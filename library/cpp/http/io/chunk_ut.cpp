@@ -11,8 +11,8 @@
 Y_UNIT_TEST_SUITE(TestChunkedIO) {
     static const char test_data[] = "87s6cfbsudg cuisg s igasidftasiy tfrcua6s";
 
-    TString CombString(const TString& s, size_t chunkSize) {
-        TString result;
+    TString CombString(const TString& s, size_t chunkSize) { 
+        TString result; 
         for (size_t pos = 0; pos < s.size(); pos += 2 * chunkSize)
             result += s.substr(pos, chunkSize);
         return result;
@@ -59,18 +59,18 @@ Y_UNIT_TEST_SUITE(TestChunkedIO) {
 
     Y_UNIT_TEST(TestChunkedIo) {
         TTempFile tmpFile(CDATA);
-        TString tmp;
+        TString tmp; 
 
         {
-            TUnbufferedFileOutput fo(CDATA);
+            TUnbufferedFileOutput fo(CDATA); 
             TChunkedOutput co(&fo);
             WriteTestData(&co, &tmp);
         }
 
         {
-            TUnbufferedFileInput fi(CDATA);
+            TUnbufferedFileInput fi(CDATA); 
             TChunkedInput ci(&fi);
-            TString r;
+            TString r; 
 
             ReadInSmallChunks(&ci, &r);
 
@@ -78,9 +78,9 @@ Y_UNIT_TEST_SUITE(TestChunkedIO) {
         }
 
         {
-            TUnbufferedFileInput fi(CDATA);
+            TUnbufferedFileInput fi(CDATA); 
             TChunkedInput ci(&fi);
-            TString r;
+            TString r; 
 
             ReadCombed(&ci, &r, 11);
 
@@ -92,7 +92,7 @@ Y_UNIT_TEST_SUITE(TestChunkedIO) {
         bool hasError = false;
 
         try {
-            TString badChunk = "10\r\nqwerty";
+            TString badChunk = "10\r\nqwerty"; 
             TMemoryInput mi(badChunk.data(), badChunk.size());
             TChunkedInput ci(&mi);
             TransferData(&ci, &Cnull);

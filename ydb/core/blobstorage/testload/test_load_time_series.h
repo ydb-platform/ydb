@@ -18,7 +18,7 @@ namespace NKikimr {
                 , Value(value)
             {}
         };
-        TDeque<TItem> Items;
+        TDeque<TItem> Items; 
 
     public:
         using TValue = T;

@@ -66,7 +66,7 @@ TString DbgPrintCell(const TCell& r, NScheme::TTypeId typeId, const NScheme::TTy
     if (!t.IsKnownType())
         return Sprintf("Unknow typeId 0x%x", (ui32)typeId);
 
-    TString res = t->GetName();
+    TString res = t->GetName(); 
     res += " : ";
 
     DbgPrintValue(res, r, typeId);
@@ -112,8 +112,8 @@ void DbgPrintValue(TString &res, const TCell &r, ui32 type) {
     }
 }
 
-TString DbgPrintTuple(const TDbTupleRef& row, const NScheme::TTypeRegistry& typeRegistry) {
-    TString res = "(";
+TString DbgPrintTuple(const TDbTupleRef& row, const NScheme::TTypeRegistry& typeRegistry) { 
+    TString res = "("; 
     for (ui32 i = 0; i < row.ColumnCount; ++i) {
         res += DbgPrintCell(row.Columns[i], row.Types[i], typeRegistry);
         if (i < row.ColumnCount-1)

@@ -15,7 +15,7 @@
 //       #include <yweb/robot/kiwi/lwtrace/all.h>
 //       #define MY_PROVIDER(PROBE, EVENT, GROUPS, TYPES, NAMES) \   // name of your provider
 //           PROBE(MyProbe, GROUPS("MyGroup1", "MyGroup2"), TYPES(), NAMES()) \   // probe specification w/o argiments
-//           PROBE(MyAnotherProbe, GROUPS("MyGroup2"), TYPES(int, TString), NAMES("arg1", "arg2")) \   // another probe with arguments
+//           PROBE(MyAnotherProbe, GROUPS("MyGroup2"), TYPES(int, TString), NAMES("arg1", "arg2")) \   // another probe with arguments 
 //           PROBE(MyScopedProbe, GROUPS(), TYPES(ui64, int), NAMES("duration", "stage")) \   // scoped probe with argument
 //           /**/
 //       LWTRACE_DECLARE_PROVIDER(MY_PROVIDER)

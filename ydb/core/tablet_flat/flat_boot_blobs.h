@@ -14,7 +14,7 @@ namespace NBoot {
 
     class TLoadBlobs: public NBoot::IStep {
     public:
-        using TBlobIds = TVector<TLogoBlobID>;
+        using TBlobIds = TVector<TLogoBlobID>; 
 
         static constexpr NBoot::EStep StepKind = NBoot::EStep::Blobs;
 
@@ -28,7 +28,7 @@ namespace NBoot {
 
         void Start() noexcept override { }
 
-        void Feed(TLogoBlobID blobId, TString body)
+        void Feed(TLogoBlobID blobId, TString body) 
         {
             if (State.Apply(blobId, std::move(body)) && Env)
                 Env->Finish(this);

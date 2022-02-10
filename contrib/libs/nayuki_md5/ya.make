@@ -8,11 +8,11 @@ VERSION(2016)
 
 ORIGINAL_SOURCE(https://www.nayuki.io/page/fast-md5-hash-implementation-in-x86-assembly)
 
-OWNER(
+OWNER( 
     pg
     g:contrib
     g:cpp-contrib
-)
+) 
 
 IF (OS_LINUX AND ARCH_X86_64)
     SRCS(

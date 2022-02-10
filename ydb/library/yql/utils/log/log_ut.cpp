@@ -26,7 +26,7 @@ Y_UNIT_TEST_SUITE(TLogTest)
         YqlLoggerScope logger(&out);
         YqlLogger().UpdateProcInfo("my_proc");
 
-        TString message = "some performance info";
+        TString message = "some performance info"; 
         YQL_LOG(INFO) << message;
 
         TLogRow logRow = ParseLogRow(out.Str());
@@ -56,7 +56,7 @@ Y_UNIT_TEST_SUITE(TLogTest)
         YQL_LOG(DEBUG) << "debug message";
         YQL_LOG(TRACE) << "trace message";
 
-        TString fatalStr, errorStr, warnStr, infoStr, _;
+        TString fatalStr, errorStr, warnStr, infoStr, _; 
         Split(out.Str(), '\n', fatalStr, errorStr, warnStr, infoStr, _);
 
         {
@@ -99,7 +99,7 @@ Y_UNIT_TEST_SUITE(TLogTest)
         YQL_CLOG(INFO, Performance) << "performance message";
         YQL_CLOG(INFO, Perf) << "perf message";
 
-        TString defaultStr, coreStr, sqlStr, commonStr, ytStr,
+        TString defaultStr, coreStr, sqlStr, commonStr, ytStr, 
                 kikimrStr, rtmrStr, performanceStr, perfStr, _;
         Split(out.Str(), '\n', defaultStr, coreStr, sqlStr,
               commonStr, ytStr,
@@ -174,7 +174,7 @@ Y_UNIT_TEST_SUITE(TLogTest)
         YQL_CLOG_IF(INFO, Perf, true) << "perf info message";
         YQL_CLOG_IF(INFO, Perf, false) << "perf info message";
 
-        TString defaultStr, perfStr, _;
+        TString defaultStr, perfStr, _; 
         Split(out.Str(), '\n', defaultStr, perfStr, _);
 
         {
@@ -213,7 +213,7 @@ Y_UNIT_TEST_SUITE(TLogTest)
         UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath(), "");
         YQL_LOG(INFO) << "level0 - end";
 
-        TString row1Str, row2Str, row3Str, row4Str, row5Str, _;
+        TString row1Str, row2Str, row3Str, row4Str, row5Str, _; 
         Split(out.Str(), '\n', row1Str, row2Str, row3Str, row4Str, row5Str, _);
 
         {
@@ -259,7 +259,7 @@ Y_UNIT_TEST_SUITE(TLogTest)
 
             UNIT_ASSERT_STRINGS_EQUAL(e.AsStrBuf(), "some message");
 
-            TString throwedLogCtx = ThrowedLogContextPath();
+            TString throwedLogCtx = ThrowedLogContextPath(); 
             TStringBuf file, line, context;
             TStringBuf(throwedLogCtx).Split(".cpp:", file, line);
             line.Split(':', line, context);
@@ -309,7 +309,7 @@ Y_UNIT_TEST_SUITE(TLogTest)
         }
         UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath(), "");
 
-        TString row1Str, row2Str, row3Str, row4Str, row5Str, _;
+        TString row1Str, row2Str, row3Str, row4Str, row5Str, _; 
         Split(out.Str(), '\n', row1Str, row2Str, row3Str, row4Str, row5Str, _);
 
         {
@@ -366,7 +366,7 @@ Y_UNIT_TEST_SUITE(TLogTest)
         }
         UNIT_ASSERT(isExecuted);
 
-        TString row1Str, row2Str, row3Str, _;
+        TString row1Str, row2Str, row3Str, _; 
         Split(out.Str(), '\n', row1Str, row2Str, row3Str, _);
 
         {
@@ -416,7 +416,7 @@ Y_UNIT_TEST_SUITE(TLogTest)
         Func1(1, 2);
         Func2(1, 2);
 
-        TString row1Str, row2Str, _;
+        TString row1Str, row2Str, _; 
         Split(out.Str(), '\n', row1Str, row2Str, _);
 
         {

@@ -147,7 +147,7 @@ namespace NCodecs {
 
         bool Learn(ISequenceReader& in, bool throwOnError) {
             TBuffer data;
-            TVector<size_t> lens;
+            TVector<size_t> lens; 
 
             data.Reserve(2 * SampleSize);
             TStringBuf r;
@@ -233,7 +233,7 @@ namespace NCodecs {
     TZStdDictCodec::~TZStdDictCodec() {
     }
 
-    TString TZStdDictCodec::GetName() const {
+    TString TZStdDictCodec::GetName() const { 
         return TStringBuilder() << MyName() << "-" << Impl->GetCompressionLevel();
     }
 
@@ -263,8 +263,8 @@ namespace NCodecs {
         Impl->Load(in);
     }
 
-    TVector<TString> TZStdDictCodec::ListCompressionNames() {
-        TVector<TString> res;
+    TVector<TString> TZStdDictCodec::ListCompressionNames() { 
+        TVector<TString> res; 
         for (int i = 1; i <= ZSTD_maxCLevel(); ++i) {
             res.emplace_back(TStringBuilder() << MyName() << "-" << i);
         }

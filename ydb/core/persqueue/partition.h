@@ -170,7 +170,7 @@ private:
     void FilterDeadlinedWrites(const TActorContext& ctx);
     void SetDeadlinesForWrites(const TActorContext& ctx);
 
-    void ReadTimestampForOffset(const TString& user, TUserInfo& ui, const TActorContext& ctx);
+    void ReadTimestampForOffset(const TString& user, TUserInfo& ui, const TActorContext& ctx); 
     void ProcessTimestampsForNewData(const ui64 prevEndOffset, const TActorContext& ctx);
     void ReportLabeledCounters(const TActorContext& ctx);
     ui64 GetSizeLag(i64 offset);
@@ -188,7 +188,7 @@ private:
     void CancelAllWritesOnIdle(const TActorContext& ctx);
     //additional contaiters are half-filled, need to clear them too
     struct TWriteMsg; // forward
-    void CancelAllWritesOnWrite(const TActorContext& ctx, TEvKeyValue::TEvRequest* request, const TString& errorStr,
+    void CancelAllWritesOnWrite(const TActorContext& ctx, TEvKeyValue::TEvRequest* request, const TString& errorStr, 
                                 const TWriteMsg& p, TSourceIdWriter& sourceIdWriter, NPersQueue::NErrorCode::EErrorCode errorCode);
 
 
@@ -243,7 +243,7 @@ public:
 
 private:
     template <typename TEv>
-    TString EventStr(const char * func, const TEv& ev) {
+    TString EventStr(const char * func, const TEv& ev) { 
         TStringStream ss;
         ss << func << " event# " << ev->GetTypeRewrite() << " (" << ev->GetBase()->ToStringHeader() << "), Tablet " << Tablet << ", Partition " << Partition
            << ", Sender " << ev->Sender.ToString() << ", Recipient " << ev->Recipient.ToString() << ", Cookie: " << ev->Cookie;
@@ -407,7 +407,7 @@ private:
 
 
     struct TUserCookie {
-        TString User;
+        TString User; 
         ui64 Cookie;
     };
 
@@ -415,7 +415,7 @@ private:
     ui64 TabletID;
     ui32 Partition;
     NKikimrPQ::TPQTabletConfig Config;
-    TString TopicName;
+    TString TopicName; 
     TString TopicPath;
     bool LocalDC;
     TString DCId;
@@ -558,7 +558,7 @@ private:
     ui32 MaxWriteResponsesSize;
 
     std::deque<TDataKey> DataKeysBody;
-    TVector<TKeyLevel> DataKeysHead;
+    TVector<TKeyLevel> DataKeysHead; 
     std::deque<TDataKey> HeadKeys;
 
     std::deque<std::pair<ui64,ui64>> GapOffsets;
@@ -570,16 +570,16 @@ private:
 
     TUsersInfoStorage UsersInfoStorage;
 
-    std::deque<TString> UpdateUserInfoTimestamp;
+    std::deque<TString> UpdateUserInfoTimestamp; 
     bool ReadingTimestamp;
-    TString ReadingForUser;
+    TString ReadingForUser; 
     ui64 ReadingForUserReadRuleGeneration;
     ui64 ReadingForOffset;
 
-    THashMap<ui64, TString> CookieToUser;
+    THashMap<ui64, TString> CookieToUser; 
     ui64 SetOffsetCookie;
 
-    THashMap<ui64, TReadInfo> ReadInfo;    // cookie -> {...}
+    THashMap<ui64, TReadInfo> ReadInfo;    // cookie -> {...} 
     ui64 Cookie;
     TInstant CreationTime;
     TDuration InitDuration;
@@ -610,8 +610,8 @@ private:
 
     bool DiskIsFull;
 
-    TSet<THasDataReq> HasDataRequests;
-    TSet<THasDataDeadline> HasDataDeadlines;
+    TSet<THasDataReq> HasDataRequests; 
+    TSet<THasDataDeadline> HasDataDeadlines; 
     ui64 HasDataReqNum;
 
     TQuotaTracker WriteQuota;

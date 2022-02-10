@@ -5,7 +5,7 @@
 
 #include <util/generic/ptr.h>
 #include <util/generic/strbuf.h>
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 #include <util/generic/vector.h>
 #include <util/string/cast.h>
 #include <util/system/fstat.h>
@@ -25,7 +25,7 @@ private:
 
 public:
     TFsPath();
-    TFsPath(const TString& path);
+    TFsPath(const TString& path); 
     TFsPath(const TStringBuf path);
     TFsPath(const char* path);
 
@@ -48,7 +48,7 @@ public:
         return Path_.c_str();
     }
 
-    inline operator const TString&() const {
+    inline operator const TString&() const { 
         return Path_;
     }
 
@@ -71,19 +71,19 @@ public:
 
     TFsPath& Fix();
 
-    inline const TString& GetPath() const {
+    inline const TString& GetPath() const { 
         return Path_;
     }
 
     /// last component of path, or "/" if root
-    TString GetName() const;
+    TString GetName() const; 
 
     /**
      * "a.b.tmp" -> "tmp"
      * "a.tmp"   -> "tmp"
      * ".tmp"    -> ""
      */
-    TString GetExtension() const;
+    TString GetExtension() const; 
 
     bool IsAbsolute() const;
     bool IsRelative() const;
@@ -126,14 +126,14 @@ public:
      */
     TFsPath Parent() const;
 
-    TString Basename() const {
+    TString Basename() const { 
         return GetName();
     }
-    TString Dirname() const {
+    TString Dirname() const { 
         return Parent();
     }
 
-    TFsPath Child(const TString& name) const;
+    TFsPath Child(const TString& name) const; 
 
     /**
      * @brief create this directory
@@ -152,8 +152,8 @@ public:
     void MkDirs(const int mode = MODE0777) const;
 
     // XXX: rewrite to return iterator
-    void List(TVector<TFsPath>& children) const;
-    void ListNames(TVector<TString>& children) const;
+    void List(TVector<TFsPath>& children) const; 
+    void ListNames(TVector<TString>& children) const; 
 
     // Check, if path contains at least one component with a specific name.
     bool Contains(const TString& component) const;
@@ -181,12 +181,12 @@ public:
     /// throw TIoException if not exists
     void CheckExists() const;
 
-    void RenameTo(const TString& newPath) const;
+    void RenameTo(const TString& newPath) const; 
     void RenameTo(const char* newPath) const;
     void RenameTo(const TFsPath& newFile) const;
-    void ForceRenameTo(const TString& newPath) const;
+    void ForceRenameTo(const TString& newPath) const; 
 
-    void CopyTo(const TString& newPath, bool force) const;
+    void CopyTo(const TString& newPath, bool force) const; 
 
     void Touch() const;
 
@@ -197,7 +197,7 @@ public:
     /// always absolute
     static TFsPath Cwd();
 
-    inline void Swap(TFsPath& p) noexcept {
+    inline void Swap(TFsPath& p) noexcept { 
         DoSwap(Path_, p.Path_);
         Split_.Swap(p.Split_);
     }
@@ -207,7 +207,7 @@ private:
     TSplit& GetSplit() const;
 
 private:
-    TString Path_;
+    TString Path_; 
     /// cache
     mutable TSimpleIntrusivePtr<TSplit> Split_;
 };
@@ -224,7 +224,7 @@ namespace NPrivate {
 }
 
 template <class... Ts>
-TString JoinFsPaths(Ts&&... args) {
+TString JoinFsPaths(Ts&&... args) { 
     TFsPath fsPath;
     ::NPrivate::AppendToFsPath(fsPath, std::forward<Ts>(args)...);
     return fsPath.GetPath();

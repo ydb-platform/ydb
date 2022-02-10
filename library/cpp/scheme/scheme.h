@@ -176,7 +176,7 @@ namespace NSc {
 
         inline TValue& SetString(TStringBuf val = TStringBuf()); // returns self
 
-        TString ForceString(const TString& deflt = TString()) const; // Best-effort cast to TString (will do ToString for numeric types)
+        TString ForceString(const TString& deflt = TString()) const; // Best-effort cast to TString (will do ToString for numeric types) 
 
         // todo: remove
         inline bool StringEmpty() const;
@@ -301,11 +301,11 @@ namespace NSc {
         static bool FromJson(TValue&, TStringBuf, const TJsonOpts& = TJsonOpts());
 
         // TODO: Переименовать ToJson в ToJsonUnsafe, а ToJsonSafe в ToJson
-        TString ToJson(const TJsonOpts& = TJsonOpts()) const;
+        TString ToJson(const TJsonOpts& = TJsonOpts()) const; 
         const TValue& ToJson(IOutputStream&, const TJsonOpts& = TJsonOpts()) const; // returns self
 
         // ToJson(JO_SORT_KEYS | JO_SKIP_UNSAFE)
-        TString ToJsonSafe(const TJsonOpts& = TJsonOpts()) const;
+        TString ToJsonSafe(const TJsonOpts& = TJsonOpts()) const; 
         const TValue& ToJsonSafe(IOutputStream&, const TJsonOpts& = TJsonOpts()) const;
 
         // ToJson(JO_SORT_KEYS | JO_PRETTY | JO_SKIP_UNSAFE)
@@ -354,7 +354,7 @@ namespace NSc {
         // TODO: add throwing variants
         // make sure to properly escape the tokens
 
-        static TString EscapeForPath(TStringBuf rawKey); // converts a raw dict key into a valid token for a selector path
+        static TString EscapeForPath(TStringBuf rawKey); // converts a raw dict key into a valid token for a selector path 
 
         static bool PathValid(TStringBuf path); // returns true if the path is syntactically valid
 
@@ -514,7 +514,7 @@ namespace NSc {
     // todo: allow insertions
     // todo: make TDict methods safe
     class TDict: public THashMap<TStringBuf, TValue, THash<TStringBuf>, TEqualTo<TStringBuf>, TPoolAllocator>, TNonCopyable {
-        using TParent = THashMap<TStringBuf, TValue, THash<TStringBuf>, TEqualTo<TStringBuf>, TPoolAllocator>;
+        using TParent = THashMap<TStringBuf, TValue, THash<TStringBuf>, TEqualTo<TStringBuf>, TPoolAllocator>; 
 
     public:
         TDict(TMemoryPool* p)

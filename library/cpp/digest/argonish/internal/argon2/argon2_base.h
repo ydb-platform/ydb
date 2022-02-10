@@ -153,19 +153,19 @@ namespace NArgonish {
                 ui8 in_buffer[BLAKE2B_OUTBYTES];
                 ui32 toproduce = outlen - BLAKE2B_OUTBYTES / 2;
 
-                TBlake2B<instructionSet> hash1(BLAKE2B_OUTBYTES);
-                hash1.Update(outlen);
-                hash1.Update(in, inlen);
-                hash1.Final(out_buffer, BLAKE2B_OUTBYTES);
+                TBlake2B<instructionSet> hash1(BLAKE2B_OUTBYTES); 
+                hash1.Update(outlen); 
+                hash1.Update(in, inlen); 
+                hash1.Final(out_buffer, BLAKE2B_OUTBYTES); 
 
                 memcpy(out, out_buffer, BLAKE2B_OUTBYTES / 2);
                 out += BLAKE2B_OUTBYTES / 2;
 
                 while (toproduce > BLAKE2B_OUTBYTES) {
                     memcpy(in_buffer, out_buffer, BLAKE2B_OUTBYTES);
-                    TBlake2B<instructionSet> hash2(BLAKE2B_OUTBYTES);
-                    hash2.Update(in_buffer, BLAKE2B_OUTBYTES);
-                    hash2.Final(out_buffer, BLAKE2B_OUTBYTES);
+                    TBlake2B<instructionSet> hash2(BLAKE2B_OUTBYTES); 
+                    hash2.Update(in_buffer, BLAKE2B_OUTBYTES); 
+                    hash2.Final(out_buffer, BLAKE2B_OUTBYTES); 
                     memcpy(out, out_buffer, BLAKE2B_OUTBYTES / 2);
                     out += BLAKE2B_OUTBYTES / 2;
                     toproduce -= BLAKE2B_OUTBYTES / 2;
@@ -173,9 +173,9 @@ namespace NArgonish {
 
                 memcpy(in_buffer, out_buffer, BLAKE2B_OUTBYTES);
                 {
-                    TBlake2B<instructionSet> hash3(toproduce);
-                    hash3.Update(in_buffer, BLAKE2B_OUTBYTES);
-                    hash3.Final(out_buffer, toproduce);
+                    TBlake2B<instructionSet> hash3(toproduce); 
+                    hash3.Update(in_buffer, BLAKE2B_OUTBYTES); 
+                    hash3.Final(out_buffer, toproduce); 
                     memcpy(out, out_buffer, toproduce);
                 }
             }

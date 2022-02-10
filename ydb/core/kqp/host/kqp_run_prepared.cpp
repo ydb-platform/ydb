@@ -122,7 +122,7 @@ private:
             YQL_CLOG(DEBUG, ProviderKqp) << "Mkql:" << Endl << mkqlText;
         }
 
-        TVector<NKikimrKqp::TParameterBinding> bindings(mkql.GetBindings().begin(), mkql.GetBindings().end());
+        TVector<NKikimrKqp::TParameterBinding> bindings(mkql.GetBindings().begin(), mkql.GetBindings().end()); 
         auto execParams = BuildParamsMap(bindings, TxState, TransformCtx, AcquireLocks);
 
         if (YQL_CLOG_ACTIVE(TRACE, ProviderKqp)) {

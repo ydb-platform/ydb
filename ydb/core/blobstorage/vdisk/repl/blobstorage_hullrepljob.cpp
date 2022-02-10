@@ -212,7 +212,7 @@ namespace NKikimr {
         TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
         const TActorId ParentId;
         const TLogoBlobID StartKey;
-        TVector<TVDiskProxyPtr> MergeHeap;
+        TVector<TVDiskProxyPtr> MergeHeap; 
         TEvReplFinished::TInfoPtr ReplInfo;
         TRecoveryMachine::TRecoveredBlobsQueue RecoveryQueue;
         TReplSstStreamWriter Writer;
@@ -237,9 +237,9 @@ namespace NKikimr {
         ui32 NumRunningProxies = 0;
 
         bool PhantomCheckPending = false;
-        TDeque<TLogoBlobID> Phantoms;
+        TDeque<TLogoBlobID> Phantoms; 
 
-        THashSet<TChunkIdx> WrittenChunkIdxSet;
+        THashSet<TChunkIdx> WrittenChunkIdxSet; 
 
         friend class TActorBootstrapped<THullReplJobActor>;
 
@@ -493,7 +493,7 @@ namespace NKikimr {
                 }
 
                 // find out which proxies carry items with the same key
-                TVector<TVDiskProxyPtr>::iterator lastIter = MergeHeap.end();
+                TVector<TVDiskProxyPtr>::iterator lastIter = MergeHeap.end(); 
                 while (lastIter != MergeHeap.begin() && MergeHeap.front()->GenLogoBlobId() == *CurrentKey) {
                     PopHeap(MergeHeap.begin(), lastIter, TVDiskProxy::TPtrGreater());
                     --lastIter;

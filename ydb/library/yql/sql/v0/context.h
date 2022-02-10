@@ -18,7 +18,7 @@
 
 namespace NSQLTranslationV0 {
 
-    typedef TMap<TString, TNodePtr> TNamedNodesMap;
+    typedef TMap<TString, TNodePtr> TNamedNodesMap; 
 
     class TContext {
     public:
@@ -30,7 +30,7 @@ namespace NSQLTranslationV0 {
         const NYql::TPosition& Pos() const;
 
         void ClearBlockScope();
-        TString MakeName(const TString& name);
+        TString MakeName(const TString& name); 
 
         IOutputStream& Error();
         IOutputStream& Error(NYql::TPosition pos);
@@ -38,7 +38,7 @@ namespace NSQLTranslationV0 {
         IOutputStream& Info(NYql::TPosition pos);
 
         template <typename TToken>
-        const TString& Token(const TToken& token) {
+        const TString& Token(const TToken& token) { 
             Position.Row = token.GetLine();
             Position.Column = token.GetColumn() + 1;
             return token.GetValue();
@@ -52,7 +52,7 @@ namespace NSQLTranslationV0 {
             return pos;
         }
 
-        inline void IncrementMonCounter(const TString& name, const TString& value) {
+        inline void IncrementMonCounter(const TString& name, const TString& value) { 
             if (IncrementMonCounterFunction) {
                 IncrementMonCounterFunction(name, value);
             }
@@ -62,7 +62,7 @@ namespace NSQLTranslationV0 {
             return GetClusterProvider(cluster).Defined();
         }
 
-        TMaybe<TString> GetClusterProvider(const TString& cluster) const {
+        TMaybe<TString> GetClusterProvider(const TString& cluster) const { 
             TString unusedNormalizedClusterName;
             return GetClusterProvider(cluster, unusedNormalizedClusterName);
         }
@@ -84,11 +84,11 @@ namespace NSQLTranslationV0 {
         bool UseUnordered(const ISource& source) const;
         bool UseUnordered(const TTableRef& table) const;
 
-        bool SetPathPrefix(const TString& value, TMaybe<TString> arg = TMaybe<TString>());
+        bool SetPathPrefix(const TString& value, TMaybe<TString> arg = TMaybe<TString>()); 
 
         TNodePtr GetPrefixedPath(const TString& cluster, const TDeferredAtom& path);
 
-        TNodePtr UniversalAlias(const TString& baseName, TNodePtr&& node);
+        TNodePtr UniversalAlias(const TString& baseName, TNodePtr&& node); 
 
         TString HasBlockShortcut(const TNodePtr& baseNode);
         TString RegisterBlockShortcut(const TNodePtr& baseNode, const TNodePtr& node, const TString& baseName);
@@ -109,8 +109,8 @@ namespace NSQLTranslationV0 {
 
         bool DeclareVariable(const TString& varName, const TNodePtr& typeNode);
 
-        bool AddExports(const TVector<TString>& symbols);
-        TString AddImport(const TVector<TString>& modulePath);
+        bool AddExports(const TVector<TString>& symbols); 
+        TString AddImport(const TVector<TString>& modulePath); 
         TString AddSimpleUdf(const TString& udf);
     private:
         IOutputStream& MakeIssue(NYql::ESeverity severity, NYql::TIssueCode code, NYql::TPosition pos);
@@ -119,25 +119,25 @@ namespace NSQLTranslationV0 {
         NYql::TPosition Position;
         THolder<TStringOutput> IssueMsgHolder;
         NSQLTranslation::TClusterMapping ClusterMapping;
-        TString PathPrefix;
+        TString PathPrefix; 
         THashMap<TString, TString> ProviderPathPrefixes;
         THashMap<TString, TString> ClusterPathPrefixes;
         bool IntoHeading = true;
 
     public:
-        THashMap<TString, TNodePtr> Variables;
+        THashMap<TString, TNodePtr> Variables; 
         NSQLTranslation::TTranslationSettings Settings;
         std::unique_ptr<TMemoryPool> Pool;
         NYql::TIssues& Issues;
-        TMap<TString, TStack<TNodePtr>> NamedNodes;
-        TMap<TString, TNodePtr> UniversalAliases;
-        THashSet<TString> Exports;
-        THashMap<TString, TString> ImportModuleAliases;
-        TMap<TString, TString> SimpleUdfs;
+        TMap<TString, TStack<TNodePtr>> NamedNodes; 
+        TMap<TString, TNodePtr> UniversalAliases; 
+        THashSet<TString> Exports; 
+        THashMap<TString, TString> ImportModuleAliases; 
+        TMap<TString, TString> SimpleUdfs; 
         NSQLTranslation::TIncrementMonCounterFunction IncrementMonCounterFunction;
-        TString CurrCluster;
+        TString CurrCluster; 
         bool HasPendingErrors;
-        THashMap<TString, ui32> GenIndexes;
+        THashMap<TString, ui32> GenIndexes; 
         bool PragmaRefSelect = false;
         bool PragmaSampleSelect = false;
         bool PragmaAllowDotInAlias = false;
@@ -156,21 +156,21 @@ namespace NSQLTranslationV0 {
         ui32 PragmaGroupByCubeLimit = 5;
         THashSet<TString> Libraries;
         NYql::TWarningPolicy WarningPolicy;
-        TVector<TString> AllResults;
-        TSet<TString> UsedClusters;
+        TVector<TString> AllResults; 
+        TSet<TString> UsedClusters; 
 
         struct ShortcutStore {
-            THashMap<INode*, TString> BaseMap;
-            TVector<std::pair<TString, TNodePtr>> Goal;
+            THashMap<INode*, TString> BaseMap; 
+            TVector<std::pair<TString, TNodePtr>> Goal; 
         };
-        THashMap<ui32, ShortcutStore> Shortcuts;
+        THashMap<ui32, ShortcutStore> Shortcuts; 
         ui32 ShortcutCurrentLevel = 0;
 
     };
 
     class TTranslation {
     protected:
-        typedef TSet<ui32> TSetType;
+        typedef TSet<ui32> TSetType; 
 
     protected:
         TTranslation(TContext& ctx);
@@ -180,36 +180,36 @@ namespace NSQLTranslationV0 {
         IOutputStream& Error();
 
         template <typename TToken>
-        const TString& Token(const TToken& token) {
+        const TString& Token(const TToken& token) { 
             return Ctx.Token(token);
         }
 
         template <typename TToken>
-        TString Identifier(const TToken& token) {
+        TString Identifier(const TToken& token) { 
             return IdContent(Ctx, Token(token));
         }
 
-        TString Identifier(const TString& str) const {
+        TString Identifier(const TString& str) const { 
             return IdContent(Ctx, str);
         }
 
-        TNodePtr GetNamedNode(const TString& name);
-        void PushNamedNode(const TString& name, TNodePtr node);
-        void PopNamedNode(const TString& name);
+        TNodePtr GetNamedNode(const TString& name); 
+        void PushNamedNode(const TString& name, TNodePtr node); 
+        void PopNamedNode(const TString& name); 
 
         template <typename TNode>
-        void AltNotImplemented(const TString& ruleName, const TNode& node) {
+        void AltNotImplemented(const TString& ruleName, const TNode& node) { 
             AltNotImplemented(ruleName, node.Alt_case(), node, TNode::descriptor());
         }
 
         template <typename TNode>
-        TString AltDescription(const TNode& node) const {
+        TString AltDescription(const TNode& node) const { 
             return AltDescription(node, node.Alt_case(), TNode::descriptor());
         }
 
     protected:
-        void AltNotImplemented(const TString& ruleName, ui32 altCase, const google::protobuf::Message& node, const google::protobuf::Descriptor* descr);
-        TString AltDescription(const google::protobuf::Message& node, ui32 altCase, const google::protobuf::Descriptor* descr) const;
+        void AltNotImplemented(const TString& ruleName, ui32 altCase, const google::protobuf::Message& node, const google::protobuf::Descriptor* descr); 
+        TString AltDescription(const google::protobuf::Message& node, ui32 altCase, const google::protobuf::Descriptor* descr) const; 
 
     protected:
         TContext& Ctx;

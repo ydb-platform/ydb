@@ -5,10 +5,10 @@ WITHOUT_LICENSE_TEXTS()
 # Proxy library
 LICENSE(Not-Applicable)
 
-OWNER(
-    g:contrib
-    g:cpp-contrib
-)
+OWNER( 
+    g:contrib 
+    g:cpp-contrib 
+) 
 
 NO_PLATFORM()
 DISABLE(OPENSOURCE_EXPORT)

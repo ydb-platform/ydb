@@ -61,8 +61,8 @@ namespace {
 
         TDeque<TString> Tmp;
         TNullCodec Null;
-        TVector<TCodecPtr> Codecs;
-        typedef THashMap<TStringBuf, ICodec*> TRegistry;
+        TVector<TCodecPtr> Codecs; 
+        typedef THashMap<TStringBuf, ICodec*> TRegistry; 
         TRegistry Registry;
 
         // SEARCH-8344: Global decompressed size limiter (to prevent remote DoS)
@@ -82,7 +82,7 @@ TCodecList NBlockCodecs::ListAllCodecs() {
     return ret;
 }
 
-TString NBlockCodecs::ListAllCodecsAsString() {
+TString NBlockCodecs::ListAllCodecsAsString() { 
     return JoinSeq(TStringBuf(","), ListAllCodecs());
 }
 
@@ -127,7 +127,7 @@ void ICodec::Decode(const TData& in, TBuffer& out) const {
     out.Resize(Decompress(in, out.Data()));
 }
 
-void ICodec::Encode(const TData& in, TString& out) const {
+void ICodec::Encode(const TData& in, TString& out) const { 
     const size_t maxLen = MaxCompressedLength(in);
     out.ReserveAndResize(maxLen);
 
@@ -136,7 +136,7 @@ void ICodec::Encode(const TData& in, TString& out) const {
     out.resize(actualLen);
 }
 
-void ICodec::Decode(const TData& in, TString& out) const {
+void ICodec::Decode(const TData& in, TString& out) const { 
     const size_t maxLen = GetDecompressedLength(in);
     out.ReserveAndResize(maxLen);
 

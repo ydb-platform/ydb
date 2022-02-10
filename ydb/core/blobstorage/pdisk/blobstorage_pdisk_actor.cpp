@@ -69,7 +69,7 @@ class TPDiskActor : public TActorBootstrapped<TPDiskActor> {
     TString StateErrorReason;
     TIntrusivePtr<TPDiskConfig> Cfg;
     TKey MainKey;
-    TList<TInitQueueItem> InitQueue;
+    TList<TInitQueueItem> InitQueue; 
     const TIntrusivePtr<NMonitoring::TDynamicCounters> PDiskCounters;
     TIntrusivePtr<TPDisk> PDisk;
     bool IsMagicAlreadyChecked = false;
@@ -143,7 +143,7 @@ class TPDiskActor : public TActorBootstrapped<TPDiskActor> {
             }
         };
     private:
-        TVector<TSource> Sources;
+        TVector<TSource> Sources; 
         NKikimrWhiteboard::EFlag LastFlag = NKikimrWhiteboard::Grey;
     public:
         void AddSource(const TLightBase& light) {
@@ -260,7 +260,7 @@ public:
     // Init state
     void InitError(const TString &errorReason) {
         Become(&TThis::StateError);
-        for (TList<TInitQueueItem>::iterator it = InitQueue.begin(); it != InitQueue.end(); ++it) {
+        for (TList<TInitQueueItem>::iterator it = InitQueue.begin(); it != InitQueue.end(); ++it) { 
             Send(it->Sender, new NPDisk::TEvYardInitResult(NKikimrProto::CORRUPTED, errorReason));
             if (PDisk) {
                 PDisk->Mon.YardInit.CountResponse();
@@ -457,7 +457,7 @@ public:
 
     void InitSuccess() {
         Become(&TThis::StateOnline);
-        for (TList<TInitQueueItem>::iterator it = InitQueue.begin(); it != InitQueue.end(); ++it) {
+        for (TList<TInitQueueItem>::iterator it = InitQueue.begin(); it != InitQueue.end(); ++it) { 
             NPDisk::TEvYardInit evInit(it->OwnerRound, it->VDisk, it->PDiskGuid, it->CutLogId, it->WhiteboardProxyId,
                 it->SlotId);
             auto* request = PDisk->ReqCreator.CreateFromEv<TYardInit>(evInit, it->Sender);

@@ -105,7 +105,7 @@ namespace NKikimr {
             s.Write(&Size, sizeof(ui32));
         }
 
-        TString ToString() const {
+        TString ToString() const { 
             TStringStream str;
             Output(str);
             return str.Str();
@@ -159,7 +159,7 @@ namespace NKikimr {
     // TDiskPartVec
     ///////////////////////////////////////////////////////////////////////////////////////
     struct TDiskPartVec {
-        using TVec = TVector<TDiskPart>;
+        using TVec = TVector<TDiskPart>; 
         TVec Vec;
 
         TDiskPartVec() = default;
@@ -198,14 +198,14 @@ namespace NKikimr {
             }
         }
 
-        static void ConvertToProto(NKikimrVDiskData::TDiskPartVec &pb, const TString &source) {
+        static void ConvertToProto(NKikimrVDiskData::TDiskPartVec &pb, const TString &source) { 
             TDiskPartVec v;
             TStringInput str(source);
             Load(&str, v.Vec);
             v.SerializeToProto(pb);
         }
 
-        static bool Check(const TString &data) {
+        static bool Check(const TString &data) { 
             Y_UNUSED(data);
             return true;
         }
@@ -226,7 +226,7 @@ namespace NKikimr {
             return Vec.size();
         }
 
-        TString ToString() const {
+        TString ToString() const { 
             TStringStream str;
             if (Vec.empty()) {
                 str << "empty";

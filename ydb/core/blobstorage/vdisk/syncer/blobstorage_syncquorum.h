@@ -12,7 +12,7 @@ namespace NKikimr {
                 ++Map[vdisk];
             }
 
-            TString ToString() const {
+            TString ToString() const { 
                 TStringStream str;
                 str << "{Map: ";
                 for (const auto &x : Map) {
@@ -27,7 +27,7 @@ namespace NKikimr {
             }
 
         private:
-            THashMap<TVDiskIdShort, unsigned> Map;
+            THashMap<TVDiskIdShort, unsigned> Map; 
         };
 
         ///////////////////////////////////////////////////////////////////////////
@@ -68,7 +68,7 @@ namespace NKikimr {
                 str << "{Debug# " << Debug.ToString() << "}";
             }
 
-            TString ToString() const {
+            TString ToString() const { 
                 TStringStream str;
                 Output(str);
                 return str.Str();

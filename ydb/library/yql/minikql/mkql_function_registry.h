@@ -42,8 +42,8 @@ namespace NKikimr {
 namespace NKikimr {
 namespace NMiniKQL {
 
-using TUdfModuleRemappings = THashMap<TString, TString>; // old => new
-using TUdfModulePathsMap = THashMap<TString, TString>; // module name => udf path
+using TUdfModuleRemappings = THashMap<TString, TString>; // old => new 
+using TUdfModulePathsMap = THashMap<TString, TString>; // module name => udf path 
 
 //////////////////////////////////////////////////////////////////////////////
 // IFunctionRegistry
@@ -71,11 +71,11 @@ public:
             const NUdf::ISecureParamsProvider* secureParamsProvider,
             TFunctionTypeInfo* funcInfo) const = 0;
 
-    virtual TMaybe<TString> FindUdfPath(const TStringBuf& moduleName) const = 0;
+    virtual TMaybe<TString> FindUdfPath(const TStringBuf& moduleName) const = 0; 
 
     virtual bool IsLoadedUdfModule(const TStringBuf& moduleName) const = 0;
 
-    virtual THashSet<TString> GetAllModuleNames() const = 0;
+    virtual THashSet<TString> GetAllModuleNames() const = 0; 
 
     virtual void PrintInfoTo(IOutputStream& out) const = 0;
 
@@ -101,7 +101,7 @@ public:
     virtual void SetBackTraceCallback(NUdf::TBackTraceCallback callback) = 0;
 
     virtual void LoadUdfs(
-            const TString& libraryPath,
+            const TString& libraryPath, 
             const TUdfModuleRemappings& remmapings,
             ui32 flags = 0) = 0;
 
@@ -122,17 +122,17 @@ TIntrusivePtr<IFunctionRegistry> CreateFunctionRegistry(
         NKikimr::NUdf::TBackTraceCallback backtraceCallback,
         IBuiltinFunctionRegistry::TPtr&& builtins,
         bool allowUdfPatch,
-        const TVector<TString>& udfsPaths,
+        const TVector<TString>& udfsPaths, 
         ui32 flags = 0); // see NUdf::IRegistrator::TFlags
 
 //////////////////////////////////////////////////////////////////////////////
 // helper functions
 //////////////////////////////////////////////////////////////////////////////
-void FindUdfsInDir(const TString& dirPath, TVector<TString>* paths);
+void FindUdfsInDir(const TString& dirPath, TVector<TString>* paths); 
 
 bool SplitModuleAndFuncName(
         const TStringBuf& name, TStringBuf& module, TStringBuf& func);
-TString FullName(const TStringBuf& module, const TStringBuf& func);
+TString FullName(const TStringBuf& module, const TStringBuf& func); 
 
 inline TStringBuf ModuleName(const TStringBuf& name) {
     TStringBuf moduleName, _;

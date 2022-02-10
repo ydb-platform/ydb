@@ -26,7 +26,7 @@ JOIN_SRCS(
     datetime/constants.cpp
     datetime/cputimer.cpp
     datetime/systime.cpp
-    datetime/uptime.cpp
+    datetime/uptime.cpp 
 )
 
 SRCS(
@@ -85,7 +85,7 @@ JOIN_SRCS(
     generic/scope.cpp
     generic/adaptor.cpp
     generic/algorithm.cpp
-    generic/array_ref.cpp
+    generic/array_ref.cpp 
     generic/array_size.cpp
     generic/bitmap.cpp
     generic/bitops.cpp
@@ -306,7 +306,7 @@ JOIN_SRCS(
     system/sanitizers.cpp
     system/sem.cpp
     system/shellcommand.cpp
-    system/shmat.cpp
+    system/shmat.cpp 
     system/sigset.cpp
     system/spinlock.cpp
     system/spin_wait.cpp

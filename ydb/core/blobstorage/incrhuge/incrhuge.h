@@ -44,9 +44,9 @@ namespace NKikimr {
             };
 
             NKikimrProto::EReplyStatus Status; // operation status
-            TVector<TItem>             Items;  // a vector of items with matching LSN's
+            TVector<TItem>             Items;  // a vector of items with matching LSN's 
 
-            TEvIncrHugeInitResult(NKikimrProto::EReplyStatus status, TVector<TItem>&& items)
+            TEvIncrHugeInitResult(NKikimrProto::EReplyStatus status, TVector<TItem>&& items) 
                 : Status(status)
                 , Items(std::move(items))
             {}
@@ -72,10 +72,10 @@ namespace NKikimr {
             ui8              Owner;   // the VDisk who writes the data
             ui64             Lsn;     // non-transparent number from owner; compared to FirstLsn on init
             TBlobMetadata    Meta;    // non-transparent blob metadata
-            TString           Data;    // buffer with payload; should not be less that minimal blob size
+            TString           Data;    // buffer with payload; should not be less that minimal blob size 
             TWritePayloadPtr Payload; // structure that is moved from request to response
 
-            TEvIncrHugeWrite(ui8 owner, ui64 lsn, const TBlobMetadata& meta, TString&& data, TWritePayloadPtr&& payload)
+            TEvIncrHugeWrite(ui8 owner, ui64 lsn, const TBlobMetadata& meta, TString&& data, TWritePayloadPtr&& payload) 
                 : Owner(owner)
                 , Lsn(lsn)
                 , Meta(meta)
@@ -120,9 +120,9 @@ namespace NKikimr {
         // contains only requested part of blob.
         struct TEvIncrHugeReadResult : public NActors::TEventLocal<TEvIncrHugeReadResult, TEvBlobStorage::EvIncrHugeReadResult> {
             NKikimrProto::EReplyStatus Status; // operation status
-            TString                     Data;   // requested blob data range
+            TString                     Data;   // requested blob data range 
 
-            TEvIncrHugeReadResult(NKikimrProto::EReplyStatus status, TString&& data)
+            TEvIncrHugeReadResult(NKikimrProto::EReplyStatus status, TString&& data) 
                 : Status(status)
                 , Data(std::move(data))
             {}
@@ -140,9 +140,9 @@ namespace NKikimr {
         struct TEvIncrHugeDelete : public NActors::TEventLocal<TEvIncrHugeDelete, TEvBlobStorage::EvIncrHugeDelete> {
             ui8                      Owner; // owner who wants to delete the data
             ui64                     SeqNo; // sequence number; should increase for each query from the same client
-            TVector<TIncrHugeBlobId> Ids;   // a vector of blobs user wants to delete
+            TVector<TIncrHugeBlobId> Ids;   // a vector of blobs user wants to delete 
 
-            TEvIncrHugeDelete(ui8 owner, ui64 seqNo, TVector<TIncrHugeBlobId>&& ids)
+            TEvIncrHugeDelete(ui8 owner, ui64 seqNo, TVector<TIncrHugeBlobId>&& ids) 
                 : Owner(owner)
                 , SeqNo(seqNo)
                 , Ids(std::move(ids))

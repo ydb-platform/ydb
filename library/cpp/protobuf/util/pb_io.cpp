@@ -7,7 +7,7 @@
 #include <google/protobuf/messagext.h>
 #include <google/protobuf/text_format.h>
 
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 #include <util/stream/file.h>
 #include <util/stream/str.h>
 #include <util/string/cast.h>
@@ -101,10 +101,10 @@ void SerializeToTextFormat(const NProtoBuf::Message& m, IOutputStream& out) {
     }
 }
 
-void SerializeToTextFormat(const NProtoBuf::Message& m, const TString& fileName) {
-    /* TUnbufferedFileOutput is unbuffered, but TCopyingOutputStreamAdaptor adds
+void SerializeToTextFormat(const NProtoBuf::Message& m, const TString& fileName) { 
+    /* TUnbufferedFileOutput is unbuffered, but TCopyingOutputStreamAdaptor adds 
      * a buffer on top of it. */
-    TUnbufferedFileOutput stream(fileName);
+    TUnbufferedFileOutput stream(fileName); 
     SerializeToTextFormat(m, stream);
 }
 
@@ -150,15 +150,15 @@ void ParseFromTextFormat(IInputStream& in, NProtoBuf::Message& m,
     }
 }
 
-void ParseFromTextFormat(const TString& fileName, NProtoBuf::Message& m,
+void ParseFromTextFormat(const TString& fileName, NProtoBuf::Message& m, 
                          const EParseFromTextFormatOptions options) {
-    /* TUnbufferedFileInput is unbuffered, but TCopyingInputStreamAdaptor adds
+    /* TUnbufferedFileInput is unbuffered, but TCopyingInputStreamAdaptor adds 
     * a buffer on top of it. */
-    TUnbufferedFileInput stream(fileName);
+    TUnbufferedFileInput stream(fileName); 
     ParseFromTextFormat(stream, m, options);
 }
 
-bool TryParseFromTextFormat(const TString& fileName, NProtoBuf::Message& m,
+bool TryParseFromTextFormat(const TString& fileName, NProtoBuf::Message& m, 
                             const EParseFromTextFormatOptions options) {
     try {
         ParseFromTextFormat(fileName, m, options);
@@ -192,9 +192,9 @@ void MergeFromTextFormat(IInputStream& in, NProtoBuf::Message& m,
 
 void MergeFromTextFormat(const TString& fileName, NProtoBuf::Message& m,
                          const EParseFromTextFormatOptions options) {
-    /* TUnbufferedFileInput is unbuffered, but TCopyingInputStreamAdaptor adds
+    /* TUnbufferedFileInput is unbuffered, but TCopyingInputStreamAdaptor adds 
     * a buffer on top of it. */
-    TUnbufferedFileInput stream(fileName);
+    TUnbufferedFileInput stream(fileName); 
     MergeFromTextFormat(stream, m, options);
 }
 

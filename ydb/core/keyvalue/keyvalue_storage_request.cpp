@@ -51,12 +51,12 @@ class TKeyValueStorageRequest : public TActorBootstrapped<TKeyValueStorageReques
     };
 
     struct TInFlightBatch {
-        TVector<TReadQueueItem> ReadQueue;
+        TVector<TReadQueueItem> ReadQueue; 
         TInstant SentAt;
     };
 
-    TMap<ui64, TInFlightBatch> InFlightBatchByCookie;
-    TDeque<TReadQueueItem> ReadItems;
+    TMap<ui64, TInFlightBatch> InFlightBatchByCookie; 
+    TDeque<TReadQueueItem> ReadItems; 
 
     TStackVec<ui32, 16> YellowMoveChannels;
     TStackVec<ui32, 16> YellowStopChannels;
@@ -457,7 +457,7 @@ public:
         Become(&TThis::StateWait);
     }
 
-    void ReplyErrorAndDie(const TActorContext &ctx, TString errorDescription,
+    void ReplyErrorAndDie(const TActorContext &ctx, TString errorDescription, 
             NMsgBusProxy::EResponseStatus status = NMsgBusProxy::MSTATUS_INTERNALERROR,
             NLog::EPriority logPriority = NLog::PRI_ERROR) {
         LOG_LOG_S(ctx, logPriority, NKikimrServices::KEYVALUE, errorDescription);
@@ -498,7 +498,7 @@ public:
         TLogoBlobID prevId;
         ui32 prevGroup = Max<ui32>();
         decltype(ReadItems)::iterator it;
-        TVector<TReadQueueItem> skippedItems;
+        TVector<TReadQueueItem> skippedItems; 
         NKikimrBlobStorage::EGetHandleClass handleClass = NKikimrBlobStorage::FastRead;
         bool isHandleClassSet = false;
         for (it = ReadItems.begin(); it != ReadItems.end(); ++it) {

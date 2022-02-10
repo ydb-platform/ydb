@@ -15,16 +15,16 @@ Y_UNIT_TEST_SUITE(TestMultiInput) {
         {
         }
         void TestReadToResult(char c, size_t expectedRetval,
-                              const TString& expectedValue,
-                              const TString& initValue = "") {
-            TString t = initValue;
+                              const TString& expectedValue, 
+                              const TString& initValue = "") { 
+            TString t = initValue; 
             UNIT_ASSERT_VALUES_EQUAL(MultiInput.ReadTo(t, c), expectedRetval);
             UNIT_ASSERT_VALUES_EQUAL(t, expectedValue);
         }
     };
 
     Y_UNIT_TEST(TestReadTo) {
-        TString t;
+        TString t; 
 
         TTestCase simpleCase("0123456789abc", "defghijk");
         simpleCase.TestReadToResult('7', 8, "0123456");

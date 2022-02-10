@@ -39,7 +39,7 @@ bool TFieldProtoValueExtractor<bool>::ExtractValue(const Reflection& reflection,
 }
 
 template <>
-TString TFieldProtoValueExtractor<TString>::ExtractValue(const Reflection& reflection, const Message& element) const {
+TString TFieldProtoValueExtractor<TString>::ExtractValue(const Reflection& reflection, const Message& element) const { 
     return reflection.GetString(element, Field);
 }
 

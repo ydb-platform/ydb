@@ -1,8 +1,8 @@
-OWNER(
-    g:contrib
-    g:cpp-contrib
-)
-
+OWNER( 
+    g:contrib 
+    g:cpp-contrib 
+) 
+ 
 VERSION(5.2.4)
 
 RECURSE(

@@ -8,7 +8,7 @@ FORK_TESTS()
 SRCS(
     generic/adaptor_ut.cpp
     generic/algorithm_ut.cpp
-    generic/array_ref_ut.cpp
+    generic/array_ref_ut.cpp 
     generic/array_size_ut.cpp
     generic/bitmap_ut.cpp
     generic/bitops_ut.cpp
@@ -42,7 +42,7 @@ SRCS(
     generic/stack_ut.cpp
     generic/store_policy_ut.cpp
     generic/strbuf_ut.cpp
-    generic/string_ut.cpp
+    generic/string_ut.cpp 
     generic/typelist_ut.cpp
     generic/typetraits_ut.cpp
     generic/utility_ut.cpp

@@ -22,7 +22,7 @@ def key_by_index(idx):
 
 
 def find(s):
-    cdef TString res
+    cdef TString res 
 
     if isinstance(s, str):
         s = utf_8_encode(s)[0]

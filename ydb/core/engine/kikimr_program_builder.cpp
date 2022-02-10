@@ -194,13 +194,13 @@ TRuntimeNode TKikimrProgramBuilder::RewriteNullType(
     return DoRewriteNullType(value, expectedType, NullInternName, Env);
 }
 
-TVector<TRuntimeNode> TKikimrProgramBuilder::FixKeysType(
+TVector<TRuntimeNode> TKikimrProgramBuilder::FixKeysType( 
         const TArrayRef<const ui32>& keyTypes,
         const TKeyColumnValues& row) const
 {
     MKQL_ENSURE(!row.empty(), "Expected at least 1 key column");
     MKQL_ENSURE(keyTypes.size() == row.size(), "Mismatch of key types count");
-    TVector<TRuntimeNode> tmp(row.size());
+    TVector<TRuntimeNode> tmp(row.size()); 
     for (ui32 i = 0; i < row.size(); ++i) {
         tmp[i] = RewriteNullType(row[i], keyTypes[i]);
         bool isOptional;
@@ -297,8 +297,8 @@ TRuntimeNode TKikimrProgramBuilder::SelectRange(
     MKQL_ENSURE(options.FromColumns.size() > 0, "Expected at least one key component in the 'from' section of the range");
     const ui32 maxKeyColumnsCount = ::Max<ui32>(options.FromColumns.size(), options.ToColumns.size());
     MKQL_ENSURE(keyTypes.size() == maxKeyColumnsCount, "Mismatch of key types count");
-    TVector<TRuntimeNode> from(options.FromColumns.size());
-    TVector<TRuntimeNode> to(options.ToColumns.size());
+    TVector<TRuntimeNode> from(options.FromColumns.size()); 
+    TVector<TRuntimeNode> to(options.ToColumns.size()); 
     for (ui32 i = 0; i < maxKeyColumnsCount; ++i) {
         TDataType* dataFrom = nullptr;
         TDataType* dataTo = nullptr;
@@ -560,7 +560,7 @@ TRuntimeNode TKikimrProgramBuilder::Bind(TRuntimeNode program, TRuntimeNode para
                     retItemType = AS_TYPE(TListType, retItemType)->GetItemType();
                 }
 
-                TVector<TRuntimeNode> mapResults;
+                TVector<TRuntimeNode> mapResults; 
                 mapResults.reserve(list->GetItemsCount());
 
                 TExploringNodeVisitor explorer;

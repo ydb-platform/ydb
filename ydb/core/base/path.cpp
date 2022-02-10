@@ -5,8 +5,8 @@
 
 namespace NKikimr {
 
-TVector<TString> SplitPath(TString path) {
-    TVector<TString> res;
+TVector<TString> SplitPath(TString path) { 
+    TVector<TString> res; 
     if (path.empty())
         return res;
 // xenoxeno: don't do it unless you want YQL to complain about paths...
@@ -30,7 +30,7 @@ TVector<TString> SplitPath(TString path) {
     return res;
 }
 
-TString JoinPath(const TVector<TString>& path) {
+TString JoinPath(const TVector<TString>& path) { 
     TString result;
     size_t size = 0;
     for (const TString& s : path) {

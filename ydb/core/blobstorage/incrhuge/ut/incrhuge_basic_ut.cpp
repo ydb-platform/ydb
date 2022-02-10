@@ -24,7 +24,7 @@ using namespace NKikimr::NIncrHuge;
 class TTestEnv {
 public:
     TIntrusivePtr<NMonitoring::TDynamicCounters> Counters = new NMonitoring::TDynamicCounters;
-    TString Path;
+    TString Path; 
     ui32 ChunkSize;
     ui64 DiskSize;
     ui64 PDiskGuid;
@@ -50,7 +50,7 @@ public:
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // PDisk
         if (format) {
-            TString dir = TempDir();
+            TString dir = TempDir(); 
             Path = dir + "/incrhuge.bin";
             TFsPath(Path).DeleteIfExists();
             ChunkSize = chunkSize;
@@ -106,7 +106,7 @@ public:
             NKikimrServices::EServiceKikimr_MAX,
             NKikimrServices::EServiceKikimr_Name
         );
-        TString explanation;
+        TString explanation; 
         logSettings->SetLevel(NLog::PRI_DEBUG, NKikimrServices::BS_INCRHUGE, explanation);
         logSettings->SetLevel(NLog::PRI_DEBUG, NActorsServices::TEST, explanation);
 

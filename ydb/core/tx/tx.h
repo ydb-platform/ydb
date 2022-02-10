@@ -84,7 +84,7 @@ struct TExecLevelHierarchy {
         ui64 ReversedDomainMask;
     };
 
-    TVector<TEntry> Entries;
+    TVector<TEntry> Entries; 
 
     ui32 Select(ui64 mask) const {
         for (ui32 i = 0, e = Entries.size(); i != e; ++i) {

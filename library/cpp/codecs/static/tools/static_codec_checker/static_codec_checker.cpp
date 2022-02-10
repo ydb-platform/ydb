@@ -14,7 +14,7 @@
 int main(int argc, char** argv) {
     NCodecs::TCodecPtr codecPtr;
     NCodecs::EDataStreamFormat fmt = NCodecs::DSF_NONE;
-    TString codecFile;
+    TString codecFile; 
     bool testCompression = false;
 
     auto opts = NLastGetopt::TOpts::Default();
@@ -50,7 +50,7 @@ int main(int argc, char** argv) {
 
         Cout << "Reading testing set data ... " << Flush;
 
-        TVector<TString> allData;
+        TVector<TString> allData; 
         for (const auto& freeArg : res.GetFreeArgs()) {
             NCodecs::ParseBlob(allData, fmt, NCodecs::GetInputBlob(freeArg));
         }

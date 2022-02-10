@@ -22,7 +22,7 @@ using namespace NKikimr;
 //////////////////////////////////////////////////////////////////////////////////////
 // TAllPDisksConfiguration
 //////////////////////////////////////////////////////////////////////////////////////
-TAllPDisksConfiguration TAllPDisksConfiguration::MkDevice(const TString &devicePath,
+TAllPDisksConfiguration TAllPDisksConfiguration::MkDevice(const TString &devicePath, 
                                                           ui32 chunkSize,
                                                           TString deviceType) {
     return TAllPDisksConfiguration(1, chunkSize, 0, TString(), devicePath, deviceType);
@@ -43,7 +43,7 @@ TAllPDisksConfiguration TAllPDisksConfiguration::MkManyTmp(ui32 pDisksNum,
 }
 
 TAllPDisksConfiguration::TAllPDisksConfiguration(ui32 num, ui32 chunkSize, ui64 diskSize,
-                                                 const TString &dir, const TString &device,
+                                                 const TString &dir, const TString &device, 
                                                  TString deviceType)
     : PDisksNum(num)
     , ChunkSize(chunkSize)
@@ -57,7 +57,7 @@ TAllPDisksConfiguration::TAllPDisksConfiguration(ui32 num, ui32 chunkSize, ui64 
 //////////////////////////////////////////////////////////////////////////////////////
 // TOnePDisk
 //////////////////////////////////////////////////////////////////////////////////////
-TOnePDisk::TOnePDisk(ui32 pDiskId, ui64 pDiskGuid, const TString &filename,
+TOnePDisk::TOnePDisk(ui32 pDiskId, ui64 pDiskGuid, const TString &filename, 
                      ui32 chunkSize, ui64 diskSize)
     : PDiskActorID()
     , PDiskID(pDiskId)
@@ -103,7 +103,7 @@ TAllPDisks::TAllPDisks(const TAllPDisksConfiguration &cfg)
 {
     if (cfg.Device.empty()) {
         // using filesystem
-        TString entryDir;
+        TString entryDir; 
         if (cfg.Dir.empty()) {
             TempDir = std::make_shared<TTempDir>();
             entryDir = (*TempDir)();
@@ -281,8 +281,8 @@ void TConfiguration::Prepare(IVDiskSetup *vdiskSetup, bool newPDisks, bool runRe
 
     TIntrusivePtr<TTableNameserverSetup> nameserverTable(new TTableNameserverSetup());
     TPortManager pm;
-    nameserverTable->StaticNodeTable[1] = std::pair<TString, ui32>("127.0.0.1", pm.GetPort(12001));
-    nameserverTable->StaticNodeTable[2] = std::pair<TString, ui32>("127.0.0.1", pm.GetPort(12002));
+    nameserverTable->StaticNodeTable[1] = std::pair<TString, ui32>("127.0.0.1", pm.GetPort(12001)); 
+    nameserverTable->StaticNodeTable[2] = std::pair<TString, ui32>("127.0.0.1", pm.GetPort(12002)); 
 
     THolder<TActorSystemSetup> setup1(new TActorSystemSetup());
     setup1->NodeId = 1;
@@ -329,7 +329,7 @@ void TConfiguration::Prepare(IVDiskSetup *vdiskSetup, bool newPDisks, bool runRe
         NKikimrServices::EServiceKikimr_MAX,
         NKikimrServices::EServiceKikimr_Name
     );
-    TString explanation;
+    TString explanation; 
     //logSettings->SetLevel(NLog::PRI_INFO, NKikimrServices::BS_SKELETON, explanation);
     //logSettings->SetLevel(NLog::PRI_INFO, NKikimrServices::BS_HULLCOMP, explanation);
     //logSettings->SetLevel(NLog::PRI_DEBUG, NKikimrServices::BS_HULLQUERY, explanation);

@@ -107,7 +107,7 @@ namespace NKikimr {
                 {}
             };
 
-            using TResultQueue = TPriorityQueue<TQueueItem, TVector<TQueueItem>, TCompare>;
+            using TResultQueue = TPriorityQueue<TQueueItem, TVector<TQueueItem>, TCompare>; 
 
             std::shared_ptr<TReplCtx> ReplCtx;
             const TBlobStorageGroupType GType;
@@ -130,7 +130,7 @@ namespace NKikimr {
             TResultQueue ResultQueue;
 
             TQueue<std::unique_ptr<TEvBlobStorage::TEvVGet>> SchedulerRequestQ;
-            THashMap<ui64, TReplMemTokenId> RequestTokens;
+            THashMap<ui64, TReplMemTokenId> RequestTokens; 
 
             friend class TActorBootstrapped<TVDiskProxyActor>;
 
@@ -387,7 +387,7 @@ namespace NKikimr {
                             ++CurPosIdx;
 
                         if (q.GetStatus() == NKikimrProto::OK) {
-                            TString buffer = q.GetBuffer();
+                            TString buffer = q.GetBuffer(); 
                             if (buffer.size() != GType.PartSize(id)) {
                                 TString message = VDISKP(ReplCtx->VCtx->VDiskLogPrefix,
                                     "Received incorrect data BlobId# %s Buffer.size# %zu;"

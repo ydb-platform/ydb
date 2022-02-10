@@ -1394,7 +1394,7 @@ class GnuCompiler(Compiler):
             self.c_defines.append('-D_YNDX_LIBUNWIND_ENABLE_EXCEPTION_BACKTRACE')
 
         if self.target.is_ios:
-            self.c_defines.extend(['-D_XOPEN_SOURCE', '-D_DARWIN_C_SOURCE'])
+            self.c_defines.extend(['-D_XOPEN_SOURCE', '-D_DARWIN_C_SOURCE']) 
             if preset('MAPSMOBI_BUILD_TARGET') and self.target.is_arm:
                 self.c_foptions.append('-fembed-bitcode')
 
@@ -1524,7 +1524,7 @@ class GnuCompiler(Compiler):
         emit('CXX_COMPILER', '${quo:CXX_COMPILER_UNQUOTED}')
         emit('NOGCCSTACKCHECK', 'yes')
         emit('SFDL_FLAG', self.sfdl_flags, '-o', '$SFDL_TMP_OUT')
-        emit('WERROR_FLAG', '-Werror')
+        emit('WERROR_FLAG', '-Werror') 
         # TODO(somov): Убрать чтение настройки из os.environ
         emit('USE_ARC_PROFILE', 'yes' if preset('USE_ARC_PROFILE') or os.environ.get('USE_ARC_PROFILE') else 'no')
         emit('DEBUG_INFO_FLAGS', self.debug_info_flags)

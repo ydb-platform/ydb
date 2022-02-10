@@ -1024,7 +1024,7 @@ bool TPipeline::CancelPropose(NIceDb::TNiceDb& db, const TActorContext& ctx, ui6
 
 ECleanupStatus TPipeline::CleanupOutdated(NIceDb::TNiceDb& db, const TActorContext& ctx, ui64 outdatedStep) {
     const ui32 OUTDATED_BATCH_SIZE = 100;
-    TVector<ui64> outdatedTxs;
+    TVector<ui64> outdatedTxs; 
     auto status = Self->TransQueue.CleanupOutdated(db, outdatedStep, OUTDATED_BATCH_SIZE, outdatedTxs);
     switch (status) {
         case ECleanupStatus::None:

@@ -18,7 +18,7 @@ class TWhiteboardAggregator {
 public:
     using TResponseType = ResponseType;
 
-    static THolder<TResponseType> AggregateResponses(TVector<THolder<TResponseType>>& responses) {
+    static THolder<TResponseType> AggregateResponses(TVector<THolder<TResponseType>>& responses) { 
         THolder<TResponseType> result = MakeHolder<TResponseType>();
         for (const auto& response : responses) {
             AggregateMessage(result->Record, response->Record);
@@ -26,7 +26,7 @@ public:
         return result;
     }
 
-    static THolder<TResponseType> AggregateResponses(TMap<TTabletId, THolder<TResponseType>>& responses) {
+    static THolder<TResponseType> AggregateResponses(TMap<TTabletId, THolder<TResponseType>>& responses) { 
         THolder<TResponseType> result = MakeHolder<TResponseType>();
         for (const auto& response : responses) {
             AggregateMessage(result->Record, response.second->Record);
@@ -36,12 +36,12 @@ public:
 };
 
 template <typename ResponseType>
-THolder<ResponseType> AggregateWhiteboardResponses(TVector<THolder<ResponseType>>& responses) {
+THolder<ResponseType> AggregateWhiteboardResponses(TVector<THolder<ResponseType>>& responses) { 
     return TWhiteboardAggregator<ResponseType>::AggregateResponses(responses);
 }
 
 template <typename ResponseType>
-THolder<ResponseType> AggregateWhiteboardResponses(TMap<TTabletId, THolder<ResponseType>>& responses) {
+THolder<ResponseType> AggregateWhiteboardResponses(TMap<TTabletId, THolder<ResponseType>>& responses) { 
     return TWhiteboardAggregator<ResponseType>::AggregateResponses(responses);
 }
 

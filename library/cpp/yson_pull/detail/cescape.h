@@ -6,7 +6,7 @@
 #include "macros.h"
 
 #include <util/generic/strbuf.h>
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 #include <util/generic/vector.h>
 
 /* REFERENCES FOR ESCAPE SEQUENCE INTERPRETATION:
@@ -38,7 +38,7 @@
 namespace NYsonPull {
     namespace NDetail {
         namespace NCEscape {
-            inline void encode(TString& dest, TStringBuf data) {
+            inline void encode(TString& dest, TStringBuf data) { 
                 NImpl::escape_impl(
                     reinterpret_cast<const ui8*>(data.data()),
                     data.size(),
@@ -78,14 +78,14 @@ namespace NYsonPull {
                 }
             }
 
-            inline TString encode(TStringBuf data) {
-                TString result;
+            inline TString encode(TStringBuf data) { 
+                TString result; 
                 result.reserve(data.size());
                 encode(result, data);
                 return result;
             }
 
-            inline void decode(TString& dest, TStringBuf data) {
+            inline void decode(TString& dest, TStringBuf data) { 
                 NImpl::unescape_impl(
                     reinterpret_cast<const ui8*>(data.begin()),
                     reinterpret_cast<const ui8*>(data.end()),
@@ -97,7 +97,7 @@ namespace NYsonPull {
                     });
             }
 
-            inline void decode_inplace(TVector<ui8>& data) {
+            inline void decode_inplace(TVector<ui8>& data) { 
                 auto* out = static_cast<ui8*>(
                     ::memchr(data.data(), '\\', data.size()));
                 if (out == nullptr) {
@@ -116,16 +116,16 @@ namespace NYsonPull {
                 data.resize(out - &data[0]);
             }
 
-            inline TString decode(TStringBuf data) {
-                TString result;
+            inline TString decode(TStringBuf data) { 
+                TString result; 
                 result.reserve(data.size());
                 decode(result, data);
                 return result;
             }
 
             ATTRIBUTE(noinline, cold)
-            inline TString quote(TStringBuf str) {
-                TString result;
+            inline TString quote(TStringBuf str) { 
+                TString result; 
                 result.reserve(str.size() + 16);
                 result += '"';
                 encode(result, str);
@@ -134,7 +134,7 @@ namespace NYsonPull {
             }
 
             ATTRIBUTE(noinline, cold)
-            inline TString quote(ui8 ch) {
+            inline TString quote(ui8 ch) { 
                 char c = ch;
                 return quote(TStringBuf(&c, 1));
             }

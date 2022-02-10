@@ -246,7 +246,7 @@ namespace NTest {
         NTest::TFakeDataShard DataShard;
         TSysLocks Locks;
         TSysTables::TLocksTable::TLock TmpLock;
-        TVector<TCell> TmpLockVec;
+        TVector<TCell> TmpLockVec; 
 
         ui64 LockId() const { return Locks.CurrentLockTxId(); }
 
@@ -261,8 +261,8 @@ namespace NTest {
 
     template <typename T>
     static void EmulateTx(TLockTester& tester, ui64 lockTxId,
-                   const TVector<T>& selects, const TVector<T>& updates,
-                   const TVector<std::pair<T, T>>& rangeSelects, ui32 rangeFlags = 0) {
+                   const TVector<T>& selects, const TVector<T>& updates, 
+                   const TVector<std::pair<T, T>>& rangeSelects, ui32 rangeFlags = 0) { 
         TLocksUpdate txLocks;
         tester.StartTx(lockTxId, txLocks);
 
@@ -283,7 +283,7 @@ namespace NTest {
     }
 
     template <typename T>
-    static void GeneratePoints(TVector<T>& points, ui32 numVals, T value, std::function<void (T&)> next) {
+    static void GeneratePoints(TVector<T>& points, ui32 numVals, T value, std::function<void (T&)> next) { 
         points.reserve(points.size() + numVals);
         for (ui32 i = 0; i < numVals; ++i) {
             points.emplace_back(value);
@@ -476,9 +476,9 @@ Y_UNIT_TEST(Points_OneTx) {
 
     ui32 numVals = 100 * 1000;
     ui64 txId = 100;
-    TVector<ui32> selects;
-    TVector<ui32> updates;
-    TVector<std::pair<ui32, ui32>> ranges;
+    TVector<ui32> selects; 
+    TVector<ui32> updates; 
+    TVector<std::pair<ui32, ui32>> ranges; 
 
     std::function<void (ui32&)> fInc = [](ui32& val) { ++val; };
     NTest::GeneratePoints(selects, numVals, 0u, fInc);
@@ -491,9 +491,9 @@ Y_UNIT_TEST(Points_ManyTx) {
 
     ui32 numVals = 100 * 1000;
     ui64 txId = 100;
-    TVector<ui32> selects;
-    TVector<ui32> updates;
-    TVector<std::pair<ui32, ui32>> ranges;
+    TVector<ui32> selects; 
+    TVector<ui32> updates; 
+    TVector<std::pair<ui32, ui32>> ranges; 
 
     selects.resize(1);
     for (ui32 i = 0; i < numVals; ++i, ++txId) {
@@ -510,9 +510,9 @@ Y_UNIT_TEST(Points_ManyTx_BreakAll) {
 
     ui32 numVals = 100 * 1000;
     ui64 txId = 100;
-    TVector<ui32> selects;
-    TVector<ui32> updates;
-    TVector<std::pair<ui32, ui32>> ranges;
+    TVector<ui32> selects; 
+    TVector<ui32> updates; 
+    TVector<std::pair<ui32, ui32>> ranges; 
 
     selects.resize(1);
     for (ui32 i = 0; i < numVals; ++i, ++txId) {
@@ -534,9 +534,9 @@ Y_UNIT_TEST(Points_ManyTx_RemoveAll) {
 
     ui32 numVals = 100 * 1000;
     ui64 txId = 100;
-    TVector<ui32> selects;
-    TVector<ui32> updates;
-    TVector<std::pair<ui32, ui32>> ranges;
+    TVector<ui32> selects; 
+    TVector<ui32> updates; 
+    TVector<std::pair<ui32, ui32>> ranges; 
 
     selects.resize(1);
     for (ui32 i = 0; i < numVals; ++i, ++txId) {
@@ -557,9 +557,9 @@ Y_UNIT_TEST(Points_ManyTx_BreakHalf_RemoveHalf) {
 
     ui32 numVals = 100 * 1000;
     ui64 txId = 100;
-    TVector<ui32> selects;
-    TVector<ui32> updates;
-    TVector<std::pair<ui32, ui32>> ranges;
+    TVector<ui32> selects; 
+    TVector<ui32> updates; 
+    TVector<std::pair<ui32, ui32>> ranges; 
 
     selects.resize(1);
     for (ui32 i = 0; i < numVals; ++i, ++txId) {

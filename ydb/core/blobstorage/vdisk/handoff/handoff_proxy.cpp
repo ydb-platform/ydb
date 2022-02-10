@@ -20,17 +20,17 @@ namespace NKikimr {
             }
         };
 
-        typedef TIntrusiveListWithAutoDelete<TEvLocalHandoff, TDestroy> TListType;
+        typedef TIntrusiveListWithAutoDelete<TEvLocalHandoff, TDestroy> TListType; 
 
 
         TIntrusivePtr<TBlobStorageGroupInfo> Info;
         TProxiesPtr ProxiesPtr;
         TVDiskInfo *VDiskInfoPtr;
         NHandoff::TCounters Counters;
-        const TString VDiskLogPrefix;
+        const TString VDiskLogPrefix; 
         const THandoffParams Params;
-        TListType WaitQueue;
-        TListType InFlightQueue;
+        TListType WaitQueue; 
+        TListType InFlightQueue; 
         TPrivateProxyState State;
         TDuration BadStateTimeouts[TPrivateProxyState::BADNESS_MAX];
 

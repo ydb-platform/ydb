@@ -35,12 +35,12 @@ pool_insert(Map* m, const char* key, const typename Map::mapped_type& data, TBuf
 #define AVERAGEWORD_BUF 10
 
 template <class T, class HashFcn, class EqualTo, class Alloc>
-class string_hash: public THashMap<const char*, T, HashFcn, EqualTo, Alloc> {
+class string_hash: public THashMap<const char*, T, HashFcn, EqualTo, Alloc> { 
 protected:
     TBuffer pool;
 
 public:
-    using yh = THashMap<const char*, T, HashFcn, EqualTo, Alloc>;
+    using yh = THashMap<const char*, T, HashFcn, EqualTo, Alloc>; 
     using iterator = typename yh::iterator;
     using const_iterator = typename yh::const_iterator;
     using mapped_type = typename yh::mapped_type;
@@ -50,7 +50,7 @@ public:
         pool.Reserve(HASH_SIZE_DEFAULT * AVERAGEWORD_BUF); // reserve here
     }
     string_hash(size_type hash_size, pool_size_type pool_size)
-        : THashMap<const char*, T, HashFcn, EqualTo, Alloc>(hash_size)
+        : THashMap<const char*, T, HashFcn, EqualTo, Alloc>(hash_size) 
     {
         pool.Reserve(pool_size); // reserve here
     }
@@ -68,14 +68,14 @@ public:
     }
 
     string_hash(const string_hash& sh)
-        : THashMap<const char*, T, HashFcn, EqualTo, Alloc>()
+        : THashMap<const char*, T, HashFcn, EqualTo, Alloc>() 
     {
         for (const_iterator i = sh.begin(); i != sh.end(); ++i)
             insert_copy((*i).first, (*i).second);
     }
     /* May be faster?
     string_hash(const string_hash& sh)
-        : THashMap<const char *, T, HashFcn, EqualTo>(sh)
+        : THashMap<const char *, T, HashFcn, EqualTo>(sh) 
     {
         pool = sh.pool;
         size_t delta = pool.begin() - sh.pool.begin();
@@ -101,12 +101,12 @@ public:
 };
 
 template <class C, class T, class HashFcn, class EqualTo>
-class THashWithSegmentedPoolForKeys: protected  THashMap<const C*, T, HashFcn, EqualTo>, TNonCopyable {
+class THashWithSegmentedPoolForKeys: protected  THashMap<const C*, T, HashFcn, EqualTo>, TNonCopyable { 
 protected:
     segmented_pool<C> pool;
 
 public:
-    using yh = THashMap<const C*, T, HashFcn, EqualTo>;
+    using yh = THashMap<const C*, T, HashFcn, EqualTo>; 
     using iterator = typename yh::iterator;
     using const_iterator = typename yh::const_iterator;
     using mapped_type = typename yh::mapped_type;
@@ -170,7 +170,7 @@ public:
         return yh::find(key);
     }
 
-    const yh& get_THashMap() const {
+    const yh& get_THashMap() const { 
         return static_cast<const yh&>(*this);
     }
 };

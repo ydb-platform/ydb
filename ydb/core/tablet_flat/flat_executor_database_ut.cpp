@@ -131,8 +131,8 @@ private:
     const ui32 TxTable = 0;
     const ui32 AffectedTable = 4;
 
-    TVector<TDeque<TTxId>> DatashardTxQueues;
-    THashMap<TTxId, ui32> UnconfirmedCount;
+    TVector<TDeque<TTxId>> DatashardTxQueues; 
+    THashMap<TTxId, ui32> UnconfirmedCount; 
     TTxId LastTxId = 0;
     ui64 LastDatashardIdx = 0;
 

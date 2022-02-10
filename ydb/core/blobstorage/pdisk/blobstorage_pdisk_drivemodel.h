@@ -208,11 +208,11 @@ public:
         return 1000000000ULL / SeekTimeNsec;
     }
 
-    TString ToString() const {
+    TString ToString() const { 
         return ToString(false);
     }
 
-    TString ToString(bool isMultiline) const {
+    TString ToString(bool isMultiline) const { 
         TStringStream str;
         const char *x = isMultiline ? "\n" : "";
         str << "{TDriveModel" << x;

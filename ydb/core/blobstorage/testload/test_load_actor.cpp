@@ -16,7 +16,7 @@ class TLoadActor : public TActorBootstrapped<TLoadActor> {
     // per-actor HTTP info
     struct TActorInfo {
         ui64 Tag; // load tag
-        TString Data; // HTML response
+        TString Data; // HTML response 
     };
 
     // per-request info
@@ -44,7 +44,7 @@ class TLoadActor : public TActorBootstrapped<TLoadActor> {
     ui32 NextRequestId;
 
     // HTTP info requests being currently executed
-    THashMap<ui32, THttpInfoRequest> InfoRequests;
+    THashMap<ui32, THttpInfoRequest> InfoRequests; 
 
     TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
 
@@ -64,7 +64,7 @@ public:
 
     void Handle(TEvBlobStorage::TEvTestLoadRequest::TPtr& ev, const TActorContext& ctx) {
         ui32 status = NMsgBusProxy::MSTATUS_OK;
-        TString error;
+        TString error; 
         const auto& record = ev->Get()->Record;
         try {
             ProcessCmd(record, ctx);

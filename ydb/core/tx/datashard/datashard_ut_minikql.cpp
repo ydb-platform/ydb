@@ -933,7 +933,7 @@ void CrossShard_1_Cycle_Impl(const TString& dispatchName, std::function<void (TT
 }
 
 Y_UNIT_TEST(CrossShard_1_Cycle) {
-    TVector<ui64> tabletIds;
+    TVector<ui64> tabletIds; 
     tabletIds.push_back((ui64)TTestTxConfig::TxTablet0);
     tabletIds.push_back((ui64)TTestTxConfig::TxTablet1);
     tabletIds.push_back((ui64)TTestTxConfig::TxTablet2);
@@ -1010,7 +1010,7 @@ void CrossShard_2_SwapAndCopy_Impl(const TString& dispatchName, std::function<vo
 }
 
 Y_UNIT_TEST(CrossShard_2_SwapAndCopy) {
-    TVector<ui64> tabletIds;
+    TVector<ui64> tabletIds; 
     tabletIds.push_back((ui64)TTestTxConfig::TxTablet0);
     tabletIds.push_back((ui64)TTestTxConfig::TxTablet1);
     tabletIds.push_back((ui64)TTestTxConfig::TxTablet2);
@@ -1088,7 +1088,7 @@ void CrossShard_3_AllToOne_Impl(const TString& dispatchName, std::function<void 
 }
 
 Y_UNIT_TEST(CrossShard_3_AllToOne) {
-    TVector<ui64> tabletIds;
+    TVector<ui64> tabletIds; 
     tabletIds.push_back((ui64)TTestTxConfig::TxTablet0);
     tabletIds.push_back((ui64)TTestTxConfig::TxTablet1);
     tabletIds.push_back((ui64)TTestTxConfig::TxTablet2);
@@ -1164,7 +1164,7 @@ void CrossShard_4_OneToAll_Impl(const TString& dispatchName, std::function<void 
 }
 
 Y_UNIT_TEST(CrossShard_4_OneToAll) {
-    TVector<ui64> tabletIds;
+    TVector<ui64> tabletIds; 
     tabletIds.push_back((ui64)TTestTxConfig::TxTablet0);
     tabletIds.push_back((ui64)TTestTxConfig::TxTablet1);
     tabletIds.push_back((ui64)TTestTxConfig::TxTablet2);
@@ -1276,7 +1276,7 @@ void CrossShard_5_AllToAll_Impl(const TString& dispatchName, std::function<void 
 }
 
 Y_UNIT_TEST(CrossShard_5_AllToAll) {
-    TVector<ui64> tabletIds;
+    TVector<ui64> tabletIds; 
     tabletIds.push_back((ui64)TTestTxConfig::TxTablet0);
     tabletIds.push_back((ui64)TTestTxConfig::TxTablet1);
     tabletIds.push_back((ui64)TTestTxConfig::TxTablet2);
@@ -1352,7 +1352,7 @@ void CrossShard_6_Local_Impl(const TString& dispatchName, std::function<void (TT
 }
 
 Y_UNIT_TEST(CrossShard_6_Local) {
-    TVector<ui64> tabletIds;
+    TVector<ui64> tabletIds; 
     tabletIds.push_back((ui64)TTestTxConfig::TxTablet0);
     tabletIds.push_back((ui64)TTestTxConfig::TxTablet1);
     tabletIds.push_back((ui64)TTestTxConfig::TxTablet2);

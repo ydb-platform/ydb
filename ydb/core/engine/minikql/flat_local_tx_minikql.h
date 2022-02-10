@@ -20,7 +20,7 @@ public:
         : Scheme(scheme)
         , TabletId(tabletId) {}
 
-    virtual NThreading::TFuture<TTableResults> ResolveTables(const TVector<TTable>& tables) override {
+    virtual NThreading::TFuture<TTableResults> ResolveTables(const TVector<TTable>& tables) override { 
         TTableResults results;
         results.reserve(tables.size());
 
@@ -76,8 +76,8 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
     const TLocalMiniKQLProgram SourceProgram;
     const TMiniKQLFactory* const Factory;
 
-    TString SerializedMiniKQLProgram;
-    TString SerializedMiniKQLParams;
+    TString SerializedMiniKQLProgram; 
+    TString SerializedMiniKQLParams; 
 
     TAutoPtr<NYql::TMiniKQLCompileResult> ProgramCompileResult;
 
@@ -284,7 +284,7 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
                 if (EngineResultStatusCode != IEngineFlat::EResult::Ok)
                     return MakeResponse(proxyEngine.Get(), ctx);
 
-                const TString shardProgram = shardData.Program;
+                const TString shardProgram = shardData.Program; 
                 proxyEngine->AfterShardProgramsExtracted();
 
                 TEngineHostCounters hostCounters;
@@ -326,7 +326,7 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
                 if (EngineResultStatusCode != IEngineFlat::EResult::Ok)
                     return MakeResponse(engine.Get(), ctx);
 
-                const TString shardEngineReply = engine->GetShardReply(TabletId);
+                const TString shardEngineReply = engine->GetShardReply(TabletId); 
                 proxyEngine->AddShardReply(TabletId, shardEngineReply);
                 proxyEngine->FinalizeOriginReplies(TabletId);
             }

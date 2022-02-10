@@ -15,16 +15,16 @@ namespace NLog {
 struct TLogRow {
     TInstant Time;
     ELevel Level;
-    TString ProcName;
+    TString ProcName; 
     pid_t ProcId;
     ui64 ThreadId;
     EComponent Component;
-    TString FileName;
+    TString FileName; 
     ui32 LineNumber;
-    TString Message;
+    TString Message; 
 };
 
-static TLogRow ParseLogRow(const TString& str) {
+static TLogRow ParseLogRow(const TString& str) { 
     static std::regex rowRe(
                 "^([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}) " // (1) time
                 "([A-Z ]{5}) "                                                         // (2) level

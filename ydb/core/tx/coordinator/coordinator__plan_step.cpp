@@ -20,9 +20,9 @@ struct TInFlyAccountant {
 struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
     const ui64 PlanOnStep;
     const bool Rapid;
-    TVector<TQueueType::TSlot> Slots;
+    TVector<TQueueType::TSlot> Slots; 
 
-    TMap<ui64, std::pair<ui64, bool *>> StepsToConfirm;
+    TMap<ui64, std::pair<ui64, bool *>> StepsToConfirm; 
     TAutoPtr<TCoordinatorStepConfirmations> ProxyPlanConfirmations;
 
     TInstant ExecStartMoment;
@@ -30,7 +30,7 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
     ui64 DeclinedCounter;
     TInFlyAccountant InFlyAccountant;
 
-    TTxPlanStep(ui64 toPlan, TVector<TQueueType::TSlot> &slots, TSelf *coordinator, bool rapid)
+    TTxPlanStep(ui64 toPlan, TVector<TQueueType::TSlot> &slots, TSelf *coordinator, bool rapid) 
         : TBase(coordinator)
         , PlanOnStep(toPlan)
         , Rapid(rapid)
@@ -47,9 +47,9 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
         ExecStartMoment = ctx.Now();
         const bool lowDiskSpace = Self->Executor()->GetStats().IsAnyChannelYellowStop;
 
-        THashSet<TTxId> newTransactions;
-        TVector<TAutoPtr<TMediatorStep>> mediatorSteps;
-        THashMap<TTabletId, TVector<TTabletId>> byMediatorAffected;
+        THashSet<TTxId> newTransactions; 
+        TVector<TAutoPtr<TMediatorStep>> mediatorSteps; 
+        THashMap<TTabletId, TVector<TTabletId>> byMediatorAffected; 
 
         // first fill every mediator with something (every mediator must receive step)
         const ui32 mediatorsSize = Self->Config.Mediators->List().size();
@@ -61,8 +61,8 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
         // create mediator steps
         ProxyPlanConfirmations.Reset(new TCoordinatorStepConfirmations(PlanOnStep));
         for (const auto &slot : Slots) {
-            TQueueType::TQ &queue = *slot.Queue;
-            TQueueType::TQ::TReadIterator iterator = queue.Iterator();
+            TQueueType::TQ &queue = *slot.Queue; 
+            TQueueType::TQ::TReadIterator iterator = queue.Iterator(); 
             while (TTransactionProposal *proposal = iterator.Next()) {
                 for (auto &x : byMediatorAffected) {
                     x.second.clear();
@@ -142,7 +142,7 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
                         byMediatorAffected[mediatorId].push_back(affectedTablet);
                     }
 
-                    TVector<TTabletId> affectedSet(transaction.AffectedSet.begin(), transaction.AffectedSet.end());
+                    TVector<TTabletId> affectedSet(transaction.AffectedSet.begin(), transaction.AffectedSet.end()); 
 
                     db.Table<Schema::Transaction>().Key(txId).Update(
                                 NIceDb::TUpdate<Schema::Transaction::Plan>(PlanOnStep),
@@ -153,7 +153,7 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
 
                 for (ui32 idx = 0; idx < mediatorsSize; ++idx) {
                     TTabletId mediatorId = mediatorSteps[idx]->MediatorId;
-                    TVector<TTabletId> &affected = byMediatorAffected[mediatorId];
+                    TVector<TTabletId> &affected = byMediatorAffected[mediatorId]; 
                     if (!affected.empty()) {
                         mediatorSteps[idx]->Transactions.push_back(TMediatorStep::TTx(txId, &affected.front(), affected.size(), 0));
                     }

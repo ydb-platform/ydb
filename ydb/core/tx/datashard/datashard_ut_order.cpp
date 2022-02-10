@@ -223,7 +223,7 @@ Y_UNIT_TEST_WITH_MVCC(ZigZag) {
 }
 
 Y_UNIT_TEST_WITH_MVCC(ZigZag_oo) {
-    TVector<ui32> variants = {4, 8, 16};
+    TVector<ui32> variants = {4, 8, 16}; 
     for (ui32 var : variants) {
         TTester::TOptions opts;
         opts.EnableOutOfOrder(var);
@@ -561,7 +561,7 @@ static inline bool HasFlag(ui32 flags, ui32 pos) {
     return (flags & (1 << pos));
 }
 
-static TString MkRandomTx(ui64 txId, ui32 points, ui32 rw, ui32 keysCount, TVector<ui32>& expected, bool range = false)
+static TString MkRandomTx(ui64 txId, ui32 points, ui32 rw, ui32 keysCount, TVector<ui32>& expected, bool range = false) 
 {
     UNIT_ASSERT(keysCount <= 32);
     Cout << "tx " << txId << ' ' << Bin(points) << ' ' << Bin(points & rw) << " (" << points << '/' << rw << ')' << Endl;
@@ -612,7 +612,7 @@ static TString MkRandomTx(ui64 txId, ui32 points, ui32 rw, ui32 keysCount, TVect
     ))", remoteKey, (ui32)txId+100, body.data());
 }
 
-static void PrintRandomResults(const TVector<ui32>& result, const TString& prefix) {
+static void PrintRandomResults(const TVector<ui32>& result, const TString& prefix) { 
     Cerr << prefix;
     for (ui32 val : result) {
         if (val != Max<ui32>())
@@ -687,7 +687,7 @@ static void RandomTxDeps(const TTester::TOptions& opts, ui32 numTxs, ui32 maxKey
         proxy.DelayData({TTestTxConfig::TxTablet0, indepTxId});
     }
 
-    TVector<ui32> expected(32, Max<ui32>());
+    TVector<ui32> expected(32, Max<ui32>()); 
     for (ui32 i = 0; i < numTxs; ++i) {
         ui32 count = minKeys + RandomNumber<ui32>(maxKeys-minKeys);
         if (counts.size() > i)
@@ -707,11 +707,11 @@ static void RandomTxDeps(const TTester::TOptions& opts, ui32 numTxs, ui32 maxKey
     }
 
     ui64 pictureTxId = proxy.LastTxId() + 1;
-    TVector<ui32> actual(32, Max<ui32>());
-    TVector<ui32> intermediate(32, Max<ui32>());
+    TVector<ui32> actual(32, Max<ui32>()); 
+    TVector<ui32> intermediate(32, Max<ui32>()); 
 
     auto extractActual = [&](TFakeProxyTx& tx) -> bool {
-        TVector<ui32> * out = &actual;
+        TVector<ui32> * out = &actual; 
         if (tx.TxId() != pictureTxId) {
             out = &intermediate;
         }
@@ -816,7 +816,7 @@ Y_UNIT_TEST_WITH_MVCC(RandomPoints_DelayRS) {
     opts.EnableOutOfOrder(8);
     opts.EnableMvcc(WithMvcc);
 
-    TVector<std::pair<ui32, ui32>> variants;
+    TVector<std::pair<ui32, ui32>> variants; 
     variants.push_back({8, 8});
     variants.push_back({8, 16});
     variants.push_back({8, 32});
@@ -840,7 +840,7 @@ Y_UNIT_TEST_WITH_MVCC(RandomDotRanges_DelayRS) {
     opts.EnableOutOfOrder(8);
     opts.EnableMvcc(WithMvcc);
 
-    TVector<std::pair<ui32, ui32>> variants;
+    TVector<std::pair<ui32, ui32>> variants; 
     variants.push_back({8, 8});
     variants.push_back({8, 16});
     variants.push_back({8, 32});
@@ -865,7 +865,7 @@ Y_UNIT_TEST_WITH_MVCC(RandomPoints_DelayRS_Reboot) {
     opts.EnableOutOfOrder(8);
     opts.EnableMvcc(WithMvcc);
 
-    TVector<std::pair<ui32, ui32>> variants;
+    TVector<std::pair<ui32, ui32>> variants; 
     variants.push_back({8, 8});
     variants.push_back({8, 16});
     variants.push_back({8, 32});
@@ -891,7 +891,7 @@ Y_UNIT_TEST_WITH_MVCC(RandomPoints_DelayRS_Reboot_Dirty) {
     opts.EnableOutOfOrder(8);
     opts.EnableMvcc(WithMvcc);
 
-    TVector<std::pair<ui32, ui32>> variants;
+    TVector<std::pair<ui32, ui32>> variants; 
     variants.push_back({8, 8});
     variants.push_back({8, 16});
     variants.push_back({8, 32});
@@ -916,7 +916,7 @@ Y_UNIT_TEST_WITH_MVCC(RandomPoints_DelayData) {
     opts.EnableOutOfOrder(8);
     opts.EnableMvcc(WithMvcc);
 
-    TVector<std::pair<ui32, ui32>> variants;
+    TVector<std::pair<ui32, ui32>> variants; 
     variants.push_back({8, 8});
     variants.push_back({8, 16});
     variants.push_back({8, 32});
@@ -1007,10 +1007,10 @@ public:
     }
 
     ui64 GetTxId() const { return TxId; }
-    const TMap<ui32, ui32>& GetResults() const { return Results; }
+    const TMap<ui32, ui32>& GetResults() const { return Results; } 
 
-    void SetResults(const TVector<ui32>& kv) {
-        THashSet<ui32> points;
+    void SetResults(const TVector<ui32>& kv) { 
+        THashSet<ui32> points; 
         for (ui32 point : Reads) {
             points.insert(point);
         }
@@ -1027,7 +1027,7 @@ public:
         }
     }
 
-    void ApplyWrites(TVector<ui32>& kv) const {
+    void ApplyWrites(TVector<ui32>& kv) const { 
         for (ui32 point : Writes) {
             kv[point] = TxId;
         }
@@ -1035,10 +1035,10 @@ public:
 
 private:
     ui64 TxId;
-    TVector<ui32> Writes;
-    TVector<ui32> Reads;
-    TVector<TSimpleRange> Ranges;
-    TMap<ui32, ui32> Results;
+    TVector<ui32> Writes; 
+    TVector<ui32> Reads; 
+    TVector<TSimpleRange> Ranges; 
+    TMap<ui32, ui32> Results; 
 
     static TString ProgramTextSwap(ui32 txId = 0) {
         ui32 point = txId % 1000;
@@ -1071,17 +1071,17 @@ public:
     }
 
 private:
-    TVector<ui32> Points;
+    TVector<ui32> Points; 
 };
 
-void Print(const TMap<ui32, ui32>& m) {
+void Print(const TMap<ui32, ui32>& m) { 
     for (auto& pair : m)
         Cerr << pair.first << ':' << pair.second << ' ';
     Cerr << Endl;
 }
 
 void RandomPointsAndRanges(TFakeMiniKQLProxy& proxy, ui32 numTxs, ui32 maxWrites, ui32 maxReads, ui32 maxRanges) {
-    TVector<std::shared_ptr<TSimpleTx>> txs;
+    TVector<std::shared_ptr<TSimpleTx>> txs; 
     txs.reserve(numTxs);
     ui32 startTxId = proxy.LastTxId()+1;
     for (ui32 i = 0; i < numTxs; ++i) {
@@ -1092,7 +1092,7 @@ void RandomPointsAndRanges(TFakeMiniKQLProxy& proxy, ui32 numTxs, ui32 maxWrites
         UNIT_ASSERT(!tx.Immediate());
 
         auto& expected = txs[tx.TxId()-startTxId]->GetResults();
-        TMap<ui32, ui32> actual;
+        TMap<ui32, ui32> actual; 
 
         NKikimrMiniKQL::TResult res = tx.GetResult();
         TValue value = TValue::Create(res.GetValue(), res.GetType());
@@ -1141,11 +1141,11 @@ Y_UNIT_TEST_WITH_MVCC(RandomPointsAndRanges) {
     opts.EnableOutOfOrder(8);
     opts.EnableMvcc(WithMvcc);
 
-    TVector<TVector<ui32>> variants;
-    variants.push_back(TVector<ui32>() = {100, 20, 20, 20});
-    variants.push_back(TVector<ui32>() = {100, 50, 50, 50});
-    variants.push_back(TVector<ui32>() = {100, 40, 30, 20});
-    variants.push_back(TVector<ui32>() = {400, 20, 20, 20});
+    TVector<TVector<ui32>> variants; 
+    variants.push_back(TVector<ui32>() = {100, 20, 20, 20}); 
+    variants.push_back(TVector<ui32>() = {100, 50, 50, 50}); 
+    variants.push_back(TVector<ui32>() = {100, 40, 30, 20}); 
+    variants.push_back(TVector<ui32>() = {400, 20, 20, 20}); 
 
     for (auto& v : variants) {
         RandomPointsAndRanges(opts, v[0], v[1], v[2], v[3]);
@@ -1165,7 +1165,7 @@ Y_UNIT_TEST_WITH_MVCC(ScanFollowedByUpdate) {
     TTester t(TTester::ESchema_MultiShardKV, opts);
     TFakeMiniKQLProxy proxy(t);
 
-    auto checkScanResult = [](const TFakeProxyTx &tx, TSet<TString> ref) -> bool {
+    auto checkScanResult = [](const TFakeProxyTx &tx, TSet<TString> ref) -> bool { 
         const TFakeScanTx &scanTx = dynamic_cast<const TFakeScanTx &>(tx);
         YdbOld::ResultSet res = scanTx.GetScanResult();
         //Cerr << res.DebugString() << Endl;
@@ -1194,7 +1194,7 @@ Y_UNIT_TEST_WITH_MVCC(ScanFollowedByUpdate) {
     c.SetName("value");
     c.SetTypeId(NScheme::NTypeIds::Utf8);
 
-    TSet<TString> ref1{"A", "B", "C"};
+    TSet<TString> ref1{"A", "B", "C"}; 
     proxy.EnqueueScan(dataTransaction.SerializeAsString(), [ref1, checkScanResult](TFakeProxyTx& tx) {
             return checkScanResult(tx, ref1);
         }, NDataShard::TTxFlags::Default);
@@ -1222,7 +1222,7 @@ Y_UNIT_TEST_WITH_MVCC(ScanFollowedByUpdate) {
 
     proxy.ExecQueue();
 
-    TSet<TString> ref2{"A" + ToString(N), "B" + ToString(N), "C" + ToString(N)};
+    TSet<TString> ref2{"A" + ToString(N), "B" + ToString(N), "C" + ToString(N)}; 
     proxy.EnqueueScan(dataTransaction.SerializeAsString(), [ref2, checkScanResult](TFakeProxyTx& tx) {
             return checkScanResult(tx, ref2);
         }, NDataShard::TTxFlags::Default);

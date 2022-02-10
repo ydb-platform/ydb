@@ -22,8 +22,8 @@
 #include <boost/spirit/home/classic/core/non_terminal/subrule_fwd.hpp>
 #include <boost/spirit/home/classic/core/non_terminal/impl/subrule.ipp>
 
-#include <util/system/compiler.h>
-
+#include <util/system/compiler.h> 
+ 
 namespace boost { namespace spirit {
 
 BOOST_SPIRIT_CLASSIC_NAMESPACE_BEGIN
@@ -209,9 +209,9 @@ BOOST_SPIRIT_CLASSIC_NAMESPACE_BEGIN
             return start.parse(g_arg);
         }
 
-        Y_PRAGMA_DIAGNOSTIC_PUSH
-        Y_PRAGMA_NO_WSHADOW
-
+        Y_PRAGMA_DIAGNOSTIC_PUSH 
+        Y_PRAGMA_NO_WSHADOW 
+ 
         template <int ID2, typename DefT2, typename ContextT2>
         inline subrule_list<
             self_t,
@@ -231,8 +231,8 @@ BOOST_SPIRIT_CLASSIC_NAMESPACE_BEGIN
                                 rhs, nil_t()));
         }
 
-        Y_PRAGMA_DIAGNOSTIC_POP
-
+        Y_PRAGMA_DIAGNOSTIC_POP 
+ 
         typename DefT::embed_t rhs;
         subrule_t const& start;
     };

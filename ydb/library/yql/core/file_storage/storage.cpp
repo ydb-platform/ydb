@@ -34,12 +34,12 @@ namespace NYql {
 namespace {
 
 struct TFileObject {
-    TString Name;
+    TString Name; 
     time_t MTime;
     ui64 Size;
 };
 
-TFsPath ToFilePath(const TString& path)
+TFsPath ToFilePath(const TString& path) 
 {
     if (path.empty()) {
         char tempDir[MAX_PATH];
@@ -149,7 +149,7 @@ public:
         TMutex Mutex;
     };
 
-    TImpl(size_t maxFiles, ui64 maxSize, const TString& storagePath)
+    TImpl(size_t maxFiles, ui64 maxSize, const TString& storagePath) 
         : StorageDir(ToFilePath(storagePath))
         , ProcessTempDir(StorageDir / ToString(GetPID())) // must be subfolder for fast hardlinking
         , IsTemp(storagePath.empty())
@@ -322,7 +322,7 @@ public:
 
 private:
     void LoadStats() {
-        TVector<TString> names;
+        TVector<TString> names; 
         StorageDir.ListNames(names);
 
         ui64 actualFiles = 0;
@@ -330,7 +330,7 @@ private:
 
         ui32 oldPid;
 
-        for (const TString& name: names) {
+        for (const TString& name: names) { 
             TFsPath childPath(StorageDir / name);
             TFileStat stat(childPath, true);
             if (stat.IsFile()) {
@@ -375,16 +375,16 @@ private:
         }
 
         with_lock (CleanupLock) {
-            TVector<TString> names;
+            TVector<TString> names; 
             StorageDir.ListNames(names);
 
-            TVector<TFileObject> files;
+            TVector<TFileObject> files; 
             files.reserve(names.size());
 
             ui64 actualFiles = 0;
             ui64 actualSize = 0;
 
-            for (const TString& name: names) {
+            for (const TString& name: names) { 
                 TFsPath childPath(StorageDir / name);
                 TFileStat stat(childPath, true);
                 if (stat.IsFile()) {
@@ -446,7 +446,7 @@ private:
     TRandGuid Rnd;
 };
 
-TStorage::TStorage(size_t maxFiles, ui64 maxSize, const TString& storagePath)
+TStorage::TStorage(size_t maxFiles, ui64 maxSize, const TString& storagePath) 
     : Impl(new TImpl(maxFiles, maxSize, storagePath))
 {
 }

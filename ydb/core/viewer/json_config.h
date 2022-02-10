@@ -42,7 +42,7 @@ public:
 
 template <>
 struct TJsonRequestSchema<TJsonConfig> {
-    static TString GetSchema() {
+    static TString GetSchema() { 
         TStringStream stream;
         TProtoToJson::ProtoToJsonSchema<NKikimrConfig::TAppConfig>(stream);
         return stream.Str();
@@ -51,14 +51,14 @@ struct TJsonRequestSchema<TJsonConfig> {
 
 template <>
 struct TJsonRequestSummary<TJsonConfig> {
-    static TString GetSummary() {
+    static TString GetSummary() { 
         return "\"Configuration\"";
     }
 };
 
 template <>
 struct TJsonRequestDescription<TJsonConfig> {
-    static TString GetDescription() {
+    static TString GetDescription() { 
         return "\"Returns configuration\"";
     }
 };

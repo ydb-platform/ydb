@@ -162,7 +162,7 @@ private:
             return;
         }
 
-        Expire = TInstant::MicroSeconds(rec.GetExpire());
+        Expire = TInstant::MicroSeconds(rec.GetExpire()); 
         LastResponse = ctx.Now();
         LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
                     "Node has now extended lease expiring " << ToString(Expire));

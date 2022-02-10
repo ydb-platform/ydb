@@ -16,12 +16,12 @@ namespace {
         const sockaddr_in* In;
         const sockaddr_in6* In6;
 
-        inline TSa(const sockaddr* sa) noexcept
+        inline TSa(const sockaddr* sa) noexcept 
             : Sa(sa)
         {
         }
 
-        inline bool operator==(const TSa& r) const noexcept {
+        inline bool operator==(const TSa& r) const noexcept { 
             if (Sa->sa_family == r.Sa->sa_family) {
                 switch (Sa->sa_family) {
                     case AF_INET:
@@ -34,7 +34,7 @@ namespace {
             return false;
         }
 
-        inline bool operator!=(const TSa& r) const noexcept {
+        inline bool operator!=(const TSa& r) const noexcept { 
             return !(*this == r);
         }
     };
@@ -43,7 +43,7 @@ namespace {
 class TContListener::TImpl {
 private:
     struct TStoredAddrInfo: public TAddrInfo, private TNetworkAddress {
-        inline TStoredAddrInfo(const struct addrinfo* ai, const TNetworkAddress& addr) noexcept
+        inline TStoredAddrInfo(const struct addrinfo* ai, const TNetworkAddress& addr) noexcept 
             : TAddrInfo(ai)
             , TNetworkAddress(addr)
         {
@@ -84,12 +84,12 @@ private:
             }
         }
 
-        inline ~TOneSocketListener() {
+        inline ~TOneSocketListener() { 
             Stop();
         }
 
     public:
-        inline void Run(TCont* cont) noexcept {
+        inline void Run(TCont* cont) noexcept { 
             C_ = cont;
             DoRun();
             C_ = nullptr;
@@ -111,11 +111,11 @@ private:
             }
         }
 
-        inline const IRemoteAddr* Addr() const noexcept {
+        inline const IRemoteAddr* Addr() const noexcept { 
             return Addr_.Get();
         }
 
-        inline void Stop() noexcept {
+        inline void Stop() noexcept { 
             if (C_) {
                 C_->Cancel();
 
@@ -126,7 +126,7 @@ private:
         }
 
     private:
-        inline void DoRun() noexcept {
+        inline void DoRun() noexcept { 
             while (!C_->Cancelled()) {
                 try {
                     TOpaqueAddr remote;
@@ -208,7 +208,7 @@ private:
     };
 
 public:
-    inline TImpl(ICallBack* cb, TContExecutor* e, const TOptions& opts) noexcept
+    inline TImpl(ICallBack* cb, TContExecutor* e, const TOptions& opts) noexcept 
         : E_(e)
         , Cb_(cb)
         , Opts_(opts)
@@ -274,7 +274,7 @@ TContListener::TContListener(ICallBack* cb, TContExecutor* e, const TOptions& op
 {
 }
 
-TContListener::~TContListener() {
+TContListener::~TContListener() { 
 }
 
 namespace {
@@ -315,7 +315,7 @@ void TContListener::Bind(const TNetworkAddress& addr) {
     CheckImpl(Impl_)->Bind(addr);
 }
 
-void TContListener::Stop() noexcept {
+void TContListener::Stop() noexcept { 
     Impl_.Destroy();
 }
 

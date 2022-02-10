@@ -2,11 +2,11 @@
 
 #include <util/generic/singleton.h>
 
-TNullIO& NPrivate::StdNullStream() noexcept {
+TNullIO& NPrivate::StdNullStream() noexcept { 
     return *SingletonWithPriority<TNullIO, 4>();
 }
 
-TNullInput::TNullInput() noexcept {
+TNullInput::TNullInput() noexcept { 
 }
 
 TNullInput::~TNullInput() = default;
@@ -23,14 +23,14 @@ size_t TNullInput::DoNext(const void**, size_t) {
     return 0;
 }
 
-TNullOutput::TNullOutput() noexcept = default;
+TNullOutput::TNullOutput() noexcept = default; 
 
 TNullOutput::~TNullOutput() = default;
 
 void TNullOutput::DoWrite(const void* /*buf*/, size_t /*len*/) {
 }
 
-TNullIO::TNullIO() noexcept {
+TNullIO::TNullIO() noexcept { 
 }
 
 TNullIO::~TNullIO() = default;

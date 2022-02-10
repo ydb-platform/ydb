@@ -9,8 +9,8 @@ namespace NMiniKQL {
 
 namespace {
 
-void TraverseGraph(const NUdf::TUnboxedValue* roots, ui32 rootCount, TVector<NUdf::TUnboxedValue>& values) {
-    THashSet<NUdf::IBoxedValue*> dedup;
+void TraverseGraph(const NUdf::TUnboxedValue* roots, ui32 rootCount, TVector<NUdf::TUnboxedValue>& values) { 
+    THashSet<NUdf::IBoxedValue*> dedup; 
 
     for (ui32 i = 0; i < rootCount; ++i) {
         const auto& value = roots[i];
@@ -51,7 +51,7 @@ void SaveGraphState(const NUdf::TUnboxedValue* roots, ui32 rootCount, ui64 hash,
     out.clear();
     out.AppendNoAlias((const char*)&hash, sizeof(hash));
 
-    TVector<NUdf::TUnboxedValue> values;
+    TVector<NUdf::TUnboxedValue> values; 
     TraverseGraph(roots, rootCount, values);
 
     for (ui32 i = 0; i < values.size(); ++i) {
@@ -74,7 +74,7 @@ void LoadGraphState(const NUdf::TUnboxedValue* roots, ui32 rootCount, ui64 hash,
 
     MKQL_ENSURE(hash == storedHash, "Unable to load graph state, different hashes");
 
-    TVector<NUdf::TUnboxedValue> values;
+    TVector<NUdf::TUnboxedValue> values; 
     TraverseGraph(roots, rootCount, values);
 
     for (ui32 i = 0; i < values.size(); ++i) {

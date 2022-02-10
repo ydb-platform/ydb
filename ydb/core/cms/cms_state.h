@@ -14,7 +14,7 @@ namespace NCms {
 struct TWalleTaskInfo {
     TString TaskId;
     TString RequestId;
-    TSet<TString> Permissions;
+    TSet<TString> Permissions; 
 
     TString ToString() const {
         return TStringBuilder() << "{"
@@ -27,9 +27,9 @@ struct TWalleTaskInfo {
 
 struct TCmsState : public TAtomicRefCount<TCmsState> {
     // Main state.
-    THashMap<TString, TPermissionInfo> Permissions;
-    THashMap<TString, TRequestInfo> ScheduledRequests;
-    THashMap<TString, TNotificationInfo> Notifications;
+    THashMap<TString, TPermissionInfo> Permissions; 
+    THashMap<TString, TRequestInfo> ScheduledRequests; 
+    THashMap<TString, TNotificationInfo> Notifications; 
     TDowntimes Downtimes;
     ui64 NextPermissionId = 0;
     ui64 NextRequestId = 0;
@@ -37,8 +37,8 @@ struct TCmsState : public TAtomicRefCount<TCmsState> {
     ui64 LastLogRecordTimestamp = 0;
 
     // State of Wall-E tasks.
-    THashMap<TString, TWalleTaskInfo> WalleTasks;
-    THashMap<TString, TString> WalleRequests;
+    THashMap<TString, TWalleTaskInfo> WalleTasks; 
+    THashMap<TString, TString> WalleRequests; 
 
     // CMS config.
     TCmsConfig Config;

@@ -11,16 +11,16 @@ namespace NSc {
     namespace NUt {
         TValue AssertFromJson(TStringBuf json);
 
-        inline TString NormalizeJson(const NSc::TValue& sc) {
+        inline TString NormalizeJson(const NSc::TValue& sc) { 
             return sc.ToJson(true);
         }
 
-        inline TString NormalizeJson(const NJson::TJsonValue& sc) {
+        inline TString NormalizeJson(const NJson::TJsonValue& sc) { 
             return NJson::WriteJson(sc, false, true, false);
         }
 
         template <class TStr>
-        inline TString NormalizeJson(const TStr& val) {
+        inline TString NormalizeJson(const TStr& val) { 
             return AssertFromJson(val).ToJson(true);
         }
 
@@ -38,12 +38,12 @@ namespace NSc {
 
 #define UNIT_ASSERT_JSON_EQ_JSON(A, B) UNIT_ASSERT_JSON_EQ_JSON_C(A, B, "")
 
-        inline TString DumpJson(const TValue& json) {
+        inline TString DumpJson(const TValue& json) { 
             return NJson::CompactifyJson(json.ToJson(true), true, true);
         }
 
         // deprecated
-        inline TString DumpJsonVS(const TValue& expected, const TValue& fact) {
+        inline TString DumpJsonVS(const TValue& expected, const TValue& fact) { 
             return DumpJson(expected) + "(expected) != (fact)" + DumpJson(fact);
         }
 

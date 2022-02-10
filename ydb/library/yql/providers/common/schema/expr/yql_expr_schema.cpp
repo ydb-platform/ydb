@@ -306,7 +306,7 @@ struct TExprTypeLoader {
         return Ctx.MakeType<TErrorExprType>(TIssue(TPosition(column, row, file), msg));
     }
     TMaybe<TType> LoadStructType(const TVector<std::pair<TString, TType>>& members, ui32 /*level*/) {
-        TVector<const TItemExprType*> items;
+        TVector<const TItemExprType*> items; 
         for (auto& member: members) {
             items.push_back(Ctx.MakeType<TItemExprType>(member.first, member.second));
         }
@@ -336,7 +336,7 @@ struct TExprTypeLoader {
     TMaybe<TType> LoadCallableType(TType returnType, const TVector<TType>& argTypes, const TVector<TString>& argNames,
         const TVector<ui64>& argFlags, size_t optionalCount, const TString& payload, ui32 /*level*/) {
         YQL_ENSURE(argTypes.size() == argNames.size() && argTypes.size() == argFlags.size());
-        TVector<TCallableExprType::TArgumentInfo> args;
+        TVector<TCallableExprType::TArgumentInfo> args; 
         for (size_t i = 0; i < argTypes.size(); ++i) {
             args.emplace_back();
             args.back().Type = argTypes[i];
@@ -352,7 +352,7 @@ struct TExprTypeLoader {
         YQL_ENSURE(ret->Validate(TPosition(), Ctx));
         return ret;
     }
-    void Error(const TString& info) {
+    void Error(const TString& info) { 
         Ctx.AddError(TIssue(Pos, info));
     }
 };

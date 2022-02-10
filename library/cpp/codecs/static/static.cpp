@@ -50,7 +50,7 @@ namespace NCodecs {
         return result;
     }
 
-    TString SaveCodecInfoToString(const TStaticCodecInfo& info) {
+    TString SaveCodecInfoToString(const TStaticCodecInfo& info) { 
         TStringStream s;
         SaveCodecInfoToStream(s, info);
         return s.Str();
@@ -61,7 +61,7 @@ namespace NCodecs {
         return LoadCodecInfoFromStream(m);
     }
 
-    TString FormatCodecInfo(const TStaticCodecInfo& ci) {
+    TString FormatCodecInfo(const TStaticCodecInfo& ci) { 
         TStringBuilder s;
         s << "codec name:      " << ci.GetDebugInfo().GetCodecName() << Endl;
         s << "codec hash:      " << HexWriteScalar(ci.GetDebugInfo().GetStoredCodecHash()) << Endl;
@@ -77,7 +77,7 @@ namespace NCodecs {
         return s;
     }
 
-    TString LoadStringFromArchive(const ui8* begin, size_t size) {
+    TString LoadStringFromArchive(const ui8* begin, size_t size) { 
         TArchiveReader ar(TBlob::NoCopy(begin, size));
         Y_VERIFY(ar.Count() == 1, "invalid number of entries");
         auto blob = ar.ObjectBlobByKey(ar.KeyByIndex(0));

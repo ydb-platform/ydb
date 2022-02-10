@@ -28,7 +28,7 @@ public:
         }
     }
 
-    const TString* GetTableName() const override {
+    const TString* GetTableName() const override { 
         return Name.GetLiteral() ? &Full : nullptr;
     }
 
@@ -62,10 +62,10 @@ public:
     }
 
 private:
-    TString Cluster;
+    TString Cluster; 
     TDeferredAtom Name;
-    TString View;
-    TString Full;
+    TString View; 
+    TString Full; 
 };
 
 TNodePtr BuildTableKey(TPosition pos, const TString& cluster, const TDeferredAtom& name, const TString& view) {
@@ -74,7 +74,7 @@ TNodePtr BuildTableKey(TPosition pos, const TString& cluster, const TDeferredAto
 
 class TPrepTableKeys: public ITableKeys {
 public:
-    TPrepTableKeys(TPosition pos, const TString& cluster, const TString& func, const TVector<TTableArg>& args)
+    TPrepTableKeys(TPosition pos, const TString& cluster, const TString& func, const TVector<TTableArg>& args) 
         : ITableKeys(pos)
         , Cluster(cluster)
         , Func(func)
@@ -93,7 +93,7 @@ public:
             return nullptr;
         }
 
-        TCiString func(Func);
+        TCiString func(Func); 
         if (func == "concat_strict") {
             auto tuple = Y();
             for (auto& arg: Args) {
@@ -306,18 +306,18 @@ public:
     }
 
 private:
-    TString Cluster;
-    TString Func;
-    TVector<TTableArg> Args;
+    TString Cluster; 
+    TString Func; 
+    TVector<TTableArg> Args; 
 };
 
-TNodePtr BuildTableKeys(TPosition pos, const TString& cluster, const TString& func, const TVector<TTableArg>& args) {
+TNodePtr BuildTableKeys(TPosition pos, const TString& cluster, const TString& func, const TVector<TTableArg>& args) { 
     return new TPrepTableKeys(pos, cluster, func, args);
 }
 
 class TInputOptions final: public TAstListNode {
 public:
-    TInputOptions(TPosition pos, const TVector<TString>& hints)
+    TInputOptions(TPosition pos, const TVector<TString>& hints) 
         : TAstListNode(pos)
         , Hints(hints)
     {
@@ -325,7 +325,7 @@ public:
 
     bool DoInit(TContext& ctx, ISource* src) override {
         Y_UNUSED(src);
-        TSet<TString> used;
+        TSet<TString> used; 
         for (auto& hint: Hints) {
             TMaybe<TIssue> normalizeError = NormalizeName(Pos, hint);
             if (!normalizeError.Empty()) {
@@ -349,10 +349,10 @@ public:
     }
 
 private:
-    TVector<TString> Hints;
+    TVector<TString> Hints; 
 };
 
-TNodePtr BuildInputOptions(TPosition pos, const TVector<TString>& hints) {
+TNodePtr BuildInputOptions(TPosition pos, const TVector<TString>& hints) { 
     if (hints.empty()) {
         return nullptr;
     }
@@ -420,7 +420,7 @@ TNodePtr BuildInputTables(TPosition pos, const TTableList& tables, bool inSubque
 
 class TCreateTableNode final: public TAstListNode {
 public:
-    TCreateTableNode(TPosition pos, const TTableRef& tr, const TVector<TColumnSchema>& columns,
+    TCreateTableNode(TPosition pos, const TTableRef& tr, const TVector<TColumnSchema>& columns, 
         const TVector<TIdentifier>& pkColumns, const TVector<TIdentifier>& partitionByColumns,
         const TVector<std::pair<TIdentifier, bool>>& orderByColumns)
         : TAstListNode(pos)
@@ -443,7 +443,7 @@ public:
         keys = ctx.GroundBlockShortcutsForExpr(keys);
 
         if (!PkColumns.empty() || !PartitionByColumns.empty() || !OrderByColumns.empty()) {
-            THashSet<TString> columnsSet;
+            THashSet<TString> columnsSet; 
             for (auto& col : Columns) {
                 columnsSet.insert(col.Name);
             }
@@ -562,13 +562,13 @@ public:
     }
 private:
     TTableRef Table;
-    TVector<TColumnSchema> Columns;
-    TVector<TIdentifier> PkColumns;
+    TVector<TColumnSchema> Columns; 
+    TVector<TIdentifier> PkColumns; 
     TVector<TIdentifier> PartitionByColumns;
     TVector<std::pair<TIdentifier, bool>> OrderByColumns; // column, is desc?
 };
 
-TNodePtr BuildCreateTable(TPosition pos, const TTableRef& tr, const TVector<TColumnSchema>& columns,
+TNodePtr BuildCreateTable(TPosition pos, const TTableRef& tr, const TVector<TColumnSchema>& columns, 
     const TVector<TIdentifier>& pkColumns, const TVector<TIdentifier>& partitionByColumns,
     const TVector<std::pair<TIdentifier, bool>>& orderByColumns)
 {
@@ -577,7 +577,7 @@ TNodePtr BuildCreateTable(TPosition pos, const TTableRef& tr, const TVector<TCol
 
 class TAlterTableNode final: public TAstListNode {
 public:
-    TAlterTableNode(TPosition pos, const TTableRef& tr, const TVector<TColumnSchema>& columns, EAlterTableIntentnt intent)
+    TAlterTableNode(TPosition pos, const TTableRef& tr, const TVector<TColumnSchema>& columns, EAlterTableIntentnt intent) 
         : TAstListNode(pos)
         , Table(tr)
         , Columns(columns)
@@ -654,11 +654,11 @@ public:
     }
 private:
     TTableRef Table;
-    TVector<TColumnSchema> Columns;
+    TVector<TColumnSchema> Columns; 
     EAlterTableIntentnt Intent;
 };
 
-TNodePtr BuildAlterTable(TPosition pos, const TTableRef& tr, const TVector<TColumnSchema>& columns, EAlterTableIntentnt intent)
+TNodePtr BuildAlterTable(TPosition pos, const TTableRef& tr, const TVector<TColumnSchema>& columns, EAlterTableIntentnt intent) 
 {
     return new TAlterTableNode(pos, tr, columns, intent);
 }
@@ -706,7 +706,7 @@ TNodePtr BuildDropTable(TPosition pos, const TTableRef& tr) {
     return new TDropTableNode(pos, tr);
 }
 
-static const TMap<EWriteColumnMode, TString> columnModeToStrMapMR {
+static const TMap<EWriteColumnMode, TString> columnModeToStrMapMR { 
     {EWriteColumnMode::Default, ""},
     {EWriteColumnMode::Insert, "append"},
     {EWriteColumnMode::Renew, "renew"}
@@ -716,7 +716,7 @@ static const TMap<EWriteColumnMode, TString> columnModeToStrMapStat {
     {EWriteColumnMode::Upsert, "upsert"}
 };
 
-static const TMap<EWriteColumnMode, TString> columnModeToStrMapKikimr {
+static const TMap<EWriteColumnMode, TString> columnModeToStrMapKikimr { 
     {EWriteColumnMode::Default, ""},
     {EWriteColumnMode::Insert, "insert_abort"},
     {EWriteColumnMode::InsertOrAbort, "insert_abort"},
@@ -732,7 +732,7 @@ static const TMap<EWriteColumnMode, TString> columnModeToStrMapKikimr {
 
 class TWriteTableNode final: public TAstListNode {
 public:
-    TWriteTableNode(TPosition pos, const TString& label, const TTableRef& table, EWriteColumnMode mode,
+    TWriteTableNode(TPosition pos, const TString& label, const TTableRef& table, EWriteColumnMode mode, 
         TNodePtr options)
         : TAstListNode(pos)
         , Label(label)
@@ -753,7 +753,7 @@ public:
         keys = ctx.GroundBlockShortcutsForExpr(keys);
 
         const auto serviceName = to_lower(Table.ServiceName(ctx));
-        auto getModesMap = [] (const TString& serviceName) -> const TMap<EWriteColumnMode, TString>& {
+        auto getModesMap = [] (const TString& serviceName) -> const TMap<EWriteColumnMode, TString>& { 
             if (serviceName == KikimrProviderName) {
                 return columnModeToStrMapKikimr;
             } else if (serviceName == StatProviderName) {
@@ -792,7 +792,7 @@ public:
         return {};
     }
 private:
-    TString Label;
+    TString Label; 
     TTableRef Table;
     EWriteColumnMode Mode;
     TNodePtr Options;
@@ -805,11 +805,11 @@ TNodePtr BuildWriteTable(TPosition pos, const TString& label, const TTableRef& t
 
 class TClustersSinkOperationBase: public TAstListNode {
 protected:
-    TClustersSinkOperationBase(TPosition pos, const TSet<TString>& clusters)
+    TClustersSinkOperationBase(TPosition pos, const TSet<TString>& clusters) 
         : TAstListNode(pos)
         , Clusters(clusters) {}
 
-    virtual TPtr ProduceOperation(TContext& ctx, const TString& sinkName, const TString& service) = 0;
+    virtual TPtr ProduceOperation(TContext& ctx, const TString& sinkName, const TString& service) = 0; 
 
     bool DoInit(TContext& ctx, ISource* src) override {
         auto block(Y());
@@ -851,31 +851,31 @@ protected:
         return {};
     }
 private:
-    TSet<TString> Clusters;
+    TSet<TString> Clusters; 
 };
 
 class TCommitClustersNode: public TClustersSinkOperationBase {
 public:
-    TCommitClustersNode(TPosition pos, const TSet<TString>& clusters)
+    TCommitClustersNode(TPosition pos, const TSet<TString>& clusters) 
         : TClustersSinkOperationBase(pos, clusters) {}
 
-    TPtr ProduceOperation(TContext& ctx, const TString& sinkName, const TString& service) override {
+    TPtr ProduceOperation(TContext& ctx, const TString& sinkName, const TString& service) override { 
         Y_UNUSED(ctx);
         Y_UNUSED(service);
         return Y("let", "world", Y(TString(CommitName), "world", sinkName));
     }
 };
 
-TNodePtr BuildCommitClusters(TPosition pos, const TSet<TString>& clusters) {
+TNodePtr BuildCommitClusters(TPosition pos, const TSet<TString>& clusters) { 
     return new TCommitClustersNode(pos, clusters);
 }
 
 class TRollbackClustersNode: public TClustersSinkOperationBase {
 public:
-    TRollbackClustersNode(TPosition pos, const TSet<TString>& clusters)
+    TRollbackClustersNode(TPosition pos, const TSet<TString>& clusters) 
         : TClustersSinkOperationBase(pos, clusters) {}
 
-    TPtr ProduceOperation(TContext& ctx, const TString& sinkName, const TString& service) override {
+    TPtr ProduceOperation(TContext& ctx, const TString& sinkName, const TString& service) override { 
         if (service != KikimrProviderName) {
             ctx.Error(ctx.Pos()) << "ROLLBACK isn't supported for provider: " << TStringBuf(service);
             return nullptr;
@@ -885,13 +885,13 @@ public:
     }
 };
 
-TNodePtr BuildRollbackClusters(TPosition pos, const TSet<TString>& clusters) {
+TNodePtr BuildRollbackClusters(TPosition pos, const TSet<TString>& clusters) { 
     return new TRollbackClustersNode(pos, clusters);
 }
 
 class TWriteResultNode final: public TAstListNode {
 public:
-    TWriteResultNode(TPosition pos, const TString& label, TNodePtr settings, const TSet<TString>& clusters)
+    TWriteResultNode(TPosition pos, const TString& label, TNodePtr settings, const TSet<TString>& clusters) 
         : TAstListNode(pos)
         , Label(label)
         , Settings(settings)
@@ -900,7 +900,7 @@ public:
 
     bool DoInit(TContext& ctx, ISource* src) override {
         auto block(Y(
-            Y("let", "result_sink", Y("DataSink", Q(TString(ResultProviderName)))),
+            Y("let", "result_sink", Y("DataSink", Q(TString(ResultProviderName)))), 
             Y("let", "world", Y(TString(WriteName), "world", "result_sink", Y("Key"), Label, Q(Settings)))
         ));
         if (ctx.PragmaAutoCommit) {
@@ -916,12 +916,12 @@ public:
         return {};
     }
 private:
-    TString Label;
+    TString Label; 
     TNodePtr Settings;
     TNodePtr CommitClusters;
 };
 
-TNodePtr BuildWriteResult(TPosition pos, const TString& label, TNodePtr settings, const TSet<TString>& clusters) {
+TNodePtr BuildWriteResult(TPosition pos, const TString& label, TNodePtr settings, const TSet<TString>& clusters) { 
     return new TWriteResultNode(pos, label, settings, clusters);
 }
 
@@ -1055,7 +1055,7 @@ public:
         return {};
     }
 private:
-    TVector<TNodePtr> Blocks;
+    TVector<TNodePtr> Blocks; 
     const bool TopLevel;
 };
 
@@ -1151,7 +1151,7 @@ TNodePtr BuildPragma(TPosition pos, const TString& prefix, const TString& name, 
 
 class TSqlLambda final: public TAstListNode {
 public:
-    TSqlLambda(TPosition pos, TVector<TString>&& args, TVector<TNodePtr>&& exprSeq)
+    TSqlLambda(TPosition pos, TVector<TString>&& args, TVector<TNodePtr>&& exprSeq) 
         : TAstListNode(pos)
         , Args(args)
         , ExprSeq(exprSeq)
@@ -1197,12 +1197,12 @@ public:
     }
 
 private:
-    TVector<TString> Args;
-    TVector<TNodePtr> ExprSeq;
+    TVector<TString> Args; 
+    TVector<TNodePtr> ExprSeq; 
     TSourcePtr FakeSource;
 };
 
-TNodePtr BuildSqlLambda(TPosition pos, TVector<TString>&& args, TVector<TNodePtr>&& exprSeq) {
+TNodePtr BuildSqlLambda(TPosition pos, TVector<TString>&& args, TVector<TNodePtr>&& exprSeq) { 
     return new TSqlLambda(pos, std::move(args), std::move(exprSeq));
 }
 

@@ -32,7 +32,7 @@ namespace NYsonPull {
             };
 
             byte_writer<stream_counter<false>> stream_;
-            TVector<EEventType> stack_;
+            TVector<EEventType> stack_; 
             bool need_item_separator_ = false;
             EStreamType mode_ = EStreamType::ListFragment;
             state state_ = state::before_begin;

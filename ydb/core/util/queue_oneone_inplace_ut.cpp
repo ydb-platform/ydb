@@ -9,8 +9,8 @@
 Y_UNIT_TEST_SUITE(TOneOneQueueTests) {
 
     Y_UNIT_TEST(TestSimpleEnqueueDequeue) {
-        using TQueueType = TOneOneQueueInplace<ui64, 32>; // 3 values per chunk
-        TQueueType queue;
+        using TQueueType = TOneOneQueueInplace<ui64, 32>; // 3 values per chunk 
+        TQueueType queue; 
 
         UNIT_ASSERT(queue.Pop() == 0);
         UNIT_ASSERT(queue.Head() == 0);
@@ -43,7 +43,7 @@ Y_UNIT_TEST_SUITE(TOneOneQueueTests) {
         UNIT_ASSERT_VALUES_EQUAL(1u, p.use_count());
 
         {
-            TAutoPtr<TQueueType, TQueueType::TPtrCleanDestructor> queue(new TQueueType());
+            TAutoPtr<TQueueType, TQueueType::TPtrCleanDestructor> queue(new TQueueType()); 
             queue->Push(new std::shared_ptr<bool>(p));
             queue->Push(new std::shared_ptr<bool>(p));
             queue->Push(new std::shared_ptr<bool>(p));
@@ -56,8 +56,8 @@ Y_UNIT_TEST_SUITE(TOneOneQueueTests) {
     }
 
     Y_UNIT_TEST(ReadIterator) {
-        using TQueueType = TOneOneQueueInplace<int, 32>;
-        TQueueType queue;
+        using TQueueType = TOneOneQueueInplace<int, 32>; 
+        TQueueType queue; 
 
         queue.Push(10);
         queue.Push(11);

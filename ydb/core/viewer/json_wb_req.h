@@ -49,8 +49,8 @@ protected:
     TMap<TNodeId, THolder<ResponseType>> PerNodeStateInfo; // map instead of unordered_map only for sorting reason
     std::unordered_map<TNodeId, TString> NodeErrors;
     TInstant NodesRequestedTime;
-    TString GroupFields;
-    TString FilterFields;
+    TString GroupFields; 
+    TString FilterFields; 
     TString MergeFields;
     TJsonSettings JsonSettings;
     bool AllEnums = false;
@@ -186,8 +186,8 @@ public:
     }
 
     static TNodeId GetNodeIdFromPeerName(const TString& peerName) {
-        TString::size_type colonPos = peerName.find(':');
-        if (colonPos != TString::npos) {
+        TString::size_type colonPos = peerName.find(':'); 
+        if (colonPos != TString::npos) { 
             return FromStringWithDefault<TNodeId>(peerName.substr(0, colonPos), 0);
         }
         return 0;
@@ -364,7 +364,7 @@ public:
 
 template <typename RequestType, typename ResponseType>
 struct TJsonRequestParameters<TJsonWhiteboardRequest<RequestType, ResponseType>> {
-    static TString GetParameters() {
+    static TString GetParameters() { 
         return R"___([{"name":"node_id","in":"query","description":"node identifier","required":false,"type":"integer"},)___"
                R"___({"name":"merge","in":"query","description":"merge information from nodes","required":false,"type":"boolean"},)___"
                R"___({"name":"group","in":"query","description":"group information by field","required":false,"type":"string"},)___"
@@ -383,7 +383,7 @@ struct TJsonRequestParameters<TJsonWhiteboardRequest<RequestType, ResponseType>>
 
 template <typename RequestType, typename ResponseType>
 struct TJsonRequestSchema<TJsonWhiteboardRequest<RequestType, ResponseType>> {
-    static TString GetSchema() {
+    static TString GetSchema() { 
         TStringStream stream;
         TProtoToJson::ProtoToJsonSchema<typename ResponseType::ProtoRecordType>(stream);
         return stream.Str();

@@ -13,30 +13,30 @@ struct TBinarySerializable {
 
 struct TNonBinarySerializable {
     ui32 Data = 0;
-    TString StrData;
+    TString StrData; 
 };
 
 struct TCustomSerializer {
     ui32 Data = 0;
-    TString StrData;
+    TString StrData; 
     SAVELOAD(StrData, Data);
 };
 
 struct TCustomOuterSerializer {
     ui32 Data = 0;
-    TString StrData;
+    TString StrData; 
 };
 
 void operator&(TCustomOuterSerializer& s, IBinSaver& f);
 
 struct TCustomOuterSerializerTmpl {
     ui32 Data = 0;
-    TString StrData;
+    TString StrData; 
 };
 
 struct TCustomOuterSerializerTmplDerived: public TCustomOuterSerializerTmpl {
     ui32 Data = 0;
-    TString StrData;
+    TString StrData; 
 };
 
 struct TMoveOnlyType {
@@ -52,7 +52,7 @@ struct TMoveOnlyType {
 
 struct TTypeWithArray {
     ui32 Data = 1;
-    TString Array[2][2]{{"test", "data"}, {"and", "more"}};
+    TString Array[2][2]{{"test", "data"}, {"and", "more"}}; 
 
     SAVELOAD(Data, Array);
     bool operator==(const TTypeWithArray& obj) const {

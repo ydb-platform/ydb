@@ -230,7 +230,7 @@ namespace NActors {
     ////////////////////////////////////////////////////////////////////////////////
     class THtmlResultMonPage: public THtmlMonPage {
     public:
-        THtmlResultMonPage(const TString &path, const TString &title, const TString &host, bool preTag,
+        THtmlResultMonPage(const TString &path, const TString &title, const TString &host, bool preTag, 
                            const NMon::IEvHttpInfoRes &result)
             : THtmlMonPage(path, title, true)
             , Host(host)
@@ -297,7 +297,7 @@ namespace NActors {
         }
 
     private:
-        TString Host;
+        TString Host; 
         bool PreTag;
         const NMon::IEvHttpInfoRes &Result;
     };
@@ -329,7 +329,7 @@ namespace NActors {
     ////////////////////////////////////////////////////////////////////////////////
     class TActorMonPage: public IMonPage {
     public:
-        TActorMonPage(const TString &path, const TString &title, const TString &host, bool preTag,
+        TActorMonPage(const TString &path, const TString &title, const TString &host, bool preTag, 
                       TActorSystem *actorSystem, const TActorId &actorId, const TVector<TString> &sids,
                       TMon::TRequestAuthorizer authorizer)
             : IMonPage(path, title)
@@ -372,7 +372,7 @@ namespace NActors {
         }
 
     private:
-        TString Host;
+        TString Host; 
         bool PreTag;
         TActorSystem *ActorSystem;
         TActorId TargetActorId;
@@ -416,13 +416,13 @@ namespace NActors {
         TBase::SortPages();
     }
 
-    TIndexMonPage *TMon::RegisterIndexPage(const TString &path, const TString &title) {
+    TIndexMonPage *TMon::RegisterIndexPage(const TString &path, const TString &title) { 
         auto page = TBase::RegisterIndexPage(path, title);
         TBase::SortPages();
         return page;
     }
 
-    IMonPage *TMon::RegisterActorPage(TIndexMonPage *index, const TString &relPath,
+    IMonPage *TMon::RegisterActorPage(TIndexMonPage *index, const TString &relPath, 
         const TString &title, bool preTag, TActorSystem *actorSystem, const TActorId &actorId, bool useAuth) {
         return RegisterActorPage({
             .Title = title,
@@ -455,18 +455,18 @@ namespace NActors {
         return page;
     }
 
-    IMonPage *TMon::RegisterCountersPage(const TString &path, const TString &title, TIntrusivePtr<TDynamicCounters> counters) {
+    IMonPage *TMon::RegisterCountersPage(const TString &path, const TString &title, TIntrusivePtr<TDynamicCounters> counters) { 
         TDynamicCountersPage* page = new TDynamicCountersPage(path, title, counters);
         page->SetUnknownGroupPolicy(EUnknownGroupPolicy::Ignore);
         Register(page);
         return page;
     }
 
-    IMonPage *TMon::FindPage(const TString &relPath) {
+    IMonPage *TMon::FindPage(const TString &relPath) { 
         return TBase::FindPage(relPath);
     }
 
-    TIndexMonPage *TMon::FindIndexPage(const TString &relPath) {
+    TIndexMonPage *TMon::FindIndexPage(const TString &relPath) { 
         return TBase::FindIndexPage(relPath);
     }
 

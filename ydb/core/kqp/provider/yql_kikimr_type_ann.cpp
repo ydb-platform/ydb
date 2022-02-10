@@ -16,9 +16,9 @@ using namespace NNodes;
 const TString DocApiTableVersionAttribute = "__document_api_version";
 
 const TTypeAnnotationNode* GetExpectedRowType(const TKikimrTableDescription& tableDesc,
-    const TVector<TString>& columns, const TPosition& pos, TExprContext& ctx)
+    const TVector<TString>& columns, const TPosition& pos, TExprContext& ctx) 
 {
-    TVector<const TItemExprType*> expectedRowTypeItems;
+    TVector<const TItemExprType*> expectedRowTypeItems; 
     for (auto& column : columns) {
         auto columnType = tableDesc.GetColumnType(column);
 
@@ -39,7 +39,7 @@ const TTypeAnnotationNode* GetExpectedRowType(const TKikimrTableDescription& tab
 const TTypeAnnotationNode* GetExpectedRowType(const TKikimrTableDescription& tableDesc,
     const TStructExprType& structType, const TPosition& pos, TExprContext& ctx)
 {
-    TVector<TString> columns;
+    TVector<TString> columns; 
     for (auto& item : structType.GetItems()) {
         columns.push_back(TString(item->GetName()));
     }
@@ -105,7 +105,7 @@ public:
 
 private:
     TStatus HandleKiRead(TKiReadBase node, TExprContext& ctx) override {
-        auto cluster = TString(node.DataSource().Cluster());
+        auto cluster = TString(node.DataSource().Cluster()); 
 
         TKikimrKey key(ctx);
         if (!key.Extract(node.TableKey().Ref())) {
@@ -143,7 +143,7 @@ private:
                 }
 
                 if (HasSetting(readTable.Settings().Ref(), "unwrap_values")) {
-                    TVector<const TItemExprType*> unwrappedItems;
+                    TVector<const TItemExprType*> unwrappedItems; 
                     for (auto* item : selectType->Cast<TStructExprType>()->GetItems()) {
                         auto unwrappedType = item->GetItemType()->Cast<TOptionalExprType>()->GetItemType();
                         auto newItemType = ctx.MakeType<TItemExprType>(item->GetName(), unwrappedType);
@@ -157,7 +157,7 @@ private:
 
                 auto listSelectType = ctx.MakeType<TListExprType>(selectType);
 
-                TTypeAnnotationNode::TListType children;
+                TTypeAnnotationNode::TListType children; 
                 children.push_back(node.World().Ref().GetTypeAnn());
                 children.push_back(listSelectType);
                 auto tupleAnn = ctx.MakeType<TTupleExprType>(children);
@@ -170,7 +170,7 @@ private:
             case TKikimrKey::Type::TableList:
             {
                 auto tableListAnnotation = BuildCommonTableListType(ctx);
-                TTypeAnnotationNode::TListType children;
+                TTypeAnnotationNode::TListType children; 
                 children.push_back(node.World().Ref().GetTypeAnn());
                 children.push_back(tableListAnnotation);
                 node.Ptr()->SetTypeAnn(ctx.MakeType<TTupleExprType>(children));
@@ -184,7 +184,7 @@ private:
                     return TStatus::Error;
                 }
 
-                TTypeAnnotationNode::TListType children;
+                TTypeAnnotationNode::TListType children; 
                 children.push_back(node.World().Ref().GetTypeAnn());
                 children.push_back(ctx.MakeType<TDataExprType>(EDataSlot::Yson));
                 node.Ptr()->SetTypeAnn(ctx.MakeType<TTupleExprType>(children));
@@ -306,7 +306,7 @@ private:
         if (auto maybeTuple = node.Input().Maybe<TExprList>()) {
             auto tuple = maybeTuple.Cast();
 
-            TVector<TExprBase> convertedValues;
+            TVector<TExprBase> convertedValues; 
             for (const auto& value : tuple) {
                 auto valueType = value.Ref().GetTypeAnn();
                 if (valueType->GetKind() != ETypeAnnotationKind::Struct) {
@@ -402,7 +402,7 @@ private:
 
         auto inputColumns = GetSetting(node.Settings().Ref(), "input_columns");
         if (!inputColumns) {
-            TExprNode::TListType columns;
+            TExprNode::TListType columns; 
             for (auto& item : rowType->GetItems()) {
                 columns.push_back(ctx.NewAtom(node.Pos(), item->GetName()));
             }
@@ -479,7 +479,7 @@ private:
         for (auto& item : updateResultType->GetItems()) {
             const auto& name = item->GetName();
 
-            if (table->GetKeyColumnIndex(TString(name))) {
+            if (table->GetKeyColumnIndex(TString(name))) { 
                 ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
                     << "Cannot update primary key column: " << name));
                 return IGraphTransformer::TStatus::Error;
@@ -551,8 +551,8 @@ private:
     }
 
     virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) override {
-        TString cluster = TString(create.DataSink().Cluster());
-        TString table = TString(create.Table());
+        TString cluster = TString(create.DataSink().Cluster()); 
+        TString table = TString(create.Table()); 
 
         auto columnTypeError = GetColumnTypeErrorFn(ctx);
 
@@ -573,7 +573,7 @@ private:
             auto nameNode = columnTuple.Item(0).Cast<TCoAtom>();
             auto typeNode = columnTuple.Item(1);
 
-            auto columnName = TString(nameNode.Value());
+            auto columnName = TString(nameNode.Value()); 
             auto columnType = typeNode.Ref().GetTypeAnn();
             YQL_ENSURE(columnType && columnType->GetKind() == ETypeAnnotationKind::Type);
 
@@ -1401,7 +1401,7 @@ private:
             return true;
         }
 
-        TString tmpDir = "/Root/Tmp/";
+        TString tmpDir = "/Root/Tmp/"; 
         TString homeDir = "/Root/Home/" + SessionCtx->GetUserName() + "/";
 
         auto tablePath = Gateway->CanonizePath(table);

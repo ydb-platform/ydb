@@ -625,7 +625,7 @@ void TTenantSlotBroker::Die(const TActorContext &ctx)
 
 void TTenantSlotBroker::LoadConfigFromProto(const NKikimrTenantSlotBroker::TConfig &config)
 {
-    PendingTimeout = TDuration::MicroSeconds(config.GetPendingSlotTimeout());
+    PendingTimeout = TDuration::MicroSeconds(config.GetPendingSlotTimeout()); 
 }
 
 void TTenantSlotBroker::ProcessEnqueuedEvents(const TActorContext &ctx)

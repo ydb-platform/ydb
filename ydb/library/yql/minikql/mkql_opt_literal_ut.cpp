@@ -143,7 +143,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLLPOTest) {
         TTypeEnvironment env(alloc);
         TProgramBuilder pgmBuilder(env, *functionRegistry);
 
-        TVector<TRuntimeNode> items;
+        TVector<TRuntimeNode> items; 
         items.push_back(pgmBuilder.NewDataLiteral<ui32>(1));
         items.push_back(pgmBuilder.NewDataLiteral<ui32>(2));
         auto list = pgmBuilder.AsList(items);
@@ -165,7 +165,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLLPOTest) {
         TTypeEnvironment env(alloc);
         TProgramBuilder pgmBuilder(env, *functionRegistry);
 
-        TVector<TRuntimeNode> items;
+        TVector<TRuntimeNode> items; 
         items.push_back(pgmBuilder.NewDataLiteral<ui32>(1));
         items.push_back(pgmBuilder.NewDataLiteral<ui32>(2));
         auto list = pgmBuilder.AsList(items);
@@ -187,7 +187,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLLPOTest) {
         TTypeEnvironment env(alloc);
         TProgramBuilder pgmBuilder(env, *functionRegistry);
 
-        TVector<TRuntimeNode> items;
+        TVector<TRuntimeNode> items; 
         items.push_back(pgmBuilder.NewDataLiteral<ui32>(1));
         items.push_back(pgmBuilder.NewDataLiteral<ui32>(2));
         auto list = pgmBuilder.AsList(items);
@@ -209,7 +209,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLLPOTest) {
         TTypeEnvironment env(alloc);
         TProgramBuilder pgmBuilder(env, *functionRegistry);
 
-        TVector<TRuntimeNode> items;
+        TVector<TRuntimeNode> items; 
         items.push_back(pgmBuilder.NewDataLiteral<ui32>(1));
         items.push_back(pgmBuilder.NewDataLiteral<ui32>(2));
         auto list = pgmBuilder.AsList(items);
@@ -231,7 +231,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLLPOTest) {
         TTypeEnvironment env(alloc);
         TProgramBuilder pgmBuilder(env, *functionRegistry);
 
-        TVector<TRuntimeNode> items;
+        TVector<TRuntimeNode> items; 
         items.push_back(pgmBuilder.NewDataLiteral<ui32>(1));
         items.push_back(pgmBuilder.NewDataLiteral<ui32>(2));
         auto list = pgmBuilder.AsList(items);
@@ -291,7 +291,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLLPOTest) {
         TTypeEnvironment env(alloc);
         TProgramBuilder pgmBuilder(env, *functionRegistry);
 
-        TVector<TRuntimeNode> elements(2);
+        TVector<TRuntimeNode> elements(2); 
         elements[0] = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("34");
         elements[1] = pgmBuilder.NewDataLiteral<ui32>(56);
         auto tuple = pgmBuilder.NewTuple(elements);

@@ -4,10 +4,10 @@ LICENSE(Public-Domain)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-OWNER(
-    g:contrib
-    g:cpp-contrib
-)
+OWNER( 
+    g:contrib 
+    g:cpp-contrib 
+) 
 
 # https://www.7-zip.org/sdk.html
 VERSION(19.00)

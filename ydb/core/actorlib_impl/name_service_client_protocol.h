@@ -12,7 +12,7 @@ public:
     void SendResolveMessage(
         TOrigActor* orig,
         const TActorContext& ctx,
-        TString address,
+        TString address, 
         ui16 port) noexcept
     {
         auto msg = new TEvResolveAddress;
@@ -41,7 +41,7 @@ public:
         const TActorContext& ctx, NAddr::IRemoteAddrPtr address) noexcept = 0;
 
     virtual void CatchResolveError(
-        const TActorContext& ctx, TString error) noexcept = 0;
+        const TActorContext& ctx, TString error) noexcept = 0; 
 
     virtual ~TResolveClientProtocol() = default;
 

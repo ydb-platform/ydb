@@ -121,7 +121,7 @@ namespace {
         typedef TBoxedResource<THistogramType, ResourceName> THistogramResource;
 
         static const TStringRef& Name() {
-            static auto name = TString(ResourceName).substr(10) + "Histogram_Create";
+            static auto name = TString(ResourceName).substr(10) + "Histogram_Create"; 
             static auto nameRef = TStringRef(name);
             return nameRef;
         }
@@ -172,7 +172,7 @@ namespace {
         typedef TBoxedResource<THistogramType, ResourceName> THistogramResource;
 
         static const TStringRef& Name() {
-            static auto name = TString(ResourceName).substr(10) + "Histogram_AddValue";
+            static auto name = TString(ResourceName).substr(10) + "Histogram_AddValue"; 
             static auto nameRef = TStringRef(name);
             return nameRef;
         }
@@ -223,7 +223,7 @@ namespace {
         typedef TBoxedResource<THistogramType, ResourceName> THistogramResource;
 
         static const TStringRef& Name() {
-            static auto name = TString(ResourceName).substr(10) + "Histogram_Serialize";
+            static auto name = TString(ResourceName).substr(10) + "Histogram_Serialize"; 
             static auto nameRef = TStringRef(name);
             return nameRef;
         }
@@ -234,7 +234,7 @@ namespace {
             const TUnboxedValuePod* args) const override {
             try {
                 THistogram proto;
-                TString result;
+                TString result; 
                 static_cast<THistogramResource*>(args[0].AsBoxed().Get())->Get()->ToProto(proto);
                 Y_PROTOBUF_SUPPRESS_NODISCARD proto.SerializeToString(&result);
                 return valueBuilder->NewString(result);
@@ -275,7 +275,7 @@ namespace {
         typedef TBoxedResource<THistogramType, ResourceName> THistogramResource;
 
         static const TStringRef& Name() {
-            static auto name = TString(ResourceName).substr(10) + "Histogram_Deserialize";
+            static auto name = TString(ResourceName).substr(10) + "Histogram_Deserialize"; 
             static auto nameRef = TStringRef(name);
             return nameRef;
         }
@@ -328,7 +328,7 @@ namespace {
         typedef TBoxedResource<THistogramType, ResourceName> THistogramResource;
 
         static const TStringRef& Name() {
-            static auto name = TString(ResourceName).substr(10) + "Histogram_Merge";
+            static auto name = TString(ResourceName).substr(10) + "Histogram_Merge"; 
             static auto nameRef = TStringRef(name);
             return nameRef;
         }
@@ -403,7 +403,7 @@ namespace {
         }
 
         static const TStringRef& Name() {
-            static auto name = TString(ResourceName).substr(10) + "Histogram_GetResult";
+            static auto name = TString(ResourceName).substr(10) + "Histogram_GetResult"; 
             static auto nameRef = TStringRef(name);
             return nameRef;
         }

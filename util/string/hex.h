@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 #include <util/generic/yexception.h>
 #include <util/system/yassert.h>
 
@@ -28,9 +28,9 @@ inline static int String2Byte(const char* s) {
 
 char* HexEncode(const void* in, size_t len, char* out);
 
-TString HexEncode(const void* in, size_t len);
+TString HexEncode(const void* in, size_t len); 
 
-inline TString HexEncode(const TStringBuf h) {
+inline TString HexEncode(const TStringBuf h) { 
     return HexEncode(h.data(), h.size());
 }
 
@@ -51,9 +51,9 @@ void* HexDecode(const void* in, size_t len, void* ptr);
  *
  * @example HexDecode("beef", 4) => {190, 239}
  */
-TString HexDecode(const void* in, size_t len);
+TString HexDecode(const void* in, size_t len); 
 
 //! Convert an ASCII hex-string (case-insensitive) to the binary form. Note that h.Size() must be even (+h % 2 == 0).
-inline TString HexDecode(const TStringBuf h) {
+inline TString HexDecode(const TStringBuf h) { 
     return HexDecode(h.data(), h.size());
 }

@@ -268,7 +268,7 @@ TExprNode::TPtr FilterByFields(TPositionHandle position, const TExprNode::TPtr& 
         return ctx.NewCallable(position, "AsStruct", std::move(structItems));
     }
 
-    TExprNode::TListType fields;
+    TExprNode::TListType fields; 
     for (auto& x : subsetFields) {
         fields.emplace_back(ctx.NewAtom(position, x));
     }
@@ -364,7 +364,7 @@ bool HasAnySetting(const TExprNode& settings, const THashSet<TString>& names) {
 }
 
 TExprNode::TPtr RemoveSetting(const TExprNode& settings, const TStringBuf& name, TExprContext& ctx) {
-    TExprNode::TListType children;
+    TExprNode::TListType children; 
     for (auto setting : settings.Children()) {
         if (setting->ChildrenSize() != 0 && setting->Head().Content() == name) {
             continue;
@@ -470,7 +470,7 @@ TExprNode::TPtr MakeSingleGroupRow(const TExprNode& aggregateNode, TExprNode::TP
     auto pos = aggregateNode.Pos();
     auto aggregatedColumns = aggregateNode.Child(2);
     auto opt = ctx.NewCallable(pos, "ToOptional", { reduced });
-    TExprNode::TListType finalRowNodes;
+    TExprNode::TListType finalRowNodes; 
     for (ui32 index = 0; index < aggregatedColumns->ChildrenSize(); ++index) {
         auto column = aggregatedColumns->Child(index);
         auto trait = column->Child(1);

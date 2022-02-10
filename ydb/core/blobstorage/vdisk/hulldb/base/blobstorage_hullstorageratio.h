@@ -68,13 +68,13 @@ namespace NKikimr {
                     << "}";
             }
 
-            TString ToString() const {
+            TString ToString() const { 
                 TStringStream str;
                 Output(str);
                 return str.Str();
             }
 
-            TString MonSummary() const {
+            TString MonSummary() const { 
                 TStringStream str;
                 str << Fraction(IndexItemsKeep, IndexItemsTotal) << " / "
                     << Fraction(IndexBytesKeep, IndexBytesTotal) << " / "
@@ -87,7 +87,7 @@ namespace NKikimr {
                 return "Idx% / IdxB% / InplB% / HugeB%";
             }
 
-            static TString Fraction(ui64 keep, ui64 total) {
+            static TString Fraction(ui64 keep, ui64 total) { 
                 Y_VERIFY(keep <= total);
                 if (total == 0)
                     return "NA";
@@ -123,7 +123,7 @@ namespace NKikimr {
                 return Ratio;
             }
 
-            TString MonSummary() const {
+            TString MonSummary() const { 
                 TSstRatioPtr ratio = Get();
                 return ratio ? ratio->MonSummary() : "UNK";
             }

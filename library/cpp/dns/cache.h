@@ -2,7 +2,7 @@
 
 #include <util/network/socket.h>
 #include <util/generic/strbuf.h>
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 
 namespace NDns {
     struct TResolveInfo {
@@ -17,14 +17,14 @@ namespace NDns {
     };
 
     struct TResolvedHost {
-        inline TResolvedHost(const TString& host, const TNetworkAddress& addr) noexcept
+        inline TResolvedHost(const TString& host, const TNetworkAddress& addr) noexcept 
             : Host(host)
             , Addr(addr)
             , Id(0)
         {
         }
 
-        TString Host; //resolved hostname (from TResolveInfo, - before aliasing)
+        TString Host; //resolved hostname (from TResolveInfo, - before aliasing) 
         TNetworkAddress Addr;
         size_t Id; //cache record id
     };
@@ -41,5 +41,5 @@ namespace NDns {
     const TResolvedHost* CachedThrResolve(const TResolveInfo& ri);
 
     //create alias for host, which can be used for static resolving (when alias is ip address)
-    void AddHostAlias(const TString& host, const TString& alias);
+    void AddHostAlias(const TString& host, const TString& alias); 
 }

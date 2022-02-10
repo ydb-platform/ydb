@@ -30,7 +30,7 @@ struct ISockAddr {
     virtual sockaddr* SockAddr() = 0;
     virtual const sockaddr* SockAddr() const = 0;
     // address in human readable form
-    virtual TString ToString() const = 0;
+    virtual TString ToString() const = 0; 
 
 protected:
     // below are the implemetation methods that can be called by T*Socket classes
@@ -64,12 +64,12 @@ struct TSockAddrLocal: public ISockAddr {
         return Size();
     }
 
-    inline void Clear() noexcept {
+    inline void Clear() noexcept { 
         Zero(in);
         Zero(Path);
     }
 
-    inline void Set(const char* path) noexcept {
+    inline void Set(const char* path) noexcept { 
         Clear();
         in.sin_family = AF_INET;
         in.sin_addr.s_addr = IpFromString("127.0.0.1");
@@ -85,8 +85,8 @@ struct TSockAddrLocal: public ISockAddr {
         return (const struct sockaddr*)(&in);
     }
 
-    TString ToString() const {
-        return TString(Path);
+    TString ToString() const { 
+        return TString(Path); 
     }
 
     TFsPath ToPath() const {
@@ -160,11 +160,11 @@ struct TSockAddrLocal: public sockaddr_un, public ISockAddr {
         return strlen(sun_path) + 2;
     }
 
-    inline void Clear() noexcept {
+    inline void Clear() noexcept { 
         Zero(*(sockaddr_un*)this);
     }
 
-    inline void Set(const char* path) noexcept {
+    inline void Set(const char* path) noexcept { 
         Clear();
         sun_family = AF_UNIX;
         strlcpy(sun_path, path, sizeof(sun_path));
@@ -178,8 +178,8 @@ struct TSockAddrLocal: public sockaddr_un, public ISockAddr {
         return (const struct sockaddr*)(const struct sockaddr_un*)this;
     }
 
-    TString ToString() const override {
-        return TString(sun_path);
+    TString ToString() const override { 
+        return TString(sun_path); 
     }
 
     TFsPath ToPath() const {
@@ -222,11 +222,11 @@ struct TSockAddrInet: public sockaddr_in, public ISockAddr {
         return Size();
     }
 
-    inline void Clear() noexcept {
+    inline void Clear() noexcept { 
         Zero(*(sockaddr_in*)this);
     }
 
-    inline void Set(TIpHost ip, TIpPort port) noexcept {
+    inline void Set(TIpHost ip, TIpPort port) noexcept { 
         Clear();
         sin_family = AF_INET;
         sin_addr.s_addr = ip;
@@ -241,7 +241,7 @@ struct TSockAddrInet: public sockaddr_in, public ISockAddr {
         return (const struct sockaddr*)(const struct sockaddr_in*)this;
     }
 
-    TString ToString() const override {
+    TString ToString() const override { 
         return IpToString(sin_addr.s_addr) + ":" + ::ToString(InetToHost(sin_port));
     }
 
@@ -258,11 +258,11 @@ struct TSockAddrInet: public sockaddr_in, public ISockAddr {
         return 0;
     }
 
-    TIpHost GetIp() const noexcept {
+    TIpHost GetIp() const noexcept { 
         return sin_addr.s_addr;
     }
 
-    TIpPort GetPort() const noexcept {
+    TIpPort GetPort() const noexcept { 
         return InetToHost(sin_port);
     }
 
@@ -288,11 +288,11 @@ struct TSockAddrInet6: public sockaddr_in6, public ISockAddr {
         return Size();
     }
 
-    inline void Clear() noexcept {
+    inline void Clear() noexcept { 
         Zero(*(sockaddr_in6*)this);
     }
 
-    inline void Set(const char* ip6, const TIpPort port) noexcept {
+    inline void Set(const char* ip6, const TIpPort port) noexcept { 
         Clear();
         sin6_family = AF_INET6;
         inet_pton(AF_INET6, ip6, &sin6_addr);
@@ -307,7 +307,7 @@ struct TSockAddrInet6: public sockaddr_in6, public ISockAddr {
         return (const struct sockaddr*)(const struct sockaddr_in6*)this;
     }
 
-    TString ToString() const override {
+    TString ToString() const override { 
         return "[" + GetIp() + "]:" + ::ToString(InetToHost(sin6_port));
     }
 
@@ -324,13 +324,13 @@ struct TSockAddrInet6: public sockaddr_in6, public ISockAddr {
         return 0;
     }
 
-    TString GetIp() const noexcept {
+    TString GetIp() const noexcept { 
         char ip6[INET6_ADDRSTRLEN];
         inet_ntop(AF_INET6, (void*)&sin6_addr, ip6, INET6_ADDRSTRLEN);
-        return TString(ip6);
+        return TString(ip6); 
     }
 
-    TIpPort GetPort() const noexcept {
+    TIpPort GetPort() const noexcept { 
         return InetToHost(sin6_port);
     }
 
@@ -583,9 +583,9 @@ public:
         Socket = socket;
     }
 
-    TStreamSocketOutput(TStreamSocketOutput&&) noexcept = default;
-    TStreamSocketOutput& operator=(TStreamSocketOutput&&) noexcept = default;
-
+    TStreamSocketOutput(TStreamSocketOutput&&) noexcept = default; 
+    TStreamSocketOutput& operator=(TStreamSocketOutput&&) noexcept = default; 
+ 
 protected:
     TStreamSocket* Socket;
 

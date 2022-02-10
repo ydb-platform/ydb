@@ -8,10 +8,10 @@ VERSION(2.0)
 
 ORIGINAL_SOURCE(https://github.com/gperftools/gperftools)
 
-OWNER(
-    g:contrib
-    g:cpp-contrib
-)
+OWNER( 
+    g:contrib 
+    g:cpp-contrib 
+) 
 
 NO_UTIL()
 

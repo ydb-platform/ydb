@@ -32,7 +32,7 @@ public:
     }
 
 protected:
-    TMap<ui32, IActor::TReceiveFunc> ProtocolFunctions;
+    TMap<ui32, IActor::TReceiveFunc> ProtocolFunctions; 
 };
 
 

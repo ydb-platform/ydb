@@ -41,7 +41,7 @@ namespace NKikimr {
     Y_UNIT_TEST_SUITE(TBlobStorageHullHugeChain) {
 
         /////////////////////////////////////////////////////////////////////////////////////////////////////////
-        void AllocateScenaryOneChunk(TChain &chain, TVector<NPrivate::TChunkSlot> &arr, ui32 slotsInChunk) {
+        void AllocateScenaryOneChunk(TChain &chain, TVector<NPrivate::TChunkSlot> &arr, ui32 slotsInChunk) { 
             NPrivate::TChunkSlot id;
             bool res = false;
             res = chain.Allocate(&id);
@@ -63,7 +63,7 @@ namespace NKikimr {
             STR << "All allocated\n";
         }
 
-        void FreeScenaryOneChunk(TChain &chain, TVector<NPrivate::TChunkSlot> &arr, ui32 slotsInChunk) {
+        void FreeScenaryOneChunk(TChain &chain, TVector<NPrivate::TChunkSlot> &arr, ui32 slotsInChunk) { 
             ui32 count = 0;
             for (const auto &x : arr) {
                 STR << "Free: " << x.ToString() << "\n";
@@ -80,7 +80,7 @@ namespace NKikimr {
 
         void AllocFreeOneChunk(ui32 slotsInChunk) {
             TChain chain("vdisk", slotsInChunk);
-            TVector<NPrivate::TChunkSlot> arr;
+            TVector<NPrivate::TChunkSlot> arr; 
             AllocateScenaryOneChunk(chain, arr, slotsInChunk);
             FreeScenaryOneChunk(chain, arr, slotsInChunk);
         }
@@ -99,8 +99,8 @@ namespace NKikimr {
 
         /////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-        void PreliminaryAllocate(ui32 num, TChain &chain, TVector<NPrivate::TChunkSlot> &arr) {
-            TVector<ui32> chunks = {27, 9, 6, 3};
+        void PreliminaryAllocate(ui32 num, TChain &chain, TVector<NPrivate::TChunkSlot> &arr) { 
+            TVector<ui32> chunks = {27, 9, 6, 3}; 
             for (ui32 i = 0; i < num; i++) {
                 NPrivate::TChunkSlot id;
                 bool res = chain.Allocate(&id);
@@ -113,7 +113,7 @@ namespace NKikimr {
             }
         }
 
-        void FreeChunksScenary(TChain &chain, TVector<NPrivate::TChunkSlot> &arr, TVector<ui32> &chunks) {
+        void FreeChunksScenary(TChain &chain, TVector<NPrivate::TChunkSlot> &arr, TVector<ui32> &chunks) { 
             for (const auto &x : arr) {
                 STR << "Free " << x.ToString() << "\n";
                 ui32 chunkId = chain.Free(x).ChunkId;
@@ -123,13 +123,13 @@ namespace NKikimr {
             STR << "Freeing done\n";
         }
 
-        void PrintOutVec(const TVector<NPrivate::TChunkSlot> &arr) {
+        void PrintOutVec(const TVector<NPrivate::TChunkSlot> &arr) { 
             for (const auto &x : arr)
                 STR << " " << x.ToString();
         }
 
-        void AllocateChunksScenary(TChain &chain, TVector<NPrivate::TChunkSlot> &arr, TVector<ui32> &chunks) {
-            TVector<NPrivate::TChunkSlot> tmp;
+        void AllocateChunksScenary(TChain &chain, TVector<NPrivate::TChunkSlot> &arr, TVector<ui32> &chunks) { 
+            TVector<NPrivate::TChunkSlot> tmp; 
             NPrivate::TChunkSlot id;
             bool res = false;
             for (ui32 i = 0; i < arr.size(); i++) {
@@ -143,7 +143,7 @@ namespace NKikimr {
             }
 
             Sort(tmp.begin(), tmp.end());
-            TVector<NPrivate::TChunkSlot> arr2(arr);
+            TVector<NPrivate::TChunkSlot> arr2(arr); 
             Sort(arr2.begin(), arr2.end());
             STR << "tmp: ";
             PrintOutVec(tmp);
@@ -157,8 +157,8 @@ namespace NKikimr {
 
         void AllocFreeAlloc(ui32 slotsInChunk) {
             TChain chain("vdisk", slotsInChunk);
-            TVector<NPrivate::TChunkSlot> arr;
-            TVector<ui32> chunks;
+            TVector<NPrivate::TChunkSlot> arr; 
+            TVector<ui32> chunks; 
 
             PreliminaryAllocate(24, chain, arr);
             FreeChunksScenary(chain, arr, chunks);
@@ -166,8 +166,8 @@ namespace NKikimr {
         }
 
         void AllocFreeRestartAlloc(ui32 slotsInChunk) {
-            TVector<NPrivate::TChunkSlot> arr;
-            TVector<ui32> chunks;
+            TVector<NPrivate::TChunkSlot> arr; 
+            TVector<ui32> chunks; 
 
             TStringStream serialized;
 
@@ -311,13 +311,13 @@ namespace NKikimr {
             STR << "Allocated: " << slot.ToString() << "\n";
 
             // just serialize/deserialize
-            TString serialized = heap.Serialize();
+            TString serialized = heap.Serialize(); 
             THeap newHeap("vdisk", chunkSize, appendBlockSize, minHugeBlobInBytes, minHugeBlobInBytes,
                     maxBlobInBytes, overhead, freeChunksReservation, false);
             newHeap.ParseFromString(serialized);
         }
 
-        void AllocateScenary(THeap &heap, ui32 hugeBlobSize, TVector<THugeSlot> &arr) {
+        void AllocateScenary(THeap &heap, ui32 hugeBlobSize, TVector<THugeSlot> &arr) { 
             heap.AddChunk(5);
             heap.AddChunk(3);
 
@@ -334,7 +334,7 @@ namespace NKikimr {
             UNIT_ASSERT_EQUAL(heap.Allocate(hugeBlobSize, &slot, &slotSize), false);
         }
 
-        void FreeScenary(THeap &heap, TVector<THugeSlot> &arr) {
+        void FreeScenary(THeap &heap, TVector<THugeSlot> &arr) { 
             for (const auto &x : arr) {
                 STR << "Free: " << x.ToString() << "\n";
                 heap.Free(x.GetDiskPart());
@@ -357,7 +357,7 @@ namespace NKikimr {
             ui32 freeChunksReservation = 0;
             THeap heap("vdisk", chunkSize, appendBlockSize, minHugeBlobInBytes, minHugeBlobInBytes,
                     maxBlobInBytes, overhead, freeChunksReservation, false);
-            TVector<THugeSlot> arr;
+            TVector<THugeSlot> arr; 
 
             AllocateScenary(heap, 6u << 20u, arr);
             FreeScenary(heap, arr);
@@ -372,10 +372,10 @@ namespace NKikimr {
             ui32 freeChunksReservation = 0;
             THeap heap("vdisk", chunkSize, appendBlockSize, minHugeBlobInBytes, minHugeBlobInBytes,
                     maxBlobInBytes, overhead, freeChunksReservation, false);
-            TVector<THugeSlot> arr;
+            TVector<THugeSlot> arr; 
 
             AllocateScenary(heap, 6u << 20u, arr);
-            TString serialized = heap.Serialize();
+            TString serialized = heap.Serialize(); 
             UNIT_ASSERT(THeap::CheckEntryPoint(serialized));
             THeap newHeap("vdisk", chunkSize, appendBlockSize, minHugeBlobInBytes, minHugeBlobInBytes,
                     maxBlobInBytes, overhead, freeChunksReservation, false);
@@ -395,7 +395,7 @@ namespace NKikimr {
 
             heap.RecoveryModeAddChunk(2);
             heap.RecoveryModeAddChunk(34);
-            TVector<ui32> rmChunks;
+            TVector<ui32> rmChunks; 
             rmChunks.push_back(2);
             rmChunks.push_back(34);
             heap.RecoveryModeRemoveChunks(rmChunks);

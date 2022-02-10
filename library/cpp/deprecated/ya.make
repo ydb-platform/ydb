@@ -18,8 +18,8 @@ RECURSE(
     ipreg1/ut_full
     ipreg1/util
     iter
-    kmp
-    kmp/ut
+    kmp 
+    kmp/ut 
     mapped_file
     mapped_file/ut
     mbitmap
@@ -37,8 +37,8 @@ RECURSE(
     datawork/conf
     calc_module
     iterators_heap
-    parse_utils
-    parse_utils/ut
+    parse_utils 
+    parse_utils/ut 
     small_array
     solartrie
     solartrie/indexed_region/ut

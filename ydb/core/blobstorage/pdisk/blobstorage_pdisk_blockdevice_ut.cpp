@@ -111,20 +111,20 @@ public:
     }
 };
 
-static TString MakeDatabasePath(const char *dir) {
-    TString databaseDirectory = Sprintf("%s/yard", dir);
+static TString MakeDatabasePath(const char *dir) { 
+    TString databaseDirectory = Sprintf("%s/yard", dir); 
     return databaseDirectory;
 }
 
-static TString MakePDiskPath(const char *dir) {
-    TString databaseDirectory = MakeDatabasePath(dir);
+static TString MakePDiskPath(const char *dir) { 
+    TString databaseDirectory = MakeDatabasePath(dir); 
     return databaseDirectory + "/pdisk.dat";
 }
 
-TString CreateFile(const char *baseDir, ui32 dataSize) {
-    TString databaseDirectory = MakeDatabasePath(baseDir);
+TString CreateFile(const char *baseDir, ui32 dataSize) { 
+    TString databaseDirectory = MakeDatabasePath(baseDir); 
     MakeDirIfNotExist(databaseDirectory.c_str());
-    TString path = MakePDiskPath(baseDir);
+    TString path = MakePDiskPath(baseDir); 
     {
         TFile file(path.c_str(), OpenAlways | RdWr | Seq | Direct);
         file.Resize(dataSize);
@@ -252,7 +252,7 @@ Y_UNIT_TEST_SUITE(TBlockDeviceTest) {
         TAtomic counter = 0;
 
         TTempDir tempDir;
-        TString path = CreateFile(tempDir().c_str(), dataSize);
+        TString path = CreateFile(tempDir().c_str(), dataSize); 
         {
             NPDisk::TAlignedData alignedBuffer;
             alignedBuffer.Resize(dataSize);

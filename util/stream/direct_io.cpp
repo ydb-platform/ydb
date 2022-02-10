@@ -33,7 +33,7 @@ void TRandomAccessFileOutput::DoFlush() {
     File->FlushData();
 }
 
-TBufferedFileOutputEx::TBufferedFileOutputEx(const TString& path, EOpenMode oMode, size_t buflen)
+TBufferedFileOutputEx::TBufferedFileOutputEx(const TString& path, EOpenMode oMode, size_t buflen) 
     : TRandomAccessFileOutput(*(new TDirectIOBufferedFile(path, oMode, buflen)))
     , FileHolder(File)
 {

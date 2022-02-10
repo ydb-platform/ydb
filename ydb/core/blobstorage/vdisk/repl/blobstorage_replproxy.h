@@ -28,7 +28,7 @@ namespace NKikimr {
                 TTrackableString Data;
 
                 TDataElement(TMemoryConsumer&& consumer, const TLogoBlobID& logoBlobId, NKikimrProto::EReplyStatus status,
-                        TString&& data)
+                        TString&& data) 
                     : LogoBlobId(logoBlobId)
                     , Status(status)
                     , Data(std::move(consumer), std::move(data))
@@ -75,14 +75,14 @@ namespace NKikimr {
             // WRITE PART
             ////////////////////////////////////////////////////////////////////////////////
 
-            void Add(const TLogoBlobID& logoBlobId, TString&& data) {
+            void Add(const TLogoBlobID& logoBlobId, TString&& data) { 
                 Y_VERIFY_DEBUG(FrontPos == 0);
                 Items.emplace_back(TMemoryConsumer(Consumer), logoBlobId, NKikimrProto::OK, std::move(data));
             }
 
             void AddError(const TLogoBlobID& logoBlobId, NKikimrProto::EReplyStatus status) {
                 Y_VERIFY_DEBUG(FrontPos == 0);
-                Items.emplace_back(TMemoryConsumer(Consumer), logoBlobId, status, TString());
+                Items.emplace_back(TMemoryConsumer(Consumer), logoBlobId, status, TString()); 
             }
 
             void Append(TDataPortion&& from) {

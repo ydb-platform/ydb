@@ -37,8 +37,8 @@ Y_UNIT_TEST_SUITE(ProtobufWalk) {
         TMutableField f(msg, fd);
         if (f.IsString()) {
             for (size_t i = 0; i < f.Size(); ++i)
-                if (f.Get<TString>(i).StartsWith('1'))
-                    f.Set(f.Get<TString>(i) + f.Get<TString>(i), i);
+                if (f.Get<TString>(i).StartsWith('1')) 
+                    f.Set(f.Get<TString>(i) + f.Get<TString>(i), i); 
         }
         return true;
     }

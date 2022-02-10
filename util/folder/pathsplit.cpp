@@ -85,8 +85,8 @@ void TPathSplitTraitsWindows::DoParsePart(const TStringBuf part0) {
     }
 }
 
-TString TPathSplitStore::DoReconstruct(const TStringBuf slash) const {
-    TString r;
+TString TPathSplitStore::DoReconstruct(const TStringBuf slash) const { 
+    TString r; 
 
     r.reserve(ToReserve(*this));
 
@@ -126,7 +126,7 @@ void Out<TPathSplit>(IOutputStream& o, const TPathSplit& ps) {
     o << ps.Reconstruct();
 }
 
-TString JoinPaths(const TPathSplit& p1, const TPathSplit& p2) {
+TString JoinPaths(const TPathSplit& p1, const TPathSplit& p2) { 
     if (p2.IsAbsolute) {
         ythrow yexception() << "can not join " << p1 << " and " << p2;
     }

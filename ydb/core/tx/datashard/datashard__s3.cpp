@@ -60,7 +60,7 @@ public:
 
         const ui32 localTableId = tableInfo.LocalTid;
 
-        TVector<TRawTypeValue> key;
+        TVector<TRawTypeValue> key; 
         TVector<TRawTypeValue> endKey;
 
         // TODO: check prefix column count against key column count

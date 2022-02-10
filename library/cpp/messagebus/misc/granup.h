@@ -11,7 +11,7 @@ namespace NBus {
     public:
         TGranUp(TDuration gran)
             : Gran(gran)
-            , Next(TInstant::MicroSeconds(0))
+            , Next(TInstant::MicroSeconds(0)) 
         {
         }
 

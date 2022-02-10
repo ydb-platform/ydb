@@ -115,21 +115,21 @@ using REALPIPEHANDLE = HANDLE;
 class TRealPipeHandle
     : public TNonCopyable {
 public:
-    inline TRealPipeHandle() noexcept
+    inline TRealPipeHandle() noexcept 
         : Fd_(INVALID_REALPIPEHANDLE)
     {
     }
 
-    inline TRealPipeHandle(REALPIPEHANDLE fd) noexcept
+    inline TRealPipeHandle(REALPIPEHANDLE fd) noexcept 
         : Fd_(fd)
     {
     }
 
-    inline ~TRealPipeHandle() {
+    inline ~TRealPipeHandle() { 
         Close();
     }
 
-    bool Close() noexcept {
+    bool Close() noexcept { 
         bool ok = true;
         if (Fd_ != INVALID_REALPIPEHANDLE)
             ok = CloseHandle(Fd_);
@@ -137,31 +137,31 @@ public:
         return ok;
     }
 
-    inline REALPIPEHANDLE Release() noexcept {
+    inline REALPIPEHANDLE Release() noexcept { 
         REALPIPEHANDLE ret = Fd_;
         Fd_ = INVALID_REALPIPEHANDLE;
         return ret;
     }
 
-    inline void Swap(TRealPipeHandle& r) noexcept {
+    inline void Swap(TRealPipeHandle& r) noexcept { 
         DoSwap(Fd_, r.Fd_);
     }
 
-    inline operator REALPIPEHANDLE() const noexcept {
+    inline operator REALPIPEHANDLE() const noexcept { 
         return Fd_;
     }
 
-    inline bool IsOpen() const noexcept {
+    inline bool IsOpen() const noexcept { 
         return Fd_ != INVALID_REALPIPEHANDLE;
     }
 
-    ssize_t Read(void* buffer, size_t byteCount) const noexcept {
+    ssize_t Read(void* buffer, size_t byteCount) const noexcept { 
         DWORD doneBytes;
         if (!ReadFile(Fd_, buffer, byteCount, &doneBytes, nullptr))
             return -1;
         return doneBytes;
     }
-    ssize_t Write(const void* buffer, size_t byteCount) const noexcept {
+    ssize_t Write(const void* buffer, size_t byteCount) const noexcept { 
         DWORD doneBytes;
         if (!WriteFile(Fd_, buffer, byteCount, &doneBytes, nullptr))
             return -1;
@@ -191,17 +191,17 @@ class TShellCommand::TImpl
     : public TAtomicRefCount<TShellCommand::TImpl> {
 private:
     TPid Pid;
-    TString Command;
-    TList<TString> Arguments;
-    TString WorkDir;
+    TString Command; 
+    TList<TString> Arguments; 
+    TString WorkDir; 
     TAtomic ExecutionStatus; // TShellCommand::ECommandStatus
     TMaybe<int> ExitCode;
     IInputStream* InputStream;
     IOutputStream* OutputStream;
     IOutputStream* ErrorStream;
-    TString CollectedOutput;
-    TString CollectedError;
-    TString InternalError;
+    TString CollectedOutput; 
+    TString CollectedError; 
+    TString InternalError; 
     TThread* WatchThread;
     TMutex TerminateMutex;
     TFileHandle InputHandle;
@@ -224,7 +224,7 @@ private:
     TShellCommandOptions::EHandleMode ErrorMode = TShellCommandOptions::HANDLE_STREAM;
 
     TShellCommandOptions::TUserOptions User;
-    THashMap<TString, TString> Environment;
+    THashMap<TString, TString> Environment; 
     int Nice = 0;
     std::function<void()> FuncAfterFork = {};
 
@@ -280,7 +280,7 @@ private:
 #endif
 
 public:
-    inline TImpl(const TStringBuf cmd, const TList<TString>& args, const TShellCommandOptions& options, const TString& workdir)
+    inline TImpl(const TStringBuf cmd, const TList<TString>& args, const TShellCommandOptions& options, const TString& workdir) 
         : Pid(0)
         , Command(ToString(cmd))
         , Arguments(args)
@@ -337,21 +337,21 @@ public:
         Arguments.push_back(ToString(argument));
     }
 
-    inline const TString& GetOutput() const {
+    inline const TString& GetOutput() const { 
         if (AtomicGet(ExecutionStatus) == SHELL_RUNNING) {
             ythrow yexception() << "You cannot retrieve output while process is running.";
         }
         return CollectedOutput;
     }
 
-    inline const TString& GetError() const {
+    inline const TString& GetError() const { 
         if (AtomicGet(ExecutionStatus) == SHELL_RUNNING) {
             ythrow yexception() << "You cannot retrieve output while process is running.";
         }
         return CollectedError;
     }
 
-    inline const TString& GetInternalError() const {
+    inline const TString& GetInternalError() const { 
         if (AtomicGet(ExecutionStatus) != SHELL_INTERNAL_ERROR) {
             ythrow yexception() << "Internal error hasn't occured so can't be retrieved.";
         }
@@ -555,10 +555,10 @@ void TShellCommand::TImpl::StartProcess(TShellCommand::TImpl::TPipes& pipes) {
     }
 
     PROCESS_INFORMATION process_info;
-    // TString cmd = "cmd /U" + TUtf16String can be used to read unicode messages from cmd
+    // TString cmd = "cmd /U" + TUtf16String can be used to read unicode messages from cmd 
     // /A - ansi charset /Q - echo off, /C - command, /Q - special quotes
-    TString qcmd = GetQuotedCommand();
-    TString cmd = UseShell ? "cmd /A /Q /S /C \"" + qcmd + "\"" : qcmd;
+    TString qcmd = GetQuotedCommand(); 
+    TString cmd = UseShell ? "cmd /A /Q /S /C \"" + qcmd + "\"" : qcmd; 
     // winapi can modify command text, copy it
 
     Y_ENSURE_EX(cmd.size() < MAX_COMMAND_LINE, yexception() << "Command is too long (length=" << cmd.size() << ")");
@@ -574,7 +574,7 @@ void TShellCommand::TImpl::StartProcess(TShellCommand::TImpl::TPipes& pipes) {
     }
 
     void* lpEnvironment = nullptr;
-    TString env;
+    TString env; 
     if (!Environment.empty()) {
         for (auto e = Environment.begin(); e != Environment.end(); ++e) {
             env += e->first + '=' + e->second + '\0';
@@ -627,21 +627,21 @@ void TShellCommand::TImpl::StartProcess(TShellCommand::TImpl::TPipes& pipes) {
 }
 #endif
 
-void ShellQuoteArg(TString& dst, TStringBuf argument) {
+void ShellQuoteArg(TString& dst, TStringBuf argument) { 
     dst.append("\"");
     TStringBuf l, r;
-    while (argument.TrySplit('"', l, r)) {
+    while (argument.TrySplit('"', l, r)) { 
         dst.append(l);
         dst.append("\\\"");
-        argument = r;
+        argument = r; 
     }
-    dst.append(argument);
+    dst.append(argument); 
     dst.append("\"");
 }
 
-void ShellQuoteArgSp(TString& dst, TStringBuf argument) {
+void ShellQuoteArgSp(TString& dst, TStringBuf argument) { 
     dst.append(' ');
-    ShellQuoteArg(dst, argument);
+    ShellQuoteArg(dst, argument); 
 }
 
 bool ArgNeedsQuotes(TStringBuf arg) noexcept {
@@ -651,8 +651,8 @@ bool ArgNeedsQuotes(TStringBuf arg) noexcept {
     return arg.find_first_of(" \"\'\t&()*<>\\`^|") != TString::npos;
 }
 
-TString TShellCommand::TImpl::GetQuotedCommand() const {
-    TString quoted = Command; /// @todo command itself should be quoted too
+TString TShellCommand::TImpl::GetQuotedCommand() const { 
+    TString quoted = Command; /// @todo command itself should be quoted too 
     for (const auto& argument : Arguments) {
         // Don't add unnecessary quotes. It's especially important for the windows with a 32k command line length limit.
         if (QuoteArguments && ArgNeedsQuotes(argument)) {
@@ -783,8 +783,8 @@ void TShellCommand::TImpl::Run() {
     }
 
     /* arguments holders */
-    TString shellArg;
-    TVector<char*> qargv;
+    TString shellArg; 
+    TVector<char*> qargv; 
     /*
       Following "const_cast"s are safe:
       http://pubs.opengroup.org/onlinepubs/9699919799/functions/exec.html
@@ -807,8 +807,8 @@ void TShellCommand::TImpl::Run() {
 
     qargv.push_back(nullptr);
 
-    TVector<TString> envHolder;
-    TVector<char*> envp;
+    TVector<TString> envHolder; 
+    TVector<char*> envp; 
     if (!Environment.empty()) {
         for (auto& env : Environment) {
             envHolder.emplace_back(env.first + '=' + env.second);
@@ -1121,14 +1121,14 @@ void TShellCommand::TImpl::Communicate(TProcessInfo* pi) {
     TerminateIsRequired(pi);
 }
 
-TShellCommand::TShellCommand(const TStringBuf cmd, const TList<TString>& args, const TShellCommandOptions& options,
-                             const TString& workdir)
+TShellCommand::TShellCommand(const TStringBuf cmd, const TList<TString>& args, const TShellCommandOptions& options, 
+                             const TString& workdir) 
     : Impl(new TImpl(cmd, args, options, workdir))
 {
 }
 
-TShellCommand::TShellCommand(const TStringBuf cmd, const TShellCommandOptions& options, const TString& workdir)
-    : Impl(new TImpl(cmd, TList<TString>(), options, workdir))
+TShellCommand::TShellCommand(const TStringBuf cmd, const TShellCommandOptions& options, const TString& workdir) 
+    : Impl(new TImpl(cmd, TList<TString>(), options, workdir)) 
 {
 }
 
@@ -1139,15 +1139,15 @@ TShellCommand& TShellCommand::operator<<(const TStringBuf argument) {
     return *this;
 }
 
-const TString& TShellCommand::GetOutput() const {
+const TString& TShellCommand::GetOutput() const { 
     return Impl->GetOutput();
 }
 
-const TString& TShellCommand::GetError() const {
+const TString& TShellCommand::GetError() const { 
     return Impl->GetError();
 }
 
-const TString& TShellCommand::GetInternalError() const {
+const TString& TShellCommand::GetInternalError() const { 
     return Impl->GetInternalError();
 }
 

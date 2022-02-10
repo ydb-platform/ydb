@@ -4,10 +4,10 @@
 
 #include "ut_helpers.h"
 
-template <typename TQueueType>
+template <typename TQueueType> 
 class TQueueTestsInSingleThread: public TTestBase {
 private:
-    using TSelf = TQueueTestsInSingleThread<TQueueType>;
+    using TSelf = TQueueTestsInSingleThread<TQueueType>; 
     using TLink = TIntrusiveLink;
 
     UNIT_TEST_SUITE_DEMANGLE(TSelf);
@@ -18,7 +18,7 @@ private:
 
 public:
     void OnePushOnePop() {
-        TQueueType queue;
+        TQueueType queue; 
 
         auto popped = queue.Pop();
         UNIT_ASSERT_VALUES_EQUAL(popped, nullptr);
@@ -33,7 +33,7 @@ public:
     };
 
     void OnePushOnePop_Repeat1M() {
-        TQueueType queue;
+        TQueueType queue; 
         TLink msg;
 
         auto popped = queue.Pop();
@@ -54,7 +54,7 @@ public:
         class TCycleThread: public ISimpleThread {
         public:
             void* ThreadProc() override {
-                TQueueType queue;
+                TQueueType queue; 
                 TLink msg;
                 auto popped = queue.Pop();
                 UNIT_ASSERT_VALUES_EQUAL(popped, nullptr);
@@ -71,7 +71,7 @@ public:
             }
         };
 
-        TVector<TAutoPtr<TCycleThread>> cyclers;
+        TVector<TAutoPtr<TCycleThread>> cyclers; 
 
         for (size_t i = 0; i < NUMBER_OF_THREADS; ++i) {
             cyclers.emplace_back(new TCycleThread);

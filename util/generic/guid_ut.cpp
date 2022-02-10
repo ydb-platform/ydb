@@ -17,7 +17,7 @@ Y_UNIT_TEST_SUITE(TGuidTest) {
 
     struct TTest {
         TGUID G;
-        TString S;
+        TString S; 
     };
 
     Y_UNIT_TEST(Test1) {

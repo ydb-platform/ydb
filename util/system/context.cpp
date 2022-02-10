@@ -52,7 +52,7 @@ extern "C" void __mylongjmp(__myjmp_buf env, int val) __attribute__((__noreturn_
 extern "C" int __mysetjmp(__myjmp_buf env) __attribute__((__returns_twice__));
 
 namespace {
-    class TStackType {
+    class TStackType { 
     public:
         inline TStackType(TArrayRef<char> range) noexcept
     #if defined(STACK_GROW_DOWN)
@@ -64,14 +64,14 @@ namespace {
             ReAlign();
         }
 
-        inline ~TStackType() = default;
+        inline ~TStackType() = default; 
 
-        inline void ReAlign() noexcept {
+        inline void ReAlign() noexcept { 
             Data_ = AlignStackPtr(Data_);
         }
 
         template <class T>
-        inline void Push(T t) noexcept {
+        inline void Push(T t) noexcept { 
     #if defined(STACK_GROW_DOWN)
             Data_ -= sizeof(T);
             *((T*)Data_) = t;
@@ -81,12 +81,12 @@ namespace {
     #endif
         }
 
-        inline char* StackPtr() noexcept {
+        inline char* StackPtr() noexcept { 
             return Data_;
         }
 
     private:
-        static inline char* AlignStackPtr(char* ptr) noexcept {
+        static inline char* AlignStackPtr(char* ptr) noexcept { 
     #if defined(STACK_GROW_DOWN)
             return AlignDown(ptr, STACK_ALIGN);
     #else
@@ -98,15 +98,15 @@ namespace {
         char* Data_;
     };
 
-    static inline void*& JmpBufReg(__myjmp_buf& buf, size_t n) noexcept {
+    static inline void*& JmpBufReg(__myjmp_buf& buf, size_t n) noexcept { 
         return (((void**)(void*)(buf))[n]);
     }
 
-    static inline void*& JmpBufStackReg(__myjmp_buf& buf) noexcept {
+    static inline void*& JmpBufStackReg(__myjmp_buf& buf) noexcept { 
         return JmpBufReg(buf, STACK_CNT);
     }
 
-    static inline void*& JmpBufProgrReg(__myjmp_buf& buf) noexcept {
+    static inline void*& JmpBufProgrReg(__myjmp_buf& buf) noexcept { 
         return JmpBufReg(buf, PROGR_CNT);
     }
 
@@ -156,7 +156,7 @@ TContMachineContext::TContMachineContext(const TContClosure& c)
     : San_(c)
     #endif
 {
-    TStackType stack(c.Stack);
+    TStackType stack(c.Stack); 
 
     /*
      * arg, and align data
@@ -194,7 +194,7 @@ TContMachineContext::TContMachineContext(const TContClosure& c)
     JmpBufFrameReg(Buf_) = nullptr;
 }
 
-void TContMachineContext::SwitchTo(TContMachineContext* next) noexcept {
+void TContMachineContext::SwitchTo(TContMachineContext* next) noexcept { 
     if (Y_LIKELY(__mysetjmp(Buf_) == 0)) {
     #if defined(_asan_enabled_) || defined(_tsan_enabled_)
         next->San_.BeforeSwitch(&San_);
@@ -231,7 +231,7 @@ TContMachineContext::TContMachineContext(const TContClosure& c)
     Y_ENSURE(Fiber_, TStringBuf("fiber error"));
 }
 
-TContMachineContext::~TContMachineContext() {
+TContMachineContext::~TContMachineContext() { 
     if (MainFiber_) {
         ConvertFiberToThread();
     } else {
@@ -239,7 +239,7 @@ TContMachineContext::~TContMachineContext() {
     }
 }
 
-void TContMachineContext::SwitchTo(TContMachineContext* next) noexcept {
+void TContMachineContext::SwitchTo(TContMachineContext* next) noexcept { 
     SwitchToFiber(next->Fiber_);
 }
 #endif
@@ -262,7 +262,7 @@ struct TContMachineContext::TImpl {
         Thread->Start();
     }
 
-    inline ~TImpl() {
+    inline ~TImpl() { 
         if (Thread) {
             Finish = true;
             Signal();
@@ -270,7 +270,7 @@ struct TContMachineContext::TImpl {
         }
     }
 
-    inline void SwitchTo(TImpl* next) noexcept {
+    inline void SwitchTo(TImpl* next) noexcept { 
         next->Signal();
         Wait();
     }
@@ -286,11 +286,11 @@ struct TContMachineContext::TImpl {
         TL->DoRun();
     }
 
-    inline void Signal() noexcept {
+    inline void Signal() noexcept { 
         Event.Signal();
     }
 
-    inline void Wait() noexcept {
+    inline void Wait() noexcept { 
         Event.Wait();
 
         if (Finish) {
@@ -315,10 +315,10 @@ TContMachineContext::TContMachineContext(const TContClosure& c)
 {
 }
 
-TContMachineContext::~TContMachineContext() {
+TContMachineContext::~TContMachineContext() { 
 }
 
-void TContMachineContext::SwitchTo(TContMachineContext* next) noexcept {
+void TContMachineContext::SwitchTo(TContMachineContext* next) noexcept { 
     Impl_->SwitchTo(next->Impl_.Get());
 }
 #endif

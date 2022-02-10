@@ -68,7 +68,7 @@ constexpr bool IsAbiCompatible(ui32 version)
             (version / 100) % 100 <= UDF_ABI_VERSION_MINOR;
 }
 
-TString AbiVersionToStr(ui32 version);
+TString AbiVersionToStr(ui32 version); 
 
 } // namspace NUdf
 } // namspace NYql

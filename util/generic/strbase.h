@@ -127,27 +127,27 @@ public:
      * @param                           Pointer to character inside the string, or nullptr.
      * @return                          Offset from string beginning (in chars), or npos on nullptr.
      */
-    inline size_t off(const TCharType* ret) const noexcept {
+    inline size_t off(const TCharType* ret) const noexcept { 
         return ret ? (size_t)(ret - Ptr()) : npos;
     }
 
-    inline size_t IterOff(const_iterator it) const noexcept {
+    inline size_t IterOff(const_iterator it) const noexcept { 
         return begin() <= it && end() > it ? size_t(it - begin()) : npos;
     }
 
-    inline const_iterator begin() const noexcept {
+    inline const_iterator begin() const noexcept { 
         return Ptr();
     }
 
-    inline const_iterator end() const noexcept {
+    inline const_iterator end() const noexcept { 
         return Ptr() + size();
     }
 
-    inline const_iterator cbegin() const noexcept {
+    inline const_iterator cbegin() const noexcept { 
         return begin();
     }
 
-    inline const_iterator cend() const noexcept {
+    inline const_iterator cend() const noexcept { 
         return end();
     }
 
@@ -167,7 +167,7 @@ public:
         return rend();
     }
 
-    inline TCharType back() const noexcept {
+    inline TCharType back() const noexcept { 
         Y_ASSERT(!this->empty());
         return Ptr()[Len() - 1];
     }
@@ -181,11 +181,11 @@ public:
         return Ptr();
     }
 
-    constexpr inline size_t size() const noexcept {
+    constexpr inline size_t size() const noexcept { 
         return Len();
     }
 
-    constexpr inline bool is_null() const noexcept {
+    constexpr inline bool is_null() const noexcept { 
         return *Ptr() == 0;
     }
 
@@ -193,16 +193,16 @@ public:
         return Len() == 0;
     }
 
-    constexpr inline explicit operator bool() const noexcept {
+    constexpr inline explicit operator bool() const noexcept { 
         return !empty();
     }
 
 public: // style-guide compliant methods
-    constexpr const TCharType* Data() const noexcept {
+    constexpr const TCharType* Data() const noexcept { 
         return Ptr();
     }
 
-    constexpr size_t Size() const noexcept {
+    constexpr size_t Size() const noexcept { 
         return Len();
     }
 
@@ -218,16 +218,16 @@ private:
 
 public:
     // ~~~ Comparison ~~~ : FAMILY0(int, compare)
-    static int compare(const TSelf& s1, const TSelf& s2) noexcept {
+    static int compare(const TSelf& s1, const TSelf& s2) noexcept { 
         return s1.AsStringView().compare(s2.AsStringView());
     }
 
-    static int compare(const TCharType* p, const TSelf& s2) noexcept {
+    static int compare(const TCharType* p, const TSelf& s2) noexcept { 
         TCharType null{0};
         return TStringViewWithTraits(p ? p : &null).compare(s2.AsStringView());
     }
 
-    static int compare(const TSelf& s1, const TCharType* p) noexcept {
+    static int compare(const TSelf& s1, const TCharType* p) noexcept { 
         TCharType null{0};
         return s1.AsStringView().compare(p ? p : &null);
     }
@@ -237,7 +237,7 @@ public:
     }
 
     template <class T>
-    inline int compare(const T& t) const noexcept {
+    inline int compare(const T& t) const noexcept { 
         return compare(*this, t);
     }
 
@@ -257,7 +257,7 @@ public:
         return compare(*this, TStringView(p, len));
     }
 
-    static bool equal(const TSelf& s1, const TSelf& s2) noexcept {
+    static bool equal(const TSelf& s1, const TSelf& s2) noexcept { 
         return s1.AsStringView() == s2.AsStringView();
     }
 
@@ -278,7 +278,7 @@ public:
     }
 
     template <class T>
-    inline bool equal(const T& t) const noexcept {
+    inline bool equal(const T& t) const noexcept { 
         return equal(*this, t);
     }
 
@@ -340,12 +340,12 @@ public:
     }
 
 #ifndef __cpp_impl_three_way_comparison
-    friend bool operator==(const TCharType* pc, const TSelf& s) noexcept {
+    friend bool operator==(const TCharType* pc, const TSelf& s) noexcept { 
         return equal(pc, s);
     }
 
     template <typename TDerived2, typename TTraits2>
-    friend bool operator!=(const TSelf& s1, const TStringBase<TDerived2, TChar, TTraits2>& s2) noexcept {
+    friend bool operator!=(const TSelf& s1, const TStringBase<TDerived2, TChar, TTraits2>& s2) noexcept { 
         return !(s1 == s2);
     }
 
@@ -353,17 +353,17 @@ public:
         return !(s1 == s2);
     }
 
-    friend bool operator!=(const TSelf& s, const TCharType* pc) noexcept {
+    friend bool operator!=(const TSelf& s, const TCharType* pc) noexcept { 
         return !(s == pc);
     }
 
-    friend bool operator!=(const TCharType* pc, const TSelf& s) noexcept {
+    friend bool operator!=(const TCharType* pc, const TSelf& s) noexcept { 
         return !(pc == s);
     }
 #endif
 
     template <typename TDerived2, typename TTraits2>
-    friend bool operator<(const TSelf& s1, const TStringBase<TDerived2, TChar, TTraits2>& s2) noexcept {
+    friend bool operator<(const TSelf& s1, const TStringBase<TDerived2, TChar, TTraits2>& s2) noexcept { 
         return compare(s1, s2) < 0;
     }
 
@@ -371,16 +371,16 @@ public:
         return compare(s1, s2) < 0;
     }
 
-    friend bool operator<(const TSelf& s, const TCharType* pc) noexcept {
+    friend bool operator<(const TSelf& s, const TCharType* pc) noexcept { 
         return compare(s, pc) < 0;
     }
 
-    friend bool operator<(const TCharType* pc, const TSelf& s) noexcept {
+    friend bool operator<(const TCharType* pc, const TSelf& s) noexcept { 
         return compare(pc, s) < 0;
     }
 
     template <typename TDerived2, typename TTraits2>
-    friend bool operator<=(const TSelf& s1, const TStringBase<TDerived2, TChar, TTraits2>& s2) noexcept {
+    friend bool operator<=(const TSelf& s1, const TStringBase<TDerived2, TChar, TTraits2>& s2) noexcept { 
         return compare(s1, s2) <= 0;
     }
 
@@ -388,16 +388,16 @@ public:
         return compare(s1, s2) <= 0;
     }
 
-    friend bool operator<=(const TSelf& s, const TCharType* pc) noexcept {
+    friend bool operator<=(const TSelf& s, const TCharType* pc) noexcept { 
         return compare(s, pc) <= 0;
     }
 
-    friend bool operator<=(const TCharType* pc, const TSelf& s) noexcept {
+    friend bool operator<=(const TCharType* pc, const TSelf& s) noexcept { 
         return compare(pc, s) <= 0;
     }
 
     template <typename TDerived2, typename TTraits2>
-    friend bool operator>(const TSelf& s1, const TStringBase<TDerived2, TChar, TTraits2>& s2) noexcept {
+    friend bool operator>(const TSelf& s1, const TStringBase<TDerived2, TChar, TTraits2>& s2) noexcept { 
         return compare(s1, s2) > 0;
     }
 
@@ -405,16 +405,16 @@ public:
         return compare(s1, s2) > 0;
     }
 
-    friend bool operator>(const TSelf& s, const TCharType* pc) noexcept {
+    friend bool operator>(const TSelf& s, const TCharType* pc) noexcept { 
         return compare(s, pc) > 0;
     }
 
-    friend bool operator>(const TCharType* pc, const TSelf& s) noexcept {
+    friend bool operator>(const TCharType* pc, const TSelf& s) noexcept { 
         return compare(pc, s) > 0;
     }
 
     template <typename TDerived2, typename TTraits2>
-    friend bool operator>=(const TSelf& s1, const TStringBase<TDerived2, TChar, TTraits2>& s2) noexcept {
+    friend bool operator>=(const TSelf& s1, const TStringBase<TDerived2, TChar, TTraits2>& s2) noexcept { 
         return compare(s1, s2) >= 0;
     }
 
@@ -422,23 +422,23 @@ public:
         return compare(s1, s2) >= 0;
     }
 
-    friend bool operator>=(const TSelf& s, const TCharType* pc) noexcept {
+    friend bool operator>=(const TSelf& s, const TCharType* pc) noexcept { 
         return compare(s, pc) >= 0;
     }
 
-    friend bool operator>=(const TCharType* pc, const TSelf& s) noexcept {
+    friend bool operator>=(const TCharType* pc, const TSelf& s) noexcept { 
         return compare(pc, s) >= 0;
     }
 
     // ~~ Read access ~~
-    inline TCharType at(size_t pos) const noexcept {
+    inline TCharType at(size_t pos) const noexcept { 
         if (Y_LIKELY(pos < Len())) {
             return (Ptr())[pos];
         }
         return 0;
     }
 
-    inline TCharType operator[](size_t pos) const noexcept {
+    inline TCharType operator[](size_t pos) const noexcept { 
         Y_ASSERT(pos < this->size());
 
         return Ptr()[pos];
@@ -456,15 +456,15 @@ public:
         return AsStringView().find(s, pos, count);
     }
 
-    inline size_t find(TCharType c, size_t pos = 0) const noexcept {
+    inline size_t find(TCharType c, size_t pos = 0) const noexcept { 
         return AsStringView().find(c, pos);
     }
 
-    inline size_t rfind(TCharType c) const noexcept {
+    inline size_t rfind(TCharType c) const noexcept { 
         return AsStringView().rfind(c);
     }
 
-    inline size_t rfind(TCharType c, size_t pos) const noexcept {
+    inline size_t rfind(TCharType c, size_t pos) const noexcept { 
         if (pos == 0) {
             return npos;
         }
@@ -492,11 +492,11 @@ public:
     }
 
     //~~~~Character Set Search~~~
-    inline size_t find_first_of(TCharType c) const noexcept {
+    inline size_t find_first_of(TCharType c) const noexcept { 
         return find_first_of(c, 0);
     }
 
-    inline size_t find_first_of(TCharType c, size_t pos) const noexcept {
+    inline size_t find_first_of(TCharType c, size_t pos) const noexcept { 
         return find(c, pos);
     }
 
@@ -508,11 +508,11 @@ public:
         return AsStringView().find_first_of(set.data(), pos, set.size());
     }
 
-    inline size_t find_first_not_of(TCharType c) const noexcept {
+    inline size_t find_first_not_of(TCharType c) const noexcept { 
         return find_first_not_of(c, 0);
     }
 
-    inline size_t find_first_not_of(TCharType c, size_t pos) const noexcept {
+    inline size_t find_first_not_of(TCharType c, size_t pos) const noexcept { 
         return find_first_not_of(TStringView(&c, 1), pos);
     }
 
@@ -524,7 +524,7 @@ public:
         return AsStringView().find_first_not_of(set.data(), pos, set.size());
     }
 
-    inline size_t find_last_of(TCharType c, size_t pos = npos) const noexcept {
+    inline size_t find_last_of(TCharType c, size_t pos = npos) const noexcept { 
         return find_last_of(&c, pos, 1);
     }
 
@@ -532,7 +532,7 @@ public:
         return find_last_of(set.data(), pos, set.length());
     }
 
-    inline size_t find_last_of(const TCharType* set, size_t pos, size_t n) const noexcept {
+    inline size_t find_last_of(const TCharType* set, size_t pos, size_t n) const noexcept { 
         return AsStringView().find_last_of(set, pos, n);
     }
 
@@ -560,7 +560,7 @@ public:
         return CopyImpl(pc, n, 0);
     }
 
-    inline size_t strcpy(TCharType* pc, size_t n) const noexcept {
+    inline size_t strcpy(TCharType* pc, size_t n) const noexcept { 
         if (n) {
             n = copy(pc, n - 1);
             pc[n] = 0;
@@ -585,19 +585,19 @@ private:
         return static_cast<TStringViewWithTraits>(*this);
     }
 
-    constexpr inline const TCharType* Ptr() const noexcept {
+    constexpr inline const TCharType* Ptr() const noexcept { 
         return This()->data();
     }
 
-    constexpr inline size_t Len() const noexcept {
+    constexpr inline size_t Len() const noexcept { 
         return This()->length();
     }
 
-    constexpr inline const TDerived* This() const noexcept {
+    constexpr inline const TDerived* This() const noexcept { 
         return static_cast<const TDerived*>(this);
     }
 
-    inline size_t CopyImpl(TCharType* pc, size_t n, size_t pos) const noexcept {
+    inline size_t CopyImpl(TCharType* pc, size_t n, size_t pos) const noexcept { 
         const size_t toCopy = Min(Len() - pos, n);
 
         TTraits::copy(pc, Ptr() + pos, toCopy);

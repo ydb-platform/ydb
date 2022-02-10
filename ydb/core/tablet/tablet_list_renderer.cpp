@@ -40,7 +40,7 @@ std::function<bool(const NKikimrWhiteboard::TTabletStateInfo&)> TTabletStateClas
     }
 }
 
-TString TTabletStateClassifier::GetTabletStateClassName(ui32 cls)
+TString TTabletStateClassifier::GetTabletStateClassName(ui32 cls) 
 {
     switch(cls) {
     case ACTIVE_TABLETS:
@@ -56,8 +56,8 @@ TString TTabletStateClassifier::GetTabletStateClassName(ui32 cls)
 ///////////////////////////// TTabletListRenderer /////////////////////////////
 
 void TTabletListRenderer::RenderHeader(TStringStream& str,
-                  const TString& listName,
-                  const TVector<TTabletListElement>& tabletsToRender,
+                  const TString& listName, 
+                  const TVector<TTabletListElement>& tabletsToRender, 
                   const TTabletFilterInfo& filterInfo)
 {
     Y_UNUSED(tabletsToRender);
@@ -73,8 +73,8 @@ void TTabletListRenderer::RenderHeader(TStringStream& str,
 }
 
 void TTabletListRenderer::RenderTableHeader(TStringStream& str,
-                       const TString& listName,
-                       const TVector<TTabletListElement>& tabletsToRender,
+                       const TString& listName, 
+                       const TVector<TTabletListElement>& tabletsToRender, 
                        const TTabletFilterInfo& filterInfo)
 {
     Y_UNUSED(listName);
@@ -98,7 +98,7 @@ void TTabletListRenderer::RenderTableHeader(TStringStream& str,
     }
 }
 
-TString TTabletListRenderer::MakeTabletMonURL(const TTabletListElement& elem,
+TString TTabletListRenderer::MakeTabletMonURL(const TTabletListElement& elem, 
                                              const TTabletFilterInfo& filterInfo)
 {
     Y_UNUSED(filterInfo);
@@ -107,7 +107,7 @@ TString TTabletListRenderer::MakeTabletMonURL(const TTabletListElement& elem,
     return str.Str();
 }
 
-TString  TTabletListRenderer::GetUserStateName(const TTabletListElement& elem)
+TString  TTabletListRenderer::GetUserStateName(const TTabletListElement& elem) 
 {
     if (elem.TabletStateInfo->HasUserState()) {
         return ToString(elem.TabletStateInfo->GetUserState());
@@ -118,8 +118,8 @@ TString  TTabletListRenderer::GetUserStateName(const TTabletListElement& elem)
 }
 
 void TTabletListRenderer::RenderTableBody(TStringStream& str,
-                     const TString& listName,
-                     const TVector<TTabletListElement>& tabletsToRender,
+                     const TString& listName, 
+                     const TVector<TTabletListElement>& tabletsToRender, 
                      const TTabletFilterInfo& filterInfo)
 {
     Y_UNUSED(listName);
@@ -130,13 +130,13 @@ void TTabletListRenderer::RenderTableBody(TStringStream& str,
         const auto& nodeInfo = *elem.NodeInfo;
         auto index = elem.TabletIndex;
         TTabletTypes::EType tabletType = (TTabletTypes::EType)ti.GetType();
-        TString tabletTypeStr = TTabletTypes::TypeToStr(tabletType);
-        TString nodeName = ToString(nodeInfo.NodeId);
+        TString tabletTypeStr = TTabletTypes::TypeToStr(tabletType); 
+        TString nodeName = ToString(nodeInfo.NodeId); 
 
         TABLER() {
             if (filterInfo.FilterNodeId == 0) {
-                TString nodeName = nodeInfo.Host.empty() ? nodeInfo.Address : nodeInfo.Host;
-                TString tooltip = nodeInfo.Address;
+                TString nodeName = nodeInfo.Host.empty() ? nodeInfo.Address : nodeInfo.Host; 
+                TString tooltip = nodeInfo.Address; 
                 TABLED() {str << ToString(nodeInfo.NodeId);}
                 TABLED() {str << "<span data-html='true' data-toggle='tooltip' title='" + tooltip + "'>" << nodeName << "</span>";}
             }
@@ -162,7 +162,7 @@ void TTabletListRenderer::RenderTableBody(TStringStream& str,
     }
 }
 
-TString TTabletListRenderer::GetStateName(ETabletState state) {
+TString TTabletListRenderer::GetStateName(ETabletState state) { 
     return NKikimrWhiteboard::TTabletStateInfo::ETabletState_Name(state);
 }
 
@@ -177,8 +177,8 @@ void TTabletListRenderer::RenderPageFooter(TStringStream& str)
 }
 
 void TTabletListRenderer::RenderTabletList(TStringStream& str,
-                                           const TString& listName,
-                                           const TVector<TTabletListElement>& tabletsToRender,
+                                           const TString& listName, 
+                                           const TVector<TTabletListElement>& tabletsToRender, 
                                            const TTabletFilterInfo& filterInfo)
 {
     IOutputStream &__stream(str);

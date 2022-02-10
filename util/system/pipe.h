@@ -17,42 +17,42 @@ using PIPEHANDLE = SOCKET;
 /// Pipe-like object: pipe on POSIX and socket on windows
 class TPipeHandle: public TNonCopyable {
 public:
-    inline TPipeHandle() noexcept
+    inline TPipeHandle() noexcept 
         : Fd_(INVALID_PIPEHANDLE)
     {
     }
 
-    inline TPipeHandle(PIPEHANDLE fd) noexcept
+    inline TPipeHandle(PIPEHANDLE fd) noexcept 
         : Fd_(fd)
     {
     }
 
-    inline ~TPipeHandle() {
+    inline ~TPipeHandle() { 
         Close();
     }
 
-    bool Close() noexcept;
+    bool Close() noexcept; 
 
-    inline PIPEHANDLE Release() noexcept {
+    inline PIPEHANDLE Release() noexcept { 
         PIPEHANDLE ret = Fd_;
         Fd_ = INVALID_PIPEHANDLE;
         return ret;
     }
 
-    inline void Swap(TPipeHandle& r) noexcept {
+    inline void Swap(TPipeHandle& r) noexcept { 
         DoSwap(Fd_, r.Fd_);
     }
 
-    inline operator PIPEHANDLE() const noexcept {
+    inline operator PIPEHANDLE() const noexcept { 
         return Fd_;
     }
 
-    inline bool IsOpen() const noexcept {
+    inline bool IsOpen() const noexcept { 
         return Fd_ != INVALID_PIPEHANDLE;
     }
 
-    ssize_t Read(void* buffer, size_t byteCount) const noexcept;
-    ssize_t Write(const void* buffer, size_t byteCount) const noexcept;
+    ssize_t Read(void* buffer, size_t byteCount) const noexcept; 
+    ssize_t Write(const void* buffer, size_t byteCount) const noexcept; 
 
     // Only CloseOnExec is supported
     static void Pipe(TPipeHandle& reader, TPipeHandle& writer, EOpenMode mode = 0);
@@ -66,12 +66,12 @@ public:
     TPipe();
     /// Takes ownership of handle, so closes it when the last holder of descriptor dies.
     explicit TPipe(PIPEHANDLE fd);
-    ~TPipe();
+    ~TPipe(); 
 
     void Close();
 
-    bool IsOpen() const noexcept;
-    PIPEHANDLE GetHandle() const noexcept;
+    bool IsOpen() const noexcept; 
+    PIPEHANDLE GetHandle() const noexcept; 
 
     size_t Read(void* buf, size_t len) const;
     size_t Write(const void* buf, size_t len) const;

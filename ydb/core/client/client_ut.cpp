@@ -29,7 +29,7 @@ namespace Tests {
     using namespace NMiniKQL;
 //    const ui32 TestDomain = 1;
 
-static const TString TablePlacement = "/dc-1/Berkanavt/tables";
+static const TString TablePlacement = "/dc-1/Berkanavt/tables"; 
 
 namespace {
 
@@ -300,7 +300,7 @@ struct TTxInfo {
     }
 };
 
-void ExtractResultInfo(const NKikimrMiniKQL::TResult& result, TVector<TTxInfo>& out) {
+void ExtractResultInfo(const NKikimrMiniKQL::TResult& result, TVector<TTxInfo>& out) { 
     TValue value = TValue::Create(result.GetValue(), result.GetType());
 
     TValue list = value["__tx_info"];
@@ -413,7 +413,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
     void ReadWriteViaMiniKQLBody(TClient &client, bool useHead, bool useFollower) {
         NKikimrMiniKQL::TResult writeRes;
-        const TString writeQuery = R"___(
+        const TString writeQuery = R"___( 
             (
                 (let row1 '('('key (Uint64 '2))))
                 (let row2 '('('key (Uint64 '2305843009213693951))))
@@ -428,7 +428,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         UNIT_ASSERT(client.FlatQuery(writeQuery, writeRes));
 
         NKikimrMiniKQL::TResult readRes;
-        const TString readQueryTemplate = R"___(
+        const TString readQueryTemplate = R"___( 
             (
                 (let row1 '('('key (Uint64 '2))))
                 (let nonExistRow1 '('('key (Uint64 '3))))
@@ -445,7 +445,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             )
         )___";
 
-        TString readQuery = readQueryTemplate;
+        TString readQuery = readQueryTemplate; 
         SubstGlobal(readQuery, "__HEAD__", !useHead ? (useFollower ? "'follower" : "'online") : "'head");
         UNIT_ASSERT(client.FlatQuery(readQuery, readRes));
 
@@ -638,7 +638,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             client.CreateTable(TablePlacement, tableSimple);
         }
 
-        const TString writeQuery = R"___(
+        const TString writeQuery = R"___( 
             (
                 (let row1 '('('key (Uint32 '2))))
                 (let row2 '('('key (Uint32 '3))))
@@ -724,7 +724,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
     void GetStepTxIdBody(TClient &client, bool useHead) {
         NKikimrMiniKQL::TResult writeRes;
-        const TString writeQuery = R"___(
+        const TString writeQuery = R"___( 
             (
                 (let row1 '('('key (Uint64 '2))))
                 (let row2 '('('key (Uint64 '2305843009213693951))))
@@ -739,7 +739,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         UNIT_ASSERT(client.FlatQuery(writeQuery, writeRes));
 
         NKikimrMiniKQL::TResult readRes;
-        const TString readQueryTemplate = R"___(
+        const TString readQueryTemplate = R"___( 
             (
                 (let row1 '('('key (Uint64 '2))))
                 (let row2 '('('key (Uint64 '2305843009213693951))))
@@ -753,7 +753,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             )
         )___";
 
-        TString readQuery = readQueryTemplate;
+        TString readQuery = readQueryTemplate; 
         SubstGlobal(readQuery, "__HEAD__", !useHead ? "'online" : "'head");
         UNIT_ASSERT(client.FlatQuery(readQuery, readRes));
 
@@ -804,7 +804,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
     void CASViaMiniKQLBody(TClient &client) {
         NKikimrMiniKQL::TResult writeRes;
-        const TString writeQuery = R"___(
+        const TString writeQuery = R"___( 
             (
                 (let table '/dc-1/Berkanavt/tables/Simple)
                 (let row1 '('('key (Uint64 '2))))
@@ -819,7 +819,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         UNIT_ASSERT(client.FlatQuery(writeQuery, writeRes));
 
         NKikimrMiniKQL::TResult updateRes;
-        const TString updateQuery = R"___(
+        const TString updateQuery = R"___( 
             (
                 (let table '/dc-1/Berkanavt/tables/Simple)
                 (let row1 '('('key (Uint64 '2))))
@@ -849,7 +849,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         }
 
         NKikimrMiniKQL::TResult readRes;
-        const TString readQuery = R"___(
+        const TString readQuery = R"___( 
             (
                 (let table '/dc-1/Berkanavt/tables/Simple)
                 (let row1 '('('key (Uint64 '2))))
@@ -930,7 +930,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
     void RowEraseViaMiniKQLBody(TClient &client) {
         NKikimrMiniKQL::TResult writeRes;
-        const TString writeQuery = R"___(
+        const TString writeQuery = R"___( 
             (
                 (let table '/dc-1/Berkanavt/tables/Simple)
                 (let row1 '('('key (Uint64 '2))))
@@ -945,7 +945,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         UNIT_ASSERT(client.FlatQuery(writeQuery, writeRes));
 
         NKikimrMiniKQL::TResult updateRes;
-        const TString updateQuery = R"___(
+        const TString updateQuery = R"___( 
             (
                 (let table '/dc-1/Berkanavt/tables/Simple)
                 (let row1 '('('key (Uint64 '2))))
@@ -957,7 +957,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         UNIT_ASSERT(client.FlatQuery(updateQuery, updateRes));
 
         NKikimrMiniKQL::TResult readRes;
-        const TString readQuery = R"___(
+        const TString readQuery = R"___( 
             (
                 (let table '/dc-1/Berkanavt/tables/Simple)
                 (let row1 '('('key (Uint64 '2))))
@@ -1038,7 +1038,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
     void ReadRangeViaMiniKQLBody(TClient &client) {
         NKikimrMiniKQL::TResult writeRes;
-        const TString writeQuery = R"___(
+        const TString writeQuery = R"___( 
             (
                 (let table '/dc-1/Berkanavt/tables/Simple)
                 (let row1 '('('key (Uint64 '2))))
@@ -1053,7 +1053,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         UNIT_ASSERT(client.FlatQuery(writeQuery, writeRes));
 
         NKikimrMiniKQL::TResult readRes;
-        const TString readQuery = R"___(
+        const TString readQuery = R"___( 
             (
                 (let table '/dc-1/Berkanavt/tables/Simple)
                 (let range '('IncFrom '('key (Uint64 '0) (Void))))
@@ -1134,7 +1134,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
     void SelectRangeOptionsBody(TClient &client) {
         NKikimrMiniKQL::TResult writeRes;
-        const TString writeQuery = R"___(
+        const TString writeQuery = R"___( 
             (
                 (let table '/dc-1/Berkanavt/tables/Simple)
                 (let row1 '('('key (Uint64 '2))))
@@ -1154,7 +1154,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
         {
             NKikimrMiniKQL::TResult readRes;
-            const TString readQuery = R"___(
+            const TString readQuery = R"___( 
                 (
                     (let from (Parameter 'FROM (DataType 'Uint64)))
                     (let to (Parameter 'TO (DataType 'Uint64)))
@@ -1170,7 +1170,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
                 )
             )___";
 
-            const TString readParams = R"___(
+            const TString readParams = R"___( 
                 (
                     (let params (Parameters))
                     (let params (AddParameter params 'FROM (Uint64 '2)))
@@ -1198,10 +1198,10 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         }
 
         {
-            TString binQuery;
+            TString binQuery; 
             NKikimrMiniKQL::TResult readRes;
 
-            const TString readQuery = R"___(
+            const TString readQuery = R"___( 
                 (
                     (let from (Parameter 'FROM (DataType 'Uint64)))
                     (let to (Parameter 'TO (DataType 'Uint64)))
@@ -1219,7 +1219,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
             UNIT_ASSERT(client.Compile(readQuery, binQuery));
 
-            const TString readParams = R"___(
+            const TString readParams = R"___( 
                 (
                     (let params (Parameters))
                     (let params (AddParameter params 'FROM (Uint64 '2)))
@@ -1246,7 +1246,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
         {
             NKikimrMiniKQL::TResult readRes;
-            const TString readQuery = R"___(
+            const TString readQuery = R"___( 
                 (
                     (let table '/dc-1/Berkanavt/tables/Simple)
                     (let range '('IncFrom 'ExcTo '('key (Uint64 '4) (Uint64 '2305843009213693952))))
@@ -1274,7 +1274,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
         {
             NKikimrMiniKQL::TResult readRes;
-            const TString readQuery = R"___(
+            const TString readQuery = R"___( 
                 (
                     (let table '/dc-1/Berkanavt/tables/Simple)
                     (let range '('ExcFrom 'IncTo '('key (Uint64 '3) (Uint64 '2305843009213693950))))
@@ -1320,7 +1320,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
     void MultiSelectBody(TClient &client, bool useFlatMap = false) {
         NKikimrMiniKQL::TResult writeRes;
-        const TString writeQuery = R"___(
+        const TString writeQuery = R"___( 
             (
                 (let table '/dc-1/Berkanavt/tables/Simple)
                 (let row1 '('('key (Uint64 '2))))
@@ -1340,7 +1340,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
         {
             NKikimrMiniKQL::TResult readRes;
-            const TString readQuery = useFlatMap ?
+            const TString readQuery = useFlatMap ? 
                 R"___(
                 (
                     (let list (Parameter 'LIST (ListType (DataType 'Uint64))))
@@ -1368,7 +1368,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
                 )
             )___";
 
-            const TString readParams = R"___(
+            const TString readParams = R"___( 
                 (
                     (let params (Parameters))
                     (let params (AddParameter params 'LIST (AsList (Uint64 '2) (Uint64 '4))))
@@ -1475,7 +1475,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
                             )___", allowFollowerPromotion ? "true": "false"));
 
         NKikimrMiniKQL::TResult writeRes;
-        const TString writeQuery = R"___(
+        const TString writeQuery = R"___( 
             (
                 (let table '/dc-1/Berkanavt/tables/Simple)
                 (let row1 '('('key (Uint64 '2))))
@@ -1489,7 +1489,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
     }
 
     void CheckRead(TClient& client, bool readFromFollower) {
-        const TString readQuery = Sprintf(
+        const TString readQuery = Sprintf( 
             R"___(
             (
                 (let key '('('key (Uint64 '2))))
@@ -1565,7 +1565,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         // force some rounds of compaction
         for (ui32 i : xrange(50, 3000)) {
             NKikimrMiniKQL::TResult writeRes;
-            const TString writeQuery = "((let table '/dc-1/Berkanavt/tables/Simple)"
+            const TString writeQuery = "((let table '/dc-1/Berkanavt/tables/Simple)" 
                 "(let row1 '('('key (Uint64 '" + ToString(i) + "))))"
                 "(return (AsList"
                     "(UpdateRow table row1 '( '('uint (Uint64 '" + ToString(i) + "))))"
@@ -1702,7 +1702,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         {
             //Cerr << result.DebugString() << Endl;
 
-            TVector<TTxInfo> infos;
+            TVector<TTxInfo> infos; 
             ExtractResultInfo(result, infos);
 
             for (const auto& txInfo : infos) {
@@ -1758,15 +1758,15 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
     // local
 
-    TString DiffStrings(const TString& newStr, const TString& oldStr) {
-        TVector<NDiff::TChunk<char>> chunks;
+    TString DiffStrings(const TString& newStr, const TString& oldStr) { 
+        TVector<NDiff::TChunk<char>> chunks; 
         NDiff::InlineDiff(chunks, newStr, oldStr, "\n");
 
-        TString res;
+        TString res; 
         TStringOutput out(res);
         for (const auto& c : chunks) {
-            TString left(c.Left.begin(), c.Left.end());
-            TString right(c.Right.begin(), c.Right.end());
+            TString left(c.Left.begin(), c.Left.end()); 
+            TString right(c.Right.begin(), c.Right.end()); 
             if (!left.empty() || !right.empty()) {
                 out  << ">>>>>" << Endl
                      << left << Endl
@@ -1778,8 +1778,8 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         return res;
     }
 
-    TString ToString(const NTabletFlatScheme::TSchemeChanges& scheme) {
-        TString str;
+    TString ToString(const NTabletFlatScheme::TSchemeChanges& scheme) { 
+        TString str; 
         ::google::protobuf::TextFormat::PrintToString(scheme, &str);
         return str;
     }
@@ -1794,7 +1794,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
         NTabletFlatScheme::TSchemeChanges scheme1;
         NTabletFlatScheme::TSchemeChanges scheme2;
-        TString err;
+        TString err; 
         bool success = client.LocalSchemeTx(Tests::Hive, "", true, scheme1, err);
         UNIT_ASSERT(success);
         success = client.LocalSchemeTx(Tests::Hive, "", false, scheme2, err);
@@ -1812,14 +1812,14 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         TClient client(settings);
 
         NTabletFlatScheme::TSchemeChanges scheme;
-        TString err;
+        TString err; 
         bool success = false;
 
         success = client.LocalSchemeTx(Tests::Hive, "", true, scheme, err);
         UNIT_ASSERT(success);
-        TString oldScheme = ToString(scheme);
+        TString oldScheme = ToString(scheme); 
 
-        TString change =  R"___(
+        TString change =  R"___( 
                 Delta {
                     DeltaType: AddColumn
                     TableId: 10
@@ -1836,10 +1836,10 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         // Dry run first
         success = client.LocalSchemeTx(Tests::Hive, change, true, scheme, err);
         UNIT_ASSERT(success);
-        TString dryRunScheme = ToString(scheme);
+        TString dryRunScheme = ToString(scheme); 
         // Re-read
         success = client.LocalSchemeTx(Tests::Hive, "", true, scheme, err);
-        TString newScheme = ToString(scheme);
+        TString newScheme = ToString(scheme); 
         UNIT_ASSERT_VALUES_EQUAL_C(newScheme, oldScheme, "Schema changed by dry-run");
 
         // Update
@@ -1848,7 +1848,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         newScheme = ToString(scheme);
         UNIT_ASSERT_VALUES_EQUAL_C(newScheme, dryRunScheme, "Dry-run result is not equal");
 
-        TString schemaDiff = DiffStrings(oldScheme, newScheme);
+        TString schemaDiff = DiffStrings(oldScheme, newScheme); 
         Cout << schemaDiff << Endl;
         UNIT_ASSERT_C(!schemaDiff.empty(), "Schema not changed after update");
     }
@@ -1865,14 +1865,14 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         WaitForLeaderStart(client, server.GetRuntime(), ChangeStateStorage(Tests::DummyTablet1, TestDomain), TDuration::Seconds(1));
 
         NTabletFlatScheme::TSchemeChanges schemeInitial;
-        TString err;
+        TString err; 
         bool success = false;
 
         success = client.LocalSchemeTx(Tests::DummyTablet1, "", true, schemeInitial, err);
         UNIT_ASSERT(success);
-        const TString oldScheme = ToString(schemeInitial);
+        const TString oldScheme = ToString(schemeInitial); 
 
-        TString change =  R"___(
+        TString change =  R"___( 
                 Delta {
                     DeltaType: DropTable
                     TableId: 32
@@ -1883,9 +1883,9 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         NTabletFlatScheme::TSchemeChanges schemeChanged;
         success = client.LocalSchemeTx(Tests::DummyTablet1, change, false, schemeChanged, err);
         UNIT_ASSERT(success);
-        const TString newScheme = ToString(schemeChanged);
+        const TString newScheme = ToString(schemeChanged); 
 
-        TString schemaDiff = DiffStrings(oldScheme, newScheme);
+        TString schemaDiff = DiffStrings(oldScheme, newScheme); 
         UNIT_ASSERT_C(!schemaDiff.empty(), "Schema not changed after update");
     }
 

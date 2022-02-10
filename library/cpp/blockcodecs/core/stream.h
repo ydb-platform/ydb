@@ -12,7 +12,7 @@ namespace NBlockCodecs {
     class TCodedOutput: public IOutputStream {
     public:
         TCodedOutput(IOutputStream* out, const ICodec* c, size_t bufLen);
-        ~TCodedOutput() override;
+        ~TCodedOutput() override; 
 
     private:
         void DoWrite(const void* buf, size_t len) override;
@@ -33,7 +33,7 @@ namespace NBlockCodecs {
         TDecodedInput(IInputStream* in);
         TDecodedInput(IInputStream* in, const ICodec* codec);
 
-        ~TDecodedInput() override;
+        ~TDecodedInput() override; 
 
     private:
         size_t DoUnboundedNext(const void** ptr) override;

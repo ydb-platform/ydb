@@ -4,8 +4,8 @@
 #include <util/generic/vector.h>
 
 Y_UNIT_TEST_SUITE(TBitIteratorTest) {
-    TVector<ui16> GenWords() {
-        TVector<ui16> words(1, 0);
+    TVector<ui16> GenWords() { 
+        TVector<ui16> words(1, 0); 
         for (ui16 word = 1; word; ++word)
             words.push_back(word);
         return words;
@@ -51,7 +51,7 @@ Y_UNIT_TEST_SUITE(TBitIteratorTest) {
     }
 
     Y_UNIT_TEST(TestForward) {
-        TVector<ui32> words;
+        TVector<ui32> words; 
         words.push_back((1 << 10) | (1 << 20) | (1 << 25));
         words.push_back(1 | (1 << 5) | (1 << 6) | (1 << 30));
         for (int i = 0; i < 3; ++i)
@@ -90,7 +90,7 @@ Y_UNIT_TEST_SUITE(TBitIteratorTest) {
     }
 
     Y_UNIT_TEST(TestUnalignedReadAndPeek) {
-        TVector<ui32> words;
+        TVector<ui32> words; 
         words.push_back((1 << 10) | (1 << 20) | (1 << 25));
         words.push_back(1 | (1 << 5) | (1 << 6) | (1 << 30));
         for (int i = 0; i < 5; ++i)

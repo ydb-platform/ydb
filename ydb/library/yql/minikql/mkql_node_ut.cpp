@@ -72,14 +72,14 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
         UNIT_ASSERT_EQUAL(sempty->GetKind(), TType::EKind::Struct);
         UNIT_ASSERT_EQUAL(sempty->GetMembersCount(), 0);
 
-        TVector<std::pair<TString, TType*>> s1members;
+        TVector<std::pair<TString, TType*>> s1members; 
         s1members.push_back(std::make_pair("aaa", env.GetVoid()->GetGenericType()));
         TStructType* s1 = TStructType::Create(s1members.data(), s1members.size(), env);
         UNIT_ASSERT_EQUAL(s1->GetMembersCount(), 1);
         UNIT_ASSERT_EQUAL(s1->GetMemberName(0), "aaa");
         UNIT_ASSERT_EQUAL(s1->GetMemberType(0)->GetKind(), TType::EKind::Void);
 
-        TVector<std::pair<TString, TType*>> s2members;
+        TVector<std::pair<TString, TType*>> s2members; 
         s2members.push_back(std::make_pair("bbb", env.GetEmptyStruct()->GetGenericType()));
         s2members.push_back(std::make_pair("ccc", env.GetTypeOfVoid()));
         TStructType* s2 = TStructType::Create(s2members.data(), s2members.size(), env);
@@ -89,7 +89,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
         UNIT_ASSERT_EQUAL(s2->GetMemberName(1), "ccc");
         UNIT_ASSERT_EQUAL(s2->GetMemberType(1)->GetKind(), TType::EKind::Void);
 
-        TVector<std::pair<TString, TType*>> s3members;
+        TVector<std::pair<TString, TType*>> s3members; 
         s3members.push_back(std::make_pair("", env.GetEmptyStruct()->GetGenericType()));
         UNIT_ASSERT_EXCEPTION(TStructType::Create(s3members.data(), s3members.size(), env), yexception);
 
@@ -101,7 +101,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
         Reverse(s2members.begin(), s2members.end());
         UNIT_ASSERT_EXCEPTION(TStructType::Create(s2members.data(), s2members.size(), env), yexception);
 
-        TVector<std::pair<TString, TType*>> duplicatedMembers;
+        TVector<std::pair<TString, TType*>> duplicatedMembers; 
         duplicatedMembers.push_back(std::make_pair("aaa", env.GetEmptyStruct()->GetGenericType()));
         duplicatedMembers.push_back(std::make_pair("aaa", env.GetTypeOfVoid()));
         UNIT_ASSERT_EXCEPTION(TStructType::Create(duplicatedMembers.data(), duplicatedMembers.size(), env), yexception);
@@ -114,11 +114,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
         TStructLiteral* sempty = TStructLiteral::Create(0, nullptr, semptyType, env);
         UNIT_ASSERT_EQUAL(sempty->GetValuesCount(), 0);
 
-        TVector<std::pair<TString, TType*>> s1members;
+        TVector<std::pair<TString, TType*>> s1members; 
         s1members.push_back(std::make_pair("aaa", env.GetVoid()->GetGenericType()));
         TStructType* s1type = TStructType::Create(s1members.data(), s1members.size(), env);
 
-        TVector<TRuntimeNode> s1values;
+        TVector<TRuntimeNode> s1values; 
         s1values.push_back(TRuntimeNode(env.GetVoid(), true));
         TStructLiteral* s1 = TStructLiteral::Create(s1values.size(), s1values.data(), s1type, env);
         UNIT_ASSERT_EQUAL(s1->GetValuesCount(), 1);
@@ -126,13 +126,13 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
 
         UNIT_ASSERT_EXCEPTION(TStructLiteral::Create(s1values.size(), s1values.data(), semptyType, env), yexception);
 
-        TVector<std::pair<TString, TType*>> s2members;
+        TVector<std::pair<TString, TType*>> s2members; 
         s2members.push_back(std::make_pair("aaa", env.GetEmptyTuple()->GetGenericType()));
         TStructType* s2type = TStructType::Create(s2members.data(), s2members.size(), env);
         UNIT_ASSERT_EXCEPTION(TStructLiteral::Create(s1values.size(), s1values.data(), s2type, env), yexception);
 
         TStructType* s1typeDyn = TStructType::Create(s1members.data(), s1members.size(), env);
-        TVector<TRuntimeNode> s1DynValues;
+        TVector<TRuntimeNode> s1DynValues; 
         TCallableType* ctype = TCallableType::Create("c1", env.GetVoid()->GetGenericType(),
             0, nullptr, nullptr, env);
         s1DynValues.push_back(TRuntimeNode(TCallable::Create(0, nullptr, ctype, env), false));
@@ -171,8 +171,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
 
         UNIT_ASSERT_NO_EXCEPTION(TListLiteral::Create(nullptr, 0, list1type, env));
 
-        TString u = "34567";
-        TVector<TRuntimeNode> someItems;
+        TString u = "34567"; 
+        TVector<TRuntimeNode> someItems; 
         someItems.push_back(TRuntimeNode(TDataLiteral::Create(
             NUdf::TUnboxedValue::Embedded(u), dtype1, env), true));
         u = "878";
@@ -190,7 +190,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
         TListType* list2typeDyn = TListType::Create(dtype1, env);
         UNIT_ASSERT_NO_EXCEPTION(TListLiteral::Create(someItems.data(), someItems.size(), list2typeDyn, env));
 
-        TVector<TRuntimeNode> someDynItems;
+        TVector<TRuntimeNode> someDynItems; 
         TCallableType* ctype = TCallableType::Create("c1", dtype1, 0, nullptr, nullptr, env);
         someDynItems.push_back(TRuntimeNode(TCallable::Create(0, nullptr, ctype, env), false));
 
@@ -218,7 +218,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
         TOptionalLiteral* emptyOpt = TOptionalLiteral::Create(opt1type, env);
         UNIT_ASSERT(!emptyOpt->HasItem());
 
-        TString u = "34567";
+        TString u = "34567"; 
         auto item1 = TRuntimeNode(TDataLiteral::Create(
             NUdf::TUnboxedValuePod::Embedded(u), dtype1, env), true);
 
@@ -260,7 +260,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
         UNIT_ASSERT_EQUAL(ctype1->GetArgumentsCount(), 0);
         UNIT_ASSERT_EQUAL(ctype1->GetReturnType()->GetKind(), TType::EKind::Void);
 
-        TVector<TType*> types;
+        TVector<TType*> types; 
         types.push_back(env.GetVoid()->GetGenericType());
         types.push_back(env.GetEmptyStruct()->GetGenericType());
         TCallableType* ctype2 = TCallableType::Create("c2", env.GetVoid()->GetGenericType(), types.size(), types.data(), nullptr, env);
@@ -275,13 +275,13 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
         UNIT_ASSERT(ctype2->IsSameType(*ctype2Cloned));
         UNIT_ASSERT(!ctype2->IsSameType(*ctype1));
 
-        TVector<TType*> types2;
+        TVector<TType*> types2; 
         types2.push_back(env.GetEmptyStruct()->GetGenericType());
         types2.push_back(env.GetVoid()->GetGenericType());
         TCallableType* ctype2rev = TCallableType::Create("c2", env.GetVoid()->GetGenericType(), types2.size(), types2.data(), nullptr, env);
         UNIT_ASSERT(!ctype2->IsSameType(*ctype2rev));
 
-        TVector<TType*> types3;
+        TVector<TType*> types3; 
         types3.push_back(env.GetVoid()->GetGenericType());
         types3.push_back(env.GetEmptyStruct()->GetGenericType());
         TCallableType* ctype2withPayload1 = TCallableType::Create("c2", env.GetVoid()->GetGenericType(), types.size(), types.data(), env.GetEmptyStruct(), env);
@@ -311,11 +311,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
         TDictType* dict1Type = TDictType::Create(dtype1, env.GetVoid()->GetGenericType(), env);
         TDictType* dict2Type = TDictType::Create(dtype1, dtype2, env);
 
-        TVector<std::pair<TRuntimeNode, TRuntimeNode>> emptyItems;
+        TVector<std::pair<TRuntimeNode, TRuntimeNode>> emptyItems; 
         UNIT_ASSERT_NO_EXCEPTION(TDictLiteral::Create(emptyItems.size(), emptyItems.data(), dict1Type, env));
 
-        TString u = "34567";
-        TVector<std::pair<TRuntimeNode, TRuntimeNode>> someItems;
+        TString u = "34567"; 
+        TVector<std::pair<TRuntimeNode, TRuntimeNode>> someItems; 
         someItems.push_back(std::make_pair(TRuntimeNode(TDataLiteral::Create(
             NUdf::TUnboxedValuePod::Embedded(u), dtype1, env), true),
             TRuntimeNode(TDataLiteral::Create(
@@ -340,7 +340,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
         TDictType* dict2TypeDyn = TDictType::Create(dtype1, dtype2, env);
         UNIT_ASSERT_NO_EXCEPTION(TDictLiteral::Create(someItems.size(), someItems.data(), dict2TypeDyn, env));
 
-        TVector<std::pair<TRuntimeNode, TRuntimeNode>> someDynItems;
+        TVector<std::pair<TRuntimeNode, TRuntimeNode>> someDynItems; 
         TCallableType* ctype = TCallableType::Create("c1", dtype1, 0, nullptr, nullptr, env);
         someDynItems.push_back(std::make_pair(
             TRuntimeNode(TCallable::Create(0, nullptr, ctype, env), false),
@@ -361,7 +361,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
         UNIT_ASSERT(c1->HasResult());
         UNIT_ASSERT_EQUAL(c1->GetResult().GetStaticType()->GetKind(), TType::EKind::Void);
 
-        TVector<TType*> ctype2args;
+        TVector<TType*> ctype2args; 
         TDataType* dtype1 = TDataType::Create(NUdf::TDataType<char*>::Id, env);
         ctype2args.push_back(dtype1);
         ctype2args.push_back(dtype1);
@@ -373,7 +373,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
 
         TCallableType* ctype3 = TCallableType::Create("c1", dtype1, 0, nullptr, nullptr, env);
 
-        TVector<TRuntimeNode> c2args;
+        TVector<TRuntimeNode> c2args; 
         c2args.push_back(TRuntimeNode(TDataLiteral::Create(
             NUdf::TUnboxedValuePod::Embedded("abc"), dtype1, env), true));
         c2args.push_back(TRuntimeNode(TCallable::Create(0, nullptr, ctype3, env), false));
@@ -445,13 +445,13 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
         UNIT_ASSERT_EQUAL(tempty->GetKind(), TType::EKind::Tuple);
         UNIT_ASSERT_EQUAL(tempty->GetElementsCount(), 0);
 
-        TVector<TType*> t1elems;
+        TVector<TType*> t1elems; 
         t1elems.push_back(env.GetVoid()->GetGenericType());
         TTupleType* t1 = TTupleType::Create(t1elems.size(), t1elems.data(), env);
         UNIT_ASSERT_EQUAL(t1->GetElementsCount(), 1);
         UNIT_ASSERT_EQUAL(t1->GetElementType(0)->GetKind(), TType::EKind::Void);
 
-        TVector<TType*> t2elems;
+        TVector<TType*> t2elems; 
         t2elems.push_back(env.GetEmptyStruct()->GetGenericType());
         t2elems.push_back(env.GetTypeOfVoid());
         TTupleType* t2 = TTupleType::Create(t2elems.size(), t2elems.data(), env);
@@ -472,11 +472,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
         TTupleLiteral* tempty = TTupleLiteral::Create(0, nullptr, temptyType, env);
         UNIT_ASSERT_EQUAL(tempty->GetValuesCount(), 0);
 
-        TVector<TType*> t1elems;
+        TVector<TType*> t1elems; 
         t1elems.push_back(env.GetVoid()->GetGenericType());
         TTupleType* t1type = TTupleType::Create(t1elems.size(), t1elems.data(), env);
 
-        TVector<TRuntimeNode> t1values;
+        TVector<TRuntimeNode> t1values; 
         t1values.push_back(TRuntimeNode(env.GetVoid(), true));
         TTupleLiteral* t1 = TTupleLiteral::Create(t1values.size(), t1values.data(), t1type, env);
         UNIT_ASSERT_EQUAL(t1->GetValuesCount(), 1);
@@ -484,13 +484,13 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
 
         UNIT_ASSERT_EXCEPTION(TTupleLiteral::Create(t1values.size(), t1values.data(), temptyType, env), yexception);
 
-        TVector<TType*> t2elems;
+        TVector<TType*> t2elems; 
         t2elems.push_back(env.GetEmptyStruct()->GetGenericType());
         TTupleType* t2type = TTupleType::Create(t2elems.size(), t2elems.data(), env);
         UNIT_ASSERT_EXCEPTION(TTupleLiteral::Create(t1values.size(), t1values.data(), t2type, env), yexception);
 
         TTupleType* t1typeDyn = TTupleType::Create(t1elems.size(), t1elems.data(), env);
-        TVector<TRuntimeNode> t1DynValues;
+        TVector<TRuntimeNode> t1DynValues; 
         TCallableType* ctype = TCallableType::Create("c1", env.GetVoid()->GetGenericType(),
             0, nullptr, nullptr, env);
         t1DynValues.push_back(TRuntimeNode(TCallable::Create(0, nullptr, ctype, env), false));

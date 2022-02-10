@@ -129,23 +129,23 @@ EUTF8Detect UTF8Detect(const char* s, size_t len) {
     return res;
 }
 
-bool ToLowerUTF8Impl(const char* beg, size_t n, TString& newString) {
+bool ToLowerUTF8Impl(const char* beg, size_t n, TString& newString) { 
     return ConvertCaseUTF8Impl(ECaseConversion::ToLower, beg, n, newString);
 }
 
-TString ToLowerUTF8(const TString& s) {
-    TString newString;
+TString ToLowerUTF8(const TString& s) { 
+    TString newString; 
     bool changed = ToLowerUTF8Impl(s.data(), s.size(), newString);
     return changed ? newString : s;
 }
 
-TString ToLowerUTF8(TStringBuf s) {
-    TString newString;
+TString ToLowerUTF8(TStringBuf s) { 
+    TString newString; 
     bool changed = ToLowerUTF8Impl(s.data(), s.size(), newString);
     return changed ? newString : TString(s.data(), s.size());
 }
 
-TString ToLowerUTF8(const char* s) {
+TString ToLowerUTF8(const char* s) { 
     return ToLowerUTF8(TStringBuf(s));
 }
 

@@ -125,7 +125,7 @@ class TGreedyDictTest: public TTestBase {
         data.insert(data.begin(), urls, urls + Y_ARRAY_SIZE(urls));
     }
 
-    typedef THashMap<TStringBuf, NGreedyDict::TEntry> TDict;
+    typedef THashMap<TStringBuf, NGreedyDict::TEntry> TDict; 
 
     TAutoPtr<NGreedyDict::TEntrySet> DoTestBuilder(const NGreedyDict::TBuildSettings& s,
                                                    TDict& res) {
@@ -159,7 +159,7 @@ class TGreedyDictTest: public TTestBase {
 
     void TestBuilder() {
         TAutoPtr<NGreedyDict::TEntrySet> set;
-        THashMap<TStringBuf, NGreedyDict::TEntry> res;
+        THashMap<TStringBuf, NGreedyDict::TEntry> res; 
         NGreedyDict::TBuildSettings s;
         set = DoTestBuilder(s, res);
 

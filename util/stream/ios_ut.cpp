@@ -53,14 +53,14 @@ public:
 UNIT_TEST_SUITE_REGISTRATION(TStreamsTest);
 
 void TStreamsTest::TestIStreamOperators() {
-    TString data("first line\r\nsecond\t\xd1\x82\xd0\xb5\xd1\x81\xd1\x82 line\r\n 1 -4 59 4320000000009999999 c\n -1.5 1e-110");
+    TString data("first line\r\nsecond\t\xd1\x82\xd0\xb5\xd1\x81\xd1\x82 line\r\n 1 -4 59 4320000000009999999 c\n -1.5 1e-110"); 
     TStringInput si(data);
 
-    TString l1;
-    TString l2;
-    TString l3;
-    TUtf16String w1;
-    TString l4;
+    TString l1; 
+    TString l2; 
+    TString l3; 
+    TUtf16String w1; 
+    TString l4; 
     ui16 i1;
     i16 i2;
     i32 i3;
@@ -120,7 +120,7 @@ void TStreamsTest::TestStringStream() {
 }
 
 void TStreamsTest::TestGenericRead() {
-    TString s("1234567890");
+    TString s("1234567890"); 
     TStringInput si(s);
     char buf[1024];
 
@@ -131,7 +131,7 @@ void TStreamsTest::TestGenericRead() {
 }
 
 void TStreamsTest::TestGenericWrite() {
-    TString s;
+    TString s; 
     TStringOutput so(s);
 
     so.Write("123456", 6);
@@ -141,7 +141,7 @@ void TStreamsTest::TestGenericWrite() {
 }
 
 void TStreamsTest::TestReadLine() {
-    TString data("1234\r\n5678\nqw");
+    TString data("1234\r\n5678\nqw"); 
     TStringInput si(data);
 
     UNIT_ASSERT_EQUAL(si.ReadLine(), "1234");
@@ -171,7 +171,7 @@ void TStreamsTest::TestMemoryStream() {
 
 class TMyStringOutput: public IOutputStream {
 public:
-    inline TMyStringOutput(TString& s, size_t buflen) noexcept
+    inline TMyStringOutput(TString& s, size_t buflen) noexcept 
         : S_(s)
         , BufLen_(buflen)
     {
@@ -185,7 +185,7 @@ public:
     }
 
     void DoWriteV(const TPart* p, size_t count) override {
-        TString s;
+        TString s; 
 
         for (size_t i = 0; i < count; ++i) {
             s.append((const char*)p[i].buf, p[i].len);
@@ -200,14 +200,14 @@ private:
 };
 
 void TStreamsTest::TestBufferedIO() {
-    TString s;
+    TString s; 
 
     {
         const size_t buflen = 7;
         TBuffered<TMyStringOutput> bo(buflen, s, buflen);
 
         for (size_t i = 0; i < 1000; ++i) {
-            TString str(" ");
+            TString str(" "); 
             str += ToString(i % 10);
 
             bo.Write(str.data(), str.size());
@@ -223,7 +223,7 @@ void TStreamsTest::TestBufferedIO() {
         TBuffered<TStringInput> bi(buflen, s);
 
         for (size_t i = 0; i < 1000; ++i) {
-            TString str(" ");
+            TString str(" "); 
             str += ToString(i % 10);
 
             char buf[3];
@@ -241,7 +241,7 @@ void TStreamsTest::TestBufferedIO() {
     {
         const size_t buflen = 13;
         TBuffered<TMyStringOutput> bo(buflen, s, buflen);
-        TString f = "1234567890";
+        TString f = "1234567890"; 
 
         for (size_t i = 0; i < 10; ++i) {
             f += f;
@@ -257,7 +257,7 @@ void TStreamsTest::TestBufferedIO() {
 
 void TStreamsTest::TestBufferStream() {
     TBufferStream stream;
-    TString s = "test";
+    TString s = "test"; 
 
     stream.Write(s.data(), s.size());
     char buf[5];
@@ -281,7 +281,7 @@ void TStreamsTest::TestBufferStream() {
 namespace {
     class TStringListInput: public IWalkInput {
     public:
-        TStringListInput(const TVector<TString>& data)
+        TStringListInput(const TVector<TString>& data) 
             : Data_(data)
             , Index_(0)
         {
@@ -293,14 +293,14 @@ namespace {
                 return 0;
             }
 
-            const TString& string = Data_[Index_++];
+            const TString& string = Data_[Index_++]; 
 
             *ptr = string.data();
             return string.size();
         }
 
     private:
-        const TVector<TString>& Data_;
+        const TVector<TString>& Data_; 
         size_t Index_;
     };
 
@@ -332,7 +332,7 @@ namespace {
         "123",
         "\t\r "};
     void TestStreamReadTo1(IInputStream& input, const char* comment) {
-        TString tmp;
+        TString tmp; 
         input.ReadTo(tmp, 'c');
         UNIT_ASSERT_VALUES_EQUAL_C(tmp, "111a222b333", comment);
 
@@ -348,7 +348,7 @@ namespace {
     }
 
     void TestStreamReadTo2(IInputStream& input, const char* comment) {
-        TString s;
+        TString s; 
         size_t i = 0;
         while (input.ReadLine(s)) {
             UNIT_ASSERT_C(i < Y_ARRAY_SIZE(Expected), comment);
@@ -368,7 +368,7 @@ namespace {
     }
 
     void TestStrokaInput(IInputStream& input, const char* comment) {
-        TString line;
+        TString line; 
         ui32 i = 0;
         TInstant start = Now();
         while (input.ReadLine(line)) {
@@ -379,7 +379,7 @@ namespace {
     }
 
     template <class T>
-    void TestStreamReadTo(const TString& text, T test) {
+    void TestStreamReadTo(const TString& text, T test) { 
         TStringInput is(text);
         test(is, "TStringInput");
         TMemoryInput mi(text.data(), text.size());
@@ -390,7 +390,7 @@ namespace {
         TStringInput slave(text);
         TBufferedInput bdi(&slave);
         test(bdi, "TBufferedInput");
-        TVector<TString> lst(1, text);
+        TVector<TString> lst(1, text); 
         TStringListInput sli(lst);
         test(sli, "IWalkInput");
     }
@@ -400,15 +400,15 @@ void TStreamsTest::TestReadTo() {
     TestStreamReadTo("111a222b333c444d555e666f", TestStreamReadTo1);
     TestStreamReadTo(Text, TestStreamReadTo2);
     TestStreamReadTo("111a222b333c444d555e666f", TestStreamReadTo3);
-    TString withZero = "one";
+    TString withZero = "one"; 
     withZero.append('\0').append("two").append('\0').append("three");
     TestStreamReadTo(withZero, TestStreamReadTo4);
 }
 
 void TStreamsTest::TestStrokaInput() {
-    TString s;
+    TString s; 
     for (ui32 i = 0; i < 100000; ++i) {
-        TVector<char> d(i % 1000, 'a');
+        TVector<char> d(i % 1000, 'a'); 
         s.append(d.data(), d.size());
         s.append('\n');
     }
@@ -416,9 +416,9 @@ void TStreamsTest::TestStrokaInput() {
 }
 
 void TStreamsTest::TestWtrokaInput() {
-    const TString s(Text);
+    const TString s(Text); 
     TStringInput is(s);
-    TUtf16String w;
+    TUtf16String w; 
     size_t i = 0;
 
     while (is.ReadLine(w)) {
@@ -430,12 +430,12 @@ void TStreamsTest::TestWtrokaInput() {
 }
 
 void TStreamsTest::TestWtrokaOutput() {
-    TString s;
+    TString s; 
     TStringOutput os(s);
     const size_t n = sizeof(Expected) / sizeof(Expected[0]);
 
     for (size_t i = 0; i < n; ++i) {
-        TUtf16String w = UTF8ToWide(Expected[i]);
+        TUtf16String w = UTF8ToWide(Expected[i]); 
 
         os << w;
 

@@ -7,7 +7,7 @@
 
 // A vector preallocated on the stack.
 // After exceeding the preconfigured stack space falls back to the heap.
-// Publicly inherits TVector, but disallows swap (and hence shrink_to_fit, also operator= is reimplemented via copying).
+// Publicly inherits TVector, but disallows swap (and hence shrink_to_fit, also operator= is reimplemented via copying). 
 //
 // Inspired by: http://qt-project.org/doc/qt-4.8/qvarlengtharray.html#details
 

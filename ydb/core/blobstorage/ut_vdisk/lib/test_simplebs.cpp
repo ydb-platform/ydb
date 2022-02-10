@@ -145,7 +145,7 @@ void name::operator ()(TConfiguration *conf) {              \
 SIMPLE_TEST_BEGIN(TSimple3Put3Get, TBasePutAllFromDataSet)
 void SendReadRequests(const TActorContext &ctx) {
     // read logoblobs
-    const TVector<TDataItem> &ds = DataSetPtr->ToVector();
+    const TVector<TDataItem> &ds = DataSetPtr->ToVector(); 
 
     for (ui32 i = 0; i < 3; ++i) {
         auto req = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(VDiskInfo.VDiskID, TInstant::Max(),
@@ -165,7 +165,7 @@ SIMPLE_TEST_END(TSimple3Put3Get, TBasePutAllFromDataSet)
 SIMPLE_TEST_BEGIN(TSimple3Put1SeqGetAll, TBasePutAllFromDataSet)
 void SendReadRequests(const TActorContext &ctx) {
     // read logoblobs
-    const TVector<TDataItem> &ds = DataSetPtr->ToVector();
+    const TVector<TDataItem> &ds = DataSetPtr->ToVector(); 
 
     auto req = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(VDiskInfo.VDiskID, TInstant::Max(),
             NKikimrBlobStorage::EGetHandleClass::AsyncRead, TEvBlobStorage::TEvVGet::EFlags::None, {},
@@ -184,7 +184,7 @@ SIMPLE_TEST_END(TSimple3Put1SeqGetAll, TBasePutAllFromDataSet)
 SIMPLE_TEST_BEGIN(TSimple3Put1SeqGet2, TBasePutAllFromDataSet)
 void SendReadRequests(const TActorContext &ctx) {
     // read logoblobs
-    const TVector<TDataItem> &ds = DataSetPtr->ToVector();
+    const TVector<TDataItem> &ds = DataSetPtr->ToVector(); 
 
     auto req = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(VDiskInfo.VDiskID, TInstant::Max(),
             NKikimrBlobStorage::EGetHandleClass::AsyncRead, TEvBlobStorage::TEvVGet::EFlags::None, {},
@@ -202,7 +202,7 @@ SIMPLE_TEST_END(TSimple3Put1SeqGet2, TBasePutAllFromDataSet)
 SIMPLE_TEST_BEGIN(TSimple3Put1SeqSubsOk, TBasePutAllFromDataSet)
 void SendReadRequests(const TActorContext &ctx) {
     // use shift/size to read parts of logoblobs
-    const TVector<TDataItem> &ds = DataSetPtr->ToVector();
+    const TVector<TDataItem> &ds = DataSetPtr->ToVector(); 
 
     auto req = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(VDiskInfo.VDiskID, TInstant::Max(),
             NKikimrBlobStorage::EGetHandleClass::AsyncRead, TEvBlobStorage::TEvVGet::EFlags::None, {},
@@ -223,7 +223,7 @@ SIMPLE_TEST_END(TSimple3Put1SeqSubsOk, TBasePutAllFromDataSet)
 SIMPLE_TEST_BEGIN(TSimple3Put1SeqSubsError, TBasePutAllFromDataSet)
 void SendReadRequests(const TActorContext &ctx) {
     // use shift/size to read parts of logoblobs
-    const TVector<TDataItem> &ds = DataSetPtr->ToVector();
+    const TVector<TDataItem> &ds = DataSetPtr->ToVector(); 
 
     auto req = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(VDiskInfo.VDiskID, TInstant::Max(),
             NKikimrBlobStorage::EGetHandleClass::AsyncRead, TEvBlobStorage::TEvVGet::EFlags::None, {},
@@ -258,7 +258,7 @@ SIMPLE_TEST_END(TSimple3Put1GetMissingKey, TBasePutAllFromDataSet)
 SIMPLE_TEST_BEGIN(TSimple3Put1GetMissingPart, TBasePutAllFromDataSet)
 void SendReadRequests(const TActorContext &ctx) {
     // use shift/size to read parts of logoblobs
-    const TVector<TDataItem> &ds = DataSetPtr->ToVector();
+    const TVector<TDataItem> &ds = DataSetPtr->ToVector(); 
 
     TLogoBlobID key(ds.at(0).Id, 2);
 
@@ -276,7 +276,7 @@ SIMPLE_TEST_END(TSimple3Put1GetMissingPart, TBasePutAllFromDataSet)
 SIMPLE_TEST_BEGIN(TSimpleHnd6Put1SeqGet, TBasePutAllFromDataSet)
 void SendReadRequests(const TActorContext &ctx) {
     // read logoblobs
-    const TVector<TDataItem> &ds = DataSetPtr->ToVector();
+    const TVector<TDataItem> &ds = DataSetPtr->ToVector(); 
 
     ui64 cookie1 = 1;
     ui64 cookie2 = 2;
@@ -305,7 +305,7 @@ SIMPLE_TEST_END(TSimpleHnd6Put1SeqGet, TBasePutAllFromDataSet)
 SIMPLE_TEST_BEGIN(TSimpleHnd2Put1Get, TBasePutAllFromDataSet)
 void SendReadRequests(const TActorContext &ctx) {
     // read logoblobs
-    const TVector<TDataItem> &ds = DataSetPtr->ToVector();
+    const TVector<TDataItem> &ds = DataSetPtr->ToVector(); 
 
     ui64 cookie = 386;
 
@@ -335,7 +335,7 @@ protected:
     }
 
     virtual void ExpectedSetAll() {
-        const TVector<TDataItem> &ds = DataSetPtr->ToVector();
+        const TVector<TDataItem> &ds = DataSetPtr->ToVector(); 
         ExpectedSet.Put(ds.at(0).Id.FullID(), NKikimrProto::OK, {});
         ExpectedSet.Put(ds.at(1).Id.FullID(), NKikimrProto::OK, {});
         ExpectedSet.Put(ds.at(2).Id.FullID(), NKikimrProto::OK, {});
@@ -348,7 +348,7 @@ protected:
     }
 
     virtual void ExpectedSetMiddle() {
-        const TVector<TDataItem> &ds = DataSetPtr->ToVector();
+        const TVector<TDataItem> &ds = DataSetPtr->ToVector(); 
         ExpectedSet.Put(ds.at(1).Id.FullID(), NKikimrProto::OK, {});
 
         Counter = 1;

@@ -38,7 +38,7 @@ public:
         if (pbRecord.GetStatus() == NKikimrScheme::EStatus::StatusSuccess) {
             if (pbRecord.HasPathDescription()) {
                 const auto& pbPathDescription(pbRecord.GetPathDescription());
-                TVector<ui64> tablets;
+                TVector<ui64> tablets; 
                 tablets.reserve(pbPathDescription.TablePartitionsSize());
                 for (const auto& partition : pbPathDescription.GetTablePartitions()) {
                     tablets.emplace_back(partition.GetDatashardId());
@@ -63,7 +63,7 @@ public:
         }
     }
 
-    void SendTabletRequests(const TVector<TTabletId>& tablets, const TActorContext& ctx) {
+    void SendTabletRequests(const TVector<TTabletId>& tablets, const TActorContext& ctx) { 
         TDomainsInfo* domainsInfo = AppData(ctx)->DomainsInfo.Get();
         for (auto tabletId : tablets) {
             TActorId pipeClient = GetTabletPipe(tabletId, ctx);

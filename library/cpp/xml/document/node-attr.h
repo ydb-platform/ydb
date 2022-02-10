@@ -28,7 +28,7 @@ namespace NXml {
 
     template <>
     inline void TNode::AttrInternal(TCharPtr& value, TString& res, TStringBuf /*errContext*/) const {
-        TString tmp(CAST2CHAR(value.Get()));
+        TString tmp(CAST2CHAR(value.Get())); 
         res.swap(tmp);
     }
 

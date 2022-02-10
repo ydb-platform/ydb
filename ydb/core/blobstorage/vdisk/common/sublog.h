@@ -32,13 +32,13 @@ namespace NKikimr {
             return Out;
         }
 
-        TString Get() const {
+        TString Get() const { 
             return Out.Str();
         }
 
     private:
         const bool PrefixWithTime;
-        const TString Prefix;
+        const TString Prefix; 
         mutable TStream Out;
         mutable size_t Recs = 0;
     };
@@ -59,7 +59,7 @@ namespace NKikimr {
     {
         TStringStream Stream;
 
-        const TString &GetLine() const {
+        const TString &GetLine() const { 
             return Stream.Str();
         }
     };

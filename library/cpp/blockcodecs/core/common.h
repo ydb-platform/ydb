@@ -55,7 +55,7 @@ namespace NBlockCodecs {
             return in.size();
         }
 
-        TStringBuf Name() const noexcept override {
+        TStringBuf Name() const noexcept override { 
             return TStringBuf("null");
         }
     };
@@ -98,7 +98,7 @@ namespace NBlockCodecs {
             return len;
         }
 
-        inline const T* Base() const noexcept {
+        inline const T* Base() const noexcept { 
             return static_cast<const T*>(this);
         }
     };

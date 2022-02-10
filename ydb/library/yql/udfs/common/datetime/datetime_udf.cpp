@@ -27,7 +27,7 @@ namespace {
 
     SIMPLE_UDF(TToStringFormat, char*(TAutoMap<TTimestamp>, char*)) {
         const auto input = args[0].Get<ui64>();
-        const TString format(args[1].AsStringRef());
+        const TString format(args[1].AsStringRef()); 
         TInstant instant = TInstant::MicroSeconds(input);
         TSimpleTM tm = TSimpleTM::New(static_cast<time_t>(instant.Seconds()));
         return valueBuilder->NewString(tm.ToString(format.c_str()));
@@ -44,7 +44,7 @@ namespace {
         Y_UNUSED(valueBuilder);
         const auto input = args[0].Get<ui64>();
         TInstant instant = TInstant::MicroSeconds(input);
-        const TString tz_name(args[1].AsStringRef());
+        const TString tz_name(args[1].AsStringRef()); 
         TTimeZone tz = GetTimeZone(tz_name);
         TTimeZone gmt_tz = GetTimeZone("GMT+0");
         TSimpleTM ct = ToCivilTime(instant, tz);
@@ -56,7 +56,7 @@ namespace {
         Y_UNUSED(valueBuilder);
         const auto input = args[0].Get<ui64>();
         TInstant instant = TInstant::MicroSeconds(input);
-        const TString tz_name(args[1].AsStringRef());
+        const TString tz_name(args[1].AsStringRef()); 
         TTimeZone tz = GetTimeZone(tz_name);
         TSimpleTM tm = TSimpleTM::New(static_cast<time_t>(instant.Seconds()));
         TInstant at = ToAbsoluteTime(tm, tz);
@@ -84,7 +84,7 @@ namespace {
         return TUnboxedValuePod(tm.WDay == 0 || tm.WDay == 6);
     }
 
-    bool TryStrptime(const TString& input, const TString& format, TInstant& result) {
+    bool TryStrptime(const TString& input, const TString& format, TInstant& result) { 
         struct tm inputTm;
         memset(&inputTm, 0, sizeof(tm));
         inputTm.tm_mday = 1;
@@ -115,7 +115,7 @@ namespace {
         TInstant result;
         ui64 bonus = 0;
 
-        const static std::unordered_map<size_t, TString> iso8601withoutTzMap = {
+        const static std::unordered_map<size_t, TString> iso8601withoutTzMap = { 
             {7, "%Y-%m"},
             {10, "%Y-%m-%d"},
             {16, "%Y-%m-%d %H:%M"},
@@ -162,7 +162,7 @@ namespace {
     TUnboxedValue FromStringFormatImpl(const TUnboxedValuePod* args) {
         EMPTY_RESULT_ON_EMPTY_ARG(0);
         const TString input(args[0].AsStringRef());
-        const TString format(args[1].AsStringRef());
+        const TString format(args[1].AsStringRef()); 
         TInstant result;
         bool success = TryStrptime(input, format, result);
 

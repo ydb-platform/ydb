@@ -13,7 +13,7 @@ inline double Finitize(double x, double notFiniteValue = 0.0)
     return isfinite(x)? x: notFiniteValue;
 }
 
-inline void ParseNameAndOpts(const TString& nameAndOpts, TString& name, THashSet<TString>& opts)
+inline void ParseNameAndOpts(const TString& nameAndOpts, TString& name, THashSet<TString>& opts) 
 {
     name.clear();
     opts.clear();
@@ -29,18 +29,18 @@ inline void ParseNameAndOpts(const TString& nameAndOpts, TString& name, THashSet
     }
 }
 
-inline TString ParseName(const TString& nameAndOpts)
+inline TString ParseName(const TString& nameAndOpts) 
 {
     auto vs = SplitString(nameAndOpts, "-");
     if (vs.empty()) {
-        return TString();
+        return TString(); 
     } else {
         return vs[0];
     }
 }
 
 template <class R, class T>
-inline R AccumulateIfExist(const TString& name, const TTable& table, R r, T t)
+inline R AccumulateIfExist(const TString& name, const TTable& table, R r, T t) 
 {
     ForEach(table.begin(), table.end(), [=,&r] (const TRow& row) {
         double value;
@@ -51,10 +51,10 @@ inline R AccumulateIfExist(const TString& name, const TTable& table, R r, T t)
     return r;
 }
 
-inline double MinValue(const TString& nameAndOpts, const TTable& table)
+inline double MinValue(const TString& nameAndOpts, const TTable& table) 
 {
-    TString name;
-    THashSet<TString> opts;
+    TString name; 
+    THashSet<TString> opts; 
     ParseNameAndOpts(nameAndOpts, name, opts);
     bool stack = opts.contains("stack");
     if (stack) {
@@ -68,10 +68,10 @@ inline double MinValue(const TString& nameAndOpts, const TTable& table)
     }
 }
 
-inline double MaxValue(const TString& nameAndOpts, const TTable& table)
+inline double MaxValue(const TString& nameAndOpts, const TTable& table) 
 {
-    TString name;
-    THashSet<TString> opts;
+    TString name; 
+    THashSet<TString> opts; 
     ParseNameAndOpts(nameAndOpts, name, opts);
     bool stack = opts.contains("stack");
     if (stack) {
@@ -88,14 +88,14 @@ inline double MaxValue(const TString& nameAndOpts, const TTable& table)
 }
 
 template <class T>
-inline void Map(TTable& table, const TString& rname, T t)
+inline void Map(TTable& table, const TString& rname, T t) 
 {
     ForEach(table.begin(), table.end(), [=] (TRow& row) {
         row[rname] = t(row);
     });
 }
 
-inline std::function<bool(const TRow&)> HasNoValueFor(TString name)
+inline std::function<bool(const TRow&)> HasNoValueFor(TString name) 
 {
     return [=] (const TRow& row) -> bool {
         double value;
@@ -104,7 +104,7 @@ inline std::function<bool(const TRow&)> HasNoValueFor(TString name)
 }
 
 
-inline std::function<double(const TRow&)> GetValueFor(TString name, double defVal = 0.0)
+inline std::function<double(const TRow&)> GetValueFor(TString name, double defVal = 0.0) 
 {
     return [=] (const TRow& row) -> double {
         double value;

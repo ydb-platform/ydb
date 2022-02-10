@@ -23,7 +23,7 @@ namespace {
             return ret;
         }
 
-        static inline size_t DoMaxCompressedLength(size_t l) noexcept {
+        static inline size_t DoMaxCompressedLength(size_t l) noexcept { 
             return ZSTD_compressBound(l);
         }
 
@@ -39,18 +39,18 @@ namespace {
             }
         }
 
-        TStringBuf Name() const noexcept override {
+        TStringBuf Name() const noexcept override { 
             return MyName;
         }
 
         const unsigned Level;
-        const TString MyName;
+        const TString MyName; 
     };
 
     struct TZStd06Registrar {
         TZStd06Registrar() {
             for (unsigned i = 1; i <= ZSTD_maxCLevel(); ++i) {
-                RegisterCodec(MakeHolder<TZStd06Codec>(i));
+                RegisterCodec(MakeHolder<TZStd06Codec>(i)); 
             }
         }
     };

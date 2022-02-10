@@ -24,34 +24,34 @@ public:
 
     ~TSystemEvent();
 
-    void Reset() noexcept;
-    void Signal() noexcept;
+    void Reset() noexcept; 
+    void Signal() noexcept; 
 
     /*
      * return true if signaled, false if timed out.
      */
-    bool WaitD(TInstant deadLine) noexcept;
+    bool WaitD(TInstant deadLine) noexcept; 
 
     /*
      * return true if signaled, false if timed out.
      */
-    inline bool WaitT(TDuration timeOut) noexcept {
+    inline bool WaitT(TDuration timeOut) noexcept { 
         return WaitD(timeOut.ToDeadLine());
     }
 
     /*
      * wait infinite time
      */
-    inline void WaitI() noexcept {
+    inline void WaitI() noexcept { 
         WaitD(TInstant::Max());
     }
 
     //return true if signaled, false if timed out.
-    inline bool Wait(ui32 timer) noexcept {
+    inline bool Wait(ui32 timer) noexcept { 
         return WaitT(TDuration::MilliSeconds(timer));
     }
 
-    inline bool Wait() noexcept {
+    inline bool Wait() noexcept { 
         WaitI();
 
         return true;

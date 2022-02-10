@@ -326,7 +326,7 @@ ui32 TFakeProxyTx::SetProgram(TTester& tester, const TString& programText) {
     UNIT_ASSERT_EQUAL_C(result, IEngineFlat::EResult::Ok, Engine->GetErrors());
     auto& dbKeys = Engine->GetDbKeys();
 
-    TSet<ui64> resolvedShards;
+    TSet<ui64> resolvedShards; 
     TTester::TKeyResolver keyResolver = tester.GetKeyResolver();
     for (auto& dbKey : dbKeys) {
         keyResolver(*dbKey);
@@ -490,7 +490,7 @@ void TFakeMiniKQLProxy::EnqueueScan(const TString& programText, std::function<bo
 }
 
 void TFakeMiniKQLProxy::ExecQueue() {
-    TMap<ui64, TFakeProxyTx::TPtr> needPlan;
+    TMap<ui64, TFakeProxyTx::TPtr> needPlan; 
     for (auto& tx : TxQueue) {
         Propose(*tx, true);
         UNIT_ASSERT(tx->Immediate() || tx->GetStatus(true) == IEngineFlat::EStatus::Unknown);
@@ -515,7 +515,7 @@ IEngineFlat::EStatus TFakeMiniKQLProxy::Execute(const TString& programText,
                                                 NKikimrMiniKQL::TResult& out,
                                                 bool waitForResult) {
     ui32 txId = ++LastTxId_;
-    TMap<ui64, TFakeProxyTx::TPtr> txs;
+    TMap<ui64, TFakeProxyTx::TPtr> txs; 
     txs[txId] = std::make_shared<TFakeProxyTx>(txId, programText);
     TFakeProxyTx& tx = *(txs.begin()->second);
 
@@ -534,7 +534,7 @@ IEngineFlat::EStatus TFakeMiniKQLProxy::Execute(const TString& programText,
 IEngineFlat::EStatus TFakeMiniKQLProxy::ExecSchemeCreateTable(const TString& tableDesc, const TVector<ui64>& shards) {
     ui64 txId = ++LastTxId_;
     ui64 stepId = ++LastStep_;
-    TMap<ui64, TFakeProxyTx::TPtr> txs;
+    TMap<ui64, TFakeProxyTx::TPtr> txs; 
     txs[txId] = std::make_shared<TFakeProxyTx>(txId, tableDesc);
     TFakeProxyTx& tx = *(txs.begin()->second);
     tx.SetKindSchema();
@@ -635,7 +635,7 @@ void TFakeMiniKQLProxy::Propose(TFakeProxyTx& tx, bool holdImmediate) {
     if (holdImmediate && tx.Immediate())
         return;
 
-    TSet<ui64> shards;
+    TSet<ui64> shards; 
     for (ui32 i = 0; i < shardsCount; ++i) {
         TString txBody;
         ui32 shard = tx.GetShardProgram(i, txBody);
@@ -665,7 +665,7 @@ void TFakeMiniKQLProxy::Propose(TFakeProxyTx& tx, bool holdImmediate) {
     }
 }
 
-void TFakeMiniKQLProxy::ResolveShards(const TSet<ui64>& shards) {
+void TFakeMiniKQLProxy::ResolveShards(const TSet<ui64>& shards) { 
     for (ui64 shard : shards) {
         auto event = new TEvDataShard::TEvGetShardState(Tester.Sender);
         ForwardToTablet(Tester.Runtime, shard, Tester.Sender, event);
@@ -693,13 +693,13 @@ ui64 TFakeMiniKQLProxy::Plan(ui64 stepId, const TMap<ui64, TFakeProxyTx::TPtr>& 
     using TEvStreamQuotaResponse = TEvTxProcessing::TEvStreamQuotaResponse;
     using TEvStreamDataAck = TEvTxProcessing::TEvStreamDataAck;
 
-    TSet<ui64> immediateTxs;
-    THashMap<ui64, TVector<ui64>> plans;
-    THashMap<ui64, TVector<ui64>> imm2onlineTxs;
-    TSet<std::pair<ui64, ui64>> acks;
-    TSet<std::pair<ui64, ui64>> results;
-    TSet<std::pair<ui64, ui64>> streams;
-    TSet<std::pair<ui64, ui64>> scans;
+    TSet<ui64> immediateTxs; 
+    THashMap<ui64, TVector<ui64>> plans; 
+    THashMap<ui64, TVector<ui64>> imm2onlineTxs; 
+    TSet<std::pair<ui64, ui64>> acks; 
+    TSet<std::pair<ui64, ui64>> results; 
+    TSet<std::pair<ui64, ui64>> streams; 
+    TSet<std::pair<ui64, ui64>> scans; 
     for (auto& pair : txs) {
         TFakeProxyTx::TPtr tx = pair.second;
         ui64 txId = tx->TxId();
@@ -735,7 +735,7 @@ ui64 TFakeMiniKQLProxy::Plan(ui64 stepId, const TMap<ui64, TFakeProxyTx::TPtr>& 
     }
 
     // prepare immediate
-    TDeque<std::pair<ui64, THolder<TEvDataShard::TEvProposeTransaction>>> immEvents;
+    TDeque<std::pair<ui64, THolder<TEvDataShard::TEvProposeTransaction>>> immEvents; 
     for (ui64 txId : immediateTxs) {
         TFakeProxyTx::TPtr tx = txs.find(txId)->second;
         UNIT_ASSERT_VALUES_EQUAL(tx->ShardsCount(), 1);
@@ -1003,7 +1003,7 @@ TKeyExtractor::TKeyExtractor(TTester& tester, TString programText) {
 
 //
 
-TDatashardInitialEventsFilter::TDatashardInitialEventsFilter(const TVector<ui64>& tabletIds)
+TDatashardInitialEventsFilter::TDatashardInitialEventsFilter(const TVector<ui64>& tabletIds) 
     : TabletIds(tabletIds)
 {
 }

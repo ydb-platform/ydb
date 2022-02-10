@@ -80,7 +80,7 @@ namespace NKikimr {
             }
 
             // create a vector of values matching time criterion
-            TVector<T> values;
+            TVector<T> values; 
             values.reserve(Items.size());
             for (const TItem &item : Items) {
                 values.push_back(item.Value);

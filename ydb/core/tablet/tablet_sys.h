@@ -57,19 +57,19 @@ class TTablet : public TActor<TTablet> {
     } StateStorageInfo;
 
     struct TFollowerUpdate {
-        TVector<std::pair<TLogoBlobID, TString>> References;
-        TString Body;
-        TString AuxPayload;
+        TVector<std::pair<TLogoBlobID, TString>> References; 
+        TString Body; 
+        TString AuxPayload; 
 
-        TVector<TLogoBlobID> GcDiscovered;
-        TVector<TLogoBlobID> GcLeft;
+        TVector<TLogoBlobID> GcDiscovered; 
+        TVector<TLogoBlobID> GcLeft; 
     };
 
     struct TLogEntry {
         const ui32 Step;
         const ui32 ConfirmedOnSend;
 
-        TVector<ui32> Dependent;
+        TVector<ui32> Dependent; 
         bool StateStorageConfirmed;
         bool BlobStorageConfirmed;
         ui32 DependenciesLeft;
@@ -113,9 +113,9 @@ class TTablet : public TActor<TTablet> {
 
     struct TGraph {
         typedef TDeque<std::unique_ptr<TLogEntry>> TQueueType;
-        typedef THashMap<ui32, TLogEntry *> TIndex;
+        typedef THashMap<ui32, TLogEntry *> TIndex; 
 
-        TQueueType Queue;
+        TQueueType Queue; 
         TQueueType PostponedFollowerUpdates;
         TIndex Index;
         TDeque<TEvTablet::TEvCommit::TPtr> DelayCommitQueue;

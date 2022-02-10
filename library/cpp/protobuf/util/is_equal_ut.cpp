@@ -24,7 +24,7 @@ Y_UNIT_TEST_SUITE(ProtobufIsEqual) {
         a.SetName("aaa");
         b.SetName("bbb");
 
-        TString path;
+        TString path; 
 
         bool equal = NProtoBuf::IsEqual(a, b, &path);
         UNIT_ASSERT(!equal);
@@ -40,7 +40,7 @@ Y_UNIT_TEST_SUITE(ProtobufIsEqual) {
         a.MutableInner()->SetBrbrbr("aaa");
         b.MutableInner()->SetBrbrbr("bbb");
 
-        TString path;
+        TString path; 
 
         bool equal = NProtoBuf::IsEqual(a, b, &path);
         UNIT_ASSERT(!equal);

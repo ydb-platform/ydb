@@ -39,7 +39,7 @@ namespace NKikimr {
                     return SlotId;
                 }
 
-                TString ToString() const {
+                TString ToString() const { 
                     TStringStream str;
                     str << "[" << ChunkId << " " << SlotId << "]";
                     return str.Str();
@@ -92,10 +92,10 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////
         class TChain : public TThrRefBase {
             using TChunkID = ui32;
-            using TFreeSpace = TMap<TChunkID, TMask>;
+            using TFreeSpace = TMap<TChunkID, TMask>; 
 
             static constexpr ui32 MaxNumberOfSlots = 10240; // it's not a good idea to have more slots than this
-            const TString VDiskLogPrefix;
+            const TString VDiskLogPrefix; 
             const ui32 SlotsInChunk;
             const TMask ConstMask; // mask of 'all slots are free'
             TFreeSpace FreeSpace;
@@ -107,7 +107,7 @@ namespace NKikimr {
             static TMask BuildConstMask(const TString &prefix, ui32 slotsInChunk);
 
         public:
-            TChain(const TString &vdiskLogPrefix, const ui32 slotsInChunk)
+            TChain(const TString &vdiskLogPrefix, const ui32 slotsInChunk) 
                 : VDiskLogPrefix(vdiskLogPrefix)
                 , SlotsInChunk(slotsInChunk)
                 , ConstMask(BuildConstMask(vdiskLogPrefix, slotsInChunk))
@@ -127,7 +127,7 @@ namespace NKikimr {
             void Save(IOutputStream *s) const;
             void Load(IInputStream *s);
             bool HaveBeenUsed() const;
-            TString ToString() const;
+            TString ToString() const; 
             void RenderHtml(IOutputStream &str) const;
             ui32 GetAllocatedSlots() const;
             void GetOwnedChunks(TSet<TChunkIdx>& chunks) const;
@@ -224,7 +224,7 @@ namespace NKikimr {
                 Migrated = 3,
             };
 
-            const TString VDiskLogPrefix;
+            const TString VDiskLogPrefix; 
             const ui32 ChunkSize;
             const ui32 AppendBlockSize;
             const ui32 MinHugeBlobInBytes;
@@ -248,7 +248,7 @@ namespace NKikimr {
             using TFreeChunks = TSet<TChunkID>;
 
             static const ui32 Signature;
-            const TString VDiskLogPrefix;
+            const TString VDiskLogPrefix; 
             const ui32 FreeChunksReservation;
             TFreeChunks FreeChunks;
             TAllChains Chains;
@@ -319,7 +319,7 @@ namespace NKikimr {
             // Output
             //////////////////////////////////////////////////////////////////////////////////////////
             void RenderHtml(IOutputStream &str) const;
-            TString ToString() const;
+            TString ToString() const; 
 
             void PrintOutSearchTable(IOutputStream &str) {
                 Chains.PrintOutSearchTable(str);

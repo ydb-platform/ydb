@@ -1,5 +1,5 @@
 from util.digest.multi cimport MultiHash
-from util.generic.string cimport TString
+from util.generic.string cimport TString 
 
 import pytest
 import unittest

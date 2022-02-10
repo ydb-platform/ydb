@@ -16,7 +16,7 @@ struct TRetryState {
         if (RetryNumber == 0) {
            wait = policy.DoFirstRetryInstantly ? TDuration::Zero() : policy.MinRetryTime;
         } else {
-            wait = TDuration::MicroSeconds(RetryDuration.GetValue() * policy.BackoffMultiplier);
+            wait = TDuration::MicroSeconds(RetryDuration.GetValue() * policy.BackoffMultiplier); 
             wait = Max(policy.MinRetryTime, wait);
             wait = Min(policy.MaxRetryTime, wait);
         }
@@ -52,7 +52,7 @@ protected:
     TKikimr::TImpl& Kikimr;
     volatile bool TimeToQuit;
     TMutex QueueMutex;
-    TPriorityQueue<TQueueItem> Queue;
+    TPriorityQueue<TQueueItem> Queue; 
     TCondVar CondVar;
     TThread QueueThread;
 
@@ -444,7 +444,7 @@ NThreading::TFuture<TQueryResult> TKikimr::ExecuteQuery(const TTextQuery& query,
     });
 }
 
-NThreading::TFuture<TQueryResult> TKikimr::ExecuteQuery(const TTextQuery& query, const TString& parameters) {
+NThreading::TFuture<TQueryResult> TKikimr::ExecuteQuery(const TTextQuery& query, const TString& parameters) { 
     TAutoPtr<NMsgBusProxy::TBusRequest> request(new NMsgBusProxy::TBusRequest());
     auto* mkqlTx = request->Record.MutableTransaction()->MutableMiniKQLTransaction();
     mkqlTx->SetFlatMKQL(true);
@@ -473,7 +473,7 @@ NThreading::TFuture<TQueryResult> TKikimr::ExecuteQuery(const TPreparedQuery& qu
     });
 }
 
-NThreading::TFuture<TQueryResult> TKikimr::ExecuteQuery(const TPreparedQuery& query, const TString& parameters) {
+NThreading::TFuture<TQueryResult> TKikimr::ExecuteQuery(const TPreparedQuery& query, const TString& parameters) { 
     TAutoPtr<NMsgBusProxy::TBusRequest> request(new NMsgBusProxy::TBusRequest());
     auto* mkqlTx = request->Record.MutableTransaction()->MutableMiniKQLTransaction();
     mkqlTx->SetFlatMKQL(true);
@@ -512,7 +512,7 @@ NThreading::TFuture<TResult> TKikimr::ModifySchema(const TModifyScheme& schema) 
     return ExecuteRequest(request.Release());
 }
 
-NThreading::TFuture<TResult> TKikimr::MakeDirectory(const TSchemaObject& object, const TString& name) {
+NThreading::TFuture<TResult> TKikimr::MakeDirectory(const TSchemaObject& object, const TString& name) { 
     TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
     request->Record.MutablePollOptions()->SetTimeout(POLLING_TIMEOUT);
     auto* modifyScheme = request->Record.MutableTransaction()->MutableModifyScheme();
@@ -523,7 +523,7 @@ NThreading::TFuture<TResult> TKikimr::MakeDirectory(const TSchemaObject& object,
     return ExecuteRequest(request.Release());
 }
 
-NThreading::TFuture<TResult> TKikimr::CreateTable(TSchemaObject& object, const TString& name, const TVector<TColumn>& columns,
+NThreading::TFuture<TResult> TKikimr::CreateTable(TSchemaObject& object, const TString& name, const TVector<TColumn>& columns, 
                                                   const TTablePartitionConfig* partitionConfig)
 {
     TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
@@ -551,7 +551,7 @@ NThreading::TFuture<TResult> TKikimr::CreateTable(TSchemaObject& object, const T
     return ExecuteRequest(request.Release());
 }
 
-void TKikimr::SetSecurityToken(const TString& securityToken) {
+void TKikimr::SetSecurityToken(const TString& securityToken) { 
     SecurityToken = securityToken;
 }
 

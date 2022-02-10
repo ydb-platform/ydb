@@ -33,7 +33,7 @@ public:
 
     virtual void Init(const TScheme& scheme) = 0;
     virtual const TScheme& GetScheme() const = 0;
-    virtual TString FinishTransaction(bool commit) = 0;
+    virtual TString FinishTransaction(bool commit) = 0; 
     virtual void Update(ui32 root, ERowOp, TRawVals key, TArrayRef<const TUpdateOp> ops) = 0;
 
     virtual void Precharge(ui32 root,
@@ -285,7 +285,7 @@ public:
 
 private:
     bool CompareTables(ui32 root) {
-        TVector<ui32> valTags;
+        TVector<ui32> valTags; 
         for (const auto& ci : Db1->GetScheme().GetTableInfo(root)->Columns) {
             valTags.push_back(ci.first);
         }

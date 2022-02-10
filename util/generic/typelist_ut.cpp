@@ -16,24 +16,24 @@ class TTypeListTest: public TTestBase {
 
 public:
     void TestGet() {
-        using TListType = TTypeList<int, char, float>;
+        using TListType = TTypeList<int, char, float>; 
 
-        UNIT_ASSERT_TYPES_EQUAL(TListType::TGet<0>, int);
-        UNIT_ASSERT_TYPES_EQUAL(TListType::TGet<1>, char);
-        UNIT_ASSERT_TYPES_EQUAL(TListType::TGet<2>, float);
+        UNIT_ASSERT_TYPES_EQUAL(TListType::TGet<0>, int); 
+        UNIT_ASSERT_TYPES_EQUAL(TListType::TGet<1>, char); 
+        UNIT_ASSERT_TYPES_EQUAL(TListType::TGet<2>, float); 
     }
 
     void TestSimple() {
-        using TListType = TTypeList<int, char, float>;
-        UNIT_ASSERT_EQUAL(TListType::Length, 3);
-        UNIT_ASSERT_TYPES_EQUAL(TListType::THead, int);
+        using TListType = TTypeList<int, char, float>; 
+        UNIT_ASSERT_EQUAL(TListType::Length, 3); 
+        UNIT_ASSERT_TYPES_EQUAL(TListType::THead, int); 
     }
 
     struct TA {};
     struct TB {};
     struct TC {};
     void TestHave() {
-        using TListType = TTypeList<TA, TB*, const TC&>;
+        using TListType = TTypeList<TA, TB*, const TC&>; 
         UNIT_ASSERT(TListType::THave<TA>::value);
         UNIT_ASSERT(TListType::THave<TB*>::value);
         UNIT_ASSERT(!TListType::THave<TB>::value);
@@ -66,7 +66,7 @@ public:
     struct TMyMap {};
 
     void TestSelectBy() {
-        using TListType = TTypeList<TA, TB, TMyMap<TA*, TB>, TMyVector<TA>, TC>;
+        using TListType = TTypeList<TA, TB, TMyMap<TA*, TB>, TMyVector<TA>, TC>; 
 
         UNIT_ASSERT_TYPES_EQUAL(TListType::TSelectBy<TAnyType>::type, TA);
         UNIT_ASSERT_TYPES_EQUAL(TListType::TSelectBy<TIs1ArgTemplate>::type, TMyVector<TA>);

@@ -13,7 +13,7 @@ namespace NKikimr {
 
 namespace {
 
-static const TString UdfName("UDF");
+static const TString UdfName("UDF"); 
 
 class TCallablePayload : public NUdf::ICallablePayload {
 public:
@@ -51,8 +51,8 @@ public:
 
 private:
     NUdf::TStringRef Payload_;
-    TVector<NUdf::TStringRef> ArgsNames_;
-    TVector<ui64> ArgsFlags_;
+    TVector<NUdf::TStringRef> ArgsNames_; 
+    TVector<ui64> ArgsFlags_; 
 };
 
 /////////////////////////////////////////////////////////////////////////////
@@ -426,7 +426,7 @@ public:
 
 private:
     const NMiniKQL::TFunctionTypeInfoBuilder& Parent_;
-    TVector<NMiniKQL::TType*> ElementTypes_;
+    TVector<NMiniKQL::TType*> ElementTypes_; 
 };
 
 /////////////////////////////////////////////////////////////////////////////
@@ -541,7 +541,7 @@ public:
 private:
     const NMiniKQL::TTypeEnvironment& Env_;
     NMiniKQL::TType* ReturnType_;
-    TVector<NMiniKQL::TType*> ArgsTypes_;
+    TVector<NMiniKQL::TType*> ArgsTypes_; 
     ui32 OptionalArgs_;
 };
 
@@ -553,7 +553,7 @@ class TFunctionArgTypesBuilder: public NUdf::IFunctionArgTypesBuilder
 public:
     explicit TFunctionArgTypesBuilder(
             NMiniKQL::TFunctionTypeInfoBuilder& parent,
-            TVector<NMiniKQL::TArgInfo>& args)
+            TVector<NMiniKQL::TArgInfo>& args) 
         : NUdf::IFunctionArgTypesBuilder(parent)
         , Env_(parent.Env())
         , Args_(args)
@@ -595,7 +595,7 @@ public:
 
 private:
     const NMiniKQL::TTypeEnvironment& Env_;
-    TVector<NMiniKQL::TArgInfo>& Args_;
+    TVector<NMiniKQL::TArgInfo>& Args_; 
 };
 
 //////////////////////////////////////////////////////////////////////////////

@@ -1476,7 +1476,7 @@ bool THive::DomainHasNodes(const TSubDomainKey &domainKey) const {
 }
 
 TResourceNormalizedValues THive::GetStDevResourceValues() const {
-    TVector<TResourceNormalizedValues> values;
+    TVector<TResourceNormalizedValues> values; 
     values.reserve(Nodes.size());
     for (const auto& ni : Nodes) {
         if (ni.second.IsAlive() && !ni.second.Down) {
@@ -1523,7 +1523,7 @@ bool THive::IsTabletMoveExpedient(const TTabletInfo& tablet, const TNodeInfo& no
         return true;
     }
 
-    TVector<TResourceNormalizedValues> values;
+    TVector<TResourceNormalizedValues> values; 
     std::size_t oldNode = std::numeric_limits<std::size_t>::max();
     std::size_t newNode = std::numeric_limits<std::size_t>::max();
     values.reserve(Nodes.size());

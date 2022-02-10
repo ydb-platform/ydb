@@ -106,7 +106,7 @@ namespace NActors {
 
         ActorSystem = actorSystem;
 
-        ScheduleQueue.Reset(new NSchedulerQueue::TQueueType());
+        ScheduleQueue.Reset(new NSchedulerQueue::TQueueType()); 
 
         for (ui32 i = 0; i != PoolThreads; ++i) {
             Threads[i].Thread.Reset(new TExecutorThread(i, 0, actorSystem, this, MailboxTable.Get(), PoolName));

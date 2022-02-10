@@ -54,7 +54,7 @@ struct TEvVMockCtlResponse : public TEventLocal<TEvVMockCtlResponse, TEvBlobStor
 struct TVDiskMockSharedState : public TThrRefBase {
     const TIntrusivePtr<TBlobStorageGroupInfo> GroupInfo;
     TMutex Mutex;
-    THashMap<TLogoBlobID, TIngress> BlobToIngressMap;
+    THashMap<TLogoBlobID, TIngress> BlobToIngressMap; 
 
     TVDiskMockSharedState(TIntrusivePtr<TBlobStorageGroupInfo> groupInfo)
         : GroupInfo(std::move(groupInfo))

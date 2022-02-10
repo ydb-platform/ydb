@@ -17,7 +17,7 @@
 #include <library/cpp/threading/future/legacy_future.h>
 
 #include <util/generic/ptr.h>
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 #include <util/generic/vector.h>
 #include <util/generic/yexception.h>
 #include <util/random/random.h>
@@ -76,7 +76,7 @@ struct TPerftestConfig {
 extern TPerftestConfig* TheConfig;
 extern bool TheExit;
 
-TVector<TNetAddr> ServerAddresses;
+TVector<TNetAddr> ServerAddresses; 
 
 struct TConfig {
     TBusQueueConfig ServerQueueConfig;
@@ -142,13 +142,13 @@ TAutoPtr<TBusMessage> NewRequest() {
         TAutoPtr<TPerftestRequest> r(new TPerftestRequest);
         r->SetCompressed(TheConfig->UseCompression);
         // TODO: use random content for better compression test
-        r->Record.SetData(TString(RequestSize(), '?'));
+        r->Record.SetData(TString(RequestSize(), '?')); 
         return r.Release();
     }
 }
 
 void CheckRequest(TPerftestRequest* request) {
-    const TString& data = request->Record.GetData();
+    const TString& data = request->Record.GetData(); 
     for (size_t i = 0; i != data.size(); ++i) {
         Y_VERIFY(data.at(i) == '?', "must be question mark");
     }
@@ -162,7 +162,7 @@ TAutoPtr<TPerftestResponse> NewResponse(TPerftestRequest* request) {
 }
 
 void CheckResponse(TPerftestResponse* response) {
-    const TString& data = response->Record.GetData();
+    const TString& data = response->Record.GetData(); 
     for (size_t i = 0; i != data.size(); ++i) {
         Y_VERIFY(data.at(i) == '.', "must be dot");
     }
@@ -237,7 +237,7 @@ public:
     TBusClientSessionPtr Session;
     THolder<TBusProtocol> Proto;
     TBusMessageQueuePtr Bus;
-    TVector<TBusClientConnectionPtr> Connections;
+    TVector<TBusClientConnectionPtr> Connections; 
 
 public:
     /// constructor creates instances of protocol and session
@@ -470,10 +470,10 @@ static TNetworkAddress ParseNetworkAddress(const char* string) {
     return TNetworkAddress(Name, Port);
 }
 
-TVector<TNetAddr> ParseNodes(const TString nodes) {
-    TVector<TNetAddr> r;
+TVector<TNetAddr> ParseNodes(const TString nodes) { 
+    TVector<TNetAddr> r; 
 
-    TVector<TString> hosts;
+    TVector<TString> hosts; 
 
     size_t numh = Split(nodes.data(), ",", hosts);
 
@@ -583,7 +583,7 @@ void TTestStats::PeriodicallyPrint() {
             stats << IndentText(client->Bus->GetStatus());
         }
 
-        TUnbufferedFileOutput("stats").Write(stats.Str());
+        TUnbufferedFileOutput("stats").Write(stats.Str()); 
     }
 }
 

@@ -3,7 +3,7 @@
 #include "base.h"
 
 #include <util/system/rusage.h>
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 #include <util/stream/str.h>
 
 class TTimer {
@@ -72,7 +72,7 @@ public:
     ui64 GetCycleCount() const;
 };
 
-TString FormatCycles(ui64 cycles);
+TString FormatCycles(ui64 cycles); 
 
 class TFormattedPrecisionTimer {
 private:
@@ -88,7 +88,7 @@ public:
 class TFuncTimer {
 public:
     TFuncTimer(const char* func);
-    ~TFuncTimer();
+    ~TFuncTimer(); 
 
 private:
     const TInstant Start_;
@@ -97,7 +97,7 @@ private:
 
 class TFakeTimer {
 public:
-    inline TFakeTimer(const char* = nullptr) noexcept {
+    inline TFakeTimer(const char* = nullptr) noexcept { 
     }
 };
 
@@ -109,14 +109,14 @@ public:
 
 class TTimeLogger {
 private:
-    TString Message;
+    TString Message; 
     bool Verbose;
     bool OK;
     time_t Begin;
     ui64 BeginCycles;
 
 public:
-    TTimeLogger(const TString& message, bool verbose = true);
+    TTimeLogger(const TString& message, bool verbose = true); 
     ~TTimeLogger();
 
     void SetOK();

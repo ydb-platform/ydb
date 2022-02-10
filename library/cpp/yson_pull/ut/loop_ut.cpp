@@ -215,7 +215,7 @@ namespace {
 
     template <typename Function>
     void test_memory(Function make_writer, size_t nrepeat) {
-        TString text;
+        TString text; 
         {
             auto writer = make_writer(NYsonPull::NOutput::FromString(&text));
             generate(writer, nrepeat);

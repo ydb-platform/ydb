@@ -11,7 +11,7 @@
 #include <util/network/socket.h>
 #include <util/generic/hash.h>
 #include <util/system/yassert.h>
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 #include <util/datetime/base.h>
 #include <util/generic/buffer.h>
 
@@ -22,12 +22,12 @@ public:
     TBaseServerRequestData(SOCKET s = INVALID_SOCKET);
     TBaseServerRequestData(const char* qs, SOCKET s = INVALID_SOCKET);
 
-    void SetHost(const TString& host, ui16 port) {
+    void SetHost(const TString& host, ui16 port) { 
         Host = host;
         Port = ToString(port);
     }
 
-    const TString& ServerName() const {
+    const TString& ServerName() const { 
         return Host;
     }
 
@@ -35,7 +35,7 @@ public:
         return NAddr::GetSockAddr(Socket);
     }
 
-    const TString& ServerPort() const {
+    const TString& ServerPort() const { 
         return Port;
     }
 
@@ -64,33 +64,33 @@ public:
         return HeadersIn_;
     }
 
-    inline size_t HeadersCount() const noexcept {
+    inline size_t HeadersCount() const noexcept { 
         return HeadersIn_.size();
     }
 
-    TString HeaderByIndex(size_t n) const noexcept;
+    TString HeaderByIndex(size_t n) const noexcept; 
     const char* Environment(const char* key) const;
 
     void Clear();
 
-    void SetSocket(SOCKET s) noexcept {
+    void SetSocket(SOCKET s) noexcept { 
         Socket = s;
     }
 
-    ui64 RequestBeginTime() const noexcept {
+    ui64 RequestBeginTime() const noexcept { 
         return BeginTime;
     }
 
-    void SetPath(const TString& path);
+    void SetPath(const TString& path); 
     const char* GetCurPage() const;
     bool Parse(const char* req);
-    void AddHeader(const TString& name, const TString& value);
+    void AddHeader(const TString& name, const TString& value); 
 
 private:
     TBuffer PathStorage;
     mutable char* Addr;
-    TString Host;
-    TString Port;
+    TString Host; 
+    TString Port; 
     char* Path;
     char* Search;
     size_t SearchLength; // length of Search
@@ -99,7 +99,7 @@ private:
     mutable char AddrData[INET6_ADDRSTRLEN];
     SOCKET Socket;
     ui64 BeginTime;
-    mutable TString CurPage;
+    mutable TString CurPage; 
     TBuffer ParseBuf;
     TBuffer ModifiedQueryString;
 };

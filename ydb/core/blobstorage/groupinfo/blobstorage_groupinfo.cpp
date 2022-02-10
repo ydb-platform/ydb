@@ -513,7 +513,7 @@ TBlobStorageGroupInfo::IQuorumChecker *TBlobStorageGroupInfo::TTopology::CreateQ
     Y_FAIL();
 }
 
-TString TBlobStorageGroupInfo::TTopology::ToString() const {
+TString TBlobStorageGroupInfo::TTopology::ToString() const { 
     TStringStream str;
     str << "{GType# " << GType.ToString();
     str << " FailRealms# {";
@@ -752,7 +752,7 @@ TVDiskID TBlobStorageGroupInfo::CreateVDiskID(const TVDiskIdShort &id) const {
     return TVDiskID(GroupID, GroupGeneration, id.FailRealm, id.FailDomain, id.VDisk);
 }
 
-TString TBlobStorageGroupInfo::BlobStateToString(EBlobState state) {
+TString TBlobStorageGroupInfo::BlobStateToString(EBlobState state) { 
     switch (state) {
         case EBS_DISINTEGRATED:
             return "EBS_DISINTEGRATED";
@@ -869,7 +869,7 @@ const TBlobStorageGroupInfo::TFailDomain& TBlobStorageGroupInfo::GetFailDomain(u
     return Topology->GetFailDomain(failDomainOrderNumber);
 }
 
-TString TBlobStorageGroupInfo::ToString() const {
+TString TBlobStorageGroupInfo::ToString() const { 
     TStringStream str;
     str << "{GroupID# " << GroupID;
     str << " GroupGeneration# " << GroupGeneration;
@@ -930,8 +930,8 @@ bool TFailDomain::TLevelIds::operator==(const TLevelIds& other) const {
 }
 
 bool TFailDomain::TLevelIds::operator<(const TLevelIds& other) const {
-    TVector<ui8>::const_iterator a = Ids.begin();
-    TVector<ui8>::const_iterator b = other.Ids.begin();
+    TVector<ui8>::const_iterator a = Ids.begin(); 
+    TVector<ui8>::const_iterator b = other.Ids.begin(); 
     while (true) {
         if (a == Ids.end()) {
             if (b == other.Ids.end()) {
@@ -956,15 +956,15 @@ bool TFailDomain::TLevelIds::operator<(const TLevelIds& other) const {
 TFailDomain::TFailDomain() {
 }
 
-TFailDomain::TFailDomain(const TString &data) {
+TFailDomain::TFailDomain(const TString &data) { 
     ui8 *end = (ui8*)const_cast<char*>(data.data()) + (data.size() / RecordSize) * RecordSize;
     for (ui8 *cursor = (ui8*)const_cast<char*>(data.data()); cursor < end; cursor += RecordSize) {
         Levels[*cursor] = ReadUnaligned<ui32>((ui32*)(cursor + 1));
     }
 }
 
-TString TFailDomain::SerializeFailDomain() const {
-    TString data = TString::Uninitialized(RecordSize * Levels.size());
+TString TFailDomain::SerializeFailDomain() const { 
+    TString data = TString::Uninitialized(RecordSize * Levels.size()); 
     TLevels::const_iterator a = Levels.begin();
     size_t offset = 0;
     while (a != Levels.end()) {
@@ -988,7 +988,7 @@ TFailDomain::TLevelIds TFailDomain::MakeIds() const {
 
 TFailDomain::TLevelIds TFailDomain::Intersect(const TLevelIds &id) const {
     TLevelIds result;
-    TVector<ui8>::const_iterator a = id.Ids.begin();
+    TVector<ui8>::const_iterator a = id.Ids.begin(); 
     TLevels::const_iterator b = Levels.begin();
     while (a != id.Ids.end() && b != Levels.end()) {
         if (*a == b->first) {
@@ -1059,7 +1059,7 @@ bool TFailDomain::IsEqual(const TFailDomain &other) const {
 }
 
 bool TFailDomain::IsDifferentAt(const TLevelIds &id, const TFailDomain &other) const {
-    TVector<ui8>::const_iterator key = id.Ids.begin();
+    TVector<ui8>::const_iterator key = id.Ids.begin(); 
     TLevels::const_iterator a = Levels.begin();
     TLevels::const_iterator b = other.Levels.begin();
 
@@ -1123,7 +1123,7 @@ bool TFailDomain::operator<(const TFailDomain &other) const {
     return false;
 }
 
-TString TFailDomain::ToString() const {
+TString TFailDomain::ToString() const { 
     TStringBuilder builder;
     builder << "[";
     for (TLevels::const_iterator a = Levels.begin(); a != Levels.end(); ++a) {

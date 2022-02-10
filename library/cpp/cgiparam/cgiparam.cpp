@@ -5,7 +5,7 @@
 
 #include <util/generic/singleton.h>
 
-TCgiParameters::TCgiParameters(std::initializer_list<std::pair<TString, TString>> il) {
+TCgiParameters::TCgiParameters(std::initializer_list<std::pair<TString, TString>> il) { 
     for (const auto& item : il) {
         insert(item);
     }
@@ -14,7 +14,7 @@ TCgiParameters::TCgiParameters(std::initializer_list<std::pair<TString, TString>
 const TString& TCgiParameters::Get(const TStringBuf name, size_t numOfValue) const noexcept {
     const auto it = Find(name, numOfValue);
 
-    return end() == it ? Default<TString>() : it->second;
+    return end() == it ? Default<TString>() : it->second; 
 }
 
 bool TCgiParameters::Erase(const TStringBuf name, size_t pos) {
@@ -63,10 +63,10 @@ void TCgiParameters::JoinUnescaped(const TStringBuf key, char sep, TStringBuf va
 
     if (it == pair.second) { // not found
         if (val.IsInited()) {
-            emplace_hint(it, TString(key), TString(val));
+            emplace_hint(it, TString(key), TString(val)); 
         }
     } else {
-        TString& dst = it->second;
+        TString& dst = it->second; 
 
         for (++it; it != pair.second; erase(it++)) {
             dst += sep;
@@ -80,8 +80,8 @@ void TCgiParameters::JoinUnescaped(const TStringBuf key, char sep, TStringBuf va
     }
 }
 
-static inline TString DoUnescape(const TStringBuf s) {
-    TString res;
+static inline TString DoUnescape(const TStringBuf s) { 
+    TString res; 
 
     res.reserve(CgiUnescapeBufLen(s.size()));
     res.ReserveAndResize(CgiUnescape(res.begin(), s).size());
@@ -139,8 +139,8 @@ void TCgiParameters::ScanAddAll(const TStringBuf query) {
     DoScan<true>(query, f);
 }
 
-TString TCgiParameters::Print() const {
-    TString res;
+TString TCgiParameters::Print() const { 
+    TString res; 
 
     res.reserve(PrintSize());
     const char* end = Print(res.begin());
@@ -169,7 +169,7 @@ char* TCgiParameters::Print(char* res) const {
     return res;
 }
 
-size_t TCgiParameters::PrintSize() const noexcept {
+size_t TCgiParameters::PrintSize() const noexcept { 
     size_t res = size(); // for '&'
 
     for (const auto& i : *this) {

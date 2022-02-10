@@ -2,13 +2,13 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/noncopyable.h>
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 #include <util/generic/ptr.h>
 
 using namespace NObjectFactory;
 
 struct TArgument {
-    TString Name;
+    TString Name; 
     void* Discarded;
 };
 
@@ -17,43 +17,43 @@ public:
     virtual ~ICommonInterface() {
     }
 
-    virtual TString GetValue() const = 0;
+    virtual TString GetValue() const = 0; 
 };
 
 class TDirectOrder: public ICommonInterface {
 public:
-    TDirectOrder(const TString& provider, float factor, TArgument& argument)
+    TDirectOrder(const TString& provider, float factor, TArgument& argument) 
         : Provider(provider)
         , Factor(factor)
         , Argument(argument)
     {
     }
 
-    TString GetValue() const override {
+    TString GetValue() const override { 
         return Provider + ToString(Factor) + Argument.Name;
     }
 
 private:
-    const TString Provider;
+    const TString Provider; 
     const float Factor;
     const TArgument Argument;
 };
 
 class TInverseOrder: public ICommonInterface {
 public:
-    TInverseOrder(const TString& provider, float factor, TArgument& argument)
+    TInverseOrder(const TString& provider, float factor, TArgument& argument) 
         : Provider(provider)
         , Factor(factor)
         , Argument(argument)
     {
     }
 
-    TString GetValue() const override {
+    TString GetValue() const override { 
         return Argument.Name + ToString(Factor) + Provider;
     }
 
 private:
-    const TString Provider;
+    const TString Provider; 
     const float Factor;
     const TArgument Argument;
 };

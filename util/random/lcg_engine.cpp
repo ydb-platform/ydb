@@ -2,7 +2,7 @@
 
 namespace NPrivate {
     template <typename T>
-    T LcgAdvance(T seed, T lcgBase, T lcgAddend, T delta) noexcept {
+    T LcgAdvance(T seed, T lcgBase, T lcgAddend, T delta) noexcept { 
         // seed[n+1] = A * seed[n] + B, A = lcgBase, B = lcgAddend
         // seed[n] = A**n * seed[0] + (A**n - 1) / (A - 1) * B
         // (initial value of n) = m * 2**k + (lower bits of n)
@@ -25,6 +25,6 @@ namespace NPrivate {
         return seed * apow + lcgAddend * adiv;
     }
 
-    template ui32 LcgAdvance<ui32>(ui32, ui32, ui32, ui32) noexcept;
-    template ui64 LcgAdvance<ui64>(ui64, ui64, ui64, ui64) noexcept;
+    template ui32 LcgAdvance<ui32>(ui32, ui32, ui32, ui32) noexcept; 
+    template ui64 LcgAdvance<ui64>(ui64, ui64, ui64, ui64) noexcept; 
 }

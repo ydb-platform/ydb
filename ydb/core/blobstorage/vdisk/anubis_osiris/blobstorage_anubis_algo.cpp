@@ -10,12 +10,12 @@ namespace NKikimr {
         : Top(top)
     {}
 
-    void TBlobsStatusMngr::SetupCandidates(TVector<TLogoBlobID> &&candidates) {
+    void TBlobsStatusMngr::SetupCandidates(TVector<TLogoBlobID> &&candidates) { 
         Candidates = std::move(candidates);
     }
 
-    TVector<TLogoBlobID> TBlobsStatusMngr::GetLogoBlobIdsToCheck(const TVDiskIdShort &vd) const {
-        TVector<TLogoBlobID> checkIds;
+    TVector<TLogoBlobID> TBlobsStatusMngr::GetLogoBlobIdsToCheck(const TVDiskIdShort &vd) const { 
+        TVector<TLogoBlobID> checkIds; 
         // find out candidates that belong to this 'vd'
         for (const auto &c : Candidates) {
             if (Top->BelongsToSubgroup(vd, c.Hash())) {
@@ -54,11 +54,11 @@ namespace NKikimr {
     }
 
     // returns LogoBlobIDs to remove
-    TVector<TLogoBlobID> TBlobsStatusMngr::BlobsToRemove() const {
+    TVector<TLogoBlobID> TBlobsStatusMngr::BlobsToRemove() const { 
         // get a reference to quorum checker helper class instance
         const auto& checker = Top->GetQuorumChecker();
         // filling in this vector
-        TVector<TLogoBlobID> forRemoval;
+        TVector<TLogoBlobID> forRemoval; 
         for (const auto &x : BlobsStatus) {
             const TBlobStorageGroupInfo::TSubgroupVDisks &subgroupDisks = x.second;
             const TBlobStorageGroupInfo::TSubgroupVDisks noneNodata = ~subgroupDisks;

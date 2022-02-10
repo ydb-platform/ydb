@@ -94,8 +94,8 @@ namespace NB64Etalon {
             MAX_IMPL
         };
 
-        using TEncodeF = void (*)(const TStringBuf&, TString&);
-        using TDecodeF = void (*)(const TStringBuf&, TString&);
+        using TEncodeF = void (*)(const TStringBuf&, TString&); 
+        using TDecodeF = void (*)(const TStringBuf&, TString&); 
 
         struct TImpl {
             TEncodeF Encode = nullptr;
@@ -163,8 +163,8 @@ void Out<NB64Etalon::TImpls::EImpl>(IOutputStream& o, typename TTypeTraits<NB64E
     }
 }
 
-static void TestEncodeDecodeIntoString(const TString& plain, const TString& encoded, const TString& encodedUrl) {
-    TString a, b;
+static void TestEncodeDecodeIntoString(const TString& plain, const TString& encoded, const TString& encodedUrl) { 
+    TString a, b; 
 
     Base64Encode(plain, a);
     UNIT_ASSERT_VALUES_EQUAL(a, encoded);
@@ -179,8 +179,8 @@ static void TestEncodeDecodeIntoString(const TString& plain, const TString& enco
     UNIT_ASSERT_VALUES_EQUAL(b, plain);
 }
 
-static void TestEncodeStrictDecodeIntoString(const TString& plain, const TString& encoded, const TString& encodedUrl) {
-    TString a, b;
+static void TestEncodeStrictDecodeIntoString(const TString& plain, const TString& encoded, const TString& encodedUrl) { 
+    TString a, b; 
 
     Base64Encode(plain, a);
     UNIT_ASSERT_VALUES_EQUAL(a, encoded);
@@ -205,11 +205,11 @@ Y_UNIT_TEST_SUITE(TBase64) {
 
     Y_UNIT_TEST(TestIntoString) {
         {
-            TString str;
+            TString str; 
             for (size_t i = 0; i < 256; ++i)
                 str += char(i);
 
-            const TString base64 =
+            const TString base64 = 
                 "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gISIjJCUmJy"
                 "gpKissLS4vMDEyMzQ1Njc4OTo7PD0+P0BBQkNERUZHSElKS0xNTk9Q"
                 "UVJTVFVWV1hZWltcXV5fYGFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eH"
@@ -217,7 +217,7 @@ Y_UNIT_TEST_SUITE(TBase64) {
                 "oqOkpaanqKmqq6ytrq+wsbKztLW2t7i5uru8vb6/wMHCw8TFxsfIyc"
                 "rLzM3Oz9DR0tPU1dbX2Nna29zd3t/g4eLj5OXm5+jp6uvs7e7v8PHy"
                 "8/T19vf4+fr7/P3+/w==";
-            const TString base64Url =
+            const TString base64Url = 
                 "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gISIjJCUmJy"
                 "gpKissLS4vMDEyMzQ1Njc4OTo7PD0-P0BBQkNERUZHSElKS0xNTk9Q"
                 "UVJTVFVWV1hZWltcXV5fYGFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eH"
@@ -231,10 +231,10 @@ Y_UNIT_TEST_SUITE(TBase64) {
         }
 
         {
-            const TString str = "http://yandex.ru:1234/request?param=value&lll=fff#fragment";
+            const TString str = "http://yandex.ru:1234/request?param=value&lll=fff#fragment"; 
 
-            const TString base64 = "aHR0cDovL3lhbmRleC5ydToxMjM0L3JlcXVlc3Q/cGFyYW09dmFsdWUmbGxsPWZmZiNmcmFnbWVudA==";
-            const TString base64Url = "aHR0cDovL3lhbmRleC5ydToxMjM0L3JlcXVlc3Q_cGFyYW09dmFsdWUmbGxsPWZmZiNmcmFnbWVudA,,";
+            const TString base64 = "aHR0cDovL3lhbmRleC5ydToxMjM0L3JlcXVlc3Q/cGFyYW09dmFsdWUmbGxsPWZmZiNmcmFnbWVudA=="; 
+            const TString base64Url = "aHR0cDovL3lhbmRleC5ydToxMjM0L3JlcXVlc3Q_cGFyYW09dmFsdWUmbGxsPWZmZiNmcmFnbWVudA,,"; 
 
             TestEncodeDecodeIntoString(str, base64, base64Url);
             TestEncodeStrictDecodeIntoString(str, base64, base64Url);
@@ -286,94 +286,94 @@ Y_UNIT_TEST_SUITE(TBase64) {
     }
 
     Y_UNIT_TEST(TestDecodeRandom) {
-        TString input;
+        TString input; 
         constexpr size_t testSize = 240000;
         for (size_t i = 0; i < testSize; ++i) {
             input.push_back(rand() % 256);
         }
-        TString output;
-        TString encoded = Base64Encode(input);
+        TString output; 
+        TString encoded = Base64Encode(input); 
         UNIT_ASSERT_VALUES_EQUAL(Base64Decode(encoded), input);
         UNIT_ASSERT_VALUES_EQUAL(Base64StrictDecode(encoded), input);
     }
 
     Y_UNIT_TEST(TestAllPossibleOctets) {
         const TString x("\0\x01\x02\x03\x04\x05\x06\x07\b\t\n\x0B\f\r\x0E\x0F\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~\x7F"sv);
-        const TString xEnc = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gISIjJCUmJygpKissLS4vMDEyMzQ1Njc4OTo7PD0+P0BBQkNERUZHSElKS0xNTk9QUVJTVFVWV1hZWltcXV5fYGFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6e3x9fn8=";
-        const TString y = Base64Decode(xEnc);
-        const TString yEnc = Base64Encode(x);
+        const TString xEnc = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gISIjJCUmJygpKissLS4vMDEyMzQ1Njc4OTo7PD0+P0BBQkNERUZHSElKS0xNTk9QUVJTVFVWV1hZWltcXV5fYGFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6e3x9fn8="; 
+        const TString y = Base64Decode(xEnc); 
+        const TString yEnc = Base64Encode(x); 
         UNIT_ASSERT_VALUES_EQUAL(x, y);
         UNIT_ASSERT_VALUES_EQUAL(xEnc, yEnc);
     }
 
     Y_UNIT_TEST(TestTwoPaddingCharacters) {
         const TString x("a");
-        const TString xEnc = "YQ==";
-        const TString y = Base64Decode(xEnc);
-        const TString yEnc = Base64Encode(x);
+        const TString xEnc = "YQ=="; 
+        const TString y = Base64Decode(xEnc); 
+        const TString yEnc = Base64Encode(x); 
         UNIT_ASSERT_VALUES_EQUAL(x, y);
         UNIT_ASSERT_VALUES_EQUAL(xEnc, yEnc);
     }
 
     Y_UNIT_TEST(TestOnePaddingCharacter) {
         const TString x("aa");
-        const TString xEnc = "YWE=";
-        const TString y = Base64Decode(xEnc);
-        const TString yEnc = Base64Encode(x);
+        const TString xEnc = "YWE="; 
+        const TString y = Base64Decode(xEnc); 
+        const TString yEnc = Base64Encode(x); 
         UNIT_ASSERT_VALUES_EQUAL(x, y);
         UNIT_ASSERT_VALUES_EQUAL(xEnc, yEnc);
     }
 
     Y_UNIT_TEST(TestNoPaddingCharacters) {
         const TString x("aaa");
-        const TString xEnc = "YWFh";
-        const TString y = Base64Decode(xEnc);
-        const TString yEnc = Base64Encode(x);
+        const TString xEnc = "YWFh"; 
+        const TString y = Base64Decode(xEnc); 
+        const TString yEnc = Base64Encode(x); 
         UNIT_ASSERT_VALUES_EQUAL(x, y);
         UNIT_ASSERT_VALUES_EQUAL(xEnc, yEnc);
     }
 
     Y_UNIT_TEST(TestTrailingZero) {
         const TString x("foo\0"sv);
-        const TString xEnc = "Zm9vAA==";
-        const TString y = Base64Decode(xEnc);
-        const TString yEnc = Base64Encode(x);
+        const TString xEnc = "Zm9vAA=="; 
+        const TString y = Base64Decode(xEnc); 
+        const TString yEnc = Base64Encode(x); 
         UNIT_ASSERT_VALUES_EQUAL(x, y);
         UNIT_ASSERT_VALUES_EQUAL(xEnc, yEnc);
     }
 
     Y_UNIT_TEST(TestTwoTrailingZeroes) {
         const TString x("foo\0\0"sv);
-        const TString xEnc = "Zm9vAAA=";
-        const TString y = Base64Decode(xEnc);
-        const TString yEnc = Base64Encode(x);
+        const TString xEnc = "Zm9vAAA="; 
+        const TString y = Base64Decode(xEnc); 
+        const TString yEnc = Base64Encode(x); 
         UNIT_ASSERT_VALUES_EQUAL(x, y);
         UNIT_ASSERT_VALUES_EQUAL(xEnc, yEnc);
     }
 
     Y_UNIT_TEST(TestZero) {
         const TString x("\0"sv);
-        const TString xEnc = "AA==";
-        const TString y = Base64Decode(xEnc);
-        const TString yEnc = Base64Encode(x);
+        const TString xEnc = "AA=="; 
+        const TString y = Base64Decode(xEnc); 
+        const TString yEnc = Base64Encode(x); 
         UNIT_ASSERT_VALUES_EQUAL(x, y);
         UNIT_ASSERT_VALUES_EQUAL(xEnc, yEnc);
     }
 
     Y_UNIT_TEST(TestSymbolsAfterZero) {
         const TString x("\0a"sv);
-        const TString xEnc = "AGE=";
-        const TString y = Base64Decode(xEnc);
-        const TString yEnc = Base64Encode(x);
+        const TString xEnc = "AGE="; 
+        const TString y = Base64Decode(xEnc); 
+        const TString yEnc = Base64Encode(x); 
         UNIT_ASSERT_VALUES_EQUAL(x, y);
         UNIT_ASSERT_VALUES_EQUAL(xEnc, yEnc);
     }
 
     Y_UNIT_TEST(TestEmptyString) {
         const TString x = "";
-        const TString xEnc = "";
-        const TString y = Base64Decode(xEnc);
-        const TString yEnc = Base64Encode(x);
+        const TString xEnc = ""; 
+        const TString y = Base64Decode(xEnc); 
+        const TString yEnc = Base64Encode(x); 
         UNIT_ASSERT_VALUES_EQUAL(x, y);
         UNIT_ASSERT_VALUES_EQUAL(xEnc, yEnc);
     }
@@ -382,11 +382,11 @@ Y_UNIT_TEST_SUITE(TBase64) {
         constexpr size_t TEST_CASES_COUNT = 1000;
         constexpr size_t MAX_DATA_SIZE = 1000;
         TFastRng<ui32> prng{42};
-        TVector<TString> xs{TEST_CASES_COUNT};
-        TString xEnc;
-        TString xDec;
-        TString yEnc;
-        TString yDec;
+        TVector<TString> xs{TEST_CASES_COUNT}; 
+        TString xEnc; 
+        TString xDec; 
+        TString yEnc; 
+        TString yDec; 
 
         for (auto& x : xs) {
             const size_t size = prng() % MAX_DATA_SIZE;
@@ -426,8 +426,8 @@ Y_UNIT_TEST_SUITE(TBase64) {
         constexpr size_t TEST_CASES_COUNT = 1000;
         constexpr size_t MAX_DATA_SIZE = 1000;
         TFastRng<ui32> prng{42};
-        TString x;
-        TVector<char> buf;
+        TString x; 
+        TVector<char> buf; 
         for (size_t i = 0; i < TEST_CASES_COUNT; ++i) {
             const size_t size = prng() % MAX_DATA_SIZE;
             x.clear();

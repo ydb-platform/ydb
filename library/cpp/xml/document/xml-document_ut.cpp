@@ -33,7 +33,7 @@ Y_UNIT_TEST_SUITE(TestXmlDocument) {
         UNIT_ASSERT_EQUAL(b.Attr<bool>("correct"), true);
 
         NXml::TConstNode text = root.Node("text");
-        UNIT_ASSERT_EQUAL(text.Value<TString>(), "Некоторый текст");
+        UNIT_ASSERT_EQUAL(text.Value<TString>(), "Некоторый текст"); 
     }
     Y_UNIT_TEST(SerializeString) {
         NXml::TDocument xml("frob", NXml::TDocument::RootName);
@@ -46,7 +46,7 @@ Y_UNIT_TEST_SUITE(TestXmlDocument) {
         authors.AddChild("zarf").SetValue("Andrew Plotkin");
         authors.AddChild("emshort", "Emily Short");
 
-        TString data = xml.ToString("utf-8");
+        TString data = xml.ToString("utf-8"); 
         UNIT_ASSERT_EQUAL(data, "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
                                 "<frob xyzzy=\"Frobozz\" kulness=\"0.3\" timelimit=\"3\">\n"
                                 "  <authors>\n"
@@ -57,9 +57,9 @@ Y_UNIT_TEST_SUITE(TestXmlDocument) {
                                 "</frob>\n");
         // check default utf8 output with ru
         {
-            NXml::TDocument xml2("frob", NXml::TDocument::RootName);
-            xml2.Root().SetAttr("xyzzy", "привет =)");
-            UNIT_ASSERT_VALUES_EQUAL(xml2.ToString(), "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
+            NXml::TDocument xml2("frob", NXml::TDocument::RootName); 
+            xml2.Root().SetAttr("xyzzy", "привет =)"); 
+            UNIT_ASSERT_VALUES_EQUAL(xml2.ToString(), "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n" 
                                                       "<frob xyzzy=\"привет =)\"/>\n");
         }
     }
@@ -83,13 +83,13 @@ Y_UNIT_TEST_SUITE(TestXmlDocument) {
         UNIT_ASSERT_EQUAL(b.Attr<bool>("correct"), true);
 
         TConstNode text = root.Node("h:text", false, nss);
-        UNIT_ASSERT_EQUAL(text.Value<TString>(), "Некоторый текст");
+        UNIT_ASSERT_EQUAL(text.Value<TString>(), "Некоторый текст"); 
 
         // For performance you can create xpath context once using nss and pass it.
         TXPathContextPtr ctxt = root.CreateXPathContext(nss);
         UNIT_ASSERT(root.Node("text", true, *ctxt).IsNull());
         UNIT_ASSERT_EXCEPTION(root.Node("text", false, *ctxt), yexception);
-        UNIT_ASSERT_EQUAL(root.Node("h:text", false, *ctxt).Value<TString>(), "Некоторый текст");
+        UNIT_ASSERT_EQUAL(root.Node("h:text", false, *ctxt).Value<TString>(), "Некоторый текст"); 
     }
     Y_UNIT_TEST(XmlNodes) {
         using namespace NXml;
@@ -97,34 +97,34 @@ Y_UNIT_TEST_SUITE(TestXmlDocument) {
                       "<root>qq<a><b>asdfg</b></a>ww<c></c></root>",
                       NXml::TDocument::String);
         TNode root = xml.Root();
-        UNIT_ASSERT_EQUAL(root.Value<TString>(), "qqasdfgww");
+        UNIT_ASSERT_EQUAL(root.Value<TString>(), "qqasdfgww"); 
         TConstNode node = root.FirstChild();
         UNIT_ASSERT_EQUAL(node.IsText(), true);
-        UNIT_ASSERT_EQUAL(node.Value<TString>(), "qq");
+        UNIT_ASSERT_EQUAL(node.Value<TString>(), "qq"); 
         node = node.NextSibling();
         UNIT_ASSERT_EQUAL(node.IsText(), false);
         UNIT_ASSERT_EQUAL(node.Name(), "a");
-        UNIT_ASSERT_EQUAL(node.Value<TString>(), "asdfg");
+        UNIT_ASSERT_EQUAL(node.Value<TString>(), "asdfg"); 
         node = node.NextSibling();
         UNIT_ASSERT_EQUAL(node.IsText(), true);
-        UNIT_ASSERT_EQUAL(node.Value<TString>(), "ww");
+        UNIT_ASSERT_EQUAL(node.Value<TString>(), "ww"); 
         node = node.NextSibling();
         UNIT_ASSERT_EQUAL(node.IsText(), false);
         UNIT_ASSERT_EQUAL(node.Name(), "c");
-        UNIT_ASSERT_EQUAL(node.Value<TString>(), "");
+        UNIT_ASSERT_EQUAL(node.Value<TString>(), ""); 
         node = node.NextSibling();
         UNIT_ASSERT_EQUAL(node.IsNull(), true);
         TStringStream iterLog;
         for (const auto& node2 : root.Nodes("/root/*")) {
-            iterLog << node2.Name() << ';';
+            iterLog << node2.Name() << ';'; 
         }
         UNIT_ASSERT_STRINGS_EQUAL(iterLog.Str(), "a;c;");
 
         // get only element nodes, ignore text nodes with empty "name" param
-        node = root.FirstChild(TString());
+        node = root.FirstChild(TString()); 
         UNIT_ASSERT_EQUAL(node.IsText(), false);
         UNIT_ASSERT_EQUAL(node.Name(), "a");
-        node = node.NextSibling(TString());
+        node = node.NextSibling(TString()); 
         UNIT_ASSERT_EQUAL(node.IsText(), false);
         UNIT_ASSERT_EQUAL(node.Name(), "c");
 
@@ -148,7 +148,7 @@ Y_UNIT_TEST_SUITE(TestXmlDocument) {
         node = root.NextSibling("unknownnode");
         UNIT_ASSERT_EQUAL(node.IsNull(), true);
         UNIT_ASSERT_EXCEPTION(node.Name(), yexception);
-        UNIT_ASSERT_EXCEPTION(node.Value<TString>(), yexception);
+        UNIT_ASSERT_EXCEPTION(node.Value<TString>(), yexception); 
         UNIT_ASSERT_EXCEPTION(node.IsText(), yexception);
     }
     Y_UNIT_TEST(DefVal) {
@@ -173,14 +173,14 @@ Y_UNIT_TEST_SUITE(TestXmlDocument) {
                       "<a>second</a></root>",
                       NXml::TDocument::String);
         UNIT_ASSERT_EXCEPTION(xml.Root().Node("/root/a/@x"), yexception);
-        UNIT_ASSERT_STRINGS_EQUAL(xml.Root().Node("/root/a").Value<TString>(), "first");
+        UNIT_ASSERT_STRINGS_EQUAL(xml.Root().Node("/root/a").Value<TString>(), "first"); 
     }
     Y_UNIT_TEST(CopyNode) {
         using namespace NXml;
         // default-construct empty node
         TNode empty;
         // put to container
-        TMap<int, TNode> nmap;
+        TMap<int, TNode> nmap; 
         nmap[2];
 
         // do copy
@@ -255,11 +255,11 @@ Y_UNIT_TEST_SUITE(TestXmlDocument) {
 
         // We can use root node context for xpath evaluation in any node
         TConstNode c1 = b.Node("c", false, *rootCtxt);
-        UNIT_ASSERT_EQUAL(c1.Value<TString>(), "Hello, world!");
+        UNIT_ASSERT_EQUAL(c1.Value<TString>(), "Hello, world!"); 
 
         TXPathContextPtr bCtxt = b.CreateXPathContext();
         TConstNode c2 = b.Node("c", false, *bCtxt);
-        UNIT_ASSERT_EQUAL(c2.Value<TString>(), "Hello, world!");
+        UNIT_ASSERT_EQUAL(c2.Value<TString>(), "Hello, world!"); 
 
         // Mixing contexts from different documents is forbidden
         TDocument otherXml("<root></root>", TDocument::String);

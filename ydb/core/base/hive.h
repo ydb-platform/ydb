@@ -89,7 +89,7 @@ namespace NKikimr {
                 Record.SetTabletID(tabletId);
             }
 
-            TString ToString() const {
+            TString ToString() const { 
                 TStringStream str;
                 str << "{EvBootTablet TabletID: " << Record.GetTabletID();
                 str << "}";
@@ -108,7 +108,7 @@ namespace NKikimr {
                 Record.SetStatusMsg(msg);
             }
 
-            TString ToString() const {
+            TString ToString() const { 
                 TStringStream str;
                 str << "{EvBootTabletReply Status: " << NKikimrProto::EReplyStatus_Name(Record.GetStatus()).data();
                 str << " Msg: " << Record.GetStatusMsg();
@@ -157,7 +157,7 @@ namespace NKikimr {
                 }
             }
 
-            TString ToString() const {
+            TString ToString() const { 
                 TStringStream str;
                 str << "{EvCreateTablet Owner: " << Record.GetOwner();
                 str << " OwnerIdx: " << Record.GetOwnerIdx();
@@ -222,7 +222,7 @@ namespace NKikimr {
                 }
             }
 
-            TString ToString() const {
+            TString ToString() const { 
                 TStringStream str;
                 str << "{EvCreateTabletReply Status: " << NKikimrProto::EReplyStatus_Name(Record.GetStatus()).data();
                 str << " Owner: " << Record.GetOwner();
@@ -250,7 +250,7 @@ namespace NKikimr {
                 }
             }
 
-            TString ToString() const {
+            TString ToString() const { 
                 TStringStream str;
                 str << "{EvTabletCreationResult Status: " << NKikimrProto::EReplyStatus_Name(Record.GetStatus()).data();
                 if (Record.HasTabletID()) {
@@ -274,7 +274,7 @@ namespace NKikimr {
                 ActorIdToProto(actorToNotify, Record.MutableActorToNotify());
             }
 
-            TString ToString() const {
+            TString ToString() const { 
                 TStringStream str;
                 str << "{EvStopTablet TabletID: " << Record.GetTabletID();
                 if (Record.HasActorToNotify()) {
@@ -293,7 +293,7 @@ namespace NKikimr {
                 Record.SetTabletID(tabletId);
             }
 
-            TString ToString() const {
+            TString ToString() const { 
                 TStringStream str;
                 str << "{EvStopTabletResult Status: " << NKikimrProto::EReplyStatus_Name(Record.GetStatus());
                 str << " TabletID: " << Record.GetTabletID();
@@ -376,7 +376,7 @@ namespace NKikimr {
                 Record.SetTabletID(tabletId);
             }
 
-            TString ToString() const {
+            TString ToString() const { 
                 TStringStream str;
                 str << "{EvReconfigureTablet TabletID: " << Record.GetTabletID();
                 str << "}";
@@ -394,7 +394,7 @@ namespace NKikimr {
                 Record.SetTabletID(tabletId);
             }
 
-            TString ToString() const {
+            TString ToString() const { 
                 TStringStream str;
                 str << "{EvReconfigureTabletReply Status: " << NKikimrProto::EReplyStatus_Name(Record.GetStatus()).data();
                 str << " TabletID: " << Record.GetTabletID();
@@ -468,7 +468,7 @@ namespace NKikimr {
                 Record.SetTabletID(tabletId);
             }
 
-            TString ToString() const {
+            TString ToString() const { 
                 TStringStream str;
                 str << "{EvLookupChannelInfo TabletID: " << Record.GetTabletID();
                 str << "}";
@@ -484,7 +484,7 @@ namespace NKikimr {
                 Record.SetTabletID(tabletId);
             }
 
-            TString ToString() const {
+            TString ToString() const { 
                 TStringStream str;
                 str << "{EvChannelInfo Status: " << NKikimrProto::EReplyStatus_Name(Record.GetStatus()).data();
                 str << " TabletID: " << Record.GetTabletID();

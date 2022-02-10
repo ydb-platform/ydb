@@ -39,7 +39,7 @@ public:
 class TIntersectionChecker {
 private:
     typedef std::pair<ui64, ui64> TAllocation;
-    TVector<TAllocation> Responses;
+    TVector<TAllocation> Responses; 
 
 public:
     void Add(ui64 begin, ui64 end) {
@@ -50,13 +50,13 @@ public:
 };
 
     typedef NKikimrTx::TEvTxAllocateResult::EStatus TResultStatus;
-    void CheckExpectedStatus(const TVector<TResultStatus> &expected, TResultStatus result);
+    void CheckExpectedStatus(const TVector<TResultStatus> &expected, TResultStatus result); 
     void CheckExpectedStatus(TResultStatus expected, TResultStatus result);
     void CheckExpectedCookie(NKikimrTx::TEvTxAllocateResult result, ui64 cockie);
 
     typedef std::pair<NKikimrTx::TEvTxAllocateResult, ui64> TAnswerWithCookie;
     TAnswerWithCookie GrabAnswer(TTestActorRuntime &runtime);
-    void AllocateAndCheck(TTestActorRuntime &runtime, ui64 size, const TVector<TResultStatus> &expected);
+    void AllocateAndCheck(TTestActorRuntime &runtime, ui64 size, const TVector<TResultStatus> &expected); 
     void AllocateAndCheck(TTestActorRuntime &runtime, ui64 size, TResultStatus expected);
     void AsyncAllocate(TTestActorRuntime &runtime, ui64 size);
 }

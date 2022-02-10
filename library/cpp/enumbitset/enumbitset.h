@@ -285,13 +285,13 @@ public:
         return t;
     }
 
-    TString ToString() const {
+    TString ToString() const { 
         static_assert(sizeof(typename TParent::TChunk) <= sizeof(ui64), "expect sizeof(typename TParent::TChunk) <= sizeof(ui64)");
         static const size_t chunkSize = sizeof(typename TParent::TChunk) * 8;
         static const size_t numDig = chunkSize / 4;
-        static const TString templ = Sprintf("%%0%lulX", numDig);
+        static const TString templ = Sprintf("%%0%lulX", numDig); 
         static const size_t numOfChunks = (BitsetSize + chunkSize - 1) / chunkSize;
-        TString ret;
+        TString ret; 
         for (int pos = numOfChunks * chunkSize; pos >= 0; pos -= chunkSize) {
             ui64 t = 0;
             this->Export(pos, t);
@@ -473,13 +473,13 @@ public:
         Init(c1, c2, r...);
     }
 
-    static TSfEnumBitSet GetFromString(const TString& s) {
+    static TSfEnumBitSet GetFromString(const TString& s) { 
         TSfEnumBitSet ebs;
         ebs.FromString(s);
         return ebs;
     }
 
-    static TSfEnumBitSet TryGetFromString(const TString& s) {
+    static TSfEnumBitSet TryGetFromString(const TString& s) { 
         TSfEnumBitSet ebs;
         ebs.TryFromString(s);
         return ebs;

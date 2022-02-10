@@ -84,7 +84,7 @@ public:
             LastUpdate = FirstUpdate = to;
             return;
         } else {
-            from = TInstant::MicroSeconds(std::max(LastUpdate.GetValue(), to.GetValue() - (DurationToStore - BUCKET_DURATION)));
+            from = TInstant::MicroSeconds(std::max(LastUpdate.GetValue(), to.GetValue() - (DurationToStore - BUCKET_DURATION))); 
         }
         int bucketFrom = TimeToBucket(from);
         if (bucketFrom == bucketTo) {
@@ -103,12 +103,12 @@ public:
         if (FirstUpdate == TInstant()) {
             FirstUpdate = to;
         } else {
-            FirstUpdate = TInstant::MicroSeconds(std::max(FirstUpdate.GetValue(), to.GetValue() - GetBucketSizeTo(to) - (DurationToStore - BUCKET_DURATION)));
+            FirstUpdate = TInstant::MicroSeconds(std::max(FirstUpdate.GetValue(), to.GetValue() - GetBucketSizeTo(to) - (DurationToStore - BUCKET_DURATION))); 
         }
     }
 
     TDuration GetStoredDuration() const {
-        return TDuration::MicroSeconds(LastUpdate.GetValue() - FirstUpdate.GetValue());
+        return TDuration::MicroSeconds(LastUpdate.GetValue() - FirstUpdate.GetValue()); 
     }
 
     ValueType GetValueAveragePerDuration(TDuration duration) const {

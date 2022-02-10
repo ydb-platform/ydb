@@ -18,10 +18,10 @@ namespace NKikimr {
             const ui64 Cookie;
             const ui8 Owner;
             const ui64 SeqNo;
-            const TVector<TIncrHugeBlobId> Ids;
+            const TVector<TIncrHugeBlobId> Ids; 
 
             ui32 NumDefragItems; // number of items being defragmented right now
-            TVector<TBlobDeleteLocator> DeleteLocators;
+            TVector<TBlobDeleteLocator> DeleteLocators; 
             EItemState State;
         };
 
@@ -222,18 +222,18 @@ namespace NKikimr {
             };
 
             // send request to logger
-            Keeper.Logger.LogBlobDeletes(item.Owner, item.SeqNo, TVector<TBlobDeleteLocator>(item.DeleteLocators),
+            Keeper.Logger.LogBlobDeletes(item.Owner, item.SeqNo, TVector<TBlobDeleteLocator>(item.DeleteLocators), 
                     MakeSimpleCallback(std::move(callback)), ctx);
         }
 
         // this function is called for items that were defragmented; a vector of delete locators contains metadata for
         // these items, but TIncrHugeBlobId's are zero to BadId as these items are not deleted from index -- they were
         // just moved
-        void TDeleter::DeleteDefrag(TVector<TBlobDeleteLocator>&& deleteLocators, const TActorContext& ctx) {
+        void TDeleter::DeleteDefrag(TVector<TBlobDeleteLocator>&& deleteLocators, const TActorContext& ctx) { 
             // sort items
             std::sort(deleteLocators.begin(), deleteLocators.end());
             // issue virtual log record to keep internal and log state consistent if delete chunk message is generated
-            Keeper.Logger.LogVirtualBlobDeletes(TVector<TBlobDeleteLocator>(deleteLocators), ctx);
+            Keeper.Logger.LogVirtualBlobDeletes(TVector<TBlobDeleteLocator>(deleteLocators), ctx); 
             // execute actual deletion; this must be called after logging virtual delete record, because this function
             // may issue chunk deletions and they must be consistent with deletions -- chunks may only be dropped after
             // _ALL_ their blobs are marked deleted
@@ -242,7 +242,7 @@ namespace NKikimr {
 
         // this function actually applies delete operations; it deletes items from index (if requested) and marks items
         // in chunks as deleted ones; this should be called only after successfully logging changes
-        void TDeleter::ProcessDeletedLocators(const TVector<TBlobDeleteLocator>& deleteLocators, bool deleteFromLookup,
+        void TDeleter::ProcessDeletedLocators(const TVector<TBlobDeleteLocator>& deleteLocators, bool deleteFromLookup, 
                 const TActorContext& ctx) {
             if (deleteFromLookup) {
                 for (const TBlobDeleteLocator& deleteLocator : deleteLocators) {

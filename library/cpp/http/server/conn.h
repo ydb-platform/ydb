@@ -10,22 +10,22 @@ class THttpServerConn {
 public:
     explicit THttpServerConn(const TSocket& s);
     THttpServerConn(const TSocket& s, size_t outputBufferSize);
-    ~THttpServerConn();
+    ~THttpServerConn(); 
 
-    THttpInput* Input() noexcept;
-    THttpOutput* Output() noexcept;
+    THttpInput* Input() noexcept; 
+    THttpOutput* Output() noexcept; 
 
-    inline const THttpInput* Input() const noexcept {
+    inline const THttpInput* Input() const noexcept { 
         return const_cast<THttpServerConn*>(this)->Input();
     }
 
-    inline const THttpOutput* Output() const noexcept {
+    inline const THttpOutput* Output() const noexcept { 
         return const_cast<THttpServerConn*>(this)->Output();
     }
 
     /// Проверяет, можно ли установить режим, при котором соединение с сервером
     /// не завершается после окончания транзакции.
-    inline bool CanBeKeepAlive() const noexcept {
+    inline bool CanBeKeepAlive() const noexcept { 
         return Output()->CanBeKeepAlive();
     }
 

@@ -399,7 +399,7 @@ namespace NActors {
         struct THTSwapMailbox: public TMailboxHeader {
             using TQueueType = NThreading::THTSwapQueue<IEventHandle*>;
 
-            TQueueType Queue;
+            TQueueType Queue; 
             NHPTimer::STime ScheduleMoment;
             char Padding_[16];
 
@@ -449,7 +449,7 @@ namespace NActors {
         struct TReadAsFilledMailbox: public TMailboxHeader {
             using TQueueType = NThreading::TReadAsFilledQueue<IEventHandle>;
 
-            TQueueType Queue;
+            TQueueType Queue; 
             NHPTimer::STime ScheduleMoment;
             char Padding_[8];
 
@@ -498,11 +498,11 @@ namespace NActors {
                       "expect sizeof(TReadAsFilledMailbox) == 192");
 
         struct TTinyReadAsFilledMailbox: public TMailboxHeader {
-            using TQueueType = NThreading::TReadAsFilledQueue<
+            using TQueueType = NThreading::TReadAsFilledQueue< 
                 IEventHandle,
                 NThreading::TRaFQueueBunchSize<4>>;
 
-            TQueueType Queue;
+            TQueueType Queue; 
             NHPTimer::STime ScheduleMoment;
             char Padding_[8];
 

@@ -9,7 +9,7 @@ using NTabletFlatExecutor::TTransactionContext;
 struct TTxMediator::TTxConfigure : public TTransactionBase<TTxMediator> {
     TActorId AckTo;
     ui64 Version;
-    TVector<TCoordinatorId> Coordinators;
+    TVector<TCoordinatorId> Coordinators; 
     ui32 TimeCastBuketsPerMediator;
     TAutoPtr<TEvSubDomain::TEvConfigureStatus> Respond;
     bool ConfigurationApplied;
@@ -36,12 +36,12 @@ struct TTxMediator::TTxConfigure : public TTransactionBase<TTxMediator> {
             return false;
 
         ui32 curVersion = 0;
-        TVector<TCoordinatorId> curCoordinators;
+        TVector<TCoordinatorId> curCoordinators; 
         ui32 curBuckets = 0;
 
         while (!rowset.EndOfSet()) {
             const ui64 ver = rowset.GetValue<Schema::DomainConfiguration::Version>();
-            TVector<TCoordinatorId> coordinators = rowset.GetValue<Schema::DomainConfiguration::Coordinators>();
+            TVector<TCoordinatorId> coordinators = rowset.GetValue<Schema::DomainConfiguration::Coordinators>(); 
             ui32 buckets = rowset.GetValue<Schema::DomainConfiguration::TimeCastBuckets>();
 
             if (ver >= curVersion) {

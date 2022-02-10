@@ -7,10 +7,10 @@
 
 namespace {
 #ifdef _linux_
-    TString GetExecName() {
-        TString execPath = GetExecPath();
+    TString GetExecName() { 
+        TString execPath = GetExecPath(); 
         size_t lastSlash = execPath.find_last_of('/');
-        if (lastSlash == TString::npos) {
+        if (lastSlash == TString::npos) { 
             return execPath;
         } else {
             return execPath.substr(lastSlash + 1);

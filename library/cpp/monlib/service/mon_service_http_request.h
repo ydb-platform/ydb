@@ -44,7 +44,7 @@ namespace NMonitoring {
         TMonService2HttpRequest(
             IOutputStream* out, const IHttpRequest* httpRequest,
             TMonService2* monService, IMonPage* monPage,
-            const TString& pathInfo,
+            const TString& pathInfo, 
             TMonService2HttpRequest* parent)
             : Out(out)
             , HttpRequest(httpRequest)

@@ -55,10 +55,10 @@ public:
             params.SizeMin = record.GetSizeMin();
             params.SizeMax = record.GetSizeMax();
             params.InFlyMax = record.GetInFlyMax();
-            params.IntervalMin = TDuration::MicroSeconds(record.GetIntervalMin());
-            params.IntervalMax = TDuration::MicroSeconds(record.GetIntervalMax());
+            params.IntervalMin = TDuration::MicroSeconds(record.GetIntervalMin()); 
+            params.IntervalMax = TDuration::MicroSeconds(record.GetIntervalMax()); 
             params.SoftLoad = record.GetSoftLoad();
-            params.Duration = TDuration::MicroSeconds(record.GetDuration());
+            params.Duration = TDuration::MicroSeconds(record.GetDuration()); 
             params.UseProtobufWithPayload = record.GetUseProtobufWithPayload();
             Callback = [=](const TActorContext& ctx) {
                 ui32 poolId = 0;

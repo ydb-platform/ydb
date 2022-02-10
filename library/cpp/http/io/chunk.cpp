@@ -6,14 +6,14 @@
 #include <util/generic/utility.h>
 #include <util/generic/yexception.h>
 
-static inline size_t ParseHex(const TString& s) {
+static inline size_t ParseHex(const TString& s) { 
     if (s.empty()) {
         ythrow yexception() << "can not parse chunk length(empty string)";
     }
 
     size_t ret = 0;
 
-    for (TString::const_iterator c = s.begin(); c != s.end(); ++c) {
+    for (TString::const_iterator c = s.begin(); c != s.end(); ++c) { 
         const char ch = *c;
 
         if (ch >= '0' && ch <= '9') {
@@ -61,7 +61,7 @@ public:
         }
     }
 
-    inline ~TImpl() {
+    inline ~TImpl() { 
     }
 
     inline size_t Read(void* buf, size_t len) {
@@ -111,7 +111,7 @@ private:
     }
 
     inline bool ProceedToNextChunk() {
-        TString len(Slave_->ReadLine());
+        TString len(Slave_->ReadLine()); 
 
         if (len.empty()) {
             /*
@@ -147,7 +147,7 @@ TChunkedInput::TChunkedInput(IInputStream* slave, TMaybe<THttpHeaders>* trailers
 {
 }
 
-TChunkedInput::~TChunkedInput() {
+TChunkedInput::~TChunkedInput() { 
 }
 
 size_t TChunkedInput::DoRead(void* buf, size_t len) {
@@ -167,7 +167,7 @@ public:
     {
     }
 
-    inline ~TImpl() {
+    inline ~TImpl() { 
     }
 
     inline void Write(const void* buf, size_t len) {
@@ -217,7 +217,7 @@ TChunkedOutput::TChunkedOutput(IOutputStream* slave)
 {
 }
 
-TChunkedOutput::~TChunkedOutput() {
+TChunkedOutput::~TChunkedOutput() { 
     try {
         Finish();
     } catch (...) {

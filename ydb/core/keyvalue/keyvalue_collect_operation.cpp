@@ -5,7 +5,7 @@ namespace NKikimr {
 namespace NKeyValue {
 
 TCollectOperationHeader::TCollectOperationHeader(ui64 collectGeneration, ui64 collectStep,
-        TVector<TLogoBlobID> &keep, TVector<TLogoBlobID> &doNotKeep)
+        TVector<TLogoBlobID> &keep, TVector<TLogoBlobID> &doNotKeep) 
     : CollectGeneration(collectGeneration)
     , CollectStep(collectStep)
     , KeepCount(keep.size())

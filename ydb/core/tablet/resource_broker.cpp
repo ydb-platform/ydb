@@ -165,7 +165,7 @@ TTaskQueue::TTaskQueue(const NKikimrResourceBroker::TQueueConfig &config,
     , TotalLimit(totalLimit)
     , RealResourceUsage(0)
     , PlannedResourceUsage(0)
-    , UsageTimestamp(TInstant::MicroSeconds(0))
+    , UsageTimestamp(TInstant::MicroSeconds(0)) 
     , QueueCounters(counters->GetSubgroup("queue", Name))
     , TotalCounters(totalCounters)
 {
@@ -588,7 +588,7 @@ void TScheduler::ScheduleTasks(const TActorSystem &as,
 {
     UpdateResourceUsage(as);
 
-    TSet<TTaskQueuePtr, TTaskQueueLess> pending;
+    TSet<TTaskQueuePtr, TTaskQueueLess> pending; 
     for (auto &entry : Queues) {
         auto &queue = entry.second;
         if (!queue->Empty())
@@ -753,7 +753,7 @@ void TScheduler::Configure(const TResourceBrokerConfig &config, const TActorSyst
     for (auto &task : config.GetTasks()) {
         TTaskCountersPtr counters = new TTaskCounters(Counters->GetSubgroup("task", task.GetName()));
         TTaskConfig taskConfig(task.GetName(),
-                               TDuration::MicroSeconds(task.GetDefaultDuration()),
+                               TDuration::MicroSeconds(task.GetDefaultDuration()), 
                                counters);
         Y_VERIFY(Queues.contains(task.GetQueueName()), " queue '%s' wasn't found in config", task.GetQueueName().data());
         taskConfig.Queue = Queues.at(task.GetQueueName());
@@ -1183,8 +1183,8 @@ void TResourceBrokerActor::Handle(TEvResourceBroker::TEvConfigure::TPtr &ev,
     LOG_DEBUG(ctx, NKikimrServices::RESOURCE_BROKER, "New config: %s",
               rec.ShortDebugString().data());
 
-    TSet<TString> queues;
-    TSet<TString> tasks;
+    TSet<TString> queues; 
+    TSet<TString> tasks; 
     bool success = true;
     TString error;
     for (auto &queue : rec.GetQueues())

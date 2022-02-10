@@ -1048,7 +1048,7 @@ namespace Tests {
         UNIT_ASSERT_VALUES_EQUAL(SyncCall(request, reply), NBus::MESSAGE_OK);
     }
 
-    TString TClient::StartTrace(const TString &path) {
+    TString TClient::StartTrace(const TString &path) { 
         TAutoPtr<NMsgBusProxy::TBusMessageBusTraceRequest> request(new NMsgBusProxy::TBusMessageBusTraceRequest());
         request->Record.SetCommand(NKikimrClient::TMessageBusTraceRequest::START);
         if (path)
@@ -1523,7 +1523,7 @@ namespace Tests {
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
 
-    NMsgBusProxy::EResponseStatus TClient::AlterTable(const TString& parent, const TString& alter) {
+    NMsgBusProxy::EResponseStatus TClient::AlterTable(const TString& parent, const TString& alter) { 
         NKikimrSchemeOp::TTableDescription table;
         bool parseOk = ::google::protobuf::TextFormat::ParseFromString(alter, &table);
         UNIT_ASSERT(parseOk);
@@ -1543,7 +1543,7 @@ namespace Tests {
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
 
-    NMsgBusProxy::EResponseStatus TClient::DeleteTable(const TString& parent, const TString& name) {
+    NMsgBusProxy::EResponseStatus TClient::DeleteTable(const TString& parent, const TString& name) { 
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropTable);
@@ -1569,7 +1569,7 @@ namespace Tests {
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
 
-    TAutoPtr<NMsgBusProxy::TBusResponse> TClient::TryDropPersQueueGroup(const TString& parent, const TString& name) {
+    TAutoPtr<NMsgBusProxy::TBusResponse> TClient::TryDropPersQueueGroup(const TString& parent, const TString& name) { 
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
         auto * op = request->Record.MutableTransaction()->MutableModifyScheme();
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup);
@@ -1685,7 +1685,7 @@ namespace Tests {
         UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
     }
 
-    void TClient::ModifyACL(const TString& parent, const TString& name, const TString& acl) {
+    void TClient::ModifyACL(const TString& parent, const TString& name, const TString& acl) { 
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpModifyACL);
@@ -1810,7 +1810,7 @@ namespace Tests {
         UNIT_ASSERT((NMsgBusProxy::EResponseStatus)responseDelete.GetStatus());
     }
 
-    bool TClient::LocalQuery(const ui64 tabletId, const TString &pgmText, NKikimrMiniKQL::TResult& result) {
+    bool TClient::LocalQuery(const ui64 tabletId, const TString &pgmText, NKikimrMiniKQL::TResult& result) { 
         TAutoPtr<NMsgBusProxy::TBusTabletLocalMKQL> request = new NMsgBusProxy::TBusTabletLocalMKQL();
         request->Record.SetTabletID(ChangeStateStorage(tabletId, Domain));
         request->Record.SetWithRetry(true);
@@ -1831,7 +1831,7 @@ namespace Tests {
     }
 
     bool TClient::LocalSchemeTx(const ui64 tabletId, const NTabletFlatScheme::TSchemeChanges& changes, bool dryRun,
-                                NTabletFlatScheme::TSchemeChanges& scheme, TString& err) {
+                                NTabletFlatScheme::TSchemeChanges& scheme, TString& err) { 
         TAutoPtr<NMsgBusProxy::TBusTabletLocalSchemeTx> request = new NMsgBusProxy::TBusTabletLocalSchemeTx();
         request->Record.SetTabletID(ChangeStateStorage(tabletId, Domain));
         request->Record.SetDryRun(dryRun);
@@ -1851,14 +1851,14 @@ namespace Tests {
         return err.empty();
     }
 
-    bool TClient::LocalSchemeTx(const ui64 tabletId, const TString &schemeChangesStr, bool dryRun,
-                                NTabletFlatScheme::TSchemeChanges& scheme, TString& err) {
+    bool TClient::LocalSchemeTx(const ui64 tabletId, const TString &schemeChangesStr, bool dryRun, 
+                                NTabletFlatScheme::TSchemeChanges& scheme, TString& err) { 
         NTabletFlatScheme::TSchemeChanges schemeChanges;
         ::google::protobuf::TextFormat::ParseFromString(schemeChangesStr, &schemeChanges);
         return LocalSchemeTx(tabletId, schemeChanges, dryRun, scheme, err);
     }
 
-    bool TClient::Compile(const TString &mkql, TString &compiled) {
+    bool TClient::Compile(const TString &mkql, TString &compiled) { 
         TAutoPtr<NMsgBusProxy::TBusRequest> request = new NMsgBusProxy::TBusRequest();
         auto* mkqlTx = request->Record.MutableTransaction()->MutableMiniKQLTransaction();
         mkqlTx->MutableProgram()->SetText(mkql);
@@ -1993,49 +1993,49 @@ namespace Tests {
         return FlatQuery(query, opts, result, expectedResponse);
     }
 
-    bool TClient::FlatQueryParams(const TString& mkql, const TString& params, bool queryCompiled, NKikimrMiniKQL::TResult &result) {
+    bool TClient::FlatQueryParams(const TString& mkql, const TString& params, bool queryCompiled, NKikimrMiniKQL::TResult &result) { 
         TFlatQueryOptions opts;
         opts.Params = params;
         opts.IsQueryCompiled = queryCompiled;
         return FlatQuery(mkql, opts, result);
     }
 
-    bool TClient::FlatQuery(const TString& mkql, NKikimrMiniKQL::TResult& result) {
+    bool TClient::FlatQuery(const TString& mkql, NKikimrMiniKQL::TResult& result) { 
         TFlatQueryOptions opts;
         return FlatQuery(mkql, opts, result);
     }
 
-    TString TClient::SendTabletMonQuery(TTestActorRuntime* runtime, ui64 tabletId, TString query) {
+    TString TClient::SendTabletMonQuery(TTestActorRuntime* runtime, ui64 tabletId, TString query) { 
         TActorId sender = runtime->AllocateEdgeActor(0);
         ForwardToTablet(*runtime, tabletId, sender, new NActors::NMon::TEvRemoteHttpInfo(query), 0);
         TAutoPtr<IEventHandle> handle;
         // Timeout for DEBUG purposes only
         runtime->GrabEdgeEvent<NMon::TEvRemoteJsonInfoRes>(handle);
-        TString res = handle->Get<NMon::TEvRemoteJsonInfoRes>()->Json;
+        TString res = handle->Get<NMon::TEvRemoteJsonInfoRes>()->Json; 
 #ifndef NDEBUG
         Cerr << res << Endl;
 #endif
         return res;
     }
 
-    TString TClient::MarkNodeInHive(TTestActorRuntime* runtime, ui32 nodeIdx, bool up) {
+    TString TClient::MarkNodeInHive(TTestActorRuntime* runtime, ui32 nodeIdx, bool up) { 
         ui32 nodeId = runtime->GetNodeId(nodeIdx);
         ui64 hive = ChangeStateStorage(Tests::Hive, Domain);
         TInstant deadline = TInstant::Now() + TIMEOUT;
         while (TInstant::Now() <= deadline) {
-            TString res = SendTabletMonQuery(runtime, hive, TString("/app?page=SetDown&node=") + ToString(nodeId) + "&down=" + (up ? "0" : "1"));
+            TString res = SendTabletMonQuery(runtime, hive, TString("/app?page=SetDown&node=") + ToString(nodeId) + "&down=" + (up ? "0" : "1")); 
             if (!res.empty() && !res.Contains("Error"))
                 return res;
 
         }
         UNIT_ASSERT_C(false, "Failed to mark node in hive");
-        return TString();
+        return TString(); 
     }
 
-    TString TClient::KickNodeInHive(TTestActorRuntime* runtime, ui32 nodeIdx) {
+    TString TClient::KickNodeInHive(TTestActorRuntime* runtime, ui32 nodeIdx) { 
         ui32 nodeId = runtime->GetNodeId(nodeIdx);
         ui64 hive = ChangeStateStorage(Tests::Hive, Domain);
-        return SendTabletMonQuery(runtime, hive, TString("/app?page=KickNode&node=") + ToString(nodeId));
+        return SendTabletMonQuery(runtime, hive, TString("/app?page=KickNode&node=") + ToString(nodeId)); 
     }
 
     bool TClient::WaitForTabletAlive(TTestActorRuntime* runtime, ui64 tabletId, bool leader, TDuration timeout) {
@@ -2195,7 +2195,7 @@ namespace Tests {
     void TClient::S3Listing(const TString& table, const TString& prefixColumnsPb,
                             const TString& pathPrefix, const TString& pathDelimiter,
                             const TString& startAfterSuffixColumnsPb,
-                            const TVector<TString>& columnsToReturn, ui32 maxKeys,
+                            const TVector<TString>& columnsToReturn, ui32 maxKeys, 
                             ui32 timeoutMillisec,
                             NKikimrClient::TS3ListingResponse& res) {
         TAutoPtr<NMsgBusProxy::TBusS3ListingRequest> request = new NMsgBusProxy::TBusS3ListingRequest();
@@ -2279,7 +2279,7 @@ namespace Tests {
         if (address.empty() || !TryFromString(port, portValue))
             ythrow TWithBackTrace<yexception>() << "Incorrect server redirect, expected 'IpAddress/Port'";
 
-        return TServerSetup(TString(address), portValue);
+        return TServerSetup(TString(address), portValue); 
     }
 
     TTenants::TTenants(TServer::TPtr server)
@@ -2346,7 +2346,7 @@ namespace Tests {
     }
 
     bool TTenants::IsActive(const TString &name, ui32 nodeIdx) const {
-        const TVector<ui32>& nodes = List(name);
+        const TVector<ui32>& nodes = List(name); 
 #ifndef NDEBUG
         Cerr << "IsActive: " << name << " -- " << nodeIdx << Endl;
         for (auto& x: nodes) {
@@ -2357,7 +2357,7 @@ namespace Tests {
         return std::find(nodes.begin(), nodes.end(), nodeIdx) != nodes.end();
     }
 
-    const TVector<ui32> &TTenants::List(const TString &name) const {
+    const TVector<ui32> &TTenants::List(const TString &name) const { 
         Y_VERIFY(Tenants.contains(name));
 
         return Tenants.at(name);
@@ -2381,7 +2381,7 @@ namespace Tests {
         return Server->DynamicNodes();
     }
 
-    TVector<ui32> &TTenants::Nodes(const TString &name) {
+    TVector<ui32> &TTenants::Nodes(const TString &name) { 
         return Tenants[name];
     }
 
@@ -2394,7 +2394,7 @@ namespace Tests {
     }
 
     void TTenants::StopPaticularNode(const TString &name, ui32 nodeIdx) {
-        TVector<ui32>& nodes = Nodes(name);
+        TVector<ui32>& nodes = Nodes(name); 
 
         auto subj = std::find(nodes.begin(), nodes.end(), nodeIdx);
         Y_VERIFY(subj != nodes.end());
@@ -2407,7 +2407,7 @@ namespace Tests {
     }
 
     void TTenants::StopNodes(const TString &name, ui32 count) {
-        TVector<ui32>& nodes = Nodes(name);
+        TVector<ui32>& nodes = Nodes(name); 
 
         for (ui32 num = 0; num < count && nodes; ++num) {
             ui32 nodeIdx = nodes.back();
@@ -2418,7 +2418,7 @@ namespace Tests {
     }
 
     void TTenants::RunNodes(const TString &name, ui32 count) {
-        TVector<ui32>& nodes = Nodes(name);
+        TVector<ui32>& nodes = Nodes(name); 
 
         for (ui32 num = 0; num < count; ++num) {
             ui32 nodeIdx = AllocNodeIdx();

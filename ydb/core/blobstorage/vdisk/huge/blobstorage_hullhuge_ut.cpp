@@ -24,7 +24,7 @@ namespace NKikimr {
             ui32 freeChunksReservation = 2;
             bool oldMapCompatible = false;
 
-            auto logf = [] (const TString &state) { STR << state; };
+            auto logf = [] (const TString &state) { STR << state; }; 
             auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
             auto info = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::Erasure4Plus2Block);
             auto vctx = MakeIntrusive<TVDiskContext>(TActorId(), info->PickTopology(), counters, TVDiskID(0, 1, 0, 0, 0),
@@ -38,7 +38,7 @@ namespace NKikimr {
             NHuge::THugeSlot hugeSlot(453, 0, 234);
             state->AllocatedSlots.insert(hugeSlot);
 
-            TString serialized(state->Serialize());
+            TString serialized(state->Serialize()); 
             UNIT_ASSERT(THullHugeKeeperPersState::CheckEntryPoint(serialized));
         }
     }

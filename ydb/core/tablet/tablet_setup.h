@@ -50,7 +50,7 @@ IActor* CreateTabletFollower(const TActorId &launcher, TTabletStorageInfo *info,
 
 struct ITabletFactory: public virtual TThrRefBase {
     virtual TIntrusivePtr<TTabletSetupInfo> CreateTablet(
-        const TString& typeName,
+        const TString& typeName, 
         const TIntrusivePtr<TTabletStorageInfo>& tabletInfo,
         const TAppData& appData) = 0;
 };

@@ -12,7 +12,7 @@ namespace NKikimr {
 
     Y_UNIT_TEST_SUITE(TBlobStorageAnubisAlgo) {
 
-        void OutputVector(const TVector<TLogoBlobID> &vec, IOutputStream &str) {
+        void OutputVector(const TVector<TLogoBlobID> &vec, IOutputStream &str) { 
             str << "{";
             bool first = true;
             for (const auto &x : vec) {
@@ -26,9 +26,9 @@ namespace NKikimr {
         }
 
         NKikimrBlobStorage::TEvVGetResult BuildResult(const TVDiskID &vd,
-                                                      const TVector<TLogoBlobID> &blobs,
+                                                      const TVector<TLogoBlobID> &blobs, 
                                                       NKikimrProto::EReplyStatus globalStatus,
-                                                      const TVector<NKikimrProto::EReplyStatus> &blobsStatus) {
+                                                      const TVector<NKikimrProto::EReplyStatus> &blobsStatus) { 
             NKikimrBlobStorage::TEvVGetResult res;
             res.SetStatus(globalStatus);
             VDiskIDFromVDiskID(vd, res.MutableVDiskID());
@@ -46,11 +46,11 @@ namespace NKikimr {
             TBlobStorageGroupInfo info(TErasureType::ErasureMirror3, 1, 4);
             TBlobsStatusMngr mngr(&info.GetTopology());
 
-            TVector<TLogoBlobID> candidates = {
+            TVector<TLogoBlobID> candidates = { 
                 TLogoBlobID(1, 4, 256, 1, 100, 0),
                 TLogoBlobID(1, 4, 257, 1, 100, 0)
             };
-            mngr.SetupCandidates(TVector<TLogoBlobID>(candidates));
+            mngr.SetupCandidates(TVector<TLogoBlobID>(candidates)); 
 
             // TVDiskRange
             for (const auto &x : info.GetTopology().GetVDisks()) {
@@ -85,7 +85,7 @@ namespace NKikimr {
                 mngr.UpdateStatusForVDisk(TVDiskIdShort(vd), r);
             }
 
-            TVector<TLogoBlobID> res = {TLogoBlobID(1, 4, 257, 1, 100, 0)};
+            TVector<TLogoBlobID> res = {TLogoBlobID(1, 4, 257, 1, 100, 0)}; 
             auto blobsToRemove = mngr.BlobsToRemove();
             STR << "blobs to remove: ";
             OutputVector(blobsToRemove, STR);

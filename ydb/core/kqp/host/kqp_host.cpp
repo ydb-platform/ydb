@@ -77,7 +77,7 @@ public:
 
 private:
     bool Discard = false;
-    TString Result;
+    TString Result; 
 };
 
 struct TExecuteContext : TThrRefBase {
@@ -267,7 +267,7 @@ public:
             if (result.GetRowsLimit()) {
                 fillSettings.RowsLimitPerWrite = result.GetRowsLimit();
             }
-            TVector<TString> columnHints(result.GetColumnHints().begin(), result.GetColumnHints().end());
+            TVector<TString> columnHints(result.GetColumnHints().begin(), result.GetColumnHints().end()); 
             auto protoResult = KikimrResultToProto(*resultValue, columnHints, fillSettings,
                 queryResult.ProtobufArenaPtr.get());
 
@@ -1011,7 +1011,7 @@ public:
         , ModuleResolver(moduleResolver)
         , KeepConfigChanges(keepConfigChanges)
         , SessionCtx(new TKikimrSessionContext(config))
-        , ClustersMap({{Cluster, TString(KikimrProviderName)}})
+        , ClustersMap({{Cluster, TString(KikimrProviderName)}}) 
         , TypesCtx(MakeIntrusive<TTypeAnnotationContext>())
         , PlanBuilder(CreatePlanBuilder(*TypesCtx))
         , FakeWorld(ExprCtx->NewWorld(TPosition()))
@@ -1060,7 +1060,7 @@ public:
             FillSettings.FormatDetails, writerFactory);
         auto resultProvider = CreateResultProvider(ResultProviderConfig);
         TypesCtx->AddDataSink(ResultProviderName, resultProvider);
-        TypesCtx->AvailablePureResultDataSources = TVector<TString>(1, TString(KikimrProviderName));
+        TypesCtx->AvailablePureResultDataSources = TVector<TString>(1, TString(KikimrProviderName)); 
 
         // Config provider
         const TGatewaysConfig* gatewaysConfig = nullptr; // TODO: can we get real gatewaysConfig here?
@@ -2173,13 +2173,13 @@ private:
 
 private:
     TIntrusivePtr<IKqpGateway> Gateway;
-    TString Cluster;
+    TString Cluster; 
     THolder<TExprContext> ExprCtx;
     IModuleResolver::TPtr ModuleResolver;
     bool KeepConfigChanges;
 
     TIntrusivePtr<TKikimrSessionContext> SessionCtx;
-    THashMap<TString, TString> ClustersMap;
+    THashMap<TString, TString> ClustersMap; 
 
     TIntrusivePtr<NKikimr::NMiniKQL::IFunctionRegistry> FuncRegistryHolder;
     const NKikimr::NMiniKQL::IFunctionRegistry* FuncRegistry;

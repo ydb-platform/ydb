@@ -105,7 +105,7 @@ public:
     const TResultsMap& GetMap() const { return ResultsMap; }
 
 public:
-    TString ToString(const THolderFactory& holderFactory, const TTypeEnvironment& env) const {
+    TString ToString(const THolderFactory& holderFactory, const TTypeEnvironment& env) const { 
         const NUdf::TUnboxedValue value(GetResultsValue(holderFactory));
         return TString(TValuePacker(false, GetResultsType(env)).Pack(value));
     }
@@ -129,7 +129,7 @@ public:
 
 private:
     static TListType* GetResultsType(const TTypeEnvironment& env) {
-        const std::array<std::pair<TString, TType*>, 2> members = {{
+        const std::array<std::pair<TString, TType*>, 2> members = {{ 
             {"Id", TDataType::Create(NUdf::TDataType<ui32>::Id, env)},
             {"Result", TDataType::Create(NUdf::TDataType<char*>::Id, env)}
         }};
@@ -168,7 +168,7 @@ TRuntimeNode RenameCallable(TCallable& callable, const TStringBuf& newName, cons
     return TRuntimeNode(builder.Build(), false);
 }
 
-void ExtractResultType(TCallable& callable, const TTypeEnvironment& env, TMap<TString, TType*>& resTypes) {
+void ExtractResultType(TCallable& callable, const TTypeEnvironment& env, TMap<TString, TType*>& resTypes) { 
     MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 args");
 
     const auto& labelInput = callable.GetInput(0);
@@ -186,7 +186,7 @@ void ExtractResultType(TCallable& callable, const TTypeEnvironment& env, TMap<TS
     MKQL_ENSURE(CanExportType(payload.GetStaticType(), env),
         TStringBuilder() << "Failed to export type:" << *payload.GetStaticType());
 
-    auto& type = resTypes[TString(label)];
+    auto& type = resTypes[TString(label)]; 
     if (!type) {
         type = payload.GetStaticType();
         return;
@@ -196,7 +196,7 @@ void ExtractResultType(TCallable& callable, const TTypeEnvironment& env, TMap<TS
         TStringBuilder() << "Mismatch of result type for label: " << label);
 }
 
-void ExtractAcquireLocksType(const TTypeEnvironment& env, TMap<TString, TType*>& resTypes) {
+void ExtractAcquireLocksType(const TTypeEnvironment& env, TMap<TString, TType*>& resTypes) { 
     {
         auto lockStructType = GetTxLockType(env, false);
         auto lockListType = TListType::Create(lockStructType, env);
@@ -216,7 +216,7 @@ void ExtractAcquireLocksType(const TTypeEnvironment& env, TMap<TString, TType*>&
     }
 }
 
-void ExtractDiagnosticsType(const TTypeEnvironment& env, TMap<TString, TType*>& resTypes) {
+void ExtractDiagnosticsType(const TTypeEnvironment& env, TMap<TString, TType*>& resTypes) { 
     auto structType = GetDiagnosticsType(env);
     auto listType = TListType::Create(structType, env);
 
@@ -266,7 +266,7 @@ public:
         Alloc.Acquire();
     }
 
-    TString GetErrors() const noexcept override {
+    TString GetErrors() const noexcept override { 
         return Errors;
     }
 
@@ -319,7 +319,7 @@ public:
 
             {
                 explorer.Walk(programNode.GetNode(), Env);
-                TMap<TString, TType*> resTypes;
+                TMap<TString, TType*> resTypes; 
                 for (auto node : explorer.GetNodes()) {
                     if (node->GetType()->GetKind() != TType::EKind::Callable)
                         continue;
@@ -384,9 +384,9 @@ public:
         Y_VERIFY(!AreAffectedShardsPrepared, "PrepareShardPrograms is already called");
         TGuard<TScopedAlloc> allocGuard(Alloc);
         AffectedShards.clear();
-        TSet<ui64> affectedShardSet;
-        TSet<ui64> writeSet;
-        TSet<ui64> onlineReadSet;
+        TSet<ui64> affectedShardSet; 
+        TSet<ui64> writeSet; 
+        TSet<ui64> onlineReadSet; 
         for (ui32 keyIndex = 0; keyIndex < DbKeys.size(); ++keyIndex) {
             auto& key = DbKeys[keyIndex];
             Y_VERIFY(key->Status == TKeyDesc::EStatus::Ok, "Some DB keys are not resolved correctly");
@@ -428,7 +428,7 @@ public:
         AffectedShards.reserve(affectedShardSet.size());
         ui64 coordinatorRequiresShardCount = 0;
         for (ui64 shard : affectedShardSet) {
-            auto shardData = TShardData(shard, TString());
+            auto shardData = TShardData(shard, TString()); 
             if (writeSet.contains(shard))
                 shardData.HasWrites = true;
             if (onlineReadSet.contains(shard))
@@ -528,7 +528,7 @@ public:
         Y_VERIFY(!AreShardProgramsExtracted, "AfterShardProgramsExtracted is already called");
         TGuard<TScopedAlloc> allocGuard(Alloc);
         TVector<THolder<TKeyDesc>>().swap(DbKeys);
-        TVector<TProgramParts>().swap(SpecializedParts);
+        TVector<TProgramParts>().swap(SpecializedParts); 
         AreShardProgramsExtracted = true;
     }
 
@@ -608,7 +608,7 @@ public:
                     THolderFactory holderFactory(Alloc.Ref(), memInfo, Settings.FunctionRegistry);
 
                     for (auto& pair : ExecutionReplies) {
-                        const TString& reply = pair.second;
+                        const TString& reply = pair.second; 
 
                         TCallableResults results = TCallableResults::FromString(reply, holderFactory, Env);
                         for (const auto& pair : results.GetMap()) {
@@ -874,7 +874,7 @@ public:
         }
 
         // Extract reads that are included in the reply
-        THashSet<TStringBuf> replyIds;
+        THashSet<TStringBuf> replyIds; 
         const auto& replyStruct = static_cast<const TStructLiteral&>(*replyPgm.GetNode());
         for (ui32 j = 0, f = replyStruct.GetValuesCount(); j < f; ++j) {
             TStringBuf uniqId(replyStruct.GetType()->GetMemberName(j));
@@ -896,7 +896,7 @@ public:
         }
 
         // Extract reads that are included in out readsets
-        THashMap<TStringBuf, THashSet<ui64>> readTargets;
+        THashMap<TStringBuf, THashSet<ui64>> readTargets; 
         const ui64 myShardId = Settings.Host->GetShardId();
         auto shardsToWriteNode = pgmStruct.GetValue(4);
         MKQL_ENSURE(shardsToWriteNode.IsImmediate() && shardsToWriteNode.GetNode()->GetType()->IsStruct(),
@@ -1056,7 +1056,7 @@ public:
 
         TGuard<TScopedAlloc> allocGuard(Alloc);
 
-        TVector<THolder<TKeyDesc>> prechargeKeys;
+        TVector<THolder<TKeyDesc>> prechargeKeys; 
         // iterate over all ProgramPerOrigin (for merged datashards)
         for (const auto& pi : ProgramPerOrigin) {
             auto pgm = pi.second;
@@ -1098,8 +1098,8 @@ public:
             OutgoingReadsets.clear();
             const ui64 myShardId = Settings.Host->GetShardId();
 
-            TVector<TString> readResults;
-            THashMap<ui64, TCallableResults> resultsPerTarget;
+            TVector<TString> readResults; 
+            THashMap<ui64, TCallableResults> resultsPerTarget; 
 
             TMemoryUsageInfo memInfo("Memory");
             THolderFactory holderFactory(Alloc.Ref(), memInfo, Settings.FunctionRegistry);
@@ -1177,7 +1177,7 @@ public:
                 }
 
                 for (auto& result : resultsPerTarget) {
-                    TString resultValue = result.second.ToString(holderFactory, Env);
+                    TString resultValue = result.second.ToString(holderFactory, Env); 
                     OutgoingReadsets.push_back(TReadSet(result.first, pgm.first, resultValue));
                 }
             }
@@ -1215,7 +1215,7 @@ public:
     void AfterOutgoingReadsetsExtracted() noexcept override {
         Y_VERIFY(!AreOutgoingReadSetsExtracted, "AfterOutgoingReadsetsExtracted is already called");
         TGuard<TScopedAlloc> allocGuard(Alloc);
-        TVector<TReadSet>().swap(OutgoingReadsets);
+        TVector<TReadSet>().swap(OutgoingReadsets); 
         AreOutgoingReadSetsExtracted = true;
     }
 
@@ -1231,7 +1231,7 @@ public:
         IncomingReadsetsShards.clear();
         try {
             const ui64 myShardId = Settings.Host->GetShardId();
-            THashSet<ui64> shards;
+            THashSet<ui64> shards; 
 
             for (const auto& pgm : ProgramPerOrigin) {
                 auto& pgmStruct = GetPgmStruct(pgm.second);
@@ -1276,7 +1276,7 @@ public:
     }
 
     void AddIncomingReadset(const TStringBuf& readset) noexcept override {
-        IncomingReadsets.push_back(TString(readset));
+        IncomingReadsets.push_back(TString(readset)); 
     }
 
     EResult Cancel() override {
@@ -1426,7 +1426,7 @@ public:
         return EResult::Ok;
     }
 
-    TString GetShardReply(ui64 origin) const noexcept override {
+    TString GetShardReply(ui64 origin) const noexcept override { 
         Y_VERIFY(IsExecuted, "Execute is not called yet");
         auto it = ExecutionReplies.find(origin);
         Y_VERIFY(it != ExecutionReplies.end(), "Bad origin: %" PRIu64, origin);
@@ -1475,7 +1475,7 @@ private:
     struct TCallableContext {
         TCallable* Node;
         TKeyDesc* Key;
-        THashSet<ui64> ShardsToWrite;
+        THashSet<ui64> ShardsToWrite; 
         TRuntimeNode ShardsForRead;
 
         TCallableContext()
@@ -1493,7 +1493,7 @@ private:
         TRuntimeNode Program;
     };
 
-    static void AddShards(TSet<ui64>& set, const TKeyDesc& key) {
+    static void AddShards(TSet<ui64>& set, const TKeyDesc& key) { 
         for (auto& partition : key.Partitions) {
             Y_VERIFY(partition.ShardId);
             set.insert(partition.ShardId);
@@ -1717,8 +1717,8 @@ private:
         ProxyProgram = SinglePassVisitCallables(Program, const_cast<TExploringNodeVisitor&>(ProgramExplorer), funcProvider, Env, false, wereChanges);
         ProxyProgramExplorer.Walk(ProxyProgram.GetNode(), Env, {}, true, nodesCount);
 
-        auto isPureLambda = [this] (TVector<TNode*> args, TRuntimeNode value) {
-            THashSet<ui32> knownArgIds;
+        auto isPureLambda = [this] (TVector<TNode*> args, TRuntimeNode value) { 
+            THashSet<ui32> knownArgIds; 
             for (auto& arg : args) {
                 if (!arg->GetType()->IsCallable()) {
                     return false;
@@ -1730,8 +1730,8 @@ private:
                 knownArgIds.insert(argCallable->GetUniqueId());
             }
 
-            TVector<TCallable*> foundArgs;
-            THashSet<TNode*> visitedNodes;
+            TVector<TCallable*> foundArgs; 
+            THashSet<TNode*> visitedNodes; 
             TExploringNodeVisitor lambdaExplorer;
             lambdaExplorer.Walk(value.GetNode(), Env, args);
             for (auto& node : lambdaExplorer.GetNodes()) {
@@ -1763,9 +1763,9 @@ private:
             return true;
         };
 
-        THashSet<ui32> pureCallables;
-        THashSet<ui32> aggregatedCallables;
-        THashMap<ui32, ui32> callableConsumers;
+        THashSet<ui32> pureCallables; 
+        THashSet<ui32> aggregatedCallables; 
+        THashMap<ui32, ui32> callableConsumers; 
         for (auto& node : ProxyProgramExplorer.GetNodes()) {
             if (!node->GetType()->IsCallable()) {
                 continue;
@@ -2088,44 +2088,44 @@ private:
     TDataType* Ui64Type;
     TStructType* ResultType;
     std::pair<ui64, ui64> StepTxId;
-    TVector<IEngineFlat::TTxLock> TxLocks;
+    TVector<IEngineFlat::TTxLock> TxLocks; 
     TMaybe<ui64> LockTxId;
     bool NeedDiagnostics;
-    TVector<IEngineFlat::TTabletInfo> TabletInfos;
+    TVector<IEngineFlat::TTabletInfo> TabletInfos; 
 
-    mutable TString Errors;
+    mutable TString Errors; 
     EStatus Status;
     TRuntimeNode Program;
     TExploringNodeVisitor ProgramExplorer;
     TRuntimeNode ProxyProgram;
     TExploringNodeVisitor ProxyProgramExplorer;
-    TVector<TProgramParts> SpecializedParts;
-    TMap<ui64, TRuntimeNode> ProgramPerOrigin;
+    TVector<TProgramParts> SpecializedParts; 
+    TMap<ui64, TRuntimeNode> ProgramPerOrigin; 
     TMap<ui64, ui64> ProgramSizes;
     TVector<THolder<TKeyDesc>> DbKeys;
-    TVector<TShardData> AffectedShards;
+    TVector<TShardData> AffectedShards; 
     TMaybe<bool> ReadOnlyProgram;
-    THashMap<ui32, TCallableContext> ProxyCallables;
-    THashMap<ui32, TCallable*> ProxyRepliesCallables;
-    THashMap<ui32, TCallable*> ProxyRepliesReads;
+    THashMap<ui32, TCallableContext> ProxyCallables; 
+    THashMap<ui32, TCallable*> ProxyRepliesCallables; 
+    THashMap<ui32, TCallable*> ProxyRepliesReads; 
     TRuntimeNode ShardsToWrite;
     bool AreAffectedShardsPrepared;
     bool AreShardProgramsExtracted;
-    TSet<ui64> FinalizedShards;
+    TSet<ui64> FinalizedShards; 
     bool IsResultBuilt;
     bool IsProgramValidated;
     bool AreOutgoingReadSetsPrepared;
     bool AreOutgoingReadSetsExtracted;
-    TVector<TReadSet> OutgoingReadsets;
+    TVector<TReadSet> OutgoingReadsets; 
     bool AreIncomingReadsetsPrepared;
-    TVector<ui64> IncomingReadsetsShards;
-    TVector<TString> IncomingReadsets;
-    THashMap<ui64, TStructLiteral*> ReadPerOrigin;
+    TVector<ui64> IncomingReadsetsShards; 
+    TVector<TString> IncomingReadsets; 
+    THashMap<ui64, TStructLiteral*> ReadPerOrigin; 
     bool IsExecuted;
-    TMap<ui64, TString> ExecutionReplies;
+    TMap<ui64, TString> ExecutionReplies; 
     IComputationPattern::TPtr Pattern;
     THolder<IComputationGraph> ResultGraph;
-    THashMap<TString, NUdf::TUnboxedValue> ResultValues;
+    THashMap<TString, NUdf::TUnboxedValue> ResultValues; 
     bool ReadOnlyOriginPrograms;
     bool IsCancelled;
 };

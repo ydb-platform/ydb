@@ -91,7 +91,7 @@ TExprBase GetEraseLocksEffects(const TString& cluster, TPositionHandle pos, TCoP
 const TTypeAnnotationNode* GetTxLockListType(TExprContext& ctx) {
     auto ui32Type = ctx.MakeType<TDataExprType>(EDataSlot::Uint32);
     auto ui64Type = ctx.MakeType<TDataExprType>(EDataSlot::Uint64);
-    TVector<const TItemExprType*> lockItems;
+    TVector<const TItemExprType*> lockItems; 
     lockItems.reserve(6);
     lockItems.push_back(ctx.MakeType<TItemExprType>("LockId", ui64Type));
     lockItems.push_back(ctx.MakeType<TItemExprType>("DataShard", ui64Type));
@@ -592,7 +592,7 @@ private:
 
 private:
     TIntrusivePtr<IKqpGateway> Gateway;
-    TString Cluster;
+    TString Cluster; 
     TIntrusivePtr<TKqpTransactionState> TxState;
     TIntrusivePtr<TKqlTransformContext> TransformCtx;
     EFinalizeState State;

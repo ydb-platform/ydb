@@ -17,7 +17,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLDictRelatedNodesTest) {
         const auto payload1 = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("A");
         const auto payload2 = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("B");
         const auto payload3 = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("C");
-        TVector<std::pair<TRuntimeNode, TRuntimeNode>> dictItems;
+        TVector<std::pair<TRuntimeNode, TRuntimeNode>> dictItems; 
         dictItems.push_back(std::make_pair(key1, payload1));
         dictItems.push_back(std::make_pair(key2, payload2));
         dictItems.push_back(std::make_pair(key3, payload3));
@@ -41,7 +41,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLDictRelatedNodesTest) {
         const auto payload1 = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("A");
         const auto payload2 = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("B");
         const auto payload3 = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("C");
-        TVector<std::pair<TRuntimeNode, TRuntimeNode>> dictItems;
+        TVector<std::pair<TRuntimeNode, TRuntimeNode>> dictItems; 
         dictItems.push_back(std::make_pair(key1, payload1));
         dictItems.push_back(std::make_pair(key2, payload2));
         dictItems.push_back(std::make_pair(key3, payload3));
@@ -79,7 +79,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLDictRelatedNodesTest) {
         const auto payload1 = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("A");
         const auto payload2 = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("B");
         const auto payload3 = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("C");
-        TVector<std::pair<TRuntimeNode, TRuntimeNode>> dictItems;
+        TVector<std::pair<TRuntimeNode, TRuntimeNode>> dictItems; 
         dictItems.push_back(std::make_pair(key1, payload1));
         dictItems.push_back(std::make_pair(key2, payload2));
         dictItems.push_back(std::make_pair(key3, payload3));

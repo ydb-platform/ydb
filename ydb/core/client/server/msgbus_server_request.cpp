@@ -18,13 +18,13 @@ namespace NMsgBusProxy {
 class TMessageBusServerRequest : public TMessageBusSecureRequest<TMessageBusServerRequestBase<TMessageBusServerRequest>> {
     using TBase = TMessageBusSecureRequest<TMessageBusServerRequestBase<TMessageBusServerRequest>>;
     THolder<TBusRequest> Request;
-    TVector<TString*> WriteResolvedKeysTo;
+    TVector<TString*> WriteResolvedKeysTo; 
     TAutoPtr<TEvTxUserProxy::TEvProposeTransaction> Proposal;
     TAutoPtr<NKikimrTxUserProxy::TEvProposeTransactionStatus> ProposalStatus;
 
     size_t InFlyRequests;
-    THashMap<TString, ui64> CompileResolveCookies;
-    TString TextProgramForCompilation;
+    THashMap<TString, ui64> CompileResolveCookies; 
+    TString TextProgramForCompilation; 
     bool CompilationRetried;
 
     void ReplyWithResult(EResponseStatus status, NKikimrTxUserProxy::TEvProposeTransactionStatus &result,
@@ -118,7 +118,7 @@ public:
                         NMiniKQL::TScopedAlloc alloc(counters, AppData(ctx)->FunctionRegistry->SupportsSizedAllocators());
                         NMiniKQL::TTypeEnvironment env(alloc);
                         NMiniKQL::TRuntimeNode node = NMiniKQL::ImportValueFromProto(mkqlTx.GetParams().GetProto(), env);
-                        TString bin = NMiniKQL::SerializeRuntimeNode(node, env);
+                        TString bin = NMiniKQL::SerializeRuntimeNode(node, env); 
                         mkqlTx.MutableParams()->ClearProto();
                         mkqlTx.MutableParams()->SetBin(bin);
                     }
@@ -195,7 +195,7 @@ void TMessageBusServerRequest::Handle(TMiniKQLCompileServiceEvents::TEvCompileSt
 
     const bool need2CompileProgram = (bool)TextProgramForCompilation;
     const bool need2CompileParams = mkqlTx->HasParams() && mkqlTx->GetParams().HasText();
-    const TString& pgm = ev->Get()->Program;
+    const TString& pgm = ev->Get()->Program; 
     Y_VERIFY((need2CompileProgram && TextProgramForCompilation == pgm) // TODO: do not check texts, trust cookies
         || (need2CompileParams && mkqlTx->GetParams().GetText() == pgm));
 

@@ -2,7 +2,7 @@
 
 #include "minimize.h"
 
-#include <util/generic/vector.h>
+#include <util/generic/vector.h> 
 #include <util/stream/output.h>
 #include <cstddef>
 

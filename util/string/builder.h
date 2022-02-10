@@ -2,10 +2,10 @@
 
 #include <util/stream/str.h>
 #include <utility>
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 
 namespace NPrivateStringBuilder {
-    class TStringBuilder: public TString {
+    class TStringBuilder: public TString { 
     public:
         inline TStringBuilder()
             : Out(*this)

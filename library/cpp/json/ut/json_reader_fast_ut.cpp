@@ -280,7 +280,7 @@ public:
     }
 
     void TestReadJsonFastTree() {
-        const TString json = R"(
+        const TString json = R"( 
             {
                 "a": {
                     "b": {}

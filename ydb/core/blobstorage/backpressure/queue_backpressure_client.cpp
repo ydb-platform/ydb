@@ -28,8 +28,8 @@ class TVDiskBackpressureClientActor : public TActorBootstrapped<TVDiskBackpressu
     };
 
     TBSProxyContextPtr BSProxyCtx;
-    TString LogPrefix;
-    const TString QueueName;
+    TString LogPrefix; 
+    const TString QueueName; 
     const NMonitoring::TDynamicCounterPtr Counters;
     TBlobStorageQueue Queue;
     TActorId BlobStorageProxy;

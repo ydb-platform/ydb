@@ -31,7 +31,7 @@ struct TContext : public TAtomicRefCount<TContext> {
         TMaybe<IDbSchemeResolver::TTableResult> Response;
     };
 
-    using TTableMap = THashMap<TString, TTableState>;
+    using TTableMap = THashMap<TString, TTableState>; 
 
     TContext(const IFunctionRegistry* funcRegistry,
              const TTypeEnvironment* typeEnv);

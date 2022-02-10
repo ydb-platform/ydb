@@ -25,7 +25,7 @@ Y_UNIT_TEST_SUITE(TBufferTest) {
         TBuffer buffer("1234567890", 10);
         TBufferInput input(buffer);
 
-        TString tmp;
+        TString tmp; 
         UNIT_ASSERT_VALUES_EQUAL(input.ReadTo(tmp, '3'), 3);
         UNIT_ASSERT_VALUES_EQUAL(tmp, "12");
 

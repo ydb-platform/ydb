@@ -66,7 +66,7 @@ NKikimr::NMiniKQL::TType* BuildType(const TTypeAnnotationNode& annotation, NKiki
 
     case ETypeAnnotationKind::Tuple: {
         auto tuple = annotation.Cast<TTupleExprType>();
-        TVector<NKikimr::NMiniKQL::TType*> elements;
+        TVector<NKikimr::NMiniKQL::TType*> elements; 
         elements.reserve(tuple->GetItems().size());
         for (auto& child : tuple->GetItems()) {
             elements.push_back(BuildType(*child, pgmBuilder, err, withTagged));
@@ -242,7 +242,7 @@ const TTypeAnnotationNode* ConvertMiniKQLType(TPosition position, NKikimr::NMini
 
     case TType::EKind::Struct:
     {
-        TVector<const TItemExprType*> items;
+        TVector<const TItemExprType*> items; 
         auto structType = static_cast<TStructType*>(type);
         for (ui32 index = 0; index < structType->GetMembersCount(); ++index) {
             auto memberType = ConvertMiniKQLType(position, structType->GetMemberType(index), ctx);
@@ -282,9 +282,9 @@ const TTypeAnnotationNode* ConvertMiniKQLType(TPosition position, NKikimr::NMini
 
     case TType::EKind::Callable:
     {
-        TVector<TCallableExprType::TArgumentInfo> arguments;
+        TVector<TCallableExprType::TArgumentInfo> arguments; 
         auto callableType = static_cast<TCallableType*>(type);
-        TString payload;
+        TString payload; 
         for (ui32 index = 0; index < callableType->GetArgumentsCount(); ++index) {
             auto argType = ConvertMiniKQLType(position, callableType->GetArgumentType(index), ctx);
             TCallableExprType::TArgumentInfo arg;
@@ -313,7 +313,7 @@ const TTypeAnnotationNode* ConvertMiniKQLType(TPosition position, NKikimr::NMini
 
     case TType::EKind::Tuple:
     {
-        TTypeAnnotationNode::TListType elements;
+        TTypeAnnotationNode::TListType elements; 
         auto tupleType = static_cast<TTupleType*>(type);
         for (ui32 index = 0; index < tupleType->GetElementsCount(); ++index) {
             auto elementType = ConvertMiniKQLType(position, tupleType->GetElementType(index), ctx);

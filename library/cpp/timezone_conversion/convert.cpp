@@ -53,7 +53,7 @@ namespace NDatetime {
     }
 
     /*
-    TTimeZone GetTimeZone(const TString& name) {
+    TTimeZone GetTimeZone(const TString& name) { 
         TTimeZone result;
         if (!cctz::load_time_zone(name, &result)) {
             ythrow yexception() << "Failed to load time zone " << name << ", " << result.name();

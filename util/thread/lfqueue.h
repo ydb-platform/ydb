@@ -364,7 +364,7 @@ class TAutoLockFreeQueue {
 public:
     using TRef = THolder<T>;
 
-    inline ~TAutoLockFreeQueue() {
+    inline ~TAutoLockFreeQueue() { 
         TRef tmp;
 
         while (Dequeue(&tmp)) {

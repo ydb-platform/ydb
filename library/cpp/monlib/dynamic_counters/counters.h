@@ -201,11 +201,11 @@ namespace NMonitoring {
         typedef TIntrusivePtr<TCountableBase> TCountablePtr;
 
         struct TChildId {
-            TString LabelName;
-            TString LabelValue;
+            TString LabelName; 
+            TString LabelValue; 
             TChildId() {
             }
-            TChildId(const TString& labelName, const TString& labelValue)
+            TChildId(const TString& labelName, const TString& labelValue) 
                 : LabelName(labelName)
                 , LabelValue(labelValue)
             {
@@ -329,8 +329,8 @@ namespace NMonitoring {
         void RemoveCounter(const TString &value);
         void RemoveNamedCounter(const TString& name, const TString &value);
 
-        TIntrusivePtr<TDynamicCounters> GetSubgroup(const TString& name, const TString& value);
-        TIntrusivePtr<TDynamicCounters> FindSubgroup(const TString& name, const TString& value) const;
+        TIntrusivePtr<TDynamicCounters> GetSubgroup(const TString& name, const TString& value); 
+        TIntrusivePtr<TDynamicCounters> FindSubgroup(const TString& name, const TString& value) const; 
         void RemoveSubgroup(const TString& name, const TString& value);
         void ReplaceSubgroup(const TString& name, const TString& value, TIntrusivePtr<TDynamicCounters> subgroup);
 

@@ -16,7 +16,7 @@ struct IAppDataInitializer : public virtual TThrRefBase {
 
 class TAppDataInitializersList : public IAppDataInitializer {
 
-    TList<TIntrusivePtr<IAppDataInitializer> > AppDataInitializersList;
+    TList<TIntrusivePtr<IAppDataInitializer> > AppDataInitializersList; 
 
 public:
     void AddAppDataInitializer(TIntrusivePtr<IAppDataInitializer> appDataInitializer);
@@ -34,7 +34,7 @@ struct IServiceInitializer: public virtual TThrRefBase {
 
 class TServiceInitializersList : public IServiceInitializer {
 
-    TList<TIntrusivePtr<IServiceInitializer> > ServiceInitializersList;
+    TList<TIntrusivePtr<IServiceInitializer> > ServiceInitializersList; 
 
 public:
     void AddServiceInitializer(TIntrusivePtr<IServiceInitializer> serviceInitializer);

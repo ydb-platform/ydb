@@ -65,7 +65,7 @@ protected:
 
 protected:
     const bool FailOnUnknown;
-    THashMap<TStringBuf, THandler> Handlers;
+    THashMap<TStringBuf, THandler> Handlers; 
 };
 
 } // NYql

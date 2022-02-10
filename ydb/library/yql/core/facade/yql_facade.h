@@ -41,7 +41,7 @@ public:
         bool useRepeatableRandomAndTimeProviders,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         ui64 nextUniqueId,
-        const TVector<TDataProviderInitializer>& dataProvidersInit,
+        const TVector<TDataProviderInitializer>& dataProvidersInit, 
         const TString& runner);
 
     void AddUserDataTable(const TUserDataTable& userDataTable);
@@ -56,12 +56,12 @@ public:
 
     TProgramPtr Create(
             const TFile& file,
-            const TString& sessionId = TString());
+            const TString& sessionId = TString()); 
 
     TProgramPtr Create(
-            const TString& filename,
-            const TString& sourceCode,
-            const TString& sessionId = TString());
+            const TString& filename, 
+            const TString& sourceCode, 
+            const TString& sessionId = TString()); 
 
     void UnrepeatableRandom();
 private:
@@ -69,9 +69,9 @@ private:
     bool UseUnrepeatableRandom = false;
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry_;
     const ui64 NextUniqueId_;
-    TVector<TDataProviderInitializer> DataProvidersInit_;
+    TVector<TDataProviderInitializer> DataProvidersInit_; 
     TUserDataTable UserDataTable_;
-    TVector<TCredentialTablePtr> CredentialTables_;
+    TVector<TCredentialTablePtr> CredentialTables_; 
     TUserCredentials UserCredentials_;
     const TGatewaysConfig* GatewaysConfig_;
     IModuleResolver::TPtr Modules_;
@@ -111,47 +111,47 @@ public:
     TFutureStatus ValidateAsync(const TString& username, IOutputStream* exprOut = nullptr, bool withTypes = false);
 
     TStatus Optimize(
-            const TString& username,
+            const TString& username, 
             IOutputStream* traceOut = nullptr,
             IOutputStream* tracePlan = nullptr,
             IOutputStream* exprOut = nullptr,
             bool withTypes = false);
 
     TFutureStatus OptimizeAsync(
-            const TString& username,
+            const TString& username, 
             IOutputStream* traceOut = nullptr,
             IOutputStream* tracePlan = nullptr,
             IOutputStream* exprOut = nullptr,
             bool withTypes = false);
 
     TStatus Run(
-            const TString& username,
+            const TString& username, 
             IOutputStream* traceOut = nullptr,
             IOutputStream* tracePlan = nullptr,
             IOutputStream* exprOut = nullptr,
             bool withTypes = false);
 
     TFutureStatus RunAsync(
-            const TString& username,
+            const TString& username, 
             IOutputStream* traceOut = nullptr,
             IOutputStream* tracePlan = nullptr,
             IOutputStream* exprOut = nullptr,
             bool withTypes = false);
 
     TStatus OptimizeWithConfig(
-            const TString& username,
+            const TString& username, 
             const IPipelineConfigurator& pipelineConf);
 
     TFutureStatus OptimizeAsyncWithConfig(
-            const TString& username,
+            const TString& username, 
             const IPipelineConfigurator& pipelineConf);
 
     TStatus RunWithConfig(
-            const TString& username,
+            const TString& username, 
             const IPipelineConfigurator& pipelineConf);
 
     TFutureStatus RunAsyncWithConfig(
-            const TString& username,
+            const TString& username, 
             const IPipelineConfigurator& pipelineConf);
 
     TFutureStatus ContinueAsync();
@@ -201,7 +201,7 @@ public:
                 !ResultProviderConfig_->CommittedResults.empty();
     }
 
-    inline const TVector<TString>& Results() const {
+    inline const TVector<TString>& Results() const { 
         return ResultProviderConfig_->CommittedResults;
     }
 
@@ -221,7 +221,7 @@ public:
 
     TMaybe<TString> GetDiscoveredData();
 
-    TString ResultsAsString() const;
+    TString ResultsAsString() const; 
     void ConfigureYsonResultFormat(NYson::EYsonFormat format);
 
     inline IOutputStream* ExprStream() const { return ExprStream_; }
@@ -244,7 +244,7 @@ public:
         OperationOptions_.AuthenticatedUser = user;
     }
 
-    void SetOperationId(const TString& id) {
+    void SetOperationId(const TString& id) { 
         Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
         OperationOptions_.Id = id;
     }
@@ -254,7 +254,7 @@ public:
         OperationOptions_.SharedId = id;
     }
 
-    void SetOperationTitle(const TString& title) {
+    void SetOperationTitle(const TString& title) { 
         Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
         if (!title.Contains("YQL")) {
             ythrow yexception() << "Please mention YQL in the title '" << title << "'";
@@ -273,7 +273,7 @@ public:
         OperationOptions_.QueryName = name;
     }
 
-    void SetOperationAttrsYson(const TString& attrs) {
+    void SetOperationAttrsYson(const TString& attrs) { 
         Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
         OperationOptions_.AttrsYson = attrs;
     }
@@ -298,9 +298,9 @@ private:
         const TIntrusivePtr<IRandomProvider> randomProvider,
         const TIntrusivePtr<ITimeProvider> timeProvider,
         ui64 nextUniqueId,
-        const TVector<TDataProviderInitializer>& dataProvidersInit,
+        const TVector<TDataProviderInitializer>& dataProvidersInit, 
         const TUserDataTable& userDataTable,
-        const TVector<TCredentialTablePtr>& credentialTables,
+        const TVector<TCredentialTablePtr>& credentialTables, 
         const TUserCredentials& userCredentials,
         const IModuleResolver::TPtr& modules,
         const IUdfResolver::TPtr& udfResolver,
@@ -308,8 +308,8 @@ private:
         const TUdfIndexPackageSet::TPtr& udfIndexPackageSet,
         const TFileStoragePtr& fileStorage,
         const TGatewaysConfig* gatewaysConfig,
-        const TString& filename,
-        const TString& sourceCode,
+        const TString& filename, 
+        const TString& sourceCode, 
         const TString& sessionId,
         const TString& runner,
         bool enableRangeComputeFor);
@@ -319,7 +319,7 @@ private:
     TTypeAnnotationContextPtr ProvideAnnotationContext(const TString& username);
     bool CollectUsedClusters();
 
-    NThreading::TFuture<void> OpenSession(const TString& username);
+    NThreading::TFuture<void> OpenSession(const TString& username); 
 
     void CleanupLastSession();
     void CloseLastSession();
@@ -339,10 +339,10 @@ private:
     const TIntrusivePtr<IRandomProvider> RandomProvider_;
     const TIntrusivePtr<ITimeProvider> TimeProvider_;
     const ui64 NextUniqueId_;
-    TVector<TDataProviderInitializer> DataProvidersInit_;
-    TVector<TDataProviderInfo> DataProviders_;
+    TVector<TDataProviderInitializer> DataProvidersInit_; 
+    TVector<TDataProviderInfo> DataProviders_; 
     TYqlOperationOptions OperationOptions_;
-    TVector<TCredentialTablePtr> CredentialTables_;
+    TVector<TCredentialTablePtr> CredentialTables_; 
     TUserCredentials UserCredentials_;
     const IUdfResolver::TPtr UdfResolver_;
     const TUdfIndex::TPtr UdfIndex_;
@@ -350,8 +350,8 @@ private:
     const TFileStoragePtr FileStorage_;
     const TUserDataStorage::TPtr UserDataStorage_;
     const TGatewaysConfig* GatewaysConfig_;
-    TString Filename_;
-    TString SourceCode_;
+    TString Filename_; 
+    TString SourceCode_; 
     ESourceSyntax SourceSyntax_;
     ui16 SyntaxVersion_;
 
@@ -362,7 +362,7 @@ private:
     TExprNode::TPtr ExprRoot_;
     TExprNode::TPtr SavedExprRoot_;
     mutable TAdaptiveLock SessionIdLock_;
-    TString SessionId_;
+    TString SessionId_; 
     TTypeAnnotationContextPtr TypeCtx_;
     TAutoPtr<IPlanBuilder> PlanBuilder_;
     TAutoPtr<IGraphTransformer> Transformer_;
@@ -374,8 +374,8 @@ private:
     NUdf::EValidateMode ValidateMode_ = NUdf::EValidateMode::None;
     bool DisableNativeUdfSupport_ = false;
     bool UseTableMetaFromGraph_ = false;
-    TMaybe<TSet<TString>> UsedClusters_;
-    TMaybe<TSet<TString>> UsedProviders_;
+    TMaybe<TSet<TString>> UsedClusters_; 
+    TMaybe<TSet<TString>> UsedProviders_; 
     TMaybe<TString> ExternalQueryAst_;
     TMaybe<TString> ExternalQueryPlan_;
     TMaybe<TString> ExternalDiagnostics_;

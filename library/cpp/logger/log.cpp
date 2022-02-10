@@ -8,7 +8,7 @@
 #include <util/string/cast.h>
 #include <util/stream/printf.h>
 #include <util/system/yassert.h>
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 #include <util/generic/scope.h>
 #include <util/generic/yexception.h>
 
@@ -146,7 +146,7 @@ TLog::~TLog() = default;
 TLog& TLog::operator=(const TLog&) = default;
 TLog& TLog::operator=(TLog&&) = default;
 
-bool TLog::IsOpen() const noexcept {
+bool TLog::IsOpen() const noexcept { 
     return Impl_->IsOpen();
 }
 
@@ -218,7 +218,7 @@ void TLog::ResetBackend(THolder<TLogBackend> backend) noexcept {
     Impl_->ResetBackend(std::move(backend));
 }
 
-bool TLog::IsNullLog() const noexcept {
+bool TLog::IsNullLog() const noexcept { 
     return Impl_->IsNullLog();
 }
 

@@ -53,12 +53,12 @@ namespace NKikimr {
         void TPeerSyncState::Parse(const NKikimrVDiskData::TSyncerVDiskEntry &pb) {
             LastSyncStatus = pb.GetLastSyncStatus();
             SyncState = SyncStateFromSyncState(pb.GetSyncState());
-            SchTime = TInstant::MicroSeconds(pb.GetSchTime());
-            LastTry = TInstant::MicroSeconds(pb.GetLastTry());
-            LastGood = TInstant::MicroSeconds(pb.GetLastGood());
+            SchTime = TInstant::MicroSeconds(pb.GetSchTime()); 
+            LastTry = TInstant::MicroSeconds(pb.GetLastTry()); 
+            LastGood = TInstant::MicroSeconds(pb.GetLastGood()); 
         }
 
-        TString TPeerSyncState::ToString() const {
+        TString TPeerSyncState::ToString() const { 
             TStringStream str;
             str << "{" << "LastSyncStatus# " << LastSyncStatus
                 << " SyncState# " << SyncState.ToString()
@@ -101,7 +101,7 @@ namespace NKikimr {
             Info = pb.GetSyncGuidInfo();
         }
 
-        TString TPeerGuidInfo::ToString() const {
+        TString TPeerGuidInfo::ToString() const { 
             TStringStream str;
             str << "{Guid#" << Info.GetGuid() << " State# " << Info.GetState() << "}";
             return str.Str();
@@ -144,7 +144,7 @@ namespace NKikimr {
             PeerGuidInfo.Parse(pb);
         }
 
-        TString TPeer::ToString() const {
+        TString TPeer::ToString() const { 
             TStringStream str;
             str << "{SyncState# " << PeerSyncState.ToString()
                 << " GuidInfo# " << PeerGuidInfo.ToString() << "}";
@@ -161,7 +161,7 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     // TSyncNeighbors
     ////////////////////////////////////////////////////////////////////////////
-    TSyncNeighbors::TSyncNeighbors(const TString &logPrefix,
+    TSyncNeighbors::TSyncNeighbors(const TString &logPrefix, 
                                    const TActorId &notifyId,
                                    const TVDiskIdShort &self,
                                    std::shared_ptr<TBlobStorageGroupInfo::TTopology> top)
@@ -191,7 +191,7 @@ namespace NKikimr {
         Neighbors.GenericParse(des);
     }
 
-    void TSyncNeighbors::OldParse(const TString &data) {
+    void TSyncNeighbors::OldParse(const TString &data) { 
         Y_VERIFY(!data.empty());
         TStringInput str(data);
         OldParse(str);
@@ -202,7 +202,7 @@ namespace NKikimr {
         Neighbors.GenericParse(des);
     }
 
-    void TSyncNeighbors::Parse(const TString &data) {
+    void TSyncNeighbors::Parse(const TString &data) { 
         Y_VERIFY(!data.empty());
         TStringInput str(data);
         Parse(str);
@@ -236,7 +236,7 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     // TSyncerDataSerializer
     ////////////////////////////////////////////////////////////////////////////
-    TString TSyncerDataSerializer::Serialize() const {
+    TString TSyncerDataSerializer::Serialize() const { 
         // Data Format:
         // data ::= [Signature=4b] TSyncerEntryPoint_Serialized
 
@@ -256,13 +256,13 @@ namespace NKikimr {
         LocalSyncerState.Serialize(s.Proto.MutableLocalGuidInfo());
     }
 
-    TString TSyncerData::Serialize(const TBlobStorageGroupInfo *info) const {
+    TString TSyncerData::Serialize(const TBlobStorageGroupInfo *info) const { 
         TSyncerDataSerializer s;
         Serialize(s, info);
         return s.Serialize();
     }
 
-    void TSyncerData::ParseWOSignature(const TString &serProto) {
+    void TSyncerData::ParseWOSignature(const TString &serProto) { 
         if (!serProto.empty()) {
             NKikimrVDiskData::TSyncerEntryPoint proto;
             auto status = proto.ParseFromString(serProto);
@@ -273,7 +273,7 @@ namespace NKikimr {
     }
 
     // check and cut signature
-    TString TSyncerData::WithoutSignature(const TString &entryPoint) {
+    TString TSyncerData::WithoutSignature(const TString &entryPoint) { 
         if (entryPoint.empty()) {
             return entryPoint;
         } else {
@@ -287,11 +287,11 @@ namespace NKikimr {
         }
     }
 
-    TSyncerData::TSyncerData(const TString &logPrefix,
+    TSyncerData::TSyncerData(const TString &logPrefix, 
                              const TActorId &notifyId,
                              const TVDiskIdShort &selfVDisk,
                              std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
-                             const TString &entryPoint)
+                             const TString &entryPoint) 
         : Neighbors(MakeIntrusive<TSyncNeighbors>(logPrefix,
                                                   notifyId,
                                                   selfVDisk,
@@ -299,18 +299,18 @@ namespace NKikimr {
         , LocalSyncerState()
         , NotifyId(notifyId)
     {
-        TString serProto = WithoutSignature(Convert(selfVDisk, top, entryPoint));
+        TString serProto = WithoutSignature(Convert(selfVDisk, top, entryPoint)); 
         ParseWOSignature(serProto);
     }
 
-    bool TSyncerData::CheckEntryPoint(const TString &logPrefix,
+    bool TSyncerData::CheckEntryPoint(const TString &logPrefix, 
                                       const TActorId &notifyId,
                                       const TVDiskIdShort &selfVDisk,
                                       std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
-                                      const TString &entryPoint) {
+                                      const TString &entryPoint) { 
         try {
             TSyncerData n(logPrefix, notifyId, selfVDisk, top);
-            TString serProto = WithoutSignature(Convert(selfVDisk, top, entryPoint));
+            TString serProto = WithoutSignature(Convert(selfVDisk, top, entryPoint)); 
             n.ParseWOSignature(serProto);
         } catch (yexception) {
             return false;
@@ -320,9 +320,9 @@ namespace NKikimr {
 
     // Convert from old entry point format to protobuf format
     // TODO: we can remove this function after migrating to the protobuf format
-    TString TSyncerData::Convert(const TVDiskIdShort &selfVDisk,
+    TString TSyncerData::Convert(const TVDiskIdShort &selfVDisk, 
                                 std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
-                                const TString &entryPoint) {
+                                const TString &entryPoint) { 
         if (entryPoint.empty()) {
             return entryPoint;
         } else {

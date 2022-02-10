@@ -14,7 +14,7 @@ enum class EDebugOutput {
     ToCerr,
 };
 
-TString Err2Str(NYql::TAstParseResult& res, EDebugOutput debug = EDebugOutput::None) {
+TString Err2Str(NYql::TAstParseResult& res, EDebugOutput debug = EDebugOutput::None) { 
     TStringStream s;
     res.Issues.PrintTo(s);
 
@@ -27,7 +27,7 @@ TString Err2Str(NYql::TAstParseResult& res, EDebugOutput debug = EDebugOutput::N
 NYql::TAstParseResult SqlToYqlWithMode(const TString& query, NSQLTranslation::ESqlMode mode = NSQLTranslation::ESqlMode::QUERY, size_t maxErrors = 10, const TString& provider = {}, EDebugOutput debug = EDebugOutput::None) {
     google::protobuf::Arena arena;
     const auto service = provider ? provider : TString(NYql::YtProviderName);
-    const TString cluster = "plato";
+    const TString cluster = "plato"; 
     NSQLTranslation::TTranslationSettings settings;
     settings.ClusterMapping[cluster] = service;
     settings.MaxErrors = maxErrors;
@@ -46,17 +46,17 @@ NYql::TAstParseResult SqlToYql(const TString& query, size_t maxErrors = 10, cons
     return SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, maxErrors, provider, debug);
 }
 
-TString GetPrettyPrint(const NYql::TAstParseResult& res) {
+TString GetPrettyPrint(const NYql::TAstParseResult& res) { 
     TStringStream yqlProgram;
     res.Root->PrettyPrintTo(yqlProgram, NYql::TAstPrintFlags::PerLine | NYql::TAstPrintFlags::ShortQuote);
     return yqlProgram.Str();
 }
 
-TString Quote(const char* str) {
+TString Quote(const char* str) { 
     return TStringBuilder() << "'\"" << str << "\"";
 }
 
-class TWordCountHive: public TMap<TString, unsigned> {
+class TWordCountHive: public TMap<TString, unsigned> { 
 public:
     TWordCountHive(std::initializer_list<TString> strings) {
         for (auto& str: strings) {
@@ -65,21 +65,21 @@ public:
     }
 
     TWordCountHive(std::initializer_list<std::pair<const TString, unsigned>> list)
-        : TMap(list)
+        : TMap(list) 
     {
     }
 };
 
-typedef std::function<void (const TString& word, const TString& line)> TVerifyLineFunc;
+typedef std::function<void (const TString& word, const TString& line)> TVerifyLineFunc; 
 
-TString VerifyProgram(const NYql::TAstParseResult& res, TWordCountHive& wordCounter, TVerifyLineFunc verifyLine = TVerifyLineFunc()) {
+TString VerifyProgram(const NYql::TAstParseResult& res, TWordCountHive& wordCounter, TVerifyLineFunc verifyLine = TVerifyLineFunc()) { 
     const auto programm = GetPrettyPrint(res);
-    TVector<TString> yqlProgram;
+    TVector<TString> yqlProgram; 
     Split(programm, "\n", yqlProgram);
     for (const auto& line: yqlProgram) {
         for (auto& counterIter: wordCounter) {
             const auto& word = counterIter.first;
-            if (line.find(word) != TString::npos) {
+            if (line.find(word) != TString::npos) { 
                 ++counterIter.second;
                 if (verifyLine) {
                     verifyLine(word, line);
@@ -167,20 +167,20 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         NYql::TAstParseResult res = SqlToYql("select interested_table.*, LENGTH(value) AS megahelpful_len  from plato.Input as interested_table;");
         UNIT_ASSERT(res.Root);
 
-        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) { 
             if (word == "FlattenMembers") {
                 static ui32 count1 = 0;
                 if (++count1 == 1) {
-                    UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("interested_table."));
+                    UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("interested_table.")); 
                 }
             } else if (word == "AsStruct") {
                 static ui32 count2 = 0;
                 if (++count2 == 2) {
-                    UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("megahelpful_len"));
+                    UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("megahelpful_len")); 
                 }
             }
         };
-        TWordCountHive elementStat = {{TString("FlattenMembers"), 0}, {TString("AsStruct"), 0}};
+        TWordCountHive elementStat = {{TString("FlattenMembers"), 0}, {TString("AsStruct"), 0}}; 
         VerifyProgram(res, elementStat, verifyLine);
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["FlattenMembers"]);
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["AsStruct"]);
@@ -190,20 +190,20 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         NYql::TAstParseResult res = SqlToYql("select LENGTH(value) AS megahelpful_len, interested_table.*  from plato.Input as interested_table;");
         UNIT_ASSERT(res.Root);
 
-        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) { 
             if (word == "FlattenMembers") {
                 static ui32 count1 = 0;
                 if (++count1 == 1) {
-                    UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("interested_table."));
+                    UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("interested_table.")); 
                 }
             } else if (word == "AsStruct") {
                 static ui32 count2 = 0;
                 if (++count2 == 2) {
-                    UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("megahelpful_len"));
+                    UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("megahelpful_len")); 
                 }
             }
         };
-        TWordCountHive elementStat = {{TString("FlattenMembers"), 0}, {TString("AsStruct"), 0}};
+        TWordCountHive elementStat = {{TString("FlattenMembers"), 0}, {TString("AsStruct"), 0}}; 
         VerifyProgram(res, elementStat, verifyLine);
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["FlattenMembers"]);
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["AsStruct"]);
@@ -213,10 +213,10 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         NYql::TAstParseResult res = SqlToYql("select interested_table.key, interested_table.value from plato.Input as interested_table;");
         UNIT_ASSERT(res.Root);
 
-        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
-            const bool fieldKey = TString::npos != line.find(Quote("key"));
-            const bool fieldValue = TString::npos != line.find(Quote("value"));
-            const bool refOnTable = TString::npos != line.find("interested_table.");
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) { 
+            const bool fieldKey = TString::npos != line.find(Quote("key")); 
+            const bool fieldValue = TString::npos != line.find(Quote("value")); 
+            const bool refOnTable = TString::npos != line.find("interested_table."); 
             if (word == "AsStruct") {
                 UNIT_ASSERT(fieldKey || fieldValue);
                 UNIT_ASSERT(!refOnTable);
@@ -224,7 +224,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
                 UNIT_ASSERT(fieldKey && fieldValue && !refOnTable);
             }
         };
-        TWordCountHive elementStat = {{TString("FlattenMembers"), 0}, {TString("AsStruct"), 0}, {TString("Write!"), 0}};
+        TWordCountHive elementStat = {{TString("FlattenMembers"), 0}, {TString("AsStruct"), 0}, {TString("Write!"), 0}}; 
         VerifyProgram(res, elementStat, verifyLine);
         UNIT_ASSERT_VALUES_EQUAL(0, elementStat["FlattenMembers"]);
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["AsStruct"]);
@@ -240,18 +240,18 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         );
         UNIT_ASSERT(res.Root);
 
-        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) { 
             if (word == "SelectMembers") {
-                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("table_aa."));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("table_bb."));
+                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("table_aa.")); 
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("table_bb.")); 
             } else if (word == "AsStruct") {
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("SqlColumn"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(Quote("table_aa")));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(Quote("key")));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(Quote("megakey")));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("SqlColumn")); 
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(Quote("table_aa"))); 
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(Quote("key"))); 
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(Quote("megakey"))); 
             }
         };
-        TWordCountHive elementStat = {{TString("FlattenMembers"), 0}, {TString("SelectMembers"), 0}, {TString("AsStruct"), 0}};
+        TWordCountHive elementStat = {{TString("FlattenMembers"), 0}, {TString("SelectMembers"), 0}, {TString("AsStruct"), 0}}; 
         VerifyProgram(res, elementStat, verifyLine);
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["FlattenMembers"]);
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["SelectMembers"]);
@@ -268,21 +268,21 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         Err2Str(res);
         UNIT_ASSERT(res.Root);
 
-        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) { 
             if (word == "SelectMembers") {
-                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("table_aa."));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("table_bb."));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("table_cc."));
+                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("table_aa.")); 
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("table_bb.")); 
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("table_cc.")); 
             } else if (word == "AsStruct") {
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("SqlColumn"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("SqlColumn")); 
                 const auto posTableAA = line.find(Quote("table_aa"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, posTableAA);
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(Quote("key")));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(Quote("gigakey")));
-                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("table_aa", posTableAA + 3));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, posTableAA); 
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(Quote("key"))); 
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(Quote("gigakey"))); 
+                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("table_aa", posTableAA + 3)); 
             }
         };
-        TWordCountHive elementStat = {{TString("FlattenMembers"), 0}, {TString("SelectMembers"), 0}, {TString("AsStruct"), 0}};
+        TWordCountHive elementStat = {{TString("FlattenMembers"), 0}, {TString("SelectMembers"), 0}, {TString("AsStruct"), 0}}; 
         VerifyProgram(res, elementStat, verifyLine);
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["FlattenMembers"]);
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["SelectMembers"]);
@@ -299,20 +299,20 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         );
         UNIT_ASSERT(res.Root);
 
-        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) { 
             if (word == "AsStruct") {
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("SqlColumn"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("SqlColumn")); 
                 const auto posTableA = line.find(Quote("a"));
                 const auto posTableB = line.find(Quote("b"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, posTableA);
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, posTableB);
-                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find(Quote("a"), posTableA + 1));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(Quote("v")));
-                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find(Quote("b"), posTableB + 1));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(Quote("value")));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, posTableA); 
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, posTableB); 
+                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find(Quote("a"), posTableA + 1)); 
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(Quote("v"))); 
+                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find(Quote("b"), posTableB + 1)); 
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(Quote("value"))); 
             }
         };
-        TWordCountHive elementStat = {{TString("FlattenMembers"), 0}, {TString("AsStruct"), 0}};
+        TWordCountHive elementStat = {{TString("FlattenMembers"), 0}, {TString("AsStruct"), 0}}; 
         VerifyProgram(res, elementStat, verifyLine);
         UNIT_ASSERT_VALUES_EQUAL(0, elementStat["FlattenMembers"]);
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["AsStruct"]);
@@ -322,18 +322,18 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         NYql::TAstParseResult res = SqlToYql("SELECT a.value, b.value FROM plato.Input AS a JOIN plato.Input as b ON a.key == b.key;");
         UNIT_ASSERT(res.Root);
 
-        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) { 
             if (word == "AsStruct") {
-                const bool isValueFromA = TString::npos != line.find(Quote("a.value"));
-                const bool isValueFromB = TString::npos != line.find(Quote("b.value"));
+                const bool isValueFromA = TString::npos != line.find(Quote("a.value")); 
+                const bool isValueFromB = TString::npos != line.find(Quote("b.value")); 
                 UNIT_ASSERT(isValueFromA || isValueFromB);
             } if (word == "Write!") {
-                const bool noDuplicateSourceInA = TString::npos == line.find("a.a.");
-                const bool noDuplicateSourceInB = TString::npos == line.find("b.b.");
+                const bool noDuplicateSourceInA = TString::npos == line.find("a.a."); 
+                const bool noDuplicateSourceInB = TString::npos == line.find("b.b."); 
                 UNIT_ASSERT(noDuplicateSourceInA || noDuplicateSourceInB);
             }
         };
-        TWordCountHive elementStat = {{TString("FlattenMembers"), 0}, {TString("AsStruct"), 0}, {"Write!", 0}};
+        TWordCountHive elementStat = {{TString("FlattenMembers"), 0}, {TString("AsStruct"), 0}, {"Write!", 0}}; 
         VerifyProgram(res, elementStat, verifyLine);
         UNIT_ASSERT_VALUES_EQUAL(0, elementStat["FlattenMembers"]);
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["AsStruct"]);
@@ -373,19 +373,19 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     Y_UNIT_TEST(SelectOrderByLabeledColumn) {
         NYql::TAstParseResult res = SqlToYql("select key as goal from plato.Input order by goal");
         UNIT_ASSERT(res.Root);
-        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) { 
             if (word == "DataSource" && TString::npos == line.find("SQL")) {
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("plato"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("Input"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("plato")); 
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("Input")); 
 
-                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("goal"));
+                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("goal")); 
             } else if (word == "Sort") {
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("goal"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("goal")); 
 
-                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("key"));
+                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("key")); 
             }
         };
-        TWordCountHive elementStat = {{TString("DataSource"), 0}, {TString("Sort"), 0}};
+        TWordCountHive elementStat = {{TString("DataSource"), 0}, {TString("Sort"), 0}}; 
         VerifyProgram(res, elementStat, verifyLine);
         UNIT_ASSERT_VALUES_EQUAL(2, elementStat["DataSource"]);
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Sort"]);
@@ -404,18 +404,18 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     Y_UNIT_TEST(SelectOrderByExpression) {
         NYql::TAstParseResult res = SqlToYql("select * from plato.Input as i order by cast(key as uint32) + cast(subkey as uint32)");
         UNIT_ASSERT(res.Root);
-        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) { 
             if (word == "Sort") {
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("\"+\""));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("key"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("subkey"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("(Bool 'true)"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("\"+\"")); 
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("key")); 
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("subkey")); 
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("(Bool 'true)")); 
 
-                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("i.key"));
-                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("i.subkey"));
+                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("i.key")); 
+                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("i.subkey")); 
             }
         };
-        TWordCountHive elementStat = {{TString("Sort"), 0}};
+        TWordCountHive elementStat = {{TString("Sort"), 0}}; 
         VerifyProgram(res, elementStat, verifyLine);
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Sort"]);
     }
@@ -423,21 +423,21 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     Y_UNIT_TEST(SelectOrderByExpressionDesc) {
         NYql::TAstParseResult res = SqlToYql("select i.*, key, subkey from plato.Input as i order by cast(i.key as uint32) - cast(i.subkey as uint32) desc");
         UNIT_ASSERT(res.Root);
-        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) { 
             if (word == "Sort") {
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("\"-\""));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("\"key\""));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("\"subkey\""));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("(Bool 'false)"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("\"-\"")); 
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("\"key\"")); 
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("\"subkey\"")); 
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("(Bool 'false)")); 
             } else if (word == "Write!") {
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'columns"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("\"key\""));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("\"subkey\""));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("prefix"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("\"i.\""));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'columns")); 
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("\"key\"")); 
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("\"subkey\"")); 
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("prefix")); 
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("\"i.\"")); 
             }
         };
-        TWordCountHive elementStat = {{TString("Sort"), 0}, {TString("Write!"), 0}};
+        TWordCountHive elementStat = {{TString("Sort"), 0}, {TString("Write!"), 0}}; 
         VerifyProgram(res, elementStat, verifyLine);
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Sort"]);
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write!"]);
@@ -446,20 +446,20 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     Y_UNIT_TEST(SelectOrderByExpressionAsc) {
         NYql::TAstParseResult res = SqlToYql("select i.key, i.subkey from plato.Input as i order by cast(key as uint32) % cast(i.subkey as uint32) asc");
         UNIT_ASSERT(res.Root);
-        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) { 
             if (word == "Sort") {
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("\"%\""));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("\"key\""));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("\"subkey\""));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("(Bool 'true)"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("\"%\"")); 
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("\"key\"")); 
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("\"subkey\"")); 
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("(Bool 'true)")); 
             } else if (word == "Write!") {
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'columns"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("\"key\""));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("\"subkey\""));
-                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("i."));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'columns")); 
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("\"key\"")); 
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("\"subkey\"")); 
+                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("i.")); 
             }
         };
-        TWordCountHive elementStat = {{TString("Sort"), 0}, {TString("Write!"), 0}};
+        TWordCountHive elementStat = {{TString("Sort"), 0}, {TString("Write!"), 0}}; 
         VerifyProgram(res, elementStat, verifyLine);
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Sort"]);
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write!"]);
@@ -494,14 +494,14 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         NYql::TAstParseResult res = SqlToYql("USE plato; CREATE TABLE tableName (Key Uint32, Subkey Int64, Value String, PRIMARY KEY (Key, Subkey));");
         UNIT_ASSERT(res.Root);
 
-        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) { 
             if (word == "Write") {
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("\"Key\""));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("\"Subkey\""));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("\"Key\"")); 
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("\"Subkey\"")); 
             }
         };
 
-        TWordCountHive elementStat = {{TString("Write"), 0}, {TString("primarykey"), 0}};
+        TWordCountHive elementStat = {{TString("Write"), 0}, {TString("primarykey"), 0}}; 
         VerifyProgram(res, elementStat, verifyLine);
 
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
@@ -512,13 +512,13 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         NYql::TAstParseResult res = SqlToYql("delete from plato.Input where key = 200;", 10, "kikimr");
         UNIT_ASSERT(res.Root);
 
-        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) { 
             if (word == "Write") {
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("('mode 'delete)"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("('mode 'delete)")); 
             }
         };
 
-        TWordCountHive elementStat = {{TString("Write"), 0}};
+        TWordCountHive elementStat = {{TString("Write"), 0}}; 
         VerifyProgram(res, elementStat, verifyLine);
 
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
@@ -528,13 +528,13 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         NYql::TAstParseResult res = SqlToYql("delete from plato.Input;", 10, "kikimr");
         UNIT_ASSERT(res.Root);
 
-        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) { 
             if (word == "Write") {
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("('mode 'delete)"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("('mode 'delete)")); 
             }
         };
 
-        TWordCountHive elementStat = {{TString("Write"), 0}};
+        TWordCountHive elementStat = {{TString("Write"), 0}}; 
         VerifyProgram(res, elementStat, verifyLine);
 
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
@@ -578,22 +578,22 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         NYql::TAstParseResult res = SqlToYql("update plato.Input set key = 777, value = 'cool' where key = 200;", 10, "kikimr");
         UNIT_ASSERT(res.Root);
 
-        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) { 
             if (word == "Write") {
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("('mode 'update)"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("('mode 'update)")); 
             } else if (word == "AsStruct") {
-                const bool isKey = line.find("key") != TString::npos;
-                const bool isValue = line.find("value") != TString::npos;
+                const bool isKey = line.find("key") != TString::npos; 
+                const bool isValue = line.find("value") != TString::npos; 
                 UNIT_ASSERT(isKey || isValue);
                 if (isKey) {
-                    UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(Quote("777")));
+                    UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(Quote("777"))); 
                 } else if (isValue) {
-                    UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(Quote("cool")));
+                    UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(Quote("cool"))); 
                 }
             }
         };
 
-        TWordCountHive elementStat = {{TString("Write"), 0}, {TString("AsStruct"), 0}};
+        TWordCountHive elementStat = {{TString("Write"), 0}, {TString("AsStruct"), 0}}; 
         VerifyProgram(res, elementStat, verifyLine);
 
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
@@ -604,25 +604,25 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         NYql::TAstParseResult res = SqlToYql("update plato.Input set (key, value, subkey) = ('2','ddd',':') where key = 200;", 10, "kikimr");
         UNIT_ASSERT(res.Root);
 
-        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) { 
             if (word == "Write") {
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("('mode 'update)"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("('mode 'update)")); 
             } else if (word == "AsStruct") {
-                const bool isKey = line.find("key") != TString::npos;
-                const bool isSubkey = line.find("subkey") != TString::npos;
-                const bool isValue = line.find("value") != TString::npos;
+                const bool isKey = line.find("key") != TString::npos; 
+                const bool isSubkey = line.find("subkey") != TString::npos; 
+                const bool isValue = line.find("value") != TString::npos; 
                 UNIT_ASSERT(isKey || isSubkey || isValue);
                 if (isKey && !isSubkey) {
-                    UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(Quote("2")));
+                    UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(Quote("2"))); 
                 } else if (isSubkey) {
-                    UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(Quote(":")));
+                    UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(Quote(":"))); 
                 } else if (isValue) {
-                    UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(Quote("ddd")));
+                    UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(Quote("ddd"))); 
                 }
             }
         };
 
-        TWordCountHive elementStat = {{TString("Write"), 0}, {TString("AsStruct"), 0}};
+        TWordCountHive elementStat = {{TString("Write"), 0}, {TString("AsStruct"), 0}}; 
         VerifyProgram(res, elementStat, verifyLine);
 
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
@@ -659,18 +659,18 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         NYql::TAstParseResult res = SqlToYql("update plato.Input set subkey = subkey + 's';", 10, "kikimr");
         UNIT_ASSERT(res.Root);
 
-        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) { 
             if (word == "Write") {
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("('mode 'update)"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("('mode 'update)")); 
             } else if (word == "AsStruct") {
-                const bool isSubkey = line.find("subkey") != TString::npos;
+                const bool isSubkey = line.find("subkey") != TString::npos; 
                 UNIT_ASSERT(isSubkey);
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(Quote("subkey")));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(Quote("s")));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(Quote("subkey"))); 
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(Quote("s"))); 
             }
         };
 
-        TWordCountHive elementStat = {{TString("Write"), 0}, {TString("AsStruct"), 0}};
+        TWordCountHive elementStat = {{TString("Write"), 0}, {TString("AsStruct"), 0}}; 
         VerifyProgram(res, elementStat, verifyLine);
 
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
@@ -714,7 +714,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         NYql::TAstParseResult res = SqlToYql("SELECT key FROM plato.Input UNION ALL select subkey FROM plato.Input;");
         UNIT_ASSERT(res.Root);
 
-        TWordCountHive elementStat = {{TString("UnionAll"), 0}};
+        TWordCountHive elementStat = {{TString("UnionAll"), 0}}; 
         VerifyProgram(res, elementStat, {});
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["UnionAll"]);
     }
@@ -740,7 +740,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         NYql::TAstParseResult res = SqlToYql("use plato; rollback;", 10, "kikimr");
         UNIT_ASSERT(res.Root);
 
-        TWordCountHive elementStat = {{TString("rollback"), 0}};
+        TWordCountHive elementStat = {{TString("rollback"), 0}}; 
         VerifyProgram(res, elementStat);
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["rollback"]);
     }
@@ -749,7 +749,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         NYql::TAstParseResult res = SqlToYql(R"(pragma file("HW", "sbr:181041334");)");
         UNIT_ASSERT(res.Root);
 
-        TWordCountHive elementStat = {{TString(R"((let world (Configure! world (DataSource '"config") '"AddFileByUrl" '"HW" '"sbr:181041334")))"), 0}};
+        TWordCountHive elementStat = {{TString(R"((let world (Configure! world (DataSource '"config") '"AddFileByUrl" '"HW" '"sbr:181041334")))"), 0}}; 
         VerifyProgram(res, elementStat);
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat.cbegin()->second);
     }

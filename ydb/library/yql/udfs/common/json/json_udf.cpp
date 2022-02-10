@@ -32,7 +32,7 @@ namespace {
             NJson::TJsonParser parser;
             parser.AddField(field, false);
 
-            TVector<TString> result;
+            TVector<TString> result; 
             parser.Parse(json, &result);
 
             TUnboxedValue* items = nullptr;

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 #include <util/generic/strbuf.h>
 
 #include "resource.h"
@@ -19,7 +19,7 @@ namespace NResource {
         virtual void Store(const TStringBuf key, const TStringBuf data) = 0;
         virtual bool FindExact(const TStringBuf key, TString* out) const = 0;
         virtual void FindMatch(const TStringBuf subkey, IMatch& cb) const = 0;
-        virtual size_t Count() const noexcept = 0;
+        virtual size_t Count() const noexcept = 0; 
         virtual TStringBuf KeyByIndex(size_t idx) const = 0;
         virtual ~IStore() {
         }

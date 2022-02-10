@@ -39,7 +39,7 @@ static inline void AppendUtf32ToWide(const ui32* in, size_t len, TUtf16String& o
     }
 }
 
-TStringBuf WideToPunycode(const TWtringBuf& in16, TString& out) {
+TStringBuf WideToPunycode(const TWtringBuf& in16, TString& out) { 
     TVector<ui32> in32;
     AppendWideToUtf32(in16, in32);
     size_t outlen = in32.size();
@@ -57,7 +57,7 @@ TStringBuf WideToPunycode(const TWtringBuf& in16, TString& out) {
     return out;
 }
 
-TWtringBuf PunycodeToWide(const TStringBuf& in, TUtf16String& out16) {
+TWtringBuf PunycodeToWide(const TStringBuf& in, TUtf16String& out16) { 
     size_t outlen = in.size();
     TVector<ui32> out32(outlen);
 
@@ -79,7 +79,7 @@ namespace {
     };
 }
 
-TString HostNameToPunycode(const TWtringBuf& unicodeHost) {
+TString HostNameToPunycode(const TWtringBuf& unicodeHost) { 
     TVector<ui32> in32;
     AppendWideToUtf32(unicodeHost, in32);
     in32.push_back(0);
@@ -91,7 +91,7 @@ TString HostNameToPunycode(const TWtringBuf& unicodeHost) {
     return out.Data;
 }
 
-TUtf16String PunycodeToHostName(const TStringBuf& punycodeHost) {
+TUtf16String PunycodeToHostName(const TStringBuf& punycodeHost) { 
     if (!IsStringASCII(punycodeHost.begin(), punycodeHost.end()))
         ythrow TPunycodeError() << "Non-ASCII punycode input";
 
@@ -105,12 +105,12 @@ TUtf16String PunycodeToHostName(const TStringBuf& punycodeHost) {
     int rc = idna_to_unicode_4z4z(in32.begin(), &out.Data, 0);
     CheckIdnaResult(rc);
 
-    TUtf16String decoded;
+    TUtf16String decoded; 
     AppendUtf32ToWide(out.Data, std::char_traits<ui32>::length(out.Data), decoded);
     return decoded;
 }
 
-TString ForceHostNameToPunycode(const TWtringBuf& unicodeHost) {
+TString ForceHostNameToPunycode(const TWtringBuf& unicodeHost) { 
     try {
         return HostNameToPunycode(unicodeHost);
     } catch (const TPunycodeError&) {
@@ -118,7 +118,7 @@ TString ForceHostNameToPunycode(const TWtringBuf& unicodeHost) {
     }
 }
 
-TUtf16String ForcePunycodeToHostName(const TStringBuf& punycodeHost) {
+TUtf16String ForcePunycodeToHostName(const TStringBuf& punycodeHost) { 
     try {
         return PunycodeToHostName(punycodeHost);
     } catch (const TPunycodeError&) {

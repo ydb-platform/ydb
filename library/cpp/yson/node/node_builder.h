@@ -35,7 +35,7 @@ public:
     void OnNode(TNode node);
 
 private:
-    TStack<TNode*> Stack_;
+    TStack<TNode*> Stack_; 
 
 private:
     inline void AddNode(TNode node, bool pop);

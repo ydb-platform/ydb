@@ -10,7 +10,7 @@ namespace {
     public:
         class TPoolThread: public IThread {
         public:
-            ~TPoolThread() override {
+            ~TPoolThread() override { 
                 if (Thr_) {
                     Thr_->Detach();
                 }
@@ -22,7 +22,7 @@ namespace {
                 Thr_->Start();
             }
 
-            void DoJoin() noexcept override {
+            void DoJoin() noexcept override { 
                 if (!Thr_) {
                     return;
                 }

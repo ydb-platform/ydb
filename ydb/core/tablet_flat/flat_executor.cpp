@@ -802,9 +802,9 @@ void TExecutor::ApplyFollowerUpdate(THolder<TEvTablet::TFUpdateBody> update) {
     if (update->IsSnapshot) // do nothing over snapshot after initial one
         return;
 
-    TString schemeUpdate;
-    TString dataUpdate;
-    TStackVec<TString> partSwitches;
+    TString schemeUpdate; 
+    TString dataUpdate; 
+    TStackVec<TString> partSwitches; 
     TStackVec<TLogoBlob> loanPartInfos;
     TVector<NPageCollection::TMemGlob> annex;
 
@@ -814,7 +814,7 @@ void TExecutor::ApplyFollowerUpdate(THolder<TEvTablet::TFUpdateBody> update) {
     } else {
         for (auto &xpair : update->References) {
             const TLogoBlobID &id = xpair.first;
-            const TString &body = xpair.second;
+            const TString &body = xpair.second; 
 
             const NBoot::TCookie cookie(id.Cookie());
             Y_VERIFY(cookie.Type() == NBoot::TCookie::EType::Log);
@@ -938,7 +938,7 @@ void TExecutor::ApplyFollowerAuxUpdate(const TString &auxBody) {
         if (!collectionInfo)
             continue;
 
-        TVector<NTable::TPageId> pages;
+        TVector<NTable::TPageId> pages; 
 
         for (ui32 pageId : x.GetTouchedPages()) {
             auto* page = collectionInfo->EnsurePage(pageId);
@@ -1706,7 +1706,7 @@ void TExecutor::PostponeTransaction(TAutoPtr<TSeat> seat, TPageCollectionTxEnv &
     for (auto &xpair : env.ToLoad) {
         TPrivatePageCache::TInfo *pageCollectionInfo = xpair.first;
 
-        TVector<NTable::TPageId> pages;
+        TVector<NTable::TPageId> pages; 
         pages.reserve(xpair.second.size());
 
         waitPages += xpair.second.size();
@@ -2457,7 +2457,7 @@ void TExecutor::Handle(NSharedCache::TEvRequest::TPtr &ev) {
     }
 
     TVector<NSharedCache::TEvResult::TLoaded> cached;
-    TVector<NTable::TPageId> left;
+    TVector<NTable::TPageId> left; 
 
     for (auto &x : msg->Pages) {
         if (TSharedPageRef body = PrivatePageCache->LookupShared(x, collectionInfo)) {
@@ -3723,7 +3723,7 @@ void TExecutor::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev) const {
             }
 
             H3() {str << "Scheme:";}
-            TVector<ui32> tables;
+            TVector<ui32> tables; 
             for (const auto &xtable : scheme->Tables)
                 tables.push_back(xtable.first);
             Sort(tables);
@@ -3740,7 +3740,7 @@ void TExecutor::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev) const {
                          }
                     }
                     TABLEBODY() {
-                        TVector<ui32> columns;
+                        TVector<ui32> columns; 
                         for (const auto &xcol : tinfo.Columns)
                             columns.push_back(xcol.first);
                         Sort(columns);

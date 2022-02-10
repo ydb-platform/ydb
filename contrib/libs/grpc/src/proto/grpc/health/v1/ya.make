@@ -7,7 +7,7 @@ LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 OWNER(
     akastornov
     g:contrib
-    g:cpp-contrib
+    g:cpp-contrib 
 )
 
 PROTO_NAMESPACE(

@@ -26,10 +26,10 @@ class TMersenne: public TCommonRNG<T, TMersenne<T>>, public ::NPrivate::TMersenn
 public:
     using TBase = typename ::NPrivate::TMersenneTraits<T>::TImpl;
 
-    inline TMersenne() noexcept {
+    inline TMersenne() noexcept { 
     }
 
-    inline TMersenne(T seed) noexcept
+    inline TMersenne(T seed) noexcept 
         : TBase(seed)
     {
     }
@@ -39,7 +39,7 @@ public:
     {
     }
 
-    inline TMersenne(const T* keys, size_t len) noexcept
+    inline TMersenne(const T* keys, size_t len) noexcept 
         : TBase(keys, len)
     {
     }

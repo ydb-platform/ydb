@@ -14,8 +14,8 @@ public:
     TNodeVisitor(NYson::IYsonConsumer* consumer, bool sortMapKeys = false);
 
     void Visit(const TNode& node);
-    void VisitMap(const TNode::TMapType& nodeMap);
-    void VisitList(const TNode::TListType& nodeMap);
+    void VisitMap(const TNode::TMapType& nodeMap); 
+    void VisitList(const TNode::TListType& nodeMap); 
 
 private:
     NYson::IYsonConsumer* Consumer_;

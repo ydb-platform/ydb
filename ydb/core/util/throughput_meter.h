@@ -9,17 +9,17 @@ namespace NKikimr {
     {
         const ui64 UpdateDivisionFactor;
         const ui64 WindowUpdateTimeoutNs;
-        TVector<std::pair<float, NMonitoring::TDynamicCounters::TCounterPtr>> Counters;
+        TVector<std::pair<float, NMonitoring::TDynamicCounters::TCounterPtr>> Counters; 
 
         ui64 CumTimeNs = 0;
         ui64 CumBytes = 0;
         THPTimer Timer;
         ui64 WindowNs = 0;
-        TVector<ui64> Histogram;
+        TVector<ui64> Histogram; 
 
     public:
         TThroughputMeter(ui64 updateDivisionFactor, const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters,
-                const TString& group, const TString& subgroup, const TString& name, const TVector<float>& thresholds,
+                const TString& group, const TString& subgroup, const TString& name, const TVector<float>& thresholds, 
                 const TDuration& windowUpdateTimeout = TDuration::MilliSeconds(10))
             : UpdateDivisionFactor(updateDivisionFactor)
             , WindowUpdateTimeoutNs(windowUpdateTimeout.NanoSeconds())

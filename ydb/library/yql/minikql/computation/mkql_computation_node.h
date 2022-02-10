@@ -134,7 +134,7 @@ public:
     virtual void PrepareStageOne() = 0;
     virtual void PrepareStageTwo() = 0;
 
-    virtual TString DebugString() const = 0;
+    virtual TString DebugString() const = 0; 
 
     virtual void Ref() = 0;
     virtual void UnRef() = 0;

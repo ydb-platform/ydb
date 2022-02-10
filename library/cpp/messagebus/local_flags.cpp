@@ -6,7 +6,7 @@
 using namespace NBus;
 using namespace NBus::NPrivate;
 
-TString NBus::NPrivate::LocalFlagSetToString(ui32 flags0) {
+TString NBus::NPrivate::LocalFlagSetToString(ui32 flags0) { 
     if (flags0 == 0) {
         return "0";
     }

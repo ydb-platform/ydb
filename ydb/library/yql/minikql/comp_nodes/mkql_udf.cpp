@@ -58,7 +58,7 @@ public:
     TUdfWrapper(
             TComputationMutables& mutables,
             IComputationNode* functionImpl,
-            TString&& functionName,
+            TString&& functionName, 
             IComputationNode* runConfigNode,
             const TCallableType* callableType)
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
@@ -110,7 +110,7 @@ private:
     }
 
     IComputationNode* const FunctionImpl;
-    const TString FunctionName;
+    const TString FunctionName; 
     IComputationNode* const RunConfigNode;
     const TCallableType* const CallableType;
 };

@@ -34,7 +34,7 @@ void TConnectSocketProtocol::ProtocolFunc(
 
 void TConnectSocketProtocol::CheckRetry(
         const TActorContext& ctx,
-        TString explain) noexcept
+        TString explain) noexcept 
 {
     if (++Retries > 5) {
         CatchConnectError(ctx, std::move(explain));

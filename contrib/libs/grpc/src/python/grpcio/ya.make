@@ -4,11 +4,11 @@ LICENSE(Apache-2.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-OWNER(
+OWNER( 
     akastornov
     g:contrib
     g:cpp-contrib
-)
+) 
 
 PEERDIR(
     contrib/libs/grpc/grpc

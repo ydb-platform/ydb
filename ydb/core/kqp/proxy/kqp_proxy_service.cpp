@@ -614,7 +614,7 @@ public:
             LogRequest(request, requestInfo, ev->Sender, requestId, dbCounters);
         }
 
-        TString sessionId = request.GetSessionId();
+        TString sessionId = request.GetSessionId(); 
         PendingRequests.SetSessionId(requestId, sessionId, dbCounters);
         // We add extra milliseconds to the user-specified timeout, so it means we give additional priority for worker replies,
         // because it is much better to give detailed error message rather than generic timeout.

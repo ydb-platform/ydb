@@ -117,7 +117,7 @@ void TTxMediator::DoConfigure(const TEvSubDomain::TEvConfigure &ev, const TActor
         return;
     }
 
-    TVector<TCoordinatorId> coordinators;
+    TVector<TCoordinatorId> coordinators; 
     coordinators.reserve(record.CoordinatorsSize());
 
     for (auto id: record.GetCoordinators()) {
@@ -164,7 +164,7 @@ void TTxMediator::ReplyStep(const TActorId &sender, NKikimrTx::TEvCoordinatorSte
 ui64 TTxMediator::FindProgressCandidate() {
     // in perfect case here could be priority queue, but who cares? (domain coordinators count is bounded and steps are not so frequent).
     ui64 candidate = Max<ui64>();
-    for (TMap<ui64, TCoordinatorInfo>::iterator it = VolatileState.Domain.begin(), end = VolatileState.Domain.end(); it != end; ++it) {
+    for (TMap<ui64, TCoordinatorInfo>::iterator it = VolatileState.Domain.begin(), end = VolatileState.Domain.end(); it != end; ++it) { 
         const TCoordinatorInfo &info = it->second;
         if (info.Queue.empty()) // could not progress w/o info from any domain coordinator
             return Max<ui64>();
@@ -183,7 +183,7 @@ void TTxMediator::Progress(ui64 to, const TActorContext &ctx) {
     TAutoPtr<TMediateStep> mds(new TMediateStep(from, to));
 
     ui64 txCount = 0;
-    for (TMap<ui64, TCoordinatorInfo>::iterator it = VolatileState.Domain.begin(), end = VolatileState.Domain.end(); it != end; ++it) {
+    for (TMap<ui64, TCoordinatorInfo>::iterator it = VolatileState.Domain.begin(), end = VolatileState.Domain.end(); it != end; ++it) { 
         TCoordinatorInfo &info = it->second;
         Y_VERIFY(!info.Queue.empty() && info.Queue.front()->Step >= to);
 
@@ -290,7 +290,7 @@ void TTxMediator::Handle(TEvTxCoordinator::TEvCoordinatorStep::TPtr &ev, const T
     }
 
     // is domain?
-    TMap<ui64, TCoordinatorInfo>::iterator domainIt = VolatileState.Domain.find(coordinator);
+    TMap<ui64, TCoordinatorInfo>::iterator domainIt = VolatileState.Domain.find(coordinator); 
     if (domainIt != VolatileState.Domain.end())
         return ProcessDomainStep(ev->Sender, record, coordinator, domainIt->second, ctx);
 

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 #include <util/generic/typetraits.h>
 #include <util/string/cast.h>
 #include "cast.h"
@@ -96,8 +96,8 @@ inline void AppendJoin(TString& dst, const TStringBuf delim, const TValues&... v
 }
 
 template <typename TFirst, typename... TRest>
-inline TString Join(const TStringBuf delim, const TFirst& f, const TRest&... r) {
-    TString ret = ToString(f);
+inline TString Join(const TStringBuf delim, const TFirst& f, const TRest&... r) { 
+    TString ret = ToString(f); 
     AppendJoin(ret, delim, r...);
     return ret;
 }
@@ -106,7 +106,7 @@ inline TString Join(const TStringBuf delim, const TFirst& f, const TRest&... r) 
 // but any char value @v will be printed as corresponding numeric code.
 // For example, Join('a', 'a', 'a') will print "97a97" (see unit-test).
 template <typename... TValues>
-inline TString Join(char cdelim, const TValues&... v) {
+inline TString Join(char cdelim, const TValues&... v) { 
     return Join(TStringBuf(&cdelim, 1), v...);
 }
 

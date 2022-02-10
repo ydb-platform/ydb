@@ -29,7 +29,7 @@ public:
 
     using TClient::FlatQuery;
 
-    void FlatQuery(const TString& mkql) {
+    void FlatQuery(const TString& mkql) { 
         NKikimrMiniKQL::TResult res;
         TClient::TFlatQueryOptions opts;
         bool success = TClient::FlatQuery(mkql, opts, res);
@@ -337,7 +337,7 @@ void TestLock(const TLocksTestOptions& testOpts) {
         }
     };
 
-    TVector<NMiniKQL::IEngineFlat::TTxLock> txLocks;
+    TVector<NMiniKQL::IEngineFlat::TTxLock> txLocks; 
 
     if (testOpts.NoLocks) {
         ui64 ssId = Max<ui64>();
@@ -487,7 +487,7 @@ void TestLock(const TLocksTestOptions& testOpts) {
         ))
         (return ret_)
     ))___";
-    TString checkUpdated = Sprintf(checkUpdatedT, testOpts.Table, testOpts.UpdateKey);
+    TString checkUpdated = Sprintf(checkUpdatedT, testOpts.Table, testOpts.UpdateKey); 
     cs.Client.FlatQuery(checkUpdated, res);
 
     {
@@ -1135,7 +1135,7 @@ static void MultipleLocks() {
         (return ret_)
     ))___";
     cs.Client.FlatQuery(q1, res);
-    TVector<NMiniKQL::IEngineFlat::TTxLock> locks1;
+    TVector<NMiniKQL::IEngineFlat::TTxLock> locks1; 
     ExtractResultLocks<TLocksVer>(res, locks1);
 
     {
@@ -1167,7 +1167,7 @@ static void MultipleLocks() {
         (return ret_)
     ))___";
     cs.Client.FlatQuery(q2, res);
-    TVector<NMiniKQL::IEngineFlat::TTxLock> locks2;
+    TVector<NMiniKQL::IEngineFlat::TTxLock> locks2; 
     ExtractResultLocks<TLocksVer>(res, locks2);
 
     {
@@ -1188,7 +1188,7 @@ static void MultipleLocks() {
             (SetResult 'lock2 (SelectRow locksTable_ lockKey2_ lockCols_))
         ))
     ))___";
-    TString selectLocks = Sprintf(selectLocksT,
+    TString selectLocks = Sprintf(selectLocksT, 
         TLocksVer::TableName(), TLocksVer::Columns(),
         TLocksVer::Key(locks1[0].LockId, locks1[0].DataShard, locks1[0].SchemeShard, locks1[0].PathId).data(),
         TLocksVer::Key(locks2[0].LockId, locks2[0].DataShard, locks2[0].SchemeShard, locks2[0].PathId).data(),
@@ -1199,11 +1199,11 @@ static void MultipleLocks() {
 
         TValue result = TValue::Create(res.GetValue(), res.GetType());
 
-        TVector<TString> names{"lock0", "lock1", "lock2"};
-        TVector<NMiniKQL::IEngineFlat::TTxLock> outLocks;
-        TSet<ui64> uniqueLockId;
-        TSet<ui64> uniqueShards;
-        TSet<ui64> uniqueCounters;
+        TVector<TString> names{"lock0", "lock1", "lock2"}; 
+        TVector<NMiniKQL::IEngineFlat::TTxLock> outLocks; 
+        TSet<ui64> uniqueLockId; 
+        TSet<ui64> uniqueShards; 
+        TSet<ui64> uniqueCounters; 
         for (const auto& name : names) {
             TValue lock = result[name];
             UNIT_ASSERT(lock.HaveValue());
@@ -1240,8 +1240,8 @@ static void MultipleLocks() {
 
         TValue result = TValue::Create(res.GetValue(), res.GetType());
 
-        TVector<TString> names{"lock0", "lock1", "lock2"};
-        TVector<NMiniKQL::IEngineFlat::TTxLock> outLocks;
+        TVector<TString> names{"lock0", "lock1", "lock2"}; 
+        TVector<NMiniKQL::IEngineFlat::TTxLock> outLocks; 
         for (const auto& name : names) {
             TValue lock = result[name];
             if (lock.HaveValue()) {
@@ -1313,7 +1313,7 @@ static void SetLockNothing() {
     ))___";
     cs.Client.FlatQuery(lockNothing, opts, res);
 
-    TVector<NMiniKQL::IEngineFlat::TTxLock> locks;
+    TVector<NMiniKQL::IEngineFlat::TTxLock> locks; 
     ExtractResultLocks<TLocksVer>(res, locks);
     for (const auto& l : locks) {
         TLocksVer::PrintLock(l);
@@ -1342,7 +1342,7 @@ static void SetEraseSet() {
     ))___";
     cs.Client.FlatQuery(Sprintf(queryT, 0), res);
 
-    TVector<NMiniKQL::IEngineFlat::TTxLock> locks1;
+    TVector<NMiniKQL::IEngineFlat::TTxLock> locks1; 
     ExtractResultLocks<TLocksVer>(res, locks1);
 
     {
@@ -1362,7 +1362,7 @@ static void SetEraseSet() {
         TLocksVer::Key(locks1[0].LockId, locks1[0].DataShard, locks1[0].SchemeShard, locks1[0].PathId).data()), res);
 
     cs.Client.FlatQuery(Sprintf(queryT, locks1[0].LockId), res);
-    TVector<NMiniKQL::IEngineFlat::TTxLock> locks2;
+    TVector<NMiniKQL::IEngineFlat::TTxLock> locks2; 
     ExtractResultLocks<TLocksVer>(res, locks2);
 
     {
@@ -1461,7 +1461,7 @@ static void SetBreakSetEraseBreak() {
     }
 #endif
 
-    TVector<NMiniKQL::IEngineFlat::TTxLock> locks;
+    TVector<NMiniKQL::IEngineFlat::TTxLock> locks; 
     ExtractResultLocks<TLocksVer>(res1, locks);
 
     {
@@ -1674,7 +1674,7 @@ static void PointSetRemove() {
         ))
     ))___";
 
-    TVector<NMiniKQL::IEngineFlat::TTxLock> locks;
+    TVector<NMiniKQL::IEngineFlat::TTxLock> locks; 
     for (ui64 i = 0; i < NUM_LOTS; ++i) {
         cs.Client.FlatQuery(Sprintf(setLock, i*2), res); // 0, 2, 4...
         ExtractResultLocks<TLocksVer>(res, locks);
@@ -1777,7 +1777,7 @@ static void RangeSetRemove() {
         ))
     ))___";
 
-    TVector<NMiniKQL::IEngineFlat::TTxLock> locks;
+    TVector<NMiniKQL::IEngineFlat::TTxLock> locks; 
     for (ui64 i = 0; i < NUM_LOTS; ++i) {
         cs.Client.FlatQuery(Sprintf(setLock, 2*i, 2*i+1), res);
         ExtractResultLocks<TLocksVer>(res, locks);
@@ -1825,7 +1825,7 @@ static void LocksLimit() {
     ))";
 
     Cout << "setting locks... " << Endl;
-    TVector<NMiniKQL::IEngineFlat::TTxLock> locks;
+    TVector<NMiniKQL::IEngineFlat::TTxLock> locks; 
     locks.reserve(limit * 2);
 
     for (ui32 i = 0; i < limit; ++i) {

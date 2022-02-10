@@ -262,7 +262,7 @@ struct TPendingPartSwitch {
 
     TVector<TChangedBundle> Changed;
     TVector<TBundleDelta> Deltas;
-    TVector<TLogoBlobID> Leaving;
+    TVector<TLogoBlobID> Leaving; 
     TVector<TLogoBlobID> LeavingTxStatus;
     TVector<TBundleMove> Moves;
     NTable::TEpoch Head = NTable::TEpoch::Zero();
@@ -374,7 +374,7 @@ class TExecutor
     ui32 ActivateTransactionWaiting = 0;
     ui32 ActivateTransactionInFlight = 0;
 
-    using TWaitingSnaps = THashMap<TTableSnapshotContext *, TIntrusivePtr<TTableSnapshotContext>>;
+    using TWaitingSnaps = THashMap<TTableSnapshotContext *, TIntrusivePtr<TTableSnapshotContext>>; 
 
     const TIntrusivePtr<TIdEmitter> Emitter;
     TAutoPtr<TBroker> Broker;
@@ -431,7 +431,7 @@ class TExecutor
     THolder<TExecutorStatsImpl> Stats;
     bool HasYellowCheckInFly = false;
 
-    TDeque<TPendingPartSwitch> PendingPartSwitches;
+    TDeque<TPendingPartSwitch> PendingPartSwitches; 
     size_t ReadyPartSwitches = 0;
 
     ui64 UsedTabletMemory = 0;
@@ -575,7 +575,7 @@ public:
     void DetachTablet(const TActorContext &ctx) override;
     void Execute(TAutoPtr<ITransaction> transaction, const TActorContext &ctx) override;
 
-    TString BorrowSnapshot(ui32 tableId, const TTableSnapshotContext& snap, TRawVals from, TRawVals to, ui64 loaner) const override;
+    TString BorrowSnapshot(ui32 tableId, const TTableSnapshotContext& snap, TRawVals from, TRawVals to, ui64 loaner) const override; 
 
     ui64 MakeScanSnapshot(ui32 table) override;
     void DropScanSnapshot(ui64 snapId) override;

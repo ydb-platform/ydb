@@ -53,9 +53,9 @@ namespace {
 				return r;
 			}
 
-			TSet<wchar32> ToSet() const
+			TSet<wchar32> ToSet() const 
 			{
-				TSet<wchar32> ret;
+				TSet<wchar32> ret; 
 				for (auto&& bound : m_bounds)
 					for (wchar32 c = bound.first; c <= bound.second; ++c)
 						ret.insert(c);
@@ -63,7 +63,7 @@ namespace {
 			}
 
 		private:
-			TVector<ypair<wchar32, wchar32> > m_bounds;
+			TVector<ypair<wchar32, wchar32> > m_bounds; 
 		};
 
 	public:
@@ -72,7 +72,7 @@ namespace {
 			return (m_classes.find(to_lower(wc & ~ControlMask)) != m_classes.end());
 		}
 
-		TSet<wchar32> Get(wchar32 wc) const
+		TSet<wchar32> Get(wchar32 wc) const 
 		{
 			auto it = m_classes.find(to_lower(wc & ~ControlMask));
 			if (it == m_classes.end())
@@ -102,7 +102,7 @@ namespace {
 			m_classes['t'] = CharClass('\t');
 		}
 
-		TMap<wchar32, CharClass> m_classes;
+		TMap<wchar32, CharClass> m_classes; 
 	};
 
 	class CharClassesImpl: public Feature {

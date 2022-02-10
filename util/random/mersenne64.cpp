@@ -10,7 +10,7 @@
 
 using namespace NPrivate;
 
-void TMersenne64::InitGenRand(ui64 seed) noexcept {
+void TMersenne64::InitGenRand(ui64 seed) noexcept { 
     mt[0] = seed;
 
     for (mti = 1; mti < NN; ++mti) {
@@ -18,7 +18,7 @@ void TMersenne64::InitGenRand(ui64 seed) noexcept {
     }
 }
 
-void TMersenne64::InitByArray(const ui64* init_key, size_t key_length) noexcept {
+void TMersenne64::InitByArray(const ui64* init_key, size_t key_length) noexcept { 
     ui64 i = 1;
     ui64 j = 0;
     ui64 k;
@@ -57,7 +57,7 @@ void TMersenne64::InitByArray(const ui64* init_key, size_t key_length) noexcept 
     mt[0] = ULL(1) << 63;
 }
 
-void TMersenne64::InitNext() noexcept {
+void TMersenne64::InitNext() noexcept { 
     int i;
     ui64 x;
     ui64 mag01[2] = {

@@ -92,10 +92,10 @@ public:
         }
     }
 
-    TIntrusivePtr<NACLib::TUserToken> GetUserToken(const TString& tokenString) {
+    TIntrusivePtr<NACLib::TUserToken> GetUserToken(const TString& tokenString) { 
         // TODO: tokenString -> UID -> (cache) -> tokenObject
         // HACK tokenObject(tokenString) - just for testing purposes
-        TIntrusivePtr<NACLib::TUserToken> tokenObject = new NACLib::TUserToken(tokenString, TVector<NACLib::TSID>());
+        TIntrusivePtr<NACLib::TUserToken> tokenObject = new NACLib::TUserToken(tokenString, TVector<NACLib::TSID>()); 
         return tokenObject;
     }
 };

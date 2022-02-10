@@ -57,7 +57,7 @@ namespace NTable {
          */
         TPinout MakePinout(const TTagsRef tags, ui32 group = Max<ui32>()) const
         {
-            TVector<TPinout::TPin> pins;
+            TVector<TPinout::TPin> pins; 
             TVector<ui32> groups;
 
             if (tags) {
@@ -120,7 +120,7 @@ namespace NTable {
         void FillKeySlots();
         void FillHistoricSlots();
         void InitGroup(TGroupInfo& group);
-        size_t InitInfo(TVector<TColumn>& cols, TPgSize header);
+        size_t InitInfo(TVector<TColumn>& cols, TPgSize header); 
 
     public:
         TVector<TGroupInfo> Groups;

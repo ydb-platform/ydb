@@ -14,8 +14,8 @@ namespace NKikimr {
         typedef ::NKikimr::TOrderedLevelSegments<TKey, TMemRec> TOrderedLevelSegments;
 
 
-        typedef TVector<TLevelSstPtr> TVectorType;
-        TVectorType Vec;
+        typedef TVector<TLevelSstPtr> TVectorType; 
+        TVectorType Vec; 
 
     public:
         TLeveledSsts()

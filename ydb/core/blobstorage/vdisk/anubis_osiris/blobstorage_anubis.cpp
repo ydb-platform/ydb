@@ -92,7 +92,7 @@ namespace NKikimr {
             for (const auto &x : HullCtx->VCtx->Top->GetVDisks()) {
                 if (HullCtx->VCtx->ShortSelfVDisk != x.VDiskIdShort) {
                     // not self
-                    TVector<TLogoBlobID> checkIds;
+                    TVector<TLogoBlobID> checkIds; 
                     // find out candidates belongs to this x.VDiskIdShort
                     checkIds = BlobsStatusMngr.GetLogoBlobIdsToCheck(x.VDiskIdShort);
 
@@ -136,7 +136,7 @@ namespace NKikimr {
 
             // check have we finished
             if (MessagesSentToPeers == 0) {
-                TVector<TLogoBlobID> forRemoval = BlobsStatusMngr.BlobsToRemove();
+                TVector<TLogoBlobID> forRemoval = BlobsStatusMngr.BlobsToRemove(); 
                 if (forRemoval.empty()) {
                     Finish(ctx);
                 } else {
@@ -155,7 +155,7 @@ namespace NKikimr {
                       HFunc(TEvents::TEvPoisonPill, HandlePoison)
                       )
 
-        void RemoveBlobs(const TActorContext &ctx, TVector<TLogoBlobID> &&forRemoval) {
+        void RemoveBlobs(const TActorContext &ctx, TVector<TLogoBlobID> &&forRemoval) { 
             Y_VERIFY(!forRemoval.empty());
 
             Become(&TThis::WaitWriteCompletion);

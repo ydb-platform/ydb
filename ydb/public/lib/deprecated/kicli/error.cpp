@@ -166,7 +166,7 @@ bool TError::Rejected() const {
     return false;
 }
 
-TString TError::GetCode() const {
+TString TError::GetCode() const { 
     switch(Facility) {
     case EFacility::FacilityMessageBus:
         return Sprintf("MB-%04" PRIu16, Code);
@@ -177,10 +177,10 @@ TString TError::GetCode() const {
     case EFacility::FacilityMsgBusProxy:
         return Sprintf("MP-%04" PRIu16, Code);
     }
-    return TString();
+    return TString(); 
 }
 
-TString TError::GetMessage() const {
+TString TError::GetMessage() const { 
     if (!Message.empty())
         return Message;
     switch(Facility) {

@@ -21,7 +21,7 @@ namespace NTxMediator {
         const ui64 HashRange;
 
         TTimeCastBuckets BucketSelector;
-        TVector<TBucket> Buckets;
+        TVector<TBucket> Buckets; 
 
         TBucket& SelectBucket(TTabletId tablet) {
             const ui32 bucketIdx = BucketSelector.Select(tablet);
@@ -30,7 +30,7 @@ namespace NTxMediator {
         }
 
         template<typename TEv>
-        void SendStepToBucket(TTabletId tablet, TStepId step, TVector<TTx> &tx, const TActorContext &ctx) {
+        void SendStepToBucket(TTabletId tablet, TStepId step, TVector<TTx> &tx, const TActorContext &ctx) { 
             TBucket &bucket = SelectBucket(tablet);
             Sort(tx.begin(), tx.end(), TTx::TCmpOrderId());
 
@@ -40,7 +40,7 @@ namespace NTxMediator {
                 for (const auto &x : tx)
                     ss << " txid# " << x.TxId;
                 ss << " marker# M2";
-                return (TString)ss;
+                return (TString)ss; 
             }());
 
             LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_EXEC_QUEUE, "Actor# " << ctx.SelfID.ToString()
@@ -50,7 +50,7 @@ namespace NTxMediator {
                         for (const auto &x : tx)
                             ss << " txid# " << x.TxId;
                         ss << " marker# M3";
-                        return (TString)ss;
+                        return (TString)ss; 
                     }());
             ctx.Send(bucket.ActiveActor, new TEv(step, tablet, tx));
         }
@@ -79,8 +79,8 @@ namespace NTxMediator {
             ui64 activeTablet = Max<ui64>();
             ui64 lookupTablet = Max<ui64>();
 
-            TVector<ui64> readPositions(totalCoordinators, 0);
-            TVector<TTx> currentTx;
+            TVector<ui64> readPositions(totalCoordinators, 0); 
+            TVector<TTx> currentTx; 
 
             do {
                 for (ui64 ci = 0; ci != totalCoordinators; ++ci) {
@@ -131,10 +131,10 @@ namespace NTxMediator {
 
             Sort(step->TabletsToTransaction.begin(), step->TabletsToTransaction.end(), TCoordinatorStep::TabletToTransactionCmp());
 
-            TVector<TTx> currentTx;
+            TVector<TTx> currentTx; 
             TTabletId activeTablet = 0;
 
-            for (TVector<std::pair<TTabletId, std::size_t>>::const_iterator it = step->TabletsToTransaction.begin(), end = step->TabletsToTransaction.end(); it != end; ++it) {
+            for (TVector<std::pair<TTabletId, std::size_t>>::const_iterator it = step->TabletsToTransaction.begin(), end = step->TabletsToTransaction.end(); it != end; ++it) { 
                 if (activeTablet != it->first) {
                     if (activeTablet)
                         SendStepToBucket<TEvTxMediator::TEvOoOTabletStep>(activeTablet, step->Step, currentTx, ctx);

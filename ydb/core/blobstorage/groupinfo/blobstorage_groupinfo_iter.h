@@ -145,7 +145,7 @@ namespace NKikimr {
     };
 
     class TBlobStorageGroupInfo::TFailRealmIterator
-        : public TBlobStorageGroupInfo::TIteratorBase<TVector<TFailRealm>::const_iterator, TRootIteratorBase, TFailRealmIterator>
+        : public TBlobStorageGroupInfo::TIteratorBase<TVector<TFailRealm>::const_iterator, TRootIteratorBase, TFailRealmIterator> 
         , public std::iterator<std::bidirectional_iterator_tag, TFailRealm>
     {
     public:
@@ -181,7 +181,7 @@ namespace NKikimr {
     };
 
     class TBlobStorageGroupInfo::TFailDomainIterator
-        : public TBlobStorageGroupInfo::TIteratorBase<TVector<TFailDomain>::const_iterator, TFailRealmIterator, TFailDomainIterator>
+        : public TBlobStorageGroupInfo::TIteratorBase<TVector<TFailDomain>::const_iterator, TFailRealmIterator, TFailDomainIterator> 
         , public std::iterator<std::bidirectional_iterator_tag, TFailDomain>
     {
     public:
@@ -217,7 +217,7 @@ namespace NKikimr {
     };
 
     class TBlobStorageGroupInfo::TVDiskIterator
-        : public TBlobStorageGroupInfo::TIteratorBase<TVector<TVDiskInfo>::const_iterator, TFailDomainIterator, TVDiskIterator>
+        : public TBlobStorageGroupInfo::TIteratorBase<TVector<TVDiskInfo>::const_iterator, TFailDomainIterator, TVDiskIterator> 
         , public std::iterator<std::bidirectional_iterator_tag, TVDiskInfo>
     {
     public:

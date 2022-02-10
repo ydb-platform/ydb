@@ -26,7 +26,7 @@ namespace NPageCollection {
         const ui64 Cookie = Max<ui64>();
 
         TIntrusiveConstPtr<IPageCollection> PageCollection;
-        TVector<ui32> Pages;
+        TVector<ui32> Pages; 
     };
 
     struct TLoadedPage {

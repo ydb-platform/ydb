@@ -71,29 +71,29 @@ using uint64x2_t = std::array<ui64, 2>;
 using float32x4_t = std::array<float, 4>;
 using float64x2_t = std::array<double, 2>;
 
-template <typename TVectorType>
+template <typename TVectorType> 
 struct TQType {
-    static TVectorType As(__m128i param) {
-        TVectorType value;
+    static TVectorType As(__m128i param) { 
+        TVectorType value; 
         _mm_storeu_si128((__m128i*)&value, param);
         return value;
     }
-    static TVectorType As(__m128 param) {
-        TVectorType value;
+    static TVectorType As(__m128 param) { 
+        TVectorType value; 
         _mm_storeu_ps((float*)&value, param);
         return value;
     }
-    static TVectorType As(__m128d param) {
-        TVectorType value;
+    static TVectorType As(__m128d param) { 
+        TVectorType value; 
         _mm_storeu_pd((double*)&value, param);
         return value;
     }
 };
 #endif
 
-template <typename TVectorType>
+template <typename TVectorType> 
 struct TFuncLoad;
-template <typename TVectorType>
+template <typename TVectorType> 
 struct TFuncStore;
 
 template <>
@@ -394,12 +394,12 @@ public:
 
     template <typename TElem, unsigned elemCount,
               typename TFunc, typename TElemFunc,
-              typename TOp, typename TVectorType = __m128i>
+              typename TOp, typename TVectorType = __m128i> 
     void Test_mm_dualop();
 
     template <typename TElem, unsigned elemCount,
               typename TFunc, typename TElemFunc,
-              typename TOp, typename TVectorType = __m128i>
+              typename TOp, typename TVectorType = __m128i> 
     void Test_mm_dualcmp();
 
     void Test_mm_or_si128();
@@ -421,7 +421,7 @@ public:
     void Test_mm_cmplt_epi32();
 
     template <typename TElem, int elemCount,
-              typename TFunc, typename TOp, typename TVectorType>
+              typename TFunc, typename TOp, typename TVectorType> 
     void Test_mm_setter_epiXX();
     void Test_mm_set1_epi8();
     void Test_mm_set1_epi16();
@@ -1068,7 +1068,7 @@ void TSSEEmulTest::Test_mm_unpackhi_epi64() {
 
 template <typename TElem, unsigned elemCount,
           typename TFunc, typename TElemFunc,
-          typename TOp, typename TVectorType>
+          typename TOp, typename TVectorType> 
 void TSSEEmulTest::Test_mm_dualop() {
     char data1[16] = {
         '\xAA', '\x00', '\xFF', '\xCC', '\x11', '\x22', '\xBB', '\xAA',
@@ -1079,14 +1079,14 @@ void TSSEEmulTest::Test_mm_dualop() {
     TElem* dataw1 = reinterpret_cast<TElem*>(&data1);
     TElem* dataw2 = reinterpret_cast<TElem*>(&data2);
 
-    TVectorType value1 = TFuncLoad<TVectorType>(&data1);
-    TVectorType value2 = TFuncLoad<TVectorType>(&data2);
+    TVectorType value1 = TFuncLoad<TVectorType>(&data1); 
+    TVectorType value2 = TFuncLoad<TVectorType>(&data2); 
 
     TElem procData[elemCount];
     for (unsigned i = 0; i < elemCount; ++i) {
         procData[i] = TElemFunc::Call(dataw1[i], dataw2[i]);
     }
-    TVectorType result = TFunc(value1, value2);
+    TVectorType result = TFunc(value1, value2); 
 
     for (unsigned i = 0; i < elemCount; ++i) {
         UNIT_ASSERT_EQUAL(procData[i], TQType<TOp>::As(result)[i]);
@@ -1097,7 +1097,7 @@ void TSSEEmulTest::Test_mm_dualop() {
    but different data1 and data2 */
 template <typename TElem, unsigned elemCount,
           typename TFunc, typename TElemFunc,
-          typename TOp, typename TVectorType>
+          typename TOp, typename TVectorType> 
 void TSSEEmulTest::Test_mm_dualcmp() {
     char data1[16] = {
         '\xAA', '\x00', '\xFF', '\xCC', '\x11', '\x66', '\x77', '\xAA',
@@ -1108,14 +1108,14 @@ void TSSEEmulTest::Test_mm_dualcmp() {
     TElem* dataw1 = reinterpret_cast<TElem*>(&data1);
     TElem* dataw2 = reinterpret_cast<TElem*>(&data2);
 
-    TVectorType value1 = TFuncLoad<TVectorType>(&data1);
-    TVectorType value2 = TFuncLoad<TVectorType>(&data2);
+    TVectorType value1 = TFuncLoad<TVectorType>(&data1); 
+    TVectorType value2 = TFuncLoad<TVectorType>(&data2); 
 
     TElem procData[elemCount];
     for (unsigned i = 0; i < elemCount; ++i) {
         procData[i] = TElemFunc::Call(dataw1[i], dataw2[i]);
     }
-    TVectorType result = TFunc(value1, value2);
+    TVectorType result = TFunc(value1, value2); 
 
     for (unsigned i = 0; i < elemCount; ++i) {
         /* memcmp is for compare to invalid floats in results */
@@ -1255,7 +1255,7 @@ void TSSEEmulTest::Test_mm_cmplt_epi32() {
 }
 
 template <typename TElem, int elemCount,
-          typename TFunc, typename TOp, typename TVectorType>
+          typename TFunc, typename TOp, typename TVectorType> 
 void TSSEEmulTest::Test_mm_setter_epiXX() {
     char data[64] = {
         '\xAA', '\x00', '\xFF', '\xCC', '\x11', '\x22', '\xBB', '\xAA',
@@ -1269,7 +1269,7 @@ void TSSEEmulTest::Test_mm_setter_epiXX() {
     TElem* dataw = reinterpret_cast<TElem*>(&data);
 
     for (unsigned dataItem = 0; dataItem < elemCount * 4; ++dataItem) {
-        TVectorType value = TFunc(dataw[dataItem]);
+        TVectorType value = TFunc(dataw[dataItem]); 
 
         for (unsigned i = 0; i < elemCount; ++i)
             UNIT_ASSERT_EQUAL(dataw[dataItem], TQType<TOp>::As(value)[i]);

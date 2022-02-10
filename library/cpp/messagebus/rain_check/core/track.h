@@ -31,7 +31,7 @@ namespace NRainCheck {
 
             void SetDone() override;
 
-            TString GetStatusSingleLine();
+            TString GetStatusSingleLine(); 
         };
 
         struct TTaskTrackerStatus {

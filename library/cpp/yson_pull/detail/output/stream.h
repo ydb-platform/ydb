@@ -44,10 +44,10 @@ namespace NYsonPull {
                 }
             };
 
-            class TFHandle: public TOwned<TUnbufferedFileOutput> {
+            class TFHandle: public TOwned<TUnbufferedFileOutput> { 
             public:
                 TFHandle(int fd, size_t buffer_size)
-                    : TOwned<TUnbufferedFileOutput>(buffer_size, Duplicate(fd))
+                    : TOwned<TUnbufferedFileOutput>(buffer_size, Duplicate(fd)) 
                 {
                 }
             };

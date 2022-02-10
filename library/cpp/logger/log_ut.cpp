@@ -7,7 +7,7 @@
 #include <util/system/yield.h>
 #include <util/memory/blob.h>
 #include <util/stream/file.h>
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 #include <util/generic/vector.h>
 
 class TLogTest: public TTestBase {
@@ -56,7 +56,7 @@ void TLogTest::TestFile() {
 
     TBlob data = TBlob::FromFileSingleThreaded(LOGFILE);
 
-    UNIT_ASSERT_EQUAL(TString((const char*)data.Begin(), data.Size()), "some useful data 12, 34, 3.000000, qwqwqw\n");
+    UNIT_ASSERT_EQUAL(TString((const char*)data.Begin(), data.Size()), "some useful data 12, 34, 3.000000, qwqwqw\n"); 
 }
 
 void TLogTest::TestThreaded() {
@@ -75,7 +75,7 @@ void TLogTest::TestThreaded() {
 
     TBlob data = TBlob::FromFileSingleThreaded(LOGFILE);
 
-    UNIT_ASSERT_EQUAL(TString((const char*)data.Begin(), data.Size()), "some useful data 12, 34, 3.000000, qwqwqw\n");
+    UNIT_ASSERT_EQUAL(TString((const char*)data.Begin(), data.Size()), "some useful data 12, 34, 3.000000, qwqwqw\n"); 
 }
 
 void TLogTest::TestThreadedWithOverflow() {
@@ -166,13 +166,13 @@ void TLogTest::TestFormat() {
 
 void TLogTest::TestWrite() {
     TStringStream data;
-    TString test;
+    TString test; 
 
     {
         TLog log(THolder(new TStreamLogBackend(&data)));
 
         for (size_t i = 0; i < 1000; ++i) {
-            TVector<char> buf(i, (char)i);
+            TVector<char> buf(i, (char)i); 
 
             test.append(buf.data(), buf.size());
             log.Write(buf.data(), buf.size());

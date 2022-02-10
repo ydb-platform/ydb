@@ -40,11 +40,11 @@ public:
     bool IsEmpty() const { return Buffer == nullptr; }
     explicit operator bool() const noexcept { return !IsEmpty(); }
 
-    TString ToString() const {
+    TString ToString() const { 
         TStringBuilder builder;
         builder << "(type:" << ValueType;
         if (!IsEmpty()) {
-            builder << ", value:" << TString((const char*)Buffer, BufferSize).Quote();
+            builder << ", value:" << TString((const char*)Buffer, BufferSize).Quote(); 
         }
         builder << ")";
         return std::move(builder);

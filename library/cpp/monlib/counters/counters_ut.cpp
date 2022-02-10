@@ -42,7 +42,7 @@ Y_UNIT_TEST_SUITE(TDeprecatedCountersTest) {
         }
 
         // no duplication in group names
-        TSet<ui32> uniqueIds(ids->begin(), ids->end());
+        TSet<ui32> uniqueIds(ids->begin(), ids->end()); 
         UNIT_ASSERT_EQUAL(ids->size(), uniqueIds.size());
         UNIT_ASSERT_EQUAL(ids->size(), GROUPS_COUNT);
     }

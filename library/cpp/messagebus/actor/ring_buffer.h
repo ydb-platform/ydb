@@ -14,7 +14,7 @@ private:
     ui32 Capacity;
     ui32 WritePos;
     ui32 ReadPos;
-    TVector<T> Data;
+    TVector<T> Data; 
 
     void StateCheck() const {
         Y_ASSERT(Capacity == Data.size());
@@ -39,7 +39,7 @@ private:
         }
         ui32 newCapacity = 1u << newCapacityPow;
         ui32 newCapacityMask = newCapacity - 1u;
-        TVector<T> newData(newCapacity);
+        TVector<T> newData(newCapacity); 
         ui32 oldSize = Size();
         // Copy old elements
         for (size_t i = 0; i < oldSize; ++i) {

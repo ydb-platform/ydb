@@ -10,12 +10,12 @@ class TSimpleCounterTemplate: public TCounterCheckPolicy {
     using TCounterCheckPolicy::Check;
 
 public:
-    inline TSimpleCounterTemplate(long initial = 0) noexcept
+    inline TSimpleCounterTemplate(long initial = 0) noexcept 
         : Counter_(initial)
     {
     }
 
-    inline ~TSimpleCounterTemplate() {
+    inline ~TSimpleCounterTemplate() { 
         Check();
     }
 
@@ -37,7 +37,7 @@ public:
         return Sub(1);
     }
 
-    inline bool TryWeakInc() noexcept {
+    inline bool TryWeakInc() noexcept { 
         if (!Counter_) {
             return false;
         }
@@ -91,18 +91,18 @@ using TExplicitSimpleCounter = TSimpleCounterTemplate<TNoCheckPolicy>;
 
 template <class TCounterCheckPolicy>
 struct TCommonLockOps<TSimpleCounterTemplate<TCounterCheckPolicy>> {
-    static inline void Acquire(TSimpleCounterTemplate<TCounterCheckPolicy>* t) noexcept {
+    static inline void Acquire(TSimpleCounterTemplate<TCounterCheckPolicy>* t) noexcept { 
         t->Inc();
     }
 
-    static inline void Release(TSimpleCounterTemplate<TCounterCheckPolicy>* t) noexcept {
+    static inline void Release(TSimpleCounterTemplate<TCounterCheckPolicy>* t) noexcept { 
         t->Dec();
     }
 };
 
 class TAtomicCounter {
 public:
-    inline TAtomicCounter(long initial = 0) noexcept
+    inline TAtomicCounter(long initial = 0) noexcept 
         : Counter_(initial)
     {
     }
@@ -117,19 +117,19 @@ public:
         return Add(1);
     }
 
-    inline TAtomicBase Sub(TAtomicBase d) noexcept {
+    inline TAtomicBase Sub(TAtomicBase d) noexcept { 
         return AtomicSub(Counter_, d);
     }
 
-    inline TAtomicBase Dec() noexcept {
+    inline TAtomicBase Dec() noexcept { 
         return Sub(1);
     }
 
-    inline TAtomicBase Val() const noexcept {
+    inline TAtomicBase Val() const noexcept { 
         return AtomicGet(Counter_);
     }
 
-    inline bool TryWeakInc() noexcept {
+    inline bool TryWeakInc() noexcept { 
         while (true) {
             intptr_t curValue = Counter_;
 
@@ -152,11 +152,11 @@ private:
 
 template <>
 struct TCommonLockOps<TAtomicCounter> {
-    static inline void Acquire(TAtomicCounter* t) noexcept {
+    static inline void Acquire(TAtomicCounter* t) noexcept { 
         t->Inc();
     }
 
-    static inline void Release(TAtomicCounter* t) noexcept {
+    static inline void Release(TAtomicCounter* t) noexcept { 
         t->Dec();
     }
 };

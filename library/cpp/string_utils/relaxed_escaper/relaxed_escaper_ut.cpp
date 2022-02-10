@@ -31,15 +31,15 @@ Y_UNIT_TEST_SUITE(TRelaxedEscaperTest) {
         for (size_t i = 0; i < Y_ARRAY_SIZE(CommonTestData); i += 2) {
             TString expected(CommonTestData[i].data(), CommonTestData[i].size());
             TString source(CommonTestData[i + 1].data(), CommonTestData[i + 1].size());
-            TString actual(EscapeJ<false>(source));
-            TString actual2(UnescapeC(expected));
+            TString actual(EscapeJ<false>(source)); 
+            TString actual2(UnescapeC(expected)); 
 
             UNIT_ASSERT_VALUES_EQUAL(expected, actual);
             UNIT_ASSERT_VALUES_EQUAL(source, actual2);
         }
 
         UNIT_ASSERT_VALUES_EQUAL("http://ya.ru/\\x17\\n\xAB", EscapeJ<false>("http://ya.ru/\x17\n\xab"));
-        TString s = EscapeJ<false, true>("http://ya.ru/\x17\n\xab\xff");
+        TString s = EscapeJ<false, true>("http://ya.ru/\x17\n\xab\xff"); 
         UNIT_ASSERT_VALUES_EQUAL("http://ya.ru/\\u0017\\n\xAB\\xFF", s);
         UNIT_ASSERT_VALUES_EQUAL("http://ya.ru/\\x17\n\xAB", EscapeJ<false>("http://ya.ru/\x17\n\xab", "\n"));
         UNIT_ASSERT_VALUES_EQUAL("http:\\x2F\\x2Fya.ru\\x2F\\x17\n\xAB'", EscapeJ<false>("http://ya.ru/\x17\n\xab'", "\n'", "/"));

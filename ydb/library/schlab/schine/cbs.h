@@ -28,7 +28,7 @@ public:
 
     static const ui64 InvalidIdx = 65535;
 
-    typedef TList<TIntrusivePtr<TJob>> TJobs;
+    typedef TList<TIntrusivePtr<TJob>> TJobs; 
     TJobs Jobs;
     ui64 JobsSize;
     ui64 JobsCost;

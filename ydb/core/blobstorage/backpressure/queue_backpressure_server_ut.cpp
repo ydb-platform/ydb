@@ -41,7 +41,7 @@ namespace NKikimr {
             qb.Push(5, actorId, TMessageId(0, 0), 1, now);
             qb.Push(5, actorId, TMessageId(0, 1), 1, now);
             auto feedback = qb.Push(5, actorId, TMessageId(0, 1), 1, now);
-            TString res = "{Status# 4 Notify# 1 ActualWindowSize# 2 MaxWindowSize# 20 "
+            TString res = "{Status# 4 Notify# 1 ActualWindowSize# 2 MaxWindowSize# 20 " 
                                 "ExpectedMsgId# [1 2] FailedMsgId# [0 1]}";
             TStringStream str;
             feedback.Output(str);
@@ -144,7 +144,7 @@ namespace NKikimr {
         Y_UNIT_TEST(PerfTrivial) {
             TQueueBackpressure<ui64> qb(true, 100u, 10u);
 
-            TVector<IClientPtr> clients;
+            TVector<IClientPtr> clients; 
             ui32 i = 0;
             for (i = 0; i < 5; i++) {
                 clients.emplace_back(new TTrivialClient(i));
@@ -167,7 +167,7 @@ namespace NKikimr {
                 TStringStream s;
                 s << "{Status# 1 Notify# 0 "
                     << "ActualWindowSize# 1 MaxWindowSize# 20 ExpectedMsgId# [0 500001] FailedMsgId# [0 0]}";
-                TString res = feedback.first.ToString();
+                TString res = feedback.first.ToString(); 
                 STR << res << "\n";
                 UNIT_ASSERT(res == s.Str());
             }
@@ -178,7 +178,7 @@ namespace NKikimr {
 
             TInstant now = Now();
 
-            TVector<IClientPtr> clients;
+            TVector<IClientPtr> clients; 
             clients.emplace_back(new TInFlightClient(0, 30));
             clients.emplace_back(new TInFlightClient(1, 10));
 
@@ -195,7 +195,7 @@ namespace NKikimr {
 
             TStringStream s;
             qb.Output(s, now);
-            TString res = "MaxCost# 100 ActualCost# 38 activeWindows# 2 fadingWindows# 0 "
+            TString res = "MaxCost# 100 ActualCost# 38 activeWindows# 2 fadingWindows# 0 " 
                                 "frozenWindows# 0 deadWindows# 0\n"
                             "GlobalStat: NSuccess# 1000038 NWindowUpdate# 400005 NProcessed# 1000000 "
                                 "NIncorrectMsgId# 0 NHighWatermarkOverflow# 0\n"

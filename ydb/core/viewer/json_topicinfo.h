@@ -18,8 +18,8 @@ class TJsonTopicInfo : public TActorBootstrapped<TJsonTopicInfo> {
     NMon::TEvHttpInfo::TPtr Event;
     NKikimrTabletCountersAggregator::TEvTabletLabeledCountersResponse TopicInfoResult;
     TJsonSettings JsonSettings;
-    TString Topic;
-    TString Client;
+    TString Topic; 
+    TString Client; 
     TString GroupNames;
     bool ShowAll = false;
     ui32 Timeout = 0;
@@ -44,7 +44,7 @@ public:
         GroupNames = params.Get("group_names");
         ShowAll = FromStringWithDefault<bool>(params.Get("all"), false);
         size_t pos = Topic.rfind('/');
-        if (pos != TString::npos)
+        if (pos != TString::npos) 
             Topic = Topic.substr(pos + 1);
         //proxy is not used
         CreateClusterLabeledCountersAggregator(ctx.SelfID, TTabletTypes::PERSQUEUE, ctx);
@@ -94,7 +94,7 @@ public:
 
 template <>
 struct TJsonRequestSchema<TJsonTopicInfo> {
-    static TString GetSchema() {
+    static TString GetSchema() { 
         TStringStream stream;
         TProtoToJson::ProtoToJsonSchema<TEvTabletCounters::TEvTabletLabeledCountersResponse::ProtoRecordType>(stream);
         return stream.Str();
@@ -103,7 +103,7 @@ struct TJsonRequestSchema<TJsonTopicInfo> {
 
 template <>
 struct TJsonRequestParameters<TJsonTopicInfo> {
-    static TString GetParameters() {
+    static TString GetParameters() { 
         return R"___([{"name":"path","in":"query","description":"schema path","required":true,"type":"string"},
                       {"name":"client","in":"query","description":"client name","required":false,"type":"string","default":"total"},
                       {"name":"enums","in":"query","description":"convert enums to strings","required":false,"type":"boolean"},
@@ -115,14 +115,14 @@ struct TJsonRequestParameters<TJsonTopicInfo> {
 
 template <>
 struct TJsonRequestSummary<TJsonTopicInfo> {
-    static TString GetSummary() {
+    static TString GetSummary() { 
         return "\"PQ topic information\"";
     }
 };
 
 template <>
 struct TJsonRequestDescription<TJsonTopicInfo> {
-    static TString GetDescription() {
+    static TString GetDescription() { 
         return "\"Information about PQ topic\"";
     }
 };

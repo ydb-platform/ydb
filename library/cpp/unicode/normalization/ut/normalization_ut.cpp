@@ -8,8 +8,8 @@ Y_UNIT_TEST_SUITE(TUnicodeNormalizationTest) {
     template <NUnicode::ENormalization NormType>
     void TestInit() {
         NUnicode::TNormalizer<NormType> normalizer;
-        TString s("упячка detected");
-        TUtf16String w;
+        TString s("упячка detected"); 
+        TUtf16String w; 
         UTF8ToWide(s, w);
         normalizer.Normalize(w);
     }

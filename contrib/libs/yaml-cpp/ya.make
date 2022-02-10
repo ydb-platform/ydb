@@ -9,12 +9,12 @@ VERSION(0.5.3)
 OWNER(
     g:antiinfra
     g:contrib
-    g:cpp-contrib
+    g:cpp-contrib 
 )
 
 NO_UTIL()
 
-NO_WSHADOW()
+NO_WSHADOW() 
 
 ADDINCL(GLOBAL contrib/libs/yaml-cpp/include)
 

@@ -2,7 +2,7 @@
 
 #include <util/generic/cast.h>
 #include <util/generic/singleton.h>
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 #include <util/generic/xrange.h>
 #include <util/random/fast.h>
 #include <util/string/cast.h>
@@ -15,7 +15,7 @@ namespace {
             WHAT = What,
             WITH = With
         };
-        TString Str;
+        TString Str; 
 
         TNoMatches() {
             for (const auto dummy : xrange(N)) {
@@ -31,7 +31,7 @@ namespace {
             WHAT = What,
             WITH = With
         };
-        TString Str;
+        TString Str; 
 
         TOneMatchInTheBeginning() {
             if (!N) {
@@ -54,7 +54,7 @@ namespace {
             WHAT = What,
             WITH = With
         };
-        TString Str;
+        TString Str; 
 
         TOneMatchInTheEnd() {
             if (!N) {
@@ -77,7 +77,7 @@ namespace {
             WHAT = What,
             WITH = With
         };
-        TString Str;
+        TString Str; 
 
         TOneMatchInTheMiddle() {
             if (!N) {
@@ -100,7 +100,7 @@ namespace {
             WHAT = What,
             WITH = With
         };
-        TString Str;
+        TString Str; 
 
         TFirstHalfMatches() {
             for (size_t i = 0; i < N / 2; ++i) {
@@ -118,7 +118,7 @@ namespace {
             WHAT = What,
             WITH = With
         };
-        TString Str;
+        TString Str; 
 
         TSecondHalfMatches() {
             for (size_t i = 0; i < N / 2; ++i) {
@@ -136,7 +136,7 @@ namespace {
             WHAT = What,
             WITH = With
         };
-        TString Str;
+        TString Str; 
 
         TEveryKth() {
             TFastRng<ui64> prng{N * K * 101};

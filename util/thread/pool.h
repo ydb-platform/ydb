@@ -176,9 +176,9 @@ public:
     bool AddAndOwn(THolder<IObjectInQueue> obj) Y_WARN_UNUSED_RESULT;
     virtual void Start(size_t threadCount, size_t queueSizeLimit = 0) = 0;
     /** Wait for completion of all scheduled objects, and then exit */
-    virtual void Stop() noexcept = 0;
+    virtual void Stop() noexcept = 0; 
     /** Number of tasks currently in queue */
-    virtual size_t Size() const noexcept = 0;
+    virtual size_t Size() const noexcept = 0; 
 
 public:
     /**
@@ -193,7 +193,7 @@ public:
         {
         }
 
-        inline ~TTsr() {
+        inline ~TTsr() { 
             try {
                 Q_->DestroyThreadSpecificResource(Data_);
             } catch (...) {
@@ -201,7 +201,7 @@ public:
             }
         }
 
-        inline operator void*() noexcept {
+        inline operator void*() noexcept { 
             return Data_;
         }
 
@@ -247,10 +247,10 @@ public:
     void Start(size_t, size_t = 0) override {
     }
 
-    void Stop() noexcept override {
+    void Stop() noexcept override { 
     }
 
-    size_t Size() const noexcept override {
+    size_t Size() const noexcept override { 
         return 0;
     }
 };
@@ -275,8 +275,8 @@ public:
       * @param threadCount means "single thread" when = 0
       */
     void Start(size_t threadCount, size_t queueSizeLimit = 0) override;
-    void Stop() noexcept override;
-    size_t Size() const noexcept override;
+    void Stop() noexcept override; 
+    size_t Size() const noexcept override; 
     size_t GetThreadCountExpected() const noexcept;
     size_t GetThreadCountReal() const noexcept;
     size_t GetMaxQueueSize() const noexcept;
@@ -305,8 +305,8 @@ public:
     bool Add(IObjectInQueue* obj) override Y_WARN_UNUSED_RESULT;
     /** @param thrnum, @param maxque are ignored */
     void Start(size_t thrnum = 0, size_t maxque = 0) override;
-    void Stop() noexcept override;
-    size_t Size() const noexcept override;
+    void Stop() noexcept override; 
+    size_t Size() const noexcept override; 
 
 private:
     class TImpl;
@@ -325,8 +325,8 @@ public:
      * SetMaxIdleTime interval parameter. if thrnum is not 0, use non-blocking TThreadPool
      */
     void Start(size_t thrnum, size_t maxque = 0) override;
-    void Stop() noexcept override;
-    size_t Size() const noexcept override;
+    void Stop() noexcept override; 
+    size_t Size() const noexcept override; 
 
 private:
     THolder<IThreadPool> Slave_;
@@ -337,7 +337,7 @@ private:
  * from IThreadPool and implement them using functions with same name from
  * pointer to TSlave.
  */
-template <class TQueueType, class TSlave>
+template <class TQueueType, class TSlave> 
 class TThreadPoolBinder: public TQueueType {
 public:
     inline TThreadPoolBinder(TSlave* slave)

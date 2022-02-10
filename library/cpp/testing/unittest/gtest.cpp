@@ -8,7 +8,7 @@
 using namespace NUnitTest;
 using namespace NUnitTest::NPrivate;
 
-IGTestFactory::~IGTestFactory() {
+IGTestFactory::~IGTestFactory() { 
 }
 
 namespace {
@@ -18,12 +18,12 @@ namespace {
         {
         }
 
-        TString TypeId() const override {
+        TString TypeId() const override { 
             return TypeName(*this) + "-" + MyName;
         }
 
-        TString Name() const noexcept override {
-            return TString(MyName);
+        TString Name() const noexcept override { 
+            return TString(MyName); 
         }
 
         const TStringBuf MyName;
@@ -35,10 +35,10 @@ namespace {
         {
         }
 
-        ~TGTestFactory() override {
+        ~TGTestFactory() override { 
         }
 
-        TString Name() const noexcept override {
+        TString Name() const noexcept override { 
             return Test.Name();
         }
 
@@ -55,7 +55,7 @@ namespace {
 }
 
 IGTestFactory* NUnitTest::NPrivate::ByName(const char* name) {
-    static TMap<TStringBuf, TAutoPtr<TGTestFactory>> tests;
+    static TMap<TStringBuf, TAutoPtr<TGTestFactory>> tests; 
 
     auto& ret = tests[name];
 

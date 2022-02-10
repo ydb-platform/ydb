@@ -248,7 +248,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
     };
 
     struct TVDiskInfo {
-        TVector<TBlobInfo> Blobs;
+        TVector<TBlobInfo> Blobs; 
         TLogoBlobID nextLogoBlobId;
         ui32 LastRequestSize;
         bool IsMoreRequested;
@@ -265,7 +265,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
         {}
     };
 
-    typedef TMap<ui64, TVDiskInfo> TVDiskInfoContainer;
+    typedef TMap<ui64, TVDiskInfo> TVDiskInfoContainer; 
 
     TVDiskInfoContainer VDiskInfo;
 
@@ -619,14 +619,14 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
                         return true;
                     } else if (IsGetBlockDone) {
                         std::unique_ptr<TEvBlobStorage::TEvDiscoverResult> result(
-                            new TEvBlobStorage::TEvDiscoverResult(logoBlobId, MinGeneration, TString(), BlockedGen));
+                            new TEvBlobStorage::TEvDiscoverResult(logoBlobId, MinGeneration, TString(), BlockedGen)); 
                         A_LOG_LOG_S(true, PriorityForStatusOutbound(result->Status), "BSD11", "Die. Result# "
                                 << result->Print(false));
                         SendResult(result);
                         return false;
                     } else {
                         PendingResult.reset(new TEvBlobStorage::TEvDiscoverResult(
-                                    logoBlobId, MinGeneration, TString(), BlockedGen));
+                                    logoBlobId, MinGeneration, TString(), BlockedGen)); 
                         A_LOG_DEBUG_S("BSD12", "Pending result is set, Result# " << PendingResult->ToString());
                         Become(&TThis::StateWait);
                         return false;

@@ -3,7 +3,7 @@
 #include "defs.h"
 #include "blobstorage_synclogformat.h"
 #include <util/generic/buffer.h>
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 #include <util/generic/list.h>
 #include <util/thread/singleton.h>
 #include <library/cpp/blockcodecs/codecs.h>
@@ -42,7 +42,7 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////
         // Codec detector
         ////////////////////////////////////////////////////////////////////////////
-        ECodec FragmentCodecDetector(const TString &data);
+        ECodec FragmentCodecDetector(const TString &data); 
 
         ////////////////////////////////////////////////////////////////////////////
         // Codec headers

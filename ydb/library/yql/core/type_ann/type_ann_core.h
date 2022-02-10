@@ -14,6 +14,6 @@ IGraphTransformer::TStatus ValidateProviders(const TExprNode::TPtr& node, TExprN
 TAutoPtr<IGraphTransformer> CreateIntentDeterminationTransformer(const TTypeAnnotationContext& types);
 TAutoPtr<IGraphTransformer> CreateExtCallableTypeAnnotationTransformer(TTypeAnnotationContext& types, bool instantOnly = false);
 
-const THashSet<TString>& GetBuiltinFunctions();
+const THashSet<TString>& GetBuiltinFunctions(); 
 
 } // namespace NYql

@@ -39,14 +39,14 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
             StatusMustBeIgnoredBody,
         } Status;
 
-        TVector<TLogoBlobID> References;
-        TVector<ui32> DependsOn;
+        TVector<TLogoBlobID> References; 
+        TVector<ui32> DependsOn; 
         bool IsSnapshot;
         bool IsTotalSnapshot;
-        TString EmbeddedLogBody;
+        TString EmbeddedLogBody; 
 
-        TVector<TLogoBlobID> GcDiscovered;
-        TVector<TLogoBlobID> GcLeft;
+        TVector<TLogoBlobID> GcDiscovered; 
+        TVector<TLogoBlobID> GcLeft; 
 
         void BecomeConfirmed() {
             switch (Status) {
@@ -155,7 +155,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
     };
 
     struct TGenerationEntry {
-        TVector<TLogEntry> Body;
+        TVector<TLogEntry> Body; 
         std::pair<ui32, ui32> PrevGeneration; // gen : confirmed-state
         ui32 NextGeneration;
         ui32 Base;
@@ -193,10 +193,10 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
     std::pair<ui32, ui32> Snapshot;
     std::pair<ui32, ui32> Confirmed;
 
-    TMap<ui32, TGenerationEntry> LogInfo;
-    TSet<TLogoBlobID> RefsToCheck;
+    TMap<ui32, TGenerationEntry> LogInfo; 
+    TSet<TLogoBlobID> RefsToCheck; 
     TMap<ui32, TVector<TLogoBlobID>> RefsToCheckByGroup;
-    TSet<TLogoBlobID> RangesToDiscover;
+    TSet<TLogoBlobID> RangesToDiscover; 
 
     ui32 RequestsLeft;
     NMetrics::TTabletThroughputRawValue GroupReadBytes;
@@ -340,7 +340,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
                 sb << LogoBlobIDFromLogoBlobID(t).ToString() << ",";
 
             sb << "] for " << Info->TabletID;
-            return (TString)sb;
+            return (TString)sb; 
         }());
 
         const ui32 step = id.Step();
@@ -450,7 +450,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
             IntrospectionTrace->Attach(MakeHolder<NTracing::TOnApplyDiscoveryRange>(msg->GroupId, msg->From, msg->To));
         }
         Y_VERIFY(RangesToDiscover.erase(msg->To));
-        for (TVector<TEvBlobStorage::TEvRangeResult::TResponse>::iterator it = msg->Responses.begin(), end = msg->Responses.end(); it != end; ++it) {
+        for (TVector<TEvBlobStorage::TEvRangeResult::TResponse>::iterator it = msg->Responses.begin(), end = msg->Responses.end(); it != end; ++it) { 
             const TLogoBlobID &id = it->Id;
 
             GroupReadBytes[std::make_pair(id.Channel(), msg->GroupId)] += it->Buffer.size();
@@ -603,7 +603,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
 
         std::pair<ui32, ui32> invalidLogEntry = std::make_pair(Max<ui32>(), Max<ui32>());
         ui32 lastUnbrokenTailEntry = Confirmed.second;
-        for (TMap<ui32, TGenerationEntry>::iterator gen = LogInfo.begin(), egen = LogInfo.end();;) {
+        for (TMap<ui32, TGenerationEntry>::iterator gen = LogInfo.begin(), egen = LogInfo.end();;) { 
             const ui32 generation = gen->first;
             TGenerationEntry &gx = gen->second;
             const bool isTailGeneration = LatestKnownStep.first == generation && Confirmed.first == generation;
@@ -634,14 +634,14 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
                     case TLogEntry::StatusBody:
                         {
                             bool dependsOk = true;
-                            for (TVector<ui32>::const_iterator it = entry.DependsOn.begin(), end = entry.DependsOn.end(); dependsOk && it != end; ++it) {
+                            for (TVector<ui32>::const_iterator it = entry.DependsOn.begin(), end = entry.DependsOn.end(); dependsOk && it != end; ++it) { 
                                 const ui32 x = *it;
                                 Y_VERIFY(x < step, "depends on future step %" PRIu32 " from %" PRIu32 ":%" PRIu32, x, generation, step);
                                 dependsOk = x < gx.Base || x <= Confirmed.second || gx.Entry(x).Status == TLogEntry::StatusOk || x <= generationSnapshotStep;
                             }
 
                             bool refsOk = true;
-                            for (TVector<TLogoBlobID>::const_iterator it = entry.References.begin(), end = entry.References.end(); refsOk && it != end; ++it) {
+                            for (TVector<TLogoBlobID>::const_iterator it = entry.References.begin(), end = entry.References.end(); refsOk && it != end; ++it) { 
                                 const TLogoBlobID &x = *it;
                                 refsOk = !RefsToCheck.contains(x);
                             }
@@ -675,7 +675,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
                                         sb << "]";
                                     }
 
-                                    return (TString) sb;
+                                    return (TString) sb; 
                                 }());
 
                                 if (entry.EmbeddedLogBody)
@@ -713,7 +713,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
                                 }
                                 sb << "] for " << Info->TabletID;
 
-                                return (TString) sb;
+                                return (TString) sb; 
                             }());
 
                             if (entry.EmbeddedLogBody)
@@ -759,7 +759,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
                 TStringBuilder sb;
                 sb << "TTabletReqRebuildHistoryGraph::BuildHistory - Graph rebuild error - no Log entry for ";
                 sb << Info->TabletID << ":" << invalidLogEntry.first << ":" << invalidLogEntry.second;
-                return (TString)sb;
+                return (TString)sb; 
             }());
             if (IntrospectionTrace) {
                 IntrospectionTrace->Attach(MakeHolder<NTracing::TErrorRebuildGraph>(invalidLogEntry.first, invalidLogEntry.second));

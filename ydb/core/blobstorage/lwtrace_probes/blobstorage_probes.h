@@ -9,7 +9,7 @@ struct TPDiskIdField {
     typedef ui32 TStoreType;
     typedef ui32 TFuncParam;
 
-    static void ToString(ui32 value, TString* out) {
+    static void ToString(ui32 value, TString* out) { 
         *out = Sprintf("%09" PRIu32, value);
     }
     static ui32 ToStoreType(ui32 value) {
@@ -23,7 +23,7 @@ struct TRequestTypeField {
     typedef ui32 TStoreType;
     typedef ui32 TFuncParam;
 
-    static void ToString(ui32 value, TString* out);
+    static void ToString(ui32 value, TString* out); 
     static ui32 ToStoreType(ui32 value) {
         return value;
     }
@@ -129,10 +129,10 @@ struct TEventTypeField {
       TYPES(TPDiskIdField, ui64, double, double, bool, bool, ui64, ui64, NKikimr::NPDisk::TRequestTypeField), \
       NAMES("pdisk", "reqId", "creationTimeSec", "costMs", "isSensitive", "isFast", "owner", "priorityClass", "type")) \
     PROBE(PDiskFairSchedulerPush, GROUPS("PDisk", "PDiskRequest"), \
-      TYPES(TPDiskIdField, ui64, TString, ui64, ui64, NKikimr::NPDisk::TRequestTypeField, ui64, double), \
+      TYPES(TPDiskIdField, ui64, TString, ui64, ui64, NKikimr::NPDisk::TRequestTypeField, ui64, double), \ 
       NAMES("pdisk", "reqId", "queueType", "owner", "priorityClass", "type", "fairQLA", "fairQCA")) \
     PROBE(PDiskFairSchedulerPop, GROUPS("PDisk", "PDiskRequest"), \
-      TYPES(TPDiskIdField, ui64, TString, ui64, ui64, NKikimr::NPDisk::TRequestTypeField, ui64, double, bool), \
+      TYPES(TPDiskIdField, ui64, TString, ui64, ui64, NKikimr::NPDisk::TRequestTypeField, ui64, double, bool), \ 
       NAMES("pdisk", "reqId", "queueType", "owner", "priorityClass", "type", "fairQLD", "fairQCD", "guarantyLost")) \
     PROBE(PDiskInputRequestTimeout, GROUPS("PDisk", "PDiskRequest"), \
       TYPES(TPDiskIdField, ui64, double), \

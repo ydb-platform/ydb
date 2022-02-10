@@ -11,7 +11,7 @@ namespace NKikimr {
 
 class TPDiskWriterTestLoadActor : public TActorBootstrapped<TPDiskWriterTestLoadActor> {
     struct TChunkInfo {
-        TDeque<std::pair<TChunkIdx, ui32>> WriteQueue;
+        TDeque<std::pair<TChunkIdx, ui32>> WriteQueue; 
         ui32 NumSlots;
         ui32 SlotSizeBlocks;
         ui32 Weight;
@@ -90,16 +90,16 @@ class TPDiskWriterTestLoadActor : public TActorBootstrapped<TPDiskWriterTestLoad
     NPDisk::TOwnerRound OwnerRound;
     ui64 PDiskGuid;
     TIntrusivePtr<TPDiskParams> PDiskParams;
-    TVector<TChunkInfo> Chunks;
+    TVector<TChunkInfo> Chunks; 
     TReallyFastRng32 Rng;
     TBuffer DataBuffer;
     ui64 Lsn = 1;
     TChunkInfo *ReservePending = nullptr;
     NKikimrBlobStorage::TEvTestLoadRequest::ELogMode LogMode;
-    THashMap<TChunkIdx, ui32> ChunkUsageCount;
-    TQueue<TChunkIdx> AllocationQueue;
-    TMultiMap<TInstant, TRequestStat> TimeSeries;
-    TVector<TChunkIdx> DeleteChunks;
+    THashMap<TChunkIdx, ui32> ChunkUsageCount; 
+    TQueue<TChunkIdx> AllocationQueue; 
+    TMultiMap<TInstant, TRequestStat> TimeSeries; 
+    TVector<TChunkIdx> DeleteChunks; 
     bool Sequential;
     bool Reuse;
     bool IsWardenlessTest;
@@ -473,7 +473,7 @@ public:
 
     void SendLogRequest(const TActorContext& ctx, ui64 requestIdx, TChunkIdx chunkIdx) {
         RequestInfo[requestIdx].LogStartTime = TAppData::TimeProvider->Now();
-        TString logRecord = "Hello, my dear log! I've just written a chunk!";
+        TString logRecord = "Hello, my dear log! I've just written a chunk!"; 
         NPDisk::TCommitRecord record;
         record.CommitChunks.push_back(chunkIdx);
         record.DeleteChunks.swap(DeleteChunks);
@@ -556,7 +556,7 @@ public:
         TABLED() { str << NAME; } \
         TABLED() { str << VALUE; } \
     }
-        TMap<ui32, TVector<TDuration>> latmap;
+        TMap<ui32, TVector<TDuration>> latmap; 
         for (const auto& pair : TimeSeries) {
             const TRequestStat& stat = pair.second;
             latmap[stat.Size].push_back(stat.Latency);
@@ -604,7 +604,7 @@ public:
 
                     for (auto& pair : latmap) {
                         str << "<br/>";
-                        TVector<TDuration>& latencies = pair.second;
+                        TVector<TDuration>& latencies = pair.second; 
                         std::sort(latencies.begin(), latencies.end());
                         for (double percentile : {0.5, 0.9, 0.95, 0.99, 0.999, 1.0}) {
                             TDuration value = latencies[size_t(percentile * (latencies.size() - 1))];

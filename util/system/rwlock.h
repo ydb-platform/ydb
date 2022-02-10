@@ -8,17 +8,17 @@
 class TRWMutex {
 public:
     TRWMutex();
-    ~TRWMutex();
+    ~TRWMutex(); 
 
-    void AcquireRead() noexcept;
-    bool TryAcquireRead() noexcept;
-    void ReleaseRead() noexcept;
+    void AcquireRead() noexcept; 
+    bool TryAcquireRead() noexcept; 
+    void ReleaseRead() noexcept; 
 
-    void AcquireWrite() noexcept;
-    bool TryAcquireWrite() noexcept;
-    void ReleaseWrite() noexcept;
+    void AcquireWrite() noexcept; 
+    bool TryAcquireWrite() noexcept; 
+    void ReleaseWrite() noexcept; 
 
-    void Release() noexcept;
+    void Release() noexcept; 
 
 private:
     class TImpl;
@@ -27,36 +27,36 @@ private:
 
 template <class T>
 struct TReadGuardOps {
-    static inline void Acquire(T* t) noexcept {
+    static inline void Acquire(T* t) noexcept { 
         t->AcquireRead();
     }
 
-    static inline void Release(T* t) noexcept {
+    static inline void Release(T* t) noexcept { 
         t->ReleaseRead();
     }
 };
 
 template <class T>
 struct TTryReadGuardOps: public TReadGuardOps<T> {
-    static inline bool TryAcquire(T* t) noexcept {
+    static inline bool TryAcquire(T* t) noexcept { 
         return t->TryAcquireRead();
     }
 };
 
 template <class T>
 struct TWriteGuardOps {
-    static inline void Acquire(T* t) noexcept {
+    static inline void Acquire(T* t) noexcept { 
         t->AcquireWrite();
     }
 
-    static inline void Release(T* t) noexcept {
+    static inline void Release(T* t) noexcept { 
         t->ReleaseWrite();
     }
 };
 
 template <class T>
 struct TTryWriteGuardOps: public TWriteGuardOps<T> {
-    static inline bool TryAcquire(T* t) noexcept {
+    static inline bool TryAcquire(T* t) noexcept { 
         return t->TryAcquireWrite();
     }
 };

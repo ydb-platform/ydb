@@ -146,11 +146,11 @@ private:
                 : ConstructorType(2)
             {
             }
-            TConstructorTest(const TString&, const TString&)
+            TConstructorTest(const TString&, const TString&) 
                 : ConstructorType(3)
             {
             }
-            TConstructorTest(TString&&, TString&&)
+            TConstructorTest(TString&&, TString&&) 
                 : ConstructorType(4)
             {
             }
@@ -228,7 +228,7 @@ private:
     void CheckMoveAlloc() {
         TMemoryPool pool(10 * sizeof(T));
 
-        TVector<T, TPoolAllocator> elems(&pool);
+        TVector<T, TPoolAllocator> elems(&pool); 
         elems.reserve(1);
         elems.emplace_back();
         elems.resize(100);

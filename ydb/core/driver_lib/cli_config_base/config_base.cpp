@@ -41,7 +41,7 @@ TCommandConfig::TServerEndpoint TCommandConfig::ParseServerAddress(const TString
     return endpoint;
 }
 
-const TString ArgFormatDescription() {
+const TString ArgFormatDescription() { 
     return R"___(
 Common option formats:
   NUM       - integer number, bounds should be deducted from a command context

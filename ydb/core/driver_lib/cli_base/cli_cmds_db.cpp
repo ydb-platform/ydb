@@ -40,8 +40,8 @@ public:
             "          Or short pathname if profile path is set (e.g. test1/test2).");
     }
 
-    TString Base;
-    TString Name;
+    TString Base; 
+    TString Name; 
 
     virtual void Parse(TConfig& config) override {
         TClientCommand::Parse(config);
@@ -123,7 +123,7 @@ public:
 
     bool ReturnTxId;
 
-    TList<TAutoPtr<NKikimrClient::TSchemeOperation>> Requests;
+    TList<TAutoPtr<NKikimrClient::TSchemeOperation>> Requests; 
 
     virtual void Config(TConfig& config) override {
         TClientCommand::Config(config);
@@ -180,7 +180,7 @@ public:
     {}
 
     TAutoPtr<NKikimrClient::TSchemeDescribe> Request;
-    TString Path;
+    TString Path; 
     bool Tree;
     bool Details;
     bool AccessRights;
@@ -220,7 +220,7 @@ public:
             Request->SetPath(Path);
         } else {
             // treat path as PathId like '72075186232623600/1225'
-            TVector<TString> fields;
+            TVector<TString> fields; 
             Split(Path, "/", fields);
             if (fields.size() != 2) {
                 Cerr << "Invaid path or pathId: " << Path << Endl;
@@ -241,9 +241,9 @@ public:
         Protobuf = Protobuf || PartitionStats || Boundaries;
     }
 
-    void PadString(TString& str, size_t size) {
+    void PadString(TString& str, size_t size) { 
         if (str.size() < size) {
-            str += TString(size - str.size(), ' ');
+            str += TString(size - str.size(), ' '); 
         } else {
             str += ' ';
         }
@@ -251,7 +251,7 @@ public:
 
     void PrintEntry(const NKikimrSchemeOp::TPathDescription& path) {
         const NKikimrSchemeOp::TDirEntry& entry(path.GetSelf());
-        TString type;
+        TString type; 
         switch(entry.GetPathType()) {
         case NKikimrSchemeOp::EPathTypeDir:
             type = "<dir>";
@@ -279,13 +279,13 @@ public:
             break;
         }
 
-        TString id(Sprintf("%lu/%lu", entry.GetSchemeshardId(), entry.GetPathId()));
-        TString name(entry.GetName());
+        TString id(Sprintf("%lu/%lu", entry.GetSchemeshardId(), entry.GetPathId())); 
+        TString name(entry.GetName()); 
         PadString(id, 24);
         PadString(type, 11);
         PadString(name, 26);
-        TString owner;
-        TString acl;
+        TString owner; 
+        TString acl; 
         if (AccessRights) {
             if (entry.HasOwner()) {
                 owner = entry.GetOwner();
@@ -324,12 +324,12 @@ public:
                 Cout << Endl;
                 const auto& keyColumnIds(table.GetKeyColumnIds());
                 for (const NKikimrSchemeOp::TColumnDescription& column : table.GetColumns()) {
-                    TString id(ToString(column.GetId()));
-                    TString type(column.GetType());
-                    TString name(column.GetName());
-                    id = id + TString(szColumns[0] - id.size(), ' ');
-                    type = type + TString(szColumns[1] - type.size(), ' ');
-                    name = name + TString(szColumns[2] - name.size(), ' ');
+                    TString id(ToString(column.GetId())); 
+                    TString type(column.GetType()); 
+                    TString name(column.GetName()); 
+                    id = id + TString(szColumns[0] - id.size(), ' '); 
+                    type = type + TString(szColumns[1] - type.size(), ' '); 
+                    name = name + TString(szColumns[2] - name.size(), ' '); 
                     Cout << id << "│" << type << "│" << name << "│";
                     auto itKey = std::find(keyColumnIds.begin(), keyColumnIds.end(), column.GetId());
                     if (itKey != keyColumnIds.end()) {
@@ -343,7 +343,7 @@ public:
                 const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroup(path.GetPersQueueGroup());
                 for (ui32 pi = 0; pi < pqGroup.PartitionsSize(); ++pi) {
                     const auto& partition = pqGroup.GetPartitions(pi);
-                    TString partitionId = Sprintf("  %6" PRIu32 " ", partition.GetPartitionId());
+                    TString partitionId = Sprintf("  %6" PRIu32 " ", partition.GetPartitionId()); 
                     Cout << partitionId << "│" << partition.GetTabletId() << Endl;
                 }
                 break;
@@ -418,7 +418,7 @@ public:
         //Cout << Path << Endl;
         for (const NKikimrSchemeOp::TPathDescription& entry : entries) {
             if (cnt > 0) {
-                Cout << TString((cnt - 1) * 3, ' ');
+                Cout << TString((cnt - 1) * 3, ' '); 
                 Cout << "└─ ";
             }
             PrintEntry(entry);
@@ -460,7 +460,7 @@ public:
     }
 
     static void PrintEntry(const NKikimrSchemeOp::TDirEntry& entry) {
-        TString type;
+        TString type; 
         switch(entry.GetPathType()) {
         case NKikimrSchemeOp::EPathTypeDir:
             type = "<dir>";
@@ -517,7 +517,7 @@ public:
     {}
 
     TAutoPtr<NKikimrClient::TSchemeInitRoot> Request;
-    TString Root;
+    TString Root; 
     TString DefaultStoragePool;
 
     virtual void Config(TConfig& config) override {
@@ -573,7 +573,7 @@ public:
         config.Opts->AddLongOption('v', "verbose", "Verbose output").NoArgument().SetFlag(&Verbose);
     }
 
-    TString Owner;
+    TString Owner; 
     TString Path;
 
     virtual void Parse(TConfig& config) override {
@@ -668,9 +668,9 @@ public:
         SetFreeArgTitle(1, "<ACCESS>", "ACCESS");
     }
 
-    TString Access;
-    TString Base;
-    TString Name;
+    TString Access; 
+    TString Base; 
+    TString Name; 
 
     virtual void Parse(TConfig& config) override {
         TClientCommand::Parse(config);
@@ -739,9 +739,9 @@ public:
         SetFreeArgTitle(1, "<ACCESS>", "ACCESS");
     }
 
-    TString Access;
-    TString Base;
-    TString Name;
+    TString Access; 
+    TString Base; 
+    TString Name; 
 
     virtual void Parse(TConfig& config) override {
         TClientCommand::Parse(config);
@@ -1284,8 +1284,8 @@ public:
         : TClientCommandConfig("minikql", { "execute", "exec", "mkql" }, "Execute Mini-KQL query")
     {}
 
-    TString MiniKQL;
-    TString Params;
+    TString MiniKQL; 
+    TString Params; 
     bool Proto = false;
 
     virtual void Config(TConfig& config) override {
@@ -1302,7 +1302,7 @@ public:
         if (config.ParseResult->GetFreeArgsPos() > 1) {
             auto paramsArg = config.ParseResult->GetFreeArgs()[1];
             Params = Proto
-                ? TUnbufferedFileInput(paramsArg).ReadAll()
+                ? TUnbufferedFileInput(paramsArg).ReadAll() 
                 : GetMiniKQL(paramsArg);
         }
     }

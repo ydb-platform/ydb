@@ -163,7 +163,7 @@ public:
 
     struct TFailDomain {
         // VDisks composing this fail domain
-        TVector<TVDiskInfo> VDisks;
+        TVector<TVDiskInfo> VDisks; 
 
         // fail domain order number; domains are numbered continuously through all fail realms
         ui32 FailDomainOrderNumber = 0;
@@ -171,14 +171,14 @@ public:
 
     struct TFailRealm {
         // fail domains contained in this fail realm
-        TVector<TFailDomain> FailDomains;
+        TVector<TFailDomain> FailDomains; 
     };
 
     struct TTopology {
         // group type (i.e. erasure)
         const TBlobStorageGroupType GType;
         // fail realms in this group
-        TVector<TFailRealm> FailRealms;
+        TVector<TFailRealm> FailRealms; 
         // total number of fail domains in this group
         ui32 TotalFailDomains = 0;
         // total number of vdisks
@@ -188,7 +188,7 @@ public:
         // quorum checker
         std::unique_ptr<IQuorumChecker> QuorumChecker;
         // map to quickly get (Short)VDisk id from its order number inside the group
-        TVector<TVDiskIdShort> VDiskIdForOrderNumber;
+        TVector<TVDiskIdShort> VDiskIdForOrderNumber; 
 
         TTopology(TBlobStorageGroupType gtype);
         TTopology(TBlobStorageGroupType gtype, ui32 numFailRealms, ui32 numFailDomainsPerFailRealm, ui32 numVDisksPerFailDomain);
@@ -258,7 +258,7 @@ public:
         TVDiskRange GetVDisks() const;
 
         EBlobState BlobState(ui32 effectiveReplicas, ui32 errorDomains) const;
-        TString ToString() const;
+        TString ToString() const; 
 
     private:
         static IBlobToDiskMapper *CreateMapper(TBlobStorageGroupType gtype, const TTopology *topology);
@@ -330,7 +330,7 @@ public:
 
     TVDiskID CreateVDiskID(const TVDiskIdShort &id) const;
 
-    static TString BlobStateToString(EBlobState);
+    static TString BlobStateToString(EBlobState); 
     EBlobState BlobState(ui32 effectiveReplicas, ui32 errorDomains) const;
     void PickSubgroup(ui32 hash, TVDiskIds *outVDisk, TServiceIds *outServiceIds) const;
     bool BelongsToSubgroup(const TVDiskID &vdisk, ui32 hash) const;
@@ -361,7 +361,7 @@ public:
     // get number of VDisks per fail domain
     ui32 GetNumVDisksPerFailDomain() const;
 
-    TString ToString() const;
+    TString ToString() const; 
 
     TFailRealmIterator FailRealmsBegin() const;
     TFailRealmIterator FailRealmsEnd() const;
@@ -434,7 +434,7 @@ private:
 // physical fail domain description
 struct TFailDomain {
     struct TLevelIds {
-        TVector<ui8> Ids;
+        TVector<ui8> Ids; 
 
         TLevelIds();
         bool IsEmpty() const;
@@ -444,12 +444,12 @@ struct TFailDomain {
 
     static constexpr size_t RecordSize = sizeof(ui32) + sizeof(ui8);
 
-    typedef TMap<ui8, ui32> TLevels;
+    typedef TMap<ui8, ui32> TLevels; 
     TLevels Levels;
 
     TFailDomain();
-    TFailDomain(const TString &data);
-    TString SerializeFailDomain() const;
+    TFailDomain(const TString &data); 
+    TString SerializeFailDomain() const; 
     TLevelIds MakeIds() const;
     TLevelIds Intersect(const TLevelIds &id) const;
     bool IsColliding(const TFailDomain &other) const;
@@ -457,7 +457,7 @@ struct TFailDomain {
     bool IsEqual(const TFailDomain &other) const;
     bool IsDifferentAt(const TLevelIds &id, const TFailDomain &other) const;
     bool operator<(const TFailDomain &other) const;
-    TString ToString() const;
+    TString ToString() const; 
     TFailDomain Slice(ui32 level) const;
 };
 

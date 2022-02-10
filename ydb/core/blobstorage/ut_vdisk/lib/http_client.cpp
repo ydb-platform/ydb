@@ -19,7 +19,7 @@ int THttpRequestException::GetStatusCode() const {
 
 //-----------------------------------------------------------------------------------------------------------
 
-THttpClient::THttpClient(const TString& host, ui32 port, TDuration socketTimeout, TDuration connectTimeout)
+THttpClient::THttpClient(const TString& host, ui32 port, TDuration socketTimeout, TDuration connectTimeout) 
     : Host(CutHttpPrefix(host))
     , Port(port)
     , SocketTimeout(socketTimeout)
@@ -31,17 +31,17 @@ THttpClient::THttpClient(const TString& host, ui32 port, TDuration socketTimeout
 THttpClient::~THttpClient() = default;
 
 void THttpClient::SendHttpRequest(const TStringBuf relativeUrl,
-                                  const TString& body,
-                                  const TString& method,
+                                  const TString& body, 
+                                  const TString& method, 
                                   IOutputStream* output,
                                   const THeaders& headers) const
 {
     auto addr = Resolve();
     auto socket = Connect(*addr);
 
-    TVector<IOutputStream::TPart> parts;
+    TVector<IOutputStream::TPart> parts; 
 
-    TString contentLength;
+    TString contentLength; 
     parts.reserve(16);
     parts.push_back(IOutputStream::TPart(method));
     parts.push_back(TStringBuf(" "));
@@ -116,7 +116,7 @@ void THttpClient::ProcessResponse(const TStringBuf relativeUrl, THttpInput& inpu
     }
 
     if (!(statusCode >= 200 && statusCode < 300)) {
-        TString rest = input.ReadAll();
+        TString rest = input.ReadAll(); 
         ythrow THttpRequestException(statusCode) << "Got " << statusCode << " at " << Host << relativeUrl << "\nFull http response:\n" << rest;
     }
 }
@@ -126,7 +126,7 @@ void THttpClient::ReadAndTransferHttp(const TStringBuf relativeUrl, THttpInput& 
     try {
         statusCode = ParseHttpRetCode(input.FirstLine());
     } catch (TFromStringException& e) {
-        TString rest = input.ReadAll();
+        TString rest = input.ReadAll(); 
         ythrow THttpRequestException() << "Failed parse status code in response of " << Host << ": " << e.what() <<
             " (" << input.FirstLine() << ")" << "\nFull http response:\n" << rest;
     }

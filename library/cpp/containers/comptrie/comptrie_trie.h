@@ -41,7 +41,7 @@ public:
 
     typedef std::pair<TKey, TData> TValueType;
     typedef std::pair<size_t, TData> TPhraseMatch;
-    typedef TVector<TPhraseMatch> TPhraseMatchVector;
+    typedef TVector<TPhraseMatch> TPhraseMatchVector; 
 
     typedef TCompactTrieBuilder<T, D, S> TBuilder;
 
@@ -202,7 +202,7 @@ protected:
         bool hasNext;
         return LookupLongestPrefix(key, keylen, prefixLen, valuepos, hasNext);
     }
-    void LookupPhrases(const char* datapos, size_t len, const TSymbol* key, size_t keylen, TVector<TPhraseMatch>& matches, TSymbol separator) const;
+    void LookupPhrases(const char* datapos, size_t len, const TSymbol* key, size_t keylen, TVector<TPhraseMatch>& matches, TSymbol separator) const; 
 };
 
 template <class T = char, class D = ui64, class S = TCompactTriePacker<D>>

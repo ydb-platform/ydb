@@ -49,7 +49,7 @@ private:
             return *l == *r;
         }
     };
-    TStack<std::pair<TMaybe<TIssuePtr>, std::function<TIssuePtr()>>> RawIssues_;
+    TStack<std::pair<TMaybe<TIssuePtr>, std::function<TIssuePtr()>>> RawIssues_; 
     TIssues CompletedIssues_;
     TMaybe<TString> WarningToErrorTreatMessage_;
     TWarningPolicy WarningPolicy_;

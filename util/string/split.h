@@ -9,7 +9,7 @@
 #include <util/generic/iterator_range.h>
 #include <util/generic/store_policy.h>
 #include <util/generic/strbuf.h>
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 #include <util/generic/typetraits.h>
 #include <util/generic/vector.h>
 #include <util/generic/ylimits.h>
@@ -72,7 +72,7 @@ SplitString(I b, const TDelim& d, TConsumer&& c) {
 }
 
 template <class I1, class I2>
-static inline I1* FastStrChr(I1* str, I2 f) noexcept {
+static inline I1* FastStrChr(I1* str, I2 f) noexcept { 
     I1* ret = NStringSplitPrivate::Find(str, f);
 
     if (!ret) {
@@ -83,7 +83,7 @@ static inline I1* FastStrChr(I1* str, I2 f) noexcept {
 }
 
 template <class I>
-static inline I* FastStrStr(I* str, I* f, size_t l) noexcept {
+static inline I* FastStrStr(I* str, I* f, size_t l) noexcept { 
     std::basic_string_view<I> strView(str);
     const auto ret = strView.find(*f);
 
@@ -283,7 +283,7 @@ struct TConsumerBackInserter<T, std::enable_if_t<!NSplitTargetHasPushBack::TClas
 
 template <class T>
 struct TContainerConsumer {
-    inline TContainerConsumer(T* c) noexcept
+    inline TContainerConsumer(T* c) noexcept 
         : C(c)
     {
     }
@@ -300,7 +300,7 @@ struct TContainerConsumer {
 
 template <class T>
 struct TContainerConvertingConsumer {
-    inline TContainerConvertingConsumer(T* c) noexcept
+    inline TContainerConvertingConsumer(T* c) noexcept 
         : C(c)
     {
     }
@@ -317,7 +317,7 @@ struct TContainerConvertingConsumer {
 
 template <class S, class I>
 struct TLimitingConsumer {
-    inline TLimitingConsumer(size_t cnt, S* slave) noexcept
+    inline TLimitingConsumer(size_t cnt, S* slave) noexcept 
         : Cnt(cnt ? cnt - 1 : Max<size_t>())
         , Slave(slave)
         , Last(nullptr)
@@ -343,7 +343,7 @@ struct TLimitingConsumer {
 
 template <class S>
 struct TSkipEmptyTokens {
-    inline TSkipEmptyTokens(S* slave) noexcept
+    inline TSkipEmptyTokens(S* slave) noexcept 
         : Slave(slave)
     {
     }
@@ -362,7 +362,7 @@ struct TSkipEmptyTokens {
 
 template <class S>
 struct TKeepDelimiters {
-    inline TKeepDelimiters(S* slave) noexcept
+    inline TKeepDelimiters(S* slave) noexcept 
         : Slave(slave)
     {
     }
@@ -411,15 +411,15 @@ static inline void Split(char* buf, char ch, T* res) {
 /// Old good slow split function.
 /// Field delimter is any number of symbols specified in delim (no empty strings in res vector)
 /// @return number of elements created
-size_t Split(const char* in, const char* delim, TVector<TString>& res);
-size_t Split(const TString& in, const TString& delim, TVector<TString>& res);
+size_t Split(const char* in, const char* delim, TVector<TString>& res); 
+size_t Split(const TString& in, const TString& delim, TVector<TString>& res); 
 
 /// Old split reimplemented for TStringBuf using the new code
 /// Note that delim can be constructed from char* automatically (it is not cheap though)
-inline size_t Split(const TStringBuf s, const TSetDelimiter<const char>& delim, TVector<TStringBuf>& res) {
+inline size_t Split(const TStringBuf s, const TSetDelimiter<const char>& delim, TVector<TStringBuf>& res) { 
     res.clear();
-    TContainerConsumer<TVector<TStringBuf>> res1(&res);
-    TSkipEmptyTokens<TContainerConsumer<TVector<TStringBuf>>> consumer(&res1);
+    TContainerConsumer<TVector<TStringBuf>> res1(&res); 
+    TSkipEmptyTokens<TContainerConsumer<TVector<TStringBuf>>> consumer(&res1); 
     SplitString(s.data(), s.data() + s.size(), delim, consumer);
     return res.size();
 }

@@ -54,7 +54,7 @@ public:
 template <typename T>
 class TYVectorWriter {
 private:
-    TVector<T> Vector;
+    TVector<T> Vector; 
 
 public:
     TYVectorWriter() = default;
@@ -233,12 +233,12 @@ template <typename TKey, typename TValue>
 class TPlainHashWriter : TPlainHashCommon {
 private:
     typedef TPackedPair<TKey, TValue> TKeyValuePair;
-    typedef TVector<TKeyValuePair> TData;
+    typedef TVector<TKeyValuePair> TData; 
     TData Data;
-    typedef TVector<TData> TData2;
+    typedef TVector<TData> TData2; 
 
     bool IsPlainEnought(ui16 bits) const {
-        TVector<size_t> counts(1LL << bits, 0);
+        TVector<size_t> counts(1LL << bits, 0); 
         for (size_t i = 0; i < Data.size(); ++i) {
             size_t& count = counts[KeyHash<TKey>(TKeyValuePair::GetFirst(&Data[i]), bits)];
             ++count;
@@ -276,7 +276,7 @@ public:
         for (size_t i = 0; i < Data.size(); ++i)
             data2[KeyHash<TKey>(TKeyValuePair::GetFirst(&Data[i]), bits)].push_back(Data[i]);
 
-        typedef TVector<TInterval> TIntervals;
+        typedef TVector<TInterval> TIntervals; 
         TIntervals intervals(nBuckets);
         ui32 offset = 0;
         for (ui32 i = 0; i < nBuckets; ++i) {
@@ -583,7 +583,7 @@ public:
 template <class T, bool isPod>
 class TVectorTakingIntoAccountThePodTypeWriter : TNonCopyable {
 private:
-    typedef TVector<ui64> TOffsets;
+    typedef TVector<ui64> TOffsets; 
     TOffsets Offsets;
     TBuffer Data;
     TBufferOutput DataStream;
@@ -655,12 +655,12 @@ struct TGeneralVectorG<TItem, true> {
 };
 
 template <>
-struct TSaveLoadVectorNonPodElement<TString> {
+struct TSaveLoadVectorNonPodElement<TString> { 
     static inline void Save(IOutputStream* out, const TString& s) {
         out->Write(s.data(), s.size() + 1);
     }
 
-    static inline void Load(TMemoryInput* in, TString& s, size_t elementSize) {
+    static inline void Load(TMemoryInput* in, TString& s, size_t elementSize) { 
         Y_ASSERT(elementSize > 0 && in->Avail() >= elementSize);
         s.assign(in->Buf(), elementSize - 1); /// excluding 0 at the end
     }
@@ -670,5 +670,5 @@ template <bool G>
 struct TStringsVectorG: public TGeneralVectorG<TString, G> {
 };
 
-using TStringsVector = TGeneralVector<TString>;
-using TStringsVectorWriter = TGeneralVectorWriter<TString>;
+using TStringsVector = TGeneralVector<TString>; 
+using TStringsVectorWriter = TGeneralVectorWriter<TString>; 

@@ -36,7 +36,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     void InitResponseBuilder(const ui64 responseCookie, const ui32 count, const ui32 counterId);
     void Handle(TEvPQ::TEvError::TPtr& ev, const TActorContext&);
     void Handle(TEvPQ::TEvProxyResponse::TPtr& ev, const TActorContext&);
-    void FinishResponse(THashMap<ui64, TAutoPtr<TResponseBuilder>>::iterator it);
+    void FinishResponse(THashMap<ui64, TAutoPtr<TResponseBuilder>>::iterator it); 
 
     void Handle(TEvInterconnect::TEvNodeInfo::TPtr& ev, const TActorContext&);
 
@@ -51,7 +51,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
 
     void Handle(TEvPQ::TEvPartitionLabeledCounters::TPtr& ev, const TActorContext&);
     void Handle(TEvPQ::TEvPartitionLabeledCountersDrop::TPtr& ev, const TActorContext&);
-    void AggregateAndSendLabeledCountersFor(const TString& group, const TActorContext&);
+    void AggregateAndSendLabeledCountersFor(const TString& group, const TActorContext&); 
 
     void Handle(TEvPQ::TEvTabletCacheCounters::TPtr& ev, const TActorContext&);
     void SetCacheCounters(TEvPQ::TEvTabletCacheCounters::TCacheCounters& cacheCounters);
@@ -135,16 +135,16 @@ public:
 private:
     bool ConfigInited;
     ui32 PartitionsInited;
-    THashMap<ui32, TPartitionInfo> Partitions;
-    THashMap<TString, TIntrusivePtr<TEvTabletCounters::TInFlightCookie>> CounterEventsInflight;
+    THashMap<ui32, TPartitionInfo> Partitions; 
+    THashMap<TString, TIntrusivePtr<TEvTabletCounters::TInFlightCookie>> CounterEventsInflight; 
 
     TActorId CacheActor;
 
-    TSet<TChangeNotification> ChangeConfigNotification;
+    TSet<TChangeNotification> ChangeConfigNotification; 
     NKikimrPQ::TPQTabletConfig NewConfig;
     bool NewConfigShouldBeApplied;
 
-    TString TopicName;
+    TString TopicName; 
     TString TopicPath;
     bool LocalDC;
     TString DCId;
@@ -152,16 +152,16 @@ private:
     NKikimrPQ::TPQTabletConfig Config;
 
     NKikimrPQ::ETabletState TabletState;
-    TSet<TChangeNotification> TabletStateRequests;
+    TSet<TChangeNotification> TabletStateRequests; 
 
     TAutoPtr<TTabletCountersBase> Counters;
     TEvPQ::TEvTabletCacheCounters::TCacheCounters CacheCounters;
     TMap<TString, NKikimr::NPQ::TMultiCounter> BytesWrittenFromDC;
 
 
-    THashMap<TString, TTabletLabeledCountersBase> LabeledCounters;
+    THashMap<TString, TTabletLabeledCountersBase> LabeledCounters; 
 
-    TVector<TAutoPtr<TEvPersQueue::TEvHasDataInfo>> HasDataRequests;
+    TVector<TAutoPtr<TEvPersQueue::TEvHasDataInfo>> HasDataRequests; 
     TVector<std::pair<TAutoPtr<TEvPersQueue::TEvUpdateConfig>, TActorId> > UpdateConfigRequests;
 
     struct TPipeInfo {
@@ -173,7 +173,7 @@ private:
     THashMap<TActorId, TPipeInfo> PipesInfo;
 
     ui64 NextResponseCookie;
-    THashMap<ui64, TAutoPtr<TResponseBuilder>> ResponseProxy;
+    THashMap<ui64, TAutoPtr<TResponseBuilder>> ResponseProxy; 
 
     NMetrics::TResourceMetrics *ResourceMetrics;
 

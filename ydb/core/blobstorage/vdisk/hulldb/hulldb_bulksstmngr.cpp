@@ -26,9 +26,9 @@ namespace NKikimr {
             TVDiskContextPtr VCtx;
             TPDiskCtxPtr PDiskCtx;
             const TActorId LocalRecoveryActorId;
-            TQueue<TBulkSegmentLoadQueueItem> BulkSegmentLoadQueue;
+            TQueue<TBulkSegmentLoadQueueItem> BulkSegmentLoadQueue; 
             THashMap<TActorId, TBulkSegmentLoadQueueItem> BulkSegmentLoadInFlight;
-            TVector<TLevelSegmentPtr> Segments;
+            TVector<TLevelSegmentPtr> Segments; 
             TActiveActors ActiveActors;
 
         public:
@@ -198,7 +198,7 @@ namespace NKikimr {
         Y_FAIL("bulk-formed SSTable not found");
     }
 
-    void TBulkFormedSstInfoSet::GetOwnedChunks(TSet<TChunkIdx>& chunks) const {
+    void TBulkFormedSstInfoSet::GetOwnedChunks(TSet<TChunkIdx>& chunks) const { 
         for (const TBulkFormedSstInfo& seg : BulkFormedSsts) {
             seg.GetOwnedChunks(chunks);
         }

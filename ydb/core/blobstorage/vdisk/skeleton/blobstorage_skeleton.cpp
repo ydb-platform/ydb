@@ -1542,7 +1542,7 @@ namespace NKikimr {
             for (const TLogoBlobID& id : msg->Phantoms) {
                 LogoBlobIDFromLogoBlobID(id, record.AddLogoBlobs());
             }
-            TString data;
+            TString data; 
             bool res = record.SerializeToString(&data);
             Y_VERIFY(res);
 

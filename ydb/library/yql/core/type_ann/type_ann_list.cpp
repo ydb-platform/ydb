@@ -2043,7 +2043,7 @@ namespace {
             inputStreamsCount = inputStreams->GetSize();
         }
 
-        TVector<const TTypeAnnotationNode*> outputStreamItems;
+        TVector<const TTypeAnnotationNode*> outputStreamItems; 
         for (ui32 i = 2; i < input->ChildrenSize(); i += 2) {
             if (!EnsureTuple(*input->Child(i), ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
@@ -2241,7 +2241,7 @@ namespace {
 
         auto tmpArg1 = ctx.Expr.NewArgument(input->Pos(), "tmp1");
         auto tmpArg2 = ctx.Expr.NewArgument(input->Pos(), "tmp2");
-        THashMap<TStringBuf, std::pair<const TTypeAnnotationNode*, ui32>> members;
+        THashMap<TStringBuf, std::pair<const TTypeAnnotationNode*, ui32>> members; 
         ui32 inputsCount = input->ChildrenSize();
         auto checkStructType = [&members, &ctx, tmpArg1, tmpArg2, inputsCount, pos = input->Pos()](TExprNode& input) -> const TStructExprType* {
             if (!EnsureListType(input, ctx.Expr)) {
@@ -2288,7 +2288,7 @@ namespace {
             return structType;
         };
 
-        TVector<const TStructExprType*> structTypes;
+        TVector<const TStructExprType*> structTypes; 
         for (auto child : input->Children()) {
             auto structType = checkStructType(*child);
             if (!structType) {
@@ -2298,8 +2298,8 @@ namespace {
             structTypes.push_back(structType);
         }
 
-        TVector<const TItemExprType*> resultItems;
-        THashSet<TStringBuf> addedMembers;
+        TVector<const TItemExprType*> resultItems; 
+        THashSet<TStringBuf> addedMembers; 
         auto addResultItems = [&resultItems, &members, &ctx, &addedMembers, inputsCount](const TStructExprType* structType) {
             for (auto item: structType->GetItems()) {
                 const TTypeAnnotationNode* memberType = nullptr;
@@ -3069,7 +3069,7 @@ namespace {
         }
 
         auto& lambdaListHandler = input->ChildRef(4);
-        TTypeAnnotationNode::TListType tupleItems = {
+        TTypeAnnotationNode::TListType tupleItems = { 
             lambdaKeySelector->GetTypeAnn(),
             ctx.Expr.MakeType<TStreamExprType>(itemType)
         };
@@ -3664,7 +3664,7 @@ namespace {
             }
         }
 
-        TTypeAnnotationNode::TListType tupleItems;
+        TTypeAnnotationNode::TListType tupleItems; 
         bool hasEmpty = false;
         for (auto& child : input->Children()) {
             hasEmpty = hasEmpty || child->GetTypeAnn()->GetKind() != ETypeAnnotationKind::List;
@@ -3694,7 +3694,7 @@ namespace {
             }
         }
 
-        TTypeAnnotationNode::TListType tupleItems;
+        TTypeAnnotationNode::TListType tupleItems; 
         for (auto& child : input->Children()) {
             auto itemType = child->GetTypeAnn()->GetKind() == ETypeAnnotationKind::List ?
                 child->GetTypeAnn()->Cast<TListExprType>()->GetItemType() :
@@ -3752,7 +3752,7 @@ namespace {
             }
         }
 
-        TTypeAnnotationNode::TListType tupleItems(2);
+        TTypeAnnotationNode::TListType tupleItems(2); 
         tupleItems[0] = expectedType;
         tupleItems[1] = input->Head().GetTypeAnn()->Cast<TListExprType>()->GetItemType();
         auto retTuple = ctx.Expr.MakeType<TTupleExprType>(tupleItems);
@@ -3988,7 +3988,7 @@ namespace {
         }
 
         const auto structType = inputItemType->Cast<TStructExprType>();
-        TVector<const TItemExprType*> resItems;
+        TVector<const TItemExprType*> resItems; 
         for (auto& x : input->Tail().Children()) {
             YQL_ENSURE(x->IsAtom());
             auto pos = FindOrReportMissingMember(x->Content(), input->Head().Pos(), *structType, ctx);
@@ -4683,7 +4683,7 @@ namespace {
             }
         }
 
-        TVector<const TItemExprType*> items;
+        TVector<const TItemExprType*> items; 
         for (auto& pair : columnTypes) {
             items.push_back(ctx.Expr.MakeType<TItemExprType>(pair.first, pair.second));
         }

@@ -47,7 +47,7 @@ TDurationCounter& TDurationCounter::operator+=(const TDurationCounter& that) {
     return *this;
 }
 
-TString TDurationCounter::ToString() const {
+TString TDurationCounter::ToString() const { 
     if (Count == 0) {
         return "0";
     } else {
@@ -154,7 +154,7 @@ TConnectionStatusMonRecord TRemoteConnectionStatus::GetStatusProtobuf() const {
     return status;
 }
 
-TString TRemoteConnectionStatus::PrintToString() const {
+TString TRemoteConnectionStatus::PrintToString() const { 
     TStringStream ss;
 
     TKeyValuePrinter p;
@@ -231,7 +231,7 @@ TRemoteConnectionStatus::TRemoteConnectionStatus()
 {
 }
 
-TString TSessionDumpStatus::PrintToString() const {
+TString TSessionDumpStatus::PrintToString() const { 
     if (Shutdown) {
         return "shutdown";
     }

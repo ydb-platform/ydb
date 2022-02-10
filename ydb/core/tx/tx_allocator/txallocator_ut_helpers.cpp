@@ -4,7 +4,7 @@ namespace NTxAllocatorUT_Private {
 
 const TDuration TTestEnv::SimTimeOut = TDuration::Seconds(1u);
 
-void CheckExpectedStatus(const TVector<TResultStatus> &expected, TResultStatus result) {
+void CheckExpectedStatus(const TVector<TResultStatus> &expected, TResultStatus result) { 
     bool isExpectedStatus = false;
     for (auto exp : expected) {
         Cerr << "expected " << exp <<'\n';
@@ -15,7 +15,7 @@ void CheckExpectedStatus(const TVector<TResultStatus> &expected, TResultStatus r
 }
 
 void CheckExpectedStatus(TResultStatus expected, TResultStatus result) {
-    const TVector<TResultStatus> temp = {expected};
+    const TVector<TResultStatus> temp = {expected}; 
     CheckExpectedStatus(temp, result);
 }
 
@@ -44,7 +44,7 @@ void AsyncAllocate(NActors::TTestActorRuntime &runtime, ui64 size) {
     runtime.SendToPipe(TTestEnv::TxAllocatorTablet, sender, ev, 0, NKikimr::NTabletPipe::TClientConfig(), TActorId(), SomeCockie(size));
 }
 
-void AllocateAndCheck(NActors::TTestActorRuntime &runtime, ui64 size, const TVector<TResultStatus> &expected) {
+void AllocateAndCheck(NActors::TTestActorRuntime &runtime, ui64 size, const TVector<TResultStatus> &expected) { 
     AsyncAllocate(runtime, size);
     TAnswerWithCookie result = GrabAnswer(runtime);
     NKikimrTx::TEvTxAllocateResult &event = result.first;
@@ -54,7 +54,7 @@ void AllocateAndCheck(NActors::TTestActorRuntime &runtime, ui64 size, const TVec
 }
 
 void AllocateAndCheck(NActors::TTestActorRuntime &runtime, ui64 size, TResultStatus expected) {
-    const TVector<TResultStatus> temp = {expected};
+    const TVector<TResultStatus> temp = {expected}; 
     AllocateAndCheck(runtime, size, temp);
 }
 

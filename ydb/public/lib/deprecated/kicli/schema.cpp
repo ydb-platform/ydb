@@ -4,33 +4,33 @@
 namespace NKikimr {
 namespace NClient {
 
-TColumn::TColumn(const TString& name, const TType& type)
+TColumn::TColumn(const TString& name, const TType& type) 
     : Name(name)
     , Type(type)
     , Key(false)
     , Partitions(0)
 {}
 
-TColumn::TColumn(const TString& name, const TType& type, bool key, ui32 partitions)
+TColumn::TColumn(const TString& name, const TType& type, bool key, ui32 partitions) 
     : Name(name)
     , Type(type)
     , Key(key)
     , Partitions(partitions)
 {}
 
-TKeyColumn::TKeyColumn(const TString& name, const TType& type)
+TKeyColumn::TKeyColumn(const TString& name, const TType& type) 
     : TColumn(name, type, true, 0)
 {}
 
-TKeyColumn::TKeyColumn(const TString& name, const TType& type, ui32 partitions)
+TKeyColumn::TKeyColumn(const TString& name, const TType& type, ui32 partitions) 
     : TColumn(name, type, true, partitions)
 {}
 
-TKeyPartitioningColumn::TKeyPartitioningColumn(const TString& name, const TType& type, ui32 partitions)
+TKeyPartitioningColumn::TKeyPartitioningColumn(const TString& name, const TType& type, ui32 partitions) 
     : TKeyColumn(name, type, partitions)
 {}
 
-TType::TType(const TString& typeName, NScheme::TTypeId typeId)
+TType::TType(const TString& typeName, NScheme::TTypeId typeId) 
     : TypeName(typeName)
     , TypeId(typeId)
 {}
@@ -56,7 +56,7 @@ const TType TType::Json(NScheme::NTypeIds::Json);
 const TType TType::JsonDocument(NScheme::NTypeIds::JsonDocument);
 const TType TType::Timestamp(NScheme::NTypeIds::Timestamp);
 
-const TString& TType::GetName() const {
+const TString& TType::GetName() const { 
     return TypeName;
 }
 
@@ -131,7 +131,7 @@ void TSchemaObject::Drop() {
     ModifySchema(drop);
 }
 
-TSchemaObject TSchemaObject::MakeDirectory(const TString& name) {
+TSchemaObject TSchemaObject::MakeDirectory(const TString& name) { 
     NThreading::TFuture<TResult> future = Kikimr.MakeDirectory(*this, name);
     TResult result = future.GetValue(TDuration::Max());
     result.GetError().Throw();
@@ -142,17 +142,17 @@ TSchemaObject TSchemaObject::MakeDirectory(const TString& name) {
     return TSchemaObject(Kikimr, Path, name, pathId, EPathType::Directory);
 }
 
-TSchemaObject TSchemaObject::CreateTable(const TString& name, const TVector<TColumn>& columns) {
+TSchemaObject TSchemaObject::CreateTable(const TString& name, const TVector<TColumn>& columns) { 
     return DoCreateTable(name, columns, nullptr);
 }
 
-TSchemaObject TSchemaObject::CreateTable(const TString& name, const TVector<TColumn>& columns,
+TSchemaObject TSchemaObject::CreateTable(const TString& name, const TVector<TColumn>& columns, 
                                          const TTablePartitionConfig& partitionConfig)
 {
     return DoCreateTable(name, columns, &partitionConfig);
 }
 
-TSchemaObject TSchemaObject::DoCreateTable(const TString& name, const TVector<TColumn>& columns,
+TSchemaObject TSchemaObject::DoCreateTable(const TString& name, const TVector<TColumn>& columns, 
                                          const TTablePartitionConfig* partitionConfig)
 {
     NThreading::TFuture<TResult> future = Kikimr.CreateTable(*this, name, columns, partitionConfig);
@@ -165,7 +165,7 @@ TSchemaObject TSchemaObject::DoCreateTable(const TString& name, const TVector<TC
     return TSchemaObject(Kikimr, Path, name, pathId, EPathType::Table);
 }
 
-TSchemaObject TSchemaObject::GetChild(const TString& name) const {
+TSchemaObject TSchemaObject::GetChild(const TString& name) const { 
     auto children = GetChildren();
     auto child = FindIf(children.begin(), children.end(), [&](const TSchemaObject& c) { return c.GetName() == name; });
     if (child == children.end()) {
@@ -211,12 +211,12 @@ static TSchemaObject::EPathType GetType(const NKikimrSchemeOp::TDirEntry& entry)
     return TSchemaObject::EPathType::Unknown;
 }
 
-TVector<TSchemaObject> TSchemaObject::GetChildren() const {
+TVector<TSchemaObject> TSchemaObject::GetChildren() const { 
     NThreading::TFuture<TResult> future = Kikimr.DescribeObject(*this);
     TResult result = future.GetValue(TDuration::Max());
     result.GetError().Throw();
     const NKikimrClient::TResponse& objects = result.GetResult<NKikimrClient::TResponse>();
-    TVector<TSchemaObject> children;
+    TVector<TSchemaObject> children; 
     children.reserve(objects.GetPathDescription().ChildrenSize());
     for (const auto& child : objects.GetPathDescription().GetChildren()) {
         children.push_back(TSchemaObject(Kikimr, Path, child.GetName(), child.GetPathId(), GetType(child)));
@@ -224,7 +224,7 @@ TVector<TSchemaObject> TSchemaObject::GetChildren() const {
     return children;
 }
 
-TVector<TColumn> TSchemaObject::GetColumns() const {
+TVector<TColumn> TSchemaObject::GetColumns() const { 
     NThreading::TFuture<TResult> future = Kikimr.DescribeObject(*this);
     TResult result = future.GetValue(TDuration::Max());
     result.GetError().Throw();
@@ -237,7 +237,7 @@ TVector<TColumn> TSchemaObject::GetColumns() const {
         columnsMap[column.GetId()] = column;
     }
 
-    TVector<TColumn> columns;
+    TVector<TColumn> columns; 
     columns.reserve(table.ColumnsSize());
     for (ui32 keyColumnId : table.GetKeyColumnIds()) {
         auto column = columnsMap.FindPtr(keyColumnId);
@@ -264,11 +264,11 @@ TSchemaObjectStats TSchemaObject::GetStats() const {
     return stats;
 }
 
-TString TSchemaObject::GetPath() const {
+TString TSchemaObject::GetPath() const { 
     return Path;
 }
 
-TString TSchemaObject::GetName() const {
+TString TSchemaObject::GetName() const { 
     return Name;
 }
 

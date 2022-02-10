@@ -18,7 +18,7 @@ public:
     void Handle(TEvTablet::TEvTabletDead::TPtr&, const TActorContext &) {
     }
 
-    virtual NBus::TBusMessage* CreateErrorReply(EResponseStatus, const TActorContext&, const TString& text = TString()) override {
+    virtual NBus::TBusMessage* CreateErrorReply(EResponseStatus, const TActorContext&, const TString& text = TString()) override { 
         return new TBusResponseStatus(MSTATUS_OK, text);
     }
 };

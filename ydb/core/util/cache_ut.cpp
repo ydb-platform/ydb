@@ -25,8 +25,8 @@ ui64 TDtorTracer::InstanceCount = 0;
 
 Y_UNIT_TEST_SUITE(TCacheTest) {
     Y_UNIT_TEST(TestUnboundedMapCache) {
-        TUnboundedCacheOnMap<ui32, TString> cache;
-        TString* tmp;
+        TUnboundedCacheOnMap<ui32, TString> cache; 
+        TString* tmp; 
         UNIT_ASSERT_EQUAL(cache.GetCount(), 0);
         UNIT_ASSERT(!cache.Find(1, tmp));
         UNIT_ASSERT(!cache.FindWithoutPromote(1, tmp));
@@ -79,10 +79,10 @@ Y_UNIT_TEST_SUITE(TCacheTest) {
     }
 
     Y_UNIT_TEST(TestSizeBasedOverflowCallback) {
-        TUnboundedCacheOnMap<ui32, TString> cache;
-        TSizeBasedOverflowCallback<ui32, TString> overflowCallback(2);
-        cache.SetOverflowCallback([&](const ICache<ui32, TString>& cache) { return overflowCallback(cache); });
-        TString* tmp;
+        TUnboundedCacheOnMap<ui32, TString> cache; 
+        TSizeBasedOverflowCallback<ui32, TString> overflowCallback(2); 
+        cache.SetOverflowCallback([&](const ICache<ui32, TString>& cache) { return overflowCallback(cache); }); 
+        TString* tmp; 
         cache.Insert(1, "a", tmp);
         UNIT_ASSERT(!cache.IsOverflow());
         cache.Insert(2, "b", tmp);
@@ -96,10 +96,10 @@ Y_UNIT_TEST_SUITE(TCacheTest) {
     }
 
     Y_UNIT_TEST(TestLruCache) {
-        TLruCache<ui32, TString> cache;
-        TString* tmp;
-        TSizeBasedOverflowCallback<ui32, TString> overflowCallback(2);
-        cache.SetOverflowCallback([&](const ICache<ui32, TString>& cache) { return overflowCallback(cache); });
+        TLruCache<ui32, TString> cache; 
+        TString* tmp; 
+        TSizeBasedOverflowCallback<ui32, TString> overflowCallback(2); 
+        cache.SetOverflowCallback([&](const ICache<ui32, TString>& cache) { return overflowCallback(cache); }); 
         UNIT_ASSERT(cache.Insert(1, "a", tmp));
         UNIT_ASSERT(cache.Insert(2, "b", tmp));
         UNIT_ASSERT_EQUAL(cache.GetUsedSize(), 2);
@@ -146,9 +146,9 @@ Y_UNIT_TEST_SUITE(TCacheTest) {
 
     Y_UNIT_TEST(Test2QCache) {
         TIntrusivePtr<T2QCacheConfig> config(new T2QCacheConfig);
-        T2QCache<ui32, TString> cache(config);
-        TString lastEvicted;
-        cache.SetEvictionCallback([&](const ui32& key, TString& value, ui64 size){
+        T2QCache<ui32, TString> cache(config); 
+        TString lastEvicted; 
+        cache.SetEvictionCallback([&](const ui32& key, TString& value, ui64 size){ 
             Y_UNUSED(key);
             Y_UNUSED(size);
             lastEvicted = value;
@@ -159,9 +159,9 @@ Y_UNIT_TEST_SUITE(TCacheTest) {
             lastEvictedKey = key;
         });
 
-        TString* tmp;
-        TSizeBasedOverflowCallback<ui32, TString> overflowCallback(4);
-        cache.SetOverflowCallback([&](const ICache<ui32, TString>& cache) { return overflowCallback(cache); });
+        TString* tmp; 
+        TSizeBasedOverflowCallback<ui32, TString> overflowCallback(4); 
+        cache.SetOverflowCallback([&](const ICache<ui32, TString>& cache) { return overflowCallback(cache); }); 
         UNIT_ASSERT(cache.Insert(1, "a", tmp));
         UNIT_ASSERT(!cache.Insert(1, "a", tmp));
         UNIT_ASSERT(cache.Insert(2, "b", tmp));
@@ -251,12 +251,12 @@ Y_UNIT_TEST_SUITE(TCacheTest) {
     }
 
     Y_UNIT_TEST(TestUpdateItemSize) {
-        TUnboundedCacheOnMap<ui32, TString> cache([](const ui32& key, const TString& value) {
+        TUnboundedCacheOnMap<ui32, TString> cache([](const ui32& key, const TString& value) { 
             Y_UNUSED(key);
             return value.size();
         });
 
-        TString* tmp;
+        TString* tmp; 
         ui32 key1 = 1;
         ui32 key2 = 2;
         UNIT_ASSERT_EQUAL(cache.GetCount(), 0);

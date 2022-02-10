@@ -34,7 +34,7 @@ public:
             Self->SrcSplitDescription = std::make_shared<NKikimrTxDataShard::TSplitMergeDescription>(Ev->Get()->Record.GetSplitDescription());
 
             // Persist split description
-            TString splitDescr;
+            TString splitDescr; 
             bool serilaizeOk = Self->SrcSplitDescription->SerializeToString(&splitDescr);
             Y_VERIFY(serilaizeOk, "Failed to serialize split/merge description");
             db.Table<Schema::Sys>().Key(Schema::Sys_SrcSplitDescription).Update(NIceDb::TUpdate<Schema::Sys::Bytes>(splitDescr));
@@ -254,14 +254,14 @@ public:
             tableInfo.GetSchema(*snapshot->MutableUserTableScheme());
 
             for (ui32 localTableId : SnapContext->TablesToSnapshot()) {
-                TString snapBody;
+                TString snapBody; 
                 if (localTableId > Schema::MinLocalTid) {
                     // Extract dst range from split/merge description to pass it to BorrowSnapshot
                     TSerializedCellVec fromCells(dstRangeDescr.GetKeyRangeBegin());
                     TSerializedCellVec toCells(dstRangeDescr.GetKeyRangeEnd());
 
                     auto cellsToRawValues = [&tableInfo] (const TSerializedCellVec& cells) {
-                        TVector<TRawTypeValue> rawVals;
+                        TVector<TRawTypeValue> rawVals; 
                         ui32 ki = 0;
                         for (; ki < cells.GetCells().size(); ++ki) {
                             rawVals.push_back(

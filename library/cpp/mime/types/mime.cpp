@@ -42,7 +42,7 @@ private:
         const char* Ext;
     };
 
-    typedef THashMap<const char*, int> TRecordHash;
+    typedef THashMap<const char*, int> TRecordHash; 
 
     // Fields
 private:

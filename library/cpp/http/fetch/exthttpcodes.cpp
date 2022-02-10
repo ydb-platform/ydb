@@ -172,7 +172,7 @@ static ui16* prepare_flags(http_flag* arg) {
 
 ui16* http2status = prepare_flags(HTTP_FLAG);
 
-TStringBuf ExtHttpCodeStr(int code) noexcept {
+TStringBuf ExtHttpCodeStr(int code) noexcept { 
     if (code < HTTP_CODE_MAX) {
         return HttpCodeStr(code);
     }

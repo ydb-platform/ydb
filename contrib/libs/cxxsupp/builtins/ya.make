@@ -22,12 +22,12 @@ VERSION(2016-03-03-08f0372c351a57b01afee6c64066961203da28c5)
 
 ORIGINAL_SOURCE(https://github.com/llvm/llvm-project)
 
-OWNER(
+OWNER( 
     pg
     somov
     g:contrib
     g:cpp-contrib
-)
+) 
 
 # Check MUSL before NO_PLATFORM() disables it.
 IF (MUSL)

@@ -10,7 +10,7 @@
 
 using namespace NKikimr;
 
-static inline TString LimitData(const TString &data) {
+static inline TString LimitData(const TString &data) { 
     return data.size() <= 16 ? data : (data.substr(0, 16) + "...");
 }
 
@@ -561,7 +561,7 @@ class TManyGets : public TActorBootstrapped<TManyGets> {
     const ui32 Gen;
     std::shared_ptr<TSet<ui32>> BadSteps;
     ui32 Step;
-    TString MsgData;
+    TString MsgData; 
 
     friend class TActorBootstrapped<TManyGets>;
 
@@ -806,8 +806,8 @@ class TPutGC : public TActorBootstrapped<TPutGC> {
     ui32 Collect;
     ui32 CollectGen;
     ui32 CollectStep;
-    TAutoPtr<TVector<TLogoBlobID>> Keep;
-    TAutoPtr<TVector<TLogoBlobID>> DoNotKeep;
+    TAutoPtr<TVector<TLogoBlobID>> Keep; 
+    TAutoPtr<TVector<TLogoBlobID>> DoNotKeep; 
 
     friend class TActorBootstrapped<TPutGC>;
 
@@ -834,7 +834,7 @@ class TPutGC : public TActorBootstrapped<TPutGC> {
 public:
     TPutGC(const NActors::TActorId &notifyID, const TAllVDisks::TVDiskInstance &vdiskInfo,
            ui64 tabletID, ui32 recGen, ui32 recGenCounter, ui32 channel, bool collect, ui32 collectGen,
-           ui32 collectStep, TAutoPtr<TVector<TLogoBlobID>> keep, TAutoPtr<TVector<TLogoBlobID>> doNotKeep)
+           ui32 collectStep, TAutoPtr<TVector<TLogoBlobID>> keep, TAutoPtr<TVector<TLogoBlobID>> doNotKeep) 
         : TActorBootstrapped<TPutGC>()
         , NotifyID(notifyID)
         , VDiskInfo(vdiskInfo)
@@ -852,8 +852,8 @@ public:
 
 NActors::IActor *CreatePutGC(const NActors::TActorId &notifyID, const TAllVDisks::TVDiskInstance &vdiskInfo,
                              ui64 tabletID, ui32 recGen, ui32 recGenCounter, ui32 channel, bool collect,
-                             ui32 collectGen, ui32 collectStep, TAutoPtr<TVector<TLogoBlobID>> keep,
-                             TAutoPtr<TVector<TLogoBlobID>> doNotKeep) {
+                             ui32 collectGen, ui32 collectStep, TAutoPtr<TVector<TLogoBlobID>> keep, 
+                             TAutoPtr<TVector<TLogoBlobID>> doNotKeep) { 
     return new TPutGC(notifyID, vdiskInfo, tabletID, recGen, recGenCounter, channel, collect, collectGen, collectStep,
                       keep, doNotKeep);
 }
@@ -1083,7 +1083,7 @@ class TWaitForSync : public TActorBootstrapped<TWaitForSync> {
         const TVDiskID VDiskId;
 
         bool SetUp = false;
-        TVector<TSyncState> SyncStates;
+        TVector<TSyncState> SyncStates; 
         NSyncLog::TLogEssence SyncLogEssence;
 
         TInfo(const TActorId &id, const TVDiskID &vd)
@@ -1175,9 +1175,9 @@ class TWaitForSync : public TActorBootstrapped<TWaitForSync> {
 
     private:
         // seq number of vdisks we exclude
-        TSet<ui32> PuncturedPoints;
+        TSet<ui32> PuncturedPoints; 
         // vector of working VDisks with their info data
-        TVector<TInfo> InfoVec;
+        TVector<TInfo> InfoVec; 
 
         ui32 FindIdx(const TVDiskID &vd) {
             // found InfoVec element idx this vdisk
@@ -1308,8 +1308,8 @@ class TPutGCToCorrespondingVDisksActor : public TActorBootstrapped<TPutGCToCorre
     ui32 Collect;
     ui32 CollectGen;
     ui32 CollectStep;
-    TAutoPtr<TVector<NKikimr::TLogoBlobID>> Keep;
-    TAutoPtr<TVector<NKikimr::TLogoBlobID>> DoNotKeep;
+    TAutoPtr<TVector<NKikimr::TLogoBlobID>> Keep; 
+    TAutoPtr<TVector<NKikimr::TLogoBlobID>> DoNotKeep; 
 
     friend class TActorBootstrapped<TPutGCToCorrespondingVDisksActor>;
 
@@ -1349,8 +1349,8 @@ class TPutGCToCorrespondingVDisksActor : public TActorBootstrapped<TPutGCToCorre
 public:
     TPutGCToCorrespondingVDisksActor(const NActors::TActorId &notifyID, TConfiguration *conf, ui64 tabletID,
                                      ui32 recGen, ui32 recGenCounter, ui32 channel, bool collect, ui32 collectGen,
-                                     ui32 collectStep, TAutoPtr<TVector<NKikimr::TLogoBlobID>> keep,
-                                     TAutoPtr<TVector<NKikimr::TLogoBlobID>> doNotKeep)
+                                     ui32 collectStep, TAutoPtr<TVector<NKikimr::TLogoBlobID>> keep, 
+                                     TAutoPtr<TVector<NKikimr::TLogoBlobID>> doNotKeep) 
         : TActorBootstrapped<TPutGCToCorrespondingVDisksActor>()
         , NotifyID(notifyID)
         , Conf(conf)
@@ -1370,16 +1370,16 @@ public:
 
 IActor *PutGCToCorrespondingVDisks(const NActors::TActorId &notifyID, TConfiguration *conf, ui64 tabletID,
                                    ui32 recGen, ui32 recGenCounter, ui32 channel, bool collect, ui32 collectGen,
-                                   ui32 collectStep, TAutoPtr<TVector<NKikimr::TLogoBlobID>> keep,
-                                   TAutoPtr<TVector<NKikimr::TLogoBlobID>> doNotKeep) {
+                                   ui32 collectStep, TAutoPtr<TVector<NKikimr::TLogoBlobID>> keep, 
+                                   TAutoPtr<TVector<NKikimr::TLogoBlobID>> doNotKeep) { 
     return new TPutGCToCorrespondingVDisksActor(notifyID, conf, tabletID, recGen, recGenCounter, channel, collect,
                                                 collectGen, collectStep, keep, doNotKeep);
 }
 
 NActors::IActor *PutGCToCorrespondingVDisks(const NActors::TActorId &notifyID, TConfiguration *conf,
                                             const TGCSettings &settings,
-                                            TAutoPtr<TVector<NKikimr::TLogoBlobID>> keep,
-                                            TAutoPtr<TVector<NKikimr::TLogoBlobID>> doNotKeep) {
+                                            TAutoPtr<TVector<NKikimr::TLogoBlobID>> keep, 
+                                            TAutoPtr<TVector<NKikimr::TLogoBlobID>> doNotKeep) { 
     return new TPutGCToCorrespondingVDisksActor(notifyID, conf, settings.TabletID, settings.RecGen,
                                                 settings.RecGenCounter, settings.Channel, settings.Collect,
                                                 settings.CollectGen, settings.CollectStep, keep, doNotKeep);
@@ -1391,14 +1391,14 @@ NActors::IActor *PutGCToCorrespondingVDisks(const NActors::TActorId &notifyID, T
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 void PutLogoBlobToVDisk(const TActorContext &ctx, const TActorId &actorID, const TVDiskID &vdiskID,
-                        const TLogoBlobID &id, const TString &data, NKikimrBlobStorage::EPutHandleClass cls) {
+                        const TLogoBlobID &id, const TString &data, NKikimrBlobStorage::EPutHandleClass cls) { 
     LOG_DEBUG(ctx, NActorsServices::TEST, "  Sending TEvPut: id=%s data='%s'", id.ToString().data(), LimitData(data).data());
     ctx.Send(actorID, new TEvBlobStorage::TEvVPut(id, data, vdiskID, false, nullptr, TInstant::Max(), cls));
 }
 
 // returns number of messages sent
 ui32 PutLogoBlobToCorrespondingVDisks(const TActorContext &ctx, NKikimr::TBlobStorageGroupInfo *info,
-                                      const TLogoBlobID &id, const TString &data, NKikimrBlobStorage::EPutHandleClass cls) {
+                                      const TLogoBlobID &id, const TString &data, NKikimrBlobStorage::EPutHandleClass cls) { 
     Y_ASSERT(id.PartId() == 0);
     ui32 msgsSent = 0;
     TBlobStorageGroupInfo::TVDiskIds outVDisks;
@@ -1441,7 +1441,7 @@ ui32 GetLogoBlobFromCorrespondingVDisks(const NActors::TActorContext &ctx, NKiki
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 TDataSnapshot::TItem::TItem(const TVDiskID &vdisk, const TActorId &service, const NKikimr::TLogoBlobID &id,
-                            const TString &data, const TIngress &ingress)
+                            const TString &data, const TIngress &ingress) 
     : VDiskID(vdisk)
     , ServiceID(service)
     , Id(id)
@@ -1460,12 +1460,12 @@ TDataSnapshot::TDataSnapshot(TIntrusivePtr<NKikimr::TBlobStorageGroupInfo> info)
 {}
 
 void TDataSnapshot::PutExact(const TVDiskID &vdisk, const TActorId &service, const NKikimr::TLogoBlobID &id,
-                             const TString &data, const TIngress &ingress) {
+                             const TString &data, const TIngress &ingress) { 
     Y_ASSERT(id.PartId() != 0);
     Data.push_back(TItem(vdisk, service, id, data, ingress));
 }
 
-void TDataSnapshot::PutCorresponding(const NKikimr::TLogoBlobID &id, const TString &data) {
+void TDataSnapshot::PutCorresponding(const NKikimr::TLogoBlobID &id, const TString &data) { 
     Y_ASSERT(id.PartId() == 0);
 
     TBlobStorageGroupInfo::TVDiskIds outVDisks;
@@ -1737,7 +1737,7 @@ void PrintDebug(NKikimr::TEvBlobStorage::TEvVGetResult::TPtr &ev, const NActors:
     for (int i = 0; i < size; i++) {
         const NKikimrBlobStorage::TQueryResult &q = rec.GetResult(i);
         const TLogoBlobID id = LogoBlobIDFromLogoBlobID(q.GetBlobID());
-        TString ingressStr;
+        TString ingressStr; 
         ui64 ingressRaw = 0;
         if (q.HasIngress()) {
             TIngress ingress(q.GetIngress());
@@ -1752,17 +1752,17 @@ void PrintDebug(NKikimr::TEvBlobStorage::TEvVGetResult::TPtr &ev, const NActors:
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-TExpectedSet::TExpectedResult::TExpectedResult(NKikimrProto::EReplyStatus status, const TString &data)
+TExpectedSet::TExpectedResult::TExpectedResult(NKikimrProto::EReplyStatus status, const TString &data) 
     : Status(status)
     , Data(data)
 {}
 
-void TExpectedSet::Put(const TLogoBlobID &id, NKikimrProto::EReplyStatus status, const TString &data) {
-    bool res = Map.insert(TMapType::value_type(id, TExpectedResult(status, data))).second;
+void TExpectedSet::Put(const TLogoBlobID &id, NKikimrProto::EReplyStatus status, const TString &data) { 
+    bool res = Map.insert(TMapType::value_type(id, TExpectedResult(status, data))).second; 
     Y_VERIFY(res);
 }
 
-TString TExpectedSet::ToString() const {
+TString TExpectedSet::ToString() const { 
     TStringStream str;
     str << "Map State:\n";
     for (const auto &x : Map) {
@@ -1771,9 +1771,9 @@ TString TExpectedSet::ToString() const {
     return str.Str();
 }
 
-void TExpectedSet::Check(const TLogoBlobID &id, NKikimrProto::EReplyStatus status, const TString &data) {
+void TExpectedSet::Check(const TLogoBlobID &id, NKikimrProto::EReplyStatus status, const TString &data) { 
     //fprintf(stderr, "Check: id=%s status=%s data=%s\n", ~id.ToString(), ~NKikimrProto::EReplyStatus_Name(status), ~data);
-    TMapType::iterator it = Map.find(id);
+    TMapType::iterator it = Map.find(id); 
     Y_VERIFY(it != Map.end(), "TExpectedSet::Check: can't find id=%s; data# '%s' map# %s", id.ToString().data(), data.data(),
            ToString().data());
     Y_VERIFY(it->second.Status == status, "TExpectedSet::Check: incorrect status %s instead of %s for %s",

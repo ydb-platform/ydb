@@ -59,7 +59,7 @@ namespace NPrivate {
                 }
             }
 
-            THashSet<size_t> Visited;
+            THashSet<size_t> Visited; 
         };
     };
 
@@ -77,7 +77,7 @@ namespace NPrivate {
             d << *T_;
         }
 
-        inline TDbgDump& SetIndent(bool v) noexcept {
+        inline TDbgDump& SetIndent(bool v) noexcept { 
             Indent = v;
 
             return *this;

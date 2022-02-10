@@ -38,7 +38,7 @@ namespace NKikimr {
     }
 
     bool TLevelIndexBase::CheckEntryPoint(const char *begin, const char *end, size_t keySizeOf, ui32 signature,
-                                          TString &explanation) {
+                                          TString &explanation) { 
         // OLD Data Format
         // data ::= [signature=4b] [nextSstId=8b] deleted_chunks level0 otherLevels;
         // deleted_chunks ::= [size=4b] [chunkIdx=4b]*

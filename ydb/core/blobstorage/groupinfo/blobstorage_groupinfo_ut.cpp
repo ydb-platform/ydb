@@ -24,7 +24,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
                     ui32 hash = 640480 + 13 * hashIdx;
                     TBlobStorageGroupInfo::TVDiskIds vdiskIds;
                     info.PickSubgroup(hash, &vdiskIds, nullptr);
-                    TVector<bool> isMissingDomain;
+                    TVector<bool> isMissingDomain; 
                     auto realm0 = info.FailRealmsBegin();
                     isMissingDomain.resize(realm0.GetNumFailDomainsPerFailRealm());
                     for (const auto& domain : realm0.GetFailRealmFailDomains()) {
@@ -145,7 +145,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
             const ui32 numMasks = 1U << numFailDomains;
 
             // calculate sets of disks
-            TVector<ui32> goodMask, badMask;
+            TVector<ui32> goodMask, badMask; 
             for (ui32 mask = 0; mask < numMasks; ++mask) {
                 (PopCount(mask) <= numHandoff ? goodMask : badMask).push_back(mask);
             }
@@ -182,7 +182,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
             return 1U << (realm * numFailDomains + domain);
         };
 
-        TVector<ui32> goodMask;
+        TVector<ui32> goodMask; 
 
         goodMask.push_back(0);
 
@@ -216,12 +216,12 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
         std::sort(goodMask.begin(), goodMask.end());
 
         // create bad mask
-        TVector<ui32> allMasks;
+        TVector<ui32> allMasks; 
         for (ui32 i = 0; i < (1U << (numFailRealms * numFailDomains)); ++i) {
             allMasks.push_back(i);
         }
 
-        TVector<ui32> badMask;
+        TVector<ui32> badMask; 
         std::set_difference(allMasks.begin(), allMasks.end(), goodMask.begin(), goodMask.end(), std::back_inserter(badMask));
 
         auto createGroupVDisks = [&](ui32 domainMask) {

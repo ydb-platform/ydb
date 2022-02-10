@@ -19,7 +19,7 @@ namespace {
         TScopedAlloc Alloc;
         TTypeEnvironment TypeEnv;
         TMockDbSchemeResolver DbSchemeResolver;
-        TVector<THolder<TKeyDesc>> DescList;
+        TVector<THolder<TKeyDesc>> DescList; 
 
         TServices()
             : FunctionRegistry(CreateFunctionRegistry(CreateBuiltinRegistry()))
@@ -40,7 +40,7 @@ namespace {
         }
     };
 
-    bool TryProgramText2Bin(const TString& programText, TServices& services, TConvertResult& result) {
+    bool TryProgramText2Bin(const TString& programText, TServices& services, TConvertResult& result) { 
         auto expr = ParseText(programText);
 
         auto resFuture = ConvertToMiniKQL(expr, services.FunctionRegistry.Get(),
@@ -56,7 +56,7 @@ namespace {
         return true;
     }
 
-    TRuntimeNode ProgramText2Bin(const TString& programText, TServices& services) {
+    TRuntimeNode ProgramText2Bin(const TString& programText, TServices& services) { 
         TConvertResult res;
         TryProgramText2Bin(programText, services, res);
 
@@ -91,7 +91,7 @@ Y_UNIT_TEST_SUITE(TTestYqlToMiniKQLCompile) {
     Y_UNIT_TEST(CheckResolve) {
         TServices services;
         RegisterSampleTables(services);
-        TVector<IDbSchemeResolver::TTable> tablesToResolve;
+        TVector<IDbSchemeResolver::TTable> tablesToResolve; 
         IDbSchemeResolver::TTable tableToResolve;
         tableToResolve.TableName = "table1";
         tableToResolve.ColumnNames.insert("value");
@@ -246,7 +246,7 @@ Y_UNIT_TEST_SUITE(TTestYqlToMiniKQLCompile) {
         auto pgm = ProgramText2Bin(programText, services);
         services.ExtractKeys(pgm);
         UNIT_ASSERT_VALUES_EQUAL(services.DescList.size(), 2);
-        THashMap<TKeyDesc::ERowOperation, ui32> counters;
+        THashMap<TKeyDesc::ERowOperation, ui32> counters; 
         for (ui32 i = 0; i < services.DescList.size(); ++i) {
             ++counters[services.DescList[i]->RowOperation];
         }

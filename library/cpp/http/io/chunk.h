@@ -16,7 +16,7 @@ public:
     /// Если передан указатель на trailers, то туда будут записаны HTTP trailer'ы (возможно пустые),
     /// которые идут после чанков.
     TChunkedInput(IInputStream* slave, TMaybe<THttpHeaders>* trailers = nullptr);
-    ~TChunkedInput() override;
+    ~TChunkedInput() override; 
 
 private:
     size_t DoRead(void* buf, size_t len) override;
@@ -33,7 +33,7 @@ private:
 class TChunkedOutput: public IOutputStream {
 public:
     TChunkedOutput(IOutputStream* slave);
-    ~TChunkedOutput() override;
+    ~TChunkedOutput() override; 
 
 private:
     void DoWrite(const void* buf, size_t len) override;

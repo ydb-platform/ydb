@@ -27,15 +27,15 @@ namespace NXml {
         return BoolResult(xmlTextReaderRead(Impl.Get()));
     }
 
-    TString TTextReader::ReadInnerXml() const {
+    TString TTextReader::ReadInnerXml() const { 
         return TempStringOrEmptyResult(xmlTextReaderReadInnerXml(Impl.Get()));
     }
 
-    TString TTextReader::ReadOuterXml() const {
+    TString TTextReader::ReadOuterXml() const { 
         return TempStringOrEmptyResult(xmlTextReaderReadOuterXml(Impl.Get()));
     }
 
-    TString TTextReader::ReadString() const {
+    TString TTextReader::ReadString() const { 
         return TempStringOrEmptyResult(xmlTextReaderReadString(Impl.Get()));
     }
 
@@ -109,7 +109,7 @@ namespace NXml {
         }
     }
 
-    TString TTextReader::GetAttribute(int number) const {
+    TString TTextReader::GetAttribute(int number) const { 
         return TempStringResult(xmlTextReaderGetAttributeNo(Impl.Get(), number));
     }
 
@@ -166,7 +166,7 @@ namespace NXml {
     }
 
     // Callback for xmlReaderForIO() to read more data.
-    // It is almost "noexcept" (std::bad_alloc may happen when saving exception message to new TString).
+    // It is almost "noexcept" (std::bad_alloc may happen when saving exception message to new TString). 
     // Waiting for std::exception_ptr and std::rethrow_exception from C++11 in Arcadia to make it really "noexcept".
     int TTextReader::ReadFromInputStreamCallback(void* context, char* buffer, int len) {
         Y_ASSERT(len >= 0);
@@ -251,7 +251,7 @@ namespace NXml {
             return;
         }
 
-        const TString message = ErrorBuffer.Str();
+        const TString message = ErrorBuffer.Str(); 
         ErrorBuffer.clear();
         IsError = false;
 
@@ -298,16 +298,16 @@ namespace NXml {
         return (value != nullptr) ? TStringBuf(CAST2CHAR(value)) : TStringBuf();
     }
 
-    TString TTextReader::TempStringResult(TCharPtr value) const {
+    TString TTextReader::TempStringResult(TCharPtr value) const { 
         if (Y_UNLIKELY(value == nullptr)) {
             ThrowException();
         }
-        return TString(CAST2CHAR(value.Get()));
+        return TString(CAST2CHAR(value.Get())); 
     }
 
-    TString TTextReader::TempStringOrEmptyResult(TCharPtr value) const {
+    TString TTextReader::TempStringOrEmptyResult(TCharPtr value) const { 
         CheckForExceptions();
-        return (value != nullptr) ? TString(CAST2CHAR(value.Get())) : TString();
+        return (value != nullptr) ? TString(CAST2CHAR(value.Get())) : TString(); 
     }
 
     struct TTextReader::TDeleter {

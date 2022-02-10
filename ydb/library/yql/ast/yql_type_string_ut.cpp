@@ -14,7 +14,7 @@ Y_UNIT_TEST_SUITE(TTypeString)
         auto res = ParseType(prog, pool, errors);
         UNIT_ASSERT(res == nullptr);
         UNIT_ASSERT(!errors.Empty());
-        errors.PrintWithProgramTo(Cerr, "-memory-", TString(prog));
+        errors.PrintWithProgramTo(Cerr, "-memory-", TString(prog)); 
         UNIT_ASSERT_STRINGS_EQUAL(errors.begin()->Message, expectedError);
         UNIT_ASSERT_VALUES_EQUAL(errors.begin()->Position.Column, column);
     }
@@ -24,7 +24,7 @@ Y_UNIT_TEST_SUITE(TTypeString)
         TIssues errors;
         auto res = ParseType(prog, pool, errors);
         if (!res) {
-            errors.PrintWithProgramTo(Cerr, "-memory-", TString(prog));
+            errors.PrintWithProgramTo(Cerr, "-memory-", TString(prog)); 
             UNIT_FAIL(TStringBuilder() << "Parsing failed:" << Endl << prog);
         }
         UNIT_ASSERT_STRINGS_EQUAL(res->ToString(), expectedType);
@@ -509,7 +509,7 @@ Y_UNIT_TEST_SUITE(TTypeString)
         TestOk("Struct<>", "(StructType)");
     }
 
-    void TestFormat(const TString& yql, const TString& expectedTypeStr) {
+    void TestFormat(const TString& yql, const TString& expectedTypeStr) { 
         TMemoryPool pool(4096);
 
         TAstParseResult astRes = ParseAst(yql, &pool);
@@ -525,7 +525,7 @@ Y_UNIT_TEST_SUITE(TTypeString)
             UNIT_FAIL("Can't compile types");
         }
 
-        TString typeStr = FormatType(type);
+        TString typeStr = FormatType(type); 
         UNIT_ASSERT_STRINGS_EQUAL(typeStr, expectedTypeStr);
     }
 

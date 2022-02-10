@@ -31,7 +31,7 @@ public:
         {
         }
 
-        inline TIterator() noexcept
+        inline TIterator() noexcept 
             : Parent_(nullptr)
             , Data_(nullptr)
             , Len_(0)
@@ -45,11 +45,11 @@ public:
             Next();
         }
 
-        inline bool operator==(const TIterator& l) const noexcept {
+        inline bool operator==(const TIterator& l) const noexcept { 
             return AtEnd_ == l.AtEnd_;
         }
 
-        inline bool operator!=(const TIterator& l) const noexcept {
+        inline bool operator!=(const TIterator& l) const noexcept { 
             return !(*this == l);
         }
 
@@ -57,7 +57,7 @@ public:
          * @return          Return null-terminated character array with current token.
          *                  The pointer may be invalid after iterator increment.
          */
-        inline const char* Data() const noexcept {
+        inline const char* Data() const noexcept { 
             Y_ASSERT(!AtEnd_);
 
             return Data_;
@@ -66,17 +66,17 @@ public:
         /**
          * @return          Length of current token.
          */
-        inline size_t Length() const noexcept {
+        inline size_t Length() const noexcept { 
             Y_ASSERT(!AtEnd_);
 
             return Len_;
         }
 
-        inline TIterator* operator->() noexcept {
+        inline TIterator* operator->() noexcept { 
             return this;
         }
 
-        inline TStringBuf operator*() noexcept {
+        inline TStringBuf operator*() noexcept { 
             return TStringBuf{Data_, Len_};
         }
 
@@ -166,7 +166,7 @@ public:
         return TIterator{this};
     }
 
-    inline TIterator end() noexcept {
+    inline TIterator end() noexcept { 
         return {};
     }
 
@@ -180,11 +180,11 @@ private:
         return bytesRead;
     }
 
-    inline char* BufBegin() noexcept {
+    inline char* BufBegin() noexcept { 
         return Buf_.Data();
     }
 
-    inline char* BufEnd() noexcept {
+    inline char* BufEnd() noexcept { 
         return Buf_.Data() + Buf_.Capacity();
     }
 
@@ -206,7 +206,7 @@ private:
  * Predicate for `TStreamTokenizer` that uses '\\n' as a delimiter.
  */
 struct TEol {
-    inline bool operator()(char ch) const noexcept {
+    inline bool operator()(char ch) const noexcept { 
         return ch == '\n';
     }
 };

@@ -17,9 +17,9 @@ struct TMiniKQLCompileResult {
     TMiniKQLCompileResult() = default;
     explicit TMiniKQLCompileResult(const TIssue& error);
     explicit TMiniKQLCompileResult(const TIssues& errors);
-    explicit TMiniKQLCompileResult(const TString& compiledProgram);
+    explicit TMiniKQLCompileResult(const TString& compiledProgram); 
     TIssues Errors;
-    TString CompiledProgram;
+    TString CompiledProgram; 
 };
 
 } // namespace NYql

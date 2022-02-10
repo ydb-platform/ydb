@@ -129,11 +129,11 @@ void TTablet::WriteZeroEntry(TEvTablet::TDependencyGraph *graph) {
     ui32 confirmedStep = 0;
     ui32 lastInGeneration = 0;
 
-    TDeque<TEvTablet::TDependencyGraph::TEntry>::iterator it = graph->Entries.begin();
-    TDeque<TEvTablet::TDependencyGraph::TEntry>::iterator end = graph->Entries.end();
+    TDeque<TEvTablet::TDependencyGraph::TEntry>::iterator it = graph->Entries.begin(); 
+    TDeque<TEvTablet::TDependencyGraph::TEntry>::iterator end = graph->Entries.end(); 
 
-    TDeque<TEvTablet::TDependencyGraph::TEntry>::iterator snapIterator = it;
-    TDeque<TEvTablet::TDependencyGraph::TEntry>::iterator confirmedIterator = it;
+    TDeque<TEvTablet::TDependencyGraph::TEntry>::iterator snapIterator = it; 
+    TDeque<TEvTablet::TDependencyGraph::TEntry>::iterator confirmedIterator = it; 
 
     // find tail (todo: do it in reverse order?)
     for (; it != end; ++it) {
@@ -218,7 +218,7 @@ void TTablet::WriteZeroEntry(TEvTablet::TDependencyGraph *graph) {
     Graph.Snapshot = snapshot;
 
     const TLogoBlobID logid(TabletID(), StateStorageInfo.KnownGeneration, 0, 0, 0, 0);
-    TVector<TEvTablet::TLogEntryReference> refs;
+    TVector<TEvTablet::TLogEntryReference> refs; 
     Register(CreateTabletReqWriteLog(SelfId(), logid, entry.Release(), refs, TEvBlobStorage::TEvPut::TacticMinLatency, Info.Get()));
 
     BLOG_D(" TTablet::WriteZeroEntry. logid# " << logid.ToString());
@@ -1123,10 +1123,10 @@ bool TTablet::HandleNext(TEvTablet::TEvCommit::TPtr &ev) {
     if (saveFollowerUpdate)
         entry->FollowerUpdate->References.reserve(msg->References.size());
 
-    for (TVector<TLogoBlobID>::const_iterator it = msg->ExternalReferences.begin(), end = msg->ExternalReferences.end(); it != end; ++it)
+    for (TVector<TLogoBlobID>::const_iterator it = msg->ExternalReferences.begin(), end = msg->ExternalReferences.end(); it != end; ++it) 
         LogoBlobIDFromLogoBlobID(*it, x->AddReferences());
 
-    for (TVector<TEvTablet::TLogEntryReference>::const_iterator it = msg->References.begin(), end = msg->References.end(); it != end; ++it) {
+    for (TVector<TEvTablet::TLogEntryReference>::const_iterator it = msg->References.begin(), end = msg->References.end(); it != end; ++it) { 
         const TLogoBlobID &id = it->Id;
         Y_VERIFY(id.TabletID() == TabletID() && id.Generation() == StateStorageInfo.KnownGeneration);
         LogoBlobIDFromLogoBlobID(id, x->AddReferences());
@@ -1290,7 +1290,7 @@ void TTablet::GcLogChannel(ui32 step) {
 
     const TTabletChannelInfo *channelInfo = Info->ChannelInfo(0);
     if (GcCounter == 0) {
-        TSet<ui32> alreadySent;
+        TSet<ui32> alreadySent; 
         for (const auto &x : channelInfo->History) {
             const ui32 groupId = x.GroupID;
             if (!alreadySent.insert(groupId).second)
@@ -1910,7 +1910,7 @@ void TTablet::ExternalWriteZeroEntry(TTabletStorageInfo *info, ui32 gen, TActorI
     entry->SetZeroConfirmed(MakeGenStepPair(0, 0));
     entry->SetZeroTailSz(0);
     TLogoBlobID logid(info->TabletID, gen, 0, 0, 0, 0);
-    TVector<TEvTablet::TLogEntryReference> refs;
+    TVector<TEvTablet::TLogEntryReference> refs; 
     TActivationContext::Register(CreateTabletReqWriteLog(owner, logid, entry.Release(), refs, TEvBlobStorage::TEvPut::TacticDefault, info));
 }
 

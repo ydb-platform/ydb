@@ -51,7 +51,7 @@ namespace {
             ythrow yexception() << "can not find codec by id " << id;
         }
 
-        typedef THashMap<TCodecID, const ICodec*> TByID;
+        typedef THashMap<TCodecID, const ICodec*> TByID; 
         TByID ByID;
     };
 
@@ -74,7 +74,7 @@ TCodedOutput::TCodedOutput(IOutputStream* out, const ICodec* c, size_t bufLen)
     }
 }
 
-TCodedOutput::~TCodedOutput() {
+TCodedOutput::~TCodedOutput() { 
     try {
         Finish();
     } catch (...) {

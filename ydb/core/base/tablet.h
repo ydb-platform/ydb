@@ -105,18 +105,18 @@ struct TEvTablet {
         struct TEntry {
             std::pair<ui32, ui32> Id;
             bool IsSnapshot;
-            TVector<TLogoBlobID> References;
+            TVector<TLogoBlobID> References; 
 
-            TVector<TLogoBlobID> GcDiscovered;
-            TVector<TLogoBlobID> GcLeft;
+            TVector<TLogoBlobID> GcDiscovered; 
+            TVector<TLogoBlobID> GcLeft; 
 
-            TString EmbeddedLogBody;
+            TString EmbeddedLogBody; 
 
             TEntry()
                 : IsSnapshot(false)
             {}
 
-            void Set(const std::pair<ui32, ui32> &id, TVector<TLogoBlobID> &refs, bool isSnapshot, TVector<TLogoBlobID> &gcDiscovered, TVector<TLogoBlobID> &gcLeft) {
+            void Set(const std::pair<ui32, ui32> &id, TVector<TLogoBlobID> &refs, bool isSnapshot, TVector<TLogoBlobID> &gcDiscovered, TVector<TLogoBlobID> &gcLeft) { 
                 Id = id;
                 References.swap(refs);
                 IsSnapshot = isSnapshot;
@@ -125,7 +125,7 @@ struct TEvTablet {
                 EmbeddedLogBody.clear();
             }
 
-            void Set(const std::pair<ui32, ui32> &id, const TString &embeddedLogBody, TVector<TLogoBlobID> &gcDiscovered, TVector<TLogoBlobID> &gcLeft) {
+            void Set(const std::pair<ui32, ui32> &id, const TString &embeddedLogBody, TVector<TLogoBlobID> &gcDiscovered, TVector<TLogoBlobID> &gcLeft) { 
                 Id = id;
                 References.clear();
                 IsSnapshot = false;
@@ -136,7 +136,7 @@ struct TEvTablet {
         };
 
         std::pair<ui32, ui32> Snapshot;
-        TDeque<TEntry> Entries;
+        TDeque<TEntry> Entries; 
 
         TDependencyGraph(const std::pair<ui32, ui32> &snap)
             : Snapshot(snap)
@@ -148,7 +148,7 @@ struct TEvTablet {
                 << " entries " << Entries.size() << "}";
         }
 
-        void AddEntry(const std::pair<ui32, ui32> &id, TVector<TLogoBlobID> &references, bool isSnapshot, TVector<TLogoBlobID> &gcDiscovered, TVector<TLogoBlobID> &gcLeft) {
+        void AddEntry(const std::pair<ui32, ui32> &id, TVector<TLogoBlobID> &references, bool isSnapshot, TVector<TLogoBlobID> &gcDiscovered, TVector<TLogoBlobID> &gcLeft) { 
             if (isSnapshot) {
                 Snapshot = id;
                 Entries.clear();
@@ -158,7 +158,7 @@ struct TEvTablet {
             Entries.back().Set(id, references, isSnapshot, gcDiscovered, gcLeft);
         }
 
-        void AddEntry(const std::pair<ui32, ui32> &id, const TString &embeddedLogBody, TVector<TLogoBlobID> &gcDiscovered, TVector<TLogoBlobID> &gcLeft) {
+        void AddEntry(const std::pair<ui32, ui32> &id, const TString &embeddedLogBody, TVector<TLogoBlobID> &gcDiscovered, TVector<TLogoBlobID> &gcLeft) { 
             Entries.push_back(TEntry());
             Entries.back().Set(id, embeddedLogBody, gcDiscovered, gcLeft);
         }
@@ -240,12 +240,12 @@ struct TEvTablet {
         const ui64 TabletID;
         const ui32 Generation;
         const ui32 Step;
-        const TVector<ui32> DependsOn;
+        const TVector<ui32> DependsOn; 
         const bool IsSnapshot;
         bool IsTotalSnapshot;
         bool WaitFollowerGcAck;
 
-        TCommitInfo(ui64 tabletId, ui32 gen, ui32 step, const TVector<ui32> &dependsOn, bool isSnapshot)
+        TCommitInfo(ui64 tabletId, ui32 gen, ui32 step, const TVector<ui32> &dependsOn, bool isSnapshot) 
             : TabletID(tabletId)
             , Generation(gen)
             , Step(step)
@@ -260,13 +260,13 @@ struct TEvTablet {
         const bool PreCommited;
         TEvBlobStorage::TEvPut::ETactic CommitTactic;
 
-        TVector<TLogoBlobID> ExternalReferences;
-        TVector<TLogEntryReference> References;
+        TVector<TLogoBlobID> ExternalReferences; 
+        TVector<TLogEntryReference> References; 
 
-        TVector<TLogoBlobID> GcDiscovered;
-        TVector<TLogoBlobID> GcLeft;
+        TVector<TLogoBlobID> GcDiscovered; 
+        TVector<TLogoBlobID> GcLeft; 
 
-        TString EmbeddedLogBody;
+        TString EmbeddedLogBody; 
         TString FollowerAux;
 
         TEvCommit(ui64 tabletId, ui32 gen, ui32 step, const TVector<ui32> &dependsOn, bool isSnapshot
@@ -287,7 +287,7 @@ struct TEvTablet {
     };
 
     struct TEvPreCommit : public TEventLocal<TEvPreCommit, EvPreCommit>, public TCommitInfo {
-        TEvPreCommit(ui64 tabletId, ui32 gen, ui32 step, const TVector<ui32> &dependsOn, bool isSnapshot)
+        TEvPreCommit(ui64 tabletId, ui32 gen, ui32 step, const TVector<ui32> &dependsOn, bool isSnapshot) 
             : TCommitInfo(tabletId, gen, step, dependsOn, isSnapshot)
         {}
     };
@@ -434,7 +434,7 @@ struct TEvTablet {
         TEvReadLocalBase()
         {}
 
-        TEvReadLocalBase(const TString& rootKey, bool saveScheme)
+        TEvReadLocalBase(const TString& rootKey, bool saveScheme) 
         {
             if (!rootKey.empty())
                 Record.SetRootKey(rootKey);
@@ -452,7 +452,7 @@ struct TEvTablet {
         TEvReadLocalBaseResult()
         {}
 
-        TEvReadLocalBaseResult(ui64 origin, const TString& rootKey, bool isError, const TString& docBuffer, const TString* schemeBuffer)
+        TEvReadLocalBaseResult(ui64 origin, const TString& rootKey, bool isError, const TString& docBuffer, const TString* schemeBuffer) 
         {
             Record.SetOrigin(origin);
             Record.SetRootKey(rootKey);
@@ -584,9 +584,9 @@ struct TEvTablet {
     struct TFUpdateBody {
         const bool IsSnapshot;
         const ui32 Step;
-        TString EmbeddedBody;
-        TVector<std::pair<TLogoBlobID, TString>> References;
-        TString AuxPayload;
+        TString EmbeddedBody; 
+        TVector<std::pair<TLogoBlobID, TString>> References; 
+        TString AuxPayload; 
 
         bool NeedFollowerGcAck;
 
@@ -669,7 +669,7 @@ struct TEvTablet {
     };
 
     struct TEvFAuxUpdate : public TEventLocal<TEvFAuxUpdate, EvFAuxUpdate> {
-        const TString AuxUpdate;
+        const TString AuxUpdate; 
 
         TEvFAuxUpdate(const TString &auxUpdate)
             : AuxUpdate(auxUpdate)
@@ -790,6 +790,6 @@ inline void Out<NKikimr::TEvTablet::TEvTabletDead::EReason>(IOutputStream& o, NK
     return NKikimr::TEvTablet::TEvTabletDead::Out(o, x);
 }
 
-inline TString ToString(NKikimr::TEvTablet::TEvTabletDead::EReason x) {
+inline TString ToString(NKikimr::TEvTablet::TEvTabletDead::EReason x) { 
     return NKikimr::TEvTablet::TEvTabletDead::Str(x);
 }

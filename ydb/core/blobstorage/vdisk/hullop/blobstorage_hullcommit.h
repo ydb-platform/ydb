@@ -57,15 +57,15 @@ namespace NKikimr {
         using TThis = TBaseHullDbCommitter<TKey, TMemRec, NotifyType, DerivedActivityType>;
 
         struct THullCommitMeta {
-            TVector<ui32>    CommitChunks;      // chunks to commit within this log entry
-            TVector<ui32>    DeleteChunks;      // chunks to delete
+            TVector<ui32>    CommitChunks;      // chunks to commit within this log entry 
+            TVector<ui32>    DeleteChunks;      // chunks to delete 
             TDiskPartVec     RemovedHugeBlobs;  // freed huge blobs
             TLevelSegmentPtr ReplSst;           // pointer to replicated SST
             ui32             NumRecoveredBlobs; // number of blobs in this SST (valid only for replicated tables)
 
             // constructor for ordinary committer (advance, fresh, level)
-            THullCommitMeta(TVector<ui32>&& chunksAdded,
-                            TVector<ui32>&& chunksDeleted,
+            THullCommitMeta(TVector<ui32>&& chunksAdded, 
+                            TVector<ui32>&& chunksDeleted, 
                             TDiskPartVec&&  removedHugeBlobs)
                 : CommitChunks(std::move(chunksAdded))
                 , DeleteChunks(std::move(chunksDeleted))
@@ -74,8 +74,8 @@ namespace NKikimr {
             {}
 
             // constructor for repl sst committer
-            THullCommitMeta(TVector<ui32>&&  chunksAdded,
-                            TVector<ui32>&&  chunksDeleted,
+            THullCommitMeta(TVector<ui32>&&  chunksAdded, 
+                            TVector<ui32>&&  chunksDeleted, 
                             TLevelSegmentPtr replSst,
                             ui32             numRecoveredBlobs)
                 : CommitChunks(std::move(chunksAdded))
@@ -185,7 +185,7 @@ namespace NKikimr {
                     commitRecord.DeleteChunks.end());
 
             // ensure that there are no intersections between chunks being committed and deleted
-            TVector<TChunkIdx> isect;
+            TVector<TChunkIdx> isect; 
             std::set_intersection(commitRecord.CommitChunks.begin(), commitRecord.CommitChunks.end(),
                     commitRecord.DeleteChunks.begin(), commitRecord.DeleteChunks.end(),
                     std::back_inserter(isect));

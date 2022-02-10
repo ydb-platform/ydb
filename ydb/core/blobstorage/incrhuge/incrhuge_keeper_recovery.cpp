@@ -209,8 +209,8 @@ namespace NKikimr {
             }
 
             // parse filled chunks list
-            TMap<TChunkSerNum, TScanQueueItem> scanQueue;
-            THashMap<TChunkSerNum, TChunkInfo *> serNumToChunk;
+            TMap<TChunkSerNum, TScanQueueItem> scanQueue; 
+            THashMap<TChunkSerNum, TChunkInfo *> serNumToChunk; 
             for (const auto& chunk : msg.Chunks.GetChunks()) {
                 Y_VERIFY(chunk.HasChunkIdx() && chunk.HasChunkSerNum() && chunk.HasState());
 
@@ -357,7 +357,7 @@ namespace NKikimr {
                 // chunk with some data; calculate number of used blocks
                 ui32 numUsedBlocks = 0;
                 ui32 offsetInBlocks = 0;
-                TVector<TBlobDeleteLocator> deleteLocators;
+                TVector<TBlobDeleteLocator> deleteLocators; 
                 for (ui32 index = 0; index < scanResult.Index.size(); ++index) {
                     const TBlobIndexRecord& record = scanResult.Index[index];
 

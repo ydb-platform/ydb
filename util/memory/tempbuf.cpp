@@ -16,7 +16,7 @@
 
 class TTempBuf::TImpl: public TRefCounted<TImpl, TSimpleCounter, TImpl> {
 public:
-    inline TImpl(void* data, size_t size) noexcept
+    inline TImpl(void* data, size_t size) noexcept 
         : Data_(data)
         , Size_(size)
         , Offset_(0)
@@ -29,27 +29,27 @@ public:
      */
     virtual ~TImpl() = default;
 
-    inline void* Data() noexcept {
+    inline void* Data() noexcept { 
         return Data_;
     }
 
-    const void* Data() const noexcept {
+    const void* Data() const noexcept { 
         return Data_;
     }
 
-    inline size_t Size() const noexcept {
+    inline size_t Size() const noexcept { 
         return Size_;
     }
 
-    inline size_t Filled() const noexcept {
+    inline size_t Filled() const noexcept { 
         return Offset_;
     }
 
-    inline void Reset() noexcept {
+    inline void Reset() noexcept { 
         Offset_ = 0;
     }
 
-    inline size_t Left() const noexcept {
+    inline size_t Left() const noexcept { 
         return Size() - Filled();
     }
 
@@ -64,12 +64,12 @@ public:
         Offset_ += off;
     }
 
-    static inline void Destroy(TImpl* This) noexcept {
+    static inline void Destroy(TImpl* This) noexcept { 
         This->Dispose();
     }
 
 protected:
-    virtual void Dispose() noexcept = 0;
+    virtual void Dispose() noexcept = 0; 
 
 private:
     void* Data_;
@@ -90,7 +90,7 @@ namespace {
         inline ~TAllocedBuf() override = default;
 
     private:
-        void Dispose() noexcept override {
+        void Dispose() noexcept override { 
             delete this;
         }
     };
@@ -99,7 +99,7 @@ namespace {
         friend class TTempBufManager;
 
     public:
-        inline TPerThreadedBuf(TTempBufManager* manager) noexcept
+        inline TPerThreadedBuf(TTempBufManager* manager) noexcept 
             : TImpl(Data_, sizeof(Data_))
             , Manager_(manager)
         {
@@ -108,7 +108,7 @@ namespace {
         inline ~TPerThreadedBuf() override = default;
 
     private:
-        void Dispose() noexcept override;
+        void Dispose() noexcept override; 
 
     private:
         char Data_[TMP_BUF_LEN];
@@ -117,16 +117,16 @@ namespace {
 
     class TTempBufManager {
         struct TDelete {
-            inline void operator()(TPerThreadedBuf* p) noexcept {
+            inline void operator()(TPerThreadedBuf* p) noexcept { 
                 delete p;
             }
         };
 
     public:
-        inline TTempBufManager() noexcept {
+        inline TTempBufManager() noexcept { 
         }
 
-        inline ~TTempBufManager() {
+        inline ~TTempBufManager() { 
             TDelete deleter;
 
             Unused_.ForEach(deleter);
@@ -140,7 +140,7 @@ namespace {
             return new TPerThreadedBuf(this);
         }
 
-        inline void Return(TPerThreadedBuf* buf) noexcept {
+        inline void Return(TPerThreadedBuf* buf) noexcept { 
             buf->Reset();
             Unused_.PushFront(buf);
         }
@@ -163,7 +163,7 @@ static inline TTempBuf::TImpl* AcquireSmallBuffer(size_t size) {
 #endif
 }
 
-void TPerThreadedBuf::Dispose() noexcept {
+void TPerThreadedBuf::Dispose() noexcept { 
     if (Manager_ == TempBufManager()) {
         Manager_->Return(this);
     } else {
@@ -196,14 +196,14 @@ TTempBuf::TTempBuf(size_t len)
 
 TTempBuf::TTempBuf(const TTempBuf&) noexcept = default;
 
-TTempBuf::TTempBuf(TTempBuf&& b) noexcept
+TTempBuf::TTempBuf(TTempBuf&& b) noexcept 
     : Impl_(std::move(b.Impl_))
 {
 }
 
 TTempBuf::~TTempBuf() = default;
 
-TTempBuf& TTempBuf::operator=(const TTempBuf& b) noexcept {
+TTempBuf& TTempBuf::operator=(const TTempBuf& b) noexcept { 
     if (this != &b) {
         Impl_ = b.Impl_;
     }
@@ -211,43 +211,43 @@ TTempBuf& TTempBuf::operator=(const TTempBuf& b) noexcept {
     return *this;
 }
 
-TTempBuf& TTempBuf::operator=(TTempBuf&& b) noexcept {
-    if (this != &b) {
-        Impl_ = std::move(b.Impl_);
-    }
-
-    return *this;
-}
-
-char* TTempBuf::Data() noexcept {
+TTempBuf& TTempBuf::operator=(TTempBuf&& b) noexcept { 
+    if (this != &b) { 
+        Impl_ = std::move(b.Impl_); 
+    } 
+ 
+    return *this; 
+} 
+ 
+char* TTempBuf::Data() noexcept { 
     return (char*)Impl_->Data();
 }
 
-const char* TTempBuf::Data() const noexcept {
+const char* TTempBuf::Data() const noexcept { 
     return static_cast<const char*>(Impl_->Data());
 }
 
-size_t TTempBuf::Size() const noexcept {
+size_t TTempBuf::Size() const noexcept { 
     return Impl_->Size();
 }
 
-char* TTempBuf::Current() noexcept {
+char* TTempBuf::Current() noexcept { 
     return Data() + Filled();
 }
 
-const char* TTempBuf::Current() const noexcept {
+const char* TTempBuf::Current() const noexcept { 
     return Data() + Filled();
 }
 
-size_t TTempBuf::Filled() const noexcept {
+size_t TTempBuf::Filled() const noexcept { 
     return Impl_->Filled();
 }
 
-size_t TTempBuf::Left() const noexcept {
+size_t TTempBuf::Left() const noexcept { 
     return Impl_->Left();
 }
 
-void TTempBuf::Reset() noexcept {
+void TTempBuf::Reset() noexcept { 
     Impl_->Reset();
 }
 
@@ -270,7 +270,7 @@ void TTempBuf::Append(const void* data, size_t len) {
     Proceed(len);
 }
 
-bool TTempBuf::IsNull() const noexcept {
+bool TTempBuf::IsNull() const noexcept { 
     return !Impl_;
 }
 

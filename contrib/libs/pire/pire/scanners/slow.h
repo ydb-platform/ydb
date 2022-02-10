@@ -62,7 +62,7 @@ public:
 	};
 
 	struct State {
-		TVector<unsigned> states;
+		TVector<unsigned> states; 
 		BitSet flags;
 
 		State() {}
@@ -352,8 +352,8 @@ private:
 	size_t* m_jumpPos;
 	size_t* m_letters;
 
-	TVector<void*> m_pool;
-	TVector< TVector<unsigned> > m_vec, *m_vecptr;
+	TVector<void*> m_pool; 
+	TVector< TVector<unsigned> > m_vec, *m_vecptr; 
 
 	bool need_actions;
 	TVector<TVector<Action>> m_actionsvec;

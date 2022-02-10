@@ -90,7 +90,7 @@ namespace NKikimr {
                 str << TabletId << ":" << Channel;
             }
 
-            TString ToString() const {
+            TString ToString() const { 
                 TStringStream str;
                 Output(str);
                 return str.Str();
@@ -138,7 +138,7 @@ namespace NKikimr {
                 str << "Issued:[" << BarrierGen << ":" << BarrierGenCounter << "]" << " -> Collect:[" << CollectGen << ":" << CollectStep << "]";
             }
 
-            TString ToString() const {
+            TString ToString() const { 
                 TStringStream str;
                 Output(str);
                 return str.Str();

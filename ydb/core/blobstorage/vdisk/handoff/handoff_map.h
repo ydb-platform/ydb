@@ -32,14 +32,14 @@ namespace NKikimr {
             ui64 SuccessfulMoveSend = 0;
             ui64 FailedMoveSend = 0;
 
-            TString ToStringBuildPlanStat() const {
+            TString ToStringBuildPlanStat() const { 
                 return Sprintf("Total# %" PRIu64 " MarkedMoveOnly# %" PRIu64 " MarkedDeleteOnly# %" PRIu64
                                " MarkedMoveAndDelete# %" PRIu64 " SkippedLevelItems# %" PRIu64,
                                ItemsTotal, ItemsMarkedMoveOnly, ItemsMarkedDeleteOnly, ItemsMarkedMoveAndDelete,
                                SkippedLevelItems);
             }
 
-            TString ToStringRuntimeStat() const {
+            TString ToStringRuntimeStat() const { 
                 return Sprintf("SuccessfulMoveSend# %" PRIu64 " FailedMoveSend# %" PRIu64,
                                SuccessfulMoveSend, FailedMoveSend);
             }
@@ -125,8 +125,8 @@ namespace NKikimr {
         // TODO: we can store MoveMap and DelMap in a more compact way
         //       Hints: 1. most of values are zero (we don't want to move or delete)
         //              2. we can store only 2 bit for every local part, not 8 bits for the whole logoblob key
-        TDeque<ui8> MoveMap;
-        TDeque<ui8> DelMap;
+        TDeque<ui8> MoveMap; 
+        TDeque<ui8> DelMap; 
         unsigned Counter;
         TTransformedItem TrRes;
         TStat Stat;

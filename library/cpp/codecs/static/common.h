@@ -12,10 +12,10 @@ namespace NCodecs {
     }
 
     template <class T>
-    TString HexWriteScalar(T t) {
+    TString HexWriteScalar(T t) { 
         static_assert(std::is_scalar<T>::value, "scalars only");
         t = LittleToBig(t);
-        TString res = HexEncode(&t, sizeof(t));
+        TString res = HexEncode(&t, sizeof(t)); 
         res.to_lower();
         return res;
     }

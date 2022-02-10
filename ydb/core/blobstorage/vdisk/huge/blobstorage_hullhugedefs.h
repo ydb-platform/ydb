@@ -114,7 +114,7 @@ namespace NKikimr {
                 return TDiskPart(ChunkId, Offset, Size);
             }
 
-            TString ToString() const {
+            TString ToString() const { 
                 TStringStream str;
                 str << "[" << ChunkId << " " << Offset << " " << Size << "]";
                 return str.Str();
@@ -166,24 +166,24 @@ namespace NKikimr {
                 : ChunkId(chunkId)
             {}
 
-            TString Serialize() const;
-            bool ParseFromString(const TString &data);
-            TString ToString() const;
+            TString Serialize() const; 
+            bool ParseFromString(const TString &data); 
+            TString ToString() const; 
         };
 
         ////////////////////////////////////////////////////////////////////////////
         // TFreeChunkRecoveryLogRec
         ////////////////////////////////////////////////////////////////////////////
         struct TFreeChunkRecoveryLogRec {
-            TVector<ui32> ChunkIds;
+            TVector<ui32> ChunkIds; 
 
-            TFreeChunkRecoveryLogRec(const TVector<ui32> &ids)
+            TFreeChunkRecoveryLogRec(const TVector<ui32> &ids) 
                 : ChunkIds(ids)
             {}
 
-            TString Serialize() const;
-            bool ParseFromString(const TString &data);
-            TString ToString() const;
+            TString Serialize() const; 
+            bool ParseFromString(const TString &data); 
+            TString ToString() const; 
         };
 
         ////////////////////////////////////////////////////////////////////////////
@@ -201,9 +201,9 @@ namespace NKikimr {
                 , DiskAddr(diskAddr)
             {}
 
-            TString Serialize() const;
-            bool ParseFromString(const TString &data);
-            TString ToString() const;
+            TString Serialize() const; 
+            bool ParseFromString(const TString &data); 
+            TString ToString() const; 
         };
 
 
@@ -289,11 +289,11 @@ namespace NKikimr {
                 return str.Str();
             }
 
-            const TVector<TDiskPart> &SavedData() const {
+            const TVector<TDiskPart> &SavedData() const { 
                 return DiskPtrs;
             }
 
-            const TVector<TDiskPart> &DeletedData() const {
+            const TVector<TDiskPart> &DeletedData() const { 
                 return Deleted;
             }
 
@@ -302,11 +302,11 @@ namespace NKikimr {
             }
 
         private:
-            typedef TVector<TDiskPart> TDiskPtrs;
+            typedef TVector<TDiskPart> TDiskPtrs; 
 
             TDiskPtrs DiskPtrs;
             TDiskPtrs Deleted;
-            NMatrix::TVectorType Parts;
+            NMatrix::TVectorType Parts; 
             TCircaLsns CircaLsns;
 
             void Merge(const TDiskPart *begin, const TDiskPart *end, const NMatrix::TVectorType &parts, ui64 circaLsn)

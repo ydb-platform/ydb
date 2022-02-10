@@ -206,7 +206,7 @@ void LoadedScanner::Load(yistream* s, ui32* type)
 	Impl::AlignedLoadArray(s, sc.m_letters, MaxChar);
 	Impl::AlignedLoadArray(s, sc.m_jumps, sc.m.statesCount * sc.m.lettersCount);
 	if (header.Version == Header::RE_VERSION_WITH_MACTIONS) {
-		TVector<Action> actions(sc.m.statesCount * sc.m.lettersCount);
+		TVector<Action> actions(sc.m.statesCount * sc.m.lettersCount); 
 		Impl::AlignedLoadArray(s, actions.data(), actions.size());
 	}
 	Impl::AlignedLoadArray(s, sc.m_tags, sc.m.statesCount);

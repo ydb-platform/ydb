@@ -132,7 +132,7 @@ void TExecutorGCLogic::ApplyLogEntry(TGCLogEntry& entry) {
     ApplyDelta(entry.Time, entry.Delta);
 }
 
-void TExecutorGCLogic::ApplyLogSnapshot(TGCLogEntry &snapshot, const TVector<std::pair<ui32, ui64>> &barriers) {
+void TExecutorGCLogic::ApplyLogSnapshot(TGCLogEntry &snapshot, const TVector<std::pair<ui32, ui64>> &barriers) { 
     ApplyLogEntry(snapshot);
     for (auto &xpair : barriers) {
         const ui32 channel = xpair.first;
@@ -201,32 +201,32 @@ void TExecutorGCLogic::TChannelInfo::ApplyDelta(TGCTime time, TGCBlobDelta& delt
     Y_VERIFY_DEBUG(delta.Created.empty() && delta.Deleted.empty());
 }
 
-void TExecutorGCLogic::MergeVectors(TVector<TLogoBlobID>& destination, const TVector<TLogoBlobID>& source) {
+void TExecutorGCLogic::MergeVectors(TVector<TLogoBlobID>& destination, const TVector<TLogoBlobID>& source) { 
     if (!source.empty()) {
         destination.insert(destination.end(), source.begin(), source.end());
     }
 }
 
-void TExecutorGCLogic::MergeVectors(THolder<TVector<TLogoBlobID>>& destination, const TVector<TLogoBlobID>& source) {
+void TExecutorGCLogic::MergeVectors(THolder<TVector<TLogoBlobID>>& destination, const TVector<TLogoBlobID>& source) { 
     if (!source.empty()) {
         if (!destination) {
-            destination.Reset(new TVector<TLogoBlobID>(source));
+            destination.Reset(new TVector<TLogoBlobID>(source)); 
         } else {
             MergeVectors(*destination.Get(), source);
         }
     }
 }
 
-void DeduplicateGCKeepVectors(TVector<TLogoBlobID> *keep, TVector<TLogoBlobID> *doNotKeep, ui32 barrierGen, ui32 barrierStep) {
+void DeduplicateGCKeepVectors(TVector<TLogoBlobID> *keep, TVector<TLogoBlobID> *doNotKeep, ui32 barrierGen, ui32 barrierStep) { 
     if (keep && doNotKeep && !keep->empty() && !doNotKeep->empty()) {
         // vectors must be sorted!
 
-        TVector<TLogoBlobID>::const_iterator keepIt = keep->begin();
-        TVector<TLogoBlobID>::const_iterator keepEnd = keep->end();
-        TVector<TLogoBlobID>::const_iterator notIt = doNotKeep->begin();
-        TVector<TLogoBlobID>::const_iterator notEnd = doNotKeep->end();
-        TVector<TLogoBlobID>::iterator keepIns = keep->begin();
-        TVector<TLogoBlobID>::iterator notIns = doNotKeep->begin();
+        TVector<TLogoBlobID>::const_iterator keepIt = keep->begin(); 
+        TVector<TLogoBlobID>::const_iterator keepEnd = keep->end(); 
+        TVector<TLogoBlobID>::const_iterator notIt = doNotKeep->begin(); 
+        TVector<TLogoBlobID>::const_iterator notEnd = doNotKeep->end(); 
+        TVector<TLogoBlobID>::iterator keepIns = keep->begin(); 
+        TVector<TLogoBlobID>::iterator notIns = doNotKeep->begin(); 
 
         bool keepModified = false;
         bool notKeepModified = false;
@@ -284,9 +284,9 @@ void DeduplicateGCKeepVectors(TVector<TLogoBlobID> *keep, TVector<TLogoBlobID> *
     }
 }
 
-TVector<TLogoBlobID>* TExecutorGCLogic::CreateVector(const TVector<TLogoBlobID>& source) {
+TVector<TLogoBlobID>* TExecutorGCLogic::CreateVector(const TVector<TLogoBlobID>& source) { 
     if (!source.empty()) {
-        return new TVector<TLogoBlobID>(source);
+        return new TVector<TLogoBlobID>(source); 
     } else {
         return nullptr;
     }
@@ -334,7 +334,7 @@ namespace {
 
 void TExecutorGCLogic::TChannelInfo::SendCollectGarbageEntry(
             const TActorContext &ctx,
-            TVector<TLogoBlobID> &&keep, TVector<TLogoBlobID> &&notKeep,
+            TVector<TLogoBlobID> &&keep, TVector<TLogoBlobID> &&notKeep, 
             ui64 tabletid, ui32 channel, ui32 bsgroup, ui32 generation)
 {
     ValidateGCVector(tabletid, channel, "Keep", keep);
@@ -345,8 +345,8 @@ void TExecutorGCLogic::TChannelInfo::SendCollectGarbageEntry(
             generation, GcCounter,
             channel, true,
             KnownGcBarrier.Generation, KnownGcBarrier.Step,
-            keep.empty() ? nullptr : new TVector<TLogoBlobID>(std::move(keep)),
-            notKeep.empty() ? nullptr : new TVector<TLogoBlobID>(std::move(notKeep)),
+            keep.empty() ? nullptr : new TVector<TLogoBlobID>(std::move(keep)), 
+            notKeep.empty() ? nullptr : new TVector<TLogoBlobID>(std::move(notKeep)), 
             TInstant::Max(),
             true);
     GcCounter += ev->PerGenerationCounterStepSize();
@@ -400,7 +400,7 @@ void TExecutorGCLogic::TChannelInfo::SendCollectGarbage(TGCTime uncommittedTime,
             SendCollectGarbageEntry(ctx, std::move(keep), std::move(notKeep), tabletStorageInfo->TabletID, channel, latestEntry->GroupID, generation);
         } else {
         // bloated case - spread among different groups
-            TMap<ui32, std::pair<TVector<TLogoBlobID>, TVector<TLogoBlobID>>> affectedGroups;
+            TMap<ui32, std::pair<TVector<TLogoBlobID>, TVector<TLogoBlobID>>> affectedGroups; 
 
             { // mark every actual generation for update
                 auto xit = UpperBound(channelInfo->History.begin(), channelInfo->History.end(), lastCommitedGcBarrier, TTabletChannelInfo::THistoryEntry::TCmp());
@@ -413,7 +413,7 @@ void TExecutorGCLogic::TChannelInfo::SendCollectGarbage(TGCTime uncommittedTime,
 
             ui32 activeGen = Max<ui32>();
             ui32 activeGroup = Max<ui32>();
-            TVector<TLogoBlobID> *vec = nullptr;
+            TVector<TLogoBlobID> *vec = nullptr; 
 
             for (const auto &blobId : keep) {
                 if (activeGen != blobId.Generation()) {

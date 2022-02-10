@@ -31,16 +31,16 @@ void WriteYsonValue(
     const TVector<ui32>* structPositions = nullptr
 );
 
-TString WriteYsonValue(
+TString WriteYsonValue( 
     const NKikimr::NUdf::TUnboxedValuePod& value,
     NKikimr::NMiniKQL::TType* type,
-    const TVector<ui32>* structPositions = nullptr,
+    const TVector<ui32>* structPositions = nullptr, 
     NYson::EYsonFormat format = NYson::EYsonFormat::Binary
 );
 
-TMaybe<TVector<ui32>> CreateStructPositions(
+TMaybe<TVector<ui32>> CreateStructPositions( 
     NKikimr::NMiniKQL::TType* inputType,
-    const TVector<TString>* columns = nullptr
+    const TVector<TString>* columns = nullptr 
 );
 
 NYT::TNode ValueToNode(const NKikimr::NUdf::TUnboxedValuePod& value, NKikimr::NMiniKQL::TType* type);

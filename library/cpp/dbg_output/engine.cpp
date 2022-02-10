@@ -9,7 +9,7 @@
 
 DBGDUMP_INLINE_IF_INCLUDED void TDumpBase::String(const TStringBuf& s) {
     if (s) {
-        Raw(TString(s).Quote());
+        Raw(TString(s).Quote()); 
     } else {
         Raw("(empty)");
     }

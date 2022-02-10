@@ -49,7 +49,7 @@ struct TPermissionInfo {
         , RequestId(requestId)
         , Owner(owner)
         , Action(permission.GetAction())
-        , Deadline(TInstant::MicroSeconds(permission.GetDeadline()))
+        , Deadline(TInstant::MicroSeconds(permission.GetDeadline())) 
     {
     }
 
@@ -163,7 +163,7 @@ public:
         {
             PermissionId = permission.PermissionId;
             LockDeadline = permission.Deadline;
-            ActionDeadline = LockDeadline + TDuration::MicroSeconds(Action.GetDuration());
+            ActionDeadline = LockDeadline + TDuration::MicroSeconds(Action.GetDuration()); 
         }
         TLock(const TLock &other) = default;
         TLock(TLock &&other) = default;
@@ -182,10 +182,10 @@ public:
         {
             NotificationId = notification.NotificationId;
             if (notification.Notification.HasTime())
-                LockStart = TInstant::MicroSeconds(notification.Notification.GetTime());
+                LockStart = TInstant::MicroSeconds(notification.Notification.GetTime()); 
             else
                 LockStart = TActivationContext::Now();
-            LockDeadline = LockStart + TDuration::MicroSeconds(action.GetDuration());
+            LockDeadline = LockStart + TDuration::MicroSeconds(action.GetDuration()); 
         }
 
         TString NotificationId;
@@ -288,7 +288,7 @@ public:
     TMaybe<TLock> Lock;
     std::list<TExternalLock> ExternalLocks;
     std::list<TScheduledLock> ScheduledLocks;
-    TVector<TTemporaryLock> TempLocks;
+    TVector<TTemporaryLock> TempLocks; 
     ui64 DeactivatedLocksOrder = Max<ui64>();
 };
 using TLockableItemPtr = TIntrusivePtr<TLockableItem>;
@@ -320,9 +320,9 @@ public:
     ui16 IcPort = 0;
     TNodeLocation Location;
     TString Version;
-    TSet<ui64> Tablets;
+    TSet<ui64> Tablets; 
     TSet<TPDiskID> PDisks;
-    TSet<TVDiskID> VDisks;
+    TSet<TVDiskID> VDisks; 
     bool HasTenantInfo = false;
     TString Tenant;
     TString PreviousTenant;
@@ -383,7 +383,7 @@ public:
     ui32 NodeId;
     TString Host;
     TString Path;
-    TSet<TVDiskID> VDisks;
+    TSet<TVDiskID> VDisks; 
     // SlotIdx -> VDiskID
     THashMap<ui32, TVDiskID> VSlots;
 
@@ -427,7 +427,7 @@ public:
     ui32 NodeId;
     TString Host;
     ui32 SlotId;
-    TSet<ui32> BSGroups;
+    TSet<ui32> BSGroups; 
 
 private:
     static bool NameToId(const TString &name, TVDiskID &id);
@@ -447,7 +447,7 @@ struct TBSGroupInfo {
 
     ui32 GroupId = 0;
     TErasureType Erasure;
-    TSet<TVDiskID> VDisks;
+    TSet<TVDiskID> VDisks; 
 };
 
 /**
@@ -461,11 +461,11 @@ struct TBSGroupInfo {
  */
 class TClusterInfo : public TThrRefBase {
 public:
-    using TNodes = THashMap<ui32, TNodeInfoPtr>;
-    using TTablets = THashMap<ui64, TTabletInfo>;
+    using TNodes = THashMap<ui32, TNodeInfoPtr>; 
+    using TTablets = THashMap<ui64, TTabletInfo>; 
     using TPDisks = THashMap<TPDiskID, TPDiskInfoPtr, TPDiskIDHash>;
-    using TVDisks = THashMap<TVDiskID, TVDiskInfoPtr>;
-    using TBSGroups = THashMap<ui32, TBSGroupInfo>;
+    using TVDisks = THashMap<TVDiskID, TVDiskInfoPtr>; 
+    using TBSGroups = THashMap<ui32, TBSGroupInfo>; 
 
     TClusterInfo() = default;
     TClusterInfo(const TClusterInfo &other) = default;
@@ -809,7 +809,7 @@ private:
         return TPDiskID();
     }
 
-    TSet<TLockableItem *> FindLockedItems(const NKikimrCms::TAction &action, const TActorContext *ctx);
+    TSet<TLockableItem *> FindLockedItems(const NKikimrCms::TAction &action, const TActorContext *ctx); 
 
     TNodes Nodes;
     TTablets Tablets;
@@ -822,9 +822,9 @@ private:
     bool Outdated = false;
 
     // Fast access structures.
-    TMultiMap<TString, ui32> HostNameToNodeId;
+    TMultiMap<TString, ui32> HostNameToNodeId; 
     TMultiMap<TString, ui32> TenantToNodeId;
-    THashMap<TString, TLockableItemPtr> LockableItems;
+    THashMap<TString, TLockableItemPtr> LockableItems; 
 };
 
 inline bool ActionRequiresHost(NKikimrCms::TAction::EType type)

@@ -39,11 +39,11 @@ struct TResultProviderConfig : TThrRefBase {
     const NKikimr::NMiniKQL::IFunctionRegistry& FunctionRegistry;
     IDataProvider::TFillSettings FillSettings;
     TResultWriterFactory WriterFactory;
-    TVector<TString> CommittedResults;
+    TVector<TString> CommittedResults; 
     bool SupportsResultPosition = false;
 };
 
 TIntrusivePtr<IDataProvider> CreateResultProvider(const TIntrusivePtr<TResultProviderConfig>& config);
-const THashSet<TStringBuf>& ResultProviderFunctions();
+const THashSet<TStringBuf>& ResultProviderFunctions(); 
 
 }

@@ -289,7 +289,7 @@ private:
     // ID of domain node broker is responsible for.
     ui32 DomainId;
     // All registered dynamic nodes.
-    THashMap<ui32, TNodeInfo> Nodes;
+    THashMap<ui32, TNodeInfo> Nodes; 
     THashMap<ui32, TNodeInfo> ExpiredNodes;
     // Maps <Host/Addr:Port> to NodeID.
     THashMap<std::tuple<TString, TString, ui16>, ui32> Hosts;
@@ -306,7 +306,7 @@ private:
     ui64 ConfigSubscriptionId;
 
     // Events collected during initialization phase.
-    TVector<TAutoPtr<IEventHandle>> EnqueuedEvents;
+    TVector<TAutoPtr<IEventHandle>> EnqueuedEvents; 
     TMultiMap<ui64, TEvNodeBroker::TEvListNodes::TPtr> DelayedListNodesRequests;
     // Transactions queue.
     TTxProcessor::TPtr TxProcessor;

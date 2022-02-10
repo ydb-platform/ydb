@@ -62,8 +62,8 @@ struct TVDiskID {
     friend bool operator !=(const TVDiskID& x, const TVDiskID& y) { return x.ConvertToTuple() != y.ConvertToTuple(); }
     friend bool operator < (const TVDiskID& x, const TVDiskID& y) { return x.ConvertToTuple() <  y.ConvertToTuple(); }
 
-    TString ToString() const;
-    TString ToStringWOGeneration() const;
+    TString ToString() const; 
+    TString ToStringWOGeneration() const; 
     void Serialize(IOutputStream &s) const;
     bool Deserialize(IInputStream &s);
 
@@ -133,7 +133,7 @@ struct TVDiskIdShort {
         return !((*this)==x);
     }
 
-    TString ToString() const {
+    TString ToString() const { 
         TStringStream str;
         str << "{FailRealm# " << (ui32)FailRealm;
         str << " FailDomain# " << (ui32)FailDomain;

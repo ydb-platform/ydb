@@ -253,7 +253,7 @@ public:
         }
     };
 
-    typedef std::vector<const TTypeAnnotationNode*> TListType;
+    typedef std::vector<const TTypeAnnotationNode*> TListType; 
     typedef std::span<const TTypeAnnotationNode*> TSpanType;
 protected:
     template <typename T>
@@ -296,13 +296,13 @@ class TTupleExprType : public TTypeAnnotationNode {
 public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Tuple;
 
-    TTupleExprType(ui64 hash, const TTypeAnnotationNode::TListType& items)
+    TTupleExprType(ui64 hash, const TTypeAnnotationNode::TListType& items) 
         : TTypeAnnotationNode(KindValue, CombineFlags(items), hash)
         , Items(items)
     {
     }
 
-    static ui64 MakeHash(const TTypeAnnotationNode::TListType& items) {
+    static ui64 MakeHash(const TTypeAnnotationNode::TListType& items) { 
         ui64 hash = TypeHashMagic | (ui64)ETypeAnnotationKind::Tuple;
         hash = StreamHash(items.size(), hash);
         for (const auto& item : items) {
@@ -316,7 +316,7 @@ public:
         return Items.size();
     }
 
-    const TTypeAnnotationNode::TListType& GetItems() const {
+    const TTypeAnnotationNode::TListType& GetItems() const { 
         return Items;
     }
 
@@ -338,7 +338,7 @@ public:
     bool Validate(TPositionHandle position, TExprContext& ctx) const;
 
 private:
-    TTypeAnnotationNode::TListType Items;
+    TTypeAnnotationNode::TListType Items; 
 };
 
 class TMultiExprType : public TTypeAnnotationNode {
@@ -452,13 +452,13 @@ public:
         };
     };
 
-    TStructExprType(ui64 hash, const TVector<const TItemExprType*>& items)
+    TStructExprType(ui64 hash, const TVector<const TItemExprType*>& items) 
         : TTypeAnnotationNode(KindValue, TypeNonComparable | CombineFlags(items), hash)
         , Items(items)
     {
     }
 
-    static ui64 MakeHash(const TVector<const TItemExprType*>& items) {
+    static ui64 MakeHash(const TVector<const TItemExprType*>& items) { 
         Y_VERIFY_DEBUG(IsSorted(items.begin(), items.end(), TItemLess()));
         ui64 hash = TypeHashMagic | (ui64)ETypeAnnotationKind::Struct;
         hash = StreamHash(items.size(), hash);
@@ -476,7 +476,7 @@ public:
         return Items.size();
     }
 
-    const TVector<const TItemExprType*>& GetItems() const {
+    const TVector<const TItemExprType*>& GetItems() const { 
         return Items;
     }
 
@@ -522,7 +522,7 @@ public:
     }
 
 private:
-    TVector<const TItemExprType*> Items;
+    TVector<const TItemExprType*> Items; 
 };
 
 class TListExprType : public TTypeAnnotationNode {
@@ -910,7 +910,7 @@ public:
         }
     };
 
-    TCallableExprType(ui64 hash, const TTypeAnnotationNode* returnType, const TVector<TArgumentInfo>& arguments
+    TCallableExprType(ui64 hash, const TTypeAnnotationNode* returnType, const TVector<TArgumentInfo>& arguments 
         , size_t optionalArgumentsCount, const TStringBuf& payload)
         : TTypeAnnotationNode(KindValue, MakeFlags(returnType), hash)
         , ReturnType(returnType)
@@ -926,7 +926,7 @@ public:
         }
     }
 
-    static ui64 MakeHash(const TTypeAnnotationNode* returnType, const TVector<TArgumentInfo>& arguments
+    static ui64 MakeHash(const TTypeAnnotationNode* returnType, const TVector<TArgumentInfo>& arguments 
         , size_t optionalArgumentsCount, const TStringBuf& payload) {
         ui64 hash = TypeHashMagic | (ui64)ETypeAnnotationKind::Callable;
         hash = StreamHash(returnType->GetHash(), hash);
@@ -960,7 +960,7 @@ public:
         return Arguments.size();
     }
 
-    const TVector<TArgumentInfo>& GetArguments() const {
+    const TVector<TArgumentInfo>& GetArguments() const { 
         return Arguments;
     }
 
@@ -1007,10 +1007,10 @@ private:
 
 private:
     const TTypeAnnotationNode* ReturnType;
-    TVector<TArgumentInfo> Arguments;
+    TVector<TArgumentInfo> Arguments; 
     const size_t OptionalArgumentsCount;
     const TStringBuf Payload;
-    THashMap<TStringBuf, ui32> IndexByName;
+    THashMap<TStringBuf, ui32> IndexByName; 
 };
 
 class TGenericExprType : public TTypeAnnotationNode {
@@ -1319,7 +1319,7 @@ private:
 
 public:
     typedef TIntrusivePtr<TExprNode> TPtr;
-    typedef std::vector<TPtr> TListType;
+    typedef std::vector<TPtr> TListType; 
     typedef TArrayRef<const TPtr> TChildrenType;
 
     struct TPtrHash : private std::hash<const TExprNode*> {
@@ -1393,7 +1393,7 @@ public:
     }
 
     template <class TKey>
-    bool IsCallable(const THashSet<TKey>& names) const {
+    bool IsCallable(const THashSet<TKey>& names) const { 
         ENSURE_NOT_DELETED
         return Type() == TExprNode::Callable && names.contains(Content());
     }
@@ -1474,7 +1474,7 @@ public:
         return ret;
     }
 
-    TString Dump() const;
+    TString Dump() const; 
 
     bool StartsExecution() const {
         ENSURE_NOT_DELETED
@@ -1526,7 +1526,7 @@ public:
         return (EType)Type_;
     }
 
-    TListType::size_type ChildrenSize() const {
+    TListType::size_type ChildrenSize() const { 
         ENSURE_NOT_DELETED
         return Children_.size();
     }
@@ -1721,7 +1721,7 @@ public:
     }
 
     static TPtr NewLambda(ui64 uniqueId, TPositionHandle pos, TPtr&& args, TPtr&& body) {
-        TListType children(body ? 2 : 1);
+        TListType children(body ? 2 : 1); 
         children.front() = std::move(args);
         if (body) {
             children.back() = std::move(body);
@@ -1753,10 +1753,10 @@ public:
 
     TPtr ChangeContent(ui64 newUniqueId, const TStringBuf& content) const {
         ENSURE_NOT_DELETED
-        return Make(Position_, (EType)Type_, TListType(Children_), content, Flags_, newUniqueId);
+        return Make(Position_, (EType)Type_, TListType(Children_), content, Flags_, newUniqueId); 
     }
 
-    TPtr ChangeChildren(ui64 newUniqueId, TListType&& children) const {
+    TPtr ChangeChildren(ui64 newUniqueId, TListType&& children) const { 
         ENSURE_NOT_DELETED
         return Make(Position_, (EType)Type_, std::move(children), Content(), Flags_, newUniqueId);
     }
@@ -1764,7 +1764,7 @@ public:
     TPtr ChangeChild(ui64 newUniqueId, ui32 index, TPtr&& child) const {
         ENSURE_NOT_DELETED
         Y_ENSURE(index < Children_.size(), "index out of range");
-        TListType newChildren(Children_);
+        TListType newChildren(Children_); 
         newChildren[index] = std::move(child);
         return Make(Position_, (EType)Type_, std::move(newChildren), Content(), Flags_, newUniqueId);
     }
@@ -2161,7 +2161,7 @@ struct TMakeTypeImpl<TDataExprParamsType> {
 template <>
 struct TMakeTypeImpl<TCallableExprType> {
     static const TCallableExprType* Make(
-        TExprContext& ctx, const TTypeAnnotationNode* returnType, const TVector<TCallableExprType::TArgumentInfo>& arguments,
+        TExprContext& ctx, const TTypeAnnotationNode* returnType, const TVector<TCallableExprType::TArgumentInfo>& arguments, 
         size_t optionalArgumentsCount, const TStringBuf& payload);
 };
 
@@ -2177,12 +2177,12 @@ struct TMakeTypeImpl<TTaggedExprType> {
 
 template <>
 struct TMakeTypeImpl<TStructExprType> {
-    static const TStructExprType* Make(TExprContext& ctx, const TVector<const TItemExprType*>& items);
+    static const TStructExprType* Make(TExprContext& ctx, const TVector<const TItemExprType*>& items); 
 };
 
 template <>
 struct TMakeTypeImpl<TTupleExprType> {
-    static const TTupleExprType* Make(TExprContext& ctx, const TTypeAnnotationNode::TListType& items);
+    static const TTupleExprType* Make(TExprContext& ctx, const TTypeAnnotationNode::TListType& items); 
 };
 
 template <>
@@ -2301,11 +2301,11 @@ struct TExprContext : private TNonCopyable {
     [[nodiscard]]
     TExprNode::TPtr ShallowCopy(const TExprNode& node);
     [[nodiscard]]
-    TExprNode::TPtr ChangeChildren(const TExprNode& node, TExprNode::TListType&& children);
+    TExprNode::TPtr ChangeChildren(const TExprNode& node, TExprNode::TListType&& children); 
     [[nodiscard]]
     TExprNode::TPtr ChangeChild(const TExprNode& node, ui32 index, TExprNode::TPtr&& child);
     [[nodiscard]]
-    TExprNode::TPtr ExactChangeChildren(const TExprNode& node, TExprNode::TListType&& children);
+    TExprNode::TPtr ExactChangeChildren(const TExprNode& node, TExprNode::TListType&& children); 
     [[nodiscard]]
     TExprNode::TPtr ExactShallowCopy(const TExprNode& node);
     [[nodiscard]]
@@ -2531,7 +2531,7 @@ bool CompileExpr(TAstNode& astRoot, TExprNode::TPtr& exprRoot, TExprContext& ctx
 
 struct TLibraryCohesion {
     TExportTable Exports;
-    TNodeMap<std::pair<TString, TString>> Imports;
+    TNodeMap<std::pair<TString, TString>> Imports; 
 };
 
 bool CompileExpr(TAstNode& astRoot, TLibraryCohesion& cohesion, TExprContext& ctx, ui16 syntaxVersion = 0);

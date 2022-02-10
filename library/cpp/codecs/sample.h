@@ -30,11 +30,11 @@ namespace NCodecs {
 
     template <class TItem>
     class TSimpleSequenceReader: public ISequenceReader {
-        const TVector<TItem>& Items;
+        const TVector<TItem>& Items; 
         size_t Idx = 0;
 
     public:
-        TSimpleSequenceReader(const TVector<TItem>& items)
+        TSimpleSequenceReader(const TVector<TItem>& items) 
             : Items(items)
         {
         }
@@ -64,13 +64,13 @@ namespace NCodecs {
     }
 
     template <class TIter, class TGetter>
-    TVector<TBuffer> GetSample(TIter begin, TIter end, size_t sampleSizeBytes, TGetter getter) {
+    TVector<TBuffer> GetSample(TIter begin, TIter end, size_t sampleSizeBytes, TGetter getter) { 
         TFastRng64 rng{0x1ce1f2e507541a05, 0x07d45659, 0x7b8771030dd9917e, 0x2d6636ce};
 
         size_t totalBytes = GetInputSize(begin, end, getter);
         double sampleProb = (double)sampleSizeBytes / Max<size_t>(1, totalBytes);
 
-        TVector<TBuffer> result;
+        TVector<TBuffer> result; 
         for (TIter iter = begin; iter != end; ++iter) {
             if (sampleProb >= 1 || rng.GenRandReal1() < sampleProb) {
                 TStringBuf reg = getter(iter);
@@ -82,7 +82,7 @@ namespace NCodecs {
     }
 
     template <class TIter>
-    TVector<TBuffer> GetSample(TIter begin, TIter end, size_t sampleSizeBytes) {
+    TVector<TBuffer> GetSample(TIter begin, TIter end, size_t sampleSizeBytes) { 
         return GetSample(begin, end, sampleSizeBytes, IterToStringBuf<TIter>);
     }
 

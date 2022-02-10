@@ -6,12 +6,12 @@
 
 namespace NAddr {
     struct TNetworkInterface {
-        TString Name;
+        TString Name; 
         IRemoteAddrRef Address;
         IRemoteAddrRef Mask;
     };
 
-    using TNetworkInterfaceList = TVector<TNetworkInterface>;
+    using TNetworkInterfaceList = TVector<TNetworkInterface>; 
 
     TNetworkInterfaceList GetNetworkInterfaces();
 }

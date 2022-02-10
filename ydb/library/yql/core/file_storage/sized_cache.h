@@ -3,7 +3,7 @@
 #include <library/cpp/cache/cache.h>
 
 #include <util/system/spinlock.h>
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 #include <util/generic/ylimits.h>
 #include <util/generic/ptr.h>
 #include <util/generic/maybe.h>
@@ -21,7 +21,7 @@ class TSizedCache {
 public:
     struct ICacheObj: public TThrRefBase {
         // Unique object identifier
-        virtual TString GetName() = 0;
+        virtual TString GetName() = 0; 
         // Object size
         virtual ui64 GetSize() = 0;
         // Called when object is removed from the cache. Should cleanup occupied resources
@@ -38,13 +38,13 @@ public:
     void Put(const TIntrusivePtr<ICacheObj>& obj, bool lock = true);
     // Decrements object lock count. If lock count becomes zero and total count/size exceeds the limit
     // then object is removed from the cache immediately
-    void Release(const TString& name, bool remove = false);
+    void Release(const TString& name, bool remove = false); 
     // Returns the object if it exists in the cache
-    TIntrusivePtr<ICacheObj> Get(const TString& name);
+    TIntrusivePtr<ICacheObj> Get(const TString& name); 
     // Removes and returns the object if it exists in the cache
-    TIntrusivePtr<ICacheObj> Revoke(const TString& name);
+    TIntrusivePtr<ICacheObj> Revoke(const TString& name); 
     // Returns count of object locks, or empty if object doesn't belong to the cache
-    TMaybe<ui32> GetLocks(const TString& name) const;
+    TMaybe<ui32> GetLocks(const TString& name) const; 
     // Total size of all objects in the cache
     ui64 GetOccupiedSize() const {
         return CurrentSize;
@@ -58,7 +58,7 @@ private:
         TIntrusivePtr<ICacheObj> Obj;
         ui32 Locks;
     };
-    using TCache = TLRUCache<TString, TEntry>;
+    using TCache = TLRUCache<TString, TEntry>; 
 
     void Remove(TCache::TIterator it);
 

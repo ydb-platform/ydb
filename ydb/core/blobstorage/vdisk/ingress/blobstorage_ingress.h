@@ -66,7 +66,7 @@ namespace NKikimr {
 #pragma pack(push, 4)
     class TIngress {
     public:
-        typedef std::pair<NMatrix::TVectorType, NMatrix::TVectorType> TPairOfVectors;
+        typedef std::pair<NMatrix::TVectorType, NMatrix::TVectorType> TPairOfVectors; 
 
         enum class EMode {
             GENERIC,
@@ -85,7 +85,7 @@ namespace NKikimr {
         NMatrix::TVectorType PartsWeKnowAbout(TBlobStorageGroupType gtype) const;
         // Returns vector of parts we MUST have locally according to Ingress, i.e. parts we have
         // written locally or recovered after crash
-        NMatrix::TVectorType PartsWeMustHaveLocally(const TBlobStorageGroupInfo::TTopology *top,
+        NMatrix::TVectorType PartsWeMustHaveLocally(const TBlobStorageGroupInfo::TTopology *top, 
                                                 const TVDiskIdShort &vdisk,
                                                 const TLogoBlobID &id) const;
         // returns a pair <VectorOfPartsToMove, VectorOfPartsToDelete>
@@ -101,7 +101,7 @@ namespace NKikimr {
         void DeleteHandoff(const TBlobStorageGroupInfo::TTopology *top,
                            const TVDiskIdShort &vdisk,
                            const TLogoBlobID &id);
-        TString ToString(const TBlobStorageGroupInfo::TTopology *top,
+        TString ToString(const TBlobStorageGroupInfo::TTopology *top, 
                         const TVDiskIdShort &vdisk,
                         const TLogoBlobID &id) const;
 
@@ -112,7 +112,7 @@ namespace NKikimr {
             Merge(*this, n);
         }
 
-        static TString PrintVDisksForLogoBlob(const TBlobStorageGroupInfo *info, const TLogoBlobID &id);
+        static TString PrintVDisksForLogoBlob(const TBlobStorageGroupInfo *info, const TLogoBlobID &id); 
         static void Merge(TIngress &myIngress, const TIngress &newIngress);
         static bool MustKnowAboutLogoBlob(const TBlobStorageGroupInfo::TTopology *top,
                                           const TVDiskIdShort &vdisk,
@@ -120,11 +120,11 @@ namespace NKikimr {
         static TIngress CreateFromRepl(const TBlobStorageGroupInfo::TTopology *top,
                                        const TVDiskIdShort& vdisk,
                                        const TLogoBlobID& id,
-                                       NMatrix::TVectorType recoveredParts);
+                                       NMatrix::TVectorType recoveredParts); 
 
         // NOTE: take into account that partId in logoblob is from 1 to SomeMax when
         //       we are talking about a concrete part; method of this class usually return
-        //       NMatrix::TVectorType mask of parts starting from 0.
+        //       NMatrix::TVectorType mask of parts starting from 0. 
 
         // create ingress from LogoBlobID id with main or handoff ingress bits
         // AND local bits (i.e. data is present)
@@ -173,7 +173,7 @@ namespace NKikimr {
         TBarrierIngress(const TIngressCache *cache);
 
         bool IsQuorum(const TIngressCache *cache) const;
-        TString ToString(const TIngressCache *cache) const;
+        TString ToString(const TIngressCache *cache) const; 
 
         static TBarrierIngress CreateFromRaw(ui32 raw);
         static void Merge(TBarrierIngress &myIngress, const TBarrierIngress &newIngress);

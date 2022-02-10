@@ -110,7 +110,7 @@ inline RECODE_RESULT Recode(ECharset from, ECharset to, const char* in, char* ou
  * @return false if conversion was not attempted (charsets were the same),
  *         true if successful
  */
-inline bool Recode(ECharset from, ECharset to, const TStringBuf& in, TString& out) {
+inline bool Recode(ECharset from, ECharset to, const TStringBuf& in, TString& out) { 
     if (to == from)
         return false;
 
@@ -132,23 +132,23 @@ inline bool Recode(ECharset from, ECharset to, const TStringBuf& in, TString& ou
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////
-//     TString -> TString                                                              //
+//     TString -> TString                                                              // 
 ///////////////////////////////////////////////////////////////////////////////////////
-inline TString Recode(ECharset from, ECharset to, const TString& in) {
-    TString out;
+inline TString Recode(ECharset from, ECharset to, const TString& in) { 
+    TString out; 
     return to != from && Recode(from, to, in, out) ? out : in;
 }
-inline TString RecodeToYandex(ECharset from, const TString& in) {
+inline TString RecodeToYandex(ECharset from, const TString& in) { 
     return Recode(from, CODES_YANDEX, in);
 }
-inline TString RecodeFromYandex(ECharset to, const TString& in) {
+inline TString RecodeFromYandex(ECharset to, const TString& in) { 
     return Recode(CODES_YANDEX, to, in);
 }
 
-inline TString RecodeToHTMLEntities(ECharset from, const TString& in) {
+inline TString RecodeToHTMLEntities(ECharset from, const TString& in) { 
     RECODE_RESULT res;
     size_t outWritten, inRead;
-    TString out;
+    TString out; 
     out.resize(in.length() * (4 + 4));
     res = NCodepagePrivate::_recodeToHTMLEntities(from, in.c_str(), out.begin(), in.length(), out.length(), inRead, outWritten);
     if (res == RECODE_EOOUTPUT) { //input contains many 8-byte characters?

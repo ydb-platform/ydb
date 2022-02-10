@@ -22,7 +22,7 @@ namespace NKikimr {
                 , Bytes(bytes)
             {}
         };
-        TDeque<TMemQueueItem> MemQueue;
+        TDeque<TMemQueueItem> MemQueue; 
         i64 MemFree;
 
         struct TMemToken {
@@ -34,7 +34,7 @@ namespace NKikimr {
                 , Bytes(bytes)
             {}
         };
-        THashMap<TReplMemTokenId, TMemToken> MemTokens;
+        THashMap<TReplMemTokenId, TMemToken> MemTokens; 
         TReplMemTokenId NextMemToken = 1;
 
     public:

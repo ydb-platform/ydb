@@ -138,7 +138,7 @@ TExprNode::TPtr KiRedundantSortByPk(TExprBase node, TExprContext& ctx,
     auto keySelector = maybeSort ? maybeSort.Cast().KeySelectorLambda() : maybePartialSort.Cast().KeySelectorLambda();
 
     auto read = input;
-    TMaybe<THashSet<TStringBuf>> passthroughFields;
+    TMaybe<THashSet<TStringBuf>> passthroughFields; 
     if (maybePartialSort && input.Maybe<TCoFlatMap>()) {
         auto flatmap = input.Cast<TCoFlatMap>();
 

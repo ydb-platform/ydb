@@ -235,7 +235,7 @@ namespace NKikimr {
                     Y_VERIFY(Crc32c(&header.IndexRecord, totalSize - sizeof(ui32)) == header.Checksum);
                     Y_VERIFY(header.IndexRecord == record);
                     Y_VERIFY(header.ChunkSerNum == ChunkInProgressSerNum);
-                    TString data = header.ExtractInplacePayload();
+                    TString data = header.ExtractInplacePayload(); 
 
                     // fill in delete locator with provided values
                     TBlobDeleteLocator deleteLocator{chunkIdx, chunkSerNum, {}, index, sizeInBlocks};

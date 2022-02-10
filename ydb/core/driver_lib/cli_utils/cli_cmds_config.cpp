@@ -188,7 +188,7 @@ public:
 
         if (ProtoFile) {
             try {
-                data = TUnbufferedFileInput(ProtoFile).ReadAll();
+                data = TUnbufferedFileInput(ProtoFile).ReadAll(); 
             } catch (const yexception& ex) {
                 Cerr << "failed to ready query from file: " << ex.what() << Endl;
                 return EXIT_FAILURE;

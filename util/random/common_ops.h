@@ -33,7 +33,7 @@ namespace NPrivate {
     }
 
     template <class T>
-    static inline ui64 ToRand64(T&& rng, ui32 x) noexcept {
+    static inline ui64 ToRand64(T&& rng, ui32 x) noexcept { 
         return ((ui64)x) | (((ui64)rng.GenRand()) << 32);
     }
 
@@ -65,7 +65,7 @@ struct TCommonRNG {
     using TResult = TRandType;
     using result_type = TRandType;
 
-    inline T& Engine() noexcept {
+    inline T& Engine() noexcept { 
         return static_cast<T&>(*this);
     }
 
@@ -81,42 +81,42 @@ struct TCommonRNG {
     }
 
     /* generates uniformly distributed random number on [0, t) interval */
-    inline TResult Uniform(TResult t) noexcept {
+    inline TResult Uniform(TResult t) noexcept { 
         return ::NPrivate::GenUniform(t, Engine());
     }
 
     /* generates uniformly distributed random number on [f, t) interval */
-    inline TResult Uniform(TResult f, TResult t) noexcept {
+    inline TResult Uniform(TResult f, TResult t) noexcept { 
         return f + Uniform(t - f);
     }
 
     /* generates 64-bit random number for current(may be 32 bit) rng */
-    inline ui64 GenRand64() noexcept {
+    inline ui64 GenRand64() noexcept { 
         return ::NPrivate::ToRand64(Engine(), Engine().GenRand());
     }
 
     /* generates a random number on [0, 1]-real-interval */
-    inline double GenRandReal1() noexcept {
+    inline double GenRandReal1() noexcept { 
         return ::NPrivate::ToRandReal1(Engine().GenRand());
     }
 
     /* generates a random number on [0, 1)-real-interval */
-    inline double GenRandReal2() noexcept {
+    inline double GenRandReal2() noexcept { 
         return ::NPrivate::ToRandReal2(Engine().GenRand());
     }
 
     /* generates a random number on (0, 1)-real-interval */
-    inline double GenRandReal3() noexcept {
+    inline double GenRandReal3() noexcept { 
         return ::NPrivate::ToRandReal3(Engine().GenRand());
     }
 
     /* generates a random number on [0, 1) with 53-bit resolution */
-    inline double GenRandReal4() noexcept {
+    inline double GenRandReal4() noexcept { 
         return ::NPrivate::ToRandReal4(Engine().GenRand64());
     }
 
     //compatibility stuff
-    inline TResult operator()() noexcept {
+    inline TResult operator()() noexcept { 
         return Engine().GenRand();
     }
 

@@ -7,7 +7,7 @@
 
 class TFileLogBackend: public TLogBackend {
 public:
-    TFileLogBackend(const TString& path);
+    TFileLogBackend(const TString& path); 
     ~TFileLogBackend() override;
 
     void WriteData(const TLogRecord& rec) override;

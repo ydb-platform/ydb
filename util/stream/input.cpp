@@ -4,7 +4,7 @@
 
 #include <util/charset/wide.h>
 #include <util/memory/tempbuf.h>
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 #include <util/generic/yexception.h>
 #include <util/generic/singleton.h>
 #include <util/string/cast.h>
@@ -89,7 +89,7 @@ size_t IInputStream::ReadLine(TString& st) {
 }
 
 size_t IInputStream::ReadLine(TUtf16String& w) {
-    TString s;
+    TString s; 
     size_t result = ReadLine(s);
 
     if (result) {
@@ -100,7 +100,7 @@ size_t IInputStream::ReadLine(TUtf16String& w) {
 }
 
 TString IInputStream::ReadLine() {
-    TString ret;
+    TString ret; 
 
     if (!ReadLine(ret)) {
         ythrow yexception() << "can not read line from stream";
@@ -110,7 +110,7 @@ TString IInputStream::ReadLine() {
 }
 
 TString IInputStream::ReadTo(char ch) {
-    TString ret;
+    TString ret; 
 
     if (!ReadTo(ret, ch)) {
         ythrow yexception() << "can not read from stream";
@@ -146,7 +146,7 @@ size_t IInputStream::DoSkip(size_t sz) {
 }
 
 TString IInputStream::ReadAll() {
-    TString result;
+    TString result; 
     TStringOutput stream(result);
 
     DoReadAll(stream);
@@ -190,7 +190,7 @@ namespace {
             free(B_);
         }
 
-        size_t DoReadTo(TString& st, char ch) override {
+        size_t DoReadTo(TString& st, char ch) override { 
             auto&& guard = Guard(M_);
 
             (void)guard;
@@ -227,7 +227,7 @@ namespace {
     using TGetLine = TGetLineBase;
     #else
     struct TGetLine: public TGetLineBase {
-        size_t DoReadTo(TString& st, char ch) override {
+        size_t DoReadTo(TString& st, char ch) override { 
             if (ch == '\n') {
                 size_t len = 0;
                 auto r = fgetln(F_, &len);
@@ -285,7 +285,7 @@ void In<TString>(IInputStream& i, TString& s) {
 
 template <>
 void In<TUtf16String>(IInputStream& i, TUtf16String& w) {
-    TString s;
+    TString s; 
     ReadUpToDelimiter(i, s);
 
     if (s.empty()) {

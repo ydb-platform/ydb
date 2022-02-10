@@ -1,7 +1,7 @@
 #pragma once
 
 #include <util/generic/strbuf.h>
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 
 //CGIEscape*:
 // ' ' converted to '+',
@@ -13,8 +13,8 @@ char* CGIEscape(char* to, const char* from, size_t len);
 inline char* CGIEscape(char* to, const TStringBuf from) {
     return CGIEscape(to, from.data(), from.size());
 }
-void CGIEscape(TString& url);
-TString CGIEscapeRet(const TStringBuf url);
+void CGIEscape(TString& url); 
+TString CGIEscapeRet(const TStringBuf url); 
 TString& AppendCgiEscaped(const TStringBuf value, TString& to);
 
 inline TStringBuf CgiEscapeBuf(char* to, const TStringBuf from) {
@@ -30,8 +30,8 @@ inline TStringBuf CgiEscape(void* tmp, const TStringBuf s) {
 // If pointer returned, then this is pointer to the end of the result string.
 char* CGIUnescape(char* to, const char* from);
 char* CGIUnescape(char* to, const char* from, size_t len);
-void CGIUnescape(TString& url);
-TString CGIUnescapeRet(const TStringBuf from);
+void CGIUnescape(TString& url); 
+TString CGIUnescapeRet(const TStringBuf from); 
 
 inline TStringBuf CgiUnescapeBuf(char* to, const TStringBuf from) {
     return TStringBuf(to, CGIUnescape(to, from.data(), from.size()));
@@ -44,13 +44,13 @@ inline TStringBuf CgiUnescape(void* tmp, const TStringBuf s) {
 // Is like CGIEscape, also skips encoding of user-supplied 'safe' characters.
 char* Quote(char* to, const char* from, const char* safe = "/");
 char* Quote(char* to, const TStringBuf s, const char* safe = "/");
-void Quote(TString& url, const char* safe = "/");
+void Quote(TString& url, const char* safe = "/"); 
 
 //UrlEscape:
 // Can't be used for cgi parameters ('&' character is not escaped)!
 // escapes only '%' not followed by two hex-digits or if forceEscape set to ture,
 // and chars outside [32, 126] range.
-// Can't handle '\0'-chars in TString.
+// Can't handle '\0'-chars in TString. 
 char* UrlEscape(char* to, const char* from, bool forceEscape = false);
 void UrlEscape(TString& url, bool forceEscape = false);
 TString UrlEscapeRet(const TStringBuf from, bool forceEscape = false);
@@ -59,8 +59,8 @@ TString UrlEscapeRet(const TStringBuf from, bool forceEscape = false);
 // '+' is NOT converted to space!
 // %xx converted to bytes, other characters are copied unchanged.
 char* UrlUnescape(char* to, TStringBuf from);
-void UrlUnescape(TString& url);
-TString UrlUnescapeRet(const TStringBuf from);
+void UrlUnescape(TString& url); 
+TString UrlUnescapeRet(const TStringBuf from); 
 
 //*BufLen: how much characters you should allocate for 'char* to' buffers.
 constexpr size_t CgiEscapeBufLen(const size_t len) noexcept {

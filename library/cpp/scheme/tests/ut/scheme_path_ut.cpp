@@ -98,61 +98,61 @@ Y_UNIT_TEST_SUITE(TSchemePathTest) {
         {
             NSc::TValue val;
             *val.TrySelectOrAdd("") = 100;
-            const TString res = R"=(100)=";
+            const TString res = R"=(100)="; 
             UNIT_ASSERT_VALUES_EQUAL(val.ToJson(), res);
         }
         {
             NSc::TValue val;
             *val.TrySelectOrAdd("a") = 100;
-            const TString res = R"=({"a":100})=";
+            const TString res = R"=({"a":100})="; 
             UNIT_ASSERT_VALUES_EQUAL(val.ToJson(), res);
         }
         {
             NSc::TValue val;
             *val.TrySelectOrAdd(R"=(////)=") = 100;
-            const TString res = R"=(100)=";
+            const TString res = R"=(100)="; 
             UNIT_ASSERT_VALUES_EQUAL(val.ToJson(), res);
         }
         {
             NSc::TValue val;
             *val.TrySelectOrAdd(R"=()=") = 100;
-            const TString res = R"=(100)=";
+            const TString res = R"=(100)="; 
             UNIT_ASSERT_VALUES_EQUAL(val.ToJson(), res);
         }
         {
             NSc::TValue val;
             *val.TrySelectOrAdd(R"=("")=") = 100;
-            const TString res = R"=({"":100})=";
+            const TString res = R"=({"":100})="; 
             UNIT_ASSERT_VALUES_EQUAL(val.ToJson(), res);
         }
         {
             NSc::TValue val;
             *val.TrySelectOrAdd(R"=("[1]")=") = 100;
-            const TString res = R"=({"[1]":100})=";
+            const TString res = R"=({"[1]":100})="; 
             UNIT_ASSERT_VALUES_EQUAL(val.ToJson(), res);
         }
         {
             NSc::TValue val;
             *val.TrySelectOrAdd(R"=("\"\"")=") = 100;
-            const TString res = R"=({"\"\"":100})=";
+            const TString res = R"=({"\"\"":100})="; 
             UNIT_ASSERT_VALUES_EQUAL(val.ToJson(), res);
         }
         {
             NSc::TValue val;
             *val.TrySelectOrAdd(R"=("/10/")=") = 100;
-            const TString res = R"=({"/10/":100})=";
+            const TString res = R"=({"/10/":100})="; 
             UNIT_ASSERT_VALUES_EQUAL(val.ToJson(), res);
         }
         {
             NSc::TValue val;
             *val.TrySelectOrAdd(R"=(/"[10]"//""/"\"/10/\""///)=") = 100;
-            const TString res = R"=({"[10]":{"":{"\"/10/\"":100}}})=";
+            const TString res = R"=({"[10]":{"":{"\"/10/\"":100}}})="; 
             UNIT_ASSERT_VALUES_EQUAL(val.ToJson(), res);
         }
         {
             NSc::TValue val;
             *val.TrySelectOrAdd(R"=(/"[10]"//""/"\"/10/\""///)=") = 100;
-            const TString res = R"=({"[10]":{"":{"\"/10/\"":100}}})=";
+            const TString res = R"=({"[10]":{"":{"\"/10/\"":100}}})="; 
             UNIT_ASSERT_VALUES_EQUAL(val.ToJson(), res);
         }
     }

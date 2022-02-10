@@ -31,35 +31,35 @@ namespace NJsonConverters {
     // fwd declarations
     //////////////////////////////////////////////////////////////////////
 
-    //TVector
+    //TVector 
     template <typename T, typename A>
-    NSc::TValue ToTValue(const TVector<T, A>& x);
+    NSc::TValue ToTValue(const TVector<T, A>& x); 
     template <typename T, typename A>
-    void FromTValue(const NSc::TValue& x, TVector<T, A>& out, const bool validate);
+    void FromTValue(const NSc::TValue& x, TVector<T, A>& out, const bool validate); 
 
-    //THashMap
+    //THashMap 
     template <class Key, class T, class HashFcn, class EqualKey, class Alloc>
-    NSc::TValue ToTValue(const THashMap<Key, T, HashFcn, EqualKey, Alloc>& x);
+    NSc::TValue ToTValue(const THashMap<Key, T, HashFcn, EqualKey, Alloc>& x); 
     template <class Key, class T, class HashFcn, class EqualKey, class Alloc>
-    void FromTValue(const NSc::TValue& x, THashMap<Key, T, HashFcn, EqualKey, Alloc>& out, const bool validate);
+    void FromTValue(const NSc::TValue& x, THashMap<Key, T, HashFcn, EqualKey, Alloc>& out, const bool validate); 
 
-    //TMap
+    //TMap 
     template <class K, class V, class Less, class A>
-    NSc::TValue ToTValue(const TMap<K, V, Less, A>& x);
+    NSc::TValue ToTValue(const TMap<K, V, Less, A>& x); 
     template <class K, class V, class Less, class A>
-    void FromTValue(const NSc::TValue& x, TMap<K, V, Less, A>& out, const bool validate);
+    void FromTValue(const NSc::TValue& x, TMap<K, V, Less, A>& out, const bool validate); 
 
-    //THashSet
+    //THashSet 
     template <class V, class H, class E, class A>
-    NSc::TValue ToTValue(const THashSet<V, H, E, A>& x);
+    NSc::TValue ToTValue(const THashSet<V, H, E, A>& x); 
     template <class V, class H, class E, class A>
-    void FromTValue(const NSc::TValue& x, THashSet<V, H, E, A>& out, const bool validate);
+    void FromTValue(const NSc::TValue& x, THashSet<V, H, E, A>& out, const bool validate); 
 
-    //TSet
+    //TSet 
     template <class K, class L, class A>
-    NSc::TValue ToTValue(const TSet<K, L, A>& x);
+    NSc::TValue ToTValue(const TSet<K, L, A>& x); 
     template <class K, class L, class A>
-    void FromTValue(const NSc::TValue& x, TSet<K, L, A>& out, const bool validate);
+    void FromTValue(const NSc::TValue& x, TSet<K, L, A>& out, const bool validate); 
 
     //std::pair
     template <class T1, class T2>
@@ -83,7 +83,7 @@ namespace NJsonConverters {
             out = x;
         }
 
-        static TString ToString(const T& x) {
+        static TString ToString(const T& x) { 
             return ::ToString(x);
         }
 
@@ -102,7 +102,7 @@ namespace NJsonConverters {
             out.FromTValue(x, validate);
         }
 
-        static TString ToString(const T& x) {
+        static TString ToString(const T& x) { 
             return x.ToJson();
         }
 
@@ -129,7 +129,7 @@ namespace NJsonConverters {
     }
 
     template <typename T>
-    TString ToString(const T& x) {
+    TString ToString(const T& x) { 
         return TValueAndStrokaConv<T, std::is_base_of<IJsonSerializable, T>::value>::ToString(x);
     }
 
@@ -204,16 +204,16 @@ namespace NJsonConverters {
     // TVector
     //////////////////////////////////////////////////////////////////////
     template <typename T, typename A>
-    NSc::TValue ToTValue(const TVector<T, A>& x) {
+    NSc::TValue ToTValue(const TVector<T, A>& x) { 
         NSc::TValue out;
         out.SetArray();
-        for (typename TVector<T, A>::const_iterator it = x.begin(); it != x.end(); ++it)
+        for (typename TVector<T, A>::const_iterator it = x.begin(); it != x.end(); ++it) 
             out.Push(NJsonConverters::ToTValue(*it));
         return out;
     }
 
     template <typename T, typename A>
-    void FromTValue(const NSc::TValue& x, TVector<T, A>& out, const bool validate) {
+    void FromTValue(const NSc::TValue& x, TVector<T, A>& out, const bool validate) { 
         if (validate)
             Y_ENSURE(x.IsArray() || x.IsNull(), "not valid input scheme");
         out.clear();
@@ -232,22 +232,22 @@ namespace NJsonConverters {
     // THashMap & TMap
     //////////////////////////////////////////////////////////////////////
     template <class Key, class T, class HashFcn, class EqualKey, class Alloc>
-    NSc::TValue ToTValue(const THashMap<Key, T, HashFcn, EqualKey, Alloc>& x) {
+    NSc::TValue ToTValue(const THashMap<Key, T, HashFcn, EqualKey, Alloc>& x) { 
         return NPrivate::ToTValueDict(x);
     }
 
     template <class Key, class T, class HashFcn, class EqualKey, class Alloc>
-    void FromTValue(const NSc::TValue& x, THashMap<Key, T, HashFcn, EqualKey, Alloc>& out, const bool validate) {
+    void FromTValue(const NSc::TValue& x, THashMap<Key, T, HashFcn, EqualKey, Alloc>& out, const bool validate) { 
         NPrivate::FromTValueDict(x, out, validate);
     }
 
     template <class K, class V, class Less, class A>
-    NSc::TValue ToTValue(const TMap<K, V, Less, A>& x) {
+    NSc::TValue ToTValue(const TMap<K, V, Less, A>& x) { 
         return NPrivate::ToTValueDict(x);
     }
 
     template <class K, class V, class Less, class A>
-    void FromTValue(const NSc::TValue& x, TMap<K, V, Less, A>& out, const bool validate) {
+    void FromTValue(const NSc::TValue& x, TMap<K, V, Less, A>& out, const bool validate) { 
         NPrivate::FromTValueDict(x, out, validate);
     }
 
@@ -255,22 +255,22 @@ namespace NJsonConverters {
     // THashSet & TSet
     //////////////////////////////////////////////////////////////////////
     template <class V, class H, class E, class A>
-    NSc::TValue ToTValue(const THashSet<V, H, E, A>& x) {
+    NSc::TValue ToTValue(const THashSet<V, H, E, A>& x) { 
         return NPrivate::ToTValueSet(x);
     }
 
     template <class V, class H, class E, class A>
-    void FromTValue(const NSc::TValue& x, THashSet<V, H, E, A>& out, const bool validate) {
+    void FromTValue(const NSc::TValue& x, THashSet<V, H, E, A>& out, const bool validate) { 
         NPrivate::FromTValueSet(x, out, validate);
     }
 
     template <class K, class L, class A>
-    NSc::TValue ToTValue(const TSet<K, L, A>& x) {
+    NSc::TValue ToTValue(const TSet<K, L, A>& x) { 
         return NPrivate::ToTValueSet(x);
     }
 
     template <class K, class L, class A>
-    void FromTValue(const NSc::TValue& x, TSet<K, L, A>& out, const bool validate) {
+    void FromTValue(const NSc::TValue& x, TSet<K, L, A>& out, const bool validate) { 
         NPrivate::FromTValueSet(x, out, validate);
     }
 
@@ -307,7 +307,7 @@ namespace NJsonConverters {
     // global user functions
     //////////////////////////////////////////////////////////////////////
     template <typename T>
-    TString ToJson(const T& val, const bool sort = false) {
+    TString ToJson(const T& val, const bool sort = false) { 
         return NJsonConverters::ToTValue(val).ToJson(sort);
     }
 

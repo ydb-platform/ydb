@@ -110,7 +110,7 @@ class TBootstrapper : public TActor<TBootstrapper> {
             return false;
         }
 
-        TVector<TWatched> Watched;
+        TVector<TWatched> Watched; 
     };
 
     // we are under watch, must notify on error
@@ -140,7 +140,7 @@ class TBootstrapper : public TActor<TBootstrapper> {
             Watchers.push_back(TWatcher(actorId, round));
         }
 
-        TVector<TWatcher> Watchers;
+        TVector<TWatcher> Watchers; 
     };
 
     struct TRound {
@@ -166,7 +166,7 @@ class TBootstrapper : public TActor<TBootstrapper> {
             {}
         };
 
-        TVector<TAlien> Aliens;
+        TVector<TAlien> Aliens; 
     };
 
     TAutoPtr<TWatch> Watches; // we watch them

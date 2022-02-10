@@ -34,13 +34,13 @@ static void CreateDirs(std::shared_ptr<TVector<TString>> partsHolder, size_t ind
             CreateDirs(partsHolder, index + 1, promise, createDir);
         });
 
-    TString basePath = IKikimrGateway::CombinePath(parts.begin(), parts.begin() + index);
+    TString basePath = IKikimrGateway::CombinePath(parts.begin(), parts.begin() + index); 
 
     createDir(basePath, parts[index], partPromise);
 }
 
 TKikimrClusterMapping::TKikimrClusterMapping(const TKikimrGatewayConfig& config) {
-    THashMap<TString, TString> defaultSettings;
+    THashMap<TString, TString> defaultSettings; 
     for (auto& setting : config.GetDefaultSettings()) {
         defaultSettings[setting.GetName()] = setting.GetValue();
     }
@@ -71,14 +71,14 @@ TKikimrClusterMapping::TKikimrClusterMapping(const TKikimrGatewayConfig& config)
     }
 }
 
-void TKikimrClusterMapping::GetAllClusterNames(TVector<TString>& names) const {
+void TKikimrClusterMapping::GetAllClusterNames(TVector<TString>& names) const { 
     names.clear();
     for (const auto& c: Clusters) {
         names.push_back(c.first);
     }
 }
 
-const TKikimrClusterConfig& TKikimrClusterMapping::GetClusterConfig(const TString& name) const {
+const TKikimrClusterConfig& TKikimrClusterMapping::GetClusterConfig(const TString& name) const { 
     if (const TKikimrClusterConfig* config = Clusters.FindPtr(name)) {
         return *config;
     } else {
@@ -86,15 +86,15 @@ const TKikimrClusterConfig& TKikimrClusterMapping::GetClusterConfig(const TStrin
     }
 }
 
-TMaybe<TString> TKikimrClusterMapping::GetClusterSetting(const TString& cluster, const TString& name) const {
+TMaybe<TString> TKikimrClusterMapping::GetClusterSetting(const TString& cluster, const TString& name) const { 
     auto clusterSettings = ClusterSettings.FindPtr(cluster);
     YQL_ENSURE(clusterSettings);
 
     auto setting = clusterSettings->FindPtr(name);
-    return setting ? *setting : TMaybe<TString>();
+    return setting ? *setting : TMaybe<TString>(); 
 }
 
-TString TKikimrClusterMapping::GetDefaultClusterName() const {
+TString TKikimrClusterMapping::GetDefaultClusterName() const { 
     if (!DefaultClusterName) {
         ythrow yexception() << "TKikimrGatewayConfig: No default cluster";
     }
@@ -114,7 +114,7 @@ TKikimrPathId TKikimrPathId::Parse(const TStringBuf& str) {
     return TKikimrPathId(FromString<ui64>(ownerStr), FromString<ui64>(idStr));
 }
 
-TString IKikimrGateway::CanonizePath(const TString& path) {
+TString IKikimrGateway::CanonizePath(const TString& path) { 
     if (path.empty()) {
         return "/";
     }
@@ -126,8 +126,8 @@ TString IKikimrGateway::CanonizePath(const TString& path) {
     return path;
 }
 
-TVector<TString> IKikimrGateway::SplitPath(const TString& path) {
-    TVector<TString> parts;
+TVector<TString> IKikimrGateway::SplitPath(const TString& path) { 
+    TVector<TString> parts; 
     Split(path, "/", parts);
     return parts;
 }
@@ -147,7 +147,7 @@ bool IKikimrGateway::TrySplitTablePath(const TString& path, std::pair<TString, T
     return true;
 }
 
-TFuture<IKikimrGateway::TGenericResult> IKikimrGateway::CreatePath(const TString& path, TCreateDirFunc createDir) {
+TFuture<IKikimrGateway::TGenericResult> IKikimrGateway::CreatePath(const TString& path, TCreateDirFunc createDir) { 
     auto partsHolder = std::make_shared<TVector<TString>>(SplitPath(path));
     auto &parts = *partsHolder;
 

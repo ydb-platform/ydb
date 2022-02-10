@@ -89,11 +89,11 @@ void TBuffer::Realloc(size_t len) {
     Len_ = len;
 }
 
-TBuffer::~TBuffer() {
+TBuffer::~TBuffer() { 
     y_deallocate(Data_);
 }
 
-void TBuffer::AsString(TString& s) {
+void TBuffer::AsString(TString& s) { 
     s.assign(Data(), Size());
     Clear();
 }

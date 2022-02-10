@@ -36,7 +36,7 @@ struct TEvStateStorage::TEvReplicaInfo : public TEventPB<TEvStateStorage::TEvRep
         }
     }
 
-    TString ToString() const {
+    TString ToString() const { 
         TStringStream str;
         str << "{EvReplicaInfo Status: " << (ui32)Record.GetStatus();
         str << " TabletID: " << Record.GetTabletID();
@@ -186,7 +186,7 @@ struct TEvStateStorage::TEvReplicaLookup : public TEventPB<TEvStateStorage::TEvR
         Record.SetCookie(cookie);
     }
 
-    TString ToString() const {
+    TString ToString() const { 
         TStringStream str;
         str << "{EvReplicaLookup TabletID: " << Record.GetTabletID();
         str << " Cookie: " << Record.GetCookie();
@@ -206,7 +206,7 @@ struct TEvStateStorage::TEvReplicaUpdate : public TEventPB<TEvStateStorage::TEvR
         Record.SetProposedStep(proposedStep);
     }
 
-    TString ToString() const {
+    TString ToString() const { 
         TStringStream str;
         str << "{EvReplicaUpdate TabletID: " << Record.GetTabletID();
         str << " ProposedGeneration: " << Record.GetProposedGeneration();
@@ -225,7 +225,7 @@ struct TEvStateStorage::TEvReplicaDelete : public TEventPB<TEvStateStorage::TEvR
         Record.SetTabletID(tabletId);
     }
 
-    TString ToString() const {
+    TString ToString() const { 
         TStringStream str;
         str << "{EvReplicaUpdate TabletID: " << Record.GetTabletID();
         str << "}";
@@ -254,7 +254,7 @@ struct TEvStateStorage::TEvReplicaLock : public TEventPB<TEvStateStorage::TEvRep
         Record.SetProposedGeneration(proposedGeneration);
     }
 
-    TString ToString() const {
+    TString ToString() const { 
         TStringStream str;
         str << "{EvReplicaLock TabletID: " << Record.GetTabletID();
         str << " ProposedGeneration: " << Record.GetProposedGeneration();

@@ -41,15 +41,15 @@ public:
         return data;
     }
 
-    inline void operator delete(void* ptr) noexcept {
+    inline void operator delete(void* ptr) noexcept { 
         DoDelete(ptr);
     }
 
-    inline void operator delete(void* ptr, size_t) noexcept {
+    inline void operator delete(void* ptr, size_t) noexcept { 
         DoDelete(ptr);
     }
 
-    inline void operator delete(void* ptr, size_t, size_t) noexcept {
+    inline void operator delete(void* ptr, size_t, size_t) noexcept { 
         /*
          * this delete operator can be called automagically by compiler
          */
@@ -57,20 +57,20 @@ public:
         DoDelete(ptr);
     }
 
-    inline void* AdditionalData() const noexcept {
+    inline void* AdditionalData() const noexcept { 
         return (char*)(static_cast<const T*>(this)) + CombinedSizeOfInstanceWithTInfo();
     }
 
-    static inline T* ObjectFromData(void* data) noexcept {
+    static inline T* ObjectFromData(void* data) noexcept { 
         return reinterpret_cast<T*>(static_cast<char*>(data) - CombinedSizeOfInstanceWithTInfo());
     }
 
-    inline size_t AdditionalDataLength() const noexcept {
+    inline size_t AdditionalDataLength() const noexcept { 
         return InfoPtr(static_cast<const T*>(this))->Length();
     }
 
 private:
-    static inline void DoDelete(void* ptr) noexcept {
+    static inline void DoDelete(void* ptr) noexcept { 
         TInfo* info = InfoPtr(static_cast<T*>(ptr));
         info->~TInfo();
         ::operator delete(ptr);

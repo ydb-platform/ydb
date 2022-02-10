@@ -46,7 +46,7 @@ namespace {
 
     template <size_t N, typename... T>
     struct TExamplesHolder {
-        using TExamples = TVector<std::tuple<T...>>;
+        using TExamples = TVector<std::tuple<T...>>; 
         TExamples Examples;
 
         TExamplesHolder()

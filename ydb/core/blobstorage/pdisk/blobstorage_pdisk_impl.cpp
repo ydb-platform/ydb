@@ -87,7 +87,7 @@ TPDisk::TPDisk(const TIntrusivePtr<TPDiskConfig> cfg, const TIntrusivePtr<NMonit
     JointCommits.reserve(16 << 10);
 }
 
-TString TPDisk::DynamicStateToString(bool isMultiline) {
+TString TPDisk::DynamicStateToString(bool isMultiline) { 
     TStringStream str;
     const char *x = isMultiline ? "\n" : "";
     str << "{PDiskDynamicState" << x;
@@ -221,7 +221,7 @@ void TPDisk::InitFreeChunks() {
 }
 
 
-TString TPDisk::StartupOwnerInfo() {
+TString TPDisk::StartupOwnerInfo() { 
     TStringStream str;
     str << "{";
     TGuard<TMutex> guard(StateMutex);
@@ -665,7 +665,7 @@ void TPDisk::AskVDisksToCutLogs(TOwner ownerFilter, bool doForce) {
         } else {
             InsaneLogChunks = 0;
         }
-        TMap<TOwner, ui64> lsnForOwner;
+        TMap<TOwner, ui64> lsnForOwner; 
         TMap<TOwner, size_t> countForOwner;
         {
             size_t logChunkNumber = 0;
@@ -989,9 +989,9 @@ TPDisk::EChunkReadPieceResult TPDisk::ChunkReadPiece(TIntrusivePtr<TChunkRead> &
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Chunk locking
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void TPDisk::ChunksLockByRange(TFreeChunks &freeChunks, ui32 begin, ui32 end, TVector<ui32> &lockedChunks) {
+void TPDisk::ChunksLockByRange(TFreeChunks &freeChunks, ui32 begin, ui32 end, TVector<ui32> &lockedChunks) { 
     ui32 freeChunksCount = freeChunks.Size();
-    TVector<ui32> tmpChunks;
+    TVector<ui32> tmpChunks; 
     tmpChunks.reserve(freeChunksCount);
     for (ui32 i = 0; i < freeChunksCount; ++i) {
         ui32 idx = freeChunks.Pop();
@@ -1011,9 +1011,9 @@ void TPDisk::ChunksLockByRange(TFreeChunks &freeChunks, ui32 begin, ui32 end, TV
     }
 }
 
-void TPDisk::ChunksLockByNumber(ui32 begin, ui32 count, TVector<ui32> &lockedChunks) {
+void TPDisk::ChunksLockByNumber(ui32 begin, ui32 count, TVector<ui32> &lockedChunks) { 
     begin = begin > 0 ? begin : 1;
-    TVector<ui32> tmpChunks;
+    TVector<ui32> tmpChunks; 
     tmpChunks.reserve(Keeper.GetFreeChunkCount());
     TString errorReason;
     while (ui32 idx = Keeper.PopFreeChunkHack(errorReason)) {
@@ -1034,7 +1034,7 @@ void TPDisk::ChunksLockByNumber(ui32 begin, ui32 count, TVector<ui32> &lockedChu
 }
 
 void TPDisk::ChunksLock(TChunksLock &evChunksLock) {
-    TVector<ui32> lockedChunks;
+    TVector<ui32> lockedChunks; 
     if (evChunksLock.LockByRange) {
         if (evChunksLock.Begin < evChunksLock.End) {
             lockedChunks.reserve(evChunksLock.End - evChunksLock.Begin);
@@ -1405,7 +1405,7 @@ void TPDisk::WriteDiskFormat(ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 user
 // Owner initialization
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void TPDisk::ReplyErrorYardInitResult(TYardInit &evYardInit, const TString &str) {
+void TPDisk::ReplyErrorYardInitResult(TYardInit &evYardInit, const TString &str) { 
     TStringStream error;
     error << "PDiskId# " << PDiskId << " YardInit error for VDiskId# " << evYardInit.VDisk.ToStringWOGeneration()
         << " reason# " << str;

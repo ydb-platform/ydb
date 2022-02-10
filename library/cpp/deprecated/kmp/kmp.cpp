@@ -8,7 +8,7 @@ TKMPMatcher::TKMPMatcher(const char* patternBegin, const char* patternEnd)
     ComputePrefixFunction();
 }
 
-TKMPMatcher::TKMPMatcher(const TString& pattern)
+TKMPMatcher::TKMPMatcher(const TString& pattern) 
     : Pattern(pattern)
 {
     ComputePrefixFunction();

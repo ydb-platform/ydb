@@ -35,7 +35,7 @@ public:
         return tmp->Obj;
     }
 
-    inline size_t Size() const noexcept {
+    inline size_t Size() const noexcept { 
         return Size_;
     }
 
@@ -43,7 +43,7 @@ public:
         return !this->Size();
     }
 
-    inline explicit operator bool() const noexcept {
+    inline explicit operator bool() const noexcept { 
         return !this->Empty();
     }
 

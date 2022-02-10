@@ -6,14 +6,14 @@
 using namespace NLastGetopt;
 
 int main(int argc, char *argv[]) {
-    TString device;
+    TString device; 
     NSize::TSize size;
     ui32 numIterations = 100;
     ui32 numFailsPerIteration = 100;
     NSize::TSize chunkSize = 16 << 20;
     NSize::TSize sectorSize = 4 << 10;
     bool erasureEncode = false;
-    TString test;
+    TString test; 
     ui32 numVDisks = 4;
 
     TOpts opts = TOpts::Default();

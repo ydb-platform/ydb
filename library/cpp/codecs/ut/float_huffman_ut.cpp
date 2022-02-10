@@ -142,7 +142,7 @@ Y_UNIT_TEST_SUITE(FloatHuffmanTest) {
     }
 
     // Helper for dumping compressed values
-    void PrintCompressed(const TVector<ui8>& codedFactors) {
+    void PrintCompressed(const TVector<ui8>& codedFactors) { 
         for (size_t i = 0; i < codedFactors.size(); ++i) {
             if (i % 0x10 == 0)
                 Cerr << Endl;
@@ -152,7 +152,7 @@ Y_UNIT_TEST_SUITE(FloatHuffmanTest) {
     }
 
     // Helper for dumping decompressed values
-    void PrintDecompressed(const TVector<float>& factors) {
+    void PrintDecompressed(const TVector<float>& factors) { 
         TStringStream result;
         TStringStream line;
 
@@ -220,7 +220,7 @@ Y_UNIT_TEST_SUITE(FloatHuffmanTest) {
 
     Y_UNIT_TEST(TestDecompressForgedData) {
         // this coredumps without end-of-coded-stream check, see SEARCH-1156 for details
-        TString brokenBase64Encoded =
+        TString brokenBase64Encoded = 
             "NLjYltUWs5pqnd3d3f05Li4OAwCAEqrP6mv06jDt7PiAUVu7Y+PiMpuZmdzeM"
             "ArqOLxS2q4FKCII52dktcVs7y0zL+OKgeO9SOzEkFj7uPfFqqoCAAAAAADAtZ"
             "mZ2fdmICAgANQXhi1WVRUAAAAAAAAGjvcWq6oKAAAAAAAAA8d7qe4rV3Nxcd3"

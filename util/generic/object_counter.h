@@ -19,7 +19,7 @@
 template <class T>
 class TObjectCounter {
 public:
-    inline TObjectCounter() noexcept {
+    inline TObjectCounter() noexcept { 
         AtomicIncrement(Count_);
     }
 
@@ -27,11 +27,11 @@ public:
         AtomicIncrement(Count_);
     }
 
-    inline ~TObjectCounter() {
+    inline ~TObjectCounter() { 
         AtomicDecrement(Count_);
     }
 
-    static inline long ObjectCount() noexcept {
+    static inline long ObjectCount() noexcept { 
         return AtomicGet(Count_);
     }
 

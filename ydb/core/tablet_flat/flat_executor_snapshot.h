@@ -25,7 +25,7 @@ namespace NTabletFlatExecutor {
         struct TFlush {
             ui32 Step = Max<ui32>();
             TVector<TIntrusivePtr<TBarrier>> Barriers;
-            THashMap<TLogoBlobID, TSet<ui64>> Bundles;
+            THashMap<TLogoBlobID, TSet<ui64>> Bundles; 
             TMap<ui32, ui32> Moved;
         };
 
@@ -90,7 +90,7 @@ namespace NTabletFlatExecutor {
 
     private:
         ui32 Pending = 0;
-        THashMap<ui32, TState> Tables;
+        THashMap<ui32, TState> Tables; 
         TFlush Holds;
     };
 

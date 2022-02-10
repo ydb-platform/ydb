@@ -1936,7 +1936,7 @@ void TSchemeShard::PersistTxState(NIceDb::TNiceDb& db, const TOperationId opId) 
 
     Y_VERIFY(txState.TxType != TTxState::TxInvalid);
     Y_VERIFY(txState.State != TTxState::Invalid);
-    TString extraData;
+    TString extraData; 
     if (txState.TxType == TTxState::TxSplitTablePartition || txState.TxType == TTxState::TxMergeTablePartition) {
         Y_VERIFY(txState.SplitDescription, "Split Tx must have non-empty split description");
         bool serializeRes = txState.SplitDescription->SerializeToString(&extraData);
@@ -2168,7 +2168,7 @@ void TSchemeShard::PersistTableAlterVersion(NIceDb::TNiceDb& db, const TPathId p
 }
 
 void TSchemeShard::PersistTableAltered(NIceDb::TNiceDb& db, const TPathId pathId, const TTableInfo::TPtr tableInfo) {
-    TString partitionConfig;
+    TString partitionConfig; 
     Y_PROTOBUF_SUPPRESS_NODISCARD tableInfo->PartitionConfig().SerializeToString(&partitionConfig);
 
     TString ttlSettings;

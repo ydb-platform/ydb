@@ -17,7 +17,7 @@
 #include <util/random/random.h>
 
 #include <util/generic/size_literals.h>
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 #include <util/generic/ylimits.h>
 #include <util/generic/yexception.h>
 
@@ -63,7 +63,7 @@ static bool IsStupidFlagCombination(EOpenMode oMode) {
     return (oMode & (CreateAlways | ForAppend)) == (CreateAlways | ForAppend) || (oMode & (TruncExisting | ForAppend)) == (TruncExisting | ForAppend) || (oMode & (CreateNew | ForAppend)) == (CreateNew | ForAppend);
 }
 
-TFileHandle::TFileHandle(const TString& fName, EOpenMode oMode) noexcept {
+TFileHandle::TFileHandle(const TString& fName, EOpenMode oMode) noexcept { 
     ui32 fcMode = 0;
     EOpenMode createMode = oMode & MaskCreation;
     Y_VERIFY(!IsStupidFlagCombination(oMode), "oMode %d makes no sense", static_cast<int>(oMode));
@@ -267,7 +267,7 @@ TFileHandle::TFileHandle(const TString& fName, EOpenMode oMode) noexcept {
 #endif
 }
 
-bool TFileHandle::Close() noexcept {
+bool TFileHandle::Close() noexcept { 
     bool isOk = true;
 #ifdef _win_
     if (Fd_ != INVALID_FHANDLE) {
@@ -294,7 +294,7 @@ bool TFileHandle::Close() noexcept {
     return isOk;
 }
 
-static inline i64 DoSeek(FHANDLE h, i64 offset, SeekDir origin) noexcept {
+static inline i64 DoSeek(FHANDLE h, i64 offset, SeekDir origin) noexcept { 
     if (h == INVALID_FHANDLE) {
         return -1L;
     }
@@ -319,15 +319,15 @@ static inline i64 DoSeek(FHANDLE h, i64 offset, SeekDir origin) noexcept {
 #endif
 }
 
-i64 TFileHandle::GetPosition() const noexcept {
+i64 TFileHandle::GetPosition() const noexcept { 
     return DoSeek(Fd_, 0, sCur);
 }
 
-i64 TFileHandle::Seek(i64 offset, SeekDir origin) noexcept {
+i64 TFileHandle::Seek(i64 offset, SeekDir origin) noexcept { 
     return DoSeek(Fd_, offset, origin);
 }
 
-i64 TFileHandle::GetLength() const noexcept {
+i64 TFileHandle::GetLength() const noexcept { 
     // XXX: returns error code, but does not set errno
     if (!IsOpen()) {
         return -1L;
@@ -335,7 +335,7 @@ i64 TFileHandle::GetLength() const noexcept {
     return GetFileLength(Fd_);
 }
 
-bool TFileHandle::Resize(i64 length) noexcept {
+bool TFileHandle::Resize(i64 length) noexcept { 
     if (!IsOpen()) {
         return false;
     }
@@ -363,7 +363,7 @@ bool TFileHandle::Resize(i64 length) noexcept {
 #endif
 }
 
-bool TFileHandle::Reserve(i64 length) noexcept {
+bool TFileHandle::Reserve(i64 length) noexcept { 
     // FIXME this should reserve disk space with fallocate
     if (!IsOpen()) {
         return false;
@@ -412,7 +412,7 @@ bool TFileHandle::ShrinkToFit() noexcept {
 #endif
 }
 
-bool TFileHandle::Flush() noexcept {
+bool TFileHandle::Flush() noexcept { 
     if (!IsOpen()) {
         return false;
     }
@@ -443,7 +443,7 @@ bool TFileHandle::Flush() noexcept {
 #endif
 }
 
-bool TFileHandle::FlushData() noexcept {
+bool TFileHandle::FlushData() noexcept { 
 #if defined(_linux_)
     if (!IsOpen()) {
         return false;
@@ -458,7 +458,7 @@ bool TFileHandle::FlushData() noexcept {
 #endif
 }
 
-i32 TFileHandle::Read(void* buffer, ui32 byteCount) noexcept {
+i32 TFileHandle::Read(void* buffer, ui32 byteCount) noexcept { 
     // FIXME size and return must be 64-bit
     if (!IsOpen()) {
         return -1;
@@ -480,7 +480,7 @@ i32 TFileHandle::Read(void* buffer, ui32 byteCount) noexcept {
 #endif
 }
 
-i32 TFileHandle::Write(const void* buffer, ui32 byteCount) noexcept {
+i32 TFileHandle::Write(const void* buffer, ui32 byteCount) noexcept { 
     if (!IsOpen()) {
         return -1;
     }
@@ -501,7 +501,7 @@ i32 TFileHandle::Write(const void* buffer, ui32 byteCount) noexcept {
 #endif
 }
 
-i32 TFileHandle::Pread(void* buffer, ui32 byteCount, i64 offset) const noexcept {
+i32 TFileHandle::Pread(void* buffer, ui32 byteCount, i64 offset) const noexcept { 
 #if defined(_win_)
     OVERLAPPED io;
     Zero(io);
@@ -526,7 +526,7 @@ i32 TFileHandle::Pread(void* buffer, ui32 byteCount, i64 offset) const noexcept 
 #endif
 }
 
-i32 TFileHandle::Pwrite(const void* buffer, ui32 byteCount, i64 offset) const noexcept {
+i32 TFileHandle::Pwrite(const void* buffer, ui32 byteCount, i64 offset) const noexcept { 
 #if defined(_win_)
     OVERLAPPED io;
     Zero(io);
@@ -548,7 +548,7 @@ i32 TFileHandle::Pwrite(const void* buffer, ui32 byteCount, i64 offset) const no
 #endif
 }
 
-FHANDLE TFileHandle::Duplicate() const noexcept {
+FHANDLE TFileHandle::Duplicate() const noexcept { 
     if (!IsOpen()) {
         return INVALID_FHANDLE;
     }
@@ -597,7 +597,7 @@ int TFileHandle::Duplicate2Posix(int dstHandle) const noexcept {
 #endif
 }
 
-bool TFileHandle::LinkTo(const TFileHandle& fh) const noexcept {
+bool TFileHandle::LinkTo(const TFileHandle& fh) const noexcept { 
 #if defined(_unix_)
     while (dup2(fh.Fd_, Fd_) == -1) {
         if (errno != EINTR) {
@@ -621,7 +621,7 @@ bool TFileHandle::LinkTo(const TFileHandle& fh) const noexcept {
 #endif
 }
 
-int TFileHandle::Flock(int op) noexcept {
+int TFileHandle::Flock(int op) noexcept { 
     return ::Flock(Fd_, op);
 }
 
@@ -775,7 +775,7 @@ bool TFileHandle::FlushCache(i64 offset, i64 length, bool wait) noexcept {
 #endif
 }
 
-TString DecodeOpenMode(ui32 mode0) {
+TString DecodeOpenMode(ui32 mode0) { 
     ui32 mode = mode0;
 
     TStringBuilder r;
@@ -843,13 +843,13 @@ TString DecodeOpenMode(ui32 mode0) {
 
 class TFile::TImpl: public TAtomicRefCount<TImpl> {
 public:
-    inline TImpl(FHANDLE fd, const TString& fname = TString())
+    inline TImpl(FHANDLE fd, const TString& fname = TString()) 
         : Handle_(fd)
         , FileName_(fname)
     {
     }
 
-    inline TImpl(const TString& fName, EOpenMode oMode)
+    inline TImpl(const TString& fName, EOpenMode oMode) 
         : Handle_(fName, oMode)
         , FileName_(fName)
     {
@@ -866,15 +866,15 @@ public:
         }
     }
 
-    const TString& GetName() const noexcept {
+    const TString& GetName() const noexcept { 
         return FileName_;
     }
 
-    void SetName(const TString& newName) {
+    void SetName(const TString& newName) { 
         FileName_ = newName;
     }
 
-    const TFileHandle& GetHandle() const noexcept {
+    const TFileHandle& GetHandle() const noexcept { 
         return Handle_;
     }
 
@@ -1084,7 +1084,7 @@ public:
 
 private:
     TFileHandle Handle_;
-    TString FileName_;
+    TString FileName_; 
 };
 
 TFile::TFile()
@@ -1097,12 +1097,12 @@ TFile::TFile(FHANDLE fd)
 {
 }
 
-TFile::TFile(FHANDLE fd, const TString& name)
+TFile::TFile(FHANDLE fd, const TString& name) 
     : Impl_(new TImpl(fd, name))
 {
 }
 
-TFile::TFile(const TString& fName, EOpenMode oMode)
+TFile::TFile(const TString& fName, EOpenMode oMode) 
     : Impl_(new TImpl(fName, oMode))
 {
 }
@@ -1113,23 +1113,23 @@ void TFile::Close() {
     Impl_->Close();
 }
 
-const TString& TFile::GetName() const noexcept {
+const TString& TFile::GetName() const noexcept { 
     return Impl_->GetName();
 }
 
-i64 TFile::GetPosition() const noexcept {
+i64 TFile::GetPosition() const noexcept { 
     return Impl_->GetHandle().GetPosition();
 }
 
-i64 TFile::GetLength() const noexcept {
+i64 TFile::GetLength() const noexcept { 
     return Impl_->GetHandle().GetLength();
 }
 
-bool TFile::IsOpen() const noexcept {
+bool TFile::IsOpen() const noexcept { 
     return Impl_->GetHandle().IsOpen();
 }
 
-FHANDLE TFile::GetHandle() const noexcept {
+FHANDLE TFile::GetHandle() const noexcept { 
     return Impl_->GetHandle();
 }
 
@@ -1237,12 +1237,12 @@ void TFile::LinkTo(const TFile& f) const {
     }
 }
 
-TFile TFile::Temporary(const TString& prefix) {
+TFile TFile::Temporary(const TString& prefix) { 
     //TODO - handle impossible case of name collision
     return TFile(prefix + ToString(MicroSeconds()) + "-" + ToString(RandomNumber<ui64>()), CreateNew | RdWr | Seq | Temp | Transient);
 }
 
-TFile TFile::ForAppend(const TString& path) {
+TFile TFile::ForAppend(const TString& path) { 
     return TFile(path, OpenAlways | WrOnly | Seq | ::ForAppend);
 }
 
@@ -1283,7 +1283,7 @@ TFile Duplicate(int fd) {
 #endif
 }
 
-bool PosixDisableReadAhead(FHANDLE fileHandle, void* addr) noexcept {
+bool PosixDisableReadAhead(FHANDLE fileHandle, void* addr) noexcept { 
     int ret = -1;
 
 #if HAVE_POSIX_FADVISE

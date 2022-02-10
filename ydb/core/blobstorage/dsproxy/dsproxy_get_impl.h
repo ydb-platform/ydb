@@ -115,7 +115,7 @@ public:
         return bytesToReport;
     }
 
-    TString DumpQuery() const {
+    TString DumpQuery() const { 
         TStringStream str;
         str << "{";
         for (ui32 i = 0; i < QuerySize; ++i) {

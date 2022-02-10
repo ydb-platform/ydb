@@ -29,8 +29,8 @@ namespace NKiwiAggr {
 
         // Merge some other histos into current
         virtual void Merge(const THistogram& histo, double multiplier) = 0;
-        virtual void Merge(const TVector<THistogram>& histogramsToMerge) = 0;
-        virtual void Merge(TVector<IHistogramPtr> histogramsToMerge) = 0;
+        virtual void Merge(const TVector<THistogram>& histogramsToMerge) = 0; 
+        virtual void Merge(TVector<IHistogramPtr> histogramsToMerge) = 0; 
 
         // factor should be greater then zero
         virtual void Multiply(double factor) = 0;

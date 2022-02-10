@@ -231,7 +231,7 @@ TVector<TDiff> GenerateRandomDiff(NPrivate::TMersenne64 &randGen, ui32 dataSize,
 Y_UNIT_TEST_SUITE(TErasureTypeTest) {
 // Test if new version is capable to restore data splited by current version (which is right by definition)
     Y_UNIT_TEST(isSplittedDataEqualsToOldVerion) {
-        TVector<TVector<ui8>> dataPool {
+        TVector<TVector<ui8>> dataPool { 
                         {49,184,130,19,181,231,130},
 
                         {249,122,57,146,140,30,69,51,88,81,92,29,220,192,18,14,195,162,244,139,59,141,161,14,
@@ -245,7 +245,7 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
                         206,247,46,22,73,11,70,87,124,4,242,9,165,99,82,83,40,165,55,53,187,238,96,248,16,
                         103,197,132,216,107,191,229,140,90,129,81,63,232,85,19,232,59,96,193,5,133,139,251,
                         148,144,0,147,22,247,36,221,244,117,144,98,173,40} };
-        TVector<TVector<TVector<ui8>>> partsPool {
+        TVector<TVector<TVector<ui8>>> partsPool { 
             {
                 {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,},
                 {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,},
@@ -285,8 +285,8 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
         };
         TErasureType type(TErasureType::EErasureSpecies::Erasure4Plus2Block);
         for (ui32 variant = 0; variant < dataPool.size(); ++variant) {
-            TVector<ui8> &data = dataPool[variant];
-            TVector<TVector<ui8>> &expectedParts = partsPool[variant];
+            TVector<ui8> &data = dataPool[variant]; 
+            TVector<TVector<ui8>> &expectedParts = partsPool[variant]; 
             TString testString;
             testString.resize(data.size());
             for (ui32 i = 0; i < testString.size(); ++i) {
@@ -337,7 +337,7 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
                     TString errorInfo = Sprintf("species=%d (%s) dataSize=%d partMask=0x%x (%s)", species,
                             TErasureType::ErasureSpeciesName(species).c_str(), dataSize, partMask, mask);
 
-                    TString testString;
+                    TString testString; 
                     testString.resize(dataSize);
                     for (ui32 i = 0; i < testString.size(); ++i) {
                         ui32 col = (i / 8) % 4;
@@ -387,11 +387,11 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
                             }
                         }
 
-                        TString mode = Sprintf(" restoreParts=%s restoreFullData=%s ",
+                        TString mode = Sprintf(" restoreParts=%s restoreFullData=%s ", 
                             (isRestoreParts ? "true" : "false"),
                             (isRestoreFullData ? "true" : "false"));
 
-                        TString restoredString;
+                        TString restoredString; 
                         try {
                             groupType.RestoreData(TErasureType::CrcModeNone, partSet, restoredString,
                                     isRestoreParts, isRestoreFullData, isRestoreParts);
@@ -864,7 +864,7 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
         partMask &= ~(ui32)(1 << missingPartIdx[1]);
 
         // Prepare the test data
-        TString testString;
+        TString testString; 
         ui32 dataSize = 129;
         testString.resize(dataSize);
         for (ui32 i = 0; i < testString.size(); ++i) {
@@ -888,12 +888,12 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
         const ui64 partialSize = 2;
         const ui64 partialShift = 95;
         const ui32 partShift = 0;
-        TString restoredString;
+        TString restoredString; 
         groupType.PartialDataRestore(TErasureType::CrcModeNone, partialShift, partialSize, partShift, partSet,
                 restoredString);
 
         // Make sure the restored data matches the original
-        TString expectedString = testString.substr(partialShift, partialSize);
+        TString expectedString = testString.substr(partialShift, partialSize); 
         UNIT_ASSERT_EQUAL(expectedString.size(), restoredString.size());
         UNIT_ASSERT_STRINGS_EQUAL(expectedString.data(), restoredString.data());
     }
@@ -910,7 +910,7 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
         partMask &= ~(ui32)(1 << missingPartIdx[1]);
 
         // Prepare the test data
-        TString testString;
+        TString testString; 
         ui32 dataSize = 129;
         testString.resize(dataSize);
         for (ui32 i = 0; i < testString.size(); ++i) {
@@ -934,12 +934,12 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
         const ui64 partialSize = 34;
         const ui64 partialShift = 31;
         const ui32 partShift = 0;
-        TString restoredString;
+        TString restoredString; 
         groupType.PartialDataRestore(TErasureType::CrcModeNone, partialShift, partialSize, partShift, partSet,
                 restoredString);
 
         // Make sure the restored data matches the original
-        TString expectedString = testString.substr(partialShift, partialSize);
+        TString expectedString = testString.substr(partialShift, partialSize); 
         UNIT_ASSERT_EQUAL(expectedString.size(), restoredString.size());
         UNIT_ASSERT_STRINGS_EQUAL(expectedString.data(), restoredString.data());
     }*/

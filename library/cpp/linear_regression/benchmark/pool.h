@@ -1,17 +1,17 @@
 #pragma once
 
 #include <util/generic/vector.h>
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 
 #include <util/random/mersenne.h>
 #include <util/random/shuffle.h>
 
 struct TInstance {
-    TVector<double> Features;
+    TVector<double> Features; 
     double Goal;
     double Weight;
 
-    static TInstance FromFeaturesString(const TString& featuresString);
+    static TInstance FromFeaturesString(const TString& featuresString); 
 };
 
 struct TPool: public TVector<TInstance> {
@@ -29,7 +29,7 @@ struct TPool: public TVector<TInstance> {
         EIteratorType IteratorType;
         size_t TestFoldNumber;
 
-        TVector<size_t> InstanceFoldNumbers;
+        TVector<size_t> InstanceFoldNumbers; 
         const size_t* Current;
 
         TMersenne<ui64> RandomGenerator;
@@ -54,7 +54,7 @@ struct TPool: public TVector<TInstance> {
         bool TakeCurrent() const;
     };
 
-    void ReadFromFeatures(const TString& featuresPath);
+    void ReadFromFeatures(const TString& featuresPath); 
     TCVIterator CrossValidationIterator(const size_t foldsCount, const EIteratorType iteratorType) const;
 
     TPool InjurePool(const double injureFactir, const double injureOffset) const;

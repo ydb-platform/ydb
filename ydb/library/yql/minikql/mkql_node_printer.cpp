@@ -793,7 +793,7 @@ namespace {
             WriteNewline();
         }
 
-        TString ToString() {
+        TString ToString() { 
             return Out.Str();
         }
 

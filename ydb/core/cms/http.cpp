@@ -195,7 +195,7 @@ private:
         ReplyWithFile(ev, ctx, TString{msg->Request.GetPathInfo()});
     }
 
-    THashMap<TString, TAutoPtr<TApiMethodHandlerBase>> ApiHandlers;
+    THashMap<TString, TAutoPtr<TApiMethodHandlerBase>> ApiHandlers; 
 
     const TStringBuf HELP_LINK = "Check /api/help for usage details";
 };

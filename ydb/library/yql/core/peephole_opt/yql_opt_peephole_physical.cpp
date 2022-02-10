@@ -100,7 +100,7 @@ TExprNode::TPtr SplitEquiJoinToPairsRecursive(const TExprNode& node, const TExpr
     }
     else {
         leftList = SplitEquiJoinToPairsRecursive(node, *leftSubtree, ctx, leftListLabels, ctx.NewList(node.Pos(), {}));
-        TExprNode::TListType leftLabelsChildren;
+        TExprNode::TListType leftLabelsChildren; 
         for (auto& label : leftListLabels) {
             leftLabelsChildren.push_back(ctx.NewAtom(node.Pos(), label));
         }
@@ -144,7 +144,7 @@ TExprNode::TPtr SplitEquiJoinToPairsRecursive(const TExprNode& node, const TExpr
     }
     else {
         rightList = SplitEquiJoinToPairsRecursive(node, *rightSubtree, ctx, rightListLabels, ctx.NewList(node.Pos(), {}));
-        TExprNode::TListType rightLabelsChildren;
+        TExprNode::TListType rightLabelsChildren; 
         for (auto& label : rightListLabels) {
             rightLabelsChildren.push_back(ctx.NewAtom(node.Pos(), label));
         }
@@ -528,7 +528,7 @@ TExprNode::TPtr PeepHoleExpandExtractItems(const TExprNode::TPtr& node, TExprCon
     const auto& input = extract.Input();
     const auto& members = extract.Members();
     auto arg = ctx.NewArgument(extract.Pos(), "arg");
-    TExprNode::TListType fields;
+    TExprNode::TListType fields; 
     for (const auto& x : members) {
         fields.emplace_back(ctx.Builder(extract.Pos())
             .List()

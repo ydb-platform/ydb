@@ -155,7 +155,7 @@ namespace NKikimr {
     public:
         TBaseWriter(TMemoryConsumer&& consumer, ui8 owner, ui64 ownerRound, ui8 priority, ui32 chunkSize,
                     ui32 appendBlockSize, ui32 writeBlockSize, TQueue<std::unique_ptr<NPDisk::TEvChunkWrite>>& msgQueue,
-                    TDeque<TChunkIdx>& rchunks)
+                    TDeque<TChunkIdx>& rchunks) 
             : Consumer(std::move(consumer))
             , Owner(owner)
             , OwnerRound(ownerRound)
@@ -168,7 +168,7 @@ namespace NKikimr {
             , UsedChunks()
         {}
 
-        const TVector<ui32> &GetUsedChunks() const {
+        const TVector<ui32> &GetUsedChunks() const { 
             return UsedChunks;
         }
 
@@ -254,8 +254,8 @@ namespace NKikimr {
         const ui32 AppendBlockSize;
         const ui32 WriteBlockSize;
         TQueue<std::unique_ptr<NPDisk::TEvChunkWrite>>& MsgQueue;
-        TDeque<ui32>& RChunks;
-        TVector<ui32> UsedChunks;
+        TDeque<ui32>& RChunks; 
+        TVector<ui32> UsedChunks; 
         std::unique_ptr<TBufferedChunkWriter> ChunkWriter;
     };
 
@@ -264,7 +264,7 @@ namespace NKikimr {
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////
     struct TDataWriterConclusion {
         std::unique_ptr<TBufferedChunkWriter> Writer;
-        TVector<ui32> UsedChunks;
+        TVector<ui32> UsedChunks; 
 
         TDataWriterConclusion(std::unique_ptr<TBufferedChunkWriter>&& writer, TVector<ui32>&& usedChunks)
             : Writer(std::move(writer))
@@ -277,13 +277,13 @@ namespace NKikimr {
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////
     template<typename TKey, typename TMemRec>
     struct TIndexWriterConclusion {
-        TVector<ui32> UsedChunks;
+        TVector<ui32> UsedChunks; 
         TDiskPart Addr; // entry point
         ui32 IndexParts = 0;
         ui32 OutboundItems = 0;
         TIntrusivePtr<TLevelSegment<TKey, TMemRec>> LevelSegment;
 
-        TString ToString() const {
+        TString ToString() const { 
             TStringStream s;
             s << "{Addr: " << Addr.ToString() << " IndexParts: " << IndexParts;
             if (OutboundItems)
@@ -314,7 +314,7 @@ namespace NKikimr {
     public:
         TDataWriter(TVDiskContextPtr vctx, EWriterDataType type, ui8 owner, ui64 ownerRound, ui32 chunkSize,
                     ui32 appendBlockSize, ui32 writeBlockSize, TQueue<std::unique_ptr<NPDisk::TEvChunkWrite>>& msgQueue,
-                    TDeque<TChunkIdx>& rchunks)
+                    TDeque<TChunkIdx>& rchunks) 
             : TBase(TMemoryConsumer(WriterDataTypeToMemConsumer(vctx, type, true)),
                     owner,
                     ownerRound,
@@ -515,7 +515,7 @@ namespace NKikimr {
                     break;
                 }
                 case TBlobType::HugeBlob: {
-                    const TVector<TDiskPart> &saved = dataMerger->GetHugeBlobMerger().SavedData();
+                    const TVector<TDiskPart> &saved = dataMerger->GetHugeBlobMerger().SavedData(); 
                     Y_VERIFY(saved.size() == 1);
 
                     TMemRec memRecTmp(memRec);
@@ -613,7 +613,7 @@ namespace NKikimr {
         const ui32 AppendBlockSize;
         const ui32 WriteBlockSize;
         TQueue<std::unique_ptr<NPDisk::TEvChunkWrite>>& MsgQueue;
-        TDeque<TChunkIdx>& RChunks;
+        TDeque<TChunkIdx>& RChunks; 
         ui32 RecsPos;
         ui32 OutboundPos;
         ui64 InplaceDataTotalSize;

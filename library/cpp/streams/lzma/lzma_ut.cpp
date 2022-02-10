@@ -8,7 +8,7 @@
 
 class TStrokaByOneByte: public IZeroCopyInput {
 public:
-    TStrokaByOneByte(const TString& s)
+    TStrokaByOneByte(const TString& s) 
         : Data(s)
         , Pos(s.data())
     {
@@ -26,7 +26,7 @@ private:
         }
     }
 
-    TString Data;
+    TString Data; 
     const char* Pos;
 };
 
@@ -37,15 +37,15 @@ class TLzmaTest: public TTestBase {
     UNIT_TEST_SUITE_END();
 
 private:
-    inline TString GenData() {
-        TString data;
+    inline TString GenData() { 
+        TString data; 
         TReallyFastRng32 rnd(RandomNumber<ui64>());
 
         for (size_t i = 0; i < 50000; ++i) {
             const char ch = rnd.Uniform(256);
             const size_t len = 1 + rnd.Uniform(10);
 
-            data += TString(len, ch);
+            data += TString(len, ch); 
         }
 
         return data;
@@ -54,7 +54,7 @@ private:
     inline void Test2() {
         class TExcOutput: public IOutputStream {
         public:
-            ~TExcOutput() override {
+            ~TExcOutput() override { 
             }
 
             void DoWrite(const void*, size_t) override {
@@ -62,7 +62,7 @@ private:
             }
         };
 
-        TString data(GenData());
+        TString data(GenData()); 
         TMemoryInput mi(data.data(), data.size());
         TExcOutput out;
 
@@ -76,9 +76,9 @@ private:
     }
 
     inline void Test1() {
-        TString data(GenData());
-        TString data1;
-        TString res;
+        TString data(GenData()); 
+        TString data1; 
+        TString res; 
 
         {
             TMemoryInput mi(data.data(), data.size());

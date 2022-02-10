@@ -6,8 +6,8 @@ namespace NKikimr {
 namespace NDriverClient {
 
 struct TCmdMessageBusTraceConfig : public TCliCmdConfig {
-    TString Command;
-    TString Path;
+    TString Command; 
+    TString Path; 
     ui32 MaxInFlight;
 
     TCmdMessageBusTraceConfig() : MaxInFlight(1) {}

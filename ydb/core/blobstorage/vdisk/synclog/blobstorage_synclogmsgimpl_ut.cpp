@@ -105,7 +105,7 @@ Y_UNIT_TEST_SUITE(CodecsTest) {
     using namespace NCodecs;
 
     template <bool delta>
-    void PFor(const TVector<ui32> &v1) {
+    void PFor(const TVector<ui32> &v1) { 
         const char *begin = (const char *)(&v1[0]);
         const char *end = begin + sizeof(v1[0]) * v1.size();
         TStringBuf in(begin, end);
@@ -115,7 +115,7 @@ Y_UNIT_TEST_SUITE(CodecsTest) {
         STR << "v size: " << sizeof(v1[0]) * v1.size() << "; encoded size: " << buf.Size() << "\n";
     }
 
-    void Delta(const TVector<ui32> &v1) {
+    void Delta(const TVector<ui32> &v1) { 
         const char *begin = (const char *)(&v1[0]);
         const char *end = begin + sizeof(v1[0]) * v1.size();
         TStringBuf in(begin, end);
@@ -125,7 +125,7 @@ Y_UNIT_TEST_SUITE(CodecsTest) {
         STR << "v size: " << sizeof(v1[0]) * v1.size() << "; encoded size: " << buf.Size() << "\n";
     }
 
-    void RunLength(const TVector<ui32> &v1) {
+    void RunLength(const TVector<ui32> &v1) { 
         const char *begin = (const char *)(&v1[0]);
         const char *end = begin + sizeof(v1[0]) * v1.size();
         TStringBuf in(begin, end);
@@ -137,10 +137,10 @@ Y_UNIT_TEST_SUITE(CodecsTest) {
 
     Y_UNIT_TEST(Basic) {
         // logoblobs
-        TVector<ui32> v1 {20, 21, 22, 23, 24, 15, 19, 16, 17, 18, 20, 78, 89, 90, 91, 93, 74, 68, 69};
-        TVector<ui32> v2 {15, 16, 17, 19, 19, 20, 21, 22, 25, 26, 29, 25, 26, 45, 46, 47, 47, 49, 50};
-        TVector<ui32> v3 {42, 42, 42, 42, 42, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66};
-        TVector<ui32> v4 {66, 66, 66, 66, 66, 66, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42};
+        TVector<ui32> v1 {20, 21, 22, 23, 24, 15, 19, 16, 17, 18, 20, 78, 89, 90, 91, 93, 74, 68, 69}; 
+        TVector<ui32> v2 {15, 16, 17, 19, 19, 20, 21, 22, 25, 26, 29, 25, 26, 45, 46, 47, 47, 49, 50}; 
+        TVector<ui32> v3 {42, 42, 42, 42, 42, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66, 66}; 
+        TVector<ui32> v4 {66, 66, 66, 66, 66, 66, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42}; 
 
         STR << "======= PFOR DELTA ===========\n";
         PFor<true>(v1);
@@ -160,7 +160,7 @@ Y_UNIT_TEST_SUITE(CodecsTest) {
     }
 
     Y_UNIT_TEST(NaturalNumbersAndZero) {
-        TVector<ui32> v;
+        TVector<ui32> v; 
         const ui32 n = 100000;
         v.reserve(n);
         for (ui32 i = 0; i < n; i++)
@@ -177,7 +177,7 @@ Y_UNIT_TEST_SUITE(CodecsTest) {
     }
 
     Y_UNIT_TEST(LargeAndRepeated) {
-        TVector<ui32> v;
+        TVector<ui32> v; 
 
         for (ui32 t = 0; t < 100; t++) {
             ui32 n = RandomNumber<ui32>();

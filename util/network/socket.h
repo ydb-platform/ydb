@@ -42,7 +42,7 @@ struct pollfd {
         #define POLLNVAL (1 << 9)
 
 const char* inet_ntop(int af, const void* src, char* dst, socklen_t size);
-int poll(struct pollfd fds[], nfds_t nfds, int timeout) noexcept;
+int poll(struct pollfd fds[], nfds_t nfds, int timeout) noexcept; 
     #else
         #define poll(fds, nfds, timeout) WSAPoll(fds, nfds, timeout)
     #endif
@@ -59,12 +59,12 @@ int inet_aton(const char* cp, struct in_addr* inp);
 #endif
 
 template <class T>
-static inline int SetSockOpt(SOCKET s, int level, int optname, T opt) noexcept {
+static inline int SetSockOpt(SOCKET s, int level, int optname, T opt) noexcept { 
     return setsockopt(s, level, optname, (const char*)&opt, sizeof(opt));
 }
 
 template <class T>
-static inline int GetSockOpt(SOCKET s, int level, int optname, T& opt) noexcept {
+static inline int GetSockOpt(SOCKET s, int level, int optname, T& opt) noexcept { 
     socklen_t len = sizeof(opt);
 
     return getsockopt(s, level, optname, (char*)&opt, &len);
@@ -174,11 +174,11 @@ public:
         {
         }
 
-        inline void Next() noexcept {
+        inline void Next() noexcept { 
             C_ = C_->ai_next;
         }
 
-        inline TIterator operator++(int) noexcept {
+        inline TIterator operator++(int) noexcept { 
             TIterator old(*this);
 
             Next();
@@ -186,25 +186,25 @@ public:
             return old;
         }
 
-        inline TIterator& operator++() noexcept {
+        inline TIterator& operator++() noexcept { 
             Next();
 
             return *this;
         }
 
-        friend inline bool operator==(const TIterator& l, const TIterator& r) noexcept {
+        friend inline bool operator==(const TIterator& l, const TIterator& r) noexcept { 
             return l.C_ == r.C_;
         }
 
-        friend inline bool operator!=(const TIterator& l, const TIterator& r) noexcept {
+        friend inline bool operator!=(const TIterator& l, const TIterator& r) noexcept { 
             return !(l == r);
         }
 
-        inline struct addrinfo& operator*() const noexcept {
+        inline struct addrinfo& operator*() const noexcept { 
             return *C_;
         }
 
-        inline struct addrinfo* operator->() const noexcept {
+        inline struct addrinfo* operator->() const noexcept { 
             return C_;
         }
 
@@ -213,21 +213,21 @@ public:
     };
 
     TNetworkAddress(ui16 port);
-    TNetworkAddress(const TString& host, ui16 port);
-    TNetworkAddress(const TString& host, ui16 port, int flags);
+    TNetworkAddress(const TString& host, ui16 port); 
+    TNetworkAddress(const TString& host, ui16 port, int flags); 
     TNetworkAddress(const TUnixSocketPath& unixSocketPath, int flags = 0);
-    ~TNetworkAddress();
+    ~TNetworkAddress(); 
 
-    inline TIterator Begin() const noexcept {
+    inline TIterator Begin() const noexcept { 
         return TIterator(Info());
     }
 
-    inline TIterator End() const noexcept {
+    inline TIterator End() const noexcept { 
         return TIterator(nullptr);
     }
 
 private:
-    struct addrinfo* Info() const noexcept;
+    struct addrinfo* Info() const noexcept; 
 
 private:
     class TImpl;
@@ -260,31 +260,31 @@ public:
         return *this;
     }
 
-    inline ~TSocketHolder() {
+    inline ~TSocketHolder() { 
         Close();
     }
 
-    inline SOCKET Release() noexcept {
+    inline SOCKET Release() noexcept { 
         SOCKET ret = Fd_;
         Fd_ = INVALID_SOCKET;
         return ret;
     }
 
-    void Close() noexcept;
+    void Close() noexcept; 
 
     inline void ShutDown(int mode) const {
         ::ShutDown(Fd_, mode);
     }
 
-    inline void Swap(TSocketHolder& r) noexcept {
+    inline void Swap(TSocketHolder& r) noexcept { 
         DoSwap(Fd_, r.Fd_);
     }
 
-    inline bool Closed() const noexcept {
+    inline bool Closed() const noexcept { 
         return Fd_ == INVALID_SOCKET;
     }
 
-    inline operator SOCKET() const noexcept {
+    inline operator SOCKET() const noexcept { 
         return Fd_;
     }
 
@@ -316,7 +316,7 @@ public:
     TSocket(const TNetworkAddress& addr, const TDuration& timeOut);
     TSocket(const TNetworkAddress& addr, const TInstant& deadLine);
 
-    ~TSocket();
+    ~TSocket(); 
 
     template <class T>
     inline void SetSockOpt(int level, int optname, T opt) {
@@ -377,12 +377,12 @@ public:
      */
     ssize_t SendV(const TPart* parts, size_t count);
 
-    inline operator SOCKET() const noexcept {
+    inline operator SOCKET() const noexcept { 
         return Fd();
     }
 
 private:
-    SOCKET Fd() const noexcept;
+    SOCKET Fd() const noexcept; 
 
 private:
     class TImpl;
@@ -391,13 +391,13 @@ private:
 
 class TSocketInput: public IInputStream {
 public:
-    TSocketInput(const TSocket& s) noexcept;
-    ~TSocketInput() override;
+    TSocketInput(const TSocket& s) noexcept; 
+    ~TSocketInput() override; 
 
-    TSocketInput(TSocketInput&&) noexcept = default;
-    TSocketInput& operator=(TSocketInput&&) noexcept = default;
-
-    const TSocket& GetSocket() const noexcept {
+    TSocketInput(TSocketInput&&) noexcept = default; 
+    TSocketInput& operator=(TSocketInput&&) noexcept = default; 
+ 
+    const TSocket& GetSocket() const noexcept { 
         return S_;
     }
 
@@ -410,13 +410,13 @@ private:
 
 class TSocketOutput: public IOutputStream {
 public:
-    TSocketOutput(const TSocket& s) noexcept;
-    ~TSocketOutput() override;
+    TSocketOutput(const TSocket& s) noexcept; 
+    ~TSocketOutput() override; 
 
-    TSocketOutput(TSocketOutput&&) noexcept = default;
-    TSocketOutput& operator=(TSocketOutput&&) noexcept = default;
-
-    const TSocket& GetSocket() const noexcept {
+    TSocketOutput(TSocketOutput&&) noexcept = default; 
+    TSocketOutput& operator=(TSocketOutput&&) noexcept = default; 
+ 
+    const TSocket& GetSocket() const noexcept { 
         return S_;
     }
 
@@ -429,4 +429,4 @@ private:
 };
 
 //return -(error code) if error occured, or number of ready fds
-ssize_t PollD(struct pollfd fds[], nfds_t nfds, const TInstant& deadLine) noexcept;
+ssize_t PollD(struct pollfd fds[], nfds_t nfds, const TInstant& deadLine) noexcept; 

@@ -7,7 +7,7 @@
 #include <util/charset/unidata.h>
 #include <util/charset/utf8.h>
 #include <util/charset/wide.h>
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 #include <util/generic/algorithm.h>
 #include <util/generic/yexception.h>
 #include <util/memory/tempbuf.h>
@@ -123,7 +123,7 @@ namespace NDetail {
     struct TRecodeTraits<char> {
         using TCharTo = wchar16;
         using TStringBufTo = TWtringBuf;
-        using TStringTo = TUtf16String;
+        using TStringTo = TUtf16String; 
         enum { ReserveSize = 4 }; // How many TCharFrom characters we should reserve for one TCharTo character in worst case
                                   // Here an unicode character can be converted up to 4 bytes of UTF8
     };
@@ -132,14 +132,14 @@ namespace NDetail {
     struct TRecodeTraits<wchar16> {
         using TCharTo = char;
         using TStringBufTo = TStringBuf;
-        using TStringTo = TString;
+        using TStringTo = TString; 
         enum { ReserveSize = 2 }; // possible surrogate pairs ?
     };
 
     // Operations with destination buffer where recoded string will be written
     template <typename TResult>
     struct TRecodeResultOps {
-        // default implementation will work with TString and TUtf16String - 99% of usage
+        // default implementation will work with TString and TUtf16String - 99% of usage 
         using TResultChar = typename TResult::char_type;
 
         static inline size_t Size(const TResult& dst) {
@@ -223,18 +223,18 @@ inline TStringBuf WideToChar(const TWtringBuf src, TString& dst, ECharset encodi
 }
 
 //! calls either to @c WideToUTF8 or @c WideToChar depending on the encoding type
-inline TString WideToChar(const wchar16* text, size_t len, ECharset enc) {
+inline TString WideToChar(const wchar16* text, size_t len, ECharset enc) { 
     if (NCodepagePrivate::NativeCodepage(enc)) {
         if (enc == CODES_UTF8)
             return WideToUTF8(text, len);
 
-        TString s = TString::Uninitialized(len);
+        TString s = TString::Uninitialized(len); 
         s.remove(WideToChar(text, len, s.begin(), enc));
 
         return s;
     }
 
-    TString s = TString::Uninitialized(len * 3);
+    TString s = TString::Uninitialized(len * 3); 
 
     size_t read = 0;
     size_t written = 0;
@@ -244,15 +244,15 @@ inline TString WideToChar(const wchar16* text, size_t len, ECharset enc) {
     return s;
 }
 
-inline TUtf16String CharToWide(const char* text, size_t len, const CodePage& cp) {
-    TUtf16String w = TUtf16String::Uninitialized(len);
+inline TUtf16String CharToWide(const char* text, size_t len, const CodePage& cp) { 
+    TUtf16String w = TUtf16String::Uninitialized(len); 
     CharToWide(text, len, w.begin(), cp);
     return w;
 }
 
 //! calls either to @c UTF8ToWide or @c CharToWide depending on the encoding type
 template <bool robust>
-inline TUtf16String CharToWide(const char* text, size_t len, ECharset enc) {
+inline TUtf16String CharToWide(const char* text, size_t len, ECharset enc) { 
     if (NCodepagePrivate::NativeCodepage(enc)) {
         if (enc == CODES_UTF8)
             return UTF8ToWide<robust>(text, len);
@@ -260,7 +260,7 @@ inline TUtf16String CharToWide(const char* text, size_t len, ECharset enc) {
         return CharToWide(text, len, *CodePageByCharset(enc));
     }
 
-    TUtf16String w = TUtf16String::Uninitialized(len * 2);
+    TUtf16String w = TUtf16String::Uninitialized(len * 2); 
 
     size_t read = 0;
     size_t written = 0;
@@ -274,8 +274,8 @@ inline TUtf16String CharToWide(const char* text, size_t len, ECharset enc) {
 //! @param text     text to be converted
 //! @param len      length of the text in characters
 //! @param cp       a codepage that is used in case of failed conversion from UTF8
-inline TUtf16String UTF8ToWide(const char* text, size_t len, const CodePage& cp) {
-    TUtf16String w = TUtf16String::Uninitialized(len);
+inline TUtf16String UTF8ToWide(const char* text, size_t len, const CodePage& cp) { 
+    TUtf16String w = TUtf16String::Uninitialized(len); 
     size_t written = 0;
     if (UTF8ToWide(text, len, w.begin(), written))
         w.remove(written);

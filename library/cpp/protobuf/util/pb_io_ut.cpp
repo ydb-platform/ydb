@@ -23,7 +23,7 @@ static NProtobufUtilUt::TTextEnumTest GetCorrectEnumMessage() {
     return m;
 }
 
-static const TString CORRECT_MESSAGE =
+static const TString CORRECT_MESSAGE = 
     R"(Foo: 42
 )";
 static const TString CORRECT_ENUM_NAME_MESSAGE =
@@ -33,7 +33,7 @@ static const TString CORRECT_ENUM_ID_MESSAGE =
     R"(Slot: 1
 )";
 
-static const TString INCORRECT_MESSAGE =
+static const TString INCORRECT_MESSAGE = 
     R"(Bar: 1
 )";
 static const TString INCORRECT_ENUM_NAME_MESSAGE =
@@ -43,11 +43,11 @@ static const TString INCORRECT_ENUM_ID_MESSAGE =
     R"(Slot: 3
 )";
 
-static const TString CORRECT_BASE64_MESSAGE = "CCo,";
+static const TString CORRECT_BASE64_MESSAGE = "CCo,"; 
 
 static const TString CORRECT_UNEVEN_BASE64_MESSAGE = "CCo";
 
-static const TString INCORRECT_BASE64_MESSAGE = "CC";
+static const TString INCORRECT_BASE64_MESSAGE = "CC"; 
 
 Y_UNIT_TEST_SUITE(TTestProtoBufIO) {
     Y_UNIT_TEST(TestBase64) {
@@ -81,8 +81,8 @@ Y_UNIT_TEST_SUITE(TTestProtoBufIO) {
         const TFsPath correctFileName = TFsPath{tempDir()} / "correct.pb.txt";
         const TFsPath incorrectFileName = TFsPath{tempDir()} / "incorrect.pb.txt";
 
-        TFileOutput{correctFileName}.Write(CORRECT_MESSAGE);
-        TFileOutput{incorrectFileName}.Write(INCORRECT_MESSAGE);
+        TFileOutput{correctFileName}.Write(CORRECT_MESSAGE); 
+        TFileOutput{incorrectFileName}.Write(INCORRECT_MESSAGE); 
 
         {
             NProtobufUtilUt::TTextTest message;
@@ -138,8 +138,8 @@ Y_UNIT_TEST_SUITE(TTestProtoBufIO) {
         }
         {
             NProtobufUtilUt::TTextTest m;
-            const auto f = [&correctFileName](NProtobufUtilUt::TTextTest& mm) {
-                mm = ParseFromTextFormat<NProtobufUtilUt::TTextTest>(correctFileName);
+            const auto f = [&correctFileName](NProtobufUtilUt::TTextTest& mm) { 
+                mm = ParseFromTextFormat<NProtobufUtilUt::TTextTest>(correctFileName); 
             };
             UNIT_ASSERT_NO_EXCEPTION(f(m));
             UNIT_ASSERT(NProtoBuf::IsEqual(GetCorrectMessage(), m));
@@ -150,8 +150,8 @@ Y_UNIT_TEST_SUITE(TTestProtoBufIO) {
         {
             NProtobufUtilUt::TTextTest m;
             TStringInput in{CORRECT_MESSAGE};
-            const auto f = [&in](NProtobufUtilUt::TTextTest& mm) {
-                mm = ParseFromTextFormat<NProtobufUtilUt::TTextTest>(in);
+            const auto f = [&in](NProtobufUtilUt::TTextTest& mm) { 
+                mm = ParseFromTextFormat<NProtobufUtilUt::TTextTest>(in); 
             };
             UNIT_ASSERT_NO_EXCEPTION(f(m));
             UNIT_ASSERT(NProtoBuf::IsEqual(GetCorrectMessage(), m));
@@ -161,10 +161,10 @@ Y_UNIT_TEST_SUITE(TTestProtoBufIO) {
             UNIT_ASSERT_EXCEPTION(ParseFromTextFormat<NProtobufUtilUt::TTextTest>(in), yexception);
         }
         {
-            const TFsPath correctFileName2 = TFsPath{tempDir()} / "serialized.pb.txt";
+            const TFsPath correctFileName2 = TFsPath{tempDir()} / "serialized.pb.txt"; 
             const auto original = GetCorrectMessage();
-            UNIT_ASSERT_NO_EXCEPTION(SerializeToTextFormat(original, correctFileName2));
-            const auto serializedStr = TUnbufferedFileInput{correctFileName2}.ReadAll();
+            UNIT_ASSERT_NO_EXCEPTION(SerializeToTextFormat(original, correctFileName2)); 
+            const auto serializedStr = TUnbufferedFileInput{correctFileName2}.ReadAll(); 
             UNIT_ASSERT_VALUES_EQUAL(serializedStr, CORRECT_MESSAGE);
         }
         {
@@ -175,8 +175,8 @@ Y_UNIT_TEST_SUITE(TTestProtoBufIO) {
         }
         {
             NProtobufUtilUt::TTextTest m;
-            const auto f = [&correctFileName](NProtobufUtilUt::TTextTest& mm) {
-                mm = ParseFromTextFormat<NProtobufUtilUt::TTextTest>(
+            const auto f = [&correctFileName](NProtobufUtilUt::TTextTest& mm) { 
+                mm = ParseFromTextFormat<NProtobufUtilUt::TTextTest>( 
                     correctFileName,
                     EParseFromTextFormatOption::AllowUnknownField);
             };
@@ -186,8 +186,8 @@ Y_UNIT_TEST_SUITE(TTestProtoBufIO) {
         {
             const NProtobufUtilUt::TTextTest empty;
             NProtobufUtilUt::TTextTest m;
-            const auto f = [&incorrectFileName](NProtobufUtilUt::TTextTest& mm) {
-                mm = ParseFromTextFormat<NProtobufUtilUt::TTextTest>(
+            const auto f = [&incorrectFileName](NProtobufUtilUt::TTextTest& mm) { 
+                mm = ParseFromTextFormat<NProtobufUtilUt::TTextTest>( 
                     incorrectFileName,
                     EParseFromTextFormatOption::AllowUnknownField);
             };
@@ -258,8 +258,8 @@ Y_UNIT_TEST_SUITE(TTestProtoBufIO) {
         const TFsPath correctFileName = TFsPath{tempDir()} / "correct.pb.txt";
         const TFsPath incorrectFileName = TFsPath{tempDir()} / "incorrect.pb.txt";
 
-        TFileOutput{correctFileName}.Write(CORRECT_MESSAGE);
-        TFileOutput{incorrectFileName}.Write(INCORRECT_MESSAGE);
+        TFileOutput{correctFileName}.Write(CORRECT_MESSAGE); 
+        TFileOutput{incorrectFileName}.Write(INCORRECT_MESSAGE); 
 
         {
             NProtobufUtilUt::TTextTest message;
@@ -341,7 +341,7 @@ Y_UNIT_TEST_SUITE(TTestProtoBufIO) {
             const TFsPath correctFileName2 = TFsPath{tempDir()} / "serialized.pb.txt";
             const auto original = GetCorrectMessage();
             UNIT_ASSERT_NO_EXCEPTION(SerializeToTextFormat(original, correctFileName2));
-            const auto serializedStr = TUnbufferedFileInput{correctFileName2}.ReadAll();
+            const auto serializedStr = TUnbufferedFileInput{correctFileName2}.ReadAll(); 
             UNIT_ASSERT_VALUES_EQUAL(serializedStr, CORRECT_MESSAGE);
         }
         {

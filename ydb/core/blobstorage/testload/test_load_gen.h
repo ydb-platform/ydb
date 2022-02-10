@@ -11,7 +11,7 @@ namespace NKikimr {
         using TResult = decltype(std::declval<TItem>().Generate());
 
         // a sef of items; key is the accumulated weight for this item (including the one for the item itself)
-        TMap<double, TItem> Items;
+        TMap<double, TItem> Items; 
 
         // accumulated weight
         double AccumWeight = 0;

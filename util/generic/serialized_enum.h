@@ -1,34 +1,34 @@
-#pragma once
-
+#pragma once 
+ 
 #include <util/generic/fwd.h>
 #include <util/generic/vector.h>
 #include <util/generic/map.h>
 
-#include <cstddef>
+#include <cstddef> 
 #include <type_traits>
-
-/*
-
+ 
+/* 
+ 
 A file with declarations of enumeration-related functions.
 It doesn't contains definitions. To generate them you have to add
-
-    GENERATE_ENUM_SERIALIZATION_WITH_HEADER(your_header_with_your_enum.h)
+ 
+    GENERATE_ENUM_SERIALIZATION_WITH_HEADER(your_header_with_your_enum.h) 
 or
     GENERATE_ENUM_SERIALIZATION(your_header_with_your_enum.h)
-
+ 
 in your ya.make
-
-@see https://st.yandex-team.ru/IGNIETFERRO-333
-@see https://wiki.yandex-team.ru/PoiskovajaPlatforma/Build/WritingCmakefiles/#generate-enum-with-header
-
-*/
-
-/**
- * Returns number of distinct items in enum or enum class
- *
- * @tparam EnumT     enum type
- */
-template <typename EnumT>
+ 
+@see https://st.yandex-team.ru/IGNIETFERRO-333 
+@see https://wiki.yandex-team.ru/PoiskovajaPlatforma/Build/WritingCmakefiles/#generate-enum-with-header 
+ 
+*/ 
+ 
+/** 
+ * Returns number of distinct items in enum or enum class 
+ * 
+ * @tparam EnumT     enum type 
+ */ 
+template <typename EnumT> 
 Y_CONST_FUNCTION constexpr size_t GetEnumItemsCount();
 
 namespace NEnumSerializationRuntime {

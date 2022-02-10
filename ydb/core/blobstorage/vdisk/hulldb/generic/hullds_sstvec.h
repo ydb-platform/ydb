@@ -15,7 +15,7 @@ namespace NKikimr {
         typedef TIntrusivePtr<TLevelSegment> TLevelSegmentPtr;
         typedef typename TLevelSegment::TLevelSstPtr TLevelSstPtr;
         typedef TOrderedLevelSegments<TKey, TMemRec> TThis;
-        typedef TVector<TLevelSegmentPtr> TSegments;
+        typedef TVector<TLevelSegmentPtr> TSegments; 
 
         TSegments Segments;
 
@@ -83,7 +83,7 @@ namespace NKikimr {
                 x->FillInChunkIds(vec);
         }
 
-        void GetOwnedChunks(TSet<TChunkIdx>& chunks) const {
+        void GetOwnedChunks(TSet<TChunkIdx>& chunks) const { 
             for (const TLevelSegmentPtr& seg : Segments) {
                 seg->GetOwnedChunks(chunks);
             }
@@ -108,8 +108,8 @@ namespace NKikimr {
             return num;
         }
 
-        TString ChunksToString() const {
-            TString str;
+        TString ChunksToString() const { 
+            TString str; 
             for (const auto &x : Segments) {
                 str += x->ChunksToString();
             }
@@ -180,7 +180,7 @@ namespace NKikimr {
         typedef ::NKikimr::TOrderedLevelSegments<TKey, TMemRec> TOrderedLevelSegments;
         typedef TIntrusivePtr<TOrderedLevelSegments> TOrderedLevelSegmentsPtr;
         typedef ::NKikimr::TUnorderedLevelSegments<TKey, TMemRec> TThis;
-        typedef TList<TLevelSegmentPtr> TSegments;
+        typedef TList<TLevelSegmentPtr> TSegments; 
 
         TSegments Segments;
         ui32 Num;
@@ -256,7 +256,7 @@ namespace NKikimr {
             }
         }
 
-        void GetOwnedChunks(TSet<TChunkIdx>& chunks) const {
+        void GetOwnedChunks(TSet<TChunkIdx>& chunks) const { 
             for (const TLevelSegmentPtr& seg : Segments) {
                 seg->GetOwnedChunks(chunks);
             }

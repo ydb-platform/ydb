@@ -95,7 +95,7 @@ namespace NActors {
         void PrepareStop() override;
         void Shutdown() override;
 
-        void GetCurrentStats(TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const override;
+        void GetCurrentStats(TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const override; 
         TString GetName() const override {
             return PoolName;
         }

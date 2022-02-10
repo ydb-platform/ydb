@@ -171,7 +171,7 @@ bool TOutReadSets::ResendRS(NTabletFlatExecutor::TTransactionContext &txc, const
     ui64 txId = rowset.GetValue<Schema::OutReadSets::TxId>();
     ui64 from = rowset.GetValue<Schema::OutReadSets::From>();
     ui64 to = rowset.GetValue<Schema::OutReadSets::To>();
-    TString body = rowset.GetValue<Schema::OutReadSets::Body>();
+    TString body = rowset.GetValue<Schema::OutReadSets::Body>(); 
 
     txc.DB.NoMoreReadsForTx();
 

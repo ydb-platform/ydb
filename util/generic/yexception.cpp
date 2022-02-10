@@ -14,31 +14,31 @@ TString FormatExc(const std::exception& exception) {
     return TString::Join(TStringBuf("("), TypeName(exception), TStringBuf(") "), exception.what());
 }
 
-TString CurrentExceptionMessage() {
-    auto exceptionPtr = std::current_exception();
-    if (exceptionPtr) {
-        try {
-            std::rethrow_exception(exceptionPtr);
-        } catch (const yexception& e) {
-            const TBackTrace* bt = e.BackTrace();
+TString CurrentExceptionMessage() { 
+    auto exceptionPtr = std::current_exception(); 
+    if (exceptionPtr) { 
+        try { 
+            std::rethrow_exception(exceptionPtr); 
+        } catch (const yexception& e) { 
+            const TBackTrace* bt = e.BackTrace(); 
 
-            if (bt) {
+            if (bt) { 
                 return TString::Join(bt->PrintToString(), TStringBuf("\n"), FormatExc(e));
-            }
-
-            return FormatExc(e);
-        } catch (const std::exception& e) {
-            return FormatExc(e);
-        } catch (...) {
+            } 
+ 
+            return FormatExc(e); 
+        } catch (const std::exception& e) { 
+            return FormatExc(e); 
+        } catch (...) { 
         }
 
-        return "unknown error";
+        return "unknown error"; 
     }
 
-    return "(NO EXCEPTION)";
+    return "(NO EXCEPTION)"; 
 }
 
-bool UncaughtException() noexcept {
+bool UncaughtException() noexcept { 
 // FIXME: use std::uncaught_exceptions() unconditionally after DEVTOOLS-8811
 #if defined(__cpp_lib_uncaught_exceptions) && !defined(_LIBCPP_AVAILABILITY_UNCAUGHT_EXCEPTIONS)
     return std::uncaught_exceptions() > 0;
@@ -97,11 +97,11 @@ void NPrivateException::yexception::ZeroTerminate() noexcept {
     *end = 0;
 }
 
-const char* NPrivateException::yexception::what() const noexcept {
+const char* NPrivateException::yexception::what() const noexcept { 
     return Buf_.Data();
 }
 
-const TBackTrace* NPrivateException::yexception::BackTrace() const noexcept {
+const TBackTrace* NPrivateException::yexception::BackTrace() const noexcept { 
     return nullptr;
 }
 

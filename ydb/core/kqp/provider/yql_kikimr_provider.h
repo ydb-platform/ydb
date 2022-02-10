@@ -104,9 +104,9 @@ struct TKikimrQueryContext : TThrRefBase {
     std::shared_ptr<const NKikimrKqp::TPreparedQuery> PreparedQuery;
     TKikimrParamsMap Parameters;
 
-    THashMap<ui64, IKikimrQueryExecutor::TQueryResult> Results;
-    THashMap<ui64, TIntrusivePtr<IKikimrQueryExecutor::TAsyncQueryResult>> InProgress;
-    TVector<ui64> ExecutionOrder;
+    THashMap<ui64, IKikimrQueryExecutor::TQueryResult> Results; 
+    THashMap<ui64, TIntrusivePtr<IKikimrQueryExecutor::TAsyncQueryResult>> InProgress; 
+    TVector<ui64> ExecutionOrder; 
 
     NActors::TActorId ReplyTarget;
     TMaybe<NKikimrKqp::TRlPath> RlPath;
@@ -190,10 +190,10 @@ public:
     bool Load(TExprContext& ctx, bool withVirtualColumns = false);
     void ToYson(NYson::TYsonWriter& writer) const;
 
-    TMaybe<ui32> GetKeyColumnIndex(const TString& name) const;
-    const TTypeAnnotationNode* GetColumnType(const TString& name) const;
+    TMaybe<ui32> GetKeyColumnIndex(const TString& name) const; 
+    const TTypeAnnotationNode* GetColumnType(const TString& name) const; 
 
-    const THashMap<TString, const TTypeAnnotationNode*> GetColumnTypesMap() const { return ColumnTypes; }
+    const THashMap<TString, const TTypeAnnotationNode*> GetColumnTypesMap() const { return ColumnTypes; } 
 
     bool DoesExist() const;
 
@@ -201,7 +201,7 @@ public:
     bool GetNeedsStats() const { return NeedsStats; }
 
 private:
-    THashMap<TString, const TTypeAnnotationNode*> ColumnTypes;
+    THashMap<TString, const TTypeAnnotationNode*> ColumnTypes; 
     bool NeedsStats = false;
 };
 
@@ -212,7 +212,7 @@ public:
     TKikimrTablesData& operator=(const TKikimrTablesData&) = delete;
 
     TKikimrTableDescription& GetOrAddTable(const TString& cluster, const TString& database, const TString& table);
-    TKikimrTableDescription& GetTable(const TString& cluster, const TString& table);
+    TKikimrTableDescription& GetTable(const TString& cluster, const TString& table); 
 
     const TKikimrTableDescription* EnsureTableExists(const TString& cluster, const TString& table,
         TPositionHandle pos, TExprContext& ctx) const;
@@ -228,7 +228,7 @@ public:
     }
 
 private:
-    THashMap<std::pair<TString, TString>, TKikimrTableDescription> Tables;
+    THashMap<std::pair<TString, TString>, TKikimrTableDescription> Tables; 
 };
 
 enum class TYdbOperation : ui32 {
@@ -340,11 +340,11 @@ public:
     void ClearTx() { TxCtx.Reset(); }
     void SetTx(TIntrusivePtr<IKikimrTransactionContext>& txCtx) { TxCtx.Reset(txCtx); }
 
-    TString GetUserName() const {
+    TString GetUserName() const { 
         return UserName;
     }
 
-    void SetUserName(const TString& userName) {
+    void SetUserName(const TString& userName) { 
         UserName = userName;
     }
 

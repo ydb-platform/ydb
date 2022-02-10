@@ -11,7 +11,7 @@ using namespace NNodes;
 namespace {
 
 template<typename TCompare>
-TExprBase BuildColumnCompare(TExprBase row, const TString& columnName, TExprBase value, TExprContext& ctx) {
+TExprBase BuildColumnCompare(TExprBase row, const TString& columnName, TExprBase value, TExprContext& ctx) { 
     auto compare = Build<TCompare>(ctx, row.Pos())
         .template Left<TCoMember>()
             .Struct(row)
@@ -62,7 +62,7 @@ TMaybeNode<TExprBase> CombinePredicatesOr(TMaybeNode<TExprBase> left, TMaybeNode
 }
 
 template<typename TItem, typename TFunc>
-TMaybeNode<TExprBase> CombinePredicateListOr(const TVector<TItem>& list, TExprContext& ctx,
+TMaybeNode<TExprBase> CombinePredicateListOr(const TVector<TItem>& list, TExprContext& ctx, 
     TFunc getPredicateFunc)
 {
     if (list.empty()) {
@@ -78,7 +78,7 @@ TMaybeNode<TExprBase> CombinePredicateListOr(const TVector<TItem>& list, TExprCo
     return residualPredicate;
 }
 
-TMaybeNode<TExprBase> BuildColumnRangePredicate(const TString& column, const TColumnRange& range,
+TMaybeNode<TExprBase> BuildColumnRangePredicate(const TString& column, const TColumnRange& range, 
     TExprBase row, TExprContext& ctx)
 {
     if (range.IsNull()) {
@@ -123,7 +123,7 @@ TMaybeNode<TExprBase> BuildColumnRangePredicate(const TString& column, const TCo
     return TMaybeNode<TExprBase>();
 }
 
-TMaybeNode<TExprBase> BuildKeyRangePredicate(const TVector<TString>& columns, const TKeyRange& keyRange,
+TMaybeNode<TExprBase> BuildKeyRangePredicate(const TVector<TString>& columns, const TKeyRange& keyRange, 
     TExprBase row, TExprContext& ctx)
 {
     YQL_ENSURE(columns.size() == keyRange.GetColumnRangesCount());
@@ -229,7 +229,7 @@ TColumnRange MakeColumnRange(TRangeBound left, TRangeBound right, const TLookupC
 
 class TKeyRangeBuilder {
 public:
-    TKeyRangeBuilder(const TVector<TString>& keyColumns)
+    TKeyRangeBuilder(const TVector<TString>& keyColumns) 
         : KeyColumns(keyColumns)
     {
         for (auto& keyColumn : keyColumns) {
@@ -244,12 +244,12 @@ public:
 
     bool IsFullScan() const {
         return std::find_if(ColumnRanges.begin(), ColumnRanges.end(),
-            [] (const std::pair<TString, TColumnRange>& pair) {
+            [] (const std::pair<TString, TColumnRange>& pair) { 
                 return pair.second.IsDefined();
             }) == ColumnRanges.end();
     }
 
-    const TVector<TString>& GetKeyColumns() const {
+    const TVector<TString>& GetKeyColumns() const { 
         return KeyColumns;
     }
 
@@ -280,7 +280,7 @@ public:
         ResidualPredicate = predicate;
     }
 
-    TMaybeNode<TExprBase> BuildPredicate(const TVector<TString>& columns,
+    TMaybeNode<TExprBase> BuildPredicate(const TVector<TString>& columns, 
         TExprBase row, TExprContext& ctx) const
     {
         auto keyRange = BuildKeyRange(row, ctx);
@@ -293,10 +293,10 @@ public:
         }
 
         auto newResidualPredicate = ResidualPredicate;
-        TVector<TColumnRange> newColumnRanges;
+        TVector<TColumnRange> newColumnRanges; 
 
         bool keyRangeFinished = false;
-        for (const TString& column : KeyColumns) {
+        for (const TString& column : KeyColumns) { 
             auto columnRange = GetColumnRange(column);
 
             if (keyRangeFinished) {
@@ -315,22 +315,22 @@ public:
     }
 
 private:
-    TVector<TString> KeyColumns;
-    THashMap<TString, TColumnRange> ColumnRanges;
+    TVector<TString> KeyColumns; 
+    THashMap<TString, TColumnRange> ColumnRanges; 
     TMaybeNode<TExprBase> ResidualPredicate;
 };
 
 class TTableLookupBuilder {
 public:
-    TTableLookupBuilder(const TVector<TString>& keyColumns, const TVector<TKeyRangeBuilder>& keyRangeBuilders)
+    TTableLookupBuilder(const TVector<TString>& keyColumns, const TVector<TKeyRangeBuilder>& keyRangeBuilders) 
         : KeyColumns(keyColumns)
         , KeyRangeBuilders(keyRangeBuilders) {}
 
-    TTableLookupBuilder(const TVector<TString>& keyColumns)
+    TTableLookupBuilder(const TVector<TString>& keyColumns) 
         : TTableLookupBuilder(keyColumns, {}) {}
 
-    TTableLookupBuilder(const TVector<TString>& keyColumns, const TKeyRangeBuilder& keyRangeBuilder)
-        : TTableLookupBuilder(keyColumns, TVector<TKeyRangeBuilder>{keyRangeBuilder}) {}
+    TTableLookupBuilder(const TVector<TString>& keyColumns, const TKeyRangeBuilder& keyRangeBuilder) 
+        : TTableLookupBuilder(keyColumns, TVector<TKeyRangeBuilder>{keyRangeBuilder}) {} 
 
     bool IsSingleRange() const {
         return KeyRangeBuilders.size() == 1;
@@ -346,7 +346,7 @@ public:
         return false;
     }
 
-    const TVector<TKeyRangeBuilder>& GetKeyRangeBuilders() const {
+    const TVector<TKeyRangeBuilder>& GetKeyRangeBuilders() const { 
         return KeyRangeBuilders;
     }
 
@@ -356,7 +356,7 @@ public:
     }
 
     TTableLookup BuildTableLookup(TExprBase row, const TLookupContext& ctx) const {
-        TVector<TKeyRange> keyRanges;
+        TVector<TKeyRange> keyRanges; 
         for (auto& keyRangeBuilder : KeyRangeBuilders) {
             keyRanges.push_back(keyRangeBuilder.BuildKeyRange(row, ctx.ExprCtx));
         }
@@ -378,7 +378,7 @@ public:
     }
 
 private:
-    static bool TryBuildPointRanges(TVector<TKeyRange>& keyRanges, const TLookupContext& ctx) {
+    static bool TryBuildPointRanges(TVector<TKeyRange>& keyRanges, const TLookupContext& ctx) { 
         YQL_ENSURE(keyRanges.size() > 1);
 
         const auto& firstRange = keyRanges[0];
@@ -448,7 +448,7 @@ private:
         return true;
     }
 
-    static bool CheckIndependentRanges(TVector<TKeyRange>& keyRanges, const TLookupContext& ctx) {
+    static bool CheckIndependentRanges(TVector<TKeyRange>& keyRanges, const TLookupContext& ctx) { 
         for (auto& keyRange : keyRanges) {
             for (auto& columnRange : keyRange.GetColumnRanges()) {
                 if (columnRange.GetFrom().IsDefined() && !ctx.CanCompareFunc(columnRange.GetFrom().GetValue())) {
@@ -476,7 +476,7 @@ private:
         return true;
     }
 
-    TKeyRange BuildBoundingKeyRange(const TVector<TKeyRange> &keyRanges,
+    TKeyRange BuildBoundingKeyRange(const TVector<TKeyRange> &keyRanges, 
         TExprBase row, TExprContext& ctx) const
     {
         YQL_ENSURE(keyRanges.size() > 0);
@@ -491,8 +491,8 @@ private:
     }
 
 private:
-    TVector<TString> KeyColumns;
-    TVector<TKeyRangeBuilder> KeyRangeBuilders;
+    TVector<TString> KeyColumns; 
+    TVector<TKeyRangeBuilder> KeyRangeBuilders; 
 };
 
 TKeyRangeBuilder CombineKeyRangesAnd(TExprBase row, const TVector<TString>& keyColumns, const TKeyRangeBuilder& left,
@@ -502,7 +502,7 @@ TKeyRangeBuilder CombineKeyRangesAnd(TExprBase row, const TVector<TString>& keyC
 
     auto rp = CombinePredicatesAnd(left.GetResidualPredicate(), right.GetResidualPredicate(), ctx.ExprCtx);
 
-    for (const TString& column : left.GetKeyColumns()) {
+    for (const TString& column : left.GetKeyColumns()) { 
         auto columnLeft = left.GetColumnRange(column);
         auto columnRight = right.GetColumnRange(column);
 
@@ -563,7 +563,7 @@ TKeyRangeBuilder CombineKeyRangesAnd(TExprBase row, const TVector<TString>& keyC
     return combinedLookup;
 }
 
-TTableLookupBuilder CombineLookupsAnd(TExprBase row, const TVector<TString>& keyColumns,
+TTableLookupBuilder CombineLookupsAnd(TExprBase row, const TVector<TString>& keyColumns, 
     const TTableLookupBuilder* builders, size_t size, const TLookupContext& ctx)
 {
     switch (size) {
@@ -623,7 +623,7 @@ TTableLookupBuilder CombineLookupsOr(TExprBase, const TVector<TString>& keyColum
 }
 
 TTableLookupBuilder CollectLookups(TExprBase row, TExprBase predicate,
-    const TVector<TString>& keyColumns, const TLookupContext& ctx)
+    const TVector<TString>& keyColumns, const TLookupContext& ctx) 
 {
     if (const auto maybeAnd = predicate.Maybe<TCoAnd>()) {
         const auto size = maybeAnd.Cast().Args().size();
@@ -783,7 +783,7 @@ TTableLookupBuilder CollectLookups(TExprBase row, TExprBase predicate,
             return fullScan;
         }
 
-        TVector<TKeyRangeBuilder> keyRanges;
+        TVector<TKeyRangeBuilder> keyRanges; 
         keyRanges.reserve(size);
         for (const auto& key : collection->Children()) {
             auto maybeValue = ctx.GetValueFunc(TExprBase(key), member.Ref().GetTypeAnn(), ctx.ExprCtx);
@@ -1041,7 +1041,7 @@ bool KeyTupleLess(const TKeyTuple& left, const TKeyTuple& right, const TTableLoo
 TTableLookup ExtractTableLookup(
     TExprBase row,
     TExprBase predicate,
-    const TVector<TString>& keyColumns,
+    const TVector<TString>& keyColumns, 
     TTableLookup::TGetValueFunc getValueFunc,
     TTableLookup::TCanCompareFunc canCompareFunc,
     TTableLookup::TCompareFunc compareFunc,

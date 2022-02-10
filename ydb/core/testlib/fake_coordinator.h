@@ -12,8 +12,8 @@ namespace NKikimr {
         struct TState : TThrRefBase {
             ui64 CurrentStep = 5000000;
             ui64 FrontStep = 0;
-            TMap<std::pair<ui64, ui64>, TVector<TAutoPtr<TEvTxProcessing::TEvPlanStep>>> QueuedPlans; // shard+step->event
-            TMap<ui64, TSet<ui64>> TxIds; // txid -> list of shards
+            TMap<std::pair<ui64, ui64>, TVector<TAutoPtr<TEvTxProcessing::TEvPlanStep>>> QueuedPlans; // shard+step->event 
+            TMap<ui64, TSet<ui64>> TxIds; // txid -> list of shards 
 
             TState() = default;
 
@@ -89,7 +89,7 @@ namespace NKikimr {
             }
 
             State->CurrentStep = Max(1 + State->CurrentStep, tx.GetMinStep());
-            TSet<ui64> shards;
+            TSet<ui64> shards; 
             for (auto shard : tx.GetAffectedSet()) {
                 shards.insert(shard.GetTabletId());
             }

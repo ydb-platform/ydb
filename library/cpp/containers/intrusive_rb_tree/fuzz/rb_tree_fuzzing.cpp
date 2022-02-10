@@ -34,7 +34,7 @@ public:
 using TTree = TRbTree<TNode, TCmp>;
 
 extern "C" int LLVMFuzzerTestOneInput(const ui8* data, size_t size) {
-    TDeque<TNode> records;
+    TDeque<TNode> records; 
     const ui8 half = 128u;
     TTree tree;
     for (size_t i = 0; i < size; ++i) {

@@ -72,7 +72,7 @@ public:
         }
 #define UPDATE_WILSON(NAME)                                       \
         if (cgi.Has(#NAME "SamplingRate")) {                      \
-            const TString& item = cgi.Get(#NAME "SamplingRate");   \
+            const TString& item = cgi.Get(#NAME "SamplingRate");   \ 
             ui64 value;                                           \
             if (TryFromString(item, value) && value <= 1000000) { \
                 AtomicSet(Mon->NAME ## SamplePPM, value);         \
@@ -88,7 +88,7 @@ public:
                 str << #NAME;                                                    \
             }                                                                    \
             TABLED() {                                                             \
-                TString value = ToString(Mon->NAME ## SamplePPM);                 \
+                TString value = ToString(Mon->NAME ## SamplePPM);                 \ 
                 str << "<input name=\"" #NAME "SamplingRate\" type=\"number\""   \
                     " value=\"" << value << "\" min=\"0\" max=\"1000000\"/>ppm"; \
             }                                                                    \

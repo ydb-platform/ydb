@@ -62,7 +62,7 @@ public:
      */
     void SetAllowMultipleStreams(bool allowMultipleStreams);
 
-    ~TZLibDecompress() override;
+    ~TZLibDecompress() override; 
 
 protected:
     size_t DoRead(void* buf, size_t size) override;
@@ -86,19 +86,19 @@ public:
         {
         }
 
-        inline TParams& SetType(ZLib::StreamType type) noexcept {
+        inline TParams& SetType(ZLib::StreamType type) noexcept { 
             Type = type;
 
             return *this;
         }
 
-        inline TParams& SetCompressionLevel(size_t level) noexcept {
+        inline TParams& SetCompressionLevel(size_t level) noexcept { 
             CompressionLevel = level;
 
             return *this;
         }
 
-        inline TParams& SetBufLen(size_t buflen) noexcept {
+        inline TParams& SetBufLen(size_t buflen) noexcept { 
             BufLen = buflen;
 
             return *this;
@@ -133,7 +133,7 @@ public:
         Init(TParams(out).SetType(type).SetCompressionLevel(compression_level).SetBufLen(buflen));
     }
 
-    ~TZLibCompress() override;
+    ~TZLibCompress() override; 
 
 private:
     void Init(const TParams& opts);
@@ -167,7 +167,7 @@ public:
     {
     }
 
-    ~TBufferedZLibDecompress() override;
+    ~TBufferedZLibDecompress() override; 
 };
 
 /** @} */

@@ -71,7 +71,7 @@ namespace {
             AddName(name);
         }
 
-        THashMap<TInternName, ui32>& GetNames() {
+        THashMap<TInternName, ui32>& GetNames() { 
             return Names;
         }
 
@@ -90,7 +90,7 @@ namespace {
         }
 
     private:
-        THashMap<TInternName, ui32> Names;
+        THashMap<TInternName, ui32> Names; 
         TVector<TInternName> NameOrder;
     };
 
@@ -877,7 +877,7 @@ namespace {
             End();
         }
 
-        TString GetOutput() const {
+        TString GetOutput() const { 
             return Out;
         }
 
@@ -957,11 +957,11 @@ namespace {
         }
 
     private:
-        TString Out;
+        TString Out; 
         ui32 ReferenceCount = 0;
-        THashMap<TInternName, ui32> Names;
+        THashMap<TInternName, ui32> Names; 
         TVector<TInternName> NameOrder;
-        TVector<std::pair<TNode*, bool>> Stack;
+        TVector<std::pair<TNode*, bool>> Stack; 
     };
 
     class TReader {
@@ -1792,7 +1792,7 @@ namespace {
                 ThrowCorrupted();
 
             auto listType = static_cast<TListType*>(type);
-            TVector<TRuntimeNode> items;
+            TVector<TRuntimeNode> items; 
             items.reserve(itemsCount);
             for (ui32 i = 0; i < itemsCount; ++i) {
                 auto item = PopNode();
@@ -2035,18 +2035,18 @@ namespace {
         const char* Current;
         const char* const End;
         const TTypeEnvironment& Env;
-        TVector<TNode*> Nodes;
-        TVector<TStringBuf> Names;
-        TVector<TNodeContext> CtxStack;
-        TVector<std::pair<TNode*, const char*>> NodeStack;
+        TVector<TNode*> Nodes; 
+        TVector<TStringBuf> Names; 
+        TVector<TNodeContext> CtxStack; 
+        TVector<std::pair<TNode*, const char*>> NodeStack; 
     };
 }
 
-TString SerializeNode(TNode* node, const TTypeEnvironment& env) noexcept{
+TString SerializeNode(TNode* node, const TTypeEnvironment& env) noexcept{ 
     return SerializeRuntimeNode(TRuntimeNode(node, true), env);
 }
 
-TString SerializeRuntimeNode(TExploringNodeVisitor& explorer, TRuntimeNode node, const TTypeEnvironment& env) noexcept{
+TString SerializeRuntimeNode(TExploringNodeVisitor& explorer, TRuntimeNode node, const TTypeEnvironment& env) noexcept{ 
     Y_UNUSED(env);
     TPrepareWriteNodeVisitor preparer;
     for (auto node : explorer.GetNodes()) {
@@ -2064,7 +2064,7 @@ TString SerializeRuntimeNode(TExploringNodeVisitor& explorer, TRuntimeNode node,
     return writer.GetOutput();
 }
 
-TString SerializeRuntimeNode(TRuntimeNode node, const TTypeEnvironment& env) noexcept{
+TString SerializeRuntimeNode(TRuntimeNode node, const TTypeEnvironment& env) noexcept{ 
     TExploringNodeVisitor explorer;
     explorer.Walk(node.GetNode(), env);
     return SerializeRuntimeNode(explorer, node, env);

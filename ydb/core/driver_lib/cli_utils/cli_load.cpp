@@ -5,7 +5,7 @@ namespace NKikimr {
 namespace NDriverClient {
 
 struct TCmdLoadConfig : public TCliCmdConfig {
-    TString Proto;
+    TString Proto; 
 
     void Parse(int argc, char **argv) {
         using namespace NLastGetopt;

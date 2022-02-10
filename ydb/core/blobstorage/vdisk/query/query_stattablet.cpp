@@ -100,12 +100,12 @@ namespace NKikimr {
                 return *this;
             }
         };
-        using TMapType = TMap<TChannelLevel, TValue>;
+        using TMapType = TMap<TChannelLevel, TValue>; 
 
         IOutputStream &Str;
         ui64 TabletId;
         bool Pretty;
-        TMapType Map;
+        TMapType Map; 
         const TIngress::EMode IngressMode;
 
     public:
@@ -197,7 +197,7 @@ namespace NKikimr {
             }
         }
 
-        void RenderTableForChannel(TMapType::const_iterator begin, TMapType::const_iterator end) const {
+        void RenderTableForChannel(TMapType::const_iterator begin, TMapType::const_iterator end) const { 
             // render output
             HTML(Str) {
                 DIV_CLASS("panel panel-info") {
@@ -227,7 +227,7 @@ namespace NKikimr {
                             }
                             TABLEBODY() {
                                 TValue total;
-                                for (TMapType::const_iterator it = begin; it != end; ++it) {
+                                for (TMapType::const_iterator it = begin; it != end; ++it) { 
                                     const TString levelName = std::get<1>(it->first);
                                     total += it->second;
                                     RenderRow(levelName, it->second);
@@ -241,9 +241,9 @@ namespace NKikimr {
         }
 
         void Finish() {
-            TMapType::const_iterator end = Map.end();
-            TMapType::const_iterator first = end;
-            for (TMapType::const_iterator it = Map.begin(); it != end; ++it) {
+            TMapType::const_iterator end = Map.end(); 
+            TMapType::const_iterator first = end; 
+            for (TMapType::const_iterator it = Map.begin(); it != end; ++it) { 
                 if (first == end) {
                     first = it;
                 } else {

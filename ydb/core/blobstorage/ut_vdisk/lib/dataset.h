@@ -4,7 +4,7 @@
 
 #include <util/generic/ptr.h>
 
-TString CreateData(const TString &orig, ui32 minHugeBlobSize, bool huge);
+TString CreateData(const TString &orig, ui32 minHugeBlobSize, bool huge); 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // ABOUT DATA GENERATION FOR TESTS
@@ -19,7 +19,7 @@ TString CreateData(const TString &orig, ui32 minHugeBlobSize, bool huge);
 //
 // TVectorDataSet
 // ~~~~~~~~~~~~~~
-// This class is good for small functional tests, we have a TVector under.
+// This class is good for small functional tests, we have a TVector under. 
 //
 // TGeneratedDataSet
 // ~~~~~~~~~~~~~~~~~
@@ -30,10 +30,10 @@ TString CreateData(const TString &orig, ui32 minHugeBlobSize, bool huge);
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 struct TDataItem {
     NKikimr::TLogoBlobID Id;
-    TString Data;
+    TString Data; 
     NKikimrBlobStorage::EPutHandleClass HandleClass;
 
-    TDataItem(const NKikimr::TLogoBlobID &id, const TString &data, NKikimrBlobStorage::EPutHandleClass cls)
+    TDataItem(const NKikimr::TLogoBlobID &id, const TString &data, NKikimrBlobStorage::EPutHandleClass cls) 
         : Id(id)
         , Data(std::move(data))
         , HandleClass(cls)
@@ -62,7 +62,7 @@ public:
     virtual TAutoPtr<TIterator> First() const = 0;
 
     // sometimes it's usefull to convert a dataset to a vector to have random access to elements
-    virtual const TVector<TDataItem> &ToVector() const = 0;
+    virtual const TVector<TDataItem> &ToVector() const = 0; 
 
     IDataSet() = default;
     virtual ~IDataSet() {}
@@ -79,15 +79,15 @@ public:
         return new TMyIterator(Items);
     }
 
-    virtual const TVector<TDataItem> &ToVector() const override {
+    virtual const TVector<TDataItem> &ToVector() const override { 
         return Items;
     }
 
 protected:
-    TVector<TDataItem> Items;
+    TVector<TDataItem> Items; 
 
     struct TMyIterator : public IDataSet::TIterator {
-        TMyIterator(const TVector<TDataItem> &items)
+        TMyIterator(const TVector<TDataItem> &items) 
             : Cur(items.begin())
             , End(items.end())
         {}
@@ -106,8 +106,8 @@ protected:
             ++Cur;
         }
 
-        TVector<TDataItem>::const_iterator Cur;
-        TVector<TDataItem>::const_iterator End;
+        TVector<TDataItem>::const_iterator Cur; 
+        TVector<TDataItem>::const_iterator End; 
     };
 };
 
@@ -138,7 +138,7 @@ public:
         return new TMyIterator(Generator.Get());
     }
 
-    virtual const TVector<TDataItem> &ToVector() const override {
+    virtual const TVector<TDataItem> &ToVector() const override { 
         if (Items.empty()) {
             TMyIterator it(Generator.Get());
             while (it.IsValid()) {
@@ -151,7 +151,7 @@ public:
 
 private:
     TAutoPtr<IDataGenerator> Generator;
-    mutable TVector<TDataItem> Items;
+    mutable TVector<TDataItem> Items; 
 
     struct TMyIterator : public IDataSet::TIterator {
         TMyIterator(IDataGenerator *generator)

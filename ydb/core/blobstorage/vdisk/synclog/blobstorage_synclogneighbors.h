@@ -33,7 +33,7 @@ namespace NKikimr {
                     , LockedLsn(p.LockedLsn)
                 {}
 
-                TString ToString() const {
+                TString ToString() const { 
                     return Sprintf("{SyncedLsn: %" PRIu64 " LockedLsn: %" PRIu64 "}", SyncedLsn, LockedLsn);
                 }
 
@@ -47,7 +47,7 @@ namespace NKikimr {
 
             TNeighbors Neighbors;
             TSyncPosQueue SyncPosQueue;
-            const TString LogPrefix;
+            const TString LogPrefix; 
             TActorSystem *ActorSystem;
             ui32 LocksNum;
 
@@ -109,14 +109,14 @@ namespace NKikimr {
                 return diskData.Get().SyncedLsn;
             }
 
-            TString ToString(char sep = '\0') const {
+            TString ToString(char sep = '\0') const { 
                 return Sprintf("{Global: %" PRIu64 " LocksNum: %" PRIu32 " Neighbors: %s}",
                                GlobalSyncedLsn(), LocksNum, Neighbors.ToString(sep).data());
             }
 
             TSyncLogNeighbors(const TVDiskIdShort &selfVDisk,
                               std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
-                              const TString &logPrefix, TActorSystem *actorSystem)
+                              const TString &logPrefix, TActorSystem *actorSystem) 
                 : Neighbors(selfVDisk, top)
                 , SyncPosQueue()
                 , LogPrefix(logPrefix)

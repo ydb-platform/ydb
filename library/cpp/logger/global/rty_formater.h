@@ -40,8 +40,8 @@ namespace NLoggingImpl {
         return TLocalTimeS();
     }
 
-    TString GetSystemResources();
-    TString PrintSystemResources(const NMemInfo::TMemInfo& info);
+    TString GetSystemResources(); 
+    TString PrintSystemResources(const NMemInfo::TMemInfo& info); 
 
     struct TLoggerFormatterTraits {
         static ILoggerFormatter* CreateDefault() {

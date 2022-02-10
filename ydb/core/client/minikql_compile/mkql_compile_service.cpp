@@ -15,11 +15,11 @@
 
 namespace NKikimr {
 
-TMiniKQLCompileServiceEvents::TEvCompile::TEvCompile(const TString& program)
+TMiniKQLCompileServiceEvents::TEvCompile::TEvCompile(const TString& program) 
     : Program(program)
 {}
 
-TMiniKQLCompileServiceEvents::TEvCompileStatus::TEvCompileStatus(const TString& pgm, const NYql::TMiniKQLCompileResult& result)
+TMiniKQLCompileServiceEvents::TEvCompileStatus::TEvCompileStatus(const TString& pgm, const NYql::TMiniKQLCompileResult& result) 
     : Program(pgm)
     , Result(result)
 {}
@@ -49,13 +49,13 @@ public:
             Alloc.Acquire();
         }
 
-        TString Program;
+        TString Program; 
         TActorId ResponseTo;
         NMiniKQL::TScopedAlloc Alloc;
         NMiniKQL::TTypeEnvironment TypeEnv;
         ui64 Cookie;
         bool Retried;
-        THashMap<TString, ui64> CompileResolveCookies;
+        THashMap<TString, ui64> CompileResolveCookies; 
         bool ForceRefresh;
     };
 
@@ -160,7 +160,7 @@ private:
 
 private:
     const size_t COMPILE_INFLIGHT_LIMIT;
-    TQueue<TCompileContext::TPtr> CompileQueue;
+    TQueue<TCompileContext::TPtr> CompileQueue; 
     using TCompilingMap = THashMap<TActorId, TCompileContext::TPtr>;
     TCompilingMap Compiling;
 

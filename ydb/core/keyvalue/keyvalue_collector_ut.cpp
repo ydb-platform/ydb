@@ -111,8 +111,8 @@ Y_UNIT_TEST(TestKeyValueCollectorEmpty) {
     TContext context;
     context.Setup();
 
-    TVector<TLogoBlobID> keep;
-    TVector<TLogoBlobID> doNotKeep;
+    TVector<TLogoBlobID> keep; 
+    TVector<TLogoBlobID> doNotKeep; 
     TIntrusivePtr<NKeyValue::TCollectOperation> operation(new NKeyValue::TCollectOperation(100, 100, std::move(keep), std::move(doNotKeep)));
     context.SetActor(CreateKeyValueCollector(
                 context.GetTabletActorId(), operation, context.GetTabletInfo().Get(), 200, 200, true));
@@ -137,9 +137,9 @@ Y_UNIT_TEST(TestKeyValueCollectorSingle) {
     TContext context;
     context.Setup();
 
-    TVector<TLogoBlobID> keep;
+    TVector<TLogoBlobID> keep; 
     keep.emplace_back(0x10010000001000Bull, 5, 58949, NKeyValue::BLOB_CHANNEL, 1209816, 10);
-    TVector<TLogoBlobID> doNotKeep;
+    TVector<TLogoBlobID> doNotKeep; 
     TIntrusivePtr<NKeyValue::TCollectOperation> operation(new NKeyValue::TCollectOperation(100, 100, std::move(keep), std::move(doNotKeep)));
     context.SetActor(CreateKeyValueCollector(
                 context.GetTabletActorId(), operation, context.GetTabletInfo().Get(), 200, 200, true));
@@ -173,8 +173,8 @@ Y_UNIT_TEST(TestKeyValueCollectorMultiple) {
     TContext context;
     context.Setup();
 
-    TVector<TLogoBlobID> keep;
-    TVector<TLogoBlobID> doNotKeep;
+    TVector<TLogoBlobID> keep; 
+    TVector<TLogoBlobID> doNotKeep; 
     doNotKeep.emplace_back(0x10010000001000Bull, 5, 58949, NKeyValue::BLOB_CHANNEL, 1209816, 10);
     doNotKeep.emplace_back(0x10010000001000Bull, 15, 58949, NKeyValue::BLOB_CHANNEL, 1209816, 10);
     doNotKeep.emplace_back(0x10010000001000Bull, 25, 58949, NKeyValue::BLOB_CHANNEL, 1209816, 10);
@@ -185,7 +185,7 @@ Y_UNIT_TEST(TestKeyValueCollectorMultiple) {
     doNotKeep.emplace_back(0x10010000001000Bull, 25, 58949, NKeyValue::BLOB_CHANNEL + 1, 1209816, 10);
     doNotKeep.emplace_back(0x10010000001000Bull, 35, 58949, NKeyValue::BLOB_CHANNEL + 1, 1209816, 10);
 
-    TSet<TLogoBlobID> ids;
+    TSet<TLogoBlobID> ids; 
     for (ui32 i = 0; i < doNotKeep.size(); ++i) {
         ids.insert(doNotKeep[i]);
     }

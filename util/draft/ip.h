@@ -80,10 +80,10 @@ static inline char* Ip6ToString(const TIp6& ip, char* buf, size_t len) {
     return buf;
 }
 
-static inline TString Ip6ToString(const TIp6& ip) {
+static inline TString Ip6ToString(const TIp6& ip) { 
     char buf[INET6_ADDRSTRLEN];
 
-    return TString(Ip6ToString(ip, buf, sizeof(buf)));
+    return TString(Ip6ToString(ip, buf, sizeof(buf))); 
 }
 
 template <>
@@ -106,7 +106,7 @@ static inline TIp4Or6 Ip4Or6FromString(const char* ipStr) {
     ythrow TSystemError() << "Failed to convert (" << ipStr << ") to ipv4 or ipv6 address";
 }
 
-static inline TString Ip4Or6ToString(const TIp4Or6& ip) {
+static inline TString Ip4Or6ToString(const TIp4Or6& ip) { 
     if (std::holds_alternative<TIp6>(ip)) {
         return Ip6ToString(std::get<TIp6>(ip));
     } else {

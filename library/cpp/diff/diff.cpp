@@ -7,8 +7,8 @@
 
 template <typename T>
 struct TCollectionImpl {
-    TVector<TConstArrayRef<T>> Words;
-    TVector<ui64> Keys;
+    TVector<TConstArrayRef<T>> Words; 
+    TVector<ui64> Keys; 
 
     inline bool Consume(const T* b, const T* e, const T*) {
         if (b < e) {
@@ -64,7 +64,7 @@ size_t NDiff::InlineDiff(TVector<TChunk<char>>& chunks, const TStringBuf& left, 
     }
     TCollection<char> c1(left, delims);
     TCollection<char> c2(right, delims);
-    TVector<TChunk<ui64>> diff;
+    TVector<TChunk<ui64>> diff; 
     const size_t dist = InlineDiff<ui64>(diff, c1.GetKeys(), c2.GetKeys());
     for (const auto& it : diff) {
         chunks.push_back(TChunk<char>(c1.Remap(it.Left), c2.Remap(it.Right), c1.Remap(it.Common)));
@@ -78,7 +78,7 @@ size_t NDiff::InlineDiff(TVector<TChunk<wchar16>>& chunks, const TWtringBuf& lef
     }
     TCollection<wchar16> c1(left, delims);
     TCollection<wchar16> c2(right, delims);
-    TVector<TChunk<ui64>> diff;
+    TVector<TChunk<ui64>> diff; 
     const size_t dist = InlineDiff<ui64>(diff, c1.GetKeys(), c2.GetKeys());
     for (const auto& it : diff) {
         chunks.push_back(TChunk<wchar16>(c1.Remap(it.Left), c2.Remap(it.Right), c1.Remap(it.Common)));

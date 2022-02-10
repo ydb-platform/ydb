@@ -40,7 +40,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
         };
 
     public:
-        inline TEchoServer(const TString& res)
+        inline TEchoServer(const TString& res) 
             : Res_(res)
         {
         }
@@ -50,7 +50,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
         }
 
     private:
-        TString Res_;
+        TString Res_; 
     };
 
     class TSleepingServer: public THttpServer::ICallBack {
@@ -136,7 +136,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
         THolder<TAtomicCounter> MaxConns;
     };
 
-    static const TString CrLf = "\r\n";
+    static const TString CrLf = "\r\n"; 
 
     struct TTestRequest {
         TTestRequest(ui16 port, TString content = TString())
@@ -148,10 +148,10 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
         void CheckContinue(TSocketInput& si) {
             if (Expect100Continue) {
                 TStringStream ss;
-                TString firstLine;
+                TString firstLine; 
                 si.ReadLine(firstLine);
                 for (;;) {
-                    TString buf;
+                    TString buf; 
                     si.ReadLine(buf);
                     if (buf.size() == 0) {
                         break;
@@ -162,7 +162,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
             }
         }
 
-        TString Execute() {
+        TString Execute() { 
             TSocket* s = nullptr;
             THolder<TSocket> singleReqSocket;
             if (KeepAliveConnection) {
@@ -239,7 +239,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
                     s->Send(r.Data(), r.Size());
                     CheckContinue(si);
                     Hdr = r.Str();
-                    TString tosend = compressedContent.Str();
+                    TString tosend = compressedContent.Str(); 
                     s->Send(tosend.data(), tosend.size());
                 } else {
                     if (isPost) {
@@ -264,7 +264,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
             return ss.Str();
         }
 
-        TString GetDescription() const {
+        TString GetDescription() const { 
             if (UseHttpOutput) {
                 TStringStream ss;
                 ss << (KeepAliveConnection ? "keep-alive " : "") << Type;
@@ -279,13 +279,13 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
 
         ui16 Port = 0;
         bool UseHttpOutput = true;
-        TString Type = "GET";
-        TString ContentEncoding;
-        TString Content;
+        TString Type = "GET"; 
+        TString ContentEncoding; 
+        TString Content; 
         bool KeepAliveConnection = false;
         THolder<TSocket> KeepAlivedSocket;
         bool EnableResponseEncoding = false;
-        TString Hdr;
+        TString Hdr; 
         bool Expect100Continue = false;
     };
 
@@ -311,8 +311,8 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
         }
     };
 
-    TString TestData(size_t size = 5 * 4096) {
-        TString res;
+    TString TestData(size_t size = 5 * 4096) { 
+        TString res; 
 
         for (size_t i = 0; i < size; ++i) {
             res += (char)i;
@@ -321,7 +321,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
     }
 
     Y_UNIT_TEST(TestEchoServer) {
-        TString res = TestData();
+        TString res = TestData(); 
         TPortManager pm;
         const ui16 port = pm.GetPort();
         const bool trueFalse[] = {true, false};
@@ -345,17 +345,17 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
                     for (bool enableResponseEncoding : trueFalse) {
                         r.EnableResponseEncoding = enableResponseEncoding;
 
-                        const TString reqTypes[] = {"GET", "POST"};
-                        for (const TString& reqType : reqTypes) {
+                        const TString reqTypes[] = {"GET", "POST"}; 
+                        for (const TString& reqType : reqTypes) { 
                             r.Type = reqType;
 
-                            const TString encoders[] = {"", "deflate"};
-                            for (const TString& encoder : encoders) {
+                            const TString encoders[] = {"", "deflate"}; 
+                            for (const TString& encoder : encoders) { 
                                 r.ContentEncoding = encoder;
 
                                 for (bool expect100Continue : trueFalse) {
                                     r.Expect100Continue = expect100Continue;
-                                    TString resp = r.Execute();
+                                    TString resp = r.Execute(); 
                                     UNIT_ASSERT_C(resp == res, "diff echo response for request:\n" + r.GetDescription());
                                 }
                             }
@@ -377,7 +377,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
         const ui16 port = pm.GetPort();
 
         TEchoServer serverImpl(res);
-        TVector<THolder<THttpServer>> servers;
+        TVector<THolder<THttpServer>> servers; 
         for (ui32 i = 0; i < 10; i++) {
             servers.push_back(MakeHolder<THttpServer>(&serverImpl, THttpServer::TOptions(port).EnableReusePort(true)));
         }
@@ -427,7 +427,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
          * Emulate request processing failures
          * Data should be large enough not to fit into socket buffer
          **/
-        TString res = TestData(10 * 1024 * 1024);
+        TString res = TestData(10 * 1024 * 1024); 
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
         TEchoServer serverImpl(res);
@@ -446,7 +446,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
             TTestRequest r(port);
             r.Content = res;
             r.Type = "POST";
-            TString resp = r.Execute();
+            TString resp = r.Execute(); 
             if (i == 1) {
                 UNIT_ASSERT(resp.Contains("Service Unavailable"));
             } else {

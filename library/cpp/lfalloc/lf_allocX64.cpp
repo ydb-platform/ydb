@@ -3,14 +3,14 @@
 //////////////////////////////////////////////////////////////////////////
 // hooks
 #if defined(USE_INTELCC) || defined(_darwin_) || defined(_freebsd_) || defined(_STLPORT_VERSION)
-#define OP_THROWNOTHING noexcept
+#define OP_THROWNOTHING noexcept 
 #else
 #define OP_THROWNOTHING
 #endif
 
 #ifndef _darwin_
 #if !defined(YMAKE)
-void* operator new(size_t size) {
+void* operator new(size_t size) { 
     return LFAlloc(size);
 }
 
@@ -26,7 +26,7 @@ void operator delete(void* p, const std::nothrow_t&)OP_THROWNOTHING {
     LFFree(p);
 }
 
-void* operator new[](size_t size) {
+void* operator new[](size_t size) { 
     return LFAlloc(size);
 }
 

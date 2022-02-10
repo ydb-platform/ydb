@@ -53,7 +53,7 @@ namespace {
             return *Singleton<TSysInfo>();
         }
 
-        static inline size_t CalcGranularity() noexcept {
+        static inline size_t CalcGranularity() noexcept { 
 #if defined(_win_)
             SYSTEM_INFO sysInfo;
             GetSystemInfo(&sysInfo);
@@ -75,7 +75,7 @@ TString TMemoryMapCommon::UnknownFileName() {
     return "Unknown_file_name";
 }
 
-static inline i64 DownToGranularity(i64 offset) noexcept {
+static inline i64 DownToGranularity(i64 offset) noexcept { 
     return offset & ~((i64)(GRANULARITY - 1));
 }
 
@@ -161,7 +161,7 @@ public:
         }
     }
 
-    inline TImpl(FILE* f, EOpenMode om, TString dbgName)
+    inline TImpl(FILE* f, EOpenMode om, TString dbgName) 
         : File_(Duplicate(f))
         , DbgName_(std::move(dbgName))
         , Length_(File_.GetLength())
@@ -171,7 +171,7 @@ public:
         CreateMapping();
     }
 
-    inline TImpl(const TString& name, EOpenMode om)
+    inline TImpl(const TString& name, EOpenMode om) 
         : File_(name, (om & oRdWr) ? OpenExisting | RdWr : OpenExisting | RdOnly)
         , DbgName_(name)
         , Length_(File_.GetLength())
@@ -181,7 +181,7 @@ public:
         CreateMapping();
     }
 
-    inline TImpl(const TString& name, i64 length, EOpenMode om)
+    inline TImpl(const TString& name, i64 length, EOpenMode om) 
         : File_(name, (om & oRdWr) ? OpenExisting | RdWr : OpenExisting | RdOnly)
         , DbgName_(name)
         , Length_(length)
@@ -196,7 +196,7 @@ public:
         CreateMapping();
     }
 
-    inline TImpl(const TFile& file, EOpenMode om, TString dbgName)
+    inline TImpl(const TFile& file, EOpenMode om, TString dbgName) 
         : File_(file)
         , DbgName_(File_.GetName() ? File_.GetName() : std::move(dbgName))
         , Length_(File_.GetLength())
@@ -206,7 +206,7 @@ public:
         CreateMapping();
     }
 
-    inline bool IsOpen() const noexcept {
+    inline bool IsOpen() const noexcept { 
         return File_.IsOpen()
 #if defined(_win_)
                && Mapping_ != nullptr
@@ -304,7 +304,7 @@ public:
 #endif
     }
 
-    inline ~TImpl() {
+    inline ~TImpl() { 
 #if defined(_win_)
         if (Mapping_) {
             ::CloseHandle(Mapping_); // != FALSE
@@ -317,15 +317,15 @@ public:
 #endif
     }
 
-    inline i64 Length() const noexcept {
+    inline i64 Length() const noexcept { 
         return Length_;
     }
 
-    inline TFile GetFile() const noexcept {
+    inline TFile GetFile() const noexcept { 
         return File_;
     }
 
-    inline TString GetDbgName() const {
+    inline TString GetDbgName() const { 
         return DbgName_;
     }
 
@@ -335,7 +335,7 @@ public:
 
 private:
     TFile File_;
-    TString DbgName_; // This string is never used to actually open a file, only in exceptions
+    TString DbgName_; // This string is never used to actually open a file, only in exceptions 
     i64 Length_;
     EOpenMode Mode_;
 
@@ -346,37 +346,37 @@ private:
 #endif
 };
 
-TMemoryMap::TMemoryMap(const TString& name)
+TMemoryMap::TMemoryMap(const TString& name) 
     : Impl_(new TImpl(name, EOpenModeFlag::oRdOnly))
 {
 }
 
-TMemoryMap::TMemoryMap(const TString& name, EOpenMode om)
+TMemoryMap::TMemoryMap(const TString& name, EOpenMode om) 
     : Impl_(new TImpl(name, om))
 {
 }
 
-TMemoryMap::TMemoryMap(const TString& name, i64 length, EOpenMode om)
+TMemoryMap::TMemoryMap(const TString& name, i64 length, EOpenMode om) 
     : Impl_(new TImpl(name, length, om))
 {
 }
 
-TMemoryMap::TMemoryMap(FILE* f, TString dbgName)
+TMemoryMap::TMemoryMap(FILE* f, TString dbgName) 
     : Impl_(new TImpl(f, EOpenModeFlag::oRdOnly, std::move(dbgName)))
 {
 }
 
-TMemoryMap::TMemoryMap(FILE* f, EOpenMode om, TString dbgName)
+TMemoryMap::TMemoryMap(FILE* f, EOpenMode om, TString dbgName) 
     : Impl_(new TImpl(f, om, std::move(dbgName)))
 {
 }
 
-TMemoryMap::TMemoryMap(const TFile& file, TString dbgName)
+TMemoryMap::TMemoryMap(const TFile& file, TString dbgName) 
     : Impl_(new TImpl(file, EOpenModeFlag::oRdOnly, std::move(dbgName)))
 {
 }
 
-TMemoryMap::TMemoryMap(const TFile& file, EOpenMode om, TString dbgName)
+TMemoryMap::TMemoryMap(const TFile& file, EOpenMode om, TString dbgName) 
     : Impl_(new TImpl(file, om, std::move(dbgName)))
 {
 }
@@ -419,11 +419,11 @@ void TMemoryMap::Evict() {
     Impl_->Evict();
 }
 
-i64 TMemoryMap::Length() const noexcept {
+i64 TMemoryMap::Length() const noexcept { 
     return Impl_->Length();
 }
 
-bool TMemoryMap::IsOpen() const noexcept {
+bool TMemoryMap::IsOpen() const noexcept { 
     return Impl_->IsOpen();
 }
 
@@ -435,41 +435,41 @@ TMemoryMap::EOpenMode TMemoryMap::GetMode() const noexcept {
     return Impl_->GetMode();
 }
 
-TFile TMemoryMap::GetFile() const noexcept {
+TFile TMemoryMap::GetFile() const noexcept { 
     return Impl_->GetFile();
 }
 
-TFileMap::TFileMap(const TMemoryMap& map) noexcept
+TFileMap::TFileMap(const TMemoryMap& map) noexcept 
     : Map_(map)
 {
 }
 
-TFileMap::TFileMap(const TString& name)
+TFileMap::TFileMap(const TString& name) 
     : Map_(name)
 {
 }
 
-TFileMap::TFileMap(const TString& name, EOpenMode om)
+TFileMap::TFileMap(const TString& name, EOpenMode om) 
     : Map_(name, om)
 {
 }
 
-TFileMap::TFileMap(const TString& name, i64 length, EOpenMode om)
+TFileMap::TFileMap(const TString& name, i64 length, EOpenMode om) 
     : Map_(name, length, om)
 {
 }
 
-TFileMap::TFileMap(FILE* f, EOpenMode om, TString dbgName)
+TFileMap::TFileMap(FILE* f, EOpenMode om, TString dbgName) 
     : Map_(f, om, dbgName)
 {
 }
 
-TFileMap::TFileMap(const TFile& file, EOpenMode om, TString dbgName)
+TFileMap::TFileMap(const TFile& file, EOpenMode om, TString dbgName) 
     : Map_(file, om, dbgName)
 {
 }
 
-TFileMap::TFileMap(const TFileMap& fm) noexcept
+TFileMap::TFileMap(const TFileMap& fm) noexcept 
     : Map_(fm.Map_)
 {
 }
@@ -516,7 +516,7 @@ void TFileMap::Unmap() {
     }
 }
 
-TFileMap::~TFileMap() {
+TFileMap::~TFileMap() { 
     try {
         // explicit Unmap() is required because in oNotGreedy mode the Map_ object doesn't own the mapped area
         Unmap();

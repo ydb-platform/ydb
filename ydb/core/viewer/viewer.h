@@ -29,7 +29,7 @@ public:
         };
 
         TString Path;
-        TVector<TPathEntry> Paths;
+        TVector<TPathEntry> Paths; 
         TActorId Owner;
         TString UserToken;
 
@@ -103,7 +103,7 @@ public:
     using TContentHandler = std::function<IActor*(const TActorId&, const TContentRequestContext&)>;
 
     virtual const TKikimrRunConfig& GetKikimrRunConfig() const = 0;
-    virtual TVector<const TVirtualHandler*> GetVirtualHandlers(NKikimrViewer::EObjectType type, const TString& path) const = 0;
+    virtual TVector<const TVirtualHandler*> GetVirtualHandlers(NKikimrViewer::EObjectType type, const TString& path) const = 0; 
     virtual void RegisterVirtualHandler(NKikimrViewer::EObjectType parentObjectType, TVirtualHandlerType handler) = 0;
 
     // returns nullptr if no such handler
@@ -123,22 +123,22 @@ void SetupKqpContentHandler(IViewer* viewer);
 
 template <typename RequestType>
 struct TJsonRequestSchema {
-    static TString GetSchema() { return TString(); }
+    static TString GetSchema() { return TString(); } 
 };
 
 template <typename RequestType>
 struct TJsonRequestSummary {
-    static TString GetSummary() { return TString(); }
+    static TString GetSummary() { return TString(); } 
 };
 
 template <typename RequestType>
 struct TJsonRequestDescription {
-    static TString GetDescription() { return TString(); }
+    static TString GetDescription() { return TString(); } 
 };
 
 template <typename RequestType>
 struct TJsonRequestParameters {
-    static TString GetParameters() { return TString(); }
+    static TString GetParameters() { return TString(); } 
 };
 
 static const char HTTPOKJSON[] = "HTTP/1.1 200 Ok\r\nAccess-Control-Allow-Origin: *\r\nContent-Type: application/json; charset=utf-8\r\nConnection: Close\r\n\r\n";

@@ -31,7 +31,7 @@ namespace NKikimr {
         TInstant ScrubLastTime;
 
         TInstant LastCutTime;
-        TDeque<ui64> FreeUpToLsn;
+        TDeque<ui64> FreeUpToLsn; 
         ui64 FreeUpToLsnLastWritten = 0;
 
         const TDuration FirstDuration;

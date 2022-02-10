@@ -17,7 +17,7 @@
 #ifdef TSTRING_IS_STD_STRING
 static_assert(sizeof(TString) == sizeof(std::string), "expect sizeof(TString) == sizeof(std::string)");
 #else
-static_assert(sizeof(TString) == sizeof(const char*), "expect sizeof(TString) == sizeof(const char*)");
+static_assert(sizeof(TString) == sizeof(const char*), "expect sizeof(TString) == sizeof(const char*)"); 
 #endif
 
 class TStringTestZero: public TTestBase {
@@ -28,7 +28,7 @@ class TStringTestZero: public TTestBase {
 public:
     void TestZero() {
         const char data[] = "abc\0def\0";
-        TString s(data, sizeof(data));
+        TString s(data, sizeof(data)); 
         UNIT_ASSERT(s.size() == sizeof(data));
         UNIT_ASSERT(s.StartsWith(s));
         UNIT_ASSERT(s.EndsWith(s));
@@ -36,8 +36,8 @@ public:
 
         const char raw_def[] = "def";
         const char raw_zero[] = "\0";
-        TString def(raw_def, sizeof(raw_def) - 1);
-        TString zero(raw_zero, sizeof(raw_zero) - 1);
+        TString def(raw_def, sizeof(raw_def) - 1); 
+        TString zero(raw_zero, sizeof(raw_zero) - 1); 
         UNIT_ASSERT_EQUAL(4, s.find(raw_def));
         UNIT_ASSERT_EQUAL(4, s.find(def));
         UNIT_ASSERT_EQUAL(4, s.find_first_of(raw_def));
@@ -45,15 +45,15 @@ public:
         UNIT_ASSERT_EQUAL(7, s.find_first_not_of(def, 4));
 
         const char nonSubstring[] = "def\0ghi";
-        UNIT_ASSERT_EQUAL(TString::npos, s.find(TString(nonSubstring, sizeof(nonSubstring))));
+        UNIT_ASSERT_EQUAL(TString::npos, s.find(TString(nonSubstring, sizeof(nonSubstring)))); 
 
-        TString copy = s;
+        TString copy = s; 
         copy.replace(copy.size() - 1, 1, "z");
         UNIT_ASSERT(s != copy);
         copy.replace(copy.size() - 1, 1, "\0", 0, 1);
         UNIT_ASSERT(s == copy);
 
-        TString prefix(data, 5);
+        TString prefix(data, 5); 
         UNIT_ASSERT(s.StartsWith(prefix));
         UNIT_ASSERT(s != prefix);
         UNIT_ASSERT(s > prefix);
@@ -68,7 +68,7 @@ public:
 
 UNIT_TEST_SUITE_REGISTRATION(TStringTestZero);
 
-template <typename TStringType, typename TTestData>
+template <typename TStringType, typename TTestData> 
 class TStringStdTestImpl {
     using TChar = typename TStringType::char_type;
     using TTraits = typename TStringType::traits_type;
@@ -92,7 +92,7 @@ protected:
 
     void reserve() {
 #if 0
-        TStringType s;
+        TStringType s; 
         // @todo use UNIT_TEST_EXCEPTION
         try {
             s.reserve(s.max_size() + 1);
@@ -129,7 +129,7 @@ protected:
     #ifndef TSTRING_IS_STD_STRING
         // Shared behaviour - always reallocate, just as much as requisted
 
-        TStringType holder = s;
+        TStringType holder = s; 
 
         UNIT_ASSERT(s.capacity() >= 256);
 
@@ -152,22 +152,22 @@ protected:
 
     void short_string() {
         TStringType const ref_short_str1(Data_.str1()), ref_short_str2(Data_.str2());
-        TStringType short_str1(ref_short_str1), short_str2(ref_short_str2);
+        TStringType short_str1(ref_short_str1), short_str2(ref_short_str2); 
         TStringType const ref_long_str1(Data_.str__________________________________________________1());
         TStringType const ref_long_str2(Data_.str__________________________________________________2());
-        TStringType long_str1(ref_long_str1), long_str2(ref_long_str2);
+        TStringType long_str1(ref_long_str1), long_str2(ref_long_str2); 
 
         UNIT_ASSERT(short_str1 == ref_short_str1);
         UNIT_ASSERT(long_str1 == ref_long_str1);
 
         {
-            TStringType str1(short_str1);
+            TStringType str1(short_str1); 
             str1 = long_str1;
             UNIT_ASSERT(str1 == ref_long_str1);
         }
 
         {
-            TStringType str1(long_str1);
+            TStringType str1(long_str1); 
             str1 = short_str1;
             UNIT_ASSERT(str1 == ref_short_str1);
         }
@@ -198,7 +198,7 @@ protected:
 
         {
             //This is to test move constructor
-            TVector<TStringType> str_vect;
+            TVector<TStringType> str_vect; 
 
             str_vect.push_back(short_str1);
             str_vect.push_back(long_str1);
@@ -214,7 +214,7 @@ protected:
 
     void erase() {
         TChar const* c_str = Data_.Hello_World();
-        TStringType str(c_str);
+        TStringType str(c_str); 
         UNIT_ASSERT(str == c_str);
 
         str.erase(str.begin() + 1, str.end() - 1); // Erase all but first and last.
@@ -266,7 +266,7 @@ protected:
     }
 
     void data() {
-        TStringType xx;
+        TStringType xx; 
 
         // ISO-IEC-14882:1998(E), 21.3.6, paragraph 3
         UNIT_ASSERT(xx.data() != nullptr);
@@ -274,8 +274,8 @@ protected:
 
     void c_str() {
         TStringType low(Data_._2004_01_01());
-        TStringType xx;
-        TStringType yy;
+        TStringType xx; 
+        TStringType yy; 
 
         // ISO-IEC-14882:1998(E), 21.3.6, paragraph 1
         UNIT_ASSERT(*(yy.c_str()) == 0);
@@ -357,10 +357,10 @@ protected:
 
     void insert() {
         TStringType strorg = Data_.This_is_test_string_for_string_calls();
-        TStringType str;
+        TStringType str; 
 
         // In case of reallocation there is no auto reference problem
-        // so we reserve a big enough TStringType to be sure to test this
+        // so we reserve a big enough TStringType to be sure to test this 
         // particular point.
 
         str.reserve(100);
@@ -383,9 +383,9 @@ protected:
         UNIT_ASSERT(str == Data_.ng_for_string_callsThis_is_test_string_for_string_calls());
 
         str = strorg;
-        typename TStringType::iterator b = str.begin();
-        typename TStringType::const_iterator s = str.begin() + str.size() / 2 - 1;
-        typename TStringType::const_iterator e = str.end();
+        typename TStringType::iterator b = str.begin(); 
+        typename TStringType::const_iterator s = str.begin() + str.size() / 2 - 1; 
+        typename TStringType::const_iterator e = str.end(); 
         str.insert(b, s, e);
         UNIT_ASSERT(str == Data_.ng_for_string_callsThis_is_test_string_for_string_calls());
 
@@ -396,13 +396,13 @@ protected:
         UNIT_ASSERT(str == Data.ng_for_string_callsThis_is_test_string_for_string_calls());
 #endif
 
-        TStringType str0;
+        TStringType str0; 
         str0.insert(str0.begin(), 5, *Data_._0());
         UNIT_ASSERT(str0 == Data_._00000());
 
-        TStringType str1;
+        TStringType str1; 
         {
-            typename TStringType::size_type pos = 0, nb = 2;
+            typename TStringType::size_type pos = 0, nb = 2; 
             str1.insert(pos, nb, *Data_._1());
         }
         UNIT_ASSERT(str1 == Data_._11());
@@ -428,7 +428,7 @@ protected:
     }
 
     void resize() {
-        TStringType s;
+        TStringType s; 
 
         s.resize(0);
 
@@ -472,7 +472,7 @@ protected:
     }
 
     void capacity() {
-        TStringType s;
+        TStringType s; 
 
         UNIT_ASSERT(s.capacity() < s.max_size());
         UNIT_ASSERT(s.capacity() >= s.size());
@@ -487,7 +487,7 @@ protected:
     }
 
     void assign() {
-        TStringType s;
+        TStringType s; 
         TChar const* cstr = Data_.test_string_for_assign();
 
         s.assign(cstr, cstr + 22);
@@ -497,12 +497,12 @@ protected:
         s.assign(s2);
         UNIT_ASSERT(s == s2);
 
-        static TStringType str1;
-        static TStringType str2;
+        static TStringType str1; 
+        static TStringType str2; 
 
-        // short TStringType optim:
+        // short TStringType optim: 
         str1 = Data_._123456();
-        // longer than short TStringType:
+        // longer than short TStringType: 
         str2 = Data_._1234567890123456789012345678901234567890();
 
         UNIT_ASSERT(str1[5] == *Data_._6());
@@ -539,7 +539,7 @@ protected:
 
     void cbegin_cend() {
         const char helloThere[] = "Hello there";
-        TString s = helloThere;
+        TString s = helloThere; 
         size_t index = 0;
         for (auto it = s.cbegin(); s.cend() != it; ++it, ++index) {
             UNIT_ASSERT_VALUES_EQUAL(helloThere[index], *it);
@@ -548,7 +548,7 @@ protected:
 
     void compare() {
         TStringType str1(Data_.abcdef());
-        TStringType str2;
+        TStringType str2; 
 
         str2 = Data_.abcdef();
         UNIT_ASSERT(str1.compare(str2) == 0);
@@ -601,14 +601,14 @@ protected:
 #if 0
     void rfind() {
         // 21.3.6.2
-        TStringType s(Data.one_two_three_one_two_three());
+        TStringType s(Data.one_two_three_one_two_three()); 
 
         UNIT_ASSERT(s.rfind(Data.two()) == 18);
-        UNIT_ASSERT(s.rfind(Data.two(), 0) == TStringType::npos);
+        UNIT_ASSERT(s.rfind(Data.two(), 0) == TStringType::npos); 
         UNIT_ASSERT(s.rfind(Data.two(), 11) == 4);
         UNIT_ASSERT(s.rfind(*Data.w()) == 19);
 
-        TStringType test(Data.aba());
+        TStringType test(Data.aba()); 
 
         UNIT_ASSERT(test.rfind(Data.a(), 2, 1) == 2);
         UNIT_ASSERT(test.rfind(Data.a(), 1, 1) == 0);
@@ -643,15 +643,15 @@ protected:
     }
 #if 0
     void replace() {
-        // This test case is for the non template basic_TString::replace method,
+        // This test case is for the non template basic_TString::replace method, 
         // this is why we play with the const iterators and reference to guaranty
         // that the right method is called.
 
-        const TStringType v(Data._78());
-        TStringType s(Data._123456());
-        TStringType const& cs = s;
+        const TStringType v(Data._78()); 
+        TStringType s(Data._123456()); 
+        TStringType const& cs = s; 
 
-        typename TStringType::iterator i = s.begin() + 1;
+        typename TStringType::iterator i = s.begin() + 1; 
         s.replace(i, i + 3, v.begin(), v.end());
         UNIT_ASSERT(s == Data._17856());
 
@@ -662,7 +662,7 @@ protected:
 
         s = Data._123456();
         i = s.begin() + 1;
-        typename TStringType::const_iterator ci = s.begin() + 1;
+        typename TStringType::const_iterator ci = s.begin() + 1; 
         s.replace(i, i + 3, ci + 3, cs.end());
         UNIT_ASSERT(s == Data._15656());
 
@@ -691,10 +691,10 @@ protected:
         // This is the test for the template replace method.
 
         s = Data._123456();
-        typename TStringType::iterator b = s.begin() + 4;
-        typename TStringType::iterator e = s.end();
-        typename TStringType::const_iterator rb = s.begin();
-        typename TStringType::const_iterator re = s.end();
+        typename TStringType::iterator b = s.begin() + 4; 
+        typename TStringType::iterator e = s.end(); 
+        typename TStringType::const_iterator rb = s.begin(); 
+        typename TStringType::const_iterator re = s.end(); 
         s.replace(b, e, rb, re);
         UNIT_ASSERT(s == Data._1234123456());
 
@@ -702,8 +702,8 @@ protected:
         s.replace(s.begin() + 4, s.end(), s.begin(), s.end());
         UNIT_ASSERT(s == Data._1234123456());
 
-        TStringType strorg(Data.This_is_test_StringT_for_StringT_calls());
-        TStringType str = strorg;
+        TStringType strorg(Data.This_is_test_StringT_for_StringT_calls()); 
+        TStringType str = strorg; 
         str.replace(5, 15, str.c_str(), 10);
         UNIT_ASSERT(str == Data.This_This_is_tefor_StringT_calls());
 
@@ -721,7 +721,7 @@ protected:
 #endif
 }; // TStringStdTestImpl
 
-class TStringTest: public TTestBase, private TStringTestImpl<TString, TTestData<char>> {
+class TStringTest: public TTestBase, private TStringTestImpl<TString, TTestData<char>> { 
 public:
     UNIT_TEST_SUITE(TStringTest);
     UNIT_TEST(TestMaxSize);
@@ -783,7 +783,7 @@ public:
 
 UNIT_TEST_SUITE_REGISTRATION(TStringTest);
 
-class TWideStringTest: public TTestBase, private TStringTestImpl<TUtf16String, TTestData<wchar16>> {
+class TWideStringTest: public TTestBase, private TStringTestImpl<TUtf16String, TTestData<wchar16>> { 
 public:
     UNIT_TEST_SUITE(TWideStringTest);
     UNIT_TEST(TestConstructors);
@@ -816,21 +816,21 @@ public:
 
 private:
     void TestDecodingMethods() {
-        UNIT_ASSERT(TUtf16String::FromAscii("").empty());
-        UNIT_ASSERT(TUtf16String::FromAscii("abc") == ASCIIToWide("abc"));
+        UNIT_ASSERT(TUtf16String::FromAscii("").empty()); 
+        UNIT_ASSERT(TUtf16String::FromAscii("abc") == ASCIIToWide("abc")); 
 
         const char* text = "123kx83abcd ej)#$%ddja&%J&";
-        TUtf16String wtext = ASCIIToWide(text);
+        TUtf16String wtext = ASCIIToWide(text); 
 
-        UNIT_ASSERT(wtext == TUtf16String::FromAscii(text));
+        UNIT_ASSERT(wtext == TUtf16String::FromAscii(text)); 
 
-        TString strtext(text);
-        UNIT_ASSERT(wtext == TUtf16String::FromAscii(strtext));
+        TString strtext(text); 
+        UNIT_ASSERT(wtext == TUtf16String::FromAscii(strtext)); 
 
         TStringBuf strbuftext(text);
-        UNIT_ASSERT(wtext == TUtf16String::FromAscii(strbuftext));
+        UNIT_ASSERT(wtext == TUtf16String::FromAscii(strbuftext)); 
 
-        UNIT_ASSERT(wtext.substr(5) == TUtf16String::FromAscii(text + 5));
+        UNIT_ASSERT(wtext.substr(5) == TUtf16String::FromAscii(text + 5)); 
 
         const wchar16 wideCyrillicAlphabet[] = {
             0x0410, 0x0411, 0x0412, 0x0413, 0x0414, 0x0415, 0x0416, 0x0417, 0x0418, 0x0419, 0x041A, 0x041B, 0x041C, 0x041D, 0x041E, 0x041F,
@@ -839,16 +839,16 @@ private:
             0x0440, 0x0441, 0x0442, 0x0443, 0x0444, 0x0445, 0x0446, 0x0447, 0x0448, 0x0449, 0x044A, 0x044B, 0x044C, 0x044D, 0x044E, 0x044F,
             0x00};
 
-        TUtf16String strWide(wideCyrillicAlphabet);
-        TString strUtf8 = WideToUTF8(strWide);
+        TUtf16String strWide(wideCyrillicAlphabet); 
+        TString strUtf8 = WideToUTF8(strWide); 
 
-        UNIT_ASSERT(strWide == TUtf16String::FromUtf8(strUtf8.c_str()));
-        UNIT_ASSERT(strWide == TUtf16String::FromUtf8(strUtf8));
-        UNIT_ASSERT(strWide == TUtf16String::FromUtf8(TStringBuf(strUtf8)));
+        UNIT_ASSERT(strWide == TUtf16String::FromUtf8(strUtf8.c_str())); 
+        UNIT_ASSERT(strWide == TUtf16String::FromUtf8(strUtf8)); 
+        UNIT_ASSERT(strWide == TUtf16String::FromUtf8(TStringBuf(strUtf8))); 
 
         // assign
 
-        TUtf16String s1;
+        TUtf16String s1; 
         s1.AssignAscii("1234");
         UNIT_ASSERT(s1 == ASCIIToWide("1234"));
 
@@ -860,8 +860,8 @@ private:
 
         // append
 
-        TUtf16String s2;
-        TUtf16String testAppend = strWide;
+        TUtf16String s2; 
+        TUtf16String testAppend = strWide; 
         s2.AppendUtf8(strUtf8);
         UNIT_ASSERT(testAppend == s2);
 
@@ -883,12 +883,12 @@ private:
     }
 
     void TestLetOperator() {
-        TUtf16String str;
+        TUtf16String str; 
 
         str = wchar16('X');
-        UNIT_ASSERT(str == TUtf16String::FromAscii("X"));
+        UNIT_ASSERT(str == TUtf16String::FromAscii("X")); 
 
-        const TUtf16String hello = TUtf16String::FromAscii("hello");
+        const TUtf16String hello = TUtf16String::FromAscii("hello"); 
         str = hello.data();
         UNIT_ASSERT(str == hello);
 
@@ -1105,7 +1105,7 @@ private:
 
 UNIT_TEST_SUITE_REGISTRATION(TUtf32StringTest);
 
-class TStringStdTest: public TTestBase, private TStringStdTestImpl<TString, TTestData<char>> {
+class TStringStdTest: public TTestBase, private TStringStdTestImpl<TString, TTestData<char>> { 
 public:
     UNIT_TEST_SUITE(TStringStdTest);
     UNIT_TEST(Constructor);
@@ -1141,7 +1141,7 @@ public:
 
 UNIT_TEST_SUITE_REGISTRATION(TStringStdTest);
 
-class TWideStringStdTest: public TTestBase, private TStringStdTestImpl<TUtf16String, TTestData<wchar16>> {
+class TWideStringStdTest: public TTestBase, private TStringStdTestImpl<TUtf16String, TTestData<wchar16>> { 
 public:
     UNIT_TEST_SUITE(TWideStringStdTest);
     UNIT_TEST(Constructor);

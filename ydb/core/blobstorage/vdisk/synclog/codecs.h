@@ -15,7 +15,7 @@ namespace NCodecs {
             : CompressionRatio(compressionRatio)
         {}
 
-        TString GetName() const override { return "VarLengthInt"; }
+        TString GetName() const override { return "VarLengthInt"; } 
 
         ui8 Encode(TStringBuf in, TBuffer& out) const override {
             if (in.size() / sizeof(TNumber) * sizeof(TNumber) != in.size())
@@ -69,7 +69,7 @@ namespace NCodecs {
             : CompressionRatio(compressionRatio)
         {}
 
-        TString GetName() const override { return "RunLength"; }
+        TString GetName() const override { return "RunLength"; } 
 
         ui8 Encode(TStringBuf in, TBuffer& out) const override {
             if (in.size() / sizeof(TInputNumber) * sizeof(TInputNumber) != in.size())
@@ -132,7 +132,7 @@ namespace NCodecs {
             : CompressionRatio(compressionRatio)
         {}
 
-        TString GetName() const override { return "SemiSortedDelta"; }
+        TString GetName() const override { return "SemiSortedDelta"; } 
 
         ui8 Encode(TStringBuf in, TBuffer& out) const override {
             if (in.size() / sizeof(TInputNumber) * sizeof(TInputNumber) != in.size())

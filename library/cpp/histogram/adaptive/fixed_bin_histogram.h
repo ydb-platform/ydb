@@ -26,8 +26,8 @@ namespace NKiwiAggr {
         double MaxValue;
         double Sum;
 
-        TVector<double> Freqs;
-        TVector<double> ReserveFreqs;
+        TVector<double> Freqs; 
+        TVector<double> ReserveFreqs; 
         double ReferencePoint;
         double BinRange;
         size_t Intervals;
@@ -49,8 +49,8 @@ namespace NKiwiAggr {
         virtual void Add(const THistoRec& histoRec);
 
         virtual void Merge(const THistogram& histo, double multiplier);
-        virtual void Merge(const TVector<THistogram>& histogramsToMerge);
-        virtual void Merge(TVector<IHistogramPtr> histogramsToMerge);
+        virtual void Merge(const TVector<THistogram>& histogramsToMerge); 
+        virtual void Merge(TVector<IHistogramPtr> histogramsToMerge); 
 
         virtual void Multiply(double factor);
 

@@ -651,7 +651,7 @@ public:
         return nullptr;
     }
 
-    bool GetDependencies(const TExprNode& node, TExprNode::TListType& children, bool compact) override {
+    bool GetDependencies(const TExprNode& node, TExprNode::TListType& children, bool compact) override { 
         Y_UNUSED(compact);
         if (CanExecute(node)) {
             children.push_back(node.ChildPtr(0));
@@ -671,7 +671,7 @@ public:
     }
 
     TString GetProviderPath(const TExprNode&) override {
-        return TString(KikimrProviderName);
+        return TString(KikimrProviderName); 
     }
 
 private:

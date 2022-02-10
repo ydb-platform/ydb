@@ -123,7 +123,7 @@ Y_UNIT_TEST_SUITE(ControlImplementationTests) {
             return nullptr;
         };
         TIntrusivePtr<TControlBoard> Icb(new TControlBoard);
-        TVector<THolder<TThread>> threads;
+        TVector<THolder<TThread>> threads; 
         threads.reserve(TEST_THREADS_CNT);
         for (ui64 i = 0; i < TEST_THREADS_CNT; ++i) {
             threads.emplace_back(new TThread(parallelJob, (void *)Icb.Get()));

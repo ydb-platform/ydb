@@ -7,7 +7,7 @@
 #include "map.h"
 #include "set.h"
 #include "strbuf.h"
-#include "string.h"
+#include "string.h" 
 
 Y_UNIT_TEST_SUITE(TIsIn) {
     template <class TCont, class T>
@@ -41,18 +41,18 @@ Y_UNIT_TEST_SUITE(TIsIn) {
     }
 
     Y_UNIT_TEST(IsInTest) {
-        TestIsInWithCont<TMap<TString, TString>>(std::make_pair("found", "1"));
-        TestIsInWithCont<TMultiMap<TString, TString>>(std::make_pair("found", "1"));
-        TestIsInWithCont<THashMap<TString, TString>>(std::make_pair("found", "1"));
-        TestIsInWithCont<THashMultiMap<TString, TString>>(std::make_pair("found", "1"));
+        TestIsInWithCont<TMap<TString, TString>>(std::make_pair("found", "1")); 
+        TestIsInWithCont<TMultiMap<TString, TString>>(std::make_pair("found", "1")); 
+        TestIsInWithCont<THashMap<TString, TString>>(std::make_pair("found", "1")); 
+        TestIsInWithCont<THashMultiMap<TString, TString>>(std::make_pair("found", "1")); 
 
-        TestIsInWithCont<TSet<TString>>("found");
-        TestIsInWithCont<TMultiSet<TString>>("found");
-        TestIsInWithCont<THashSet<TString>>("found");
-        TestIsInWithCont<THashMultiSet<TString>>("found");
+        TestIsInWithCont<TSet<TString>>("found"); 
+        TestIsInWithCont<TMultiSet<TString>>("found"); 
+        TestIsInWithCont<THashSet<TString>>("found"); 
+        TestIsInWithCont<THashMultiSet<TString>>("found"); 
 
         // vector also compiles and works
-        TVector<TString> v;
+        TVector<TString> v; 
         v.push_back("found");
         UNIT_ASSERT(IsIn(v, "found"));
         UNIT_ASSERT(!IsIn(v, "not found"));
@@ -61,8 +61,8 @@ Y_UNIT_TEST_SUITE(TIsIn) {
         UNIT_ASSERT(IsIn(v.begin(), v.end(), "found"));
         UNIT_ASSERT(!IsIn(v.begin(), v.end(), "not found"));
 
-        // Works with TString (it has find, but find is not used)
-        TString s = "found";
+        // Works with TString (it has find, but find is not used) 
+        TString s = "found"; 
         UNIT_ASSERT(IsIn(s, 'f'));
         UNIT_ASSERT(!IsIn(s, 'z'));
 
@@ -87,7 +87,7 @@ Y_UNIT_TEST_SUITE(TIsIn) {
         UNIT_ASSERT(IsIn({abc, def}, def)); // direct pointer comparison
         UNIT_ASSERT(!IsIn({TStringBuf("abc"), TStringBuf("def")}, TStringBuf("ghi")));
         UNIT_ASSERT(!IsIn({"abc", "def"}, TStringBuf("ghi")));
-        UNIT_ASSERT(!IsIn({"abc", "def"}, TString("ghi")));
+        UNIT_ASSERT(!IsIn({"abc", "def"}, TString("ghi"))); 
 
         const TStringBuf str = "abc////";
 
@@ -98,11 +98,11 @@ Y_UNIT_TEST_SUITE(TIsIn) {
         UNIT_ASSERT(IsIn({1, 2, 3}, 1));
         UNIT_ASSERT(!IsIn({1, 2, 3}, 4));
 
-        const TString b = "b";
+        const TString b = "b"; 
 
         UNIT_ASSERT(!IsIn({"a", "b", "c"}, b.data())); // compares pointers by value. Whether it's good or not.
         UNIT_ASSERT(IsIn(TVector<TStringBuf>({"a", "b", "c"}), b.data()));
-        UNIT_ASSERT(IsIn(TVector<TStringBuf>({"a", "b", "c"}), "b"));
+        UNIT_ASSERT(IsIn(TVector<TStringBuf>({"a", "b", "c"}), "b")); 
     }
 
     Y_UNIT_TEST(IsInArrayTest) {

@@ -17,7 +17,7 @@ TLogElement::TLogElement(const TLog* parent, ELogPriority priority)
     Reset();
 }
 
-TLogElement::~TLogElement() {
+TLogElement::~TLogElement() { 
     try {
         Finish();
     } catch (...) {

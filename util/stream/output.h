@@ -3,8 +3,8 @@
 #include "fwd.h"
 #include "labeled.h"
 
-#include <util/generic/noncopyable.h>
-#include <util/generic/string.h>
+#include <util/generic/noncopyable.h> 
+#include <util/generic/string.h> 
 #include <util/generic/strbuf.h>
 #include <util/generic/typetraits.h>
 
@@ -24,7 +24,7 @@ public:
      * Data block for output.
      */
     struct TPart {
-        inline TPart(const void* Buf, size_t Len) noexcept
+        inline TPart(const void* Buf, size_t Len) noexcept 
             : buf(Buf)
             , len(Len)
         {
@@ -36,7 +36,7 @@ public:
         {
         }
 
-        inline TPart() noexcept
+        inline TPart() noexcept 
             : buf(nullptr)
             , len(0)
         {
@@ -44,7 +44,7 @@ public:
 
         inline ~TPart() = default;
 
-        static inline TPart CrLf() noexcept {
+        static inline TPart CrLf() noexcept { 
             return TPart("\r\n", 2);
         }
 
@@ -57,11 +57,11 @@ public:
 
     IOutputStream(IOutputStream&&) noexcept {
     }
-
+ 
     IOutputStream& operator=(IOutputStream&&) noexcept {
-        return *this;
-    };
-
+        return *this; 
+    }; 
+ 
     /**
      * Writes into this stream.
      *

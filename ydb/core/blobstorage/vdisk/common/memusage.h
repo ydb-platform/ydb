@@ -5,7 +5,7 @@
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <util/generic/buffer.h>
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 #include <util/generic/list.h>
 #include <util/generic/vector.h>
 
@@ -249,7 +249,7 @@ namespace NKikimr {
     struct TTrackerWrapper<TVector<T, A>, TDerived>
         : protected TTrackerWrapperBase<TVector<T, A>, TDerived>
     {
-        using TBase = TVector<T, A>;
+        using TBase = TVector<T, A>; 
         using TWrapperBase = TTrackerWrapperBase<TVector<T, A>, TDerived>;
         using TWrapperBase::TWrapperBase;
 
@@ -257,7 +257,7 @@ namespace NKikimr {
             return TBase::capacity() * sizeof(T);
         }
 
-        // ya-specific TVector methods
+        // ya-specific TVector methods 
         TRACKABLE_WRAP_METHOD(crop)
 
         // std::vector methods
@@ -291,7 +291,7 @@ namespace NKikimr {
     struct TTrackerWrapper<TList<T, A>, TDerived>
         : protected TTrackerWrapperBase<TList<T, A>, TDerived>
     {
-        using TBase = TList<T, A>;
+        using TBase = TList<T, A>; 
         using TWrapperBase = TTrackerWrapperBase<TList<T, A>, TDerived>;
         using TWrapperBase::TWrapperBase;
 
@@ -397,7 +397,7 @@ namespace NKikimr {
     struct TTrackerWrapper<TString, TDerived>
         : protected TTrackerWrapperBase<TString, TDerived>
     {
-        using TBase = TString;
+        using TBase = TString; 
         using TWrapperBase = TTrackerWrapperBase<TString, TDerived>;
         using TWrapperBase::TWrapperBase;
 
@@ -524,10 +524,10 @@ namespace NKikimr {
 
     template<typename T, typename A = typename TDeque<T>::allocator_type>
     using TTrackableDeque = TTrackable<TDeque<T, A>>;
-    template<typename T, typename A = typename TVector<T>::allocator_type>
-    using TTrackableVector = TTrackable<TVector<T, A>>;
-    template<typename T, typename A = typename TList<T>::allocator_type>
-    using TTrackableList = TTrackable<TList<T, A>>;
+    template<typename T, typename A = typename TVector<T>::allocator_type> 
+    using TTrackableVector = TTrackable<TVector<T, A>>; 
+    template<typename T, typename A = typename TList<T>::allocator_type> 
+    using TTrackableList = TTrackable<TList<T, A>>; 
     using TTrackableBuffer = TTrackable<TBuffer>;
     using TTrackableString = TTrackable<TString>;
 

@@ -30,7 +30,7 @@ namespace NKikimr {
             : TabletId(tabletId)
         {}
 
-        TString ToString() const {
+        TString ToString() const { 
             return Sprintf("[%16" PRIu64 "]", TabletId);
         }
 
@@ -138,7 +138,7 @@ namespace NKikimr {
         }
 
         NMatrix::TVectorType GetLocalParts(TBlobStorageGroupType) const {
-            return NMatrix::TVectorType();
+            return NMatrix::TVectorType(); 
         }
 
         void ClearLocalParts(TBlobStorageGroupType)
@@ -148,7 +148,7 @@ namespace NKikimr {
             return TBlobType::DiskBlob;
         }
 
-        TString ToString(const TIngressCache *cache, const TDiskPart *outbound = nullptr) const {
+        TString ToString(const TIngressCache *cache, const TDiskPart *outbound = nullptr) const { 
             Y_UNUSED(cache);
             Y_UNUSED(outbound);
             return Sprintf("{BlockedGen: %" PRIu32 "}", BlockedGeneration);

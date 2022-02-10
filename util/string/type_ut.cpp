@@ -62,7 +62,7 @@ Y_UNIT_TEST_SUITE(TStringClassify) {
         UNIT_ASSERT(IsHexNumber("1234567890a"));
         UNIT_ASSERT(!IsHexNumber("12345xx67890a"));
         UNIT_ASSERT(!IsHexNumber("foobar"));
-        UNIT_ASSERT(!IsHexNumber(TString()));
+        UNIT_ASSERT(!IsHexNumber(TString())); 
 
         UNIT_ASSERT(IsHexNumber(u"0"));
         UNIT_ASSERT(IsHexNumber(u"aaaadddAAAAA"));
@@ -71,6 +71,6 @@ Y_UNIT_TEST_SUITE(TStringClassify) {
         UNIT_ASSERT(IsHexNumber(u"1234567890a"));
         UNIT_ASSERT(!IsHexNumber(u"12345xx67890a"));
         UNIT_ASSERT(!IsHexNumber(u"foobar"));
-        UNIT_ASSERT(!IsHexNumber(TUtf16String()));
+        UNIT_ASSERT(!IsHexNumber(TUtf16String())); 
     }
 }

@@ -63,11 +63,11 @@ Y_UNIT_TEST_SUITE(TBlobStorageHullCompactDeferredQueueTest) {
         struct TItem {
             ssize_t BlobId;
             NMatrix::TVectorType BlobParts;
-            NMatrix::TVectorType PartsToStore;
+            NMatrix::TVectorType PartsToStore; 
             TVector<std::pair<size_t, NMatrix::TVectorType>> DiskData;
             size_t Expected;
         };
-        TVector<TItem> items;
+        TVector<TItem> items; 
 
         TRopeArena arena(&TRopeArenaBackend::Allocate);
 

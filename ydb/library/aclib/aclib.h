@@ -59,7 +59,7 @@ enum class EDiffType : ui32 {
     Remove,
 };
 
-using TSID = TString;
+using TSID = TString; 
 
 class TUserToken : protected NACLibProto::TUserToken, public TThrRefBase {
 public:
@@ -72,16 +72,16 @@ public:
 
     TUserToken(TUserTokenInitFields fields);
     TUserToken(const TVector<TSID>& userAndGroupSIDs);
-    TUserToken(const TSID& userSID, const TVector<TSID>& groupSIDs);
+    TUserToken(const TSID& userSID, const TVector<TSID>& groupSIDs); 
     TUserToken(const TString& originalUserToken, const TSID& userSID, const TVector<TSID>& groupSIDs);
     TUserToken(const NACLibProto::TUserToken& token);
     TUserToken(NACLibProto::TUserToken&& token);
-    TUserToken(const TString& token);
+    TUserToken(const TString& token); 
     bool IsExist(const TSID& someSID) const; // check for presence of SID specified in the token
     TSID GetUserSID() const;
-    TVector<TSID> GetGroupSIDs() const;
+    TVector<TSID> GetGroupSIDs() const; 
     TString GetOriginalUserToken() const;
-    TString SerializeAsString() const;
+    TString SerializeAsString() const; 
     void AddGroupSID(const TSID& groupSID);
 
     using NACLibProto::TUserToken::ShortDebugString;
@@ -95,17 +95,17 @@ protected:
 class TACL : public NACLibProto::TACL {
 public:
     TACL() = default;
-    TACL(const TString& string); // proto format
+    TACL(const TString& string); // proto format 
     std::pair<ui32, ui32> AddAccess(EAccessType type, ui32 access, const TSID& sid, ui32 inheritance = InheritObject | InheritContainer);
     std::pair<ui32, ui32> RemoveAccess(NACLib::EAccessType type, ui32 access, const NACLib::TSID& sid, ui32 inheritance = InheritObject | InheritContainer);
     std::pair<ui32, ui32> RemoveAccess(const NACLibProto::TACE& filter);
     std::pair<ui32, ui32> ClearAccess();
     std::pair<ui32, ui32> ApplyDiff(const NACLibProto::TDiffACL& diffACL);
     NACLibProto::TACL GetImmediateACL() const;
-    TString ToString() const; // simple text format
-    void FromString(const TString& string); // simple text format
-    static TString ToString(const NACLibProto::TACE& ace);
-    static void FromString(NACLibProto::TACE& ace, const TString& string);
+    TString ToString() const; // simple text format 
+    void FromString(const TString& string); // simple text format 
+    static TString ToString(const NACLibProto::TACE& ace); 
+    static void FromString(NACLibProto::TACE& ace, const TString& string); 
 
 protected:
     static ui32 SpecialRightsFromString(const TString& string);
@@ -116,7 +116,7 @@ protected:
 class TDiffACL : public NACLibProto::TDiffACL {
 public:
     TDiffACL() = default;
-    TDiffACL(const TString& string);
+    TDiffACL(const TString& string); 
     void AddAccess(EAccessType type, ui32 access, const TSID& sid, ui32 inheritance = InheritObject | InheritContainer);
     void RemoveAccess(NACLib::EAccessType type, ui32 access, const NACLib::TSID& sid, ui32 inheritance = InheritObject | InheritContainer);
     void AddAccess(const NACLibProto::TACE& access);

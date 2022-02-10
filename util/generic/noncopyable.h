@@ -15,11 +15,11 @@
 
 namespace NNonCopyable { // protection from unintended ADL
     struct TNonCopyable {
-        TNonCopyable(const TNonCopyable&) = delete;
-        TNonCopyable& operator=(const TNonCopyable&) = delete;
+        TNonCopyable(const TNonCopyable&) = delete; 
+        TNonCopyable& operator=(const TNonCopyable&) = delete; 
 
-        TNonCopyable() = default;
-        ~TNonCopyable() = default;
+        TNonCopyable() = default; 
+        ~TNonCopyable() = default; 
     };
 
     struct TMoveOnly {

@@ -40,7 +40,7 @@ Y_UNIT_TEST_SUITE(Network) {
         TVector<TBindResult> r = BindOnPort(FixedPort, false).second;
         UNIT_ASSERT_VALUES_EQUAL(size_t(2), r.size());
 
-        for (TVector<TBindResult>::iterator i = r.begin(); i != r.end(); ++i) {
+        for (TVector<TBindResult>::iterator i = r.begin(); i != r.end(); ++i) { 
             UNIT_ASSERT_VALUES_EQUAL(i->Addr.GetPort(), GetSockPort(i->Socket->operator SOCKET()));
         }
     }
@@ -49,7 +49,7 @@ Y_UNIT_TEST_SUITE(Network) {
         TVector<TBindResult> r = BindOnPort(0, false).second;
         UNIT_ASSERT_VALUES_EQUAL(size_t(2), r.size());
 
-        for (TVector<TBindResult>::iterator i = r.begin(); i != r.end(); ++i) {
+        for (TVector<TBindResult>::iterator i = r.begin(); i != r.end(); ++i) { 
             UNIT_ASSERT_VALUES_EQUAL(i->Addr.GetPort(), GetSockPort(i->Socket->operator SOCKET()));
             UNIT_ASSERT(i->Addr.GetPort() > 0);
         }

@@ -65,14 +65,14 @@ ui64 TPrecisionTimer::GetCycleCount() const {
     return ::GetCycleCount() - Start;
 }
 
-TString FormatCycles(ui64 cycles) {
+TString FormatCycles(ui64 cycles) { 
     ui64 milliseconds = cycles / GetCyclesPerMillisecond();
     ui32 ms = ui32(milliseconds % 1000);
     milliseconds /= 1000;
     ui32 secs = ui32(milliseconds % 60);
     milliseconds /= 60;
     ui32 mins = ui32(milliseconds);
-    TString result;
+    TString result; 
     sprintf(result, "%" PRIu32 " m %.2" PRIu32 " s %.3" PRIu32 " ms", mins, secs, ms);
     return result;
 }
@@ -98,11 +98,11 @@ TFuncTimer::TFuncTimer(const char* func)
     Cerr << "enter " << Func_ << Endl;
 }
 
-TFuncTimer::~TFuncTimer() {
+TFuncTimer::~TFuncTimer() { 
     Cerr << "leave " << Func_ << " -> " << (TInstant::Now() - Start_) << Endl;
 }
 
-TTimeLogger::TTimeLogger(const TString& message, bool verbose)
+TTimeLogger::TTimeLogger(const TString& message, bool verbose) 
     : Message(message)
     , Verbose(verbose)
     , OK(false)

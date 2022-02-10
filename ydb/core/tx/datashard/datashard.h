@@ -666,7 +666,7 @@ struct TEvDataShard {
 
     struct TEvReturnBorrowedPart : public TEventPB<TEvReturnBorrowedPart, NKikimrTxDataShard::TEvReturnBorrowedPart, TEvDataShard::EvReturnBorrowedPart> {
         TEvReturnBorrowedPart() = default;
-        TEvReturnBorrowedPart(ui64 tabletId, const TVector<TLogoBlobID>& partMetaVec) {
+        TEvReturnBorrowedPart(ui64 tabletId, const TVector<TLogoBlobID>& partMetaVec) { 
             Record.SetFromTabletId(tabletId);
             for (const auto& partMeta : partMetaVec) {
                 LogoBlobIDFromLogoBlobID(partMeta, Record.AddPartMetadata());
@@ -676,7 +676,7 @@ struct TEvDataShard {
 
     struct TEvReturnBorrowedPartAck : public TEventPB<TEvReturnBorrowedPartAck, NKikimrTxDataShard::TEvReturnBorrowedPartAck, TEvDataShard::EvReturnBorrowedPartAck> {
         TEvReturnBorrowedPartAck() = default;
-        explicit TEvReturnBorrowedPartAck(const TVector<TLogoBlobID>& partMetaVec) {
+        explicit TEvReturnBorrowedPartAck(const TVector<TLogoBlobID>& partMetaVec) { 
             for (const auto& partMeta : partMetaVec) {
                 LogoBlobIDFromLogoBlobID(partMeta, Record.AddPartMetadata());
             }

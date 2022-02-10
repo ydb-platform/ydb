@@ -20,7 +20,7 @@ Y_UNIT_TEST_SUITE(TIntrusiveStackTest) {
 
     Y_UNIT_TEST(TestPushPop) {
         TIntrusiveStack<TSimpleItem, &TSimpleItem::Next> stack;
-        TVector<TSimpleItem> items;
+        TVector<TSimpleItem> items; 
         items.resize(100);
         for (i64 i = 0; i < 100; ++i) {
             stack.Push(&items[i]);

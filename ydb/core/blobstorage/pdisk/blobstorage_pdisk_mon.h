@@ -74,7 +74,7 @@ inline ui64 HPCyclesMs(ui64 ms) {
 
 class TLightBase {
 protected:
-    TString Name;
+    TString Name; 
     NMonitoring::TDynamicCounters::TCounterPtr State; // Current state (0=OFF=green, 1=ON=red)
     NMonitoring::TDynamicCounters::TCounterPtr Count; // Number of switches to ON state
     NMonitoring::TDynamicCounters::TCounterPtr RedMs; // Time elapsed in ON state
@@ -86,7 +86,7 @@ private:
     NHPTimer::STime LastNow = 0;
     ui64 UpdateThreshold = 0;
 public:
-    void Initialize(TIntrusivePtr<NMonitoring::TDynamicCounters>& counters, const TString& name) {
+    void Initialize(TIntrusivePtr<NMonitoring::TDynamicCounters>& counters, const TString& name) { 
         Name = name;
         State = counters->GetCounter(name + "_state");
         Count = counters->GetCounter(name + "_count", true);
@@ -288,8 +288,8 @@ public:
     {}
 
     void Initialize(const TIntrusivePtr<NMonitoring::TDynamicCounters> &counters,
-                    const TString& group, const TString& subgroup, const TString& name,
-                    const TVector<float> &thresholds) {
+                    const TString& group, const TString& subgroup, const TString& name, 
+                    const TVector<float> &thresholds) { 
         Tracker.Initialize(counters, group, subgroup, name, thresholds);
     }
 
@@ -655,7 +655,7 @@ struct TPDiskMon {
         NMonitoring::TDynamicCounters::TCounterPtr Bytes;
         NMonitoring::TDynamicCounters::TCounterPtr Results;
 
-        void Setup(const TIntrusivePtr<NMonitoring::TDynamicCounters>& group, TString name) {
+        void Setup(const TIntrusivePtr<NMonitoring::TDynamicCounters>& group, TString name) { 
             TIntrusivePtr<NMonitoring::TDynamicCounters> subgroup = group->GetSubgroup("req", name);
             Requests = subgroup->GetCounter("Requests", true);
             Bytes = subgroup->GetCounter("Bytes", true);
@@ -745,7 +745,7 @@ struct TPDiskMon {
 
     TPDiskMon(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters, ui32 pdiskId, TPDiskConfig *cfg);
 
-    NMonitoring::TDynamicCounters::TCounterPtr GetBusyPeriod(const TString& owner, const TString& queue);
+    NMonitoring::TDynamicCounters::TCounterPtr GetBusyPeriod(const TString& owner, const TString& queue); 
     void IncrementQueueTime(ui8 priorityClass, size_t timeMs);
     void IncrementResponseTime(ui8 priorityClass, double timeMs, size_t sizeBytes);
     void UpdatePercentileTrackers();

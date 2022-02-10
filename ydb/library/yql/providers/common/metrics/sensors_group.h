@@ -5,10 +5,10 @@
 
 namespace NYql {
 namespace NSensorComponent {
-    static const TString kExecutor = "executor";
-    static const TString kWorkerServer = "worker_server";
-    static const TString kDataServer = "data_server";
-    static const TString kInspectorClient = "inspector_client";
+    static const TString kExecutor = "executor"; 
+    static const TString kWorkerServer = "worker_server"; 
+    static const TString kDataServer = "data_server"; 
+    static const TString kInspectorClient = "inspector_client"; 
     static const TString kDq = "dq";
 } // namspace NSensorComponent
 
@@ -22,8 +22,8 @@ using TSensorCounterPtr = TIntrusivePtr<TSensorCounter>;
 
 TSensorsGroupPtr GetSensorsRootGroup();
 
-inline TSensorsGroupPtr GetSensorsGroupFor(const TString& compName) {
-    static TString compLabel("component");
+inline TSensorsGroupPtr GetSensorsGroupFor(const TString& compName) { 
+    static TString compLabel("component"); 
     return GetSensorsRootGroup()->GetSubgroup(compLabel, compName);
 }
 

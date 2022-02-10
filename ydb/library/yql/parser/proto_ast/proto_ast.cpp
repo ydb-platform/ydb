@@ -12,7 +12,7 @@ IErrorCollector::~IErrorCollector()
 {
 }
 
-void IErrorCollector::Error(ui32 line, ui32 col, const TString& message) {
+void IErrorCollector::Error(ui32 line, ui32 col, const TString& message) { 
     if (NumErrors + 1 == MaxErrors) {
         AddError(0, 0, "Too many errors");
         ++NumErrors;
@@ -37,7 +37,7 @@ TErrorOutput::~TErrorOutput()
 {
 }
 
-void TErrorOutput::AddError(ui32 line, ui32 col, const TString& message) {
+void TErrorOutput::AddError(ui32 line, ui32 col, const TString& message) { 
     if (!Name.empty()) {
         Err << "Query " << Name << ": ";
     }

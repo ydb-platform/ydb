@@ -68,7 +68,7 @@ private:
 private:
     size_t MaxSize;
     size_t Begin = 0;
-    TVector<T> Items;
+    TVector<T> Items; 
 };
 
 template <typename T, size_t maxSize>

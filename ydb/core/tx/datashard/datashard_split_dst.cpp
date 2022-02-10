@@ -61,7 +61,7 @@ public:
         }
 
         // Persist split description
-        TString splitDescr;
+        TString splitDescr; 
         bool serilaizeOk = Self->DstSplitDescription->SerializeToString(&splitDescr);
         Y_VERIFY(serilaizeOk, "Failed to serialize split/merge description");
         Self->PersistSys(db, Schema::Sys_DstSplitDescription, splitDescr);
@@ -133,7 +133,7 @@ public:
             NKikimrSchemeOp::TTableDescription newTableScheme(tableScheme);
 
             // Get this shard's range boundaries from the split/merge description
-            TString rangeBegin, rangeEnd;
+            TString rangeBegin, rangeEnd; 
             for (ui32 di = 0; di < Self->DstSplitDescription->DestinationRangesSize(); ++di) {
                 const auto& dstRange = Self->DstSplitDescription->GetDestinationRanges(di);
                 if (dstRange.GetTabletID() != Self->TabletID())

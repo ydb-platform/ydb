@@ -1299,7 +1299,7 @@ private:
 template <typename T>
 class THashedSingleFixedSetHolder : public TComputationValue<THashedSingleFixedSetHolder<T>> {
 public:
-    using TSetType = TValuesDictHashSingleFixedSet<T>;
+    using TSetType = TValuesDictHashSingleFixedSet<T>; 
 
     class TIterator : public TComputationValue<TIterator> {
     public:
@@ -1341,12 +1341,12 @@ public:
         }
 
         const NUdf::TRefCountedPtr<THashedSingleFixedSetHolder> Parent;
-        typename TSetType::const_iterator Iterator;
-        typename TSetType::const_iterator End;
+        typename TSetType::const_iterator Iterator; 
+        typename TSetType::const_iterator End; 
         bool AtStart;
     };
 
-    THashedSingleFixedSetHolder(TMemoryUsageInfo* memInfo, TSetType&& set)
+    THashedSingleFixedSetHolder(TMemoryUsageInfo* memInfo, TSetType&& set) 
         : TComputationValue<THashedSingleFixedSetHolder>(memInfo)
         , Set(std::move(set))
     {
@@ -1399,7 +1399,7 @@ private:
 template <typename T>
 class THashedSingleFixedCompactSetHolder : public TComputationValue<THashedSingleFixedCompactSetHolder<T>> {
 public:
-    using TSetType = TValuesDictHashSingleFixedCompactSet<T>;
+    using TSetType = TValuesDictHashSingleFixedCompactSet<T>; 
 
     class TIterator : public TComputationValue<TIterator> {
     public:
@@ -1440,11 +1440,11 @@ public:
         }
 
         const NUdf::TRefCountedPtr<THashedSingleFixedCompactSetHolder> Parent;
-        typename TSetType::TIterator Iterator;
+        typename TSetType::TIterator Iterator; 
         bool AtStart;
     };
 
-    THashedSingleFixedCompactSetHolder(TMemoryUsageInfo* memInfo, TSetType&& set)
+    THashedSingleFixedCompactSetHolder(TMemoryUsageInfo* memInfo, TSetType&& set) 
         : TComputationValue<THashedSingleFixedCompactSetHolder>(memInfo)
         , Set(std::move(set))
     {
@@ -1494,7 +1494,7 @@ private:
 
 class THashedCompactSetHolder : public TComputationValue<THashedCompactSetHolder> {
 public:
-    using TSetType = TValuesDictHashCompactSet;
+    using TSetType = TValuesDictHashCompactSet; 
 
     class TIterator : public TComputationValue<TIterator> {
     public:
@@ -1535,11 +1535,11 @@ public:
         }
 
         const NUdf::TRefCountedPtr<THashedCompactSetHolder> Parent;
-        typename TSetType::TIterator Iterator;
+        typename TSetType::TIterator Iterator; 
         bool AtStart;
     };
 
-    THashedCompactSetHolder(TMemoryUsageInfo* memInfo, TSetType&& set, TPagedArena&& pool, TType* keyType, TComputationContext* ctx)
+    THashedCompactSetHolder(TMemoryUsageInfo* memInfo, TSetType&& set, TPagedArena&& pool, TType* keyType, TComputationContext* ctx) 
         : TComputationValue(memInfo)
         , Pool(std::move(pool))
         , Set(std::move(set))
@@ -1600,7 +1600,7 @@ private:
 
 class THashedCompactMapHolder : public TComputationValue<THashedCompactMapHolder> {
 public:
-    using TMapType = TValuesDictHashCompactMap;
+    using TMapType = TValuesDictHashCompactMap; 
 
     template <bool NoSwap>
     class TIterator : public TComputationValue<TIterator<NoSwap>> {
@@ -1646,11 +1646,11 @@ public:
         }
 
         const NUdf::TRefCountedPtr<THashedCompactMapHolder> Parent;
-        typename TMapType::TIterator Iterator;
+        typename TMapType::TIterator Iterator; 
         bool AtStart;
     };
 
-    THashedCompactMapHolder(TMemoryUsageInfo* memInfo, TMapType&& map, TPagedArena&& pool,
+    THashedCompactMapHolder(TMemoryUsageInfo* memInfo, TMapType&& map, TPagedArena&& pool, 
         TType* keyType, TType* payloadType, TComputationContext* ctx)
         : TComputationValue(memInfo)
         , Pool(std::move(pool))
@@ -1710,8 +1710,8 @@ private:
 
 class THashedCompactMultiMapHolder : public TComputationValue<THashedCompactMultiMapHolder> {
 public:
-    using TMapType = TValuesDictHashCompactMultiMap;
-    using TMapIterator = typename TMapType::TIterator;
+    using TMapType = TValuesDictHashCompactMultiMap; 
+    using TMapIterator = typename TMapType::TIterator; 
 
     class TPayloadList: public TCustomListValue {
     public:
@@ -1833,7 +1833,7 @@ public:
         TMapIterator Iterator;
     };
 
-    THashedCompactMultiMapHolder(TMemoryUsageInfo* memInfo, TMapType&& map, TPagedArena&& pool,
+    THashedCompactMultiMapHolder(TMemoryUsageInfo* memInfo, TMapType&& map, TPagedArena&& pool, 
         TType* keyType, TType* payloadType, TComputationContext* ctx)
         : TComputationValue(memInfo)
         , Pool(std::move(pool))
@@ -2046,7 +2046,7 @@ private:
 template <typename T>
 class THashedSingleFixedMapHolder : public TComputationValue<THashedSingleFixedMapHolder<T>> {
 public:
-    using TMapType = TValuesDictHashSingleFixedMap<T>;
+    using TMapType = TValuesDictHashSingleFixedMap<T>; 
 
     template <bool NoSwap>
     class TIterator : public TComputationValue<TIterator<NoSwap>> {
@@ -2090,8 +2090,8 @@ public:
         }
 
         const NUdf::TRefCountedPtr<THashedSingleFixedMapHolder> Parent;
-        typename TMapType::const_iterator Iterator;
-        typename TMapType::const_iterator End;
+        typename TMapType::const_iterator Iterator; 
+        typename TMapType::const_iterator End; 
         bool AtStart;
     };
 
@@ -2143,7 +2143,7 @@ private:
 template <typename T>
 class THashedSingleFixedCompactMapHolder : public TComputationValue<THashedSingleFixedCompactMapHolder<T>> {
 public:
-    using TMapType = TValuesDictHashSingleFixedCompactMap<T>;
+    using TMapType = TValuesDictHashSingleFixedCompactMap<T>; 
 
     template <bool NoSwap>
     class TIterator : public TComputationValue<TIterator<NoSwap>> {
@@ -2187,11 +2187,11 @@ public:
         }
 
         const NUdf::TRefCountedPtr<THashedSingleFixedCompactMapHolder> Parent;
-        typename TMapType::TIterator Iterator;
+        typename TMapType::TIterator Iterator; 
         bool AtStart;
     };
 
-    THashedSingleFixedCompactMapHolder(TMemoryUsageInfo* memInfo, TMapType&& map, TPagedArena&& pool,
+    THashedSingleFixedCompactMapHolder(TMemoryUsageInfo* memInfo, TMapType&& map, TPagedArena&& pool, 
         TType* payloadType, TComputationContext* ctx)
         : TComputationValue<THashedSingleFixedCompactMapHolder>(memInfo)
         , Pool(std::move(pool))
@@ -2247,8 +2247,8 @@ private:
 template <typename T>
 class THashedSingleFixedCompactMultiMapHolder : public TComputationValue<THashedSingleFixedCompactMultiMapHolder<T>> {
 public:
-    using TMapType = TValuesDictHashSingleFixedCompactMultiMap<T>;
-    using TMapIterator = typename TMapType::TIterator;
+    using TMapType = TValuesDictHashSingleFixedCompactMultiMap<T>; 
+    using TMapIterator = typename TMapType::TIterator; 
 
     class TPayloadList: public TCustomListValue {
     public:
@@ -2369,7 +2369,7 @@ public:
         TMapIterator Iterator;
     };
 
-    THashedSingleFixedCompactMultiMapHolder(TMemoryUsageInfo* memInfo, TMapType&& map, TPagedArena&& pool,
+    THashedSingleFixedCompactMultiMapHolder(TMemoryUsageInfo* memInfo, TMapType&& map, TPagedArena&& pool, 
         TType* payloadType, TComputationContext* ctx)
         : TComputationValue<THashedSingleFixedCompactMultiMapHolder>(memInfo)
         , Pool(std::move(pool))

@@ -8,7 +8,7 @@
 template <typename T, template <typename, class> class TVectorType = TVector>
 class TLockFreeQueueBatch {
 private:
-    TLockFreeStack<TVectorType<T, std::allocator<T>>*> Stack;
+    TLockFreeStack<TVectorType<T, std::allocator<T>>*> Stack; 
 
 public:
     bool IsEmpty() {
@@ -19,11 +19,11 @@ public:
         Stack.Enqueue(vec.Release());
     }
 
-    void DequeueAllSingleConsumer(TVectorType<T, std::allocator<T>>* r) {
-        TTempTlsVector<TVectorType<T, std::allocator<T>>*> vs;
+    void DequeueAllSingleConsumer(TVectorType<T, std::allocator<T>>* r) { 
+        TTempTlsVector<TVectorType<T, std::allocator<T>>*> vs; 
         Stack.DequeueAllSingleConsumer(vs.GetVector());
 
-        for (typename TVector<TVectorType<T, std::allocator<T>>*>::reverse_iterator i = vs.GetVector()->rbegin();
+        for (typename TVector<TVectorType<T, std::allocator<T>>*>::reverse_iterator i = vs.GetVector()->rbegin(); 
              i != vs.GetVector()->rend(); ++i) {
             if (i == vs.GetVector()->rend()) {
                 r->swap(**i);

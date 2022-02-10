@@ -3,7 +3,7 @@
 #include <util/generic/deque.h>
 
 template <typename TElem,
-          template <typename, typename...> class TContainer = TDeque>
+          template <typename, typename...> class TContainer = TDeque> 
 class TRecentWnd {
 public:
     TRecentWnd(ui32 wndSize)

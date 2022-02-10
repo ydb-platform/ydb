@@ -14,7 +14,7 @@
 
 #include <contrib/libs/double-conversion/double-conversion.h>
 
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 #include <util/system/yassert.h>
 #include <util/generic/yexception.h>
 #include <util/generic/typetraits.h>
@@ -517,8 +517,8 @@ bool FromStringImpl<bool>(const char* data, size_t len) {
 }
 
 template <>
-TString FromStringImpl<TString>(const char* data, size_t len) {
-    return TString(data, len);
+TString FromStringImpl<TString>(const char* data, size_t len) { 
+    return TString(data, len); 
 }
 
 template <>
@@ -532,8 +532,8 @@ std::string FromStringImpl<std::string>(const char* data, size_t len) {
 }
 
 template <>
-TUtf16String FromStringImpl<TUtf16String>(const wchar16* data, size_t len) {
-    return TUtf16String(data, len);
+TUtf16String FromStringImpl<TUtf16String>(const wchar16* data, size_t len) { 
+    return TUtf16String(data, len); 
 }
 
 template <>
@@ -549,8 +549,8 @@ bool TryFromStringImpl<TStringBuf>(const char* data, size_t len, TStringBuf& res
 }
 
 template <>
-bool TryFromStringImpl<TString>(const char* data, size_t len, TString& result) {
-    result = TString(data, len);
+bool TryFromStringImpl<TString>(const char* data, size_t len, TString& result) { 
+    result = TString(data, len); 
     return true;
 }
 
@@ -567,8 +567,8 @@ bool TryFromStringImpl<TWtringBuf>(const wchar16* data, size_t len, TWtringBuf& 
 }
 
 template <>
-bool TryFromStringImpl<TUtf16String>(const wchar16* data, size_t len, TUtf16String& result) {
-    result = TUtf16String(data, len);
+bool TryFromStringImpl<TUtf16String>(const wchar16* data, size_t len, TUtf16String& result) { 
+    result = TUtf16String(data, len); 
     return true;
 }
 

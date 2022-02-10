@@ -15,15 +15,15 @@
  */
 
 /**
- * Unbuffered file input stream.
+ * Unbuffered file input stream. 
  *
  * Note that the input is not buffered, which means that `ReadLine` calls will
  * be _very_ slow.
  */
-class TUnbufferedFileInput: public IInputStream {
+class TUnbufferedFileInput: public IInputStream { 
 public:
-    TUnbufferedFileInput(const TFile& file);
-    TUnbufferedFileInput(const TString& path);
+    TUnbufferedFileInput(const TFile& file); 
+    TUnbufferedFileInput(const TString& path); 
 
 private:
     size_t DoRead(void* buf, size_t len) override;
@@ -39,8 +39,8 @@ private:
 class TMappedFileInput: public TMemoryInput {
 public:
     TMappedFileInput(const TFile& file);
-    TMappedFileInput(const TString& path);
-    ~TMappedFileInput() override;
+    TMappedFileInput(const TString& path); 
+    ~TMappedFileInput() override; 
 
 private:
     class TImpl;
@@ -53,15 +53,15 @@ private:
  * Note that the output is unbuffered, thus writing in many small chunks is
  * likely to be quite slow.
  */
-class TUnbufferedFileOutput: public IOutputStream {
+class TUnbufferedFileOutput: public IOutputStream { 
 public:
-    TUnbufferedFileOutput(const TString& path);
-    TUnbufferedFileOutput(const TFile& file);
-    ~TUnbufferedFileOutput() override;
+    TUnbufferedFileOutput(const TString& path); 
+    TUnbufferedFileOutput(const TFile& file); 
+    ~TUnbufferedFileOutput() override; 
 
-    TUnbufferedFileOutput(TUnbufferedFileOutput&&) noexcept = default;
-    TUnbufferedFileOutput& operator=(TUnbufferedFileOutput&&) noexcept = default;
-
+    TUnbufferedFileOutput(TUnbufferedFileOutput&&) noexcept = default; 
+    TUnbufferedFileOutput& operator=(TUnbufferedFileOutput&&) noexcept = default; 
+ 
 private:
     void DoWrite(const void* buf, size_t len) override;
     void DoFlush() override;
@@ -75,34 +75,34 @@ private:
  *
  * @see TBuffered
  */
-class TFileInput: public TBuffered<TUnbufferedFileInput> {
+class TFileInput: public TBuffered<TUnbufferedFileInput> { 
 public:
     template <class T>
-    inline TFileInput(T&& t, size_t buf = 1 << 13)
-        : TBuffered<TUnbufferedFileInput>(buf, std::forward<T>(t))
+    inline TFileInput(T&& t, size_t buf = 1 << 13) 
+        : TBuffered<TUnbufferedFileInput>(buf, std::forward<T>(t)) 
     {
     }
 
-    ~TFileInput() override = default;
+    ~TFileInput() override = default; 
 };
 
 /**
  * Buffered file output stream.
  *
- * Currently deprecated, please use TFileOutput in new code.
+ * Currently deprecated, please use TFileOutput in new code. 
  *
  * @deprecated
  * @see TBuffered
  */
-class TFixedBufferFileOutput: public TBuffered<TUnbufferedFileOutput> {
+class TFixedBufferFileOutput: public TBuffered<TUnbufferedFileOutput> { 
 public:
     template <class T>
-    inline TFixedBufferFileOutput(T&& t, size_t buf = 1 << 13)
-        : TBuffered<TUnbufferedFileOutput>(buf, std::forward<T>(t))
+    inline TFixedBufferFileOutput(T&& t, size_t buf = 1 << 13) 
+        : TBuffered<TUnbufferedFileOutput>(buf, std::forward<T>(t)) 
     {
     }
 
-    ~TFixedBufferFileOutput() override = default;
+    ~TFixedBufferFileOutput() override = default; 
 };
 
 /** @} */

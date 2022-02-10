@@ -100,10 +100,10 @@ namespace NKikimr {
 
         const ui64* GetRaw() const { return Raw.X; }
 
-        TString ToString() const;
+        TString ToString() const; 
         void Out(IOutputStream &o) const;
-        static bool Parse(TLogoBlobID &out, const TString &buf, TString &errorExplanation);
-        static void Out(IOutputStream &o, const TVector<TLogoBlobID> &vec);
+        static bool Parse(TLogoBlobID &out, const TString &buf, TString &errorExplanation); 
+        static void Out(IOutputStream &o, const TVector<TLogoBlobID> &vec); 
 
         // Returns -1 if *this < x, 0 if *this == x, 1 if *this > x
         int Compare(const TLogoBlobID &x) const {
@@ -232,12 +232,12 @@ namespace NKikimr {
 
     struct TLogoBlob {
         TLogoBlobID Id;
-        TString Buffer;
+        TString Buffer; 
 
         TLogoBlob()
         {}
 
-        TLogoBlob(const TLogoBlobID &id, const TString &buffer)
+        TLogoBlob(const TLogoBlobID &id, const TString &buffer) 
             : Id(id)
             , Buffer(buffer)
         {}
@@ -247,9 +247,9 @@ namespace NKikimr {
         TLogoBlobID Id;
         ui32 Status;
         ui32 Shift;
-        TString Buffer;
+        TString Buffer; 
 
-        explicit TLogoBlobRef(const TLogoBlobID &id, ui32 status, ui32 shift, const TString &buffer)
+        explicit TLogoBlobRef(const TLogoBlobID &id, ui32 status, ui32 shift, const TString &buffer) 
             : Id(id)
             , Status(status)
             , Shift(shift)
@@ -272,7 +272,7 @@ namespace NKikimr {
     TLogoBlobID LogoBlobIDFromLogoBlobID(const NKikimrProto::TLogoBlobID &proto);
     void LogoBlobIDFromLogoBlobID(const TLogoBlobID &id, NKikimrProto::TLogoBlobID *proto);
     void LogoBlobIDVectorFromLogoBlobIDRepeated(
-                TVector<TLogoBlobID> *to,
+                TVector<TLogoBlobID> *to, 
                 const ::google::protobuf::RepeatedPtrField<NKikimrProto::TLogoBlobID> &proto);
 
     template<typename TIterator>
@@ -310,7 +310,7 @@ inline void Out<NKikimr::TLogoBlobID>(IOutputStream& o, const NKikimr::TLogoBlob
 }
 
 template<>
-inline void Out<TVector<NKikimr::TLogoBlobID>>(IOutputStream& out, const TVector<NKikimr::TLogoBlobID> &xvec) {
+inline void Out<TVector<NKikimr::TLogoBlobID>>(IOutputStream& out, const TVector<NKikimr::TLogoBlobID> &xvec) { 
     return NKikimr::TLogoBlobID::Out(out, xvec);
 }
 

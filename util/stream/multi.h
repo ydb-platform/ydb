@@ -13,12 +13,12 @@
 class TMultiInput: public IInputStream {
 public:
     TMultiInput(IInputStream* f, IInputStream* s) noexcept;
-    ~TMultiInput() override;
+    ~TMultiInput() override; 
 
 private:
     size_t DoRead(void* buf, size_t len) override;
     size_t DoSkip(size_t len) override;
-    size_t DoReadTo(TString& st, char ch) override;
+    size_t DoReadTo(TString& st, char ch) override; 
 
 private:
     IInputStream* C_;

@@ -35,7 +35,7 @@ namespace NKikimr {
                     , LastLsn(0)
                 {}
 
-                TString ToString() const {
+                TString ToString() const { 
                     return Sprintf("[FreePos# %" PRIu32 " RecsNum# %" PRIu32
                                    " LastLsn# %" PRIu64 "]", FreePos, RecsNum, LastLsn);
                 }
@@ -124,7 +124,7 @@ namespace NKikimr {
             const ui32 PageSize;
         };
 
-        typedef TDeque<TSyncLogPagePtr> TSyncLogPages;
+        typedef TDeque<TSyncLogPagePtr> TSyncLogPages; 
 
         ////////////////////////////////////////////////////////////////////////////
         // TSyncLogPageROIterator
@@ -245,7 +245,7 @@ namespace NKikimr {
             }
 
             TString ToVerboseString() const;
-            TString ToString() const;
+            TString ToString() const; 
             void Output(IOutputStream &str) const;
         };
 
@@ -391,7 +391,7 @@ namespace NKikimr {
             }
 
             void OutputHtml(IOutputStream &str) const;
-            TString BoundariesToString() const;
+            TString BoundariesToString() const; 
             void CheckSnapshotConsistency() const;
 
         private:
@@ -453,7 +453,7 @@ namespace NKikimr {
                 return Snap.Get() == it.Snap.Get() && It == it.It;
             }
 
-            TString ToString() const {
+            TString ToString() const { 
                 TStringStream str;
                 str << "[pagePos# " << unsigned(It - Snap->Pages.begin()) << "]";
                 return str.Str();
@@ -499,7 +499,7 @@ namespace NKikimr {
                 return Hdr;
             }
 
-            TString ToString() const {
+            TString ToString() const { 
                 return Sprintf("[PagesIt=%s Hdr=%p]", PagesIt.ToString().data(), Hdr);
             }
 
@@ -560,9 +560,9 @@ namespace NKikimr {
                 ui64 diskLastLsn,
                 ui64 freeUpToLsn, // excluding
                 ui32 freeNPages);
-            TString BoundariesToString() const;
+            TString BoundariesToString() const; 
             void Output(IOutputStream &s) const;
-            TString ToString() const;
+            TString ToString() const; 
 
         private:
             ui32 DiscardPages(ui32 pagesToKeep, ui64 lastUnneededLsn);

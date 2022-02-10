@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 #include <util/generic/vector.h>
 #include <util/stream/input.h>
 #include <util/stream/output.h>
@@ -23,13 +23,13 @@ namespace NJson {
      */
 
     class TJsonParser {
-        TString Prefix;
+        TString Prefix; 
 
         struct TField {
-            TVector<TPathElem> Path;
+            TVector<TPathElem> Path; 
             bool NonEmpty;
         };
-        TVector<TField> Fields;
+        TVector<TField> Fields; 
 
         friend class TRewriteJsonImpl;
 

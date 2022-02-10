@@ -154,7 +154,7 @@ struct TBusTestShardControlRequest : TBusMessage<TBusTestShardControlRequest, NK
 
 class TBusResponseStatus : public TBusResponse {
 public:
-    TBusResponseStatus(EResponseStatus status, const TString& text = TString())
+    TBusResponseStatus(EResponseStatus status, const TString& text = TString()) 
     {
         Record.SetStatus(status);
         if (text) {
@@ -165,12 +165,12 @@ public:
 
 class TProtocol : public NBus::TBusBufferProtocol {
 protected:
-    THashMap<TString, NBus::TBusBufferBase*> NameToType;
+    THashMap<TString, NBus::TBusBufferBase*> NameToType; 
 
 public:
-    static TString TrimMessageName(const TString& name) {
+    static TString TrimMessageName(const TString& name) { 
         std::size_t pos = name.rfind(':');
-        if (pos != TString::npos && pos + 5 <= name.size() && name.substr(pos + 1, 4) == "TBus")
+        if (pos != TString::npos && pos + 5 <= name.size() && name.substr(pos + 1, 4) == "TBus") 
             return name.substr(pos + 5); // removing leading 'TBus' letters
         return name;
     }
@@ -181,7 +181,7 @@ public:
         NBus::TBusBufferProtocol::RegisterType(message);
     }
 
-    TAutoPtr<NBus::TBusBufferBase> NewMessage(const TString& name) const {
+    TAutoPtr<NBus::TBusBufferBase> NewMessage(const TString& name) const { 
         auto it = NameToType.find(name);
         if (it != NameToType.end()) {
             return it->second->New();

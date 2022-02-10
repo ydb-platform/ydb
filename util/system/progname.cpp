@@ -13,11 +13,11 @@ namespace {
         {
         }
 
-        TString ProgName;
+        TString ProgName; 
     };
 }
 
-const TString& GetProgramName() {
+const TString& GetProgramName() { 
     return Singleton<TProgramNameHolder>()->ProgName;
 }
 

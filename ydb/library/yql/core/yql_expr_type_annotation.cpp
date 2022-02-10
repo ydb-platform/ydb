@@ -369,7 +369,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
     else if (expectedType.GetKind() == ETypeAnnotationKind::Struct && node->IsCallable({"Struct", "AsStruct"})) {
         auto from = sourceType.Cast<TStructExprType>();
         auto to = expectedType.Cast<TStructExprType>();
-        THashMap<TString, TExprNode::TPtr> columnTransforms;
+        THashMap<TString, TExprNode::TPtr> columnTransforms; 
         ui32 usedFields = 0;
         for (auto newField : to->GetItems()) {
             auto pos = from->FindItem(newField->GetName());
@@ -408,7 +408,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
             return IGraphTransformer::TStatus::Error;
         }
 
-        TExprNode::TListType nodeChildren;
+        TExprNode::TListType nodeChildren; 
         for (auto& child : columnTransforms) {
             nodeChildren.push_back(ctx.NewList(node->Pos(), {
                 ctx.NewAtom(node->Pos(), child.first), child.second }));
@@ -420,7 +420,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
     else if (expectedType.GetKind() == ETypeAnnotationKind::Struct && sourceType.GetKind() == ETypeAnnotationKind::Struct) {
         auto from = sourceType.Cast<TStructExprType>();
         auto to = expectedType.Cast<TStructExprType>();
-        THashMap<TString, TExprNode::TPtr> columnTransforms;
+        THashMap<TString, TExprNode::TPtr> columnTransforms; 
         ui32 usedFields = 0;
         for (auto newField : to->GetItems()) {
             auto pos = from->FindItem(newField->GetName());
@@ -463,7 +463,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
             return IGraphTransformer::TStatus::Error;
         }
 
-        TExprNode::TListType nodeChildren;
+        TExprNode::TListType nodeChildren; 
         for (auto& child : columnTransforms) {
             nodeChildren.push_back(ctx.NewList(node->Pos(), {
                 ctx.NewAtom(node->Pos(), child.first), child.second }));
@@ -680,7 +680,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
         auto from = sourceType.Cast<TTupleExprType>();
         auto to = expectedType.Cast<TTupleExprType>();
         if (from->GetSize() <= to->GetSize()) {
-            TExprNode::TListType valueTransforms;
+            TExprNode::TListType valueTransforms; 
             valueTransforms.reserve(to->GetSize());
             for (ui32 i = 0; i < from->GetSize(); ++i) {
                 const auto oldType = from->GetItems()[i];
@@ -714,7 +714,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
         const auto from = sourceType.Cast<TTupleExprType>();
         const auto to = expectedType.Cast<TTupleExprType>();
         if (from->GetSize() <= to->GetSize()) {
-            TExprNode::TListType valueTransforms;
+            TExprNode::TListType valueTransforms; 
             valueTransforms.reserve(to->GetSize());
             for (ui32 i = 0; i < from->GetSize(); ++i) {
                 const auto oldType = from->GetItems()[i];
@@ -757,7 +757,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
         auto oldItemType = from->GetItemType();
         auto newItemType = to->GetItemType();
 
-        TExprNode::TListType valueTransforms;
+        TExprNode::TListType valueTransforms; 
         if (node->IsCallable("List")) {
             valueTransforms.push_back(ExpandType(node->Pos(), *to, ctx));
         }
@@ -2131,13 +2131,13 @@ IGraphTransformer::TStatus ConvertToLambda(TExprNode::TPtr& node, TExprContext& 
         return IGraphTransformer::TStatus::Error;
     }
 
-    TExprNode::TListType args;
+    TExprNode::TListType args; 
     args.push_back(node);
     for (ui32 index = 0; index < (minArgumentsCount != Max<ui32>() ? minArgumentsCount : callableType->GetArgumentsSize()); ++index) {
         args.push_back(ctx.NewArgument(node->Pos(), Sprintf("arg%" PRIu32, index)));
     }
 
-    auto body = ctx.NewCallable(node->Pos(), "Apply", TExprNode::TListType(args));
+    auto body = ctx.NewCallable(node->Pos(), "Apply", TExprNode::TListType(args)); 
     args.erase(args.begin());
     auto arguments = ctx.NewArguments(node->Pos(), std::move(args));
     node = ctx.NewLambda(node->Pos(), std::move(arguments), std::move(body));
@@ -2834,7 +2834,7 @@ static bool EnsureKeyProperty(TPositionHandle position, const TTypeAnnotationNod
         return false;
     }
 
-    TTypeAnnotationNode::TListType keyTypes;
+    TTypeAnnotationNode::TListType keyTypes; 
     if (keyType->GetKind() != ETypeAnnotationKind::Tuple) {
         keyTypes.push_back(keyType);
     }
@@ -3664,9 +3664,9 @@ IGraphTransformer::TStatus SilentInferCommonType(TExprNode::TPtr& node1, const T
         auto tupleType1 = type1.Cast<TTupleExprType>();
         auto tupleType2 = type2.Cast<TTupleExprType>();
         if (tupleType1->GetSize() == tupleType2->GetSize()) {
-            TVector<const TTypeAnnotationNode*> commonItemTypes;
-            TExprNode::TListType leftItems;
-            TExprNode::TListType rightItems;
+            TVector<const TTypeAnnotationNode*> commonItemTypes; 
+            TExprNode::TListType leftItems; 
+            TExprNode::TListType rightItems; 
             bool hasError = false;
             for (ui32 i = 0; i < tupleType1->GetSize(); ++i) {
                 auto item1type = tupleType1->GetItems()[i];
@@ -3697,7 +3697,7 @@ IGraphTransformer::TStatus SilentInferCommonType(TExprNode::TPtr& node1, const T
     if (type1.GetKind() == ETypeAnnotationKind::Struct && type2.GetKind() == ETypeAnnotationKind::Struct) {
         auto structType1 = type1.Cast<TStructExprType>();
         auto structType2 = type2.Cast<TStructExprType>();
-        TSet<TStringBuf> allFields;
+        TSet<TStringBuf> allFields; 
         for (const auto& x : structType1->GetItems()) {
             allFields.emplace(x->GetName());
         }
@@ -3706,9 +3706,9 @@ IGraphTransformer::TStatus SilentInferCommonType(TExprNode::TPtr& node1, const T
             allFields.emplace(x->GetName());
         }
 
-        TVector<const TItemExprType*> commonItemTypes;
-        TExprNode::TListType leftItems;
-        TExprNode::TListType rightItems;
+        TVector<const TItemExprType*> commonItemTypes; 
+        TExprNode::TListType leftItems; 
+        TExprNode::TListType rightItems; 
         bool hasError = false;
         for (const auto& x: allFields) {
             auto pos1 = structType1->FindItem(x);
@@ -4190,7 +4190,7 @@ bool IsPureIsolatedLambda(const TExprNode& lambdaBody) {
     return IsPureIsolatedLambdaImpl(lambdaBody, visited);
 }
 
-TString GetIntegralAtomValue(ui64 value, bool hasSign) {
+TString GetIntegralAtomValue(ui64 value, bool hasSign) { 
     return (hasSign) ? "-" + ToString(value) : ToString(value);
 }
 
@@ -4512,8 +4512,8 @@ TMaybe<TIssue> NormalizeName(TPosition position, TString& name) {
     return Nothing();
 }
 
-TString NormalizeName(const TStringBuf& name) {
-    TString result(name);
+TString NormalizeName(const TStringBuf& name) { 
+    TString result(name); 
     TMaybe<TIssue> error = NormalizeName(TPosition(), result);
     YQL_ENSURE(error.Empty(), "" << error->Message);
     return result;
@@ -4564,7 +4564,7 @@ bool IsEmptyList(const TTypeAnnotationNode& type) {
 }
 
 static TString GetStructDiff(const TStructExprType& left, const TStructExprType& right) {
-    THashMap<TStringBuf, const TItemExprType*> rightItems;
+    THashMap<TStringBuf, const TItemExprType*> rightItems; 
     for (auto item: right.GetItems()) {
         rightItems.insert({item->GetName(), item});
     }
@@ -4644,7 +4644,7 @@ TExprNode::TPtr ExpandTypeNoCache(TPositionHandle position, const TTypeAnnotatio
     }
     case ETypeAnnotationKind::Tuple:
     {
-        TExprNode::TListType tupleItems;
+        TExprNode::TListType tupleItems; 
         for (auto& child : type.Cast<TTupleExprType>()->GetItems()) {
             tupleItems.push_back(ExpandType(position, *child, ctx));
         }
@@ -4655,7 +4655,7 @@ TExprNode::TPtr ExpandTypeNoCache(TPositionHandle position, const TTypeAnnotatio
 
     case ETypeAnnotationKind::Struct:
     {
-        TExprNode::TListType structItems;
+        TExprNode::TListType structItems; 
         for (auto& child : type.Cast<TStructExprType>()->GetItems()) {
             structItems.push_back(
                 ctx.NewList(position, {
@@ -4722,8 +4722,8 @@ TExprNode::TPtr ExpandTypeNoCache(TPositionHandle position, const TTypeAnnotatio
     {
         auto callableType = type.Cast<TCallableExprType>();
 
-        TExprNode::TListType callableArgs;
-        TExprNode::TListType mainSettings;
+        TExprNode::TListType callableArgs; 
+        TExprNode::TListType mainSettings; 
         if (callableType->GetOptionalArgumentsCount() != 0 || !callableType->GetPayload().empty()) {
             mainSettings.push_back(ctx.NewAtom(position, ToString(callableType->GetOptionalArgumentsCount())));
         }
@@ -4734,12 +4734,12 @@ TExprNode::TPtr ExpandTypeNoCache(TPositionHandle position, const TTypeAnnotatio
 
         callableArgs.push_back(ctx.NewList(position, std::move(mainSettings)));
 
-        TExprNode::TListType retSettings;
+        TExprNode::TListType retSettings; 
         retSettings.push_back(ExpandType(position, *callableType->GetReturnType(), ctx));
         callableArgs.push_back(ctx.NewList(position, std::move(retSettings)));
 
         for (const auto& child : callableType->GetArguments()) {
-            TExprNode::TListType argSettings;
+            TExprNode::TListType argSettings; 
             argSettings.push_back(ExpandType(position, *child.Type, ctx));
             if (!child.Name.empty() || child.Flags != 0) {
                 argSettings.push_back(ctx.NewAtom(position, child.Name));

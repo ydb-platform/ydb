@@ -4,11 +4,11 @@ WITHOUT_LICENSE_TEXTS()
 
 LICENSE(BSD-2-Clause)
 
-OWNER(
+OWNER( 
     orivej
     g:contrib
     g:cpp-contrib
-)
+) 
 
 NO_UTIL()
 

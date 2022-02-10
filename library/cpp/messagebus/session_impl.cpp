@@ -52,7 +52,7 @@ struct TBusSessionImpl::TImpl {
 };
 
 namespace {
-    TBusSessionConfig SessionConfigFillDefaults(const TBusSessionConfig& config, const TString& name) {
+    TBusSessionConfig SessionConfigFillDefaults(const TBusSessionConfig& config, const TString& name) { 
         TBusSessionConfig copy = config;
         if (copy.TotalTimeout == 0 && copy.SendTimeout == 0) {
             copy.TotalTimeout = TDuration::Seconds(60).MilliSeconds();
@@ -154,7 +154,7 @@ void TBusSessionImpl::Shutdown() {
 
     // shutdown acceptors before connections
     // so they won't create more connections
-    TVector<TAcceptorPtr> acceptors;
+    TVector<TAcceptorPtr> acceptors; 
     GetAcceptors(&acceptors);
     {
         TGuard<TMutex> guard(ConnectionsLock);
@@ -166,7 +166,7 @@ void TBusSessionImpl::Shutdown() {
     }
 
     // shutdown connections
-    TVector<TRemoteConnectionPtr> cs;
+    TVector<TRemoteConnectionPtr> cs; 
     GetConnections(&cs);
 
     for (auto& c : cs) {
@@ -241,7 +241,7 @@ TSessionDumpStatus TBusSessionImpl::GetStatusRecordInternal() {
     return StatusData.StatusDumpCached;
 }
 
-TString TBusSessionImpl::GetStatus(ui16 flags) {
+TString TBusSessionImpl::GetStatus(ui16 flags) { 
     Y_UNUSED(flags);
 
     return GetStatusRecordInternal().PrintToString();
@@ -256,7 +256,7 @@ TConnectionStatusMonRecord TBusSessionImpl::GetStatusProtobuf() {
     return StatusData.StatusDumpCached.ConnectionStatusSummary.GetStatusProtobuf();
 }
 
-TString TBusSessionImpl::GetStatusSingleLine() {
+TString TBusSessionImpl::GetStatusSingleLine() { 
     TSessionDumpStatus status = GetStatusRecordInternal();
 
     TStringStream ss;
@@ -308,7 +308,7 @@ void TBusSessionImpl::ProcessItem(TConnectionTag, TRemoveTag, TRemoteConnectionP
         }
     }
 
-    THashMap<ui64, TRemoteConnectionPtr>::iterator it2 = ConnectionsById.find(c->ConnectionId);
+    THashMap<ui64, TRemoteConnectionPtr>::iterator it2 = ConnectionsById.find(c->ConnectionId); 
     if (it2 != ConnectionsById.end()) {
         ConnectionsById.erase(it2);
     }
@@ -317,12 +317,12 @@ void TBusSessionImpl::ProcessItem(TConnectionTag, TRemoveTag, TRemoteConnectionP
 }
 
 void TBusSessionImpl::ProcessConnectionsAcceptorsShapshotQueueItem(TAtomicSharedPtr<TConnectionsAcceptorsSnapshot> snapshot) {
-    for (TVector<TRemoteConnectionPtr>::const_iterator connection = snapshot->Connections.begin();
+    for (TVector<TRemoteConnectionPtr>::const_iterator connection = snapshot->Connections.begin(); 
          connection != snapshot->Connections.end(); ++connection) {
         Y_ASSERT((*connection)->ConnectionId <= snapshot->LastConnectionId);
     }
 
-    for (TVector<TAcceptorPtr>::const_iterator acceptor = snapshot->Acceptors.begin();
+    for (TVector<TAcceptorPtr>::const_iterator acceptor = snapshot->Acceptors.begin(); 
          acceptor != snapshot->Acceptors.end(); ++acceptor) {
         Y_ASSERT((*acceptor)->AcceptorId <= snapshot->LastAcceptorId);
     }
@@ -355,7 +355,7 @@ void TBusSessionImpl::StatusUpdateCachedDump() {
     {
         TStringStream ss;
 
-        TString name = Config.Name;
+        TString name = Config.Name; 
         if (!name) {
             name = "unnamed";
         }
@@ -373,8 +373,8 @@ void TBusSessionImpl::StatusUpdateCachedDump() {
         r.Head = ss.Str();
     }
 
-    TVector<TRemoteConnectionPtr>& connections = StatusData.ConnectionsAcceptorsSnapshot->Connections;
-    TVector<TAcceptorPtr>& acceptors = StatusData.ConnectionsAcceptorsSnapshot->Acceptors;
+    TVector<TRemoteConnectionPtr>& connections = StatusData.ConnectionsAcceptorsSnapshot->Connections; 
+    TVector<TAcceptorPtr>& acceptors = StatusData.ConnectionsAcceptorsSnapshot->Acceptors; 
 
     r.ConnectionStatusSummary = TRemoteConnectionStatus();
     r.ConnectionStatusSummary.Summary = true;
@@ -387,7 +387,7 @@ void TBusSessionImpl::StatusUpdateCachedDump() {
     {
         TStringStream ss;
 
-        for (TVector<TAcceptorPtr>::const_iterator acceptor = acceptors.begin();
+        for (TVector<TAcceptorPtr>::const_iterator acceptor = acceptors.begin(); 
              acceptor != acceptors.end(); ++acceptor) {
             const TAcceptorStatus status = (*acceptor)->GranStatus.Listen.Get();
 
@@ -405,7 +405,7 @@ void TBusSessionImpl::StatusUpdateCachedDump() {
     {
         TStringStream ss;
 
-        for (TVector<TRemoteConnectionPtr>::const_iterator connection = connections.begin();
+        for (TVector<TRemoteConnectionPtr>::const_iterator connection = connections.begin(); 
              connection != connections.end(); ++connection) {
             if (connection != connections.begin()) {
                 ss << "\n";
@@ -544,17 +544,17 @@ void TBusSessionImpl::InsertAcceptorLockAcquired(TAcceptor* acceptor) {
     SendSnapshotToStatusActor();
 }
 
-void TBusSessionImpl::GetConnections(TVector<TRemoteConnectionPtr>* r) {
+void TBusSessionImpl::GetConnections(TVector<TRemoteConnectionPtr>* r) { 
     TConnectionsGuard guard(ConnectionsLock);
     GetConnectionsLockAquired(r);
 }
 
-void TBusSessionImpl::GetAcceptors(TVector<TAcceptorPtr>* r) {
+void TBusSessionImpl::GetAcceptors(TVector<TAcceptorPtr>* r) { 
     TConnectionsGuard guard(ConnectionsLock);
     GetAcceptorsLockAquired(r);
 }
 
-void TBusSessionImpl::GetConnectionsLockAquired(TVector<TRemoteConnectionPtr>* r) {
+void TBusSessionImpl::GetConnectionsLockAquired(TVector<TRemoteConnectionPtr>* r) { 
     //Y_ASSERT(ConnectionsLock.IsLocked());
 
     r->reserve(Connections.size());
@@ -564,7 +564,7 @@ void TBusSessionImpl::GetConnectionsLockAquired(TVector<TRemoteConnectionPtr>* r
     }
 }
 
-void TBusSessionImpl::GetAcceptorsLockAquired(TVector<TAcceptorPtr>* r) {
+void TBusSessionImpl::GetAcceptorsLockAquired(TVector<TAcceptorPtr>* r) { 
     //Y_ASSERT(ConnectionsLock.IsLocked());
 
     r->reserve(Acceptors.size());
@@ -577,7 +577,7 @@ void TBusSessionImpl::GetAcceptorsLockAquired(TVector<TAcceptorPtr>* r) {
 TRemoteConnectionPtr TBusSessionImpl::GetConnectionById(ui64 id) {
     TConnectionsGuard guard(ConnectionsLock);
 
-    THashMap<ui64, TRemoteConnectionPtr>::const_iterator it = ConnectionsById.find(id);
+    THashMap<ui64, TRemoteConnectionPtr>::const_iterator it = ConnectionsById.find(id); 
     if (it == ConnectionsById.end()) {
         return nullptr;
     } else {
@@ -623,7 +623,7 @@ TRemoteConnectionPtr TBusSessionImpl::GetConnection(const TBusSocketAddr& addr, 
 }
 
 void TBusSessionImpl::Cron() {
-    TVector<TRemoteConnectionPtr> connections;
+    TVector<TRemoteConnectionPtr> connections; 
     GetConnections(&connections);
 
     for (const auto& it : connections) {
@@ -642,7 +642,7 @@ void TBusSessionImpl::Cron() {
     Queue->Schedule(IScheduleItemAutoPtr(new TScheduleSession(this, TInstant::Now() + Config.Secret.TimeoutPeriod)));
 }
 
-TString TBusSessionImpl::GetNameInternal() {
+TString TBusSessionImpl::GetNameInternal() { 
     if (!!Config.Name) {
         return Config.Name;
     }

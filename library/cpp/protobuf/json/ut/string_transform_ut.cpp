@@ -6,7 +6,7 @@
 Y_UNIT_TEST_SUITE(TDoubleEscapeTransform) {
     Y_UNIT_TEST(TestEmptyString) {
         const NProtobufJson::IStringTransform& transform = NProtobufJson::TDoubleEscapeTransform();
-        TString s;
+        TString s; 
         s = "";
         transform.Transform(s);
         UNIT_ASSERT_EQUAL(s, "");
@@ -14,7 +14,7 @@ Y_UNIT_TEST_SUITE(TDoubleEscapeTransform) {
 
     Y_UNIT_TEST(TestAlphabeticString) {
         const NProtobufJson::IStringTransform& transform = NProtobufJson::TDoubleEscapeTransform();
-        TString s;
+        TString s; 
         s = "abacaba";
         transform.Transform(s);
         UNIT_ASSERT_EQUAL(s, "abacaba");
@@ -22,7 +22,7 @@ Y_UNIT_TEST_SUITE(TDoubleEscapeTransform) {
 
     Y_UNIT_TEST(TestRussianSymbols) {
         const NProtobufJson::IStringTransform& transform = NProtobufJson::TDoubleEscapeTransform();
-        TString s;
+        TString s; 
         s = "тест";
         transform.Transform(s);
         UNIT_ASSERT_EQUAL(s, "\\\\321\\\\202\\\\320\\\\265\\\\321\\\\201\\\\321\\\\202");
@@ -30,7 +30,7 @@ Y_UNIT_TEST_SUITE(TDoubleEscapeTransform) {
 
     Y_UNIT_TEST(TestEscapeSpecialSymbols) {
         const NProtobufJson::IStringTransform& transform = NProtobufJson::TDoubleEscapeTransform();
-        TString s;
+        TString s; 
         s = "aba\\ca\"ba";
         transform.Transform(s);
         Cerr << "###" << s << Endl;
@@ -41,7 +41,7 @@ Y_UNIT_TEST_SUITE(TDoubleEscapeTransform) {
 Y_UNIT_TEST_SUITE(TDoubleUnescapeTransform) {
     Y_UNIT_TEST(TestEmptyString) {
         const NProtobufJson::IStringTransform& transform = NProtobufJson::TDoubleUnescapeTransform();
-        TString s;
+        TString s; 
         s = "";
         transform.Transform(s);
         UNIT_ASSERT_EQUAL("", s);
@@ -49,7 +49,7 @@ Y_UNIT_TEST_SUITE(TDoubleUnescapeTransform) {
 
     Y_UNIT_TEST(TestAlphabeticString) {
         const NProtobufJson::IStringTransform& transform = NProtobufJson::TDoubleUnescapeTransform();
-        TString s;
+        TString s; 
         s = "abacaba";
         transform.Transform(s);
         Cerr << "###" << s << Endl;
@@ -58,7 +58,7 @@ Y_UNIT_TEST_SUITE(TDoubleUnescapeTransform) {
 
     Y_UNIT_TEST(TestRussianSymbols) {
         const NProtobufJson::IStringTransform& transform = NProtobufJson::TDoubleUnescapeTransform();
-        TString s;
+        TString s; 
         s = "\\\\321\\\\202\\\\320\\\\265\\\\321\\\\201\\\\321\\\\202";
         transform.Transform(s);
         UNIT_ASSERT_EQUAL("тест", s);
@@ -66,7 +66,7 @@ Y_UNIT_TEST_SUITE(TDoubleUnescapeTransform) {
 
     Y_UNIT_TEST(TestEscapeSpecialSymbols) {
         const NProtobufJson::IStringTransform& transform = NProtobufJson::TDoubleUnescapeTransform();
-        TString s;
+        TString s; 
         s = "aba\\\\\\\\ca\\\\\\\"ba";
         transform.Transform(s);
         UNIT_ASSERT_EQUAL("aba\\ca\"ba", s);
@@ -74,7 +74,7 @@ Y_UNIT_TEST_SUITE(TDoubleUnescapeTransform) {
 
     Y_UNIT_TEST(TestEscapeSpecialSymbolsDifficultCases) {
         const NProtobufJson::IStringTransform& transform = NProtobufJson::TDoubleUnescapeTransform();
-        TString s;
+        TString s; 
         s = "\\\\\\\\\\\\\\\\";
         transform.Transform(s);
         UNIT_ASSERT_EQUAL("\\\\", s);

@@ -2,7 +2,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 #include <util/random/mersenne.h>
 
 Y_UNIT_TEST_SUITE(TestBufferedIO) {
@@ -12,7 +12,7 @@ Y_UNIT_TEST_SUITE(TestBufferedIO) {
 
         for (size_t i = 0; i < 1000; ++i) {
             const size_t c = r.GenRand() % 10000;
-            TString s;
+            TString s; 
 
             for (size_t j = 0; j < c; ++j) {
                 s.append('A' + (r.GenRand() % 10));
@@ -23,8 +23,8 @@ Y_UNIT_TEST_SUITE(TestBufferedIO) {
     }
 
     Y_UNIT_TEST(TestEqual) {
-        TString s1;
-        TString s2;
+        TString s1; 
+        TString s2; 
 
         Run(TBuffered<TStringOutput>(8000, s1));
         Run(TAdaptivelyBuffered<TStringOutput>(s2));
@@ -33,7 +33,7 @@ Y_UNIT_TEST_SUITE(TestBufferedIO) {
     }
 
     Y_UNIT_TEST(Test1) {
-        TString s;
+        TString s; 
 
         TBuffered<TStringOutput>(100, s).Write("1", 1);
 
@@ -41,7 +41,7 @@ Y_UNIT_TEST_SUITE(TestBufferedIO) {
     }
 
     Y_UNIT_TEST(Test2) {
-        TString s;
+        TString s; 
 
         TBuffered<TStringOutput>(1, s).Write("12", 2);
 
@@ -49,7 +49,7 @@ Y_UNIT_TEST_SUITE(TestBufferedIO) {
     }
 
     Y_UNIT_TEST(Test3) {
-        TString s;
+        TString s; 
 
         auto&& b = TBuffered<TStringOutput>(1, s);
 
@@ -108,7 +108,7 @@ Y_UNIT_TEST_SUITE(TestBufferedIO) {
     }
 
     Y_UNIT_TEST(TestInput) {
-        TString s("0123456789abcdefghijklmn");
+        TString s("0123456789abcdefghijklmn"); 
         TBuffered<TStringInput> in(5, s);
         char c;
         UNIT_ASSERT_VALUES_EQUAL(in.Read(&c, 1), 1); //1
@@ -129,9 +129,9 @@ Y_UNIT_TEST_SUITE(TestBufferedIO) {
     }
 
     Y_UNIT_TEST(TestReadTo) {
-        TString s("0123456789abc");
+        TString s("0123456789abc"); 
         TBuffered<TStringInput> in(2, s);
-        TString t;
+        TString t; 
         UNIT_ASSERT_VALUES_EQUAL(in.ReadTo(t, '7'), 8);
         UNIT_ASSERT_VALUES_EQUAL(t, "0123456");
         UNIT_ASSERT_VALUES_EQUAL(in.ReadTo(t, '8'), 1);

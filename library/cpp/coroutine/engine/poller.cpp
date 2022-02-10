@@ -128,11 +128,11 @@ namespace {
             }
         };
 
-        typedef TIntrusiveList<TVal> TListType;
+        typedef TIntrusiveList<TVal> TListType; 
 
     public:
-        typedef typename TListType::TIterator TIterator;
-        typedef typename TListType::TConstIterator TConstIterator;
+        typedef typename TListType::TIterator TIterator; 
+        typedef typename TListType::TConstIterator TConstIterator; 
 
         TIndexedArray()
             : P_(TMemoryPool::TExpGrow::Instance(), TDefaultAllocator::Instance())
@@ -184,7 +184,7 @@ namespace {
         using TValRef = THolder<TVal>;
         typename TVal::TPool P_;
         TSocketMap<TValRef> V_;
-        TListType I_;
+        TListType I_; 
     };
 
 
@@ -306,7 +306,7 @@ namespace {
     private:
         typedef TIndexedArray<TChange> TFds;
         TFds S_;
-        typedef TVector<pollfd> TPollVec;
+        typedef TVector<pollfd> TPollVec; 
         TPollVec T_;
     };
 

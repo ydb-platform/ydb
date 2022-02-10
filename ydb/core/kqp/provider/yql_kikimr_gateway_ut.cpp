@@ -119,7 +119,7 @@ void TestLoadTableMetadataCommon(TIntrusivePtr<IKikimrGateway> gateway) {
 }
 
 void TestRunSimpleCommon(TIntrusivePtr<IKqpGateway> gateway) {
-    const TString program(R"(
+    const TString program(R"( 
         (
             (let key '(
                 '('Group (Uint32 '1))

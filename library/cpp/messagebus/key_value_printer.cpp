@@ -2,7 +2,7 @@
 
 #include <util/stream/format.h>
 
-TKeyValuePrinter::TKeyValuePrinter(const TString& sep)
+TKeyValuePrinter::TKeyValuePrinter(const TString& sep) 
     : Sep(sep)
 {
 }
@@ -10,15 +10,15 @@ TKeyValuePrinter::TKeyValuePrinter(const TString& sep)
 TKeyValuePrinter::~TKeyValuePrinter() {
 }
 
-void TKeyValuePrinter::AddRowImpl(const TString& key, const TString& value, bool alignLeft) {
+void TKeyValuePrinter::AddRowImpl(const TString& key, const TString& value, bool alignLeft) { 
     Keys.push_back(key);
     Values.push_back(value);
     AlignLefts.push_back(alignLeft);
 }
 
-TString TKeyValuePrinter::PrintToString() const {
+TString TKeyValuePrinter::PrintToString() const { 
     if (Keys.empty()) {
-        return TString();
+        return TString(); 
     }
 
     size_t keyWidth = 0;

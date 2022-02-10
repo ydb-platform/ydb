@@ -9,7 +9,7 @@ struct TJsonTraits {
     using TValue = NJson::TJsonValue;
     using TValueRef = TValue*;
     using TConstValueRef = const TValue*;
-    using TStringType = TStringBuf;
+    using TStringType = TStringBuf; 
 
     // anyvalue defaults
     template <class T>
@@ -104,7 +104,7 @@ struct TJsonTraits {
         return v->GetMap().size();
     }
 
-    using TDictIterator = NJson::TJsonValue::TMapType::const_iterator;
+    using TDictIterator = NJson::TJsonValue::TMapType::const_iterator; 
 
     static inline TDictIterator DictBegin(TConstValueRef v) {
         return v->GetMap().begin();
@@ -200,8 +200,8 @@ struct TJsonTraits {
     }
 
     // validation ops
-    static inline TVector<TString> GetKeys(TConstValueRef v) {
-        TVector<TString> res;
+    static inline TVector<TString> GetKeys(TConstValueRef v) { 
+        TVector<TString> res; 
         for (const auto& it : v->GetMap()) {
             res.push_back(it.first);
         }

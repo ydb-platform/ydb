@@ -241,7 +241,7 @@ Y_UNIT_TEST_SUITE(TSchemeTest) {
 
     Y_UNIT_TEST(TestAssignments) {
         for (int i = -2; i < 3; ++i) {
-            TString ii = ToString(i);
+            TString ii = ToString(i); 
             int iless = i - 1;
             int imore = i + 1;
             DoCheckAssignmentNum<signed char>(i, iless, imore, ii, "schar");
@@ -262,7 +262,7 @@ Y_UNIT_TEST_SUITE(TSchemeTest) {
         //        DoCheckAssignment<bool>(false, false, false, "false", "bool");
 
         for (int i = 1; i < 3; ++i) {
-            TString ii = ToString(i);
+            TString ii = ToString(i); 
             int iless = i - 1;
             int imore = i + 1;
 
@@ -292,9 +292,9 @@ Y_UNIT_TEST_SUITE(TSchemeTest) {
             DoCheckAssignmentNum<double>(i, iless, imore, ii, "double");
         }
 
-        TString uuu = "uuu";
-        TString uua = "uua";
-        TString uuz = "uuz";
+        TString uuu = "uuu"; 
+        TString uua = "uua"; 
+        TString uuz = "uuz"; 
         DoCheckAssignment<char*>(uuu.begin(), uua.begin(), uuz.begin(), "\"uuu\"", "char*");
         DoCheckAssignment<const char*>("www", "wwa", "wwz", "\"www\"", "const char*");
         DoCheckAssignmentArr("xxx", "xxa", "xxz", "\"xxx\"", "const char[]");
@@ -303,7 +303,7 @@ Y_UNIT_TEST_SUITE(TSchemeTest) {
 #if defined(_MSC_VER)
         //TODO
 #else
-        DoCheckAssignment<TString>("ttt", "tta", "ttz", "\"ttt\"", "TString");
+        DoCheckAssignment<TString>("ttt", "tta", "ttz", "\"ttt\"", "TString"); 
 #endif
 
         NSc::TValue v;
@@ -358,12 +358,12 @@ Y_UNIT_TEST_SUITE(TSchemeTest) {
         v.AppendAll(d);
         UNIT_ASSERT_VALUES_EQUAL(v.ToJson(), R"(["a","b","c","d",1,2,3,4,5,6])");
         UNIT_ASSERT_VALUES_EQUAL(d.size(), 3u);
-        TVector<TStringBuf> s{"x", "y", "z"};
+        TVector<TStringBuf> s{"x", "y", "z"}; 
         v.AppendAll(s.begin(), s.end());
         UNIT_ASSERT_VALUES_EQUAL(v.ToJson(), R"(["a","b","c","d",1,2,3,4,5,6,"x","y","z"])");
 
         UNIT_ASSERT_VALUES_EQUAL(v.Clone().Clear().AppendAll(s).ToJson(), R"(["x","y","z"])");
-        UNIT_ASSERT_VALUES_EQUAL(v.Clone().Clear().AppendAll(TVector<TStringBuf>()).ToJson(), R"([])");
+        UNIT_ASSERT_VALUES_EQUAL(v.Clone().Clear().AppendAll(TVector<TStringBuf>()).ToJson(), R"([])"); 
 
         v.AddAll({{"a", "b"}, {"c", "d"}});
         UNIT_ASSERT_VALUES_EQUAL(v.ToJson(), R"({"a":"b","c":"d"})");
@@ -421,10 +421,10 @@ Y_UNIT_TEST_SUITE(TSchemeTest) {
         NSc::TValue va = NSc::TValue::FromJson("[ x, y]");
         NSc::TValue vs = NSc::TValue::FromJson("foo");
         NSc::TValue vn = NSc::TValue::FromJson("1");
-        TString sd = "{\"a\":1,\"b\":\"c\"}";
-        TString sa = "[\"x\",\"y\"]";
-        TString ss = "\"foo\"";
-        TString sn = "1";
+        TString sd = "{\"a\":1,\"b\":\"c\"}"; 
+        TString sa = "[\"x\",\"y\"]"; 
+        TString ss = "\"foo\""; 
+        TString sn = "1"; 
         UNIT_ASSERT_VALUES_EQUAL(sd, vd.ToJson(true));
         UNIT_ASSERT_VALUES_EQUAL(sa, va.ToJson(true));
         UNIT_ASSERT_VALUES_EQUAL(ss, vs.ToJson(true));
@@ -781,7 +781,7 @@ Y_UNIT_TEST_SUITE(TSchemeTest) {
 
     Y_UNIT_TEST(TestCopyFrom) {
         {
-            TString sa = "[1,2]";
+            TString sa = "[1,2]"; 
             const NSc::TValue& va = NSc::TValue::FromJson(sa);
             NSc::TValue vb = va;
             vb.CopyFrom(va);
@@ -789,7 +789,7 @@ Y_UNIT_TEST_SUITE(TSchemeTest) {
             UNIT_ASSERT_VALUES_EQUAL(vb.ToJson(), sa);
         }
         {
-            TString sa = "[1,2]";
+            TString sa = "[1,2]"; 
             NSc::TValue va = NSc::TValue::FromJson(sa);
             NSc::TValue vb = va;
             vb.CopyFrom(va);
@@ -797,7 +797,7 @@ Y_UNIT_TEST_SUITE(TSchemeTest) {
             UNIT_ASSERT_VALUES_EQUAL(vb.ToJson(), sa);
         }
         {
-            TString sa = "[1,2]";
+            TString sa = "[1,2]"; 
             NSc::TValue va = NSc::TValue::FromJson(sa);
             const NSc::TValue& vb = va;
             va.CopyFrom(vb);
@@ -805,7 +805,7 @@ Y_UNIT_TEST_SUITE(TSchemeTest) {
             UNIT_ASSERT_VALUES_EQUAL(vb.ToJson(), sa);
         }
         {
-            TString sa = "[1,2]";
+            TString sa = "[1,2]"; 
             NSc::TValue va = NSc::TValue::FromJson(sa);
             NSc::TValue vb = va;
             va.CopyFrom(vb);
@@ -816,7 +816,7 @@ Y_UNIT_TEST_SUITE(TSchemeTest) {
             NSc::TValue va = NSc::TValue::FromJson("{\"x\":\"ab\",\"y\":{\"p\":\"cd\",\"q\":\"ef\"}}");
             NSc::TValue vb = va.Get("y");
             va.CopyFrom(vb);
-            TString sa = "{\"p\":\"cd\",\"q\":\"ef\"}";
+            TString sa = "{\"p\":\"cd\",\"q\":\"ef\"}"; 
             UNIT_ASSERT_VALUES_EQUAL(va.ToJson(), sa);
             UNIT_ASSERT_VALUES_EQUAL(vb.ToJson(), sa);
         }
@@ -824,14 +824,14 @@ Y_UNIT_TEST_SUITE(TSchemeTest) {
             NSc::TValue va = NSc::TValue::FromJson("{\"x\":\"ab\",\"y\":{\"p\":\"cd\",\"q\":\"ef\"}}");
             const NSc::TValue& vb = va.Get("y");
             va.CopyFrom(vb);
-            TString sa = "{\"p\":\"cd\",\"q\":\"ef\"}";
+            TString sa = "{\"p\":\"cd\",\"q\":\"ef\"}"; 
             UNIT_ASSERT_VALUES_EQUAL(va.ToJson(), sa);
         }
         {
             NSc::TValue va = NSc::TValue::FromJson("{\"x\":\"ab\",\"y\":{\"p\":\"cd\",\"q\":\"ef\"}}");
             NSc::TValue vb = va.Get("y");
             va = vb;
-            TString sa = "{\"p\":\"cd\",\"q\":\"ef\"}";
+            TString sa = "{\"p\":\"cd\",\"q\":\"ef\"}"; 
             UNIT_ASSERT_VALUES_EQUAL(va.ToJson(), sa);
             UNIT_ASSERT_VALUES_EQUAL(vb.ToJson(), sa);
         }
@@ -839,7 +839,7 @@ Y_UNIT_TEST_SUITE(TSchemeTest) {
             NSc::TValue va = NSc::TValue::FromJson("{\"x\":\"ab\",\"y\":{\"p\":\"cd\",\"q\":\"ef\"}}");
             const NSc::TValue& vb = va.Get("y");
             va = vb;
-            TString sa = "{\"p\":\"cd\",\"q\":\"ef\"}";
+            TString sa = "{\"p\":\"cd\",\"q\":\"ef\"}"; 
             UNIT_ASSERT_VALUES_EQUAL(va.ToJson(), sa);
             UNIT_ASSERT_VALUES_EQUAL(vb.ToJson(), sa);
         }

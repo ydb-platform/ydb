@@ -7,14 +7,14 @@ TQuery::TQuery(TKikimr& kikimr)
     : Kikimr(&kikimr)
 {}
 
-void TQuery::ParseTextParameters(NKikimrMiniKQL::TParams& params, const TString& parameters) {
+void TQuery::ParseTextParameters(NKikimrMiniKQL::TParams& params, const TString& parameters) { 
     if (!parameters.empty()) {
         bool ok = ::google::protobuf::TextFormat::ParseFromString(parameters, &params);
         Y_VERIFY(ok);
     }
 }
 
-TTextQuery::TTextQuery(TKikimr& kikimr, const TString& program)
+TTextQuery::TTextQuery(TKikimr& kikimr, const TString& program) 
     : TQuery(kikimr)
     , TextProgram(program)
 {}
@@ -31,7 +31,7 @@ TQueryResult TTextQuery::SyncExecute(const NKikimrMiniKQL::TParams& parameters) 
     return AsyncExecute(parameters).GetValue(TDuration::Max());
 }
 
-TQueryResult TTextQuery::SyncExecute(const TString& parameters) const {
+TQueryResult TTextQuery::SyncExecute(const TString& parameters) const { 
     return AsyncExecute(parameters).GetValue(TDuration::Max());
 }
 
@@ -39,11 +39,11 @@ NThreading::TFuture<TQueryResult> TTextQuery::AsyncExecute(const NKikimrMiniKQL:
     return Kikimr->ExecuteQuery(*this, parameters);
 }
 
-NThreading::TFuture<TQueryResult> TTextQuery::AsyncExecute(const TString& parameters) const {
+NThreading::TFuture<TQueryResult> TTextQuery::AsyncExecute(const TString& parameters) const { 
     return Kikimr->ExecuteQuery(*this, parameters);
 }
 
-TPreparedQuery::TPreparedQuery(const TQuery& textQuery, const TString& program)
+TPreparedQuery::TPreparedQuery(const TQuery& textQuery, const TString& program) 
     : TQuery(textQuery)
     , CompiledProgram(program)
 {}
@@ -52,7 +52,7 @@ TQueryResult TPreparedQuery::SyncExecute(const NKikimrMiniKQL::TParams& paramete
     return AsyncExecute(parameters).GetValue(TDuration::Max());
 }
 
-TQueryResult TPreparedQuery::SyncExecute(const TString& parameters) const {
+TQueryResult TPreparedQuery::SyncExecute(const TString& parameters) const { 
     return AsyncExecute(parameters).GetValue(TDuration::Max());
 }
 
@@ -60,11 +60,11 @@ NThreading::TFuture<TQueryResult> TPreparedQuery::AsyncExecute(const NKikimrMini
     return Kikimr->ExecuteQuery(*this, parameters);
 }
 
-NThreading::TFuture<TQueryResult> TPreparedQuery::AsyncExecute(const TString& parameters) const {
+NThreading::TFuture<TQueryResult> TPreparedQuery::AsyncExecute(const TString& parameters) const { 
     return Kikimr->ExecuteQuery(*this, parameters);
 }
 
-TUnbindedQuery::TUnbindedQuery(const TString& program)
+TUnbindedQuery::TUnbindedQuery(const TString& program) 
     : CompiledProgram(program)
 {}
 

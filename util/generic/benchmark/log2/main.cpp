@@ -11,7 +11,7 @@
 namespace {
     template <typename T, size_t N>
     struct TExamplesHolder {
-        TVector<T> Examples;
+        TVector<T> Examples; 
 
         TExamplesHolder()
             : Examples(N)

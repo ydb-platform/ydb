@@ -39,17 +39,17 @@ struct TGateRecord {
 };
 
 struct TOwnerRecord {
-    TVector<TGateRecord> Gates;
+    TVector<TGateRecord> Gates; 
 };
 
 class TScheduler {
-    TVector<TCbs> Cbs;
+    TVector<TCbs> Cbs; 
     TNameTable NameTable;
     ui64 TotalWeight = 0;
     ui32 FirstEmptyCbs = 0;
-    TVector<TOwnerRecord> Owners;
+    TVector<TOwnerRecord> Owners; 
     ui64 NextJobId = 0;
-    TVector<TIntrusivePtr<TJob>> EdfJobs;
+    TVector<TIntrusivePtr<TJob>> EdfJobs; 
     TReallyFastRng32 Rng;
 
     TSchLog SchLog;

@@ -61,7 +61,7 @@ public:
 private:
     IOutputStream& out;
     bool FirstCounter;
-    TString prefix;
+    TString prefix; 
 };
 
 TGolovanCountersPage::TGolovanCountersPage(const TString& path, TIntrusivePtr<NMonitoring::TDynamicCounters> counters,

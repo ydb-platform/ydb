@@ -11,10 +11,10 @@
 class TCondVar {
 public:
     TCondVar();
-    ~TCondVar();
+    ~TCondVar(); 
 
-    void BroadCast() noexcept;
-    void Signal() noexcept;
+    void BroadCast() noexcept; 
+    void Signal() noexcept; 
 
     /*
      * returns false if failed by timeout
@@ -46,7 +46,7 @@ public:
     /*
      * infinite wait
      */
-    inline void WaitI(TMutex& m) noexcept {
+    inline void WaitI(TMutex& m) noexcept { 
         WaitD(m, TInstant::Max());
     }
 
@@ -56,7 +56,7 @@ public:
     }
 
     //deprecated
-    inline void Wait(TMutex& m) noexcept {
+    inline void Wait(TMutex& m) noexcept { 
         WaitI(m);
     }
 

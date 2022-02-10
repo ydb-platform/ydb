@@ -32,7 +32,7 @@ void TDefaultValueBuilder::SetCalleePositionHolder(const NUdf::TSourcePosition*&
 
 void TDefaultValueBuilder::Terminate(const char* message) const {
     TStringBuf reason = (message ? TStringBuf(message) : TStringBuf("(unknown)"));
-    TString fullMessage = TStringBuilder() <<
+    TString fullMessage = TStringBuilder() << 
         "Terminate was called, reason(" << reason.size() << "): " << reason << Endl;
     HolderFactory_.CleanupModulesOnTerminate();
     if (Policy_ == NUdf::EValidatePolicy::Exception) {

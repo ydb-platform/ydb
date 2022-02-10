@@ -85,7 +85,7 @@ namespace {
             return ret;
         }
 
-        static inline const TFeatureCheck* Instance() noexcept {
+        static inline const TFeatureCheck* Instance() noexcept { 
             return Singleton<TFeatureCheck>();
         }
 

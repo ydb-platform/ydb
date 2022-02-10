@@ -40,7 +40,7 @@ TAcceptorStatus& TAcceptorStatus::operator+=(const TAcceptorStatus& that) {
     return *this;
 }
 
-TString TAcceptorStatus::PrintToString() const {
+TString TAcceptorStatus::PrintToString() const { 
     TStringStream ss;
 
     if (!Summary) {

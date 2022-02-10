@@ -58,27 +58,27 @@ private:
 
         TestRead(sbuf, "TStringBuf");
 
-        TUtf16String wtr;
+        TUtf16String wtr; 
         wtr.resize(10, 1024);
 
-        TestRead(wtr, "TUtf16String");
+        TestRead(wtr, "TUtf16String"); 
 
         TBuffer buf;
         buf.Resize(30);
 
         TestRead(buf, "TBuffer");
 
-        TVector<ui64> vec(10, 100);
+        TVector<ui64> vec(10, 100); 
 
-        TestRead(vec, "TVector<ui64>");
+        TestRead(vec, "TVector<ui64>"); 
 
-        TestWrite<TString>("TString");
-        TestWrite<TVector<char>>("TVector<char>");
+        TestWrite<TString>("TString"); 
+        TestWrite<TVector<char>>("TVector<char>"); 
         TestWrite<TBuffer>("TBuffer");
-        TestWrite<TVector<ui64>>("TVector<ui64>");
-        TestWrite<TUtf16String>("TUtf16String");
+        TestWrite<TVector<ui64>>("TVector<ui64>"); 
+        TestWrite<TUtf16String>("TUtf16String"); 
 
-        std::array<TString, 10> sarr;
+        std::array<TString, 10> sarr; 
         NAccessors::Init(sarr);
         NAccessors::Clear(sarr);
 

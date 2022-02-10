@@ -487,13 +487,13 @@ static inline Val InnerProduct(It1 begin1, It1 end1, It2 begin2, Val val, BinOp1
     return std::inner_product(begin1, end1, begin2, val, binOp1, binOp2);
 }
 
-template <typename TVectorType>
-static inline typename TVectorType::value_type InnerProduct(const TVectorType& lhs, const TVectorType& rhs, typename TVectorType::value_type val = typename TVectorType::value_type()) {
+template <typename TVectorType> 
+static inline typename TVectorType::value_type InnerProduct(const TVectorType& lhs, const TVectorType& rhs, typename TVectorType::value_type val = typename TVectorType::value_type()) { 
     return std::inner_product(lhs.begin(), lhs.end(), rhs.begin(), val);
 }
 
-template <typename TVectorType, typename BinOp1, typename BinOp2>
-static inline typename TVectorType::value_type InnerProduct(const TVectorType& lhs, const TVectorType& rhs, typename TVectorType::value_type val, BinOp1 binOp1, BinOp2 binOp2) {
+template <typename TVectorType, typename BinOp1, typename BinOp2> 
+static inline typename TVectorType::value_type InnerProduct(const TVectorType& lhs, const TVectorType& rhs, typename TVectorType::value_type val, BinOp1 binOp1, BinOp2 binOp2) { 
     return std::inner_product(lhs.begin(), lhs.end(), rhs.begin(), val, binOp1, binOp2);
 }
 

@@ -12,7 +12,7 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////
         // Codec detector
         ////////////////////////////////////////////////////////////////////////////
-        ECodec FragmentCodecDetector(const TString &data) {
+        ECodec FragmentCodecDetector(const TString &data) { 
             if (data.size() < 48)
                 return ECodec::Naive;
 
@@ -40,14 +40,14 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////
         class TLogoBlobColumns {
         protected:
-            TVector<ui64> TabletIds;
-            TVector<ui8>  Channels;
-            TVector<ui32> Generations;
-            TVector<ui32> Steps;
-            TVector<ui32> Cookies;
-            TVector<ui32> Sizes;
-            TVector<ui64> Ingresses;
-            TVector<ui32> Counters;
+            TVector<ui64> TabletIds; 
+            TVector<ui8>  Channels; 
+            TVector<ui32> Generations; 
+            TVector<ui32> Steps; 
+            TVector<ui32> Cookies; 
+            TVector<ui32> Sizes; 
+            TVector<ui64> Ingresses; 
+            TVector<ui32> Counters; 
 
             const size_t LogoBlobColumnizedRowSize = (8 + 1 + 4 + 4 + 4 + 4 + 8 + 4);
 
@@ -55,7 +55,7 @@ namespace NKikimr {
             virtual ~TLogoBlobColumns() {
             }
 
-            void Columnize(TVector<TLogoBlobRecWithSerial> &logoBlobs) {
+            void Columnize(TVector<TLogoBlobRecWithSerial> &logoBlobs) { 
                 Clear();
                 auto comp = [](const TLogoBlobRecWithSerial& x, const TLogoBlobRecWithSerial& y) {
                     return std::make_tuple(x.LogoBlobID(), x.Ingress.Raw(), x.Counter) <
@@ -87,7 +87,7 @@ namespace NKikimr {
                 }
             }
 
-            void Decolumnize(TVector<TLogoBlobRecWithSerial> &logoBlobs) {
+            void Decolumnize(TVector<TLogoBlobRecWithSerial> &logoBlobs) { 
                 logoBlobs.clear();
 
                 const ui32 blobsSize = Size();

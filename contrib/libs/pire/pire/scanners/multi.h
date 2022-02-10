@@ -402,7 +402,7 @@ protected:
 		Y_ASSERT(m_buffer == nullptr);
 
 		// Ensure that specializations of Scanner across different Relocations do not touch its Locals
-		static_assert(sizeof(m) == sizeof(s.m), "sizeof(m) == sizeof(s.m)");
+		static_assert(sizeof(m) == sizeof(s.m), "sizeof(m) == sizeof(s.m)"); 
 		memcpy(&m, &s.m, sizeof(s.m));
 		m.relocationSignature = Relocation::Signature;
 		m.shortcuttingSignature = Shortcutting::Signature;
@@ -475,7 +475,7 @@ protected:
 		Y_ASSERT(m_buffer);
 
 		// Build the mapping from letter classes to characters
-		TVector< TVector<char> > letters(RowSize());
+		TVector< TVector<char> > letters(RowSize()); 
 		for (unsigned ch = 0; ch != 1 << (sizeof(char)*8); ++ch)
 			letters[m_letters[ch]].push_back(ch);
 
@@ -1012,7 +1012,7 @@ public:
 	{
 	}
 
-	void AcceptStates(const TVector<State>& states)
+	void AcceptStates(const TVector<State>& states) 
 	{
 		// Make up a new scanner and fill in the final table
 

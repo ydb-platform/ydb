@@ -184,7 +184,7 @@ Y_UNIT_TEST_SUITE(TFlatCxxDatabaseTest) {
                 UNIT_ASSERT(row.IsReady());
                 UNIT_ASSERT(row.IsValid());
                 ui64 value = row.GetValue<Schema::TestTable::Value>();
-                TString name = row.GetValue<Schema::TestTable::Name>();
+                TString name = row.GetValue<Schema::TestTable::Name>(); 
                 bool boolValue = row.GetValue<Schema::TestTable::BoolValue>();
                 ESomeEnum enumValue = row.GetValue<Schema::TestTable::EnumValue>();
                 TInstant instantValue = row.GetValue<Schema::TestTable::InstantValue>();
@@ -219,7 +219,7 @@ Y_UNIT_TEST_SUITE(TFlatCxxDatabaseTest) {
             for (ui64 i = 0; i < 1000; ++i) {
                 UNIT_ASSERT(!rowset.EndOfSet());
                 ui64 value = rowset.GetValue<Schema::TestTable::Value>();
-                TString name = rowset.GetValue<Schema::TestTable::Name>();
+                TString name = rowset.GetValue<Schema::TestTable::Name>(); 
                 bool boolValue = rowset.GetValue<Schema::TestTable::BoolValue>();
                 UNIT_ASSERT_EQUAL(value, i);
                 UNIT_ASSERT_EQUAL(ToString(value), name);
@@ -315,7 +315,7 @@ Y_UNIT_TEST_SUITE(TFlatCxxDatabaseTest) {
             for (ui64 i = 500; i < 1000; ++i) {
                 UNIT_ASSERT(!rowset.EndOfSet());
                 ui64 value = rowset.GetValue<Schema::TestTable::Value>();
-                TString name = rowset.GetValue<Schema::TestTable::Name>();
+                TString name = rowset.GetValue<Schema::TestTable::Name>(); 
                 bool boolValue = rowset.GetValue<Schema::TestTable::BoolValue>();
                 UNIT_ASSERT_EQUAL(value, i);
                 UNIT_ASSERT_EQUAL(ToString(value), name);
@@ -573,8 +573,8 @@ Y_UNIT_TEST_SUITE(TFlatCxxDatabaseTest) {
                 UNIT_ASSERT(rowset.IsReady());
                 for (ui64 j = 0; j < 4; ++j) {
                     UNIT_ASSERT(rowset.IsValid());
-                    TString should = IntToString<16>(j);
-                    TString have = rowset.GetValue<Schema::TestTable3::ID2>();
+                    TString should = IntToString<16>(j); 
+                    TString have = rowset.GetValue<Schema::TestTable3::ID2>(); 
                     UNIT_ASSERT_EQUAL(should, have);
                     UNIT_ASSERT_EQUAL((i - 1) * 4 + j, rowset.GetValue<Schema::TestTable3::Value>());
                     UNIT_ASSERT(rowset.Next());

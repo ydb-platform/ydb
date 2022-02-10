@@ -290,7 +290,7 @@ protected:
         TestVariantTypeImpl(PgmBuilder.NewVariantType(tupleType));
     }
 
-    void ValidateEmbeddedLength(const TStringBuf& buf, const TString& info) {
+    void ValidateEmbeddedLength(const TStringBuf& buf, const TString& info) { 
         if (buf.size() > 8) {
             UNIT_ASSERT_VALUES_EQUAL_C(*(const ui32*)buf.data() + 4, buf.size(), info);
         } else {
@@ -326,8 +326,8 @@ protected:
     }
 
     template <typename T>
-    void TestNumericValue(T value, TValuePacker& packer, const TString& typeDesc) {
-        TString additionalMsg = TStringBuilder() << typeDesc << ", Value:" << value;
+    void TestNumericValue(T value, TValuePacker& packer, const TString& typeDesc) { 
+        TString additionalMsg = TStringBuilder() << typeDesc << ", Value:" << value; 
         auto uValue = TestPackUnpack(packer, NUdf::TUnboxedValuePod(value), additionalMsg);
         UNIT_ASSERT_VALUES_EQUAL_C(uValue.template Get<T>(), value, additionalMsg);
     }
@@ -347,7 +347,7 @@ protected:
     void TestOptionalNumericValue(std::optional<T> value, TValuePacker& packer, const TString& typeDesc,
         const std::optional<ui32>& expectedLength = {})
     {
-        TString additionalMsg = TStringBuilder() << typeDesc << "), Value:" << (value ? ToString(*value) : TString("null"));
+        TString additionalMsg = TStringBuilder() << typeDesc << "), Value:" << (value ? ToString(*value) : TString("null")); 
         const auto v = value ? NUdf::TUnboxedValuePod(*value) : NUdf::TUnboxedValuePod();
         const auto uValue = TestPackUnpack(packer, v, additionalMsg, expectedLength);
         if (value) {
@@ -369,7 +369,7 @@ protected:
     }
 
     void TestStringValue(const std::string_view& value, TValuePacker& packer, const TString& typeDesc, ui32 expectedLength) {
-        TString additionalMsg = TStringBuilder() << typeDesc << ", Value:" << value;
+        TString additionalMsg = TStringBuilder() << typeDesc << ", Value:" << value; 
         const auto v = NUdf::TUnboxedValue(MakeString(value));
         const auto uValue = TestPackUnpack(packer, v, additionalMsg, expectedLength);
         UNIT_ASSERT_VALUES_EQUAL_C(std::string_view(uValue.AsStringRef()), value, additionalMsg);
@@ -393,7 +393,7 @@ protected:
     }
 
     void TestOptionalStringValue(std::optional<std::string_view> value, TValuePacker& packer, const TString& typeDesc, ui32 expectedLength) {
-        TString additionalMsg = TStringBuilder() << typeDesc << "), Value:" << (value ? *value : TString("null"));
+        TString additionalMsg = TStringBuilder() << typeDesc << "), Value:" << (value ? *value : TString("null")); 
         const auto v = value ? NUdf::TUnboxedValue(MakeString(*value)) : NUdf::TUnboxedValue();
         const auto uValue = TestPackUnpack(packer, v, additionalMsg, expectedLength);
         if (value) {
@@ -415,7 +415,7 @@ protected:
     }
 
     void TestVariantTypeImpl(TType* variantType) {
-        TString descr = TStringBuilder() << "Type:Variant("
+        TString descr = TStringBuilder() << "Type:Variant(" 
             << static_cast<TVariantType*>(variantType)->GetUnderlyingType()->GetKindAsStr() << ')';
         {
             const NUdf::TUnboxedValue value = HolderFactory.CreateVariantHolder(MakeString("01234567890123456789"), 0);

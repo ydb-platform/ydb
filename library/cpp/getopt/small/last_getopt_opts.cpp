@@ -11,8 +11,8 @@
 #include <stdlib.h>
 
 namespace NLastGetoptPrivate {
-    TString& VersionString() {
-        static TString data;
+    TString& VersionString() { 
+        static TString data; 
         return data;
     }
     TString& ShortVersionString() {

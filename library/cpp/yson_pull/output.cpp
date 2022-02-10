@@ -20,7 +20,7 @@ THolder<IStream> NOutput::FromPosixFd(int fd, size_t buffer_size) {
     return MakeHolder<TFHandle>(fd, buffer_size);
 }
 
-THolder<IStream> NOutput::FromString(TString* output, size_t buffer_size) {
+THolder<IStream> NOutput::FromString(TString* output, size_t buffer_size) { 
     return MakeHolder<TOwned<TStringOutput>>(buffer_size, *output);
 }
 

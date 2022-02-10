@@ -5,7 +5,7 @@
 using namespace NYsonPull::NDetail;
 
 namespace {
-    void test_roundtrip(const TVector<ui8>& str) {
+    void test_roundtrip(const TVector<ui8>& str) { 
         TStringBuf str_buf(
             reinterpret_cast<const char*>(str.data()),
             str.size());
@@ -19,7 +19,7 @@ namespace {
     }
 
     template <size_t N>
-    void test_exhaustive(TVector<ui8>& str) {
+    void test_exhaustive(TVector<ui8>& str) { 
         for (int i = 0; i < 256; ++i) {
             str[str.size() - N] = static_cast<char>(i);
             test_exhaustive<N - 1>(str);
@@ -27,13 +27,13 @@ namespace {
     }
 
     template <>
-    void test_exhaustive<0>(TVector<ui8>& str) {
+    void test_exhaustive<0>(TVector<ui8>& str) { 
         test_roundtrip(str);
     }
 
     template <size_t N>
     void test_exhaustive() {
-        TVector<ui8> str(N, ' ');
+        TVector<ui8> str(N, ' '); 
         test_exhaustive<N>(str);
     }
 

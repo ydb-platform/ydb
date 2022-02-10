@@ -4,18 +4,18 @@
 #include <util/network/init.h>
 #include <util/network/address.h>
 #include <util/generic/size_literals.h>
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 #include <util/generic/vector.h>
 #include <util/datetime/base.h>
 
 class THttpServerOptions {
 public:
-    inline THttpServerOptions(ui16 port = 17000) noexcept
+    inline THttpServerOptions(ui16 port = 17000) noexcept 
         : Port(port)
     {
     }
 
-    using TBindAddresses = TVector<TNetworkAddress>;
+    using TBindAddresses = TVector<TNetworkAddress>; 
     void BindAddresses(TBindAddresses& ret) const;
 
     inline THttpServerOptions& AddBindAddress(const TString& address, ui16 port) {
@@ -32,13 +32,13 @@ public:
         return AddBindAddress(address, 0);
     }
 
-    inline THttpServerOptions& EnableKeepAlive(bool enable) noexcept {
+    inline THttpServerOptions& EnableKeepAlive(bool enable) noexcept { 
         KeepAliveEnabled = enable;
 
         return *this;
     }
 
-    inline THttpServerOptions& EnableCompression(bool enable) noexcept {
+    inline THttpServerOptions& EnableCompression(bool enable) noexcept { 
         CompressionEnabled = enable;
 
         return *this;
@@ -62,51 +62,51 @@ public:
         return *this;
     }
 
-    inline THttpServerOptions& SetThreads(ui32 threads) noexcept {
+    inline THttpServerOptions& SetThreads(ui32 threads) noexcept { 
         nThreads = threads;
 
         return *this;
     }
 
     /// Default interface name to bind the server. Used when none of BindAddress are provided.
-    inline THttpServerOptions& SetHost(const TString& host) noexcept {
+    inline THttpServerOptions& SetHost(const TString& host) noexcept { 
         Host = host;
 
         return *this;
     }
 
     /// Default port to bind the server. Used when none of BindAddress are provided.
-    inline THttpServerOptions& SetPort(ui16 port) noexcept {
+    inline THttpServerOptions& SetPort(ui16 port) noexcept { 
         Port = port;
 
         return *this;
     }
 
-    inline THttpServerOptions& SetMaxConnections(ui32 mc = 0) noexcept {
+    inline THttpServerOptions& SetMaxConnections(ui32 mc = 0) noexcept { 
         MaxConnections = mc;
 
         return *this;
     }
 
-    inline THttpServerOptions& SetMaxQueueSize(ui32 mqs = 0) noexcept {
+    inline THttpServerOptions& SetMaxQueueSize(ui32 mqs = 0) noexcept { 
         MaxQueueSize = mqs;
 
         return *this;
     }
 
-    inline THttpServerOptions& SetClientTimeout(const TDuration& timeout) noexcept {
+    inline THttpServerOptions& SetClientTimeout(const TDuration& timeout) noexcept { 
         ClientTimeout = timeout;
 
         return *this;
     }
 
-    inline THttpServerOptions& SetListenBacklog(int val) noexcept {
+    inline THttpServerOptions& SetListenBacklog(int val) noexcept { 
         ListenBacklog = val;
 
         return *this;
     }
 
-    inline THttpServerOptions& SetOutputBufferSize(size_t val) noexcept {
+    inline THttpServerOptions& SetOutputBufferSize(size_t val) noexcept { 
         OutputBufferSize = val;
 
         return *this;
@@ -140,11 +140,11 @@ public:
     }
 
     struct TAddr {
-        TString Addr;
+        TString Addr; 
         ui16 Port;
     };
 
-    typedef TVector<TAddr> TAddrs;
+    typedef TVector<TAddr> TAddrs; 
 
     bool KeepAliveEnabled = true;
     bool CompressionEnabled = false;

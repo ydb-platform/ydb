@@ -172,7 +172,7 @@ public:
             ctx.Error(Pos) << "Expected aggregation function: " << GetName() << " only as window function. You may have forgotten OVER instruction.";
             return false;
         }
-        TVector<TNodePtr> exprsAuto;
+        TVector<TNodePtr> exprsAuto; 
         if (!exprs) {
             auto winNamePtr = src->GetWindowName();
             YQL_ENSURE(winNamePtr);
@@ -212,7 +212,7 @@ TAggregationPtr BuildFactoryAggregationWinAutoarg(TPosition pos, const TString& 
 
 class TKeyPayloadAggregationFactory final : public TAggregationFactory {
 public:
-    TKeyPayloadAggregationFactory(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode)
+    TKeyPayloadAggregationFactory(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode) 
         : TAggregationFactory(pos, name, factory, aggMode)
     {}
 
@@ -293,13 +293,13 @@ private:
     TNodePtr Key, Payload, Limit;
 };
 
-TAggregationPtr BuildKeyPayloadFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode) {
+TAggregationPtr BuildKeyPayloadFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode) { 
     return new TKeyPayloadAggregationFactory(pos, name, factory, aggMode);
 }
 
 class TPayloadPredicateAggregationFactory final : public TAggregationFactory {
 public:
-    TPayloadPredicateAggregationFactory(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode)
+    TPayloadPredicateAggregationFactory(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode) 
         : TAggregationFactory(pos, name, factory, aggMode)
     {}
 
@@ -369,13 +369,13 @@ private:
     TNodePtr Payload, Predicate;
 };
 
-TAggregationPtr BuildPayloadPredicateFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode) {
+TAggregationPtr BuildPayloadPredicateFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode) { 
     return new TPayloadPredicateAggregationFactory(pos, name, factory, aggMode);
 }
 
 class TTwoArgsAggregationFactory final : public TAggregationFactory {
 public:
-    TTwoArgsAggregationFactory(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode)
+    TTwoArgsAggregationFactory(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode) 
         : TAggregationFactory(pos, name, factory, aggMode)
     {}
 
@@ -441,13 +441,13 @@ private:
     TNodePtr One, Two;
 };
 
-TAggregationPtr BuildTwoArgsFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode) {
+TAggregationPtr BuildTwoArgsFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode) { 
     return new TTwoArgsAggregationFactory(pos, name, factory, aggMode);
 }
 
 class THistogramAggregationFactory final : public TAggregationFactory {
 public:
-    THistogramAggregationFactory(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode)
+    THistogramAggregationFactory(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode) 
         : TAggregationFactory(pos, name, factory, aggMode)
         , FakeSource(BuildFakeSource(pos))
         , Weight(Y("Double", Q("1.0")))
@@ -540,13 +540,13 @@ private:
     TNodePtr Weight, Intervals;
 };
 
-TAggregationPtr BuildHistogramFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode) {
+TAggregationPtr BuildHistogramFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode) { 
     return new THistogramAggregationFactory(pos, name, factory, aggMode);
 }
 
 class TLinearHistogramAggregationFactory final : public TAggregationFactory {
 public:
-    TLinearHistogramAggregationFactory(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode)
+    TLinearHistogramAggregationFactory(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode) 
         : TAggregationFactory(pos, name, factory, aggMode)
         , FakeSource(BuildFakeSource(pos))
         , BinSize(Y("Double", Q("10.0")))
@@ -611,19 +611,19 @@ private:
     TNodePtr BinSize, Minimum, Maximum;
 };
 
-TAggregationPtr BuildLinearHistogramFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode) {
+TAggregationPtr BuildLinearHistogramFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode) { 
     return new TLinearHistogramAggregationFactory(pos, name, factory, aggMode);
 }
 
 class TPercentileFactory final : public TAggregationFactory {
 public:
-    TPercentileFactory(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode)
+    TPercentileFactory(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode) 
         : TAggregationFactory(pos, name, factory, aggMode)
         , FakeSource(BuildFakeSource(pos))
     {}
 
 private:
-    const TString* GetGenericKey() const final {
+    const TString* GetGenericKey() const final { 
         return Column;
     }
 
@@ -727,18 +727,18 @@ private:
     }
 
     TSourcePtr FakeSource;
-    std::multimap<TString, TNodePtr> Percentiles;
+    std::multimap<TString, TNodePtr> Percentiles; 
     TNodePtr FactoryPercentile;
     const TString* Column = nullptr;
 };
 
-TAggregationPtr BuildPercentileFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode) {
+TAggregationPtr BuildPercentileFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode) { 
     return new TPercentileFactory(pos, name, factory, aggMode);
 }
 
 class TTopFreqFactory final : public TAggregationFactory {
 public:
-    TTopFreqFactory(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode)
+    TTopFreqFactory(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode) 
         : TAggregationFactory(pos, name, factory, aggMode)
     {}
 
@@ -854,11 +854,11 @@ private:
         return TAggregationFactory::DoInit(ctx, src);
     }
 
-    std::multimap<TString, TPair> TopFreqs;
+    std::multimap<TString, TPair> TopFreqs; 
     TPair TopFreqFactoryParams;
 };
 
-TAggregationPtr BuildTopFreqFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode) {
+TAggregationPtr BuildTopFreqFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode) { 
     return new TTopFreqFactory(pos, name, factory, aggMode);
 }
 
@@ -1106,7 +1106,7 @@ TAggregationPtr BuildListFactoryAggregation(TPosition pos, const TString& name, 
 
 class TUserDefinedAggregationFactory final : public TAggregationFactory {
 public:
-    TUserDefinedAggregationFactory(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode)
+    TUserDefinedAggregationFactory(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode) 
         : TAggregationFactory(pos, name, factory, aggMode)
     {}
 
@@ -1164,13 +1164,13 @@ private:
     TNodePtr DefVal;
 };
 
-TAggregationPtr BuildUserDefinedFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode) {
+TAggregationPtr BuildUserDefinedFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode) { 
     return new TUserDefinedAggregationFactory(pos, name, factory, aggMode);
 }
 
 class TCountAggregation final : public TAggregationFactory {
 public:
-    TCountAggregation(TPosition pos, const TString& name, const TString& func, EAggregateMode aggMode)
+    TCountAggregation(TPosition pos, const TString& name, const TString& func, EAggregateMode aggMode) 
         : TAggregationFactory(pos, name, func, aggMode)
     {}
 
@@ -1197,7 +1197,7 @@ private:
     }
 };
 
-TAggregationPtr BuildCountAggregation(TPosition pos, const TString& name, const TString& func, EAggregateMode aggMode) {
+TAggregationPtr BuildCountAggregation(TPosition pos, const TString& name, const TString& func, EAggregateMode aggMode) { 
     return new TCountAggregation(pos, name, func, aggMode);
 }
 

@@ -1,7 +1,7 @@
 #pragma once
 
 #include <util/generic/buffer.h>
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 #include <util/generic/strbuf.h>
 #include <util/generic/flags.h>
 
@@ -40,15 +40,15 @@ public:
         return FileNamesSize;
     }
 
-    inline void Fill(const TString& dirname, bool sort = false) {
+    inline void Fill(const TString& dirname, bool sort = false) { 
         Fill(dirname, TStringBuf(), sort);
     }
 
-    inline void Fill(const TString& dirname, TStringBuf prefix, bool sort = false) {
+    inline void Fill(const TString& dirname, TStringBuf prefix, bool sort = false) { 
         Fill(dirname, prefix, TStringBuf(), 1, sort);
     }
 
-    void Fill(const TString& dirname, TStringBuf prefix, TStringBuf suffix, int depth, bool sort = false);
+    void Fill(const TString& dirname, TStringBuf prefix, TStringBuf suffix, int depth, bool sort = false); 
 
     void Restart() {
         Cur = FileNames.Data();

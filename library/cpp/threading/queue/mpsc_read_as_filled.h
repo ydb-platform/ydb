@@ -544,7 +544,7 @@ namespace NThreading {
             using TBunchBase = TEmpty;
 
             template <typename TElem, typename... TRest>
-            using TContainer = TDeque<TElem, TRest...>;
+            using TContainer = TDeque<TElem, TRest...>; 
 
             static constexpr bool DeleteItems = true;
         };

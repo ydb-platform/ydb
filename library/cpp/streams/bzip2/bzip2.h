@@ -25,7 +25,7 @@ class TBZipCompressError: public TBZipException {
 class TBZipDecompress: public IInputStream {
 public:
     TBZipDecompress(IInputStream* input, size_t bufLen = BZIP_BUF_LEN);
-    ~TBZipDecompress() override;
+    ~TBZipDecompress() override; 
 
 private:
     size_t DoRead(void* buf, size_t size) override;
@@ -38,7 +38,7 @@ private:
 class TBZipCompress: public IOutputStream {
 public:
     TBZipCompress(IOutputStream* out, size_t compressionLevel = BZIP_COMPRESSION_LEVEL, size_t bufLen = BZIP_BUF_LEN);
-    ~TBZipCompress() override;
+    ~TBZipCompress() override; 
 
 private:
     void DoWrite(const void* buf, size_t size) override;

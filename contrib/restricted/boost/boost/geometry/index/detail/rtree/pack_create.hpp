@@ -17,11 +17,11 @@
 
 #include <boost/geometry/algorithms/detail/expand_by_epsilon.hpp>
 
-#include <util/system/compiler.h>
-
-Y_PRAGMA_DIAGNOSTIC_PUSH
-Y_PRAGMA_NO_WSHADOW
-
+#include <util/system/compiler.h> 
+ 
+Y_PRAGMA_DIAGNOSTIC_PUSH 
+Y_PRAGMA_NO_WSHADOW 
+ 
 namespace boost { namespace geometry { namespace index { namespace detail { namespace rtree {
 
 namespace pack_utils {
@@ -157,7 +157,7 @@ public:
                        parameters_type const& parameters, Translator const& translator, Allocators & allocators)
     {
         typedef typename std::iterator_traits<InIt>::difference_type diff_type;
-
+ 
         diff_type diff = std::distance(first, last);
         if ( diff <= 0 )
             return node_pointer(0);
@@ -167,7 +167,7 @@ public:
 
         values_count = static_cast<size_type>(diff);
         entries.reserve(values_count);
-
+ 
         expandable_box<Box> hint_box;
         for ( ; first != last ; ++first )
         {
@@ -323,7 +323,7 @@ private:
         rtree::elements(in).reserve(nodes_count);                                                           // MAY THROW (A)
         // calculate values box and copy values
         expandable_box<Box> elements_box;
-
+ 
         per_level_packets(first, last, hint_box, values_count, subtree_counts, next_subtree_counts,
                           rtree::elements(in), elements_box,
                           parameters, translator, allocators);
@@ -364,7 +364,7 @@ private:
             elements_box.expand(el.first);
             return;
         }
-
+ 
         std::size_t median_count = calculate_median_count(values_count, subtree_counts);
         EIt median = first + median_count;
 
@@ -374,7 +374,7 @@ private:
         Box left, right;
         pack_utils::nth_element_and_half_boxes<0, dimension>
             ::apply(first, median, last, hint_box, left, right, greatest_dim_index);
-
+ 
         per_level_packets(first, median, left,
                           median_count, subtree_counts, next_subtree_counts,
                           elements, elements_box,
@@ -467,6 +467,6 @@ private:
 
 }}}}} // namespace boost::geometry::index::detail::rtree
 
-Y_PRAGMA_DIAGNOSTIC_POP
-
+Y_PRAGMA_DIAGNOSTIC_POP 
+ 
 #endif // BOOST_GEOMETRY_INDEX_DETAIL_RTREE_PACK_CREATE_HPP

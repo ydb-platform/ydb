@@ -13,7 +13,7 @@
     #include <unistd.h>
 #endif
 
-TString GetUsername() {
+TString GetUsername() { 
     for (const auto& var : {"LOGNAME", "USER", "LNAME", "USERNAME"}) {
         TString val = GetEnv(var);
         if (val) {
@@ -32,13 +32,13 @@ TString GetUsername() {
             else
                 ythrow TSystemError(err) << " GetUserName failed";
         } else {
-            return TString(nameBuf.Data(), (size_t)(len - 1));
+            return TString(nameBuf.Data(), (size_t)(len - 1)); 
         }
 #elif defined(_bionic_)
         const passwd* pwd = getpwuid(geteuid());
 
         if (pwd) {
-            return TString(pwd->pw_name);
+            return TString(pwd->pw_name); 
         }
 
         ythrow TSystemError() << TStringBuf(" getpwuid failed");

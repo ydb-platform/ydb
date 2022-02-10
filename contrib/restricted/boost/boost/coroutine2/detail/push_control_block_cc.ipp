@@ -20,11 +20,11 @@
 #include <boost/coroutine2/detail/forced_unwind.hpp>
 #include <boost/coroutine2/detail/wrap.hpp>
 
-#include <util/system/compiler.h>
-
-Y_PRAGMA_DIAGNOSTIC_PUSH
-Y_PRAGMA_NO_WSHADOW
-
+#include <util/system/compiler.h> 
+ 
+Y_PRAGMA_DIAGNOSTIC_PUSH 
+Y_PRAGMA_NO_WSHADOW 
+ 
 #ifdef BOOST_HAS_ABI_HEADERS
 #  include BOOST_ABI_PREFIX
 #endif
@@ -380,6 +380,6 @@ push_coroutine< void >::control_block::valid() const noexcept {
 #  include BOOST_ABI_SUFFIX
 #endif
 
-Y_PRAGMA_DIAGNOSTIC_POP
-
+Y_PRAGMA_DIAGNOSTIC_POP 
+ 
 #endif // BOOST_COROUTINES2_DETAIL_PUSH_CONTROL_BLOCK_IPP

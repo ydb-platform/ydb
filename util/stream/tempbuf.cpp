@@ -1,7 +1,7 @@
 #include "tempbuf.h"
 
 namespace {
-    static inline size_t Next(size_t size) noexcept {
+    static inline size_t Next(size_t size) noexcept { 
         return size * 2;
     }
 }

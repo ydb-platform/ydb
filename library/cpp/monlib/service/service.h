@@ -33,7 +33,7 @@ namespace NMonitoring {
     class TCoHttpServer: private TContListener::ICallBack {
     public:
         // initialize and schedule coroutines for execution
-        TCoHttpServer(TContExecutor& executor, const TString& bindAddr, TIpPort port, THandler handler);
+        TCoHttpServer(TContExecutor& executor, const TString& bindAddr, TIpPort port, THandler handler); 
         void Start();
         void Stop();
 
@@ -54,7 +54,7 @@ namespace NMonitoring {
         TContExecutor& Executor;
         TContListener Listener;
         THandler Handler;
-        TString BindAddr;
+        TString BindAddr; 
         TIpPort Port;
     };
 

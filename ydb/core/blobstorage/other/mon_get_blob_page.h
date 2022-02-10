@@ -6,6 +6,6 @@
 
 namespace NKikimr {
 
-    NMonitoring::IMonPage *CreateMonGetBlobPage(const TString& path, TActorSystem *actorSystem);
+    NMonitoring::IMonPage *CreateMonGetBlobPage(const TString& path, TActorSystem *actorSystem); 
 
 } // NKikimr

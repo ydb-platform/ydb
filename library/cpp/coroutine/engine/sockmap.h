@@ -19,6 +19,6 @@ public:
     }
 
 private:
-    TVector<T> V_;
-    THashMap<size_t, T> H_;
+    TVector<T> V_; 
+    THashMap<size_t, T> H_; 
 };

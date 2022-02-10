@@ -347,9 +347,9 @@ private:
     const TServerOptions Options_;
     std::unique_ptr<grpc::Server> Server_;
     std::vector<std::unique_ptr<grpc::ServerCompletionQueue>> CQS_;
-    TVector<IThreadRef> Ts;
+    TVector<IThreadRef> Ts; 
 
-    TVector<IGRpcServicePtr> Services_;
+    TVector<IGRpcServicePtr> Services_; 
     TGlobalLimiter Limiter_;
 };
 

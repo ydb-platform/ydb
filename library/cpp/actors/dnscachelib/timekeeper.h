@@ -14,7 +14,7 @@
 class TTimeKeeper {
 public:
     static TInstant GetNow(void) {
-        return TInstant::MicroSeconds(GetTime());
+        return TInstant::MicroSeconds(GetTime()); 
     }
 
     static time_t GetTime(void) {

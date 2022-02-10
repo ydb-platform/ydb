@@ -57,7 +57,7 @@ Y_UNIT_TEST_SUITE(HyperscanWrappers) {
         UNIT_ASSERT(NHyperscan::Matches(db, scratch, "BAR"));
         UNIT_ASSERT(!NHyperscan::Matches(db, scratch, "FOO"));
 
-        TSet<unsigned int> foundIds;
+        TSet<unsigned int> foundIds; 
         auto callback = [&](unsigned int id, unsigned long long /* from */, unsigned long long /* to */) {
             foundIds.insert(id);
         };
@@ -89,7 +89,7 @@ Y_UNIT_TEST_SUITE(HyperscanWrappers) {
         NHyperscan::TDatabase db = NHyperscan::Compile(
             "foo",
             HS_FLAG_DOTALL | HS_FLAG_SINGLEMATCH);
-        TString serialization = Serialize(db);
+        TString serialization = Serialize(db); 
         db.Reset();
         TDatabase db2 = Deserialize(serialization);
         NHyperscan::TScratch scratch = NHyperscan::MakeScratch(db2);

@@ -19,10 +19,10 @@ inline TOptional TOptional::GetItem<TOptional>() const {
 }
 
 template <>
-inline TListType TOptional::GetItem<TListType>() const {
+inline TListType TOptional::GetItem<TListType>() const { 
     ENSURE_HAS_ITEM();
     const auto& itemType = RootType.GetOptional().GetItem();
-    return TListType(RootValue.GetOptional(), itemType);
+    return TListType(RootValue.GetOptional(), itemType); 
 }
 
 template <>

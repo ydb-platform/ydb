@@ -96,11 +96,11 @@ using TComponentLevels =
 class TYqlLog: public TLog {
 public:
     TYqlLog();
-    TYqlLog(const TString& logType, const TComponentLevels& levels);
+    TYqlLog(const TString& logType, const TComponentLevels& levels); 
     TYqlLog(TAutoPtr<TLogBackend> backend, const TComponentLevels& levels);
 
     // XXX: not thread-safe
-    void UpdateProcInfo(const TString& procName);
+    void UpdateProcInfo(const TString& procName); 
 
     ELevel GetComponentLevel(EComponent component) const {
         return ELevelHelpers::FromInt(AtomicGet(ComponentLevels_[EComponentHelpers::ToInt(component)]));
@@ -121,7 +121,7 @@ public:
     void WriteLogPrefix(IOutputStream* out, EComponent component, ELevel level, TStringBuf file, int line) const;
 
 private:
-    TString ProcName_;
+    TString ProcName_; 
     pid_t ProcId_;
     std::array<TAtomic, EComponentHelpers::ToInt(EComponent::MaxValue)> ComponentLevels_{0};
     mutable TAtomic WriteTruncMsg_;
@@ -147,7 +147,7 @@ inline bool IsYqlLoggerInitialized() {
  * @param log - one of { syslog, console, cout, cerr, null, /path/to/file }
  * @param startAsDaemon - true if process is demonized
  */
-void InitLogger(const TString& log, bool startAsDaemon = false);
+void InitLogger(const TString& log, bool startAsDaemon = false); 
 
 /**
  * @brief Initialize logger with concrete backend.

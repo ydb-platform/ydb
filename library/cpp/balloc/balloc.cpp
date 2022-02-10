@@ -109,7 +109,7 @@ extern "C" void free(void* data) {
 #define OP_THROWNOTHING
 #endif
 
-void* operator new(size_t size) {
+void* operator new(size_t size) { 
 #if defined(Y_COVER_PTR)
     return malloc(size);
 #else
@@ -168,7 +168,7 @@ void operator delete(void* p, const std::nothrow_t&)OP_THROWNOTHING {
 #endif
 }
 
-void* operator new[](size_t size) {
+void* operator new[](size_t size) { 
 #if defined(Y_COVER_PTR)
     return malloc(size);
 #else

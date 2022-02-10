@@ -13,7 +13,7 @@ public:
     struct TWriteInfo {
         ui64 Lsn;
         TLogoBlobID LogoBlobId;
-        TString Data;
+        TString Data; 
 
         friend bool operator <(const TWriteInfo& left, const TWriteInfo& right) {
             return left.Lsn < right.Lsn || (left.Lsn == right.Lsn && left.LogoBlobId < right.LogoBlobId);
@@ -29,10 +29,10 @@ public:
     };
 
     struct TTestActorState {
-        TMap<TIncrHugeBlobId, TBlobInfo> ConfirmedState;
-        TMap<std::pair<ui64, TLogoBlobID>, TBlobInfo> InFlightWrites;
-        TMap<TIncrHugeBlobId, TBlobInfo> InFlightDeletes;
-        THashMap<ui64, TBlobInfo> InFlightReads;
+        TMap<TIncrHugeBlobId, TBlobInfo> ConfirmedState; 
+        TMap<std::pair<ui64, TLogoBlobID>, TBlobInfo> InFlightWrites; 
+        TMap<TIncrHugeBlobId, TBlobInfo> InFlightDeletes; 
+        THashMap<ui64, TBlobInfo> InFlightReads; 
         ui64 Lsn = 0;
         ui64 BytesWritten = 0;
         TInstant StartTime = Now();
@@ -93,7 +93,7 @@ public:
         TEvIncrHugeInitResult *msg = ev->Get();
         Y_VERIFY(msg->Status == NKikimrProto::OK);
 
-        TVector<TEvIncrHugeInitResult::TItem> referenceItems;
+        TVector<TEvIncrHugeInitResult::TItem> referenceItems; 
         for (const auto& pair : State.ConfirmedState) {
             TBlobMetadata meta;
             memset(&meta, 0, sizeof(meta));
@@ -277,7 +277,7 @@ public:
             temp[pos] = Rng();
         }
 
-        TString data(temp, len);
+        TString data(temp, len); 
 
         // allocate LSN for new record
         ui64 lsn = State.Lsn++;

@@ -2,7 +2,7 @@
 
 #include <util/generic/buffer.h>
 #include <util/generic/strbuf.h>
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 #include <util/generic/typetraits.h>
 #include <util/generic/vector.h>
 #include <util/generic/yexception.h>
@@ -45,25 +45,25 @@ namespace NBlockCodecs {
         virtual size_t Compress(const TData& in, void* out) const = 0;
         virtual size_t Decompress(const TData& in, void* out) const = 0;
 
-        virtual TStringBuf Name() const noexcept = 0;
+        virtual TStringBuf Name() const noexcept = 0; 
 
         // some useful helpers
         void Encode(const TData& in, TBuffer& out) const;
         void Decode(const TData& in, TBuffer& out) const;
 
-        void Encode(const TData& in, TString& out) const;
-        void Decode(const TData& in, TString& out) const;
+        void Encode(const TData& in, TString& out) const; 
+        void Decode(const TData& in, TString& out) const; 
 
-        inline TString Encode(const TData& in) const {
-            TString out;
+        inline TString Encode(const TData& in) const { 
+            TString out; 
 
             Encode(in, out);
 
             return out;
         }
 
-        inline TString Decode(const TData& in) const {
-            TString out;
+        inline TString Decode(const TData& in) const { 
+            TString out; 
 
             Decode(in, out);
 
@@ -78,9 +78,9 @@ namespace NBlockCodecs {
     const ICodec* Codec(const TStringBuf& name);
 
     // some aux methods
-    typedef TVector<TStringBuf> TCodecList;
+    typedef TVector<TStringBuf> TCodecList; 
     TCodecList ListAllCodecs();
-    TString ListAllCodecsAsString();
+    TString ListAllCodecsAsString(); 
 
     // SEARCH-8344: Get the size of max possible decompressed block
     size_t GetMaxPossibleDecompressedLength();

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 #include <util/string/builder.h>
 #include <util/system/src_location.h>
 
@@ -17,7 +17,7 @@
 
 #define LWTRACE_LOCATION_SYMBOL                                                          \
     [](const char* func) {                                                               \
-        static TString _holder(TStringBuilder() << func << " (" << __LOCATION__ << ")"); \
+        static TString _holder(TStringBuilder() << func << " (" << __LOCATION__ << ")"); \ 
         return ::NLWTrace::TSymbol(&_holder);                                            \
     }(Y_FUNC_SIGNATURE) /**/
 

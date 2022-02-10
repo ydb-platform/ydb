@@ -8,7 +8,7 @@
 #include <utility>
 #include <memory>
 
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 #include <util/generic/vector.h>
 #include <util/generic/deque.h>
 #include <util/generic/list.h>
@@ -26,7 +26,7 @@
 #include <util/string/vector.h>
 
 namespace Pire {
-    using ystring = TString;
+    using ystring = TString; 
     template<size_t N> using ybitset = std::bitset<N>;
     template<typename T1, typename T2> using ypair = std::pair<T1, T2>;
     template<typename T> using yauto_ptr = std::auto_ptr<T>;
@@ -60,7 +60,7 @@ namespace Pire {
     typedef IInputStream yistream;
 
     template<class Iter>
-    ystring Join(Iter begin, Iter end, const ystring& separator) { return JoinStrings(begin, end, separator); }
+    ystring Join(Iter begin, Iter end, const ystring& separator) { return JoinStrings(begin, end, separator); } 
 }
 
 #endif

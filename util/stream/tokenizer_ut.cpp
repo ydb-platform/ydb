@@ -108,7 +108,7 @@ Y_UNIT_TEST_SUITE(TStreamTokenizerTests) {
 
     Y_UNIT_TEST(CustomPredicateTest) {
         struct TIsVerticalBar {
-            inline bool operator()(const char ch) const noexcept {
+            inline bool operator()(const char ch) const noexcept { 
                 return '|' == ch;
             }
         };
@@ -132,7 +132,7 @@ Y_UNIT_TEST_SUITE(TStreamTokenizerTests) {
 
     Y_UNIT_TEST(CustomPredicateSecondTest) {
         struct TIsVerticalBar {
-            inline bool operator()(const char ch) const noexcept {
+            inline bool operator()(const char ch) const noexcept { 
                 return '|' == ch || ',' == ch;
             }
         };
@@ -157,7 +157,7 @@ Y_UNIT_TEST_SUITE(TStreamTokenizerTests) {
 
     Y_UNIT_TEST(FalsePredicateTest) {
         struct TAlwaysFalse {
-            inline bool operator()(const char) const noexcept {
+            inline bool operator()(const char) const noexcept { 
                 return false;
             }
         };
@@ -178,7 +178,7 @@ Y_UNIT_TEST_SUITE(TStreamTokenizerTests) {
 
     Y_UNIT_TEST(TruePredicateTest) {
         struct TAlwaysTrue {
-            inline bool operator()(const char) const noexcept {
+            inline bool operator()(const char) const noexcept { 
                 return true;
             }
         };

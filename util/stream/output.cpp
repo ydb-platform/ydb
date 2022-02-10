@@ -23,7 +23,7 @@
 #if defined(_win_)
     #include <io.h>
 #endif
-
+ 
 constexpr size_t MAX_UTF8_BYTES = 4; // UTF-8-encoded code point takes between 1 and 4 bytes
 
 IOutputStream::IOutputStream() noexcept = default;
@@ -260,13 +260,13 @@ namespace {
 
         class TAndroidStdOutput: public IOutputStream {
         public:
-            inline TAndroidStdOutput(TLogFuncPtr logFuncPtr) noexcept
+            inline TAndroidStdOutput(TLogFuncPtr logFuncPtr) noexcept 
                 : Buffer()
                 , LogFuncPtr(logFuncPtr)
             {
             }
 
-            virtual ~TAndroidStdOutput() {
+            virtual ~TAndroidStdOutput() { 
             }
 
         private:
@@ -298,7 +298,7 @@ namespace {
             {
             }
 
-            virtual ~TStdErr() {
+            virtual ~TStdErr() { 
             }
 
         private:
@@ -314,7 +314,7 @@ namespace {
             {
             }
 
-            virtual ~TStdOut() {
+            virtual ~TStdOut() { 
             }
 
         private:
@@ -341,7 +341,7 @@ namespace {
 namespace {
     class TStdOutput: public IOutputStream {
     public:
-        inline TStdOutput(FILE* f) noexcept
+        inline TStdOutput(FILE* f) noexcept 
             : F_(f)
         {
         }

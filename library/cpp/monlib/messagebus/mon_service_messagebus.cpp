@@ -2,7 +2,7 @@
 
 using namespace NMonitoring;
 
-TMonServiceMessageBus::TMonServiceMessageBus(ui16 port, const TString& title)
+TMonServiceMessageBus::TMonServiceMessageBus(ui16 port, const TString& title) 
     : TMonService2(port, title)
 {
 }

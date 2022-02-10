@@ -34,17 +34,17 @@ private:
     bool WaitingResolveReply;
     bool Finished;
     TAutoPtr<NSchemeCache::TSchemeCacheNavigate> ResolveNamesResult;
-    TVector<NScheme::TTypeId> KeyColumnTypes;
+    TVector<NScheme::TTypeId> KeyColumnTypes; 
     TSysTables::TTableColumnInfo PathColumnInfo;
-    TVector<TSysTables::TTableColumnInfo> CommonPrefixesColumns;
-    TVector<TSysTables::TTableColumnInfo> ContentsColumns;
+    TVector<TSysTables::TTableColumnInfo> CommonPrefixesColumns; 
+    TVector<TSysTables::TTableColumnInfo> ContentsColumns; 
     TSerializedCellVec PrefixColumns;
     TSerializedCellVec StartAfterSuffixColumns;
     TSerializedCellVec KeyRangeFrom;
     TSerializedCellVec KeyRangeTo;
     ui32 CurrentShardIdx;
-    TVector<TSerializedCellVec> CommonPrefixesRows;
-    TVector<TSerializedCellVec> ContentsRows;
+    TVector<TSerializedCellVec> CommonPrefixesRows; 
+    TVector<TSerializedCellVec> ContentsRows; 
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -178,8 +178,8 @@ private:
 
         auto& entry = ResolveNamesResult->ResultSet.front();
 
-        TVector<ui32> keyColumnIds;
-        THashMap<TString, ui32> columnByName;
+        TVector<ui32> keyColumnIds; 
+        THashMap<TString, ui32> columnByName; 
         for (const auto& ci : entry.Columns) {
             columnByName[ci.second.Name] = ci.second.Id;
             i32 keyOrder = ci.second.KeyOrder;
@@ -193,7 +193,7 @@ private:
         }
 
         TString errStr;
-        TVector<TCell> prefixCells;
+        TVector<TCell> prefixCells; 
         TConstArrayRef<NScheme::TTypeId> prefixTypes(KeyColumnTypes.data(), KeyColumnTypes.size() - 1); // -1 for path column
         NMiniKQL::CellsFromTuple(&Request->GetKeyPrefix().GetType(), Request->GetKeyPrefix().GetValue(),
                                  prefixTypes, true, prefixCells, errStr);
@@ -263,8 +263,8 @@ private:
     bool BuildKeyRange(const NActors::TActorContext& ctx) {
         Y_UNUSED(ctx);
 
-        TVector<TCell> fromValues(PrefixColumns.GetCells().begin(), PrefixColumns.GetCells().end());
-        TVector<TCell> toValues(PrefixColumns.GetCells().begin(), PrefixColumns.GetCells().end());
+        TVector<TCell> fromValues(PrefixColumns.GetCells().begin(), PrefixColumns.GetCells().end()); 
+        TVector<TCell> toValues(PrefixColumns.GetCells().begin(), PrefixColumns.GetCells().end()); 
 
         TString pathPrefix = Request->GetPathColumnPrefix();
         TString endPathPrefix;
@@ -299,7 +299,7 @@ private:
                           KeyRangeTo.GetCells(), false,
                           false);
 
-        TVector<TKeyDesc::TColumnOp> columns;
+        TVector<TKeyDesc::TColumnOp> columns; 
         for (const auto& ci : ContentsColumns) {
             TKeyDesc::TColumnOp op = { ci.Id, TKeyDesc::EColumnOperation::Read, ci.PType, 0, 0 };
             columns.push_back(op);
@@ -525,7 +525,7 @@ private:
         }
     }
 
-    void AddResultRow(NKikimrMiniKQL::TValue& listOfRows, const TVector<TSysTables::TTableColumnInfo>& rowScheme, const TSerializedCellVec& cells) const {
+    void AddResultRow(NKikimrMiniKQL::TValue& listOfRows, const TVector<TSysTables::TTableColumnInfo>& rowScheme, const TSerializedCellVec& cells) const { 
         Y_VERIFY(rowScheme.size() >= cells.GetCells().size());
         TString errStr;
 

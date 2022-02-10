@@ -195,7 +195,7 @@ void GatherKeyAliases(const TExprNode::TPtr& joinTree, TMap<TString, TSet<TStrin
     }
 }
 
-void MakeTransitiveClosure(TMap<TString, TSet<TString>>& aliases) {
+void MakeTransitiveClosure(TMap<TString, TSet<TString>>& aliases) { 
     for (;;) {
         bool hasChanges = false;
         for (auto& x : aliases) {
@@ -217,7 +217,7 @@ void MakeTransitiveClosure(TMap<TString, TSet<TString>>& aliases) {
 }
 
 void GatherOptionalKeyColumnsFromEquality(TExprNode::TPtr columns, const TJoinLabels& labels, ui32 inputIndex,
-    TSet<TString>& optionalKeyColumns) {
+    TSet<TString>& optionalKeyColumns) { 
     for (ui32 i = 0; i < columns->ChildrenSize(); i += 2) {
         auto table = columns->Child(i)->Content();
         auto column = columns->Child(i + 1)->Content();
@@ -231,7 +231,7 @@ void GatherOptionalKeyColumnsFromEquality(TExprNode::TPtr columns, const TJoinLa
 }
 
 void GatherOptionalKeyColumns(TExprNode::TPtr joinTree, const TJoinLabels& labels, ui32 inputIndex,
-    TSet<TString>& optionalKeyColumns) {
+    TSet<TString>& optionalKeyColumns) { 
     auto left = joinTree->Child(1);
     auto right = joinTree->Child(2);
     if (!left->IsAtom()) {
@@ -253,14 +253,14 @@ void GatherOptionalKeyColumns(TExprNode::TPtr joinTree, const TJoinLabels& label
 }
 
 TExprNode::TPtr SingleInputPredicatePushdownOverEquiJoin(TExprNode::TPtr equiJoin, TExprNode::TPtr predicate,
-    const TSet<TStringBuf>& usedFields, TExprNode::TPtr args, const TJoinLabels& labels,
+    const TSet<TStringBuf>& usedFields, TExprNode::TPtr args, const TJoinLabels& labels, 
     ui32 firstCandidate, const TMap<TStringBuf, TVector<TStringBuf>>& renameMap, bool ordered, TExprContext& ctx) {
     auto inputsCount = equiJoin->ChildrenSize() - 2;
     auto joinTree = equiJoin->Child(inputsCount);
-    TMap<TString, TSet<TString>> aliases;
+    TMap<TString, TSet<TString>> aliases; 
     GatherKeyAliases(joinTree, aliases, labels);
     MakeTransitiveClosure(aliases);
-    TSet<ui32> candidates;
+    TSet<ui32> candidates; 
     candidates.insert(firstCandidate);
     // check whether some used fields are not aliased
     bool onlyKeys = true;
@@ -271,7 +271,7 @@ TExprNode::TPtr SingleInputPredicatePushdownOverEquiJoin(TExprNode::TPtr equiJoi
         }
     }
 
-    THashMap<ui32, THashMap<TString, TString>> aliasedKeys;
+    THashMap<ui32, THashMap<TString, TString>> aliasedKeys; 
     if (onlyKeys) {
         // try to extend inputs
         for (ui32 i = 0; i < inputsCount; ++i) {
@@ -279,7 +279,7 @@ TExprNode::TPtr SingleInputPredicatePushdownOverEquiJoin(TExprNode::TPtr equiJoi
                 continue;
             }
 
-            TSet<TString> coveredKeys;
+            TSet<TString> coveredKeys; 
             for (auto field : labels.Inputs[i].EnumerateAllColumns()) {
                 if (auto aliasSet = aliases.FindPtr(field)) {
                     for (auto alias : *aliasSet) {
@@ -312,7 +312,7 @@ TExprNode::TPtr SingleInputPredicatePushdownOverEquiJoin(TExprNode::TPtr equiJoi
         auto newInput = prevInput;
         if (x.second) {
             // skip null key columns
-            TSet<TString> optionalKeyColumns;
+            TSet<TString> optionalKeyColumns; 
             GatherOptionalKeyColumns(joinTree, labels, inputIndex, optionalKeyColumns);
             newInput = FilterOutNullJoinColumns(predicate->Pos(),
                 prevInput, labels.Inputs[inputIndex], optionalKeyColumns, ctx);
@@ -330,7 +330,7 @@ TExprNode::TPtr SingleInputPredicatePushdownOverEquiJoin(TExprNode::TPtr equiJoi
                                 ui32 index = 0;
                                 const auto& label = labels.Inputs[inputIndex];
                                 for (auto column : label.EnumerateAllColumns()) {
-                                    TVector<TString> targetColumns;
+                                    TVector<TString> targetColumns; 
                                     targetColumns.push_back(column);
                                     if (onlyKeys && inputIndex != firstCandidate) {
                                         if (auto aliasedKey = aliasedKeys[inputIndex].FindPtr(column)) {
@@ -399,16 +399,16 @@ TExprNode::TPtr FlatMapOverEquiJoin(const TCoFlatMapBase& node, TExprContext& ct
         joinSettings = RemoveSetting(*joinSettings, "rename", ctx);
         auto structType = equiJoin.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()
             ->Cast<TStructExprType>();
-        THashSet<TStringBuf> usedFields;
-        TMap<TStringBuf, TVector<TStringBuf>> memberUsageMap;
+        THashSet<TStringBuf> usedFields; 
+        TMap<TStringBuf, TVector<TStringBuf>> memberUsageMap; 
         for (auto& child : structNode->Children()) {
             auto item = child->Child(1);
             usedFields.insert(item->Child(1)->Content());
             memberUsageMap[item->Child(1)->Content()].push_back(child->Child(0)->Content());
         }
 
-        TMap<TStringBuf, TStringBuf> reversedRenameMap;
-        TMap<TStringBuf, TVector<TStringBuf>> newRenameMap;
+        TMap<TStringBuf, TStringBuf> reversedRenameMap; 
+        TMap<TStringBuf, TVector<TStringBuf>> newRenameMap; 
         for (auto& x : renameMap) {
             if (!x.second.empty()) {
                 for (auto& y : x.second) {
@@ -452,7 +452,7 @@ TExprNode::TPtr FlatMapOverEquiJoin(const TCoFlatMapBase& node, TExprContext& ct
         return ret;
     }
 
-    TSet<TStringBuf> usedFields;
+    TSet<TStringBuf> usedFields; 
     auto& arg = node.Lambda().Args().Arg(0).Ref();
     auto body = node.Lambda().Body().Ptr();
     if (HaveFieldsSubset(body, arg, usedFields, parentsMap)) {
@@ -498,13 +498,13 @@ TExprNode::TPtr FlatMapOverEquiJoin(const TCoFlatMapBase& node, TExprContext& ct
             }
         }
 
-        TExprNode::TListType andTerms;
+        TExprNode::TListType andTerms; 
         GatherAndTerms(std::move(predicate), andTerms);
         TExprNode::TPtr ret;
         TExprNode::TPtr extraPredicate;
         auto joinSettings = equiJoin.Ref().Child(equiJoin.Ref().ChildrenSize() - 1);
         auto renameMap = LoadJoinRenameMap(*joinSettings);
-        THashMap<TString, TString> backRenameMap;
+        THashMap<TString, TString> backRenameMap; 
         for (auto& x : renameMap) {
             if (!x.second.empty()) {
                 for (auto& y : x.second) {
@@ -520,8 +520,8 @@ TExprNode::TPtr FlatMapOverEquiJoin(const TCoFlatMapBase& node, TExprContext& ct
                 continue;
             }
 
-            TSet<TStringBuf> usedFields;
-            TSet<ui32> inputs;
+            TSet<TStringBuf> usedFields; 
+            TSet<ui32> inputs; 
             if (!HaveFieldsSubset(andTerm, row, usedFields, parentsMap, false)) {
                 continue;
             }
@@ -655,7 +655,7 @@ TExprNode::TPtr FlatMapSubsetFields(const TCoFlatMapBase& node, TExprContext& ct
 }
 
 TExprNode::TPtr RenameJoinTable(TPositionHandle pos, TExprNode::TPtr table,
-    const THashMap<TString, TString>& upstreamTablesRename, TExprContext& ctx)
+    const THashMap<TString, TString>& upstreamTablesRename, TExprContext& ctx) 
 {
     if (auto renamed = upstreamTablesRename.FindPtr(table->Content())) {
         return ctx.NewAtom(pos, *renamed);
@@ -665,7 +665,7 @@ TExprNode::TPtr RenameJoinTable(TPositionHandle pos, TExprNode::TPtr table,
 }
 
 TExprNode::TPtr RenameEqualityTables(TPositionHandle pos, TExprNode::TPtr columns,
-    const THashMap<TString, TString>& upstreamTablesRename, TExprContext& ctx)
+    const THashMap<TString, TString>& upstreamTablesRename, TExprContext& ctx) 
 {
     TExprNode::TListType newChildren(columns->ChildrenList());
     for (ui32 i = 0; i < newChildren.size(); i += 2) {
@@ -676,7 +676,7 @@ TExprNode::TPtr RenameEqualityTables(TPositionHandle pos, TExprNode::TPtr column
     return ret;
 }
 
-TExprNode::TPtr RenameJoinTree(TExprNode::TPtr joinTree, const THashMap<TString, TString>& upstreamTablesRename,
+TExprNode::TPtr RenameJoinTree(TExprNode::TPtr joinTree, const THashMap<TString, TString>& upstreamTablesRename, 
     TExprContext& ctx)
 {
     TExprNode::TPtr left;
@@ -706,8 +706,8 @@ TExprNode::TPtr RenameJoinTree(TExprNode::TPtr joinTree, const THashMap<TString,
 }
 
 TExprNode::TPtr ReassembleJoinEquality(TExprNode::TPtr columns, const TStringBuf& upstreamLabel,
-    const THashMap<TString, TString>& upstreamTablesRename,
-    const THashMap<TString, TString>& upstreamColumnsBackRename, TExprContext& ctx)
+    const THashMap<TString, TString>& upstreamTablesRename, 
+    const THashMap<TString, TString>& upstreamColumnsBackRename, TExprContext& ctx) 
 {
     TExprNode::TListType newChildren(columns->ChildrenList());
     for (ui32 i = 0; i < columns->ChildrenSize(); i += 2) {
@@ -740,7 +740,7 @@ TExprNode::TPtr ReassembleJoinEquality(TExprNode::TPtr columns, const TStringBuf
 }
 
 TExprNode::TPtr FuseJoinTree(TExprNode::TPtr downstreamJoinTree, TExprNode::TPtr upstreamJoinTree, const TStringBuf& upstreamLabel,
-    const THashMap<TString, TString>& upstreamTablesRename, const THashMap<TString, TString>& upstreamColumnsBackRename,
+    const THashMap<TString, TString>& upstreamTablesRename, const THashMap<TString, TString>& upstreamColumnsBackRename, 
     TExprContext& ctx)
 {
     TExprNode::TPtr left;
@@ -795,7 +795,7 @@ TExprNode::TPtr FuseEquiJoins(const TExprNode::TPtr& node, ui32 upstreamIndex, T
     ui32 downstreamInputs = node->ChildrenSize() - 2;
     auto upstreamList = node->Child(upstreamIndex)->Child(0);
     auto upstreamLabel = node->Child(upstreamIndex)->Child(1);
-    THashSet<TStringBuf> downstreamLabels;
+    THashSet<TStringBuf> downstreamLabels; 
     for (ui32 i = 0; i < downstreamInputs; ++i) {
         auto label = node->Child(i)->Child(1);
         if (!label->IsAtom()) {
@@ -805,9 +805,9 @@ TExprNode::TPtr FuseEquiJoins(const TExprNode::TPtr& node, ui32 upstreamIndex, T
         downstreamLabels.insert(label->Content());
     }
 
-    THashMap<TString, TString> upstreamTablesRename; // rename of conflicted upstream tables
-    THashMap<TString, TString> upstreamColumnsBackRename; // renamed of columns under upstreamLabel to full name inside upstream
-    TMap<TString, TVector<TString>> upstreamColumnsRename;
+    THashMap<TString, TString> upstreamTablesRename; // rename of conflicted upstream tables 
+    THashMap<TString, TString> upstreamColumnsBackRename; // renamed of columns under upstreamLabel to full name inside upstream 
+    TMap<TString, TVector<TString>> upstreamColumnsRename; 
     ui32 upstreamInputs = upstreamList->ChildrenSize() - 2;
     THashSet<TStringBuf> upstreamLabels;
     for (ui32 i = 0; i < upstreamInputs; ++i) {
@@ -837,7 +837,7 @@ TExprNode::TPtr FuseEquiJoins(const TExprNode::TPtr& node, ui32 upstreamIndex, T
         }
     }
 
-    TExprNode::TListType equiJoinChildren;
+    TExprNode::TListType equiJoinChildren; 
     for (ui32 i = 0; i < downstreamInputs; ++i) {
         if (i != upstreamIndex) {
             equiJoinChildren.push_back(node->Child(i));
@@ -858,7 +858,7 @@ TExprNode::TPtr FuseEquiJoins(const TExprNode::TPtr& node, ui32 upstreamIndex, T
     auto downstreamJoinTree = node->Child(downstreamInputs);
     auto downstreamSettings = node->Children().back();
     auto upstreamJoinTree = upstreamList->Child(upstreamInputs);
-    TExprNode::TListType settingsChildren;
+    TExprNode::TListType settingsChildren; 
 
     for (auto& setting : upstreamList->Children().back()->Children()) {
         if (setting->Child(0)->Content() != "rename") {
@@ -1643,15 +1643,15 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
 
             auto& arg = self.Lambda().Args().Arg(0).Ref();
             auto body = self.Lambda().Body().Ptr();
-            TSet<TStringBuf> usedFields;
+            TSet<TStringBuf> usedFields; 
             if (HaveFieldsSubset(body, arg, usedFields, *optCtx.ParentsMap)) {
                 YQL_CLOG(DEBUG, Core) << "FieldsSubset in " << node->Content() << " over " << self.Input().Ref().Content();
-                TSet<TString> fields;
+                TSet<TString> fields; 
                 for (auto& x : usedFields) {
                     fields.emplace(TString(x));
                 }
 
-                TExprNode::TListType filteredInputs;
+                TExprNode::TListType filteredInputs; 
                 for (ui32 index = 0; index < self.Input().Ref().ChildrenSize(); ++index) {
                     auto x = self.Input().Ref().ChildPtr(index);
                     if (!self.Input().Maybe<TCoExtendBase>() && index > 0) {

@@ -57,7 +57,7 @@ public:
         IssueResponse(ctx);
     }
 
-    void IssueErrorResponse(TString message, const TActorContext& ctx) {
+    void IssueErrorResponse(TString message, const TActorContext& ctx) { 
         Response.SetErrorDescription(message);
         IssueResponse(ctx);
     }

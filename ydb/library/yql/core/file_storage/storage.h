@@ -2,7 +2,7 @@
 
 #include <util/folder/path.h>
 #include <util/generic/ptr.h>
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 #include <util/generic/maybe.h>
 
 #include <functional>
@@ -14,7 +14,7 @@ public:
     TFileLink(const TFsPath& path, const TString& storageFileName, ui64 size, const TString& md5, bool deleteOnDestroy = true);
     ~TFileLink();
 
-    const TString& GetStorageFileName() const { return StorageFileName; }
+    const TString& GetStorageFileName() const { return StorageFileName; } 
     const TFsPath& GetPath() const { return Path; }
     ui64 GetSize() const { return Size; }
     const TString& GetMd5() const { return Md5; }
@@ -45,7 +45,7 @@ public:
     /* Constructs the storage with the specified limits.
        storagePath can be empty - a temporary directory will be used in this case.
     */
-    TStorage(size_t maxFiles, ui64 maxSize, const TString& storagePath = {});
+    TStorage(size_t maxFiles, ui64 maxSize, const TString& storagePath = {}); 
     ~TStorage();
 
     // Returns root storage directory

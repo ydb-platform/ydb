@@ -402,7 +402,7 @@ public:
     void Bootstrap(const TActorContext &ctx) {
         WhiteboardServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(ctx.SelfID.NodeId());
         ctx.Send(WhiteboardServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateAddEndpoint("mbus", Sprintf(":%d", Session->GetProto()->GetPort())));
-        Become(&TMessageBusMonitorActor::StateWork, ctx, TDuration::MicroSeconds(Interval), new TEvPrivate::TEvUpdateMsgBusStats());
+        Become(&TMessageBusMonitorActor::StateWork, ctx, TDuration::MicroSeconds(Interval), new TEvPrivate::TEvUpdateMsgBusStats()); 
     }
 
 protected:
@@ -421,7 +421,7 @@ protected:
             systemStateInfo.SetMessageBusState(NKikimrWhiteboard::EFlag::Red);
         }
         ctx.Send(WhiteboardServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateUpdate(systemStateInfo));
-        ctx.Schedule(TDuration::MicroSeconds(Interval), new TEvPrivate::TEvUpdateMsgBusStats());
+        ctx.Schedule(TDuration::MicroSeconds(Interval), new TEvPrivate::TEvUpdateMsgBusStats()); 
     }
 
     STFUNC(StateWork) {

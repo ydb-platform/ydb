@@ -20,7 +20,7 @@ public:
 
     ~TTagDetails() {}
 
-    TString Name;
+    TString Name; 
     ui32 Idx;
     ui32 ValueType;
     ui32 PayloadType;

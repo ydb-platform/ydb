@@ -11,7 +11,7 @@ struct TUdfValidateException: public yexception {
 };
 
 struct TValidateErrorPolicyThrow {
-    static void Generate(const TString& message) {
+    static void Generate(const TString& message) { 
         GenerateExc(TUdfValidateException() << message);
     }
 
@@ -23,7 +23,7 @@ struct TValidateErrorPolicyThrow {
 };
 
 struct TValidateErrorPolicyFail {
-    static void Generate(const TString& message) {
+    static void Generate(const TString& message) { 
         Y_FAIL("value verify failed: %s", message.c_str());
     }
 

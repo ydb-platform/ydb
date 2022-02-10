@@ -44,7 +44,7 @@ public:
 private:
     size_t DoRead(void* ptr, size_t len) override;
     size_t DoSkip(size_t len) override;
-    size_t DoReadTo(TString& st, char ch) override;
+    size_t DoReadTo(TString& st, char ch) override; 
     ui64 DoReadAll(IOutputStream& out) override;
 
 private:
@@ -64,9 +64,9 @@ public:
     {
     }
 
-    TAlignedOutput(TAlignedOutput&&) noexcept = default;
-    TAlignedOutput& operator=(TAlignedOutput&&) noexcept = default;
-
+    TAlignedOutput(TAlignedOutput&&) noexcept = default; 
+    TAlignedOutput& operator=(TAlignedOutput&&) noexcept = default; 
+ 
     size_t GetCurrentOffset() const {
         return Position_;
     }

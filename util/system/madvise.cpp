@@ -35,7 +35,7 @@ namespace {
         }
 #else
         if (-1 == madvise(begin, size, flag)) {
-            TString err(LastSystemErrorText());
+            TString err(LastSystemErrorText()); 
             ythrow yexception() << "madvise(" << begin << ", " << size << ", " << flag << ")"
                                 << " returned error: " << err;
         }

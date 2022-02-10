@@ -126,7 +126,7 @@ namespace NBus {
             IBusServerHandler* handler,
             const TBusServerSessionConfig& config,
             TBusMessageQueuePtr queue,
-            const TVector<TBindResult>& bindTo);
+            const TVector<TBindResult>& bindTo); 
 
         // TODO: make parameter non-const
         virtual EMessageStatus SendReply(const TBusIdentity& ident, TBusMessage* pRep) = 0;

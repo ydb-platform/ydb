@@ -1,7 +1,7 @@
 #pragma once
 
 #include "defs.h"
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 #include <util/generic/set.h>
 #include <util/generic/map.h>
 #include <util/generic/vector.h>
@@ -19,7 +19,7 @@ namespace NKikimr {
      * through replication, or do something else. */
 
     class TBufferWithGaps {
-        TString Data;
+        TString Data; 
         // <begin, size>
         TMap<ui32, ui32> Gaps;
         ui32 Offset; // Data's offset in Gaps space
@@ -60,17 +60,17 @@ namespace NKikimr {
             Gaps.emplace(begin, size);
         }
 
-        void SetData(TString&& data) {
+        void SetData(TString&& data) { 
             Data = std::move(data);
             IsCommited = true;
         }
 
-        TString ToString() const {
+        TString ToString() const { 
             Y_VERIFY(IsReadable(), "returned data is corrupt (or was never written) and therefore could not be used safely");
             return Data;
         }
 
-        TString Substr(ui32 offset, ui32 len) const {
+        TString Substr(ui32 offset, ui32 len) const { 
             Y_VERIFY(IsReadable(offset, len), "returned data is corrupt (or was never written) at offset# %" PRIu32
                    " len# %" PRIu32 " and therefore could not be used safely", offset, len);
             return Data.substr(offset, len);

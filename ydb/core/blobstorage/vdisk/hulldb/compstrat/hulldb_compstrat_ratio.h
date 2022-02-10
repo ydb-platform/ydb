@@ -59,7 +59,7 @@ namespace NKikimr {
                 bool BreakedActualRatio = false;
                 bool BreakedTimeout = false;
 
-                TString ToString() const {
+                TString ToString() const { 
                     auto bool2str = [] (bool v) { return v ? "true" : "false"; };
                     return Sprintf("{SstsChecked# %" PRIu32 " BreakedActualRatio# %s "
                                    "BreakedTimeout# %s}", SstsChecked, bool2str(BreakedActualRatio),
@@ -81,7 +81,7 @@ namespace NKikimr {
                 }
             };
 
-            void OrderSstByStorageRatioTime(TVector<TTimeSst> &vec) {
+            void OrderSstByStorageRatioTime(TVector<TTimeSst> &vec) { 
                 vec.clear();
                 TSstIterator it(&LevelSnap.SliceSnap);
                 it.SeekToFirst();
@@ -99,7 +99,7 @@ namespace NKikimr {
                 const TDuration &calcDuration = HullCtx->HullCompStorageRatioMaxCalcDuration;
 
                 // order all ssts (including level 0) by storage ratio calculation time
-                TVector<TTimeSst> vec;
+                TVector<TTimeSst> vec; 
                 vec.reserve(1000u);
                 OrderSstByStorageRatioTime(vec);
 

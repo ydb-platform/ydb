@@ -10,8 +10,8 @@ using namespace NCompTable;
 
 template <bool HQ>
 void DoTest(const TCompressorTable& table, const TVector<TString>& lines) {
-    TVector<char> compressed;
-    TVector<char> decompressed;
+    TVector<char> compressed; 
+    TVector<char> decompressed; 
 
     TChunkCompressor compressor(HQ, table);
     TChunkDecompressor deCompressor(HQ, table);
@@ -42,18 +42,18 @@ void DoTest(const TCompressorTable& table, const TVector<TString>& lines) {
 
 int main(int argc, const char* argv[]) {
     TReallyFastRng32 rr(17);
-    TVector<TString> lines;
+    TVector<TString> lines; 
     /*FILE *fp = fopen("res", "rb");
     while (!feof(fp)) {
         char buff[4096];
         fscanf(fp, "%s", buff);
-        lines.push_back(TString(buff));
+        lines.push_back(TString(buff)); 
     }*/
     //for (size_t i = 0; i < 10000000; ++i) {
     //for (size_t i = 0; i < 1000000; ++i) {
     for (size_t i = 0; i < 1000000; ++i) {
         size_t size = rr.Uniform(32);
-        TString res = "www.yandex.ru/yandsearch?text=";
+        TString res = "www.yandex.ru/yandsearch?text="; 
         for (size_t j = 0; j < size; ++j) {
             res += "qwer"[rr.Uniform(4)];
         }

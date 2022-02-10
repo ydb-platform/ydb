@@ -104,7 +104,7 @@ namespace {
 #endif
         }
 
-        inline ~TSemaphoreImpl() {
+        inline ~TSemaphoreImpl() { 
 #ifdef _win_
             ::CloseHandle(Handle);
 #else
@@ -119,7 +119,7 @@ namespace {
 #endif
         }
 
-        inline void Release() noexcept {
+        inline void Release() noexcept { 
 #ifdef _win_
             ::ReleaseSemaphore(Handle, 1, 0);
 #else
@@ -135,7 +135,7 @@ namespace {
 
         //The UNIX semaphore object does not support a timed "wait", and
         //hence to maintain consistancy, for win32 case we use INFINITE or 0 timeout.
-        inline void Acquire() noexcept {
+        inline void Acquire() noexcept { 
 #ifdef _win_
             Y_VERIFY(::WaitForSingleObject(Handle, INFINITE) == WAIT_OBJECT_0, "can not acquire semaphore");
 #else
@@ -149,7 +149,7 @@ namespace {
 #endif
         }
 
-        inline bool TryAcquire() noexcept {
+        inline bool TryAcquire() noexcept { 
 #ifdef _win_
             // zero-second time-out interval
             // WAIT_OBJECT_0: current free count > 0
@@ -169,8 +169,8 @@ namespace {
 
 #if defined(_unix_)
     /*
-    Disable errors/warnings about deprecated sem_* in Darwin
-*/
+    Disable errors/warnings about deprecated sem_* in Darwin 
+*/ 
     #ifdef _darwin_
     Y_PRAGMA_DIAGNOSTIC_PUSH
     Y_PRAGMA_NO_DEPRECATED
@@ -182,19 +182,19 @@ namespace {
             }
         }
 
-        inline ~TPosixSemaphore() {
+        inline ~TPosixSemaphore() { 
             Y_VERIFY(sem_destroy(&S_) == 0, "semaphore destroy failed");
         }
 
-        inline void Acquire() noexcept {
+        inline void Acquire() noexcept { 
             Y_VERIFY(sem_wait(&S_) == 0, "semaphore acquire failed");
         }
 
-        inline void Release() noexcept {
+        inline void Release() noexcept { 
             Y_VERIFY(sem_post(&S_) == 0, "semaphore release failed");
         }
 
-        inline bool TryAcquire() noexcept {
+        inline bool TryAcquire() noexcept { 
             if (sem_trywait(&S_)) {
                 Y_VERIFY(errno == EAGAIN, "semaphore try wait failed");
 
@@ -227,15 +227,15 @@ TSemaphore::TSemaphore(const char* name, ui32 maxFreeCount)
 
 TSemaphore::~TSemaphore() = default;
 
-void TSemaphore::Release() noexcept {
+void TSemaphore::Release() noexcept { 
     Impl_->Release();
 }
 
-void TSemaphore::Acquire() noexcept {
+void TSemaphore::Acquire() noexcept { 
     Impl_->Acquire();
 }
 
-bool TSemaphore::TryAcquire() noexcept {
+bool TSemaphore::TryAcquire() noexcept { 
     return Impl_->TryAcquire();
 }
 
@@ -248,10 +248,10 @@ public:
     }
 };
 #else
-class TFastSemaphore::TImpl: public TString, public TSemaphoreImpl {
+class TFastSemaphore::TImpl: public TString, public TSemaphoreImpl { 
 public:
     inline TImpl(ui32 n)
-        : TString(ToString(RandomNumber<ui64>()))
+        : TString(ToString(RandomNumber<ui64>())) 
         , TSemaphoreImpl(c_str(), n)
     {
     }
@@ -265,14 +265,14 @@ TFastSemaphore::TFastSemaphore(ui32 maxFreeCount)
 
 TFastSemaphore::~TFastSemaphore() = default;
 
-void TFastSemaphore::Release() noexcept {
+void TFastSemaphore::Release() noexcept { 
     Impl_->Release();
 }
 
-void TFastSemaphore::Acquire() noexcept {
+void TFastSemaphore::Acquire() noexcept { 
     Impl_->Acquire();
 }
 
-bool TFastSemaphore::TryAcquire() noexcept {
+bool TFastSemaphore::TryAcquire() noexcept { 
     return Impl_->TryAcquire();
 }

@@ -11,7 +11,7 @@ namespace NKikimr {
         using TLogoBlobSstPtr = TIntrusivePtr<TLogoBlobSst>;
         using TLogoBlobOrderedSsts = TOrderedLevelSegments<TKeyLogoBlob, TMemRecLogoBlob>;
         using TLogoBlobOrderedSstsPtr = TIntrusivePtr<TLogoBlobOrderedSsts>;
-        using TSegments = TVector<TLogoBlobSstPtr>;
+        using TSegments = TVector<TLogoBlobSstPtr>; 
 
         static const ui32 ChunkSize = 8u << 20u;
         static const ui32 CompWorthReadSize = 2u << 20u;
@@ -58,7 +58,7 @@ namespace NKikimr {
                 str << it.GetCurKey().ToString();
                 it.Next();
             }
-            TString result("[0:0:10:0:0:0:0][0:0:11:0:0:0:0]"
+            TString result("[0:0:10:0:0:0:0][0:0:11:0:0:0:0]" 
                           "[0:0:12:0:0:0:0][0:0:13:0:0:0:0]"
                           "[0:0:14:0:0:0:0][0:0:15:0:0:0:0]"
                           "[0:0:16:0:0:0:0][0:0:17:0:0:0:0]"
@@ -76,7 +76,7 @@ namespace NKikimr {
                 str << it.GetCurKey().ToString();
                 it.Prev();
             }
-            TString result("[0:0:19:0:0:0:0][0:0:18:0:0:0:0]"
+            TString result("[0:0:19:0:0:0:0][0:0:18:0:0:0:0]" 
                           "[0:0:17:0:0:0:0][0:0:16:0:0:0:0]"
                           "[0:0:15:0:0:0:0][0:0:14:0:0:0:0]"
                           "[0:0:13:0:0:0:0][0:0:12:0:0:0:0]"
@@ -91,14 +91,14 @@ namespace NKikimr {
             TLogoBlobID id;
             id = TLogoBlobID(0, 0, 15, 0, 0, 0);
             it.Seek(id);
-            UNIT_ASSERT(it.GetCurKey().ToString() == TString("[0:0:15:0:0:0:0]"));
+            UNIT_ASSERT(it.GetCurKey().ToString() == TString("[0:0:15:0:0:0:0]")); 
 
             TStringStream str;
             while (it.Valid()) {
                 str << it.GetCurKey().ToString();
                 it.Next();
             }
-            TString result("[0:0:15:0:0:0:0][0:0:16:0:0:0:0]"
+            TString result("[0:0:15:0:0:0:0][0:0:16:0:0:0:0]" 
                           "[0:0:17:0:0:0:0][0:0:18:0:0:0:0]"
                           "[0:0:19:0:0:0:0]");
             UNIT_ASSERT(str.Str() == result);
@@ -111,14 +111,14 @@ namespace NKikimr {
             TLogoBlobID id;
             id = TLogoBlobID(0, 0, 15, 0, 0, 0);
             it.Seek(id);
-            UNIT_ASSERT(it.GetCurKey().ToString() == TString("[0:0:15:0:0:0:0]"));
+            UNIT_ASSERT(it.GetCurKey().ToString() == TString("[0:0:15:0:0:0:0]")); 
 
             TStringStream str;
             while (it.Valid()) {
                 str << it.GetCurKey().ToString();
                 it.Prev();
             }
-            TString result("[0:0:15:0:0:0:0][0:0:14:0:0:0:0]"
+            TString result("[0:0:15:0:0:0:0][0:0:14:0:0:0:0]" 
                           "[0:0:13:0:0:0:0][0:0:12:0:0:0:0]"
                           "[0:0:11:0:0:0:0][0:0:10:0:0:0:0]");
             UNIT_ASSERT(str.Str() == result);
@@ -175,7 +175,7 @@ namespace NKikimr {
                 str << it.GetCurKey().ToString();
                 it.Next();
             }
-            TString result("[0:0:10:0:0:0:0][0:0:11:0:0:0:0]"
+            TString result("[0:0:10:0:0:0:0][0:0:11:0:0:0:0]" 
                           "[0:0:12:0:0:0:0][0:0:13:0:0:0:0]"
                           "[0:0:14:0:0:0:0][0:0:15:0:0:0:0]"
                           "[0:0:16:0:0:0:0][0:0:17:0:0:0:0]"
@@ -197,7 +197,7 @@ namespace NKikimr {
                 str << it.GetCurKey().ToString();
                 it.Prev();
             }
-            TString result("[0:0:24:0:0:0:0][0:0:23:0:0:0:0]"
+            TString result("[0:0:24:0:0:0:0][0:0:23:0:0:0:0]" 
                           "[0:0:22:0:0:0:0][0:0:21:0:0:0:0]"
                           "[0:0:20:0:0:0:0][0:0:19:0:0:0:0]"
                           "[0:0:18:0:0:0:0][0:0:17:0:0:0:0]"

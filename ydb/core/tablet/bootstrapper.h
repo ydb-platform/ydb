@@ -34,7 +34,7 @@ struct TEvBootstrapper {
 
 struct TBootstrapperInfo : public TThrRefBase {
     TIntrusivePtr<TTabletSetupInfo> SetupInfo;
-    TVector<ui32> OtherNodes;
+    TVector<ui32> OtherNodes; 
     TDuration WatchThreshold;
     TDuration OfflineDelay;
     bool StartFollowers;

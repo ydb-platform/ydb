@@ -27,7 +27,7 @@ bool ResultsOverflow(ui64 rows, ui64 bytes, const IDataProvider::TFillSettings& 
 }
 
 void WriteValueToYson(const TStringStream& stream, NCommon::TYsonResultWriter& writer, const NKikimrMiniKQL::TType& type,
-    const NKikimrMiniKQL::TValue& value, const TVector<TString>* fieldsOrder,
+    const NKikimrMiniKQL::TValue& value, const TVector<TString>* fieldsOrder, 
     const IDataProvider::TFillSettings& fillSettings, bool& truncated, bool firstLevel = false)
 {
     switch (type.GetKind()) {
@@ -181,7 +181,7 @@ void WriteValueToYson(const TStringStream& stream, NCommon::TYsonResultWriter& w
 
             if (fieldsOrder) {
                 YQL_ENSURE(fieldsOrder->size() == structType.MemberSize());
-                TMap<TString, size_t> memberIndices;
+                TMap<TString, size_t> memberIndices; 
                 for (size_t i = 0; i < structType.MemberSize(); ++i) {
                     memberIndices[structType.GetMember(i).GetName()] = i;
                 }
@@ -348,7 +348,7 @@ TVector<NKikimrMiniKQL::TResult*> UnpackKikimrRunResult(const NKikimrMiniKQL::TR
 }
 
 void KikimrResultToYson(const TStringStream& stream, NYson::TYsonWriter& writer, const NKikimrMiniKQL::TResult& result,
-    const TVector<TString>& columnHints, const IDataProvider::TFillSettings& fillSettings, bool& truncated)
+    const TVector<TString>& columnHints, const IDataProvider::TFillSettings& fillSettings, bool& truncated) 
 {
     truncated = false;
     NCommon::TYsonResultWriter resultWriter(writer);
@@ -392,7 +392,7 @@ NKikimrMiniKQL::TResult* KikimrResultToProto(const NKikimrMiniKQL::TResult& resu
     if (result.GetType().GetKind() == NKikimrMiniKQL::ETypeKind::List) {
         const auto& itemType = result.GetType().GetList().GetItem();
 
-        TMap<TString, size_t> memberIndices;
+        TMap<TString, size_t> memberIndices; 
         if (itemType.GetKind() == NKikimrMiniKQL::ETypeKind::Struct && !columnHints.empty()) {
             const auto& structType = itemType.GetStruct();
 
@@ -480,7 +480,7 @@ const TTypeAnnotationNode* ParseTypeFromKikimrProto(const NKikimrMiniKQL::TType&
         }
 
         case NKikimrMiniKQL::ETypeKind::Tuple: {
-            TTypeAnnotationNode::TListType tupleItems;
+            TTypeAnnotationNode::TListType tupleItems; 
 
             for (auto& element : type.GetTuple().GetElement()) {
                 auto elementType = ParseTypeFromKikimrProto(element, ctx);
@@ -504,7 +504,7 @@ const TTypeAnnotationNode* ParseTypeFromKikimrProto(const NKikimrMiniKQL::TType&
         }
 
         case NKikimrMiniKQL::ETypeKind::Struct: {
-            TVector<const TItemExprType*> structMembers;
+            TVector<const TItemExprType*> structMembers; 
             for (auto& member : type.GetStruct().GetMember()) {
                 auto memberType = ParseTypeFromKikimrProto(member.GetType(), ctx);
                 if (!memberType) {
@@ -677,7 +677,7 @@ TExprNode::TPtr ParseKikimrProtoValue(const NKikimrMiniKQL::TType& type, const N
                 return nullptr;
             }
 
-            TExprNode::TListType itemNodes;
+            TExprNode::TListType itemNodes; 
             for (ui32 i = 0; i < tupleType.ElementSize(); ++i) {
                 const auto& itemType = tupleType.GetElement(i);
                 auto itemNode = ParseKikimrProtoValue(itemType, value.GetTuple(i), pos, ctx);
@@ -698,7 +698,7 @@ TExprNode::TPtr ParseKikimrProtoValue(const NKikimrMiniKQL::TType& type, const N
                 return nullptr;
             }
 
-            TExprNode::TListType itemNodes;
+            TExprNode::TListType itemNodes; 
             for (ui32 i = 0; i < value.ListSize(); ++i) {
                 auto itemNode = ParseKikimrProtoValue(itemType, value.GetList(i), pos, ctx);
                 if (!itemNode) {
@@ -721,7 +721,7 @@ TExprNode::TPtr ParseKikimrProtoValue(const NKikimrMiniKQL::TType& type, const N
                 return nullptr;
             }
 
-            TExprNode::TListType structMembers;
+            TExprNode::TListType structMembers; 
             for (ui32 i = 0; i < structType.MemberSize(); ++i) {
                 const auto& member = structType.GetMember(i);
 
@@ -743,7 +743,7 @@ TExprNode::TPtr ParseKikimrProtoValue(const NKikimrMiniKQL::TType& type, const N
 
         case NKikimrMiniKQL::ETypeKind::Dict: {
             const auto& dictType = type.GetDict();
-            TExprNode::TListType dictPairs;
+            TExprNode::TListType dictPairs; 
             for (ui32 i = 0; i < value.DictSize(); ++i) {
                 auto keyNode = ParseKikimrProtoValue(dictType.GetKey(), value.GetDict(i).GetKey(), pos, ctx);
                 if (!keyNode) {
@@ -814,7 +814,7 @@ TMaybe<TString> KqpResultToYson(const NKikimrMiniKQL::TResult& kqpResult, const 
     writer.OnBeginMap();
     writer.OnKeyedItem("Type");
 
-    TVector<TString> columns;
+    TVector<TString> columns; 
     if (dataResult.GetType().GetKind() == NKikimrMiniKQL::ETypeKind::List) {
         const auto& itemType = dataResult.GetType().GetList().GetItem();
         if (itemType.GetKind() == NKikimrMiniKQL::ETypeKind::Struct) {

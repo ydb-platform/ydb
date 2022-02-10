@@ -20,7 +20,7 @@ private:
 public:
     virtual ui32 GetMaxTabletStateClass() const override;
     virtual std::function<bool(const NKikimrWhiteboard::TTabletStateInfo&)> GetTabletStateClassFilter(ui32 cls) const override;
-    virtual TString GetTabletStateClassName(ui32 cls) override;
+    virtual TString GetTabletStateClassName(ui32 cls) override; 
 
 };
 
@@ -28,26 +28,26 @@ public:
 class TTabletListRenderer : public ITabletListRenderer {
 protected:
     using ETabletState = NKikimrWhiteboard::TTabletStateInfo::ETabletState;
-    static TString GetStateName(ETabletState state);
+    static TString GetStateName(ETabletState state); 
 
-    virtual TString MakeTabletMonURL(const TTabletListElement& elem,
+    virtual TString MakeTabletMonURL(const TTabletListElement& elem, 
                                     const TTabletFilterInfo& filterInfo);
 
-    virtual TString GetUserStateName(const TTabletListElement& elem);
+    virtual TString GetUserStateName(const TTabletListElement& elem); 
 
     virtual void RenderHeader(TStringStream& str,
-                      const TString& listName,
-                      const TVector<TTabletListElement>& tabletsToRender,
+                      const TString& listName, 
+                      const TVector<TTabletListElement>& tabletsToRender, 
                       const TTabletFilterInfo& filterInfo);
 
     virtual void RenderTableHeader(TStringStream& str,
-                           const TString& listName,
-                           const TVector<TTabletListElement>& tabletsToRender,
+                           const TString& listName, 
+                           const TVector<TTabletListElement>& tabletsToRender, 
                            const TTabletFilterInfo& filterInfo);
 
     virtual void RenderTableBody(TStringStream& str,
-                         const TString& listName,
-                         const TVector<TTabletListElement>& tabletsToRender,
+                         const TString& listName, 
+                         const TVector<TTabletListElement>& tabletsToRender, 
                          const TTabletFilterInfo& filterInfo);
 
 public:
@@ -56,8 +56,8 @@ public:
     void RenderPageFooter(TStringStream& str) override;
 
     void RenderTabletList(TStringStream& str,
-                          const TString& listName,
-                          const TVector<TTabletListElement>& tabletsToRender,
+                          const TString& listName, 
+                          const TVector<TTabletListElement>& tabletsToRender, 
                           const TTabletFilterInfo& filterInfo) override;
 };
 

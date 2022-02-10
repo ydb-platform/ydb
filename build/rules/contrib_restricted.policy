@@ -190,4 +190,4 @@ ALLOW yandex_io -> contrib/restricted/patched/hostap_client
 # All peerdirs to contrib/restricted from outside are prohibited
 #
 ALLOW contrib -> contrib/restricted
-DENY .* -> contrib/restricted
+DENY .* -> contrib/restricted 

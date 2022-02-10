@@ -414,10 +414,10 @@ private:
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx);
 
 private:
-    TStack<TInstant> ScheduledCleanups;
+    TStack<TInstant> ScheduledCleanups; 
     TString NotSupportedReason;
     TQueue<TAutoPtr<IEventHandle>> InitQueue;
-    TQueue<TAutoPtr<IEventHandle>> Queue;
+    TQueue<TAutoPtr<IEventHandle>> Queue; 
     TCmsStatePtr State;
     TLogger Logger;
     // Shortcut to State->ClusterInfo.

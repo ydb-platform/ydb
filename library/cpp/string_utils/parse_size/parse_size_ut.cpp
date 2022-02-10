@@ -56,7 +56,7 @@ private:
     }
 
     void TestToString() {
-        UNIT_ASSERT_VALUES_EQUAL(ToString(FromKiloBytes(1)), TString("1024"));
+        UNIT_ASSERT_VALUES_EQUAL(ToString(FromKiloBytes(1)), TString("1024")); 
     }
 };
 

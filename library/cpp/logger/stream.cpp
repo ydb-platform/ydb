@@ -8,7 +8,7 @@ TStreamLogBackend::TStreamLogBackend(IOutputStream* slave)
 {
 }
 
-TStreamLogBackend::~TStreamLogBackend() {
+TStreamLogBackend::~TStreamLogBackend() { 
 }
 
 void TStreamLogBackend::WriteData(const TLogRecord& rec) {

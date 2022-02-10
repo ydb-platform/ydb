@@ -67,7 +67,7 @@ public:
 private:
     THolder<IEventBase> Request;
     TAutoPtr<IEventHandle> Response;
-    TVector<TString> Ids;
+    TVector<TString> Ids; 
     bool Expired;
 };
 

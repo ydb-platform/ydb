@@ -8,7 +8,7 @@
 
 Y_UNIT_TEST_SUITE(YSetTest) {
     Y_UNIT_TEST(TestSet1) {
-        TSet<int, TLess<int>> s;
+        TSet<int, TLess<int>> s; 
         UNIT_ASSERT(!s);
         UNIT_ASSERT(s.count(42) == 0);
         s.insert(42);
@@ -21,7 +21,7 @@ Y_UNIT_TEST_SUITE(YSetTest) {
     }
 
     Y_UNIT_TEST(TestSet2) {
-        using int_set = TSet<int, TLess<int>>;
+        using int_set = TSet<int, TLess<int>>; 
         int_set s;
         std::pair<int_set::iterator, bool> p = s.insert(42);
         UNIT_ASSERT(p.second == true);
@@ -46,7 +46,7 @@ Y_UNIT_TEST_SUITE(YSetTest) {
     }
 
     Y_UNIT_TEST(TestErase) {
-        TSet<int, TLess<int>> s;
+        TSet<int, TLess<int>> s; 
         s.insert(1);
         s.erase(s.begin());
         UNIT_ASSERT(s.empty());
@@ -56,26 +56,26 @@ Y_UNIT_TEST_SUITE(YSetTest) {
     }
 
     Y_UNIT_TEST(TestInsert) {
-        TSet<int> s;
-        TSet<int>::iterator i = s.insert(s.end(), 0);
+        TSet<int> s; 
+        TSet<int>::iterator i = s.insert(s.end(), 0); 
         UNIT_ASSERT(*i == 0);
     }
 
     Y_UNIT_TEST(TestFind) {
-        TSet<int> s;
+        TSet<int> s; 
 
         UNIT_ASSERT(s.find(0) == s.end());
 
-        TSet<int> const& crs = s;
+        TSet<int> const& crs = s; 
 
         UNIT_ASSERT(crs.find(0) == crs.end());
     }
 
     Y_UNIT_TEST(TestHas) {
-        TSet<int> s;
+        TSet<int> s; 
         UNIT_ASSERT(!s.contains(0));
 
-        TSet<int> const& crs = s;
+        TSet<int> const& crs = s; 
         UNIT_ASSERT(!crs.contains(0));
 
         s.insert(1);
@@ -91,13 +91,13 @@ Y_UNIT_TEST_SUITE(YSetTest) {
 
     Y_UNIT_TEST(TestBounds) {
         int array1[] = {1, 3, 6, 7};
-        TSet<int> s(array1, array1 + sizeof(array1) / sizeof(array1[0]));
-        TSet<int> const& crs = s;
+        TSet<int> s(array1, array1 + sizeof(array1) / sizeof(array1[0])); 
+        TSet<int> const& crs = s; 
 
-        TSet<int>::iterator sit;
-        TSet<int>::const_iterator scit;
-        std::pair<TSet<int>::iterator, TSet<int>::iterator> pit;
-        std::pair<TSet<int>::const_iterator, TSet<int>::const_iterator> pcit;
+        TSet<int>::iterator sit; 
+        TSet<int>::const_iterator scit; 
+        std::pair<TSet<int>::iterator, TSet<int>::iterator> pit; 
+        std::pair<TSet<int>::const_iterator, TSet<int>::const_iterator> pcit; 
 
         //Check iterator on mutable set
         sit = s.lower_bound(2);
@@ -156,35 +156,35 @@ Y_UNIT_TEST_SUITE(YSetTest) {
     }
 
     Y_UNIT_TEST(TestImplementationCheck) {
-        TSet<int> tree;
+        TSet<int> tree; 
         tree.insert(1);
-        TSet<int>::iterator it = tree.begin();
+        TSet<int>::iterator it = tree.begin(); 
         int const& int_ref = *it++;
         UNIT_ASSERT(int_ref == 1);
 
         UNIT_ASSERT(it == tree.end());
         UNIT_ASSERT(it != tree.begin());
 
-        TSet<int>::const_iterator cit = tree.begin();
+        TSet<int>::const_iterator cit = tree.begin(); 
         int const& int_cref = *cit++;
         UNIT_ASSERT(int_cref == 1);
     }
 
     Y_UNIT_TEST(TestReverseIteratorTest) {
-        TSet<int> tree;
+        TSet<int> tree; 
         tree.insert(1);
         tree.insert(2);
 
         {
-            TSet<int>::reverse_iterator rit(tree.rbegin());
+            TSet<int>::reverse_iterator rit(tree.rbegin()); 
             UNIT_ASSERT(*(rit++) == 2);
             UNIT_ASSERT(*(rit++) == 1);
             UNIT_ASSERT(rit == tree.rend());
         }
 
         {
-            TSet<int> const& ctree = tree;
-            TSet<int>::const_reverse_iterator rit(ctree.rbegin());
+            TSet<int> const& ctree = tree; 
+            TSet<int>::const_reverse_iterator rit(ctree.rbegin()); 
             UNIT_ASSERT(*(rit++) == 2);
             UNIT_ASSERT(*(rit++) == 1);
             UNIT_ASSERT(rit == ctree.rend());
@@ -193,7 +193,7 @@ Y_UNIT_TEST_SUITE(YSetTest) {
 
     Y_UNIT_TEST(TestConstructorsAndAssignments) {
         {
-            using container = TSet<int>;
+            using container = TSet<int>; 
 
             container c1;
             c1.insert(100);
@@ -228,7 +228,7 @@ Y_UNIT_TEST_SUITE(YSetTest) {
         }
 
         {
-            using container = TMultiSet<int>;
+            using container = TMultiSet<int>; 
 
             container c1;
             c1.insert(100);
@@ -311,7 +311,7 @@ Y_UNIT_TEST_SUITE(YSetTest) {
 
     Y_UNIT_TEST(TestTemplateMethods) {
         {
-            using KeySet = TSet<TKey, TKeyCmp>;
+            using KeySet = TSet<TKey, TKeyCmp>; 
             KeySet keySet;
             keySet.insert(TKey(1));
             keySet.insert(TKey(2));
@@ -335,7 +335,7 @@ Y_UNIT_TEST_SUITE(YSetTest) {
         }
 
         {
-            using KeySet = TSet<TKey*, TKeyCmpPtr>;
+            using KeySet = TSet<TKey*, TKeyCmpPtr>; 
             KeySet keySet;
             TKey key1(1), key2(2), key3(3), key4(4);
             keySet.insert(&key1);
@@ -358,7 +358,7 @@ Y_UNIT_TEST_SUITE(YSetTest) {
             UNIT_ASSERT(ckeySet.equal_range(2) != std::make_pair(ckeySet.begin(), ckeySet.end()));
         }
         {
-            using KeySet = TMultiSet<TKey, TKeyCmp>;
+            using KeySet = TMultiSet<TKey, TKeyCmp>; 
             KeySet keySet;
             keySet.insert(TKey(1));
             keySet.insert(TKey(2));
@@ -382,7 +382,7 @@ Y_UNIT_TEST_SUITE(YSetTest) {
         }
 
         {
-            using KeySet = TMultiSet<TKey const volatile*, TKeyCmpPtr>;
+            using KeySet = TMultiSet<TKey const volatile*, TKeyCmpPtr>; 
             KeySet keySet;
             TKey key1(1), key2(2), key3(3), key4(4);
             keySet.insert(&key1);

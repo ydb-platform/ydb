@@ -10,7 +10,7 @@
 
 Y_UNIT_TEST_SUITE(TestFileStat) {
     Y_UNIT_TEST(FileTest) {
-        TString fileName = "f1.txt";
+        TString fileName = "f1.txt"; 
         TFileStat oFs;
         {
             TFile file(fileName.data(), OpenAlways | WrOnly);

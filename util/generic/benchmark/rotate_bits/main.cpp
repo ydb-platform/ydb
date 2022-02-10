@@ -25,7 +25,7 @@ namespace {
             }
         }
 
-        TVector<TExample<T>> Examples;
+        TVector<TExample<T>> Examples; 
     };
 }
 

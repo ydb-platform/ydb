@@ -188,7 +188,7 @@ namespace NYsonPull {
             lexer_base<EnableLinePositionInfo> lexer_;
             state state_;
             TEvent event_;
-            TVector<EEventType> stack_;
+            TVector<EEventType> stack_; 
             EStreamType mode_;
 
         public:

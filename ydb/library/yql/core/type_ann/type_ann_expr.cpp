@@ -66,7 +66,7 @@ public:
     NThreading::TFuture<void> DoGetAsyncFuture(const TExprNode& input) final {
         YQL_PROFILE_SCOPE(DEBUG, "TypeAnnotationTransformer::DoGetAsyncFuture");
         Y_UNUSED(input);
-        TVector<NThreading::TFuture<void>> futures;
+        TVector<NThreading::TFuture<void>> futures; 
         for (const auto& callable : CallableInputs) {
             futures.push_back(CallableTransformer->GetAsyncFuture(*callable));
         }
@@ -105,7 +105,7 @@ private:
             return;
         }
 
-        TVector<std::pair<TString, ui64>> values;
+        TVector<std::pair<TString, ui64>> values; 
         for (const auto& x : RepeatCallableCount) {
             values.push_back({ x.first, x.second });
         }
@@ -259,7 +259,7 @@ private:
             case TExprNode::List:
             {
                 TStatus combinedStatus = TStatus::Ok;
-                TExprNode::TListType newChildren;
+                TExprNode::TListType newChildren; 
                 newChildren.reserve(input->ChildrenSize());
                 bool updatedChildren = false;
                 for (ui32 i = 0; i < input->ChildrenSize(); ++i) {
@@ -284,7 +284,7 @@ private:
                     break;
                 }
 
-                TTypeAnnotationNode::TListType children;
+                TTypeAnnotationNode::TListType children; 
                 children.reserve(input->ChildrenSize());
                 bool isUnit = false;
                 for (auto& child : input->Children()) {
@@ -388,7 +388,7 @@ private:
             {
                 TStatus combinedStatus = TStatus::Ok;
                 {
-                    TExprNode::TListType newChildren;
+                    TExprNode::TListType newChildren; 
                     newChildren.reserve(input->ChildrenSize());
                     bool updatedChildren = false;
                     for (ui32 i = 0; i < input->ChildrenSize(); ++i) {
@@ -544,10 +544,10 @@ private:
 private:
     TAutoPtr<IGraphTransformer> CallableTransformer;
     TTypeAnnotationContext& Types;
-    TDeque<TExprNode::TPtr> CallableInputs;
+    TDeque<TExprNode::TPtr> CallableInputs; 
     TNodeOnNodeOwnedMap Processed;
     bool HasRenames = false;
-    THashMap<TString, ui64> RepeatCallableCount;
+    THashMap<TString, ui64> RepeatCallableCount; 
     TStack<std::pair<TStringBuf, bool>> CurrentFunctions;
     THashMap<TStringBuf, std::pair<ui64, ui64>> CallableTimes;
 };
@@ -574,7 +574,7 @@ TAutoPtr<IGraphTransformer> CreateFullTypeAnnotationTransformer(
         bool wholeProgram,
         TTypeAnnotationContext& typeAnnotationContext)
 {
-    TVector<TTransformStage> transformers;
+    TVector<TTransformStage> transformers; 
     auto issueCode = TIssuesIds::CORE_PRE_TYPE_ANN;
     transformers.push_back(TTransformStage(
         CreateFunctorTransformer(&ExpandApply),

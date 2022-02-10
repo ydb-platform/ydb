@@ -14,7 +14,7 @@ public:
         Init();
     }
 
-    inline ~TImpl() {
+    inline ~TImpl() { 
         Clear();
     }
 
@@ -24,7 +24,7 @@ public:
         }
     }
 
-    inline void Clear() noexcept {
+    inline void Clear() noexcept { 
         BZ2_bzDecompressEnd(&BzStream_);
     }
 
@@ -79,7 +79,7 @@ TBZipDecompress::TBZipDecompress(IInputStream* input, size_t bufLen)
 {
 }
 
-TBZipDecompress::~TBZipDecompress() {
+TBZipDecompress::~TBZipDecompress() { 
 }
 
 size_t TBZipDecompress::DoRead(void* buf, size_t size) {
@@ -101,7 +101,7 @@ public:
         BzStream_.avail_out = TmpBufLen();
     }
 
-    inline ~TImpl() {
+    inline ~TImpl() { 
         BZ2_bzCompressEnd(&BzStream_);
     }
 
@@ -156,11 +156,11 @@ public:
     }
 
 private:
-    inline char* TmpBuf() noexcept {
+    inline char* TmpBuf() noexcept { 
         return (char*)AdditionalData();
     }
 
-    inline size_t TmpBufLen() const noexcept {
+    inline size_t TmpBufLen() const noexcept { 
         return AdditionalDataLength();
     }
 
@@ -174,7 +174,7 @@ TBZipCompress::TBZipCompress(IOutputStream* out, size_t compressionLevel, size_t
 {
 }
 
-TBZipCompress::~TBZipCompress() {
+TBZipCompress::~TBZipCompress() { 
     try {
         Finish();
     } catch (...) {

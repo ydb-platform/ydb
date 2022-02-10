@@ -20,7 +20,7 @@ class TBlobStorageGroupIndexRestoreGetRequest
     const bool IsInternal;
 
     THashMap<ui64, TGroupQuorumTracker> QuorumTracker;
-    TVector<TBlobStatusTracker> BlobStatus;
+    TVector<TBlobStatusTracker> BlobStatus; 
     ui32 VGetsInFlight;
 
     TInstant StartTime;
@@ -54,7 +54,7 @@ class TBlobStorageGroupIndexRestoreGetRequest
 
     friend class TBlobStorageGroupRequestActor<TBlobStorageGroupIndexRestoreGetRequest>;
 
-    TString DumpBlobStatus() const {
+    TString DumpBlobStatus() const { 
         TStringStream str("{");
 
         for (ui32 i = 0; i < BlobStatus.size(); ++i) {
@@ -68,7 +68,7 @@ class TBlobStorageGroupIndexRestoreGetRequest
         return str.Str();
     }
 
-    TString DumpBlobStatus(ui32 i) const {
+    TString DumpBlobStatus(ui32 i) const { 
         TStringStream str;
         BlobStatus[i].Output(str, Info.Get());
         return str.Str();

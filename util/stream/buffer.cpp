@@ -34,7 +34,7 @@ public:
         Data_.Append(c);
     }
 
-    inline TBuffer& Buffer() const noexcept {
+    inline TBuffer& Buffer() const noexcept { 
         return Data_;
     }
 
@@ -71,7 +71,7 @@ TBufferOutput& TBufferOutput::operator=(TBufferOutput&&) noexcept = default;
 
 TBufferOutput::~TBufferOutput() = default;
 
-TBuffer& TBufferOutput::Buffer() const noexcept {
+TBuffer& TBufferOutput::Buffer() const noexcept { 
     return Impl_->Buffer();
 }
 
@@ -99,11 +99,11 @@ TBufferInput::TBufferInput(const TBuffer& buffer)
 
 TBufferInput::~TBufferInput() = default;
 
-const TBuffer& TBufferInput::Buffer() const noexcept {
+const TBuffer& TBufferInput::Buffer() const noexcept { 
     return Buf_;
 }
 
-void TBufferInput::Rewind() noexcept {
+void TBufferInput::Rewind() noexcept { 
     Readed_ = 0;
 }
 

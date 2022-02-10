@@ -56,7 +56,7 @@ namespace NKikimr {
             return *Begin;
         }
 
-        TString ToString() const {
+        TString ToString() const { 
             if (Begin == End)
                 return "empty";
             else {
@@ -185,11 +185,11 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     struct TPutRecoveryLogRecOpt {
         TLogoBlobID Id;
-        TString Data;
+        TString Data; 
 
         static TString Serialize(const TBlobStorageGroupType &gtype, const TLogoBlobID &id, const TRope &rope);
-        bool ParseFromString(const TBlobStorageGroupType &gtype, const TString &data);
-        TString ToString() const;
+        bool ParseFromString(const TBlobStorageGroupType &gtype, const TString &data); 
+        TString ToString() const; 
         void Output(IOutputStream &str) const;
     };
 

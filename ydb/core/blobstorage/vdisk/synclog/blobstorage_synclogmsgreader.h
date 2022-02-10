@@ -32,7 +32,7 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////
         class TNaiveFragmentReader : public IFragmentReader {
         public:
-            TNaiveFragmentReader(const TString &data)
+            TNaiveFragmentReader(const TString &data) 
                 : Data(data)
             {}
 
@@ -40,7 +40,7 @@ namespace NKikimr {
             virtual bool Check(TString &errorString) override;
 
         protected:
-            const TString &Data;
+            const TString &Data; 
             void ForEach(const TString &d, TReadLogoBlobRec fblob, TReadBlockRec fblock, TReadBarrierRec fbar, TReadBlockRecV2 fblock2);
         };
 
@@ -50,7 +50,7 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////
         class TLz4FragmentReader : public TNaiveFragmentReader {
         public:
-            TLz4FragmentReader(const TString &data)
+            TLz4FragmentReader(const TString &data) 
                 : TNaiveFragmentReader(data)
                 , Uncompressed()
             {}
@@ -59,7 +59,7 @@ namespace NKikimr {
             virtual bool Check(TString &errorString) override;
 
         private:
-            mutable TString Uncompressed;
+            mutable TString Uncompressed; 
             void Decompress();
         };
 
@@ -82,7 +82,7 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////
         class TOrderedLz4FragmentReader : public TBaseOrderedFragmentReader {
         public:
-            TOrderedLz4FragmentReader(const TString &data)
+            TOrderedLz4FragmentReader(const TString &data) 
                 : Data(data)
                 , Decompressed(false)
             {}
@@ -90,7 +90,7 @@ namespace NKikimr {
             virtual bool Check(TString &errorString) override;
 
         private:
-            const TString &Data;
+            const TString &Data; 
             bool Decompressed;
 
             bool Decompress() override;
@@ -101,7 +101,7 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////
         class TCustomCodecFragmentReader : public TBaseOrderedFragmentReader {
         public:
-            TCustomCodecFragmentReader(const TString &data)
+            TCustomCodecFragmentReader(const TString &data) 
                 : Data(data)
                 , Decompressed(false)
             {}
@@ -109,7 +109,7 @@ namespace NKikimr {
             virtual bool Check(TString &errorString) override;
 
         private:
-            const TString &Data;
+            const TString &Data; 
             bool Decompressed;
 
             bool Decompress() override;
@@ -121,7 +121,7 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////
         class TFragmentReader {
         public:
-            TFragmentReader(const TString &data);
+            TFragmentReader(const TString &data); 
 
             void ForEach(TReadLogoBlobRec fblob, TReadBlockRec fblock, TReadBarrierRec fbar, TReadBlockRecV2 fblock2) {
                 Impl->ForEach(fblob, fblock, fbar, fblock2);

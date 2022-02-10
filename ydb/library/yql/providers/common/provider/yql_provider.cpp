@@ -49,9 +49,9 @@ bool TCommitSettings::EnsureOtherEmpty(TExprContext& ctx) {
 }
 
 TCoNameValueTupleList TCommitSettings::BuildNode(TExprContext& ctx) const {
-    TVector<TExprBase> settings;
+    TVector<TExprBase> settings; 
 
-    auto addSettings = [this, &settings, &ctx] (const TString& name, TMaybeNode<TExprBase> value) {
+    auto addSettings = [this, &settings, &ctx] (const TString& name, TMaybeNode<TExprBase> value) { 
         if (value) {
 
             auto node = Build<TCoNameValueTuple>(ctx, Pos)
@@ -79,7 +79,7 @@ TCoNameValueTupleList TCommitSettings::BuildNode(TExprContext& ctx) const {
 }
 
 const TStructExprType* BuildCommonTableListType(TExprContext& ctx) {
-    TVector<const TItemExprType*> items;
+    TVector<const TItemExprType*> items; 
     auto stringType = ctx.MakeType<TDataExprType>(EDataSlot::String);
     auto listOfString = ctx.MakeType<TListExprType>(stringType);
 
@@ -106,8 +106,8 @@ bool HasResOrPullOption(const TExprNode& node, const TStringBuf& option) {
     return false;
 }
 
-TVector<TString> GetResOrPullColumnHints(const TExprNode& node) {
-    TVector<TString> columns;
+TVector<TString> GetResOrPullColumnHints(const TExprNode& node) { 
+    TVector<TString> columns; 
     auto setting = GetSetting(*node.Child(4), "columns");
     if (setting) {
         auto type = node.Head().GetTypeAnn();
@@ -122,7 +122,7 @@ TVector<TString> GetResOrPullColumnHints(const TExprNode& node) {
     return columns;
 }
 
-TString FullTableName(const TStringBuf& cluster, const TStringBuf& table) {
+TString FullTableName(const TStringBuf& cluster, const TStringBuf& table) { 
     return TStringBuilder() << cluster << ".[" << table << "]";
 }
 
@@ -322,7 +322,7 @@ TCommitSettings ParseCommitSettings(NNodes::TCoCommit node, TExprContext& ctx) {
 
     TMaybeNode<TCoAtom> mode;
     TMaybeNode<TCoAtom> epoch;
-    TVector<TExprBase> other;
+    TVector<TExprBase> other; 
 
     if (node.Settings()) {
         auto settings = node.Settings().Cast();
@@ -351,15 +351,15 @@ TCommitSettings ParseCommitSettings(NNodes::TCoCommit node, TExprContext& ctx) {
     return ret;
 }
 
-TVector<TString> GetStructFields(const TTypeAnnotationNode* type) {
-    TVector<TString> fields;
+TVector<TString> GetStructFields(const TTypeAnnotationNode* type) { 
+    TVector<TString> fields; 
     if (type->GetKind() == ETypeAnnotationKind::List) {
         type = type->Cast<TListExprType>()->GetItemType();
     }
     if (type->GetKind() == ETypeAnnotationKind::Struct) {
         auto structType = type->Cast<TStructExprType>();
         for (auto& member : structType->GetItems()) {
-            fields.push_back(TString(member->GetName()));
+            fields.push_back(TString(member->GetName())); 
         }
     }
     return fields;

@@ -9,15 +9,15 @@ namespace NMiniKQL {
 using namespace NDetail;
 
 namespace {
-    TNode* BuildCallableTypePayload(const TVector<TStringBuf>& argNames,
-        const TVector<ui64>& argFlags, TStringBuf payload, const TTypeEnvironment& env) {
+    TNode* BuildCallableTypePayload(const TVector<TStringBuf>& argNames, 
+        const TVector<ui64>& argFlags, TStringBuf payload, const TTypeEnvironment& env) { 
         TStructTypeBuilder itemTypeBuilder(env);
         itemTypeBuilder.Add("Name", TDataType::Create(NUdf::TDataType<char*>::Id, env));
         itemTypeBuilder.Add("Flags", TDataType::Create(NUdf::TDataType<ui64>::Id, env));
         TType* itemType = itemTypeBuilder.Build();
 
         bool startedNames = false;
-        THashSet<TStringBuf> usedNames;
+        THashSet<TStringBuf> usedNames; 
         TListLiteralBuilder argsListBuilder(env, itemType);
         for (ui32 i = 0; i < argNames.size(); ++i) {
             TStructLiteralBuilder itemBuilder(env);
@@ -151,7 +151,7 @@ TStructLiteral* TStructLiteralBuilder::Build() {
     if (Members.empty())
         return Env->GetEmptyStruct();
 
-    TVector<std::pair<TStringBuf, ui32>> sortedIndicies(Members.size());
+    TVector<std::pair<TStringBuf, ui32>> sortedIndicies(Members.size()); 
     for (ui32 i = 0, e = Members.size(); i < e; ++i) {
         sortedIndicies[i] = std::make_pair(Members[i].Name, i);
     }
@@ -161,8 +161,8 @@ TStructLiteral* TStructLiteralBuilder::Build() {
             return x.first < y.first;
     });
 
-    TVector<TStructMember> sortedMembers(Members.size());
-    TVector<TRuntimeNode> sortedValues(Members.size());
+    TVector<TStructMember> sortedMembers(Members.size()); 
+    TVector<TRuntimeNode> sortedValues(Members.size()); 
 
     for (ui32 i = 0, e = Members.size(); i < e; ++i) {
         sortedMembers[i] = Members[sortedIndicies[i].second];

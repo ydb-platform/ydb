@@ -5,7 +5,7 @@
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 
 using namespace NProtobufJson;
 

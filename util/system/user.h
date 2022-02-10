@@ -2,4 +2,4 @@
 
 #include <util/generic/fwd.h>
 
-TString GetUsername();
+TString GetUsername(); 

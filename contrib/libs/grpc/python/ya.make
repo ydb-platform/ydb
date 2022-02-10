@@ -4,11 +4,11 @@ WITHOUT_LICENSE_TEXTS()
 
 LICENSE(Apache-2.0)
 
-OWNER(
+OWNER( 
     akastornov
     g:contrib
     g:cpp-contrib
-)
+) 
 
 PEERDIR(
     contrib/libs/grpc/src/python/grpcio

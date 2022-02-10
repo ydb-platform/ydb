@@ -10,7 +10,7 @@
 #include <library/cpp/yson/writer.h>
 
 #include <util/generic/hash_set.h>
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 #include <util/generic/strbuf.h>
 
 #include <utility>
@@ -83,7 +83,7 @@ TExprNode::TPtr BuildTypeExpr(TPositionHandle pos, const TTypeAnnotationNode& an
 
 bool HasResOrPullOption(const TExprNode& node, const TStringBuf& option);
 
-TVector<TString> GetResOrPullColumnHints(const TExprNode& node);
+TVector<TString> GetResOrPullColumnHints(const TExprNode& node); 
 
 TWriteTableSettings ParseWriteTableSettings(NNodes::TExprList node, TExprContext& ctx);
 
@@ -91,12 +91,12 @@ TWriteRoleSettings ParseWriteRoleSettings(NNodes::TExprList node, TExprContext& 
 
 TCommitSettings ParseCommitSettings(NNodes::TCoCommit node, TExprContext& ctx);
 
-TString FullTableName(const TStringBuf& cluster, const TStringBuf& table);
+TString FullTableName(const TStringBuf& cluster, const TStringBuf& table); 
 
 IDataProvider::TFillSettings GetFillSettings(const TExprNode& node);
 NYson::EYsonFormat GetYsonFormat(const IDataProvider::TFillSettings& fillSettings);
 
-TVector<TString> GetStructFields(const TTypeAnnotationNode* type);
+TVector<TString> GetStructFields(const TTypeAnnotationNode* type); 
 
 void TransformerStatsToYson(const TString& name, const IGraphTransformer::TStatistics& stats, NYson::TYsonWriter& writer);
 

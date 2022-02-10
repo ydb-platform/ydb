@@ -89,7 +89,7 @@ namespace NKikimr {
                     return Present && Rank > FreeSpaceThreshold;
                 }
 
-                TString ToString() const {
+                TString ToString() const { 
                     TStringStream str;
                     str << "{Rank# " << Rank << " Level# " << LevelSstPtr.Level << "}";
                     return str.Str();

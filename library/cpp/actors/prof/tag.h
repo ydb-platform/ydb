@@ -12,7 +12,7 @@ namespace NProfiling {
     ui32 MakeTag(const char* s);
 
     // Make only unique tags. Y_VERIFY inside.
-    ui32 MakeTags(const TVector<const char*>& ss);
+    ui32 MakeTags(const TVector<const char*>& ss); 
 
     const char* GetTag(ui32 tag);
     size_t GetTagsCount();

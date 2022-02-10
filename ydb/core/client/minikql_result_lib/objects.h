@@ -17,7 +17,7 @@ using TProtoType = NKikimrMiniKQL::TType;
 using EProtoTypeKind = NKikimrMiniKQL::ETypeKind;
 
 class TOptional;
-class TListType;
+class TListType; 
 class TTuple;
 class TStruct;
 class TDict;
@@ -75,7 +75,7 @@ private:
 };
 
 
-class TListType {
+class TListType { 
 public:
     template <typename T>
     class iterator {
@@ -99,7 +99,7 @@ public:
     template <typename T>
     class TIterableList {
     public:
-        TIterableList(const TListType& l)
+        TIterableList(const TListType& l) 
             : List(l)
         {
         }
@@ -113,11 +113,11 @@ public:
         }
 
     private:
-        const TListType& List;
+        const TListType& List; 
     };
 
 
-    explicit TListType(const TProtoValue& value, const TProtoType& type)
+    explicit TListType(const TProtoValue& value, const TProtoType& type) 
         : RootValue(value)
         , RootType(type)
         , Size(RootValue.ListSize())
@@ -238,7 +238,7 @@ public:
     }
 
     template <typename K, typename V>
-    THashMap<K, V> GetHashMap() const;
+    THashMap<K, V> GetHashMap() const; 
 
 private:
     const TProtoValue& RootValue;
@@ -259,7 +259,7 @@ T TOptional::GetItem() const {
 #include "optional_funcs.inl"
 
 
-// TListType.
+// TListType. 
 #include "list_funcs.inl"
 
 
@@ -299,8 +299,8 @@ T TStruct::GetMember(size_t memberIndex) {
 
 // TDict.
 template <typename K, typename V>
-THashMap<K, V> TDict::GetHashMap() const {
-    THashMap<K, V> m;
+THashMap<K, V> TDict::GetHashMap() const { 
+    THashMap<K, V> m; 
     ui32 keySchemeType = RootType.GetDict().GetKey().GetData().GetScheme();
     for (const auto& kvPair : RootValue.GetDict()) {
         auto dictKey = NPrivate::GetData<K>(kvPair.GetKey(), keySchemeType);

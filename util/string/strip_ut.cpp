@@ -27,9 +27,9 @@ Y_UNIT_TEST_SUITE(TStripStringTest) {
         };
 
         for (const auto& test : tests) {
-            TString inputStr(test.Str);
+            TString inputStr(test.Str); 
 
-            TString s;
+            TString s; 
             Strip(inputStr, s);
             UNIT_ASSERT_EQUAL(s, test.StripRes);
 
@@ -58,7 +58,7 @@ Y_UNIT_TEST_SUITE(TStripStringTest) {
 
         for (auto test : tests) {
             UNIT_ASSERT_EQUAL(
-                StripString(TString(test.Str), EqualsStripAdapter('/')),
+                StripString(TString(test.Str), EqualsStripAdapter('/')), 
                 test.Result);
         };
     }
@@ -78,10 +78,10 @@ Y_UNIT_TEST_SUITE(TStripStringTest) {
 
         for (const auto& test : tests) {
             UNIT_ASSERT_EQUAL(
-                StripStringLeft(TString(test.Str), EqualsStripAdapter('/')),
+                StripStringLeft(TString(test.Str), EqualsStripAdapter('/')), 
                 test.ResultLeft);
             UNIT_ASSERT_EQUAL(
-                StripStringRight(TString(test.Str), EqualsStripAdapter('/')),
+                StripStringRight(TString(test.Str), EqualsStripAdapter('/')), 
                 test.ResultRight);
         };
     }
@@ -90,7 +90,7 @@ Y_UNIT_TEST_SUITE(TStripStringTest) {
         TStringBuf nullString(nullptr, nullptr);
         UNIT_ASSERT_EQUAL(
             StripString(nullString),
-            TString());
+            TString()); 
     }
 
     Y_UNIT_TEST(TestWtrokaStrip) {
@@ -108,14 +108,14 @@ Y_UNIT_TEST_SUITE(TStripStringTest) {
     }
 
     Y_UNIT_TEST(TestCollapse) {
-        TString s;
-        Collapse(TString("  123    456  "), s);
+        TString s; 
+        Collapse(TString("  123    456  "), s); 
         UNIT_ASSERT(s == " 123 456 ");
-        Collapse(TString("  123    456  "), s, 10);
+        Collapse(TString("  123    456  "), s, 10); 
         UNIT_ASSERT(s == " 123 456  ");
 
-        s = TString(" a b c ");
-        TString s2 = s;
+        s = TString(" a b c "); 
+        TString s2 = s; 
         CollapseInPlace(s2);
 
         UNIT_ASSERT(s == s2);
@@ -125,9 +125,9 @@ Y_UNIT_TEST_SUITE(TStripStringTest) {
     }
 
     Y_UNIT_TEST(TestCollapseText) {
-        TString abs1("Very long description string written in unknown language.");
-        TString abs2(abs1);
-        TString abs3(abs1);
+        TString abs1("Very long description string written in unknown language."); 
+        TString abs2(abs1); 
+        TString abs3(abs1); 
         CollapseText(abs1, 204);
         CollapseText(abs2, 54);
         CollapseText(abs3, 49);

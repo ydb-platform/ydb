@@ -100,7 +100,7 @@ protected:
     NMonitoring::TDynamicCounterPtr QueryReplayGroup;
 
     // Requests
-    THashMap<NKikimrKqp::EQueryAction, NMonitoring::TDynamicCounters::TCounterPtr> QueryActionRequests;
+    THashMap<NKikimrKqp::EQueryAction, NMonitoring::TDynamicCounters::TCounterPtr> QueryActionRequests; 
     NMonitoring::TDynamicCounters::TCounterPtr OtherQueryRequests;
     NMonitoring::TDynamicCounters::TCounterPtr CloseSessionRequests;
     NMonitoring::TDynamicCounters::TCounterPtr CreateSessionRequests;

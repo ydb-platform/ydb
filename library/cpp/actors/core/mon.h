@@ -57,7 +57,7 @@ namespace NActors {
             virtual EContentType GetContentType() const = 0;
         };
 
-        // Ready to output HTML in TString
+        // Ready to output HTML in TString 
         struct TEvHttpInfoRes: public IEvHttpInfoRes {
             TEvHttpInfoRes(const TString& answer, int subReqId = 0, EContentType contentType = Html)
                 : Answer(answer)
@@ -74,7 +74,7 @@ namespace NActors {
                 return ContentType;
             }
 
-            const TString Answer;
+            const TString Answer; 
             const int SubRequestId;
             const EContentType ContentType;
         };
@@ -83,7 +83,7 @@ namespace NActors {
             TEvRemoteHttpInfo() {
             }
 
-            TEvRemoteHttpInfo(const TString& query)
+            TEvRemoteHttpInfo(const TString& query) 
                 : Query(query)
             {
             }
@@ -94,20 +94,20 @@ namespace NActors {
             {
             }
 
-            TString Query;
+            TString Query; 
             HTTP_METHOD Method;
 
-            TString PathInfo() const {
+            TString PathInfo() const { 
                 const size_t pos = Query.find('?');
-                return (pos == TString::npos) ? TString() : Query.substr(0, pos);
+                return (pos == TString::npos) ? TString() : Query.substr(0, pos); 
             }
 
             TCgiParameters Cgi() const {
                 const size_t pos = Query.find('?');
-                return TCgiParameters((pos == TString::npos) ? TString() : Query.substr(pos + 1));
+                return TCgiParameters((pos == TString::npos) ? TString() : Query.substr(pos + 1)); 
             }
 
-            TString ToStringHeader() const override {
+            TString ToStringHeader() const override { 
                 return "TEvRemoteHttpInfo";
             }
 
@@ -137,14 +137,14 @@ namespace NActors {
             TEvRemoteHttpInfoRes() {
             }
 
-            TEvRemoteHttpInfoRes(const TString& html)
+            TEvRemoteHttpInfoRes(const TString& html) 
                 : Html(html)
             {
             }
 
-            TString Html;
+            TString Html; 
 
-            TString ToStringHeader() const override {
+            TString ToStringHeader() const override { 
                 return "TEvRemoteHttpInfoRes";
             }
 
@@ -169,14 +169,14 @@ namespace NActors {
             TEvRemoteJsonInfoRes() {
             }
 
-            TEvRemoteJsonInfoRes(const TString& json)
+            TEvRemoteJsonInfoRes(const TString& json) 
                 : Json(json)
             {
             }
 
-            TString Json;
+            TString Json; 
 
-            TString ToStringHeader() const override {
+            TString ToStringHeader() const override { 
                 return "TEvRemoteJsonInfoRes";
             }
 
@@ -201,14 +201,14 @@ namespace NActors {
             TEvRemoteBinaryInfoRes() {
             }
 
-            TEvRemoteBinaryInfoRes(const TString& blob)
+            TEvRemoteBinaryInfoRes(const TString& blob) 
                 : Blob(blob)
             {
             }
 
-            TString Blob;
+            TString Blob; 
 
-            TString ToStringHeader() const override {
+            TString ToStringHeader() const override { 
                 return "TEvRemoteBinaryInfoRes";
             }
 

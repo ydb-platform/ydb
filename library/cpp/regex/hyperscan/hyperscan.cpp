@@ -249,7 +249,7 @@ namespace NHyperscan {
         return NPrivate::Matches(db, scratch, text, *Singleton<NPrivate::TImpl>());
     }
 
-    TString Serialize(const TDatabase& db) {
+    TString Serialize(const TDatabase& db) { 
         char* databaseBytes = nullptr;
         size_t databaseLength;
         hs_error_t status = Singleton<NPrivate::TImpl>()->SerializeDatabase(
@@ -260,7 +260,7 @@ namespace NHyperscan {
         if (status != HS_SUCCESS) {
             ythrow yexception() << "Failed to serialize hyperscan database";
         }
-        return TString(serialization.Get(), databaseLength);
+        return TString(serialization.Get(), databaseLength); 
     }
 
     TDatabase Deserialize(const TStringBuf& serialization) {

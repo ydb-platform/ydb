@@ -47,7 +47,7 @@ namespace NKikimr {
                 , DomainOrderNumber(domainOrderNumber)
             {}
 
-            TString ToString() const {
+            TString ToString() const { 
                 TStringStream str;
                 str << "{" << "VDiskIdShort: " << VDiskIdShort
                     << " " << Payload.ToString()
@@ -72,7 +72,7 @@ namespace NKikimr {
             // TNeighbors contains nested vectors of FailRealms, FailDomains and VDisks inside them; e.g.
             // [ FailRealm0:[ FailDomain0:[ VDisk_0_0_0 VDisk_0_0_1 ] FailDomain1:[ VDisk_0_1_0 ... ] ] ]
             // that is TNeighbors[vdisk.FailRealm][vdisk.FailDomain][vdisk.VDisk] contains per-VDisk metadata
-            using TNeighbors = TVector<TVector<TVector<TValue>>>;
+            using TNeighbors = TVector<TVector<TVector<TValue>>>; 
 
             template<bool Const>
             class TFailDomainIteratorImpl;
@@ -327,7 +327,7 @@ namespace NKikimr {
                 return End();
             }
 
-            TString ToString(char sep = '\0') const {
+            TString ToString(char sep = '\0') const { 
                 TStringStream s;
                 s << "{";
                 for (TConstIterator it = Begin(), e = End(); it != e; ++it) {
@@ -357,7 +357,7 @@ namespace NKikimr {
 
             template <class TPrinter>
             void OutputHtmlTable(IOutputStream &str, TPrinter &printer) const {
-                TVector<TConstIterator> its;
+                TVector<TConstIterator> its; 
                 HTML(str) {
                     TABLE_CLASS ("table table-condensed") {
                         TABLEHEAD() {
@@ -417,13 +417,13 @@ namespace NKikimr {
             }
 
             template <class TPrinter>
-            void OutputHtmlTableBody(IOutputStream &str, TPrinter &printer, TVector<TConstIterator> &its) const {
+            void OutputHtmlTableBody(IOutputStream &str, TPrinter &printer, TVector<TConstIterator> &its) const { 
                 HTML(str) {
                     TABLEBODY() {
                         for (ui32 row = 0; row < DisksInDomain; ++row) {
                             TABLER() {
                                 // column iterator -- one entry for each domain in "its"
-                                typename TVector<TConstIterator>::iterator colIt = its.begin();
+                                typename TVector<TConstIterator>::iterator colIt = its.begin(); 
 
                                 for (const auto& vdisks : GetFailDomains()) {
                                     TABLED() {

@@ -37,9 +37,9 @@ namespace NTest{
     struct TRandomString {
         TRandomString(TGen &gen): Gen(gen) { }
 
-        TString Do(const size_t len) noexcept
+        TString Do(const size_t len) noexcept 
         {
-            TString line;
+            TString line; 
 
             line.reserve(len);
 

@@ -69,7 +69,7 @@ public:
 
     void SetError(const NUdf::TStringRef& error) override;
     inline bool HasError() const { return !Error_.empty(); }
-    inline const TString& GetError() const { return Error_; }
+    inline const TString& GetError() const { return Error_; } 
 
     void Build(TFunctionTypeInfo* funcInfo);
 
@@ -126,10 +126,10 @@ private:
     const TType* ReturnType_;
     const TType* RunConfigType_;
     const TType* UserType_;
-    TVector<TArgInfo> Args_;
-    TString Error_;
+    TVector<TArgInfo> Args_; 
+    TString Error_; 
     ui32 OptionalArgs_ = 0;
-    TString Payload_;
+    TString Payload_; 
     NUdf::ITypeInfoHelper::TPtr TypeInfoHelper_;
     TStringBuf ModuleName_;
     NUdf::ICountersProvider* CountersProvider_;

@@ -71,12 +71,12 @@ public:
     TVector<TRequestBase*> JointLogReads;
     TVector<TIntrusivePtr<TRequestBase>> JointChunkReads;
     TVector<TRequestBase*> JointChunkWrites;
-    TVector<TLogWrite*> JointLogWrites;
-    TVector<TLogWrite*> JointCommits;
-    TVector<TChunkTrim*> JointChunkTrims;
+    TVector<TLogWrite*> JointLogWrites; 
+    TVector<TLogWrite*> JointCommits; 
+    TVector<TChunkTrim*> JointChunkTrims; 
 
     TVector<std::unique_ptr<TRequestBase>> FastOperationsQueue;
-    TDeque<TRequestBase*> PausedQueue;
+    TDeque<TRequestBase*> PausedQueue; 
     std::set<std::unique_ptr<TYardInit>> PendingYardInits;
     ui64 LastFlushId = 0;
     bool IsQueuePaused = false;
@@ -117,9 +117,9 @@ public:
     TMutex StateMutex; // The state is modified mainly by the PDisk thread, but can be accessed by other threads.
     const TOwnerRound NextOwnerRound;  // Next unique-id to use for owner creation
     TOwner LastOwnerId = OwnerBeginUser;
-    TVector<TOwnerData> OwnerData; // Per-owner information
+    TVector<TOwnerData> OwnerData; // Per-owner information 
     TMap<TVDiskID, TOwner> VDiskOwners; // For fast VDisk -> OwnerID mapping
-    TVector<TChunkState> ChunkState; // Per-chunk information
+    TVector<TChunkState> ChunkState; // Per-chunk information 
     TKeeper Keeper; // Chunk data manager
     bool TrimInFly = false; // TChunkTrim request is present somewhere in pdisk
     TAtomic ChunkBeingTrimmed = 0;
@@ -177,7 +177,7 @@ public:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Initialization
     TPDisk(const TIntrusivePtr<TPDiskConfig> cfg, const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters);
-    TString DynamicStateToString(bool isMultiline);
+    TString DynamicStateToString(bool isMultiline); 
     bool ReadChunk0Format(ui8* formatSectors, const TKey& mainKey); // Called by actor
     bool IsFormatMagicValid(ui8 *magicData, ui32 magicDataSize); // Called by actor
     bool CheckGuid(TString *outReason); // Called by actor
@@ -188,7 +188,7 @@ public:
     TString ProcessReadSysLogResult(ui64 &outWritePosition, ui64 &outLsn, const TEvReadLogResult &readLogResult);
     void ReadAndParseMainLog(const TActorId &pDiskActor);
     // Called by the log reader on success with the current chunkOwnerMap.
-    void ProcessChunkOwnerMap(TMap<ui32, TChunkState> &chunkOwnerMap);
+    void ProcessChunkOwnerMap(TMap<ui32, TChunkState> &chunkOwnerMap); 
     void InitLogChunksInfo();
     void PrintLogChunksInfo(const TString& msg);
     void InitFreeChunks();
@@ -196,7 +196,7 @@ public:
     bool InitCommonLogger();
     bool LogNonceJump(ui64 previousNonce);
     void GetStartingPoints(TOwner owner, TMap<TLogSignature, TLogRecord> &outStartingPoints);
-    TString StartupOwnerInfo();
+    TString StartupOwnerInfo(); 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Destruction
     virtual ~TPDisk();
@@ -234,7 +234,7 @@ public:
             bool isAllowedForSpaceRed);
     bool AllocateLogChunks(ui32 chunksNeeded, ui32 chunksContainingPayload, TOwner owner, ui64 lsn,
             EOwnerGroupType ownerGroupType, bool isAllowedForSpaceRed);
-    void LogWrite(TLogWrite &evLog, TVector<ui32> &logChunksToCommit);
+    void LogWrite(TLogWrite &evLog, TVector<ui32> &logChunksToCommit); 
     void CommitLogChunks(TCommitLogChunks &req);
     void OnLogCommitDone(TLogCommitDone &req);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -267,8 +267,8 @@ public:
             ui64 *reallyReadBytes);
     void SplitChunkJobSize(ui32 totalSize, ui32 *outSmallJobSize, ui32 *outLargeJObSize, ui32 *outSmallJobCount);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    void ChunksLockByRange(TFreeChunks &freeChunks, ui32 begin, ui32 end, TVector<ui32> &lockedChunks);
-    void ChunksLockByNumber(ui32 begin, ui32 number, TVector<ui32> &lockedChunks);
+    void ChunksLockByRange(TFreeChunks &freeChunks, ui32 begin, ui32 end, TVector<ui32> &lockedChunks); 
+    void ChunksLockByNumber(ui32 begin, ui32 number, TVector<ui32> &lockedChunks); 
     void ChunksLock(TChunksLock &evChunksLock);
     void ChunksUnlock(TChunksUnlock &evChunksUnlock);
     // Chunk reservation
@@ -291,7 +291,7 @@ public:
             TString textMessage, const bool isErasureEncodeUserLog, const bool trimEntireDevice);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Owner initialization
-    void ReplyErrorYardInitResult(TYardInit &evYardInit, const TString &str);
+    void ReplyErrorYardInitResult(TYardInit &evYardInit, const TString &str); 
     TOwner FindNextOwnerId();
     bool YardInitStart(TYardInit &evYardInit);
     void YardInitFinish(TYardInit &evYardInit);

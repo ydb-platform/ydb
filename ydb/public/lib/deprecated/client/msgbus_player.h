@@ -11,7 +11,7 @@ protected:
     TMsgBusClient &MsgBusClient;
 public:
     TMsgBusPlayer(TMsgBusClient &msgBusClient);
-    ui32 PlayTrace(const TString &traceFile, ui32 maxInFlight = 1000, std::function<void(int)> progressReporter = std::function<void(int)>());
+    ui32 PlayTrace(const TString &traceFile, ui32 maxInFlight = 1000, std::function<void(int)> progressReporter = std::function<void(int)>()); 
 };
 
 }

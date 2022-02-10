@@ -59,7 +59,7 @@ namespace NKikimr {
             str << "}";
         }
 
-        TString ToString() const {
+        TString ToString() const { 
             TStringStream str;
             Output(str);
             return str.Str();

@@ -108,7 +108,7 @@ namespace NKikimr {
             return PartOffs[part + 1] - PartOffs[part];
         }
 
-        NMatrix::TVectorType GetParts() const {
+        NMatrix::TVectorType GetParts() const { 
             return Parts;
         }
 
@@ -327,7 +327,7 @@ namespace NKikimr {
             std::swap(Blob, m.Blob);
         }
 
-        TString ToString() const {
+        TString ToString() const { 
             TStringStream str;
             str << "{FullDataSize# " << Blob.GetFullDataSize() << " Parts# " << Blob.GetParts().ToString() << "}";
             return str.Str();
@@ -338,7 +338,7 @@ namespace NKikimr {
         }
 
     protected:
-        void AddImpl(const TDiskBlob &addBlob, NMatrix::TVectorType addParts) {
+        void AddImpl(const TDiskBlob &addBlob, NMatrix::TVectorType addParts) { 
             for (auto it = addBlob.begin(); it != addBlob.end(); ++it) {
                 const ui8 part = it.GetPartId() - 1;
                 if (addParts.Get(part)) {
@@ -372,14 +372,14 @@ namespace NKikimr {
             AddFilterMask.Clear();
         }
 
-        void SetFilterMask(NMatrix::TVectorType mask) {
+        void SetFilterMask(NMatrix::TVectorType mask) { 
             Y_VERIFY(!AddFilterMask);
             AddFilterMask = mask;
         }
 
         void Add(const TDiskBlob &addBlob) {
             Y_VERIFY(AddFilterMask);
-            NMatrix::TVectorType addParts = addBlob.GetParts() & *AddFilterMask;
+            NMatrix::TVectorType addParts = addBlob.GetParts() & *AddFilterMask; 
             if (!addParts.Empty()) {
                 TDiskBlobMerger::AddImpl(addBlob, addParts);
             }
@@ -398,7 +398,7 @@ namespace NKikimr {
         }
 
     private:
-        TMaybe<NMatrix::TVectorType> AddFilterMask;
+        TMaybe<NMatrix::TVectorType> AddFilterMask; 
     };
 
 } // NKikimr

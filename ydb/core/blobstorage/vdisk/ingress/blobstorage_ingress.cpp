@@ -207,7 +207,7 @@ namespace NKikimr {
         return res;
     }
 
-    TVectorType TIngress::PartsWeMustHaveLocally(const TBlobStorageGroupInfo::TTopology *top,
+    TVectorType TIngress::PartsWeMustHaveLocally(const TBlobStorageGroupInfo::TTopology *top, 
                                                  const TVDiskIdShort &vdisk,
                                                  const TLogoBlobID &id) const {
         return KnownParts(top->GType, top->GetIdxInSubgroup(vdisk, id.Hash()));
@@ -224,16 +224,16 @@ namespace NKikimr {
 
         ui8 nodeId = top->GetIdxInSubgroup(vdisk, id.Hash());
         if (nodeId < totalParts) {
-            TVectorType emptyVec(0, totalParts);
+            TVectorType emptyVec(0, totalParts); 
             return TPairOfVectors(emptyVec, emptyVec);
         } else {
             ui8 handoffNodeId = nodeId - totalParts;
             Y_VERIFY_DEBUG(handoffNodeId < handoffNum);
 
-            TVectorType m = handoff[handoffNodeId].ToVector(); // map of handoff replicas on this node
-            TVectorType mainVec = main.ToVector();
-            TVectorType toMove = m - mainVec;   // what we can send to main replicas
-            TVectorType toDel = m & mainVec;    // what we can delete
+            TVectorType m = handoff[handoffNodeId].ToVector(); // map of handoff replicas on this node 
+            TVectorType mainVec = main.ToVector(); 
+            TVectorType toMove = m - mainVec;   // what we can send to main replicas 
+            TVectorType toDel = m & mainVec;    // what we can delete 
             return TPairOfVectors(toMove, toDel);
         }
     }
@@ -317,7 +317,7 @@ namespace NKikimr {
         }
     }
 
-    TString TIngress::ToString(const TBlobStorageGroupInfo::TTopology *top,
+    TString TIngress::ToString(const TBlobStorageGroupInfo::TTopology *top, 
                               const TVDiskIdShort &vdisk,
                               const TLogoBlobID &id) const {
         switch (IngressMode(top->GType)) {
@@ -383,7 +383,7 @@ namespace NKikimr {
         }
     }
 
-    TString TIngress::PrintVDisksForLogoBlob(const TBlobStorageGroupInfo *info, const TLogoBlobID &id) {
+    TString TIngress::PrintVDisksForLogoBlob(const TBlobStorageGroupInfo *info, const TLogoBlobID &id) { 
         Y_VERIFY_DEBUG(id.PartId() == 0);
         TBlobStorageGroupInfo::TVDiskIds outVDisks;
         info->PickSubgroup(id.Hash(), &outVDisks, nullptr);
@@ -403,7 +403,7 @@ namespace NKikimr {
     TIngress TIngress::CreateFromRepl(const TBlobStorageGroupInfo::TTopology *top,
                                       const TVDiskIdShort& vdisk,
                                       const TLogoBlobID& id,
-                                      NMatrix::TVectorType recoveredParts) {
+                                      NMatrix::TVectorType recoveredParts) { 
         TIngress res;
         Y_VERIFY(id.PartId() == 0);
         for (ui8 i = recoveredParts.FirstPosition(); i != recoveredParts.GetSize(); i = recoveredParts.NextPosition(i)) {
@@ -465,7 +465,7 @@ namespace NKikimr {
         return topology.GetQuorumChecker().CheckQuorumForGroup(synced);
     }
 
-    TString TBarrierIngress::ToString(const TIngressCache *cache) const {
+    TString TBarrierIngress::ToString(const TIngressCache *cache) const { 
         /*
            BlobStorage Group
            fd -- fail domain, i.e. rack

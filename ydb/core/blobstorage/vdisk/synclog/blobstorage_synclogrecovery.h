@@ -74,7 +74,7 @@ namespace NKikimr {
             ui64 GetLastLsnOfIndexRecord() const;
             ui64 GetLastLsn() const;
             const TSyncLogHeader &GetSyncLogHeader() const;
-            void GetOwnedChunks(TSet<TChunkIdx>& chunks) const;
+            void GetOwnedChunks(TSet<TChunkIdx>& chunks) const; 
 
         private:
             TString ToString() const;

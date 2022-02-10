@@ -16,10 +16,10 @@ class TReadUntilSuccessActor : public TActorBootstrapped<TReadUntilSuccessActor>
     bool Multipart;
 
     struct TVal {
-        TString Data;
+        TString Data; 
         ui32 PartMask;
 
-        TVal(const TString &data)
+        TVal(const TString &data) 
             : Data(data)
             , PartMask(0)
         {}
@@ -33,9 +33,9 @@ class TReadUntilSuccessActor : public TActorBootstrapped<TReadUntilSuccessActor>
             return PartMask == 7;
         }
     };
-    typedef TMap<TLogoBlobID, TVal> TReadSet;
+    typedef TMap<TLogoBlobID, TVal> TReadSet; 
     TReadSet ReadSet;
-    typedef TSet<TLogoBlobID> TPendingReads;
+    typedef TSet<TLogoBlobID> TPendingReads; 
     TPendingReads PendingReads;
     bool HaveNoData;
 
@@ -186,8 +186,8 @@ private:
     TActorId QueueId;
     bool Running = false;
     /*
-    void Put(const NKikimr::TLogoBlobID &id, NKikimrProto::EReplyStatus status, const TString &data);
-    void Check(const NKikimr::TLogoBlobID &id, NKikimrProto::EReplyStatus status, const TString &data);
+    void Put(const NKikimr::TLogoBlobID &id, NKikimrProto::EReplyStatus status, const TString &data); 
+    void Check(const NKikimr::TLogoBlobID &id, NKikimrProto::EReplyStatus status, const TString &data); 
     void Finish();
     */
 
@@ -360,7 +360,7 @@ virtual void Scenario(const TActorContext &ctx) {
     bool collect = true;
     ui32 collectGen = 1;
     ui32 collectStep = 40;
-    TAutoPtr<TVector<NKikimr::TLogoBlobID>> keep(new TVector<NKikimr::TLogoBlobID>());
+    TAutoPtr<TVector<NKikimr::TLogoBlobID>> keep(new TVector<NKikimr::TLogoBlobID>()); 
     keep->push_back(TLogoBlobID(0, 1, 37, 0, 0, 0));
     TAutoPtr<IActor> gcCommand(PutGCToCorrespondingVDisks(SyncRunner->NotifyID(), Conf, tabletID, recGen, recGenCounter,
                                                           channel, collect, collectGen, collectStep, keep, nullptr));
@@ -390,7 +390,7 @@ SYNC_TEST_END(TTestReplProxyKeepBits, TSyncTestWithSmallCommonDataset)
 SYNC_TEST_BEGIN(TTestHandoffMoveDel, TSyncTestBase)
 virtual void Scenario(const TActorContext &ctx) {
     TDataSnapshotPtr data(new TDataSnapshot(Conf->GroupInfo.Get()));
-    TString aaaa("aaaa");
+    TString aaaa("aaaa"); 
     TLogoBlobID id0(0, 1, 321, 0, aaaa.size(), 0);
     // [0:0:0:0:0] - main
     // [0:0:0:1:1] - main

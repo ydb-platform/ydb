@@ -564,17 +564,17 @@ private:
 struct TSecurityObject : TAtomicRefCount<TSecurityObject>, NACLib::TSecurityObject {
     using TPtr = TIntrusivePtr<TSecurityObject>;
 
-    static NACLib::TSecurityObject FromByteStream(const NACLibProto::TSecurityObject* parent, const TString& owner, const TString& acl, bool isContainer) {
+    static NACLib::TSecurityObject FromByteStream(const NACLibProto::TSecurityObject* parent, const TString& owner, const TString& acl, bool isContainer) { 
         NACLib::TSecurityObject object(owner, isContainer);
         Y_VERIFY(object.MutableACL()->ParseFromString(acl));
         return parent != nullptr ? object.MergeWithParent(*parent) : object;
     }
 
-    TSecurityObject(const TString& owner, const TString& acl, bool isContainer)
+    TSecurityObject(const TString& owner, const TString& acl, bool isContainer) 
         : NACLib::TSecurityObject(FromByteStream(nullptr, owner, acl, isContainer))
     {}
 
-    TSecurityObject(const TSecurityObject* parent, const TString& owner, const TString& acl, bool isContainer)
+    TSecurityObject(const TSecurityObject* parent, const TString& owner, const TString& acl, bool isContainer) 
         : NACLib::TSecurityObject(FromByteStream(parent, owner, acl, isContainer))
     {}
 };
@@ -667,14 +667,14 @@ public:
     const TOwnedTableRange Range;
     const TRangeLimits RangeLimits;
     const ERowOperation RowOperation;
-    const TVector<NScheme::TTypeId> KeyColumnTypes; // For SelectRange there can be not full key
-    const TVector<TColumnOp> Columns;
+    const TVector<NScheme::TTypeId> KeyColumnTypes; // For SelectRange there can be not full key 
+    const TVector<TColumnOp> Columns; 
     const bool Reverse;
     TReadTarget ReadTarget; // Set for Read row operation
 
     // out
     EStatus Status;
-    TVector<TColumnInfo> ColumnInfos;
+    TVector<TColumnInfo> ColumnInfos; 
     TVector<TPartitionInfo> Partitions;
     TIntrusivePtr<TSecurityObject> SecurityObject;
 

@@ -16,7 +16,7 @@ namespace NKikimr {
             ui32 NumReads;
             TDiskPart PreallocatedLocation;
             TDiskBlobMergerWithMask Merger;
-            NMatrix::TVectorType PartsToStore;
+            NMatrix::TVectorType PartsToStore; 
             TLogoBlobID BlobId;
 
             TItem(ui64 id, ui32 numReads, const TDiskPart& preallocatedLocation, const TDiskBlobMerger& merger,
@@ -30,7 +30,7 @@ namespace NKikimr {
             {}
         };
 
-        TQueue<TItem> ItemQueue;
+        TQueue<TItem> ItemQueue; 
         bool Started = false;
         TRopeArena& Arena;
         const TBlobStorageGroupType GType;

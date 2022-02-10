@@ -15,7 +15,7 @@ public:
         BT_.Capture();
     }
 
-    const TBackTrace* BackTrace() const noexcept override {
+    const TBackTrace* BackTrace() const noexcept override { 
         return &BT_;
     }
 

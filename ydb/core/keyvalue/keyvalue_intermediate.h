@@ -32,9 +32,9 @@ struct TIntermediate {
             {}
         };
 
-        TVector<TReadItem> ReadItems;
-        TString Key;
-        TString Value;
+        TVector<TReadItem> ReadItems; 
+        TString Key; 
+        TString Value; 
         ui32 Offset;
         ui32 Size;
         ui32 ValueSize;
@@ -43,25 +43,25 @@ struct TIntermediate {
         NKikimrClient::TKeyValueRequest::EStorageChannel StorageChannel;
         NKikimrBlobStorage::EGetHandleClass HandleClass;
         NKikimrProto::EReplyStatus Status;
-        TString Message;
+        TString Message; 
 
         TRead();
-        TRead(const TString &key, ui32 valueSize, ui64 creationUnixTime,
+        TRead(const TString &key, ui32 valueSize, ui64 creationUnixTime, 
                 NKikimrClient::TKeyValueRequest::EStorageChannel storageChannel);
         NKikimrProto::EReplyStatus ItemsStatus() const;
         NKikimrProto::EReplyStatus CumulativeStatus() const;
     };
     struct TRangeRead {
-        TDeque<TRead> Reads;
+        TDeque<TRead> Reads; 
         NKikimrBlobStorage::EGetHandleClass HandleClass;
         NKikimrProto::EReplyStatus Status;
         bool IncludeData;
         ui64 LimitBytes;
     };
     struct TWrite {
-        TVector<TLogoBlobID> LogoBlobIds;
-        TString Key;
-        TString Data;
+        TVector<TLogoBlobID> LogoBlobIds; 
+        TString Key; 
+        TString Data; 
         TEvBlobStorage::TEvPut::ETactic Tactic;
         NKikimrBlobStorage::EPutHandleClass HandleClass;
         NKikimrProto::EReplyStatus Status;
@@ -72,17 +72,17 @@ struct TIntermediate {
         TKeyRange Range;
     };
     struct TRename {
-        TString OldKey;
-        TString NewKey;
+        TString OldKey; 
+        TString NewKey; 
     };
     struct TCopyRange {
         TKeyRange Range;
-        TString PrefixToAdd;
-        TString PrefixToRemove;
+        TString PrefixToAdd; 
+        TString PrefixToRemove; 
     };
     struct TConcat {
-        TVector<TString> InputKeys;
-        TString OutputKey;
+        TVector<TString> InputKeys; 
+        TString OutputKey; 
         bool KeepInputs;
     };
     struct TGetStatus {
@@ -93,8 +93,8 @@ struct TIntermediate {
     };
     struct TTrimLeakedBlobs {
         ui32 MaxItemsToTrim;
-        TMultiMap<ui32, ui32> ChannelGroupMap;
-        TVector<TLogoBlobID> FoundBlobs;
+        TMultiMap<ui32, ui32> ChannelGroupMap; 
+        TVector<TLogoBlobID> FoundBlobs; 
     };
     struct TSetExecutorFastLogPolicy {
         bool IsAllowed;
@@ -103,14 +103,14 @@ struct TIntermediate {
     using TCmd = std::variant<TWrite, TDelete, TRename, TCopyRange, TConcat>;
     using TReadCmd = std::variant<TRead, TRangeRead>;
 
-    TDeque<TRead> Reads;
-    TDeque<TRangeRead> RangeReads;
-    TDeque<TWrite> Writes;
-    TDeque<TDelete> Deletes;
-    TDeque<TRename> Renames;
-    TDeque<TCopyRange> CopyRanges;
-    TDeque<TConcat> Concats;
-    TDeque<TGetStatus> GetStatuses;
+    TDeque<TRead> Reads; 
+    TDeque<TRangeRead> RangeReads; 
+    TDeque<TWrite> Writes; 
+    TDeque<TDelete> Deletes; 
+    TDeque<TRename> Renames; 
+    TDeque<TCopyRange> CopyRanges; 
+    TDeque<TConcat> Concats; 
+    TDeque<TGetStatus> GetStatuses; 
     TMaybe<TTrimLeakedBlobs> TrimLeakedBlobs;
     TMaybe<TSetExecutorFastLogPolicy> SetExecutorFastLogPolicy;
 

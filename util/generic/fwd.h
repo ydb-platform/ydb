@@ -53,46 +53,46 @@ class TRbTree;
 
 //containers
 template <class T, class A = std::allocator<T>>
-class TVector;
+class TVector; 
 
 template <class T, class A = std::allocator<T>>
-class TDeque;
+class TDeque; 
 
-template <class T, class S = TDeque<T>>
-class TQueue;
+template <class T, class S = TDeque<T>> 
+class TQueue; 
 
-template <class T, class S = TVector<T>, class C = TLess<T>>
-class TPriorityQueue;
-
-template <class Key, class T, class HashFcn = THash<Key>, class EqualKey = TEqualTo<Key>, class Alloc = std::allocator<Key>>
-class THashMap;
+template <class T, class S = TVector<T>, class C = TLess<T>> 
+class TPriorityQueue; 
 
 template <class Key, class T, class HashFcn = THash<Key>, class EqualKey = TEqualTo<Key>, class Alloc = std::allocator<Key>>
-class THashMultiMap;
+class THashMap; 
+
+template <class Key, class T, class HashFcn = THash<Key>, class EqualKey = TEqualTo<Key>, class Alloc = std::allocator<Key>>
+class THashMultiMap; 
 
 template <class Value, class HashFcn = THash<Value>, class EqualKey = TEqualTo<Value>, class Alloc = std::allocator<Value>>
-class THashSet;
+class THashSet; 
 
 template <class Value, class HashFcn = THash<Value>, class EqualKey = TEqualTo<Value>, class Alloc = std::allocator<Value>>
-class THashMultiSet;
+class THashMultiSet; 
 
 template <class T, class A = std::allocator<T>>
-class TList;
+class TList; 
 
 template <class K, class V, class Less = TLess<K>, class A = std::allocator<K>>
-class TMap;
+class TMap; 
 
 template <class K, class V, class Less = TLess<K>, class A = std::allocator<K>>
-class TMultiMap;
+class TMultiMap; 
 
 template <class K, class L = TLess<K>, class A = std::allocator<K>>
-class TSet;
+class TSet; 
 
 template <class K, class L = TLess<K>, class A = std::allocator<K>>
-class TMultiSet;
+class TMultiSet; 
 
-template <class T, class S = TDeque<T>>
-class TStack;
+template <class T, class S = TDeque<T>> 
+class TStack; 
 
 template <size_t BitCount, typename TChunkType = ui64>
 class TBitMap;

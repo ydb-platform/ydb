@@ -115,7 +115,7 @@ TProgramFactory::TProgramFactory(
     bool useRepeatableRandomAndTimeProviders,
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     ui64 nextUniqueId,
-    const TVector<TDataProviderInitializer>& dataProvidersInit,
+    const TVector<TDataProviderInitializer>& dataProvidersInit, 
     const TString& runner)
     : UseRepeatableRandomAndTimeProviders_(useRepeatableRandomAndTimeProviders)
     , FunctionRegistry_(functionRegistry)
@@ -174,16 +174,16 @@ void TProgramFactory::SetFileStorage(TFileStoragePtr fileStorage) {
 
 TProgramPtr TProgramFactory::Create(
         const TFile& file,
-        const TString& sessionId)
+        const TString& sessionId) 
 {
-    TString sourceCode = TFileInput(file).ReadAll();
+    TString sourceCode = TFileInput(file).ReadAll(); 
     return Create(file.GetName(), sourceCode, sessionId);
 }
 
 TProgramPtr TProgramFactory::Create(
-        const TString& filename,
-        const TString& sourceCode,
-        const TString& sessionId)
+        const TString& filename, 
+        const TString& sourceCode, 
+        const TString& sessionId) 
 {
     auto randomProvider = UseRepeatableRandomAndTimeProviders_ && !UseUnrepeatableRandom ?
         CreateDeterministicRandomProvider(1) : CreateDefaultRandomProvider();
@@ -209,9 +209,9 @@ TProgram::TProgram(
         const TIntrusivePtr<IRandomProvider> randomProvider,
         const TIntrusivePtr<ITimeProvider> timeProvider,
         ui64 nextUniqueId,
-        const TVector<TDataProviderInitializer>& dataProvidersInit,
+        const TVector<TDataProviderInitializer>& dataProvidersInit, 
         const TUserDataTable& userDataTable,
-        const TVector<TCredentialTablePtr>& credentialTables,
+        const TVector<TCredentialTablePtr>& credentialTables, 
         const TUserCredentials& userCredentials,
         const IModuleResolver::TPtr& modules,
         const IUdfResolver::TPtr& udfResolver,
@@ -219,8 +219,8 @@ TProgram::TProgram(
         const TUdfIndexPackageSet::TPtr& udfIndexPackageSet,
         const TFileStoragePtr& fileStorage,
         const TGatewaysConfig* gatewaysConfig,
-        const TString& filename,
-        const TString& sourceCode,
+        const TString& filename, 
+        const TString& sourceCode, 
         const TString& sessionId,
         const TString& runner,
         bool enableRangeComputeFor
@@ -398,7 +398,7 @@ bool TProgram::ParseYql() {
 bool TProgram::ParseSql() {
     YQL_PROFILE_FUNC(TRACE);
 
-    static const THashMap<TString, TString> clusters = {
+    static const THashMap<TString, TString> clusters = { 
         { "plato", TString(YtProviderName) }
     };
 
@@ -598,7 +598,7 @@ TProgram::TFutureStatus TProgram::ValidateAsync(const TString& username, IOutput
 }
 
 TProgram::TStatus TProgram::Optimize(
-        const TString& username,
+        const TString& username, 
         IOutputStream* traceOut,
         IOutputStream* tracePlan,
         IOutputStream* exprOut,
@@ -610,7 +610,7 @@ TProgram::TStatus TProgram::Optimize(
 }
 
 TProgram::TFutureStatus TProgram::OptimizeAsync(
-        const TString& username,
+        const TString& username, 
         IOutputStream* traceOut,
         IOutputStream* tracePlan,
         IOutputStream* exprOut,
@@ -670,7 +670,7 @@ TProgram::TFutureStatus TProgram::OptimizeAsync(
 }
 
 TProgram::TStatus TProgram::OptimizeWithConfig(
-        const TString& username, const IPipelineConfigurator& pipelineConf)
+        const TString& username, const IPipelineConfigurator& pipelineConf) 
 {
     YQL_PROFILE_FUNC(TRACE);
     auto m = &TProgram::OptimizeAsyncWithConfig;
@@ -678,7 +678,7 @@ TProgram::TStatus TProgram::OptimizeWithConfig(
 }
 
 TProgram::TFutureStatus TProgram::OptimizeAsyncWithConfig(
-        const TString& username, const IPipelineConfigurator& pipelineConf)
+        const TString& username, const IPipelineConfigurator& pipelineConf) 
 {
     if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_) || !CollectUsedClusters()) {
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
@@ -739,7 +739,7 @@ TProgram::TFutureStatus TProgram::OptimizeAsyncWithConfig(
 }
 
 TProgram::TStatus TProgram::Run(
-        const TString& username,
+        const TString& username, 
         IOutputStream* traceOut,
         IOutputStream* tracePlan,
         IOutputStream* exprOut,
@@ -751,7 +751,7 @@ TProgram::TStatus TProgram::Run(
 }
 
 TProgram::TFutureStatus TProgram::RunAsync(
-        const TString& username,
+        const TString& username, 
         IOutputStream* traceOut,
         IOutputStream* tracePlan,
         IOutputStream* exprOut,
@@ -821,7 +821,7 @@ TProgram::TFutureStatus TProgram::RunAsync(
 }
 
 TProgram::TStatus TProgram::RunWithConfig(
-        const TString& username, const IPipelineConfigurator& pipelineConf)
+        const TString& username, const IPipelineConfigurator& pipelineConf) 
 {
     YQL_PROFILE_FUNC(TRACE);
     auto m = &TProgram::RunAsyncWithConfig;
@@ -829,7 +829,7 @@ TProgram::TStatus TProgram::RunWithConfig(
 }
 
 TProgram::TFutureStatus TProgram::RunAsyncWithConfig(
-        const TString& username, const IPipelineConfigurator& pipelineConf)
+        const TString& username, const IPipelineConfigurator& pipelineConf) 
 {
     if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_) || !CollectUsedClusters()) {
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
@@ -1229,7 +1229,7 @@ void TProgram::CloseLastSession() {
     }
 }
 
-TString TProgram::ResultsAsString() const {
+TString TProgram::ResultsAsString() const { 
     if (!ResultProviderConfig_)
         return "";
 
@@ -1267,7 +1267,7 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
     }
 
     PlanBuilder_ = CreatePlanBuilder(*typeAnnotationContext);
-    THashSet<TString> providerNames;
+    THashSet<TString> providerNames; 
     TVector<TString> fullResultDataSinks;
     TVector<std::function<TMaybe<TString>(const TString& url)>> tokenResolvers;
     for (const auto& dpi : DataProvidersInit_) {
@@ -1301,13 +1301,13 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
         }
     }
 
-    TVector<TString> resultProviderDataSources;
+    TVector<TString> resultProviderDataSources; 
     if (providerNames.contains(YtProviderName)) {
         resultProviderDataSources.push_back(TString(YtProviderName));
     }
 
     if (providerNames.contains(KikimrProviderName)) {
-        resultProviderDataSources.push_back(TString(KikimrProviderName));
+        resultProviderDataSources.push_back(TString(KikimrProviderName)); 
     }
 
     if (providerNames.contains(RtmrProviderName)) {
@@ -1347,9 +1347,9 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
     return typeAnnotationContext;
 }
 
-TFuture<void> TProgram::OpenSession(const TString& username)
+TFuture<void> TProgram::OpenSession(const TString& username) 
 {
-    TVector<TFuture<void>> openFutures;
+    TVector<TFuture<void>> openFutures; 
     for (const auto& dp : DataProviders_) {
         if (dp.OpenSession) {
             auto future = dp.OpenSession(SessionId_, username, ProgressWriter_, OperationOptions_,
@@ -1362,7 +1362,7 @@ TFuture<void> TProgram::OpenSession(const TString& username)
 }
 
 void TProgram::Print(IOutputStream* exprOut, IOutputStream* planOut, bool cleanPlan) {
-    TVector<TTransformStage> printTransformers;
+    TVector<TTransformStage> printTransformers; 
     const auto issueCode = TIssuesIds::DEFAULT_ERROR;
     if (exprOut) {
         printTransformers.push_back(TTransformStage(

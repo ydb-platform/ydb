@@ -11,10 +11,10 @@ namespace NKikimr {
     struct THullDbSignatureRoutines {
         static const ui32 CurSignature;
 
-        static TString Serialize(const NKikimrVDiskData::THullDbEntryPoint &pb);
+        static TString Serialize(const NKikimrVDiskData::THullDbEntryPoint &pb); 
         static bool Parse(NKikimrVDiskData::THullDbEntryPoint &pb,
-                          const TString &source,
-                          TString &explanation);
+                          const TString &source, 
+                          TString &explanation); 
     };
 
 } // NKikimr

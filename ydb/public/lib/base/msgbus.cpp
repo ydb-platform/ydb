@@ -4,7 +4,7 @@
 namespace NKikimr {
 namespace NMsgBusProxy {
 
-void ExplainProposeTransactionStatus(ui32 status, TString& name, TString& description) {
+void ExplainProposeTransactionStatus(ui32 status, TString& name, TString& description) { 
     name = ToString(status);
     description = "Unknown status";
 
@@ -22,7 +22,7 @@ void ExplainProposeTransactionStatus(ui32 status, TString& name, TString& descri
     }
 }
 
-void ExplainExecutionEngineStatus(ui32 status, TString& name, TString& description) {
+void ExplainExecutionEngineStatus(ui32 status, TString& name, TString& description) { 
     name = ToString(status);
     description = "Unknown status";
 

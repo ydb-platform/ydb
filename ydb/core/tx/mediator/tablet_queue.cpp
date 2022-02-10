@@ -38,26 +38,26 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
 
         struct TStep {
             TStepEntry * const StepRef;
-            TVector<TTx> Transactions;
+            TVector<TTx> Transactions; 
 
             TStep(TStepEntry *stepRef)
                 : StepRef(stepRef)
             {}
         };
 
-        typedef TOneOneQueueInplace<TStep *, 32> TQueueType;
+        typedef TOneOneQueueInplace<TStep *, 32> TQueueType; 
 
         EState State;
-        TAutoPtr<TQueueType, TQueueType::TPtrCleanDestructor> Queue;
-        TMap<TStepId, TVector<TTx>> OutOfOrder; // todo: replace TVector<> with chunked queue to conserve copying
+        TAutoPtr<TQueueType, TQueueType::TPtrCleanDestructor> Queue; 
+        TMap<TStepId, TVector<TTx>> OutOfOrder; // todo: replace TVector<> with chunked queue to conserve copying 
 
         TTabletEntry()
             : State(StateInit)
-            , Queue(new TQueueType())
+            , Queue(new TQueueType()) 
         {}
 
         void MergeOutOfOrder(TStep *x);
-        void MergeToOutOfOrder(TStepId step, TVector<TTx> &update);
+        void MergeToOutOfOrder(TStepId step, TVector<TTx> &update); 
     };
 
     const TActorId Owner;
@@ -65,7 +65,7 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
     const ui64 HashRange;
     const ui64 HashBucket;
 
-    THashMap<TTabletId, TTabletEntry> PerTabletPlanQueue; // by tablet entries
+    THashMap<TTabletId, TTabletEntry> PerTabletPlanQueue; // by tablet entries 
 
     typedef TOneOneQueueInplace<TStepEntry *, 512> TStepCommitQueue;
     TAutoPtr<TStepCommitQueue, TStepCommitQueue::TPtrCleanDestructor> StepCommitQueue;
@@ -212,7 +212,7 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
         }
 
         tabletEntry.State = TTabletEntry::StateConnected;
-        TTabletEntry::TQueueType::TReadIterator it = tabletEntry.Queue->Iterator();
+        TTabletEntry::TQueueType::TReadIterator it = tabletEntry.Queue->Iterator(); 
         while (TTabletEntry::TStep *sx = it.Next()) {
             tabletEntry.MergeOutOfOrder(sx);
             SendToTablet(sx, tablet, ctx);
@@ -300,7 +300,7 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
         TimecastWatches.erase(ev->Sender);
     }
 
-    void AckOoO(TTabletId tablet, TStepId step, const TVector<TTx> &transactions, const TActorContext &ctx) {
+    void AckOoO(TTabletId tablet, TStepId step, const TVector<TTx> &transactions, const TActorContext &ctx) { 
         TMap<TActorId, TAutoPtr<TEvTxProcessing::TEvPlanStepAck>> acks;
         for (const TTx &tx : transactions) {
             TAutoPtr<TEvTxProcessing::TEvPlanStepAck> &ack = acks[tx.AckTo];
@@ -370,7 +370,7 @@ public:
     }
 };
 
-TString yvector2str(const TVector<TTx>& v) {
+TString yvector2str(const TVector<TTx>& v) { 
     TStringStream stream;
     stream << '{';
     for (auto it = v.begin(); it != v.end(); ++it) {
@@ -387,7 +387,7 @@ void TTxMediatorTabletQueue::TTabletEntry::MergeOutOfOrder(TStep *sx) {
     const TStepId step = sx->StepRef->Step;
     const auto ox = OutOfOrder.find(step);
     if (ox != OutOfOrder.end()) {
-        const TVector<TTx> &o = ox->second;
+        const TVector<TTx> &o = ox->second; 
         Y_VERIFY_DEBUG(
             IsSorted(sx->Transactions.begin(), sx->Transactions.end(), TTx::TCmpOrderId()),
             "%s",
@@ -396,10 +396,10 @@ void TTxMediatorTabletQueue::TTabletEntry::MergeOutOfOrder(TStep *sx) {
         Y_VERIFY_DEBUG(IsSorted(o.begin(), o.end(), TTx::TCmpOrderId()), "%s", yvector2str(o).c_str());
         //
         // ok, now merge sorted arrays replacing ack-to
-        TVector<TTx>::iterator planIt = sx->Transactions.begin();
-        TVector<TTx>::iterator planEnd = sx->Transactions.end();
-        TVector<TTx>::const_iterator oooIt = o.begin();
-        TVector<TTx>::const_iterator oooEnd = o.end();
+        TVector<TTx>::iterator planIt = sx->Transactions.begin(); 
+        TVector<TTx>::iterator planEnd = sx->Transactions.end(); 
+        TVector<TTx>::const_iterator oooIt = o.begin(); 
+        TVector<TTx>::const_iterator oooEnd = o.end(); 
         while (oooIt != oooEnd && planIt != planEnd) {
             if (planIt->TxId < oooIt->TxId) {
                 ++planIt;
@@ -415,21 +415,21 @@ void TTxMediatorTabletQueue::TTabletEntry::MergeOutOfOrder(TStep *sx) {
     }
 }
 
-void TTxMediatorTabletQueue::TTabletEntry::MergeToOutOfOrder(TStepId step, TVector<TTx> &update) {
-    TVector<TTx> &current = OutOfOrder[step];
+void TTxMediatorTabletQueue::TTabletEntry::MergeToOutOfOrder(TStepId step, TVector<TTx> &update) { 
+    TVector<TTx> &current = OutOfOrder[step]; 
     if (current.empty()) {
         current.swap(update);
     } else {
-        TVector<TTx> old;
+        TVector<TTx> old; 
         old.swap(current);
         Y_VERIFY_DEBUG(IsSorted(old.begin(), old.end(), TTx::TCmpOrderId()), "%s", yvector2str(old).c_str());
         Y_VERIFY_DEBUG(IsSorted(update.begin(), update.end(), TTx::TCmpOrderId()), "%s", yvector2str(update).c_str());
         //
         // now merge old with update
-        TVector<TTx>::const_iterator oldIt = old.begin();
-        TVector<TTx>::const_iterator oldEnd = old.end();
-        TVector<TTx>::const_iterator updIt = update.begin();
-        TVector<TTx>::const_iterator updEnd = update.end();
+        TVector<TTx>::const_iterator oldIt = old.begin(); 
+        TVector<TTx>::const_iterator oldEnd = old.end(); 
+        TVector<TTx>::const_iterator updIt = update.begin(); 
+        TVector<TTx>::const_iterator updEnd = update.end(); 
 
         while (oldIt != oldEnd && updIt != updEnd) {
             if (oldIt->TxId < updIt->TxId) {

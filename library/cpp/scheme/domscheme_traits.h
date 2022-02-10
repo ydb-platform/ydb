@@ -7,7 +7,7 @@ struct TSchemeTraits {
     using TValue = NSc::TValue;
     using TValueRef = TValue*;
     using TConstValueRef = const TValue*;
-    using TStringType = TStringBuf;
+    using TStringType = TStringBuf; 
 
     // anyvalue defaults
     template <class T>
@@ -213,8 +213,8 @@ struct TSchemeTraits {
     }
 
     // validation ops
-    static inline TVector<TString> GetKeys(TConstValueRef v) {
-        TVector<TString> res;
+    static inline TVector<TString> GetKeys(TConstValueRef v) { 
+        TVector<TString> res; 
         for (const auto& key : v->DictKeys(true)) {
             res.push_back(ToString(key));
         }

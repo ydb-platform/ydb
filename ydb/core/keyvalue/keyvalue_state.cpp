@@ -383,7 +383,7 @@ void TKeyValueState::Load(const TString &key, const TString& value) {
         IsEmptyDbStart = false;
     }
 
-    TString arbitraryPart;
+    TString arbitraryPart; 
     TKeyHeader header;
     bool isOk = THelpers::ExtractKeyParts(key, arbitraryPart, header);
     Y_VERIFY(isOk);
@@ -396,7 +396,7 @@ void TKeyValueState::Load(const TString &key, const TString& value) {
         case EIT_KEYVALUE_1:
         {
             TIndexRecord &record = Index[arbitraryPart];
-            TString errorInfo;
+            TString errorInfo; 
             bool isOk = false;
             EItemType headerItemType = TIndexRecord::ReadItemType(value);
             if (headerItemType == EIT_KEYVALUE_1) {
@@ -446,8 +446,8 @@ void TKeyValueState::Load(const TString &key, const TString& value) {
             ui64 totalSize = sizeof(TCollectOperationHeader)
                 + sizeof(TLogoBlobID) * (header->KeepCount + header->DoNotKeepCount);
             Y_VERIFY(value.size() == totalSize);
-            TVector<TLogoBlobID> keep;
-            TVector<TLogoBlobID> doNotKeep;
+            TVector<TLogoBlobID> keep; 
+            TVector<TLogoBlobID> doNotKeep; 
             keep.resize(header->KeepCount);
             doNotKeep.resize(header->DoNotKeepCount);
             const char* data = value.data() + sizeof(TCollectOperationHeader);
@@ -1645,9 +1645,9 @@ void TKeyValueState::Dereference(const TLogoBlobID& id, ISimpleDb& db, const TAc
     }
 }
 
-void TKeyValueState::UpdateKeyValue(const TString& key, const TIndexRecord& record, ISimpleDb& db,
+void TKeyValueState::UpdateKeyValue(const TString& key, const TIndexRecord& record, ISimpleDb& db, 
         const TActorContext& ctx) {
-    TString value = record.Serialize();
+    TString value = record.Serialize(); 
     THelpers::DbUpdateUserKeyValue(key, value, db, ctx);
 }
 
@@ -1717,7 +1717,7 @@ bool TKeyValueState::CheckDeadline(const TActorContext &ctx, NKikimrClient::TKey
         THolder<TIntermediate> &intermediate) {
     if (kvRequest.HasDeadlineInstantMs()) {
         TInstant now = TAppData::TimeProvider->Now();
-        intermediate->Deadline = TInstant::MicroSeconds(kvRequest.GetDeadlineInstantMs() * 1000ull);
+        intermediate->Deadline = TInstant::MicroSeconds(kvRequest.GetDeadlineInstantMs() * 1000ull); 
 
         if (intermediate->Deadline <= now) {
             TStringStream str;
@@ -2330,8 +2330,8 @@ bool TKeyValueState::PrepareCmdCopyRange(const TActorContext& ctx, NKikimrClient
         } else if (!ConvertRange(request.GetRange(), &interm.Range, ctx, intermediate, "CmdCopyRange", i)) {
             return false;
         }
-        interm.PrefixToAdd = request.HasPrefixToAdd() ? request.GetPrefixToAdd() : TString();
-        interm.PrefixToRemove = request.HasPrefixToRemove() ? request.GetPrefixToRemove() : TString();
+        interm.PrefixToAdd = request.HasPrefixToAdd() ? request.GetPrefixToAdd() : TString(); 
+        interm.PrefixToRemove = request.HasPrefixToRemove() ? request.GetPrefixToRemove() : TString(); 
     }
     return false;
 }
@@ -2533,7 +2533,7 @@ TPrepareResult TKeyValueState::PrepareCommands(NKikimrKeyValue::ExecuteTransacti
     return {};
 }
 
-void TKeyValueState::ReplyError(const TActorContext &ctx, TString errorDescription,
+void TKeyValueState::ReplyError(const TActorContext &ctx, TString errorDescription, 
         NMsgBusProxy::EResponseStatus status, THolder<TIntermediate> &intermediate,
         const TTabletStorageInfo *info) {
     LOG_INFO_S(ctx, NKikimrServices::KEYVALUE, errorDescription);
@@ -3181,11 +3181,11 @@ bool TKeyValueState::ConvertRange(const NKikimrClient::TKeyValueRequest::TKeyRan
     return true;
 }
 
-TString TKeyValueState::Dump() const {
+TString TKeyValueState::Dump() const { 
     TStringStream ss;
     ss << "=== INDEX ===\n";
     for (auto& x : Index) {
-        const TString& k = x.first;
+        const TString& k = x.first; 
         const TIndexRecord& v = x.second;
         ss << k << "=== ctime:" << v.CreationUnixTime;
         for (const TIndexRecord::TChainItem& y : v.Chain) {
@@ -3202,8 +3202,8 @@ void TKeyValueState::VerifyEqualIndex(const TKeyValueState& state) const {
     int i = 0;
     for (auto i1 = Index.cbegin(), e1 = Index.cend(); i1 != e1; ++i, ++i1, ++i2) {
         Y_VERIFY(i2 != e2, "index length differs. Dump:\n%s\n%s\n", Dump().data(), state.Dump().data());
-        const TString& k1 = i1->first;
-        const TString& k2 = i2->first;
+        const TString& k1 = i1->first; 
+        const TString& k2 = i2->first; 
         Y_VERIFY(k1 == k2, "index key #%d differs. Dump:\n%s\n%s\n", i, Dump().data(), state.Dump().data());
         const TIndexRecord& v1 = i1->second;
         const TIndexRecord& v2 = i2->second;

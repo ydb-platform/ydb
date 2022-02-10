@@ -9,11 +9,11 @@ VERSION(1.33.2)
 
 ORIGINAL_SOURCE(https://github.com/grpc/grpc)
 
-OWNER(
+OWNER( 
     akastornov
     g:contrib
     g:cpp-contrib
-)
+) 
 
 PEERDIR(
     contrib/libs/grpc/grpc

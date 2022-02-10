@@ -83,7 +83,7 @@ namespace {
         runtime.SetLogPriority(NKikimrServices::BOOTSTRAPPER, otherPriority);
     }
 
-    THashMap<ui32, TIntrusivePtr<TNodeWardenConfig>> NodeWardenConfigs;
+    THashMap<ui32, TIntrusivePtr<TNodeWardenConfig>> NodeWardenConfigs; 
 
     void SetupDomainInfo(TTestActorRuntime &runtime, TAppPrepare &app)  {
         app.ClearDomainsAndHive();
@@ -134,7 +134,7 @@ namespace {
 
     void SetupNodeWarden(TTestActorRuntime &runtime) {
         for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
-            TString staticConfig(
+            TString staticConfig( 
                 "AvailabilityDomains: 0 "
                 "PDisks { NodeID: $Node1 PDiskID: 1 PDiskGuid: 1 Path: \"/tmp/pdisk.dat\" }"
                 "VDisks { VDiskID { GroupID: 0 GroupGeneration: 1 Ring: 0 Domain: 0 VDisk: 0 }"
@@ -456,7 +456,7 @@ void InitSchemeRoot(TTestBasicRuntime& runtime, const TActorId& sender) {
 
 Y_UNIT_TEST_SUITE(THiveTest) {
     template <typename KeyType, typename ValueType>
-    static double GetStDev(const THashMap<KeyType, ValueType>& values) {
+    static double GetStDev(const THashMap<KeyType, ValueType>& values) { 
         double sum = double();
         if (values.empty())
             return sum;
@@ -474,7 +474,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     }
 
     template <typename KeyType, typename ValueType>
-    static ValueType GetMinMaxDiff(const THashMap<KeyType, ValueType>& values) {
+    static ValueType GetMinMaxDiff(const THashMap<KeyType, ValueType>& values) { 
         ValueType minVal = std::numeric_limits<ValueType>::max();
         ValueType maxVal = std::numeric_limits<ValueType>::min();
 
@@ -602,7 +602,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     void SendReassignTablet(TTestActorRuntime &runtime,
                             ui64 hiveTablet,
                             ui64 tabletId,
-                            const TVector<ui32>& channels,
+                            const TVector<ui32>& channels, 
                             ui32 nodeIndex) {
         TActorId senderB = runtime.AllocateEdgeActor(nodeIndex);
         runtime.SendToPipe(hiveTablet, senderB, new TEvHive::TEvReassignTablet(tabletId, channels), 0, GetPipeConfigWithRetries());
@@ -2137,13 +2137,13 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
         THiveInitialEventsFilter initialEventsFilter;
 
-        TVector<ui64> tabletIds;
+        TVector<ui64> tabletIds; 
         tabletIds.push_back(hiveTablet);
         tabletIds.push_back(bsControllerTablet);
         tabletIds.push_back(testerTablet);
         RunTestWithReboots(tabletIds, [&]() {
             return initialEventsFilter.Prepare();
-        }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) {
+        }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) { 
             if (ENABLE_DETAILED_HIVE_LOG) {
                 Ctest << "At dispatch " << dispatchName << Endl;
             }
@@ -2188,7 +2188,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     Y_UNIT_TEST(TestLocalDisconnect) {
         TTestBasicRuntime runtime(1, false);
         Setup(runtime, true);
-        TVector<ui64> tabletIds;
+        TVector<ui64> tabletIds; 
         const ui64 hiveTablet = MakeDefaultHiveID(0);
         const ui64 testerTablet = MakeDefaultHiveID(1);
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::FLAT_HIVE), &CreateDefaultHive);
@@ -2242,7 +2242,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     Y_UNIT_TEST(TestLocalReplacement) {
         TTestBasicRuntime runtime(2, false);
         Setup(runtime, true);
-        TVector<ui64> tabletIds;
+        TVector<ui64> tabletIds; 
         const ui64 hiveTablet = MakeDefaultHiveID(0);
         const ui64 testerTablet = MakeDefaultHiveID(1);
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::FLAT_HIVE), &CreateDefaultHive);
@@ -2320,7 +2320,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     Y_UNIT_TEST(TestLimitedNodeList) {
         TTestBasicRuntime runtime(3, false);
         Setup(runtime, true);
-        TVector<ui64> tabletIds;
+        TVector<ui64> tabletIds; 
         const ui64 hiveTablet = MakeDefaultHiveID(0);
         const ui64 testerTablet = MakeDefaultHiveID(1);
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::FLAT_HIVE), &CreateDefaultHive);
@@ -2462,7 +2462,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         runtime.SendToPipe(hiveTablet, sender, new TEvHive::TEvLookupChannelInfo(tabletId));
         TAutoPtr<IEventHandle> handle1;
         TEvHive::TEvChannelInfo* channelInfo1 = runtime.GrabEdgeEventRethrow<TEvHive::TEvChannelInfo>(handle1);
-        TVector<ui32> channels = {1, 2};
+        TVector<ui32> channels = {1, 2}; 
 
         runtime.SendToPipe(hiveTablet, sender, new TEvHive::TEvInvalidateStoragePools(), 0, GetPipeConfigWithRetries());
 
@@ -2507,7 +2507,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
         RunTestWithReboots({hiveTablet, bsControllerTablet, testerTablet}, [&]() {
             return initialEventsFilter.Prepare();
-        }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) {
+        }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) { 
             if (ENABLE_DETAILED_HIVE_LOG) {
                 Ctest << "At dispatch " << dispatchName << Endl;
             }
@@ -2613,7 +2613,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         TTestBasicRuntime runtime(1, false);
         Setup(runtime, true);
         TActorId sender = runtime.AllocateEdgeActor();
-        TVector<ui64> tabletIds;
+        TVector<ui64> tabletIds; 
         TAutoPtr<ITabletScheduledEventsGuard> guard = CreateTabletScheduledEventsGuard(tabletIds, runtime, sender);
         const ui64 hiveTablet = MakeDefaultHiveID(0);
         const ui64 testerTablet = MakeDefaultHiveID(1);
@@ -2636,7 +2636,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     Y_UNIT_TEST(TestFailureNotification) {
         TTestBasicRuntime runtime(3, false);
         Setup(runtime, true);
-        TVector<ui64> tabletIds;
+        TVector<ui64> tabletIds; 
         TActorId senderA = runtime.AllocateEdgeActor();
         TAutoPtr<ITabletScheduledEventsGuard> guard = CreateTabletScheduledEventsGuard(tabletIds, runtime, senderA);
         const ui64 hiveTablet = MakeDefaultHiveID(0);
@@ -2648,7 +2648,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         // Create the tablet
         ui32 tabletType = 0;
         THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500, tabletType, 0));
-        TVector<ui32> allowedNodes;
+        TVector<ui32> allowedNodes; 
         allowedNodes.push_back(runtime.GetNodeId(1));
         ev->SetStartupOptions(TEvHive::TEvCreateTablet::FlagLimitAllowedNodes, &allowedNodes, 0, 0);
         ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, ev.Release(), 0);
@@ -2664,7 +2664,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     Y_UNIT_TEST(TestFollowers) {
         TTestBasicRuntime runtime(3, false);
         Setup(runtime, true);
-        TVector<ui64> tabletIds;
+        TVector<ui64> tabletIds; 
         const ui64 hiveTablet = MakeDefaultHiveID(0);
         const ui64 testerTablet = MakeDefaultHiveID(1);
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::FLAT_HIVE), &CreateDefaultHive);
@@ -2689,7 +2689,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     Y_UNIT_TEST(TestFollowersReconfiguration) {
         TTestBasicRuntime runtime(3, false);
         Setup(runtime, true);
-        TVector<ui64> tabletIds;
+        TVector<ui64> tabletIds; 
         TActorId senderA = runtime.AllocateEdgeActor();
         //TAutoPtr<ITabletScheduledEventsGuard> guard = CreateTabletScheduledEventsGuard(tabletIds, runtime, senderA);
         const ui64 hiveTablet = MakeDefaultHiveID(0);
@@ -2738,7 +2738,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         TTestBasicRuntime runtime(NODES, false);
         Setup(runtime, true);
 
-        TVector<ui64> tabletIds;
+        TVector<ui64> tabletIds; 
         const ui64 hiveTablet = MakeDefaultHiveID(0);
         const ui64 testerTablet = MakeDefaultHiveID(1);
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::FLAT_HIVE), &CreateDefaultHive);
@@ -2808,7 +2808,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         TTestBasicRuntime runtime(2, false);
         Setup(runtime, true);
         const int nodeBase = runtime.GetNodeId(0);
-        TVector<ui64> tabletIds;
+        TVector<ui64> tabletIds; 
         TActorId senderA = runtime.AllocateEdgeActor();
         const ui64 hiveTablet = MakeDefaultHiveID(0);
         const ui64 testerTablet = MakeDefaultHiveID(1);
@@ -2900,7 +2900,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
         // creating NUM_TABLETS tablets
         TTabletTypes::EType tabletType = TTabletTypes::Dummy;
-        TVector<ui64> tablets;
+        TVector<ui64> tablets; 
         for (int i = 0; i < NUM_TABLETS; ++i) {
             THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500 + i, tabletType, BINDED_CHANNELS));
             ev->Record.SetObjectId(i);
@@ -3376,7 +3376,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     Y_UNIT_TEST(TestRestartTablets) {
         TTestBasicRuntime runtime(3, false);
         Setup(runtime, true);
-        TVector<ui64> tabletIds;
+        TVector<ui64> tabletIds; 
         const ui64 hiveTablet = MakeDefaultHiveID(0);
         const ui64 testerTablet = MakeDefaultHiveID(1);
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::FLAT_HIVE), &CreateDefaultHive);
@@ -3439,7 +3439,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     Y_UNIT_TEST(TestFollowersCrossDC_Easy) {
         TTestBasicRuntime runtime((ui32)9, (ui32)3);
         Setup(runtime, true);
-        TVector<ui64> tabletIds;
+        TVector<ui64> tabletIds; 
         const ui64 hiveTablet = MakeDefaultHiveID(0);
         const ui64 testerTablet = MakeDefaultHiveID(1);
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::FLAT_HIVE), &CreateDefaultHive);
@@ -3591,7 +3591,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         static constexpr ui32 FOLLOWERS = NODES / DCS;
         TTestBasicRuntime runtime(NODES, DCS);
         Setup(runtime, true);
-        TVector<ui64> tabletIds;
+        TVector<ui64> tabletIds; 
         const ui64 hiveTablet = MakeDefaultHiveID(0);
         const ui64 testerTablet = MakeDefaultHiveID(1);
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::FLAT_HIVE), &CreateDefaultHive);
@@ -3644,7 +3644,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         static constexpr ui32 FOLLOWERS = NODES / DCS;
         TTestBasicRuntime runtime(NODES, DCS);
         Setup(runtime, true);
-        TVector<ui64> tabletIds;
+        TVector<ui64> tabletIds; 
         const ui64 hiveTablet = MakeDefaultHiveID(0);
         const ui64 testerTablet = MakeDefaultHiveID(1);
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::FLAT_HIVE), &CreateDefaultHive);

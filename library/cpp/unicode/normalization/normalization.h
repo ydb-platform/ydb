@@ -127,7 +127,7 @@ namespace NUnicode {
         };
 
         typedef std::pair<wchar32, TCombining> TSymbol;
-        typedef TVector<TSymbol> TBuffer;
+        typedef TVector<TSymbol> TBuffer; 
 
         template <bool doCompose>
         class TCompositor;

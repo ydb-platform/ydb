@@ -128,7 +128,7 @@ namespace NSc {
         return deflt;
     }
 
-    TString TValue::ForceString(const TString& deflt) const {
+    TString TValue::ForceString(const TString& deflt) const { 
         const TScCore& core = Core();
         if (core.IsString()) {
             return ToString(core.GetString(TStringBuf()));
@@ -584,7 +584,7 @@ namespace NSc {
     LIBRARY_SCHEME_DECLARE_TVALUE_OPS_IMPL(double, CompareFloat)
 
     LIBRARY_SCHEME_DECLARE_TVALUE_OPS_IMPL(TStringBuf, CompareStr)
-    LIBRARY_SCHEME_DECLARE_TVALUE_OPS_IMPL(const TString&, CompareStr)
+    LIBRARY_SCHEME_DECLARE_TVALUE_OPS_IMPL(const TString&, CompareStr) 
     LIBRARY_SCHEME_DECLARE_TVALUE_OPS_IMPL(const char* const, CompareStr)
 
 #undef LIBRARY_SCHEME_DECLARE_TVALUE_OPS_IMPL

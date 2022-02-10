@@ -68,7 +68,7 @@ struct TDomainsInfo : public TThrRefBase {
         return "UserTableDefault";
     }
 
-    typedef THashMap<TString, TIntrusiveConstPtr<NLocalDb::TCompactionPolicy>> TNamedCompactionPolicies;
+    typedef THashMap<TString, TIntrusiveConstPtr<NLocalDb::TCompactionPolicy>> TNamedCompactionPolicies; 
 
     struct TDomain : public TThrRefBase {
         using TPtr = TIntrusivePtr<TDomain>;
@@ -81,13 +81,13 @@ struct TDomainsInfo : public TThrRefBase {
         const ui32 DefaultStateStorageGroup;
         const ui32 DefaultSchemeBoardGroup;
         const ui64 SchemeRoot;
-        const TString Name;
-        const TVector<ui64> Coordinators;
-        const TVector<ui64> Mediators;
-        const TVector<ui64> TxAllocators;
-        const TVector<ui32> StateStorageGroups;
+        const TString Name; 
+        const TVector<ui64> Coordinators; 
+        const TVector<ui64> Mediators; 
+        const TVector<ui64> TxAllocators; 
+        const TVector<ui32> StateStorageGroups; 
         const ui32 DefaultHiveUid;
-        const TVector<ui32> HiveUids;
+        const TVector<ui32> HiveUids; 
         const ui64 DomainPlanResolution;
         const TStoragePoolKinds StoragePoolTypes;
 
@@ -181,16 +181,16 @@ struct TDomainsInfo : public TThrRefBase {
             return DomainUid + FirstUserTag;
         }
 
-        static TVector<ui64> TransformUids(TVector<ui64> &&uids, std::function<ui64 (ui32)> func) {
-            TVector<ui64> result(std::move(uids));
+        static TVector<ui64> TransformUids(TVector<ui64> &&uids, std::function<ui64 (ui32)> func) { 
+            TVector<ui64> result(std::move(uids)); 
             for (ui32 i = 0; i < result.size(); ++i) {
                 result[i] = func(result[i]);
             }
             return result;
         }
 
-        static TVector<ui64> TransformIntoVectorUids(ui32 count) {
-            TVector<ui64> result;
+        static TVector<ui64> TransformIntoVectorUids(ui32 count) { 
+            TVector<ui64> result; 
             result.reserve(count);
             for (ui32 i = 1; i <= count; ++i) {
                 result.push_back(i);
@@ -198,27 +198,27 @@ struct TDomainsInfo : public TThrRefBase {
             return result;
         }
 
-        static TVector<ui64> MakeCoordinatorsIds(TVector<ui64> &&uids, ui32 domainUid) {
+        static TVector<ui64> MakeCoordinatorsIds(TVector<ui64> &&uids, ui32 domainUid) { 
             return TransformUids(std::move(uids), [&domainUid](ui32 uid) { return MakeTxCoordinatorID(domainUid, uid); });
         }
 
-        static TVector<ui64> MakeCoordinatorsIds(ui32 count, ui32 domainUid) {
+        static TVector<ui64> MakeCoordinatorsIds(ui32 count, ui32 domainUid) { 
             return MakeCoordinatorsIds(TransformIntoVectorUids(count), domainUid);
         }
 
-        static TVector<ui64> MakeMediatrosIds(TVector<ui64> &&uids, ui32 domainUid) {
+        static TVector<ui64> MakeMediatrosIds(TVector<ui64> &&uids, ui32 domainUid) { 
             return TransformUids(std::move(uids), [&domainUid](ui32 uid) { return MakeTxMediatorID(domainUid, uid); });
         }
 
-        static TVector<ui64> MakeMediatrosIds(ui32 count, ui32 domainUid) {
+        static TVector<ui64> MakeMediatrosIds(ui32 count, ui32 domainUid) { 
             return MakeMediatrosIds(TransformIntoVectorUids(count), domainUid);
         }
 
-        static TVector<ui64> MakeAllocatorsIds(TVector<ui64> &&uids, ui32 domainUid) {
+        static TVector<ui64> MakeAllocatorsIds(TVector<ui64> &&uids, ui32 domainUid) { 
             return TransformUids(std::move(uids), [&domainUid](ui32 uid) { return MakeTxAllocatorID(domainUid, uid); });
         }
 
-        static TVector<ui64> MakeAllocatorsIds(ui32 count, ui32 domainUid) {
+        static TVector<ui64> MakeAllocatorsIds(ui32 count, ui32 domainUid) { 
             return MakeAllocatorsIds(TransformIntoVectorUids(count), domainUid);
         }
 
@@ -231,11 +231,11 @@ struct TDomainsInfo : public TThrRefBase {
         }
     };
 
-    TMap<ui32, TIntrusivePtr<TDomain>> Domains;
-    THashMap<TString, TIntrusivePtr<TDomain>> DomainByName;
-    TMap<ui32, TIntrusivePtr<TDomain>> DomainByStateStorageGroup;
-    TMap<ui32, TIntrusivePtr<TDomain>> DomainByHiveUid;
-    TMap<ui32, ui64> HivesByHiveUid;
+    TMap<ui32, TIntrusivePtr<TDomain>> Domains; 
+    THashMap<TString, TIntrusivePtr<TDomain>> DomainByName; 
+    TMap<ui32, TIntrusivePtr<TDomain>> DomainByStateStorageGroup; 
+    TMap<ui32, TIntrusivePtr<TDomain>> DomainByHiveUid; 
+    TMap<ui32, ui64> HivesByHiveUid; 
     TNamedCompactionPolicies NamedCompactionPolicies;
 
     TDomainsInfo() {
@@ -252,7 +252,7 @@ struct TDomainsInfo : public TThrRefBase {
         return *NamedCompactionPolicies.FindPtr(UserTableDefaultPoicyName());
     }
 
-    void AddCompactionPolicy(TString name, TIntrusiveConstPtr<NLocalDb::TCompactionPolicy> policy) {
+    void AddCompactionPolicy(TString name, TIntrusiveConstPtr<NLocalDb::TCompactionPolicy> policy) { 
         NamedCompactionPolicies[name] = policy;
     }
 

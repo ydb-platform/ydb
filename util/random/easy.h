@@ -42,6 +42,6 @@ namespace NPrivate {
     };
 }
 
-static inline ::NPrivate::TRandom Random() noexcept {
+static inline ::NPrivate::TRandom Random() noexcept { 
     return {};
 }

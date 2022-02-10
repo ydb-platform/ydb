@@ -11,7 +11,7 @@
 
 template <class T, void (*DestroyFun)(T*)>
 struct TFunctionDestroy {
-    static inline void Destroy(T* t) noexcept {
+    static inline void Destroy(T* t) noexcept { 
         if (t)
             DestroyFun(t);
     }

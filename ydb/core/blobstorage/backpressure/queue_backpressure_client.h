@@ -23,7 +23,7 @@ namespace NKikimr {
             , IsConnected(isConnected)
         {}
 
-        TString ToString() const {
+        TString ToString() const { 
             TStringStream str;
             str << "{VDiskId# " << VDiskId.ToString();
             str << " QueueId# " << static_cast<ui32>(QueueId);

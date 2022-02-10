@@ -10,11 +10,11 @@ namespace NKeyValue {
 struct TIndexRecord {
     struct TChainItem {
         TLogoBlobID LogoBlobId;
-        TString InlineData;
+        TString InlineData; 
         ui64 Offset;
 
         TChainItem(const TLogoBlobID &id, ui64 offset);
-        TChainItem(TString &inlineData, ui64 offset);
+        TChainItem(TString &inlineData, ui64 offset); 
         bool IsInline() const;
         ui64 GetSize() const;
 
@@ -25,17 +25,17 @@ struct TIndexRecord {
         bool operator==(const TChainItem& right) const;
     };
 
-    TVector<TChainItem> Chain;
+    TVector<TChainItem> Chain; 
     ui64 CreationUnixTime;
 
     TIndexRecord();
     TIndexRecord(const TIndexRecord& /*other*/) = delete;
     ui64 GetFullValueSize() const;
     ui32 GetReadItems(ui64 offset, ui64 size, TIntermediate::TRead& read) const;
-    TString Serialize() const;
-    bool Deserialize1(const TString &rawData, TString &outErrorInfo);
-    bool Deserialize2(const TString &rawData, TString &outErrorInfo);
-    static EItemType ReadItemType(const TString &rawData);
+    TString Serialize() const; 
+    bool Deserialize1(const TString &rawData, TString &outErrorInfo); 
+    bool Deserialize2(const TString &rawData, TString &outErrorInfo); 
+    static EItemType ReadItemType(const TString &rawData); 
 
     // equlity operator for testing
     bool operator==(const TIndexRecord& right) const;

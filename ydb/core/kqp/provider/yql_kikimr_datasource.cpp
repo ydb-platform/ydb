@@ -98,8 +98,8 @@ public:
         futures.reserve(tablesCount);
 
         for (auto& it : SessionCtx->Tables().GetTables()) {
-            const TString& clusterName = it.first.first;
-            const TString& tableName = it.first.second;
+            const TString& clusterName = it.first.first; 
+            const TString& tableName = it.first.second; 
             TKikimrTableDescription& table = SessionCtx->Tables().GetTable(clusterName, tableName);
 
             if (table.Metadata) {
@@ -452,7 +452,7 @@ public:
             return nullptr;
         }
 
-        TString newName;
+        TString newName; 
         switch (key.GetKeyType()) {
             case TKikimrKey::Type::Table:
                 newName = TKiReadTable::CallableName();
@@ -567,7 +567,7 @@ public:
         return source;
     }
 
-    bool GetDependencies(const TExprNode& node, TExprNode::TListType& children, bool compact) override {
+    bool GetDependencies(const TExprNode& node, TExprNode::TListType& children, bool compact) override { 
         Y_UNUSED(compact);
         if (CanExecute(node)) {
             children.push_back(node.ChildPtr(0));
@@ -577,10 +577,10 @@ public:
         return false;
     }
 
-    TString GetProviderPath(const TExprNode& node) override {
+    TString GetProviderPath(const TExprNode& node) override { 
         Y_UNUSED(node);
 
-        return TString(KikimrProviderName);
+        return TString(KikimrProviderName); 
     }
 
 private:

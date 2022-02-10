@@ -134,7 +134,7 @@ namespace NKikimr {
             }
         }
 
-        TString TProxyState::ToString() const {
+        TString TProxyState::ToString() const { 
             return Sprintf("MaxBytes# %" PRIu32 " Initialized# %s", MaxBytes, (Initialized ? "true" : "false"));
         }
 

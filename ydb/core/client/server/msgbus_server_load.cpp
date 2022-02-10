@@ -5,7 +5,7 @@ namespace NKikimr {
 namespace NMsgBusProxy {
 
 class TBsTestLoadActorRequest : public TActorBootstrapped<TBsTestLoadActorRequest>, public TMessageBusSessionIdentHolder {
-    TVector<ui32> NodeIds;
+    TVector<ui32> NodeIds; 
     NKikimrBlobStorage::TEvTestLoadRequest Cmd;
     NKikimrClient::TBsTestLoadResponse Response;
     ui32 ResponsesPending;
@@ -30,7 +30,7 @@ public:
             ctx.Send(MakeBlobStorageLoadID(nodeId), msg.Release());
             ++ResponsesPending;
         }
-        TVector<ui32>().swap(NodeIds);
+        TVector<ui32>().swap(NodeIds); 
         Become(&TBsTestLoadActorRequest::StateFunc);
         CheckResponse(ctx);
     }

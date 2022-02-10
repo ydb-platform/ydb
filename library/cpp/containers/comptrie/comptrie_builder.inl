@@ -78,7 +78,7 @@ public:
 
     bool AddEntry(const TSymbol* key, size_t keylen, const TData& value);
     bool AddEntryPtr(const TSymbol* key, size_t keylen, const char* value);
-    bool AddSubtreeInFile(const TSymbol* key, size_t keylen, const TString& fileName);
+    bool AddSubtreeInFile(const TSymbol* key, size_t keylen, const TString& fileName); 
     bool AddSubtreeInBuffer(const TSymbol* key, size_t keylen, TArrayWithSizeHolder<char>&& buffer);
     bool FindEntry(const TSymbol* key, size_t keylen, TData* value) const;
     bool FindLongestPrefix(const TSymbol* key, size_t keylen, size_t* prefixlen, TData* value) const;
@@ -269,12 +269,12 @@ public:
 
     struct TSubtreeInFile: public ISubtree {
         struct TData {
-            TString FileName;
+            TString FileName; 
             ui64 Size;
         };
         THolder<TData> Data;
 
-        TSubtreeInFile(const TString& fileName) {
+        TSubtreeInFile(const TString& fileName) { 
             // stupid API
             TFile file(fileName, RdOnly);
             i64 size = file.GetLength();
@@ -321,7 +321,7 @@ public:
         }
 
         ui64 Save(const TBuilderImpl*, IOutputStream& os) const override {
-            TUnbufferedFileInput is(Data->FileName);
+            TUnbufferedFileInput is(Data->FileName); 
             ui64 written = TransferData(&is, &os);
             if (written != Data->Size)
                 ythrow yexception() << "file " << Data->FileName.Quote() << " size changed";
@@ -400,7 +400,7 @@ public:
         return pool.Allocate();
     }
 
-    inline void operator delete(void* ptr, TFixedSizeAllocator& pool) noexcept {
+    inline void operator delete(void* ptr, TFixedSizeAllocator& pool) noexcept { 
         pool.Release(ptr);
     }
 
@@ -436,7 +436,7 @@ bool TCompactTrieBuilder<T, D, S>::AddPtr(const TSymbol* key, size_t keylen, con
 }
 
 template <class T, class D, class S>
-bool TCompactTrieBuilder<T, D, S>::AddSubtreeInFile(const TSymbol* key, size_t keylen, const TString& fileName) {
+bool TCompactTrieBuilder<T, D, S>::AddSubtreeInFile(const TSymbol* key, size_t keylen, const TString& fileName) { 
     return Impl->AddSubtreeInFile(key, keylen, fileName);
 }
 
@@ -566,7 +566,7 @@ bool TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::AddEntryPtr(
 
 template <class T, class D, class S>
 bool TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::AddSubtreeInFile(
-                const TSymbol* key, size_t keylen, const TString& fileName) {
+                const TSymbol* key, size_t keylen, const TString& fileName) { 
     typedef typename TNode::ISubtree ISubtree;
     typedef typename TNode::TSubtreeInFile TSubtreeInFile;
 

@@ -85,7 +85,7 @@ namespace {
     }
 }
 
-TClientCommand::TClientCommand(const TString& name, const std::initializer_list<TString>& aliases, const TString& description)
+TClientCommand::TClientCommand(const TString& name, const std::initializer_list<TString>& aliases, const TString& description) 
     : Name(name)
     , Aliases(aliases)
     , Description(description)
@@ -201,8 +201,8 @@ void TClientCommand::SetFreeArgTitle(size_t pos, const TString& title, const TSt
     Opts.SetFreeArgTitle(pos, title, help);
 }
 
-TString TClientCommand::Ends2Prefix(const std::basic_string<bool>& ends) {
-    TString prefix;
+TString TClientCommand::Ends2Prefix(const std::basic_string<bool>& ends) { 
+    TString prefix; 
     if (!ends.empty()) {
         for (auto it = ends.begin();;) {
             bool s = *it;
@@ -246,7 +246,7 @@ void TClientCommand::RenderCommandsDescription(
     stream << '\n';
 }
 
-TClientCommandTree::TClientCommandTree(const TString& name, const std::initializer_list<TString>& aliases, const TString& description)
+TClientCommandTree::TClientCommandTree(const TString& name, const std::initializer_list<TString>& aliases, const TString& description) 
     : TClientCommand(name, aliases, description)
     , SelectedCommand(nullptr)
 {
@@ -254,7 +254,7 @@ TClientCommandTree::TClientCommandTree(const TString& name, const std::initializ
 }
 
 void TClientCommandTree::AddCommand(std::unique_ptr<TClientCommand> command) {
-    for (const TString& a : command->Aliases) {
+    for (const TString& a : command->Aliases) { 
         Aliases[a] = command->Name;
     }
     command->Parent = this;
@@ -264,7 +264,7 @@ void TClientCommandTree::AddCommand(std::unique_ptr<TClientCommand> command) {
 void TClientCommandTree::Config(TConfig& config) {
     TClientCommand::Config(config);
     SetFreeArgs(config);
-    TString commands;
+    TString commands; 
     for (auto it = SubCommands.begin(); it != SubCommands.end(); ++it) {
         if (!commands.empty())
             commands += ',';
@@ -284,7 +284,7 @@ void TClientCommandTree::Config(TConfig& config) {
 
 void TClientCommandTree::Parse(TConfig& config) {
     TClientCommand::Parse(config);
-    TString cmd = config.ParseResult->GetFreeArgs().at(0);
+    TString cmd = config.ParseResult->GetFreeArgs().at(0); 
     config.Tokens.push_back(cmd);
     size_t count = config.ParseResult->GetFreeArgsPos();
     config.ArgC -= count;

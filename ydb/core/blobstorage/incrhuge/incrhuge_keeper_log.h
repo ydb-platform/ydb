@@ -19,12 +19,12 @@ namespace NKikimr {
                 NKikimrVDiskData::TIncrHugeChunks::EChunkState State;
             };
 
-            THashMap<TChunkIdx, TChunkInfo> Chunks;
+            THashMap<TChunkIdx, TChunkInfo> Chunks; 
             TMaybe<TChunkSerNum> CurrentSerNum;
 
         public:
             struct TChunkAllocation {
-                TVector<TChunkIdx> NewChunkIds;
+                TVector<TChunkIdx> NewChunkIds; 
                 TChunkSerNum BaseSerNum;
                 TChunkSerNum CurrentSerNum;
             };
@@ -47,21 +47,21 @@ namespace NKikimr {
             void operator ()(const TCompleteChunk& record);
             NKikimrVDiskData::TIncrHugeChunks GetCurrentState() const;
 
-            static TString Serialize(const NKikimrVDiskData::TIncrHugeChunks& record);
-            static TString Serialize(const TChunkAllocation& record);
-            static TString Serialize(const TChunkDeletion& record);
-            static TString Serialize(const TCompleteChunk& record);
+            static TString Serialize(const NKikimrVDiskData::TIncrHugeChunks& record); 
+            static TString Serialize(const TChunkAllocation& record); 
+            static TString Serialize(const TChunkDeletion& record); 
+            static TString Serialize(const TCompleteChunk& record); 
         };
 
         class TDeleteRecordMerger {
-            THashMap<ui8, ui64> OwnerToSeqNo;
-            THashMap<TChunkSerNum, TDynBitMap> SerNumToChunk;
+            THashMap<ui8, ui64> OwnerToSeqNo; 
+            THashMap<TChunkSerNum, TDynBitMap> SerNumToChunk; 
 
         public:
             struct TBlobDeletes {
                 ui8 Owner;
                 ui64 SeqNo;
-                TVector<TBlobDeleteLocator> DeleteLocators;
+                TVector<TBlobDeleteLocator> DeleteLocators; 
             };
 
             // delete chunk -- a pure virtual record that is never written to real log
@@ -76,9 +76,9 @@ namespace NKikimr {
             void operator ()(const TDeleteChunk& record);
             NKikimrVDiskData::TIncrHugeDelete GetCurrentState() const;
 
-            static TString Serialize(const NKikimrVDiskData::TIncrHugeDelete& record);
-            static TString Serialize(const TBlobDeletes& record);
-            static TString Serialize(const TDeleteChunk& record);
+            static TString Serialize(const NKikimrVDiskData::TIncrHugeDelete& record); 
+            static TString Serialize(const TBlobDeletes& record); 
+            static TString Serialize(const TDeleteChunk& record); 
         };
 
         class TLogger
@@ -97,14 +97,14 @@ namespace NKikimr {
             bool IssueChunksStartingPoint = false;
 
             // accumulated list of allocated chunks waiting for commit
-            TVector<TChunkIdx> PendingCleanChunks;
+            TVector<TChunkIdx> PendingCleanChunks; 
 
             /////////////////////////////
             // Chunk record operations //
             /////////////////////////////
 
             struct TChunkQueueItem;
-            using TChunkQueue = TList<TChunkQueueItem>;
+            using TChunkQueue = TList<TChunkQueueItem>; 
             TChunkQueue ChunkQueue;
             TChunkQueue PendingChunkQueue;
 
@@ -120,7 +120,7 @@ namespace NKikimr {
             //////////////////////////////
 
             struct TDeleteQueueItem;
-            using TDeleteQueue = TList<TDeleteQueueItem>;
+            using TDeleteQueue = TList<TDeleteQueueItem>; 
             TDeleteQueue DeleteQueue;
 
             // this merger contains confirmed state of deletes -- that is it includes all successfully completed delete
@@ -156,7 +156,7 @@ namespace NKikimr {
             // Chunks //
             ////////////
 
-            void LogChunkAllocation(TVector<TChunkIdx>&& newChunkIds, TChunkSerNum baseSerNum,
+            void LogChunkAllocation(TVector<TChunkIdx>&& newChunkIds, TChunkSerNum baseSerNum, 
                     std::unique_ptr<IEventCallback>&& callback, const TActorContext& ctx);
 
             // log deletion of chunk
@@ -182,10 +182,10 @@ namespace NKikimr {
 
             // log deletion of some blobs; requests are executed one by one in FIFO order; locators should come in
             // sorted order
-            void LogBlobDeletes(ui8 owner, ui64 seqNo, TVector<TBlobDeleteLocator>&& deleteLocators,
+            void LogBlobDeletes(ui8 owner, ui64 seqNo, TVector<TBlobDeleteLocator>&& deleteLocators, 
                     std::unique_ptr<IEventCallback>&& callback, const TActorContext& ctx);
 
-            void LogVirtualBlobDeletes(TVector<TBlobDeleteLocator>&& deleteLocators, const TActorContext& ctx);
+            void LogVirtualBlobDeletes(TVector<TBlobDeleteLocator>&& deleteLocators, const TActorContext& ctx); 
 
             // set initial state
             void SetInitialDeletesState(const NKikimrVDiskData::TIncrHugeDelete& record);

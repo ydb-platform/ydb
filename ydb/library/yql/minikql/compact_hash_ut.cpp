@@ -21,7 +21,7 @@ Y_UNIT_TEST_SUITE(TCompactHashTest) {
         TPool pool(pagePool);
         UNIT_ASSERT(countOfLists > 1);
 
-        THashSet<TItem*> lists;
+        THashSet<TItem*> lists; 
 
         void* pageAddr = nullptr;
         for (size_t i = 0; i < countOfLists / 2; ++i) {
@@ -57,7 +57,7 @@ Y_UNIT_TEST_SUITE(TCompactHashTest) {
             pool.ReturnList(l);
         }
 
-        THashSet<TItem*> lists2;
+        THashSet<TItem*> lists2; 
         for (size_t i = 0; i < countOfLists; ++i) {
             TItem* l = pool.template GetList<TItem>(listSize);
             // All lists are from the same page
@@ -159,7 +159,7 @@ Y_UNIT_TEST_SUITE(TCompactHashTest) {
         TAlignedPagePool pagePool;
         TCompactHash<TItem, TItem, TItemHash> hash(pagePool);
 
-        TVector<TItem> elements(elementsCount);
+        TVector<TItem> elements(elementsCount); 
         std::iota(elements.begin(), elements.end(), 0);
         Shuffle(elements.begin(), elements.end());
         for (TItem i: elements) {
@@ -204,7 +204,7 @@ Y_UNIT_TEST_SUITE(TCompactHashTest) {
         TAlignedPagePool pagePool;
         TCompactMultiHash<TItem, TItem, TItemHash> hash(pagePool);
 
-        TVector<TItem> keys(keysCount);
+        TVector<TItem> keys(keysCount); 
         std::iota(keys.begin(), keys.end(), 0);
         Shuffle(keys.begin(), keys.end());
 
@@ -305,7 +305,7 @@ Y_UNIT_TEST_SUITE(TCompactHashTest) {
         TAlignedPagePool pagePool;
         TCompactHashSet<TItem, TItemHash> hash(pagePool);
 
-        TVector<TItem> elements(elementsCount);
+        TVector<TItem> elements(elementsCount); 
         std::iota(elements.begin(), elements.end(), 0);
         Shuffle(elements.begin(), elements.end());
         for (TItem i: elements) {

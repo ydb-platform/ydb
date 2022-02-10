@@ -97,7 +97,7 @@ public:
 private:
 	typedef unsigned char ContainerType;
 	static const size_t ItemSize = sizeof(ContainerType) * 8;
-	TVector<ContainerType> m_data;
+	TVector<ContainerType> m_data; 
 	size_t m_size;
 
 	static size_t RoundUp(size_t x)   { return x / ItemSize + ((x % ItemSize) ? 1 : 0); }

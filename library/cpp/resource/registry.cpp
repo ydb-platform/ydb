@@ -20,7 +20,7 @@ namespace {
 
     typedef std::pair<TStringBuf, TStringBuf> TDescriptor;
 
-    struct TStore: public IStore, public THashMap<TStringBuf, TDescriptor*> {
+    struct TStore: public IStore, public THashMap<TStringBuf, TDescriptor*> { 
         void Store(const TStringBuf key, const TStringBuf data) override {
             if (contains(key)) {
                 const TStringBuf value = (*this)[key]->second;
@@ -87,7 +87,7 @@ namespace {
             }
         }
 
-        size_t Count() const noexcept override {
+        size_t Count() const noexcept override { 
             return D_.size();
         }
 
@@ -95,7 +95,7 @@ namespace {
             return D_.at(idx).first;
         }
 
-        typedef TDeque<TDescriptor> TDescriptors;
+        typedef TDeque<TDescriptor> TDescriptors; 
         TDescriptors D_;
     };
 }

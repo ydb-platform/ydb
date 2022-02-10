@@ -26,7 +26,7 @@ void TPersQueueCacheL2::Bootstrap(const TActorContext& ctx)
 void TPersQueueCacheL2::Handle(TEvPqCache::TEvCacheL2Request::TPtr& ev, const TActorContext& ctx)
 {
     THolder<TCacheL2Request> request(ev->Get()->Data.Release());
-    TString topicName = request->TopicName;
+    TString topicName = request->TopicName; 
 
     Y_VERIFY(topicName.size(), "PQ L2. Empty topic name in L2");
 
@@ -35,13 +35,13 @@ void TPersQueueCacheL2::Handle(TEvPqCache::TEvCacheL2Request::TPtr& ev, const TA
     RemoveBlobs(ctx, topicName, request->RemovedBlobs);
     RegretBlobs(ctx, topicName, request->MissedBlobs);
 
-    THashMap<TKey, TCacheValue::TPtr> evicted;
+    THashMap<TKey, TCacheValue::TPtr> evicted; 
     AddBlobs(ctx, topicName, request->StoredBlobs, evicted);
 
     SendResponses(ctx, evicted);
 }
 
-void TPersQueueCacheL2::SendResponses(const TActorContext& ctx, const THashMap<TKey, TCacheValue::TPtr>& evictedBlobs)
+void TPersQueueCacheL2::SendResponses(const TActorContext& ctx, const THashMap<TKey, TCacheValue::TPtr>& evictedBlobs) 
 {
     TInstant now = TAppData::TimeProvider->Now();
     THashMap<TActorId, THolder<TCacheL2Response>> responses;
@@ -73,8 +73,8 @@ void TPersQueueCacheL2::SendResponses(const TActorContext& ctx, const THashMap<T
 }
 
 /// @return outRemoved - map of evicted items. L1 should be noticed about them
-void TPersQueueCacheL2::AddBlobs(const TActorContext& ctx, TString topic, const TVector<TCacheBlobL2>& blobs,
-                                 THashMap<TKey, TCacheValue::TPtr>& outEvicted)
+void TPersQueueCacheL2::AddBlobs(const TActorContext& ctx, TString topic, const TVector<TCacheBlobL2>& blobs, 
+                                 THashMap<TKey, TCacheValue::TPtr>& outEvicted) 
 {
     ui32 numUnused = 0;
     for (const TCacheBlobL2& blob : blobs) {
@@ -126,7 +126,7 @@ void TPersQueueCacheL2::AddBlobs(const TActorContext& ctx, TString topic, const 
     }
 }
 
-void TPersQueueCacheL2::RemoveBlobs(const TActorContext& ctx, TString topic, const TVector<TCacheBlobL2>& blobs)
+void TPersQueueCacheL2::RemoveBlobs(const TActorContext& ctx, TString topic, const TVector<TCacheBlobL2>& blobs) 
 {
     ui32 numEvicted = 0;
     ui32 numUnused = 0;
@@ -156,7 +156,7 @@ void TPersQueueCacheL2::RemoveBlobs(const TActorContext& ctx, TString topic, con
     }
 }
 
-void TPersQueueCacheL2::TouchBlobs(const TActorContext& ctx, TString topic, const TVector<TCacheBlobL2>& blobs, bool isHit)
+void TPersQueueCacheL2::TouchBlobs(const TActorContext& ctx, TString topic, const TVector<TCacheBlobL2>& blobs, bool isHit) 
 {
     TInstant now = TAppData::TimeProvider->Now();
 
@@ -184,7 +184,7 @@ void TPersQueueCacheL2::TouchBlobs(const TActorContext& ctx, TString topic, cons
     }
 }
 
-void TPersQueueCacheL2::RegretBlobs(const TActorContext& ctx, TString topic, const TVector<TCacheBlobL2>& blobs)
+void TPersQueueCacheL2::RegretBlobs(const TActorContext& ctx, TString topic, const TVector<TCacheBlobL2>& blobs) 
 {
     for (const TCacheBlobL2& blob : blobs) {
         LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Missed blob. Topic '" << topic
@@ -200,18 +200,18 @@ void TPersQueueCacheL2::Handle(NMon::TEvHttpInfo::TPtr& ev, const TActorContext&
 {
     const auto& params = ev->Get()->Request.GetParams();
     if (params.Has("submit")) {
-        TString strParam = params.Get("newCacheLimit");
+        TString strParam = params.Get("newCacheLimit"); 
         if (strParam.size()) {
             ui32 valueMb = atoll(strParam.data());
             MaxSize = SizeInBytes(valueMb); // will be applyed at next AddBlobs
         }
     }
 
-    TString html = HttpForm();
+    TString html = HttpForm(); 
     ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(html));
 }
 
-TString TPersQueueCacheL2::HttpForm() const
+TString TPersQueueCacheL2::HttpForm() const 
 {
     TStringStream str;
     HTML(str) {

@@ -23,15 +23,15 @@ AreJsonMapsEqual(const NJson::TJsonValue& lhs, const NJson::TJsonValue& rhs) {
     if (rhs.GetType() != JSON_MAP)
         return false;
 
-    typedef TJsonValue::TMapType TMapType;
-    const TMapType& lhsMap = lhs.GetMap();
-    const TMapType& rhsMap = rhs.GetMap();
+    typedef TJsonValue::TMapType TMapType; 
+    const TMapType& lhsMap = lhs.GetMap(); 
+    const TMapType& rhsMap = rhs.GetMap(); 
 
     if (lhsMap.size() != rhsMap.size())
         return false;
 
     for (const auto& lhsIt : lhsMap) {
-        TMapType::const_iterator rhsIt = rhsMap.find(lhsIt.first);
+        TMapType::const_iterator rhsIt = rhsMap.find(lhsIt.first); 
         if (rhsIt == rhsMap.end())
             return false;
 

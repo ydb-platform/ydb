@@ -9,11 +9,11 @@
 
 using TAddr = THttpServerOptions::TAddr;
 
-static inline TString AddrToString(const TAddr& addr) {
+static inline TString AddrToString(const TAddr& addr) { 
     return addr.Addr + ":" + ToString(addr.Port);
 }
 
-static inline TNetworkAddress ToNetworkAddr(const TString& address, ui16 port) {
+static inline TNetworkAddress ToNetworkAddr(const TString& address, ui16 port) { 
     if (address.empty() || address == TStringBuf("*")) {
         return TNetworkAddress(port);
     }
@@ -22,14 +22,14 @@ static inline TNetworkAddress ToNetworkAddr(const TString& address, ui16 port) {
 }
 
 void THttpServerOptions::BindAddresses(TBindAddresses& ret) const {
-    THashSet<TString> check;
+    THashSet<TString> check; 
 
     for (auto addr : BindSockaddr) {
         if (!addr.Port) {
             addr.Port = Port;
         }
 
-        const TString straddr = AddrToString(addr);
+        const TString straddr = AddrToString(addr); 
 
         if (check.find(straddr) == check.end()) {
             check.insert(straddr);

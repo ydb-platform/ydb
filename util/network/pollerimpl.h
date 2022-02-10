@@ -7,7 +7,7 @@
 #include <util/system/defaults.h>
 #include <util/generic/ylimits.h>
 #include <util/generic/utility.h>
-#include <util/generic/vector.h>
+#include <util/generic/vector.h> 
 #include <util/generic/yexception.h>
 #include <util/datetime/base.h>
 
@@ -40,7 +40,7 @@ enum EContPoll {
     CONT_POLL_BACKLOG_EMPTY = 64,  // Backlog is empty (seen end of request, EAGAIN or truncated read)
 };
 
-static inline bool IsSocket(SOCKET fd) noexcept {
+static inline bool IsSocket(SOCKET fd) noexcept { 
     int val = 0;
     socklen_t len = sizeof(val);
 
@@ -51,7 +51,7 @@ static inline bool IsSocket(SOCKET fd) noexcept {
     return LastSystemError() != ENOTSOCK;
 }
 
-static inline int MicroToMilli(int timeout) noexcept {
+static inline int MicroToMilli(int timeout) noexcept { 
     if (timeout) {
         /*
          * 1. API of epoll syscall allows to specify timeout with millisecond
@@ -74,7 +74,7 @@ struct TWithoutLocking {
 
 #if defined(HAVE_KQUEUE_POLLER)
 static inline int Kevent(int kq, struct kevent* changelist, int nchanges,
-                         struct kevent* eventlist, int nevents, const struct timespec* timeout) noexcept {
+                         struct kevent* eventlist, int nevents, const struct timespec* timeout) noexcept { 
     int ret;
 
     do {
@@ -97,11 +97,11 @@ public:
         }
     }
 
-    inline ~TKqueuePoller() {
+    inline ~TKqueuePoller() { 
         close(Fd_);
     }
 
-    inline int Fd() const noexcept {
+    inline int Fd() const noexcept { 
         return Fd_;
     }
 
@@ -131,7 +131,7 @@ public:
         }
     }
 
-    inline void Remove(int fd) noexcept {
+    inline void Remove(int fd) noexcept { 
         TEvent e[2];
 
         Zero(e);
@@ -142,7 +142,7 @@ public:
         Y_VERIFY(!(Kevent(Fd_, e, 2, nullptr, 0, nullptr) == -1 && errno != ENOENT), "kevent remove failed: %s", LastSystemErrorText());
     }
 
-    inline size_t Wait(TEvent* events, size_t len, int timeout) noexcept {
+    inline size_t Wait(TEvent* events, size_t len, int timeout) noexcept { 
         struct timespec ts;
 
         ts.tv_sec = timeout / 1000000;
@@ -155,11 +155,11 @@ public:
         return (size_t)ret;
     }
 
-    static inline void* ExtractEvent(const TEvent* event) noexcept {
+    static inline void* ExtractEvent(const TEvent* event) noexcept { 
         return event->udata;
     }
 
-    static inline int ExtractStatus(const TEvent* event) noexcept {
+    static inline int ExtractStatus(const TEvent* event) noexcept { 
         if (event->flags & EV_ERROR) {
             return EIO;
         }
@@ -167,7 +167,7 @@ public:
         return event->fflags;
     }
 
-    static inline int ExtractFilterImpl(const TEvent* event) noexcept {
+    static inline int ExtractFilterImpl(const TEvent* event) noexcept { 
         if (event->filter == EVFILT_READ) {
             return CONT_POLL_READ;
         }
@@ -189,7 +189,7 @@ private:
 #endif
 
 #if defined(HAVE_EPOLL_POLLER)
-static inline int ContEpollWait(int epfd, struct epoll_event* events, int maxevents, int timeout) noexcept {
+static inline int ContEpollWait(int epfd, struct epoll_event* events, int maxevents, int timeout) noexcept { 
     int ret;
 
     do {
@@ -212,11 +212,11 @@ public:
         }
     }
 
-    inline ~TEpollPoller() {
+    inline ~TEpollPoller() { 
         close(Fd_);
     }
 
-    inline int Fd() const noexcept {
+    inline int Fd() const noexcept { 
         return Fd_;
     }
 
@@ -258,7 +258,7 @@ public:
         }
     }
 
-    inline void Remove(int fd) noexcept {
+    inline void Remove(int fd) noexcept { 
         TEvent e;
 
         Zero(e);
@@ -266,7 +266,7 @@ public:
         epoll_ctl(Fd_, EPOLL_CTL_DEL, fd, &e);
     }
 
-    inline size_t Wait(TEvent* events, size_t len, int timeout) noexcept {
+    inline size_t Wait(TEvent* events, size_t len, int timeout) noexcept { 
         const int ret = ContEpollWait(Fd_, events, len, MicroToMilli(timeout));
 
         Y_VERIFY(ret >= 0, "epoll wait error: %s", LastSystemErrorText());
@@ -274,11 +274,11 @@ public:
         return (size_t)ret;
     }
 
-    static inline void* ExtractEvent(const TEvent* event) noexcept {
+    static inline void* ExtractEvent(const TEvent* event) noexcept { 
         return event->data.ptr;
     }
 
-    static inline int ExtractStatus(const TEvent* event) noexcept {
+    static inline int ExtractStatus(const TEvent* event) noexcept { 
         if (event->events & (EPOLLERR | EPOLLHUP)) {
             return EIO;
         }
@@ -286,7 +286,7 @@ public:
         return 0;
     }
 
-    static inline int ExtractFilterImpl(const TEvent* event) noexcept {
+    static inline int ExtractFilterImpl(const TEvent* event) noexcept { 
         int ret = 0;
 
         if (event->events & EPOLLIN) {
@@ -315,7 +315,7 @@ private:
 
     #include "pair.h"
 
-static inline int ContSelect(int n, fd_set* r, fd_set* w, fd_set* e, struct timeval* t) noexcept {
+static inline int ContSelect(int n, fd_set* r, fd_set* w, fd_set* e, struct timeval* t) noexcept { 
     int ret;
 
     do {
@@ -336,11 +336,11 @@ struct TSelectPollerNoTemplate {
         {
         }
 
-        inline void* Data() const noexcept {
+        inline void* Data() const noexcept { 
             return Data_;
         }
 
-        inline void Set(void* d, int s) noexcept {
+        inline void Set(void* d, int s) noexcept { 
             Data_ = d;
             Filter_ = s;
         }
@@ -349,12 +349,12 @@ struct TSelectPollerNoTemplate {
             Filter_ &= ~c;
         }
 
-        inline int Filter() const noexcept {
+        inline int Filter() const noexcept { 
             return Filter_;
         }
     };
 
-    class TFds: public THashMap<SOCKET, THandle> {
+    class TFds: public THashMap<SOCKET, THandle> { 
     public:
         inline void Set(SOCKET fd, void* data, int filter) {
             (*this)[fd].Set(data, filter);
@@ -364,7 +364,7 @@ struct TSelectPollerNoTemplate {
             erase(fd);
         }
 
-        inline SOCKET Build(fd_set* r, fd_set* w, fd_set* e) const noexcept {
+        inline SOCKET Build(fd_set* r, fd_set* w, fd_set* e) const noexcept { 
             SOCKET ret = 0;
 
             for (const auto& it : *this) {
@@ -391,15 +391,15 @@ struct TSelectPollerNoTemplate {
     };
 
     struct TEvent: public THandle {
-        inline int Status() const noexcept {
+        inline int Status() const noexcept { 
             return -Min(Filter(), 0);
         }
 
-        inline void Error(void* d, int err) noexcept {
+        inline void Error(void* d, int err) noexcept { 
             Set(d, -err);
         }
 
-        inline void Success(void* d, int what) noexcept {
+        inline void Success(void* d, int what) noexcept { 
             Set(d, what);
         }
     };
@@ -419,7 +419,7 @@ public:
         SetNonBlock(SigSock());
     }
 
-    inline ~TSelectPoller() {
+    inline ~TSelectPoller() { 
         closesocket(Signal_[0]);
         closesocket(Signal_[1]);
     }
@@ -432,7 +432,7 @@ public:
         Signal();
     }
 
-    inline void Remove(SOCKET fd) noexcept {
+    inline void Remove(SOCKET fd) noexcept { 
         with_lock (CommandLock_) {
             Commands_.push_back(TCommand(fd, 0));
         }
@@ -440,7 +440,7 @@ public:
         Signal();
     }
 
-    inline size_t Wait(TEvent* events, size_t len, int timeout) noexcept {
+    inline size_t Wait(TEvent* events, size_t len, int timeout) noexcept { 
         auto guard = Guard(Lock_);
 
         do {
@@ -472,7 +472,7 @@ public:
         return SavedEvents_.Get();
     }
 
-    inline size_t WaitBase(TEvent* events, size_t len, int timeout) noexcept {
+    inline size_t WaitBase(TEvent* events, size_t len, int timeout) noexcept { 
         with_lock (CommandLock_) {
             for (auto command = Commands_.begin(); command != Commands_.end(); ++command) {
                 if (command->Filter_ != 0) {
@@ -571,24 +571,24 @@ public:
         return events - eventsStart;
     }
 
-    inline size_t EventNumberHint() const noexcept {
+    inline size_t EventNumberHint() const noexcept { 
         return sizeof(fd_set) * 8 * 2;
     }
 
-    static inline void* ExtractEvent(const TEvent* event) noexcept {
+    static inline void* ExtractEvent(const TEvent* event) noexcept { 
         return event->Data();
     }
 
-    static inline int ExtractStatus(const TEvent* event) noexcept {
+    static inline int ExtractStatus(const TEvent* event) noexcept { 
         return event->Status();
     }
 
-    static inline int ExtractFilterImpl(const TEvent* event) noexcept {
+    static inline int ExtractFilterImpl(const TEvent* event) noexcept { 
         return event->Filter();
     }
 
 private:
-    inline void Signal() noexcept {
+    inline void Signal() noexcept { 
         char ch = 13;
 
         send(SigSock(), &ch, 1, 0);
@@ -602,11 +602,11 @@ private:
         }
     }
 
-    inline SOCKET WaitSock() const noexcept {
+    inline SOCKET WaitSock() const noexcept { 
         return Signal_[1];
     }
 
-    inline SOCKET SigSock() const noexcept {
+    inline SOCKET SigSock() const noexcept { 
         return Signal_[0];
     }
 
@@ -638,13 +638,13 @@ private:
     TEvent* End_;
 
     TMyMutex CommandLock_;
-    TVector<TCommand> Commands_;
+    TVector<TCommand> Commands_; 
 
     SOCKET Signal_[2];
 };
 #endif
 
-static inline TDuration PollStep(const TInstant& deadLine, const TInstant& now) noexcept {
+static inline TDuration PollStep(const TInstant& deadLine, const TInstant& now) noexcept { 
     if (deadLine < now) {
         return TDuration::Zero();
     }
@@ -667,7 +667,7 @@ public:
         }
     }
 
-    static inline int ExtractFilter(const TEvent* event) noexcept {
+    static inline int ExtractFilter(const TEvent* event) noexcept { 
         if (TBase::ExtractStatus(event)) {
             return CONT_POLL_READ | CONT_POLL_WRITE | CONT_POLL_RDHUP;
         }
@@ -675,7 +675,7 @@ public:
         return TBase::ExtractFilterImpl(event);
     }
 
-    inline size_t WaitD(TEvent* events, size_t len, TInstant deadLine, TInstant now = TInstant::Now()) noexcept {
+    inline size_t WaitD(TEvent* events, size_t len, TInstant deadLine, TInstant now = TInstant::Now()) noexcept { 
         if (!len) {
             return 0;
         }

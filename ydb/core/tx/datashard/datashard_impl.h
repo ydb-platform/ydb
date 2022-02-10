@@ -73,7 +73,7 @@ public:
 
 private:
     TStepOrder StepOrder;
-    TVector<ui32> Tables;
+    TVector<ui32> Tables; 
 };
 
 // For Split
@@ -100,7 +100,7 @@ public:
     TRowVersion LowWatermark;
 
 private:
-    TVector<ui32> Tables;
+    TVector<ui32> Tables; 
 };
 
 // Base class for non-Transactional scans of DataShard data
@@ -854,7 +854,7 @@ class TDataShard
         return true;
     }
 
-    inline static bool SysGetBytes(NIceDb::TNiceDb& db, ui64 row, TString& value) {
+    inline static bool SysGetBytes(NIceDb::TNiceDb& db, ui64 row, TString& value) { 
         auto rowset = db.Table<Schema::Sys>().Key(row).Select<Schema::Sys::Bytes>();
         if (!rowset.IsReady())
             return false;
@@ -1073,11 +1073,11 @@ public:
                                    const TActorContext& ctx);
     THolder<TEvTxProcessing::TEvReadSet> PrepareReadSet(ui64 step, ui64 txId, ui64 source, ui64 target,
                                                         const TString& body, ui64 seqno);
-    void SendReadSet(const TActorContext& ctx, ui64 step, ui64 txId, ui64 source, ui64 target, const TString& body, ui64 seqno);
+    void SendReadSet(const TActorContext& ctx, ui64 step, ui64 txId, ui64 source, ui64 target, const TString& body, ui64 seqno); 
     void SendReadSets(const TActorContext& ctx,
                       TVector<THolder<TEvTxProcessing::TEvReadSet>> &&readsets);
     void ResendReadSet(const TActorContext& ctx, ui64 step, ui64 txId, ui64 source, ui64 target, const TString& body, ui64 seqno);
-    void SendDelayedAcks(const TActorContext& ctx, TVector<THolder<IEventHandle>>& delayedAcks) const;
+    void SendDelayedAcks(const TActorContext& ctx, TVector<THolder<IEventHandle>>& delayedAcks) const; 
     void SendResult(const TActorContext &ctx,
                     TOutputOpData::TResultPtr &result,
                     const TActorId &target,
@@ -1162,8 +1162,8 @@ public:
 
     TSysLocks& SysLocksTable() { return SysLocks; }
 
-    static const TString& GetUserTablePrefix() {
-        static TString prefix = Schema::UserTablePrefix;
+    static const TString& GetUserTablePrefix() { 
+        static TString prefix = Schema::UserTablePrefix; 
         return prefix;
     }
 
@@ -1448,14 +1448,14 @@ private:
     class TLoanReturnTracker {
         struct TLoanReturnInfo {
             TActorId PipeToOwner;
-            THashSet<TLogoBlobID> PartMeta;
+            THashSet<TLogoBlobID> PartMeta; 
         };
 
         ui64 MyTabletID;
         // TabletID -> non-acked loans
-        THashMap<ui64, TLoanReturnInfo> LoanReturns;
+        THashMap<ui64, TLoanReturnInfo> LoanReturns; 
         // part -> owner
-        THashMap<TLogoBlobID, ui64> LoanOwners;
+        THashMap<TLogoBlobID, ui64> LoanOwners; 
         NTabletPipe::TClientRetryPolicy PipeRetryPolicy;
 
     public:
@@ -1478,7 +1478,7 @@ private:
             LoanReturns.clear();
         }
 
-        void ReturnLoan(ui64 ownerTabletId, const TVector<TLogoBlobID>& partMetaVec, const TActorContext& ctx) {
+        void ReturnLoan(ui64 ownerTabletId, const TVector<TLogoBlobID>& partMetaVec, const TActorContext& ctx) { 
             TLoanReturnInfo& info = LoanReturns[ownerTabletId];
 
             TVector<TLogoBlobID> partsToReturn(Reserve(partMetaVec.size()));
@@ -1514,7 +1514,7 @@ private:
             if (!LoanReturns.contains(ownerTabletId))
                 return;
 
-            THashSet<TLogoBlobID> toResend;
+            THashSet<TLogoBlobID> toResend; 
             toResend.swap(LoanReturns[ownerTabletId].PartMeta);
 
             LoanReturns.erase(ownerTabletId);
@@ -1565,7 +1565,7 @@ private:
             Dst.insert(dstTabeltId);
         }
 
-        const THashSet<ui64>& GetDstSet() const {
+        const THashSet<ui64>& GetDstSet() const { 
             return Dst;
         }
 
@@ -1636,8 +1636,8 @@ private:
 
     private:
         TDataShard* Self;
-        THashSet<ui64> Dst;
-        THashMap<ui64, TAutoPtr<NKikimrTxDataShard::TEvSplitTransferSnapshot>> DataToSend;
+        THashSet<ui64> Dst; 
+        THashMap<ui64, TAutoPtr<NKikimrTxDataShard::TEvSplitTransferSnapshot>> DataToSend; 
         THashMap<ui64, TActorId> PipesToDstShards;
     };
 
@@ -1920,7 +1920,7 @@ private:
     bool SplitSnapshotStarted;      // Non-persistent flag that is used to restart snapshot in case of datashard restart
     TSplitSrcSnapshotSender SplitSrcSnapshotSender;
     // TODO: make this persitent
-    THashSet<ui64> ReceiveSnapshotsFrom;
+    THashSet<ui64> ReceiveSnapshotsFrom; 
     ui64 DstSplitOpId;
     ui64 SrcSplitOpId;
     bool DstSplitSchemaInitialized = false;

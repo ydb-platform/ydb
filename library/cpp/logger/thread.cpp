@@ -126,7 +126,7 @@ TThreadedLogBackend::TThreadedLogBackend(TLogBackend* slave, size_t queuelen, st
 {
 }
 
-TThreadedLogBackend::~TThreadedLogBackend() {
+TThreadedLogBackend::~TThreadedLogBackend() { 
 }
 
 void TThreadedLogBackend::WriteData(const TLogRecord& rec) {

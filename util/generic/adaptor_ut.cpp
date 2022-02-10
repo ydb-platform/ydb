@@ -34,8 +34,8 @@ struct TState {
 
 Y_UNIT_TEST_SUITE(TReverseAdaptor) {
     Y_UNIT_TEST(ReadTest) {
-        TVector<int> cont = {1, 2, 3};
-        TVector<int> etalon = {3, 2, 1};
+        TVector<int> cont = {1, 2, 3}; 
+        TVector<int> etalon = {3, 2, 1}; 
         size_t idx = 0;
         for (const auto& x : Reversed(cont)) {
             UNIT_ASSERT_VALUES_EQUAL(etalon[idx++], x);
@@ -47,8 +47,8 @@ Y_UNIT_TEST_SUITE(TReverseAdaptor) {
     }
 
     Y_UNIT_TEST(WriteTest) {
-        TVector<int> cont = {1, 2, 3};
-        TVector<int> etalon = {3, 6, 9};
+        TVector<int> cont = {1, 2, 3}; 
+        TVector<int> etalon = {3, 6, 9}; 
         size_t idx = 0;
         for (auto& x : Reversed(cont)) {
             x *= x + idx++;
@@ -60,7 +60,7 @@ Y_UNIT_TEST_SUITE(TReverseAdaptor) {
     }
 
     Y_UNIT_TEST(InnerTypeTest) {
-        using TStub = TVector<int>;
+        using TStub = TVector<int>; 
         TStub stub;
         const TStub cstub;
 

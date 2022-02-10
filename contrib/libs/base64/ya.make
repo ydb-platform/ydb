@@ -1,7 +1,7 @@
 OWNER(
     yazevnul
     g:contrib
-    g:cpp-contrib
+    g:cpp-contrib 
 )
 
 VERSION(0.3.0)

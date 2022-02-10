@@ -3,7 +3,7 @@
 TNullLogBackend::TNullLogBackend() {
 }
 
-TNullLogBackend::~TNullLogBackend() {
+TNullLogBackend::~TNullLogBackend() { 
 }
 
 void TNullLogBackend::WriteData(const TLogRecord&) {

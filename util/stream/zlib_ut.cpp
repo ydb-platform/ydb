@@ -56,7 +56,7 @@ Y_UNIT_TEST_SUITE(TZLibTest) {
     static const TString DATA2 = "cn8wk2bd9vb3vdfif83g1ks94bfiovtwv";
 
     Y_UNIT_TEST(Compress) {
-        TUnbufferedFileOutput o(ZDATA);
+        TUnbufferedFileOutput o(ZDATA); 
         TZLibCompress c(&o, ZLib::ZLib);
 
         c.Write(DATA.data(), DATA.size());
@@ -68,7 +68,7 @@ Y_UNIT_TEST_SUITE(TZLibTest) {
         TTempFile tmpFile(ZDATA);
 
         {
-            TUnbufferedFileInput i(ZDATA);
+            TUnbufferedFileInput i(ZDATA); 
             TZLibDecompress d(&i);
 
             UNIT_ASSERT_EQUAL(d.ReadAll(), DATA);
@@ -94,7 +94,7 @@ Y_UNIT_TEST_SUITE(TZLibTest) {
         // Check that Decompress(Compress(X) + Compress(Y)) == X + Y
         TTempFile tmpFile(ZDATA);
         {
-            TUnbufferedFileOutput o(ZDATA);
+            TUnbufferedFileOutput o(ZDATA); 
             TZLibCompress c1(&o, ZLib::ZLib);
             c1.Write(DATA.data(), DATA.size());
             c1.Finish();
@@ -104,7 +104,7 @@ Y_UNIT_TEST_SUITE(TZLibTest) {
             o.Finish();
         }
         {
-            TUnbufferedFileInput i(ZDATA);
+            TUnbufferedFileInput i(ZDATA); 
             TZLibDecompress d(&i);
 
             UNIT_ASSERT_EQUAL(d.ReadAll(), DATA + DATA2);
@@ -130,7 +130,7 @@ Y_UNIT_TEST_SUITE(TZLibTest) {
         // Check that Decompress(Compress(X) + Compress(Y)) == X when single stream is allowed
         TTempFile tmpFile(ZDATA);
         {
-            TUnbufferedFileOutput o(ZDATA);
+            TUnbufferedFileOutput o(ZDATA); 
             TZLibCompress c1(&o, ZLib::ZLib);
             c1.Write(DATA.data(), DATA.size());
             c1.Finish();
@@ -140,7 +140,7 @@ Y_UNIT_TEST_SUITE(TZLibTest) {
             o.Finish();
         }
         {
-            TUnbufferedFileInput i(ZDATA);
+            TUnbufferedFileInput i(ZDATA); 
             TZLibDecompress d(&i);
             d.SetAllowMultipleStreams(false);
 

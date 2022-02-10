@@ -19,7 +19,7 @@ namespace NYsonPull {
             using Base = byte_reader<
                 stream_counter<EnableLinePositionInfo>>;
 
-            TVector<ui8> token_buffer_;
+            TVector<ui8> token_buffer_; 
             TMaybe<size_t> memory_limit_;
 
         public:

@@ -4,7 +4,7 @@
 
 namespace NKikimr {
 namespace NMiniKQL {
-    typedef THashMap<ui32, TVector<TString>> TIncomingResults;
+    typedef THashMap<ui32, TVector<TString>> TIncomingResults; 
 
     struct TBuiltinStrings {
         TBuiltinStrings(const TTypeEnvironment& env)
@@ -46,7 +46,7 @@ namespace NMiniKQL {
         const TInternName Length;
         const TInternName Arg;
 
-        THashSet<TInternName> All;
+        THashSet<TInternName> All; 
     };
 
     struct TFlatEngineStrings : public TTableStrings {
@@ -93,14 +93,14 @@ namespace NMiniKQL {
         const TEngineFlatSettings& Settings;
         const TFlatEngineStrings& Strings;
         const std::pair<ui64, ui64>& StepTxId;
-        THashSet<ui32> LocalReadCallables;
+        THashSet<ui32> LocalReadCallables; 
         TIncomingResults Results;
     };
 
     struct TProxyExecData {
         TProxyExecData(const TEngineFlatSettings& settings, const TFlatEngineStrings& strings,
-                     const std::pair<ui64, ui64>& stepTxId, const TVector<IEngineFlat::TTabletInfo>& tabletInfos,
-                     const TVector<IEngineFlat::TTxLock>& locks)
+                     const std::pair<ui64, ui64>& stepTxId, const TVector<IEngineFlat::TTabletInfo>& tabletInfos, 
+                     const TVector<IEngineFlat::TTxLock>& locks) 
             : Settings(settings)
             , Strings(strings)
             , StepTxId(stepTxId)
@@ -111,8 +111,8 @@ namespace NMiniKQL {
         const TEngineFlatSettings& Settings;
         const TFlatEngineStrings& Strings;
         const std::pair<ui64, ui64> StepTxId;
-        const TVector<IEngineFlat::TTabletInfo>& TabletInfos;
-        const TVector<IEngineFlat::TTxLock>& TxLocks;
+        const TVector<IEngineFlat::TTabletInfo>& TabletInfos; 
+        const TVector<IEngineFlat::TTxLock>& TxLocks; 
         TIncomingResults Results;
     };
 
@@ -127,7 +127,7 @@ namespace NMiniKQL {
     struct TEngineFlatApplyContext : public NUdf::IApplyContext {
         bool IsAborted = false;
         IEngineFlatHost* Host = nullptr;
-        THashMap<TString, NUdf::TUnboxedValue>* ResultValues = nullptr;
+        THashMap<TString, NUdf::TUnboxedValue>* ResultValues = nullptr; 
         const TTypeEnvironment* Env = nullptr;
     };
 

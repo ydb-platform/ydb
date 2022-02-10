@@ -5,7 +5,7 @@ namespace NKikimr {
 
 TAppData::TAppData(
         ui32 sysPoolId, ui32 userPoolId, ui32 ioPoolId, ui32 batchPoolId,
-        TMap<TString, ui32> servicePools,
+        TMap<TString, ui32> servicePools, 
         const NScheme::TTypeRegistry* typeRegistry,
         const NMiniKQL::IFunctionRegistry* functionRegistry,
         const TFormatFactory* formatFactory,

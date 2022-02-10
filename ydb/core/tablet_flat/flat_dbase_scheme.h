@@ -94,9 +94,9 @@ public:
         }
 
         ui32 Id;
-        TString Name;
-        THashMap<ui32, TRoom> Rooms;
-        THashMap<ui32, TFamily> Families;
+        TString Name; 
+        THashMap<ui32, TRoom> Rooms; 
+        THashMap<ui32, TFamily> Families; 
 
         TIntrusiveConstPtr<TCompactionPolicy> CompactionPolicy;
         bool ColdBorrow = false;
@@ -194,8 +194,8 @@ public:
     }
 
 
-    THashMap<ui32, TTableInfo> Tables;
-    THashMap<TString, ui32> TableNames;
+    THashMap<ui32, TTableInfo> Tables; 
+    THashMap<TString, ui32> TableNames; 
     TExecutorInfo Executor;
     TRedo Redo;
 };

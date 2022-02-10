@@ -31,7 +31,7 @@ namespace {
             return ret->AdditionalData();
         }
 
-        inline void Deallocate(void* ptr) noexcept {
+        inline void Deallocate(void* ptr) noexcept { 
             if (ptr) {
                 delete TAllocation::ObjectFromData(ptr);
             }
@@ -65,7 +65,7 @@ namespace {
             {
             }
 
-            ~TInput() override {
+            ~TInput() override { 
             }
 
             size_t DoRead(void* ptr, size_t len) override {
@@ -83,7 +83,7 @@ namespace {
             {
             }
 
-            ~TOutput() override {
+            ~TOutput() override { 
             }
 
             void DoWrite(const void* ptr, size_t len) override {
@@ -105,7 +105,7 @@ namespace {
         {
         }
 
-        virtual ~TInverseFilter() {
+        virtual ~TInverseFilter() { 
             if (!UncaughtException()) {
                 try {
                     Finish();
@@ -277,7 +277,7 @@ namespace {
             TMemoryGc Gc_;
         };
 
-        inline ISzAlloc* Alloc() noexcept {
+        inline ISzAlloc* Alloc() noexcept { 
             return &Alloc_;
         }
 
@@ -317,7 +317,7 @@ namespace {
             Check(LzmaEnc_WriteProperties(H_, PropsBuf_, &bufLen));
         }
 
-        inline ~TLzmaCompressBase() {
+        inline ~TLzmaCompressBase() { 
             LzmaEnc_Destroy(H_, Alloc(), Alloc());
         }
 
@@ -354,7 +354,7 @@ public:
     {
         LzmaDec_Construct(&H_);
     }
-    inline virtual ~TImpl() {
+    inline virtual ~TImpl() { 
         LzmaDec_Free(&H_, Alloc());
     }
 
@@ -483,7 +483,7 @@ TLzmaCompress::TLzmaCompress(IOutputStream* slave, size_t level)
 {
 }
 
-TLzmaCompress::~TLzmaCompress() {
+TLzmaCompress::~TLzmaCompress() { 
 }
 
 void TLzmaCompress::DoWrite(const void* buf, size_t len) {
@@ -512,7 +512,7 @@ TLzmaDecompress::TLzmaDecompress(IZeroCopyInput* input)
 {
 }
 
-TLzmaDecompress::~TLzmaDecompress() {
+TLzmaDecompress::~TLzmaDecompress() { 
 }
 
 size_t TLzmaDecompress::DoRead(void* buf, size_t len) {

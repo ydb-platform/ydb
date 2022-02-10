@@ -14,7 +14,7 @@ using namespace NDns;
 namespace {
     class TThreadedResolver: public IThreadFactory::IThreadAble, public TNonCopyable {
         struct TResolveRequest {
-            inline TResolveRequest(const TString& host, ui16 port)
+            inline TResolveRequest(const TString& host, ui16 port) 
                 : Host(host)
                 , Port(port)
             {
@@ -36,7 +36,7 @@ namespace {
                 ythrow TNetworkResolutionError(EAI_FAIL) << TStringBuf(": shit happen");
             }
 
-            inline void Resolve() noexcept {
+            inline void Resolve() noexcept { 
                 try {
                     Result = new TNetworkAddress(Host, Port);
                 } catch (...) {
@@ -46,11 +46,11 @@ namespace {
                 Wake();
             }
 
-            inline void Wake() noexcept {
+            inline void Wake() noexcept { 
                 E.Signal();
             }
 
-            TString Host;
+            TString Host; 
             ui16 Port;
             TManualEvent E;
             TNetworkAddressPtr Result;
@@ -64,7 +64,7 @@ namespace {
             T_.push_back(SystemThreadFactory()->Run(this));
         }
 
-        inline ~TThreadedResolver() override {
+        inline ~TThreadedResolver() override { 
             Schedule(nullptr);
 
             for (size_t i = 0; i < T_.size(); ++i) {
@@ -86,7 +86,7 @@ namespace {
             return Singleton<TThreadedResolver>();
         }
 
-        inline TNetworkAddressPtr Resolve(const TString& host, ui16 port) {
+        inline TNetworkAddressPtr Resolve(const TString& host, ui16 port) { 
             TResolveRequest rr(host, port);
 
             Schedule(&rr);
@@ -122,12 +122,12 @@ namespace {
         TLockFreeQueue<TResolveRequest*> Q_;
         TSystemEvent E_;
         typedef TAutoPtr<IThreadFactory::IThread> IThreadRef;
-        TVector<IThreadRef> T_;
+        TVector<IThreadRef> T_; 
     };
 }
 
 namespace NDns {
-    TNetworkAddressPtr ThreadedResolve(const TString& host, ui16 port) {
+    TNetworkAddressPtr ThreadedResolve(const TString& host, ui16 port) { 
         return TThreadedResolver::Instance()->Resolve(host, port);
     }
 }

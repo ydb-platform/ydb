@@ -92,7 +92,7 @@ namespace NTable {
                     });
         }
 
-        using TVec = TVector<THole>;
+        using TVec = TVector<THole>; 
 
         TScreen(TVec holes) : Holes(std::move(holes)) { }
 
@@ -241,7 +241,7 @@ namespace NTable {
         }
 
     private:
-        const TVector<THole> Holes;
+        const TVector<THole> Holes; 
     };
 
 }

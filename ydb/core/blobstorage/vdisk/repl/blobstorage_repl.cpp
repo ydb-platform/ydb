@@ -34,7 +34,7 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     // TEvReplFinished::TInfo
     ////////////////////////////////////////////////////////////////////////////
-    TString TEvReplFinished::TInfo::ToString() const {
+    TString TEvReplFinished::TInfo::ToString() const { 
         return Sprintf("{KeyPos: %s Eof: %s ReplicaOk: %" PRIu64 " RecoveryScheduled: %" PRIu64 " DataRecoverySuccess: %"
             PRIu64 " DataRecoveryFailure: %" PRIu64 "}", KeyPos.ToString().data(), (Eof ? "true" : "false"),
             ReplicaOk, RecoveryScheduled, DataRecoverySuccess, DataRecoveryFailure);
@@ -430,7 +430,7 @@ namespace NKikimr {
                     HTML(str) {
                         TABLER() {
                             str << "<td colspan=3>";
-                            TString id = CreateGuidAsString();
+                            TString id = CreateGuidAsString(); 
                             COLLAPSED_BUTTON_CONTENT(id, "More") {
                                 TABLE() {
                                     OutputQuantums(str, it, e);
@@ -475,7 +475,7 @@ namespace NKikimr {
                         TABLE_CLASS ("table table-condensed") {
                             CAPTION() STRONG() {str << "Last " << historySize << " replication quantums"; }
                             TABLEBODY() {
-                                TVector<TEvReplFinished::TInfoPtr> quantums;
+                                TVector<TEvReplFinished::TInfoPtr> quantums; 
                                 for (auto it = History.Begin(); it != History.End(); ++it) {
                                     quantums.push_back(*it);
                                 }

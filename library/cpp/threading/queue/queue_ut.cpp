@@ -5,10 +5,10 @@
 
 typedef void* TMsgLink;
 
-template <typename TQueueType>
+template <typename TQueueType> 
 class TQueueTestProcs: public TTestBase {
 private:
-    UNIT_TEST_SUITE_DEMANGLE(TQueueTestProcs<TQueueType>);
+    UNIT_TEST_SUITE_DEMANGLE(TQueueTestProcs<TQueueType>); 
     UNIT_TEST(Threads2_Push1M_Threads1_Pop2M)
     UNIT_TEST(Threads4_Push1M_Threads1_Pop4M)
     UNIT_TEST(Threads8_RndPush100K_Threads8_Queues)
@@ -21,7 +21,7 @@ private:
 
 public:
     void Push1M_Pop1M() {
-        TQueueType queue;
+        TQueueType queue; 
         TMsgLink msg = &queue;
 
         auto pmsg = queue.Pop();
@@ -41,17 +41,17 @@ public:
     }
 
     void Threads2_Push1M_Threads1_Pop2M() {
-        TQueueType queue;
+        TQueueType queue; 
 
         class TPusherThread: public ISimpleThread {
         public:
-            TPusherThread(TQueueType& theQueue, char* start)
-                : Queue(theQueue)
+            TPusherThread(TQueueType& theQueue, char* start) 
+                : Queue(theQueue) 
                 , Arg(start)
             {
             }
 
-            TQueueType& Queue;
+            TQueueType& Queue; 
             char* Arg;
 
             void* ThreadProc() override {
@@ -79,17 +79,17 @@ public:
     }
 
     void Threads4_Push1M_Threads1_Pop4M() {
-        TQueueType queue;
+        TQueueType queue; 
 
         class TPusherThread: public ISimpleThread {
         public:
-            TPusherThread(TQueueType& theQueue, char* start)
-                : Queue(theQueue)
+            TPusherThread(TQueueType& theQueue, char* start) 
+                : Queue(theQueue) 
                 , Arg(start)
             {
             }
 
-            TQueueType& Queue;
+            TQueueType& Queue; 
             char* Arg;
 
             void* ThreadProc() override {
@@ -122,17 +122,17 @@ public:
 
     template <size_t NUMBER_OF_PUSHERS, size_t NUMBER_OF_QUEUES>
     void ManyRndPush100K_ManyQueues() {
-        TQueueType queue[NUMBER_OF_QUEUES];
+        TQueueType queue[NUMBER_OF_QUEUES]; 
 
         class TPusherThread: public ISimpleThread {
         public:
-            TPusherThread(TQueueType* queues, char* start)
+            TPusherThread(TQueueType* queues, char* start) 
                 : Queues(queues)
                 , Arg(start)
             {
             }
 
-            TQueueType* Queues;
+            TQueueType* Queues; 
             char* Arg;
 
             void* ThreadProc() override {
@@ -157,13 +157,13 @@ public:
 
         class TPopperThread: public ISimpleThread {
         public:
-            TPopperThread(TQueueType* theQueue, char* base)
-                : Queue(theQueue)
+            TPopperThread(TQueueType* theQueue, char* base) 
+                : Queue(theQueue) 
                 , Base(base)
             {
             }
 
-            TQueueType* Queue;
+            TQueueType* Queue; 
             char* Base;
 
             void* ThreadProc() override {
@@ -197,8 +197,8 @@ public:
             }
         };
 
-        TVector<TAutoPtr<TPopperThread>> poppers;
-        TVector<TAutoPtr<TPusherThread>> pushers;
+        TVector<TAutoPtr<TPopperThread>> poppers; 
+        TVector<TAutoPtr<TPusherThread>> pushers; 
 
         for (size_t i = 0; i < NUMBER_OF_QUEUES; ++i) {
             poppers.emplace_back(new TPopperThread(&queue[i], (char*)&queue));

@@ -20,20 +20,20 @@ namespace NKikimr {
             ui32 CurrentChunkOffsetInBlocks = 0;
 
             // index of current chunk
-            TVector<TBlobIndexRecord> CurrentChunkIndex;
+            TVector<TBlobIndexRecord> CurrentChunkIndex; 
 
             // number of in-flight blob write requests to current chunk
             ui32 CurrentChunkWritesInFlight = 0;
 
             // write queue
             struct TWriteQueueItem;
-            using TWriteQueue = TList<TWriteQueueItem>;
+            using TWriteQueue = TList<TWriteQueueItem>; 
             TWriteQueue WriteQueue; // pending items
             TWriteQueue WriteInProgressItems; // items in work; they all are executed concurrently and may finish out-of-order
 
             // index write queue
             struct TIndexWriteQueueItem;
-            using TIndexWriteQueue = TList<TIndexWriteQueueItem>;
+            using TIndexWriteQueue = TList<TIndexWriteQueueItem>; 
             TIndexWriteQueue IndexWriteQueue;
 
             // finalization chunk queue
@@ -45,10 +45,10 @@ namespace NKikimr {
                 bool IndexWritten = false;
 
                 // index of chunk being finalized
-                TVector<TBlobIndexRecord> Index;
+                TVector<TBlobIndexRecord> Index; 
             };
 
-            THashMap<TChunkIdx, TFinalizingChunk> FinalizingChunks;
+            THashMap<TChunkIdx, TFinalizingChunk> FinalizingChunks; 
 
             ui64 NextQueryId = 0;
 
@@ -80,7 +80,7 @@ namespace NKikimr {
                     const TActorContext& ctx);
 
             // reset writer to specified position (used in recovery)
-            void SetUpCurrentChunk(ui32 offsetInBlocks, TVector<TBlobIndexRecord>&& index);
+            void SetUpCurrentChunk(ui32 offsetInBlocks, TVector<TBlobIndexRecord>&& index); 
 
             // check if item is obsolete
             bool IsObsolete(const TWriteQueueItem& item, const TActorContext& ctx);
@@ -116,7 +116,7 @@ namespace NKikimr {
             // Client init //
             /////////////////
 
-            TVector<TEvIncrHugeInitResult::TItem> EnumerateItems(ui8 owner, ui64 firstLsn);
+            TVector<TEvIncrHugeInitResult::TItem> EnumerateItems(ui8 owner, ui64 firstLsn); 
         };
 
     } // NIncrHuge

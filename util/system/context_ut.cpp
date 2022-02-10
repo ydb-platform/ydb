@@ -22,7 +22,7 @@ Y_UNIT_TEST_SUITE(TestContext) {
             char Buf[1000000];
         };
 
-        static TDeque<TW> w;
+        static TDeque<TW> w; 
 
         auto& tw = w.emplace_back(&f);
 

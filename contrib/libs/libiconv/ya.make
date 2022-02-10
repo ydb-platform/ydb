@@ -1,7 +1,7 @@
-OWNER(
+OWNER( 
     g:contrib
     g:cpp-contrib
-)
+) 
 
 LIBRARY()
 

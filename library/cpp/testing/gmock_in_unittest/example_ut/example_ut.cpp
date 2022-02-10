@@ -2,7 +2,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 
 // Set this variable to true if you want to see failures
 /////////////////////////////////////////////////////////
@@ -16,7 +16,7 @@ public:
 
     virtual void Func1() = 0;
 
-    virtual int Func2(const TString&) const = 0;
+    virtual int Func2(const TString&) const = 0; 
 };
 
 class TTestMock: public ITestIface {
@@ -50,11 +50,11 @@ Y_UNIT_TEST_SUITE(TExampleGMockTest) {
 
     Y_UNIT_TEST(TReturnValuesTest) {
         TTestMock mock;
-        EXPECT_CALL(mock, Func2(TString("1")))
+        EXPECT_CALL(mock, Func2(TString("1"))) 
             .WillOnce(Return(1))
             .WillRepeatedly(Return(42));
 
-        EXPECT_CALL(mock, Func2(TString("hello")))
+        EXPECT_CALL(mock, Func2(TString("hello"))) 
             .WillOnce(Return(-1));
 
         UNIT_ASSERT_VALUES_EQUAL(mock.Func2("hello"), -1);

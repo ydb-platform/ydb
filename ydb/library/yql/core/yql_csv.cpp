@@ -82,10 +82,10 @@ TCsvInputStream::TCsvInputStream(IInputStream& slave, char delimiter)
 {
 }
 
-TVector<TString> TCsvInputStream::ReadLine()
+TVector<TString> TCsvInputStream::ReadLine() 
 {
-    TVector<TString> parts;
-    TString line;
+    TVector<TString> parts; 
+    TString line; 
 
     if (Slave_.ReadLine(line)) {
         TCsvLineParser lineParser(line, Delim_);
@@ -98,16 +98,16 @@ TVector<TString> TCsvInputStream::ReadLine()
     return parts;
 }
 
-TVector<TString> TCsvInputStream::ReadLineWithEscaping()
+TVector<TString> TCsvInputStream::ReadLineWithEscaping() 
 {
-    TVector<TString> parts;
-    TString line;
+    TVector<TString> parts; 
+    TString line; 
 
     if (Slave_.ReadLine(line)) {
         TCsvLineParser lineParser(line, Delim_);
         TStringBuf token;
         while (lineParser.Next(token)) {
-            parts.push_back(TString(token));
+            parts.push_back(TString(token)); 
         }
     }
 
@@ -123,9 +123,9 @@ TCsvInputBuffer::TCsvInputBuffer(const TStringBuf& buffer, char delimiter)
 {
 }
 
-TVector<TString> TCsvInputBuffer::ReadLine()
+TVector<TString> TCsvInputBuffer::ReadLine() 
 {
-    TVector<TString> parts;
+    TVector<TString> parts; 
     TStringBuf line;
 
     if (Buffer_.ReadLine(line)) {
@@ -139,9 +139,9 @@ TVector<TString> TCsvInputBuffer::ReadLine()
     return parts;
 }
 
-TVector<TString> TCsvInputBuffer::ReadLineWithEscaping()
+TVector<TString> TCsvInputBuffer::ReadLineWithEscaping() 
 {
-    TVector<TString> parts;
+    TVector<TString> parts; 
     TStringBuf line;
 
     if (Buffer_.ReadLine(line)) {

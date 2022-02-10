@@ -5,8 +5,8 @@ SUBSCRIBER(g:util-subscribers)
 
 SRCDIR(util)
 
-NO_WSHADOW()
-
+NO_WSHADOW() 
+ 
 PY_SRCS(
     NAMESPACE
     util
@@ -15,7 +15,7 @@ PY_SRCS(
     generic/deque_ut.pyx
     generic/maybe_ut.pyx
     generic/ptr_ut.pyx
-    generic/string_ut.pyx
+    generic/string_ut.pyx 
     generic/vector_ut.pyx
     generic/list_ut.pyx
     generic/hash_set_ut.pyx

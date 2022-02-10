@@ -17,8 +17,8 @@ namespace NSQLTranslationV1 {
 class TListBuiltin: public TCallNode {
 public:
     TListBuiltin(TPosition pos,
-                     const TString& opName,
-                     const TVector<TNodePtr>& args)
+                     const TString& opName, 
+                     const TVector<TNodePtr>& args) 
         : TCallNode(pos, opName, args.size(), args.size(), args)
         , OpName(opName)
         , Args(args)
@@ -29,8 +29,8 @@ public:
     TAstNode* Translate(TContext& ctx) const override;
 
 protected:
-    const TString OpName;
-    TVector<TNodePtr> Args;
+    const TString OpName; 
+    TVector<TNodePtr> Args; 
     TNodePtr Node;
 
     inline TNodePtr GetIdentityLambda();
@@ -38,7 +38,7 @@ protected:
 
 class TListSortBuiltin final: public TListBuiltin {
 public:
-    TListSortBuiltin(TPosition pos, const TVector<TNodePtr>& args, bool asc)
+    TListSortBuiltin(TPosition pos, const TVector<TNodePtr>& args, bool asc) 
         : TListBuiltin(pos, "ListSort", args)
         , Asc(asc)
     {}
@@ -55,7 +55,7 @@ private:
 
 class TListExtractBuiltin final: public TListBuiltin {
 public:
-    TListExtractBuiltin(TPosition pos, const TVector<TNodePtr>& args)
+    TListExtractBuiltin(TPosition pos, const TVector<TNodePtr>& args) 
         : TListBuiltin(pos, "ListExtract", args)
     {}
 
@@ -69,8 +69,8 @@ public:
 class TListProcessBuiltin: public TListBuiltin {
 protected:
     TListProcessBuiltin(TPosition pos,
-                 const TString& opName,
-                 const TVector<TNodePtr>& args)
+                 const TString& opName, 
+                 const TVector<TNodePtr>& args) 
         : TListBuiltin(pos, opName, args)
     {}
 
@@ -80,7 +80,7 @@ protected:
 class TListMapBuiltin final: public TListProcessBuiltin {
 public:
     TListMapBuiltin(TPosition pos,
-                    const TVector<TNodePtr>& args,
+                    const TVector<TNodePtr>& args, 
                     bool flat)
         : TListProcessBuiltin(pos, flat ? "ListFlatMap" : "ListMap", args)
         , Flat(flat)
@@ -98,7 +98,7 @@ private:
 class TListFilterBuiltin final: public TListProcessBuiltin {
 public:
     TListFilterBuiltin(TPosition pos, const TString& opName,
-                       const TVector<TNodePtr>& args)
+                       const TVector<TNodePtr>& args) 
         : TListProcessBuiltin(pos, opName, args)
     {}
 
@@ -115,7 +115,7 @@ protected:
 class TListUniqBuiltin final: public TListBuiltin {
 public:
     TListUniqBuiltin(TPosition pos,
-                     const TVector<TNodePtr>& args)
+                     const TVector<TNodePtr>& args) 
         : TListBuiltin(pos, "ListUniq", args)
     {}
 
@@ -129,7 +129,7 @@ public:
 class TListCreateBuiltin final: public TListBuiltin {
 public:
     TListCreateBuiltin(TPosition pos,
-                     const TVector<TNodePtr>& args)
+                     const TVector<TNodePtr>& args) 
         : TListBuiltin(pos, "ListCreate", args)
     {}
 

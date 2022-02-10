@@ -31,7 +31,7 @@ Y_UNIT_TEST_SUITE(TTestTLS) {
             {
             }
 
-            void* ThreadProc() noexcept override {
+            void* ThreadProc() noexcept override { 
                 for (size_t i = 0; i < 100000; ++i) {
                     P[i].Do();
                 }

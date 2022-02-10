@@ -1,44 +1,44 @@
 # cython: c_string_type=str, c_string_encoding=utf8
 
-from util.generic.vector cimport TVector
+from util.generic.vector cimport TVector 
 from util.generic.string cimport TString
 
 import pytest
 import unittest
 
 
-def _check_convert(TVector[TString] x):
+def _check_convert(TVector[TString] x): 
     return x
 
 
 class TestVector(unittest.TestCase):
 
     def test_ctor1(self):
-        cdef TVector[int] tmp = TVector[int]()
+        cdef TVector[int] tmp = TVector[int]() 
         self.assertEqual(tmp.size(), 0)
 
     def test_ctor2(self):
-        cdef TVector[int] tmp = TVector[int](10)
+        cdef TVector[int] tmp = TVector[int](10) 
         self.assertEqual(tmp.size(), 10)
         self.assertEqual(tmp[0], 0)
 
     def test_ctor3(self):
-        cdef TVector[int] tmp = TVector[int](10, 42)
+        cdef TVector[int] tmp = TVector[int](10, 42) 
         self.assertEqual(tmp.size(), 10)
         self.assertEqual(tmp[0], 42)
 
     def test_ctor4(self):
-        cdef TVector[int] tmp = TVector[int](10, 42)
-        cdef TVector[int] tmp2 = TVector[int](tmp)
+        cdef TVector[int] tmp = TVector[int](10, 42) 
+        cdef TVector[int] tmp2 = TVector[int](tmp) 
         self.assertEqual(tmp2.size(), 10)
         self.assertEqual(tmp2[0], 42)
 
     def test_operator_assign(self):
-        cdef TVector[int] tmp2
+        cdef TVector[int] tmp2 
         tmp2.push_back(1)
         tmp2.push_back(2)
 
-        cdef TVector[int] tmp3
+        cdef TVector[int] tmp3 
         tmp3.push_back(1)
         tmp3.push_back(3)
 
@@ -51,15 +51,15 @@ class TestVector(unittest.TestCase):
         self.assertEqual(tmp3[1], 2)
 
     def test_compare(self):
-        cdef TVector[int] tmp1
+        cdef TVector[int] tmp1 
         tmp1.push_back(1)
         tmp1.push_back(2)
 
-        cdef TVector[int] tmp2
+        cdef TVector[int] tmp2 
         tmp2.push_back(1)
         tmp2.push_back(2)
 
-        cdef TVector[int] tmp3
+        cdef TVector[int] tmp3 
         tmp3.push_back(1)
         tmp3.push_back(3)
 
@@ -73,7 +73,7 @@ class TestVector(unittest.TestCase):
         self.assertTrue(tmp3 >= tmp1)
 
     def test_index(self):
-        cdef TVector[int] tmp = TVector[int](10, 42)
+        cdef TVector[int] tmp = TVector[int](10, 42) 
 
         self.assertEqual(tmp[0], 42)
         self.assertEqual(tmp[5], 42)
@@ -88,7 +88,7 @@ class TestVector(unittest.TestCase):
             tmp.at(100)
 
     def test_push_pop_back(self):
-        cdef TVector[int] tmp
+        cdef TVector[int] tmp 
         self.assertEqual(tmp.size(), 0)
 
         tmp.push_back(42)
@@ -107,22 +107,22 @@ class TestVector(unittest.TestCase):
         self.assertEqual(tmp.size(), 0)
 
     def test_front(self):
-        cdef TVector[int] tmp
+        cdef TVector[int] tmp 
         tmp.push_back(42)
         self.assertEqual(tmp.front(), 42)
 
     def test_empty(self):
-        cdef TVector[int] tmp
+        cdef TVector[int] tmp 
         self.assertTrue(tmp.empty())
         tmp.push_back(42)
         self.assertFalse(tmp.empty())
 
     def test_max_size(self):
-        cdef TVector[int] tmp
+        cdef TVector[int] tmp 
         self.assertTrue(tmp.max_size() > 0)
 
     def test_reserve_resize(self):
-        cdef TVector[int] tmp
+        cdef TVector[int] tmp 
         tmp.reserve(1000)
         self.assertEqual(tmp.capacity(), 1000)
 
@@ -140,7 +140,7 @@ class TestVector(unittest.TestCase):
         self.assertEqual(tmp.back(), 42)
 
     def test_iter(self):
-        cdef TVector[int] tmp
+        cdef TVector[int] tmp 
         tmp.push_back(1)
         tmp.push_back(20)
         tmp.push_back(300)
@@ -148,7 +148,7 @@ class TestVector(unittest.TestCase):
         self.assertEqual([i for i in tmp], [1, 20, 300])
 
     def test_iterator(self):
-        cdef TVector[int] tmp
+        cdef TVector[int] tmp 
 
         self.assertTrue(tmp.begin() == tmp.end())
         self.assertTrue(tmp.rbegin() == tmp.rend())
@@ -173,7 +173,7 @@ class TestVector(unittest.TestCase):
         self.assertTrue(tmp.const_rbegin() + 1 == tmp.const_rend())
 
     def test_assign(self):
-        cdef TVector[int] tmp
+        cdef TVector[int] tmp 
 
         tmp.assign(10, 42)
         self.assertEqual(tmp.size(), 10)
@@ -181,12 +181,12 @@ class TestVector(unittest.TestCase):
         self.assertEqual(tmp.back(), 42)
 
     def test_insert(self):
-        cdef TVector[int] tmp
+        cdef TVector[int] tmp 
         tmp.push_back(1)
         tmp.push_back(2)
         tmp.push_back(3)
 
-        cdef TVector[int] tmp2
+        cdef TVector[int] tmp2 
         tmp2.push_back(7)
         tmp2.push_back(9)
 
@@ -200,7 +200,7 @@ class TestVector(unittest.TestCase):
         self.assertEqual([i for i in tmp], [7, 9, 6, 6, 8, 1, 2, 3])
 
     def test_erase(self):
-        cdef TVector[int] tmp
+        cdef TVector[int] tmp 
         tmp.push_back(1)
         tmp.push_back(2)
         tmp.push_back(3)

@@ -14,7 +14,7 @@
 using namespace NYql;
 using namespace NThreading;
 
-static TString DATA = "1234567890";
+static TString DATA = "1234567890"; 
 static TString DATA_MD5 = "e807f1fcf82d132f9bb018ca6738a19f";
 
 Y_UNIT_TEST_SUITE(TStorageTests) {
@@ -24,11 +24,11 @@ Y_UNIT_TEST_SUITE(TStorageTests) {
         TFsPath Path_;
 
     public:
-        TTestDir(const TString& name) {
+        TTestDir(const TString& name) { 
             Y_ENSURE(name.length() > 0, "have to specify name");
-            Y_ENSURE(name.find('.') == TString::npos, "must be simple name");
-            Y_ENSURE(name.find('/') == TString::npos, "must be simple name");
-            Y_ENSURE(name.find('\\') == TString::npos, "must be simple name");
+            Y_ENSURE(name.find('.') == TString::npos, "must be simple name"); 
+            Y_ENSURE(name.find('/') == TString::npos, "must be simple name"); 
+            Y_ENSURE(name.find('\\') == TString::npos, "must be simple name"); 
             Path_ = TFsPath(name);
 
             Path_.ForceDelete();
@@ -52,7 +52,7 @@ Y_UNIT_TEST_SUITE(TStorageTests) {
         });
     }
 
-    TFileLinkPtr PutFileWithSleep(const TString& name, TStorage& storage) {
+    TFileLinkPtr PutFileWithSleep(const TString& name, TStorage& storage) { 
         return PutFile(name, storage, {}, 1);
     }
 
@@ -76,7 +76,7 @@ Y_UNIT_TEST_SUITE(TStorageTests) {
         TThreadPool queue;
         queue.Start(10);
 
-        TVector<TFuture<TFileLinkPtr>> res;
+        TVector<TFuture<TFileLinkPtr>> res; 
         res.reserve(10);
         for (size_t i = 0; i < 10; ++i) {
             res.emplace_back(Async([&]() {
@@ -130,7 +130,7 @@ Y_UNIT_TEST_SUITE(TStorageTests) {
         UNIT_ASSERT(file2->GetPath().Exists());
         UNIT_ASSERT(file3->GetPath().Exists());
 
-        TVector<TString> filesInStorage;
+        TVector<TString> filesInStorage; 
         storage->GetRoot().ListNames(filesInStorage);
         UNIT_ASSERT_EQUAL(filesInStorage.size(), 2); // 1 file + 1 hardlink directory
 
@@ -167,7 +167,7 @@ Y_UNIT_TEST_SUITE(TStorageTests) {
         UNIT_ASSERT(file2->GetPath().Exists());
         UNIT_ASSERT(file3->GetPath().Exists());
 
-        TVector<TString> filesInStorage;
+        TVector<TString> filesInStorage; 
         storage->GetRoot().ListNames(filesInStorage);
         UNIT_ASSERT_EQUAL(filesInStorage.size(), 2); // 1 file + 1 hardlink directory
 

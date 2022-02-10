@@ -86,9 +86,9 @@ TNodePtr TListProcessBuiltin::PrepareResult() {
     TNodePtr result;
     if (OpLiteral) {
         size_t modulePos = OpLiteral->find("::");
-        if (modulePos != TString::npos) {
-            const TString& module = OpLiteral->substr(0, modulePos);
-            const TString& function = OpLiteral->substr(modulePos + 2);
+        if (modulePos != TString::npos) { 
+            const TString& module = OpLiteral->substr(0, modulePos); 
+            const TString& function = OpLiteral->substr(modulePos + 2); 
             auto udf = Y("Udf", Q(module + "." + function));
             result = Y("Apply", udf, "item");
         } else {

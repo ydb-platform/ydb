@@ -27,7 +27,7 @@ public:
     TBufferedInput(TBufferedInput&&) noexcept;
     TBufferedInput& operator=(TBufferedInput&&) noexcept;
 
-    ~TBufferedInput() override;
+    ~TBufferedInput() override; 
 
     /**
      * Switches the underlying stream to the one provided. Does not clear the
@@ -39,7 +39,7 @@ public:
 
 protected:
     size_t DoRead(void* buf, size_t len) override;
-    size_t DoReadTo(TString& st, char ch) override;
+    size_t DoReadTo(TString& st, char ch) override; 
     size_t DoSkip(size_t len) override;
     size_t DoNext(const void** ptr, size_t len) override;
 
@@ -81,15 +81,15 @@ public:
 
     TBufferedOutputBase(TBufferedOutputBase&&) noexcept;
     TBufferedOutputBase& operator=(TBufferedOutputBase&&) noexcept;
-
-    ~TBufferedOutputBase() override;
+ 
+    ~TBufferedOutputBase() override; 
 
     /**
      * @param propagate                 Whether `Flush` and `Finish` calls should
      *                                  be propagated to the underlying stream.
      *                                  By default they are not.
      */
-    inline void SetPropagateMode(bool propagate) noexcept {
+    inline void SetPropagateMode(bool propagate) noexcept { 
         SetFlushPropagateMode(propagate);
         SetFinishPropagateMode(propagate);
     }
@@ -99,14 +99,14 @@ public:
      *                                  to the underlying stream. By default they
      *                                  are not.
      */
-    void SetFlushPropagateMode(bool propagate) noexcept;
+    void SetFlushPropagateMode(bool propagate) noexcept; 
 
     /**
      * @param propagate                 Whether `Finish` calls should be propagated
      *                                  to the underlying stream. By default they
      *                                  are not.
      */
-    void SetFinishPropagateMode(bool propagate) noexcept;
+    void SetFinishPropagateMode(bool propagate) noexcept; 
 
     class TImpl;
 
@@ -130,10 +130,10 @@ private:
 class TBufferedOutput: public TBufferedOutputBase {
 public:
     TBufferedOutput(IOutputStream* slave, size_t buflen = 8192);
-    ~TBufferedOutput() override;
-
-    TBufferedOutput(TBufferedOutput&&) noexcept = default;
-    TBufferedOutput& operator=(TBufferedOutput&&) noexcept = default;
+    ~TBufferedOutput() override; 
+ 
+    TBufferedOutput(TBufferedOutput&&) noexcept = default; 
+    TBufferedOutput& operator=(TBufferedOutput&&) noexcept = default; 
 };
 
 /**
@@ -145,10 +145,10 @@ public:
 class TAdaptiveBufferedOutput: public TBufferedOutputBase {
 public:
     TAdaptiveBufferedOutput(IOutputStream* slave);
-    ~TAdaptiveBufferedOutput() override;
-
-    TAdaptiveBufferedOutput(TAdaptiveBufferedOutput&&) noexcept = default;
-    TAdaptiveBufferedOutput& operator=(TAdaptiveBufferedOutput&&) noexcept = default;
+    ~TAdaptiveBufferedOutput() override; 
+ 
+    TAdaptiveBufferedOutput(TAdaptiveBufferedOutput&&) noexcept = default; 
+    TAdaptiveBufferedOutput& operator=(TAdaptiveBufferedOutput&&) noexcept = default; 
 };
 
 namespace NPrivate {
@@ -170,13 +170,13 @@ namespace NPrivate {
  * A mixin class that turns unbuffered stream into a buffered one.
  *
  * Note that using this mixin with a stream that is already buffered won't
- * result in double buffering, e.g. `TBuffered<TBuffered<TUnbufferedFileInput>>` and
- * `TBuffered<TUnbufferedFileInput>` are basically the same types.
+ * result in double buffering, e.g. `TBuffered<TBuffered<TUnbufferedFileInput>>` and 
+ * `TBuffered<TUnbufferedFileInput>` are basically the same types. 
  *
  * Example usage:
  * @code
- * TBuffered<TUnbufferedFileInput> file_input(1024, "/path/to/file");
- * TBuffered<TUnbufferedFileOutput> file_output(1024, "/path/to/file");
+ * TBuffered<TUnbufferedFileInput> file_input(1024, "/path/to/file"); 
+ * TBuffered<TUnbufferedFileOutput> file_output(1024, "/path/to/file"); 
  * @endcode
  * Here 1024 is the size of the buffer.
  */
@@ -211,7 +211,7 @@ public:
  *
  * Example usage:
  * @code
- * TAdaptivelyBuffered<TUnbufferedFileOutput> file_output("/path/to/file");
+ * TAdaptivelyBuffered<TUnbufferedFileOutput> file_output("/path/to/file"); 
  * @endcode
  */
 template <class TSlave>

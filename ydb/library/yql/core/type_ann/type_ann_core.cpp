@@ -86,7 +86,7 @@ namespace NTypeAnnImpl {
 
         if (!isValid) {
             ctx.AddError(TIssue(ctx.GetPosition(atomNode.Pos()), TStringBuilder() << "Bad atom format for type: "
-                << type << ", value: " << TString(atomNode.Content()).Quote()));
+                << type << ", value: " << TString(atomNode.Content()).Quote())); 
         }
 
         return isValid;
@@ -520,11 +520,11 @@ namespace NTypeAnnImpl {
     struct TSyncFunctionsMap {
         TSyncFunctionsMap();
 
-        THashMap<TString, TAnnotationFunc> Functions;
-        THashMap<TString, TExtendedAnnotationFunc> ExtFunctions;
+        THashMap<TString, TAnnotationFunc> Functions; 
+        THashMap<TString, TExtendedAnnotationFunc> ExtFunctions; 
         THashMap<TString, TExtendedAnnotationFunc> ColumnOrderFunctions;
-        THashMap<TString, ETypeAnnotationKind> TypeKinds;
-        THashSet<TString> AllNames;
+        THashMap<TString, ETypeAnnotationKind> TypeKinds; 
+        THashSet<TString> AllNames; 
 
         static const TSyncFunctionsMap& Instance() {
             return *Singleton<TSyncFunctionsMap>();
@@ -1170,7 +1170,7 @@ namespace NTypeAnnImpl {
 
     IGraphTransformer::TStatus FlattenMembersWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         Y_UNUSED(output);
-        TVector<const TItemExprType*> allItems;
+        TVector<const TItemExprType*> allItems; 
         for (auto& child : input->Children()) {
             if (!EnsureTupleSize(*child, 2, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
@@ -1197,7 +1197,7 @@ namespace NTypeAnnImpl {
                     itemType = ctx.Expr.MakeType<TOptionalExprType>(itemType);
                 }
                 auto newField = ctx.Expr.MakeType<TItemExprType>(
-                    TString::Join(prefix->Content(), field->GetName()),
+                    TString::Join(prefix->Content(), field->GetName()), 
                     itemType
                 );
                 allItems.push_back(newField);
@@ -1218,7 +1218,7 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        TVector<const TItemExprType*> allItems;
+        TVector<const TItemExprType*> allItems; 
         if (!EnsureStructType(input->Head(), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -1316,7 +1316,7 @@ namespace NTypeAnnImpl {
         if (optional) {
             type = type->Cast<TOptionalExprType>()->GetItemType();
         }
-        TVector<const TItemExprType*> allItems;
+        TVector<const TItemExprType*> allItems; 
         auto structExprType = type->Cast<TStructExprType>();
         for (auto& field: structExprType->GetItems()) {
             const auto& fieldName = field->GetName();
@@ -1362,7 +1362,7 @@ namespace NTypeAnnImpl {
         if (optional) {
             type = type->Cast<TOptionalExprType>()->GetItemType();
         }
-        TVector<const TItemExprType*> allItems;
+        TVector<const TItemExprType*> allItems; 
         auto structExprType = type->Cast<TStructExprType>();
         for (auto& field: structExprType->GetItems()) {
             const auto& fieldName = field->GetName();
@@ -1414,11 +1414,11 @@ namespace NTypeAnnImpl {
         if (!EnsureStructOrOptionalStructType(*structObj, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
-        TSet<TString> aliases;
-        TMap<TString, TString> flattenByColumns;
+        TSet<TString> aliases; 
+        TMap<TString, TString> flattenByColumns; 
         for (++iter; iter != input->Children().end(); ++iter) {
             const auto& child = *iter;
-            TString alias;
+            TString alias; 
             const auto& argType = child->Type();
             if (argType != TExprNode::List && argType != TExprNode::Atom) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder() << "Expected atom or tuple, but got: " << argType));
@@ -1450,7 +1450,7 @@ namespace NTypeAnnImpl {
                 return IGraphTransformer::TStatus::Error;
             }
             auto columnName = columnNameNode->Content();
-            if (!flattenByColumns.emplace(TString(columnName), alias).second) {
+            if (!flattenByColumns.emplace(TString(columnName), alias).second) { 
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(columnNameNode->Pos()), TStringBuilder() <<
                     "Duplicate flatten field found: " << columnName));
                 return IGraphTransformer::TStatus::Error;
@@ -1468,7 +1468,7 @@ namespace NTypeAnnImpl {
         }
 
         bool allFieldOptional = true;
-        TVector<const TItemExprType*> allItems;
+        TVector<const TItemExprType*> allItems; 
         for (auto& field: type->Cast<TStructExprType>()->GetItems()) {
             const auto& fieldName = field->GetName();
             auto flattenIter = flattenByColumns.find(fieldName);
@@ -1554,7 +1554,7 @@ namespace NTypeAnnImpl {
                 auto dictType = fieldType->Cast<TDictExprType>();
                 const auto keyType = dictType->GetKeyType();
                 const auto payloadType = dictType->GetPayloadType();
-                flattenItemType = ctx.Expr.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType({keyType, payloadType}));
+                flattenItemType = ctx.Expr.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType({keyType, payloadType})); 
             } else {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(structObj->Pos()), TStringBuilder() <<
                     "Expected list, dict or optional types in field of struct: '" << fieldName <<
@@ -3302,12 +3302,12 @@ namespace NTypeAnnImpl {
             }
 
             auto structType = type->Cast<TStructExprType>();
-            THashMap<TStringBuf, const TItemExprType*> expectedMembers;
+            THashMap<TStringBuf, const TItemExprType*> expectedMembers; 
             for (auto& item : structType->GetItems()) {
                 expectedMembers[item->GetName()] = item;
             }
 
-            THashSet<TStringBuf> foundMembers;
+            THashSet<TStringBuf> foundMembers; 
             for (size_t i = 1; i < input->ChildrenSize(); ++i) {
                 if (!EnsureTupleSize(*input->Child(i), 2, ctx.Expr)) {
                     return IGraphTransformer::TStatus::Error;
@@ -5262,7 +5262,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
             return IGraphTransformer::TStatus::Repeat;
         } else if (Mode == EDictItems::Both) {
-            TTypeAnnotationNode::TListType items;
+            TTypeAnnotationNode::TListType items; 
             items.push_back(dictType->GetKeyType());
             items.push_back(dictType->GetPayloadType());
             auto tupleType = ctx.Expr.MakeType<TTupleExprType>(items);
@@ -5286,7 +5286,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Repeat;
         }
 
-        TVector<const TItemExprType*> items;
+        TVector<const TItemExprType*> items; 
         for (auto& child : input->Children()) {
             if (!EnsureTupleSize(*child, 2, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
@@ -5433,7 +5433,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
-        TExprNode::TListType newChildren;
+        TExprNode::TListType newChildren; 
         IGraphTransformer::TStatus totalStatus = IGraphTransformer::TStatus::Ok;
         for (size_t i = 0; i < keysListNode->ChildrenSize(); ++i) {
             newChildren.push_back(keysListNode->ChildPtr(i));
@@ -5714,7 +5714,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
         if (isTuple) {
             auto tupleType = input->Head().GetTypeAnn()->Cast<TTupleExprType>();
-            TExprNode::TListType children;
+            TExprNode::TListType children; 
             for (ui32 pos = 0; pos < tupleType->GetSize(); ++pos) {
                 children.push_back(ctx.Expr.Builder(input->Pos())
                     .Apply(input->Child(1))
@@ -5731,7 +5731,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             output = ctx.Expr.NewList(input->Pos(), std::move(children));
         } else {
             auto structType = input->Head().GetTypeAnn()->Cast<TStructExprType>();
-            TExprNode::TListType children;
+            TExprNode::TListType children; 
             for (auto item : structType->GetItems()) {
                 children.push_back(ctx.Expr.Builder(input->Pos())
                     .List()
@@ -7050,7 +7050,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         auto combinedStatus = IGraphTransformer::TStatus(IGraphTransformer::TStatus::Ok);
-        TVector<ui32> autoMapArgs;
+        TVector<ui32> autoMapArgs; 
         for (ui32 i = 1; i < input->ChildrenSize(); ++i) {
             const auto& arg = type->GetArguments()[i - 1];
             const bool isAutoMap = arg.Flags & NKikimr::NUdf::ICallablePayload::TArgumentFlags::AutoMap;
@@ -7104,7 +7104,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
         if (!autoMapArgs.empty()) {
             // build output
-            TExprNode::TListType args;
+            TExprNode::TListType args; 
             for (ui32 i = 0; i < autoMapArgs.size(); ++i) {
                 args.push_back(ctx.Expr.NewArgument(input->Pos(), TStringBuilder() << "automap_" << i));
             }
@@ -7185,12 +7185,12 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
-        TTypeAnnotationNode::TListType expectedTupleTypeItems;
+        TTypeAnnotationNode::TListType expectedTupleTypeItems; 
         for (ui32 i = 0; i < tupleType->GetSize(); ++i) {
             expectedTupleTypeItems.push_back(type->GetArguments()[i].Type);
         }
 
-        TVector<ui32> tupleAutoMaps;
+        TVector<ui32> tupleAutoMaps; 
         auto expectedTupleType = ctx.Expr.MakeType<TTupleExprType>(expectedTupleTypeItems);
         auto convertStatus = TrySilentConvertTo(input->ChildRef(1), *expectedTupleType, ctx.Expr);
         if (convertStatus.Level == IGraphTransformer::TStatus::Error) {
@@ -7229,8 +7229,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return convertStatus;
         }
 
-        TVector<const TItemExprType*> expectedStructTypeItems;
-        TSet<ui32> usedIndices;
+        TVector<const TItemExprType*> expectedStructTypeItems; 
+        TSet<ui32> usedIndices; 
         for (const auto& structItem : structType->GetItems()) {
             auto foundIndex = type->ArgumentIndexByName(structItem->GetName());
             if (!foundIndex) {
@@ -7272,7 +7272,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         convertStatus = TrySilentConvertTo(input->ChildRef(2), *expectedStructType, ctx.Expr);
-        TVector<ui32> structAutoMaps;
+        TVector<ui32> structAutoMaps; 
         if (convertStatus.Level == IGraphTransformer::TStatus::Error) {
             bool hasError = false;
             for (ui32 i = 0; i < structType->GetSize(); ++i) {
@@ -7312,9 +7312,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         if (!tupleAutoMaps.empty() || !structAutoMaps.empty()) {
             auto totalAutoMapArgs = tupleAutoMaps.size() + structAutoMaps.size();
             // build output
-            TExprNode::TListType args;
-            TExprNode::TListType inputArgs;
-            TMap<ui32, ui32> indexToTupleIndex;
+            TExprNode::TListType args; 
+            TExprNode::TListType inputArgs; 
+            TMap<ui32, ui32> indexToTupleIndex; 
             for (ui32 i = 0; i < totalAutoMapArgs; ++i) {
                 args.push_back(ctx.Expr.NewArgument(input->Pos(), TStringBuilder() << "automap_" << i));
             }
@@ -7326,7 +7326,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                     ctx.Expr.NewAtom(input->Pos(), ToString(tupleAutoMaps[i])) }));
             }
 
-            TMap<ui32, ui32> indexToStructIndex;
+            TMap<ui32, ui32> indexToStructIndex; 
             for (ui32 i = 0; i < structAutoMaps.size(); ++i) {
                 auto name = structType->GetItems()[structAutoMaps[i]]->GetName();
                 indexToStructIndex[structAutoMaps[i]] = i + tupleAutoMaps.size();
@@ -7338,7 +7338,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             auto newChildren = input->ChildrenList();
             if (!tupleAutoMaps.empty()) {
                 // update tuple arg
-                TExprNode::TListType newTupleItems;
+                TExprNode::TListType newTupleItems; 
                 for (ui32 i = 0; i < tupleType->GetSize(); ++i) {
                     auto it = indexToTupleIndex.find(i);
                     if (it == indexToTupleIndex.end()) {
@@ -7356,7 +7356,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
             if (!structAutoMaps.empty()) {
                 // update struct arg
-                TExprNode::TListType newStructItems;
+                TExprNode::TListType newStructItems; 
                 for (ui32 i = 0; i < structType->GetSize(); ++i) {
                     auto name = structType->GetItems()[i]->GetName();
                     auto it = indexToStructIndex.find(i);
@@ -7595,7 +7595,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
-        TTypeAnnotationNode::TListType tupleItems(2);
+        TTypeAnnotationNode::TListType tupleItems(2); 
         tupleItems[0] = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64);
         tupleItems[1] = input->Head().GetTypeAnn();
         input->SetTypeAnn(ctx.Expr.MakeType<TTupleExprType>(tupleItems));
@@ -7769,7 +7769,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         auto variantType = input->Head().GetTypeAnn()->Cast<TVariantExprType>();
-        TVector<bool> usedFields;
+        TVector<bool> usedFields; 
         ui32 usedCount = 0;
         const TTupleExprType* tupleType = nullptr;
         const TStructExprType* structType = nullptr;
@@ -13266,7 +13266,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
         for (ui32 k = (ui32)ETypeAnnotationKind::Unit; k < (ui32)ETypeAnnotationKind::LastType; ++k) {
             const ETypeAnnotationKind kind = (ETypeAnnotationKind)k;
-            TypeKinds.insert(std::pair<TString, ETypeAnnotationKind>(TStringBuilder() << kind, kind));
+            TypeKinds.insert(std::pair<TString, ETypeAnnotationKind>(TStringBuilder() << kind, kind)); 
         }
 
         for (auto& func : Functions) {
@@ -13436,7 +13436,7 @@ TAutoPtr<IGraphTransformer> CreateExtCallableTypeAnnotationTransformer(TTypeAnno
     return new NTypeAnnImpl::TExtCallableTypeAnnotationTransformer(types, instantOnly);
 }
 
-const THashSet<TString>& GetBuiltinFunctions() {
+const THashSet<TString>& GetBuiltinFunctions() { 
     return NTypeAnnImpl::TSyncFunctionsMap::Instance().AllNames;
 }
 

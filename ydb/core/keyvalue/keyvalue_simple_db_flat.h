@@ -16,8 +16,8 @@ protected:
     NTable::TDatabase &Db;
 public:
     TSimpleDbFlat(NTable::TDatabase &db);
-    void Erase(const TString &key, const TActorContext &ctx) override;
-    void Update(const TString &key, const TString &value, const TActorContext &ctx) override;
+    void Erase(const TString &key, const TActorContext &ctx) override; 
+    void Update(const TString &key, const TString &value, const TActorContext &ctx) override; 
 };
 
 } // NKeyValue

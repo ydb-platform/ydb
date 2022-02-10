@@ -729,7 +729,7 @@ EWriteCacheResult SetWriteCache(FHANDLE file, const TString &path, bool isEnable
 #endif
 
 /*
-bool GetWriteCache(TFileHandle *file, TActorSystem *actorSystem, const TString &path, bool *outIsEnabled) {
+bool GetWriteCache(TFileHandle *file, TActorSystem *actorSystem, const TString &path, bool *outIsEnabled) { 
     *outIsEnabled = false;
 #ifdef _linux_
     int val = 0;
@@ -780,7 +780,7 @@ bool GetWriteCache(TFileHandle *file, TActorSystem *actorSystem, const TString &
 #endif
 }
 
-bool SetWriteCache(TFileHandle *file, bool isWriteCacheEnable, TActorSystem *actorSystem, const TString &path) {
+bool SetWriteCache(TFileHandle *file, bool isWriteCacheEnable, TActorSystem *actorSystem, const TString &path) { 
 #ifdef _linux_
     // TODO: Consider flushing the cache before disabling it
     errno = 0;

@@ -11,15 +11,15 @@
 #define LDATA "./ldata"
 #define LDATA_RANDOM "./ldata.random"
 
-static const TString data = "aa aaa aa aaa aa aaa bb bbb bb bbb bb bbb";
+static const TString data = "aa aaa aa aaa aa aaa bb bbb bb bbb bb bbb"; 
 
 namespace {
     /**
      * Produces well-formed random crap
      **/
-    TString RandomString(size_t size) {
-        TString entropy(NResource::Find("/random.data"));
-        TString result;
+    TString RandomString(size_t size) { 
+        TString entropy(NResource::Find("/random.data")); 
+        TString result; 
         size_t seed = 1;
         size_t j = 0;
         for (size_t i = 0; i < size; ++i) {
@@ -38,8 +38,8 @@ namespace {
         return result;
     }
 
-    TVector<TString> InitRandomData() {
-        static const TVector<size_t> sizes = {
+    TVector<TString> InitRandomData() { 
+        static const TVector<size_t> sizes = { 
             0,
             1,
             127,
@@ -47,7 +47,7 @@ namespace {
             32767,
         };
 
-        TVector<TString> result;
+        TVector<TString> result; 
         for (auto size : sizes) {
             result.push_back(RandomString(size));
         }
@@ -55,18 +55,18 @@ namespace {
         return result;
     }
 
-    TString TestFileName(const TString& d, size_t bufferSize) {
+    TString TestFileName(const TString& d, size_t bufferSize) { 
         return LDATA_RANDOM + TString(".") + ToString(d.size()) + TString(".") + ToString(bufferSize);
     }
 
-    struct TRandomData: public TVector<TString> {
+    struct TRandomData: public TVector<TString> { 
         inline TRandomData() {
             InitRandomData().swap(*this);
         }
     };
 }
 
-static const TVector<size_t> bufferSizes = {
+static const TVector<size_t> bufferSizes = { 
     127,
     1024,
     32768,
@@ -84,10 +84,10 @@ namespace {
 
 template <class C>
 static inline void TestGoodDataCompress() {
-    TFixedBufferFileOutput o(LDATA);
+    TFixedBufferFileOutput o(LDATA); 
     C c(&o, 1024);
 
-    TString d = data;
+    TString d = data; 
 
     for (size_t i = 0; i < 10; ++i) {
         c.Write(d.data(), d.size());
@@ -100,9 +100,9 @@ static inline void TestGoodDataCompress() {
 }
 
 template <class C>
-static inline void TestIncompressibleDataCompress(const TString& d, size_t bufferSize) {
-    TString testFileName = TestFileName(d, bufferSize);
-    TFixedBufferFileOutput o(testFileName);
+static inline void TestIncompressibleDataCompress(const TString& d, size_t bufferSize) { 
+    TString testFileName = TestFileName(d, bufferSize); 
+    TFixedBufferFileOutput o(testFileName); 
     C c(&o, bufferSize);
     c.Write(d.data(), d.size());
     c.Finish();
@@ -124,12 +124,12 @@ static inline void TestGoodDataDecompress() {
     TTempFile tmpFile(LDATA);
 
     {
-        TFileInput i1(LDATA);
-        D ld(&i1);
+        TFileInput i1(LDATA); 
+        D ld(&i1); 
 
-        TString d = data;
+        TString d = data; 
 
-        for (size_t i2 = 0; i2 < 10; ++i2) {
+        for (size_t i2 = 0; i2 < 10; ++i2) { 
             UNIT_ASSERT_EQUAL(ld.ReadLine(), d);
 
             d = d + d;
@@ -138,12 +138,12 @@ static inline void TestGoodDataDecompress() {
 }
 
 template <class D>
-static inline void TestIncompressibleDataDecompress(const TString& d, size_t bufferSize) {
-    TString testFileName = TestFileName(d, bufferSize);
+static inline void TestIncompressibleDataDecompress(const TString& d, size_t bufferSize) { 
+    TString testFileName = TestFileName(d, bufferSize); 
     TTempFile tmpFile(testFileName);
 
     {
-        TFileInput i(testFileName);
+        TFileInput i(testFileName); 
         D ld(&i);
 
         UNIT_ASSERT_EQUAL(ld.ReadAll(), d);

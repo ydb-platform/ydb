@@ -224,7 +224,7 @@ public:
     }
 
 private:
-    typedef TQueueType<ElementType> TBase;
+    typedef TQueueType<ElementType> TBase; 
 
     virtual typename TBase::TEntry* NewEntry(ElementType&& element) noexcept override {
         AtomicAdd(Count, 1);

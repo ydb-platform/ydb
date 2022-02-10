@@ -7,7 +7,7 @@
 
 Y_UNIT_TEST_SUITE(TEndpointTest) {
     Y_UNIT_TEST(TestSimple) {
-        TVector<TNetworkAddress> addrs;
+        TVector<TNetworkAddress> addrs; 
 
         TEndpoint ep0;
 
@@ -64,7 +64,7 @@ Y_UNIT_TEST_SUITE(TEndpointTest) {
 
         ep3_.SetPort(54321);
 
-        THashSet<TEndpoint> he;
+        THashSet<TEndpoint> he; 
 
         he.insert(ep0);
         he.insert(ep1);
@@ -87,8 +87,8 @@ Y_UNIT_TEST_SUITE(TEndpointTest) {
     }
 
     Y_UNIT_TEST(TestEqual) {
-        const TString ip1 = "2a02:6b8:0:1410::5f6c:f3c2";
-        const TString ip2 = "2a02:6b8:0:1410::5f6c:f3c3";
+        const TString ip1 = "2a02:6b8:0:1410::5f6c:f3c2"; 
+        const TString ip2 = "2a02:6b8:0:1410::5f6c:f3c3"; 
 
         TNetworkAddress na1(ip1, 24242);
         TEndpoint ep1(new NAddr::TAddrInfo(&*na1.Begin()));

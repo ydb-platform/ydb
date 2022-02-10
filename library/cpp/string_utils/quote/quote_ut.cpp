@@ -14,7 +14,7 @@ Y_UNIT_TEST_SUITE(TCGIEscapeTest) {
         char r[] = {'1', '2', '3', '4'};
         char buf[sizeof(r) * 3 + 2];
 
-        TString ret(buf, CGIEscape(buf, r, sizeof(r)));
+        TString ret(buf, CGIEscape(buf, r, sizeof(r))); 
 
         UNIT_ASSERT_EQUAL(ret, "1234");
     }
@@ -125,7 +125,7 @@ Y_UNIT_TEST_SUITE(TCGIUnescapeTest) {
     }
 
     Y_UNIT_TEST(StrokaOutParameterInplace) {
-        TString s;
+        TString s; 
 
         s = "hello%3dworld";
         CGIUnescape(s);
@@ -149,7 +149,7 @@ Y_UNIT_TEST_SUITE(TCGIUnescapeTest) {
     }
 
     Y_UNIT_TEST(StrokaOutParameterNotInplace) {
-        TString s, sCopy;
+        TString s, sCopy; 
 
         s = "hello%3dworld";
         sCopy = s;
@@ -232,7 +232,7 @@ Y_UNIT_TEST_SUITE(TUrlEscapeTest) {
 
 Y_UNIT_TEST_SUITE(TUrlUnescapeTest) {
     Y_UNIT_TEST(StrokaOutParameterInplace) {
-        TString s;
+        TString s; 
 
         s = "hello%3dworld";
         UrlUnescape(s);
@@ -256,7 +256,7 @@ Y_UNIT_TEST_SUITE(TUrlUnescapeTest) {
     }
 
     Y_UNIT_TEST(StrokaOutParameterNotInplace) {
-        TString s, sCopy;
+        TString s, sCopy; 
 
         s = "hello%3dworld";
         sCopy = s;
@@ -297,7 +297,7 @@ Y_UNIT_TEST_SUITE(TQuoteTest) {
         char r[100];
         Quote(r, "/path;tail/path,tail/");
         UNIT_ASSERT_VALUES_EQUAL("/path%3Btail/path%2Ctail/", r);
-        TString s("/path;tail/path,tail/");
+        TString s("/path;tail/path,tail/"); 
         Quote(s);
         UNIT_ASSERT_VALUES_EQUAL("/path%3Btail/path%2Ctail/", s.c_str());
     }
@@ -306,7 +306,7 @@ Y_UNIT_TEST_SUITE(TQuoteTest) {
         char r[100];
         Quote(r, "/path;tail/path,tail/", ";,");
         UNIT_ASSERT_VALUES_EQUAL("%2Fpath;tail%2Fpath,tail%2F", r);
-        TString s("/path;tail/path,tail/");
+        TString s("/path;tail/path,tail/"); 
         Quote(s, ";,");
         UNIT_ASSERT_VALUES_EQUAL("%2Fpath;tail%2Fpath,tail%2F", s.c_str());
     }

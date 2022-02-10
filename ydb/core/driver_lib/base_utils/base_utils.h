@@ -17,13 +17,13 @@
 namespace NKikimr {
 
 struct TCmdFormatConfig {
-    TString Path;
+    TString Path; 
     NSize::TSize DiskSize;
     NSize::TSize ChunkSize;
     NSize::TSize SectorSize;
     ui64 Guid;
     ui64 MainKey;
-    TString TextMessage;
+    TString TextMessage; 
 
     TCmdFormatConfig();
 
@@ -31,7 +31,7 @@ struct TCmdFormatConfig {
 };
 
 struct TCmdFormatInfoConfig {
-    TString Path;
+    TString Path; 
     ui64 MainKey;
     bool IsVerbose;
 
@@ -41,8 +41,8 @@ struct TCmdFormatInfoConfig {
 };
 
 struct TCmdNodeByHostConfig {
-    TString NamingFile;
-    TString Hostname;
+    TString NamingFile; 
+    TString Hostname; 
     i32 Port;
 
     TCmdNodeByHostConfig();
@@ -51,7 +51,7 @@ struct TCmdNodeByHostConfig {
 };
 
 struct TCmdFormatUtilConfig {
-    TString FormatFile;
+    TString FormatFile; 
     ui32 NodeId;
 
     TCmdFormatUtilConfig ();

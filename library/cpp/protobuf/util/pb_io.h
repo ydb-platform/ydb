@@ -32,11 +32,11 @@ namespace NProtoBuf {
 
     /* Serialize message into string and apply base64 URL encoding.
      */
-    TString SerializeToBase64String(const Message& m);
-    void SerializeToBase64String(const Message& m, TString& dataBase64);
-    bool TrySerializeToBase64String(const Message& m, TString& dataBase64);
+    TString SerializeToBase64String(const Message& m); 
+    void SerializeToBase64String(const Message& m, TString& dataBase64); 
+    bool TrySerializeToBase64String(const Message& m, TString& dataBase64); 
 
-    const TString ShortUtf8DebugString(const Message& message);
+    const TString ShortUtf8DebugString(const Message& message); 
 
     bool MergePartialFromString(NProtoBuf::Message& m, const TStringBuf serializedProtoMessage);
     bool MergeFromString(NProtoBuf::Message& m, const TStringBuf serializedProtoMessage);
@@ -45,7 +45,7 @@ namespace NProtoBuf {
 int operator&(NProtoBuf::Message& m, IBinSaver& f);
 
 // Write a textual representation of the given message to the given file.
-void SerializeToTextFormat(const NProtoBuf::Message& m, const TString& fileName);
+void SerializeToTextFormat(const NProtoBuf::Message& m, const TString& fileName); 
 void SerializeToTextFormat(const NProtoBuf::Message& m, IOutputStream& out);
 
 // Write a textual representation of the given message to the given output stream
@@ -64,7 +64,7 @@ enum class EParseFromTextFormatOption : ui64 {
 Y_DECLARE_FLAGS(EParseFromTextFormatOptions, EParseFromTextFormatOption);
 
 // Parse a text-format protocol message from the given file into message object.
-void ParseFromTextFormat(const TString& fileName, NProtoBuf::Message& m,
+void ParseFromTextFormat(const TString& fileName, NProtoBuf::Message& m, 
                          const EParseFromTextFormatOptions options = {});
 // NOTE: will read `in` till the end.
 void ParseFromTextFormat(IInputStream& in, NProtoBuf::Message& m,
@@ -74,7 +74,7 @@ void ParseFromTextFormat(IInputStream& in, NProtoBuf::Message& m,
  *
  * @see `ParseFromTextFormat`
  */
-bool TryParseFromTextFormat(const TString& fileName, NProtoBuf::Message& m,
+bool TryParseFromTextFormat(const TString& fileName, NProtoBuf::Message& m, 
                             const EParseFromTextFormatOptions options = {});
 // NOTE: will read `in` till the end.
 bool TryParseFromTextFormat(IInputStream& in, NProtoBuf::Message& m,
@@ -82,7 +82,7 @@ bool TryParseFromTextFormat(IInputStream& in, NProtoBuf::Message& m,
 
 // @see `ParseFromTextFormat`
 template <typename T>
-static T ParseFromTextFormat(const TString& fileName,
+static T ParseFromTextFormat(const TString& fileName, 
                              const EParseFromTextFormatOptions options = {}) {
     T message;
     ParseFromTextFormat(fileName, message, options);

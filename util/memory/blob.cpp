@@ -6,7 +6,7 @@
 #include <util/system/mlock.h>
 #include <util/stream/buffer.h>
 #include <util/generic/ptr.h>
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 #include <util/generic/buffer.h>
 #include <util/generic/ylimits.h>
 #include <util/generic/singleton.h>
@@ -23,19 +23,19 @@ public:
 
     ~TDynamicBlobBase() override = default;
 
-    void Ref() noexcept override {
+    void Ref() noexcept override { 
         TRefBase::Ref();
     }
 
-    void UnRef() noexcept override {
+    void UnRef() noexcept override { 
         TRefBase::UnRef();
     }
 
-    inline void* Data() const noexcept {
+    inline void* Data() const noexcept { 
         return this->AdditionalData();
     }
 
-    inline size_t Length() const noexcept {
+    inline size_t Length() const noexcept { 
         return this->AdditionalDataLength();
     }
 };
@@ -51,15 +51,15 @@ public:
 
     ~TBufferBlobBase() override = default;
 
-    void Ref() noexcept override {
+    void Ref() noexcept override { 
         TRefBase::Ref();
     }
 
-    void UnRef() noexcept override {
+    void UnRef() noexcept override { 
         TRefBase::UnRef();
     }
 
-    inline const TBuffer& Buffer() const noexcept {
+    inline const TBuffer& Buffer() const noexcept { 
         return Buf_;
     }
 
@@ -72,7 +72,7 @@ class TStringBlobBase: public TBlob::TBase, public TRefCounted<TStringBlobBase<T
     using TRefBase = TRefCounted<TStringBlobBase, TCounter>;
 
 public:
-    inline TStringBlobBase(const TString& s)
+    inline TStringBlobBase(const TString& s) 
         : S_(s)
     {
     }
@@ -84,20 +84,20 @@ public:
 
     ~TStringBlobBase() override = default;
 
-    void Ref() noexcept override {
+    void Ref() noexcept override { 
         TRefBase::Ref();
     }
 
-    void UnRef() noexcept override {
+    void UnRef() noexcept override { 
         TRefBase::UnRef();
     }
 
-    inline const TString& String() const noexcept {
+    inline const TString& String() const noexcept { 
         return S_;
     }
 
 private:
-    const TString S_;
+    const TString S_; 
 };
 
 template <class TCounter>
@@ -128,19 +128,19 @@ public:
         }
     }
 
-    void Ref() noexcept override {
+    void Ref() noexcept override { 
         TRefBase::Ref();
     }
 
-    void UnRef() noexcept override {
+    void UnRef() noexcept override { 
         TRefBase::UnRef();
     }
 
-    inline const void* Data() const noexcept {
+    inline const void* Data() const noexcept { 
         return Map_.Ptr();
     }
 
-    inline size_t Length() const noexcept {
+    inline size_t Length() const noexcept { 
         return Map_.MappedSize();
     }
 
@@ -324,12 +324,12 @@ static inline TBlob ConstructFromFileContent(const TFile& file, ui64 offset, ui6
     return ReadFromFile<TCounter>(file, offset, static_cast<size_t>(length));
 }
 
-TBlob TBlob::FromFileContentSingleThreaded(const TString& path) {
+TBlob TBlob::FromFileContentSingleThreaded(const TString& path) { 
     TFile file(path, RdOnly);
     return ConstructFromFileContent<TSimpleCounter>(file, 0, file.GetLength());
 }
 
-TBlob TBlob::FromFileContent(const TString& path) {
+TBlob TBlob::FromFileContent(const TString& path) { 
     TFile file(path, RdOnly);
     return ConstructFromFileContent<TAtomicCounter>(file, 0, file.GetLength());
 }
@@ -401,7 +401,7 @@ TBlob ConstructFromString(S&& s) {
     return ret;
 }
 
-TBlob TBlob::FromStringSingleThreaded(const TString& s) {
+TBlob TBlob::FromStringSingleThreaded(const TString& s) { 
     return ConstructFromString<TSimpleCounter>(s);
 }
 
@@ -409,7 +409,7 @@ TBlob TBlob::FromStringSingleThreaded(TString&& s) {
     return ConstructFromString<TSimpleCounter>(std::move(s));
 }
 
-TBlob TBlob::FromString(const TString& s) {
+TBlob TBlob::FromString(const TString& s) { 
     return ConstructFromString<TAtomicCounter>(s);
 }
 

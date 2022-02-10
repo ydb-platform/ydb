@@ -103,8 +103,8 @@ namespace NUdf {
         static ui32 MetaIndexes[MEMBERS_COUNT];
         static ui32 MetaBackIndexes[MEMBERS_COUNT];
 
-        TString FirstName;
-        TString LastName;
+        TString FirstName; 
+        TString LastName; 
         ui32 Age;
 
         NUdf::TUnboxedValue GetByIndex(ui32 index) const {
@@ -126,8 +126,8 @@ namespace NUdf {
         static ui32 MetaIndexes[MEMBERS_COUNT];
         static ui32 MetaBackIndexes[MEMBERS_COUNT];
 
-        TString FirstName;
-        TString LastName;
+        TString FirstName; 
+        TString LastName; 
         ui32 Age;
         typedef std::vector<ui32> TTagList;
         TTagList Tags;
@@ -385,7 +385,7 @@ namespace {
         }
     };
 
-    SIMPLE_UDF(TException, NUdf::TListType<ui32>()) {
+    SIMPLE_UDF(TException, NUdf::TListType<ui32>()) { 
         Y_UNUSED(valueBuilder);
         Y_UNUSED(args);
         return NUdf::TUnboxedValuePod(new TThrowerValue);
@@ -438,7 +438,7 @@ namespace {
         return NUdf::TUnboxedValuePod(backResult);
     }
 
-    SIMPLE_UDF(TSeqList, NUdf::TListType<ui32>(ui32)) {
+    SIMPLE_UDF(TSeqList, NUdf::TListType<ui32>(ui32)) { 
         const ui32 size = args[0].Get<ui32>();
         std::vector<NUdf::TUnboxedValue> res;
         res.resize(size);
@@ -448,7 +448,7 @@ namespace {
         return valueBuilder->NewList(res.data(), res.size());
     }
 
-    SIMPLE_UDF_RUN(TSeqListWithHole, NUdf::TListType<ui32>(ui32, ui32), NUdf::TOptional<void>) {
+    SIMPLE_UDF_RUN(TSeqListWithHole, NUdf::TListType<ui32>(ui32, ui32), NUdf::TOptional<void>) { 
         Y_UNUSED(valueBuilder);
         const ui32 size = args[0].Get<ui32>();
         const ui32 hole = args[1].Get<ui32>();
@@ -456,7 +456,7 @@ namespace {
         return NUdf::TUnboxedValuePod(std::move(boxed));
     }
 
-    static const auto TUPLE = std::make_tuple(ui8(33), TString("world"), ui64(0xFEEDB00B2A115E), TString("funny bunny"));
+    static const auto TUPLE = std::make_tuple(ui8(33), TString("world"), ui64(0xFEEDB00B2A115E), TString("funny bunny")); 
 
     typedef NUdf::TTuple<ui8, char*, ui64, char*> NUdfTuple;
 
@@ -550,14 +550,14 @@ namespace {
         return valueBuilder->ToIndexDict(NUdf::TUnboxedValuePod(std::move(boxed)));
     }
 
-    SIMPLE_UDF(TListOfPersonStruct, NUdf::TListType<NUdf::PersonStructWithOptList>(ui32)) {
+    SIMPLE_UDF(TListOfPersonStruct, NUdf::TListType<NUdf::PersonStructWithOptList>(ui32)) { 
         Y_UNUSED(valueBuilder);
         Y_UNUSED(args);
         NUdf::IBoxedValuePtr boxed(new NUdf::TListRef<decltype(LIST_OF_STRUCT_PERSON)>(LIST_OF_STRUCT_PERSON));
         return NUdf::TUnboxedValuePod(std::move(boxed));
     }
 
-    SIMPLE_UDF(TListOfPersonStructWithBrokenIndexToDict, NUdf::TListType<NUdf::PersonStructWithOptList>()) {
+    SIMPLE_UDF(TListOfPersonStructWithBrokenIndexToDict, NUdf::TListType<NUdf::PersonStructWithOptList>()) { 
         Y_UNUSED(valueBuilder);
         Y_UNUSED(args);
         NUdf::IBoxedValuePtr boxed(new NUdf::TListRef<decltype(LIST_OF_STRUCT_PERSON), RAW_BROKEN_INDEX_LIST_TO_DICT>(
@@ -1042,9 +1042,9 @@ Y_UNIT_TEST_SUITE(TMiniKQLValidateTest) {
         const auto person = value.Lookup(NUdf::TUnboxedValuePod(ui64(lookupIndex)));
         UNIT_ASSERT(person);
         auto firstName = person.GetElement(NUdf::PersonStructWithOptList::MetaIndexes[0]);
-        UNIT_ASSERT_VALUES_EQUAL(TString(firstName.AsStringRef()), LIST_OF_STRUCT_PERSON[lookupIndex].FirstName);
+        UNIT_ASSERT_VALUES_EQUAL(TString(firstName.AsStringRef()), LIST_OF_STRUCT_PERSON[lookupIndex].FirstName); 
         auto lastName = person.GetElement(NUdf::PersonStructWithOptList::MetaIndexes[1]);
-        UNIT_ASSERT_VALUES_EQUAL(TString(lastName.AsStringRef()), LIST_OF_STRUCT_PERSON[lookupIndex].LastName);
+        UNIT_ASSERT_VALUES_EQUAL(TString(lastName.AsStringRef()), LIST_OF_STRUCT_PERSON[lookupIndex].LastName); 
         UNIT_ASSERT_VALUES_EQUAL(person.GetElement(NUdf::PersonStructWithOptList::MetaIndexes[2]).Get<ui32>(), LIST_OF_STRUCT_PERSON[lookupIndex].Age);
         UNIT_ASSERT(!person.GetElement(NUdf::PersonStructWithOptList::MetaIndexes[3]));
         auto dictIter = value.GetDictIterator();
@@ -1121,9 +1121,9 @@ Y_UNIT_TEST_SUITE(TMiniKQLValidateTest) {
                 UNIT_ASSERT_VALUES_EQUAL(key.Get<ui32>(), MAKE_DICT_DIGIT2PERSON()[index].first);
                 auto person = payload;
                 auto firstName = person.GetElement(NUdf::PersonStruct::MetaIndexes[0]);
-                UNIT_ASSERT_VALUES_EQUAL(TString(firstName.AsStringRef()), DICT_DIGIT2PERSON_BROKEN_CONTENT_BY_INDEX[index]->FirstName);
+                UNIT_ASSERT_VALUES_EQUAL(TString(firstName.AsStringRef()), DICT_DIGIT2PERSON_BROKEN_CONTENT_BY_INDEX[index]->FirstName); 
                 auto lastName = person.GetElement(NUdf::PersonStruct::MetaIndexes[1]);
-                UNIT_ASSERT_VALUES_EQUAL(TString(lastName.AsStringRef()), DICT_DIGIT2PERSON_BROKEN_CONTENT_BY_INDEX[index]->LastName);
+                UNIT_ASSERT_VALUES_EQUAL(TString(lastName.AsStringRef()), DICT_DIGIT2PERSON_BROKEN_CONTENT_BY_INDEX[index]->LastName); 
                 UNIT_ASSERT_VALUES_EQUAL(person.GetElement(NUdf::PersonStruct::MetaIndexes[2]).Get<ui32>(), DICT_DIGIT2PERSON_BROKEN_CONTENT_BY_INDEX[index]->Age);
             }
         };

@@ -46,7 +46,7 @@ bool TTransQueue::Load(NIceDb::TNiceDb& db) {
 
     TInstant now = AppData()->TimeProvider->Now();
 
-    THashSet<ui64> schemaTxs;
+    THashSet<ui64> schemaTxs; 
     {
         auto rowset = db.Table<Schema::TxMain>().Range().Select();
         if (!rowset.IsReady())

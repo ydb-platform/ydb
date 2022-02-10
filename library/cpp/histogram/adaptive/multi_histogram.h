@@ -15,7 +15,7 @@ namespace NKiwiAggr {
     private:
         static const size_t DEFAULT_INTERVALS = 100;
 
-        typedef THashMap<ui64, IHistogramPtr> THistogramsMap;
+        typedef THashMap<ui64, IHistogramPtr> THistogramsMap; 
         THistogramsMap Histograms;
         size_t Intervals;
 
@@ -62,8 +62,8 @@ namespace NKiwiAggr {
             }
         }
 
-        TVector<ui64> GetIds() const {
-            TVector<ui64> result(0);
+        TVector<ui64> GetIds() const { 
+            TVector<ui64> result(0); 
             for (THistogramsMap::const_iterator it = Histograms.begin(); it != Histograms.end(); ++it) {
                 result.push_back(it->first);
             }

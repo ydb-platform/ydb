@@ -29,11 +29,11 @@ struct TPinInfo {
     const TExprNode* DataSource;
     const TExprNode* DataSink;
     const TExprNode* Key;
-    TString DisplayName;
+    TString DisplayName; 
     bool HideInBasicPlan;
 
     TPinInfo(const TExprNode* dataSource, const TExprNode* dataSink,
-        const TExprNode* key, const TString& displayName, bool hideInBasicPlan)
+        const TExprNode* key, const TString& displayName, bool hideInBasicPlan) 
         : DataSource(dataSource)
         , DataSink(dataSink)
         , Key(key)
@@ -48,15 +48,15 @@ public:
 
     virtual void WriteDetails(const TExprNode& node, NYson::TYsonWriter& writer) = 0;
     // returns visibility of node
-    virtual bool GetDependencies(const TExprNode& node, TExprNode::TListType& children, bool compact) = 0;
+    virtual bool GetDependencies(const TExprNode& node, TExprNode::TListType& children, bool compact) = 0; 
     virtual void GetResultDependencies(const TExprNode::TPtr& node, TExprNode::TListType& children, bool compact) = 0;
-    virtual void GetInputs(const TExprNode& node, TVector<TPinInfo>& inputs) = 0;
-    virtual void GetOutputs(const TExprNode& node, TVector<TPinInfo>& outputs) = 0;
-    virtual TString GetProviderPath(const TExprNode& node) = 0;
+    virtual void GetInputs(const TExprNode& node, TVector<TPinInfo>& inputs) = 0; 
+    virtual void GetOutputs(const TExprNode& node, TVector<TPinInfo>& outputs) = 0; 
+    virtual TString GetProviderPath(const TExprNode& node) = 0; 
     virtual void WritePlanDetails(const TExprNode& node, NYson::TYsonWriter& writer) = 0;
     virtual void WritePullDetails(const TExprNode& node, NYson::TYsonWriter& writer) = 0;
     virtual void WritePinDetails(const TExprNode& node, NYson::TYsonWriter& writer) = 0;
-    virtual TString GetOperationDisplayName(const TExprNode& node) = 0;
+    virtual TString GetOperationDisplayName(const TExprNode& node) = 0; 
 };
 
 class ITrackableNodeProcessor {
@@ -94,7 +94,7 @@ public:
         TMaybe<ui64> AllResultsBytesLimit = 100000;
         TMaybe<ui64> RowsLimitPerWrite = 1000; // only if list is written
         EResultFormat Format;
-        TString FormatDetails;
+        TString FormatDetails; 
         bool Discard = false;
     };
 
@@ -149,7 +149,7 @@ public:
 
     //-- execution
     virtual bool CanExecute(const TExprNode& node) = 0;
-    virtual void GetRequiredChildren(const TExprNode& node, TExprNode::TListType& children) = 0;
+    virtual void GetRequiredChildren(const TExprNode& node, TExprNode::TListType& children) = 0; 
     virtual IGraphTransformer& GetCallableExecutionTransformer() = 0;
 
     //-- finalizing
@@ -194,7 +194,7 @@ struct TDataProviderInfo {
     TIntrusivePtr<IDataProvider> Sink;
     bool SupportFullResultDataSink = false;
 
-    std::function<TMaybe<TString>(const TMaybe<TSet<TString>>& usedClusters, const TMaybe<TSet<TString>>& usedProviders,
+    std::function<TMaybe<TString>(const TMaybe<TSet<TString>>& usedClusters, const TMaybe<TSet<TString>>& usedProviders, 
         ESourceSyntax syntax)> RemoteClusterProvider;
 
     std::function<TFutureStatus(const TString& cluster, ESourceSyntax sourceSyntax, const TString& sourceCode,

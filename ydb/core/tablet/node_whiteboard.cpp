@@ -620,7 +620,7 @@ protected:
 //        auto& record = response->Record;
 //        const TIntrusivePtr<NMonitoring::TDynamicCounters> &counters = AppData(ctx)->Counters;
 //        TIntrusivePtr<NMonitoring::TDynamicCounters> interconnectCounters = GetServiceCounters(counters, "interconnect");
-//        interconnectCounters->EnumerateSubgroups([&record, &interconnectCounters](const TString &name, const TString &value) -> void {
+//        interconnectCounters->EnumerateSubgroups([&record, &interconnectCounters](const TString &name, const TString &value) -> void { 
 //            NKikimrWhiteboard::TNodeStateInfo &nodeStateInfo = *record.AddNodeStateInfo();
 //            TIntrusivePtr<NMonitoring::TDynamicCounters> peerCounters = interconnectCounters->GetSubgroup(name, value);
 //            NMonitoring::TDynamicCounters::TCounterPtr connectedCounter = peerCounters->GetCounter("Connected");
@@ -779,8 +779,8 @@ protected:
         ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
     }
 
-    static TVector<double> GetLoadAverage() {
-        TVector<double> loadAvg(3);
+    static TVector<double> GetLoadAverage() { 
+        TVector<double> loadAvg(3); 
         loadAvg.resize(NSystemInfo::LoadAverage(loadAvg.data(), loadAvg.size()));
         return loadAvg;
     }

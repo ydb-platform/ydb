@@ -193,7 +193,7 @@ public:
         return Y("AsList", Y("AsStruct"));
     }
 
-    bool AddGroupKey(TContext& ctx, const TString& column) override {
+    bool AddGroupKey(TContext& ctx, const TString& column) override { 
         Y_UNUSED(column);
         ctx.Error(Pos) << "Grouping is not allowed " << (MissingFrom ? "without FROM" : "in this context");
         return false;
@@ -225,7 +225,7 @@ public:
         return {};
     }
 
-    bool IsGroupByColumn(const TString& column) const override {
+    bool IsGroupByColumn(const TString& column) const override { 
         Y_UNUSED(column);
         return false;
     }
@@ -236,7 +236,7 @@ public:
         return nullptr;
     }
 
-    TNodePtr BuildAggregation(const TString& label) override {
+    TNodePtr BuildAggregation(const TString& label) override { 
         Y_UNUSED(label);
         return nullptr;
     }
@@ -355,7 +355,7 @@ protected:
 
     TMaybe<bool> AddColumn(TContext& ctx, TColumnNode& column) override {
         Y_VERIFY_DEBUG(Source);
-        const TString label(Source->GetLabel());
+        const TString label(Source->GetLabel()); 
         Source->SetLabel(Label);
         const auto ret = Source->AddColumn(ctx, column);
         Source->SetLabel(label);
@@ -430,7 +430,7 @@ protected:
         return true;
     }
 
-    TMaybe<TString> FindColumnMistype(const TString& name) const override {
+    TMaybe<TString> FindColumnMistype(const TString& name) const override { 
         auto result = FindMistypeIn(Columns.Real, name);
         if (!result) {
             auto result = FindMistypeIn(Columns.Artificial, name);
@@ -676,7 +676,7 @@ public:
             TNodePtr samplingRate,
             TNodePtr samplingSeed) override
     {
-        TString modeName;
+        TString modeName; 
         if (!samplingSeed) {
             samplingSeed = Y("Int32", Q("0"));
         }
@@ -1133,9 +1133,9 @@ public:
 private:
     ReduceMode Mode;
     TSourcePtr Source;
-    TVector<TSortSpecificationPtr> OrderBy;
-    TVector<TNodePtr> Keys;
-    TVector<TNodePtr> Args;
+    TVector<TSortSpecificationPtr> OrderBy; 
+    TVector<TNodePtr> Keys; 
+    TVector<TNodePtr> Args; 
     TNodePtr Udf;
     TNodePtr Having;
     const TWriteSettings Settings;
@@ -1381,10 +1381,10 @@ private:
     TNodePtr Flatten;
     TNodePtr PreFlattenMap;
     const TWriteSettings Settings;
-    TVector<TSourcePtr> Subselects;
+    TVector<TSourcePtr> Subselects; 
     TVector<TNodePtr> Grouping;
     TVector<TNodePtr> GroupByExpr;
-    TSet<TString> GroupingCols;
+    TSet<TString> GroupingCols; 
 };
 
 /// \todo simplify class
@@ -1393,17 +1393,17 @@ public:
     TSelectCore(
         TPosition pos,
         TSourcePtr source,
-        const TVector<TNodePtr>& groupByExpr,
-        const TVector<TNodePtr>& groupBy,
+        const TVector<TNodePtr>& groupByExpr, 
+        const TVector<TNodePtr>& groupBy, 
         bool compactGroupBy,
         bool assumeSorted,
-        const TVector<TSortSpecificationPtr>& orderBy,
+        const TVector<TSortSpecificationPtr>& orderBy, 
         TNodePtr having,
         TWinSpecs& winSpecs,
         THoppingWindowSpecPtr hoppingWindowSpec,
-        const TVector<TNodePtr>& terms,
+        const TVector<TNodePtr>& terms, 
         bool distinct,
-        const TVector<TNodePtr>& without,
+        const TVector<TNodePtr>& without, 
         bool selectStream,
         const TWriteSettings& settings
     )
@@ -2072,12 +2072,12 @@ private:
 
 private:
     TSourcePtr Source;
-    TVector<TNodePtr> GroupByExpr;
+    TVector<TNodePtr> GroupByExpr; 
     TVector<TNodePtr> DistinctAggrExpr;
-    TVector<TNodePtr> GroupBy;
+    TVector<TNodePtr> GroupBy; 
     bool AssumeSorted = false;
     bool CompactGroupBy = false;
-    TVector<TSortSpecificationPtr> OrderBy;
+    TVector<TSortSpecificationPtr> OrderBy; 
     TNodePtr Having;
     TWinSpecs WinSpecs;
     TNodePtr Flatten;
@@ -2087,8 +2087,8 @@ private:
     TNodePtr Aggregate;
     TNodePtr CalcOverWindow;
     TNodePtr CompositeTerms;
-    TVector<TNodePtr> Terms;
-    TVector<TNodePtr> Without;
+    TVector<TNodePtr> Terms; 
+    TVector<TNodePtr> Without; 
     const bool Distinct;
     bool OrderByInit = false;
     THoppingWindowSpecPtr HoppingWindowSpec;
@@ -2362,14 +2362,14 @@ TSourcePtr BuildProcess(
 
 class TNestedProxySource: public IProxySource {
 public:
-    TNestedProxySource(TPosition pos, const TVector<TNodePtr>& groupBy, TSourcePtr source)
+    TNestedProxySource(TPosition pos, const TVector<TNodePtr>& groupBy, TSourcePtr source) 
         : IProxySource(pos, source.Get())
         , CompositeSelect(nullptr)
         , Holder(std::move(source))
         , GroupBy(groupBy)
     {}
 
-    TNestedProxySource(TCompositeSelect* compositeSelect, const TVector<TNodePtr>& groupBy)
+    TNestedProxySource(TCompositeSelect* compositeSelect, const TVector<TNodePtr>& groupBy) 
         : IProxySource(compositeSelect->GetPos(), compositeSelect->RealSource())
         , CompositeSelect(compositeSelect)
         , GroupBy(groupBy)
@@ -2403,7 +2403,7 @@ public:
         return CompositeSelect;
     }
 
-    bool CalculateGroupingHint(TContext& ctx, const TVector<TString>& columns, ui64& hint) const override {
+    bool CalculateGroupingHint(TContext& ctx, const TVector<TString>& columns, ui64& hint) const override { 
         Y_UNUSED(ctx);
         hint = 0;
         if (GroupByColumns.empty()) {
@@ -2443,8 +2443,8 @@ public:
 private:
     TCompositeSelect* CompositeSelect;
     TSourcePtr Holder;
-    TVector<TNodePtr> GroupBy;
-    mutable TSet<TString> GroupByColumns;
+    TVector<TNodePtr> GroupBy; 
+    mutable TSet<TString> GroupByColumns; 
 };
 
 
@@ -2454,17 +2454,17 @@ TSourcePtr DoBuildSelectCore(
     TPosition pos,
     TSourcePtr originalSource,
     TSourcePtr source,
-    const TVector<TNodePtr>& groupByExpr,
-    const TVector<TNodePtr>& groupBy,
+    const TVector<TNodePtr>& groupByExpr, 
+    const TVector<TNodePtr>& groupBy, 
     bool compactGroupBy,
     bool assumeSorted,
-    const TVector<TSortSpecificationPtr>& orderBy,
+    const TVector<TSortSpecificationPtr>& orderBy, 
     TNodePtr having,
     TWinSpecs&& winSpecs,
     THoppingWindowSpecPtr hoppingWindowSpec,
-    TVector<TNodePtr>&& terms,
+    TVector<TNodePtr>&& terms, 
     bool distinct,
-    TVector<TNodePtr>&& without,
+    TVector<TNodePtr>&& without, 
     bool selectStream,
     const TWriteSettings& settings
 ) {
@@ -2483,11 +2483,11 @@ TSourcePtr DoBuildSelectCore(
     /// \todo some smart merge logic, generalize common part of grouping (expr, flatten, etc)?
     TIntrusivePtr<TCompositeSelect> compositeSelect = new TCompositeSelect(pos, std::move(source), originalSource->CloneSource(), settings);
     size_t totalGroups = 0;
-    TVector<TSourcePtr> subselects;
+    TVector<TSourcePtr> subselects; 
     TVector<TNodePtr> groupingCols;
     for (auto& grouping: groupBy) {
         auto contentPtr = grouping->ContentListPtr();
-        TVector<TNodePtr> cache(1, nullptr);
+        TVector<TNodePtr> cache(1, nullptr); 
         if (!contentPtr) {
             cache[0] = grouping;
             contentPtr = &cache;
@@ -2496,7 +2496,7 @@ TSourcePtr DoBuildSelectCore(
         TSourcePtr proxySource = new TNestedProxySource(compositeSelect.Get(), CloneContainer(*contentPtr));
         if (!subselects.empty()) {
             /// clone terms for others usage
-            TVector<TNodePtr> termsCopy;
+            TVector<TNodePtr> termsCopy; 
             for (const auto& term: terms) {
                 termsCopy.emplace_back(term->Clone());
             }
@@ -2613,7 +2613,7 @@ public:
     }
 
 private:
-    TVector<TSourcePtr> Sources;
+    TVector<TSourcePtr> Sources; 
     const TWriteSettings Settings;
 };
 
@@ -2623,7 +2623,7 @@ TSourcePtr BuildUnionAll(TPosition pos, TVector<TSourcePtr>&& sources, const TWr
 
 class TOverWindowSource: public IProxySource {
 public:
-    TOverWindowSource(TPosition pos, const TString& windowName, ISource* origSource)
+    TOverWindowSource(TPosition pos, const TString& windowName, ISource* origSource) 
         : IProxySource(pos, origSource)
         , WindowName(windowName)
     {
@@ -2679,10 +2679,10 @@ public:
     }
 
 private:
-    const TString WindowName;
+    const TString WindowName; 
 };
 
-TSourcePtr BuildOverWindowSource(TPosition pos, const TString& windowName, ISource* origSource) {
+TSourcePtr BuildOverWindowSource(TPosition pos, const TString& windowName, ISource* origSource) { 
     return new TOverWindowSource(pos, windowName, origSource);
 }
 

@@ -105,7 +105,7 @@ private:
 	}
 
 	TArrayHolder<value_type> mMap;
-	TVector<bool> mFilled;
+	TVector<bool> mFilled; 
 
 	// Noncopyable
 	GluedStateLookupTable(const GluedStateLookupTable&);

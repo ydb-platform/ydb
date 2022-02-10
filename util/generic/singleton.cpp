@@ -7,15 +7,15 @@
 #include <cstring>
 
 namespace {
-    static inline bool MyAtomicTryLock(TAtomic& a, TAtomicBase v) noexcept {
+    static inline bool MyAtomicTryLock(TAtomic& a, TAtomicBase v) noexcept { 
         return AtomicCas(&a, v, 0);
     }
 
-    static inline bool MyAtomicTryAndTryLock(TAtomic& a, TAtomicBase v) noexcept {
+    static inline bool MyAtomicTryAndTryLock(TAtomic& a, TAtomicBase v) noexcept { 
         return (AtomicGet(a) == 0) && MyAtomicTryLock(a, v);
     }
 
-    static inline TAtomicBase MyThreadId() noexcept {
+    static inline TAtomicBase MyThreadId() noexcept { 
         const TAtomicBase ret = TThread::CurrentThreadId();
 
         if (ret) {
@@ -41,7 +41,7 @@ void NPrivate::FillWithTrash(void* ptr, size_t len) {
 #endif
 }
 
-void NPrivate::LockRecursive(TAtomic& lock) noexcept {
+void NPrivate::LockRecursive(TAtomic& lock) noexcept { 
     const TAtomicBase id = MyThreadId();
 
     Y_VERIFY(AtomicGet(lock) != id, "recursive singleton initialization");
@@ -55,7 +55,7 @@ void NPrivate::LockRecursive(TAtomic& lock) noexcept {
     }
 }
 
-void NPrivate::UnlockRecursive(TAtomic& lock) noexcept {
+void NPrivate::UnlockRecursive(TAtomic& lock) noexcept { 
     Y_VERIFY(AtomicGet(lock) == MyThreadId(), "unlock from another thread?!?!");
     AtomicUnlock(&lock);
 }

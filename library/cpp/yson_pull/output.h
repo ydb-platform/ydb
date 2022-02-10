@@ -60,6 +60,6 @@ namespace NYsonPull {
 
         THolder<IStream> FromOutputStream(IOutputStream* output, size_t buffer_size = 65536);
 
-        THolder<IStream> FromString(TString* output, size_t buffer_size = 1024);
+        THolder<IStream> FromString(TString* output, size_t buffer_size = 1024); 
     }
 }

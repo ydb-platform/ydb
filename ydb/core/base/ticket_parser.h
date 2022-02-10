@@ -31,7 +31,7 @@ namespace NKikimr {
             };
 
             const TString Database;
-            const TString Ticket;
+            const TString Ticket; 
             const TString PeerName;
 
             // if two identical permissions with different attributies are specified,
@@ -112,7 +112,7 @@ namespace NKikimr {
             TString Ticket;
             TError Error;
             TIntrusivePtr<NACLib::TUserToken> Token;
-            TString SerializedToken;
+            TString SerializedToken; 
 
             TEvAuthorizeTicketResult(const TString& ticket, const TIntrusivePtr<NACLib::TUserToken>& token, const TString& serializedToken)
                 : Ticket(ticket)

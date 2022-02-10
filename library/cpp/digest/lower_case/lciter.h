@@ -7,24 +7,24 @@
 
 template <class T>
 struct TLowerCaseIterator: public std::iterator<std::input_iterator_tag, T> {
-    using TNonConst = std::remove_const_t<T>;
+    using TNonConst = std::remove_const_t<T>; 
 
     inline TLowerCaseIterator(T* c)
         : C(c)
     {
     }
 
-    inline TLowerCaseIterator& operator++() noexcept {
+    inline TLowerCaseIterator& operator++() noexcept { 
         ++C;
 
         return *this;
     }
 
-    inline TLowerCaseIterator operator++(int) noexcept {
+    inline TLowerCaseIterator operator++(int) noexcept { 
         return C++;
     }
 
-    inline TNonConst operator*() const noexcept {
+    inline TNonConst operator*() const noexcept { 
         return AsciiToLower(*C);
     }
 
@@ -32,11 +32,11 @@ struct TLowerCaseIterator: public std::iterator<std::input_iterator_tag, T> {
 };
 
 template <class T>
-inline bool operator==(const TLowerCaseIterator<T>& l, const TLowerCaseIterator<T>& r) noexcept {
+inline bool operator==(const TLowerCaseIterator<T>& l, const TLowerCaseIterator<T>& r) noexcept { 
     return l.C == r.C;
 }
 
 template <class T>
-inline bool operator!=(const TLowerCaseIterator<T>& l, const TLowerCaseIterator<T>& r) noexcept {
+inline bool operator!=(const TLowerCaseIterator<T>& l, const TLowerCaseIterator<T>& r) noexcept { 
     return !(l == r);
 }

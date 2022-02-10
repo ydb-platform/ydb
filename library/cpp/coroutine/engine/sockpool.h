@@ -77,7 +77,7 @@ class TPooledSocket {
         }
 
     private:
-        inline void ReturnToPool() noexcept;
+        inline void ReturnToPool() noexcept; 
 
     private:
         TSocketPool* Pool_;
@@ -222,7 +222,7 @@ private:
     TMutex Mutex_;
 };
 
-inline void TPooledSocket::TImpl::ReturnToPool() noexcept {
+inline void TPooledSocket::TImpl::ReturnToPool() noexcept { 
     Pool_->Release(this);
 }
 

@@ -210,7 +210,7 @@ namespace NActors {
         };
 
         struct TEvNodesInfo: public TEventLocal<TEvNodesInfo, EvNodesInfo> {
-            TVector<TNodeInfo> Nodes;
+            TVector<TNodeInfo> Nodes; 
 
             const TNodeInfo* GetNodeInfo(ui32 nodeId) const {
                 for (const auto& x : Nodes) {

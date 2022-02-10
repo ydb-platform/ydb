@@ -21,7 +21,7 @@ public:
     TDnsCache(bool allowIpv4 = true, bool allowIpv6 = true, time_t entry_lifetime = 1800, time_t neg_lifetime = 1, ui32 request_timeout = 500000);
     ~TDnsCache();
 
-    TString GetHostByAddr(const NAddr::IRemoteAddr&);
+    TString GetHostByAddr(const NAddr::IRemoteAddr&); 
 
     // ip in network byte order
     TIpHost Get(const TString& host);
@@ -43,7 +43,7 @@ protected:
 private:
     struct TGHBNContext {
         TDnsCache* Owner;
-        TString Hostname;
+        TString Hostname; 
         int Family;
     };
 
@@ -56,23 +56,23 @@ private:
         THost() noexcept {
         }
 
-        TVector<TIpHost> AddrsV4;
+        TVector<TIpHost> AddrsV4; 
         time_t ResolvedV4 = 0;
         time_t NotFoundV4 = 0;
         TAtomic InProgressV4 = 0;
 
-        TVector<in6_addr> AddrsV6;
+        TVector<in6_addr> AddrsV6; 
         time_t ResolvedV6 = 0;
         time_t NotFoundV6 = 0;
         TAtomic InProgressV6 = 0;
 
-        TString AddrsV4ToString() const;
-        TString AddrsV6ToString() const;
+        TString AddrsV4ToString() const; 
+        TString AddrsV6ToString() const; 
 
         bool IsStale(int family, const TDnsCache* ctx) const noexcept;
     };
 
-    typedef TMap<TString, THost> THostCache;
+    typedef TMap<TString, THost> THostCache; 
 
     struct TAddr {
         TString Hostname;
@@ -96,7 +96,7 @@ private:
             return false;
         }
     };
-    typedef TMap<in6_addr, TAddr, TAddrCmp> TAddrCache;
+    typedef TMap<in6_addr, TAddr, TAddrCmp> TAddrCache; 
 
     const THost& Resolve(const TString&, int family, bool cacheOnly = false);
 

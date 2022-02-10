@@ -9,8 +9,8 @@ template <class F, class I>
 inline void DoRun(F&& f, I&& i) {
     const ui64 n = i.Iterations();
 
-    for (ui64 j = 0; j < n; ++j) {
-        Y_DO_NOT_OPTIMIZE_AWAY(f(j * (ui64)123456 + (ui64)1));
+    for (ui64 j = 0; j < n; ++j) { 
+        Y_DO_NOT_OPTIMIZE_AWAY(f(j * (ui64)123456 + (ui64)1)); 
     }
 }
 

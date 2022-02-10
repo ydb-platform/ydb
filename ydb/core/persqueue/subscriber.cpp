@@ -27,9 +27,9 @@ void TSubscriberLogic::AddSubscription(TReadInfo&& info, const ui64 cookie)
     Y_VERIFY(res);
 }
 
-TVector<std::pair<TReadInfo, ui64>> TSubscriberLogic::CompleteSubscriptions(const ui64 endOffset)
+TVector<std::pair<TReadInfo, ui64>> TSubscriberLogic::CompleteSubscriptions(const ui64 endOffset) 
 {
-    TVector<std::pair<TReadInfo, ui64>> res;
+    TVector<std::pair<TReadInfo, ui64>> res; 
     while (!WaitingReads.empty()) {
         const ui64& offset = WaitingReads.front().Offset;
         const ui64& cookie = WaitingReads.front().Cookie;
@@ -73,7 +73,7 @@ void TSubscriber::AddSubscription(TReadInfo&& info, const ui32 timeout, const ui
         ctx.Schedule(TDuration::MilliSeconds(timeout), new TEvPQ::TEvReadTimeout(cookie));
 }
 
-TVector<std::pair<TReadInfo, ui64>> TSubscriber::GetReads(const ui64 endOffset) {
+TVector<std::pair<TReadInfo, ui64>> TSubscriber::GetReads(const ui64 endOffset) { 
     auto res = Subscriber.CompleteSubscriptions(endOffset);
     Counters.Cumulative()[COUNTER_PQ_READ_SUBSCRIPTION_OK].Increment(res.size());
     return res;

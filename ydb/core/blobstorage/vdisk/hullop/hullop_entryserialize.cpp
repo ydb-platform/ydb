@@ -7,7 +7,7 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     const ui32 THullDbSignatureRoutines::CurSignature = 0x93F7ADD5;
 
-    TString THullDbSignatureRoutines::Serialize(const NKikimrVDiskData::THullDbEntryPoint &pb) {
+    TString THullDbSignatureRoutines::Serialize(const NKikimrVDiskData::THullDbEntryPoint &pb) { 
         // signature
         TStringStream str;
         str.Write(&CurSignature, sizeof(ui32));
@@ -18,8 +18,8 @@ namespace NKikimr {
     }
 
     bool THullDbSignatureRoutines::Parse(NKikimrVDiskData::THullDbEntryPoint &pb,
-                                         const TString &source,
-                                         TString &explanation) {
+                                         const TString &source, 
+                                         TString &explanation) { 
         TStringStream str;
         if (source.size() < sizeof(ui32)) {
             str << "Can't check signature because serialized data size is less than sizeof(ui32)";

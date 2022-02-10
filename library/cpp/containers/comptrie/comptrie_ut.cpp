@@ -138,19 +138,19 @@ private:
     template <class T, bool minimize>
     void TestRandom(const size_t n, const size_t maxKeySize);
 
-    void TestFindTailsImpl(const TString& prefix);
+    void TestFindTailsImpl(const TString& prefix); 
 
     void TestUniqueImpl(bool isPrefixGrouped);
 
-    TVector<TUtf16String> GetSampleKeys(size_t nKeys) const;
+    TVector<TUtf16String> GetSampleKeys(size_t nKeys) const; 
     template <class TContainer>
-    TVector<TContainer> GetSampleVectorData(size_t nValues);
+    TVector<TContainer> GetSampleVectorData(size_t nValues); 
     template <class TContainer>
-    TVector<TContainer> GetSampleTextVectorData(size_t nValues);
+    TVector<TContainer> GetSampleTextVectorData(size_t nValues); 
     template <class T>
     void CheckEquality(const T& value1, const T& value2) const;
     template <class TContainer>
-    void TestTrieWithContainers(const TVector<TUtf16String>& keys, const TVector<TContainer>& sampleData, TString methodName);
+    void TestTrieWithContainers(const TVector<TUtf16String>& keys, const TVector<TContainer>& sampleData, TString methodName); 
 
     template <typename TChar>
     void TestSearchIterImpl();
@@ -287,7 +287,7 @@ typename TCompactTrie<T>::TKey MakeWideKey(const char* str, size_t len) {
 }
 
 template <class T>
-typename TCompactTrie<T>::TKey MakeWideKey(const TString& str) {
+typename TCompactTrie<T>::TKey MakeWideKey(const TString& str) { 
     return MakeWideKey<T>(str.c_str(), str.length());
 }
 
@@ -321,7 +321,7 @@ void TCompactTrieTest::CreateTrie(IOutputStream& out, bool minimize, bool useFas
 }
 
 // Iterates over all strings of length <= 4 made of letters a-g.
-static bool LexicographicStep(TString& s) {
+static bool LexicographicStep(TString& s) { 
     if (s.length() < 4) {
         s += "a";
         return true;
@@ -343,7 +343,7 @@ void TCompactTrieTest::CheckUpperBound(const char* data, size_t datalen) {
     typedef typename TCompactTrie<T>::TKey TKey;
     typedef typename TCompactTrie<T>::TData TData;
 
-    TString key;
+    TString key; 
     do {
         const TKey wideKey = MakeWideKey<T>(key);
         typename TCompactTrie<T>::TConstIterator it = trie.UpperBound(wideKey);
@@ -375,7 +375,7 @@ void TCompactTrieTest::CheckData(const char* data, size_t datalen) {
         UNIT_ASSERT_EQUAL(len, prefixLen);
         UNIT_ASSERT_EQUAL(len * 2, value);
 
-        TString badkey("bb");
+        TString badkey("bb"); 
         badkey += i;
         key = MakeWideKey<T>(badkey);
         UNIT_ASSERT(!trie.Find(key));
@@ -400,7 +400,7 @@ void TCompactTrieTest::CheckData(const char* data, size_t datalen) {
         UNIT_ASSERT_EQUAL(len, prefixLen);
     }
 
-    TString testkey("fbbaa");
+    TString testkey("fbbaa"); 
     typename TCompactTrie<T>::TKey key = MakeWideKey<T>(testkey);
     ui64 value = 0;
     size_t prefixLen = 0;
@@ -423,7 +423,7 @@ template <class T>
 void TCompactTrieTest::CheckIterator(const char* data, size_t datalen) {
     typedef typename TCompactTrie<T>::TKey TKey;
     typedef typename TCompactTrie<T>::TValueType TValue;
-    TMap<TKey, ui64> stored;
+    TMap<TKey, ui64> stored; 
 
     for (auto& i : SampleData) {
         size_t len = strlen(i);
@@ -432,10 +432,10 @@ void TCompactTrieTest::CheckIterator(const char* data, size_t datalen) {
     }
 
     TCompactTrie<T> trie(data, datalen);
-    TVector<TValue> items;
+    TVector<TValue> items; 
     typename TCompactTrie<T>::TConstIterator it = trie.Begin();
     size_t entry_count = 0;
-    TMap<TKey, ui64> received;
+    TMap<TKey, ui64> received; 
     while (it != trie.End()) {
         UNIT_ASSERT_VALUES_EQUAL(it.GetKeySize(), it.GetKey().size());
         received.insert(*it);
@@ -443,7 +443,7 @@ void TCompactTrieTest::CheckIterator(const char* data, size_t datalen) {
         entry_count++;
         it++;
     }
-    TMap<TKey, ui64> received2;
+    TMap<TKey, ui64> received2; 
     for (std::pair<TKey, ui64> x : trie) {
         received2.insert(x);
     }
@@ -573,7 +573,7 @@ void TCompactTrieTest::TestPhraseSearch() {
     builder.Save(bufout);
 
     TCompactTrie<char> trie(bufout.Buffer().Data(), bufout.Buffer().Size());
-    TVector<TCompactTrie<char>::TPhraseMatch> matches;
+    TVector<TCompactTrie<char>::TPhraseMatch> matches; 
     trie.FindPhrases(goodphrase, strlen(goodphrase), matches);
 
     UNIT_ASSERT(matches.size() == Y_ARRAY_SIZE(phrases));
@@ -650,9 +650,9 @@ static char RandChar() {
     return char(RandomNumber<size_t>() % 256);
 }
 
-static TString RandStr(const size_t max) {
+static TString RandStr(const size_t max) { 
     size_t len = RandomNumber<size_t>() % max;
-    TString key;
+    TString key; 
     for (size_t j = 0; j < len; ++j)
         key += RandChar();
     return key;
@@ -662,12 +662,12 @@ template <class T, bool minimize>
 void TCompactTrieTest::TestRandom(const size_t n, const size_t maxKeySize) {
     const TStringBuf EMPTY_KEY = TStringBuf("", 1);
     TCompactTrieBuilder<char, typename T::TData, T> builder;
-    typedef TMap<TString, typename T::TData> TKeys;
+    typedef TMap<TString, typename T::TData> TKeys; 
     TKeys keys;
 
     typename T::TData dummy;
     for (size_t i = 0; i < n; ++i) {
-        const TString key = RandStr(maxKeySize);
+        const TString key = RandStr(maxKeySize); 
         if (key != EMPTY_KEY && keys.find(key) == keys.end()) {
             const typename T::TData val = T::Data(key);
             keys[key] = val;
@@ -729,13 +729,13 @@ void TCompactTrieTest::TestRandom() {
     TestRandom<TStrokaPacker, true>(100, 100);
 }
 
-void TCompactTrieTest::TestFindTailsImpl(const TString& prefix) {
+void TCompactTrieTest::TestFindTailsImpl(const TString& prefix) { 
     TCompactTrieBuilder<> builder;
 
-    TMap<TString, ui64> input;
+    TMap<TString, ui64> input; 
 
     for (auto& i : SampleData) {
-        TString temp = i;
+        TString temp = i; 
         ui64 val = temp.size() * 2;
         builder.Add(temp.data(), temp.size(), val);
         if (temp.StartsWith(prefix)) {
@@ -751,7 +751,7 @@ void TCompactTrieTest::TestFindTailsImpl(const TString& prefix) {
 
     TTrie subtrie = trie.FindTails(prefix.data(), prefix.size());
 
-    TMap<TString, ui64> output;
+    TMap<TString, ui64> output; 
 
     for (TTrie::TConstIterator i = subtrie.Begin(), mi = subtrie.End(); i != mi; ++i) {
         TTrie::TValueType val = *i;
@@ -847,7 +847,7 @@ void TCompactTrieTest::TestMergeFromFile() {
         b.Add("yandex", 12);
         b.Add("google", 13);
         b.Add("mail", 14);
-        TUnbufferedFileOutput out(GetSystemTempDir() + "/TCompactTrieTest-TestMerge-ru");
+        TUnbufferedFileOutput out(GetSystemTempDir() + "/TCompactTrieTest-TestMerge-ru"); 
         b.Save(out);
     }
 
@@ -856,7 +856,7 @@ void TCompactTrieTest::TestMergeFromFile() {
         b.Add("yandex", 112);
         b.Add("google", 113);
         b.Add("yahoo", 114);
-        TUnbufferedFileOutput out(GetSystemTempDir() + "/TCompactTrieTest-TestMerge-com");
+        TUnbufferedFileOutput out(GetSystemTempDir() + "/TCompactTrieTest-TestMerge-com"); 
         b.Save(out);
     }
 
@@ -865,7 +865,7 @@ void TCompactTrieTest::TestMergeFromFile() {
         UNIT_ASSERT(b.AddSubtreeInFile("com.", GetSystemTempDir() + "/TCompactTrieTest-TestMerge-com"));
         UNIT_ASSERT(b.Add("org.kernel", 22));
         UNIT_ASSERT(b.AddSubtreeInFile("ru.", GetSystemTempDir() + "/TCompactTrieTest-TestMerge-ru"));
-        TUnbufferedFileOutput out(GetSystemTempDir() + "/TCompactTrieTest-TestMerge-res");
+        TUnbufferedFileOutput out(GetSystemTempDir() + "/TCompactTrieTest-TestMerge-res"); 
         b.Save(out);
     }
 
@@ -1026,7 +1026,7 @@ public:
 
 class TCompactTrieTest::TStrokaPacker: public TCompactTriePacker<TString> {
 public:
-    typedef TString TData;
+    typedef TString TData; 
 
     static TString Data(const TString& str) {
         return str;
@@ -1104,18 +1104,18 @@ void TCompactTrieTest::TestTrieSet() {
 
 // Tests for trie with vector (list, set) values
 
-TVector<TUtf16String> TCompactTrieTest::GetSampleKeys(size_t nKeys) const {
+TVector<TUtf16String> TCompactTrieTest::GetSampleKeys(size_t nKeys) const { 
     Y_ASSERT(nKeys <= 10);
-    TString sampleKeys[] = {"a", "b", "ac", "bd", "abe", "bcf", "deg", "ah", "xy", "abc"};
-    TVector<TUtf16String> result;
+    TString sampleKeys[] = {"a", "b", "ac", "bd", "abe", "bcf", "deg", "ah", "xy", "abc"}; 
+    TVector<TUtf16String> result; 
     for (size_t i = 0; i < nKeys; i++)
         result.push_back(ASCIIToWide(sampleKeys[i]));
     return result;
 }
 
 template <class TContainer>
-TVector<TContainer> TCompactTrieTest::GetSampleVectorData(size_t nValues) {
-    TVector<TContainer> data;
+TVector<TContainer> TCompactTrieTest::GetSampleVectorData(size_t nValues) { 
+    TVector<TContainer> data; 
     for (size_t i = 0; i < nValues; i++) {
         data.push_back(TContainer());
         for (size_t j = 0; j < i; j++)
@@ -1125,12 +1125,12 @@ TVector<TContainer> TCompactTrieTest::GetSampleVectorData(size_t nValues) {
 }
 
 template <class TContainer>
-TVector<TContainer> TCompactTrieTest::GetSampleTextVectorData(size_t nValues) {
-    TVector<TContainer> data;
+TVector<TContainer> TCompactTrieTest::GetSampleTextVectorData(size_t nValues) { 
+    TVector<TContainer> data; 
     for (size_t i = 0; i < nValues; i++) {
         data.push_back(TContainer());
         for (size_t j = 0; j < i; j++)
-            data[i].insert(data[i].end(), TString("abc") + ToString<size_t>(j));
+            data[i].insert(data[i].end(), TString("abc") + ToString<size_t>(j)); 
     }
     return data;
 }
@@ -1148,14 +1148,14 @@ void TCompactTrieTest::CheckEquality<TVector<i64>>(const TVector<i64>& value1, c
 }
 
 template <class TContainer>
-void TCompactTrieTest::TestTrieWithContainers(const TVector<TUtf16String>& keys, const TVector<TContainer>& sampleData, TString methodName) {
-    TString fileName = GetSystemTempDir() + "/TCompactTrieTest-TestTrieWithContainers-" + methodName;
+void TCompactTrieTest::TestTrieWithContainers(const TVector<TUtf16String>& keys, const TVector<TContainer>& sampleData, TString methodName) { 
+    TString fileName = GetSystemTempDir() + "/TCompactTrieTest-TestTrieWithContainers-" + methodName; 
 
     TCompactTrieBuilder<wchar16, TContainer> b;
     for (size_t i = 0; i < keys.size(); i++) {
         b.Add(keys[i], sampleData[i]);
     }
-    TUnbufferedFileOutput out(fileName);
+    TUnbufferedFileOutput out(fileName); 
     b.Save(out);
 
     TCompactTrie<wchar16, TContainer> trie(TBlob::FromFileSingleThreaded(fileName));
@@ -1174,13 +1174,13 @@ void TCompactTrieTest::TestTrieWithContainers(const TVector<TUtf16String>& keys,
 template <>
 void TCompactTrieTest::TestTrieWithContainers<std::pair<TUtf16String, TVector<i64>>>(const TVector<TUtf16String>& keys, const TVector<std::pair<TUtf16String, TVector<i64>>>& sampleData, TString methodName) {
     typedef std::pair<TUtf16String, TVector<i64>> TContainer;
-    TString fileName = GetSystemTempDir() + "/TCompactTrieTest-TestTrieWithContainers-" + methodName;
+    TString fileName = GetSystemTempDir() + "/TCompactTrieTest-TestTrieWithContainers-" + methodName; 
 
     TCompactTrieBuilder<wchar16, TContainer> b;
     for (size_t i = 0; i < keys.size(); i++) {
         b.Add(keys[i], sampleData[i]);
     }
-    TUnbufferedFileOutput out(fileName);
+    TUnbufferedFileOutput out(fileName); 
     b.Save(out);
 
     TCompactTrie<wchar16, TContainer> trie(TBlob::FromFileSingleThreaded(fileName));
@@ -1221,7 +1221,7 @@ void TCompactTrieTest::TestTrieForVectorWtroka() {
     TVector<TVector<TString>> data = GetSampleTextVectorData<TVector<TString>>(10);
     TVector<TVector<TUtf16String>> wData;
     for (size_t i = 0; i < data.size(); i++) {
-        wData.push_back(TVector<TUtf16String>());
+        wData.push_back(TVector<TUtf16String>()); 
         for (size_t j = 0; j < data[i].size(); j++)
             wData[i].push_back(UTF8ToWide(data[i][j]));
     }
@@ -1237,7 +1237,7 @@ void TCompactTrieTest::TestTrieForVectorDouble() {
 }
 
 void TCompactTrieTest::TestTrieForListVectorInt64() {
-    TVector<i64> tmp;
+    TVector<i64> tmp; 
     tmp.push_back(0);
     TList<TVector<i64>> dataElement(5, tmp);
     TVector<TList<TVector<i64>>> data(10, dataElement);
@@ -1245,7 +1245,7 @@ void TCompactTrieTest::TestTrieForListVectorInt64() {
 }
 
 void TCompactTrieTest::TestTrieForPairWtrokaVectorInt64() {
-    TVector<TUtf16String> keys = GetSampleKeys(10);
+    TVector<TUtf16String> keys = GetSampleKeys(10); 
     TVector<TVector<i64>> values = GetSampleVectorData<TVector<i64>>(10);
     TVector<std::pair<TUtf16String, TVector<i64>>> data;
     for (size_t i = 0; i < 10; i++)
@@ -1295,14 +1295,14 @@ void TCompactTrieTest::TestFindLongestPrefixWithEmptyValue() {
 
 template <typename TChar>
 struct TConvertKey {
-    static inline TString Convert(const TStringBuf& key) {
+    static inline TString Convert(const TStringBuf& key) { 
         return ToString(key);
     }
 };
 
 template <>
 struct TConvertKey<wchar16> {
-    static inline TUtf16String Convert(const TStringBuf& key) {
+    static inline TUtf16String Convert(const TStringBuf& key) { 
         return UTF8ToWide(key);
     }
 };
@@ -1436,8 +1436,8 @@ void TCompactTrieTest::TestFirstSymbolIteratorChar32() {
 
 void TCompactTrieTest::TestArrayPacker() {
     using TDataInt = std::array<int, 2>;
-    const std::pair<TString, TDataInt> dataXxx{"xxx", {{15, 16}}};
-    const std::pair<TString, TDataInt> dataYyy{"yyy", {{20, 30}}};
+    const std::pair<TString, TDataInt> dataXxx{"xxx", {{15, 16}}}; 
+    const std::pair<TString, TDataInt> dataYyy{"yyy", {{20, 30}}}; 
 
     TCompactTrieBuilder<char, TDataInt> trieBuilderOne;
     trieBuilderOne.Add(dataXxx.first, dataXxx.second);
@@ -1450,9 +1450,9 @@ void TCompactTrieTest::TestArrayPacker() {
     UNIT_ASSERT_VALUES_EQUAL(dataXxx.second, trieOne.Get(dataXxx.first));
     UNIT_ASSERT_VALUES_EQUAL(dataYyy.second, trieOne.Get(dataYyy.first));
 
-    using TDataStroka = std::array<TString, 2>;
-    const std::pair<TString, TDataStroka> dataZzz{"zzz", {{"hello", "there"}}};
-    const std::pair<TString, TDataStroka> dataWww{"www", {{"half", "life"}}};
+    using TDataStroka = std::array<TString, 2>; 
+    const std::pair<TString, TDataStroka> dataZzz{"zzz", {{"hello", "there"}}}; 
+    const std::pair<TString, TDataStroka> dataWww{"www", {{"half", "life"}}}; 
 
     TCompactTrieBuilder<char, TDataStroka> trieBuilderTwo;
     trieBuilderTwo.Add(dataZzz.first, dataZzz.second);
@@ -1480,8 +1480,8 @@ void TCompactTrieTest::TestBuilderFindLongestPrefix() {
 }
 
 void TCompactTrieTest::TestBuilderFindLongestPrefix(size_t keysCount, double branchProbability, bool isPrefixGrouped, bool hasEmptyKey) {
-    TVector<TString> keys;
-    TString keyToAdd;
+    TVector<TString> keys; 
+    TString keyToAdd; 
     for (size_t i = 0; i < keysCount; ++i) {
         const size_t prevKeyLen = keyToAdd.Size();
         // add two random chars to prev key
@@ -1500,16 +1500,16 @@ void TCompactTrieTest::TestBuilderFindLongestPrefix(size_t keysCount, double bra
     else
         Shuffle(keys.begin(), keys.end());
 
-    TCompactTrieBuilder<char, TString> builder(isPrefixGrouped ? CTBF_PREFIX_GROUPED : CTBF_NONE);
-    const TString EMPTY_VALUE = "empty";
+    TCompactTrieBuilder<char, TString> builder(isPrefixGrouped ? CTBF_PREFIX_GROUPED : CTBF_NONE); 
+    const TString EMPTY_VALUE = "empty"; 
     if (hasEmptyKey)
         builder.Add(nullptr, 0, EMPTY_VALUE);
 
     for (size_t i = 0; i < keysCount; ++i) {
-        const TString& key = keys[i];
+        const TString& key = keys[i]; 
 
         for (size_t j = 0; j < keysCount; ++j) {
-            const TString& otherKey = keys[j];
+            const TString& otherKey = keys[j]; 
             const bool exists = j < i;
             size_t expectedSize = 0;
             if (exists) {
@@ -1523,7 +1523,7 @@ void TCompactTrieTest::TestBuilderFindLongestPrefix(size_t keysCount, double bra
             }
 
             size_t prefixSize = 0xfcfcfc;
-            TString value = "abcd";
+            TString value = "abcd"; 
             const bool expectedResult = hasEmptyKey || expectedSize != 0;
             UNIT_ASSERT_VALUES_EQUAL_C(expectedResult, builder.FindLongestPrefix(otherKey.data(), otherKey.size(), &prefixSize, &value), "otherKey = " << HexEncode(otherKey));
             if (expectedResult) {
@@ -1539,10 +1539,10 @@ void TCompactTrieTest::TestBuilderFindLongestPrefix(size_t keysCount, double bra
             }
 
             for (int c = 0; c < 10; ++c) {
-                TString extendedKey = otherKey;
+                TString extendedKey = otherKey; 
                 extendedKey += RandChar();
                 size_t extendedPrefixSize = 0xdddddd;
-                TString extendedValue = "dcba";
+                TString extendedValue = "dcba"; 
                 UNIT_ASSERT_VALUES_EQUAL(expectedResult, builder.FindLongestPrefix(extendedKey.data(), extendedKey.size(), &extendedPrefixSize, &extendedValue));
                 if (expectedResult) {
                     UNIT_ASSERT_VALUES_EQUAL(value, extendedValue);

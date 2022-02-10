@@ -142,7 +142,7 @@ void CollectEraseRowKey(const TExprNode* child, TContext::TPtr ctx) {
         Y_ENSURE_EX(tupleItem->Child(0)->IsAtom() &&
             !tupleItem->Child(0)->Content().empty(), TNodeException(tupleItem->Child(0))
                     << "Expected column name as non-empty atom.");
-        request.ColumnNames.insert(TString(tupleItem->Child(0)->Content()));
+        request.ColumnNames.insert(TString(tupleItem->Child(0)->Content())); 
     }
 
     ctx->AddTableLookup(request);
@@ -166,7 +166,7 @@ void CollectUpdateRowKey(const TExprNode* child, TContext::TPtr ctx) {
         Y_ENSURE_EX(tupleItem->Child(0)->IsAtom() &&
             !tupleItem->Child(0)->Content().empty(), TNodeException(tupleItem->Child(0))
                 << "Expected column name as non-empty atom.");
-        request.ColumnNames.insert(TString(tupleItem->Child(0)->Content()));
+        request.ColumnNames.insert(TString(tupleItem->Child(0)->Content())); 
     }
 
     auto updateTuple = child->Child(2);
@@ -178,7 +178,7 @@ void CollectUpdateRowKey(const TExprNode* child, TContext::TPtr ctx) {
         Y_ENSURE_EX(tupleItem->Child(0)->IsAtom() &&
             !tupleItem->Child(0)->Content().empty(), TNodeException(tupleItem->Child(0))
                 << "Expected column name as non-empty atom.");
-        request.ColumnNames.insert(TString(tupleItem->Child(0)->Content()));
+        request.ColumnNames.insert(TString(tupleItem->Child(0)->Content())); 
     }
 
     ctx->AddTableLookup(request);
@@ -202,7 +202,7 @@ void CollectSelectRowKey(const TExprNode* child, TContext::TPtr ctx) {
         Y_ENSURE_EX(tupleItem->Child(0)->IsAtom() &&
             !tupleItem->Child(0)->Content().empty(), TNodeException(tupleItem->Child(0))
                     << "Expected column name as non-empty atom.");
-        request.ColumnNames.insert(TString(tupleItem->Child(0)->Content()));
+        request.ColumnNames.insert(TString(tupleItem->Child(0)->Content())); 
     }
 
     auto selectTuple = child->Child(2);
@@ -211,7 +211,7 @@ void CollectSelectRowKey(const TExprNode* child, TContext::TPtr ctx) {
     for (auto& tupleItem : selectTuple->Children()) {
         Y_ENSURE_EX(tupleItem->IsAtom() &&
             !tupleItem->Content().empty(), TNodeException(*tupleItem) << "Expected column name as non-empty atom.");
-        request.ColumnNames.insert(TString(tupleItem->Content()));
+        request.ColumnNames.insert(TString(tupleItem->Content())); 
     }
 
     ctx->AddTableLookup(request);
@@ -238,7 +238,7 @@ void CollectSelectRangeKey(const TExprNode* child, TContext::TPtr ctx) {
 
             Y_ENSURE_EX(rangeItem->Child(0)->IsAtom() &&
                 !rangeItem->Child(0)->Content().empty(), TNodeException(rangeItem->Child(0)) << "Expected column name as non-empty atom.");
-            request.ColumnNames.insert(TString(rangeItem->Child(0)->Content()));
+            request.ColumnNames.insert(TString(rangeItem->Child(0)->Content())); 
         }
     }
 
@@ -248,7 +248,7 @@ void CollectSelectRangeKey(const TExprNode* child, TContext::TPtr ctx) {
     for (auto& tupleItem : selectTuple->Children()) {
         Y_ENSURE_EX(tupleItem->IsAtom() &&
             !tupleItem->Content().empty(), TNodeException(*tupleItem) << "Expected column name as non-empty atom.");
-        request.ColumnNames.insert(TString(tupleItem->Content()));
+        request.ColumnNames.insert(TString(tupleItem->Content())); 
     }
 
     ctx->AddTableLookup(request);
@@ -377,7 +377,7 @@ private:
     const TTypeAnnotationNode* GetSelectType(IDbSchemeResolver::TTableResult* lookup, TExprNode& selectTuple,
         TExprContext& ctx)
     {
-        TVector<const TItemExprType*> resultItems;
+        TVector<const TItemExprType*> resultItems; 
 
         for (auto& tupleItem : selectTuple.Children()) {
             auto columnName = tupleItem->Content();
@@ -535,7 +535,7 @@ private:
         auto selectType = GetSelectType(lookup, *selectTuple, ctx);
         auto listSelectType = ctx.MakeType<TListExprType>(selectType);
 
-        TVector<const TItemExprType*> resultItems;
+        TVector<const TItemExprType*> resultItems; 
         resultItems.reserve(2);
         resultItems.push_back(ctx.MakeType<TItemExprType>("List", listSelectType));
         auto boolType = ctx.MakeType<TDataExprType>(EDataSlot::Bool);
@@ -618,7 +618,7 @@ private:
         }
 
         auto ui64Type = ctx.MakeType<TDataExprType>(EDataSlot::Uint64);
-        TVector<const TTypeAnnotationNode*> items;
+        TVector<const TTypeAnnotationNode*> items; 
         items.reserve(2);
         items.push_back(ui64Type);
         items.push_back(ui64Type);
@@ -647,7 +647,7 @@ private:
     IGraphTransformer::TStatus ParametersWrapper(TExprNode& node, TExprContext& ctx) {
         Y_ENSURE_EX(node.ChildrenSize() == 0, TNodeException(node) << "Parameters expects 0 args.");
 
-        auto structType = ctx.MakeType<TStructExprType>(TVector<const TItemExprType*>());
+        auto structType = ctx.MakeType<TStructExprType>(TVector<const TItemExprType*>()); 
 
         node.SetTypeAnn(structType);
         return TStatus::Ok;
@@ -915,8 +915,8 @@ TIntrusivePtr<NCommon::IMkqlCallableCompiler> CreateMkqlCompiler(TContext::TPtr 
             }
 
             auto rowTuple = node.Child(1);
-            TVector<TRuntimeNode> row(rowTuple->ChildrenSize());
-            TVector<ui32> keyTypes(rowTuple->ChildrenSize());
+            TVector<TRuntimeNode> row(rowTuple->ChildrenSize()); 
+            TVector<ui32> keyTypes(rowTuple->ChildrenSize()); 
             for (ui32 i = 0; i < rowTuple->ChildrenSize(); ++i) {
                 auto columnName = rowTuple->Child(i)->Child(0)->Content();
                 auto column = lookup->Columns.FindPtr(columnName);
@@ -926,7 +926,7 @@ TIntrusivePtr<NCommon::IMkqlCallableCompiler> CreateMkqlCompiler(TContext::TPtr 
                 keyTypes[i] = column->Type;
             }
 
-            TVector<TSelectColumn> columnsToRead;
+            TVector<TSelectColumn> columnsToRead; 
             FillColumnsToRead(lookup, node.Child(2), columnsToRead);
 
             auto readTargetNode = GetReadTargetNode(node, 3, ctx, mkqlContext);
@@ -987,9 +987,9 @@ TIntrusivePtr<NCommon::IMkqlCallableCompiler> CreateMkqlCompiler(TContext::TPtr 
             }
 
             TTableRangeOptions options = mkqlContext->PgmBuilder->GetDefaultTableRangeOptions();
-            TVector<ui32> keyTypes(Max(fromComponents, toComponents));
-            TVector<TRuntimeNode> from(fromComponents);
-            TVector<TRuntimeNode> to(toComponents);
+            TVector<ui32> keyTypes(Max(fromComponents, toComponents)); 
+            TVector<TRuntimeNode> from(fromComponents); 
+            TVector<TRuntimeNode> to(toComponents); 
             ui32 keyIndex = 0;
             for (auto rangeItem : rangeTuple->Children()) {
                 if (rangeItem->IsAtom()) {
@@ -1031,7 +1031,7 @@ TIntrusivePtr<NCommon::IMkqlCallableCompiler> CreateMkqlCompiler(TContext::TPtr 
             TVector<bool> forbidNullArgsTo(lookup->KeyColumnCount, false);
             options.ForbidNullArgsTo = forbidNullArgsTo;
 
-            TVector<TSelectColumn> columnsToRead;
+            TVector<TSelectColumn> columnsToRead; 
             FillColumnsToRead(lookup, node.Child(2), columnsToRead);
 
             auto optionsNode = node.Child(3);
@@ -1074,8 +1074,8 @@ TIntrusivePtr<NCommon::IMkqlCallableCompiler> CreateMkqlCompiler(TContext::TPtr 
             }
 
             auto rowTuple = node.Child(1);
-            TVector<TRuntimeNode> row(rowTuple->ChildrenSize());
-            TVector<ui32> keyTypes(rowTuple->ChildrenSize());
+            TVector<TRuntimeNode> row(rowTuple->ChildrenSize()); 
+            TVector<ui32> keyTypes(rowTuple->ChildrenSize()); 
             for (ui32 i = 0; i < rowTuple->ChildrenSize(); ++i) {
                 auto columnName = rowTuple->Child(i)->Child(0)->Content();
                 auto column = lookup->Columns.FindPtr(columnName);
@@ -1125,8 +1125,8 @@ TIntrusivePtr<NCommon::IMkqlCallableCompiler> CreateMkqlCompiler(TContext::TPtr 
             }
 
             auto rowTuple = node.Child(1);
-            TVector<TRuntimeNode> row(rowTuple->ChildrenSize());
-            TVector<ui32> keyTypes(rowTuple->ChildrenSize());
+            TVector<TRuntimeNode> row(rowTuple->ChildrenSize()); 
+            TVector<ui32> keyTypes(rowTuple->ChildrenSize()); 
             for (ui32 i = 0; i < rowTuple->ChildrenSize(); ++i) {
                 auto columnName = rowTuple->Child(i)->Child(0)->Content();
                 auto column = lookup->Columns.FindPtr(columnName);
@@ -1292,9 +1292,9 @@ TRuntimeNode CompileNode(const TExprNode& node, TExprContext& exprCtx, TContext:
 } // anonymous namespace
 
 void CollectKeys(const TExprNode* root, TContext::TPtr ctx) {
-    TStack<const TExprNode*> activeNodes;
+    TStack<const TExprNode*> activeNodes; 
     activeNodes.push(root);
-    THashSet<const TExprNode*> visited;
+    THashSet<const TExprNode*> visited; 
     visited.insert(root);
     while (!activeNodes.empty()) {
         auto current = activeNodes.top();
@@ -1340,7 +1340,7 @@ ConvertToMiniKQL(TExprContainer::TPtr expr,
         CollectKeys(expr->Root.Get(), ctx);
         const auto& tablesToResolve = ctx->GetTablesToResolve();
         if (!tablesToResolve.empty()) {
-            TVector<IDbSchemeResolver::TTable> requests;
+            TVector<IDbSchemeResolver::TTable> requests; 
             requests.reserve(tablesToResolve.size());
             for (const auto& x : tablesToResolve) {
                 requests.push_back(x.second.Request);
@@ -1415,7 +1415,7 @@ ConvertToMiniKQL(TExprContainer::TPtr expr,
 }
 
 
-TMiniKQLCompileActorEvents::TEvCompileResult::TEvCompileResult(const TMiniKQLCompileResult& result, THashMap<TString, ui64> &&resolveCookies)
+TMiniKQLCompileActorEvents::TEvCompileResult::TEvCompileResult(const TMiniKQLCompileResult& result, THashMap<TString, ui64> &&resolveCookies) 
     : Result(result)
     , CompileResolveCookies(std::move(resolveCookies))
 {}
@@ -1426,11 +1426,11 @@ public:
         return NKikimrServices::TActivity::MINIKQL_COMPILE_ACTOR;
     }
 
-    TMiniKQLCompileActor(const TString& program,
+    TMiniKQLCompileActor(const TString& program, 
                          const NKikimr::NMiniKQL::TTypeEnvironment* typeEnv,
                          IDbSchemeResolver* dbSchemeResolver,
                          TActorId responseTo,
-                         THashMap<TString, ui64> &&resolveRefreshCookies,
+                         THashMap<TString, ui64> &&resolveRefreshCookies, 
                          bool forceCacheRefresh)
         : TypeEnv(typeEnv)
         , Program(program)
@@ -1455,7 +1455,7 @@ public:
             Compiler = CreateMkqlCompiler(CompileCtx);
             const auto& tablesToResolve = CompileCtx->GetTablesToResolve();
             if (!tablesToResolve.empty()) {
-                TVector<IDbSchemeResolver::TTable> requests;
+                TVector<IDbSchemeResolver::TTable> requests; 
                 requests.reserve(tablesToResolve.size());
                 for (auto& x : tablesToResolve) {
                     requests.push_back(x.second.Request);
@@ -1493,7 +1493,7 @@ public:
 
 private:
     void Handle(IDbSchemeResolver::TEvents::TEvResolveTablesResult::TPtr& ev, const TActorContext& ctx) {
-        THashMap<TString, ui64> compileResolveCookies;
+        THashMap<TString, ui64> compileResolveCookies; 
 
         try {
             const auto& results = ev->Get()->Result;
@@ -1586,13 +1586,13 @@ private:
         return true;
     }
 
-    TString CompileProgram() {
+    TString CompileProgram() { 
         TRuntimeNode convertedNode = CompileNode(*Expr->Root, Expr->Context, CompileCtx, Compiler.Get());
         TConvertResult convRes = CompileCtx->Finish(convertedNode);
         return NMiniKQL::SerializeRuntimeNode(convRes.Node, CompileCtx->PgmBuilder->GetTypeEnvironment());
     }
 
-    void SendResponseAndDie(const TMiniKQLCompileResult& result, THashMap<TString, ui64> &&resolveCookies, const TActorContext& ctx) {
+    void SendResponseAndDie(const TMiniKQLCompileResult& result, THashMap<TString, ui64> &&resolveCookies, const TActorContext& ctx) { 
         ctx.ExecutorThread.Send(
             new IEventHandle(
                 ResponseTo,
@@ -1610,21 +1610,21 @@ private:
     }
 
     const NKikimr::NMiniKQL::TTypeEnvironment* TypeEnv;
-    TString Program;
+    TString Program; 
     TContext::TPtr CompileCtx;
     IDbSchemeResolver* DbSchemeResolver;
     TActorId ResponseTo;
     TExprContainer::TPtr Expr;
     TIntrusivePtr<NCommon::IMkqlCallableCompiler> Compiler;
-    THashMap<TString, ui64> ResolveRefreshCookies;
+    THashMap<TString, ui64> ResolveRefreshCookies; 
 };
 
 NActors::IActor*
-CreateCompileActor(const TString& program,
+CreateCompileActor(const TString& program, 
                    const NKikimr::NMiniKQL::TTypeEnvironment* typeEnv,
                    IDbSchemeResolver* dbSchemeResolver,
                    TActorId responseTo,
-                   THashMap<TString, ui64> &&resolveRefreshCookies,
+                   THashMap<TString, ui64> &&resolveRefreshCookies, 
                    bool forceCacheRefresh)
 {
     return new TMiniKQLCompileActor(program, typeEnv, dbSchemeResolver, responseTo, std::move(resolveRefreshCookies), forceCacheRefresh);

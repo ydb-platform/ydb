@@ -394,7 +394,7 @@ Y_UNIT_TEST(TestExportVariantStructTypeYdb) {
         bool parseOk = ::google::protobuf::TextFormat::ParseFromString(paramsProto, &params);
         UNIT_ASSERT_C(parseOk, paramsProto);
 
-        TVector<TCell> cells;
+        TVector<TCell> cells; 
         TString errStr;
         bool res = CellsFromTuple(&params.GetType(), params.GetValue(), types, true, cells, errStr);
         UNIT_ASSERT_VALUES_EQUAL_C(res, errStr.empty(), paramsProto);

@@ -651,8 +651,8 @@ private:
     TKqpParamsMap ParamsMap;
     bool CompilationPending;
     bool CompilationRetried;
-    TString MkqlProgramText;
-    THashMap<TString, ui64> CompileResolveCookies;
+    TString MkqlProgramText; 
+    THashMap<TString, ui64> CompileResolveCookies; 
     TAlignedPagePoolCounters AllocCounters;
     TActorId MiniKqlComplileServiceActorId;
 };
@@ -935,7 +935,7 @@ private:
 };
 
 template<typename TResult>
-TFuture<TResult> InvalidCluster(const TString& cluster) {
+TFuture<TResult> InvalidCluster(const TString& cluster) { 
     return MakeFuture(ResultFromError<TResult>("Invalid cluster:" + cluster));
 }
 
@@ -998,7 +998,7 @@ public:
         return cluster == Cluster;
     }
 
-    TVector<TString> GetClusters() override {
+    TVector<TString> GetClusters() override { 
         return {Cluster};
     }
 
@@ -1011,7 +1011,7 @@ public:
         return {};
     }
 
-    TMaybe<TString> GetSetting(const TString& cluster, const TString& name) override {
+    TMaybe<TString> GetSetting(const TString& cluster, const TString& name) override { 
         Y_UNUSED(cluster);
         Y_UNUSED(name);
         return {};
@@ -1032,7 +1032,7 @@ public:
         return UserToken ? UserToken->Serialized : TString();
     }
 
-    TFuture<TListPathResult> ListPath(const TString& cluster, const TString &path) override {
+    TFuture<TListPathResult> ListPath(const TString& cluster, const TString &path) override { 
         using TRequest = TEvTxUserProxy::TEvNavigate;
 
         try {
@@ -1265,7 +1265,7 @@ public:
         }
     }
 
-    TFuture<TGenericResult> DropTable(const TString& cluster, const TString& table) override {
+    TFuture<TGenericResult> DropTable(const TString& cluster, const TString& table) override { 
         try {
             if (!CheckCluster(cluster)) {
                 return InvalidCluster<TGenericResult>(cluster);
@@ -2031,7 +2031,7 @@ private:
         });
     }
 
-    bool CheckCluster(const TString& cluster) {
+    bool CheckCluster(const TString& cluster) { 
         return cluster == Cluster;
     }
 

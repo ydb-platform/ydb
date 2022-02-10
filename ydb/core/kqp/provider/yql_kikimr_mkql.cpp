@@ -37,7 +37,7 @@ TExprNode::TPtr MkqlRewriteCallables(TCallable callable, TExprContext& ctx, cons
     if (auto maybeSelectRow = callable.Maybe<TKiSelectRow>()) {
         auto selectRow  = maybeSelectRow.Cast();
         auto vt = selectRow.Table();
-        TExprNode::TListType children = {
+        TExprNode::TListType children = { 
             BuildMkqlVersionedTable(vt.Path(), vt.SchemaVersion(), vt.PathId(), ctx, selectRow.Pos()),
             selectRow.Key().Ptr(),
             selectRow.Select().Ptr()
@@ -54,7 +54,7 @@ TExprNode::TPtr MkqlRewriteCallables(TCallable callable, TExprContext& ctx, cons
         auto selectRange = maybeSelectRange.Cast();
         auto vt = selectRange.Table();
 
-        TExprNode::TListType children = {
+        TExprNode::TListType children = { 
             BuildMkqlVersionedTable(vt.Path(), vt.SchemaVersion(), vt.PathId(), ctx, selectRange.Pos()),
             selectRange.Range().Ptr(),
             selectRange.Select().Ptr(),

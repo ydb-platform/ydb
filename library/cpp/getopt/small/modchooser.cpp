@@ -128,11 +128,11 @@ void TModChooser::AddAlias(const TString& alias, const TString& mode) {
     Modes[alias] = Modes[mode];
 }
 
-void TModChooser::SetDescription(const TString& descr) {
+void TModChooser::SetDescription(const TString& descr) { 
     Description = descr;
 }
 
-void TModChooser::SetModesHelpOption(const TString& helpOption) {
+void TModChooser::SetModesHelpOption(const TString& helpOption) { 
     ModesHelpOption = helpOption;
 }
 
@@ -144,7 +144,7 @@ void TModChooser::SetSeparatedMode(bool separated) {
     ShowSeparated = separated;
 }
 
-void TModChooser::SetSeparationString(const TString& str) {
+void TModChooser::SetSeparationString(const TString& str) { 
     SeparationString = str;
 }
 
@@ -277,7 +277,7 @@ TString TModChooser::TMode::FormatFullName(size_t pad) const {
     return name;
 }
 
-void TModChooser::PrintHelp(const TString& progName) const {
+void TModChooser::PrintHelp(const TString& progName) const { 
     Cerr << Description << Endl << Endl;
     Cerr << NColorizer::StdErr().BoldColor() << "Usage" << NColorizer::StdErr().OldColor() << ": " << progName << " MODE [MODE_OPTIONS]" << Endl;
     Cerr << Endl;

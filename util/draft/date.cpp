@@ -44,7 +44,7 @@ TDate::TDate(const char* yyyymmdd)
 {
 }
 
-TDate::TDate(const TString& yyyymmdd)
+TDate::TDate(const TString& yyyymmdd) 
     : Timestamp(GetDateStart(ParseDate(yyyymmdd.c_str())))
 {
 }
@@ -54,7 +54,7 @@ TDate::TDate(time_t ts)
 {
 }
 
-TDate::TDate(const TString& date, const TString& format)
+TDate::TDate(const TString& date, const TString& format) 
     : Timestamp(GetDateStart(ParseDate(date.data(), format.data())))
 {
 }
@@ -82,7 +82,7 @@ time_t TDate::GetStartUTC() const {
     return TimeGM(&dateTm);
 }
 
-TString TDate::ToStroka(const char* format) const {
+TString TDate::ToStroka(const char* format) const { 
     tm dateTm;
     localtime_r(&Timestamp, &dateTm);
     return Strftime(format, &dateTm);

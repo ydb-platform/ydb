@@ -96,7 +96,7 @@ struct TLogPageHeader {
         , Size(size)
     {}
 
-    TString ToString() const {
+    TString ToString() const { 
         TStringStream str;
         str << "{Version# " << (ui32)Version
             << " Flags# ";
@@ -236,7 +236,7 @@ struct TNonceJumpLogPageHeader2 {
         }
     }
 
-    TString ToString(bool isMultiline) {
+    TString ToString(bool isMultiline) { 
         const char *x = isMultiline ? "\n" : "";
         TStringStream str;
         str << "{TNonceJumpLogPageHeader2 Version# " << (ui32)Version << x;
@@ -250,7 +250,7 @@ struct TNonceJumpLogPageHeader2 {
         for (ui32 r = 0; r < NONCE_JUMP_DLOG_RECORDS; ++r) {
             str << "r" << r;
             str << " pn" << PreviousNonces[r];
-            str << " pi" << TInstant::MicroSeconds(PreviousInstants[r]).ToString();
+            str << " pi" << TInstant::MicroSeconds(PreviousInstants[r]).ToString(); 
             str << " {c";
             for (ui32 c = 0; c < NONCE_JUMP_DLOG_CHUNKS; ++c) {
                 if (c) {
@@ -300,11 +300,11 @@ struct TNonceSet {
         : Version(PDISK_DATA_VERSION)
     {}
 
-    TString ToString() const {
+    TString ToString() const { 
         return ToString(false);
     }
 
-    TString ToString(bool isMultiline) const {
+    TString ToString(bool isMultiline) const { 
         TStringStream str;
         const char *x = isMultiline ? "\n" : "";
         str << "{TNonceSet" << x;
@@ -338,11 +338,11 @@ struct TSysLogRecord {
         }
     }
 
-    TString ToString() const {
+    TString ToString() const { 
         return ToString(false);
     }
 
-    TString ToString(bool isMultiline) const {
+    TString ToString(bool isMultiline) const { 
         TStringStream str;
         const char *x = isMultiline ? "\n" : "";
         str << "{TSysLogRecord" << x;
@@ -373,11 +373,11 @@ struct TSysLogFirstNoncesToKeep {
         }
     }
 
-    TString ToString() const {
+    TString ToString() const { 
         return ToString(false);
     }
 
-    TString ToString(bool isMultiline) const {
+    TString ToString(bool isMultiline) const { 
         TStringStream str;
         const char *x = isMultiline ? "\n" : "";
         str << "{TSysLogFirstNoncesToKeep" << x;
@@ -513,7 +513,7 @@ struct TDiskFormat {
 
     THash Hash;
 
-    TString FormatFlagsToString(ui64 flags) const {
+    TString FormatFlagsToString(ui64 flags) const { 
         TStringStream str;
         bool isFirst = true;
         isFirst = NText::OutFlag(isFirst, flags == 0, "None", str);
@@ -530,11 +530,11 @@ struct TDiskFormat {
         return str.Str();
     }
 
-    TString ToString() const {
+    TString ToString() const { 
         return ToString(false);
     }
 
-    TString ToString(bool isMultiline) const {
+    TString ToString(bool isMultiline) const { 
         TStringStream str;
         const char *x = isMultiline ? "\n" : "";
         str << "{TDiskFormat" << x;

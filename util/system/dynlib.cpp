@@ -25,7 +25,7 @@ using HINSTANCE = void*;
     #define DLLSYM(hndl, name) dlsym(hndl, name)
 #endif
 
-inline TString DLLERR() {
+inline TString DLLERR() { 
 #ifdef _unix_
     return dlerror();
 #endif
@@ -38,7 +38,7 @@ inline TString DLLERR() {
         return "DLLERR() unknown error";
     while (cnt && isspace(msg[cnt - 1]))
         --cnt;
-    TString err(msg, 0, cnt);
+    TString err(msg, 0, cnt); 
     LocalFree(msg);
     return err;
 #endif
@@ -67,13 +67,13 @@ public:
         return new TImpl(path, flags);
     }
 
-    inline ~TImpl() {
+    inline ~TImpl() { 
         if (Module && Unloadable) {
             DLLCLOSE(Module);
         }
     }
 
-    inline void* SymOptional(const char* name) noexcept {
+    inline void* SymOptional(const char* name) noexcept { 
         return (void*)DLLSYM(Module, name);
     }
 
@@ -96,10 +96,10 @@ private:
     bool Unloadable;
 };
 
-TDynamicLibrary::TDynamicLibrary() noexcept {
+TDynamicLibrary::TDynamicLibrary() noexcept { 
 }
 
-TDynamicLibrary::TDynamicLibrary(const TString& path, int flags) {
+TDynamicLibrary::TDynamicLibrary(const TString& path, int flags) { 
     Open(path.data(), flags);
 }
 
@@ -109,11 +109,11 @@ void TDynamicLibrary::Open(const char* path, int flags) {
     Impl_.Reset(TImpl::SafeCreate(path, flags));
 }
 
-void TDynamicLibrary::Close() noexcept {
+void TDynamicLibrary::Close() noexcept { 
     Impl_.Destroy();
 }
 
-void* TDynamicLibrary::SymOptional(const char* name) noexcept {
+void* TDynamicLibrary::SymOptional(const char* name) noexcept { 
     if (!IsLoaded()) {
         return nullptr;
     }
@@ -129,7 +129,7 @@ void* TDynamicLibrary::Sym(const char* name) {
     return Impl_->Sym(name);
 }
 
-bool TDynamicLibrary::IsLoaded() const noexcept {
+bool TDynamicLibrary::IsLoaded() const noexcept { 
     return (bool)Impl_.Get();
 }
 

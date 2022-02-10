@@ -1,7 +1,7 @@
 #pragma once
 
 #include <util/generic/fwd.h>
-#include <util/generic/noncopyable.h>
+#include <util/generic/noncopyable.h> 
 #include <util/system/defaults.h>
 
 class IOutputStream;
@@ -21,11 +21,11 @@ public:
 
     IInputStream(IInputStream&&) noexcept {
     }
-
+ 
     IInputStream& operator=(IInputStream&&) noexcept {
-        return *this;
+        return *this; 
     }
-
+ 
     /**
      * Reads some data from the stream. Note that this function might read less
      * data than what was requested. Use `Load` function if you want to read as
@@ -66,7 +66,7 @@ public:
      * @returns                         Total number of characters read from the stream.
      *                                  A return value of zero signals end of stream.
      */
-    inline size_t ReadTo(TString& st, char ch) {
+    inline size_t ReadTo(TString& st, char ch) { 
         return DoReadTo(st, ch);
     }
 
@@ -98,7 +98,7 @@ public:
      *
      * @returns                         Contents of this stream as a string.
      */
-    TString ReadAll();
+    TString ReadAll(); 
 
     /**
      * Reads all data from this stream and writes it into a provided output
@@ -119,7 +119,7 @@ public:
      *                                  because end of stream has already been
      *                                  reached.
      */
-    TString ReadLine();
+    TString ReadLine(); 
 
     /**
      * Reads all characters from the stream until the given character is
@@ -132,7 +132,7 @@ public:
      *                                  because end of stream has already been
      *                                  reached.
      */
-    TString ReadTo(char ch);
+    TString ReadTo(char ch); 
 
     /**
      * Reads all data from the stream until the first occurrence of '\n' and
@@ -143,7 +143,7 @@ public:
      * @returns                         Total number of characters read from the stream.
      *                                  A return value of zero signals end of stream.
      */
-    size_t ReadLine(TString& st);
+    size_t ReadLine(TString& st); 
 
     /**
      * Reads UTF8 encoded characters from the stream the first occurrence of '\n',
@@ -155,7 +155,7 @@ public:
      * @returns                         Total number of characters read from the stream.
      *                                  A return value of zero signals end of stream.
      */
-    size_t ReadLine(TUtf16String& w);
+    size_t ReadLine(TUtf16String& w); 
 
     /**
      * Skips some data from the stream without reading / copying it. Note that
@@ -204,7 +204,7 @@ protected:
      *                                  A return value of zero signals end of stream.
      * @throws yexception               If IO error occurs.
      */
-    virtual size_t DoReadTo(TString& st, char ch);
+    virtual size_t DoReadTo(TString& st, char ch); 
 
     /**
      * Reads all data from this stream and writes it into a provided output

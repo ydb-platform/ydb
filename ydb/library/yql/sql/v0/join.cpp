@@ -17,8 +17,8 @@ namespace {
 
 }
 
-TString NormalizeJoinOp(const TString& joinOp) {
-    TVector<TString> joinOpsParts;
+TString NormalizeJoinOp(const TString& joinOp) { 
+    TVector<TString> joinOpsParts; 
     Split(joinOp, " ", joinOpsParts);
     for (auto&x : joinOpsParts) {
         x.to_title();
@@ -28,23 +28,23 @@ TString NormalizeJoinOp(const TString& joinOp) {
 }
 
 struct TJoinDescr {
-    TString Op;
+    TString Op; 
 
     struct TFullColumn {
         ui32 Source;
         TNodePtr Column;
     };
 
-    TVector<std::pair<TFullColumn, TFullColumn>> Keys;
+    TVector<std::pair<TFullColumn, TFullColumn>> Keys; 
 
-    TJoinDescr(const TString& op)
+    TJoinDescr(const TString& op) 
         : Op(op)
     {}
 };
 
 class TJoinBase: public IJoin {
 public:
-    TJoinBase(TPosition pos, TVector<TSourcePtr>&& sources)
+    TJoinBase(TPosition pos, TVector<TSourcePtr>&& sources) 
         : IJoin(pos)
         , Sources(std::move(sources))
     {
@@ -99,7 +99,7 @@ public:
             unsigned acceptedColumns = 0;
             TIntrusivePtr<TColumnNode> tryColumn = static_cast<TColumnNode*>(column.Clone().Get());
             tryColumn->SetAsNotReliable();
-            TString lastAcceptedColumnSource;
+            TString lastAcceptedColumnSource; 
             for (auto& source: Sources) {
                 if (source->AddColumn(ctx, *tryColumn)) {
                     ++acceptedColumns;
@@ -139,12 +139,12 @@ public:
 
     TNodePtr BuildJoinKeys(TContext& ctx, const TVector<TDeferredAtom>& names) override {
         const size_t n = JoinOps.size();
-        TString what(Sources[n]->GetLabel());
-        static const TSet<TString> noRightSourceJoinOps = {"LeftOnly", "LeftSemi"};
+        TString what(Sources[n]->GetLabel()); 
+        static const TSet<TString> noRightSourceJoinOps = {"LeftOnly", "LeftSemi"}; 
         for (size_t nn = n; nn > 0 && noRightSourceJoinOps.contains(JoinOps[nn-1]); --nn) {
             what = Sources[nn-1]->GetLabel();
         }
-        const TString with(Sources[n + 1]->GetLabel());
+        const TString with(Sources[n + 1]->GetLabel()); 
 
         for (auto index = n; index <= n + 1; ++index) {
             const auto& label = Sources[index]->GetLabel();
@@ -184,23 +184,23 @@ public:
 
     bool DoInit(TContext& ctx, ISource* src) override;
 
-    void SetupJoin(const TString& opName, TNodePtr expr) override {
+    void SetupJoin(const TString& opName, TNodePtr expr) override { 
         JoinOps.push_back(opName);
         JoinExprs.push_back(expr);
     }
 
 protected:
-    static TString FullColumnName(const TColumnNode& column) {
+    static TString FullColumnName(const TColumnNode& column) { 
         auto sourceName = *column.GetSourceName();
         auto columnName = *column.GetColumnName();
         return sourceName ? DotJoin(sourceName, columnName) : columnName;
     }
 
     bool InitKeysOrFilters(TContext& ctx, ui32 joinIdx, TNodePtr expr) {
-        const TString joinOp(JoinOps[joinIdx]);
+        const TString joinOp(JoinOps[joinIdx]); 
         const TCallNode* op = nullptr;
         if (expr) {
-            const TString opName(expr->GetOpName());
+            const TString opName(expr->GetOpName()); 
             if (opName != "==") {
                 ctx.Error(expr->GetPos()) << "JOIN ON expression must be a conjunction of equality predicates";
                 return false;
@@ -212,7 +212,7 @@ protected:
         }
 
         ui32 idx = 0;
-        THashMap<TString, ui32> sources;
+        THashMap<TString, ui32> sources; 
         for (auto& source: Sources) {
             sources.insert({ source->GetLabel(), idx });
             ++idx;
@@ -227,10 +227,10 @@ protected:
         ui32 rightArg = 0;
         ui32 leftSourceIdx = 0;
         ui32 rightSourceIdx = 0;
-        const TString* leftSource = nullptr;
-        const TString* rightSource = nullptr;
+        const TString* leftSource = nullptr; 
+        const TString* rightSource = nullptr; 
         const TString* sameColumnNamePtr = nullptr;
-        TSet<TString> joinedSources;
+        TSet<TString> joinedSources; 
         if (op) {
             const TString* columnNamePtr = nullptr;
             for (auto& arg : op->GetArgs()) {
@@ -339,12 +339,12 @@ protected:
     }
 
 protected:
-    TVector<TString> JoinOps;
-    TVector<TNodePtr> JoinExprs;
-    TVector<TJoinDescr> JoinDescrs;
+    TVector<TString> JoinOps; 
+    TVector<TNodePtr> JoinExprs; 
+    TVector<TJoinDescr> JoinDescrs; 
     TNodePtr KeysGround;
-    THashMap<TString, THashSet<TString>> SameKeyMap;
-    TVector<TSourcePtr> Sources;
+    THashMap<TString, THashSet<TString>> SameKeyMap; 
+    TVector<TSourcePtr> Sources; 
     TColumns JoinedColumns;
     bool KeysInitializing = false;
     bool IsColumnDone = false;
@@ -396,7 +396,7 @@ bool TJoinBase::DoInit(TContext& ctx, ISource* src) {
 
     YQL_ENSURE(JoinOps.size() == JoinExprs.size(), "Invalid join exprs number");
 
-    const TSet<TString> allowedJoinOps = {"Inner", "Left", "Right", "Full", "LeftOnly", "RightOnly", "Exclusion", "LeftSemi", "RightSemi", "Cross"};
+    const TSet<TString> allowedJoinOps = {"Inner", "Left", "Right", "Full", "LeftOnly", "RightOnly", "Exclusion", "LeftSemi", "RightSemi", "Cross"}; 
     for (auto& opName: JoinOps) {
         if (!allowedJoinOps.contains(opName)) {
             ctx.Error(Pos) << "Invalid join op: " << opName;
@@ -407,7 +407,7 @@ bool TJoinBase::DoInit(TContext& ctx, ISource* src) {
     ui32 idx = 0;
     for (auto expr: JoinExprs) {
         if (expr) {
-            TDeque<TNodePtr> conjQueue;
+            TDeque<TNodePtr> conjQueue; 
             conjQueue.push_back(expr);
             while (!conjQueue.empty()) {
                 TNodePtr cur = conjQueue.front();
@@ -428,7 +428,7 @@ bool TJoinBase::DoInit(TContext& ctx, ISource* src) {
         ++idx;
     }
 
-    TSet<ui32> joinedSources;
+    TSet<ui32> joinedSources; 
     for (auto& descr: JoinDescrs) {
         for (auto& key : descr.Keys) {
             joinedSources.insert(key.first.Source);
@@ -447,13 +447,13 @@ bool TJoinBase::DoInit(TContext& ctx, ISource* src) {
 
 class TEquiJoin: public TJoinBase {
 public:
-    TEquiJoin(TPosition pos, TVector<TSourcePtr>&& sources)
+    TEquiJoin(TPosition pos, TVector<TSourcePtr>&& sources) 
         : TJoinBase(pos, std::move(sources))
     {
     }
 
     TNodePtr Build(TContext& ctx) override {
-        TMap<std::pair<TString, TString>, TNodePtr> extraColumns;
+        TMap<std::pair<TString, TString>, TNodePtr> extraColumns; 
         TNodePtr joinTree;
         for (auto& descr: JoinDescrs) {
             auto leftBranch = joinTree;
@@ -536,12 +536,12 @@ public:
         return equiJoin;
     }
 
-    const THashMap<TString, THashSet<TString>>& GetSameKeysMap() const override {
+    const THashMap<TString, THashSet<TString>>& GetSameKeysMap() const override { 
         return SameKeyMap;
     }
 
-    const TSet<TString> GetJoinLabels() const override {
-        TSet<TString> labels;
+    const TSet<TString> GetJoinLabels() const override { 
+        TSet<TString> labels; 
         for (auto& source: Sources) {
             const auto label = source->GetLabel();
             YQL_ENSURE(label);
@@ -551,7 +551,7 @@ public:
     }
 
     TPtr DoClone() const final {
-        TVector<TSourcePtr> clonedSources;
+        TVector<TSourcePtr> clonedSources; 
         for (auto& cur: Sources) {
             clonedSources.push_back(cur->CloneSource());
         }
@@ -564,15 +564,15 @@ public:
 private:
     TNodePtr GetColumnNames(
         TContext& ctx,
-        TMap<std::pair<TString, TString>, TNodePtr>& extraColumns,
-        const TVector<std::pair<TJoinDescr::TFullColumn, TJoinDescr::TFullColumn>>& keys,
+        TMap<std::pair<TString, TString>, TNodePtr>& extraColumns, 
+        const TVector<std::pair<TJoinDescr::TFullColumn, TJoinDescr::TFullColumn>>& keys, 
         bool left
     ) {
         Y_UNUSED(ctx);
         auto res = Y();
         for (auto& it: keys) {
             auto tableName = Sources[left ? it.first.Source : it.second.Source]->GetLabel();
-            TString columnName;
+            TString columnName; 
             auto column = left ? it.first.Column : it.second.Column;
             if (!column) {
                 continue;
@@ -595,7 +595,7 @@ private:
     }
 };
 
-TSourcePtr BuildEquiJoin(TPosition pos, TVector<TSourcePtr>&& sources) {
+TSourcePtr BuildEquiJoin(TPosition pos, TVector<TSourcePtr>&& sources) { 
     return new TEquiJoin(pos, std::move(sources));
 }
 

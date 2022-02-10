@@ -9,16 +9,16 @@ class TStaticCodecInfoBuilderTest: public NUnitTest::TTestBase {
     UNIT_TEST_SUITE_END();
 
 private:
-    TVector<TString> PrepareData() {
-        TVector<TString> data;
+    TVector<TString> PrepareData() { 
+        TVector<TString> data; 
         for (ui32 i = 'a'; i <= 'z'; ++i) {
-            data.push_back(TString(1, (char)i));
+            data.push_back(TString(1, (char)i)); 
         }
         return data;
     }
 
     void TestBuild() {
-        TVector<TString> data;
+        TVector<TString> data; 
         NCodecs::TCodecBuildInfo info;
         info.CodecName = "huffman";
         info.SampleSizeMultiplier = 2;

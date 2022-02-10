@@ -2,7 +2,7 @@
 
 #include <library/cpp/string_utils/ztstrbuf/ztstrbuf.h>
 
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 #include <util/generic/vector.h>
 #include <util/stream/output.h>
 #include <util/stream/str.h>
@@ -32,7 +32,7 @@ namespace NXml {
         * @param src: source type: File | String | RootName
         * throws if file not found or cannot be parsed
         */
-        TDocument(const TString& source, Source type = File);
+        TDocument(const TString& source, Source type = File); 
 
     public:
         TDocument(const TDocument& that) = delete;
@@ -71,7 +71,7 @@ namespace NXml {
         }
 
     private:
-        void ParseFile(const TString& file);
+        void ParseFile(const TString& file); 
         void ParseString(TZtStringBuf xml);
 
         TDocument(TDocHolder doc)
@@ -83,10 +83,10 @@ namespace NXml {
     };
 
     struct TNamespaceForXPath {
-        TString Prefix;
-        TString Url;
+        TString Prefix; 
+        TString Url; 
     };
-    typedef TVector<TNamespaceForXPath> TNamespacesForXPath;
+    typedef TVector<TNamespaceForXPath> TNamespacesForXPath; 
 
     class TConstNodes {
     private:
@@ -411,12 +411,12 @@ namespace NXml {
         /**
         * get node name
         */
-        TString Name() const;
+        TString Name() const; 
 
         /**
         * get node xpath
         */
-        TString Path() const;
+        TString Path() const; 
 
         /**
         * get node xml representation
@@ -662,7 +662,7 @@ namespace NXml {
         /**
         * get node name
         */
-        TString Name() const {
+        TString Name() const { 
             return ActualNode.Name();
         }
 

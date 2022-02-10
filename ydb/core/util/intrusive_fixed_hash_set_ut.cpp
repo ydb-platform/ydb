@@ -37,7 +37,7 @@ Y_UNIT_TEST_SUITE(TIntrusiveFixedHashSetTest) {
 
     Y_UNIT_TEST(TestPushFindClear) {
         TIntrusiveFixedHashSet<TSimpleItem, &TSimpleItem::Next, &TSimpleItem::Hash, &TSimpleItem::Equals> set(100);
-        TDeque<TSimpleItem> items;
+        TDeque<TSimpleItem> items; 
         for (ui64 i = 0; i < 100; ++i) {
             items.emplace_back(i /2, i);
             set.Push(&items.back());

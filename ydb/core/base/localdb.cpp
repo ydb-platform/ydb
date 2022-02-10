@@ -218,7 +218,7 @@ TCompactionPolicyPtr CreateDefaultUserTablePolicy() {
     return userPolicy;
 }
 
-bool ValidateCompactionPolicyChange(const TCompactionPolicy& oldPolicy, const TCompactionPolicy& newPolicy, TString& err) {
+bool ValidateCompactionPolicyChange(const TCompactionPolicy& oldPolicy, const TCompactionPolicy& newPolicy, TString& err) { 
     if (newPolicy.Generations.size() < oldPolicy.Generations.size()) {
         err = Sprintf("Decreasing number of levels in compaction policy in not supported, old level count %u, new level count %u",
            (ui32)oldPolicy.Generations.size(), (ui32)newPolicy.Generations.size());

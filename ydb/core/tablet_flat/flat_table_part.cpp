@@ -167,7 +167,7 @@ void TPartScheme::InitGroup(TGroupInfo& group)
     }
 }
 
-size_t TPartScheme::InitInfo(TVector<TColumn>& cols, TPgSize headerSize)
+size_t TPartScheme::InitInfo(TVector<TColumn>& cols, TPgSize headerSize) 
 {
     size_t offset = 0;
 

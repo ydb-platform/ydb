@@ -66,13 +66,13 @@ public:
         return *KeyType;
     }
 
-    TString GetTablePath() const {
+    TString GetTablePath() const { 
         Y_VERIFY_DEBUG(KeyType.Defined());
         Y_VERIFY_DEBUG(KeyType == Type::Table || KeyType == Type::TableScheme);
         return Target;
     }
 
-    TString GetFolderPath() const {
+    TString GetFolderPath() const { 
         Y_VERIFY_DEBUG(KeyType.Defined());
         Y_VERIFY_DEBUG(KeyType == Type::TableList);
         return Target;
@@ -260,12 +260,12 @@ NCommon::TTableLookup::TCompareResult KiTableLookupCompare(NNodes::TExprBase lef
 NNodes::TKiProgram BuildKiProgram(NNodes::TKiDataQuery query, const TKikimrTablesData& tablesData, TExprContext& ctx,
     bool withSystemColumns);
 
-const THashSet<TStringBuf>& KikimrDataSourceFunctions();
-const THashSet<TStringBuf>& KikimrDataSinkFunctions();
-const THashSet<TStringBuf>& KikimrKqlFunctions();
+const THashSet<TStringBuf>& KikimrDataSourceFunctions(); 
+const THashSet<TStringBuf>& KikimrDataSinkFunctions(); 
+const THashSet<TStringBuf>& KikimrKqlFunctions(); 
 const THashSet<TStringBuf>& KikimrSupportedEffects();
 
-const THashSet<TStringBuf>& KikimrCommitModes();
+const THashSet<TStringBuf>& KikimrCommitModes(); 
 const TStringBuf& KikimrCommitModeFlush();
 const TStringBuf& KikimrCommitModeRollback();
 const TStringBuf& KikimrCommitModeScheme();

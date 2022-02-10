@@ -677,10 +677,10 @@ union LZ4_streamDecode_u {
  *  before including the header file.
  */
 
-#ifndef LZ4_DISABLE_DEPRECATE_WARNINGS
-#  define LZ4_DISABLE_DEPRECATE_WARNINGS
-#endif
-
+#ifndef LZ4_DISABLE_DEPRECATE_WARNINGS 
+#  define LZ4_DISABLE_DEPRECATE_WARNINGS 
+#endif 
+ 
 #ifdef LZ4_DISABLE_DEPRECATE_WARNINGS
 #  define LZ4_DEPRECATED(message)   /* disable deprecation warnings */
 #else

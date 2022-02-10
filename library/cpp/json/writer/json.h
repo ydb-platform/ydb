@@ -2,7 +2,7 @@
 
 #include <util/generic/noncopyable.h>
 #include <util/generic/ptr.h>
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 #include <util/generic/vector.h>
 #include <util/generic/yexception.h>
 #include <util/stream/str.h>
@@ -36,7 +36,7 @@ namespace NJsonWriter {
     struct TBufState {
         bool NeedComma;
         bool NeedNewline;
-        TVector<EJsonEntity> Stack;
+        TVector<EJsonEntity> Stack; 
     };
 
     class TBuf : TNonCopyable {
@@ -88,7 +88,7 @@ namespace NJsonWriter {
         /*** Return the string formed in the internal TStringStream.
            * You may only call it if the `stream' parameter was NULL
            * at construction time.                                        */
-        const TString& Str() const;
+        const TString& Str() const; 
 
         /*** Dump and forget the string constructed so far.
            * You may only call it if the `stream' parameter was NULL
@@ -147,10 +147,10 @@ namespace NJsonWriter {
     private:
         IOutputStream* Stream;
         THolder<TStringStream> StringStream;
-        typedef TVector<const TString*> TKeys;
+        typedef TVector<const TString*> TKeys; 
         TKeys Keys;
 
-        TVector<EJsonEntity> Stack;
+        TVector<EJsonEntity> Stack; 
         bool NeedComma;
         bool NeedNewline;
         const EHtmlEscapeMode EscapeMode;

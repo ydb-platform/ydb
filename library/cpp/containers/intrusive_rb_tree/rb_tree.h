@@ -18,11 +18,11 @@ struct TRbTreeNodeBase {
     TBasePtr Right_;
     size_t Children_;
 
-    inline TRbTreeNodeBase() noexcept {
+    inline TRbTreeNodeBase() noexcept { 
         ReInitNode();
     }
 
-    inline void ReInitNode() noexcept {
+    inline void ReInitNode() noexcept { 
         Color_ = RBTreeBlack;
         Parent_ = nullptr;
         Left_ = nullptr;
@@ -82,7 +82,7 @@ struct TRbTreeBaseIterator {
     using TBasePtr = TRbTreeNodeBase*;
     TBasePtr Node_;
 
-    inline TRbTreeBaseIterator(TBasePtr x = nullptr) noexcept
+    inline TRbTreeBaseIterator(TBasePtr x = nullptr) noexcept 
         : Node_(x)
     {
     }
@@ -98,48 +98,48 @@ struct TRbTreeIterator: public TRbTreeBaseIterator {
     inline TRbTreeIterator() noexcept = default;
 
     template <class T1>
-    inline TRbTreeIterator(const T1& x) noexcept
+    inline TRbTreeIterator(const T1& x) noexcept 
         : TRbTreeBaseIterator(x)
     {
     }
 
-    inline TReference operator*() const noexcept {
+    inline TReference operator*() const noexcept { 
         return *static_cast<TValue*>(Node_);
     }
 
-    inline TPointer operator->() const noexcept {
+    inline TPointer operator->() const noexcept { 
         return static_cast<TValue*>(Node_);
     }
 
-    inline TSelf& operator++() noexcept {
+    inline TSelf& operator++() noexcept { 
         Node_ = TRbGlobalInst::IncrementNode(Node_);
         return *this;
     }
 
-    inline TSelf operator++(int) noexcept {
+    inline TSelf operator++(int) noexcept { 
         TSelf tmp = *this;
         ++(*this);
         return tmp;
     }
 
-    inline TSelf& operator--() noexcept {
+    inline TSelf& operator--() noexcept { 
         Node_ = TRbGlobalInst::DecrementNode(Node_);
         return *this;
     }
 
-    inline TSelf operator--(int) noexcept {
+    inline TSelf operator--(int) noexcept { 
         TSelf tmp = *this;
         --(*this);
         return tmp;
     }
 
     template <class T1>
-    inline bool operator==(const T1& rhs) const noexcept {
+    inline bool operator==(const T1& rhs) const noexcept { 
         return Node_ == rhs.Node_;
     }
 
     template <class T1>
-    inline bool operator!=(const T1& rhs) const noexcept {
+    inline bool operator!=(const T1& rhs) const noexcept { 
         return Node_ != rhs.Node_;
     }
 };
@@ -149,7 +149,7 @@ class TRbTree {
     struct TCmpAdaptor: public TCmp {
         inline TCmpAdaptor() noexcept = default;
 
-        inline TCmpAdaptor(const TCmp& cmp) noexcept
+        inline TCmpAdaptor(const TCmp& cmp) noexcept 
             : TCmp(cmp)
         {
         }
@@ -182,11 +182,11 @@ public:
         {
         }
 
-        inline ~TRealNode() {
+        inline ~TRealNode() { 
             UnLink();
         }
 
-        inline void UnLink() noexcept {
+        inline void UnLink() noexcept { 
             if (Tree_) {
                 Tree_->EraseImpl(this);
                 ReInitNode();
@@ -194,11 +194,11 @@ public:
             }
         }
 
-        inline void SetRbTreeParent(TRbTree* parent) noexcept {
+        inline void SetRbTreeParent(TRbTree* parent) noexcept { 
             Tree_ = parent;
         }
 
-        inline TRbTree* ParentTree() const noexcept {
+        inline TRbTree* ParentTree() const noexcept { 
             return Tree_;
         }
 
@@ -209,17 +209,17 @@ public:
     using TIterator = TRbTreeIterator<TValue, TNonConstTraits>;
     using TConstIterator = TRbTreeIterator<TValue, TConstTraits>;
 
-    inline TRbTree() noexcept {
+    inline TRbTree() noexcept { 
         Init();
     }
 
-    inline TRbTree(const TCmp& cmp) noexcept
+    inline TRbTree(const TCmp& cmp) noexcept 
         : KeyCompare_(cmp)
     {
         Init();
     }
 
-    inline void Init() noexcept {
+    inline void Init() noexcept { 
         Data_.Color_ = RBTreeRed;
         Data_.Parent_ = nullptr;
         Data_.Left_ = &Data_;
@@ -228,17 +228,17 @@ public:
     }
 
     struct TDestroy {
-        inline void operator()(TValue& v) const noexcept {
+        inline void operator()(TValue& v) const noexcept { 
             v.SetRbTreeParent(nullptr);
             v.ReInitNode();
         }
     };
 
-    inline ~TRbTree() {
+    inline ~TRbTree() { 
         ForEachNoOrder(TDestroy());
     }
 
-    inline void Clear() noexcept {
+    inline void Clear() noexcept { 
         ForEachNoOrder(TDestroy());
         Init();
     }
@@ -257,27 +257,27 @@ public:
         }
     }
 
-    inline TIterator Begin() noexcept {
+    inline TIterator Begin() noexcept { 
         return LeftMost();
     }
 
-    inline TConstIterator Begin() const noexcept {
+    inline TConstIterator Begin() const noexcept { 
         return LeftMost();
     }
 
-    inline TIterator End() noexcept {
+    inline TIterator End() noexcept { 
         return &this->Data_;
     }
 
-    inline TConstIterator End() const noexcept {
+    inline TConstIterator End() const noexcept { 
         return const_cast<TBasePtr>(&this->Data_);
     }
 
-    inline bool Empty() const noexcept {
+    inline bool Empty() const noexcept { 
         return this->Begin() == this->End();
     }
 
-    inline explicit operator bool() const noexcept {
+    inline explicit operator bool() const noexcept { 
         return !this->Empty();
     }
 
@@ -314,19 +314,19 @@ public:
         }
     }
 
-    inline void Erase(TValue& val) noexcept {
+    inline void Erase(TValue& val) noexcept { 
         val.UnLink();
     }
 
-    inline void Erase(TValue* val) noexcept {
+    inline void Erase(TValue* val) noexcept { 
         Erase(*val);
     }
 
-    inline void Erase(TIterator pos) noexcept {
+    inline void Erase(TIterator pos) noexcept { 
         Erase(*pos);
     }
 
-    inline void EraseImpl(TNodeBase* val) noexcept {
+    inline void EraseImpl(TNodeBase* val) noexcept { 
         TRbGlobalInst::RebalanceForErase(val, this->Data_.Parent_, this->Data_.Left_, this->Data_.Right_);
     }
 

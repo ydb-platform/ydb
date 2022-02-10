@@ -63,14 +63,14 @@ namespace NKikimr {
             }
         }
 
-        void FillInVector(TVector<ui32> &vec) {
+        void FillInVector(TVector<ui32> &vec) { 
             Y_VERIFY_DEBUG(vec.empty());
             vec.reserve(AllChunks.size());
             for (const auto &x : AllChunks)
                 vec.push_back(x);
         }
 
-        TString ToString() const {
+        TString ToString() const { 
             TStringStream str;
             if (AllChunks.empty()) {
                 return "<empty>";
@@ -90,7 +90,7 @@ namespace NKikimr {
         }
 
     private:
-        THashSet<ui32> AllChunks;
+        THashSet<ui32> AllChunks; 
         ui32 LastChunkIdx;
     };
 
@@ -107,7 +107,7 @@ namespace NKikimr {
         const TPDiskCtxPtr PDiskCtx;
         TLevelSegment *LevelSegment;
         TActorId Recipient;
-        TString Origin;
+        TString Origin; 
         bool FirstRead;
         ui32 RestToReadIndex;
         ui32 RestToReadOutbound;
@@ -127,7 +127,7 @@ namespace NKikimr {
         }
 
         // loaded index to string
-        TString ToString() const {
+        TString ToString() const { 
             TStringStream str;
             {
                 typedef typename TLevelSegment::TRec TRec;
@@ -220,7 +220,7 @@ namespace NKikimr {
 
         void Handle(NPDisk::TEvChunkReadResult::TPtr &ev, const TActorContext &ctx) {
             auto *msg = ev->Get();
-            TString message;
+            TString message; 
             if (msg->Status != NKikimrProto::OK) {
                 TStringStream str;
                 str << "{Origin# '" << Origin << "'}";
@@ -303,7 +303,7 @@ namespace NKikimr {
                 const TPDiskCtxPtr &pdiskCtx,
                 TLevelSegment *levelSegment,
                 const TActorId &recipient,
-                const TString &origin)
+                const TString &origin) 
             : TActorBootstrapped<TThis>()
             , VCtx(vctx)
             , PDiskCtx(pdiskCtx)

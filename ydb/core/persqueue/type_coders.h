@@ -136,7 +136,7 @@ protected:
 
 private:
     ui32 DataSize;
-    TVector<ui32> Offsets;
+    TVector<ui32> Offsets; 
     TCoderMask<IsNullable> Mask;
     TFlatBlobDataOutputStream* Output;
 };

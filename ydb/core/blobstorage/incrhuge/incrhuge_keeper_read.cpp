@@ -53,7 +53,7 @@ namespace NKikimr {
                     Keeper.Deleter.IssueLogChunkDelete(chunkIdx, ctx);
                 }
 
-                TString data;
+                TString data; 
                 NPDisk::TEvChunkReadResult& result = *static_cast<NPDisk::TEvChunkReadResult*>(msg);
                 if (result.Data.IsReadable()) {
                     data = result.Data.ToString();

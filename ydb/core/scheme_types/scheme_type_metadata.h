@@ -35,8 +35,8 @@ public:
         ::TString Name;
     };
 
-    typedef THashMap<TTypeId, const ITypeMetadata*> TMapById;
-    typedef THashMap<::TString, const ITypeMetadata*> TMapByName;
+    typedef THashMap<TTypeId, const ITypeMetadata*> TMapById; 
+    typedef THashMap<::TString, const ITypeMetadata*> TMapByName; 
 
     void Register(const ITypeMetadata* metadata) {
         Y_VERIFY(MapById.insert({ metadata->GetTypeId(), metadata }).second);

@@ -28,9 +28,9 @@ class TJsonStorage : public TViewerPipeClient<TJsonStorage> {
     TActorId Initiator;
     NMon::TEvHttpInfo::TPtr Event;
     THolder<TEvInterconnect::TEvNodesInfo> NodesInfo;
-    TMap<ui32, THolder<TEvWhiteboard::TEvVDiskStateResponse>> VDiskInfo;
-    TMap<ui32, THolder<TEvWhiteboard::TEvPDiskStateResponse>> PDiskInfo;
-    TMap<ui32, THolder<TEvWhiteboard::TEvBSGroupStateResponse>> BSGroupInfo;
+    TMap<ui32, THolder<TEvWhiteboard::TEvVDiskStateResponse>> VDiskInfo; 
+    TMap<ui32, THolder<TEvWhiteboard::TEvPDiskStateResponse>> PDiskInfo; 
+    TMap<ui32, THolder<TEvWhiteboard::TEvBSGroupStateResponse>> BSGroupInfo; 
     THashMap<TString, THolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>> DescribeResult;
     THashMap<TTabletId, THolder<TEvHive::TEvResponseHiveStorageStats>> HiveStorageStats;
     THolder<TEvBlobStorage::TEvControllerConfigResponse> BaseConfig;
@@ -303,8 +303,8 @@ public:
     THolder<TEvWhiteboard::TEvPDiskStateResponse> MergedPDiskInfo;
     TMap<TString, const NKikimrWhiteboard::TBSGroupStateInfo&> BSGroupIndex;
     TMap<TString, NKikimrHive::THiveStorageGroupStats> BSGroupHiveIndex;
-    TMap<NKikimrBlobStorage::TVDiskID, const NKikimrWhiteboard::TVDiskStateInfo&> VDisksIndex;
-    TMap<std::pair<ui32, ui32>, const NKikimrWhiteboard::TPDiskStateInfo&> PDisksIndex;
+    TMap<NKikimrBlobStorage::TVDiskID, const NKikimrWhiteboard::TVDiskStateInfo&> VDisksIndex; 
+    TMap<std::pair<ui32, ui32>, const NKikimrWhiteboard::TPDiskStateInfo&> PDisksIndex; 
     TMap<TString, TString> BSGroupOverall;
     THashSet<TString> BSGroupWithMissingDisks;
     THashSet<TString> BSGroupWithSpaceProblems;
@@ -566,7 +566,7 @@ public:
 
 template <>
 struct TJsonRequestSchema<TJsonStorage> {
-    static TString GetSchema() {
+    static TString GetSchema() { 
         TStringStream stream;
         TProtoToJson::ProtoToJsonSchema<NKikimrViewer::TStorageInfo>(stream);
         return stream.Str();
@@ -575,7 +575,7 @@ struct TJsonRequestSchema<TJsonStorage> {
 
 template <>
 struct TJsonRequestParameters<TJsonStorage> {
-    static TString GetParameters() {
+    static TString GetParameters() { 
         return R"___([{"name":"enums","in":"query","description":"convert enums to strings","required":false,"type":"boolean"},
                       {"name":"ui64","in":"query","description":"return ui64 as number","required":false,"type":"boolean"},
                       {"name":"tenant","in":"query","description":"tenant name","required":false,"type":"string"},
@@ -590,14 +590,14 @@ struct TJsonRequestParameters<TJsonStorage> {
 
 template <>
 struct TJsonRequestSummary<TJsonStorage> {
-    static TString GetSummary() {
+    static TString GetSummary() { 
         return "\"Storage information\"";
     }
 };
 
 template <>
 struct TJsonRequestDescription<TJsonStorage> {
-    static TString GetDescription() {
+    static TString GetDescription() { 
         return "\"Returns information about storage\"";
     }
 };

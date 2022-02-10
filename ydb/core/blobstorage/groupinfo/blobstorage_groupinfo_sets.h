@@ -233,7 +233,7 @@ namespace NKikimr {
             }
         }
 
-        TString ToString() const {
+        TString ToString() const { 
             TStringStream str;
             Output(str);
             return str.Str();

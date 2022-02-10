@@ -3,7 +3,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 struct TStrokaWeighter {
-    static size_t Weight(const TString& s) {
+    static size_t Weight(const TString& s) { 
         return s.size();
     }
 };
@@ -115,7 +115,7 @@ Y_UNIT_TEST_SUITE(TCacheTest) {
     }
 
     Y_UNIT_TEST(SimpleTest) {
-        typedef TLRUCache<int, TString> TCache;
+        typedef TLRUCache<int, TString> TCache; 
         TCache s(2); // size 2
         s.Insert(1, "abcd");
         UNIT_ASSERT(s.Find(1) != s.End());
@@ -312,7 +312,7 @@ Y_UNIT_TEST_SUITE(TCacheTest) {
     }
 
     Y_UNIT_TEST(MultiCacheTest) {
-        typedef TLRUCache<int, TString> TCache;
+        typedef TLRUCache<int, TString> TCache; 
         TCache s(3, true);
         UNIT_ASSERT(s.Insert(1, "abcd"));
         UNIT_ASSERT(s.Insert(1, "bcde"));
@@ -358,7 +358,7 @@ Y_UNIT_TEST_SUITE(TCacheTest) {
 }
 
 Y_UNIT_TEST_SUITE(TThreadSafeCacheTest) {
-    typedef TThreadSafeCache<ui32, TString, ui32> TCache;
+    typedef TThreadSafeCache<ui32, TString, ui32> TCache; 
 
     const char* VALS[] = {"abcd", "defg", "hjkl"};
 
@@ -369,7 +369,7 @@ Y_UNIT_TEST_SUITE(TThreadSafeCacheTest) {
         }
         TValue* CreateObject(ui32 i) const override {
             Creations++;
-            return new TString(VALS[i]);
+            return new TString(VALS[i]); 
         }
 
         mutable i32 Creations = 0;

@@ -2,15 +2,15 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-static void TestEquals(const TString& expected, const TString& actual) {
+static void TestEquals(const TString& expected, const TString& actual) { 
     UNIT_ASSERT_VALUES_EQUAL(expected, actual);
 }
 
 struct TClassWithStreamOperator {
     ui32 Id;
-    TString Name;
+    TString Name; 
 
-    TClassWithStreamOperator(ui32 id, const TString& name)
+    TClassWithStreamOperator(ui32 id, const TString& name) 
         : Id(id)
         , Name(name)
     {
@@ -30,7 +30,7 @@ Y_UNIT_TEST_SUITE(TStringBuilderTest) {
     }
 
     Y_UNIT_TEST(TestStringBuilderOut) {
-        TString s;
+        TString s; 
         TStringOutput out(s);
         TStringBuilder sb;
         sb << "a";
@@ -40,11 +40,11 @@ Y_UNIT_TEST_SUITE(TStringBuilderTest) {
 
     Y_UNIT_TEST(TestStringBuilderRValue) {
         struct TRValueAcceptTester {
-            static bool IsRValue(const TString&) {
+            static bool IsRValue(const TString&) { 
                 return false;
             }
 
-            static bool IsRValue(TString&&) {
+            static bool IsRValue(TString&&) { 
                 return true;
             }
         };

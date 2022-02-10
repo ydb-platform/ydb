@@ -1,7 +1,7 @@
-#include "array_ref.h"
-
+#include "array_ref.h" 
+ 
 #include <library/cpp/testing/unittest/registar.h>
-
+ 
 Y_UNIT_TEST_SUITE(TestArrayRef) {
     Y_UNIT_TEST(TestDefaultConstructor) {
         TArrayRef<int> defaulted;
@@ -65,10 +65,10 @@ Y_UNIT_TEST_SUITE(TestArrayRef) {
             UNIT_ASSERT(iterator != r.end());
             UNIT_ASSERT_VALUES_EQUAL(i, *iterator);
             ++iterator;
-        }
+        } 
         UNIT_ASSERT(iterator == r.end());
     }
-
+ 
     Y_UNIT_TEST(TestReverseIterators) {
         const int x[] = {1, 2, 3};
         const TArrayRef<const int> rx{x};
@@ -80,8 +80,8 @@ Y_UNIT_TEST_SUITE(TestArrayRef) {
         UNIT_ASSERT_VALUES_EQUAL(*i, 1);
         ++i;
         UNIT_ASSERT_EQUAL(i, rx.crend());
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TestConstIterators) {
         int x[] = {1, 2, 3};
         TArrayRef<int> rx{x};
@@ -121,16 +121,16 @@ Y_UNIT_TEST_SUITE(TestArrayRef) {
 
     Y_UNIT_TEST(TestCreatingFromStringLiteral) {
         TConstArrayRef<char> knownSizeRef("123", 3);
-        size_t ret = 0;
-
+        size_t ret = 0; 
+ 
         for (char ch : knownSizeRef) {
-            ret += ch - '0';
-        }
-
-        UNIT_ASSERT_VALUES_EQUAL(ret, 6);
+            ret += ch - '0'; 
+        } 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(ret, 6); 
         UNIT_ASSERT_VALUES_EQUAL(knownSizeRef.size(), 3);
         UNIT_ASSERT_VALUES_EQUAL(knownSizeRef.at(0), '1');
-
+ 
         /*
          * When TArrayRef is being constructed from string literal,
          * trailing zero will be added into it.
@@ -138,7 +138,7 @@ Y_UNIT_TEST_SUITE(TestArrayRef) {
         TConstArrayRef<char> autoSizeRef("456");
         UNIT_ASSERT_VALUES_EQUAL(autoSizeRef[0], '4');
         UNIT_ASSERT_VALUES_EQUAL(autoSizeRef[3], '\0');
-    }
+    } 
 
     Y_UNIT_TEST(TestEqualityOperator) {
         static constexpr size_t size = 5;
@@ -174,10 +174,10 @@ Y_UNIT_TEST_SUITE(TestArrayRef) {
         auto fc = [](TArrayRef<const int>) {};
         auto fm = [](TArrayRef<int>) {};
 
-        fc(TVector<int>({1}));
+        fc(TVector<int>({1})); 
 
-        const TVector<int> ac = {1};
-        TVector<int> am = {1};
+        const TVector<int> ac = {1}; 
+        TVector<int> am = {1}; 
 
         fc(ac);
         fc(am);
@@ -319,4 +319,4 @@ Y_UNIT_TEST_SUITE(TestArrayRef) {
         const TVector<int> constData;
         Foo(MakeConstArrayRef(constData));
     }
-}
+} 

@@ -6,7 +6,7 @@ namespace NKikimr {
 // TBlobState
 //
 
-void TBlobState::TState::AddResponseData(ui32 fullSize, ui32 shift, TString &data) {
+void TBlobState::TState::AddResponseData(ui32 fullSize, ui32 shift, TString &data) { 
     // Add the data to the Data buffer
     Y_VERIFY(data.size());
     Y_VERIFY(shift + data.size() <= fullSize);
@@ -92,7 +92,7 @@ bool TBlobState::Restore(const TBlobStorageGroupInfo &info) {
     }
     partSet.FullDataSize = Id.BlobSize();
 
-    TString whole;
+    TString whole; 
     info.Type.RestoreData((TErasureType::ECrcMode)Id.CrcMode(), partSet, whole, false, true, false);
     Whole.Data.Write(0, whole.data(), Id.BlobSize());
     Whole.Here.Add(fullBlobInterval);
@@ -242,7 +242,7 @@ void TBlobState::GetWorstPredictedDelaysNs(const TBlobStorageGroupInfo &info, TG
     }
 }
 
-TString TBlobState::ToString() const {
+TString TBlobState::ToString() const { 
     TStringStream str;
     str << "{Id# " << Id.ToString();
     str << Endl;
@@ -266,7 +266,7 @@ TString TBlobState::ToString() const {
     return str.Str();
 }
 
-TString TBlobState::SituationToString(ESituation situation) {
+TString TBlobState::SituationToString(ESituation situation) { 
     switch (situation) {
         case ESituation::Unknown:
             return "ESituation::Unknown";
@@ -285,7 +285,7 @@ TString TBlobState::SituationToString(ESituation situation) {
     return "";
 }
 
-TString TBlobState::TDisk::ToString() const {
+TString TBlobState::TDisk::ToString() const { 
     TStringStream str;
     str << "{OrderNumber# " << OrderNumber;
     str << " IsSlow# " << IsSlow;
@@ -297,7 +297,7 @@ TString TBlobState::TDisk::ToString() const {
     return str.Str();
 }
 
-TString TBlobState::TDiskPart::ToString() const {
+TString TBlobState::TDiskPart::ToString() const { 
     TStringStream str;
     str << "{Requested# " << Requested.ToString();
     str << " Situation# " << SituationToString(Situation);
@@ -305,7 +305,7 @@ TString TBlobState::TDiskPart::ToString() const {
     return str.Str();
 }
 
-TString TBlobState::TState::ToString() const {
+TString TBlobState::TState::ToString() const { 
     TStringStream str;
     str << "{Data# " << Data.Print();
     str << " Here# " << Here.ToString();
@@ -428,7 +428,7 @@ void TBlackboard::AddPutOkResponse(const TLogoBlobID &id, ui32 orderNumber) {
     state.AddPutOkResponse(*Info, id, orderNumber);
 }
 
-void TBlackboard::AddResponseData(const TLogoBlobID &id, ui32 orderNumber, ui32 shift, TString &data) {
+void TBlackboard::AddResponseData(const TLogoBlobID &id, ui32 orderNumber, ui32 shift, TString &data) { 
     Y_VERIFY(bool(id));
     Y_VERIFY(id.PartId() != 0);
     TBlobState &state = GetState(id);

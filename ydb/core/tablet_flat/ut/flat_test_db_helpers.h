@@ -16,7 +16,7 @@ struct TFakeTableCell {
 private:
     ECellOp Op = ECellOp::Set;
     TRawTypeValue Val;
-    TString Buf;
+    TString Buf; 
 public:
     TFakeTableCell() {}
 
@@ -32,7 +32,7 @@ public:
 
     void Set(const TRawTypeValue& v) {
         if (!v.IsEmpty()) {
-            Buf = TString((const char*)v.Data(), v.Size());
+            Buf = TString((const char*)v.Data(), v.Size()); 
             Val = TRawTypeValue(Buf.data(), Buf.size(), v.Type());
         } else {
             Val = TRawTypeValue();
@@ -86,14 +86,14 @@ inline TFakeTableCell FromVal(NScheme::TTypeId, std::nullptr_t) {
     return MakeNull(ECellOp::Set);
 }
 
-inline TFakeTableCell FromVal(NScheme::TTypeId t, TString val) {
+inline TFakeTableCell FromVal(NScheme::TTypeId t, TString val) { 
     TFakeTableCell c;
     c.Set(TRawTypeValue(val.data(), val.size(), t));
     return c;
 }
 
 inline TFakeTableCell FromVal(NScheme::TTypeId t, const char* v) {
-    return FromVal(t, TString(v));
+    return FromVal(t, TString(v)); 
 }
 
 // Store table id and row key for an update operation
@@ -102,7 +102,7 @@ protected:
     const TScheme& Scheme;
 private:
     ui32 Root;
-    TVector<TFakeTableCell> KeyCells;
+    TVector<TFakeTableCell> KeyCells; 
 public:
     TDbRowOpBase(const TScheme& scheme, ui32 root)
         : Scheme(scheme)
@@ -119,14 +119,14 @@ public:
         return Root;
     }
 
-    const TVector<TFakeTableCell>& GetKey() const {
+    const TVector<TFakeTableCell>& GetKey() const { 
         return KeyCells;
     }
 };
 
 // Accumulates row key and and a set of tag updates operations
 class TDbRowUpdate : public TDbRowOpBase {
-    TMap<ui32, TFakeTableCell> TagOps;
+    TMap<ui32, TFakeTableCell> TagOps; 
 public:
     TDbRowUpdate(const TScheme& scheme, ui32 root)
         : TDbRowOpBase(scheme, root)
@@ -139,7 +139,7 @@ public:
     }
 
     template<typename T>
-    TDbRowUpdate& Set(TString tagName, const T& val) {
+    TDbRowUpdate& Set(TString tagName, const T& val) { 
         const TScheme::TTableInfo* tableInfo = Scheme.GetTableInfo(GetRoot());
         Y_VERIFY(tableInfo, "Unknown table id %u", GetRoot());
         const ui32* tagId = tableInfo->ColumnNames.FindPtr(tagName);
@@ -151,7 +151,7 @@ public:
         return *this;
     }
 
-    TDbRowUpdate& Erase(TString tagName) {
+    TDbRowUpdate& Erase(TString tagName) { 
         const TScheme::TTableInfo* tableInfo = Scheme.GetTableInfo(GetRoot());
         Y_VERIFY(tableInfo, "Unknown table id %u", GetRoot());
         const ui32* tagId = tableInfo->ColumnNames.FindPtr(tagName);
@@ -162,7 +162,7 @@ public:
         return *this;
     }
 
-    const TMap<ui32, TFakeTableCell>& GetTagOps() const {
+    const TMap<ui32, TFakeTableCell>& GetTagOps() const { 
         return TagOps;
     }
 };
@@ -171,13 +171,13 @@ typedef TDbRowOpBase TDbRowErase;
 
 
 template <typename... Tt>
-void AppendKeyColumn(ui32 root, const TScheme& scheme, TVector<TFakeTableCell>& tuple) {
+void AppendKeyColumn(ui32 root, const TScheme& scheme, TVector<TFakeTableCell>& tuple) { 
     // Extend the key according to scheme
     tuple.resize(scheme.GetTableInfo(root)->KeyColumns.size());
 }
 
 template <typename T, typename... Tt>
-void AppendKeyColumn(ui32 root, const TScheme& scheme, TVector<TFakeTableCell>& tuple, T t, Tt... tt) {
+void AppendKeyColumn(ui32 root, const TScheme& scheme, TVector<TFakeTableCell>& tuple, T t, Tt... tt) { 
     ui32 pos = tuple.size();
     ui32 tag = scheme.GetTableInfo(root)->KeyColumns[pos];
     NScheme::TTypeId type = scheme.GetColumnInfo(root, tag)->PType;
@@ -186,7 +186,7 @@ void AppendKeyColumn(ui32 root, const TScheme& scheme, TVector<TFakeTableCell>& 
 }
 
 template <typename... Tt>
-void AppendKeyColumn(ui32 root, const TScheme& scheme, TVector<TFakeTableCell>& tuple, nullptr_t, Tt... tt) {
+void AppendKeyColumn(ui32 root, const TScheme& scheme, TVector<TFakeTableCell>& tuple, nullptr_t, Tt... tt) { 
     tuple.push_back(MakeNull(ECellOp::Set));
     AppendKeyColumn(root, scheme, tuple, tt...);
 }
@@ -216,7 +216,7 @@ public:
     }
 
     void Apply(const TDbRowUpdate& update) {
-        TVector<TRawTypeValue> key;
+        TVector<TRawTypeValue> key; 
         Y_VERIFY(!update.GetKey().empty());
         for (const auto& col : update.GetKey()) {
             key.push_back(col.Get());
@@ -231,7 +231,7 @@ public:
     }
 
     void Apply(const TDbRowErase& erase) {
-        TVector<TRawTypeValue> key;
+        TVector<TRawTypeValue> key; 
         Y_VERIFY(!erase.GetKey().empty());
         for (const auto& col : erase.GetKey()) {
             key.push_back(col.Get());

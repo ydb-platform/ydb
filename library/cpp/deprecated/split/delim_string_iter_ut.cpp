@@ -3,7 +3,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 /// Test that TDelimStringIter build on top of given string and delimeter will produce expected sequence
-static void AssertStringSplit(const TString& str, const TString& delim, const TVector<TString>& expected) {
+static void AssertStringSplit(const TString& str, const TString& delim, const TVector<TString>& expected) { 
     TDelimStringIter it(str, delim);
 
     // test iterator invariants
@@ -40,8 +40,8 @@ Y_UNIT_TEST_SUITE(TDelimStrokaIterTestSuite) {
     }
 
     Y_UNIT_TEST(ForIter) {
-        TVector<TStringBuf> expected = {"1", "", "3@4", ""};
-        TVector<TStringBuf> got;
+        TVector<TStringBuf> expected = {"1", "", "3@4", ""}; 
+        TVector<TStringBuf> got; 
 
         for (TStringBuf x : TDelimStroka("1@@@@3@4@@", "@@")) {
             got.push_back(x);
@@ -54,7 +54,7 @@ Y_UNIT_TEST_SUITE(TDelimStrokaIterTestSuite) {
 static void AssertKeyValueStringSplit(
     const TStringBuf str,
     const TStringBuf delim,
-    const TVector<std::pair<TStringBuf, TStringBuf>>& expected) {
+    const TVector<std::pair<TStringBuf, TStringBuf>>& expected) { 
     TKeyValueDelimStringIter it(str, delim);
 
     for (const auto& expectedKeyValue : expected) {

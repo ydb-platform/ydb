@@ -131,7 +131,7 @@ message TCompositeRepeated {
     repeated TFlatOptional Part = 1;
 };
 
-message TMapType {
+message TMapType { 
     map<string, string> Items = 1;
 };
 

@@ -40,7 +40,7 @@ public:
     }
 
     virtual void CatchConnectError(
-        const TActorContext& ctx, TString error) noexcept = 0;
+        const TActorContext& ctx, TString error) noexcept = 0; 
 
     virtual void CatchConnectedSocket(
         const TActorContext& ctx,

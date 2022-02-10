@@ -15,7 +15,7 @@ OWNER(somov)
 PYTHON(
     generate_symbolizer.py ${CXX_COMPILER}
     STDOUT symbolizer.c
-)
+) 
 
 CFLAGS(-fPIC)
 

@@ -143,8 +143,8 @@ RECURSE(
     pytest
     pytest-mongodb
     pytest/allure
-    pytest/empty
-    pytest/plugins
+    pytest/empty 
+    pytest/plugins 
     python-blackboxer
     python-django-tanker
     python-django-yauth/tests

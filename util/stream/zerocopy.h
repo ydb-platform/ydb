@@ -25,7 +25,7 @@ public:
 
     IZeroCopyInput(IZeroCopyInput&&) noexcept = default;
     IZeroCopyInput& operator=(IZeroCopyInput&&) noexcept = default;
-
+ 
     /**
      * Returns the next data chunk from this input stream.
      *
@@ -70,7 +70,7 @@ public:
     IZeroCopyInputFastReadTo& operator=(IZeroCopyInputFastReadTo&&) noexcept = default;
 
 protected:
-    size_t DoReadTo(TString& st, char ch) override;
+    size_t DoReadTo(TString& st, char ch) override; 
 
 private:
     /**

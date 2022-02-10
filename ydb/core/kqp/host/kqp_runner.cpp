@@ -617,7 +617,7 @@ private:
 
 private:
     TIntrusivePtr<IKqpGateway> Gateway;
-    TString Cluster;
+    TString Cluster; 
     TTypeAnnotationContext& TypesCtx;
     const NMiniKQL::IFunctionRegistry& FuncRegistry;
     TKikimrConfiguration::TPtr Config;

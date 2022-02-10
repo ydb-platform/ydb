@@ -115,7 +115,7 @@ namespace NMemInfo {
         } else {
             path = TStringBuilder() << TStringBuf("/proc/") << pid << TStringBuf("/statm");
         }
-        const TString stats = TUnbufferedFileInput(path).ReadAll();
+        const TString stats = TUnbufferedFileInput(path).ReadAll(); 
 
         TStringBuf statsiter(stats);
 
@@ -136,7 +136,7 @@ namespace NMemInfo {
         errno = 0;
         if (sysctl((int*)mib, 4, &proc, &size, nullptr, 0) == -1) {
             int err = errno;
-            TString errtxt = LastSystemErrorText(err);
+            TString errtxt = LastSystemErrorText(err); 
             ythrow yexception() << "sysctl({CTL_KERN,KERN_PROC,KERN_PROC_PID,pid},4,proc,&size,NULL,0) returned -1, errno: " << err << " (" << errtxt << ")" << Endl;
         }
 
@@ -151,7 +151,7 @@ namespace NMemInfo {
 
         if (r != sizeof(taskInfo)) {
             int err = errno;
-            TString errtxt = LastSystemErrorText(err);
+            TString errtxt = LastSystemErrorText(err); 
             ythrow yexception() << "proc_pidinfo(pid, PROC_PIDTASKINFO, 0, &taskInfo, sizeof(taskInfo)) returned " << r << ", errno: " << err << " (" << errtxt << ")" << Endl;
         }
         result.VMS = taskInfo.pti_virtual_size;

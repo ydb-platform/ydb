@@ -24,7 +24,7 @@ public:
 };
 
 class TSchOotGenSet {
-    TVector<TSchOotGen> Gen;
+    TVector<TSchOotGen> Gen; 
 
 public:
     TSchOotGenSet(const TSchOotGenCfgSet &cfgSet);

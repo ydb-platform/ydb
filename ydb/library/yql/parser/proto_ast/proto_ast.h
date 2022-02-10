@@ -41,10 +41,10 @@ namespace NProtoAST {
         virtual ~IErrorCollector();
 
         // throws TTooManyErrors
-        void Error(ui32 line, ui32 col, const TString& message);
+        void Error(ui32 line, ui32 col, const TString& message); 
 
     private:
-        virtual void AddError(ui32 line, ui32 col, const TString& message) = 0;
+        virtual void AddError(ui32 line, ui32 col, const TString& message) = 0; 
 
     protected:
         const size_t MaxErrors;
@@ -61,7 +61,7 @@ namespace NProtoAST {
 
     public:
         IOutputStream& Err;
-        TString Name;
+        TString Name; 
     };
 
     template <typename TParser, typename TLexer>
@@ -92,7 +92,7 @@ namespace NProtoAST {
         }
 
     private:
-        TString QueryName;
+        TString QueryName; 
 
         typename TLexer::InputStreamType InputStream;
         TLexer Lexer;

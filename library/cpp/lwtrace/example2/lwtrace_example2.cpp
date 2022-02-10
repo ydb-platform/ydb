@@ -20,7 +20,7 @@ THolder<NLWTrace::TManager> traceManager;
 
 struct TConfig {
     bool UnsafeLWTrace;
-    TString TraceRequestPath;
+    TString TraceRequestPath; 
 };
 
 void InitLWTrace(TConfig& cfg) {
@@ -28,7 +28,7 @@ void InitLWTrace(TConfig& cfg) {
 }
 
 void AddLWTraceRequest(TConfig& cfg) {
-    TString queryStr = TUnbufferedFileInput(cfg.TraceRequestPath).ReadAll();
+    TString queryStr = TUnbufferedFileInput(cfg.TraceRequestPath).ReadAll(); 
     NLWTrace::TQuery query;
     google::protobuf::TextFormat::ParseFromString(queryStr, &query);
     traceManager->New("TraceRequest1", query);
@@ -42,7 +42,7 @@ public:
             Cout << " time=" << item.Timestamp;
         }
         if (item.SavedParamsCount > 0) {
-            TString paramValues[LWTRACE_MAX_PARAMS];
+            TString paramValues[LWTRACE_MAX_PARAMS]; 
             item.Probe->Event.Signature.SerializeParams(item.Params, paramValues);
             Cout << " params: ";
             for (size_t i = 0; i < item.SavedParamsCount; ++i) {
@@ -78,7 +78,7 @@ void FactorialCalculator() {
 
     i32 n;
     Cout << "Enter a number: ";
-    TString str;
+    TString str; 
     Cin >> n;
 
     GLOBAL_LWPROBE(LWTRACE_EXAMPLE_PROVIDER, AfterInputProbe, n);

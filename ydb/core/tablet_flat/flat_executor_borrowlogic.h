@@ -19,8 +19,8 @@ class TExecutorBorrowLogic {
         TLogoBlobID BorrowBlobId;
 
         struct { // out
-            TVector<ui64> FullBorrow;
-            TVector<TLogoBlobID> Keep;
+            TVector<ui64> FullBorrow; 
+            TVector<TLogoBlobID> Keep; 
             ui64 KeepBytes = 0;
 
             bool HasKeep(const TLogoBlobID &blob) const noexcept
@@ -44,7 +44,7 @@ class TExecutorBorrowLogic {
             TIntrusivePtr<TTabletStorageInfo> StorageInfo; // todo: must be list with info for every referenced tablet
 
             bool Collected = false;
-            TVector<TLogoBlobID> Keep;
+            TVector<TLogoBlobID> Keep; 
         } LoanInfo;
     };
 
@@ -53,15 +53,15 @@ class TExecutorBorrowLogic {
         TVector<TCompactedPartLoans> Parts;
     };
 
-    THashMap<TLogoBlobID, TBorrowedPartInfo> BorrowedInfo;
+    THashMap<TLogoBlobID, TBorrowedPartInfo> BorrowedInfo; 
     TDeque<TLogoBlobID> Garbage;
 
-    THashMap<TLogoBlobID, TCompactedPartLoans> CompactedPartLoans;
+    THashMap<TLogoBlobID, TCompactedPartLoans> CompactedPartLoans; 
     TDeque<TCompactedPart> PendingCompactedPartLoans;
 
     bool HasFlag;
 
-    THashMap<ui64, TIntrusivePtr<TTabletStorageInfo>> ReferencedStorageInfos;
+    THashMap<ui64, TIntrusivePtr<TTabletStorageInfo>> ReferencedStorageInfos; 
 
     void UpdateStorageInfo(TTabletStorageInfo *update);
 
@@ -95,7 +95,7 @@ public:
     // called on lender at moment of sharing part
     void BorrowBundle(
         const TLogoBlobID &bundleId,
-        const TSet<ui64> &loaners,
+        const TSet<ui64> &loaners, 
         TLogCommit *commit);
 
     // called on loaner at moment of attaching part
@@ -153,7 +153,7 @@ public:
     // returns true if smth moved to CompactedPartLoands so we need to signal for user tablet
     bool SetGcBarrier(ui32 step);
 
-    const THashMap<TLogoBlobID, TCompactedPartLoans>* GetCompactedLoansList();
+    const THashMap<TLogoBlobID, TCompactedPartLoans>* GetCompactedLoansList(); 
     const bool* GetHasFlag();
 
     // on bootstrap

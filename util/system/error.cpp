@@ -47,7 +47,7 @@ int LastSystemError() {
 #if defined(_win_)
 namespace {
     struct TErrString {
-        inline TErrString() noexcept {
+        inline TErrString() noexcept { 
             data[0] = 0;
         }
 

@@ -26,7 +26,7 @@ namespace NActors {
 
         volatile bool StopFlag;
 
-        typedef TMap<ui64, TAutoPtr<NSchedulerQueue::TQueueType>> TMomentMap; // intrasecond queues
+        typedef TMap<ui64, TAutoPtr<NSchedulerQueue::TQueueType>> TMomentMap; // intrasecond queues 
         typedef THashMap<ui64, TAutoPtr<TMomentMap>> TScheduleMap;            // over-second schedule
 
         TScheduleMap ScheduleMap;

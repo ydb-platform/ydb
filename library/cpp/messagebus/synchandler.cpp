@@ -186,7 +186,7 @@ const TBusClientSession* TBusSyncSourceSession::GetBusClientSessionWorkaroundDoN
     return Session.Get();
 }
 
-TBusSyncClientSessionPtr TBusMessageQueue::CreateSyncSource(TBusProtocol* proto, const TBusClientSessionConfig& config, bool needReply, const TString& name) {
+TBusSyncClientSessionPtr TBusMessageQueue::CreateSyncSource(TBusProtocol* proto, const TBusClientSessionConfig& config, bool needReply, const TString& name) { 
     TIntrusivePtr<TBusSyncSourceSessionImpl> session = new TBusSyncSourceSessionImpl(this, proto, config, needReply, name);
     Add(session.Get());
     return new TBusSyncSourceSession(session);

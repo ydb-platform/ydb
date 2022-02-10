@@ -48,7 +48,7 @@ namespace {
 
 Y_UNIT_TEST_SUITE(TestHttpParser) {
     Y_UNIT_TEST(TestTrivialRequest) {
-        const TString blob{
+        const TString blob{ 
             "GET /search?q=hi HTTP/1.1\r\n"
             "Host:  www.google.ru:8080 \r\n"
             "\r\n"};
@@ -61,7 +61,7 @@ Y_UNIT_TEST_SUITE(TestHttpParser) {
 
     // XXX: `entity_size` is i32 and `content_length` is i64!
     Y_UNIT_TEST(TestTrivialResponse) {
-        const TString blob{
+        const TString blob{ 
             "HTTP/1.1 200 Ok\r\n"
             "Content-Length: 2\r\n"
             "\r\n"
@@ -81,7 +81,7 @@ Y_UNIT_TEST_SUITE(TestHttpParser) {
 
     // XXX: `entity_size` is off by one in TE:chunked case.
     Y_UNIT_TEST(TestChunkedResponse) {
-        const TString blob{
+        const TString blob{ 
             "HTTP/1.1 200 OK\r\n"
             "Transfer-Encoding: chunked\r\n"
             "\r\n"
@@ -111,7 +111,7 @@ Y_UNIT_TEST_SUITE(TestHttpParser) {
                                                                 "\r\n"));
     }
 
-    static const TString PipelineClenBlob_{
+    static const TString PipelineClenBlob_{ 
         "HTTP/1.1 200 Ok\r\n"
         "Content-Length: 4\r\n"
         "\r\n"
@@ -131,14 +131,14 @@ Y_UNIT_TEST_SUITE(TestHttpParser) {
     }
 
     Y_UNIT_TEST(TestPipelineClenByteByByte) {
-        const TString& blob = PipelineClenBlob_;
+        const TString& blob = PipelineClenBlob_; 
         THttpHeader hdr;
         TTestHttpParser parser;
         parser.Init(&hdr);
         for (size_t i = 0; i < blob.size(); ++i) {
             const TStringBuf d{blob, i, 1};
             parser.Parse((void*)d.data(), d.size());
-            Cout << TString(d).Quote() << " -> " << parser.GetState() << Endl;
+            Cout << TString(d).Quote() << " -> " << parser.GetState() << Endl; 
         }
         AssertPipelineClen(parser, hdr);
         UNIT_ASSERT_EQUAL(parser.Body(), "OK\r\n");
@@ -147,7 +147,7 @@ Y_UNIT_TEST_SUITE(TestHttpParser) {
 
     // XXX: Content-Length is ignored, Body() looks unexpected!
     Y_UNIT_TEST(TestPipelineClenOneChunk) {
-        const TString& blob = PipelineClenBlob_;
+        const TString& blob = PipelineClenBlob_; 
         THttpHeader hdr;
         TTestHttpParser parser;
         parser.Init(&hdr);
@@ -167,7 +167,7 @@ Y_UNIT_TEST_SUITE(TestHttpParser) {
                                                "ZZ\r\n"));
     }
 
-    static const TString PipelineChunkedBlob_{
+    static const TString PipelineChunkedBlob_{ 
         "HTTP/1.1 200 OK\r\n"
         "Transfer-Encoding: chunked\r\n"
         "\r\n"
@@ -206,14 +206,14 @@ Y_UNIT_TEST_SUITE(TestHttpParser) {
     }
 
     Y_UNIT_TEST(TestPipelineChunkedByteByByte) {
-        const TString& blob = PipelineChunkedBlob_;
+        const TString& blob = PipelineChunkedBlob_; 
         THttpHeader hdr;
         TTestHttpParser parser;
         parser.Init(&hdr);
         for (size_t i = 0; i < blob.size(); ++i) {
             const TStringBuf d{blob, i, 1};
             parser.Parse((void*)d.data(), d.size());
-            Cout << TString(d).Quote() << " -> " << parser.GetState() << Endl;
+            Cout << TString(d).Quote() << " -> " << parser.GetState() << Endl; 
             if (blob.size() / 2 - 1 <= i) // last \n sets EOF
                 UNIT_ASSERT_EQUAL(parser.GetState(), parser.hp_eof);
         }
@@ -221,7 +221,7 @@ Y_UNIT_TEST_SUITE(TestHttpParser) {
     }
 
     Y_UNIT_TEST(TestPipelineChunkedOneChunk) {
-        const TString& blob = PipelineChunkedBlob_;
+        const TString& blob = PipelineChunkedBlob_; 
         THttpHeader hdr;
         TTestHttpParser parser;
         parser.Init(&hdr);

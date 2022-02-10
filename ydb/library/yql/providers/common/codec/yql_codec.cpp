@@ -245,7 +245,7 @@ void WriteYsonValue(NYson::TYsonConsumerBase& writer, const NUdf::TUnboxedValueP
     WriteYsonValueImpl(resultWriter, value, type, structPositions);
 }
 
-TString WriteYsonValue(const NUdf::TUnboxedValuePod& value, TType* type, const TVector<ui32>* structPositions,
+TString WriteYsonValue(const NUdf::TUnboxedValuePod& value, TType* type, const TVector<ui32>* structPositions, 
     NYson::EYsonFormat format) {
     TStringStream str;
     NYson::TYsonWriter writer(&str, format);
@@ -264,13 +264,13 @@ TCodecContext::TCodecContext(
 {
 }
 
-TMaybe<TVector<ui32>> CreateStructPositions(TType* inputType, const TVector<TString>* columns) {
+TMaybe<TVector<ui32>> CreateStructPositions(TType* inputType, const TVector<TString>* columns) { 
     if (inputType->GetKind() != TType::EKind::Struct) {
         return Nothing();
     }
     auto inputStruct = AS_TYPE(TStructType, inputType);
-    TMap<TStringBuf, ui32> members;
-    TVector<ui32> structPositions(inputStruct->GetMembersCount(), Max<ui32>());
+    TMap<TStringBuf, ui32> members; 
+    TVector<ui32> structPositions(inputStruct->GetMembersCount(), Max<ui32>()); 
     for (ui32 i = 0; i < inputStruct->GetMembersCount(); ++i) {
         if (columns) {
             members.insert(std::make_pair(inputStruct->GetMemberName(i), i));
@@ -322,9 +322,9 @@ NYT::TNode DataValueToNode(const NKikimr::NUdf::TUnboxedValuePod& value, NKikimr
         case NUdf::TDataType<NUdf::TUtf8>::Id:
         case NUdf::TDataType<NUdf::TJson>::Id:
         case NUdf::TDataType<NUdf::TUuid>::Id:
-            return NYT::TNode(TString(value.AsStringRef()));
+            return NYT::TNode(TString(value.AsStringRef())); 
         case NUdf::TDataType<NUdf::TYson>::Id:
-            return NYT::NodeFromYsonString(TString(value.AsStringRef()));
+            return NYT::NodeFromYsonString(TString(value.AsStringRef())); 
         case NUdf::TDataType<NUdf::TDate>::Id:
             return NYT::TNode((ui64)value.Get<ui16>());
         case NUdf::TDataType<NUdf::TDatetime>::Id:

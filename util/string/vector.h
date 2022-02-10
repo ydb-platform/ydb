@@ -5,7 +5,7 @@
 
 #include <util/generic/map.h>
 #include <util/generic/strbuf.h>
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 #include <util/generic/vector.h>
 #include <util/string/cast.h>
 #include <util/system/yassert.h>
@@ -67,11 +67,11 @@ SplitString(const typename ::NPrivate::TStringDeducer<C>::type& str, const C* de
 }
 
 template <class TIter>
-inline TString JoinStrings(TIter begin, TIter end, const TStringBuf delim) {
+inline TString JoinStrings(TIter begin, TIter end, const TStringBuf delim) { 
     if (begin == end)
-        return TString();
+        return TString(); 
 
-    TString result = ToString(*begin);
+    TString result = ToString(*begin); 
 
     for (++begin; begin != end; ++begin) {
         result.append(delim);
@@ -82,11 +82,11 @@ inline TString JoinStrings(TIter begin, TIter end, const TStringBuf delim) {
 }
 
 template <class TIter>
-inline TUtf16String JoinStrings(TIter begin, TIter end, const TWtringBuf delim) {
+inline TUtf16String JoinStrings(TIter begin, TIter end, const TWtringBuf delim) { 
     if (begin == end)
-        return TUtf16String();
+        return TUtf16String(); 
 
-    TUtf16String result = ToWtring(*begin);
+    TUtf16String result = ToWtring(*begin); 
 
     for (++begin; begin != end; ++begin) {
         result.append(delim);
@@ -96,34 +96,34 @@ inline TUtf16String JoinStrings(TIter begin, TIter end, const TWtringBuf delim) 
     return result;
 }
 
-/// Concatenates elements of given TVector<TString>.
-inline TString JoinStrings(const TVector<TString>& v, const TStringBuf delim) {
-    return JoinStrings(v.begin(), v.end(), delim);
+/// Concatenates elements of given TVector<TString>. 
+inline TString JoinStrings(const TVector<TString>& v, const TStringBuf delim) { 
+    return JoinStrings(v.begin(), v.end(), delim); 
 }
 
-inline TString JoinStrings(const TVector<TString>& v, size_t index, size_t count, const TStringBuf delim) {
-    Y_ASSERT(index + count <= v.size() && "JoinStrings(): index or count out of range");
-    return JoinStrings(v.begin() + index, v.begin() + index + count, delim);
-}
-
-template <typename T>
-inline TString JoinVectorIntoString(const TVector<T>& v, const TStringBuf delim) {
-    return JoinStrings(v.begin(), v.end(), delim);
+inline TString JoinStrings(const TVector<TString>& v, size_t index, size_t count, const TStringBuf delim) { 
+    Y_ASSERT(index + count <= v.size() && "JoinStrings(): index or count out of range"); 
+    return JoinStrings(v.begin() + index, v.begin() + index + count, delim); 
 }
 
 template <typename T>
-inline TString JoinVectorIntoString(const TVector<T>& v, size_t index, size_t count, const TStringBuf delim) {
+inline TString JoinVectorIntoString(const TVector<T>& v, const TStringBuf delim) { 
+    return JoinStrings(v.begin(), v.end(), delim); 
+}
+
+template <typename T>
+inline TString JoinVectorIntoString(const TVector<T>& v, size_t index, size_t count, const TStringBuf delim) { 
     Y_ASSERT(index + count <= v.size() && "JoinVectorIntoString(): index or count out of range");
-    return JoinStrings(v.begin() + index, v.begin() + index + count, delim);
+    return JoinStrings(v.begin() + index, v.begin() + index + count, delim); 
 }
 
-TUtf16String JoinStrings(const TVector<TUtf16String>& v, const TWtringBuf delim);
-TUtf16String JoinStrings(const TVector<TUtf16String>& v, size_t index, size_t count, const TWtringBuf delim);
+TUtf16String JoinStrings(const TVector<TUtf16String>& v, const TWtringBuf delim); 
+TUtf16String JoinStrings(const TVector<TUtf16String>& v, size_t index, size_t count, const TWtringBuf delim); 
 
 //! Converts vector of strings to vector of type T variables
 template <typename T, typename TStringType>
-TVector<T> Scan(const TVector<TStringType>& input) {
-    TVector<T> output;
+TVector<T> Scan(const TVector<TStringType>& input) { 
+    TVector<T> output; 
     output.reserve(input.size());
     for (int i = 0; i < input.ysize(); ++i) {
         output.push_back(FromString<T>(input[i]));

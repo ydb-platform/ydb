@@ -46,14 +46,14 @@ Y_UNIT_TEST(TListTest) {
         value.AddList()->SetInt32(0);
         value.AddList()->SetInt32(100);
 
-        TListType l(value, type);
+        TListType l(value, type); 
 
         UNIT_ASSERT_EQUAL(l.GetSize(), 3);
         UNIT_ASSERT_EQUAL(l.GetItem<i32>(0), -100);
         UNIT_ASSERT_EQUAL(l.GetItem<i32>(1), 0);
         UNIT_ASSERT_EQUAL(l.GetItem<i32>(2), 100);
 
-        TVector<i32> v;
+        TVector<i32> v; 
         for (const auto& listItem : l.MakeIterable<i32>()) {
             v.push_back(listItem);
         }
@@ -72,9 +72,9 @@ Y_UNIT_TEST(TListTest) {
         value.AddList()->MutableOptional()->SetInt32(-100);
         value.AddList()->MutableOptional()->SetInt32(0);
         value.AddList()->MutableOptional()->SetInt32(100);
-        TListType l(value, type);
+        TListType l(value, type); 
 
-        TVector<i32> v;
+        TVector<i32> v; 
         for (const TOptional& opt : l.MakeIterable<TOptional>()) {
             v.push_back(opt.GetItem<i32>());
         }
@@ -111,9 +111,9 @@ Y_UNIT_TEST(TTupleTest) {
 
         TOptional opt = t.GetElement<TOptional>(0);
         UNIT_ASSERT_EQUAL(opt.GetItem<i32>(), 911);
-        TListType l = t.GetElement<TListType>(1);
+        TListType l = t.GetElement<TListType>(1); 
 
-        TVector<ui64> v;
+        TVector<ui64> v; 
         for (ui64 item : l.MakeIterable<ui64>()) {
             v.push_back(item);
         }

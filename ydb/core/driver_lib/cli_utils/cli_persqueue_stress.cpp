@@ -7,10 +7,10 @@ namespace NDriverClient {
 
 struct TCmdPersQueueConfig : public TCliCmdConfig {
     bool IsWrite;
-    TString Topic;
+    TString Topic; 
     ui32 Partition;
     //write options
-    TString SourceId;
+    TString SourceId; 
     ui32 OneCmdMinSize;
     ui32 OneCmdMaxSize;
     //read options
@@ -35,9 +35,9 @@ int PersQueueStress(TCommandConfig &cmdConf, int argc, char** argv) {
         ui64 DoneBytes = 0;
         TInstant timestamp = TInstant::Now();
 
-        TVector<ui32> buckets(3000);
+        TVector<ui32> buckets(3000); 
 
-        TString cookie;
+        TString cookie; 
         {
         TAutoPtr<NMsgBusProxy::TBusPersQueue> request(new NMsgBusProxy::TBusPersQueue);
         auto pr = request->Record.MutablePartitionRequest();
@@ -83,7 +83,7 @@ int PersQueueStress(TCommandConfig &cmdConf, int argc, char** argv) {
                 write->SetSourceId(config.SourceId);
                 write->SetSeqNo(++seqNo);
                 ui32 size = config.OneCmdMinSize + rand() % (config.OneCmdMaxSize - config.OneCmdMinSize + 1);
-                write->SetData(TString(size, 'a'));
+                write->SetData(TString(size, 'a')); 
                 totalSize += size;
             }
             TInstant tt = TInstant::Now();
@@ -176,7 +176,7 @@ void TCmdPersQueueConfig::Parse(int argc, char **argv) {
 
     TOpts opts = TOpts::Default();
 
-    TString command;
+    TString command; 
     opts.AddLongOption('c', "command", "type of action").Required().RequiredArgument("[write|read]").StoreResult(&command);
     opts.AddLongOption("topic", "topic").Required().RequiredArgument("STR").StoreResult(&Topic);
     opts.AddLongOption("partition", "partition").Required().RequiredArgument("NUM").StoreResult(&Partition);

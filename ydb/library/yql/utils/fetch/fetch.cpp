@@ -26,8 +26,8 @@ THttpURL ParseURL(const TStringBuf addr, NUri::TParseFlags features) {
 class TFetchResultImpl: public IFetchResult {
 public:
     TFetchResultImpl(const THttpURL& url, const THttpHeaders& additionalHeaders, TDuration timeout) {
-        TString host = url.Get(THttpURL::FieldHost);
-        TString path = url.PrintS(THttpURL::FlagPath | THttpURL::FlagQuery);
+        TString host = url.Get(THttpURL::FieldHost); 
+        TString path = url.PrintS(THttpURL::FlagPath | THttpURL::FlagQuery); 
         const char* p = url.Get(THttpURL::FieldPort);
         ui16 port = 80;
         bool https = false;
@@ -41,7 +41,7 @@ public:
             port = FromString<ui16>(p);
         }
 
-        TString req;
+        TString req; 
         {
             TStringOutput rqs(req);
             TStringBuf userAgent = "User-Agent: Mozilla/5.0 (compatible; YQL/1.0)";

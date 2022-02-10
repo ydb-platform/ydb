@@ -36,7 +36,7 @@ struct TChannelProfiles : public TThrRefBase {
             }
         };
 
-        TVector<TChannel> Channels;
+        TVector<TChannel> Channels; 
 
         template<typename T>
         TProfile(const T &channels)
@@ -47,7 +47,7 @@ struct TChannelProfiles : public TThrRefBase {
         {}
     };
 
-    TVector<TProfile> Profiles;
+    TVector<TProfile> Profiles; 
 
     template<typename T>
     TChannelProfiles(const T &profiles)

@@ -13,7 +13,7 @@
 class TTeeOutput: public IOutputStream {
 public:
     TTeeOutput(IOutputStream* l, IOutputStream* r) noexcept;
-    ~TTeeOutput() override;
+    ~TTeeOutput() override; 
 
 private:
     void DoWrite(const void* buf, size_t len) override;

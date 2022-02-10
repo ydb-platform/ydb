@@ -600,10 +600,10 @@ bool TCms::TryToLockPDisk(const TAction &action,
 
 bool TCms::TryToLockVDisks(const TAction &action,
                            const TActionOptions& opts,
-                           const TSet<TVDiskID> &vdisks,
+                           const TSet<TVDiskID> &vdisks, 
                            TErrorInfo &error) const
 {
-    TDuration duration = TDuration::MicroSeconds(action.GetDuration());
+    TDuration duration = TDuration::MicroSeconds(action.GetDuration()); 
     duration += opts.PermissionDuration;
 
     auto res = true;
@@ -715,7 +715,7 @@ bool TCms::CheckActionReplaceDevices(const TAction &action,
 {
     auto point = ClusterInfo->PushRollbackPoint();
     bool res = true;
-    TDuration duration = TDuration::MicroSeconds(action.GetDuration());
+    TDuration duration = TDuration::MicroSeconds(action.GetDuration()); 
     duration += opts.PermissionDuration;
 
     for (const auto &device : action.GetDevices()) {
@@ -833,9 +833,9 @@ void TCms::ScheduleNotificationsCleanup(const TActorContext &ctx)
 
     TInstant earliest = TInstant::Max();
     for (const auto &entry : State->Notifications) {
-        TInstant start = TInstant::MicroSeconds(entry.second.Notification.GetTime());
+        TInstant start = TInstant::MicroSeconds(entry.second.Notification.GetTime()); 
         for (const auto &action : entry.second.Notification.GetActions()) {
-            TDuration duration = TDuration::MicroSeconds(action.GetDuration());
+            TDuration duration = TDuration::MicroSeconds(action.GetDuration()); 
             Y_VERIFY(duration);
             earliest = Min(earliest, start + duration);
         }
@@ -871,7 +871,7 @@ void TCms::DoPermissionsCleanup(const TActorContext &ctx)
 {
     ScheduledCleanups.pop();
 
-    TVector<TString> ids;
+    TVector<TString> ids; 
     auto now = ctx.Now();
     for (const auto &entry : State->Permissions) {
         const TDuration duration = TDuration::MicroSeconds(entry.second.Action.GetDuration());
@@ -1047,7 +1047,7 @@ void TCms::RemovePermission(TEvCms::TEvManagePermissionRequest::TPtr &ev, bool d
     LOG_INFO(ctx, NKikimrServices::CMS, "User %s %s permissions %s",
               user.data(), done ? "is done with" : "rejected", ToString(rec.GetPermissions()).data());
 
-    TVector<TString> ids;
+    TVector<TString> ids; 
     resp->Record.MutableStatus()->SetCode(TStatus::OK);
     for (const auto &id : rec.GetPermissions()) {
         auto it = State->Permissions.find(id);
@@ -1610,7 +1610,7 @@ void TCms::Handle(TEvCms::TEvCheckRequest::TPtr &ev, const TActorContext &ctx)
 bool TCms::CheckNotificationDeadline(const TAction &action, TInstant time,
                                      TErrorInfo &error, const TActorContext &ctx) const
 {
-    if (time + TDuration::MicroSeconds(action.GetDuration()) < ctx.Now()) {
+    if (time + TDuration::MicroSeconds(action.GetDuration()) < ctx.Now()) { 
         error.Code =  TStatus::WRONG_REQUEST;
         error.Reason = "Action already finished";
         return false;
@@ -1717,7 +1717,7 @@ bool TCms::CheckNotification(const TNotification &notification,
                              TNotificationResponse &resp,
                              const TActorContext &ctx) const
 {
-    TInstant time = TInstant::MicroSeconds(notification.GetTime());
+    TInstant time = TInstant::MicroSeconds(notification.GetTime()); 
 
     resp.MutableStatus()->SetCode(TStatus::OK);
     for (const auto &action : notification.GetActions()) {
@@ -1819,7 +1819,7 @@ void TCms::Handle(TEvCms::TEvRemoveWalleTask::TPtr &ev, const TActorContext &ctx
         if (State->ScheduledRequests.contains(task.RequestId)) {
             Execute(CreateTxRemoveRequest(task.RequestId, std::move(ev->Release()), handle), ctx);
         } else {
-            TVector<TString> ids(task.Permissions.begin(), task.Permissions.end());
+            TVector<TString> ids(task.Permissions.begin(), task.Permissions.end()); 
             Execute(CreateTxRemovePermissions(ids, std::move(ev->Release()), handle), ctx);
         }
     } else {

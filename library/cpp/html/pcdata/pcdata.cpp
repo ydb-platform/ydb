@@ -1,10 +1,10 @@
 #include "pcdata.h"
 
-#include <util/string/strspn.h>
-
+#include <util/string/strspn.h> 
+ 
 static TCompactStrSpn sspn("\"<>&'");
 
-static void EncodeHtmlPcdataAppendInternal(const TStringBuf str, TString& strout, bool qAmp) {
+static void EncodeHtmlPcdataAppendInternal(const TStringBuf str, TString& strout, bool qAmp) { 
     const char* s = str.data();
     const char* e = s + str.length();
 
@@ -49,18 +49,18 @@ static void EncodeHtmlPcdataAppendInternal(const TStringBuf str, TString& strout
     }
 }
 
-void EncodeHtmlPcdataAppend(const TStringBuf str, TString& strout) {
+void EncodeHtmlPcdataAppend(const TStringBuf str, TString& strout) { 
     EncodeHtmlPcdataAppendInternal(str, strout, true);
 }
 
-TString EncodeHtmlPcdata(const TStringBuf str, bool qAmp) {
-    TString strout;
+TString EncodeHtmlPcdata(const TStringBuf str, bool qAmp) { 
+    TString strout; 
     EncodeHtmlPcdataAppendInternal(str, strout, qAmp);
     return strout;
 }
 
-TString DecodeHtmlPcdata(const TString& sz) {
-    TString res;
+TString DecodeHtmlPcdata(const TString& sz) { 
+    TString res; 
     const char* codes[] = {"&quot;", "&lt;", "&gt;", "&#39;", "&#039;", "&amp;", "&apos;", nullptr};
     const char chars[] = {'\"', '<', '>', '\'', '\'', '&', '\''};
     for (size_t i = 0; i < sz.length(); ++i) {

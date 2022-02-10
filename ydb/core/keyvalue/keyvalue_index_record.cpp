@@ -11,7 +11,7 @@ TIndexRecord::TChainItem::TChainItem(const TLogoBlobID &id, ui64 offset)
 {
 }
 
-TIndexRecord::TChainItem::TChainItem(TString &inlineData, ui64 offset)
+TIndexRecord::TChainItem::TChainItem(TString &inlineData, ui64 offset) 
     : InlineData(inlineData)
     , Offset(offset)
 {
@@ -89,8 +89,8 @@ bool TIndexRecord::operator==(const TIndexRecord& right) const {
     return Chain == right.Chain && CreationUnixTime == right.CreationUnixTime;
 }
 
-TString TIndexRecord::Serialize() const {
-    TString value;
+TString TIndexRecord::Serialize() const { 
+    TString value; 
     ui64 totalSize = sizeof(TKeyValueData2);
     for (ui32 i = 0; i < Chain.size(); ++i) {
         if (Chain[i].IsInline()) {
@@ -123,13 +123,13 @@ TString TIndexRecord::Serialize() const {
     return value;
 }
 
-EItemType TIndexRecord::ReadItemType(const TString &rawData) {
+EItemType TIndexRecord::ReadItemType(const TString &rawData) { 
     Y_VERIFY(rawData.size() >= sizeof(TDataHeader));
     const TDataHeader *dataHeader = (const TDataHeader *)rawData.data();
     return (EItemType)dataHeader->ItemType;
 }
 
-bool TIndexRecord::Deserialize1(const TString &rawData, TString &outErrorInfo) {
+bool TIndexRecord::Deserialize1(const TString &rawData, TString &outErrorInfo) { 
     Y_VERIFY(rawData.size() >= sizeof(TKeyValueData1));
     const TKeyValueData1 *data = (const TKeyValueData1 *)rawData.data();
     const ui32 numItems = TKeyValueData1::GetNumItems(rawData.size());
@@ -167,7 +167,7 @@ bool TIndexRecord::Deserialize1(const TString &rawData, TString &outErrorInfo) {
     return true;
 }
 
-bool TIndexRecord::Deserialize2(const TString &rawData, TString &outErrorInfo) {
+bool TIndexRecord::Deserialize2(const TString &rawData, TString &outErrorInfo) { 
     Y_VERIFY(rawData.size() >= sizeof(TKeyValueData2));
     const TKeyValueData2 *data = (const TKeyValueData2 *)rawData.data();
     if (!data->CheckChecksum(rawData.size())) {

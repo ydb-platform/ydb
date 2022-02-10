@@ -167,7 +167,7 @@ public:
         *this = TdSelf();
     }
 
-    constexpr bool IsInited() const noexcept {
+    constexpr bool IsInited() const noexcept { 
         return data() != nullptr;
     }
 
@@ -213,7 +213,7 @@ public:
      * @param[out] r                    The second part of split result.
      * @returns                         Whether the split was actually performed.
      */
-    inline bool TrySplit(TdSelf delim, TdSelf& l, TdSelf& r) const noexcept {
+    inline bool TrySplit(TdSelf delim, TdSelf& l, TdSelf& r) const noexcept { 
         return TrySplitOn(TBase::find(delim), l, r, delim.size());
     }
 
@@ -228,7 +228,7 @@ public:
      * @param[out] r                    The second part of split result.
      * @returns                         Whether the split was actually performed.
      */
-    inline bool TryRSplit(TdSelf delim, TdSelf& l, TdSelf& r) const noexcept {
+    inline bool TryRSplit(TdSelf delim, TdSelf& l, TdSelf& r) const noexcept { 
         return TrySplitOn(TBase::rfind(delim), l, r, delim.size());
     }
 
@@ -240,17 +240,17 @@ public:
         RSplitTemplate(delim, l, r);
     }
 
-    inline void Split(TdSelf delim, TdSelf& l, TdSelf& r) const noexcept {
+    inline void Split(TdSelf delim, TdSelf& l, TdSelf& r) const noexcept { 
         SplitTemplate(delim, l, r);
     }
 
-    inline void RSplit(TdSelf delim, TdSelf& l, TdSelf& r) const noexcept {
+    inline void RSplit(TdSelf delim, TdSelf& l, TdSelf& r) const noexcept { 
         RSplitTemplate(delim, l, r);
     }
 
 private:
     // splits on a delimiter at a given position; delimiter is excluded
-    void DoSplitOn(size_t pos, TdSelf& l, TdSelf& r, size_t len) const noexcept {
+    void DoSplitOn(size_t pos, TdSelf& l, TdSelf& r, size_t len) const noexcept { 
         Y_ASSERT(pos != TBase::npos);
 
         // make a copy in case one of l/r is really *this
@@ -267,7 +267,7 @@ public:
     // For example, for TStringBuf s("abc"):
     // s.TrySplitOn(s.find('z'), ...) is false, but s.TrySplitOn(100500, ...) is true.
 
-    bool TrySplitOn(size_t pos, TdSelf& l, TdSelf& r, size_t len = 1) const noexcept {
+    bool TrySplitOn(size_t pos, TdSelf& l, TdSelf& r, size_t len = 1) const noexcept { 
         if (TBase::npos == pos)
             return false;
 
@@ -275,25 +275,25 @@ public:
         return true;
     }
 
-    void SplitOn(size_t pos, TdSelf& l, TdSelf& r, size_t len = 1) const noexcept {
+    void SplitOn(size_t pos, TdSelf& l, TdSelf& r, size_t len = 1) const noexcept { 
         if (!TrySplitOn(pos, l, r, len)) {
             l = *this;
             r = TdSelf();
         }
     }
 
-    bool TrySplitAt(size_t pos, TdSelf& l, TdSelf& r) const noexcept {
+    bool TrySplitAt(size_t pos, TdSelf& l, TdSelf& r) const noexcept { 
         return TrySplitOn(pos, l, r, 0);
     }
 
-    void SplitAt(size_t pos, TdSelf& l, TdSelf& r) const noexcept {
+    void SplitAt(size_t pos, TdSelf& l, TdSelf& r) const noexcept { 
         SplitOn(pos, l, r, 0);
     }
 
     /*
     // Not implemented intentionally, use TrySplitOn() instead
-    void RSplitOn(size_t pos, TdSelf& l, TdSelf& r) const noexcept;
-    void RSplitAt(size_t pos, TdSelf& l, TdSelf& r) const noexcept;
+    void RSplitOn(size_t pos, TdSelf& l, TdSelf& r) const noexcept; 
+    void RSplitAt(size_t pos, TdSelf& l, TdSelf& r) const noexcept; 
 */
 
 public:
@@ -318,7 +318,7 @@ public:
     }
 
 public:
-    inline bool AfterPrefix(const TdSelf& prefix, TdSelf& result) const noexcept {
+    inline bool AfterPrefix(const TdSelf& prefix, TdSelf& result) const noexcept { 
         if (this->StartsWith(prefix)) {
             result = Tail(prefix.size());
             return true;
@@ -326,7 +326,7 @@ public:
         return false;
     }
 
-    inline bool BeforeSuffix(const TdSelf& suffix, TdSelf& result) const noexcept {
+    inline bool BeforeSuffix(const TdSelf& suffix, TdSelf& result) const noexcept { 
         if (this->EndsWith(suffix)) {
             result = Head(size() - suffix.size());
             return true;
@@ -335,12 +335,12 @@ public:
     }
 
     // returns true if string started with `prefix`, false otherwise
-    inline bool SkipPrefix(const TdSelf& prefix) noexcept {
+    inline bool SkipPrefix(const TdSelf& prefix) noexcept { 
         return AfterPrefix(prefix, *this);
     }
 
     // returns true if string ended with `suffix`, false otherwise
-    inline bool ChopSuffix(const TdSelf& suffix) noexcept {
+    inline bool ChopSuffix(const TdSelf& suffix) noexcept { 
         return BeforeSuffix(suffix, *this);
     }
 
@@ -435,13 +435,13 @@ public:
 
 public: // string subsequences
     /// Cut last @c shift characters (or less if length is less than @c shift)
-    inline TdSelf& Chop(size_t shift) noexcept {
+    inline TdSelf& Chop(size_t shift) noexcept { 
         this->remove_suffix(std::min(shift, size()));
         return *this;
     }
 
     /// Cut first @c shift characters (or less if length is less than @c shift)
-    inline TdSelf& Skip(size_t shift) noexcept {
+    inline TdSelf& Skip(size_t shift) noexcept { 
         this->remove_prefix(std::min(shift, size()));
         return *this;
     }
@@ -520,7 +520,7 @@ private:
     }
 
     template <typename TDelimiterType>
-    inline void SplitTemplate(TDelimiterType delim, TdSelf& l, TdSelf& r) const noexcept {
+    inline void SplitTemplate(TDelimiterType delim, TdSelf& l, TdSelf& r) const noexcept { 
         if (!TrySplit(delim, l, r)) {
             l = *this;
             r = TdSelf();
@@ -528,7 +528,7 @@ private:
     }
 
     template <typename TDelimiterType>
-    inline void RSplitTemplate(TDelimiterType delim, TdSelf& l, TdSelf& r) const noexcept {
+    inline void RSplitTemplate(TDelimiterType delim, TdSelf& l, TdSelf& r) const noexcept { 
         if (!TryRSplit(delim, l, r)) {
             r = *this;
             l = TdSelf();

@@ -102,7 +102,7 @@ namespace NKiwiAggr {
 
         if (!IsInitialized) {
             if (!TrainingSet) {
-                TrainingSet.Reset(new TVector<TWeightedValue>(0));
+                TrainingSet.Reset(new TVector<TWeightedValue>(0)); 
             }
             TrainingSet->push_back(TWeightedValue(value, weight));
             if (TrainingSet->size() >= TrainingSetSize) {
@@ -128,17 +128,17 @@ namespace NKiwiAggr {
         ythrow yexception() << "Method is not implemented for TFixedBinHistogram";
     }
 
-    void TFixedBinHistogram::Merge(const TVector<THistogram>& histogramsToMerge) {
-        TVector<IHistogramPtr> parsedHistogramsToMerge;
+    void TFixedBinHistogram::Merge(const TVector<THistogram>& histogramsToMerge) { 
+        TVector<IHistogramPtr> parsedHistogramsToMerge; 
         for (size_t i = 0; i < histogramsToMerge.size(); ++i) {
             parsedHistogramsToMerge.push_back(IHistogramPtr(new TAutoHistogram(histogramsToMerge[i], Intervals, Id)));
         }
         Merge(parsedHistogramsToMerge);
     }
 
-    void TFixedBinHistogram::Merge(TVector<IHistogramPtr> histogramsToMerge) {
-        TVector<IHistogramPtr> histogramsToMergeRepacked(0);
-        TVector<TFixedBinHistogram*> histograms(0);
+    void TFixedBinHistogram::Merge(TVector<IHistogramPtr> histogramsToMerge) { 
+        TVector<IHistogramPtr> histogramsToMergeRepacked(0); 
+        TVector<TFixedBinHistogram*> histograms(0); 
 
         // put current histogram to the vector of histograms to merge and clear self
         if (!Empty()) {
@@ -485,7 +485,7 @@ namespace NKiwiAggr {
         }
         SetFrame(MinElement(TrainingSet->begin(), TrainingSet->end(), CompareWeightedValue)->first,
                  MaxElement(TrainingSet->begin(), TrainingSet->end(), CompareWeightedValue)->first, true);
-        for (TVector<TWeightedValue>::const_iterator it = TrainingSet->begin(); it != TrainingSet->end(); ++it) {
+        for (TVector<TWeightedValue>::const_iterator it = TrainingSet->begin(); it != TrainingSet->end(); ++it) { 
             Freqs[CalcBin(it->first)] += it->second;
         }
         TrainingSet.Destroy();

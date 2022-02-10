@@ -1,7 +1,7 @@
 #pragma once
 #include "defs.h"
 
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 
 // VDisk prefix for log records
 #define VDISK(...) ::NKikimr::AppendVDiskLogPrefix((Db->VCtx), __VA_ARGS__)
@@ -17,7 +17,7 @@ namespace NKikimr {
     Y_PRINTF_FORMAT(2, 3)
     TString AppendVDiskLogPrefix(const TIntrusivePtr<TVDiskContext> &vctx, const char *c, ...);
     Y_PRINTF_FORMAT(2, 3)
-    TString AppendVDiskLogPrefix(const TString &prefix, const char *c, ...);
+    TString AppendVDiskLogPrefix(const TString &prefix, const char *c, ...); 
 
     struct TVDiskID;
     TString GenerateVDiskLogPrefix(const TVDiskID &vdisk, bool donorMode);

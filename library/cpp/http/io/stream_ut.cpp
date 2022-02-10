@@ -60,7 +60,7 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
         };
 
     public:
-        inline TTestHttpServer(const TString& res)
+        inline TTestHttpServer(const TString& res) 
             : Res_(res)
         {
         }
@@ -74,7 +74,7 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
         }
 
     private:
-        TString Res_;
+        TString Res_; 
         size_t LastRequestSentSize_ = 0;
     };
 
@@ -83,7 +83,7 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
     }
 
     Y_UNIT_TEST(TestHttpInput) {
-        TString res = "I'm a teapot";
+        TString res = "I'm a teapot"; 
         TPortManager pm;
         const ui16 port = pm.GetPort();
 
@@ -106,7 +106,7 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
             output.EnableKeepAlive(true);
             output.EnableCompression(true);
 
-            TString r;
+            TString r; 
             r += "GET / HTTP/1.1";
             r += "\r\n";
             r += "Host: yandex.lo";
@@ -180,56 +180,56 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
 
     Y_UNIT_TEST(TestKeepAlive) {
         {
-            TString s = "GET / HTTP/1.0\r\n\r\n";
+            TString s = "GET / HTTP/1.0\r\n\r\n"; 
             TStringInput si(s);
             THttpInput in(&si);
             UNIT_ASSERT(!in.IsKeepAlive());
         }
 
         {
-            TString s = "GET / HTTP/1.0\r\nConnection: keep-alive\r\n\r\n";
+            TString s = "GET / HTTP/1.0\r\nConnection: keep-alive\r\n\r\n"; 
             TStringInput si(s);
             THttpInput in(&si);
             UNIT_ASSERT(in.IsKeepAlive());
         }
 
         {
-            TString s = "GET / HTTP/1.1\r\n\r\n";
+            TString s = "GET / HTTP/1.1\r\n\r\n"; 
             TStringInput si(s);
             THttpInput in(&si);
             UNIT_ASSERT(in.IsKeepAlive());
         }
 
         {
-            TString s = "GET / HTTP/1.1\r\nConnection: close\r\n\r\n";
+            TString s = "GET / HTTP/1.1\r\nConnection: close\r\n\r\n"; 
             TStringInput si(s);
             THttpInput in(&si);
             UNIT_ASSERT(!in.IsKeepAlive());
         }
 
         {
-            TString s = "HTTP/1.0 200 Ok\r\n\r\n";
+            TString s = "HTTP/1.0 200 Ok\r\n\r\n"; 
             TStringInput si(s);
             THttpInput in(&si);
             UNIT_ASSERT(!in.IsKeepAlive());
         }
 
         {
-            TString s = "HTTP/1.0 200 Ok\r\nConnection: keep-alive\r\n\r\n";
+            TString s = "HTTP/1.0 200 Ok\r\nConnection: keep-alive\r\n\r\n"; 
             TStringInput si(s);
             THttpInput in(&si);
             UNIT_ASSERT(in.IsKeepAlive());
         }
 
         {
-            TString s = "HTTP/1.1 200 Ok\r\n\r\n";
+            TString s = "HTTP/1.1 200 Ok\r\n\r\n"; 
             TStringInput si(s);
             THttpInput in(&si);
             UNIT_ASSERT(in.IsKeepAlive());
         }
 
         {
-            TString s = "HTTP/1.1 200 Ok\r\nConnection: close\r\n\r\n";
+            TString s = "HTTP/1.1 200 Ok\r\nConnection: close\r\n\r\n"; 
             TStringInput si(s);
             THttpInput in(&si);
             UNIT_ASSERT(!in.IsKeepAlive());
@@ -237,7 +237,7 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
     }
 
     Y_UNIT_TEST(TestMinRequest) {
-        TString res = "qqqqqq";
+        TString res = "qqqqqq"; 
         TPortManager pm;
         const ui16 port = pm.GetPort();
 
@@ -263,7 +263,7 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
     }
 
     Y_UNIT_TEST(TestResponseWithBlanks) {
-        TString res = "qqqqqq\r\n\r\nsdasdsad\r\n";
+        TString res = "qqqqqq\r\n\r\nsdasdsad\r\n"; 
         TPortManager pm;
         const ui16 port = pm.GetPort();
 
@@ -282,13 +282,13 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
         THttpInput input(&si);
         unsigned httpCode = ParseHttpRetCode(input.FirstLine());
         UNIT_ASSERT_VALUES_EQUAL(httpCode, 200u);
-        TString reply = input.ReadAll();
+        TString reply = input.ReadAll(); 
         UNIT_ASSERT_VALUES_EQUAL(reply, res);
         server.Stop();
     }
 
     Y_UNIT_TEST(TestOutputFlush) {
-        TString str;
+        TString str; 
         TStringOutput strOut(str);
         TBufferedOutput bufOut(&strOut, 8192);
         THttpOutput httpOut(&bufOut);
@@ -308,8 +308,8 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
     }
 
     Y_UNIT_TEST(TestOutputPostFlush) {
-        TString str;
-        TString checkStr;
+        TString str; 
+        TString checkStr; 
         TStringOutput strOut(str);
         TStringOutput checkOut(checkStr);
         TBufferedOutput bufOut(&strOut, 8192);
@@ -333,7 +333,7 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
     }
 
     TString MakeHttpOutputBody(const char* body, bool encodingEnabled) {
-        TString str;
+        TString str; 
         TStringOutput strOut(str);
         {
             TBufferedOutput bufOut(&strOut, 8192);
@@ -353,7 +353,7 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
         }
         const char* bodyDelimiter = "\r\n\r\n";
         size_t bodyPos = str.find(bodyDelimiter);
-        UNIT_ASSERT(bodyPos != TString::npos);
+        UNIT_ASSERT(bodyPos != TString::npos); 
         return str.substr(bodyPos + strlen(bodyDelimiter));
     };
 
@@ -373,7 +373,7 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
     }
 
     Y_UNIT_TEST(TestOutputFinish) {
-        TString str;
+        TString str; 
         TStringOutput strOut(str);
         TBufferedOutput bufOut(&strOut, 8192);
         THttpOutput httpOut(&bufOut);
@@ -399,8 +399,8 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
         const char* headerLine3 = "\tAccept-Language";
         const char* headerLine4 = "Content-Length: 18";
 
-        TString endLine("\r\n");
-        TString r;
+        TString endLine("\r\n"); 
+        TString r; 
         r += headerLine0 + endLine;
         r += headerLine1 + endLine;
         r += headerLine2 + endLine;
@@ -414,15 +414,15 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
         UNIT_ASSERT_VALUES_EQUAL(httpHeaders.Count(), 3u);
 
         THttpHeaders::TConstIterator it = httpHeaders.Begin();
-        UNIT_ASSERT_VALUES_EQUAL(it->ToString(), TString(headerLine1));
-        UNIT_ASSERT_VALUES_EQUAL((++it)->ToString(), TString::Join(headerLine2, headerLine3));
-        UNIT_ASSERT_VALUES_EQUAL((++it)->ToString(), TString(headerLine4));
+        UNIT_ASSERT_VALUES_EQUAL(it->ToString(), TString(headerLine1)); 
+        UNIT_ASSERT_VALUES_EQUAL((++it)->ToString(), TString::Join(headerLine2, headerLine3)); 
+        UNIT_ASSERT_VALUES_EQUAL((++it)->ToString(), TString(headerLine4)); 
     }
 
     Y_UNIT_TEST(ContentLengthRemoval) {
         TMemoryInput request("GET / HTTP/1.1\r\nAccept-Encoding: gzip\r\n\r\n");
         THttpInput i(&request);
-        TString result;
+        TString result; 
         TStringOutput out(result);
         THttpOutput httpOut(&out, &i);
 
@@ -661,7 +661,7 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
         out << "HTTP/1.1 200 OK\r\nConnection: Keep-Alive\r\n\r\n";
         out << "";
         out.Finish();
-        TString result = outBuf.Str();
+        TString result = outBuf.Str(); 
         UNIT_ASSERT(!result.Contains(TStringBuf("0\r\n")));
     }
 

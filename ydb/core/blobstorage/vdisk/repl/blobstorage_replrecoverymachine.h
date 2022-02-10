@@ -58,7 +58,7 @@ namespace NKikimr {
         class TRecoveryMachine {
         public:
             using TRecoveredBlobInfo = TReplSstStreamWriter::TRecoveredBlobInfo;
-            using TRecoveredBlobsQueue = TQueue<TRecoveredBlobInfo>;
+            using TRecoveredBlobsQueue = TQueue<TRecoveredBlobInfo>; 
 
             struct TPartSet {
                 TDataPartSet PartSet;
@@ -206,7 +206,7 @@ namespace NKikimr {
                         Y_VERIFY(partSet.PartSet.FullDataSize == id.BlobSize());
 
                         // PartSet contains some data, other data will be restored and written in the same PartSet
-                        TString recoveredData;
+                        TString recoveredData; 
                         const ui32 incomingMask = partSet.PartSet.PartsMask;
                         if (canRestore && needToRestore) {
                             groupType.RestoreData((TErasureType::ECrcMode)id.CrcMode(), partSet.PartSet, recoveredData,
@@ -291,7 +291,7 @@ namespace NKikimr {
             }
 
             // add next task during preparation phase
-            void AddTask(const TLogoBlobID &id, const NMatrix::TVectorType &partsToRecover, bool possiblePhantom,
+            void AddTask(const TLogoBlobID &id, const NMatrix::TVectorType &partsToRecover, bool possiblePhantom, 
                     TIngress ingress) {
                 Y_VERIFY(!id.PartId());
                 Y_VERIFY(LostVec.empty() || LostVec.back().Id < id);
@@ -327,11 +327,11 @@ namespace NKikimr {
             // structure for a lost part
             struct TLost {
                 const TLogoBlobID Id;
-                const NMatrix::TVectorType PartsToRecover;
+                const NMatrix::TVectorType PartsToRecover; 
                 bool PossiblePhantom;
                 const TIngress Ingress;
 
-                TLost(const TLogoBlobID &id, const NMatrix::TVectorType &partsToRecover, const bool possiblePhantom,
+                TLost(const TLogoBlobID &id, const NMatrix::TVectorType &partsToRecover, const bool possiblePhantom, 
                         TIngress ingress)
                     : Id(id)
                     , PartsToRecover(partsToRecover)

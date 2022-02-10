@@ -40,7 +40,7 @@ TString BinaryPath(TStringBuf path) {
     return (TFsPath(BuildRoot()) / path).Fix();
 }
 
-TString GetArcadiaTestsData() {
+TString GetArcadiaTestsData() { 
     TString atdRoot = NPrivate::GetTestEnv().ArcadiaTestsDataDir;
     if (atdRoot) {
         return atdRoot;
@@ -49,7 +49,7 @@ TString GetArcadiaTestsData() {
     TString path = NPrivate::GetCwd();
     const char pathsep = GetDirectorySeparator();
     while (!path.empty()) {
-        TString dataDir = path + "/arcadia_tests_data";
+        TString dataDir = path + "/arcadia_tests_data"; 
         if (IsDir(dataDir)) {
             return dataDir;
         }
@@ -64,7 +64,7 @@ TString GetArcadiaTestsData() {
     return {};
 }
 
-TString GetWorkPath() {
+TString GetWorkPath() { 
     TString workPath = NPrivate::GetTestEnv().WorkPath;
     if (workPath) {
         return workPath;

@@ -16,11 +16,11 @@ ENDIF()
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-OWNER(
+OWNER( 
     vskipin
     g:contrib
     g:cpp-contrib
-)
+) 
 
 NO_UTIL()
 

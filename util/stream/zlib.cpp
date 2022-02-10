@@ -22,17 +22,17 @@ namespace {
 
     class TZLibCommon {
     public:
-        inline TZLibCommon() noexcept {
+        inline TZLibCommon() noexcept { 
             memset(Z(), 0, sizeof(*Z()));
         }
 
         inline ~TZLibCommon() = default;
 
-        inline const char* GetErrMsg() const noexcept {
+        inline const char* GetErrMsg() const noexcept { 
             return Z()->msg != nullptr ? Z()->msg : "unknown error";
         }
 
-        inline z_stream* Z() const noexcept {
+        inline z_stream* Z() const noexcept { 
             return (z_stream*)(&Z_);
         }
 
@@ -40,7 +40,7 @@ namespace {
         z_stream Z_;
     };
 
-    static inline ui32 MaxPortion(size_t s) noexcept {
+    static inline ui32 MaxPortion(size_t s) noexcept { 
         return (ui32)Min<size_t>(Max<ui32>(), s);
     }
 
@@ -225,7 +225,7 @@ public:
         Z()->avail_out = TmpBufLen();
     }
 
-    inline ~TImpl() {
+    inline ~TImpl() { 
         deflateEnd(Z());
     }
 
@@ -305,11 +305,11 @@ public:
     }
 
 private:
-    inline unsigned char* TmpBuf() noexcept {
+    inline unsigned char* TmpBuf() noexcept { 
         return (unsigned char*)AdditionalData();
     }
 
-    inline size_t TmpBufLen() const noexcept {
+    inline size_t TmpBufLen() const noexcept { 
         return AdditionalDataLength();
     }
 
@@ -347,7 +347,7 @@ void TZLibCompress::TDestruct::Destroy(TImpl* impl) {
     delete impl;
 }
 
-TZLibCompress::~TZLibCompress() {
+TZLibCompress::~TZLibCompress() { 
     try {
         Finish();
     } catch (...) {

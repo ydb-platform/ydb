@@ -50,7 +50,7 @@ namespace NPageCollection {
         const TEntry *Index = nullptr;
         const TExtra *Extra = nullptr;
         const char *InboundData = nullptr;
-        TVector<ui64> Steps;    /* Pages boundaries vector  */
+        TVector<ui64> Steps;    /* Pages boundaries vector  */ 
     };
 
 }

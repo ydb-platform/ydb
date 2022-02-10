@@ -143,7 +143,7 @@ inline std::enable_if_t<!::NPrivate::TSafelyConvertible<TSmall, TLarge>::Result,
 }
 
 template <class TSmallInt, class TLargeInt>
-inline TSmallInt IntegerCast(TLargeInt largeInt) noexcept {
+inline TSmallInt IntegerCast(TLargeInt largeInt) noexcept { 
     try {
         return SafeIntegerCast<TSmallInt>(largeInt);
     } catch (const yexception& exc) {

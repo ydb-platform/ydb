@@ -46,7 +46,7 @@ namespace NTable {
         }
 
     private:
-        THashMap<const void*, THashSet<TPageId>> Touched;
+        THashMap<const void*, THashSet<TPageId>> Touched; 
         ui64 Pages = 0;
         ui64 Bytes = 0;
     };

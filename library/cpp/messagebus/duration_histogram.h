@@ -2,7 +2,7 @@
 
 #include <util/datetime/base.h>
 #include <util/generic/bitops.h>
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 
 #include <array>
 
@@ -39,7 +39,7 @@ struct TDurationHistogram {
         return *this;
     }
 
-    static TString LabelBefore(unsigned i);
+    static TString LabelBefore(unsigned i); 
 
-    TString PrintToString() const;
+    TString PrintToString() const; 
 };

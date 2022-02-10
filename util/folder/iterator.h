@@ -11,7 +11,7 @@
 
 class TDirIterator: public TInputRangeAdaptor<TDirIterator> {
     struct TFtsDestroy {
-        static inline void Destroy(FTS* f) noexcept {
+        static inline void Destroy(FTS* f) noexcept { 
             yfts_close(f);
         }
     };
@@ -36,33 +36,33 @@ public:
             Init(opts);
         }
 
-        inline TOptions& SetMaxLevel(size_t level) noexcept {
+        inline TOptions& SetMaxLevel(size_t level) noexcept { 
             MaxLevel = level;
 
             return *this;
         }
 
-        inline TOptions& SetSortFunctor(TCompare cmp) noexcept {
+        inline TOptions& SetSortFunctor(TCompare cmp) noexcept { 
             Cmp = cmp;
 
             return *this;
         }
 
-        TOptions& SetSortByName() noexcept;
+        TOptions& SetSortByName() noexcept; 
 
         int FtsOptions;
         size_t MaxLevel;
         TCompare Cmp;
 
     private:
-        inline void Init(int opts) noexcept {
+        inline void Init(int opts) noexcept { 
             FtsOptions = opts | FTS_NOCHDIR;
             MaxLevel = Max<size_t>();
             Cmp = nullptr;
         }
     };
 
-    inline TDirIterator(const TString& path, const TOptions& options = TOptions())
+    inline TDirIterator(const TString& path, const TOptions& options = TOptions()) 
         : Options_(options)
         , Path_(path)
     {
@@ -103,7 +103,7 @@ public:
 
 private:
     TOptions Options_;
-    TString Path_;
+    TString Path_; 
     char* Trees_[2];
     THolder<FTS, TFtsDestroy> FileTree_;
 };

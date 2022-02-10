@@ -11,7 +11,7 @@ namespace NKikimr {
     class TRangeSet {
         using TRange = std::pair<TValue, TValue>;
 
-        TVector<TRange> Ranges;
+        TVector<TRange> Ranges; 
         TValue Count = TValue();
 
     public:
@@ -80,15 +80,15 @@ namespace NKikimr {
             TPayload Payload;
             ui64 Serial;
             NKikimrProto::EReplyStatus Status;
-            TString Content;
+            TString Content; 
         };
-        using TReadQueue = TDeque<TReadItem>;
+        using TReadQueue = TDeque<TReadItem>; 
         TReadQueue ReadQueue;
         ui64 NextSerial = 0;
 
         typename TReadQueue::iterator Iterator;
 
-        TMap<void *, std::pair<typename TReadQueue::iterator, typename TReadQueue::iterator>> ActiveRequests;
+        TMap<void *, std::pair<typename TReadQueue::iterator, typename TReadQueue::iterator>> ActiveRequests; 
         ui64 NextRequestCookie = 1;
 
         struct TCompareReadItem {
@@ -96,7 +96,7 @@ namespace NKikimr {
                 return x->Serial > y->Serial;
             }
         };
-        TPriorityQueue<typename TReadQueue::iterator, TVector<typename TReadQueue::iterator>, TCompareReadItem> ReadyItemQueue;
+        TPriorityQueue<typename TReadQueue::iterator, TVector<typename TReadQueue::iterator>, TCompareReadItem> ReadyItemQueue; 
         ui64 NextReadySerial = 0;
 
         bool Started = false;
@@ -142,7 +142,7 @@ namespace NKikimr {
             TRangeSet<ui32> range;
 
             // vector of items we are _NOT_ going to read now
-            TVector<TReadItem> otherItems;
+            TVector<TReadItem> otherItems; 
 
             // iterator where we store enqueued items
             typename TReadQueue::iterator outIt = Iterator;
@@ -247,7 +247,7 @@ namespace NKikimr {
         }
 
         // try to get result item
-        bool GetResultItem(ui64 *serial, TPayload *payload, NKikimrProto::EReplyStatus *status, TString *content) {
+        bool GetResultItem(ui64 *serial, TPayload *payload, NKikimrProto::EReplyStatus *status, TString *content) { 
             if (!ReadyItemQueue) {
                 return false;
             }

@@ -74,8 +74,8 @@ enum {
 */
 class Term {
 public:
-	typedef TVector<wchar32> String;
-	typedef TSet<String> Strings;
+	typedef TVector<wchar32> String; 
+	typedef TSet<String> Strings; 
 
 	typedef ypair<int, int> RepetitionCount;
 	typedef ypair<Strings, bool> CharacterRange;
@@ -170,7 +170,7 @@ private:
 
 	void InstallDefaultFeatures();
 
-	TDeque<wchar32> m_input;
+	TDeque<wchar32> m_input; 
 	const Pire::Encoding* m_encoding;
 	TVector<THolder<Feature>> m_features;
 	Any m_retval;

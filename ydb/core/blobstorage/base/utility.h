@@ -21,7 +21,7 @@ namespace NKikimr {
     }
 
     template<typename T, typename A>
-    inline void AppendToVector(TVector<T, A>& to, TVector<T, A>&& from) {
+    inline void AppendToVector(TVector<T, A>& to, TVector<T, A>&& from) { 
         if (to) {
             to.insert(to.end(), from.begin(), from.end());
         } else {
@@ -30,13 +30,13 @@ namespace NKikimr {
     }
 
     template<typename T, typename A>
-    inline void AppendToVector(TVector<T, A>& to, const TVector<T, A>& from) {
+    inline void AppendToVector(TVector<T, A>& to, const TVector<T, A>& from) { 
         to.insert(to.end(), from.begin(), from.end());
     }
 
 
     template<typename TContainer>
-    inline TString FormatList(const TContainer& cont) {
+    inline TString FormatList(const TContainer& cont) { 
         TStringStream str;
         str << "[";
         bool first = true;

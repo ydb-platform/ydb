@@ -38,7 +38,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
                 , Cookie(cookie)
             {}
 
-            TString ToString() const {
+            TString ToString() const { 
                 TStringStream str;
                 str << "{EvPingTimeout TabletID: " << TabletID;
                 if (Cookie.Get()) {
@@ -98,11 +98,11 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             {}
         };
 
-        typedef TOneOneQueueInplace<TQueueEntry *, 64> TQueueType;
+        typedef TOneOneQueueInplace<TQueueEntry *, 64> TQueueType; 
 
         EState State = StInit;
 
-        TAutoPtr<TQueueType, TQueueType::TPtrCleanDestructor> Queue;
+        TAutoPtr<TQueueType, TQueueType::TPtrCleanDestructor> Queue; 
         TActorId KnownLeader;
         TActorId KnownLeaderTablet;
 
@@ -199,7 +199,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
 
     bool PushQueue(TEvTabletResolver::TEvForward::TPtr &ev, TEntry &entry, const TActorContext &ctx) {
         if (!entry.Queue)
-            entry.Queue.Reset(new TEntry::TQueueType());
+            entry.Queue.Reset(new TEntry::TQueueType()); 
         entry.Queue->Push(new TEntry::TQueueEntry(ctx.Now(), ev));
         return true;
     }
@@ -321,7 +321,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
     }
 
     void SendQueued(ui64 tabletId, TEntry &entry, const TActorContext &ctx) {
-        if (TEntry::TQueueType *queue = entry.Queue.Get()) {
+        if (TEntry::TQueueType *queue = entry.Queue.Get()) { 
             for (TAutoPtr<TEntry::TQueueEntry> x = queue->Pop(); !!x; x.Reset(queue->Pop())) {
                 TEvTabletResolver::TEvForward *msg = x->Ev->Get();
                 if (!SendForward(x->Ev->Sender, entry, msg, ctx))
@@ -356,7 +356,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         LOG_DEBUG(ctx, NKikimrServices::TABLET_RESOLVER,
                   "DropEntry tabletId: %" PRIu64 " followers: %" PRIu64,
                   tabletId, entry.KnownFollowers.size());
-        if (TEntry::TQueueType *queue = entry.Queue.Get()) {
+        if (TEntry::TQueueType *queue = entry.Queue.Get()) { 
             for (TAutoPtr<TEntry::TQueueEntry> x = queue->Pop(); !!x; x.Reset(queue->Pop())) {
                 ctx.Send(x->Ev->Sender, new TEvTabletResolver::TEvForwardResult(NKikimrProto::ERROR, tabletId));
             }
@@ -819,7 +819,7 @@ public:
             if (!value)
                 return;
 
-            if (TEntry::TQueueType *queue = value->Queue.Get()) {
+            if (TEntry::TQueueType *queue = value->Queue.Get()) { 
                 for (TAutoPtr<TEntry::TQueueEntry> x = queue->Pop(); !!x; x.Reset(queue->Pop())) {
                     ActorSystem->Send(x->Ev->Sender, new TEvTabletResolver::TEvForwardResult(NKikimrProto::RACE, key));
                 }

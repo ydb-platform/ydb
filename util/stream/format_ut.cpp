@@ -54,7 +54,7 @@ Y_UNIT_TEST_SUITE(TOutputStreamFormattingTest) {
         }
         {
             TStringStream ss;
-            TUtf16String w = UTF8ToWide("abcи");
+            TUtf16String w = UTF8ToWide("abcи"); 
             ss << HexText<wchar16>(w);
             UNIT_ASSERT_VALUES_EQUAL("0061 0062 0063 0438", ss.Str());
         }

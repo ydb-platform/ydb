@@ -151,7 +151,7 @@ struct TReadSpeedLimiterHolder {
 struct TUserInfo {
     THolder<TReadSpeedLimiterHolder> ReadSpeedLimiter;
 
-    TString Session = "";
+    TString Session = ""; 
     ui32 Generation = 0;
     ui32 Step = 0;
     i64 Offset = 0;

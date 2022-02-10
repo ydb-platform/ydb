@@ -27,13 +27,13 @@
 #include <cstdio>
 #include <functional>
 
-extern bool CheckExceptionMessage(const char*, TString&);
+extern bool CheckExceptionMessage(const char*, TString&); 
 
 namespace NUnitTest {
     class TTestBase;
 
     namespace NPrivate {
-        void RaiseError(const char* what, const TString& msg, bool fatalFailure);
+        void RaiseError(const char* what, const TString& msg, bool fatalFailure); 
         void SetUnittestThread(bool);
         void SetCurrentTest(TTestBase*);
         TTestBase* GetCurrentTest();
@@ -41,9 +41,9 @@ namespace NUnitTest {
 
     extern bool ShouldColorizeDiff;
     extern bool ContinueOnFail;
-    TString ColoredDiff(TStringBuf s1, TStringBuf s2, const TString& delims = TString(), bool reverse = false);
-    TString GetFormatTag(const char* name);
-    TString GetResetTag();
+    TString ColoredDiff(TStringBuf s1, TStringBuf s2, const TString& delims = TString(), bool reverse = false); 
+    TString GetFormatTag(const char* name); 
+    TString GetResetTag(); 
 
     // Raise error handler
     // Used for testing library/cpp/testing/unittest macroses
@@ -73,7 +73,7 @@ namespace NUnitTest {
         {
         }
 
-        using TMetrics = THashMap<TString, double>;
+        using TMetrics = THashMap<TString, double>; 
         TMetrics Metrics;
 
         ITestSuiteProcessor* Processor;
@@ -82,7 +82,7 @@ namespace NUnitTest {
     class ITestSuiteProcessor {
     public:
         struct TUnit {
-            const TString name;
+            const TString name; 
         };
 
         struct TTest {
@@ -93,7 +93,7 @@ namespace NUnitTest {
         struct TError {
             const TTest* test;
             const char* msg;
-            TString BackTrace;
+            TString BackTrace; 
             TTestContext* Context;
         };
 
@@ -163,8 +163,8 @@ namespace NUnitTest {
         void AddTestFinish(const TTest& test);
 
     private:
-        TMap<TString, size_t> TestErrors_;
-        TMap<TString, size_t> CurTestErrors_;
+        TMap<TString, size_t> TestErrors_; 
+        TMap<TString, size_t> CurTestErrors_; 
     };
 
     class TTestBase;
@@ -177,7 +177,7 @@ namespace NUnitTest {
         virtual ~ITestBaseFactory();
 
         // name of test suite
-        virtual TString Name() const noexcept = 0;
+        virtual TString Name() const noexcept = 0; 
         virtual TTestBase* ConstructTest() = 0;
 
     private:
@@ -195,7 +195,7 @@ namespace NUnitTest {
 
         virtual TString TypeId() const;
 
-        virtual TString Name() const noexcept = 0;
+        virtual TString Name() const noexcept = 0; 
         virtual void Execute() = 0;
 
         virtual void SetUp();
@@ -431,7 +431,7 @@ public:                       \
         const TString _b(B);                                                                                 \
         if (_a != _b) {                                                                                      \
             auto&& failMsg = Sprintf("%s != %s %s", ToString(_a).data(), ToString(_b).data(), (::TStringBuilder() << C).data()); \
-            UNIT_FAIL_IMPL("strings equal assertion failed", failMsg);                                       \
+            UNIT_FAIL_IMPL("strings equal assertion failed", failMsg);                                       \ 
         }                                                                                                    \
     } while (false)
 
@@ -686,7 +686,7 @@ public:                       \
 
         // helper method to avoid double evaluation of A and B expressions in UNIT_ASSERT_VALUES_EQUAL_C
         template <typename T, typename U>
-        static inline bool CompareAndMakeStrings(const T& a, const U& b, TString& as, TString& asInd, TString& bs, TString& bsInd, bool& usePlainDiff, bool want) {
+        static inline bool CompareAndMakeStrings(const T& a, const U& b, TString& as, TString& asInd, TString& bs, TString& bsInd, bool& usePlainDiff, bool want) { 
             const bool have = CompareEqual(a, b);
             usePlainDiff = std::is_integral<T>::value && std::is_integral<U>::value;
 
@@ -714,10 +714,10 @@ public:                       \
         if (!::NUnitTest::NPrivate::CompareAndMakeStrings(A, B, _as, _asInd, _bs, _bsInd, _usePlainDiff, EQflag)) {                    \
             auto&& failMsg = Sprintf("(%s %s %s) failed: (%s %s %s) %s", #A, EQstr, #B, _as.data(), NEQstr, _bs.data(), (::TStringBuilder() << C).data()); \
             if (EQflag && !_usePlainDiff) {                                                                                            \
-                failMsg += ", with diff:\n";                                                                                           \
-                failMsg += ::NUnitTest::ColoredDiff(_asInd, _bsInd);                                                                   \
+                failMsg += ", with diff:\n";                                                                                           \ 
+                failMsg += ::NUnitTest::ColoredDiff(_asInd, _bsInd);                                                                   \ 
             }                                                                                                                          \
-            UNIT_FAIL_IMPL("assertion failed", failMsg);                                                                               \
+            UNIT_FAIL_IMPL("assertion failed", failMsg);                                                                               \ 
         }                                                                                                                              \
     } while (false)
 
@@ -1024,7 +1024,7 @@ public:                       \
 #define Y_UNIT_TEST_FRIEND(N, T) \
     friend NTestSuite##N::TTestCase##T \
 
-    TString RandomString(size_t len, ui32 seed = 0);
+    TString RandomString(size_t len, ui32 seed = 0); 
 }
 
 using ::NUnitTest::TTestBase;

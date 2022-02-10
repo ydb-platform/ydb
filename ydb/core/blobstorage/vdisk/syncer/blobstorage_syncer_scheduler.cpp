@@ -196,7 +196,7 @@ namespace NKikimr {
             }
         };
 
-        using TSchedulerQueue = TPriorityQueue<TVDiskInfoPtr, TVector<TVDiskInfoPtr>, TGreater>;
+        using TSchedulerQueue = TPriorityQueue<TVDiskInfoPtr, TVector<TVDiskInfoPtr>, TGreater>; 
 
         TIntrusivePtr<TSyncerContext> SyncerContext;
         TIntrusivePtr<TBlobStorageGroupInfo> GInfo;

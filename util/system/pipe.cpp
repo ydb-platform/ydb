@@ -3,7 +3,7 @@
 #include <util/stream/output.h>
 #include <util/generic/yexception.h>
 
-ssize_t TPipeHandle::Read(void* buffer, size_t byteCount) const noexcept {
+ssize_t TPipeHandle::Read(void* buffer, size_t byteCount) const noexcept { 
 #ifdef _win_
     return recv(Fd_, (char*)buffer, byteCount, 0);
 #else
@@ -11,7 +11,7 @@ ssize_t TPipeHandle::Read(void* buffer, size_t byteCount) const noexcept {
 #endif
 }
 
-ssize_t TPipeHandle::Write(const void* buffer, size_t byteCount) const noexcept {
+ssize_t TPipeHandle::Write(const void* buffer, size_t byteCount) const noexcept { 
 #ifdef _win_
     return send(Fd_, (const char*)buffer, byteCount, 0);
 #else
@@ -19,7 +19,7 @@ ssize_t TPipeHandle::Write(const void* buffer, size_t byteCount) const noexcept 
 #endif
 }
 
-bool TPipeHandle::Close() noexcept {
+bool TPipeHandle::Close() noexcept { 
     bool ok = true;
     if (Fd_ != INVALID_PIPEHANDLE) {
 #ifdef _win_
@@ -94,7 +94,7 @@ public:
         }
     }
 
-    TPipeHandle& GetHandle() noexcept {
+    TPipeHandle& GetHandle() noexcept { 
         return Handle_;
     }
 
@@ -134,11 +134,11 @@ void TPipe::Close() {
     Impl_->Close();
 }
 
-PIPEHANDLE TPipe::GetHandle() const noexcept {
+PIPEHANDLE TPipe::GetHandle() const noexcept { 
     return Impl_->GetHandle();
 }
 
-bool TPipe::IsOpen() const noexcept {
+bool TPipe::IsOpen() const noexcept { 
     return Impl_->IsOpen();
 }
 

@@ -5,7 +5,7 @@
 #include <util/memory/tempbuf.h>
 #include <util/generic/buffer.h>
 #include <util/generic/strbuf.h>
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 #include <util/generic/vector.h>
 #include <util/generic/typetraits.h>
 
@@ -108,7 +108,7 @@ struct TMemoryTraits<std::vector<T, TAlloc>>: public TElementDependentMemoryTrai
 };
 
 template <typename T, typename TAlloc>
-struct TMemoryTraits<TVector<T, TAlloc>>: public TMemoryTraits<std::vector<T, TAlloc>> {
+struct TMemoryTraits<TVector<T, TAlloc>>: public TMemoryTraits<std::vector<T, TAlloc>> { 
 };
 
 template <typename T>
@@ -126,7 +126,7 @@ struct TMemoryTraits<std::basic_string<T, TCharTraits, TAlloc>>: public TElement
 };
 
 template <>
-struct TMemoryTraits<TString>: public TElementDependentMemoryTraits<char> {
+struct TMemoryTraits<TString>: public TElementDependentMemoryTraits<char> { 
     enum {
         OwnsMemory = true
     };

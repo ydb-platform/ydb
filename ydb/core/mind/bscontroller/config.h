@@ -46,15 +46,15 @@ namespace NKikimr {
             TBlobStorageController& Self;
 
             // user-defined configuration
-            TCowHolder<TMap<THostConfigId, THostConfigInfo>> HostConfigs;
-            TCowHolder<TMap<TBoxId, TBoxInfo>> Boxes;
-            TCowHolder<TMap<TBoxStoragePoolId, TStoragePoolInfo>> StoragePools;
-            TCowHolder<TMultiMap<TBoxStoragePoolId, TGroupId>> StoragePoolGroups;
+            TCowHolder<TMap<THostConfigId, THostConfigInfo>> HostConfigs; 
+            TCowHolder<TMap<TBoxId, TBoxInfo>> Boxes; 
+            TCowHolder<TMap<TBoxStoragePoolId, TStoragePoolInfo>> StoragePools; 
+            TCowHolder<TMultiMap<TBoxStoragePoolId, TGroupId>> StoragePoolGroups; 
 
             // system-level configuration
             TOverlayMap<TPDiskId, TPDiskInfo> PDisks;
             TOverlayMap<TSerial, TDriveSerialInfo> DrivesSerials;
-            TCowHolder<TMap<TNodeId, TNodeInfo>> Nodes;
+            TCowHolder<TMap<TNodeId, TNodeInfo>> Nodes; 
             TOverlayMap<TVSlotId, TVSlotInfo> VSlots;
             TOverlayMap<TGroupId, TGroupInfo> Groups;
             TCowHolder<TMap<TGroupSpecies, TVector<TGroupId>>> IndexGroupSpeciesToGroup;

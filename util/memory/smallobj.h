@@ -8,11 +8,11 @@
 
 class TFixedSizeAllocator {
     struct TAlloc: public TIntrusiveSListItem<TAlloc> {
-        inline void* ToPointer() noexcept {
+        inline void* ToPointer() noexcept { 
             return this;
         }
 
-        static inline TAlloc* FromPointer(void* ptr) noexcept {
+        static inline TAlloc* FromPointer(void* ptr) noexcept { 
             return (TAlloc*)ptr;
         }
 
@@ -24,7 +24,7 @@ class TFixedSizeAllocator {
             return Max(alignof(TAlloc), align);
         }
 
-        static inline TAlloc* Construct(void* ptr) noexcept {
+        static inline TAlloc* Construct(void* ptr) noexcept { 
             return (TAlloc*)ptr;
         }
     };
@@ -62,11 +62,11 @@ public:
         return Free_.PopFront()->ToPointer();
     }
 
-    inline void Release(void* ptr) noexcept {
+    inline void Release(void* ptr) noexcept { 
         Free_.PushFront(TAlloc::FromPointer(ptr));
     }
 
-    inline size_t Size() const noexcept {
+    inline size_t Size() const noexcept { 
         return AllocSize_;
     }
 
@@ -96,7 +96,7 @@ public:
         return (T*)Alloc_.Allocate();
     }
 
-    inline void Release(T* t) noexcept {
+    inline void Release(T* t) noexcept { 
         Alloc_.Release(t);
     }
 
@@ -120,11 +120,11 @@ public:
         return &ret->Obj;
     }
 
-    inline void operator delete(void* ptr, size_t) noexcept {
+    inline void operator delete(void* ptr, size_t) noexcept { 
         DoDelete(ptr);
     }
 
-    inline void operator delete(void* ptr, TPool*) noexcept {
+    inline void operator delete(void* ptr, TPool*) noexcept { 
         /*
          * this delete operator can be called automagically by compiler
          */
@@ -133,7 +133,7 @@ public:
     }
 
 private:
-    static inline void DoDelete(void* ptr) noexcept {
+    static inline void DoDelete(void* ptr) noexcept { 
         static_assert(std::is_standard_layout<THeader>::value, "offsetof is only defined for standard layout types");
         THeader* header = (THeader*)((char*)ptr - offsetof(THeader, Obj));
         ((TPool*)header->Pool)->Release(header);

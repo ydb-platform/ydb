@@ -33,7 +33,7 @@ struct TDecompressorError: public yexception {
 class TLz4Compress: public IOutputStream {
 public:
     TLz4Compress(IOutputStream* slave, ui16 maxBlockSize = 1 << 15);
-    ~TLz4Compress() override;
+    ~TLz4Compress() override; 
 
 private:
     void DoWrite(const void* buf, size_t len) override;
@@ -53,7 +53,7 @@ private:
 class TLz4Decompress: public IInputStream {
 public:
     TLz4Decompress(IInputStream* slave);
-    ~TLz4Decompress() override;
+    ~TLz4Decompress() override; 
 
 private:
     size_t DoRead(void* buf, size_t len) override;
@@ -71,7 +71,7 @@ private:
 class TSnappyCompress: public IOutputStream {
 public:
     TSnappyCompress(IOutputStream* slave, ui16 maxBlockSize = 1 << 15);
-    ~TSnappyCompress() override;
+    ~TSnappyCompress() override; 
 
 private:
     void DoWrite(const void* buf, size_t len) override;
@@ -91,7 +91,7 @@ private:
 class TSnappyDecompress: public IInputStream {
 public:
     TSnappyDecompress(IInputStream* slave);
-    ~TSnappyDecompress() override;
+    ~TSnappyDecompress() override; 
 
 private:
     size_t DoRead(void* buf, size_t len) override;
@@ -107,7 +107,7 @@ private:
 class TLzoCompress: public IOutputStream {
 public:
     TLzoCompress(IOutputStream* slave, ui16 maxBlockSize = 1 << 15);
-    ~TLzoCompress() override;
+    ~TLzoCompress() override; 
 
 private:
     void DoWrite(const void* buf, size_t len) override;
@@ -125,7 +125,7 @@ private:
 class TLzoDecompress: public IInputStream {
 public:
     TLzoDecompress(IInputStream* slave);
-    ~TLzoDecompress() override;
+    ~TLzoDecompress() override; 
 
 private:
     size_t DoRead(void* buf, size_t len) override;
@@ -141,7 +141,7 @@ private:
 class TLzfCompress: public IOutputStream {
 public:
     TLzfCompress(IOutputStream* slave, ui16 maxBlockSize = 1 << 15);
-    ~TLzfCompress() override;
+    ~TLzfCompress() override; 
 
 private:
     void DoWrite(const void* buf, size_t len) override;
@@ -159,7 +159,7 @@ private:
 class TLzfDecompress: public IInputStream {
 public:
     TLzfDecompress(IInputStream* slave);
-    ~TLzfDecompress() override;
+    ~TLzfDecompress() override; 
 
 private:
     size_t DoRead(void* buf, size_t len) override;
@@ -193,7 +193,7 @@ public:
                  EVersion ver = V_1_31,
                  unsigned level = 0,
                  EMode mode = M_0);
-    ~TLzqCompress() override;
+    ~TLzqCompress() override; 
 
 private:
     void DoWrite(const void* buf, size_t len) override;
@@ -211,7 +211,7 @@ private:
 class TLzqDecompress: public IInputStream {
 public:
     TLzqDecompress(IInputStream* slave);
-    ~TLzqDecompress() override;
+    ~TLzqDecompress() override; 
 
 private:
     size_t DoRead(void* buf, size_t len) override;

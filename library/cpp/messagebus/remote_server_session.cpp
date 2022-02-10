@@ -130,7 +130,7 @@ EMessageStatus TRemoteServerSession::SendReply(const TBusIdentity& ident, TBusMe
     return MESSAGE_OK;
 }
 
-int TRemoteServerSession::GetInFlight() const noexcept {
+int TRemoteServerSession::GetInFlight() const noexcept { 
     return ServerOwnedMessages.GetCurrentCount();
 }
 

@@ -86,7 +86,7 @@ public:
 
 class TClientCommandState : public TCmsClientCommand {
 public:
-    TVector<TString> Hosts;
+    TVector<TString> Hosts; 
 
     TClientCommandState()
         : TCmsClientCommand("state", {}, "Get cluster state")
@@ -115,10 +115,10 @@ public:
     {
         auto &state = response.GetClusterStateResponse().GetState();
 
-        TInstant timestamp = TInstant::MicroSeconds(state.GetTimestamp());
+        TInstant timestamp = TInstant::MicroSeconds(state.GetTimestamp()); 
         Cout << "Cluster state at " << timestamp.ToStringLocalUpToSeconds() << Endl;
 
-        TMultiMap<TString, const NKikimrCms::THostState*> hosts;
+        TMultiMap<TString, const NKikimrCms::THostState*> hosts; 
         for (auto &host : state.GetHosts())
             hosts.emplace(host.GetName(), &host);
 
@@ -139,14 +139,14 @@ public:
             Cout << "  Markers: " << JoinSeq(", ", markers) << Endl;
         }
 
-        TMultiMap<TString, const NKikimrCms::TServiceState*> services;
+        TMultiMap<TString, const NKikimrCms::TServiceState*> services; 
         for (auto &service : host.GetServices())
             services.emplace(service.GetName(), &service);
 
         for (auto &pr : services)
             PrintService(*pr.second);
 
-        TMultiMap<TString, const NKikimrCms::TDeviceState*> devices;
+        TMultiMap<TString, const NKikimrCms::TDeviceState*> devices; 
         for (auto &device : host.GetDevices())
             devices.emplace(device.GetName(), &device);
 

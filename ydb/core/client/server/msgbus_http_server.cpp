@@ -37,14 +37,14 @@ public:
     virtual void GetInFlightBulk(::TArrayRef<const NBus::TNetAddr>, TArrayRef<size_t>) const override {}
     virtual void GetConnectSyscallsNumBulkForTest(::TArrayRef<const NBus::TNetAddr>, TArrayRef<size_t>) const override {}
     virtual int GetInFlight() const noexcept override { return 1; }
-    virtual TString GetStatus(ui16) override { return TString(); }
+    virtual TString GetStatus(ui16) override { return TString(); } 
     virtual NBus::TConnectionStatusMonRecord GetStatusProtobuf() override { return NBus::TConnectionStatusMonRecord(); }
     virtual NBus::NPrivate::TSessionDumpStatus GetStatusRecordInternal() override { return NBus::NPrivate::TSessionDumpStatus(); }
-    virtual TString GetStatusSingleLine() override { return TString(); }
+    virtual TString GetStatusSingleLine() override { return TString(); } 
     virtual const NBus::TBusSessionConfig* GetConfig() const noexcept override { return &Config; }
     virtual const NBus::TBusProtocol* GetProto() const noexcept override { return &Protocol; }
     virtual NBus::TBusMessageQueue* GetQueue() const noexcept override { return nullptr; }
-    virtual TString GetNameInternal() override { return TString(); }
+    virtual TString GetNameInternal() override { return TString(); } 
     virtual void Shutdown() override {}
     virtual void PauseInput(bool) override {}
     virtual unsigned GetActualListenPort() override { return 0; }
@@ -181,7 +181,7 @@ void TMessageBusHttpServer::Output(NMonitoring::IMonHttpRequest& request) {
             const ::google::protobuf::Descriptor* msgDescriptor = message->GetRecord()->GetDescriptor();
             if (msgDescriptor->name() == "TJSON") {
                 NKikimrClient::TJSON* json(static_cast<NKikimrClient::TJSON*>(message->GetRecord()));
-                json->SetJSON(TString(postContent));
+                json->SetJSON(TString(postContent)); 
             } else {
                 static NJson::TJsonReaderConfig readerConfig;
                 static NProtobufJson::TJson2ProtoConfig protoConfig;

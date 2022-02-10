@@ -1,5 +1,5 @@
 #include <util/generic/set.h>
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 #include <util/generic/strbuf.h>
 #include <utility>
 
@@ -21,7 +21,7 @@ namespace {
 
     public:
         void Add(TStringBuf name, TStringBuf value) {
-            Impl.emplace(TString(name), TString(value));
+            Impl.emplace(TString(name), TString(value)); 
         }
 
         bool operator==(const THeadersExistence& rhs) const {
@@ -29,7 +29,7 @@ namespace {
         }
 
     private:
-        typedef TMultiSet<std::pair<TString, TString>> TImpl;
+        typedef TMultiSet<std::pair<TString, TString>> TImpl; 
         TImpl Impl;
     };
 }
@@ -66,11 +66,11 @@ public:
 
 private:
     static void AddHeaderImpl1Arg(THttpHeaders& headers, TStringBuf name, TStringBuf value) {
-        headers.AddHeader(THttpInputHeader(TString(name), TString(value)));
+        headers.AddHeader(THttpInputHeader(TString(name), TString(value))); 
     }
 
     static void AddHeaderImpl2Args(THttpHeaders& headers, TStringBuf name, TStringBuf value) {
-        headers.AddHeader(TString(name), TString(value));
+        headers.AddHeader(TString(name), TString(value)); 
     }
 
     static void AddOrReplaceHeaderImpl1Arg(THttpHeaders& headers, TStringBuf name, TStringBuf value) {
@@ -154,7 +154,7 @@ void THttpHeadersTest::DoTestAddOrReplaceOperation(TAddHeaderFunction addHeader,
 void THttpHeadersTest::TestAddHeaderTemplateness() {
     THttpHeaders h1;
     h1.AddHeader("h1", "v1");
-    h1.AddHeader("h2", TString("v2"));
+    h1.AddHeader("h2", TString("v2")); 
     h1.AddHeader("h3", TStringBuf("v3"));
     h1.AddHeader("h4", TStringBuf("v4"));
 

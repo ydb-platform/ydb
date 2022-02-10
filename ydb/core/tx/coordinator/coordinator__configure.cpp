@@ -7,7 +7,7 @@ struct TTxCoordinator::TTxConfigure : public TTransactionBase<TTxCoordinator> {
     TActorId AckTo;
     ui64 Version;
     ui64 Resolution;
-    TVector<TTabletId> Mediators;
+    TVector<TTabletId> Mediators; 
     NKikimrSubDomains::TProcessingParams Config;
     TAutoPtr<TEvSubDomain::TEvConfigureStatus> Respond;
     bool ConfigurationApplied;
@@ -36,13 +36,13 @@ struct TTxCoordinator::TTxConfigure : public TTransactionBase<TTxCoordinator> {
             return false;
 
         ui64 curVersion = 0;
-        TVector<TTabletId> curMediators;
+        TVector<TTabletId> curMediators; 
         ui64 curResolution = 0;
         bool curHaveConfig = false;
 
         while (!rowset.EndOfSet()) {
             const ui64 ver = rowset.GetValue<Schema::DomainConfiguration::Version>();
-            TVector<TTabletId> mediators = rowset.GetValue<Schema::DomainConfiguration::Mediators>();
+            TVector<TTabletId> mediators = rowset.GetValue<Schema::DomainConfiguration::Mediators>(); 
             ui64 resolution = rowset.GetValue<Schema::DomainConfiguration::Resolution>();
 
             if (ver >= curVersion) {

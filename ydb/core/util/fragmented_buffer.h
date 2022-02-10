@@ -19,7 +19,7 @@ public:
 
     void Write(i32 begin, const char* buffer, i32 size);
     void Read(i32 begin, char* buffer, i32 size) const;
-    TString Print() const;
+    TString Print() const; 
 
     std::pair<const char*, i32> Get(i32 begin) const;
     void CopyFrom(const TFragmentedBuffer& from, const TIntervalSet<i32>& range);

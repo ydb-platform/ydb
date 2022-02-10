@@ -58,10 +58,10 @@ class TJsonHandlerBase {
 public:
     virtual ~TJsonHandlerBase() = default;
     virtual IActor* CreateRequestActor(IViewer* viewer, NMon::TEvHttpInfo::TPtr& event) = 0;
-    virtual TString GetResponseJsonSchema() = 0;
-    virtual TString GetRequestSummary() { return TString(); }
-    virtual TString GetRequestDescription() { return TString(); }
-    virtual TString GetRequestParameters() { return TString(); }
+    virtual TString GetResponseJsonSchema() = 0; 
+    virtual TString GetRequestSummary() { return TString(); } 
+    virtual TString GetRequestDescription() { return TString(); } 
+    virtual TString GetRequestParameters() { return TString(); } 
 };
 
 template <typename ActorRequestType>
@@ -71,23 +71,23 @@ public:
         return new ActorRequestType(viewer, event);
     }
 
-    TString GetResponseJsonSchema() override {
-        static TString jsonSchema = TJsonRequestSchema<ActorRequestType>::GetSchema();
+    TString GetResponseJsonSchema() override { 
+        static TString jsonSchema = TJsonRequestSchema<ActorRequestType>::GetSchema(); 
         return jsonSchema;
     }
 
-    TString GetRequestSummary() override {
-        static TString jsonSummary = TJsonRequestSummary<ActorRequestType>::GetSummary();
+    TString GetRequestSummary() override { 
+        static TString jsonSummary = TJsonRequestSummary<ActorRequestType>::GetSummary(); 
         return jsonSummary;
     }
 
-    TString GetRequestDescription() override {
-        static TString jsonDescription = TJsonRequestDescription<ActorRequestType>::GetDescription();
+    TString GetRequestDescription() override { 
+        static TString jsonDescription = TJsonRequestDescription<ActorRequestType>::GetDescription(); 
         return jsonDescription;
     }
 
-    TString GetRequestParameters() override {
-        static TString jsonParameters = TJsonRequestParameters<ActorRequestType>::GetParameters();
+    TString GetRequestParameters() override { 
+        static TString jsonParameters = TJsonRequestParameters<ActorRequestType>::GetParameters(); 
         return jsonParameters;
     }
 };
@@ -219,8 +219,8 @@ public:
         VirtualHandlersByParentType.insert(std::make_pair(parentObjectType, TVirtualHandler(handler)));
     }
 
-    TVector<const TVirtualHandler*> GetVirtualHandlers(NKikimrViewer::EObjectType type, const TString&/* path*/) const override {
-        TVector<const TVirtualHandler*> handlers;
+    TVector<const TVirtualHandler*> GetVirtualHandlers(NKikimrViewer::EObjectType type, const TString&/* path*/) const override { 
+        TVector<const TVirtualHandler*> handlers; 
         auto its = VirtualHandlersByParentType.equal_range(type);
         for (auto it = its.first; it != its.second; ++it) {
             handlers.push_back(&it->second);
@@ -242,7 +242,7 @@ public:
     }
 
 private:
-    THashMap<TString, TAutoPtr<TJsonHandlerBase>> JsonHandlers;
+    THashMap<TString, TAutoPtr<TJsonHandlerBase>> JsonHandlers; 
     const TKikimrRunConfig KikimrRunConfig;
     std::unordered_multimap<NKikimrViewer::EObjectType, TVirtualHandler> VirtualHandlersByParentType;
     std::unordered_map<NKikimrViewer::EObjectType, TContentHandler> ContentHandlers;
@@ -253,7 +253,7 @@ private:
         }
     }
 
-    TString GetSwaggerJson(NMon::TEvHttpInfo::TPtr &ev) {
+    TString GetSwaggerJson(NMon::TEvHttpInfo::TPtr &ev) { 
         TStringStream json;
         TString basepath = ev->Get()->Request.GetParams().Get("basepath");
         if (basepath.empty()) {
@@ -284,26 +284,26 @@ private:
             if (itJson != JsonHandlers.begin()) {
                 json << ',';
             }
-            TString name = itJson->first;
+            TString name = itJson->first; 
             json << '"' << name << '"' << ":{";
                 json << "\"get\":{";
                     json << "\"tags\":[\"viewer\"],";
                     json << "\"produces\":[\"application/json\"],";
-                    TString summary = itJson->second->GetRequestSummary();
+                    TString summary = itJson->second->GetRequestSummary(); 
                     if (!summary.empty()) {
                         json << "\"summary\":" << summary << ',';
                     }
-                    TString description = itJson->second->GetRequestDescription();
+                    TString description = itJson->second->GetRequestDescription(); 
                     if (!description.empty()) {
                         json << "\"description\":" << description << ',';
                     }
-                    TString parameters = itJson->second->GetRequestParameters();
+                    TString parameters = itJson->second->GetRequestParameters(); 
                     if (!parameters.empty()) {
                         json << "\"parameters\":" << parameters << ',';
                     }
                     json << "\"responses\":{";
                         json << "\"200\":{";
-                            TString schema = itJson->second->GetResponseJsonSchema();
+                            TString schema = itJson->second->GetResponseJsonSchema(); 
                             if (!schema.empty()) {
                                 json << "\"schema\":" << schema;
                             }
@@ -321,7 +321,7 @@ private:
     }
 
     bool ReplyWithSwaggerJson(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx) {
-        TString json(GetSwaggerJson(ev));
+        TString json(GetSwaggerJson(ev)); 
         TStringStream response;
         response << "HTTP/1.1 200 Ok\r\n";
         response << "Content-Type: application/json\r\n";
@@ -332,16 +332,16 @@ private:
         return true;
     }
 
-    bool ReplyWithFile(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx, const TString& name) {
+    bool ReplyWithFile(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx, const TString& name) { 
         if (name == "/api/viewer.json") {
             return ReplyWithSwaggerJson(ev, ctx);
         }
         TString filename("content" + name);
-        TString blob;
-        TString type;
+        TString blob; 
+        TString type; 
         TFileStat fstat(filename);
         if (fstat.IsFile()) {
-            blob = TUnbufferedFileInput(filename).ReadAll();
+            blob = TUnbufferedFileInput(filename).ReadAll(); 
             if (!blob.empty()) {
                 type = mimetypeByExt(filename.c_str());
             }
@@ -409,7 +409,7 @@ private:
                     ctx.ExecutorThread.RegisterActor(itJson->second->CreateRequestActor(this, ev));
                 }
                 catch (const std::exception& e) {
-                    ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(TString("HTTP/1.1 400 Bad Request\r\n\r\n") + e.what(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+                    ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(TString("HTTP/1.1 400 Bad Request\r\n\r\n") + e.what(), 0, NMon::IEvHttpInfoRes::EContentType::Custom)); 
                     return;
                 }
             } else {

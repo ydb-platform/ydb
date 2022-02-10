@@ -63,22 +63,22 @@ Y_UNIT_TEST_SUITE(TStringPoolTest) {
 
         strPool.Build();
 
-        TVector<TString> strings;
-        TVector<ui32> indexes;
-        TVector<ui32> frequences;
+        TVector<TString> strings; 
+        TVector<ui32> indexes; 
+        TVector<ui32> frequences; 
         strPool.ForEach([&](TStringBuf str, ui32 index, ui32 freq) {
             strings.emplace_back(str);
             indexes.push_back(index);
             frequences.push_back(freq);
         });
 
-        TVector<TString> expectedStrings = {"three", "two", "one"};
+        TVector<TString> expectedStrings = {"three", "two", "one"}; 
         UNIT_ASSERT_EQUAL(strings, expectedStrings);
 
-        TVector<ui32> expectedIndexes = {0, 1, 2};
+        TVector<ui32> expectedIndexes = {0, 1, 2}; 
         UNIT_ASSERT_EQUAL(indexes, expectedIndexes);
 
-        TVector<ui32> expectedFrequences = {3, 2, 1};
+        TVector<ui32> expectedFrequences = {3, 2, 1}; 
         UNIT_ASSERT_EQUAL(frequences, expectedFrequences);
     }
 }

@@ -1,7 +1,7 @@
 #pragma once
 
 #include <util/generic/noncopyable.h>
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 #include <util/generic/list.h>
 #include <util/generic/hash.h>
 #include <util/generic/strbuf.h>
@@ -17,9 +17,9 @@
 class TShellCommandOptions {
 public:
     struct TUserOptions {
-        TString Name;
+        TString Name; 
 #if defined(_win_)
-        TString Password;
+        TString Password; 
 #endif
 #if defined(_unix_)
         /**
@@ -38,7 +38,7 @@ public:
     };
 
 public:
-    inline TShellCommandOptions() noexcept
+    inline TShellCommandOptions() noexcept 
         : ClearSignalMask(false)
         , CloseAllFdsOnExec(false)
         , AsyncMode(false)
@@ -59,7 +59,7 @@ public:
     {
     }
 
-    inline TShellCommandOptions& SetNice(int value) noexcept {
+    inline TShellCommandOptions& SetNice(int value) noexcept { 
         Nice = value;
 
         return *this;
@@ -318,7 +318,7 @@ public:
     IOutputStream* OutputStream;
     IOutputStream* ErrorStream;
     TUserOptions User;
-    THashMap<TString, TString> Environment;
+    THashMap<TString, TString> Environment; 
     int Nice = 0;
 
     static const size_t DefaultSyncPollDelay = 1000; // ms
@@ -351,10 +351,10 @@ public:
      * @param options execution options
      * @todo store entire options structure
      */
-    TShellCommand(const TStringBuf cmd, const TList<TString>& args, const TShellCommandOptions& options = TShellCommandOptions(),
-                  const TString& workdir = TString());
-    TShellCommand(const TStringBuf cmd, const TShellCommandOptions& options = TShellCommandOptions(), const TString& workdir = TString());
-    ~TShellCommand();
+    TShellCommand(const TStringBuf cmd, const TList<TString>& args, const TShellCommandOptions& options = TShellCommandOptions(), 
+                  const TString& workdir = TString()); 
+    TShellCommand(const TStringBuf cmd, const TShellCommandOptions& options = TShellCommandOptions(), const TString& workdir = TString()); 
+    ~TShellCommand(); 
 
 public:
     /**
@@ -372,7 +372,7 @@ public:
      *
      * @return collected output
      */
-    const TString& GetOutput() const;
+    const TString& GetOutput() const; 
 
     /**
      * @brief return the collected error output from the command.
@@ -380,7 +380,7 @@ public:
      *
      * @return collected error output
      */
-    const TString& GetError() const;
+    const TString& GetError() const; 
 
     /**
      * @brief return the internal error occured while watching
@@ -389,7 +389,7 @@ public:
      *
      * @return error text
      */
-    const TString& GetInternalError() const;
+    const TString& GetInternalError() const; 
 
     /**
      * @brief get current status of command execution
@@ -476,10 +476,10 @@ private:
 };
 
 /// Appends to dst: quoted arg
-void ShellQuoteArg(TString& dst, TStringBuf arg);
+void ShellQuoteArg(TString& dst, TStringBuf arg); 
 
 /// Appends to dst: space, quoted arg
-void ShellQuoteArgSp(TString& dst, TStringBuf arg);
+void ShellQuoteArgSp(TString& dst, TStringBuf arg); 
 
 /// Returns true if arg should be quoted
 bool ArgNeedsQuotes(TStringBuf arg) noexcept;

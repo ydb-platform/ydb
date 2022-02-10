@@ -11,7 +11,7 @@ SRCS(
     iconv.cpp
     recyr.hh
     recyr_int.hh
-    ci_string.cpp
+    ci_string.cpp 
     wide.cpp
 )
 

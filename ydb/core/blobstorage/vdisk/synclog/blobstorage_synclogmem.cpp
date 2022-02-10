@@ -92,7 +92,7 @@ namespace NKikimr {
             }
         }
 
-        TString TMemRecLogSnapshot::BoundariesToString() const {
+        TString TMemRecLogSnapshot::BoundariesToString() const { 
             if (Empty())
                 return Sprintf("{Mem: empty}");
             else
@@ -319,7 +319,7 @@ namespace NKikimr {
             return snap;
         }
 
-        TString TMemRecLog::BoundariesToString() const {
+        TString TMemRecLog::BoundariesToString() const { 
             if (Empty())
                 return Sprintf("{Mem: empty}");
             else
@@ -345,7 +345,7 @@ namespace NKikimr {
             s << "\n";
         }
 
-        TString TMemRecLog::ToString() const {
+        TString TMemRecLog::ToString() const { 
             TStringStream str;
             Output(str);
             return str.Str();

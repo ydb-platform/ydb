@@ -139,8 +139,8 @@ NKikimrClient::TResponse CreateErrorReply(EResponseStatus status, NPersQueue::NE
 }
 
 struct TTopicInfo {
-    TVector<ui64> Tablets;
-    THashMap<ui32, ui64> PartitionToTablet;
+    TVector<ui64> Tablets; 
+    THashMap<ui32, ui64> PartitionToTablet; 
     ui64 BalancerTabletId = 0;
 
     THolder<NKikimrPQ::TReadSessionsInfoResponse> ReadSessionsInfo;
@@ -148,20 +148,20 @@ struct TTopicInfo {
     NKikimrPQ::TPQTabletConfig Config;
     TIntrusiveConstPtr<TSchemeCacheNavigate::TPQGroupInfo> PQInfo;
     ui32 NumParts = 0;
-    THashSet<ui32> PartitionsToRequest;
+    THashSet<ui32> PartitionsToRequest; 
 
     //fetchRequest part
-    THashMap<ui32, TAutoPtr<TEvPersQueue::TEvHasDataInfo>> FetchInfo;
+    THashMap<ui32, TAutoPtr<TEvPersQueue::TEvHasDataInfo>> FetchInfo; 
 };
 
 struct TTabletInfo {
     ui32 NodeId = 0;
-    TString Topic;
+    TString Topic; 
     TActorId PipeClient;
     bool BrokenPipe = false;
     bool IsBalancer = false;
-    TVector<NKikimrPQ::TOffsetsResponse::TPartResult> OffsetResponses;
-    TVector<NKikimrPQ::TStatusResponse::TPartResult> StatusResponses;
+    TVector<NKikimrPQ::TOffsetsResponse::TPartResult> OffsetResponses; 
+    TVector<NKikimrPQ::TStatusResponse::TPartResult> StatusResponses; 
 };
 
 TPersQueueBaseRequestProcessor::TPersQueueBaseRequestProcessor(const NKikimrClient::TPersQueueRequest& request, const TActorId& pqMetaCacheId, bool listNodes)
@@ -437,7 +437,7 @@ class TMessageBusServerPersQueueImpl : public TActorBootstrapped<TMessageBusServ
 
 protected:
     NKikimrClient::TPersQueueRequest RequestProto;
-    const TString RequestId;
+    const TString RequestId; 
     const bool IsMetaRequest;
     const bool IsFetchRequest;
 
@@ -452,16 +452,16 @@ protected:
 
     TAutoPtr<TEvInterconnect::TEvNodesInfo> NodesInfo;
 
-    THashMap<TString, TTopicInfo> TopicInfo;
-    THashMap<ui64, TTabletInfo> TabletInfo;
+    THashMap<TString, TTopicInfo> TopicInfo; 
+    THashMap<ui64, TTabletInfo> TabletInfo; 
 
     ui32 TopicsAnswered;
     THashSet<ui64> TabletsDiscovered;
-    THashSet<ui64> TabletsAnswered;
+    THashSet<ui64> TabletsAnswered; 
     ui32 AclRequests;
     ui32 DescribeRequests;
     ui32 PartTabletsRequested;
-    TString ErrorReason;
+    TString ErrorReason; 
     bool NoTopicsAtStart;
 
 public:
@@ -579,7 +579,7 @@ public:
     {
         auto& meta = RequestProto.GetMetaRequest();
 
-        THashMap<ui32, TString> hostName(NodesInfo->Nodes.size());
+        THashMap<ui32, TString> hostName(NodesInfo->Nodes.size()); 
         for (const auto& n : NodesInfo->Nodes)
             hostName.insert(std::make_pair(n.NodeId, n.Host));
 
@@ -722,7 +722,7 @@ public:
         record.SetErrorCode(NPersQueue::NErrorCode::OK);
         auto stat = record.MutableMetaResponse()->MutableCmdGetReadSessionsInfoResult();
 
-        THashMap<ui32, TString> hostName(NodesInfo->Nodes.size());
+        THashMap<ui32, TString> hostName(NodesInfo->Nodes.size()); 
         for (const auto& n : NodesInfo->Nodes)
             hostName.insert(std::make_pair(n.NodeId, n.Host));
 
@@ -736,7 +736,7 @@ public:
                 topicRes->SetErrorCode(NPersQueue::NErrorCode::OK);
             }
 
-            THashMap<ui32, ui32> partitionToResp;
+            THashMap<ui32, ui32> partitionToResp; 
             ui32 sz = 0;
             Y_VERIFY(p.second.ReadSessionsInfo);
             auto* sessionsInfo = p.second.ReadSessionsInfo.Get();

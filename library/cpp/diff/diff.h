@@ -3,7 +3,7 @@
 #include <library/cpp/lcs/lcs_via_lis.h>
 
 #include <util/generic/algorithm.h>
-#include <util/generic/array_ref.h>
+#include <util/generic/array_ref.h> 
 #include <util/generic/strbuf.h>
 #include <util/generic/vector.h>
 #include <util/stream/output.h>
@@ -39,7 +39,7 @@ namespace NDiff {
             swapped = true;
         }
 
-        TVector<T> lcs;
+        TVector<T> lcs; 
         NLCS::TLCSCtx<T> ctx;
         NLCS::MakeLCS<T>(s1, s2, &lcs, &ctx);
 
@@ -91,8 +91,8 @@ namespace NDiff {
     }
 
     template <typename TFormatter, typename T>
-    void PrintChunks(IOutputStream& out, const TFormatter& fmt, const TVector<TChunk<T>>& chunks) {
-        for (typename TVector<TChunk<T>>::const_iterator chunk = chunks.begin(); chunk != chunks.end(); ++chunk) {
+    void PrintChunks(IOutputStream& out, const TFormatter& fmt, const TVector<TChunk<T>>& chunks) { 
+        for (typename TVector<TChunk<T>>::const_iterator chunk = chunks.begin(); chunk != chunks.end(); ++chunk) { 
             if (!chunk->Left.empty() || !chunk->Right.empty()) {
                 out << fmt.Special("(");
                 out << fmt.Left(chunk->Left);

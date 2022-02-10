@@ -395,7 +395,7 @@ Y_UNIT_TEST_SUITE(ClientLibSchema) {
     static void MaxPath(NClient::TKikimr& kikimr) {
         try {
             const ui32 TestedMaxPath = 32;
-            TVector<NKikimr::NClient::TSchemaObject> paths;
+            TVector<NKikimr::NClient::TSchemaObject> paths; 
             paths.reserve(TestedMaxPath+1);
             paths.emplace_back(kikimr.GetSchemaRoot("dc-1"));
 
@@ -480,8 +480,8 @@ Y_UNIT_TEST_SUITE(ClientLib) {
             auto result = query.SyncExecute();
             auto value = result.GetValue();
             UNIT_ASSERT(!value["myRes"].IsNull());
-            UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"]["Species"], "Rat");
-            UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"]["Name"], "Dobby");
+            UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"]["Species"], "Rat"); 
+            UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"]["Name"], "Dobby"); 
         }
     }
 
@@ -518,8 +518,8 @@ Y_UNIT_TEST_SUITE(ClientLib) {
             auto result = query.AsyncPrepare().GetValue(TDuration::Max()).GetQuery().AsyncExecute().GetValue(TDuration::Max());
             auto value = result.GetValue();
             UNIT_ASSERT(!value["myRes"].IsNull());
-            UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"]["Species"], "Rat");
-            UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"]["Name"], "Dobby");
+            UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"]["Species"], "Rat"); 
+            UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"]["Name"], "Dobby"); 
         }
     }
 
@@ -642,12 +642,12 @@ Y_UNIT_TEST_SUITE(ClientLib) {
         auto value = result.GetValue();
 
         UNIT_ASSERT_VALUES_EQUAL(value["myRes"].Size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"][0]["Species"], "Rat");
-        UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"][0]["Name"], "Dobby");
+        UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"][0]["Species"], "Rat"); 
+        UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"][0]["Name"], "Dobby"); 
         UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"][0]["Description"], "A test for \"double quotes\"");
         UNIT_ASSERT_VALUES_EQUAL((i64)value["myRes"][0]["Weight"], 350);
-        UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"][1]["Species"], "Rat");
-        UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"][1]["Name"], "Korzhik");
+        UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"][1]["Species"], "Rat"); 
+        UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"][1]["Name"], "Korzhik"); 
         UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"][1]["Description"], "A test for 'single quotes'");
         UNIT_ASSERT_VALUES_EQUAL((i64)value["myRes"][1]["Weight"], 500);
     }
@@ -846,11 +846,11 @@ Y_UNIT_TEST_SUITE(ClientLib) {
         auto value = result.GetValue();
 
         UNIT_ASSERT_VALUES_EQUAL(value["myRes"].Size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"][0]["Species"], "Rat");
-        UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"][0]["Name"], "Dobby");
+        UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"][0]["Species"], "Rat"); 
+        UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"][0]["Name"], "Dobby"); 
         UNIT_ASSERT_VALUES_EQUAL((i64)value["myRes"][0]["Weight"], 350);
-        UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"][1]["Species"], "Rat");
-        UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"][1]["Name"], "Korzhik");
+        UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"][1]["Species"], "Rat"); 
+        UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"][1]["Name"], "Korzhik"); 
         UNIT_ASSERT_VALUES_EQUAL((i64)value["myRes"][1]["Weight"], 500);
     }
 
@@ -928,16 +928,16 @@ Y_UNIT_TEST_SUITE(ClientLib) {
         auto value = result.GetValue();
 
         UNIT_ASSERT_VALUES_EQUAL(value["myRes"].Size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"][0]["Species"], "Rat");
-        UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"][0]["Name"], "Dobby");
+        UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"][0]["Species"], "Rat"); 
+        UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"][0]["Name"], "Dobby"); 
         UNIT_ASSERT_VALUES_EQUAL((i64)value["myRes"][0]["Weight"], 350);
-        UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"][1]["Species"], "Rat");
-        UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"][1]["Name"], "Korzhik");
+        UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"][1]["Species"], "Rat"); 
+        UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"][1]["Name"], "Korzhik"); 
         UNIT_ASSERT_VALUES_EQUAL((i64)value["myRes"][1]["Weight"], 500);
     }
 
     struct TGenericParameterType {
-        TGenericParameterType(const TString& name, const NKikimrMiniKQL::TParams& parameter)
+        TGenericParameterType(const TString& name, const NKikimrMiniKQL::TParams& parameter) 
             : Name(name)
             , Parameter(parameter)
         {
@@ -951,7 +951,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
             value.CopyFrom(Parameter.GetValue());
         }
         private:
-        TString Name;
+        TString Name; 
         NKikimrMiniKQL::TParams Parameter;
     };
 
@@ -1178,8 +1178,8 @@ Y_UNIT_TEST_SUITE(ClientLib) {
                                 TParameter("ID", (ui64)1),
                                 TParameter("ANIMAL", TEmptyOptional(
                                     TStruct(
-                                       TParameter("SPECIES", TString()),
-                                       TParameter("NAME", TString()),
+                                       TParameter("SPECIES", TString()), 
+                                       TParameter("NAME", TString()), 
                                        TParameter("WEIGHT", i64())
                                        )))
                             );
@@ -1506,7 +1506,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
     void CheckSelectRange(NClient::TKikimr& kikimr,
                           ui32 key1Start, ui32 key1End,
                           bool includeFrom, bool includeTo,
-                          const TVector<std::pair<ui32, ui32>>& expectedKeys)
+                          const TVector<std::pair<ui32, ui32>>& expectedKeys) 
     {
         using namespace NClient;
 
@@ -1588,7 +1588,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
                 auto result = updateQuery.GetQuery().SyncExecute(
                             TParameter("KEY1", k1),
                             TParameter("KEY2", k2),
-                            TParameter("VALUE", TString(2048, 'A'))
+                            TParameter("VALUE", TString(2048, 'A')) 
                             );
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NMsgBusProxy::MSTATUS_OK,  result.GetError().GetMessage().c_str());
             }
@@ -1596,7 +1596,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
 
         for (ui32 k1 = 0; k1 < 299; ++k1) {
             // from (k1, inf) to (k1+1, inf)
-            TVector<std::pair<ui32, ui32>> expected = {{k1+1,0},{k1+1,1},{k1+1,2}};
+            TVector<std::pair<ui32, ui32>> expected = {{k1+1,0},{k1+1,1},{k1+1,2}}; 
             CheckSelectRange(kikimr, k1, k1+1, false, false, expected);
             CheckSelectRange(kikimr, k1, k1+1, false, true, expected);
             CheckSelectRange(kikimr, k1, k1+1, true, false, expected);
@@ -1663,9 +1663,9 @@ Y_UNIT_TEST_SUITE(ClientLib) {
                                   (return pgmReturn)
                                   )
                                   )___").SyncPrepare().GetQuery();
-        THashSet<ui64> values_h1;
-        THashSet<ui64> values_h2;
-        THashSet<ui64> values_h3;
+        THashSet<ui64> values_h1; 
+        THashSet<ui64> values_h2; 
+        THashSet<ui64> values_h3; 
         for (ui64 cnt = 0; cnt < 10; ++cnt) {
             ui64 H1 = 100 + cnt;
             ui64 H2 = 200 - cnt * 2;
@@ -2040,13 +2040,13 @@ Y_UNIT_TEST_SUITE(ClientLib) {
         UNIT_ASSERT_EQUAL((ui64)value["rui64"], 5);
         UNIT_ASSERT_EQUAL((float)value["rf"], 6.5);
         UNIT_ASSERT_EQUAL((double)value["rd"], 7.5);
-        UNIT_ASSERT_EQUAL((TString)value["rs"], "Str1");
-        UNIT_ASSERT_EQUAL((TString)value["ru"], "Str2");
+        UNIT_ASSERT_EQUAL((TString)value["rs"], "Str1"); 
+        UNIT_ASSERT_EQUAL((TString)value["ru"], "Str2"); 
     }
 
 //    Y_UNIT_TEST(Wrongdoing1) {
 //        using namespace NClient;
-//        TString type = R"___(
+//        TString type = R"___( 
 //                    Kind: 6
 //                    Struct {
 //                      Member {
@@ -2137,7 +2137,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
 //    }
 }
 
-NKikimrTxUserProxy::TKeyRange MakeRange(const TVector<TString> from, const TVector<TString> to,
+NKikimrTxUserProxy::TKeyRange MakeRange(const TVector<TString> from, const TVector<TString> to, 
                                         bool fromInclusive, bool toInclusive)
 {
     NKikimrTxUserProxy::TKeyRange range;

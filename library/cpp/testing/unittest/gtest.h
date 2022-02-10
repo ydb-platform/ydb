@@ -13,7 +13,7 @@
 namespace NUnitTest {
     namespace NPrivate {
         struct IGTestFactory: public ITestBaseFactory {
-            ~IGTestFactory() override;
+            ~IGTestFactory() override; 
 
             virtual void AddTest(const char* name, void (*body)(TTestContext&), bool forceFork) = 0;
         };
@@ -30,7 +30,7 @@ namespace NTesting {
         virtual void TearDown() {
         }
 
-        inline TTest* _This() noexcept {
+        inline TTest* _This() noexcept { 
             return this;
         }
     };

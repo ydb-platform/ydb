@@ -5,7 +5,7 @@
 #include <util/charset/recode_result.h>
 #include <util/charset/unidata.h> // all wchar32 functions
 #include <util/charset/utf8.h>
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 #include <util/generic/ylimits.h>
 #include <util/generic/yexception.h>
 #include <util/system/yassert.h>
@@ -303,17 +303,17 @@ inline void ToUpper(char* s, size_t n, const CodePage& cp = csYandex) {
         *s = cp.ToUpper(*s);
 }
 
-inline TString ToLower(TString s, const CodePage& cp, size_t pos = 0, size_t n = TString::npos) {
+inline TString ToLower(TString s, const CodePage& cp, size_t pos = 0, size_t n = TString::npos) { 
     s.Transform([&cp](size_t, char c) { return cp.ToLower(c); }, pos, n);
     return s;
 }
 
-inline TString ToUpper(TString s, const CodePage& cp, size_t pos = 0, size_t n = TString::npos) {
+inline TString ToUpper(TString s, const CodePage& cp, size_t pos = 0, size_t n = TString::npos) { 
     s.Transform([&cp](size_t, char c) { return cp.ToUpper(c); }, pos, n);
     return s;
 }
 
-inline TString ToTitle(TString s, const CodePage& cp, size_t pos = 0, size_t n = TString::npos) {
+inline TString ToTitle(TString s, const CodePage& cp, size_t pos = 0, size_t n = TString::npos) { 
     s.Transform(
         [pos, &cp](size_t i, char c) {
             return i == pos ? cp.ToTitle(c) : cp.ToLower(c);

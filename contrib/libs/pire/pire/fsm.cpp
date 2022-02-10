@@ -11,7 +11,7 @@
  * it under the terms of the GNU Lesser Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- *
+ * 
  * Pire is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -42,7 +42,7 @@
 #include "platform.h"
 
 namespace Pire {
-
+ 
 ystring CharDump(Char c)
 {
 	char buf[8];
@@ -75,7 +75,7 @@ ystring CharDump(Char c)
 void Fsm::DumpState(yostream& s, size_t state) const
 {
 	// Fill in a 'row': Q -> exp(V) (for current state)
-	TVector< ybitset<MaxChar> > row(Size());
+	TVector< ybitset<MaxChar> > row(Size()); 
 	for (auto&& transition : m_transitions[state])
 		for (auto&& transitionState : transition.second) {
 			if (transitionState >= Size()) {
@@ -157,7 +157,7 @@ void Fsm::DumpState(yostream& s, size_t state) const
 				if (oit2 == oit->second.end())
 					;
 				else {
-					TVector<int> payload;
+					TVector<int> payload; 
 					for (unsigned i = 0; i < sizeof(oit2->second) * 8; ++i)
 						if (oit2->second & (1ul << i))
 							payload.push_back(i);
@@ -236,9 +236,9 @@ const Fsm::StatesSet& Fsm::Destinations(size_t from, Char c) const
 	return (i != m_transitions[from].end()) ? i->second : DefaultValue<StatesSet>();
 }
 
-TSet<Char> Fsm::OutgoingLetters(size_t state) const
+TSet<Char> Fsm::OutgoingLetters(size_t state) const 
 {
-	TSet<Char> ret;
+	TSet<Char> ret; 
 	for (auto&& i : m_transitions[state])
 		ret.insert(i.first);
 	return ret;
@@ -291,7 +291,7 @@ Fsm& Fsm::Append(char c)
 	determined = false;
     return *this;
 }
-
+ 
 Fsm& Fsm::Append(const ystring& str)
 {
     for (auto&& i : str)
@@ -309,7 +309,7 @@ Fsm& Fsm::AppendSpecial(Char c)
     return *this;
 }
 
-Fsm& Fsm::AppendStrings(const TVector<ystring>& strings)
+Fsm& Fsm::AppendStrings(const TVector<ystring>& strings) 
 {
 	for (auto&& i : strings)
 		if (i.empty())
@@ -326,15 +326,15 @@ Fsm& Fsm::AppendStrings(const TVector<ystring>& strings)
 	// state #0 cannot appear in LTRs. Thus we can use this
 	// criteria to test whether a transition has been created or not.
 	typedef ypair<size_t, char> Transition;
-	TMap<char, size_t> startLtr;
-	TMap<Transition, size_t> ltr;
+	TMap<char, size_t> startLtr; 
+	TMap<Transition, size_t> ltr; 
 
 	// A presense of a transition in this set indicates that
 	// a that transition already points somewhere (either to end
 	// or somewhere else). Another attempt to create such transition
 	// will clear `determined flag.
-	TSet<Transition> usedTransitions;
-	TSet<char> usedFirsts;
+	TSet<Transition> usedTransitions; 
+	TSet<char> usedFirsts; 
 
 	for (const auto& str : strings) {
 		if (str.size() > 1) {
@@ -398,7 +398,7 @@ void Fsm::Import(const Fsm& rhs)
 	auto dest = m_transitions.begin() + oldsize;
 	for (auto outer = rhs.m_transitions.begin(), outerEnd = rhs.m_transitions.end(); outer != outerEnd; ++outer, ++dest) {
 		for (auto&& inner : *outer) {
-			TSet<size_t> targets;
+			TSet<size_t> targets; 
 			std::transform(inner.second.begin(), inner.second.end(), std::inserter(targets, targets.begin()),
 				std::bind2nd(std::plus<size_t>(), oldsize));
 			dest->insert(ymake_pair(inner.first, targets));
@@ -504,7 +504,7 @@ Fsm& Fsm::operator |= (const Fsm& rhs)
 	Import(rhs);
 	for (auto&& final : rhs.m_final)
 		m_final.insert(final + lhsSize);
-
+ 
 	if (!isAlternative && !rhs.isAlternative) {
 		Resize(Size() + 1);
 		Connect(Size() - 1, initial);
@@ -598,40 +598,40 @@ void Fsm::MakeSuffix()
 			Connect(initial, i);
 	ClearHints();
 }
-
+ 
 Fsm& Fsm::Reverse()
-{
+{ 
 	Fsm out;
 	out.Resize(Size() + 1);
 	out.letters = Letters();
-
+ 
 	// Invert transitions
 	for (size_t from = 0; from < Size(); ++from)
 		for (auto&& i : m_transitions[from])
 			for (auto&& j : i.second)
 				out.Connect(j, from, i.first);
-
+ 
 	// Invert initial and final states
 	out.m_final.clear();
 	out.SetFinal(initial, true);
 	for (auto i : m_final)
 		out.Connect(Size(), i, Epsilon);
 	out.SetInitial(Size());
-
+ 
 	// Invert outputs
 	for (auto&& i : outputs)
 		for (auto&& j : i.second)
 			out.SetOutput(j.first, i.first, j.second);
-
+ 
 	// Preserve tags (although thier semantics are usually heavily broken at this point)
 	out.tags = tags;
-
+ 
 	// Apply
 	Swap(out);
 	return *this;
 }
 
-TSet<size_t> Fsm::DeadStates() const
+TSet<size_t> Fsm::DeadStates() const 
 {
 	TSet<size_t> res;
 
@@ -697,7 +697,7 @@ void Fsm::RemoveDeadEnds()
 {
 	PIRE_IFDEBUG(Cdbg << "Removing dead ends on:" << Endl << *this << Endl);
 
-	TSet<size_t> dead = DeadStates();
+	TSet<size_t> dead = DeadStates(); 
 	// Erase all useless states
 	for (auto&& i : dead) {
 		PIRE_IFDEBUG(Cdbg << "Removing useless state " << i << Endl);
@@ -726,7 +726,7 @@ void Fsm::MergeEpsilonConnection(size_t from, size_t to)
 
 	// Merge transitions from 'to' state into transitions from 'from' state
 	for (auto&& transition : m_transitions[to]) {
-		TSet<size_t> connStates;
+		TSet<size_t> connStates; 
 		std::copy(transition.second.begin(), transition.second.end(),
 			std::inserter(m_transitions[from][transition.first], m_transitions[from][transition.first].end()));
 
@@ -766,7 +766,7 @@ void Fsm::MergeEpsilonConnection(size_t from, size_t to)
 // finds all states which are Epsilon-reachable from 'thru' and connects
 // them directly to 'from' with Epsilon transition having proper output.
 // Updates inverse map of epsilon transitions as well.
-void Fsm::ShortCutEpsilon(size_t from, size_t thru, TVector< TSet<size_t> >& inveps)
+void Fsm::ShortCutEpsilon(size_t from, size_t thru, TVector< TSet<size_t> >& inveps) 
 {
 	PIRE_IFDEBUG(Cdbg << "In Fsm::ShortCutEpsilon(" << from << ", " << thru << ")\n");
 	const StatesSet& to = Destinations(thru, Epsilon);
@@ -778,7 +778,7 @@ void Fsm::ShortCutEpsilon(size_t from, size_t thru, TVector< TSet<size_t> >& inv
 		inveps[toElement].insert(from);
 		if (outIt != outputs.end())
 			outIt->second[toElement] |= (fromThruOut | Output(thru, toElement));
-	}
+	} 
 }
 
 // Removes all Epsilon-connections by iterating though states and merging each Epsilon-connection
@@ -786,15 +786,15 @@ void Fsm::ShortCutEpsilon(size_t from, size_t thru, TVector< TSet<size_t> >& inv
 void Fsm::RemoveEpsilons()
 {
 	Unsparse();
-
+ 
 	// Build inverse map of epsilon transitions
-	TVector< TSet<size_t> > inveps(Size()); // We have to use TSet<> here since we want it sorted
+	TVector< TSet<size_t> > inveps(Size()); // We have to use TSet<> here since we want it sorted 
 	for (size_t from = 0; from != Size(); ++from) {
 		const StatesSet& tos = Destinations(from, Epsilon);
 		for (auto&& to : tos)
 			inveps[to].insert(from);
 	}
-
+ 
 	// Make a transitive closure of all epsilon transitions (Floyd-Warshall algorithm)
 	// (if there exists an epsilon-path between two states, epsilon-connect them directly)
 	for (size_t thru = 0; thru != Size(); ++thru)
@@ -802,9 +802,9 @@ void Fsm::RemoveEpsilons()
 			// inveps[thru] may alter during loop body, hence we cannot cache ivneps[thru].end()
 			if (from != thru)
 				ShortCutEpsilon(from, thru, inveps);
-
+ 
 	PIRE_IFDEBUG(Cdbg << "=== After epsilons shortcut\n" << *this << Endl);
-
+ 
 	// Iterate through all epsilon-connected state pairs, merging states together
 	for (size_t from = 0; from != Size(); ++from) {
 		const StatesSet& to = Destinations(from, Epsilon);
@@ -812,13 +812,13 @@ void Fsm::RemoveEpsilons()
 			if (toElement != from)
 				MergeEpsilonConnection(from, toElement); // it's a NOP if to == from, so don't waste time
 	}
-
+ 
 	PIRE_IFDEBUG(Cdbg << "=== After epsilons merged\n" << *this << Endl);
-
+ 
 	// Drop all epsilon transitions
 	for (auto&& i : m_transitions)
 		i.erase(Epsilon);
-
+ 
 	Sparse();
 	ClearHints();
 }
@@ -859,9 +859,9 @@ void Fsm::Unsparse()
 
 // Returns a set of 'terminal states', which are those of the final states,
 // from which a transition to themselves on any letter is possible.
-TSet<size_t> Fsm::TerminalStates() const
+TSet<size_t> Fsm::TerminalStates() const 
 {
-	TSet<size_t> terminals;
+	TSet<size_t> terminals; 
 	for (auto&& final : m_final) {
 		bool ok = true;
 		for (auto&& letter : letters) {
@@ -877,10 +877,10 @@ TSet<size_t> Fsm::TerminalStates() const
 namespace Impl {
 class FsmDetermineTask {
 public:
-	typedef TVector<size_t> State;
+	typedef TVector<size_t> State; 
 	typedef Fsm::LettersTbl LettersTbl;
-	typedef TMap<State, size_t> InvStates;
-
+	typedef TMap<State, size_t> InvStates; 
+ 
 	FsmDetermineTask(const Fsm& fsm)
 		: mFsm(fsm)
 		, mTerminals(fsm.TerminalStates())
@@ -888,7 +888,7 @@ public:
 		PIRE_IFDEBUG(Cdbg << "Terminal states: [" << Join(mTerminals.begin(), mTerminals.end(), ", ") << "]" << Endl);
 	}
 	const LettersTbl& Letters() const { return mFsm.letters; }
-
+ 
 	State Initial() const { return State(1, mFsm.initial); }
 	bool IsRequired(const State& state) const
 	{
@@ -897,7 +897,7 @@ public:
 				return false;
 		return true;
 	}
-
+ 
 	State Next(const State& state, Char letter) const
 	{
 		State next;
@@ -913,8 +913,8 @@ public:
 		                  << "--> [" << Join(next.begin(), next.end(), ", ") << "]" << Endl);
 		return next;
 	}
-
-	void AcceptStates(const TVector<State>& states)
+ 
+	void AcceptStates(const TVector<State>& states) 
 	{
 		mNewFsm.Resize(states.size());
 		mNewFsm.initial = 0;
@@ -924,7 +924,7 @@ public:
 		for (size_t ns = 0; ns < states.size(); ++ns) {
 			PIRE_IFDEBUG(Cdbg << "State " << ns << " = [" << Join(states[ns].begin(), states[ns].end(), ", ") << "]" << Endl);
 			for (auto&& j : states[ns]) {
-
+ 
 				// If it was a terminal state, connect it to itself
 				if (mTerminals.find(j) != mTerminals.end()) {
 					for (auto&& letter : Letters())
@@ -943,7 +943,7 @@ public:
 						// hence weve done with this state and got nothing more to do.
 						break;
 				}
-
+ 
 				// Bitwise OR all tags in states
 				auto ti = mFsm.tags.find(j);
 				if (ti != mFsm.tags.end()) {
@@ -953,12 +953,12 @@ public:
 			}
 		}
 		// For each old state, prepare a list of new state it is contained in
-		typedef TMap< size_t, TVector<size_t> > Old2New;
+		typedef TMap< size_t, TVector<size_t> > Old2New; 
 		Old2New old2new;
 		for (size_t ns = 0; ns < states.size(); ++ns)
 			for (auto&& j : states[ns])
 				old2new[j].push_back(ns);
-
+ 
 		// Copy all outputs
 		for (auto&& i : mFsm.outputs) {
 			for (auto&& j : i.second) {
@@ -973,7 +973,7 @@ public:
 		}
 		PIRE_IFDEBUG(Cdbg << "New terminals = [" << Join(mNewTerminals.begin(), mNewTerminals.end(), ",") << "]" << Endl);
 	}
-
+ 
 	void Connect(size_t from, size_t to, Char letter)
 	{
 		PIRE_IFDEBUG(Cdbg << "Connecting " << from << " --" << letter << "--> " << to << Endl);
@@ -1004,13 +1004,13 @@ public:
 	}
 
 	Result Failure() { return false; }
-
+ 
 	Fsm& Output() { return mNewFsm; }
 private:
 	const Fsm& mFsm;
 	Fsm mNewFsm;
-	TSet<size_t> mTerminals;
-	TSet<size_t> mNewTerminals;
+	TSet<size_t> mTerminals; 
+	TSet<size_t> mNewTerminals; 
 };
 }
 
@@ -1021,10 +1021,10 @@ bool Fsm::Determine(size_t maxsize /* = 0 */)
 		return true;
 
 	PIRE_IFDEBUG(Cdbg << "=== Initial ===" << Endl << *this << Endl);
-
+ 
 	RemoveEpsilons();
 	PIRE_IFDEBUG(Cdbg << "=== After all epsilons removed" << Endl << *this << Endl);
-
+ 
 	Impl::FsmDetermineTask task(*this);
 	if (Pire::Impl::Determine(task, maxsize ? maxsize : MaxSize)) {
 		task.Output().Swap(*this);
@@ -1162,7 +1162,7 @@ void Fsm::Minimize()
 Fsm& Fsm::Canonize(size_t maxSize /* = 0 */)
 {
 	if (!IsDetermined()) {
-		if (!Determine(maxSize))
+		if (!Determine(maxSize)) 
 			throw Error("regexp pattern too complicated");
 	}
 	Minimize();
@@ -1175,7 +1175,7 @@ void Fsm::PrependAnything()
 	Resize(Size() + 1);
 	for (size_t letter = 0; letter < MaxChar; ++letter)
 		Connect(newstate, newstate, letter);
-
+ 
 	Connect(newstate, initial);
 	initial = newstate;
 
@@ -1188,7 +1188,7 @@ void Fsm::AppendAnything()
 	Resize(Size() + 1);
 	for (size_t letter = 0; letter < MaxChar; ++letter)
 		Connect(newstate, newstate, letter);
-
+ 
 	ConnectFinal(newstate);
 	ClearFinal();
 	SetFinal(newstate, 1);

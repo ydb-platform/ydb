@@ -48,7 +48,7 @@ namespace NUtil {
             return conf && conf->Satisfies(prio, Comp, 0ull);
         }
 
-        void LogLn(ELnLev level, const TString &line) const noexcept override
+        void LogLn(ELnLev level, const TString &line) const noexcept override 
         {
             /* Usage of time provider will be possible on complete migration
                 to this logger. Legacy macros based logging takes just Now().

@@ -3,7 +3,7 @@
 // unique tag to fix pragma once gcc glueing: ./ydb/library/yql/minikql/defs.h
 
 #include <util/system/compiler.h>
-#include <util/generic/array_ref.h>
+#include <util/generic/array_ref.h> 
 #include <util/generic/yexception.h>
 
 #define THROW ::NKikimr::TThrowable() , __LOCATION__ +

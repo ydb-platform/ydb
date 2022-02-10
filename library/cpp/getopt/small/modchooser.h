@@ -3,7 +3,7 @@
 #include "last_getopt_opts.h"
 
 #include <util/generic/map.h>
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 #include <util/generic/vector.h>
 
 #include <functional>
@@ -63,10 +63,10 @@ public:
     void AddAlias(const TString& alias, const TString& mode);
 
     //! Set main program description.
-    void SetDescription(const TString& descr);
+    void SetDescription(const TString& descr); 
 
     //! Set modes help option name (-? is by default)
-    void SetModesHelpOption(const TString& helpOption);
+    void SetModesHelpOption(const TString& helpOption); 
 
     //! Specify handler for '--version' parameter
     void SetVersionHandler(TVersionHandlerPtr handler);
@@ -75,7 +75,7 @@ public:
     void SetSeparatedMode(bool separated = true);
 
     //! Set separation string
-    void SetSeparationString(const TString& str);
+    void SetSeparationString(const TString& str); 
 
     //! Set short command representation in Usage block
     void SetPrintShortCommandInUsage(bool printShortCommandInUsage);
@@ -100,12 +100,12 @@ public:
     //! Run appropriate mode. Same as Run(const int, const char**)
     int Run(const TVector<TString>& argv) const;
 
-    void PrintHelp(const TString& progName) const;
+    void PrintHelp(const TString& progName) const; 
 
     struct TMode {
-        TString Name;
+        TString Name; 
         TMainClass* Main;
-        TString Description;
+        TString Description; 
         bool Hidden;
         bool NoCompletion;
         TVector<TString> Aliases;
@@ -136,10 +136,10 @@ public:
 
 private:
     //! Main program description.
-    TString Description;
+    TString Description; 
 
     //! Help option for modes.
-    TString ModesHelpOption;
+    TString ModesHelpOption; 
 
     //! Wrappers around all modes.
     TVector<THolder<TMainClass>> Wrappers;
@@ -162,7 +162,7 @@ private:
     bool PrintShortCommandInUsage;
 
     //! Text string used when displaying each separator
-    TString SeparationString;
+    TString SeparationString; 
 
     //! Unsorted list of options
     TVector<THolder<TMode>> UnsortedModes;

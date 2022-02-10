@@ -12,12 +12,12 @@
  */
 class TDebugOutput: public IOutputStream {
 public:
-    inline TDebugOutput() noexcept = default;
+    inline TDebugOutput() noexcept = default; 
     ~TDebugOutput() override = default;
 
-    TDebugOutput(TDebugOutput&&) noexcept = default;
-    TDebugOutput& operator=(TDebugOutput&&) noexcept = default;
-
+    TDebugOutput(TDebugOutput&&) noexcept = default; 
+    TDebugOutput& operator=(TDebugOutput&&) noexcept = default; 
+ 
 private:
     void DoWrite(const void* buf, size_t len) override;
 };
@@ -39,7 +39,7 @@ IOutputStream& StdDbgStream() noexcept;
  * @see ETraceLevel
  * @see DBGTRACE
  */
-int StdDbgLevel() noexcept;
+int StdDbgLevel() noexcept; 
 
 /**
  * Standard debug stream.

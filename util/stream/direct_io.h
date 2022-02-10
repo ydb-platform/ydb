@@ -21,9 +21,9 @@ class TRandomAccessFileOutput: public IOutputStream {
 public:
     TRandomAccessFileOutput(TDirectIOBufferedFile& file);
 
-    TRandomAccessFileOutput(TRandomAccessFileOutput&&) noexcept = default;
-    TRandomAccessFileOutput& operator=(TRandomAccessFileOutput&&) noexcept = default;
-
+    TRandomAccessFileOutput(TRandomAccessFileOutput&&) noexcept = default; 
+    TRandomAccessFileOutput& operator=(TRandomAccessFileOutput&&) noexcept = default; 
+ 
 protected:
     TDirectIOBufferedFile* File;
 
@@ -34,7 +34,7 @@ private:
 
 class TBufferedFileOutputEx: public TRandomAccessFileOutput {
 public:
-    TBufferedFileOutputEx(const TString& path, EOpenMode oMode, size_t buflen = 1 << 17);
+    TBufferedFileOutputEx(const TString& path, EOpenMode oMode, size_t buflen = 1 << 17); 
 
 private:
     void DoFlush() override;

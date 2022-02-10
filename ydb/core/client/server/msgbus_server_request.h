@@ -20,7 +20,7 @@ public:
         HandleError(status, proxyStatus, TEvTxUserProxy::TResultStatus::Str(proxyStatus), ctx);
     }
 
-    void HandleError(EResponseStatus status,  TEvTxUserProxy::TResultStatus::EStatus proxyStatus, const TString& message, const TActorContext &ctx) {
+    void HandleError(EResponseStatus status,  TEvTxUserProxy::TResultStatus::EStatus proxyStatus, const TString& message, const TActorContext &ctx) { 
         TAutoPtr<TBusResponse> response(new TBusResponseStatus(status, message));
 
         if (proxyStatus != TEvTxUserProxy::TResultStatus::Unknown)

@@ -14,7 +14,7 @@ private:
 
     class TIt;
     struct TItCompare {
-        static inline bool Compare(const TIt& l, const TIt& r) noexcept;
+        static inline bool Compare(const TIt& l, const TIt& r) noexcept; 
     };
 
     class TIt: public TAvlTreeItem<TIt, TItCompare> {
@@ -30,7 +30,7 @@ private:
     using TIts = TAvlTree<TIt, TItCompare>;
 };
 
-inline bool TAvlTreeTest::TItCompare::Compare(const TIt& l, const TIt& r) noexcept {
+inline bool TAvlTreeTest::TItCompare::Compare(const TIt& l, const TIt& r) noexcept { 
     return l.Val < r.Val;
 }
 
@@ -80,12 +80,12 @@ void TAvlTreeTest::TestIterator() {
     its.Insert(&it6);
     its.Insert(&it2);
 
-    TVector<int> res;
+    TVector<int> res; 
     for (const TIt& i : its) {
         res.push_back(i.Val);
     }
 
-    TVector<int> expected{1, 2, 3, 4, 5, 6, 7};
+    TVector<int> expected{1, 2, 3, 4, 5, 6, 7}; 
     UNIT_ASSERT_EQUAL(res, expected);
 
     res.clear();

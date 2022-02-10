@@ -114,7 +114,7 @@ struct TEvWhiteboard{
     struct TEvPDiskStateUpdate : TEventPB<TEvPDiskStateUpdate, NKikimrWhiteboard::TPDiskStateInfo, EvPDiskStateUpdate> {
         TEvPDiskStateUpdate() = default;
 
-        TEvPDiskStateUpdate(ui32 pDiskId, const TString& path, ui64 guid, ui64 category) {
+        TEvPDiskStateUpdate(ui32 pDiskId, const TString& path, ui64 guid, ui64 category) { 
             Record.SetPDiskId(pDiskId);
             Record.SetPath(path);
             Record.SetGuid(guid);
@@ -279,7 +279,7 @@ struct TEvWhiteboard{
             Record.SetNumberOfCpus(numberOfCpus);
         }
 
-        TEvSystemStateUpdate(const TVector<double>& loadAverage) {
+        TEvSystemStateUpdate(const TVector<double>& loadAverage) { 
             for (double d : loadAverage) {
                 Record.AddLoadAverage(d);
             }

@@ -63,7 +63,7 @@ namespace {
                 }
 
                 if (strncmp(RequestString.data(), "GET /hosts HTTP/1.", 18) == 0) {
-                    TString list = Sprintf("[\"localhost\"]");
+                    TString list = Sprintf("[\"localhost\"]"); 
                     Output() << "HTTP/1.1 200 Ok\r\n";
                     Output() << "Connection: close\r\n";
                     Output() << "X-Server: unit test server\r\n";
@@ -94,7 +94,7 @@ namespace {
         };
 
     public:
-        inline THTTP200OkServer(TString res)
+        inline THTTP200OkServer(TString res) 
             : Res_(std::move(res))
         {
         }
@@ -104,7 +104,7 @@ namespace {
         }
 
     private:
-        TString Res_;
+        TString Res_; 
     };
 }
 
@@ -1075,8 +1075,8 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
                 );
     }
 
-    void TestLsSuccess(TFlatMsgBusClient& annoyingClient, const TString& name, const TVector<TString>& children) {
-        TString selfName = name;
+    void TestLsSuccess(TFlatMsgBusClient& annoyingClient, const TString& name, const TVector<TString>& children) { 
+        TString selfName = name; 
         if (selfName != "/") {
             selfName= name.substr(name.find_last_of('/')+1);
         }
@@ -1087,10 +1087,10 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         UNIT_ASSERT_VALUES_EQUAL_C(res->Record.GetPathDescription().ChildrenSize(), children.size(),
                                    "Unexpected number of children for " + name);
 
-        THashSet<TString> actualChildren;
-        TString prevName;
+        THashSet<TString> actualChildren; 
+        TString prevName; 
         for (size_t i = 0; i < res->Record.GetPathDescription().ChildrenSize(); ++i) {
-            TString name = res->Record.GetPathDescription().GetChildren(i).GetName();
+            TString name = res->Record.GetPathDescription().GetChildren(i).GetName(); 
             bool res = actualChildren.insert(name).second;
             UNIT_ASSERT_C(res, "Repeating child: " + name);
             UNIT_ASSERT_C(prevName < name, "Children are not sorted: " + prevName + ", " + name);
@@ -1103,7 +1103,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         }
     }
 
-    void TestLsUknownPath(TFlatMsgBusClient& annoyingClient, const TString& name) {
+    void TestLsUknownPath(TFlatMsgBusClient& annoyingClient, const TString& name) { 
         TAutoPtr<NMsgBusProxy::TBusResponse> res = annoyingClient.Ls(name);
         UNIT_ASSERT_VALUES_EQUAL_C(res->Record.HasPathDescription(), false,
                                    "Unxepected description for " + name);
@@ -1221,7 +1221,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         TestLsSuccess(annoyingClient, "/dc-1", {"A", "B", "Dir1", "Dir2", "Dir3", "Dir4"});
     }
 
-    void TestLsPathIdSuccess(TFlatMsgBusClient& annoyingClient, ui64 schemeshardId, ui64 pathId, const TString& selfName, const TVector<TString>& children) {
+    void TestLsPathIdSuccess(TFlatMsgBusClient& annoyingClient, ui64 schemeshardId, ui64 pathId, const TString& selfName, const TVector<TString>& children) { 
         TAutoPtr<NMsgBusProxy::TBusResponse> res = annoyingClient.LsPathId(schemeshardId, pathId);
         UNIT_ASSERT_VALUES_EQUAL_C(res->Record.GetPathDescription().GetSelf().GetName(), selfName, "Self name doesn't match");
 
@@ -1229,9 +1229,9 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         UNIT_ASSERT_VALUES_EQUAL_C(res->Record.GetPathDescription().ChildrenSize(), children.size(),
                                    "Unexpected number of children for " + selfName);
 
-        THashSet<TString> actualChildren;
+        THashSet<TString> actualChildren; 
         for (size_t i = 0; i < res->Record.GetPathDescription().ChildrenSize(); ++i) {
-            TString n = res->Record.GetPathDescription().GetChildren(i).GetName();
+            TString n = res->Record.GetPathDescription().GetChildren(i).GetName(); 
             bool res = actualChildren.insert(n).second;
             UNIT_ASSERT_C(res, "Repeating child: " + n);
         }
@@ -1464,7 +1464,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         annoyingClient.MkDir("/dc-1", "Dir");
         annoyingClient.CreateTable("/dc-1/Dir", table);
 
-        TString insertRowQuery = "("
+        TString insertRowQuery = "(" 
                 "(let key '('('Key (Uint32 '%u))))"
                 "(let value '('('Value (Utf8 '%s))))"
                 "(let ret_ (AsList"
@@ -1487,7 +1487,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         }
         UNIT_ASSERT_C(errorCount > 0, "Out of disk space error must have happened");
 
-        TString readQuery =
+        TString readQuery = 
                 "("
                 "(let range '('ExcFrom '('Key (Uint32 '0) (%s))))"
                 "(let select '('Key))"
@@ -1518,7 +1518,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
 
         TFlatMsgBusClient annoyingClient(port);
 
-        TString table =
+        TString table = 
                 " Name: \"Table\""
                 " Columns { Name: \"Key\"    Type: \"Uint32\"}"
                 " Columns { Name: \"Value\"  Type: \"Utf8\"}"
@@ -1530,7 +1530,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         annoyingClient.MkDir("/dc-1", "Dir");
         annoyingClient.CreateTable("/dc-1/Dir", table);
 
-        TString insertRowQuery = "("
+        TString insertRowQuery = "(" 
                 "(let key '('('Key (Uint32 '%u))))"
                 "(let value '('('Value (Utf8 '%s))))"
                 "(let ret_ (AsList"
@@ -1601,7 +1601,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         annoyingClient.MkDir("/dc-1", "Dir");
         annoyingClient.CreateTable("/dc-1/Dir", table);
 
-        TString insertRowQuery = "("
+        TString insertRowQuery = "(" 
                 "(let key '('('Key (Uint32 '%u))))"
                 "(let value '('('Value (Utf8 '%s))))"
                 "(let ret_ (AsList"
@@ -1673,7 +1673,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         annoyingClient.MkDir("/dc-1", "Dir");
         annoyingClient.CreateTable("/dc-1/Dir", table);
 
-        TString insertRowQuery = "("
+        TString insertRowQuery = "(" 
                 "(let key '('('Key (Uint32 '%u))))"
                 "(let value '('('Value (Utf8 '%s))))"
                 "(let ret_ (AsList"
@@ -1686,7 +1686,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
             annoyingClient.FlatQuery(Sprintf(insertRowQuery.data(), i, TString(1000000, 'A').data()));
         }
 
-        TString readQuery =
+        TString readQuery = 
                 "("
                 "(let key1 '('('Key (Uint32 '4242))))"
                 "(let row (SelectRow '/dc-1/Dir/Table key1 '('Value)))"
@@ -1742,8 +1742,8 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         RunWriteQueryRetryOverloads(annoyingClient, Sprintf(insertRowQuery.data(), key, value.data(), large.data(), table.data()));
     }
 
-    void WriteRow(TFlatMsgBusClient& annoyingClient, TString table, ui32 key, TString value) {
-        TString insertRowQuery = "("
+    void WriteRow(TFlatMsgBusClient& annoyingClient, TString table, ui32 key, TString value) { 
+        TString insertRowQuery = "(" 
                 "(let key '('('Key (Uint32 '%u))))"
                 "(let value '('('Value (Utf8 '%s))))"
                 "(let ret_ (AsList"
@@ -1764,8 +1764,8 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         }
     }
 
-    TString ReadRow(TFlatMsgBusClient& annoyingClient, TString table, ui32 key) {
-        TString query =
+    TString ReadRow(TFlatMsgBusClient& annoyingClient, TString table, ui32 key) { 
+        TString query = 
                     R"(
                     (
                     (let row '('('Key (Uint32 '%u))))
@@ -1867,14 +1867,14 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         NKikimrMiniKQL::TResult result;
         result.Swap(response.MutableExecutionEngineEvaluatedResponse());
 
-        TString strResult;
+        TString strResult; 
         ::google::protobuf::TextFormat::PrintToString(result.GetValue(), &strResult);
         return strResult;
     }
 
-    template <class TSetType>
+    template <class TSetType> 
     void WaitForTabletsToBeDeletedInHive(TFlatMsgBusClient& annoyingClient, TTestActorRuntime* runtime,
-                                         const TSetType& tabletIds, const TDuration& timeout = TDuration::Seconds(20)) {
+                                         const TSetType& tabletIds, const TDuration& timeout = TDuration::Seconds(20)) { 
         TInstant waitStart = TInstant::Now();
         for (ui64 tabletId : tabletIds) {
             Cerr << "Check that tablet " << tabletId << " was deleted\n";
@@ -1905,8 +1905,8 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
 
         annoyingClient.CreateTable("/dc-1/Dir", " Name: \"Table\" CopyFromTable: \"/dc-1/Dir/TableOld\"");
 
-        TString strResultOld = ReadFromTable(annoyingClient, "/dc-1/Dir/TableOld");
-        TString strResult = ReadFromTable(annoyingClient, "/dc-1/Dir/Table");
+        TString strResultOld = ReadFromTable(annoyingClient, "/dc-1/Dir/TableOld"); 
+        TString strResult = ReadFromTable(annoyingClient, "/dc-1/Dir/Table"); 
 
         Cout << strResultOld << Endl;
         UNIT_ASSERT_NO_DIFF(strResult, strResultOld);
@@ -1989,8 +1989,8 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
         Cerr << "Copy TableOld to Table" << Endl;
         annoyingClient.CreateTable("/dc-1/Dir", " Name: \"Table\" CopyFromTable: \"/dc-1/Dir/TableOld\"");
-        TString strResultOld = ReadFromTable(annoyingClient, "/dc-1/Dir/TableOld");
-        TString strResult = ReadFromTable(annoyingClient, "/dc-1/Dir/Table");
+        TString strResultOld = ReadFromTable(annoyingClient, "/dc-1/Dir/TableOld"); 
+        TString strResult = ReadFromTable(annoyingClient, "/dc-1/Dir/Table"); 
 
         Cout << strResult << Endl;
         UNIT_ASSERT_NO_DIFF(strResult, strResultOld);
@@ -2058,11 +2058,11 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         TFlatMsgBusClient annoyingClient(port);
 
         PrepareSourceTable(annoyingClient);
-        TString strResultOld = ReadFromTable(annoyingClient, "/dc-1/Dir/TableOld");
+        TString strResultOld = ReadFromTable(annoyingClient, "/dc-1/Dir/TableOld"); 
         Cerr << strResultOld << Endl;
 
-        THashSet<ui64> datashards;
-        TVector<ui64> partitions = annoyingClient.GetTablePartitions("/dc-1/Dir/TableOld");
+        THashSet<ui64> datashards; 
+        TVector<ui64> partitions = annoyingClient.GetTablePartitions("/dc-1/Dir/TableOld"); 
         datashards.insert(partitions.begin(), partitions.end());
 
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
@@ -2074,7 +2074,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         datashards.insert(partitions.begin(), partitions.end());
         annoyingClient.DeleteTable("/dc-1/Dir", "Table");
 
-        TString strResult = ReadFromTable(annoyingClient, "/dc-1/Dir/TableOld");
+        TString strResult = ReadFromTable(annoyingClient, "/dc-1/Dir/TableOld"); 
         UNIT_ASSERT_NO_DIFF(strResult, strResultOld);
 
         // Make a new copy
@@ -2107,10 +2107,10 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         TFlatMsgBusClient annoyingClient(port);
 
         PrepareSourceTable(annoyingClient);
-        TString strResultOld = ReadFromTable(annoyingClient, "/dc-1/Dir/TableOld");
+        TString strResultOld = ReadFromTable(annoyingClient, "/dc-1/Dir/TableOld"); 
         Cerr << strResultOld << Endl;
 
-        THashSet<ui64> datashards;
+        THashSet<ui64> datashards; 
         auto oldShards = annoyingClient.GetTablePartitions("/dc-1/Dir/TableOld");
         datashards.insert(oldShards.begin(), oldShards.end());
 
@@ -2125,7 +2125,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         // Drop original
         annoyingClient.DeleteTable("/dc-1/Dir", "TableOld");
 
-        TString strResult = ReadFromTable(annoyingClient, "/dc-1/Dir/Table");
+        TString strResult = ReadFromTable(annoyingClient, "/dc-1/Dir/Table"); 
         UNIT_ASSERT_NO_DIFF(strResult, strResultOld);
 
         // Delete the copy
@@ -2146,8 +2146,8 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
 
         PrepareSourceTable(annoyingClient);
 
-        THashSet<ui64> datashards;
-        TVector<ui64> partitions = annoyingClient.GetTablePartitions("/dc-1/Dir/TableOld");
+        THashSet<ui64> datashards; 
+        TVector<ui64> partitions = annoyingClient.GetTablePartitions("/dc-1/Dir/TableOld"); 
         datashards.insert(partitions.begin(), partitions.end());
 
         // Copy the table
@@ -2193,12 +2193,12 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
 
         // Write new rows to the copy in order to trigger compaction
         WriteRandomRows(annoyingClient, "Table", 666, 100);
-        TString strResult = ReadFromTable(annoyingClient, "/dc-1/Dir/Table");
+        TString strResult = ReadFromTable(annoyingClient, "/dc-1/Dir/Table"); 
 
         // Delete original table
         annoyingClient.DeleteTable("/dc-1/Dir", "TableOld");
 
-        TString strResultAfter = ReadFromTable(annoyingClient, "/dc-1/Dir/Table");
+        TString strResultAfter = ReadFromTable(annoyingClient, "/dc-1/Dir/Table"); 
         UNIT_ASSERT_NO_DIFF(strResultAfter, strResult);
 
         // Delete the copy
@@ -2218,8 +2218,8 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
 
         PrepareSourceTable(annoyingClient);
 
-        THashSet<ui64> datashards;
-        TVector<ui64> partitions = annoyingClient.GetTablePartitions("/dc-1/Dir/TableOld");
+        THashSet<ui64> datashards; 
+        TVector<ui64> partitions = annoyingClient.GetTablePartitions("/dc-1/Dir/TableOld"); 
         datashards.insert(partitions.begin(), partitions.end());
 
         // Copy the table
@@ -2272,14 +2272,14 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         WriteRandomRows(annoyingClient, "Table", 666, 100);
 
         // Check that first partition of the original table is deleted after part is returned
-        WaitForTabletsToBeDeletedInHive(annoyingClient, cleverServer.GetRuntime(), THashSet<ui64>({partitions[0]}));
+        WaitForTabletsToBeDeletedInHive(annoyingClient, cleverServer.GetRuntime(), THashSet<ui64>({partitions[0]})); 
 
         partitions = annoyingClient.GetTablePartitions("/dc-1/Dir/Table");
         datashards.insert(partitions.begin(), partitions.end());
 
-        TString strResult = ReadFromTable(annoyingClient, "/dc-1/Dir/Table");
+        TString strResult = ReadFromTable(annoyingClient, "/dc-1/Dir/Table"); 
         for (int i = 0; i < 5; ++i) {
-            TString strResultAfter = ReadFromTable(annoyingClient, "/dc-1/Dir/Table");
+            TString strResultAfter = ReadFromTable(annoyingClient, "/dc-1/Dir/Table"); 
             UNIT_ASSERT_NO_DIFF(strResultAfter, strResult);
         }
 
@@ -2299,10 +2299,10 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         TFlatMsgBusClient annoyingClient(port);
 
         PrepareSourceTable(annoyingClient);
-        TString strResultOld = ReadFromTable(annoyingClient, "/dc-1/Dir/TableOld");
+        TString strResultOld = ReadFromTable(annoyingClient, "/dc-1/Dir/TableOld"); 
         Cerr << strResultOld << Endl;
 
-        THashSet<ui64> datashards;
+        THashSet<ui64> datashards; 
         auto oldShards = annoyingClient.GetTablePartitions("/dc-1/Dir/TableOld");
         datashards.insert(oldShards.begin(), oldShards.end());
 
@@ -2322,7 +2322,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         // Drop first copy
         annoyingClient.DeleteTable("/dc-1/Dir", "Table");
 
-        TString strResult = ReadFromTable(annoyingClient, "/dc-1/Dir/TableNew");
+        TString strResult = ReadFromTable(annoyingClient, "/dc-1/Dir/TableNew"); 
         UNIT_ASSERT_NO_DIFF(strResult, strResultOld);
 
         // Drop original
@@ -2349,12 +2349,12 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         WaitForTabletsToBeDeletedInHive(annoyingClient, cleverServer.GetRuntime(), datashards);
     }
 
-    void DoSplitMergeTable(TFlatMsgBusClient& annoyingClient, TString table, const TVector<ui64>& srcPartitions, const TVector<ui32>& splitPoints) {
-        TVector<ui64> partitionsBefore;
+    void DoSplitMergeTable(TFlatMsgBusClient& annoyingClient, TString table, const TVector<ui64>& srcPartitions, const TVector<ui32>& splitPoints) { 
+        TVector<ui64> partitionsBefore; 
         partitionsBefore = annoyingClient.GetTablePartitions(table);
         UNIT_ASSERT(partitionsBefore.size() > 0);
 
-        TString strResultBefore = ReadFromTable(annoyingClient, table);
+        TString strResultBefore = ReadFromTable(annoyingClient, table); 
 
         TStringStream splitDescr;
         for (ui32 src : srcPartitions) {
@@ -2365,22 +2365,22 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         }
         annoyingClient.SplitTablePartition(table, splitDescr.Str());
 
-        TVector<ui64> partitionsAfter;
+        TVector<ui64> partitionsAfter; 
         partitionsAfter = annoyingClient.GetTablePartitions(table);
         UNIT_ASSERT_VALUES_EQUAL(partitionsAfter.size(),
                                  partitionsBefore.size() - srcPartitions.size() + splitPoints.size() + 1);
         // TODO: check paritions that were not supposed to change
         //UNIT_ASSERT_VALUES_EQUAL(partitionsAfter.back(), partitionsBefore.back());
 
-        TString strResultAfter = ReadFromTable(annoyingClient, table);
+        TString strResultAfter = ReadFromTable(annoyingClient, table); 
         UNIT_ASSERT_NO_DIFF(strResultBefore, strResultAfter);
     }
 
-    void SplitTable(TFlatMsgBusClient& annoyingClient, TString table, ui64 partitionIdx, const TVector<ui32>& splitPoints) {
+    void SplitTable(TFlatMsgBusClient& annoyingClient, TString table, ui64 partitionIdx, const TVector<ui32>& splitPoints) { 
         DoSplitMergeTable(annoyingClient, table, {partitionIdx}, splitPoints);
     }
 
-    void MergeTable(TFlatMsgBusClient& annoyingClient, TString table, const TVector<ui64>& partitionIdxs) {
+    void MergeTable(TFlatMsgBusClient& annoyingClient, TString table, const TVector<ui64>& partitionIdxs) { 
         DoSplitMergeTable(annoyingClient, table, partitionIdxs, {});
     }
 
@@ -2423,7 +2423,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         SplitTable(annoyingClient, "/dc-1/Dir/TableOld", 0, {100, 200});
 
         // Write new rows to the copy in order to trigger compaction
-        TMap<ui32, TString> rows = {
+        TMap<ui32, TString> rows = { 
             {1, "AAA"},
             {101, "BBB"},
             {201, "CCC"},
@@ -2434,7 +2434,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         }
 
         for (const auto& r : rows) {
-            TString val = ReadRow(annoyingClient, "TableOld", r.first);
+            TString val = ReadRow(annoyingClient, "TableOld", r.first); 
             UNIT_ASSERT_VALUES_EQUAL(val, r.second);
         }
 
@@ -2486,7 +2486,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         SplitTable(annoyingClient, "/dc-1/Dir/TableOld", 2, {300, 400});
 
         // Write new rows to the copy in order to trigger compaction
-        TMap<ui32, TString> rows = {
+        TMap<ui32, TString> rows = { 
             {1, "AAA"},
             {101, "BBB"},
             {201, "CCC"},
@@ -2497,7 +2497,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         }
 
         for (const auto& r : rows) {
-            TString val = ReadRow(annoyingClient, "TableOld", r.first);
+            TString val = ReadRow(annoyingClient, "TableOld", r.first); 
             UNIT_ASSERT_VALUES_EQUAL(val, r.second);
         }
 
@@ -2522,7 +2522,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         MergeTable(annoyingClient, "/dc-1/Dir/TableOld", {0, 1});
 
         // Write new rows to the copy in order to trigger compaction
-        TMap<ui32, TString> rows = {
+        TMap<ui32, TString> rows = { 
             {1, "AAA"},
             {101, "BBB"},
             {201, "CCC"},
@@ -2533,7 +2533,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         }
 
         for (const auto& r : rows) {
-            TString val = ReadRow(annoyingClient, "TableOld", r.first);
+            TString val = ReadRow(annoyingClient, "TableOld", r.first); 
             UNIT_ASSERT_VALUES_EQUAL(val, r.second);
         }
 
@@ -2556,7 +2556,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
 
         // Write new rows to the copy in order to trigger compaction
-        TMap<ui32, TString> rows = {
+        TMap<ui32, TString> rows = { 
             {1, "AAA"},
             {101, "BBB"},
             {3000000201, "CCC"},
@@ -2569,7 +2569,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         MergeTable(annoyingClient, "/dc-1/Dir/TableOld", {0, 1});
 
         for (const auto& r : rows) {
-            TString val = ReadRow(annoyingClient, "TableOld", r.first);
+            TString val = ReadRow(annoyingClient, "TableOld", r.first); 
             UNIT_ASSERT_VALUES_EQUAL(val, r.second);
         }
 
@@ -2653,7 +2653,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         MergeTable(annoyingClient, "/dc-1/Dir/TableOld", {0, 1});
 
         // Write new rows to the copy in order to trigger compaction
-        TMap<ui32, TString> rows = {
+        TMap<ui32, TString> rows = { 
             {1, "AAA"},
             {101, "BBB"},
             {201, "CCC"},
@@ -2664,7 +2664,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         }
 
         for (const auto& r : rows) {
-            TString val = ReadRow(annoyingClient, "TableOld", r.first);
+            TString val = ReadRow(annoyingClient, "TableOld", r.first); 
             UNIT_ASSERT_VALUES_EQUAL(val, r.second);
         }
 
@@ -2687,7 +2687,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
 
         // Write new rows to the copy in order to trigger compaction
-        TMap<ui32, TString> rows = {
+        TMap<ui32, TString> rows = { 
             {1, "AAA"},
             {101, "BBB"},
             {201, "CCC"}
@@ -2696,16 +2696,16 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
             WriteRow(annoyingClient, "TableOld", r.first, r.second);
         }
 
-        TString strResult = ReadFromTable(annoyingClient, "/dc-1/Dir/TableOld");
+        TString strResult = ReadFromTable(annoyingClient, "/dc-1/Dir/TableOld"); 
 
         SplitTable(annoyingClient, "/dc-1/Dir/TableOld", 0, {100, 200});
 
         for (const auto& r : rows) {
-            TString val = ReadRow(annoyingClient, "TableOld", r.first);
+            TString val = ReadRow(annoyingClient, "TableOld", r.first); 
             UNIT_ASSERT_VALUES_EQUAL(val, r.second);
         }
 
-        TString strResultAfter = ReadFromTable(annoyingClient, "/dc-1/Dir/TableOld");
+        TString strResultAfter = ReadFromTable(annoyingClient, "/dc-1/Dir/TableOld"); 
         UNIT_ASSERT_NO_DIFF(strResultAfter, strResult);
 
         annoyingClient.DeleteTable("/dc-1/Dir", "TableOld");
@@ -2727,7 +2727,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
 
         // Write new rows to the copy in order to trigger compaction
-        TMap<ui32, TString> rows ={
+        TMap<ui32, TString> rows ={ 
             {1, "AAA"},
             {201, "BBB"},
             {301, "CCC"}
@@ -2739,12 +2739,12 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
             WriteRow(annoyingClient, "TableOld", r.first, r.second);
         }
 
-        TString strResult = ReadFromTable(annoyingClient, "/dc-1/Dir/TableOld", 201, false);
+        TString strResult = ReadFromTable(annoyingClient, "/dc-1/Dir/TableOld", 201, false); 
 
         SplitTable(annoyingClient, "/dc-1/Dir/TableOld", 0, {100, 200});
 
         for (const auto& r : rows) {
-            TString val = ReadRow(annoyingClient, "TableOld", r.first);
+            TString val = ReadRow(annoyingClient, "TableOld", r.first); 
             UNIT_ASSERT_VALUES_EQUAL(val, r.second);
         }
 
@@ -2760,7 +2760,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         }
 
         for (ui32 i = 0; i < 20; ++i) { // multiple rounds to move some reads to followers
-            TString strResultAfter = ReadFromTable(annoyingClient, "/dc-1/Dir/TableOld", 201, true);
+            TString strResultAfter = ReadFromTable(annoyingClient, "/dc-1/Dir/TableOld", 201, true); 
             UNIT_ASSERT_NO_DIFF(strResultAfter, strResult);
         }
 
@@ -2782,7 +2782,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
 
         // Write new rows to the copy in order to trigger compaction
-        TMap<ui32, TString> rows1 = {
+        TMap<ui32, TString> rows1 = { 
             {1, "AAA"},
             {101, "BBB"},
             {201, "CCC"}
@@ -2793,7 +2793,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
 
         SplitTable(annoyingClient, "/dc-1/Dir/TableOld", 0, {100, 200});
 
-        TMap<ui32, TString> rows2 = {
+        TMap<ui32, TString> rows2 = { 
             {2, "2222AAA"},
             {102, "2222BBB"},
             {202, "2222CCC"}
@@ -2805,7 +2805,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         for (auto tableId: annoyingClient.GetTablePartitions("/dc-1/Dir/TableOld"))
             annoyingClient.KillTablet(cleverServer, tableId);
 
-        TMap<ui32, TString> rows = rows1;
+        TMap<ui32, TString> rows = rows1; 
         rows.insert(rows2.begin(), rows2.end());
         for (const auto& r : rows) {
             TString val = ReadRow(annoyingClient, "TableOld", r.first);
@@ -2850,7 +2850,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
 //        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
 
         // Write new rows to the copy in order to trigger compaction
-        TMap<ui32, TString> rows1 = {
+        TMap<ui32, TString> rows1 = { 
             {1, "AAA"},
             {101, "BBB"},
             {201, "CCC"}
@@ -2861,7 +2861,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
 
         SplitTable(annoyingClient, "/dc-1/Dir/TableOld", 0, {100, 200});
 
-        TMap<ui32, TString> rows2 = {
+        TMap<ui32, TString> rows2 = { 
             {2, "2222AAA"},
             {102, "2222BBB"},
             {202, "2222CCC"}
@@ -2872,10 +2872,10 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
 
         SplitTable(annoyingClient, "/dc-1/Dir/TableOld", 1, {101});
 
-        TMap<ui32, TString> rows = rows1;
+        TMap<ui32, TString> rows = rows1; 
         rows.insert(rows2.begin(), rows2.end());
         for (const auto& r : rows) {
-            TString val = ReadRow(annoyingClient, "TableOld", r.first);
+            TString val = ReadRow(annoyingClient, "TableOld", r.first); 
             UNIT_ASSERT_VALUES_EQUAL(val, r.second);
         }
 
@@ -2930,7 +2930,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         annoyingClient.MkDir("/dc-1", "Dir");
         annoyingClient.CreateTable("/dc-1/Dir", tableDescr);
 
-        TVector<ui64> partitions = annoyingClient.GetTablePartitions("/dc-1/Dir/T1");
+        TVector<ui64> partitions = annoyingClient.GetTablePartitions("/dc-1/Dir/T1"); 
         UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
 
         // Force stats reporting without delays
@@ -3241,7 +3241,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         TFlatMsgBusClient annoyingClient(port);
 
         PrepareSourceTable(annoyingClient);
-        TVector<ui64> partitions = annoyingClient.GetTablePartitions("/dc-1/Dir/TableOld");
+        TVector<ui64> partitions = annoyingClient.GetTablePartitions("/dc-1/Dir/TableOld"); 
 
         TAutoPtr<NKikimr::NMsgBusProxy::TBusTabletCountersRequest> request(new NKikimr::NMsgBusProxy::TBusTabletCountersRequest());
         request->Record.SetTabletID(partitions[0]);

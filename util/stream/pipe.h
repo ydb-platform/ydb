@@ -5,7 +5,7 @@
 
 #include <util/system/pipe.h>
 #include <util/generic/ptr.h>
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 
 /**
  * @addtogroup Streams_Pipes
@@ -24,8 +24,8 @@ protected:
      * @param mode                      Data transfer mode for the pipe. Use
      *                                  "r" for reading and "w" for writing.
      */
-    TPipeBase(const TString& command, const char* mode);
-    virtual ~TPipeBase();
+    TPipeBase(const TString& command, const char* mode); 
+    virtual ~TPipeBase(); 
 
 protected:
     class TImpl;
@@ -45,7 +45,7 @@ public:
      *
      * @param command                   Command line to start a process with.
      */
-    TPipeInput(const TString& command);
+    TPipeInput(const TString& command); 
 
 private:
     size_t DoRead(void* buf, size_t len) override;
@@ -64,7 +64,7 @@ public:
      *
      * @param command                   Command line to start a process with.
      */
-    TPipeOutput(const TString& command);
+    TPipeOutput(const TString& command); 
 
     /**
      * Waits for the process to terminate and throws an exception if it ended
@@ -79,7 +79,7 @@ private:
 class TPipedBase {
 protected:
     TPipedBase(PIPEHANDLE fd);
-    virtual ~TPipedBase();
+    virtual ~TPipedBase(); 
 
 protected:
     TPipeHandle Handle_;
@@ -91,7 +91,7 @@ protected:
 class TPipedInput: public TPipedBase, public IInputStream {
 public:
     TPipedInput(PIPEHANDLE fd);
-    ~TPipedInput() override;
+    ~TPipedInput() override; 
 
 private:
     size_t DoRead(void* buf, size_t len) override;
@@ -103,7 +103,7 @@ private:
 class TPipedOutput: public TPipedBase, public IOutputStream {
 public:
     TPipedOutput(PIPEHANDLE fd);
-    ~TPipedOutput() override;
+    ~TPipedOutput() override; 
 
 private:
     void DoWrite(const void* buf, size_t len) override;

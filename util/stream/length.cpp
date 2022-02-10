@@ -28,7 +28,7 @@ size_t TCountingInput::DoSkip(size_t len) {
     return ret;
 }
 
-size_t TCountingInput::DoReadTo(TString& st, char ch) {
+size_t TCountingInput::DoReadTo(TString& st, char ch) { 
     const size_t ret = Slave_->ReadTo(st, ch);
     Count_ += ret;
     return ret;

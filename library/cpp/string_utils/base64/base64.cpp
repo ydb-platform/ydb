@@ -245,13 +245,13 @@ size_t Base64Decode(void* dst, const char* b, const char* e) {
     return outLen;
 }
 
-TString Base64DecodeUneven(const TStringBuf s) {
+TString Base64DecodeUneven(const TStringBuf s) { 
     if (s.length() % 4 == 0) {
         return Base64Decode(s);
     }
 
     // padding to 4
-    return Base64Decode(TString(s) + TString(4 - (s.length() % 4), '='));
+    return Base64Decode(TString(s) + TString(4 - (s.length() % 4), '=')); 
 }
 
 char* Base64Encode(char* outstr, const unsigned char* instr, size_t len) {

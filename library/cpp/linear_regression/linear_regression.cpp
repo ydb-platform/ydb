@@ -12,17 +12,17 @@
 #include <functional>
 
 namespace {
-    inline void AddFeaturesProduct(const double weight, const TVector<double>& features, TVector<double>& linearizedOLSTriangleMatrix);
+    inline void AddFeaturesProduct(const double weight, const TVector<double>& features, TVector<double>& linearizedOLSTriangleMatrix); 
 
-    TVector<double> Solve(const TVector<double>& olsMatrix, const TVector<double>& olsVector);
+    TVector<double> Solve(const TVector<double>& olsMatrix, const TVector<double>& olsVector); 
 
-    double SumSquaredErrors(const TVector<double>& olsMatrix,
-                            const TVector<double>& olsVector,
-                            const TVector<double>& solution,
+    double SumSquaredErrors(const TVector<double>& olsMatrix, 
+                            const TVector<double>& olsVector, 
+                            const TVector<double>& solution, 
                             const double goalsDeviation);
 }
 
-bool TFastLinearRegressionSolver::Add(const TVector<double>& features, const double goal, const double weight) {
+bool TFastLinearRegressionSolver::Add(const TVector<double>& features, const double goal, const double weight) { 
     const size_t featuresCount = features.size();
 
     if (LinearizedOLSMatrix.empty()) {
@@ -45,7 +45,7 @@ bool TFastLinearRegressionSolver::Add(const TVector<double>& features, const dou
     return true;
 }
 
-bool TLinearRegressionSolver::Add(const TVector<double>& features, const double goal, const double weight) {
+bool TLinearRegressionSolver::Add(const TVector<double>& features, const double goal, const double weight) { 
     const size_t featuresCount = features.size();
 
     if (FeatureMeans.empty()) {
@@ -114,7 +114,7 @@ bool TLinearRegressionSolver::Add(const TVector<double>& features, const double 
 }
 
 TLinearModel TFastLinearRegressionSolver::Solve() const {
-    TVector<double> coefficients = ::Solve(LinearizedOLSMatrix, OLSVector);
+    TVector<double> coefficients = ::Solve(LinearizedOLSMatrix, OLSVector); 
     double intercept = 0.;
 
     if (!coefficients.empty()) {
@@ -126,7 +126,7 @@ TLinearModel TFastLinearRegressionSolver::Solve() const {
 }
 
 TLinearModel TLinearRegressionSolver::Solve() const {
-    TVector<double> coefficients = ::Solve(LinearizedOLSMatrix, OLSVector);
+    TVector<double> coefficients = ::Solve(LinearizedOLSMatrix, OLSVector); 
     double intercept = GoalsMean;
 
     const size_t featuresCount = OLSVector.size();
@@ -138,12 +138,12 @@ TLinearModel TLinearRegressionSolver::Solve() const {
 }
 
 double TFastLinearRegressionSolver::SumSquaredErrors() const {
-    const TVector<double> coefficients = ::Solve(LinearizedOLSMatrix, OLSVector);
+    const TVector<double> coefficients = ::Solve(LinearizedOLSMatrix, OLSVector); 
     return ::SumSquaredErrors(LinearizedOLSMatrix, OLSVector, coefficients, SumSquaredGoals.Get());
 }
 
 double TLinearRegressionSolver::SumSquaredErrors() const {
-    const TVector<double> coefficients = ::Solve(LinearizedOLSMatrix, OLSVector);
+    const TVector<double> coefficients = ::Solve(LinearizedOLSMatrix, OLSVector); 
     return ::SumSquaredErrors(LinearizedOLSMatrix, OLSVector, coefficients, GoalsDeviation);
 }
 
@@ -194,10 +194,10 @@ double TSLRSolver::SumSquaredErrors(const double regularizationParameter) const 
 
 namespace {
     // LDL matrix decomposition, see http://en.wikipedia.org/wiki/Cholesky_decomposition#LDL_decomposition_2
-    bool LDLDecomposition(const TVector<double>& linearizedOLSMatrix,
+    bool LDLDecomposition(const TVector<double>& linearizedOLSMatrix, 
                           const double regularizationThreshold,
                           const double regularizationParameter,
-                          TVector<double>& decompositionTrace,
+                          TVector<double>& decompositionTrace, 
                           TVector<TVector<double>>& decompositionMatrix) {
         const size_t featuresCount = decompositionTrace.size();
 
@@ -206,7 +206,7 @@ namespace {
             double& decompositionTraceElement = decompositionTrace[rowNumber];
             decompositionTraceElement = linearizedOLSMatrix[olsMatrixElementIdx] + regularizationParameter;
 
-            TVector<double>& decompositionRow = decompositionMatrix[rowNumber];
+            TVector<double>& decompositionRow = decompositionMatrix[rowNumber]; 
             for (size_t i = 0; i < rowNumber; ++i) {
                 decompositionTraceElement -= decompositionRow[i] * decompositionRow[i] * decompositionTrace[i];
             }
@@ -218,7 +218,7 @@ namespace {
             ++olsMatrixElementIdx;
             decompositionRow[rowNumber] = 1.;
             for (size_t columnNumber = rowNumber + 1; columnNumber < featuresCount; ++columnNumber) {
-                TVector<double>& secondDecompositionRow = decompositionMatrix[columnNumber];
+                TVector<double>& secondDecompositionRow = decompositionMatrix[columnNumber]; 
                 double& decompositionMatrixElement = secondDecompositionRow[rowNumber];
 
                 decompositionMatrixElement = linearizedOLSMatrix[olsMatrixElementIdx];
@@ -237,8 +237,8 @@ namespace {
         return true;
     }
 
-    void LDLDecomposition(const TVector<double>& linearizedOLSMatrix,
-                          TVector<double>& decompositionTrace,
+    void LDLDecomposition(const TVector<double>& linearizedOLSMatrix, 
+                          TVector<double>& decompositionTrace, 
                           TVector<TVector<double>>& decompositionMatrix) {
         const double regularizationThreshold = 1e-5;
         double regularizationParameter = 0.;
@@ -253,16 +253,16 @@ namespace {
     }
 
     TVector<double> SolveLower(const TVector<TVector<double>>& decompositionMatrix,
-                               const TVector<double>& decompositionTrace,
+                               const TVector<double>& decompositionTrace, 
                                const TVector<double>& olsVector) {
         const size_t featuresCount = olsVector.size();
 
-        TVector<double> solution(featuresCount);
+        TVector<double> solution(featuresCount); 
         for (size_t featureNumber = 0; featureNumber < featuresCount; ++featureNumber) {
             double& solutionElement = solution[featureNumber];
             solutionElement = olsVector[featureNumber];
 
-            const TVector<double>& decompositionRow = decompositionMatrix[featureNumber];
+            const TVector<double>& decompositionRow = decompositionMatrix[featureNumber]; 
             for (size_t i = 0; i < featureNumber; ++i) {
                 solutionElement -= solution[i] * decompositionRow[i];
             }
@@ -279,12 +279,12 @@ namespace {
                                const TVector<double>& lowerSolution) {
         const size_t featuresCount = lowerSolution.size();
 
-        TVector<double> solution(featuresCount);
+        TVector<double> solution(featuresCount); 
         for (size_t featureNumber = featuresCount; featureNumber > 0; --featureNumber) {
             double& solutionElement = solution[featureNumber - 1];
             solutionElement = lowerSolution[featureNumber - 1];
 
-            const TVector<double>& decompositionRow = decompositionMatrix[featureNumber - 1];
+            const TVector<double>& decompositionRow = decompositionMatrix[featureNumber - 1]; 
             for (size_t i = featureNumber; i < featuresCount; ++i) {
                 solutionElement -= solution[i] * decompositionRow[i];
             }
@@ -293,10 +293,10 @@ namespace {
         return solution;
     }
 
-    TVector<double> Solve(const TVector<double>& olsMatrix, const TVector<double>& olsVector) {
+    TVector<double> Solve(const TVector<double>& olsMatrix, const TVector<double>& olsVector) { 
         const size_t featuresCount = olsVector.size();
 
-        TVector<double> decompositionTrace(featuresCount);
+        TVector<double> decompositionTrace(featuresCount); 
         TVector<TVector<double>> decompositionMatrix(featuresCount, TVector<double>(featuresCount));
 
         LDLDecomposition(olsMatrix, decompositionTrace, decompositionMatrix);
@@ -304,9 +304,9 @@ namespace {
         return SolveUpper(decompositionMatrix, SolveLower(decompositionMatrix, decompositionTrace, olsVector));
     }
 
-    double SumSquaredErrors(const TVector<double>& olsMatrix,
-                            const TVector<double>& olsVector,
-                            const TVector<double>& solution,
+    double SumSquaredErrors(const TVector<double>& olsMatrix, 
+                            const TVector<double>& olsVector, 
+                            const TVector<double>& solution, 
                             const double goalsDeviation) {
         const size_t featuresCount = olsVector.size();
 
@@ -325,7 +325,7 @@ namespace {
     }
 
 #ifdef _sse2_
-    inline void AddFeaturesProduct(const double weight, const TVector<double>& features, TVector<double>& linearizedOLSTriangleMatrix) {
+    inline void AddFeaturesProduct(const double weight, const TVector<double>& features, TVector<double>& linearizedOLSTriangleMatrix) { 
         const double* leftFeature = features.data();
         const double* featuresEnd = features.data() + features.size();
         double* matrixElement = linearizedOLSTriangleMatrix.data();
@@ -351,7 +351,7 @@ namespace {
         linearizedOLSTriangleMatrix.back() += weight;
     }
 #else
-    inline void AddFeaturesProduct(const double weight, const TVector<double>& features, TVector<double>& linearizedTriangleMatrix) {
+    inline void AddFeaturesProduct(const double weight, const TVector<double>& features, TVector<double>& linearizedTriangleMatrix) { 
         const double* leftFeature = features.data();
         const double* featuresEnd = features.data() + features.size();
         double* matrixElement = linearizedTriangleMatrix.data();

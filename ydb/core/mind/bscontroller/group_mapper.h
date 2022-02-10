@@ -15,7 +15,7 @@ namespace NKikimr {
             THolder<TImpl> Impl;
 
         public:
-            using TGroupDefinition = TVector<TVector<TVector<TPDiskId>>>; // Realm/Domain/Disk
+            using TGroupDefinition = TVector<TVector<TVector<TPDiskId>>>; // Realm/Domain/Disk 
             using TForbiddenPDisks = std::unordered_set<TPDiskId, THash<TPDiskId>>;
 
         public:

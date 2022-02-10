@@ -564,7 +564,7 @@ public:
         const char* const * metaInfo,
         const ui8* types,
         const ui8* aggrFunc,
-        const TString& group, const char* const * groupNames, const ui64 id)
+        const TString& group, const char* const * groupNames, const ui64 id) 
         : Counters(countersQnt)
         , Ids(countersQnt)
         , MetaInfo(metaInfo)
@@ -594,7 +594,7 @@ public:
         return Counters;
     }
 
-    const TString& GetGroup() const {
+    const TString& GetGroup() const { 
         return Group;
     }
 
@@ -659,7 +659,7 @@ private:
     const char* const * MetaInfo;
     const ui8* Types;
     const ui8* AggregateFunc;
-    TString Group;
+    TString Group; 
     const char* const * GroupNames;
     bool Drop;
 };

@@ -16,7 +16,7 @@
     PROBE(SymbolParam, GROUPS("Group"), TYPES(NLWTrace::TSymbol), NAMES("symbol"))                           \
     PROBE(CheckParam, GROUPS("Group"), TYPES(NLWTrace::TCheck), NAMES("value"))                              \
     EVENT(TwoParamsEvent, GROUPS("Group"), TYPES(int, TString), NAMES("param1", "param2"))                   \
-    EVENT(TwoParamsCheckEvent, GROUPS("Group"), TYPES(NLWTrace::TCheck, TString), NAMES("param1", "param2")) \
+    EVENT(TwoParamsCheckEvent, GROUPS("Group"), TYPES(NLWTrace::TCheck, TString), NAMES("param1", "param2")) \ 
     /**/
 
 LWTRACE_DECLARE_PROVIDER(LWTRACE_TESTS_PROVIDER)

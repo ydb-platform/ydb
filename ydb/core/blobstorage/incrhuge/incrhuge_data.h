@@ -17,7 +17,7 @@ namespace NKikimr {
                 return memcmp(&left, &right, sizeof(TBlobIndexRecord)) == 0;
             }
 
-            TString ToString() const {
+            TString ToString() const { 
                 return Sprintf("{Id# %016" PRIx64 " Lsn# %" PRIu64 " PayloadSize# %" PRIu32 " Owner# %" PRIu32 "}",
                         Id, Lsn, PayloadSize, Owner);
             }
@@ -42,10 +42,10 @@ namespace NKikimr {
             TBlobIndexRecord IndexRecord; // index record for this blob
             TChunkSerNum     ChunkSerNum; // unique serial number of chunk this blob was written to
 
-            TString ExtractInplacePayload() const {
+            TString ExtractInplacePayload() const { 
                 const char *begin = reinterpret_cast<const char *>(this + 1);
                 const char *end = begin + IndexRecord.PayloadSize;
-                return TString(begin, end);
+                return TString(begin, end); 
             }
         };
 #pragma pack(pop)

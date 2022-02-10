@@ -49,7 +49,7 @@ struct TTransactionProposal {
         // reserved
     };
 
-    TVector<TAffectedEntry> AffectedSet;
+    TVector<TAffectedEntry> AffectedSet; 
 
     TInstant AcceptMoment;
     bool IgnoreLowDiskSpace;
@@ -94,7 +94,7 @@ struct TMediatorStep {
         TTxId TxId;
 
         // todo: move to flat presentation (with buffer for all affected, instead of per-one)
-        TVector<TTabletId> PushToAffected; // filtered one (only entries which belong to this mediator)
+        TVector<TTabletId> PushToAffected; // filtered one (only entries which belong to this mediator) 
 
         ui64 Moderator;
 
@@ -116,7 +116,7 @@ struct TMediatorStep {
     const TTabletId MediatorId;
     const TStepId Step;
     bool Confirmed;
-    TVector<TTx> Transactions;
+    TVector<TTx> Transactions; 
 
     TMediatorStep(TTabletId mediatorId, TStepId step)
         : MediatorId(mediatorId)
@@ -128,7 +128,7 @@ struct TMediatorStep {
 struct TMediatorConfirmations {
     const TTabletId MediatorId;
 
-    THashMap<TTxId, THashSet<TTabletId>> Acks;
+    THashMap<TTxId, THashSet<TTabletId>> Acks; 
 
     TMediatorConfirmations(TTabletId mediatorId)
         : MediatorId(mediatorId)
@@ -153,7 +153,7 @@ do { \
     if (mSettings && mSettings->Satisfies(mPriority, mComponent, sampleBy)) { \
         TStringBuilder logStringBuilder; \
         logStringBuilder << stream; \
-        Self->DebugLog << (TString)logStringBuilder << Endl; \
+        Self->DebugLog << (TString)logStringBuilder << Endl; \ 
     } \
 } while(0) \
 /**/
@@ -182,7 +182,7 @@ class TTxCoordinator : public TActor<TTxCoordinator>, public TTabletExecutedFlat
         struct TEvAcquireReadStepFlush : public TEventLocal<TEvAcquireReadStepFlush, EvAcquireReadStepFlush> {};
     };
 
-    struct TQueueType {
+    struct TQueueType { 
         typedef TOneOneQueueInplace<TTransactionProposal *, 512> TQ;
 
         struct TFlowEntry {
@@ -205,7 +205,7 @@ class TTxCoordinator : public TActor<TTxCoordinator>, public TTabletExecutedFlat
             {}
         };
 
-        typedef TMap<TStepId, TSlot> TSlotQueue;
+        typedef TMap<TStepId, TSlot> TSlotQueue; 
 
         TSlotQueue Low;
         TSlot RapidSlot; // slot for entries with schedule on 'right now' moment (actually - with min-schedule time in past).
@@ -214,15 +214,15 @@ class TTxCoordinator : public TActor<TTxCoordinator>, public TTabletExecutedFlat
         TAutoPtr<TQ, TQ::TPtrCleanDestructor> Unsorted;
 
         TSlot& LowSlot(TStepId step) {
-            TMap<TStepId, TSlot>::iterator it = Low.find(step);
+            TMap<TStepId, TSlot>::iterator it = Low.find(step); 
             if (it != Low.end())
                 return it->second;
-            std::pair<TMap<TStepId, TSlot>::iterator, bool> xit = Low.insert(TSlotQueue::value_type(step, TSlot()));
+            std::pair<TMap<TStepId, TSlot>::iterator, bool> xit = Low.insert(TSlotQueue::value_type(step, TSlot())); 
             TSlot &ret = xit.first->second;
             return ret;
         }
 
-        TQueueType()
+        TQueueType() 
             : RapidFreeze(false)
         {}
     };
@@ -291,8 +291,8 @@ class TTxCoordinator : public TActor<TTxCoordinator>, public TTabletExecutedFlat
 
     struct TTransaction {
         TStepId PlanOnStep;
-        THashSet<TTabletId> AffectedSet;
-        THashMap<TTabletId, THashSet<TTabletId>> UnconfirmedAffectedSet;
+        THashSet<TTabletId> AffectedSet; 
+        THashMap<TTabletId, THashSet<TTabletId>> UnconfirmedAffectedSet; 
 
         TTransaction()
             : PlanOnStep(0)
@@ -316,7 +316,7 @@ class TTxCoordinator : public TActor<TTxCoordinator>, public TTabletExecutedFlat
         ui64 LastEmptyStep = 0;
         TMonotonic LastEmptyPlanAt{ };
 
-        TQueueType Queue;
+        TQueueType Queue; 
 
         ui64 AcquireReadStepInFlight = 0;
         TMonotonic AcquireReadStepLast{ };
@@ -333,7 +333,7 @@ public:
         struct Transaction : Table<0> {
             struct ID : Column<0, NScheme::NTypeIds::Uint64> {}; // PK
             struct Plan : Column<1, NScheme::NTypeIds::Uint64> {};
-            struct AffectedSet : Column<2, NScheme::NTypeIds::String> { using Type = TVector<TTabletId>; };
+            struct AffectedSet : Column<2, NScheme::NTypeIds::String> { using Type = TVector<TTabletId>; }; 
 
             using TKey = TableKey<ID>;
             using TColumns = TableColumns<ID, Plan, AffectedSet>;
@@ -364,7 +364,7 @@ public:
 
         struct DomainConfiguration : Table<5> {
             struct Version : Column<1, NScheme::NTypeIds::Uint64> {};
-            struct Mediators : Column<2, NScheme::NTypeIds::String> { using Type = TVector<TTabletId>; };
+            struct Mediators : Column<2, NScheme::NTypeIds::String> { using Type = TVector<TTabletId>; }; 
             struct Resolution : Column<3, NScheme::NTypeIds::Uint64> {};
             struct Config : Column<4, NScheme::NTypeIds::String> {};
 
@@ -410,18 +410,18 @@ private:
     TTabletCountersBase* TabletCounters;
     TAutoPtr<TTabletCountersBase> TabletCountersPtr;
 
-    typedef THashMap<TTabletId, TMediator> TMediatorsIndex;
+    typedef THashMap<TTabletId, TMediator> TMediatorsIndex; 
     TMediatorsIndex Mediators;
 
-    typedef THashMap<TTxId, TTransaction> TTransactions;
+    typedef THashMap<TTxId, TTransaction> TTransactions; 
     TTransactions Transactions;
 
     bool Stopping = false;
 
 #ifdef COORDINATOR_LOG_TO_FILE
     // HACK
-    TString DebugName;
-    TFixedBufferFileOutput DebugLogFile;
+    TString DebugName; 
+    TFixedBufferFileOutput DebugLogFile; 
     TZLibCompress DebugLog;
 #endif
 
@@ -485,7 +485,7 @@ private:
     void PlanTx(TAutoPtr<TTransactionProposal> &proposal, const TActorContext &ctx);
 
     void SchedulePlanTick(const TActorContext &ctx);
-    bool RestoreMediatorInfo(TTabletId mediatorId, TVector<TAutoPtr<TMediatorStep>> &planned, TTransactionContext &txc, /*TKeyBuilder &kb, */THashMap<TTxId,TVector<TTabletId>> &pushToAffected) const;
+    bool RestoreMediatorInfo(TTabletId mediatorId, TVector<TAutoPtr<TMediatorStep>> &planned, TTransactionContext &txc, /*TKeyBuilder &kb, */THashMap<TTxId,TVector<TTabletId>> &pushToAffected) const; 
 
     void TryInitMonCounters(const TActorContext &ctx);
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext &ctx) override;

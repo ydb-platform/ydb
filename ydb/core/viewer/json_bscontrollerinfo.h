@@ -74,7 +74,7 @@ public:
 
 template <>
 struct TJsonRequestSchema<TJsonBSControllerInfo> {
-    static TString GetSchema() {
+    static TString GetSchema() { 
         TStringStream stream;
         TProtoToJson::ProtoToJsonSchema<TEvBlobStorage::TEvResponseControllerInfo::ProtoRecordType>(stream);
         return stream.Str();
@@ -83,7 +83,7 @@ struct TJsonRequestSchema<TJsonBSControllerInfo> {
 
 template <>
 struct TJsonRequestParameters<TJsonBSControllerInfo> {
-    static TString GetParameters() {
+    static TString GetParameters() { 
         return R"___([{"name":"controller_id","in":"query","description":"storage controller identifier (tablet id)","required":true,"type":"string"},
                       {"name":"enums","in":"query","description":"convert enums to strings","required":false,"type":"boolean"},
                       {"name":"ui64","in":"query","description":"return ui64 as number","required":false,"type":"boolean"},
@@ -93,14 +93,14 @@ struct TJsonRequestParameters<TJsonBSControllerInfo> {
 
 template <>
 struct TJsonRequestSummary<TJsonBSControllerInfo> {
-    static TString GetSummary() {
+    static TString GetSummary() { 
         return "\"Storage controller information\"";
     }
 };
 
 template <>
 struct TJsonRequestDescription<TJsonBSControllerInfo> {
-    static TString GetDescription() {
+    static TString GetDescription() { 
         return "\"Returns information about storage controller\"";
     }
 };

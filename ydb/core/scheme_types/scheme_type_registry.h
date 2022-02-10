@@ -6,7 +6,7 @@
 #include <util/generic/map.h>
 #include <util/generic/maybe.h>
 #include <util/generic/singleton.h>
-#include <util/generic/vector.h>
+#include <util/generic/vector.h> 
 #include <util/string/builder.h>
 
 
@@ -80,8 +80,8 @@ public:
         ythrow yexception() << "Unknown type: " << name;
     }
 
-    TVector<const IType*> GetTypes() const {
-        TVector<const IType*> types;
+    TVector<const IType*> GetTypes() const { 
+        TVector<const IType*> types; 
         types.reserve(TypeByIdMap.size());
         for (const auto& entry : TypeByIdMap)
             types.push_back(entry.second);
@@ -104,8 +104,8 @@ public:
 
 private:
     //
-    typedef TMap<ui32, const IType *> TTypeByIdMap;
-    typedef TMap<::TString, const IType *> TTypeByNameMap;
+    typedef TMap<ui32, const IType *> TTypeByIdMap; 
+    typedef TMap<::TString, const IType *> TTypeByNameMap; 
 
     TTypeByIdMap TypeByIdMap;
     TTypeByNameMap TypeByNameMap;

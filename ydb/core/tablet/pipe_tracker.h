@@ -55,8 +55,8 @@ private:
         {}
     };
 
-    TVector<TCommand> Attach;
-    TVector<TCommand> Detach;
+    TVector<TCommand> Attach; 
+    TVector<TCommand> Detach; 
 };
 
 }

@@ -36,7 +36,7 @@ TBusMessageQueuePtr NBus::CreateMessageQueue(const char* name) {
 }
 
 namespace {
-    TBusQueueConfig QueueConfigFillDefaults(const TBusQueueConfig& orig, const TString& name) {
+    TBusQueueConfig QueueConfigFillDefaults(const TBusQueueConfig& orig, const TString& name) { 
         TBusQueueConfig patched = orig;
         if (!patched.Name) {
             patched.Name = name;
@@ -85,15 +85,15 @@ TBusMessageQueueStatus TBusMessageQueue::GetStatusRecordInternal() const {
     return r;
 }
 
-TString TBusMessageQueue::GetStatusSelf() const {
+TString TBusMessageQueue::GetStatusSelf() const { 
     return GetStatusRecordInternal().PrintToString();
 }
 
-TString TBusMessageQueue::GetStatusSingleLine() const {
+TString TBusMessageQueue::GetStatusSingleLine() const { 
     return WorkQueue->GetStatusSingleLine();
 }
 
-TString TBusMessageQueue::GetStatus(ui16 flags) const {
+TString TBusMessageQueue::GetStatus(ui16 flags) const { 
     TStringStream ss;
 
     ss << GetStatusSelf();
@@ -193,6 +193,6 @@ void TBusMessageQueue::Schedule(IScheduleItemAutoPtr i) {
     Scheduler.Schedule(i);
 }
 
-TString TBusMessageQueue::GetNameInternal() const {
+TString TBusMessageQueue::GetNameInternal() const { 
     return Config.Name;
 }

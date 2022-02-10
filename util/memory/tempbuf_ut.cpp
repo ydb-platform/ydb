@@ -27,7 +27,7 @@ public:
         tmp.Append("def", 3);
 
         UNIT_ASSERT_EQUAL(tmp.Filled(), 6);
-        UNIT_ASSERT_EQUAL(TString(tmp.Data(), tmp.Filled()), "abcdef");
+        UNIT_ASSERT_EQUAL(TString(tmp.Data(), tmp.Filled()), "abcdef"); 
     }
 };
 

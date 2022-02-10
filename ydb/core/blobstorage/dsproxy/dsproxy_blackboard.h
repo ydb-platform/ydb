@@ -50,9 +50,9 @@ struct TBlobState {
         TFragmentedBuffer Data;
         TIntervalSet<i32> Here;    // Present in the Data buffer
 
-        void AddResponseData(ui32 fullSize, ui32 shift, TString &data);
+        void AddResponseData(ui32 fullSize, ui32 shift, TString &data); 
         void AddPartToPut(TString &data);
-        TString ToString() const;
+        TString ToString() const; 
     };
     struct TWholeState : TState {
         TIntervalSet<i32> Needed;  // Requested by the external user
@@ -62,13 +62,13 @@ struct TBlobState {
     struct TDiskPart {
         TIntervalSet<i32> Requested;
         ESituation Situation = ESituation::Unknown;
-        TString ToString() const;
+        TString ToString() const; 
     };
     struct TDisk {
         ui32 OrderNumber;
         bool IsSlow = false;
         TStackVec<TDiskPart, TypicalPartsInBlob> DiskParts;
-        TString ToString() const;
+        TString ToString() const; 
     };
 
     TLogoBlobID Id;
@@ -98,8 +98,8 @@ struct TBlobState {
     void GetWorstPredictedDelaysNs(const TBlobStorageGroupInfo &info, TGroupQueues &groupQueues,
             NKikimrBlobStorage::EVDiskQueueId queueId,
             ui64 *outWorstNs, ui64 *outNextToWorstNs, i32 *outWorstSubgroupIdx) const;
-    TString ToString() const;
-    static TString SituationToString(ESituation situation);
+    TString ToString() const; 
+    static TString SituationToString(ESituation situation); 
 };
 
 struct TDiskGetRequest {
@@ -123,7 +123,7 @@ struct TDiskPutRequest {
         ReasonAccelerate
     };
     const TLogoBlobID Id;
-    TString Buffer;
+    TString Buffer; 
     EPutReason Reason;
     bool IsHandoff;
     ui8 BlobIdx;
@@ -138,7 +138,7 @@ struct TDiskPutRequest {
 };
 
 struct TDiskRequests {
-    TDeque<TDiskGetRequest> GetsToSend;
+    TDeque<TDiskGetRequest> GetsToSend; 
     TStackVec<TDiskPutRequest, TypicalPartsInBlob> PutsToSend;
     ui32 FirstUnsentRequestIdx = 0;
     ui32 FirstUnsentPutIdx = 0;
@@ -197,7 +197,7 @@ struct TBlackboard {
     void AddPartToPut(const TLogoBlobID &id, ui32 partIdx, TString &partData);
     void MarkBlobReadyToPut(const TLogoBlobID &id, ui8 blobIdx = 0);
     void MoveBlobStateToDone(const TLogoBlobID &id);
-    void AddResponseData(const TLogoBlobID &id, ui32 orderNumber, ui32 shift, TString &data);
+    void AddResponseData(const TLogoBlobID &id, ui32 orderNumber, ui32 shift, TString &data); 
     void AddPutOkResponse(const TLogoBlobID &id, ui32 orderNumber);
     void AddNoDataResponse(const TLogoBlobID &id, ui32 orderNumber);
     void AddErrorResponse(const TLogoBlobID &id, ui32 orderNumber);

@@ -84,7 +84,7 @@ namespace NKikimr {
             }
         }
 
-        TString Serialize() const {
+        TString Serialize() const { 
             return Sds.Serialize();
         }
 
@@ -107,7 +107,7 @@ namespace NKikimr {
                 , Cookie(cookie)
             {}
         };
-        using TNotifyVec = TVector<TNotify>;
+        using TNotifyVec = TVector<TNotify>; 
 
         TIntrusivePtr<TSyncerContext> SyncerCtx;
         const TDuration AdvanceEntryPointTimeout;
@@ -134,7 +134,7 @@ namespace NKikimr {
             // commit
             NPDisk::TCommitRecord commitRec;
             commitRec.IsStartingPoint = true;
-            TString data = State.Serialize();
+            TString data = State.Serialize(); 
             size_t dataSize = data.size();
             TLsnSeg seg = SyncerCtx->LsnMngr->AllocLsnForLocalUse();
             auto msg = std::make_unique<NPDisk::TEvLog>(SyncerCtx->PDiskCtx->Dsk->Owner,

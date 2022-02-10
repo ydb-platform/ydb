@@ -24,7 +24,7 @@ Y_UNIT_TEST_SUITE(OptTest) {
         int argc = 5;
         Opt opts(argc, argv, "", options);
 
-        UNIT_ASSERT_VALUES_EQUAL(JoinStrings(opts.GetFreeArgs(), ", "), "ARG1, ARG3");
+        UNIT_ASSERT_VALUES_EQUAL(JoinStrings(opts.GetFreeArgs(), ", "), "ARG1, ARG3"); 
     }
 
     Y_UNIT_TEST(TestLongOption) {
@@ -37,7 +37,7 @@ Y_UNIT_TEST_SUITE(OptTest) {
             int argc = 5;
             Opt opts(argc, argv, "", options);
 
-            TString optionValue = "";
+            TString optionValue = ""; 
             int optlet = 0;
             while ((optlet = opts.Get()) != EOF) {
                 if (optlet == SOME_OPTION_ID) {

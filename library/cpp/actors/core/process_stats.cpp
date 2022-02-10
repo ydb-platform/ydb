@@ -80,7 +80,7 @@ namespace NActors {
 
             TFileInput statm("/proc/" + strPid + "/statm");
             statm.ReadLine(str);
-            TVector<TString> fields;
+            TVector<TString> fields; 
             StringSplitter(str).Split(' ').SkipEmpty().Collect(&fields);
             if (fields.size() >= 7) {
                 ui64 resident = FromString<ui64>(fields[1]);

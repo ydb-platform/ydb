@@ -63,7 +63,7 @@ void TSockTest::TestTimeout() {
     }
     int realTimeout = (int)(millisec() - startTime);
     if (realTimeout > timeout + 2000) {
-        TString err = TStringBuilder() << "Timeout exceeded: " << realTimeout << " ms (expected " << timeout << " ms)";
+        TString err = TStringBuilder() << "Timeout exceeded: " << realTimeout << " ms (expected " << timeout << " ms)"; 
         UNIT_FAIL(err);
     }
 }
@@ -74,7 +74,7 @@ void TSockTest::TestConnectionRefused() {
 }
 
 void TSockTest::TestNetworkResolutionError() {
-    TString errMsg;
+    TString errMsg; 
     try {
         TNetworkAddress addr("", 0);
     } catch (const TNetworkResolutionError& e) {
@@ -86,8 +86,8 @@ void TSockTest::TestNetworkResolutionError() {
     }
 
     int expectedErr = EAI_NONAME;
-    TString expectedErrMsg = gai_strerror(expectedErr);
-    if (errMsg.find(expectedErrMsg) == TString::npos) {
+    TString expectedErrMsg = gai_strerror(expectedErr); 
+    if (errMsg.find(expectedErrMsg) == TString::npos) { 
         UNIT_FAIL("TNetworkResolutionError contains\nInvalid msg: " + errMsg + "\nExpected msg: " + expectedErrMsg + "\n");
     }
 }
@@ -289,9 +289,9 @@ void TPollTest::TestPollInOut() {
 
     ui32 localIp = ntohl(inet_addr("127.0.0.1"));
 
-    TVector<TSimpleSharedPtr<TSocketHolder>> clientSockets;
-    TVector<TSimpleSharedPtr<TSocketHolder>> connectedSockets;
-    TVector<pollfd> fds;
+    TVector<TSimpleSharedPtr<TSocketHolder>> clientSockets; 
+    TVector<TSimpleSharedPtr<TSocketHolder>> connectedSockets; 
+    TVector<pollfd> fds; 
 
     for (size_t i = 0; i < socketCount; ++i) {
         TSimpleSharedPtr<TSocketHolder> clientSocket(new TSocketHolder(StartClientSocket(localIp, port)));

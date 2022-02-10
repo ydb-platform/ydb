@@ -61,7 +61,7 @@ namespace {
                 }
 
                 if (strncmp(RequestString.data(), "GET /hosts HTTP/1.", 18) == 0) {
-                    TString list = Sprintf("[\"localhost\"]");
+                    TString list = Sprintf("[\"localhost\"]"); 
                     Output() << "HTTP/1.1 200 Ok\r\n";
                     Output() << "Connection: close\r\n";
                     Output() << "Content-Length: " << list.size() << "\r\n";
@@ -89,7 +89,7 @@ namespace {
         };
 
     public:
-        inline THTTP200OkServer(TString res)
+        inline THTTP200OkServer(TString res) 
             : Res_(std::move(res))
         {
         }
@@ -99,7 +99,7 @@ namespace {
         }
 
     private:
-        TString Res_;
+        TString Res_; 
     };
 }
 
@@ -128,14 +128,14 @@ Y_UNIT_TEST_SUITE(TestProtocols) {
         }
 
         void CatchResolveError(
-                const TActorContext& ctx, TString error) noexcept override
+                const TActorContext& ctx, TString error) noexcept override 
         {
             Error = std::move(error);
             ctx.Send(Edge, new TEvents::TEvWakeup);
         }
 
         NAddr::IRemoteAddrPtr Address;
-        TString Error;
+        TString Error; 
         TActorId Edge;
     };
 
@@ -186,14 +186,14 @@ Y_UNIT_TEST_SUITE(TestProtocols) {
         }
 
         void CatchResolveError(
-                const TActorContext& ctx, TString error) noexcept override
+                const TActorContext& ctx, TString error) noexcept override 
         {
             Error = std::move(error);
             ctx.Send(Edge, new TEvents::TEvWakeup);
         }
 
         void CatchConnectError(
-                const TActorContext& ctx, TString error) noexcept override
+                const TActorContext& ctx, TString error) noexcept override 
         {
             Error = std::move(error);
             ctx.Send(Edge, new TEvents::TEvWakeup);
@@ -210,7 +210,7 @@ Y_UNIT_TEST_SUITE(TestProtocols) {
 
 
         NAddr::IRemoteAddrRef Address;
-        TString Error;
+        TString Error; 
         TActorId Edge;
         TIntrusivePtr<NInterconnect::TStreamSocket> Socket;
         ui64 Port;
@@ -281,14 +281,14 @@ Y_UNIT_TEST_SUITE(TestProtocols) {
         }
 
         void CatchResolveError(
-                const TActorContext& ctx, TString error) noexcept override
+                const TActorContext& ctx, TString error) noexcept override 
         {
             Error = std::move(error);
             ctx.Send(Edge, new TEvents::TEvWakeup);
         }
 
         void CatchConnectError(
-                const TActorContext& ctx, TString error) noexcept override
+                const TActorContext& ctx, TString error) noexcept override 
         {
             Error = std::move(error);
             ctx.Send(Edge, new TEvents::TEvWakeup);
@@ -327,7 +327,7 @@ Y_UNIT_TEST_SUITE(TestProtocols) {
 
         void CatchHTTPReply(
                 const TActorContext& ctx,
-                TVector<char> buf,
+                TVector<char> buf, 
                 size_t httpMessageSize) noexcept override
         {
             Y_UNUSED(httpMessageSize);
@@ -336,8 +336,8 @@ Y_UNIT_TEST_SUITE(TestProtocols) {
         }
 
     public:
-        TString Error;
-        TString Data;
+        TString Error; 
+        TString Data; 
         TActorId Edge;
         ui16 Port;
 
@@ -499,7 +499,7 @@ Y_UNIT_TEST_SUITE(TestProtocols) {
 
         void CatchHTTPReply(
                 const TActorContext& ctx,
-                TVector<char> buf,
+                TVector<char> buf, 
                 size_t httpMessageSize) noexcept override
         {
             Ctest << "HTTP message size: " << httpMessageSize << Endl;
@@ -523,7 +523,7 @@ Y_UNIT_TEST_SUITE(TestProtocols) {
 
         void CatchProxyList(
                 const TActorContext& ctx,
-                TVector<char> buf,
+                TVector<char> buf, 
                 size_t httpMessageSize,
                 THttpInput& httpMsg) noexcept
         {
@@ -549,7 +549,7 @@ Y_UNIT_TEST_SUITE(TestProtocols) {
                     Buf.erase(Buf.begin(), Buf.begin() + httpMessageSize);
                     Buf.pop_back();
                     if (value == 0) {
-                        CatchHTTPContent(ctx, TVector<char>());
+                        CatchHTTPContent(ctx, TVector<char>()); 
                         return;
                     }
                     HTTPReadContent(this, ctx, value);
@@ -593,12 +593,12 @@ Y_UNIT_TEST_SUITE(TestProtocols) {
         }
 
         void CatchHTTPContent(
-                const TActorContext& ctx, TVector<char> buf) noexcept override
+                const TActorContext& ctx, TVector<char> buf) noexcept override 
         {
             Buf.insert(Buf.end(), buf.begin(), buf.end());
             buf.clear();
             Ctest << "Content complete" << Endl;
-            Ctest << TString(Buf.data(), Buf.size()) << Endl;
+            Ctest << TString(Buf.data(), Buf.size()) << Endl; 
 
             do {
                 TMemoryInput input(Buf.data(), Buf.size());
@@ -614,7 +614,7 @@ Y_UNIT_TEST_SUITE(TestProtocols) {
 
                 Ctest << "First proxy is: " << result.front() << Endl;
 
-                TString headers =
+                TString headers = 
                     "Accept: application/json\r\n"
                     "Content-Type: text/tab-separated-values\r\n"
                     "Transfer-Encoding: chunked\r\n"
@@ -672,12 +672,12 @@ Y_UNIT_TEST_SUITE(TestProtocols) {
         }
 
     public:
-        TString Error;
+        TString Error; 
         TActorId Edge;
         ui16 Port;
 
     private:
-        TVector<char> Buf;
+        TVector<char> Buf; 
     };
 
 

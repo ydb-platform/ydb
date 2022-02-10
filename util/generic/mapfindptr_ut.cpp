@@ -1,4 +1,4 @@
-#include "string.h"
+#include "string.h" 
 #include "hash.h"
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -19,7 +19,7 @@ Y_UNIT_TEST_SUITE(TMapFindPtrTest) {
         UNIT_ASSERT_EQUAL(a.FindPtr(0), nullptr);
 
         //test mutation
-        if (TString* p = a.FindPtr(42)) {
+        if (TString* p = a.FindPtr(42)) { 
             *p = "dog";
         }
         UNIT_ASSERT(a.FindPtr(42));
@@ -35,9 +35,9 @@ Y_UNIT_TEST_SUITE(TMapFindPtrTest) {
     }
 
     Y_UNIT_TEST(TestTemplateFind) {
-        THashMap<TString, int> m;
+        THashMap<TString, int> m; 
 
-        m[TString("x")] = 2;
+        m[TString("x")] = 2; 
 
         UNIT_ASSERT(m.FindPtr(TStringBuf("x")));
         UNIT_ASSERT_EQUAL(*m.FindPtr(TStringBuf("x")), 2);
@@ -57,8 +57,8 @@ Y_UNIT_TEST_SUITE(TMapFindPtrTest) {
 
         a[1] = "lol";
 
-        const TString str123 = "123";
-        TString str1234 = "1234";
+        const TString str123 = "123"; 
+        TString str1234 = "1234"; 
 
         UNIT_ASSERT_VALUES_EQUAL(a.ValueRef(1, str123), "lol");
         UNIT_ASSERT_VALUES_EQUAL(a.ValueRef(2, str123), "123");

@@ -15,14 +15,14 @@ public:
     {
     }
 
-    inline ~TImpl() {
+    inline ~TImpl() { 
     }
 
-    inline THttpInput* Input() noexcept {
+    inline THttpInput* Input() noexcept { 
         return &HI_;
     }
 
-    inline THttpOutput* Output() noexcept {
+    inline THttpOutput* Output() noexcept { 
         return &HO_;
     }
 
@@ -53,14 +53,14 @@ THttpServerConn::THttpServerConn(const TSocket& s, size_t outputBufferSize)
 {
 }
 
-THttpServerConn::~THttpServerConn() {
+THttpServerConn::~THttpServerConn() { 
 }
 
-THttpInput* THttpServerConn::Input() noexcept {
+THttpInput* THttpServerConn::Input() noexcept { 
     return Impl_->Input();
 }
 
-THttpOutput* THttpServerConn::Output() noexcept {
+THttpOutput* THttpServerConn::Output() noexcept { 
     return Impl_->Output();
 }
 

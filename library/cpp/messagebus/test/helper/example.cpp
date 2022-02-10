@@ -19,12 +19,12 @@ static void FillWithJunk(TArrayRef<char> data) {
     }
 }
 
-static TString JunkString(size_t len) {
+static TString JunkString(size_t len) { 
     TTempBuf temp(len);
     TArrayRef<char> tempArrayRef(temp.Data(), len);
     FillWithJunk(tempArrayRef);
 
-    return TString(tempArrayRef.data(), tempArrayRef.size());
+    return TString(tempArrayRef.data(), tempArrayRef.size()); 
 }
 
 TExampleRequest::TExampleRequest(TAtomic* counterPtr, size_t payloadSize)

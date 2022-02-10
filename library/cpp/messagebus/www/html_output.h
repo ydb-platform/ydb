@@ -29,7 +29,7 @@ struct THtmlOutputStreamPushPop {
 };
 
 struct TChars {
-    TString Text;
+    TString Text; 
     bool NeedEscape;
 
     TChars(TStringBuf text)
@@ -53,7 +53,7 @@ struct TChars {
     {
     }
 
-    TString Escape() {
+    TString Escape() { 
         if (NeedEscape) {
             return EncodeHtmlPcdata(Text);
         } else {
@@ -63,8 +63,8 @@ struct TChars {
 };
 
 struct TAttr {
-    TString Name;
-    TString Value;
+    TString Name; 
+    TString Value; 
 
     TAttr(TStringBuf name, TStringBuf value)
         : Name(name)
@@ -157,7 +157,7 @@ static inline void Small(TStringBuf text) {
 }
 
 static inline void HnWithSmall(unsigned n, TStringBuf title, TStringBuf small) {
-    TString tagName = ConcatStrings("h", n);
+    TString tagName = ConcatStrings("h", n); 
     Open(tagName);
     HtmlOutputStream() << title;
     Sp();
@@ -268,7 +268,7 @@ static inline void Code(TStringBuf content) {
 }
 
 struct TTagGuard {
-    const TString TagName;
+    const TString TagName; 
 
     TTagGuard(TStringBuf tagName, TStringBuf cssClass, TStringBuf id = "")
         : TagName(tagName)

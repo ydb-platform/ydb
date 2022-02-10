@@ -4,13 +4,13 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-static void TestIconv(const TString& utf8, const TString& other, ECharset enc) {
-    TUtf16String wide0 = CharToWide(utf8, CODES_UTF8);
-    TUtf16String wide1 = CharToWide(other, enc);
+static void TestIconv(const TString& utf8, const TString& other, ECharset enc) { 
+    TUtf16String wide0 = CharToWide(utf8, CODES_UTF8); 
+    TUtf16String wide1 = CharToWide(other, enc); 
 
     UNIT_ASSERT(wide0 == wide1);
 
-    TString temp = WideToUTF8(wide0);
+    TString temp = WideToUTF8(wide0); 
     UNIT_ASSERT(temp == utf8);
 
     temp = WideToChar(wide0, enc);

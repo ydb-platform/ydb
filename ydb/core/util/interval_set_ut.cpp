@@ -212,7 +212,7 @@ Y_UNIT_TEST_SUITE(TIntervalSetTest) {
         sets.emplace_back(50, 80);
         sets.emplace_back(90, 100);
 
-        TVector<ui32> counters;
+        TVector<ui32> counters; 
         counters.resize(sets.size() * 2 / 3);
         for (ui32 i = 0; i < counters.size(); ++i) {
             counters[i] = 0;

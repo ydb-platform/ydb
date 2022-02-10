@@ -13,31 +13,31 @@ namespace NKikimr {
     struct TCoordinators: TAtomicRefCount<TCoordinators>  {
         using TPtr = TIntrusiveConstPtr<TCoordinators>;
 
-        const TVector<ui64> Coordinators;
+        const TVector<ui64> Coordinators; 
 
         TCoordinators(const NKikimrSubDomains::TProcessingParams &processing);
         TCoordinators(const TDomainsInfo::TDomain &domain);
 
-        TCoordinators(const TVector<ui64> &coordinators);
-        TCoordinators(TVector<ui64> &&coordinators);
+        TCoordinators(const TVector<ui64> &coordinators); 
+        TCoordinators(TVector<ui64> &&coordinators); 
 
         ui64 Select(ui64 txId) const;
-        const TVector<ui64>& List() const;
+        const TVector<ui64>& List() const; 
     };
 
     struct TMediators: TAtomicRefCount<TMediators>  {
         using TPtr = TIntrusiveConstPtr<TMediators>;
 
-        const TVector<ui64> Mediators;
+        const TVector<ui64> Mediators; 
 
         TMediators(const NKikimrSubDomains::TProcessingParams &processing);
         TMediators(const TDomainsInfo::TDomain &domain);
 
-        TMediators(const TVector<ui64> &mediators);
-        TMediators(TVector<ui64> &&mediators);
+        TMediators(const TVector<ui64> &mediators); 
+        TMediators(TVector<ui64> &&mediators); 
 
         ui64 Select(ui64 tabletId) const;
-        const TVector<ui64>& List() const;
+        const TVector<ui64>& List() const; 
     };
 
     struct TTimeCastBuckets: TAtomicRefCount<TTimeCastBuckets>  {

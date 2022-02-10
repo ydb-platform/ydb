@@ -26,12 +26,12 @@ UNIT_TEST_SUITE_REGISTRATION(TArchiveTest);
 #define ARCHIVE "./test.ar"
 
 void TArchiveTest::CreateArchive() {
-    TFixedBufferFileOutput out(ARCHIVE);
+    TFixedBufferFileOutput out(ARCHIVE); 
     TArchiveWriter w(&out);
 
     for (size_t i = 0; i < 1000; ++i) {
-        const TString path = "/" + ToString(i);
-        const TString data = "data" + ToString(i * 1000) + "dataend";
+        const TString path = "/" + ToString(i); 
+        const TString data = "data" + ToString(i * 1000) + "dataend"; 
         TStringInput si(data);
 
         w.Add(path, &si);
@@ -55,9 +55,9 @@ void TArchiveTest::TestRead() {
     UNIT_ASSERT_EQUAL(r.Count(), 1000);
 
     for (size_t i = 0; i < 1000; ++i) {
-        const TString key = "/" + ToString(i);
+        const TString key = "/" + ToString(i); 
         TAutoPtr<IInputStream> is = r.ObjectByKey(key);
-        const TString data = is->ReadAll();
+        const TString data = is->ReadAll(); 
 
         UNIT_ASSERT_EQUAL(data, "data" + ToString(i * 1000) + "dataend");
     }
@@ -66,15 +66,15 @@ void TArchiveTest::TestRead() {
 void TArchiveTest::TestOffsetOrder() {
     CreateArchive();
     TTempFile tmpFile(ARCHIVE);
-    TBlob blob1 = TBlob::FromFileSingleThreaded(ARCHIVE);
-    TArchiveReader r(blob1);
+    TBlob blob1 = TBlob::FromFileSingleThreaded(ARCHIVE); 
+    TArchiveReader r(blob1); 
 
     const void* prevOffset = nullptr;
 
     for (size_t i = 0; i < r.Count(); ++i) {
-        const TString key = r.KeyByIndex(i);
-        TBlob blob2 = r.BlobByKey(key);
-        const void* offset = blob2.Data();
+        const TString key = r.KeyByIndex(i); 
+        TBlob blob2 = r.BlobByKey(key); 
+        const void* offset = blob2.Data(); 
 
         if (i) {
             UNIT_ASSERT(prevOffset < offset);

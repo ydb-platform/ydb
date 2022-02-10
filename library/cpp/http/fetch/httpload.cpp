@@ -336,7 +336,7 @@ bool httpLoadAgent::doStartRequest() {
             return false;
         }
 
-        TString urlBaseStr = URL_.PrintS(THttpURL::FlagNoFrag);
+        TString urlBaseStr = URL_.PrintS(THttpURL::FlagNoFrag); 
 
         clearReader();
         Reader_ = new httpAgentReader(*this, urlBaseStr.c_str(),

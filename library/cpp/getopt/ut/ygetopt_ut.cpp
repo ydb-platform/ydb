@@ -29,8 +29,8 @@ void TGetOptTest::TestGetOpt() {
         "-q",
         nullptr};
 
-    TString res;
-    const TString format = "qzp:f";
+    TString res; 
+    const TString format = "qzp:f"; 
     TGetOpt opt(sizeof(argv) / sizeof(*argv) - 1, argv, format);
 
     for (TGetOpt::TIterator it = opt.Begin(); it != opt.End(); ++it) {

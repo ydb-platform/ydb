@@ -26,12 +26,12 @@ namespace NKikimr {
         return *this == vdisk;
     }
 
-    TString TVDiskID::ToString() const {
+    TString TVDiskID::ToString() const { 
         return Sprintf("[%" PRIx32 ":%" PRIu32 ":%" PRIu8 ":%" PRIu8 ":%" PRIu8 "]",
                         GroupID, GroupGeneration, FailRealm, FailDomain, VDisk).data();
     }
 
-    TString TVDiskID::ToStringWOGeneration() const {
+    TString TVDiskID::ToStringWOGeneration() const { 
         return Sprintf("[%" PRIx32 ":_:%" PRIu8 ":%" PRIu8 ":%" PRIu8 "]",
                         GroupID, FailRealm, FailDomain, VDisk).data();
     }

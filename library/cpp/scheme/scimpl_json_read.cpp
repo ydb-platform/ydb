@@ -7,7 +7,7 @@
 namespace NSc {
     struct TJsonError {
         size_t Offset = 0;
-        TMaybe<TString> Reason;
+        TMaybe<TString> Reason; 
     };
 
     struct TJsonDeserializer : NJson::TJsonCallbacks {
@@ -57,14 +57,14 @@ namespace NSc {
             }
         };
 
-        typedef TVector<TContainer> TStackType;
+        typedef TVector<TContainer> TStackType; 
 
     public:
         TValue& Root;
         TJsonError& Error;
         const TJsonOpts& Cfg;
 
-        TStackType Stack;
+        TStackType Stack; 
         bool Virgin = true;
 
     public:
@@ -213,7 +213,7 @@ namespace NSc {
             return res;
         }
 
-        TString reason = err.Reason.Empty() ? "NULL" : *err.Reason;
+        TString reason = err.Reason.Empty() ? "NULL" : *err.Reason; 
         ythrow TSchemeParseException(err.Offset, reason) << "JSON error at offset " << err.Offset << " (" << reason << ")";
     }
 

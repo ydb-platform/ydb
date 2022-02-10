@@ -9,7 +9,7 @@
 // based on http://www.pcg-random.org/. See T*FastRng* family below.
 
 struct TPCGMixer {
-    static inline ui32 Mix(ui64 x) noexcept {
+    static inline ui32 Mix(ui64 x) noexcept { 
         const ui32 xorshifted = ((x >> 18u) ^ x) >> 27u;
         const ui32 rot = x >> 59u;
 
@@ -44,7 +44,7 @@ struct TReallyFastRng32: public TCommonRNG<ui32, TReallyFastRng32>, public TReal
 class TFastRng64: public TCommonRNG<ui64, TFastRng64> {
 public:
     struct TArgs {
-        TArgs(ui64 seed) noexcept;
+        TArgs(ui64 seed) noexcept; 
         TArgs(IInputStream& entropy);
 
         ui64 Seed1;
@@ -53,26 +53,26 @@ public:
         ui32 Seq2;
     };
 
-    TFastRng64(ui64 seed1, ui32 seq1, ui64 seed2, ui32 seq2) noexcept;
+    TFastRng64(ui64 seed1, ui32 seq1, ui64 seed2, ui32 seq2) noexcept; 
 
     /*
      * simplify constructions like
      *     TFastRng64 rng(17);
      *     TFastRng64 rng(Seek()); //from any IInputStream
      */
-    inline TFastRng64(const TArgs& args) noexcept
+    inline TFastRng64(const TArgs& args) noexcept 
         : TFastRng64(args.Seed1, args.Seq1, args.Seed2, args.Seq2)
     {
     }
 
-    inline ui64 GenRand() noexcept {
+    inline ui64 GenRand() noexcept { 
         const ui64 x = R1_.GenRand();
         const ui64 y = R2_.GenRand();
 
         return (x << 32) | y;
     }
 
-    inline void Advance(ui64 delta) noexcept {
+    inline void Advance(ui64 delta) noexcept { 
         R1_.Advance(delta);
         R2_.Advance(delta);
     }

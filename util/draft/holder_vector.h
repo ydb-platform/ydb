@@ -6,7 +6,7 @@
 
 template <class T, class D = TDelete>
 class THolderVector: public TVector<T*>, public TNonCopyable {
-    using TBase = TVector<T*>;
+    using TBase = TVector<T*>; 
 
 public:
     explicit THolderVector(size_t n = 0)
@@ -30,7 +30,7 @@ public:
         return TBase::size();
     }
 
-    // TVector takes ownership of T
+    // TVector takes ownership of T 
     void PushBack(T* t) {
         try {
             TBase::push_back(t);

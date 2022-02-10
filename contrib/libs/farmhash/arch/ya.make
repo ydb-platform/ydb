@@ -1,3 +1,3 @@
-OWNER(
-    somov
-)
+OWNER( 
+    somov 
+) 

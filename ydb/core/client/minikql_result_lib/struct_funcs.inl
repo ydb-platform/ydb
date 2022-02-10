@@ -16,11 +16,11 @@ inline TOptional TStruct::GetMember<TOptional>(size_t memberIndex) {
 }
 
 template <>
-inline TListType TStruct::GetMember<TListType>(size_t memberIndex) {
+inline TListType TStruct::GetMember<TListType>(size_t memberIndex) { 
     Y_ENSURE(CheckIndex(memberIndex), "Struct member index" << memberIndex << " is out of bounds.");
     const auto& memberType = RootType.GetStruct().GetMember(memberIndex).GetType();
     const auto& member = RootValue.GetStruct(memberIndex);
-    return TListType(member, memberType);
+    return TListType(member, memberType); 
 }
 
 template <>

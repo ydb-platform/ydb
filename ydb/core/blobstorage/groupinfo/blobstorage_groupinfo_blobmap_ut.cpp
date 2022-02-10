@@ -9,7 +9,7 @@ namespace {
 
     struct TOriginalBlobStorageGroupInfo {
         ui32 BlobSubgroupSize;
-        TVector<TBlobStorageGroupInfo::TFailRealm> Realms;
+        TVector<TBlobStorageGroupInfo::TFailRealm> Realms; 
         const ui32 GroupID;
         const ui32 GroupGeneration;
         TBlobStorageGroupInfo::TDynamicInfo DynamicInfo;
@@ -103,7 +103,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoBlobMapTest) {
         const ui32 blobSubgroupSize = groupInfo->Type.BlobSubgroupSize();
         TOriginalBlobStorageGroupInfo orig(blobSubgroupSize, *groupInfo);
 
-        TVector<TLogoBlobID> ids;
+        TVector<TLogoBlobID> ids; 
         for (ui32 i = 0; i < 10000; ++i) {
             for (ui32 j = 0; j < 1000; ++j) {
                 ids.emplace_back(i, 1, j, 1, 1000, 1);
@@ -238,10 +238,10 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoBlobMapTest) {
 
         std::unique_ptr<IBlobToDiskMapper> mapper{IBlobToDiskMapper::CreateMirror3dcMapper(&groupInfo->GetTopology())};
 
-        THashMap<TVDiskID, TVector<ui32>> usageMap;
+        THashMap<TVDiskID, TVector<ui32>> usageMap; 
         for (const auto& vdisk : groupInfo->GetVDisks()) {
             auto vd = groupInfo->GetVDiskId(vdisk.OrderNumber);
-            usageMap.emplace(vd, TVector<ui32>(9));
+            usageMap.emplace(vd, TVector<ui32>(9)); 
         }
 
         TReallyFastRng32 rng(1);
@@ -272,7 +272,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoBlobMapTest) {
             UNIT_ASSERT(vdisks[0].FailRealm != vdisks[2].FailRealm);
             UNIT_ASSERT(vdisks[1].FailRealm != vdisks[2].FailRealm);
 
-            THashMap<TVDiskID, ui32> disk2index;
+            THashMap<TVDiskID, ui32> disk2index; 
             for (ui32 i = 0; i < vdisks.size(); ++i) {
                 disk2index[vdisks[i]] = i;
             }
@@ -290,7 +290,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoBlobMapTest) {
             }
         }
 
-        TVector<double> xv;
+        TVector<double> xv; 
         for (const auto& kv : usageMap) {
             Cerr << kv.first.ToString() << "#";
             for (ui32 i : kv.second) {

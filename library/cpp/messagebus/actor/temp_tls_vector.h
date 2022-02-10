@@ -10,15 +10,15 @@ class TTempTlsVector {
 private:
     struct TTagForTls {};
 
-    TVectorType<T, std::allocator<T>>* Vector;
+    TVectorType<T, std::allocator<T>>* Vector; 
 
 public:
-    TVectorType<T, std::allocator<T>>* GetVector() {
+    TVectorType<T, std::allocator<T>>* GetVector() { 
         return Vector;
     }
 
     TTempTlsVector() {
-        Vector = FastTlsSingletonWithTag<TVectorType<T, std::allocator<T>>, TTagForTls>();
+        Vector = FastTlsSingletonWithTag<TVectorType<T, std::allocator<T>>, TTagForTls>(); 
         Y_ASSERT(Vector->empty());
     }
 
@@ -30,7 +30,7 @@ public:
         Vector->clear();
     }
 
-    size_t Capacity() const noexcept {
+    size_t Capacity() const noexcept { 
         return Vector->capacity();
     }
 

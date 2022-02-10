@@ -13,12 +13,12 @@ namespace NSc {
     TValue TValue::From(const Message& msg, bool mapAsDict) {
         TValue v;
         const Reflection* r = msg.GetReflection();
-        TVector<const FieldDescriptor*> fields;
-        TVector<const FieldDescriptor*>::iterator it;
-        int i1;
+        TVector<const FieldDescriptor*> fields; 
+        TVector<const FieldDescriptor*>::iterator it; 
+        int i1; 
 
         r->ListFields(msg, &fields);
-        for (it = fields.begin(), i1 = 0; it != fields.end(); ++it, ++i1) {
+        for (it = fields.begin(), i1 = 0; it != fields.end(); ++it, ++i1) { 
             const FieldDescriptor* field = *it;
             try {
                 if (field->is_repeated()) {
@@ -154,7 +154,7 @@ namespace NSc {
     }
 
     void TValue::ValueToField(const TValue& value, Message& msg, const FieldDescriptor* field, const TProtoOpts& opts) const {
-        const TString& name = field->name();
+        const TString& name = field->name(); 
         if (value.IsNull()) {
             if (field->is_required() && !field->has_default_value()) {
                 ythrow TSchemeException() << "has no value for required field " << name;
@@ -233,7 +233,7 @@ namespace NSc {
     }
 
     void TValue::ToRepeatedField(Message& msg, const FieldDescriptor* field, const TProtoOpts& opts) const {
-        const TString& name = field->name();
+        const TString& name = field->name(); 
 
         const TValue& fieldValue = Get(name);
         if (fieldValue.IsNull()) {

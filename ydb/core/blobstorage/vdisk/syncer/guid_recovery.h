@@ -46,7 +46,7 @@ namespace NKikimr {
             // recovered guid
             TVDiskEternalGuid Guid;
             // human readable explanation for inconsistency
-            TString Explanation;
+            TString Explanation; 
             // for FirstRun:
             //     we can detect data loss: AddInfo means LostData
             // for LostData:
@@ -57,7 +57,7 @@ namespace NKikimr {
             TDecision(EDecision d,
                       EFirstRunStep f,
                       TVDiskEternalGuid guid,
-                      const TString &e,
+                      const TString &e, 
                       bool a);
 
         public:
@@ -69,7 +69,7 @@ namespace NKikimr {
             ~TDecision() = default;
 
             static TDecision FirstRun(EFirstRunStep step, TVDiskEternalGuid guid);
-            static TDecision Inconsistency(const TString &expl);
+            static TDecision Inconsistency(const TString &expl); 
             static TDecision LostData(TVDiskEternalGuid guid, bool subsequentFailure);
             static TDecision LostData(EFirstRunStep step,
                                       TVDiskEternalGuid guid,
@@ -77,11 +77,11 @@ namespace NKikimr {
             static TDecision Good(TVDiskEternalGuid guid);
             static TDecision Good(EFirstRunStep step, TVDiskEternalGuid guid);
             void Output(IOutputStream &str) const;
-            TString ToString() const;
+            TString ToString() const; 
             EDecision GetDecision() const { return Decision; }
             TVDiskEternalGuid GetGuid() const { return Guid; }
             EFirstRunStep GetFirstRunStep() const;
-            TString GetExplanation() const { return Explanation; }
+            TString GetExplanation() const { return Explanation; } 
             bool BadDecision() const { return IsBad(Decision); }
         };
 
@@ -93,7 +93,7 @@ namespace NKikimr {
         struct TOutcome {
             const EDecision Decision;
             const TVDiskEternalGuid Guid;
-            const TString Explanation;
+            const TString Explanation; 
 
             TOutcome(const TDecision &d)
                 : Decision(d.GetDecision())
@@ -114,7 +114,7 @@ namespace NKikimr {
             ~TOutcome() = default;
             bool BadDecision() const { return IsBad(Decision); }
             void Output(IOutputStream &str) const;
-            TString ToString() const;
+            TString ToString() const; 
         };
 
     } // NSyncer

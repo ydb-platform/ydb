@@ -1,6 +1,6 @@
 #include "walk.h"
 
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 
 void IWalkInput::DoUndo(size_t len) {
     Len_ += len;

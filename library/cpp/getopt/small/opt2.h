@@ -1,7 +1,7 @@
 #pragma once
 
 #include <util/system/defaults.h>
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 #include <util/generic/vector.h>
 
 // simplified options parser
@@ -31,9 +31,9 @@ struct Opt2Param {
     bool IsRequired;
     bool MultipleUse;
     const char* DefValue;
-    TString DefValueStr;
-    TString HelpUsage;
-    TVector<const char*> ActualValue;
+    TString DefValueStr; 
+    TString HelpUsage; 
+    TVector<const char*> ActualValue; 
     const char* LongOptName;
     Opt2Param()
         : HasArg(false)
@@ -112,7 +112,7 @@ public:
 
 public:
     // non-option args
-    TVector<char*> Pos;
+    TVector<char*> Pos; 
     bool HasErrors;
 
 private:
@@ -122,15 +122,15 @@ private:
     char OptionMissingArg;
     char OptionWrongArg;
     char RequiredOptionMissing;
-    TVector<TString> UserErrorMessages;
+    TVector<TString> UserErrorMessages; 
 
 protected:
     int Argc;
     char* const* Argv;
     int MinArgs, MaxArgs;
     ui8 SpecsMap[256];
-    TVector<Opt2Param> Specs;
-    TString alias_copy;
+    TVector<Opt2Param> Specs; 
+    TString alias_copy; 
     void EatArgv(const char* optspec, const char* long_alias);
     void Clear();
     Opt2Param& GetInternal(char opt, const char* defValue, const char* helpUsage, bool required);

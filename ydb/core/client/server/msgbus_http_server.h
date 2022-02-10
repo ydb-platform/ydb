@@ -12,7 +12,7 @@ namespace NMsgBusProxy {
 
 class IMessageBusHttpServer : public NMonitoring::IMonPage {
 public:
-    IMessageBusHttpServer(const TString& path, TIntrusivePtr<NMonitoring::TDynamicCounters> counters)
+    IMessageBusHttpServer(const TString& path, TIntrusivePtr<NMonitoring::TDynamicCounters> counters) 
         : NMonitoring::IMonPage(path)
         , Counters(counters)
     {}

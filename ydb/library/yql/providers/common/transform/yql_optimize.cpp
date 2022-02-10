@@ -167,7 +167,7 @@ TOptimizeTransformerBase::TFilter TOptimizeTransformerBase::Any() {
 }
 
 TOptimizeTransformerBase::TFilter TOptimizeTransformerBase::Names(std::initializer_list<TStringBuf> names) {
-    return [filter = THashSet<TStringBuf>(names)] (const TExprNode* node) {
+    return [filter = THashSet<TStringBuf>(names)] (const TExprNode* node) { 
         return node->IsCallable(filter);
     };
 }

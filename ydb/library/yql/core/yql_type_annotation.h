@@ -112,11 +112,11 @@ private:
 
 // -- credentials --
 struct TCredential {
-    const TString Category;
-    const TString Subcategory;
-    const TString Content;
+    const TString Category; 
+    const TString Subcategory; 
+    const TString Content; 
 
-    TCredential(const TString& category, const TString& subcategory, const TString& content)
+    TCredential(const TString& category, const TString& subcategory, const TString& content) 
         : Category(category)
         , Subcategory(subcategory)
         , Content(content)
@@ -124,7 +124,7 @@ struct TCredential {
     }
 };
 
-using TCredentialTable = THashMap<TString, TCredential>;
+using TCredentialTable = THashMap<TString, TCredential>; 
 using TCredentialTablePtr = std::shared_ptr<TCredentialTable>;
 
 struct TUserCredentials {
@@ -134,17 +134,17 @@ struct TUserCredentials {
 
 bool SplitUdfName(TStringBuf name, TStringBuf& moduleName, TStringBuf& funcName);
 
-using TUdfModulesTable = THashMap<TString, TString>; // external module name -> alias of file
+using TUdfModulesTable = THashMap<TString, TString>; // external module name -> alias of file 
 
 struct TYqlOperationOptions {
     TString Runner;
     TMaybe<TString> AuthenticatedUser;
-    TMaybe<TString> Id;
+    TMaybe<TString> Id; 
     TMaybe<TString> SharedId;
     TMaybe<TString> QueryName;
-    TMaybe<TString> Title;
+    TMaybe<TString> Title; 
     TMaybe<TString> Url;
-    TMaybe<TString> AttrsYson;
+    TMaybe<TString> AttrsYson; 
     TMaybe<NYT::TNode> ParametersYson;
 };
 
@@ -182,15 +182,15 @@ struct TTypeAnnotationContext: public TThrRefBase {
     TUdfIndex::TPtr UdfIndex;
     TUdfIndexPackageSet::TPtr UdfIndexPackageSet;
     IUdfResolver::TPtr UdfResolver;
-    THashMap<TString, IUdfResolver::TImport> UdfImports; // aliases of files that was imported => list of module names
+    THashMap<TString, IUdfResolver::TImport> UdfImports; // aliases of files that was imported => list of module names 
     TUdfModulesTable UdfModules;
-    TString PureResultDataSource;
-    TVector<TString> AvailablePureResultDataSources;
+    TString PureResultDataSource; 
+    TVector<TString> AvailablePureResultDataSources; 
     TString FullResultDataSink;
     TUserDataStorage::TPtr UserDataStorage;
     TUserDataTable UserDataStorageCrutches;
     TYqlOperationOptions OperationOptions;
-    TVector<TCredentialTablePtr> Credentials;
+    TVector<TCredentialTablePtr> Credentials; 
     TUserCredentials UserCredentials;
     IModuleResolver::TPtr Modules;
     NUdf::EValidateMode ValidateMode = NUdf::EValidateMode::None;

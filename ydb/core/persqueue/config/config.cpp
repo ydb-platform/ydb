@@ -3,7 +3,7 @@
 #include <util/string/printf.h>
 namespace NKikimr {
 
-bool CheckPersQueueConfig(const NKikimrPQ::TPQTabletConfig& config, const bool shouldHavePartitionsList, TString *error) {
+bool CheckPersQueueConfig(const NKikimrPQ::TPQTabletConfig& config, const bool shouldHavePartitionsList, TString *error) { 
     if (!config.HasPartitionConfig()) {
         if (error)
             *error = "no PartitionConfig";
@@ -20,7 +20,7 @@ bool CheckPersQueueConfig(const NKikimrPQ::TPQTabletConfig& config, const bool s
             return false;
         }
 
-        THashSet<ui32> parts;
+        THashSet<ui32> parts; 
         for (const auto partitionId : partitionIds) {
             if (!parts.insert(partitionId).second) {
                 if (error)

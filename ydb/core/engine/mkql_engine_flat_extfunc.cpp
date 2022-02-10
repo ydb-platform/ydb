@@ -48,7 +48,7 @@ namespace {
         return MakeCell(dataType->GetSchemeType(), value, env);
     }
 
-    void ExtractRow(const NUdf::TUnboxedValue& row, TTupleType* rowType, TVector<TCell>& cells, const TTypeEnvironment& env) {
+    void ExtractRow(const NUdf::TUnboxedValue& row, TTupleType* rowType, TVector<TCell>& cells, const TTypeEnvironment& env) { 
         cells.resize(rowType->GetElementsCount());
         for (ui32 i = 0; i < rowType->GetElementsCount(); ++i) {
             cells[i] = ExtractCell(row.GetElement(i), rowType->GetElementType(i), env);
@@ -228,7 +228,7 @@ namespace {
         private:
             void Apply(NUdf::IApplyContext& applyContext) const override {
                 auto& engineCtx = *CheckedCast<TEngineFlatApplyContext*>(&applyContext);
-                TVector<TCell> row;
+                TVector<TCell> row; 
                 ExtractRow(Row, Owner->RowType, row, *engineCtx.Env);
 
                 if (!engineCtx.Host->IsPathErased(Owner->TableId) && engineCtx.Host->IsMyKey(Owner->TableId, row)) {
@@ -282,12 +282,12 @@ namespace {
         private:
             void Apply(NUdf::IApplyContext& applyContext) const override {
                 auto& engineCtx = *CheckedCast<TEngineFlatApplyContext*>(&applyContext);
-                TVector<TCell> row;
+                TVector<TCell> row; 
                 ExtractRow(Row, Owner->RowType, row, *engineCtx.Env);
 
                 if (!engineCtx.Host->IsPathErased(Owner->TableId) && engineCtx.Host->IsMyKey(Owner->TableId, row)) {
                     auto updateStruct = Owner->UpdateStruct;
-                    TVector<IEngineFlatHost::TUpdateCommand> commands(updateStruct->GetValuesCount());
+                    TVector<IEngineFlatHost::TUpdateCommand> commands(updateStruct->GetValuesCount()); 
                     for (ui32 i = 0; i < updateStruct->GetValuesCount(); ++i) {
                         auto& cmd = commands[i];
                         auto columnIdBuf = updateStruct->GetType()->GetMemberName(i);
@@ -370,7 +370,7 @@ namespace {
     }
 
     IComputationNode* WrapAcquireLocks(TCallable& callable, const TComputationNodeFactoryContext& ctx,
-        const TVector<IEngineFlat::TTxLock>& txLocks)
+        const TVector<IEngineFlat::TTxLock>& txLocks) 
     {
         MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 arg");
 
@@ -412,7 +412,7 @@ namespace {
     }
 
     IComputationNode* WrapDiagnostics(TCallable& callable, const TComputationNodeFactoryContext& ctx,
-        const TVector<IEngineFlat::TTabletInfo>& tabletInfos)
+        const TVector<IEngineFlat::TTabletInfo>& tabletInfos) 
     {
         MKQL_ENSURE(callable.GetInputsCount() == 0, "Expected zero args");
 
@@ -455,7 +455,7 @@ namespace {
         MKQL_ENSURE(callable.GetInputsCount() == 0, "Expected zero args");
 
         auto ui64Type = TDataType::Create(NUdf::TDataType<ui64>::Id, ctx.Env);
-        TVector<TType*> tupleTypes(2, ui64Type);
+        TVector<TType*> tupleTypes(2, ui64Type); 
         auto tupleType = TTupleType::Create(tupleTypes.size(), tupleTypes.data(), ctx.Env);
 
         NUdf::TUnboxedValue* items = nullptr;
@@ -600,7 +600,7 @@ namespace {
 
         bool truncatedAny = false;
         ui32 keyColumnsCount = 0;
-        TVector<NUdf::TDataTypeId> types;
+        TVector<NUdf::TDataTypeId> types; 
 
         using TPartKey = std::tuple<const TCell*, NUdf::TUnboxedValue, ui64, ui64, NUdf::TUnboxedValue, bool>;
 
@@ -619,7 +619,7 @@ namespace {
             auto firstKeyValue = value.GetElement(2);
             ui64 sizeInBytes = value.GetElement(3).Get<ui64>();
 
-            TString firstKey(firstKeyValue.AsStringRef());
+            TString firstKey(firstKeyValue.AsStringRef()); 
             truncatedAny = truncatedAny || truncated;
 
             ui64 itemsCount = list.GetListLength();
@@ -958,7 +958,7 @@ NUdf::TUnboxedValue PerformLocalSelectRow(TCallable& callable, IEngineFlatHost& 
     auto tableNode = callable.GetInput(0);
     const auto tableId = ExtractTableId(tableNode);
     auto tupleNode = AS_VALUE(TTupleLiteral, callable.GetInput(3));
-    TVector<TCell> row;
+    TVector<TCell> row; 
     ExtractRow(row, tupleNode, env);
 
     auto returnType = callable.GetType()->GetReturnType();
@@ -979,8 +979,8 @@ NUdf::TUnboxedValue PerformLocalSelectRange(TCallable& callable, IEngineFlatHost
     ui64 itemsLimit = AS_VALUE(TDataLiteral, callable.GetInput(6))->AsValue().Get<ui64>();
     ui64 bytesLimit = AS_VALUE(TDataLiteral, callable.GetInput(7))->AsValue().Get<ui64>();
 
-    TVector<TCell> fromValues;
-    TVector<TCell> toValues;
+    TVector<TCell> fromValues; 
+    TVector<TCell> toValues; 
     ExtractRow(fromValues, AS_VALUE(TTupleLiteral, callable.GetInput(3)), env);
     ExtractRow(toValues, AS_VALUE(TTupleLiteral, callable.GetInput(4)), env);
 
@@ -1029,7 +1029,7 @@ TStructType* GetTxLockType(const TTypeEnvironment& env, bool v2) {
         return lockStructType;
     }
 
-    TVector<std::pair<TString, TType*>> lockStructMembers = {
+    TVector<std::pair<TString, TType*>> lockStructMembers = { 
         std::make_pair("Counter", ui64Type),
         std::make_pair("DataShard", ui64Type),
         std::make_pair("Generation", ui32Type),
@@ -1045,7 +1045,7 @@ TStructType* GetDiagnosticsType(const TTypeEnvironment& env) {
     auto ui64Type = TDataType::Create(NUdf::TDataType<ui64>::Id, env);
     auto boolType = TDataType::Create(NUdf::TDataType<bool>::Id, env);
 
-    TVector<std::pair<TString, TType*>> diagStructMembers = {
+    TVector<std::pair<TString, TType*>> diagStructMembers = { 
         std::make_pair("ActorIdRawX1", ui64Type),
         std::make_pair("ActorIdRawX2", ui64Type),
         std::make_pair("ExecLatency", ui64Type),

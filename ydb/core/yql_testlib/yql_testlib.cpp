@@ -40,9 +40,9 @@ private:
             const NKikimr::NUdf::IValueBuilder* valueBuilder,
             const NKikimr::NUdf::TUnboxedValuePod* args) const override
     {
-        TString orig(args[0].AsStringRef());
+        TString orig(args[0].AsStringRef()); 
         ui64 times = args[1].Get<ui64>();
-        TString res = "";
+        TString res = ""; 
         for (ui64 i = 0; i < times; i++) {
             res += orig;
         }
@@ -189,7 +189,7 @@ void TYqlServer::Initialize() {
 }
 
 
-void MakeGatewaysConfig(const THashMap<TString, TString>& clusterMapping, NYql::TGatewaysConfig& gatewaysConfig) {
+void MakeGatewaysConfig(const THashMap<TString, TString>& clusterMapping, NYql::TGatewaysConfig& gatewaysConfig) { 
     for (auto& x : clusterMapping) {
         if (x.second == NYql::YtProviderName) {
             auto cluster = gatewaysConfig.MutableYt()->AddClusterMapping();

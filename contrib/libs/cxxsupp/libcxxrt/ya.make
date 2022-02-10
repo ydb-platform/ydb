@@ -11,13 +11,13 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-OWNER(
+OWNER( 
     pg
     setser
     somov
     g:cpp-committee
     g:cpp-contrib
-)
+) 
 
 VERSION(2021-09-08-14bf5d5526056ae1cc16f03b7b8e96108a1e38d0)
 

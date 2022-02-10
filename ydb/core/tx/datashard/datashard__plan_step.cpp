@@ -28,7 +28,7 @@ bool TDataShard::TTxPlanStep::Execute(TTransactionContext &txc, const TActorCont
     const ui64 step = Ev->Get()->Record.GetStep();
     Self->LastKnownMediator = Ev->Get()->Record.GetMediatorID();
 
-    TVector<ui64> txIds;
+    TVector<ui64> txIds; 
     txIds.reserve(Ev->Get()->Record.TransactionsSize());
     for (const auto& tx : Ev->Get()->Record.GetTransactions()) {
         Y_VERIFY(tx.HasTxId());

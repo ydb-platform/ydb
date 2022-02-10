@@ -178,7 +178,7 @@ namespace NDatetime {
         }
     }
 
-    TString TSimpleTM::ToString(const char* fmt) const {
+    TString TSimpleTM::ToString(const char* fmt) const { 
         struct tm t = *this;
         return Strftime(fmt, &t);
     }

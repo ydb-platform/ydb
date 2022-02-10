@@ -961,7 +961,7 @@ PerlXSGenerator::GenerateMessageXSFieldAccessors(const FieldDescriptor* field,
 		  "    STRLEN len;\n");
     if ( type == FieldDescriptor::TYPE_STRING ) {
       printer.Print(vars,
-		    "    TString $value$;\n");
+		    "    TString $value$;\n"); 
     }
     printer.Print("\n"
 		  "  CODE:\n");
@@ -1160,7 +1160,7 @@ PerlXSGenerator::GenerateMessageXSCommonMethods(const Descriptor* descriptor,
 		"error_string(svTHIS)\n"
 		"  SV * svTHIS\n"
 		"  PREINIT:\n"
-		"    TString estr;\n"
+		"    TString estr;\n" 
 		"\n"
 		"  CODE:\n");
   GenerateTypemapInput(descriptor, printer, "THIS");
@@ -1203,7 +1203,7 @@ PerlXSGenerator::GenerateMessageXSCommonMethods(const Descriptor* descriptor,
 		  "debug_string(svTHIS)\n"
 		  "  SV * svTHIS\n"
 		  "  PREINIT:\n"
-		  "    TString dstr;\n"
+		  "    TString dstr;\n" 
 		  "\n"
 		  "  CODE:\n");
     GenerateTypemapInput(descriptor, printer, "THIS");
@@ -1225,7 +1225,7 @@ PerlXSGenerator::GenerateMessageXSCommonMethods(const Descriptor* descriptor,
 		  "short_debug_string(svTHIS)\n"
 		  "  SV * svTHIS\n"
 		  "  PREINIT:\n"
-		  "    TString dstr;\n"
+		  "    TString dstr;\n" 
 		  "\n"
 		  "  CODE:\n");
     GenerateTypemapInput(descriptor, printer, "THIS");
@@ -1913,7 +1913,7 @@ PerlXSGenerator::FieldFromHashrefHelper(io::Printer& printer,
 		  "char * str;\n");
 
     if ( field->type() == FieldDescriptor::TYPE_STRING ) {
-      printer.Print("TString sval;\n");
+      printer.Print("TString sval;\n"); 
     }
 
     printer.Print(vars,

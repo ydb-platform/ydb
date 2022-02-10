@@ -10,7 +10,7 @@ using namespace NPrivate;
 #define UPPER_MASK 0x80000000UL
 #define LOWER_MASK 0x7fffffffUL
 
-void TMersenne32::InitGenRand(ui32 s) noexcept {
+void TMersenne32::InitGenRand(ui32 s) noexcept { 
     mt[0] = s;
 
     for (mti = 1; mti < N; ++mti) {
@@ -18,7 +18,7 @@ void TMersenne32::InitGenRand(ui32 s) noexcept {
     }
 }
 
-void TMersenne32::InitByArray(const ui32 init_key[], size_t key_length) noexcept {
+void TMersenne32::InitByArray(const ui32 init_key[], size_t key_length) noexcept { 
     InitGenRand(19650218UL);
 
     ui32 i = 1;
@@ -55,7 +55,7 @@ void TMersenne32::InitByArray(const ui32 init_key[], size_t key_length) noexcept
     mt[0] = 0x80000000UL;
 }
 
-void TMersenne32::InitNext() noexcept {
+void TMersenne32::InitNext() noexcept { 
     int kk;
     ui32 y;
     ui32 mag01[2] = {

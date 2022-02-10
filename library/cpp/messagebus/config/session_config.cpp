@@ -16,7 +16,7 @@ TBusSessionConfig::TBusSessionConfig()
 {
 }
 
-TString TBusSessionConfig::PrintToString() const {
+TString TBusSessionConfig::PrintToString() const { 
     TStringStream ss;
     BUS_SESSION_CONFIG_MAP(STRUCT_FIELD_PRINT, )
     return ss.Str();
@@ -66,7 +66,7 @@ static i64 ParseWithKmgSuffixS(const char* option) {
 }
 
 void TBusSessionConfig::ConfigureLastGetopt(NLastGetopt::TOpts& opts,
-                                            const TString& prefix) {
+                                            const TString& prefix) { 
     opts.AddLongOption(prefix + "total-timeout")
         .RequiredArgument("MILLISECONDS")
         .DefaultValue(ToString(TotalTimeout))

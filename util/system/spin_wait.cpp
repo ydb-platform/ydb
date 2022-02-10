@@ -8,7 +8,7 @@
 #include <util/generic/utility.h>
 
 template <class T>
-static inline T RandomizeSleepTime(T t) noexcept {
+static inline T RandomizeSleepTime(T t) noexcept { 
     static TAtomic counter = 0;
     const T rndNum = IntHash((T)AtomicIncrement(counter));
 

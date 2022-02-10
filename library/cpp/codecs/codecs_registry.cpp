@@ -16,13 +16,13 @@ namespace NCodecs {
         return Singleton<NPrivate::TCodecRegistry>()->GetCodec(name);
     }
 
-    TVector<TString> ICodec::GetCodecsList() {
+    TVector<TString> ICodec::GetCodecsList() { 
         return Singleton<NPrivate::TCodecRegistry>()->GetCodecsList();
     }
 
     namespace NPrivate {
         void TCodecRegistry::RegisterFactory(TFactoryPtr fac) {
-            TVector<TString> names = fac->ListNames();
+            TVector<TString> names = fac->ListNames(); 
             for (const auto& name : names) {
                 Y_VERIFY(!Registry.contains(name), "already has %s", name.data());
                 Registry[name] = fac;
@@ -51,9 +51,9 @@ namespace NCodecs {
             }
         }
 
-        TVector<TString> TCodecRegistry::GetCodecsList() const {
+        TVector<TString> TCodecRegistry::GetCodecsList() const { 
             using namespace NPrivate;
-            TVector<TString> vs;
+            TVector<TString> vs; 
             vs.push_back("none");
 
             for (const auto& it : Registry) {
@@ -99,8 +99,8 @@ namespace NCodecs {
                 ythrow TNoCodecException(name);
             }
 
-            TVector<TString> ListNames() const override {
-                TVector<TString> vs;
+            TVector<TString> ListNames() const override { 
+                TVector<TString> vs; 
                 vs.push_back(ToString(TSolarCodec::MyName()));
                 vs.push_back(ToString(TSolarCodec::MyName8k()));
                 vs.push_back(ToString(TSolarCodec::MyName16k()));
@@ -122,7 +122,7 @@ namespace NCodecs {
                 return new TZStdDictCodec(TZStdDictCodec::ParseCompressionName(name));
             }
 
-            TVector<TString> ListNames() const override {
+            TVector<TString> ListNames() const override { 
                 return TZStdDictCodec::ListCompressionNames();
             }
         };
@@ -139,8 +139,8 @@ namespace NCodecs {
                 }
             }
 
-            TVector<TString> ListNames() const override {
-                TVector<TString> vs;
+            TVector<TString> ListNames() const override { 
+                TVector<TString> vs; 
                 vs.push_back(ToString(TCompTableCodec::MyNameHQ()));
                 vs.push_back(ToString(TCompTableCodec::MyNameLQ()));
                 return vs;
@@ -155,7 +155,7 @@ namespace NCodecs {
             {
             }
 
-            TString GetName() const override {
+            TString GetName() const override { 
                 return ToString(Codec->Name());
             }
 
@@ -175,7 +175,7 @@ namespace NCodecs {
         };
 
         struct TBlockCodecsFactory : ICodecFactory {
-            using TRegistry = THashMap<TString, TCodecPtr>;
+            using TRegistry = THashMap<TString, TCodecPtr>; 
             TRegistry Registry;
 
             TBlockCodecsFactory() {
@@ -196,8 +196,8 @@ namespace NCodecs {
                 return Registry.find(name)->second;
             }
 
-            TVector<TString> ListNames() const override {
-                TVector<TString> res;
+            TVector<TString> ListNames() const override { 
+                TVector<TString> res; 
                 for (const auto& it : Registry) {
                     res.push_back(it.first);
                 }

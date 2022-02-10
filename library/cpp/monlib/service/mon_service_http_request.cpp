@@ -9,7 +9,7 @@ IMonHttpRequest::~IMonHttpRequest() {
 TMonService2HttpRequest::~TMonService2HttpRequest() {
 }
 
-TString TMonService2HttpRequest::GetServiceTitle() const {
+TString TMonService2HttpRequest::GetServiceTitle() const { 
     return MonService->GetTitle();
 }
 

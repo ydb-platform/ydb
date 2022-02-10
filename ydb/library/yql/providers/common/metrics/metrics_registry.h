@@ -14,7 +14,7 @@ struct IMetricsRegistry;
 using IMetricsRegistryPtr = TIntrusivePtr<IMetricsRegistry>;
 
 using TMetricsDecorator = std::function<IMetricsRegistryPtr(
-        const IMetricsRegistryPtr& old, const TString& username)>;
+        const IMetricsRegistryPtr& old, const TString& username)>; 
 
 //////////////////////////////////////////////////////////////////////////////
 // IYqlMetricsRegistry
@@ -28,8 +28,8 @@ struct IMetricsRegistry: public TThrRefBase {
         bool derivative = false) = 0;
 
     virtual void IncCounter(
-            const TString& labelName,
-            const TString& labelValue,
+            const TString& labelName, 
+            const TString& labelValue, 
             bool derivative = true) = 0;
 
     virtual void AddCounter(
@@ -46,7 +46,7 @@ struct IMetricsRegistry: public TThrRefBase {
             const NProto::TMetricsRegistrySnapshot& snapshot) = 0;
 
     virtual IMetricsRegistryPtr Personalized(
-            const TString& userName) const = 0;
+            const TString& userName) const = 0; 
 
     virtual void Flush() = 0;
 

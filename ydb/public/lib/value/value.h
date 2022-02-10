@@ -96,7 +96,7 @@ public:
     // returns  member name by index
     TString GetMemberName(int index) const;
     // returns all members
-    TVector<TString> GetMembersNames() const;
+    TVector<TString> GetMembersNames() const; 
     // returns member index by name
     int GetMemberIndex(TStringBuf name) const;
 

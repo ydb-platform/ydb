@@ -4,7 +4,7 @@
 #include <util/stream/str.h>
 
 extern "C" int LLVMFuzzerTestOneInput(const ui8* data, size_t size) {
-    const auto json = TString((const char*)data, size);
+    const auto json = TString((const char*)data, size); 
 
     try {
         NJson::TJsonValue value;

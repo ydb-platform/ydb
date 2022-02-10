@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 #include <util/generic/strbuf.h>
 #include <util/generic/set.h>
 #include <util/generic/list.h>
@@ -249,47 +249,47 @@ namespace NPackers {
     };
 
     //-------------------------------------------
-    // TStringPacker --- for TString/TUtf16String and TStringBuf.
+    // TStringPacker --- for TString/TUtf16String and TStringBuf. 
 
-    template <class TStringType>
+    template <class TStringType> 
     class TStringPacker {
     public:
-        void UnpackLeaf(const char* p, TStringType& t) const;
-        void PackLeaf(char* buffer, const TStringType& data, size_t size) const;
-        size_t MeasureLeaf(const TStringType& data) const;
+        void UnpackLeaf(const char* p, TStringType& t) const; 
+        void PackLeaf(char* buffer, const TStringType& data, size_t size) const; 
+        size_t MeasureLeaf(const TStringType& data) const; 
         size_t SkipLeaf(const char* p) const;
     };
 
     template <class TStringType>
-    inline void TStringPacker<TStringType>::UnpackLeaf(const char* buf, TStringType& t) const {
+    inline void TStringPacker<TStringType>::UnpackLeaf(const char* buf, TStringType& t) const { 
         size_t len;
         TIntegralPacker<size_t>().UnpackLeaf(buf, len);
         size_t start = TIntegralPacker<size_t>().SkipLeaf(buf);
-        t = TStringType((const typename TStringType::char_type*)(buf + start), len);
+        t = TStringType((const typename TStringType::char_type*)(buf + start), len); 
     }
 
     template <class TStringType>
-    inline void TStringPacker<TStringType>::PackLeaf(char* buf, const TStringType& str, size_t size) const {
+    inline void TStringPacker<TStringType>::PackLeaf(char* buf, const TStringType& str, size_t size) const { 
         size_t len = str.size();
-        size_t lenChar = len * sizeof(typename TStringType::char_type);
+        size_t lenChar = len * sizeof(typename TStringType::char_type); 
         size_t start = size - lenChar;
         TIntegralPacker<size_t>().PackLeaf(buf, len, TIntegralPacker<size_t>().MeasureLeaf(len));
         memcpy(buf + start, str.data(), lenChar);
     }
 
     template <class TStringType>
-    inline size_t TStringPacker<TStringType>::MeasureLeaf(const TStringType& str) const {
+    inline size_t TStringPacker<TStringType>::MeasureLeaf(const TStringType& str) const { 
         size_t len = str.size();
-        return TIntegralPacker<size_t>().MeasureLeaf(len) + len * sizeof(typename TStringType::char_type);
+        return TIntegralPacker<size_t>().MeasureLeaf(len) + len * sizeof(typename TStringType::char_type); 
     }
 
     template <class TStringType>
-    inline size_t TStringPacker<TStringType>::SkipLeaf(const char* buf) const {
+    inline size_t TStringPacker<TStringType>::SkipLeaf(const char* buf) const { 
         size_t result = TIntegralPacker<size_t>().SkipLeaf(buf);
         {
             size_t len;
             TIntegralPacker<size_t>().UnpackLeaf(buf, len);
-            result += len * sizeof(typename TStringType::char_type);
+            result += len * sizeof(typename TStringType::char_type); 
         }
         return result;
     }
@@ -304,7 +304,7 @@ namespace NPackers {
     //    - has subclass C::const_iterator
     //    - has methods begin() and end() (return C::const_iterator)
     //    - has method insert(C::const_iterator, const C::value_type&)
-    //  Examples: TVector, TList, TSet
+    //  Examples: TVector, TList, TSet 
     //  Requirements to class EP: has methods as in any packer (UnpackLeaf, PackLeaf, MeasureLeaf, SkipLeaf) that
     //    are applicable to C::value_type
 

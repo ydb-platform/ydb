@@ -44,7 +44,7 @@ namespace NTxMediator {
             }
         };
 
-        TString ToString() const {
+        TString ToString() const { 
             TStringStream str;
             str << "{TTx Moderator# " << Moderator;
             str << " txid# " << TxId;
@@ -58,9 +58,9 @@ namespace NTxMediator {
         const TStepId Step;
         const TStepId PrevStep;
 
-        TVector<TTx> Transactions;
+        TVector<TTx> Transactions; 
 
-        TVector<std::pair<TTabletId, std::size_t>> TabletsToTransaction; // tablet -> tx index in Transactions
+        TVector<std::pair<TTabletId, std::size_t>> TabletsToTransaction; // tablet -> tx index in Transactions 
 
         struct TabletToTransactionCmp {
             bool operator()(const std::pair<TTabletId, std::size_t> &left, const std::pair<TTabletId, std::size_t> &right) const {
@@ -70,7 +70,7 @@ namespace NTxMediator {
 
         TCoordinatorStep(const NKikimrTx::TEvCoordinatorStep &record);
 
-        TString ToString() const {
+        TString ToString() const { 
             TStringStream str;
             str << "{TCoordinatorStep step# " << Step;
             str << " PrevStep# " << PrevStep;
@@ -99,14 +99,14 @@ namespace NTxMediator {
         TStepId From;
         TStepId To;
 
-        TVector<TAutoPtr<TCoordinatorStep>> Steps;
+        TVector<TAutoPtr<TCoordinatorStep>> Steps; 
 
         TMediateStep(TStepId from, TStepId to)
             : From(from)
             , To(to)
         {}
 
-        TString ToString() const {
+        TString ToString() const { 
             TStringStream str;
             str << "{TMediateStep From " << From;
             str << " To# " << To;
@@ -149,7 +149,7 @@ struct TEvTxMediator {
             : MediateStep(mds)
         {}
 
-        TString ToString() const {
+        TString ToString() const { 
             TStringStream str;
             str << "{TEvCommitStep MediateStep: " << MediateStep->ToString();
             str << "}";
@@ -166,7 +166,7 @@ struct TEvTxMediator {
             , AckTo(ackTo)
         {}
 
-        TString ToString() const {
+        TString ToString() const { 
             TStringStream str;
             str << "{TEvRequestLostAcks CoordinatorStep: " << CoordinatorStep->ToString();
             str << " AckTo# " << AckTo.ToString();
@@ -179,15 +179,15 @@ struct TEvTxMediator {
     struct TEvCommitTabletStep : public TEventLocal<TEvCommitTabletStep, EvCommitTabletStep> {
         const TStepId Step;
         const TTabletId TabletId;
-        TVector<NTxMediator::TTx> Transactions; // todo: inplace placing
+        TVector<NTxMediator::TTx> Transactions; // todo: inplace placing 
 
-        TEvCommitTabletStep(TStepId step, TTabletId tabletId, TVector<NTxMediator::TTx> &transactions)
+        TEvCommitTabletStep(TStepId step, TTabletId tabletId, TVector<NTxMediator::TTx> &transactions) 
             : Step(step)
             , TabletId(tabletId)
             , Transactions(transactions.begin(), transactions.end())
         {}
 
-        TString ToString() const {
+        TString ToString() const { 
             TStringStream str;
             str << "{TEvCommitTabletStep step# " << Step;
             str << " TabletId# " << TabletId;
@@ -207,7 +207,7 @@ struct TEvTxMediator {
             : Step(step)
         {}
 
-        TString ToString() const {
+        TString ToString() const { 
             TStringStream str;
             str << "{TEvStepPlanComplete step# " << Step;
             str << "}";
@@ -218,15 +218,15 @@ struct TEvTxMediator {
     struct TEvOoOTabletStep : public TEventLocal<TEvOoOTabletStep, EvOoOTabletStep> {
         const TStepId Step;
         const TTabletId TabletId;
-        TVector<NTxMediator::TTx> Transactions;
+        TVector<NTxMediator::TTx> Transactions; 
 
-        TEvOoOTabletStep(TStepId step, TTabletId tabletId, TVector<NTxMediator::TTx> &transactions)
+        TEvOoOTabletStep(TStepId step, TTabletId tabletId, TVector<NTxMediator::TTx> &transactions) 
             : Step(step)
             , TabletId(tabletId)
             , Transactions(transactions.begin(), transactions.end())
         {}
 
-        TString ToString() const {
+        TString ToString() const { 
             TStringStream str;
             str << "{TEvOoOTabletStep step# " << Step;
             str << " TabletId# " << TabletId;
@@ -246,7 +246,7 @@ struct TEvTxMediator {
             : Source(source)
         {}
 
-        TString ToString() const {
+        TString ToString() const { 
             TStringStream str;
             str << "{TEvWatchBucket Source# " << Source.ToString();
             str << "}";
@@ -276,10 +276,10 @@ class TTxMediator : public TActor<TTxMediator>, public NTabletFlatExecutor::TTab
     };
 
     struct TCoordinatorInfo {
-        typedef TDeque<TAutoPtr<TCoordinatorStep>> TQueueType; // todo: list/queue
+        typedef TDeque<TAutoPtr<TCoordinatorStep>> TQueueType; // todo: list/queue 
 
         ui64 KnownPrevStep;
-        TQueueType Queue;
+        TQueueType Queue; 
 
         ui64 ActiveCoordinatorGeneration;
         TActorId AckTo;
@@ -291,8 +291,8 @@ class TTxMediator : public TActor<TTxMediator>, public NTabletFlatExecutor::TTab
     };
 
     struct TVolatileState {
-        TMap<ui64, TCoordinatorInfo> Domain;
-        TMap<ui64, TCoordinatorInfo> Foreign;
+        TMap<ui64, TCoordinatorInfo> Domain; 
+        TMap<ui64, TCoordinatorInfo> Foreign; 
 
         ui64 CompleteStep;
         ui64 LatestKnownStep;
@@ -320,7 +320,7 @@ class TTxMediator : public TActor<TTxMediator>, public NTabletFlatExecutor::TTab
     TActorId ExecQueue;
 
     THashMap<TActorId, NKikimrTx::TEvCoordinatorSync> CoordinatorsSyncEnqueued;
-    TVector<TEvMediatorTimecast::TEvWatch::TPtr> WatchEnqueued;
+    TVector<TEvMediatorTimecast::TEvWatch::TPtr> WatchEnqueued; 
 
     void Die(const TActorContext &ctx) override;
     void OnActivateExecutor(const TActorContext &ctx) override;
@@ -372,7 +372,7 @@ public:
 
         struct DomainConfiguration : Table<2> {
             struct Version : Column<1, NScheme::NTypeIds::Uint64> {};
-            struct Coordinators : Column<2, NScheme::NTypeIds::String> { using Type = TVector<TCoordinatorId>; };
+            struct Coordinators : Column<2, NScheme::NTypeIds::String> { using Type = TVector<TCoordinatorId>; }; 
             struct TimeCastBuckets : Column<3, NScheme::NTypeIds::Uint32> { static constexpr ui32 Default = TDomainsInfo::TDomain::TimecastBucketsPerMediator; };
 
             using TKey = TableKey<Version>;

@@ -9,5 +9,5 @@ void SetProgramName(const char* argv0);
         SetProgramName(argv[0]); \
     } while (0)
 
-/// guaranted return the same immutable instance of TString
-const TString& GetProgramName();
+/// guaranted return the same immutable instance of TString 
+const TString& GetProgramName(); 

@@ -15,7 +15,7 @@ namespace NSc {
         class TContextGuard : TNonCopyable {
             using TElement = typename TContext::TElement;
             using TTarget = typename TContext::TTarget;
-            using TVectorType = TVector<TElement>;
+            using TVectorType = TVector<TElement>; 
 
         public:
             TContextGuard(TContext& ctx, TTarget& target)
@@ -35,7 +35,7 @@ namespace NSc {
                 }
             }
 
-            const TVectorType& GetVector() const {
+            const TVectorType& GetVector() const { 
                 return Ctx.Vector;
             }
 
@@ -68,7 +68,7 @@ namespace NSc {
                 Vector.reserve(64);
             }
 
-            TVector<TElement> Vector;
+            TVector<TElement> Vector; 
         };
 
         class TKeySortContext: public TBasicContext<TStringBuf, const TDict> {

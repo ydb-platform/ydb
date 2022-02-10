@@ -81,7 +81,7 @@ public:
 
 template <>
 struct TJsonRequestSchema<TJsonHiveStats> {
-    static TString GetSchema() {
+    static TString GetSchema() { 
         TStringStream stream;
         TProtoToJson::ProtoToJsonSchema<TEvHive::TEvResponseHiveDomainStats::ProtoRecordType>(stream);
         return stream.Str();
@@ -90,7 +90,7 @@ struct TJsonRequestSchema<TJsonHiveStats> {
 
 template <>
 struct TJsonRequestParameters<TJsonHiveStats> {
-    static TString GetParameters() {
+    static TString GetParameters() { 
         return R"___([{"name":"hive_id","in":"query","description":"hive identifier (tablet id)","required":true,"type":"string"},
                       {"name":"followers","in":"query","description":"return followers","required":false,"type":"boolean"},
                       {"name":"metrics","in":"query","description":"return tablet metrics","required":false,"type":"boolean"},
@@ -102,14 +102,14 @@ struct TJsonRequestParameters<TJsonHiveStats> {
 
 template <>
 struct TJsonRequestSummary<TJsonHiveStats> {
-    static TString GetSummary() {
+    static TString GetSummary() { 
         return "\"Hive statistics\"";
     }
 };
 
 template <>
 struct TJsonRequestDescription<TJsonHiveStats> {
-    static TString GetDescription() {
+    static TString GetDescription() { 
         return "\"Returns information about Hive statistics\"";
     }
 };

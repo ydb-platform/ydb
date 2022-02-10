@@ -17,7 +17,7 @@ Y_UNIT_TEST_SUITE(TBlockCodecsTest) {
     }
 
     void TestAllAtOnce(size_t n, size_t m) {
-        TVector<TBuffer> datas;
+        TVector<TBuffer> datas; 
 
         datas.emplace_back();
         datas.push_back(Buffer("na gorshke sidel korol"));
@@ -50,7 +50,7 @@ Y_UNIT_TEST_SUITE(TBlockCodecsTest) {
 
             for (size_t j = 0; j < datas.size(); ++j) {
                 const TBuffer& data = datas[j];
-                TString res;
+                TString res; 
 
                 try {
                     TBuffer e, d;
@@ -144,11 +144,11 @@ Y_UNIT_TEST_SUITE(TBlockCodecsTest) {
     }
 
     void TestStreams(size_t n, size_t m) {
-        TVector<TString> datas;
-        TString res;
+        TVector<TString> datas; 
+        TString res; 
 
         for (size_t i = 0; i < 256; ++i) {
-            datas.push_back(TString(i, (char)(i % 128)));
+            datas.push_back(TString(i, (char)(i % 128))); 
         }
 
         for (size_t i = 0; i < datas.size(); ++i) {
@@ -178,7 +178,7 @@ Y_UNIT_TEST_SUITE(TBlockCodecsTest) {
                 out.Finish();
             }
 
-            const TString resNew = TDecodedInput(&ss).ReadAll();
+            const TString resNew = TDecodedInput(&ss).ReadAll(); 
 
             try {
                 UNIT_ASSERT_EQUAL(resNew, res);

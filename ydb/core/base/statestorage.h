@@ -79,7 +79,7 @@ struct TEvStateStorage {
             : SigWaitMode(sigWaitMode)
         {}
 
-        TString ToString() const {
+        TString ToString() const { 
             switch (SigWaitMode) {
             case SigNone: return "SigNone";
             case SigAsync: return "SigAsync";
@@ -100,7 +100,7 @@ struct TEvStateStorage {
             , ProxyOptions(proxyOptions)
         {}
 
-        TString ToString() const {
+        TString ToString() const { 
             TStringStream str;
             str << "{EvLookup TabletID: " << TabletID;
             str << " Cookie: " << Cookie;
@@ -135,7 +135,7 @@ struct TEvStateStorage {
             Copy(sig, sig + sigsz, Signature.Get());
         }
 
-        TString ToString() const {
+        TString ToString() const { 
             TStringStream str;
             str << "{EvUpdate TabletID: " << TabletID;
             str << " Cookie: " << Cookie;
@@ -166,7 +166,7 @@ struct TEvStateStorage {
             , Cookie(cookie)
         {}
 
-        TString ToString() const {
+        TString ToString() const { 
             TStringStream str;
             str << "{EvDelete TabletID: " << TabletID;
             str << " Cookie: " << Cookie;
@@ -194,7 +194,7 @@ struct TEvStateStorage {
             , Status(status)
         {}
 
-        TString ToString() const {
+        TString ToString() const { 
             TStringStream str;
             str << "{EvDeleteResult TabletID: " << TabletID;
             str << " Status: " << (ui32)Status;
@@ -224,7 +224,7 @@ struct TEvStateStorage {
             Copy(sig, sig + sigsz, Signature.Get());
         }
 
-        TString ToString() const {
+        TString ToString() const { 
             TStringStream str;
             str << "{EvLock TabletID: " << TabletID;
             str << " Cookie: " << Cookie;
@@ -284,7 +284,7 @@ struct TEvStateStorage {
             MakeFilteredSignatureCopy(sig, sigsz, Signature.Get());
         }
 
-        TString ToString() const {
+        TString ToString() const { 
             TStringStream str;
             str << "{EvInfo Status: " << (ui32)Status;
             str << " TabletID: " << TabletID;
@@ -331,7 +331,7 @@ struct TEvStateStorage {
             MakeFilteredSignatureCopy(sig, sigsz, Signature.Get());
         }
 
-        TString ToString() const {
+        TString ToString() const { 
             TStringStream str;
             str << "{EvUpdateSignature TabletID: " << TabletID;
             str << " Sz: " << Sz;

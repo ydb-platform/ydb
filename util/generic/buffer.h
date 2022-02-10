@@ -35,18 +35,18 @@ public:
         return *this;
     }
 
-    ~TBuffer();
+    ~TBuffer(); 
 
-    inline void Clear() noexcept {
+    inline void Clear() noexcept { 
         Pos_ = 0;
     }
 
-    inline void EraseBack(size_t n) noexcept {
+    inline void EraseBack(size_t n) noexcept { 
         Y_ASSERT(n <= Pos_);
         Pos_ -= n;
     }
 
-    inline void Reset() noexcept {
+    inline void Reset() noexcept { 
         TBuffer().Swap(*this);
     }
 
@@ -59,24 +59,24 @@ public:
         Assign(b, e - b);
     }
 
-    inline char* Data() noexcept {
+    inline char* Data() noexcept { 
         return Data_;
     }
 
-    inline const char* Data() const noexcept {
+    inline const char* Data() const noexcept { 
         return Data_;
     }
 
-    inline char* Pos() noexcept {
+    inline char* Pos() noexcept { 
         return Data_ + Pos_;
     }
 
-    inline const char* Pos() const noexcept {
+    inline const char* Pos() const noexcept { 
         return Data_ + Pos_;
     }
 
     /// Used space in bytes (do not mix with Capacity!)
-    inline size_t Size() const noexcept {
+    inline size_t Size() const noexcept { 
         return Pos_;
     }
 
@@ -84,11 +84,11 @@ public:
         return !Size();
     }
 
-    inline explicit operator bool() const noexcept {
+    inline explicit operator bool() const noexcept { 
         return Size();
     }
 
-    inline size_t Avail() const noexcept {
+    inline size_t Avail() const noexcept { 
         return Len_ - Pos_;
     }
 
@@ -170,7 +170,7 @@ public:
         Pos_ = len;
     }
 
-    inline size_t Capacity() const noexcept {
+    inline size_t Capacity() const noexcept { 
         return Len_;
     }
 
@@ -193,7 +193,7 @@ public:
         return Size();
     }
 
-    inline void Swap(TBuffer& r) noexcept {
+    inline void Swap(TBuffer& r) noexcept { 
         DoSwap(Data_, r.Data_);
         DoSwap(Len_, r.Len_);
         DoSwap(Pos_, r.Pos_);
@@ -202,24 +202,24 @@ public:
     /*
      * after this call buffer becomes empty
      */
-    void AsString(TString& s);
+    void AsString(TString& s); 
 
     /*
      * iterator-like interface
      */
-    inline TIterator Begin() noexcept {
+    inline TIterator Begin() noexcept { 
         return Data();
     }
 
-    inline TIterator End() noexcept {
+    inline TIterator End() noexcept { 
         return Begin() + Size();
     }
 
-    inline TConstIterator Begin() const noexcept {
+    inline TConstIterator Begin() const noexcept { 
         return Data();
     }
 
-    inline TConstIterator End() const noexcept {
+    inline TConstIterator End() const noexcept { 
         return Begin() + Size();
     }
 

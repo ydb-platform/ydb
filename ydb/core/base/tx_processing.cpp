@@ -10,11 +10,11 @@ NKikimr::TCoordinators::TCoordinators(const NKikimr::TDomainsInfo::TDomain &doma
     : Coordinators(domain.Coordinators)
 {}
 
-NKikimr::TCoordinators::TCoordinators(const TVector<ui64> &coordinators)
+NKikimr::TCoordinators::TCoordinators(const TVector<ui64> &coordinators) 
     : Coordinators(coordinators)
 {}
 
-NKikimr::TCoordinators::TCoordinators(TVector<ui64> &&coordinators)
+NKikimr::TCoordinators::TCoordinators(TVector<ui64> &&coordinators) 
     : Coordinators(std::move(coordinators))
 {}
 
@@ -26,7 +26,7 @@ ui64 NKikimr::TCoordinators::Select(ui64 txId) const {
     return 0;
 }
 
-const TVector<ui64> &NKikimr::TCoordinators::List() const {
+const TVector<ui64> &NKikimr::TCoordinators::List() const { 
     return Coordinators;
 }
 
@@ -38,11 +38,11 @@ NKikimr::TMediators::TMediators(const NKikimr::TDomainsInfo::TDomain &domain)
     : Mediators(domain.Mediators)
 {}
 
-NKikimr::TMediators::TMediators(const TVector<ui64> &mediators)
+NKikimr::TMediators::TMediators(const TVector<ui64> &mediators) 
     : Mediators(mediators)
 {}
 
-NKikimr::TMediators::TMediators(TVector<ui64> &&mediators)
+NKikimr::TMediators::TMediators(TVector<ui64> &&mediators) 
     : Mediators(std::move(mediators))
 {}
 
@@ -50,7 +50,7 @@ ui64 NKikimr::TMediators::Select(ui64 tabletId) const {
     return Mediators[Hash64to32(tabletId) % Mediators.size()];
 }
 
-const TVector<ui64> &NKikimr::TMediators::List() const {
+const TVector<ui64> &NKikimr::TMediators::List() const { 
     return Mediators;
 }
 

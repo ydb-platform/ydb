@@ -9,7 +9,7 @@
 #include <util/generic/utility.h>
 #include <util/generic/yexception.h>
 #include <util/generic/flags.h>
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 
 #include <new>
 #include <cstdio>
@@ -21,19 +21,19 @@ namespace NPrivate {
 
 struct TMemoryMapCommon {
     struct TMapResult {
-        inline size_t MappedSize() const noexcept {
+        inline size_t MappedSize() const noexcept { 
             return Size - Head;
         }
 
-        inline void* MappedData() const noexcept {
+        inline void* MappedData() const noexcept { 
             return Ptr ? (void*)((char*)Ptr + Head) : nullptr;
         }
 
-        inline bool IsMapped() const noexcept {
+        inline bool IsMapped() const noexcept { 
             return Ptr != nullptr;
         }
 
-        inline void Reset() noexcept {
+        inline void Reset() noexcept { 
             Ptr = nullptr;
             Size = 0;
             Head = 0;
@@ -43,7 +43,7 @@ struct TMemoryMapCommon {
         size_t Size;
         i32 Head;
 
-        TMapResult(void) noexcept {
+        TMapResult(void) noexcept { 
             Reset();
         }
     };
@@ -70,15 +70,15 @@ Y_DECLARE_OPERATORS_FOR_FLAGS(TMemoryMapCommon::EOpenMode)
 
 class TMemoryMap: public TMemoryMapCommon {
 public:
-    explicit TMemoryMap(const TString& name);
-    explicit TMemoryMap(const TString& name, EOpenMode om);
-    TMemoryMap(const TString& name, i64 length, EOpenMode om);
+    explicit TMemoryMap(const TString& name); 
+    explicit TMemoryMap(const TString& name, EOpenMode om); 
+    TMemoryMap(const TString& name, i64 length, EOpenMode om); 
     TMemoryMap(FILE* f, TString dbgName = UnknownFileName());
     TMemoryMap(FILE* f, EOpenMode om, TString dbgName = UnknownFileName());
     TMemoryMap(const TFile& file, TString dbgName = UnknownFileName());
     TMemoryMap(const TFile& file, EOpenMode om, TString dbgName = UnknownFileName());
 
-    ~TMemoryMap();
+    ~TMemoryMap(); 
 
     TMapResult Map(i64 offset, size_t size);
     bool Unmap(TMapResult region);
@@ -86,11 +86,11 @@ public:
     void ResizeAndReset(i64 size);
     TMapResult ResizeAndRemap(i64 offset, size_t size);
 
-    i64 Length() const noexcept;
-    bool IsOpen() const noexcept;
+    i64 Length() const noexcept; 
+    bool IsOpen() const noexcept; 
     bool IsWritable() const noexcept;
     EOpenMode GetMode() const noexcept;
-    TFile GetFile() const noexcept;
+    TFile GetFile() const noexcept; 
 
     void SetSequential();
     void Evict(void* ptr, size_t len);
@@ -108,15 +108,15 @@ private:
 
 class TFileMap: public TMemoryMapCommon {
 public:
-    TFileMap(const TMemoryMap& map) noexcept;
-    TFileMap(const TString& name);
-    TFileMap(const TString& name, EOpenMode om);
-    TFileMap(const TString& name, i64 length, EOpenMode om);
+    TFileMap(const TMemoryMap& map) noexcept; 
+    TFileMap(const TString& name); 
+    TFileMap(const TString& name, EOpenMode om); 
+    TFileMap(const TString& name, i64 length, EOpenMode om); 
     TFileMap(FILE* f, EOpenMode om = oRdOnly, TString dbgName = UnknownFileName());
     TFileMap(const TFile& file, EOpenMode om = oRdOnly, TString dbgName = UnknownFileName());
-    TFileMap(const TFileMap& fm) noexcept;
+    TFileMap(const TFileMap& fm) noexcept; 
 
-    ~TFileMap();
+    ~TFileMap(); 
 
     TMapResult Map(i64 offset, size_t size);
     TMapResult ResizeAndRemap(i64 offset, size_t size);
@@ -138,11 +138,11 @@ public:
         FlushAsync(Ptr(), MappedSize());
     }
 
-    inline i64 Length() const noexcept {
+    inline i64 Length() const noexcept { 
         return Map_.Length();
     }
 
-    inline bool IsOpen() const noexcept {
+    inline bool IsOpen() const noexcept { 
         return Map_.IsOpen();
     }
 
@@ -154,15 +154,15 @@ public:
         return Map_.GetMode();
     }
 
-    inline void* Ptr() const noexcept {
+    inline void* Ptr() const noexcept { 
         return Region_.MappedData();
     }
 
-    inline size_t MappedSize() const noexcept {
+    inline size_t MappedSize() const noexcept { 
         return Region_.MappedSize();
     }
 
-    TFile GetFile() const noexcept {
+    TFile GetFile() const noexcept { 
         return Map_.GetFile();
     }
 
@@ -241,7 +241,7 @@ public:
         Dummy_.Destroy();
         Dummy_.Reset(new (DummyData()) T(n_Dummy));
     }
-    inline char* DummyData() const noexcept {
+    inline char* DummyData() const noexcept { 
         return AlignUp((char*)DummyData_);
     }
     inline const T& Dummy() const {
@@ -260,22 +260,22 @@ public:
         return 0 == Size_;
     }
     /// for STL compatibility only, Begin() usage is recommended
-    const T* begin() const noexcept {
+    const T* begin() const noexcept { 
         return Begin();
     }
-    const T* Begin() const noexcept {
+    const T* Begin() const noexcept { 
         return Ptr_;
     }
     /// for STL compatibility only, End() usage is recommended
-    const T* end() const noexcept {
+    const T* end() const noexcept { 
         return End_;
     }
-    const T* End() const noexcept {
+    const T* End() const noexcept { 
         return End_;
     }
 
 private:
-    void DoInit(const TString& fileName) {
+    void DoInit(const TString& fileName) { 
         DataHolder_->Map(0, DataHolder_->Length());
         if (DataHolder_->Length() % sizeof(T)) {
             Term();
@@ -308,10 +308,10 @@ public:
     char* Data(ui32 pos = 0) const {
         return (char*)(Ptr_ ? ((char*)Ptr_ + pos) : nullptr);
     }
-    char* Begin() const noexcept {
+    char* Begin() const noexcept { 
         return (char*)Ptr();
     }
-    char* End() const noexcept {
+    char* End() const noexcept { 
         return Begin() + MappedSize();
     }
     size_t MappedSize() const {

@@ -119,21 +119,21 @@ void TTxCoordinator::PlanTx(TAutoPtr<TTransactionProposal> &proposal, const TAct
         proposal->TxId, planStep, ctx, TabletID());
 
     if (forRapidExecution) {
-        TQueueType::TSlot &rapidSlot = VolatileState.Queue.RapidSlot;
+        TQueueType::TSlot &rapidSlot = VolatileState.Queue.RapidSlot; 
         rapidSlot.Queue->Push(proposal.Release());
         ++rapidSlot.QueueSize;
 
         if (rapidSlot.QueueSize >= Config.RapidSlotFlushSize && !VolatileState.Queue.RapidFreeze) {
-            TVector<TQueueType::TSlot> slots;
+            TVector<TQueueType::TSlot> slots; 
             slots.push_back(rapidSlot);
-            rapidSlot = TQueueType::TSlot();
+            rapidSlot = TQueueType::TSlot(); 
             VolatileState.LastPlanned = planStep;
             VolatileState.Queue.RapidFreeze = true;
 
             Execute(CreateTxPlanStep(planStep, slots, true), ctx);
         }
     } else {
-        TQueueType::TSlot &planSlot = VolatileState.Queue.LowSlot(planStep);
+        TQueueType::TSlot &planSlot = VolatileState.Queue.LowSlot(planStep); 
         planSlot.Queue->Push(proposal.Release());
         ++planSlot.QueueSize;
     }
@@ -161,7 +161,7 @@ void TTxCoordinator::HandleEnqueue(TEvTxProxy::TEvProposeTransaction::TPtr &ev, 
     }
 
     if (!VolatileState.Queue.Unsorted)
-        VolatileState.Queue.Unsorted.Reset(new TQueueType::TQ());
+        VolatileState.Queue.Unsorted.Reset(new TQueueType::TQ()); 
 
     VolatileState.Queue.Unsorted->Push(proposal.Release());
 }
@@ -186,12 +186,12 @@ void TTxCoordinator::Handle(TEvPrivate::TEvPlanTick::TPtr &ev, const TActorConte
         return SchedulePlanTick(ctx);
     }
 
-    TVector<TQueueType::TSlot> slots;
+    TVector<TQueueType::TSlot> slots; 
     slots.reserve(1000);
 
     if (VolatileState.Queue.RapidSlot.QueueSize) {
         slots.push_back(VolatileState.Queue.RapidSlot);
-        VolatileState.Queue.RapidSlot = TQueueType::TSlot();
+        VolatileState.Queue.RapidSlot = TQueueType::TSlot(); 
     }
 
     while (!VolatileState.Queue.Low.empty()) {
@@ -280,7 +280,7 @@ void TTxCoordinator::DoConfiguration(const TEvSubDomain::TEvConfigure &ev, const
         return;
     }
 
-    TVector<TTabletId> mediators;
+    TVector<TTabletId> mediators; 
     mediators.reserve(record.MediatorsSize());
 
     for (auto id: record.GetMediators()) {

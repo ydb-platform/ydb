@@ -2,13 +2,13 @@
 
 #include "ascii.h"
 
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 #include <util/generic/strbuf.h>
 #include <utility>
 
 template <class It>
 struct TIsAsciiSpaceAdapter {
-    bool operator()(const It& it) const noexcept {
+    bool operator()(const It& it) const noexcept { 
         return IsAsciiSpace(*it);
     }
 };
@@ -26,7 +26,7 @@ struct TEqualsStripAdapter {
     }
 
     template <class It>
-    bool operator()(const It& it) const noexcept {
+    bool operator()(const It& it) const noexcept { 
         return *it == Ch;
     }
 
@@ -39,33 +39,33 @@ TEqualsStripAdapter<TChar> EqualsStripAdapter(TChar ch) {
 }
 
 template <class It, class TStripCriterion>
-inline void StripRangeBegin(It& b, const It& e, TStripCriterion&& criterion) noexcept {
+inline void StripRangeBegin(It& b, const It& e, TStripCriterion&& criterion) noexcept { 
     while (b < e && criterion(b)) {
         ++b;
     }
 }
 
 template <class It>
-inline void StripRangeBegin(It& b, const It& e) noexcept {
+inline void StripRangeBegin(It& b, const It& e) noexcept { 
     StripRangeBegin(b, e, IsAsciiSpaceAdapter(b));
 }
 
 template <class It, class TStripCriterion>
-inline void StripRangeEnd(const It& b, It& e, TStripCriterion&& criterion) noexcept {
+inline void StripRangeEnd(const It& b, It& e, TStripCriterion&& criterion) noexcept { 
     while (b < e && criterion(e - 1)) {
         --e;
     }
 }
 
 template <class It>
-inline void StripRangeEnd(const It& b, It& e) noexcept {
+inline void StripRangeEnd(const It& b, It& e) noexcept { 
     StripRangeEnd(b, e, IsAsciiSpaceAdapter(b));
 }
 
 template <bool stripBeg, bool stripEnd>
 struct TStripImpl {
     template <class It, class TStripCriterion>
-    static inline bool StripRange(It& b, It& e, TStripCriterion&& criterion) noexcept {
+    static inline bool StripRange(It& b, It& e, TStripCriterion&& criterion) noexcept { 
         const size_t oldLen = e - b;
 
         if (stripBeg) {
@@ -110,17 +110,17 @@ struct TStripImpl {
 };
 
 template <class It, class TStripCriterion>
-inline bool StripRange(It& b, It& e, TStripCriterion&& criterion) noexcept {
+inline bool StripRange(It& b, It& e, TStripCriterion&& criterion) noexcept { 
     return TStripImpl<true, true>::StripRange(b, e, criterion);
 }
 
 template <class It>
-inline bool StripRange(It& b, It& e) noexcept {
+inline bool StripRange(It& b, It& e) noexcept { 
     return StripRange(b, e, IsAsciiSpaceAdapter(b));
 }
 
 template <class It, class TStripCriterion>
-inline bool Strip(It& b, size_t& len, TStripCriterion&& criterion) noexcept {
+inline bool Strip(It& b, size_t& len, TStripCriterion&& criterion) noexcept { 
     It e = b + len;
 
     if (StripRange(b, e, criterion)) {
@@ -133,7 +133,7 @@ inline bool Strip(It& b, size_t& len, TStripCriterion&& criterion) noexcept {
 }
 
 template <class It>
-inline bool Strip(It& b, size_t& len) noexcept {
+inline bool Strip(It& b, size_t& len) noexcept { 
     return Strip(b, len, IsAsciiSpaceAdapter(b));
 }
 
@@ -178,7 +178,7 @@ static inline T StripStringRight(const T& from, TStripCriterion&& criterion) {
 }
 
 /// Copies the given string removing leading and trailing spaces.
-static inline bool Strip(const TString& from, TString& to) {
+static inline bool Strip(const TString& from, TString& to) { 
     return StripString(from, to);
 }
 
@@ -189,9 +189,9 @@ inline TString& StripInPlace(TString& s) {
 }
 
 /// Returns a copy of the given string with removed leading and trailing spaces.
-inline TString Strip(const TString& s) Y_WARN_UNUSED_RESULT;
-inline TString Strip(const TString& s) {
-    TString ret = s;
+inline TString Strip(const TString& s) Y_WARN_UNUSED_RESULT; 
+inline TString Strip(const TString& s) { 
+    TString ret = s; 
     Strip(ret, ret);
     return ret;
 }
@@ -215,8 +215,8 @@ size_t CollapseImpl(TChar* s, size_t n, const TWhitespaceFunc& isWhitespace) {
     return newLen;
 }
 
-template <class TStringType, class TWhitespaceFunc>
-bool CollapseImpl(const TStringType& from, TStringType& to, size_t maxLen, const TWhitespaceFunc& isWhitespace) {
+template <class TStringType, class TWhitespaceFunc> 
+bool CollapseImpl(const TStringType& from, TStringType& to, size_t maxLen, const TWhitespaceFunc& isWhitespace) { 
     to = from;
     maxLen = maxLen ? Min(maxLen, to.size()) : to.size();
     for (size_t i = 0; i < maxLen; ++i) {
@@ -230,7 +230,7 @@ bool CollapseImpl(const TStringType& from, TStringType& to, size_t maxLen, const
     return false;
 }
 
-bool Collapse(const TString& from, TString& to, size_t maxLen = 0);
+bool Collapse(const TString& from, TString& to, size_t maxLen = 0); 
 
 /// Replaces several consequtive space symbols with one (processing is limited to maxLen bytes)
 inline TString& CollapseInPlace(TString& s, size_t maxLen = 0) {
@@ -241,17 +241,17 @@ inline TString& CollapseInPlace(TString& s, size_t maxLen = 0) {
 /// Replaces several consequtive space symbols with one (processing is limited to maxLen bytes)
 inline TString Collapse(const TString& s, size_t maxLen = 0) Y_WARN_UNUSED_RESULT;
 inline TString Collapse(const TString& s, size_t maxLen) {
-    TString ret;
+    TString ret; 
     Collapse(s, ret, maxLen);
     return ret;
 }
 
-void CollapseText(const TString& from, TString& to, size_t maxLen);
+void CollapseText(const TString& from, TString& to, size_t maxLen); 
 
 /// The same as Collapse() + truncates the string to maxLen.
 /// @details An ellipsis is inserted at the end of the truncated line.
-inline void CollapseText(TString& s, size_t maxLen) {
-    TString to;
+inline void CollapseText(TString& s, size_t maxLen) { 
+    TString to; 
     CollapseText(s, to, maxLen);
     s = to;
 }

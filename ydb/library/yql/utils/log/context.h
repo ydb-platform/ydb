@@ -173,13 +173,13 @@ auto MakeRootCtx(TArgs&&... args) -> TRootLogContext<sizeof...(args)> {
  * @brief Returns current logger contexts path as string. Each element
  *        is separated with '/'.
  */
-TString CurrentLogContextPath();
+TString CurrentLogContextPath(); 
 
 /**
  * @brief If last throwing exception was performed with YQL_LOG_CTX_THROW
  *        macro this function returns location and context of that throw point.
  */
-TString ThrowedLogContextPath();
+TString ThrowedLogContextPath(); 
 
 /**
  * @brief Adds context preffix before logging message.

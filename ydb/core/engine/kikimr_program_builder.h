@@ -234,7 +234,7 @@ public:
 private:
     TRuntimeNode NewDataLiteral(const std::pair<ui64, ui64>& data) const;
     TRuntimeNode BuildTableId(const TTableId& tableId) const;
-    TVector<TRuntimeNode> FixKeysType(
+    TVector<TRuntimeNode> FixKeysType( 
         const TArrayRef<const ui32>& keyTypes,
         const TKeyColumnValues& row) const;
     TRuntimeNode RewriteNullType(

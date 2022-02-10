@@ -54,7 +54,7 @@ public:
 
 private:
     TIntrusivePtr<TTypeAnnotationContext> TypeAnnotationContext_;
-    TVector<TTransformStage> Transformers_;
+    TVector<TTransformStage> Transformers_; 
 };
 
 struct IPipelineConfigurator

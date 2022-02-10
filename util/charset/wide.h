@@ -6,7 +6,7 @@
 #include "wide_specific.h"
 
 #include <util/generic/algorithm.h>
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 #include <util/generic/yexception.h>
 #include <util/memory/tempbuf.h>
 #include <util/system/compiler.h>
@@ -24,8 +24,8 @@ class TTempArray;
 using TCharTemp = TTempArray<wchar16>;
 
 namespace NDetail {
-    inline TString InStringMsg(const char* s, size_t len) {
-        return (len <= 50) ? " in string " + TString(s, len).Quote() : TString();
+    inline TString InStringMsg(const char* s, size_t len) { 
+        return (len <= 50) ? " in string " + TString(s, len).Quote() : TString(); 
     }
 
     template <bool isPointer>
@@ -321,8 +321,8 @@ inline size_t UTF8ToWideImpl(const char* text, size_t len, TCharType* dest, size
 }
 
 template <bool robust>
-inline TUtf16String UTF8ToWide(const char* text, size_t len) {
-    TUtf16String w = TUtf16String::Uninitialized(len);
+inline TUtf16String UTF8ToWide(const char* text, size_t len) { 
+    TUtf16String w = TUtf16String::Uninitialized(len); 
     size_t written;
     size_t pos = UTF8ToWideImpl<robust>(text, len, w.begin(), written);
     if (pos != len)
@@ -347,7 +347,7 @@ inline bool UTF8ToWide(const char* text, size_t len, TCharType* dest, size_t& wr
 }
 
 template <bool robust>
-inline TWtringBuf UTF8ToWide(const TStringBuf src, TUtf16String& dst) {
+inline TWtringBuf UTF8ToWide(const TStringBuf src, TUtf16String& dst) { 
     dst.ReserveAndResize(src.size());
     size_t written = 0;
     UTF8ToWideImpl<robust>(src.data(), src.size(), dst.begin(), written);
@@ -365,16 +365,16 @@ inline TUtf32StringBuf UTF8ToUTF32(const TStringBuf src, TUtf32String& dst) {
     return dst;
 }
 
-inline TWtringBuf UTF8ToWide(const TStringBuf src, TUtf16String& dst) {
+inline TWtringBuf UTF8ToWide(const TStringBuf src, TUtf16String& dst) { 
     return UTF8ToWide<false>(src, dst);
 }
 
-inline TUtf16String UTF8ToWide(const char* text, size_t len) {
+inline TUtf16String UTF8ToWide(const char* text, size_t len) { 
     return UTF8ToWide<false>(text, len);
 }
 
 template <bool robust>
-inline TUtf16String UTF8ToWide(const TStringBuf s) {
+inline TUtf16String UTF8ToWide(const TStringBuf s) { 
     return UTF8ToWide<robust>(s.data(), s.size());
 }
 
@@ -385,7 +385,7 @@ inline TUtf32String UTF8ToUTF32(const TStringBuf s) {
     return r;
 }
 
-inline TUtf16String UTF8ToWide(const TStringBuf s) {
+inline TUtf16String UTF8ToWide(const TStringBuf s) { 
     return UTF8ToWide<false>(s.data(), s.size());
 }
 
@@ -410,7 +410,7 @@ constexpr size_t WideToUTF8BufferSize(const size_t inputStringSize) noexcept {
     return inputStringSize * 4; // * 4 because the conversion functions can convert unicode character into maximum 4 bytes of UTF8
 }
 
-inline TStringBuf WideToUTF8(const TWtringBuf src, TString& dst) {
+inline TStringBuf WideToUTF8(const TWtringBuf src, TString& dst) { 
     dst.ReserveAndResize(WideToUTF8BufferSize(src.size()));
     size_t written = 0;
     WideToUTF8(src.data(), src.size(), dst.begin(), written);
@@ -419,8 +419,8 @@ inline TStringBuf WideToUTF8(const TWtringBuf src, TString& dst) {
     return dst;
 }
 
-inline TString WideToUTF8(const wchar16* text, size_t len) {
-    TString s = TString::Uninitialized(WideToUTF8BufferSize(len));
+inline TString WideToUTF8(const wchar16* text, size_t len) { 
+    TString s = TString::Uninitialized(WideToUTF8BufferSize(len)); 
     size_t written = 0;
     WideToUTF8(text, len, s.begin(), written);
     Y_ASSERT(s.size() >= written);
@@ -437,7 +437,7 @@ inline TString WideToUTF8(const wchar32* text, size_t len) {
     return s;
 }
 
-inline TString WideToUTF8(const TWtringBuf w) {
+inline TString WideToUTF8(const TWtringBuf w) { 
     return WideToUTF8(w.data(), w.size());
 }
 
@@ -445,8 +445,8 @@ inline TString WideToUTF8(const TUtf32StringBuf w) {
     return WideToUTF8(w.data(), w.size());
 }
 
-inline TUtf16String UTF32ToWide(const wchar32* begin, size_t len) {
-    TUtf16String res;
+inline TUtf16String UTF32ToWide(const wchar32* begin, size_t len) { 
+    TUtf16String res; 
     res.reserve(len);
 
     const wchar32* end = begin + len;
@@ -628,29 +628,29 @@ inline void Copy(const TChar1* first, size_t len, TChar2* result) {
 //!       template <typename InputIterator>
 //!       basic_string(InputIterator begin, InputIterator end, const Allocator& a = Allocator());
 //!       and the family of template member functions: append, assign, insert, replace.
-template <typename TStringType, typename TChar>
-inline TStringType CopyTo(const TChar* first, const TChar* last) {
+template <typename TStringType, typename TChar> 
+inline TStringType CopyTo(const TChar* first, const TChar* last) { 
     Y_ASSERT(first <= last);
-    TStringType str = TStringType::Uninitialized(last - first);
+    TStringType str = TStringType::Uninitialized(last - first); 
     Copy(first, last, str.begin());
     return str;
 }
 
-template <typename TStringType, typename TChar>
-inline TStringType CopyTo(const TChar* s, size_t n) {
-    TStringType str = TStringType::Uninitialized(n);
+template <typename TStringType, typename TChar> 
+inline TStringType CopyTo(const TChar* s, size_t n) { 
+    TStringType str = TStringType::Uninitialized(n); 
     Copy(s, n, str.begin());
     return str;
 }
 
-inline TString WideToASCII(const TWtringBuf w) {
+inline TString WideToASCII(const TWtringBuf w) { 
     Y_ASSERT(IsStringASCII(w.begin(), w.end()));
-    return CopyTo<TString>(w.begin(), w.end());
+    return CopyTo<TString>(w.begin(), w.end()); 
 }
 
-inline TUtf16String ASCIIToWide(const TStringBuf s) {
+inline TUtf16String ASCIIToWide(const TStringBuf s) { 
     Y_ASSERT(IsStringASCII(s.begin(), s.end()));
-    return CopyTo<TUtf16String>(s.begin(), s.end());
+    return CopyTo<TUtf16String>(s.begin(), s.end()); 
 }
 
 inline TUtf32String ASCIIToUTF32(const TStringBuf s) {
@@ -679,7 +679,7 @@ inline bool IsSpace(const TWtringBuf s) {
 }
 
 //! replaces multiple sequential whitespace characters with a single space character
-void Collapse(TUtf16String& w);
+void Collapse(TUtf16String& w); 
 
 //! @return new length
 size_t Collapse(wchar16* s, size_t n);
@@ -810,7 +810,7 @@ TUtf32String ToTitleRet(const TUtf32StringBuf text, size_t pos = 0, size_t count
 //! replaces the '<', '>' and '&' characters in string with '&lt;', '&gt;' and '&amp;' respectively
 // insertBr=true - replace '\r' and '\n' with "<BR>"
 template <bool insertBr>
-void EscapeHtmlChars(TUtf16String& str);
+void EscapeHtmlChars(TUtf16String& str); 
 
 //! returns number of characters in range. Handle surrogate pairs as one character.
 inline size_t CountWideChars(const wchar16* b, const wchar16* e) {

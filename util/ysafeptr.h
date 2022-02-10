@@ -212,8 +212,8 @@ protected:                                                        \
 private:
 #define OBJECT_NOCOPY_METHODS(classname) OBJECT_METHODS(classname)
 #define BASIC_REGISTER_CLASS(classname)                                              \
-    Y_PRAGMA_DIAGNOSTIC_PUSH                                                         \
-    Y_PRAGMA_NO_UNUSED_FUNCTION                                                      \
+    Y_PRAGMA_DIAGNOSTIC_PUSH                                                         \ 
+    Y_PRAGMA_NO_UNUSED_FUNCTION                                                      \ 
     template <>                                                                      \
     IObjectBase* CastToObjectBaseImpl<classname>(classname * p, void*) {             \
         return p;                                                                    \
@@ -222,7 +222,7 @@ private:
     classname* CastToUserObjectImpl<classname>(IObjectBase * p, classname*, void*) { \
         return dynamic_cast<classname*>(p);                                          \
     }                                                                                \
-    Y_PRAGMA_DIAGNOSTIC_POP
+    Y_PRAGMA_DIAGNOSTIC_POP 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 template <class TUserObj>

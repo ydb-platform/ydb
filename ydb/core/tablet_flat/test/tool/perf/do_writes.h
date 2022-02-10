@@ -24,8 +24,8 @@ namespace NTable {
 
             TMemTable table(lay.RowScheme(), 0);
 
-            TVector<TRawTypeValue> key;
-            TVector<TUpdateOp> ops;
+            TVector<TRawTypeValue> key; 
+            TVector<TUpdateOp> ops; 
 
             ui64 keyUi64 = 42;
             key.emplace_back(&keyUi64, sizeof(keyUi64), NScheme::NTypeIds::Uin>

@@ -30,18 +30,18 @@ public:
         term();
     }
 
-    explicit TMappedFile(const TString& name) {
+    explicit TMappedFile(const TString& name) { 
         Map_ = nullptr;
         init(name, TFileMap::oRdOnly);
     }
 
     TMappedFile(const TFile& file, TFileMap::EOpenMode om = TFileMap::oRdOnly, const char* dbgName = "unknown");
 
-    void init(const TString& name);
+    void init(const TString& name); 
 
-    void init(const TString& name, TFileMap::EOpenMode om);
+    void init(const TString& name, TFileMap::EOpenMode om); 
 
-    void init(const TString& name, size_t length, TFileMap::EOpenMode om);
+    void init(const TString& name, size_t length, TFileMap::EOpenMode om); 
 
     void init(const TFile&, TFileMap::EOpenMode om = TFileMap::oRdOnly, const char* dbgName = "unknown");
 
@@ -66,7 +66,7 @@ public:
 
     void precharge(size_t pos = 0, size_t size = (size_t)-1) const;
 
-    void swap(TMappedFile& file) noexcept {
+    void swap(TMappedFile& file) noexcept { 
         DoSwap(Map_, file.Map_);
     }
 };

@@ -14,7 +14,7 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     class THtmlLightSignalRenderer {
     public:
-        THtmlLightSignalRenderer(NKikimrWhiteboard::EFlag light, const TString &value)
+        THtmlLightSignalRenderer(NKikimrWhiteboard::EFlag light, const TString &value) 
             : Light(light)
             , Value(value)
         {}
@@ -23,7 +23,7 @@ namespace NKikimr {
 
     private:
         NKikimrWhiteboard::EFlag Light;
-        const TString Value;
+        const TString Value; 
         static const std::pair<TStringBuf, TStringBuf> Lights[NKikimrWhiteboard::EFlag_ARRAYSIZE]; // {class, style}
     };
 

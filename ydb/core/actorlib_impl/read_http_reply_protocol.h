@@ -13,7 +13,7 @@ public:
             TOrigActor* orig,
             const TActorContext& ctx,
             TIntrusivePtr<NInterconnect::TStreamSocket> socket,
-            TVector<char> readyBuf = TVector<char>()
+            TVector<char> readyBuf = TVector<char>() 
                 ) noexcept
     {
         Socket = socket;
@@ -36,7 +36,7 @@ public:
 
     virtual void CatchHTTPReply(
         const TActorContext& ctx,
-        TVector<char> buf,
+        TVector<char> buf, 
         size_t httpMessageSize) noexcept = 0;
 
     size_t HTTPReplySizeLimit = DEFAULT_MAXIMUM_HTTP_REPLY_SIZE;
@@ -53,7 +53,7 @@ private:
 
 
     TIntrusivePtr<NInterconnect::TStreamSocket> Socket;
-    TVector<char> Buf;
+    TVector<char> Buf; 
     size_t Filled = 0;
 
     static constexpr size_t FREE_SPACE_LOW_WATER_MARK = 1024;

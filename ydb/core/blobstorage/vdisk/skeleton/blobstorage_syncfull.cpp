@@ -53,7 +53,7 @@ namespace NKikimr {
         friend class TActorBootstrapped<THullSyncFullActor>;
 
         void Serialize(const TActorContext &ctx,
-                       TString *buf,
+                       TString *buf, 
                        const TKeyLogoBlob &key,
                        const TMemRecLogoBlob &memRec) {
             Y_UNUSED(ctx);
@@ -64,7 +64,7 @@ namespace NKikimr {
         }
 
         void Serialize(const TActorContext &ctx,
-                       TString *buf,
+                       TString *buf, 
                        const TKeyBlock &key,
                        const TMemRecBlock &memRec) {
             Y_UNUSED(ctx);
@@ -75,7 +75,7 @@ namespace NKikimr {
         }
 
         void Serialize(const TActorContext &ctx,
-                       TString *buf,
+                       TString *buf, 
                        const TKeyBarrier &key,
                        const TMemRecBarrier &memRec) {
             Y_UNUSED(ctx);
@@ -138,7 +138,7 @@ namespace NKikimr {
                 TKey &key,
                 const TFilter &filter) {
             // reserve some space for data
-            TString *data = Result->Record.MutableData();
+            TString *data = Result->Record.MutableData(); 
             if (data->capacity() < Config->MaxResponseSize) {
                 data->reserve(Config->MaxResponseSize);
             }

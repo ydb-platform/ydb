@@ -23,7 +23,7 @@ using TBase = TActorBootstrapped<TMessageBusHiveCreateTablet<ResponseType>>;
         ui64 OwnerId;
         ui64 OwnerIdx;
         TTabletTypes::EType TabletType;
-        TVector<ui32> AllowedNodeIDs;
+        TVector<ui32> AllowedNodeIDs; 
         TVector<TSubDomainKey> AllowedDomains;
         TChannelsBindings BindedChannels;
 
@@ -59,11 +59,11 @@ using TBase = TActorBootstrapped<TMessageBusHiveCreateTablet<ResponseType>>;
     bool WithRetry;
     TActorId PipeClient;
 
-    TDeque<TRequest> Requests;
+    TDeque<TRequest> Requests; 
     NKikimrProto::EReplyStatus Status;
     ui32 ResponsesReceived;
     ui32 DomainUid;
-    TString ErrorReason;
+    TString ErrorReason; 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::MSGBUS_COMMON;

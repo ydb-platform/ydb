@@ -82,10 +82,10 @@ public:
     void Start(size_t, size_t) override {
     }
 
-    void Stop() noexcept override {
+    void Stop() noexcept override { 
     }
 
-    size_t Size() const noexcept override {
+    size_t Size() const noexcept override { 
         return 0;
     }
 };

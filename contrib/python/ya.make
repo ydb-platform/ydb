@@ -392,10 +392,10 @@ RECURSE(
     flask_graphql
     Flask-Humanize
     Flask-Log-Request-ID
-    Flask-Login
-    Flask-Mail
+    Flask-Login 
+    Flask-Mail 
     flask-marshmallow
-    Flask-Menu
+    Flask-Menu 
     flask_migrate
     flask-mongoengine
     Flask-OpenTracing
@@ -410,8 +410,8 @@ RECURSE(
     Flask-Shelve
     Flask-SQLAlchemy
     Flask-SSLify
-    flask-swagger
-    flask-swagger-ui
+    flask-swagger 
+    flask-swagger-ui 
     Flask-Table
     Flask-UUID
     Flask-WTF

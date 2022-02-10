@@ -1,24 +1,24 @@
-#include <util/system/defaults.h> 
-#include <util/system/filemap.h> 
+#include <util/system/defaults.h>
+#include <util/system/filemap.h>
 #include <util/generic/string.h>
-#include <util/generic/vector.h> 
-#include <util/string/cast.h> 
-#include <util/stream/file.h> 
+#include <util/generic/vector.h>
+#include <util/string/cast.h>
+#include <util/stream/file.h>
 #include <library/cpp/compproto/huff.h>
- 
-#include "comptable.h" 
- 
+
+#include "comptable.h"
+
 #include <cstdlib>
 
-namespace NCompTable { 
+namespace NCompTable {
     static const ui32 magicHashMul = 0xd077cd1f;
     static const size_t hashSizeLog = 18;
     static const size_t hashSize = 1 << hashSizeLog;
- 
+
     size_t HashIndex(ui32 value, ui32 hashMul) {
         return (value * hashMul) >> (32 - hashSizeLog);
     }
- 
+
     void TCompressorTable::GetHuffCode(const NCompProto::TCoderEntry& entry, ui32 value, ui64& bitCode, ui8& bitLength) const {
         ui64 code = value - entry.MinValue;
         bitCode = (code << entry.PrefixBits) | entry.Prefix;
@@ -34,19 +34,19 @@ namespace NCompTable {
                 GetHuffCode(huffCode, value, bitCode, bitLength);
                 return;
             }
-        } 
+        }
         abort();
-    } 
+    }
     ui8 TCompressorTable::GetHuffIndex(ui8 prefix) {
         for (size_t i = 0; i < 10; ++i) {
             if ((prefix & ((1 << HuffCodes[i].PrefixBits) - 1)) == HuffCodes[i].Prefix) {
                 return i;
             }
-        } 
+        }
         abort();
         return 0;
-    } 
- 
+    }
+
     void TCompressorTable::BuildHuffCodes(i64 totalFreq, i64 freqs[65536]) {
         i64 add = 1;
         while (1) {
@@ -54,9 +54,9 @@ namespace NCompTable {
                 return;
             }
             add = add * 2;
-        } 
-    } 
- 
+        }
+    }
+
     bool TCompressorTable::BuildHuffCodes(i64 totalFreq, i64 freqs[65536], i64 add) {
         TVector<NCompProto::TCode> codes;
         size_t bits[] = {0, 1, 2, 4, 8, 10, 12, 14, 16, 32};
@@ -71,7 +71,7 @@ namespace NCompTable {
             codes.push_back(NCompProto::TCode(weight + add, ui32(off), bits[i]));
             total = total > weight ? total - weight : 0;
             off += size;
-        } 
+        }
         codes.push_back(NCompProto::TCode(total + add, 0, 32));
         i64 ret = NCompProto::BuildHuff(codes);
         Y_UNUSED(ret);
@@ -84,13 +84,13 @@ namespace NCompTable {
             if (code.PrefixBits > 8) {
                 return false;
             }
-        } 
+        }
         for (size_t i = 0; i < 256; ++i) {
             HuffIndices[i] = GetHuffIndex(ui8(i));
         }
         return true;
-    } 
- 
+    }
+
     template <class TIterator>
     void Iterate(const TStringBuf& data, TIterator& iterator) {
         size_t i = 0;
@@ -103,8 +103,8 @@ namespace NCompTable {
             memcpy(buffer, data.data() + i, data.size() - i);
             iterator.Visit(buffer[0]);
         }
-    } 
- 
+    }
+
     class TDataCompressor {
         ui32 Keys[hashSize];
         ui32 Vals[hashSize];
@@ -128,7 +128,7 @@ namespace NCompTable {
                 Vals[index] = i;
                 table.GetHuffCode(ui32(i), BitCodes[index], BitLengths[index]);
             }
-        } 
+        }
         void GetStat(ui32 val, ui32& stat) const {
             size_t index = HashIndex(val, HashMul);
             if (Keys[index] == val) {
@@ -136,7 +136,7 @@ namespace NCompTable {
             } else {
                 stat = ui32(-1);
             }
-        } 
+        }
         void GetStat(ui32 val, ui64& bitCode, ui8& bitLength) const {
             size_t index = HashIndex(val, HashMul);
             if (Keys[index] == val) {
@@ -145,7 +145,7 @@ namespace NCompTable {
             } else {
                 Table.GetLastHuffCode(val, bitCode, bitLength);
             }
-        } 
+        }
         size_t Compress4(const ui32* data4, ui8* dataBuff) const {
             ui8* oldBuff = dataBuff;
             ++dataBuff;
@@ -174,7 +174,7 @@ namespace NCompTable {
             }
             oldBuff[0] = ui8(status);
             return dataBuff - oldBuff;
-        } 
+        }
         struct TCompressorIterator {
             TVector<char>& Result;
             const TDataCompressor& Compressor;
@@ -187,7 +187,7 @@ namespace NCompTable {
                 , Index(0)
                 , RealSize(0)
             {
-            } 
+            }
             void Flush() {
                 Result.yresize(RealSize + 32);
                 RealSize += Compressor.Compress4(Cached, reinterpret_cast<ui8*>(Result.data()) + RealSize);
@@ -246,11 +246,11 @@ namespace NCompTable {
             if (!HQ) {
                 TCompressorIterator iterator(rslt, *this);
                 Iterate(stringBuf, iterator);
-            } else { 
+            } else {
                 THQCompressorIterator iterator(rslt, *this);
                 Iterate(stringBuf, iterator);
-            } 
-        } 
+            }
+        }
     };
 
     class TDataDecompressor {
@@ -259,8 +259,8 @@ namespace NCompTable {
     public:
         TDataDecompressor(const TCompressorTable& table)
             : Table(table)
-        { 
-        } 
+        {
+        }
         size_t Decompress(ui32* data4, const ui8* dataBuff, ui32 type) const {
             if (type == 0) {
                 data4[0] = 0;
@@ -280,7 +280,7 @@ namespace NCompTable {
                 memcpy(data4, dataBuff, sizeof(*data4));
                 return 4;
             }
-        } 
+        }
         size_t Decompress(ui32* data4, const ui8* dataBuff) const {
             ui32 status = *dataBuff;
             const ui8* oldData = dataBuff;
@@ -298,7 +298,7 @@ namespace NCompTable {
                 memcpy(&val, dataBuff + off, sizeof(val));
             } else {
                 memcpy(&val, dataBuff + off, border - off);
-            } 
+            }
             val >>= (offset & 7);
             ui8 index = Table.HuffIndices[ui8(val)];
             const NCompProto::TCoderEntry& entry = Table.HuffCodes[index];
@@ -307,7 +307,7 @@ namespace NCompTable {
             val = val + entry.MinValue;
             data[0] = (index == 9) ? val : Table.Table[val];
             offset += allBits;
-        } 
+        }
         size_t GetJunkSize() const {
             return 8;
         }
@@ -331,7 +331,7 @@ namespace NCompTable {
                 len = length;
                 for (size_t i = 0; i < length32; ++i) {
                     Decompress(&result[i], src, offset, border);
-                } 
+                }
             } else {
                 ui32 data[4];
                 src += Decompress(data, src);
@@ -345,39 +345,39 @@ namespace NCompTable {
                 for (size_t j = 1; j < length32x4; ++j) {
                     src += Decompress(&result[j * 4 - 1], src);
                 }
-            } 
+            }
             rslt.resize(len);
-        } 
-    }; 
+        }
+    };
 
     struct TSamplerIterator {
         TDataSampler& Sampler;
         TSamplerIterator(TDataSampler& sampler)
             : Sampler(sampler)
-        { 
-        } 
-        void Visit(const ui32 data) { 
+        {
+        }
+        void Visit(const ui32 data) {
             Sampler.AddStat(data);
-        } 
+        }
     };
 
     struct TGreaterComparer {
         //std::greater in arcadia???
         bool operator()(ui64 a, ui64 b) const {
             return a > b;
-        } 
-    }; 
+        }
+    };
 
     TDataSampler::TDataSampler() {
         memset(this, 0, sizeof(*this));
-    } 
- 
+    }
+
     void TDataSampler::BuildTable(TCompressorTable& table) const {
         std::vector<ui64> sorted;
         for (size_t i = 0; i < Size; ++i) {
             ui64 res = (ui64(EntryHit[i]) << 32) + ui32(i);
             sorted.push_back(res);
-        } 
+        }
         std::vector<ui32> entryTbl(Size);
         std::sort(sorted.begin(), sorted.end(), TGreaterComparer());
         table.HashMul = magicHashMul;
@@ -386,9 +386,9 @@ namespace NCompTable {
             ui32 ind = ui32(sorted[i]);
             table.Table[i] = EntryVal[ind];
             freqs[i] = EntryHit[ind];
-        } 
+        }
         table.BuildHuffCodes(Counter, freqs);
-    } 
+    }
 
     void TDataSampler::AddStat(ui32 val) {
         ++Counter;
@@ -397,47 +397,47 @@ namespace NCompTable {
             ++EntryHit[hashInd];
         } else if (EntryHit[hashInd] > 1) {
             --EntryHit[hashInd];
-        } else { 
+        } else {
             EntryHit[hashInd] = 1;
             EntryVal[hashInd] = val;
-        } 
-    } 
+        }
+    }
 
     void TDataSampler::AddStat(const TStringBuf& stringBuf) {
         TSamplerIterator iterator(*this);
         Iterate(stringBuf, iterator);
-    } 
- 
+    }
+
     TChunkCompressor::TChunkCompressor(bool highQuality, const TCompressorTable& table)
         : HighQuality(highQuality)
-    { 
+    {
         Compressor.Reset(new TDataCompressor(table));
-    } 
- 
+    }
+
     void TChunkCompressor::Compress(TStringBuf data, TVector<char>* rslt) const {
         if (HighQuality) {
             Compressor->Compress<1>(data, *rslt);
         } else {
             Compressor->Compress<0>(data, *rslt);
         }
-    } 
- 
+    }
+
     TChunkCompressor::~TChunkCompressor() = default;
- 
+
     TChunkDecompressor::TChunkDecompressor(bool highQuality, const TCompressorTable& table)
         : HighQuality(highQuality)
     {
         Decompressor.Reset(new TDataDecompressor(table));
-    } 
- 
+    }
+
     void TChunkDecompressor::Decompress(TStringBuf data, TVector<char>* rslt) const {
         if (HighQuality) {
             Decompressor->Decompress<1>(data, *rslt);
         } else {
             Decompressor->Decompress<0>(data, *rslt);
         }
-    } 
- 
+    }
+
     TChunkDecompressor::~TChunkDecompressor() = default;
- 
-} 
+
+}

@@ -856,7 +856,7 @@ RECURSE(
     pystan
     pystan/pystan_model
     pysyncobj
-    pyTelegramBotAPI
+    pyTelegramBotAPI 
     pytest
     pytest-allure-adaptor
     pytest-asyncio

@@ -10,8 +10,8 @@
 
 //on some systems you must have privilege and resource limit
 
-void LockMemory(const void* addr, size_t len);
-void UnlockMemory(const void* addr, size_t len);
+void LockMemory(const void* addr, size_t len); 
+void UnlockMemory(const void* addr, size_t len); 
 
 enum ELockAllMemoryFlag {
     /** Lock all pages which are currently mapped into the address space of the process. */

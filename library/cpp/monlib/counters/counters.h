@@ -1,20 +1,20 @@
 #pragma once
 
-#include <util/datetime/base.h> 
-#include <util/generic/algorithm.h> 
-#include <util/generic/list.h> 
-#include <util/generic/map.h> 
-#include <util/generic/ptr.h> 
-#include <util/generic/singleton.h> 
-#include <util/generic/vector.h> 
-#include <util/str_stl.h> 
+#include <util/datetime/base.h>
+#include <util/generic/algorithm.h>
+#include <util/generic/list.h>
+#include <util/generic/map.h>
+#include <util/generic/ptr.h>
+#include <util/generic/singleton.h>
+#include <util/generic/vector.h>
+#include <util/str_stl.h>
 #include <util/stream/output.h>
-#include <util/string/util.h> 
+#include <util/string/util.h>
 #include <util/system/atomic.h>
-#include <util/system/defaults.h> 
-#include <util/system/guard.h> 
-#include <util/system/sem.h> 
-#include <util/system/spinlock.h> 
+#include <util/system/defaults.h>
+#include <util/system/guard.h>
+#include <util/system/sem.h>
+#include <util/system/spinlock.h>
 
 #include <array>
 
@@ -51,7 +51,7 @@ namespace NMonitoring {
             , Derivative(derivative)
         {
         }
- 
+
         bool ForDerivative() const {
             return Derivative;
         }
@@ -166,23 +166,23 @@ namespace NMonitoring {
             TArrayHolder<TElement> Elements;
             size_t Size;
 
-        public: 
+        public:
             TCollection()
                 : Size(0)
             {
-            } 
- 
+            }
+
             TCollection(const TCollection& collection)
-                : Elements(new TElement[collection.Size]) 
+                : Elements(new TElement[collection.Size])
                 , Size(collection.Size)
             {
                 for (int i = 0; i < Size; ++i) {
                     Elements[i] = collection.Elements[i];
                 }
-            } 
- 
+            }
+
             TCollection(const TCollection& collection, T* name, G* counters)
-                : Elements(new TElement[collection.Size + 1]) 
+                : Elements(new TElement[collection.Size + 1])
                 , Size(collection.Size + 1)
             {
                 for (size_t i = 0; i < Size - 1; ++i) {
@@ -198,13 +198,13 @@ namespace NMonitoring {
                         --j;
                     }
                 }
-            } 
+            }
 
             G* Find(const T& name) const {
                 G* result = nullptr;
                 if (Size == 0) {
                     return nullptr;
-                } 
+                }
                 size_t l = 0;
                 size_t r = Size - 1;
                 while (l < r) {
@@ -219,8 +219,8 @@ namespace NMonitoring {
                     result = Elements[l].Counters;
                 }
                 return result;
-            } 
- 
+            }
+
             void Free() {
                 for (size_t i = 0; i < Size; ++i) {
                     T* name = Elements[i].Name;
@@ -231,15 +231,15 @@ namespace NMonitoring {
                     delete counters;
                 }
                 Size = 0;
-            } 
+            }
 
             TGroupsNamesPtr GetNames() const {
                 TGroupsNamesPtr result(new TGroupsNames());
                 for (size_t i = 0; i < Size; ++i) {
                     result->push_back(*(Elements[i].Name));
-                } 
+                }
                 return result;
-            } 
+            }
         }; // TCollection
         struct TOldGroup {
             TCollection* Collection;
@@ -280,16 +280,16 @@ namespace NMonitoring {
                 }
                 Groups = newGroups;
                 result = Groups->Find(name);
-            } 
-            return result; 
-        } 
- 
+            }
+            return result;
+        }
+
     public:
         TDeprecatedCounterGroups(ui64 timeout = 5 * 1000000L) {
             Groups = new TCollection();
             Timeout = timeout;
-        } 
- 
+        }
+
         virtual ~TDeprecatedCounterGroups() {
             TGuard<TSpinLock> guard(AddMutex);
             Groups->Free();
@@ -299,20 +299,20 @@ namespace NMonitoring {
             for (i = OldGroups.begin(); i != OldGroups.end(); ++i) {
                 delete i->Collection;
                 i->Collection = nullptr;
-            } 
+            }
             OldGroups.clear();
-        } 
- 
+        }
+
         bool Has(const T& name) const {
             TCollection* groups = Groups;
             return groups->Find(name) != nullptr;
         }
- 
+
         G* Find(const T& name) const {
             TCollection* groups = Groups;
             return groups->Find(name);
-        } 
- 
+        }
+
         // Get group with the name, if it exists.
         // If there is no group with the name, add new group.
         G& Get(const T& name) {
@@ -322,20 +322,20 @@ namespace NMonitoring {
                 Y_ASSERT(result != nullptr);
             }
             return *result;
-        } 
- 
+        }
+
         // Get copy of groups names array.
         TGroupsNamesPtr GetGroupsNames() const {
             TCollection* groups = Groups;
             TGroupsNamesPtr result = groups->GetNames();
             return result;
-        } 
+        }
     }; // TDeprecatedCounterGroups
- 
+
     template <typename T, typename G, typename TL>
     TL TDeprecatedCounterGroups<T, G, TL>::Less;
 }
- 
+
 static inline IOutputStream& operator<<(IOutputStream& o, const NMonitoring::TDeprecatedCounter& rhs) {
     return o << rhs.Val();
 }

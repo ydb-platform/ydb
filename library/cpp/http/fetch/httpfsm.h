@@ -24,12 +24,12 @@ struct THttpHeaderParser {
     }
 
     int Init(THttpHeader* h) {
-        int ret = Init((THttpBaseHeader*)(h)); 
+        int ret = Init((THttpBaseHeader*)(h));
         hd = h;
         hd->Init();
         hreflangpos = hd->hreflangs;
         hreflangspace = HREFLANG_MAX;
-        return ret; 
+        return ret;
     }
 
     int Init(THttpAuthHeader* h) {
@@ -38,11 +38,11 @@ struct THttpHeaderParser {
         return ret;
     }
     int Init(THttpRequestHeader* h) {
-        int ret = Init((THttpBaseHeader*)(h)); 
-        request_hd = h; 
-        request_hd->Init(); 
-        return ret; 
-    } 
+        int ret = Init((THttpBaseHeader*)(h));
+        request_hd = h;
+        request_hd->Init();
+        return ret;
+    }
 
     THttpHeader* hd;
     long I;
@@ -67,16 +67,16 @@ private:
     THttpBaseHeader* base_hd;
     int cs;
 
-private: 
+private:
     int Init(THttpBaseHeader* header) {
-        base_hd = header; 
+        base_hd = header;
         auth_hd = nullptr;
         request_hd = nullptr;
         hd = nullptr;
-        init(); 
-        return 0; 
-    } 
- 
+        init();
+        return 0;
+    }
+
     int execute(unsigned char* inBuf, int len);
     void init();
 };

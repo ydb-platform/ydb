@@ -815,7 +815,7 @@ RECURSE(
     pyfakefs
     pyflakes
     pyfst
-    pygit2 
+    pygit2
     PyGithub
     Pygments
     pygrib

@@ -150,7 +150,7 @@ RECURSE(
     libfdk-aac
     libfuzzer12
     libgeotiff
-    libgit2 
+    libgit2
     libgraphqlparser
     libheif
     libical

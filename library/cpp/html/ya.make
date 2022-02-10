@@ -1,4 +1,4 @@
-RECURSE( 
+RECURSE(
     dehtml
     dehtml/ut
     detect
@@ -20,7 +20,7 @@ RECURSE(
     print
     relalternate
     relalternate/ut
-    sanitize 
+    sanitize
     spec
     storage
     storage/ut
@@ -29,4 +29,4 @@ RECURSE(
     url
     zoneconf
     zoneconf/ut
-) 
+)

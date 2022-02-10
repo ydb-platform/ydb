@@ -93,44 +93,44 @@ Y_UNIT_TEST_SUITE(TRegExp) {
         UNIT_ASSERT(TMatcher(glued).Match("abc").Final());
         UNIT_ASSERT(!TMatcher(glued).Match("Abc").Final());
     }
- 
+
     Y_UNIT_TEST(Capture1) {
-        TCapturingFsm fsm("here we have user_id=([a-z0-9]+);"); 
- 
-        TSearcher searcher(fsm); 
-        searcher.Search("in db and here we have user_id=0x0d0a; same as CRLF"); 
-        UNIT_ASSERT(searcher.Captured()); 
+        TCapturingFsm fsm("here we have user_id=([a-z0-9]+);");
+
+        TSearcher searcher(fsm);
+        searcher.Search("in db and here we have user_id=0x0d0a; same as CRLF");
+        UNIT_ASSERT(searcher.Captured());
         UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("0x0d0a"));
-    } 
- 
+    }
+
     Y_UNIT_TEST(Capture2) {
-        TCapturingFsm fsm("w([abcdez]+)f"); 
- 
-        TSearcher searcher(fsm); 
-        searcher.Search("wabcdef"); 
-        UNIT_ASSERT(searcher.Captured()); 
+        TCapturingFsm fsm("w([abcdez]+)f");
+
+        TSearcher searcher(fsm);
+        searcher.Search("wabcdef");
+        UNIT_ASSERT(searcher.Captured());
         UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("abcde"));
-    } 
- 
+    }
+
     Y_UNIT_TEST(Capture3) {
-        TCapturingFsm fsm("http://vk(ontakte[.]ru|[.]com)/id(\\d+)([^0-9]|$)", 
+        TCapturingFsm fsm("http://vk(ontakte[.]ru|[.]com)/id(\\d+)([^0-9]|$)",
                           TFsm::TOptions().SetCapture(2));
- 
-        TSearcher searcher(fsm); 
-        searcher.Search("http://vkontakte.ru/id100500"); 
-        UNIT_ASSERT(searcher.Captured()); 
+
+        TSearcher searcher(fsm);
+        searcher.Search("http://vkontakte.ru/id100500");
+        UNIT_ASSERT(searcher.Captured());
         UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("100500"));
-    } 
- 
+    }
+
     Y_UNIT_TEST(Capture4) {
-        TCapturingFsm fsm("Здравствуйте, ((\\s|\\w|[()]|-)+)!", 
+        TCapturingFsm fsm("Здравствуйте, ((\\s|\\w|[()]|-)+)!",
                           TFsm::TOptions().SetCharset(CODES_UTF8));
- 
-        TSearcher searcher(fsm); 
-        searcher.Search("   Здравствуйте, Уважаемый (-ая)!   "); 
-        UNIT_ASSERT(searcher.Captured()); 
+
+        TSearcher searcher(fsm);
+        searcher.Search("   Здравствуйте, Уважаемый (-ая)!   ");
+        UNIT_ASSERT(searcher.Captured());
         UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("Уважаемый (-ая)"));
-    } 
+    }
 
     Y_UNIT_TEST(Capture5) {
         TCapturingFsm fsm("away\\.php\\?to=http:([^\"])+\"");

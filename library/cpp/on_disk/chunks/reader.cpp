@@ -1,4 +1,4 @@
-#include <util/generic/cast.h> 
+#include <util/generic/cast.h>
 #include <util/memory/blob.h>
 #include <util/system/unaligned_mem.h>
 

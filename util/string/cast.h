@@ -180,41 +180,41 @@ inline T FromString(const TUtf16String& s) {
     return ::FromString<T, wchar16>(s.data(), s.size());
 }
 
-namespace NPrivate { 
-    template <typename TChar> 
-    class TFromString { 
-        const TChar* const Data; 
-        const size_t Len; 
- 
-    public: 
-        inline TFromString(const TChar* data, size_t len) 
-            : Data(data) 
-            , Len(len) 
-        { 
-        } 
- 
-        template <typename T> 
-        inline operator T() const { 
-            return FromString<T, TChar>(Data, Len); 
-        } 
-    }; 
-} 
- 
-template <typename TChar> 
-inline ::NPrivate::TFromString<TChar> FromString(const TChar* data, size_t len) { 
-    return ::NPrivate::TFromString<TChar>(data, len); 
-} 
- 
-template <typename TChar> 
-inline ::NPrivate::TFromString<TChar> FromString(const TChar* data) { 
+namespace NPrivate {
+    template <typename TChar>
+    class TFromString {
+        const TChar* const Data;
+        const size_t Len;
+
+    public:
+        inline TFromString(const TChar* data, size_t len)
+            : Data(data)
+            , Len(len)
+        {
+        }
+
+        template <typename T>
+        inline operator T() const {
+            return FromString<T, TChar>(Data, Len);
+        }
+    };
+}
+
+template <typename TChar>
+inline ::NPrivate::TFromString<TChar> FromString(const TChar* data, size_t len) {
+    return ::NPrivate::TFromString<TChar>(data, len);
+}
+
+template <typename TChar>
+inline ::NPrivate::TFromString<TChar> FromString(const TChar* data) {
     return ::NPrivate::TFromString<TChar>(data, std::char_traits<TChar>::length(data));
-} 
- 
-template <typename T> 
-inline ::NPrivate::TFromString<typename T::TChar> FromString(const T& s) { 
+}
+
+template <typename T>
+inline ::NPrivate::TFromString<typename T::TChar> FromString(const T& s) {
     return ::NPrivate::TFromString<typename T::TChar>(s.data(), s.size());
-} 
- 
+}
+
 // Conversion exception free versions
 template <typename T, typename TChar>
 bool TryFromStringImpl(const TChar* data, size_t len, T& result);

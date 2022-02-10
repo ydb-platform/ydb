@@ -1,14 +1,14 @@
 #pragma once
 
 #include "typetraits.h"
-#include "yexception.h" 
+#include "yexception.h"
 
 #include <util/system/compat.h>
 #include <util/system/type_name.h>
 #include <util/system/unaligned_mem.h>
 #include <util/system/yassert.h>
 
-#include <cstdlib> 
+#include <cstdlib>
 
 template <class T, class F>
 static inline T VerifyDynamicCast(F f) {
@@ -87,7 +87,7 @@ constexpr bool IsNegative(const TType value) noexcept {
     return TInteger<std::is_unsigned<TType>::value>::IsNegative(value);
 }
 
-namespace NPrivate { 
+namespace NPrivate {
     template <class T>
     using TUnderlyingTypeOrSelf = typename std::conditional<
         std::is_enum<T>::value,
@@ -96,21 +96,21 @@ namespace NPrivate {
         >::type::type;           // Left ::type is for std::conditional, right ::type is for underlying_type/enable_if
 
     template <class TSmall, class TLarge>
-    struct TSafelyConvertible { 
+    struct TSafelyConvertible {
         using TSmallInt = TUnderlyingTypeOrSelf<TSmall>;
         using TLargeInt = TUnderlyingTypeOrSelf<TLarge>;
 
         static constexpr bool Result = std::is_integral<TSmallInt>::value && std::is_integral<TLargeInt>::value &&
                                        ((std::is_signed<TSmallInt>::value == std::is_signed<TLargeInt>::value && sizeof(TSmallInt) >= sizeof(TLargeInt)) ||
                                         (std::is_signed<TSmallInt>::value && sizeof(TSmallInt) > sizeof(TLargeInt)));
-    }; 
-} 
- 
+    };
+}
+
 template <class TSmallInt, class TLargeInt>
 constexpr std::enable_if_t<::NPrivate::TSafelyConvertible<TSmallInt, TLargeInt>::Result, TSmallInt> SafeIntegerCast(TLargeInt largeInt) noexcept {
     return static_cast<TSmallInt>(largeInt);
-} 
- 
+}
+
 template <class TSmall, class TLarge>
 inline std::enable_if_t<!::NPrivate::TSafelyConvertible<TSmall, TLarge>::Result, TSmall> SafeIntegerCast(TLarge largeInt) {
     using TSmallInt = ::NPrivate::TUnderlyingTypeOrSelf<TSmall>;
@@ -127,7 +127,7 @@ inline std::enable_if_t<!::NPrivate::TSafelyConvertible<TSmall, TLarge>::Result,
     TSmallInt smallInt = TSmallInt(largeInt);
 
     if (std::is_signed<TSmallInt>::value && std::is_unsigned<TLargeInt>::value) {
-        if (IsNegative(smallInt)) { 
+        if (IsNegative(smallInt)) {
             ythrow TBadCastException() << "Conversion '" << TypeName<TLarge>() << '{' << TLargeInt(largeInt) << "}' to '"
                                        << TypeName<TSmallInt>()
                                        << "', positive value converted to negative";
@@ -141,15 +141,15 @@ inline std::enable_if_t<!::NPrivate::TSafelyConvertible<TSmall, TLarge>::Result,
 
     return static_cast<TSmall>(smallInt);
 }
- 
-template <class TSmallInt, class TLargeInt> 
+
+template <class TSmallInt, class TLargeInt>
 inline TSmallInt IntegerCast(TLargeInt largeInt) noexcept {
-    try { 
-        return SafeIntegerCast<TSmallInt>(largeInt); 
-    } catch (const yexception& exc) { 
+    try {
+        return SafeIntegerCast<TSmallInt>(largeInt);
+    } catch (const yexception& exc) {
         Y_FAIL("IntegerCast: %s", exc.what());
-    } 
-} 
+    }
+}
 
 /* Convert given enum value to its underlying type. This is just a shortcut for
  * `static_cast<std::underlying_type_t<EEnum>>(enum_)`.

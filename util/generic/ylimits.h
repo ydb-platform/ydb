@@ -15,30 +15,30 @@ template <class T>
 static constexpr T Min() noexcept {
     return std::numeric_limits<T>::min();
 }
- 
-namespace NPrivate { 
-    struct TMax { 
-        template <class T> 
+
+namespace NPrivate {
+    struct TMax {
+        template <class T>
         constexpr operator T() const {
-            return Max<T>(); 
-        } 
-    }; 
- 
-    struct TMin { 
-        template <class T> 
+            return Max<T>();
+        }
+    };
+
+    struct TMin {
+        template <class T>
         constexpr operator T() const {
-            return Min<T>(); 
-        } 
-    }; 
-} 
- 
+            return Min<T>();
+        }
+    };
+}
+
 static constexpr ::NPrivate::TMax Max() noexcept {
     return {};
-} 
- 
+}
+
 static constexpr ::NPrivate::TMin Min() noexcept {
     return {};
-} 
+}
 
 namespace NPrivate {
     template <unsigned long long N>

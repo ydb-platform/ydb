@@ -9,7 +9,7 @@
 #include <util/stream/null.h>
 #include <util/stream/tee.h>
 
-#include <util/system/compat.h> 
+#include <util/system/compat.h>
 #include <util/system/yassert.h>
 
 #include <util/network/socket.h>
@@ -25,7 +25,7 @@
 #define HEADERCMP(header, str) \
     case sizeof(str) - 1:      \
         if (!stricmp((header).Name().data(), str))
- 
+
 namespace {
     inline size_t SuggestBufferSize() {
         return 8192;
@@ -192,10 +192,10 @@ public:
         if (HasContentLength_) {
             value = ContentLength_;
             return true;
-        } 
+        }
         return false;
     }
- 
+
     inline bool ContentEncoded() const noexcept {
         return ContentEncoded_;
     }
@@ -381,7 +381,7 @@ private:
     bool KeepAlive_;
 
     TAcceptCodings Codings_;
- 
+
     bool HasContentLength_;
     ui64 ContentLength_;
 
@@ -441,9 +441,9 @@ TString THttpInput::BestCompressionScheme() const {
 }
 
 bool THttpInput::GetContentLength(ui64& value) const noexcept {
-    return Impl_->GetContentLength(value); 
-} 
- 
+    return Impl_->GetContentLength(value);
+}
+
 bool THttpInput::ContentEncoded() const noexcept {
     return Impl_->ContentEncoded();
 }

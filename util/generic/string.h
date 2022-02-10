@@ -864,7 +864,7 @@ public:
      */
 
     friend TBasicString operator+(TBasicString&& s1, const TBasicString& s2) Y_WARN_UNUSED_RESULT {
-        s1 += s2; 
+        s1 += s2;
         return std::move(s1);
     }
 
@@ -880,17 +880,17 @@ public:
             return std::move(s2);
         }
 #endif
-        s1 += s2; 
+        s1 += s2;
         return std::move(s1);
     }
 
     friend TBasicString operator+(TBasicString&& s1, const TBasicStringBuf<TCharType, TTraits> s2) Y_WARN_UNUSED_RESULT {
-        s1 += s2; 
+        s1 += s2;
         return std::move(s1);
     }
 
     friend TBasicString operator+(TBasicString&& s1, const TCharType* s2) Y_WARN_UNUSED_RESULT {
-        s1 += s2; 
+        s1 += s2;
         return std::move(s1);
     }
 

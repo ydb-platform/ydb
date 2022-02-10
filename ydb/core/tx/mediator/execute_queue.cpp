@@ -38,8 +38,8 @@ namespace NTxMediator {
                 TStringBuilder ss;
                 ss << "Mediator exec queue [" << MediatorId << "], step# " << step << " for tablet [" << tablet << "]. TxIds:";
                 for (const auto &x : tx)
-                    ss << " txid# " << x.TxId;
-                ss << " marker# M2";
+                    ss << " txid# " << x.TxId; 
+                ss << " marker# M2"; 
                 return (TString)ss;
             }());
 
@@ -49,7 +49,7 @@ namespace NTxMediator {
                         TStringBuilder ss;
                         for (const auto &x : tx)
                             ss << " txid# " << x.TxId;
-                        ss << " marker# M3";
+                        ss << " marker# M3"; 
                         return (TString)ss;
                     }());
             ctx.Send(bucket.ActiveActor, new TEv(step, tablet, tx));
@@ -69,7 +69,7 @@ namespace NTxMediator {
             const ui32 totalCoordinators = step->Steps.size();
 
             LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_EXEC_QUEUE, "Actor# " << ctx.SelfID.ToString()
-                << " MediatorId# " << MediatorId << " HANDLE TEvCommitStep " << step->ToString() << " marker# M1");
+                << " MediatorId# " << MediatorId << " HANDLE TEvCommitStep " << step->ToString() << " marker# M1"); 
 
             for (ui32 i = 0; i != totalCoordinators; ++i) {
                 TCoordinatorStep &coord = *step->Steps[i];

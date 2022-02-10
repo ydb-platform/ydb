@@ -42,7 +42,7 @@ struct TEvTxProcessing {
 
         TString ToString() const {
             TStringStream str;
-            str << "{TEvPlanStep step# " << Record.GetStep();
+            str << "{TEvPlanStep step# " << Record.GetStep(); 
             str << " MediatorId# " << Record.GetMediatorID();
             str << " TabletID " << Record.GetTabletID();
             str << "}";
@@ -77,7 +77,7 @@ struct TEvTxProcessing {
         TString ToString() const {
             TStringStream str;
             str << "{TEvPlanStepAck TabletId# " << Record.GetTabletId();
-            str << " step# " << Record.GetStep();
+            str << " step# " << Record.GetStep(); 
             for (size_t i = 0; i < Record.TxIdSize(); ++i) {
                 str << " txid# " << Record.GetTxId(i);
             }
@@ -99,7 +99,7 @@ struct TEvTxProcessing {
         TString ToString() const {
             TStringStream str;
             str << "{TEvPlanStepAccepted TabletId# " << Record.GetTabletId();
-            str << " step# " << Record.GetStep();
+            str << " step# " << Record.GetStep(); 
             str << "}";
             return str.Str();
         }
@@ -122,7 +122,7 @@ struct TEvTxProcessing {
 
         TString ToString() const {
             TStringStream str;
-            str << "{TEvReadSet step# " << Record.GetStep();
+            str << "{TEvReadSet step# " << Record.GetStep(); 
             str << " txid# " << Record.GetTxId();
             str << " TabletSource# " << Record.GetTabletSource();
             str << " TabletDest# " << Record.GetTabletDest();
@@ -163,7 +163,7 @@ struct TEvTxProcessing {
 
         TString ToString() const {
             TStringStream str;
-            str << "{TEvReadSet step# " << Record.GetStep();
+            str << "{TEvReadSet step# " << Record.GetStep(); 
             str << " txid# " << Record.GetTxId();
             str << " TabletSource# " << Record.GetTabletSource();
             str << " TabletDest# " << Record.GetTabletDest();

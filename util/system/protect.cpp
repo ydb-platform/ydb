@@ -54,7 +54,7 @@ void ProtectMemory(void* addr, const size_t length, const EProtectMemory mode) {
 
 #ifdef _win_
     DWORD mpMode = PAGE_NOACCESS;
-    // windows developers are not aware of bit flags :( 
+    // windows developers are not aware of bit flags :(
 
     /*
      * It's unclear that we should NOT fail on Windows that does not support write-only

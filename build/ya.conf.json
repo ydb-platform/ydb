@@ -6829,7 +6829,7 @@
                 "sandbox_id": [
                     1204918529
                 ],
-                "match": "yp_util" 
+                "match": "yp_util"
             },
             "executable": {
                 "yp-util": [

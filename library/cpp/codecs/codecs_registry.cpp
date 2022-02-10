@@ -13,11 +13,11 @@
 
 namespace NCodecs {
     TCodecPtr ICodec::GetInstance(TStringBuf name) {
-        return Singleton<NPrivate::TCodecRegistry>()->GetCodec(name); 
+        return Singleton<NPrivate::TCodecRegistry>()->GetCodec(name);
     }
 
     TVector<TString> ICodec::GetCodecsList() {
-        return Singleton<NPrivate::TCodecRegistry>()->GetCodecsList(); 
+        return Singleton<NPrivate::TCodecRegistry>()->GetCodecsList();
     }
 
     namespace NPrivate {

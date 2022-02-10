@@ -1,17 +1,17 @@
 #include <util/charset/wide.h>
-#include <util/system/types.h>
+#include <util/system/types.h> 
 
-#ifdef SSE41_STUB
-
-namespace NDetail {
-    void UTF8ToWideImplSSE41(const unsigned char*&, const unsigned char*, wchar16*&) noexcept {
-    }
+#ifdef SSE41_STUB 
+ 
+namespace NDetail { 
+    void UTF8ToWideImplSSE41(const unsigned char*&, const unsigned char*, wchar16*&) noexcept { 
+    } 
     void UTF8ToWideImplSSE41(const unsigned char*&, const unsigned char*, wchar32*&) noexcept {
     }
-}
-
-#else
-
+} 
+ 
+#else 
+ 
     #include <util/system/compiler.h>
 
     #include <cstring>
@@ -243,5 +243,5 @@ namespace NDetail {
         // Possible improvement: go back to the vectorized processing after the error or the 4 byte sequence
     }
 }
-
-#endif
+ 
+#endif 

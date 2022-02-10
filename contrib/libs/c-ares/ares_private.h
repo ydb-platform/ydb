@@ -43,13 +43,13 @@
 #define INADDR_NONE 0xffffffff
 #endif
 
-#ifdef CARES_EXPOSE_STATICS
-/* Make some internal functions visible for testing */
-#define STATIC_TESTABLE
-#else
-#define STATIC_TESTABLE static
-#endif
-
+#ifdef CARES_EXPOSE_STATICS 
+/* Make some internal functions visible for testing */ 
+#define STATIC_TESTABLE 
+#else 
+#define STATIC_TESTABLE static 
+#endif 
+ 
 /* By using a double cast, we can get rid of the bogus warning of
  * warning: cast from 'const struct sockaddr *' to 'const struct sockaddr_in6 *' increases required alignment from 1 to 4 [-Wcast-align]
  */
@@ -66,7 +66,7 @@
 #define DATABASEPATH         "DatabasePath"
 #define WIN_PATH_HOSTS       "\\hosts"
 #define SEARCHLIST_KEY       "SearchList"
-#define PRIMARYDNSSUFFIX_KEY "PrimaryDNSSuffix"
+#define PRIMARYDNSSUFFIX_KEY "PrimaryDNSSuffix" 
 #define INTERFACES_KEY       "Interfaces"
 #define DOMAIN_KEY           "Domain"
 #define DHCPDOMAIN_KEY       "DhcpDomain"
@@ -105,7 +105,7 @@
 #  define getenv(ptr) ares_getenv(ptr)
 #endif
 
-#include "ares_strdup.h"
+#include "ares_strdup.h" 
 #include "ares_strsplit.h"
 
 #ifndef HAVE_STRCASECMP
@@ -136,8 +136,8 @@ struct ares_addr {
     struct in_addr       addr4;
     struct ares_in6_addr addr6;
   } addr;
-  int udp_port;  /* stored in network order */
-  int tcp_port;  /* stored in network order */
+  int udp_port;  /* stored in network order */ 
+  int tcp_port;  /* stored in network order */ 
 };
 #define addrV4 addr.addr4
 #define addrV6 addr.addr6
@@ -273,8 +273,8 @@ struct ares_channeldata {
   int tries;
   int ndots;
   int rotate; /* if true, all servers specified are used */
-  int udp_port; /* stored in network order */
-  int tcp_port; /* stored in network order */
+  int udp_port; /* stored in network order */ 
+  int tcp_port; /* stored in network order */ 
   int socket_send_buffer_size;
   int socket_receive_buffer_size;
   char **domains;
@@ -327,12 +327,12 @@ struct ares_channeldata {
 
   ares_sock_create_callback sock_create_cb;
   void *sock_create_cb_data;
-
-  ares_sock_config_callback sock_config_cb;
-  void *sock_config_cb_data;
-
-  const struct ares_socket_functions * sock_funcs;
-  void *sock_func_cb_data;
+ 
+  ares_sock_config_callback sock_config_cb; 
+  void *sock_config_cb_data; 
+ 
+  const struct ares_socket_functions * sock_funcs; 
+  void *sock_func_cb_data; 
 
   /* Path for resolv.conf file, configurable via ares_options */
   char *resolvconf_path;
@@ -341,15 +341,15 @@ struct ares_channeldata {
 /* Does the domain end in ".onion" or ".onion."? Case-insensitive. */
 int ares__is_onion_domain(const char *name);
 
-/* Memory management functions */
-extern void *(*ares_malloc)(size_t size);
-extern void *(*ares_realloc)(void *ptr, size_t size);
-extern void (*ares_free)(void *ptr);
-
+/* Memory management functions */ 
+extern void *(*ares_malloc)(size_t size); 
+extern void *(*ares_realloc)(void *ptr, size_t size); 
+extern void (*ares_free)(void *ptr); 
+ 
 /* return true if now is exactly check time or later */
 int ares__timedout(struct timeval *now,
                    struct timeval *check);
-
+ 
 void ares__send_query(ares_channel channel, struct query *query,
                       struct timeval *now);
 void ares__close_sockets(ares_channel channel, struct server_state *server);
@@ -408,7 +408,7 @@ int ares__connect_socket(ares_channel channel,
                          ares_socket_t sockfd,
                          const struct sockaddr *addr,
                          ares_socklen_t addrlen);
-
+ 
 #define ARES_SWAP_BYTE(a,b) \
   { unsigned char swapByte = *(a);  *(a) = *(b);  *(b) = swapByte; }
 

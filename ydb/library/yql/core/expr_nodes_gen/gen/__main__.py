@@ -89,7 +89,7 @@ for node in model["Nodes"]:
         return hasBuilderKind(node) and node["Builder"]["Kind"] == "List"
 
     hasAscList = False
-    for ascName in sorted(aux["acscendants"]):
+    for ascName in sorted(aux["acscendants"]): 
         asc = nodesMap[ascName]
         if isListBuilder(asc):
             hasAscList = True
@@ -117,7 +117,7 @@ for node in model["Nodes"]:
     if "Children" in node:
         allChildren.extend(node["Children"])
 
-    for ascName in sorted(aux["acscendants"]):
+    for ascName in sorted(aux["acscendants"]): 
         if "Children" in nodesMap[ascName]:
             allChildren.extend(nodesMap[ascName]["Children"])
 
@@ -139,7 +139,7 @@ for node in model["Nodes"]:
 
     if "Match" in node and node["Match"]["Type"] == "CallableBase":
         namesToMatch = aux["namesToMatch"] = []
-        for descName in sorted(aux["descendants"]):
+        for descName in sorted(aux["descendants"]): 
             desc = nodesMap[descName]
             if desc["Match"]["Type"] == "Callable":
                 namesToMatch.append(desc["Match"]["Name"])

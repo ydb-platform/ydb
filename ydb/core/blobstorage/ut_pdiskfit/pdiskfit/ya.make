@@ -2,10 +2,10 @@ OWNER(
     alexvru
     g:kikimr
 )
-
+ 
 IF (OS_LINUX)
-    PROGRAM(pdiskfit)
-
+    PROGRAM(pdiskfit) 
+ 
     SRCS(
         pdiskfit.cpp
     )
@@ -18,5 +18,5 @@ IF (OS_LINUX)
         ydb/core/mon
     )
 
-    END()
-ENDIF()
+    END() 
+ENDIF() 

@@ -954,7 +954,7 @@
 /* The number of bytes in type long */
 #ifndef SIZEOF_LONG
 #error undefined SIZEOF_LONG
-#endif
+#endif 
 
 /* The number of bytes in type long long */
 /* #undef SIZEOF_LONG_LONG */

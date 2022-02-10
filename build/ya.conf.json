@@ -296,18 +296,18 @@
         "news": {
             "description": "Run news team tools"
         },
-        "go": {
-            "description": "Run go tool (1.17.6)"
-        },
-        "gofmt": {
-            "description": "Run gofmt tool (1.17.6)"
-        },
-        "go_1.18beta2": {
-            "description": "Run go tool (1.18beta2)"
-        },
-        "gofmt_1.18beta2": {
-            "description": "Run gofmt tool (1.18beta2)"
-        },
+        "go": { 
+            "description": "Run go tool (1.17.6)" 
+        }, 
+        "gofmt": { 
+            "description": "Run gofmt tool (1.17.6)" 
+        }, 
+        "go_1.18beta2": { 
+            "description": "Run go tool (1.18beta2)" 
+        }, 
+        "gofmt_1.18beta2": { 
+            "description": "Run gofmt tool (1.18beta2)" 
+        }, 
         "godoc": {
             "description": "Arcadia version of godoc"
         },
@@ -320,9 +320,9 @@
         "swagger": {
             "description": "Run go-swagger"
         },
-        "dlv": {
-            "description": "Debugger for the Go programming language"
-        },
+        "dlv": { 
+            "description": "Debugger for the Go programming language" 
+        }, 
         "node-search": {
             "description": "Autocheck data inspector tool",
             "visible": false
@@ -1064,13 +1064,13 @@
                         "arch": "aarch64"
                     },
                     "default": true
-                },
-                {
-                    "host": {
-                        "os": "LINUX",
-                        "arch": "ppc64le"
-                    },
-                    "default": true
+                }, 
+                { 
+                    "host": { 
+                        "os": "LINUX", 
+                        "arch": "ppc64le" 
+                    }, 
+                    "default": true 
                 }
             ]
         },
@@ -1215,41 +1215,41 @@
                 }
             ]
         },
-        "dlv": {
-            "tools": {
-                "dlv": {
-                    "bottle": "delve",
-                    "executable": "dlv"
-                }
-            },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN",
-                        "arch": "arm64"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "WIN"
-                    },
-                    "default": true
-                }
-            ]
-        },
+        "dlv": { 
+            "tools": { 
+                "dlv": { 
+                    "bottle": "delve", 
+                    "executable": "dlv" 
+                } 
+            }, 
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN", 
+                        "arch": "arm64" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "WIN" 
+                    }, 
+                    "default": true 
+                } 
+            ] 
+        }, 
         "cue": {
             "tools": {
                 "cue": {
@@ -2731,9 +2731,9 @@
                         "os": "DARWIN"
                     },
                     "default": true
-                },
-                {
-                    "host": {
+                }, 
+                { 
+                    "host": { 
                         "os": "DARWIN",
                         "arch": "arm64"
                     },
@@ -2741,10 +2741,10 @@
                 },
                 {
                     "host": {
-                        "os": "LINUX",
-                        "arch": "ppc64le"
-                    },
-                    "default": true
+                        "os": "LINUX", 
+                        "arch": "ppc64le" 
+                    }, 
+                    "default": true 
                 }
             ],
             "env": {
@@ -2778,13 +2778,13 @@
                         "os": "DARWIN"
                     },
                     "default": true
-                },
-                {
-                    "host": {
-                        "os": "LINUX",
-                        "arch": "ppc64le"
-                    },
-                    "default": true
+                }, 
+                { 
+                    "host": { 
+                        "os": "LINUX", 
+                        "arch": "ppc64le" 
+                    }, 
+                    "default": true 
                 }
             ]
         },
@@ -2827,13 +2827,13 @@
                         "arch": "aarch64"
                     },
                     "default": true
-                },
-                {
-                    "host": {
-                        "os": "LINUX",
-                        "arch": "ppc64le"
-                    },
-                    "default": true
+                }, 
+                { 
+                    "host": { 
+                        "os": "LINUX", 
+                        "arch": "ppc64le" 
+                    }, 
+                    "default": true 
                 }
             ]
         },
@@ -4689,7 +4689,7 @@
                     "default": true
                 }
             ]
-        },
+        }, 
         "apphost": {
             "tools": {
                 "apphost": {
@@ -4778,22 +4778,22 @@
                 }
             ]
         },
-        "golang_1_17_6": {
-            "tools": {
-                "golang": {
-                    "bottle": "golang_1.17.6",
-                    "executable": "golang"
+        "golang_1_17_6": { 
+            "tools": { 
+                "golang": { 
+                    "bottle": "golang_1.17.6", 
+                    "executable": "golang" 
                 },
-                "go": {
-                    "bottle": "golang_1.17.6",
-                    "executable": "go"
+                "go": { 
+                    "bottle": "golang_1.17.6", 
+                    "executable": "go" 
                 },
-                "gofmt": {
-                    "bottle": "golang_1.17.6",
-                    "executable": "gofmt"
+                "gofmt": { 
+                    "bottle": "golang_1.17.6", 
+                    "executable": "gofmt" 
                 }
-            },
-            "platforms": [
+            }, 
+            "platforms": [ 
                 {
                     "host": {
                         "os": "LINUX"
@@ -4808,39 +4808,39 @@
                 },
                 {
                     "host": {
-                        "os": "DARWIN",
-                        "arch": "arm64"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
+                        "os": "DARWIN", 
+                        "arch": "arm64" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
                         "os": "WIN"
                     },
                     "default": true
                 }
-            ],
-            "params": {
-                "type": "golang",
-                "version": "1.17.6"
-            }
+            ], 
+            "params": { 
+                "type": "golang", 
+                "version": "1.17.6" 
+            } 
         },
-        "golang_1_18beta2": {
-            "tools": {
-                "golang_1.18beta2": {
-                    "bottle": "golang_1.18beta2",
-                    "executable": "golang_1.18beta2"
+        "golang_1_18beta2": { 
+            "tools": { 
+                "golang_1.18beta2": { 
+                    "bottle": "golang_1.18beta2", 
+                    "executable": "golang_1.18beta2" 
                 },
-                "go_1.18beta2": {
-                    "bottle": "golang_1.18beta2",
-                    "executable": "go_1.18beta2"
+                "go_1.18beta2": { 
+                    "bottle": "golang_1.18beta2", 
+                    "executable": "go_1.18beta2" 
                 },
-                "gofmt_1.18beta2": {
-                    "bottle": "golang_1.18beta2",
-                    "executable": "gofmt_1.18beta2"
+                "gofmt_1.18beta2": { 
+                    "bottle": "golang_1.18beta2", 
+                    "executable": "gofmt_1.18beta2" 
                 }
-            },
-            "platforms": [
+            }, 
+            "platforms": [ 
                 {
                     "host": {
                         "os": "LINUX"
@@ -4855,23 +4855,23 @@
                 },
                 {
                     "host": {
-                        "os": "DARWIN",
-                        "arch": "arm64"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
+                        "os": "DARWIN", 
+                        "arch": "arm64" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
                         "os": "WIN"
                     },
                     "default": true
                 }
-            ],
-            "params": {
-                "type": "golang",
-                "version": "1.18beta2"
-            }
-        },
+            ], 
+            "params": { 
+                "type": "golang", 
+                "version": "1.18beta2" 
+            } 
+        }, 
         "godoc": {
             "tools": {
                 "godoc": {
@@ -5858,19 +5858,19 @@
                 ]
             }
         },
-        "delve": {
-            "formula": {
-                "sandbox_id": [
+        "delve": { 
+            "formula": { 
+                "sandbox_id": [ 
                     1192022937
-                ],
-                "match": "delve"
-            },
-            "executable": {
-                "dlv": [
-                    "dlv"
-                ]
-            }
-        },
+                ], 
+                "match": "delve" 
+            }, 
+            "executable": { 
+                "dlv": [ 
+                    "dlv" 
+                ] 
+            } 
+        }, 
         "cue": {
             "formula": {
                 "sandbox_id": [
@@ -7325,7 +7325,7 @@
                     "crypta"
                 ]
             }
-        },
+        }, 
         "apphost": {
             "formula": {
                 "sandbox_id": 1210601039,
@@ -7376,47 +7376,47 @@
                 ]
             }
         },
-        "golang_1.17.6": {
-            "formula": {
+        "golang_1.17.6": { 
+            "formula": { 
                 "sandbox_id": [
-                    1178356987,
-                    1178357306,
-                    1178357717,
-                    1178358055
+                    1178356987, 
+                    1178357306, 
+                    1178357717, 
+                    1178358055 
                 ],
-                "match": "GOLANG"
-            },
-            "executable": {
-                "go": [
+                "match": "GOLANG" 
+            }, 
+            "executable": { 
+                "go": [ 
                     "bin",
                     "go"
                 ],
-                "gofmt": [
+                "gofmt": [ 
                     "bin",
                     "gofmt"
                 ]
-            }
-        },
-        "golang_1.18beta2": {
-            "formula": {
+            } 
+        }, 
+        "golang_1.18beta2": { 
+            "formula": { 
                 "sandbox_id": [
-                    1206631393,
-                    1206631765,
-                    1206632232,
-                    1206632597
+                    1206631393, 
+                    1206631765, 
+                    1206632232, 
+                    1206632597 
                 ],
-                "match": "GOLANG"
-            },
-            "executable": {
-                "go_1.18beta2": [
+                "match": "GOLANG" 
+            }, 
+            "executable": { 
+                "go_1.18beta2": [ 
                     "bin",
                     "go"
                 ],
-                "gofmt_1.18beta2": [
+                "gofmt_1.18beta2": [ 
                     "bin",
                     "gofmt"
                 ]
-            }
+            } 
         },
         "qemu": {
             "formula": {

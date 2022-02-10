@@ -20,9 +20,9 @@ PEERDIR(
     contrib/libs/grpc/grpc++
 )
 
-# Fix selective checkout DEVTOOLSSUPPORT-6767
+# Fix selective checkout DEVTOOLSSUPPORT-6767 
 SRCDIR(contrib/libs/grpc/include)
-
+ 
 END()
 
 RECURSE(

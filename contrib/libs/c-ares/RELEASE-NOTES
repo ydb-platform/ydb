@@ -10,7 +10,7 @@ Changes:
    version.bind, version.server, authoris.bind, hostname.bind, and id.server.
    [3]
 
-Bug fixes:
+Bug fixes: 
  o Fix Windows Unicode incompatibilities with ares_getaddrinfo() [1]
  o Silence false cast-align compiler warnings due to valid casts of
    struct sockaddr to struct sockaddr_in and struct sockaddr_in6.
@@ -24,7 +24,7 @@ Thanks go to these friendly people for their efforts and contributions:
  Jann Horn, Shelly Vohr, Teemu R (@rytilahti)
  (6 contributors)
 
-References to bug reports and discussions on issues:
+References to bug reports and discussions on issues: 
  [1] = https://github.com/c-ares/c-ares/pull/328
  [2] = https://github.com/c-ares/c-ares/pull/323
  [3] = https://github.com/c-ares/c-ares/pull/321

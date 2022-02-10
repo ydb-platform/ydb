@@ -38,8 +38,8 @@
    require it! */
 #if defined(_AIX) || defined(__NOVELL_LIBC__) || defined(__NetBSD__) || \
     defined(__minix) || defined(__SYMBIAN32__) || defined(__INTEGRITY) || \
-    defined(ANDROID) || defined(__ANDROID__) || defined(__OpenBSD__) || \
-    defined(__QNXNTO__)
+    defined(ANDROID) || defined(__ANDROID__) || defined(__OpenBSD__) || \ 
+    defined(__QNXNTO__) 
 #include <sys/select.h>
 #endif
 #if (defined(NETWARE) && !defined(__NOVELL_LIBC__))
@@ -68,10 +68,10 @@
 #  include <netinet/in.h>
 #endif
 
-#if defined(ANDROID) || defined(__ANDROID__)
-#include <jni.h>
-#endif
-
+#if defined(ANDROID) || defined(__ANDROID__) 
+#include <jni.h> 
+#endif 
+ 
 #ifdef  __cplusplus
 extern "C" {
 #endif
@@ -166,7 +166,7 @@ extern "C" {
 #define ARES_OPT_TIMEOUTMS      (1 << 13)
 #define ARES_OPT_ROTATE         (1 << 14)
 #define ARES_OPT_EDNSPSZ        (1 << 15)
-#define ARES_OPT_NOROTATE       (1 << 16)
+#define ARES_OPT_NOROTATE       (1 << 16) 
 #define ARES_OPT_RESOLVCONF     (1 << 17)
 #define ARES_OPT_MAXTIMEOUTMS   (1 << 18)
 #define ARES_OPT_JITTER         (1 << 19)
@@ -314,10 +314,10 @@ typedef int  (*ares_sock_create_callback)(ares_socket_t socket_fd,
                                           int type,
                                           void *data);
 
-typedef int  (*ares_sock_config_callback)(ares_socket_t socket_fd,
-                                          int type,
-                                          void *data);
-
+typedef int  (*ares_sock_config_callback)(ares_socket_t socket_fd, 
+                                          int type, 
+                                          void *data); 
+ 
 typedef void (*ares_addrinfo_callback)(void *arg,
                                    int status,
                                    int timeouts,
@@ -325,19 +325,19 @@ typedef void (*ares_addrinfo_callback)(void *arg,
 
 CARES_EXTERN int ares_library_init(int flags);
 
-CARES_EXTERN int ares_library_init_mem(int flags,
-                                       void *(*amalloc)(size_t size),
-                                       void (*afree)(void *ptr),
-                                       void *(*arealloc)(void *ptr, size_t size));
-
-#if defined(ANDROID) || defined(__ANDROID__)
-CARES_EXTERN void ares_library_init_jvm(JavaVM *jvm);
-CARES_EXTERN int ares_library_init_android(jobject connectivity_manager);
-CARES_EXTERN int ares_library_android_initialized(void);
-#endif
-
-CARES_EXTERN int ares_library_initialized(void);
-
+CARES_EXTERN int ares_library_init_mem(int flags, 
+                                       void *(*amalloc)(size_t size), 
+                                       void (*afree)(void *ptr), 
+                                       void *(*arealloc)(void *ptr, size_t size)); 
+ 
+#if defined(ANDROID) || defined(__ANDROID__) 
+CARES_EXTERN void ares_library_init_jvm(JavaVM *jvm); 
+CARES_EXTERN int ares_library_init_android(jobject connectivity_manager); 
+CARES_EXTERN int ares_library_android_initialized(void); 
+#endif 
+ 
+CARES_EXTERN int ares_library_initialized(void); 
+ 
 CARES_EXTERN void ares_library_cleanup(void);
 
 CARES_EXTERN const char *ares_version(int *version);
@@ -379,13 +379,13 @@ CARES_EXTERN void ares_set_socket_callback(ares_channel channel,
                                            ares_sock_create_callback callback,
                                            void *user_data);
 
-CARES_EXTERN void ares_set_socket_configure_callback(ares_channel channel,
-                                                     ares_sock_config_callback callback,
-                                                     void *user_data);
-
-CARES_EXTERN int ares_set_sortlist(ares_channel channel,
-                                   const char *sortstr);
-
+CARES_EXTERN void ares_set_socket_configure_callback(ares_channel channel, 
+                                                     ares_sock_config_callback callback, 
+                                                     void *user_data); 
+ 
+CARES_EXTERN int ares_set_sortlist(ares_channel channel, 
+                                   const char *sortstr); 
+ 
 CARES_EXTERN void ares_getaddrinfo(ares_channel channel,
                                    const char* node,
                                    const char* service,
@@ -395,27 +395,27 @@ CARES_EXTERN void ares_getaddrinfo(ares_channel channel,
 
 CARES_EXTERN void ares_freeaddrinfo(struct ares_addrinfo* ai);
 
-/*
- * Virtual function set to have user-managed socket IO.
- * Note that all functions need to be defined, and when
- * set, the library will not do any bind nor set any
- * socket options, assuming the client handles these
- * through either socket creation or the
- * ares_sock_config_callback call.
- */
-struct iovec;
-struct ares_socket_functions {
-   ares_socket_t(*asocket)(int, int, int, void *);
-   int(*aclose)(ares_socket_t, void *);
-   int(*aconnect)(ares_socket_t, const struct sockaddr *, ares_socklen_t, void *);
-   ares_ssize_t(*arecvfrom)(ares_socket_t, void *, size_t, int, struct sockaddr *, ares_socklen_t *, void *);
-   ares_ssize_t(*asendv)(ares_socket_t, const struct iovec *, int, void *);
-};
-
-CARES_EXTERN void ares_set_socket_functions(ares_channel channel,
-					    const struct ares_socket_functions * funcs,
-					    void *user_data);
-
+/* 
+ * Virtual function set to have user-managed socket IO. 
+ * Note that all functions need to be defined, and when 
+ * set, the library will not do any bind nor set any 
+ * socket options, assuming the client handles these 
+ * through either socket creation or the 
+ * ares_sock_config_callback call. 
+ */ 
+struct iovec; 
+struct ares_socket_functions { 
+   ares_socket_t(*asocket)(int, int, int, void *); 
+   int(*aclose)(ares_socket_t, void *); 
+   int(*aconnect)(ares_socket_t, const struct sockaddr *, ares_socklen_t, void *); 
+   ares_ssize_t(*arecvfrom)(ares_socket_t, void *, size_t, int, struct sockaddr *, ares_socklen_t *, void *); 
+   ares_ssize_t(*asendv)(ares_socket_t, const struct iovec *, int, void *); 
+}; 
+ 
+CARES_EXTERN void ares_set_socket_functions(ares_channel channel, 
+					    const struct ares_socket_functions * funcs, 
+					    void *user_data); 
+ 
 CARES_EXTERN void ares_send(ares_channel channel,
                             const unsigned char *qbuf,
                             int qlen,
@@ -539,35 +539,35 @@ struct ares_srv_reply {
   unsigned short          priority;
   unsigned short          weight;
   unsigned short          port;
-  int                     ttl;
+  int                     ttl; 
 };
 
 struct ares_mx_reply {
   struct ares_mx_reply   *next;
   char                   *host;
   unsigned short          priority;
-  int                     ttl;
+  int                     ttl; 
 };
 
 struct ares_txt_reply {
   struct ares_txt_reply  *next;
   unsigned char          *txt;
   size_t                  length;  /* length excludes null termination */
-  int                     ttl;
+  int                     ttl; 
 };
 
-/* NOTE: This structure is a superset of ares_txt_reply
- */
-struct ares_txt_ext {
-  struct ares_txt_ext      *next;
-  unsigned char            *txt;
-  size_t                   length;
-  /* 1 - if start of new record
-   * 0 - if a chunk in the same record */
-  unsigned char            record_start;
-  int                      ttl;
-};
-
+/* NOTE: This structure is a superset of ares_txt_reply 
+ */ 
+struct ares_txt_ext { 
+  struct ares_txt_ext      *next; 
+  unsigned char            *txt; 
+  size_t                   length; 
+  /* 1 - if start of new record 
+   * 0 - if a chunk in the same record */ 
+  unsigned char            record_start; 
+  int                      ttl; 
+}; 
+ 
 struct ares_naptr_reply {
   struct ares_naptr_reply *next;
   unsigned char           *flags;
@@ -576,7 +576,7 @@ struct ares_naptr_reply {
   char                    *replacement;
   unsigned short           order;
   unsigned short           preference;
-  int                      ttl;
+  int                      ttl; 
 };
 
 struct ares_soa_reply {
@@ -587,7 +587,7 @@ struct ares_soa_reply {
   unsigned int retry;
   unsigned int expire;
   unsigned int minttl;
-  int          ttl;
+  int          ttl; 
 };
 
 /*
@@ -653,8 +653,8 @@ CARES_EXTERN int ares_parse_ptr_reply(const unsigned char *abuf,
                                       const void *addr,
                                       int addrlen,
                                       int family,
-                                      struct hostent **host,
-                                      int *hostttl);
+                                      struct hostent **host, 
+                                      int *hostttl); 
 
 CARES_EXTERN int ares_parse_ns_reply(const unsigned char *abuf,
                                      int alen,
@@ -672,10 +672,10 @@ CARES_EXTERN int ares_parse_txt_reply(const unsigned char* abuf,
                                       int alen,
                                       struct ares_txt_reply** txt_out);
 
-CARES_EXTERN int ares_parse_txt_reply_ext(const unsigned char* abuf,
-                                          int alen,
-                                          struct ares_txt_ext** txt_out);
-
+CARES_EXTERN int ares_parse_txt_reply_ext(const unsigned char* abuf, 
+                                          int alen, 
+                                          struct ares_txt_ext** txt_out); 
+ 
 CARES_EXTERN int ares_parse_naptr_reply(const unsigned char* abuf,
                                         int alen,
                                         struct ares_naptr_reply** naptr_out);
@@ -701,32 +701,32 @@ struct ares_addr_node {
   } addr;
 };
 
-struct ares_addr_port_node {
-  struct ares_addr_port_node *next;
-  int family;
-  union {
-    struct in_addr       addr4;
-    struct ares_in6_addr addr6;
-  } addr;
-  int udp_port;
-  int tcp_port;
-};
-
+struct ares_addr_port_node { 
+  struct ares_addr_port_node *next; 
+  int family; 
+  union { 
+    struct in_addr       addr4; 
+    struct ares_in6_addr addr6; 
+  } addr; 
+  int udp_port; 
+  int tcp_port; 
+}; 
+ 
 CARES_EXTERN int ares_set_servers(ares_channel channel,
                                   struct ares_addr_node *servers);
-CARES_EXTERN int ares_set_servers_ports(ares_channel channel,
-                                        struct ares_addr_port_node *servers);
+CARES_EXTERN int ares_set_servers_ports(ares_channel channel, 
+                                        struct ares_addr_port_node *servers); 
 
 /* Incomming string format: host[:port][,host[:port]]... */
 CARES_EXTERN int ares_set_servers_csv(ares_channel channel,
                                       const char* servers);
-CARES_EXTERN int ares_set_servers_ports_csv(ares_channel channel,
-                                            const char* servers);
+CARES_EXTERN int ares_set_servers_ports_csv(ares_channel channel, 
+                                            const char* servers); 
 
 CARES_EXTERN int ares_get_servers(ares_channel channel,
                                   struct ares_addr_node **servers);
-CARES_EXTERN int ares_get_servers_ports(ares_channel channel,
-                                        struct ares_addr_port_node **servers);
+CARES_EXTERN int ares_get_servers_ports(ares_channel channel, 
+                                        struct ares_addr_port_node **servers); 
 
 CARES_EXTERN const char *ares_inet_ntop(int af, const void *src, char *dst,
                                         ares_socklen_t size);

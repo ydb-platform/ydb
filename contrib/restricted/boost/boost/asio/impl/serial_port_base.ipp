@@ -114,7 +114,7 @@ BOOST_ASIO_SYNC_OP_VOID serial_port_base::baud_rate::store(
     ec = boost::asio::error::invalid_argument;
     BOOST_ASIO_SYNC_OP_VOID_RETURN(ec);
   }
-# if (defined(_BSD_SOURCE) || defined(_DEFAULT_SOURCE)) && (!defined(__ANDROID__) || __ANDROID__API__ >= 21)
+# if (defined(_BSD_SOURCE) || defined(_DEFAULT_SOURCE)) && (!defined(__ANDROID__) || __ANDROID__API__ >= 21) 
   ::cfsetspeed(&storage, baud);
 # else
   ::cfsetispeed(&storage, baud);

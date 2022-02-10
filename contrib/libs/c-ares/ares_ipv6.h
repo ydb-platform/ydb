@@ -54,16 +54,16 @@ struct addrinfo
 #endif
 
 #ifndef NS_IN6ADDRSZ
-#ifndef HAVE_STRUCT_IN6_ADDR
+#ifndef HAVE_STRUCT_IN6_ADDR 
 /* We cannot have it set to zero, so we pick a fixed value here */
 #define NS_IN6ADDRSZ 16
 #else
-#define NS_IN6ADDRSZ sizeof(struct in6_addr)
+#define NS_IN6ADDRSZ sizeof(struct in6_addr) 
 #endif
 #endif
 
 #ifndef NS_INADDRSZ
-#define NS_INADDRSZ sizeof(struct in_addr)
+#define NS_INADDRSZ sizeof(struct in_addr) 
 #endif
 
 #ifndef NS_INT16SZ
@@ -78,7 +78,7 @@ struct addrinfo
 #endif
 #endif
 
-/* Defined in inet_net_pton.c for no particular reason. */
+/* Defined in inet_net_pton.c for no particular reason. */ 
 extern const struct ares_in6_addr ares_in6addr_any; /* :: */
 
 

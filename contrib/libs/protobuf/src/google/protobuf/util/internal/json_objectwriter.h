@@ -91,7 +91,7 @@ namespace converter {
 class PROTOBUF_EXPORT JsonObjectWriter : public StructuredObjectWriter {
  public:
   JsonObjectWriter(StringPiece indent_string, io::CodedOutputStream* out)
-      : element_(new Element(/*parent=*/nullptr, /*is_json_object=*/false)),
+      : element_(new Element(/*parent=*/nullptr, /*is_json_object=*/false)), 
         stream_(out),
         sink_(out),
         indent_string_(indent_string),
@@ -140,10 +140,10 @@ class PROTOBUF_EXPORT JsonObjectWriter : public StructuredObjectWriter {
  protected:
   class PROTOBUF_EXPORT Element : public BaseElement {
    public:
-    Element(Element* parent, bool is_json_object)
-        : BaseElement(parent),
-          is_first_(true),
-          is_json_object_(is_json_object) {}
+    Element(Element* parent, bool is_json_object) 
+        : BaseElement(parent), 
+          is_first_(true), 
+          is_json_object_(is_json_object) {} 
 
     // Called before each field of the Element is to be processed.
     // Returns true if this is the first call (processing the first field).
@@ -156,12 +156,12 @@ class PROTOBUF_EXPORT JsonObjectWriter : public StructuredObjectWriter {
     }
 
     // Whether we are currently rendering inside a JSON object (i.e., between
-    // StartObject() and EndObject()).
-    bool is_json_object() const { return is_json_object_; }
-
+    // StartObject() and EndObject()). 
+    bool is_json_object() const { return is_json_object_; } 
+ 
    private:
     bool is_first_;
-    bool is_json_object_;
+    bool is_json_object_; 
 
     GOOGLE_DISALLOW_IMPLICIT_CONSTRUCTORS(Element);
   };
@@ -195,16 +195,16 @@ class PROTOBUF_EXPORT JsonObjectWriter : public StructuredObjectWriter {
     return this;
   }
 
-  // Pushes a new JSON array element to the stack.
-  void PushArray() {
-    element_.reset(new Element(element_.release(), /*is_json_object=*/false));
-  }
+  // Pushes a new JSON array element to the stack. 
+  void PushArray() { 
+    element_.reset(new Element(element_.release(), /*is_json_object=*/false)); 
+  } 
 
-  // Pushes a new JSON object element to the stack.
-  void PushObject() {
-    element_.reset(new Element(element_.release(), /*is_json_object=*/true));
-  }
-
+  // Pushes a new JSON object element to the stack. 
+  void PushObject() { 
+    element_.reset(new Element(element_.release(), /*is_json_object=*/true)); 
+  } 
+ 
   // Pops an element off of the stack and deletes the popped element.
   void Pop() {
     bool needs_newline = !element_->is_first();

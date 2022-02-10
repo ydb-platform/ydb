@@ -56,7 +56,7 @@ JsonObjectWriter::~JsonObjectWriter() {
 JsonObjectWriter* JsonObjectWriter::StartObject(StringPiece name) {
   WritePrefix(name);
   WriteChar('{');
-  PushObject();
+  PushObject(); 
   return this;
 }
 
@@ -70,7 +70,7 @@ JsonObjectWriter* JsonObjectWriter::EndObject() {
 JsonObjectWriter* JsonObjectWriter::StartList(StringPiece name) {
   WritePrefix(name);
   WriteChar('[');
-  PushArray();
+  PushArray(); 
   return this;
 }
 
@@ -174,7 +174,7 @@ void JsonObjectWriter::WritePrefix(StringPiece name) {
   bool not_first = !element()->is_first();
   if (not_first) WriteChar(',');
   if (not_first || !element()->is_root()) NewLine();
-  if (!name.empty() || element()->is_json_object()) {
+  if (!name.empty() || element()->is_json_object()) { 
     WriteChar('"');
     if (!name.empty()) {
       JsonEscaping::Escape(name, &sink_);

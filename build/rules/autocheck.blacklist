@@ -1,4 +1,4 @@
-# Atocheck blacklist
+# Atocheck blacklist 
 # The list of directories excluded from autocheck (with all subdirs)
 browser/frontend
 data-ui/abc
@@ -10,9 +10,9 @@ direct/frontend/services
 direct/frontend/packages
 drive/pyback
 fintech/frontend
-frontend
+frontend 
 games/frontend
-junk
+junk 
 kinopoisk/frontend
 kinopoisk/analytics
 maps/front

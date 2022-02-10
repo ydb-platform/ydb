@@ -15,7 +15,7 @@
  *
  * Ref: http://countries.nerd.dk/more.html
  *
- * Written by G. Vanem <gvanem@yahoo.no> 2006, 2007
+ * Written by G. Vanem <gvanem@yahoo.no> 2006, 2007 
  *
  * NB! This program may not be big-endian aware.
  *
@@ -76,8 +76,8 @@
 
 static const char *usage      = "acountry [-?hdv] {host|addr} ...\n";
 static const char  nerd_fmt[] = "%u.%u.%u.%u.zz.countries.nerd.dk";
-static const char *nerd_ver1  = nerd_fmt + 14;  /* .countries.nerd.dk */
-static const char *nerd_ver2  = nerd_fmt + 11;  /* .zz.countries.nerd.dk */
+static const char *nerd_ver1  = nerd_fmt + 14;  /* .countries.nerd.dk */ 
+static const char *nerd_ver2  = nerd_fmt + 11;  /* .zz.countries.nerd.dk */ 
 static int         verbose    = 0;
 
 #define TRACE(fmt) do {               \
@@ -205,9 +205,9 @@ static void wait_ares(ares_channel channel)
       if (nfds == 0)
         break;
       tvp = ares_timeout(channel, NULL, &tv);
-      nfds = select(nfds, &read_fds, &write_fds, NULL, tvp);
-      if (nfds < 0)
-        continue;
+      nfds = select(nfds, &read_fds, &write_fds, NULL, tvp); 
+      if (nfds < 0) 
+        continue; 
       ares_process(channel, &read_fds, &write_fds);
     }
 }
@@ -278,7 +278,7 @@ static const struct search_list *list_lookup(int number, const struct search_lis
  */
 static const struct search_list country_list[] = {
        {   4, "af", "Afghanistan"                          },
-       { 248, "ax", "Åland Island"                         },
+       { 248, "ax", "Åland Island"                         }, 
        {   8, "al", "Albania"                              },
        {  12, "dz", "Algeria"                              },
        {  16, "as", "American Samoa"                       },
@@ -566,10 +566,10 @@ static void find_country_from_cname(const char *cname, struct in_addr addr)
   if (ver_1)
     {
       const char *dot = strchr(cname, '.');
-      if (dot != cname+4)
+      if (dot != cname+4) 
         {
           printf("Unexpected CNAME %s (ver_1)\n", cname);
-          free(ccopy);
+          free(ccopy); 
           return;
         }
     }
@@ -580,14 +580,14 @@ static void find_country_from_cname(const char *cname, struct in_addr addr)
       if (z0 != 'z' && z1 != 'z')
         {
           printf("Unexpected CNAME %s (ver_2)\n", cname);
-          free(ccopy);
+          free(ccopy); 
           return;
         }
     }
   else
     {
       printf("Unexpected CNAME %s (ver?)\n", cname);
-      free(ccopy);
+      free(ccopy); 
       return;
     }
 

@@ -23,14 +23,14 @@ RECURSE(
     conf_fatal_error
     config
     docs/empty
-    external_resources
+    external_resources 
     platform/java
     platform/local_so
     platform/perl
     platform/python
     platform/python/ldflags
     plugins
-    prebuilt
+    prebuilt 
     scripts
     tests
     tests_slow

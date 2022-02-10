@@ -31,16 +31,16 @@ PY_SRCS(
     sitecustomize.pyx
 )
 
-IF (CYTHON_COVERAGE)
-    # Let covarage support add all needed files to resources
-ELSE()
-    RESOURCE_FILES(
-        PREFIX ${MODDIR}/
-        __res.pyx
-        importer.pxi
-        sitecustomize.pyx
-    )
-ENDIF()
+IF (CYTHON_COVERAGE) 
+    # Let covarage support add all needed files to resources 
+ELSE() 
+    RESOURCE_FILES( 
+        PREFIX ${MODDIR}/ 
+        __res.pyx 
+        importer.pxi 
+        sitecustomize.pyx 
+    ) 
+ENDIF() 
 
 END()
 

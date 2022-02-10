@@ -11,7 +11,7 @@ OWNER(
 )
 
 INCLUDE(${ARCADIA_ROOT}/contrib/restricted/boost/boost_common.inc)
-
+ 
 SRCDIR(${BOOST_ROOT}/libs/test/src)
 
 SRCS(

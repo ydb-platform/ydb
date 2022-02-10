@@ -50,7 +50,7 @@ ares_parse_soa_reply(const unsigned char *abuf, int alen,
   struct ares_soa_reply *soa = NULL;
   int qdcount, ancount, qclass;
   int status, i, rr_type, rr_class, rr_len;
-  int ttl;
+  int ttl; 
 
   if (alen < HFIXEDSZ)
     return ARES_EBADRESP;
@@ -96,11 +96,11 @@ ares_parse_soa_reply(const unsigned char *abuf, int alen,
 
     aptr += len;
     if ( aptr + RRFIXEDSZ > abuf + alen )
-    {
+    { 
       ares_free(rr_name);
       status = ARES_EBADRESP;
-      goto failed_stat;
-    }
+      goto failed_stat; 
+    } 
     rr_type = DNS_RR_TYPE( aptr );
     rr_class = DNS_RR_CLASS( aptr );
     rr_len = DNS_RR_LEN( aptr );
@@ -180,6 +180,6 @@ failed_stat:
   if (soa)
     ares_free_data(soa);
   if (qname)
-    ares_free(qname);
+    ares_free(qname); 
   return status;
 }

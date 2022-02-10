@@ -5,7 +5,7 @@ OWNER(torkve g:python-contrib)
 VERSION(2.10)
 
 LICENSE(Apache-2.0)
-
+ 
 PEERDIR(
     contrib/python/protobuf
 )
@@ -28,6 +28,6 @@ RESOURCE_FILES(
 
 END()
 
-RECURSE(
-    bin
+RECURSE( 
+    bin 
 )

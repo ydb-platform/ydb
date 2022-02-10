@@ -1,7 +1,7 @@
-OWNER(g:ymake)
-
-INCLUDE(ya.make.prebuilt)
-
-IF (NOT PREBUILT)
-    MESSAGE(FATAL_ERROR Unsupported host platform for prebuilt ragel6 tool)
-ENDIF()
+OWNER(g:ymake) 
+ 
+INCLUDE(ya.make.prebuilt) 
+ 
+IF (NOT PREBUILT) 
+    MESSAGE(FATAL_ERROR Unsupported host platform for prebuilt ragel6 tool) 
+ENDIF() 

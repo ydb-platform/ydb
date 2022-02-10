@@ -8,11 +8,11 @@ RECURSE(
     #lemmer/byk/ut
 )
 
-IF (NOT SANITIZER_TYPE)
-    RECURSE(
-        go
+IF (NOT SANITIZER_TYPE) 
+    RECURSE( 
+        go 
         java
-    )
-ENDIF()
-
+    ) 
+ENDIF() 
+ 
 NEED_CHECK()

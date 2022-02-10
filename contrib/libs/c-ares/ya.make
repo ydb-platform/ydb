@@ -42,12 +42,12 @@ IF (NOT DLL_FOR)
     )
 ENDIF()
 
-IF (ARCH_ARM7)
+IF (ARCH_ARM7) 
     CFLAGS(
         GLOBAL -D__SIZEOF_LONG__=4
     )
-ENDIF()
-
+ENDIF() 
+ 
 SRCS(
     ares__close_sockets.c
     ares__get_hostent.c
@@ -56,7 +56,7 @@ SRCS(
     ares__readaddrinfo.c
     ares__sortaddrinfo.c
     ares__timeval.c
-    ares_android.c
+    ares_android.c 
     ares_cancel.c
     ares_create_query.c
     ares_data.c

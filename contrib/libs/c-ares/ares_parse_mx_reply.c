@@ -46,7 +46,7 @@ ares_parse_mx_reply (const unsigned char *abuf, int alen,
 {
   unsigned int qdcount, ancount, i;
   const unsigned char *aptr, *vptr;
-  int status, rr_type, rr_class, rr_len, rr_ttl;
+  int status, rr_type, rr_class, rr_len, rr_ttl; 
   long len;
   char *hostname = NULL, *rr_name = NULL;
   struct ares_mx_reply *mx_head = NULL;
@@ -76,7 +76,7 @@ ares_parse_mx_reply (const unsigned char *abuf, int alen,
 
   if (aptr + len + QFIXEDSZ > abuf + alen)
     {
-      ares_free (hostname);
+      ares_free (hostname); 
       return ARES_EBADRESP;
     }
   aptr += len + QFIXEDSZ;
@@ -99,7 +99,7 @@ ares_parse_mx_reply (const unsigned char *abuf, int alen,
       rr_type = DNS_RR_TYPE (aptr);
       rr_class = DNS_RR_CLASS (aptr);
       rr_len = DNS_RR_LEN (aptr);
-      rr_ttl = DNS_RR_TTL (aptr);
+      rr_ttl = DNS_RR_TTL (aptr); 
       aptr += RRFIXEDSZ;
       if (aptr + rr_len > abuf + alen)
         {
@@ -136,7 +136,7 @@ ares_parse_mx_reply (const unsigned char *abuf, int alen,
 
           vptr = aptr;
           mx_curr->priority = DNS__16BIT(vptr);
-          mx_curr->ttl = rr_ttl;
+          mx_curr->ttl = rr_ttl; 
           vptr += sizeof(unsigned short);
 
           status = ares_expand_name (vptr, abuf, alen, &mx_curr->host, &len);
@@ -145,7 +145,7 @@ ares_parse_mx_reply (const unsigned char *abuf, int alen,
         }
 
       /* Don't lose memory in the next iteration */
-      ares_free (rr_name);
+      ares_free (rr_name); 
       rr_name = NULL;
 
       /* Move on to the next record */
@@ -153,9 +153,9 @@ ares_parse_mx_reply (const unsigned char *abuf, int alen,
     }
 
   if (hostname)
-    ares_free (hostname);
+    ares_free (hostname); 
   if (rr_name)
-    ares_free (rr_name);
+    ares_free (rr_name); 
 
   /* clean up on error */
   if (status != ARES_SUCCESS)

@@ -88,7 +88,7 @@ JsonString2Field(const NJson::TJsonValue& json,
     Y_ASSERT(!!reflection);
 
     if (!json.IsString() && !config.CastRobust) {
-        ythrow yexception() << "Invalid type of JSON field '" << field.name() << "': " 
+        ythrow yexception() << "Invalid type of JSON field '" << field.name() << "': "
                             << "IsString() failed while "
                             << "CPPTYPE_STRING is expected.";
     }

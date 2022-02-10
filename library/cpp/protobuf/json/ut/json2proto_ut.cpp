@@ -985,7 +985,7 @@ Y_UNIT_TEST(TestMapAsObjectConfigNotSet) {
     TJson2ProtoConfig config;
     UNIT_ASSERT_EXCEPTION_CONTAINS(
         Json2Proto<TMapType>(modelStr, config), yexception,
-        "Map as object representation is not allowed"); 
+        "Map as object representation is not allowed");
 } // TestMapAsObjectNotSet
 
 Y_UNIT_TEST(TestMergeFlatOptional) {

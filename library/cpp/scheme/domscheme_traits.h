@@ -52,7 +52,7 @@ struct TSchemeTraits {
     }
 
     static inline void ArrayClear(TValueRef v) {
-        v->SetArray(); 
+        v->SetArray();
         v->ClearArray();
     }
 
@@ -84,7 +84,7 @@ struct TSchemeTraits {
     }
 
     static inline void DictClear(TValueRef v) {
-        v->SetDict(); 
+        v->SetDict();
         v->ClearDict();
     }
 

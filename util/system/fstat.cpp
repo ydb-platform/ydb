@@ -51,7 +51,7 @@ static void MakeStat(TFileStat& st, const TSystemFStat& fs) {
     st.Uid = fs.st_uid;
     st.Gid = fs.st_gid;
     st.Size = fs.st_size;
-    st.AllocationSize = fs.st_blocks * 512; 
+    st.AllocationSize = fs.st_blocks * 512;
     st.ATime = fs.st_atime;
     st.MTime = fs.st_mtime;
     st.CTime = fs.st_ctime;
@@ -69,7 +69,7 @@ static void MakeStat(TFileStat& st, const TSystemFStat& fs) {
     st.Uid = 0;
     st.Gid = 0;
     st.Size = ((ui64)fs.nFileSizeHigh << 32) | fs.nFileSizeLow;
-    st.AllocationSize = st.Size; // FIXME 
+    st.AllocationSize = st.Size; // FIXME
     st.INode = ((ui64)fs.nFileIndexHigh << 32) | fs.nFileIndexLow;
 #endif
 }

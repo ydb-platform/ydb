@@ -456,9 +456,9 @@
         },
         "buf": {
             "description": "Protobuf lint and breaking change detector"
-        },
-        "iceflame": {
-            "description": "Performance data collection and analysis"
+        }, 
+        "iceflame": { 
+            "description": "Performance data collection and analysis" 
         },
         "cs": {
             "description": "Fast CodeSearch CLI tool"
@@ -5555,28 +5555,28 @@
                     "default": true
                 }
             ]
-        },
-        "iceflame": {
-            "tools": {
-                "iceflame": {
-                    "bottle": "iceflame",
-                    "executable": "iceflame"
-                }
-            },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
-            ]
+        }, 
+        "iceflame": { 
+            "tools": { 
+                "iceflame": { 
+                    "bottle": "iceflame", 
+                    "executable": "iceflame" 
+                } 
+            }, 
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
+            ] 
         },
         "cs": {
             "tools": {
@@ -7873,17 +7873,17 @@
                     "buf"
                 ]
             }
-        },
-        "iceflame": {
-            "formula": {
+        }, 
+        "iceflame": { 
+            "formula": { 
                 "sandbox_id": 1179554942,
-                "match": "iceflame"
-            },
-            "executable": {
-                "iceflame": [
-                    "iceflame"
-                ]
-            }
+                "match": "iceflame" 
+            }, 
+            "executable": { 
+                "iceflame": [ 
+                    "iceflame" 
+                ] 
+            } 
         },
         "cs": {
             "formula": {

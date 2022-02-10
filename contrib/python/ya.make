@@ -67,7 +67,7 @@ RECURSE(
     arrow
     asciitree
     asgiref
-    asn1crypto 
+    asn1crypto
     astroid
     asttokens
     astunparse
@@ -230,7 +230,7 @@ RECURSE(
     django-celery-email
     django-celery-results
     django-closuretree
-    django-constance 
+    django-constance
     django-cors-headers
     django-cors-middleware
     django-crispy-forms
@@ -248,7 +248,7 @@ RECURSE(
     django-environ
     django-etc
     django-export-action-py3
-    django-extensions 
+    django-extensions
     django-fernet-fields
     django-filebrowser-no-grappelli
     django-filter
@@ -339,7 +339,7 @@ RECURSE(
     enum34
     environ-config
     environs
-    envoy 
+    envoy
     ephem
     escapism
     etcd3
@@ -732,7 +732,7 @@ RECURSE(
     peewee
     peewee/playhouse
     pefile
-    pem 
+    pem
     pexpect
     pgcli
     PGPy
@@ -791,7 +791,7 @@ RECURSE(
     pyahocorasick
     pyaml
     pyasn1
-    pyasn1-modules 
+    pyasn1-modules
     pybreaker
     pycares
     pycbrf

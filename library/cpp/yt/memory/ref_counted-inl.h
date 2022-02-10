@@ -13,10 +13,10 @@ constexpr uintptr_t PtrMask = (1ULL << PtrBits) - 1;
 
 template <class T>
 Y_FORCE_INLINE char* PackPointer(T* ptr, uint16_t data)
-{
+{ 
     return reinterpret_cast<char*>((static_cast<uintptr_t>(data) << PtrBits) | reinterpret_cast<uintptr_t>(ptr));
-}
-
+} 
+ 
 template <class T>
 struct TPackedPointer
 {
@@ -75,10 +75,10 @@ Y_FORCE_INLINE void TRefCounter::Ref() const noexcept
     StrongCount_.fetch_add(1, std::memory_order_relaxed);
 
     YT_ASSERT(WeakCount_.load(std::memory_order_relaxed) > 0);
-}
-
+} 
+ 
 Y_FORCE_INLINE bool TRefCounter::TryRef() const noexcept
-{
+{ 
     auto value = StrongCount_.load(std::memory_order_relaxed);
     YT_ASSERT(WeakCount_.load(std::memory_order_relaxed) > 0);
 
@@ -102,18 +102,18 @@ Y_FORCE_INLINE bool TRefCounter::Unref() const
         return false;
     }
 }
-
+ 
 Y_FORCE_INLINE int TRefCounter::GetWeakRefCount() const noexcept
 {
     return WeakCount_.load(std::memory_order_acquire);
 }
-
+ 
 Y_FORCE_INLINE void TRefCounter::WeakRef() const noexcept
 {
     auto oldWeakCount = WeakCount_.fetch_add(1, std::memory_order_relaxed);
     YT_ASSERT(oldWeakCount > 0);
-}
-
+} 
+ 
 Y_FORCE_INLINE bool TRefCounter::WeakUnref() const
 {
     auto oldWeakCount = WeakCount_.fetch_sub(1, std::memory_order_release);
@@ -130,11 +130,11 @@ Y_FORCE_INLINE bool TRefCounter::WeakUnref() const
 
 template <class T, bool = std::is_base_of_v<TRefCountedBase, T>>
 struct TRefCountedHelper
-{
+{ 
     static_assert(
         std::is_final_v<T>,
         "Ref-counted objects must be derived from TRefCountedBase or to be final");
-
+ 
     static constexpr size_t RefCounterSpace = (sizeof(TRefCounter) + alignof(T) - 1) & ~(alignof(T) - 1);
     static constexpr size_t RefCounterOffset = RefCounterSpace - sizeof(TRefCounter);
 
@@ -142,7 +142,7 @@ struct TRefCountedHelper
     {
         return reinterpret_cast<const TRefCounter*>(obj) - 1;
     }
-
+ 
     Y_FORCE_INLINE static void Destroy(const T* obj)
     {
         auto* refCounter = GetRefCounter(obj);
@@ -199,14 +199,14 @@ template <class T>
 Y_FORCE_INLINE const TRefCounter* GetRefCounter(const T* obj)
 {
     return TRefCountedHelper<T>::GetRefCounter(obj);
-}
-
+} 
+ 
 template <class T>
 Y_FORCE_INLINE void DestroyRefCounted(const T* obj)
-{
+{ 
     TRefCountedHelper<T>::Destroy(obj);
-}
-
+} 
+ 
 template <class T>
 Y_FORCE_INLINE void DeallocateRefCounted(const T* obj)
 {
@@ -232,10 +232,10 @@ Y_FORCE_INLINE void Unref(T* obj)
 ////////////////////////////////////////////////////////////////////////////////
 
 Y_FORCE_INLINE void TRefCounted::Unref() const
-{
+{ 
     ::NYT::Unref(this);
-}
-
+} 
+ 
 Y_FORCE_INLINE void TRefCounted::WeakUnref() const
 {
     if (TRefCounter::WeakUnref()) {
@@ -244,9 +244,9 @@ Y_FORCE_INLINE void TRefCounted::WeakUnref() const
 }
 
 
-template <class T>
+template <class T> 
 void TRefCounted::DestroyRefCountedImpl(T* ptr)
-{
+{ 
     // No standard way to statically calculate the base offset even if T is final.
     // static_cast<TFinalDerived*>(virtualBasePtr) does not work.
 
@@ -271,8 +271,8 @@ void TRefCounted::DestroyRefCountedImpl(T* ptr)
     if (refCounter->WeakUnref()) {
         TMemoryReleaser<T>::Do(ptr, offset);
     }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
+} 
+ 
+//////////////////////////////////////////////////////////////////////////////// 
+ 
 } // namespace NYT

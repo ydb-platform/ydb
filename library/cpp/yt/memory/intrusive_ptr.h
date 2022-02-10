@@ -148,14 +148,14 @@ public:
         return T_;
     }
 
-    //! Returns the pointer and releases the ownership.
-    T* Release() noexcept
-    {
-        auto* p = T_;
-        T_ = nullptr;
-        return p;
-    }
-
+    //! Returns the pointer and releases the ownership. 
+    T* Release() noexcept 
+    { 
+        auto* p = T_; 
+        T_ = nullptr; 
+        return p; 
+    } 
+ 
     T& operator*() const noexcept
     {
         YT_ASSERT(T_);

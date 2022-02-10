@@ -1,15 +1,15 @@
-#ifndef NEW_INL_H_
-#error "Direct inclusion of this file is not allowed, include new.h"
+#ifndef NEW_INL_H_ 
+#error "Direct inclusion of this file is not allowed, include new.h" 
 // For the sake of sane code completion.
 #include "new.h"
-#endif
-
+#endif 
+ 
 #include <library/cpp/ytalloc/api/ytalloc.h>
 
-namespace NYT {
-
-////////////////////////////////////////////////////////////////////////////////
-
+namespace NYT { 
+ 
+//////////////////////////////////////////////////////////////////////////////// 
+ 
 struct TRefCountedCookieHolder
 {
 #ifdef YT_ENABLE_REF_COUNTED_TRACKING
@@ -31,7 +31,7 @@ struct TRefCountedCookieHolder
 #endif
 };
 
-template <class T>
+template <class T> 
 struct TRefCountedWrapper final
     : public T
     , public TRefTracked<T>
@@ -81,7 +81,7 @@ struct TRefCountedWrapperWithCookie final
     explicit TRefCountedWrapperWithCookie(TArgs&&... args)
         : T(std::forward<TArgs>(args)...)
     { }
-
+ 
     ~TRefCountedWrapperWithCookie() = default;
 
     void DestroyRefCounted() override
@@ -89,9 +89,9 @@ struct TRefCountedWrapperWithCookie final
         T::DestroyRefCountedImpl(this);
     }
 };
-
+ 
 namespace NDetail {
-
+ 
 Y_FORCE_INLINE void* AllignedMalloc(size_t size, size_t allignment)
 {
 #ifdef _win_
@@ -170,9 +170,9 @@ struct TConstructHelper<T, true>
     }
 };
 
-template <class T, class... As>
+template <class T, class... As> 
 Y_FORCE_INLINE TIntrusivePtr<T> SafeConstruct(void* ptr, As&&... args)
-{
+{ 
     try {
         auto* instance = TConstructHelper<T>::Construct(ptr, std::forward<As>(args)...);
         return TIntrusivePtr<T>(instance, false);
@@ -181,8 +181,8 @@ Y_FORCE_INLINE TIntrusivePtr<T> SafeConstruct(void* ptr, As&&... args)
         TFreeMemory<T>::Do(ptr);
         throw;
     }
-}
-
+} 
+ 
 template <size_t Size, size_t Alignment>
 void* AllocateConstSizeAligned()
 {
@@ -193,14 +193,14 @@ void* AllocateConstSizeAligned()
     }
 }
 
-} // namespace NDetail
-
+} // namespace NDetail 
+ 
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T, class... As, class>
 Y_FORCE_INLINE TIntrusivePtr<T> New(
     As&&... args)
-{
+{ 
     void* ptr = NDetail::AllocateConstSizeAligned<
         NDetail::TConstructHelper<T>::Size,
         NDetail::TConstructHelper<T>::Alignment>();
@@ -218,15 +218,15 @@ Y_FORCE_INLINE TIntrusivePtr<T> New(
         return nullptr;
     }
     return NDetail::SafeConstruct<T>(ptr, std::forward<As>(args)...);
-}
-
+} 
+ 
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T, class... As, class>
 Y_FORCE_INLINE TIntrusivePtr<T> NewWithExtraSpace(
-    size_t extraSpaceSize,
-    As&&... args)
-{
+    size_t extraSpaceSize, 
+    As&&... args) 
+{ 
     auto totalSize = NYT::NDetail::TConstructHelper<T>::Size + extraSpaceSize;
     void* ptr = nullptr;
 
@@ -268,43 +268,43 @@ Y_FORCE_INLINE TIntrusivePtr<T> NewWithDelete(const TDeleter& deleter, As&&... a
         std::forward<As>(args)...);
 
     return TIntrusivePtr<T>(instance, false);
-}
-
+} 
+ 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <class T, class TTag, int Counter, class... As>
-Y_FORCE_INLINE TIntrusivePtr<T> NewWithLocation(
-    const TSourceLocation& location,
-    As&&... args)
-{
+template <class T, class TTag, int Counter, class... As> 
+Y_FORCE_INLINE TIntrusivePtr<T> NewWithLocation( 
+    const TSourceLocation& location, 
+    As&&... args) 
+{ 
     using TWrapper = TRefCountedWrapperWithCookie<T>;
     void* ptr = NDetail::AllocateConstSizeAligned<sizeof(TWrapper), alignof(TWrapper)>();
 
     auto* instance = NDetail::NewEpilogue<TWrapper>(ptr, std::forward<As>(args)...);
 
-#ifdef YT_ENABLE_REF_COUNTED_TRACKING
+#ifdef YT_ENABLE_REF_COUNTED_TRACKING 
     instance->InitializeTracking(GetRefCountedTypeCookieWithLocation<T, TTag, Counter>(location));
-#else
+#else 
     Y_UNUSED(location);
-#endif
+#endif 
 
     return TIntrusivePtr<T>(instance, false);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-template <class T>
-const void* TWithExtraSpace<T>::GetExtraSpacePtr() const
-{
-    return static_cast<const T*>(this) + 1;
-}
-
-template <class T>
-void* TWithExtraSpace<T>::GetExtraSpacePtr()
-{
-    return static_cast<T*>(this) + 1;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-} // namespace NYT
+} 
+ 
+//////////////////////////////////////////////////////////////////////////////// 
+ 
+template <class T> 
+const void* TWithExtraSpace<T>::GetExtraSpacePtr() const 
+{ 
+    return static_cast<const T*>(this) + 1; 
+} 
+ 
+template <class T> 
+void* TWithExtraSpace<T>::GetExtraSpacePtr() 
+{ 
+    return static_cast<T*>(this) + 1; 
+} 
+ 
+//////////////////////////////////////////////////////////////////////////////// 
+ 
+} // namespace NYT 

@@ -261,14 +261,14 @@ TSharedMutableRef TSharedMutableRef::MakeCopy(TRef ref, TRefCountedTypeCookie ta
     }
     if (ref.Empty()) {
         return TSharedMutableRef::MakeEmpty();
-    }
+    } 
     auto result = Allocate(ref.Size(), false, tagCookie);
     ::memcpy(result.Begin(), ref.Begin(), ref.Size());
     return result;
 }
 
-////////////////////////////////////////////////////////////////////////////////
-
+//////////////////////////////////////////////////////////////////////////////// 
+ 
 TString ToString(TRef ref)
 {
     return TString(ref.Begin(), ref.End());

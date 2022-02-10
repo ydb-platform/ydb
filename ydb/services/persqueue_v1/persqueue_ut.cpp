@@ -1,10 +1,10 @@
-#include "grpc_pq_actor.h" 
+#include "grpc_pq_actor.h"
 #include <ydb/services/persqueue_v1/ut/pq_data_writer.h>
 #include <ydb/services/persqueue_v1/ut/api_test_setup.h>
 #include <ydb/services/persqueue_v1/ut/rate_limiter_test_setup.h>
 #include <ydb/services/persqueue_v1/ut/test_utils.h>
 #include <ydb/services/persqueue_v1/ut/persqueue_test_fixture.h>
- 
+
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/testlib/test_pq_client.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
@@ -43,7 +43,7 @@ namespace NKikimr::NPersQueueTests {
 using namespace Tests;
 using namespace NKikimrClient;
 using namespace Ydb::PersQueue;
-using namespace Ydb::PersQueue::V1; 
+using namespace Ydb::PersQueue::V1;
 using namespace NThreading;
 using namespace NNetClassifier;
 
@@ -99,22 +99,22 @@ namespace {
 
 
     Y_UNIT_TEST_SUITE(TPersQueueTest) {
-    Y_UNIT_TEST(AllEqual) { 
-        using NGRpcProxy::V1::AllEqual; 
+    Y_UNIT_TEST(AllEqual) {
+        using NGRpcProxy::V1::AllEqual;
 
-        UNIT_ASSERT(AllEqual(0)); 
-        UNIT_ASSERT(AllEqual(0, 0)); 
-        UNIT_ASSERT(AllEqual(0, 0, 0)); 
-        UNIT_ASSERT(AllEqual(1, 1, 1)); 
-        UNIT_ASSERT(AllEqual(1, 1, 1, 1, 1, 1)); 
-        UNIT_ASSERT(!AllEqual(1, 0)); 
-        UNIT_ASSERT(!AllEqual(0, 1)); 
-        UNIT_ASSERT(!AllEqual(0, 1, 0)); 
-        UNIT_ASSERT(!AllEqual(1, 1, 0)); 
-        UNIT_ASSERT(!AllEqual(0, 1, 1)); 
-        UNIT_ASSERT(!AllEqual(1, 1, 1, 1, 1, 0)); 
-    } 
- 
+        UNIT_ASSERT(AllEqual(0));
+        UNIT_ASSERT(AllEqual(0, 0));
+        UNIT_ASSERT(AllEqual(0, 0, 0));
+        UNIT_ASSERT(AllEqual(1, 1, 1));
+        UNIT_ASSERT(AllEqual(1, 1, 1, 1, 1, 1));
+        UNIT_ASSERT(!AllEqual(1, 0));
+        UNIT_ASSERT(!AllEqual(0, 1));
+        UNIT_ASSERT(!AllEqual(0, 1, 0));
+        UNIT_ASSERT(!AllEqual(1, 1, 0));
+        UNIT_ASSERT(!AllEqual(0, 1, 1));
+        UNIT_ASSERT(!AllEqual(1, 1, 1, 1, 1, 0));
+    }
+
     Y_UNIT_TEST(SetupLockSession2) {
         TPersQueueV1TestServer server;
         SET_LOCALS;
@@ -428,27 +428,27 @@ namespace {
         UNIT_ASSERT(!writer2->Close());
     }
 
-    Y_UNIT_TEST(EachMessageGetsExactlyOneAcknowledgementInCorrectOrder) { 
+    Y_UNIT_TEST(EachMessageGetsExactlyOneAcknowledgementInCorrectOrder) {
         NPersQueue::TTestServer server;
         server.AnnoyingClient->CreateTopic("rt3.dc1--topic", 1);
- 
+
         auto driver = server.AnnoyingClient->GetDriver();
 
         auto writer = CreateSimpleWriter(*driver, "topic", "test source ID");
 
         bool res = true;
 
-        ui32 messageCount = 1000; 
- 
-        for (ui32 sequenceNumber = 1; sequenceNumber <= messageCount; ++sequenceNumber) { 
+        ui32 messageCount = 1000;
+
+        for (ui32 sequenceNumber = 1; sequenceNumber <= messageCount; ++sequenceNumber) {
                 res = writer->Write("x", sequenceNumber);
                 UNIT_ASSERT(res);
-        } 
+        }
         UNIT_ASSERT(writer->IsAlive());
         res = writer->Close(TDuration::Seconds(10));
         UNIT_ASSERT(res);
-    } 
- 
+    }
+
     Y_UNIT_TEST(SetupWriteSessionOnDisabledCluster) {
         TPersQueueV1TestServer server;
         SET_LOCALS;
@@ -1079,7 +1079,7 @@ namespace {
         NACLib::TDiffACL acl;
         acl.AddAccess(NACLib::EAccessType::Allow, NACLib::UpdateRow, "topic1@" BUILTIN_ACL_DOMAIN);
         server.AnnoyingClient->ModifyACL("/Root/PQ", DEFAULT_TOPIC_NAME, acl.SerializeAsString());
-        WaitACLModification(); 
+        WaitACLModification();
 
         writer2.Write(SHORT_TOPIC_NAME, {"valuevaluevalue1"}, false, "topic1@" BUILTIN_ACL_DOMAIN);
         writer2.Write(SHORT_TOPIC_NAME, {"valuevaluevalue1"}, true, "invalid_ticket");
@@ -1092,7 +1092,7 @@ namespace {
             dynamic_cast<TTestCredentialsProviderFactory*>(creds.get())->SetToken(NYdb::TStringType("topic1@" BUILTIN_ACL_DOMAIN));
 
             auto writer = CreateWriter(*driver, SHORT_TOPIC_NAME, "123", {}, {}, {}, creds);
- 
+
             auto msg = writer->GetEvent(true);
             UNIT_ASSERT(msg); // ReadyToAcceptEvent
 
@@ -1166,7 +1166,7 @@ namespace {
         acl.AddAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, "user1@" BUILTIN_ACL_DOMAIN);
         acl.AddAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, "user2@" BUILTIN_ACL_DOMAIN);
         server.AnnoyingClient->ModifyACL("/Root/PQ", topic2, acl.SerializeAsString());
-        WaitACLModification(); 
+        WaitACLModification();
 
         auto ticket1 = "1@" BUILTIN_ACL_DOMAIN;
         auto ticket2 = "2@" BUILTIN_ACL_DOMAIN;
@@ -1186,7 +1186,7 @@ namespace {
         acl.Clear();
         acl.AddAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, "user3@" BUILTIN_ACL_DOMAIN);
         server.AnnoyingClient->ModifyACL("/Root/PQ", topic2, acl.SerializeAsString());
-        WaitACLModification(); 
+        WaitACLModification();
 
         Cerr << "==== Writer - read\n";
         writer.Read(shortTopic2Name, "user1", "user3@" BUILTIN_ACL_DOMAIN, false, true, true);
@@ -1359,7 +1359,7 @@ namespace {
 
             if (i == 5) {
                 UNIT_ASSERT(TInstant::Now() - st > TDuration::Seconds(3));
-                // TODO: Describe this assert in comment 
+                // TODO: Describe this assert in comment
                 UNIT_ASSERT(!ack->Acks.empty());
                 UNIT_ASSERT(ack->Acks.back().Stat);
                 UNIT_ASSERT(ack->Acks.back().Stat->TotalTimeInPartitionQueue >= ack->Acks.back().Stat->PartitionQuotedTime);
@@ -1747,7 +1747,7 @@ namespace {
             for (ui32 i = 1; i <= 11; ++i) {
                 auto f = producer->Write(i,  TString(10, 'a'));
                 f.Wait();
-                UNIT_ASSERT_C(f.GetValue().Response.server_message_case() == StreamingWriteServerMessage::kBatchWriteResponse, f.GetValue().Response); 
+                UNIT_ASSERT_C(f.GetValue().Response.server_message_case() == StreamingWriteServerMessage::kBatchWriteResponse, f.GetValue().Response);
             }
         }
 
@@ -2129,227 +2129,227 @@ namespace {
         UNIT_ASSERT_EQUAL(ccResult.Response.Getissues(0).issue_code(), Ydb::PersQueue::ErrorCode::UNKNOWN_TOPIC);
     }
 */
-    Y_UNIT_TEST(Codecs_InitWriteSession_DefaultTopicSupportedCodecsInInitResponse) { 
-        APITestSetup setup{TEST_CASE_NAME}; 
-        grpc::ClientContext context; 
-        auto session = setup.GetPersQueueService()->StreamingWrite(&context); 
- 
- 
-        auto serverMessage = setup.InitSession(session); 
- 
- 
+    Y_UNIT_TEST(Codecs_InitWriteSession_DefaultTopicSupportedCodecsInInitResponse) {
+        APITestSetup setup{TEST_CASE_NAME};
+        grpc::ClientContext context;
+        auto session = setup.GetPersQueueService()->StreamingWrite(&context);
+
+
+        auto serverMessage = setup.InitSession(session);
+
+
         auto defaultSupportedCodecs = TVector<Ydb::PersQueue::V1::Codec>{ Ydb::PersQueue::V1::CODEC_RAW, Ydb::PersQueue::V1::CODEC_GZIP, Ydb::PersQueue::V1::CODEC_LZOP };
-        auto topicSupportedCodecs = serverMessage.init_response().supported_codecs(); 
+        auto topicSupportedCodecs = serverMessage.init_response().supported_codecs();
         UNIT_ASSERT_VALUES_EQUAL_C(defaultSupportedCodecs.size(), topicSupportedCodecs.size(), serverMessage.init_response());
         UNIT_ASSERT_C(Equal(defaultSupportedCodecs.begin(), defaultSupportedCodecs.end(), topicSupportedCodecs.begin()), serverMessage.init_response());
-    } 
- 
-    Y_UNIT_TEST(Codecs_WriteMessageWithDefaultCodecs_MessagesAreAcknowledged) { 
-        APITestSetup setup{TEST_CASE_NAME}; 
-        auto log = setup.GetLog(); 
-        StreamingWriteClientMessage clientMessage; 
-        auto* writeRequest = clientMessage.mutable_write_request(); 
-        auto sequenceNumber = 1; 
-        auto messageCount = 0; 
-        const auto message = NUnitTest::RandomString(250 * 1024, std::rand()); 
-        auto compress = [](TString data, i32 codecID) { 
-            Y_UNUSED(codecID); 
-            return TString(data); 
-        }; 
-        TVector<char> defaultCodecs{0, 1, 2}; 
-        for (const auto& codecID : defaultCodecs) { 
-            auto compressedMessage = compress(message, codecID); 
- 
-            writeRequest->add_sequence_numbers(sequenceNumber++); 
-            writeRequest->add_message_sizes(message.size()); 
-            writeRequest->add_created_at_ms(TInstant::Now().MilliSeconds()); 
-            writeRequest->add_sent_at_ms(TInstant::Now().MilliSeconds()); 
-            writeRequest->add_blocks_offsets(0); 
-            writeRequest->add_blocks_part_numbers(0); 
-            writeRequest->add_blocks_message_counts(1); 
-            writeRequest->add_blocks_uncompressed_sizes(message.size()); 
-            writeRequest->add_blocks_headers(TString(1, codecID)); 
-            writeRequest->add_blocks_data(compressedMessage); 
-            ++messageCount; 
-        } 
-        auto session = setup.InitWriteSession(); 
- 
- 
-        AssertSuccessfullStreamingOperation(session.first->Write(clientMessage), session.first, &clientMessage); 
- 
- 
-        StreamingWriteServerMessage serverMessage; 
-        log << TLOG_INFO << "Wait for write acknowledgement"; 
-        AssertSuccessfullStreamingOperation(session.first->Read(&serverMessage), session.first); 
-        UNIT_ASSERT_C(serverMessage.server_message_case() == StreamingWriteServerMessage::kBatchWriteResponse, serverMessage); 
-        UNIT_ASSERT_VALUES_EQUAL_C(defaultCodecs.size(), serverMessage.batch_write_response().offsets_size(), serverMessage); 
-    } 
- 
-    Y_UNIT_TEST(Codecs_WriteMessageWithNonDefaultCodecThatHasToBeConfiguredAdditionally_SessionClosedWithBadRequestError) { 
-        APITestSetup setup{TEST_CASE_NAME}; 
-        auto log = setup.GetLog(); 
-        StreamingWriteClientMessage clientMessage; 
-        auto* writeRequest = clientMessage.mutable_write_request(); 
-        const auto message = NUnitTest::RandomString(250 * 1024, std::rand()); 
-        const auto codecID = 3; 
-        writeRequest->add_sequence_numbers(1); 
-        writeRequest->add_message_sizes(message.size()); 
-        writeRequest->add_created_at_ms(TInstant::Now().MilliSeconds()); 
-        writeRequest->add_sent_at_ms(TInstant::Now().MilliSeconds()); 
-        writeRequest->add_blocks_offsets(0); 
-        writeRequest->add_blocks_part_numbers(0); 
-        writeRequest->add_blocks_message_counts(1); 
-        writeRequest->add_blocks_uncompressed_sizes(message.size()); 
-        writeRequest->add_blocks_headers(TString(1, codecID)); 
-        writeRequest->add_blocks_data(message); 
-        auto session = setup.InitWriteSession(); 
- 
- 
-        AssertSuccessfullStreamingOperation(session.first->Write(clientMessage), session.first, &clientMessage); 
- 
-        log << TLOG_INFO << "Wait for session to die"; 
-        AssertStreamingSessionDead(session.first, Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::BAD_REQUEST); 
-    } 
- 
-    StreamingWriteClientMessage::InitRequest GenerateSessionSetupWithPreferredCluster(const TString preferredCluster) { 
-        StreamingWriteClientMessage::InitRequest sessionSetup; 
-        sessionSetup.set_preferred_cluster(preferredCluster); 
-        sessionSetup.set_message_group_id("test-message-group-id-" + preferredCluster); 
-        return sessionSetup; 
-    }; 
- 
-    Y_UNIT_TEST(PreferredCluster_TwoEnabledClustersAndWriteSessionsWithDifferentPreferredCluster_SessionWithMismatchedClusterDiesAndOthersAlive) { 
-        APITestSetup setup{TEST_CASE_NAME}; 
-        auto log = setup.GetLog(); 
- 
-        setup.GetPQConfig().SetClustersUpdateTimeoutSec(0); 
-        setup.GetPQConfig().SetRemoteClusterEnabledDelaySec(0); 
+    }
+
+    Y_UNIT_TEST(Codecs_WriteMessageWithDefaultCodecs_MessagesAreAcknowledged) {
+        APITestSetup setup{TEST_CASE_NAME};
+        auto log = setup.GetLog();
+        StreamingWriteClientMessage clientMessage;
+        auto* writeRequest = clientMessage.mutable_write_request();
+        auto sequenceNumber = 1;
+        auto messageCount = 0;
+        const auto message = NUnitTest::RandomString(250 * 1024, std::rand());
+        auto compress = [](TString data, i32 codecID) {
+            Y_UNUSED(codecID);
+            return TString(data);
+        };
+        TVector<char> defaultCodecs{0, 1, 2};
+        for (const auto& codecID : defaultCodecs) {
+            auto compressedMessage = compress(message, codecID);
+
+            writeRequest->add_sequence_numbers(sequenceNumber++);
+            writeRequest->add_message_sizes(message.size());
+            writeRequest->add_created_at_ms(TInstant::Now().MilliSeconds());
+            writeRequest->add_sent_at_ms(TInstant::Now().MilliSeconds());
+            writeRequest->add_blocks_offsets(0);
+            writeRequest->add_blocks_part_numbers(0);
+            writeRequest->add_blocks_message_counts(1);
+            writeRequest->add_blocks_uncompressed_sizes(message.size());
+            writeRequest->add_blocks_headers(TString(1, codecID));
+            writeRequest->add_blocks_data(compressedMessage);
+            ++messageCount;
+        }
+        auto session = setup.InitWriteSession();
+
+
+        AssertSuccessfullStreamingOperation(session.first->Write(clientMessage), session.first, &clientMessage);
+
+
+        StreamingWriteServerMessage serverMessage;
+        log << TLOG_INFO << "Wait for write acknowledgement";
+        AssertSuccessfullStreamingOperation(session.first->Read(&serverMessage), session.first);
+        UNIT_ASSERT_C(serverMessage.server_message_case() == StreamingWriteServerMessage::kBatchWriteResponse, serverMessage);
+        UNIT_ASSERT_VALUES_EQUAL_C(defaultCodecs.size(), serverMessage.batch_write_response().offsets_size(), serverMessage);
+    }
+
+    Y_UNIT_TEST(Codecs_WriteMessageWithNonDefaultCodecThatHasToBeConfiguredAdditionally_SessionClosedWithBadRequestError) {
+        APITestSetup setup{TEST_CASE_NAME};
+        auto log = setup.GetLog();
+        StreamingWriteClientMessage clientMessage;
+        auto* writeRequest = clientMessage.mutable_write_request();
+        const auto message = NUnitTest::RandomString(250 * 1024, std::rand());
+        const auto codecID = 3;
+        writeRequest->add_sequence_numbers(1);
+        writeRequest->add_message_sizes(message.size());
+        writeRequest->add_created_at_ms(TInstant::Now().MilliSeconds());
+        writeRequest->add_sent_at_ms(TInstant::Now().MilliSeconds());
+        writeRequest->add_blocks_offsets(0);
+        writeRequest->add_blocks_part_numbers(0);
+        writeRequest->add_blocks_message_counts(1);
+        writeRequest->add_blocks_uncompressed_sizes(message.size());
+        writeRequest->add_blocks_headers(TString(1, codecID));
+        writeRequest->add_blocks_data(message);
+        auto session = setup.InitWriteSession();
+
+
+        AssertSuccessfullStreamingOperation(session.first->Write(clientMessage), session.first, &clientMessage);
+
+        log << TLOG_INFO << "Wait for session to die";
+        AssertStreamingSessionDead(session.first, Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::BAD_REQUEST);
+    }
+
+    StreamingWriteClientMessage::InitRequest GenerateSessionSetupWithPreferredCluster(const TString preferredCluster) {
+        StreamingWriteClientMessage::InitRequest sessionSetup;
+        sessionSetup.set_preferred_cluster(preferredCluster);
+        sessionSetup.set_message_group_id("test-message-group-id-" + preferredCluster);
+        return sessionSetup;
+    };
+
+    Y_UNIT_TEST(PreferredCluster_TwoEnabledClustersAndWriteSessionsWithDifferentPreferredCluster_SessionWithMismatchedClusterDiesAndOthersAlive) {
+        APITestSetup setup{TEST_CASE_NAME};
+        auto log = setup.GetLog();
+
+        setup.GetPQConfig().SetClustersUpdateTimeoutSec(0);
+        setup.GetPQConfig().SetRemoteClusterEnabledDelaySec(0);
         setup.GetPQConfig().SetCloseClientSessionWithEnabledRemotePreferredClusterDelaySec(0);
-        auto sessionWithNoPreferredCluster = setup.InitWriteSession(GenerateSessionSetupWithPreferredCluster(TString())); 
-        auto sessionWithLocalPreffedCluster = setup.InitWriteSession(GenerateSessionSetupWithPreferredCluster(setup.GetLocalCluster())); 
-        auto sessionWithRemotePrefferedCluster = setup.InitWriteSession(GenerateSessionSetupWithPreferredCluster(setup.GetRemoteCluster())); 
-        grpc::ClientContext context; 
-        auto sessionWithNoInitialization = setup.GetPersQueueService()->StreamingWrite(&context); 
- 
-        log << TLOG_INFO << "Wait for session with remote preferred cluster to die"; 
-        AssertStreamingSessionDead(sessionWithRemotePrefferedCluster.first, Ydb::StatusIds::ABORTED, Ydb::PersQueue::ErrorCode::PREFERRED_CLUSTER_MISMATCHED); 
-        AssertStreamingSessionAlive(sessionWithNoPreferredCluster.first); 
-        AssertStreamingSessionAlive(sessionWithLocalPreffedCluster.first); 
- 
-        setup.InitSession(sessionWithNoInitialization); 
-        AssertStreamingSessionAlive(sessionWithNoInitialization); 
-    } 
- 
-    Y_UNIT_TEST(PreferredCluster_DisabledRemoteClusterAndWriteSessionsWithDifferentPreferredClusterAndLaterRemoteClusterEnabled_SessionWithMismatchedClusterDiesAfterPreferredClusterEnabledAndOtherSessionsAlive) { 
-        APITestSetup setup{TEST_CASE_NAME}; 
-        auto log = setup.GetLog(); 
-        log << TLOG_INFO << "Disable remote cluster " << setup.GetRemoteCluster().Quote(); 
-        setup.GetFlatMsgBusPQClient().UpdateDC(setup.GetRemoteCluster(), false, false); 
-        setup.GetPQConfig().SetClustersUpdateTimeoutSec(0); 
-        setup.GetPQConfig().SetRemoteClusterEnabledDelaySec(0); 
-        setup.GetPQConfig().SetCloseClientSessionWithEnabledRemotePreferredClusterDelaySec(0); 
-        auto sessionWithNoPreferredCluster = setup.InitWriteSession(GenerateSessionSetupWithPreferredCluster(TString())); 
-        auto sessionWithLocalPreffedCluster = setup.InitWriteSession(GenerateSessionSetupWithPreferredCluster(setup.GetLocalCluster())); 
-        auto sessionWithRemotePrefferedCluster = setup.InitWriteSession(GenerateSessionSetupWithPreferredCluster(setup.GetRemoteCluster())); 
-        AssertStreamingSessionAlive(sessionWithNoPreferredCluster.first); 
-        AssertStreamingSessionAlive(sessionWithLocalPreffedCluster.first); 
-        AssertStreamingSessionAlive(sessionWithRemotePrefferedCluster.first); 
- 
-        log << TLOG_INFO << "Enable remote cluster " << setup.GetRemoteCluster().Quote(); 
-        setup.GetFlatMsgBusPQClient().UpdateDC(setup.GetRemoteCluster(), false, true); 
- 
-        log << TLOG_INFO << "Wait for session with remote preferred cluster to die"; 
-        AssertStreamingSessionDead(sessionWithRemotePrefferedCluster.first, Ydb::StatusIds::ABORTED, Ydb::PersQueue::ErrorCode::PREFERRED_CLUSTER_MISMATCHED); 
-        AssertStreamingSessionAlive(sessionWithNoPreferredCluster.first); 
-        AssertStreamingSessionAlive(sessionWithLocalPreffedCluster.first); 
-    } 
- 
-    Y_UNIT_TEST(PreferredCluster_EnabledRemotePreferredClusterAndCloseClientSessionWithEnabledRemotePreferredClusterDelaySec_SessionDiesOnlyAfterDelay) { 
-        APITestSetup setup{TEST_CASE_NAME}; 
-        auto log = setup.GetLog(); 
-        setup.GetPQConfig().SetClustersUpdateTimeoutSec(0); 
-        setup.GetPQConfig().SetRemoteClusterEnabledDelaySec(0); 
+        auto sessionWithNoPreferredCluster = setup.InitWriteSession(GenerateSessionSetupWithPreferredCluster(TString()));
+        auto sessionWithLocalPreffedCluster = setup.InitWriteSession(GenerateSessionSetupWithPreferredCluster(setup.GetLocalCluster()));
+        auto sessionWithRemotePrefferedCluster = setup.InitWriteSession(GenerateSessionSetupWithPreferredCluster(setup.GetRemoteCluster()));
+        grpc::ClientContext context;
+        auto sessionWithNoInitialization = setup.GetPersQueueService()->StreamingWrite(&context);
+
+        log << TLOG_INFO << "Wait for session with remote preferred cluster to die";
+        AssertStreamingSessionDead(sessionWithRemotePrefferedCluster.first, Ydb::StatusIds::ABORTED, Ydb::PersQueue::ErrorCode::PREFERRED_CLUSTER_MISMATCHED);
+        AssertStreamingSessionAlive(sessionWithNoPreferredCluster.first);
+        AssertStreamingSessionAlive(sessionWithLocalPreffedCluster.first);
+
+        setup.InitSession(sessionWithNoInitialization);
+        AssertStreamingSessionAlive(sessionWithNoInitialization);
+    }
+
+    Y_UNIT_TEST(PreferredCluster_DisabledRemoteClusterAndWriteSessionsWithDifferentPreferredClusterAndLaterRemoteClusterEnabled_SessionWithMismatchedClusterDiesAfterPreferredClusterEnabledAndOtherSessionsAlive) {
+        APITestSetup setup{TEST_CASE_NAME};
+        auto log = setup.GetLog();
+        log << TLOG_INFO << "Disable remote cluster " << setup.GetRemoteCluster().Quote();
+        setup.GetFlatMsgBusPQClient().UpdateDC(setup.GetRemoteCluster(), false, false);
+        setup.GetPQConfig().SetClustersUpdateTimeoutSec(0);
+        setup.GetPQConfig().SetRemoteClusterEnabledDelaySec(0);
+        setup.GetPQConfig().SetCloseClientSessionWithEnabledRemotePreferredClusterDelaySec(0);
+        auto sessionWithNoPreferredCluster = setup.InitWriteSession(GenerateSessionSetupWithPreferredCluster(TString()));
+        auto sessionWithLocalPreffedCluster = setup.InitWriteSession(GenerateSessionSetupWithPreferredCluster(setup.GetLocalCluster()));
+        auto sessionWithRemotePrefferedCluster = setup.InitWriteSession(GenerateSessionSetupWithPreferredCluster(setup.GetRemoteCluster()));
+        AssertStreamingSessionAlive(sessionWithNoPreferredCluster.first);
+        AssertStreamingSessionAlive(sessionWithLocalPreffedCluster.first);
+        AssertStreamingSessionAlive(sessionWithRemotePrefferedCluster.first);
+
+        log << TLOG_INFO << "Enable remote cluster " << setup.GetRemoteCluster().Quote();
+        setup.GetFlatMsgBusPQClient().UpdateDC(setup.GetRemoteCluster(), false, true);
+
+        log << TLOG_INFO << "Wait for session with remote preferred cluster to die";
+        AssertStreamingSessionDead(sessionWithRemotePrefferedCluster.first, Ydb::StatusIds::ABORTED, Ydb::PersQueue::ErrorCode::PREFERRED_CLUSTER_MISMATCHED);
+        AssertStreamingSessionAlive(sessionWithNoPreferredCluster.first);
+        AssertStreamingSessionAlive(sessionWithLocalPreffedCluster.first);
+    }
+
+    Y_UNIT_TEST(PreferredCluster_EnabledRemotePreferredClusterAndCloseClientSessionWithEnabledRemotePreferredClusterDelaySec_SessionDiesOnlyAfterDelay) {
+        APITestSetup setup{TEST_CASE_NAME};
+        auto log = setup.GetLog();
+        setup.GetPQConfig().SetClustersUpdateTimeoutSec(0);
+        setup.GetPQConfig().SetRemoteClusterEnabledDelaySec(0);
         setup.GetPQConfig().SetCloseClientSessionWithEnabledRemotePreferredClusterDelaySec(0);
 
-        const auto edgeActorID = setup.GetServer().GetRuntime()->AllocateEdgeActor(); 
- 
+        const auto edgeActorID = setup.GetServer().GetRuntime()->AllocateEdgeActor();
+
         setup.GetServer().GetRuntime()->Send(new IEventHandle(NPQ::NClusterTracker::MakeClusterTrackerID(), edgeActorID, new NPQ::NClusterTracker::TEvClusterTracker::TEvSubscribe));
         log << TLOG_INFO << "Wait for cluster tracker event";
         auto clustersUpdate = setup.GetServer().GetRuntime()->GrabEdgeEvent<NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate>();
- 
 
-        auto session = setup.InitWriteSession(GenerateSessionSetupWithPreferredCluster(setup.GetRemoteCluster())); 
- 
-        AssertStreamingSessionAlive(session.first); 
- 
-        AssertStreamingSessionDead(session.first, Ydb::StatusIds::ABORTED, Ydb::PersQueue::ErrorCode::PREFERRED_CLUSTER_MISMATCHED); 
-    } 
- 
-    Y_UNIT_TEST(PreferredCluster_NonExistentPreferredCluster_SessionDiesOnlyAfterDelay) { 
-        APITestSetup setup{TEST_CASE_NAME}; 
-        auto log = setup.GetLog(); 
-        setup.GetPQConfig().SetClustersUpdateTimeoutSec(0); 
-        setup.GetPQConfig().SetRemoteClusterEnabledDelaySec(0); 
-        setup.GetPQConfig().SetCloseClientSessionWithEnabledRemotePreferredClusterDelaySec(2);
- 
-        TInstant now(TInstant::Now());
-        auto session = setup.InitWriteSession(GenerateSessionSetupWithPreferredCluster("non-existent-cluster")); 
-        AssertStreamingSessionAlive(session.first); 
- 
-        AssertStreamingSessionDead(session.first, Ydb::StatusIds::ABORTED, Ydb::PersQueue::ErrorCode::PREFERRED_CLUSTER_MISMATCHED); 
-        UNIT_ASSERT(TInstant::Now() - now > TDuration::MilliSeconds(1999));
-    } 
- 
-    Y_UNIT_TEST(PreferredCluster_EnabledRemotePreferredClusterAndRemoteClusterEnabledDelaySec_SessionDiesOnlyAfterDelay) { 
-        APITestSetup setup{TEST_CASE_NAME}; 
-        auto log = setup.GetLog(); 
-        setup.GetPQConfig().SetClustersUpdateTimeoutSec(0); 
-        setup.GetPQConfig().SetCloseClientSessionWithEnabledRemotePreferredClusterDelaySec(2);
-        const auto edgeActorID = setup.GetServer().GetRuntime()->AllocateEdgeActor(); 
- 
-        setup.GetPQConfig().SetRemoteClusterEnabledDelaySec(0);
- 
-        TInstant now(TInstant::Now());
-        auto session = setup.InitWriteSession(GenerateSessionSetupWithPreferredCluster(setup.GetRemoteCluster())); 
- 
-        setup.GetServer().GetRuntime()->Send(new IEventHandle(NPQ::NClusterTracker::MakeClusterTrackerID(), edgeActorID, new NPQ::NClusterTracker::TEvClusterTracker::TEvSubscribe)); 
-        log << TLOG_INFO << "Wait for cluster tracker event"; 
-        auto clustersUpdate = setup.GetServer().GetRuntime()->GrabEdgeEvent<NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate>(); 
-        AssertStreamingSessionAlive(session.first); 
- 
+
+        auto session = setup.InitWriteSession(GenerateSessionSetupWithPreferredCluster(setup.GetRemoteCluster()));
+
+        AssertStreamingSessionAlive(session.first);
+
         AssertStreamingSessionDead(session.first, Ydb::StatusIds::ABORTED, Ydb::PersQueue::ErrorCode::PREFERRED_CLUSTER_MISMATCHED);
- 
-        UNIT_ASSERT(TInstant::Now() - now > TDuration::MilliSeconds(1999));
-    } 
- 
-    Y_UNIT_TEST(PreferredCluster_RemotePreferredClusterEnabledWhileSessionInitializing_SessionDiesOnlyAfterInitializationAndDelay) { 
-        APITestSetup setup{TEST_CASE_NAME}; 
-        auto log = setup.GetLog(); 
-        setup.GetPQConfig().SetClustersUpdateTimeoutSec(0); 
-        setup.GetPQConfig().SetRemoteClusterEnabledDelaySec(0); 
+    }
+
+    Y_UNIT_TEST(PreferredCluster_NonExistentPreferredCluster_SessionDiesOnlyAfterDelay) {
+        APITestSetup setup{TEST_CASE_NAME};
+        auto log = setup.GetLog();
+        setup.GetPQConfig().SetClustersUpdateTimeoutSec(0);
+        setup.GetPQConfig().SetRemoteClusterEnabledDelaySec(0);
         setup.GetPQConfig().SetCloseClientSessionWithEnabledRemotePreferredClusterDelaySec(2);
-        const auto edgeActorID = setup.GetServer().GetRuntime()->AllocateEdgeActor(); 
-        setup.GetFlatMsgBusPQClient().UpdateDC(setup.GetRemoteCluster(), false, false); 
- 
-        grpc::ClientContext context; 
-        auto session = setup.GetPersQueueService()->StreamingWrite(&context); 
- 
-        setup.GetFlatMsgBusPQClient().UpdateDC(setup.GetRemoteCluster(), false, true); 
- 
-        setup.GetServer().GetRuntime()->Send(new IEventHandle(NPQ::NClusterTracker::MakeClusterTrackerID(), edgeActorID, new NPQ::NClusterTracker::TEvClusterTracker::TEvSubscribe)); 
-        log << TLOG_INFO << "Wait for cluster tracker event"; 
-        auto clustersUpdate = setup.GetServer().GetRuntime()->GrabEdgeEvent<NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate>(); 
-        TInstant now(TInstant::Now());
-        setup.InitSession(session, GenerateSessionSetupWithPreferredCluster(setup.GetRemoteCluster())); 
 
-        AssertStreamingSessionAlive(session); 
- 
-        log << TLOG_INFO << "Set small delay and wait for initialized session with remote preferred cluster to die"; 
-        AssertStreamingSessionDead(session, Ydb::StatusIds::ABORTED, Ydb::PersQueue::ErrorCode::PREFERRED_CLUSTER_MISMATCHED); 
+        TInstant now(TInstant::Now());
+        auto session = setup.InitWriteSession(GenerateSessionSetupWithPreferredCluster("non-existent-cluster"));
+        AssertStreamingSessionAlive(session.first);
+
+        AssertStreamingSessionDead(session.first, Ydb::StatusIds::ABORTED, Ydb::PersQueue::ErrorCode::PREFERRED_CLUSTER_MISMATCHED);
+        UNIT_ASSERT(TInstant::Now() - now > TDuration::MilliSeconds(1999));
+    }
+
+    Y_UNIT_TEST(PreferredCluster_EnabledRemotePreferredClusterAndRemoteClusterEnabledDelaySec_SessionDiesOnlyAfterDelay) {
+        APITestSetup setup{TEST_CASE_NAME};
+        auto log = setup.GetLog();
+        setup.GetPQConfig().SetClustersUpdateTimeoutSec(0);
+        setup.GetPQConfig().SetCloseClientSessionWithEnabledRemotePreferredClusterDelaySec(2);
+        const auto edgeActorID = setup.GetServer().GetRuntime()->AllocateEdgeActor();
+
+        setup.GetPQConfig().SetRemoteClusterEnabledDelaySec(0);
+
+        TInstant now(TInstant::Now());
+        auto session = setup.InitWriteSession(GenerateSessionSetupWithPreferredCluster(setup.GetRemoteCluster()));
+
+        setup.GetServer().GetRuntime()->Send(new IEventHandle(NPQ::NClusterTracker::MakeClusterTrackerID(), edgeActorID, new NPQ::NClusterTracker::TEvClusterTracker::TEvSubscribe));
+        log << TLOG_INFO << "Wait for cluster tracker event";
+        auto clustersUpdate = setup.GetServer().GetRuntime()->GrabEdgeEvent<NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate>();
+        AssertStreamingSessionAlive(session.first);
+
+        AssertStreamingSessionDead(session.first, Ydb::StatusIds::ABORTED, Ydb::PersQueue::ErrorCode::PREFERRED_CLUSTER_MISMATCHED);
+
+        UNIT_ASSERT(TInstant::Now() - now > TDuration::MilliSeconds(1999));
+    }
+
+    Y_UNIT_TEST(PreferredCluster_RemotePreferredClusterEnabledWhileSessionInitializing_SessionDiesOnlyAfterInitializationAndDelay) {
+        APITestSetup setup{TEST_CASE_NAME};
+        auto log = setup.GetLog();
+        setup.GetPQConfig().SetClustersUpdateTimeoutSec(0);
+        setup.GetPQConfig().SetRemoteClusterEnabledDelaySec(0);
+        setup.GetPQConfig().SetCloseClientSessionWithEnabledRemotePreferredClusterDelaySec(2);
+        const auto edgeActorID = setup.GetServer().GetRuntime()->AllocateEdgeActor();
+        setup.GetFlatMsgBusPQClient().UpdateDC(setup.GetRemoteCluster(), false, false);
+
+        grpc::ClientContext context;
+        auto session = setup.GetPersQueueService()->StreamingWrite(&context);
+
+        setup.GetFlatMsgBusPQClient().UpdateDC(setup.GetRemoteCluster(), false, true);
+
+        setup.GetServer().GetRuntime()->Send(new IEventHandle(NPQ::NClusterTracker::MakeClusterTrackerID(), edgeActorID, new NPQ::NClusterTracker::TEvClusterTracker::TEvSubscribe));
+        log << TLOG_INFO << "Wait for cluster tracker event";
+        auto clustersUpdate = setup.GetServer().GetRuntime()->GrabEdgeEvent<NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate>();
+        TInstant now(TInstant::Now());
+        setup.InitSession(session, GenerateSessionSetupWithPreferredCluster(setup.GetRemoteCluster()));
+
+        AssertStreamingSessionAlive(session);
+
+        log << TLOG_INFO << "Set small delay and wait for initialized session with remote preferred cluster to die";
+        AssertStreamingSessionDead(session, Ydb::StatusIds::ABORTED, Ydb::PersQueue::ErrorCode::PREFERRED_CLUSTER_MISMATCHED);
 
         UNIT_ASSERT(TInstant::Now() - now > TDuration::MilliSeconds(1999));
 
-    } 
+    }
 
     Y_UNIT_TEST(SchemeOperationsTest) {
         NPersQueue::TTestServer server;

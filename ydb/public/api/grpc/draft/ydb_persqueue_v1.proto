@@ -32,7 +32,7 @@ service PersQueueService {
      *        <----------------
      */
 
-    rpc StreamingWrite(stream StreamingWriteClientMessage) returns (stream StreamingWriteServerMessage); 
+    rpc StreamingWrite(stream StreamingWriteClientMessage) returns (stream StreamingWriteServerMessage);
 
     /**
      * Creates Read Session

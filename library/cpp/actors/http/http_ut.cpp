@@ -83,17 +83,17 @@ Y_UNIT_TEST_SUITE(HttpProxy) {
         UNIT_ASSERT_EQUAL(response->Body, "this\r\n is test.");
     }
 
-    Y_UNIT_TEST(CreateRepsonseWithCompressedBody) { 
-        NHttp::THttpIncomingRequestPtr request = nullptr; 
-        NHttp::THttpOutgoingResponsePtr response = new NHttp::THttpOutgoingResponse(request, "HTTP", "1.1", "200", "OK"); 
-        response->Set<&NHttp::THttpResponse::ContentEncoding>("gzip"); 
-        TString compressedBody = "compressed body"; 
-        response->SetBody(compressedBody); 
-        UNIT_ASSERT_VALUES_EQUAL("gzip", response->ContentEncoding); 
-        UNIT_ASSERT_VALUES_EQUAL(ToString(compressedBody.size()), response->ContentLength); 
-        UNIT_ASSERT_VALUES_EQUAL(compressedBody, response->Body); 
-    } 
- 
+    Y_UNIT_TEST(CreateRepsonseWithCompressedBody) {
+        NHttp::THttpIncomingRequestPtr request = nullptr;
+        NHttp::THttpOutgoingResponsePtr response = new NHttp::THttpOutgoingResponse(request, "HTTP", "1.1", "200", "OK");
+        response->Set<&NHttp::THttpResponse::ContentEncoding>("gzip");
+        TString compressedBody = "compressed body";
+        response->SetBody(compressedBody);
+        UNIT_ASSERT_VALUES_EQUAL("gzip", response->ContentEncoding);
+        UNIT_ASSERT_VALUES_EQUAL(ToString(compressedBody.size()), response->ContentLength);
+        UNIT_ASSERT_VALUES_EQUAL(compressedBody, response->Body);
+    }
+
     Y_UNIT_TEST(BasicPartialParsing) {
         NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
         EatPartialString(request, "GET /test HTTP/1.1\r\nHost: test\r\nSome-Header: 32344\r\n\r\n");

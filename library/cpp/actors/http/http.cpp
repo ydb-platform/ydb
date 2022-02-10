@@ -45,7 +45,7 @@ template <> TStringBuf THttpResponse::GetName<&THttpResponse::ContentType>() { r
 template <> TStringBuf THttpResponse::GetName<&THttpResponse::ContentLength>() { return "Content-Length"; }
 template <> TStringBuf THttpResponse::GetName<&THttpResponse::TransferEncoding>() { return "Transfer-Encoding"; }
 template <> TStringBuf THttpResponse::GetName<&THttpResponse::LastModified>() { return "Last-Modified"; }
-template <> TStringBuf THttpResponse::GetName<&THttpResponse::ContentEncoding>() { return "Content-Encoding"; } 
+template <> TStringBuf THttpResponse::GetName<&THttpResponse::ContentEncoding>() { return "Content-Encoding"; }
 
 const TMap<TStringBuf, TStringBuf THttpResponse::*, TLessNoCase> THttpResponse::HeadersLocation = {
     { THttpResponse::GetName<&THttpResponse::Connection>(), &THttpResponse::Connection },
@@ -53,7 +53,7 @@ const TMap<TStringBuf, TStringBuf THttpResponse::*, TLessNoCase> THttpResponse::
     { THttpResponse::GetName<&THttpResponse::ContentLength>(), &THttpResponse::ContentLength },
     { THttpResponse::GetName<&THttpResponse::TransferEncoding>(), &THttpResponse::TransferEncoding },
     { THttpResponse::GetName<&THttpResponse::LastModified>(), &THttpResponse::LastModified },
-    { THttpResponse::GetName<&THttpResponse::ContentEncoding>(), &THttpResponse::ContentEncoding } 
+    { THttpResponse::GetName<&THttpResponse::ContentEncoding>(), &THttpResponse::ContentEncoding }
 };
 
 void THttpRequest::Clear() {

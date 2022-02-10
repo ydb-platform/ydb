@@ -32,7 +32,7 @@ using namespace NMsgBusProxy;
 namespace NGRpcProxy {
 namespace V1 {
 
-using namespace PersQueue::V1; 
+using namespace PersQueue::V1;
 
 #define PQ_LOG_PREFIX "session cookie " << Cookie << " consumer " << ClientPath << " session " << Session
 
@@ -2982,8 +2982,8 @@ Ydb::StatusIds::StatusCode ConvertPersQueueInternalCodeToStatus(const PersQueue:
         case INITIALIZING:
         case CLUSTER_DISABLED:
             return Ydb::StatusIds::UNAVAILABLE;
-        case PREFERRED_CLUSTER_MISMATCHED: 
-            return Ydb::StatusIds::ABORTED; 
+        case PREFERRED_CLUSTER_MISMATCHED:
+            return Ydb::StatusIds::ABORTED;
         case OVERLOAD:
             return Ydb::StatusIds::OVERLOADED;
         case BAD_REQUEST:

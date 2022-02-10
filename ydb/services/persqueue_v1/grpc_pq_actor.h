@@ -52,14 +52,14 @@ const TString& TopicPrefix(const TActorContext& ctx);
 
 static const TDuration CHECK_ACL_DELAY = TDuration::Minutes(5);
 
-// Codec ID size in bytes 
-constexpr ui32 CODEC_ID_SIZE = 1; 
- 
+// Codec ID size in bytes
+constexpr ui32 CODEC_ID_SIZE = 1;
 
-template<typename TItem0, typename... TItems> 
-bool AllEqual(const TItem0& item0, const TItems&... items) { 
-    return ((items == item0) && ... && true); 
-} 
+
+template<typename TItem0, typename... TItems>
+bool AllEqual(const TItem0& item0, const TItems&... items) {
+    return ((items == item0) && ... && true);
+}
 
 static inline bool InternalErrorCode(PersQueue::ErrorCode::ErrorCode errorCode) {
     switch(errorCode) {
@@ -98,7 +98,7 @@ struct TCommitCookie {
 
 struct TEvPQProxy {
     enum EEv {
-        EvWriteInit = EventSpaceBegin(TKikimrEvents::ES_PQ_PROXY_NEW), // TODO: Replace 'NEW' with version or something 
+        EvWriteInit = EventSpaceBegin(TKikimrEvents::ES_PQ_PROXY_NEW), // TODO: Replace 'NEW' with version or something
         EvWrite,
         EvDone,
         EvReadInit,
@@ -123,7 +123,7 @@ struct TEvPQProxy {
         EvUpdateClusters,
         EvQueryCompiled,
         EvSessionDead,
-        EvSessionSetPreferredCluster, 
+        EvSessionSetPreferredCluster,
         EvScheduleUpdateClusters,
         EvDeadlineExceeded,
         EvGetStatus,
@@ -148,14 +148,14 @@ struct TEvPQProxy {
         TTopicTabletsPairs TopicAndTablets;
     };
 
-    struct TEvSessionSetPreferredCluster : public NActors::TEventLocal<TEvSessionSetPreferredCluster, EvSessionSetPreferredCluster> { 
-        TEvSessionSetPreferredCluster(const ui64 cookie, const TString& preferredCluster) 
-            : Cookie(cookie) 
-            , PreferredCluster(preferredCluster) 
-        {} 
-        const ui64 Cookie; 
-        const TString PreferredCluster; 
-    }; 
+    struct TEvSessionSetPreferredCluster : public NActors::TEventLocal<TEvSessionSetPreferredCluster, EvSessionSetPreferredCluster> {
+        TEvSessionSetPreferredCluster(const ui64 cookie, const TString& preferredCluster)
+            : Cookie(cookie)
+            , PreferredCluster(preferredCluster)
+        {}
+        const ui64 Cookie;
+        const TString PreferredCluster;
+    };
 
     struct TEvSessionDead : public NActors::TEventLocal<TEvSessionDead, EvSessionDead> {
         TEvSessionDead(const ui64 cookie)
@@ -196,21 +196,21 @@ struct TEvPQProxy {
 
 
     struct TEvWriteInit : public NActors::TEventLocal<TEvWriteInit, EvWriteInit> {
-        TEvWriteInit(PersQueue::V1::StreamingWriteClientMessage&& req, const TString& peerName) 
+        TEvWriteInit(PersQueue::V1::StreamingWriteClientMessage&& req, const TString& peerName)
             : Request(std::move(req))
             , PeerName(peerName)
         { }
 
-        PersQueue::V1::StreamingWriteClientMessage Request; 
+        PersQueue::V1::StreamingWriteClientMessage Request;
         TString PeerName;
     };
 
     struct TEvWrite : public NActors::TEventLocal<TEvWrite, EvWrite> {
-        explicit TEvWrite(PersQueue::V1::StreamingWriteClientMessage&& req) 
+        explicit TEvWrite(PersQueue::V1::StreamingWriteClientMessage&& req)
             : Request(std::move(req))
         { }
 
-        PersQueue::V1::StreamingWriteClientMessage Request; 
+        PersQueue::V1::StreamingWriteClientMessage Request;
     };
 
     struct TEvDone : public NActors::TEventLocal<TEvDone, EvDone> {
@@ -244,14 +244,14 @@ struct TEvPQProxy {
         ui64 ReadTimestampMs;
     };
 
-    struct TEvUpdateToken : public NActors::TEventLocal<TEvUpdateToken, EvUpdateToken> { 
-        explicit TEvUpdateToken(PersQueue::V1::StreamingWriteClientMessage&& req) 
-            : Request(std::move(req)) 
-        { } 
- 
-        PersQueue::V1::StreamingWriteClientMessage Request; 
-    }; 
- 
+    struct TEvUpdateToken : public NActors::TEventLocal<TEvUpdateToken, EvUpdateToken> {
+        explicit TEvUpdateToken(PersQueue::V1::StreamingWriteClientMessage&& req)
+            : Request(std::move(req))
+        { }
+
+        PersQueue::V1::StreamingWriteClientMessage Request;
+    };
+
     struct TEvCloseSession : public NActors::TEventLocal<TEvCloseSession, EvCloseSession> {
         TEvCloseSession(const TString& reason, const PersQueue::ErrorCode::ErrorCode errorCode)
             : Reason(reason)
@@ -453,7 +453,7 @@ struct TEvPQProxy {
 
 /// WRITE ACTOR
 class TWriteSessionActor : public NActors::TActorBootstrapped<TWriteSessionActor> {
-using IContext = NGRpcServer::IGRpcStreamingContext<PersQueue::V1::StreamingWriteClientMessage, PersQueue::V1::StreamingWriteServerMessage>; 
+using IContext = NGRpcServer::IGRpcStreamingContext<PersQueue::V1::StreamingWriteClientMessage, PersQueue::V1::StreamingWriteServerMessage>;
 using TEvDescribeTopicsResponse = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsResponse;
 using TEvDescribeTopicsRequest = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsRequest;
 
@@ -515,11 +515,11 @@ private:
     void Handle(NKqp::TEvKqp::TEvProcessResponse::TPtr &ev, const TActorContext &ctx);
 
     void CheckACL(const TActorContext& ctx);
-    // Requests fresh ACL from 'SchemeCache' 
+    // Requests fresh ACL from 'SchemeCache'
     void InitCheckSchema(const TActorContext& ctx, bool needWaitSchema = false);
     void Handle(TEvPQProxy::TEvWriteInit::TPtr& ev,  const NActors::TActorContext& ctx);
     void Handle(TEvPQProxy::TEvWrite::TPtr& ev, const NActors::TActorContext& ctx);
-    void Handle(TEvPQProxy::TEvUpdateToken::TPtr& ev, const NActors::TActorContext& ctx); 
+    void Handle(TEvPQProxy::TEvUpdateToken::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(TEvPQProxy::TEvDone::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx);
@@ -581,8 +581,8 @@ private:
     NPersQueue::TConverterPtr TopicConverter;
     ui32 Partition;
     ui32 PreferedPartition;
-    // 'SourceId' is called 'MessageGroupId' since gRPC data plane API v1 
-    TString SourceId; // TODO: Replace with 'MessageGroupId' everywhere 
+    // 'SourceId' is called 'MessageGroupId' since gRPC data plane API v1
+    TString SourceId; // TODO: Replace with 'MessageGroupId' everywhere
     TString EscapedSourceId;
     ui32 Hash = 0;
 
@@ -592,7 +592,7 @@ private:
     ui32 NumReserveBytesRequests;
 
     THolder<TAclWrapper> ACL;
- 
+
     struct TWriteRequestBatchInfo: public TSimpleRefCount<TWriteRequestBatchInfo> {
         using TPtr = TIntrusivePtr<TWriteRequestBatchInfo>;
 
@@ -615,7 +615,7 @@ private:
     // Requests that is already sent to partition actor
     std::deque<TWriteRequestBatchInfo::TPtr> SentMessages;
 
- 
+
     bool WritesDone;
 
     THashMap<ui32, ui64> PartitionToTablet;
@@ -639,9 +639,9 @@ private:
 
     TIntrusivePtr<NACLib::TUserToken> Token;
     TString Auth;
-    // Got 'update_token_request', authentication or authorization in progress or 'update_token_response' is not sent yet. Only single 'update_token_request' is allowed inflight 
-    bool UpdateTokenInProgress; 
-    bool UpdateTokenAuthenticated; 
+    // Got 'update_token_request', authentication or authorization in progress or 'update_token_response' is not sent yet. Only single 'update_token_request' is allowed inflight
+    bool UpdateTokenInProgress;
+    bool UpdateTokenAuthenticated;
     bool ACLCheckInProgress;
     bool FirstACLCheck;
     bool RequestNotChecked;
@@ -651,8 +651,8 @@ private:
     ui64 BalancerTabletId;
     TActorId PipeToBalancer;
 
-    // PQ tablet configuration that we get at the time of session initialization 
-    NKikimrPQ::TPQTabletConfig InitialPQTabletConfig; 
+    // PQ tablet configuration that we get at the time of session initialization
+    NKikimrPQ::TPQTabletConfig InitialPQTabletConfig;
 
     NKikimrPQClient::TDataChunk InitMeta;
     TString LocalDC;

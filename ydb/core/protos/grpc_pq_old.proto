@@ -32,7 +32,7 @@ message TDataChunk {
 
     optional EChunkType ChunkType = 9 [default = REGULAR];
 
-    optional int64 Codec = 10; 
+    optional int64 Codec = 10;
 
     optional TMapType ExtraFields     = 126;
 

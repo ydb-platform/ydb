@@ -43,9 +43,9 @@ private:
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
             HFunc(NKikimr::NGRpcService::TEvStreamPQWriteRequest, Handle);
-            HFunc(NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate, Handle); 
+            HFunc(NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate, Handle);
             HFunc(TEvPQProxy::TEvSessionDead, Handle);
-            HFunc(TEvPQProxy::TEvSessionSetPreferredCluster, Handle); 
+            HFunc(TEvPQProxy::TEvSessionSetPreferredCluster, Handle);
             HFunc(NNetClassifier::TEvNetClassifier::TEvClassifierUpdate, Handle);
 
         }
@@ -53,10 +53,10 @@ private:
 
 private:
     void Handle(NKikimr::NGRpcService::TEvStreamPQWriteRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate::TPtr& ev, const TActorContext& ctx); 
+    void Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate::TPtr& ev, const TActorContext& ctx);
     void Handle(NNetClassifier::TEvNetClassifier::TEvClassifierUpdate::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(TEvPQProxy::TEvSessionSetPreferredCluster::TPtr& ev, const TActorContext& ctx); 
+    void Handle(TEvPQProxy::TEvSessionSetPreferredCluster::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQProxy::TEvSessionDead::TPtr& ev, const TActorContext& ctx);
 
     NActors::TActorId SchemeCache;
@@ -65,11 +65,11 @@ private:
     TAtomic LastCookie = 0;
 
     THashMap<ui64, TActorId> Sessions;
-    // Created at by session cookie map by remote preferred cluster name 
-    THashMap<TString, THashMap<ui64, TInstant>> SessionsByRemotePreferredCluster; 
-    THashMap<ui64, TString> RemotePreferredClusterBySessionCookie; 
-    // Cluster enabled at time if cluster is currently enabled 
-    THashMap<TString, TInstant> ClustersEnabledAt; 
+    // Created at by session cookie map by remote preferred cluster name
+    THashMap<TString, THashMap<ui64, TInstant>> SessionsByRemotePreferredCluster;
+    THashMap<ui64, TString> RemotePreferredClusterBySessionCookie;
+    // Cluster enabled at time if cluster is currently enabled
+    THashMap<TString, TInstant> ClustersEnabledAt;
 
     TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
 

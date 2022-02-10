@@ -7,7 +7,7 @@
 
 #include <util/datetime/cputimer.h>
 #include <util/generic/hide_ptr.h>
-#include <util/generic/scope.h>
+#include <util/generic/scope.h> 
 #include <util/system/atomic.h>
 
 namespace NLWTrace {
@@ -235,8 +235,8 @@ namespace NLWTrace {
         inline void operator()(LWTRACE_FUNCTION_PARAMS) {
             TParams params;
             LWTRACE_PREPARE_PARAMS(params);
-            Y_DEFER { TUserSignature<LWTRACE_TEMPLATE_ARGS>::DestroyParams(params); };
-
+            Y_DEFER { TUserSignature<LWTRACE_TEMPLATE_ARGS>::DestroyParams(params); }; 
+ 
             TOrbit orbit;
             Probe.RunExecutors(orbit, params);
         }
@@ -244,8 +244,8 @@ namespace NLWTrace {
         inline void Run(TOrbit& orbit, LWTRACE_FUNCTION_PARAMS) {
             TParams params;
             LWTRACE_PREPARE_PARAMS(params);
-            Y_DEFER { TUserSignature<LWTRACE_TEMPLATE_ARGS>::DestroyParams(params); };
-
+            Y_DEFER { TUserSignature<LWTRACE_TEMPLATE_ARGS>::DestroyParams(params); }; 
+ 
             Probe.RunExecutors(orbit, params);
             Probe.RunShuttles(orbit, params); // Executors can create shuttles
         }

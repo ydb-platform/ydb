@@ -12,7 +12,7 @@ CFLAGS(-DPIRE_NO_CONFIG)
 SRCDIR(contrib/libs/pire/pire)
 
 SRCS(
-    pcre2pire.cpp
+    pcre2pire.cpp 
     classes.cpp
     encoding.cpp
     fsm.cpp

@@ -72,12 +72,12 @@ size_t IInputStream::Load(void* buf_in, size_t len) {
 }
 
 void IInputStream::LoadOrFail(void* buf, size_t len) {
-    const size_t realLen = Load(buf, len);
+    const size_t realLen = Load(buf, len); 
     if (Y_UNLIKELY(realLen != len)) {
-        ythrow yexception() << "Failed to read required number of bytes from stream! Expected: " << len << ", gained: " << realLen << "!";
-    }
-}
-
+        ythrow yexception() << "Failed to read required number of bytes from stream! Expected: " << len << ", gained: " << realLen << "!"; 
+    } 
+} 
+ 
 size_t IInputStream::ReadLine(TString& st) {
     const size_t ret = ReadTo(st, '\n');
 

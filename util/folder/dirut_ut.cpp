@@ -127,7 +127,7 @@ Y_UNIT_TEST_SUITE(TDirutTest) {
         UNIT_ASSERT_EQUAL(StripFileComponent(tmpDir), tmpDir + GetDirectorySeparatorS());
         UNIT_ASSERT_EQUAL(StripFileComponent(tmpSubDir), tmpSubDir + GetDirectorySeparatorS());
         UNIT_ASSERT_EQUAL(StripFileComponent(tmpFile), tmpDir + GetDirectorySeparatorS());
-
+ 
         RemoveDirWithContents(tmpDir);
     }
 };

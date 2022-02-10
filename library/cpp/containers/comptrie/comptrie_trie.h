@@ -331,7 +331,7 @@ bool TCompactTrie<T, D, S>::Find(const TSymbol* key, size_t keylen, TData* value
     if (!LookupLongestPrefix(key, keylen, prefixLen, valuepos, hasNext) || prefixLen != keylen)
         return false;
     if (value)
-        Packer.UnpackLeaf(valuepos, *value);
+        Packer.UnpackLeaf(valuepos, *value); 
     return true;
 }
 
@@ -468,7 +468,7 @@ bool TCompactTrie<T, D, S>::FindLongestPrefix(const TSymbol* key, size_t keylen,
     if (prefixLen)
         *prefixLen = tempPrefixLen;
     if (found && value)
-        Packer.UnpackLeaf(valuepos, *value);
+        Packer.UnpackLeaf(valuepos, *value); 
     if (hasNext)
         *hasNext = tempHasNext;
     return found;
@@ -647,16 +647,16 @@ const char* TCompactTrie<T, D, S>::TConstIterator::GetValuePtr() const {
 
 template <class T, class D, class S>
 typename TCompactTrie<T, D, S>::TData TCompactTrie<T, D, S>::TConstIterator::GetValue() const {
-    D data;
-    GetValue(data);
-    return data;
-}
-
+    D data; 
+    GetValue(data); 
+    return data; 
+} 
+ 
 template <class T, class D, class S>
 void TCompactTrie<T, D, S>::TConstIterator::GetValue(typename TCompactTrie<T, D, S>::TData& data) const {
     const char* ptr = GetValuePtr();
     if (ptr) {
-        Packer.UnpackLeaf(ptr, data);
+        Packer.UnpackLeaf(ptr, data); 
     } else {
         data = typename TCompactTrie<T, D, S>::TData();
     }

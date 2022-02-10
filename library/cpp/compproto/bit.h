@@ -5,7 +5,7 @@
 #include <util/stream/output.h>
 #include <util/stream/input.h>
 
-#include "huff.h"
+#include "huff.h" 
 #include "compressor.h"
 #include "metainfo.h"
 

@@ -82,7 +82,7 @@ public:
      *                                  signals end of stream.
      */
     size_t Load(void* buf, size_t len);
-
+ 
     /**
      * Reads the requested amount of data from the stream, or fails with an
      * exception if unable to do so.

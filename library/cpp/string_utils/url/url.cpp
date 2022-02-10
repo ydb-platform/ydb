@@ -147,41 +147,41 @@ static inline TStringBuf GetHostAndPortImpl(const TStringBuf url) {
 }
 
 TStringBuf GetHost(const TStringBuf url) noexcept {
-    return GetHostAndPortImpl<false>(url);
-}
-
+    return GetHostAndPortImpl<false>(url); 
+} 
+ 
 TStringBuf GetHostAndPort(const TStringBuf url) noexcept {
-    return GetHostAndPortImpl<true>(url);
-}
-
+    return GetHostAndPortImpl<true>(url); 
+} 
+ 
 TStringBuf GetSchemeHostAndPort(const TStringBuf url, bool trimHttp, bool trimDefaultPort) noexcept {
-    const size_t schemeSize = GetSchemePrefixSize(url);
-    const TStringBuf scheme = url.Head(schemeSize);
-
+    const size_t schemeSize = GetSchemePrefixSize(url); 
+    const TStringBuf scheme = url.Head(schemeSize); 
+ 
     const bool isHttp = (schemeSize == 0 || scheme == TStringBuf("http://"));
-
-    TStringBuf hostAndPort = GetHostAndPort(url.Tail(schemeSize));
-
-    if (trimDefaultPort) {
-        const size_t pos = hostAndPort.find(':');
-        if (pos != TStringBuf::npos) {
+ 
+    TStringBuf hostAndPort = GetHostAndPort(url.Tail(schemeSize)); 
+ 
+    if (trimDefaultPort) { 
+        const size_t pos = hostAndPort.find(':'); 
+        if (pos != TStringBuf::npos) { 
             const bool isHttps = (scheme == TStringBuf("https://"));
-
-            const TStringBuf port = hostAndPort.Tail(pos + 1);
+ 
+            const TStringBuf port = hostAndPort.Tail(pos + 1); 
             if ((isHttp && port == TStringBuf("80")) || (isHttps && port == TStringBuf("443"))) {
-                // trimming default port
-                hostAndPort = hostAndPort.Head(pos);
-            }
-        }
-    }
-
-    if (isHttp && trimHttp) {
-        return hostAndPort;
-    } else {
-        return TStringBuf(scheme.begin(), hostAndPort.end());
-    }
-}
-
+                // trimming default port 
+                hostAndPort = hostAndPort.Head(pos); 
+            } 
+        } 
+    } 
+ 
+    if (isHttp && trimHttp) { 
+        return hostAndPort; 
+    } else { 
+        return TStringBuf(scheme.begin(), hostAndPort.end()); 
+    } 
+} 
+ 
 void SplitUrlToHostAndPath(const TStringBuf url, TStringBuf& host, TStringBuf& path) {
     auto [hostBuf, pathBuf] = NUrl::SplitUrlToHostAndPath(url);
     host = hostBuf;
@@ -240,14 +240,14 @@ TStringBuf GetOnlyHost(const TStringBuf url) noexcept {
 }
 
 TStringBuf GetPathAndQuery(const TStringBuf url, bool trimFragment) noexcept {
-    const size_t off = url.find('/', GetHttpPrefixSize(url));
+    const size_t off = url.find('/', GetHttpPrefixSize(url)); 
     TStringBuf hostUnused, path;
     if (!url.TrySplitAt(off, hostUnused, path))
-        return "/";
+        return "/"; 
 
     return trimFragment ? path.Before('#') : path;
-}
-
+} 
+ 
 // this strange creature returns 2nd level domain, possibly with port
 TStringBuf GetDomain(const TStringBuf host) noexcept {
     const char* c = !host ? host.data() : host.end() - 1;

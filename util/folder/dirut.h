@@ -47,8 +47,8 @@ void MakeDirIfNotExist(const char* path, int mode = 0777);
 
 inline void MakeDirIfNotExist(const TString& path, int mode = 0777) {
     MakeDirIfNotExist(path.data(), mode);
-}
-
+} 
+ 
 /// Create path making parent directories as needed
 void MakePathIfNotExist(const char* path, int mode = 0777);
 
@@ -65,8 +65,8 @@ const char* GetFileNameComponent(const char* f);
 
 inline TString GetFileNameComponent(const TString& f) {
     return GetFileNameComponent(f.data());
-}
-
+} 
+ 
 /// RealPath doesn't guarantee trailing separator to be stripped or left in place for directories.
 TString RealPath(const TString& path);     // throws
 TString RealLocation(const TString& path); /// throws; last file name component doesn't need to exist
@@ -88,7 +88,7 @@ TString GetDirName(const TString& path);
 TString GetBaseName(const TString& path);
 
 TString StripFileComponent(const TString& fileName);
-
+ 
 class TExistenceChecker {
 public:
     TExistenceChecker(bool strict = false)

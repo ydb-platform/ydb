@@ -131,7 +131,7 @@ Y_UNIT_TEST_SUITE(TRegExp) {
         UNIT_ASSERT(searcher.Captured());
         UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("Уважаемый (-ая)"));
     }
-
+ 
     Y_UNIT_TEST(Capture5) {
         TCapturingFsm fsm("away\\.php\\?to=http:([^\"])+\"");
         TSearcher searcher(fsm);
@@ -306,13 +306,13 @@ Y_UNIT_TEST_SUITE(TRegExp) {
     }
 
     Y_UNIT_TEST(Pcre2PireTest) {
-        UNIT_ASSERT_VALUES_EQUAL(Pcre2Pire("(?:fake)"), "(fake)");
-        UNIT_ASSERT_VALUES_EQUAL(Pcre2Pire("(?:fake)??"), "(fake)?");
-        UNIT_ASSERT_VALUES_EQUAL(Pcre2Pire("(?:fake)*?fake"), "(fake)*fake");
-        UNIT_ASSERT_VALUES_EQUAL(Pcre2Pire("(?P<field>fake)"), "(fake)");
-        UNIT_ASSERT_VALUES_EQUAL(Pcre2Pire("fake\\#"), "fake#");
-        UNIT_ASSERT_VALUES_EQUAL(Pcre2Pire("(?P<field>)fake"), "fake");
-        UNIT_ASSERT_VALUES_EQUAL(Pcre2Pire("(?:(?P<field1>)(?P<field2>))"), "");
-        UNIT_ASSERT_VALUES_EQUAL(Pcre2Pire("(?:(?:fake))"), "((fake))");
-    }
+        UNIT_ASSERT_VALUES_EQUAL(Pcre2Pire("(?:fake)"), "(fake)"); 
+        UNIT_ASSERT_VALUES_EQUAL(Pcre2Pire("(?:fake)??"), "(fake)?"); 
+        UNIT_ASSERT_VALUES_EQUAL(Pcre2Pire("(?:fake)*?fake"), "(fake)*fake"); 
+        UNIT_ASSERT_VALUES_EQUAL(Pcre2Pire("(?P<field>fake)"), "(fake)"); 
+        UNIT_ASSERT_VALUES_EQUAL(Pcre2Pire("fake\\#"), "fake#"); 
+        UNIT_ASSERT_VALUES_EQUAL(Pcre2Pire("(?P<field>)fake"), "fake"); 
+        UNIT_ASSERT_VALUES_EQUAL(Pcre2Pire("(?:(?P<field1>)(?P<field2>))"), ""); 
+        UNIT_ASSERT_VALUES_EQUAL(Pcre2Pire("(?:(?:fake))"), "((fake))"); 
+    } 
 }

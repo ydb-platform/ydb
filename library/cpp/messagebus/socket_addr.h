@@ -87,7 +87,7 @@ namespace NBus {
             TBusSocketAddr(const NAddr::IRemoteAddr*);
             TBusSocketAddr(const TNetAddr&);
             TBusSocketAddr(TStringBuf host, unsigned port);
-
+ 
             TNetAddr ToNetAddr() const;
 
             bool operator==(const TBusSocketAddr& that) const {

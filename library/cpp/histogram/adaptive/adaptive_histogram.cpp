@@ -351,9 +351,9 @@ namespace NKiwiAggr {
 
     double TAdaptiveHistogram::CalcUpperBound(double sum) {
         Y_VERIFY(sum >= 0, "Sum must be >= 0");
-        if (sum == 0.0) {
-            return MinValue;
-        }
+        if (sum == 0.0) { 
+            return MinValue; 
+        } 
         if (Empty()) {
             return MaxValue;
         }
@@ -392,9 +392,9 @@ namespace NKiwiAggr {
 
     double TAdaptiveHistogram::CalcLowerBound(double sum) {
         Y_VERIFY(sum >= 0, "Sum must be >= 0");
-        if (sum == 0.0) {
-            return MaxValue;
-        }
+        if (sum == 0.0) { 
+            return MaxValue; 
+        } 
         if (Empty()) {
             return MinValue;
         }

@@ -14,7 +14,7 @@ using namespace NBus::NPrivate;
 static_assert(ADDR_UNSPEC == 0, "expect ADDR_UNSPEC == 0");
 
 NBus::NPrivate::TBusSocketAddr::TBusSocketAddr(const NAddr::IRemoteAddr* addr)
-    : IPv6ScopeID(0)
+    : IPv6ScopeID(0) 
 {
     const sockaddr* sa = addr->Addr();
 

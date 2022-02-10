@@ -11,11 +11,11 @@
 #include <sys/socket.h>
 #endif
 
-#if defined(_win_) 
+#if defined(_win_)
 // #include required to avoid problem with undefined 'socklen_t' on Windows
 #include <util/network/socket.h>
-#endif 
- 
+#endif
+
 namespace NAddr {
     class IRemoteAddr;
 }

@@ -111,12 +111,12 @@ struct TEnumTraits<T, true>
     ENUM__MINMAX \
     ENUM__VALIDATE_UNIQUE(name) \
     ENUM__END_TRAITS(name)
-
-//! Defines a smart enumeration with a specific underlying type.
-//! Duplicate enumeration values are allowed.
-#define DEFINE_AMBIGUOUS_ENUM_WITH_UNDERLYING_TYPE(name, underlyingType, seq) \
-    ENUM__CLASS(name, underlyingType, seq) \
-    ENUM__BEGIN_TRAITS(name, underlyingType, false, false, seq) \
+ 
+//! Defines a smart enumeration with a specific underlying type. 
+//! Duplicate enumeration values are allowed. 
+#define DEFINE_AMBIGUOUS_ENUM_WITH_UNDERLYING_TYPE(name, underlyingType, seq) \ 
+    ENUM__CLASS(name, underlyingType, seq) \ 
+    ENUM__BEGIN_TRAITS(name, underlyingType, false, false, seq) \ 
     ENUM__MINMAX \
     ENUM__END_TRAITS(name)
 
@@ -138,20 +138,20 @@ struct TEnumTraits<T, true>
     ENUM__END_TRAITS(name) \
     ENUM__BITWISE_OPS(name)
 
-//! Defines a smart enumeration with a specific underlying type.
-//! Duplicate enumeration values are allowed.
-/*!
- * \param name Enumeration name.
- * \param seq Enumeration domain encoded as a <em>sequence</em>.
- * \param underlyingType Underlying type.
- */
-#define DEFINE_AMBIGUOUS_BIT_ENUM_WITH_UNDERLYING_TYPE(name, underlyingType, seq) \
-    ENUM__CLASS(name, underlyingType, seq) \
-    ENUM__BEGIN_TRAITS(name, underlyingType, true, false, seq) \
+//! Defines a smart enumeration with a specific underlying type. 
+//! Duplicate enumeration values are allowed. 
+/*! 
+ * \param name Enumeration name. 
+ * \param seq Enumeration domain encoded as a <em>sequence</em>. 
+ * \param underlyingType Underlying type. 
+ */ 
+#define DEFINE_AMBIGUOUS_BIT_ENUM_WITH_UNDERLYING_TYPE(name, underlyingType, seq) \ 
+    ENUM__CLASS(name, underlyingType, seq) \ 
+    ENUM__BEGIN_TRAITS(name, underlyingType, true, false, seq) \ 
     ENUM__DECOMPOSE \
-    ENUM__END_TRAITS(name) \
-    ENUM__BITWISE_OPS(name)
-
+    ENUM__END_TRAITS(name) \ 
+    ENUM__BITWISE_OPS(name) 
+ 
 //! Defines a smart enumeration with the default |unsigned| underlying type.
 /*!
  * \param name Enumeration name.
@@ -171,13 +171,13 @@ struct TEnumTraits<T, true>
     ENUM__BEGIN_TRAITS(name, underlyingType, false, true, seq) \
     ENUM__MINMAX \
     ENUM__VALIDATE_UNIQUE(name) \
-    ENUM__END_TRAITS(name) \
-
-//! Defines a smart enumeration with a specific underlying type and IsStringSerializable attribute.
-//! Duplicate enumeration values are allowed.
-#define DEFINE_AMBIGUOUS_STRING_SERIALIZABLE_ENUM_WITH_UNDERLYING_TYPE(name, underlyingType, seq) \
-    ENUM__CLASS(name, underlyingType, seq) \
-    ENUM__BEGIN_TRAITS(name, underlyingType, false, true, seq) \
+    ENUM__END_TRAITS(name) \ 
+ 
+//! Defines a smart enumeration with a specific underlying type and IsStringSerializable attribute. 
+//! Duplicate enumeration values are allowed. 
+#define DEFINE_AMBIGUOUS_STRING_SERIALIZABLE_ENUM_WITH_UNDERLYING_TYPE(name, underlyingType, seq) \ 
+    ENUM__CLASS(name, underlyingType, seq) \ 
+    ENUM__BEGIN_TRAITS(name, underlyingType, false, true, seq) \ 
     ENUM__MINMAX \
     ENUM__END_TRAITS(name)
 

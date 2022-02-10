@@ -2,7 +2,7 @@
 
 $$ Please, use Pump to convert this source file to valid C++ header.
 $$ Note that lines in this file could be longer than 80 symbols.
-$var n = 199
+$var n = 199 
 $range i 0..n
 
 /*!

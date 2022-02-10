@@ -114,7 +114,7 @@ namespace NCompProto {
                     }
                 }
                 for (size_t i = 0; i < 16; ++i) {
-                    if (Tables[i].Get()) {
+                    if (Tables[i].Get()) { 
                         Tables[i]->GenerateFreqs(codes, depth + 4, termDepth, code + (i << (28 - depth)), cnt);
                     }
                 }

@@ -106,17 +106,17 @@ inline TString JoinStrings(const TVector<TString>& v, size_t index, size_t count
     return JoinStrings(v.begin() + index, v.begin() + index + count, delim);
 }
 
-template <typename T>
+template <typename T> 
 inline TString JoinVectorIntoString(const TVector<T>& v, const TStringBuf delim) {
     return JoinStrings(v.begin(), v.end(), delim);
-}
-
-template <typename T>
+} 
+ 
+template <typename T> 
 inline TString JoinVectorIntoString(const TVector<T>& v, size_t index, size_t count, const TStringBuf delim) {
     Y_ASSERT(index + count <= v.size() && "JoinVectorIntoString(): index or count out of range");
     return JoinStrings(v.begin() + index, v.begin() + index + count, delim);
-}
-
+} 
+ 
 TUtf16String JoinStrings(const TVector<TUtf16String>& v, const TWtringBuf delim);
 TUtf16String JoinStrings(const TVector<TUtf16String>& v, size_t index, size_t count, const TWtringBuf delim);
 

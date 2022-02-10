@@ -55,19 +55,19 @@ inline void Print(const T& t) {
     }
 }
 
-template <template <typename> class TConsumer, typename TResult, typename I, typename TDelimiter>
+template <template <typename> class TConsumer, typename TResult, typename I, typename TDelimiter> 
 void TestDelimiterOnString(TResult& good, I* str, const TDelimiter& delim) {
     TResult test;
-    TConsumer<TResult> consumer(&test);
+    TConsumer<TResult> consumer(&test); 
     SplitString(str, delim, consumer);
     Cmp(good, test);
     UNIT_ASSERT_EQUAL(good, test);
 }
 
-template <template <typename> class TConsumer, typename TResult, typename I, typename TDelimiter>
+template <template <typename> class TConsumer, typename TResult, typename I, typename TDelimiter> 
 void TestDelimiterOnRange(TResult& good, I* b, I* e, const TDelimiter& delim) {
     TResult test;
-    TConsumer<TResult> consumer(&test);
+    TConsumer<TResult> consumer(&test); 
     SplitString(b, e, delim, consumer);
     Cmp(good, test);
     UNIT_ASSERT_EQUAL(good, test);
@@ -142,14 +142,14 @@ Y_UNIT_TEST_SUITE(SplitStringTest) {
 
     Y_UNIT_TEST(TestConvertToIntCharSingleDelimiter) {
         TString data("42 4242 -12345 0");
-        i32 canonic[] = {42, 4242, -12345, 0};
+        i32 canonic[] = {42, 4242, -12345, 0}; 
         TVector<i32> good(canonic, canonic + 4);
-        TCharDelimiter<const char> delim(' ');
-
+        TCharDelimiter<const char> delim(' '); 
+ 
         TestDelimiterOnString<TContainerConvertingConsumer>(good, data.data(), delim);
         TestDelimiterOnRange<TContainerConvertingConsumer>(good, data.data(), data.end(), delim);
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TestCharSkipEmpty) {
         TString data("qw ab  qwabcab ");
         TString canonic[] = {"qw", "ab", "qwabcab"};
@@ -243,14 +243,14 @@ Y_UNIT_TEST_SUITE(SplitStringTest) {
         TVector<TString> good(canonic, canonic + 3);
         TString delim = "ab";
         TVector<TString> test;
-        Split(data, delim, test);
-        Cmp(good, test);
+        Split(data, delim, test); 
+        Cmp(good, test); 
 
         TVector<TStringBuf> test1;
         Split(data, delim.data(), test1);
         Cmp(good, test1);
-    }
-
+    } 
+ 
     Y_UNIT_TEST(ConvenientSplitTest) {
         TString data("abc 22 33.5 xyz");
         TString str;
@@ -263,7 +263,7 @@ Y_UNIT_TEST_SUITE(SplitStringTest) {
         UNIT_ASSERT_VALUES_EQUAL(num2, 33.5);
         UNIT_ASSERT_VALUES_EQUAL(strBuf, "xyz");
     }
-
+ 
     Y_UNIT_TEST(ConvenientSplitTestWithMaybe) {
         TString data("abc 42");
         TString str;

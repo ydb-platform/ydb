@@ -298,23 +298,23 @@ struct TContainerConsumer {
     T* C;
 };
 
-template <class T>
-struct TContainerConvertingConsumer {
+template <class T> 
+struct TContainerConvertingConsumer { 
     inline TContainerConvertingConsumer(T* c) noexcept
-        : C(c)
-    {
-    }
-
-    template <class I>
-    inline bool Consume(I* b, I* d, I* /*e*/) {
+        : C(c) 
+    { 
+    } 
+ 
+    template <class I> 
+    inline bool Consume(I* b, I* d, I* /*e*/) { 
         TConsumerBackInserter<T>::DoInsert(C, FromString<typename T::value_type>(TStringBuf(b, d)));
-
-        return true;
-    }
-
-    T* C;
-};
-
+ 
+        return true; 
+    } 
+ 
+    T* C; 
+}; 
+ 
 template <class S, class I>
 struct TLimitingConsumer {
     inline TLimitingConsumer(size_t cnt, S* slave) noexcept

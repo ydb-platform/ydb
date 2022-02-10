@@ -1,6 +1,6 @@
 import datetime
 import typing
-import ydb 
+import ydb
 from utils import session_pool_context, make_driver_config
 from config import Config
 

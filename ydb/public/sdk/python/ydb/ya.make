@@ -5,41 +5,41 @@ OWNER(g:kikimr)
 PY_SRCS(
     NAMESPACE ydb
     __init__.py
-    _apis.py 
-    _session_impl.py 
-    _sp_impl.py 
-    _tx_ctx_impl.py 
-    _utilities.py 
+    _apis.py
+    _session_impl.py
+    _sp_impl.py
+    _tx_ctx_impl.py
+    _utilities.py
     auth_helpers.py
-    connection.py 
-    convert.py 
+    connection.py
+    convert.py
     credentials.py
     dbapi/__init__.py
     dbapi/connection.py
     dbapi/cursor.py
     dbapi/errors.py
-    default_pem.py 
-    driver.py 
+    default_pem.py
+    driver.py
     experimental.py
     export.py
     iam/__init__.py
     iam/auth.py
     import_client.py
     interceptor.py
-    issues.py 
-    operation.py 
-    pool.py 
-    resolver.py 
+    issues.py
+    operation.py
+    pool.py
+    resolver.py
     s3list.py
-    scheme.py 
+    scheme.py
     scripting.py
-    settings.py 
+    settings.py
     sqlalchemy/__init__.py
     sqlalchemy/types.py
-    table.py 
+    table.py
     tracing.py
-    types.py 
-    ydb_version.py 
+    types.py
+    ydb_version.py
 )
 
 IF (PYTHON3)
@@ -61,13 +61,13 @@ IF (PYTHON3)
 
 ENDIF()
 
-IF (PYTHON2) 
-    PEERDIR( 
-        contrib/python/enum34 
-        contrib/python/futures 
-    ) 
-ENDIF() 
- 
+IF (PYTHON2)
+    PEERDIR(
+        contrib/python/enum34
+        contrib/python/futures
+    )
+ENDIF()
+
 PEERDIR(
     contrib/libs/grpc/python
     contrib/python/protobuf

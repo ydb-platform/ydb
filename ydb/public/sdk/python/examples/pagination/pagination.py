@@ -2,7 +2,7 @@
 from __future__ import print_function
 import os
 
-import ydb 
+import ydb
 from concurrent.futures import TimeoutError
 from . import sample_data
 

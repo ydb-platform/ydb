@@ -27,10 +27,10 @@
 * remove useless `from_bytes` for PY3
 * improve performance of column parser
 
-## 1.0.27 ## 
- 
-* fix bug with prepare in aio 
- 
+## 1.0.27 ##
+
+* fix bug with prepare in aio
+
 ## 1.0.26 ##
 
 * allow specifying column labels in group by in the sqlalchemy dialect
@@ -39,10 +39,10 @@
 
 * add SEQUENCE to known schema types
 
-## 1.0.22 ## 
- 
+## 1.0.22 ##
+
 * add `retry_operation` to `aio.SessionPool`
- 
+
 ## 1.0.21 ##
 
 * ydb.aio supports retry operation helper.
@@ -51,26 +51,26 @@
 
 * storage class support
 
-## 1.0.19 ## 
- 
-* add async `SessionPool` support 
- 
+## 1.0.19 ##
+
+* add async `SessionPool` support
+
 ## 1.0.18 ##
 
 * minor change in dbapi
 
-## 1.0.17 ## 
- 
-* add asyncio support 
- 
-## 1.0.14 ## 
- 
-* add some custom datatypes for sqlalchemy 
- 
-## 1.0.13 ## 
- 
-* change error format for sqlalchemy 
- 
+## 1.0.17 ##
+
+* add asyncio support
+
+## 1.0.14 ##
+
+* add some custom datatypes for sqlalchemy
+
+## 1.0.13 ##
+
+* change error format for sqlalchemy
+
 ## 1.0.12 ##
 
 * add ``ValueSinceUnixEpochModeSettings`` support to ``TtlSettings``

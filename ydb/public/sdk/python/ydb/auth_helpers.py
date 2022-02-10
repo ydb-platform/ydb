@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import os
 
-from . import credentials, tracing 
+from . import credentials, tracing
 import warnings
 
 
@@ -17,8 +17,8 @@ def load_ydb_root_certificate():
     return None
 
 
-def construct_credentials_from_environ(tracer=None): 
-    tracer = tracer if tracer is not None else tracing.Tracer(None) 
+def construct_credentials_from_environ(tracer=None):
+    tracer = tracer if tracer is not None else tracing.Tracer(None)
     warnings.warn(
         "using construct_credentials_from_environ method for credentials instantiation is deprecated and will be "
         "removed in the future major releases. Please instantialize credentials by default or provide correct credentials "
@@ -32,18 +32,18 @@ def construct_credentials_from_environ(tracer=None):
     ):
         import ydb.iam
 
-        tracing.trace(tracer, {"credentials.metadata": True}) 
+        tracing.trace(tracer, {"credentials.metadata": True})
         return ydb.iam.MetadataUrlCredentials()
 
     if os.getenv("YDB_TOKEN") is not None:
-        tracing.trace(tracer, {"credentials.access_token": True}) 
+        tracing.trace(tracer, {"credentials.access_token": True})
         return credentials.AuthTokenCredentials(os.getenv("YDB_TOKEN"))
 
     if os.getenv("SA_KEY_FILE") is not None:
 
         import ydb.iam
 
-        tracing.trace(tracer, {"credentials.sa_key_file": True}) 
+        tracing.trace(tracer, {"credentials.sa_key_file": True})
         root_certificates_file = os.getenv("SSL_ROOT_CERTIFICATES_FILE", None)
         iam_channel_credentials = {}
         if root_certificates_file is not None:

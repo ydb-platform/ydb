@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from ydb.public.api.grpc.draft import ydb_s3_internal_v1_pb2_grpc
 from ydb.public.api.protos import ydb_s3_internal_pb2
-from . import convert, issues, types 
+from . import convert, issues, types
 
 
 _S3Listing = "S3Listing"

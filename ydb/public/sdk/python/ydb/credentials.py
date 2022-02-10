@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import abc
 import six
-from . import tracing 
+from . import tracing
 
 YDB_AUTH_TICKET_HEADER = "x-ydb-auth-ticket"
 
@@ -15,9 +15,9 @@ class AbstractCredentials(object):
 
 @six.add_metaclass(abc.ABCMeta)
 class Credentials(object):
-    def __init__(self, tracer=None): 
-        self.tracer = tracer if tracer is not None else tracing.Tracer(None) 
- 
+    def __init__(self, tracer=None):
+        self.tracer = tracer if tracer is not None else tracing.Tracer(None)
+
     @abc.abstractmethod
     def auth_metadata(self):
         """

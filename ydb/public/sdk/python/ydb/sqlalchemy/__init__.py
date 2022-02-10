@@ -21,9 +21,9 @@ try:
     from sqlalchemy.sql.elements import ClauseList
     from sqlalchemy.sql import functions
     import sqlalchemy as sa
-    from sqlalchemy import exc 
-    from sqlalchemy.util.compat import inspect_getfullargspec 
-    from sqlalchemy.sql import literal_column 
+    from sqlalchemy import exc
+    from sqlalchemy.util.compat import inspect_getfullargspec
+    from sqlalchemy.sql import literal_column
 
     SQLALCHEMY_VERSION = tuple(sa.__version__.split("."))
     SA_14 = SQLALCHEMY_VERSION >= ("1", "4")
@@ -59,15 +59,15 @@ try:
         def visit_BOOLEAN(self, type_, **kw):
             return "BOOL"
 
-        def visit_uint32(self, type_, **kw): 
-            return "UInt32" 
- 
-        def visit_uint64(self, type_, **kw): 
-            return "UInt64" 
- 
-        def visit_uint8(self, type_, **kw): 
-            return "UInt8" 
- 
+        def visit_uint32(self, type_, **kw):
+            return "UInt32"
+
+        def visit_uint64(self, type_, **kw):
+            return "UInt64"
+
+        def visit_uint8(self, type_, **kw):
+            return "UInt8"
+
     class ParametrizedFunction(functions.Function):
         __visit_name__ = "parametrized_function"
 
@@ -85,28 +85,28 @@ try:
             kw.update(within_columns_clause=True)
             return super(YqlCompiler, self).group_by_clause(select, **kw)
 
-        def visit_lambda(self, lambda_, **kw): 
-            func = lambda_.func 
-            spec = inspect_getfullargspec(func) 
- 
-            if spec.varargs: 
+        def visit_lambda(self, lambda_, **kw):
+            func = lambda_.func
+            spec = inspect_getfullargspec(func)
+
+            if spec.varargs:
                 raise exc.CompileError("Lambdas with *args are not supported")
- 
-            try: 
-                keywords = spec.keywords 
-            except AttributeError: 
-                keywords = spec.varkw 
- 
-            if keywords: 
+
+            try:
+                keywords = spec.keywords
+            except AttributeError:
+                keywords = spec.varkw
+
+            if keywords:
                 raise exc.CompileError("Lambdas with **kwargs are not supported")
- 
+
             text = "(" + ", ".join("$" + arg for arg in spec.args) + ")" + " -> "
- 
+
             args = [literal_column("$" + arg) for arg in spec.args]
-            text += "{ RETURN " + self.process(func(*args), **kw) + " ;}" 
- 
-            return text 
- 
+            text += "{ RETURN " + self.process(func(*args), **kw) + " ;}"
+
+            return text
+
         def visit_parametrized_function(self, func, **kwargs):
             name = func.name
             name_parts = []
@@ -170,8 +170,8 @@ try:
         ydb.PrimitiveType.Int64: sa.INTEGER,
         ydb.PrimitiveType.Uint8: sa.INTEGER,
         ydb.PrimitiveType.Uint16: sa.INTEGER,
-        ydb.PrimitiveType.Uint32: UInt32, 
-        ydb.PrimitiveType.Uint64: UInt64, 
+        ydb.PrimitiveType.Uint32: UInt32,
+        ydb.PrimitiveType.Uint64: UInt64,
         ydb.PrimitiveType.Float: sa.FLOAT,
         ydb.PrimitiveType.Double: sa.FLOAT,
         ydb.PrimitiveType.String: sa.TEXT,

@@ -127,7 +127,7 @@ RECURSE(
     nirvana_api
     nirvana_api/test_lib
     nirvana_test
-    nstools 
+    nstools
     nyt
     oauth
     oauth/example

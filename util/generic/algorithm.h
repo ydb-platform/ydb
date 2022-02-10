@@ -313,18 +313,18 @@ static inline T UniqueBy(T f, T l, const TGetKey& getKey) {
     return Unique(f, l, [&](auto&& left, auto&& right) { return getKey(left) == getKey(right); });
 }
 
-template <class C> 
-void SortUnique(C& c) { 
-    Sort(c.begin(), c.end()); 
+template <class C>
+void SortUnique(C& c) {
+    Sort(c.begin(), c.end());
     c.erase(Unique(c.begin(), c.end()), c.end());
-} 
- 
-template <class C, class Cmp> 
-void SortUnique(C& c, Cmp cmp) { 
-    Sort(c.begin(), c.end(), cmp); 
+}
+
+template <class C, class Cmp>
+void SortUnique(C& c, Cmp cmp) {
+    Sort(c.begin(), c.end(), cmp);
     c.erase(Unique(c.begin(), c.end()), c.end());
-} 
- 
+}
+
 template <class C, class TGetKey>
 void SortUniqueBy(C& c, const TGetKey& getKey) {
     SortBy(c, getKey);

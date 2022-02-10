@@ -1031,11 +1031,11 @@ void LZ4_resetStreamHC_fast (LZ4_streamHC_t* LZ4_streamHCPtr, int compressionLev
         LZ4_initStreamHC(LZ4_streamHCPtr, sizeof(*LZ4_streamHCPtr));
     } else {
         /* preserve end - base : can trigger clearTable's threshold */
-        if (LZ4_streamHCPtr->internal_donotuse.end != NULL) {
-            LZ4_streamHCPtr->internal_donotuse.end -= (uptrval)LZ4_streamHCPtr->internal_donotuse.base;
-        } else {
-            assert(LZ4_streamHCPtr->internal_donotuse.base == NULL);
-        }
+        if (LZ4_streamHCPtr->internal_donotuse.end != NULL) { 
+            LZ4_streamHCPtr->internal_donotuse.end -= (uptrval)LZ4_streamHCPtr->internal_donotuse.base; 
+        } else { 
+            assert(LZ4_streamHCPtr->internal_donotuse.base == NULL); 
+        } 
         LZ4_streamHCPtr->internal_donotuse.base = NULL;
         LZ4_streamHCPtr->internal_donotuse.dictCtx = NULL;
     }

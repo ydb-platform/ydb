@@ -8,7 +8,7 @@
     #pragma intrinsic(__rdtsc)
 #endif // _win_
 
-#if defined(_darwin_) && !defined(_x86_)
+#if defined(_darwin_) && !defined(_x86_) 
     #include <mach/mach_time.h>
 #endif
 

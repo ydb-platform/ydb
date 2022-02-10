@@ -40,17 +40,17 @@ class DescribeTableSettings(settings_impl.BaseRequestSettings):
     def __init__(self):
         super(DescribeTableSettings, self).__init__()
         self.include_shard_key_bounds = False
-        self.include_table_stats = False
+        self.include_table_stats = False 
 
     def with_include_shard_key_bounds(self, value):
         self.include_shard_key_bounds = value
         return self
 
-    def with_include_table_stats(self, value):
-        self.include_table_stats = value
-        return self
+    def with_include_table_stats(self, value): 
+        self.include_table_stats = value 
+        return self 
 
-
+ 
 class ExecDataQuerySettings(settings_impl.BaseRequestSettings):
     def __init__(self):
         super(ExecDataQuerySettings, self).__init__()
@@ -523,20 +523,20 @@ class TtlSettings(object):
         return pb
 
 
-class TableStats(object):
-    def __init__(self):
-        self.partitions = None
+class TableStats(object): 
+    def __init__(self): 
+        self.partitions = None 
         self.store_size = 0
-
+ 
     def with_store_size(self, store_size):
         self.store_size = store_size
         return self
 
-    def with_partitions(self, partitions):
-        self.partitions = partitions
-        return self
-
-
+    def with_partitions(self, partitions): 
+        self.partitions = partitions 
+        return self 
+ 
+ 
 class ReadReplicasSettings(object):
     def __init__(self):
         self.per_az_read_replicas_count = 0
@@ -1474,14 +1474,14 @@ class TableSchemeEntry(scheme.SchemeEntry):
                     ttl_settings.value_since_unix_epoch.expire_after_seconds,
                 )
 
-        self.table_stats = None
-        if table_stats is not None:
-            self.table_stats = TableStats()
-            if table_stats.partitions != 0:
-                self.table_stats = self.table_stats.with_partitions(
-                    table_stats.partitions
-                )
-
+        self.table_stats = None 
+        if table_stats is not None: 
+            self.table_stats = TableStats() 
+            if table_stats.partitions != 0: 
+                self.table_stats = self.table_stats.with_partitions( 
+                    table_stats.partitions 
+                ) 
+ 
             if table_stats.store_size != 0:
                 self.table_stats = self.table_stats.with_store_size(
                     table_stats.store_size
@@ -1985,19 +1985,19 @@ class Session(BaseSession):
             self._state.endpoint,
         )
 
-    def async_copy_table(self, source_path, destination_path, settings=None):
+    def async_copy_table(self, source_path, destination_path, settings=None): 
         return self.async_copy_tables(
             [(source_path, destination_path)], settings=settings
         )
-
+ 
     @_utilities.wrap_async_call_exceptions
-    def async_copy_tables(self, source_destination_pairs, settings=None):
+    def async_copy_tables(self, source_destination_pairs, settings=None): 
         return self._driver.future(
             _session_impl.copy_tables_request_factory(
                 self._state, source_destination_pairs
             ),
             _apis.TableService.Stub,
-            _apis.TableService.CopyTables,
+            _apis.TableService.CopyTables, 
             _session_impl.wrap_operation,
             settings,
             (self._state,),

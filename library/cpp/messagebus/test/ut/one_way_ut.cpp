@@ -59,9 +59,9 @@ struct NullClient : TBusClientHandlerError {
 
         /// register source/client session
         Session = TBusClientSession::Create(&Proto, this, sessionConfig, Queue);
- 
-        /// register service, announce to clients via LocatorService 
-        Session->RegisterService("localhost"); 
+
+        /// register service, announce to clients via LocatorService
+        Session->RegisterService("localhost");
     }
 
     ~NullClient() override {

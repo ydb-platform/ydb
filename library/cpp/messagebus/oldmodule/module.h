@@ -127,7 +127,7 @@ namespace NBus {
             }
             UseAddr = !!addr;
         }
- 
+
     public:
         TString GetStatus(unsigned flags);
     };
@@ -270,7 +270,7 @@ namespace NBus {
 
         /// return human reabable status of this job
         virtual TString GetStatus(unsigned flags);
- 
+
         /// set sleep time for job
         void Sleep(int milliSeconds);
 
@@ -372,7 +372,7 @@ namespace NBus {
 
         /// get status of all jobs in flight
         TString GetStatus(unsigned flags = 0);
- 
+
         /// called when application is about to start
         virtual bool StartInput();
         /// called when application is about to exit

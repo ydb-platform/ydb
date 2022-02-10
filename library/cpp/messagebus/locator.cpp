@@ -136,7 +136,7 @@ namespace NBus {
     TBusLocator::TServiceId TBusLocator::GetServiceId(const char* name) {
         const char* c = ServiceIdSet.insert(name).first->c_str();
         return (ui64)c;
-    } 
+    }
 
     int TBusLocator::RegisterBreak(TBusService service, const TVector<TBusKey>& starts, const TNetAddr& addr) {
         TGuard<TMutex> G(Lock);
@@ -261,16 +261,16 @@ namespace NBus {
             const TItem& item = *it;
             addrs.push_back(item.Addr);
         }
- 
+
         if (addrs.size() == 0) {
             return -1;
         }
         return (int)addrs.size();
-    } 
+    }
 
     int TBusLocator::Locate(TBusService service, TBusKey key, TNetAddr* addr) {
         TGuard<TMutex> G(Lock);
- 
+
         TServiceId serviceId = GetServiceId(service);
         TItems::const_iterator it;
 
@@ -299,7 +299,7 @@ namespace NBus {
             if (item.ServiceId != serviceId) {
                 break;
             }
- 
+
             if (IsLocal(item.Addr)) {
                 if (port != 0 && port != GetAddrPort(item.Addr)) {
                     Y_ASSERT(0 && "Can't decide which port to use.");
@@ -308,15 +308,15 @@ namespace NBus {
                 port = GetAddrPort(item.Addr);
             }
         }
- 
+
         return port;
-    } 
+    }
 
     int TBusLocator::GetLocalAddresses(TBusService service, TVector<TNetAddr>& addrs) {
         TGuard<TMutex> G(Lock);
         TServiceId serviceId = GetServiceId(service);
         TItems::const_iterator it;
- 
+
         for (it = Items.lower_bound(TItem(serviceId, 0, 0, TNetAddr())); it != Items.end(); ++it) {
             const TItem& item = *it;
             if (item.ServiceId != serviceId) {
@@ -386,7 +386,7 @@ namespace NBus {
         }
         Register(service, start, end, addr);
         return 0;
-    } 
+    }
 
     int TBusLocator::Register(TBusService service, TBusKey start, TBusKey end, const TNetworkAddress& na, EIpVersion requireVersion /*= EIP_VERSION_4*/, EIpVersion preferVersion /*= EIP_VERSION_ANY*/) {
         TNetAddr addr(na, requireVersion, preferVersion); // throws
@@ -396,7 +396,7 @@ namespace NBus {
 
     int TBusLocator::Register(TBusService service, TBusKey start, TBusKey end, const TNetAddr& addr) {
         TGuard<TMutex> G(Lock);
- 
+
         TServiceId serviceId = GetServiceId(service);
         TItems::const_iterator it;
 
@@ -416,12 +416,12 @@ namespace NBus {
         Items.insert(itemToReg);
         return 0;
     }
- 
+
     int TBusLocator::Unregister(TBusService service, TBusKey start, TBusKey end) {
         TGuard<TMutex> G(Lock);
         TServiceId serviceId = GetServiceId(service);
         Items.erase(TItem(serviceId, start, end, TNetAddr()));
         return 0;
-    } 
- 
+    }
+
 }

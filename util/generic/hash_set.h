@@ -8,7 +8,7 @@
 
 #undef value_type
 
-template <class Value, class HashFcn, class EqualKey, class Alloc>
+template <class Value, class HashFcn, class EqualKey, class Alloc> 
 class THashSet {
 private:
     using ht = THashTable<Value, Value, HashFcn, ::TIdentity, EqualKey, Alloc>;

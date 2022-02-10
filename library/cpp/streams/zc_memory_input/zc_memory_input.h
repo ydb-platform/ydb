@@ -9,7 +9,7 @@ class TZCMemoryInput: public TMemoryInput {
 public:
     TZCMemoryInput() {
     }
-
+ 
     TZCMemoryInput(const char* dataPtr, size_t size)
         : TMemoryInput(dataPtr, size)
     {

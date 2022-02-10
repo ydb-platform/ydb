@@ -2,7 +2,7 @@
 
 #include <util/stream/output.h>
 
-void DoWithRetry(std::function<void()> func, TRetryOptions retryOptions) {
+void DoWithRetry(std::function<void()> func, TRetryOptions retryOptions) { 
     DoWithRetry(func, retryOptions, true);
 }
 

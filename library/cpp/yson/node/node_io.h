@@ -34,7 +34,7 @@ TNode NodeFromJsonString(const TStringBuf input);
 
 // Convert TJsonValue to TNode
 TNode NodeFromJsonValue(const NJson::TJsonValue& input);
-
+ 
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT

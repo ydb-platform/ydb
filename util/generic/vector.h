@@ -8,7 +8,7 @@
 #include <vector>
 #include <initializer_list>
 
-template <class T, class A>
+template <class T, class A> 
 class TVector: public std::vector<T, TReboundAllocator<A, T>> {
 public:
     using TBase = std::vector<T, TReboundAllocator<A, T>>;

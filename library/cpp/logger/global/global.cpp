@@ -25,16 +25,16 @@ void DoInitGlobalLog(THolder<TLogBackend> backend, THolder<ILoggerFormatter> for
 bool GlobalLogInitialized() {
     return TLoggerOperator<TGlobalLog>::Usage();
 }
- 
+
 template <>
-TGlobalLog* CreateDefaultLogger<TGlobalLog>() { 
-    return new TGlobalLog("console", TLOG_INFO); 
-} 
- 
+TGlobalLog* CreateDefaultLogger<TGlobalLog>() {
+    return new TGlobalLog("console", TLOG_INFO);
+}
+
 template <>
-TNullLog* CreateDefaultLogger<TNullLog>() { 
-    return new TNullLog("null"); 
-} 
+TNullLog* CreateDefaultLogger<TNullLog>() {
+    return new TNullLog("null");
+}
 
 NPrivateGlobalLogger::TVerifyEvent::~TVerifyEvent() {
     const TString info = Str();

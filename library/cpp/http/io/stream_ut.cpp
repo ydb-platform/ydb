@@ -266,27 +266,27 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
         TString res = "qqqqqq\r\n\r\nsdasdsad\r\n";
         TPortManager pm;
         const ui16 port = pm.GetPort();
- 
-        TTestHttpServer serverImpl(res); 
-        THttpServer server(&serverImpl, THttpServer::TOptions(port).EnableKeepAlive(true).EnableCompression(true)); 
- 
-        UNIT_ASSERT(server.Start()); 
- 
-        TNetworkAddress addr("localhost", port); 
- 
-        TSocket s(addr); 
- 
+
+        TTestHttpServer serverImpl(res);
+        THttpServer server(&serverImpl, THttpServer::TOptions(port).EnableKeepAlive(true).EnableCompression(true));
+
+        UNIT_ASSERT(server.Start());
+
+        TNetworkAddress addr("localhost", port);
+
+        TSocket s(addr);
+
         SendMinimalHttpRequest(s, "www.yandex.ru", "/");
- 
-        TSocketInput si(s); 
-        THttpInput input(&si); 
-        unsigned httpCode = ParseHttpRetCode(input.FirstLine()); 
-        UNIT_ASSERT_VALUES_EQUAL(httpCode, 200u); 
+
+        TSocketInput si(s);
+        THttpInput input(&si);
+        unsigned httpCode = ParseHttpRetCode(input.FirstLine());
+        UNIT_ASSERT_VALUES_EQUAL(httpCode, 200u);
         TString reply = input.ReadAll();
-        UNIT_ASSERT_VALUES_EQUAL(reply, res); 
-        server.Stop(); 
-    } 
- 
+        UNIT_ASSERT_VALUES_EQUAL(reply, res);
+        server.Stop();
+    }
+
     Y_UNIT_TEST(TestOutputFlush) {
         TString str;
         TStringOutput strOut(str);

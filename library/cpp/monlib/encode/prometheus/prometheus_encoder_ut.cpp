@@ -367,48 +367,48 @@ Y_UNIT_TEST_SUITE(TPrometheusEncoderTest) {
             "bytesRx_count{host=\"solomon-sas-01\", dc=\"sas\", } 17 1512216010000\n"
             "\n");
     }
- 
-    Y_UNIT_TEST(CommonLables) { 
-        auto result = EncodeToString([](IMetricEncoder* e) { 
-            e->OnStreamBegin(); 
-            { // common time 
-                e->OnCommonTime(TInstant::Seconds(1500000000)); 
-            } 
-            { // common labels 
-                e->OnLabelsBegin(); 
-                e->OnLabel("project", "solomon"); 
-                e->OnLabelsEnd(); 
-            } 
-            { // metric #1 
-                e->OnMetricBegin(EMetricType::COUNTER); 
-                { 
-                    e->OnLabelsBegin(); 
-                    e->OnLabel("sensor", "single"); 
-                    e->OnLabel("labels", "l1"); 
-                    e->OnLabelsEnd(); 
-                } 
-                e->OnUint64(TInstant::ParseIso8601Deprecated("2017-12-02T12:00:10Z"), 17); 
-                e->OnMetricEnd(); 
-            } 
-            { // metric #2 
-                e->OnMetricBegin(EMetricType::COUNTER); 
-                { 
-                    e->OnLabelsBegin(); 
-                    e->OnLabel("sensor", "two"); 
-                    e->OnLabel("labels", "l2"); 
-                    e->OnLabelsEnd(); 
-                } 
-                e->OnUint64(TInstant::Zero(), 42); 
-                e->OnMetricEnd(); 
-            } 
-            e->OnStreamEnd(); 
-        }); 
-    UNIT_ASSERT_STRINGS_EQUAL(result, 
-R"(# TYPE single counter 
-single{labels="l1", project="solomon", } 17 1512216010000 
-# TYPE two counter 
-two{labels="l2", project="solomon", } 42 1500000000000 
- 
-)"); 
-    } 
+
+    Y_UNIT_TEST(CommonLables) {
+        auto result = EncodeToString([](IMetricEncoder* e) {
+            e->OnStreamBegin();
+            { // common time
+                e->OnCommonTime(TInstant::Seconds(1500000000));
+            }
+            { // common labels
+                e->OnLabelsBegin();
+                e->OnLabel("project", "solomon");
+                e->OnLabelsEnd();
+            }
+            { // metric #1
+                e->OnMetricBegin(EMetricType::COUNTER);
+                {
+                    e->OnLabelsBegin();
+                    e->OnLabel("sensor", "single");
+                    e->OnLabel("labels", "l1");
+                    e->OnLabelsEnd();
+                }
+                e->OnUint64(TInstant::ParseIso8601Deprecated("2017-12-02T12:00:10Z"), 17);
+                e->OnMetricEnd();
+            }
+            { // metric #2
+                e->OnMetricBegin(EMetricType::COUNTER);
+                {
+                    e->OnLabelsBegin();
+                    e->OnLabel("sensor", "two");
+                    e->OnLabel("labels", "l2");
+                    e->OnLabelsEnd();
+                }
+                e->OnUint64(TInstant::Zero(), 42);
+                e->OnMetricEnd();
+            }
+            e->OnStreamEnd();
+        });
+    UNIT_ASSERT_STRINGS_EQUAL(result,
+R"(# TYPE single counter
+single{labels="l1", project="solomon", } 17 1512216010000
+# TYPE two counter
+two{labels="l2", project="solomon", } 42 1500000000000
+
+)");
+    }
 }

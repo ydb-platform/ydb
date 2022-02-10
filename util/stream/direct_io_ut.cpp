@@ -1,12 +1,12 @@
 #include <library/cpp/testing/unittest/registar.h>
- 
+
 #include <util/generic/string.h>
 #include <util/generic/array_size.h>
 #include <util/system/env.h>
- 
+
 #include "buffered.h"
 #include "direct_io.h"
- 
+
 Y_UNIT_TEST_SUITE(TDirectIOTests) {
     // Decrease numBufToWrite further if tests continue to time out
     static void Y_NO_INLINE Test(EOpenMode mode, size_t numBufToWrite) {
@@ -55,8 +55,8 @@ Y_UNIT_TEST_SUITE(TDirectIOTests) {
         }
 
         UNIT_ASSERT_VALUES_EQUAL(bytesRead, numBufToWrite * BUFFER_SIZE);
-    } 
- 
+    }
+
     Y_UNIT_TEST(ReadWriteTest) {
         Test(0, 100 * 32);
     }
@@ -67,5 +67,5 @@ Y_UNIT_TEST_SUITE(TDirectIOTests) {
 
     Y_UNIT_TEST(ReadWriteDirectSeqTest) {
         Test(Direct | Seq, 100 * 4);
-    } 
-} 
+    }
+}

@@ -16,8 +16,8 @@ IF (ALLOCATOR == "B" OR ALLOCATOR == "BS" OR ALLOCATOR == "C")
     PEERDIR(
         library/cpp/balloc/optional
     )
-ENDIF() 
- 
+ENDIF()
+
 SRCS(
     actor_bootstrapped.h
     actor_coroutine.cpp

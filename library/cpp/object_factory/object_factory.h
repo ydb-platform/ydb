@@ -1,12 +1,12 @@
-#pragma once 
- 
-#include <util/system/guard.h> 
+#pragma once
+
+#include <util/system/guard.h>
 #include <util/system/rwlock.h>
-#include <util/generic/map.h> 
-#include <util/generic/set.h> 
+#include <util/generic/map.h>
+#include <util/generic/set.h>
 #include <util/generic/singleton.h>
 #include <util/generic/yexception.h>
- 
+
 namespace NObjectFactory {
     template <class TProduct, class... TArgs>
     class IFactoryObjectCreator {
@@ -62,7 +62,7 @@ namespace NObjectFactory {
             if (!Creators.insert(typename ICreators::value_type(key, creator)).second)
                 ythrow yexception() << "Product with key " << key << " already registered";
         }
- 
+
         template <class TDerivedProduct>
         void Register(const TKey& key) {
             Register<TDerivedProduct>(key, new TFactoryObjectCreator<TProduct, TDerivedProduct, TArgs...>);
@@ -74,8 +74,8 @@ namespace NObjectFactory {
             for (typename ICreators::const_iterator i = Creators.begin(), e = Creators.end(); i != e; ++i) {
                 keys.insert(i->first);
             }
-        } 
- 
+        }
+
     protected:
         IFactoryObjectCreator<TProduct, TArgs...>* GetCreator(const TKey& key) const {
             TReadGuard guard(CreatorsLock);
@@ -94,7 +94,7 @@ namespace NObjectFactory {
         ICreators Creators;
         TRWMutex CreatorsLock;
     };
- 
+
     template <class TProduct, class TKey>
     class TObjectFactory: public IObjectFactory<TProduct, TKey, void> {
     public:
@@ -132,11 +132,11 @@ namespace NObjectFactory {
             return result;
         }
 
-        template<class... Args> 
-        static THolder<TProduct> MakeHolder(Args&&... args) { 
+        template<class... Args>
+        static THolder<TProduct> MakeHolder(Args&&... args) {
             return THolder<TProduct>(Construct(std::forward<Args>(args)...));
-        } 
- 
+        }
+
         static bool Has(const TKey& key) {
             return Singleton<TObjectFactory<TProduct, TKey>>()->HasImpl(key);
         }
@@ -144,7 +144,7 @@ namespace NObjectFactory {
         static void GetRegisteredKeys(TSet<TKey>& keys) {
             return Singleton<TObjectFactory<TProduct, TKey>>()->GetKeys(keys);
         }
- 
+
         static TSet<TKey> GetRegisteredKeys() {
             TSet<TKey> keys;
             Singleton<TObjectFactory<TProduct, TKey>>()->GetKeys(keys);
@@ -182,16 +182,16 @@ namespace NObjectFactory {
 
     template <class TProduct, class TKey, class... TArgs>
     class TParametrizedObjectFactory: public IObjectFactory<TProduct, TKey, TArgs...> {
-    public: 
+    public:
         TProduct* Create(const TKey& key, TArgs... args) const {
             IFactoryObjectCreator<TProduct, TArgs...>* creator = IObjectFactory<TProduct, TKey, TArgs...>::GetCreator(key);
             return creator == nullptr ? nullptr : creator->Create(std::forward<TArgs>(args)...);
-        } 
+        }
 
         static bool Has(const TKey& key) {
             return Singleton<TParametrizedObjectFactory<TProduct, TKey, TArgs...>>()->HasImpl(key);
         }
- 
+
         static TProduct* Construct(const TKey& key, TArgs... args) {
             return Singleton<TParametrizedObjectFactory<TProduct, TKey, TArgs...>>()->Create(key, std::forward<TArgs>(args)...);
         }
@@ -203,11 +203,11 @@ namespace NObjectFactory {
             return result;
         }
 
-        template<class... Args> 
-        static THolder<TProduct> MakeHolder(Args&&... args) { 
-            return THolder<TProduct>(Construct(std::forward<Args>(args)...)); 
-        } 
- 
+        template<class... Args>
+        static THolder<TProduct> MakeHolder(Args&&... args) {
+            return THolder<TProduct>(Construct(std::forward<Args>(args)...));
+        }
+
         static void GetRegisteredKeys(TSet<TKey>& keys) {
             return Singleton<TParametrizedObjectFactory<TProduct, TKey, TArgs...>>()->GetKeys(keys);
         }
@@ -238,6 +238,6 @@ namespace NObjectFactory {
                 return Product::GetTypeName();
             }
         };
-    }; 
+    };
 
 }

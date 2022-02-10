@@ -16,7 +16,7 @@ public:
     }
 
 protected:
-    void DoUndo(size_t len) override; 
+    void DoUndo(size_t len) override;
     size_t DoNext(const void** ptr, size_t len) override;
 
     /**

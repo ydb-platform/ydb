@@ -35,7 +35,7 @@ public:
         return MemInput_.Read(buf, len);
     }
 
-    inline size_t Skip(size_t len) { 
+    inline size_t Skip(size_t len) {
         size_t totalSkipped = 0;
         while (len) {
             const size_t skipped = DoSkip(len);
@@ -45,11 +45,11 @@ public:
 
             totalSkipped += skipped;
             len -= skipped;
-        } 
+        }
 
         return totalSkipped;
-    } 
- 
+    }
+
     inline size_t DoSkip(size_t len) {
         if (MemInput_.Exhausted()) {
             if (len > BufLen() / 2) {
@@ -131,10 +131,10 @@ size_t TBufferedInput::DoRead(void* buf, size_t len) {
     return Impl_->Read(buf, len);
 }
 
-size_t TBufferedInput::DoSkip(size_t len) { 
-    return Impl_->Skip(len); 
-} 
- 
+size_t TBufferedInput::DoSkip(size_t len) {
+    return Impl_->Skip(len);
+}
+
 size_t TBufferedInput::DoNext(const void** ptr, size_t len) {
     return Impl_->Next(ptr, len);
 }

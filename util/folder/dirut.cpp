@@ -222,22 +222,22 @@ int correctpath(char* cpath, const char* path) {
     }
     char* ptr = (char*)path;
     char* cptr = cpath;
-    int counter = 0; 
-    while (*ptr) { 
-        char c = *ptr; 
-        if (c == '/') 
-            c = '\\'; 
-        if (c == '\\') 
+    int counter = 0;
+    while (*ptr) {
+        char c = *ptr;
+        if (c == '/')
+            c = '\\';
+        if (c == '\\')
             ++counter;
-        else 
-            counter = 0; 
-        if (counter <= 1) { 
-            *cptr = c; 
+        else
+            counter = 0;
+        if (counter <= 1) {
+            *cptr = c;
             ++cptr;
-        } 
+        }
         ++ptr;
-    } 
-    *cptr = 0; 
+    }
+    *cptr = 0;
     // replace '/' by '\'
     int dk = skip_disk(cpath);
 

@@ -37,7 +37,7 @@
 #include <util/system/compat.h>
 #include <util/system/compiler.h>
 #include <util/system/defaults.h>
-#include <util/system/error.h> 
+#include <util/system/error.h>
 
 #include <stdlib.h>
 #ifndef _win_
@@ -465,7 +465,7 @@ yfts_read(FTS* sp) {
     char* t;
     int saved_errno;
 
-    ClearLastSystemError(); 
+    ClearLastSystemError();
 
     /* If finished or unrecoverable error, return NULL. */
     if (sp->fts_cur == nullptr || ISSET(FTS_STOP)) {

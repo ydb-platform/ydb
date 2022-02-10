@@ -155,7 +155,7 @@ public:
         return Max<i64>(0, Bucket);
     }
 
-    void Use(ui64 tokens, bool sleep = false) { 
+    void Use(ui64 tokens, bool sleep = false) {
         TGuard<Lock> g(BucketMutex);
         UseNoLock(tokens, sleep);
     }

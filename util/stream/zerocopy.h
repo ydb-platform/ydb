@@ -56,36 +56,36 @@ protected:
     virtual size_t DoNext(const void** ptr, size_t len) = 0;
 };
 
-/** 
-* Input stream with direct access to the input buffer and ability to undo read 
-* 
-* Derived classes must implement `DoUndo` method. 
-*/ 
+/**
+* Input stream with direct access to the input buffer and ability to undo read
+*
+* Derived classes must implement `DoUndo` method.
+*/
 class IZeroCopyInputFastReadTo: public IZeroCopyInput {
-public: 
+public:
     IZeroCopyInputFastReadTo() noexcept = default;
     ~IZeroCopyInputFastReadTo() override;
- 
+
     IZeroCopyInputFastReadTo(IZeroCopyInputFastReadTo&&) noexcept = default;
     IZeroCopyInputFastReadTo& operator=(IZeroCopyInputFastReadTo&&) noexcept = default;
 
-protected: 
+protected:
     size_t DoReadTo(TString& st, char ch) override;
- 
-private: 
-    /** 
-    * Undo read. 
-    * 
-    * Note that this function not check if you try undo more that read. In fact Undo used for undo read in last chunk. 
-    * 
-    * @param len[in]                   Bytes to undo. 
-    */ 
-    inline void Undo(size_t len) { 
-        if (len) { 
-            DoUndo(len); 
-        } 
-    } 
-    virtual void DoUndo(size_t len) = 0; 
-}; 
- 
+
+private:
+    /**
+    * Undo read.
+    *
+    * Note that this function not check if you try undo more that read. In fact Undo used for undo read in last chunk.
+    *
+    * @param len[in]                   Bytes to undo.
+    */
+    inline void Undo(size_t len) {
+        if (len) {
+            DoUndo(len);
+        }
+    }
+    virtual void DoUndo(size_t len) = 0;
+};
+
 /** @} */

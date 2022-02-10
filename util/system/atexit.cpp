@@ -35,7 +35,7 @@ namespace {
         }
 
         inline void Finish() noexcept {
-            AtomicSet(FinishStarted_, 1); 
+            AtomicSet(FinishStarted_, 1);
 
             auto guard = Guard(Lock_);
 
@@ -65,13 +65,13 @@ namespace {
             }
         }
 
-        inline bool FinishStarted() const { 
-            return AtomicGet(FinishStarted_); 
-        } 
+        inline bool FinishStarted() const {
+            return AtomicGet(FinishStarted_);
+        }
 
     private:
         TAdaptiveLock Lock_;
-        TAtomic FinishStarted_; 
+        TAtomic FinishStarted_;
         TDeque<TFunc> Store_;
         TPriorityQueue<TFunc*, TVector<TFunc*>, TCmp> Items_;
     };
@@ -108,13 +108,13 @@ void ManualRunAtExitFinalizers() {
     OnExit();
 }
 
-bool ExitStarted() { 
+bool ExitStarted() {
     if (TAtExit* const atExit = AtomicGet(atExitPtr)) {
         return atExit->FinishStarted();
-    } 
+    }
     return false;
-} 
- 
+}
+
 void AtExit(TAtExitFunc func, void* ctx, size_t priority) {
     Instance()->Register(func, ctx, priority);
 }

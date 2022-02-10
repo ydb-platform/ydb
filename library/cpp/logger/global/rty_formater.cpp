@@ -1,20 +1,20 @@
-#include "rty_formater.h" 
-#include <util/datetime/base.h> 
+#include "rty_formater.h"
+#include <util/datetime/base.h>
 #include <util/datetime/systime.h>
-#include <util/stream/str.h> 
-#include <util/stream/printf.h> 
-#include <util/system/mem_info.h> 
+#include <util/stream/str.h>
+#include <util/stream/printf.h>
+#include <util/system/mem_info.h>
 #include <util/system/yassert.h>
 #include <inttypes.h>
 #include <cstdio>
- 
+
 namespace {
     constexpr size_t LocalTimeSBufferSize = sizeof("2017-07-24 12:20:34.313 +0300");
 
     size_t PrintLocalTimeS(const TInstant instant, char* const begin, const char* const end) {
         Y_VERIFY(static_cast<size_t>(end - begin) >= LocalTimeSBufferSize);
 
-        struct tm tm; 
+        struct tm tm;
         instant.LocalTime(&tm);
 
         // both stftime and sprintf exclude the terminating null byte from the return value
@@ -24,9 +24,9 @@ namespace {
         pos += strftime(pos, end - pos, " %z", &tm);
         Y_VERIFY(LocalTimeSBufferSize - 1 == pos - begin); // together with Y_VERIFY above this also implies pos<=end
         return (pos - begin);
-    } 
+    }
 }
- 
+
 namespace NLoggingImpl {
     IOutputStream& operator<<(IOutputStream& out, TLocalTimeS localTimeS) {
         char buffer[LocalTimeSBufferSize];
@@ -48,20 +48,20 @@ namespace NLoggingImpl {
         return res;
     }
 
-    TStringBuf StripFileName(TStringBuf string) { 
-        return string.RNextTok(LOCSLASH_C); 
-    } 
- 
+    TStringBuf StripFileName(TStringBuf string) {
+        return string.RNextTok(LOCSLASH_C);
+    }
+
     TString GetSystemResources() {
-        NMemInfo::TMemInfo mi = NMemInfo::GetMemInfo(); 
+        NMemInfo::TMemInfo mi = NMemInfo::GetMemInfo();
         return PrintSystemResources(mi);
     }
 
     TString PrintSystemResources(const NMemInfo::TMemInfo& mi) {
-        return Sprintf(" rss=%0.3fMb, vms=%0.3fMb", mi.RSS * 1.0 / (1024 * 1024), mi.VMS * 1.0 / (1024 * 1024)); 
-    } 
-} 
- 
+        return Sprintf(" rss=%0.3fMb, vms=%0.3fMb", mi.RSS * 1.0 / (1024 * 1024), mi.VMS * 1.0 / (1024 * 1024));
+    }
+}
+
 namespace {
     class TRtyLoggerFormatter : public ILoggerFormatter {
     public:
@@ -84,11 +84,11 @@ bool TRTYMessageFormater::CheckLoggingContext(TLog& /*logger*/, const TLogRecord
     return true;
 }
 
-TSimpleSharedPtr<TLogElement> TRTYMessageFormater::StartRecord(TLog& logger, const TLogRecordContext& context, TSimpleSharedPtr<TLogElement> earlier) { 
+TSimpleSharedPtr<TLogElement> TRTYMessageFormater::StartRecord(TLog& logger, const TLogRecordContext& context, TSimpleSharedPtr<TLogElement> earlier) {
     if (!earlier) {
-        earlier.Reset(new TLogElement(&logger)); 
+        earlier.Reset(new TLogElement(&logger));
     }
 
     TLoggerFormatterOperator::Get()->Format(context, *earlier);
-    return earlier; 
-} 
+    return earlier;
+}

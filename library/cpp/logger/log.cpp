@@ -1,5 +1,5 @@
-#include "log.h" 
-#include "uninitialized_creator.h" 
+#include "log.h"
+#include "uninitialized_creator.h"
 #include "filter.h"
 #include "null.h"
 #include "stream.h"
@@ -13,9 +13,9 @@
 #include <util/generic/yexception.h>
 
 THolder<TLogBackend> CreateLogBackend(const TString& fname, ELogPriority priority, bool threaded) {
-    TLogBackendCreatorUninitialized creator; 
-    creator.InitCustom(fname, priority, threaded); 
-    return creator.CreateLogBackend(); 
+    TLogBackendCreatorUninitialized creator;
+    creator.InitCustom(fname, priority, threaded);
+    return creator.CreateLogBackend();
 }
 
 THolder<TLogBackend> CreateFilteredOwningThreadedLogBackend(const TString& fname, ELogPriority priority, size_t queueLen) {
@@ -23,7 +23,7 @@ THolder<TLogBackend> CreateFilteredOwningThreadedLogBackend(const TString& fname
 }
 
 THolder<TOwningThreadedLogBackend> CreateOwningThreadedLogBackend(const TString& fname, size_t queueLen) {
-    return MakeHolder<TOwningThreadedLogBackend>(CreateLogBackend(fname, LOG_MAX_PRIORITY, false).Release(), queueLen); 
+    return MakeHolder<TOwningThreadedLogBackend>(CreateLogBackend(fname, LOG_MAX_PRIORITY, false).Release(), queueLen);
 }
 
 class TLog::TImpl: public TAtomicRefCount<TImpl> {
@@ -131,7 +131,7 @@ TLog::TLog()
 }
 
 TLog::TLog(const TString& fname, ELogPriority priority)
-    : TLog(CreateLogBackend(fname, priority, false)) 
+    : TLog(CreateLogBackend(fname, priority, false))
 {
 }
 
@@ -206,7 +206,7 @@ ELogPriority TLog::DefaultPriority() const noexcept {
 
 bool TLog::OpenLog(const char* path, ELogPriority lp) {
     if (path) {
-        ResetBackend(CreateLogBackend(path, lp)); 
+        ResetBackend(CreateLogBackend(path, lp));
     } else {
         ResetBackend(MakeHolder<TStreamLogBackend>(&Cerr));
     }

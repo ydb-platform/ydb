@@ -1,4 +1,4 @@
-#include "lf_allocX64.h" 
+#include "lf_allocX64.h"
 
 //////////////////////////////////////////////////////////////////////////
 // hooks
@@ -8,14 +8,14 @@
 #define OP_THROWNOTHING
 #endif
 
-#ifndef _darwin_ 
+#ifndef _darwin_
 #if !defined(YMAKE)
 void* operator new(size_t size) {
-    return LFAlloc(size); 
+    return LFAlloc(size);
 }
 
 void* operator new(size_t size, const std::nothrow_t&) OP_THROWNOTHING {
-    return LFAlloc(size); 
+    return LFAlloc(size);
 }
 
 void operator delete(void* p)OP_THROWNOTHING {
@@ -27,11 +27,11 @@ void operator delete(void* p, const std::nothrow_t&)OP_THROWNOTHING {
 }
 
 void* operator new[](size_t size) {
-    return LFAlloc(size); 
+    return LFAlloc(size);
 }
 
 void* operator new[](size_t size, const std::nothrow_t&) OP_THROWNOTHING {
-    return LFAlloc(size); 
+    return LFAlloc(size);
 }
 
 void operator delete[](void* p) OP_THROWNOTHING {
@@ -46,20 +46,20 @@ void operator delete[](void* p, const std::nothrow_t&) OP_THROWNOTHING {
 //#ifndef _MSC_VER
 
 extern "C" void* malloc(size_t size) {
-    return LFAlloc(size); 
+    return LFAlloc(size);
 }
 
 extern "C" void* valloc(size_t size) {
-    return LFVAlloc(size); 
+    return LFVAlloc(size);
 }
 
 extern "C" int posix_memalign(void** memptr, size_t alignment, size_t size) {
-    return LFPosixMemalign(memptr, alignment, size); 
+    return LFPosixMemalign(memptr, alignment, size);
 }
 
 extern "C" void* memalign(size_t alignment, size_t size) {
     void* ptr;
-    int res = LFPosixMemalign(&ptr, alignment, size); 
+    int res = LFPosixMemalign(&ptr, alignment, size);
     return res ? nullptr : ptr;
 }
 
@@ -84,7 +84,7 @@ extern "C" void* calloc(size_t n, size_t elem_size) {
     if (elem_size != 0 && size / elem_size != n)
         return nullptr;
 
-    void* result = LFAlloc(size); 
+    void* result = LFAlloc(size);
     if (result != nullptr) {
         memset(result, 0, size);
     }
@@ -97,7 +97,7 @@ extern "C" void cfree(void* ptr) {
 
 extern "C" void* realloc(void* old_ptr, size_t new_size) {
     if (old_ptr == nullptr) {
-        void* result = LFAlloc(new_size); 
+        void* result = LFAlloc(new_size);
         return result;
     }
     if (new_size == 0) {
@@ -105,7 +105,7 @@ extern "C" void* realloc(void* old_ptr, size_t new_size) {
         return nullptr;
     }
 
-    void* new_ptr = LFAlloc(new_size); 
+    void* new_ptr = LFAlloc(new_size);
     if (new_ptr == nullptr) {
         return nullptr;
     }
@@ -122,20 +122,20 @@ extern "C" size_t malloc_usable_size(void* ptr) {
     return LFGetSize(ptr);
 }
 
-NMalloc::TMallocInfo NMalloc::MallocInfo() { 
-    NMalloc::TMallocInfo r; 
-#if defined(LFALLOC_DBG) 
-    r.Name = "lfalloc_dbg"; 
-#elif defined(LFALLOC_YT) 
-    r.Name = "lfalloc_yt"; 
+NMalloc::TMallocInfo NMalloc::MallocInfo() {
+    NMalloc::TMallocInfo r;
+#if defined(LFALLOC_DBG)
+    r.Name = "lfalloc_dbg";
+#elif defined(LFALLOC_YT)
+    r.Name = "lfalloc_yt";
 #else
-    r.Name = "lfalloc"; 
-#endif 
-    r.SetParam = &LFAlloc_SetParam; 
-    r.GetParam = &LFAlloc_GetParam; 
-    return r; 
-} 
-#else 
+    r.Name = "lfalloc";
+#endif
+    r.SetParam = &LFAlloc_SetParam;
+    r.GetParam = &LFAlloc_GetParam;
+    return r;
+}
+#else
 NMalloc::TMallocInfo NMalloc::MallocInfo() {
     NMalloc::TMallocInfo r;
     r.Name = "system-darwin";

@@ -2,7 +2,7 @@
 #include "tokenizer.h"
 #include "buffer.h"
 #include "buffered.h"
-#include "walk.h" 
+#include "walk.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -23,8 +23,8 @@ class TStreamsTest: public TTestBase {
     UNIT_TEST(TestBufferStream);
     UNIT_TEST(TestStringStream);
     UNIT_TEST(TestWtrokaInput);
-    UNIT_TEST(TestStrokaInput); 
-    UNIT_TEST(TestReadTo); 
+    UNIT_TEST(TestStrokaInput);
+    UNIT_TEST(TestReadTo);
     UNIT_TEST(TestWtrokaOutput);
     UNIT_TEST(TestIStreamOperators);
     UNIT_TEST(TestWchar16Output);
@@ -41,10 +41,10 @@ public:
     void TestBufferStream();
     void TestStringStream();
     void TestWtrokaInput();
-    void TestStrokaInput(); 
+    void TestStrokaInput();
     void TestWtrokaOutput();
     void TestIStreamOperators();
-    void TestReadTo(); 
+    void TestReadTo();
     void TestWchar16Output();
     void TestWchar32Output();
     void TestUtf16StingOutputByChars();
@@ -280,30 +280,30 @@ void TStreamsTest::TestBufferStream() {
 
 namespace {
     class TStringListInput: public IWalkInput {
-    public: 
+    public:
         TStringListInput(const TVector<TString>& data)
-            : Data_(data) 
-            , Index_(0) 
-        { 
-        } 
- 
-    protected: 
-        size_t DoUnboundedNext(const void** ptr) override { 
-            if (Index_ >= Data_.size()) { 
-                return 0; 
-            } 
- 
+            : Data_(data)
+            , Index_(0)
+        {
+        }
+
+    protected:
+        size_t DoUnboundedNext(const void** ptr) override {
+            if (Index_ >= Data_.size()) {
+                return 0;
+            }
+
             const TString& string = Data_[Index_++];
- 
-            *ptr = string.data(); 
-            return string.size(); 
-        } 
- 
-    private: 
+
+            *ptr = string.data();
+            return string.size();
+        }
+
+    private:
         const TVector<TString>& Data_;
-        size_t Index_; 
-    }; 
- 
+        size_t Index_;
+    };
+
     const char Text[] =
         // UTF8 encoded "one \ntwo\r\nthree\n\tfour\nfive\n" in russian and ...
         "один \n"
@@ -335,18 +335,18 @@ namespace {
         TString tmp;
         input.ReadTo(tmp, 'c');
         UNIT_ASSERT_VALUES_EQUAL_C(tmp, "111a222b333", comment);
- 
+
         char tmp2;
         input.Read(&tmp2, 1);
         UNIT_ASSERT_VALUES_EQUAL_C(tmp2, '4', comment);
- 
+
         input.ReadTo(tmp, '6');
         UNIT_ASSERT_VALUES_EQUAL_C(tmp, "44d555e", comment);
- 
+
         tmp = input.ReadAll();
         UNIT_ASSERT_VALUES_EQUAL_C(tmp, "66f", comment);
     }
- 
+
     void TestStreamReadTo2(IInputStream& input, const char* comment) {
         TString s;
         size_t i = 0;
@@ -354,30 +354,30 @@ namespace {
             UNIT_ASSERT_C(i < Y_ARRAY_SIZE(Expected), comment);
             UNIT_ASSERT_VALUES_EQUAL_C(s, Expected[i], comment);
             ++i;
-        } 
+        }
     }
- 
+
     void TestStreamReadTo3(IInputStream& input, const char* comment) {
         UNIT_ASSERT_VALUES_EQUAL_C(input.ReadLine(), "111a222b333c444d555e666f", comment);
     }
- 
+
     void TestStreamReadTo4(IInputStream& input, const char* comment) {
         UNIT_ASSERT_VALUES_EQUAL_C(input.ReadTo('\0'), "one", comment);
         UNIT_ASSERT_VALUES_EQUAL_C(input.ReadTo('\0'), "two", comment);
         UNIT_ASSERT_VALUES_EQUAL_C(input.ReadTo('\0'), "three", comment);
     }
- 
+
     void TestStrokaInput(IInputStream& input, const char* comment) {
         TString line;
         ui32 i = 0;
         TInstant start = Now();
         while (input.ReadLine(line)) {
             ++i;
-        } 
+        }
         Cout << comment << ":" << (Now() - start).SecondsFloat() << Endl;
         UNIT_ASSERT_VALUES_EQUAL(i, 100000);
     }
- 
+
     template <class T>
     void TestStreamReadTo(const TString& text, T test) {
         TStringInput is(text);
@@ -396,25 +396,25 @@ namespace {
     }
 }
 
-void TStreamsTest::TestReadTo() { 
-    TestStreamReadTo("111a222b333c444d555e666f", TestStreamReadTo1); 
-    TestStreamReadTo(Text, TestStreamReadTo2); 
-    TestStreamReadTo("111a222b333c444d555e666f", TestStreamReadTo3); 
+void TStreamsTest::TestReadTo() {
+    TestStreamReadTo("111a222b333c444d555e666f", TestStreamReadTo1);
+    TestStreamReadTo(Text, TestStreamReadTo2);
+    TestStreamReadTo("111a222b333c444d555e666f", TestStreamReadTo3);
     TString withZero = "one";
-    withZero.append('\0').append("two").append('\0').append("three"); 
-    TestStreamReadTo(withZero, TestStreamReadTo4); 
-} 
- 
-void TStreamsTest::TestStrokaInput() { 
+    withZero.append('\0').append("two").append('\0').append("three");
+    TestStreamReadTo(withZero, TestStreamReadTo4);
+}
+
+void TStreamsTest::TestStrokaInput() {
     TString s;
-    for (ui32 i = 0; i < 100000; ++i) { 
+    for (ui32 i = 0; i < 100000; ++i) {
         TVector<char> d(i % 1000, 'a');
         s.append(d.data(), d.size());
-        s.append('\n'); 
-    } 
+        s.append('\n');
+    }
     TestStreamReadTo(s, ::TestStrokaInput);
-} 
- 
+}
+
 void TStreamsTest::TestWtrokaInput() {
     const TString s(Text);
     TStringInput is(s);

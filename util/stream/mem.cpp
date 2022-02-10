@@ -31,7 +31,7 @@ size_t TMemoryInput::DoNext(const void** ptr, size_t len) {
     return len;
 }
 
-void TMemoryInput::DoUndo(size_t len) { 
+void TMemoryInput::DoUndo(size_t len) {
     Len_ += len;
     Buf_ -= len;
 }

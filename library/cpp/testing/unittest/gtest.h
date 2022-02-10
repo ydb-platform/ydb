@@ -15,7 +15,7 @@ namespace NUnitTest {
         struct IGTestFactory: public ITestBaseFactory {
             ~IGTestFactory() override;
 
-            virtual void AddTest(const char* name, void (*body)(TTestContext&), bool forceFork) = 0; 
+            virtual void AddTest(const char* name, void (*body)(TTestContext&), bool forceFork) = 0;
         };
 
         IGTestFactory* ByName(const char* name);
@@ -42,7 +42,7 @@ namespace testing {
 }
 
 #define TEST_IMPL(N, NN, FF)                                                         \
-    void Test##N##NN(NUnitTest::TTestContext&);                                      \ 
+    void Test##N##NN(NUnitTest::TTestContext&);                                      \
     namespace NTestSuite##N##NN {                                                    \
         struct TReg {                                                                \
             inline TReg() {                                                          \
@@ -51,7 +51,7 @@ namespace testing {
         };                                                                           \
         static TReg reg;                                                             \
     }                                                                                \
-    void Test##N##NN(NUnitTest::TTestContext&) 
+    void Test##N##NN(NUnitTest::TTestContext&)
 
 #define TEST_F_IMPL(N, NN, FF)                \
     namespace NTestSuite##N##NN {             \

@@ -11,11 +11,11 @@ size_t TStringInput::DoNext(const void** ptr, size_t len) {
     return len;
 }
 
-void TStringInput::DoUndo(size_t len) { 
-    Y_VERIFY(len <= Pos_); 
-    Pos_ -= len; 
-} 
- 
+void TStringInput::DoUndo(size_t len) {
+    Y_VERIFY(len <= Pos_);
+    Pos_ -= len;
+}
+
 TStringOutput::~TStringOutput() = default;
 
 size_t TStringOutput::DoNext(void** ptr) {

@@ -13,7 +13,7 @@ public:
 
     void Init();
 
-    inline MD5& Update(const void* data, size_t len) { 
+    inline MD5& Update(const void* data, size_t len) {
         return Update(MakeArrayRef(static_cast<const ui8*>(data), len));
     }
 
@@ -23,7 +23,7 @@ public:
 
     inline MD5& Update(const TArrayRef<const ui8> data) {
         UpdatePart(data);
-        return *this; 
+        return *this;
     }
 
     void Pad();

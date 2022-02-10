@@ -27,12 +27,12 @@ using namespace NProtobufJsonTest;
 
 Y_UNIT_TEST_SUITE(TProto2JsonFlatTest) {
     Y_UNIT_TEST(TestFlatDefault) {
-        using namespace ::google::protobuf; 
-        TFlatDefault proto; 
-        NJson::TJsonValue json; 
-        TProto2JsonConfig cfg; 
-        cfg.SetMissingSingleKeyMode(TProto2JsonConfig::MissingKeyDefault); 
-        UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, json, cfg)); 
+        using namespace ::google::protobuf;
+        TFlatDefault proto;
+        NJson::TJsonValue json;
+        TProto2JsonConfig cfg;
+        cfg.SetMissingSingleKeyMode(TProto2JsonConfig::MissingKeyDefault);
+        UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, json, cfg));
 #define DEFINE_FIELD(name, value)                                                                     \
     {                                                                                                 \
         auto descr = proto.GetMetadata().descriptor->FindFieldByName(#name);                          \
@@ -71,9 +71,9 @@ Y_UNIT_TEST_SUITE(TProto2JsonFlatTest) {
         }                                                                                             \
     }
 #include <library/cpp/protobuf/json/ut/fields.incl>
-#undef DEFINE_FIELD 
-    } 
- 
+#undef DEFINE_FIELD
+    }
+
     Y_UNIT_TEST(TestNameGenerator) {
         TNameGeneratorType proto;
         proto.SetField(42);

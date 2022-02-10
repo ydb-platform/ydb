@@ -46,7 +46,7 @@ namespace {
             return new TCurrentTest(Test);
         }
 
-        void AddTest(const char* name, void (*body)(TTestContext&), bool forceFork) override { 
+        void AddTest(const char* name, void (*body)(TTestContext&), bool forceFork) override {
             Test.Tests.push_back(TBaseTestCase(name, body, forceFork));
         }
 

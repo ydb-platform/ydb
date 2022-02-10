@@ -4,9 +4,9 @@
 #include <library/cpp/actors/util/datetime.h>
 #include <library/cpp/actors/util/thread.h>
 
-#ifdef BALLOC 
+#ifdef BALLOC
 #include <library/cpp/balloc/optional/operators.h>
-#endif 
+#endif
 
 namespace NActors {
 
@@ -50,9 +50,9 @@ namespace NActors {
     }
 
     void TBasicSchedulerThread::CycleFunc() {
-#ifdef BALLOC 
-        ThreadDisableBalloc(); 
-#endif 
+#ifdef BALLOC
+        ThreadDisableBalloc();
+#endif
         ::SetCurrentThreadName("Scheduler");
 
         ui64 currentMonotonic = RelaxedLoad(CurrentMonotonic);

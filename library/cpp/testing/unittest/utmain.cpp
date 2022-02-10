@@ -89,11 +89,11 @@ private:
         event.InsertValue("status", status);
         event.InsertValue("comment", comment.data());
         event.InsertValue("time", (now - PrevTime).SecondsFloat());
-        if (context) { 
-            for (const auto& metric : context->Metrics) { 
-                event["metrics"].InsertValue(metric.first, metric.second); 
-            } 
-        } 
+        if (context) {
+            for (const auto& metric : context->Metrics) {
+                event["metrics"].InsertValue(metric.first, metric.second);
+            }
+        }
         Trace("subtest-finished", event);
 
         PrevTime = now;

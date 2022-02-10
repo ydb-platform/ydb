@@ -14,8 +14,8 @@
 #define NMATCHES 100
 #define REGEXP_GLOBAL 0x0080 // use this if you want to find all occurences
 
-class TRegExBaseImpl; 
- 
+class TRegExBaseImpl;
+
 class TRegExBase {
 protected:
     TSimpleIntrusivePtr<TRegExBaseImpl> Impl;
@@ -24,11 +24,11 @@ public:
     TRegExBase(const char* regExpr = nullptr, int cflags = REG_EXTENDED);
     TRegExBase(const TString& regExpr, int cflags = REG_EXTENDED);
 
-    virtual ~TRegExBase(); 
+    virtual ~TRegExBase();
 
     int Exec(const char* str, regmatch_t pmatch[], int eflags, int nmatches = NMATCHES) const;
     void Compile(const TString& regExpr, int cflags = REG_EXTENDED);
-    bool IsCompiled() const; 
+    bool IsCompiled() const;
     int GetCompileOptions() const;
     TString GetRegExpr() const;
 };

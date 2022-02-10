@@ -3,7 +3,7 @@ import os
 import sys
 
 
-def mkdir_p(directory): 
+def mkdir_p(directory):
     if not os.path.exists(directory):
         os.makedirs(directory)
 

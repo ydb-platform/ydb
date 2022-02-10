@@ -27,7 +27,7 @@ RECURSE(
     directindexer
     doc_handle_decode
     doc_handle_decode/ut
-    doc_url_index_print 
+    doc_url_index_print
     dolbilo
     domschemec
     domschemec/ut
@@ -78,7 +78,7 @@ RECURSE(
     mstand
     mtime0
     mx_bin2info
-    nehc 
+    nehc
     nlp_test
     nodeiter_test
     nodeiter_test/tests
@@ -115,7 +115,7 @@ RECURSE(
     python-netconfig-static
     qlz
     query_marker_builder
-    queryrectest 
+    queryrectest
     queryrectest/tests
     queryrectest/tests/data
     rcgtest

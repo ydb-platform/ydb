@@ -12,14 +12,14 @@
 // @end value is not included in the mask and is not necessarily defined as enum value.
 // For example: enum EType { A, B, C } ==> TEnumBitSet<EType, A, C + 1>
 template <typename TEnum, int mbegin, int mend>
-class TEnumBitSet: private TBitMap<mend - mbegin> { 
+class TEnumBitSet: private TBitMap<mend - mbegin> {
 public:
     static const int BeginIndex = mbegin;
     static const int EndIndex = mend;
     static const size_t BitsetSize = EndIndex - BeginIndex;
 
     typedef TBitMap<BitsetSize> TParent;
-    typedef TEnumBitSet<TEnum, mbegin, mend> TThis; 
+    typedef TEnumBitSet<TEnum, mbegin, mend> TThis;
 
     TEnumBitSet()
         : TParent(0)
@@ -348,14 +348,14 @@ public:
         return Count();
     }
 
-    class TIterator { 
-    public: 
+    class TIterator {
+    public:
         TIterator(TEnum value, const TThis* bitmap) noexcept
             : Value(static_cast<int>(value))
-            , BitMap(bitmap) 
-        { 
-        } 
- 
+            , BitMap(bitmap)
+        {
+        }
+
         TIterator(const TThis* bitmap) noexcept
             : Value(EndIndex)
             , BitMap(bitmap)
@@ -364,13 +364,13 @@ public:
 
         TEnum operator*() const noexcept {
             Y_ASSERT(Value < EndIndex);
-            return static_cast<TEnum>(Value); 
-        } 
- 
+            return static_cast<TEnum>(Value);
+        }
+
         bool operator!=(const TIterator& other) const noexcept {
-            return Value != other.Value; 
-        } 
- 
+            return Value != other.Value;
+        }
+
         TIterator& operator++() noexcept {
             Y_ASSERT(Value < EndIndex);
             TEnum res;
@@ -381,22 +381,22 @@ public:
             }
 
             return *this;
-        } 
- 
-    private: 
-        int Value; 
-        const TThis* BitMap; 
-    }; 
- 
-    TIterator begin() const { 
+        }
+
+    private:
+        int Value;
+        const TThis* BitMap;
+    };
+
+    TIterator begin() const {
         TEnum res;
         return FindFirst(res) ? TIterator(res, this) : TIterator(this);
-    } 
- 
-    TIterator end() const { 
+    }
+
+    TIterator end() const {
         return TIterator(this);
-    } 
- 
+    }
+
 private:
     static size_t Pos(TEnum c) {
         Y_ASSERT(IsValid(c));
@@ -432,10 +432,10 @@ private:
     }
 };
 
-template <typename TEnum, TEnum mbegin, int mend> 
+template <typename TEnum, TEnum mbegin, int mend>
 class TSfEnumBitSet: public TEnumBitSet<TEnum, mbegin, mend> {
 public:
-    typedef TEnumBitSet<TEnum, mbegin, mend> TParent; 
+    typedef TEnumBitSet<TEnum, mbegin, mend> TParent;
 
     TSfEnumBitSet()
         : TParent()

@@ -1,7 +1,7 @@
 #include "impl.h"
 #include "config.h"
 #include "group_mapper.h"
-#include "group_geometry_info.h"
+#include "group_geometry_info.h" 
 
 namespace NKikimr {
     namespace NBsController {

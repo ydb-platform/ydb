@@ -155,7 +155,7 @@ namespace NKikimr::NBsController {
 
                 State.emplace(*Self, Self->HostRecords, TActivationContext::Now());
                 State->CheckConsistency();
-
+ 
                 TString m;
                 google::protobuf::TextFormat::Printer printer;
                 printer.SetSingleLineMode(true);

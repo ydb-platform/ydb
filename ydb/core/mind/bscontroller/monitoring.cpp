@@ -29,19 +29,19 @@ class TBlobStorageController::TTxMonEvent_OperationLog : public TTransactionBase
     const TCgiParameters Params;
 
 private:
-    struct TOperationLogEntry {
+    struct TOperationLogEntry { 
         using T = Schema::OperationLog;
         T::Index::Type Index;
         T::Timestamp::Type Timestamp;
         T::Request::Type Request;
         T::Response::Type Response;
         T::ExecutionTime::Type ExecutionTime;
-    };
-
+    }; 
+ 
 private:
-    TVector<TOperationLogEntry> Logs;
+    TVector<TOperationLogEntry> Logs; 
     ui64 NumRows = 0;
-
+ 
 public:
     TTxMonEvent_OperationLog(const TActorId& sender, TCgiParameters params, TSelf *controller)
         : TBase(controller)
@@ -70,7 +70,7 @@ public:
     {}
 
     bool LoadOperationLog(TTransactionContext& txc, ui64 count, ui64 offset) {
-        NIceDb::TNiceDb db(txc.DB);
+        NIceDb::TNiceDb db(txc.DB); 
         using T = Schema::OperationLog;
 
         // obtain the very first record index
@@ -88,8 +88,8 @@ public:
         // scan the table
         auto table = db.Table<T>().GreaterOrEqual(firstRecordIndex + offset).Select();
         if (!table.IsReady()) {
-            return false;
-        }
+            return false; 
+        } 
         Logs.reserve(count);
         for (; !table.EndOfSet() && count; --count) {
             const auto& index = table.GetValue<Schema::OperationLog::Index>();
@@ -99,12 +99,12 @@ public:
             const auto& executionTime = table.GetValue<Schema::OperationLog::ExecutionTime>();
             Logs.emplace_back(TOperationLogEntry{index, timestamp, request, response, executionTime});
             if (!table.Next()) {
-                return false;
-            }
-        }
-        return true;
-    }
-
+                return false; 
+            } 
+        } 
+        return true; 
+    } 
+ 
     void RenderOperationLog(IOutputStream& out, const ui64 count, const ui64 offset) {
         Self->RenderHeader(out);
 
@@ -537,13 +537,13 @@ public:
     const TActorId Source;
     const TGroupId GroupId;
     TString Response;
-
+ 
     TTxMonEvent_GetDown(const TActorId& source, TGroupId groupId, TSelf* bsc)
         : TBase(bsc)
         , Source(source)
         , GroupId(groupId)
     {}
-
+ 
     TTxType GetTxType() const override { return NBlobStorageController::TXTYPE_MON_EVENT_GET_DOWN; }
 
     bool Execute(TTransactionContext&, const TActorContext&) override {
@@ -562,27 +562,27 @@ public:
                 json = reportGroup(*group);
             } else {
                 json["Error"] = Sprintf("GroupId# %" PRIu32 " not found", GroupId);
-            }
+            } 
         } else {
             for (const auto& kv : Self->GroupMap) {
                 json.AppendValue(reportGroup(*kv.second));
             }
-        }
+        } 
 
         TStringStream stream;
         NJson::WriteJson(&stream, &json);
         Response = stream.Str();
 
         return true;
-    }
-
+    } 
+ 
     void Complete(const TActorContext&) override {
         STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXMO02, "TBlobStorageController::TTxMonEvent_GetDown", (GroupId, GroupId),
             (Response, Response));
         TActivationContext::Send(new IEventHandle(Source, Self->SelfId(), new NMon::TEvRemoteJsonInfoRes(Response)));
-    }
+    } 
 };
-
+ 
 class TDisableSelfHealActor : public TActorBootstrapped<TDisableSelfHealActor> {
     const TActorId MonProxy;
     const TString Url;
@@ -616,11 +616,11 @@ public:
 bool TBlobStorageController::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext&) {
     if (!Executor() || !Executor()->GetStats().IsActive) {
         return false;
-    }
+    } 
     if (!ev) {
         return true;
     }
-
+ 
     THolder<TTransactionBase<TBlobStorageController>> tx;
     TStringStream str;
     const TCgiParameters& cgi(ev->Get()->Cgi());
@@ -900,7 +900,7 @@ void TBlobStorageController::RenderInternalTables(IOutputStream& out, const TStr
                         }
                     }
                 }
-            }
+            } 
         } else if (table == "serials") {
             TABLE_CLASS("table") {
                 TABLEHEAD() {
@@ -928,9 +928,9 @@ void TBlobStorageController::RenderInternalTables(IOutputStream& out, const TStr
                     }
                 }
             }
-        }
+        } 
     }
-
+ 
     RenderFooter(out);
 }
 

@@ -254,29 +254,29 @@ message TReassignGroupDisk {
     bool SuppressDonorMode = 7; // when set, donor mode is not used even if it is enabled through BSC
 }
 
-enum EClusterFitAlgorithm {
-    QUADRATIC = 0;
-    HUNGARIAN = 1;
-    ANNEALING = 2;
-}
-
+enum EClusterFitAlgorithm { 
+    QUADRATIC = 0; 
+    HUNGARIAN = 1; 
+    ANNEALING = 2; 
+} 
+ 
 message TClusterFit {
-    EClusterFitAlgorithm Algorithm = 1;
-    uint64 Iterations = 2;
+    EClusterFitAlgorithm Algorithm = 1; 
+    uint64 Iterations = 2; 
 }
 
-message TVSlotMetric {
+message TVSlotMetric { 
     NKikimrBlobStorage.TVSlotId VSlotId = 1;
-    uint64 Metric = 2;
-}
-
-message TClusterFitConfig {
-    TBaseConfig BaseConfig = 1;
-    repeated TDefineStoragePool StoragePool = 2;
-    repeated TVSlotMetric Metric = 3;
-    TClusterFit Request = 4;
-}
-
+    uint64 Metric = 2; 
+} 
+ 
+message TClusterFitConfig { 
+    TBaseConfig BaseConfig = 1; 
+    repeated TDefineStoragePool StoragePool = 2; 
+    repeated TVSlotMetric Metric = 3; 
+    TClusterFit Request = 4; 
+} 
+ 
 message TMergeBoxes {
     message TStoragePoolIdMap {
         uint64 OriginStoragePoolId = 1;
@@ -299,15 +299,15 @@ message TMoveGroups {
     repeated uint32 ExplicitGroupId = 6; // if no groups are provided, then all groups of origin storage pool are moved
 }
 
-message TAddMigrationPlan {
-    string Name = 1;
-    repeated TMoveCommand MoveCommand = 2;
-}
-
-message TDeleteMigrationPlan {
-    string Name = 1;
-}
-
+message TAddMigrationPlan { 
+    string Name = 1; 
+    repeated TMoveCommand MoveCommand = 2; 
+} 
+ 
+message TDeleteMigrationPlan { 
+    string Name = 1; 
+} 
+ 
 message TEnableSelfHeal {
     bool Enable = 1;
 }
@@ -450,8 +450,8 @@ message TConfigRequest {
             TQueryBaseConfig QueryBaseConfig = 16; // introspection
             TMergeBoxes MergeBoxes = 23;
             TMoveGroups MoveGroups = 24; // move groups between storage pools; no checks of SP constraints are performed
-            TAddMigrationPlan AddMigrationPlan = 25;
-            TDeleteMigrationPlan DeleteMigrationPlan = 26;
+            TAddMigrationPlan AddMigrationPlan = 25; 
+            TDeleteMigrationPlan DeleteMigrationPlan = 26; 
             TEnableSelfHeal EnableSelfHeal = 27;
             TDeclareIntent DeclareIntent = 28;
             TReadIntent ReadIntent = 29;
@@ -580,15 +580,15 @@ message TMoveCommand {
     uint32 TargetPDiskId = 6;
 }
 
-message TPDiskStat {
-    uint32 NodeId = 1;
-    uint32 PDiskId = 2;
-    string Fqdn = 3;
-    int32 IcPort = 4;
-    string Path = 5;
-    uint32 NumSlotsAfterMigration = 6;
-}
-
+message TPDiskStat { 
+    uint32 NodeId = 1; 
+    uint32 PDiskId = 2; 
+    string Fqdn = 3; 
+    int32 IcPort = 4; 
+    string Path = 5; 
+    uint32 NumSlotsAfterMigration = 6; 
+} 
+ 
 message TReassignedItem {
     NKikimrBlobStorage.TVDiskID VDiskId = 1;
     NKikimrBlobStorage.TVSlotId From = 2;
@@ -645,7 +645,7 @@ message TConfigResponse {
         repeated uint32 GroupId = 8;
         uint64 AssignedStoragePoolId = 9;
         repeated TMoveCommand MoveCommand = 10;
-        repeated TPDiskStat PDiskStat = 11;
+        repeated TPDiskStat PDiskStat = 11; 
         repeated TReassignedItem ReassignedItem = 14;
         TDeclareIntent Intent = 15;
     }

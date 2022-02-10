@@ -1,15 +1,15 @@
 #pragma once
-
+ 
 #include "defs.h"
 
-#include "impl.h"
-#include "config.h"
-#include "group_mapper.h"
-
+#include "impl.h" 
+#include "config.h" 
+#include "group_mapper.h" 
+ 
 namespace NKikimr::NBsController {
-
+ 
     struct TExFitGroupError : yexception {};
-
+ 
     class TGroupGeometryInfo {
         const TBlobStorageGroupType Type;
         ui32 NumFailRealms;
@@ -19,7 +19,7 @@ namespace NKikimr::NBsController {
         ui32 RealmLevelEnd;
         ui32 DomainLevelBegin;
         ui32 DomainLevelEnd;
-
+ 
     public:
         TGroupGeometryInfo(TBlobStorageGroupType type, NKikimrBlobStorage::TGroupGeometry g)
             : Type(type)
@@ -36,7 +36,7 @@ namespace NKikimr::NBsController {
             const ui32 minNumFailRealms = isMirror3dc ? 3 : 1;
             const ui32 minNumFailDomainsPerFailRealm = isMirror3dc ? 3 : Type.BlobSubgroupSize();
             const ui32 minNumVDisksPerFailDomain = 1;
-
+ 
             if (!NumFailRealms && !NumFailDomainsPerFailRealm && !NumVDisksPerFailDomain) {
                 // no values are set, this means we're going to use the default ones
                 NumFailRealms = minNumFailRealms;
@@ -46,8 +46,8 @@ namespace NKikimr::NBsController {
                     NumFailDomainsPerFailRealm < minNumFailDomainsPerFailRealm ||
                     NumVDisksPerFailDomain < minNumVDisksPerFailDomain) {
                 throw TExFitGroupError() << "not enough fail domains, fail realms, or vdisks for specified erasure";
-            }
-
+            } 
+ 
             if (RealmLevelBegin || RealmLevelEnd || DomainLevelBegin || DomainLevelEnd) {
                 if (RealmLevelEnd < RealmLevelBegin || DomainLevelEnd < DomainLevelBegin) {
                     throw TExFitGroupError() << "XxxLevelBegin must be less than or equal to XxxLevelEnd";
@@ -57,9 +57,9 @@ namespace NKikimr::NBsController {
                 RealmLevelEnd = 20;
                 DomainLevelBegin = 10;
                 DomainLevelEnd = 40;
-            }
+            } 
         }
-
+ 
         ui32 GetNumFailRealms() const { return NumFailRealms; }
         ui32 GetNumFailDomainsPerFailRealm() const { return NumFailDomainsPerFailRealm; }
         ui32 GetNumVDisksPerFailDomain() const { return NumVDisksPerFailDomain; }
@@ -77,19 +77,19 @@ namespace NKikimr::NBsController {
                         requiredSpace, requireOperational, error)) {
                     return;
                 }
-            }
+            } 
             throw TExFitGroupError() << "failed to allocate group: " << error;
         }
-
+ 
         bool ResizeGroup(TGroupMapper::TGroupDefinition& group) const {
             if (!group) {
                 group.resize(NumFailRealms);
-                for (auto &realm : group) {
+                for (auto &realm : group) { 
                     realm.resize(NumFailDomainsPerFailRealm);
-                    for (auto &domain : realm) {
+                    for (auto &domain : realm) { 
                         domain.resize(NumVDisksPerFailDomain);
-                    }
-                }
+                    } 
+                } 
             } else {
                 bool ok = group.size() == NumFailRealms;
                 if (ok) {
@@ -111,13 +111,13 @@ namespace NKikimr::NBsController {
                 if (!ok) {
                     return false;
                 }
-            }
+            } 
             return true;
         }
-
+ 
         TBlobStorageGroupType::EErasureSpecies GetErasure() const {
             return Type.GetErasure();
         }
     };
-
+ 
 } // NKikimr::NBsController

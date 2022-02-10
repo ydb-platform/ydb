@@ -15,7 +15,7 @@
 #include <library/cpp/actors/core/interconnect.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
 
-#include <util/datetime/cputimer.h>
+#include <util/datetime/cputimer.h> 
 #include <util/random/random.h>
 
 #include <google/protobuf/text_format.h>
@@ -54,13 +54,13 @@ struct TEnvironmentSetup {
 
     TPDiskRecord ParsePDiskRecord(const NKikimrBlobStorage::TBaseConfig::TPDisk& pdisk) {
         return std::make_tuple(
-            pdisk.GetNodeId(),
-            std::make_tuple(
-                pdisk.GetPath(),
-                pdisk.GetType(),
-                pdisk.GetSharedWithOs(),
-                pdisk.GetReadCentric(),
-                pdisk.GetKind()));
+            pdisk.GetNodeId(), 
+            std::make_tuple( 
+                pdisk.GetPath(), 
+                pdisk.GetType(), 
+                pdisk.GetSharedWithOs(), 
+                pdisk.GetReadCentric(), 
+                pdisk.GetKind())); 
     }
 
     TSet<TPDiskRecord> ParsePDisks(const NKikimrBlobStorage::TBaseConfig& config) {
@@ -74,8 +74,8 @@ struct TEnvironmentSetup {
     TEnvironmentSetup(ui32 nodeCount, ui32 dataCenterCount)
         : NodeCount(nodeCount)
         , DataCenterCount(dataCenterCount)
-    {
-    }
+    { 
+    } 
 
     void Prepare(const TString& /*dispatchName*/, std::function<void(TTestActorRuntime&)> setup, bool& outActiveZone) {
         outActiveZone = false;
@@ -130,8 +130,8 @@ struct TEnvironmentSetup {
     }
 
     void DefineBox(ui64 boxId, const TString& name, const TVector<TPDiskDefinition>& pdisks,
-                   const TVector<TNodeRecord>& nodes, NKikimrBlobStorage::TConfigRequest& request,
-                   const ui64 generation = 0) {
+                   const TVector<TNodeRecord>& nodes, NKikimrBlobStorage::TConfigRequest& request, 
+                   const ui64 generation = 0) { 
         auto& hostcfg = *request.AddCommand()->MutableDefineHostConfig();
         hostcfg.SetHostConfigId(NextHostConfigId++);
         for (const auto& pdisk : pdisks) {
@@ -151,7 +151,7 @@ struct TEnvironmentSetup {
         auto& box = *request.AddCommand()->MutableDefineBox();
         box.SetBoxId(boxId);
         box.SetName(name);
-        box.SetItemConfigGeneration(generation);
+        box.SetItemConfigGeneration(generation); 
         for (const auto& node : nodes) {
             TString fqdn;
             i32 icPort;
@@ -171,9 +171,9 @@ struct TEnvironmentSetup {
     }
 
     void DefineStoragePool(ui64 boxId, ui64 storagePoolId, const TString& name, ui32 numGroups,
-                           TMaybe<NKikimrBlobStorage::EPDiskType> pdiskType, TMaybe<bool> sharedWithOs,
-                           NKikimrBlobStorage::TConfigRequest& request, const TString& erasure = "block-4-2",
-                           const ui64 generation = 0) {
+                           TMaybe<NKikimrBlobStorage::EPDiskType> pdiskType, TMaybe<bool> sharedWithOs, 
+                           NKikimrBlobStorage::TConfigRequest& request, const TString& erasure = "block-4-2", 
+                           const ui64 generation = 0) { 
         auto& cmd = *request.AddCommand()->MutableDefineStoragePool();
         cmd.SetBoxId(boxId);
         cmd.SetStoragePoolId(storagePoolId);
@@ -181,7 +181,7 @@ struct TEnvironmentSetup {
         cmd.SetErasureSpecies(erasure);
         cmd.SetVDiskKind("Default");
         cmd.SetNumGroups(numGroups);
-        cmd.SetItemConfigGeneration(generation);
+        cmd.SetItemConfigGeneration(generation); 
         if (pdiskType || sharedWithOs) {
             auto& filter = *cmd.AddPDiskFilter();
             if (pdiskType) {
@@ -231,7 +231,7 @@ struct TEnvironmentSetup {
     void SetupTablet() {
         const TActorId bootstrapper = CreateTestBootstrapper(*Runtime,
                                                        CreateTestTabletInfo(TabletId, TTabletTypes::FLAT_BS_CONTROLLER, TErasureType::ErasureNone, GroupId),
-                                                       &CreateFlatBsController, NodeId);
+                                                       &CreateFlatBsController, NodeId); 
         Runtime->EnableScheduleForActor(bootstrapper);
         {
             TDispatchOptions options;
@@ -252,8 +252,8 @@ class TFinalizer {
 public:
     TFinalizer(TEnvironmentSetup& env)
         : Env(env)
-    {
-    }
+    { 
+    } 
 
     ~TFinalizer() {
         Env.Finalize();
@@ -263,18 +263,18 @@ public:
 Y_UNIT_TEST_SUITE(BsControllerConfig) {
     Y_UNIT_TEST(Basic) {
         TEnvironmentSetup env(10, 1);
-        RunTestWithReboots(env.TabletIds, [&] { return env.PrepareInitialEventsFilter(); }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& outActiveZone) {
+        RunTestWithReboots(env.TabletIds, [&] { return env.PrepareInitialEventsFilter(); }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& outActiveZone) { 
                 TFinalizer finalizer(env);
                 env.Prepare(dispatchName, setup, outActiveZone);
 
                 NKikimrBlobStorage::TConfigRequest request;
                 NKikimrBlobStorage::TConfigResponse response = env.Invoke(request);
-                UNIT_ASSERT(response.GetSuccess()); });
+                UNIT_ASSERT(response.GetSuccess()); }); 
     }
 
     Y_UNIT_TEST(PDiskCreate) {
         TEnvironmentSetup env(10, 1);
-        RunTestWithReboots(env.TabletIds, [&] { return env.PrepareInitialEventsFilter(); }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& outActiveZone) {
+        RunTestWithReboots(env.TabletIds, [&] { return env.PrepareInitialEventsFilter(); }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& outActiveZone) { 
                 TFinalizer finalizer(env);
                 env.Prepare(dispatchName, setup, outActiveZone);
 
@@ -290,7 +290,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
 
                 NKikimrBlobStorage::TConfigResponse response = env.Invoke(request);
                 UNIT_ASSERT(response.GetSuccess());
-                UNIT_ASSERT(env.ParsePDisks(response.GetStatus(baseConfigIndex).GetBaseConfig()) == env.ExpectedPDisks); });
+                UNIT_ASSERT(env.ParsePDisks(response.GetStatus(baseConfigIndex).GetBaseConfig()) == env.ExpectedPDisks); }); 
     }
 
     Y_UNIT_TEST(ManyPDisksRestarts) {
@@ -331,7 +331,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         const ui32 numGroups1 = numNodes1 * 3;
         const ui32 numGroups2 = numNodes2 * 4;
         TEnvironmentSetup env(numNodes, 1);
-        RunTestWithReboots(env.TabletIds, [&] { return env.PrepareInitialEventsFilter(); }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& outActiveZone) {
+        RunTestWithReboots(env.TabletIds, [&] { return env.PrepareInitialEventsFilter(); }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& outActiveZone) { 
                 TFinalizer finalizer(env);
                 env.Prepare(dispatchName, setup, outActiveZone);
 
@@ -408,81 +408,81 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
                     for (const auto& kv : groups2) {
                         UNIT_ASSERT_EQUAL(kv.second, 8);
                     }
-                } });
-    }
-
-    Y_UNIT_TEST(ExtendBoxAndStoragePool) {
-        const ui32 totalNumNodes = 60;
-        const ui32 originNumNodes = 50;
-        const ui32 originNumGroups = originNumNodes * 3;
-        const ui32 resultNumGroups = totalNumNodes * 3;
-        TEnvironmentSetup env(totalNumNodes, 1);
-        RunTestWithReboots(env.TabletIds, [&] { return env.PrepareInitialEventsFilter(); }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& outActiveZone) {
-                TFinalizer finalizer(env);
-                env.Prepare(dispatchName, setup, outActiveZone);
-
-                TVector<TEnvironmentSetup::TNodeRecord> nodes = env.GetNodes(), part1, part2;
-
-                for (auto &node : nodes) {
-                    (part1.size() < originNumNodes ? part1 : part2).push_back(node);
+                } }); 
+    } 
+ 
+    Y_UNIT_TEST(ExtendBoxAndStoragePool) { 
+        const ui32 totalNumNodes = 60; 
+        const ui32 originNumNodes = 50; 
+        const ui32 originNumGroups = originNumNodes * 3; 
+        const ui32 resultNumGroups = totalNumNodes * 3; 
+        TEnvironmentSetup env(totalNumNodes, 1); 
+        RunTestWithReboots(env.TabletIds, [&] { return env.PrepareInitialEventsFilter(); }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& outActiveZone) { 
+                TFinalizer finalizer(env); 
+                env.Prepare(dispatchName, setup, outActiveZone); 
+ 
+                TVector<TEnvironmentSetup::TNodeRecord> nodes = env.GetNodes(), part1, part2; 
+ 
+                for (auto &node : nodes) { 
+                    (part1.size() < originNumNodes ? part1 : part2).push_back(node); 
                 }
 
-                // creating box of originNumNodes nodes
-                NKikimrBlobStorage::TConfigRequest request;
-                env.DefineBox(1, "first box", {
-                        {"/dev/disk1", NKikimrBlobStorage::ROT, false, false, 0},
-                        {"/dev/disk2", NKikimrBlobStorage::ROT, true,  false, 0},
-                        {"/dev/disk3", NKikimrBlobStorage::SSD, false, false, 0},
-                    }, part1, request);
-
-                // creating storage pool of originNumGroups groups
-                env.DefineStoragePool(1, 1, "first storage pool", originNumGroups, NKikimrBlobStorage::ROT, {}, request);
-
-                // executing request
-                size_t baseConfigIndex = request.CommandSize();
-                request.AddCommand()->MutableQueryBaseConfig();
-                NKikimrBlobStorage::TConfigResponse response = env.Invoke(request);
-                UNIT_ASSERT(response.GetSuccess());
-
-                // extending count of nodes in box: from originNumNodes to totalNumNodes
-                request.Clear();
-                env.DefineBox(1, "first box", {
-                        {"/dev/disk1", NKikimrBlobStorage::ROT, false, false, 0},
-                        {"/dev/disk2", NKikimrBlobStorage::ROT, true,  false, 0},
-                        {"/dev/disk3", NKikimrBlobStorage::SSD, false, false, 0},
-                    }, nodes, request, 1);
-
-                // saving node ids
-                TSet<ui32> nodeIds;
-                for (const auto& item : nodes) {
-                    nodeIds.insert(std::get<2>(item));
-                }
-
-                // extending count of groups in box: from originNumGroups to resultNumGroups
-                env.DefineStoragePool(1, 1, "first storage pool", resultNumGroups, NKikimrBlobStorage::ROT, {},
-                        request, "block-4-2", 1);
-
-                // executing extention request
-                baseConfigIndex = request.CommandSize();
-                request.AddCommand()->MutableQueryBaseConfig();
-                response = env.Invoke(request);
-                UNIT_ASSERT(response.GetSuccess());
-
-                // checking consequence
-                TMap<ui32, ui32> groups;
-                {
-                    const auto& baseConfig = response.GetStatus(baseConfigIndex).GetBaseConfig();
-                    UNIT_ASSERT(env.ParsePDisks(baseConfig) == env.ExpectedPDisks);
-                    for (const auto& vslot : baseConfig.GetVSlot()) {
-                        UNIT_ASSERT(vslot.HasVSlotId());
-                        UNIT_ASSERT(nodeIds.count(vslot.GetVSlotId().GetNodeId()));
-                        ++groups[vslot.GetGroupId()];
-                    }
-                    UNIT_ASSERT_EQUAL(groups.size(), resultNumGroups);
-                    for (const auto& kv : groups) {
-                        UNIT_ASSERT_EQUAL(kv.second, 8);
-                    }
-                } });
+                // creating box of originNumNodes nodes 
+                NKikimrBlobStorage::TConfigRequest request; 
+                env.DefineBox(1, "first box", { 
+                        {"/dev/disk1", NKikimrBlobStorage::ROT, false, false, 0}, 
+                        {"/dev/disk2", NKikimrBlobStorage::ROT, true,  false, 0}, 
+                        {"/dev/disk3", NKikimrBlobStorage::SSD, false, false, 0}, 
+                    }, part1, request); 
+ 
+                // creating storage pool of originNumGroups groups 
+                env.DefineStoragePool(1, 1, "first storage pool", originNumGroups, NKikimrBlobStorage::ROT, {}, request); 
+ 
+                // executing request 
+                size_t baseConfigIndex = request.CommandSize(); 
+                request.AddCommand()->MutableQueryBaseConfig(); 
+                NKikimrBlobStorage::TConfigResponse response = env.Invoke(request); 
+                UNIT_ASSERT(response.GetSuccess()); 
+ 
+                // extending count of nodes in box: from originNumNodes to totalNumNodes 
+                request.Clear(); 
+                env.DefineBox(1, "first box", { 
+                        {"/dev/disk1", NKikimrBlobStorage::ROT, false, false, 0}, 
+                        {"/dev/disk2", NKikimrBlobStorage::ROT, true,  false, 0}, 
+                        {"/dev/disk3", NKikimrBlobStorage::SSD, false, false, 0}, 
+                    }, nodes, request, 1); 
+ 
+                // saving node ids 
+                TSet<ui32> nodeIds; 
+                for (const auto& item : nodes) { 
+                    nodeIds.insert(std::get<2>(item)); 
+                } 
+ 
+                // extending count of groups in box: from originNumGroups to resultNumGroups 
+                env.DefineStoragePool(1, 1, "first storage pool", resultNumGroups, NKikimrBlobStorage::ROT, {}, 
+                        request, "block-4-2", 1); 
+ 
+                // executing extention request 
+                baseConfigIndex = request.CommandSize(); 
+                request.AddCommand()->MutableQueryBaseConfig(); 
+                response = env.Invoke(request); 
+                UNIT_ASSERT(response.GetSuccess()); 
+ 
+                // checking consequence 
+                TMap<ui32, ui32> groups; 
+                { 
+                    const auto& baseConfig = response.GetStatus(baseConfigIndex).GetBaseConfig(); 
+                    UNIT_ASSERT(env.ParsePDisks(baseConfig) == env.ExpectedPDisks); 
+                    for (const auto& vslot : baseConfig.GetVSlot()) { 
+                        UNIT_ASSERT(vslot.HasVSlotId()); 
+                        UNIT_ASSERT(nodeIds.count(vslot.GetVSlotId().GetNodeId())); 
+                        ++groups[vslot.GetGroupId()]; 
+                    } 
+                    UNIT_ASSERT_EQUAL(groups.size(), resultNumGroups); 
+                    for (const auto& kv : groups) { 
+                        UNIT_ASSERT_EQUAL(kv.second, 8); 
+                    } 
+                } }); 
     }
 
     Y_UNIT_TEST(DeleteStoragePool) {
@@ -790,16 +790,16 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
 
         NKikimrBlobStorage::TConfigRequest request;
         env.DefineBox(1, "test box", {
-                                         {"/dev/disk1", NKikimrBlobStorage::ROT, false, false, 0},
-                                         {"/dev/disk2", NKikimrBlobStorage::ROT, false, false, 0},
-                                         {"/dev/disk3", NKikimrBlobStorage::ROT, false, false, 0},
-                                         {"/dev/disk4", NKikimrBlobStorage::ROT, false, false, 0},
-                                         {"/dev/disk5", NKikimrBlobStorage::ROT, false, false, 0},
-                                         {"/dev/disk6", NKikimrBlobStorage::ROT, false, false, 0},
-                                         {"/dev/disk7", NKikimrBlobStorage::ROT, false, false, 0},
-                                         {"/dev/disk8", NKikimrBlobStorage::ROT, false, false, 0},
-                                     },
-                      env.GetNodes(), request);
+                                         {"/dev/disk1", NKikimrBlobStorage::ROT, false, false, 0}, 
+                                         {"/dev/disk2", NKikimrBlobStorage::ROT, false, false, 0}, 
+                                         {"/dev/disk3", NKikimrBlobStorage::ROT, false, false, 0}, 
+                                         {"/dev/disk4", NKikimrBlobStorage::ROT, false, false, 0}, 
+                                         {"/dev/disk5", NKikimrBlobStorage::ROT, false, false, 0}, 
+                                         {"/dev/disk6", NKikimrBlobStorage::ROT, false, false, 0}, 
+                                         {"/dev/disk7", NKikimrBlobStorage::ROT, false, false, 0}, 
+                                         {"/dev/disk8", NKikimrBlobStorage::ROT, false, false, 0}, 
+                                     }, 
+                      env.GetNodes(), request); 
 
         env.DefineStoragePool(1, 1, "test pool", numGroups, NKikimrBlobStorage::ROT, false, request);
 
@@ -810,7 +810,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             NKikimrBlobStorage::TEvControllerSelectGroups request;
             request.SetReturnAllMatchingGroups(true);
 
-            auto* p = request.AddGroupParameters();
+            auto* p = request.AddGroupParameters(); 
             p->SetErasureSpecies(TBlobStorageGroupType::Erasure4Plus2Block);
             p->SetDesiredPDiskCategory(0);
             p->SetDesiredVDiskCategory(0);

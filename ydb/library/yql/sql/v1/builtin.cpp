@@ -58,7 +58,7 @@ public:
         , Args(args)
     {}
 
-    bool DoInit(TContext& ctx, ISource* src) final { 
+    bool DoInit(TContext& ctx, ISource* src) final {
         if (!src) {
             ctx.Error(Pos) << "Grouping function should have source";
             return false;
@@ -96,7 +96,7 @@ public:
         return TAstListNode::DoInit(ctx, src);
     }
 
-    TNodePtr DoClone() const final { 
+    TNodePtr DoClone() const final {
         return new TGroupingNode(Pos, Args);
     }
 
@@ -104,7 +104,7 @@ private:
     const TVector<TNodePtr> Args;
 };
 
-class TBasicAggrFunc final: public TAstListNode { 
+class TBasicAggrFunc final: public TAstListNode {
 public:
     TBasicAggrFunc(TPosition pos, const TString& name, TAggregationPtr aggr, const TVector<TNodePtr>& args)
         : TAstListNode(pos)
@@ -117,7 +117,7 @@ public:
         return Name;
     }
 
-    bool DoInit(TContext& ctx, ISource* src) final { 
+    bool DoInit(TContext& ctx, ISource* src) final {
         if (!src) {
             ctx.Error(Pos) << "Unable to use aggregation function '" << Name << "' without data source";
             return false;
@@ -158,7 +158,7 @@ public:
         Aggr->MarkKeyColumnAsGenerated();
     }
 
-    TNodePtr DoClone() const final { 
+    TNodePtr DoClone() const final {
         TAggregationPtr aggrClone = static_cast<IAggregation*>(Aggr->Clone().Release());
         return new TBasicAggrFunc(Pos, Name, aggrClone, CloneContainer(Args));
     }
@@ -168,7 +168,7 @@ public:
     }
 
 private:
-    bool DoInitAggregation(TContext& ctx, ISource* src) { 
+    bool DoInitAggregation(TContext& ctx, ISource* src) {
         if (PreaggregateExpr) {
             YQL_ENSURE(PreaggregateExpr->HasState(ENodeState::Initialized));
             if (PreaggregateExpr->IsAggregated() && !PreaggregateExpr->IsAggregationKey() && !Aggr->IsOverWindow()) {
@@ -183,7 +183,7 @@ private:
         return src->AddAggregation(ctx, Aggr);
     }
 
-    void DoUpdateState() const final { 
+    void DoUpdateState() const final {
         State.Set(ENodeState::Const, !Args.empty() && AllOf(Args, [](const auto& arg){ return arg->IsConstant(); }));
         State.Set(ENodeState::Aggregated);
     }
@@ -332,15 +332,15 @@ public:
 
     bool DoInit(TContext& ctx, ISource* src) override {
         auto slot = NUdf::FindDataSlot(GetOpName());
-        if (!slot) { 
-            ctx.Error(Pos) << "Unexpected type " << GetOpName(); 
-            return false; 
-        } 
- 
+        if (!slot) {
+            ctx.Error(Pos) << "Unexpected type " << GetOpName();
+            return false;
+        }
+
         if (*slot == NUdf::EDataSlot::Decimal) {
-            MinArgs = MaxArgs = 3; 
-        } 
- 
+            MinArgs = MaxArgs = 3;
+        }
+
         if (!ValidateArguments(ctx)) {
             return false;
         }
@@ -354,32 +354,32 @@ public:
 
         TString value;
         if (*slot == NUdf::EDataSlot::Decimal) {
-            const auto precision = Args[1]->GetLiteral("Int32"); 
-            const auto scale = Args[2]->GetLiteral("Int32"); 
- 
-            if (!NKikimr::NMiniKQL::IsValidDecimal(*atom)) { 
-                ctx.Error(Pos) << "Invalid value " << atom->Quote() << " for type " << GetOpName(); 
-                return false; 
-            } 
- 
-            ui8 stub; 
-            if (!(precision && TryFromString<ui8>(*precision, stub))) { 
-                ctx.Error(Pos) << "Invalid precision " << (precision ? precision->Quote() : "") << " for type " << GetOpName(); 
-                return false; 
-            } 
- 
-            if (!(scale && TryFromString<ui8>(*scale, stub))) { 
-                ctx.Error(Pos) << "Invalid scale " << (scale ? scale->Quote() : "") << " for type " << GetOpName(); 
-                return false; 
-            } 
- 
-            Args[0] = BuildQuotedAtom(GetPos(), *atom); 
-            Args[1] = BuildQuotedAtom(GetPos(), *precision); 
-            Args[2] = BuildQuotedAtom(GetPos(), *scale); 
-            return TCallNode::DoInit(ctx, src); 
+            const auto precision = Args[1]->GetLiteral("Int32");
+            const auto scale = Args[2]->GetLiteral("Int32");
+
+            if (!NKikimr::NMiniKQL::IsValidDecimal(*atom)) {
+                ctx.Error(Pos) << "Invalid value " << atom->Quote() << " for type " << GetOpName();
+                return false;
+            }
+
+            ui8 stub;
+            if (!(precision && TryFromString<ui8>(*precision, stub))) {
+                ctx.Error(Pos) << "Invalid precision " << (precision ? precision->Quote() : "") << " for type " << GetOpName();
+                return false;
+            }
+
+            if (!(scale && TryFromString<ui8>(*scale, stub))) {
+                ctx.Error(Pos) << "Invalid scale " << (scale ? scale->Quote() : "") << " for type " << GetOpName();
+                return false;
+            }
+
+            Args[0] = BuildQuotedAtom(GetPos(), *atom);
+            Args[1] = BuildQuotedAtom(GetPos(), *precision);
+            Args[2] = BuildQuotedAtom(GetPos(), *scale);
+            return TCallNode::DoInit(ctx, src);
         } else if (NUdf::GetDataTypeInfo(*slot).Features & (NUdf::DateType | NUdf::TzDateType | NUdf::TimeIntervalType)) {
-            const auto out = NKikimr::NMiniKQL::ValueFromString(*slot, *atom); 
-            if (!out) { 
+            const auto out = NKikimr::NMiniKQL::ValueFromString(*slot, *atom);
+            if (!out) {
                 ctx.Error(Pos) << "Invalid value " << atom->Quote() << " for type " << GetOpName();
                 return false;
             }
@@ -387,46 +387,46 @@ public:
             switch (*slot) {
             case NUdf::EDataSlot::Date:
             case NUdf::EDataSlot::TzDate:
-                value = ToString(out.Get<ui16>()); 
+                value = ToString(out.Get<ui16>());
                 break;
             case NUdf::EDataSlot::Datetime:
             case NUdf::EDataSlot::TzDatetime:
-                value = ToString(out.Get<ui32>()); 
+                value = ToString(out.Get<ui32>());
                 break;
             case NUdf::EDataSlot::Timestamp:
             case NUdf::EDataSlot::TzTimestamp:
-                value = ToString(out.Get<ui64>()); 
+                value = ToString(out.Get<ui64>());
                 break;
             case NUdf::EDataSlot::Interval:
-                value = ToString(out.Get<i64>()); 
-                if ('T' == atom->back()) { 
-                    ctx.Error(Pos) << "Time prefix 'T' at end of interval constant. The designator 'T' shall be absent if all of the time components are absent."; 
-                    return false; 
-                } 
-                break; 
+                value = ToString(out.Get<i64>());
+                if ('T' == atom->back()) {
+                    ctx.Error(Pos) << "Time prefix 'T' at end of interval constant. The designator 'T' shall be absent if all of the time components are absent.";
+                    return false;
+                }
+                break;
             default:
                 Y_FAIL("Unexpected data slot");
             }
 
             if (NUdf::GetDataTypeInfo(*slot).Features & NUdf::TzDateType) {
-                value += ","; 
-                value += NKikimr::NMiniKQL::GetTimezoneIANAName(out.GetTimezoneId()); 
-            } 
+                value += ",";
+                value += NKikimr::NMiniKQL::GetTimezoneIANAName(out.GetTimezoneId());
+            }
         } else if (NUdf::EDataSlot::Uuid == *slot) {
-            char out[0x10]; 
-            if (!NKikimr::NMiniKQL::ParseUuid(*atom, out)) { 
-                ctx.Error(Pos) << "Invalid value " << atom->Quote() << " for type " << GetOpName(); 
-                return false; 
-            } 
- 
-            value.assign(out, sizeof(out)); 
-        } else {
-            if (!NKikimr::NMiniKQL::IsValidStringValue(*slot, *atom)) { 
+            char out[0x10];
+            if (!NKikimr::NMiniKQL::ParseUuid(*atom, out)) {
                 ctx.Error(Pos) << "Invalid value " << atom->Quote() << " for type " << GetOpName();
                 return false;
             }
 
-            value = *atom; 
+            value.assign(out, sizeof(out));
+        } else {
+            if (!NKikimr::NMiniKQL::IsValidStringValue(*slot, *atom)) {
+                ctx.Error(Pos) << "Invalid value " << atom->Quote() << " for type " << GetOpName();
+                return false;
+            }
+
+            value = *atom;
         }
 
         Args[0] = BuildQuotedAtom(GetPos(), value);
@@ -983,15 +983,15 @@ TString NormalizeTypeString(const TString& str) {
     if (ret.StartsWith("Json")) {
         ret = "Json" + to_title(ret.substr(4));
     }
-    if (ret.StartsWith("Dy")) { 
-        ret = "Dy" + to_title(ret.substr(2)); 
-    } 
+    if (ret.StartsWith("Dy")) {
+        ret = "Dy" + to_title(ret.substr(2));
+    }
 
     return ret;
 }
 
 static const TSet<TString> AvailableDataTypes = {"Bool", "String", "Uint32", "Uint64", "Int32", "Int64", "Float", "Double", "Utf8", "Yson", "Json", "JsonDocument",
-    "Date", "Datetime", "Timestamp", "Interval", "Uint8", "Int8", "Uint16", "Int16", "TzDate", "TzDatetime", "TzTimestamp", "Uuid", "Decimal", "DyNumber"}; 
+    "Date", "Datetime", "Timestamp", "Interval", "Uint8", "Int8", "Uint16", "Int16", "TzDate", "TzDatetime", "TzTimestamp", "Uuid", "Decimal", "DyNumber"};
 TNodePtr GetDataTypeStringNode(TContext& ctx, TCallNode& node, unsigned argNum, TString* outTypeStrPtr = nullptr) {
     auto errMsgFunc = [&node, argNum]() {
         static std::array<TString, 2> numToName = {{"first", "second"}};
@@ -1304,18 +1304,18 @@ private:
 
 class TYqlSubstring final: public TCallNode {
 public:
-    TYqlSubstring(TPosition pos, const TString& name, const TVector<TNodePtr>& args) 
-        : TCallNode(pos, name, 2, 3, args) 
+    TYqlSubstring(TPosition pos, const TString& name, const TVector<TNodePtr>& args)
+        : TCallNode(pos, name, 2, 3, args)
     {}
 
 private:
     TCallNode::TPtr DoClone() const override {
-       return new TYqlSubstring(GetPos(), OpName, CloneContainer(Args)); 
+       return new TYqlSubstring(GetPos(), OpName, CloneContainer(Args));
     }
 
     bool DoInit(TContext& ctx, ISource* src) override {
         if (Args.size() == 2) {
-            Args.push_back(Y("Null")); 
+            Args.push_back(Y("Null"));
         }
         return TCallNode::DoInit(ctx, src);
     }
@@ -2006,7 +2006,7 @@ public:
             }
 
             const TString yql("(" + parsedName->Content + ")");
-            TAstParseResult ast = ParseAst(yql, ctx.Pool.get()); 
+            TAstParseResult ast = ParseAst(yql, ctx.Pool.get());
             /// TODO: do not drop warnings
             if (ast.IsOk()) {
                 const auto rootCount = ast.Root->GetChildrenCount();
@@ -2039,9 +2039,9 @@ public:
                 }
             }
 
-            if ("Datetime" == Module || ("Yson" == Module && ctx.PragmaYsonFast)) 
-                Module.append('2'); 
- 
+            if ("Datetime" == Module || ("Yson" == Module && ctx.PragmaYsonFast))
+                Module.append('2');
+
             TMaybe<TString> typeConfig = MakeTypeConfig(to_lower(Module), Args);
             if (ForReduce) {
                 TVector<TNodePtr> udfArgs;
@@ -2411,14 +2411,14 @@ TBuiltinFactoryCallback BuildNamedBuiltinFactoryCallback(const TString& name) {
         return new TType(pos, name, args);
     };
 }
- 
+
 template<typename TType>
 TBuiltinFactoryCallback BuildArgcBuiltinFactoryCallback(i32 minArgs, i32 maxArgs) {
     return [minArgs, maxArgs] (TPosition pos, const TVector<TNodePtr>& args) -> TNodePtr {
         return new TType(pos, minArgs, maxArgs, args);
     };
 }
- 
+
 template<typename TType>
 TBuiltinFactoryCallback BuildNamedArgcBuiltinFactoryCallback(const TString& name, i32 minArgs, i32 maxArgs) {
     return [name, minArgs, maxArgs] (TPosition pos, const TVector<TNodePtr>& args) -> TNodePtr {
@@ -2439,14 +2439,14 @@ TBuiltinFactoryCallback BuildBoolBuiltinFactoryCallback(bool arg) {
         return new TType(pos, args, arg);
     };
 }
- 
+
 template<typename TType>
 TBuiltinFactoryCallback BuildFoldBuiltinFactoryCallback(const TString& name, const TString& defaultValue) {
     return [name, defaultValue] (TPosition pos, const TVector<TNodePtr>& args) -> TNodePtr {
         return new TType(pos, name, "Bool", defaultValue, 1, args);
     };
 }
- 
+
 TNodePtr MakePair(TPosition pos, const TVector<TNodePtr>& args) {
     TNodePtr list = new TAstListNodeImpl(pos, {
         args[0],
@@ -2482,13 +2482,13 @@ struct TBuiltinFuncData {
             {"length", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Size", 1, 1)},
             {"charlength", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Size", 1, 1)},
             {"characterlength", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Size", 1, 1)},
-            {"substring", BuildNamedBuiltinFactoryCallback<TYqlSubstring>("Substring")}, 
-            {"find", BuildNamedBuiltinFactoryCallback<TYqlSubstring>("Find")}, 
-            {"rfind", BuildNamedBuiltinFactoryCallback<TYqlSubstring>("RFind")}, 
+            {"substring", BuildNamedBuiltinFactoryCallback<TYqlSubstring>("Substring")},
+            {"find", BuildNamedBuiltinFactoryCallback<TYqlSubstring>("Find")},
+            {"rfind", BuildNamedBuiltinFactoryCallback<TYqlSubstring>("RFind")},
             {"byteat", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ByteAt", 2, 2) },
-            {"startswith", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StartsWith", 2, 2)}, 
-            {"endswith", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("EndsWith", 2, 2)}, 
- 
+            {"startswith", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StartsWith", 2, 2)},
+            {"endswith", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("EndsWith", 2, 2)},
+
             // Numeric builtins
             {"abs", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Abs", 1, 1) },
             {"tobytes", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ToBytes", 1, 1) },
@@ -2509,38 +2509,38 @@ struct TBuiltinFuncData {
             {"listextend", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListExtend", 0, -1)},
             {"listextendstrict", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListExtendStrict", 0, -1)},
             {"listunionall", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListUnionAll", 0, -1) },
-            {"listzip", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListZip", -1, -1)}, 
-            {"listzipall", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListZipAll", -1, -1)}, 
-            {"listenumerate", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListEnumerate", 1, 3)}, 
-            {"listreverse", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListReverse", 1, 1)}, 
-            {"listskip", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListSkip", 2, 2)}, 
-            {"listtake", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListTake", 2, 2)}, 
-            {"listhead", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListHead", 1, 1)}, 
-            {"listlast", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListLast", 1, 1)}, 
+            {"listzip", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListZip", -1, -1)},
+            {"listzipall", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListZipAll", -1, -1)},
+            {"listenumerate", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListEnumerate", 1, 3)},
+            {"listreverse", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListReverse", 1, 1)},
+            {"listskip", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListSkip", 2, 2)},
+            {"listtake", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListTake", 2, 2)},
+            {"listhead", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListHead", 1, 1)},
+            {"listlast", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListLast", 1, 1)},
             {"listsort", BuildBoolBuiltinFactoryCallback<TListSortBuiltin>(true)},
             {"listsortasc", BuildBoolBuiltinFactoryCallback<TListSortBuiltin>(true)},
             {"listsortdesc", BuildBoolBuiltinFactoryCallback<TListSortBuiltin>(false)},
             {"listmap", BuildBoolBuiltinFactoryCallback<TListMapBuiltin>(false)},
             {"listflatmap", BuildBoolBuiltinFactoryCallback<TListMapBuiltin>(true)},
-            {"listfilter", BuildNamedBuiltinFactoryCallback<TListFilterBuiltin>("ListFilter")}, 
-            {"listany", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListAny", 1, 1)}, 
-            {"listall", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListAll", 1, 1)}, 
-            {"listhas", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListHas", 2, 2)}, 
-            {"listmax", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListMax", 1, 1)}, 
-            {"listmin", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListMin", 1, 1)}, 
-            {"listsum", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListSum", 1, 1)}, 
-            {"listavg", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListAvg", 1, 1)}, 
-            {"listconcat", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListConcat", 1, 2)}, 
+            {"listfilter", BuildNamedBuiltinFactoryCallback<TListFilterBuiltin>("ListFilter")},
+            {"listany", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListAny", 1, 1)},
+            {"listall", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListAll", 1, 1)},
+            {"listhas", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListHas", 2, 2)},
+            {"listmax", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListMax", 1, 1)},
+            {"listmin", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListMin", 1, 1)},
+            {"listsum", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListSum", 1, 1)},
+            {"listavg", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListAvg", 1, 1)},
+            {"listconcat", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListConcat", 1, 2)},
             {"listextract", BuildSimpleBuiltinFactoryCallback<TListExtractBuiltin>()},
             {"listuniq", BuildSimpleBuiltinFactoryCallback<TListUniqBuiltin>()},
             {"listcreate", BuildSimpleBuiltinFactoryCallback<TListCreateBuiltin>()},
             {"listfromrange", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListFromRange", 2, 3) },
-            {"listreplicate", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Replicate", 2, 2) }, 
-            {"listtakewhile", BuildNamedBuiltinFactoryCallback<TListFilterBuiltin>("ListTakeWhile") }, 
-            {"listskipwhile", BuildNamedBuiltinFactoryCallback<TListFilterBuiltin>("ListSkipWhile") }, 
-            {"listtakewhileinclusive", BuildNamedBuiltinFactoryCallback<TListFilterBuiltin>("ListTakeWhileInclusive") }, 
-            {"listskipwhileinclusive", BuildNamedBuiltinFactoryCallback<TListFilterBuiltin>("ListSkipWhileInclusive") }, 
-            {"listcollect", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListCollect", 1, 1) }, 
+            {"listreplicate", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Replicate", 2, 2) },
+            {"listtakewhile", BuildNamedBuiltinFactoryCallback<TListFilterBuiltin>("ListTakeWhile") },
+            {"listskipwhile", BuildNamedBuiltinFactoryCallback<TListFilterBuiltin>("ListSkipWhile") },
+            {"listtakewhileinclusive", BuildNamedBuiltinFactoryCallback<TListFilterBuiltin>("ListTakeWhileInclusive") },
+            {"listskipwhileinclusive", BuildNamedBuiltinFactoryCallback<TListFilterBuiltin>("ListSkipWhileInclusive") },
+            {"listcollect", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListCollect", 1, 1) },
             {"listnotnull", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListNotNull", 1, 1)},
             {"listflatten", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListFlatten", 1, 1)},
 
@@ -2773,8 +2773,8 @@ struct TBuiltinFuncData {
             {"aggrlistdistinct", BuildAggrFuncFactoryCallback("AggregateListDistinct", "set_traits_factory", LIST)},
             {"aggregatelistdistinct", BuildAggrFuncFactoryCallback("AggregateListDistinct", "set_traits_factory", LIST)},
 
-            {"median", BuildAggrFuncFactoryCallback("Median", "percentile_traits_factory", PERCENTILE)}, 
-            {"percentile", BuildAggrFuncFactoryCallback("Percentile", "percentile_traits_factory", PERCENTILE)}, 
+            {"median", BuildAggrFuncFactoryCallback("Median", "percentile_traits_factory", PERCENTILE)},
+            {"percentile", BuildAggrFuncFactoryCallback("Percentile", "percentile_traits_factory", PERCENTILE)},
 
             {"mode", BuildAggrFuncFactoryCallback("Mode", "topfreq_traits_factory", TOPFREQ) },
             {"topfreq", BuildAggrFuncFactoryCallback("TopFreq", "topfreq_traits_factory", TOPFREQ) },
@@ -3234,45 +3234,45 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
             name = "ParseJson";
         }
     }
- 
-    if (ctx.PragmaYsonFast && ns == "yson") { 
-        ns.append('2'); 
-        nameSpace.append('2'); 
-    } 
- 
-    if (ns.StartsWith("yson")) { 
+
+    if (ctx.PragmaYsonFast && ns == "yson") {
+        ns.append('2');
+        nameSpace.append('2');
+    }
+
+    if (ns.StartsWith("yson")) {
         if (name == "ConvertTo" && usedArgs.size() > 1) {
             customUserType = usedArgs[1];
             usedArgs.erase(usedArgs.begin() + 1);
         }
- 
-        if (name == "Serialize") { 
-            if (usedArgs) { 
-                usedArgs.resize(1U); 
-            } 
-        } else if (ctx.PragmaYsonFast && name == "SerializeJsonEncodeUtf8") { 
-            name = "SerializeJson"; 
-            if (usedArgs.size() < 2U) { 
-                usedArgs.emplace_back(BuildYsonOptionsNode(pos, ctx.PragmaYsonAutoConvert, ctx.PragmaYsonStrict, ctx.PragmaYsonFast)); 
-            } 
-            positionalArgs = BuildTuple(pos, usedArgs); 
-            auto encodeUtf8 = BuildLiteralBool(pos, true);
-            encodeUtf8->SetLabel("EncodeUtf8"); 
-            namedArgs = BuildStructure(pos, {encodeUtf8}); 
-            usedArgs = {positionalArgs, namedArgs}; 
-        } else if (name.StartsWith("From")) { 
+
+        if (name == "Serialize") {
             if (usedArgs) {
                 usedArgs.resize(1U);
             }
-            name = "From"; 
-        } else if (name == "GetLength" || name.StartsWith("ConvertTo") || name.StartsWith("Parse") || name.StartsWith("SerializeJson")) { 
-            if (usedArgs.size() < 2U) { 
-                usedArgs.emplace_back(BuildYsonOptionsNode(pos, ctx.PragmaYsonAutoConvert, ctx.PragmaYsonStrict, ctx.PragmaYsonFast)); 
-            } 
-        } else if (name == "Contains" || name.StartsWith("Lookup") || name.StartsWith("YPath")) { 
-            if (usedArgs.size() < 3U) { 
-                usedArgs.push_back(BuildYsonOptionsNode(pos, ctx.PragmaYsonAutoConvert, ctx.PragmaYsonStrict, ctx.PragmaYsonFast)); 
-            } 
+        } else if (ctx.PragmaYsonFast && name == "SerializeJsonEncodeUtf8") {
+            name = "SerializeJson";
+            if (usedArgs.size() < 2U) {
+                usedArgs.emplace_back(BuildYsonOptionsNode(pos, ctx.PragmaYsonAutoConvert, ctx.PragmaYsonStrict, ctx.PragmaYsonFast));
+            }
+            positionalArgs = BuildTuple(pos, usedArgs);
+            auto encodeUtf8 = BuildLiteralBool(pos, true);
+            encodeUtf8->SetLabel("EncodeUtf8");
+            namedArgs = BuildStructure(pos, {encodeUtf8});
+            usedArgs = {positionalArgs, namedArgs};
+        } else if (name.StartsWith("From")) {
+            if (usedArgs) {
+                usedArgs.resize(1U);
+            }
+            name = "From";
+        } else if (name == "GetLength" || name.StartsWith("ConvertTo") || name.StartsWith("Parse") || name.StartsWith("SerializeJson")) {
+            if (usedArgs.size() < 2U) {
+                usedArgs.emplace_back(BuildYsonOptionsNode(pos, ctx.PragmaYsonAutoConvert, ctx.PragmaYsonStrict, ctx.PragmaYsonFast));
+            }
+        } else if (name == "Contains" || name.StartsWith("Lookup") || name.StartsWith("YPath")) {
+            if (usedArgs.size() < 3U) {
+                usedArgs.push_back(BuildYsonOptionsNode(pos, ctx.PragmaYsonAutoConvert, ctx.PragmaYsonStrict, ctx.PragmaYsonFast));
+            }
         }
     }
 

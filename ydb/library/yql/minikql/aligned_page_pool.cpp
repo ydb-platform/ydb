@@ -122,8 +122,8 @@ TAlignedPagePool::~TAlignedPagePool() {
     for (auto it = ActiveBlocks.cbegin(); ActiveBlocks.cend() != it; ActiveBlocks.erase(it++)) {
         activeBlocksSize += it->second;
         Free(it->first, it->second);
-    } 
- 
+    }
+
     if (activeBlocksSize > 0 || FreePages.size() != AllPages.size() || OffloadedActiveBytes) {
         if (Counters.LostPagesBytesFreeCntr) {
             (*Counters.LostPagesBytesFreeCntr) += OffloadedActiveBytes + activeBlocksSize + (AllPages.size() - FreePages.size()) * POOL_PAGE_SIZE;
@@ -146,14 +146,14 @@ TAlignedPagePool::~TAlignedPagePool() {
     }
     TotalAllocated = 0;
 }
- 
+
 void TAlignedPagePool::ReleaseFreePages() {
     TotalAllocated -= FreePages.size() * POOL_PAGE_SIZE;
     if (Counters.TotalBytesAllocatedCntr) {
         (*Counters.TotalBytesAllocatedCntr) -= FreePages.size() * POOL_PAGE_SIZE;
     }
 
-    for (; !FreePages.empty(); FreePages.pop()) { 
+    for (; !FreePages.empty(); FreePages.pop()) {
         AllPages.erase(FreePages.top());
         TGlobalPools::Instance().Get(0).PushPage(FreePages.top());
     }
@@ -189,7 +189,7 @@ void TAlignedPagePool::OffloadAlloc(ui64 size) {
     UpdatePeaks();
 }
 
-void TAlignedPagePool::OffloadFree(ui64 size) noexcept { 
+void TAlignedPagePool::OffloadFree(ui64 size) noexcept {
     TotalAllocated -= size;
     OffloadedActiveBytes -= size;
     if (Counters.TotalBytesAllocatedCntr) {
@@ -201,8 +201,8 @@ void* TAlignedPagePool::GetPage() {
     ++PageAllocCount;
     if (!FreePages.empty()) {
         ++PageHitCount;
-        const auto res = FreePages.top(); 
-        FreePages.pop(); 
+        const auto res = FreePages.top();
+        FreePages.pop();
         return res;
     }
 
@@ -219,44 +219,44 @@ void* TAlignedPagePool::GetPage() {
             (*Counters.TotalBytesAllocatedCntr) += POOL_PAGE_SIZE;
         }
         ++PageGlobalHitCount;
-        AllPages.emplace(ptr); 
+        AllPages.emplace(ptr);
 
         UpdatePeaks();
         return ptr;
     }
 
     ++PageMissCount;
-    const auto res = Alloc(POOL_PAGE_SIZE); 
-    AllPages.emplace(res); 
-    return res; 
+    const auto res = Alloc(POOL_PAGE_SIZE);
+    AllPages.emplace(res);
+    return res;
 }
 
-void TAlignedPagePool::ReturnPage(void* addr) noexcept { 
+void TAlignedPagePool::ReturnPage(void* addr) noexcept {
     Y_VERIFY_DEBUG(AllPages.find(addr) != AllPages.end());
-    FreePages.emplace(addr); 
-} 
- 
-void* TAlignedPagePool::GetBlock(size_t size) { 
+    FreePages.emplace(addr);
+}
+
+void* TAlignedPagePool::GetBlock(size_t size) {
     Y_VERIFY_DEBUG(size >= POOL_PAGE_SIZE);
-    if (size == POOL_PAGE_SIZE) { 
-        return GetPage(); 
-    } else { 
-        const auto ptr = Alloc(size); 
-        Y_VERIFY_DEBUG(ActiveBlocks.emplace(ptr, size).second); 
-        return ptr; 
-    } 
-} 
- 
-void TAlignedPagePool::ReturnBlock(void* ptr, size_t size) noexcept { 
+    if (size == POOL_PAGE_SIZE) {
+        return GetPage();
+    } else {
+        const auto ptr = Alloc(size);
+        Y_VERIFY_DEBUG(ActiveBlocks.emplace(ptr, size).second);
+        return ptr;
+    }
+}
+
+void TAlignedPagePool::ReturnBlock(void* ptr, size_t size) noexcept {
     Y_VERIFY_DEBUG(size >= POOL_PAGE_SIZE);
-    if (size == POOL_PAGE_SIZE) { 
-        ReturnPage(ptr); 
-    } else { 
-        Free(ptr, size); 
-        Y_VERIFY_DEBUG(ActiveBlocks.erase(ptr)); 
-    } 
-} 
- 
+    if (size == POOL_PAGE_SIZE) {
+        ReturnPage(ptr);
+    } else {
+        Free(ptr, size);
+        Y_VERIFY_DEBUG(ActiveBlocks.erase(ptr));
+    }
+}
+
 void* TAlignedPagePool::Alloc(size_t size) {
     void* res = nullptr;
     size = AlignUp(size, SYS_PAGE_SIZE);
@@ -370,7 +370,7 @@ void* TAlignedPagePool::Alloc(size_t size) {
     return res;
 }
 
-void TAlignedPagePool::Free(void* ptr, size_t size) noexcept { 
+void TAlignedPagePool::Free(void* ptr, size_t size) noexcept {
     size = AlignUp(size, SYS_PAGE_SIZE);
     if (size <= MaxMidSize)
         size = FastClp2(size);
@@ -380,9 +380,9 @@ void TAlignedPagePool::Free(void* ptr, size_t size) noexcept {
         TGlobalPools::Instance().Get(level).PushPage(ptr);
     } else {
 #ifdef _win_
-        Y_VERIFY(::VirtualFree(ptr, 0, MEM_RELEASE)); 
+        Y_VERIFY(::VirtualFree(ptr, 0, MEM_RELEASE));
 #else
-        Y_VERIFY(!::munmap(ptr, size)); 
+        Y_VERIFY(!::munmap(ptr, size));
 #endif
     }
 

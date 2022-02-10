@@ -34,7 +34,7 @@ SRCS(
     yql_panic.h
     yql_paths.cpp
     yql_paths.h
-    utf8.cpp 
+    utf8.cpp
 )
 
 PEERDIR(

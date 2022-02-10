@@ -279,9 +279,9 @@ TCompactTrie<T, D, S>& TCompactTrie<T, D, S>::operator=(const TCompactTrie& othe
 template <class T, class D, class S>
 TCompactTrie<T, D, S>& TCompactTrie<T, D, S>::operator=(TCompactTrie&& other) noexcept {
     if (this != &other) {
-        DataHolder = std::move(other.DataHolder); 
-        EmptyValue = std::move(other.EmptyValue); 
-        Packer = std::move(other.Packer); 
+        DataHolder = std::move(other.DataHolder);
+        EmptyValue = std::move(other.EmptyValue);
+        Packer = std::move(other.Packer);
     }
     return *this;
 }

@@ -5,21 +5,21 @@
 #include <ydb/library/yql/minikql/mkql_node_builder.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 
-#include <algorithm> 
+#include <algorithm>
 #include <iterator>
- 
+
 namespace NKikimr {
 namespace NMiniKQL {
 
-namespace { 
- 
+namespace {
+
 std::vector<NUdf::EDataSlot> PrepareKeyTypesByScheme(const std::vector<std::tuple<NUdf::EDataSlot, bool, TType*>>& keySchemeTypes) {
     MKQL_ENSURE(!keySchemeTypes.empty(), "No key types provided");
     std::vector<NUdf::EDataSlot> keyTypes;
     keyTypes.reserve(keySchemeTypes.size());
-    for (const auto& schemeType: keySchemeTypes) { 
-        keyTypes.emplace_back(std::get<0>(schemeType)); 
-        const auto& info = NUdf::GetDataTypeInfo(keyTypes.back()); 
+    for (const auto& schemeType: keySchemeTypes) {
+        keyTypes.emplace_back(std::get<0>(schemeType));
+        const auto& info = NUdf::GetDataTypeInfo(keyTypes.back());
         MKQL_ENSURE(info.Features & NUdf::CanCompare, "Cannot compare key type: " << info.Name);
     }
     return keyTypes;
@@ -42,7 +42,7 @@ public:
         }
     }
 
-    std::vector<TMaybe<TGenericPresortEncoder>> Columns; 
+    std::vector<TMaybe<TGenericPresortEncoder>> Columns;
     bool NeedEncode = false;
 };
 
@@ -185,127 +185,127 @@ private:
     NUdf::TUnboxedValue* Second;
 };
 
-using TComparator = std::function<bool(const TKeyPayloadPairVector::value_type&, const TKeyPayloadPairVector::value_type&)>; 
-using TAlgorithm = void(*)(TKeyPayloadPairVector::iterator, TKeyPayloadPairVector::iterator, TComparator); 
+using TComparator = std::function<bool(const TKeyPayloadPairVector::value_type&, const TKeyPayloadPairVector::value_type&)>;
+using TAlgorithm = void(*)(TKeyPayloadPairVector::iterator, TKeyPayloadPairVector::iterator, TComparator);
 using TAlgorithmInplace = void(*)(TGatherIterator, TGatherIterator, TComparator);
-using TNthAlgorithm = void(*)(TKeyPayloadPairVector::iterator, TKeyPayloadPairVector::iterator, TKeyPayloadPairVector::iterator, TComparator); 
+using TNthAlgorithm = void(*)(TKeyPayloadPairVector::iterator, TKeyPayloadPairVector::iterator, TKeyPayloadPairVector::iterator, TComparator);
 
-struct TCompareDescr { 
-    TCompareDescr(TComputationMutables& mutables, std::vector<std::tuple<NUdf::EDataSlot, bool, TType*>>&& keySchemeTypes) 
-        : KeySchemeTypes(std::move(keySchemeTypes)) 
-        , KeyTypes(PrepareKeyTypesByScheme(KeySchemeTypes)) 
-        , Encoders(mutables) 
-    {} 
- 
-    static TKeyPayloadPairVector::value_type::first_type& Set(TKeyPayloadPairVector::value_type& item) { return item.first; } 
-    static TUnboxedValueVector::value_type& Set(TUnboxedValueVector::value_type& item) { return item; } 
- 
-    static const TKeyPayloadPairVector::value_type::first_type& Get(const TKeyPayloadPairVector::value_type& item) { return item.first; } 
-    static const TUnboxedValueVector::value_type& Get(const TUnboxedValueVector::value_type& item) { return item; } 
- 
-    template<class Container> 
-    std::function<bool(const typename Container::value_type&, const typename Container::value_type&)> 
+struct TCompareDescr {
+    TCompareDescr(TComputationMutables& mutables, std::vector<std::tuple<NUdf::EDataSlot, bool, TType*>>&& keySchemeTypes)
+        : KeySchemeTypes(std::move(keySchemeTypes))
+        , KeyTypes(PrepareKeyTypesByScheme(KeySchemeTypes))
+        , Encoders(mutables)
+    {}
+
+    static TKeyPayloadPairVector::value_type::first_type& Set(TKeyPayloadPairVector::value_type& item) { return item.first; }
+    static TUnboxedValueVector::value_type& Set(TUnboxedValueVector::value_type& item) { return item; }
+
+    static const TKeyPayloadPairVector::value_type::first_type& Get(const TKeyPayloadPairVector::value_type& item) { return item.first; }
+    static const TUnboxedValueVector::value_type& Get(const TUnboxedValueVector::value_type& item) { return item; }
+
+    template<class Container>
+    std::function<bool(const typename Container::value_type&, const typename Container::value_type&)>
     MakeComparator(const NUdf::TUnboxedValue& ascending) const {
         if (KeyTypes.size() > 1U) {
             // sort tuples
             return [this, &ascending](const typename Container::value_type& x, const typename Container::value_type& y) {
                 const auto& left = Get(x);
                 const auto& right = Get(y);
- 
+
                 for (ui32 i = 0; i < KeyTypes.size(); ++i) {
                     const auto& keyType = KeyTypes[i];
                     const auto& leftElem = left.GetElement(i);
                     const auto& rightElem = right.GetElement(i);
                     const bool asc = ascending.GetElement(i).Get<bool>();
- 
+
                     if (const auto cmp = CompareValues(keyType, asc, std::get<1>(KeySchemeTypes[i]), leftElem, rightElem)) {
                         return cmp < 0;
-                    } 
+                    }
                 }
- 
+
                 return false;
             };
         } else {
             // sort one column
             const bool isOptional = std::get<1>(KeySchemeTypes.front());
             const bool asc = ascending.Get<bool>();
- 
+
             return [this, asc, isOptional](const typename Container::value_type& x, const typename Container::value_type& y) {
                     return CompareValues(KeyTypes.front(), asc, isOptional, Get(x), Get(y)) < 0;
             };
-        } 
-    } 
- 
-    template<class Container> 
-    void Prepare(TComputationContext& ctx, Container& items) const { 
-        if (!KeyTypes.empty()) { 
-            auto& encoders = Encoders.RefMutableObject(ctx, KeySchemeTypes); 
-            if (KeyTypes.size() > 1U) { 
-                // sort tuples 
-                if (encoders.NeedEncode) { 
-                    // rebuild tuples 
-                    for (auto& x : items) { 
-                        NUdf::TUnboxedValue* arrayItems = nullptr; 
-                        NUdf::TUnboxedValue array = ctx.HolderFactory.CreateDirectArrayHolder(KeyTypes.size(), arrayItems); 
-                        for (ui32 i = 0; i < KeyTypes.size(); ++i) { 
-                            if (auto& e = encoders.Columns[i]) { 
-                                arrayItems[i] = MakeString(e->Encode(Get(x).GetElement(i), false)); 
-                            } else { 
-                                arrayItems[i] = Get(x).GetElement(i); 
-                            } 
-                        } 
- 
-                        Set(x) = std::move(array); 
-                    } 
-                } 
-            } else if (auto& encoder = encoders.Columns.front()) { 
-                for (auto& x : items) { 
-                    Set(x) = MakeString(encoder->Encode(Get(x), false)); 
-                } 
-            } 
-        } 
-    } 
- 
-    const std::vector<std::tuple<NUdf::EDataSlot, bool, TType*>> KeySchemeTypes; 
-    const std::vector<NUdf::EDataSlot> KeyTypes; 
-    TMutableObjectOverBoxedValue<TEncoders> Encoders; 
-}; 
- 
+        }
+    }
+
+    template<class Container>
+    void Prepare(TComputationContext& ctx, Container& items) const {
+        if (!KeyTypes.empty()) {
+            auto& encoders = Encoders.RefMutableObject(ctx, KeySchemeTypes);
+            if (KeyTypes.size() > 1U) {
+                // sort tuples
+                if (encoders.NeedEncode) {
+                    // rebuild tuples
+                    for (auto& x : items) {
+                        NUdf::TUnboxedValue* arrayItems = nullptr;
+                        NUdf::TUnboxedValue array = ctx.HolderFactory.CreateDirectArrayHolder(KeyTypes.size(), arrayItems);
+                        for (ui32 i = 0; i < KeyTypes.size(); ++i) {
+                            if (auto& e = encoders.Columns[i]) {
+                                arrayItems[i] = MakeString(e->Encode(Get(x).GetElement(i), false));
+                            } else {
+                                arrayItems[i] = Get(x).GetElement(i);
+                            }
+                        }
+
+                        Set(x) = std::move(array);
+                    }
+                }
+            } else if (auto& encoder = encoders.Columns.front()) {
+                for (auto& x : items) {
+                    Set(x) = MakeString(encoder->Encode(Get(x), false));
+                }
+            }
+        }
+    }
+
+    const std::vector<std::tuple<NUdf::EDataSlot, bool, TType*>> KeySchemeTypes;
+    const std::vector<NUdf::EDataSlot> KeyTypes;
+    TMutableObjectOverBoxedValue<TEncoders> Encoders;
+};
+
 template<class TWrapperImpl, bool MaybeInplace>
 class TAlgoBaseWrapper : public TMutableComputationNode<TAlgoBaseWrapper<TWrapperImpl, MaybeInplace>> {
     using TBaseComputation = TMutableComputationNode<TAlgoBaseWrapper<TWrapperImpl, MaybeInplace>>;
-protected: 
-    TAlgoBaseWrapper( 
-            TComputationMutables& mutables, 
-            std::vector<std::tuple<NUdf::EDataSlot, bool, TType*>>&& keySchemeTypes, 
-            IComputationNode* list, 
-            IComputationExternalNode* item, 
-            IComputationNode* key, 
+protected:
+    TAlgoBaseWrapper(
+            TComputationMutables& mutables,
+            std::vector<std::tuple<NUdf::EDataSlot, bool, TType*>>&& keySchemeTypes,
+            IComputationNode* list,
+            IComputationExternalNode* item,
+            IComputationNode* key,
             IComputationNode* ascending,
             bool stealed)
-        : TBaseComputation(mutables) 
-        , Description(mutables, std::move(keySchemeTypes)) 
-        , List(list) 
-        , Item(item) 
-        , Key(key) 
-        , Ascending(ascending) 
+        : TBaseComputation(mutables)
+        , Description(mutables, std::move(keySchemeTypes))
+        , List(list)
+        , Item(item)
+        , Key(key)
+        , Ascending(ascending)
         , Stealed(stealed)
-    {} 
- 
-public: 
-    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const { 
-        const auto& list = List->GetValue(ctx); 
+    {}
+
+public:
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
+        const auto& list = List->GetValue(ctx);
         auto ptr = list.GetElements();
         if (MaybeInplace && ptr) {
             TUnboxedValueVector keys;
             NUdf::TUnboxedValue *inplace = nullptr;
             NUdf::TUnboxedValue res;
- 
+
             auto size = list.GetListLength();
             if (!size) {
                 return ctx.HolderFactory.GetEmptyContainer();
             }
- 
+
             if (Stealed) {
                 res = list;
                 inplace = const_cast<NUdf::TUnboxedValue*>(ptr);
@@ -332,10 +332,10 @@ public:
             TKeyPayloadPairVector items;
             if (ptr) {
                 auto size = list.GetListLength();
-                items.reserve(size); 
+                items.reserve(size);
                 for (ui32 i = 0; i < size; ++i) {
                     Item->SetValue(ctx, NUdf::TUnboxedValuePod(ptr[i]));
-                    items.emplace_back(Key->GetValue(ctx), Item->GetValue(ctx)); 
+                    items.emplace_back(Key->GetValue(ctx), Item->GetValue(ctx));
                 }
             } else {
                 const auto& iter = list.GetListIterator();
@@ -347,62 +347,62 @@ public:
                     Item->SetValue(ctx, std::move(item));
                     items.emplace_back(Key->GetValue(ctx), Item->GetValue(ctx));
                 }
-            } 
- 
+            }
+
             if (items.empty()) {
                 return ctx.HolderFactory.GetEmptyContainer();
-            } 
- 
+            }
+
             Description.Prepare(ctx, items);
             return static_cast<const TWrapperImpl*>(this)->Perform(ctx, items,
                 Description.MakeComparator<TKeyPayloadPairVector>(Ascending->GetValue(ctx)));
-        } 
-    } 
+        }
+    }
 
-protected: 
-    void RegisterDependencies() const override { 
-        this->DependsOn(List); 
-        this->Own(Item); 
-        this->DependsOn(Key); 
-        this->DependsOn(Ascending); 
-    } 
- 
-private: 
-    TCompareDescr Description; 
-    IComputationNode* const List; 
-    IComputationExternalNode* const Item; 
-    IComputationNode* const Key; 
-    IComputationNode* const Ascending; 
+protected:
+    void RegisterDependencies() const override {
+        this->DependsOn(List);
+        this->Own(Item);
+        this->DependsOn(Key);
+        this->DependsOn(Ascending);
+    }
+
+private:
+    TCompareDescr Description;
+    IComputationNode* const List;
+    IComputationExternalNode* const Item;
+    IComputationNode* const Key;
+    IComputationNode* const Ascending;
     const bool Stealed;
-}; 
- 
+};
+
 class TAlgoWrapper : public TAlgoBaseWrapper<TAlgoWrapper, true> {
     using TBaseComputation = TAlgoBaseWrapper<TAlgoWrapper, true>;
-public: 
-    TAlgoWrapper( 
-            TAlgorithm algorithm, 
+public:
+    TAlgoWrapper(
+            TAlgorithm algorithm,
             TAlgorithmInplace algorithmInplace,
-            TComputationMutables& mutables, 
-            std::vector<std::tuple<NUdf::EDataSlot, bool, TType*>>&& keySchemeTypes, 
-            IComputationNode* list, 
-            IComputationExternalNode* item, 
-            IComputationNode* key, 
+            TComputationMutables& mutables,
+            std::vector<std::tuple<NUdf::EDataSlot, bool, TType*>>&& keySchemeTypes,
+            IComputationNode* list,
+            IComputationExternalNode* item,
+            IComputationNode* key,
             IComputationNode* ascending,
             bool stealed)
         : TBaseComputation(mutables, std::move(keySchemeTypes), list, item, key, ascending, stealed)
-        , Algorithm(algorithm) 
+        , Algorithm(algorithm)
         , AlgorithmInplace(algorithmInplace)
-    {} 
- 
-    NUdf::TUnboxedValuePod Perform(TComputationContext& ctx, TKeyPayloadPairVector& items, const TComparator& comparator) const { 
-        Algorithm(items.begin(), items.end(), comparator); 
- 
-        NUdf::TUnboxedValue *inplace = nullptr; 
-        const auto result = ctx.HolderFactory.CreateDirectArrayHolder(items.size(), inplace); 
-        for (auto& item : items) { 
-            *inplace++ = std::move(item.second); 
-        } 
-        return result; 
+    {}
+
+    NUdf::TUnboxedValuePod Perform(TComputationContext& ctx, TKeyPayloadPairVector& items, const TComparator& comparator) const {
+        Algorithm(items.begin(), items.end(), comparator);
+
+        NUdf::TUnboxedValue *inplace = nullptr;
+        const auto result = ctx.HolderFactory.CreateDirectArrayHolder(items.size(), inplace);
+        for (auto& item : items) {
+            *inplace++ = std::move(item.second);
+        }
+        return result;
     }
 
     void PerformInplace(TComputationContext& ctx, ui32 size, NUdf::TUnboxedValue* keys, NUdf::TUnboxedValue* items, const TComparator& comparator) const {
@@ -410,42 +410,42 @@ public:
     }
 
 private:
-    const TAlgorithm Algorithm; 
+    const TAlgorithm Algorithm;
     const TAlgorithmInplace AlgorithmInplace;
-}; 
+};
 
 class TNthAlgoWrapper : public TAlgoBaseWrapper<TNthAlgoWrapper, false> {
     using TBaseComputation = TAlgoBaseWrapper<TNthAlgoWrapper, false>;
-public: 
-    TNthAlgoWrapper( 
-            TNthAlgorithm algorithm, 
-            TComputationMutables& mutables, 
-            std::vector<std::tuple<NUdf::EDataSlot, bool, TType*>>&& keySchemeTypes, 
-            IComputationNode* list, 
-            IComputationNode* nth, 
-            IComputationExternalNode* item, 
-            IComputationNode* key, 
-            IComputationNode* ascending) 
+public:
+    TNthAlgoWrapper(
+            TNthAlgorithm algorithm,
+            TComputationMutables& mutables,
+            std::vector<std::tuple<NUdf::EDataSlot, bool, TType*>>&& keySchemeTypes,
+            IComputationNode* list,
+            IComputationNode* nth,
+            IComputationExternalNode* item,
+            IComputationNode* key,
+            IComputationNode* ascending)
         : TBaseComputation(mutables, std::move(keySchemeTypes), list, item, key, ascending, false)
-        , Algorithm(algorithm), Nth(nth) 
-    {} 
+        , Algorithm(algorithm), Nth(nth)
+    {}
 
-    NUdf::TUnboxedValuePod Perform(TComputationContext& ctx, TKeyPayloadPairVector& items, const TComparator& comparator) const { 
-        const auto n = std::min<ui64>(Nth->GetValue(ctx).Get<ui64>(), items.size()); 
-        if (!n) { 
-            return ctx.HolderFactory.GetEmptyContainer(); 
-        } 
+    NUdf::TUnboxedValuePod Perform(TComputationContext& ctx, TKeyPayloadPairVector& items, const TComparator& comparator) const {
+        const auto n = std::min<ui64>(Nth->GetValue(ctx).Get<ui64>(), items.size());
+        if (!n) {
+            return ctx.HolderFactory.GetEmptyContainer();
+        }
 
-        Algorithm(items.begin(), items.begin() + n, items.end(), comparator); 
-        items.resize(n); 
+        Algorithm(items.begin(), items.begin() + n, items.end(), comparator);
+        items.resize(n);
 
-        NUdf::TUnboxedValue *inplace = nullptr; 
-        const auto result = ctx.HolderFactory.CreateDirectArrayHolder(n, inplace); 
-        for (auto& item : items) { 
-            *inplace++ = std::move(item.second); 
-        } 
-        return result; 
-    } 
+        NUdf::TUnboxedValue *inplace = nullptr;
+        const auto result = ctx.HolderFactory.CreateDirectArrayHolder(n, inplace);
+        for (auto& item : items) {
+            *inplace++ = std::move(item.second);
+        }
+        return result;
+    }
 
     void PerformInplace(TComputationContext& ctx, ui32 size, NUdf::TUnboxedValue* keys, NUdf::TUnboxedValue* items, const TComparator& comparator) const {
         Y_UNUSED(ctx);
@@ -456,169 +456,169 @@ public:
         Y_FAIL("Not supported");
     }
 
-private: 
-    void RegisterDependencies() const final { 
-        TBaseComputation::RegisterDependencies(); 
-        this->DependsOn(Nth); 
-    } 
- 
-    const TNthAlgorithm Algorithm; 
-    IComputationNode* const Nth; 
-}; 
- 
-class TKeepTopWrapper : public TMutableComputationNode<TKeepTopWrapper> { 
-    using TBaseComputation = TMutableComputationNode<TKeepTopWrapper>; 
-public: 
-    TKeepTopWrapper( 
-            TComputationMutables& mutables, 
-            std::vector<std::tuple<NUdf::EDataSlot, bool, TType*>>&& keySchemeTypes, 
-            IComputationNode* count, 
-            IComputationNode* list, 
-            IComputationNode* item, 
-            IComputationExternalNode* arg, 
-            IComputationNode* key, 
-            IComputationNode* ascending, 
-            IComputationExternalNode* hotkey) 
-        : TBaseComputation(mutables) 
-        , Description(mutables, std::move(keySchemeTypes)) 
-        , Count(count) 
-        , List(list) 
-        , Item(item) 
-        , Arg(arg) 
-        , Key(key) 
-        , Ascending(ascending) 
-        , HotKey(hotkey) 
-    {} 
- 
-    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const { 
-        const auto count = Count->GetValue(ctx).Get<ui64>(); 
-        if (!count) { 
-            return ctx.HolderFactory.GetEmptyContainer(); 
-        } 
- 
-        auto list = List->GetValue(ctx); 
-        auto item = Item->GetValue(ctx); 
- 
-        const auto size = list.GetListLength(); 
- 
-        if (size < count) { 
-            return ctx.HolderFactory.Append(list.Release(), item.Release()); 
-        } 
- 
-        auto hotkey = HotKey->GetValue(ctx); 
- 
-        if (size == count) { 
-            if (hotkey.IsInvalid()) { 
-                TUnboxedValueVector keys; 
-                keys.reserve(size); 
- 
-                const auto ptr = list.GetElements(); 
-                std::transform(ptr, ptr + size, std::back_inserter(keys), [&](const NUdf::TUnboxedValuePod item) { 
-                    Arg->SetValue(ctx, item); 
-                    return Key->GetValue(ctx); 
-                }); 
-
-                const auto& ascending = Ascending->GetValue(ctx); 
-                const auto max = std::max_element(keys.begin(), keys.end(), Description.MakeComparator<TUnboxedValueVector>(ascending));
-                hotkey = *max; 
-                HotKey->SetValue(ctx, std::move(*max)); 
-            }
-        } 
- 
-        const auto copy = item; 
-        Arg->SetValue(ctx, item.Release()); 
-        const auto& key = Key->GetValue(ctx); 
- 
-        const auto& ascending = Ascending->GetValue(ctx); 
-        if (Description.MakeComparator<TUnboxedValueVector>(ascending)(key, hotkey)) {
-            const auto reserve = std::max<ui64>(count << 1ULL, 1ULL << 8ULL); 
-            if (size < reserve) { 
-                return ctx.HolderFactory.Append(list.Release(), Arg->GetValue(ctx).Release()); 
-            } 
- 
-            TKeyPayloadPairVector items(1U, TKeyPayloadPair(Key->GetValue(ctx), Arg->GetValue(ctx))); 
-            items.reserve(items.size() + size); 
- 
-            const auto ptr = list.GetElements(); 
-            std::transform(ptr, ptr + size, std::back_inserter(items), [&](const NUdf::TUnboxedValuePod item) { 
-                Arg->SetValue(ctx, item); 
-                return TKeyPayloadPair(Key->GetValue(ctx), Arg->GetValue(ctx)); 
-            }); 
- 
-            Description.Prepare(ctx, items); 
-            std::nth_element(items.begin(), items.begin() + count - 1U, items.end(), Description.MakeComparator<TKeyPayloadPairVector>(ascending));
-            items.resize(count); 
- 
-            NUdf::TUnboxedValue *inplace = nullptr; 
-            const auto result = ctx.HolderFactory.CreateDirectArrayHolder(count, inplace); /// TODO: Use list holder. 
-            for (auto& item : items) { 
-                *inplace++ = std::move(item.second); 
-            } 
-            return result; 
-        } 
- 
-        return list.Release(); 
+private:
+    void RegisterDependencies() const final {
+        TBaseComputation::RegisterDependencies();
+        this->DependsOn(Nth);
     }
 
-private: 
-    void RegisterDependencies() const final { 
-        DependsOn(Count); 
-        DependsOn(List); 
-        DependsOn(Item); 
-        Own(Arg); 
-        DependsOn(Key); 
-        DependsOn(Ascending); 
-        Own(HotKey); 
-    }
-
-    TCompareDescr Description; 
-    IComputationNode* const Count; 
-    IComputationNode* const List;
-    IComputationNode* const Item;
-    IComputationExternalNode* const Arg; 
-    IComputationNode* const Key;
-    IComputationNode* const Ascending;
-    IComputationExternalNode* const HotKey; 
+    const TNthAlgorithm Algorithm;
+    IComputationNode* const Nth;
 };
 
-std::vector<std::tuple<NUdf::EDataSlot, bool, TType*>> GetKeySchemeTypes(TType* keyType, TType* ascType) { 
+class TKeepTopWrapper : public TMutableComputationNode<TKeepTopWrapper> {
+    using TBaseComputation = TMutableComputationNode<TKeepTopWrapper>;
+public:
+    TKeepTopWrapper(
+            TComputationMutables& mutables,
+            std::vector<std::tuple<NUdf::EDataSlot, bool, TType*>>&& keySchemeTypes,
+            IComputationNode* count,
+            IComputationNode* list,
+            IComputationNode* item,
+            IComputationExternalNode* arg,
+            IComputationNode* key,
+            IComputationNode* ascending,
+            IComputationExternalNode* hotkey)
+        : TBaseComputation(mutables)
+        , Description(mutables, std::move(keySchemeTypes))
+        , Count(count)
+        , List(list)
+        , Item(item)
+        , Arg(arg)
+        , Key(key)
+        , Ascending(ascending)
+        , HotKey(hotkey)
+    {}
+
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
+        const auto count = Count->GetValue(ctx).Get<ui64>();
+        if (!count) {
+            return ctx.HolderFactory.GetEmptyContainer();
+        }
+
+        auto list = List->GetValue(ctx);
+        auto item = Item->GetValue(ctx);
+
+        const auto size = list.GetListLength();
+
+        if (size < count) {
+            return ctx.HolderFactory.Append(list.Release(), item.Release());
+        }
+
+        auto hotkey = HotKey->GetValue(ctx);
+
+        if (size == count) {
+            if (hotkey.IsInvalid()) {
+                TUnboxedValueVector keys;
+                keys.reserve(size);
+
+                const auto ptr = list.GetElements();
+                std::transform(ptr, ptr + size, std::back_inserter(keys), [&](const NUdf::TUnboxedValuePod item) {
+                    Arg->SetValue(ctx, item);
+                    return Key->GetValue(ctx);
+                });
+
+                const auto& ascending = Ascending->GetValue(ctx);
+                const auto max = std::max_element(keys.begin(), keys.end(), Description.MakeComparator<TUnboxedValueVector>(ascending));
+                hotkey = *max;
+                HotKey->SetValue(ctx, std::move(*max));
+            }
+        }
+
+        const auto copy = item;
+        Arg->SetValue(ctx, item.Release());
+        const auto& key = Key->GetValue(ctx);
+
+        const auto& ascending = Ascending->GetValue(ctx);
+        if (Description.MakeComparator<TUnboxedValueVector>(ascending)(key, hotkey)) {
+            const auto reserve = std::max<ui64>(count << 1ULL, 1ULL << 8ULL);
+            if (size < reserve) {
+                return ctx.HolderFactory.Append(list.Release(), Arg->GetValue(ctx).Release());
+            }
+
+            TKeyPayloadPairVector items(1U, TKeyPayloadPair(Key->GetValue(ctx), Arg->GetValue(ctx)));
+            items.reserve(items.size() + size);
+
+            const auto ptr = list.GetElements();
+            std::transform(ptr, ptr + size, std::back_inserter(items), [&](const NUdf::TUnboxedValuePod item) {
+                Arg->SetValue(ctx, item);
+                return TKeyPayloadPair(Key->GetValue(ctx), Arg->GetValue(ctx));
+            });
+
+            Description.Prepare(ctx, items);
+            std::nth_element(items.begin(), items.begin() + count - 1U, items.end(), Description.MakeComparator<TKeyPayloadPairVector>(ascending));
+            items.resize(count);
+
+            NUdf::TUnboxedValue *inplace = nullptr;
+            const auto result = ctx.HolderFactory.CreateDirectArrayHolder(count, inplace); /// TODO: Use list holder.
+            for (auto& item : items) {
+                *inplace++ = std::move(item.second);
+            }
+            return result;
+        }
+
+        return list.Release();
+    }
+
+private:
+    void RegisterDependencies() const final {
+        DependsOn(Count);
+        DependsOn(List);
+        DependsOn(Item);
+        Own(Arg);
+        DependsOn(Key);
+        DependsOn(Ascending);
+        Own(HotKey);
+    }
+
+    TCompareDescr Description;
+    IComputationNode* const Count;
+    IComputationNode* const List;
+    IComputationNode* const Item;
+    IComputationExternalNode* const Arg;
+    IComputationNode* const Key;
+    IComputationNode* const Ascending;
+    IComputationExternalNode* const HotKey;
+};
+
+std::vector<std::tuple<NUdf::EDataSlot, bool, TType*>> GetKeySchemeTypes(TType* keyType, TType* ascType) {
     std::vector<std::tuple<NUdf::EDataSlot, bool, TType*>> keySchemeTypes;
     if (ascType->IsTuple()) {
         MKQL_ENSURE(keyType->IsTuple(), "Key must be tuple");
-        const auto keyDetailedType = static_cast<TTupleType*>(keyType); 
-        const auto keyElementsCount = keyDetailedType->GetElementsCount(); 
+        const auto keyDetailedType = static_cast<TTupleType*>(keyType);
+        const auto keyElementsCount = keyDetailedType->GetElementsCount();
         keySchemeTypes.reserve(keyElementsCount);
         for (ui32 i = 0; i < keyElementsCount; ++i) {
-            const auto elementType = keyDetailedType->GetElementType(i); 
+            const auto elementType = keyDetailedType->GetElementType(i);
             bool isOptional;
-            const auto unpacked = UnpackOptional(elementType, isOptional); 
+            const auto unpacked = UnpackOptional(elementType, isOptional);
             if (!unpacked->IsData()) {
-                keySchemeTypes.emplace_back(NUdf::EDataSlot::String, false, elementType); 
+                keySchemeTypes.emplace_back(NUdf::EDataSlot::String, false, elementType);
             } else {
-                keySchemeTypes.emplace_back(*static_cast<TDataType*>(unpacked)->GetDataSlot(), isOptional, nullptr); 
+                keySchemeTypes.emplace_back(*static_cast<TDataType*>(unpacked)->GetDataSlot(), isOptional, nullptr);
             }
         }
     } else {
         keySchemeTypes.reserve(1);
         bool isOptional;
-        const auto unpacked = UnpackOptional(keyType, isOptional); 
+        const auto unpacked = UnpackOptional(keyType, isOptional);
         if (!unpacked->IsData()) {
-            keySchemeTypes.emplace_back(NUdf::EDataSlot::String, false, keyType); 
+            keySchemeTypes.emplace_back(NUdf::EDataSlot::String, false, keyType);
         } else {
-            keySchemeTypes.emplace_back(*static_cast<TDataType*>(unpacked)->GetDataSlot(), isOptional, nullptr); 
+            keySchemeTypes.emplace_back(*static_cast<TDataType*>(unpacked)->GetDataSlot(), isOptional, nullptr);
         }
     }
-    return keySchemeTypes; 
-} 
+    return keySchemeTypes;
+}
 
 IComputationNode* WrapAlgo(TAlgorithm algorithm, TAlgorithmInplace algorithmInplace, TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == 4, "Expected 4 args"); 
- 
-    const auto keyNode = callable.GetInput(2); 
-    const auto sortNode = callable.GetInput(3); 
- 
-    const auto keyType = keyNode.GetStaticType(); 
-    const auto ascType = sortNode.GetStaticType(); 
+    MKQL_ENSURE(callable.GetInputsCount() == 4, "Expected 4 args");
+
+    const auto keyNode = callable.GetInput(2);
+    const auto sortNode = callable.GetInput(3);
+
+    const auto keyType = keyNode.GetStaticType();
+    const auto ascType = sortNode.GetStaticType();
     auto listNode = callable.GetInput(0);
     IComputationNode* list = nullptr;
     bool stealed = false;
@@ -629,77 +629,77 @@ IComputationNode* WrapAlgo(TAlgorithm algorithm, TAlgorithmInplace algorithmInpl
             stealed = true;
         }
     }
- 
+
     if (!list) {
         list = LocateNode(ctx.NodeLocator, callable, 0);
     }
 
-    const auto key = LocateNode(ctx.NodeLocator, callable, 2); 
-    const auto ascending = LocateNode(ctx.NodeLocator, callable, 3); 
-    const auto itemArg = LocateExternalNode(ctx.NodeLocator, callable, 1); 
+    const auto key = LocateNode(ctx.NodeLocator, callable, 2);
+    const auto ascending = LocateNode(ctx.NodeLocator, callable, 3);
+    const auto itemArg = LocateExternalNode(ctx.NodeLocator, callable, 1);
 
     return new TAlgoWrapper(algorithm, algorithmInplace, ctx.Mutables, GetKeySchemeTypes(keyType, ascType), list,
         itemArg, key, ascending, stealed);
 }
 
-IComputationNode* WrapNthAlgo(TNthAlgorithm algorithm, TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
-    MKQL_ENSURE(callable.GetInputsCount() == 5, "Expected 5 args"); 
- 
-    const auto keyNode = callable.GetInput(3); 
-    const auto sortNode = callable.GetInput(4); 
- 
-    const auto keyType = keyNode.GetStaticType(); 
-    const auto ascType = sortNode.GetStaticType(); 
- 
-    const auto list = LocateNode(ctx.NodeLocator, callable, 0); 
-    const auto nth = LocateNode(ctx.NodeLocator, callable, 1); 
-    const auto key = LocateNode(ctx.NodeLocator, callable, 3); 
-    const auto ascending = LocateNode(ctx.NodeLocator, callable, 4); 
-    const auto itemArg = LocateExternalNode(ctx.NodeLocator, callable, 2); 
- 
-    return new TNthAlgoWrapper(algorithm, ctx.Mutables, GetKeySchemeTypes(keyType, ascType), list, nth, itemArg, key, ascending); 
+IComputationNode* WrapNthAlgo(TNthAlgorithm algorithm, TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    MKQL_ENSURE(callable.GetInputsCount() == 5, "Expected 5 args");
+
+    const auto keyNode = callable.GetInput(3);
+    const auto sortNode = callable.GetInput(4);
+
+    const auto keyType = keyNode.GetStaticType();
+    const auto ascType = sortNode.GetStaticType();
+
+    const auto list = LocateNode(ctx.NodeLocator, callable, 0);
+    const auto nth = LocateNode(ctx.NodeLocator, callable, 1);
+    const auto key = LocateNode(ctx.NodeLocator, callable, 3);
+    const auto ascending = LocateNode(ctx.NodeLocator, callable, 4);
+    const auto itemArg = LocateExternalNode(ctx.NodeLocator, callable, 2);
+
+    return new TNthAlgoWrapper(algorithm, ctx.Mutables, GetKeySchemeTypes(keyType, ascType), list, nth, itemArg, key, ascending);
 }
- 
-} 
- 
+
+}
+
 IComputationNode* WrapUnstableSort(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     return WrapAlgo(&std::sort<TKeyPayloadPairVector::iterator, TComparator>,
         &std::sort<TGatherIterator, TComparator>, callable, ctx);
 }
 
-IComputationNode* WrapSort(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
+IComputationNode* WrapSort(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     return WrapAlgo(&std::stable_sort<TKeyPayloadPairVector::iterator, TComparator>,
         &std::stable_sort<TGatherIterator, TComparator>, callable, ctx);
 }
- 
-IComputationNode* WrapTop(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
-    return WrapNthAlgo(&std::nth_element<TKeyPayloadPairVector::iterator, TComparator>, callable, ctx); 
-} 
- 
-IComputationNode* WrapTopSort(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
-    return WrapNthAlgo(&std::partial_sort<TKeyPayloadPairVector::iterator, TComparator>, callable, ctx); 
-} 
- 
-IComputationNode* WrapKeepTop(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
-    MKQL_ENSURE(callable.GetInputsCount() == 7, "Expected 7 args"); 
- 
-    const auto keyNode = callable.GetInput(4); 
-    const auto sortNode = callable.GetInput(5); 
- 
-    const auto keyType = keyNode.GetStaticType(); 
-    const auto ascType = sortNode.GetStaticType(); 
- 
-    const auto count = LocateNode(ctx.NodeLocator, callable, 0); 
-    const auto list = LocateNode(ctx.NodeLocator, callable, 1); 
-    const auto item = LocateNode(ctx.NodeLocator, callable, 2); 
- 
-    const auto key = LocateNode(ctx.NodeLocator, callable, 4); 
-    const auto ascending = LocateNode(ctx.NodeLocator, callable, 5); 
-    const auto itemArg = LocateExternalNode(ctx.NodeLocator, callable, 3); 
-    const auto hotkey = LocateExternalNode(ctx.NodeLocator, callable, 6); 
- 
-    return new TKeepTopWrapper(ctx.Mutables, GetKeySchemeTypes(keyType, ascType), count, list, item, itemArg, key, ascending, hotkey); 
-} 
- 
-} 
-} 
+
+IComputationNode* WrapTop(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    return WrapNthAlgo(&std::nth_element<TKeyPayloadPairVector::iterator, TComparator>, callable, ctx);
+}
+
+IComputationNode* WrapTopSort(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    return WrapNthAlgo(&std::partial_sort<TKeyPayloadPairVector::iterator, TComparator>, callable, ctx);
+}
+
+IComputationNode* WrapKeepTop(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    MKQL_ENSURE(callable.GetInputsCount() == 7, "Expected 7 args");
+
+    const auto keyNode = callable.GetInput(4);
+    const auto sortNode = callable.GetInput(5);
+
+    const auto keyType = keyNode.GetStaticType();
+    const auto ascType = sortNode.GetStaticType();
+
+    const auto count = LocateNode(ctx.NodeLocator, callable, 0);
+    const auto list = LocateNode(ctx.NodeLocator, callable, 1);
+    const auto item = LocateNode(ctx.NodeLocator, callable, 2);
+
+    const auto key = LocateNode(ctx.NodeLocator, callable, 4);
+    const auto ascending = LocateNode(ctx.NodeLocator, callable, 5);
+    const auto itemArg = LocateExternalNode(ctx.NodeLocator, callable, 3);
+    const auto hotkey = LocateExternalNode(ctx.NodeLocator, callable, 6);
+
+    return new TKeepTopWrapper(ctx.Mutables, GetKeySchemeTypes(keyType, ascType), count, list, item, itemArg, key, ascending, hotkey);
+}
+
+}
+}

@@ -104,7 +104,7 @@ ProjectionDescription::getProjectionFromAST(const ASTPtr & definition_ast, const
     if (projection_definition->name.empty())
         throw Exception("Projection must have name in definition.", ErrorCodes::INCORRECT_QUERY);
 
-    if (projection_definition->name.starts_with("tmp_")) 
+    if (projection_definition->name.starts_with("tmp_"))
         throw Exception("Projection's name cannot start with 'tmp_'", ErrorCodes::INCORRECT_QUERY);
 
     if (!projection_definition->query)

@@ -29,7 +29,7 @@ public:
         , Args(args)
     {}
 
-    bool DoInit(TContext& ctx, ISource* src) final { 
+    bool DoInit(TContext& ctx, ISource* src) final {
         if (!src) {
             ctx.Error(Pos) << "Grouping function should have source";
             return false;
@@ -59,7 +59,7 @@ public:
         return TAstListNode::DoInit(ctx, src);
     }
 
-    TNodePtr DoClone() const final { 
+    TNodePtr DoClone() const final {
         return new TGroupingNode(Pos, Args);
     }
 
@@ -67,7 +67,7 @@ private:
     const TVector<TNodePtr> Args;
 };
 
-class TBasicAggrFunc final: public TAstListNode { 
+class TBasicAggrFunc final: public TAstListNode {
 public:
     TBasicAggrFunc(TPosition pos, const TString& name, TAggregationPtr aggr, const TVector<TNodePtr>& args)
         : TAstListNode(pos)
@@ -80,7 +80,7 @@ public:
         return Name;
     }
 
-    bool DoInit(TContext& ctx, ISource* src) final { 
+    bool DoInit(TContext& ctx, ISource* src) final {
         if (!src) {
             ctx.Error(Pos) << "Unable to use aggregation function '" << Name << "' without data source";
             return false;
@@ -92,7 +92,7 @@ public:
         return TAstListNode::DoInit(ctx, src);
     }
 
-    TNodePtr DoClone() const final { 
+    TNodePtr DoClone() const final {
         TAggregationPtr aggrClone = static_cast<IAggregation*>(Aggr->Clone().Release());
         return new TBasicAggrFunc(Pos, Name, aggrClone, CloneContainer(Args));
     }
@@ -102,15 +102,15 @@ public:
     }
 
 private:
-    bool DoInitAggregation(TContext& ctx, ISource* src) { 
+    bool DoInitAggregation(TContext& ctx, ISource* src) {
         if (!Aggr->InitAggr(ctx, false, src, *this, Args)) {
             return false;
         }
         return src->AddAggregation(ctx, Aggr);
     }
 
-    void DoUpdateState() const final { 
-        State.Set(ENodeState::Const, Args.front()->IsConstant()); 
+    void DoUpdateState() const final {
+        State.Set(ENodeState::Const, Args.front()->IsConstant());
         State.Set(ENodeState::Aggregated);
     }
 
@@ -239,15 +239,15 @@ public:
 
     bool DoInit(TContext& ctx, ISource* src) override {
         auto slot = NUdf::FindDataSlot(GetOpName());
-        if (!slot) { 
-            ctx.Error(Pos) << "Unexpected type " << GetOpName(); 
-            return false; 
-        } 
- 
+        if (!slot) {
+            ctx.Error(Pos) << "Unexpected type " << GetOpName();
+            return false;
+        }
+
         if (*slot == NUdf::EDataSlot::Decimal) {
-            MinArgs = MaxArgs = 3; 
-        } 
- 
+            MinArgs = MaxArgs = 3;
+        }
+
         if (!ValidateArguments(ctx)) {
             return false;
         }
@@ -261,32 +261,32 @@ public:
 
         TString value;
         if (*slot == NUdf::EDataSlot::Decimal) {
-            const auto precision = Args[1]->GetLiteral("Int32"); 
-            const auto scale = Args[2]->GetLiteral("Int32"); 
- 
-            if (!NKikimr::NMiniKQL::IsValidDecimal(*atom)) { 
-                ctx.Error(Pos) << "Invalid value " << atom->Quote() << " for type " << GetOpName(); 
-                return false; 
-            } 
- 
-            ui8 stub; 
-            if (!(precision && TryFromString<ui8>(*precision, stub))) { 
-                ctx.Error(Pos) << "Invalid precision " << (precision ? precision->Quote() : "") << " for type " << GetOpName(); 
-                return false; 
-            } 
- 
-            if (!(scale && TryFromString<ui8>(*scale, stub))) { 
-                ctx.Error(Pos) << "Invalid scale " << (scale ? scale->Quote() : "") << " for type " << GetOpName(); 
-                return false; 
-            } 
- 
-            Args[0] = BuildQuotedAtom(GetPos(), *atom); 
-            Args[1] = BuildQuotedAtom(GetPos(), *precision); 
-            Args[2] = BuildQuotedAtom(GetPos(), *scale); 
-            return TCallNode::DoInit(ctx, src); 
+            const auto precision = Args[1]->GetLiteral("Int32");
+            const auto scale = Args[2]->GetLiteral("Int32");
+
+            if (!NKikimr::NMiniKQL::IsValidDecimal(*atom)) {
+                ctx.Error(Pos) << "Invalid value " << atom->Quote() << " for type " << GetOpName();
+                return false;
+            }
+
+            ui8 stub;
+            if (!(precision && TryFromString<ui8>(*precision, stub))) {
+                ctx.Error(Pos) << "Invalid precision " << (precision ? precision->Quote() : "") << " for type " << GetOpName();
+                return false;
+            }
+
+            if (!(scale && TryFromString<ui8>(*scale, stub))) {
+                ctx.Error(Pos) << "Invalid scale " << (scale ? scale->Quote() : "") << " for type " << GetOpName();
+                return false;
+            }
+
+            Args[0] = BuildQuotedAtom(GetPos(), *atom);
+            Args[1] = BuildQuotedAtom(GetPos(), *precision);
+            Args[2] = BuildQuotedAtom(GetPos(), *scale);
+            return TCallNode::DoInit(ctx, src);
         } else if (NUdf::GetDataTypeInfo(*slot).Features & (NUdf::DateType | NUdf::TzDateType | NUdf::TimeIntervalType)) {
-            const auto out = NKikimr::NMiniKQL::ValueFromString(*slot, *atom); 
-            if (!out) { 
+            const auto out = NKikimr::NMiniKQL::ValueFromString(*slot, *atom);
+            if (!out) {
                 ctx.Error(Pos) << "Invalid value " << atom->Quote() << " for type " << GetOpName();
                 return false;
             }
@@ -294,45 +294,45 @@ public:
             switch (*slot) {
             case NUdf::EDataSlot::Date:
             case NUdf::EDataSlot::TzDate:
-                value = ToString(out.Get<ui16>()); 
+                value = ToString(out.Get<ui16>());
                 break;
             case NUdf::EDataSlot::Datetime:
             case NUdf::EDataSlot::TzDatetime:
-                value = ToString(out.Get<ui32>()); 
+                value = ToString(out.Get<ui32>());
                 break;
             case NUdf::EDataSlot::Timestamp:
             case NUdf::EDataSlot::TzTimestamp:
-                value = ToString(out.Get<ui64>()); 
+                value = ToString(out.Get<ui64>());
                 break;
             case NUdf::EDataSlot::Interval:
-                value = ToString(out.Get<i64>()); 
-                if ('T' == atom->back()) { 
-                    ctx.Warning(Pos, TIssuesIds::YQL_DEPRECATED_INTERVAL_CONSTANT) << "Time prefix 'T' at end of interval constant"; 
-                } 
-                break; 
+                value = ToString(out.Get<i64>());
+                if ('T' == atom->back()) {
+                    ctx.Warning(Pos, TIssuesIds::YQL_DEPRECATED_INTERVAL_CONSTANT) << "Time prefix 'T' at end of interval constant";
+                }
+                break;
             default:
                 Y_FAIL("Unexpected data slot");
             }
 
             if (NUdf::GetDataTypeInfo(*slot).Features & NUdf::TzDateType) {
-                value += ","; 
-                value += NKikimr::NMiniKQL::GetTimezoneIANAName(out.GetTimezoneId()); 
-            } 
+                value += ",";
+                value += NKikimr::NMiniKQL::GetTimezoneIANAName(out.GetTimezoneId());
+            }
         } else if (NUdf::EDataSlot::Uuid == *slot) {
-            char out[0x10]; 
-            if (!NKikimr::NMiniKQL::ParseUuid(*atom, out)) { 
-                ctx.Error(Pos) << "Invalid value " << atom->Quote() << " for type " << GetOpName(); 
-                return false; 
-            } 
- 
-            value.assign(out, sizeof(out)); 
-        } else {
-            if (!NKikimr::NMiniKQL::IsValidStringValue(*slot, *atom)) { 
+            char out[0x10];
+            if (!NKikimr::NMiniKQL::ParseUuid(*atom, out)) {
                 ctx.Error(Pos) << "Invalid value " << atom->Quote() << " for type " << GetOpName();
                 return false;
             }
 
-            value = *atom; 
+            value.assign(out, sizeof(out));
+        } else {
+            if (!NKikimr::NMiniKQL::IsValidStringValue(*slot, *atom)) {
+                ctx.Error(Pos) << "Invalid value " << atom->Quote() << " for type " << GetOpName();
+                return false;
+            }
+
+            value = *atom;
         }
 
         Args[0] = BuildQuotedAtom(GetPos(), value);
@@ -732,7 +732,7 @@ TString NormalizeTypeString(const TString& str) {
 }
 
 static const TSet<TString> AvailableDataTypes = {"Bool", "String", "Uint32", "Uint64", "Int32", "Int64", "Float", "Double", "Utf8", "Yson", "Json",
-    "Date", "Datetime", "Timestamp", "Interval", "Uint8", "Int8", "Uint16", "Int16", "TzDate", "TzDatetime", "TzTimestamp", "Uuid", "Decimal"}; 
+    "Date", "Datetime", "Timestamp", "Interval", "Uint8", "Int8", "Uint16", "Int16", "TzDate", "TzDatetime", "TzTimestamp", "Uuid", "Decimal"};
 TNodePtr GetDataTypeStringNode(TContext& ctx, TCallNode& node, unsigned argNum, TString* outTypeStrPtr = nullptr) {
     auto errMsgFunc = [&node, argNum]() {
         static std::array<TString, 2> numToName = {{"first", "second"}};
@@ -1397,7 +1397,7 @@ public:
             }
 
             const TString yql("(" + parsedName + ")");
-            TAstParseResult ast = ParseAst(yql, ctx.Pool.get()); 
+            TAstParseResult ast = ParseAst(yql, ctx.Pool.get());
             /// TODO: do not drop warnings
             if (ast.IsOk()) {
                 Node = AstNode(ast.Root->GetChild(0));
@@ -1770,14 +1770,14 @@ TBuiltinFactoryCallback BuildNamedBuiltinFactoryCallback(const TString& name) {
         return new TType(pos, name, args);
     };
 }
- 
+
 template<typename TType>
 TBuiltinFactoryCallback BuildArgcBuiltinFactoryCallback(i32 minArgs, i32 maxArgs) {
     return [minArgs, maxArgs] (TPosition pos, const TVector<TNodePtr>& args) -> TNodePtr {
         return new TType(pos, minArgs, maxArgs, args);
     };
 }
- 
+
 template<typename TType>
 TBuiltinFactoryCallback BuildNamedArgcBuiltinFactoryCallback(const TString& name, i32 minArgs, i32 maxArgs) {
     return [name, minArgs, maxArgs] (TPosition pos, const TVector<TNodePtr>& args) -> TNodePtr {
@@ -1798,14 +1798,14 @@ TBuiltinFactoryCallback BuildBoolBuiltinFactoryCallback(bool arg) {
         return new TType(pos, args, arg);
     };
 }
- 
+
 template<typename TType>
 TBuiltinFactoryCallback BuildFoldBuiltinFactoryCallback(const TString& name, const TString& defaultValue) {
     return [name, defaultValue] (TPosition pos, const TVector<TNodePtr>& args) -> TNodePtr {
         return new TType(pos, name, "Bool", defaultValue, 1, args);
     };
 }
- 
+
 TNodePtr MakePair(TPosition pos, const TVector<TNodePtr>& args) {
     TNodePtr list = new TAstListNodeImpl(pos, {
         args[0],
@@ -1843,7 +1843,7 @@ struct TBuiltinFuncData {
             {"characterlength", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Size", 1, 1)},
             {"substring", BuildSimpleBuiltinFactoryCallback<TYqlSubstring>()},
             {"byteat", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ByteAt", 2, 2) },
- 
+
             // Numeric builtins
             {"abs", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Abs", 1, 1) },
             {"tobytes", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ToBytes", 1, 1) },
@@ -1879,9 +1879,9 @@ struct TBuiltinFuncData {
             {"listany", BuildFoldBuiltinFactoryCallback<TListFoldBuiltinImpl>("Or", "false")},
             {"listall", BuildFoldBuiltinFactoryCallback<TListFoldBuiltinImpl>("And", "true")},
             {"listhas", BuildSimpleBuiltinFactoryCallback<TListHasBuiltin>()},
-            {"listmax", BuildNamedBuiltinFactoryCallback<TListFold1Builtin>("AggrMax")}, 
-            {"listmin", BuildNamedBuiltinFactoryCallback<TListFold1Builtin>("AggrMin")}, 
-            {"listsum", BuildNamedBuiltinFactoryCallback<TListFold1Builtin>("AggrAdd")}, 
+            {"listmax", BuildNamedBuiltinFactoryCallback<TListFold1Builtin>("AggrMax")},
+            {"listmin", BuildNamedBuiltinFactoryCallback<TListFold1Builtin>("AggrMin")},
+            {"listsum", BuildNamedBuiltinFactoryCallback<TListFold1Builtin>("AggrAdd")},
             {"listavg", BuildSimpleBuiltinFactoryCallback<TListAvgBuiltin>()},
             {"listconcat", BuildNamedBuiltinFactoryCallback<TListFold1Builtin>("Concat")},
             {"listextract", BuildSimpleBuiltinFactoryCallback<TListExtractBuiltin>()},
@@ -2082,8 +2082,8 @@ struct TBuiltinFuncData {
             {"aggrlistdistinct", BuildAggrFuncFactoryCallback("AggregateListDistinct", "set_traits_factory", LIST)},
             {"aggregatelistdistinct", BuildAggrFuncFactoryCallback("AggregateListDistinct", "set_traits_factory", LIST)},
 
-            {"median", BuildAggrFuncFactoryCallback("Median", "percentile_traits_factory", PERCENTILE)}, 
-            {"percentile", BuildAggrFuncFactoryCallback("Percentile", "percentile_traits_factory", PERCENTILE)}, 
+            {"median", BuildAggrFuncFactoryCallback("Median", "percentile_traits_factory", PERCENTILE)},
+            {"percentile", BuildAggrFuncFactoryCallback("Percentile", "percentile_traits_factory", PERCENTILE)},
 
             {"mode", BuildAggrFuncFactoryCallback("Mode", "topfreq_traits_factory", TOPFREQ) },
             {"topfreq", BuildAggrFuncFactoryCallback("TopFreq", "topfreq_traits_factory", TOPFREQ) },

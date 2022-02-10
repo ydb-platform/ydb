@@ -122,7 +122,7 @@ namespace
 {
     UInt64 stringToMaxThreads(const String & str)
     {
-        if (str.starts_with("auto")) 
+        if (str.starts_with("auto"))
             return 0;
         return parseFromString<UInt64>(str);
     }

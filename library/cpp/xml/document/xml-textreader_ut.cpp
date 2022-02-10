@@ -11,7 +11,7 @@ namespace {
      * Simple wrapper around the xmlTextReader wrapper
      */
     void ParseXml(const TString& xmlData,
-                  std::function<void(NXml::TConstNode)> nodeHandlerFunc, 
+                  std::function<void(NXml::TConstNode)> nodeHandlerFunc,
                   const TString& localName,
                   const TString& namespaceUri = TString()) {
         TStringInput in(xmlData);

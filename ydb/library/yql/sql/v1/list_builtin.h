@@ -39,7 +39,7 @@ protected:
 class TListSortBuiltin final: public TListBuiltin {
 public:
     TListSortBuiltin(TPosition pos, const TVector<TNodePtr>& args, bool asc)
-        : TListBuiltin(pos, "ListSort", args) 
+        : TListBuiltin(pos, "ListSort", args)
         , Asc(asc)
     {}
 
@@ -50,13 +50,13 @@ public:
     }
 
 private:
-    const bool Asc; 
+    const bool Asc;
 };
 
 class TListExtractBuiltin final: public TListBuiltin {
 public:
     TListExtractBuiltin(TPosition pos, const TVector<TNodePtr>& args)
-        : TListBuiltin(pos, "ListExtract", args) 
+        : TListBuiltin(pos, "ListExtract", args)
     {}
 
     bool DoInit(TContext& ctx, ISource* src) override;
@@ -97,16 +97,16 @@ private:
 
 class TListFilterBuiltin final: public TListProcessBuiltin {
 public:
-    TListFilterBuiltin(TPosition pos, const TString& opName, 
+    TListFilterBuiltin(TPosition pos, const TString& opName,
                        const TVector<TNodePtr>& args)
-        : TListProcessBuiltin(pos, opName, args) 
+        : TListProcessBuiltin(pos, opName, args)
     {}
 
 
     bool DoInit(TContext& ctx, ISource* src) override;
 
     TNodePtr DoClone() const final {
-        return new TListFilterBuiltin(Pos, OpName, CloneContainer(Args)); 
+        return new TListFilterBuiltin(Pos, OpName, CloneContainer(Args));
     }
 protected:
     virtual TNodePtr GetFilterLambda();

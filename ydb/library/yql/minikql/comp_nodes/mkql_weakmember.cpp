@@ -9,7 +9,7 @@
 
 namespace NKikimr {
 namespace NMiniKQL {
-namespace { 
+namespace {
 
 class TTryWeakMemberFromDictWrapper : public TMutableComputationNode<TTryWeakMemberFromDictWrapper> {
     typedef TMutableComputationNode<TTryWeakMemberFromDictWrapper> TBaseComputation;
@@ -27,11 +27,11 @@ public:
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         if (const auto& restDict = RestDict->GetValue(ctx)) {
-            if (const auto& tryMember = restDict.Lookup(MemberName)) { 
-                return SimpleValueFromYson(SchemeType, tryMember.AsStringRef()); 
-            } 
-        } 
- 
+            if (const auto& tryMember = restDict.Lookup(MemberName)) {
+                return SimpleValueFromYson(SchemeType, tryMember.AsStringRef());
+            }
+        }
+
         if (const auto& otherDict = OtherDict->GetValue(ctx)) {
             if (auto tryMember = otherDict.Lookup(MemberName)) {
                 const bool isString = otherDict.Contains(OtherIsStringMemberName);
@@ -50,19 +50,19 @@ public:
                     } else {
                         return {};
                     }
-                } else { 
-                    return SimpleValueFromYson(SchemeType, tryMember.AsStringRef()); 
+                } else {
+                    return SimpleValueFromYson(SchemeType, tryMember.AsStringRef());
                 }
             }
         }
 
-        return NUdf::TUnboxedValuePod(); 
+        return NUdf::TUnboxedValuePod();
     }
 
 private:
-    void RegisterDependencies() const final { 
-        DependsOn(OtherDict); 
-        DependsOn(RestDict); 
+    void RegisterDependencies() const final {
+        DependsOn(OtherDict);
+        DependsOn(RestDict);
     }
 
     IComputationNode* const OtherDict;
@@ -72,8 +72,8 @@ private:
     const NUdf::TUnboxedValue OtherIsStringMemberName;
 };
 
-} 
- 
+}
+
 IComputationNode* WrapTryWeakMemberFromDict(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 4, "Expected 4 args");
 
@@ -99,8 +99,8 @@ IComputationNode* WrapTryWeakMemberFromDict(TCallable& callable, const TComputat
 
     auto otherDict = LocateNode(ctx.NodeLocator, callable, 0);
     auto restDict = LocateNode(ctx.NodeLocator, callable, 1);
-    auto memberNameStr = MakeString(memberName); 
-    auto otherIsStringMemberNameStr = MakeString("_yql_" + memberName); 
+    auto memberNameStr = MakeString(memberName);
+    auto otherIsStringMemberNameStr = MakeString("_yql_" + memberName);
     return new TTryWeakMemberFromDictWrapper(ctx.Mutables, otherDict, restDict, static_cast<NUdf::TDataTypeId>(schemeType),
             std::move(memberNameStr), std::move(otherIsStringMemberNameStr));
 }

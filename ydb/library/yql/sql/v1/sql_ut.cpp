@@ -792,11 +792,11 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["UnionAll"]);
     }
 
-    Y_UNIT_TEST(DeclareDecimalParameter) { 
-        NYql::TAstParseResult res = SqlToYql("declare $value as Decimal(22,9); select $value as cnt;"); 
-        UNIT_ASSERT(res.Root); 
-    } 
- 
+    Y_UNIT_TEST(DeclareDecimalParameter) {
+        NYql::TAstParseResult res = SqlToYql("declare $value as Decimal(22,9); select $value as cnt;");
+        UNIT_ASSERT(res.Root);
+    }
+
     Y_UNIT_TEST(SimpleGroupBy) {
         NYql::TAstParseResult res = SqlToYql("select count(1),z from plato.Input group by key as z order by z;");
         UNIT_ASSERT(res.Root);
@@ -817,33 +817,33 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         VerifyProgram(res, elementStat);
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["rollback"]);
     }
- 
+
     Y_UNIT_TEST(PragmaFile) {
-        NYql::TAstParseResult res = SqlToYql(R"(pragma file("HW", "sbr:181041334");)"); 
-        UNIT_ASSERT(res.Root); 
- 
+        NYql::TAstParseResult res = SqlToYql(R"(pragma file("HW", "sbr:181041334");)");
+        UNIT_ASSERT(res.Root);
+
         TWordCountHive elementStat = {{TString(R"((let world (Configure! world (DataSource '"config") '"AddFileByUrl" '"HW" '"sbr:181041334")))"), 0}};
-        VerifyProgram(res, elementStat); 
-        UNIT_ASSERT_VALUES_EQUAL(1, elementStat.cbegin()->second); 
-    } 
+        VerifyProgram(res, elementStat);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat.cbegin()->second);
+    }
 
     Y_UNIT_TEST(DoNotCrashOnNamedInFilter) {
         NYql::TAstParseResult res = SqlToYql("USE plato; $all = ($table_name) -> { return true; }; SELECT * FROM FILTER(Input, $all)");
         UNIT_ASSERT(res.Root);
     }
- 
+
     Y_UNIT_TEST(PragmasFileAndUdfOrder) {
-        NYql::TAstParseResult res = SqlToYql(R"( 
+        NYql::TAstParseResult res = SqlToYql(R"(
             PRAGMA file("libvideoplayers_udf.so", "https://proxy.sandbox.yandex-team.ru/235185290");
-            PRAGMA udf("libvideoplayers_udf.so"); 
-        )"); 
-        UNIT_ASSERT(res.Root); 
- 
-        const auto programm = GetPrettyPrint(res); 
-        const auto file = programm.find("AddFileByUrl"); 
-        const auto udfs = programm.find("ImportUdfs"); 
-        UNIT_ASSERT(file < udfs); 
-    } 
+            PRAGMA udf("libvideoplayers_udf.so");
+        )");
+        UNIT_ASSERT(res.Root);
+
+        const auto programm = GetPrettyPrint(res);
+        const auto file = programm.find("AddFileByUrl");
+        const auto udfs = programm.find("ImportUdfs");
+        UNIT_ASSERT(file < udfs);
+    }
 
     Y_UNIT_TEST(ProcessUserType) {
         NYql::TAstParseResult res = SqlToYql("process plato.Input using Kikimr::PushData(TableRows());", 1, TString(NYql::KikimrProviderName));

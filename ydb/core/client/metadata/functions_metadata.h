@@ -8,7 +8,7 @@ namespace NMiniKQL {
     class IBuiltinFunctionRegistry;
 }
 
-void SerializeMetadata(const NMiniKQL::IBuiltinFunctionRegistry& funcRegistry, TString* out); 
-void DeserializeMetadata(TStringBuf buffer, NMiniKQL::IBuiltinFunctionRegistry& funcRegistry); 
+void SerializeMetadata(const NMiniKQL::IBuiltinFunctionRegistry& funcRegistry, TString* out);
+void DeserializeMetadata(TStringBuf buffer, NMiniKQL::IBuiltinFunctionRegistry& funcRegistry);
 
 } // namespace NKikimr

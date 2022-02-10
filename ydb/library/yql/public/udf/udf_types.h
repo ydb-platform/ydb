@@ -4,7 +4,7 @@
 #include "udf_data_type.h"
 #include "udf_version.h"
 
-namespace NYql { 
+namespace NYql {
 namespace NUdf {
 
 class TStringRef;
@@ -216,4 +216,4 @@ UDF_ASSERT_TYPE_SIZE(ITypeInfoHelper, 16);
 UDF_ASSERT_TYPE_SIZE(ITypeInfoHelper::TPtr, 8);
 
 } // namspace NUdf
-} // namspace NYql 
+} // namspace NYql

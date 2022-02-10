@@ -14,7 +14,7 @@ TAutoPtr<IGraphTransformer> CreateConstraintTransformer(TTypeAnnotationContext& 
 TAutoPtr<IGraphTransformer> CreateDefCallableConstraintTransformer();
 
 IGraphTransformer::TStatus UpdateLambdaConstraints(const TExprNode& lambda);
-IGraphTransformer::TStatus UpdateLambdaConstraints(TExprNode::TPtr& lambda, TExprContext& ctx, const TArrayRef<const TConstraintNode::TListType>& constraints); 
+IGraphTransformer::TStatus UpdateLambdaConstraints(TExprNode::TPtr& lambda, TExprContext& ctx, const TArrayRef<const TConstraintNode::TListType>& constraints);
 IGraphTransformer::TStatus UpdateAllChildLambdasConstraints(const TExprNode& node);
 
 }

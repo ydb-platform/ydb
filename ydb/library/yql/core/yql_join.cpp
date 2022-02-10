@@ -221,9 +221,9 @@ namespace {
                     << " has type: " << *rightKeyTypes[i] << ")"));
                 return IGraphTransformer::TStatus::Error;
             }
-            if (ECompareOptions::Uncomparable == CanCompare<true>(leftKeyTypes[i], rightKeyTypes[i])) { 
+            if (ECompareOptions::Uncomparable == CanCompare<true>(leftKeyTypes[i], rightKeyTypes[i])) {
                 ctx.AddError(TIssue(ctx.GetPosition(joins.Pos()),
-                    TStringBuilder() << "Cannot compare key columns (" << leftKeys[i].first << "." << leftKeys[i].second 
+                    TStringBuilder() << "Cannot compare key columns (" << leftKeys[i].first << "." << leftKeys[i].second
                     << " has type: " << *leftKeyTypes[i] << ", " << rightKeys[i].first << "." << rightKeys[i].second
                     << " has type: " << *rightKeyTypes[i] << ")"));
                 return IGraphTransformer::TStatus::Error;
@@ -857,7 +857,7 @@ bool IsRightJoinSideOptional(const TStringBuf& joinType) {
 }
 
 TExprNode::TPtr FilterOutNullJoinColumns(TPositionHandle pos, const TExprNode::TPtr& input,
-    const TJoinLabel& label, const TSet<TString>& optionalKeyColumns, TExprContext& ctx) { 
+    const TJoinLabel& label, const TSet<TString>& optionalKeyColumns, TExprContext& ctx) {
     if (optionalKeyColumns.empty()) {
         return input;
     }
@@ -871,9 +871,9 @@ TExprNode::TPtr FilterOutNullJoinColumns(TPositionHandle pos, const TExprNode::T
         optColumns.push_back(ctx.NewAtom(pos, memberName));
     }
 
-    auto optTuple = ctx.NewList(pos, std::move(optColumns)); 
+    auto optTuple = ctx.NewList(pos, std::move(optColumns));
     return ctx.Builder(pos)
-        .Callable("SkipNullMembers") 
+        .Callable("SkipNullMembers")
             .Add(0, input)
             .Add(1, optTuple)
         .Seal()
@@ -882,7 +882,7 @@ TExprNode::TPtr FilterOutNullJoinColumns(TPositionHandle pos, const TExprNode::T
 
 TMap<TStringBuf, TVector<TStringBuf>> LoadJoinRenameMap(const TExprNode& settings) {
     TMap<TStringBuf, TVector<TStringBuf>> res;
-    for (const auto& child : settings.Children()) { 
+    for (const auto& child : settings.Children()) {
         if (child->Child(0)->Content() == "rename") {
             auto& v = res[child->Child(1)->Content()];
             if (!child->Child(2)->Content().empty()) {
@@ -910,7 +910,7 @@ TSet<TVector<TStringBuf>> LoadJoinSortSets(const TExprNode& settings) {
 
 THashMap<TString, const TTypeAnnotationNode*> GetJoinColumnTypes(const TExprNode& joins,
     const TJoinLabels& labels, TExprContext& ctx) {
-    return GetJoinColumnTypes(joins, labels, joins.Child(0)->Content(), ctx); 
+    return GetJoinColumnTypes(joins, labels, joins.Child(0)->Content(), ctx);
 }
 
 THashMap<TString, const TTypeAnnotationNode*> GetJoinColumnTypes(const TExprNode& joins,
@@ -920,26 +920,26 @@ THashMap<TString, const TTypeAnnotationNode*> GetJoinColumnTypes(const TExprNode
     THashMap<TString, const TTypeAnnotationNode*> rightType;
     bool isLeftOptional = IsLeftJoinSideOptional(joinType);
     bool isRightOptional = IsRightJoinSideOptional(joinType);
-    if (joins.Child(1)->IsAtom()) { 
-        auto name = joins.Child(1)->Content(); 
+    if (joins.Child(1)->IsAtom()) {
+        auto name = joins.Child(1)->Content();
         auto input = *labels.FindInput(name);
         for (auto& x : input->InputType->GetItems()) {
             leftType[input->FullName(x->GetName())] = x->GetItemType();
         }
     }
     else {
-        leftType = GetJoinColumnTypes(*joins.Child(1), labels, ctx); 
+        leftType = GetJoinColumnTypes(*joins.Child(1), labels, ctx);
     }
 
-    if (joins.Child(2)->IsAtom()) { 
-        auto name = joins.Child(2)->Content(); 
+    if (joins.Child(2)->IsAtom()) {
+        auto name = joins.Child(2)->Content();
         auto input = *labels.FindInput(name);
         for (auto& x : input->InputType->GetItems()) {
             rightType[input->FullName(x->GetName())] = x->GetItemType();
         }
     }
     else {
-        rightType = GetJoinColumnTypes(*joins.Child(2), labels, ctx); 
+        rightType = GetJoinColumnTypes(*joins.Child(2), labels, ctx);
     }
 
     if (isLeftOptional) {
@@ -969,31 +969,31 @@ THashMap<TString, const TTypeAnnotationNode*> GetJoinColumnTypes(const TExprNode
     return finalType;
 }
 
-bool AreSameJoinKeys(const TExprNode& joins, const TStringBuf& table1, const TStringBuf& column1, const TStringBuf& table2, const TStringBuf& column2) { 
-    if (!joins.Child(1)->IsAtom()) { 
-        if (AreSameJoinKeys(*joins.Child(1), table1, column1, table2, column2)) { 
+bool AreSameJoinKeys(const TExprNode& joins, const TStringBuf& table1, const TStringBuf& column1, const TStringBuf& table2, const TStringBuf& column2) {
+    if (!joins.Child(1)->IsAtom()) {
+        if (AreSameJoinKeys(*joins.Child(1), table1, column1, table2, column2)) {
             return true;
         }
     }
 
-    if (!joins.Child(2)->IsAtom()) { 
-        if (AreSameJoinKeys(*joins.Child(2), table1, column1, table2, column2)) { 
+    if (!joins.Child(2)->IsAtom()) {
+        if (AreSameJoinKeys(*joins.Child(2), table1, column1, table2, column2)) {
             return true;
         }
     }
 
-    for (ui32 i = 0; i < joins.Child(3)->ChildrenSize(); i += 2) { 
-        if (joins.Child(3)->Child(i)->Content() == table1) { 
-            if (joins.Child(4)->Child(i)->Content() == table2 && 
-                joins.Child(3)->Child(i + 1)->Content() == column1 && 
-                joins.Child(4)->Child(i + 1)->Content() == column2) { 
+    for (ui32 i = 0; i < joins.Child(3)->ChildrenSize(); i += 2) {
+        if (joins.Child(3)->Child(i)->Content() == table1) {
+            if (joins.Child(4)->Child(i)->Content() == table2 &&
+                joins.Child(3)->Child(i + 1)->Content() == column1 &&
+                joins.Child(4)->Child(i + 1)->Content() == column2) {
                 return true;
             }
         }
-        else if (joins.Child(3)->Child(i)->Content() == table2) { 
-            if (joins.Child(4)->Child(i)->Content() == table1 && 
-                joins.Child(3)->Child(i + 1)->Content() == column2 && 
-                joins.Child(4)->Child(i + 1)->Content() == column1) { 
+        else if (joins.Child(3)->Child(i)->Content() == table2) {
+            if (joins.Child(4)->Child(i)->Content() == table1 &&
+                joins.Child(3)->Child(i + 1)->Content() == column2 &&
+                joins.Child(4)->Child(i + 1)->Content() == column1) {
                 return true;
             }
         }
@@ -1244,299 +1244,299 @@ TExprNode::TPtr RemapNonConvertibleMemberForJoin(TPositionHandle pos, const TExp
     return result;
 }
 
-TExprNode::TPtr PrepareListForJoin(TExprNode::TPtr list, const TTypeAnnotationNode::TListType& keyTypes, TExprNode::TListType& keys, TExprNode::TListType& payloads, bool payload, bool optional, bool filter, TExprContext& ctx) { 
-    const auto pos = list->Pos(); 
+TExprNode::TPtr PrepareListForJoin(TExprNode::TPtr list, const TTypeAnnotationNode::TListType& keyTypes, TExprNode::TListType& keys, TExprNode::TListType& payloads, bool payload, bool optional, bool filter, TExprContext& ctx) {
+    const auto pos = list->Pos();
 
-    if (keyTypes.empty() && 1U == keys.size()) { 
-        return payload ? 
-            ctx.Builder(pos) 
-                .Callable("Map") 
-                    .Add(0, std::move(list)) 
-                    .Lambda(1) 
-                        .Param("row") 
-                        .List() 
-                            .Add(0, std::move(keys.front())) 
-                            .Callable(1, "FilterMembers") 
-                                .Arg(0, "row") 
-                                .List(1) 
-                                    .Add(std::move(payloads)) 
-                                .Seal() 
-                            .Seal() 
-                        .Seal() 
-                    .Seal() 
-                .Seal() 
-            .Build(): 
-            ctx.Builder(pos) 
-                .Callable("List") 
-                    .Callable(0, "ListType") 
-                        .Callable(0, "DataType") 
-                            .Atom(0, "Bool", TNodeFlags::Default) 
-                        .Seal() 
-                    .Seal() 
-                .Seal() 
-            .Build(); 
-    } 
- 
-    if (1U == keyTypes.size()) { 
-        const auto keyType = ctx.MakeType<TOptionalExprType>(keyTypes.front()); 
-        list = payload ? optional ? 
-            ctx.Builder(pos) 
-                .Callable("Map") 
-                    .Add(0, std::move(list)) 
-                    .Lambda(1) 
-                        .Param("row") 
-                        .List() 
-                            .Callable(0, "StrictCast") 
-                                .Callable(0, "Member") 
-                                    .Arg(0, "row") 
-                                    .Add(1, std::move(keys.front())) 
-                                .Seal() 
-                                .Add(1, ExpandType(pos, *keyType, ctx)) 
-                            .Seal() 
-                            .Callable(1, "FilterMembers") 
-                                .Arg(0, "row") 
-                                .List(1) 
-                                    .Add(std::move(payloads)) 
-                                .Seal() 
-                            .Seal() 
-                        .Seal() 
-                    .Seal() 
-                .Seal() 
-            .Build(): 
-            ctx.Builder(pos) 
-                .Callable("FlatMap") 
-                    .Add(0, std::move(list)) 
-                    .Lambda(1) 
-                        .Param("row") 
-                        .Callable("FlatMap") 
-                            .Callable(0, "StrictCast") 
-                                .Callable(0, "Member") 
-                                    .Arg(0, "row") 
-                                    .Add(1, std::move(keys.front())) 
-                                .Seal() 
-                                .Add(1, ExpandType(pos, *keyType, ctx)) 
-                            .Seal() 
-                            .Lambda(1) 
-                                .Param("key") 
-                                .Callable("Just") 
-                                    .List(0) 
-                                        .Arg(0, "key") 
-                                        .Callable(1, "FilterMembers") 
-                                            .Arg(0, "row") 
-                                            .List(1) 
-                                                .Add(std::move(payloads)) 
-                                            .Seal() 
-                                        .Seal() 
-                                    .Seal() 
-                                .Seal() 
-                            .Seal() 
-                        .Seal() 
-                    .Seal() 
-                .Seal() 
-            .Build(): 
-            ctx.Builder(pos) 
-                .Callable(optional ? "Map" : "FlatMap") 
-                    .Add(0, std::move(list)) 
-                    .Lambda(1) 
-                        .Param("row") 
-                        .Callable("StrictCast") 
-                            .Callable(0, "Member") 
-                                .Arg(0, "row") 
-                                .Add(1, std::move(keys.front())) 
-                            .Seal() 
-                            .Add(1, ExpandType(pos, *keyType, ctx)) 
-                        .Seal() 
-                    .Seal() 
-                .Seal() 
-            .Build(); 
-    } else { 
-        const auto keyType = ctx.MakeType<TOptionalExprType>(ctx.MakeType<TTupleExprType>(keyTypes)); 
-        list = payload ? optional ? 
-            ctx.Builder(pos) 
-                .Callable("Map") 
-                    .Add(0, std::move(list)) 
-                    .Lambda(1) 
-                        .Param("row") 
-                        .List() 
-                            .Callable(0, "StrictCast") 
-                                .List(0) 
-                                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& { 
-                                        ui32 pos = 0; 
-                                        for (auto& key : keys) { 
-                                            parent.Callable(pos++, "Member") 
-                                                .Arg(0, "row") 
-                                                .Add(1, std::move(key)) 
-                                            .Seal(); 
-                                        } 
-                                        return parent; 
-                                    }) 
-                                .Seal() 
-                                .Add(1, ExpandType(pos, *keyType, ctx)) 
-                            .Seal() 
-                            .Callable(1, "FilterMembers") 
-                                .Arg(0, "row") 
-                                .List(1) 
-                                    .Add(std::move(payloads)) 
-                                .Seal() 
-                            .Seal() 
-                        .Seal() 
-                    .Seal() 
-                .Seal() 
-            .Build(): 
-            ctx.Builder(pos) 
-                .Callable("FlatMap") 
-                    .Add(0, std::move(list)) 
-                    .Lambda(1) 
-                        .Param("row") 
-                        .Callable("FlatMap") 
-                            .Callable(0, "StrictCast") 
-                                .List(0) 
-                                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& { 
-                                        ui32 pos = 0; 
-                                        for (auto& key : keys) { 
-                                            parent.Callable(pos++, "Member") 
-                                                .Arg(0, "row") 
-                                                .Add(1, std::move(key)) 
-                                            .Seal(); 
-                                        } 
-                                        return parent; 
-                                    }) 
-                                .Seal() 
-                                .Add(1, ExpandType(pos, *keyType, ctx)) 
-                            .Seal() 
-                            .Lambda(1) 
-                                .Param("key") 
-                                .Callable("Just") 
-                                    .List(0) 
-                                        .Arg(0, "key") 
-                                        .Callable(1, "FilterMembers") 
-                                            .Arg(0, "row") 
-                                            .List(1) 
-                                                .Add(std::move(payloads)) 
-                                            .Seal() 
-                                        .Seal() 
-                                    .Seal() 
-                                .Seal() 
-                            .Seal() 
-                        .Seal() 
-                    .Seal() 
-                .Seal() 
-            .Build(): 
-            ctx.Builder(pos) 
-                .Callable(optional ? "Map" : "FlatMap") 
-                    .Add(0, std::move(list)) 
-                    .Lambda(1) 
-                        .Param("row") 
-                        .Callable("StrictCast") 
-                            .List(0) 
-                                .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& { 
-                                    ui32 pos = 0; 
-                                    for (auto& key : keys) { 
-                                        parent.Callable(pos++, "Member") 
-                                            .Arg(0, "row") 
-                                            .Add(1, std::move(key)) 
-                                        .Seal(); 
-                                    } 
-                                    return parent; 
-                                }) 
-                            .Seal() 
-                            .Add(1, ExpandType(pos, *keyType, ctx)) 
-                        .Seal() 
-                    .Seal() 
-                .Seal() 
-            .Build(); 
-    } 
- 
-    if (optional && filter) { 
-        list = payload ? 
-            ctx.Builder(pos) 
-                .Callable("Filter") 
-                    .Add(0, std::move(list)) 
-                    .Lambda(1) 
-                        .Param("row") 
-                        .Callable(0, "Exists") 
-                            .Callable(0, "Nth") 
-                                .Arg(0, "row") 
-                                .Atom(1, "0", TNodeFlags::Default) 
-                            .Seal() 
-                        .Seal() 
-                    .Seal() 
-                .Seal() 
-            .Build(): 
-            ctx.Builder(pos) 
-                .Callable("Filter") 
-                    .Add(0, std::move(list)) 
-                    .Lambda(1) 
-                        .Param("row") 
-                        .Callable(0, "Exists") 
-                            .Arg(0, "row") 
-                        .Seal() 
-                    .Seal() 
-                .Seal() 
-            .Build(); 
-    } 
- 
-    return list; 
-} 
- 
-template <bool Squeeze> 
-TExprNode::TPtr MakeDictForJoin(TExprNode::TPtr&& list, bool payload, bool multi, TExprContext& ctx) { 
-    return payload ? 
-        ctx.Builder(list->Pos()) 
-            .Callable(Squeeze ? "SqueezeToDict" : "ToDict") 
-                .Add(0, std::move(list)) 
-                .Lambda(1) 
-                    .Param("row") 
-                    .Callable("Nth") 
-                        .Arg(0, "row") 
-                        .Atom(1, "0", TNodeFlags::Default) 
-                    .Seal() 
-                .Seal() 
-                .Lambda(2) 
-                    .Param("row") 
-                    .Callable("Nth") 
-                        .Arg(0, "row") 
-                        .Atom(1, "1", TNodeFlags::Default) 
-                    .Seal() 
-                .Seal() 
-                .List(3) 
-                    .Atom(0, multi ? "Many" : "One", TNodeFlags::Default) 
-                    .Atom(1, "Hashed", TNodeFlags::Default) 
-                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& { 
-                        if constexpr (Squeeze) 
-                            parent.Atom(2, "Compact", TNodeFlags::Default); 
-                        return parent; 
- 
-                    }) 
-                .Seal() 
-            .Seal() 
-        .Build(): 
-        ctx.Builder(list->Pos()) 
-            .Callable(Squeeze ? "SqueezeToDict" : "ToDict") 
-                .Add(0, std::move(list)) 
-                .Lambda(1) 
-                    .Param("row") 
-                    .Arg("row") 
-                .Seal() 
-                .Lambda(2) 
-                    .Param("stub") 
-                    .Callable("Void").Seal() 
-                .Seal() 
-                .List(3) 
-                    .Atom(0, multi ? "Many" : "One", TNodeFlags::Default) 
-                    .Atom(1, "Hashed", TNodeFlags::Default) 
-                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& { 
-                        if constexpr (Squeeze) 
-                            parent.Atom(2, "Compact", TNodeFlags::Default); 
-                        return parent; 
- 
-                    }) 
-                .Seal() 
-            .Seal() 
-        .Build(); 
-} 
- 
-template TExprNode::TPtr MakeDictForJoin<true>(TExprNode::TPtr&& list, bool payload, bool multi, TExprContext& ctx); 
-template TExprNode::TPtr MakeDictForJoin<false>(TExprNode::TPtr&& list, bool payload, bool multi, TExprContext& ctx); 
- 
+    if (keyTypes.empty() && 1U == keys.size()) {
+        return payload ?
+            ctx.Builder(pos)
+                .Callable("Map")
+                    .Add(0, std::move(list))
+                    .Lambda(1)
+                        .Param("row")
+                        .List()
+                            .Add(0, std::move(keys.front()))
+                            .Callable(1, "FilterMembers")
+                                .Arg(0, "row")
+                                .List(1)
+                                    .Add(std::move(payloads))
+                                .Seal()
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                .Seal()
+            .Build():
+            ctx.Builder(pos)
+                .Callable("List")
+                    .Callable(0, "ListType")
+                        .Callable(0, "DataType")
+                            .Atom(0, "Bool", TNodeFlags::Default)
+                        .Seal()
+                    .Seal()
+                .Seal()
+            .Build();
+    }
+
+    if (1U == keyTypes.size()) {
+        const auto keyType = ctx.MakeType<TOptionalExprType>(keyTypes.front());
+        list = payload ? optional ?
+            ctx.Builder(pos)
+                .Callable("Map")
+                    .Add(0, std::move(list))
+                    .Lambda(1)
+                        .Param("row")
+                        .List()
+                            .Callable(0, "StrictCast")
+                                .Callable(0, "Member")
+                                    .Arg(0, "row")
+                                    .Add(1, std::move(keys.front()))
+                                .Seal()
+                                .Add(1, ExpandType(pos, *keyType, ctx))
+                            .Seal()
+                            .Callable(1, "FilterMembers")
+                                .Arg(0, "row")
+                                .List(1)
+                                    .Add(std::move(payloads))
+                                .Seal()
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                .Seal()
+            .Build():
+            ctx.Builder(pos)
+                .Callable("FlatMap")
+                    .Add(0, std::move(list))
+                    .Lambda(1)
+                        .Param("row")
+                        .Callable("FlatMap")
+                            .Callable(0, "StrictCast")
+                                .Callable(0, "Member")
+                                    .Arg(0, "row")
+                                    .Add(1, std::move(keys.front()))
+                                .Seal()
+                                .Add(1, ExpandType(pos, *keyType, ctx))
+                            .Seal()
+                            .Lambda(1)
+                                .Param("key")
+                                .Callable("Just")
+                                    .List(0)
+                                        .Arg(0, "key")
+                                        .Callable(1, "FilterMembers")
+                                            .Arg(0, "row")
+                                            .List(1)
+                                                .Add(std::move(payloads))
+                                            .Seal()
+                                        .Seal()
+                                    .Seal()
+                                .Seal()
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                .Seal()
+            .Build():
+            ctx.Builder(pos)
+                .Callable(optional ? "Map" : "FlatMap")
+                    .Add(0, std::move(list))
+                    .Lambda(1)
+                        .Param("row")
+                        .Callable("StrictCast")
+                            .Callable(0, "Member")
+                                .Arg(0, "row")
+                                .Add(1, std::move(keys.front()))
+                            .Seal()
+                            .Add(1, ExpandType(pos, *keyType, ctx))
+                        .Seal()
+                    .Seal()
+                .Seal()
+            .Build();
+    } else {
+        const auto keyType = ctx.MakeType<TOptionalExprType>(ctx.MakeType<TTupleExprType>(keyTypes));
+        list = payload ? optional ?
+            ctx.Builder(pos)
+                .Callable("Map")
+                    .Add(0, std::move(list))
+                    .Lambda(1)
+                        .Param("row")
+                        .List()
+                            .Callable(0, "StrictCast")
+                                .List(0)
+                                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                        ui32 pos = 0;
+                                        for (auto& key : keys) {
+                                            parent.Callable(pos++, "Member")
+                                                .Arg(0, "row")
+                                                .Add(1, std::move(key))
+                                            .Seal();
+                                        }
+                                        return parent;
+                                    })
+                                .Seal()
+                                .Add(1, ExpandType(pos, *keyType, ctx))
+                            .Seal()
+                            .Callable(1, "FilterMembers")
+                                .Arg(0, "row")
+                                .List(1)
+                                    .Add(std::move(payloads))
+                                .Seal()
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                .Seal()
+            .Build():
+            ctx.Builder(pos)
+                .Callable("FlatMap")
+                    .Add(0, std::move(list))
+                    .Lambda(1)
+                        .Param("row")
+                        .Callable("FlatMap")
+                            .Callable(0, "StrictCast")
+                                .List(0)
+                                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                        ui32 pos = 0;
+                                        for (auto& key : keys) {
+                                            parent.Callable(pos++, "Member")
+                                                .Arg(0, "row")
+                                                .Add(1, std::move(key))
+                                            .Seal();
+                                        }
+                                        return parent;
+                                    })
+                                .Seal()
+                                .Add(1, ExpandType(pos, *keyType, ctx))
+                            .Seal()
+                            .Lambda(1)
+                                .Param("key")
+                                .Callable("Just")
+                                    .List(0)
+                                        .Arg(0, "key")
+                                        .Callable(1, "FilterMembers")
+                                            .Arg(0, "row")
+                                            .List(1)
+                                                .Add(std::move(payloads))
+                                            .Seal()
+                                        .Seal()
+                                    .Seal()
+                                .Seal()
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                .Seal()
+            .Build():
+            ctx.Builder(pos)
+                .Callable(optional ? "Map" : "FlatMap")
+                    .Add(0, std::move(list))
+                    .Lambda(1)
+                        .Param("row")
+                        .Callable("StrictCast")
+                            .List(0)
+                                .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                    ui32 pos = 0;
+                                    for (auto& key : keys) {
+                                        parent.Callable(pos++, "Member")
+                                            .Arg(0, "row")
+                                            .Add(1, std::move(key))
+                                        .Seal();
+                                    }
+                                    return parent;
+                                })
+                            .Seal()
+                            .Add(1, ExpandType(pos, *keyType, ctx))
+                        .Seal()
+                    .Seal()
+                .Seal()
+            .Build();
+    }
+
+    if (optional && filter) {
+        list = payload ?
+            ctx.Builder(pos)
+                .Callable("Filter")
+                    .Add(0, std::move(list))
+                    .Lambda(1)
+                        .Param("row")
+                        .Callable(0, "Exists")
+                            .Callable(0, "Nth")
+                                .Arg(0, "row")
+                                .Atom(1, "0", TNodeFlags::Default)
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                .Seal()
+            .Build():
+            ctx.Builder(pos)
+                .Callable("Filter")
+                    .Add(0, std::move(list))
+                    .Lambda(1)
+                        .Param("row")
+                        .Callable(0, "Exists")
+                            .Arg(0, "row")
+                        .Seal()
+                    .Seal()
+                .Seal()
+            .Build();
+    }
+
+    return list;
+}
+
+template <bool Squeeze>
+TExprNode::TPtr MakeDictForJoin(TExprNode::TPtr&& list, bool payload, bool multi, TExprContext& ctx) {
+    return payload ?
+        ctx.Builder(list->Pos())
+            .Callable(Squeeze ? "SqueezeToDict" : "ToDict")
+                .Add(0, std::move(list))
+                .Lambda(1)
+                    .Param("row")
+                    .Callable("Nth")
+                        .Arg(0, "row")
+                        .Atom(1, "0", TNodeFlags::Default)
+                    .Seal()
+                .Seal()
+                .Lambda(2)
+                    .Param("row")
+                    .Callable("Nth")
+                        .Arg(0, "row")
+                        .Atom(1, "1", TNodeFlags::Default)
+                    .Seal()
+                .Seal()
+                .List(3)
+                    .Atom(0, multi ? "Many" : "One", TNodeFlags::Default)
+                    .Atom(1, "Hashed", TNodeFlags::Default)
+                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                        if constexpr (Squeeze)
+                            parent.Atom(2, "Compact", TNodeFlags::Default);
+                        return parent;
+
+                    })
+                .Seal()
+            .Seal()
+        .Build():
+        ctx.Builder(list->Pos())
+            .Callable(Squeeze ? "SqueezeToDict" : "ToDict")
+                .Add(0, std::move(list))
+                .Lambda(1)
+                    .Param("row")
+                    .Arg("row")
+                .Seal()
+                .Lambda(2)
+                    .Param("stub")
+                    .Callable("Void").Seal()
+                .Seal()
+                .List(3)
+                    .Atom(0, multi ? "Many" : "One", TNodeFlags::Default)
+                    .Atom(1, "Hashed", TNodeFlags::Default)
+                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                        if constexpr (Squeeze)
+                            parent.Atom(2, "Compact", TNodeFlags::Default);
+                        return parent;
+
+                    })
+                .Seal()
+            .Seal()
+        .Build();
+}
+
+template TExprNode::TPtr MakeDictForJoin<true>(TExprNode::TPtr&& list, bool payload, bool multi, TExprContext& ctx);
+template TExprNode::TPtr MakeDictForJoin<false>(TExprNode::TPtr&& list, bool payload, bool multi, TExprContext& ctx);
+
 } // namespace NYql

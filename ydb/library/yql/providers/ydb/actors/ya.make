@@ -1,13 +1,13 @@
-LIBRARY() 
- 
+LIBRARY()
+
 OWNER(g:yql)
- 
-SRCS( 
-    yql_ydb_read_actor.cpp 
-    yql_ydb_source_factory.cpp 
-) 
- 
-PEERDIR( 
+
+SRCS(
+    yql_ydb_read_actor.cpp
+    yql_ydb_source_factory.cpp
+)
+
+PEERDIR(
     ydb/core/scheme
     ydb/library/yql/minikql/computation
     ydb/library/yql/providers/common/token_accessor/client
@@ -17,8 +17,8 @@ PEERDIR(
     ydb/public/sdk/cpp/client/ydb_driver
     ydb/library/yql/dq/actors/compute
     ydb/library/yql/providers/ydb/proto
-) 
- 
-YQL_LAST_ABI_VERSION() 
- 
-END() 
+)
+
+YQL_LAST_ABI_VERSION()
+
+END()

@@ -23,13 +23,13 @@ namespace NYql {
     xx(Error, 16) \
     xx(Variant, 17) \
     xx(Stream, 18) \
-    xx(Null, 19) \ 
+    xx(Null, 19) \
     xx(Flow, 20) \
     xx(EmptyList, 21) \
-    xx(EmptyDict, 22) \ 
-    xx(Multi, 23) 
+    xx(EmptyDict, 22) \
+    xx(Multi, 23)
 
-enum class ETypeAnnotationKind : ui64 { 
+enum class ETypeAnnotationKind : ui64 {
     YQL_TYPE_ANN_KIND_MAP(ENUM_VALUE_GEN)
     LastType
 };

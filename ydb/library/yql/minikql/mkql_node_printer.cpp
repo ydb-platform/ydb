@@ -70,10 +70,10 @@ namespace {
             Out << "Type (Data), schemeType: ";
             if (slot) {
                 Out << GetDataTypeInfo(*slot).Name;
-                if (node.GetSchemeType() == NUdf::TDataType<NUdf::TDecimal>::Id) { 
-                    const auto params = static_cast<TDataDecimalType&>(node).GetParams(); 
-                    Out << '(' << int(params.first) << ',' << int(params.second) << ')'; 
-                } 
+                if (node.GetSchemeType() == NUdf::TDataType<NUdf::TDecimal>::Id) {
+                    const auto params = static_cast<TDataDecimalType&>(node).GetParams();
+                    Out << '(' << int(params.first) << ',' << int(params.second) << ')';
+                }
             } else {
                 Out << "<" << node.GetSchemeType() << ">";
             }
@@ -163,32 +163,32 @@ namespace {
             WriteNewline();
         }
 
-        void Visit(TFlowType& node) override { 
-            WriteIndentation(); 
-            Out << "Type (Flow) {"; 
-            WriteNewline(); 
- 
-            { 
-                TIndentScope scope(this); 
-                WriteIndentation(); 
-                Out << "Flow item type: {"; 
-                WriteNewline(); 
- 
-                { 
-                    TIndentScope scope2(this); 
-                    node.GetItemType()->Accept(*this); 
-                } 
- 
-                WriteIndentation(); 
-                Out << "}"; 
-                WriteNewline(); 
-            } 
- 
-            WriteIndentation(); 
-            Out << "}"; 
-            WriteNewline(); 
-        } 
- 
+        void Visit(TFlowType& node) override {
+            WriteIndentation();
+            Out << "Type (Flow) {";
+            WriteNewline();
+
+            {
+                TIndentScope scope(this);
+                WriteIndentation();
+                Out << "Flow item type: {";
+                WriteNewline();
+
+                {
+                    TIndentScope scope2(this);
+                    node.GetItemType()->Accept(*this);
+                }
+
+                WriteIndentation();
+                Out << "}";
+                WriteNewline();
+            }
+
+            WriteIndentation();
+            Out << "}";
+            WriteNewline();
+        }
+
         void Visit(TBlockType& node) override {
             WriteIndentation();
             Out << "Type (Block) {";
@@ -487,7 +487,7 @@ namespace {
                     Out << "null";
                     WriteNewline();
                 } else {
-                    Out << TString(node.AsValue().AsStringRef()).Quote(); 
+                    Out << TString(node.AsValue().AsStringRef()).Quote();
                     WriteNewline();
                 }
             }

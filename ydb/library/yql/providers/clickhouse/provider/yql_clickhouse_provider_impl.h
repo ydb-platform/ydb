@@ -11,7 +11,7 @@
 namespace NYql {
 
 THolder<IGraphTransformer> CreateClickHouseIODiscoveryTransformer(TClickHouseState::TPtr state);
-THolder<IGraphTransformer> CreateClickHouseLoadTableMetadataTransformer(TClickHouseState::TPtr state, IHTTPGateway::TPtr gateway); 
+THolder<IGraphTransformer> CreateClickHouseLoadTableMetadataTransformer(TClickHouseState::TPtr state, IHTTPGateway::TPtr gateway);
 
 THolder<TVisitorTransformerBase> CreateClickHouseDataSourceTypeAnnotationTransformer(TClickHouseState::TPtr state);
 THolder<TVisitorTransformerBase> CreateClickHouseDataSinkTypeAnnotationTransformer(TClickHouseState::TPtr state);
@@ -19,6 +19,6 @@ THolder<TVisitorTransformerBase> CreateClickHouseDataSinkTypeAnnotationTransform
 THolder<TExecTransformerBase> CreateClickHouseDataSinkExecTransformer(TClickHouseState::TPtr state);
 
 THolder<IGraphTransformer> CreateClickHouseLogicalOptProposalTransformer(TClickHouseState::TPtr state);
-THolder<IGraphTransformer> CreateClickHousePhysicalOptProposalTransformer(TClickHouseState::TPtr state); 
+THolder<IGraphTransformer> CreateClickHousePhysicalOptProposalTransformer(TClickHouseState::TPtr state);
 
 } // namespace NYql

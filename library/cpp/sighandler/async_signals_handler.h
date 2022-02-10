@@ -1,7 +1,7 @@
 #pragma once
 
 #include <util/generic/ptr.h>
-#include <functional> 
+#include <functional>
 
 struct TEventHandler {
     virtual ~TEventHandler() {
@@ -11,4 +11,4 @@ struct TEventHandler {
 
 void SetAsyncSignalHandler(int signum, TAutoPtr<TEventHandler> handler);
 void SetAsyncSignalHandler(int signum, void (*handler)(int));
-void SetAsyncSignalFunction(int signum, std::function<void(int)> func); 
+void SetAsyncSignalFunction(int signum, std::function<void(int)> func);

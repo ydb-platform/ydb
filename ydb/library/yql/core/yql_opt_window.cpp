@@ -357,18 +357,18 @@ TExprNode::TPtr CoalesceQueueOutput(TPositionHandle pos, const TExprNode::TPtr& 
             .Build();
     }
 
-    if (defaultValue->IsCallable("EmptyList")) { 
-        return ctx.Builder(pos) 
-            .Callable("FlatMap") 
-                .Add(0, output) 
-                .Lambda(1) 
-                    .Param("item") 
-                    .Arg("item") 
-                .Seal() 
-            .Seal() 
-            .Build(); 
-    } 
- 
+    if (defaultValue->IsCallable("EmptyList")) {
+        return ctx.Builder(pos)
+            .Callable("FlatMap")
+                .Add(0, output)
+                .Lambda(1)
+                    .Param("item")
+                    .Arg("item")
+                .Seal()
+            .Seal()
+            .Build();
+    }
+
     return ctx.Builder(pos)
         .Callable("Coalesce")
             .Add(0, output)
@@ -377,7 +377,7 @@ TExprNode::TPtr CoalesceQueueOutput(TPositionHandle pos, const TExprNode::TPtr& 
         .Build();
 }
 
-TExprNode::TPtr BuildInitLambdaForChain1Map(TPositionHandle pos, const TExprNode::TPtr& initStateLambda, 
+TExprNode::TPtr BuildInitLambdaForChain1Map(TPositionHandle pos, const TExprNode::TPtr& initStateLambda,
     const TExprNode::TPtr& calculateLambda, TExprContext& ctx)
 {
     return ctx.Builder(pos)
@@ -399,7 +399,7 @@ TExprNode::TPtr BuildInitLambdaForChain1Map(TPositionHandle pos, const TExprNode
         .Build();
 }
 
-TExprNode::TPtr BuildUpdateLambdaForChain1Map(TPositionHandle pos, const TExprNode::TPtr& updateStateLambda, 
+TExprNode::TPtr BuildUpdateLambdaForChain1Map(TPositionHandle pos, const TExprNode::TPtr& updateStateLambda,
     const TExprNode::TPtr& calculateLambda, TExprContext& ctx)
 {
     return ctx.Builder(pos)
@@ -426,11 +426,11 @@ TExprNode::TPtr BuildUpdateLambdaForChain1Map(TPositionHandle pos, const TExprNo
 
 
 
-class TChain1MapTraits : public TThrRefBase, public TNonCopyable { 
+class TChain1MapTraits : public TThrRefBase, public TNonCopyable {
 public:
-    using TPtr = TIntrusivePtr<TChain1MapTraits>; 
+    using TPtr = TIntrusivePtr<TChain1MapTraits>;
 
-    TChain1MapTraits(TStringBuf name, TPositionHandle pos) 
+    TChain1MapTraits(TStringBuf name, TPositionHandle pos)
       : Name(name)
       , Pos(pos)
     {
@@ -459,16 +459,16 @@ public:
         return {};
     }
 
-    virtual ~TChain1MapTraits() = default; 
+    virtual ~TChain1MapTraits() = default;
 private:
     const TStringBuf Name;
     const TPositionHandle Pos;
 };
 
-class TChain1MapTraitsLagLead : public TChain1MapTraits { 
+class TChain1MapTraitsLagLead : public TChain1MapTraits {
 public:
-    TChain1MapTraitsLagLead(TStringBuf name, const TRawTrait& raw, TMaybe<ui64> queueOffset) 
-        : TChain1MapTraits(name, raw.Pos) 
+    TChain1MapTraitsLagLead(TStringBuf name, const TRawTrait& raw, TMaybe<ui64> queueOffset)
+        : TChain1MapTraits(name, raw.Pos)
         , QueueOffset(queueOffset)
         , LeadLagLambda(raw.CalculateLambda)
     {
@@ -531,10 +531,10 @@ private:
 };
 
 
-class TChain1MapTraitsRowNumber : public TChain1MapTraits { 
+class TChain1MapTraitsRowNumber : public TChain1MapTraits {
 public:
-    TChain1MapTraitsRowNumber(TStringBuf name, const TRawTrait& raw) 
-        : TChain1MapTraits(name, raw.Pos) 
+    TChain1MapTraitsRowNumber(TStringBuf name, const TRawTrait& raw)
+        : TChain1MapTraits(name, raw.Pos)
     {
     }
 
@@ -572,10 +572,10 @@ public:
     }
 };
 
-class TChain1MapTraitsRankBase : public TChain1MapTraits { 
+class TChain1MapTraitsRankBase : public TChain1MapTraits {
 public:
-    TChain1MapTraitsRankBase(TStringBuf name, const TRawTrait& raw) 
-        : TChain1MapTraits(name, raw.Pos) 
+    TChain1MapTraitsRankBase(TStringBuf name, const TRawTrait& raw)
+        : TChain1MapTraits(name, raw.Pos)
         , ExtractForCompareLambda(raw.CalculateLambda->ChildPtr(1))
         , Ansi(HasSetting(*raw.CalculateLambda->Child(2), "ansi"))
         , KeyType(raw.OutputType)
@@ -618,7 +618,7 @@ public:
             .Seal()
             .Build();
 
-        return BuildInitLambdaForChain1Map(GetPos(), initRowLambda, BuildCalculateLambda(ctx), ctx); 
+        return BuildInitLambdaForChain1Map(GetPos(), initRowLambda, BuildCalculateLambda(ctx), ctx);
     }
 
     // Lambda(row, state) -> AsTuple(output, state)
@@ -677,7 +677,7 @@ public:
             .Seal()
             .Build();
 
-        return BuildUpdateLambdaForChain1Map(GetPos(), updateRowLambda, BuildCalculateLambda(ctx), ctx); 
+        return BuildUpdateLambdaForChain1Map(GetPos(), updateRowLambda, BuildCalculateLambda(ctx), ctx);
     }
 
     virtual TExprNode::TPtr BuildRawInitLambda(TExprContext& ctx) const = 0;
@@ -715,10 +715,10 @@ private:
     const TTypeAnnotationNode* const KeyType;
 };
 
-class TChain1MapTraitsRank : public TChain1MapTraitsRankBase { 
+class TChain1MapTraitsRank : public TChain1MapTraitsRankBase {
 public:
-    TChain1MapTraitsRank(TStringBuf name, const TRawTrait& raw) 
-        : TChain1MapTraitsRankBase(name, raw) 
+    TChain1MapTraitsRank(TStringBuf name, const TRawTrait& raw)
+        : TChain1MapTraitsRankBase(name, raw)
     {
     }
 
@@ -782,10 +782,10 @@ public:
     }
 };
 
-class TChain1MapTraitsDenseRank : public TChain1MapTraitsRankBase { 
+class TChain1MapTraitsDenseRank : public TChain1MapTraitsRankBase {
 public:
-    TChain1MapTraitsDenseRank(TStringBuf name, const TRawTrait& raw) 
-        : TChain1MapTraitsRankBase(name, raw) 
+    TChain1MapTraitsDenseRank(TStringBuf name, const TRawTrait& raw)
+        : TChain1MapTraitsRankBase(name, raw)
     {
     }
 
@@ -840,10 +840,10 @@ public:
     }
 };
 
-class TChain1MapTraitsStateBase : public TChain1MapTraits { 
+class TChain1MapTraitsStateBase : public TChain1MapTraits {
 public:
-    TChain1MapTraitsStateBase(TStringBuf name, const TRawTrait& raw) 
-        : TChain1MapTraits(name, raw.Pos) 
+    TChain1MapTraitsStateBase(TStringBuf name, const TRawTrait& raw)
+        : TChain1MapTraits(name, raw.Pos)
         , InitLambda(raw.InitLambda)
         , UpdateLambda(raw.UpdateLambda)
         , CalculateLambda(raw.CalculateLambda)
@@ -876,10 +876,10 @@ private:
 };
 
 
-class TChain1MapTraitsCurrentOrLagging : public TChain1MapTraitsStateBase { 
+class TChain1MapTraitsCurrentOrLagging : public TChain1MapTraitsStateBase {
 public:
-    TChain1MapTraitsCurrentOrLagging(TStringBuf name, const TRawTrait& raw, TMaybe<ui64> lagQueueIndex) 
-        : TChain1MapTraitsStateBase(name, raw) 
+    TChain1MapTraitsCurrentOrLagging(TStringBuf name, const TRawTrait& raw, TMaybe<ui64> lagQueueIndex)
+        : TChain1MapTraitsStateBase(name, raw)
         , LaggingQueueIndex(lagQueueIndex)
         , OutputIsOptional(raw.OutputType->GetKind() == ETypeAnnotationKind::Optional)
     {
@@ -888,13 +888,13 @@ public:
     // Lambda(row) -> AsTuple(output, state)
     TExprNode::TPtr BuildInitLambda(const TExprNode::TPtr& dataQueue, TExprContext& ctx) const override {
         Y_UNUSED(dataQueue);
-        return BuildInitLambdaForChain1Map(GetPos(), GetInitLambda(), GetCalculateLambda(), ctx); 
+        return BuildInitLambdaForChain1Map(GetPos(), GetInitLambda(), GetCalculateLambda(), ctx);
     }
 
     // Lambda(row, state) -> AsTuple(output, state)
     TExprNode::TPtr BuildUpdateLambda(const TExprNode::TPtr& dataQueue, TExprContext& ctx) const override {
         Y_UNUSED(dataQueue);
-        return BuildUpdateLambdaForChain1Map(GetPos(), GetUpdateLambda(), GetCalculateLambda(), ctx); 
+        return BuildUpdateLambdaForChain1Map(GetPos(), GetUpdateLambda(), GetCalculateLambda(), ctx);
     }
 
     TExprNode::TPtr ExtractLaggingOutput(const TExprNode::TPtr& lagQueue,
@@ -924,10 +924,10 @@ private:
     const bool OutputIsOptional;
 };
 
-class TChain1MapTraitsLeading : public TChain1MapTraitsStateBase { 
+class TChain1MapTraitsLeading : public TChain1MapTraitsStateBase {
 public:
-    TChain1MapTraitsLeading(TStringBuf name, const TRawTrait& raw, ui64 currentRowIndex, ui64 lastRowIndex) 
-        : TChain1MapTraitsStateBase(name, raw) 
+    TChain1MapTraitsLeading(TStringBuf name, const TRawTrait& raw, ui64 currentRowIndex, ui64 lastRowIndex)
+        : TChain1MapTraitsStateBase(name, raw)
         , QueueBegin(currentRowIndex + 1)
         , QueueEnd(lastRowIndex + 1)
     {
@@ -1007,10 +1007,10 @@ private:
 };
 
 
-class TChain1MapTraitsFull : public TChain1MapTraitsStateBase { 
+class TChain1MapTraitsFull : public TChain1MapTraitsStateBase {
 public:
-    TChain1MapTraitsFull(TStringBuf name, const TRawTrait& raw, ui64 currentRowIndex) 
-        : TChain1MapTraitsStateBase(name, raw) 
+    TChain1MapTraitsFull(TStringBuf name, const TRawTrait& raw, ui64 currentRowIndex)
+        : TChain1MapTraitsStateBase(name, raw)
         , QueueBegin(currentRowIndex + 1)
     {
     }
@@ -1067,10 +1067,10 @@ private:
 };
 
 
-class TChain1MapTraitsGeneric : public TChain1MapTraitsStateBase { 
+class TChain1MapTraitsGeneric : public TChain1MapTraitsStateBase {
 public:
-    TChain1MapTraitsGeneric(TStringBuf name, const TRawTrait& raw, ui64 queueBegin, ui64 queueEnd) 
-        : TChain1MapTraitsStateBase(name, raw) 
+    TChain1MapTraitsGeneric(TStringBuf name, const TRawTrait& raw, ui64 queueBegin, ui64 queueEnd)
+        : TChain1MapTraitsStateBase(name, raw)
         , QueueBegin(queueBegin)
         , QueueEnd(queueEnd)
         , FrameNeverEmpty(raw.FrameSettings.NeverEmpty)
@@ -1153,10 +1153,10 @@ private:
     const bool OutputIsOptional;
 };
 
-class TChain1MapTraitsEmpty : public TChain1MapTraitsStateBase { 
+class TChain1MapTraitsEmpty : public TChain1MapTraitsStateBase {
 public:
-    TChain1MapTraitsEmpty(TStringBuf name, const TRawTrait& raw) 
-        : TChain1MapTraitsStateBase(name, raw) 
+    TChain1MapTraitsEmpty(TStringBuf name, const TRawTrait& raw)
+        : TChain1MapTraitsStateBase(name, raw)
         , RawOutputType(raw.OutputType)
     {
     }
@@ -1193,7 +1193,7 @@ public:
 
 private:
     TExprNode::TPtr BuildFinalOutput(TExprContext& ctx) const {
-        const auto defaultValue = GetDefaultValue(); 
+        const auto defaultValue = GetDefaultValue();
 
         if (defaultValue->IsCallable("Null")) {
             auto resultingType = RawOutputType;
@@ -1207,31 +1207,31 @@ private:
                 .Seal()
                 .Build();
         }
-        if (defaultValue->IsCallable("EmptyList")) { 
-            auto resultingType = RawOutputType; 
-            if (resultingType->GetKind() != ETypeAnnotationKind::List) { 
-                resultingType = ctx.MakeType<TListExprType>(resultingType); 
-            } 
- 
-            return ctx.Builder(GetPos()) 
-                .Callable("List") 
-                    .Add(0, ExpandType(GetPos(), *resultingType, ctx)) 
-                .Seal() 
-                .Build(); 
-        } 
+        if (defaultValue->IsCallable("EmptyList")) {
+            auto resultingType = RawOutputType;
+            if (resultingType->GetKind() != ETypeAnnotationKind::List) {
+                resultingType = ctx.MakeType<TListExprType>(resultingType);
+            }
+
+            return ctx.Builder(GetPos())
+                .Callable("List")
+                    .Add(0, ExpandType(GetPos(), *resultingType, ctx))
+                .Seal()
+                .Build();
+        }
         return defaultValue;
     }
 
     const TTypeAnnotationNode* const RawOutputType;
 };
 
-TVector<TChain1MapTraits::TPtr> BuildFoldMapTraits(ui64& dataOutpace, ui64& dataLag, ui64& lagQueueSize, 
+TVector<TChain1MapTraits::TPtr> BuildFoldMapTraits(ui64& dataOutpace, ui64& dataLag, ui64& lagQueueSize,
     const TTypeAnnotationNode*& lagQueueItemType, const TExprNode::TPtr& frames, TExprContext& ctx)
 {
     dataOutpace = dataLag = lagQueueSize = 0;
     lagQueueItemType = nullptr;
 
-    TVector<TChain1MapTraits::TPtr> result; 
+    TVector<TChain1MapTraits::TPtr> result;
 
     TCalcOverWindowTraits traits = ExtractCalcOverWindowTraits(frames, ctx);
 
@@ -1262,14 +1262,14 @@ TVector<TChain1MapTraits::TPtr> BuildFoldMapTraits(ui64& dataOutpace, ui64& data
                     queueOffset = currentRowIndex + *trait.CalculateLambdaLead;
                 }
 
-                result.push_back(new TChain1MapTraitsLagLead(name, trait, queueOffset)); 
+                result.push_back(new TChain1MapTraitsLagLead(name, trait, queueOffset));
             } else if (trait.CalculateLambda->IsCallable("RowNumber")) {
-                result.push_back(new TChain1MapTraitsRowNumber(name, trait)); 
+                result.push_back(new TChain1MapTraitsRowNumber(name, trait));
             } else if (trait.CalculateLambda->IsCallable("Rank")) {
-                result.push_back(new TChain1MapTraitsRank(name, trait)); 
+                result.push_back(new TChain1MapTraitsRank(name, trait));
             } else {
                 YQL_ENSURE(trait.CalculateLambda->IsCallable("DenseRank"));
-                result.push_back(new TChain1MapTraitsDenseRank(name, trait)); 
+                result.push_back(new TChain1MapTraitsDenseRank(name, trait));
             }
 
             continue;
@@ -1286,18 +1286,18 @@ TVector<TChain1MapTraits::TPtr> BuildFoldMapTraits(ui64& dataOutpace, ui64& data
                     lagQueueIndex = lagQueueSize + end;
                 }
 
-                result.push_back(new TChain1MapTraitsCurrentOrLagging(name, trait, lagQueueIndex)); 
+                result.push_back(new TChain1MapTraitsCurrentOrLagging(name, trait, lagQueueIndex));
                 break;
             }
             case EFrameType::LEADING: {
                 auto end = *trait.FrameSettings.Last;
                 YQL_ENSURE(end > 0);
                 ui64 lastRowIndex = currentRowIndex + ui64(end);
-                result.push_back(new TChain1MapTraitsLeading(name, trait, currentRowIndex, lastRowIndex)); 
+                result.push_back(new TChain1MapTraitsLeading(name, trait, currentRowIndex, lastRowIndex));
                 break;
             }
             case EFrameType::FULL: {
-                result.push_back(new TChain1MapTraitsFull(name, trait, currentRowIndex)); 
+                result.push_back(new TChain1MapTraitsFull(name, trait, currentRowIndex));
                 break;
             }
             case EFrameType::GENERIC: {
@@ -1306,11 +1306,11 @@ TVector<TChain1MapTraits::TPtr> BuildFoldMapTraits(ui64& dataOutpace, ui64& data
                 YQL_ENSURE(first.Defined());
                 ui64 beginIndex = currentRowIndex + *first;
                 ui64 endIndex = last.Defined() ? (currentRowIndex + *last + 1) : Max<ui64>();
-                result.push_back(new TChain1MapTraitsGeneric(name, trait, beginIndex, endIndex)); 
+                result.push_back(new TChain1MapTraitsGeneric(name, trait, beginIndex, endIndex));
                 break;
             }
             case EFrameType::EMPTY: {
-                result.push_back(new TChain1MapTraitsEmpty(name, trait)); 
+                result.push_back(new TChain1MapTraitsEmpty(name, trait));
                 break;
             }
         }
@@ -1392,7 +1392,7 @@ TExprNode::TPtr SelectMembers(TPositionHandle pos, const T& members, const TExpr
 }
 
 TExprNode::TPtr HandleLaggingItems(TPositionHandle pos, const TExprNode::TPtr& rowArg,
-    const TExprNode::TPtr& tupleOfOutputAndState, const TVector<TChain1MapTraits::TPtr>& traits, 
+    const TExprNode::TPtr& tupleOfOutputAndState, const TVector<TChain1MapTraits::TPtr>& traits,
     const TExprNode::TPtr& lagQueue, TExprContext& ctx)
 {
 
@@ -1466,7 +1466,7 @@ TExprNode::TPtr HandleLaggingItems(TPositionHandle pos, const TExprNode::TPtr& r
 }
 
 
-TExprNode::TPtr BuildChain1MapInitLambda(TPositionHandle pos, const TVector<TChain1MapTraits::TPtr>& traits, 
+TExprNode::TPtr BuildChain1MapInitLambda(TPositionHandle pos, const TVector<TChain1MapTraits::TPtr>& traits,
     const TExprNode::TPtr& dataQueue, ui64 lagQueueSize, const TTypeAnnotationNode* lagQueueItemType, TExprContext& ctx)
 {
     auto rowArg = ctx.NewArgument(pos, "row");
@@ -1500,30 +1500,30 @@ TExprNode::TPtr BuildChain1MapInitLambda(TPositionHandle pos, const TVector<TCha
     return ctx.NewLambda(pos, ctx.NewArguments(pos, {rowArg}), std::move(finalBody));
 }
 
-TExprNode::TPtr BuildChain1MapUpdateLambda(TPositionHandle pos, const TVector<TChain1MapTraits::TPtr>& traits, 
+TExprNode::TPtr BuildChain1MapUpdateLambda(TPositionHandle pos, const TVector<TChain1MapTraits::TPtr>& traits,
     const TExprNode::TPtr& dataQueue, bool haveLagQueue, TExprContext& ctx)
 {
-    const auto rowArg = ctx.NewArgument(pos, "row"); 
-    const auto stateArg = ctx.NewArgument(pos, "state"); 
-    auto state = ctx.Builder(pos) 
-        .Callable("Nth") 
-            .Add(0, stateArg) 
-            .Atom(1, "1", TNodeFlags::Default) 
-        .Seal() 
-        .Build(); 
+    const auto rowArg = ctx.NewArgument(pos, "row");
+    const auto stateArg = ctx.NewArgument(pos, "state");
+    auto state = ctx.Builder(pos)
+        .Callable("Nth")
+            .Add(0, stateArg)
+            .Atom(1, "1", TNodeFlags::Default)
+        .Seal()
+        .Build();
 
     TExprNode::TPtr lagQueue;
     if (haveLagQueue) {
-        lagQueue = ctx.Builder(pos) 
+        lagQueue = ctx.Builder(pos)
             .Callable("Nth")
-                .Add(0, state) 
-                .Atom(1, "1", TNodeFlags::Default) 
+                .Add(0, state)
+                .Atom(1, "1", TNodeFlags::Default)
             .Seal()
             .Build();
-        state = ctx.Builder(pos) 
+        state = ctx.Builder(pos)
             .Callable("Nth")
-                .Add(0, std::move(state)) 
-                .Atom(1, "0", TNodeFlags::Default) 
+                .Add(0, std::move(state))
+                .Atom(1, "0", TNodeFlags::Default)
             .Seal()
             .Build();
     }
@@ -1994,27 +1994,27 @@ TExprNode::TPtr ExpandNonCompactFullFrames(TPositionHandle pos, const TExprNode:
             .Build();
     }
 
-    auto aggregated = ctx.Builder(pos) 
-        .Callable("PartitionsByKeys") 
-            .Add(0, input) 
-            .Add(1, keySelector) 
-            .Add(2, sortOrder) 
-            .Add(3, sortKey) 
-            .Lambda(4) 
-                .Param("stream") 
-                .Callable("Map") 
-                    .Callable(0, "Condense1") 
+    auto aggregated = ctx.Builder(pos)
+        .Callable("PartitionsByKeys")
+            .Add(0, input)
+            .Add(1, keySelector)
+            .Add(2, sortOrder)
+            .Add(3, sortKey)
+            .Lambda(4)
+                .Param("stream")
+                .Callable("Map")
+                    .Callable(0, "Condense1")
                         .Apply(0, preprocessLambda)
                             .With(0, "stream")
                         .Seal()
-                        .Add(1, BuildFold1Lambda(pos, frames, EFold1LambdaKind::INIT, keyColumns, ctx)) 
+                        .Add(1, BuildFold1Lambda(pos, frames, EFold1LambdaKind::INIT, keyColumns, ctx))
                         .Add(2, condenseSwitch)
-                        .Add(3, BuildFold1Lambda(pos, frames, EFold1LambdaKind::UPDATE, keyColumns, ctx)) 
+                        .Add(3, BuildFold1Lambda(pos, frames, EFold1LambdaKind::UPDATE, keyColumns, ctx))
                     .Seal()
-                    .Add(1, BuildFold1Lambda(pos, frames, EFold1LambdaKind::CALCULATE, keyColumns, ctx)) 
+                    .Add(1, BuildFold1Lambda(pos, frames, EFold1LambdaKind::CALCULATE, keyColumns, ctx))
                 .Seal()
             .Seal()
-        .Seal().Build(); 
+        .Seal().Build();
 
     if (sessionUpdate) {
         // preprocess input without aggregation
@@ -2242,7 +2242,7 @@ TExprNode::TPtr ExpandSingleCalcOverWindow(TPositionHandle pos, const TExprNode:
     ui64 dataLag;
     ui64 lagQueueSize;
     const TTypeAnnotationNode* lagQueueItemType;
-    TVector<TChain1MapTraits::TPtr> traits = BuildFoldMapTraits(dataOutpace, dataLag, lagQueueSize, lagQueueItemType, frames, ctx); 
+    TVector<TChain1MapTraits::TPtr> traits = BuildFoldMapTraits(dataOutpace, dataLag, lagQueueSize, lagQueueItemType, frames, ctx);
 
     TExprNode::TPtr sessionKey;
     TExprNode::TPtr sessionSortTraits;
@@ -2316,21 +2316,21 @@ TExprNode::TPtr ExpandSingleCalcOverWindow(TPositionHandle pos, const TExprNode:
             .Build();
     }
 
- 
+
     processed = ctx.Builder(pos)
-        .Callable("OrderedMap") 
-            .Callable(0, "Chain1Map") 
-                .Add(0, std::move(processed)) 
-                .Add(1, BuildChain1MapInitLambda(pos, traits, dataQueue, lagQueueSize, lagQueueItemType, ctx)) 
-                .Add(2, BuildChain1MapUpdateLambda(pos, traits, dataQueue, lagQueueSize != 0, ctx)) 
-            .Seal() 
-            .Lambda(1) 
-                .Param("pair") 
-                .Callable("Nth") 
-                    .Arg(0, "pair") 
-                    .Atom(1, "0", TNodeFlags::Default) 
-                .Seal() 
-            .Seal() 
+        .Callable("OrderedMap")
+            .Callable(0, "Chain1Map")
+                .Add(0, std::move(processed))
+                .Add(1, BuildChain1MapInitLambda(pos, traits, dataQueue, lagQueueSize, lagQueueItemType, ctx))
+                .Add(2, BuildChain1MapUpdateLambda(pos, traits, dataQueue, lagQueueSize != 0, ctx))
+            .Seal()
+            .Lambda(1)
+                .Param("pair")
+                .Callable("Nth")
+                    .Arg(0, "pair")
+                    .Atom(1, "0", TNodeFlags::Default)
+                .Seal()
+            .Seal()
         .Seal()
         .Build();
 

@@ -24,16 +24,16 @@ NKikimr::NMiniKQL::TType* BuildType(const TTypeAnnotationNode& annotation, NKiki
         auto slot = data->GetSlot();
         const auto schemeType = NUdf::GetDataTypeInfo(slot).TypeId;
         if (NUdf::TDataType<NUdf::TDecimal>::Id == schemeType) {
-            const auto params = static_cast<const TDataExprParamsType&>(annotation); 
-            return pgmBuilder.NewDecimalType(FromString<ui8>(params.GetParamOne()), FromString<ui8>(params.GetParamTwo())); 
-        } else { 
-            return pgmBuilder.NewDataType(schemeType); 
-        } 
+            const auto params = static_cast<const TDataExprParamsType&>(annotation);
+            return pgmBuilder.NewDecimalType(FromString<ui8>(params.GetParamOne()), FromString<ui8>(params.GetParamTwo()));
+        } else {
+            return pgmBuilder.NewDataType(schemeType);
+        }
     }
 
     case ETypeAnnotationKind::Struct: {
         auto structObj = annotation.Cast<TStructExprType>();
-        std::vector<std::pair<std::string_view, NKikimr::NMiniKQL::TType*>> members; 
+        std::vector<std::pair<std::string_view, NKikimr::NMiniKQL::TType*>> members;
         members.reserve(structObj->GetItems().size());
 
         for (auto& item : structObj->GetItems()) {
@@ -77,19 +77,19 @@ NKikimr::NMiniKQL::TType* BuildType(const TTypeAnnotationNode& annotation, NKiki
         return pgmBuilder.NewTupleType(elements);
     }
 
-    case ETypeAnnotationKind::Multi: { 
-        auto multi = annotation.Cast<TMultiExprType>(); 
-        TVector<NKikimr::NMiniKQL::TType*> elements; 
-        elements.reserve(multi->GetItems().size()); 
-        for (auto& child : multi->GetItems()) { 
-            elements.push_back(BuildType(*child, pgmBuilder, err, withTagged)); 
-            if (!elements.back()) { 
-                return nullptr; 
-            } 
-        } 
-        return pgmBuilder.NewTupleType(elements); 
-    } 
- 
+    case ETypeAnnotationKind::Multi: {
+        auto multi = annotation.Cast<TMultiExprType>();
+        TVector<NKikimr::NMiniKQL::TType*> elements;
+        elements.reserve(multi->GetItems().size());
+        for (auto& child : multi->GetItems()) {
+            elements.push_back(BuildType(*child, pgmBuilder, err, withTagged));
+            if (!elements.back()) {
+                return nullptr;
+            }
+        }
+        return pgmBuilder.NewTupleType(elements);
+    }
+
     case ETypeAnnotationKind::Dict: {
         auto dictType = annotation.Cast<TDictExprType>();
         auto keyType = BuildType(*dictType->GetKeyType(), pgmBuilder, err, withTagged);
@@ -110,7 +110,7 @@ NKikimr::NMiniKQL::TType* BuildType(const TTypeAnnotationNode& annotation, NKiki
     }
 
     case ETypeAnnotationKind::Null: {
-        return pgmBuilder.NewNull().GetStaticType(); 
+        return pgmBuilder.NewNull().GetStaticType();
     }
 
     case ETypeAnnotationKind::Callable: {
@@ -171,15 +171,15 @@ NKikimr::NMiniKQL::TType* BuildType(const TTypeAnnotationNode& annotation, NKiki
         return pgmBuilder.NewStreamType(itemType);
     }
 
-    case ETypeAnnotationKind::Flow: { 
-        auto flow = annotation.Cast<TFlowExprType>(); 
+    case ETypeAnnotationKind::Flow: {
+        auto flow = annotation.Cast<TFlowExprType>();
         auto itemType = BuildType(*flow->GetItemType(), pgmBuilder, err, withTagged);
-        if (!itemType) { 
-            return nullptr; 
-        } 
-        return pgmBuilder.NewFlowType(itemType); 
-    } 
- 
+        if (!itemType) {
+            return nullptr;
+        }
+        return pgmBuilder.NewFlowType(itemType);
+    }
+
     case ETypeAnnotationKind::EmptyList: {
         if (NKikimr::NMiniKQL::RuntimeVersion < 11) {
             auto voidType = pgmBuilder.NewVoid().GetStaticType();
@@ -231,13 +231,13 @@ const TTypeAnnotationNode* ConvertMiniKQLType(TPosition position, NKikimr::NMini
         auto slot = NUdf::FindDataSlot(dataType->GetSchemeType());
         YQL_ENSURE(slot, "Unknown datatype: " << dataType->GetSchemeType());
         if (*slot == EDataSlot::Decimal) {
-            const auto params = static_cast<TDataDecimalType*>(dataType)->GetParams(); 
+            const auto params = static_cast<TDataDecimalType*>(dataType)->GetParams();
             auto ret = ctx.MakeType<TDataExprParamsType>(*slot, ToString(params.first), ToString(params.second));
             YQL_ENSURE(ret->Validate(position, ctx));
             return ret;
-        } else { 
+        } else {
             return ctx.MakeType<TDataExprType>(*slot);
-        } 
+        }
     }
 
     case TType::EKind::Struct:

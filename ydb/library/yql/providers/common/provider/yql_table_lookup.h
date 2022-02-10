@@ -56,7 +56,7 @@ public:
     {
         Point = From.IsDefined() && To.IsDefined() &&
             From.IsInclusive() && To.IsInclusive() &&
-            From.GetValue().Raw() == To.GetValue().Raw(); 
+            From.GetValue().Raw() == To.GetValue().Raw();
     }
 
     TColumnRange()

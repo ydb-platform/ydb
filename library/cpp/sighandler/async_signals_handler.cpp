@@ -239,7 +239,7 @@ void SetAsyncSignalHandler(int signum, void (*handler)(int)) {
     SetAsyncSignalHandler(signum, new TFunctionEventHandler<void (*)(int)>(handler));
 }
 
-void SetAsyncSignalFunction(int signum, std::function<void(int)> func) { 
-    typedef std::function<void(int)> TFunc; 
+void SetAsyncSignalFunction(int signum, std::function<void(int)> func) {
+    typedef std::function<void(int)> TFunc;
     SetAsyncSignalHandler(signum, new TFunctionEventHandler<TFunc>(func));
 }

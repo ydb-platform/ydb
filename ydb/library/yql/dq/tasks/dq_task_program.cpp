@@ -44,7 +44,7 @@ TString BuildProgram(NNodes::TCoLambda program, const TStructExprType& paramsTyp
         inputNodes.push_back(inputNode);
     }
 
-    NYql::NCommon::TMkqlBuildContext ctx(compiler, pgmBuilder, exprCtx, program.Ref().UniqueId(), std::move(arguments)); 
+    NYql::NCommon::TMkqlBuildContext ctx(compiler, pgmBuilder, exprCtx, program.Ref().UniqueId(), std::move(arguments));
     ctx.Parameters = paramsNode;
 
     TRuntimeNode rootNode = MkqlBuildExpr(program.Body().Ref(), ctx);

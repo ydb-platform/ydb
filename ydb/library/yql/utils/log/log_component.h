@@ -28,9 +28,9 @@ enum class EComponent {
     CorePeepHole,
     ProviderDq,
     ProviderClickHouse,
-    ProviderYdb, 
+    ProviderYdb,
     ProviderPq,
-    ProviderS3, 
+    ProviderS3,
     CoreDq,
     // <--- put other log components here
     MaxValue
@@ -71,7 +71,7 @@ struct EComponentHelpers {
         case EComponent::ProviderClickHouse: return TStringBuf("CLICKHOUSE");
         case EComponent::ProviderYdb: return TStringBuf("YDB");
         case EComponent::ProviderPq: return TStringBuf("PQ");
-        case EComponent::ProviderS3: return TStringBuf("S3"); 
+        case EComponent::ProviderS3: return TStringBuf("S3");
         case EComponent::CoreDq: return TStringBuf("core dq");
         default:
             ythrow yexception() << "invalid log component value: "
@@ -101,7 +101,7 @@ struct EComponentHelpers {
         if (str == TStringBuf("CLICKHOUSE")) return EComponent::ProviderClickHouse;
         if (str == TStringBuf("YDB")) return EComponent::ProviderYdb;
         if (str == TStringBuf("PQ")) return EComponent::ProviderPq;
-        if (str == TStringBuf("S3")) return EComponent::ProviderS3; 
+        if (str == TStringBuf("S3")) return EComponent::ProviderS3;
         if (str == TStringBuf("core dq")) return EComponent::CoreDq;
         ythrow yexception() << "unknown log component: '" << str << '\'';
     }

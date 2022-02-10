@@ -100,7 +100,7 @@ class TMutableFunctionRegistry: public IMutableFunctionRegistry
 
 public:
     TMutableFunctionRegistry(IBuiltinFunctionRegistry::TPtr builtins)
-        : Builtins_(std::move(builtins)) 
+        : Builtins_(std::move(builtins))
     {
     }
 
@@ -150,7 +150,7 @@ public:
             ui32 version = abiVersionFunc();
             Y_ENSURE(NUdf::IsAbiCompatible(version),
                      "Non compatible ABI version of UDF library " << libraryPath
-                     << ", expected up to " << NUdf::AbiVersionToStr(NUdf::CurrentCompatibilityAbiVersion() * 100) 
+                     << ", expected up to " << NUdf::AbiVersionToStr(NUdf::CurrentCompatibilityAbiVersion() * 100)
                      << ", got " << NUdf::AbiVersionToStr(version)
                      << "; try to re-compile library using "
                      << "YQL_ABI_VERSION(" << UDF_ABI_VERSION_MAJOR
@@ -160,9 +160,9 @@ public:
                 SupportsSizedAllocators_ = false;
             }
 
-#if defined(_win_) || defined(_darwin_) 
-            auto bindSymbolsFunc = reinterpret_cast<NUdf::TBindSymbolsFunctionPtr>(lib->Lib.Sym(BindSymbolsFuncName)); 
-            bindSymbolsFunc(NUdf::GetStaticSymbols()); 
+#if defined(_win_) || defined(_darwin_)
+            auto bindSymbolsFunc = reinterpret_cast<NUdf::TBindSymbolsFunctionPtr>(lib->Lib.Sym(BindSymbolsFuncName));
+            bindSymbolsFunc(NUdf::GetStaticSymbols());
 #endif
 
             if (BackTraceCallback_) {
@@ -201,7 +201,7 @@ public:
         TUdfModuleLoader loader(
                     UdfModules_, libraryPathStr,
                     remappings, NUdf::CurrentAbiVersion());
-        loader.AddModule(moduleName, std::move(module)); 
+        loader.AddModule(moduleName, std::move(module));
 
         Y_ENSURE(!loader.HasError(), loader.GetError());
     }
@@ -210,8 +210,8 @@ public:
         SystemModulePaths_ = paths;
     }
 
-    const IBuiltinFunctionRegistry::TPtr& GetBuiltins() const override { 
-        return Builtins_; 
+    const IBuiltinFunctionRegistry::TPtr& GetBuiltins() const override {
+        return Builtins_;
     }
 
     TStatus FindFunctionTypeInfo(
@@ -296,42 +296,42 @@ public:
 
     THashSet<TString> GetAllModuleNames() const override {
         THashSet<TString> names;
-        names.reserve(UdfModules_.size()); 
+        names.reserve(UdfModules_.size());
         for (const auto& module: UdfModules_) {
             names.insert(module.first);
         }
         return names;
     }
 
-    TFunctionsMap GetModuleFunctions(const TStringBuf& moduleName) const override { 
+    TFunctionsMap GetModuleFunctions(const TStringBuf& moduleName) const override {
         struct TFunctionNamesSink: public NUdf::IFunctionNamesSink {
-            TFunctionsMap Functions; 
-            class TFuncDescriptor : public NUdf::IFunctionDescriptor { 
-            public: 
-                TFuncDescriptor(TFunctionProperties& properties) 
-                    : Properties(properties) 
-                {} 
+            TFunctionsMap Functions;
+            class TFuncDescriptor : public NUdf::IFunctionDescriptor {
+            public:
+                TFuncDescriptor(TFunctionProperties& properties)
+                    : Properties(properties)
+                {}
 
-            private: 
-                void SetTypeAwareness() final { 
-                    Properties.IsTypeAwareness = true; 
-                } 
- 
-                TFunctionProperties& Properties; 
-            }; 
- 
-            NUdf::IFunctionDescriptor::TPtr Add(const NUdf::TStringRef& name) final { 
-                const auto it = Functions.emplace(name, TFunctionProperties{}); 
-                return new TFuncDescriptor(it.first->second); 
+            private:
+                void SetTypeAwareness() final {
+                    Properties.IsTypeAwareness = true;
+                }
+
+                TFunctionProperties& Properties;
+            };
+
+            NUdf::IFunctionDescriptor::TPtr Add(const NUdf::TStringRef& name) final {
+                const auto it = Functions.emplace(name, TFunctionProperties{});
+                return new TFuncDescriptor(it.first->second);
             }
         } sink;
 
 
-        const auto it = UdfModules_.find(moduleName); 
-        if (UdfModules_.cend() == it) 
-            return TFunctionsMap(); 
-        it->second.Impl->GetAllFunctions(sink); 
-        return sink.Functions; 
+        const auto it = UdfModules_.find(moduleName);
+        if (UdfModules_.cend() == it)
+            return TFunctionsMap();
+        it->second.Impl->GetAllFunctions(sink);
+        return sink.Functions;
     }
 
     bool SupportsSizedAllocators() const override {
@@ -357,7 +357,7 @@ public:
     }
 
 private:
-    const IBuiltinFunctionRegistry::TPtr Builtins_; 
+    const IBuiltinFunctionRegistry::TPtr Builtins_;
 
     THashMap<TString, TUdfLibraryPtr> LoadedLibraries_;
     TUdfModulesMap UdfModules_;
@@ -373,13 +373,13 @@ private:
 class TBuiltinsWrapper: public IFunctionRegistry
 {
 public:
-    TBuiltinsWrapper(IBuiltinFunctionRegistry::TPtr&& builtins) 
-        : Builtins_(std::move(builtins)) 
+    TBuiltinsWrapper(IBuiltinFunctionRegistry::TPtr&& builtins)
+        : Builtins_(std::move(builtins))
     {
     }
 
-    const IBuiltinFunctionRegistry::TPtr& GetBuiltins() const override { 
-        return Builtins_; 
+    const IBuiltinFunctionRegistry::TPtr& GetBuiltins() const override {
+        return Builtins_;
     }
 
     void AllowUdfPatch() override {
@@ -424,8 +424,8 @@ public:
         return {};
     }
 
-    TFunctionsMap GetModuleFunctions(const TStringBuf&) const override { 
-        return TFunctionsMap(); 
+    TFunctionsMap GetModuleFunctions(const TStringBuf&) const override {
+        return TFunctionsMap();
     }
 
     bool SupportsSizedAllocators() const override {
@@ -444,7 +444,7 @@ public:
     }
 
 private:
-    const IBuiltinFunctionRegistry::TPtr Builtins_; 
+    const IBuiltinFunctionRegistry::TPtr Builtins_;
 };
 
 } // namespace
@@ -508,7 +508,7 @@ TString FullName(const TStringBuf& module, const TStringBuf& func)
     return fullName;
 }
 
-TIntrusivePtr<IFunctionRegistry> CreateFunctionRegistry(IBuiltinFunctionRegistry::TPtr&& builtins) 
+TIntrusivePtr<IFunctionRegistry> CreateFunctionRegistry(IBuiltinFunctionRegistry::TPtr&& builtins)
 {
     return new TBuiltinsWrapper(std::move(builtins));
 }
@@ -520,7 +520,7 @@ TIntrusivePtr<IFunctionRegistry> CreateFunctionRegistry(
     const TVector<TString>& udfsPaths,
     ui32 flags /* = 0 */)
 {
-    auto registry = MakeHolder<TMutableFunctionRegistry>(std::move(builtins)); 
+    auto registry = MakeHolder<TMutableFunctionRegistry>(std::move(builtins));
     if (allowUdfPatch) {
         registry->AllowUdfPatch();
     }

@@ -19,7 +19,7 @@ namespace NMonitoring {
         using TOutputCallback = std::function<void()>;
 
     private:
-        const TIntrusivePtr<TDynamicCounters> Counters; 
+        const TIntrusivePtr<TDynamicCounters> Counters;
         TOutputCallback OutputCallback;
         EUnknownGroupPolicy UnknownGroupPolicy {EUnknownGroupPolicy::Error};
 
@@ -40,11 +40,11 @@ namespace NMonitoring {
         void Output(NMonitoring::IMonHttpRequest& request) override;
 
         void BeforePre(NMonitoring::IMonHttpRequest& request) override;
- 
+
         void OutputText(IOutputStream& out, NMonitoring::IMonHttpRequest&) override;
 
         /// If set to Error, responds with 404 if the requested subgroup is not found. This is the default.
         /// If set to Ignore, responds with 204 if the requested subgroup is not found
         void SetUnknownGroupPolicy(EUnknownGroupPolicy value);
-    }; 
+    };
 }

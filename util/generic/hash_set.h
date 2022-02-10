@@ -21,7 +21,7 @@ public:
     using value_type = typename ht::value_type;
     using hasher = typename ht::hasher;
     using key_equal = typename ht::key_equal;
-    using allocator_type = typename ht::allocator_type; 
+    using allocator_type = typename ht::allocator_type;
     using node_allocator_type = typename ht::node_allocator_type;
 
     using size_type = typename ht::size_type;
@@ -35,8 +35,8 @@ public:
     using const_iterator = typename ht::const_iterator;
     using insert_ctx = typename ht::insert_ctx;
 
-    hasher hash_function() const { 
-        return rep.hash_function(); 
+    hasher hash_function() const {
+        return rep.hash_function();
     }
     key_equal key_eq() const {
         return rep.key_eq();
@@ -246,14 +246,14 @@ public:
     }
 
 public:
-    void reserve(size_type hint) { 
-        rep.reserve(hint); 
+    void reserve(size_type hint) {
+        rep.reserve(hint);
     }
     size_type bucket_count() const {
         return rep.bucket_count();
     }
-    size_type bucket_size(size_type n) const { 
-        return rep.bucket_size(n); 
+    size_type bucket_size(size_type n) const {
+        return rep.bucket_size(n);
     }
     node_allocator_type& GetNodeAllocator() {
         return rep.GetNodeAllocator();
@@ -289,7 +289,7 @@ public:
     using value_type = typename ht::value_type;
     using hasher = typename ht::hasher;
     using key_equal = typename ht::key_equal;
-    using allocator_type = typename ht::allocator_type; 
+    using allocator_type = typename ht::allocator_type;
     using node_allocator_type = typename ht::node_allocator_type;
 
     using size_type = typename ht::size_type;
@@ -302,8 +302,8 @@ public:
     using iterator = typename ht::const_iterator;
     using const_iterator = typename ht::const_iterator;
 
-    hasher hash_function() const { 
-        return rep.hash_function(); 
+    hasher hash_function() const {
+        return rep.hash_function();
     }
     key_equal key_eq() const {
         return rep.key_eq();
@@ -449,14 +449,14 @@ public:
     }
 
 public:
-    void reserve(size_type hint) { 
-        rep.reserve(hint); 
+    void reserve(size_type hint) {
+        rep.reserve(hint);
     }
     size_type bucket_count() const {
         return rep.bucket_count();
     }
-    size_type bucket_size(size_type n) const { 
-        return rep.bucket_size(n); 
+    size_type bucket_size(size_type n) const {
+        return rep.bucket_size(n);
     }
     node_allocator_type& GetNodeAllocator() {
         return rep.GetNodeAllocator();

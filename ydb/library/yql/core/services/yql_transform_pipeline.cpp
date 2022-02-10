@@ -70,7 +70,7 @@ TTransformationPipeline& TTransformationPipeline::AddPreTypeAnnotation(EYqlIssue
     Transformers_.push_back(TTransformStage(CreateFunctorTransformer(&ExpandApply), "ExpandApply",
         issueCode));
     Transformers_.push_back(TTransformStage(CreateFunctorTransformer(
-        [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) { 
+        [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
             return ValidateProviders(input, output, ctx, typeCtx);
         }), "ValidateProviders", issueCode));
 
@@ -96,7 +96,7 @@ TTransformationPipeline& TTransformationPipeline::AddIOAnnotation(EYqlIssueCode 
 
     auto& typeCtx = *TypeAnnotationContext_;
     Transformers_.push_back(TTransformStage(CreateFunctorTransformer(
-        [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) { 
+        [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
             return RewriteIO(input, output, typeCtx, ctx);
         }), "RewriteIO", issueCode));
 
@@ -116,14 +116,14 @@ TTransformationPipeline& TTransformationPipeline::AddPostTypeAnnotation(bool for
         CreateConstraintTransformer(*TypeAnnotationContext_, false, forSubGraph), "Constraints", issueCode));
     Transformers_.push_back(TTransformStage(
         CreateFunctorTransformer(
-            [](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) { 
-                return UpdateCompletness(input, output, ctx); 
-            } 
-        ), 
-        "UpdateCompletness", 
-        issueCode)); 
-    Transformers_.push_back(TTransformStage( 
-        CreateFunctorTransformer( 
+            [](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+                return UpdateCompletness(input, output, ctx);
+            }
+        ),
+        "UpdateCompletness",
+        issueCode));
+    Transformers_.push_back(TTransformStage(
+        CreateFunctorTransformer(
             [forSubGraph, coStore = TypeAnnotationContext_->ColumnOrderStorage](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
                 return EliminateCommonSubExpressions(input, output, ctx, forSubGraph, *coStore);
             }

@@ -80,7 +80,7 @@ struct TPresortTest {
         TPresortEncoder encoder;
         encoder.AddType(NUdf::TDataType<T>::Slot, false, isDesc);
 
-        TPresortDecoder decoder; 
+        TPresortDecoder decoder;
         decoder.AddType(NUdf::TDataType<T>::Slot, false, isDesc);
 
         encoder.Start();
@@ -101,11 +101,11 @@ struct TPresortTest {
         TPresortEncoder encoder;
         encoder.AddType(Slot, false, isDesc);
 
-        TPresortDecoder decoder; 
+        TPresortDecoder decoder;
         decoder.AddType(Slot, false, isDesc);
 
         encoder.Start();
-        encoder.Encode(NUdf::TUnboxedValue(MakeString(NUdf::TStringRef(value)))); 
+        encoder.Encode(NUdf::TUnboxedValue(MakeString(NUdf::TStringRef(value))));
         auto bytes = encoder.Finish();
 
         UNIT_ASSERT_EQUAL(HexEncode(bytes.data(), bytes.size()), hex);
@@ -145,7 +145,7 @@ struct TPresortTest {
         UNIT_ASSERT_EQUAL(decoded.GetTimezoneId(), value.second);
     };
 
-    void ValidateEncoding(bool isDesc, NYql::NDecimal::TInt128 value, const TString& hex) { 
+    void ValidateEncoding(bool isDesc, NYql::NDecimal::TInt128 value, const TString& hex) {
         TPresortEncoder encoder;
         encoder.AddType(NUdf::EDataSlot::Decimal, false, isDesc);
 
@@ -195,7 +195,7 @@ Y_UNIT_TEST(SimpleTypes) {
         TPresortEncoder encoder;
         AddTypes(encoder, isOptional, isDesc);
 
-        TPresortDecoder decoder; 
+        TPresortDecoder decoder;
         AddTypes(decoder, isOptional, isDesc);
 
         auto bytes = Encode(encoder, values);
@@ -406,28 +406,28 @@ Y_UNIT_TEST(TzTimestamp) {
 }
 
 Y_UNIT_TEST(Decimal) {
-    const TVector<std::tuple<NYql::NDecimal::TInt128, TString, TString>> values = { 
-        {-NYql::NDecimal::Nan(), 
-            "00", 
-            "FF"}, 
-        {-NYql::NDecimal::Inf(), 
-            "01", 
-            "FE"}, 
-        {NYql::NDecimal::TInt128(-1), 
-            "7F", 
-            "8101"}, 
-        {NYql::NDecimal::TInt128(0), 
-            "80", 
-            "80"}, 
-        {NYql::NDecimal::TInt128(1), 
-            "8101", 
-            "7F"}, 
-        {NYql::NDecimal::Inf(), 
-            "FE", 
-            "01"}, 
-        {NYql::NDecimal::Nan(), 
-            "FF", 
-            "00"}, 
+    const TVector<std::tuple<NYql::NDecimal::TInt128, TString, TString>> values = {
+        {-NYql::NDecimal::Nan(),
+            "00",
+            "FF"},
+        {-NYql::NDecimal::Inf(),
+            "01",
+            "FE"},
+        {NYql::NDecimal::TInt128(-1),
+            "7F",
+            "8101"},
+        {NYql::NDecimal::TInt128(0),
+            "80",
+            "80"},
+        {NYql::NDecimal::TInt128(1),
+            "8101",
+            "7F"},
+        {NYql::NDecimal::Inf(),
+            "FE",
+            "01"},
+        {NYql::NDecimal::Nan(),
+            "FF",
+            "00"},
     };
     TPresortTest().ValidateEncoding(values);
 }

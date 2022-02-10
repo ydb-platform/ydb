@@ -124,7 +124,7 @@ struct TDqTaskRunnerSettings {
     bool CollectProfileStats = false;
     bool TerminateOnError = false;
     bool AllowGeneratorsInUnboxedValues = true;
-    TString OptLLVM = ""; 
+    TString OptLLVM = "";
     THashMap<TString, TString> SecureParams;
     THashMap<TString, TString> TaskParams;
 };

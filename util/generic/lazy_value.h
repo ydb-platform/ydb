@@ -6,7 +6,7 @@
 template <class T>
 class TLazyValueBase {
 public:
-    using TInitializer = std::function<T()>; 
+    using TInitializer = std::function<T()>;
 
     TLazyValueBase() = default;
 

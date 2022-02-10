@@ -114,7 +114,7 @@ namespace {
             , FetchCallback(fetchCallback) {}
 
     private:
-        TUnboxedValueVector Items; 
+        TUnboxedValueVector Items;
         ui32 Index;
         std::function<void()> FetchCallback;
 
@@ -140,11 +140,11 @@ namespace {
         TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
 
         auto structType = pgmBuilder.NewEmptyStructType();
-        structType = pgmBuilder.NewStructType(structType, "key", 
+        structType = pgmBuilder.NewStructType(structType, "key",
             pgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id));
-        structType = pgmBuilder.NewStructType(structType, "time", 
+        structType = pgmBuilder.NewStructType(structType, "time",
             pgmBuilder.NewDataType(NUdf::TDataType<NUdf::TTimestamp>::Id));
-        structType = pgmBuilder.NewStructType(structType, "sum", 
+        structType = pgmBuilder.NewStructType(structType, "sum",
             pgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id));
         auto keyIndex = AS_TYPE(TStructType, structType)->GetMemberIndex("key");
         auto timeIndex = AS_TYPE(TStructType, structType)->GetMemberIndex("time");
@@ -158,44 +158,44 @@ namespace {
         auto pgmReturn = pgmBuilder.MultiHoppingCore(
             TRuntimeNode(streamNode, false),
             [&](TRuntimeNode item) { // keyExtractor
-                return pgmBuilder.Member(item, "key"); 
+                return pgmBuilder.Member(item, "key");
             },
             [&](TRuntimeNode item) { // timeExtractor
-                return pgmBuilder.Member(item, "time"); 
+                return pgmBuilder.Member(item, "time");
             },
             [&](TRuntimeNode item) { // init
-                std::vector<std::pair<std::string_view, TRuntimeNode>> members; 
-                members.emplace_back("sum", pgmBuilder.Member(item, "sum")); 
+                std::vector<std::pair<std::string_view, TRuntimeNode>> members;
+                members.emplace_back("sum", pgmBuilder.Member(item, "sum"));
                 return pgmBuilder.NewStruct(members);
             },
             [&](TRuntimeNode item, TRuntimeNode state) { // update
                 auto add = pgmBuilder.AggrAdd(
-                    pgmBuilder.Member(item, "sum"), 
-                    pgmBuilder.Member(state, "sum")); 
-                std::vector<std::pair<std::string_view, TRuntimeNode>> members; 
-                members.emplace_back("sum", add); 
+                    pgmBuilder.Member(item, "sum"),
+                    pgmBuilder.Member(state, "sum"));
+                std::vector<std::pair<std::string_view, TRuntimeNode>> members;
+                members.emplace_back("sum", add);
                 return pgmBuilder.NewStruct(members);
             },
             [&](TRuntimeNode state) { // save
-                return pgmBuilder.Member(state, "sum"); 
+                return pgmBuilder.Member(state, "sum");
             },
             [&](TRuntimeNode savedState) { // load
-                std::vector<std::pair<std::string_view, TRuntimeNode>> members; 
-                members.emplace_back("sum", savedState); 
+                std::vector<std::pair<std::string_view, TRuntimeNode>> members;
+                members.emplace_back("sum", savedState);
                 return pgmBuilder.NewStruct(members);
             },
             [&](TRuntimeNode state1, TRuntimeNode state2) { // merge
                 auto add = pgmBuilder.AggrAdd(
-                    pgmBuilder.Member(state1, "sum"), 
-                    pgmBuilder.Member(state2, "sum")); 
-                std::vector<std::pair<std::string_view, TRuntimeNode>> members; 
-                members.emplace_back("sum", add); 
+                    pgmBuilder.Member(state1, "sum"),
+                    pgmBuilder.Member(state2, "sum"));
+                std::vector<std::pair<std::string_view, TRuntimeNode>> members;
+                members.emplace_back("sum", add);
                 return pgmBuilder.NewStruct(members);
             },
             [&](TRuntimeNode key, TRuntimeNode state, TRuntimeNode time) { // finish
-                std::vector<std::pair<std::string_view, TRuntimeNode>> members; 
-                members.emplace_back("key", key); 
-                members.emplace_back("sum", pgmBuilder.Member(state, "sum")); 
+                std::vector<std::pair<std::string_view, TRuntimeNode>> members;
+                members.emplace_back("key", key);
+                members.emplace_back("sum", pgmBuilder.Member(state, "sum"));
                 members.emplace_back("time", time);
                 return pgmBuilder.NewStruct(members);
             },
@@ -207,7 +207,7 @@ namespace {
 
         auto graph = setup.BuildGraph(pgmReturn, {streamNode});
 
-        TUnboxedValueVector streamItems; 
+        TUnboxedValueVector streamItems;
         for (size_t i = 0; i < items.size(); ++i) {
             NUdf::TUnboxedValue* itemsPtr;
             auto structValues = graph->GetHolderFactory().CreateDirectArrayHolder(3, itemsPtr);

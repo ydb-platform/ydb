@@ -14,7 +14,7 @@ SRCS(
     compact_hash.h
     defs.h
     mkql_alloc.cpp
-    mkql_function_metadata.h 
+    mkql_function_metadata.h
     mkql_function_registry.cpp
     mkql_function_registry.h
     mkql_node.cpp
@@ -36,16 +36,16 @@ SRCS(
     mkql_runtime_version.cpp
     mkql_runtime_version.h
     mkql_stats_registry.cpp
-    mkql_string_util.cpp 
-    mkql_string_util.h 
-    mkql_terminator.cpp 
-    mkql_terminator.h 
+    mkql_string_util.cpp
+    mkql_string_util.h
+    mkql_terminator.cpp
+    mkql_terminator.h
     mkql_type_builder.cpp
     mkql_type_builder.h
     mkql_type_ops.cpp
     mkql_type_ops.h
-    mkql_unboxed_value_stream.cpp 
-    mkql_unboxed_value_stream.h 
+    mkql_unboxed_value_stream.cpp
+    mkql_unboxed_value_stream.h
     primes.cpp
     primes.h
     watermark_tracker.cpp

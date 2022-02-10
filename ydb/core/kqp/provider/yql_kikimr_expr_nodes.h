@@ -13,10 +13,10 @@ namespace NNodes {
 
 class TKiDataSource : public NGenerated::TKiDataSourceStub<TExprBase, TCallable, TCoAtom> {
 public:
-    explicit TKiDataSource(const TExprNode* node) 
-        : TKiDataSourceStub(node) {} 
- 
-    explicit TKiDataSource(const TExprNode::TPtr& node) 
+    explicit TKiDataSource(const TExprNode* node)
+        : TKiDataSourceStub(node) {}
+
+    explicit TKiDataSource(const TExprNode::TPtr& node)
         : TKiDataSourceStub(node) {}
 
     static bool Match(const TExprNode* node) {
@@ -34,10 +34,10 @@ public:
 
 class TKiDataSink : public NGenerated::TKiDataSinkStub<TExprBase, TCallable, TCoAtom> {
 public:
-    explicit TKiDataSink(const TExprNode* node) 
-        : TKiDataSinkStub(node) {} 
- 
-    explicit TKiDataSink(const TExprNode::TPtr& node) 
+    explicit TKiDataSink(const TExprNode* node)
+        : TKiDataSinkStub(node) {}
+
+    explicit TKiDataSink(const TExprNode::TPtr& node)
         : TKiDataSinkStub(node) {}
 
     static bool Match(const TExprNode* node) {
@@ -55,10 +55,10 @@ public:
 
 class TKiReadTable : public NGenerated::TKiReadTableStub<TExprBase, TKiReadBase, TCoNameValueTupleList> {
 public:
-    explicit TKiReadTable(const TExprNode* node) 
-        : TKiReadTableStub(node) {} 
- 
-    explicit TKiReadTable(const TExprNode::TPtr& node) 
+    explicit TKiReadTable(const TExprNode* node)
+        : TKiReadTableStub(node) {}
+
+    explicit TKiReadTable(const TExprNode::TPtr& node)
         : TKiReadTableStub(node) {}
 
     TString GetTable(TExprContext& ctx) const;
@@ -80,7 +80,7 @@ public:
         : NGenerated::TKiColumnRangeTupleBuilder<TParent>(ctx, pos, buildFunc, getArgFunc) {}
 
     TKiColumnRangeTuple DoBuild() {
-        auto node = this->Ctx.NewList(this->Pos, { this->ColumnHolder.Cast().Ptr(), this->FromHolder.Cast().Ptr(), this->ToHolder.Cast().Ptr() }); 
+        auto node = this->Ctx.NewList(this->Pos, { this->ColumnHolder.Cast().Ptr(), this->FromHolder.Cast().Ptr(), this->ToHolder.Cast().Ptr() });
         return TKiColumnRangeTuple(node);
     }
 };

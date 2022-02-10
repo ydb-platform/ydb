@@ -28,7 +28,7 @@ public:
     void Rewind() final;
 private:
     IGraphTransformer::TStatus DoTransform(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx,
-        const TCallableOptimizerMap& callables, TProcessedNodesSet& processedNodes, 
+        const TCallableOptimizerMap& callables, TProcessedNodesSet& processedNodes,
         bool withParents);
 
     IGraphTransformer::TStatus DoTransform(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx,
@@ -96,7 +96,7 @@ void TCommonOptTransformer::Rewind() {
 
 IGraphTransformer::TStatus TCommonOptTransformer::DoTransform(
     const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx,
-    const TCallableOptimizerMap& callables, 
+    const TCallableOptimizerMap& callables,
     TProcessedNodesSet& processedNodes, bool withParents)
 {
     TOptimizeExprSettings settings(TypeCtx);
@@ -117,7 +117,7 @@ IGraphTransformer::TStatus TCommonOptTransformer::DoTransform(
     }
 
     return OptimizeExpr(input, output, [&callables, &optCtx, defaultOpt](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
-        const auto rule = callables.find(node->Content()); 
+        const auto rule = callables.find(node->Content());
         TExprNode::TPtr result = node;
         if (rule != callables.cend()) {
             result = (rule->second)(node, ctx, optCtx);
@@ -147,9 +147,9 @@ IGraphTransformer::TStatus TCommonOptTransformer::DoTransform(const TExprNode::T
         },
         [&callables, &toOptimize, &ctx, &optCtx](const TExprNode::TPtr& node) {
             if (toOptimize.empty()) {
-                const auto rule = callables.find(node->Content()); 
-                if (callables.cend() != rule) { 
-                    (rule->second)(node, toOptimize, ctx, optCtx); 
+                const auto rule = callables.find(node->Content());
+                if (callables.cend() != rule) {
+                    (rule->second)(node, toOptimize, ctx, optCtx);
                 }
             }
             return toOptimize.empty();

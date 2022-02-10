@@ -235,7 +235,7 @@ private:
 };
 
 struct TAstParseResult {
-    std::unique_ptr<TMemoryPool> Pool; 
+    std::unique_ptr<TMemoryPool> Pool;
     TAstNode* Root = nullptr;
     TIssues Issues;
 

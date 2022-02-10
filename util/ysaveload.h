@@ -511,7 +511,7 @@ public:
     inline TSetSerializerInserter(TMapType& m, size_t cnt)
         : TBase(m)
     {
-        m.reserve(cnt); 
+        m.reserve(cnt);
     }
 };
 
@@ -537,7 +537,7 @@ public:
     inline TSetSerializerInserter(TSetType& s, size_t cnt)
         : TBase(s)
     {
-        s.reserve(cnt); 
+        s.reserve(cnt);
     }
 };
 

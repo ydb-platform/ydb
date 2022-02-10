@@ -58,20 +58,20 @@ void TBuffer::Append(const char* buf, size_t len) {
     Y_ASSERT(Pos_ <= Len_);
 }
 
-void TBuffer::Fill(char ch, size_t len) { 
-    if (len > Avail()) { 
-        Reserve(Pos_ + len); 
-    } 
- 
-    Y_ASSERT(len <= Avail()); 
- 
-    memset(Data() + Pos_, ch, len); 
-    NSan::Unpoison(Data() + Pos_, len); 
-    Pos_ += len; 
- 
-    Y_ASSERT(Pos_ <= Len_); 
-} 
- 
+void TBuffer::Fill(char ch, size_t len) {
+    if (len > Avail()) {
+        Reserve(Pos_ + len);
+    }
+
+    Y_ASSERT(len <= Avail());
+
+    memset(Data() + Pos_, ch, len);
+    NSan::Unpoison(Data() + Pos_, len);
+    Pos_ += len;
+
+    Y_ASSERT(Pos_ <= Len_);
+}
+
 void TBuffer::DoReserve(size_t realLen) {
     // FastClp2<T>(x) returns 0 on x from [Max<T>/2 + 2, Max<T>]
     const size_t len = Max<size_t>(FastClp2(realLen), realLen);

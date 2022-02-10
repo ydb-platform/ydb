@@ -11,64 +11,64 @@
 #include <ydb/library/yql/utils/cast.h>
 #include <ydb/library/yql/utils/hash.h>
 
-#include <algorithm> 
-#include <unordered_map> 
- 
+#include <algorithm>
+#include <unordered_map>
+
 namespace NKikimr {
 namespace NMiniKQL {
 
 using NYql::EnsureDynamicCast;
 
-namespace { 
- 
-class THashedMultiMapAccumulator { 
+namespace {
+
+class THashedMultiMapAccumulator {
     using TMapType = std::unordered_map<
         NUdf::TUnboxedValue,
-        TUnboxedValueVector, 
+        TUnboxedValueVector,
         NYql::TVaryingHash<NUdf::TUnboxedValue, TValueHasher>,
         TValueEqual,
-        TMKQLAllocator<std::pair<const NUdf::TUnboxedValue, TUnboxedValueVector>>>; 
+        TMKQLAllocator<std::pair<const NUdf::TUnboxedValue, TUnboxedValueVector>>>;
 
-    TComputationContext& Ctx; 
+    TComputationContext& Ctx;
     TType* KeyType;
-    const TKeyTypes& KeyTypes; 
+    const TKeyTypes& KeyTypes;
     bool IsTuple;
-    std::optional<TValuePacker> Packer; 
+    std::optional<TValuePacker> Packer;
 
     TMapType Map;
- 
-public: 
+
+public:
     THashedMultiMapAccumulator(TType* keyType, TType* payloadType, const TKeyTypes& keyTypes, bool isTuple, bool encoded, TComputationContext& ctx, ui64 itemsCountHint)
         : Ctx(ctx), KeyType(keyType), KeyTypes(keyTypes), IsTuple(isTuple), Map(0, TValueHasher(KeyTypes, isTuple), TValueEqual(KeyTypes, isTuple))
     {
         if (encoded) {
-            Packer.emplace(true, keyType); 
+            Packer.emplace(true, keyType);
         }
- 
+
         Y_UNUSED(payloadType);
-        Map.reserve(itemsCountHint); 
+        Map.reserve(itemsCountHint);
     }
 
-    void Add(NUdf::TUnboxedValue&& key, NUdf::TUnboxedValue&& payload) 
+    void Add(NUdf::TUnboxedValue&& key, NUdf::TUnboxedValue&& payload)
     {
         if (Packer) {
             key = MakeString(Packer->Pack(key));
         }
 
-        const auto ins = Map.emplace(std::move(key), 1U); 
-        if (ins.second) 
-            ins.first->second.front() = std::move(payload); 
-        else 
-            ins.first->second.emplace_back(std::move(payload)); 
+        const auto ins = Map.emplace(std::move(key), 1U);
+        if (ins.second)
+            ins.first->second.front() = std::move(payload);
+        else
+            ins.first->second.emplace_back(std::move(payload));
     }
 
-    NUdf::TUnboxedValue Build() 
+    NUdf::TUnboxedValue Build()
     {
-        const auto filler = [this](TValuesDictHashMap& targetMap) { 
-            targetMap.reserve(Map.size()); 
+        const auto filler = [this](TValuesDictHashMap& targetMap) {
+            targetMap.reserve(Map.size());
 
-            for (auto& pair : Map) { 
-                auto itemFactory = [](const NUdf::TUnboxedValuePod& value) { 
+            for (auto& pair : Map) {
+                auto itemFactory = [](const NUdf::TUnboxedValuePod& value) {
                     return value;
                 };
 
@@ -77,7 +77,7 @@ public:
                 auto payloadList = CreateOwningVectorListAdapter(std::move(pair.second), itemFactory,
                     start, finish, false, Ctx.HolderFactory.GetMemInfo());
 
-                targetMap.emplace(pair.first, std::move(payloadList)); 
+                targetMap.emplace(pair.first, std::move(payloadList));
             }
         };
 
@@ -85,42 +85,42 @@ public:
     }
 };
 
-class THashedMapAccumulator { 
+class THashedMapAccumulator {
     using TMapType = TValuesDictHashMap;
 
-    TComputationContext& Ctx; 
+    TComputationContext& Ctx;
     TType* KeyType;
-    const TKeyTypes& KeyTypes; 
+    const TKeyTypes& KeyTypes;
     const bool IsTuple;
-    std::optional<TValuePacker> Packer; 
+    std::optional<TValuePacker> Packer;
 
     TMapType Map;
- 
-public: 
+
+public:
     THashedMapAccumulator(TType* keyType, TType* payloadType, const TKeyTypes& keyTypes, bool isTuple, bool encoded, TComputationContext& ctx, ui64 itemsCountHint)
         : Ctx(ctx), KeyType(keyType), KeyTypes(keyTypes), IsTuple(isTuple), Map(0, TValueHasher(KeyTypes, isTuple), TValueEqual(KeyTypes, isTuple))
     {
         if (encoded) {
-            Packer.emplace(true, keyType); 
+            Packer.emplace(true, keyType);
         }
- 
+
         Y_UNUSED(payloadType);
-        Map.reserve(itemsCountHint); 
+        Map.reserve(itemsCountHint);
     }
 
-    void Add(NUdf::TUnboxedValue&& key, NUdf::TUnboxedValue&& payload) 
+    void Add(NUdf::TUnboxedValue&& key, NUdf::TUnboxedValue&& payload)
     {
         if (Packer) {
             key = MakeString(Packer->Pack(key));
         }
 
-        Map.emplace(std::move(key), std::move(payload)); 
+        Map.emplace(std::move(key), std::move(payload));
     }
 
-    NUdf::TUnboxedValue Build() 
+    NUdf::TUnboxedValue Build()
     {
         const auto filler = [this](TMapType& targetMap) {
-            targetMap = std::move(Map); 
+            targetMap = std::move(Map);
         };
 
         return Ctx.HolderFactory.CreateDirectHashedDictHolder(filler, KeyTypes, IsTuple, true, Packer ? KeyType : nullptr);
@@ -128,45 +128,45 @@ public:
 };
 
 template<typename T>
-class THashedSingleFixedMultiMapAccumulator { 
+class THashedSingleFixedMultiMapAccumulator {
     using TMapType = std::unordered_map<
         T,
-        TUnboxedValueVector, 
+        TUnboxedValueVector,
         NYql::TVaryingHash<T, TMyHash<T>>,
-        TMyEquals<T>, 
-        TMKQLAllocator<std::pair<const T, TUnboxedValueVector>>>; 
+        TMyEquals<T>,
+        TMKQLAllocator<std::pair<const T, TUnboxedValueVector>>>;
 
-    TComputationContext& Ctx; 
-    const TKeyTypes& KeyTypes; 
+    TComputationContext& Ctx;
+    const TKeyTypes& KeyTypes;
     TMapType Map;
- 
-public: 
+
+public:
     THashedSingleFixedMultiMapAccumulator(TType* keyType, TType* payloadType, const TKeyTypes& keyTypes, bool isTuple, bool encoded, TComputationContext& ctx, ui64 itemsCountHint)
-        : Ctx(ctx), KeyTypes(keyTypes), Map(0, TMyHash<T>(), TMyEquals<T>()) 
+        : Ctx(ctx), KeyTypes(keyTypes), Map(0, TMyHash<T>(), TMyEquals<T>())
     {
-        Y_UNUSED(keyType); 
+        Y_UNUSED(keyType);
         Y_UNUSED(payloadType);
         Y_UNUSED(isTuple);
         Y_UNUSED(encoded);
-        Map.reserve(itemsCountHint); 
+        Map.reserve(itemsCountHint);
     }
 
-    void Add(NUdf::TUnboxedValue&& key, NUdf::TUnboxedValue&& payload) 
+    void Add(NUdf::TUnboxedValue&& key, NUdf::TUnboxedValue&& payload)
     {
-        const auto ins = Map.emplace(key.Get<T>(), 1U); 
-        if (ins.second) 
-            ins.first->second.front() = std::move(payload); 
-        else 
-            ins.first->second.emplace_back(std::move(payload)); 
+        const auto ins = Map.emplace(key.Get<T>(), 1U);
+        if (ins.second)
+            ins.first->second.front() = std::move(payload);
+        else
+            ins.first->second.emplace_back(std::move(payload));
     }
 
-    NUdf::TUnboxedValue Build() 
+    NUdf::TUnboxedValue Build()
     {
-        const auto filler = [this](TValuesDictHashMap& targetMap) { 
-            targetMap.reserve(Map.size()); 
+        const auto filler = [this](TValuesDictHashMap& targetMap) {
+            targetMap.reserve(Map.size());
 
-            for (auto& pair : Map) { 
-                auto itemFactory = [](const NUdf::TUnboxedValuePod& value) { 
+            for (auto& pair : Map) {
+                auto itemFactory = [](const NUdf::TUnboxedValuePod& value) {
                     return value;
                 };
 
@@ -174,9 +174,9 @@ public:
                 ui64 finish = pair.second.size();
                 auto payloadList = CreateOwningVectorListAdapter(std::move(pair.second), itemFactory,
                     start, finish, false,
-                    Ctx.HolderFactory.GetMemInfo()); 
+                    Ctx.HolderFactory.GetMemInfo());
 
-                targetMap.emplace(NUdf::TUnboxedValuePod(pair.first), std::move(payloadList)); 
+                targetMap.emplace(NUdf::TUnboxedValuePod(pair.first), std::move(payloadList));
             }
         };
 
@@ -185,69 +185,69 @@ public:
 };
 
 template<typename T>
-class THashedSingleFixedMapAccumulator { 
+class THashedSingleFixedMapAccumulator {
     using TMapType = TValuesDictHashSingleFixedMap<T>;
 
-    TComputationContext& Ctx; 
+    TComputationContext& Ctx;
     TMapType Map;
- 
-public: 
+
+public:
     THashedSingleFixedMapAccumulator(TType* keyType, TType* payloadType, const TKeyTypes& keyTypes, bool isTuple, bool encoded, TComputationContext& ctx, ui64 itemsCountHint)
         : Ctx(ctx), Map(0, TMyHash<T>(), TMyEquals<T>())
     {
-        Y_UNUSED(keyType); 
+        Y_UNUSED(keyType);
         Y_UNUSED(payloadType);
         Y_UNUSED(keyTypes);
         Y_UNUSED(isTuple);
         Y_UNUSED(encoded);
-        Map.reserve(itemsCountHint); 
+        Map.reserve(itemsCountHint);
     }
 
-    void Add(NUdf::TUnboxedValue&& key, NUdf::TUnboxedValue&& payload) 
+    void Add(NUdf::TUnboxedValue&& key, NUdf::TUnboxedValue&& payload)
     {
-        Map.emplace(key.Get<T>(), std::move(payload)); 
+        Map.emplace(key.Get<T>(), std::move(payload));
     }
 
-    NUdf::TUnboxedValue Build() 
+    NUdf::TUnboxedValue Build()
     {
-        return Ctx.HolderFactory.CreateDirectHashedSingleFixedMapHolder<T>(std::move(Map)); 
+        return Ctx.HolderFactory.CreateDirectHashedSingleFixedMapHolder<T>(std::move(Map));
     }
 };
 
-class THashedSetAccumulator { 
+class THashedSetAccumulator {
     using TSetType = TValuesDictHashSet;
 
-    TComputationContext& Ctx; 
+    TComputationContext& Ctx;
     TType* KeyType;
-    const TKeyTypes& KeyTypes; 
+    const TKeyTypes& KeyTypes;
     bool IsTuple;
-    std::optional<TValuePacker> Packer; 
+    std::optional<TValuePacker> Packer;
     TSetType Set;
- 
-public: 
+
+public:
     THashedSetAccumulator(TType* keyType, const TKeyTypes& keyTypes, bool isTuple, bool encoded, TComputationContext& ctx, ui64 itemsCountHint)
         : Ctx(ctx), KeyType(keyType), KeyTypes(keyTypes), IsTuple(isTuple), Set(0, TValueHasher(KeyTypes, isTuple), TValueEqual(KeyTypes, isTuple))
     {
         if (encoded) {
-            Packer.emplace(true, keyType); 
+            Packer.emplace(true, keyType);
         }
- 
-        Set.reserve(itemsCountHint); 
+
+        Set.reserve(itemsCountHint);
     }
 
-    void Add(NUdf::TUnboxedValue&& key) 
-    { 
+    void Add(NUdf::TUnboxedValue&& key)
+    {
         if (Packer) {
             key = MakeString(Packer->Pack(key));
         }
 
-        Set.emplace(std::move(key)); 
+        Set.emplace(std::move(key));
     }
 
-    NUdf::TUnboxedValue Build() 
-    { 
+    NUdf::TUnboxedValue Build()
+    {
         const auto filler = [this](TSetType& targetSet) {
-            targetSet = std::move(Set); 
+            targetSet = std::move(Set);
         };
 
         return Ctx.HolderFactory.CreateDirectHashedSetHolder(filler, KeyTypes, IsTuple, true, Packer ? KeyType : nullptr);
@@ -255,385 +255,385 @@ public:
 };
 
 template <typename T>
-class THashedSingleFixedSetAccumulator { 
+class THashedSingleFixedSetAccumulator {
     using TSetType = TValuesDictHashSingleFixedSet<T>;
 
-    TComputationContext& Ctx; 
+    TComputationContext& Ctx;
     TSetType Set;
- 
-public: 
+
+public:
     THashedSingleFixedSetAccumulator(TType* keyType, const TKeyTypes& keyTypes, bool isTuple, bool encoded, TComputationContext& ctx, ui64 itemsCountHint)
         : Ctx(ctx), Set(0, TMyHash<T>(), TMyEquals<T>())
-    { 
-        Y_UNUSED(keyType); 
+    {
+        Y_UNUSED(keyType);
         Y_UNUSED(keyTypes);
         Y_UNUSED(isTuple);
         Y_UNUSED(encoded);
-        Set.reserve(itemsCountHint); 
+        Set.reserve(itemsCountHint);
     }
 
-    void Add(NUdf::TUnboxedValue&& key) 
-    { 
-        Set.emplace(key.Get<T>()); 
+    void Add(NUdf::TUnboxedValue&& key)
+    {
+        Set.emplace(key.Get<T>());
     }
 
-    NUdf::TUnboxedValue Build() 
-    { 
-        return Ctx.HolderFactory.CreateDirectHashedSingleFixedSetHolder<T>(std::move(Set)); 
+    NUdf::TUnboxedValue Build()
+    {
+        return Ctx.HolderFactory.CreateDirectHashedSingleFixedSetHolder<T>(std::move(Set));
     }
 };
 
 template <typename T>
-class THashedSingleFixedCompactSetAccumulator { 
+class THashedSingleFixedCompactSetAccumulator {
     using TSetType = TValuesDictHashSingleFixedCompactSet<T>;
 
-    TComputationContext& Ctx; 
-    TPagedArena Pool; 
+    TComputationContext& Ctx;
+    TPagedArena Pool;
     TSetType Set;
- 
-public: 
+
+public:
     THashedSingleFixedCompactSetAccumulator(TType* keyType, const TKeyTypes& keyTypes, bool isTuple, bool encoded, TComputationContext& ctx, ui64 itemsCountHint)
         : Ctx(ctx), Pool(&Ctx.HolderFactory.GetPagePool()), Set(Ctx.HolderFactory.GetPagePool(), itemsCountHint / COMPACT_HASH_MAX_LOAD_FACTOR)
-    { 
-        Y_UNUSED(keyType); 
+    {
+        Y_UNUSED(keyType);
         Y_UNUSED(keyTypes);
         Y_UNUSED(isTuple);
         Y_UNUSED(encoded);
-        Set.SetMaxLoadFactor(COMPACT_HASH_MAX_LOAD_FACTOR); 
+        Set.SetMaxLoadFactor(COMPACT_HASH_MAX_LOAD_FACTOR);
     }
 
-    void Add(NUdf::TUnboxedValue&& key) 
-    { 
-        Set.Insert(key.Get<T>()); 
+    void Add(NUdf::TUnboxedValue&& key)
+    {
+        Set.Insert(key.Get<T>());
     }
 
-    NUdf::TUnboxedValue Build() 
-    { 
-        return Ctx.HolderFactory.CreateDirectHashedSingleFixedCompactSetHolder<T>(std::move(Set)); 
+    NUdf::TUnboxedValue Build()
+    {
+        return Ctx.HolderFactory.CreateDirectHashedSingleFixedCompactSetHolder<T>(std::move(Set));
     }
 };
 
-class THashedCompactSetAccumulator { 
+class THashedCompactSetAccumulator {
     using TSetType = TValuesDictHashCompactSet;
 
-    TComputationContext& Ctx; 
-    TPagedArena Pool; 
+    TComputationContext& Ctx;
+    TPagedArena Pool;
     TSetType Set;
-    TType *KeyType; 
-    TValuePacker KeyPacker; 
- 
-public: 
+    TType *KeyType;
+    TValuePacker KeyPacker;
+
+public:
     THashedCompactSetAccumulator(TType* keyType, const TKeyTypes& keyTypes, bool isTuple, bool encoded, TComputationContext& ctx, ui64 itemsCountHint)
         : Ctx(ctx), Pool(&Ctx.HolderFactory.GetPagePool()), Set(Ctx.HolderFactory.GetPagePool(), itemsCountHint / COMPACT_HASH_MAX_LOAD_FACTOR, TSmallValueHash(), TSmallValueEqual())
         , KeyType(keyType), KeyPacker(true, keyType)
-    { 
+    {
         Y_UNUSED(keyTypes);
         Y_UNUSED(isTuple);
         Y_UNUSED(encoded);
-        Set.SetMaxLoadFactor(COMPACT_HASH_MAX_LOAD_FACTOR); 
+        Set.SetMaxLoadFactor(COMPACT_HASH_MAX_LOAD_FACTOR);
     }
 
-    void Add(NUdf::TUnboxedValue&& key) 
-    { 
-        Set.Insert(AddSmallValue(Pool, KeyPacker.Pack(key))); 
+    void Add(NUdf::TUnboxedValue&& key)
+    {
+        Set.Insert(AddSmallValue(Pool, KeyPacker.Pack(key)));
     }
 
-    NUdf::TUnboxedValue Build() 
-    { 
-        return Ctx.HolderFactory.CreateDirectHashedCompactSetHolder(std::move(Set), std::move(Pool), KeyType, &Ctx); 
+    NUdf::TUnboxedValue Build()
+    {
+        return Ctx.HolderFactory.CreateDirectHashedCompactSetHolder(std::move(Set), std::move(Pool), KeyType, &Ctx);
     }
 };
 
 template <bool Multi>
-class THashedCompactMapAccumulator; 
+class THashedCompactMapAccumulator;
 
 template <>
-class THashedCompactMapAccumulator<false> { 
+class THashedCompactMapAccumulator<false> {
     using TMapType = TValuesDictHashCompactMap;
 
-    TComputationContext& Ctx; 
-    TPagedArena Pool; 
+    TComputationContext& Ctx;
+    TPagedArena Pool;
     TMapType Map;
-    TType *KeyType, *PayloadType; 
-    TValuePacker KeyPacker, PayloadPacker; 
- 
-public: 
+    TType *KeyType, *PayloadType;
+    TValuePacker KeyPacker, PayloadPacker;
+
+public:
     THashedCompactMapAccumulator(TType* keyType, TType* payloadType, const TKeyTypes& keyTypes, bool isTuple, bool encoded, TComputationContext& ctx, ui64 itemsCountHint)
         : Ctx(ctx), Pool(&Ctx.HolderFactory.GetPagePool()), Map(Ctx.HolderFactory.GetPagePool(), itemsCountHint / COMPACT_HASH_MAX_LOAD_FACTOR)
         , KeyType(keyType), PayloadType(payloadType), KeyPacker(true, keyType), PayloadPacker(false, payloadType)
-    { 
+    {
         Y_UNUSED(keyTypes);
         Y_UNUSED(isTuple);
         Y_UNUSED(encoded);
-        Map.SetMaxLoadFactor(COMPACT_HASH_MAX_LOAD_FACTOR); 
+        Map.SetMaxLoadFactor(COMPACT_HASH_MAX_LOAD_FACTOR);
     }
 
-    void Add(NUdf::TUnboxedValue&& key, NUdf::TUnboxedValue&& payload) 
-    { 
-        Map.InsertNew(AddSmallValue(Pool, KeyPacker.Pack(key)), AddSmallValue(Pool, PayloadPacker.Pack(payload))); 
+    void Add(NUdf::TUnboxedValue&& key, NUdf::TUnboxedValue&& payload)
+    {
+        Map.InsertNew(AddSmallValue(Pool, KeyPacker.Pack(key)), AddSmallValue(Pool, PayloadPacker.Pack(payload)));
     }
 
-    NUdf::TUnboxedValue Build() 
-    { 
-        return Ctx.HolderFactory.CreateDirectHashedCompactMapHolder(std::move(Map), std::move(Pool), KeyType, PayloadType, &Ctx); 
+    NUdf::TUnboxedValue Build()
+    {
+        return Ctx.HolderFactory.CreateDirectHashedCompactMapHolder(std::move(Map), std::move(Pool), KeyType, PayloadType, &Ctx);
     }
 };
 
 template <>
-class THashedCompactMapAccumulator<true> { 
+class THashedCompactMapAccumulator<true> {
     using TMapType = TValuesDictHashCompactMultiMap;
 
-    TComputationContext& Ctx; 
-    TPagedArena Pool; 
+    TComputationContext& Ctx;
+    TPagedArena Pool;
     TMapType Map;
-    TType *KeyType, *PayloadType; 
-    TValuePacker KeyPacker, PayloadPacker; 
- 
-public: 
+    TType *KeyType, *PayloadType;
+    TValuePacker KeyPacker, PayloadPacker;
+
+public:
     THashedCompactMapAccumulator(TType* keyType, TType* payloadType, const TKeyTypes& keyTypes, bool isTuple, bool encoded, TComputationContext& ctx, ui64 itemsCountHint)
         : Ctx(ctx), Pool(&Ctx.HolderFactory.GetPagePool()), Map(Ctx.HolderFactory.GetPagePool(), itemsCountHint / COMPACT_HASH_MAX_LOAD_FACTOR)
         , KeyType(keyType), PayloadType(payloadType), KeyPacker(true, keyType), PayloadPacker(false, payloadType)
-    { 
+    {
         Y_UNUSED(keyTypes);
         Y_UNUSED(isTuple);
         Y_UNUSED(encoded);
-        Map.SetMaxLoadFactor(COMPACT_HASH_MAX_LOAD_FACTOR); 
+        Map.SetMaxLoadFactor(COMPACT_HASH_MAX_LOAD_FACTOR);
     }
 
-    void Add(NUdf::TUnboxedValue&& key, NUdf::TUnboxedValue&& payload) 
-    { 
-        Map.Insert(AddSmallValue(Pool, KeyPacker.Pack(key)), AddSmallValue(Pool, PayloadPacker.Pack(payload))); 
+    void Add(NUdf::TUnboxedValue&& key, NUdf::TUnboxedValue&& payload)
+    {
+        Map.Insert(AddSmallValue(Pool, KeyPacker.Pack(key)), AddSmallValue(Pool, PayloadPacker.Pack(payload)));
     }
 
-    NUdf::TUnboxedValue Build() 
-    { 
-        return Ctx.HolderFactory.CreateDirectHashedCompactMultiMapHolder(std::move(Map), std::move(Pool), KeyType, PayloadType, &Ctx); 
+    NUdf::TUnboxedValue Build()
+    {
+        return Ctx.HolderFactory.CreateDirectHashedCompactMultiMapHolder(std::move(Map), std::move(Pool), KeyType, PayloadType, &Ctx);
     }
 };
 
 template <typename T, bool Multi>
-class THashedSingleFixedCompactMapAccumulator; 
+class THashedSingleFixedCompactMapAccumulator;
 
 template <typename T>
-class THashedSingleFixedCompactMapAccumulator<T, false> { 
+class THashedSingleFixedCompactMapAccumulator<T, false> {
     using TMapType = TValuesDictHashSingleFixedCompactMap<T>;
 
-    TComputationContext& Ctx; 
-    TPagedArena Pool; 
+    TComputationContext& Ctx;
+    TPagedArena Pool;
     TMapType Map;
-    TType *PayloadType; 
-    TValuePacker PayloadPacker; 
- 
-public: 
+    TType *PayloadType;
+    TValuePacker PayloadPacker;
+
+public:
     THashedSingleFixedCompactMapAccumulator(TType* keyType, TType* payloadType, const TKeyTypes& keyTypes, bool isTuple, bool encoded, TComputationContext& ctx, ui64 itemsCountHint)
         : Ctx(ctx), Pool(&Ctx.HolderFactory.GetPagePool()), Map(Ctx.HolderFactory.GetPagePool(), itemsCountHint / COMPACT_HASH_MAX_LOAD_FACTOR)
         , PayloadType(payloadType), PayloadPacker(false, payloadType)
-    { 
-        Y_UNUSED(keyType); 
+    {
+        Y_UNUSED(keyType);
         Y_UNUSED(keyTypes);
         Y_UNUSED(isTuple);
         Y_UNUSED(encoded);
-        Map.SetMaxLoadFactor(COMPACT_HASH_MAX_LOAD_FACTOR); 
+        Map.SetMaxLoadFactor(COMPACT_HASH_MAX_LOAD_FACTOR);
     }
 
-    void Add(NUdf::TUnboxedValue&& key, NUdf::TUnboxedValue&& payload) 
-    { 
-        Map.InsertNew(key.Get<T>(), AddSmallValue(Pool, PayloadPacker.Pack(payload))); 
+    void Add(NUdf::TUnboxedValue&& key, NUdf::TUnboxedValue&& payload)
+    {
+        Map.InsertNew(key.Get<T>(), AddSmallValue(Pool, PayloadPacker.Pack(payload)));
     }
 
-    NUdf::TUnboxedValue Build() 
-    { 
-        return Ctx.HolderFactory.CreateDirectHashedSingleFixedCompactMapHolder(std::move(Map), std::move(Pool), PayloadType, &Ctx); 
+    NUdf::TUnboxedValue Build()
+    {
+        return Ctx.HolderFactory.CreateDirectHashedSingleFixedCompactMapHolder(std::move(Map), std::move(Pool), PayloadType, &Ctx);
     }
 };
 
 template <typename T>
-class THashedSingleFixedCompactMapAccumulator<T, true> { 
+class THashedSingleFixedCompactMapAccumulator<T, true> {
     using TMapType = TValuesDictHashSingleFixedCompactMultiMap<T>;
 
-    TComputationContext& Ctx; 
-    TPagedArena Pool; 
+    TComputationContext& Ctx;
+    TPagedArena Pool;
     TMapType Map;
-    TType *PayloadType; 
-    TValuePacker PayloadPacker; 
- 
-public: 
+    TType *PayloadType;
+    TValuePacker PayloadPacker;
+
+public:
     THashedSingleFixedCompactMapAccumulator(TType* keyType, TType* payloadType, const TKeyTypes& keyTypes, bool isTuple, bool encoded, TComputationContext& ctx, ui64 itemsCountHint)
         : Ctx(ctx), Pool(&Ctx.HolderFactory.GetPagePool()), Map(Ctx.HolderFactory.GetPagePool(), itemsCountHint / COMPACT_HASH_MAX_LOAD_FACTOR)
         , PayloadType(payloadType), PayloadPacker(false, payloadType)
-    { 
+    {
         Y_UNUSED(keyTypes);
-        Y_UNUSED(keyType); 
+        Y_UNUSED(keyType);
         Y_UNUSED(isTuple);
         Y_UNUSED(encoded);
-        Map.SetMaxLoadFactor(COMPACT_HASH_MAX_LOAD_FACTOR); 
+        Map.SetMaxLoadFactor(COMPACT_HASH_MAX_LOAD_FACTOR);
     }
 
-    void Add(NUdf::TUnboxedValue&& key, NUdf::TUnboxedValue&& payload) 
-    { 
-        Map.Insert(key.Get<T>(), AddSmallValue(Pool, PayloadPacker.Pack(payload))); 
+    void Add(NUdf::TUnboxedValue&& key, NUdf::TUnboxedValue&& payload)
+    {
+        Map.Insert(key.Get<T>(), AddSmallValue(Pool, PayloadPacker.Pack(payload)));
     }
 
-    NUdf::TUnboxedValue Build() 
-    { 
-        return Ctx.HolderFactory.CreateDirectHashedSingleFixedCompactMultiMapHolder(std::move(Map), std::move(Pool), PayloadType, &Ctx); 
+    NUdf::TUnboxedValue Build()
+    {
+        return Ctx.HolderFactory.CreateDirectHashedSingleFixedCompactMultiMapHolder(std::move(Map), std::move(Pool), PayloadType, &Ctx);
     }
 };
 
-class TSortedSetAccumulator { 
-    TComputationContext& Ctx; 
-    TType* KeyType; 
-    const TKeyTypes& KeyTypes; 
-    bool IsTuple; 
-    std::optional<TGenericPresortEncoder> Packer; 
-    TUnboxedValueVector Items; 
- 
-public: 
-    TSortedSetAccumulator(TType* keyType, const TKeyTypes& keyTypes, bool isTuple, bool encoded, TComputationContext& ctx, ui64 itemsCountHint) 
-        : Ctx(ctx), KeyType(keyType), KeyTypes(keyTypes), IsTuple(isTuple) 
-    { 
-        if (encoded) { 
-            Packer.emplace(KeyType); 
-        } 
- 
-        Items.reserve(itemsCountHint); 
-    } 
- 
-    void Add(NUdf::TUnboxedValue&& key) 
-    { 
-        if (Packer) { 
-            key = MakeString(Packer->Encode(key, false)); 
-        } 
- 
-        Items.emplace_back(std::move(key)); 
-    } 
- 
-    NUdf::TUnboxedValue Build() 
-    { 
-        const TSortedSetFiller filler = [this](TUnboxedValueVector& values) { 
-            std::stable_sort(Items.begin(), Items.end(), TValueLess(KeyTypes, IsTuple)); 
-            Items.erase(std::unique(Items.begin(), Items.end(), TValueEqual(KeyTypes, IsTuple)), Items.end()); 
-            values = std::move(Items); 
-        }; 
- 
-        return Ctx.HolderFactory.CreateDirectSortedSetHolder(filler, KeyTypes, IsTuple, 
-            EDictSortMode::SortedUniqueAscending, true, Packer ? KeyType : nullptr); 
-    } 
-}; 
- 
-template<bool IsMulti> 
-class TSortedMapAccumulator; 
- 
-template<> 
-class TSortedMapAccumulator<false> { 
-    TComputationContext& Ctx; 
+class TSortedSetAccumulator {
+    TComputationContext& Ctx;
     TType* KeyType;
-    const TKeyTypes& KeyTypes; 
+    const TKeyTypes& KeyTypes;
     bool IsTuple;
-    std::optional<TGenericPresortEncoder> Packer; 
+    std::optional<TGenericPresortEncoder> Packer;
+    TUnboxedValueVector Items;
 
-    TKeyPayloadPairVector Items; 
- 
-public: 
-    TSortedMapAccumulator(TType* keyType, TType* payloadType, const TKeyTypes& keyTypes, bool isTuple, bool encoded, TComputationContext& ctx, ui64 itemsCountHint)
+public:
+    TSortedSetAccumulator(TType* keyType, const TKeyTypes& keyTypes, bool isTuple, bool encoded, TComputationContext& ctx, ui64 itemsCountHint)
         : Ctx(ctx), KeyType(keyType), KeyTypes(keyTypes), IsTuple(isTuple)
     {
         if (encoded) {
-            Packer.emplace(KeyType); 
+            Packer.emplace(KeyType);
         }
- 
-        Y_UNUSED(payloadType); 
-        Items.reserve(itemsCountHint); 
+
+        Items.reserve(itemsCountHint);
     }
 
-    void Add(NUdf::TUnboxedValue&& key, NUdf::TUnboxedValue&& payload) 
-    { 
+    void Add(NUdf::TUnboxedValue&& key)
+    {
         if (Packer) {
             key = MakeString(Packer->Encode(key, false));
         }
 
-        Items.emplace_back(std::move(key), std::move(payload)); 
+        Items.emplace_back(std::move(key));
     }
 
-    NUdf::TUnboxedValue Build() 
-    { 
-        const TSortedDictFiller filler = [this](TKeyPayloadPairVector& values) { 
-            values = std::move(Items); 
-        }; 
+    NUdf::TUnboxedValue Build()
+    {
+        const TSortedSetFiller filler = [this](TUnboxedValueVector& values) {
+            std::stable_sort(Items.begin(), Items.end(), TValueLess(KeyTypes, IsTuple));
+            Items.erase(std::unique(Items.begin(), Items.end(), TValueEqual(KeyTypes, IsTuple)), Items.end());
+            values = std::move(Items);
+        };
+
+        return Ctx.HolderFactory.CreateDirectSortedSetHolder(filler, KeyTypes, IsTuple,
+            EDictSortMode::SortedUniqueAscending, true, Packer ? KeyType : nullptr);
+    }
+};
+
+template<bool IsMulti>
+class TSortedMapAccumulator;
+
+template<>
+class TSortedMapAccumulator<false> {
+    TComputationContext& Ctx;
+    TType* KeyType;
+    const TKeyTypes& KeyTypes;
+    bool IsTuple;
+    std::optional<TGenericPresortEncoder> Packer;
+
+    TKeyPayloadPairVector Items;
+
+public:
+    TSortedMapAccumulator(TType* keyType, TType* payloadType, const TKeyTypes& keyTypes, bool isTuple, bool encoded, TComputationContext& ctx, ui64 itemsCountHint)
+        : Ctx(ctx), KeyType(keyType), KeyTypes(keyTypes), IsTuple(isTuple)
+    {
+        if (encoded) {
+            Packer.emplace(KeyType);
+        }
+
+        Y_UNUSED(payloadType);
+        Items.reserve(itemsCountHint);
+    }
+
+    void Add(NUdf::TUnboxedValue&& key, NUdf::TUnboxedValue&& payload)
+    {
+        if (Packer) {
+            key = MakeString(Packer->Encode(key, false));
+        }
+
+        Items.emplace_back(std::move(key), std::move(payload));
+    }
+
+    NUdf::TUnboxedValue Build()
+    {
+        const TSortedDictFiller filler = [this](TKeyPayloadPairVector& values) {
+            values = std::move(Items);
+        };
 
         return Ctx.HolderFactory.CreateDirectSortedDictHolder(filler, KeyTypes, IsTuple, EDictSortMode::RequiresSorting, true, Packer ? KeyType : nullptr);
-    } 
-}; 
- 
-template<> 
-class TSortedMapAccumulator<true> { 
-    TComputationContext& Ctx; 
-    TType* KeyType;
-    const TKeyTypes& KeyTypes; 
-    bool IsTuple;
-    std::optional<TGenericPresortEncoder> Packer; 
-    TKeyPayloadPairVector Items; 
+    }
+};
 
-public: 
+template<>
+class TSortedMapAccumulator<true> {
+    TComputationContext& Ctx;
+    TType* KeyType;
+    const TKeyTypes& KeyTypes;
+    bool IsTuple;
+    std::optional<TGenericPresortEncoder> Packer;
+    TKeyPayloadPairVector Items;
+
+public:
     TSortedMapAccumulator(TType* keyType, TType* payloadType, const TKeyTypes& keyTypes, bool isTuple, bool encoded, TComputationContext& ctx, ui64 itemsCountHint)
         : Ctx(ctx), KeyType(keyType), KeyTypes(keyTypes), IsTuple(isTuple)
     {
         if (encoded) {
-            Packer.emplace(KeyType); 
+            Packer.emplace(KeyType);
         }
- 
-        Y_UNUSED(payloadType); 
-        Items.reserve(itemsCountHint); 
-    } 
 
-    void Add(NUdf::TUnboxedValue&& key, NUdf::TUnboxedValue&& payload) 
-    { 
+        Y_UNUSED(payloadType);
+        Items.reserve(itemsCountHint);
+    }
+
+    void Add(NUdf::TUnboxedValue&& key, NUdf::TUnboxedValue&& payload)
+    {
         if (Packer) {
             key = MakeString(Packer->Encode(key, false));
         }
 
-        Items.emplace_back(std::move(key), std::move(payload)); 
+        Items.emplace_back(std::move(key), std::move(payload));
     }
 
-    NUdf::TUnboxedValue Build() 
-    { 
-        const TSortedDictFiller filler = [this](TKeyPayloadPairVector& values) { 
+    NUdf::TUnboxedValue Build()
+    {
+        const TSortedDictFiller filler = [this](TKeyPayloadPairVector& values) {
             std::stable_sort(Items.begin(), Items.end(), TKeyPayloadPairLess(KeyTypes, IsTuple));
- 
-            TKeyPayloadPairVector groups; 
-            groups.reserve(Items.size()); 
-            if (!Items.empty()) { 
-                TDefaultListRepresentation currentList(std::move(Items.begin()->second)); 
-                auto lastKey = std::move(Items.begin()->first); 
+
+            TKeyPayloadPairVector groups;
+            groups.reserve(Items.size());
+            if (!Items.empty()) {
+                TDefaultListRepresentation currentList(std::move(Items.begin()->second));
+                auto lastKey = std::move(Items.begin()->first);
                 TValueEqual eqPredicate(KeyTypes, IsTuple);
-                for (auto it = Items.begin() + 1; it != Items.end(); ++it) { 
-                    if (eqPredicate(lastKey, it->first)) { 
-                        currentList = currentList.Append(std::move(it->second)); 
-                    } 
-                    else { 
-                        auto payload = Ctx.HolderFactory.CreateDirectListHolder(std::move(currentList)); 
-                        groups.emplace_back(std::move(lastKey), std::move(payload)); 
-                        currentList = TDefaultListRepresentation(std::move(it->second)); 
-                        lastKey =  std::move(it->first); 
-                    } 
-                } 
- 
-                auto payload = Ctx.HolderFactory.CreateDirectListHolder(std::move(currentList)); 
-                groups.emplace_back(std::move(lastKey), std::move(payload)); 
-            } 
- 
-            values = std::move(groups); 
-        }; 
- 
+                for (auto it = Items.begin() + 1; it != Items.end(); ++it) {
+                    if (eqPredicate(lastKey, it->first)) {
+                        currentList = currentList.Append(std::move(it->second));
+                    }
+                    else {
+                        auto payload = Ctx.HolderFactory.CreateDirectListHolder(std::move(currentList));
+                        groups.emplace_back(std::move(lastKey), std::move(payload));
+                        currentList = TDefaultListRepresentation(std::move(it->second));
+                        lastKey =  std::move(it->first);
+                    }
+                }
+
+                auto payload = Ctx.HolderFactory.CreateDirectListHolder(std::move(currentList));
+                groups.emplace_back(std::move(lastKey), std::move(payload));
+            }
+
+            values = std::move(groups);
+        };
+
         return Ctx.HolderFactory.CreateDirectSortedDictHolder(filler, KeyTypes, IsTuple,
             EDictSortMode::SortedUniqueAscending, true, Packer ? KeyType : nullptr);
     }
-}; 
- 
+};
+
 template <typename TSetAccumulator, bool IsStream>
 class TSetWrapper : public TMutableComputationNode<TSetWrapper<TSetAccumulator, IsStream>> {
     typedef TMutableComputationNode<TSetWrapper<TSetAccumulator, IsStream>> TBaseComputation;
-public: 
+public:
     class TStreamValue : public TComputationValue<TStreamValue> {
     public:
         TStreamValue(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue&& input, IComputationExternalNode* const item,
@@ -679,87 +679,87 @@ public:
         bool Finished = false;
     };
 
-    TSetWrapper(TComputationMutables& mutables, TType* keyType, IComputationNode* list, IComputationExternalNode* item, 
-        IComputationNode* key, ui64 itemsCountHint) 
-        : TBaseComputation(mutables, EValueRepresentation::Boxed) 
+    TSetWrapper(TComputationMutables& mutables, TType* keyType, IComputationNode* list, IComputationExternalNode* item,
+        IComputationNode* key, ui64 itemsCountHint)
+        : TBaseComputation(mutables, EValueRepresentation::Boxed)
         , KeyType(keyType)
-        , List(list) 
-        , Item(item) 
-        , Key(key) 
-        , ItemsCountHint(itemsCountHint) 
+        , List(list)
+        , Item(item)
+        , Key(key)
+        , ItemsCountHint(itemsCountHint)
     {
         GetDictionaryKeyTypes(KeyType, KeyTypes, IsTuple, Encoded);
     }
 
-    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const { 
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         if constexpr (IsStream) {
             return ctx.HolderFactory.Create<TStreamValue>(List->GetValue(ctx), Item, Key,
                 TSetAccumulator(KeyType, KeyTypes, IsTuple, Encoded, ctx, ItemsCountHint), ctx);
         }
 
         const auto& list = List->GetValue(ctx);
-        auto itemsCountHint = ItemsCountHint; 
+        auto itemsCountHint = ItemsCountHint;
         if (list.HasFastListLength()) {
-            if (const auto size = list.GetListLength()) 
-                itemsCountHint = size; 
-            else 
-                return ctx.HolderFactory.GetEmptyContainer(); 
-        } 
- 
+            if (const auto size = list.GetListLength())
+                itemsCountHint = size;
+            else
+                return ctx.HolderFactory.GetEmptyContainer();
+        }
+
         TSetAccumulator accumulator(KeyType, KeyTypes, IsTuple, Encoded, ctx, itemsCountHint);
- 
+
         TThresher<false>::DoForEachItem(list,
             [this, &accumulator, &ctx] (NUdf::TUnboxedValue&& item) {
                 Item->SetValue(ctx, std::move(item));
                 accumulator.Add(Key->GetValue(ctx));
-            } 
-        ); 
- 
-        return accumulator.Build().Release(); 
-    } 
- 
-private: 
-    void RegisterDependencies() const final { 
-        this->DependsOn(List); 
+            }
+        );
+
+        return accumulator.Build().Release();
+    }
+
+private:
+    void RegisterDependencies() const final {
+        this->DependsOn(List);
         this->Own(Item);
-        this->DependsOn(Key); 
-    } 
- 
+        this->DependsOn(Key);
+    }
+
     TType* const KeyType;
     IComputationNode* const List;
-    IComputationExternalNode* const Item; 
+    IComputationExternalNode* const Item;
     IComputationNode* const Key;
-    const ui64 ItemsCountHint; 
+    const ui64 ItemsCountHint;
     TKeyTypes KeyTypes;
     bool IsTuple;
     bool Encoded;
 };
 
 template <typename TSetAccumulator>
-class TSqueezeSetFlowWrapper : public TStatefulFlowCodegeneratorNode<TSqueezeSetFlowWrapper<TSetAccumulator>> { 
-    using TBase = TStatefulFlowCodegeneratorNode<TSqueezeSetFlowWrapper<TSetAccumulator>>; 
-public: 
+class TSqueezeSetFlowWrapper : public TStatefulFlowCodegeneratorNode<TSqueezeSetFlowWrapper<TSetAccumulator>> {
+    using TBase = TStatefulFlowCodegeneratorNode<TSqueezeSetFlowWrapper<TSetAccumulator>>;
+public:
     class TState : public TComputationValue<TState> {
         using TBase = TComputationValue<TState>;
     public:
         TState(TMemoryUsageInfo* memInfo, TSetAccumulator&& setAccum)
             : TBase(memInfo), SetAccum(std::move(setAccum)) {}
 
-        NUdf::TUnboxedValuePod Build() { 
-            return SetAccum.Build().Release(); 
+        NUdf::TUnboxedValuePod Build() {
+            return SetAccum.Build().Release();
         }
 
-        void Insert(NUdf::TUnboxedValuePod value) { 
-            SetAccum.Add(value); 
+        void Insert(NUdf::TUnboxedValuePod value) {
+            SetAccum.Add(value);
         }
 
     private:
         TSetAccumulator SetAccum;
     };
 
-    TSqueezeSetFlowWrapper(TComputationMutables& mutables, TType* keyType, 
+    TSqueezeSetFlowWrapper(TComputationMutables& mutables, TType* keyType,
         IComputationNode* flow, IComputationExternalNode* item, IComputationNode* key, ui64 itemsCountHint)
-        : TBase(mutables, flow, EValueRepresentation::Boxed, EValueRepresentation::Any) 
+        : TBase(mutables, flow, EValueRepresentation::Boxed, EValueRepresentation::Any)
         , KeyType(keyType)
         , Flow(flow)
         , Item(item)
@@ -769,140 +769,140 @@ public:
         GetDictionaryKeyTypes(KeyType, KeyTypes, IsTuple, Encoded);
     }
 
-    NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const { 
-        if (state.IsFinish()) { 
-            return state.Release(); 
-        } else if (!state.HasValue()) { 
-            MakeState(ctx, state); 
+    NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
+        if (state.IsFinish()) {
+            return state.Release();
+        } else if (!state.HasValue()) {
+            MakeState(ctx, state);
         }
 
-        while (const auto statePtr = static_cast<TState*>(state.AsBoxed().Get())) { 
-            if (auto item = Flow->GetValue(ctx); item.IsYield()) { 
-                return item.Release(); 
-            } else if (item.IsFinish()) { 
-                const auto dict = statePtr->Build(); 
-                state = std::move(item); 
-                return dict; 
-            } else { 
-                Item->SetValue(ctx, std::move(item)); 
-                statePtr->Insert(Key->GetValue(ctx).Release()); 
-            } 
+        while (const auto statePtr = static_cast<TState*>(state.AsBoxed().Get())) {
+            if (auto item = Flow->GetValue(ctx); item.IsYield()) {
+                return item.Release();
+            } else if (item.IsFinish()) {
+                const auto dict = statePtr->Build();
+                state = std::move(item);
+                return dict;
+            } else {
+                Item->SetValue(ctx, std::move(item));
+                statePtr->Insert(Key->GetValue(ctx).Release());
+            }
         }
         Y_UNREACHABLE();
-    } 
-#ifndef MKQL_DISABLE_CODEGEN 
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const { 
-        auto& context = ctx.Codegen->GetContext(); 
+    }
+#ifndef MKQL_DISABLE_CODEGEN
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+        auto& context = ctx.Codegen->GetContext();
 
-        const auto codegenItemArg = dynamic_cast<ICodegeneratorExternalNode*>(Item); 
+        const auto codegenItemArg = dynamic_cast<ICodegeneratorExternalNode*>(Item);
         MKQL_ENSURE(codegenItemArg, "Item must be codegenerator node.");
 
-        const auto valueType = Type::getInt128Ty(context); 
-        const auto structPtrType = PointerType::getUnqual(StructType::get(context)); 
+        const auto valueType = Type::getInt128Ty(context);
+        const auto structPtrType = PointerType::getUnqual(StructType::get(context));
 
-        const auto stateType = StructType::get(context, { 
-            structPtrType,              // vtbl 
-            Type::getInt32Ty(context),  // ref 
-            Type::getInt16Ty(context),  // abi 
-            Type::getInt16Ty(context),  // reserved 
-            structPtrType,              // meminfo 
-            structPtrType               // accumulator 
-        }); 
- 
-        const auto statePtrType = PointerType::getUnqual(stateType); 
- 
-        const auto make = BasicBlock::Create(context, "make", ctx.Func); 
-        const auto main = BasicBlock::Create(context, "main", ctx.Func); 
- 
-        BranchInst::Create(make, main, IsInvalid(statePtr, block), block); 
-        block = make; 
- 
-        const auto ptrType = PointerType::getUnqual(StructType::get(context)); 
-        const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block); 
-        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSqueezeSetFlowWrapper<TSetAccumulator>::MakeState)); 
-        const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false); 
-        const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block); 
-        CallInst::Create(makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block); 
-        BranchInst::Create(main, block); 
- 
-        block = main; 
- 
-        const auto more = BasicBlock::Create(context, "more", ctx.Func); 
-        const auto done = BasicBlock::Create(context, "done", ctx.Func); 
-        const auto plus = BasicBlock::Create(context, "plus", ctx.Func); 
-        const auto over = BasicBlock::Create(context, "over", ctx.Func); 
- 
-        const auto result = PHINode::Create(valueType, 3U, "result", over); 
- 
-        const auto state = new LoadInst(statePtr, "state", block); 
-        const auto half = CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block); 
-        const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block); 
- 
-        result->addIncoming(GetFinish(context), block); 
- 
-        BranchInst::Create(over, more, IsFinish(state, block), block); 
- 
-        block = more; 
- 
-        const auto item = GetNodeValue(Flow, ctx, block); 
-        result->addIncoming(GetYield(context), block); 
- 
-        const auto choise = SwitchInst::Create(item, plus, 2U, block); 
-        choise->addCase(GetFinish(context), done); 
-        choise->addCase(GetYield(context), over); 
- 
-        block = plus; 
- 
-        codegenItemArg->CreateSetValue(ctx, block, item); 
-        const auto key = GetNodeValue(Key, ctx, block); 
- 
-        const auto insert = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Insert)); 
- 
-        const auto keyArg = WrapArgumentForWindows(key, ctx, block); 
- 
-        const auto insType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType(), keyArg->getType()}, false); 
-        const auto insPtr = CastInst::Create(Instruction::IntToPtr, insert, PointerType::getUnqual(insType), "insert", block); 
-        CallInst::Create(insPtr, {stateArg, keyArg}, "", block); 
- 
-        BranchInst::Create(more, block); 
- 
-        block = done; 
- 
-        const auto build = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Build)); 
- 
-        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) { 
-            const auto funType = FunctionType::get(valueType, {stateArg->getType()}, false); 
-            const auto funcPtr = CastInst::Create(Instruction::IntToPtr, build, PointerType::getUnqual(funType), "build", block); 
-            const auto dict = CallInst::Create(funcPtr, {stateArg}, "dict", block); 
-            UnRefBoxed(state, ctx, block); 
-            result->addIncoming(dict, block); 
-        } else { 
-            const auto ptr = new AllocaInst(valueType, 0U, "ptr", block); 
-            const auto funType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType(), ptr->getType()}, false); 
-            const auto funcPtr = CastInst::Create(Instruction::IntToPtr, build, PointerType::getUnqual(funType), "build", block); 
-            CallInst::Create(funcPtr, {stateArg, ptr}, "", block); 
-            const auto dict = new LoadInst(ptr, "dict", block); 
-            UnRefBoxed(state, ctx, block); 
-            result->addIncoming(dict, block); 
+        const auto stateType = StructType::get(context, {
+            structPtrType,              // vtbl
+            Type::getInt32Ty(context),  // ref
+            Type::getInt16Ty(context),  // abi
+            Type::getInt16Ty(context),  // reserved
+            structPtrType,              // meminfo
+            structPtrType               // accumulator
+        });
+
+        const auto statePtrType = PointerType::getUnqual(stateType);
+
+        const auto make = BasicBlock::Create(context, "make", ctx.Func);
+        const auto main = BasicBlock::Create(context, "main", ctx.Func);
+
+        BranchInst::Create(make, main, IsInvalid(statePtr, block), block);
+        block = make;
+
+        const auto ptrType = PointerType::getUnqual(StructType::get(context));
+        const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
+        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSqueezeSetFlowWrapper<TSetAccumulator>::MakeState));
+        const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false);
+        const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
+        CallInst::Create(makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
+        BranchInst::Create(main, block);
+
+        block = main;
+
+        const auto more = BasicBlock::Create(context, "more", ctx.Func);
+        const auto done = BasicBlock::Create(context, "done", ctx.Func);
+        const auto plus = BasicBlock::Create(context, "plus", ctx.Func);
+        const auto over = BasicBlock::Create(context, "over", ctx.Func);
+
+        const auto result = PHINode::Create(valueType, 3U, "result", over);
+
+        const auto state = new LoadInst(statePtr, "state", block);
+        const auto half = CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block);
+        const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block);
+
+        result->addIncoming(GetFinish(context), block);
+
+        BranchInst::Create(over, more, IsFinish(state, block), block);
+
+        block = more;
+
+        const auto item = GetNodeValue(Flow, ctx, block);
+        result->addIncoming(GetYield(context), block);
+
+        const auto choise = SwitchInst::Create(item, plus, 2U, block);
+        choise->addCase(GetFinish(context), done);
+        choise->addCase(GetYield(context), over);
+
+        block = plus;
+
+        codegenItemArg->CreateSetValue(ctx, block, item);
+        const auto key = GetNodeValue(Key, ctx, block);
+
+        const auto insert = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Insert));
+
+        const auto keyArg = WrapArgumentForWindows(key, ctx, block);
+
+        const auto insType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType(), keyArg->getType()}, false);
+        const auto insPtr = CastInst::Create(Instruction::IntToPtr, insert, PointerType::getUnqual(insType), "insert", block);
+        CallInst::Create(insPtr, {stateArg, keyArg}, "", block);
+
+        BranchInst::Create(more, block);
+
+        block = done;
+
+        const auto build = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Build));
+
+        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {
+            const auto funType = FunctionType::get(valueType, {stateArg->getType()}, false);
+            const auto funcPtr = CastInst::Create(Instruction::IntToPtr, build, PointerType::getUnqual(funType), "build", block);
+            const auto dict = CallInst::Create(funcPtr, {stateArg}, "dict", block);
+            UnRefBoxed(state, ctx, block);
+            result->addIncoming(dict, block);
+        } else {
+            const auto ptr = new AllocaInst(valueType, 0U, "ptr", block);
+            const auto funType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType(), ptr->getType()}, false);
+            const auto funcPtr = CastInst::Create(Instruction::IntToPtr, build, PointerType::getUnqual(funType), "build", block);
+            CallInst::Create(funcPtr, {stateArg, ptr}, "", block);
+            const auto dict = new LoadInst(ptr, "dict", block);
+            UnRefBoxed(state, ctx, block);
+            result->addIncoming(dict, block);
         }
 
-        new StoreInst(item, statePtr, block); 
-        BranchInst::Create(over, block); 
- 
-        block = over; 
-        return result; 
+        new StoreInst(item, statePtr, block);
+        BranchInst::Create(over, block);
+
+        block = over;
+        return result;
     }
 #endif
-private: 
-    void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const { 
-        state = ctx.HolderFactory.Create<TState>(TSetAccumulator(KeyType, KeyTypes, IsTuple, Encoded, ctx, ItemsCountHint)); 
-    } 
+private:
+    void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
+        state = ctx.HolderFactory.Create<TState>(TSetAccumulator(KeyType, KeyTypes, IsTuple, Encoded, ctx, ItemsCountHint));
+    }
 
     void RegisterDependencies() const final {
-        if (const auto flow = this->FlowDependsOn(Flow)) { 
-            this->Own(flow, Item); 
-            this->DependsOn(flow, Key); 
-        } 
+        if (const auto flow = this->FlowDependsOn(Flow)) {
+            this->Own(flow, Item);
+            this->DependsOn(flow, Key);
+        }
     }
 
     TType* const KeyType;
@@ -915,201 +915,201 @@ private:
     bool Encoded;
 };
 
-template <typename TSetAccumulator> 
-class TSqueezeSetWideWrapper : public TStatefulFlowCodegeneratorNode<TSqueezeSetWideWrapper<TSetAccumulator>> { 
-    using TBase = TStatefulFlowCodegeneratorNode<TSqueezeSetWideWrapper<TSetAccumulator>>; 
-public: 
-    class TState : public TComputationValue<TState> { 
-        using TBase = TComputationValue<TState>; 
-    public: 
-        TState(TMemoryUsageInfo* memInfo, TSetAccumulator&& setAccum) 
-            : TBase(memInfo), SetAccum(std::move(setAccum)) {} 
- 
-        NUdf::TUnboxedValuePod Build() { 
-            return SetAccum.Build().Release(); 
-        } 
- 
-        void Insert(NUdf::TUnboxedValuePod value) { 
-            SetAccum.Add(value); 
-        } 
- 
-    private: 
-        TSetAccumulator SetAccum; 
-    }; 
- 
-    TSqueezeSetWideWrapper(TComputationMutables& mutables, TType* keyType, 
-        IComputationWideFlowNode* flow, TComputationExternalNodePtrVector&& items, IComputationNode* key, ui64 itemsCountHint) 
-        : TBase(mutables, flow, EValueRepresentation::Boxed, EValueRepresentation::Any) 
-        , KeyType(keyType) 
-        , Flow(flow) 
-        , Items(std::move(items)) 
-        , Key(key) 
-        , ItemsCountHint(itemsCountHint) 
-        , PasstroughKey(GetPasstroughtMap({Key}, Items).front()) 
-        , Fields(Items.size(), nullptr) 
-    { 
-        GetDictionaryKeyTypes(KeyType, KeyTypes, IsTuple, Encoded); 
-    } 
- 
-    NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const { 
-        if (state.IsFinish()) { 
-            return state.Release(); 
-        } else if (!state.HasValue()) { 
-            MakeState(ctx, state); 
-        } 
- 
-        while (const auto statePtr = static_cast<TState*>(state.AsBoxed().Get())) { 
-            for (auto i = 0U; i < Fields.size(); ++i) 
-                if (Key == Items[i] || Items[i]->GetDependencesCount() > 0U) 
-                    Fields[i] = &Items[i]->RefValue(ctx); 
- 
-            switch (const auto result = Flow->FetchValues(ctx, Fields.data())) { 
-                case EFetchResult::One: 
-                    statePtr->Insert(Key->GetValue(ctx).Release()); 
-                    continue; 
-                case EFetchResult::Yield: 
-                    return NUdf::TUnboxedValuePod::MakeYield(); 
-                case EFetchResult::Finish: { 
-                    const auto dict = statePtr->Build(); 
-                    state = NUdf::TUnboxedValuePod::MakeFinish(); 
-                    return dict; 
-                } 
-            } 
-        } 
+template <typename TSetAccumulator>
+class TSqueezeSetWideWrapper : public TStatefulFlowCodegeneratorNode<TSqueezeSetWideWrapper<TSetAccumulator>> {
+    using TBase = TStatefulFlowCodegeneratorNode<TSqueezeSetWideWrapper<TSetAccumulator>>;
+public:
+    class TState : public TComputationValue<TState> {
+        using TBase = TComputationValue<TState>;
+    public:
+        TState(TMemoryUsageInfo* memInfo, TSetAccumulator&& setAccum)
+            : TBase(memInfo), SetAccum(std::move(setAccum)) {}
+
+        NUdf::TUnboxedValuePod Build() {
+            return SetAccum.Build().Release();
+        }
+
+        void Insert(NUdf::TUnboxedValuePod value) {
+            SetAccum.Add(value);
+        }
+
+    private:
+        TSetAccumulator SetAccum;
+    };
+
+    TSqueezeSetWideWrapper(TComputationMutables& mutables, TType* keyType,
+        IComputationWideFlowNode* flow, TComputationExternalNodePtrVector&& items, IComputationNode* key, ui64 itemsCountHint)
+        : TBase(mutables, flow, EValueRepresentation::Boxed, EValueRepresentation::Any)
+        , KeyType(keyType)
+        , Flow(flow)
+        , Items(std::move(items))
+        , Key(key)
+        , ItemsCountHint(itemsCountHint)
+        , PasstroughKey(GetPasstroughtMap({Key}, Items).front())
+        , Fields(Items.size(), nullptr)
+    {
+        GetDictionaryKeyTypes(KeyType, KeyTypes, IsTuple, Encoded);
+    }
+
+    NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
+        if (state.IsFinish()) {
+            return state.Release();
+        } else if (!state.HasValue()) {
+            MakeState(ctx, state);
+        }
+
+        while (const auto statePtr = static_cast<TState*>(state.AsBoxed().Get())) {
+            for (auto i = 0U; i < Fields.size(); ++i)
+                if (Key == Items[i] || Items[i]->GetDependencesCount() > 0U)
+                    Fields[i] = &Items[i]->RefValue(ctx);
+
+            switch (const auto result = Flow->FetchValues(ctx, Fields.data())) {
+                case EFetchResult::One:
+                    statePtr->Insert(Key->GetValue(ctx).Release());
+                    continue;
+                case EFetchResult::Yield:
+                    return NUdf::TUnboxedValuePod::MakeYield();
+                case EFetchResult::Finish: {
+                    const auto dict = statePtr->Build();
+                    state = NUdf::TUnboxedValuePod::MakeFinish();
+                    return dict;
+                }
+            }
+        }
         Y_UNREACHABLE();
-    } 
-#ifndef MKQL_DISABLE_CODEGEN 
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const { 
-        auto& context = ctx.Codegen->GetContext(); 
- 
-        const auto valueType = Type::getInt128Ty(context); 
-        const auto structPtrType = PointerType::getUnqual(StructType::get(context)); 
- 
-        const auto stateType = StructType::get(context, { 
-            structPtrType,              // vtbl 
-            Type::getInt32Ty(context),  // ref 
-            Type::getInt16Ty(context),  // abi 
-            Type::getInt16Ty(context),  // reserved 
-            structPtrType,              // meminfo 
-            structPtrType               // accumulator 
-        }); 
- 
-        const auto statePtrType = PointerType::getUnqual(stateType); 
- 
-        const auto make = BasicBlock::Create(context, "make", ctx.Func); 
-        const auto main = BasicBlock::Create(context, "main", ctx.Func); 
- 
-        BranchInst::Create(make, main, IsInvalid(statePtr, block), block); 
-        block = make; 
- 
-        const auto ptrType = PointerType::getUnqual(StructType::get(context)); 
-        const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block); 
-        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSqueezeSetWideWrapper<TSetAccumulator>::MakeState)); 
-        const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false); 
-        const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block); 
-        CallInst::Create(makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block); 
-        BranchInst::Create(main, block); 
- 
-        block = main; 
- 
-        const auto more = BasicBlock::Create(context, "more", ctx.Func); 
-        const auto done = BasicBlock::Create(context, "done", ctx.Func); 
-        const auto plus = BasicBlock::Create(context, "plus", ctx.Func); 
-        const auto over = BasicBlock::Create(context, "over", ctx.Func); 
- 
-        const auto result = PHINode::Create(valueType, 3U, "result", over); 
- 
-        const auto state = new LoadInst(statePtr, "state", block); 
-        const auto half = CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block); 
-        const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block); 
- 
-        result->addIncoming(GetFinish(context), block); 
- 
-        BranchInst::Create(over, more, IsFinish(state, block), block); 
- 
-        block = more; 
- 
-         const auto getres = GetNodeValues(Flow, ctx, block); 
- 
-        result->addIncoming(GetYield(context), block); 
- 
-        const auto action = SwitchInst::Create(getres.first, plus, 2U, block); 
-        action->addCase(ConstantInt::get(Type::getInt32Ty(context), i32(EFetchResult::Finish)), done); 
-        action->addCase(ConstantInt::get(Type::getInt32Ty(context), i32(EFetchResult::Yield)), over); 
- 
-        block = plus; 
- 
-        if (!PasstroughKey) { 
-            for (auto i = 0U; i < Items.size(); ++i) 
-                if (Items[i]->GetDependencesCount() > 0U) 
+    }
+#ifndef MKQL_DISABLE_CODEGEN
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+        auto& context = ctx.Codegen->GetContext();
+
+        const auto valueType = Type::getInt128Ty(context);
+        const auto structPtrType = PointerType::getUnqual(StructType::get(context));
+
+        const auto stateType = StructType::get(context, {
+            structPtrType,              // vtbl
+            Type::getInt32Ty(context),  // ref
+            Type::getInt16Ty(context),  // abi
+            Type::getInt16Ty(context),  // reserved
+            structPtrType,              // meminfo
+            structPtrType               // accumulator
+        });
+
+        const auto statePtrType = PointerType::getUnqual(stateType);
+
+        const auto make = BasicBlock::Create(context, "make", ctx.Func);
+        const auto main = BasicBlock::Create(context, "main", ctx.Func);
+
+        BranchInst::Create(make, main, IsInvalid(statePtr, block), block);
+        block = make;
+
+        const auto ptrType = PointerType::getUnqual(StructType::get(context));
+        const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
+        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSqueezeSetWideWrapper<TSetAccumulator>::MakeState));
+        const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false);
+        const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
+        CallInst::Create(makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
+        BranchInst::Create(main, block);
+
+        block = main;
+
+        const auto more = BasicBlock::Create(context, "more", ctx.Func);
+        const auto done = BasicBlock::Create(context, "done", ctx.Func);
+        const auto plus = BasicBlock::Create(context, "plus", ctx.Func);
+        const auto over = BasicBlock::Create(context, "over", ctx.Func);
+
+        const auto result = PHINode::Create(valueType, 3U, "result", over);
+
+        const auto state = new LoadInst(statePtr, "state", block);
+        const auto half = CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block);
+        const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block);
+
+        result->addIncoming(GetFinish(context), block);
+
+        BranchInst::Create(over, more, IsFinish(state, block), block);
+
+        block = more;
+
+         const auto getres = GetNodeValues(Flow, ctx, block);
+
+        result->addIncoming(GetYield(context), block);
+
+        const auto action = SwitchInst::Create(getres.first, plus, 2U, block);
+        action->addCase(ConstantInt::get(Type::getInt32Ty(context), i32(EFetchResult::Finish)), done);
+        action->addCase(ConstantInt::get(Type::getInt32Ty(context), i32(EFetchResult::Yield)), over);
+
+        block = plus;
+
+        if (!PasstroughKey) {
+            for (auto i = 0U; i < Items.size(); ++i)
+                if (Items[i]->GetDependencesCount() > 0U)
                     EnsureDynamicCast<ICodegeneratorExternalNode*>(Items[i])->CreateSetValue(ctx, block, getres.second[i](ctx, block));
-        } 
- 
-        const auto key = PasstroughKey ? getres.second[*PasstroughKey](ctx, block) : GetNodeValue(Key, ctx, block); 
- 
-        const auto insert = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Insert)); 
- 
-        const auto keyArg = WrapArgumentForWindows(key, ctx, block); 
- 
-        const auto insType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType(), keyArg->getType()}, false); 
-        const auto insPtr = CastInst::Create(Instruction::IntToPtr, insert, PointerType::getUnqual(insType), "insert", block); 
-        CallInst::Create(insPtr, {stateArg, keyArg}, "", block); 
- 
-        BranchInst::Create(more, block); 
- 
-        block = done; 
- 
-        const auto build = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Build)); 
- 
-        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) { 
-            const auto funType = FunctionType::get(valueType, {stateArg->getType()}, false); 
-            const auto funcPtr = CastInst::Create(Instruction::IntToPtr, build, PointerType::getUnqual(funType), "build", block); 
-            const auto dict = CallInst::Create(funcPtr, {stateArg}, "dict", block); 
-            UnRefBoxed(state, ctx, block); 
-            result->addIncoming(dict, block); 
-        } else { 
-            const auto ptr = new AllocaInst(valueType, 0U, "ptr", block); 
-            const auto funType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType(), ptr->getType()}, false); 
-            const auto funcPtr = CastInst::Create(Instruction::IntToPtr, build, PointerType::getUnqual(funType), "build", block); 
-            CallInst::Create(funcPtr, {stateArg, ptr}, "", block); 
-            const auto dict = new LoadInst(ptr, "dict", block); 
-            UnRefBoxed(state, ctx, block); 
-            result->addIncoming(dict, block); 
-        } 
- 
-        new StoreInst(GetFinish(context), statePtr, block); 
-        BranchInst::Create(over, block); 
- 
-        block = over; 
-        return result; 
-    } 
-#endif 
-private: 
-    void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const { 
-        state = ctx.HolderFactory.Create<TState>(TSetAccumulator(KeyType, KeyTypes, IsTuple, Encoded, ctx, ItemsCountHint)); 
-    } 
- 
-    void RegisterDependencies() const final { 
-        if (const auto flow = this->FlowDependsOn(Flow)) { 
-            std::for_each(Items.cbegin(), Items.cend(), std::bind(&TSqueezeSetWideWrapper::Own, flow, std::placeholders::_1)); 
-            this->DependsOn(flow, Key); 
-        } 
-    } 
- 
-    TType* const KeyType; 
-    IComputationWideFlowNode* const Flow; 
-    const TComputationExternalNodePtrVector Items; 
-    IComputationNode* const Key; 
-    const ui64 ItemsCountHint; 
-    TKeyTypes KeyTypes; 
-    bool IsTuple; 
-    bool Encoded; 
- 
-    const std::optional<size_t> PasstroughKey; 
- 
-    mutable std::vector<NUdf::TUnboxedValue*> Fields; 
-}; 
- 
+        }
+
+        const auto key = PasstroughKey ? getres.second[*PasstroughKey](ctx, block) : GetNodeValue(Key, ctx, block);
+
+        const auto insert = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Insert));
+
+        const auto keyArg = WrapArgumentForWindows(key, ctx, block);
+
+        const auto insType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType(), keyArg->getType()}, false);
+        const auto insPtr = CastInst::Create(Instruction::IntToPtr, insert, PointerType::getUnqual(insType), "insert", block);
+        CallInst::Create(insPtr, {stateArg, keyArg}, "", block);
+
+        BranchInst::Create(more, block);
+
+        block = done;
+
+        const auto build = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Build));
+
+        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {
+            const auto funType = FunctionType::get(valueType, {stateArg->getType()}, false);
+            const auto funcPtr = CastInst::Create(Instruction::IntToPtr, build, PointerType::getUnqual(funType), "build", block);
+            const auto dict = CallInst::Create(funcPtr, {stateArg}, "dict", block);
+            UnRefBoxed(state, ctx, block);
+            result->addIncoming(dict, block);
+        } else {
+            const auto ptr = new AllocaInst(valueType, 0U, "ptr", block);
+            const auto funType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType(), ptr->getType()}, false);
+            const auto funcPtr = CastInst::Create(Instruction::IntToPtr, build, PointerType::getUnqual(funType), "build", block);
+            CallInst::Create(funcPtr, {stateArg, ptr}, "", block);
+            const auto dict = new LoadInst(ptr, "dict", block);
+            UnRefBoxed(state, ctx, block);
+            result->addIncoming(dict, block);
+        }
+
+        new StoreInst(GetFinish(context), statePtr, block);
+        BranchInst::Create(over, block);
+
+        block = over;
+        return result;
+    }
+#endif
+private:
+    void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
+        state = ctx.HolderFactory.Create<TState>(TSetAccumulator(KeyType, KeyTypes, IsTuple, Encoded, ctx, ItemsCountHint));
+    }
+
+    void RegisterDependencies() const final {
+        if (const auto flow = this->FlowDependsOn(Flow)) {
+            std::for_each(Items.cbegin(), Items.cend(), std::bind(&TSqueezeSetWideWrapper::Own, flow, std::placeholders::_1));
+            this->DependsOn(flow, Key);
+        }
+    }
+
+    TType* const KeyType;
+    IComputationWideFlowNode* const Flow;
+    const TComputationExternalNodePtrVector Items;
+    IComputationNode* const Key;
+    const ui64 ItemsCountHint;
+    TKeyTypes KeyTypes;
+    bool IsTuple;
+    bool Encoded;
+
+    const std::optional<size_t> PasstroughKey;
+
+    mutable std::vector<NUdf::TUnboxedValue*> Fields;
+};
+
 template <typename TMapAccumulator, bool IsStream>
 class TMapWrapper : public TMutableComputationNode<TMapWrapper<TMapAccumulator, IsStream>> {
     typedef TMutableComputationNode<TMapWrapper<TMapAccumulator, IsStream>> TBaseComputation;
@@ -1161,71 +1161,71 @@ public:
         bool Finished = false;
     };
 
-    TMapWrapper(TComputationMutables& mutables, TType* keyType, TType* payloadType, IComputationNode* list, IComputationExternalNode* item, 
-        IComputationNode* key, IComputationNode* payload, ui64 itemsCountHint) 
-        : TBaseComputation(mutables, EValueRepresentation::Boxed) 
+    TMapWrapper(TComputationMutables& mutables, TType* keyType, TType* payloadType, IComputationNode* list, IComputationExternalNode* item,
+        IComputationNode* key, IComputationNode* payload, ui64 itemsCountHint)
+        : TBaseComputation(mutables, EValueRepresentation::Boxed)
         , KeyType(keyType)
-        , PayloadType(payloadType) 
-        , List(list) 
-        , Item(item) 
-        , Key(key) 
-        , Payload(payload) 
-        , ItemsCountHint(itemsCountHint) 
+        , PayloadType(payloadType)
+        , List(list)
+        , Item(item)
+        , Key(key)
+        , Payload(payload)
+        , ItemsCountHint(itemsCountHint)
     {
         GetDictionaryKeyTypes(KeyType, KeyTypes, IsTuple, Encoded);
     }
- 
-    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const { 
+
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         if constexpr (IsStream) {
             return ctx.HolderFactory.Create<TStreamValue>(List->GetValue(ctx), Item, Key, Payload,
                 TMapAccumulator(KeyType, PayloadType, KeyTypes, IsTuple, Encoded, ctx, ItemsCountHint), ctx);
         }
 
         const auto& list = List->GetValue(ctx);
- 
-        auto itemsCountHint = ItemsCountHint; 
+
+        auto itemsCountHint = ItemsCountHint;
         if (list.HasFastListLength()) {
-            if (const auto size = list.GetListLength()) 
-                itemsCountHint = size; 
-            else 
-                return ctx.HolderFactory.GetEmptyContainer(); 
-        } 
- 
+            if (const auto size = list.GetListLength())
+                itemsCountHint = size;
+            else
+                return ctx.HolderFactory.GetEmptyContainer();
+        }
+
         TMapAccumulator accumulator(KeyType, PayloadType, KeyTypes, IsTuple, Encoded, ctx, itemsCountHint);
- 
+
         TThresher<false>::DoForEachItem(list,
             [this, &accumulator, &ctx] (NUdf::TUnboxedValue&& item) {
                 Item->SetValue(ctx, std::move(item));
                 accumulator.Add(Key->GetValue(ctx), Payload->GetValue(ctx));
-            } 
-        ); 
- 
-        return accumulator.Build().Release(); 
-    } 
- 
-private: 
-    void RegisterDependencies() const final { 
-        this->DependsOn(List); 
+            }
+        );
+
+        return accumulator.Build().Release();
+    }
+
+private:
+    void RegisterDependencies() const final {
+        this->DependsOn(List);
         this->Own(Item);
-        this->DependsOn(Key); 
-        this->DependsOn(Payload); 
-    } 
- 
+        this->DependsOn(Key);
+        this->DependsOn(Payload);
+    }
+
     TType* const KeyType;
-    TType* PayloadType; 
-    IComputationNode* const List; 
-    IComputationExternalNode* const Item; 
-    IComputationNode* const Key; 
-    IComputationNode* const Payload; 
-    const ui64 ItemsCountHint; 
+    TType* PayloadType;
+    IComputationNode* const List;
+    IComputationExternalNode* const Item;
+    IComputationNode* const Key;
+    IComputationNode* const Payload;
+    const ui64 ItemsCountHint;
     TKeyTypes KeyTypes;
     bool IsTuple;
     bool Encoded;
-}; 
- 
+};
+
 template <typename TMapAccumulator>
-class TSqueezeMapFlowWrapper : public TStatefulFlowCodegeneratorNode<TSqueezeMapFlowWrapper<TMapAccumulator>> { 
-    using TBase = TStatefulFlowCodegeneratorNode<TSqueezeMapFlowWrapper<TMapAccumulator>>; 
+class TSqueezeMapFlowWrapper : public TStatefulFlowCodegeneratorNode<TSqueezeMapFlowWrapper<TMapAccumulator>> {
+    using TBase = TStatefulFlowCodegeneratorNode<TSqueezeMapFlowWrapper<TMapAccumulator>>;
 public:
     class TState : public TComputationValue<TState> {
         using TBase = TComputationValue<TState>;
@@ -1233,22 +1233,22 @@ public:
         TState(TMemoryUsageInfo* memInfo, TMapAccumulator&& mapAccum)
             : TBase(memInfo), MapAccum(std::move(mapAccum)) {}
 
-        NUdf::TUnboxedValuePod Build() { 
-            return MapAccum.Build().Release(); 
+        NUdf::TUnboxedValuePod Build() {
+            return MapAccum.Build().Release();
         }
 
-        void Insert(NUdf::TUnboxedValuePod key, NUdf::TUnboxedValuePod value) { 
-            MapAccum.Add(key, value); 
+        void Insert(NUdf::TUnboxedValuePod key, NUdf::TUnboxedValuePod value) {
+            MapAccum.Add(key, value);
         }
 
     private:
         TMapAccumulator MapAccum;
     };
 
-    TSqueezeMapFlowWrapper(TComputationMutables& mutables, TType* keyType, TType* payloadType, 
+    TSqueezeMapFlowWrapper(TComputationMutables& mutables, TType* keyType, TType* payloadType,
         IComputationNode* flow, IComputationExternalNode* item, IComputationNode* key, IComputationNode* payload,
         ui64 itemsCountHint)
-        : TBase(mutables, flow, EValueRepresentation::Boxed, EValueRepresentation::Any) 
+        : TBase(mutables, flow, EValueRepresentation::Boxed, EValueRepresentation::Any)
         , KeyType(keyType)
         , PayloadType(payloadType)
         , Flow(flow)
@@ -1260,143 +1260,143 @@ public:
         GetDictionaryKeyTypes(KeyType, KeyTypes, IsTuple, Encoded);
     }
 
-    NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const { 
-        if (state.IsFinish()) { 
-            return state; 
-        } else if (!state.HasValue()) { 
-            MakeState(ctx, state); 
+    NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
+        if (state.IsFinish()) {
+            return state;
+        } else if (!state.HasValue()) {
+            MakeState(ctx, state);
         }
 
-        while (const auto statePtr = static_cast<TState*>(state.AsBoxed().Get())) { 
-            if (auto item = Flow->GetValue(ctx); item.IsYield()) { 
-                return item.Release(); 
-            } else if (item.IsFinish()) { 
-                const auto dict = statePtr->Build(); 
-                state = std::move(item); 
-                return dict; 
-            } else { 
-                Item->SetValue(ctx, std::move(item)); 
-                statePtr->Insert(Key->GetValue(ctx).Release(), Payload->GetValue(ctx).Release()); 
-            } 
+        while (const auto statePtr = static_cast<TState*>(state.AsBoxed().Get())) {
+            if (auto item = Flow->GetValue(ctx); item.IsYield()) {
+                return item.Release();
+            } else if (item.IsFinish()) {
+                const auto dict = statePtr->Build();
+                state = std::move(item);
+                return dict;
+            } else {
+                Item->SetValue(ctx, std::move(item));
+                statePtr->Insert(Key->GetValue(ctx).Release(), Payload->GetValue(ctx).Release());
+            }
         }
         Y_UNREACHABLE();
-    } 
-#ifndef MKQL_DISABLE_CODEGEN 
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const { 
-        auto& context = ctx.Codegen->GetContext(); 
+    }
+#ifndef MKQL_DISABLE_CODEGEN
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+        auto& context = ctx.Codegen->GetContext();
 
-        const auto codegenItemArg = dynamic_cast<ICodegeneratorExternalNode*>(Item); 
+        const auto codegenItemArg = dynamic_cast<ICodegeneratorExternalNode*>(Item);
         MKQL_ENSURE(codegenItemArg, "Item must be codegenerator node.");
 
-        const auto valueType = Type::getInt128Ty(context); 
-        const auto structPtrType = PointerType::getUnqual(StructType::get(context)); 
+        const auto valueType = Type::getInt128Ty(context);
+        const auto structPtrType = PointerType::getUnqual(StructType::get(context));
 
-        const auto stateType = StructType::get(context, { 
-            structPtrType,              // vtbl 
-            Type::getInt32Ty(context),  // ref 
-            Type::getInt16Ty(context),  // abi 
-            Type::getInt16Ty(context),  // reserved 
-            structPtrType,              // meminfo 
-            structPtrType               // accumulator 
-        }); 
- 
-        const auto statePtrType = PointerType::getUnqual(stateType); 
- 
-        const auto make = BasicBlock::Create(context, "make", ctx.Func); 
-        const auto main = BasicBlock::Create(context, "main", ctx.Func); 
- 
-        BranchInst::Create(make, main, IsInvalid(statePtr, block), block); 
-        block = make; 
- 
-        const auto ptrType = PointerType::getUnqual(StructType::get(context)); 
-        const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block); 
-        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSqueezeMapFlowWrapper<TMapAccumulator>::MakeState)); 
-        const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false); 
-        const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block); 
-        CallInst::Create(makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block); 
-        BranchInst::Create(main, block); 
- 
-        block = main; 
- 
-        const auto more = BasicBlock::Create(context, "more", ctx.Func); 
-        const auto done = BasicBlock::Create(context, "done", ctx.Func); 
-        const auto plus = BasicBlock::Create(context, "plus", ctx.Func); 
-        const auto over = BasicBlock::Create(context, "over", ctx.Func); 
- 
-        const auto result = PHINode::Create(valueType, 3U, "result", over); 
- 
-        const auto state = new LoadInst(statePtr, "state", block); 
-        const auto half = CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block); 
-        const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block); 
- 
-        result->addIncoming(GetFinish(context), block); 
- 
-        BranchInst::Create(over, more, IsFinish(state, block), block); 
- 
-        block = more; 
- 
-        const auto item = GetNodeValue(Flow, ctx, block); 
-        result->addIncoming(GetYield(context), block); 
- 
-        const auto choise = SwitchInst::Create(item, plus, 2U, block); 
-        choise->addCase(GetFinish(context), done); 
-        choise->addCase(GetYield(context), over); 
- 
-        block = plus; 
- 
-        codegenItemArg->CreateSetValue(ctx, block, item); 
-        const auto key = GetNodeValue(Key, ctx, block); 
-        const auto payload = GetNodeValue(Payload, ctx, block); 
- 
-        const auto insert = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Insert)); 
- 
-        const auto keyArg = WrapArgumentForWindows(key, ctx, block); 
-        const auto payloadArg = WrapArgumentForWindows(payload, ctx, block); 
- 
-        const auto insType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType(), keyArg->getType(), payloadArg->getType()}, false); 
-        const auto insPtr = CastInst::Create(Instruction::IntToPtr, insert, PointerType::getUnqual(insType), "insert", block); 
-        CallInst::Create(insPtr, {stateArg, keyArg, payloadArg}, "", block); 
- 
-        BranchInst::Create(more, block); 
- 
-        block = done; 
- 
-        const auto build = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Build)); 
- 
-        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) { 
-            const auto funType = FunctionType::get(valueType, {stateArg->getType()}, false); 
-            const auto funcPtr = CastInst::Create(Instruction::IntToPtr, build, PointerType::getUnqual(funType), "build", block); 
-            const auto dict = CallInst::Create(funcPtr, {stateArg}, "dict", block); 
-            UnRefBoxed(state, ctx, block); 
-            result->addIncoming(dict, block); 
-        } else { 
-            const auto ptr = new AllocaInst(valueType, 0U, "ptr", block); 
-            const auto funType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType(), ptr->getType()}, false); 
-            const auto funcPtr = CastInst::Create(Instruction::IntToPtr, build, PointerType::getUnqual(funType), "build", block); 
-            CallInst::Create(funcPtr, {stateArg, ptr}, "", block); 
-            const auto dict = new LoadInst(ptr, "dict", block); 
-            UnRefBoxed(state, ctx, block); 
-            result->addIncoming(dict, block); 
+        const auto stateType = StructType::get(context, {
+            structPtrType,              // vtbl
+            Type::getInt32Ty(context),  // ref
+            Type::getInt16Ty(context),  // abi
+            Type::getInt16Ty(context),  // reserved
+            structPtrType,              // meminfo
+            structPtrType               // accumulator
+        });
+
+        const auto statePtrType = PointerType::getUnqual(stateType);
+
+        const auto make = BasicBlock::Create(context, "make", ctx.Func);
+        const auto main = BasicBlock::Create(context, "main", ctx.Func);
+
+        BranchInst::Create(make, main, IsInvalid(statePtr, block), block);
+        block = make;
+
+        const auto ptrType = PointerType::getUnqual(StructType::get(context));
+        const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
+        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSqueezeMapFlowWrapper<TMapAccumulator>::MakeState));
+        const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false);
+        const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
+        CallInst::Create(makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
+        BranchInst::Create(main, block);
+
+        block = main;
+
+        const auto more = BasicBlock::Create(context, "more", ctx.Func);
+        const auto done = BasicBlock::Create(context, "done", ctx.Func);
+        const auto plus = BasicBlock::Create(context, "plus", ctx.Func);
+        const auto over = BasicBlock::Create(context, "over", ctx.Func);
+
+        const auto result = PHINode::Create(valueType, 3U, "result", over);
+
+        const auto state = new LoadInst(statePtr, "state", block);
+        const auto half = CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block);
+        const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block);
+
+        result->addIncoming(GetFinish(context), block);
+
+        BranchInst::Create(over, more, IsFinish(state, block), block);
+
+        block = more;
+
+        const auto item = GetNodeValue(Flow, ctx, block);
+        result->addIncoming(GetYield(context), block);
+
+        const auto choise = SwitchInst::Create(item, plus, 2U, block);
+        choise->addCase(GetFinish(context), done);
+        choise->addCase(GetYield(context), over);
+
+        block = plus;
+
+        codegenItemArg->CreateSetValue(ctx, block, item);
+        const auto key = GetNodeValue(Key, ctx, block);
+        const auto payload = GetNodeValue(Payload, ctx, block);
+
+        const auto insert = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Insert));
+
+        const auto keyArg = WrapArgumentForWindows(key, ctx, block);
+        const auto payloadArg = WrapArgumentForWindows(payload, ctx, block);
+
+        const auto insType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType(), keyArg->getType(), payloadArg->getType()}, false);
+        const auto insPtr = CastInst::Create(Instruction::IntToPtr, insert, PointerType::getUnqual(insType), "insert", block);
+        CallInst::Create(insPtr, {stateArg, keyArg, payloadArg}, "", block);
+
+        BranchInst::Create(more, block);
+
+        block = done;
+
+        const auto build = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Build));
+
+        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {
+            const auto funType = FunctionType::get(valueType, {stateArg->getType()}, false);
+            const auto funcPtr = CastInst::Create(Instruction::IntToPtr, build, PointerType::getUnqual(funType), "build", block);
+            const auto dict = CallInst::Create(funcPtr, {stateArg}, "dict", block);
+            UnRefBoxed(state, ctx, block);
+            result->addIncoming(dict, block);
+        } else {
+            const auto ptr = new AllocaInst(valueType, 0U, "ptr", block);
+            const auto funType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType(), ptr->getType()}, false);
+            const auto funcPtr = CastInst::Create(Instruction::IntToPtr, build, PointerType::getUnqual(funType), "build", block);
+            CallInst::Create(funcPtr, {stateArg, ptr}, "", block);
+            const auto dict = new LoadInst(ptr, "dict", block);
+            UnRefBoxed(state, ctx, block);
+            result->addIncoming(dict, block);
         }
 
-        new StoreInst(item, statePtr, block); 
-        BranchInst::Create(over, block); 
- 
-        block = over; 
-        return result; 
+        new StoreInst(item, statePtr, block);
+        BranchInst::Create(over, block);
+
+        block = over;
+        return result;
     }
 #endif
-private: 
-    void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const { 
-        state = ctx.HolderFactory.Create<TState>(TMapAccumulator(KeyType, PayloadType, KeyTypes, IsTuple, Encoded, ctx, ItemsCountHint)); 
-    } 
+private:
+    void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
+        state = ctx.HolderFactory.Create<TState>(TMapAccumulator(KeyType, PayloadType, KeyTypes, IsTuple, Encoded, ctx, ItemsCountHint));
+    }
 
     void RegisterDependencies() const final {
-        if (const auto flow = this->FlowDependsOn(Flow)) { 
-            this->Own(flow, Item); 
-            this->DependsOn(flow, Key); 
-            this->DependsOn(flow, Payload); 
-        } 
+        if (const auto flow = this->FlowDependsOn(Flow)) {
+            this->Own(flow, Item);
+            this->DependsOn(flow, Key);
+            this->DependsOn(flow, Payload);
+        }
     }
 
     TType* const KeyType;
@@ -1411,347 +1411,347 @@ private:
     bool Encoded;
 };
 
-template <typename TMapAccumulator> 
-class TSqueezeMapWideWrapper : public TStatefulFlowCodegeneratorNode<TSqueezeMapWideWrapper<TMapAccumulator>> { 
-    using TBase = TStatefulFlowCodegeneratorNode<TSqueezeMapWideWrapper<TMapAccumulator>>; 
-public: 
-    class TState : public TComputationValue<TState> { 
-        using TBase = TComputationValue<TState>; 
-    public: 
-        TState(TMemoryUsageInfo* memInfo, TMapAccumulator&& mapAccum) 
-            : TBase(memInfo), MapAccum(std::move(mapAccum)) {} 
- 
-        NUdf::TUnboxedValuePod Build() { 
-            return MapAccum.Build().Release(); 
-        } 
- 
-        void Insert(NUdf::TUnboxedValuePod key, NUdf::TUnboxedValuePod value) { 
-            MapAccum.Add(key, value); 
-        } 
- 
-    private: 
-        TMapAccumulator MapAccum; 
-    }; 
- 
-    TSqueezeMapWideWrapper(TComputationMutables& mutables, TType* keyType, TType* payloadType, 
-        IComputationWideFlowNode* flow, TComputationExternalNodePtrVector&& items, IComputationNode* key, IComputationNode* payload, 
-        ui64 itemsCountHint) 
-        : TBase(mutables, flow, EValueRepresentation::Boxed, EValueRepresentation::Any) 
-        , KeyType(keyType) 
-        , PayloadType(payloadType) 
-        , Flow(flow) 
-        , Items(std::move(items)) 
-        , Key(key) 
-        , Payload(payload) 
-        , ItemsCountHint(itemsCountHint) 
-        , PasstroughKey(GetPasstroughtMap({Key, Payload}, Items).front()) 
-        , PasstroughPayload(GetPasstroughtMap({Key, Payload}, Items).back()) 
-        , Fields(Items.size(), nullptr) 
-    { 
-        GetDictionaryKeyTypes(KeyType, KeyTypes, IsTuple, Encoded); 
-    } 
- 
-    NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const { 
-        if (state.IsFinish()) { 
-            return state; 
-        } else if (!state.HasValue()) { 
-            MakeState(ctx, state); 
-        } 
- 
-        while (const auto statePtr = static_cast<TState*>(state.AsBoxed().Get())) { 
-            for (auto i = 0U; i < Fields.size(); ++i) 
-                if (Key == Items[i] || Payload == Items[i] || Items[i]->GetDependencesCount() > 0U) 
-                    Fields[i] = &Items[i]->RefValue(ctx); 
- 
-            switch (const auto result = Flow->FetchValues(ctx, Fields.data())) { 
-                case EFetchResult::One: 
-                    statePtr->Insert(Key->GetValue(ctx).Release(), Payload->GetValue(ctx).Release()); 
-                    continue; 
-                case EFetchResult::Yield: 
-                    return NUdf::TUnboxedValuePod::MakeYield(); 
-                case EFetchResult::Finish: { 
-                    const auto dict = statePtr->Build(); 
-                    state = NUdf::TUnboxedValuePod::MakeFinish(); 
-                    return dict; 
-                } 
-            } 
-        } 
+template <typename TMapAccumulator>
+class TSqueezeMapWideWrapper : public TStatefulFlowCodegeneratorNode<TSqueezeMapWideWrapper<TMapAccumulator>> {
+    using TBase = TStatefulFlowCodegeneratorNode<TSqueezeMapWideWrapper<TMapAccumulator>>;
+public:
+    class TState : public TComputationValue<TState> {
+        using TBase = TComputationValue<TState>;
+    public:
+        TState(TMemoryUsageInfo* memInfo, TMapAccumulator&& mapAccum)
+            : TBase(memInfo), MapAccum(std::move(mapAccum)) {}
+
+        NUdf::TUnboxedValuePod Build() {
+            return MapAccum.Build().Release();
+        }
+
+        void Insert(NUdf::TUnboxedValuePod key, NUdf::TUnboxedValuePod value) {
+            MapAccum.Add(key, value);
+        }
+
+    private:
+        TMapAccumulator MapAccum;
+    };
+
+    TSqueezeMapWideWrapper(TComputationMutables& mutables, TType* keyType, TType* payloadType,
+        IComputationWideFlowNode* flow, TComputationExternalNodePtrVector&& items, IComputationNode* key, IComputationNode* payload,
+        ui64 itemsCountHint)
+        : TBase(mutables, flow, EValueRepresentation::Boxed, EValueRepresentation::Any)
+        , KeyType(keyType)
+        , PayloadType(payloadType)
+        , Flow(flow)
+        , Items(std::move(items))
+        , Key(key)
+        , Payload(payload)
+        , ItemsCountHint(itemsCountHint)
+        , PasstroughKey(GetPasstroughtMap({Key, Payload}, Items).front())
+        , PasstroughPayload(GetPasstroughtMap({Key, Payload}, Items).back())
+        , Fields(Items.size(), nullptr)
+    {
+        GetDictionaryKeyTypes(KeyType, KeyTypes, IsTuple, Encoded);
+    }
+
+    NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
+        if (state.IsFinish()) {
+            return state;
+        } else if (!state.HasValue()) {
+            MakeState(ctx, state);
+        }
+
+        while (const auto statePtr = static_cast<TState*>(state.AsBoxed().Get())) {
+            for (auto i = 0U; i < Fields.size(); ++i)
+                if (Key == Items[i] || Payload == Items[i] || Items[i]->GetDependencesCount() > 0U)
+                    Fields[i] = &Items[i]->RefValue(ctx);
+
+            switch (const auto result = Flow->FetchValues(ctx, Fields.data())) {
+                case EFetchResult::One:
+                    statePtr->Insert(Key->GetValue(ctx).Release(), Payload->GetValue(ctx).Release());
+                    continue;
+                case EFetchResult::Yield:
+                    return NUdf::TUnboxedValuePod::MakeYield();
+                case EFetchResult::Finish: {
+                    const auto dict = statePtr->Build();
+                    state = NUdf::TUnboxedValuePod::MakeFinish();
+                    return dict;
+                }
+            }
+        }
         Y_UNREACHABLE();
-    } 
-#ifndef MKQL_DISABLE_CODEGEN 
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const { 
-        auto& context = ctx.Codegen->GetContext(); 
- 
-        const auto valueType = Type::getInt128Ty(context); 
-        const auto structPtrType = PointerType::getUnqual(StructType::get(context)); 
- 
-        const auto stateType = StructType::get(context, { 
-            structPtrType,              // vtbl 
-            Type::getInt32Ty(context),  // ref 
-            Type::getInt16Ty(context),  // abi 
-            Type::getInt16Ty(context),  // reserved 
-            structPtrType,              // meminfo 
-            structPtrType               // accumulator 
-        }); 
- 
-        const auto statePtrType = PointerType::getUnqual(stateType); 
- 
-        const auto make = BasicBlock::Create(context, "make", ctx.Func); 
-        const auto main = BasicBlock::Create(context, "main", ctx.Func); 
- 
-        BranchInst::Create(make, main, IsInvalid(statePtr, block), block); 
-        block = make; 
- 
-        const auto ptrType = PointerType::getUnqual(StructType::get(context)); 
-        const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block); 
-        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSqueezeMapWideWrapper<TMapAccumulator>::MakeState)); 
-        const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false); 
-        const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block); 
-        CallInst::Create(makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block); 
-        BranchInst::Create(main, block); 
- 
-        block = main; 
- 
-        const auto more = BasicBlock::Create(context, "more", ctx.Func); 
-        const auto done = BasicBlock::Create(context, "done", ctx.Func); 
-        const auto plus = BasicBlock::Create(context, "plus", ctx.Func); 
-        const auto over = BasicBlock::Create(context, "over", ctx.Func); 
- 
-        const auto result = PHINode::Create(valueType, 3U, "result", over); 
- 
-        const auto state = new LoadInst(statePtr, "state", block); 
-        const auto half = CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block); 
-        const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block); 
- 
-        result->addIncoming(GetFinish(context), block); 
- 
-        BranchInst::Create(over, more, IsFinish(state, block), block); 
- 
-        block = more; 
- 
-        const auto getres = GetNodeValues(Flow, ctx, block); 
- 
-        result->addIncoming(GetYield(context), block); 
- 
-        const auto action = SwitchInst::Create(getres.first, plus, 2U, block); 
-        action->addCase(ConstantInt::get(Type::getInt32Ty(context), i32(EFetchResult::Finish)), done); 
-        action->addCase(ConstantInt::get(Type::getInt32Ty(context), i32(EFetchResult::Yield)), over); 
- 
-        block = plus; 
- 
-        if (!(PasstroughKey && PasstroughPayload)) { 
-            for (auto i = 0U; i < Items.size(); ++i) 
-                if (Items[i]->GetDependencesCount() > 0U) 
+    }
+#ifndef MKQL_DISABLE_CODEGEN
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+        auto& context = ctx.Codegen->GetContext();
+
+        const auto valueType = Type::getInt128Ty(context);
+        const auto structPtrType = PointerType::getUnqual(StructType::get(context));
+
+        const auto stateType = StructType::get(context, {
+            structPtrType,              // vtbl
+            Type::getInt32Ty(context),  // ref
+            Type::getInt16Ty(context),  // abi
+            Type::getInt16Ty(context),  // reserved
+            structPtrType,              // meminfo
+            structPtrType               // accumulator
+        });
+
+        const auto statePtrType = PointerType::getUnqual(stateType);
+
+        const auto make = BasicBlock::Create(context, "make", ctx.Func);
+        const auto main = BasicBlock::Create(context, "main", ctx.Func);
+
+        BranchInst::Create(make, main, IsInvalid(statePtr, block), block);
+        block = make;
+
+        const auto ptrType = PointerType::getUnqual(StructType::get(context));
+        const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
+        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSqueezeMapWideWrapper<TMapAccumulator>::MakeState));
+        const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false);
+        const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
+        CallInst::Create(makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
+        BranchInst::Create(main, block);
+
+        block = main;
+
+        const auto more = BasicBlock::Create(context, "more", ctx.Func);
+        const auto done = BasicBlock::Create(context, "done", ctx.Func);
+        const auto plus = BasicBlock::Create(context, "plus", ctx.Func);
+        const auto over = BasicBlock::Create(context, "over", ctx.Func);
+
+        const auto result = PHINode::Create(valueType, 3U, "result", over);
+
+        const auto state = new LoadInst(statePtr, "state", block);
+        const auto half = CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block);
+        const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block);
+
+        result->addIncoming(GetFinish(context), block);
+
+        BranchInst::Create(over, more, IsFinish(state, block), block);
+
+        block = more;
+
+        const auto getres = GetNodeValues(Flow, ctx, block);
+
+        result->addIncoming(GetYield(context), block);
+
+        const auto action = SwitchInst::Create(getres.first, plus, 2U, block);
+        action->addCase(ConstantInt::get(Type::getInt32Ty(context), i32(EFetchResult::Finish)), done);
+        action->addCase(ConstantInt::get(Type::getInt32Ty(context), i32(EFetchResult::Yield)), over);
+
+        block = plus;
+
+        if (!(PasstroughKey && PasstroughPayload)) {
+            for (auto i = 0U; i < Items.size(); ++i)
+                if (Items[i]->GetDependencesCount() > 0U)
                     EnsureDynamicCast<ICodegeneratorExternalNode*>(Items[i])->CreateSetValue(ctx, block, getres.second[i](ctx, block));
-        } 
- 
-        const auto key = PasstroughKey ? getres.second[*PasstroughKey](ctx, block) : GetNodeValue(Key, ctx, block); 
-        const auto payload = PasstroughPayload ? getres.second[*PasstroughPayload](ctx, block) : GetNodeValue(Payload, ctx, block); 
- 
-        const auto insert = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Insert)); 
- 
-        const auto keyArg = WrapArgumentForWindows(key, ctx, block); 
-        const auto payloadArg = WrapArgumentForWindows(payload, ctx, block); 
- 
-        const auto insType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType(), keyArg->getType(), payloadArg->getType()}, false); 
-        const auto insPtr = CastInst::Create(Instruction::IntToPtr, insert, PointerType::getUnqual(insType), "insert", block); 
-        CallInst::Create(insPtr, {stateArg, keyArg, payloadArg}, "", block); 
- 
-        BranchInst::Create(more, block); 
- 
-        block = done; 
- 
-        const auto build = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Build)); 
- 
-        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) { 
-            const auto funType = FunctionType::get(valueType, {stateArg->getType()}, false); 
-            const auto funcPtr = CastInst::Create(Instruction::IntToPtr, build, PointerType::getUnqual(funType), "build", block); 
-            const auto dict = CallInst::Create(funcPtr, {stateArg}, "dict", block); 
-            UnRefBoxed(state, ctx, block); 
-            result->addIncoming(dict, block); 
-        } else { 
-            const auto ptr = new AllocaInst(valueType, 0U, "ptr", block); 
-            const auto funType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType(), ptr->getType()}, false); 
-            const auto funcPtr = CastInst::Create(Instruction::IntToPtr, build, PointerType::getUnqual(funType), "build", block); 
-            CallInst::Create(funcPtr, {stateArg, ptr}, "", block); 
-            const auto dict = new LoadInst(ptr, "dict", block); 
-            UnRefBoxed(state, ctx, block); 
-            result->addIncoming(dict, block); 
-        } 
- 
-        new StoreInst(GetFinish(context), statePtr, block); 
-        BranchInst::Create(over, block); 
- 
-        block = over; 
-        return result; 
-    } 
-#endif 
-private: 
-    void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const { 
-        state = ctx.HolderFactory.Create<TState>(TMapAccumulator(KeyType, PayloadType, KeyTypes, IsTuple, Encoded, ctx, ItemsCountHint)); 
-    } 
- 
-    void RegisterDependencies() const final { 
-        if (const auto flow = this->FlowDependsOn(Flow)) { 
-            std::for_each(Items.cbegin(), Items.cend(), std::bind(&TSqueezeMapWideWrapper::Own, flow, std::placeholders::_1)); 
-            this->DependsOn(flow, Key); 
-            this->DependsOn(flow, Payload); 
-        } 
-    } 
- 
-    TType* const KeyType; 
-    TType* PayloadType; 
-    IComputationWideFlowNode* const Flow; 
-    const TComputationExternalNodePtrVector Items; 
-    IComputationNode* const Key; 
-    IComputationNode* const Payload; 
-    const ui64 ItemsCountHint; 
-    TKeyTypes KeyTypes; 
-    bool IsTuple; 
-    bool Encoded; 
- 
-    const std::optional<size_t> PasstroughKey; 
-    const std::optional<size_t> PasstroughPayload; 
- 
-    mutable std::vector<NUdf::TUnboxedValue*> Fields; 
-}; 
- 
-template <typename TAccumulator> 
+        }
+
+        const auto key = PasstroughKey ? getres.second[*PasstroughKey](ctx, block) : GetNodeValue(Key, ctx, block);
+        const auto payload = PasstroughPayload ? getres.second[*PasstroughPayload](ctx, block) : GetNodeValue(Payload, ctx, block);
+
+        const auto insert = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Insert));
+
+        const auto keyArg = WrapArgumentForWindows(key, ctx, block);
+        const auto payloadArg = WrapArgumentForWindows(payload, ctx, block);
+
+        const auto insType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType(), keyArg->getType(), payloadArg->getType()}, false);
+        const auto insPtr = CastInst::Create(Instruction::IntToPtr, insert, PointerType::getUnqual(insType), "insert", block);
+        CallInst::Create(insPtr, {stateArg, keyArg, payloadArg}, "", block);
+
+        BranchInst::Create(more, block);
+
+        block = done;
+
+        const auto build = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Build));
+
+        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {
+            const auto funType = FunctionType::get(valueType, {stateArg->getType()}, false);
+            const auto funcPtr = CastInst::Create(Instruction::IntToPtr, build, PointerType::getUnqual(funType), "build", block);
+            const auto dict = CallInst::Create(funcPtr, {stateArg}, "dict", block);
+            UnRefBoxed(state, ctx, block);
+            result->addIncoming(dict, block);
+        } else {
+            const auto ptr = new AllocaInst(valueType, 0U, "ptr", block);
+            const auto funType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType(), ptr->getType()}, false);
+            const auto funcPtr = CastInst::Create(Instruction::IntToPtr, build, PointerType::getUnqual(funType), "build", block);
+            CallInst::Create(funcPtr, {stateArg, ptr}, "", block);
+            const auto dict = new LoadInst(ptr, "dict", block);
+            UnRefBoxed(state, ctx, block);
+            result->addIncoming(dict, block);
+        }
+
+        new StoreInst(GetFinish(context), statePtr, block);
+        BranchInst::Create(over, block);
+
+        block = over;
+        return result;
+    }
+#endif
+private:
+    void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
+        state = ctx.HolderFactory.Create<TState>(TMapAccumulator(KeyType, PayloadType, KeyTypes, IsTuple, Encoded, ctx, ItemsCountHint));
+    }
+
+    void RegisterDependencies() const final {
+        if (const auto flow = this->FlowDependsOn(Flow)) {
+            std::for_each(Items.cbegin(), Items.cend(), std::bind(&TSqueezeMapWideWrapper::Own, flow, std::placeholders::_1));
+            this->DependsOn(flow, Key);
+            this->DependsOn(flow, Payload);
+        }
+    }
+
+    TType* const KeyType;
+    TType* PayloadType;
+    IComputationWideFlowNode* const Flow;
+    const TComputationExternalNodePtrVector Items;
+    IComputationNode* const Key;
+    IComputationNode* const Payload;
+    const ui64 ItemsCountHint;
+    TKeyTypes KeyTypes;
+    bool IsTuple;
+    bool Encoded;
+
+    const std::optional<size_t> PasstroughKey;
+    const std::optional<size_t> PasstroughPayload;
+
+    mutable std::vector<NUdf::TUnboxedValue*> Fields;
+};
+
+template <typename TAccumulator>
 IComputationNode* WrapToSet(TCallable& callable, const TNodeLocator& nodeLocator, TComputationMutables& mutables) {
-    const auto keyType = callable.GetInput(callable.GetInputsCount() - 5U).GetStaticType(); 
-    const auto itemsCountHint = AS_VALUE(TDataLiteral, callable.GetInput(callable.GetInputsCount() - 1U))->AsValue().Get<ui64>(); 
+    const auto keyType = callable.GetInput(callable.GetInputsCount() - 5U).GetStaticType();
+    const auto itemsCountHint = AS_VALUE(TDataLiteral, callable.GetInput(callable.GetInputsCount() - 1U))->AsValue().Get<ui64>();
 
-    const auto flow = LocateNode(nodeLocator, callable, 0U); 
-    const auto keySelector = LocateNode(nodeLocator, callable, callable.GetInputsCount() - 5U); 
+    const auto flow = LocateNode(nodeLocator, callable, 0U);
+    const auto keySelector = LocateNode(nodeLocator, callable, callable.GetInputsCount() - 5U);
 
-    if (const auto wide = dynamic_cast<IComputationWideFlowNode*>(flow)) { 
-        const auto width = callable.GetInputsCount() - 6U; 
-        TComputationExternalNodePtrVector args(width, nullptr); 
-        auto index = 0U; 
-        std::generate_n(args.begin(), width, [&](){ return LocateExternalNode(nodeLocator, callable, ++index); }); 
+    if (const auto wide = dynamic_cast<IComputationWideFlowNode*>(flow)) {
+        const auto width = callable.GetInputsCount() - 6U;
+        TComputationExternalNodePtrVector args(width, nullptr);
+        auto index = 0U;
+        std::generate_n(args.begin(), width, [&](){ return LocateExternalNode(nodeLocator, callable, ++index); });
 
-        return new TSqueezeSetWideWrapper<TAccumulator>(mutables, keyType, wide, std::move(args), keySelector, itemsCountHint); 
-    } 
- 
-    const auto itemArg = LocateExternalNode(nodeLocator, callable, 1U); 
-    const auto type = callable.GetInput(0U).GetStaticType(); 
+        return new TSqueezeSetWideWrapper<TAccumulator>(mutables, keyType, wide, std::move(args), keySelector, itemsCountHint);
+    }
+
+    const auto itemArg = LocateExternalNode(nodeLocator, callable, 1U);
+    const auto type = callable.GetInput(0U).GetStaticType();
 
     if (type->IsList()) {
-        return new TSetWrapper<TAccumulator, false>(mutables, keyType, flow, itemArg, keySelector, itemsCountHint); 
+        return new TSetWrapper<TAccumulator, false>(mutables, keyType, flow, itemArg, keySelector, itemsCountHint);
     }
     if (type->IsFlow()) {
-        return new TSqueezeSetFlowWrapper<TAccumulator>(mutables, keyType, flow, itemArg, keySelector, itemsCountHint); 
+        return new TSqueezeSetFlowWrapper<TAccumulator>(mutables, keyType, flow, itemArg, keySelector, itemsCountHint);
     }
     if (type->IsStream()) {
-        return new TSetWrapper<TAccumulator, true>(mutables, keyType, flow, itemArg, keySelector, itemsCountHint); 
+        return new TSetWrapper<TAccumulator, true>(mutables, keyType, flow, itemArg, keySelector, itemsCountHint);
     }
 
     THROW yexception() << "Expected list, flow or stream.";
-} 
- 
-template <typename TAccumulator> 
+}
+
+template <typename TAccumulator>
 IComputationNode* WrapToMap(TCallable& callable, const TNodeLocator& nodeLocator, TComputationMutables& mutables) {
-    const auto keyType = callable.GetInput(callable.GetInputsCount() - 5U).GetStaticType(); 
-    const auto payloadType = callable.GetInput(callable.GetInputsCount() - 4U).GetStaticType(); 
- 
-    const auto itemsCountHint = AS_VALUE(TDataLiteral, callable.GetInput(callable.GetInputsCount() - 1U))->AsValue().Get<ui64>(); 
- 
-    const auto flow = LocateNode(nodeLocator, callable, 0U); 
-    const auto keySelector = LocateNode(nodeLocator, callable, callable.GetInputsCount() - 5U); 
-    const auto payloadSelector = LocateNode(nodeLocator, callable, callable.GetInputsCount() - 4U); 
- 
-    if (const auto wide = dynamic_cast<IComputationWideFlowNode*>(flow)) { 
-        const auto width = callable.GetInputsCount() - 6U; 
-        TComputationExternalNodePtrVector args(width, nullptr); 
-        auto index = 0U; 
-        std::generate(args.begin(), args.end(), [&](){ return LocateExternalNode(nodeLocator, callable, ++index); }); 
- 
-        return new TSqueezeMapWideWrapper<TAccumulator>(mutables, keyType, payloadType, wide, std::move(args), keySelector, payloadSelector, itemsCountHint); 
-    } 
+    const auto keyType = callable.GetInput(callable.GetInputsCount() - 5U).GetStaticType();
+    const auto payloadType = callable.GetInput(callable.GetInputsCount() - 4U).GetStaticType();
 
-    const auto itemArg = LocateExternalNode(nodeLocator, callable, 1U); 
-    const auto type = callable.GetInput(0U).GetStaticType(); 
- 
+    const auto itemsCountHint = AS_VALUE(TDataLiteral, callable.GetInput(callable.GetInputsCount() - 1U))->AsValue().Get<ui64>();
+
+    const auto flow = LocateNode(nodeLocator, callable, 0U);
+    const auto keySelector = LocateNode(nodeLocator, callable, callable.GetInputsCount() - 5U);
+    const auto payloadSelector = LocateNode(nodeLocator, callable, callable.GetInputsCount() - 4U);
+
+    if (const auto wide = dynamic_cast<IComputationWideFlowNode*>(flow)) {
+        const auto width = callable.GetInputsCount() - 6U;
+        TComputationExternalNodePtrVector args(width, nullptr);
+        auto index = 0U;
+        std::generate(args.begin(), args.end(), [&](){ return LocateExternalNode(nodeLocator, callable, ++index); });
+
+        return new TSqueezeMapWideWrapper<TAccumulator>(mutables, keyType, payloadType, wide, std::move(args), keySelector, payloadSelector, itemsCountHint);
+    }
+
+    const auto itemArg = LocateExternalNode(nodeLocator, callable, 1U);
+    const auto type = callable.GetInput(0U).GetStaticType();
+
     if (type->IsList()) {
-        return new TMapWrapper<TAccumulator, false>(mutables, keyType, payloadType, flow, itemArg, keySelector, payloadSelector, itemsCountHint); 
+        return new TMapWrapper<TAccumulator, false>(mutables, keyType, payloadType, flow, itemArg, keySelector, payloadSelector, itemsCountHint);
     }
     if (type->IsFlow()) {
-        return new TSqueezeMapFlowWrapper<TAccumulator>(mutables, keyType, payloadType, flow, itemArg, keySelector, payloadSelector, itemsCountHint); 
+        return new TSqueezeMapFlowWrapper<TAccumulator>(mutables, keyType, payloadType, flow, itemArg, keySelector, payloadSelector, itemsCountHint);
     }
     if (type->IsStream()) {
-        return new TMapWrapper<TAccumulator, true>(mutables, keyType, payloadType, flow, itemArg, keySelector, payloadSelector, itemsCountHint); 
+        return new TMapWrapper<TAccumulator, true>(mutables, keyType, payloadType, flow, itemArg, keySelector, payloadSelector, itemsCountHint);
     }
 
     THROW yexception() << "Expected list, flow or stream.";
-} 
- 
+}
+
 template <bool IsList>
 IComputationNode* WrapToSortedDictInternal(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() >= 6U, "Expected six or more args."); 
- 
-    const auto type = callable.GetInput(0U).GetStaticType(); 
+    MKQL_ENSURE(callable.GetInputsCount() >= 6U, "Expected six or more args.");
+
+    const auto type = callable.GetInput(0U).GetStaticType();
     if constexpr (IsList) {
         MKQL_ENSURE(type->IsList(), "Expected list.");
     } else {
         MKQL_ENSURE(type->IsFlow() || type->IsStream(), "Expected flow or stream.");
     }
 
-    const auto keyType = callable.GetInput(callable.GetInputsCount() - 5U).GetStaticType(); 
-    const auto payloadType = callable.GetInput(callable.GetInputsCount() - 4U).GetStaticType(); 
- 
-    const auto multiData = AS_VALUE(TDataLiteral, callable.GetInput(callable.GetInputsCount() - 3U)); 
-    const bool isMulti = multiData->AsValue().Get<bool>(); 
-    const auto itemsCountHint = AS_VALUE(TDataLiteral, callable.GetInput(callable.GetInputsCount() - 1U))->AsValue().Get<ui64>(); 
- 
-    const auto flow = LocateNode(ctx.NodeLocator, callable, 0U); 
-    const auto keySelector = LocateNode(ctx.NodeLocator, callable, callable.GetInputsCount() -5U); 
-    const auto payloadSelector = LocateNode(ctx.NodeLocator, callable, callable.GetInputsCount() -4U); 
+    const auto keyType = callable.GetInput(callable.GetInputsCount() - 5U).GetStaticType();
+    const auto payloadType = callable.GetInput(callable.GetInputsCount() - 4U).GetStaticType();
 
-    if (const auto wide = dynamic_cast<IComputationWideFlowNode*>(flow)) { 
-        const auto width = callable.GetInputsCount() - 6U; 
-        TComputationExternalNodePtrVector args(width, nullptr); 
-        auto index = 0U; 
-        std::generate(args.begin(), args.end(), [&](){ return LocateExternalNode(ctx.NodeLocator, callable, ++index); }); 
- 
-        if (!isMulti && payloadType->IsVoid()) { 
-            return new TSqueezeSetWideWrapper<TSortedSetAccumulator>(ctx.Mutables, keyType, wide, std::move(args), keySelector, itemsCountHint); 
-        } else if (isMulti) { 
-            return new TSqueezeMapWideWrapper<TSortedMapAccumulator<true>>(ctx.Mutables, keyType, payloadType, wide, std::move(args), keySelector, payloadSelector, itemsCountHint); 
-        } else { 
-            return new TSqueezeMapWideWrapper<TSortedMapAccumulator<false>>(ctx.Mutables, keyType, payloadType, wide, std::move(args), keySelector, payloadSelector, itemsCountHint); 
-        } 
-    } 
- 
-    const auto itemArg = LocateExternalNode(ctx.NodeLocator, callable, 1U); 
-    if (!isMulti && payloadType->IsVoid()) { 
+    const auto multiData = AS_VALUE(TDataLiteral, callable.GetInput(callable.GetInputsCount() - 3U));
+    const bool isMulti = multiData->AsValue().Get<bool>();
+    const auto itemsCountHint = AS_VALUE(TDataLiteral, callable.GetInput(callable.GetInputsCount() - 1U))->AsValue().Get<ui64>();
+
+    const auto flow = LocateNode(ctx.NodeLocator, callable, 0U);
+    const auto keySelector = LocateNode(ctx.NodeLocator, callable, callable.GetInputsCount() -5U);
+    const auto payloadSelector = LocateNode(ctx.NodeLocator, callable, callable.GetInputsCount() -4U);
+
+    if (const auto wide = dynamic_cast<IComputationWideFlowNode*>(flow)) {
+        const auto width = callable.GetInputsCount() - 6U;
+        TComputationExternalNodePtrVector args(width, nullptr);
+        auto index = 0U;
+        std::generate(args.begin(), args.end(), [&](){ return LocateExternalNode(ctx.NodeLocator, callable, ++index); });
+
+        if (!isMulti && payloadType->IsVoid()) {
+            return new TSqueezeSetWideWrapper<TSortedSetAccumulator>(ctx.Mutables, keyType, wide, std::move(args), keySelector, itemsCountHint);
+        } else if (isMulti) {
+            return new TSqueezeMapWideWrapper<TSortedMapAccumulator<true>>(ctx.Mutables, keyType, payloadType, wide, std::move(args), keySelector, payloadSelector, itemsCountHint);
+        } else {
+            return new TSqueezeMapWideWrapper<TSortedMapAccumulator<false>>(ctx.Mutables, keyType, payloadType, wide, std::move(args), keySelector, payloadSelector, itemsCountHint);
+        }
+    }
+
+    const auto itemArg = LocateExternalNode(ctx.NodeLocator, callable, 1U);
+    if (!isMulti && payloadType->IsVoid()) {
         if (type->IsList()) {
-            return new TSetWrapper<TSortedSetAccumulator, false>(ctx.Mutables, keyType, flow, itemArg, keySelector, itemsCountHint); 
+            return new TSetWrapper<TSortedSetAccumulator, false>(ctx.Mutables, keyType, flow, itemArg, keySelector, itemsCountHint);
         }
         if (type->IsFlow()) {
-            return new TSqueezeSetFlowWrapper<TSortedSetAccumulator>(ctx.Mutables, keyType, flow, itemArg, keySelector, itemsCountHint); 
+            return new TSqueezeSetFlowWrapper<TSortedSetAccumulator>(ctx.Mutables, keyType, flow, itemArg, keySelector, itemsCountHint);
         }
         if (type->IsStream()) {
-            return new TSetWrapper<TSortedSetAccumulator, true>(ctx.Mutables, keyType, flow, itemArg, keySelector, itemsCountHint); 
+            return new TSetWrapper<TSortedSetAccumulator, true>(ctx.Mutables, keyType, flow, itemArg, keySelector, itemsCountHint);
         }
-    } else if (isMulti) { 
-        if (type->IsList()) { 
-            return new TMapWrapper<TSortedMapAccumulator<true>, false>(ctx.Mutables, keyType, payloadType, flow, itemArg, keySelector, payloadSelector, itemsCountHint); 
-        } 
-        if (type->IsFlow()) { 
-            return new TSqueezeMapFlowWrapper<TSortedMapAccumulator<true>>(ctx.Mutables, keyType, payloadType, flow, itemArg, keySelector, payloadSelector, itemsCountHint); 
-        } 
-        if (type->IsStream()) { 
-            return new TMapWrapper<TSortedMapAccumulator<true>, true>(ctx.Mutables, keyType, payloadType, flow, itemArg, keySelector, payloadSelector, itemsCountHint); 
-        } 
+    } else if (isMulti) {
+        if (type->IsList()) {
+            return new TMapWrapper<TSortedMapAccumulator<true>, false>(ctx.Mutables, keyType, payloadType, flow, itemArg, keySelector, payloadSelector, itemsCountHint);
+        }
+        if (type->IsFlow()) {
+            return new TSqueezeMapFlowWrapper<TSortedMapAccumulator<true>>(ctx.Mutables, keyType, payloadType, flow, itemArg, keySelector, payloadSelector, itemsCountHint);
+        }
+        if (type->IsStream()) {
+            return new TMapWrapper<TSortedMapAccumulator<true>, true>(ctx.Mutables, keyType, payloadType, flow, itemArg, keySelector, payloadSelector, itemsCountHint);
+        }
     } else {
         if (type->IsList()) {
-            return new TMapWrapper<TSortedMapAccumulator<false>, false>(ctx.Mutables, keyType, payloadType, flow, itemArg, keySelector, payloadSelector, itemsCountHint); 
+            return new TMapWrapper<TSortedMapAccumulator<false>, false>(ctx.Mutables, keyType, payloadType, flow, itemArg, keySelector, payloadSelector, itemsCountHint);
         }
         if (type->IsFlow()) {
-            return new TSqueezeMapFlowWrapper<TSortedMapAccumulator<false>>(ctx.Mutables, keyType, payloadType, flow, itemArg, keySelector, payloadSelector, itemsCountHint); 
+            return new TSqueezeMapFlowWrapper<TSortedMapAccumulator<false>>(ctx.Mutables, keyType, payloadType, flow, itemArg, keySelector, payloadSelector, itemsCountHint);
         }
         if (type->IsStream()) {
-            return new TMapWrapper<TSortedMapAccumulator<false>, true>(ctx.Mutables, keyType, payloadType, flow, itemArg, keySelector, payloadSelector, itemsCountHint); 
+            return new TMapWrapper<TSortedMapAccumulator<false>, true>(ctx.Mutables, keyType, payloadType, flow, itemArg, keySelector, payloadSelector, itemsCountHint);
         }
     }
 
@@ -1760,27 +1760,27 @@ IComputationNode* WrapToSortedDictInternal(TCallable& callable, const TComputati
 
 template <bool IsList>
 IComputationNode* WrapToHashedDictInternal(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() >= 6U, "Expected six or more args."); 
+    MKQL_ENSURE(callable.GetInputsCount() >= 6U, "Expected six or more args.");
 
-    const auto type = callable.GetInput(0U).GetStaticType(); 
+    const auto type = callable.GetInput(0U).GetStaticType();
     if constexpr (IsList) {
         MKQL_ENSURE(type->IsList(), "Expected list.");
     } else {
         MKQL_ENSURE(type->IsFlow() || type->IsStream(), "Expected flow or stream.");
     }
 
-    const auto keyType = callable.GetInput(callable.GetInputsCount() - 5U).GetStaticType(); 
-    const auto payloadType = callable.GetInput(callable.GetInputsCount() - 4U).GetStaticType(); 
-    const bool multi = AS_VALUE(TDataLiteral, callable.GetInput(callable.GetInputsCount() - 3U))->AsValue().Get<bool>(); 
-    const bool isCompact = AS_VALUE(TDataLiteral, callable.GetInput(callable.GetInputsCount() - 2U))->AsValue().Get<bool>(); 
-    const auto payloadSelectorNode = callable.GetInput(callable.GetInputsCount() - 4U); 
+    const auto keyType = callable.GetInput(callable.GetInputsCount() - 5U).GetStaticType();
+    const auto payloadType = callable.GetInput(callable.GetInputsCount() - 4U).GetStaticType();
+    const bool multi = AS_VALUE(TDataLiteral, callable.GetInput(callable.GetInputsCount() - 3U))->AsValue().Get<bool>();
+    const bool isCompact = AS_VALUE(TDataLiteral, callable.GetInput(callable.GetInputsCount() - 2U))->AsValue().Get<bool>();
+    const auto payloadSelectorNode = callable.GetInput(callable.GetInputsCount() - 4U);
 
-    if (!multi && payloadType->IsVoid()) { 
+    if (!multi && payloadType->IsVoid()) {
         if (isCompact) {
             if (keyType->IsData()) {
 #define USE_HASHED_SINGLE_FIXED_COMPACT_SET(xType, xLayoutType) \
                 case NUdf::TDataType<xType>::Id: \
-                    return WrapToSet< \ 
+                    return WrapToSet< \
                         THashedSingleFixedCompactSetAccumulator<xLayoutType>>(callable, ctx.NodeLocator, ctx.Mutables);
 
                 switch (AS_TYPE(TDataType, keyType)->GetSchemeType()) {
@@ -1795,7 +1795,7 @@ IComputationNode* WrapToHashedDictInternal(TCallable& callable, const TComputati
         if (keyType->IsData()) {
 #define USE_HASHED_SINGLE_FIXED_SET(xType, xLayoutType) \
             case NUdf::TDataType<xType>::Id: \
-                return WrapToSet< \ 
+                return WrapToSet< \
                     THashedSingleFixedSetAccumulator<xLayoutType>>(callable, ctx.NodeLocator, ctx.Mutables);
 
             switch (AS_TYPE(TDataType, keyType)->GetSchemeType()) {
@@ -1811,10 +1811,10 @@ IComputationNode* WrapToHashedDictInternal(TCallable& callable, const TComputati
 #define USE_HASHED_SINGLE_FIXED_COMPACT_MAP(xType, xLayoutType) \
                 case NUdf::TDataType<xType>::Id: \
                     if (multi) { \
-                        return WrapToMap< \ 
+                        return WrapToMap< \
                             THashedSingleFixedCompactMapAccumulator<xLayoutType, true>>(callable, ctx.NodeLocator, ctx.Mutables); \
                     } else { \
-                        return WrapToMap< \ 
+                        return WrapToMap< \
                             THashedSingleFixedCompactMapAccumulator<xLayoutType, false>>(callable, ctx.NodeLocator, ctx.Mutables); \
                     }
 
@@ -1835,10 +1835,10 @@ IComputationNode* WrapToHashedDictInternal(TCallable& callable, const TComputati
 #define USE_HASHED_SINGLE_FIXED_MAP(xType, xLayoutType) \
             case NUdf::TDataType<xType>::Id: \
                 if (multi) { \
-                    return WrapToMap< \ 
+                    return WrapToMap< \
                         THashedSingleFixedMultiMapAccumulator<xLayoutType>>(callable, ctx.NodeLocator, ctx.Mutables); \
                 } else { \
-                    return WrapToMap< \ 
+                    return WrapToMap< \
                         THashedSingleFixedMapAccumulator<xLayoutType>>(callable, ctx.NodeLocator, ctx.Mutables); \
                 }
 

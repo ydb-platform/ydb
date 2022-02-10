@@ -1,7 +1,7 @@
-syntax = "proto3"; 
- 
-package NYql.NCH; 
- 
-message TRange { 
-    string Range = 1; 
-} 
+syntax = "proto3";
+
+package NYql.NCH;
+
+message TRange {
+    string Range = 1;
+}

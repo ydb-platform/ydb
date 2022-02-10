@@ -211,7 +211,7 @@ public:
 
         if (TDqConnection::Match(&node)) {
             children.push_back(node.ChildPtr(TDqConnection::idx_Output)->ChildPtr(TDqOutput::idx_Stage));
-            return false; 
+            return false;
         }
 
         if (TDqStageBase::Match(&node)) {

@@ -4,81 +4,81 @@
 #include <ydb/library/yql/minikql/mkql_alloc.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-using namespace NYql::NUdf; 
+using namespace NYql::NUdf;
 
 Y_UNIT_TEST_SUITE(TUdfValue) {
 
     Y_UNIT_TEST(TestOptional) {
-        TUnboxedValuePod foo((ui32) 42); 
-        UNIT_ASSERT(foo); 
+        TUnboxedValuePod foo((ui32) 42);
+        UNIT_ASSERT(foo);
         UNIT_ASSERT(42 == foo.Get<ui32>());
 
-        auto optFoo = foo.MakeOptional(); 
-        UNIT_ASSERT(optFoo); 
-        UNIT_ASSERT(optFoo.HasValue()); 
+        auto optFoo = foo.MakeOptional();
+        UNIT_ASSERT(optFoo);
+        UNIT_ASSERT(optFoo.HasValue());
 
-        auto bar = optFoo.GetOptionalValue(); 
+        auto bar = optFoo.GetOptionalValue();
         UNIT_ASSERT(42 == bar.Get<ui32>());
     }
 
     Y_UNIT_TEST(TestOptional2) {
-        auto valueOpt = TUnboxedValuePod((ui32) 42); 
-        UNIT_ASSERT(valueOpt); 
-        UNIT_ASSERT(valueOpt.HasValue()); 
+        auto valueOpt = TUnboxedValuePod((ui32) 42);
+        UNIT_ASSERT(valueOpt);
+        UNIT_ASSERT(valueOpt.HasValue());
 
-        auto value = valueOpt.GetOptionalValue(); 
+        auto value = valueOpt.GetOptionalValue();
         UNIT_ASSERT(42 == value.Get<ui32>());
     }
 
     Y_UNIT_TEST(TestEmptyOptional) {
-        auto optEmpty = TUnboxedValuePod(); 
-        UNIT_ASSERT(!optEmpty); 
-        UNIT_ASSERT(!optEmpty.HasValue()); 
+        auto optEmpty = TUnboxedValuePod();
+        UNIT_ASSERT(!optEmpty);
+        UNIT_ASSERT(!optEmpty.HasValue());
 
-        auto optOptEmpty = optEmpty.MakeOptional(); 
-        UNIT_ASSERT(optOptEmpty); 
-        UNIT_ASSERT(!optOptEmpty.HasValue()); 
+        auto optOptEmpty = optEmpty.MakeOptional();
+        UNIT_ASSERT(optOptEmpty);
+        UNIT_ASSERT(!optOptEmpty.HasValue());
 
-        auto optOptOptEmpty = optOptEmpty.MakeOptional(); 
-        UNIT_ASSERT(optOptOptEmpty); 
-        UNIT_ASSERT(!optOptOptEmpty.HasValue()); 
- 
-        auto v = optOptEmpty.GetOptionalValue(); 
-        UNIT_ASSERT(!v); 
+        auto optOptOptEmpty = optOptEmpty.MakeOptional();
+        UNIT_ASSERT(optOptOptEmpty);
+        UNIT_ASSERT(!optOptOptEmpty.HasValue());
+
+        auto v = optOptEmpty.GetOptionalValue();
+        UNIT_ASSERT(!v);
     }
 
     Y_UNIT_TEST(TestVariant) {
-        TUnboxedValuePod foo((ui64) 42); 
-        UNIT_ASSERT(foo); 
- 
-        UNIT_ASSERT(!foo.TryMakeVariant(63)); 
- 
-        UNIT_ASSERT(foo.TryMakeVariant(62)); 
- 
-        UNIT_ASSERT(!foo.TryMakeVariant(0)); 
- 
-        UNIT_ASSERT(62 == foo.GetVariantIndex()); 
-        UNIT_ASSERT(42 == foo.Get<ui64>()); 
-    } 
- 
+        TUnboxedValuePod foo((ui64) 42);
+        UNIT_ASSERT(foo);
+
+        UNIT_ASSERT(!foo.TryMakeVariant(63));
+
+        UNIT_ASSERT(foo.TryMakeVariant(62));
+
+        UNIT_ASSERT(!foo.TryMakeVariant(0));
+
+        UNIT_ASSERT(62 == foo.GetVariantIndex());
+        UNIT_ASSERT(42 == foo.Get<ui64>());
+    }
+
     Y_UNIT_TEST(TestEmptyInVariant) {
-        TUnboxedValuePod foo; 
-        UNIT_ASSERT(!foo); 
-        UNIT_ASSERT(!foo.HasValue()); 
- 
-        UNIT_ASSERT(foo.TryMakeVariant(0)); 
-        UNIT_ASSERT(foo); 
-        UNIT_ASSERT(!foo.HasValue()); 
- 
-        UNIT_ASSERT(0 == foo.GetVariantIndex()); 
- 
-        const auto opt = foo.MakeOptional(); 
-        UNIT_ASSERT(!std::memcmp(&opt, &foo, sizeof(opt))); 
- 
-        const auto bar = opt.GetOptionalValue(); 
-        UNIT_ASSERT(!std::memcmp(&opt, &bar, sizeof(bar))); 
-    } 
- 
+        TUnboxedValuePod foo;
+        UNIT_ASSERT(!foo);
+        UNIT_ASSERT(!foo.HasValue());
+
+        UNIT_ASSERT(foo.TryMakeVariant(0));
+        UNIT_ASSERT(foo);
+        UNIT_ASSERT(!foo.HasValue());
+
+        UNIT_ASSERT(0 == foo.GetVariantIndex());
+
+        const auto opt = foo.MakeOptional();
+        UNIT_ASSERT(!std::memcmp(&opt, &foo, sizeof(opt)));
+
+        const auto bar = opt.GetOptionalValue();
+        UNIT_ASSERT(!std::memcmp(&opt, &bar, sizeof(bar)));
+    }
+
     Y_UNIT_TEST(TestInvalid) {
         TUnboxedValuePod foo;
         UNIT_ASSERT(!foo.IsInvalid());

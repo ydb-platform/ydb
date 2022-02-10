@@ -11,17 +11,17 @@
 #include <util/generic/utility.h> // Min, Max
 #include <util/generic/yexception.h> // Y_ENSURE
 #include <util/system/compiler.h> // Y_FORCE_INLINE
- 
-#include <algorithm> 
-#include <type_traits> 
+
+#include <algorithm>
+#include <type_traits>
 
 class IOutputStream;
 
-namespace NYql { 
+namespace NYql {
 namespace NUdf {
 
 class TUnboxedValue;
-class TUnboxedValuePod; 
+class TUnboxedValuePod;
 class TOpaqueListRepresentation;
 class IValueBuilder;
 
@@ -42,15 +42,15 @@ constexpr ui32 PreferredBlockBytes = 1000000;
 #endif
 
 ///////////////////////////////////////////////////////////////////////////////
-// IApplyContext 
-/////////////////////////////////////////////////////////////////////////////// 
-class IApplyContext { 
-public: 
-    virtual ~IApplyContext() = default; 
-}; 
- 
-UDF_ASSERT_TYPE_SIZE(IApplyContext, 8); 
- 
+// IApplyContext
+///////////////////////////////////////////////////////////////////////////////
+class IApplyContext {
+public:
+    virtual ~IApplyContext() = default;
+};
+
+UDF_ASSERT_TYPE_SIZE(IApplyContext, 8);
+
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 19)
 class TBlock;
 class TFlatDataBlock;
@@ -60,7 +60,7 @@ class TSingleBlock;
 typedef bool(*TBlockCallback)(TBlock& block, void* context);
 #endif
 
-/////////////////////////////////////////////////////////////////////////////// 
+///////////////////////////////////////////////////////////////////////////////
 // IBoxedValue
 ///////////////////////////////////////////////////////////////////////////////
 class IBoxedValue;
@@ -77,56 +77,56 @@ public:
 
     virtual ~IBoxedValue1() = default;
 
-private: 
-    // List accessors 
-    virtual bool HasFastListLength() const = 0; 
-    virtual ui64 GetListLength() const = 0; 
-    virtual ui64 GetEstimatedListLength() const = 0; 
-    virtual TUnboxedValue GetListIterator() const = 0; 
-    // customization of list operations, may return null @{ 
-    virtual const TOpaqueListRepresentation* GetListRepresentation() const = 0; 
+private:
+    // List accessors
+    virtual bool HasFastListLength() const = 0;
+    virtual ui64 GetListLength() const = 0;
+    virtual ui64 GetEstimatedListLength() const = 0;
+    virtual TUnboxedValue GetListIterator() const = 0;
+    // customization of list operations, may return null @{
+    virtual const TOpaqueListRepresentation* GetListRepresentation() const = 0;
     virtual IBoxedValuePtr ReverseListImpl(const IValueBuilder& builder) const = 0;
     virtual IBoxedValuePtr SkipListImpl(const IValueBuilder& builder, ui64 count) const = 0;
     virtual IBoxedValuePtr TakeListImpl(const IValueBuilder& builder, ui64 count) const = 0;
     virtual IBoxedValuePtr ToIndexDictImpl(const IValueBuilder& builder) const = 0;
-    // @} 
- 
-    // Dict accessors 
-    virtual ui64 GetDictLength() const = 0; 
-    virtual TUnboxedValue GetDictIterator() const = 0; 
-    virtual TUnboxedValue GetKeysIterator() const = 0; // May return empty. 
-    virtual TUnboxedValue GetPayloadsIterator() const = 0; // May return empty. 
-    virtual bool Contains(const TUnboxedValuePod& key) const = 0; 
-    virtual TUnboxedValue Lookup(const TUnboxedValuePod& key) const = 0; 
- 
-    // Tuple or Struct accessors 
-    virtual TUnboxedValue GetElement(ui32 index) const = 0; 
-    virtual const TUnboxedValue* GetElements() const = 0; // May return nullptr. 
- 
-    // Callable accessors 
-    virtual TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const = 0; 
- 
-    // Resource accessor 
-    virtual TStringRef GetResourceTag() const = 0; 
-    virtual void* GetResource() = 0; 
- 
-    virtual bool HasListItems() const = 0; 
-    virtual bool HasDictItems() const = 0; 
- 
-    virtual ui32 GetVariantIndex() const = 0; 
-    virtual TUnboxedValue GetVariantItem() const = 0; 
- 
-    // Either Done/Yield with empty result or Ready with non-empty result should be returned 
-    virtual EFetchStatus Fetch(TUnboxedValue& result) = 0; 
- 
-    // Any iterator. 
-    virtual bool Skip() = 0; 
-    // List iterator. 
-    virtual bool Next(TUnboxedValue& value) = 0; 
-    // Dict iterator. 
-    virtual bool NextPair(TUnboxedValue& key, TUnboxedValue& payload) = 0; 
- 
-    virtual void Apply(IApplyContext& context) const = 0; 
+    // @}
+
+    // Dict accessors
+    virtual ui64 GetDictLength() const = 0;
+    virtual TUnboxedValue GetDictIterator() const = 0;
+    virtual TUnboxedValue GetKeysIterator() const = 0; // May return empty.
+    virtual TUnboxedValue GetPayloadsIterator() const = 0; // May return empty.
+    virtual bool Contains(const TUnboxedValuePod& key) const = 0;
+    virtual TUnboxedValue Lookup(const TUnboxedValuePod& key) const = 0;
+
+    // Tuple or Struct accessors
+    virtual TUnboxedValue GetElement(ui32 index) const = 0;
+    virtual const TUnboxedValue* GetElements() const = 0; // May return nullptr.
+
+    // Callable accessors
+    virtual TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const = 0;
+
+    // Resource accessor
+    virtual TStringRef GetResourceTag() const = 0;
+    virtual void* GetResource() = 0;
+
+    virtual bool HasListItems() const = 0;
+    virtual bool HasDictItems() const = 0;
+
+    virtual ui32 GetVariantIndex() const = 0;
+    virtual TUnboxedValue GetVariantItem() const = 0;
+
+    // Either Done/Yield with empty result or Ready with non-empty result should be returned
+    virtual EFetchStatus Fetch(TUnboxedValue& result) = 0;
+
+    // Any iterator.
+    virtual bool Skip() = 0;
+    // List iterator.
+    virtual bool Next(TUnboxedValue& value) = 0;
+    // Dict iterator.
+    virtual bool NextPair(TUnboxedValue& key, TUnboxedValue& payload) = 0;
+
+    virtual void Apply(IApplyContext& context) const = 0;
 
 public:
     // reference counting
@@ -203,13 +203,13 @@ class IBoxedValue : public IBoxedValue2 {};
 #else
 class IBoxedValue : public IBoxedValue1 {};
 #endif
- 
-UDF_ASSERT_TYPE_SIZE(IBoxedValue, 16); 
- 
+
+UDF_ASSERT_TYPE_SIZE(IBoxedValue, 16);
+
 UDF_ASSERT_TYPE_SIZE(IBoxedValuePtr, 8);
- 
+
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 19)
-/////////////////////////////////////////////////////////////////////////////// 
+///////////////////////////////////////////////////////////////////////////////
 // TBlock
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -386,10 +386,10 @@ UDF_ASSERT_TYPE_SIZE(TFlatDataBlockPtr, 8);
 #endif
 
 ///////////////////////////////////////////////////////////////////////////////
-// TBoxedValueAccessor 
-/////////////////////////////////////////////////////////////////////////////// 
-struct TBoxedValueAccessor 
-{ 
+// TBoxedValueAccessor
+///////////////////////////////////////////////////////////////////////////////
+struct TBoxedValueAccessor
+{
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 19)
 
 #define METHOD_MAP(xx) \
@@ -607,56 +607,56 @@ struct TBoxedValueAccessor
         Y_FAIL("unknown method");
     }
 
-    template<EMethod Method> static uintptr_t GetMethodPtr(); 
- 
-    // List accessors 
-    static inline bool HasFastListLength(const IBoxedValue& value); 
-    static inline ui64 GetListLength(const IBoxedValue& value); 
-    static inline ui64 GetEstimatedListLength(const IBoxedValue& value); 
-    static inline TUnboxedValue GetListIterator(const IBoxedValue& value); 
-    // customization of list operations, may return null @{ 
-    static inline const TOpaqueListRepresentation* GetListRepresentation(const IBoxedValue& value); 
+    template<EMethod Method> static uintptr_t GetMethodPtr();
+
+    // List accessors
+    static inline bool HasFastListLength(const IBoxedValue& value);
+    static inline ui64 GetListLength(const IBoxedValue& value);
+    static inline ui64 GetEstimatedListLength(const IBoxedValue& value);
+    static inline TUnboxedValue GetListIterator(const IBoxedValue& value);
+    // customization of list operations, may return null @{
+    static inline const TOpaqueListRepresentation* GetListRepresentation(const IBoxedValue& value);
     static inline IBoxedValuePtr ReverseListImpl(const IBoxedValue& value, const IValueBuilder& builder);
     static inline IBoxedValuePtr SkipListImpl(const IBoxedValue& value, const IValueBuilder& builder, ui64 count);
     static inline IBoxedValuePtr TakeListImpl(const IBoxedValue& value, const IValueBuilder& builder, ui64 count);
     static inline IBoxedValuePtr ToIndexDictImpl(const IBoxedValue& value, const IValueBuilder& builder);
-    // @} 
- 
-    // Dict accessors 
-    static inline ui64 GetDictLength(const IBoxedValue& value); 
-    static inline TUnboxedValue GetDictIterator(const IBoxedValue& value); 
-    static inline TUnboxedValue GetKeysIterator(const IBoxedValue& value); 
-    static inline TUnboxedValue GetPayloadsIterator(const IBoxedValue& value); 
-    static inline bool Contains(const IBoxedValue& value, const TUnboxedValuePod& key); 
-    static inline TUnboxedValue Lookup(const IBoxedValue& value, const TUnboxedValuePod& key); 
- 
-    // Tuple or Struct accessors 
-    static inline TUnboxedValue GetElement(const IBoxedValue& value, ui32 index); 
-    static inline const TUnboxedValue* GetElements(const IBoxedValue& value); 
- 
-    // Callable accessors 
-    static inline TUnboxedValue Run(const IBoxedValue& value, const IValueBuilder* valueBuilder, const TUnboxedValuePod* args); 
- 
-    // Resource accessor 
-    static inline TStringRef GetResourceTag(const IBoxedValue& value); 
-    static inline void* GetResource(IBoxedValue& value); 
- 
-    static inline bool HasListItems(const IBoxedValue& value); 
-    static inline bool HasDictItems(const IBoxedValue& value); 
- 
-    static inline ui32 GetVariantIndex(const IBoxedValue& value); 
-    static inline TUnboxedValue GetVariantItem(const IBoxedValue& value); 
- 
-    static inline EFetchStatus Fetch(IBoxedValue& value, TUnboxedValue& result); 
- 
-    // Any iterator. 
-    static inline bool Skip(IBoxedValue& value); 
-    // List iterator. 
-    static inline bool Next(IBoxedValue& value, TUnboxedValue& result); 
-    // Dict iterator. 
-    static inline bool NextPair(IBoxedValue& value, TUnboxedValue& key, TUnboxedValue& payload); 
- 
-    static inline void Apply(IBoxedValue& value, IApplyContext& context); 
+    // @}
+
+    // Dict accessors
+    static inline ui64 GetDictLength(const IBoxedValue& value);
+    static inline TUnboxedValue GetDictIterator(const IBoxedValue& value);
+    static inline TUnboxedValue GetKeysIterator(const IBoxedValue& value);
+    static inline TUnboxedValue GetPayloadsIterator(const IBoxedValue& value);
+    static inline bool Contains(const IBoxedValue& value, const TUnboxedValuePod& key);
+    static inline TUnboxedValue Lookup(const IBoxedValue& value, const TUnboxedValuePod& key);
+
+    // Tuple or Struct accessors
+    static inline TUnboxedValue GetElement(const IBoxedValue& value, ui32 index);
+    static inline const TUnboxedValue* GetElements(const IBoxedValue& value);
+
+    // Callable accessors
+    static inline TUnboxedValue Run(const IBoxedValue& value, const IValueBuilder* valueBuilder, const TUnboxedValuePod* args);
+
+    // Resource accessor
+    static inline TStringRef GetResourceTag(const IBoxedValue& value);
+    static inline void* GetResource(IBoxedValue& value);
+
+    static inline bool HasListItems(const IBoxedValue& value);
+    static inline bool HasDictItems(const IBoxedValue& value);
+
+    static inline ui32 GetVariantIndex(const IBoxedValue& value);
+    static inline TUnboxedValue GetVariantItem(const IBoxedValue& value);
+
+    static inline EFetchStatus Fetch(IBoxedValue& value, TUnboxedValue& result);
+
+    // Any iterator.
+    static inline bool Skip(IBoxedValue& value);
+    // List iterator.
+    static inline bool Next(IBoxedValue& value, TUnboxedValue& result);
+    // Dict iterator.
+    static inline bool NextPair(IBoxedValue& value, TUnboxedValue& key, TUnboxedValue& payload);
+
+    static inline void Apply(IBoxedValue& value, IApplyContext& context);
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 3)
     // Save/Load state
@@ -682,65 +682,65 @@ struct TBoxedValueAccessor
     static inline EFetchStatus FetchBlock(IBoxedValue& value, TUnboxedValue& result, ui32 rowsLimitHint);
     static inline bool VisitBlocks(IBoxedValue& value, TBlockCallback callback, void* context);
 #endif
-}; 
- 
-#define MAP_HANDLER(xx) template<> inline uintptr_t TBoxedValueAccessor::GetMethodPtr<TBoxedValueAccessor::EMethod::xx>() { return GetMethodPtr(&IBoxedValue::xx); } 
-METHOD_MAP(MAP_HANDLER) 
-#undef MAP_HANDLER 
- 
-#undef METHOD_MAP 
- 
-/////////////////////////////////////////////////////////////////////////////// 
-// TBoxedValue 
-/////////////////////////////////////////////////////////////////////////////// 
+};
+
+#define MAP_HANDLER(xx) template<> inline uintptr_t TBoxedValueAccessor::GetMethodPtr<TBoxedValueAccessor::EMethod::xx>() { return GetMethodPtr(&IBoxedValue::xx); }
+METHOD_MAP(MAP_HANDLER)
+#undef MAP_HANDLER
+
+#undef METHOD_MAP
+
+///////////////////////////////////////////////////////////////////////////////
+// TBoxedValue
+///////////////////////////////////////////////////////////////////////////////
 class TBoxedValueBase: public IBoxedValue {
-private: 
-    // List accessors 
-    bool HasFastListLength() const override; 
-    ui64 GetListLength() const override; 
-    ui64 GetEstimatedListLength() const override; 
-    TUnboxedValue GetListIterator() const override; 
-    const TOpaqueListRepresentation* GetListRepresentation() const override; 
+private:
+    // List accessors
+    bool HasFastListLength() const override;
+    ui64 GetListLength() const override;
+    ui64 GetEstimatedListLength() const override;
+    TUnboxedValue GetListIterator() const override;
+    const TOpaqueListRepresentation* GetListRepresentation() const override;
     IBoxedValuePtr ReverseListImpl(const IValueBuilder& builder) const override;
     IBoxedValuePtr SkipListImpl(const IValueBuilder& builder, ui64 count) const override;
     IBoxedValuePtr TakeListImpl(const IValueBuilder& builder, ui64 count) const override;
     IBoxedValuePtr ToIndexDictImpl(const IValueBuilder& builder) const override;
- 
-    // Dict accessors 
-    ui64 GetDictLength() const override; 
-    TUnboxedValue GetDictIterator() const override; 
-    TUnboxedValue GetKeysIterator() const override; 
-    TUnboxedValue GetPayloadsIterator() const override; 
-    bool Contains(const TUnboxedValuePod& key) const override; 
-    TUnboxedValue Lookup(const TUnboxedValuePod& key) const override; 
- 
-    // Tuple or Struct accessors 
-    TUnboxedValue GetElement(ui32 index) const override; 
-    const TUnboxedValue* GetElements() const override; 
- 
-    // Callable accessors 
-    TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const override; 
- 
-    // Resource accessors 
-    TStringRef GetResourceTag() const override; 
-    void* GetResource() override; 
- 
-    bool HasListItems() const override; 
-    bool HasDictItems() const override; 
- 
-    ui32 GetVariantIndex() const override; 
-    TUnboxedValue GetVariantItem() const override; 
- 
-    EFetchStatus Fetch(TUnboxedValue& result) override; 
- 
-    // Any iterator. 
-    bool Skip() override; 
-    // List iterator. 
-    bool Next(TUnboxedValue& value) override; 
-    // Dict iterator. 
-    bool NextPair(TUnboxedValue& key, TUnboxedValue& payload) override; 
- 
-    void Apply(IApplyContext& context) const override; 
+
+    // Dict accessors
+    ui64 GetDictLength() const override;
+    TUnboxedValue GetDictIterator() const override;
+    TUnboxedValue GetKeysIterator() const override;
+    TUnboxedValue GetPayloadsIterator() const override;
+    bool Contains(const TUnboxedValuePod& key) const override;
+    TUnboxedValue Lookup(const TUnboxedValuePod& key) const override;
+
+    // Tuple or Struct accessors
+    TUnboxedValue GetElement(ui32 index) const override;
+    const TUnboxedValue* GetElements() const override;
+
+    // Callable accessors
+    TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const override;
+
+    // Resource accessors
+    TStringRef GetResourceTag() const override;
+    void* GetResource() override;
+
+    bool HasListItems() const override;
+    bool HasDictItems() const override;
+
+    ui32 GetVariantIndex() const override;
+    TUnboxedValue GetVariantItem() const override;
+
+    EFetchStatus Fetch(TUnboxedValue& result) override;
+
+    // Any iterator.
+    bool Skip() override;
+    // List iterator.
+    bool Next(TUnboxedValue& value) override;
+    // Dict iterator.
+    bool NextPair(TUnboxedValue& key, TUnboxedValue& payload) override;
+
+    void Apply(IApplyContext& context) const override;
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 3)
     // Save/Load state
@@ -770,17 +770,17 @@ private:
 
 class TBoxedValueLink: public TBoxedValueBase
 {
-public: 
+public:
     void Link(TBoxedValueLink* root);
-    void Unlink(); 
-    void InitLinks() { Left = Right = this; } 
+    void Unlink();
+    void InitLinks() { Left = Right = this; }
     TBoxedValueLink* GetLeft() const { return Left; }
     TBoxedValueLink* GetRight() const { return Right; }
-private: 
+private:
     TBoxedValueLink *Left = nullptr;
     TBoxedValueLink *Right = nullptr;
-}; 
- 
+};
+
 class TBoxedValue: public TBoxedValueLink, public TWithUdfAllocator
 {
 public:
@@ -792,133 +792,133 @@ class TManagedBoxedValue: public TBoxedValueBase, public TWithUdfAllocator
 {
 };
 
-UDF_ASSERT_TYPE_SIZE(TBoxedValue, 32); 
- 
-/////////////////////////////////////////////////////////////////////////////// 
-// TUnboxedValuePod 
-/////////////////////////////////////////////////////////////////////////////// 
-class TUnboxedValuePod 
-{ 
-friend class TUnboxedValue; 
-protected: 
-    enum class EMarkers : ui8 { 
-        Empty = 0, 
-        Embedded, 
-        String, 
-        Boxed, 
-    }; 
- 
-public: 
-    inline TUnboxedValuePod() noexcept = default; 
-    inline ~TUnboxedValuePod() noexcept = default; 
- 
-    inline TUnboxedValuePod(const TUnboxedValuePod& value) noexcept = default; 
+UDF_ASSERT_TYPE_SIZE(TBoxedValue, 32);
+
+///////////////////////////////////////////////////////////////////////////////
+// TUnboxedValuePod
+///////////////////////////////////////////////////////////////////////////////
+class TUnboxedValuePod
+{
+friend class TUnboxedValue;
+protected:
+    enum class EMarkers : ui8 {
+        Empty = 0,
+        Embedded,
+        String,
+        Boxed,
+    };
+
+public:
+    inline TUnboxedValuePod() noexcept = default;
+    inline ~TUnboxedValuePod() noexcept = default;
+
+    inline TUnboxedValuePod(const TUnboxedValuePod& value) noexcept = default;
     inline TUnboxedValuePod(TUnboxedValuePod&& value) noexcept = default;
- 
-    inline TUnboxedValuePod& operator=(const TUnboxedValuePod& value) noexcept = default; 
-    inline TUnboxedValuePod& operator=(TUnboxedValuePod&& value) noexcept = default; 
- 
-    inline TUnboxedValuePod(TUnboxedValue&&) = delete; 
-    inline TUnboxedValuePod& operator=(TUnboxedValue&&) = delete; 
- 
+
+    inline TUnboxedValuePod& operator=(const TUnboxedValuePod& value) noexcept = default;
+    inline TUnboxedValuePod& operator=(TUnboxedValuePod&& value) noexcept = default;
+
+    inline TUnboxedValuePod(TUnboxedValue&&) = delete;
+    inline TUnboxedValuePod& operator=(TUnboxedValue&&) = delete;
+
     template <typename T, typename = std::enable_if_t<TPrimitiveDataType<T>::Result>>
-    inline explicit TUnboxedValuePod(T value); 
+    inline explicit TUnboxedValuePod(T value);
     inline explicit TUnboxedValuePod(IBoxedValuePtr&& value);
-    inline explicit TUnboxedValuePod(TStringValue&& value, ui32 size = Max<ui32>(), ui32 offset = 0U); 
- 
+    inline explicit TUnboxedValuePod(TStringValue&& value, ui32 size = Max<ui32>(), ui32 offset = 0U);
+
     void Dump(IOutputStream& out) const;
-    // meta information 
-    inline explicit operator bool() const { return bool(Raw); } 
- 
-    inline bool HasValue() const { return EMarkers::Empty != Raw.GetMarkers(); } 
- 
-    inline bool IsString() const { return EMarkers::String == Raw.GetMarkers(); } 
-    inline bool IsBoxed() const { return EMarkers::Boxed == Raw.GetMarkers(); } 
+    // meta information
+    inline explicit operator bool() const { return bool(Raw); }
+
+    inline bool HasValue() const { return EMarkers::Empty != Raw.GetMarkers(); }
+
+    inline bool IsString() const { return EMarkers::String == Raw.GetMarkers(); }
+    inline bool IsBoxed() const { return EMarkers::Boxed == Raw.GetMarkers(); }
     inline bool IsEmbedded() const { return EMarkers::Embedded == Raw.GetMarkers(); }
- 
-    // Data accessors 
+
+    // Data accessors
     template <typename T, typename = std::enable_if_t<TPrimitiveDataType<T>::Result>>
-    inline T Get() const; 
+    inline T Get() const;
     template <typename T, typename = std::enable_if_t<TPrimitiveDataType<T>::Result>>
-    inline T GetOrDefault(T ifEmpty) const; 
- 
-    inline explicit TUnboxedValuePod(NYql::NDecimal::TInt128 value); 
-    inline explicit TUnboxedValuePod(NYql::NDecimal::TUint128 value); 
-    inline NYql::NDecimal::TInt128 GetInt128() const; 
-    inline NYql::NDecimal::TUint128 GetUint128() const; 
- 
-    inline const void* GetRawPtr() const; 
-    inline void* GetRawPtr(); 
- 
-    inline TStringRef AsStringRef() const&; 
-    inline TMutableStringRef AsStringRef() &; 
-    void AsStringRef() && = delete; 
- 
-    inline TStringValue AsStringValue() const; 
+    inline T GetOrDefault(T ifEmpty) const;
+
+    inline explicit TUnboxedValuePod(NYql::NDecimal::TInt128 value);
+    inline explicit TUnboxedValuePod(NYql::NDecimal::TUint128 value);
+    inline NYql::NDecimal::TInt128 GetInt128() const;
+    inline NYql::NDecimal::TUint128 GetUint128() const;
+
+    inline const void* GetRawPtr() const;
+    inline void* GetRawPtr();
+
+    inline TStringRef AsStringRef() const&;
+    inline TMutableStringRef AsStringRef() &;
+    void AsStringRef() && = delete;
+
+    inline TStringValue AsStringValue() const;
     inline IBoxedValuePtr AsBoxed() const;
-    inline bool UniqueBoxed() const; 
- 
-    // special values 
-    inline static TUnboxedValuePod Void(); 
-    inline static TUnboxedValuePod Zero(); 
-    inline static TUnboxedValuePod Embedded(ui8 size); 
-    inline static TUnboxedValuePod Embedded(const TStringRef& value); 
+    inline bool UniqueBoxed() const;
+
+    // special values
+    inline static TUnboxedValuePod Void();
+    inline static TUnboxedValuePod Zero();
+    inline static TUnboxedValuePod Embedded(ui8 size);
+    inline static TUnboxedValuePod Embedded(const TStringRef& value);
     inline static TUnboxedValuePod Invalid();
-    inline static TUnboxedValuePod MakeFinish(); 
-    inline static TUnboxedValuePod MakeYield(); 
+    inline static TUnboxedValuePod MakeFinish();
+    inline static TUnboxedValuePod MakeYield();
     inline bool IsInvalid() const;
-    inline bool IsFinish() const; 
-    inline bool IsYield() const; 
-    inline bool IsSpecial() const; 
- 
-    inline TUnboxedValuePod MakeOptional() const; 
-    inline TUnboxedValuePod GetOptionalValue() const; 
- 
-    template<bool IsOptional> inline TUnboxedValuePod GetOptionalValueIf() const; 
-    template<bool IsOptional> inline TUnboxedValuePod MakeOptionalIf() const; 
- 
-    // List accessors 
-    inline bool HasFastListLength() const; 
-    inline ui64 GetListLength() const; 
-    inline ui64 GetEstimatedListLength() const; 
-    inline TUnboxedValue GetListIterator() const; 
-    inline bool HasListItems() const; 
- 
-    // Dict accessors 
-    inline ui64 GetDictLength() const; 
-    inline TUnboxedValue GetDictIterator() const; 
-    inline TUnboxedValue GetKeysIterator() const; 
-    inline TUnboxedValue GetPayloadsIterator() const; 
- 
-    inline bool Contains(const TUnboxedValuePod& key) const; 
-    inline TUnboxedValue Lookup(const TUnboxedValuePod& key) const; 
-    inline bool HasDictItems() const; 
- 
-    // Tuple or Struct accessors 
-    inline TUnboxedValue GetElement(ui32 index) const; 
-    inline const TUnboxedValue* GetElements() const; 
- 
-    // Callable accessors 
+    inline bool IsFinish() const;
+    inline bool IsYield() const;
+    inline bool IsSpecial() const;
+
+    inline TUnboxedValuePod MakeOptional() const;
+    inline TUnboxedValuePod GetOptionalValue() const;
+
+    template<bool IsOptional> inline TUnboxedValuePod GetOptionalValueIf() const;
+    template<bool IsOptional> inline TUnboxedValuePod MakeOptionalIf() const;
+
+    // List accessors
+    inline bool HasFastListLength() const;
+    inline ui64 GetListLength() const;
+    inline ui64 GetEstimatedListLength() const;
+    inline TUnboxedValue GetListIterator() const;
+    inline bool HasListItems() const;
+
+    // Dict accessors
+    inline ui64 GetDictLength() const;
+    inline TUnboxedValue GetDictIterator() const;
+    inline TUnboxedValue GetKeysIterator() const;
+    inline TUnboxedValue GetPayloadsIterator() const;
+
+    inline bool Contains(const TUnboxedValuePod& key) const;
+    inline TUnboxedValue Lookup(const TUnboxedValuePod& key) const;
+    inline bool HasDictItems() const;
+
+    // Tuple or Struct accessors
+    inline TUnboxedValue GetElement(ui32 index) const;
+    inline const TUnboxedValue* GetElements() const;
+
+    // Callable accessors
     inline TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const;
- 
-    // Resource accessors 
-    inline TStringRef GetResourceTag() const; 
-    inline void* GetResource() const; 
- 
-    inline ui32 GetVariantIndex() const; 
-    inline TUnboxedValue GetVariantItem() const; 
- 
-    inline EFetchStatus Fetch(TUnboxedValue& result) const; 
- 
-    // Any iterator. 
-    inline bool Skip() const; 
-    // List iterator. 
-    inline bool Next(TUnboxedValue& value) const; 
-    // Dict iterator. 
-    inline bool NextPair(TUnboxedValue& key, TUnboxedValue& payload) const; 
- 
-    inline void Apply(IApplyContext& context) const; 
- 
+
+    // Resource accessors
+    inline TStringRef GetResourceTag() const;
+    inline void* GetResource() const;
+
+    inline ui32 GetVariantIndex() const;
+    inline TUnboxedValue GetVariantItem() const;
+
+    inline EFetchStatus Fetch(TUnboxedValue& result) const;
+
+    // Any iterator.
+    inline bool Skip() const;
+    // List iterator.
+    inline bool Next(TUnboxedValue& value) const;
+    // Dict iterator.
+    inline bool NextPair(TUnboxedValue& key, TUnboxedValue& payload) const;
+
+    inline void Apply(IApplyContext& context) const;
+
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 3)
     // Save/Load state
     inline ui32 GetTraverseCount() const;
@@ -940,118 +940,118 @@ public:
     inline bool VisitBlocks(TBlockCallback callback, void* context);
 #endif
 
-    inline bool TryMakeVariant(ui32 index); 
- 
+    inline bool TryMakeVariant(ui32 index);
+
     inline void SetTimezoneId(ui16 id);
     inline ui16 GetTimezoneId() const;
 
-protected: 
-    union TRaw { 
-        ui64 Halfs[2] = {0, 0}; 
- 
-        struct { 
-            char Buffer[0xE]; 
-            ui8 Size; 
-            ui8 Meta; 
-        } Embedded; 
- 
-        struct { 
-            IBoxedValue* Value; 
-            ui8 Reserved[7]; 
-            ui8 Meta; 
-        } Boxed; 
- 
-        struct { 
-            TStringValue::TData* Value; 
-            ui32 Size; 
-            union { 
-                ui32 Offset; 
-                struct { 
-                    ui8 Skip[3]; 
-                    ui8 Meta; 
-                }; 
-            }; 
-        } String; 
- 
-        struct { 
-            union { 
-                #define FIELD(type) type type##_; 
-                PRIMITIVE_VALUE_TYPES(FIELD); 
-                #undef FIELD 
-                const void* Void; 
-                ui64 Count; 
-            }; 
-            union { 
-                ui64 FullMeta; 
-                struct { 
+protected:
+    union TRaw {
+        ui64 Halfs[2] = {0, 0};
+
+        struct {
+            char Buffer[0xE];
+            ui8 Size;
+            ui8 Meta;
+        } Embedded;
+
+        struct {
+            IBoxedValue* Value;
+            ui8 Reserved[7];
+            ui8 Meta;
+        } Boxed;
+
+        struct {
+            TStringValue::TData* Value;
+            ui32 Size;
+            union {
+                ui32 Offset;
+                struct {
+                    ui8 Skip[3];
+                    ui8 Meta;
+                };
+            };
+        } String;
+
+        struct {
+            union {
+                #define FIELD(type) type type##_;
+                PRIMITIVE_VALUE_TYPES(FIELD);
+                #undef FIELD
+                const void* Void;
+                ui64 Count;
+            };
+            union {
+                ui64 FullMeta;
+                struct {
                     ui16 TimezoneId;
                     ui8 Reserved[4];
-                    ui8 Size; 
-                    ui8 Meta; 
-                }; 
-            }; 
-        } Simple; 
- 
-        EMarkers GetMarkers() const { 
-            return static_cast<EMarkers>(0x3 & Simple.Meta); 
-        } 
- 
-        ui8 GetIndex() const { 
-            return Simple.Meta >> 2; 
-        } 
- 
-        explicit operator bool() const { return Simple.FullMeta | Simple.Count; } 
-    } Raw; 
- 
-public: 
-    inline void Ref() const noexcept; 
-    inline void UnRef() const noexcept; 
-    inline void ReleaseRef() const noexcept; 
-    inline void DeleteUnreferenced() const noexcept; 
+                    ui8 Size;
+                    ui8 Meta;
+                };
+            };
+        } Simple;
+
+        EMarkers GetMarkers() const {
+            return static_cast<EMarkers>(0x3 & Simple.Meta);
+        }
+
+        ui8 GetIndex() const {
+            return Simple.Meta >> 2;
+        }
+
+        explicit operator bool() const { return Simple.FullMeta | Simple.Count; }
+    } Raw;
+
+public:
+    inline void Ref() const noexcept;
+    inline void UnRef() const noexcept;
+    inline void ReleaseRef() const noexcept;
+    inline void DeleteUnreferenced() const noexcept;
     inline i32 LockRef() const noexcept;
     inline void UnlockRef(i32 prev) const noexcept;
- 
-    static constexpr ui32 InternalBufferSize = sizeof(TRaw::Embedded.Buffer); 
-    static constexpr ui32 OffsetLimit = 1U << 24U; 
-}; 
- 
-UDF_ASSERT_TYPE_SIZE(TUnboxedValuePod, 16); 
- 
-static_assert(std::is_trivially_destructible<TUnboxedValuePod>::value, "Incompatible with LLVM codegeneration!"); 
-static_assert(std::is_trivially_copy_assignable<TUnboxedValuePod>::value, "Incompatible with LLVM codegeneration!"); 
-static_assert(std::is_trivially_move_assignable<TUnboxedValuePod>::value, "Incompatible with LLVM codegeneration!"); 
-static_assert(std::is_trivially_copy_constructible<TUnboxedValuePod>::value, "Incompatible with LLVM codegeneration!"); 
-static_assert(std::is_trivially_move_constructible<TUnboxedValuePod>::value, "Incompatible with LLVM codegeneration!"); 
- 
-////////////////////////////////////////////////////////////////////////////// 
-// TUnboxedValue 
-/////////////////////////////////////////////////////////////////////////////// 
-class TUnboxedValue : public TUnboxedValuePod 
-{ 
-public: 
-    inline TUnboxedValue() noexcept = default; 
-    inline ~TUnboxedValue() noexcept; 
- 
-    inline TUnboxedValue(const TUnboxedValuePod& value) noexcept; 
-    inline TUnboxedValue(TUnboxedValuePod&& value) noexcept; 
- 
-    inline TUnboxedValue(const TUnboxedValue& value) noexcept; 
+
+    static constexpr ui32 InternalBufferSize = sizeof(TRaw::Embedded.Buffer);
+    static constexpr ui32 OffsetLimit = 1U << 24U;
+};
+
+UDF_ASSERT_TYPE_SIZE(TUnboxedValuePod, 16);
+
+static_assert(std::is_trivially_destructible<TUnboxedValuePod>::value, "Incompatible with LLVM codegeneration!");
+static_assert(std::is_trivially_copy_assignable<TUnboxedValuePod>::value, "Incompatible with LLVM codegeneration!");
+static_assert(std::is_trivially_move_assignable<TUnboxedValuePod>::value, "Incompatible with LLVM codegeneration!");
+static_assert(std::is_trivially_copy_constructible<TUnboxedValuePod>::value, "Incompatible with LLVM codegeneration!");
+static_assert(std::is_trivially_move_constructible<TUnboxedValuePod>::value, "Incompatible with LLVM codegeneration!");
+
+//////////////////////////////////////////////////////////////////////////////
+// TUnboxedValue
+///////////////////////////////////////////////////////////////////////////////
+class TUnboxedValue : public TUnboxedValuePod
+{
+public:
+    inline TUnboxedValue() noexcept = default;
+    inline ~TUnboxedValue() noexcept;
+
+    inline TUnboxedValue(const TUnboxedValuePod& value) noexcept;
+    inline TUnboxedValue(TUnboxedValuePod&& value) noexcept;
+
+    inline TUnboxedValue(const TUnboxedValue& value) noexcept;
     inline TUnboxedValue(TUnboxedValue&& value) noexcept;
- 
-    inline TUnboxedValue& operator=(const TUnboxedValue& value) noexcept; 
+
+    inline TUnboxedValue& operator=(const TUnboxedValue& value) noexcept;
     inline TUnboxedValue& operator=(TUnboxedValue&& value) noexcept;
- 
-    inline TUnboxedValuePod Release() noexcept; 
- 
-    inline void Clear() noexcept; 
- 
-    using TAllocator = TStdAllocatorForUdf<TUnboxedValue>; 
-}; 
- 
-UDF_ASSERT_TYPE_SIZE(TUnboxedValue, 16); 
- 
+
+    inline TUnboxedValuePod Release() noexcept;
+
+    inline void Clear() noexcept;
+
+    using TAllocator = TStdAllocatorForUdf<TUnboxedValue>;
+};
+
+UDF_ASSERT_TYPE_SIZE(TUnboxedValue, 16);
+
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 19)
-/////////////////////////////////////////////////////////////////////////////// 
+///////////////////////////////////////////////////////////////////////////////
 // TSingleBlock
 ///////////////////////////////////////////////////////////////////////////////
 class TSingleBlock: public TBlock {
@@ -1079,62 +1079,62 @@ UDF_ASSERT_TYPE_SIZE(TSingleBlockPtr, 8);
 #endif
 
 ///////////////////////////////////////////////////////////////////////////////
-// TBoxedResource 
-/////////////////////////////////////////////////////////////////////////////// 
-template <typename TResourceData, const char* ResourceTag> 
-class TBoxedResource: public TBoxedValue 
-{ 
-public: 
-    template <typename... Args> 
-    inline TBoxedResource(Args&&... args) 
-        : ResourceData_(std::forward<Args>(args)...) 
-    { 
-    } 
- 
-    inline TStringRef GetResourceTag() const override { 
-        return TStringRef(ResourceTag, std::strlen(ResourceTag)); 
-    } 
- 
-    inline void* GetResource() override { 
-        return Get(); 
-    } 
- 
-    inline TResourceData* Get() { 
-        return &ResourceData_; 
-    } 
- 
-    inline static void Validate(const TUnboxedValuePod& value) { 
-        Y_VERIFY_DEBUG(value.GetResourceTag() == TStringRef(ResourceTag, std::strlen(ResourceTag))); 
-    } 
- 
-private: 
-    TResourceData ResourceData_; 
-}; 
- 
+// TBoxedResource
+///////////////////////////////////////////////////////////////////////////////
+template <typename TResourceData, const char* ResourceTag>
+class TBoxedResource: public TBoxedValue
+{
+public:
+    template <typename... Args>
+    inline TBoxedResource(Args&&... args)
+        : ResourceData_(std::forward<Args>(args)...)
+    {
+    }
+
+    inline TStringRef GetResourceTag() const override {
+        return TStringRef(ResourceTag, std::strlen(ResourceTag));
+    }
+
+    inline void* GetResource() override {
+        return Get();
+    }
+
+    inline TResourceData* Get() {
+        return &ResourceData_;
+    }
+
+    inline static void Validate(const TUnboxedValuePod& value) {
+        Y_VERIFY_DEBUG(value.GetResourceTag() == TStringRef(ResourceTag, std::strlen(ResourceTag)));
+    }
+
+private:
+    TResourceData ResourceData_;
+};
+
 #define INCLUDE_UDF_VALUE_INL_H
 #include "udf_value_inl.h"
 #undef INCLUDE_UDF_VALUE_INL_H
 
 } // namespace NUdf
-} // namespace NYql 
+} // namespace NYql
 
 template<>
-inline void Out<NYql::NUdf::TUnboxedValuePod>(class IOutputStream &o, const NYql::NUdf::TUnboxedValuePod& value); 
+inline void Out<NYql::NUdf::TUnboxedValuePod>(class IOutputStream &o, const NYql::NUdf::TUnboxedValuePod& value);
 
 template<>
-inline void Out<NYql::NUdf::TUnboxedValue>(class IOutputStream &o, const NYql::NUdf::TUnboxedValue& value); 
+inline void Out<NYql::NUdf::TUnboxedValue>(class IOutputStream &o, const NYql::NUdf::TUnboxedValue& value);
 
 template<>
-inline void Out<NYql::NUdf::EFetchStatus>(class IOutputStream &o, NYql::NUdf::EFetchStatus value); 
+inline void Out<NYql::NUdf::EFetchStatus>(class IOutputStream &o, NYql::NUdf::EFetchStatus value);
 
 template<>
-inline void Out<NYql::NUdf::TStringRef>(class IOutputStream &o, const NYql::NUdf::TStringRef& value); 
+inline void Out<NYql::NUdf::TStringRef>(class IOutputStream &o, const NYql::NUdf::TStringRef& value);
 
 #include "udf_terminator.h"
 #include <util/stream/output.h>
 #include <tuple>
 
-namespace NYql { 
+namespace NYql {
 namespace NUdf {
 
 //////////////////////////////////////////////////////////////////////////////
@@ -1224,7 +1224,7 @@ inline TUnboxedValue TBoxedValueBase::GetKeysIterator() const
 
 inline TUnboxedValue TBoxedValueBase::GetPayloadsIterator() const
 {
-    Y_FAIL("Not implemented"); 
+    Y_FAIL("Not implemented");
 }
 
 inline bool TBoxedValueBase::Skip()
@@ -1394,34 +1394,34 @@ inline void TUnboxedValuePod::Dump(IOutputStream& out) const {
 }
 
 } // namespace NUdf
-} // namespace NYql 
+} // namespace NYql
 
 template<>
-inline void Out<NYql::NUdf::TUnboxedValuePod>(class IOutputStream &o, const NYql::NUdf::TUnboxedValuePod& value) { 
+inline void Out<NYql::NUdf::TUnboxedValuePod>(class IOutputStream &o, const NYql::NUdf::TUnboxedValuePod& value) {
     value.Dump(o);
 }
 
 template<>
-inline void Out<NYql::NUdf::TUnboxedValue>(class IOutputStream &o, const NYql::NUdf::TUnboxedValue& value) { 
+inline void Out<NYql::NUdf::TUnboxedValue>(class IOutputStream &o, const NYql::NUdf::TUnboxedValue& value) {
     value.Dump(o);
 }
 
 template<>
-inline void Out<NYql::NUdf::EFetchStatus>(class IOutputStream &o, NYql::NUdf::EFetchStatus value) { 
+inline void Out<NYql::NUdf::EFetchStatus>(class IOutputStream &o, NYql::NUdf::EFetchStatus value) {
     switch (value) {
-    case NYql::NUdf::EFetchStatus::Ok: 
+    case NYql::NUdf::EFetchStatus::Ok:
         o << "Ok";
         break;
-    case NYql::NUdf::EFetchStatus::Yield: 
+    case NYql::NUdf::EFetchStatus::Yield:
         o << "Yield";
         break;
-    case NYql::NUdf::EFetchStatus::Finish: 
+    case NYql::NUdf::EFetchStatus::Finish:
         o << "Finish";
         break;
     }
 }
 
 template<>
-inline void Out<NYql::NUdf::TStringRef>(class IOutputStream &o, const NYql::NUdf::TStringRef& value) { 
+inline void Out<NYql::NUdf::TStringRef>(class IOutputStream &o, const NYql::NUdf::TStringRef& value) {
     o << TStringBuf(value.Data(), value.Size());
 }

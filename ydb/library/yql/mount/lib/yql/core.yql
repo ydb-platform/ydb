@@ -12,8 +12,8 @@
 (let RemoveOptionalType (lambda '(type) (MatchType type 'Optional (lambda '() (OptionalItemType type))  (lambda '() type))))
 (let MaskBit (lambda '(value index) (ShiftLeft (Data (Apply RemoveOptionalType (TypeOf value)) '1) index)))
 
-(let TestBitInt (lambda '(value index) (Convert (BitAnd value (Apply MaskBit value index)) 'Bool))) 
-(let TestBitStr (lambda '(value index) (Apply TestBitInt (ByteAt value (Convert (ShiftRight (Convert index 'Uint64) (Uint8 '8)) 'Uint32)) (BitAnd (Convert index 'Uint8) (Uint8 '7))))) 
+(let TestBitInt (lambda '(value index) (Convert (BitAnd value (Apply MaskBit value index)) 'Bool)))
+(let TestBitStr (lambda '(value index) (Apply TestBitInt (ByteAt value (Convert (ShiftRight (Convert index 'Uint64) (Uint8 '8)) 'Uint32)) (BitAnd (Convert index 'Uint8) (Uint8 '7)))))
 (let TestBit (lambda '(value index) (block '(
     (let x (InstanceOf (Apply RemoveOptionalType (TypeOf value))))
     (return (IfType x (DataType 'String)
@@ -218,7 +218,7 @@ def signature(script, name):
    (Map list (lambda '(x) (AsStruct '('Data x))))
    '()
    '('('Data (Apply factory (StructType '('Data (ListItemType (TypeOf list)))) (lambda '(x) (Member x 'Data)))))
-   '('('compact)) 
+   '('('compact))
    ) 'Data))
 )))
 
@@ -234,7 +234,7 @@ def signature(script, name):
       (lambda '(row) (Map (Member row 'Data) (lambda '(item) (AsStruct '('Key (Member row 'Key)) '('Data item))))))
    '('Key)
    '('('Data (Apply factory (StructType '('Data (ListItemType (DictPayloadType (TypeOf dict))))) (lambda '(x) (Member x 'Data)))))
-   '('('compact)) 
+   '('('compact))
 ) 
 (lambda '(x) (Member x 'Key)) (lambda '(x) (Member x 'Data)) '('Hashed 'One)
 )))))

@@ -38,7 +38,7 @@ int CompileAndExecMiniKQL(TCommandConfig &cmdConf, int argc, char **argv) {
     TCmdCompileAndExecMiniKQLConfig config;
     config.Parse(argc, argv);
 
-    auto functionRegistry = NMiniKQL::CreateFunctionRegistry(NMiniKQL::CreateBuiltinRegistry()); 
+    auto functionRegistry = NMiniKQL::CreateFunctionRegistry(NMiniKQL::CreateBuiltinRegistry());
     TAlignedPagePoolCounters countersStub;
     NMiniKQL::TScopedAlloc alloc(countersStub);
     NMiniKQL::TTypeEnvironment TypeEnv(alloc);

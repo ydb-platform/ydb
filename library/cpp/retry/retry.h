@@ -8,7 +8,7 @@
 #include <util/generic/maybe.h>
 #include <util/generic/typetraits.h>
 #include <util/generic/yexception.h>
-#include <functional> 
+#include <functional>
 
 struct TRetryOptions {
     ui32 RetryCount;

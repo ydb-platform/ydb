@@ -13,14 +13,14 @@ TDqStageSettings TDqStageSettings::Parse(const TDqStageBase& node) {
     TDqStageSettings settings{};
 
     for (const auto& tuple : node.Settings()) {
-        if (const auto name = tuple.Name().Value(); name == IdSettingName) { 
+        if (const auto name = tuple.Name().Value(); name == IdSettingName) {
             YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
             settings.Id = tuple.Value().Cast<TCoAtom>().Value();
         } else if (name == LogicalIdSettingName) {
             YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
             settings.LogicalId = FromString<ui64>(tuple.Value().Cast<TCoAtom>().Value());
-        } else if (name == SinglePartitionSettingName) { 
-            settings.SinglePartition = true; 
+        } else if (name == SinglePartitionSettingName) {
+            settings.SinglePartition = true;
         } else if (name == IsExternalSetting) {
             settings.IsExternalFunction = true;
         } else if (name == TransformNameSetting) {
@@ -70,12 +70,12 @@ NNodes::TCoNameValueTupleList TDqStageSettings::BuildNode(TExprContext& ctx, TPo
             .Done());
     }
 
-    if (SinglePartition) { 
-        settings.push_back(Build<TCoNameValueTuple>(ctx, pos) 
-            .Name().Build(SinglePartitionSettingName) 
-            .Done()); 
-    } 
- 
+    if (SinglePartition) {
+        settings.push_back(Build<TCoNameValueTuple>(ctx, pos)
+            .Name().Build(SinglePartitionSettingName)
+            .Done());
+    }
+
     return Build<TCoNameValueTupleList>(ctx, pos)
         .Add(settings)
         .Done();

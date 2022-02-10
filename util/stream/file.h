@@ -7,7 +7,7 @@
 #include "mem.h"
 
 #include <util/system/file.h>
-#include <utility> 
+#include <utility>
 
 /**
  * @addtogroup Streams_Files

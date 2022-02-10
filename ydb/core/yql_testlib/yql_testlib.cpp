@@ -35,19 +35,19 @@ public:
         return name;
     }
 
-private: 
-    TUnboxedValue Run( 
-            const NKikimr::NUdf::IValueBuilder* valueBuilder, 
-            const NKikimr::NUdf::TUnboxedValuePod* args) const override 
-    { 
+private:
+    TUnboxedValue Run(
+            const NKikimr::NUdf::IValueBuilder* valueBuilder,
+            const NKikimr::NUdf::TUnboxedValuePod* args) const override
+    {
         TString orig(args[0].AsStringRef());
-        ui64 times = args[1].Get<ui64>(); 
+        ui64 times = args[1].Get<ui64>();
         TString res = "";
-        for (ui64 i = 0; i < times; i++) { 
-            res += orig; 
-        } 
-        return valueBuilder->NewString(res); 
-    } 
+        for (ui64 i = 0; i < times; i++) {
+            res += orig;
+        }
+        return valueBuilder->NewString(res);
+    }
 };
 
 
@@ -68,24 +68,24 @@ public:
     }
 
 private:
-    NKikimr::NUdf::TUnboxedValue Run( 
-            const IValueBuilder* valueBuilder, 
-            const TUnboxedValuePod* args) const override 
-    { 
-        Y_UNUSED(valueBuilder); 
-        YQL_ENSURE(Runtime->IsRealThreads()); 
- 
-        ui64 tabletID = args[0].Get<ui64>(); 
- 
-        auto sender = Runtime->AllocateEdgeActor(); 
- 
-        Runtime->SendToPipe(tabletID, sender, new NKikimr::TEvents::TEvPoisonPill); 
- 
-        ResumeYqlExecution.Wait(); 
- 
-        ui64 result = 0; 
-        return TUnboxedValuePod(result); 
-    } 
+    NKikimr::NUdf::TUnboxedValue Run(
+            const IValueBuilder* valueBuilder,
+            const TUnboxedValuePod* args) const override
+    {
+        Y_UNUSED(valueBuilder);
+        YQL_ENSURE(Runtime->IsRealThreads());
+
+        ui64 tabletID = args[0].Get<ui64>();
+
+        auto sender = Runtime->AllocateEdgeActor();
+
+        Runtime->SendToPipe(tabletID, sender, new NKikimr::TEvents::TEvPoisonPill);
+
+        ResumeYqlExecution.Wait();
+
+        ui64 result = 0;
+        return TUnboxedValuePod(result);
+    }
 };
 
 class TTestUDFs: public IUdfModule
@@ -103,11 +103,11 @@ public:
         return TStringRef::Of("TestUDFs");
     }
 
-    void CleanupOnTerminate() const final {} 
+    void CleanupOnTerminate() const final {}
 
-    void GetAllFunctions(IFunctionsSink& sink) const final { 
-        sink.Add(TRepeat::Name()); 
-        sink.Add(TSendPoisonPill::Name()); 
+    void GetAllFunctions(IFunctionsSink& sink) const final {
+        sink.Add(TRepeat::Name());
+        sink.Add(TSendPoisonPill::Name());
     }
 
     void BuildFunctionTypeInfo(
@@ -115,7 +115,7 @@ public:
             TType* userType,
             const TStringRef& typeConfig,
             ui32 flags,
-            IFunctionTypeInfoBuilder& builder) const final 
+            IFunctionTypeInfoBuilder& builder) const final
     {
         try {
             Y_UNUSED(userType);
@@ -168,7 +168,7 @@ void TYqlServer::Initialize() {
     app.SetFnRegistry([this](const NKikimr::NScheme::TTypeRegistry& typeRegistry) -> NKikimr::NMiniKQL::IFunctionRegistry* {
             Y_UNUSED(typeRegistry);
             // register test UDFs
-            auto freg = NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry())->Clone(); 
+            auto freg = NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry())->Clone();
             freg->AddModule("", "TestUDFs", new TTestUDFs(GetRuntime(), ResumeYqlExecutionPromise.GetFuture()));
             return freg.Release();
         }

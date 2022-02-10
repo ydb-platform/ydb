@@ -13,10 +13,10 @@
 namespace NYql {
 
 struct TDqSettings {
- 
-    struct TDefault { 
-        static constexpr ui32 MaxTasksPerStage = 20U; 
-        static constexpr ui32 MaxTasksPerOperation = 70U; 
+
+    struct TDefault {
+        static constexpr ui32 MaxTasksPerStage = 20U;
+        static constexpr ui32 MaxTasksPerOperation = 70U;
         static constexpr ui64 PortoMemoryLimit = 3_GB;
         static constexpr bool EnablePorto = false;
         static constexpr ui64 DataSizePerJob = 128_MB;
@@ -25,8 +25,8 @@ struct TDqSettings {
         static constexpr ui64 LiteralTimeout = 60000; // 1 minutes
         static constexpr ui64 TableTimeout = 600000; // 10 minutes
         static constexpr ui32 CloudFunctionConcurrency = 10;
-    }; 
- 
+    };
+
     using TPtr = std::shared_ptr<TDqSettings>;
 
     NCommon::TConfSetting<ui64, false> DataSizePerJob;
@@ -46,7 +46,7 @@ struct TDqSettings {
     NCommon::TConfSetting<ui64, false> PullRequestTimeoutMs;
     NCommon::TConfSetting<ui64, false> PingTimeoutMs;
     NCommon::TConfSetting<bool, false> UseSimpleYtReader;
-    NCommon::TConfSetting<TString, false> OptLLVM; 
+    NCommon::TConfSetting<TString, false> OptLLVM;
     NCommon::TConfSetting<ui64, false> ChannelBufferSize;
     NCommon::TConfSetting<ui64, false> OutputChunkMaxSize;
     NCommon::TConfSetting<NSize::TSize, false> MemoryLimit;
@@ -87,7 +87,7 @@ struct TDqSettings {
         SAVE_SETTING(CollectCoreDumps);
         SAVE_SETTING(PullRequestTimeoutMs);
         SAVE_SETTING(PingTimeoutMs);
-        SAVE_SETTING(OptLLVM); 
+        SAVE_SETTING(OptLLVM);
         SAVE_SETTING(ChannelBufferSize);
         SAVE_SETTING(OutputChunkMaxSize);
         SAVE_SETTING(MemoryLimit);

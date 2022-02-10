@@ -14,14 +14,14 @@ TAutoPtr<IGraphTransformer> CreateTypeAnnotationTransformer(
 TAutoPtr<IGraphTransformer> CreateFullTypeAnnotationTransformer(bool instant, bool wholeProgram, TTypeAnnotationContext& types);
 
 bool SyncAnnotateTypes(
-        TExprNode::TPtr& root, TExprContext& ctx, bool wholeProgram, 
+        TExprNode::TPtr& root, TExprContext& ctx, bool wholeProgram,
         TTypeAnnotationContext& typeAnnotationContext);
 
 bool InstantAnnotateTypes(
-        TExprNode::TPtr& root, TExprContext& ctx, bool wholeProgram, 
+        TExprNode::TPtr& root, TExprContext& ctx, bool wholeProgram,
         TTypeAnnotationContext& typeAnnotationContext);
 
-TExprNode::TPtr ParseAndAnnotate( 
+TExprNode::TPtr ParseAndAnnotate(
         const TStringBuf& str,
         TExprContext& exprCtx, bool instant, bool wholeProgram,
         TTypeAnnotationContext& typeAnnotationContext);

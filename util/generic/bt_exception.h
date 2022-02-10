@@ -1,6 +1,6 @@
 #pragma once
 
-#include <utility> 
+#include <utility>
 #include "yexception.h"
 
 #include <util/system/backtrace.h>
@@ -10,7 +10,7 @@ class TWithBackTrace: public T {
 public:
     template <typename... Args>
     inline TWithBackTrace(Args&&... args)
-        : T(std::forward<Args>(args)...) 
+        : T(std::forward<Args>(args)...)
     {
         BT_.Capture();
     }

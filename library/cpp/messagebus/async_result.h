@@ -5,8 +5,8 @@
 #include <util/system/condvar.h>
 #include <util/system/mutex.h>
 #include <util/system/yassert.h>
- 
-#include <functional> 
+
+#include <functional>
 
 // probably this thing should have been called TFuture
 template <typename T>
@@ -19,7 +19,7 @@ private:
 
     typedef void TOnResult(const T&);
 
-    std::function<TOnResult> OnResult; 
+    std::function<TOnResult> OnResult;
 
 public:
     void SetResult(const T& result) {
@@ -48,7 +48,7 @@ public:
             onResult(*Result);
         } else {
             Y_ASSERT(!OnResult);
-            OnResult = std::function<TOnResult>(onResult); 
+            OnResult = std::function<TOnResult>(onResult);
         }
     }
 };

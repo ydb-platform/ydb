@@ -1,6 +1,6 @@
 #pragma once
 
-#include <utility> 
+#include <utility>
 
 #include "maybe_traits.h"
 #include "yexception.h"
@@ -443,7 +443,7 @@ private:
 
     template <typename... Args>
     void Init(Args&&... args) {
-        new (Data()) T(std::forward<Args>(args)...); 
+        new (Data()) T(std::forward<Args>(args)...);
         this->Defined_ = true;
     }
 };

@@ -62,9 +62,9 @@ namespace NActors {
     }
 
     void TTestActorRuntimeBase::TNodeDataBase::Stop() {
-        if (Poller) 
-            Poller->Stop(); 
- 
+        if (Poller)
+            Poller->Stop();
+
         if (MailboxTable) {
             for (ui32 round = 0; !MailboxTable->Cleanup(); ++round)
                 Y_VERIFY(round < 10, "cyclic event/actor spawn while trying to shutdown actorsystem stub");
@@ -72,7 +72,7 @@ namespace NActors {
 
         if (ActorSystem)
             ActorSystem->Stop();
- 
+
         ActorSystem.Destroy();
         Poller.Reset();
     }
@@ -684,37 +684,37 @@ namespace NActors {
 
     TTestActorRuntimeBase::TEventObserver TTestActorRuntimeBase::SetObserverFunc(TEventObserver observerFunc) {
         TGuard<TMutex> guard(Mutex);
-        auto result = ObserverFunc; 
-        ObserverFunc = observerFunc; 
-        return result; 
+        auto result = ObserverFunc;
+        ObserverFunc = observerFunc;
+        return result;
     }
 
     TTestActorRuntimeBase::TScheduledEventsSelector TTestActorRuntimeBase::SetScheduledEventsSelectorFunc(TScheduledEventsSelector scheduledEventsSelectorFunc) {
         TGuard<TMutex> guard(Mutex);
-        auto result = ScheduledEventsSelectorFunc; 
-        ScheduledEventsSelectorFunc = scheduledEventsSelectorFunc; 
-        return result; 
+        auto result = ScheduledEventsSelectorFunc;
+        ScheduledEventsSelectorFunc = scheduledEventsSelectorFunc;
+        return result;
     }
 
     TTestActorRuntimeBase::TEventFilter TTestActorRuntimeBase::SetEventFilter(TEventFilter filterFunc) {
         TGuard<TMutex> guard(Mutex);
-        auto result = EventFilterFunc; 
-        EventFilterFunc = filterFunc; 
-        return result; 
+        auto result = EventFilterFunc;
+        EventFilterFunc = filterFunc;
+        return result;
     }
 
     TTestActorRuntimeBase::TScheduledEventFilter TTestActorRuntimeBase::SetScheduledEventFilter(TScheduledEventFilter filterFunc) {
         TGuard<TMutex> guard(Mutex);
-        auto result = ScheduledEventFilterFunc; 
-        ScheduledEventFilterFunc = filterFunc; 
-        return result; 
+        auto result = ScheduledEventFilterFunc;
+        ScheduledEventFilterFunc = filterFunc;
+        return result;
     }
 
     TTestActorRuntimeBase::TRegistrationObserver TTestActorRuntimeBase::SetRegistrationObserverFunc(TRegistrationObserver observerFunc) {
         TGuard<TMutex> guard(Mutex);
-        auto result = RegistrationObserver; 
-        RegistrationObserver = observerFunc; 
-        return result; 
+        auto result = RegistrationObserver;
+        RegistrationObserver = observerFunc;
+        return result;
     }
 
     bool TTestActorRuntimeBase::IsVerbose() {
@@ -1641,7 +1641,7 @@ namespace NActors {
         }
 
         const auto& interconnectCounters = GetCountersForComponent(node->DynamicCounters, "interconnect");
- 
+
         setup->LocalServices = node->LocalServices;
         setup->Interconnect.ProxyActors.resize(FirstNodeId + NodeCount);
         const TActorId nameserviceId = GetNameserviceActorId();

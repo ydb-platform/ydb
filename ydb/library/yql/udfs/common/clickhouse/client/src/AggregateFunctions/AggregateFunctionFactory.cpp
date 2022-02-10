@@ -132,25 +132,25 @@ AggregateFunctionPtr AggregateFunctionFactory::getImpl(
         found = jt->second;
         is_case_insensitive = true;
     }
-/* 
+/*
     ContextPtr query_context;
     if (CurrentThread::isInitialized())
         query_context = CurrentThread::get().getQueryContext();
-*/ 
+*/
     if (found.creator)
     {
         out_properties = found.properties;
-/* 
+/*
         if (query_context && query_context->getSettingsRef().log_queries)
             query_context->addQueryFactoriesInfo(
                     Context::QueryLogFactories::AggregateFunction, is_case_insensitive ? Poco::toLower(name) : name);
-*/ 
+*/
         /// The case when aggregate function should return NULL on NULL arguments. This case is handled in "get" method.
         if (!out_properties.returns_default_when_only_null && has_null_arguments)
             return nullptr;
 
-//        const Settings * settings = query_context ? &query_context->getSettingsRef() : nullptr; 
-        return found.creator(name, argument_types, parameters, nullptr); 
+//        const Settings * settings = query_context ? &query_context->getSettingsRef() : nullptr;
+        return found.creator(name, argument_types, parameters, nullptr);
     }
 
     /// Combinators of aggregate functions.
@@ -161,10 +161,10 @@ AggregateFunctionPtr AggregateFunctionFactory::getImpl(
     {
         if (combinator->isForInternalUsageOnly())
             throw Exception("Aggregate function combinator '" + combinator->getName() + "' is only for internal usage", ErrorCodes::UNKNOWN_AGGREGATE_FUNCTION);
-/* 
+/*
         if (query_context && query_context->getSettingsRef().log_queries)
             query_context->addQueryFactoriesInfo(Context::QueryLogFactories::AggregateFunctionCombinator, combinator->getName());
-*/ 
+*/
         String nested_name = name.substr(0, name.size() - combinator->getName().size());
         DataTypes nested_types = combinator->transformArguments(argument_types);
         Array nested_parameters = combinator->transformParameters(parameters);

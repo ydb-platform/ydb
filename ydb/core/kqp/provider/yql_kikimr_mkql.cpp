@@ -105,8 +105,8 @@ TExprNode::TPtr MkqlRewriteCallables(TCallable callable, TExprContext& ctx, cons
     if (auto setResult = callable.Maybe<TKiSetResult>()) {
         return ctx.Builder(setResult.Cast().Pos())
             .Callable("SetResult")
-                .Add(0, setResult.Cast().Name().Ptr()) 
-                .Add(1, setResult.Cast().Data().Ptr()) 
+                .Add(0, setResult.Cast().Name().Ptr())
+                .Add(1, setResult.Cast().Data().Ptr())
                 .Seal()
             .Build();
     }
@@ -114,7 +114,7 @@ TExprNode::TPtr MkqlRewriteCallables(TCallable callable, TExprContext& ctx, cons
     if (auto acquireLocks = callable.Maybe<TKiAcquireLocks>()) {
         return ctx.Builder(acquireLocks.Cast().Pos())
             .Callable("AcquireLocks")
-                .Add(0, acquireLocks.Cast().LockTxId().Ptr()) 
+                .Add(0, acquireLocks.Cast().LockTxId().Ptr())
                 .Seal()
             .Build();
     }
@@ -130,8 +130,8 @@ TExprNode::TPtr MkqlRewriteCallables(TCallable callable, TExprContext& ctx, cons
     if (auto map = callable.Maybe<TKiFlatMapParameter>()) {
         return ctx.Builder(map.Cast().Pos())
             .Callable("FlatMapParameter")
-                .Add(0, map.Cast().Input().Ptr()) 
-                .Add(1, map.Cast().Lambda().Ptr()) 
+                .Add(0, map.Cast().Input().Ptr())
+                .Add(1, map.Cast().Lambda().Ptr())
                 .Seal()
             .Build();
     }
@@ -153,7 +153,7 @@ TExprNode::TPtr MkqlRewriteCallables(TCallable callable, TExprContext& ctx, cons
             .Build();
     }
 
-    return callable.Ptr(); 
+    return callable.Ptr();
 }
 
 } // namespace
@@ -177,7 +177,7 @@ TMaybeNode<TExprBase> TranslateToMkql(TExprBase node, TExprContext& ctx, const T
         node = program.Effects();
     }
 
-    auto current = node.Ptr(); 
+    auto current = node.Ptr();
     TExprNode::TPtr output;
     TOptimizeExprSettings optSettings(nullptr);
     optSettings.VisitChanges = true;
@@ -197,7 +197,7 @@ TMaybeNode<TExprBase> TranslateToMkql(TExprBase node, TExprContext& ctx, const T
         }, ctx, optSettings);
 
     if (status != IGraphTransformer::TStatus::Ok) {
-        return TExprNode::TPtr(); 
+        return TExprNode::TPtr();
     }
 
     return TExprBase(output);

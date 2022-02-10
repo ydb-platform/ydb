@@ -42,9 +42,9 @@ TExprNode::TPtr KiEmptyCommit(TExprBase node) {
     return innerCommit.Ptr();
 }
 
-TExprNode::TPtr KiEraseOverSelectRow(TExprBase node, TExprContext& ctx) { 
+TExprNode::TPtr KiEraseOverSelectRow(TExprBase node, TExprContext& ctx) {
     if (!node.Maybe<TCoFlatMap>().Input().Maybe<TKiSelectRow>()) {
-        return node.Ptr(); 
+        return node.Ptr();
     }
 
     auto map = node.Cast<TCoFlatMap>();
@@ -97,7 +97,7 @@ TExprNode::TPtr KiEraseOverSelectRow(TExprBase node, TExprContext& ctx) {
         }
     }
 
-    return node.Ptr(); 
+    return node.Ptr();
 }
 
 TExprNode::TPtr KiRewriteAggregate(TExprBase node, TExprContext& ctx) {
@@ -120,7 +120,7 @@ TExprNode::TPtr KiRewriteAggregate(TExprBase node, TExprContext& ctx) {
     }
 
     YQL_CLOG(INFO, ProviderKikimr) << "KiRewriteAggregate";
-    return ExpandAggregate(node.Ptr(), ctx); 
+    return ExpandAggregate(node.Ptr(), ctx);
 }
 
 TExprNode::TPtr KiRedundantSortByPk(TExprBase node, TExprContext& ctx,
@@ -667,8 +667,8 @@ TAutoPtr<IGraphTransformer> CreateKiLogicalOptProposalTransformer(TIntrusivePtr<
         optCtx.ParentsMap = &parentsMap;
 
         TStatus status = OptimizeExpr(input, output, [sessionCtx, &optCtx](const TExprNode::TPtr& inputNode, TExprContext& ctx) {
-            auto ret = inputNode; 
-            TExprBase node(inputNode); 
+            auto ret = inputNode;
+            TExprBase node(inputNode);
 
             ret = KiSqlInToEquiJoin(node, sessionCtx->Tables(), sessionCtx->Config(), ctx);
             if (ret != inputNode) {
@@ -691,17 +691,17 @@ TAutoPtr<IGraphTransformer> CreateKiLogicalOptProposalTransformer(TIntrusivePtr<
             }
 
             ret = KiApplyLimitToSelectRange(node, ctx);
-            if (ret != inputNode) { 
+            if (ret != inputNode) {
                 return ret;
             }
 
             ret = KiPushPredicateToSelectRange(node, ctx, sessionCtx->Tables(), sessionCtx->Config());
-            if (ret != inputNode) { 
+            if (ret != inputNode) {
                 return ret;
             }
 
             ret = KiEraseOverSelectRow(node, ctx);
-            if (ret != inputNode) { 
+            if (ret != inputNode) {
                 return ret;
             }
 

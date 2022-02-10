@@ -83,7 +83,7 @@ class TKqpLookupRowsWrapper : public TStatelessFlowComputationNode<TKqpLookupRow
 public:
     TKqpLookupRowsWrapper(TComputationMutables& mutables, TKqpDatashardComputeContext& computeCtx,
         const TTypeEnvironment& typeEnv, const TParseLookupTableResult& parseResult, IComputationNode* lookupKeysNode)
-        : TBase(mutables, this, EValueRepresentation::Boxed) 
+        : TBase(mutables, this, EValueRepresentation::Boxed)
         , ComputeCtx(computeCtx)
         , TypeEnv(typeEnv)
         , ParseResult(parseResult)
@@ -203,7 +203,7 @@ class TKqpLookupTableWrapper : public TStatelessFlowComputationNode<TKqpLookupTa
 public:
     TKqpLookupTableWrapper(TComputationMutables& mutables, TKqpDatashardComputeContext& computeCtx,
         const TTypeEnvironment& typeEnv, const TParseLookupTableResult& parseResult, IComputationNode* lookupKeysNode)
-        : TBase(mutables, this, EValueRepresentation::Boxed) 
+        : TBase(mutables, this, EValueRepresentation::Boxed)
         , ComputeCtx(computeCtx)
         , TypeEnv(typeEnv)
         , ParseResult(parseResult)

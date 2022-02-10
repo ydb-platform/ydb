@@ -7,7 +7,7 @@
 #include <ydb/library/yql/public/decimal/yql_decimal_serialize.h>
 
 #include <util/system/unaligned_mem.h>
-#include <util/string/builder.h> 
+#include <util/string/builder.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -330,23 +330,23 @@ void DecodeTzUnsigned(TStringBuf& input, TUnsigned& value, ui16& tzId) {
     }
 }
 
-constexpr size_t DecimalSize = sizeof(NYql::NDecimal::TInt128); 
+constexpr size_t DecimalSize = sizeof(NYql::NDecimal::TInt128);
 
 template <bool Desc>
 Y_FORCE_INLINE
-void EncodeDecimal(TVector<ui8>& output, NYql::NDecimal::TInt128 value) { 
+void EncodeDecimal(TVector<ui8>& output, NYql::NDecimal::TInt128 value) {
     output.resize(output.size() + DecimalSize);
     auto ptr = reinterpret_cast<char*>(output.end() - DecimalSize);
-    output.resize(output.size() + NYql::NDecimal::Serialize(Desc ? -value : value, ptr) - DecimalSize); 
+    output.resize(output.size() + NYql::NDecimal::Serialize(Desc ? -value : value, ptr) - DecimalSize);
 }
 
 template <bool Desc>
 Y_FORCE_INLINE
-NYql::NDecimal::TInt128 DecodeDecimal(TStringBuf& input) { 
-    MKQL_ENSURE(input.size() > 0U && input.size() <= DecimalSize, "premature end of input"); 
+NYql::NDecimal::TInt128 DecodeDecimal(TStringBuf& input) {
+    MKQL_ENSURE(input.size() > 0U && input.size() <= DecimalSize, "premature end of input");
     const auto des = NYql::NDecimal::Deserialize(input.data());
-    input.Skip(des.second); 
-    return Desc ? -des.first : des.first; 
+    input.Skip(des.second);
+    return Desc ? -des.first : des.first;
 }
 
 
@@ -392,7 +392,7 @@ void Encode(TVector<ui8>& output, NUdf::EDataSlot slot, const NUdf::TUnboxedValu
     case NUdf::EDataSlot::Float:
         EncodeFloating<float, Desc>(output, value.Get<float>());
         break;
-    case NUdf::EDataSlot::DyNumber: 
+    case NUdf::EDataSlot::DyNumber:
     case NUdf::EDataSlot::String:
     case NUdf::EDataSlot::Utf8: {
         auto stringRef = value.AsStringRef();
@@ -422,7 +422,7 @@ void Encode(TVector<ui8>& output, NUdf::EDataSlot slot, const NUdf::TUnboxedValu
 
 template <bool Desc>
 Y_FORCE_INLINE
-NUdf::TUnboxedValue Decode(TStringBuf& input, NUdf::EDataSlot slot, TVector<ui8>& buffer) 
+NUdf::TUnboxedValue Decode(TStringBuf& input, NUdf::EDataSlot slot, TVector<ui8>& buffer)
 {
     switch (slot) {
 
@@ -463,11 +463,11 @@ NUdf::TUnboxedValue Decode(TStringBuf& input, NUdf::EDataSlot slot, TVector<ui8>
     case NUdf::EDataSlot::Float:
         return NUdf::TUnboxedValuePod(DecodeFloating<float, Desc>(input));
 
-    case NUdf::EDataSlot::DyNumber: 
+    case NUdf::EDataSlot::DyNumber:
     case NUdf::EDataSlot::String:
     case NUdf::EDataSlot::Utf8:
         buffer.clear();
-        return MakeString(NUdf::TStringRef(DecodeString<Desc>(input, buffer))); 
+        return MakeString(NUdf::TStringRef(DecodeString<Desc>(input, buffer)));
 
     case NUdf::EDataSlot::Uuid:
         buffer.clear();
@@ -705,7 +705,7 @@ NUdf::TUnboxedValue DecodeImpl(TType* type, TStringBuf& input, const THolderFact
 
         TType* altType = tupleType->GetElementType(alt);
         auto value = DecodeImpl(altType, input, factory, buffer);
-        return factory.CreateVariantHolder(value.Release(), alt); 
+        return factory.CreateVariantHolder(value.Release(), alt);
     }
 
     // Struct and Dict may be encoded into a presort form only to canonize dict keys. No need to decode them.
@@ -776,12 +776,12 @@ NUdf::TUnboxedValue TPresortDecoder::Decode() {
         if (type.IsOptional && !NDetail::DecodeBool<true>(Input)) {
             return NUdf::TUnboxedValuePod();
         }
-        return NDetail::Decode<true>(Input, type.Slot, Buffer); 
+        return NDetail::Decode<true>(Input, type.Slot, Buffer);
     } else {
         if (type.IsOptional && !NDetail::DecodeBool<false>(Input)) {
             return NUdf::TUnboxedValuePod();
         }
-        return NDetail::Decode<false>(Input, type.Slot, Buffer); 
+        return NDetail::Decode<false>(Input, type.Slot, Buffer);
     }
 }
 

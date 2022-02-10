@@ -658,12 +658,12 @@ int main(int argc, char* argv[]) {
         for (int i = 0; i < TheConfig->ClientCount; ++i) {
             TGuard<TMutex> guard(ClientsLock);
             Clients.push_back(new TPerftestClient);
-            futures.push_back(new NThreading::TLegacyFuture<void, false>(std::bind(&TPerftestClient::Work, Clients.back()))); 
+            futures.push_back(new NThreading::TLegacyFuture<void, false>(std::bind(&TPerftestClient::Work, Clients.back())));
             www->RegisterClientSession(Clients.back()->Session);
         }
     }
 
-    futures.push_back(new NThreading::TLegacyFuture<void, false>(std::bind(&TTestStats::PeriodicallyPrint, std::ref(Stats)))); 
+    futures.push_back(new NThreading::TLegacyFuture<void, false>(std::bind(&TTestStats::PeriodicallyPrint, std::ref(Stats))));
 
     THolder<TBusWwwHttpServer> wwwServer;
     if (TheConfig->WwwPort != 0) {

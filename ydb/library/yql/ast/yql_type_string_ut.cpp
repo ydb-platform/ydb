@@ -58,7 +58,7 @@ Y_UNIT_TEST_SUITE(TTypeString)
         TestOk("TzDatetime", "(DataType 'TzDatetime)");
         TestOk("TzTimestamp", "(DataType 'TzTimestamp)");
         TestOk("Uuid", "(DataType 'Uuid)");
-        TestOk("Decimal(10,2)", "(DataType 'Decimal '10 '2)"); 
+        TestOk("Decimal(10,2)", "(DataType 'Decimal '10 '2)");
     }
 
     Y_UNIT_TEST(Multiline) {
@@ -551,10 +551,10 @@ Y_UNIT_TEST_SUITE(TTypeString)
                    "Struct<'Age':Uint32,'Male':Bool,'Name':String>");
     }
 
-    Y_UNIT_TEST(FormatDecimal) { 
-        TestFormat("((Data Decimal 10 3))", "Decimal(10,3)"); 
-    } 
- 
+    Y_UNIT_TEST(FormatDecimal) {
+        TestFormat("((Data Decimal 10 3))", "Decimal(10,3)");
+    }
+
     Y_UNIT_TEST(FormatList) {
         TestFormat("((List (Data String)))", "List<String>");
     }

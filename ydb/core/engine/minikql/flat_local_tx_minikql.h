@@ -156,7 +156,7 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
         TScopedAlloc alloc(counters, appData->FunctionRegistry->SupportsSizedAllocators());
         TTypeEnvironment typeEnv(alloc);
         TLocalDbSchemeResolver dbResolver(txc.DB.GetScheme(), TabletId);
-        const auto unguard = Unguard(alloc); 
+        const auto unguard = Unguard(alloc);
         auto future = ConvertToMiniKQL(expr, appData->FunctionRegistry, &typeEnv, &dbResolver);
         future.Wait();
         NYql::TConvertResult compileResult = future.GetValue();

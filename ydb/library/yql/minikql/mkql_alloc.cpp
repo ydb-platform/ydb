@@ -10,14 +10,14 @@ namespace NMiniKQL {
 Y_POD_THREAD(TAllocState*) TlsAllocState;
 
 TAllocPageHeader TAllocState::EmptyPageHeader = { 0, 0, 0, 0, 0, nullptr };
- 
-void TAllocState::TListEntry::Link(TAllocState::TListEntry* root) noexcept { 
+
+void TAllocState::TListEntry::Link(TAllocState::TListEntry* root) noexcept {
     Left = root;
     Right = root->Right;
     Right->Left = Left->Right = this;
 }
 
-void TAllocState::TListEntry::Unlink() noexcept { 
+void TAllocState::TListEntry::Unlink() noexcept {
     std::tie(Right->Left, Left->Right) = std::make_pair(Left, Right);
     Left = Right = nullptr;
 }
@@ -25,19 +25,19 @@ void TAllocState::TListEntry::Unlink() noexcept {
 TAllocState::TAllocState(const NKikimr::TAlignedPagePoolCounters &counters, bool supportsSizedAllocators)
     : TAlignedPagePool(counters)
     , SupportsSizedAllocators(supportsSizedAllocators)
-{ 
-    GetRoot()->InitLinks(); 
+{
+    GetRoot()->InitLinks();
     OffloadedBlocksRoot.InitLinks();
-} 
+}
 
-void TAllocState::KillAllBoxed() { 
+void TAllocState::KillAllBoxed() {
     {
         const auto root = GetRoot();
         for (auto next = root->GetRight(); next != root; next = root->GetLeft()) {
             next->Ref();
             next->~TBoxedValueLink();
         }
-    } 
+    }
 
     {
         const auto root = &OffloadedBlocksRoot;
@@ -51,8 +51,8 @@ void TAllocState::KillAllBoxed() {
 #ifndef NDEBUG
     ActiveMemInfo.clear();
 #endif
-} 
- 
+}
+
 void TAllocState::InvalidateMemInfo() {
 #ifndef NDEBUG
     for (auto& pair : ActiveMemInfo) {
@@ -94,7 +94,7 @@ void* MKQLAllocSlow(size_t sz, TAllocState* state) {
     return ret;
 }
 
-void MKQLFreeSlow(TAllocPageHeader* header) noexcept { 
+void MKQLFreeSlow(TAllocPageHeader* header) noexcept {
     TAllocState *state = TlsAllocState;
     Y_VERIFY_DEBUG(state);
     state->ReturnBlock(header, header->Capacity);
@@ -116,7 +116,7 @@ void* TPagedArena::AllocSlow(size_t sz) {
     return ret;
 }
 
-void TPagedArena::Clear() noexcept { 
+void TPagedArena::Clear() noexcept {
     auto current = CurrentPage_;
     while (current != &TAllocState::EmptyPageHeader) {
         auto next = current->Link;

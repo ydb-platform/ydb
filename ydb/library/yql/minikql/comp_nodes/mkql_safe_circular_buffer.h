@@ -3,7 +3,7 @@
 
 #include <util/system/yassert.h>
 #include <util/generic/maybe.h>
-#include <vector> 
+#include <vector>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -59,7 +59,7 @@ public:
     }
 
     size_t Size() const {
-        return Buffer.size(); 
+        return Buffer.size();
     }
 
     size_t UsedSize() const {
@@ -79,8 +79,8 @@ public:
 
     void Clear() {
         Head = Count = 0;
-        Buffer.clear(); 
-        Buffer.shrink_to_fit(); 
+        Buffer.clear();
+        Buffer.shrink_to_fit();
     }
 
 private:
@@ -97,7 +97,7 @@ private:
         return index % size;
     }
 
-    std::vector<T> Buffer; 
+    std::vector<T> Buffer;
     const T EmptyValue;
     const bool Unbounded;
     size_t Head = 0;

@@ -47,12 +47,12 @@ struct TThrowable
     }
 };
 
-typedef 
-#ifdef _win_ 
-struct { ui64 Data, Meta; } 
-#else 
-unsigned __int128 
-#endif 
-TRawUV; 
- 
+typedef
+#ifdef _win_
+struct { ui64 Data, Meta; }
+#else
+unsigned __int128
+#endif
+TRawUV;
+
 }

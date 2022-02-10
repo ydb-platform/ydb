@@ -9,7 +9,7 @@
 
 #include <util/system/progname.h>
 
-#include <functional> 
+#include <functional>
 
 namespace NMonitoring {
     class TMonService2: public TMtHttpServer {

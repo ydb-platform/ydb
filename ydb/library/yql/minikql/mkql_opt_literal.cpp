@@ -27,7 +27,7 @@ TNode* LiteralAddMember(
     TStructLiteralBuilder resultBuilder(env);
 
     TDataLiteral* positionData = AS_VALUE(TDataLiteral, position);
-    const ui32 positionValue = positionData->AsValue().Get<ui32>(); 
+    const ui32 positionValue = positionData->AsValue().Get<ui32>();
     MKQL_ENSURE(positionValue <= oldStruct.GetType()->GetMembersCount(), "Bad member index");
 
     for (ui32 i = 0; i < positionValue; ++i) {
@@ -50,7 +50,7 @@ TNode* LiteralRemoveMember(
     TStructLiteralBuilder resultBuilder(env);
 
     TDataLiteral* positionData = AS_VALUE(TDataLiteral, position);
-    const ui32 positionValue = positionData->AsValue().Get<ui32>(); 
+    const ui32 positionValue = positionData->AsValue().Get<ui32>();
     MKQL_ENSURE(positionValue < oldStruct.GetType()->GetMembersCount(), "Bad member index");
 
     for (ui32 i = 0; i < positionValue; ++i) {
@@ -73,7 +73,7 @@ TRuntimeNode OptimizeIf(TCallable& callable, const TTypeEnvironment& env) {
     auto elseInput = callable.GetInput(2);
     if (predicateInput.HasValue()) {
         TDataLiteral* data = AS_VALUE(TDataLiteral, predicateInput);
-        const bool predicateValue = data->AsValue().Get<bool>(); 
+        const bool predicateValue = data->AsValue().Get<bool>();
         return predicateValue ? thenInput : elseInput;
     }
 
@@ -90,7 +90,7 @@ TRuntimeNode OptimizeSize(TCallable& callable, const TTypeEnvironment& env) {
     auto dataInput = callable.GetInput(0);
     if (dataInput.HasValue()) {
         TDataLiteral* value = AS_VALUE(TDataLiteral, dataInput);
-        return TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod((ui32)value->AsValue().AsStringRef().Size()), NUdf::EDataSlot::Uint32, env), true); 
+        return TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod((ui32)value->AsValue().AsStringRef().Size()), NUdf::EDataSlot::Uint32, env), true);
     }
 
     return TRuntimeNode(&callable, false);
@@ -150,7 +150,7 @@ TRuntimeNode OptimizeMember(TCallable& callable, const TTypeEnvironment& env) {
 
         auto position = callable.GetInput(1);
         TDataLiteral* positionData = AS_VALUE(TDataLiteral, position);
-        const ui32 positionValue = positionData->AsValue().Get<ui32>(); 
+        const ui32 positionValue = positionData->AsValue().Get<ui32>();
 
         MKQL_ENSURE(positionValue < value->GetValuesCount(), "Bad member index");
         return value->GetValue(positionValue);
@@ -160,25 +160,25 @@ TRuntimeNode OptimizeMember(TCallable& callable, const TTypeEnvironment& env) {
 }
 
 TRuntimeNode OptimizeFilter(TCallable& callable, const TTypeEnvironment& env) {
-    if (callable.GetInputsCount() == 3U) { 
-        auto listInput = callable.GetInput(0); 
-        if (!listInput.GetStaticType()->IsList()) { 
-            return TRuntimeNode(&callable, false); 
-        } 
+    if (callable.GetInputsCount() == 3U) {
+        auto listInput = callable.GetInput(0);
+        if (!listInput.GetStaticType()->IsList()) {
+            return TRuntimeNode(&callable, false);
+        }
 
-        auto listType = static_cast<TListType*>(listInput.GetStaticType()); 
-        auto predicateInput = callable.GetInput(2); 
-        if (predicateInput.HasValue()) { 
-            auto predicate = predicateInput.GetValue(); 
-            MKQL_ENSURE(predicate->GetType()->IsData(), "Expected data"); 
+        auto listType = static_cast<TListType*>(listInput.GetStaticType());
+        auto predicateInput = callable.GetInput(2);
+        if (predicateInput.HasValue()) {
+            auto predicate = predicateInput.GetValue();
+            MKQL_ENSURE(predicate->GetType()->IsData(), "Expected data");
 
-            const auto& data = static_cast<const TDataLiteral&>(*predicate); 
-            const bool predicateValue = data.AsValue().Get<bool>(); 
-            if (predicateValue) { 
-                return listInput; 
-            } else { 
-                return TRuntimeNode(TListLiteral::Create(nullptr, 0, listType, env), true); 
-            } 
+            const auto& data = static_cast<const TDataLiteral&>(*predicate);
+            const bool predicateValue = data.AsValue().Get<bool>();
+            if (predicateValue) {
+                return listInput;
+            } else {
+                return TRuntimeNode(TListLiteral::Create(nullptr, 0, listType, env), true);
+            }
         }
     }
 
@@ -203,15 +203,15 @@ TRuntimeNode OptimizeMap(TCallable& callable, const TTypeEnvironment& env) {
 }
 
 TRuntimeNode OptimizeFlatMap(TCallable& callable, const TTypeEnvironment& env) {
-    MKQL_ENSURE(callable.GetInputsCount() > 2U, "Expected 3 or more arguments"); 
+    MKQL_ENSURE(callable.GetInputsCount() > 2U, "Expected 3 or more arguments");
 
-    const auto returnType = callable.GetType()->GetReturnType(); 
-    if (!returnType->IsList() || callable.GetInputsCount() > 3U) { 
+    const auto returnType = callable.GetType()->GetReturnType();
+    if (!returnType->IsList() || callable.GetInputsCount() > 3U) {
         return TRuntimeNode(&callable, false);
     }
 
-    const auto listType = static_cast<TListType*>(returnType); 
-    const auto newItemInput = callable.GetInput(2); 
+    const auto listType = static_cast<TListType*>(returnType);
+    const auto newItemInput = callable.GetInput(2);
     if (listType->GetItemType()->IsVoid() && newItemInput.HasValue()) {
         if (newItemInput.GetStaticType()->IsList()) {
             TListLiteral* list = AS_VALUE(TListLiteral, newItemInput);
@@ -254,7 +254,7 @@ TRuntimeNode OptimizeExists(TCallable& callable, const TTypeEnvironment& env) {
 
     auto optionalInput = callable.GetInput(0);
     if (optionalInput.HasValue()) {
-        const bool has = AS_VALUE(TOptionalLiteral, optionalInput)->HasItem(); 
+        const bool has = AS_VALUE(TOptionalLiteral, optionalInput)->HasItem();
         return TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod(has), NUdf::EDataSlot::Bool, env), true);
     }
 
@@ -269,7 +269,7 @@ TRuntimeNode OptimizeNth(TCallable& callable, const TTypeEnvironment& env) {
     if (tupleInput.HasValue() && tupleInput.GetStaticType()->IsTuple()) {
         auto tuple = tupleInput.GetValue();
         auto indexData = AS_VALUE(TDataLiteral, callable.GetInput(1));
-        const ui32 index = indexData->AsValue().Get<ui32>(); 
+        const ui32 index = indexData->AsValue().Get<ui32>();
 
         const auto& value = static_cast<const TTupleLiteral&>(*tuple);
         MKQL_ENSURE(index < value.GetValuesCount(), "Index out of range");

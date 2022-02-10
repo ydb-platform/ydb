@@ -13,24 +13,24 @@ namespace NMiniKQL {
 ///////////////////////////////////////////////////////////////////////////////
 // TDefaultValueBuilder
 ///////////////////////////////////////////////////////////////////////////////
-TDefaultValueBuilder::TDefaultValueBuilder(const THolderFactory& holderFactory, NUdf::EValidatePolicy policy) 
-    : HolderFactory_(holderFactory) 
-    , Policy_(policy) 
-{} 
- 
-void TDefaultValueBuilder::SetSecureParamsProvider(const NUdf::ISecureParamsProvider* provider) { 
-    SecureParamsProvider_ = provider; 
-} 
- 
-void TDefaultValueBuilder::RethrowAtTerminate() { 
-    Rethrow_ = true; 
-} 
- 
-void TDefaultValueBuilder::SetCalleePositionHolder(const NUdf::TSourcePosition*& position) { 
-    CalleePositionPtr_ = &position; 
-} 
- 
-void TDefaultValueBuilder::Terminate(const char* message) const { 
+TDefaultValueBuilder::TDefaultValueBuilder(const THolderFactory& holderFactory, NUdf::EValidatePolicy policy)
+    : HolderFactory_(holderFactory)
+    , Policy_(policy)
+{}
+
+void TDefaultValueBuilder::SetSecureParamsProvider(const NUdf::ISecureParamsProvider* provider) {
+    SecureParamsProvider_ = provider;
+}
+
+void TDefaultValueBuilder::RethrowAtTerminate() {
+    Rethrow_ = true;
+}
+
+void TDefaultValueBuilder::SetCalleePositionHolder(const NUdf::TSourcePosition*& position) {
+    CalleePositionPtr_ = &position;
+}
+
+void TDefaultValueBuilder::Terminate(const char* message) const {
     TStringBuf reason = (message ? TStringBuf(message) : TStringBuf("(unknown)"));
     TString fullMessage = TStringBuilder() <<
         "Terminate was called, reason(" << reason.size() << "): " << reason << Endl;
@@ -48,89 +48,89 @@ void TDefaultValueBuilder::Terminate(const char* message) const {
     abort();
 }
 
-NUdf::TUnboxedValue TDefaultValueBuilder::NewStringNotFilled(ui32 size) const 
-{ 
-    return MakeStringNotFilled(size); 
-} 
- 
-NUdf::TUnboxedValue TDefaultValueBuilder::NewString(const NUdf::TStringRef& ref) const 
-{ 
-    return MakeString(ref); 
-} 
- 
-NUdf::TUnboxedValue TDefaultValueBuilder::ConcatStrings(NUdf::TUnboxedValuePod first, NUdf::TUnboxedValuePod second) const 
-{ 
-    return ::NKikimr::NMiniKQL::ConcatStrings(first, second); 
-} 
- 
-NUdf::TUnboxedValue TDefaultValueBuilder::AppendString(NUdf::TUnboxedValuePod value, const NUdf::TStringRef& ref) const 
-{ 
-    return ::NKikimr::NMiniKQL::AppendString(value, ref); 
-} 
- 
-NUdf::TUnboxedValue TDefaultValueBuilder::PrependString(const NUdf::TStringRef& ref, NUdf::TUnboxedValuePod value) const 
-{ 
-    return ::NKikimr::NMiniKQL::PrependString(ref, value); 
-} 
- 
-NUdf::TUnboxedValue TDefaultValueBuilder::SubString(NUdf::TUnboxedValuePod value, ui32 offset, ui32 size) const 
-{ 
-    return ::NKikimr::NMiniKQL::SubString(value, offset, size); 
-} 
- 
-NUdf::TUnboxedValue TDefaultValueBuilder::NewList(NUdf::TUnboxedValue* items, ui64 count) const { 
-    if (!items || !count) 
-        return HolderFactory_.GetEmptyContainer(); 
- 
-    if (count < Max<ui32>()) { 
-        NUdf::TUnboxedValue* inplace = nullptr; 
-        auto array = HolderFactory_.CreateDirectArrayHolder(count, inplace); 
-        for (ui64 i = 0; i < count; ++i) 
-            *inplace++ = std::move(*items++); 
-        return std::move(array); 
-    } 
- 
-    TDefaultListRepresentation list; 
-    for (ui64 i = 0; i < count; ++i) { 
-        list = list.Append(std::move(*items++)); 
-    } 
- 
-    return HolderFactory_.CreateDirectListHolder(std::move(list)); 
-} 
- 
-NUdf::TUnboxedValue TDefaultValueBuilder::ReverseList(const NUdf::TUnboxedValuePod& list) const 
-{ 
-    return HolderFactory_.ReverseList(this, list); 
-} 
- 
-NUdf::TUnboxedValue TDefaultValueBuilder::SkipList(const NUdf::TUnboxedValuePod& list, ui64 count) const 
-{ 
-    return HolderFactory_.SkipList(this, list, count); 
-} 
- 
-NUdf::TUnboxedValue TDefaultValueBuilder::TakeList(const NUdf::TUnboxedValuePod& list, ui64 count) const 
-{ 
-    return HolderFactory_.TakeList(this, list, count); 
-} 
- 
-NUdf::TUnboxedValue TDefaultValueBuilder::ToIndexDict(const NUdf::TUnboxedValuePod& list) const 
-{ 
-    return HolderFactory_.ToIndexDict(this, list); 
-} 
- 
-NUdf::TUnboxedValue TDefaultValueBuilder::NewArray(ui32 count, NUdf::TUnboxedValue*& itemsPtr) const { 
-    return HolderFactory_.CreateDirectArrayHolder(count, itemsPtr); 
-} 
- 
-NUdf::TUnboxedValue TDefaultValueBuilder::NewVariant(ui32 index, NUdf::TUnboxedValue&& value) const { 
-    return HolderFactory_.CreateVariantHolder(value.Release(), index); 
-} 
+NUdf::TUnboxedValue TDefaultValueBuilder::NewStringNotFilled(ui32 size) const
+{
+    return MakeStringNotFilled(size);
+}
 
-NUdf::IDictValueBuilder::TPtr TDefaultValueBuilder::NewDict(const NUdf::TType* dictType, ui32 flags) const 
-{ 
-    return HolderFactory_.NewDict(dictType, flags); 
-} 
- 
+NUdf::TUnboxedValue TDefaultValueBuilder::NewString(const NUdf::TStringRef& ref) const
+{
+    return MakeString(ref);
+}
+
+NUdf::TUnboxedValue TDefaultValueBuilder::ConcatStrings(NUdf::TUnboxedValuePod first, NUdf::TUnboxedValuePod second) const
+{
+    return ::NKikimr::NMiniKQL::ConcatStrings(first, second);
+}
+
+NUdf::TUnboxedValue TDefaultValueBuilder::AppendString(NUdf::TUnboxedValuePod value, const NUdf::TStringRef& ref) const
+{
+    return ::NKikimr::NMiniKQL::AppendString(value, ref);
+}
+
+NUdf::TUnboxedValue TDefaultValueBuilder::PrependString(const NUdf::TStringRef& ref, NUdf::TUnboxedValuePod value) const
+{
+    return ::NKikimr::NMiniKQL::PrependString(ref, value);
+}
+
+NUdf::TUnboxedValue TDefaultValueBuilder::SubString(NUdf::TUnboxedValuePod value, ui32 offset, ui32 size) const
+{
+    return ::NKikimr::NMiniKQL::SubString(value, offset, size);
+}
+
+NUdf::TUnboxedValue TDefaultValueBuilder::NewList(NUdf::TUnboxedValue* items, ui64 count) const {
+    if (!items || !count)
+        return HolderFactory_.GetEmptyContainer();
+
+    if (count < Max<ui32>()) {
+        NUdf::TUnboxedValue* inplace = nullptr;
+        auto array = HolderFactory_.CreateDirectArrayHolder(count, inplace);
+        for (ui64 i = 0; i < count; ++i)
+            *inplace++ = std::move(*items++);
+        return std::move(array);
+    }
+
+    TDefaultListRepresentation list;
+    for (ui64 i = 0; i < count; ++i) {
+        list = list.Append(std::move(*items++));
+    }
+
+    return HolderFactory_.CreateDirectListHolder(std::move(list));
+}
+
+NUdf::TUnboxedValue TDefaultValueBuilder::ReverseList(const NUdf::TUnboxedValuePod& list) const
+{
+    return HolderFactory_.ReverseList(this, list);
+}
+
+NUdf::TUnboxedValue TDefaultValueBuilder::SkipList(const NUdf::TUnboxedValuePod& list, ui64 count) const
+{
+    return HolderFactory_.SkipList(this, list, count);
+}
+
+NUdf::TUnboxedValue TDefaultValueBuilder::TakeList(const NUdf::TUnboxedValuePod& list, ui64 count) const
+{
+    return HolderFactory_.TakeList(this, list, count);
+}
+
+NUdf::TUnboxedValue TDefaultValueBuilder::ToIndexDict(const NUdf::TUnboxedValuePod& list) const
+{
+    return HolderFactory_.ToIndexDict(this, list);
+}
+
+NUdf::TUnboxedValue TDefaultValueBuilder::NewArray(ui32 count, NUdf::TUnboxedValue*& itemsPtr) const {
+    return HolderFactory_.CreateDirectArrayHolder(count, itemsPtr);
+}
+
+NUdf::TUnboxedValue TDefaultValueBuilder::NewVariant(ui32 index, NUdf::TUnboxedValue&& value) const {
+    return HolderFactory_.CreateVariantHolder(value.Release(), index);
+}
+
+NUdf::IDictValueBuilder::TPtr TDefaultValueBuilder::NewDict(const NUdf::TType* dictType, ui32 flags) const
+{
+    return HolderFactory_.NewDict(dictType, flags);
+}
+
 bool TDefaultValueBuilder::MakeDate(ui32 year, ui32 month, ui32 day, ui16& value) const {
     return ::NKikimr::NMiniKQL::MakeDate(year, month, day, value);
 }
@@ -149,23 +149,23 @@ bool TDefaultValueBuilder::SplitDatetime(ui32 value, ui32& year, ui32& month, ui
     return ::NKikimr::NMiniKQL::SplitTzDatetime(value, year, month, day, hour, minute, second, tzId);
 }
 
-bool TDefaultValueBuilder::FullSplitDate(ui16 value, ui32& year, ui32& month, ui32& day, 
-    ui32& dayOfYear, ui32& weekOfYear, ui32& dayOfWeek, ui16 tzId) const { 
+bool TDefaultValueBuilder::FullSplitDate(ui16 value, ui32& year, ui32& month, ui32& day,
+    ui32& dayOfYear, ui32& weekOfYear, ui32& dayOfWeek, ui16 tzId) const {
     ui32 unusedWeekOfYearIso8601 = 0;
     return ::NKikimr::NMiniKQL::SplitTzDate(value, year, month, day, dayOfYear, weekOfYear, unusedWeekOfYearIso8601, dayOfWeek, tzId);
-} 
- 
+}
+
 bool TDefaultValueBuilder::FullSplitDate2(ui16 value, ui32& year, ui32& month, ui32& day,
     ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 tzId) const {
     return ::NKikimr::NMiniKQL::SplitTzDate(value, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId);
 }
 
-bool TDefaultValueBuilder::FullSplitDatetime(ui32 value, ui32& year, ui32& month, ui32& day, ui32& hour, ui32& minute, ui32& second, 
-    ui32& dayOfYear, ui32& weekOfYear, ui32& dayOfWeek, ui16 tzId) const { 
+bool TDefaultValueBuilder::FullSplitDatetime(ui32 value, ui32& year, ui32& month, ui32& day, ui32& hour, ui32& minute, ui32& second,
+    ui32& dayOfYear, ui32& weekOfYear, ui32& dayOfWeek, ui16 tzId) const {
     ui32 unusedWeekOfYearIso8601 = 0;
     return ::NKikimr::NMiniKQL::SplitTzDatetime(value, year, month, day, hour, minute, second, dayOfYear, weekOfYear, unusedWeekOfYearIso8601, dayOfWeek, tzId);
-} 
- 
+}
+
 bool TDefaultValueBuilder::FullSplitDatetime2(ui32 value, ui32& year, ui32& month, ui32& day, ui32& hour, ui32& minute, ui32& second,
     ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 tzId) const {
     return ::NKikimr::NMiniKQL::SplitTzDatetime(value, year, month, day, hour, minute, second, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId);
@@ -186,14 +186,14 @@ bool TDefaultValueBuilder::GetTimezoneShift(ui32 year, ui32 month, ui32 day, ui3
 }
 
 const NUdf::TSourcePosition* TDefaultValueBuilder::CalleePosition() const {
-    return *CalleePositionPtr_; 
+    return *CalleePositionPtr_;
 }
 
 NUdf::TUnboxedValue TDefaultValueBuilder::Run(const NUdf::TSourcePosition& callee, const NUdf::IBoxedValue& value, const NUdf::TUnboxedValuePod* args) const {
-    const auto prev = *CalleePositionPtr_; 
-    *CalleePositionPtr_ = &callee; 
-    const auto ret = NUdf::TBoxedValueAccessor::Run(value, this, args); 
-    *CalleePositionPtr_ = prev; 
+    const auto prev = *CalleePositionPtr_;
+    *CalleePositionPtr_ = &callee;
+    const auto ret = NUdf::TBoxedValueAccessor::Run(value, this, args);
+    *CalleePositionPtr_ = prev;
     return ret;
 }
 

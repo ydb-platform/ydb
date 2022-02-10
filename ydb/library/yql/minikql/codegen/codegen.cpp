@@ -2,8 +2,8 @@
 #include <llvm/ExecutionEngine/ExecutionEngine.h>
 #include <llvm/ExecutionEngine/JITEventListener.h>
 #include <llvm/ExecutionEngine/MCJIT.h>
-#include <llvm/IR/DiagnosticInfo.h> 
-#include <llvm/IR/DiagnosticPrinter.h> 
+#include <llvm/IR/DiagnosticInfo.h>
+#include <llvm/IR/DiagnosticPrinter.h>
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Module.h>
@@ -15,15 +15,15 @@
 #include <llvm/Support/ManagedStatic.h>
 #include <llvm/Support/SourceMgr.h>
 #include <llvm/Support/TargetSelect.h>
-#include <llvm/Support/Timer.h> 
+#include <llvm/Support/Timer.h>
 #include <llvm/Support/ErrorHandling.h>
 #include <llvm/Transforms/IPO.h>
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
-#include <llvm/Transforms/Instrumentation.h> 
+#include <llvm/Transforms/Instrumentation.h>
 #include <llvm/Transforms/Instrumentation/AddressSanitizer.h>
 #include <llvm/Transforms/Instrumentation/MemorySanitizer.h>
 #include <llvm/Transforms/Instrumentation/ThreadSanitizer.h>
-#include <llvm/LinkAllPasses.h> 
+#include <llvm/LinkAllPasses.h>
 
 #include <contrib/libs/re2/re2/re2.h>
 
@@ -108,38 +108,38 @@ typedef union
     }s;
 } utwords;
 
-typedef union 
-{ 
-    ti_int all; 
-    struct 
-    { 
-        du_int low; 
-        di_int high; 
-    }s; 
-} twords; 
- 
-typedef union 
-{ 
-    du_int all; 
-    struct 
-    { 
-        su_int low; 
-        su_int high; 
-    }s; 
-} udwords; 
- 
-typedef union 
-{ 
-    su_int u; 
-    float f; 
-} float_bits; 
- 
-typedef union 
-{ 
-    udwords u; 
-    double  f; 
-} double_bits; 
- 
+typedef union
+{
+    ti_int all;
+    struct
+    {
+        du_int low;
+        di_int high;
+    }s;
+} twords;
+
+typedef union
+{
+    du_int all;
+    struct
+    {
+        su_int low;
+        su_int high;
+    }s;
+} udwords;
+
+typedef union
+{
+    su_int u;
+    float f;
+} float_bits;
+
+typedef union
+{
+    udwords u;
+    double  f;
+} double_bits;
+
 int __builtin_ctzll(ui64 value) {
     DWORD trailing_zero = 0;
     if (_BitScanForward64(&trailing_zero, value)) {
@@ -161,16 +161,16 @@ int __builtin_clzll(ui64 value) {
 #define __divti3 __divti3impl
 #define __udivmodti4 __udivmodti4impl
 #define __modti3 __modti3impl
-#define __clzti2 __clzti2impl 
-#define __floattisf __floattisfimpl 
-#define __floattidf __floattidfimpl 
+#define __clzti2 __clzti2impl
+#define __floattisf __floattisfimpl
+#define __floattidf __floattidfimpl
 
 #include <contrib/libs/cxxsupp/builtins/udivmodti4.c>
 #include <contrib/libs/cxxsupp/builtins/divti3.c>
 #include <contrib/libs/cxxsupp/builtins/modti3.c>
-#include <contrib/libs/cxxsupp/builtins/clzti2.c> 
-#include <contrib/libs/cxxsupp/builtins/floattisf.c> 
-#include <contrib/libs/cxxsupp/builtins/floattidf.c> 
+#include <contrib/libs/cxxsupp/builtins/clzti2.c>
+#include <contrib/libs/cxxsupp/builtins/floattisf.c>
+#include <contrib/libs/cxxsupp/builtins/floattidf.c>
 #include <intrin.h>
 #include <xmmintrin.h>
 
@@ -259,26 +259,26 @@ namespace {
 
 class TCodegen : public ICodegen, private llvm::JITEventListener {
 public:
-    TCodegen(ETarget target, ESanitize sanitize) 
-        : Target_(target), Sanitize_(sanitize) 
-        , EffectiveTarget_(Target_), EffectiveSanitize_(Sanitize_) 
+    TCodegen(ETarget target, ESanitize sanitize)
+        : Target_(target), Sanitize_(sanitize)
+        , EffectiveTarget_(Target_), EffectiveSanitize_(Sanitize_)
     {
         Singleton<TCodegenInit>();
         Context_.setDiagnosticHandlerCallBack(&DiagnosticHandler, this);
- 
+
         std::unique_ptr<llvm::Module> module(new llvm::Module("yql", Context_));
-        Module_ = module.get(); 
+        Module_ = module.get();
         std::string triple;
-        if (EffectiveTarget_ == ETarget::Native && EffectiveSanitize_ == ESanitize::Auto) { 
+        if (EffectiveTarget_ == ETarget::Native && EffectiveSanitize_ == ESanitize::Auto) {
 #if defined(_asan_enabled_)
-            EffectiveSanitize_ = ESanitize::Asan; 
-#elif defined(_tsan_enabled_) 
-            EffectiveSanitize_ = ESanitize::Tsan; 
-#elif defined(_msan_enabled_) 
-            EffectiveSanitize_ = ESanitize::Msan; 
-#endif 
-        } 
- 
+            EffectiveSanitize_ = ESanitize::Asan;
+#elif defined(_tsan_enabled_)
+            EffectiveSanitize_ = ESanitize::Tsan;
+#elif defined(_msan_enabled_)
+            EffectiveSanitize_ = ESanitize::Msan;
+#endif
+        }
+
         if (EffectiveTarget_ == ETarget::CurrentOS || EffectiveTarget_ == ETarget::Native) {
 #if defined(_linux_)
             EffectiveTarget_ = ETarget::Linux;
@@ -291,7 +291,7 @@ public:
 #endif
         }
 
- 
+
         switch (EffectiveTarget_) {
         case ETarget::Linux:
             triple = "x86_64-unknown-linux-gnu";
@@ -307,7 +307,7 @@ public:
         }
 
         Triple_ = llvm::Triple::normalize(triple);
-        Module_->setTargetTriple(Triple_); 
+        Module_->setTargetTriple(Triple_);
 
         llvm::TargetOptions targetOptions;
         targetOptions.EnableFastISel = true;
@@ -332,7 +332,7 @@ public:
         if (!Engine_)
             ythrow yexception() << "Failed to construct ExecutionEngine: " << what;
 
-        Module_->setDataLayout(Engine_->getDataLayout().getStringRepresentation()); 
+        Module_->setDataLayout(Engine_->getDataLayout().getStringRepresentation());
         Engine_->RegisterJITEventListener(this);
     }
 
@@ -361,8 +361,8 @@ public:
     }
 
 
-    llvm::Module& GetModule() override { 
-        return *Module_; 
+    llvm::Module& GetModule() override {
+        return *Module_;
     }
 
     llvm::ExecutionEngine& GetEngine() override {
@@ -370,10 +370,10 @@ public:
     }
 
     void Verify() override {
-        std::string what; 
-        llvm::raw_string_ostream os(what); 
-        if (llvm::verifyModule(*Module_, &os)) { 
-            ythrow yexception() << "Verification error: " << what; 
+        std::string what;
+        llvm::raw_string_ostream os(what);
+        if (llvm::verifyModule(*Module_, &os)) {
+            ythrow yexception() << "Verification error: " << what;
         }
     }
 
@@ -437,10 +437,10 @@ public:
             function.addFnAttr("target-features", "+sse,+sse2");
         }
 
-        if (dumpTimers) { 
-            llvm::TimePassesIsEnabled = true; 
-        } 
- 
+        if (dumpTimers) {
+            llvm::TimePassesIsEnabled = true;
+        }
+
         std::unique_ptr<llvm::legacy::PassManager> modulePassManager;
         std::unique_ptr<llvm::legacy::FunctionPassManager> functionPassManager;
 
@@ -481,14 +481,14 @@ public:
                            AddThreadSanitizerPass);
         }
 
-        functionPassManager = std::make_unique<llvm::legacy::FunctionPassManager>(Module_); 
+        functionPassManager = std::make_unique<llvm::legacy::FunctionPassManager>(Module_);
         modulePassManager = std::make_unique<llvm::legacy::PassManager>();
 
         passManagerBuilder.populateModulePassManager(*modulePassManager);
         passManagerBuilder.populateFunctionPassManager(*functionPassManager);
 
         functionPassManager->doInitialization();
-        for (auto it = Module_->begin(), jt = Module_->end(); it != jt; ++it) { 
+        for (auto it = Module_->begin(), jt = Module_->end(); it != jt; ++it) {
             if (!it->isDeclaration()) {
                 functionPassManager->run(*it);
             }
@@ -496,7 +496,7 @@ public:
         functionPassManager->doFinalization();
 
         auto modulePassStart = Now();
-        modulePassManager->run(*Module_); 
+        modulePassManager->run(*Module_);
         if (compileStats) {
             compileStats->ModulePassTime = (Now() - modulePassStart).MilliSeconds();
         }
@@ -527,10 +527,10 @@ public:
         }
 
         std::sort(SortedFuncs_.begin(), SortedFuncs_.end(), CompareFuncOffsets);
-        if (dumpTimers) { 
-            llvm::TimerGroup::printAll(llvm::errs()); 
-            llvm::TimePassesIsEnabled = false; 
-        } 
+        if (dumpTimers) {
+            llvm::TimerGroup::printAll(llvm::errs());
+            llvm::TimePassesIsEnabled = false;
+        }
     }
 
     void* GetPointerToFunction(llvm::Function* function) override {
@@ -619,7 +619,7 @@ public:
         llvm::SMDiagnostic error;
         auto buffer = llvm::MemoryBuffer::getMemBuffer(
             llvm::StringRef(bitcode.data(), bitcode.size()));
-        std::unique_ptr<llvm::Module> module = llvm::parseIR(buffer->getMemBufferRef(), error, Context_); 
+        std::unique_ptr<llvm::Module> module = llvm::parseIR(buffer->getMemBufferRef(), error, Context_);
 
         if (!module) {
             std::string what;
@@ -629,12 +629,12 @@ public:
         }
 
         module->setTargetTriple(Triple_);
-        module->setDataLayout(Engine_->getDataLayout().getStringRepresentation()); 
+        module->setDataLayout(Engine_->getDataLayout().getStringRepresentation());
         if (uniqId) {
             module->setModuleIdentifier(llvm::StringRef(uniqId.data(), uniqId.size()));
         }
- 
-        if (llvm::Linker::linkModules(*Module_, std::move(module))) { 
+
+        if (llvm::Linker::linkModules(*Module_, std::move(module))) {
             TString err;
             err.append("LLVM: error linking module");
             if (uniqId) {
@@ -644,14 +644,14 @@ public:
                 err.append(": ").append(Diagnostic_.c_str(), Diagnostic_.size());
             }
             ythrow yexception() << err;
-        } 
+        }
 
         if (uniqId) {
             LoadedModules_.emplace(uniqId);
         }
     }
 
-    void AddGlobalMapping(TStringBuf name, const void* address) override { 
+    void AddGlobalMapping(TStringBuf name, const void* address) override {
         ReverseGlobalMapping_[address] = TString(name);
         Engine_->updateGlobalMapping(llvm::StringRef(name.data(), name.size()), (uint64_t)address);
     }
@@ -672,16 +672,16 @@ public:
     }
 
 private:
-    void OnDiagnosticInfo(const llvm::DiagnosticInfo &info) { 
-        llvm::raw_string_ostream ostream(Diagnostic_); 
-        llvm::DiagnosticPrinterRawOStream printer(ostream); 
-        info.print(printer); 
-    } 
- 
-    static void DiagnosticHandler(const llvm::DiagnosticInfo &info, void* context) { 
-        return static_cast<TCodegen*>(context)->OnDiagnosticInfo(info); 
-    } 
- 
+    void OnDiagnosticInfo(const llvm::DiagnosticInfo &info) {
+        llvm::raw_string_ostream ostream(Diagnostic_);
+        llvm::DiagnosticPrinterRawOStream printer(ostream);
+        info.print(printer);
+    }
+
+    static void DiagnosticHandler(const llvm::DiagnosticInfo &info, void* context) {
+        return static_cast<TCodegen*>(context)->OnDiagnosticInfo(info);
+    }
+
     void AllocateTls() {
         for (const auto& glob : Module_->globals()) {
             auto nameRef = glob.getName();
@@ -722,13 +722,13 @@ private:
     }
 
     const ETarget Target_;
-    const ESanitize Sanitize_; 
+    const ESanitize Sanitize_;
     ETarget EffectiveTarget_;
-    ESanitize EffectiveSanitize_; 
+    ESanitize EffectiveSanitize_;
     llvm::LLVMContext Context_;
-    std::string Diagnostic_; 
+    std::string Diagnostic_;
     std::string Triple_;
-    llvm::Module* Module_; 
+    llvm::Module* Module_;
     llvm::JITEventListener* PerfListener_ = nullptr;
     std::unique_ptr<llvm::ExecutionEngine> Engine_;
     std::vector<std::pair<llvm::object::SectionRef, ui64>> CodeSections_;
@@ -740,9 +740,9 @@ private:
     THashSet<TString> LoadedModules_;
 };
 
-ICodegen::TPtr 
-ICodegen::Make(ETarget target, ESanitize sanitize) { 
-    return std::make_unique<TCodegen>(target, sanitize); 
+ICodegen::TPtr
+ICodegen::Make(ETarget target, ESanitize sanitize) {
+    return std::make_unique<TCodegen>(target, sanitize);
 }
 
 }

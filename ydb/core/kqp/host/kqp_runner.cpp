@@ -114,7 +114,7 @@ public:
         : Iterations(0) {}
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
-        output = input; 
+        output = input;
 
         if (Iterations > MaxTransformIterations) {
             ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()
@@ -440,7 +440,7 @@ private:
         bool hasNonDeterministicFunctions;
         TPeepholeSettings peepholeSettings;
         peepholeSettings.WithNonDeterministicRules = false;
-        status = PeepHoleOptimizeNode<false>(optimizedProgram, finalProgram, ctx, TypesCtx, KqlTypeAnnTransformer.Get(), 
+        status = PeepHoleOptimizeNode<false>(optimizedProgram, finalProgram, ctx, TypesCtx, KqlTypeAnnTransformer.Get(),
             hasNonDeterministicFunctions, peepholeSettings);
         if (status != IGraphTransformer::TStatus::Ok) {
             ctx.AddError(TIssue(ctx.GetPosition(dataQuery.Pos()), "Failed to peephole optimize KQL query."));

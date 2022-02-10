@@ -292,12 +292,12 @@ public:
             modulesMapping);
     }
 
-    NThreading::TFuture<void> OpenSession(const TString& sessionId, const TString& username) override { 
+    NThreading::TFuture<void> OpenSession(const TString& sessionId, const TString& username) override {
         YQL_LOG_CTX_SCOPE(sessionId);
         YQL_CLOG(INFO, ProviderDq) << "OpenSession";
         Yql::DqsProto::OpenSessionRequest request;
         request.SetSession(sessionId);
-        request.SetUsername(username); 
+        request.SetUsername(username);
 
         NGrpc::TCallMeta meta;
         meta.Timeout = OpenSessionTimeout;

@@ -42,12 +42,12 @@ public:
     virtual void PinPages(const TVector<THolder<TKeyDesc>>& keys, ui64 pageFaultCount = 0) = 0;
 
     // Returns empty optional with type 'returnType' or the filled one.
-    virtual NUdf::TUnboxedValue SelectRow(const TTableId& tableId, const TArrayRef<const TCell>& row, 
+    virtual NUdf::TUnboxedValue SelectRow(const TTableId& tableId, const TArrayRef<const TCell>& row,
         TStructLiteral* columnIds, TOptionalType* returnType, const TReadTarget& readTarget,
         const THolderFactory& holderFactory) = 0;
 
     // Returns struct with type 'returnType' - that should have fields 'List' and 'Truncated'.
-    virtual NUdf::TUnboxedValue SelectRange(const TTableId& tableId, const TTableRange& range, 
+    virtual NUdf::TUnboxedValue SelectRange(const TTableId& tableId, const TTableRange& range,
         TStructLiteral* columnIds, TListLiteral* skipNullKeys, TStructType* returnType,
         const TReadTarget& readTarget, ui64 itemsLimit, ui64 bytesLimit, bool reverse,
         std::pair<const TListLiteral*, const TListLiteral*> forbidNullArgs, const THolderFactory& holderFactory) = 0;

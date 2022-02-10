@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/system/types.h> 
+#include <util/system/types.h>
 
 namespace NYql {
 
@@ -14,7 +14,7 @@ struct TGcNodeStatistics {
     ui64 TotalCollectedNodes = 0;
 };
 
-struct TGcNodeConfig { 
+struct TGcNodeConfig {
     TGcNodeSettings Settings;
     TGcNodeStatistics Statistics;
 };

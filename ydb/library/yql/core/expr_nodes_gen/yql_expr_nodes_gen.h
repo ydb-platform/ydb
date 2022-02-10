@@ -20,75 +20,75 @@ class TMaybeNode {};
 
 class TExprBase {
 public:
-    explicit TExprBase(const TExprNode* node) 
-        : Raw_(node) 
-    { 
-        YQL_ENSURE(node);
-    } 
- 
-    explicit TExprBase(TExprNode::TPtr&& node) 
-        : Raw_(node.Get()), Node(std::move(node)) 
-    { 
-        YQL_ENSURE(Raw_); 
-    } 
- 
-    explicit TExprBase(const TExprNode::TPtr& node) 
-        : Raw_(node.Get()), Node(node) 
+    explicit TExprBase(const TExprNode* node)
+        : Raw_(node)
     {
         YQL_ENSURE(node);
     }
 
-    const TExprNode* Raw() const { 
-        return Raw_; 
-    } 
-
-    TExprNode::TPtr Ptr() const { 
-        YQL_ENSURE(Node); 
-        return Node; 
+    explicit TExprBase(TExprNode::TPtr&& node)
+        : Raw_(node.Get()), Node(std::move(node))
+    {
+        YQL_ENSURE(Raw_);
     }
 
-    const TExprNode& Ref() const { 
-        return *Raw_; 
-    } 
- 
+    explicit TExprBase(const TExprNode::TPtr& node)
+        : Raw_(node.Get()), Node(node)
+    {
+        YQL_ENSURE(node);
+    }
+
+    const TExprNode* Raw() const {
+        return Raw_;
+    }
+
+    TExprNode::TPtr Ptr() const {
+        YQL_ENSURE(Node);
+        return Node;
+    }
+
+    const TExprNode& Ref() const {
+        return *Raw_;
+    }
+
     TExprBase NonOwning() const {
         return TExprBase(Raw_);
     }
 
     TPositionHandle Pos() const {
-        return Raw_->Pos(); 
+        return Raw_->Pos();
     }
 
     template<typename TNode>
     TMaybeNode<TNode> Maybe() const {
-        return Cast<TMaybeNode<TNode>>(); 
+        return Cast<TMaybeNode<TNode>>();
     }
 
     template<typename TNode>
     TNode Cast() const {
-        return Node ? TNode(Node) : TNode(Raw_); 
+        return Node ? TNode(Node) : TNode(Raw_);
     }
 
 private:
-    const TExprNode* Raw_; 
-    TExprNode::TPtr Node; 
+    const TExprNode* Raw_;
+    TExprNode::TPtr Node;
 };
 
 template<>
 class TMaybeNode<TExprBase> {
 public:
-    TMaybeNode(const TExprNode* node = nullptr) 
-        : Raw_(node) {} 
+    TMaybeNode(const TExprNode* node = nullptr)
+        : Raw_(node) {}
 
-    TMaybeNode(const TExprNode::TPtr& node) 
-        : Raw_(node.Get()), Node(node) {} 
- 
+    TMaybeNode(const TExprNode::TPtr& node)
+        : Raw_(node.Get()), Node(node) {}
+
     TMaybeNode(const TExprBase& node)
-        : Raw_(node.Raw()), Node(node.Ptr()) {} 
+        : Raw_(node.Raw()), Node(node.Ptr()) {}
 
-    const TExprNode& Ref() const { 
+    const TExprNode& Ref() const {
         YQL_ENSURE(IsValid());
-        return *Raw_; 
+        return *Raw_;
     }
 
     const TExprNode* Raw() const {
@@ -96,32 +96,32 @@ public:
     }
 
     bool IsValid() const {
-        return Raw_ != nullptr; 
+        return Raw_ != nullptr;
     }
 
-    explicit operator bool() const { 
+    explicit operator bool() const {
         return IsValid();
     }
 
     template<typename TNode>
     TMaybeNode<TNode> Maybe() const {
-        return Node ? TMaybeNode<TNode>(Node) : TMaybeNode<TNode>(Raw_); 
+        return Node ? TMaybeNode<TNode>(Node) : TMaybeNode<TNode>(Raw_);
     }
 
     template<typename TNode>
     TNode Cast() const {
         YQL_ENSURE(IsValid());
-        return Node ? TNode(Node) : TNode(Raw_); 
+        return Node ? TNode(Node) : TNode(Raw_);
     }
 
     TExprBase Cast() const {
         YQL_ENSURE(IsValid());
-        return Node ? TExprBase(Node) : TExprBase(Raw_); 
+        return Node ? TExprBase(Node) : TExprBase(Raw_);
     }
 
 private:
-    const TExprNode* Raw_; 
-    TExprNode::TPtr Node; 
+    const TExprNode* Raw_;
+    TExprNode::TPtr Node;
 };
 
 template<typename TNode>
@@ -178,7 +178,7 @@ private:
         CurNode = CurIt == EndIt ? nullptr : *CurIt;
     }
 
-    TExprNode::TPtr CurNode; 
+    TExprNode::TPtr CurNode;
     TExprNode::TListType::const_iterator CurIt;
     TExprNode::TListType::const_iterator EndIt;
 };
@@ -186,43 +186,43 @@ private:
 template<typename TItem>
 class TListBase : public TExprBase {
 public:
-    TListBase(const TExprNode* node) 
+    TListBase(const TExprNode* node)
         : TExprBase(node)
     {
         YQL_ENSURE(Match(node));
     }
 
-    TListBase(const TExprNode::TPtr& node) 
-        : TExprBase(node) 
-    { 
+    TListBase(const TExprNode::TPtr& node)
+        : TExprBase(node)
+    {
         YQL_ENSURE(Match(node.Get()));
-    } 
+    }
 
-    TItem Item(size_t index) const { return TItem(Ref().ChildPtr(index)); } 
-    size_t Size() const { return Ref().ChildrenSize(); } 
+    TItem Item(size_t index) const { return TItem(Ref().ChildPtr(index)); }
+    size_t Size() const { return Ref().ChildrenSize(); }
     bool Empty() const { return Size() == 0; }
 
     TChildIterator<TItem> begin() const { return TChildIterator<TItem>(*this); }
     TChildIterator<TItem> end() const { return TChildIterator<TItem>(); }
 
 public:
-    static bool Match(const TExprNode* node) { 
-        return node && node->IsList(); 
+    static bool Match(const TExprNode* node) {
+        return node && node->IsList();
     }
 };
 
 template<typename TItem>
 class TMaybeNode<TListBase<TItem>> : public TMaybeNode<TExprBase> {
 public:
-    TMaybeNode(const TExprNode* node) 
-        : TMaybeNode<TExprBase>(node && TListBase<TItem>::Match(node) ? node : nullptr) {} 
- 
-    TMaybeNode(const TExprNode::TPtr& node) 
-        : TMaybeNode<TExprBase>(node && TListBase<TItem>::Match(node.Get()) ? node : TExprNode::TPtr()) {} 
+    TMaybeNode(const TExprNode* node)
+        : TMaybeNode<TExprBase>(node && TListBase<TItem>::Match(node) ? node : nullptr) {}
+
+    TMaybeNode(const TExprNode::TPtr& node)
+        : TMaybeNode<TExprBase>(node && TListBase<TItem>::Match(node.Get()) ? node : TExprNode::TPtr()) {}
 
     TListBase<TItem> Cast() const {
         YQL_ENSURE(IsValid());
-        return TMaybeNode<TExprBase>::Cast().template Cast<TListBase<TItem>>(); 
+        return TMaybeNode<TExprBase>::Cast().template Cast<TListBase<TItem>>();
     }
 
     TMaybeNode<TItem> Item(size_t index) const {
@@ -230,36 +230,36 @@ public:
             return TMaybeNode<TItem>();
         }
 
-        auto list = Cast(); 
+        auto list = Cast();
         if (index >= list.Size()) {
             return TMaybeNode<TItem>();
         }
 
-        return TMaybeNode<TItem>(Ref().ChildPtr(index)); 
+        return TMaybeNode<TItem>(Ref().ChildPtr(index));
     }
 };
 
 class TCallable : public TExprBase {
 public:
-    explicit TCallable(const TExprNode* node) 
+    explicit TCallable(const TExprNode* node)
         : TExprBase(node)
     {
         YQL_ENSURE(Match(node));
     }
 
-    explicit TCallable(const TExprNode::TPtr& node) 
-        : TExprBase(node) 
-    { 
+    explicit TCallable(const TExprNode::TPtr& node)
+        : TExprBase(node)
+    {
         YQL_ENSURE(Match(node.Get()));
-    } 
- 
+    }
+
     TStringBuf CallableName() const {
-        return Ref().Content(); 
+        return Ref().Content();
     }
 
 public:
-    static bool Match(const TExprNode* node) { 
-        return node && node->IsCallable(); 
+    static bool Match(const TExprNode* node) {
+        return node && node->IsCallable();
     }
 };
 
@@ -267,17 +267,17 @@ template<>
 class TMaybeNode<TCallable> : public TMaybeNode<TExprBase> {
 public:
     TMaybeNode(const TExprNode* node = nullptr)
-        : TMaybeNode<TExprBase>(node && TCallable::Match(node) ? node : nullptr) {} 
- 
+        : TMaybeNode<TExprBase>(node && TCallable::Match(node) ? node : nullptr) {}
+
     TMaybeNode(const TExprNode::TPtr& node)
-        : TMaybeNode<TExprBase>(node && TCallable::Match(node.Get()) ? node : TExprNode::TPtr()) {} 
+        : TMaybeNode<TExprBase>(node && TCallable::Match(node.Get()) ? node : TExprNode::TPtr()) {}
 
     TMaybeNode(const TCallable& node)
         : TMaybeNode(node.Ptr()) {}
 
     TCallable Cast() const {
         YQL_ENSURE(IsValid());
-        return TMaybeNode<TExprBase>::Cast().Cast<TCallable>(); 
+        return TMaybeNode<TExprBase>::Cast().Cast<TCallable>();
     }
 };
 
@@ -343,12 +343,12 @@ public:
 class TArgs
 {
 public:
-    TArgs(const TExprBase& node, size_t startIndex) 
+    TArgs(const TExprBase& node, size_t startIndex)
         : Node(node)
         , StartIndex(startIndex) {}
 
-    TExprBase Get(size_t index) const { return TExprBase(Node.Ref().ChildPtr(index)); } 
-    size_t Count() const { return Node.Ref().ChildrenSize(); } 
+    TExprBase Get(size_t index) const { return TExprBase(Node.Ref().ChildPtr(index)); }
+    size_t Count() const { return Node.Ref().ChildrenSize(); }
     TChildIterator<TExprBase> begin() const { return TChildIterator<TExprBase>(Node, StartIndex); }
     TChildIterator<TExprBase> end() const { return TChildIterator<TExprBase>(); }
 
@@ -360,43 +360,43 @@ private:
 template<const size_t FixedArgsCount>
 class TFreeArgCallable : public TCallable {
 public:
-    explicit TFreeArgCallable(const TExprNode* node) 
+    explicit TFreeArgCallable(const TExprNode* node)
         : TCallable(node)
     {
         YQL_ENSURE(Match(node));
     }
 
-    explicit TFreeArgCallable(const TExprNode::TPtr& node) 
-        : TCallable(node) 
-    { 
+    explicit TFreeArgCallable(const TExprNode::TPtr& node)
+        : TCallable(node)
+    {
         YQL_ENSURE(Match(node.Get()));
-    } 
- 
+    }
+
     TArgs Args() const { return TArgs(*this, 0); }
     TArgs FreeArgs() const { return TArgs(*this, FixedArgsCount); }
 
     TExprBase Arg(size_t index) const { return TArgs(*this, 0).Get(index); }
 
-    static bool Match(const TExprNode* node) { 
-        return node && node->IsCallable() && node->ChildrenSize() >= FixedArgsCount; 
+    static bool Match(const TExprNode* node) {
+        return node && node->IsCallable() && node->ChildrenSize() >= FixedArgsCount;
     }
 };
 
 template<const size_t FixedArgsCount>
 class TMaybeNode<TFreeArgCallable<FixedArgsCount>> : public TMaybeNode<TExprBase> {
 public:
-    TMaybeNode(const TExprNode* node) 
-        : TMaybeNode<TExprBase>(node && TFreeArgCallable<FixedArgsCount>::Match(node) ? node : nullptr) {} 
- 
+    TMaybeNode(const TExprNode* node)
+        : TMaybeNode<TExprBase>(node && TFreeArgCallable<FixedArgsCount>::Match(node) ? node : nullptr) {}
+
     TMaybeNode(const TExprNode::TPtr& node)
-        : TMaybeNode<TExprBase>(node && TFreeArgCallable<FixedArgsCount>::Match(node.Get()) ? node : TExprNode::TPtr()) {} 
+        : TMaybeNode<TExprBase>(node && TFreeArgCallable<FixedArgsCount>::Match(node.Get()) ? node : TExprNode::TPtr()) {}
 
     TMaybeNode(const TExprBase& node)
-        : TMaybeNode(node) {} 
+        : TMaybeNode(node) {}
 
     TFreeArgCallable<FixedArgsCount> Cast() const {
         YQL_ENSURE(IsValid());
-        return TMaybeNode<TExprBase>::Cast().template Cast<TFreeArgCallable<FixedArgsCount>>(); 
+        return TMaybeNode<TExprBase>::Cast().template Cast<TFreeArgCallable<FixedArgsCount>>();
     }
 };
 
@@ -474,7 +474,7 @@ public:
     }
 
     TNodeBuilder<TParent, TDerived>& Add(const TStringBuf& argName) {
-        return Add(TExprBase(this->GetArgFunc(argName))); 
+        return Add(TExprBase(this->GetArgFunc(argName)));
     }
 
     template <typename T, typename = std::enable_if_t<!std::is_same<T, TExprBase>::value
@@ -543,7 +543,7 @@ public:
     typedef TNode ResultType;
 
     void SetValue(const TNode& node) {
-        Node = node.template Maybe<TNode>(); 
+        Node = node.template Maybe<TNode>();
     }
 
     TNode Value() const {

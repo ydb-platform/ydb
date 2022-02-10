@@ -7,7 +7,7 @@
 #include <util/system/tls.h>
 #include <util/system/align.h>
 #include <new>
-#include <unordered_map> 
+#include <unordered_map>
 
 namespace NKikimr {
 
@@ -28,19 +28,19 @@ constexpr ui32 MaxPageUserData = TAlignedPagePool::POOL_PAGE_SIZE - sizeof(TAllo
 
 static_assert(sizeof(TAllocPageHeader) % MKQL_ALIGNMENT == 0, "Incorrect size of header");
 
-struct TAllocState : public TAlignedPagePool 
+struct TAllocState : public TAlignedPagePool
 {
     struct TListEntry {
         TListEntry *Left = nullptr;
         TListEntry *Right = nullptr;
 
-        void Link(TListEntry* root) noexcept; 
-        void Unlink() noexcept; 
-        void InitLinks() noexcept { Left = Right = this; } 
+        void Link(TListEntry* root) noexcept;
+        void Unlink() noexcept;
+        void InitLinks() noexcept { Left = Right = this; }
     };
 
 #ifndef NDEBUG
-    std::unordered_map<TMemoryUsageInfo*, TIntrusivePtr<TMemoryUsageInfo>> ActiveMemInfo; 
+    std::unordered_map<TMemoryUsageInfo*, TIntrusivePtr<TMemoryUsageInfo>> ActiveMemInfo;
 #endif
     bool SupportsSizedAllocators = false;
 
@@ -48,22 +48,22 @@ struct TAllocState : public TAlignedPagePool
         return Alloc(size);
     }
 
-    void LargeFree(void* ptr, size_t size) noexcept { 
+    void LargeFree(void* ptr, size_t size) noexcept {
         Free(ptr, size);
     }
 
     static TAllocPageHeader EmptyPageHeader;
     TAllocPageHeader* CurrentPage = &EmptyPageHeader;
     TListEntry OffloadedBlocksRoot;
- 
+
     ::NKikimr::NUdf::TBoxedValueLink Root;
- 
-    NKikimr::NUdf::TBoxedValueLink* GetRoot() noexcept { 
+
+    NKikimr::NUdf::TBoxedValueLink* GetRoot() noexcept {
         return &Root;
-    } 
- 
+    }
+
     explicit TAllocState(const TAlignedPagePoolCounters& counters, bool supportsSizedAllocators);
-    void KillAllBoxed(); 
+    void KillAllBoxed();
     void InvalidateMemInfo();
     size_t GetDeallocatedInPages() const;
 };
@@ -80,7 +80,7 @@ public:
 
     ~TScopedAlloc()
     {
-        MyState_.KillAllBoxed(); 
+        MyState_.KillAllBoxed();
         Release();
     }
 
@@ -195,13 +195,13 @@ private:
 
 class TPagedArena {
 public:
-    TPagedArena(TAlignedPagePool* pagePool) noexcept 
+    TPagedArena(TAlignedPagePool* pagePool) noexcept
         : PagePool_(pagePool)
         , CurrentPage_(&TAllocState::EmptyPageHeader)
     {}
 
     TPagedArena(const TPagedArena&) = delete;
-    TPagedArena(TPagedArena&& other) noexcept 
+    TPagedArena(TPagedArena&& other) noexcept
         : PagePool_(other.PagePool_)
         , CurrentPage_(other.CurrentPage_)
     {
@@ -209,14 +209,14 @@ public:
     }
 
     void operator=(const TPagedArena&) = delete;
-    void operator=(TPagedArena&& other) noexcept { 
+    void operator=(TPagedArena&& other) noexcept {
         Clear();
         PagePool_ = other.PagePool_;
         CurrentPage_ = other.CurrentPage_;
         other.CurrentPage_ = &TAllocState::EmptyPageHeader;
     }
 
-    ~TPagedArena() noexcept { 
+    ~TPagedArena() noexcept {
         Clear();
     }
 
@@ -230,7 +230,7 @@ public:
         return AllocSlow(sz);
     }
 
-    void Clear() noexcept; 
+    void Clear() noexcept;
 
 private:
     void* AllocSlow(size_t sz);
@@ -274,8 +274,8 @@ inline void* MKQLAllocFastWithSize(size_t sz, TAllocState* state) {
     return MKQLAllocSlow(sz, state);
 }
 
-void MKQLFreeSlow(TAllocPageHeader* header) noexcept; 
- 
+void MKQLFreeSlow(TAllocPageHeader* header) noexcept;
+
 inline void MKQLFreeDeprecated(const void* p) noexcept {
     if (!p) {
         return;
@@ -289,7 +289,7 @@ inline void MKQLFreeDeprecated(const void* p) noexcept {
     MKQLFreeSlow(header);
 }
 
-inline void MKQLFreeFastWithSize(const void* mem, size_t sz, TAllocState* state) noexcept { 
+inline void MKQLFreeFastWithSize(const void* mem, size_t sz, TAllocState* state) noexcept {
     if (!mem) {
         return;
     }
@@ -320,18 +320,18 @@ inline void* MKQLAllocWithSize(size_t sz) {
     return MKQLAllocFastWithSize(sz, TlsAllocState);
 }
 
-inline void MKQLFreeWithSize(const void* mem, size_t sz) noexcept { 
+inline void MKQLFreeWithSize(const void* mem, size_t sz) noexcept {
     return MKQLFreeFastWithSize(mem, sz, TlsAllocState);
 }
 
-inline void MKQLRegisterObject(NUdf::TBoxedValue* value) noexcept { 
-    return value->Link(TlsAllocState->GetRoot()); 
-} 
- 
-inline void MKQLUnregisterObject(NUdf::TBoxedValue* value) noexcept { 
-    return value->Unlink(); 
-} 
- 
+inline void MKQLRegisterObject(NUdf::TBoxedValue* value) noexcept {
+    return value->Link(TlsAllocState->GetRoot());
+}
+
+inline void MKQLUnregisterObject(NUdf::TBoxedValue* value) noexcept {
+    return value->Unlink();
+}
+
 struct TWithMiniKQLAlloc {
     void* operator new(size_t sz) {
         return MKQLAllocWithSize(sz);
@@ -348,14 +348,14 @@ struct TWithMiniKQLAlloc {
     void operator delete[](void *mem, std::size_t sz) noexcept {
         MKQLFreeWithSize(mem, sz);
     }
-}; 
+};
 
-template <typename T, typename... Args> 
-T* AllocateOn(TAllocState* state, Args&&... args) 
-{ 
+template <typename T, typename... Args>
+T* AllocateOn(TAllocState* state, Args&&... args)
+{
     return ::new(MKQLAllocFastWithSize(sizeof(T), state)) T(std::forward<Args>(args)...);
-    static_assert(std::is_base_of<TWithMiniKQLAlloc, T>::value, "Class must inherit TWithMiniKQLAlloc."); 
-} 
+    static_assert(std::is_base_of<TWithMiniKQLAlloc, T>::value, "Class must inherit TWithMiniKQLAlloc.");
+}
 
 template <typename Type>
 struct TMKQLAllocator
@@ -371,19 +371,19 @@ struct TMKQLAllocator
     TMKQLAllocator() noexcept = default;
     ~TMKQLAllocator() noexcept = default;
 
-    template<typename U> TMKQLAllocator(const TMKQLAllocator<U>&) noexcept {} 
+    template<typename U> TMKQLAllocator(const TMKQLAllocator<U>&) noexcept {}
     template<typename U> struct rebind { typedef TMKQLAllocator<U> other; };
-    template<typename U> bool operator==(const TMKQLAllocator<U>&) const { return true; } 
+    template<typename U> bool operator==(const TMKQLAllocator<U>&) const { return true; }
     template<typename U> bool operator!=(const TMKQLAllocator<U>&) const { return false; }
 
     static pointer allocate(size_type n, const void* = nullptr)
     {
-        return static_cast<pointer>(MKQLAllocWithSize(n * sizeof(value_type))); 
+        return static_cast<pointer>(MKQLAllocWithSize(n * sizeof(value_type)));
     }
 
-    static void deallocate(const_pointer p, size_type n) noexcept 
+    static void deallocate(const_pointer p, size_type n) noexcept
     {
-        return MKQLFreeWithSize(p, n * sizeof(value_type)); 
+        return MKQLFreeWithSize(p, n * sizeof(value_type));
     }
 };
 
@@ -444,12 +444,12 @@ public:
         IndexInLastPage = OBJECTS_PER_PAGE;
     }
 
-    const T& operator[](size_t i) const { 
-        const auto table = i / OBJECTS_PER_PAGE; 
-        const auto index = i % OBJECTS_PER_PAGE; 
-        return *ObjectAt(Pages[table], index); 
-    } 
- 
+    const T& operator[](size_t i) const {
+        const auto table = i / OBJECTS_PER_PAGE;
+        const auto index = i % OBJECTS_PER_PAGE;
+        return *ObjectAt(Pages[table], index);
+    }
+
     size_t Size() const {
         return Pages.empty() ? 0 : ((Pages.size() - 1) * OBJECTS_PER_PAGE + IndexInLastPage);
     }
@@ -595,21 +595,21 @@ public:
     };
 
 private:
-    static const T* ObjectAt(const void* page, size_t objectIndex) { 
-        return reinterpret_cast<const T*>(static_cast<const char*>(page) + objectIndex * sizeof(T)); 
-    } 
- 
-    static T* ObjectAt(void* page, size_t objectIndex) { 
-        return reinterpret_cast<T*>(static_cast<char*>(page) + objectIndex * sizeof(T)); 
-    } 
- 
+    static const T* ObjectAt(const void* page, size_t objectIndex) {
+        return reinterpret_cast<const T*>(static_cast<const char*>(page) + objectIndex * sizeof(T));
+    }
+
+    static T* ObjectAt(void* page, size_t objectIndex) {
+        return reinterpret_cast<T*>(static_cast<char*>(page) + objectIndex * sizeof(T));
+    }
+
     TAlignedPagePool& Pool;
-    using TPages = std::vector<void*, TMKQLAllocator<void*>>; 
+    using TPages = std::vector<void*, TMKQLAllocator<void*>>;
     TPages Pages;
     size_t IndexInLastPage;
 };
 
- 
+
 } // NMiniKQL
 
 } // NKikimr

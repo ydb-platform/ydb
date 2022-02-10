@@ -6,14 +6,14 @@
 
 #include <util/generic/maybe.h>
 #include <util/generic/algorithm.h>
-#include <functional> 
+#include <functional>
 
 namespace NKikimr {
 namespace NMiniKQL {
 
 namespace {
 
-bool ExtractKeyData(TRuntimeNode valueNode, bool isOptional, NUdf::TUnboxedValue& data) { 
+bool ExtractKeyData(TRuntimeNode valueNode, bool isOptional, NUdf::TUnboxedValue& data) {
     if (valueNode.HasValue()) {
         TNode* value = valueNode.GetValue();
         TNode* dataValue = value;
@@ -21,7 +21,7 @@ bool ExtractKeyData(TRuntimeNode valueNode, bool isOptional, NUdf::TUnboxedValue
             MKQL_ENSURE(value->GetType()->IsOptional(), "Expected optional");
             auto opt = static_cast<TOptionalLiteral*>(value);
             if (!opt->HasItem()) {
-                data = NUdf::TUnboxedValue(); 
+                data = NUdf::TUnboxedValue();
                 return true;
             }
             else {
@@ -30,7 +30,7 @@ bool ExtractKeyData(TRuntimeNode valueNode, bool isOptional, NUdf::TUnboxedValue
         }
 
         if (dataValue->GetType()->IsData()) {
-            data = NUdf::TUnboxedValuePod(static_cast<TDataLiteral*>(dataValue)->AsValue()); 
+            data = NUdf::TUnboxedValuePod(static_cast<TDataLiteral*>(dataValue)->AsValue());
             return true;
         }
     }
@@ -38,13 +38,13 @@ bool ExtractKeyData(TRuntimeNode valueNode, bool isOptional, NUdf::TUnboxedValue
     return false;
 }
 
-template<typename T> 
-TCell MakeCell(const NUdf::TUnboxedValuePod& value) { 
-    static_assert(TCell::CanInline(sizeof(T)), "Can't inline data in cell."); 
-    const auto v = value.Get<T>(); 
-    return TCell(reinterpret_cast<const char*>(&v), sizeof(v)); 
-} 
- 
+template<typename T>
+TCell MakeCell(const NUdf::TUnboxedValuePod& value) {
+    static_assert(TCell::CanInline(sizeof(T)), "Can't inline data in cell.");
+    const auto v = value.Get<T>();
+    return TCell(reinterpret_cast<const char*>(&v), sizeof(v));
+}
+
 THolder<TKeyDesc> ExtractKeyTuple(const TTableId& tableId, TTupleLiteral* tuple,
     const TVector<TKeyDesc::TColumnOp>& columns,
     TKeyDesc::ERowOperation rowOperation, bool requireStaticKey, const TTypeEnvironment& env) {
@@ -65,7 +65,7 @@ THolder<TKeyDesc> ExtractKeyTuple(const TTableId& tableId, TTupleLiteral* tuple,
         }
 
         auto valueNode = tuple->GetValue(i);
-        NUdf::TUnboxedValue data; 
+        NUdf::TUnboxedValue data;
         bool hasImmediateData = ExtractKeyData(valueNode, isOptional, data);
         if (!hasImmediateData) {
             MKQL_ENSURE(!requireStaticKey, "Expected static key components");
@@ -75,7 +75,7 @@ THolder<TKeyDesc> ExtractKeyTuple(const TTableId& tableId, TTupleLiteral* tuple,
         }
 
         ++staticComponents;
-        fromValues[i] = toValues[i] = MakeCell(keyColumnTypes[i], data, env); 
+        fromValues[i] = toValues[i] = MakeCell(keyColumnTypes[i], data, env);
     }
 
     TTableRange range(TConstArrayRef<TCell>(fromValues.data(), tuple->GetValuesCount()),
@@ -88,7 +88,7 @@ void ExtractReadColumns(TStructType* columnsType, TStructLiteral* tags, TVector<
     for (ui32 i = 0; i < columnsType->GetMembersCount(); ++i) {
         auto memberName = columnsType->GetMemberName(i);
         MKQL_ENSURE(tags->GetType()->GetMemberName(i) == memberName, "Mismatch name of column");
-        ui32 columnId = AS_VALUE(TDataLiteral, tags->GetValue(i))->AsValue().Get<ui32>(); 
+        ui32 columnId = AS_VALUE(TDataLiteral, tags->GetValue(i))->AsValue().Get<ui32>();
         TKeyDesc::TColumnOp& op = columns[i];
         op.Column = columnId;
         op.Operation = TKeyDesc::EColumnOperation::Read;
@@ -126,10 +126,10 @@ THolder<TKeyDesc> ExtractSelectRange(TCallable& callable, const TTypeEnvironment
     auto toTuple = AS_VALUE(TTupleLiteral, callable.GetInput(4));
 
     auto flagsInput = callable.GetInput(5);
-    const ui32 flags = AS_VALUE(TDataLiteral, flagsInput)->AsValue().Get<ui32>(); 
+    const ui32 flags = AS_VALUE(TDataLiteral, flagsInput)->AsValue().Get<ui32>();
 
-    ui64 itemsLimit = AS_VALUE(TDataLiteral, callable.GetInput(6))->AsValue().Get<ui64>(); 
-    ui64 bytesLimit = AS_VALUE(TDataLiteral, callable.GetInput(7))->AsValue().Get<ui64>(); 
+    ui64 itemsLimit = AS_VALUE(TDataLiteral, callable.GetInput(6))->AsValue().Get<ui64>();
+    ui64 bytesLimit = AS_VALUE(TDataLiteral, callable.GetInput(7))->AsValue().Get<ui64>();
 
     TVector<ui32> keyColumnTypes(Max(fromTuple->GetValuesCount(), toTuple->GetValuesCount()));
     TVector<TCell> fromValues(keyColumnTypes.size()); // padded with NULLs
@@ -143,10 +143,10 @@ THolder<TKeyDesc> ExtractSelectRange(TCallable& callable, const TTypeEnvironment
         auto dataType = UnpackOptionalData(type, isOptional);
         keyColumnTypes[i] = dataType->GetSchemeType();
         auto valueNode = fromTuple->GetValue(i);
-        NUdf::TUnboxedValue data; 
+        NUdf::TUnboxedValue data;
         bool hasImmediateData = ExtractKeyData(valueNode, isOptional, data);
         MKQL_ENSURE(hasImmediateData, "Expected static key components");
-        fromValues[i] = MakeCell(keyColumnTypes[i], data, env); 
+        fromValues[i] = MakeCell(keyColumnTypes[i], data, env);
     }
 
     for (ui32 i = 0; i < toTuple->GetValuesCount(); ++i) {
@@ -155,10 +155,10 @@ THolder<TKeyDesc> ExtractSelectRange(TCallable& callable, const TTypeEnvironment
         auto dataType = UnpackOptionalData(type, isOptional);
         keyColumnTypes[i] = dataType->GetSchemeType();
         auto valueNode = toTuple->GetValue(i);
-        NUdf::TUnboxedValue data; 
+        NUdf::TUnboxedValue data;
         bool hasImmediateData = ExtractKeyData(valueNode, isOptional, data);
         MKQL_ENSURE(hasImmediateData, "Expected static key components");
-        toValues[i] = MakeCell(keyColumnTypes[i], data, env); 
+        toValues[i] = MakeCell(keyColumnTypes[i], data, env);
     }
 
     bool reverse = false;
@@ -198,7 +198,7 @@ THolder<TKeyDesc> ExtractUpdateRow(TCallable& callable, const TTypeEnvironment& 
             TTupleLiteral* tuple = AS_VALUE(TTupleLiteral, cmd);
             MKQL_ENSURE(tuple->GetValuesCount() == 2, "Expected pair");
             auto inplaceModeNode = tuple->GetValue(0);
-            ui32 mode = AS_VALUE(TDataLiteral, inplaceModeNode)->AsValue().Get<ui8>(); 
+            ui32 mode = AS_VALUE(TDataLiteral, inplaceModeNode)->AsValue().Get<ui8>();
             MKQL_ENSURE(mode >= (ui32)EInplaceUpdateMode::FirstMode && mode <= (ui32)EInplaceUpdateMode::LastMode,
                 "Wrong inplace update mode");
             auto valueNode = tuple->GetValue(1);
@@ -241,15 +241,15 @@ THolder<TKeyDesc> ExtractEraseRow(TCallable& callable, const TTypeEnvironment& e
 
 }
 
-#define MAKE_PRIMITIVE_TYPE_CELL(type, layout) \ 
-    case NUdf::TDataType<type>::Id: return MakeCell<layout>(value); 
- 
+#define MAKE_PRIMITIVE_TYPE_CELL(type, layout) \
+    case NUdf::TDataType<type>::Id: return MakeCell<layout>(value);
+
 TCell MakeCell(NUdf::TDataTypeId typeId, const NUdf::TUnboxedValuePod& value, const TTypeEnvironment& env, bool copy) {
-    if (!value) 
-        return TCell(); 
- 
-    switch(typeId) { 
-        KNOWN_FIXED_VALUE_TYPES(MAKE_PRIMITIVE_TYPE_CELL) 
+    if (!value)
+        return TCell();
+
+    switch(typeId) {
+        KNOWN_FIXED_VALUE_TYPES(MAKE_PRIMITIVE_TYPE_CELL)
     case NUdf::TDataType<NUdf::TDecimal>::Id:
         {
             auto intVal = value.GetInt128();
@@ -258,21 +258,21 @@ TCell MakeCell(NUdf::TDataTypeId typeId, const NUdf::TUnboxedValuePod& value, co
             return TCell(val.Data(), val.Size());
         }
         break;
-    } 
- 
-    const auto& ref = value.AsStringRef(); 
+    }
+
+    const auto& ref = value.AsStringRef();
     if (!copy || value.IsString() || TCell::CanInline(ref.Size()))
-        return TCell(ref.Data(), ref.Size()); 
- 
-    const auto& val = env.NewString(ref.Size()); 
-    std::memcpy(val.Data(), ref.Data(), ref.Size()); 
-    return TCell(val.Data(), val.Size()); 
-} 
- 
-#undef MAKE_PRIMITIVE_TYPE_CELL 
- 
+        return TCell(ref.Data(), ref.Size());
+
+    const auto& val = env.NewString(ref.Size());
+    std::memcpy(val.Data(), ref.Data(), ref.Size());
+    return TCell(val.Data(), val.Size());
+}
+
+#undef MAKE_PRIMITIVE_TYPE_CELL
+
 TReadTarget ExtractFlatReadTarget(TRuntimeNode modeInput) {
-    const ui32 mode = static_cast<TDataLiteral&>(*modeInput.GetValue()).AsValue().Get<ui32>(); 
+    const ui32 mode = static_cast<TDataLiteral&>(*modeInput.GetValue()).AsValue().Get<ui32>();
     switch ((TReadTarget::EMode)mode) {
     case TReadTarget::EMode::Online:
         return TReadTarget::Online();

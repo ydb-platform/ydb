@@ -2,14 +2,14 @@ import re
 
 
 def main():
-    REGEXP = "^(\"(.+)\",|\"\",\/\/(.+))$" 
+    REGEXP = "^(\"(.+)\",|\"\",\/\/(.+))$"
     OUTPUT = "../udf_tz.gen"
     INPUT = OUTPUT
     CONTRIB_ZONES = "../../../../../../../contrib/libs/cctz/tzdata/ya.make.resources"
     RES_PREFIX = "/cctz/tzdata/"
 
     print("process %s into %s" % (INPUT, OUTPUT))
-    with open(INPUT, "r") as inp: 
+    with open(INPUT, "r") as inp:
         lines = inp.readlines()
 
     zones = []
@@ -17,7 +17,7 @@ def main():
         m = re.match(REGEXP, line)
         if not m:
             raise ValueError("invalid line: %s", line)
-        zones.append(m.group(2) or m.group(3)) 
+        zones.append(m.group(2) or m.group(3))
 
     szones = set()
     print("loaded %s zones" % len(zones))
@@ -27,7 +27,7 @@ def main():
         szones.add(zone)
 
     scontrib = set()
-    with open(CONTRIB_ZONES, "r") as contrib: 
+    with open(CONTRIB_ZONES, "r") as contrib:
         for line in contrib.readlines():
             if RES_PREFIX not in line:
                 continue
@@ -40,14 +40,14 @@ def main():
             szones.add(zone)
             zones.append(zone)
 
-    lines = [] 
-    for zone in zones: 
-        if zone in scontrib: 
-            lines.append('"%s",\n' % zone) 
-        else: 
-            lines.append('"",//%s\n' % zone) 
- 
-    with open(OUTPUT, "w") as outp: 
+    lines = []
+    for zone in zones:
+        if zone in scontrib:
+            lines.append('"%s",\n' % zone)
+        else:
+            lines.append('"",//%s\n' % zone)
+
+    with open(OUTPUT, "w") as outp:
         outp.writelines(lines)
 
     print("saved %s zones" % len(zones))

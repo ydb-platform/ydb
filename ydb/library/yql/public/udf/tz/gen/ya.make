@@ -1,5 +1,5 @@
 
-PY3_PROGRAM(tz_gen) 
+PY3_PROGRAM(tz_gen)
 
 OWNER(g:yql)
 

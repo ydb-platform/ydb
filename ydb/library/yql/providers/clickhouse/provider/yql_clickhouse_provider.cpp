@@ -5,10 +5,10 @@
 namespace NYql {
 
 TDataProviderInitializer GetClickHouseDataProviderInitializer(
-    IHTTPGateway::TPtr gateway, 
+    IHTTPGateway::TPtr gateway,
     const std::shared_ptr<NYq::TDatabaseAsyncResolverWithMeta> dbResolverWithMeta)
 {
-    return [gateway, dbResolverWithMeta] ( 
+    return [gateway, dbResolverWithMeta] (
         const TString& userName,
         const TString& sessionId,
         const TGatewaysConfig* gatewaysConfig,
@@ -37,7 +37,7 @@ TDataProviderInitializer GetClickHouseDataProviderInitializer(
         TDataProviderInfo info;
 
         info.Names.insert({TString{ClickHouseProviderName}});
-        info.Source = CreateClickHouseDataSource(state, gateway); 
+        info.Source = CreateClickHouseDataSource(state, gateway);
         info.Sink = CreateClickHouseDataSink(state);
 
         return info;

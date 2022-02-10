@@ -22,8 +22,8 @@ TExprNode::TPtr ApplyExtractMembersToFlatMap(const TExprNode::TPtr& node, const 
 TExprNode::TPtr ApplyExtractMembersToPartitionByKey(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix);
 TExprNode::TPtr ApplyExtractMembersToCalcOverWindow(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix);
 TExprNode::TPtr ApplyExtractMembersToAggregate(const TExprNode::TPtr& node, const TExprNode::TPtr& members, const TParentsMap& parentsMap, TExprContext& ctx, TStringBuf logSuffix);
-TExprNode::TPtr ApplyExtractMembersToChopper(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix); 
+TExprNode::TPtr ApplyExtractMembersToChopper(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix);
 TExprNode::TPtr ApplyExtractMembersToCollect(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix);
-TExprNode::TPtr ApplyExtractMembersToMapJoinCore(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix); 
+TExprNode::TPtr ApplyExtractMembersToMapJoinCore(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix);
 
 } // NYql

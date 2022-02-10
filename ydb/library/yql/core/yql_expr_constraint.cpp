@@ -93,22 +93,22 @@ public:
         Functions["SkipWhile"] = &TCallableConstraintTransformer::FilterWrap<true>;
         Functions["TakeWhileInclusive"] = &TCallableConstraintTransformer::FilterWrap<true>;
         Functions["SkipWhileInclusive"] = &TCallableConstraintTransformer::FilterWrap<true>;
-        Functions["WideTakeWhile"] = &TCallableConstraintTransformer::FilterWrap<true>; 
-        Functions["WideSkipWhile"] = &TCallableConstraintTransformer::FilterWrap<true>; 
-        Functions["WideTakeWhileInclusive"] = &TCallableConstraintTransformer::FilterWrap<true>; 
-        Functions["WideSkipWhileInclusive"] = &TCallableConstraintTransformer::FilterWrap<true>; 
+        Functions["WideTakeWhile"] = &TCallableConstraintTransformer::FilterWrap<true>;
+        Functions["WideSkipWhile"] = &TCallableConstraintTransformer::FilterWrap<true>;
+        Functions["WideTakeWhileInclusive"] = &TCallableConstraintTransformer::FilterWrap<true>;
+        Functions["WideSkipWhileInclusive"] = &TCallableConstraintTransformer::FilterWrap<true>;
         Functions["Iterator"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["ForwardList"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["LazyList"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
-        Functions["ToFlow"] = &TCallableConstraintTransformer::CopyAllFrom<0>; 
-        Functions["FromFlow"] = &TCallableConstraintTransformer::CopyAllFrom<0>; 
+        Functions["ToFlow"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
+        Functions["FromFlow"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["ToStream"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["ToSequence"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["Collect"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["FilterNullMembers"] = &TCallableConstraintTransformer::FromFirst<TSortedConstraintNode, TPassthroughConstraintNode, TEmptyConstraintNode, TUniqueConstraintNode, TVarIndexConstraintNode>;
         Functions["SkipNullMembers"] = &TCallableConstraintTransformer::FromFirst<TSortedConstraintNode, TPassthroughConstraintNode, TEmptyConstraintNode, TUniqueConstraintNode, TVarIndexConstraintNode>;
-        Functions["FilterNullElements"] = &TCallableConstraintTransformer::FromFirst<TPassthroughConstraintNode, TEmptyConstraintNode, TVarIndexConstraintNode>; 
-        Functions["SkipNullElements"] = &TCallableConstraintTransformer::FromFirst<TPassthroughConstraintNode, TEmptyConstraintNode, TVarIndexConstraintNode>; 
+        Functions["FilterNullElements"] = &TCallableConstraintTransformer::FromFirst<TPassthroughConstraintNode, TEmptyConstraintNode, TVarIndexConstraintNode>;
+        Functions["SkipNullElements"] = &TCallableConstraintTransformer::FromFirst<TPassthroughConstraintNode, TEmptyConstraintNode, TVarIndexConstraintNode>;
         Functions["Right!"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["Cons!"] = &TCallableConstraintTransformer::CopyAllFrom<1>;
         Functions["ExtractMembers"] = &TCallableConstraintTransformer::ExtractMembersWrap;
@@ -116,25 +116,25 @@ public:
         Functions["RemovePrefixMembers"] = &TCallableConstraintTransformer::RemovePrefixMembersWrap;
         Functions["SelectMembers"] = &TCallableConstraintTransformer::SelectMembersWrap;
         Functions["CastStruct"] = &TCallableConstraintTransformer::SelectMembersWrap;
-        Functions["SafeCast"] = &TCallableConstraintTransformer::SelectMembersWrap<true>; 
-        Functions["StrictCast"] = &TCallableConstraintTransformer::SelectMembersWrap<true>; 
+        Functions["SafeCast"] = &TCallableConstraintTransformer::SelectMembersWrap<true>;
+        Functions["StrictCast"] = &TCallableConstraintTransformer::SelectMembersWrap<true>;
         Functions["DivePrefixMembers"] = &TCallableConstraintTransformer::DivePrefixMembersWrap;
         Functions["OrderedFilter"] = &TCallableConstraintTransformer::FilterWrap<true>;
         Functions["Filter"] = &TCallableConstraintTransformer::FilterWrap<false>;
-        Functions["WideFilter"] = &TCallableConstraintTransformer::FilterWrap<true>; 
-        Functions["OrderedMap"] = &TCallableConstraintTransformer::MapWrap<true, false>; 
-        Functions["Map"] = &TCallableConstraintTransformer::MapWrap<false, false>; 
-        Functions["OrderedFlatMap"] = &TCallableConstraintTransformer::MapWrap<true, true>; 
-        Functions["FlatMap"] = &TCallableConstraintTransformer::MapWrap<false, true>; 
-        Functions["OrderedMultiMap"] = &TCallableConstraintTransformer::MapWrap<true, false>; 
-        Functions["MultiMap"] = &TCallableConstraintTransformer::MapWrap<false, false>; 
-        Functions["ExpandMap"] = &TCallableConstraintTransformer::MapWrap<true, false, false, true>; 
-        Functions["WideMap"] = &TCallableConstraintTransformer::MapWrap<true, false, true, true>; 
-        Functions["NarrowMap"] = &TCallableConstraintTransformer::MapWrap<true, false, true, false>; 
-        Functions["NarrowFlatMap"] = &TCallableConstraintTransformer::MapWrap<true, true, true, false>; 
-        Functions["NarrowMultiMap"] = &TCallableConstraintTransformer::MapWrap<true, false, true, false>; 
-        Functions["OrderedFlatMapToEquiJoin"] = &TCallableConstraintTransformer::MapWrap<true, true>; 
-        Functions["FlatMapToEquiJoin"] = &TCallableConstraintTransformer::MapWrap<false, true>; 
+        Functions["WideFilter"] = &TCallableConstraintTransformer::FilterWrap<true>;
+        Functions["OrderedMap"] = &TCallableConstraintTransformer::MapWrap<true, false>;
+        Functions["Map"] = &TCallableConstraintTransformer::MapWrap<false, false>;
+        Functions["OrderedFlatMap"] = &TCallableConstraintTransformer::MapWrap<true, true>;
+        Functions["FlatMap"] = &TCallableConstraintTransformer::MapWrap<false, true>;
+        Functions["OrderedMultiMap"] = &TCallableConstraintTransformer::MapWrap<true, false>;
+        Functions["MultiMap"] = &TCallableConstraintTransformer::MapWrap<false, false>;
+        Functions["ExpandMap"] = &TCallableConstraintTransformer::MapWrap<true, false, false, true>;
+        Functions["WideMap"] = &TCallableConstraintTransformer::MapWrap<true, false, true, true>;
+        Functions["NarrowMap"] = &TCallableConstraintTransformer::MapWrap<true, false, true, false>;
+        Functions["NarrowFlatMap"] = &TCallableConstraintTransformer::MapWrap<true, true, true, false>;
+        Functions["NarrowMultiMap"] = &TCallableConstraintTransformer::MapWrap<true, false, true, false>;
+        Functions["OrderedFlatMapToEquiJoin"] = &TCallableConstraintTransformer::MapWrap<true, true>;
+        Functions["FlatMapToEquiJoin"] = &TCallableConstraintTransformer::MapWrap<false, true>;
         Functions["OrderedLMap"] = &TCallableConstraintTransformer::LMapWrap<true>;
         Functions["LMap"] = &TCallableConstraintTransformer::LMapWrap<false>;
         Functions["Extract"] = &TCallableConstraintTransformer::FromFirst<TEmptyConstraintNode>;
@@ -152,7 +152,7 @@ public:
         Functions["Just"] = &TCallableConstraintTransformer::FromFirst<TPassthroughConstraintNode, TUniqueConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>;
         Functions["Unwrap"] = &TCallableConstraintTransformer::FromFirst<TPassthroughConstraintNode, TUniqueConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode, TEmptyConstraintNode>;
         Functions["ToList"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
-        Functions["ToOptional"] = &TCallableConstraintTransformer::FromFirst<TPassthroughConstraintNode, TEmptyConstraintNode, TUniqueConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>; 
+        Functions["ToOptional"] = &TCallableConstraintTransformer::FromFirst<TPassthroughConstraintNode, TEmptyConstraintNode, TUniqueConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>;
         Functions["Head"] = &TCallableConstraintTransformer::FromFirst<TPassthroughConstraintNode, TEmptyConstraintNode, TUniqueConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>;
         Functions["Last"] = &TCallableConstraintTransformer::FromFirst<TPassthroughConstraintNode, TEmptyConstraintNode, TUniqueConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>;
         Functions["Reverse"] = &TCallableConstraintTransformer::FromFirst<TPassthroughConstraintNode, TEmptyConstraintNode, TUniqueConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>;
@@ -168,17 +168,17 @@ public:
         Functions["FlatOptionalIf"] = &TCallableConstraintTransformer::CopyAllFrom<1>;
         Functions["EmptyIterator"] = &TCallableConstraintTransformer::FromEmpty;
         Functions["List"] = &TCallableConstraintTransformer::ListWrap;
-        Functions["Dict"] = &TCallableConstraintTransformer::DictWrap; 
+        Functions["Dict"] = &TCallableConstraintTransformer::DictWrap;
         Functions["EmptyList"] = &TCallableConstraintTransformer::FromEmpty;
         Functions["EmptyDict"] = &TCallableConstraintTransformer::FromEmpty;
         Functions["DictItems"] = &TCallableConstraintTransformer::FromFirst<TEmptyConstraintNode>;
         Functions["DictKeys"] = &TCallableConstraintTransformer::FromFirst<TEmptyConstraintNode>;
         Functions["DictPayloads"] = &TCallableConstraintTransformer::FromFirst<TEmptyConstraintNode>;
         Functions["DictFromKeys"] = &TCallableConstraintTransformer::DictFromKeysWrap;
-        Functions["If"] = &TCallableConstraintTransformer::IfWrap; 
+        Functions["If"] = &TCallableConstraintTransformer::IfWrap;
         Functions["Nothing"] = &TCallableConstraintTransformer::FromEmpty;
         Functions["IfPresent"] = &TCallableConstraintTransformer::IfPresentWrap;
-        Functions["Coalesce"] = &TCallableConstraintTransformer::CommonFromChildren<0, TSortedConstraintNode, TPassthroughConstraintNode, TEmptyConstraintNode, TUniqueConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>; 
+        Functions["Coalesce"] = &TCallableConstraintTransformer::CommonFromChildren<0, TSortedConstraintNode, TPassthroughConstraintNode, TEmptyConstraintNode, TUniqueConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>;
         Functions["CombineByKey"] = &TCallableConstraintTransformer::FromFinalLambda<TCoCombineByKey::idx_FinishHandlerLambda>;
         Functions["CombineCore"] = &TCallableConstraintTransformer::FromFinalLambda<TCoCombineCore::idx_FinishHandler>;
         Functions["PartitionByKey"] = &TCallableConstraintTransformer::PartitionByKeyWrap;
@@ -197,18 +197,18 @@ public:
         Functions["ToDict"] = &TCallableConstraintTransformer::InheriteEmptyFromInput;
         Functions["FoldMap"] = &TCallableConstraintTransformer::InheriteEmptyFromInput; // TODO: passthrough
         Functions["Fold1Map"] = &TCallableConstraintTransformer::InheriteEmptyFromInput; // TODO: passthrough
-        Functions["Chain1Map"] = &TCallableConstraintTransformer::InheriteEmptyFromInput; // TODO: passthrough, sorted, unique 
-        Functions["WideChain1Map"] = &TCallableConstraintTransformer::InheriteEmptyFromInput; // TODO: passthrough, sorted, unique 
+        Functions["Chain1Map"] = &TCallableConstraintTransformer::InheriteEmptyFromInput; // TODO: passthrough, sorted, unique
+        Functions["WideChain1Map"] = &TCallableConstraintTransformer::InheriteEmptyFromInput; // TODO: passthrough, sorted, unique
         Functions["IsKeySwitch"] = &TCallableConstraintTransformer::IsKeySwitchWrap;
         Functions["Condense"] = &TCallableConstraintTransformer::CondenseWrap;
         Functions["Condense1"] = &TCallableConstraintTransformer::CondenseWrap;
         Functions["Squeeze"] = &TCallableConstraintTransformer::InheriteEmptyFromInput;
         Functions["Squeeze1"] = &TCallableConstraintTransformer::InheriteEmptyFromInput;
         Functions["GroupingCore"] = &TCallableConstraintTransformer::InheriteEmptyFromInput;
-        Functions["Chopper"] = &TCallableConstraintTransformer::InheriteEmptyFromInput; 
-        Functions["WideChopper"] = &TCallableConstraintTransformer::InheriteEmptyFromInput; 
-        Functions["WideCombiner"] = &TCallableConstraintTransformer::InheriteEmptyFromInput; 
-        Functions["WideCondense1"] = &TCallableConstraintTransformer::WideCondense1Wrap; 
+        Functions["Chopper"] = &TCallableConstraintTransformer::InheriteEmptyFromInput;
+        Functions["WideChopper"] = &TCallableConstraintTransformer::InheriteEmptyFromInput;
+        Functions["WideCombiner"] = &TCallableConstraintTransformer::InheriteEmptyFromInput;
+        Functions["WideCondense1"] = &TCallableConstraintTransformer::WideCondense1Wrap;
         Functions["Aggregate"] = &TCallableConstraintTransformer::AggregateWrap;
         Functions["Fold"] = &TCallableConstraintTransformer::FoldWrap;
         Functions["Fold1"] = &TCallableConstraintTransformer::FoldWrap;
@@ -221,12 +221,12 @@ public:
         return Nothing();
     }
 
-    TMaybe<IGraphTransformer::TStatus> ProcessList(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) { 
-        if (!input->ChildrenSize() || ETypeAnnotationKind::Tuple != input->GetTypeAnn()->GetKind()) 
-            return TStatus::Ok; 
-        return AsTupleWrap(input, output, ctx); 
-    } 
- 
+    TMaybe<IGraphTransformer::TStatus> ProcessList(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+        if (!input->ChildrenSize() || ETypeAnnotationKind::Tuple != input->GetTypeAnn()->GetKind())
+            return TStatus::Ok;
+        return AsTupleWrap(input, output, ctx);
+    }
+
     TStatus ProcessUnknown(const TExprNode::TPtr& input, TExprContext&) {
         return UpdateAllChildLambdasConstraints(*input);
     }
@@ -378,7 +378,7 @@ private:
         return FromFirst<TPassthroughConstraintNode, TEmptyConstraintNode, TUniqueConstraintNode, TVarIndexConstraintNode>(input, output, ctx);
     }
 
-    template <bool CheckMembersType = false> 
+    template <bool CheckMembersType = false>
     TStatus SelectMembersWrap(const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) const {
         const TTypeAnnotationNode* outItemType = input->GetTypeAnn();
         while (outItemType->GetKind() == ETypeAnnotationKind::Optional) {
@@ -395,9 +395,9 @@ private:
                         if (item.first < outSize) {
                             filteredItems.push_back(item);
                         }
-                    } 
+                    }
                     multi = filteredItems.empty() ? nullptr : ctx.MakeConstraint<TMultiConstraintNode>(std::move(filteredItems));
-                } 
+                }
                 if (multi) {
                     input->AddConstraint(multi);
                 }
@@ -409,9 +409,9 @@ private:
                         if (item.first < outSize) {
                             filteredItems.push_back(item);
                         }
-                    } 
+                    }
                     varIndex = filteredItems.empty() ? nullptr : ctx.MakeConstraint<TVarIndexConstraintNode>(std::move(filteredItems));
-                } 
+                }
                 if (varIndex) {
                     input->AddConstraint(varIndex);
                 }
@@ -420,44 +420,44 @@ private:
         else if (outItemType->GetKind() == ETypeAnnotationKind::Struct) {
             const TStructExprType* outStructType = outItemType->Cast<TStructExprType>();
 
-            if (const auto passthrough = input->Head().GetConstraint<TPassthroughConstraintNode>()) { 
+            if (const auto passthrough = input->Head().GetConstraint<TPassthroughConstraintNode>()) {
                 TPassthroughConstraintNode::TMapType filteredMapping;
-                if constexpr (CheckMembersType) { 
+                if constexpr (CheckMembersType) {
                     const TTypeAnnotationNode* inItemType = input->Head().GetTypeAnn();
                     while (inItemType->GetKind() == ETypeAnnotationKind::Optional) {
                         inItemType = inItemType->Cast<TOptionalExprType>()->GetItemType();
                     }
-                    const auto inStructType = inItemType->Cast<TStructExprType>(); 
+                    const auto inStructType = inItemType->Cast<TStructExprType>();
                     const auto& inItems = inStructType->GetItems();
                     const auto& outItems = outStructType->GetItems();
-                    for (const auto& part : passthrough->GetColumnMapping()) { 
-                        TPassthroughConstraintNode::TPartType filtered; 
-                        filtered.reserve(part.second.size()); 
-                        for (const auto& item : part.second) { 
-                            if (!item.first.empty()) { 
-                                const auto outItem = outStructType->FindItem(item.first.front()); 
-                                const auto inItem = inStructType->FindItem(item.first.front()); 
-                                if (outItem && inItem && IsSameAnnotation(*outItems[*outItem]->GetItemType(), *inItems[*inItem]->GetItemType())) { 
-                                    filtered.push_back(item); 
-                                } 
-                            } 
-                            if (!filtered.empty()) { 
-                                filteredMapping.emplace(part.first ? part.first : passthrough, std::move(filtered)); 
-                            } 
+                    for (const auto& part : passthrough->GetColumnMapping()) {
+                        TPassthroughConstraintNode::TPartType filtered;
+                        filtered.reserve(part.second.size());
+                        for (const auto& item : part.second) {
+                            if (!item.first.empty()) {
+                                const auto outItem = outStructType->FindItem(item.first.front());
+                                const auto inItem = inStructType->FindItem(item.first.front());
+                                if (outItem && inItem && IsSameAnnotation(*outItems[*outItem]->GetItemType(), *inItems[*inItem]->GetItemType())) {
+                                    filtered.push_back(item);
+                                }
+                            }
+                            if (!filtered.empty()) {
+                                filteredMapping.emplace(part.first ? part.first : passthrough, std::move(filtered));
+                            }
                         }
                     }
                 } else {
-                    for (const auto& part: passthrough->GetColumnMapping()) { 
-                        TPassthroughConstraintNode::TPartType filtered; 
-                        filtered.reserve(part.second.size()); 
-                        for (const auto& item : part.second) { 
-                            if (!item.first.empty() && outStructType->FindItem(item.first.front())) { 
-                                filtered.push_back(item); 
-                            } 
+                    for (const auto& part: passthrough->GetColumnMapping()) {
+                        TPassthroughConstraintNode::TPartType filtered;
+                        filtered.reserve(part.second.size());
+                        for (const auto& item : part.second) {
+                            if (!item.first.empty() && outStructType->FindItem(item.first.front())) {
+                                filtered.push_back(item);
+                            }
                         }
-                        if (!filtered.empty()) { 
-                            filteredMapping.emplace(part.first ? part.first : passthrough, std::move(filtered)); 
-                        } 
+                        if (!filtered.empty()) {
+                            filteredMapping.emplace(part.first ? part.first : passthrough, std::move(filtered));
+                        }
                     }
                 }
                 if (!filteredMapping.empty()) {
@@ -476,24 +476,24 @@ private:
     }
 
     TStatus DivePrefixMembersWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
-        const auto prefixes = input->Child(1)->Children(); 
-        if (const auto passthrough = input->Head().GetConstraint<TPassthroughConstraintNode>()) { 
+        const auto prefixes = input->Child(1)->Children();
+        if (const auto passthrough = input->Head().GetConstraint<TPassthroughConstraintNode>()) {
             TPassthroughConstraintNode::TMapType filteredMapping;
-            for (const auto& part: passthrough->GetColumnMapping()) { 
-                TPassthroughConstraintNode::TPartType filtered; 
-                filtered.reserve(part.second.size()); 
-                for (auto item: part.second) { 
-                    for (const auto& p : prefixes) { 
-                        if (const auto& prefix = p->Content(); !item.first.empty() && item.first.front().starts_with(prefix)) { 
-                            item.first.front() = item.first.front().substr(prefix.length()); 
-                            filtered.insert_unique(std::move(item)); 
-                            break; 
-                        } 
+            for (const auto& part: passthrough->GetColumnMapping()) {
+                TPassthroughConstraintNode::TPartType filtered;
+                filtered.reserve(part.second.size());
+                for (auto item: part.second) {
+                    for (const auto& p : prefixes) {
+                        if (const auto& prefix = p->Content(); !item.first.empty() && item.first.front().starts_with(prefix)) {
+                            item.first.front() = item.first.front().substr(prefix.length());
+                            filtered.insert_unique(std::move(item));
+                            break;
+                        }
                     }
                 }
-                if (!filtered.empty()) { 
-                    filteredMapping.emplace(part.first ? part.first : passthrough, std::move(filtered)); 
-                } 
+                if (!filtered.empty()) {
+                    filteredMapping.emplace(part.first ? part.first : passthrough, std::move(filtered));
+                }
             }
             if (!filteredMapping.empty()) {
                 input->AddConstraint(ctx.MakeConstraint<TPassthroughConstraintNode>(std::move(filteredMapping)));
@@ -521,27 +521,27 @@ private:
 
     TStatus ExtractMembersWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
         const TStructExprType* outItemType = GetItemType(*input->GetTypeAnn())->Cast<TStructExprType>();
-        if (const auto passthrough = input->Head().GetConstraint<TPassthroughConstraintNode>()) { 
+        if (const auto passthrough = input->Head().GetConstraint<TPassthroughConstraintNode>()) {
             TPassthroughConstraintNode::TMapType filteredMapping;
-            for (const auto& part: passthrough->GetColumnMapping()) { 
-                TPassthroughConstraintNode::TPartType filtered; 
-                filtered.reserve(part.second.size()); 
-                for (const auto& item: part.second) { 
-                    if (!item.first.empty() && outItemType->FindItem(item.first.front())) { 
-                        filtered.push_back(item); 
-                    } 
+            for (const auto& part: passthrough->GetColumnMapping()) {
+                TPassthroughConstraintNode::TPartType filtered;
+                filtered.reserve(part.second.size());
+                for (const auto& item: part.second) {
+                    if (!item.first.empty() && outItemType->FindItem(item.first.front())) {
+                        filtered.push_back(item);
+                    }
                 }
-                if (!filtered.empty()) { 
-                    filteredMapping.emplace(part.first ? part.first : passthrough, std::move(filtered)); 
-                } 
+                if (!filtered.empty()) {
+                    filteredMapping.emplace(part.first ? part.first : passthrough, std::move(filtered));
+                }
             }
             if (!filteredMapping.empty()) {
                 input->AddConstraint(ctx.MakeConstraint<TPassthroughConstraintNode>(std::move(filteredMapping)));
             }
         }
 
-        if (const auto sorted = TSortedConstraintNode::FilterByType(input->Head().GetConstraint<TSortedConstraintNode>(), outItemType, ctx)) 
-            input->AddConstraint(sorted); 
+        if (const auto sorted = TSortedConstraintNode::FilterByType(input->Head().GetConstraint<TSortedConstraintNode>(), outItemType, ctx))
+            input->AddConstraint(sorted);
 
         if (auto uniq = input->Child(0)->GetConstraint<TUniqueConstraintNode>()) {
             if (AllOf(uniq->GetColumns(), [outItemType](TStringBuf col) { return outItemType->FindItem(col).Defined(); } )) {
@@ -559,28 +559,28 @@ private:
         }
 
         if (outItemType->GetKind() == ETypeAnnotationKind::Struct) {
-            const auto outStructType = outItemType->Cast<TStructExprType>(); 
-            if (const auto passthrough = input->Head().GetConstraint<TPassthroughConstraintNode>()) { 
+            const auto outStructType = outItemType->Cast<TStructExprType>();
+            if (const auto passthrough = input->Head().GetConstraint<TPassthroughConstraintNode>()) {
                 TPassthroughConstraintNode::TMapType filteredMapping;
-                for (const auto& part: passthrough->GetColumnMapping()) { 
-                    TPassthroughConstraintNode::TPartType filtered; 
-                    filtered.reserve(part.second.size()); 
-                    for (const auto& item: part.second) { 
-                        if (!item.first.empty() && outStructType->FindItem(item.first.front())) { 
-                            filtered.push_back(item); 
-                        } 
+                for (const auto& part: passthrough->GetColumnMapping()) {
+                    TPassthroughConstraintNode::TPartType filtered;
+                    filtered.reserve(part.second.size());
+                    for (const auto& item: part.second) {
+                        if (!item.first.empty() && outStructType->FindItem(item.first.front())) {
+                            filtered.push_back(item);
+                        }
                     }
-                    if (!filtered.empty()) { 
-                        filteredMapping.emplace(part.first ? part.first : passthrough, std::move(filtered)); 
-                    } 
+                    if (!filtered.empty()) {
+                        filteredMapping.emplace(part.first ? part.first : passthrough, std::move(filtered));
+                    }
                 }
                 if (!filteredMapping.empty()) {
                     input->AddConstraint(ctx.MakeConstraint<TPassthroughConstraintNode>(std::move(filteredMapping)));
                 }
             }
 
-            if (const auto sorted = TSortedConstraintNode::FilterByType(input->Head().GetConstraint<TSortedConstraintNode>(), outStructType, ctx)) 
-                input->AddConstraint(sorted); 
+            if (const auto sorted = TSortedConstraintNode::FilterByType(input->Head().GetConstraint<TSortedConstraintNode>(), outStructType, ctx))
+                input->AddConstraint(sorted);
 
             if (auto uniq = input->Child(0)->GetConstraint<TUniqueConstraintNode>()) {
                 if (AllOf(uniq->GetColumns(), [outStructType](TStringBuf col) { return outStructType->FindItem(col).Defined(); } )) {
@@ -598,27 +598,27 @@ private:
                     auto& constr = multiItems[item.first];
                     const TStructExprType* outStructType = tupleUnderType->GetItems()[item.first]->Cast<TStructExprType>();
 
-                    if (const auto passthrough = item.second.GetConstraint<TPassthroughConstraintNode>()) { 
+                    if (const auto passthrough = item.second.GetConstraint<TPassthroughConstraintNode>()) {
                         TPassthroughConstraintNode::TMapType filteredMapping;
-                        for (const auto& part: passthrough->GetColumnMapping()) { 
-                            TPassthroughConstraintNode::TPartType filtered; 
-                            filtered.reserve(part.second.size()); 
-                            for (const auto& item: part.second) { 
-                                if (!item.first.empty() && outStructType->FindItem(item.first.front())) { 
-                                    filtered.push_back(item); 
-                                } 
+                        for (const auto& part: passthrough->GetColumnMapping()) {
+                            TPassthroughConstraintNode::TPartType filtered;
+                            filtered.reserve(part.second.size());
+                            for (const auto& item: part.second) {
+                                if (!item.first.empty() && outStructType->FindItem(item.first.front())) {
+                                    filtered.push_back(item);
+                                }
                             }
-                            if (!filtered.empty()) { 
-                                filteredMapping.emplace(part.first ? part.first : passthrough, std::move(filtered)); 
-                            } 
+                            if (!filtered.empty()) {
+                                filteredMapping.emplace(part.first ? part.first : passthrough, std::move(filtered));
+                            }
                         }
                         if (!filteredMapping.empty()) {
                             constr.AddConstraint(ctx.MakeConstraint<TPassthroughConstraintNode>(std::move(filteredMapping)));
                         }
                     }
 
-                    if (const auto sorted = TSortedConstraintNode::FilterByType(item.second.GetConstraint<TSortedConstraintNode>(), outStructType, ctx)) 
-                        constr.AddConstraint(sorted); 
+                    if (const auto sorted = TSortedConstraintNode::FilterByType(item.second.GetConstraint<TSortedConstraintNode>(), outStructType, ctx))
+                        constr.AddConstraint(sorted);
 
                     if (auto uniq = item.second.GetConstraint<TUniqueConstraintNode>()) {
                         if (AllOf(uniq->GetColumns(), [outStructType](TStringBuf col) { return outStructType->FindItem(col).Defined(); } )) {
@@ -636,234 +636,234 @@ private:
     // TODO: Empty for false condition
     template <bool UseSorted>
     TStatus FilterWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
-        if (const auto status = UpdateLambdaConstraints(*input->Child(1)); status != TStatus::Ok) { 
+        if (const auto status = UpdateLambdaConstraints(*input->Child(1)); status != TStatus::Ok) {
             return status;
         }
 
-        if constexpr (UseSorted) { 
+        if constexpr (UseSorted) {
             FromFirst<TSortedConstraintNode>(input, output, ctx);
         }
 
         return FromFirst<TPassthroughConstraintNode, TEmptyConstraintNode, TUniqueConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>(input, output, ctx);
     }
 
-    template<class TConstraint> 
-    static const TConstraint* GetConstraintFromWideResultLambda(const TExprNode& lambda, TExprContext& ctx); 
- 
-    template<class TConstraintType> 
-    static const TConstraintType* GetLambdaConstraint(const TExprNode& lambda, TExprContext& ctx) { 
-        if (2U == lambda.ChildrenSize()) 
-            return lambda.GetConstraint<TConstraintType>(); 
- 
-        TVector<const TConstraintSet*> constraints; 
-        constraints.reserve(lambda.ChildrenSize() - 1U); 
-        for (size_t i = 1U; i < lambda.ChildrenSize(); ++i) { 
-            constraints.emplace_back(&lambda.Child(i)->GetConstraintSet()); 
-        } 
-        return TConstraintType::MakeCommon(constraints, ctx); 
-    } 
- 
-    template<class TConstraintType, bool WideLambda> 
-    static const TConstraintType* GetConstraintFromLambda(const TExprNode& lambda, TExprContext& ctx) { 
-        if constexpr (WideLambda) 
-            return GetConstraintFromWideResultLambda<TConstraintType>(lambda, ctx); 
-        else 
-            return GetLambdaConstraint<TConstraintType>(lambda, ctx); 
-    } 
- 
-    static TConstraintNode::TListType GetConstraintsForInputArgument(const TExprNode& node, std::unordered_set<const TPassthroughConstraintNode*>& explicitPasstrought, TExprContext& ctx) { 
-        TConstraintNode::TListType constraints; 
-        if (const auto inItemType = GetItemType(*node.Head().GetTypeAnn())) { 
-            if (inItemType->GetKind() == ETypeAnnotationKind::Variant) { 
-                if (inItemType->Cast<TVariantExprType>()->GetUnderlyingType()->GetKind() == ETypeAnnotationKind::Tuple) { 
-                    const auto tupleType = inItemType->Cast<TVariantExprType>()->GetUnderlyingType()->Cast<TTupleExprType>(); 
-                    constraints.push_back(ctx.MakeConstraint<TVarIndexConstraintNode>(*inItemType->Cast<TVariantExprType>())); 
-                    TMultiConstraintNode::TMapType multiItems; 
-                    multiItems.reserve(tupleType->GetSize()); 
-                    for (size_t i = 0; i < tupleType->GetSize(); ++i) { 
-                        multiItems.emplace_back(i, TConstraintSet{}); 
-                        const auto inputMulti = node.Head().GetConstraint<TMultiConstraintNode>(); 
-                        if (const auto inputConstr = inputMulti ? inputMulti->GetItem(i) : nullptr) { 
-                            if (const auto uniq = inputConstr->GetConstraint<TUniqueConstraintNode>()) { 
-                                multiItems.back().second.AddConstraint(uniq); 
-                            } 
-                            if (const auto pass = inputConstr->GetConstraint<TPassthroughConstraintNode>()) { 
-                                multiItems.back().second.AddConstraint(pass); 
-                                continue; 
-                            } 
-                        } 
-                        switch (const auto variantItemType = tupleType->GetItems()[i]; variantItemType->GetKind()) { 
-/*TODO:                     case ETypeAnnotationKind::Tuple: 
-                                if (const auto argType = variantItemType->Cast<TTupleExprType>(); argType->GetSize() > 0U) { 
-                                    multiItems.back().second.AddConstraint(*explicitPasstrought.emplace(ctx.MakeConstraint<TPassthroughConstraintNode>(*argType)).first); 
-                                } 
-                                break;*/ 
-                            case ETypeAnnotationKind::Struct: 
-                                if (const auto argType = variantItemType->Cast<TStructExprType>(); argType->GetSize() > 0U) { 
-                                    multiItems.back().second.AddConstraint(*explicitPasstrought.emplace(ctx.MakeConstraint<TPassthroughConstraintNode>(*argType)).first); 
-                                } 
-                                break; 
-                            default: 
-                                break; 
-                        } 
-                    } 
-                    if (!multiItems.empty()) { 
-                        constraints.emplace_back(ctx.MakeConstraint<TMultiConstraintNode>(std::move(multiItems))); 
-                    } 
-                } 
-            } else { 
-                if (const auto inputPassthrough = node.Head().GetConstraint<TPassthroughConstraintNode>()) { 
-                    constraints.emplace_back(inputPassthrough); 
-                } else switch (inItemType->GetKind()) { 
-/*TODO:             case ETypeAnnotationKind::Tuple: 
-                        if (const auto argType = inItemType->Cast<TTupleExprType>(); argType->GetSize() > 0U) { 
-                            constraints.emplace_back(*explicitPasstrought.emplace(ctx.MakeConstraint<TPassthroughConstraintNode>(*argType)).first); 
-                        } 
-                        break;*/ 
-                    case ETypeAnnotationKind::Struct: 
-                        if (const auto argType = inItemType->Cast<TStructExprType>(); argType->GetSize() > 0U) { 
-                            constraints.emplace_back(*explicitPasstrought.emplace(ctx.MakeConstraint<TPassthroughConstraintNode>(*argType)).first); 
-                        } 
-                        break; 
-                    default: 
-                        break; 
-                } 
- 
-                if (const auto unique = node.Head().GetConstraint<TUniqueConstraintNode>()) { 
-                    constraints.emplace_back(unique); 
-                } 
- 
-                if (const auto groupBy = node.Head().GetConstraint<TGroupByConstraintNode>()) { 
-                    constraints.emplace_back(groupBy); 
-                } 
-            } 
-        } 
- 
-        return constraints; 
-    } 
- 
-    template <bool UseSorted, bool Flat, bool WideInput = false, bool WideOutput = false> 
-    TStatus MapWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
-        const auto inItemType = GetItemType(*input->Child(0)->GetTypeAnn()); 
-        bool multiInput = false;
-        TSmallVec<TConstraintNode::TListType> argConstraints(input->Tail().Head().ChildrenSize()); 
-        std::unordered_set<const TPassthroughConstraintNode*> explicitPasstrought; 
-        if (inItemType) {
-            //TODO: Use GetConstraintsForInputArgument 
+    template<class TConstraint>
+    static const TConstraint* GetConstraintFromWideResultLambda(const TExprNode& lambda, TExprContext& ctx);
+
+    template<class TConstraintType>
+    static const TConstraintType* GetLambdaConstraint(const TExprNode& lambda, TExprContext& ctx) {
+        if (2U == lambda.ChildrenSize())
+            return lambda.GetConstraint<TConstraintType>();
+
+        TVector<const TConstraintSet*> constraints;
+        constraints.reserve(lambda.ChildrenSize() - 1U);
+        for (size_t i = 1U; i < lambda.ChildrenSize(); ++i) {
+            constraints.emplace_back(&lambda.Child(i)->GetConstraintSet());
+        }
+        return TConstraintType::MakeCommon(constraints, ctx);
+    }
+
+    template<class TConstraintType, bool WideLambda>
+    static const TConstraintType* GetConstraintFromLambda(const TExprNode& lambda, TExprContext& ctx) {
+        if constexpr (WideLambda)
+            return GetConstraintFromWideResultLambda<TConstraintType>(lambda, ctx);
+        else
+            return GetLambdaConstraint<TConstraintType>(lambda, ctx);
+    }
+
+    static TConstraintNode::TListType GetConstraintsForInputArgument(const TExprNode& node, std::unordered_set<const TPassthroughConstraintNode*>& explicitPasstrought, TExprContext& ctx) {
+        TConstraintNode::TListType constraints;
+        if (const auto inItemType = GetItemType(*node.Head().GetTypeAnn())) {
             if (inItemType->GetKind() == ETypeAnnotationKind::Variant) {
                 if (inItemType->Cast<TVariantExprType>()->GetUnderlyingType()->GetKind() == ETypeAnnotationKind::Tuple) {
-                    const auto inputMulti = input->Head().GetConstraint<TMultiConstraintNode>(); 
-                    const auto tupleType = inItemType->Cast<TVariantExprType>()->GetUnderlyingType()->Cast<TTupleExprType>(); 
-                    argConstraints.front().push_back(ctx.MakeConstraint<TVarIndexConstraintNode>(*inItemType->Cast<TVariantExprType>())); 
+                    const auto tupleType = inItemType->Cast<TVariantExprType>()->GetUnderlyingType()->Cast<TTupleExprType>();
+                    constraints.push_back(ctx.MakeConstraint<TVarIndexConstraintNode>(*inItemType->Cast<TVariantExprType>()));
                     TMultiConstraintNode::TMapType multiItems;
-                    multiItems.reserve(tupleType->GetSize()); 
+                    multiItems.reserve(tupleType->GetSize());
+                    for (size_t i = 0; i < tupleType->GetSize(); ++i) {
+                        multiItems.emplace_back(i, TConstraintSet{});
+                        const auto inputMulti = node.Head().GetConstraint<TMultiConstraintNode>();
+                        if (const auto inputConstr = inputMulti ? inputMulti->GetItem(i) : nullptr) {
+                            if (const auto uniq = inputConstr->GetConstraint<TUniqueConstraintNode>()) {
+                                multiItems.back().second.AddConstraint(uniq);
+                            }
+                            if (const auto pass = inputConstr->GetConstraint<TPassthroughConstraintNode>()) {
+                                multiItems.back().second.AddConstraint(pass);
+                                continue;
+                            }
+                        }
+                        switch (const auto variantItemType = tupleType->GetItems()[i]; variantItemType->GetKind()) {
+/*TODO:                     case ETypeAnnotationKind::Tuple:
+                                if (const auto argType = variantItemType->Cast<TTupleExprType>(); argType->GetSize() > 0U) {
+                                    multiItems.back().second.AddConstraint(*explicitPasstrought.emplace(ctx.MakeConstraint<TPassthroughConstraintNode>(*argType)).first);
+                                }
+                                break;*/
+                            case ETypeAnnotationKind::Struct:
+                                if (const auto argType = variantItemType->Cast<TStructExprType>(); argType->GetSize() > 0U) {
+                                    multiItems.back().second.AddConstraint(*explicitPasstrought.emplace(ctx.MakeConstraint<TPassthroughConstraintNode>(*argType)).first);
+                                }
+                                break;
+                            default:
+                                break;
+                        }
+                    }
+                    if (!multiItems.empty()) {
+                        constraints.emplace_back(ctx.MakeConstraint<TMultiConstraintNode>(std::move(multiItems)));
+                    }
+                }
+            } else {
+                if (const auto inputPassthrough = node.Head().GetConstraint<TPassthroughConstraintNode>()) {
+                    constraints.emplace_back(inputPassthrough);
+                } else switch (inItemType->GetKind()) {
+/*TODO:             case ETypeAnnotationKind::Tuple:
+                        if (const auto argType = inItemType->Cast<TTupleExprType>(); argType->GetSize() > 0U) {
+                            constraints.emplace_back(*explicitPasstrought.emplace(ctx.MakeConstraint<TPassthroughConstraintNode>(*argType)).first);
+                        }
+                        break;*/
+                    case ETypeAnnotationKind::Struct:
+                        if (const auto argType = inItemType->Cast<TStructExprType>(); argType->GetSize() > 0U) {
+                            constraints.emplace_back(*explicitPasstrought.emplace(ctx.MakeConstraint<TPassthroughConstraintNode>(*argType)).first);
+                        }
+                        break;
+                    default:
+                        break;
+                }
+
+                if (const auto unique = node.Head().GetConstraint<TUniqueConstraintNode>()) {
+                    constraints.emplace_back(unique);
+                }
+
+                if (const auto groupBy = node.Head().GetConstraint<TGroupByConstraintNode>()) {
+                    constraints.emplace_back(groupBy);
+                }
+            }
+        }
+
+        return constraints;
+    }
+
+    template <bool UseSorted, bool Flat, bool WideInput = false, bool WideOutput = false>
+    TStatus MapWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
+        const auto inItemType = GetItemType(*input->Child(0)->GetTypeAnn());
+        bool multiInput = false;
+        TSmallVec<TConstraintNode::TListType> argConstraints(input->Tail().Head().ChildrenSize());
+        std::unordered_set<const TPassthroughConstraintNode*> explicitPasstrought;
+        if (inItemType) {
+            //TODO: Use GetConstraintsForInputArgument
+            if (inItemType->GetKind() == ETypeAnnotationKind::Variant) {
+                if (inItemType->Cast<TVariantExprType>()->GetUnderlyingType()->GetKind() == ETypeAnnotationKind::Tuple) {
+                    const auto inputMulti = input->Head().GetConstraint<TMultiConstraintNode>();
+                    const auto tupleType = inItemType->Cast<TVariantExprType>()->GetUnderlyingType()->Cast<TTupleExprType>();
+                    argConstraints.front().push_back(ctx.MakeConstraint<TVarIndexConstraintNode>(*inItemType->Cast<TVariantExprType>()));
+                    TMultiConstraintNode::TMapType multiItems;
+                    multiItems.reserve(tupleType->GetSize());
 
                     for (size_t i = 0; i < tupleType->GetSize(); ++i) {
-                        multiItems.emplace_back(i, TConstraintSet{}); 
-                        const auto inputConstr = inputMulti ? inputMulti->GetItem(i) : nullptr; 
+                        multiItems.emplace_back(i, TConstraintSet{});
+                        const auto inputConstr = inputMulti ? inputMulti->GetItem(i) : nullptr;
                         if (inputConstr) {
-                            if (const auto empty = inputConstr->GetConstraint<TEmptyConstraintNode>()) { 
+                            if (const auto empty = inputConstr->GetConstraint<TEmptyConstraintNode>()) {
                                 // TODO: multiItems.pop_back() instead
                                 multiItems.back().second.AddConstraint(empty);
                             }
- 
-                            if (const auto pass = inputConstr->GetConstraint<TPassthroughConstraintNode>()) { 
-                                multiItems.back().second.AddConstraint(pass); 
-                                continue; 
-                            } 
+
+                            if (const auto pass = inputConstr->GetConstraint<TPassthroughConstraintNode>()) {
+                                multiItems.back().second.AddConstraint(pass);
+                                continue;
+                            }
                         }
-                        switch (const auto variantItemType = tupleType->GetItems()[i]; variantItemType->GetKind()) { 
-/*TODO:                     case ETypeAnnotationKind::Tuple: 
-                                if (const auto argType = variantItemType->Cast<TTupleExprType>(); argType->GetSize() > 0U) { 
-                                    multiItems.back().second.AddConstraint(*explicitPasstrought.emplace(ctx.MakeConstraint<TPassthroughConstraintNode>(*argType)).first); 
-                                } 
-                                break;*/ 
-                            case ETypeAnnotationKind::Struct: 
-                                if (const auto argType = variantItemType->Cast<TStructExprType>(); argType->GetSize() > 0U) { 
-                                    multiItems.back().second.AddConstraint(*explicitPasstrought.emplace(ctx.MakeConstraint<TPassthroughConstraintNode>(*argType)).first); 
-                                    if (inputConstr) { 
-                                        if (auto uniq = inputConstr->GetConstraint<TUniqueConstraintNode>()) { 
-                                            multiItems.back().second.AddConstraint(uniq); 
-                                        } 
-                                    } 
-                                } 
-                                break; 
-                            default: 
-                                break; 
-                        } 
+                        switch (const auto variantItemType = tupleType->GetItems()[i]; variantItemType->GetKind()) {
+/*TODO:                     case ETypeAnnotationKind::Tuple:
+                                if (const auto argType = variantItemType->Cast<TTupleExprType>(); argType->GetSize() > 0U) {
+                                    multiItems.back().second.AddConstraint(*explicitPasstrought.emplace(ctx.MakeConstraint<TPassthroughConstraintNode>(*argType)).first);
+                                }
+                                break;*/
+                            case ETypeAnnotationKind::Struct:
+                                if (const auto argType = variantItemType->Cast<TStructExprType>(); argType->GetSize() > 0U) {
+                                    multiItems.back().second.AddConstraint(*explicitPasstrought.emplace(ctx.MakeConstraint<TPassthroughConstraintNode>(*argType)).first);
+                                    if (inputConstr) {
+                                        if (auto uniq = inputConstr->GetConstraint<TUniqueConstraintNode>()) {
+                                            multiItems.back().second.AddConstraint(uniq);
+                                        }
+                                    }
+                                }
+                                break;
+                            default:
+                                break;
+                        }
                     }
                     if (!multiItems.empty()) {
-                        argConstraints.front().push_back(ctx.MakeConstraint<TMultiConstraintNode>(std::move(multiItems))); 
+                        argConstraints.front().push_back(ctx.MakeConstraint<TMultiConstraintNode>(std::move(multiItems)));
                     }
                     multiInput = true;
                 }
             } else {
-                const auto inputPassthrough = input->Head().GetConstraint<TPassthroughConstraintNode>(); 
-                if constexpr (WideInput) { 
-                    const auto structUnique = input->Head().GetConstraint<TUniqueConstraintNode>(); 
-                    for (ui32 i = 0U; i < argConstraints.size(); ++i) { 
-                        const auto memberName = ctx.AppendString(ToString(i)); 
-                        if (structUnique && structUnique->GetColumns().has(memberName)) { 
-                            argConstraints[i].emplace_back(ctx.MakeConstraint<TUniqueConstraintNode>(TVector<TStringBuf>{memberName})); 
-                        } 
-                    } 
- 
-                    const auto multiType = inItemType->Cast<TMultiExprType>(); 
-                    if (const auto passtrought = inputPassthrough ? inputPassthrough : multiType ->GetSize() > 0U ? *explicitPasstrought.emplace(ctx.MakeConstraint<TPassthroughConstraintNode>(*multiType)).first : nullptr) { 
-                        for (ui32 i = 0U; i < argConstraints.size(); ++i) { 
-                            if (const auto fieldPasstrought = passtrought->ExtractField(ctx, ToString(i))) { 
-                                argConstraints[i].emplace_back(fieldPasstrought); 
-                            } 
-                        } 
+                const auto inputPassthrough = input->Head().GetConstraint<TPassthroughConstraintNode>();
+                if constexpr (WideInput) {
+                    const auto structUnique = input->Head().GetConstraint<TUniqueConstraintNode>();
+                    for (ui32 i = 0U; i < argConstraints.size(); ++i) {
+                        const auto memberName = ctx.AppendString(ToString(i));
+                        if (structUnique && structUnique->GetColumns().has(memberName)) {
+                            argConstraints[i].emplace_back(ctx.MakeConstraint<TUniqueConstraintNode>(TVector<TStringBuf>{memberName}));
+                        }
                     }
-                } else { 
-                    if (inputPassthrough) 
-                        argConstraints.front().emplace_back(inputPassthrough); 
-                    else switch (inItemType->GetKind()) { 
-/*TODO:                case ETypeAnnotationKind::Tuple: 
-                            if (const auto argType = inItemType->Cast<TTupleExprType>(); argType->GetSize() > 0U) { 
-                                argConstraints.front().push_back(*explicitPasstrought.emplace(ctx.MakeConstraint<TPassthroughConstraintNode>(*argType)).first); 
-                            } 
-                            break;*/ 
-                        case ETypeAnnotationKind::Struct: 
-                            if (const auto argType = inItemType->Cast<TStructExprType>(); argType->GetSize() > 0U) { 
-                                argConstraints.front().push_back(*explicitPasstrought.emplace(ctx.MakeConstraint<TPassthroughConstraintNode>(*argType)).first); 
-                            } 
-                            break; 
-                        default: 
-                            break; 
-                    } 
- 
-                    if (const auto unique = input->Head().GetConstraint<TUniqueConstraintNode>()) { 
-                        argConstraints.front().push_back(unique); 
+
+                    const auto multiType = inItemType->Cast<TMultiExprType>();
+                    if (const auto passtrought = inputPassthrough ? inputPassthrough : multiType ->GetSize() > 0U ? *explicitPasstrought.emplace(ctx.MakeConstraint<TPassthroughConstraintNode>(*multiType)).first : nullptr) {
+                        for (ui32 i = 0U; i < argConstraints.size(); ++i) {
+                            if (const auto fieldPasstrought = passtrought->ExtractField(ctx, ToString(i))) {
+                                argConstraints[i].emplace_back(fieldPasstrought);
+                            }
+                        }
+                    }
+                } else {
+                    if (inputPassthrough)
+                        argConstraints.front().emplace_back(inputPassthrough);
+                    else switch (inItemType->GetKind()) {
+/*TODO:                case ETypeAnnotationKind::Tuple:
+                            if (const auto argType = inItemType->Cast<TTupleExprType>(); argType->GetSize() > 0U) {
+                                argConstraints.front().push_back(*explicitPasstrought.emplace(ctx.MakeConstraint<TPassthroughConstraintNode>(*argType)).first);
+                            }
+                            break;*/
+                        case ETypeAnnotationKind::Struct:
+                            if (const auto argType = inItemType->Cast<TStructExprType>(); argType->GetSize() > 0U) {
+                                argConstraints.front().push_back(*explicitPasstrought.emplace(ctx.MakeConstraint<TPassthroughConstraintNode>(*argType)).first);
+                            }
+                            break;
+                        default:
+                            break;
+                    }
+
+                    if (const auto unique = input->Head().GetConstraint<TUniqueConstraintNode>()) {
+                        argConstraints.front().push_back(unique);
                     }
                 }
-                if (const auto groupBy = input->Head().GetConstraint<TGroupByConstraintNode>()) { 
-                    argConstraints.front().push_back(groupBy); 
+                if (const auto groupBy = input->Head().GetConstraint<TGroupByConstraintNode>()) {
+                    argConstraints.front().push_back(groupBy);
                 }
             }
         }
- 
-        if (const auto status = UpdateLambdaConstraints(input->TailRef(), ctx, argConstraints); status != TStatus::Ok) { 
+
+        if (const auto status = UpdateLambdaConstraints(input->TailRef(), ctx, argConstraints); status != TStatus::Ok) {
             return status;
         }
 
         bool hasOutSorted = false;
-        const auto lambdaPassthrough = GetConstraintFromLambda<TPassthroughConstraintNode, WideOutput>(input->Tail(), ctx); 
+        const auto lambdaPassthrough = GetConstraintFromLambda<TPassthroughConstraintNode, WideOutput>(input->Tail(), ctx);
         if (lambdaPassthrough) {
-            if (!explicitPasstrought.contains(lambdaPassthrough)) { 
-                auto mapping = lambdaPassthrough->GetColumnMapping(); 
-                for (const auto myPasstrought : explicitPasstrought) { 
-                    mapping.erase(myPasstrought); 
-                } 
-                if (!mapping.empty()) { 
-                    input->AddConstraint(ctx.MakeConstraint<TPassthroughConstraintNode>(std::move(mapping))); 
-                } 
+            if (!explicitPasstrought.contains(lambdaPassthrough)) {
+                auto mapping = lambdaPassthrough->GetColumnMapping();
+                for (const auto myPasstrought : explicitPasstrought) {
+                    mapping.erase(myPasstrought);
+                }
+                if (!mapping.empty()) {
+                    input->AddConstraint(ctx.MakeConstraint<TPassthroughConstraintNode>(std::move(mapping)));
+                }
             }
 
-            if constexpr (UseSorted) { 
-                if (const auto sorted = input->Head().GetConstraint<TSortedConstraintNode>()) { 
-                    if (const auto outSorted = GetPassthroughSortedConstraint(*sorted, *lambdaPassthrough, ctx)) { 
+            if constexpr (UseSorted) {
+                if (const auto sorted = input->Head().GetConstraint<TSortedConstraintNode>()) {
+                    if (const auto outSorted = GetPassthroughSortedConstraint(*sorted, *lambdaPassthrough, ctx)) {
                         input->AddConstraint(outSorted);
                         hasOutSorted = true;
                     }
@@ -871,15 +871,15 @@ private:
             }
         }
 
-        if (input->Head().GetConstraint<TUniqueConstraintNode>()) { 
-            if (const auto lambdaUnique = GetConstraintFromLambda<TUniqueConstraintNode, WideOutput>(input->Tail(), ctx)) { 
+        if (input->Head().GetConstraint<TUniqueConstraintNode>()) {
+            if (const auto lambdaUnique = GetConstraintFromLambda<TUniqueConstraintNode, WideOutput>(input->Tail(), ctx)) {
                 input->AddConstraint(lambdaUnique);
             }
         }
 
-        const auto lambdaVarIndex = GetConstraintFromLambda<TVarIndexConstraintNode, WideOutput>(input->Tail(), ctx); 
-        const auto lambdaMulti = GetConstraintFromLambda<TMultiConstraintNode, WideOutput>(input->Tail(), ctx); 
-        if (const auto varIndex = input->Head().GetConstraint<TVarIndexConstraintNode>()) { 
+        const auto lambdaVarIndex = GetConstraintFromLambda<TVarIndexConstraintNode, WideOutput>(input->Tail(), ctx);
+        const auto lambdaMulti = GetConstraintFromLambda<TMultiConstraintNode, WideOutput>(input->Tail(), ctx);
+        if (const auto varIndex = input->Head().GetConstraint<TVarIndexConstraintNode>()) {
             if (multiInput) {
                 if (lambdaVarIndex) {
                     if (auto outVarIndex = GetVarIndexOverVarIndexConstraint(*varIndex, *lambdaVarIndex, ctx)) {
@@ -904,71 +904,71 @@ private:
             }
         }
 
-        const auto inputMulti = input->Head().GetConstraint<TMultiConstraintNode>(); 
+        const auto inputMulti = input->Head().GetConstraint<TMultiConstraintNode>();
         if (lambdaMulti && !input->Child(0)->GetConstraint<TEmptyConstraintNode>()) {
             TMultiConstraintNode::TMapType remappedItems;
             for (auto& item: lambdaMulti->GetItems()) {
                 remappedItems.push_back(std::make_pair(item.first, TConstraintSet{}));
                 if (!multiInput) { // remapping one to many
-                    if (const auto lambdaPassthrough = item.second.template GetConstraint<TPassthroughConstraintNode>()) { 
-                        if (!explicitPasstrought.contains(lambdaPassthrough)) { 
-                            auto mapping = lambdaPassthrough->GetColumnMapping(); 
-                            for (const auto myPasstrought : explicitPasstrought) 
-                                mapping.erase(myPasstrought); 
-                            if (!mapping.empty()) { 
-                                remappedItems.back().second.AddConstraint(ctx.MakeConstraint<TPassthroughConstraintNode>(std::move(mapping))); 
-                            } 
-                        } 
+                    if (const auto lambdaPassthrough = item.second.template GetConstraint<TPassthroughConstraintNode>()) {
+                        if (!explicitPasstrought.contains(lambdaPassthrough)) {
+                            auto mapping = lambdaPassthrough->GetColumnMapping();
+                            for (const auto myPasstrought : explicitPasstrought)
+                                mapping.erase(myPasstrought);
+                            if (!mapping.empty()) {
+                                remappedItems.back().second.AddConstraint(ctx.MakeConstraint<TPassthroughConstraintNode>(std::move(mapping)));
+                            }
+                        }
 
-                        if constexpr (UseSorted) { 
-                            if (const auto sorted = input->Child(0)->GetConstraint<TSortedConstraintNode>()) { 
-                                if (const auto outSorted = GetPassthroughSortedConstraint(*sorted, *lambdaPassthrough, ctx)) { 
+                        if constexpr (UseSorted) {
+                            if (const auto sorted = input->Child(0)->GetConstraint<TSortedConstraintNode>()) {
+                                if (const auto outSorted = GetPassthroughSortedConstraint(*sorted, *lambdaPassthrough, ctx)) {
                                     remappedItems.back().second.AddConstraint(outSorted);
                                 }
                             }
                         }
                     }
                     if (input->Child(0)->GetConstraint<TUniqueConstraintNode>()) {
-                        if (const auto lambdaUnique = item.second.template GetConstraint<TUniqueConstraintNode>()) { 
+                        if (const auto lambdaUnique = item.second.template GetConstraint<TUniqueConstraintNode>()) {
                             remappedItems.back().second.AddConstraint(lambdaUnique);
                         }
                     }
 
-                    if (const auto empty = item.second.template GetConstraint<TEmptyConstraintNode>()) { 
+                    if (const auto empty = item.second.template GetConstraint<TEmptyConstraintNode>()) {
                         remappedItems.pop_back();
                     }
                 }
-                else if (lambdaVarIndex && inputMulti) { 
+                else if (lambdaVarIndex && inputMulti) {
                     const auto range = lambdaVarIndex->GetIndexMapping().equal_range(item.first);
                     switch (std::distance(range.first, range.second)) {
                     case 0: // new index
                         break;
                     case 1: // remapping 1 to 1
-                        if (const auto origConstr = inputMulti->GetItem(range.first->second)) { 
-                            if (const auto lambdaPassthrough = item.second.template GetConstraint<TPassthroughConstraintNode>()) { 
-                                if (!explicitPasstrought.contains(lambdaPassthrough)) { 
-                                    auto mapping = lambdaPassthrough->GetColumnMapping(); 
-                                    for (const auto myPasstrought : explicitPasstrought) 
-                                        mapping.erase(myPasstrought); 
-                                    if (!mapping.empty()) { 
-                                        remappedItems.back().second.AddConstraint(ctx.MakeConstraint<TPassthroughConstraintNode>(std::move(mapping))); 
-                                    } 
+                        if (const auto origConstr = inputMulti->GetItem(range.first->second)) {
+                            if (const auto lambdaPassthrough = item.second.template GetConstraint<TPassthroughConstraintNode>()) {
+                                if (!explicitPasstrought.contains(lambdaPassthrough)) {
+                                    auto mapping = lambdaPassthrough->GetColumnMapping();
+                                    for (const auto myPasstrought : explicitPasstrought)
+                                        mapping.erase(myPasstrought);
+                                    if (!mapping.empty()) {
+                                        remappedItems.back().second.AddConstraint(ctx.MakeConstraint<TPassthroughConstraintNode>(std::move(mapping)));
+                                    }
                                 }
 
-                                if constexpr (UseSorted) { 
-                                    if (const auto sorted = origConstr->template GetConstraint<TSortedConstraintNode>()) { 
+                                if constexpr (UseSorted) {
+                                    if (const auto sorted = origConstr->template GetConstraint<TSortedConstraintNode>()) {
                                         if (auto outSorted = GetPassthroughSortedConstraint(*sorted, *lambdaPassthrough, ctx)) {
                                             remappedItems.back().second.AddConstraint(outSorted);
                                         }
                                     }
                                 }
                             }
-                            if (origConstr->template GetConstraint<TUniqueConstraintNode>()) { 
-                                if (const auto lambdaUnique = item.second.template GetConstraint<TUniqueConstraintNode>()) { 
+                            if (origConstr->template GetConstraint<TUniqueConstraintNode>()) {
+                                if (const auto lambdaUnique = item.second.template GetConstraint<TUniqueConstraintNode>()) {
                                     remappedItems.back().second.AddConstraint(lambdaUnique);
                                 }
                             }
-                            if (const auto empty = item.second.template GetConstraint<TEmptyConstraintNode>()) { 
+                            if (const auto empty = item.second.template GetConstraint<TEmptyConstraintNode>()) {
                                 remappedItems.pop_back();
                             }
                         } else {
@@ -979,7 +979,7 @@ private:
                         {
                             std::vector<const TConstraintSet*> nonEmpty;
                             for (auto i = range.first; i != range.second; ++i) {
-                                if (auto origConstr = inputMulti->GetItem(i->second)) { 
+                                if (auto origConstr = inputMulti->GetItem(i->second)) {
                                     nonEmpty.push_back(origConstr);
                                 }
                             }
@@ -1000,11 +1000,11 @@ private:
                 input->AddConstraint(ctx.MakeConstraint<TMultiConstraintNode>(std::move(remappedItems)));
             }
         }
-        else if (inputMulti && lambdaVarIndex) { // Many to one 
+        else if (inputMulti && lambdaVarIndex) { // Many to one
             const auto range = lambdaVarIndex->GetIndexMapping().equal_range(0);
             std::vector<const TConstraintSet*> nonEmpty;
             for (auto i = range.first; i != range.second; ++i) {
-                if (auto origConstr = inputMulti->GetItem(i->second)) { 
+                if (auto origConstr = inputMulti->GetItem(i->second)) {
                     nonEmpty.push_back(origConstr);
                 }
             }
@@ -1017,16 +1017,16 @@ private:
             }
         }
 
-        if (const auto lambdaEmpty = GetConstraintFromLambda<TEmptyConstraintNode, WideOutput>(input->Tail(), ctx)) { 
+        if (const auto lambdaEmpty = GetConstraintFromLambda<TEmptyConstraintNode, WideOutput>(input->Tail(), ctx)) {
             if (TCoFlatMapBase::Match(input.Get())) {
                 input->AddConstraint(lambdaEmpty);
             }
             if (UseSorted && !hasOutSorted && !lambdaPassthrough) {
-                if (const auto sorted = input->Child(0)->GetConstraint<TSortedConstraintNode>()) { 
-                    const auto outItemType = GetItemType(*input->GetTypeAnn()); 
+                if (const auto sorted = input->Child(0)->GetConstraint<TSortedConstraintNode>()) {
+                    const auto outItemType = GetItemType(*input->GetTypeAnn());
                     if (outItemType && outItemType->GetKind() == ETypeAnnotationKind::Struct) {
-                        if (const auto outSorted = TSortedConstraintNode::FilterByType(sorted, outItemType->Cast<TStructExprType>(), ctx)) { 
-                            input->AddConstraint(outSorted); 
+                        if (const auto outSorted = TSortedConstraintNode::FilterByType(sorted, outItemType->Cast<TStructExprType>(), ctx)) {
+                            input->AddConstraint(outSorted);
                         }
                     }
                 }
@@ -1039,13 +1039,13 @@ private:
     template <bool UseSorted>
     TStatus LMapWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
         TConstraintNode::TListType argConstraints;
-        for (const auto c: input->Head().GetAllConstraints()) { 
+        for (const auto c: input->Head().GetAllConstraints()) {
             if (UseSorted || c->GetName() != TSortedConstraintNode::Name()) {
                 argConstraints.push_back(c);
             }
         }
 
-        if (const auto status = UpdateLambdaConstraints(input->TailRef(), ctx, {argConstraints}); status != TStatus::Ok) { 
+        if (const auto status = UpdateLambdaConstraints(input->TailRef(), ctx, {argConstraints}); status != TStatus::Ok) {
             return status;
         }
 
@@ -1053,10 +1053,10 @@ private:
         if (!UseSorted) {
             except.insert(TSortedConstraintNode::Name());
         }
-        if (input->Tail().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) { 
+        if (input->Tail().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) {
             except.insert(TEmptyConstraintNode::Name());
         }
-        CopyExcept(*input, input->Tail(), except); 
+        CopyExcept(*input, input->Tail(), except);
 
         return FromFirst<TEmptyConstraintNode>(input, output, ctx);
     }
@@ -1086,9 +1086,9 @@ private:
                 for (auto& child: input->Children()) {
                     inputStructs.push_back(child->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>());
                 }
-                auto commonPrefixLength = sort->GetContent().size(); 
+                auto commonPrefixLength = sort->GetContent().size();
                 for (size_t i = 0; i < commonPrefixLength; ++i) {
-                    auto column = sort->GetContent()[i].first.front(); 
+                    auto column = sort->GetContent()[i].first.front();
                     auto pos = resultStruct->FindItem(column);
                     YQL_ENSURE(pos, "Missing column " << TString{column}.Quote() << " in result type");
                     auto resultItemType = resultStruct->GetItems()[*pos];
@@ -1104,7 +1104,7 @@ private:
                         }
                     }
                 }
-                sort = sort->CutPrefix(commonPrefixLength, ctx); 
+                sort = sort->CutPrefix(commonPrefixLength, ctx);
             }
             if (sort) {
                 input->AddConstraint(sort);
@@ -1125,23 +1125,23 @@ private:
 
     TStatus TakeWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
         if (input->Tail().IsCallable("Uint64") && !FromString<ui64>(input->Tail().Head().Content())) {
-            input->AddConstraint(ctx.MakeConstraint<TEmptyConstraintNode>()); 
+            input->AddConstraint(ctx.MakeConstraint<TEmptyConstraintNode>());
         }
-        return CopyAllFrom<0>(input, output, ctx); 
+        return CopyAllFrom<0>(input, output, ctx);
     }
 
     TStatus MemberWrap(const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) const {
         TVector<TStringBuf> unique;
 
-        const auto& memberName = input->Tail().Content(); 
-        const auto& structNode = input->Head(); 
-        if (const auto structPassthrough = structNode.GetConstraint<TPassthroughConstraintNode>()) { 
-            if (const auto p = structPassthrough->ExtractField(ctx, memberName)) { 
-                input->AddConstraint(p); 
+        const auto& memberName = input->Tail().Content();
+        const auto& structNode = input->Head();
+        if (const auto structPassthrough = structNode.GetConstraint<TPassthroughConstraintNode>()) {
+            if (const auto p = structPassthrough->ExtractField(ctx, memberName)) {
+                input->AddConstraint(p);
             }
         }
-        if (!TCoNothing::Match(&structNode)) { 
-            if (auto structUnique = structNode.GetConstraint<TUniqueConstraintNode>()) { 
+        if (!TCoNothing::Match(&structNode)) {
+            if (auto structUnique = structNode.GetConstraint<TUniqueConstraintNode>()) {
                 if (structUnique->GetColumns().has(memberName)) {
                     unique.push_back(memberName);
                 }
@@ -1152,8 +1152,8 @@ private:
             input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(std::move(unique)));
         }
 
-        if (structNode.IsCallable("AsStruct")) { 
-            for (auto& child: structNode.Children()) { 
+        if (structNode.IsCallable("AsStruct")) {
+            for (auto& child: structNode.Children()) {
                 if (child->Child(0)->Content() == memberName) {
                     TApplyConstraintFromInput<1, TVarIndexConstraintNode>::Do(child);
                     break;
@@ -1165,90 +1165,90 @@ private:
         return TStatus::Ok;
     }
 
-    TStatus AsTupleWrap(const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) const { 
-        TPassthroughConstraintNode::TMapType passthrough; 
-        passthrough.reserve(input->ChildrenSize()); 
- 
-        TVector<TStringBuf> unique; 
-        TVector<const TConstraintSet*> structConstraints; 
-        TNodeSet srcStructs, arguments; 
- 
-        ui32 i = 0U; 
-        for (const auto& child : input->Children()) { 
-            const auto& name = ctx.AppendString(ToString(i++)); 
-            if (const auto pass = child->GetConstraint<TPassthroughConstraintNode>()) { 
-                for (auto part : pass->GetColumnMapping()) { 
-                    std::transform(part.second.cbegin(), part.second.cend(), std::back_inserter(passthrough[part.first ? part.first : pass]), [&name](TPassthroughConstraintNode::TPartType::value_type item) { 
-                        item.first.emplace_front(name); 
-                        return item; 
-                    }); 
-                } 
-            } 
- 
-            const auto valueNode = SkipModifiers(child.Get()); 
-            if (TCoMember::Match(valueNode) || TCoNth::Match(valueNode)) { 
-                auto memberName = valueNode->Child(1)->Content(); 
-                auto structNode = valueNode->Child(0); 
-                if (auto structUnique = structNode->GetConstraint<TUniqueConstraintNode>()) { 
-                    if (structUnique->GetColumns().has(memberName)) { 
-                        if (!TCoNothing::Match(structNode)) { 
-                            srcStructs.insert(structNode); 
-                            unique.push_back(name); 
-                        } 
-                    } 
-                } 
-                structConstraints.push_back(&structNode->GetConstraintSet()); 
-            } 
-            else if (valueNode->Type() == TExprNode::Argument && ETypeAnnotationKind::Struct != valueNode->GetTypeAnn()->GetKind()) { 
-                if (auto structUnique = valueNode->GetConstraint<TUniqueConstraintNode>()) { 
-                    if (structUnique->GetColumns().size() == 1) { 
-                        arguments.insert(valueNode); 
-                        if (const auto scope = valueNode->GetDependencyScope()) 
-                            srcStructs.insert(scope->second); 
-                        unique.push_back(name); 
-                    } 
-                } 
-                structConstraints.push_back(&valueNode->GetConstraintSet()); 
-            } 
-        } 
-        if (!passthrough.empty()) { 
-            input->AddConstraint(ctx.MakeConstraint<TPassthroughConstraintNode>(std::move(passthrough))); 
-        } 
-        if (!unique.empty()) { 
-            if (srcStructs.empty() || (srcStructs.size() == 1 && (unique.size() == arguments.size() || 
-                (!(*srcStructs.begin())->IsLambda() && unique.size() == (*srcStructs.begin())->GetConstraint<TUniqueConstraintNode>()->GetColumns().size())))) { 
-                ::SortUnique(unique); 
-                input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(std::move(unique))); 
-            } 
-        } 
-        if (auto varIndex = TVarIndexConstraintNode::MakeCommon(structConstraints, ctx)) { 
-            input->AddConstraint(varIndex); 
-        } 
- 
-        return TStatus::Ok; 
-    } 
- 
+    TStatus AsTupleWrap(const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) const {
+        TPassthroughConstraintNode::TMapType passthrough;
+        passthrough.reserve(input->ChildrenSize());
+
+        TVector<TStringBuf> unique;
+        TVector<const TConstraintSet*> structConstraints;
+        TNodeSet srcStructs, arguments;
+
+        ui32 i = 0U;
+        for (const auto& child : input->Children()) {
+            const auto& name = ctx.AppendString(ToString(i++));
+            if (const auto pass = child->GetConstraint<TPassthroughConstraintNode>()) {
+                for (auto part : pass->GetColumnMapping()) {
+                    std::transform(part.second.cbegin(), part.second.cend(), std::back_inserter(passthrough[part.first ? part.first : pass]), [&name](TPassthroughConstraintNode::TPartType::value_type item) {
+                        item.first.emplace_front(name);
+                        return item;
+                    });
+                }
+            }
+
+            const auto valueNode = SkipModifiers(child.Get());
+            if (TCoMember::Match(valueNode) || TCoNth::Match(valueNode)) {
+                auto memberName = valueNode->Child(1)->Content();
+                auto structNode = valueNode->Child(0);
+                if (auto structUnique = structNode->GetConstraint<TUniqueConstraintNode>()) {
+                    if (structUnique->GetColumns().has(memberName)) {
+                        if (!TCoNothing::Match(structNode)) {
+                            srcStructs.insert(structNode);
+                            unique.push_back(name);
+                        }
+                    }
+                }
+                structConstraints.push_back(&structNode->GetConstraintSet());
+            }
+            else if (valueNode->Type() == TExprNode::Argument && ETypeAnnotationKind::Struct != valueNode->GetTypeAnn()->GetKind()) {
+                if (auto structUnique = valueNode->GetConstraint<TUniqueConstraintNode>()) {
+                    if (structUnique->GetColumns().size() == 1) {
+                        arguments.insert(valueNode);
+                        if (const auto scope = valueNode->GetDependencyScope())
+                            srcStructs.insert(scope->second);
+                        unique.push_back(name);
+                    }
+                }
+                structConstraints.push_back(&valueNode->GetConstraintSet());
+            }
+        }
+        if (!passthrough.empty()) {
+            input->AddConstraint(ctx.MakeConstraint<TPassthroughConstraintNode>(std::move(passthrough)));
+        }
+        if (!unique.empty()) {
+            if (srcStructs.empty() || (srcStructs.size() == 1 && (unique.size() == arguments.size() ||
+                (!(*srcStructs.begin())->IsLambda() && unique.size() == (*srcStructs.begin())->GetConstraint<TUniqueConstraintNode>()->GetColumns().size())))) {
+                ::SortUnique(unique);
+                input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(std::move(unique)));
+            }
+        }
+        if (auto varIndex = TVarIndexConstraintNode::MakeCommon(structConstraints, ctx)) {
+            input->AddConstraint(varIndex);
+        }
+
+        return TStatus::Ok;
+    }
+
     TStatus AsStructWrap(const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) const {
         TPassthroughConstraintNode::TMapType passthrough;
         passthrough.reserve(input->ChildrenSize());
- 
+
         TVector<TStringBuf> unique;
         TVector<const TConstraintSet*> structConstraints;
-        TNodeSet srcStructs, arguments; 
+        TNodeSet srcStructs, arguments;
 
-        for (const auto& child : input->Children()) { 
-            const auto& name = child->Head().Content(); 
-            if (const auto pass = child->Tail().GetConstraint<TPassthroughConstraintNode>()) { 
-                for (auto part : pass->GetColumnMapping()) { 
-                    std::transform(part.second.cbegin(), part.second.cend(), std::back_inserter(passthrough[part.first ? part.first : pass]), [&name](TPassthroughConstraintNode::TPartType::value_type item) { 
-                        item.first.emplace_front(name); 
-                        return item; 
-                    }); 
-                } 
-            } 
+        for (const auto& child : input->Children()) {
+            const auto& name = child->Head().Content();
+            if (const auto pass = child->Tail().GetConstraint<TPassthroughConstraintNode>()) {
+                for (auto part : pass->GetColumnMapping()) {
+                    std::transform(part.second.cbegin(), part.second.cend(), std::back_inserter(passthrough[part.first ? part.first : pass]), [&name](TPassthroughConstraintNode::TPartType::value_type item) {
+                        item.first.emplace_front(name);
+                        return item;
+                    });
+                }
+            }
 
-            const auto valueNode = SkipModifiers(child->Child(1)); 
-            if (TCoMember::Match(valueNode) || TCoNth::Match(valueNode)) { 
+            const auto valueNode = SkipModifiers(child->Child(1));
+            if (TCoMember::Match(valueNode) || TCoNth::Match(valueNode)) {
                 auto memberName = valueNode->Child(1)->Content();
                 auto structNode = valueNode->Child(0);
                 if (auto structUnique = structNode->GetConstraint<TUniqueConstraintNode>()) {
@@ -1262,12 +1262,12 @@ private:
                 structConstraints.push_back(&structNode->GetConstraintSet());
             }
             else if (valueNode->Type() == TExprNode::Argument) {
- 
+
                 if (auto structUnique = valueNode->GetConstraint<TUniqueConstraintNode>()) {
                     if (structUnique->GetColumns().size() == 1) {
-                        arguments.insert(valueNode); 
-                        if (const auto scope = valueNode->GetDependencyScope()) 
-                            srcStructs.insert(scope->second); 
+                        arguments.insert(valueNode);
+                        if (const auto scope = valueNode->GetDependencyScope())
+                            srcStructs.insert(scope->second);
                         unique.push_back(name);
                     }
                 }
@@ -1278,8 +1278,8 @@ private:
             input->AddConstraint(ctx.MakeConstraint<TPassthroughConstraintNode>(std::move(passthrough)));
         }
         if (!unique.empty()) {
-            if (srcStructs.empty() || (srcStructs.size() == 1 && (unique.size() == arguments.size() || 
-                (!(*srcStructs.begin())->IsLambda() && unique.size() == (*srcStructs.begin())->GetConstraint<TUniqueConstraintNode>()->GetColumns().size())))) { 
+            if (srcStructs.empty() || (srcStructs.size() == 1 && (unique.size() == arguments.size() ||
+                (!(*srcStructs.begin())->IsLambda() && unique.size() == (*srcStructs.begin())->GetConstraint<TUniqueConstraintNode>()->GetColumns().size())))) {
                 ::SortUnique(unique);
                 input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(std::move(unique)));
             }
@@ -1292,35 +1292,35 @@ private:
     }
 
     TStatus AddMemberWrap(const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) const {
-        const auto& addStructNode = input->Head(); 
-        const auto& name = input->Child(1)->Content(); 
+        const auto& addStructNode = input->Head();
+        const auto& name = input->Child(1)->Content();
 
-        if (const auto structPassthrough = addStructNode.GetConstraint<TPassthroughConstraintNode>(), fieldPasstrought = input->Tail().GetConstraint<TPassthroughConstraintNode>(); fieldPasstrought) { 
-            auto mapping = structPassthrough ? structPassthrough->GetColumnMapping() : TPassthroughConstraintNode::TMapType(); 
-            if (const auto self = mapping.find(nullptr); mapping.cend() != self) 
-                mapping.emplace(structPassthrough, std::move(mapping.extract(self).mapped())); 
-            for (const auto& part : fieldPasstrought->GetColumnMapping()) { 
-                for (auto item : part.second) { 
-                    item.first.emplace_front(name); 
-                    mapping[part.first ? part.first : fieldPasstrought].insert_unique(std::move(item)); 
-                } 
-            } 
- 
-            input->AddConstraint(ctx.MakeConstraint<TPassthroughConstraintNode>(std::move(mapping))); 
-        } else if (structPassthrough) { 
-            input->AddConstraint(structPassthrough); 
+        if (const auto structPassthrough = addStructNode.GetConstraint<TPassthroughConstraintNode>(), fieldPasstrought = input->Tail().GetConstraint<TPassthroughConstraintNode>(); fieldPasstrought) {
+            auto mapping = structPassthrough ? structPassthrough->GetColumnMapping() : TPassthroughConstraintNode::TMapType();
+            if (const auto self = mapping.find(nullptr); mapping.cend() != self)
+                mapping.emplace(structPassthrough, std::move(mapping.extract(self).mapped()));
+            for (const auto& part : fieldPasstrought->GetColumnMapping()) {
+                for (auto item : part.second) {
+                    item.first.emplace_front(name);
+                    mapping[part.first ? part.first : fieldPasstrought].insert_unique(std::move(item));
+                }
+            }
+
+            input->AddConstraint(ctx.MakeConstraint<TPassthroughConstraintNode>(std::move(mapping)));
+        } else if (structPassthrough) {
+            input->AddConstraint(structPassthrough);
         }
 
-        auto valueNode = SkipModifiers(input->Child(2)); 
- 
+        auto valueNode = SkipModifiers(input->Child(2));
+
         TVector<const TConstraintSet*> structConstraints;
-        structConstraints.push_back(&addStructNode.GetConstraintSet()); 
+        structConstraints.push_back(&addStructNode.GetConstraintSet());
 
         TVector<TStringBuf> unique;
         TNodeSet srcStructs;
-        if (!TCoNothing::Match(&addStructNode)) { 
-            if (auto structUnique = addStructNode.GetConstraint<TUniqueConstraintNode>()) { 
-                srcStructs.insert(&addStructNode); 
+        if (!TCoNothing::Match(&addStructNode)) {
+            if (auto structUnique = addStructNode.GetConstraint<TUniqueConstraintNode>()) {
+                srcStructs.insert(&addStructNode);
                 unique.insert(unique.end(), structUnique->GetColumns().begin(), structUnique->GetColumns().end());
             }
         }
@@ -1362,25 +1362,25 @@ private:
     }
 
     TStatus RemoveMemberWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
-        if (const auto structPassthrough = input->Head().GetConstraint<TPassthroughConstraintNode>()) { 
-            const TPassthroughConstraintNode::TKeyType key(1U, input->Tail().Content()); 
-            auto mapping = structPassthrough->GetColumnMapping(); 
-            if (const auto self = mapping.find(nullptr); mapping.cend() != self) 
-                mapping.emplace(structPassthrough, std::move(mapping.extract(self).mapped())); 
-            for (auto p = mapping.begin(); mapping.end() != p;) { 
-                if (auto it = p->second.lower_bound(key); p->second.cend() > it && it->first.front() == key.front()) { 
-                    do p->second.erase(it++); 
-                    while (p->second.end() > it && it->first.front() == key.front()); 
-                    if (p->second.empty()) { 
-                        mapping.erase(p++); 
-                        continue; 
-                    } 
+        if (const auto structPassthrough = input->Head().GetConstraint<TPassthroughConstraintNode>()) {
+            const TPassthroughConstraintNode::TKeyType key(1U, input->Tail().Content());
+            auto mapping = structPassthrough->GetColumnMapping();
+            if (const auto self = mapping.find(nullptr); mapping.cend() != self)
+                mapping.emplace(structPassthrough, std::move(mapping.extract(self).mapped()));
+            for (auto p = mapping.begin(); mapping.end() != p;) {
+                if (auto it = p->second.lower_bound(key); p->second.cend() > it && it->first.front() == key.front()) {
+                    do p->second.erase(it++);
+                    while (p->second.end() > it && it->first.front() == key.front());
+                    if (p->second.empty()) {
+                        mapping.erase(p++);
+                        continue;
+                    }
                 }
-                ++p; 
+                ++p;
             }
-            if (!mapping.empty()) { 
-                input->AddConstraint(ctx.MakeConstraint<TPassthroughConstraintNode>(std::move(mapping))); 
-            } 
+            if (!mapping.empty()) {
+                input->AddConstraint(ctx.MakeConstraint<TPassthroughConstraintNode>(std::move(mapping)));
+            }
         }
 
         if (auto uniq = input->Child(0)->GetConstraint<TUniqueConstraintNode>()) {
@@ -1393,46 +1393,46 @@ private:
     }
 
     TStatus ReplaceMemberWrap(const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) const {
-        const auto name = input->Child(1)->Content(); 
+        const auto name = input->Child(1)->Content();
         TVector<const TConstraintSet*> structConstraints;
         structConstraints.push_back(&input->Child(0)->GetConstraintSet());
 
-        if (const auto structPassthrough = input->Head().GetConstraint<TPassthroughConstraintNode>(), fieldPasstrought = input->Tail().GetConstraint<TPassthroughConstraintNode>(); 
-            structPassthrough || fieldPasstrought) { 
-            auto mapping = structPassthrough ? structPassthrough->GetColumnMapping() : TPassthroughConstraintNode::TMapType(); 
-            if (const auto self = mapping.find(nullptr); mapping.cend() != self) 
-                mapping.emplace(structPassthrough, std::move(mapping.extract(self).mapped())); 
-            const TPassthroughConstraintNode::TKeyType key(1U, name); 
-            for (auto p = mapping.begin(); mapping.end() != p;) { 
-                if (auto it = p->second.lower_bound(key); p->second.cend() > it && it->first.front() == key.front()) { 
-                    do p->second.erase(it++); 
-                    while (p->second.end() > it && it->first.front() == key.front()); 
-                    if (p->second.empty()) { 
-                        mapping.erase(p++); 
-                        continue; 
+        if (const auto structPassthrough = input->Head().GetConstraint<TPassthroughConstraintNode>(), fieldPasstrought = input->Tail().GetConstraint<TPassthroughConstraintNode>();
+            structPassthrough || fieldPasstrought) {
+            auto mapping = structPassthrough ? structPassthrough->GetColumnMapping() : TPassthroughConstraintNode::TMapType();
+            if (const auto self = mapping.find(nullptr); mapping.cend() != self)
+                mapping.emplace(structPassthrough, std::move(mapping.extract(self).mapped()));
+            const TPassthroughConstraintNode::TKeyType key(1U, name);
+            for (auto p = mapping.begin(); mapping.end() != p;) {
+                if (auto it = p->second.lower_bound(key); p->second.cend() > it && it->first.front() == key.front()) {
+                    do p->second.erase(it++);
+                    while (p->second.end() > it && it->first.front() == key.front());
+                    if (p->second.empty()) {
+                        mapping.erase(p++);
+                        continue;
                     }
                 }
-                ++p; 
+                ++p;
             }
-            if (fieldPasstrought) { 
-                for (const auto& part : fieldPasstrought->GetColumnMapping()) { 
-                    for (auto item : part.second) { 
-                        item.first.emplace_front(name); 
-                        mapping[part.first ? part.first : fieldPasstrought].insert_unique(std::move(item)); 
-                    } 
-                } 
-            } 
+            if (fieldPasstrought) {
+                for (const auto& part : fieldPasstrought->GetColumnMapping()) {
+                    for (auto item : part.second) {
+                        item.first.emplace_front(name);
+                        mapping[part.first ? part.first : fieldPasstrought].insert_unique(std::move(item));
+                    }
+                }
+            }
 
             if (!mapping.empty()) {
                 input->AddConstraint(ctx.MakeConstraint<TPassthroughConstraintNode>(std::move(mapping)));
             }
- 
-            if (structPassthrough && fieldPasstrought) { 
-                if (auto valueNode = SkipModifiers(input->Child(2)); TCoMember::Match(valueNode)) { 
-                    auto structNode = valueNode->Child(0); 
-                    structConstraints.push_back(&structNode->GetConstraintSet()); 
-                } 
-            } 
+
+            if (structPassthrough && fieldPasstrought) {
+                if (auto valueNode = SkipModifiers(input->Child(2)); TCoMember::Match(valueNode)) {
+                    auto structNode = valueNode->Child(0);
+                    structConstraints.push_back(&structNode->GetConstraintSet());
+                }
+            }
         }
 
         if (auto uniq = input->Child(0)->GetConstraint<TUniqueConstraintNode>()) {
@@ -1460,13 +1460,13 @@ private:
         return TStatus::Ok;
     }
 
-    TStatus DictWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const { 
-        if (input->ChildrenSize() == 1) { 
-            return FromEmpty(input, output, ctx); 
-        } 
-        return TStatus::Ok; 
-    } 
- 
+    TStatus DictWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
+        if (input->ChildrenSize() == 1) {
+            return FromEmpty(input, output, ctx);
+        }
+        return TStatus::Ok;
+    }
+
     TStatus DictFromKeysWrap(const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) const {
         if (input->Child(1)->ChildrenSize() == 0) {
             input->AddConstraint(ctx.MakeConstraint<TEmptyConstraintNode>());
@@ -1474,113 +1474,113 @@ private:
         return TStatus::Ok;
     }
 
-    TStatus IfWrap(const TExprNode::TPtr& input, TExprNode::TPtr&, TExprContext& ctx) const { 
-        TVector<const TConstraintSet*> constraints; 
-        constraints.reserve((input->ChildrenSize() << 1U) + 1U); 
-        if (1U != input->Tail().ChildrenSize() || !input->Tail().IsCallable({"List", "Nothing"})) 
-            constraints.emplace_back(&input->Tail().GetConstraintSet()); 
- 
-        for (auto i = 0U; i < input->ChildrenSize() - 1U; ++i) { 
-            if (const auto child = input->Child(++i); 1U != child->ChildrenSize() || !child->IsCallable({"List", "Nothing"})) {// TODO: Use empty constraint. 
-                constraints.emplace_back(&child->GetConstraintSet()); 
-            } 
-        } 
+    TStatus IfWrap(const TExprNode::TPtr& input, TExprNode::TPtr&, TExprContext& ctx) const {
+        TVector<const TConstraintSet*> constraints;
+        constraints.reserve((input->ChildrenSize() << 1U) + 1U);
+        if (1U != input->Tail().ChildrenSize() || !input->Tail().IsCallable({"List", "Nothing"}))
+            constraints.emplace_back(&input->Tail().GetConstraintSet());
 
-        if (constraints.empty()) 
-            input->AddConstraint(ctx.MakeConstraint<TEmptyConstraintNode>()); 
-        else if (1U == constraints.size()) 
-            input->SetConstraints(**constraints.cbegin()); 
-        else 
-            TApplyCommonConstraint<TSortedConstraintNode 
-                , TUniqueConstraintNode 
-                , TPassthroughConstraintNode 
-                , TEmptyConstraintNode 
-                , TVarIndexConstraintNode 
-                , TMultiConstraintNode 
-                >::Do(input, constraints, ctx); 
-        return TStatus::Ok; 
-    } 
- 
-    TStatus IfPresentWrap(const TExprNode::TPtr& input, TExprNode::TPtr&, TExprContext& ctx) const { 
-        auto optionals = input->ChildrenList(); 
-        const auto lambdaIndex = optionals.size() - 2U; 
-        auto lambda = std::move(optionals[lambdaIndex]); 
-        optionals.resize(lambdaIndex); 
- 
-        TVector<const TConstraintNode::TListType> constraints; 
-        constraints.reserve(optionals.size()); 
-        std::transform(optionals.cbegin(), optionals.cend(), std::back_inserter(constraints), [](const TExprNode::TPtr& node){ return node->GetAllConstraints(); }); 
- 
-        if (const auto status = UpdateLambdaConstraints(input->ChildRef(lambdaIndex), ctx, constraints); status != TStatus::Ok) { 
+        for (auto i = 0U; i < input->ChildrenSize() - 1U; ++i) {
+            if (const auto child = input->Child(++i); 1U != child->ChildrenSize() || !child->IsCallable({"List", "Nothing"})) {// TODO: Use empty constraint.
+                constraints.emplace_back(&child->GetConstraintSet());
+            }
+        }
+
+        if (constraints.empty())
+            input->AddConstraint(ctx.MakeConstraint<TEmptyConstraintNode>());
+        else if (1U == constraints.size())
+            input->SetConstraints(**constraints.cbegin());
+        else
+            TApplyCommonConstraint<TSortedConstraintNode
+                , TUniqueConstraintNode
+                , TPassthroughConstraintNode
+                , TEmptyConstraintNode
+                , TVarIndexConstraintNode
+                , TMultiConstraintNode
+                >::Do(input, constraints, ctx);
+        return TStatus::Ok;
+    }
+
+    TStatus IfPresentWrap(const TExprNode::TPtr& input, TExprNode::TPtr&, TExprContext& ctx) const {
+        auto optionals = input->ChildrenList();
+        const auto lambdaIndex = optionals.size() - 2U;
+        auto lambda = std::move(optionals[lambdaIndex]);
+        optionals.resize(lambdaIndex);
+
+        TVector<const TConstraintNode::TListType> constraints;
+        constraints.reserve(optionals.size());
+        std::transform(optionals.cbegin(), optionals.cend(), std::back_inserter(constraints), [](const TExprNode::TPtr& node){ return node->GetAllConstraints(); });
+
+        if (const auto status = UpdateLambdaConstraints(input->ChildRef(lambdaIndex), ctx, constraints); status != TStatus::Ok) {
             return status;
         }
- 
-        if (std::any_of(optionals.cbegin(), optionals.cend(), [] (const TExprNode::TPtr& node) { return bool(node->GetConstraint<TEmptyConstraintNode>()); })) { 
-            input->CopyConstraints(input->Tail()); 
-            return TStatus::Ok; 
-        } 
- 
-        const TVector<const TConstraintSet*> both = { &lambda->GetConstraintSet(), &input->Tail().GetConstraintSet() }; 
-        TApplyCommonConstraint<TSortedConstraintNode 
-            , TUniqueConstraintNode 
-            , TPassthroughConstraintNode 
-            , TEmptyConstraintNode 
-            , TVarIndexConstraintNode 
-            , TMultiConstraintNode 
-            >::Do(input, both, ctx); 
-        return TStatus::Ok; 
+
+        if (std::any_of(optionals.cbegin(), optionals.cend(), [] (const TExprNode::TPtr& node) { return bool(node->GetConstraint<TEmptyConstraintNode>()); })) {
+            input->CopyConstraints(input->Tail());
+            return TStatus::Ok;
+        }
+
+        const TVector<const TConstraintSet*> both = { &lambda->GetConstraintSet(), &input->Tail().GetConstraintSet() };
+        TApplyCommonConstraint<TSortedConstraintNode
+            , TUniqueConstraintNode
+            , TPassthroughConstraintNode
+            , TEmptyConstraintNode
+            , TVarIndexConstraintNode
+            , TMultiConstraintNode
+            >::Do(input, both, ctx);
+        return TStatus::Ok;
     }
 
     TStatus SwitchWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
         TStatus status = TStatus::Ok;
         TDynBitMap outFromChildren; // children, from which take a multi constraint for output
-        if (const auto multi = input->Head().GetConstraint<TMultiConstraintNode>()) { 
-            for (size_t i = 2; i < input->ChildrenSize(); ++i) { 
-                TMultiConstraintNode::TMapType items; 
-                ui32 lambdaInputIndex = 0; 
-                for (auto& child : input->Child(i)->Children()) { 
-                    const ui32 index = FromString<ui32>(child->Content()); 
-                    if (auto c = multi->GetItem(index)) { 
-                        items[lambdaInputIndex] = *c; 
-                        outFromChildren.Set(i + 1); 
+        if (const auto multi = input->Head().GetConstraint<TMultiConstraintNode>()) {
+            for (size_t i = 2; i < input->ChildrenSize(); ++i) {
+                TMultiConstraintNode::TMapType items;
+                ui32 lambdaInputIndex = 0;
+                for (auto& child : input->Child(i)->Children()) {
+                    const ui32 index = FromString<ui32>(child->Content());
+                    if (auto c = multi->GetItem(index)) {
+                        items[lambdaInputIndex] = *c;
+                        outFromChildren.Set(i + 1);
                     }
-                    ++lambdaInputIndex; 
-                } 
-                TConstraintNode::TListType argConstraints; 
-                if (!items.empty()) { 
-                    if (input->Child(i)->ChildrenSize() > 1) { 
-                        argConstraints.push_back(ctx.MakeConstraint<TMultiConstraintNode>(std::move(items))); 
-                        argConstraints.push_back(ctx.MakeConstraint<TVarIndexConstraintNode>(input->Child(i)->ChildrenSize())); 
-                    } else { 
-                        argConstraints = items.front().second.GetAllConstraints(); 
+                    ++lambdaInputIndex;
+                }
+                TConstraintNode::TListType argConstraints;
+                if (!items.empty()) {
+                    if (input->Child(i)->ChildrenSize() > 1) {
+                        argConstraints.push_back(ctx.MakeConstraint<TMultiConstraintNode>(std::move(items)));
+                        argConstraints.push_back(ctx.MakeConstraint<TVarIndexConstraintNode>(input->Child(i)->ChildrenSize()));
+                    } else {
+                        argConstraints = items.front().second.GetAllConstraints();
                     }
                 }
- 
-                status = status.Combine(UpdateLambdaConstraints(input->ChildRef(++i), ctx, {argConstraints})); 
+
+                status = status.Combine(UpdateLambdaConstraints(input->ChildRef(++i), ctx, {argConstraints}));
             }
         } else {
-            const bool inVar = GetSeqItemType(input->Head().GetTypeAnn())->GetKind() == ETypeAnnotationKind::Variant; 
-            const TSmallVec<TConstraintNode::TListType> argConstraints(1U, inVar ? TConstraintNode::TListType() : input->Head().GetAllConstraints()); 
-            for (size_t i = 3; i < input->ChildrenSize(); i += 2) { 
-                status = status.Combine(UpdateLambdaConstraints(input->ChildRef(i), ctx, argConstraints)); 
+            const bool inVar = GetSeqItemType(input->Head().GetTypeAnn())->GetKind() == ETypeAnnotationKind::Variant;
+            const TSmallVec<TConstraintNode::TListType> argConstraints(1U, inVar ? TConstraintNode::TListType() : input->Head().GetAllConstraints());
+            for (size_t i = 3; i < input->ChildrenSize(); i += 2) {
+                status = status.Combine(UpdateLambdaConstraints(input->ChildRef(i), ctx, argConstraints));
             }
             outFromChildren.Set(0, input->ChildrenSize());
         }
- 
+
         if (status != TStatus::Ok) {
             return status;
         }
 
-        const auto inputVarIndex = input->Head().GetConstraint<TVarIndexConstraintNode>(); 
-        const bool emptyInput = input->Head().GetConstraint<TEmptyConstraintNode>(); 
-        if (GetSeqItemType(input->GetTypeAnn())->GetKind() == ETypeAnnotationKind::Variant) { 
+        const auto inputVarIndex = input->Head().GetConstraint<TVarIndexConstraintNode>();
+        const bool emptyInput = input->Head().GetConstraint<TEmptyConstraintNode>();
+        if (GetSeqItemType(input->GetTypeAnn())->GetKind() == ETypeAnnotationKind::Variant) {
             ui32 outIndexOffset = 0;
             TMultiConstraintNode::TMapType multiItems;
             TVarIndexConstraintNode::TMapType remapItems;
             bool emptyOut = true;
             for (size_t i = 2; i < input->ChildrenSize(); i += 2) {
                 const auto lambda = input->Child(i + 1);
-                const auto lambdaItemType = GetSeqItemType(lambda->GetTypeAnn()); 
+                const auto lambdaItemType = GetSeqItemType(lambda->GetTypeAnn());
 
                 if (inputVarIndex) {
                     if (auto varIndex = lambda->GetConstraint<TVarIndexConstraintNode>()) {
@@ -1650,41 +1650,41 @@ private:
         return FromFirst<TEmptyConstraintNode>(input, output, ctx);
     }
 
-    TStatus VisitWrap(const TExprNode::TPtr& input, TExprNode::TPtr&, TExprContext& ctx) const { 
+    TStatus VisitWrap(const TExprNode::TPtr& input, TExprNode::TPtr&, TExprContext& ctx) const {
         TStatus status = TStatus::Ok;
         TDynBitMap outFromChildren; // children, from which take a multi constraint for output
         TDynBitMap usedAlts;
-        const auto inMulti = input->Head().GetConstraint<TMultiConstraintNode>(); 
-        for (ui32 i = 1; i < input->ChildrenSize(); ++i) { 
-            if (const auto child = input->Child(i); child->IsAtom()) { 
-                TSmallVec<TConstraintNode::TListType> argConstraints(1U); 
-                if (inMulti) { 
-                    const auto index = FromString<ui32>(child->Content()); 
-                    usedAlts.Set(index); 
-                    if (const auto c = inMulti->GetItem(index)) { 
-                        argConstraints.front() = c->GetAllConstraints(); 
-                        outFromChildren.Set(i + 1U); 
+        const auto inMulti = input->Head().GetConstraint<TMultiConstraintNode>();
+        for (ui32 i = 1; i < input->ChildrenSize(); ++i) {
+            if (const auto child = input->Child(i); child->IsAtom()) {
+                TSmallVec<TConstraintNode::TListType> argConstraints(1U);
+                if (inMulti) {
+                    const auto index = FromString<ui32>(child->Content());
+                    usedAlts.Set(index);
+                    if (const auto c = inMulti->GetItem(index)) {
+                        argConstraints.front() = c->GetAllConstraints();
+                        outFromChildren.Set(i + 1U);
                     }
                 }
-                status = status.Combine(UpdateLambdaConstraints(input->ChildRef(++i), ctx, argConstraints)); 
-            } else if (inMulti) {                // Check that we can fall to default branch 
-                for (auto& item: inMulti->GetItems()) { 
-                    if (!usedAlts.Test(item.first)) { 
-                        outFromChildren.Set(i); 
-                        break; 
-                    } 
-                } 
+                status = status.Combine(UpdateLambdaConstraints(input->ChildRef(++i), ctx, argConstraints));
+            } else if (inMulti) {                // Check that we can fall to default branch
+                for (auto& item: inMulti->GetItems()) {
+                    if (!usedAlts.Test(item.first)) {
+                        outFromChildren.Set(i);
+                        break;
+                    }
+                }
             }
         }
- 
+
         if (status != TStatus::Ok) {
             return status;
         }
 
-        if (!inMulti) { 
-            outFromChildren.Set(0, input->ChildrenSize()); 
-        } 
- 
+        if (!inMulti) {
+            outFromChildren.Set(0, input->ChildrenSize());
+        }
+
         auto outType = input->GetTypeAnn();
         if (auto t = GetItemType(*outType)) {
             outType = t;
@@ -1765,9 +1765,9 @@ private:
                 TVarIndexConstraintNode::TMapType varIndexItems;
                 for (ui32 i = 1; i < input->ChildrenSize(); ++i) {
                     if (input->Child(i)->IsAtom()) {
-                        const auto index = FromString<ui32>(input->Child(i++)->Content()); 
-                        if (outFromChildren.Test(i) && IsDepended(input->Child(i)->Tail(), input->Child(i)->Head().Head())) { // Somehow depends on arg 
-                            const auto range = varIndex->GetIndexMapping().equal_range(index); 
+                        const auto index = FromString<ui32>(input->Child(i++)->Content());
+                        if (outFromChildren.Test(i) && IsDepended(input->Child(i)->Tail(), input->Child(i)->Head().Head())) { // Somehow depends on arg
+                            const auto range = varIndex->GetIndexMapping().equal_range(index);
                             for (auto i = range.first; i != range.second; ++i) {
                                 varIndexItems.push_back(std::make_pair(0, i->second));
                             }
@@ -1898,28 +1898,28 @@ private:
         return TStatus::Ok;
     }
 
-    TStatus NthWrap(const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) const { 
-        TVector<TStringBuf> unique; 
- 
-        const auto& memberName = input->Tail().Content(); 
-        const auto& structNode = input->Head(); 
-        if (const auto structPassthrough = structNode.GetConstraint<TPassthroughConstraintNode>()) { 
-            if (const auto p = structPassthrough->ExtractField(ctx, memberName)) { 
-                input->AddConstraint(p); 
-            } 
-        } 
-        if (!TCoNothing::Match(&structNode)) { 
-            if (auto structUnique = structNode.GetConstraint<TUniqueConstraintNode>()) { 
-                if (structUnique->GetColumns().has(memberName)) { 
-                    unique.push_back(memberName); 
-                } 
-            } 
-        } 
- 
-        if (!unique.empty()) { 
-            input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(std::move(unique))); 
-        } 
- 
+    TStatus NthWrap(const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) const {
+        TVector<TStringBuf> unique;
+
+        const auto& memberName = input->Tail().Content();
+        const auto& structNode = input->Head();
+        if (const auto structPassthrough = structNode.GetConstraint<TPassthroughConstraintNode>()) {
+            if (const auto p = structPassthrough->ExtractField(ctx, memberName)) {
+                input->AddConstraint(p);
+            }
+        }
+        if (!TCoNothing::Match(&structNode)) {
+            if (auto structUnique = structNode.GetConstraint<TUniqueConstraintNode>()) {
+                if (structUnique->GetColumns().has(memberName)) {
+                    unique.push_back(memberName);
+                }
+            }
+        }
+
+        if (!unique.empty()) {
+            input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(std::move(unique)));
+        }
+
         if (input->Child(0)->IsList()) {
             input->CopyConstraints(*input->Child(0)->Child(FromString<ui32>(input->Child(1)->Content())));
         }
@@ -1976,12 +1976,12 @@ private:
     }
 
     TStatus IsKeySwitchWrap(const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& /*ctx*/) const {
-        if (const auto status = UpdateLambdaConstraints(*input->Child(TCoIsKeySwitch::idx_ItemKeyExtractor)) 
-            .Combine(UpdateLambdaConstraints(*input->Child(TCoIsKeySwitch::idx_StateKeyExtractor))); status != TStatus::Ok) { 
+        if (const auto status = UpdateLambdaConstraints(*input->Child(TCoIsKeySwitch::idx_ItemKeyExtractor))
+            .Combine(UpdateLambdaConstraints(*input->Child(TCoIsKeySwitch::idx_StateKeyExtractor))); status != TStatus::Ok) {
             return status;
         }
 
-        if (const auto groupBy = input->Head().GetConstraint<TGroupByConstraintNode>()) { 
+        if (const auto groupBy = input->Head().GetConstraint<TGroupByConstraintNode>()) {
             TVector<TStringBuf> keys;
             ExtractKeys(*input->Child(2), keys);
             if (!keys.empty()) {
@@ -1994,24 +1994,24 @@ private:
     }
 
     TStatus CondenseWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
-        const TStructExprType* inItemType = GetNonEmptyStructItemType(*input->Head().GetTypeAnn()); 
+        const TStructExprType* inItemType = GetNonEmptyStructItemType(*input->Head().GetTypeAnn());
         const TStructExprType* outItemType = GetNonEmptyStructItemType(*input->GetTypeAnn());
         if (!inItemType) {
             return InheriteEmptyFromInput(input, output, ctx);
         }
 
-        const auto inputPassthrough = input->Head().GetConstraint<TPassthroughConstraintNode>(); 
+        const auto inputPassthrough = input->Head().GetConstraint<TPassthroughConstraintNode>();
         if (input->Child(1)->IsLambda()) {
             TConstraintNode::TListType argConstraints;
-            if (inputPassthrough) 
-                argConstraints.emplace_back(inputPassthrough); 
-            if (const auto status = UpdateLambdaConstraints(input->ChildRef(1), ctx, {argConstraints}); status != TStatus::Ok) { 
+            if (inputPassthrough)
+                argConstraints.emplace_back(inputPassthrough);
+            if (const auto status = UpdateLambdaConstraints(input->ChildRef(1), ctx, {argConstraints}); status != TStatus::Ok) {
                 return status;
             }
         }
 
-        const auto initState = input->Child(1); 
-        auto stateConstraints = initState->GetAllConstraints(); 
+        const auto initState = input->Child(1);
+        auto stateConstraints = initState->GetAllConstraints();
         stateConstraints.erase(
             std::remove_if(
                 stateConstraints.begin(),
@@ -2022,47 +2022,47 @@ private:
         );
 
         TConstraintNode::TListType itemConstraints;
-        if (inputPassthrough) 
-            itemConstraints.emplace_back(inputPassthrough); 
-        if (const auto groupBy = input->Head().GetConstraint<TGroupByConstraintNode>()) { 
-            itemConstraints.push_back(groupBy); 
+        if (inputPassthrough)
+            itemConstraints.emplace_back(inputPassthrough);
+        if (const auto groupBy = input->Head().GetConstraint<TGroupByConstraintNode>()) {
+            itemConstraints.push_back(groupBy);
         }
 
-        if (const auto status = UpdateLambdaConstraints(input->ChildRef(2), ctx, {itemConstraints, stateConstraints}) 
-            .Combine(UpdateLambdaConstraints(input->TailRef(), ctx, {itemConstraints, stateConstraints})); status != TStatus::Ok) { 
+        if (const auto status = UpdateLambdaConstraints(input->ChildRef(2), ctx, {itemConstraints, stateConstraints})
+            .Combine(UpdateLambdaConstraints(input->TailRef(), ctx, {itemConstraints, stateConstraints})); status != TStatus::Ok) {
             return status;
         }
 
-        const TPassthroughConstraintNode* commonPassthrough = nullptr; 
-        const auto updateLambda = input->Child(3); 
-        if (const auto lambdaPassthrough = updateLambda->GetConstraint<TPassthroughConstraintNode>()) { 
-            if (initState->IsLambda()) { 
-                if (const auto initPassthrough = initState->GetConstraint<TPassthroughConstraintNode>()) { 
-                    std::array<TConstraintSet, 2U> set; 
-                    set.front().AddConstraint(initPassthrough); 
-                    set.back().AddConstraint(lambdaPassthrough); 
-                    if (commonPassthrough = TPassthroughConstraintNode::MakeCommon({&set.front(), &set.back()}, ctx)) 
-                        input->AddConstraint(commonPassthrough); 
-                } 
-            } else { 
-                input->AddConstraint(commonPassthrough = lambdaPassthrough); 
-            } 
-        } 
+        const TPassthroughConstraintNode* commonPassthrough = nullptr;
+        const auto updateLambda = input->Child(3);
+        if (const auto lambdaPassthrough = updateLambda->GetConstraint<TPassthroughConstraintNode>()) {
+            if (initState->IsLambda()) {
+                if (const auto initPassthrough = initState->GetConstraint<TPassthroughConstraintNode>()) {
+                    std::array<TConstraintSet, 2U> set;
+                    set.front().AddConstraint(initPassthrough);
+                    set.back().AddConstraint(lambdaPassthrough);
+                    if (commonPassthrough = TPassthroughConstraintNode::MakeCommon({&set.front(), &set.back()}, ctx))
+                        input->AddConstraint(commonPassthrough);
+                }
+            } else {
+                input->AddConstraint(commonPassthrough = lambdaPassthrough);
+            }
+        }
 
-        if (const auto switchLambda = input->Child(2); switchLambda->Tail().IsCallable(TCoBool::CallableName()) && IsFalse(switchLambda->Tail().Head().Content())) { 
+        if (const auto switchLambda = input->Child(2); switchLambda->Tail().IsCallable(TCoBool::CallableName()) && IsFalse(switchLambda->Tail().Head().Content())) {
             if (outItemType) {
                 input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(*outItemType));
             }
         }
         else {
             TVector<TStringBuf> groupByKeys;
-            if (const auto groupBy = switchLambda->GetConstraint<TGroupByConstraintNode>()) { 
+            if (const auto groupBy = switchLambda->GetConstraint<TGroupByConstraintNode>()) {
                 groupByKeys.assign(groupBy->GetColumns().begin(), groupBy->GetColumns().end());
-            } else if (switchLambda->Tail().IsCallable({"AggrNotEquals", "NotEquals"})) { 
+            } else if (switchLambda->Tail().IsCallable({"AggrNotEquals", "NotEquals"})) {
                 ExtractSimpleKeys(switchLambda->Child(1)->Child(0), switchLambda->Child(0)->Child(0), groupByKeys);
             }
-            if (!groupByKeys.empty() && commonPassthrough) { 
-                const auto& mapping = commonPassthrough->GetReverseMapping(); 
+            if (!groupByKeys.empty() && commonPassthrough) {
+                const auto& mapping = commonPassthrough->GetReverseMapping();
                 TUniqueConstraintNode::TSetType uniqColumns;
                 for (auto key: groupByKeys) {
                     auto range = mapping.equal_range(key);
@@ -2084,111 +2084,111 @@ private:
         return FromFirst<TEmptyConstraintNode>(input, output, ctx);
     }
 
-    TStatus WideCondense1Wrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const { 
-        TSmallVec<TConstraintNode::TListType> argConstraints(input->Child(1)->Head().ChildrenSize()); 
-        const auto inputPassthrough = input->Head().GetConstraint<TPassthroughConstraintNode>(); 
-        const auto groupBy = input->Head().GetConstraint<TGroupByConstraintNode>(); 
-        for (ui32 i = 0U; i < argConstraints.size(); ++i) { 
-            if (groupBy) 
-                argConstraints[i].push_back(groupBy); 
-            if (inputPassthrough) 
-                if (const auto fieldPasstrought = inputPassthrough->ExtractField(ctx, ToString(i))) 
-                    argConstraints[i].emplace_back(fieldPasstrought); 
-        } 
- 
-        if (const auto status = UpdateLambdaConstraints(input->ChildRef(1), ctx, argConstraints); status != TStatus::Ok) { 
+    TStatus WideCondense1Wrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
+        TSmallVec<TConstraintNode::TListType> argConstraints(input->Child(1)->Head().ChildrenSize());
+        const auto inputPassthrough = input->Head().GetConstraint<TPassthroughConstraintNode>();
+        const auto groupBy = input->Head().GetConstraint<TGroupByConstraintNode>();
+        for (ui32 i = 0U; i < argConstraints.size(); ++i) {
+            if (groupBy)
+                argConstraints[i].push_back(groupBy);
+            if (inputPassthrough)
+                if (const auto fieldPasstrought = inputPassthrough->ExtractField(ctx, ToString(i)))
+                    argConstraints[i].emplace_back(fieldPasstrought);
+        }
+
+        if (const auto status = UpdateLambdaConstraints(input->ChildRef(1), ctx, argConstraints); status != TStatus::Ok) {
             return status;
-        } 
- 
-        const auto initLambda = input->Child(1); 
-        argConstraints.reserve(argConstraints.size() + initLambda->ChildrenSize() - 1U); 
-        for (ui32 i = 1U; i < initLambda->ChildrenSize(); ++i) { 
-            argConstraints.emplace_back(initLambda->Child(i)->GetAllConstraints()); 
-            argConstraints.back().erase( 
-                std::remove_if( 
-                    argConstraints.back().begin(), 
-                    argConstraints.back().end(), 
-                    [](const TConstraintNode* c) { return c->GetName() == TEmptyConstraintNode::Name(); } 
-                ), 
-                argConstraints.back().cend() 
-            ); 
-        } 
- 
-        if (const auto status = UpdateLambdaConstraints(input->ChildRef(2), ctx, argConstraints) 
-            .Combine(UpdateLambdaConstraints(input->TailRef(), ctx, argConstraints)); status != TStatus::Ok) { 
+        }
+
+        const auto initLambda = input->Child(1);
+        argConstraints.reserve(argConstraints.size() + initLambda->ChildrenSize() - 1U);
+        for (ui32 i = 1U; i < initLambda->ChildrenSize(); ++i) {
+            argConstraints.emplace_back(initLambda->Child(i)->GetAllConstraints());
+            argConstraints.back().erase(
+                std::remove_if(
+                    argConstraints.back().begin(),
+                    argConstraints.back().end(),
+                    [](const TConstraintNode* c) { return c->GetName() == TEmptyConstraintNode::Name(); }
+                ),
+                argConstraints.back().cend()
+            );
+        }
+
+        if (const auto status = UpdateLambdaConstraints(input->ChildRef(2), ctx, argConstraints)
+            .Combine(UpdateLambdaConstraints(input->TailRef(), ctx, argConstraints)); status != TStatus::Ok) {
             return status;
-        } 
- 
-        const TPassthroughConstraintNode* commonPassthrough = nullptr; 
-        if (inputPassthrough) { 
-            const auto updateLambda = input->Child(3); 
-            const auto initPassthrough = GetConstraintFromLambda<TPassthroughConstraintNode, true>(*initLambda, ctx); 
-            const auto updatePassthrough = GetConstraintFromLambda<TPassthroughConstraintNode, true>(*updateLambda, ctx); 
-            if (initPassthrough && updatePassthrough) { 
-                std::array<TConstraintSet, 2U> set; 
-                set.front().AddConstraint(initPassthrough); 
-                set.back().AddConstraint(updatePassthrough); 
-                if (commonPassthrough = TPassthroughConstraintNode::MakeCommon({&set.front(), &set.back()}, ctx)) 
-                    input->AddConstraint(commonPassthrough); 
-            } 
-        } 
- 
-        if (const auto switchLambda = input->Child(2); switchLambda->Tail().IsCallable(TCoBool::CallableName()) && IsFalse(switchLambda->Tail().Head().Content())) { 
-            TVector<TString> fields(initLambda->Head().ChildrenSize()); 
-            ui32 i = 0U; 
-            std::generate_n(fields.begin(), initLambda->Head().ChildrenSize(), [&i](){ return ToString(i++); }); 
-            input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(fields)); 
-        } else { 
-            TVector<TStringBuf> groupByKeys; 
-            if (const auto groupBy = switchLambda->GetConstraint<TGroupByConstraintNode>()) { 
-                groupByKeys.assign(groupBy->GetColumns().begin(), groupBy->GetColumns().end()); 
-            } else if (switchLambda->Tail().IsCallable({"AggrNotEquals", "NotEquals"})) { 
-                ExtractSimpleKeys(switchLambda->Child(1)->Child(0), switchLambda->Child(0)->Child(0), groupByKeys); 
-            } 
-            if (!groupByKeys.empty() && commonPassthrough) { 
-                auto mapping = commonPassthrough->GetReverseMapping(); 
-                TUniqueConstraintNode::TSetType uniqColumns; 
-                for (auto key: groupByKeys) { 
-                    auto range = mapping.equal_range(key); 
-                    if (range.first != range.second) { 
-                        for (auto i = range.first; i != range.second; ++i) { 
-                            uniqColumns.insert_unique(i->second); 
-                        } 
-                    } else { 
-                        uniqColumns.clear(); 
-                        break; 
-                    } 
-                } 
-                if (!uniqColumns.empty()) { 
-                    input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(std::move(uniqColumns))); 
-                } 
-            } 
-        } 
- 
-        return FromFirst<TEmptyConstraintNode>(input, output, ctx); 
-    } 
- 
+        }
+
+        const TPassthroughConstraintNode* commonPassthrough = nullptr;
+        if (inputPassthrough) {
+            const auto updateLambda = input->Child(3);
+            const auto initPassthrough = GetConstraintFromLambda<TPassthroughConstraintNode, true>(*initLambda, ctx);
+            const auto updatePassthrough = GetConstraintFromLambda<TPassthroughConstraintNode, true>(*updateLambda, ctx);
+            if (initPassthrough && updatePassthrough) {
+                std::array<TConstraintSet, 2U> set;
+                set.front().AddConstraint(initPassthrough);
+                set.back().AddConstraint(updatePassthrough);
+                if (commonPassthrough = TPassthroughConstraintNode::MakeCommon({&set.front(), &set.back()}, ctx))
+                    input->AddConstraint(commonPassthrough);
+            }
+        }
+
+        if (const auto switchLambda = input->Child(2); switchLambda->Tail().IsCallable(TCoBool::CallableName()) && IsFalse(switchLambda->Tail().Head().Content())) {
+            TVector<TString> fields(initLambda->Head().ChildrenSize());
+            ui32 i = 0U;
+            std::generate_n(fields.begin(), initLambda->Head().ChildrenSize(), [&i](){ return ToString(i++); });
+            input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(fields));
+        } else {
+            TVector<TStringBuf> groupByKeys;
+            if (const auto groupBy = switchLambda->GetConstraint<TGroupByConstraintNode>()) {
+                groupByKeys.assign(groupBy->GetColumns().begin(), groupBy->GetColumns().end());
+            } else if (switchLambda->Tail().IsCallable({"AggrNotEquals", "NotEquals"})) {
+                ExtractSimpleKeys(switchLambda->Child(1)->Child(0), switchLambda->Child(0)->Child(0), groupByKeys);
+            }
+            if (!groupByKeys.empty() && commonPassthrough) {
+                auto mapping = commonPassthrough->GetReverseMapping();
+                TUniqueConstraintNode::TSetType uniqColumns;
+                for (auto key: groupByKeys) {
+                    auto range = mapping.equal_range(key);
+                    if (range.first != range.second) {
+                        for (auto i = range.first; i != range.second; ++i) {
+                            uniqColumns.insert_unique(i->second);
+                        }
+                    } else {
+                        uniqColumns.clear();
+                        break;
+                    }
+                }
+                if (!uniqColumns.empty()) {
+                    input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(std::move(uniqColumns)));
+                }
+            }
+        }
+
+        return FromFirst<TEmptyConstraintNode>(input, output, ctx);
+    }
+
     TStatus GroupByKeyWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
-        const TStructExprType* inItemType = GetNonEmptyStructItemType(*input->Head().GetTypeAnn()); 
+        const TStructExprType* inItemType = GetNonEmptyStructItemType(*input->Head().GetTypeAnn());
         const TStructExprType* outItemType = GetNonEmptyStructItemType(*input->GetTypeAnn());
         if (inItemType && outItemType) {
-            const auto keySelector = input->Child(TCoGroupByKey::idx_KeySelectorLambda); 
-            if (const auto status = UpdateLambdaConstraints(*keySelector); status != TStatus::Ok) { 
-                return status; 
+            const auto keySelector = input->Child(TCoGroupByKey::idx_KeySelectorLambda);
+            if (const auto status = UpdateLambdaConstraints(*keySelector); status != TStatus::Ok) {
+                return status;
             }
-            TConstraintNode::TListType argConstraints; 
-            if (const auto inputPassthrough = input->Head().GetConstraint<TPassthroughConstraintNode>()) 
-                argConstraints.emplace_back(inputPassthrough); 
-            if (const auto status = UpdateLambdaConstraints(input->ChildRef(TCoGroupByKey::idx_HandlerLambda), ctx, {TConstraintNode::TListType{}, argConstraints}); status != TStatus::Ok) { 
-                return status; 
-            } 
+            TConstraintNode::TListType argConstraints;
+            if (const auto inputPassthrough = input->Head().GetConstraint<TPassthroughConstraintNode>())
+                argConstraints.emplace_back(inputPassthrough);
+            if (const auto status = UpdateLambdaConstraints(input->ChildRef(TCoGroupByKey::idx_HandlerLambda), ctx, {TConstraintNode::TListType{}, argConstraints}); status != TStatus::Ok) {
+                return status;
+            }
 
-            if (const auto handlerLambda = input->Child(TCoGroupByKey::idx_HandlerLambda); handlerLambda->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) { 
+            if (const auto handlerLambda = input->Child(TCoGroupByKey::idx_HandlerLambda); handlerLambda->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) {
                 TVector<TStringBuf> groupKeys;
                 ExtractKeys(*keySelector, groupKeys);
                 if (!groupKeys.empty()) {
-                    if (const auto passthrough = handlerLambda->GetConstraint<TPassthroughConstraintNode>()) { 
-                        const auto mapping = passthrough->GetReverseMapping(); 
+                    if (const auto passthrough = handlerLambda->GetConstraint<TPassthroughConstraintNode>()) {
+                        const auto mapping = passthrough->GetReverseMapping();
                         TUniqueConstraintNode::TSetType uniqColumns;
                         for (auto key: groupKeys) {
                             auto range = mapping.equal_range(key);
@@ -2219,17 +2219,17 @@ private:
     }
 
     TStatus PartitionByKeyWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
-        if (const auto status = UpdateLambdaConstraints(*input->Child(TCoPartitionByKeyBase::idx_KeySelectorLambda)); status != TStatus::Ok) { 
-            return status; 
+        if (const auto status = UpdateLambdaConstraints(*input->Child(TCoPartitionByKeyBase::idx_KeySelectorLambda)); status != TStatus::Ok) {
+            return status;
         }
-        if (const auto sortKeySelector = input->Child(TCoPartitionByKeyBase::idx_SortKeySelectorLambda); sortKeySelector->IsLambda()) { 
-            if (const auto status = UpdateLambdaConstraints(*sortKeySelector); status != TStatus::Ok) { 
-                return status; 
-            } 
-        } 
+        if (const auto sortKeySelector = input->Child(TCoPartitionByKeyBase::idx_SortKeySelectorLambda); sortKeySelector->IsLambda()) {
+            if (const auto status = UpdateLambdaConstraints(*sortKeySelector); status != TStatus::Ok) {
+                return status;
+            }
+        }
 
-        std::unordered_set<const TPassthroughConstraintNode*> explicitPasstrought; 
-        auto argConstraints = GetConstraintsForInputArgument(*input, explicitPasstrought, ctx); 
+        std::unordered_set<const TPassthroughConstraintNode*> explicitPasstrought;
+        auto argConstraints = GetConstraintsForInputArgument(*input, explicitPasstrought, ctx);
 
         TVector<TStringBuf> partitionKeys;
         ExtractKeys(*input->Child(TCoPartitionByKeyBase::idx_KeySelectorLambda), partitionKeys);
@@ -2237,23 +2237,23 @@ private:
             argConstraints.push_back(ctx.MakeConstraint<TGroupByConstraintNode>(std::move(partitionKeys)));
         }
 
-        if (const auto status = UpdateLambdaConstraints(input->ChildRef(TCoPartitionByKeyBase::idx_ListHandlerLambda), ctx, {argConstraints}); status != TStatus::Ok) { 
+        if (const auto status = UpdateLambdaConstraints(input->ChildRef(TCoPartitionByKeyBase::idx_ListHandlerLambda), ctx, {argConstraints}); status != TStatus::Ok) {
             return status;
         }
 
-        const auto handlerLambda = input->Child(TCoPartitionByKeyBase::idx_ListHandlerLambda); 
-        const auto lambdaPassthrough = handlerLambda->GetConstraint<TPassthroughConstraintNode>(); 
-        if (lambdaPassthrough) { 
-            if (!explicitPasstrought.contains(lambdaPassthrough)) { 
-                auto mapping = lambdaPassthrough->GetColumnMapping(); 
-                for (const auto myPasstrought : explicitPasstrought) 
-                    mapping.erase(myPasstrought); 
-                if (!mapping.empty()) { 
-                    input->AddConstraint(ctx.MakeConstraint<TPassthroughConstraintNode>(std::move(mapping))); 
-                } 
-            } 
-        } 
- 
+        const auto handlerLambda = input->Child(TCoPartitionByKeyBase::idx_ListHandlerLambda);
+        const auto lambdaPassthrough = handlerLambda->GetConstraint<TPassthroughConstraintNode>();
+        if (lambdaPassthrough) {
+            if (!explicitPasstrought.contains(lambdaPassthrough)) {
+                auto mapping = lambdaPassthrough->GetColumnMapping();
+                for (const auto myPasstrought : explicitPasstrought)
+                    mapping.erase(myPasstrought);
+                if (!mapping.empty()) {
+                    input->AddConstraint(ctx.MakeConstraint<TPassthroughConstraintNode>(std::move(mapping)));
+                }
+            }
+        }
+
         if (!partitionKeys.empty() && lambdaPassthrough) {
             if (auto uniq = handlerLambda->GetConstraint<TUniqueConstraintNode>()) {
                 auto mapping = lambdaPassthrough->GetReverseMapping();
@@ -2275,9 +2275,9 @@ private:
             }
         }
 
-        const bool multiInput = ETypeAnnotationKind::Variant == GetItemType(*input->Head().GetTypeAnn())->GetKind(); 
+        const bool multiInput = ETypeAnnotationKind::Variant == GetItemType(*input->Head().GetTypeAnn())->GetKind();
         const auto lambdaVarIndex = handlerLambda->GetConstraint<TVarIndexConstraintNode>();
-        const auto multi = input->Head().GetConstraint<TMultiConstraintNode>(); 
+        const auto multi = input->Head().GetConstraint<TMultiConstraintNode>();
         const auto lambdaMulti = handlerLambda->GetConstraint<TMultiConstraintNode>();
 
         if (const auto varIndex = input->Head().GetConstraint<TVarIndexConstraintNode>()) {
@@ -2311,13 +2311,13 @@ private:
                 remappedItems.push_back(std::make_pair(item.first, TConstraintSet{}));
                 if (!multiInput) { // remapping one to many
                     if (const auto lambdaPassthrough = item.second.template GetConstraint<TPassthroughConstraintNode>()) {
-                        if (!explicitPasstrought.contains(lambdaPassthrough)) { 
-                            auto mapping = lambdaPassthrough->GetColumnMapping(); 
-                            for (const auto myPasstrought : explicitPasstrought) 
-                                mapping.erase(myPasstrought); 
-                            if (!mapping.empty()) { 
-                                remappedItems.back().second.AddConstraint(ctx.MakeConstraint<TPassthroughConstraintNode>(std::move(mapping))); 
-                            } 
+                        if (!explicitPasstrought.contains(lambdaPassthrough)) {
+                            auto mapping = lambdaPassthrough->GetColumnMapping();
+                            for (const auto myPasstrought : explicitPasstrought)
+                                mapping.erase(myPasstrought);
+                            if (!mapping.empty()) {
+                                remappedItems.back().second.AddConstraint(ctx.MakeConstraint<TPassthroughConstraintNode>(std::move(mapping)));
+                            }
                         }
                         if (const auto lambdaUnique = item.second.template GetConstraint<TUniqueConstraintNode>()) {
                             auto mapping = lambdaPassthrough->GetReverseMapping();
@@ -2351,13 +2351,13 @@ private:
                     case 1: // remapping 1 to 1
                         if (auto origConstr = multi->GetItem(range.first->second)) {
                             if (const auto lambdaPassthrough = item.second.template GetConstraint<TPassthroughConstraintNode>()) {
-                                if (!explicitPasstrought.contains(lambdaPassthrough)) { 
-                                    auto mapping = lambdaPassthrough->GetColumnMapping(); 
-                                    for (const auto myPasstrought : explicitPasstrought) 
-                                        mapping.erase(myPasstrought); 
-                                    if (!mapping.empty()) { 
-                                        remappedItems.back().second.AddConstraint(ctx.MakeConstraint<TPassthroughConstraintNode>(std::move(mapping))); 
-                                    } 
+                                if (!explicitPasstrought.contains(lambdaPassthrough)) {
+                                    auto mapping = lambdaPassthrough->GetColumnMapping();
+                                    for (const auto myPasstrought : explicitPasstrought)
+                                        mapping.erase(myPasstrought);
+                                    if (!mapping.empty()) {
+                                        remappedItems.back().second.AddConstraint(ctx.MakeConstraint<TPassthroughConstraintNode>(std::move(mapping)));
+                                    }
                                 }
                                 if (const auto lambdaUnique = item.second.template GetConstraint<TUniqueConstraintNode>()) {
                                     auto mapping = lambdaPassthrough->GetReverseMapping();
@@ -2442,25 +2442,25 @@ private:
         return TStatus::Ok;
     }
 
-    TStatus FoldWrap(const TExprNode::TPtr& input, TExprNode::TPtr&, TExprContext& ctx) const { 
+    TStatus FoldWrap(const TExprNode::TPtr& input, TExprNode::TPtr&, TExprContext& ctx) const {
         const TStructExprType* inItemType = GetNonEmptyStructItemType(*input->Child(0)->GetTypeAnn());
         const TStructExprType* outItemType = GetNonEmptyStructItemType(*input->GetTypeAnn());
         if (!inItemType || !outItemType) {
             return UpdateAllChildLambdasConstraints(*input);
         }
 
-        const auto inputPassthrough = input->Head().GetConstraint<TPassthroughConstraintNode>(); 
+        const auto inputPassthrough = input->Head().GetConstraint<TPassthroughConstraintNode>();
         if (input->Child(1)->IsLambda()) {
-            TConstraintNode::TListType argConstraints; 
-            if (inputPassthrough) 
-                argConstraints.emplace_back(inputPassthrough); 
-            if (const auto status = UpdateLambdaConstraints(input->ChildRef(1), ctx, {argConstraints}); status != TStatus::Ok) { 
+            TConstraintNode::TListType argConstraints;
+            if (inputPassthrough)
+                argConstraints.emplace_back(inputPassthrough);
+            if (const auto status = UpdateLambdaConstraints(input->ChildRef(1), ctx, {argConstraints}); status != TStatus::Ok) {
                 return status;
             }
         }
 
-        const auto initState = input->Child(1); 
-        auto stateConstraints = initState->GetAllConstraints(); 
+        const auto initState = input->Child(1);
+        auto stateConstraints = initState->GetAllConstraints();
         stateConstraints.erase(
             std::remove_if(
                 stateConstraints.begin(),
@@ -2470,16 +2470,16 @@ private:
             stateConstraints.end()
         );
 
-        TConstraintNode::TListType argConstraints; 
-        if (inputPassthrough) 
-            argConstraints.emplace_back(inputPassthrough); 
+        TConstraintNode::TListType argConstraints;
+        if (inputPassthrough)
+            argConstraints.emplace_back(inputPassthrough);
 
-        if (const auto status = UpdateLambdaConstraints(input->TailRef(), ctx, {argConstraints, stateConstraints}); status != TStatus::Ok) { 
+        if (const auto status = UpdateLambdaConstraints(input->TailRef(), ctx, {argConstraints, stateConstraints}); status != TStatus::Ok) {
             return status;
         }
 
-        if (const auto lambdaPassthrough = input->Tail().GetConstraint<TPassthroughConstraintNode>()) { 
-            input->AddConstraint(lambdaPassthrough); 
+        if (const auto lambdaPassthrough = input->Tail().GetConstraint<TPassthroughConstraintNode>()) {
+            input->AddConstraint(lambdaPassthrough);
         }
 
         return TStatus::Ok;
@@ -2529,16 +2529,16 @@ private:
             return nullptr;
         }
 
-        if (GetSeqItemType(list.GetTypeAnn())->GetKind() == ETypeAnnotationKind::Struct) { 
-            TVector<bool> dirs; 
-            TVector<TStringBuf> keys; 
-            ExtractSimpleSortTraits(directions, keyExtractor, dirs, keys); 
-            YQL_ENSURE(dirs.size() == keys.size()); 
-            TSortedConstraintNode::TContainerType content; 
-            for (auto i = 0U; i < keys.size(); ++i) 
-                content.emplace_back(TSortedConstraintNode::TContainerType::value_type::first_type{keys[i]}, dirs[i]); 
-            if (!content.empty()) { 
-                return ctx.MakeConstraint<TSortedConstraintNode>(std::move(content)); 
+        if (GetSeqItemType(list.GetTypeAnn())->GetKind() == ETypeAnnotationKind::Struct) {
+            TVector<bool> dirs;
+            TVector<TStringBuf> keys;
+            ExtractSimpleSortTraits(directions, keyExtractor, dirs, keys);
+            YQL_ENSURE(dirs.size() == keys.size());
+            TSortedConstraintNode::TContainerType content;
+            for (auto i = 0U; i < keys.size(); ++i)
+                content.emplace_back(TSortedConstraintNode::TContainerType::value_type::first_type{keys[i]}, dirs[i]);
+            if (!content.empty()) {
+                return ctx.MakeConstraint<TSortedConstraintNode>(std::move(content));
             }
         }
         return nullptr;
@@ -2563,29 +2563,29 @@ private:
     static const TSortedConstraintNode* GetPassthroughSortedConstraint(const TSortedConstraintNode& inputSorted,
         const TPassthroughConstraintNode& passthrough, TExprContext& ctx)
     {
-        const auto& reverseMapping = passthrough.GetReverseMapping(); 
-        const auto& content = inputSorted.GetContent(); 
-        TSortedConstraintNode::TContainerType filtered; 
-        for (auto i = 0U; i < content.size(); ++i) { 
-            TSortedConstraintNode::TContainerType::value_type nextItem; 
-            for (const auto& column : content[i].first) { 
-                auto range = reverseMapping.equal_range(column); 
-                if (range.first != range.second) { 
-                    for (auto it = range.first; it != range.second; ++it) { 
-                        nextItem.first.emplace_back(it->second); 
-                    } 
+        const auto& reverseMapping = passthrough.GetReverseMapping();
+        const auto& content = inputSorted.GetContent();
+        TSortedConstraintNode::TContainerType filtered;
+        for (auto i = 0U; i < content.size(); ++i) {
+            TSortedConstraintNode::TContainerType::value_type nextItem;
+            for (const auto& column : content[i].first) {
+                auto range = reverseMapping.equal_range(column);
+                if (range.first != range.second) {
+                    for (auto it = range.first; it != range.second; ++it) {
+                        nextItem.first.emplace_back(it->second);
+                    }
                 }
-            } 
-            if (nextItem.first.empty()) 
+            }
+            if (nextItem.first.empty())
                 break;
- 
-            nextItem.second = content[i].second; 
-            ::Sort(nextItem.first); 
-            filtered.emplace_back(std::move(nextItem)); 
+
+            nextItem.second = content[i].second;
+            ::Sort(nextItem.first);
+            filtered.emplace_back(std::move(nextItem));
         }
- 
-        if (!filtered.empty()) { 
-            return ctx.MakeConstraint<TSortedConstraintNode>(std::move(filtered)); 
+
+        if (!filtered.empty()) {
+            return ctx.MakeConstraint<TSortedConstraintNode>(std::move(filtered));
         }
         return nullptr;
     }
@@ -2593,7 +2593,7 @@ private:
     static const TUniqueConstraintNode* GetPassthroughUniqueConstraint(const TUniqueConstraintNode& inputUnique,
         const TPassthroughConstraintNode& passthrough, TExprContext& ctx)
     {
-        const auto reverseMapping = passthrough.GetReverseMapping(); 
+        const auto reverseMapping = passthrough.GetReverseMapping();
         TUniqueConstraintNode::TSetType remappedColumns;
         for (auto col: inputUnique.GetColumns()) {
             auto range = reverseMapping.equal_range(col);
@@ -2627,102 +2627,102 @@ private:
     THashMap<TStringBuf, THandler> Functions;
 };
 
-template<> const TPassthroughConstraintNode* 
-TCallableConstraintTransformer::GetConstraintFromWideResultLambda<TPassthroughConstraintNode>(const TExprNode& lambda, TExprContext& ctx) { 
-    TPassthroughConstraintNode::TMapType passthrough; 
-    for (auto i = 1U; i < lambda.ChildrenSize(); ++i) { 
-        if (const auto pass = lambda.Child(i)->GetConstraint<TPassthroughConstraintNode>()) { 
-            const auto& name = ctx.AppendString(ToString(i - 1U)); 
-            for (const auto& part : pass->GetColumnMapping()) { 
-                std::transform(part.second.cbegin(), part.second.cend(), std::back_inserter(passthrough[part.first ? part.first : pass]), [&name](TPassthroughConstraintNode::TPartType::value_type item) { 
-                    item.first.emplace_front(name); 
-                    return item; 
-                }); 
-            } 
-        } 
-    } 
- 
-    return passthrough.empty() ? nullptr: ctx.MakeConstraint<TPassthroughConstraintNode>(std::move(passthrough)); 
-} 
- 
-template<> const TUniqueConstraintNode* 
-TCallableConstraintTransformer::GetConstraintFromWideResultLambda<TUniqueConstraintNode>(const TExprNode& lambda, TExprContext& ctx) { 
-    TNodeSet srcStructs; 
-    TVector<TStringBuf> unique; 
-    unique.reserve(lambda.ChildrenSize() - 1U); 
- 
-    for (auto i = 1U; i < lambda.ChildrenSize(); ++i) { 
-        auto valueNode = lambda.Child(i); 
-        const auto& name = ctx.AppendString(ToString(i - 1U)); 
-        if (TCoCoalesce::Match(valueNode)) { 
-            if (valueNode->Child(0)->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Optional || valueNode->ChildrenSize() == 1) { 
-                valueNode = valueNode->Child(0); 
-            } 
-        } 
-        if (TCoJust::Match(valueNode)) { 
-            valueNode = valueNode->Child(0); 
-        } 
- 
-        if (TCoMember::Match(valueNode) || TCoNth::Match(valueNode)) { 
-            const auto memberName = valueNode->Child(1)->Content(); 
-            const auto structNode = valueNode->Child(0); 
-            if (const auto structUnique = structNode->GetConstraint<TUniqueConstraintNode>()) { 
-                if (structUnique->GetColumns().has(memberName)) { 
-                    if (!TCoNothing::Match(structNode)) { 
-                        srcStructs.insert(structNode); 
-                        unique.push_back(name); 
-                    } 
-                } 
-            } 
-        } else if (valueNode->Type() == TExprNode::Argument) { 
-            if (const auto structUnique = valueNode->GetConstraint<TUniqueConstraintNode>()) { 
-                if (structUnique->GetColumns().size() == 1) { 
-                    srcStructs.insert(valueNode); 
-                    unique.push_back(name); 
-                } 
-            } 
-        } 
-    } 
- 
-    if (!unique.empty()) { 
-        if (srcStructs.empty() || (srcStructs.size() == 1 && unique.size() == (*srcStructs.begin())->GetConstraint<TUniqueConstraintNode>()->GetColumns().size())) { 
-            ::SortUnique(unique); 
-            return ctx.MakeConstraint<TUniqueConstraintNode>(std::move(unique)); 
-        } 
-    } 
- 
-    return nullptr; 
-} 
- 
-template<> const TVarIndexConstraintNode* 
-TCallableConstraintTransformer::TCallableConstraintTransformer::GetConstraintFromWideResultLambda<TVarIndexConstraintNode>(const TExprNode& lambda, TExprContext& ctx) { 
-    TVector<const TConstraintSet*> structConstraints; 
-    structConstraints.reserve(lambda.ChildrenSize() - 1U); 
- 
-    for (auto i = 1U; i < lambda.ChildrenSize(); ++i) { 
-        auto valueNode = lambda.Child(i); 
-        if (TCoCoalesce::Match(valueNode)) { 
-            if (valueNode->Child(0)->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Optional || valueNode->ChildrenSize() == 1) { 
-                valueNode = valueNode->Child(0); 
-            } 
-        } 
-        if (TCoJust::Match(valueNode)) { 
-            valueNode = valueNode->Child(0); 
-        } 
- 
-        if (TCoMember::Match(valueNode) || TCoNth::Match(valueNode)) { 
-            structConstraints.push_back(&valueNode->Head().GetConstraintSet()); 
-        } else if (valueNode->Type() == TExprNode::Argument) { 
-            structConstraints.push_back(&valueNode->GetConstraintSet()); 
-        } 
-    } 
- 
-    return TVarIndexConstraintNode::MakeCommon(structConstraints, ctx); 
-} 
- 
-template<class TConstraint> const TConstraint* 
-TCallableConstraintTransformer::GetConstraintFromWideResultLambda(const TExprNode&, TExprContext&) { return nullptr; } 
- 
+template<> const TPassthroughConstraintNode*
+TCallableConstraintTransformer::GetConstraintFromWideResultLambda<TPassthroughConstraintNode>(const TExprNode& lambda, TExprContext& ctx) {
+    TPassthroughConstraintNode::TMapType passthrough;
+    for (auto i = 1U; i < lambda.ChildrenSize(); ++i) {
+        if (const auto pass = lambda.Child(i)->GetConstraint<TPassthroughConstraintNode>()) {
+            const auto& name = ctx.AppendString(ToString(i - 1U));
+            for (const auto& part : pass->GetColumnMapping()) {
+                std::transform(part.second.cbegin(), part.second.cend(), std::back_inserter(passthrough[part.first ? part.first : pass]), [&name](TPassthroughConstraintNode::TPartType::value_type item) {
+                    item.first.emplace_front(name);
+                    return item;
+                });
+            }
+        }
+    }
+
+    return passthrough.empty() ? nullptr: ctx.MakeConstraint<TPassthroughConstraintNode>(std::move(passthrough));
+}
+
+template<> const TUniqueConstraintNode*
+TCallableConstraintTransformer::GetConstraintFromWideResultLambda<TUniqueConstraintNode>(const TExprNode& lambda, TExprContext& ctx) {
+    TNodeSet srcStructs;
+    TVector<TStringBuf> unique;
+    unique.reserve(lambda.ChildrenSize() - 1U);
+
+    for (auto i = 1U; i < lambda.ChildrenSize(); ++i) {
+        auto valueNode = lambda.Child(i);
+        const auto& name = ctx.AppendString(ToString(i - 1U));
+        if (TCoCoalesce::Match(valueNode)) {
+            if (valueNode->Child(0)->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Optional || valueNode->ChildrenSize() == 1) {
+                valueNode = valueNode->Child(0);
+            }
+        }
+        if (TCoJust::Match(valueNode)) {
+            valueNode = valueNode->Child(0);
+        }
+
+        if (TCoMember::Match(valueNode) || TCoNth::Match(valueNode)) {
+            const auto memberName = valueNode->Child(1)->Content();
+            const auto structNode = valueNode->Child(0);
+            if (const auto structUnique = structNode->GetConstraint<TUniqueConstraintNode>()) {
+                if (structUnique->GetColumns().has(memberName)) {
+                    if (!TCoNothing::Match(structNode)) {
+                        srcStructs.insert(structNode);
+                        unique.push_back(name);
+                    }
+                }
+            }
+        } else if (valueNode->Type() == TExprNode::Argument) {
+            if (const auto structUnique = valueNode->GetConstraint<TUniqueConstraintNode>()) {
+                if (structUnique->GetColumns().size() == 1) {
+                    srcStructs.insert(valueNode);
+                    unique.push_back(name);
+                }
+            }
+        }
+    }
+
+    if (!unique.empty()) {
+        if (srcStructs.empty() || (srcStructs.size() == 1 && unique.size() == (*srcStructs.begin())->GetConstraint<TUniqueConstraintNode>()->GetColumns().size())) {
+            ::SortUnique(unique);
+            return ctx.MakeConstraint<TUniqueConstraintNode>(std::move(unique));
+        }
+    }
+
+    return nullptr;
+}
+
+template<> const TVarIndexConstraintNode*
+TCallableConstraintTransformer::TCallableConstraintTransformer::GetConstraintFromWideResultLambda<TVarIndexConstraintNode>(const TExprNode& lambda, TExprContext& ctx) {
+    TVector<const TConstraintSet*> structConstraints;
+    structConstraints.reserve(lambda.ChildrenSize() - 1U);
+
+    for (auto i = 1U; i < lambda.ChildrenSize(); ++i) {
+        auto valueNode = lambda.Child(i);
+        if (TCoCoalesce::Match(valueNode)) {
+            if (valueNode->Child(0)->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Optional || valueNode->ChildrenSize() == 1) {
+                valueNode = valueNode->Child(0);
+            }
+        }
+        if (TCoJust::Match(valueNode)) {
+            valueNode = valueNode->Child(0);
+        }
+
+        if (TCoMember::Match(valueNode) || TCoNth::Match(valueNode)) {
+            structConstraints.push_back(&valueNode->Head().GetConstraintSet());
+        } else if (valueNode->Type() == TExprNode::Argument) {
+            structConstraints.push_back(&valueNode->GetConstraintSet());
+        }
+    }
+
+    return TVarIndexConstraintNode::MakeCommon(structConstraints, ctx);
+}
+
+template<class TConstraint> const TConstraint*
+TCallableConstraintTransformer::GetConstraintFromWideResultLambda(const TExprNode&, TExprContext&) { return nullptr; }
+
 class TDefaultCallableConstraintTransformer : public TSyncTransformerBase {
 public:
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
@@ -2749,7 +2749,7 @@ public:
         UpdateStatusIfChanged(status, input, output);
 
         if (status.Level != TStatus::Error && HasRenames) {
-            output = ctx.ReplaceNodes(std::move(output), Processed); 
+            output = ctx.ReplaceNodes(std::move(output), Processed);
         }
 
         Processed.clear();
@@ -2934,15 +2934,15 @@ private:
             {
                 retStatus = TransformChildren(input, output, ctx);
                 if (retStatus == TStatus::Ok) {
-                    retStatus = CallableTransformer->Transform(input, output, ctx); 
-                    if (retStatus == TStatus::Ok) { 
-                        input->SetState(TExprNode::EState::ConstrComplete); 
-                        CheckExpected(*input); 
-                        break; 
-                    } 
-                } 
- 
-                if (retStatus != TStatus::Error && input != output) { 
+                    retStatus = CallableTransformer->Transform(input, output, ctx);
+                    if (retStatus == TStatus::Ok) {
+                        input->SetState(TExprNode::EState::ConstrComplete);
+                        CheckExpected(*input);
+                        break;
+                    }
+                }
+
+                if (retStatus != TStatus::Error && input != output) {
                     processedPair.first->second = output;
                 }
                 break;
@@ -2950,10 +2950,10 @@ private:
 
             case TExprNode::Lambda:
             {
-                YQL_ENSURE(input->ChildrenSize() > 0U); 
+                YQL_ENSURE(input->ChildrenSize() > 0U);
                 TExprNode::TPtr out;
-                auto argStatus = TransformNode(input->HeadPtr(), out, ctx); 
-                UpdateStatusIfChanged(argStatus, input->HeadPtr(), out); 
+                auto argStatus = TransformNode(input->HeadPtr(), out, ctx);
+                UpdateStatusIfChanged(argStatus, input->HeadPtr(), out);
                 if (argStatus.Level == TStatus::Error) {
                     input->SetState(TExprNode::EState::Error);
                     return argStatus;
@@ -2962,35 +2962,35 @@ private:
                 if (argStatus.Level == TStatus::Repeat)
                     return TStatus::Ok;
 
-                TStatus bodyStatus = TStatus::Ok; 
-                TExprNode::TListType newBody; 
-                newBody.reserve(input->ChildrenSize() - 1U); 
-                bool updatedChildren = false; 
-                for (ui32 i = 1U; i < input->ChildrenSize(); ++i) { 
-                    const auto child = input->ChildPtr(i); 
-                    TExprNode::TPtr newChild; 
-                    auto childStatus = TransformNode(child, newChild, ctx); 
-                    UpdateStatusIfChanged(childStatus, child, newChild); 
-                    updatedChildren = updatedChildren || (newChild != child); 
-                    bodyStatus = bodyStatus.Combine(childStatus); 
-                    newBody.emplace_back(std::move(newChild)); 
-                } 
- 
+                TStatus bodyStatus = TStatus::Ok;
+                TExprNode::TListType newBody;
+                newBody.reserve(input->ChildrenSize() - 1U);
+                bool updatedChildren = false;
+                for (ui32 i = 1U; i < input->ChildrenSize(); ++i) {
+                    const auto child = input->ChildPtr(i);
+                    TExprNode::TPtr newChild;
+                    auto childStatus = TransformNode(child, newChild, ctx);
+                    UpdateStatusIfChanged(childStatus, child, newChild);
+                    updatedChildren = updatedChildren || (newChild != child);
+                    bodyStatus = bodyStatus.Combine(childStatus);
+                    newBody.emplace_back(std::move(newChild));
+                }
+
                 retStatus = argStatus.Combine(bodyStatus);
                 if (retStatus != TStatus::Ok) {
                     if (retStatus.Level == TStatus::Error) {
                         input->SetState(TExprNode::EState::Error);
                     }
-                    else if (updatedChildren) { 
-                        output = ctx.DeepCopyLambda(*input, std::move(newBody)); 
+                    else if (updatedChildren) {
+                        output = ctx.DeepCopyLambda(*input, std::move(newBody));
                         processedPair.first->second = output;
                         HasRenames = true;
                     }
                 } else {
-                    if (input->ChildrenSize() != 2U) 
-                        input->SetState(TExprNode::EState::ConstrComplete); 
-                    else 
-                        input->CopyConstraints(input->Tail()); 
+                    if (input->ChildrenSize() != 2U)
+                        input->SetState(TExprNode::EState::ConstrComplete);
+                    else
+                        input->CopyConstraints(input->Tail());
                     CheckExpected(*input);
                 }
                 break;
@@ -3109,18 +3109,18 @@ private:
     }
 
     void CheckExpected(const TExprNode& input) {
-        if (const auto it = Types.ExpectedConstraints.find(input.UniqueId()); it != Types.ExpectedConstraints.cend()) { 
+        if (const auto it = Types.ExpectedConstraints.find(input.UniqueId()); it != Types.ExpectedConstraints.cend()) {
             for (const TConstraintNode* expectedConstr: it->second) {
                 if (!Types.DisableConstraintCheck.contains(expectedConstr->GetName())) {
-                    const auto newConstr = input.GetConstraint(expectedConstr->GetName()); 
+                    const auto newConstr = input.GetConstraint(expectedConstr->GetName());
                     // Constraint Multi(0:{Empty},1:{Empty}, ..., N:{Empty}) can be reduced to Empty
-                    if (expectedConstr->GetName() == TMultiConstraintNode::Name()) { 
-                        if (newConstr) { 
-                            YQL_ENSURE(static_cast<const TMultiConstraintNode*>(newConstr)->FilteredIncludes(*expectedConstr, Types.DisableConstraintCheck), "Rewrite error, unequal " << *newConstr 
-                                << " constraint in node " << input.Content() << ", previous was " << *expectedConstr); 
-                        } else { 
-                            YQL_ENSURE(input.GetConstraint<TEmptyConstraintNode>(), "Rewrite error, missing " << *expectedConstr << " constraint in node " << input.Content()); 
-                        } 
+                    if (expectedConstr->GetName() == TMultiConstraintNode::Name()) {
+                        if (newConstr) {
+                            YQL_ENSURE(static_cast<const TMultiConstraintNode*>(newConstr)->FilteredIncludes(*expectedConstr, Types.DisableConstraintCheck), "Rewrite error, unequal " << *newConstr
+                                << " constraint in node " << input.Content() << ", previous was " << *expectedConstr);
+                        } else {
+                            YQL_ENSURE(input.GetConstraint<TEmptyConstraintNode>(), "Rewrite error, missing " << *expectedConstr << " constraint in node " << input.Content());
+                        }
                     } else {
                         YQL_ENSURE(newConstr, "Rewrite error, missing " << *expectedConstr << " constraint in node " << input.Content());
                         YQL_ENSURE(newConstr->Includes(*expectedConstr), "Rewrite error, unequal " << *newConstr
@@ -3153,11 +3153,11 @@ TAutoPtr<IGraphTransformer> CreateDefCallableConstraintTransformer() {
 
 IGraphTransformer::TStatus UpdateLambdaConstraints(const TExprNode& lambda) {
     auto args = lambda.Child(0);
-    for (const auto& arg: args->Children()) { 
+    for (const auto& arg: args->Children()) {
         if (arg->GetState() == TExprNode::EState::TypeComplete || arg->GetState() == TExprNode::EState::ConstrPending) {
             arg->SetState(TExprNode::EState::ConstrComplete);
         }
-        YQL_ENSURE(arg->GetAllConstraints().empty()); 
+        YQL_ENSURE(arg->GetAllConstraints().empty());
     }
 
     if (args->GetState() == TExprNode::EState::TypeComplete || args->GetState() == TExprNode::EState::ConstrPending) {
@@ -3171,51 +3171,51 @@ IGraphTransformer::TStatus UpdateLambdaConstraints(const TExprNode& lambda) {
     return IGraphTransformer::TStatus::Ok;
 }
 
-IGraphTransformer::TStatus UpdateLambdaConstraints(TExprNode::TPtr& lambda, TExprContext& ctx, const TArrayRef<const TConstraintNode::TListType>& constraints) { 
+IGraphTransformer::TStatus UpdateLambdaConstraints(TExprNode::TPtr& lambda, TExprContext& ctx, const TArrayRef<const TConstraintNode::TListType>& constraints) {
     bool updateArgs = false;
-    const auto args = lambda->Child(0); 
+    const auto args = lambda->Child(0);
 
     YQL_ENSURE(args->ChildrenSize() == constraints.size());
     size_t i = 0;
-    for (const auto constrList: constraints) { 
-        const auto arg = args->Child(i++); 
+    for (const auto constrList: constraints) {
+        const auto arg = args->Child(i++);
         if (arg->GetState() == TExprNode::EState::TypeComplete || arg->GetState() == TExprNode::EState::ConstrPending) {
-            for (const auto c: constrList) { 
+            for (const auto c: constrList) {
                 arg->AddConstraint(c);
             }
             arg->SetState(TExprNode::EState::ConstrComplete);
         } else {
-            if (constrList.size() != arg->GetAllConstraints().size() || !AllOf(constrList, [arg] (const TConstraintNode* c) { return arg->GetConstraint(c->GetName()) == c; })) { 
+            if (constrList.size() != arg->GetAllConstraints().size() || !AllOf(constrList, [arg] (const TConstraintNode* c) { return arg->GetConstraint(c->GetName()) == c; })) {
                 updateArgs = true;
             }
         }
     }
 
     if (updateArgs) {
-        TNodeOnNodeOwnedMap replaces(constraints.size()); 
-        TExprNode::TListType argsChildren; 
-        argsChildren.reserve(constraints.size()); 
+        TNodeOnNodeOwnedMap replaces(constraints.size());
+        TExprNode::TListType argsChildren;
+        argsChildren.reserve(constraints.size());
         i = 0;
-        for (const auto constrList: constraints) { 
-            const auto arg = args->Child(i++); 
-            const auto newArg = ctx.ShallowCopy(*arg); 
+        for (const auto constrList: constraints) {
+            const auto arg = args->Child(i++);
+            const auto newArg = ctx.ShallowCopy(*arg);
             newArg->SetTypeAnn(arg->GetTypeAnn());
-            for (const auto c: constrList) { 
+            for (const auto c: constrList) {
                 newArg->AddConstraint(c);
             }
             newArg->SetState(TExprNode::EState::ConstrComplete);
             YQL_ENSURE(replaces.emplace(arg, newArg).second);
-            argsChildren.emplace_back(std::move(newArg)); 
+            argsChildren.emplace_back(std::move(newArg));
         }
 
         auto newArgs = ctx.NewArguments(args->Pos(), std::move(argsChildren));
         newArgs->SetTypeAnn(ctx.MakeType<TUnitExprType>());
         newArgs->SetState(TExprNode::EState::ConstrComplete);
-        const auto type = lambda->GetTypeAnn(); 
-        lambda = ctx.NewLambda(lambda->Pos(), std::move(newArgs), ctx.ReplaceNodes<true>(GetLambdaBody(*lambda), replaces)); 
-        lambda->SetTypeAnn(type); 
-        lambda->Head().ForEachChild(std::bind(&TExprNode::SetDependencyScope, std::placeholders::_1, lambda.Get(), lambda.Get())); 
-        return IGraphTransformer::TStatus::Repeat; 
+        const auto type = lambda->GetTypeAnn();
+        lambda = ctx.NewLambda(lambda->Pos(), std::move(newArgs), ctx.ReplaceNodes<true>(GetLambdaBody(*lambda), replaces));
+        lambda->SetTypeAnn(type);
+        lambda->Head().ForEachChild(std::bind(&TExprNode::SetDependencyScope, std::placeholders::_1, lambda.Get(), lambda.Get()));
+        return IGraphTransformer::TStatus::Repeat;
     }
 
     if (args->GetState() == TExprNode::EState::TypeComplete || args->GetState() == TExprNode::EState::ConstrPending) {

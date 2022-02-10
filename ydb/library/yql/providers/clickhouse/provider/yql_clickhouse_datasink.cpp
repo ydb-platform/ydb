@@ -13,8 +13,8 @@ namespace NYql {
 
 using namespace NNodes;
 
-namespace { 
- 
+namespace {
+
 class TClickHouseDataSink : public TDataProviderBase {
 public:
     TClickHouseDataSink(TClickHouseState::TPtr state)
@@ -22,7 +22,7 @@ public:
         , TypeAnnotationTransformer_(CreateClickHouseDataSinkTypeAnnotationTransformer(State_))
         , ExecutionTransformer_(CreateClickHouseDataSinkExecTransformer(State_))
         , LogicalOptProposalTransformer_(CreateClickHouseLogicalOptProposalTransformer(State_))
-        , PhysicalOptProposalTransformer_(CreateClickHousePhysicalOptProposalTransformer(State_)) 
+        , PhysicalOptProposalTransformer_(CreateClickHousePhysicalOptProposalTransformer(State_))
     {
     }
 
@@ -68,19 +68,19 @@ public:
         return *LogicalOptProposalTransformer_;
     }
 
-    IGraphTransformer& GetPhysicalOptProposalTransformer() override { 
-        return *PhysicalOptProposalTransformer_; 
-    } 
+    IGraphTransformer& GetPhysicalOptProposalTransformer() override {
+        return *PhysicalOptProposalTransformer_;
+    }
 private:
-    const TClickHouseState::TPtr State_; 
-    const THolder<TVisitorTransformerBase> TypeAnnotationTransformer_; 
-    const THolder<TExecTransformerBase> ExecutionTransformer_; 
-    const THolder<IGraphTransformer> LogicalOptProposalTransformer_; 
-    const THolder<IGraphTransformer> PhysicalOptProposalTransformer_; 
+    const TClickHouseState::TPtr State_;
+    const THolder<TVisitorTransformerBase> TypeAnnotationTransformer_;
+    const THolder<TExecTransformerBase> ExecutionTransformer_;
+    const THolder<IGraphTransformer> LogicalOptProposalTransformer_;
+    const THolder<IGraphTransformer> PhysicalOptProposalTransformer_;
 };
 
-} 
- 
+}
+
 TIntrusivePtr<IDataProvider> CreateClickHouseDataSink(TClickHouseState::TPtr state) {
     return new TClickHouseDataSink(state);
 }

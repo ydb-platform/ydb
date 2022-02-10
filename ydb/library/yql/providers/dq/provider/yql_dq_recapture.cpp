@@ -21,9 +21,9 @@ using namespace NNodes;
 
 namespace {
 
-const THashSet<TStringBuf> VALID_SOURCES = {DqProviderName, ConfigProviderName, YtProviderName, ClickHouseProviderName, YdbProviderName}; 
+const THashSet<TStringBuf> VALID_SOURCES = {DqProviderName, ConfigProviderName, YtProviderName, ClickHouseProviderName, YdbProviderName};
 const THashSet<TStringBuf> VALID_SINKS = {ResultProviderName, YtProviderName};
-const THashSet<TStringBuf> UNSUPPORTED_CALLABLE = { TCoForwardList::CallableName() }; 
+const THashSet<TStringBuf> UNSUPPORTED_CALLABLE = { TCoForwardList::CallableName() };
 
 }
 
@@ -104,7 +104,7 @@ public:
                     auto dataSource = State_->TypeCtx->DataSourceMap.FindPtr(dataSourceName);
                     YQL_ENSURE(dataSource);
                     if (auto dqIntegration = (*dataSource)->GetDqIntegration()) {
-                        auto newRead = dqIntegration->WrapRead(*State_->Settings, maybeRead.Cast().Ptr(), ctx); 
+                        auto newRead = dqIntegration->WrapRead(*State_->Settings, maybeRead.Cast().Ptr(), ctx);
                         if (newRead.Get() != maybeRead.Raw()) {
                             return newRead;
                         }
@@ -154,7 +154,7 @@ private:
         } else if (node.IsCallable(UNSUPPORTED_CALLABLE)) {
             AddInfo(ctx, TStringBuilder() << "unsupported callable '" << node.Content() << "'");
             good = false;
-        } else if (node.IsCallable(TCoCollect::CallableName())) { 
+        } else if (node.IsCallable(TCoCollect::CallableName())) {
             if (ETypeAnnotationKind::List != node.Head().GetTypeAnn()->GetKind()) {
                 AddInfo(ctx, TStringBuilder() << "unsupported callable '" << node.Content() << "' over stream/flow");
                 good = false;
@@ -181,7 +181,7 @@ private:
                 auto datasource = State_->TypeCtx->DataSourceMap.FindPtr(dataSourceName);
                 YQL_ENSURE(datasource);
                 if (auto dqIntegration = (*datasource)->GetDqIntegration()) {
-                    if (auto size = dqIntegration->CanRead(*State_->Settings, node, ctx, /*skipIssues = */ false)) { 
+                    if (auto size = dqIntegration->CanRead(*State_->Settings, node, ctx, /*skipIssues = */ false)) {
                         dataSize += *size;
                     } else {
                         good = false;

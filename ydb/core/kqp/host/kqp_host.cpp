@@ -1022,7 +1022,7 @@ public:
         if (funcRegistry) {
             FuncRegistry = funcRegistry;
         } else {
-            FuncRegistryHolder = NMiniKQL::CreateFunctionRegistry(NMiniKQL::CreateBuiltinRegistry()); 
+            FuncRegistryHolder = NMiniKQL::CreateFunctionRegistry(NMiniKQL::CreateBuiltinRegistry());
             FuncRegistry = FuncRegistryHolder.Get();
         }
 
@@ -1058,7 +1058,7 @@ public:
         auto writerFactory = [] () { return MakeIntrusive<TKqpResultWriter>(); };
         ResultProviderConfig = MakeIntrusive<TResultProviderConfig>(*TypesCtx, *FuncRegistry, FillSettings.Format,
             FillSettings.FormatDetails, writerFactory);
-        auto resultProvider = CreateResultProvider(ResultProviderConfig); 
+        auto resultProvider = CreateResultProvider(ResultProviderConfig);
         TypesCtx->AddDataSink(ResultProviderName, resultProvider);
         TypesCtx->AvailablePureResultDataSources = TVector<TString>(1, TString(KikimrProviderName));
 
@@ -1073,7 +1073,7 @@ public:
         YQL_ENSURE(TypesCtx->Initialize(*ExprCtx));
 
         YqlTransformer = TTransformationPipeline(TypesCtx)
-            .AddServiceTransformers() 
+            .AddServiceTransformers()
             .Add(TLogExprTransformer::Sync("YqlTransformer", NYql::NLog::EComponent::ProviderKqp,
                 NYql::NLog::ELevel::TRACE), "LogYqlTransform")
             .AddPreTypeAnnotation()
@@ -1455,7 +1455,7 @@ private:
             return nullptr;
         }
 
-        TExprNode::TPtr result; 
+        TExprNode::TPtr result;
         if (!CompileExpr(*astRes.Root, result, ctx, ModuleResolver.get())) {
             return nullptr;
         }

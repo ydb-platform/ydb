@@ -12,7 +12,7 @@
 #include <util/generic/strbuf.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
-#include <functional> 
+#include <functional>
 #include <util/string/vector.h>
 #include <util/string/type.h>
 

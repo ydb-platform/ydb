@@ -31,12 +31,12 @@ TComputationContext::TComputationContext(const THolderFactory& holderFactory,
     TComputationOptsFull& opts,
     const TComputationMutables& mutables,
     arrow::MemoryPool& arrowMemoryPool)
-    : TComputationContextLLVM{holderFactory, opts.Stats, std::make_unique<NUdf::TUnboxedValue[]>(mutables.CurValueIndex), builder} 
+    : TComputationContextLLVM{holderFactory, opts.Stats, std::make_unique<NUdf::TUnboxedValue[]>(mutables.CurValueIndex), builder}
     , RandomProvider(opts.RandomProvider)
     , TimeProvider(opts.TimeProvider)
     , ArrowMemoryPool(arrowMemoryPool)
 {
-    std::fill_n(MutableValues.get(), mutables.CurValueIndex, NUdf::TUnboxedValue(NUdf::TUnboxedValuePod::Invalid())); 
+    std::fill_n(MutableValues.get(), mutables.CurValueIndex, NUdf::TUnboxedValue(NUdf::TUnboxedValuePod::Invalid()));
 }
 
 TComputationContext::~TComputationContext() {
@@ -65,10 +65,10 @@ void TComputationContext::UpdateUsageAdjustor(ui64 memLimit) {
 
     if (auto peakAlloc = HolderFactory.GetPagePool().GetPeakAllocated()) {
         if (rss - InitRss > memLimit && rss - LastRss > (memLimit / 4)) {
-            UsageAdjustor = std::max(1.f, float(rss - InitRss) / float(peakAlloc)); 
+            UsageAdjustor = std::max(1.f, float(rss - InitRss) / float(peakAlloc));
             LastRss = rss;
 #ifndef NDEBUG
-            printUsage = UsageAdjustor > 1.f; 
+            printUsage = UsageAdjustor > 1.f;
 #endif
         }
     }

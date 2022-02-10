@@ -6,7 +6,7 @@
 #include <util/datetime/base.h>
 #include <util/generic/map.h>
 #include <util/generic/vector.h>
-#include <functional> 
+#include <functional>
 #include <util/memory/pool.h>
 #include <util/random/random.h>
 #include <util/string/join.h>

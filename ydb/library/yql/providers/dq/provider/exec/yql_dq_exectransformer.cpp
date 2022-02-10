@@ -58,8 +58,8 @@ using namespace NCommon;
 using namespace NKikimr::NMiniKQL;
 using namespace NNodes;
 
-namespace { 
- 
+namespace {
+
 using TUploadList = IDqGateway::TUploadList;
 
 // TODO: move this to separate file
@@ -206,18 +206,18 @@ private:
     TDqStatePtr State;
 };
 
-struct TDqsPipelineConfigurator : public IPipelineConfigurator { 
-private: 
-    void AfterCreate(TTransformationPipeline*) const final {} 
- 
-    void AfterTypeAnnotation(TTransformationPipeline* pipeline) const final { 
+struct TDqsPipelineConfigurator : public IPipelineConfigurator {
+private:
+    void AfterCreate(TTransformationPipeline*) const final {}
+
+    void AfterTypeAnnotation(TTransformationPipeline* pipeline) const final {
         pipeline->Add(NDq::CreateDqBuildPhyStagesTransformer(false), "Build-Phy");
         pipeline->Add(NDqs::CreateDqsRewritePhyCallablesTransformer(), "Rewrite-Phy-Callables");
-    } 
- 
-    void AfterOptimize(TTransformationPipeline*) const final {} 
-}; 
- 
+    }
+
+    void AfterOptimize(TTransformationPipeline*) const final {}
+};
+
 class TInMemoryExecTransformer: public TExecTransformerBase, TCounters
 {
 public:
@@ -248,11 +248,11 @@ private:
         }
     }
 
-    TExprNode::TPtr GetLambdaBody(int& level, TExprNode::TPtr&& node, TExprContext& ctx) const { 
-        const auto kind = node->GetTypeAnn()->GetKind(); 
-        const bool data = kind != ETypeAnnotationKind::Flow && kind != ETypeAnnotationKind::List && kind != ETypeAnnotationKind::Stream && kind != ETypeAnnotationKind::Optional; 
-        level = data ? 1 : 0; 
-        return ctx.WrapByCallableIf(kind != ETypeAnnotationKind::Stream, "ToStream", ctx.WrapByCallableIf(data, "Just", std::move(node))); 
+    TExprNode::TPtr GetLambdaBody(int& level, TExprNode::TPtr&& node, TExprContext& ctx) const {
+        const auto kind = node->GetTypeAnn()->GetKind();
+        const bool data = kind != ETypeAnnotationKind::Flow && kind != ETypeAnnotationKind::List && kind != ETypeAnnotationKind::Stream && kind != ETypeAnnotationKind::Optional;
+        level = data ? 1 : 0;
+        return ctx.WrapByCallableIf(kind != ETypeAnnotationKind::Stream, "ToStream", ctx.WrapByCallableIf(data, "Just", std::move(node)));
     }
 
     std::tuple<TString, TString> GetPathAndObjectId(const TString& path, const TString& objectId, const TString& md5) const {
@@ -474,21 +474,21 @@ private:
         TUploadList* uploadList,
         const TResult& result, TExprContext& ctx, bool hasGraphParams) const
     {
-        auto input = Build<TDqPhyStage>(ctx, result.Pos()) 
-            .Inputs() 
-                .Build() 
-            .Program<TCoLambda>() 
-                .Args({}) 
-                .Body(GetLambdaBody(*level, result.Input().Ptr(), ctx)) 
-            .Build() 
-            .Settings().Build() 
-        .Done().Ptr(); 
- 
+        auto input = Build<TDqPhyStage>(ctx, result.Pos())
+            .Inputs()
+                .Build()
+            .Program<TCoLambda>()
+                .Args({})
+                .Body(GetLambdaBody(*level, result.Input().Ptr(), ctx))
+            .Build()
+            .Settings().Build()
+        .Done().Ptr();
+
         {
             auto block = MeasureBlock("PeepHole");
 
             bool hasNonDeterministicFunctions = false;
-            if (const auto status = PeepHoleOptimizeNode<true>(input, input, ctx, *State->TypeCtx, nullptr, hasNonDeterministicFunctions); status.Level != TStatus::Ok) { 
+            if (const auto status = PeepHoleOptimizeNode<true>(input, input, ctx, *State->TypeCtx, nullptr, hasNonDeterministicFunctions); status.Level != TStatus::Ok) {
                 return SyncStatus(status);
             }
         }
@@ -497,7 +497,7 @@ private:
         TUserDataTable crutches = State->TypeCtx->UserDataStorageCrutches;
         TUserDataTable files;
         StartCounter("FreezeUsedFiles");
-        if (const auto filesRes = NCommon::FreezeUsedFiles(*input, files, *State->TypeCtx, ctx, [](const TString&){return true;}, crutches); filesRes.first.Level != TStatus::Ok) { 
+        if (const auto filesRes = NCommon::FreezeUsedFiles(*input, files, *State->TypeCtx, ctx, [](const TString&){return true;}, crutches); filesRes.first.Level != TStatus::Ok) {
             if (filesRes.first.Level != TStatus::Error) {
                 YQL_LOG(DEBUG) << "Freezing files for " << input->Content() << " (UniqueId=" << input->UniqueId() << ")";
             }
@@ -512,7 +512,7 @@ private:
 
         {
             auto block = MeasureBlock("BuildProgram");
-            auto programLambda = TDqPhyStage(input).Program(); 
+            auto programLambda = TDqPhyStage(input).Program();
 
             TVector<TExprBase> fakeReads;
             auto paramsType = NDq::CollectParameters(programLambda, ctx);
@@ -656,13 +656,13 @@ private:
                 return lambdaResult;
             }
 
-            THashMap<ui32, ui32> allPublicIds; 
+            THashMap<ui32, ui32> allPublicIds;
             bool hasStageError = false;
             VisitExpr(result.Ptr(), [&](const TExprNode::TPtr& node) {
                 const TExprBase expr(node);
                 if (expr.Maybe<TResFill>()) {
                     if (auto publicId = State->TypeCtx->TranslateOperationId(node->UniqueId())) {
-                        allPublicIds.emplace(*publicId, 0U); 
+                        allPublicIds.emplace(*publicId, 0U);
                     }
                 }
                 return true;
@@ -729,9 +729,9 @@ private:
 
                 if (res.Fallback) {
                     if (state->Settings->FallbackPolicy.Get().GetOrElse("default") == "never" || state->TypeCtx->ForceDq) {
-                        auto issues = TIssues{TIssue(ctx.GetPosition(input->Pos()), "Gateway Error").SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_WARNING)}; 
-                        issues.AddIssues(res.Issues); 
-                        ctx.AssociativeIssues.emplace(input.Get(), std::move(issues)); 
+                        auto issues = TIssues{TIssue(ctx.GetPosition(input->Pos()), "Gateway Error").SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_WARNING)};
+                        issues.AddIssues(res.Issues);
+                        ctx.AssociativeIssues.emplace(input.Get(), std::move(issues));
                         return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Error);
                     }
 
@@ -821,13 +821,13 @@ private:
         }
     }
 
-    TStatusCallbackPair FallbackWithMessage(const TExprNode& node, const TString& message, TExprContext& ctx) { 
+    TStatusCallbackPair FallbackWithMessage(const TExprNode& node, const TString& message, TExprContext& ctx) {
         if (State->Metrics) {
             State->Metrics->IncCounter("dq", "Fallback");
         }
         State->Statistics[State->MetricId++].Entries.push_back(TOperationStatistics::TEntry("Fallback", 0, 0, 0, 0, 1));
-        auto issue = TIssue(ctx.GetPosition(node.Pos()), message).SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_WARNING); 
-        ctx.AssociativeIssues.emplace(&node, TIssues{std::move(issue)}); 
+        auto issue = TIssue(ctx.GetPosition(node.Pos()), message).SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_WARNING);
+        ctx.AssociativeIssues.emplace(&node, TIssues{std::move(issue)});
         return SyncStatus(IGraphTransformer::TStatus(IGraphTransformer::TStatus::Error));
     }
 
@@ -847,24 +847,24 @@ private:
 
         const bool oneGraphPerQuery = State->Settings->_OneGraphPerQuery.Get().GetOrElse(false);
         size_t graphsCount = 0;
-        THashMap<ui32, ui32> allPublicIds; 
+        THashMap<ui32, ui32> allPublicIds;
         THashMap<ui64, ui32> stage2publicId;
         bool hasStageError = false;
         VisitExpr(pull.Ptr(), [&](const TExprNode::TPtr& node) {
-            if (TResTransientBase::Match(node.Get())) 
-                return false; 
-            if (const TExprBase expr(node); expr.Maybe<TDqConnection>()) { 
-                if (const auto publicId = State->TypeCtx->TranslateOperationId(node->UniqueId())) { 
-                    allPublicIds.emplace(*publicId, 0U); 
+            if (TResTransientBase::Match(node.Get()))
+                return false;
+            if (const TExprBase expr(node); expr.Maybe<TDqConnection>()) {
+                if (const auto publicId = State->TypeCtx->TranslateOperationId(node->UniqueId())) {
+                    allPublicIds.emplace(*publicId, 0U);
                 }
-            } else if (const auto& maybeStage = expr.Maybe<TDqStage>()) { 
+            } else if (const auto& maybeStage = expr.Maybe<TDqStage>()) {
                 const auto& stage = maybeStage.Cast();
                 if (!(stage.Ref().StartsExecution() || stage.Ref().HasResult())) {
-                    if (const auto publicId = State->TypeCtx->TranslateOperationId(node->UniqueId())) { 
-                        if (const auto settings = NDq::TDqStageSettings::Parse(maybeStage.Cast()); settings.LogicalId) { 
-                            stage2publicId[settings.LogicalId] = *publicId; 
-                        } 
-                        allPublicIds.emplace(*publicId, 0U); 
+                    if (const auto publicId = State->TypeCtx->TranslateOperationId(node->UniqueId())) {
+                        if (const auto settings = NDq::TDqStageSettings::Parse(maybeStage.Cast()); settings.LogicalId) {
+                            stage2publicId[settings.LogicalId] = *publicId;
+                        }
+                        allPublicIds.emplace(*publicId, 0U);
                     }
                 }
             } else if (oneGraphPerQuery) {
@@ -888,7 +888,7 @@ private:
         optimizedInput->SetTypeAnn(pull.Input().Ref().GetTypeAnn());
         optimizedInput->CopyConstraints(pull.Input().Ref());
 
-        TDqsPipelineConfigurator peepholeConfig; 
+        TDqsPipelineConfigurator peepholeConfig;
         TPeepholeSettings peepholeSettings;
         peepholeSettings.CommonConfig = &peepholeConfig;
         bool hasNonDeterministicFunctions;
@@ -923,8 +923,8 @@ private:
         executionPlanner->SetPublicIds(stage2publicId);
 
         auto settings = std::make_shared<TDqSettings>(*State->Settings);
-        auto tasksPerStage = settings->MaxTasksPerStage.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerStage); 
-        const auto maxTasksPerOperation = State->Settings->MaxTasksPerOperation.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerOperation); 
+        auto tasksPerStage = settings->MaxTasksPerStage.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerStage);
+        const auto maxTasksPerOperation = State->Settings->MaxTasksPerOperation.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerOperation);
 
         auto maxDataSizePerJob = settings->MaxDataSizePerJob.Get().GetOrElse(TDqSettings::TDefault::MaxDataSizePerJob);
         auto stagesCount = executionPlanner->StagesCount();
@@ -937,7 +937,7 @@ private:
 
         if (stagesCount > maxTasksPerOperation && canFallback) {
             return FallbackWithMessage(
-                pull.Ref(), 
+                pull.Ref(),
                 TStringBuilder()
                 << "Too many stages: "
                 << stagesCount << " > "
@@ -960,7 +960,7 @@ private:
         bool fallbackFlag = false;
         if (executionPlanner->MaxDataSizePerJob() > maxDataSizePerJob && canFallback) {
             return FallbackWithMessage(
-                pull.Ref(), 
+                pull.Ref(),
                 TStringBuilder()
                 << "MaxDataSizePerJob reached: "
                 << executionPlanner->MaxDataSizePerJob() << " > "
@@ -971,7 +971,7 @@ private:
         auto& tasks = executionPlanner->GetTasks();
         if (tasks.size() > maxTasksPerOperation && canFallback) {
             return FallbackWithMessage(
-                pull.Ref(), 
+                pull.Ref(),
                 TStringBuilder()
                 << "Too many tasks: "
                 << tasks.size() << " > "
@@ -990,27 +990,27 @@ private:
                 t.MutableProgram()->SetRaw(lambda);
 
                 Yql::DqsProto::TTaskMeta taskMeta;
-                t.MutableMeta()->UnpackTo(&taskMeta); 
+                t.MutableMeta()->UnpackTo(&taskMeta);
                 for (const auto& file : uploadList) {
                     *taskMeta.AddFiles() = file;
                 }
-                t.MutableMeta()->PackFrom(taskMeta); 
-                if (const auto it = allPublicIds.find(taskMeta.GetStageId()); allPublicIds.cend() != it) 
-                    ++it->second; 
+                t.MutableMeta()->PackFrom(taskMeta);
+                if (const auto it = allPublicIds.find(taskMeta.GetStageId()); allPublicIds.cend() != it)
+                    ++it->second;
             }
         }
 
         MarkProgressStarted(allPublicIds, State->ProgressWriter);
 
         if (fallbackFlag) {
-            return FallbackWithMessage(pull.Ref(), "Too big attachment", ctx); 
+            return FallbackWithMessage(pull.Ref(), "Too big attachment", ctx);
         }
 
         IDataProvider::TFillSettings fillSettings = NCommon::GetFillSettings(pull.Ref());
         settings = settings->WithFillSettings(fillSettings);
 
         if (const auto optLLVM = State->TypeCtx->OptLLVM) {
-            settings->OptLLVM = *optLLVM; 
+            settings->OptLLVM = *optLLVM;
         }
 
         auto graphParams = GatherGraphParams(optimizedInput);
@@ -1040,7 +1040,7 @@ private:
         }
 
         IDqGateway::TDqProgressWriter progressWriter = MakeDqProgressWriter(allPublicIds);
- 
+
         auto future = State->DqGateway->ExecutePlan(State->SessionId, *executionPlanner.Get(), columns, secureParams, graphParams,
             settings, progressWriter, ModulesMapping, fillSettings.Discard);
 
@@ -1075,9 +1075,9 @@ private:
                 }
                 state->Statistics[state->MetricId++].Entries.push_back(TOperationStatistics::TEntry("Fallback", 0, 0, 0, 0, 1));
                 // never fallback will be captured in yql_facade
-                auto issues = TIssues{TIssue(ctx.GetPosition(input->Pos()), "Gateway Error").SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_WARNING)}; 
-                issues.AddIssues(res.Issues); 
-                ctx.AssociativeIssues.emplace(input.Get(), std::move(issues)); 
+                auto issues = TIssues{TIssue(ctx.GetPosition(input->Pos()), "Gateway Error").SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_WARNING)};
+                issues.AddIssues(res.Issues);
+                ctx.AssociativeIssues.emplace(input.Get(), std::move(issues));
                 return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Error);
             }
 
@@ -1171,39 +1171,39 @@ private:
         }, "");
     }
 
-    IDqGateway::TDqProgressWriter MakeDqProgressWriter(const THashMap<ui32, ui32>& allPublicIds) const { 
+    IDqGateway::TDqProgressWriter MakeDqProgressWriter(const THashMap<ui32, ui32>& allPublicIds) const {
         IDqGateway::TDqProgressWriter dqProgressWriter = [progressWriter = State->ProgressWriter, allPublicIds](const TString& stage) {
             for (const auto& publicId : allPublicIds) {
-                auto p = TOperationProgress(TString(DqProviderName), publicId.first, TOperationProgress::EState::InProgress, stage); 
-                if (publicId.second) { 
-                    p.Counters.ConstructInPlace(); 
-                    p.Counters->Running = p.Counters->Total = publicId.second; 
-                } 
+                auto p = TOperationProgress(TString(DqProviderName), publicId.first, TOperationProgress::EState::InProgress, stage);
+                if (publicId.second) {
+                    p.Counters.ConstructInPlace();
+                    p.Counters->Running = p.Counters->Total = publicId.second;
+                }
                 progressWriter(p);
             }
         };
         return dqProgressWriter;
     }
 
-    static void MarkProgressStarted(const THashMap<ui32, ui32>& allPublicIds, const TOperationProgressWriter& progressWriter) { 
-        for(const auto& publicId : allPublicIds) { 
-            auto p = TOperationProgress(TString(DqProviderName), publicId.first, TOperationProgress::EState::InProgress); 
-            if (publicId.second) { 
-                p.Counters.ConstructInPlace(); 
-                p.Counters->Running = p.Counters->Total = publicId.second; 
-            } 
+    static void MarkProgressStarted(const THashMap<ui32, ui32>& allPublicIds, const TOperationProgressWriter& progressWriter) {
+        for(const auto& publicId : allPublicIds) {
+            auto p = TOperationProgress(TString(DqProviderName), publicId.first, TOperationProgress::EState::InProgress);
+            if (publicId.second) {
+                p.Counters.ConstructInPlace();
+                p.Counters->Running = p.Counters->Total = publicId.second;
+            }
             progressWriter(p);
         }
     }
 
-    static void MarkProgressFinished(const THashMap<ui32, ui32>& allPublicIds, bool success, const TOperationProgressWriter& progressWriter) { 
-        for(const auto& publicId : allPublicIds) { 
+    static void MarkProgressFinished(const THashMap<ui32, ui32>& allPublicIds, bool success, const TOperationProgressWriter& progressWriter) {
+        for(const auto& publicId : allPublicIds) {
             auto state = success ? TOperationProgress::EState::Finished : TOperationProgress::EState::Failed;
-            auto p = TOperationProgress(TString(DqProviderName), publicId.first, state); 
-            if (publicId.second) { 
-                p.Counters.ConstructInPlace(); 
-                (success ? p.Counters->Completed : p.Counters->Failed) = p.Counters->Total = publicId.second; 
-            } 
+            auto p = TOperationProgress(TString(DqProviderName), publicId.first, state);
+            if (publicId.second) {
+                p.Counters.ConstructInPlace();
+                (success ? p.Counters->Completed : p.Counters->Failed) = p.Counters->Total = publicId.second;
+            }
             progressWriter(p);
         }
     }
@@ -1260,8 +1260,8 @@ private:
     mutable THashMap<TString, TString> ModulesMapping;
 };
 
-} 
- 
+}
+
 IGraphTransformer* CreateInMemoryExecTransformer(const TDqStatePtr& state) {
     return new TInMemoryExecTransformer(state);
 }

@@ -30,8 +30,8 @@
 #include <util/system/valgrind.h>
 #include <utility>
 
-#include <functional> 
- 
+#include <functional>
+
 const TDuration DEFAULT_DISPATCH_TIMEOUT = NSan::PlainOrUnderSanitizer(
         NValgrind::PlainOrUnderValgrind(TDuration::Seconds(60), TDuration::Seconds(120)),
         TDuration::Seconds(120)
@@ -355,7 +355,7 @@ namespace NActors {
 
         template <typename TEvent>
         TEvent* GrabEdgeEvent(TAutoPtr<IEventHandle>& handle, TDuration simTimeout = TDuration::Max()) {
-            std::function<bool(const TEvent&)> truth = [](const TEvent&) { return true; }; 
+            std::function<bool(const TEvent&)> truth = [](const TEvent&) { return true; };
             return GrabEdgeEventIf(handle, truth, simTimeout);
         }
 
@@ -644,7 +644,7 @@ namespace NActors {
     }
 
     template <typename TEvent>
-    TEvent* FindEvent(TEventsList& events, const std::function<bool(const TEvent&)>& predicate) { 
+    TEvent* FindEvent(TEventsList& events, const std::function<bool(const TEvent&)>& predicate) {
         for (auto& event : events) {
             if (event && event->GetTypeRewrite() == TEvent::EventType && predicate(*static_cast<TEvent*>(event->GetBase()))) {
                 return static_cast<TEvent*>(event->GetBase());
@@ -669,7 +669,7 @@ namespace NActors {
 
     template <typename TEvent>
     TEvent* GrabEvent(TEventsList& events, TAutoPtr<IEventHandle>& ev,
-        const std::function<bool(const typename TEvent::TPtr&)>& predicate) { 
+        const std::function<bool(const typename TEvent::TPtr&)>& predicate) {
         ev.Destroy();
         for (auto& event : events) {
             if (event && event->GetTypeRewrite() == TEvent::EventType) {

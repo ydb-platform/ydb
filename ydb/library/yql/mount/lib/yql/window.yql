@@ -38,7 +38,7 @@
 
 # list_type:type, factory:lambda, extractor:lambda
 (let extractor_traits_factory (lambda '(list_type extractor factory) (block '(
-  (let traits (Apply factory (ListType (TypeOf (Apply extractor (InstanceOf (ListItemType list_type))))))) 
+  (let traits (Apply factory (ListType (TypeOf (Apply extractor (InstanceOf (ListItemType list_type)))))))
   (let init (NthArg '1 traits))
   (let update (NthArg '2 traits))
   (let shift (lambda '(value state) (Void)))
@@ -128,15 +128,15 @@
 (let list_traits_factory_opt_gen (lambda '(limit defval) (block '(
 (return (lambda '(list_type) (block '(
     (let item_type (ListItemType list_type))
-    (let init (lambda '(value) (MatchType item_type 
-        'Optional (lambda '() (ToList value)) 
-        'Null (lambda '() (EmptyList)) 
-        (lambda '() (AsList value))))) 
+    (let init (lambda '(value) (MatchType item_type
+        'Optional (lambda '() (ToList value))
+        'Null (lambda '() (EmptyList))
+        (lambda '() (AsList value)))))
     (let update (lambda '(value state) (block '(
-       (let x (MatchType item_type 
-        'Optional (lambda '() (IfPresent value (lambda '(value) (Insert state value)) state)) 
-        'Null (lambda '() (EmptyList)) 
-        (lambda '() (Insert state value)))) 
+       (let x (MatchType item_type
+        'Optional (lambda '() (IfPresent value (lambda '(value) (Insert state value)) state))
+        'Null (lambda '() (EmptyList))
+        (lambda '() (Insert state value))))
        (return (If (== limit (Uint64 '0)) x (Take x limit)))))))
     (let shift (lambda '(value state) (Void)))
     (let current (lambda '(state) state))
@@ -239,7 +239,7 @@
     (let shift (lambda '(value state) (Void)))
     (let current (lambda '(state) (Apply UdfSetGetResult state)))
 
-    (return (WindowTraits value_type init update shift current (EmptyList))) 
+    (return (WindowTraits value_type init update shift current (EmptyList)))
 ))))
 
 # list_type:type n:ui32 buffer:ui32
@@ -259,7 +259,7 @@
     (let shift (lambda '(value state) (Void)))
     (let current (lambda '(state) (Apply UdfTopFreqGet state n)))
 
-    (return (WindowTraits value_type init update shift current (EmptyList))) 
+    (return (WindowTraits value_type init update shift current (EmptyList)))
 ))))
 
 # list_type:type extractor:lambda count:ui32 is_top:atom
@@ -280,7 +280,7 @@
     (let shift (lambda '(value state) (Void)))
     (let current (lambda '(state) (Apply UdfTopGetResult state)))
 
-    (return (WindowTraits value_type init update shift current (EmptyList))) 
+    (return (WindowTraits value_type init update shift current (EmptyList)))
 ))))
 
 # list_type:type key_extractor:lambda payload_extractor:lambda count:ui32 is_top:atom
@@ -304,7 +304,7 @@
     (let shift (lambda '(value state) (Void)))
     (let current (lambda '(state) (Apply UdfTopGetResult state)))
 
-    (return (WindowTraits value_type init update shift current (List (ListType payload_type)))) 
+    (return (WindowTraits value_type init update shift current (List (ListType payload_type))))
 ))))
 
 # list_type:type n:double
@@ -379,14 +379,14 @@
 
     (let init_optional
         (lambda '(value)
-            (MatchType item_type 
-                'Optional (lambda '() 
+            (MatchType item_type
+                'Optional (lambda '()
                     (IfPresent value
                         (lambda '(value) (Just (Apply init value)))
                         (Nothing (OptionalType (TypeOf (Apply init (InstanceOf (OptionalItemType (TypeOf value)))))))
                     )
                 )
-                'Null (lambda '() defval) 
+                'Null (lambda '() defval)
                 (lambda '() (Apply init value))
             )
         )
@@ -394,8 +394,8 @@
 
     (let update_optional
         (lambda '(value state)
-            (MatchType item_type 
-                'Optional (lambda '() 
+            (MatchType item_type
+                'Optional (lambda '()
                     (IfPresent state
                         (lambda '(state)
                             (IfPresent value
@@ -406,7 +406,7 @@
                         (Apply init_optional value)
                     )
                 )
-                'Null (lambda '() defval) 
+                'Null (lambda '() defval)
                 (lambda '() (Apply update value state))
             )
         )
@@ -415,7 +415,7 @@
 # todo: fill the body
     (let shift_optional (lambda '(value state) (Void)))
 
-    (let current_optional (lambda '(state) (MatchType item_type 'Optional (lambda '() (Map state current)) 'Null (lambda '() defval) (lambda '() (Apply current state))))) 
+    (let current_optional (lambda '(state) (MatchType item_type 'Optional (lambda '() (Map state current)) 'Null (lambda '() defval) (lambda '() (Apply current state)))))
     (return (WindowTraits item_type init_optional update_optional shift_optional current_optional defval))
 ))))
 
@@ -432,14 +432,14 @@
 
     (let init_optional
         (lambda '(value parent)
-            (MatchType item_type 
-                'Optional (lambda '() 
+            (MatchType item_type
+                'Optional (lambda '()
                     (IfPresent value
                         (lambda '(value) (Just (Apply init value parent)))
                         (Nothing (OptionalType (TypeOf (Apply init (InstanceOf (OptionalItemType (TypeOf value))) parent))))
                     )
                 )
-                'Null (lambda '() defval) 
+                'Null (lambda '() defval)
                 (lambda '() (Apply init value parent))
             )
         )
@@ -449,8 +449,8 @@
 
     (let update_optional
         (lambda '(value state parent)
-            (MatchType item_type 
-                'Optional (lambda '() 
+            (MatchType item_type
+                'Optional (lambda '()
                     (IfPresent state
                         (lambda '(state)
                             (IfPresent value
@@ -461,68 +461,68 @@
                         (Apply init_optional value parent)
                     )
                 )
-                'Null (lambda '() defval) 
+                'Null (lambda '() defval)
                 (lambda '() (Apply update value state parent))
             )
         )
     )
 
-    (let current_optional (lambda '(state) (MatchType item_type 'Optional (lambda '() (Map state current)) 'Null (lambda '() defval) (lambda '() (Apply current state))))) 
+    (let current_optional (lambda '(state) (MatchType item_type 'Optional (lambda '() (Map state current)) 'Null (lambda '() defval) (lambda '() (Apply current state)))))
     (return (WindowTraits item_type init_optional update_optional shift_optional current_optional defval))
 ))))
 
-# list_type:type factory:lambda 
-# support optional values, init and update with parent 
-(let flatten_traits_factory_parent (lambda '(list_type factory) (block '( 
-    (let item_type (ListItemType list_type)) 
-    (let traits (Apply factory (MatchType item_type 'Optional (lambda '() (ListType (OptionalItemType item_type))) (lambda '() (ListType item_type))))) 
-    (let init (NthArg '1 traits)) 
-    (let update (NthArg '2 traits)) 
-    (let shift (NthArg '3 traits)) 
-    (let current (NthArg '4 traits)) 
-    (let defval (NthArg '5 traits)) 
- 
-    (let init_optional 
-        (lambda '(value parent) 
-            (MatchType item_type 
-                'Optional (lambda '() 
-                    (IfPresent value 
-                        (lambda '(value) (Just (Apply init value parent))) 
-                        (Nothing (OptionalType (TypeOf (Apply init (InstanceOf (OptionalItemType (TypeOf value))) parent)))) 
-                    ) 
-                ) 
-                'Null (lambda '() defval) 
-                (lambda '() (Apply init value parent)) 
-            ) 
-        ) 
-    ) 
- 
-    (let shift_optional (lambda '(value state) (Void))) 
- 
-    (let update_optional 
-        (lambda '(value state parent) 
-            (MatchType item_type 
-                'Optional (lambda '() 
-                    (IfPresent state 
-                        (lambda '(state) 
-                            (IfPresent value 
-                                (lambda '(value) (Just (Apply update value state parent))) 
-                                (Just state) 
-                            ) 
-                        ) 
-                        (Apply init_optional value parent) 
-                    ) 
-                ) 
-                'Null (lambda '() defval) 
-                (lambda '() (Apply update value state parent)) 
-            ) 
-        ) 
-    ) 
- 
-    (let current_optional (lambda '(state) (MatchType item_type 'Optional (lambda '() (FlatMap state current)) 'Null (lambda '() defval) (lambda '() (Apply current state))))) 
-    (return (WindowTraits item_type init_optional update_optional shift_optional current_optional defval)) 
-)))) 
- 
+# list_type:type factory:lambda
+# support optional values, init and update with parent
+(let flatten_traits_factory_parent (lambda '(list_type factory) (block '(
+    (let item_type (ListItemType list_type))
+    (let traits (Apply factory (MatchType item_type 'Optional (lambda '() (ListType (OptionalItemType item_type))) (lambda '() (ListType item_type)))))
+    (let init (NthArg '1 traits))
+    (let update (NthArg '2 traits))
+    (let shift (NthArg '3 traits))
+    (let current (NthArg '4 traits))
+    (let defval (NthArg '5 traits))
+
+    (let init_optional
+        (lambda '(value parent)
+            (MatchType item_type
+                'Optional (lambda '()
+                    (IfPresent value
+                        (lambda '(value) (Just (Apply init value parent)))
+                        (Nothing (OptionalType (TypeOf (Apply init (InstanceOf (OptionalItemType (TypeOf value))) parent))))
+                    )
+                )
+                'Null (lambda '() defval)
+                (lambda '() (Apply init value parent))
+            )
+        )
+    )
+
+    (let shift_optional (lambda '(value state) (Void)))
+
+    (let update_optional
+        (lambda '(value state parent)
+            (MatchType item_type
+                'Optional (lambda '()
+                    (IfPresent state
+                        (lambda '(state)
+                            (IfPresent value
+                                (lambda '(value) (Just (Apply update value state parent)))
+                                (Just state)
+                            )
+                        )
+                        (Apply init_optional value parent)
+                    )
+                )
+                'Null (lambda '() defval)
+                (lambda '() (Apply update value state parent))
+            )
+        )
+    )
+
+    (let current_optional (lambda '(state) (MatchType item_type 'Optional (lambda '() (FlatMap state current)) 'Null (lambda '() defval) (lambda '() (Apply current state)))))
+    (return (WindowTraits item_type init_optional update_optional shift_optional current_optional defval))
+))))
+
 # list_type:type
 # support optional values
 (let min_traits_factory_opt (lambda '(list_type) (Apply simple_traits_factory list_type (lambda '(one two) (AggrMin one two)))))
@@ -552,11 +552,11 @@
 
 # list_type:type count:ui32
 # support optional values
-(let set_traits_factory_opt (lambda '(list_type count) (Apply flatten_traits_factory_parent list_type (lambda '(list_type) (Apply set_traits_factory_raw list_type count))))) 
+(let set_traits_factory_opt (lambda '(list_type count) (Apply flatten_traits_factory_parent list_type (lambda '(list_type) (Apply set_traits_factory_raw list_type count)))))
 
 # list_type:type n:ui32 buffer:ui32
 # support optional values
-(let topfreq_traits_factory_opt (lambda '(list_type n buffer) (Apply flatten_traits_factory_parent list_type (lambda '(list_type) (Apply topfreq_traits_factory_raw list_type n buffer))))) 
+(let topfreq_traits_factory_opt (lambda '(list_type n buffer) (Apply flatten_traits_factory_parent list_type (lambda '(list_type) (Apply topfreq_traits_factory_raw list_type n buffer)))))
 
 # list_type:type
 # support optional values
@@ -568,7 +568,7 @@
 
 # list_type:type, factory:lambda, extractor:lambda
 (let extractor_traits_factory (lambda '(list_type extractor factory) (block '(
-  (let traits (Apply factory (ListType (TypeOf (Apply extractor (InstanceOf (ListItemType list_type))))))) 
+  (let traits (Apply factory (ListType (TypeOf (Apply extractor (InstanceOf (ListItemType list_type)))))))
   (let init (NthArg '1 traits))
   (let update (NthArg '2 traits))
   (let shift (NthArg '3 traits))
@@ -577,12 +577,12 @@
   (let init_ext (lambda '(row) (Apply init (Apply extractor row))))
   (let update_ext (lambda '(row state) (Apply update (Apply extractor row) state)))
   (let shift_ext (lambda '(row state) (Apply shift (Apply extractor row) state)))
-  (return (WindowTraits (ListItemType list_type) init_ext update_ext shift_ext current defval)) 
+  (return (WindowTraits (ListItemType list_type) init_ext update_ext shift_ext current defval))
 ))))
 
 # list_type:type, factory:lambda, extractor:lambda
 (let extractor_traits_factory_parent (lambda '(list_type extractor factory) (block '(
-  (let traits (Apply factory (ListType (TypeOf (Apply extractor (InstanceOf (ListItemType list_type))))))) 
+  (let traits (Apply factory (ListType (TypeOf (Apply extractor (InstanceOf (ListItemType list_type)))))))
   (let init (NthArg '1 traits))
   (let update (NthArg '2 traits))
   (let shift (NthArg '3 traits))
@@ -591,7 +591,7 @@
   (let init_ext (lambda '(row parent) (Apply init (Apply extractor row) parent)))
   (let update_ext (lambda '(row state parent) (Apply update (Apply extractor row) state parent)))
   (let shift_ext (lambda '(row state) (Apply shift (Apply extractor row) state)))
-  (return (WindowTraits (ListItemType list_type) init_ext update_ext shift_ext current defval)) 
+  (return (WindowTraits (ListItemType list_type) init_ext update_ext shift_ext current defval))
 ))))
 
 # list_type:type, extractor:lambda
@@ -606,9 +606,9 @@
 (let bit_and_traits_factory (lambda '(list_type extractor) (Apply extractor_traits_factory list_type extractor bit_and_traits_factory_opt)))
 (let bit_or_traits_factory (lambda '(list_type extractor) (Apply extractor_traits_factory list_type extractor bit_or_traits_factory_opt)))
 (let bit_xor_traits_factory (lambda '(list_type extractor) (Apply extractor_traits_factory list_type extractor bit_xor_traits_factory_opt)))
-(let and_traits_factory (lambda '(list_type extractor) (Apply extractor_traits_factory list_type (lambda '(v) (SafeCast (Apply extractor v) (DataType 'Bool))) bool_and_traits_factory_opt))) 
-(let or_traits_factory (lambda '(list_type extractor) (Apply extractor_traits_factory list_type (lambda '(v) (SafeCast (Apply extractor v) (DataType 'Bool))) bool_or_traits_factory_opt))) 
-(let xor_traits_factory (lambda '(list_type extractor) (Apply extractor_traits_factory list_type (lambda '(v) (SafeCast (Apply extractor v) (DataType 'Bool))) bool_xor_traits_factory_opt))) 
+(let and_traits_factory (lambda '(list_type extractor) (Apply extractor_traits_factory list_type (lambda '(v) (SafeCast (Apply extractor v) (DataType 'Bool))) bool_and_traits_factory_opt)))
+(let or_traits_factory (lambda '(list_type extractor) (Apply extractor_traits_factory list_type (lambda '(v) (SafeCast (Apply extractor v) (DataType 'Bool))) bool_or_traits_factory_opt)))
+(let xor_traits_factory (lambda '(list_type extractor) (Apply extractor_traits_factory list_type (lambda '(v) (SafeCast (Apply extractor v) (DataType 'Bool))) bool_xor_traits_factory_opt)))
 (let avg_traits_factory (lambda '(list_type extractor) (Apply extractor_traits_factory list_type extractor avg_traits_factory_opt)))
 (let list_traits_factory (lambda '(list_type extractor limit) (Apply extractor_traits_factory list_type extractor (Apply list_traits_factory_opt_gen limit (Null)))))
 (let list2_traits_factory (lambda '(list_type extractor limit) (Apply extractor_traits_factory list_type extractor (Apply list_traits_factory_opt_gen limit empty_list))))
@@ -742,49 +742,49 @@
     (return (WindowTraits item_type init_opt update_opt shift_opt current_opt defval))
 ))))
 
-# factory:lambda list_type:type first:lambda second:lambda 
-# support optional values, init and update has parent arg 
-(let list_by_traits_factory_opt_parent (lambda '(factory list_type first second) (block '( 
-    (let item_type (ListItemType list_type)) 
-    (let key_type (TypeOf (Apply first (InstanceOf item_type)))) 
-    (let traits (Apply factory list_type first second)) 
-    (let init (NthArg '1 traits)) 
-    (let update (NthArg '2 traits)) 
-    (let shift (NthArg '3 traits)) 
-    (let current (NthArg '4 traits)) 
-    (let defval (NthArg '5 traits)) 
- 
-    (let init_opt (lambda '(row parent) (MatchType key_type 
-        'Optional (lambda '() 
-            (IfPresent (Apply first row) 
-                (lambda '(key) (Just (Apply init row parent))) 
-                (Nothing (OptionalType (TypeOf (Apply init (InstanceOf (TypeOf row)) parent)))) 
-            ) 
-        ) 
-        'Null (lambda '() defval) 
-        (lambda '() (Apply init row parent)) 
-    ))) 
-    (let update_opt (lambda '(row state parent) (MatchType key_type 
-        'Optional (lambda '() 
-            (IfPresent state 
-                (lambda '(state) 
-                    (IfPresent (Apply first row) 
-                        (lambda '(key) (Just (Apply update row state parent))) 
-                        (Just state) 
-                    ) 
-                ) 
-                (Apply init_opt row parent) 
-            ) 
-        ) 
-        'Null (lambda '() defval) 
-        (lambda '() (Apply update row state parent)) 
-    ))) 
- 
-    (let shift_opt (lambda '(value state) (Void))) 
-    (let current_opt (lambda '(state) (MatchType key_type 'Optional (lambda '() (FlatMap state current)) 'Null (lambda '() defval) (lambda '() (Apply current state))))) 
-    (return (WindowTraits item_type init_opt update_opt shift_opt current_opt defval)) 
-)))) 
- 
+# factory:lambda list_type:type first:lambda second:lambda
+# support optional values, init and update has parent arg
+(let list_by_traits_factory_opt_parent (lambda '(factory list_type first second) (block '(
+    (let item_type (ListItemType list_type))
+    (let key_type (TypeOf (Apply first (InstanceOf item_type))))
+    (let traits (Apply factory list_type first second))
+    (let init (NthArg '1 traits))
+    (let update (NthArg '2 traits))
+    (let shift (NthArg '3 traits))
+    (let current (NthArg '4 traits))
+    (let defval (NthArg '5 traits))
+
+    (let init_opt (lambda '(row parent) (MatchType key_type
+        'Optional (lambda '()
+            (IfPresent (Apply first row)
+                (lambda '(key) (Just (Apply init row parent)))
+                (Nothing (OptionalType (TypeOf (Apply init (InstanceOf (TypeOf row)) parent))))
+            )
+        )
+        'Null (lambda '() defval)
+        (lambda '() (Apply init row parent))
+    )))
+    (let update_opt (lambda '(row state parent) (MatchType key_type
+        'Optional (lambda '()
+            (IfPresent state
+                (lambda '(state)
+                    (IfPresent (Apply first row)
+                        (lambda '(key) (Just (Apply update row state parent)))
+                        (Just state)
+                    )
+                )
+                (Apply init_opt row parent)
+            )
+        )
+        'Null (lambda '() defval)
+        (lambda '() (Apply update row state parent))
+    )))
+
+    (let shift_opt (lambda '(value state) (Void)))
+    (let current_opt (lambda '(state) (MatchType key_type 'Optional (lambda '() (FlatMap state current)) 'Null (lambda '() defval) (lambda '() (Apply current state)))))
+    (return (WindowTraits item_type init_opt update_opt shift_opt current_opt defval))
+))))
+
 # list_type:type value:lambda weight:lambda intervals:integer
 # support optional values
 (let histogram_adaptive_ward_traits_factory (lambda '(list_type value weight intervals) (Apply double_traits_factory_opt_parent (lambda '(list_type value weight) (Apply histogram_adaptive_ward_traits_factory_raw list_type value weight intervals)) list_type value weight)))
@@ -834,7 +834,7 @@
 
 (let top_bottom_traits_factory (lambda '(list_type extractor count is_top)
     (Apply extractor_traits_factory_parent list_type extractor (lambda '(list_type)
-        (Apply flatten_traits_factory_parent list_type (lambda '(list_type) 
+        (Apply flatten_traits_factory_parent list_type (lambda '(list_type)
             (Apply top_traits_factory_raw list_type extractor count is_top)))))))
 
 (let top_traits_factory (lambda '(list_type extractor count)
@@ -844,7 +844,7 @@
     (Apply top_bottom_traits_factory list_type extractor count '0)))
 
 (let top_bottom_by_traits_factory (lambda '(list_type key_extractor payload_extractor count is_top)
-    (Apply list_by_traits_factory_opt_parent (lambda '(list_type key_extractor payload_extractor) 
+    (Apply list_by_traits_factory_opt_parent (lambda '(list_type key_extractor payload_extractor)
         (Apply top_by_traits_factory_raw list_type key_extractor payload_extractor count is_top)) list_type key_extractor payload_extractor)))
 
 (let top_by_traits_factory (lambda '(list_type key_extractor payload_extractor count)

@@ -5,14 +5,14 @@ namespace NKikimr {
 namespace NMiniKQL {
 
 struct TUnboxedValueStream : public IOutputStream {
-    NUdf::TUnboxedValue Value_; 
- 
-    TUnboxedValueStream(); 
- 
-    NUdf::TUnboxedValuePod Value(); 
- 
-    void DoWrite(const void* buf, size_t len) override; 
-}; 
+    NUdf::TUnboxedValue Value_;
+
+    TUnboxedValueStream();
+
+    NUdf::TUnboxedValuePod Value();
+
+    void DoWrite(const void* buf, size_t len) override;
+};
 
 }
 }

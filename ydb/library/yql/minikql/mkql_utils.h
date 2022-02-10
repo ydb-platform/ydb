@@ -20,7 +20,7 @@ public:
 
     inline static TStatus Error(TString&& error) {
         Y_VERIFY_DEBUG(!error.empty());
-        return TStatus(std::move(error)); 
+        return TStatus(std::move(error));
     }
 
     inline static TStatus Error() {
@@ -45,7 +45,7 @@ private:
     inline TStatus() = default;
 
     inline TStatus(TString&& error)
-        : Error_(std::move(error)) 
+        : Error_(std::move(error))
     {
     }
 

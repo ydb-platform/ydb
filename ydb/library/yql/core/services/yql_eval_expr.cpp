@@ -482,7 +482,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
         return IGraphTransformer::TStatus::Ok;
     }), "CheckPure", EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR, "Ensure expression is computable");
 
-    pipeline.Add(MakePeepholeOptimization(&types), "PeepHole", EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR, "Peephole optimizations"); 
+    pipeline.Add(MakePeepholeOptimization(&types), "PeepHole", EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR, "Peephole optimizations");
 
     auto fullTransformer = pipeline.Build();
 
@@ -835,7 +835,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
                         return nullptr;
                     }
 
-                    keys.push_back(ctx.ReplaceNode(TExprNode::TPtr(eachKey), *list, std::move(name))); 
+                    keys.push_back(ctx.ReplaceNode(TExprNode::TPtr(eachKey), *list, std::move(name)));
                 }
             }
 
@@ -895,7 +895,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
             externalWorldReplaces.emplace(x.first, ctx.NewWorld(x.first->Pos()));
         }
 
-        newArg = ctx.ReplaceNodes(std::move(newArg), externalWorldReplaces); 
+        newArg = ctx.ReplaceNodes(std::move(newArg), externalWorldReplaces);
         TExprNode::TPtr clonedArg;
         {
             TNodeOnNodeOwnedMap deepClones;
@@ -1067,7 +1067,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
                 return true;
             });
 
-            result = ctx.ReplaceNodes(std::move(result), replaces); 
+            result = ctx.ReplaceNodes(std::move(result), replaces);
             ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas);
             hasPendingEvaluations = hasPendingEvaluations.Combine(IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true));
             return result;

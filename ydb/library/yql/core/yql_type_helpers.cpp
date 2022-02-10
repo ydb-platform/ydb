@@ -50,7 +50,7 @@ bool SilentGetSequenceItemType(TPosition pos, const TTypeAnnotationNode& inputTy
         return false;
     }
 
-    if (allowMultiIO && itemType->GetKind() != ETypeAnnotationKind::Struct && itemType->GetKind() != ETypeAnnotationKind::Multi) { 
+    if (allowMultiIO && itemType->GetKind() != ETypeAnnotationKind::Struct && itemType->GetKind() != ETypeAnnotationKind::Multi) {
         if (itemType->GetKind() != ETypeAnnotationKind::Variant) {
             error = TIssue(pos, TStringBuilder() << "Expected Struct or Variant as row type, but got: " << *itemType);
             return false;
@@ -75,8 +75,8 @@ bool SilentGetSequenceItemType(TPosition pos, const TTypeAnnotationNode& inputTy
             }
         }
     } else {
-        if (itemType->GetKind() != ETypeAnnotationKind::Struct && itemType->GetKind() != ETypeAnnotationKind::Multi) { 
-            error = TIssue(pos, TStringBuilder() << "Expected Struct or Multi as row type, but got: " << *itemType); 
+        if (itemType->GetKind() != ETypeAnnotationKind::Struct && itemType->GetKind() != ETypeAnnotationKind::Multi) {
+            error = TIssue(pos, TStringBuilder() << "Expected Struct or Multi as row type, but got: " << *itemType);
             return false;
         }
     }

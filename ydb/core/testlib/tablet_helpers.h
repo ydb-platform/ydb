@@ -11,7 +11,7 @@
 #include <ydb/core/protos/tablet_database.pb.h>
 #include <ydb/core/tx/tx.h>
 
-#include <functional> 
+#include <functional>
 
 namespace NKikimr {
     struct TAppPrepare;

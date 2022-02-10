@@ -8,7 +8,7 @@
 #include <util/stream/format.h>
 #include <util/system/type_name.h>
 #include <util/generic/hash_set.h>
-#include <utility> 
+#include <utility>
 
 /*
  * Cout << DbgDump(any) << Endl;
@@ -24,7 +24,7 @@ namespace NPrivate {
         struct TDump: public TDumpBase, public TColorSchemeContainer<TColorScheme> {
             template <typename... Args>
             inline TDump(Args&&... args)
-                : TDumpBase(std::forward<Args>(args)...) 
+                : TDumpBase(std::forward<Args>(args)...)
             {
             }
 
@@ -44,7 +44,7 @@ namespace NPrivate {
         struct TDump: public TDumpBase, public TColorSchemeContainer<TColorScheme> {
             template <typename... Args>
             inline TDump(Args&&... args)
-                : TDumpBase(std::forward<Args>(args)...) 
+                : TDumpBase(std::forward<Args>(args)...)
             {
             }
 

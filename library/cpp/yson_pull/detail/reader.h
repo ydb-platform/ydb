@@ -657,12 +657,12 @@ namespace NYsonPull {
                         yield(lexer_.read_percent_scalar());
                         break;
 
-                    case char_class::none: 
-                        COLD_BLOCK_BYVALUE 
-                        lexer_.fail("Invalid yson value."); 
-                        COLD_BLOCK_END 
-                        break; 
- 
+                    case char_class::none:
+                        COLD_BLOCK_BYVALUE
+                        lexer_.fail("Invalid yson value.");
+                        COLD_BLOCK_END
+                        break;
+
                     default:
                         Y_UNREACHABLE();
                 }

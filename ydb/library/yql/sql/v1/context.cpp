@@ -46,7 +46,7 @@ THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
     {"WarnOnAnsiAliasShadowing", &TContext::WarnOnAnsiAliasShadowing},
     {"PullUpFlatMapOverJoin", &TContext::PragmaPullUpFlatMapOverJoin},
     {"DqEngineEnable", &TContext::DqEngineEnable},
-    {"DqEngineForce", &TContext::DqEngineForce}, 
+    {"DqEngineForce", &TContext::DqEngineForce},
     {"RegexUseRe2", &TContext::PragmaRegexUseRe2},
     {"OrderedColumns", &TContext::OrderedColumns},
     {"BogousStarInGroupByOverJoin", &TContext::BogousStarInGroupByOverJoin},

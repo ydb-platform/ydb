@@ -74,7 +74,7 @@ namespace NYql::NDqs {
                 , ErrorCounter(ServiceProxyActorCounters->GetCounter("UnrecoverableError", /*derivative=*/ true))
                 , Request(dynamic_cast<const RequestType*>(ctx->GetRequest()))
                 , TraceId(traceId)
-                , Username(username) 
+                , Username(username)
                 , Promise(NewPromise<void>())
             {
                 Settings->Dispatch(Request->GetSettings());
@@ -233,7 +233,7 @@ namespace NYql::NDqs {
 
             const RequestType* Request;
             const TString TraceId;
-            const TString Username; 
+            const TString Username;
             TPromise<void> Promise;
             const TInstant RequestStartTime = TInstant::Now();
 

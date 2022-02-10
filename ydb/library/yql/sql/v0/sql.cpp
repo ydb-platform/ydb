@@ -262,41 +262,41 @@ static bool PureColumnOrNamedListStr(const TRule_pure_column_or_named_list& node
     return true;
 }
 
-namespace { 
+namespace {
 
 bool IsDistinctOptSet(const TRule_opt_set_quantifier& node) {
     return node.HasBlock1() && node.GetBlock1().GetToken1().GetId() == SQLLexerTokens::TOKEN_DISTINCT;
 }
 
-std::pair<TString, bool> FlexType(const TRule_flex_type& node, TTranslation& ctx) { 
-    switch (node.Alt_case()) { 
-        case TRule_flex_type::kAltFlexType1: 
-            return std::make_pair(StringContent(ctx.Context(), ctx.Token(node.GetAlt_flex_type1().GetToken1())), true); 
-        case TRule_flex_type::kAltFlexType2: { 
-            const auto& typeName = node.GetAlt_flex_type2().GetRule_type_name1(); 
-            const TString& paramOne = typeName.HasBlock2() ? typeName.GetBlock2().GetRule_integer2().GetToken1().GetValue() : TString(); 
-            const TString& paramTwo = !paramOne.empty() && typeName.GetBlock2().HasBlock3() ? typeName.GetBlock2().GetBlock3().GetRule_integer2().GetToken1().GetValue() : TString(); 
-            TString stringType = Id(typeName.GetRule_id1(), ctx); 
-            if (!paramOne.empty() && !paramTwo.empty()) { 
-                TStringStream strm; 
-                strm << '(' << paramOne << ',' << paramTwo << ')'; 
-                stringType += strm.Str(); 
-            } 
-            return std::make_pair(stringType, false); 
-        } 
-        default: 
-            Y_FAIL("You should change implementation according to grammar changes"); 
-    } 
-} 
- 
-} 
- 
+std::pair<TString, bool> FlexType(const TRule_flex_type& node, TTranslation& ctx) {
+    switch (node.Alt_case()) {
+        case TRule_flex_type::kAltFlexType1:
+            return std::make_pair(StringContent(ctx.Context(), ctx.Token(node.GetAlt_flex_type1().GetToken1())), true);
+        case TRule_flex_type::kAltFlexType2: {
+            const auto& typeName = node.GetAlt_flex_type2().GetRule_type_name1();
+            const TString& paramOne = typeName.HasBlock2() ? typeName.GetBlock2().GetRule_integer2().GetToken1().GetValue() : TString();
+            const TString& paramTwo = !paramOne.empty() && typeName.GetBlock2().HasBlock3() ? typeName.GetBlock2().GetBlock3().GetRule_integer2().GetToken1().GetValue() : TString();
+            TString stringType = Id(typeName.GetRule_id1(), ctx);
+            if (!paramOne.empty() && !paramTwo.empty()) {
+                TStringStream strm;
+                strm << '(' << paramOne << ',' << paramTwo << ')';
+                stringType += strm.Str();
+            }
+            return std::make_pair(stringType, false);
+        }
+        default:
+            Y_FAIL("You should change implementation according to grammar changes");
+    }
+}
+
+}
+
 static TColumnSchema ColumnSchemaImpl(const TRule_column_schema& node, TTranslation& ctx) {
     const bool nullable = !node.HasBlock3() || !node.GetBlock3().HasBlock1();
     const TString name(Id(node.GetRule_id_schema1(), ctx));
     const TPosition pos(ctx.Context().Pos());
-    const auto& type = FlexType(node.GetRule_flex_type2(), ctx); 
-    return TColumnSchema(pos, name, type.first, nullable, type.second); 
+    const auto& type = FlexType(node.GetRule_flex_type2(), ctx);
+    return TColumnSchema(pos, name, type.first, nullable, type.second);
 }
 
 static bool CreateTableEntry(const TRule_create_table_entry& node, TTranslation& ctx,
@@ -624,7 +624,7 @@ private:
     TNodePtr BindParameterRule(const TRule_bind_parameter& rule);
     TNodePtr LambdaRule(const TRule_lambda& rule);
     TNodePtr CastRule(const TRule_cast_expr& rule);
-    TNodePtr BitCastRule(const TRule_bitcast_expr& rule); 
+    TNodePtr BitCastRule(const TRule_bitcast_expr& rule);
     TNodePtr ExistsRule(const TRule_exists_expr& rule);
     TNodePtr CaseRule(const TRule_case_expr& rule);
 
@@ -1500,17 +1500,17 @@ TNodePtr TSqlExpression::CastRule(const TRule_cast_expr& rule) {
     return BuildCast(Ctx, pos, expr.Build(alt.GetRule_expr3()), Id(alt.GetRule_type_name5().GetRule_id1(), *this), paramOne, paramTwo);
 }
 
-TNodePtr TSqlExpression::BitCastRule(const TRule_bitcast_expr& rule) { 
-    Ctx.IncrementMonCounter("sql_features", "BitCast"); 
-    const auto& alt = rule; 
-    Token(alt.GetToken1()); 
-    TPosition pos(Ctx.Pos()); 
-    TSqlExpression expr(Ctx, Mode); 
-    const auto& paramOne = alt.GetRule_type_name5().HasBlock2() ? alt.GetRule_type_name5().GetBlock2().GetRule_integer2().GetToken1().GetValue() : TString(); 
-    const auto& paramTwo = !paramOne.empty() && alt.GetRule_type_name5().GetBlock2().HasBlock3() ? alt.GetRule_type_name5().GetBlock2().GetBlock3().GetRule_integer2().GetToken1().GetValue() : TString(); 
-    return BuildBitCast(Ctx, pos, expr.Build(alt.GetRule_expr3()), Id(alt.GetRule_type_name5().GetRule_id1(), *this), paramOne, paramTwo); 
-} 
- 
+TNodePtr TSqlExpression::BitCastRule(const TRule_bitcast_expr& rule) {
+    Ctx.IncrementMonCounter("sql_features", "BitCast");
+    const auto& alt = rule;
+    Token(alt.GetToken1());
+    TPosition pos(Ctx.Pos());
+    TSqlExpression expr(Ctx, Mode);
+    const auto& paramOne = alt.GetRule_type_name5().HasBlock2() ? alt.GetRule_type_name5().GetBlock2().GetRule_integer2().GetToken1().GetValue() : TString();
+    const auto& paramTwo = !paramOne.empty() && alt.GetRule_type_name5().GetBlock2().HasBlock3() ? alt.GetRule_type_name5().GetBlock2().GetBlock3().GetRule_integer2().GetToken1().GetValue() : TString();
+    return BuildBitCast(Ctx, pos, expr.Build(alt.GetRule_expr3()), Id(alt.GetRule_type_name5().GetRule_id1(), *this), paramOne, paramTwo);
+}
+
 TNodePtr TSqlExpression::ExistsRule(const TRule_exists_expr& rule) {
     Ctx.IncrementMonCounter("sql_features", "Exists");
     const auto& alt = rule;
@@ -1636,8 +1636,8 @@ TNodePtr TSqlExpression::AtomExpr(const TRule_atom_expr& node) {
             const TString name(IdOrString(alt.GetRule_id_or_string3(), *this, rawString));
             return BuildCallable(pos, module, name, {});
         }
-        case TRule_atom_expr::kAltAtomExpr9: 
-            return BitCastRule(node.GetAlt_atom_expr9().GetRule_bitcast_expr1()); 
+        case TRule_atom_expr::kAltAtomExpr9:
+            return BitCastRule(node.GetAlt_atom_expr9().GetRule_bitcast_expr1());
         default:
             AltNotImplemented("atom_expr", node);
     }
@@ -1681,8 +1681,8 @@ TNodePtr TSqlExpression::InAtomExpr(const TRule_in_atom_expr& node) {
             Ctx.IncrementMonCounter("sql_features", "InSubquery");
             return BuildSelectResult(pos, std::move(source), false, Mode == NSQLTranslation::ESqlMode::SUBQUERY);
         }
-        case TRule_in_atom_expr::kAltInAtomExpr8: 
-            return BitCastRule(node.GetAlt_in_atom_expr8().GetRule_bitcast_expr1()); 
+        case TRule_in_atom_expr::kAltInAtomExpr8:
+            return BitCastRule(node.GetAlt_in_atom_expr8().GetRule_bitcast_expr1());
         default:
             AltNotImplemented("in_atom_expr", node);
     }
@@ -3669,21 +3669,21 @@ bool TGroupByClause::HoppingWindow(const TRule_hopping_window_specification& nod
             });
         }
 
-        const auto out = NKikimr::NMiniKQL::ValueFromString(NKikimr::NUdf::EDataSlot::Interval, *literal); 
-        if (!out) { 
+        const auto out = NKikimr::NMiniKQL::ValueFromString(NKikimr::NUdf::EDataSlot::Interval, *literal);
+        if (!out) {
             Ctx.Error(node->GetPos()) << "Expected interval in ISO 8601 format";
             return nullptr;
         }
 
-        if ('T' == literal->back()) { 
-            Ctx.Warning(node->GetPos(), TIssuesIds::YQL_DEPRECATED_INTERVAL_CONSTANT) << "Time prefix 'T' at end of interval contant"; 
-        } 
- 
+        if ('T' == literal->back()) {
+            Ctx.Warning(node->GetPos(), TIssuesIds::YQL_DEPRECATED_INTERVAL_CONSTANT) << "Time prefix 'T' at end of interval contant";
+        }
+
         return new TAstListNodeImpl(Ctx.Pos(), {
             new TAstAtomNodeImpl(Ctx.Pos(), "Interval", TNodeFlags::Default),
             new TAstListNodeImpl(Ctx.Pos(), {
                 new TAstAtomNodeImpl(Ctx.Pos(), "quote", TNodeFlags::Default),
-                new TAstAtomNodeImpl(Ctx.Pos(), ToString(out.Get<i64>()), TNodeFlags::Default) 
+                new TAstAtomNodeImpl(Ctx.Pos(), ToString(out.Get<i64>()), TNodeFlags::Default)
             })
         });
     };
@@ -4650,11 +4650,11 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
         } else if (normalizedPragma == "file") {
             if (values.size() != 2U || pragmaValueDefault) {
                 Error() << "Expected file alias and url as pragma values";
-                Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue"); 
+                Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
                 return {};
-            } 
- 
-            Ctx.IncrementMonCounter("sql_pragma", "file"); 
+            }
+
+            Ctx.IncrementMonCounter("sql_pragma", "file");
             success = true;
             return BuildPragma(Ctx.Pos(), TString(ConfigProviderName), "AddFileByUrl", values, false);
         } else if (normalizedPragma == "folder") {
@@ -5061,12 +5061,12 @@ TNodePtr TSqlQuery::Build(const TSQLParserAST& ast) {
             "SQL v0 syntax is deprecated and will stop working soon. Consider switching to v1: https://clubs.at.yandex-team.ru/yql/2910";
     }
 
-    if (Ctx.Settings.V0Behavior == NSQLTranslation::EV0Behavior::Report) { 
-        AddStatementToBlocks(blocks, BuildPragma(TPosition(), "config", "flags", { 
-            TDeferredAtom(TPosition(), "SQL"), 
-            TDeferredAtom(TPosition(), "0") 
-        }, false)); 
-    } 
+    if (Ctx.Settings.V0Behavior == NSQLTranslation::EV0Behavior::Report) {
+        AddStatementToBlocks(blocks, BuildPragma(TPosition(), "config", "flags", {
+            TDeferredAtom(TPosition(), "SQL"),
+            TDeferredAtom(TPosition(), "0")
+        }, false));
+    }
     if (!Statement(blocks, statements.GetRule_sql_stmt1().GetRule_sql_stmt_core2())) {
         return nullptr;
     }
@@ -5097,9 +5097,9 @@ TNodePtr TSqlQuery::Build(const TSQLParserAST& ast) {
 
 TNodePtr TSqlQuery::FlexType(TTranslation& ctx, const TRule_flex_type& node) {
     const auto& stringType = NSQLTranslationV0::FlexType(node, ctx);
-    auto res = TryBuildDataType(Ctx.Pos(), TypeByAlias(stringType.first, !stringType.second)); 
+    auto res = TryBuildDataType(Ctx.Pos(), TypeByAlias(stringType.first, !stringType.second));
     if (!res) {
-        res = BuildBuiltinFunc(Ctx, Ctx.Pos(), "ParseType", {BuildLiteralRawString(Ctx.Pos(), stringType.first)}); 
+        res = BuildBuiltinFunc(Ctx, Ctx.Pos(), "ParseType", {BuildLiteralRawString(Ctx.Pos(), stringType.first)});
     }
     return res;
 }
@@ -5271,7 +5271,7 @@ void SqlASTToYqlImpl(NYql::TAstParseResult& res, const google::protobuf::Message
         TContext& ctx) {
     YQL_ENSURE(!ctx.Issues.Size());
     res.Root = SqlASTToYql(protoAst, ctx);
-    res.Pool = std::move(ctx.Pool); 
+    res.Pool = std::move(ctx.Pool);
     if (!res.Root) {
         if (ctx.Issues.Size()) {
             ctx.IncrementMonCounter("sql_errors", "AstToYqlError");

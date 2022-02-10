@@ -13,7 +13,7 @@ enum ESerializeCommands {
     INLINE_STR = 0x08, // string is unique, don't write it to the pool
     SAME_POSITION = 0x40,
     ATOM_FLAG = 0x20,
-    WIDE = 0x80, // mark wide lambdas 
+    WIDE = 0x80, // mark wide lambdas
     ATOM = ATOM_FLAG | NODE_VALUE,  // for atoms we will use TNodeFlags bits (1/2/4)
     LIST = TExprNode::List | NODE_VALUE,
     CALLABLE = TExprNode::Callable | NODE_VALUE,
@@ -111,10 +111,10 @@ public:
 
         char command = (node.Type() == TExprNode::Atom) ? ATOM : ((node.Type() & TExprNode::TypeMask) | NODE_VALUE);
 
-        if (node.Type() == TExprNode::Lambda && node.ChildrenSize() > 2U) { 
-            command |= WIDE; 
-        } 
- 
+        if (node.Type() == TExprNode::Lambda && node.ChildrenSize() > 2U) {
+            command |= WIDE;
+        }
+
         if (Components_ & TSerializedExprGraphComponents::Positions) {
             // will write position
             if (Ctx.GetPosition(node.Pos()) == LastPosition_) {
@@ -163,7 +163,7 @@ public:
             }
         }
 
-        if (node.Type() == TExprNode::Callable || node.Type() == TExprNode::Arguments || node.Type() == TExprNode::List || (node.Type() == TExprNode::Lambda && node.ChildrenSize() > 2U)) { 
+        if (node.Type() == TExprNode::Callable || node.Type() == TExprNode::Arguments || node.Type() == TExprNode::List || (node.Type() == TExprNode::Lambda && node.ChildrenSize() > 2U)) {
             WriteVar32(node.ChildrenSize());
         }
 
@@ -299,7 +299,7 @@ private:
             return Nodes_[nodeId - 1];
         }
 
- 
+
         command &= ~NODE_VALUE;
         TPosition pos = Pos_;
         if (Components_ & TSerializedExprGraphComponents::Positions) {
@@ -335,9 +335,9 @@ private:
             command |= TExprNode::Atom;
         }
 
-        const bool wide = command & WIDE; 
-        command &= ~WIDE; 
- 
+        const bool wide = command & WIDE;
+        command &= ~WIDE;
+
         TStringBuf content;
         if (command == TExprNode::Atom || command == TExprNode::Callable || command == TExprNode::Argument) {
             if (hasInlineStr) {
@@ -354,7 +354,7 @@ private:
         }
 
         ui32 childrenSize = 0;
-        if (command == TExprNode::Callable || command == TExprNode::Arguments || command == TExprNode::List || (command == TExprNode::Lambda && wide)) { 
+        if (command == TExprNode::Callable || command == TExprNode::Arguments || command == TExprNode::List || (command == TExprNode::Lambda && wide)) {
             childrenSize = ReadVar32();
         }
 
@@ -366,8 +366,8 @@ private:
         case TExprNode::List: {
             TExprNode::TListType children;
             children.reserve(childrenSize);
-            for (ui32 i = 0U; i < childrenSize; ++i) { 
-                children.emplace_back(Fetch()); 
+            for (ui32 i = 0U; i < childrenSize; ++i) {
+                children.emplace_back(Fetch());
             }
 
             ret = Ctx_.NewList(pos, std::move(children));
@@ -377,45 +377,45 @@ private:
         case TExprNode::Callable: {
             TExprNode::TListType children;
             children.reserve(childrenSize);
-            for (ui32 i = 0U; i < childrenSize; ++i) { 
-                children.emplace_back(Fetch()); 
+            for (ui32 i = 0U; i < childrenSize; ++i) {
+                children.emplace_back(Fetch());
             }
 
             ret = Ctx_.NewCallable(pos, content, std::move(children));
             break;
         }
 
-        case TExprNode::Argument: 
+        case TExprNode::Argument:
             ret = Ctx_.NewArgument(pos, content);
             break;
 
         case TExprNode::Arguments: {
             TExprNode::TListType children;
             children.reserve(childrenSize);
-            for (ui32 i = 0U; i < childrenSize; ++i) { 
-                children.emplace_back(Fetch()); 
+            for (ui32 i = 0U; i < childrenSize; ++i) {
+                children.emplace_back(Fetch());
             }
 
             ret = Ctx_.NewArguments(pos, std::move(children));
             break;
         }
 
-        case TExprNode::Lambda: 
-            if (wide) { 
-                TExprNode::TListType children; 
-                children.reserve(childrenSize); 
-                for (ui32 i = 0U; i < childrenSize; ++i) { 
-                    children.emplace_back(Fetch()); 
-                } 
-                ret = Ctx_.NewLambda(pos, std::move(children)); 
-            } else { 
-                auto args = Fetch(); 
-                auto body = Fetch(); 
-                ret = Ctx_.NewLambda(pos, {std::move(args), std::move(body)}); 
-            } 
+        case TExprNode::Lambda:
+            if (wide) {
+                TExprNode::TListType children;
+                children.reserve(childrenSize);
+                for (ui32 i = 0U; i < childrenSize; ++i) {
+                    children.emplace_back(Fetch());
+                }
+                ret = Ctx_.NewLambda(pos, std::move(children));
+            } else {
+                auto args = Fetch();
+                auto body = Fetch();
+                ret = Ctx_.NewLambda(pos, {std::move(args), std::move(body)});
+            }
             break;
 
-        case TExprNode::World: 
+        case TExprNode::World:
             ret = Ctx_.NewWorld(pos);
             break;
 

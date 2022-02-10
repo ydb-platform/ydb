@@ -877,7 +877,7 @@ public:
 
     TPtr ProduceOperation(TContext& ctx, const TString& sinkName, const TString& service) override {
         if (service != KikimrProviderName) {
-            ctx.Error(ctx.Pos()) << "ROLLBACK isn't supported for provider: " << TStringBuf(service); 
+            ctx.Error(ctx.Pos()) << "ROLLBACK isn't supported for provider: " << TStringBuf(service);
             return nullptr;
         }
 

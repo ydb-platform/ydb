@@ -2,7 +2,7 @@ YQL_UDF(pire_udf)
 
 YQL_ABI_VERSION(
     2
-    23 
+    23
     0
 )
 

@@ -8,7 +8,7 @@
 namespace NYql {
 namespace NTypeAnnImpl {
     template <ETypeAnnotationKind>
-    IGraphTransformer::TStatus TypeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx); 
+    IGraphTransformer::TStatus TypeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
 
     #define TYPE_ANN_TYPE_ARGUMENT_MAP(xx) \
         xx(Unknown, 0) \
@@ -32,9 +32,9 @@ namespace NTypeAnnImpl {
     };
 
     template <ETypeArgument>
-    IGraphTransformer::TStatus TypeArgWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx); 
-    IGraphTransformer::TStatus ParseTypeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx); 
-    IGraphTransformer::TStatus FormatTypeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx); 
+    IGraphTransformer::TStatus TypeArgWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
+    IGraphTransformer::TStatus ParseTypeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
+    IGraphTransformer::TStatus FormatTypeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     IGraphTransformer::TStatus TypeHandleWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     IGraphTransformer::TStatus SerializeTypeHandleWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     IGraphTransformer::TStatus ParseTypeHandleWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);

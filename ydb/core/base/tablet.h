@@ -16,7 +16,7 @@
 #include <util/generic/vector.h>
 #include <util/datetime/base.h>
 
-#include <functional> 
+#include <functional>
 
 namespace NKikimr {
 

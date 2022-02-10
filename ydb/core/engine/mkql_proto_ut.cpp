@@ -34,7 +34,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProtoTestYdb) {
 
     Y_UNIT_TEST(TestExportDecimalTypeYdb) {
         TestExportType<Ydb::Type>([](TProgramBuilder& pgmBuilder) {
-            NYql::NDecimal::TInt128 x; 
+            NYql::NDecimal::TInt128 x;
             ui64* p = (ui64*)&x;
             p[0] = 1;
             p[1] = 0;
@@ -81,7 +81,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProtoTestYdb) {
 
     Y_UNIT_TEST(TestExportTupleTypeYdb) {
         TestExportType<Ydb::Type>([](TProgramBuilder& pgmBuilder) {
-            TRuntimeNode::TList items; 
+            TRuntimeNode::TList items;
             items.push_back(pgmBuilder.NewDataLiteral<i32>(42));
             items.push_back(pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("abc"));
             auto pgmReturn = pgmBuilder.NewTuple(items);
@@ -99,7 +99,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProtoTestYdb) {
 
     Y_UNIT_TEST(TestExportStructTypeYdb) {
         TestExportType<Ydb::Type>([](TProgramBuilder& pgmBuilder) {
-            std::vector<std::pair<std::string_view, TRuntimeNode>> items; 
+            std::vector<std::pair<std::string_view, TRuntimeNode>> items;
             items.push_back({ "x", pgmBuilder.NewDataLiteral<i32>(42) });
             items.push_back({ "y", pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("abc") });
             auto pgmReturn = pgmBuilder.NewStruct(items);
@@ -186,7 +186,7 @@ Y_UNIT_TEST(TestExportVariantStructTypeYdb) {
 )___";
 
         TestExportType<Ydb::Type>([](TProgramBuilder& pgmBuilder) {
-            std::vector<std::pair<std::string_view, TType*>> structElemenTypes; 
+            std::vector<std::pair<std::string_view, TType*>> structElemenTypes;
             structElemenTypes.push_back({"a", pgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id)});
             structElemenTypes.push_back({"b", pgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id)});
             TType* structType = pgmBuilder.NewStructType(structElemenTypes);
@@ -244,7 +244,7 @@ Y_UNIT_TEST(TestExportVariantStructTypeYdb) {
 
     Y_UNIT_TEST(TestExportDecimalYdb) {
         TestExportValue<Ydb::Value>([](TProgramBuilder& pgmBuilder) {
-            NYql::NDecimal::TInt128 x; 
+            NYql::NDecimal::TInt128 x;
             ui64* p = (ui64*)&x;
             p[0] = 1;
             p[1] = 0;
@@ -255,7 +255,7 @@ Y_UNIT_TEST(TestExportVariantStructTypeYdb) {
 
     Y_UNIT_TEST(TestExportDecimalNegativeYdb) {
         TestExportValue<Ydb::Value>([](TProgramBuilder& pgmBuilder) {
-            NYql::NDecimal::TInt128 x; 
+            NYql::NDecimal::TInt128 x;
             ui64* p = (ui64*)&x;
             p[0] = Max<ui64>();
             p[1] = Max<ui64>();
@@ -267,7 +267,7 @@ Y_UNIT_TEST(TestExportVariantStructTypeYdb) {
 
     Y_UNIT_TEST(TestExportDecimalHugeYdb) {
         TestExportValue<Ydb::Value>([](TProgramBuilder& pgmBuilder) {
-            NYql::NDecimal::TInt128 x; 
+            NYql::NDecimal::TInt128 x;
             ui64* p = (ui64*)&x;
             p[0] = 0;
             p[1] = 1;
@@ -322,7 +322,7 @@ Y_UNIT_TEST(TestExportVariantStructTypeYdb) {
 
     Y_UNIT_TEST(TestExportTupleYdb) {
         TestExportValue<Ydb::Value>([](TProgramBuilder& pgmBuilder) {
-            TRuntimeNode::TList items; 
+            TRuntimeNode::TList items;
             items.push_back(pgmBuilder.NewDataLiteral<i32>(42));
             items.push_back(pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("abc"));
             auto pgmReturn = pgmBuilder.NewTuple(items);
@@ -338,7 +338,7 @@ Y_UNIT_TEST(TestExportVariantStructTypeYdb) {
 
     Y_UNIT_TEST(TestExportStructYdb) {
         TestExportValue<Ydb::Value>([](TProgramBuilder& pgmBuilder) {
-            std::vector<std::pair<std::string_view, TRuntimeNode>> items; 
+            std::vector<std::pair<std::string_view, TRuntimeNode>> items;
             items.push_back({ "x", pgmBuilder.NewDataLiteral<i32>(42) });
             items.push_back({ "y", pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("abc") });
             auto pgmReturn = pgmBuilder.NewStruct(items);

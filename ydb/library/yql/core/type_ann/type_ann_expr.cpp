@@ -42,7 +42,7 @@ public:
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
         YQL_PROFILE_SCOPE(DEBUG, "TypeAnnotationTransformer::DoTransform");
-        output = input; 
+        output = input;
         auto status = TransformNode(input, output, ctx);
         UpdateStatusIfChanged(status, input, output);
         if (status.Level != TStatus::Ok) {
@@ -50,7 +50,7 @@ public:
         }
 
         if (status.Level != TStatus::Error && HasRenames) {
-            output = ctx.ReplaceNodes(std::move(output), Processed); 
+            output = ctx.ReplaceNodes(std::move(output), Processed);
         }
 
         Processed.clear();
@@ -67,7 +67,7 @@ public:
         YQL_PROFILE_SCOPE(DEBUG, "TypeAnnotationTransformer::DoGetAsyncFuture");
         Y_UNUSED(input);
         TVector<NThreading::TFuture<void>> futures;
-        for (const auto& callable : CallableInputs) { 
+        for (const auto& callable : CallableInputs) {
             futures.push_back(CallableTransformer->GetAsyncFuture(*callable));
         }
 
@@ -76,13 +76,13 @@ public:
 
     TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
         YQL_PROFILE_SCOPE(DEBUG, "TypeAnnotationTransformer::DoApplyAsyncChanges");
-        output = input; 
+        output = input;
         TStatus combinedStatus = TStatus::Ok;
-        for (const auto& callable : CallableInputs) { 
+        for (const auto& callable : CallableInputs) {
             callable->SetState(TExprNode::EState::TypePending);
-            TExprNode::TPtr callableOutput; 
-            auto status = CallableTransformer->ApplyAsyncChanges(callable, callableOutput, ctx); 
-            Y_VERIFY(callableOutput); 
+            TExprNode::TPtr callableOutput;
+            auto status = CallableTransformer->ApplyAsyncChanges(callable, callableOutput, ctx);
+            Y_VERIFY(callableOutput);
             YQL_ENSURE(status != TStatus::Async);
             YQL_ENSURE(callableOutput == callable);
             combinedStatus = combinedStatus.Combine(status);
@@ -140,9 +140,9 @@ private:
                 return IGraphTransformer::TStatus::Async;
             case TExprNode::EState::TypePending:
                 if (start->Type() == TExprNode::Lambda) {
-                    if (!start->Head().GetTypeAnn()) { 
+                    if (!start->Head().GetTypeAnn()) {
                         return TStatus::Ok;
-                    } else if (start->Head().ChildrenSize() == 0) { 
+                    } else if (start->Head().ChildrenSize() == 0) {
                         break;
                     }
                 }
@@ -308,15 +308,15 @@ private:
 
             case TExprNode::Lambda:
             {
-                YQL_ENSURE(input->ChildrenSize() > 0U); 
-                const auto& args = input->Head(); 
-                for (ui32 i = 0; i < args.ChildrenSize(); ++i) { 
-                    args.Child(i)->SetArgIndex(i); 
+                YQL_ENSURE(input->ChildrenSize() > 0U);
+                const auto& args = input->Head();
+                for (ui32 i = 0; i < args.ChildrenSize(); ++i) {
+                    args.Child(i)->SetArgIndex(i);
                 }
 
                 TExprNode::TPtr out;
-                auto argStatus = TransformNode(input->HeadPtr(), out, ctx); 
-                UpdateStatusIfChanged(argStatus, input->HeadPtr(), out); 
+                auto argStatus = TransformNode(input->HeadPtr(), out, ctx);
+                UpdateStatusIfChanged(argStatus, input->HeadPtr(), out);
                 if (argStatus.Level == TStatus::Error) {
                     input->SetState(TExprNode::EState::Error);
                     return argStatus;
@@ -325,44 +325,44 @@ private:
                 if (argStatus.Level == TStatus::Repeat)
                     return TStatus::Ok;
 
-                TStatus combinedStatus = TStatus::Ok; 
-                TExprNode::TListType newChildren; 
-                newChildren.reserve(input->ChildrenSize()); 
-                newChildren.emplace_back(input->HeadPtr()); 
-                bool updatedChildren = false; 
-                for (ui32 i = 1U; i < input->ChildrenSize(); ++i) { 
-                    const auto child = input->ChildPtr(i); 
-                    TExprNode::TPtr newChild; 
-                    auto childStatus = TransformNode(child, newChild, ctx); 
-                    UpdateStatusIfChanged(childStatus, child, newChild); 
-                    updatedChildren = updatedChildren || (newChild != child); 
-                    combinedStatus = combinedStatus.Combine(childStatus); 
-                    newChildren.emplace_back(std::move(newChild)); 
-                } 
- 
+                TStatus combinedStatus = TStatus::Ok;
+                TExprNode::TListType newChildren;
+                newChildren.reserve(input->ChildrenSize());
+                newChildren.emplace_back(input->HeadPtr());
+                bool updatedChildren = false;
+                for (ui32 i = 1U; i < input->ChildrenSize(); ++i) {
+                    const auto child = input->ChildPtr(i);
+                    TExprNode::TPtr newChild;
+                    auto childStatus = TransformNode(child, newChild, ctx);
+                    UpdateStatusIfChanged(childStatus, child, newChild);
+                    updatedChildren = updatedChildren || (newChild != child);
+                    combinedStatus = combinedStatus.Combine(childStatus);
+                    newChildren.emplace_back(std::move(newChild));
+                }
+
                 if (combinedStatus != TStatus::Ok) {
                     if (combinedStatus.Level == TStatus::Error) {
                         input->SetState(TExprNode::EState::Error);
                     }
-                    else if (updatedChildren) { 
-                        input->ChangeChildrenInplace(std::move(newChildren)); 
+                    else if (updatedChildren) {
+                        input->ChangeChildrenInplace(std::move(newChildren));
                     }
 
                     retStatus = combinedStatus;
                     break;
                 }
 
-                if (newChildren.size() != 2U) { 
-                    TTypeAnnotationNode::TListType rootTypes; 
-                    rootTypes.reserve(newChildren.size() - 1U); 
-                    for (ui32 i = 1U; i < newChildren.size(); ++i) { 
-                        rootTypes.emplace_back(newChildren[i]->GetTypeAnn()); 
-                    } 
-                    input->SetTypeAnn(ctx.MakeType<TMultiExprType>(rootTypes)); 
-                } else { 
-                    input->SetTypeAnn(input->Tail().GetTypeAnn()); 
-                } 
- 
+                if (newChildren.size() != 2U) {
+                    TTypeAnnotationNode::TListType rootTypes;
+                    rootTypes.reserve(newChildren.size() - 1U);
+                    for (ui32 i = 1U; i < newChildren.size(); ++i) {
+                        rootTypes.emplace_back(newChildren[i]->GetTypeAnn());
+                    }
+                    input->SetTypeAnn(ctx.MakeType<TMultiExprType>(rootTypes));
+                } else {
+                    input->SetTypeAnn(input->Tail().GetTypeAnn());
+                }
+
                 if (input->GetTypeAnn()) {
                     CheckExpected(*input, ctx);
                 }
@@ -480,15 +480,15 @@ private:
                     auto childStatus = TransformNode(child, tmp, ctx);
                     UpdateStatusIfChanged(childStatus, child, tmp);
                     YQL_ENSURE(tmp == child);
-                    combinedStatus = combinedStatus.Combine(childStatus); 
-                } 
+                    combinedStatus = combinedStatus.Combine(childStatus);
+                }
 
-                if (combinedStatus != TStatus::Ok) { 
-                    if (combinedStatus.Level == TStatus::Error) { 
+                if (combinedStatus != TStatus::Ok) {
+                    if (combinedStatus.Level == TStatus::Error) {
                         input->SetState(TExprNode::EState::Error);
-                    } 
- 
-                    return combinedStatus; 
+                    }
+
+                    return combinedStatus;
                 }
 
                 input->SetTypeAnn(ctx.MakeType<TUnitExprType>());
@@ -497,8 +497,8 @@ private:
 
             default:
                 YQL_ENSURE(false, "Unknown type");
-            } 
- 
+            }
+
             if (retStatus.Level != TStatus::Repeat || retStatus.HasRestart) {
                 return retStatus;
             }
@@ -554,8 +554,8 @@ private:
 
 } // namespace
 
-IGraphTransformer::TStatus CheckWholeProgramType(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) { 
-    output = input; 
+IGraphTransformer::TStatus CheckWholeProgramType(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+    output = input;
     if (input->Type() == TExprNode::Lambda || input->GetTypeAnn()->GetKind() != ETypeAnnotationKind::World) {
         ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Return must be world"));
         input->SetState(TExprNode::EState::Error);
@@ -636,7 +636,7 @@ TAutoPtr<IGraphTransformer> CreateFullTypeAnnotationTransformer(
 }
 
 bool SyncAnnotateTypes(
-        TExprNode::TPtr& root, TExprContext& ctx, bool wholeProgram, 
+        TExprNode::TPtr& root, TExprContext& ctx, bool wholeProgram,
         TTypeAnnotationContext& typeAnnotationContext)
 {
     auto fullTransformer = CreateFullTypeAnnotationTransformer(wholeProgram, typeAnnotationContext);
@@ -644,14 +644,14 @@ bool SyncAnnotateTypes(
 }
 
 bool InstantAnnotateTypes(
-        TExprNode::TPtr& root, TExprContext& ctx, bool wholeProgram, 
+        TExprNode::TPtr& root, TExprContext& ctx, bool wholeProgram,
         TTypeAnnotationContext& typeAnnotationContext)
 {
     auto fullTransformer = CreateFullTypeAnnotationTransformer(wholeProgram, typeAnnotationContext);
     return InstantTransform(*fullTransformer, root, ctx) == IGraphTransformer::TStatus::Ok;
 }
 
-TExprNode::TPtr ParseAndAnnotate( 
+TExprNode::TPtr ParseAndAnnotate(
         const TStringBuf& str,
         TExprContext& exprCtx, bool instant, bool wholeProgram,
         TTypeAnnotationContext& typeAnnotationContext)
@@ -662,7 +662,7 @@ TExprNode::TPtr ParseAndAnnotate(
         return nullptr;
     }
 
-    TExprNode::TPtr exprRoot; 
+    TExprNode::TPtr exprRoot;
     if (!CompileExpr(*astRes.Root, exprRoot, exprCtx, nullptr)) {
         return nullptr;
     }

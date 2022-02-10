@@ -66,7 +66,7 @@ DataTypePtr DataTypeFactory::get(const String & family_name_param, const ASTPtr 
 {
     String family_name = getAliasToOrName(family_name_param);
 
-    if (family_name.ends_with("WithDictionary")) 
+    if (family_name.ends_with("WithDictionary"))
     {
         ASTPtr low_cardinality_params = std::make_shared<ASTExpressionList>();
         String param_name = family_name.substr(0, family_name.size() - strlen("WithDictionary"));
@@ -155,17 +155,17 @@ void DataTypeFactory::registerSimpleDataTypeCustom(const String &name, SimpleCre
 
 const DataTypeFactory::Value & DataTypeFactory::findCreatorByName(const String & family_name) const
 {
-/* 
+/*
     ContextPtr query_context;
     if (CurrentThread::isInitialized())
         query_context = CurrentThread::get().getQueryContext();
-*/ 
+*/
     {
         DataTypesDictionary::const_iterator it = data_types.find(family_name);
         if (data_types.end() != it)
         {
-//            if (query_context && query_context->getSettingsRef().log_queries) 
-//                query_context->addQueryFactoriesInfo(Context::QueryLogFactories::DataType, family_name); 
+//            if (query_context && query_context->getSettingsRef().log_queries)
+//                query_context->addQueryFactoriesInfo(Context::QueryLogFactories::DataType, family_name);
             return it->second;
         }
     }
@@ -176,8 +176,8 @@ const DataTypeFactory::Value & DataTypeFactory::findCreatorByName(const String &
         DataTypesDictionary::const_iterator it = case_insensitive_data_types.find(family_name_lowercase);
         if (case_insensitive_data_types.end() != it)
         {
-//            if (query_context && query_context->getSettingsRef().log_queries) 
-//                query_context->addQueryFactoriesInfo(Context::QueryLogFactories::DataType, family_name_lowercase); 
+//            if (query_context && query_context->getSettingsRef().log_queries)
+//                query_context->addQueryFactoriesInfo(Context::QueryLogFactories::DataType, family_name_lowercase);
             return it->second;
         }
     }

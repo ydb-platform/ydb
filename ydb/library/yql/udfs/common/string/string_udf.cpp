@@ -73,7 +73,7 @@ namespace {
     }
 
 #define STROKA_ASCII_CASE_UDF(udfName, function)                 \
-    SIMPLE_UDF(T##udfName, char*(TAutoMap<char*>)) {             \ 
+    SIMPLE_UDF(T##udfName, char*(TAutoMap<char*>)) {             \
         TString input(args[0].AsStringRef());                    \
         if (input.function()) {                                  \
             return valueBuilder->NewString(input);               \
@@ -88,7 +88,7 @@ namespace {
         if (args[0]) {                                          \
             const TString haystack(args[0].AsStringRef());      \
             const TString needle(args[1].AsStringRef());        \
-            return TUnboxedValuePod(haystack.function(needle)); \ 
+            return TUnboxedValuePod(haystack.function(needle)); \
         } else {                                                \
             return TUnboxedValuePod(false);                     \
         }                                                       \
@@ -100,7 +100,7 @@ namespace {
         if (args[0]) {                                           \
             const TString haystack(args[0].AsStringRef());       \
             const TString needle(args[1].AsStringRef());         \
-            return TUnboxedValuePod(function(haystack, needle)); \ 
+            return TUnboxedValuePod(function(haystack, needle)); \
         } else {                                                 \
             return TUnboxedValuePod(false);                      \
         }                                                        \
@@ -110,7 +110,7 @@ namespace {
     SIMPLE_UDF(T##function, bool(TOptional<char*>)) {      \
         Y_UNUSED(valueBuilder);                            \
         if (args[0]) {                                     \
-            const TStringBuf input(args[0].AsStringRef()); \ 
+            const TStringBuf input(args[0].AsStringRef()); \
             bool result = true;                            \
             for (auto c : input) {                         \
                 if (!function(c)) {                        \
@@ -186,10 +186,10 @@ namespace {
     }
 
     SIMPLE_UDF(TReplaceAll, char*(TAutoMap<char*>, char*, char*)) {
-        if (TString result(args[0].AsStringRef()); SubstGlobal(result, args[1].AsStringRef(), args[2].AsStringRef())) 
-            return valueBuilder->NewString(result); 
-        else 
-            return args[0]; 
+        if (TString result(args[0].AsStringRef()); SubstGlobal(result, args[1].AsStringRef(), args[2].AsStringRef()))
+            return valueBuilder->NewString(result);
+        else
+            return args[0];
     }
 
     SIMPLE_UDF(TReplaceFirst, char*(TAutoMap<char*>, char*, char*)) {
@@ -202,11 +202,11 @@ namespace {
         if (with.size() != 1) {
             UdfTerminate("Only one char is supported as third argument");
         }
-        if (const auto index = result.find(what[0]); index != TStringBuf::npos) { 
+        if (const auto index = result.find(what[0]); index != TStringBuf::npos) {
             result.replace(index, 1, with.data());
-            return valueBuilder->NewString(result); 
+            return valueBuilder->NewString(result);
         }
-        return args[0]; 
+        return args[0];
     }
 
     SIMPLE_UDF(TReplaceLast, char*(TAutoMap<char*>, char*, char*)) {
@@ -219,11 +219,11 @@ namespace {
         if (with.size() != 1) {
             UdfTerminate("Only one char is supported as third argument");
         }
-        if (const auto index = result.rfind(what[0]); index != TStringBuf::npos) { 
+        if (const auto index = result.rfind(what[0]); index != TStringBuf::npos) {
             result.replace(index, 1, with.data());
-            return valueBuilder->NewString(result); 
+            return valueBuilder->NewString(result);
         }
-        return args[0]; 
+        return args[0];
     }
 
     SIMPLE_UDF(TRemoveAll, char*(TAutoMap<char*>, char*)) {
@@ -241,11 +241,11 @@ namespace {
         if (remove.size() != 1) {
             UdfTerminate("Only one char is supported as second argument");
         }
-        if (const auto index = result.find(remove[0]); index != TStringBuf::npos) { 
+        if (const auto index = result.find(remove[0]); index != TStringBuf::npos) {
             result.remove(index, 1);
-            return valueBuilder->NewString(result); 
+            return valueBuilder->NewString(result);
         }
-        return args[0]; 
+        return args[0];
     }
 
     SIMPLE_UDF(TRemoveLast, char*(TAutoMap<char*>, char*)) {
@@ -254,11 +254,11 @@ namespace {
         if (remove.size() != 1) {
             UdfTerminate("Only one char is supported as second argument");
         }
-        if (const auto index = result.rfind(remove[0]); index != TStringBuf::npos) { 
+        if (const auto index = result.rfind(remove[0]); index != TStringBuf::npos) {
             result.remove(index, 1);
-            return valueBuilder->NewString(result); 
+            return valueBuilder->NewString(result);
         }
-        return args[0]; 
+        return args[0];
     }
 
     SIMPLE_UDF_OPTIONS(TFind, i64(TAutoMap<char*>, char*, TOptional<ui64>),
@@ -287,37 +287,37 @@ namespace {
         return valueBuilder->NewString(input.substr(from, count));
     }
 
-    using TTmpVector = TSmallVec<TUnboxedValue, TUnboxedValue::TAllocator>; 
- 
+    using TTmpVector = TSmallVec<TUnboxedValue, TUnboxedValue::TAllocator>;
+
     template <typename TIt>
     static void SplitToListImpl(
             const IValueBuilder* valueBuilder,
-            const TUnboxedValue& input, 
-            const std::string_view::const_iterator from, 
-            const TIt& it, 
-            TTmpVector& result) { 
-        for (const auto& elem : it) { 
-            result.emplace_back(valueBuilder->SubString(input, std::distance(from, elem.TokenStart()), std::distance(elem.TokenStart(), elem.TokenDelim()))); 
+            const TUnboxedValue& input,
+            const std::string_view::const_iterator from,
+            const TIt& it,
+            TTmpVector& result) {
+        for (const auto& elem : it) {
+            result.emplace_back(valueBuilder->SubString(input, std::distance(from, elem.TokenStart()), std::distance(elem.TokenStart(), elem.TokenDelim())));
         }
     }
     template <typename TIt>
     static void SplitToListImpl(
             const IValueBuilder* valueBuilder,
-            const TUnboxedValue& input, 
-            const std::string_view::const_iterator from, 
+            const TUnboxedValue& input,
+            const std::string_view::const_iterator from,
             TIt& it,
             bool skipEmpty,
-            TTmpVector& result) { 
+            TTmpVector& result) {
         if (skipEmpty) {
-            SplitToListImpl(valueBuilder, input, from, it.SkipEmpty(), result); 
+            SplitToListImpl(valueBuilder, input, from, it.SkipEmpty(), result);
         } else {
-            SplitToListImpl(valueBuilder, input, from, it, result); 
+            SplitToListImpl(valueBuilder, input, from, it, result);
         }
     }
 
-    constexpr char delimeterStringName[] = "DelimeterString"; 
-    constexpr char skipEmptyName[] = "SkipEmpty"; 
-    constexpr char limitName[] = "Limit"; 
+    constexpr char delimeterStringName[] = "DelimeterString";
+    constexpr char skipEmptyName[] = "SkipEmpty";
+    constexpr char limitName[] = "Limit";
     using TDelimeterStringArg = TNamedArg<bool, delimeterStringName>;
     using TSkipEmptyArg = TNamedArg<bool, skipEmptyName>;
     using TLimitArg = TNamedArg<ui64, limitName>;
@@ -331,28 +331,28 @@ namespace {
                             TLimitArg
                        ),
                        builder.OptionalArgs(3)) {
-        TTmpVector result; 
+        TTmpVector result;
         if (args[0]) {
-            const std::string_view input(args[0].AsStringRef()); 
-            const std::string_view delimeter(args[1].AsStringRef()); 
-            const bool delimiterString = args[2].GetOrDefault<bool>(true); 
-            const bool skipEmpty = args[3].GetOrDefault<bool>(false); 
-            const auto limit = args[4].GetOrDefault<ui64>(0); 
+            const std::string_view input(args[0].AsStringRef());
+            const std::string_view delimeter(args[1].AsStringRef());
+            const bool delimiterString = args[2].GetOrDefault<bool>(true);
+            const bool skipEmpty = args[3].GetOrDefault<bool>(false);
+            const auto limit = args[4].GetOrDefault<ui64>(0);
             if (delimiterString) {
                 if (limit) {
                     auto it = StringSplitter(input).SplitByString(delimeter).Limit(limit + 1);
-                    SplitToListImpl(valueBuilder, args[0], input.cbegin(), it, skipEmpty, result); 
+                    SplitToListImpl(valueBuilder, args[0], input.cbegin(), it, skipEmpty, result);
                 } else {
                     auto it = StringSplitter(input).SplitByString(delimeter);
-                    SplitToListImpl(valueBuilder, args[0], input.cbegin(), it, skipEmpty, result); 
+                    SplitToListImpl(valueBuilder, args[0], input.cbegin(), it, skipEmpty, result);
                 }
             } else {
                 if (limit) {
-                    auto it = StringSplitter(input).SplitBySet(TString(delimeter).c_str()).Limit(limit + 1); 
-                    SplitToListImpl(valueBuilder, args[0], input.cbegin(), it, skipEmpty, result); 
+                    auto it = StringSplitter(input).SplitBySet(TString(delimeter).c_str()).Limit(limit + 1);
+                    SplitToListImpl(valueBuilder, args[0], input.cbegin(), it, skipEmpty, result);
                 } else {
-                    auto it = StringSplitter(input).SplitBySet(TString(delimeter).c_str()); 
-                    SplitToListImpl(valueBuilder, args[0], input.cbegin(), it, skipEmpty, result); 
+                    auto it = StringSplitter(input).SplitBySet(TString(delimeter).c_str());
+                    SplitToListImpl(valueBuilder, args[0], input.cbegin(), it, skipEmpty, result);
                 }
             }
         }

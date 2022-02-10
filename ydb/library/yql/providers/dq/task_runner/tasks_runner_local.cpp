@@ -263,9 +263,9 @@ public:
         task.GetMeta().UnpackTo(&taskMeta);
 
         for (const auto& s : taskMeta.GetSettings()) {
-            if ("OptLLVM" == s.GetName()) 
-                settings.OptLLVM = s.GetValue(); 
-        } 
+            if ("OptLLVM" == s.GetName())
+                settings.OptLLVM = s.GetValue();
+        }
         for (const auto& x : taskMeta.GetSecureParams()) {
             settings.SecureParams[x.first] = x.second;
         }

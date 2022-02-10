@@ -48,7 +48,7 @@ struct TClickHouseConfiguration : public TClickHouseSettings, public NCommon::TS
             }
 
             Tokens[cluster.GetName()] = cluster.GetCHToken();
-            // TODO: Drop later 
+            // TODO: Drop later
             TString endpoint;
             if (cluster.HasCluster()) {
                 endpoint = cluster.GetCluster();
@@ -61,35 +61,35 @@ struct TClickHouseConfiguration : public TClickHouseSettings, public NCommon::TS
             }
             Endpoints[cluster.GetName()] = std::make_pair(
                 endpoint + ":" + ToString(cluster.GetNativeHostPort()), cluster.GetNativeSecure());
- 
-            auto& url = Urls[cluster.GetName()]; 
-            auto& host = std::get<TString>(url); 
-            auto& scheme = std::get<EHostScheme>(url); 
-            auto& port = std::get<ui16>(url); 
-            host = cluster.GetCluster(); 
-            while (host.EndsWith("/")) 
-                host = host.substr(0u, host.length() - 1u); 
-            if (host.StartsWith("http://")) { 
-                scheme = HS_HTTP; 
-                host = host.substr(7u); 
-                port = 80; 
-            } else { 
-                scheme = HS_HTTPS; 
-                port = 443; 
-                if (host.StartsWith("https://")) { 
-                    host = host.substr(8u); 
-                } 
-            } 
- 
-            if (const auto p = host.rfind(':'); TString::npos != p) { 
-                port = ::FromString<ui16>(host.substr(p + 1u)); 
-                host = host.substr(0u, p); 
-            } 
- 
-            if (cluster.HasHostScheme()) 
-                scheme = cluster.GetHostScheme(); 
-            if (cluster.HasHostPort()) 
-                port = cluster.GetHostPort(); 
+
+            auto& url = Urls[cluster.GetName()];
+            auto& host = std::get<TString>(url);
+            auto& scheme = std::get<EHostScheme>(url);
+            auto& port = std::get<ui16>(url);
+            host = cluster.GetCluster();
+            while (host.EndsWith("/"))
+                host = host.substr(0u, host.length() - 1u);
+            if (host.StartsWith("http://")) {
+                scheme = HS_HTTP;
+                host = host.substr(7u);
+                port = 80;
+            } else {
+                scheme = HS_HTTPS;
+                port = 443;
+                if (host.StartsWith("https://")) {
+                    host = host.substr(8u);
+                }
+            }
+
+            if (const auto p = host.rfind(':'); TString::npos != p) {
+                port = ::FromString<ui16>(host.substr(p + 1u));
+                host = host.substr(0u, p);
+            }
+
+            if (cluster.HasHostScheme())
+                scheme = cluster.GetHostScheme();
+            if (cluster.HasHostPort())
+                port = cluster.GetHostPort();
         }
         this->FreezeDefaults();
     }
@@ -98,7 +98,7 @@ struct TClickHouseConfiguration : public TClickHouseSettings, public NCommon::TS
 
     TClickHouseSettings::TConstPtr Snapshot() const;
     THashMap<TString, TString> Tokens;
-    THashMap<TString, std::tuple<TString, EHostScheme, ui16>> Urls; 
+    THashMap<TString, std::tuple<TString, EHostScheme, ui16>> Urls;
     THashMap<TString, std::pair<TString, bool>> Endpoints;
     THashMap<TString, TVector<TString>> DbId2Clusters; // DatabaseId -> ClusterNames
 };

@@ -103,11 +103,11 @@ public:
     ui64 CalculateResultSize(const TKeyDesc& key) const override;
     void PinPages(const TVector<THolder<TKeyDesc>>& keys, ui64 pageFaultCount) override;
 
-    NUdf::TUnboxedValue SelectRow(const TTableId& tableId, const TArrayRef<const TCell>& row, 
+    NUdf::TUnboxedValue SelectRow(const TTableId& tableId, const TArrayRef<const TCell>& row,
         TStructLiteral* columnIds, TOptionalType* returnType, const TReadTarget& readTarget,
         const THolderFactory& holderFactory) override;
 
-    NUdf::TUnboxedValue SelectRange(const TTableId& tableId, const TTableRange& range, 
+    NUdf::TUnboxedValue SelectRange(const TTableId& tableId, const TTableRange& range,
         TStructLiteral* columnIds, TListLiteral* skipNullKeys, TStructType* returnType,
         const TReadTarget& readTarget, ui64 itemsLimit, ui64 bytesLimit, bool reverse,
         std::pair<const TListLiteral*, const TListLiteral*> forbidNullArgs, const THolderFactory& holderFactory) override;

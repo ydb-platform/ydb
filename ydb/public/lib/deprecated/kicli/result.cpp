@@ -154,7 +154,7 @@ template <> TString TReadTableResult::ValueToString<TFormatCSV>(const YdbOld::Va
         }
     case NScheme::NTypeIds::Decimal:
         {
-            NYql::NDecimal::TInt128 val; 
+            NYql::NDecimal::TInt128 val;
             auto p = reinterpret_cast<char*>(&val);
             reinterpret_cast<ui64*>(p)[0] = value.low_128();
             reinterpret_cast<ui64*>(p)[1] = value.high_128();

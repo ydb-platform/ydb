@@ -209,7 +209,7 @@ NNodes::TExprBase PreserveParams(NNodes::TExprBase node,
         return true;
     });
 
-    auto newNode = TExprBase(ctx.ReplaceNodes(node.Ptr(), replaceMap)); 
+    auto newNode = TExprBase(ctx.ReplaceNodes(node.Ptr(), replaceMap));
 
     if (!resultsMap.empty()) {
         VisitExpr(newNode.Ptr(), [&resultsMap] (const TExprNode::TPtr& node) {
@@ -240,7 +240,7 @@ public:
         , TransformCtx(transformCtx) {}
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
-        output = input; 
+        output = input;
 
         const auto& analyzeResults = TransformCtx->AnalyzeResults;
 
@@ -331,7 +331,7 @@ public:
     }
 
     TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
-        output = input; 
+        output = input;
 
         NKikimr::NKqp::IKqpGateway::TMkqlResult result(MkqlExecuteResult.Future.ExtractValue());
 

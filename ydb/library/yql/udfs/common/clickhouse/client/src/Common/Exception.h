@@ -3,7 +3,7 @@
 #include <cerrno>
 #include <vector>
 #include <memory>
-#include <optional> 
+#include <optional>
 
 #include <Poco/Version.h>
 #include <Poco/Exception.h>

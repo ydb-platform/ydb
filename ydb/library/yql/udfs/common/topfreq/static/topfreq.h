@@ -3,16 +3,16 @@
 #include <ydb/library/yql/public/udf/udf_allocator.h>
 #include <ydb/library/yql/public/udf/udf_helpers.h>
 #include <ydb/library/yql/public/udf/udf_type_ops.h>
- 
+
 #include <unordered_map>
 
 template <typename THash, typename TEquals>
 class TTopFreqBase {
 protected:
-    using TUnboxedValuePod = NKikimr::NUdf::TUnboxedValuePod; 
+    using TUnboxedValuePod = NKikimr::NUdf::TUnboxedValuePod;
     using TUnboxedValue = NKikimr::NUdf::TUnboxedValue;
-    using IValueBuilder = NKikimr::NUdf::IValueBuilder; 
- 
+    using IValueBuilder = NKikimr::NUdf::IValueBuilder;
+
     using TVectorElement = std::pair<TUnboxedValue, ui64>;
     using TVectorType = std::vector<TVectorElement, NKikimr::NUdf::TStdAllocatorForUdf<TVectorElement>>;
 
@@ -22,20 +22,20 @@ protected:
     ui32 MaxSize_ = 0;
 
     void Add(const TTopFreqBase& otherCalc);
-    void Update(const TUnboxedValuePod& key, const ui64 value); 
+    void Update(const TUnboxedValuePod& key, const ui64 value);
     void TryCompress();
     void Compress(ui32 newSize, bool sort = false);
-    TUnboxedValue Convert(const IValueBuilder* valueBuilder) const; 
+    TUnboxedValue Convert(const IValueBuilder* valueBuilder) const;
 
 protected:
     TTopFreqBase(THash hash, TEquals equals);
- 
+
     void Init(const TUnboxedValuePod& value, const ui32 minSize, const ui32 maxSize);
     void Merge(const TTopFreqBase& TopFreq1, const TTopFreqBase& TopFreq2);
     void Deserialize(const TUnboxedValuePod& serialized);
 
-    TUnboxedValue Serialize(const IValueBuilder* builder); 
-    TUnboxedValue Get(const IValueBuilder* builder, ui32 resultSize); 
+    TUnboxedValue Serialize(const IValueBuilder* builder);
+    TUnboxedValue Get(const IValueBuilder* builder, ui32 resultSize);
     void AddValue(const TUnboxedValuePod& value);
 };
 

@@ -100,8 +100,8 @@ struct TProviderInfo {
     ui32 Id;
     const TExprNode* Node;
     IDataProvider* Provider;
-    TNodeMap<ui32> Pin; 
-    std::vector<const TExprNode*> PinOrder; 
+    TNodeMap<ui32> Pin;
+    std::vector<const TExprNode*> PinOrder;
 
     TProviderInfo(ui32 id, const TExprNode* node, IDataProvider* provider)
         : Id(id)
@@ -129,7 +129,7 @@ void WriteProviders(const TString& tag, const TProviderInfoMap& providers, NYson
             writer.OnListItem();
             writer.OnBeginMap();
             writer.OnKeyedItem("Id");
-            writer.OnUint64Scalar(p.second.Pin.find(pin)->second); 
+            writer.OnUint64Scalar(p.second.Pin.find(pin)->second);
             p.second.Provider->GetPlanFormatter().WritePinDetails(*pin, writer);
             writer.OnEndMap();
         }
@@ -189,7 +189,7 @@ public:
             return;
         }
 
-        TNodeMap<TNodeInfo> nodes; 
+        TNodeMap<TNodeInfo> nodes;
         TExprNode::TListType order;
         TProviderInfoMap providers;
 
@@ -204,7 +204,7 @@ public:
         TVector<TBasicLink> basicLinks;
         TMap<TString, ui32> opStats;
         for (auto node : order) {
-            auto& info = nodes.find(node.Get())->second; 
+            auto& info = nodes.find(node.Get())->second;
             if (!info.IsVisible) {
                 continue;
             }
@@ -331,7 +331,7 @@ public:
     }
 
     void VisitCallable(const TExprNode::TPtr& node, TNodeMap<TNodeInfo>& nodes, TExprNode::TListType& order) {
-        if (nodes.cend() != nodes.find(node.Get())) { 
+        if (nodes.cend() != nodes.find(node.Get())) {
             return;
         }
 
@@ -340,25 +340,25 @@ public:
             translatedId = ++NextId_;
         }
 
-        auto& info = nodes.emplace(node.Get(), TNodeInfo(translatedId, node.Get())).first->second; 
+        auto& info = nodes.emplace(node.Get(), TNodeInfo(translatedId, node.Get())).first->second;
         TExprNode::TListType& dependencies = info.Dependencies;
-        if (node->Content() == CommitName) { 
-            dependencies.push_back(node->Child(0)); 
-            auto dataSinkName = node->Child(1)->Child(0)->Content(); 
+        if (node->Content() == CommitName) {
+            dependencies.push_back(node->Child(0));
+            auto dataSinkName = node->Child(1)->Child(0)->Content();
             auto datasink = Types_.DataSinkMap.FindPtr(dataSinkName);
             YQL_ENSURE(datasink);
             info.Provider = (*datasink).Get();
             info.IsVisible = dataSinkName != ResultProviderName;
         }
         else if (node->ChildrenSize() >= 2 && node->Child(1)->IsCallable("DataSource")) {
-            auto dataSourceName = node->Child(1)->Child(0)->Content(); 
+            auto dataSourceName = node->Child(1)->Child(0)->Content();
             auto datasource = Types_.DataSourceMap.FindPtr(dataSourceName);
             YQL_ENSURE(datasource);
             info.Provider = (*datasource).Get();
             info.IsVisible = (*datasource)->GetPlanFormatter().GetDependencies(*node, dependencies, true);
         }
         else if (node->ChildrenSize() >= 2 && node->Child(1)->IsCallable("DataSink")) {
-            auto dataSinkName = node->Child(1)->Child(0)->Content(); 
+            auto dataSinkName = node->Child(1)->Child(0)->Content();
             auto datasink = Types_.DataSinkMap.FindPtr(dataSinkName);
             YQL_ENSURE(datasink);
             info.Provider = (*datasink).Get();
@@ -379,16 +379,16 @@ public:
             }
         }
 
-        for (const auto& child : dependencies) { 
-            VisitNode(child, nodes, order); 
+        for (const auto& child : dependencies) {
+            VisitNode(child, nodes, order);
         }
 
-        order.push_back(node); 
+        order.push_back(node);
     }
 
-    void VisitNode(const TExprNode::TPtr& node, TNodeMap<TNodeInfo>& nodes, 
+    void VisitNode(const TExprNode::TPtr& node, TNodeMap<TNodeInfo>& nodes,
         TExprNode::TListType& order) {
-        switch (node->Type()) { 
+        switch (node->Type()) {
         case TExprNode::Atom:
         case TExprNode::List:
         case TExprNode::World:
@@ -404,16 +404,16 @@ public:
 
     void GatherDependencies(const TExprNode& node,
         const TNodeMap<TNodeInfo>& nodes, TSet<ui64>& dependsOn) {
-        const auto info = nodes.find(&node); 
-        if (nodes.cend() == info) 
+        const auto info = nodes.find(&node);
+        if (nodes.cend() == info)
             return;
 
-        if (info->second.IsVisible) { 
-            dependsOn.insert(info->second.NodeId); 
+        if (info->second.IsVisible) {
+            dependsOn.insert(info->second.NodeId);
             return;
         }
 
-        for (auto child : info->second.Dependencies) { 
+        for (auto child : info->second.Dependencies) {
             GatherDependencies(*child, nodes, dependsOn);
         }
     }
@@ -424,7 +424,7 @@ public:
         THashMap<TPinKey, ui32, TPinKey::THash> allInputs;
         THashMap<TPinKey, ui32, TPinKey::THash> allOutputs;
         for (auto node : order) {
-            auto& info = nodes.find(node.Get())->second; 
+            auto& info = nodes.find(node.Get())->second;
             if (!info.IsVisible) {
                 continue;
             }
@@ -481,7 +481,7 @@ public:
         }
 
         for (auto node : order) {
-            auto& info = nodes.find(node.Get())->second; 
+            auto& info = nodes.find(node.Get())->second;
             if (!info.IsVisible) {
                 continue;
             }

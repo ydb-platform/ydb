@@ -4,7 +4,7 @@ OWNER(g:yql)
 
 SRCS(
     common.proto
-    yql_mount.proto 
+    yql_mount.proto
     clickhouse.proto
 )
 

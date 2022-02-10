@@ -12,7 +12,7 @@ namespace {
 template <typename THash, typename TEquals>
 class TSetBase {
 private:
-    std::unordered_set<TUnboxedValue, THash, TEquals, TUnboxedValue::TAllocator> Set; 
+    std::unordered_set<TUnboxedValue, THash, TEquals, TUnboxedValue::TAllocator> Set;
     ui32 MaxSize = 0;
     bool WasChanged = false;
 

@@ -4781,7 +4781,7 @@ void CheckYqlDecimalValues(std::shared_ptr<grpc::Channel> channel, const TString
 
     TVector<std::pair<ui64, ui64>> halves;
     for (auto &pr : vals) {
-        NYql::NDecimal::TInt128 val = pr.first; 
+        NYql::NDecimal::TInt128 val = pr.first;
         val *= Power(10, NScheme::DECIMAL_SCALE);
         if (val >= 0)
             val += pr.second;

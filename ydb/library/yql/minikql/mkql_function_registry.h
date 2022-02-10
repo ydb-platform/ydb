@@ -1,7 +1,7 @@
 #pragma once
 
-#include "mkql_function_metadata.h" 
- 
+#include "mkql_function_metadata.h"
+
 #include <ydb/library/yql/public/udf/udf_counter.h>
 #include <ydb/library/yql/public/udf/udf_registrator.h>
 #include <ydb/library/yql/public/udf/udf_type_builder.h>
@@ -11,7 +11,7 @@
 #include <util/generic/maybe.h>
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
-#include <map> 
+#include <map>
 
 #ifdef _win_
 #   define MKQL_UDF_LIB_PREFIX ""
@@ -51,11 +51,11 @@ using TUdfModulePathsMap = THashMap<TString, TString>; // module name => udf pat
 class IFunctionRegistry: public TThrRefBase
 {
 public:
-    typedef TIntrusivePtr<IFunctionRegistry> TPtr; 
- 
+    typedef TIntrusivePtr<IFunctionRegistry> TPtr;
+
     virtual ~IFunctionRegistry() = default;
 
-    virtual const IBuiltinFunctionRegistry::TPtr& GetBuiltins() const = 0; 
+    virtual const IBuiltinFunctionRegistry::TPtr& GetBuiltins() const = 0;
 
     virtual void AllowUdfPatch() = 0;
 
@@ -82,12 +82,12 @@ public:
     virtual void CleanupModulesOnTerminate() const = 0;
 
     virtual TIntrusivePtr<IMutableFunctionRegistry> Clone() const = 0;
- 
-    struct TFunctionProperties { bool IsTypeAwareness = false; }; 
- 
-    typedef std::map<TString, TFunctionProperties> TFunctionsMap; 
- 
-    virtual TFunctionsMap GetModuleFunctions(const TStringBuf& moduleName) const = 0; 
+
+    struct TFunctionProperties { bool IsTypeAwareness = false; };
+
+    typedef std::map<TString, TFunctionProperties> TFunctionsMap;
+
+    virtual TFunctionsMap GetModuleFunctions(const TStringBuf& moduleName) const = 0;
 
     virtual bool SupportsSizedAllocators() const = 0;
 };
@@ -116,11 +116,11 @@ public:
 //////////////////////////////////////////////////////////////////////////////
 // factories
 //////////////////////////////////////////////////////////////////////////////
-TIntrusivePtr<IFunctionRegistry> CreateFunctionRegistry(IBuiltinFunctionRegistry::TPtr&& builtins); 
+TIntrusivePtr<IFunctionRegistry> CreateFunctionRegistry(IBuiltinFunctionRegistry::TPtr&& builtins);
 
 TIntrusivePtr<IFunctionRegistry> CreateFunctionRegistry(
         NKikimr::NUdf::TBackTraceCallback backtraceCallback,
-        IBuiltinFunctionRegistry::TPtr&& builtins, 
+        IBuiltinFunctionRegistry::TPtr&& builtins,
         bool allowUdfPatch,
         const TVector<TString>& udfsPaths,
         ui32 flags = 0); // see NUdf::IRegistrator::TFlags

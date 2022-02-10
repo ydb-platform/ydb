@@ -2,7 +2,7 @@ YQL_UDF(json2_udf)
 
 YQL_ABI_VERSION(
     2
-    21 
+    21
     0
 )
 

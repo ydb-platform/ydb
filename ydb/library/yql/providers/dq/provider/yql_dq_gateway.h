@@ -59,7 +59,7 @@ public:
 
     virtual ~IDqGateway() = default;
 
-    virtual NThreading::TFuture<void> OpenSession(const TString& sessionId, const TString& username) = 0; 
+    virtual NThreading::TFuture<void> OpenSession(const TString& sessionId, const TString& username) = 0;
 
     virtual void CloseSession(const TString& sessionId) = 0;
 

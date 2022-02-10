@@ -2,28 +2,28 @@
 
 #include <ydb/library/yql/utils/yql_panic.h>
 
-#include <library/cpp/containers/stack_vector/stack_vec.h> 
+#include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <library/cpp/containers/sorted_vector/sorted_vector.h>
-#include <library/cpp/json/json_writer.h> 
+#include <library/cpp/json/json_writer.h>
 
 #include <util/generic/strbuf.h>
 #include <util/generic/string.h>
 #include <util/stream/output.h>
 
-#include <deque> 
-#include <unordered_map> 
+#include <deque>
+#include <unordered_map>
 
 namespace NYql {
 
 struct TExprContext;
 class TStructExprType;
-class TTupleExprType; 
-class TMultiExprType; 
+class TTupleExprType;
+class TMultiExprType;
 class TVariantExprType;
 
 class TConstraintNode {
 protected:
-    TConstraintNode(TExprContext& ctx, std::string_view name); 
+    TConstraintNode(TExprContext& ctx, std::string_view name);
     TConstraintNode(TConstraintNode&& constr);
 
 public:
@@ -46,11 +46,11 @@ public:
             return l->GetName() < r->GetName();
         }
 
-        inline bool operator()(const std::string_view name, const TConstraintNode* r) const { 
+        inline bool operator()(const std::string_view name, const TConstraintNode* r) const {
             return name < r->GetName();
         }
 
-        inline bool operator()(const TConstraintNode* l, const std::string_view name) const { 
+        inline bool operator()(const TConstraintNode* l, const std::string_view name) const {
             return l->GetName() < name;
         }
     };
@@ -66,7 +66,7 @@ public:
         return Equals(node);
     }
     virtual void Out(IOutputStream& out) const;
-    virtual void ToJson(NJson::TJsonWriter& out) const = 0; 
+    virtual void ToJson(NJson::TJsonWriter& out) const = 0;
 
     template <typename T>
     const T* Cast() const {
@@ -78,13 +78,13 @@ public:
         return ret;
     }
 
-    std::string_view GetName() const { 
+    std::string_view GetName() const {
         return Name_;
     }
 
 protected:
     ui64 Hash_;
-    std::string_view Name_; 
+    std::string_view Name_;
 };
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -126,11 +126,11 @@ public:
         return Constraints_ != s.Constraints_;
     }
 
-    const TConstraintNode* GetConstraint(std::string_view name) const; 
+    const TConstraintNode* GetConstraint(std::string_view name) const;
     void AddConstraint(const TConstraintNode* node);
-    const TConstraintNode* RemoveConstraint(std::string_view name); 
+    const TConstraintNode* RemoveConstraint(std::string_view name);
 
-    void ToJson(NJson::TJsonWriter& writer) const; 
+    void ToJson(NJson::TJsonWriter& writer) const;
 private:
     TConstraintNode::TListType Constraints_;
 };
@@ -155,55 +155,55 @@ public:
     bool Equals(const TConstraintNode& node) const override;
     bool Includes(const TConstraintNode& node) const override;
     void Out(IOutputStream& out) const override;
-    void ToJson(NJson::TJsonWriter& out) const override; 
+    void ToJson(NJson::TJsonWriter& out) const override;
 
 protected:
     TSetType Columns_;
 };
 
-class TSortedConstraintNode final: public TConstraintNode { 
-public: 
-    using TContainerType = TSmallVec<std::pair<NSorted::TSimpleSet<std::string_view>, bool>>; 
- 
-private: 
+class TSortedConstraintNode final: public TConstraintNode {
+public:
+    using TContainerType = TSmallVec<std::pair<NSorted::TSimpleSet<std::string_view>, bool>>;
+
+private:
     friend struct TExprContext;
 
-    TSortedConstraintNode(TExprContext& ctx, TContainerType&& content); 
+    TSortedConstraintNode(TExprContext& ctx, TContainerType&& content);
     TSortedConstraintNode(TExprContext& ctx, const TSortedConstraintNode& constr, size_t prefixLength);
     TSortedConstraintNode(TSortedConstraintNode&& constr);
 public:
-    static constexpr std::string_view Name() { 
+    static constexpr std::string_view Name() {
         return "Sorted";
     }
 
-    const TContainerType& GetContent() const { 
-        return Content_; 
+    const TContainerType& GetContent() const {
+        return Content_;
     }
 
-    // TODO: deprecated, drop 
-    const TVector<TStringBuf> GetColumns() const { 
-        TVector<TStringBuf> result; 
-        result.reserve(Content_.size()); 
-        for (const auto& c : Content_) 
-            result.emplace_back(c.first.front()); 
-        return result; 
-    } 
- 
+    // TODO: deprecated, drop
+    const TVector<TStringBuf> GetColumns() const {
+        TVector<TStringBuf> result;
+        result.reserve(Content_.size());
+        for (const auto& c : Content_)
+            result.emplace_back(c.first.front());
+        return result;
+    }
+
     bool Equals(const TConstraintNode& node) const override;
     bool Includes(const TConstraintNode& node) const override;
     void Out(IOutputStream& out) const override;
-    void ToJson(NJson::TJsonWriter& out) const override; 
+    void ToJson(NJson::TJsonWriter& out) const override;
 
     bool IsPrefixOf(const TSortedConstraintNode& node) const;
     size_t GetCommonPrefixLength(const TSortedConstraintNode& node) const;
 
-    const TSortedConstraintNode* CutPrefix(size_t newPrefixLength, TExprContext& ctx) const; 
- 
+    const TSortedConstraintNode* CutPrefix(size_t newPrefixLength, TExprContext& ctx) const;
+
     static const TSortedConstraintNode* MakeCommon(const TVector<const TConstraintSet*>& constraints, TExprContext& ctx);
-    static const TSortedConstraintNode* FilterByType(const TSortedConstraintNode* sorted, const TStructExprType* outItemType, TExprContext& ctx); 
+    static const TSortedConstraintNode* FilterByType(const TSortedConstraintNode* sorted, const TStructExprType* outItemType, TExprContext& ctx);
 
 protected:
-    TContainerType Content_; 
+    TContainerType Content_;
 };
 
 class TGroupByConstraintNode final: public TColumnSetConstraintNodeBase {
@@ -217,7 +217,7 @@ protected:
 
     size_t GetCommonPrefixLength(const TGroupByConstraintNode& node) const;
 public:
-    static constexpr std::string_view Name() { 
+    static constexpr std::string_view Name() {
         return "GroupBy";
     }
 
@@ -235,7 +235,7 @@ protected:
     TUniqueConstraintNode(TUniqueConstraintNode&& constr);
 
 public:
-    static constexpr std::string_view Name() { 
+    static constexpr std::string_view Name() {
         return "Unique";
     }
 
@@ -247,33 +247,33 @@ public:
 
 class TPassthroughConstraintNode final: public TConstraintNode {
 public:
-    using TKeyType = std::deque<std::string_view>; 
-    using TPartType = NSorted::TSimpleMap<TKeyType, std::string_view>; 
-    using TMapType = std::unordered_map<const TPassthroughConstraintNode*, TPartType>; 
-    using TReverseMapType = NSorted::TSimpleMap<std::string_view, std::string_view>; 
-private: 
+    using TKeyType = std::deque<std::string_view>;
+    using TPartType = NSorted::TSimpleMap<TKeyType, std::string_view>;
+    using TMapType = std::unordered_map<const TPassthroughConstraintNode*, TPartType>;
+    using TReverseMapType = NSorted::TSimpleMap<std::string_view, std::string_view>;
+private:
     friend struct TExprContext;
 
     TPassthroughConstraintNode(TExprContext& ctx, const TStructExprType& itemType);
-    TPassthroughConstraintNode(TExprContext& ctx, const TTupleExprType& itemType); 
-    TPassthroughConstraintNode(TExprContext& ctx, const TMultiExprType& itemType); 
+    TPassthroughConstraintNode(TExprContext& ctx, const TTupleExprType& itemType);
+    TPassthroughConstraintNode(TExprContext& ctx, const TMultiExprType& itemType);
     TPassthroughConstraintNode(TPassthroughConstraintNode&& constr);
-    TPassthroughConstraintNode(TExprContext& ctx, TMapType&& mapping); 
+    TPassthroughConstraintNode(TExprContext& ctx, TMapType&& mapping);
 public:
-    static constexpr std::string_view Name() { 
+    static constexpr std::string_view Name() {
         return "Passthrough";
     }
 
-    const TMapType& GetColumnMapping() const; 
-    TReverseMapType GetReverseMapping() const; 
+    const TMapType& GetColumnMapping() const;
+    TReverseMapType GetReverseMapping() const;
 
     bool Equals(const TConstraintNode& node) const override;
     bool Includes(const TConstraintNode& node) const override;
     void Out(IOutputStream& out) const override;
-    void ToJson(NJson::TJsonWriter& out) const override; 
+    void ToJson(NJson::TJsonWriter& out) const override;
 
-    const TPassthroughConstraintNode* ExtractField(TExprContext& ctx, const std::string_view& field) const; 
- 
+    const TPassthroughConstraintNode* ExtractField(TExprContext& ctx, const std::string_view& field) const;
+
     static const TPassthroughConstraintNode* MakeCommon(const TVector<const TConstraintSet*>& constraints, TExprContext& ctx);
 private:
     TMapType Mapping_;
@@ -287,12 +287,12 @@ protected:
     TEmptyConstraintNode(TEmptyConstraintNode&& constr);
 
 public:
-    static constexpr std::string_view Name() { 
+    static constexpr std::string_view Name() {
         return "Empty";
     }
 
     bool Equals(const TConstraintNode& node) const override;
-    void ToJson(NJson::TJsonWriter& out) const override; 
+    void ToJson(NJson::TJsonWriter& out) const override;
 
     static const TEmptyConstraintNode* MakeCommon(const TVector<const TConstraintSet*>& constraints, TExprContext& ctx);
 };
@@ -310,7 +310,7 @@ protected:
     TVarIndexConstraintNode(TVarIndexConstraintNode&& constr);
 
 public:
-    static constexpr std::string_view Name() { 
+    static constexpr std::string_view Name() {
         return "VarIndex";
     }
 
@@ -325,7 +325,7 @@ public:
     bool Equals(const TConstraintNode& node) const override;
     bool Includes(const TConstraintNode& node) const override;
     void Out(IOutputStream& out) const override;
-    void ToJson(NJson::TJsonWriter& out) const override; 
+    void ToJson(NJson::TJsonWriter& out) const override;
 
     static const TVarIndexConstraintNode* MakeCommon(const TVector<const TConstraintSet*>& constraints, TExprContext& ctx);
 
@@ -348,7 +348,7 @@ public:
     TMultiConstraintNode(TMultiConstraintNode&& constr);
 
 public:
-    static constexpr std::string_view Name() { 
+    static constexpr std::string_view Name() {
         return "Multi";
     }
 
@@ -363,11 +363,11 @@ public:
     bool Equals(const TConstraintNode& node) const override;
     bool Includes(const TConstraintNode& node) const override;
     void Out(IOutputStream& out) const override;
-    void ToJson(NJson::TJsonWriter& out) const override; 
+    void ToJson(NJson::TJsonWriter& out) const override;
 
     static const TMultiConstraintNode* MakeCommon(const TVector<const TConstraintSet*>& constraints, TExprContext& ctx);
 
-    bool FilteredIncludes(const TConstraintNode& node, const THashSet<TString>& blacklist) const; 
+    bool FilteredIncludes(const TConstraintNode& node, const THashSet<TString>& blacklist) const;
 protected:
     TMapType Items_;
 };

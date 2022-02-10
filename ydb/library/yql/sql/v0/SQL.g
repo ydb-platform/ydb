@@ -84,7 +84,7 @@ atom_expr:
   | exists_expr
   | case_expr
   | id_or_string NAMESPACE id_or_string
-  | bitcast_expr 
+  | bitcast_expr
 ;
 
 in_atom_expr:
@@ -95,13 +95,13 @@ in_atom_expr:
   | cast_expr
   | case_expr
   | LPAREN select_stmt RPAREN
-  | bitcast_expr 
+  | bitcast_expr
 ;
 
 cast_expr: CAST LPAREN expr AS type_name RPAREN;
 
-bitcast_expr: BITCAST LPAREN expr AS type_name RPAREN; 
- 
+bitcast_expr: BITCAST LPAREN expr AS type_name RPAREN;
+
 exists_expr: EXISTS LPAREN select_stmt RPAREN;
 
 case_expr: CASE expr? when_expr+ (ELSE expr)? END;
@@ -161,9 +161,9 @@ named_bind_parameter_list: named_bind_parameter (COMMA named_bind_parameter)*;
 
 unsigned_number: integer | real;
 signed_number: (PLUS | MINUS)? (integer | real);
-type_name: id (LPAREN integer (COMMA integer)? RPAREN)?; 
+type_name: id (LPAREN integer (COMMA integer)? RPAREN)?;
 
-flex_type: STRING | type_name; 
+flex_type: STRING | type_name;
 
 declare_stmt: DECLARE bind_parameter AS flex_type (EQUALS literal_value)?;
 
@@ -305,7 +305,7 @@ alter_table_action: alter_table_add_column | alter_table_drop_column;
 alter_table_add_column: ADD COLUMN? column_schema (COMMA ADD COLUMN? column_schema)*;
 alter_table_drop_column: DROP COLUMN? id;
 
-column_schema: id_schema flex_type (NOT? NULL)?; 
+column_schema: id_schema flex_type (NOT? NULL)?;
 column_order_by_specification: id (ASC | DESC)?;
 
 table_constraint:
@@ -424,8 +424,8 @@ keyword: keyword_restricted | keyword_alter_uncompat | keyword_table_uncompat;
 keyword_restricted: keyword_compat | keyword_expr_uncompat | keyword_select_uncompat | keyword_in_uncompat;
 
 keyword_expr_uncompat:
-    BITCAST 
-  | CASE 
+    BITCAST
+  | CASE
   | CAST
   | CUBE
   | CURRENT_TIME
@@ -713,7 +713,7 @@ BEFORE: B E F O R E;
 BEGIN: B E G I N;
 BERNOULLI: B E R N O U L L I;
 BETWEEN: B E T W E E N;
-BITCAST: B I T C A S T; 
+BITCAST: B I T C A S T;
 BY: B Y;
 CASCADE: C A S C A D E;
 CASE: C A S E;

@@ -287,7 +287,7 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
         });
 
     compiler->AddCallable(TKqpUpsertRows::CallableName(),
-        [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) { 
+        [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
             TKqpUpsertRows upsertRows(&node);
 
             const auto& tableMeta = ctx.GetTableMeta(upsertRows.Table());
@@ -317,7 +317,7 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
             auto result = ctx.PgmBuilder().KqpUpsertRows(MakeTableId(upsertRows.Table()), rows,
                 GetKqpColumns(tableMeta, upsertColumns, false));
 
-            return result; 
+            return result;
         });
 
     compiler->AddCallable(TKqpDeleteRows::CallableName(),

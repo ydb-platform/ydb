@@ -1,6 +1,6 @@
 #include <Common/hex.h>
 #include <Common/escapeForFileName.h>
-#include <Common/StringUtils/StringUtils.h> 
+#include <Common/StringUtils/StringUtils.h>
 
 namespace DB
 {

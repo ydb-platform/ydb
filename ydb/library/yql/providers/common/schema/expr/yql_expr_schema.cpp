@@ -157,11 +157,11 @@ public:
 
     void Save(const TTypeAnnotationNode* type) {
         switch (type->GetKind()) {
-            case ETypeAnnotationKind::Data: { 
-                const auto dataType = type->Cast<TDataExprType>(); 
-                if (const auto dataParamsType = dynamic_cast<const TDataExprParamsType*>(dataType)) { 
+            case ETypeAnnotationKind::Data: {
+                const auto dataType = type->Cast<TDataExprType>();
+                if (const auto dataParamsType = dynamic_cast<const TDataExprParamsType*>(dataType)) {
                     TBase::SaveDataTypeParams(dataType->GetName(), dataParamsType->GetParamOne(), dataParamsType->GetParamTwo());
-                } else 
+                } else
                     TBase::SaveDataType(dataType->GetName());
                 }
                 break;
@@ -269,7 +269,7 @@ struct TExprTypeLoader {
     {
     }
     TMaybe<TType> LoadVoidType(ui32 /*level*/) {
-        return Ctx.MakeType<TVoidExprType>(); 
+        return Ctx.MakeType<TVoidExprType>();
     }
     TMaybe<TType> LoadNullType(ui32 /*level*/) {
         return Ctx.MakeType<TNullExprType>();

@@ -23,7 +23,7 @@ namespace {
         structBuilder.Add("04", TRuntimeNode(TDataType::Create(NUdf::TDataType<ui32>::Id, env), true));
         structBuilder.Add("12", TRuntimeNode(env.GetEmptyStruct()->GetType(), true));
         TVector<std::pair<TString, TType*>> smallMembers;
-        smallMembers.push_back(std::make_pair("Embedded member", env.GetVoid()->GetGenericType())); 
+        smallMembers.push_back(std::make_pair("Embedded member", env.GetVoid()->GetGenericType()));
         structBuilder.Add("13", TRuntimeNode(TStructType::Create(smallMembers.data(), smallMembers.size(), env), true));
         structBuilder.Add("14", TRuntimeNode(TListType::Create(dtype1, env), true));
         structBuilder.Add("15", TRuntimeNode(TOptionalType::Create(dtype2, env), true));
@@ -34,26 +34,26 @@ namespace {
             dtype2, smallTypes.size(), smallTypes.data(), nullptr, env), true));
         structBuilder.Add("18", TRuntimeNode(env.GetVoid(), true));
         ui32 u = 345;
-        structBuilder.Add("19", TRuntimeNode(TDataLiteral::Create(NUdf::TUnboxedValuePod(u), dtype1, env), true)); 
+        structBuilder.Add("19", TRuntimeNode(TDataLiteral::Create(NUdf::TUnboxedValuePod(u), dtype1, env), true));
         auto v = TRuntimeNode(env.GetVoid(), true);
         structBuilder.Add("26", TRuntimeNode(TListLiteral::Create(nullptr, 0, ltype1, env), true));
         TVector<TRuntimeNode> litems;
-        litems.push_back(TRuntimeNode(TDataLiteral::Create(NUdf::TUnboxedValuePod(u), dtype1, env), true)); 
+        litems.push_back(TRuntimeNode(TDataLiteral::Create(NUdf::TUnboxedValuePod(u), dtype1, env), true));
         u = 789;
-        litems.push_back(TRuntimeNode(TDataLiteral::Create(NUdf::TUnboxedValuePod(u), dtype1, env), true)); 
+        litems.push_back(TRuntimeNode(TDataLiteral::Create(NUdf::TUnboxedValuePod(u), dtype1, env), true));
         structBuilder.Add("27", TRuntimeNode(TListLiteral::Create(litems.data(), litems.size(), ltype1, env), true));
         structBuilder.Add("28", TRuntimeNode(TOptionalLiteral::Create(otype1, env), true));
         structBuilder.Add("29", TRuntimeNode(TOptionalLiteral::Create(litems[0], otype1, env), true));
 
         auto ditype1 = TDictType::Create(dtype1, dtype2, env);
         TVector<std::pair<TRuntimeNode, TRuntimeNode>> ditems;
-        ditems.push_back(std::make_pair(TRuntimeNode(TDataLiteral::Create(NUdf::TUnboxedValuePod((ui32)456), dtype1, env), true), 
-            TRuntimeNode(TDataLiteral::Create(NUdf::TUnboxedValuePod::Embedded("aaaa"), dtype2, env), true))); 
+        ditems.push_back(std::make_pair(TRuntimeNode(TDataLiteral::Create(NUdf::TUnboxedValuePod((ui32)456), dtype1, env), true),
+            TRuntimeNode(TDataLiteral::Create(NUdf::TUnboxedValuePod::Embedded("aaaa"), dtype2, env), true)));
         structBuilder.Add("30", TRuntimeNode(TDictLiteral::Create(ditems.size(), ditems.data(), ditype1, env), true));
         TVector<TRuntimeNode> callableArgs;
         callableArgs.push_back(TRuntimeNode(env.GetVoid(), true));
         TCallable* callable = TCallable::Create(callableArgs.size(), callableArgs.data(), ctype1, env);
-        callable->SetResult(TRuntimeNode(TDataLiteral::Create(NUdf::TUnboxedValuePod(u), dtype1, env), true), env); 
+        callable->SetResult(TRuntimeNode(TDataLiteral::Create(NUdf::TUnboxedValuePod(u), dtype1, env), true), env);
         structBuilder.Add("31", TRuntimeNode(callable, true));
         structBuilder.Add("32", TRuntimeNode(env.GetAnyType(), true));
         structBuilder.Add("33", TRuntimeNode(TAny::Create(env), true));
@@ -66,7 +66,7 @@ namespace {
         TVector<TType*> tupleTypes;
         tupleTypes.push_back(dtype1);
         TVector<TRuntimeNode> tupleValues;
-        tupleValues.push_back(TRuntimeNode(TDataLiteral::Create(NUdf::TUnboxedValuePod((ui32)456), dtype1, env), true)); 
+        tupleValues.push_back(TRuntimeNode(TDataLiteral::Create(NUdf::TUnboxedValuePod((ui32)456), dtype1, env), true));
         auto tupleType = TTupleType::Create(tupleTypes.size(), tupleTypes.data(), env);
         structBuilder.Add("36", TRuntimeNode(tupleType, true));
         structBuilder.Add("37", TRuntimeNode(TTupleLiteral::Create(tupleValues.size(), tupleValues.data(), tupleType, env), true));

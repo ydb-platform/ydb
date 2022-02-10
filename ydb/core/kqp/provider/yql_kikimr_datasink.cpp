@@ -121,9 +121,9 @@ private:
     }
 
     TStatus HandleWrite(TExprBase node, TExprContext& ctx) override {
-        auto cluster = node.Ref().Child(1)->Child(1)->Content(); 
+        auto cluster = node.Ref().Child(1)->Child(1)->Content();
         TKikimrKey key(ctx);
-        if (!key.Extract(*node.Ref().Child(2))) { 
+        if (!key.Extract(*node.Ref().Child(2))) {
             return TStatus::Error;
         }
 
@@ -388,8 +388,8 @@ public:
 
     bool ValidateParameters(TExprNode& node, TExprContext& ctx, TMaybe<TString>& cluster) override {
         if (node.IsCallable(TCoDataSink::CallableName())) {
-            if (node.Child(0)->Content() == KikimrProviderName) { 
-                if (node.Child(1)->Content().empty()) { 
+            if (node.Child(0)->Content() == KikimrProviderName) {
+                if (node.Child(1)->Content().empty()) {
                     ctx.AddError(TIssue(ctx.GetPosition(node.Child(1)->Pos()), "Empty cluster name"));
                     return false;
                 }
@@ -476,8 +476,8 @@ public:
         return true;
     }
 
-    TExprNode::TPtr RewriteIO(const TExprNode::TPtr& node, TExprContext& ctx) override { 
-        YQL_ENSURE(node->IsCallable(WriteName), "Expected Write!, got: " << node->Content()); 
+    TExprNode::TPtr RewriteIO(const TExprNode::TPtr& node, TExprContext& ctx) override {
+        YQL_ENSURE(node->IsCallable(WriteName), "Expected Write!, got: " << node->Content());
 
         TKikimrKey key(ctx);
         YQL_ENSURE(key.Extract(*node->Child(2)), "Failed to extract ydb key.");
@@ -490,43 +490,43 @@ public:
 
                 if (mode == "drop") {
                     YQL_ENSURE(!settings.Columns);
-                    return Build<TKiDropTable>(ctx, node->Pos()) 
-                        .World(node->Child(0)) 
-                        .DataSink(node->Child(1)) 
+                    return Build<TKiDropTable>(ctx, node->Pos())
+                        .World(node->Child(0))
+                        .DataSink(node->Child(1))
                         .Table().Build(key.GetTablePath())
                         .Settings(settings.Other)
                         .Done()
-                        .Ptr(); 
+                        .Ptr();
                 } else if (mode == "update") {
                     YQL_ENSURE(settings.Filter);
                     YQL_ENSURE(settings.Update);
-                    return Build<TKiUpdateTable>(ctx, node->Pos()) 
-                        .World(node->Child(0)) 
-                        .DataSink(node->Child(1)) 
+                    return Build<TKiUpdateTable>(ctx, node->Pos())
+                        .World(node->Child(0))
+                        .DataSink(node->Child(1))
                         .Table().Build(key.GetTablePath())
                         .Filter(settings.Filter.Cast())
                         .Update(settings.Update.Cast())
                         .Done()
-                        .Ptr(); 
+                        .Ptr();
                 } else if (mode == "delete") {
                     YQL_ENSURE(settings.Filter);
-                    return Build<TKiDeleteTable>(ctx, node->Pos()) 
-                        .World(node->Child(0)) 
-                        .DataSink(node->Child(1)) 
+                    return Build<TKiDeleteTable>(ctx, node->Pos())
+                        .World(node->Child(0))
+                        .DataSink(node->Child(1))
                         .Table().Build(key.GetTablePath())
                         .Filter(settings.Filter.Cast())
                         .Done()
-                        .Ptr(); 
+                        .Ptr();
                 } else {
-                    return Build<TKiWriteTable>(ctx, node->Pos()) 
-                        .World(node->Child(0)) 
-                        .DataSink(node->Child(1)) 
+                    return Build<TKiWriteTable>(ctx, node->Pos())
+                        .World(node->Child(0))
+                        .DataSink(node->Child(1))
                         .Table().Build(key.GetTablePath())
-                        .Input(node->Child(3)) 
+                        .Input(node->Child(3))
                         .Mode(mode)
                         .Settings(settings.Other)
                         .Done()
-                        .Ptr(); 
+                        .Ptr();
                 }
             }
 
@@ -654,7 +654,7 @@ public:
     bool GetDependencies(const TExprNode& node, TExprNode::TListType& children, bool compact) override {
         Y_UNUSED(compact);
         if (CanExecute(node)) {
-            children.push_back(node.ChildPtr(0)); 
+            children.push_back(node.ChildPtr(0));
             return true;
         }
 
@@ -693,10 +693,10 @@ private:
 IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output,
     TExprContext& ctx)
 {
-    YQL_ENSURE(input->Type() == TExprNode::Callable); 
-    output = input; 
+    YQL_ENSURE(input->Type() == TExprNode::Callable);
+    output = input;
 
-    auto callable = TCallable(input); 
+    auto callable = TCallable(input);
 
     if (auto node = callable.Maybe<TKiClusterConfig>()) {
         return HandleClusterConfig(node.Cast(), ctx);
@@ -714,7 +714,7 @@ IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPt
         return HandleDeleteTable(node.Cast(), ctx);
     }
 
-    if (auto node = TMaybeNode<TKiCreateTable>(input)) { 
+    if (auto node = TMaybeNode<TKiCreateTable>(input)) {
         return HandleCreateTable(node.Cast(), ctx);
     }
 
@@ -722,7 +722,7 @@ IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPt
         return HandleAlterTable(node.Cast(), ctx);
     }
 
-    if (auto node = TMaybeNode<TKiDropTable>(input)) { 
+    if (auto node = TMaybeNode<TKiDropTable>(input)) {
         return HandleDropTable(node.Cast(), ctx);
     }
 
@@ -750,8 +750,8 @@ IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPt
         return HandleDropGroup(node.Cast(), ctx);
     }
 
-    if (input->IsCallable(WriteName)) { 
-        return HandleWrite(TExprBase(input), ctx); 
+    if (input->IsCallable(WriteName)) {
+        return HandleWrite(TExprBase(input), ctx);
     }
 
     if (auto node = callable.Maybe<TCoCommit>()) {

@@ -8,7 +8,7 @@
 #include <util/generic/yexception.h>
 #include <util/generic/ptr.h>
 #include <util/generic/noncopyable.h>
-#include <functional> 
+#include <functional>
 
 class TDuration;
 

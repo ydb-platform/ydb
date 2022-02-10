@@ -147,28 +147,28 @@ bool RangeFinished(const TString& lastReadKey, const TString& endKey, const TVec
     return cmp >= 0;
 }
 
-TScanIterator::TScanIterator(const TDriver& driver, const TString &database, const TString &endpoint, const TString &token, bool ssl, const TString& path, 
-                                           const TVector<TString>& columns, 
-                                           const TVector<NKikimr::NScheme::TTypeId>& keyColumnTypes, 
-                                           ui64 maxRowsInRequest, ui64 maxBytesInRequest, 
-                                           const TString& keyFrom, const TString& keyTo, 
-                                           const TScanSettings& settings) 
-    : Path(path) 
-    , Columns(columns) 
-    , KeyColumnTypes(keyColumnTypes) 
-    , MaxRows(maxRowsInRequest) 
-    , MaxBytes(maxBytesInRequest) 
-    , Settings(settings) 
-    , Connection(driver, NYdb::TCommonClientSettings().Database(database).AuthToken(token).DiscoveryEndpoint(endpoint).DiscoveryMode(NYdb::EDiscoveryMode::Async).EnableSsl(ssl)) 
-    , LastReadKey(keyFrom.empty() ? NKikimr::TSerializedCellVec::Serialize(TVector<NKikimr::TCell>(KeyColumnTypes.size())) : keyFrom) 
-    , LastReadKeyInclusive(false) 
-    , EndKey(keyTo) 
-    , RequestsDone(!EndKey.empty() && RangeFinished(LastReadKey, EndKey, KeyColumnTypes)) 
-    , MaxRetries(20) 
-    , Retried(0) 
-{ 
-    MakeRequest(); 
-} 
+TScanIterator::TScanIterator(const TDriver& driver, const TString &database, const TString &endpoint, const TString &token, bool ssl, const TString& path,
+                                           const TVector<TString>& columns,
+                                           const TVector<NKikimr::NScheme::TTypeId>& keyColumnTypes,
+                                           ui64 maxRowsInRequest, ui64 maxBytesInRequest,
+                                           const TString& keyFrom, const TString& keyTo,
+                                           const TScanSettings& settings)
+    : Path(path)
+    , Columns(columns)
+    , KeyColumnTypes(keyColumnTypes)
+    , MaxRows(maxRowsInRequest)
+    , MaxBytes(maxBytesInRequest)
+    , Settings(settings)
+    , Connection(driver, NYdb::TCommonClientSettings().Database(database).AuthToken(token).DiscoveryEndpoint(endpoint).DiscoveryMode(NYdb::EDiscoveryMode::Async).EnableSsl(ssl))
+    , LastReadKey(keyFrom.empty() ? NKikimr::TSerializedCellVec::Serialize(TVector<NKikimr::TCell>(KeyColumnTypes.size())) : keyFrom)
+    , LastReadKeyInclusive(false)
+    , EndKey(keyTo)
+    , RequestsDone(!EndKey.empty() && RangeFinished(LastReadKey, EndKey, KeyColumnTypes))
+    , MaxRetries(20)
+    , Retried(0)
+{
+    MakeRequest();
+}
 
 TScanIterator::TScanIterator(const TDriver& driver, const TString &database, const TString &token, const TString& path,
                                            const TVector<TString>& columns,
@@ -183,10 +183,10 @@ TScanIterator::TScanIterator(const TDriver& driver, const TString &database, con
     , MaxBytes(maxBytesInRequest)
     , Settings(settings)
     , Connection(driver, NYdb::TCommonClientSettings().Database(database).AuthToken(token))
-    , LastReadKey(keyFrom.empty() ? NKikimr::TSerializedCellVec::Serialize(TVector<NKikimr::TCell>(KeyColumnTypes.size())) : keyFrom) 
+    , LastReadKey(keyFrom.empty() ? NKikimr::TSerializedCellVec::Serialize(TVector<NKikimr::TCell>(KeyColumnTypes.size())) : keyFrom)
     , LastReadKeyInclusive(false)
     , EndKey(keyTo)
-    , RequestsDone(!EndKey.empty() && RangeFinished(LastReadKey, EndKey, KeyColumnTypes)) 
+    , RequestsDone(!EndKey.empty() && RangeFinished(LastReadKey, EndKey, KeyColumnTypes))
     , MaxRetries(20)
     , Retried(0)
 {

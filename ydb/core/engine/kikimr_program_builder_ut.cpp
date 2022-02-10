@@ -16,55 +16,55 @@
 
 namespace NKikimr {
 namespace NMiniKQL {
-    TIntrusivePtr<IRandomProvider> CreateRandomProvider() { 
-        return CreateDeterministicRandomProvider(1); 
-    } 
+    TIntrusivePtr<IRandomProvider> CreateRandomProvider() {
+        return CreateDeterministicRandomProvider(1);
+    }
 
-    TIntrusivePtr<ITimeProvider> CreateTimeProvider() { 
-        return CreateDeterministicTimeProvider(1); 
-    } 
- 
-    TComputationNodeFactory GetLazyListFactory() { 
-        return [](TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* { 
-            if (callable.GetType()->GetName() == "LazyList") { 
-                return new TExternalComputationNode(ctx.Mutables); 
-            } 
- 
-            return GetBuiltinFactory()(callable, ctx); 
-        }; 
-    } 
- 
-    struct TSetup { 
-        TSetup() { 
-            FunctionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry()); 
-            RandomProvider = CreateRandomProvider(); 
-            TimeProvider = CreateTimeProvider(); 
- 
-            Env.Reset(new TTypeEnvironment(Alloc)); 
+    TIntrusivePtr<ITimeProvider> CreateTimeProvider() {
+        return CreateDeterministicTimeProvider(1);
+    }
+
+    TComputationNodeFactory GetLazyListFactory() {
+        return [](TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
+            if (callable.GetType()->GetName() == "LazyList") {
+                return new TExternalComputationNode(ctx.Mutables);
+            }
+
+            return GetBuiltinFactory()(callable, ctx);
+        };
+    }
+
+    struct TSetup {
+        TSetup() {
+            FunctionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
+            RandomProvider = CreateRandomProvider();
+            TimeProvider = CreateTimeProvider();
+
+            Env.Reset(new TTypeEnvironment(Alloc));
             PgmBuilder.Reset(new TKikimrProgramBuilder(*Env, *FunctionRegistry));
-        } 
- 
-        TAutoPtr<IComputationGraph> BuildGraph(TRuntimeNode pgm) { 
-            Explorer.Walk(pgm.GetNode(), *Env); 
+        }
+
+        TAutoPtr<IComputationGraph> BuildGraph(TRuntimeNode pgm) {
+            Explorer.Walk(pgm.GetNode(), *Env);
             TComputationPatternOpts opts(Alloc.Ref(), *Env, GetLazyListFactory(),
                 FunctionRegistry.Get(), NUdf::EValidateMode::None,
-                NUdf::EValidatePolicy::Exception, "OFF", EGraphPerProcess::Multi); 
+                NUdf::EValidatePolicy::Exception, "OFF", EGraphPerProcess::Multi);
             Pattern = MakeComputationPattern(Explorer, pgm, {}, opts);
             return Pattern->Clone(opts.ToComputationOptions(*RandomProvider, *TimeProvider));
-        } 
- 
-        TIntrusivePtr<IFunctionRegistry> FunctionRegistry; 
-        TIntrusivePtr<IRandomProvider> RandomProvider; 
-        TIntrusivePtr<ITimeProvider> TimeProvider; 
- 
-        TScopedAlloc Alloc; 
-        THolder<TTypeEnvironment> Env; 
-        THolder<TKikimrProgramBuilder> PgmBuilder; 
- 
-        TExploringNodeVisitor Explorer; 
+        }
+
+        TIntrusivePtr<IFunctionRegistry> FunctionRegistry;
+        TIntrusivePtr<IRandomProvider> RandomProvider;
+        TIntrusivePtr<ITimeProvider> TimeProvider;
+
+        TScopedAlloc Alloc;
+        THolder<TTypeEnvironment> Env;
+        THolder<TKikimrProgramBuilder> PgmBuilder;
+
+        TExploringNodeVisitor Explorer;
         IComputationPattern::TPtr Pattern;
-    }; 
- 
+    };
+
 Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
 
     void VerifySerialization(TNode* pgm, const TTypeEnvironment& env) {
@@ -83,11 +83,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
     Y_UNIT_TEST(TestEraseRowStaticKey) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
-        auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry()); 
+        auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         TKikimrProgramBuilder pgmBuilder(env, *functionRegistry);
         auto pgmReturn = pgmBuilder.NewEmptyListOfVoid();
         TVector<TRuntimeNode> keyColumns;
-        keyColumns.push_back(pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42)); 
+        keyColumns.push_back(pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42));
         keyColumns.push_back(pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui64>::Id));
         keyColumns.push_back(pgmBuilder.NewOptional(
             pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("qwe")));
@@ -126,14 +126,14 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
     Y_UNIT_TEST(TestEraseRowPartialDynamicKey) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
-        auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry()); 
+        auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         TKikimrProgramBuilder pgmBuilder(env, *functionRegistry);
         auto pgmReturn = pgmBuilder.NewEmptyListOfVoid();
         TVector<TRuntimeNode> keyColumns;
         keyColumns.push_back(pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui64>::Id));
         keyColumns.push_back(pgmBuilder.Add(
-            pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(34), 
-            pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(12))); 
+            pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(34),
+            pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(12)));
         keyColumns.push_back(pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("qwe"));
         TVector<ui32> keyTypes({ NUdf::TDataType<ui64>::Id, NUdf::TDataType<ui32>::Id, NUdf::TDataType<char*>::Id });
         pgmReturn = pgmBuilder.Append(pgmReturn, pgmBuilder.EraseRow(TTableId(1, 2),
@@ -168,13 +168,13 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
     Y_UNIT_TEST(TestEraseRowDynamicKey) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
-        auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry()); 
+        auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         TKikimrProgramBuilder pgmBuilder(env, *functionRegistry);
         auto pgmReturn = pgmBuilder.NewEmptyListOfVoid();
         TVector<TRuntimeNode> keyColumns;
         keyColumns.push_back(pgmBuilder.Add(
-            pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(34), 
-            pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(12))); 
+            pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(34),
+            pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(12)));
         keyColumns.push_back(pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("qwe"));
 
         TVector<ui32> keyTypes({ NUdf::TDataType<ui32>::Id, NUdf::TDataType<char*>::Id });
@@ -207,11 +207,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
     Y_UNIT_TEST(TestSelectRow) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
-        auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry()); 
+        auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         TKikimrProgramBuilder pgmBuilder(env, *functionRegistry);
         auto pgmReturn = pgmBuilder.NewEmptyListOfVoid();
         TVector<TRuntimeNode> keyColumns;
-        keyColumns.push_back(pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42)); 
+        keyColumns.push_back(pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42));
         keyColumns.push_back(pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui64>::Id));
         keyColumns.push_back(pgmBuilder.NewOptional(
             pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("qwe")));
@@ -260,20 +260,20 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
     Y_UNIT_TEST(TestUpdateRowStaticKey) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
-        auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry()); 
+        auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         TKikimrProgramBuilder pgmBuilder(env, *functionRegistry);
         auto pgmReturn = pgmBuilder.NewEmptyListOfVoid();
         TVector<TRuntimeNode> keyColumns;
-        keyColumns.push_back(pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42)); 
+        keyColumns.push_back(pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42));
         keyColumns.push_back(pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui64>::Id));
         keyColumns.push_back(pgmBuilder.NewOptional(
             pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("qwe")));
         auto update = pgmBuilder.GetUpdateRowBuilder();
         update.SetColumn(34, NUdf::TDataType<ui32>::Id,
-            pgmBuilder.NewOptional(pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(12))); 
+            pgmBuilder.NewOptional(pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(12)));
         update.EraseColumn(56);
         update.InplaceUpdateColumn(78, NUdf::TDataType<ui64>::Id,
-            pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(1), EInplaceUpdateMode::Sum); 
+            pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(1), EInplaceUpdateMode::Sum);
         TVector<ui32> keyTypes({ NUdf::TDataType<ui32>::Id, NUdf::TDataType<ui64>::Id, NUdf::TDataType<char*>::Id });
         pgmReturn = pgmBuilder.Append(pgmReturn, pgmBuilder.UpdateRow(TTableId(1, 2),
             keyTypes,
@@ -318,22 +318,22 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
     Y_UNIT_TEST(TestUpdateRowDynamicKey) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
-        auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry()); 
+        auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         TKikimrProgramBuilder pgmBuilder(env, *functionRegistry);
         auto pgmReturn = pgmBuilder.NewEmptyListOfVoid();
         TVector<TRuntimeNode> keyColumns;
         keyColumns.push_back(pgmBuilder.Add(
-            pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(34), 
-            pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(12))); 
+            pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(34),
+            pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(12)));
         keyColumns.push_back(pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui64>::Id));
         keyColumns.push_back(pgmBuilder.NewOptional(
             pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("qwe")));
         auto update = pgmBuilder.GetUpdateRowBuilder();
         update.SetColumn(34, NUdf::TDataType<ui32>::Id,
-            pgmBuilder.NewOptional(pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(12))); 
+            pgmBuilder.NewOptional(pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(12)));
         update.EraseColumn(56);
         update.InplaceUpdateColumn(78, NUdf::TDataType<ui64>::Id,
-            pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(1), EInplaceUpdateMode::Sum); 
+            pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(1), EInplaceUpdateMode::Sum);
         TVector<ui32> keyTypes({ NUdf::TDataType<ui32>::Id, NUdf::TDataType<ui64>::Id, NUdf::TDataType<char*>::Id });
         pgmReturn = pgmBuilder.Append(pgmReturn, pgmBuilder.UpdateRow(TTableId(1, 2),
             keyTypes,
@@ -376,12 +376,12 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
     Y_UNIT_TEST(TestSelectFromInclusiveRange) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
-        auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry()); 
+        auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         TKikimrProgramBuilder pgmBuilder(env, *functionRegistry);
         auto pgmReturn = pgmBuilder.NewEmptyListOfVoid();
         TTableRangeOptions options(pgmBuilder.GetDefaultTableRangeOptions());
         TVector<TRuntimeNode> from;
-        from.push_back(pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42)); 
+        from.push_back(pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42));
         from.push_back(pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui64>::Id));
         options.FromColumns = from;
 
@@ -425,15 +425,15 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
     Y_UNIT_TEST(TestSelectFromExclusiveRange) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
-        auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry()); 
+        auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         TKikimrProgramBuilder pgmBuilder(env, *functionRegistry);
         auto pgmReturn = pgmBuilder.NewEmptyListOfVoid();
         TTableRangeOptions options(pgmBuilder.GetDefaultTableRangeOptions());
         TVector<TRuntimeNode> from;
-        from.push_back(pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42)); 
+        from.push_back(pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42));
         from.push_back(pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui64>::Id));
         options.FromColumns = from;
-        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeInitValue); 
+        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeInitValue);
 
         TVector<TSelectColumn> columnsToRead;
         columnsToRead.emplace_back("column1", 34, (ui32)NUdf::TDataType<ui32>::Id);
@@ -475,14 +475,14 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
     Y_UNIT_TEST(TestSelectToInclusiveRange) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
-        auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry()); 
+        auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         TKikimrProgramBuilder pgmBuilder(env, *functionRegistry);
         auto pgmReturn = pgmBuilder.NewEmptyListOfVoid();
         TTableRangeOptions options(pgmBuilder.GetDefaultTableRangeOptions());
         TVector<TRuntimeNode> from;
         from.push_back(pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id));
         TVector<TRuntimeNode> to;
-        to.push_back(pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42)); 
+        to.push_back(pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42));
         to.push_back(pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui64>::Id));
         options.FromColumns = from;
         options.ToColumns = to;
@@ -529,18 +529,18 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
     Y_UNIT_TEST(TestSelectToExclusiveRange) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
-        auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry()); 
+        auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         TKikimrProgramBuilder pgmBuilder(env, *functionRegistry);
         auto pgmReturn = pgmBuilder.NewEmptyListOfVoid();
         TTableRangeOptions options(pgmBuilder.GetDefaultTableRangeOptions());
         TVector<TRuntimeNode> from;
         from.push_back(pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id));
         TVector<TRuntimeNode> to;
-        to.push_back(pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42)); 
+        to.push_back(pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42));
         to.push_back(pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui64>::Id));
         options.FromColumns = from;
         options.ToColumns = to;
-        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue); 
+        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
 
         TVector<TSelectColumn> columnsToRead;
         columnsToRead.emplace_back("column1", 34, (ui32)NUdf::TDataType<ui32>::Id);
@@ -584,7 +584,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
     Y_UNIT_TEST(TestSelectBothFromInclusiveToInclusiveRange) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
-        auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry()); 
+        auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         TKikimrProgramBuilder pgmBuilder(env, *functionRegistry);
         auto pgmReturn = pgmBuilder.NewEmptyListOfVoid();
         TTableRangeOptions options(pgmBuilder.GetDefaultTableRangeOptions());
@@ -634,7 +634,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
     Y_UNIT_TEST(TestSelectBothFromExclusiveToExclusiveRange) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
-        auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry()); 
+        auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         TKikimrProgramBuilder pgmBuilder(env, *functionRegistry);
         auto pgmReturn = pgmBuilder.NewEmptyListOfVoid();
         TTableRangeOptions options(pgmBuilder.GetDefaultTableRangeOptions());
@@ -644,8 +644,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
         to.push_back(pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("bc"));
         options.FromColumns = from;
         options.ToColumns = to;
-        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>( 
-            TReadRangeOptions::TFlags::ExcludeInitValue | TReadRangeOptions::TFlags::ExcludeTermValue); 
+        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(
+            TReadRangeOptions::TFlags::ExcludeInitValue | TReadRangeOptions::TFlags::ExcludeTermValue);
 
         TVector<TSelectColumn> columnsToRead;
         columnsToRead.emplace_back("column1", 34, (ui32)NUdf::TDataType<ui32>::Id);
@@ -686,11 +686,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
     Y_UNIT_TEST(TestAcquireLocks) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
-        auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry()); 
+        auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         TKikimrProgramBuilder pgmBuilder(env, *functionRegistry);
         auto pgmReturn = pgmBuilder.NewEmptyListOfVoid();
         pgmReturn = pgmBuilder.Append(pgmReturn, pgmBuilder.SetResult("locks",
-            pgmBuilder.AcquireLocks(pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(0)))); 
+            pgmBuilder.AcquireLocks(pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(0))));
         auto pgm = pgmBuilder.Build(pgmReturn, TKikimrProgramBuilder::TBindFlags::DisableOptimization).GetNode();
 
         VerifyProgram(pgm, env);
@@ -699,7 +699,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
     Y_UNIT_TEST(TestDiagnostics) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
-        auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry()); 
+        auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         TKikimrProgramBuilder pgmBuilder(env, *functionRegistry);
         auto pgmReturn = pgmBuilder.NewEmptyListOfVoid();
         pgmReturn = pgmBuilder.Append(pgmReturn, pgmBuilder.SetResult("diag", pgmBuilder.Diagnostics()));
@@ -711,7 +711,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
     Y_UNIT_TEST(TestInvalidParameterName) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
-        auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry()); 
+        auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         TKikimrProgramBuilder pgmBuilder(env, *functionRegistry);
 
         auto paramsBuilder = pgmBuilder.GetParametersBuilder();
@@ -732,7 +732,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
     Y_UNIT_TEST(TestInvalidParameterType) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
-        auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry()); 
+        auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         TKikimrProgramBuilder pgmBuilder(env, *functionRegistry);
 
         auto paramsBuilder = pgmBuilder.GetParametersBuilder();

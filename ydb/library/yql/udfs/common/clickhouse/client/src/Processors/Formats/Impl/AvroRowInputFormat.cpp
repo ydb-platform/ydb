@@ -614,7 +614,7 @@ bool AvroRowInputFormat::readRow(MutableColumns & columns, RowReadExtension &ext
     }
     return false;
 }
-/* 
+/*
 class AvroConfluentRowInputFormat::SchemaRegistry
 {
 public:
@@ -713,7 +713,7 @@ static std::shared_ptr<ConfluentSchemaRegistry> getConfluentSchemaRegistry(const
     );
     return schema_registry;
 }
-*/ 
+*/
 static uint32_t readConfluentSchemaId(ReadBuffer & in)
 {
     uint8_t magic;
@@ -747,7 +747,7 @@ static uint32_t readConfluentSchemaId(ReadBuffer & in)
 AvroConfluentRowInputFormat::AvroConfluentRowInputFormat(
     const Block & header_, ReadBuffer & in_, Params params_, const FormatSettings & format_settings_)
     : IRowInputFormat(header_, in_, params_)
-//    , schema_registry(getConfluentSchemaRegistry(format_settings_)) 
+//    , schema_registry(getConfluentSchemaRegistry(format_settings_))
     , input_stream(std::make_unique<InputStreamReadBufferAdapter>(in))
     , decoder(avro::binaryDecoder())
     , format_settings(format_settings_)
@@ -783,12 +783,12 @@ void AvroConfluentRowInputFormat::syncAfterError()
 const AvroDeserializer & AvroConfluentRowInputFormat::getOrCreateDeserializer(SchemaId schema_id)
 {
     auto it = deserializer_cache.find(schema_id);
- /* if (it == deserializer_cache.end()) 
+ /* if (it == deserializer_cache.end())
     {
         auto schema = schema_registry->getSchema(schema_id);
         AvroDeserializer deserializer(output.getHeader(), schema, format_settings.avro.allow_missing_fields);
         it = deserializer_cache.emplace(schema_id, deserializer).first;
-    }*/ 
+    }*/
     return it->second;
 }
 

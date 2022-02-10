@@ -45,7 +45,7 @@ namespace NYmp {
     }
 
     template <typename T>
-    inline void ParallelForStaticChunk(T begin, T end, size_t chunkSize, std::function<void(T)> func) { 
+    inline void ParallelForStaticChunk(T begin, T end, size_t chunkSize, std::function<void(T)> func) {
         chunkSize = Max<size_t>(chunkSize, 1);
 
         size_t threadCount = TMtpQueueHelper::Instance().GetThreadCount();
@@ -96,7 +96,7 @@ namespace NYmp {
     }
 
     template <typename T>
-    inline void ParallelForStaticAutoChunk(T begin, T end, std::function<void(T)> func) { 
+    inline void ParallelForStaticAutoChunk(T begin, T end, std::function<void(T)> func) {
         const size_t taskSize = end - begin;
         const size_t threadCount = TMtpQueueHelper::Instance().GetThreadCount();
 

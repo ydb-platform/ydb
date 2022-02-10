@@ -14,8 +14,8 @@
 #include "src/Columns/ColumnsNumber.h"
 #include "src/Columns/ColumnString.h"
 
-#include "src/DataStreams/NativeBlockInputStream.h" 
- 
+#include "src/DataStreams/NativeBlockInputStream.h"
+
 #include "src/DataTypes/DataTypeEnum.h"
 #include "src/DataTypes/DataTypesNumber.h"
 #include "src/DataTypes/DataTypeDate.h"
@@ -34,12 +34,12 @@
 #include "src/Formats/InputStreamFromInputFormat.h"
 #include "src/Formats/registerFormats.h"
 
-#include <util/string/split.h> 
- 
+#include <util/string/split.h>
+
 using namespace NYql;
 using namespace NUdf;
 
-namespace { 
+namespace {
 
 struct TColumnMeta {
     std::optional<TString> Aggregation;
@@ -160,7 +160,7 @@ DB::DataTypePtr MetaToClickHouse(const TColumnMeta& meta) {
         case EDataSlot::Int8:
             ret = std::make_shared<DB::DataTypeInt8>();
             break;
-        case EDataSlot::Bool: 
+        case EDataSlot::Bool:
         case EDataSlot::Uint8:
             ret = std::make_shared<DB::DataTypeUInt8>();
             break;
@@ -192,11 +192,11 @@ DB::DataTypePtr MetaToClickHouse(const TColumnMeta& meta) {
             ret = std::make_shared<DB::DataTypeString>();
             break;
         case EDataSlot::Date:
-        case EDataSlot::TzDate: 
+        case EDataSlot::TzDate:
             ret = std::make_shared<DB::DataTypeDate>();
             break;
         case EDataSlot::Datetime:
-        case EDataSlot::TzDatetime: 
+        case EDataSlot::TzDatetime:
             ret = std::make_shared<DB::DataTypeDateTime>();
             break;
         case EDataSlot::Uuid:
@@ -350,114 +350,20 @@ TUnboxedValuePod ConvertOutputValue(const DB::IColumn* col, const TColumnMeta& m
     }
 }
 
-class TParseFromYdb : public TBoxedValue { 
-public: 
-    class TStreamValue : public TBoxedValue { 
-    public: 
-        TStreamValue(const IValueBuilder* valueBuilder, const TUnboxedValue& stream, 
-            const std::vector<TColumnMeta>& outMeta, 
-            const TSourcePosition& pos, 
-            ui32 tzId) 
-            : ValueBuilder(valueBuilder) 
-            , Stream(stream) 
-            , OutMeta(outMeta) 
-            , Pos(pos) 
-            , TzId(tzId) 
-            , Cache(OutMeta.size()) 
-        {} 
- 
-        EFetchStatus Fetch(TUnboxedValue& result) final try { 
-            for (;;) { 
-                if (!BlockStream) { 
-                    if (const auto status = Stream.Fetch(Input); EFetchStatus::Ok != status) 
-                        return status; 
- 
-                    const std::string_view buffer = Input.AsStringRef(); 
-                    Buffer = std::make_unique<DB::ReadBufferFromMemory>(buffer.data(), buffer.size()); 
-                    BlockStream = std::make_unique<DB::NativeBlockInputStream>(*Buffer, DBMS_MIN_REVISION_WITH_CURRENT_AGGREGATION_VARIANT_SELECTION_METHOD); 
-                } 
- 
-                if (CurrentRow >= CurrentBlock.rows()) { 
-                    CurrentRow = 0; 
-                    if (CurrentBlock = BlockStream->read(); !CurrentBlock) { 
-                        BlockStream.reset(); 
-                        Buffer.reset(); 
-                        continue; 
-                    } 
-                } 
- 
-                TUnboxedValue* items = nullptr; 
-                result = Cache.NewArray(*ValueBuilder, items); 
-                for (ui32 i = 0; i < OutMeta.size(); ++i) { 
-                    *items++ = ConvertOutputValue(CurrentBlock.getByPosition(i).column.get(), OutMeta[i], TzId, ValueBuilder, CurrentRow); 
-                } 
- 
-                ++CurrentRow; 
-                return EFetchStatus::Ok; 
-            } 
-        } 
-        catch (const Poco::Exception& e) { 
-            UdfTerminate((TStringBuilder() << ValueBuilder->WithCalleePosition(Pos) << " " << e.displayText()).data()); 
-        } 
-        catch (const std::exception& e) { 
-            UdfTerminate((TStringBuilder() << ValueBuilder->WithCalleePosition(Pos) << " " << e.what()).data()); 
-        } 
-    private: 
-        const IValueBuilder* ValueBuilder; 
-        const TUnboxedValue Stream; 
-        const std::vector<TColumnMeta> OutMeta; // in struct order 
-        const TSourcePosition Pos; 
-        const ui32 TzId; 
- 
-        TPlainArrayCache Cache; 
- 
-        TUnboxedValue Input; 
-        std::unique_ptr<DB::ReadBuffer> Buffer; 
-        std::unique_ptr<DB::IBlockInputStream> BlockStream; 
-        DB::Block CurrentBlock; 
-        size_t CurrentRow = 0; 
-    }; 
- 
-    TParseFromYdb(const TSourcePosition& pos, std::vector<TColumnMeta>&& metaForColumns) 
-        : Pos(pos), OutMeta(std::move(metaForColumns)) 
-    {} 
- 
-    TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const final try { 
-        ui32 tzId = 0U; 
-        if (const auto& tz = args[1U]) { 
-            if (!valueBuilder->GetDateBuilder().FindTimezoneId(tz.AsStringRef(), tzId)) { 
-                tzId = 0U; 
-            } 
-        } 
- 
-        return TUnboxedValuePod(new TStreamValue(valueBuilder, *args, OutMeta, Pos, tzId)); 
-    } 
-    catch (const Poco::Exception& e) { 
-        UdfTerminate((TStringBuilder() << valueBuilder->WithCalleePosition(Pos) << " " << e.displayText()).data()); 
-    } 
-    catch (const std::exception& e) { 
-        UdfTerminate((TStringBuilder() << valueBuilder->WithCalleePosition(Pos) << " " << e.what()).data()); 
-    } 
-private: 
-    const TSourcePosition Pos; 
-    const std::vector<TColumnMeta> OutMeta; // in struct order 
-}; 
- 
-class TParseFormat : public TBoxedValue {
+class TParseFromYdb : public TBoxedValue {
 public:
     class TStreamValue : public TBoxedValue {
     public:
-        TStreamValue(const std::string& type, const DB::FormatSettings& settings, const IValueBuilder* valueBuilder, const TUnboxedValue& stream, 
-            const std::vector<TColumnMeta> outMeta, const DB::ColumnsWithTypeAndName& columns, const TSourcePosition& pos, ui32 tzId)
+        TStreamValue(const IValueBuilder* valueBuilder, const TUnboxedValue& stream,
+            const std::vector<TColumnMeta>& outMeta,
+            const TSourcePosition& pos,
+            ui32 tzId)
             : ValueBuilder(valueBuilder)
             , Stream(stream)
             , OutMeta(outMeta)
-            , Columns(columns)
             , Pos(pos)
             , TzId(tzId)
-            , Cache(OutMeta.size()) 
-            , Type(type)
-            , Settings(settings)
+            , Cache(OutMeta.size())
         {}
 
         EFetchStatus Fetch(TUnboxedValue& result) final try {
@@ -467,8 +373,8 @@ public:
                         return status;
 
                     const std::string_view buffer = Input.AsStringRef();
-                    Buffer = std::make_unique<DB::ReadBufferFromMemory>(buffer.data(), buffer.size()); 
-                    BlockStream = std::make_unique<DB::InputStreamFromInputFormat>(DB::FormatFactory::instance().getInputFormat(Type, *Buffer, DB::Block(Columns), nullptr, buffer.size(),  Settings)); 
+                    Buffer = std::make_unique<DB::ReadBufferFromMemory>(buffer.data(), buffer.size());
+                    BlockStream = std::make_unique<DB::NativeBlockInputStream>(*Buffer, DBMS_MIN_REVISION_WITH_CURRENT_AGGREGATION_VARIANT_SELECTION_METHOD);
                 }
 
                 if (CurrentRow >= CurrentBlock.rows()) {
@@ -481,7 +387,101 @@ public:
                 }
 
                 TUnboxedValue* items = nullptr;
-                result = Cache.NewArray(*ValueBuilder, items); 
+                result = Cache.NewArray(*ValueBuilder, items);
+                for (ui32 i = 0; i < OutMeta.size(); ++i) {
+                    *items++ = ConvertOutputValue(CurrentBlock.getByPosition(i).column.get(), OutMeta[i], TzId, ValueBuilder, CurrentRow);
+                }
+
+                ++CurrentRow;
+                return EFetchStatus::Ok;
+            }
+        }
+        catch (const Poco::Exception& e) {
+            UdfTerminate((TStringBuilder() << ValueBuilder->WithCalleePosition(Pos) << " " << e.displayText()).data());
+        }
+        catch (const std::exception& e) {
+            UdfTerminate((TStringBuilder() << ValueBuilder->WithCalleePosition(Pos) << " " << e.what()).data());
+        }
+    private:
+        const IValueBuilder* ValueBuilder;
+        const TUnboxedValue Stream;
+        const std::vector<TColumnMeta> OutMeta; // in struct order
+        const TSourcePosition Pos;
+        const ui32 TzId;
+
+        TPlainArrayCache Cache;
+
+        TUnboxedValue Input;
+        std::unique_ptr<DB::ReadBuffer> Buffer;
+        std::unique_ptr<DB::IBlockInputStream> BlockStream;
+        DB::Block CurrentBlock;
+        size_t CurrentRow = 0;
+    };
+
+    TParseFromYdb(const TSourcePosition& pos, std::vector<TColumnMeta>&& metaForColumns)
+        : Pos(pos), OutMeta(std::move(metaForColumns))
+    {}
+
+    TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const final try {
+        ui32 tzId = 0U;
+        if (const auto& tz = args[1U]) {
+            if (!valueBuilder->GetDateBuilder().FindTimezoneId(tz.AsStringRef(), tzId)) {
+                tzId = 0U;
+            }
+        }
+
+        return TUnboxedValuePod(new TStreamValue(valueBuilder, *args, OutMeta, Pos, tzId));
+    }
+    catch (const Poco::Exception& e) {
+        UdfTerminate((TStringBuilder() << valueBuilder->WithCalleePosition(Pos) << " " << e.displayText()).data());
+    }
+    catch (const std::exception& e) {
+        UdfTerminate((TStringBuilder() << valueBuilder->WithCalleePosition(Pos) << " " << e.what()).data());
+    }
+private:
+    const TSourcePosition Pos;
+    const std::vector<TColumnMeta> OutMeta; // in struct order
+};
+
+class TParseFormat : public TBoxedValue {
+public:
+    class TStreamValue : public TBoxedValue {
+    public:
+        TStreamValue(const std::string& type, const DB::FormatSettings& settings, const IValueBuilder* valueBuilder, const TUnboxedValue& stream,
+            const std::vector<TColumnMeta> outMeta, const DB::ColumnsWithTypeAndName& columns, const TSourcePosition& pos, ui32 tzId)
+            : ValueBuilder(valueBuilder)
+            , Stream(stream)
+            , OutMeta(outMeta)
+            , Columns(columns)
+            , Pos(pos)
+            , TzId(tzId)
+            , Cache(OutMeta.size())
+            , Type(type)
+            , Settings(settings)
+        {}
+
+        EFetchStatus Fetch(TUnboxedValue& result) final try {
+            for (;;) {
+                if (!BlockStream) {
+                    if (const auto status = Stream.Fetch(Input); EFetchStatus::Ok != status)
+                        return status;
+
+                    const std::string_view buffer = Input.AsStringRef();
+                    Buffer = std::make_unique<DB::ReadBufferFromMemory>(buffer.data(), buffer.size());
+                    BlockStream = std::make_unique<DB::InputStreamFromInputFormat>(DB::FormatFactory::instance().getInputFormat(Type, *Buffer, DB::Block(Columns), nullptr, buffer.size(),  Settings));
+                }
+
+                if (CurrentRow >= CurrentBlock.rows()) {
+                    CurrentRow = 0;
+                    if (CurrentBlock = BlockStream->read(); !CurrentBlock) {
+                        BlockStream.reset();
+                        Buffer.reset();
+                        continue;
+                    }
+                }
+
+                TUnboxedValue* items = nullptr;
+                result = Cache.NewArray(*ValueBuilder, items);
                 for (ui32 i = 0; i < OutMeta.size(); ++i) {
                     *items++ = ConvertOutputValue(CurrentBlock.getByPosition(i).column.get(), OutMeta[i], TzId, ValueBuilder, CurrentRow);
                 }
@@ -504,11 +504,11 @@ public:
         const TSourcePosition Pos;
         const ui32 TzId;
 
-        TPlainArrayCache Cache; 
- 
+        TPlainArrayCache Cache;
+
         TUnboxedValue Input;
         const TString Type;
-        const DB::FormatSettings Settings; 
+        const DB::FormatSettings Settings;
 
         std::unique_ptr<DB::ReadBuffer> Buffer;
         std::unique_ptr<DB::IBlockInputStream> BlockStream;
@@ -516,19 +516,19 @@ public:
         size_t CurrentRow = 0;
     };
 
-    TParseFormat(const std::string_view& type, const std::string_view& settings, const TSourcePosition& pos, std::vector<TColumnMeta>&& outMeta, DB::ColumnsWithTypeAndName&& columns) 
-        : Type(type), Settings(GetFormatSettings(settings)), Pos(pos), OutMeta(std::move(outMeta)), Columns(std::move(columns)) 
+    TParseFormat(const std::string_view& type, const std::string_view& settings, const TSourcePosition& pos, std::vector<TColumnMeta>&& outMeta, DB::ColumnsWithTypeAndName&& columns)
+        : Type(type), Settings(GetFormatSettings(settings)), Pos(pos), OutMeta(std::move(outMeta)), Columns(std::move(columns))
     {}
 
     TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const final try {
-        ui32 tzId = 0U; 
+        ui32 tzId = 0U;
         if (const auto& tz = args[1U]) {
-            if (!valueBuilder->GetDateBuilder().FindTimezoneId(tz.AsStringRef(), tzId)) { 
-                tzId = 0U; 
+            if (!valueBuilder->GetDateBuilder().FindTimezoneId(tz.AsStringRef(), tzId)) {
+                tzId = 0U;
             }
         }
 
-        return TUnboxedValuePod(new TStreamValue(Type, Settings, valueBuilder, *args, OutMeta, Columns, Pos, tzId)); 
+        return TUnboxedValuePod(new TStreamValue(Type, Settings, valueBuilder, *args, OutMeta, Columns, Pos, tzId));
     }
     catch (const Poco::Exception& e) {
         UdfTerminate((TStringBuilder() << valueBuilder->WithCalleePosition(Pos) << " " << e.displayText()).data());
@@ -537,10 +537,10 @@ public:
         UdfTerminate((TStringBuilder() << valueBuilder->WithCalleePosition(Pos) << " " << e.what()).data());
     }
 private:
-    static DB::FormatSettings GetFormatSettings(const std::string_view& view) { 
-        DB::FormatSettings settings; 
-        settings.skip_unknown_fields = true; 
-        settings.with_names_use_header = true; 
+    static DB::FormatSettings GetFormatSettings(const std::string_view& view) {
+        DB::FormatSettings settings;
+        settings.skip_unknown_fields = true;
+        settings.with_names_use_header = true;
         if (!view.empty()) {
             const std::string str(view);
             const JSON json(str);
@@ -552,155 +552,155 @@ private:
 
 #define SET_FLAG(flag) \
             if (json.has(#flag)) \
-                settings.flag = json[#flag].get<bool>(); 
+                settings.flag = json[#flag].get<bool>();
 
             SUPPORTED_FLAGS(SET_FLAG)
 
 #undef SET_FLAG
 #undef SUPPORTED_FLAGS
         }
-        return settings; 
+        return settings;
     }
 
     const std::string Type;
-    const DB::FormatSettings Settings; 
+    const DB::FormatSettings Settings;
     const TSourcePosition Pos;
     const std::vector<TColumnMeta> OutMeta;
     const DB::ColumnsWithTypeAndName Columns;
 };
 
-struct TCHInitializer { 
-    using TWeakPtr = std::weak_ptr<TCHInitializer>; 
-    using TPtr = std::shared_ptr<TCHInitializer>; 
+struct TCHInitializer {
+    using TWeakPtr = std::weak_ptr<TCHInitializer>;
+    using TPtr = std::shared_ptr<TCHInitializer>;
 
-    TCHInitializer() 
+    TCHInitializer()
     {
         DB::registerFormats();
     }
 };
 
-template <typename T> 
-TString MakeEnumImpl(const T& values) { 
-    TStringBuilder str; 
-    str << "Enum<"; 
-    bool first = true; 
-    for (const auto& value : values) { 
-        if (!first) { 
-            str << ','; 
-        } 
-        else { 
-            first = false; 
-        } 
- 
-        str << "'" << value.first << "'"; 
-    } 
- 
-    str << '>'; 
-    return str; 
-} 
- 
-std::optional<TString> MakeYqlType(DB::DataTypePtr type, bool validTz) { 
-    if (type->getTypeId() == DB::TypeIndex::Enum8) { 
-        const DB::DataTypeEnum8* enum8 = DB::checkAndGetDataType<DB::DataTypeEnum8>(type.get()); 
-        return MakeEnumImpl(enum8->getValues()); 
-    } 
- 
-    if (type->getTypeId() == DB::TypeIndex::Enum16) { 
-        const DB::DataTypeEnum16* enum16 = DB::checkAndGetDataType<DB::DataTypeEnum16>(type.get()); 
-        return MakeEnumImpl(enum16->getValues()); 
-    } 
- 
-    if (type->getTypeId() == DB::TypeIndex::AggregateFunction) { 
-        return "Tagged<String,'" + TString(type->getName()) + "'>"; 
-    } 
- 
-    if (type->getTypeId() == DB::TypeIndex::Array) { 
-        const DB::DataTypeArray* array = DB::checkAndGetDataType<DB::DataTypeArray>(type.get()); 
-        type = array->getNestedType(); 
-        if (type->getTypeId() == DB::TypeIndex::Nothing) { 
-            return "EmptyList"; 
-        } 
- 
-        auto inner = MakeYqlType(type, validTz); 
-        if (!inner) { 
-            return std::nullopt; 
-        } 
- 
-        return "List<" + *inner + '>'; 
-    } 
- 
-    if (type->getTypeId() == DB::TypeIndex::Tuple) { 
-        const DB::DataTypeTuple* tuple = DB::checkAndGetDataType<DB::DataTypeTuple>(type.get()); 
-        const auto& elems = tuple->getElements(); 
-        TStringBuilder str; 
-        str << "Tuple<"; 
-        bool first = true; 
-        for (const auto& e : elems) { 
-            auto inner = MakeYqlType(e, validTz); 
-            if (!inner) { 
-                return std::nullopt; 
-            } 
- 
-            if (!first) { 
-                str << ','; 
-            } else { 
-                first = false; 
-            } 
- 
-            str << *inner; 
-        } 
- 
-        str << '>'; 
-        return str; 
-    } 
- 
-    if (type->isNullable()) { 
-       type = removeNullable(type); 
-       if (type->getTypeId() == DB::TypeIndex::Nothing) { 
-          return "Null"; 
-       } 
- 
-       auto inner = MakeYqlType(type, validTz); 
-       if (!inner) { 
-           return std::nullopt; 
-       } 
- 
-       return "Optional<" + *inner + '>'; 
-   } 
- 
-   if (type->getTypeId() == DB::TypeIndex::UInt8) return "Uint8"; 
-   else if (type->getTypeId() == DB::TypeIndex::Int8) return "Int8"; 
-   else if (type->getTypeId() == DB::TypeIndex::UInt16) return "Uint16"; 
-   else if (type->getTypeId() == DB::TypeIndex::Int16) return "Int16"; 
-   else if (type->getTypeId() == DB::TypeIndex::UInt32) return "Uint32"; 
-   else if (type->getTypeId() == DB::TypeIndex::Int32) return "Int32"; 
-   else if (type->getTypeId() == DB::TypeIndex::UInt64) return "Uint64"; 
-   else if (type->getTypeId() == DB::TypeIndex::Int64) return "Int64"; 
-   else if (type->getTypeId() == DB::TypeIndex::Float32) return "Float"; 
-   else if (type->getTypeId() == DB::TypeIndex::Float64) return "Double"; 
-   else if (type->getTypeId() == DB::TypeIndex::String) return "String"; 
-   else if (type->getTypeId() == DB::TypeIndex::FixedString) return "String"; 
-   else if (validTz && type->getTypeId() == DB::TypeIndex::Date) return "TzDate"; 
-   else if (validTz && type->getTypeId() == DB::TypeIndex::DateTime) return "TzDatetime"; 
-   else if (type->getTypeId() == DB::TypeIndex::UUID) return "Uuid"; 
-   else return std::nullopt; 
-} 
- 
-SIMPLE_UDF(TToYqlType, TOptional<TUtf8>(TUtf8, TUtf8)) { 
-    const auto ref = args[0].AsStringRef(); 
-    const auto tzRef = args[1].AsStringRef(); 
-    ui32 tzId; 
-    const bool validTz = valueBuilder->GetDateBuilder().FindTimezoneId(tzRef, tzId); 
-    const DB::String typeStr(ref.Data(), ref.Data() + ref.Size()); 
-    const auto type = DB::DataTypeFactory::instance().get(typeStr); 
-    if (const auto ret = MakeYqlType(type, validTz)) { 
-        return valueBuilder->NewString(*ret); 
-    } 
-    return TUnboxedValue(); 
-} 
- 
-} 
- 
+template <typename T>
+TString MakeEnumImpl(const T& values) {
+    TStringBuilder str;
+    str << "Enum<";
+    bool first = true;
+    for (const auto& value : values) {
+        if (!first) {
+            str << ',';
+        }
+        else {
+            first = false;
+        }
+
+        str << "'" << value.first << "'";
+    }
+
+    str << '>';
+    return str;
+}
+
+std::optional<TString> MakeYqlType(DB::DataTypePtr type, bool validTz) {
+    if (type->getTypeId() == DB::TypeIndex::Enum8) {
+        const DB::DataTypeEnum8* enum8 = DB::checkAndGetDataType<DB::DataTypeEnum8>(type.get());
+        return MakeEnumImpl(enum8->getValues());
+    }
+
+    if (type->getTypeId() == DB::TypeIndex::Enum16) {
+        const DB::DataTypeEnum16* enum16 = DB::checkAndGetDataType<DB::DataTypeEnum16>(type.get());
+        return MakeEnumImpl(enum16->getValues());
+    }
+
+    if (type->getTypeId() == DB::TypeIndex::AggregateFunction) {
+        return "Tagged<String,'" + TString(type->getName()) + "'>";
+    }
+
+    if (type->getTypeId() == DB::TypeIndex::Array) {
+        const DB::DataTypeArray* array = DB::checkAndGetDataType<DB::DataTypeArray>(type.get());
+        type = array->getNestedType();
+        if (type->getTypeId() == DB::TypeIndex::Nothing) {
+            return "EmptyList";
+        }
+
+        auto inner = MakeYqlType(type, validTz);
+        if (!inner) {
+            return std::nullopt;
+        }
+
+        return "List<" + *inner + '>';
+    }
+
+    if (type->getTypeId() == DB::TypeIndex::Tuple) {
+        const DB::DataTypeTuple* tuple = DB::checkAndGetDataType<DB::DataTypeTuple>(type.get());
+        const auto& elems = tuple->getElements();
+        TStringBuilder str;
+        str << "Tuple<";
+        bool first = true;
+        for (const auto& e : elems) {
+            auto inner = MakeYqlType(e, validTz);
+            if (!inner) {
+                return std::nullopt;
+            }
+
+            if (!first) {
+                str << ',';
+            } else {
+                first = false;
+            }
+
+            str << *inner;
+        }
+
+        str << '>';
+        return str;
+    }
+
+    if (type->isNullable()) {
+       type = removeNullable(type);
+       if (type->getTypeId() == DB::TypeIndex::Nothing) {
+          return "Null";
+       }
+
+       auto inner = MakeYqlType(type, validTz);
+       if (!inner) {
+           return std::nullopt;
+       }
+
+       return "Optional<" + *inner + '>';
+   }
+
+   if (type->getTypeId() == DB::TypeIndex::UInt8) return "Uint8";
+   else if (type->getTypeId() == DB::TypeIndex::Int8) return "Int8";
+   else if (type->getTypeId() == DB::TypeIndex::UInt16) return "Uint16";
+   else if (type->getTypeId() == DB::TypeIndex::Int16) return "Int16";
+   else if (type->getTypeId() == DB::TypeIndex::UInt32) return "Uint32";
+   else if (type->getTypeId() == DB::TypeIndex::Int32) return "Int32";
+   else if (type->getTypeId() == DB::TypeIndex::UInt64) return "Uint64";
+   else if (type->getTypeId() == DB::TypeIndex::Int64) return "Int64";
+   else if (type->getTypeId() == DB::TypeIndex::Float32) return "Float";
+   else if (type->getTypeId() == DB::TypeIndex::Float64) return "Double";
+   else if (type->getTypeId() == DB::TypeIndex::String) return "String";
+   else if (type->getTypeId() == DB::TypeIndex::FixedString) return "String";
+   else if (validTz && type->getTypeId() == DB::TypeIndex::Date) return "TzDate";
+   else if (validTz && type->getTypeId() == DB::TypeIndex::DateTime) return "TzDatetime";
+   else if (type->getTypeId() == DB::TypeIndex::UUID) return "Uuid";
+   else return std::nullopt;
+}
+
+SIMPLE_UDF(TToYqlType, TOptional<TUtf8>(TUtf8, TUtf8)) {
+    const auto ref = args[0].AsStringRef();
+    const auto tzRef = args[1].AsStringRef();
+    ui32 tzId;
+    const bool validTz = valueBuilder->GetDateBuilder().FindTimezoneId(tzRef, tzId);
+    const DB::String typeStr(ref.Data(), ref.Data() + ref.Size());
+    const auto type = DB::DataTypeFactory::instance().get(typeStr);
+    if (const auto ret = MakeYqlType(type, validTz)) {
+        return valueBuilder->NewString(*ret);
+    }
+    return TUnboxedValue();
+}
+
+}
+
 class TClickHouseClientModule : public IUdfModule
 {
 public:
@@ -714,9 +714,9 @@ public:
     void CleanupOnTerminate() const final {}
 
     void GetAllFunctions(IFunctionsSink& sink) const final {
-        sink.Add(TStringRef::Of("ToYqlType")); 
+        sink.Add(TStringRef::Of("ToYqlType"));
         sink.Add(TStringRef::Of("ParseFormat"))->SetTypeAwareness();
-        sink.Add(TStringRef::Of("ParseFromYdb"))->SetTypeAwareness(); 
+        sink.Add(TStringRef::Of("ParseFromYdb"))->SetTypeAwareness();
     }
 
     void BuildFunctionTypeInfo(
@@ -724,117 +724,117 @@ public:
                         TType* userType,
                         const TStringRef& typeConfig,
                         ui32 flags,
-                        IFunctionTypeInfoBuilder& builder) const final try { 
-        LazyInitContext(); 
-        auto argBuilder = builder.Args(); 
- 
-        if (name == "ToYqlType") { 
-            argBuilder->Add<TUtf8>(); 
-            argBuilder->Add<TUtf8>(); 
-            argBuilder->Done(); 
-            builder.Returns<TOptional<TUtf8>>(); 
-            if (!(flags & TFlags::TypesOnly)) { 
-                builder.Implementation(new TToYqlType(builder)); 
-            } 
- 
-            return; 
-        } 
- 
-        const auto typeHelper = builder.TypeInfoHelper(); 
-        if (name == "ParseFormat") { 
-            const auto userTypeInspector = TTupleTypeInspector(*typeHelper, userType); 
-            if (!userTypeInspector || userTypeInspector.GetElementsCount() < 3) { 
-                return builder.SetError("Invalid user type."); 
-            } 
+                        IFunctionTypeInfoBuilder& builder) const final try {
+        LazyInitContext();
+        auto argBuilder = builder.Args();
 
-            const auto argsTypeTuple = userTypeInspector.GetElementType(0); 
-            const auto argsTypeInspector = TTupleTypeInspector(*typeHelper, argsTypeTuple); 
-            if (!argsTypeInspector) { 
-                return builder.SetError("Invalid user type - expected tuple."); 
-            } 
+        if (name == "ToYqlType") {
+            argBuilder->Add<TUtf8>();
+            argBuilder->Add<TUtf8>();
+            argBuilder->Done();
+            builder.Returns<TOptional<TUtf8>>();
+            if (!(flags & TFlags::TypesOnly)) {
+                builder.Implementation(new TToYqlType(builder));
+            }
 
-            if (const auto argsCount = argsTypeInspector.GetElementsCount(); argsCount < 1 || argsCount > 2) { 
-                ::TStringBuilder sb; 
-                sb << "Invalid user type - expected one or two arguments, got: " << argsCount; 
-                return builder.SetError(sb); 
-            } 
+            return;
+        }
 
-            const auto resultType = userTypeInspector.GetElementType(2); 
+        const auto typeHelper = builder.TypeInfoHelper();
+        if (name == "ParseFormat") {
+            const auto userTypeInspector = TTupleTypeInspector(*typeHelper, userType);
+            if (!userTypeInspector || userTypeInspector.GetElementsCount() < 3) {
+                return builder.SetError("Invalid user type.");
+            }
 
-            builder.UserType(userType); 
-            builder.Args()->Add(builder.Stream()->Item<char*>()).Add<TOptional<TUtf8>>().Done(); 
-            builder.OptionalArgs(1U); 
-            builder.Returns(builder.Stream()->Item(resultType)); 
+            const auto argsTypeTuple = userTypeInspector.GetElementType(0);
+            const auto argsTypeInspector = TTupleTypeInspector(*typeHelper, argsTypeTuple);
+            if (!argsTypeInspector) {
+                return builder.SetError("Invalid user type - expected tuple.");
+            }
 
-            if (const auto structType = TStructTypeInspector(*typeHelper, resultType)) { 
-                std::vector<TColumnMeta> outMeta(structType.GetMembersCount()); 
-                DB::ColumnsWithTypeAndName columns(structType.GetMembersCount()); 
-                for (ui32 i = 0U; i < structType.GetMembersCount(); ++i) { 
-                    if (auto& meta = outMeta[i]; GetDataType(*typeHelper, structType.GetMemberType(i), meta)) { 
-                        auto& colsumn = columns[i]; 
-                        colsumn.type = MetaToClickHouse(meta); 
-                        colsumn.name = structType.GetMemberName(i); 
-                    } else { 
-                        ::TStringBuilder sb; 
-                        sb << "Incompatible column '" << structType.GetMemberName(i) << "' type: "; 
-                        TTypePrinter(*typeHelper, structType.GetMemberType(i)).Out(sb.Out); 
-                        return builder.SetError(sb); 
+            if (const auto argsCount = argsTypeInspector.GetElementsCount(); argsCount < 1 || argsCount > 2) {
+                ::TStringBuilder sb;
+                sb << "Invalid user type - expected one or two arguments, got: " << argsCount;
+                return builder.SetError(sb);
+            }
+
+            const auto resultType = userTypeInspector.GetElementType(2);
+
+            builder.UserType(userType);
+            builder.Args()->Add(builder.Stream()->Item<char*>()).Add<TOptional<TUtf8>>().Done();
+            builder.OptionalArgs(1U);
+            builder.Returns(builder.Stream()->Item(resultType));
+
+            if (const auto structType = TStructTypeInspector(*typeHelper, resultType)) {
+                std::vector<TColumnMeta> outMeta(structType.GetMembersCount());
+                DB::ColumnsWithTypeAndName columns(structType.GetMembersCount());
+                for (ui32 i = 0U; i < structType.GetMembersCount(); ++i) {
+                    if (auto& meta = outMeta[i]; GetDataType(*typeHelper, structType.GetMemberType(i), meta)) {
+                        auto& colsumn = columns[i];
+                        colsumn.type = MetaToClickHouse(meta);
+                        colsumn.name = structType.GetMemberName(i);
+                    } else {
+                        ::TStringBuilder sb;
+                        sb << "Incompatible column '" << structType.GetMemberName(i) << "' type: ";
+                        TTypePrinter(*typeHelper, structType.GetMemberType(i)).Out(sb.Out);
+                        return builder.SetError(sb);
                     }
-                } 
+                }
 
-                if (!(flags & TFlags::TypesOnly)) { 
-                    const std::string_view& typeCfg = typeConfig; 
-                    const auto jsonFrom = typeCfg.find('{'); 
-                    builder.Implementation(new TParseFormat(typeCfg.substr(0U, jsonFrom), std::string_view::npos == jsonFrom ? "" : typeCfg.substr(jsonFrom),  builder.GetSourcePosition(), std::move(outMeta), std::move(columns))); 
-                } 
-                return; 
-            } else { 
-                ::TStringBuilder sb; 
-                sb << "Incompatible row type: "; 
-                TTypePrinter(*typeHelper, resultType).Out(sb.Out); 
-                return builder.SetError(sb); 
-            } 
-        } else if (name == "ParseFromYdb") { 
-            builder.UserType(userType); 
-            builder.Args()->Add(builder.Stream()->Item<char*>()).Add<TOptional<TUtf8>>().Done(); 
-            builder.OptionalArgs(1U); 
-            builder.Returns(builder.Stream()->Item(userType)); 
- 
-            if (const auto structType = TStructTypeInspector(*typeHelper, userType)) { 
-                std::vector<TColumnMeta> columns(structType.GetMembersCount()); 
-                for (ui32 i = 0U; i < structType.GetMembersCount(); ++i) { 
-                    if (const auto dataType = TDataAndDecimalTypeInspector(*typeHelper, TOptionalTypeInspector(*typeHelper, structType.GetMemberType(i)).GetItemType())) { 
-                        auto& meta = columns[i]; 
-                        meta.Slot = GetDataSlot(dataType.GetTypeId()); 
-                        meta.IsOptional = true; 
-                        meta.Precision = dataType.GetPrecision(); 
-                        meta.Scale = dataType.GetScale(); 
-                    } else { 
-                        ::TStringBuilder sb; 
-                        sb << "Incompatible column '" << structType.GetMemberName(i) << "' type: "; 
-                        TTypePrinter(*typeHelper, structType.GetMemberType(i)).Out(sb.Out); 
-                        return builder.SetError(sb); 
-                    } 
-                } 
- 
-                if (!(flags & TFlags::TypesOnly)) { 
-                    builder.Implementation(new TParseFromYdb(builder.GetSourcePosition(), std::move(columns))); 
-                } 
-                return; 
-            } else { 
-                ::TStringBuilder sb; 
-                sb << "Incompatible row type: "; 
-                TTypePrinter(*typeHelper, userType).Out(sb.Out); 
-                return builder.SetError(sb); 
-            } 
-        } 
+                if (!(flags & TFlags::TypesOnly)) {
+                    const std::string_view& typeCfg = typeConfig;
+                    const auto jsonFrom = typeCfg.find('{');
+                    builder.Implementation(new TParseFormat(typeCfg.substr(0U, jsonFrom), std::string_view::npos == jsonFrom ? "" : typeCfg.substr(jsonFrom),  builder.GetSourcePosition(), std::move(outMeta), std::move(columns)));
+                }
+                return;
+            } else {
+                ::TStringBuilder sb;
+                sb << "Incompatible row type: ";
+                TTypePrinter(*typeHelper, resultType).Out(sb.Out);
+                return builder.SetError(sb);
+            }
+        } else if (name == "ParseFromYdb") {
+            builder.UserType(userType);
+            builder.Args()->Add(builder.Stream()->Item<char*>()).Add<TOptional<TUtf8>>().Done();
+            builder.OptionalArgs(1U);
+            builder.Returns(builder.Stream()->Item(userType));
+
+            if (const auto structType = TStructTypeInspector(*typeHelper, userType)) {
+                std::vector<TColumnMeta> columns(structType.GetMembersCount());
+                for (ui32 i = 0U; i < structType.GetMembersCount(); ++i) {
+                    if (const auto dataType = TDataAndDecimalTypeInspector(*typeHelper, TOptionalTypeInspector(*typeHelper, structType.GetMemberType(i)).GetItemType())) {
+                        auto& meta = columns[i];
+                        meta.Slot = GetDataSlot(dataType.GetTypeId());
+                        meta.IsOptional = true;
+                        meta.Precision = dataType.GetPrecision();
+                        meta.Scale = dataType.GetScale();
+                    } else {
+                        ::TStringBuilder sb;
+                        sb << "Incompatible column '" << structType.GetMemberName(i) << "' type: ";
+                        TTypePrinter(*typeHelper, structType.GetMemberType(i)).Out(sb.Out);
+                        return builder.SetError(sb);
+                    }
+                }
+
+                if (!(flags & TFlags::TypesOnly)) {
+                    builder.Implementation(new TParseFromYdb(builder.GetSourcePosition(), std::move(columns)));
+                }
+                return;
+            } else {
+                ::TStringBuilder sb;
+                sb << "Incompatible row type: ";
+                TTypePrinter(*typeHelper, userType).Out(sb.Out);
+                return builder.SetError(sb);
+            }
+        }
     }
-    catch (const Poco::Exception& e) { 
-        builder.SetError(e.displayText()); 
-    } 
-    catch (const std::exception& e) { 
-        builder.SetError(TStringBuf(e.what())); 
-    } 
+    catch (const Poco::Exception& e) {
+        builder.SetError(e.displayText());
+    }
+    catch (const std::exception& e) {
+        builder.SetError(TStringBuf(e.what()));
+    }
 private:
     void LazyInitContext() const {
         const std::unique_lock lock(CtxMutex);
@@ -842,17 +842,17 @@ private:
             if (auto ctx = StaticCtx.lock()) {
                 Ctx = std::move(ctx);
             } else {
-                StaticCtx = Ctx = std::make_shared<TCHInitializer>(); 
+                StaticCtx = Ctx = std::make_shared<TCHInitializer>();
             }
         }
     }
 
     static std::mutex CtxMutex;
-    static TCHInitializer::TWeakPtr StaticCtx; 
-    mutable TCHInitializer::TPtr Ctx; 
+    static TCHInitializer::TWeakPtr StaticCtx;
+    mutable TCHInitializer::TPtr Ctx;
 };
 
 std::mutex TClickHouseClientModule::CtxMutex;
-TCHInitializer::TWeakPtr TClickHouseClientModule::StaticCtx; 
+TCHInitializer::TWeakPtr TClickHouseClientModule::StaticCtx;
 
 REGISTER_MODULES(TClickHouseClientModule);

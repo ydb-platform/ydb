@@ -15,8 +15,8 @@ namespace NYql {
 
 using namespace NNodes;
 
-namespace { 
- 
+namespace {
+
 class TClickHouseLogicalOptProposalTransformer : public TOptimizeTransformerBase {
 public:
     TClickHouseLogicalOptProposalTransformer(TClickHouseState::TPtr state)
@@ -27,28 +27,28 @@ public:
         AddHandler(0, &TCoLeft::Match, HNDL(TrimReadWorld));
         AddHandler(0, &TCoExtractMembers::Match, HNDL(ExtractMembers));
         AddHandler(0, &TCoExtractMembers::Match, HNDL(ExtractMembersOverDqWrap));
-        AddHandler(0, &TCoExtractMembers::Match, HNDL(ExtractMembersOverDqSourceWrap)); 
+        AddHandler(0, &TCoExtractMembers::Match, HNDL(ExtractMembersOverDqSourceWrap));
 #undef HNDL
     }
 
     TMaybeNode<TExprBase> TrimReadWorld(TExprBase node, TExprContext& ctx) const {
-        if (const auto maybeRead = node.Cast<TCoLeft>().Input().Maybe<TClReadTable>()) 
-            return TExprBase(ctx.NewWorld(node.Pos())); 
-        return node; 
+        if (const auto maybeRead = node.Cast<TCoLeft>().Input().Maybe<TClReadTable>())
+            return TExprBase(ctx.NewWorld(node.Pos()));
+        return node;
 
     }
 
     TMaybeNode<TExprBase> ExtractMembers(TExprBase node, TExprContext& ctx) const {
-        const auto extract = node.Cast<TCoExtractMembers>(); 
-        const auto input = extract.Input(); 
-        const auto read = input.Maybe<TCoRight>().Input().Maybe<TClReadTable>(); 
+        const auto extract = node.Cast<TCoExtractMembers>();
+        const auto input = extract.Input();
+        const auto read = input.Maybe<TCoRight>().Input().Maybe<TClReadTable>();
         if (!read) {
             return node;
         }
 
         return Build<TCoRight>(ctx, extract.Pos())
             .Input<TClReadTable>()
-                .InitFrom(read.Cast()) 
+                .InitFrom(read.Cast())
                 .Columns(extract.Members())
             .Build()
             .Done();
@@ -65,35 +65,35 @@ public:
         return Build<TDqReadWrap>(ctx, node.Pos())
             .InitFrom(input.Cast<TDqReadWrap>())
             .Input<TClReadTable>()
-                .InitFrom(read.Cast()) 
+                .InitFrom(read.Cast())
                 .Columns(extract.Members())
             .Build()
             .Done();
     }
 
-    TMaybeNode<TExprBase> ExtractMembersOverDqSourceWrap(TExprBase node, TExprContext& ctx) const { 
-        const auto extract = node.Cast<TCoExtractMembers>(); 
-        const auto input = extract.Input(); 
-        const auto read = input.Maybe<TDqSourceWrap>().Input().Maybe<TClSourceSettings>(); 
-        if (!read) { 
-            return node; 
-        } 
- 
-        return Build<TDqSourceWrap>(ctx, node.Pos()) 
-            .Input<TClSourceSettings>() 
-                .InitFrom(read.Cast()) 
-                .Columns(extract.Members()) 
-            .Build() 
-            .DataSource(input.Cast<TDqSourceWrap>().DataSource()) 
-            .RowType(ExpandType(node.Pos(), *GetSeqItemType(extract.Ref().GetTypeAnn()), ctx)) 
-            .Done(); 
-    } 
+    TMaybeNode<TExprBase> ExtractMembersOverDqSourceWrap(TExprBase node, TExprContext& ctx) const {
+        const auto extract = node.Cast<TCoExtractMembers>();
+        const auto input = extract.Input();
+        const auto read = input.Maybe<TDqSourceWrap>().Input().Maybe<TClSourceSettings>();
+        if (!read) {
+            return node;
+        }
+
+        return Build<TDqSourceWrap>(ctx, node.Pos())
+            .Input<TClSourceSettings>()
+                .InitFrom(read.Cast())
+                .Columns(extract.Members())
+            .Build()
+            .DataSource(input.Cast<TDqSourceWrap>().DataSource())
+            .RowType(ExpandType(node.Pos(), *GetSeqItemType(extract.Ref().GetTypeAnn()), ctx))
+            .Done();
+    }
 private:
-    const TClickHouseState::TPtr State_; 
+    const TClickHouseState::TPtr State_;
 };
 
-} 
- 
+}
+
 THolder<IGraphTransformer> CreateClickHouseLogicalOptProposalTransformer(TClickHouseState::TPtr state) {
     return MakeHolder<TClickHouseLogicalOptProposalTransformer>(state);
 }

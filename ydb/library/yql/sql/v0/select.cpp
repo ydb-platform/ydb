@@ -832,7 +832,7 @@ public:
             keysTuple = Q(keysTuple);
         }
         auto extractKey = Y("SqlExtractKey", "row", BuildLambda(Pos, Y("row"), keysTuple));
-        auto extractKeyLambda = BuildLambda(Pos, Y("row"), extractKey); 
+        auto extractKeyLambda = BuildLambda(Pos, Y("row"), extractKey);
 
         TNodePtr processPartitions;
         switch (Mode) {
@@ -849,7 +849,7 @@ public:
                 break;
             }
             case ReduceMode::ByPartition: {
-                processPartitions = Y("SqlReduce", "partitionStream", extractKeyLambda, Udf, 
+                processPartitions = Y("SqlReduce", "partitionStream", extractKeyLambda, Udf,
                     BuildLambda(Pos, Y("row"), GroundWithExpr(ExprGround, Args[0])));
                 break;
             }
@@ -864,7 +864,7 @@ public:
             sortKeySelector = BuildLambda(Pos, Y("row"), Y("SqlExtractKey", "row", sortKeySelector));
         }
 
-        auto partitionByKey = Y(Mode == ReduceMode::ByAll ? "PartitionByKey" : "PartitionsByKeys", "core", extractKeyLambda, 
+        auto partitionByKey = Y(Mode == ReduceMode::ByAll ? "PartitionByKey" : "PartitionsByKeys", "core", extractKeyLambda,
             sortDirection, sortKeySelector, BuildLambda(Pos, Y("partitionStream"), processPartitions));
 
         auto block(Y(Y("let", "core", input)));

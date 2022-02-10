@@ -58,15 +58,15 @@ namespace NActors {
                 : Blob(blob)
             {
             }
- 
+
             TString ToStringHeader() const noexcept override {
                 return "THelloWorld::Blob";
             }
- 
+
             bool SerializeToArcadiaStream(TChunkSerializer *serializer) const override {
                 return serializer->WriteString(&Blob);
             }
- 
+
             static IEventBase* Load(TEventSerializedData* bufs) noexcept {
                 return new TEvBlob(bufs->GetString());
             }
@@ -75,7 +75,7 @@ namespace NActors {
                 return true;
             }
         };
- 
+
         struct TSystem {
             enum {
                 Start = EventSpaceBegin(ES_SYSTEM),
@@ -103,7 +103,7 @@ namespace NActors {
                 PoisonPill = Poison,
                 ActorDied = Gone,
             };
- 
+
             static_assert(End < EventSpaceEnd(ES_SYSTEM), "expect End < EventSpaceEnd(ES_SYSTEM)");
         };
 
@@ -130,7 +130,7 @@ namespace NActors {
         struct TEvUnsubscribe: public TEventBase<TEvUnsubscribe, TSystem::Unsubscribe> {
             DEFINE_SIMPLE_LOCAL_EVENT(TEvUnsubscribe, "System: TEvUnsubscribe")
         };
- 
+
         struct TEvUndelivered: public TEventBase<TEvUndelivered, TSystem::Undelivered> {
             enum EReason {
                 ReasonUnknown,
@@ -141,7 +141,7 @@ namespace NActors {
             const EReason Reason;
             const bool Unsure;
             const TString Data;
- 
+
             TEvUndelivered(ui32 sourceType, ui32 reason, bool unsure = false)
                 : SourceType(sourceType)
                 , Reason(static_cast<EReason>(reason))

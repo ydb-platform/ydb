@@ -16,10 +16,10 @@ namespace {
 TType* ValidateColumns(
         const TArrayRef<const TSelectColumn>& columns,
         TRuntimeNode& tags,
-        const TProgramBuilder* builder) 
+        const TProgramBuilder* builder)
 {
-    TStructTypeBuilder rowTypeBuilder(builder->GetTypeEnvironment()); 
-    TStructLiteralBuilder tagsBuilder(builder->GetTypeEnvironment()); 
+    TStructTypeBuilder rowTypeBuilder(builder->GetTypeEnvironment());
+    TStructLiteralBuilder tagsBuilder(builder->GetTypeEnvironment());
     rowTypeBuilder.Reserve(columns.size());
     tagsBuilder.Reserve(columns.size());
     for (auto& col : columns) {
@@ -32,9 +32,9 @@ TType* ValidateColumns(
                 builder->GetTypeEnvironment());
         else
             dataType = TDataType::Create(col.SchemeType, builder->GetTypeEnvironment());
-        auto optType = TOptionalType::Create(dataType, builder->GetTypeEnvironment()); 
+        auto optType = TOptionalType::Create(dataType, builder->GetTypeEnvironment());
         rowTypeBuilder.Add(col.Label, optType);
-        tagsBuilder.Add(col.Label, builder->NewDataLiteral<ui32>(col.ColumnId)); 
+        tagsBuilder.Add(col.Label, builder->NewDataLiteral<ui32>(col.ColumnId));
     }
 
     tags = TRuntimeNode(tagsBuilder.Build(), true);
@@ -175,7 +175,7 @@ EInplaceUpdateMode InplaceUpdateModeFromCString(const char* str) {
 TKikimrProgramBuilder::TKikimrProgramBuilder(
         const TTypeEnvironment& env,
         const IFunctionRegistry& functionRegistry)
-    : TProgramBuilder(env, functionRegistry, true) 
+    : TProgramBuilder(env, functionRegistry, true)
 {
     UseNullType = false;
     NullInternName = Env.InternName(TStringBuf("Null"));
@@ -238,7 +238,7 @@ TRuntimeNode TKikimrProgramBuilder::SelectRow(
     auto rows = FixKeysType(keyTypes, row);
 
     TRuntimeNode tags;
-    auto rowType = ValidateColumns(columns, tags, this); 
+    auto rowType = ValidateColumns(columns, tags, this);
     TType* optType = NewOptionalType(rowType);
 
     TCallableBuilder builder(Env, "SelectRow", optType);
@@ -331,7 +331,7 @@ TRuntimeNode TKikimrProgramBuilder::SelectRange(
     }
 
     TRuntimeNode tags;
-    auto rowType = ValidateColumns(columns, tags, this); 
+    auto rowType = ValidateColumns(columns, tags, this);
     TType* listType = NewListType(rowType);
     TDataType* boolType = TDataType::Create(NUdf::TDataType<bool>::Id, Env);
 
@@ -535,7 +535,7 @@ TRuntimeNode TKikimrProgramBuilder::Bind(TRuntimeNode program, TRuntimeNode para
                 MKQL_ENSURE(callable.GetType()->GetPayload(), "Expected payload");
                 auto structObj = AS_VALUE(NMiniKQL::TStructLiteral, NMiniKQL::TRuntimeNode(callable.GetType()->GetPayload(), true));
                 auto payloadIndex = 1; // fields: Args, Payload
-                const TStringBuf parameterName(AS_VALUE(NMiniKQL::TDataLiteral, structObj->GetValue(payloadIndex))->AsValue().AsStringRef()); 
+                const TStringBuf parameterName(AS_VALUE(NMiniKQL::TDataLiteral, structObj->GetValue(payloadIndex))->AsValue().AsStringRef());
 
                 auto parameterIndex = parametersStruct.GetType()->FindMemberIndex(parameterName);
                 MKQL_ENSURE(parameterIndex, "Missing value for parameter: " << parameterName);
@@ -656,7 +656,7 @@ TRuntimeNode TKikimrProgramBuilder::SetResult(const TStringBuf& label, TRuntimeN
 
 TRuntimeNode TKikimrProgramBuilder::NewDataLiteral(const std::pair<ui64, ui64>& data) const {
     return TRuntimeNode(BuildDataLiteral(NUdf::TStringRef(reinterpret_cast<const char*>(&data), sizeof(data)), LegacyPairUi64Ui64, Env), true);
-} 
+}
 
 TRuntimeNode TKikimrProgramBuilder::BuildTableId(const TTableId& tableId) const {
     if (tableId.SchemaVersion) {

@@ -11,7 +11,7 @@ namespace NYql::NDq {
 struct TDqStageSettings {
     static constexpr TStringBuf LogicalIdSettingName = "_logical_id";
     static constexpr TStringBuf IdSettingName = "_id";
-    static constexpr TStringBuf SinglePartitionSettingName = "_single_partition"; 
+    static constexpr TStringBuf SinglePartitionSettingName = "_single_partition";
     static constexpr TStringBuf IsExternalSetting = "is_external_function";
     static constexpr TStringBuf TransformNameSetting = "transform_name";
     static constexpr TStringBuf TransformTypeSetting = "transform_type";
@@ -19,7 +19,7 @@ struct TDqStageSettings {
 
     ui64 LogicalId = 0;
     TString Id;
-    bool SinglePartition = false; 
+    bool SinglePartition = false;
 
     bool IsExternalFunction = false;
     NDqProto::ETransformType TransformType = NDqProto::TRANSFORM_YANDEX_CLOUD;

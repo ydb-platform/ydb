@@ -12,35 +12,35 @@ Y_UNIT_TEST_SUITE(TMiniKQLSafeCircularBuffer) {
     typedef TSafeCircularBuffer<TUnboxedValue> TBufUnboxed;
 
     Y_UNIT_TEST(TestUnboxedNoFailOnEmpty) {
-        TBufUnboxed bufferOptional(1, TUnboxedValuePod()); 
+        TBufUnboxed bufferOptional(1, TUnboxedValuePod());
         TBufUnboxed buffer(1, TUnboxedValue::Void());
-        UNIT_ASSERT(buffer.Get(0)); 
-        UNIT_ASSERT(buffer.Get(1)); 
-        UNIT_ASSERT(buffer.Get(3)); 
-        UNIT_ASSERT(buffer.Get(-1)); 
+        UNIT_ASSERT(buffer.Get(0));
+        UNIT_ASSERT(buffer.Get(1));
+        UNIT_ASSERT(buffer.Get(3));
+        UNIT_ASSERT(buffer.Get(-1));
         for (auto i = 0; i < 5; ++i) {
             buffer.PopFront();
         }
     }
 
     Y_UNIT_TEST(TestUnboxedNormalUsage) {
-        TBufUnboxed buffer(5, TUnboxedValuePod()); 
-        buffer.PushBack(TUnboxedValue::Embedded("It")); 
+        TBufUnboxed buffer(5, TUnboxedValuePod());
+        buffer.PushBack(TUnboxedValue::Embedded("It"));
         UNIT_ASSERT_EQUAL(buffer.Get(0).AsStringRef(), "It");
-        buffer.PushBack(TUnboxedValue::Embedded("is")); 
+        buffer.PushBack(TUnboxedValue::Embedded("is"));
         UNIT_ASSERT_EQUAL(buffer.Get(0).AsStringRef(), "It");
-        buffer.PushBack(TUnboxedValue::Embedded("funny")); 
+        buffer.PushBack(TUnboxedValue::Embedded("funny"));
         UNIT_ASSERT_EQUAL(buffer.UsedSize(), 3);
         UNIT_ASSERT_EQUAL(buffer.Get(0).AsStringRef(), "It");
         UNIT_ASSERT_EQUAL(buffer.Get(2).AsStringRef(), "funny");
-        UNIT_ASSERT(!buffer.Get(3)); 
+        UNIT_ASSERT(!buffer.Get(3));
         buffer.PopFront();
         UNIT_ASSERT_EQUAL(buffer.Get(0).AsStringRef(), "is");
         UNIT_ASSERT_EQUAL(buffer.Get(1).AsStringRef(), "funny");
-        buffer.PushBack(TUnboxedValue::Embedded("bunny")); 
+        buffer.PushBack(TUnboxedValue::Embedded("bunny"));
         UNIT_ASSERT_EQUAL(buffer.Get(1).AsStringRef(), "funny");
         UNIT_ASSERT_EQUAL(buffer.Get(2).AsStringRef(), "bunny");
-        UNIT_ASSERT(!buffer.Get(3)); 
+        UNIT_ASSERT(!buffer.Get(3));
         buffer.PopFront();
         UNIT_ASSERT_EQUAL(buffer.Get(0).AsStringRef(), "funny");
         UNIT_ASSERT_EQUAL(buffer.Get(1).AsStringRef(), "bunny");
@@ -51,7 +51,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLSafeCircularBuffer) {
         for (auto i = 0; i < 3; ++i) {
             buffer.PopFront();
             UNIT_ASSERT_EQUAL(buffer.UsedSize(), 0);
-            UNIT_ASSERT(!buffer.Get(0)); 
+            UNIT_ASSERT(!buffer.Get(0));
         }
     }
 
@@ -115,12 +115,12 @@ Y_UNIT_TEST_SUITE(TMiniKQLSafeCircularBuffer) {
         const auto multPopLevel = 0.5;
         const auto initSize = 10;
         const auto iterationCount = 4;
-        TBufUnboxed buffer(initSize, NUdf::TUnboxedValuePod()); 
+        TBufUnboxed buffer(initSize, NUdf::TUnboxedValuePod());
         unsigned lastDirectIndex = 0;
         unsigned lastChecked = 0;
         for (unsigned iteration = 0; iteration < iterationCount; ++iteration) {
             for (auto i = 0; i < multFillLevel * initSize; ++i) {
-                buffer.PushBack(NUdf::TUnboxedValuePod(++lastDirectIndex)); 
+                buffer.PushBack(NUdf::TUnboxedValuePod(++lastDirectIndex));
             }
             UNIT_ASSERT(buffer.UsedSize() > 0);
             UNIT_ASSERT_EQUAL(buffer.Get(buffer.UsedSize() - 1).Get<unsigned>(), lastDirectIndex);

@@ -18,7 +18,7 @@ TExprBase DqRewriteAggregate(TExprBase node, TExprContext& ctx) {
         return node;
     }
 
-    auto result = ExpandAggregate(node.Ptr(), ctx); 
+    auto result = ExpandAggregate(node.Ptr(), ctx);
     YQL_ENSURE(result);
 
     return TExprBase(result);

@@ -106,30 +106,30 @@ public:
         *(Data() + Pos_++) = ch;
     }
 
-    void Fill(char ch, size_t len); 
- 
+    void Fill(char ch, size_t len);
+
     // Method is useful when first messages from buffer are processed, and
     // the last message in buffer is incomplete, so we need to move partial
     // message to the begin of the buffer and continue filling the buffer
     // from the network.
-    inline void Chop(size_t pos, size_t count) { 
-        const auto end = pos + count; 
-        Y_ASSERT(end <= Pos_); 
+    inline void Chop(size_t pos, size_t count) {
+        const auto end = pos + count;
+        Y_ASSERT(end <= Pos_);
 
         if (count == 0) {
             return;
         } else if (count == Pos_) {
             Pos_ = 0;
         } else {
-            memmove(Data_ + pos, Data_ + end, Pos_ - end); 
-            Pos_ -= count; 
+            memmove(Data_ + pos, Data_ + end, Pos_ - end);
+            Pos_ -= count;
         }
     }
 
-    inline void ChopHead(size_t count) { 
-        Chop(0U, count); 
-    } 
- 
+    inline void ChopHead(size_t count) {
+        Chop(0U, count);
+    }
+
     inline void Proceed(size_t pos) {
         //Y_ASSERT(pos <= Len_); // see discussion in REVIEW:29021
         Resize(pos);

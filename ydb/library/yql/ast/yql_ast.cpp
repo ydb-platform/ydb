@@ -50,8 +50,8 @@ namespace {
             , Pool_(externalPool)
         {
             if (!Pool_) {
-                InnerPool_ = std::make_unique<TMemoryPool>(4096); 
-                Pool_ = InnerPool_.get(); 
+                InnerPool_ = std::make_unique<TMemoryPool>(4096);
+                Pool_ = InnerPool_.get();
             }
         }
 
@@ -102,14 +102,14 @@ namespace {
         inline ui32 Offset() const { return Offset_; }
         inline const TPosition& Position() const { return Position_; }
         inline TMemoryPool& Pool() { return *Pool_; }
-        inline std::unique_ptr<TMemoryPool>&& InnerPool() { return std::move(InnerPool_); } 
+        inline std::unique_ptr<TMemoryPool>&& InnerPool() { return std::move(InnerPool_); }
 
     private:
         TStringBuf Str_;
         TPosition Position_;
         ui32 Offset_;
         TMemoryPool* Pool_;
-        std::unique_ptr<TMemoryPool> InnerPool_; 
+        std::unique_ptr<TMemoryPool> InnerPool_;
     };
 
     ///////////////////////////////////////////////////////////////////////////
@@ -171,12 +171,12 @@ namespace {
             }
         }
 
-        TAstNode* ParseList(size_t level) { 
-            if (level >= 1000U) { 
-                AddError("Too deep graph!"); 
-                return nullptr; 
-            } 
- 
+        TAstNode* ParseList(size_t level) {
+            if (level >= 1000U) {
+                AddError("Too deep graph!");
+                return nullptr;
+            }
+
             SkipSpace();
 
             if (Ctx_.AtEnd()) {
@@ -206,7 +206,7 @@ namespace {
                     return TAstNode::NewList(listPos, children.data(), children.size(), Ctx_.Pool());
                 }
 
-                TAstNode* elem = ParseElement(level); 
+                TAstNode* elem = ParseElement(level);
                 if (!elem)
                     return nullptr;
 
@@ -214,7 +214,7 @@ namespace {
             }
         }
 
-        TAstNode* ParseElement(size_t level) { 
+        TAstNode* ParseElement(size_t level) {
             if (Ctx_.AtEnd()) {
                 AddError("Expected element");
                 return nullptr;
@@ -234,7 +234,7 @@ namespace {
                 }
 
                 TAstNode* content = IsListStart(ch)
-                        ? ParseList(++level) 
+                        ? ParseList(++level)
                         : ParseAtom();
                 if (!content)
                     return nullptr;
@@ -243,7 +243,7 @@ namespace {
             }
 
             if (IsListStart(c))
-                return ParseList(++level); 
+                return ParseList(++level);
 
             return ParseAtom();
         }

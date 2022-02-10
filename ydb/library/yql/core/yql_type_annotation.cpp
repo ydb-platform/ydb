@@ -11,7 +11,7 @@
 
 #include <util/stream/file.h>
 #include <util/string/join.h>
- 
+
 namespace NYql {
 
 using namespace NKikimr;
@@ -21,9 +21,9 @@ bool TTypeAnnotationContext::Initialize(TExprContext& ctx) {
         InitializeResult = DoInitialize(ctx);
     }
 
-    return *InitializeResult; 
-} 
- 
+    return *InitializeResult;
+}
+
 bool TTypeAnnotationContext::DoInitialize(TExprContext& ctx) {
     for (auto& x : DataSources) {
         if (!x->Initialize(ctx)) {

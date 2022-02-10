@@ -1,4 +1,4 @@
-#include "mkql_computation_node_ut.h" 
+#include "mkql_computation_node_ut.h"
 
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
@@ -8,8 +8,8 @@ namespace NMiniKQL {
 
 namespace {
 
-template<bool UseLLVM> 
-TRuntimeNode MakeStream(TSetup<UseLLVM>& setup, ui64 count = 9U) { 
+template<bool UseLLVM>
+TRuntimeNode MakeStream(TSetup<UseLLVM>& setup, ui64 count = 9U) {
     TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
 
     TCallableBuilder callableBuilder(*setup.Env, "TestStream",
@@ -23,7 +23,7 @@ TRuntimeNode MakeStream(TSetup<UseLLVM>& setup, ui64 count = 9U) {
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
-template<bool UseLLVM> 
+template<bool UseLLVM>
 TRuntimeNode Group(TSetup<UseLLVM>& setup, TRuntimeNode stream, const std::function<TRuntimeNode(TRuntimeNode, TRuntimeNode)>& groupSwitch,
     const std::function<TRuntimeNode(TRuntimeNode)>& handler = {})
 {
@@ -47,7 +47,7 @@ TRuntimeNode Group(TSetup<UseLLVM>& setup, TRuntimeNode stream, const std::funct
     });
 }
 
-template<bool UseLLVM> 
+template<bool UseLLVM>
 TRuntimeNode GroupKeys(TSetup<UseLLVM>& setup, TRuntimeNode stream, const std::function<TRuntimeNode(TRuntimeNode, TRuntimeNode)>& groupSwitch) {
     TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
 
@@ -61,8 +61,8 @@ TRuntimeNode GroupKeys(TSetup<UseLLVM>& setup, TRuntimeNode stream, const std::f
     });
 }
 
-template<bool UseLLVM> 
-TRuntimeNode StreamToString(TSetup<UseLLVM>& setup, TRuntimeNode stream) { 
+template<bool UseLLVM>
+TRuntimeNode StreamToString(TSetup<UseLLVM>& setup, TRuntimeNode stream) {
     TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
 
     return pgmBuilder.Squeeze(stream, pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("|"), [&] (TRuntimeNode item, TRuntimeNode state) {
@@ -74,14 +74,14 @@ TRuntimeNode StreamToString(TSetup<UseLLVM>& setup, TRuntimeNode stream) {
 
 
 Y_UNIT_TEST_SUITE(TMiniKQLGroupingTest) {
-    Y_UNIT_TEST_LLVM(TestGrouping) { 
-        TSetup<LLVM> setup; 
+    Y_UNIT_TEST_LLVM(TestGrouping) {
+        TSetup<LLVM> setup;
         TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
 
         auto stream = MakeStream(setup);
         stream = Group(setup, stream, [&](TRuntimeNode key, TRuntimeNode item) {
             Y_UNUSED(key);
-            return pgmBuilder.Equals(item, pgmBuilder.NewDataLiteral<ui64>(0)); 
+            return pgmBuilder.Equals(item, pgmBuilder.NewDataLiteral<ui64>(0));
         });
         auto pgm = StreamToString(setup, stream);
         auto graph = setup.BuildGraph(pgm);
@@ -98,7 +98,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGroupingTest) {
 
         auto stream = MakeStream(setup);
         stream = Group(setup, stream, [&](TRuntimeNode key, TRuntimeNode item) {
-            return pgmBuilder.NotEquals(item, key); 
+            return pgmBuilder.NotEquals(item, key);
         });
         auto pgm = StreamToString(setup, stream);
         auto graph = setup.BuildGraph(pgm);
@@ -109,14 +109,14 @@ Y_UNIT_TEST_SUITE(TMiniKQLGroupingTest) {
         UNIT_ASSERT_VALUES_EQUAL(TStringBuf(result.AsStringRef()), "|*00*00*|*11*|*00*00*00*|*11*|*22*|*33*|");
     }
 
-    Y_UNIT_TEST_LLVM(TestGroupingWithEmptyInput) { 
-        TSetup<LLVM> setup; 
+    Y_UNIT_TEST_LLVM(TestGroupingWithEmptyInput) {
+        TSetup<LLVM> setup;
         TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
 
         auto stream = MakeStream(setup, 0);
         stream = Group(setup, stream, [&](TRuntimeNode key, TRuntimeNode item) {
             Y_UNUSED(key);
-            return pgmBuilder.Equals(item, pgmBuilder.NewDataLiteral<ui64>(0)); 
+            return pgmBuilder.Equals(item, pgmBuilder.NewDataLiteral<ui64>(0));
         });
         auto pgm = StreamToString(setup, stream);
         auto graph = setup.BuildGraph(pgm);
@@ -127,8 +127,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLGroupingTest) {
         UNIT_ASSERT_VALUES_EQUAL(TStringBuf(result.AsStringRef()), "|");
     }
 
-    Y_UNIT_TEST_LLVM(TestSingleGroup) { 
-        TSetup<LLVM> setup; 
+    Y_UNIT_TEST_LLVM(TestSingleGroup) {
+        TSetup<LLVM> setup;
         TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
 
         auto stream = MakeStream(setup);
@@ -146,8 +146,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLGroupingTest) {
         UNIT_ASSERT_VALUES_EQUAL(TStringBuf(result.AsStringRef()), "|*00*00*01*00*00*00*01*02*03*|");
     }
 
-    Y_UNIT_TEST_LLVM(TestGroupingWithYield) { 
-        TSetup<LLVM> setup; 
+    Y_UNIT_TEST_LLVM(TestGroupingWithYield) {
+        TSetup<LLVM> setup;
         TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
 
         auto stream = MakeStream(setup);
@@ -160,7 +160,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGroupingTest) {
                 [&](ui32 /*index*/, TRuntimeNode item1) {
                     return Group(setup, item1, [&](TRuntimeNode key, TRuntimeNode item2) {
                         Y_UNUSED(key);
-                        return pgmBuilder.Equals(item2, pgmBuilder.NewDataLiteral<ui64>(0)); 
+                        return pgmBuilder.Equals(item2, pgmBuilder.NewDataLiteral<ui64>(0));
                     });
                 },
                 1,
@@ -176,15 +176,15 @@ Y_UNIT_TEST_SUITE(TMiniKQLGroupingTest) {
         UNIT_ASSERT_VALUES_EQUAL(TStringBuf(result.AsStringRef()), "|*00*|*00*01*|*00*|*00*|*00*01*02*03*|");
     }
 
-    Y_UNIT_TEST_LLVM(TestGroupingWithoutFetchingSubStreams) { 
-        TSetup<LLVM> setup; 
+    Y_UNIT_TEST_LLVM(TestGroupingWithoutFetchingSubStreams) {
+        TSetup<LLVM> setup;
         TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
 
         auto stream = MakeStream(setup);
 
         stream = GroupKeys(setup, stream, [&](TRuntimeNode key, TRuntimeNode item) {
             Y_UNUSED(key);
-            return pgmBuilder.Equals(item, pgmBuilder.NewDataLiteral<ui64>(0)); 
+            return pgmBuilder.Equals(item, pgmBuilder.NewDataLiteral<ui64>(0));
         });
 
         auto pgm = StreamToString(setup, stream);
@@ -196,8 +196,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLGroupingTest) {
         UNIT_ASSERT_VALUES_EQUAL(TStringBuf(result.AsStringRef()), "|0|0|0|0|0|");
     }
 
-    Y_UNIT_TEST_LLVM(TestGroupingWithYieldAndWithoutFetchingSubStreams) { 
-        TSetup<LLVM> setup; 
+    Y_UNIT_TEST_LLVM(TestGroupingWithYieldAndWithoutFetchingSubStreams) {
+        TSetup<LLVM> setup;
         TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
 
         auto stream = MakeStream(setup);
@@ -210,7 +210,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGroupingTest) {
                 [&](ui32 /*index*/, TRuntimeNode item1) {
                     return GroupKeys(setup, item1, [&](TRuntimeNode key, TRuntimeNode item2) {
                         Y_UNUSED(key);
-                        return pgmBuilder.Equals(item2, pgmBuilder.NewDataLiteral<ui64>(0)); 
+                        return pgmBuilder.Equals(item2, pgmBuilder.NewDataLiteral<ui64>(0));
                     });
                 },
                 1,

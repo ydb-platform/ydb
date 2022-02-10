@@ -26,13 +26,13 @@ namespace NCommon {
 
 void WriteYsonValue(
     NYson::TYsonConsumerBase& writer,
-    const NKikimr::NUdf::TUnboxedValuePod& value, 
+    const NKikimr::NUdf::TUnboxedValuePod& value,
     NKikimr::NMiniKQL::TType* type,
     const TVector<ui32>* structPositions = nullptr
 );
 
 TString WriteYsonValue(
-    const NKikimr::NUdf::TUnboxedValuePod& value, 
+    const NKikimr::NUdf::TUnboxedValuePod& value,
     NKikimr::NMiniKQL::TType* type,
     const TVector<ui32>* structPositions = nullptr,
     NYson::EYsonFormat format = NYson::EYsonFormat::Binary

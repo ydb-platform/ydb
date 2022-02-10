@@ -66,7 +66,7 @@ TProgram::TStatus SyncExecution(
         TProgram::TFutureStatus (TProgram::*method)(Params1...),
         Params2&&... params) {
     TProgram::TFutureStatus future =
-            (program->*method)(std::forward<Params2>(params)...); 
+            (program->*method)(std::forward<Params2>(params)...);
     YQL_ENSURE(future.Initialized());
     future.Wait();
     YQL_ENSURE(!future.HasException());
@@ -114,12 +114,12 @@ std::function<TMaybe<TString>(const TString&)> BuildCompositeTokenResolver(TVect
 TProgramFactory::TProgramFactory(
     bool useRepeatableRandomAndTimeProviders,
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-    ui64 nextUniqueId, 
+    ui64 nextUniqueId,
     const TVector<TDataProviderInitializer>& dataProvidersInit,
     const TString& runner)
     : UseRepeatableRandomAndTimeProviders_(useRepeatableRandomAndTimeProviders)
     , FunctionRegistry_(functionRegistry)
-    , NextUniqueId_(nextUniqueId) 
+    , NextUniqueId_(nextUniqueId)
     , DataProvidersInit_(dataProvidersInit)
     , GatewaysConfig_(nullptr)
     , Runner_(runner)
@@ -155,10 +155,10 @@ void TProgramFactory::SetGatewaysConfig(const TGatewaysConfig* gatewaysConfig) {
     GatewaysConfig_ = gatewaysConfig;
 }
 
-void TProgramFactory::SetModules(IModuleResolver::TPtr modules) { 
-    Modules_ = modules; 
-} 
- 
+void TProgramFactory::SetModules(IModuleResolver::TPtr modules) {
+    Modules_ = modules;
+}
+
 void TProgramFactory::SetUdfResolver(IUdfResolver::TPtr udfResolver) {
     UdfResolver_ = udfResolver;
 }
@@ -208,12 +208,12 @@ TProgram::TProgram(
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const TIntrusivePtr<IRandomProvider> randomProvider,
         const TIntrusivePtr<ITimeProvider> timeProvider,
-        ui64 nextUniqueId, 
+        ui64 nextUniqueId,
         const TVector<TDataProviderInitializer>& dataProvidersInit,
         const TUserDataTable& userDataTable,
         const TVector<TCredentialTablePtr>& credentialTables,
         const TUserCredentials& userCredentials,
-        const IModuleResolver::TPtr& modules, 
+        const IModuleResolver::TPtr& modules,
         const IUdfResolver::TPtr& udfResolver,
         const TUdfIndex::TPtr& udfIndex,
         const TUdfIndexPackageSet::TPtr& udfIndexPackageSet,
@@ -228,7 +228,7 @@ TProgram::TProgram(
     : FunctionRegistry_(functionRegistry)
     , RandomProvider_(randomProvider)
     , TimeProvider_(timeProvider)
-    , NextUniqueId_(nextUniqueId) 
+    , NextUniqueId_(nextUniqueId)
     , DataProvidersInit_(dataProvidersInit)
     , CredentialTables_(credentialTables)
     , UserCredentials_(userCredentials)
@@ -243,7 +243,7 @@ TProgram::TProgram(
     , SourceSyntax_(ESourceSyntax::Unknown)
     , SyntaxVersion_(0)
     , AstRoot_(nullptr)
-    , Modules_(modules) 
+    , Modules_(modules)
     , ExprRoot_(nullptr)
     , SessionId_(sessionId)
     , ResultFormat_(NYson::EYsonFormat::Binary)
@@ -370,7 +370,7 @@ bool TProgram::FillParseResult(NYql::TAstParseResult&& astRes, NYql::TWarningRul
         return false;
     }
     AstRoot_ = astRes.Root;
-    AstPool_ = std::move(astRes.Pool); 
+    AstPool_ = std::move(astRes.Pool);
     return true;
 }
 
@@ -570,7 +570,7 @@ TProgram::TFutureStatus TProgram::ValidateAsync(const TString& username, IOutput
 
     ExprStream_ = exprOut;
     Transformer_ = TTransformationPipeline(TypeCtx_)
-            .AddServiceTransformers() 
+            .AddServiceTransformers()
             .AddParametersEvaluation(*FunctionRegistry_)
             .AddPreTypeAnnotation()
             .AddExpressionEvaluation(*FunctionRegistry_)
@@ -638,7 +638,7 @@ TProgram::TFutureStatus TProgram::OptimizeAsync(
     ExprStream_ = exprOut;
     PlanStream_ = tracePlan;
     Transformer_ = TTransformationPipeline(TypeCtx_)
-        .AddServiceTransformers() 
+        .AddServiceTransformers()
         .AddParametersEvaluation(*FunctionRegistry_)
         .AddPreTypeAnnotation()
         .AddExpressionEvaluation(*FunctionRegistry_)
@@ -646,7 +646,7 @@ TProgram::TFutureStatus TProgram::OptimizeAsync(
         .AddTypeAnnotation()
         .AddPostTypeAnnotation()
         .Add(TExprOutputTransformer::Sync(ExprRoot_, traceOut), "ExprOutput")
-        .AddOptimization() 
+        .AddOptimization()
         .Add(CreatePlanInfoTransformer(*TypeCtx_), "PlanInfo")
         .Add(TExprOutputTransformer::Sync(ExprRoot_, exprOut, withTypes), "AstOutput")
         .Add(TPlanOutputTransformer::Sync(tracePlan, GetPlanBuilder(), OutputFormat_), "PlanOutput")
@@ -701,7 +701,7 @@ TProgram::TFutureStatus TProgram::OptimizeAsyncWithConfig(
 
     TTransformationPipeline pipeline(TypeCtx_);
     pipelineConf.AfterCreate(&pipeline);
-    pipeline.AddServiceTransformers(); 
+    pipeline.AddServiceTransformers();
     pipeline.AddParametersEvaluation(*FunctionRegistry_);
     pipeline.AddPreTypeAnnotation();
     pipeline.AddExpressionEvaluation(*FunctionRegistry_);
@@ -710,7 +710,7 @@ TProgram::TFutureStatus TProgram::OptimizeAsyncWithConfig(
     pipeline.AddPostTypeAnnotation();
     pipelineConf.AfterTypeAnnotation(&pipeline);
 
-    pipeline.AddOptimization(); 
+    pipeline.AddOptimization();
     if (EnableRangeComputeFor_) {
         pipeline.Add(MakeExpandRangeComputeForTransformer(pipeline.GetTypeAnnotationContext()),
                      "ExpandRangeComputeFor", TIssuesIds::CORE_EXEC);
@@ -853,7 +853,7 @@ TProgram::TFutureStatus TProgram::RunAsyncWithConfig(
 
     TTransformationPipeline pipeline(TypeCtx_);
     pipelineConf.AfterCreate(&pipeline);
-    pipeline.AddServiceTransformers(); 
+    pipeline.AddServiceTransformers();
     pipeline.AddParametersEvaluation(*FunctionRegistry_);
     pipeline.AddPreTypeAnnotation();
     pipeline.AddExpressionEvaluation(*FunctionRegistry_);
@@ -862,7 +862,7 @@ TProgram::TFutureStatus TProgram::RunAsyncWithConfig(
     pipeline.AddPostTypeAnnotation();
     pipelineConf.AfterTypeAnnotation(&pipeline);
 
-    pipeline.AddOptimization(); 
+    pipeline.AddOptimization();
     if (EnableRangeComputeFor_) {
         pipeline.Add(MakeExpandRangeComputeForTransformer(pipeline.GetTypeAnnotationContext()),
             "ExpandRangeComputeFor", TIssuesIds::CORE_EXEC);
@@ -1250,7 +1250,7 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
     typeAnnotationContext->UserDataStorage = UserDataStorage_;
     typeAnnotationContext->Credentials = CredentialTables_;
     typeAnnotationContext->UserCredentials = UserCredentials_;
-    typeAnnotationContext->Modules = Modules_; 
+    typeAnnotationContext->Modules = Modules_;
     typeAnnotationContext->UdfResolver = UdfResolver_;
     typeAnnotationContext->UdfIndex = UdfIndex_;
     typeAnnotationContext->UdfIndexPackageSet = UdfIndexPackageSet_;
@@ -1329,7 +1329,7 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
         ResultProviderConfig_ = MakeIntrusive<TResultProviderConfig>(*typeAnnotationContext,
             *FunctionRegistry_, IDataProvider::EResultFormat::Yson, ToString((ui32)resultFormat), writerFactory);
         ResultProviderConfig_->SupportsResultPosition = SupportsResultPosition_;
-        auto resultProvider = CreateResultProvider(ResultProviderConfig_); 
+        auto resultProvider = CreateResultProvider(ResultProviderConfig_);
         typeAnnotationContext->AddDataSink(ResultProviderName, resultProvider);
         typeAnnotationContext->AvailablePureResultDataSources = resultProviderDataSources;
     }

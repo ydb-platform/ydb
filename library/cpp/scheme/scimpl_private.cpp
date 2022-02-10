@@ -1,7 +1,7 @@
 #include "scimpl_private.h"
 
 #include <util/generic/algorithm.h>
-#include <utility> 
+#include <utility>
 
 namespace NSc {
     namespace NImpl {

@@ -41,7 +41,7 @@ private:
 
 class TPresortDecoder : public TPresortCodec {
 public:
-    TPresortDecoder() = default; 
+    TPresortDecoder() = default;
 
     void Start(TStringBuf input);
     NUdf::TUnboxedValue Decode();

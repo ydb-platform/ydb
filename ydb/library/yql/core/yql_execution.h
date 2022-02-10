@@ -28,21 +28,21 @@ namespace NYql {
         TString RemoteId;
 
         struct TCounters {
-            ui64 Completed = 0ULL; 
-            ui64 Running = 0ULL; 
-            ui64 Total = 0ULL; 
-            ui64 Aborted = 0ULL; 
-            ui64 Failed = 0ULL; 
-            ui64 Lost = 0ULL; 
-            ui64 Pending = 0ULL; 
+            ui64 Completed = 0ULL;
+            ui64 Running = 0ULL;
+            ui64 Total = 0ULL;
+            ui64 Aborted = 0ULL;
+            ui64 Failed = 0ULL;
+            ui64 Lost = 0ULL;
+            ui64 Pending = 0ULL;
             bool operator==(const TCounters& rhs) const noexcept {
                 return Completed == rhs.Completed &&
                        Running == rhs.Running &&
-                       Total == rhs.Total && 
-                       Aborted == rhs.Aborted && 
-                       Failed == rhs.Failed && 
-                       Lost == rhs.Lost && 
-                       Pending == rhs.Pending; 
+                       Total == rhs.Total &&
+                       Aborted == rhs.Aborted &&
+                       Failed == rhs.Failed &&
+                       Lost == rhs.Lost &&
+                       Pending == rhs.Pending;
             }
 
             bool operator!=(const TCounters& rhs) const noexcept {

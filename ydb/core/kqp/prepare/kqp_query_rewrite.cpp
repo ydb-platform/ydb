@@ -58,7 +58,7 @@ TExprBase RebuildMapToList(TMapNode map, TExprContext& ctx) {
 
 TExprNode::TPtr NormalizeCallables(TExprBase node, TExprContext& ctx, const TKqpAnalyzeResults& analyzeResults) {
     if (!analyzeResults.CallableToExecRootsMap.contains(node.Raw())) {
-        return node.Ptr(); 
+        return node.Ptr();
     }
 
     if (node.Maybe<TCoMap>() || node.Maybe<TCoFlatMap>()) {
@@ -73,23 +73,23 @@ TExprNode::TPtr NormalizeCallables(TExprBase node, TExprContext& ctx, const TKqp
             .Input(filter.Cast().Input())
             .Lambda()
                 .Args({"item"})
-                .Body<TCoIf>() 
+                .Body<TCoIf>()
                     .Predicate<TExprApplier>()
                         .Apply(filter.Cast().Lambda())
                         .With(0, "item")
                         .Build()
-                    .ThenValue<TCoJust>() 
-                        .Input("item") 
-                        .Build() 
-                    .ElseValue<TCoNothing>() 
-                        .OptionalType<TCoOptionalType>() 
-                            .ItemType<TCoTypeOf>() 
-                                .Value("item") 
-                                .Build() 
-                            .Build() 
-                        .Build() 
+                    .ThenValue<TCoJust>()
+                        .Input("item")
+                        .Build()
+                    .ElseValue<TCoNothing>()
+                        .OptionalType<TCoOptionalType>()
+                            .ItemType<TCoTypeOf>()
+                                .Value("item")
+                                .Build()
+                            .Build()
+                        .Build()
                 .Build()
-            .Build() 
+            .Build()
             .Done()
             .Ptr();
     }
@@ -105,14 +105,14 @@ TExprNode::TPtr ToListOverToOptional(TExprBase node, TExprContext& ctx) {
             YQL_CLOG(INFO, ProviderKqp) << "ToListOverToOptional";
             return toOpt.Cast().List().Ptr();
         }
-        if (auto toOpt = toList.Cast().Optional().Maybe<TCoHead>()) { 
-            YQL_CLOG(INFO, ProviderKqp) << "ToListOverHead"; 
-            return toOpt.Cast().Input().Ptr(); 
-        } 
-        if (auto toOpt = toList.Cast().Optional().Maybe<TCoLast>()) { 
-            YQL_CLOG(INFO, ProviderKqp) << "ToListOverLast"; 
-            return toOpt.Cast().Input().Ptr(); 
-        } 
+        if (auto toOpt = toList.Cast().Optional().Maybe<TCoHead>()) {
+            YQL_CLOG(INFO, ProviderKqp) << "ToListOverHead";
+            return toOpt.Cast().Input().Ptr();
+        }
+        if (auto toOpt = toList.Cast().Optional().Maybe<TCoLast>()) {
+            YQL_CLOG(INFO, ProviderKqp) << "ToListOverLast";
+            return toOpt.Cast().Input().Ptr();
+        }
     }
 
     return node.Ptr();
@@ -233,7 +233,7 @@ TExprBase SplitMap(TExprBase input, TCoLambda lambda, TExprContext& ctx, const T
         replaceMap.emplace(jointNodes[i].Raw(), node.Ptr());
     }
 
-    auto outerLambdaBody = ctx.ReplaceNodes(lambda.Body().Ptr(), replaceMap); 
+    auto outerLambdaBody = ctx.ReplaceNodes(lambda.Body().Ptr(), replaceMap);
     auto outerLambda = Build<TCoLambda>(ctx, lambda.Pos())
         .Args({outerLambdaArg})
         .Body(TExprBase(outerLambdaBody))
@@ -349,7 +349,7 @@ public:
                 TExprBase node(input);
 
                 ret = NormalizeCallables(node, ctx, analyzeResults);
-                if (ret != input) { 
+                if (ret != input) {
                     return ret;
                 }
 
@@ -362,17 +362,17 @@ public:
             }, ctx, optSettings);
         YQL_ENSURE(status == TStatus::Ok);
 
-        if (input != output) { 
+        if (input != output) {
             return TStatus(TStatus::Repeat, true);
         }
 
         status = OptimizeExpr(input, output,
-            [&analyzeResults](const TExprNode::TPtr& input, TExprContext& ctx) { 
-                auto ret = input; 
-                TExprBase node(input); 
+            [&analyzeResults](const TExprNode::TPtr& input, TExprContext& ctx) {
+                auto ret = input;
+                TExprBase node(input);
 
                 ret = UnnestExecutionRoots(node, ctx, analyzeResults);
-                if (ret != input) { 
+                if (ret != input) {
                     return ret;
                 }
 
@@ -380,7 +380,7 @@ public:
             }, ctx, optSettings);
         YQL_ENSURE(status == TStatus::Ok);
 
-        YQL_ENSURE(input != output); 
+        YQL_ENSURE(input != output);
         return TStatus(TStatus::Repeat, true);
     }
 

@@ -115,7 +115,7 @@ public:
         , HasProgramResults(false) {}
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
-        output = input; 
+        output = input;
 
         YQL_ENSURE(State == EFinalizeState::Initial);
 
@@ -496,32 +496,32 @@ private:
                 .Build()
             .Done();
 
-        TVector<TExprBase> args = { 
-            Build<TCoCmpEqual>(ctx, pos) 
-                .Left<TCoMember>() 
-                    .Struct(selectLock) 
-                    .Name().Build("Generation") 
-                    .Build() 
-                .Right<TCoMember>() 
-                    .Struct(lockArg) 
-                    .Name().Build("Generation") 
-                    .Build() 
-                .Done(), 
-            Build<TCoCmpEqual>(ctx, pos) 
-                .Left<TCoMember>() 
-                    .Struct(selectLock) 
-                    .Name().Build("Counter") 
-                    .Build() 
-                .Right<TCoMember>() 
-                    .Struct(lockArg) 
-                    .Name().Build("Counter") 
-                    .Build() 
-                .Done() 
-        }; 
+        TVector<TExprBase> args = {
+            Build<TCoCmpEqual>(ctx, pos)
+                .Left<TCoMember>()
+                    .Struct(selectLock)
+                    .Name().Build("Generation")
+                    .Build()
+                .Right<TCoMember>()
+                    .Struct(lockArg)
+                    .Name().Build("Generation")
+                    .Build()
+                .Done(),
+            Build<TCoCmpEqual>(ctx, pos)
+                .Left<TCoMember>()
+                    .Struct(selectLock)
+                    .Name().Build("Counter")
+                    .Build()
+                .Right<TCoMember>()
+                    .Struct(lockArg)
+                    .Name().Build("Counter")
+                    .Build()
+                .Done()
+        };
         auto lockPredicate = Build<TCoNot>(ctx, pos)
             .Value<TCoCoalesce>()
                 .Predicate<TCoAnd>()
-                    .Add(args) 
+                    .Add(args)
                     .Build()
                 .Value<TCoBool>()
                     .Literal().Build("false")

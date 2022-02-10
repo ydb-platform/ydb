@@ -211,11 +211,11 @@ bool INode::DoInit(TContext& ctx, ISource* src) {
     return true;
 }
 
-TNodePtr INode::AstNode() const { 
+TNodePtr INode::AstNode() const {
     return new TAstListNodeImpl(Pos);
 }
 
-TNodePtr INode::AstNode(TNodePtr node) const { 
+TNodePtr INode::AstNode(TNodePtr node) const {
     return node;
 }
 
@@ -223,7 +223,7 @@ TNodePtr INode::AstNode(const TString& str) const {
     return new TAstAtomNodeImpl(Pos, str, TNodeFlags::Default);
 }
 
-TNodePtr INode::AstNode(TAstNode* node) const { 
+TNodePtr INode::AstNode(TAstNode* node) const {
     return new TAstDirectNode(node);
 }
 
@@ -977,8 +977,8 @@ TAstNode* ITableKeys::Translate(TContext& ctx) const {
     return nullptr;
 }
 
-bool IAggregation::IsDistinct() const { 
-    return !DistinctKey.empty(); 
+bool IAggregation::IsDistinct() const {
+    return !DistinctKey.empty();
 }
 
 void IAggregation::DoUpdateState() const {
@@ -990,17 +990,17 @@ const TString* IAggregation::GetGenericKey() const {
     return nullptr;
 }
 
-void IAggregation::Join(IAggregation*) { 
-    Y_VERIFY(false); 
-} 
- 
+void IAggregation::Join(IAggregation*) {
+    Y_VERIFY(false);
+}
+
 const TString& IAggregation::GetName() const {
     return Name;
 }
 
 IAggregation::IAggregation(TPosition pos, const TString& name, const TString& func, EAggregateMode aggMode)
     : INode(pos), Name(name), Func(func), AggMode(aggMode)
-{} 
+{}
 
 TAstNode* IAggregation::Translate(TContext& ctx) const {
     Y_VERIFY_DEBUG(false);
@@ -1012,8 +1012,8 @@ TNodePtr IAggregation::AggregationTraits(const TNodePtr& type) const {
     const bool distinct = AggMode == EAggregateMode::Distinct;
     const auto listType = distinct ? Y("ListType", Y("StructMemberType", Y("ListItemType", type), BuildQuotedAtom(Pos, DistinctKey))) : type;
     return distinct ? Q(Y(Q(Name), GetApply(listType), BuildQuotedAtom(Pos, DistinctKey))): Q(Y(Q(Name), GetApply(listType)));
-} 
- 
+}
+
 void IAggregation::AddFactoryArguments(TNodePtr& apply) const {
     Y_UNUSED(apply);
 }
@@ -1433,23 +1433,23 @@ TNodePtr ISource::BuildAggregation(const TString& label) {
     }
 
     std::map<std::pair<bool, TString>, std::vector<IAggregation*>> genericAggrs;
-    for (const auto& aggr: Aggregations) { 
-        if (const auto key = aggr->GetGenericKey()) { 
-            genericAggrs[{aggr->IsDistinct(), *key}].emplace_back(aggr.Get()); 
+    for (const auto& aggr: Aggregations) {
+        if (const auto key = aggr->GetGenericKey()) {
+            genericAggrs[{aggr->IsDistinct(), *key}].emplace_back(aggr.Get());
         }
     }
 
-    for (const auto& aggr : genericAggrs) { 
-        for (size_t i = 1U; i < aggr.second.size(); ++i) { 
-            aggr.second.front()->Join(aggr.second[i]); 
+    for (const auto& aggr : genericAggrs) {
+        for (size_t i = 1U; i < aggr.second.size(); ++i) {
+            aggr.second.front()->Join(aggr.second[i]);
         }
-    } 
+    }
 
-    const auto listType = Y("TypeOf", label); 
-    auto aggrArgs = Y(); 
-    for (const auto& aggr: Aggregations) { 
+    const auto listType = Y("TypeOf", label);
+    auto aggrArgs = Y();
+    for (const auto& aggr: Aggregations) {
         if (const auto traits = aggr->AggregationTraits(listType))
-            aggrArgs = L(aggrArgs, traits); 
+            aggrArgs = L(aggrArgs, traits);
     }
 
     if (HoppingWindowSpec) {
@@ -1466,7 +1466,7 @@ TNodePtr ISource::BuildAggregation(const TString& label) {
             Q(Y(Q(Y(BuildQuotedAtom(Pos, "hopping"), hoppingTraits)))));
     }
 
-    return Y("Aggregate", label, Q(keysTuple), Q(aggrArgs)); 
+    return Y("Aggregate", label, Q(keysTuple), Q(aggrArgs));
 }
 
 TMaybe<TString> ISource::FindColumnMistype(const TString& name) const {
@@ -2379,23 +2379,23 @@ TNodePtr BuildAccess(TPosition pos, const TVector<INode::TIdPart>& ids, bool isL
     return new TAccessNode(pos, ids, isLookup);
 }
 
-class TBindNode: public TAstListNode { 
-public: 
+class TBindNode: public TAstListNode {
+public:
     TBindNode(TPosition pos, const TString& module, const TString& alias)
-        : TAstListNode(pos) 
-    { 
-        Add("bind", AstNode(module), BuildQuotedAtom(pos, alias)); 
-    } 
+        : TAstListNode(pos)
+    {
+        Add("bind", AstNode(module), BuildQuotedAtom(pos, alias));
+    }
 
     TPtr DoClone() const final {
         return {};
     }
-}; 
- 
+};
+
 TNodePtr BuildBind(TPosition pos, const TString& module, const TString& alias) {
-    return new TBindNode(pos, module, alias); 
-} 
- 
+    return new TBindNode(pos, module, alias);
+}
+
 class TLambdaNode: public TAstListNode {
 public:
     TLambdaNode(TPosition pos, TNodePtr params, TNodePtr body, const TString& resName)
@@ -2416,23 +2416,23 @@ TNodePtr BuildLambda(TPosition pos, TNodePtr params, TNodePtr body, const TStrin
     return new TLambdaNode(pos, params, body, resName);
 }
 
-template <bool Bit> 
+template <bool Bit>
 class TCastNode: public TAstListNode {
 public:
-    TCastNode(TPosition pos, TNodePtr expr, const TString& typeName, const TString& paramOne, const TString& paramTwo) 
-        : TAstListNode(pos) 
-        , Expr(expr) 
-        , NormalizedTypeName(TypeByAlias(typeName)) 
-        , ParamOne(paramOne) 
-        , ParamTwo(paramTwo) 
-    {} 
+    TCastNode(TPosition pos, TNodePtr expr, const TString& typeName, const TString& paramOne, const TString& paramTwo)
+        : TAstListNode(pos)
+        , Expr(expr)
+        , NormalizedTypeName(TypeByAlias(typeName))
+        , ParamOne(paramOne)
+        , ParamTwo(paramTwo)
+    {}
 
     const TString* GetSourceName() const override {
         return Expr->GetSourceName();
     }
 
     TString GetOpName() const override {
-        return Bit ? "BitCast" : "Cast"; 
+        return Bit ? "BitCast" : "Cast";
     }
 
     void DoUpdateState() const override {
@@ -2442,76 +2442,76 @@ public:
     }
 
     TPtr DoClone() const final {
-        return new TCastNode(Pos, Expr->Clone(), NormalizedTypeName, ParamOne, ParamTwo); 
+        return new TCastNode(Pos, Expr->Clone(), NormalizedTypeName, ParamOne, ParamTwo);
     }
 
     bool DoInit(TContext& ctx, ISource* src) override;
 private:
     TNodePtr Expr;
     const TString NormalizedTypeName;
-    const TString ParamOne, ParamTwo; 
+    const TString ParamOne, ParamTwo;
 };
 
-template <> 
-bool TCastNode<false>::DoInit(TContext& ctx, ISource* src) { 
+template <>
+bool TCastNode<false>::DoInit(TContext& ctx, ISource* src) {
     if (Expr->IsNull()) {
-        if (ParamOne.empty() && ParamTwo.empty()) { 
-            Add("Nothing", Y("OptionalType", Y("DataType", Q(NormalizedTypeName)))); 
-        } else if (ParamTwo.empty()) { 
-            Add("Nothing", Y("OptionalType", Y("DataType", Q(NormalizedTypeName), Q(ParamOne)))); 
-        } else { 
-            Add("Nothing", Y("OptionalType", Y("DataType", Q(NormalizedTypeName), Q(ParamOne), Q(ParamTwo)))); 
-        } 
+        if (ParamOne.empty() && ParamTwo.empty()) {
+            Add("Nothing", Y("OptionalType", Y("DataType", Q(NormalizedTypeName))));
+        } else if (ParamTwo.empty()) {
+            Add("Nothing", Y("OptionalType", Y("DataType", Q(NormalizedTypeName), Q(ParamOne))));
+        } else {
+            Add("Nothing", Y("OptionalType", Y("DataType", Q(NormalizedTypeName), Q(ParamOne), Q(ParamTwo))));
+        }
     } else {
-        if (ParamOne.empty() && ParamTwo.empty()) { 
-            Add("Cast", Expr, Q(NormalizedTypeName)); 
-        } else if (ParamTwo.empty()) { 
-            Add("Cast", Expr, Q(NormalizedTypeName), Q(ParamOne)); 
-        } else { 
-            Add("Cast", Expr, Q(NormalizedTypeName), Q(ParamOne), Q(ParamTwo)); 
-        } 
+        if (ParamOne.empty() && ParamTwo.empty()) {
+            Add("Cast", Expr, Q(NormalizedTypeName));
+        } else if (ParamTwo.empty()) {
+            Add("Cast", Expr, Q(NormalizedTypeName), Q(ParamOne));
+        } else {
+            Add("Cast", Expr, Q(NormalizedTypeName), Q(ParamOne), Q(ParamTwo));
+        }
     }
     return TAstListNode::DoInit(ctx, src);
 }
 
-template <> 
-bool TCastNode<true>::DoInit(TContext& ctx, ISource* src) { 
-    if (Expr->IsNull()) { 
-        if (ParamOne.empty() && ParamTwo.empty()) { 
-            Add("Nothing", Y("OptionalType", Y("DataType", Q(NormalizedTypeName)))); 
-        } else if (ParamTwo.empty()) { 
-            Add("Nothing", Y("OptionalType", Y("DataType", Q(NormalizedTypeName), Q(ParamOne)))); 
-        } else { 
-            Add("Nothing", Y("OptionalType", Y("DataType", Q(NormalizedTypeName), Q(ParamOne), Q(ParamTwo)))); 
-        } 
-    } else { 
-        if (ParamOne.empty() && ParamTwo.empty()) { 
-            Add("BitCast", Expr, Q(NormalizedTypeName)); 
-        } else if (ParamTwo.empty()) { 
-            Add("BitCast", Expr, Q(NormalizedTypeName), Q(ParamOne)); 
-        } else { 
-            Add("BitCast", Expr, Q(NormalizedTypeName), Q(ParamOne), Q(ParamTwo)); 
-        } 
-    } 
-    return TAstListNode::DoInit(ctx, src); 
-} 
- 
-TNodePtr BuildCast(TContext& ctx, TPosition pos, TNodePtr expr, const TString& typeName, const TString& paramOne, const TString& paramTwo) { 
+template <>
+bool TCastNode<true>::DoInit(TContext& ctx, ISource* src) {
+    if (Expr->IsNull()) {
+        if (ParamOne.empty() && ParamTwo.empty()) {
+            Add("Nothing", Y("OptionalType", Y("DataType", Q(NormalizedTypeName))));
+        } else if (ParamTwo.empty()) {
+            Add("Nothing", Y("OptionalType", Y("DataType", Q(NormalizedTypeName), Q(ParamOne))));
+        } else {
+            Add("Nothing", Y("OptionalType", Y("DataType", Q(NormalizedTypeName), Q(ParamOne), Q(ParamTwo))));
+        }
+    } else {
+        if (ParamOne.empty() && ParamTwo.empty()) {
+            Add("BitCast", Expr, Q(NormalizedTypeName));
+        } else if (ParamTwo.empty()) {
+            Add("BitCast", Expr, Q(NormalizedTypeName), Q(ParamOne));
+        } else {
+            Add("BitCast", Expr, Q(NormalizedTypeName), Q(ParamOne), Q(ParamTwo));
+        }
+    }
+    return TAstListNode::DoInit(ctx, src);
+}
+
+TNodePtr BuildCast(TContext& ctx, TPosition pos, TNodePtr expr, const TString& typeName, const TString& paramOne, const TString& paramTwo) {
     Y_UNUSED(ctx);
     if (!expr) {
         return nullptr;
     }
-    return new TCastNode<false>(pos, expr, typeName, paramOne, paramTwo); 
+    return new TCastNode<false>(pos, expr, typeName, paramOne, paramTwo);
 }
 
-TNodePtr BuildBitCast(TContext& ctx, TPosition pos, TNodePtr expr, const TString& typeName, const TString& paramOne, const TString& paramTwo) { 
+TNodePtr BuildBitCast(TContext& ctx, TPosition pos, TNodePtr expr, const TString& typeName, const TString& paramOne, const TString& paramTwo) {
     Y_UNUSED(ctx);
-    if (!expr) { 
-        return nullptr; 
-    } 
-    return new TCastNode<true>(pos, expr, typeName, paramOne, paramTwo); 
-} 
- 
+    if (!expr) {
+        return nullptr;
+    }
+    return new TCastNode<true>(pos, expr, typeName, paramOne, paramTwo);
+}
+
 TString TypeByAlias(const TString& alias, bool normalize) {
     TString type(alias);
     TCiString typeAlias(alias);

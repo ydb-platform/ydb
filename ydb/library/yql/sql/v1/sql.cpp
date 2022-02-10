@@ -939,7 +939,7 @@ private:
     TNodePtr BindParameterRule(const TRule_bind_parameter& rule, const TTrailingQuestions& tail);
     TNodePtr LambdaRule(const TRule_lambda& rule);
     TNodePtr CastRule(const TRule_cast_expr& rule);
-    TNodePtr BitCastRule(const TRule_bitcast_expr& rule); 
+    TNodePtr BitCastRule(const TRule_bitcast_expr& rule);
     TNodePtr ExistsRule(const TRule_exists_expr& rule);
     TNodePtr CaseRule(const TRule_case_expr& rule);
 
@@ -1396,7 +1396,7 @@ bool TSqlTranslation::ClusterExpr(const TRule_cluster_expr& node, bool allowWild
     if (node.HasBlock1()) {
         service = to_lower(Id(node.GetBlock1().GetRule_an_id1(), *this));
         allowBinding = false;
-        if (service != YtProviderName && 
+        if (service != YtProviderName &&
             service != KikimrProviderName &&
             service != RtmrProviderName && service != StatProviderName) {
             Ctx.Error() << "Unknown service: " << service;
@@ -2122,10 +2122,10 @@ namespace {
         }
         return true;
     }
- 
-    bool WithoutAlpha(const std::string_view& literal) { 
-        return literal.cend() == std::find_if(literal.cbegin(), literal.cend(), [](char c) { return std::isalpha(c) || (c & '\x80'); }); 
-    } 
+
+    bool WithoutAlpha(const std::string_view& literal) {
+        return literal.cend() == std::find_if(literal.cbegin(), literal.cend(), [](char c) { return std::isalpha(c) || (c & '\x80'); });
+    }
 
     template<typename TChar>
     struct TSplitResult {
@@ -4482,12 +4482,12 @@ TNodePtr TSqlExpression::CastRule(const TRule_cast_expr& rule) {
     return new TCallNodeImpl(pos, "SafeCast", {exprNode, type});
 }
 
-TNodePtr TSqlExpression::BitCastRule(const TRule_bitcast_expr& rule) { 
-    Ctx.IncrementMonCounter("sql_features", "BitCast"); 
-    const auto& alt = rule; 
-    Token(alt.GetToken1()); 
-    TPosition pos(Ctx.Pos()); 
-    TSqlExpression expr(Ctx, Mode); 
+TNodePtr TSqlExpression::BitCastRule(const TRule_bitcast_expr& rule) {
+    Ctx.IncrementMonCounter("sql_features", "BitCast");
+    const auto& alt = rule;
+    Token(alt.GetToken1());
+    TPosition pos(Ctx.Pos());
+    TSqlExpression expr(Ctx, Mode);
     auto exprNode = expr.Build(rule.GetRule_expr3());
     if (!exprNode) {
         return {};
@@ -4497,8 +4497,8 @@ TNodePtr TSqlExpression::BitCastRule(const TRule_bitcast_expr& rule) {
         return {};
     }
     return new TCallNodeImpl(pos, "BitCast", {exprNode, type});
-} 
- 
+}
+
 TNodePtr TSqlExpression::ExistsRule(const TRule_exists_expr& rule) {
     Ctx.IncrementMonCounter("sql_features", "Exists");
 
@@ -4749,7 +4749,7 @@ TMaybe<TExprOrIdent> TSqlExpression::InAtomExpr(const TRule_in_atom_expr& node, 
             result.Expr = ValueConstructor(node.GetAlt_in_atom_expr8().GetRule_value_constructor1());
             break;
         }
-        case TRule_in_atom_expr::kAltInAtomExpr9: 
+        case TRule_in_atom_expr::kAltInAtomExpr9:
             result.Expr = BitCastRule(node.GetAlt_in_atom_expr9().GetRule_bitcast_expr1());
             break;
         case TRule_in_atom_expr::kAltInAtomExpr10:
@@ -4995,13 +4995,13 @@ TNodePtr TSqlExpression::SubExpr(const TRule_xor_subexpr& node, const TTrailingQ
                         TString prefix, suffix;
                         bool inEscape = false;
                         bool hasPattern = false;
-                        bool isSimple = true; 
+                        bool isSimple = true;
 
                         TMaybe<char> escape;
                         if (escapeLiteral) {
                             escape = escapeLiteral->front();
                         }
- 
+
                         bool mayIgnoreCase;
                         if (isUtf8) {
                             auto splitResult = SplitPattern(UTF8ToUTF32<false>(*literalPattern), escape, inEscape, hasPattern, isSimple);
@@ -5014,21 +5014,21 @@ TNodePtr TSqlExpression::SubExpr(const TRule_xor_subexpr& node, const TTrailingQ
                             suffix = splitResult.Suffix;
                             mayIgnoreCase = WithoutAlpha(*literalPattern);
                         }
- 
+
                         if (inEscape) {
                             Ctx.IncrementMonCounter("sql_errors", "LikeEscapeSymbolEnd");
                             Error() << "LIKE pattern should not end with escape symbol";
                             return nullptr;
                         }
- 
+
                         if (opName == "like" || mayIgnoreCase) {
-//TODO: Drop regex          if (isSimple) {} 
- 
-                            if (!(hasPattern || suffix.empty())) { 
+//TODO: Drop regex          if (isSimple) {}
+
+                            if (!(hasPattern || suffix.empty())) {
                                 isMatch = BuildBinaryOp(Ctx, pos, "==", res, BuildLiteralRawString(pos, suffix, isUtf8));
-                            } else if (!prefix.empty()) { 
+                            } else if (!prefix.empty()) {
                                 const auto& lowerBoundOp = BuildBinaryOp(Ctx, pos, "StartsWith", res, BuildLiteralRawString(pos, prefix, isUtf8));
-                                isMatch = BuildBinaryOp(Ctx, pos, "And", lowerBoundOp, isMatch); 
+                                isMatch = BuildBinaryOp(Ctx, pos, "And", lowerBoundOp, isMatch);
                             }
                         }
                     }
@@ -5044,13 +5044,13 @@ TNodePtr TSqlExpression::SubExpr(const TRule_xor_subexpr& node, const TTrailingQ
                         return nullptr;
                     }
 
-                    if (!Ctx.PragmaRegexUseRe2) { 
-                        Ctx.Warning(pos, TIssuesIds::CORE_LEGACY_REGEX_ENGINE) << "Legacy regex engine works incorrectly with unicode. Use PRAGMA RegexUseRe2='true';"; 
-                    } 
- 
-                    const auto& matcher = Ctx.PragmaRegexUseRe2 ? 
-                        BuildUdf(Ctx, pos, "Re2", opName == "match" ? "Match" : "Grep", {BuildTuple(pos, {pattern, BuildLiteralNull(pos)})}): 
-                        BuildUdf(Ctx, pos, "Pcre", opName == "match" ? "BacktrackingMatch" : "BacktrackingGrep", { pattern }); 
+                    if (!Ctx.PragmaRegexUseRe2) {
+                        Ctx.Warning(pos, TIssuesIds::CORE_LEGACY_REGEX_ENGINE) << "Legacy regex engine works incorrectly with unicode. Use PRAGMA RegexUseRe2='true';";
+                    }
+
+                    const auto& matcher = Ctx.PragmaRegexUseRe2 ?
+                        BuildUdf(Ctx, pos, "Re2", opName == "match" ? "Match" : "Grep", {BuildTuple(pos, {pattern, BuildLiteralNull(pos)})}):
+                        BuildUdf(Ctx, pos, "Pcre", opName == "match" ? "BacktrackingMatch" : "BacktrackingGrep", { pattern });
                     isMatch = new TCallNodeImpl(pos, "Apply", { matcher, res });
                     if (opName != "match") {
                         Ctx.IncrementMonCounter("sql_features", notMatch ? "NotRegexp" : "Regexp");
@@ -5231,7 +5231,7 @@ TNodePtr TSqlExpression::BinOpList(const TNode& node, TGetNode getNode, TIter be
                 opName = "/";
                 Ctx.IncrementMonCounter("sql_binary_operations", "Divide");
                 if (!Ctx.Scoped->PragmaClassicDivision && partialResult) {
-                    partialResult = new TCallNodeImpl(pos, "SafeCast", {std::move(partialResult), BuildDataType(pos, "Double")}); 
+                    partialResult = new TCallNodeImpl(pos, "SafeCast", {std::move(partialResult), BuildDataType(pos, "Double")});
                 }
                 break;
             case SQLv1LexerTokens::TOKEN_PERCENT:
@@ -7375,22 +7375,22 @@ bool TGroupByClause::HoppingWindow(const TRule_hopping_window_specification& nod
             });
         }
 
-        const auto out = NKikimr::NMiniKQL::ValueFromString(NKikimr::NUdf::EDataSlot::Interval, *literal); 
-        if (!out) { 
+        const auto out = NKikimr::NMiniKQL::ValueFromString(NKikimr::NUdf::EDataSlot::Interval, *literal);
+        if (!out) {
             Ctx.Error(node->GetPos()) << "Expected interval in ISO 8601 format";
             return nullptr;
         }
 
-        if ('T' == literal->back()) { 
-            Ctx.Error(node->GetPos()) << "Time prefix 'T' at end of interval constant. The designator 'T' shall be absent if all of the time components are absent."; 
-            return nullptr; 
-        } 
- 
+        if ('T' == literal->back()) {
+            Ctx.Error(node->GetPos()) << "Time prefix 'T' at end of interval constant. The designator 'T' shall be absent if all of the time components are absent.";
+            return nullptr;
+        }
+
         return new TAstListNodeImpl(Ctx.Pos(), {
             new TAstAtomNodeImpl(Ctx.Pos(), "Interval", TNodeFlags::Default),
             new TAstListNodeImpl(Ctx.Pos(), {
                 new TAstAtomNodeImpl(Ctx.Pos(), "quote", TNodeFlags::Default),
-                new TAstAtomNodeImpl(Ctx.Pos(), ToString(out.Get<i64>()), TNodeFlags::Default) 
+                new TAstAtomNodeImpl(Ctx.Pos(), ToString(out.Get<i64>()), TNodeFlags::Default)
             })
         });
     };
@@ -8089,7 +8089,7 @@ bool TSqlIntoTable::ValidateServiceName(const TRule_into_table_stmt& node, const
     Y_UNUSED(node);
     auto serviceName = table.Service;
     const bool isMapReduce = serviceName == YtProviderName;
-    const bool isKikimr = serviceName == KikimrProviderName || serviceName == YdbProviderName; 
+    const bool isKikimr = serviceName == KikimrProviderName || serviceName == YdbProviderName;
     const bool isRtmr = serviceName == RtmrProviderName;
     const bool isStat = serviceName == StatProviderName;
 
@@ -9250,11 +9250,11 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
         } else if (normalizedPragma == "file") {
             if (values.size() != 2U || pragmaValueDefault) {
                 Error() << "Expected file alias and url as pragma values";
-                Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue"); 
+                Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
                 return {};
-            } 
- 
-            Ctx.IncrementMonCounter("sql_pragma", "file"); 
+            }
+
+            Ctx.IncrementMonCounter("sql_pragma", "file");
             success = true;
             return BuildPragma(Ctx.Pos(), TString(ConfigProviderName), "AddFileByUrl", values, false);
         } else if (normalizedPragma == "folder") {
@@ -9516,12 +9516,12 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
         } else if (normalizedPragma == "disablewarnonansialiasshadowing") {
             Ctx.WarnOnAnsiAliasShadowing = false;
             Ctx.IncrementMonCounter("sql_pragma", "DisableWarnOnAnsiAliasShadowing");
-        } else if (normalizedPragma == "regexusere2") { 
+        } else if (normalizedPragma == "regexusere2") {
             if (values.size() != 1U || !values.front().GetLiteral() || !TryFromString(*values.front().GetLiteral(), Ctx.PragmaRegexUseRe2)) {
-                Error() << "Expected 'true' or 'false' for: " << pragma; 
-                Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue"); 
-                return {}; 
-            } 
+                Error() << "Expected 'true' or 'false' for: " << pragma;
+                Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
+                return {};
+            }
             Ctx.IncrementMonCounter("sql_pragma", "RegexUseRe2");
         } else if (normalizedPragma == "jsonqueryreturnsjsondocument") {
             Ctx.JsonQueryReturnsJsonDocument = true;
@@ -9608,12 +9608,12 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
                 Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
                 return {};
             }
-            if (normalizedPragma == "fast") { 
+            if (normalizedPragma == "fast") {
                 Ctx.Warning(Ctx.Pos(), TIssuesIds::YQL_DEPRECATED_PRAGMA)
                     << "Use of deprecated yson.Fast pragma. It will be dropped soon";
-                success = true; 
-                return {}; 
-            } else if (normalizedPragma == "autoconvert") { 
+                success = true;
+                return {};
+            } else if (normalizedPragma == "autoconvert") {
                 Ctx.PragmaYsonAutoConvert = true;
                 success = true;
                 return {};
@@ -10094,7 +10094,7 @@ void SqlASTToYqlImpl(NYql::TAstParseResult& res, const google::protobuf::Message
         TContext& ctx) {
     YQL_ENSURE(!ctx.Issues.Size());
     res.Root = SqlASTToYql(protoAst, ctx);
-    res.Pool = std::move(ctx.Pool); 
+    res.Pool = std::move(ctx.Pool);
     if (!res.Root) {
         if (ctx.Issues.Size()) {
             ctx.IncrementMonCounter("sql_errors", "AstToYqlError");

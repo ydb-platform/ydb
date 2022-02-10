@@ -1,19 +1,19 @@
 #include "mkql_computation_node_holders.h"
-#include "mkql_value_builder.h" 
-#include "mkql_computation_node_codegen.h" 
+#include "mkql_value_builder.h"
+#include "mkql_computation_node_codegen.h"
 #include <ydb/library/yql/minikql/arrow/mkql_memory_pool.h>
 #include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
 #include <ydb/library/yql/minikql/mkql_type_builder.h>
 #include <ydb/library/yql/minikql/mkql_terminator.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
-#include <util/system/env.h> 
+#include <util/system/env.h>
 #include <util/system/mutex.h>
 #include <util/digest/city.h>
 
-#ifndef MKQL_DISABLE_CODEGEN 
-#include <llvm/Support/raw_ostream.h> 
-#endif 
- 
+#ifndef MKQL_DISABLE_CODEGEN
+#include <llvm/Support/raw_ostream.h>
+#endif
+
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -49,26 +49,26 @@ const static TStatKey CodeGen_FinalizeTime("CodeGen_FinalizeTime", true);
 
 const static TStatKey Mkql_TotalNodes("Mkql_TotalNodes", true);
 const static TStatKey Mkql_CodegenFunctions("Mkql_CodegenFunctions", true);
- 
+
 class TDependencyScanVisitor : public TEmptyNodeVisitor {
 public:
-    void Walk(TNode* root, const TTypeEnvironment& env) { 
-        Stack = &env.GetNodeStack(); 
-        Stack->clear(); 
-        Stack->push_back(root); 
-        while (!Stack->empty()) { 
-            auto top = Stack->back(); 
-            Stack->pop_back(); 
-            if (top->GetCookie() != IS_NODE_REACHABLE) { 
-                top->SetCookie(IS_NODE_REACHABLE); 
-                top->Accept(*this); 
-            } 
-        } 
- 
-        Stack = nullptr; 
-    } 
- 
-private: 
+    void Walk(TNode* root, const TTypeEnvironment& env) {
+        Stack = &env.GetNodeStack();
+        Stack->clear();
+        Stack->push_back(root);
+        while (!Stack->empty()) {
+            auto top = Stack->back();
+            Stack->pop_back();
+            if (top->GetCookie() != IS_NODE_REACHABLE) {
+                top->SetCookie(IS_NODE_REACHABLE);
+                top->Accept(*this);
+            }
+        }
+
+        Stack = nullptr;
+    }
+
+private:
     using TEmptyNodeVisitor::Visit;
 
     void Visit(TStructLiteral& node) override {
@@ -129,7 +129,7 @@ private:
         }
     }
 
-    std::vector<TNode*>* Stack = nullptr; 
+    std::vector<TNode*>* Stack = nullptr;
 };
 
 class TPatternNodes: public TAtomicRefCount<TPatternNodes> {
@@ -164,8 +164,8 @@ public:
     }
 
     IComputationNode* GetComputationNode(TNode* node, bool pop = false, bool require = true) {
-        const auto cookie = node->GetCookie(); 
-        const auto result = reinterpret_cast<IComputationNode*>(cookie); 
+        const auto cookie = node->GetCookie();
+        const auto result = reinterpret_cast<IComputationNode*>(cookie);
 
         if (cookie <= IS_NODE_REACHABLE) {
             MKQL_ENSURE(!require, "Computation graph builder, node not found, type:"
@@ -180,7 +180,7 @@ public:
         return result;
     }
 
-    IComputationExternalNode* GetEntryPoint(size_t index, bool require) { 
+    IComputationExternalNode* GetEntryPoint(size_t index, bool require) {
         MKQL_ENSURE(index < Runtime2Computation.size() && (!require || Runtime2Computation[index]),
             "Pattern nodes can not get computation node by index: " << index << ", require: " << require);
         return Runtime2Computation[index];
@@ -197,12 +197,12 @@ private:
     TAllocState& AllocState;
     TIntrusivePtr<TMemoryUsageInfo> MemInfo;
     THolder<THolderFactory> HolderFactory;
-    THolder<TDefaultValueBuilder> ValueBuilder; 
+    THolder<TDefaultValueBuilder> ValueBuilder;
     TComputationMutables Mutables;
     TComputationNodePtrDeque ComputationNodesList;
     IComputationNode* RootNode = nullptr;
-    TComputationExternalNodePtrVector Runtime2Computation; 
-    TComputationNodeOnNodeMap ElementsCache; 
+    TComputationExternalNodePtrVector Runtime2Computation;
+    TComputationNodeOnNodeMap ElementsCache;
 };
 
 class TComputationGraphBuildingVisitor:
@@ -223,8 +223,8 @@ public:
         , PatternNodes(MakeIntrusive<TPatternNodes>(opts.AllocState))
         , ExternalAlloc(opts.CacheAlloc)
     {
-        PatternNodes->HolderFactory = MakeHolder<THolderFactory>(opts.AllocState, *PatternNodes->MemInfo, &FunctionRegistry); 
-        PatternNodes->ValueBuilder = MakeHolder<TDefaultValueBuilder>(*PatternNodes->HolderFactory, ValidatePolicy); 
+        PatternNodes->HolderFactory = MakeHolder<THolderFactory>(opts.AllocState, *PatternNodes->MemInfo, &FunctionRegistry);
+        PatternNodes->ValueBuilder = MakeHolder<TDefaultValueBuilder>(*PatternNodes->HolderFactory, ValidatePolicy);
         PatternNodes->ValueBuilder->SetSecureParamsProvider(opts.SecureParamsProvider);
         NodeFactory = MakeHolder<TNodeFactory>(*PatternNodes->MemInfo, PatternNodes->Mutables);
     }
@@ -240,10 +240,10 @@ public:
         return FunctionRegistry;
     }
 
-private: 
+private:
     template <typename T>
     void VisitType(T& node) {
-        AddNode(node, NodeFactory->CreateTypeNode(&node)); 
+        AddNode(node, NodeFactory->CreateTypeNode(&node));
     }
 
     void Visit(TTypeType& node) override {
@@ -282,10 +282,10 @@ private:
         VisitType<TStreamType>(node);
     }
 
-    void Visit(TFlowType& node) override { 
-        VisitType<TFlowType>(node); 
-    } 
- 
+    void Visit(TFlowType& node) override {
+        VisitType<TFlowType>(node);
+    }
+
     void Visit(TBlockType& node) override {
         VisitType<TBlockType>(node);
     }
@@ -323,7 +323,7 @@ private:
     }
 
     void Visit(TVoid& node) override {
-        AddNode(node, NodeFactory->CreateImmutableNode(NUdf::TUnboxedValue::Void())); 
+        AddNode(node, NodeFactory->CreateImmutableNode(NUdf::TUnboxedValue::Void()));
     }
 
     void Visit(TNull& node) override {
@@ -339,18 +339,18 @@ private:
     }
 
     void Visit(TDataLiteral& node) override {
-        auto value = node.AsValue(); 
-        NUdf::TDataTypeId typeId = node.GetType()->GetSchemeType(); 
-        if (typeId != 0x101) { // TODO remove 
-            const auto slot = NUdf::GetDataSlot(typeId); 
-            MKQL_ENSURE(IsValidValue(slot, value), 
-                "Bad data literal for type: " << NUdf::GetDataTypeInfo(slot).Name << ", " << value); 
-        } 
- 
+        auto value = node.AsValue();
+        NUdf::TDataTypeId typeId = node.GetType()->GetSchemeType();
+        if (typeId != 0x101) { // TODO remove
+            const auto slot = NUdf::GetDataSlot(typeId);
+            MKQL_ENSURE(IsValidValue(slot, value),
+                "Bad data literal for type: " << NUdf::GetDataTypeInfo(slot).Name << ", " << value);
+        }
+
         NUdf::TUnboxedValue externalValue;
         if (ExternalAlloc) {
             if (value.IsString()) {
-                externalValue = MakeString(value.AsStringRef()); 
+                externalValue = MakeString(value.AsStringRef());
             }
         }
         if (!externalValue) {
@@ -367,7 +367,7 @@ private:
             values.push_back(GetComputationNode(node.GetValue(i).GetNode()));
         }
 
-        AddNode(node, NodeFactory->CreateArrayNode(std::move(values))); 
+        AddNode(node, NodeFactory->CreateArrayNode(std::move(values)));
     }
 
     void Visit(TListLiteral& node) override {
@@ -377,7 +377,7 @@ private:
             items.push_back(GetComputationNode(node.GetItems()[i].GetNode()));
         }
 
-        AddNode(node, NodeFactory->CreateArrayNode(std::move(items))); 
+        AddNode(node, NodeFactory->CreateArrayNode(std::move(items)));
     }
 
     void Visit(TOptionalLiteral& node) override {
@@ -392,7 +392,7 @@ private:
         bool encoded;
         GetDictionaryKeyTypes(keyType, types, isTuple, encoded);
 
-        std::vector<std::pair<IComputationNode*, IComputationNode*>> items; 
+        std::vector<std::pair<IComputationNode*, IComputationNode*>> items;
         items.reserve(node.GetItemsCount());
         for (ui32 i = 0, e = node.GetItemsCount(); i < e; ++i) {
             auto item = node.GetItem(i);
@@ -426,14 +426,14 @@ private:
                 SecureParamsProvider,
                 *NodeFactory,
                 *PatternNodes->HolderFactory,
-                PatternNodes->ValueBuilder.Get(), 
+                PatternNodes->ValueBuilder.Get(),
                 ValidateMode,
                 ValidatePolicy,
                 GraphPerProcess,
-                PatternNodes->Mutables, 
-                PatternNodes->ElementsCache, 
-                std::bind(&TComputationGraphBuildingVisitor::PushBackNode, this, std::placeholders::_1)); 
-        const auto computationNode = Factory(node, ctx); 
+                PatternNodes->Mutables,
+                PatternNodes->ElementsCache,
+                std::bind(&TComputationGraphBuildingVisitor::PushBackNode, this, std::placeholders::_1));
+        const auto computationNode = Factory(node, ctx);
 
         if (!computationNode) {
             THROW yexception()
@@ -458,7 +458,7 @@ private:
             values.push_back(GetComputationNode(node.GetValue(i).GetNode()));
         }
 
-        AddNode(node, NodeFactory->CreateArrayNode(std::move(values))); 
+        AddNode(node, NodeFactory->CreateArrayNode(std::move(values)));
     }
 
     void Visit(TVariantLiteral& node) override {
@@ -466,7 +466,7 @@ private:
         AddNode(node, NodeFactory->CreateVariantNode(item, node.GetIndex()));
     }
 
-public: 
+public:
     IComputationNode* GetComputationNode(TNode* node, bool pop = false, bool require = true) {
         return PatternNodes->GetComputationNode(node, pop, require);
     }
@@ -491,21 +491,21 @@ public:
         PatternNodes->RootNode = rootNode;
     }
 
-    void PreserveEntryPoints(TComputationExternalNodePtrVector&& runtime2Computation) { 
+    void PreserveEntryPoints(TComputationExternalNodePtrVector&& runtime2Computation) {
         PatternNodes->Runtime2Computation = std::move(runtime2Computation);
     }
 
 private:
     void PushBackNode(const IComputationNode::TPtr& computationNode) {
-        computationNode->RegisterDependencies(); 
+        computationNode->RegisterDependencies();
         PatternNodes->ComputationNodesList.push_back(computationNode);
     }
 
     void AddNode(TNode& node, const IComputationNode::TPtr& computationNode) {
-        PushBackNode(computationNode); 
+        PushBackNode(computationNode);
         node.SetCookie((ui64)computationNode.Get());
-    } 
- 
+    }
+
 private:
     const TTypeEnvironment& Env;
     NUdf::ITypeInfoHelper::TPtr TypeInfoHelper;
@@ -533,7 +533,7 @@ public:
         CompOpts.AllocState.ActiveMemInfo.emplace(MemInfo.Get(), MemInfo);
 #endif
         HolderFactory = MakeHolder<THolderFactory>(CompOpts.AllocState, *MemInfo, patternNodes->HolderFactory->GetFunctionRegistry());
-        ValueBuilder = MakeHolder<TDefaultValueBuilder>(*HolderFactory.Get(), compOpts.ValidatePolicy); 
+        ValueBuilder = MakeHolder<TDefaultValueBuilder>(*HolderFactory.Get(), compOpts.ValidatePolicy);
         ValueBuilder->SetSecureParamsProvider(CompOpts.SecureParamsProvider);
         ArrowMemoryPool = MakeArrowMemoryPool(CompOpts.AllocState);
     }
@@ -558,7 +558,7 @@ public:
                 CompOpts,
                 PatternNodes->GetMutables(),
                 *ArrowMemoryPool));
-            ValueBuilder->SetCalleePositionHolder(Ctx->CalleePosition); 
+            ValueBuilder->SetCalleePositionHolder(Ctx->CalleePosition);
             for (auto& node : PatternNodes->GetNodes()) {
                 node->InitNode(*Ctx);
             }
@@ -571,12 +571,12 @@ public:
         return *Ctx;
     }
 
-    NUdf::TUnboxedValue GetValue() override { 
+    NUdf::TUnboxedValue GetValue() override {
         Prepare();
         return PatternNodes->GetRoot()->GetValue(*Ctx);
     }
 
-    IComputationExternalNode* GetEntryPoint(size_t index, bool require) override { 
+    IComputationExternalNode* GetEntryPoint(size_t index, bool require) override {
         Prepare();
         return PatternNodes->GetEntryPoint(index, require);
     }
@@ -585,7 +585,7 @@ public:
         std::fill_n(Ctx->MutableValues.get(), PatternNodes->GetMutables().CurValueIndex, NUdf::TUnboxedValue(NUdf::TUnboxedValuePod::Invalid()));
     }
 
-    const TComputationNodePtrDeque& GetNodes() const override { 
+    const TComputationNodePtrDeque& GetNodes() const override {
         return PatternNodes->GetNodes();
     }
 
@@ -593,20 +593,20 @@ public:
         return *MemInfo;
     }
 
-    const THolderFactory& GetHolderFactory() const override { 
+    const THolderFactory& GetHolderFactory() const override {
         return *HolderFactory;
     }
 
-    ITerminator* GetTerminator() const override { 
-        return ValueBuilder.Get(); 
-    } 
- 
-    bool SetExecuteLLVM(bool value) override { 
-        const bool old = Ctx->ExecuteLLVM; 
-        Ctx->ExecuteLLVM = value; 
-        return old; 
-    } 
- 
+    ITerminator* GetTerminator() const override {
+        return ValueBuilder.Get();
+    }
+
+    bool SetExecuteLLVM(bool value) override {
+        const bool old = Ctx->ExecuteLLVM;
+        Ctx->ExecuteLLVM = value;
+        return old;
+    }
+
     TString SaveGraphState() override {
         Prepare();
 
@@ -646,10 +646,10 @@ public:
     }
 
 private:
-    const TPatternNodes::TPtr PatternNodes; 
-    const TIntrusivePtr<TMemoryUsageInfo> MemInfo; 
+    const TPatternNodes::TPtr PatternNodes;
+    const TIntrusivePtr<TMemoryUsageInfo> MemInfo;
     THolder<THolderFactory> HolderFactory;
-    THolder<TDefaultValueBuilder> ValueBuilder; 
+    THolder<TDefaultValueBuilder> ValueBuilder;
     std::unique_ptr<arrow::MemoryPool> ArrowMemoryPool;
     THolder<TComputationContext> Ctx;
     TComputationOptsFull CompOpts;
@@ -665,44 +665,44 @@ public:
         : Codegen()
 #elif defined(MKQL_FORCE_USE_CODEGEN)
         : Codegen(NYql::NCodegen::ICodegen::Make(NYql::NCodegen::ETarget::Native))
-#else 
-        : Codegen(opts.OptLLVM != "OFF" || GetEnv(TString("MKQL_FORCE_USE_LLVM")) ? NYql::NCodegen::ICodegen::Make(NYql::NCodegen::ETarget::Native) : NYql::NCodegen::ICodegen::TPtr()) 
-#endif 
-    { 
-        const auto& nodes = builder->GetNodes(); 
-        for (const auto& node : nodes) 
-            node->PrepareStageOne(); 
-        for (const auto& node : nodes) 
-            node->PrepareStageTwo(); 
-        MKQL_ADD_STAT(opts.Stats, Mkql_TotalNodes, nodes.size()); 
+#else
+        : Codegen(opts.OptLLVM != "OFF" || GetEnv(TString("MKQL_FORCE_USE_LLVM")) ? NYql::NCodegen::ICodegen::Make(NYql::NCodegen::ETarget::Native) : NYql::NCodegen::ICodegen::TPtr())
+#endif
+    {
+        const auto& nodes = builder->GetNodes();
+        for (const auto& node : nodes)
+            node->PrepareStageOne();
+        for (const auto& node : nodes)
+            node->PrepareStageTwo();
+        MKQL_ADD_STAT(opts.Stats, Mkql_TotalNodes, nodes.size());
 #ifndef MKQL_DISABLE_CODEGEN
-        if (Codegen) { 
+        if (Codegen) {
             TStatTimer timerFull(CodeGen_FullTime);
             timerFull.Acquire();
             bool hasCode = false;
-            { 
-                TStatTimer timerGen(CodeGen_GenerateTime); 
-                timerGen.Acquire(); 
-                for (auto it = nodes.crbegin(); nodes.crend() != it; ++it) { 
-                    if (const auto codegen = dynamic_cast<ICodegeneratorRootNode*>(it->Get())) { 
-                        codegen->GenerateFunctions(Codegen); 
-                        hasCode = true; 
-                    } 
+            {
+                TStatTimer timerGen(CodeGen_GenerateTime);
+                timerGen.Acquire();
+                for (auto it = nodes.crbegin(); nodes.crend() != it; ++it) {
+                    if (const auto codegen = dynamic_cast<ICodegeneratorRootNode*>(it->Get())) {
+                        codegen->GenerateFunctions(Codegen);
+                        hasCode = true;
+                    }
                 }
-                timerGen.Release(); 
-                timerGen.Report(opts.Stats); 
-            } 
+                timerGen.Release();
+                timerGen.Report(opts.Stats);
+            }
 
             if (hasCode) {
-                if (opts.OptLLVM.Contains("--dump-generated")) { 
-                    Cerr << "############### Begin generated module ###############" << Endl; 
-                    Codegen->GetModule().print(llvm::errs(), nullptr); 
-                    Cerr << "################ End generated module ################" << Endl; 
-                } 
- 
-                TStatTimer timerComp(CodeGen_CompileTime); 
-                timerComp.Acquire(); 
- 
+                if (opts.OptLLVM.Contains("--dump-generated")) {
+                    Cerr << "############### Begin generated module ###############" << Endl;
+                    Codegen->GetModule().print(llvm::errs(), nullptr);
+                    Cerr << "################ End generated module ################" << Endl;
+                }
+
+                TStatTimer timerComp(CodeGen_CompileTime);
+                timerComp.Acquire();
+
                 NYql::NCodegen::TCodegenStats codegenStats;
                 Codegen->GetStats(codegenStats);
                 MKQL_ADD_STAT(opts.Stats, CodeGen_TotalFunctions, codegenStats.TotalFunctions);
@@ -713,7 +713,7 @@ public:
                     Cerr << "TotalInstructions: " << codegenStats.TotalInstructions << Endl;
                     Cerr << "MaxFunctionInstructions: " << codegenStats.MaxFunctionInstructions << Endl;
                 }
- 
+
                 if (opts.OptLLVM.Contains("--dump-perf-map")) {
                     Codegen->TogglePerfJITEventListener();
                 }
@@ -730,16 +730,16 @@ public:
                     MKQL_ADD_STAT(opts.Stats, CodeGen_FinalizeTime, compileStats.FinalizeTime);
                 }
 
-                timerComp.Release(); 
-                timerComp.Report(opts.Stats); 
- 
+                timerComp.Release();
+                timerComp.Report(opts.Stats);
+
                 if (Codegen) {
                     if (opts.OptLLVM.Contains("--dump-compiled")) {
                         Cerr << "############### Begin compiled module ###############" << Endl;
                         Codegen->GetModule().print(llvm::errs(), nullptr);
                         Cerr << "################ End compiled module ################" << Endl;
                     }
- 
+
                     if (opts.OptLLVM.Contains("--asm-compiled")) {
                         Cerr << "############### Begin compiled asm ###############" << Endl;
                         Codegen->ShowGeneratedFunctions(&Cerr);
@@ -752,20 +752,20 @@ public:
                             codegen->FinalizeFunctions(Codegen);
                             ++count;
                         }
-                    } 
+                    }
 
                     if (count)
                         MKQL_ADD_STAT(opts.Stats, Mkql_CodegenFunctions, count);
                 }
-            } 
+            }
 
             timerFull.Release();
             timerFull.Report(opts.Stats);
-        } 
-#endif 
+        }
+#endif
         PatternNodes = builder->GetPatternNodes();
-    } 
- 
+    }
+
     ~TComputationPatternImpl() {
         if (Alloc) {
             Alloc->Acquire();
@@ -812,26 +812,26 @@ TIntrusivePtr<TComputationPatternImpl> MakeComputationPatternImpl(TExploringNode
     depScanner.Walk(root.GetNode(), opts.Env);
 
     auto builder = MakeHolder<TComputationGraphBuildingVisitor>(opts);
-    for (const auto& node : explorer.GetNodes()) { 
+    for (const auto& node : explorer.GetNodes()) {
         Y_VERIFY(node->GetCookie() <= IS_NODE_REACHABLE, "TNode graph should not be reused");
         if (node->GetCookie() == IS_NODE_REACHABLE) {
             node->Accept(*builder);
         }
     }
 
-    const auto rootNode = builder->GetComputationNode(root.GetNode()); 
- 
-    TComputationExternalNodePtrVector runtime2Computation; 
+    const auto rootNode = builder->GetComputationNode(root.GetNode());
+
+    TComputationExternalNodePtrVector runtime2Computation;
     runtime2Computation.resize(entryPoints.size(), nullptr);
-    for (const auto& node : explorer.GetNodes()) { 
+    for (const auto& node : explorer.GetNodes()) {
         for (auto iter = std::find(entryPoints.cbegin(), entryPoints.cend(), node); entryPoints.cend() != iter; iter = std::find(iter + 1, entryPoints.cend(), node)) {
-            runtime2Computation[iter - entryPoints.begin()] = dynamic_cast<IComputationExternalNode*>(builder->GetComputationNode(node)); 
-        } 
+            runtime2Computation[iter - entryPoints.begin()] = dynamic_cast<IComputationExternalNode*>(builder->GetComputationNode(node));
+        }
         node->SetCookie(0);
-    } 
+    }
     builder->PreserveRoot(rootNode);
     builder->PreserveEntryPoints(std::move(runtime2Computation));
- 
+
     return MakeIntrusive<TComputationPatternImpl>(std::move(builder), opts);
 }
 
@@ -882,5 +882,5 @@ IComputationPattern::TPtr TComputationPatternCache::EmplacePattern(const TString
     }
 }
 
-} // namespace NMiniKQL 
-} // namespace NKikimr 
+} // namespace NMiniKQL
+} // namespace NKikimr

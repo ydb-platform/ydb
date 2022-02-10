@@ -3,7 +3,7 @@
 #include <util/generic/vector.h>
 #include <library/cpp/threading/future/legacy_future.h>
 
- 
+
 #include "queue_oneone_inplace.h"
 
 Y_UNIT_TEST_SUITE(TOneOneQueueTests) {

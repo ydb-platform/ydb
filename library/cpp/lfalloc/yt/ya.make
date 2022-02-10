@@ -1,6 +1,6 @@
 LIBRARY()
 
-OWNER(a-romanov) 
+OWNER(a-romanov)
 
 NO_UTIL()
 
@@ -14,9 +14,9 @@ ELSE()
     IF ("${YMAKE}" MATCHES "devtools")
         CFLAGS(-DYMAKE=1)
     ENDIF()
-    CXXFLAGS(-DLFALLOC_YT) 
+    CXXFLAGS(-DLFALLOC_YT)
     SRCS(
-        ../lf_allocX64.cpp 
+        ../lf_allocX64.cpp
     )
 ENDIF()
 

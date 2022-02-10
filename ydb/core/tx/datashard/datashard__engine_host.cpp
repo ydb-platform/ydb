@@ -28,8 +28,8 @@ namespace {
 NUdf::TUnboxedValue CreateRow(const TVector<TCell>& inRow,
                               const TVector<NScheme::TTypeId>& inType,
                               const THolderFactory& holderFactory) {
-    NUdf::TUnboxedValue* rowItems = nullptr; 
-    auto row = holderFactory.CreateDirectArrayHolder(inRow.size(), rowItems); 
+    NUdf::TUnboxedValue* rowItems = nullptr;
+    auto row = holderFactory.CreateDirectArrayHolder(inRow.size(), rowItems);
 
     for (ui32 i = 0; i < inRow.size(); ++i) {
         rowItems[i] = GetCellValue(inRow[i], inType[i]);
@@ -71,7 +71,7 @@ struct TRowResultInfo {
         for (ui32 i = 0; i < columnIds->GetValuesCount(); ++i) {
             TOptionalType * optType = AS_TYPE(TOptionalType, RowType->GetMemberType(i));
             TDataLiteral* literal = AS_VALUE(TDataLiteral, columnIds->GetValue(i));
-            ui32 colId = literal->AsValue().Get<ui32>(); 
+            ui32 colId = literal->AsValue().Get<ui32>();
 
             const TSysTables::TTableColumnInfo * colInfo = columns.FindPtr(colId);
             Y_VERIFY(colInfo && (colInfo->Id == colId), "No column info for column");
@@ -81,7 +81,7 @@ struct TRowResultInfo {
 
     NUdf::TUnboxedValue CreateResult(TVector<TCell>&& inRow, const THolderFactory& holderFactory) const {
         if (inRow.empty()) {
-            return NUdf::TUnboxedValuePod(); 
+            return NUdf::TUnboxedValuePod();
         }
 
         Y_VERIFY(inRow.size() >= ItemInfos.size());
@@ -129,7 +129,7 @@ struct TRangeResultInfo {
         for (ui32 i = 0; i < columnIds->GetValuesCount(); ++i) {
             TOptionalType * optType = AS_TYPE(TOptionalType, RowType->GetMemberType(i));
             TDataLiteral* literal = AS_VALUE(TDataLiteral, columnIds->GetValue(i));
-            ui32 colId = literal->AsValue().Get<ui32>(); 
+            ui32 colId = literal->AsValue().Get<ui32>();
 
             const TSysTables::TTableColumnInfo * colInfo = columns.FindPtr(colId);
             Y_VERIFY(colInfo && (colInfo->Id == colId), "No column info for column");
@@ -173,14 +173,14 @@ struct TRangeResultInfo {
         }
     }
 
-    NUdf::TUnboxedValue CreateResult(const THolderFactory& holderFactory) { 
-        NUdf::TUnboxedValue* resultItems = nullptr; 
-        auto result = holderFactory.CreateDirectArrayHolder(4, resultItems); 
+    NUdf::TUnboxedValue CreateResult(const THolderFactory& holderFactory) {
+        NUdf::TUnboxedValue* resultItems = nullptr;
+        auto result = holderFactory.CreateDirectArrayHolder(4, resultItems);
 
         resultItems[0] = holderFactory.CreateDirectListHolder(std::move(Rows));
-        resultItems[1] = NUdf::TUnboxedValuePod(false); 
-        resultItems[2] = MakeString(FirstKey); 
-        resultItems[3] = NUdf::TUnboxedValuePod(Bytes); 
+        resultItems[1] = NUdf::TUnboxedValuePod(false);
+        resultItems[2] = MakeString(FirstKey);
+        resultItems[3] = NUdf::TUnboxedValuePod(Bytes);
 
         return std::move(result);
     }
@@ -207,7 +207,7 @@ public:
         }
     }
 
-    NUdf::TUnboxedValue SelectRow(const TArrayRef<const TCell>& row, TStructLiteral* columnIds, 
+    NUdf::TUnboxedValue SelectRow(const TArrayRef<const TCell>& row, TStructLiteral* columnIds,
         TOptionalType* returnType, const TReadTarget& readTarget, const THolderFactory& holderFactory) const
     {
         Y_UNUSED(readTarget);
@@ -358,7 +358,7 @@ public:
         return TEngineHost::IsValidKey(key, maxSnapshotTime);
     }
 
-    NUdf::TUnboxedValue SelectRow(const TTableId& tableId, const TArrayRef<const TCell>& row, 
+    NUdf::TUnboxedValue SelectRow(const TTableId& tableId, const TArrayRef<const TCell>& row,
         TStructLiteral* columnIds, TOptionalType* returnType, const TReadTarget& readTarget,
         const THolderFactory& holderFactory) override
     {
@@ -372,7 +372,7 @@ public:
         return TEngineHost::SelectRow(tableId, row, columnIds, returnType, readTarget, holderFactory);
     }
 
-    NUdf::TUnboxedValue SelectRange(const TTableId& tableId, const TTableRange& range, 
+    NUdf::TUnboxedValue SelectRange(const TTableId& tableId, const TTableRange& range,
         TStructLiteral* columnIds,  TListLiteral* skipNullKeys, TStructType* returnType,
         const TReadTarget& readTarget, ui64 itemsLimit, ui64 bytesLimit, bool reverse,
         std::pair<const TListLiteral*, const TListLiteral*> forbidNullArgs, const THolderFactory& holderFactory) override
@@ -699,7 +699,7 @@ NKqp::TKqpTasksRunner& TEngineBay::GetKqpTasksRunner(const NKikimrTxDataShard::T
             settings.CollectProfileStats = false;
         }
 
-        settings.OptLLVM = "OFF"; 
+        settings.OptLLVM = "OFF";
         settings.TerminateOnError = false;
         settings.AllowGeneratorsInUnboxedValues = false;
 

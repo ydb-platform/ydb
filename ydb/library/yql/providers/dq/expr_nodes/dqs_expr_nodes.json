@@ -12,8 +12,8 @@
       "Builder": {"Generate": "None"},
       "Children": [
         {"Index": 0, "Name": "Input", "Type": "TExprBase"},
-        {"Index": 1, "Name": "Token", "Type": "TCoSecureParam", "Optional": true}, 
-        {"Index": 2, "Name": "Flags", "Type": "TCoAtomList", "Optional": true} 
+        {"Index": 1, "Name": "Token", "Type": "TCoSecureParam", "Optional": true},
+        {"Index": 2, "Name": "Flags", "Type": "TCoAtomList", "Optional": true}
       ]
     },
     {
@@ -22,9 +22,9 @@
       "Match": {"Type": "Callable", "Name": "DqReadWrap"}
     },
     {
-      "Name": "TDqReadWideWrap", 
-      "Base": "TDqReadWrapBase", 
-      "Match": {"Type": "Callable", "Name": "DqReadWideWrap"} 
+      "Name": "TDqReadWideWrap",
+      "Base": "TDqReadWrapBase",
+      "Match": {"Type": "Callable", "Name": "DqReadWideWrap"}
     },
     {
       "Name": "TDqWrite",
@@ -35,27 +35,27 @@
         {"Index": 1, "Name": "Provider", "Type": "TCoAtom"},
         {"Index": 2, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
       ]
-    }, 
-    { 
-      "Name": "TDqSourceWrapBase", 
-      "Base": "TExprBase", 
-      "Match": {"Type": "CallableBase"}, 
-      "Children": [ 
-        {"Index": 0, "Name": "Input", "Type": "TExprBase"}, 
-        {"Index": 1, "Name": "DataSource", "Type": "TCoDataSource"}, 
-        {"Index": 2, "Name": "RowType", "Type": "TExprBase"}, 
-        {"Index": 3, "Name": "Settings", "Type": "TExprBase", "Optional": true} 
-      ] 
-    }, 
-    { 
-      "Name": "TDqSourceWrap", 
-      "Base": "TDqSourceWrapBase", 
-      "Match": {"Type": "Callable", "Name": "DqSourceWrap"} 
-    }, 
-    { 
-      "Name": "TDqSourceWideWrap", 
-      "Base": "TDqSourceWrapBase", 
-      "Match": {"Type": "Callable", "Name": "DqSourceWideWrap"} 
+    },
+    {
+      "Name": "TDqSourceWrapBase",
+      "Base": "TExprBase",
+      "Match": {"Type": "CallableBase"},
+      "Children": [
+        {"Index": 0, "Name": "Input", "Type": "TExprBase"},
+        {"Index": 1, "Name": "DataSource", "Type": "TCoDataSource"},
+        {"Index": 2, "Name": "RowType", "Type": "TExprBase"},
+        {"Index": 3, "Name": "Settings", "Type": "TExprBase", "Optional": true}
+      ]
+    },
+    {
+      "Name": "TDqSourceWrap",
+      "Base": "TDqSourceWrapBase",
+      "Match": {"Type": "Callable", "Name": "DqSourceWrap"}
+    },
+    {
+      "Name": "TDqSourceWideWrap",
+      "Base": "TDqSourceWrapBase",
+      "Match": {"Type": "Callable", "Name": "DqSourceWideWrap"}
     }
   ]
 }

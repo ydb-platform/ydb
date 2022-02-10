@@ -28,8 +28,8 @@ public:
 
     virtual ui64 Partition(const TDqSettings& config, size_t maxPartitions, const TExprNode& node,
         TVector<TString>& partitions, TString* clusterName, TExprContext& ctx, bool canFallback) = 0;
-    virtual TMaybe<ui64> CanRead(const TDqSettings& config, const TExprNode& read, TExprContext& ctx, bool skipIssues = true) = 0; 
-    virtual TExprNode::TPtr WrapRead(const TDqSettings& config, const TExprNode::TPtr& read, TExprContext& ctx) = 0; 
+    virtual TMaybe<ui64> CanRead(const TDqSettings& config, const TExprNode& read, TExprContext& ctx, bool skipIssues = true) = 0;
+    virtual TExprNode::TPtr WrapRead(const TDqSettings& config, const TExprNode::TPtr& read, TExprContext& ctx) = 0;
     virtual TMaybe<bool> CanWrite(const TDqSettings& config, const TExprNode& write, TExprContext& ctx) = 0;
     virtual void RegisterMkqlCompiler(NCommon::TMkqlCallableCompilerBase& compiler) = 0;
     virtual bool CanFallback() = 0;

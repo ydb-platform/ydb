@@ -12,7 +12,7 @@
 
 #include <new>
 #include <string>
-#include <utility> 
+#include <utility>
 
 /**
  * Memory pool implements a memory allocation scheme that is very fast, but
@@ -191,7 +191,7 @@ public:
 
     template <typename T, typename... Args>
     inline T* New(Args&&... args) {
-        return new (Allocate<T>()) T(std::forward<Args>(args)...); 
+        return new (Allocate<T>()) T(std::forward<Args>(args)...);
     }
 
     template <typename T>

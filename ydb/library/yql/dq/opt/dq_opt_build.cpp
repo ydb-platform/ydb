@@ -30,49 +30,49 @@ TExprBase RewriteProgramResultToStream(const TExprBase& result, TExprContext& ct
             .Done();
     }
 
-    if (const auto itemType = result.Ref().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType(); 
-        ETypeAnnotationKind::Struct == itemType->GetKind() && result.Ref().IsCallable({"PartitionsByKeys", "CombineByKey"})) { 
-        if (const auto structType = itemType->Cast<TStructExprType>(); structType->GetSize() > 0U) { 
-            return TCoFromFlow(ctx.Builder(result.Pos()) 
-                .Callable("FromFlow") 
-                    .Callable(0, "NarrowMap") 
-                        .Callable(0, "ExpandMap") 
-                            .Add(0, result.Ptr()) 
-                            .Lambda(1) 
-                                .Param("item") 
-                                .Do([&](TExprNodeBuilder& lambda) -> TExprNodeBuilder& { 
-                                    ui32 i = 0U; 
-                                    for (const auto& item : structType->GetItems()) { 
-                                        lambda.Callable(i++, "Member") 
-                                            .Arg(0, "item") 
-                                            .Atom(1, item->GetName()) 
-                                        .Seal(); 
-                                    } 
-                                    return lambda; 
-                                }) 
-                            .Seal() 
-                        .Seal() 
-                        .Lambda(1) 
-                            .Params("fields", structType->GetSize()) 
-                            .Callable("AsStruct") 
-                                .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& { 
-                                    ui32 i = 0U; 
-                                    for (const auto& item : structType->GetItems()) { 
-                                        parent.List(i) 
-                                            .Atom(0, item->GetName()) 
-                                            .Arg(1, "fields", i) 
-                                        .Seal(); 
-                                        ++i; 
-                                    } 
-                                    return parent; 
-                                }) 
-                            .Seal() 
-                        .Seal() 
-                    .Seal() 
-                .Seal().Build()); 
-        } 
-    } 
- 
+    if (const auto itemType = result.Ref().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType();
+        ETypeAnnotationKind::Struct == itemType->GetKind() && result.Ref().IsCallable({"PartitionsByKeys", "CombineByKey"})) {
+        if (const auto structType = itemType->Cast<TStructExprType>(); structType->GetSize() > 0U) {
+            return TCoFromFlow(ctx.Builder(result.Pos())
+                .Callable("FromFlow")
+                    .Callable(0, "NarrowMap")
+                        .Callable(0, "ExpandMap")
+                            .Add(0, result.Ptr())
+                            .Lambda(1)
+                                .Param("item")
+                                .Do([&](TExprNodeBuilder& lambda) -> TExprNodeBuilder& {
+                                    ui32 i = 0U;
+                                    for (const auto& item : structType->GetItems()) {
+                                        lambda.Callable(i++, "Member")
+                                            .Arg(0, "item")
+                                            .Atom(1, item->GetName())
+                                        .Seal();
+                                    }
+                                    return lambda;
+                                })
+                            .Seal()
+                        .Seal()
+                        .Lambda(1)
+                            .Params("fields", structType->GetSize())
+                            .Callable("AsStruct")
+                                .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                    ui32 i = 0U;
+                                    for (const auto& item : structType->GetItems()) {
+                                        parent.List(i)
+                                            .Atom(0, item->GetName())
+                                            .Arg(1, "fields", i)
+                                        .Seal();
+                                        ++i;
+                                    }
+                                    return parent;
+                                })
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                .Seal().Build());
+        }
+    }
+
     return Build<TCoFromFlow>(ctx, result.Pos()) // TODO: TDqOutputReader?
         .Input(result)
         .Done();

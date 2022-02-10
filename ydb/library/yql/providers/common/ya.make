@@ -3,7 +3,7 @@ RECURSE(
     config
     dq
     gateway
-    http_gateway 
+    http_gateway
     metrics
     mkql
     comp_nodes

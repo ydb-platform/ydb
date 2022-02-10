@@ -5,34 +5,34 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-namespace { 
- 
-class TExistsWrapper : public TDecoratorCodegeneratorNode<TExistsWrapper> { 
-    typedef TDecoratorCodegeneratorNode<TExistsWrapper> TBaseComputation; 
-public:
-    TExistsWrapper(IComputationNode* optional) 
-        : TBaseComputation(optional) 
-    {} 
+namespace {
 
-    NUdf::TUnboxedValuePod DoCalculate(TComputationContext&, const NUdf::TUnboxedValuePod& value) const { 
-        return NUdf::TUnboxedValuePod(bool(value)); 
+class TExistsWrapper : public TDecoratorCodegeneratorNode<TExistsWrapper> {
+    typedef TDecoratorCodegeneratorNode<TExistsWrapper> TBaseComputation;
+public:
+    TExistsWrapper(IComputationNode* optional)
+        : TBaseComputation(optional)
+    {}
+
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext&, const NUdf::TUnboxedValuePod& value) const {
+        return NUdf::TUnboxedValuePod(bool(value));
     }
 
-#ifndef MKQL_DISABLE_CODEGEN 
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* value, BasicBlock*& block) const { 
-        const auto check = IsExists(value, block); 
-        if (Node->IsTemporaryValue()) 
-            ValueCleanup(Node->GetRepresentation(), value, ctx, block); 
-        return MakeBoolean(check, ctx.Codegen->GetContext(), block); 
-    } 
-#endif 
+#ifndef MKQL_DISABLE_CODEGEN
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* value, BasicBlock*& block) const {
+        const auto check = IsExists(value, block);
+        if (Node->IsTemporaryValue())
+            ValueCleanup(Node->GetRepresentation(), value, ctx, block);
+        return MakeBoolean(check, ctx.Codegen->GetContext(), block);
+    }
+#endif
 };
 
-} 
- 
+}
+
 IComputationNode* WrapExists(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 arg");
-    return new TExistsWrapper(LocateNode(ctx.NodeLocator, callable, 0)); 
+    return new TExistsWrapper(LocateNode(ctx.NodeLocator, callable, 0));
 }
 
 }

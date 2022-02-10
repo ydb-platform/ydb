@@ -5,7 +5,7 @@
 #include <ydb/public/lib/base/defs.h>
 #include <ydb/public/lib/base/msgbus.h>
 
-#include <functional> 
+#include <functional>
 #include <util/system/info.h>
 #include <library/cpp/messagebus/ybus.h>
 
@@ -24,7 +24,7 @@ private:
     void OnResult(TAutoPtr<NBus::TBusMessage> pMessage, NBus::EMessageStatus status, TAutoPtr<NBus::TBusMessage> pReply);
 
 public:
-    typedef std::function<void (NBus::EMessageStatus status, TAutoPtr<NBus::TBusMessage> reply)> TOnCall; 
+    typedef std::function<void (NBus::EMessageStatus status, TAutoPtr<NBus::TBusMessage> reply)> TOnCall;
     typedef std::function<void (NBus::EMessageStatus status,
                                 TAutoPtr<NBus::TBusMessage> message,
                                 TAutoPtr<NBus::TBusMessage> reply)> TOnCallWithRequest;

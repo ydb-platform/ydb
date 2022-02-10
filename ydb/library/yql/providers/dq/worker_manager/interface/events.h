@@ -23,7 +23,7 @@ using TDqResManEvents = NDq::TBaseDqResManEvents<NActors::TEvents::EEventSpace::
 
         explicit TEvAllocateWorkersRequest(
             ui32 count,
-            const TString& user, 
+            const TString& user,
             const TMaybe<ui64>& globalResourceId = TMaybe<ui64>());
     };
 

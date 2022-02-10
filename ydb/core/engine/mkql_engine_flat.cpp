@@ -95,18 +95,18 @@ TStructLiteral& GetPgmReplyStruct(TStructLiteral& pgmStruct) {
 
 class TCallableResults {
 public:
-    void AddResult(ui32 id, const TStringBuf& result, const TTypeEnvironment& env) { 
-        const auto insertResult = ResultsMap.emplace(id, env.NewStringValue(result)); 
+    void AddResult(ui32 id, const TStringBuf& result, const TTypeEnvironment& env) {
+        const auto insertResult = ResultsMap.emplace(id, env.NewStringValue(result));
         MKQL_ENSURE(insertResult.second, "TCallableResults: duplicate result id: " << id);
     }
 
-    typedef std::unordered_map<ui32, NUdf::TUnboxedValue> TResultsMap; 
+    typedef std::unordered_map<ui32, NUdf::TUnboxedValue> TResultsMap;
 
-    const TResultsMap& GetMap() const { return ResultsMap; } 
- 
+    const TResultsMap& GetMap() const { return ResultsMap; }
+
 public:
     TString ToString(const THolderFactory& holderFactory, const TTypeEnvironment& env) const {
-        const NUdf::TUnboxedValue value(GetResultsValue(holderFactory)); 
+        const NUdf::TUnboxedValue value(GetResultsValue(holderFactory));
         return TString(TValuePacker(false, GetResultsType(env)).Pack(value));
     }
 
@@ -117,11 +117,11 @@ public:
 
         TValuePacker packer(false, GetResultsType(env));
         NUdf::TUnboxedValue value = packer.Unpack(valueStr, holderFactory);
-        const auto it = value.GetListIterator(); 
-        for (NUdf::TUnboxedValue resultStruct; it.Next(resultStruct);) { 
-            ui32 id = resultStruct.GetElement(0).Get<ui32>(); 
-            NUdf::TUnboxedValue result = resultStruct.GetElement(1); 
-            callableResults.AddResult(id, result.AsStringRef(), env); 
+        const auto it = value.GetListIterator();
+        for (NUdf::TUnboxedValue resultStruct; it.Next(resultStruct);) {
+            ui32 id = resultStruct.GetElement(0).Get<ui32>();
+            NUdf::TUnboxedValue result = resultStruct.GetElement(1);
+            callableResults.AddResult(id, result.AsStringRef(), env);
         }
 
         return callableResults;
@@ -132,26 +132,26 @@ private:
         const std::array<std::pair<TString, TType*>, 2> members = {{
             {"Id", TDataType::Create(NUdf::TDataType<ui32>::Id, env)},
             {"Result", TDataType::Create(NUdf::TDataType<char*>::Id, env)}
-        }}; 
+        }};
 
-        return TListType::Create(TStructType::Create(members.data(), members.size(), env), env); 
+        return TListType::Create(TStructType::Create(members.data(), members.size(), env), env);
     }
 
-    NUdf::TUnboxedValue GetResultsValue(const THolderFactory& holderFactory) const { 
-        NUdf::TUnboxedValue* items = nullptr; 
-        auto results = holderFactory.CreateDirectArrayHolder(ResultsMap.size(), items); 
-        for (const auto& pair : ResultsMap) { 
-            NUdf::TUnboxedValue* resultItems = nullptr; 
-            *items++ = holderFactory.CreateDirectArrayHolder(2, resultItems); 
-            resultItems[0] = NUdf::TUnboxedValuePod(pair.first); 
-            resultItems[1] = pair.second; 
+    NUdf::TUnboxedValue GetResultsValue(const THolderFactory& holderFactory) const {
+        NUdf::TUnboxedValue* items = nullptr;
+        auto results = holderFactory.CreateDirectArrayHolder(ResultsMap.size(), items);
+        for (const auto& pair : ResultsMap) {
+            NUdf::TUnboxedValue* resultItems = nullptr;
+            *items++ = holderFactory.CreateDirectArrayHolder(2, resultItems);
+            resultItems[0] = NUdf::TUnboxedValuePod(pair.first);
+            resultItems[1] = pair.second;
         }
 
-        return std::move(results); 
+        return std::move(results);
     }
 
 private:
-    TResultsMap ResultsMap; 
+    TResultsMap ResultsMap;
 };
 
 TRuntimeNode ReplaceAsVoid(TCallable& callable, const TTypeEnvironment& env) {
@@ -177,7 +177,7 @@ void ExtractResultType(TCallable& callable, const TTypeEnvironment& env, TMap<TS
     const auto& labelData = static_cast<const TDataLiteral&>(*labelInput.GetNode());
     MKQL_ENSURE(labelData.GetType()->GetSchemeType() == NUdf::TDataType<char*>::Id, "Expected string");
 
-    TStringBuf label = labelData.AsValue().AsStringRef(); 
+    TStringBuf label = labelData.AsValue().AsStringRef();
     MKQL_ENSURE(!label.empty(), "Empty result label is not allowed");
     MKQL_ENSURE(!label.StartsWith(TxInternalResultPrefix),
         TStringBuilder() << "Label can't be used in SetResult as it's reserved for internal purposes: " << label);
@@ -233,7 +233,7 @@ ui64 ExtractAcquireLocksTxId(TCallable& callable) {
 
     const auto& lockTxIdData = static_cast<const TDataLiteral&>(*lockTxIdInput.GetNode());
     MKQL_ENSURE(lockTxIdData.GetType()->GetSchemeType() == NUdf::TDataType<ui64>::Id, "Expected Uint64");
-    return lockTxIdData.AsValue().Get<ui64>(); 
+    return lockTxIdData.AsValue().Get<ui64>();
 }
 
 class TEngineFlat : public IEngineFlat {
@@ -605,16 +605,16 @@ public:
 
                 {
                     TMemoryUsageInfo memInfo("Memory");
-                    THolderFactory holderFactory(Alloc.Ref(), memInfo, Settings.FunctionRegistry); 
+                    THolderFactory holderFactory(Alloc.Ref(), memInfo, Settings.FunctionRegistry);
 
                     for (auto& pair : ExecutionReplies) {
                         const TString& reply = pair.second;
 
                         TCallableResults results = TCallableResults::FromString(reply, holderFactory, Env);
-                        for (const auto& pair : results.GetMap()) { 
+                        for (const auto& pair : results.GetMap()) {
                             ui32 id = pair.first;
 
-                            const auto nodeIt = ProxyRepliesCallables.find(id); 
+                            const auto nodeIt = ProxyRepliesCallables.find(id);
                             if (nodeIt == ProxyRepliesCallables.end()) {
                                 AddError("BuildResult", __LINE__, Sprintf(
                                     "Bad shard reply, node %" PRIu32 " not found", id).data());
@@ -633,11 +633,11 @@ public:
                         GetFlatProxyExecutionFactory(execData),
                         Settings.FunctionRegistry,
                         NUdf::EValidateMode::None, NUdf::EValidatePolicy::Exception,
-                        Settings.LlvmRuntime ? "" : "OFF", EGraphPerProcess::Multi); 
+                        Settings.LlvmRuntime ? "" : "OFF", EGraphPerProcess::Multi);
                     Pattern = MakeComputationPattern(ProxyProgramExplorer, ProxyProgram, {}, opts);
                     ResultGraph = Pattern->Clone(opts.ToComputationOptions(Settings.RandomProvider, Settings.TimeProvider));
 
-                    const TBindTerminator bind(ResultGraph->GetTerminator()); 
+                    const TBindTerminator bind(ResultGraph->GetTerminator());
 
                     value = ResultGraph->GetValue();
                 }
@@ -1023,11 +1023,11 @@ public:
                 GetFlatShardExecutionFactory(execData, true),
                 Settings.FunctionRegistry,
                 NUdf::EValidateMode::None, NUdf::EValidatePolicy::Exception,
-                Settings.LlvmRuntime ? "" : "OFF", EGraphPerProcess::Multi); 
+                Settings.LlvmRuntime ? "" : "OFF", EGraphPerProcess::Multi);
             auto pattern = MakeComputationPattern(explorer, runPgm, {}, opts);
             auto graph = pattern->Clone(opts.ToComputationOptions(Settings.RandomProvider, Settings.TimeProvider));
 
-            const TBindTerminator bind(graph->GetTerminator()); 
+            const TBindTerminator bind(graph->GetTerminator());
 
             graph->Prepare();
         }
@@ -1102,7 +1102,7 @@ public:
             THashMap<ui64, TCallableResults> resultsPerTarget;
 
             TMemoryUsageInfo memInfo("Memory");
-            THolderFactory holderFactory(Alloc.Ref(), memInfo, Settings.FunctionRegistry); 
+            THolderFactory holderFactory(Alloc.Ref(), memInfo, Settings.FunctionRegistry);
 
             for (auto pgm : ProgramPerOrigin) {
                 auto& pgmStruct = GetPgmStruct(pgm.second);
@@ -1304,13 +1304,13 @@ public:
         ExecutionReplies.clear();
         try {
             TMemoryUsageInfo memInfo("Memory");
-            THolderFactory holderFactory(Alloc.Ref(), memInfo, Settings.FunctionRegistry); 
+            THolderFactory holderFactory(Alloc.Ref(), memInfo, Settings.FunctionRegistry);
 
             for (auto pgm : ProgramPerOrigin) {
                 TShardExecData execData(Settings, Strings, StepTxId);
                 for (auto& rs: IncomingReadsets) {
                     TCallableResults results = TCallableResults::FromString(rs, holderFactory, Env);
-                    for (const auto& result : results.GetMap()) { 
+                    for (const auto& result : results.GetMap()) {
                         execData.Results[result.first].emplace_back(result.second.AsStringRef());
                     }
                 }
@@ -1352,16 +1352,16 @@ public:
                         GetFlatShardExecutionFactory(execData, false),
                         Settings.FunctionRegistry,
                         NUdf::EValidateMode::None, NUdf::EValidatePolicy::Exception,
-                        Settings.LlvmRuntime ? "" : "OFF", EGraphPerProcess::Multi); 
+                        Settings.LlvmRuntime ? "" : "OFF", EGraphPerProcess::Multi);
                     auto pattern = MakeComputationPattern(runExplorer, runPgm, {}, opts);
                     auto compOpts = opts.ToComputationOptions(Settings.RandomProvider, Settings.TimeProvider);
                     THolder<IComputationGraph> runGraph = pattern->Clone(compOpts);
 
-                    const TBindTerminator bind(runGraph->GetTerminator()); 
- 
+                    const TBindTerminator bind(runGraph->GetTerminator());
+
                     NUdf::TUnboxedValue runValue = runGraph->GetValue();
-                    NUdf::TUnboxedValue replyValue = runValue.GetElement(0); 
-                    NUdf::TUnboxedValue writeValue = runValue.GetElement(1); 
+                    NUdf::TUnboxedValue replyValue = runValue.GetElement(0);
+                    NUdf::TUnboxedValue writeValue = runValue.GetElement(1);
 
                     TEngineFlatApplyContext applyCtx;
                     applyCtx.Host = Settings.Host;
@@ -1376,10 +1376,10 @@ public:
                         auto memberName = replyStruct.GetType()->GetMemberName(i);
                         ui32 resultId = FromString<ui32>(memberName);
 
-                        NUdf::TUnboxedValue resultValue = replyValue.GetElement(i); 
+                        NUdf::TUnboxedValue resultValue = replyValue.GetElement(i);
                         auto returnType = GetActualReturnType(*callable, Env, Strings);
                         TValuePacker packer(false, returnType);
-                        replyResults.AddResult(resultId, packer.Pack(resultValue), Env); 
+                        replyResults.AddResult(resultId, packer.Pack(resultValue), Env);
                     }
 
                     auto replyStr = replyResults.ToString(holderFactory, Env);

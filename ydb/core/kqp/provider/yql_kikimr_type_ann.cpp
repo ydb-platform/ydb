@@ -47,7 +47,7 @@ const TTypeAnnotationNode* GetExpectedRowType(const TKikimrTableDescription& tab
     return GetExpectedRowType(tableDesc, columns, pos, ctx);
 }
 
-IGraphTransformer::TStatus ConvertTableRowType(TExprNode::TPtr& input, const TKikimrTableDescription& tableDesc, 
+IGraphTransformer::TStatus ConvertTableRowType(TExprNode::TPtr& input, const TKikimrTableDescription& tableDesc,
     TExprContext& ctx)
 {
     YQL_ENSURE(input->GetTypeAnn());
@@ -108,7 +108,7 @@ private:
         auto cluster = TString(node.DataSource().Cluster());
 
         TKikimrKey key(ctx);
-        if (!key.Extract(node.TableKey().Ref())) { 
+        if (!key.Extract(node.TableKey().Ref())) {
             return TStatus::Error;
         }
 
@@ -212,7 +212,7 @@ private:
     }
 
     TStatus HandleConfigure(TExprBase node, TExprContext& ctx) override {
-        if (!EnsureWorldType(*node.Ref().Child(0), ctx)) { 
+        if (!EnsureWorldType(*node.Ref().Child(0), ctx)) {
             return TStatus::Error;
         }
 
@@ -283,11 +283,11 @@ private:
     }
 
     virtual TStatus HandleWriteTable(TKiWriteTable node, TExprContext& ctx) override {
-        if (!EnsureWorldType(node.World().Ref(), ctx)) { 
+        if (!EnsureWorldType(node.World().Ref(), ctx)) {
             return TStatus::Error;
         }
 
-        if (!EnsureSpecificDataSink(node.DataSink().Ref(), KikimrProviderName, ctx)) { 
+        if (!EnsureSpecificDataSink(node.DataSink().Ref(), KikimrProviderName, ctx)) {
             return TStatus::Error;
         }
 
@@ -425,7 +425,7 @@ private:
             }
         }
 
-        auto status = ConvertTableRowType(node.Ptr()->ChildRef(TKiWriteTable::idx_Input), *table, ctx); 
+        auto status = ConvertTableRowType(node.Ptr()->ChildRef(TKiWriteTable::idx_Input), *table, ctx);
         if (status != IGraphTransformer::TStatus::Ok) {
             return status;
         }
@@ -449,8 +449,8 @@ private:
         }
 
         auto rowType = table->SchemeNode;
-        auto& filterLambda = node.Ptr()->ChildRef(TKiUpdateTable::idx_Filter); 
-        if (!UpdateLambdaAllArgumentsTypes(filterLambda, {rowType}, ctx)) { 
+        auto& filterLambda = node.Ptr()->ChildRef(TKiUpdateTable::idx_Filter);
+        if (!UpdateLambdaAllArgumentsTypes(filterLambda, {rowType}, ctx)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -462,8 +462,8 @@ private:
             return IGraphTransformer::TStatus::Error;
         }
 
-        auto& updateLambda = node.Ptr()->ChildRef(TKiUpdateTable::idx_Update); 
-        if (!UpdateLambdaAllArgumentsTypes(updateLambda, {rowType}, ctx)) { 
+        auto& updateLambda = node.Ptr()->ChildRef(TKiUpdateTable::idx_Update);
+        if (!UpdateLambdaAllArgumentsTypes(updateLambda, {rowType}, ctx)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -496,7 +496,7 @@ private:
             }
         }
 
-        auto updateBody = node.Update().Body().Ptr(); 
+        auto updateBody = node.Update().Body().Ptr();
         auto status = ConvertTableRowType(updateBody, *table, ctx);
         if (status != IGraphTransformer::TStatus::Ok) {
             if (status == IGraphTransformer::TStatus::Repeat) {
@@ -504,7 +504,7 @@ private:
                     .Args(node.Update().Args())
                     .Body(updateBody)
                     .Done()
-                    .Ptr(); 
+                    .Ptr();
             }
 
             return status;
@@ -529,8 +529,8 @@ private:
         }
 
         auto rowType = table->SchemeNode;
-        auto& filterLambda = node.Ptr()->ChildRef(TKiUpdateTable::idx_Filter); 
-        if (!UpdateLambdaAllArgumentsTypes(filterLambda, {rowType}, ctx)) { 
+        auto& filterLambda = node.Ptr()->ChildRef(TKiUpdateTable::idx_Filter);
+        if (!UpdateLambdaAllArgumentsTypes(filterLambda, {rowType}, ctx)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -1298,17 +1298,17 @@ private:
         if (auto maybeMap = node.Maybe<TKiMapParameter>()) {
             auto map = maybeMap.Cast();
 
-            if (!EnsureArgsCount(map.Ref(), 2, ctx)) { 
+            if (!EnsureArgsCount(map.Ref(), 2, ctx)) {
                 return IGraphTransformer::TStatus::Error;
             }
 
-            if (!EnsureListType(map.Input().Ref(), ctx)) { 
+            if (!EnsureListType(map.Input().Ref(), ctx)) {
                 return IGraphTransformer::TStatus::Error;
             }
 
-            auto& lambda = map.Ptr()->ChildRef(TKiMapParameter::idx_Lambda); 
+            auto& lambda = map.Ptr()->ChildRef(TKiMapParameter::idx_Lambda);
             auto itemType = map.Input().Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType();
-            if (!UpdateLambdaAllArgumentsTypes(lambda, {itemType}, ctx)) { 
+            if (!UpdateLambdaAllArgumentsTypes(lambda, {itemType}, ctx)) {
                 return IGraphTransformer::TStatus::Error;
             }
 
@@ -1324,17 +1324,17 @@ private:
         if (auto maybeMap = node.Maybe<TKiFlatMapParameter>()) {
             auto map = maybeMap.Cast();
 
-            if (!EnsureArgsCount(map.Ref(), 2, ctx)) { 
+            if (!EnsureArgsCount(map.Ref(), 2, ctx)) {
                 return IGraphTransformer::TStatus::Error;
             }
 
-            if (!EnsureListType(map.Input().Ref(), ctx)) { 
+            if (!EnsureListType(map.Input().Ref(), ctx)) {
                 return IGraphTransformer::TStatus::Error;
             }
 
-            auto& lambda = map.Ptr()->ChildRef(TKiFlatMapParameter::idx_Lambda); 
+            auto& lambda = map.Ptr()->ChildRef(TKiFlatMapParameter::idx_Lambda);
             auto itemType = map.Input().Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType();
-            if (!UpdateLambdaAllArgumentsTypes(lambda, {itemType}, ctx)) { 
+            if (!UpdateLambdaAllArgumentsTypes(lambda, {itemType}, ctx)) {
                 return IGraphTransformer::TStatus::Error;
             }
 

@@ -48,7 +48,7 @@ namespace {
             Explorer.Walk(pgm.GetNode(), *Env);
             TComputationPatternOpts opts(Alloc.Ref(), *Env, GetAuxCallableFactory(),
                 FunctionRegistry.Get(),
-                NUdf::EValidateMode::None, NUdf::EValidatePolicy::Fail, "OFF", EGraphPerProcess::Multi); 
+                NUdf::EValidateMode::None, NUdf::EValidatePolicy::Fail, "OFF", EGraphPerProcess::Multi);
             Pattern = MakeComputationPattern(Explorer, pgm, entryPoints, opts);
             TComputationOptsFull compOpts = opts.ToComputationOptions(*RandomProvider, *TimeProvider);
             return Pattern->Clone(compOpts);
@@ -67,14 +67,14 @@ namespace {
     };
 
     struct TStreamWithYield : public NUdf::TBoxedValue {
-        TStreamWithYield(const TUnboxedValueVector& items, ui32 yieldPos, ui32 index) 
+        TStreamWithYield(const TUnboxedValueVector& items, ui32 yieldPos, ui32 index)
             : Items(items)
             , YieldPos(yieldPos)
             , Index(index)
         {}
 
     private:
-        TUnboxedValueVector Items; 
+        TUnboxedValueVector Items;
         ui32 YieldPos;
         ui32 Index;
 
@@ -107,7 +107,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLSaveLoadTest) {
     Y_UNIT_TEST(TestSqueezeSaveLoad) {
         TScopedAlloc alloc;
 
-        const std::vector<ui32> items = {2, 3, 4, 5, 6, 7, 8}; 
+        const std::vector<ui32> items = {2, 3, 4, 5, 6, 7, 8};
 
         auto buildGraph = [&items] (TSetup& setup, ui32 yieldPos, ui32 startIndex) -> THolder<IComputationGraph> {
             TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
@@ -131,7 +131,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLSaveLoadTest) {
                     return state;
                 });
 
-            TUnboxedValueVector streamItems; 
+            TUnboxedValueVector streamItems;
             for (auto item : items) {
                 streamItems.push_back(NUdf::TUnboxedValuePod(item));
             }
@@ -146,9 +146,9 @@ Y_UNIT_TEST_SUITE(TMiniKQLSaveLoadTest) {
             TSetup setup1(alloc);
             auto graph1 = buildGraph(setup1, yieldPos, 0);
 
-            auto root1 = graph1->GetValue(); 
+            auto root1 = graph1->GetValue();
             NUdf::TUnboxedValue res;
-            auto status = root1.Fetch(res); 
+            auto status = root1.Fetch(res);
             UNIT_ASSERT_EQUAL(status, NUdf::EFetchStatus::Yield);
 
             TString graphState;
@@ -158,13 +158,13 @@ Y_UNIT_TEST_SUITE(TMiniKQLSaveLoadTest) {
             auto graph2 = buildGraph(setup2, -1, yieldPos);
 
             auto root2 = graph2->GetValue();
-            LoadGraphState(&root2, 1, 0ULL, graphState); 
+            LoadGraphState(&root2, 1, 0ULL, graphState);
 
-            status = root2.Fetch(res); 
+            status = root2.Fetch(res);
             UNIT_ASSERT_EQUAL(status, NUdf::EFetchStatus::Ok);
             UNIT_ASSERT_EQUAL(res.Get<ui32>(), 36);
 
-            status = root2.Fetch(res); 
+            status = root2.Fetch(res);
             UNIT_ASSERT_EQUAL(status, NUdf::EFetchStatus::Finish);
         }
     }
@@ -172,7 +172,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLSaveLoadTest) {
     Y_UNIT_TEST(TestSqueeze1SaveLoad) {
         TScopedAlloc alloc;
 
-        const std::vector<ui32> items = {1, 2, 3, 4, 5, 6, 7, 8}; 
+        const std::vector<ui32> items = {1, 2, 3, 4, 5, 6, 7, 8};
 
         auto buildGraph = [&items] (TSetup& setup, ui32 yieldPos, ui32 startIndex) -> THolder<IComputationGraph> {
             TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
@@ -198,7 +198,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLSaveLoadTest) {
                     return state;
                 });
 
-            TUnboxedValueVector streamItems; 
+            TUnboxedValueVector streamItems;
             for (auto item : items) {
                 streamItems.push_back(NUdf::TUnboxedValuePod(item));
             }
@@ -213,10 +213,10 @@ Y_UNIT_TEST_SUITE(TMiniKQLSaveLoadTest) {
             TSetup setup1(alloc);
             auto graph1 = buildGraph(setup1, yieldPos, 0);
 
-            auto root1 = graph1->GetValue(); 
- 
+            auto root1 = graph1->GetValue();
+
             NUdf::TUnboxedValue res;
-            auto status = root1.Fetch(res); 
+            auto status = root1.Fetch(res);
             UNIT_ASSERT_EQUAL(status, NUdf::EFetchStatus::Yield);
 
             TString graphState;
@@ -226,13 +226,13 @@ Y_UNIT_TEST_SUITE(TMiniKQLSaveLoadTest) {
             auto graph2 = buildGraph(setup2, -1, yieldPos);
 
             auto root2 = graph2->GetValue();
-            LoadGraphState(&root2, 1, 0ULL, graphState); 
+            LoadGraphState(&root2, 1, 0ULL, graphState);
 
-            status = root2.Fetch(res); 
+            status = root2.Fetch(res);
             UNIT_ASSERT_EQUAL(status, NUdf::EFetchStatus::Ok);
             UNIT_ASSERT_EQUAL(res.Get<ui32>(), 36);
 
-            status = root2.Fetch(res); 
+            status = root2.Fetch(res);
             UNIT_ASSERT_EQUAL(status, NUdf::EFetchStatus::Finish);
         }
     }
@@ -240,7 +240,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLSaveLoadTest) {
     Y_UNIT_TEST(TestHoppingSaveLoad) {
         TScopedAlloc alloc;
 
-        const std::vector<std::pair<i64, ui32>> items = { 
+        const std::vector<std::pair<i64, ui32>> items = {
             {1, 2},
             {2, 3},
             {15, 4},
@@ -260,9 +260,9 @@ Y_UNIT_TEST_SUITE(TMiniKQLSaveLoadTest) {
             TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
 
             auto structType = pgmBuilder.NewEmptyStructType();
-            structType = pgmBuilder.NewStructType(structType, "time", 
+            structType = pgmBuilder.NewStructType(structType, "time",
                 pgmBuilder.NewDataType(NUdf::TDataType<NUdf::TTimestamp>::Id));
-            structType = pgmBuilder.NewStructType(structType, "sum", 
+            structType = pgmBuilder.NewStructType(structType, "sum",
                 pgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id));
             auto timeIndex = AS_TYPE(TStructType, structType)->GetMemberIndex("time");
             auto sumIndex = AS_TYPE(TStructType, structType)->GetMemberIndex("sum");
@@ -277,41 +277,41 @@ Y_UNIT_TEST_SUITE(TMiniKQLSaveLoadTest) {
             auto pgmReturn = pgmBuilder.HoppingCore(
                 TRuntimeNode(streamNode, false),
                 [&](TRuntimeNode item) { // timeExtractor
-                    return pgmBuilder.Member(item, "time"); 
+                    return pgmBuilder.Member(item, "time");
                 },
                 [&](TRuntimeNode item) { // init
-                    std::vector<std::pair<std::string_view, TRuntimeNode>> members; 
-                    members.emplace_back("sum", pgmBuilder.Member(item, "sum")); 
+                    std::vector<std::pair<std::string_view, TRuntimeNode>> members;
+                    members.emplace_back("sum", pgmBuilder.Member(item, "sum"));
                     return pgmBuilder.NewStruct(members);
                 },
                 [&](TRuntimeNode item, TRuntimeNode state) { // update
                     auto add = pgmBuilder.AggrAdd(
-                        pgmBuilder.Member(item, "sum"), 
-                        pgmBuilder.Member(state, "sum")); 
-                    std::vector<std::pair<std::string_view, TRuntimeNode>> members; 
-                    members.emplace_back("sum", add); 
+                        pgmBuilder.Member(item, "sum"),
+                        pgmBuilder.Member(state, "sum"));
+                    std::vector<std::pair<std::string_view, TRuntimeNode>> members;
+                    members.emplace_back("sum", add);
                     return pgmBuilder.NewStruct(members);
                 },
                 [&](TRuntimeNode state) { // save
-                    return pgmBuilder.Member(state, "sum"); 
+                    return pgmBuilder.Member(state, "sum");
                 },
                 [&](TRuntimeNode savedState) { // load
-                    std::vector<std::pair<std::string_view, TRuntimeNode>> members; 
-                    members.emplace_back("sum", savedState); 
+                    std::vector<std::pair<std::string_view, TRuntimeNode>> members;
+                    members.emplace_back("sum", savedState);
                     return pgmBuilder.NewStruct(members);
                 },
                 [&](TRuntimeNode state1, TRuntimeNode state2) { // merge
                     auto add = pgmBuilder.AggrAdd(
-                        pgmBuilder.Member(state1, "sum"), 
-                        pgmBuilder.Member(state2, "sum")); 
-                    std::vector<std::pair<std::string_view, TRuntimeNode>> members; 
-                    members.emplace_back("sum", add); 
+                        pgmBuilder.Member(state1, "sum"),
+                        pgmBuilder.Member(state2, "sum"));
+                    std::vector<std::pair<std::string_view, TRuntimeNode>> members;
+                    members.emplace_back("sum", add);
                     return pgmBuilder.NewStruct(members);
                 },
                 [&](TRuntimeNode state, TRuntimeNode time) { // finish
                     Y_UNUSED(time);
-                    std::vector<std::pair<std::string_view, TRuntimeNode>> members; 
-                    members.emplace_back("sum", pgmBuilder.Member(state, "sum")); 
+                    std::vector<std::pair<std::string_view, TRuntimeNode>> members;
+                    members.emplace_back("sum", pgmBuilder.Member(state, "sum"));
                     return pgmBuilder.NewStruct(members);
                 },
                 pgmBuilder.NewDataLiteral<NUdf::EDataSlot::Interval>(NUdf::TStringRef((const char*)&hop, sizeof(hop))), // hop
@@ -321,7 +321,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLSaveLoadTest) {
 
             auto graph = setup.BuildGraph(pgmReturn, {streamNode});
 
-            TUnboxedValueVector streamItems; 
+            TUnboxedValueVector streamItems;
             for (size_t i = 0; i < items.size(); ++i) {
                 NUdf::TUnboxedValue* itemsPtr;
                 auto structValues = graph->GetHolderFactory().CreateDirectArrayHolder(2, itemsPtr);
@@ -336,7 +336,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLSaveLoadTest) {
         };
 
         for (ui32 yieldPos = 0; yieldPos < items.size(); ++yieldPos) {
-            std::vector<ui32> result; 
+            std::vector<ui32> result;
 
             TSetup setup1(alloc);
             auto graph1 = buildGraph(setup1, yieldPos, 0);
@@ -358,7 +358,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLSaveLoadTest) {
             TSetup setup2(alloc);
             auto graph2 = buildGraph(setup2, -1, yieldPos);
             auto root2 = graph2->GetValue();
-            LoadGraphState(&root2, 1, 0ULL, graphState); 
+            LoadGraphState(&root2, 1, 0ULL, graphState);
 
             status = NUdf::EFetchStatus::Ok;
             while (status == NUdf::EFetchStatus::Ok) {
@@ -370,7 +370,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLSaveLoadTest) {
             }
             UNIT_ASSERT_EQUAL(status, NUdf::EFetchStatus::Finish);
 
-            const std::vector<ui32> resultCompare = {5, 9, 27, 22, 21, 11, 11, 8, 8, 8, 8}; 
+            const std::vector<ui32> resultCompare = {5, 9, 27, 22, 21, 11, 11, 8, 8, 8, 8};
             UNIT_ASSERT_EQUAL(result, resultCompare);
         }
     }

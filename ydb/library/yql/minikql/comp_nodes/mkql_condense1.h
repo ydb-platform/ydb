@@ -4,7 +4,7 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-IComputationNode* WrapCondense1(TCallable& callable, const TComputationNodeFactoryContext& ctx); 
+IComputationNode* WrapCondense1(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 IComputationNode* WrapSqueeze1(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
 }

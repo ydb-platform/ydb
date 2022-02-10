@@ -3,7 +3,7 @@
 #include <util/system/yassert.h> // Y_ASSERT
 
 
-namespace NYql { 
+namespace NYql {
 namespace NUdf {
 
 namespace NDetails {
@@ -216,4 +216,4 @@ private:
 };
 
 } // namspace NUdf
-} // namspace NYql 
+} // namspace NYql

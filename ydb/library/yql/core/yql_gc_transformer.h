@@ -5,6 +5,6 @@
 
 namespace NYql {
 
-TAutoPtr<IGraphTransformer> CreateGcNodeTransformer(); 
+TAutoPtr<IGraphTransformer> CreateGcNodeTransformer();
 
 }

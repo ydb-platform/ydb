@@ -229,9 +229,9 @@ public:
     TRuntimeNode Abort();
     TRuntimeNode StepTxId();
     TRuntimeNode SetResult(const TStringBuf& label, TRuntimeNode payload);
- 
+
     using TProgramBuilder::NewDataLiteral;
-private: 
+private:
     TRuntimeNode NewDataLiteral(const std::pair<ui64, ui64>& data) const;
     TRuntimeNode BuildTableId(const TTableId& tableId) const;
     TVector<TRuntimeNode> FixKeysType(

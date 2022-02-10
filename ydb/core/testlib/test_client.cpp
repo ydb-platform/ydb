@@ -899,8 +899,8 @@ namespace Tests {
         , DomainName(settings.DomainName)
         , SupportsRedirect(settings.SupportsRedirect)
         , StoragePoolTypes(settings.StoragePoolTypes)
-        , FunctionRegistry(NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry())) 
-        , LoadedFunctionRegistry(NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry())) 
+        , FunctionRegistry(NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry()))
+        , LoadedFunctionRegistry(NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry()))
     {
         TServerSetup serverSetup;
         if (SupportsRedirect && Tests::IsServerRedirected()) {
@@ -952,7 +952,7 @@ namespace Tests {
 
         UNIT_ASSERT(response.HasTypeMetadata() && response.HasFunctionMetadata());
         DeserializeMetadata(response.GetTypeMetadata(), &LoadedTypeMetadataRegistry);
-        DeserializeMetadata(response.GetFunctionMetadata(), *LoadedFunctionRegistry->GetBuiltins()); 
+        DeserializeMetadata(response.GetFunctionMetadata(), *LoadedFunctionRegistry->GetBuiltins());
         TypesEtag = response.GetETag();
         return true;
     }

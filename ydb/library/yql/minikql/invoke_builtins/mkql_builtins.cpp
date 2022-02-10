@@ -1,18 +1,18 @@
 #include "mkql_builtins_impl.h"
-#include "mkql_builtins_compare.h" 
- 
+#include "mkql_builtins_compare.h"
+
 #include <util/digest/murmur.h>
 #include <util/generic/yexception.h>
-#include <util/generic/maybe.h> 
+#include <util/generic/maybe.h>
 
-#include <algorithm> 
- 
+#include <algorithm>
+
 namespace NKikimr {
 namespace NMiniKQL {
 
 namespace {
 
-void RegisterDefaultOperations(IBuiltinFunctionRegistry& registry) { 
+void RegisterDefaultOperations(IBuiltinFunctionRegistry& registry) {
     RegisterAdd(registry);
     RegisterAggrAdd(registry);
     RegisterSub(registry);
@@ -36,27 +36,27 @@ void RegisterDefaultOperations(IBuiltinFunctionRegistry& registry) {
     RegisterConvert(registry);
     RegisterConcat(registry);
     RegisterSubstring(registry);
-    RegisterFind(registry); 
-    RegisterWith(registry); 
+    RegisterFind(registry);
+    RegisterWith(registry);
     RegisterInversePresortString(registry);
     RegisterInverseString(registry);
     RegisterNanvl(registry);
     RegisterByteAt(registry);
-    RegisterMax(registry); 
-    RegisterMin(registry); 
-    RegisterAggrMax(registry); 
-    RegisterAggrMin(registry); 
-    RegisterEquals(registry); 
-    RegisterNotEquals(registry); 
-    RegisterLess(registry); 
-    RegisterLessOrEqual(registry); 
-    RegisterGreater(registry); 
-    RegisterGreaterOrEqual(registry); 
+    RegisterMax(registry);
+    RegisterMin(registry);
+    RegisterAggrMax(registry);
+    RegisterAggrMin(registry);
+    RegisterEquals(registry);
+    RegisterNotEquals(registry);
+    RegisterLess(registry);
+    RegisterLessOrEqual(registry);
+    RegisterGreater(registry);
+    RegisterGreaterOrEqual(registry);
 }
 
-void PrintType(NUdf::TDataTypeId schemeType, bool isOptional, IOutputStream& out) 
+void PrintType(NUdf::TDataTypeId schemeType, bool isOptional, IOutputStream& out)
 {
-    const auto slot = NUdf::FindDataSlot(schemeType); 
+    const auto slot = NUdf::FindDataSlot(schemeType);
     out << (slot ? NUdf::GetDataTypeInfo(*slot).Name : "unknown");
 
     if (isOptional) {
@@ -65,11 +65,11 @@ void PrintType(NUdf::TDataTypeId schemeType, bool isOptional, IOutputStream& out
 }
 
 void PrintFunctionSignature(
-        const std::string_view& funcName, 
+        const std::string_view& funcName,
         const TFunctionDescriptor& desc,
         IOutputStream& out)
 {
-    const auto* param = desc.ResultAndArgs; 
+    const auto* param = desc.ResultAndArgs;
     out << '\t';
 
     // print results type
@@ -85,7 +85,7 @@ void PrintFunctionSignature(
             out << ", ";
         }
     }
-    out << ')'; 
+    out << ')';
 }
 
 bool IsArgumentsMatch(
@@ -114,94 +114,94 @@ bool IsArgumentsMatch(
     return index == argTypesCount;
 }
 
-////////////////////////////////////////////////////////////////////////////// 
-// TBuiltinFunctionRegistry 
-////////////////////////////////////////////////////////////////////////////// 
-class TBuiltinFunctionRegistry: public IBuiltinFunctionRegistry 
-{ 
-public: 
-    TBuiltinFunctionRegistry(); 
+//////////////////////////////////////////////////////////////////////////////
+// TBuiltinFunctionRegistry
+//////////////////////////////////////////////////////////////////////////////
+class TBuiltinFunctionRegistry: public IBuiltinFunctionRegistry
+{
+public:
+    TBuiltinFunctionRegistry();
 
-private: 
-    TFunctionDescriptor GetBuiltin(const std::string_view& name, 
-            const std::pair<NUdf::TDataTypeId, bool>* argTypes, size_t argTypesCount) const final; 
- 
-    bool HasBuiltin(const std::string_view& name) const final; 
- 
-    ui64 GetMetadataEtag() const final; 
- 
-    void PrintInfoTo(IOutputStream& out) const final; 
- 
-    void Register(const std::string_view& name, const TFunctionDescriptor& description) final; 
- 
-    void RegisterAll(TFunctionsMap&& functions, TFunctionParamMetadataList&& arguments) final; 
- 
-    const TFunctionsMap& GetFunctions() const final; 
- 
-    void CalculateMetadataEtag(); 
- 
-    std::optional<TFunctionDescriptor> FindBuiltin(const std::string_view& name, const std::pair<NUdf::TDataTypeId, bool>* argTypes, size_t argTypesCount) const; 
- 
-    const TDescriptionList& FindCandidates(const std::string_view& name) const; 
- 
-    TFunctionsMap Functions; 
-    TFunctionParamMetadataList ArgumentsMetadata; 
-    std::optional<ui64> MetadataEtag; 
-}; 
- 
+private:
+    TFunctionDescriptor GetBuiltin(const std::string_view& name,
+            const std::pair<NUdf::TDataTypeId, bool>* argTypes, size_t argTypesCount) const final;
+
+    bool HasBuiltin(const std::string_view& name) const final;
+
+    ui64 GetMetadataEtag() const final;
+
+    void PrintInfoTo(IOutputStream& out) const final;
+
+    void Register(const std::string_view& name, const TFunctionDescriptor& description) final;
+
+    void RegisterAll(TFunctionsMap&& functions, TFunctionParamMetadataList&& arguments) final;
+
+    const TFunctionsMap& GetFunctions() const final;
+
+    void CalculateMetadataEtag();
+
+    std::optional<TFunctionDescriptor> FindBuiltin(const std::string_view& name, const std::pair<NUdf::TDataTypeId, bool>* argTypes, size_t argTypesCount) const;
+
+    const TDescriptionList& FindCandidates(const std::string_view& name) const;
+
+    TFunctionsMap Functions;
+    TFunctionParamMetadataList ArgumentsMetadata;
+    std::optional<ui64> MetadataEtag;
+};
+
 TBuiltinFunctionRegistry::TBuiltinFunctionRegistry()
 {
     RegisterDefaultOperations(*this);
     CalculateMetadataEtag();
 }
 
-void TBuiltinFunctionRegistry::Register(const std::string_view& name, const TFunctionDescriptor& description) 
+void TBuiltinFunctionRegistry::Register(const std::string_view& name, const TFunctionDescriptor& description)
 {
-    Functions[TString(name)].push_back(description); 
+    Functions[TString(name)].push_back(description);
 }
 
-void TBuiltinFunctionRegistry::RegisterAll(TFunctionsMap&& functions, TFunctionParamMetadataList&& arguments) 
+void TBuiltinFunctionRegistry::RegisterAll(TFunctionsMap&& functions, TFunctionParamMetadataList&& arguments)
 {
     Functions = std::move(functions);
     ArgumentsMetadata = std::move(arguments);
     CalculateMetadataEtag();
 }
 
-const TFunctionsMap& TBuiltinFunctionRegistry::GetFunctions() const 
-{ 
-    return Functions; 
-} 
- 
-const TDescriptionList& TBuiltinFunctionRegistry::FindCandidates(const std::string_view& name) const { 
-    if (const auto it = Functions.find(TString(name)); it != Functions.cend()) 
-        return it->second; 
- 
-    ythrow yexception() << "Not found builtin function: '" << name << "' in " << Functions.size() << " total."; 
+const TFunctionsMap& TBuiltinFunctionRegistry::GetFunctions() const
+{
+    return Functions;
 }
 
-std::optional<TFunctionDescriptor> TBuiltinFunctionRegistry::FindBuiltin(const std::string_view& name, const std::pair<NUdf::TDataTypeId, bool>* argTypes, size_t argTypesCount) const 
+const TDescriptionList& TBuiltinFunctionRegistry::FindCandidates(const std::string_view& name) const {
+    if (const auto it = Functions.find(TString(name)); it != Functions.cend())
+        return it->second;
+
+    ythrow yexception() << "Not found builtin function: '" << name << "' in " << Functions.size() << " total.";
+}
+
+std::optional<TFunctionDescriptor> TBuiltinFunctionRegistry::FindBuiltin(const std::string_view& name, const std::pair<NUdf::TDataTypeId, bool>* argTypes, size_t argTypesCount) const
 {
-    for (const auto& desc: FindCandidates(name)) { 
-        if (IsArgumentsMatch(desc.ResultAndArgs, argTypes, argTypesCount)) { 
+    for (const auto& desc: FindCandidates(name)) {
+        if (IsArgumentsMatch(desc.ResultAndArgs, argTypes, argTypesCount)) {
             return desc;
         }
     }
 
-    return std::nullopt; 
+    return std::nullopt;
 }
 
-TFunctionDescriptor TBuiltinFunctionRegistry::GetBuiltin(const std::string_view& name, 
+TFunctionDescriptor TBuiltinFunctionRegistry::GetBuiltin(const std::string_view& name,
         const std::pair<NUdf::TDataTypeId, bool>* argTypes, size_t argTypesCount) const
 {
-    if (const auto desc = FindBuiltin(name, argTypes, argTypesCount)) { 
+    if (const auto desc = FindBuiltin(name, argTypes, argTypesCount)) {
         return *desc;
     }
 
     TStringStream ss;
-    PrintType(argTypes[0].first, argTypes[0].second, ss); 
-    ss << ' ' << name << '('; 
-    for (size_t i = 1U; i < argTypesCount; i++) { 
-        if (i > 1U) { 
+    PrintType(argTypes[0].first, argTypes[0].second, ss);
+    ss << ' ' << name << '(';
+    for (size_t i = 1U; i < argTypesCount; i++) {
+        if (i > 1U) {
             ss << ", ";
         }
         PrintType(argTypes[i].first, argTypes[i].second, ss);
@@ -221,20 +221,20 @@ TFunctionDescriptor TBuiltinFunctionRegistry::GetBuiltin(const std::string_view&
     ythrow yexception() << "Unsupported builtin function: " << ss.Str();
 }
 
-bool TBuiltinFunctionRegistry::HasBuiltin(const std::string_view& name) const 
+bool TBuiltinFunctionRegistry::HasBuiltin(const std::string_view& name) const
 {
-    return Functions.find(TString(name)) != Functions.cend(); 
+    return Functions.find(TString(name)) != Functions.cend();
 }
 
 void TBuiltinFunctionRegistry::CalculateMetadataEtag() {
-    using TFunctionPair = std::pair<std::string_view, const TDescriptionList*>; 
+    using TFunctionPair = std::pair<std::string_view, const TDescriptionList*>;
 
-    std::vector<TFunctionPair> operations; 
-    for (const auto& func : Functions) { 
-        operations.emplace_back(func.first, &func.second); 
+    std::vector<TFunctionPair> operations;
+    for (const auto& func : Functions) {
+        operations.emplace_back(func.first, &func.second);
     }
 
-    std::sort(operations.begin(), operations.end(), [](const TFunctionPair& x, const TFunctionPair& y) { 
+    std::sort(operations.begin(), operations.end(), [](const TFunctionPair& x, const TFunctionPair& y) {
         return x.first < y.first;
     });
 
@@ -248,7 +248,7 @@ void TBuiltinFunctionRegistry::CalculateMetadataEtag() {
         const ui64 descriptionCount = descriptions.size();
         hash = MurmurHash<ui64>(&descriptionCount, sizeof(descriptionCount), hash);
         for (const auto& description : descriptions) {
-            for (const auto* args = description.ResultAndArgs; args->SchemeType; ++args) { 
+            for (const auto* args = description.ResultAndArgs; args->SchemeType; ++args) {
                 hash = MurmurHash<ui64>(args, sizeof(*args), hash);
             }
         }
@@ -276,12 +276,12 @@ void TBuiltinFunctionRegistry::PrintInfoTo(IOutputStream& out) const
     }
 }
 
-} // namespace 
- 
-IBuiltinFunctionRegistry::TPtr CreateBuiltinRegistry() { 
-    return MakeIntrusive<TBuiltinFunctionRegistry>(); 
-} 
- 
- 
+} // namespace
+
+IBuiltinFunctionRegistry::TPtr CreateBuiltinRegistry() {
+    return MakeIntrusive<TBuiltinFunctionRegistry>();
+}
+
+
 } // namespace NMiniKQL
 } // namespace NKikimr

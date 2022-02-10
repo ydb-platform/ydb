@@ -2,7 +2,7 @@
 
 #include <util/generic/ptr.h>
 
-#include <utility> 
+#include <utility>
 #include <type_traits>
 
 class IInputStream;

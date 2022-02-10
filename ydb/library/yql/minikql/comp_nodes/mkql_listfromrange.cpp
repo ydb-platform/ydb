@@ -31,7 +31,7 @@ ui64 GetElementsCount(ui64 start, ui64 end, ui64 step) {
     return rem ? (div + 1) : div;
 }
 
-template<typename T, typename TStep> 
+template<typename T, typename TStep>
 ui64 GetElementsCount(T start, T end, TStep step) {
     ui64 newStart = ShiftByMaxNegative(start);
     ui64 newEnd = ShiftByMaxNegative(end);
@@ -47,12 +47,12 @@ ui64 GetElementsCount(T start, T end, TStep step) {
     return GetElementsCount(newStart, newEnd, newStep);
 }
 
-template <typename T, typename TStep = std::make_signed_t<T>, std::conditional_t<std::is_floating_point_v<TStep>, i8, TStep> TConstFactor = 1, ui64 TConstLimit = std::numeric_limits<ui64>::max(), bool TzDate = false> 
+template <typename T, typename TStep = std::make_signed_t<T>, std::conditional_t<std::is_floating_point_v<TStep>, i8, TStep> TConstFactor = 1, ui64 TConstLimit = std::numeric_limits<ui64>::max(), bool TzDate = false>
 class TListFromRangeWrapper : public TMutableCodegeneratorNode<TListFromRangeWrapper<T, TStep, TConstFactor, TConstLimit, TzDate>> {
-private: 
-    using TBaseComputation = TMutableCodegeneratorNode<TListFromRangeWrapper<T, TStep, TConstFactor, TConstLimit, TzDate>>; 
+private:
+    using TBaseComputation = TMutableCodegeneratorNode<TListFromRangeWrapper<T, TStep, TConstFactor, TConstLimit, TzDate>>;
 
-    class TValue : public TComputationValue<TValue> { 
+    class TValue : public TComputationValue<TValue> {
     public:
         template <bool Asc, bool Float>
         class TIterator;
@@ -68,7 +68,7 @@ private:
             {}
 
         protected:
-            bool Skip() final { 
+            bool Skip() final {
                 if (!Count) {
                     return false;
                 }
@@ -79,15 +79,15 @@ private:
 
             bool Next(NUdf::TUnboxedValue& value) override {
                 if (!Count) {
-                    return false; 
-                } 
- 
-                value = NUdf::TUnboxedValuePod(Current); 
+                    return false;
+                }
+
+                value = NUdf::TUnboxedValuePod(Current);
                 Current += Step;
                 --Count;
-                return true; 
-            } 
- 
+                return true;
+            }
+
             T Current;
             const TStep Step;
             ui64 Count;
@@ -99,38 +99,38 @@ private:
             TIterator(TMemoryUsageInfo* memInfo, T start, T end, TStep step)
                 : TComputationValue<TIterator>(memInfo)
                 , Start(start)
-                , Index(-T(1)) 
-                , Limit(end - start) 
+                , Index(-T(1))
+                , Limit(end - start)
                 , Step(step)
             {}
 
         private:
-            bool Skip() final { 
-                const auto next = Index + T(1); 
-                if (Asc ? next * Step < Limit : next * Step > Limit) { 
-                    Index = next; 
-                    return true; 
+            bool Skip() final {
+                const auto next = Index + T(1);
+                if (Asc ? next * Step < Limit : next * Step > Limit) {
+                    Index = next;
+                    return true;
                 }
 
                 return false;
             }
 
-            bool Next(NUdf::TUnboxedValue& value) final { 
-                if (!Skip()) { 
-                    return false; 
-                } 
- 
-                value = NUdf::TUnboxedValuePod(Start + Index * Step); 
-                return true; 
-            } 
- 
+            bool Next(NUdf::TUnboxedValue& value) final {
+                if (!Skip()) {
+                    return false;
+                }
+
+                value = NUdf::TUnboxedValuePod(Start + Index * Step);
+                return true;
+            }
+
             const T Start;
             T Index;
-            const T Limit; 
+            const T Limit;
             const TStep Step;
         };
         TValue(TMemoryUsageInfo* memInfo, TComputationContext& ctx, T start, T end, TStep step)
-            : TComputationValue<TValue>(memInfo) 
+            : TComputationValue<TValue>(memInfo)
             , Ctx(ctx)
             , Start(start)
             , End(end)
@@ -141,50 +141,50 @@ private:
     protected:
         NUdf::TUnboxedValue GetListIterator() const override {
             if (Step > TStep(0)) {
-                return Ctx.HolderFactory.template Create<TIterator<true, std::is_floating_point<T>::value>>(Start, End, Step); 
+                return Ctx.HolderFactory.template Create<TIterator<true, std::is_floating_point<T>::value>>(Start, End, Step);
             } else if (Step < TStep(0)) {
-                return Ctx.HolderFactory.template Create<TIterator<false, std::is_floating_point<T>::value>>(Start, End, Step); 
+                return Ctx.HolderFactory.template Create<TIterator<false, std::is_floating_point<T>::value>>(Start, End, Step);
             } else {
                 return Ctx.HolderFactory.GetEmptyContainer();
             }
         }
 
-        ui64 GetListLength() const final { 
+        ui64 GetListLength() const final {
             if (std::is_integral<T>()) {
                 return GetElementsCount<T, TStep>(Start, End, Step);
             }
 
-            if (Step > T(0) && Start < End) { 
-                ui64 len = 0ULL; 
-                for (T i = 0; i * Step < End - Start; i += T(1)) { 
-                    ++len; 
-                } 
-                return len; 
-            } else if (Step < T(0) && Start > End) { 
-                ui64 len = 0ULL; 
-                for (T i = 0; i * Step > End - Start; i += T(1)) { 
-                    ++len; 
-                } 
-                return len; 
-            } else { 
-                return 0ULL; 
-            } 
-        } 
- 
-        bool HasListItems() const final { 
+            if (Step > T(0) && Start < End) {
+                ui64 len = 0ULL;
+                for (T i = 0; i * Step < End - Start; i += T(1)) {
+                    ++len;
+                }
+                return len;
+            } else if (Step < T(0) && Start > End) {
+                ui64 len = 0ULL;
+                for (T i = 0; i * Step > End - Start; i += T(1)) {
+                    ++len;
+                }
+                return len;
+            } else {
+                return 0ULL;
+            }
+        }
+
+        bool HasListItems() const final {
             if (Step > TStep(0)) {
-                return Start < End; 
+                return Start < End;
             } else if (Step < TStep(0)) {
-                return Start > End; 
-            } else { 
-                return false; 
-            } 
-        } 
- 
-        bool HasFastListLength() const final { 
-            return std::is_integral<T>(); 
-        } 
- 
+                return Start > End;
+            } else {
+                return false;
+            }
+        }
+
+        bool HasFastListLength() const final {
+            return std::is_integral<T>();
+        }
+
         TComputationContext& Ctx;
         const T Start;
         const T End;
@@ -209,7 +209,7 @@ private:
                 return false;
             }
         private:
-            const ui16 TimezoneId; 
+            const ui16 TimezoneId;
         };
         NUdf::TUnboxedValue GetListIterator() const final {
             if (TValue::Step > TStep(0)) {
@@ -226,80 +226,80 @@ private:
         {
         }
     private:
-        const ui16 TimezoneId; 
+        const ui16 TimezoneId;
     };
-public: 
+public:
     TListFromRangeWrapper(TComputationMutables& mutables, IComputationNode* start, IComputationNode* end, IComputationNode* step)
-        : TBaseComputation(mutables, EValueRepresentation::Boxed) 
+        : TBaseComputation(mutables, EValueRepresentation::Boxed)
         , Start(start)
         , End(end)
         , Step(step)
     {}
 
-    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const { 
-        const auto start = Start->GetValue(ctx); 
-        const auto end = End->GetValue(ctx); 
-        auto step = Step->GetValue(ctx).Get<TStep>(); 
-        if constexpr (TConstFactor > 1) { 
-            if (step % TConstFactor) 
-                step = 0; 
-            else 
-                step /= TConstFactor; 
-        } 
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
+        const auto start = Start->GetValue(ctx);
+        const auto end = End->GetValue(ctx);
+        auto step = Step->GetValue(ctx).Get<TStep>();
+        if constexpr (TConstFactor > 1) {
+            if (step % TConstFactor)
+                step = 0;
+            else
+                step /= TConstFactor;
+        }
 
-        if constexpr (TzDate) { 
-            return MakeList(ctx, start.Get<T>(), end.Get<T>(), step, start.GetTimezoneId()); 
+        if constexpr (TzDate) {
+            return MakeList(ctx, start.Get<T>(), end.Get<T>(), step, start.GetTimezoneId());
         } else {
-            return MakeList(ctx, start.Get<T>(), end.Get<T>(), step, 0U); 
+            return MakeList(ctx, start.Get<T>(), end.Get<T>(), step, 0U);
         }
     }
-#ifndef MKQL_DISABLE_CODEGEN 
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const { 
-        auto& context = ctx.Codegen->GetContext(); 
- 
-        const auto startv = GetNodeValue(Start, ctx, block); 
-        const auto endv = GetNodeValue(End, ctx, block); 
-        const auto stepv = GetNodeValue(Step, ctx, block); 
- 
-        const auto start = GetterFor<T>(startv, context, block); 
-        const auto end = GetterFor<T>(endv, context, block); 
- 
-        auto step = GetterFor<TStep>(stepv, context, block); 
-        if constexpr (TConstFactor > 1) { 
-            const auto zero = ConstantInt::get(GetTypeFor<TStep>(context), 0); 
-            const auto fact = ConstantInt::get(GetTypeFor<TStep>(context), TConstFactor); 
-            const auto div = BinaryOperator::CreateSDiv(step, fact, "div", block); 
-            const auto rem = BinaryOperator::CreateSRem(step, fact, "rem", block); 
-            const auto bad = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, rem, zero, "bad", block); 
-            step = SelectInst::Create(bad, zero, div, "step", block); 
-        } 
- 
-        const auto timezone = TzDate ? GetterForTimezone(context, startv, block) : ConstantInt::get(Type::getInt16Ty(context), 0); 
- 
-        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TListFromRangeWrapper::MakeList)); 
-        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) { 
-            const auto signature = FunctionType::get(Type::getInt128Ty(context), {ctx.Ctx->getType(), start->getType(), end->getType(), step->getType(), timezone->getType()}, false); 
-            const auto creator = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(signature), "creator", block); 
-            const auto output = CallInst::Create(creator, {ctx.Ctx, start, end, step, timezone}, "output", block); 
-            return output; 
-        } else { 
-            const auto place = new AllocaInst(Type::getInt128Ty(context), 0U, "place", block); 
-            const auto signature = FunctionType::get(Type::getVoidTy(context), {place->getType(), ctx.Ctx->getType(), start->getType(), end->getType(), step->getType(), timezone->getType()}, false); 
-            const auto creator = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(signature), "creator", block); 
-            CallInst::Create(creator, {place, ctx.Ctx, start, end, step, timezone}, "", block); 
-            const auto output = new LoadInst(place, "output", block); 
-            return output; 
-        } 
-    } 
-#endif 
+#ifndef MKQL_DISABLE_CODEGEN
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+        auto& context = ctx.Codegen->GetContext();
+
+        const auto startv = GetNodeValue(Start, ctx, block);
+        const auto endv = GetNodeValue(End, ctx, block);
+        const auto stepv = GetNodeValue(Step, ctx, block);
+
+        const auto start = GetterFor<T>(startv, context, block);
+        const auto end = GetterFor<T>(endv, context, block);
+
+        auto step = GetterFor<TStep>(stepv, context, block);
+        if constexpr (TConstFactor > 1) {
+            const auto zero = ConstantInt::get(GetTypeFor<TStep>(context), 0);
+            const auto fact = ConstantInt::get(GetTypeFor<TStep>(context), TConstFactor);
+            const auto div = BinaryOperator::CreateSDiv(step, fact, "div", block);
+            const auto rem = BinaryOperator::CreateSRem(step, fact, "rem", block);
+            const auto bad = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, rem, zero, "bad", block);
+            step = SelectInst::Create(bad, zero, div, "step", block);
+        }
+
+        const auto timezone = TzDate ? GetterForTimezone(context, startv, block) : ConstantInt::get(Type::getInt16Ty(context), 0);
+
+        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TListFromRangeWrapper::MakeList));
+        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {
+            const auto signature = FunctionType::get(Type::getInt128Ty(context), {ctx.Ctx->getType(), start->getType(), end->getType(), step->getType(), timezone->getType()}, false);
+            const auto creator = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(signature), "creator", block);
+            const auto output = CallInst::Create(creator, {ctx.Ctx, start, end, step, timezone}, "output", block);
+            return output;
+        } else {
+            const auto place = new AllocaInst(Type::getInt128Ty(context), 0U, "place", block);
+            const auto signature = FunctionType::get(Type::getVoidTy(context), {place->getType(), ctx.Ctx->getType(), start->getType(), end->getType(), step->getType(), timezone->getType()}, false);
+            const auto creator = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(signature), "creator", block);
+            CallInst::Create(creator, {place, ctx.Ctx, start, end, step, timezone}, "", block);
+            const auto output = new LoadInst(place, "output", block);
+            return output;
+        }
+    }
+#endif
 private:
-    static NUdf::TUnboxedValuePod MakeList(TComputationContext& ctx, T start, T end, TStep step, ui16 timezoneId) { 
-        if (timezoneId) 
-            return ctx.HolderFactory.Create<TTzValue>(ctx, start, end, step, timezoneId); 
-        else 
-            return ctx.HolderFactory.Create<TValue>(ctx, start, end, step); 
-    } 
- 
+    static NUdf::TUnboxedValuePod MakeList(TComputationContext& ctx, T start, T end, TStep step, ui16 timezoneId) {
+        if (timezoneId)
+            return ctx.HolderFactory.Create<TTzValue>(ctx, start, end, step, timezoneId);
+        else
+            return ctx.HolderFactory.Create<TValue>(ctx, start, end, step);
+    }
+
     void RegisterDependencies() const final {
         this->DependsOn(Start);
         this->DependsOn(End);
@@ -316,9 +316,9 @@ private:
 IComputationNode* WrapListFromRange(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 3, "Expected 3 args");
 
-    const auto start = LocateNode(ctx.NodeLocator, callable, 0); 
-    const auto end = LocateNode(ctx.NodeLocator, callable, 1); 
-    const auto step = LocateNode(ctx.NodeLocator, callable, 2); 
+    const auto start = LocateNode(ctx.NodeLocator, callable, 0);
+    const auto end = LocateNode(ctx.NodeLocator, callable, 1);
+    const auto step = LocateNode(ctx.NodeLocator, callable, 2);
     switch (*AS_TYPE(TDataType, callable.GetInput(0).GetStaticType())->GetDataSlot()) {
     case NUdf::EDataSlot::Uint8:
         return new TListFromRangeWrapper<ui8>(ctx.Mutables, start, end, step);
@@ -337,9 +337,9 @@ IComputationNode* WrapListFromRange(TCallable& callable, const TComputationNodeF
     case NUdf::EDataSlot::Int64:
         return new TListFromRangeWrapper<i64>(ctx.Mutables, start, end, step);
     case NUdf::EDataSlot::Float:
-        return new TListFromRangeWrapper<float, float>(ctx.Mutables, start, end, step); 
+        return new TListFromRangeWrapper<float, float>(ctx.Mutables, start, end, step);
     case NUdf::EDataSlot::Double:
-        return new TListFromRangeWrapper<double, double>(ctx.Mutables, start, end, step); 
+        return new TListFromRangeWrapper<double, double>(ctx.Mutables, start, end, step);
     case NUdf::EDataSlot::Date:
         return new TListFromRangeWrapper<ui16, i64, 86400000000ll, NYql::NUdf::MAX_DATE>(ctx.Mutables, start, end, step);
     case NUdf::EDataSlot::TzDate:
@@ -352,8 +352,8 @@ IComputationNode* WrapListFromRange(TCallable& callable, const TComputationNodeF
         return new TListFromRangeWrapper<ui64, i64, 1, NYql::NUdf::MAX_TIMESTAMP>(ctx.Mutables, start, end, step);
     case NUdf::EDataSlot::TzTimestamp:
         return new TListFromRangeWrapper<ui64, i64, 1, NYql::NUdf::MAX_TIMESTAMP, true>(ctx.Mutables, start, end, step);
-    case NUdf::EDataSlot::Interval: 
-        return new TListFromRangeWrapper<i64, i64, 1, NYql::NUdf::MAX_TIMESTAMP>(ctx.Mutables, start, end, step); 
+    case NUdf::EDataSlot::Interval:
+        return new TListFromRangeWrapper<i64, i64, 1, NYql::NUdf::MAX_TIMESTAMP>(ctx.Mutables, start, end, step);
     default:
         MKQL_ENSURE(false, "unexpected");
     }

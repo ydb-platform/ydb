@@ -51,8 +51,8 @@ Y_UNIT_TEST_SUITE(TExprBuilder) {
 
         UNIT_ASSERT_VALUES_EQUAL(res->Type(), TExprNode::List);
         UNIT_ASSERT_VALUES_EQUAL(res->ChildrenSize(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().Type(), TExprNode::Atom); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().Content(), "ABC"); 
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().Type(), TExprNode::Atom);
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().Content(), "ABC");
         UNIT_ASSERT_VALUES_EQUAL(res->Child(1)->Type(), TExprNode::Atom);
         UNIT_ASSERT_VALUES_EQUAL(res->Child(1)->Content(), "XYZ");
     }
@@ -76,8 +76,8 @@ Y_UNIT_TEST_SUITE(TExprBuilder) {
 
         UNIT_ASSERT_VALUES_EQUAL(res->Type(), TExprNode::List);
         UNIT_ASSERT_VALUES_EQUAL(res->ChildrenSize(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().Type(), TExprNode::Atom); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().Content(), "ABC"); 
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().Type(), TExprNode::Atom);
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().Content(), "ABC");
         UNIT_ASSERT_VALUES_EQUAL(res->Child(1)->Type(), TExprNode::Atom);
         UNIT_ASSERT_VALUES_EQUAL(res->Child(1)->Content(), "XYZ");
     }
@@ -96,12 +96,12 @@ Y_UNIT_TEST_SUITE(TExprBuilder) {
 
         UNIT_ASSERT_VALUES_EQUAL(res->Type(), TExprNode::List);
         UNIT_ASSERT_VALUES_EQUAL(res->ChildrenSize(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().Type(), TExprNode::List); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().ChildrenSize(), 2); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().Head().Type(), TExprNode::Atom); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().Head().Content(), "ABC"); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().Child(1)->Type(), TExprNode::Atom); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().Child(1)->Content(), "DEF"); 
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().Type(), TExprNode::List);
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().ChildrenSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().Head().Type(), TExprNode::Atom);
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().Head().Content(), "ABC");
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().Child(1)->Type(), TExprNode::Atom);
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().Child(1)->Content(), "DEF");
         UNIT_ASSERT_VALUES_EQUAL(res->Child(1)->Type(), TExprNode::Atom);
         UNIT_ASSERT_VALUES_EQUAL(res->Child(1)->Content(), "XYZ");
     }
@@ -131,8 +131,8 @@ Y_UNIT_TEST_SUITE(TExprBuilder) {
         UNIT_ASSERT_VALUES_EQUAL(res->Type(), TExprNode::Callable);
         UNIT_ASSERT_VALUES_EQUAL(res->Content(), "Func");
         UNIT_ASSERT_VALUES_EQUAL(res->ChildrenSize(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().Type(), TExprNode::Atom); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().Content(), "ABC"); 
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().Type(), TExprNode::Atom);
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().Content(), "ABC");
         UNIT_ASSERT_VALUES_EQUAL(res->Child(1)->Type(), TExprNode::Atom);
         UNIT_ASSERT_VALUES_EQUAL(res->Child(1)->Content(), "XYZ");
     }
@@ -152,13 +152,13 @@ Y_UNIT_TEST_SUITE(TExprBuilder) {
         UNIT_ASSERT_VALUES_EQUAL(res->Type(), TExprNode::Callable);
         UNIT_ASSERT_VALUES_EQUAL(res->Content(), "Func1");
         UNIT_ASSERT_VALUES_EQUAL(res->ChildrenSize(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().Type(), TExprNode::Callable); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().Content(), "Func2"); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().ChildrenSize(), 2); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().Head().Type(), TExprNode::Atom); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().Head().Content(), "ABC"); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().Child(1)->Type(), TExprNode::Atom); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().Child(1)->Content(), "DEF"); 
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().Type(), TExprNode::Callable);
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().Content(), "Func2");
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().ChildrenSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().Head().Type(), TExprNode::Atom);
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().Head().Content(), "ABC");
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().Child(1)->Type(), TExprNode::Atom);
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().Child(1)->Content(), "DEF");
         UNIT_ASSERT_VALUES_EQUAL(res->Child(1)->Type(), TExprNode::Atom);
         UNIT_ASSERT_VALUES_EQUAL(res->Child(1)->Content(), "XYZ");
     }
@@ -180,7 +180,7 @@ Y_UNIT_TEST_SUITE(TExprBuilder) {
         UNIT_ASSERT_VALUES_EQUAL(res->Type(), TExprNode::Callable);
         UNIT_ASSERT_VALUES_EQUAL(res->Content(), "Func");
         UNIT_ASSERT_VALUES_EQUAL(res->ChildrenSize(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().Type(), TExprNode::World); 
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().Type(), TExprNode::World);
     }
 
     Y_UNIT_TEST(TestIncompleteRootLambda) {
@@ -204,8 +204,8 @@ Y_UNIT_TEST_SUITE(TExprBuilder) {
         auto res = ctx.Builder(TPositionHandle()).Lambda().Atom("ABC").Seal().Build();
         UNIT_ASSERT_VALUES_EQUAL(res->Type(), TExprNode::Lambda);
         UNIT_ASSERT_VALUES_EQUAL(res->ChildrenSize(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().Type(), TExprNode::Arguments); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().ChildrenSize(), 0); 
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().Type(), TExprNode::Arguments);
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().ChildrenSize(), 0);
         UNIT_ASSERT_VALUES_EQUAL(res->Child(1)->Type(), TExprNode::Atom);
         UNIT_ASSERT_VALUES_EQUAL(res->Child(1)->Content(), "ABC");
     }
@@ -220,8 +220,8 @@ Y_UNIT_TEST_SUITE(TExprBuilder) {
 
         UNIT_ASSERT_VALUES_EQUAL(res->Type(), TExprNode::Lambda);
         UNIT_ASSERT_VALUES_EQUAL(res->ChildrenSize(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().Type(), TExprNode::Arguments); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().ChildrenSize(), 0); 
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().Type(), TExprNode::Arguments);
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().ChildrenSize(), 0);
         UNIT_ASSERT_VALUES_EQUAL(res->Child(1)->Type(), TExprNode::Atom);
         UNIT_ASSERT_VALUES_EQUAL(res->Child(1)->Content(), "ABC");
     }
@@ -239,14 +239,14 @@ Y_UNIT_TEST_SUITE(TExprBuilder) {
 
         UNIT_ASSERT_VALUES_EQUAL(res->Type(), TExprNode::List);
         UNIT_ASSERT_VALUES_EQUAL(res->ChildrenSize(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().Type(), TExprNode::Lambda); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().ChildrenSize(), 2); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().Head().Type(), TExprNode::Arguments); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().Head().ChildrenSize(), 1); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().Head().Head().Type(), TExprNode::Argument); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().Head().Head().Content(), "x"); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().Child(1)->Type(), TExprNode::Atom); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().Child(1)->Content(), "ABC"); 
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().Type(), TExprNode::Lambda);
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().ChildrenSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().Head().Type(), TExprNode::Arguments);
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().Head().ChildrenSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().Head().Head().Type(), TExprNode::Argument);
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().Head().Head().Content(), "x");
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().Child(1)->Type(), TExprNode::Atom);
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().Child(1)->Content(), "ABC");
     }
 
     Y_UNIT_TEST(TestDuplicateLambdaParamNames) {
@@ -335,49 +335,49 @@ Y_UNIT_TEST_SUITE(TExprBuilder) {
             .Build(), yexception);
     }
 
-    Y_UNIT_TEST(TestWrongIndexAtomAtLambda) { 
+    Y_UNIT_TEST(TestWrongIndexAtomAtLambda) {
         TExprContext ctx;
         UNIT_ASSERT_EXCEPTION(ctx.Builder(TPositionHandle())
             .Lambda()
-            .Atom(1, "ABC") 
+            .Atom(1, "ABC")
             .Seal()
             .Build(), yexception);
     }
 
-    Y_UNIT_TEST(TestWrongIndexListAtLambda) { 
+    Y_UNIT_TEST(TestWrongIndexListAtLambda) {
         TExprContext ctx;
         UNIT_ASSERT_EXCEPTION(ctx.Builder(TPositionHandle())
             .Lambda()
-            .List(1) 
-            .Seal()
-            .Seal()
-            .Build(), yexception);
-    }
-
-    Y_UNIT_TEST(TestWrongIndexWorldAtLambda) { 
-        TExprContext ctx;
-        UNIT_ASSERT_EXCEPTION(ctx.Builder(TPositionHandle())
-            .Lambda()
-            .World(1) 
-            .Seal()
-            .Build(), yexception);
-    }
-
-    Y_UNIT_TEST(TestWrongIndexCallableAtLambda) { 
-        TExprContext ctx;
-        UNIT_ASSERT_EXCEPTION(ctx.Builder(TPositionHandle())
-            .Lambda()
-            .Callable(1, "Func") 
+            .List(1)
             .Seal()
             .Seal()
             .Build(), yexception);
     }
 
-    Y_UNIT_TEST(TestWrongIndexLambdaAtLambda) { 
+    Y_UNIT_TEST(TestWrongIndexWorldAtLambda) {
         TExprContext ctx;
         UNIT_ASSERT_EXCEPTION(ctx.Builder(TPositionHandle())
             .Lambda()
-            .Lambda(1) 
+            .World(1)
+            .Seal()
+            .Build(), yexception);
+    }
+
+    Y_UNIT_TEST(TestWrongIndexCallableAtLambda) {
+        TExprContext ctx;
+        UNIT_ASSERT_EXCEPTION(ctx.Builder(TPositionHandle())
+            .Lambda()
+            .Callable(1, "Func")
+            .Seal()
+            .Seal()
+            .Build(), yexception);
+    }
+
+    Y_UNIT_TEST(TestWrongIndexLambdaAtLambda) {
+        TExprContext ctx;
+        UNIT_ASSERT_EXCEPTION(ctx.Builder(TPositionHandle())
+            .Lambda()
+            .Lambda(1)
             .Atom("ABC")
             .Seal()
             .Seal()
@@ -388,7 +388,7 @@ Y_UNIT_TEST_SUITE(TExprBuilder) {
         TExprContext ctx;
         UNIT_ASSERT_EXCEPTION(ctx.Builder(TPositionHandle())
             .Lambda()
-            .Add(1, ctx.Builder(TPositionHandle()).Atom("ABC").Build()) 
+            .Add(1, ctx.Builder(TPositionHandle()).Atom("ABC").Build())
             .Seal()
             .Build(), yexception);
     }
@@ -405,20 +405,20 @@ Y_UNIT_TEST_SUITE(TExprBuilder) {
 
         UNIT_ASSERT_VALUES_EQUAL(res->Type(), TExprNode::Lambda);
         UNIT_ASSERT_VALUES_EQUAL(res->ChildrenSize(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().Type(), TExprNode::Arguments); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().ChildrenSize(), 2); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().Head().Type(), TExprNode::Argument); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().Head().Content(), "x"); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().Child(1)->Type(), TExprNode::Argument); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().Child(1)->Content(), "y"); 
-        UNIT_ASSERT_EQUAL(res->Child(1), res->Head().Child(0)); 
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().Type(), TExprNode::Arguments);
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().ChildrenSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().Head().Type(), TExprNode::Argument);
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().Head().Content(), "x");
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().Child(1)->Type(), TExprNode::Argument);
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().Child(1)->Content(), "y");
+        UNIT_ASSERT_EQUAL(res->Child(1), res->Head().Child(0));
     }
 
     Y_UNIT_TEST(TestIndexedArgAsLambdaBody) {
         TExprContext ctx;
         UNIT_ASSERT_EXCEPTION(ctx.Builder(TPositionHandle()).Lambda()
             .Param("x")
-            .Arg(1, "x") 
+            .Arg(1, "x")
             .Seal()
             .Build(), yexception);
     }
@@ -447,17 +447,17 @@ Y_UNIT_TEST_SUITE(TExprBuilder) {
 
         UNIT_ASSERT_VALUES_EQUAL(res->Type(), TExprNode::Lambda);
         UNIT_ASSERT_VALUES_EQUAL(res->ChildrenSize(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().Type(), TExprNode::Arguments); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().ChildrenSize(), 2); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().Head().Type(), TExprNode::Argument); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().Head().Content(), "x"); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().Child(1)->Type(), TExprNode::Argument); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().Child(1)->Content(), "y"); 
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().Type(), TExprNode::Arguments);
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().ChildrenSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().Head().Type(), TExprNode::Argument);
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().Head().Content(), "x");
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().Child(1)->Type(), TExprNode::Argument);
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().Child(1)->Content(), "y");
         UNIT_ASSERT_VALUES_EQUAL(res->Child(1)->Type(), TExprNode::Callable);
         UNIT_ASSERT_VALUES_EQUAL(res->Child(1)->Content(), "+");
         UNIT_ASSERT_VALUES_EQUAL(res->Child(1)->ChildrenSize(), 2);
-        UNIT_ASSERT_EQUAL(res->Child(1)->Child(0), res->Head().Child(1)); 
-        UNIT_ASSERT_EQUAL(res->Child(1)->Child(1), res->Head().Child(0)); 
+        UNIT_ASSERT_EQUAL(res->Child(1)->Child(0), res->Head().Child(1));
+        UNIT_ASSERT_EQUAL(res->Child(1)->Child(1), res->Head().Child(0));
     }
 
     Y_UNIT_TEST(TestNestedScopeInLambda) {
@@ -480,28 +480,28 @@ Y_UNIT_TEST_SUITE(TExprBuilder) {
 
         UNIT_ASSERT_VALUES_EQUAL(res->Type(), TExprNode::Lambda);
         UNIT_ASSERT_VALUES_EQUAL(res->ChildrenSize(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().Type(), TExprNode::Arguments); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().ChildrenSize(), 2); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().Head().Type(), TExprNode::Argument); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().Head().Content(), "x"); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().Child(1)->Type(), TExprNode::Argument); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().Child(1)->Content(), "y"); 
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().Type(), TExprNode::Arguments);
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().ChildrenSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().Head().Type(), TExprNode::Argument);
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().Head().Content(), "x");
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().Child(1)->Type(), TExprNode::Argument);
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().Child(1)->Content(), "y");
         UNIT_ASSERT_VALUES_EQUAL(res->Child(1)->Type(), TExprNode::Callable);
         UNIT_ASSERT_VALUES_EQUAL(res->Child(1)->Content(), "Apply");
         UNIT_ASSERT_VALUES_EQUAL(res->Child(1)->ChildrenSize(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(res->Child(1)->Head().Type(), TExprNode::Lambda); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Child(1)->Head().Head().ChildrenSize(), 1); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Child(1)->Head().Head().Head().Type(), TExprNode::Argument); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Child(1)->Head().Head().Head().Content(), "x"); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Child(1)->Head().Child(1)->Type(), TExprNode::Callable); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Child(1)->Head().Child(1)->Content(), "+"); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Child(1)->Head().Child(1)->ChildrenSize(), 2); 
+        UNIT_ASSERT_VALUES_EQUAL(res->Child(1)->Head().Type(), TExprNode::Lambda);
+        UNIT_ASSERT_VALUES_EQUAL(res->Child(1)->Head().Head().ChildrenSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(res->Child(1)->Head().Head().Head().Type(), TExprNode::Argument);
+        UNIT_ASSERT_VALUES_EQUAL(res->Child(1)->Head().Head().Head().Content(), "x");
+        UNIT_ASSERT_VALUES_EQUAL(res->Child(1)->Head().Child(1)->Type(), TExprNode::Callable);
+        UNIT_ASSERT_VALUES_EQUAL(res->Child(1)->Head().Child(1)->Content(), "+");
+        UNIT_ASSERT_VALUES_EQUAL(res->Child(1)->Head().Child(1)->ChildrenSize(), 2);
         // nested x
-        UNIT_ASSERT_VALUES_EQUAL(res->Child(1)->Head().Child(1)->Child(0), 
-            res->Child(1)->Head().Head().Child(0)); 
+        UNIT_ASSERT_VALUES_EQUAL(res->Child(1)->Head().Child(1)->Child(0),
+            res->Child(1)->Head().Head().Child(0));
         // outer y
-        UNIT_ASSERT_VALUES_EQUAL(res->Child(1)->Head().Child(1)->Child(1), 
-            res->Head().Child(1)); 
+        UNIT_ASSERT_VALUES_EQUAL(res->Child(1)->Head().Child(1)->Child(1),
+            res->Head().Child(1));
     }
 
     Y_UNIT_TEST(TestNonIndexedArg) {
@@ -533,11 +533,11 @@ Y_UNIT_TEST_SUITE(TExprBuilder) {
 
         UNIT_ASSERT_VALUES_EQUAL(res->Type(), TExprNode::Lambda);
         UNIT_ASSERT_VALUES_EQUAL(res->ChildrenSize(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().Type(), TExprNode::Arguments); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().ChildrenSize(), 1); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().Head().Type(), TExprNode::Argument); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().Head().Content(), "y"); 
-        UNIT_ASSERT_EQUAL(res->Child(1), res->Head().Child(0)); 
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().Type(), TExprNode::Arguments);
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().ChildrenSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().Head().Type(), TExprNode::Argument);
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().Head().Content(), "y");
+        UNIT_ASSERT_EQUAL(res->Child(1), res->Head().Child(0));
     }
 
     Y_UNIT_TEST(TestApplyLambdaArgInContainer) {
@@ -560,13 +560,13 @@ Y_UNIT_TEST_SUITE(TExprBuilder) {
 
         UNIT_ASSERT_VALUES_EQUAL(res->Type(), TExprNode::Lambda);
         UNIT_ASSERT_VALUES_EQUAL(res->ChildrenSize(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().Type(), TExprNode::Arguments); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().ChildrenSize(), 1); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().Head().Type(), TExprNode::Argument); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().Head().Content(), "y"); 
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().Type(), TExprNode::Arguments);
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().ChildrenSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().Head().Type(), TExprNode::Argument);
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().Head().Content(), "y");
         UNIT_ASSERT_VALUES_EQUAL(res->Child(1)->Type(), TExprNode::List);
         UNIT_ASSERT_VALUES_EQUAL(res->Child(1)->ChildrenSize(), 1);
-        UNIT_ASSERT_EQUAL(res->Child(1)->Child(0), res->Head().Child(0)); 
+        UNIT_ASSERT_EQUAL(res->Child(1)->Child(0), res->Head().Child(0));
     }
 
     Y_UNIT_TEST(TestApplyPartialLambdaArgAsRoot) {
@@ -586,17 +586,17 @@ Y_UNIT_TEST_SUITE(TExprBuilder) {
         auto res = ctx.Builder(TPositionHandle())
             .Lambda()
                 .Param("y")
-                .ApplyPartial(lambda->HeadPtr(), lambda->Child(1)->HeadPtr()).With(0, "y").Seal() 
+                .ApplyPartial(lambda->HeadPtr(), lambda->Child(1)->HeadPtr()).With(0, "y").Seal()
             .Seal()
             .Build();
 
         UNIT_ASSERT_VALUES_EQUAL(res->Type(), TExprNode::Lambda);
         UNIT_ASSERT_VALUES_EQUAL(res->ChildrenSize(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().Type(), TExprNode::Arguments); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().ChildrenSize(), 1); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().Head().Type(), TExprNode::Argument); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().Head().Content(), "y"); 
-        UNIT_ASSERT_EQUAL(res->Child(1)->Child(1), res->Head().Child(0)); 
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().Type(), TExprNode::Arguments);
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().ChildrenSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().Head().Type(), TExprNode::Argument);
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().Head().Content(), "y");
+        UNIT_ASSERT_EQUAL(res->Child(1)->Child(1), res->Head().Child(0));
     }
 
     Y_UNIT_TEST(TestApplyPartialLambdaArgInContainer) {
@@ -617,18 +617,18 @@ Y_UNIT_TEST_SUITE(TExprBuilder) {
             .Lambda()
                 .Param("y")
                 .Callable("Func3")
-                    .ApplyPartial(0, lambda->HeadPtr(), lambda->Child(1)->HeadPtr()).With(0, "y").Seal() 
+                    .ApplyPartial(0, lambda->HeadPtr(), lambda->Child(1)->HeadPtr()).With(0, "y").Seal()
                 .Seal()
             .Seal()
             .Build();
 
         UNIT_ASSERT_VALUES_EQUAL(res->Type(), TExprNode::Lambda);
         UNIT_ASSERT_VALUES_EQUAL(res->ChildrenSize(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().Type(), TExprNode::Arguments); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().ChildrenSize(), 1); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().Head().Type(), TExprNode::Argument); 
-        UNIT_ASSERT_VALUES_EQUAL(res->Head().Head().Content(), "y"); 
-        UNIT_ASSERT_EQUAL(res->Child(1)->Head().Child(1), res->Head().Child(0)); 
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().Type(), TExprNode::Arguments);
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().ChildrenSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().Head().Type(), TExprNode::Argument);
+        UNIT_ASSERT_VALUES_EQUAL(res->Head().Head().Content(), "y");
+        UNIT_ASSERT_EQUAL(res->Child(1)->Head().Child(1), res->Head().Child(0));
     }
 
     Y_UNIT_TEST(TestApplyOuterArg) {
@@ -652,19 +652,19 @@ Y_UNIT_TEST_SUITE(TExprBuilder) {
             .Lambda()
                 .Param("y")
                 .Callable("Func3")
-                    .ApplyPartial(0, nullptr, ast->Child(1)->Child(1)->ChildPtr(1)) 
-                    .WithNode(*ast->Head().Child(0), "y").Seal() 
+                    .ApplyPartial(0, nullptr, ast->Child(1)->Child(1)->ChildPtr(1))
+                    .WithNode(*ast->Head().Child(0), "y").Seal()
                 .Seal()
             .Seal()
             .Build();
 
         UNIT_ASSERT_VALUES_EQUAL(res1->Type(), TExprNode::Lambda);
         UNIT_ASSERT_VALUES_EQUAL(res1->ChildrenSize(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(res1->Head().Type(), TExprNode::Arguments); 
-        UNIT_ASSERT_VALUES_EQUAL(res1->Head().ChildrenSize(), 1); 
-        UNIT_ASSERT_VALUES_EQUAL(res1->Head().Head().Type(), TExprNode::Argument); 
-        UNIT_ASSERT_VALUES_EQUAL(res1->Head().Head().Content(), "y"); 
-        UNIT_ASSERT_EQUAL(res1->Child(1)->Head().Child(1), res1->Head().Child(0)); 
+        UNIT_ASSERT_VALUES_EQUAL(res1->Head().Type(), TExprNode::Arguments);
+        UNIT_ASSERT_VALUES_EQUAL(res1->Head().ChildrenSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(res1->Head().Head().Type(), TExprNode::Argument);
+        UNIT_ASSERT_VALUES_EQUAL(res1->Head().Head().Content(), "y");
+        UNIT_ASSERT_EQUAL(res1->Child(1)->Head().Child(1), res1->Head().Child(0));
 
         auto atom = ctx.Builder(TPositionHandle())
             .Atom("const")
@@ -673,17 +673,17 @@ Y_UNIT_TEST_SUITE(TExprBuilder) {
         auto res2 = ctx.Builder(TPositionHandle())
             .Lambda()
                 .Callable("Func3")
-                    .ApplyPartial(0, nullptr, ast->Child(1)->Child(1)->ChildPtr(1)) 
-                    .WithNode(ast->Head().Head(), TExprNode::TPtr(atom)).Seal() 
+                    .ApplyPartial(0, nullptr, ast->Child(1)->Child(1)->ChildPtr(1))
+                    .WithNode(ast->Head().Head(), TExprNode::TPtr(atom)).Seal()
                 .Seal()
             .Seal()
             .Build();
 
         UNIT_ASSERT_VALUES_EQUAL(res2->Type(), TExprNode::Lambda);
         UNIT_ASSERT_VALUES_EQUAL(res2->ChildrenSize(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(res2->Head().Type(), TExprNode::Arguments); 
-        UNIT_ASSERT_VALUES_EQUAL(res2->Head().ChildrenSize(), 0); 
-        UNIT_ASSERT_EQUAL(res2->Child(1)->Head().ChildPtr(1), atom); 
+        UNIT_ASSERT_VALUES_EQUAL(res2->Head().Type(), TExprNode::Arguments);
+        UNIT_ASSERT_VALUES_EQUAL(res2->Head().ChildrenSize(), 0);
+        UNIT_ASSERT_EQUAL(res2->Child(1)->Head().ChildPtr(1), atom);
     }
 }
 

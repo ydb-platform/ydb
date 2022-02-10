@@ -940,8 +940,8 @@ void writeDecimalFractional(const T & x, UInt32 scale, WriteBuffer & ostr, bool 
     constexpr size_t max_digits = std::numeric_limits<UInt256>::digits10;
     assert(scale <= max_digits);
     char buf[max_digits];
-    const char zero = '0'; 
-    std::memset(buf, zero, scale); 
+    const char zero = '0';
+    std::memset(buf, zero, scale);
 
     T value = x;
     Int32 last_nonzero_pos = 0;

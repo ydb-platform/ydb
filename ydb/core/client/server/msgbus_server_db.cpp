@@ -346,22 +346,22 @@ public:
 
     static NMiniKQL::TRuntimeNode NewDataLiteral(NMiniKQL::TKikimrProgramBuilder& pgmBuilder, const NJson::TJsonValue& jsonValue, NScheme::TTypeId typeId) {
         // TODO
-        auto& builder = static_cast<NMiniKQL::TProgramBuilder&>(pgmBuilder); 
+        auto& builder = static_cast<NMiniKQL::TProgramBuilder&>(pgmBuilder);
         switch (typeId) {
         case NScheme::NTypeIds::Bool:
-            return builder.NewDataLiteral<bool>(jsonValue.GetBoolean()); 
+            return builder.NewDataLiteral<bool>(jsonValue.GetBoolean());
         case NScheme::NTypeIds::Float:
-            return builder.NewDataLiteral<float>(jsonValue.GetDouble()); 
+            return builder.NewDataLiteral<float>(jsonValue.GetDouble());
         case NScheme::NTypeIds::Double:
-            return builder.NewDataLiteral(jsonValue.GetDouble()); 
+            return builder.NewDataLiteral(jsonValue.GetDouble());
         case NScheme::NTypeIds::Int32:
-            return builder.NewDataLiteral<i32>(jsonValue.GetInteger()); 
+            return builder.NewDataLiteral<i32>(jsonValue.GetInteger());
         case NScheme::NTypeIds::Int64:
-            return builder.NewDataLiteral<i64>(jsonValue.GetInteger()); 
+            return builder.NewDataLiteral<i64>(jsonValue.GetInteger());
         case NScheme::NTypeIds::Uint32:
-            return builder.NewDataLiteral<ui32>(jsonValue.GetUInteger()); 
+            return builder.NewDataLiteral<ui32>(jsonValue.GetUInteger());
         case NScheme::NTypeIds::Uint64:
-            return builder.NewDataLiteral<ui64>(jsonValue.GetUInteger()); 
+            return builder.NewDataLiteral<ui64>(jsonValue.GetUInteger());
         case NScheme::NTypeIds::Utf8:
             return builder.NewDataLiteral<NUdf::EDataSlot::Utf8>(jsonValue.GetString());
         case NScheme::NTypeIds::String:

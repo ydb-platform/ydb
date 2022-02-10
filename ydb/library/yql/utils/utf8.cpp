@@ -1,14 +1,14 @@
-#include "utf8.h" 
+#include "utf8.h"
 
 #include <util/charset/wide.h>
 
-#include <ctype.h> 
+#include <ctype.h>
 #include <vector>
- 
-namespace NYql { 
- 
-namespace { 
- 
+
+namespace NYql {
+
+namespace {
+
 unsigned char GetRange(unsigned char c) {
     // Referring to DFA of http://bjoern.hoehrmann.de/utf-8/decoder/dfa/
     // With new mapping 1 -> 0x10, 7 -> 0x20, 9 -> 0x40, such that AND operation can test multiple types.
@@ -25,8 +25,8 @@ unsigned char GetRange(unsigned char c) {
         10,3,3,3,3,3,3,3,3,3,3,3,3,4,3,3, 11,6,6,6,5,8,8,8,8,8,8,8,8,8,8,8,
     };
     return type[c];
-} 
- 
+}
+
 struct TByteRange {
     ui8 First = 0;
     ui8 Last = 0;
@@ -126,15 +126,15 @@ std::optional<std::string> RoundBadUtf8(size_t range, std::string_view inputStri
 
 }
 
-bool IsUtf8(const std::string_view& str) { 
-    for (auto it = str.cbegin(); str.cend() != it;) { 
+bool IsUtf8(const std::string_view& str) {
+    for (auto it = str.cbegin(); str.cend() != it;) {
 #define COPY() if (str.cend() != it) { c = *it++; } else { return false; }
 #define TRANS(mask) result &= ((GetRange(static_cast<unsigned char>(c)) & mask) != 0)
 #define TAIL() COPY(); TRANS(0x70)
         auto c = *it++;
         if (!(c & 0x80))
             continue;
- 
+
         bool result = true;
         switch (GetRange(static_cast<unsigned char>(c))) {
         case 2: TAIL(); break;
@@ -146,29 +146,29 @@ bool IsUtf8(const std::string_view& str) {
         case 11: COPY(); TRANS(0x60); TAIL(); TAIL(); break;
         default: return false;
         }
- 
+
         if (!result) return false;
 #undef COPY
 #undef TRANS
 #undef TAIL
-    } 
-    return true; 
-} 
- 
-unsigned char WideCharSize(char head) { 
-    switch (GetRange(static_cast<unsigned char>(head))) { 
-        case 0: return 1; 
-        case 2: return 2; 
-        case 3: return 3; 
-        case 4: return 3; 
-        case 5: return 4; 
-        case 6: return 4; 
-        case 10: return 3; 
-        case 11: return 4; 
-        default: return 0; 
-    } 
-} 
- 
+    }
+    return true;
+}
+
+unsigned char WideCharSize(char head) {
+    switch (GetRange(static_cast<unsigned char>(head))) {
+        case 0: return 1;
+        case 2: return 2;
+        case 3: return 3;
+        case 4: return 3;
+        case 5: return 4;
+        case 6: return 4;
+        case 10: return 3;
+        case 11: return 4;
+        default: return 0;
+    }
+}
+
 std::optional<std::string> RoundToNearestValidUtf8(const std::string_view& str, bool roundDown) {
     const size_t ss = str.size();
     for (size_t pos = 0; pos < ss; ) {
@@ -204,7 +204,7 @@ std::optional<std::string> RoundToNearestValidUtf8(const std::string_view& str, 
         }
     }
     return std::string(str);
-} 
+}
 
 std::optional<std::string> NextValidUtf8(const std::string_view& str) {
     Y_ENSURE(IsUtf8(str));

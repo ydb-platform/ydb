@@ -33,7 +33,7 @@ public:
         Counters = new NMonitoring::TDynamicCounters;
 
         TIntrusivePtr<NScheme::TTypeRegistry> typeRegistry(new NScheme::TKikimrTypeRegistry());
-        auto functionRegistry = NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry()); 
+        auto functionRegistry = NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry());
         AppData.reset(new NKikimr::TAppData(0, 1, 2, 3, TMap<TString, ui32>(), typeRegistry.Get(), functionRegistry.Get(), nullptr, &KikimrShouldContinue));
         AppData->Counters = Counters;
 

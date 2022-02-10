@@ -137,7 +137,7 @@ void CollectEraseRowKey(const TExprNode* child, TContext::TPtr ctx) {
 
     for (auto& tupleItem : rowTuple->Children()) {
         Y_ENSURE_EX(tupleItem->IsList() && tupleItem->ChildrenSize() == 2,
-            TNodeException(*tupleItem) << child->Content() << "Expected pair"); 
+            TNodeException(*tupleItem) << child->Content() << "Expected pair");
 
         Y_ENSURE_EX(tupleItem->Child(0)->IsAtom() &&
             !tupleItem->Child(0)->Content().empty(), TNodeException(tupleItem->Child(0))
@@ -161,7 +161,7 @@ void CollectUpdateRowKey(const TExprNode* child, TContext::TPtr ctx) {
 
     for (auto& tupleItem : rowTuple->Children()) {
         Y_ENSURE_EX(tupleItem->IsList() && tupleItem->ChildrenSize() == 2,
-            TNodeException(*tupleItem) << child->Content() << "Expected pair"); 
+            TNodeException(*tupleItem) << child->Content() << "Expected pair");
 
         Y_ENSURE_EX(tupleItem->Child(0)->IsAtom() &&
             !tupleItem->Child(0)->Content().empty(), TNodeException(tupleItem->Child(0))
@@ -174,7 +174,7 @@ void CollectUpdateRowKey(const TExprNode* child, TContext::TPtr ctx) {
 
     for (auto& tupleItem : updateTuple->Children()) {
         Y_ENSURE_EX(tupleItem->IsList() && tupleItem->ChildrenSize() >= 1 && tupleItem->ChildrenSize() <= 3,
-            TNodeException(*tupleItem) << child->Content() << "Expected tuple of size 1..3"); 
+            TNodeException(*tupleItem) << child->Content() << "Expected tuple of size 1..3");
         Y_ENSURE_EX(tupleItem->Child(0)->IsAtom() &&
             !tupleItem->Child(0)->Content().empty(), TNodeException(tupleItem->Child(0))
                 << "Expected column name as non-empty atom.");
@@ -197,7 +197,7 @@ void CollectSelectRowKey(const TExprNode* child, TContext::TPtr ctx) {
 
     for (auto& tupleItem : rowTuple->Children()) {
         Y_ENSURE_EX(tupleItem->IsList() && tupleItem->ChildrenSize() == 2,
-            TNodeException(*tupleItem) << child->Content() << "Expected pair"); 
+            TNodeException(*tupleItem) << child->Content() << "Expected pair");
 
         Y_ENSURE_EX(tupleItem->Child(0)->IsAtom() &&
             !tupleItem->Child(0)->Content().empty(), TNodeException(tupleItem->Child(0))
@@ -234,7 +234,7 @@ void CollectSelectRangeKey(const TExprNode* child, TContext::TPtr ctx) {
         }
         else {
             Y_ENSURE_EX(rangeItem->IsList() && rangeItem->ChildrenSize() == 3,
-                TNodeException(*rangeItem) << child->Content() << "Expected 3 items in range item - column/from/to"); 
+                TNodeException(*rangeItem) << child->Content() << "Expected 3 items in range item - column/from/to");
 
             Y_ENSURE_EX(rangeItem->Child(0)->IsAtom() &&
                 !rangeItem->Child(0)->Content().empty(), TNodeException(rangeItem->Child(0)) << "Expected column name as non-empty atom.");
@@ -263,7 +263,7 @@ public:
         , CallableTransformer(callableTransformer) {}
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
-        output = input; 
+        output = input;
         {
             auto name = input->Content();
             TIssueScopeGuard issueScope(ctx.IssueManager, [&]() {
@@ -374,7 +374,7 @@ private:
         return true;
     }
 
-    const TTypeAnnotationNode* GetSelectType(IDbSchemeResolver::TTableResult* lookup, TExprNode& selectTuple, 
+    const TTypeAnnotationNode* GetSelectType(IDbSchemeResolver::TTableResult* lookup, TExprNode& selectTuple,
         TExprContext& ctx)
     {
         TVector<const TItemExprType*> resultItems;
@@ -518,7 +518,7 @@ private:
         Y_ENSURE_EX(optionsNode->IsList(), TNodeException(optionsNode) << "Expected tuple");
         for (auto optionsItem : optionsNode->Children()) {
             Y_ENSURE_EX(optionsItem->IsList() && optionsItem->ChildrenSize() == 2 && optionsItem->Child(0)->IsAtom(),
-                TNodeException(*optionsItem) << "Expected pair of atom and value"); 
+                TNodeException(*optionsItem) << "Expected pair of atom and value");
 
             auto optionName = optionsItem->Child(0)->Content();
             if (optionName != "ItemsLimit" &&
@@ -657,9 +657,9 @@ private:
         Y_ENSURE_EX(node.ChildrenSize() > 0, TNodeException(node) << "AsParameters expects > 0 args.");
 
         // Use AsStruct type annotation
-        auto tmpNode = ctx.RenameNode(node, "AsStruct"); 
-        auto output = tmpNode; 
-        YQL_ENSURE(CallableTransformer->Transform(tmpNode, output, ctx) == TStatus::Ok); 
+        auto tmpNode = ctx.RenameNode(node, "AsStruct");
+        auto output = tmpNode;
+        YQL_ENSURE(CallableTransformer->Transform(tmpNode, output, ctx) == TStatus::Ok);
 
         node.SetTypeAnn(tmpNode->GetTypeAnn());
         return TStatus::Ok;
@@ -669,9 +669,9 @@ private:
         Y_ENSURE_EX(node.ChildrenSize() == 3, TNodeException(node) << "AddParameter expects 3 args.");
 
         // Use AddMember type annotation
-        auto tmpNode = ctx.RenameNode(node, "AddMember"); 
-        auto output = tmpNode; 
-        YQL_ENSURE(CallableTransformer->Transform(tmpNode, output, ctx) == TStatus::Ok); 
+        auto tmpNode = ctx.RenameNode(node, "AddMember");
+        auto output = tmpNode;
+        YQL_ENSURE(CallableTransformer->Transform(tmpNode, output, ctx) == TStatus::Ok);
 
         node.SetTypeAnn(tmpNode->GetTypeAnn());
         return TStatus::Ok;
@@ -692,7 +692,7 @@ private:
 
         auto& lambda = node.ChildRef(1);
         const TTypeAnnotationNode* itemType = node.Child(0)->GetTypeAnn()->Cast<TListExprType>()->GetItemType();
-        if (!UpdateLambdaAllArgumentsTypes(lambda, {itemType}, ctx)) { 
+        if (!UpdateLambdaAllArgumentsTypes(lambda, {itemType}, ctx)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -723,7 +723,7 @@ private:
 
         auto& lambda = node.ChildRef(1);
         const TTypeAnnotationNode* itemType = node.Child(0)->GetTypeAnn()->Cast<TListExprType>()->GetItemType();
-        if (!UpdateLambdaAllArgumentsTypes(lambda, {itemType}, ctx)) { 
+        if (!UpdateLambdaAllArgumentsTypes(lambda, {itemType}, ctx)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -776,18 +776,18 @@ private:
 
     IGraphTransformer::TStatus DataTypeWrapper(TExprNode& node, TExprContext& ctx)
     {
-        switch (node.ChildrenSize()) { 
-        case 1: 
+        switch (node.ChildrenSize()) {
+        case 1:
             node.SetTypeAnn(ctx.MakeType<TTypeExprType>(ctx.MakeType<TDataExprType>(NKikimr::NUdf::GetDataSlot(
                 AdaptLegacyYqlType(node.Child(0)->Content())))));
-            break; 
-        case 3: 
+            break;
+        case 3:
             node.SetTypeAnn(ctx.MakeType<TTypeExprType>(ctx.MakeType<TDataExprParamsType>(
                 NKikimr::NUdf::GetDataSlot(AdaptLegacyYqlType(node.Child(0)->Content())), node.Child(1)->Content(), node.Child(2)->Content())));
-            break; 
-        default: 
-            return TStatus::Error; 
-        } 
+            break;
+        default:
+            return TStatus::Error;
+        }
         return TStatus::Ok;
     }
 
@@ -796,7 +796,7 @@ private:
     TAutoPtr<IGraphTransformer> CallableTransformer;
 };
 
-bool PerformTypeAnnotation(TExprNode::TPtr& exprRoot, TExprContext& ctx, TContext::TPtr mkqlContext) { 
+bool PerformTypeAnnotation(TExprNode::TPtr& exprRoot, TExprContext& ctx, TContext::TPtr mkqlContext) {
     TTypeAnnotationContext types;
     types.DeprecatedSQL = true;
 
@@ -812,17 +812,17 @@ bool PerformTypeAnnotation(TExprNode::TPtr& exprRoot, TExprContext& ctx, TContex
     return InstantTransform(*typeTransformer, exprRoot, ctx) == IGraphTransformer::TStatus::Ok;
 }
 
-TRuntimeNode GetReadTargetNode(const TExprNode& callable, ui32 index, TMkqlBuildContext& ctx, 
+TRuntimeNode GetReadTargetNode(const TExprNode& callable, ui32 index, TMkqlBuildContext& ctx,
     TContext::TPtr mkqlContext)
 {
     TReadTarget readTarget;
 
-    if (callable.ChildrenSize() > index) { 
-        const auto child = callable.Child(index); 
+    if (callable.ChildrenSize() > index) {
+        const auto child = callable.Child(index);
         if (child->IsAtom()) {
-            readTarget = GetReadTarget(child); 
+            readTarget = GetReadTarget(child);
         } else {
-            return MkqlBuildExpr(*child, ctx); 
+            return MkqlBuildExpr(*child, ctx);
         }
     }
 
@@ -893,16 +893,16 @@ TIntrusivePtr<NCommon::IMkqlCallableCompiler> CreateMkqlCompiler(TContext::TPtr 
     auto compiler = MakeIntrusive<NCommon::TMkqlCommonCallableCompiler>();
 
     compiler->AddCallable("SetResult",
-        [mkqlContext](const TExprNode& node, TMkqlBuildContext& ctx) { 
-            auto label = node.Child(0)->Content(); 
-            auto payload = MkqlBuildExpr(*node.Child(1), ctx); 
+        [mkqlContext](const TExprNode& node, TMkqlBuildContext& ctx) {
+            auto label = node.Child(0)->Content();
+            auto payload = MkqlBuildExpr(*node.Child(1), ctx);
             TRuntimeNode result = mkqlContext->PgmBuilder->SetResult(label, payload);
 
-            return result; 
+            return result;
         });
 
     compiler->AddCallable("SelectRow",
-        [mkqlContext](const TExprNode& node, TMkqlBuildContext& ctx) { 
+        [mkqlContext](const TExprNode& node, TMkqlBuildContext& ctx) {
             YQL_ENSURE(node.Child(0)->IsList() || HasUnversionedTable(node), "expected list or atom as table");
             const auto lookup = GetTableLookup(mkqlContext, node);
             YQL_ENSURE(lookup->TableId);
@@ -914,14 +914,14 @@ TIntrusivePtr<NCommon::IMkqlCallableCompiler> CreateMkqlCompiler(TContext::TPtr 
                 lookup->TableId->SchemaVersion = 0;
             }
 
-            auto rowTuple = node.Child(1); 
+            auto rowTuple = node.Child(1);
             TVector<TRuntimeNode> row(rowTuple->ChildrenSize());
             TVector<ui32> keyTypes(rowTuple->ChildrenSize());
             for (ui32 i = 0; i < rowTuple->ChildrenSize(); ++i) {
                 auto columnName = rowTuple->Child(i)->Child(0)->Content();
                 auto column = lookup->Columns.FindPtr(columnName);
                 YQL_ENSURE(column);
-                auto keyValue = MkqlBuildExpr(*rowTuple->Child(i)->Child(1), ctx); 
+                auto keyValue = MkqlBuildExpr(*rowTuple->Child(i)->Child(1), ctx);
                 row[i] = keyValue;
                 keyTypes[i] = column->Type;
             }
@@ -933,11 +933,11 @@ TIntrusivePtr<NCommon::IMkqlCallableCompiler> CreateMkqlCompiler(TContext::TPtr 
 
             auto result = mkqlContext->PgmBuilder->SelectRow(*lookup->TableId, keyTypes, columnsToRead, row,
                 readTargetNode);
-            return result; 
+            return result;
         });
 
     compiler->AddCallable("SelectRange",
-        [mkqlContext](const TExprNode& node, TMkqlBuildContext& ctx) { 
+        [mkqlContext](const TExprNode& node, TMkqlBuildContext& ctx) {
             YQL_ENSURE(node.Child(0)->IsList() || HasUnversionedTable(node), "expected list or atom as table");
             const auto lookup = GetTableLookup(mkqlContext, node);
             YQL_ENSURE(lookup->TableId);
@@ -951,7 +951,7 @@ TIntrusivePtr<NCommon::IMkqlCallableCompiler> CreateMkqlCompiler(TContext::TPtr 
 
             bool includeFrom = true;
             bool includeTo = true;
-            auto rangeTuple = node.Child(1); 
+            auto rangeTuple = node.Child(1);
             ui32 keyCount = 0;
             ui32 fromComponents = 0;
             ui32 toComponents = 0;
@@ -1005,12 +1005,12 @@ TIntrusivePtr<NCommon::IMkqlCallableCompiler> CreateMkqlCompiler(TContext::TPtr 
                 YQL_ENSURE(column);
 
                 if (keyIndex < fromComponents) {
-                    auto fromKeyValue = MkqlBuildExpr(*rangeItem->Child(1), ctx); 
+                    auto fromKeyValue = MkqlBuildExpr(*rangeItem->Child(1), ctx);
                     from[keyIndex] = fromKeyValue;
                 }
 
                 if (keyIndex < toComponents) {
-                    auto toKeyValue = MkqlBuildExpr(*rangeItem->Child(2), ctx); 
+                    auto toKeyValue = MkqlBuildExpr(*rangeItem->Child(2), ctx);
                     to[keyIndex] = toKeyValue;
                 }
 
@@ -1020,7 +1020,7 @@ TIntrusivePtr<NCommon::IMkqlCallableCompiler> CreateMkqlCompiler(TContext::TPtr 
 
             const ui32 flags = (includeFrom ? TReadRangeOptions::TFlags::IncludeInitValue : TReadRangeOptions::TFlags::ExcludeInitValue) |
                 (includeTo ? TReadRangeOptions::TFlags::IncludeTermValue : TReadRangeOptions::TFlags::ExcludeTermValue);
-            options.Flags = ctx.ProgramBuilder.NewDataLiteral(flags); 
+            options.Flags = ctx.ProgramBuilder.NewDataLiteral(flags);
             options.FromColumns = from;
             options.ToColumns = to;
 
@@ -1034,12 +1034,12 @@ TIntrusivePtr<NCommon::IMkqlCallableCompiler> CreateMkqlCompiler(TContext::TPtr 
             TVector<TSelectColumn> columnsToRead;
             FillColumnsToRead(lookup, node.Child(2), columnsToRead);
 
-            auto optionsNode = node.Child(3); 
+            auto optionsNode = node.Child(3);
             for (auto optionsItem : optionsNode->Children()) {
                 if (optionsItem->Child(0)->Content() == "ItemsLimit") {
-                    options.ItemsLimit = MkqlBuildExpr(*optionsItem->Child(1), ctx); 
+                    options.ItemsLimit = MkqlBuildExpr(*optionsItem->Child(1), ctx);
                 } else if (optionsItem->Child(0)->Content() == "BytesLimit") {
-                    options.BytesLimit = MkqlBuildExpr(*optionsItem->Child(1), ctx); 
+                    options.BytesLimit = MkqlBuildExpr(*optionsItem->Child(1), ctx);
                 } else if (optionsItem->Child(0)->Content() == "SkipNullKeys") {
                     FillKeyPosition(skipNullKeys, optionsItem->Child(1), lookup);
                 } else if (optionsItem->Child(0)->Content() == "ForbidNullArgsFrom") {
@@ -1057,11 +1057,11 @@ TIntrusivePtr<NCommon::IMkqlCallableCompiler> CreateMkqlCompiler(TContext::TPtr 
 
             TRuntimeNode result = mkqlContext->PgmBuilder->SelectRange(*lookup->TableId, keyTypes, columnsToRead,
                 options, readTargetNode);
-            return result; 
+            return result;
         });
 
     compiler->AddCallable("UpdateRow",
-        [mkqlContext](const TExprNode& node, TMkqlBuildContext& ctx) { 
+        [mkqlContext](const TExprNode& node, TMkqlBuildContext& ctx) {
             YQL_ENSURE(node.Child(0)->IsList() || HasUnversionedTable(node), "expected list or atom as table");
             const auto lookup = GetTableLookup(mkqlContext, node);
             YQL_ENSURE(lookup->TableId);
@@ -1073,20 +1073,20 @@ TIntrusivePtr<NCommon::IMkqlCallableCompiler> CreateMkqlCompiler(TContext::TPtr 
                 lookup->TableId->SchemaVersion = 0;
             }
 
-            auto rowTuple = node.Child(1); 
+            auto rowTuple = node.Child(1);
             TVector<TRuntimeNode> row(rowTuple->ChildrenSize());
             TVector<ui32> keyTypes(rowTuple->ChildrenSize());
             for (ui32 i = 0; i < rowTuple->ChildrenSize(); ++i) {
                 auto columnName = rowTuple->Child(i)->Child(0)->Content();
                 auto column = lookup->Columns.FindPtr(columnName);
                 YQL_ENSURE(column);
-                auto keyValue = MkqlBuildExpr(*rowTuple->Child(i)->Child(1), ctx); 
+                auto keyValue = MkqlBuildExpr(*rowTuple->Child(i)->Child(1), ctx);
                 row[i] = keyValue;
                 keyTypes[i] = column->Type;
             }
 
             auto update = mkqlContext->PgmBuilder->GetUpdateRowBuilder();
-            auto updateTuple = node.Child(2); 
+            auto updateTuple = node.Child(2);
             for (ui32 i = 0; i < updateTuple->ChildrenSize(); ++i) {
                 auto child = updateTuple->Child(i);
                 auto columnName = child->Child(0)->Content();
@@ -1097,22 +1097,22 @@ TIntrusivePtr<NCommon::IMkqlCallableCompiler> CreateMkqlCompiler(TContext::TPtr 
                     update.EraseColumn(column->Column);
                 }
                 else if (child->ChildrenSize() == 2) {
-                    auto setValue = MkqlBuildExpr(*updateTuple->Child(i)->Child(1), ctx); 
+                    auto setValue = MkqlBuildExpr(*updateTuple->Child(i)->Child(1), ctx);
                     update.SetColumn(column->Column, column->Type, setValue);
                 } else {
                     auto modeStr = child->Child(1)->Content();
                     EInplaceUpdateMode mode = ParseUpdateMode(modeStr);
-                    auto mergeValue = MkqlBuildExpr(*updateTuple->Child(i)->Child(2), ctx); 
+                    auto mergeValue = MkqlBuildExpr(*updateTuple->Child(i)->Child(2), ctx);
                     update.InplaceUpdateColumn(column->Column, column->Type, mergeValue, mode);
                 }
             }
 
             TRuntimeNode result = mkqlContext->PgmBuilder->UpdateRow(*lookup->TableId, keyTypes, row, update);
-            return result; 
+            return result;
         });
 
     compiler->AddCallable("EraseRow",
-        [mkqlContext](const TExprNode& node, TMkqlBuildContext& ctx) { 
+        [mkqlContext](const TExprNode& node, TMkqlBuildContext& ctx) {
             YQL_ENSURE(node.Child(0)->IsList() || HasUnversionedTable(node), "expected list or atom as table");
             const auto lookup = GetTableLookup(mkqlContext, node);
             YQL_ENSURE(lookup->TableId);
@@ -1124,70 +1124,70 @@ TIntrusivePtr<NCommon::IMkqlCallableCompiler> CreateMkqlCompiler(TContext::TPtr 
                 lookup->TableId->SchemaVersion = 0;
             }
 
-            auto rowTuple = node.Child(1); 
+            auto rowTuple = node.Child(1);
             TVector<TRuntimeNode> row(rowTuple->ChildrenSize());
             TVector<ui32> keyTypes(rowTuple->ChildrenSize());
             for (ui32 i = 0; i < rowTuple->ChildrenSize(); ++i) {
                 auto columnName = rowTuple->Child(i)->Child(0)->Content();
                 auto column = lookup->Columns.FindPtr(columnName);
                 YQL_ENSURE(column);
-                auto keyValue = MkqlBuildExpr(*rowTuple->Child(i)->Child(1), ctx); 
+                auto keyValue = MkqlBuildExpr(*rowTuple->Child(i)->Child(1), ctx);
                 row[i] = keyValue;
                 keyTypes[i] = column->Type;
             }
 
             TRuntimeNode result = mkqlContext->PgmBuilder->EraseRow(*lookup->TableId, keyTypes, row);
-            return result; 
+            return result;
         });
 
-    compiler->AddCallable("Increment", [](const TExprNode& node, TMkqlBuildContext& ctx) { 
-        auto arg = MkqlBuildExpr(*node.Child(0), ctx); 
+    compiler->AddCallable("Increment", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        auto arg = MkqlBuildExpr(*node.Child(0), ctx);
 
-        return ctx.ProgramBuilder.Increment(arg); 
+        return ctx.ProgramBuilder.Increment(arg);
     });
 
-    compiler->AddCallable("StepTxId", [mkqlContext](const TExprNode&, TMkqlBuildContext&) { 
-        return mkqlContext->PgmBuilder->StepTxId(); 
+    compiler->AddCallable("StepTxId", [mkqlContext](const TExprNode&, TMkqlBuildContext&) {
+        return mkqlContext->PgmBuilder->StepTxId();
     });
 
-    compiler->OverrideCallable("Parameter", [mkqlContext](const TExprNode& node, TMkqlBuildContext& ctx) { 
-        const auto& name = node.Child(0)->Content(); 
-        const auto type = BuildType(*node.Child(1), *node.Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType(), ctx.ProgramBuilder); 
+    compiler->OverrideCallable("Parameter", [mkqlContext](const TExprNode& node, TMkqlBuildContext& ctx) {
+        const auto& name = node.Child(0)->Content();
+        const auto type = BuildType(*node.Child(1), *node.Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType(), ctx.ProgramBuilder);
         return mkqlContext->NewParam(name, type);
     });
 
-    compiler->AddCallable("Parameters", [mkqlContext](const TExprNode& node, TMkqlBuildContext& ctx) { 
+    compiler->AddCallable("Parameters", [mkqlContext](const TExprNode& node, TMkqlBuildContext& ctx) {
         Y_UNUSED(ctx);
 
         if (!mkqlContext->NewParamsBuilder()) {
-            throw TNodeException(node) << "You can create only one Parameters object."; 
+            throw TNodeException(node) << "You can create only one Parameters object.";
         }
 
         return TRuntimeNode();
     });
 
-    compiler->AddCallable("AsParameters", [mkqlContext](const TExprNode& node, TMkqlBuildContext& ctx) { 
+    compiler->AddCallable("AsParameters", [mkqlContext](const TExprNode& node, TMkqlBuildContext& ctx) {
         if (!mkqlContext->NewParamsBuilder()) {
-            throw TNodeException(node) << "You can create only one Parameters object."; 
+            throw TNodeException(node) << "You can create only one Parameters object.";
         }
-        for (auto child : node.Children()) { 
+        for (auto child : node.Children()) {
             const auto& name = child->Child(0)->Content();
-            auto value = MkqlBuildExpr(*child->Child(1), ctx); 
+            auto value = MkqlBuildExpr(*child->Child(1), ctx);
             mkqlContext->ParamsBuilder->Add(name, value);
         }
 
         return mkqlContext->ParamsBuilder->Build();
     });
 
-    compiler->AddCallable("AddParameter", [mkqlContext](const TExprNode& node, TMkqlBuildContext& ctx) { 
+    compiler->AddCallable("AddParameter", [mkqlContext](const TExprNode& node, TMkqlBuildContext& ctx) {
         if (!mkqlContext->NewParamsBuilder()) {
-            throw TNodeException(node) << "You can create only one Parameters object."; 
+            throw TNodeException(node) << "You can create only one Parameters object.";
         }
 
-        for (auto curNode = &node; curNode->Content() != "Parameters"; curNode = curNode->Child(0)) { 
-            Y_ENSURE_EX(curNode->Content() == "AddParameter", TNodeException(*curNode) << "Only AddParameter func can be in AddParameter func."); 
+        for (auto curNode = &node; curNode->Content() != "Parameters"; curNode = curNode->Child(0)) {
+            Y_ENSURE_EX(curNode->Content() == "AddParameter", TNodeException(*curNode) << "Only AddParameter func can be in AddParameter func.");
             const auto& name = curNode->Child(1)->Content();
-            auto value = MkqlBuildExpr(*curNode->Child(2), ctx); 
+            auto value = MkqlBuildExpr(*curNode->Child(2), ctx);
             mkqlContext->ParamsBuilder->Add(name, value);
         }
 
@@ -1195,88 +1195,88 @@ TIntrusivePtr<NCommon::IMkqlCallableCompiler> CreateMkqlCompiler(TContext::TPtr 
     });
 
     compiler->AddCallable("MapParameter",
-        [mkqlContext](const TExprNode& node, TMkqlBuildContext& ctx) { 
-        auto list = MkqlBuildExpr(*node.Child(0), ctx); 
-        return mkqlContext->PgmBuilder->MapParameter(list, [&](TRuntimeNode item) { 
-            TMkqlBuildContext::TArgumentsMap innerArguments; 
-            auto arg = node.Child(1)->Child(0)->Child(0); 
+        [mkqlContext](const TExprNode& node, TMkqlBuildContext& ctx) {
+        auto list = MkqlBuildExpr(*node.Child(0), ctx);
+        return mkqlContext->PgmBuilder->MapParameter(list, [&](TRuntimeNode item) {
+            TMkqlBuildContext::TArgumentsMap innerArguments;
+            auto arg = node.Child(1)->Child(0)->Child(0);
             innerArguments[arg] = item;
-            TMkqlBuildContext innerCtx(ctx, std::move(innerArguments), node.Child(1)->UniqueId()); 
-            auto res = MkqlBuildExpr(*node.Child(1)->Child(1), innerCtx); 
+            TMkqlBuildContext innerCtx(ctx, std::move(innerArguments), node.Child(1)->UniqueId());
+            auto res = MkqlBuildExpr(*node.Child(1)->Child(1), innerCtx);
             return res;
-        }); 
+        });
     });
 
     compiler->AddCallable("FlatMapParameter",
-        [mkqlContext](const TExprNode& node, TMkqlBuildContext& ctx) { 
-        auto list = MkqlBuildExpr(*node.Child(0), ctx); 
-        return mkqlContext->PgmBuilder->FlatMapParameter(list, [&](TRuntimeNode item) { 
-            TMkqlBuildContext::TArgumentsMap innerArguments; 
-            auto arg = node.Child(1)->Child(0)->Child(0); 
+        [mkqlContext](const TExprNode& node, TMkqlBuildContext& ctx) {
+        auto list = MkqlBuildExpr(*node.Child(0), ctx);
+        return mkqlContext->PgmBuilder->FlatMapParameter(list, [&](TRuntimeNode item) {
+            TMkqlBuildContext::TArgumentsMap innerArguments;
+            auto arg = node.Child(1)->Child(0)->Child(0);
             innerArguments[arg] = item;
-            TMkqlBuildContext innerCtx(ctx, std::move(innerArguments), node.Child(1)->UniqueId()); 
-            auto res = MkqlBuildExpr(*node.Child(1)->Child(1), innerCtx); 
+            TMkqlBuildContext innerCtx(ctx, std::move(innerArguments), node.Child(1)->UniqueId());
+            auto res = MkqlBuildExpr(*node.Child(1)->Child(1), innerCtx);
             return res;
-        }); 
+        });
     });
 
     compiler->AddCallable("AcquireLocks",
-        [mkqlContext](const TExprNode& node, TMkqlBuildContext& ctx) { 
-        auto lockTxId = MkqlBuildExpr(*node.Child(0), ctx); 
-        return mkqlContext->PgmBuilder->AcquireLocks(lockTxId); 
+        [mkqlContext](const TExprNode& node, TMkqlBuildContext& ctx) {
+        auto lockTxId = MkqlBuildExpr(*node.Child(0), ctx);
+        return mkqlContext->PgmBuilder->AcquireLocks(lockTxId);
     });
 
     compiler->AddCallable("Diagnostics",
-        [mkqlContext](const TExprNode&, TMkqlBuildContext&) { 
-        return mkqlContext->PgmBuilder->Diagnostics(); 
+        [mkqlContext](const TExprNode&, TMkqlBuildContext&) {
+        return mkqlContext->PgmBuilder->Diagnostics();
     });
 
     compiler->AddCallable("PartialSort",
-        [mkqlContext](const TExprNode& node, TMkqlBuildContext& ctx) { 
-        auto list = MkqlBuildExpr(*node.Child(0), ctx); 
-        auto ascending = MkqlBuildExpr(*node.Child(1), ctx); 
-        return mkqlContext->PgmBuilder->PartialSort(list, ascending, [&](TRuntimeNode item) { 
-            TMkqlBuildContext::TArgumentsMap innerArguments; 
-            auto argItem = node.Child(2)->Child(0)->Child(0); 
+        [mkqlContext](const TExprNode& node, TMkqlBuildContext& ctx) {
+        auto list = MkqlBuildExpr(*node.Child(0), ctx);
+        auto ascending = MkqlBuildExpr(*node.Child(1), ctx);
+        return mkqlContext->PgmBuilder->PartialSort(list, ascending, [&](TRuntimeNode item) {
+            TMkqlBuildContext::TArgumentsMap innerArguments;
+            auto argItem = node.Child(2)->Child(0)->Child(0);
             innerArguments[argItem] = item;
-            TMkqlBuildContext innerCtx(ctx, std::move(innerArguments), node.Child(2)->UniqueId()); 
-            auto res = MkqlBuildExpr(*node.Child(2)->Child(1), innerCtx); 
+            TMkqlBuildContext innerCtx(ctx, std::move(innerArguments), node.Child(2)->UniqueId());
+            auto res = MkqlBuildExpr(*node.Child(2)->Child(1), innerCtx);
             return res;
-        }); 
+        });
     });
 
     compiler->AddCallable("PartialTake",
-        [mkqlContext](const TExprNode& node, TMkqlBuildContext& ctx) { 
-        auto list = MkqlBuildExpr(*node.Child(0), ctx); 
-        auto len = MkqlBuildExpr(*node.Child(1), ctx); 
-        return mkqlContext->PgmBuilder->PartialTake(list, len); 
+        [mkqlContext](const TExprNode& node, TMkqlBuildContext& ctx) {
+        auto list = MkqlBuildExpr(*node.Child(0), ctx);
+        auto len = MkqlBuildExpr(*node.Child(1), ctx);
+        return mkqlContext->PgmBuilder->PartialTake(list, len);
     });
 
     compiler->OverrideCallable("CombineByKey",
-        [mkqlContext](const TExprNode& node, TMkqlBuildContext& ctx) { 
+        [mkqlContext](const TExprNode& node, TMkqlBuildContext& ctx) {
         auto combineByKey = CombineByKeyImpl(node, ctx);
         auto merge = mkqlContext->PgmBuilder->CombineByKeyMerge(combineByKey);
         return merge;
     });
 
     // TODO: Remove override once we support custom types in YQL type annotaion.
-    compiler->OverrideCallable("DataType", [](const TExprNode& node, TMkqlBuildContext& ctx) { 
-        auto typeName = node.Child(0)->Content(); 
+    compiler->OverrideCallable("DataType", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        auto typeName = node.Child(0)->Content();
         typeName = AdaptLegacyYqlType(typeName);
         auto slot = NKikimr::NUdf::FindDataSlot(typeName);
         if (!slot) {
-            throw TNodeException(node) << "Unknown type '" << typeName << "'."; 
+            throw TNodeException(node) << "Unknown type '" << typeName << "'.";
         }
 
         NUdf::TDataTypeId typeId = NKikimr::NUdf::GetDataTypeInfo(*slot).TypeId;
-        if (typeId == NUdf::TDataType<NUdf::TDecimal>::Id) { 
-            auto precision = node.Child(1)->Content(); 
-            auto scale = node.Child(2)->Content(); 
+        if (typeId == NUdf::TDataType<NUdf::TDecimal>::Id) {
+            auto precision = node.Child(1)->Content();
+            auto scale = node.Child(2)->Content();
             auto type = ctx.ProgramBuilder.NewDecimalType(FromString<ui8>(precision), FromString<ui8>(scale));
-            return TRuntimeNode(type, true); 
+            return TRuntimeNode(type, true);
         } else {
             auto type = ctx.ProgramBuilder.NewDataType(typeId);
-            return TRuntimeNode(type, true); 
+            return TRuntimeNode(type, true);
         }
     });
 
@@ -1284,9 +1284,9 @@ TIntrusivePtr<NCommon::IMkqlCallableCompiler> CreateMkqlCompiler(TContext::TPtr 
 }
 
 TRuntimeNode CompileNode(const TExprNode& node, TExprContext& exprCtx, TContext::TPtr ctx, const IMkqlCallableCompiler* compiler) {
-    const auto guard = ctx->TypeEnv->BindAllocator(); 
+    const auto guard = ctx->TypeEnv->BindAllocator();
     TMkqlBuildContext mkqlCtx(*compiler, *ctx->PgmBuilder, exprCtx);
-    return MkqlBuildExpr(node, mkqlCtx); 
+    return MkqlBuildExpr(node, mkqlCtx);
 }
 
 } // anonymous namespace
@@ -1315,8 +1315,8 @@ void CollectKeys(const TExprNode* root, TContext::TPtr ctx) {
         }
 
         for (auto& child : current->Children()) {
-            if (visited.insert(child.Get()).second) { 
-                activeNodes.push(child.Get()); 
+            if (visited.insert(child.Get()).second) {
+                activeNodes.push(child.Get());
             }
         }
     }
@@ -1337,7 +1337,7 @@ ConvertToMiniKQL(TExprContainer::TPtr expr,
     try {
         TContext::TPtr ctx(new TContext(functionRegistry, typeEnv));
         auto compiler = CreateMkqlCompiler(ctx);
-        CollectKeys(expr->Root.Get(), ctx); 
+        CollectKeys(expr->Root.Get(), ctx);
         const auto& tablesToResolve = ctx->GetTablesToResolve();
         if (!tablesToResolve.empty()) {
             TVector<IDbSchemeResolver::TTable> requests;
@@ -1450,7 +1450,7 @@ public:
                 return SendResponseAndDie(result, {}, ctx);
             }
 
-            CollectKeys(Expr->Root.Get(), CompileCtx); 
+            CollectKeys(Expr->Root.Get(), CompileCtx);
 
             Compiler = CreateMkqlCompiler(CompileCtx);
             const auto& tablesToResolve = CompileCtx->GetTablesToResolve();
@@ -1575,7 +1575,7 @@ private:
         }
         IGraphTransformer::TStatus status(IGraphTransformer::TStatus::Ok);
         do {
-            status = ExpandApply(Expr->Root, Expr->Root, Expr->Context); 
+            status = ExpandApply(Expr->Root, Expr->Root, Expr->Context);
         } while (status.Level == IGraphTransformer::TStatus::Repeat);
         Y_VERIFY_DEBUG(status.Level == IGraphTransformer::TStatus::Ok ||
                      status.Level == IGraphTransformer::TStatus::Error);

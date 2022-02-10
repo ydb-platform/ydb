@@ -42,7 +42,7 @@ IVolume::IVolume(
 
     for (const auto & disk : keys)
     {
-        if (disk.starts_with("disk")) 
+        if (disk.starts_with("disk"))
         {
             auto disk_name = config.getString(config_prefix + "." + disk);
             disks.push_back(disk_selector->get(disk_name));

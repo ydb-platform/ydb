@@ -220,7 +220,7 @@ Cluster::Address Cluster::Address::fromFullString(const String & full_string)
     const char * user_pw_end = strchr(full_string.data(), '@');
 
     /// parsing with the new shard{shard_index}[_replica{replica_index}] format
-    if (!user_pw_end && full_string.starts_with("shard")) 
+    if (!user_pw_end && full_string.starts_with("shard"))
     {
         const char * underscore = strchr(full_string.data(), '_');
 
@@ -239,7 +239,7 @@ Cluster::Address Cluster::Address::fromFullString(const String & full_string)
 
         Protocol::Secure secure = Protocol::Secure::Disable;
         const char * secure_tag = "+secure";
-        if (full_string.ends_with(secure_tag)) 
+        if (full_string.ends_with(secure_tag))
         {
             address_end -= strlen(secure_tag);
             secure = Protocol::Secure::Enable;
@@ -367,7 +367,7 @@ Cluster::Cluster(const Poco::Util::AbstractConfiguration & config,
     UInt32 current_shard_num = 1;
     for (const auto & key : config_keys)
     {
-        if (key.starts_with("node")) 
+        if (key.starts_with("node"))
         {
             /// Shard without replicas.
 
@@ -404,7 +404,7 @@ Cluster::Cluster(const Poco::Util::AbstractConfiguration & config,
             shards_info.emplace_back(std::move(info));
             addresses_with_failover.emplace_back(std::move(addresses));
         }
-        else if (key.starts_with("shard")) 
+        else if (key.starts_with("shard"))
         {
             /// Shard with replicas.
 
@@ -427,10 +427,10 @@ Cluster::Cluster(const Poco::Util::AbstractConfiguration & config,
 
             for (const auto & replica_key : replica_keys)
             {
-                if (replica_key.starts_with("weight") ||replica_key.starts_with("internal_replication")) 
+                if (replica_key.starts_with("weight") ||replica_key.starts_with("internal_replication"))
                     continue;
 
-                if (replica_key.starts_with("replica")) 
+                if (replica_key.starts_with("replica"))
                 {
                     replica_addresses.emplace_back(config,
                         partial_prefix + replica_key,

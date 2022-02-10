@@ -116,7 +116,7 @@ void NativeBlockOutputStream::write(const Block & block)
         /// For compatibility, we will not send explicit timezone parameter in DateTime data type
         ///  to older clients, that cannot understand it.
         if (client_revision < DBMS_MIN_REVISION_WITH_TIME_ZONE_PARAMETER_IN_DATETIME_DATA_TYPE
-            && type_name.starts_with("DateTime(")) 
+            && type_name.starts_with("DateTime("))
             type_name = "DateTime";
 
         writeStringBinary(type_name, ostr);

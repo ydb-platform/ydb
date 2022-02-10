@@ -3,7 +3,7 @@
 #include <util/generic/intrlist.h>
 #include <util/generic/map.h>
 #include <util/generic/hash_set.h>
-#include <functional> 
+#include <functional>
 
 namespace NKikimr {
 namespace NCache {
@@ -95,10 +95,10 @@ class ICache {
 public:
     typedef ICache<TKey, TValue> TSelf;
 
-    typedef std::function<void(const TKey& key, TValue& value, ui64 size)> TEvictionCallback; 
-    typedef std::function<void(const TKey& key)> TKeyEvictionCallback; 
-    typedef std::function<ui64(const TKey& key, const TValue& value)> TMeasureCallback; 
-    typedef std::function<bool(const TSelf& cache)> TOverflowCallback; 
+    typedef std::function<void(const TKey& key, TValue& value, ui64 size)> TEvictionCallback;
+    typedef std::function<void(const TKey& key)> TKeyEvictionCallback;
+    typedef std::function<ui64(const TKey& key, const TValue& value)> TMeasureCallback;
+    typedef std::function<bool(const TSelf& cache)> TOverflowCallback;
 
     virtual ~ICache() {}
     virtual ui64 GetUsedSize() const = 0;

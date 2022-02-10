@@ -1,4 +1,4 @@
- 
+
 #include <util/system/atomic.h>
 #include <util/system/event.h>
 #include <util/generic/deque.h>
@@ -88,11 +88,11 @@ Y_UNIT_TEST_SUITE(TLockFreeStackTests) {
             TVector<TSimpleSharedPtr<NThreading::TLegacyFuture<>>> futures;
 
             for (size_t i = 0; i < EnqueueThreads; ++i) {
-                futures.push_back(new NThreading::TLegacyFuture<>(std::bind(&TDequeueAllTester<SingleConsumer>::Enqueuer, this))); 
+                futures.push_back(new NThreading::TLegacyFuture<>(std::bind(&TDequeueAllTester<SingleConsumer>::Enqueuer, this)));
             }
 
             for (size_t i = 0; i < DequeueThreads; ++i) {
-                futures.push_back(new NThreading::TLegacyFuture<>(std::bind(&TDequeueAllTester<SingleConsumer>::DequeuerAll, this))); 
+                futures.push_back(new NThreading::TLegacyFuture<>(std::bind(&TDequeueAllTester<SingleConsumer>::DequeuerAll, this)));
             }
 
             // effectively join

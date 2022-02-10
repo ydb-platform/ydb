@@ -98,7 +98,7 @@ message SvnRevisionResponse {
 
 message OpenSessionRequest {
     string Session = 1;
-    string Username = 2; 
+    string Username = 2;
 }
 
 message OpenSessionResponse {
@@ -317,7 +317,7 @@ message ConfigureFailureInjectorRequest {
 
 message ConfigureFailureInjectorResponse {
     bool success = 1;
-} 
+}
 
 message IsReadyRequest {
     repeated TFile Files = 1;

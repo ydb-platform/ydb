@@ -18,7 +18,7 @@ template<class TValidateErrorPolicy>
 struct TLazyVerifyListValue;
 
 template<class TValidateErrorPolicy>
-struct TLazyVerifyListIterator: public TBoxedValue { 
+struct TLazyVerifyListIterator: public TBoxedValue {
     TLazyVerifyListIterator(const TLazyVerifyListValue<TValidateErrorPolicy>& lazyList, ui64 index = 0)
         : LazyList(lazyList)
         , OrigIter(TBoxedValueAccessor::GetListIterator(*lazyList.Orig))
@@ -30,23 +30,23 @@ struct TLazyVerifyListIterator: public TBoxedValue {
     }
 private:
     const TLazyVerifyListValue<TValidateErrorPolicy>& LazyList;
-    TUnboxedValue OrigIter; 
+    TUnboxedValue OrigIter;
     ui64 Index;
 
-    bool Next(NUdf::TUnboxedValue& item) final { 
-        ++Index; 
-        if (!OrigIter.Next(item)) 
-            return false; 
-        TType* itemType = LazyList.ListType->GetItemType(); 
-        item = TValidate<TValidateErrorPolicy, TValidateModeLazy<TValidateErrorPolicy>>::Value(LazyList.ValueBuilder, itemType, std::move(item), 
-                TStringBuilder() << "LazyList[" << Index << "]" << VERIFY_DELIMITER << LazyList.Message); 
-        return true; 
-    } 
- 
-    bool Skip() final { 
-        ++Index; 
-        return OrigIter.Skip(); 
-    } 
+    bool Next(NUdf::TUnboxedValue& item) final {
+        ++Index;
+        if (!OrigIter.Next(item))
+            return false;
+        TType* itemType = LazyList.ListType->GetItemType();
+        item = TValidate<TValidateErrorPolicy, TValidateModeLazy<TValidateErrorPolicy>>::Value(LazyList.ValueBuilder, itemType, std::move(item),
+                TStringBuilder() << "LazyList[" << Index << "]" << VERIFY_DELIMITER << LazyList.Message);
+        return true;
+    }
+
+    bool Skip() final {
+        ++Index;
+        return OrigIter.Skip();
+    }
 };
 
 template<class TValidateErrorPolicy>
@@ -61,29 +61,29 @@ struct TLazyVerifyListValue: public TBoxedValue {
         , Message(message)
     {}
 
-    const IValueBuilder *const ValueBuilder; 
-    const TListType *const ListType; 
+    const IValueBuilder *const ValueBuilder;
+    const TListType *const ListType;
     const IBoxedValuePtr Orig;
-    const TString Message; 
- 
+    const TString Message;
+
 private:
-    bool HasFastListLength() const override { 
+    bool HasFastListLength() const override {
         return TBoxedValueAccessor::HasFastListLength(*Orig);
     }
 
-    ui64 GetListLength() const override { 
+    ui64 GetListLength() const override {
         return TBoxedValueAccessor::GetListLength(*Orig);
     }
 
-    ui64 GetEstimatedListLength() const override { 
+    ui64 GetEstimatedListLength() const override {
         return TBoxedValueAccessor::GetEstimatedListLength(*Orig);
     }
 
-    TUnboxedValue GetListIterator() const override { 
-        return TUnboxedValuePod(new TLazyVerifyListIterator<TValidateErrorPolicy>(*this)); 
-    } 
+    TUnboxedValue GetListIterator() const override {
+        return TUnboxedValuePod(new TLazyVerifyListIterator<TValidateErrorPolicy>(*this));
+    }
 
-    const TOpaqueListRepresentation* GetListRepresentation() const override { 
+    const TOpaqueListRepresentation* GetListRepresentation() const override {
         return nullptr;
     }
 
@@ -132,11 +132,11 @@ private:
     }
 };
 
-template<class TValidateErrorPolicy, bool Keys> 
-struct TLazyVerifyDictIterator: public TBoxedValue { 
+template<class TValidateErrorPolicy, bool Keys>
+struct TLazyVerifyDictIterator: public TBoxedValue {
     TLazyVerifyDictIterator(const TLazyVerifyDictValue<TValidateErrorPolicy>& lazyDict, ui64 index = 0)
         : LazyDict(lazyDict)
-        , OrigIter((Keys ? &TBoxedValueAccessor::GetKeysIterator : &TBoxedValueAccessor::GetDictIterator)(*LazyDict.Orig)) 
+        , OrigIter((Keys ? &TBoxedValueAccessor::GetKeysIterator : &TBoxedValueAccessor::GetDictIterator)(*LazyDict.Orig))
         , Index(index)
     {
         if (!OrigIter) {
@@ -146,33 +146,33 @@ struct TLazyVerifyDictIterator: public TBoxedValue {
 
 private:
     const TLazyVerifyDictValue<TValidateErrorPolicy>& LazyDict;
-    TUnboxedValue OrigIter; 
+    TUnboxedValue OrigIter;
     ui64 Index;
 
-    bool Skip() final { 
-        ++Index; 
-        return OrigIter.Skip(); 
-    } 
- 
-    bool Next(NUdf::TUnboxedValue& key) final { 
-        ++Index; 
-        if (!OrigIter.Next(key)) 
-            return false; 
-        key = TValidate<TValidateErrorPolicy, TValidateModeLazy<TValidateErrorPolicy>>::Value(LazyDict.ValueBuilder, LazyDict.KeyType, std::move(key), 
-                TStringBuilder() << "LazyDict[" << Index << "], validate key" << VERIFY_DELIMITER << LazyDict.Message); 
-        return true; 
-    } 
- 
-    bool NextPair(NUdf::TUnboxedValue& key, NUdf::TUnboxedValue& payload) final { 
-        ++Index; 
-        if (!OrigIter.NextPair(key, payload)) 
-            return false; 
-        key = TValidate<TValidateErrorPolicy, TValidateModeLazy<TValidateErrorPolicy>>::Value(LazyDict.ValueBuilder, LazyDict.KeyType, std::move(key), 
-                TStringBuilder() << "LazyDict[" << Index << "], validate key" << VERIFY_DELIMITER << LazyDict.Message); 
-        payload = TValidate<TValidateErrorPolicy, TValidateModeLazy<TValidateErrorPolicy>>::Value(LazyDict.ValueBuilder, LazyDict.PayloadType, std::move(payload), 
-                TStringBuilder() << "LazyDict[" << Index << "], validate payload" << VERIFY_DELIMITER << LazyDict.Message); 
-        return true; 
-    } 
+    bool Skip() final {
+        ++Index;
+        return OrigIter.Skip();
+    }
+
+    bool Next(NUdf::TUnboxedValue& key) final {
+        ++Index;
+        if (!OrigIter.Next(key))
+            return false;
+        key = TValidate<TValidateErrorPolicy, TValidateModeLazy<TValidateErrorPolicy>>::Value(LazyDict.ValueBuilder, LazyDict.KeyType, std::move(key),
+                TStringBuilder() << "LazyDict[" << Index << "], validate key" << VERIFY_DELIMITER << LazyDict.Message);
+        return true;
+    }
+
+    bool NextPair(NUdf::TUnboxedValue& key, NUdf::TUnboxedValue& payload) final {
+        ++Index;
+        if (!OrigIter.NextPair(key, payload))
+            return false;
+        key = TValidate<TValidateErrorPolicy, TValidateModeLazy<TValidateErrorPolicy>>::Value(LazyDict.ValueBuilder, LazyDict.KeyType, std::move(key),
+                TStringBuilder() << "LazyDict[" << Index << "], validate key" << VERIFY_DELIMITER << LazyDict.Message);
+        payload = TValidate<TValidateErrorPolicy, TValidateModeLazy<TValidateErrorPolicy>>::Value(LazyDict.ValueBuilder, LazyDict.PayloadType, std::move(payload),
+                TStringBuilder() << "LazyDict[" << Index << "], validate payload" << VERIFY_DELIMITER << LazyDict.Message);
+        return true;
+    }
 };
 
 template<class TValidateErrorPolicy>
@@ -189,36 +189,36 @@ struct TLazyVerifyDictValue: public TBoxedValue {
         , Message(message)
     {}
 
-    const IValueBuilder *const ValueBuilder; 
-    const TType *const KeyType; 
-    const TType *const PayloadType; 
+    const IValueBuilder *const ValueBuilder;
+    const TType *const KeyType;
+    const TType *const PayloadType;
     const IBoxedValuePtr Orig;
-    const TString Message; 
+    const TString Message;
 
 private:
-    ui64 GetDictLength() const override { 
+    ui64 GetDictLength() const override {
         return TBoxedValueAccessor::GetDictLength(*Orig);
     }
- 
-    TUnboxedValue GetKeysIterator() const override { 
-        return TUnboxedValuePod(new TLazyVerifyDictIterator<TValidateErrorPolicy, true>(*this)); 
+
+    TUnboxedValue GetKeysIterator() const override {
+        return TUnboxedValuePod(new TLazyVerifyDictIterator<TValidateErrorPolicy, true>(*this));
     }
- 
-    TUnboxedValue GetDictIterator() const override { 
-        return TUnboxedValuePod(new TLazyVerifyDictIterator<TValidateErrorPolicy, false>(*this)); 
-    } 
- 
-    bool Contains(const TUnboxedValuePod& key) const override { 
-        return TBoxedValueAccessor::Contains(*Orig, key); 
-    } 
-    TUnboxedValue Lookup(const TUnboxedValuePod& key) const override { 
-        if (auto lookup = TBoxedValueAccessor::Lookup(*Orig, key)) { 
-            return TValidate<TValidateErrorPolicy, TValidateModeLazy<TValidateErrorPolicy>>::Value(ValueBuilder, PayloadType, lookup.Release().GetOptionalValue(), 
-                    TStringBuilder() << "LazyDict, validate Lookup payload" << VERIFY_DELIMITER << Message).Release().MakeOptional(); 
-        } 
-        return TUnboxedValuePod(); 
-    } 
- 
+
+    TUnboxedValue GetDictIterator() const override {
+        return TUnboxedValuePod(new TLazyVerifyDictIterator<TValidateErrorPolicy, false>(*this));
+    }
+
+    bool Contains(const TUnboxedValuePod& key) const override {
+        return TBoxedValueAccessor::Contains(*Orig, key);
+    }
+    TUnboxedValue Lookup(const TUnboxedValuePod& key) const override {
+        if (auto lookup = TBoxedValueAccessor::Lookup(*Orig, key)) {
+            return TValidate<TValidateErrorPolicy, TValidateModeLazy<TValidateErrorPolicy>>::Value(ValueBuilder, PayloadType, lookup.Release().GetOptionalValue(),
+                    TStringBuilder() << "LazyDict, validate Lookup payload" << VERIFY_DELIMITER << Message).Release().MakeOptional();
+        }
+        return TUnboxedValuePod();
+    }
+
     bool HasListItems() const override {
         const bool result = TBoxedValueAccessor::HasListItems(*Orig);
         if (result) {
@@ -238,11 +238,11 @@ public:
     WrapCallableValue(const TCallableType* callableType, TUnboxedValue&& callable, const TString& message);
 
 private:
-    const TCallableType *const CallableType; 
-    const TUnboxedValue Callable; 
-    const TString Message; 
+    const TCallableType *const CallableType;
+    const TUnboxedValue Callable;
+    const TString Message;
 
-    TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const final; 
+    TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const final;
 };
 
 template<class TValidateErrorPolicy, class TValidateMode>
@@ -254,13 +254,13 @@ WrapCallableValue<TValidateErrorPolicy, TValidateMode>::WrapCallableValue(const 
 }
 
 template<class TValidateErrorPolicy, class TValidateMode>
-TUnboxedValue WrapCallableValue<TValidateErrorPolicy, TValidateMode>::Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const { 
+TUnboxedValue WrapCallableValue<TValidateErrorPolicy, TValidateMode>::Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const {
     const ui32 argsCount = CallableType->GetArgumentsCount();
     TSmallVec<TUnboxedValue> wrapArgs(argsCount);
     bool childWrapped = false;
     for (ui32 indexArg = 0; indexArg < argsCount; ++indexArg) {
         const auto argType = CallableType->GetArgumentType(indexArg);
-        wrapArgs[indexArg] = TValidate<TValidateErrorPolicy, TValidateMode>::Value(valueBuilder, argType, TUnboxedValuePod(args[indexArg]), TStringBuilder() << "CallableWrapper<" << CallableType->GetName() << ">.arg[" << indexArg << "]" << VERIFY_DELIMITER << Message, &childWrapped); 
+        wrapArgs[indexArg] = TValidate<TValidateErrorPolicy, TValidateMode>::Value(valueBuilder, argType, TUnboxedValuePod(args[indexArg]), TStringBuilder() << "CallableWrapper<" << CallableType->GetName() << ">.arg[" << indexArg << "]" << VERIFY_DELIMITER << Message, &childWrapped);
     }
     return TValidate<TValidateErrorPolicy, TValidateMode>::Value(valueBuilder, CallableType->GetReturnType(), Callable.Run(valueBuilder, childWrapped ? wrapArgs.data() : args), TStringBuilder() << "CallableWrapper<" << CallableType->GetName() << ">.result" << VERIFY_DELIMITER << Message);
 }
@@ -292,14 +292,14 @@ struct TValidateModeGreedy {
         }
 
         const TType* itemType = listType->GetItemType();
-        std::vector<NUdf::TUnboxedValue> list; 
-        if (TBoxedValueAccessor::HasFastListLength(*boxed)) 
-            list.reserve(TBoxedValueAccessor::GetListLength(*boxed)); 
+        std::vector<NUdf::TUnboxedValue> list;
+        if (TBoxedValueAccessor::HasFastListLength(*boxed))
+            list.reserve(TBoxedValueAccessor::GetListLength(*boxed));
         bool childWrapped = false;
         ui64 curIndex = 0;
-        const auto iter = TBoxedValueAccessor::GetListIterator(*boxed); 
-        for (NUdf::TUnboxedValue current; iter.Next(current); ++curIndex) { 
-            list.emplace_back(TValidate<TValidateErrorPolicy, TValidateModeGreedy>::Value(valueBuilder, itemType, std::move(current), 
+        const auto iter = TBoxedValueAccessor::GetListIterator(*boxed);
+        for (NUdf::TUnboxedValue current; iter.Next(current); ++curIndex) {
+            list.emplace_back(TValidate<TValidateErrorPolicy, TValidateModeGreedy>::Value(valueBuilder, itemType, std::move(current),
                 TStringBuilder() << "LazyList[" << curIndex << "]" << VERIFY_DELIMITER << message, &childWrapped));
         }
         const auto elementsCount = TBoxedValueAccessor::GetListLength(*boxed);
@@ -310,9 +310,9 @@ struct TValidateModeGreedy {
             if (wrapped) {
                 *wrapped = true;
             }
-            return valueBuilder->NewList(list.data(), list.size()); 
+            return valueBuilder->NewList(list.data(), list.size());
         }
-        return NUdf::TUnboxedValuePod(std::move(boxed)); 
+        return NUdf::TUnboxedValuePod(std::move(boxed));
     }
 
     static TUnboxedValue ProcessDict(const IValueBuilder* valueBuilder, const TDictType* dictType, IBoxedValuePtr&& boxed, const TString& message, bool* wrapped) {
@@ -321,13 +321,13 @@ struct TValidateModeGreedy {
         auto dictBuilder = valueBuilder->NewDict(dictType, TDictFlags::Sorted);
         bool childWrapped = false;
         ui64 curIndex = 0;
-        const auto iter = TBoxedValueAccessor::GetDictIterator(*boxed); 
-        for (NUdf::TUnboxedValue key, payload; iter.NextPair(key, payload); ++curIndex) { 
-            key = TValidate<TValidateErrorPolicy, TValidateModeLazy<TValidateErrorPolicy>>::Value(valueBuilder, keyType, std::move(key), 
-                    TStringBuilder() << "GreedyDict[" << curIndex << "], validate key" << VERIFY_DELIMITER << message); 
-            payload = TValidate<TValidateErrorPolicy, TValidateModeLazy<TValidateErrorPolicy>>::Value(valueBuilder, payloadType, std::move(payload), 
-                    TStringBuilder() << "GreedyDict[" << curIndex << "], validate payload" << VERIFY_DELIMITER << message); 
-            dictBuilder->Add(std::move(key), std::move(payload)); 
+        const auto iter = TBoxedValueAccessor::GetDictIterator(*boxed);
+        for (NUdf::TUnboxedValue key, payload; iter.NextPair(key, payload); ++curIndex) {
+            key = TValidate<TValidateErrorPolicy, TValidateModeLazy<TValidateErrorPolicy>>::Value(valueBuilder, keyType, std::move(key),
+                    TStringBuilder() << "GreedyDict[" << curIndex << "], validate key" << VERIFY_DELIMITER << message);
+            payload = TValidate<TValidateErrorPolicy, TValidateModeLazy<TValidateErrorPolicy>>::Value(valueBuilder, payloadType, std::move(payload),
+                    TStringBuilder() << "GreedyDict[" << curIndex << "], validate payload" << VERIFY_DELIMITER << message);
+            dictBuilder->Add(std::move(key), std::move(payload));
         }
         const auto elementsCount = TBoxedValueAccessor::GetDictLength(*boxed);
         if (curIndex != elementsCount) {
@@ -339,12 +339,12 @@ struct TValidateModeGreedy {
             }
             return dictBuilder->Build();
         }
-        return NUdf::TUnboxedValuePod(std::move(boxed)); 
+        return NUdf::TUnboxedValuePod(std::move(boxed));
     }
 };
 
 template<class TValidateErrorPolicy, class TValidateMode>
-NUdf::TUnboxedValue TValidate<TValidateErrorPolicy, TValidateMode>::Value(const IValueBuilder* valueBuilder, const TType* type, NUdf::TUnboxedValue&& value, const TString& message, bool* wrapped) { 
+NUdf::TUnboxedValue TValidate<TValidateErrorPolicy, TValidateMode>::Value(const IValueBuilder* valueBuilder, const TType* type, NUdf::TUnboxedValue&& value, const TString& message, bool* wrapped) {
     if (!value && !(type->IsOptional() || type->IsNull())) {
         TValidateErrorPolicy::Generate(TStringBuilder() << "Expected value '" << PrintNode(type, true) << "', but got Empty" << VERIFY_DELIMITER << message);
     }
@@ -363,14 +363,14 @@ NUdf::TUnboxedValue TValidate<TValidateErrorPolicy, TValidateMode>::Value(const 
         if (!slot) {
             TValidateErrorPolicy::GenerateExc(TUdfValidateException() << "Unregistered TypeId: " << dataTypeId << VERIFY_DELIMITER << message);
         }
-        if (!IsValidValue(*slot, value)) { 
+        if (!IsValidValue(*slot, value)) {
             TValidateErrorPolicy::Generate(TStringBuilder() << "Expected value '" << PrintNode(type, true) << "' does not conform" << VERIFY_DELIMITER << message);
         }
         break;
     }
 
     case TType::EKind::Optional: {
-        if (!value) { 
+        if (!value) {
             break;
         }
         auto optionalType = static_cast<const TOptionalType*>(type);
@@ -380,7 +380,7 @@ NUdf::TUnboxedValue TValidate<TValidateErrorPolicy, TValidateMode>::Value(const 
             if (wrapped) {
                 *wrapped = true;
             }
-            return upValue.Release().MakeOptional(); 
+            return upValue.Release().MakeOptional();
         }
         break;
     }
@@ -390,7 +390,7 @@ NUdf::TUnboxedValue TValidate<TValidateErrorPolicy, TValidateMode>::Value(const 
             TValidateErrorPolicy::Generate(TStringBuilder() << "expected value '" << PrintNode(type, true) << "' not conform" << VERIFY_DELIMITER << message);
         }
         auto listType = static_cast<const TListType*>(type);
-        return TValidateMode::ProcessList(valueBuilder, listType, std::move(value.Release().AsBoxed()), message, wrapped); 
+        return TValidateMode::ProcessList(valueBuilder, listType, std::move(value.Release().AsBoxed()), message, wrapped);
     }
 
     case TType::EKind::Struct: {
@@ -405,8 +405,8 @@ NUdf::TUnboxedValue TValidate<TValidateErrorPolicy, TValidateMode>::Value(const 
             stackItems[index] = TValidate<TValidateErrorPolicy, TValidateMode>::Value(valueBuilder, memberType, value.GetElement(index), TStringBuilder() << "Struct[" << structType->GetMemberName(index) << "]" << VERIFY_DELIMITER << message, &childWrapped);
         }
         if (childWrapped) {
-            TUnboxedValue* items = nullptr; 
-            const auto wrappedStruct = valueBuilder->NewArray(structType->GetMembersCount(), items); 
+            TUnboxedValue* items = nullptr;
+            const auto wrappedStruct = valueBuilder->NewArray(structType->GetMembersCount(), items);
             for (ui32 index = 0; index < structType->GetMembersCount(); ++index) {
                 items[index] = std::move(stackItems[index]);
             }
@@ -424,14 +424,14 @@ NUdf::TUnboxedValue TValidate<TValidateErrorPolicy, TValidateMode>::Value(const 
         }
         auto tupleType = static_cast<const TTupleType*>(type);
         bool childWrapped = false;
-        TSmallVec<NUdf::TUnboxedValue> stackItems(tupleType->GetElementsCount()); 
+        TSmallVec<NUdf::TUnboxedValue> stackItems(tupleType->GetElementsCount());
         for (ui32 index = 0; index < tupleType->GetElementsCount(); ++index) {
             TType* elementType = tupleType->GetElementType(index);
             stackItems[index] = TValidate<TValidateErrorPolicy, TValidateMode>::Value(valueBuilder, elementType, value.GetElement(index), TStringBuilder() << "Tuple[" << index << "]" << VERIFY_DELIMITER << message, &childWrapped);
         }
         if (childWrapped) {
-            TUnboxedValue* items = nullptr; 
-            const auto wrappedTuple = valueBuilder->NewArray(tupleType->GetElementsCount(), items); 
+            TUnboxedValue* items = nullptr;
+            const auto wrappedTuple = valueBuilder->NewArray(tupleType->GetElementsCount(), items);
             for (ui32 index = 0; index < tupleType->GetElementsCount(); ++index) {
                 items[index] = std::move(stackItems[index]);
             }
@@ -448,7 +448,7 @@ NUdf::TUnboxedValue TValidate<TValidateErrorPolicy, TValidateMode>::Value(const 
             TValidateErrorPolicy::Generate(TStringBuilder() << "expected value '" << PrintNode(type, true) << "' not conform" << VERIFY_DELIMITER << message);
         }
         auto dictType = static_cast<const TDictType*>(type);
-        return TValidateMode::ProcessDict(valueBuilder, dictType, std::move(value.Release().AsBoxed()), message, wrapped); 
+        return TValidateMode::ProcessDict(valueBuilder, dictType, std::move(value.Release().AsBoxed()), message, wrapped);
     }
 
     case TType::EKind::Callable: {
@@ -459,8 +459,8 @@ NUdf::TUnboxedValue TValidate<TValidateErrorPolicy, TValidateMode>::Value(const 
         if (wrapped) {
             *wrapped = true;
         }
-        TValidate<TValidateErrorPolicy>::WrapCallable(callableType, value, message); 
-        return value; 
+        TValidate<TValidateErrorPolicy>::WrapCallable(callableType, value, message);
+        return value;
     }
 
     case TType::EKind::Type:
@@ -492,12 +492,12 @@ NUdf::TUnboxedValue TValidate<TValidateErrorPolicy, TValidateMode>::Value(const 
     default:
         Y_FAIL("Verify value meet unexpected type kind: %s", type->GetKindAsStr().data());
     }
-    return std::move(value); 
+    return std::move(value);
 }
 
 template<class TValidateErrorPolicy, class TValidateMode>
-void TValidate<TValidateErrorPolicy, TValidateMode>::WrapCallable(const TCallableType* callableType, NUdf::TUnboxedValue& callable, const TString& message) { 
-    callable = NUdf::TUnboxedValuePod(new WrapCallableValue<TValidateErrorPolicy, TValidateMode>(callableType, std::move(callable), TStringBuilder() << "CallableWrapper<" << callableType->GetName() << ">" << VERIFY_DELIMITER << message)); 
+void TValidate<TValidateErrorPolicy, TValidateMode>::WrapCallable(const TCallableType* callableType, NUdf::TUnboxedValue& callable, const TString& message) {
+    callable = NUdf::TUnboxedValuePod(new WrapCallableValue<TValidateErrorPolicy, TValidateMode>(callableType, std::move(callable), TStringBuilder() << "CallableWrapper<" << callableType->GetName() << ">" << VERIFY_DELIMITER << message));
 }
 
 template struct TValidate<TValidateErrorPolicyThrow, TValidateModeLazy<TValidateErrorPolicyThrow>>;

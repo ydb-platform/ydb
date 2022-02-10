@@ -77,7 +77,7 @@ TDataProviderInitializer GetDqDataProviderInitializer(
             if (dqGateway) { // nullptr in yqlrun
                 auto t = TInstant::Now();
                 YQL_LOG(DEBUG) << "OpenSession " << sessionId;
-                auto future = dqGateway->OpenSession(sessionId, username); 
+                auto future = dqGateway->OpenSession(sessionId, username);
                 future.Subscribe([sessionId, t] (const auto& ) {
                     YQL_LOG(DEBUG) << "OpenSession " << sessionId << " complete in " << (TInstant::Now()-t).MilliSeconds();
                 });

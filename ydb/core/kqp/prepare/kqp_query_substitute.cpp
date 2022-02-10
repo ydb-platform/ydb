@@ -26,7 +26,7 @@ public:
             return TStatus::Ok;
         }
 
-        TNodeOnNodeOwnedMap replaceMap; 
+        TNodeOnNodeOwnedMap replaceMap;
         for (size_t i = 0; i < analyzeResults.ExecutionRoots.size(); ++i) {
             auto newParamName = TxState->Tx().NewParamName();
 
@@ -51,7 +51,7 @@ public:
             replaceMap.emplace(node.Raw(), paramNode.Ptr());
         }
 
-        output = ctx.ReplaceNodes(std::move(input), replaceMap); 
+        output = ctx.ReplaceNodes(std::move(input), replaceMap);
 
         return TStatus(TStatus::Repeat, true);
     }

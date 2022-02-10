@@ -40,7 +40,7 @@ public:
     TDqExecuter(
         const NActors::TActorId& gwmActorId,
         const NActors::TActorId& printerId,
-        const TString& traceId, const TString& username, 
+        const TString& traceId, const TString& username,
         const TDqConfiguration::TPtr& settings,
         const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters,
         TInstant requestStartTime,
@@ -50,7 +50,7 @@ public:
         , PrinterId(printerId)
         , Settings(settings)
         , TraceId(traceId)
-        , Username(username) 
+        , Username(username)
         , Counters(counters) // root, component=dq
         , LongWorkersAllocationCounter(Counters->GetSubgroup("component", "ServiceProxyActor")->GetCounter("LongWorkersAllocation"))
         , ExecutionTimeoutCounter(Counters->GetSubgroup("component", "ServiceProxyActor")->GetCounter("ExecutionTimeout", /*derivative=*/ true))
@@ -182,7 +182,7 @@ private:
             Counters,
             enableComputeActor ? tasks : TVector<NYql::NDqProto::TDqTask>(),
             computeActorType));
-        auto allocateRequest = MakeHolder<TEvAllocateWorkersRequest>(workerCount, Username); 
+        auto allocateRequest = MakeHolder<TEvAllocateWorkersRequest>(workerCount, Username);
         allocateRequest->Record.SetTraceId(TraceId);
         allocateRequest->Record.SetCreateComputeActor(enableComputeActor);
         allocateRequest->Record.SetComputeActorType(computeActorType);
@@ -453,7 +453,7 @@ private:
     THolder<IDqsExecutionPlanner> ExecutionPlanner;
     ui64 ResourceId = 0;
     const TString TraceId;
-    const TString Username; 
+    const TString Username;
     TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
     TDynamicCounters::TCounterPtr LongWorkersAllocationCounter;
     TDynamicCounters::TCounterPtr ExecutionTimeoutCounter;
@@ -479,7 +479,7 @@ private:
 NActors::IActor* MakeDqExecuter(
     const NActors::TActorId& gwmActorId,
     const NActors::TActorId& printerId,
-    const TString& traceId, const TString& username, 
+    const TString& traceId, const TString& username,
     const TDqConfiguration::TPtr& settings,
     const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters,
     TInstant requestStartTime,

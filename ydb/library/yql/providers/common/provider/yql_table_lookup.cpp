@@ -1,7 +1,7 @@
 #include "yql_table_lookup.h"
 
 #include <ydb/library/yql/ast/yql_expr.h>
-#include <array> 
+#include <array>
 
 namespace NYql {
 namespace NCommon {
@@ -40,7 +40,7 @@ TExprBase BuildColumnCompare(TExprBase row, const TString& columnName, TExprBase
 TMaybeNode<TExprBase> CombinePredicatesAnd(TMaybeNode<TExprBase> left, TMaybeNode<TExprBase> right, TExprContext& ctx) {
     if (left && right) {
         return Build<TCoAnd>(ctx, left.Cast().Pos())
-            .Add({left.Cast(), right.Cast()}) 
+            .Add({left.Cast(), right.Cast()})
             .Done();
     } else if (left) {
         return left;
@@ -54,7 +54,7 @@ TMaybeNode<TExprBase> CombinePredicatesAnd(TMaybeNode<TExprBase> left, TMaybeNod
 TMaybeNode<TExprBase> CombinePredicatesOr(TMaybeNode<TExprBase> left, TMaybeNode<TExprBase> right, TExprContext& ctx) {
     if (left && right) {
         return Build<TCoOr>(ctx, left.Cast().Pos())
-            .Add({left.Cast(), right.Cast()}) 
+            .Add({left.Cast(), right.Cast()})
             .Done();
     }
 
@@ -112,7 +112,7 @@ TMaybeNode<TExprBase> BuildColumnRangePredicate(const TString& column, const TCo
 
     if (fromPredicate && toPredicate) {
         return Build<TCoAnd>(ctx, row.Pos())
-            .Add({fromPredicate.Cast(), toPredicate.Cast()}) 
+            .Add({fromPredicate.Cast(), toPredicate.Cast()})
             .Done();
     } else if (fromPredicate) {
         return fromPredicate.Cast();
@@ -564,85 +564,85 @@ TKeyRangeBuilder CombineKeyRangesAnd(TExprBase row, const TVector<TString>& keyC
 }
 
 TTableLookupBuilder CombineLookupsAnd(TExprBase row, const TVector<TString>& keyColumns,
-    const TTableLookupBuilder* builders, size_t size, const TLookupContext& ctx) 
+    const TTableLookupBuilder* builders, size_t size, const TLookupContext& ctx)
 {
-    switch (size) { 
-        case 0U: Y_FAIL("Wrong case"); 
-        case 1U: return *builders; 
-        case 2U: { 
-            const auto& left = builders[0U]; 
-            const auto& right = builders[1U]; 
-            if (left.IsSingleRange() && right.IsSingleRange()) { 
-                auto combinedKeyRange = CombineKeyRangesAnd(row, keyColumns, left.GetKeyRangeBuilder(), 
-                    right.GetKeyRangeBuilder(), ctx); 
-                return TTableLookupBuilder(keyColumns, combinedKeyRange); 
-            } else { 
-                auto combineRanges = 
-                    [&keyColumns, row, &ctx] (const TTableLookupBuilder& lookup, const TTableLookupBuilder& residual) { 
-                        auto& residualKeyRanges = residual.GetKeyRangeBuilders(); 
-                        auto residualPredicate = CombinePredicateListOr(residualKeyRanges, ctx.ExprCtx, 
-                            [&keyColumns, row, &ctx](const TKeyRangeBuilder& keyRange) { 
-                                return keyRange.BuildPredicate(keyColumns, row, ctx.ExprCtx); 
-                            }); 
+    switch (size) {
+        case 0U: Y_FAIL("Wrong case");
+        case 1U: return *builders;
+        case 2U: {
+            const auto& left = builders[0U];
+            const auto& right = builders[1U];
+            if (left.IsSingleRange() && right.IsSingleRange()) {
+                auto combinedKeyRange = CombineKeyRangesAnd(row, keyColumns, left.GetKeyRangeBuilder(),
+                    right.GetKeyRangeBuilder(), ctx);
+                return TTableLookupBuilder(keyColumns, combinedKeyRange);
+            } else {
+                auto combineRanges =
+                    [&keyColumns, row, &ctx] (const TTableLookupBuilder& lookup, const TTableLookupBuilder& residual) {
+                        auto& residualKeyRanges = residual.GetKeyRangeBuilders();
+                        auto residualPredicate = CombinePredicateListOr(residualKeyRanges, ctx.ExprCtx,
+                            [&keyColumns, row, &ctx](const TKeyRangeBuilder& keyRange) {
+                                return keyRange.BuildPredicate(keyColumns, row, ctx.ExprCtx);
+                            });
 
-                        TVector<TKeyRangeBuilder> newKeyRanges; 
-                        for (auto& keyRange : lookup.GetKeyRangeBuilders()) { 
-                            auto newResidualPredicate = CombinePredicatesAnd(keyRange.GetResidualPredicate(), 
-                                residualPredicate, ctx.ExprCtx); 
-                            auto newRange = TKeyRangeBuilder(keyRange, newResidualPredicate); 
-                            newKeyRanges.push_back(newRange); 
-                        } 
+                        TVector<TKeyRangeBuilder> newKeyRanges;
+                        for (auto& keyRange : lookup.GetKeyRangeBuilders()) {
+                            auto newResidualPredicate = CombinePredicatesAnd(keyRange.GetResidualPredicate(),
+                                residualPredicate, ctx.ExprCtx);
+                            auto newRange = TKeyRangeBuilder(keyRange, newResidualPredicate);
+                            newKeyRanges.push_back(newRange);
+                        }
 
-                        return TTableLookupBuilder(keyColumns, newKeyRanges); 
-                    }; 
+                        return TTableLookupBuilder(keyColumns, newKeyRanges);
+                    };
 
-                const bool keepRight = right.HasNonFullscanRanges() && !left.HasNonFullscanRanges(); 
-                return keepRight ? combineRanges(right, left) : combineRanges(left, right); 
-            } 
-        } 
-        default: break; 
-    } 
+                const bool keepRight = right.HasNonFullscanRanges() && !left.HasNonFullscanRanges();
+                return keepRight ? combineRanges(right, left) : combineRanges(left, right);
+            }
+        }
+        default: break;
+    }
 
-    const auto half = (size + 1U) >> 1U; 
-    const std::array<TTableLookupBuilder, 2U> pair = {{ 
-        CombineLookupsAnd(row, keyColumns, builders, half, ctx), 
-        CombineLookupsAnd(row, keyColumns, builders + half, size - half, ctx) 
-    }}; 
-    return CombineLookupsAnd(row, keyColumns, pair.data(), pair.size(), ctx); 
+    const auto half = (size + 1U) >> 1U;
+    const std::array<TTableLookupBuilder, 2U> pair = {{
+        CombineLookupsAnd(row, keyColumns, builders, half, ctx),
+        CombineLookupsAnd(row, keyColumns, builders + half, size - half, ctx)
+    }};
+    return CombineLookupsAnd(row, keyColumns, pair.data(), pair.size(), ctx);
 }
 
-TTableLookupBuilder CombineLookupsOr(TExprBase, const TVector<TString>& keyColumns, 
-    const TTableLookupBuilder* builders, size_t size, const TLookupContext&) 
+TTableLookupBuilder CombineLookupsOr(TExprBase, const TVector<TString>& keyColumns,
+    const TTableLookupBuilder* builders, size_t size, const TLookupContext&)
 {
-    TVector<TKeyRangeBuilder> newKeyRanges; 
-    newKeyRanges.reserve(size); 
-    for (size_t i = 0U; i < size; ++i) { 
-        newKeyRanges.insert(newKeyRanges.end(), builders[i].GetKeyRangeBuilders().cbegin(), builders[i].GetKeyRangeBuilders().cend()); 
-    } 
+    TVector<TKeyRangeBuilder> newKeyRanges;
+    newKeyRanges.reserve(size);
+    for (size_t i = 0U; i < size; ++i) {
+        newKeyRanges.insert(newKeyRanges.end(), builders[i].GetKeyRangeBuilders().cbegin(), builders[i].GetKeyRangeBuilders().cend());
+    }
     return TTableLookupBuilder(keyColumns, newKeyRanges);
 }
 
 TTableLookupBuilder CollectLookups(TExprBase row, TExprBase predicate,
     const TVector<TString>& keyColumns, const TLookupContext& ctx)
 {
-    if (const auto maybeAnd = predicate.Maybe<TCoAnd>()) { 
-        const auto size = maybeAnd.Cast().Args().size(); 
-        std::vector<TTableLookupBuilder> builders; 
-        builders.reserve(size); 
-        for (auto i = 0U; i < size; ++i) { 
-            builders.emplace_back(CollectLookups(row, maybeAnd.Cast().Arg(i), keyColumns, ctx)); 
-        } 
-        return CombineLookupsAnd(row, keyColumns, builders.data(), builders.size(), ctx); 
+    if (const auto maybeAnd = predicate.Maybe<TCoAnd>()) {
+        const auto size = maybeAnd.Cast().Args().size();
+        std::vector<TTableLookupBuilder> builders;
+        builders.reserve(size);
+        for (auto i = 0U; i < size; ++i) {
+            builders.emplace_back(CollectLookups(row, maybeAnd.Cast().Arg(i), keyColumns, ctx));
+        }
+        return CombineLookupsAnd(row, keyColumns, builders.data(), builders.size(), ctx);
     }
 
-    if (const auto maybeOr = predicate.Maybe<TCoOr>()) { 
-        const auto size = maybeOr.Cast().Args().size(); 
-        std::vector<TTableLookupBuilder> builders; 
-        builders.reserve(size); 
-        for (auto i = 0U; i < size; ++i) { 
-            builders.emplace_back(CollectLookups(row, maybeOr.Cast().Arg(i), keyColumns, ctx)); 
-        } 
-        return CombineLookupsOr(row, keyColumns, builders.data(), builders.size(), ctx); 
+    if (const auto maybeOr = predicate.Maybe<TCoOr>()) {
+        const auto size = maybeOr.Cast().Args().size();
+        std::vector<TTableLookupBuilder> builders;
+        builders.reserve(size);
+        for (auto i = 0U; i < size; ++i) {
+            builders.emplace_back(CollectLookups(row, maybeOr.Cast().Arg(i), keyColumns, ctx));
+        }
+        return CombineLookupsOr(row, keyColumns, builders.data(), builders.size(), ctx);
     }
 
     TMaybeNode<TCoCompare> maybeCompare = predicate.Maybe<TCoCompare>();

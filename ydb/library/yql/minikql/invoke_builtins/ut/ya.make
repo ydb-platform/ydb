@@ -16,12 +16,12 @@ OWNER(
     g:kikimr
 )
 
-PEERDIR( 
+PEERDIR(
     ydb/library/yql/minikql
     ydb/library/yql/public/udf
     ydb/library/yql/public/udf/service/exception_policy
-) 
- 
+)
+
 YQL_LAST_ABI_VERSION()
 
 SRCS(

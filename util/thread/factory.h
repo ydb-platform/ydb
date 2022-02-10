@@ -1,7 +1,7 @@
 #pragma once
 
 #include <util/generic/ptr.h>
-#include <functional> 
+#include <functional>
 
 class IThreadFactory {
 public:

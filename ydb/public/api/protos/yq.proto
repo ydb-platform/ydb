@@ -393,9 +393,9 @@ message DescribeJobResult {
 message CurrentIAMTokenAuth {
 }
 
-message NoneAuth { 
-} 
- 
+message NoneAuth {
+}
+
 message ServiceAccountAuth {
     string id = 1 [(Ydb.length).le = 1024];
 }
@@ -404,7 +404,7 @@ message IamAuth {
     oneof identity {
         CurrentIAMTokenAuth current_iam = 1;
         ServiceAccountAuth service_account = 2;
-        NoneAuth none = 3; 
+        NoneAuth none = 3;
     }
 }
 
@@ -736,4 +736,4 @@ message DeleteBindingResponse {
 }
 
 message DeleteBindingResult {
-} 
+}

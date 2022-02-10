@@ -157,8 +157,8 @@ void TDynamicCounters::MergeWithSubgroup(const TString& name, const TString& val
     Counters.erase(it);
     Counters.merge(subgroup->Resign());
     AtomicAdd(ExpiringCount, AtomicSwap(&subgroup->ExpiringCount, 0));
-} 
- 
+}
+
 void TDynamicCounters::ResetCounters(bool derivOnly) {
     TReadGuard g(Lock);
     for (auto& [key, value] : Counters) {
@@ -198,7 +198,7 @@ void TDynamicCounters::EnumerateSubgroups(const std::function<void(const TString
             output(key.LabelName, key.LabelValue);
         }
     }
-} 
+}
 
 void TDynamicCounters::OutputPlainText(IOutputStream& os, const TString& indent) const {
     auto snap = ReadSnapshot();
@@ -206,7 +206,7 @@ void TDynamicCounters::OutputPlainText(IOutputStream& os, const TString& indent)
     auto outputVisibilityMarker = [] (EVisibility vis) {
         return vis == EVisibility::Private ? "\t[PRIVATE]" : "";
     };
- 
+
     for (const auto& [key, value] : snap) {
         if (const auto counter = AsCounter(value)) {
             os << indent

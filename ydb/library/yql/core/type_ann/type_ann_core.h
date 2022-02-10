@@ -7,8 +7,8 @@
 
 namespace NYql {
 
-IGraphTransformer::TStatus ValidateDataSource(const TExprNode::TPtr& node, TExprContext& ctx, const TTypeAnnotationContext& types); 
-IGraphTransformer::TStatus ValidateDataSink(const TExprNode::TPtr& node, TExprContext& ctx, const TTypeAnnotationContext& types); 
+IGraphTransformer::TStatus ValidateDataSource(const TExprNode::TPtr& node, TExprContext& ctx, const TTypeAnnotationContext& types);
+IGraphTransformer::TStatus ValidateDataSink(const TExprNode::TPtr& node, TExprContext& ctx, const TTypeAnnotationContext& types);
 IGraphTransformer::TStatus ValidateProviders(const TExprNode::TPtr& node, TExprNode::TPtr& output, TExprContext& ctx, const TTypeAnnotationContext& types);
 
 TAutoPtr<IGraphTransformer> CreateIntentDeterminationTransformer(const TTypeAnnotationContext& types);

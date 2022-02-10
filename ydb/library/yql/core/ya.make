@@ -31,8 +31,8 @@ SRCS(
     yql_holding_file_storage.h
     yql_join.cpp
     yql_join.h
-    yql_library_compiler.cpp 
-    yql_opt_aggregate.cpp 
+    yql_library_compiler.cpp
+    yql_opt_aggregate.cpp
     yql_opt_proposed_by_data.cpp
     yql_opt_proposed_by_data.h
     yql_opt_range.cpp

@@ -88,7 +88,7 @@ public:
         return View;
     }
 
-    bool Extract(const TExprNode& key); 
+    bool Extract(const TExprNode& key);
 
 private:
     TExprContext& Ctx;

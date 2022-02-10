@@ -1385,7 +1385,7 @@ void TCompactTrieTest::TestCopyAndAssignment() {
     TTrie assign;
     assign = trie;
     UNIT_ASSERT(assign.HasCorrectSkipper());
-    TTrie move(std::move(trie)); 
+    TTrie move(std::move(trie));
     UNIT_ASSERT(move.HasCorrectSkipper());
     TTrie moveAssign;
     moveAssign = TTrie(bufout.Buffer().Data(), bufout.Buffer().Size());

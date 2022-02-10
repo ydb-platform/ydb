@@ -141,12 +141,12 @@ TExprNode::TPtr ExtractCombineByKeyPreMap(TExprBase node, TExprContext& ctx) {
     return node.Ptr();
 }
 
-template <class TPartitionsType> 
+template <class TPartitionsType>
 TExprNode::TPtr ExtractPartitionByKeyListHandler(TExprBase node, TExprContext& ctx) {
-    if (auto maybePartition = node.Maybe<TPartitionsType>()) { 
+    if (auto maybePartition = node.Maybe<TPartitionsType>()) {
         auto partition = maybePartition.Cast();
         if (!IsKqlPureLambda(partition.ListHandlerLambda())) {
-            auto newPartition = Build<TPartitionsType>(ctx, node.Pos()) 
+            auto newPartition = Build<TPartitionsType>(ctx, node.Pos())
                 .Input(partition.Input())
                 .KeySelectorLambda(partition.KeySelectorLambda())
                 .SortDirections(partition.SortDirections())
@@ -325,16 +325,16 @@ public:
                     return ret;
                 }
 
-                ret = ExtractPartitionByKeyListHandler<TCoPartitionByKey>(node, ctx); 
+                ret = ExtractPartitionByKeyListHandler<TCoPartitionByKey>(node, ctx);
                 if (ret != input) {
                     return ret;
                 }
 
-                ret = ExtractPartitionByKeyListHandler<TCoPartitionsByKeys>(node, ctx); 
-                if (ret != input) { 
-                    return ret; 
-                } 
- 
+                ret = ExtractPartitionByKeyListHandler<TCoPartitionsByKeys>(node, ctx);
+                if (ret != input) {
+                    return ret;
+                }
+
                 ret = RewritePresentIfToFlatMap(node, ctx);
                 if (ret != input) {
                     return ret;

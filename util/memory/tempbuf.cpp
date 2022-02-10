@@ -7,7 +7,7 @@
 #include <util/generic/intrlist.h>
 #include <util/generic/singleton.h>
 #include <util/generic/yexception.h>
-#include <utility> 
+#include <utility>
 #include <util/thread/singleton.h>
 
 #ifndef TMP_BUF_LEN
@@ -197,7 +197,7 @@ TTempBuf::TTempBuf(size_t len)
 TTempBuf::TTempBuf(const TTempBuf&) noexcept = default;
 
 TTempBuf::TTempBuf(TTempBuf&& b) noexcept
-    : Impl_(std::move(b.Impl_)) 
+    : Impl_(std::move(b.Impl_))
 {
 }
 

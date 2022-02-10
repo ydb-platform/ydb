@@ -553,7 +553,7 @@ RECURSE(
     json2html
     jsondiff
     jsonfield
-    jsonobject
+    jsonobject 
     jsonpath-rw
     jsonpickle
     jsonpointer
@@ -923,7 +923,7 @@ RECURSE(
     pyusb
     PyWavelets
     PyYAML
-    pyzmq
+    pyzmq 
     qemu
     qrcode
     quart

@@ -14,7 +14,7 @@
 
 class TMtpQueueHelper {
 public:
-    TMtpQueueHelper() {
+    TMtpQueueHelper() { 
         SetThreadCount(NSystemInfo::CachedNumberOfCpus());
     }
     IThreadPool* Get() {

@@ -64,7 +64,7 @@ private:
 class TStringOutput: public IZeroCopyOutput {
 public:
     /**
-     * Constructs a string output stream that appends character data to the
+     * Constructs a string output stream that appends character data to the 
      * provided string.
      *
      * Note that this stream keeps a reference to the provided string, so it's

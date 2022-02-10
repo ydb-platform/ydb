@@ -248,13 +248,13 @@ unsigned long Opt2::UInt(char opt, const char* help, unsigned long def, bool req
     return rv;
 }
 
-// Add user defined error message and set error flag
-void Opt2::AddError(const char* message) {
-    HasErrors = true;
+// Add user defined error message and set error flag 
+void Opt2::AddError(const char* message) { 
+    HasErrors = true; 
     if (message)
-        UserErrorMessages.push_back(message);
-}
-
+        UserErrorMessages.push_back(message); 
+} 
+ 
 int Opt2::AutoUsage(const char* free_arg_names) {
     if (!HasErrors)
         return 0;

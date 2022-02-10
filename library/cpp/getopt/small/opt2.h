@@ -107,9 +107,9 @@ public:
     // For options w/o parameters
     bool Has(char opt, const char* helpUsage);
 
-    // Add user defined error message and set error flag
+    // Add user defined error message and set error flag 
     void AddError(const char* message = nullptr);
-
+ 
 public:
     // non-option args
     TVector<char*> Pos;

@@ -76,15 +76,15 @@ private:
     void DoWrite(const void* buf, size_t len) override;
 };
 
-class TPipedBase {
+class TPipedBase { 
 protected:
     TPipedBase(PIPEHANDLE fd);
     virtual ~TPipedBase();
 
 protected:
     TPipeHandle Handle_;
-};
-
+}; 
+ 
 /**
  * Input stream that binds to a standard output stream of an existing process.
  */
@@ -92,11 +92,11 @@ class TPipedInput: public TPipedBase, public IInputStream {
 public:
     TPipedInput(PIPEHANDLE fd);
     ~TPipedInput() override;
-
+ 
 private:
     size_t DoRead(void* buf, size_t len) override;
-};
-
+}; 
+ 
 /**
  * Output stream that binds to a standard input stream of an existing process.
  */
@@ -104,9 +104,9 @@ class TPipedOutput: public TPipedBase, public IOutputStream {
 public:
     TPipedOutput(PIPEHANDLE fd);
     ~TPipedOutput() override;
-
+ 
 private:
     void DoWrite(const void* buf, size_t len) override;
-};
-
+}; 
+ 
 /** @} */

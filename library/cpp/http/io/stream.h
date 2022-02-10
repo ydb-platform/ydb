@@ -147,12 +147,12 @@ public:
 
     void SendContinue();
 
-    /*
-     * first line - response or request
-     */
-    /// Возвращает первую строку HTTP-запроса/ответа
-    const TString& FirstLine() const noexcept;
-
+    /* 
+     * first line - response or request 
+     */ 
+    /// Возвращает первую строку HTTP-запроса/ответа 
+    const TString& FirstLine() const noexcept; 
+ 
     /// Возвращает размер отправленных данных (без заголовков, с учётом сжатия, без
     /// учёта chunked transfer encoding)
     size_t SentSize() const noexcept;

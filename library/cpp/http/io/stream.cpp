@@ -619,10 +619,10 @@ public:
         return SupportChunkedTransfer() && IsKeepAliveEnabled() && (Request_ ? Request_->IsKeepAlive() : true);
     }
 
-    inline const TString& FirstLine() const noexcept {
-        return FirstLine_;
-    }
-
+    inline const TString& FirstLine() const noexcept { 
+        return FirstLine_; 
+    } 
+ 
     inline size_t SentSize() const noexcept {
         return SizeCalculator_.Length();
     }
@@ -958,10 +958,10 @@ void THttpOutput::SendContinue() {
     Impl_->SendContinue();
 }
 
-const TString& THttpOutput::FirstLine() const noexcept {
-    return Impl_->FirstLine();
-}
-
+const TString& THttpOutput::FirstLine() const noexcept { 
+    return Impl_->FirstLine(); 
+} 
+ 
 size_t THttpOutput::SentSize() const noexcept {
     return Impl_->SentSize();
 }

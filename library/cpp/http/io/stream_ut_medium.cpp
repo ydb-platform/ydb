@@ -2,7 +2,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/stream/zlib.h>
 
-Y_UNIT_TEST_SUITE(THttpTestMedium) {
+Y_UNIT_TEST_SUITE(THttpTestMedium) { 
     Y_UNIT_TEST(TestCodings2) {
         TStringBuf data = "aaaaaaaaaaaaaaaaaaaaaaa";
 
@@ -51,4 +51,4 @@ Y_UNIT_TEST_SUITE(THttpTestMedium) {
         }
     }
 
-} // THttpTestMedium suite
+} // THttpTestMedium suite 

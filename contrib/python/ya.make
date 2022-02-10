@@ -780,7 +780,7 @@ RECURSE(
     publicsuffix2
     pure-eval
     pure-python-adb
-    pure-sasl 
+    pure-sasl
     py
     py-asciimath
     py-expression-eval

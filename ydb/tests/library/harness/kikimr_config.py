@@ -390,7 +390,7 @@ class KikimrConfigGenerator(object):
 
                 if self.__use_in_memory_pdisks:
                     pdisk_size_gb = disk_size / (1024*1024*1024)
-                    pdisk_path = "SectorMap:%d:%d" % (pdisk_id, pdisk_size_gb) 
+                    pdisk_path = "SectorMap:%d:%d" % (pdisk_id, pdisk_size_gb)
                 else:
                     tmp_file = tempfile.NamedTemporaryFile(prefix="pdisk{}".format(pdisk_id), suffix=".data", dir=self._pdisk_store_path)
                     pdisk_path = tmp_file.name

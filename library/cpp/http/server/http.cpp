@@ -272,13 +272,13 @@ public:
         }
     }
 
-    size_t GetRequestQueueSize() const { 
-        return Requests->Size(); 
-    } 
+    size_t GetRequestQueueSize() const {
+        return Requests->Size();
+    }
 
-    size_t GetFailQueueSize() const { 
-        return FailRequests->Size(); 
-    } 
+    size_t GetFailQueueSize() const {
+        return FailRequests->Size();
+    }
 
     const IThreadPool& GetRequestQueue() const {
         return *Requests;
@@ -531,14 +531,14 @@ const THttpServer::TOptions& THttpServer::Options() const noexcept {
     return Impl_->Options();
 }
 
-size_t THttpServer::GetRequestQueueSize() const { 
-    return Impl_->GetRequestQueueSize(); 
-} 
- 
-size_t THttpServer::GetFailQueueSize() const { 
-    return Impl_->GetFailQueueSize(); 
-} 
- 
+size_t THttpServer::GetRequestQueueSize() const {
+    return Impl_->GetRequestQueueSize();
+}
+
+size_t THttpServer::GetFailQueueSize() const {
+    return Impl_->GetFailQueueSize();
+}
+
 const IThreadPool& THttpServer::GetRequestQueue() const {
     return Impl_->GetRequestQueue();
 }

@@ -12,9 +12,9 @@ import time
 
 import six
 
-from cryptography import utils 
+from cryptography import utils
 from cryptography.exceptions import InvalidSignature
-from cryptography.hazmat.backends import _get_backend 
+from cryptography.hazmat.backends import _get_backend
 from cryptography.hazmat.primitives import hashes, padding
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.hmac import HMAC
@@ -29,7 +29,7 @@ _MAX_CLOCK_SKEW = 60
 
 class Fernet(object):
     def __init__(self, key, backend=None):
-        backend = _get_backend(backend) 
+        backend = _get_backend(backend)
 
         key = base64.urlsafe_b64decode(key)
         if len(key) != 32:
@@ -46,14 +46,14 @@ class Fernet(object):
         return base64.urlsafe_b64encode(os.urandom(32))
 
     def encrypt(self, data):
-        return self.encrypt_at_time(data, int(time.time())) 
- 
-    def encrypt_at_time(self, data, current_time): 
+        return self.encrypt_at_time(data, int(time.time()))
+
+    def encrypt_at_time(self, data, current_time):
         iv = os.urandom(16)
         return self._encrypt_from_parts(data, current_time, iv)
 
     def _encrypt_from_parts(self, data, current_time, iv):
-        utils._check_bytes("data", data) 
+        utils._check_bytes("data", data)
 
         padder = padding.PKCS7(algorithms.AES.block_size).padder()
         padded_data = padder.update(data) + padder.finalize()
@@ -72,26 +72,26 @@ class Fernet(object):
         return base64.urlsafe_b64encode(basic_parts + hmac)
 
     def decrypt(self, token, ttl=None):
-        timestamp, data = Fernet._get_unverified_token_data(token) 
-        return self._decrypt_data(data, timestamp, ttl, int(time.time())) 
+        timestamp, data = Fernet._get_unverified_token_data(token)
+        return self._decrypt_data(data, timestamp, ttl, int(time.time()))
 
-    def decrypt_at_time(self, token, ttl, current_time): 
-        if ttl is None: 
-            raise ValueError( 
-                "decrypt_at_time() can only be used with a non-None ttl" 
-            ) 
-        timestamp, data = Fernet._get_unverified_token_data(token) 
-        return self._decrypt_data(data, timestamp, ttl, current_time) 
- 
-    def extract_timestamp(self, token): 
-        timestamp, data = Fernet._get_unverified_token_data(token) 
-        # Verify the token was not tampered with. 
-        self._verify_signature(data) 
-        return timestamp 
+    def decrypt_at_time(self, token, ttl, current_time):
+        if ttl is None:
+            raise ValueError(
+                "decrypt_at_time() can only be used with a non-None ttl"
+            )
+        timestamp, data = Fernet._get_unverified_token_data(token)
+        return self._decrypt_data(data, timestamp, ttl, current_time)
 
-    @staticmethod 
-    def _get_unverified_token_data(token): 
-        utils._check_bytes("token", token) 
+    def extract_timestamp(self, token):
+        timestamp, data = Fernet._get_unverified_token_data(token)
+        # Verify the token was not tampered with.
+        self._verify_signature(data)
+        return timestamp
+
+    @staticmethod
+    def _get_unverified_token_data(token):
+        utils._check_bytes("token", token)
         try:
             data = base64.urlsafe_b64decode(token)
         except (TypeError, binascii.Error):
@@ -101,12 +101,12 @@ class Fernet(object):
             raise InvalidToken
 
         try:
-            (timestamp,) = struct.unpack(">Q", data[1:9]) 
+            (timestamp,) = struct.unpack(">Q", data[1:9])
         except struct.error:
             raise InvalidToken
-        return timestamp, data 
+        return timestamp, data
 
-    def _verify_signature(self, data): 
+    def _verify_signature(self, data):
         h = HMAC(self._signing_key, hashes.SHA256(), backend=self._backend)
         h.update(data[:-32])
         try:
@@ -114,16 +114,16 @@ class Fernet(object):
         except InvalidSignature:
             raise InvalidToken
 
-    def _decrypt_data(self, data, timestamp, ttl, current_time): 
-        if ttl is not None: 
-            if timestamp + ttl < current_time: 
-                raise InvalidToken 
- 
-            if current_time + _MAX_CLOCK_SKEW < timestamp: 
-                raise InvalidToken 
- 
-        self._verify_signature(data) 
- 
+    def _decrypt_data(self, data, timestamp, ttl, current_time):
+        if ttl is not None:
+            if timestamp + ttl < current_time:
+                raise InvalidToken
+
+            if current_time + _MAX_CLOCK_SKEW < timestamp:
+                raise InvalidToken
+
+        self._verify_signature(data)
+
         iv = data[9:25]
         ciphertext = data[25:-32]
         decryptor = Cipher(
@@ -154,25 +154,25 @@ class MultiFernet(object):
         self._fernets = fernets
 
     def encrypt(self, msg):
-        return self.encrypt_at_time(msg, int(time.time())) 
+        return self.encrypt_at_time(msg, int(time.time()))
 
-    def encrypt_at_time(self, msg, current_time): 
-        return self._fernets[0].encrypt_at_time(msg, current_time) 
- 
-    def rotate(self, msg): 
-        timestamp, data = Fernet._get_unverified_token_data(msg) 
-        for f in self._fernets: 
-            try: 
-                p = f._decrypt_data(data, timestamp, None, None) 
-                break 
-            except InvalidToken: 
-                pass 
-        else: 
-            raise InvalidToken 
- 
-        iv = os.urandom(16) 
-        return self._fernets[0]._encrypt_from_parts(p, timestamp, iv) 
- 
+    def encrypt_at_time(self, msg, current_time):
+        return self._fernets[0].encrypt_at_time(msg, current_time)
+
+    def rotate(self, msg):
+        timestamp, data = Fernet._get_unverified_token_data(msg)
+        for f in self._fernets:
+            try:
+                p = f._decrypt_data(data, timestamp, None, None)
+                break
+            except InvalidToken:
+                pass
+        else:
+            raise InvalidToken
+
+        iv = os.urandom(16)
+        return self._fernets[0]._encrypt_from_parts(p, timestamp, iv)
+
     def decrypt(self, msg, ttl=None):
         for f in self._fernets:
             try:
@@ -180,11 +180,11 @@ class MultiFernet(object):
             except InvalidToken:
                 pass
         raise InvalidToken
- 
-    def decrypt_at_time(self, msg, ttl, current_time): 
-        for f in self._fernets: 
-            try: 
-                return f.decrypt_at_time(msg, ttl, current_time) 
-            except InvalidToken: 
-                pass 
-        raise InvalidToken 
+
+    def decrypt_at_time(self, msg, ttl, current_time):
+        for f in self._fernets:
+            try:
+                return f.decrypt_at_time(msg, ttl, current_time)
+            except InvalidToken:
+                pass
+        raise InvalidToken

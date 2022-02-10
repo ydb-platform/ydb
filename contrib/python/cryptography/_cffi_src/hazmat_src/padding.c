@@ -1,7 +1,7 @@
 // This file is dual licensed under the terms of the Apache License, Version
 // 2.0, and the BSD License. See the LICENSE file in the root of this
 // repository for complete details.
- 
+
 /* Returns the value of the input with the most-significant-bit copied to all
    of the bits. */
 static uint16_t Cryptography_DUPLICATE_MSB_TO_ALL(uint16_t a) {

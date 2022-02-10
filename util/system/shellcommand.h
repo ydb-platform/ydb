@@ -1,21 +1,21 @@
-#pragma once 
- 
-#include <util/generic/noncopyable.h> 
+#pragma once
+
+#include <util/generic/noncopyable.h>
 #include <util/generic/string.h>
-#include <util/generic/list.h> 
+#include <util/generic/list.h>
 #include <util/generic/hash.h>
-#include <util/generic/strbuf.h> 
+#include <util/generic/strbuf.h>
 #include <util/generic/maybe.h>
-#include <util/stream/input.h> 
-#include <util/stream/output.h> 
+#include <util/stream/input.h>
+#include <util/stream/output.h>
 #include "file.h"
 #include "getpid.h"
 #include "thread.h"
 #include "mutex.h"
-#include <sys/types.h> 
- 
+#include <sys/types.h>
+
 class TShellCommandOptions {
-public: 
+public:
     struct TUserOptions {
         TString Name;
 #if defined(_win_)
@@ -57,15 +57,15 @@ public:
         , Nice(0)
         , FuncAfterFork(std::function<void()>())
     {
-    } 
- 
+    }
+
     inline TShellCommandOptions& SetNice(int value) noexcept {
         Nice = value;
 
         return *this;
     }
 
-    /** 
+    /**
      * @brief clear signal mask from parent process. If true, child process
      * clears the signal mask inherited from the parent process; otherwise
      * child process retains the signal mask of the parent process.
@@ -94,21 +94,21 @@ public:
     }
 
     /**
-     * @brief set asynchronous mode. If true, task will be run 
-     * in separate thread, and control will be returned immediately 
-     * 
-     * @param async true if asynchonous mode is needed 
+     * @brief set asynchronous mode. If true, task will be run
+     * in separate thread, and control will be returned immediately
+     *
+     * @param async true if asynchonous mode is needed
      * @note in default async mode launcher will need 100% cpu for rapid process termination
-     * @return self 
-     */ 
+     * @return self
+     */
     inline TShellCommandOptions& SetAsync(bool async) {
-        AsyncMode = async; 
+        AsyncMode = async;
         if (AsyncMode)
             PollDelayMs = 0;
-        return *this; 
-    } 
- 
-    /** 
+        return *this;
+    }
+
+    /**
      * @brief specify delay for process controlling loop
      * @param ms number of milliseconds to poll for
      * @note for synchronous process default of 1s should generally fit
@@ -122,52 +122,52 @@ public:
     }
 
     /**
-     * @brief set the stream, which is input fetched from 
-     * 
-     * @param stream Pointer to stream. 
-     * If stream is NULL or not set, input channel will be closed. 
-     * 
-     * @return self 
-     */ 
+     * @brief set the stream, which is input fetched from
+     *
+     * @param stream Pointer to stream.
+     * If stream is NULL or not set, input channel will be closed.
+     *
+     * @return self
+     */
     inline TShellCommandOptions& SetInputStream(IInputStream* stream) {
-        InputStream = stream; 
+        InputStream = stream;
         if (InputStream == nullptr) {
             InputMode = HANDLE_INHERIT;
         } else {
             InputMode = HANDLE_STREAM;
         }
-        return *this; 
-    } 
- 
-    /** 
-     * @brief set the stream, collecting the command output 
-     * 
-     * @param stream Pointer to stream. 
-     * If stream is NULL or not set, output will be collected to the 
-     * internal variable 
-     * 
-     * @return self 
-     */ 
+        return *this;
+    }
+
+    /**
+     * @brief set the stream, collecting the command output
+     *
+     * @param stream Pointer to stream.
+     * If stream is NULL or not set, output will be collected to the
+     * internal variable
+     *
+     * @return self
+     */
     inline TShellCommandOptions& SetOutputStream(IOutputStream* stream) {
-        OutputStream = stream; 
-        return *this; 
-    } 
- 
-    /** 
-     * @brief set the stream, collecting the command error output 
-     * 
-     * @param stream Pointer to stream. 
-     * If stream is NULL or not set, errors will be collected to the 
-     * internal variable 
-     * 
-     * @return self 
-     */ 
+        OutputStream = stream;
+        return *this;
+    }
+
+    /**
+     * @brief set the stream, collecting the command error output
+     *
+     * @param stream Pointer to stream.
+     * If stream is NULL or not set, errors will be collected to the
+     * internal variable
+     *
+     * @return self
+     */
     inline TShellCommandOptions& SetErrorStream(IOutputStream* stream) {
-        ErrorStream = stream; 
-        return *this; 
-    } 
- 
-    /** 
+        ErrorStream = stream;
+        return *this;
+    }
+
+    /**
     * @brief set if Finish() should be called on user-supplied streams
     * if process is run in async mode Finish will be called in process' thread
     * @param val if Finish() should be called
@@ -205,25 +205,25 @@ public:
     }
 
     /**
-     * @brief set if the arguments should be wrapped in quotes. 
-     * Please, note that this option makes no difference between 
-     * real arguments and shell syntax, so if you execute something 
-     * like \b TShellCommand("sleep") << "3" << "&&" << "ls", your 
-     * command will look like: 
-     *   sleep "3" "&&" "ls" 
-     * which will never end successfully. 
-     * By default, this option is turned on. 
-     * 
+     * @brief set if the arguments should be wrapped in quotes.
+     * Please, note that this option makes no difference between
+     * real arguments and shell syntax, so if you execute something
+     * like \b TShellCommand("sleep") << "3" << "&&" << "ls", your
+     * command will look like:
+     *   sleep "3" "&&" "ls"
+     * which will never end successfully.
+     * By default, this option is turned on.
+     *
      * @note arguments will only be quoted if shell is used
-     * @param quote if the arguments should be quoted 
-     * 
-     * @return self 
-     */ 
+     * @param quote if the arguments should be quoted
+     *
+     * @return self
+     */
     inline TShellCommandOptions& SetQuoteArguments(bool quote) {
-        QuoteArguments = quote; 
-        return *this; 
-    } 
- 
+        QuoteArguments = quote;
+        return *this;
+    }
+
     /**
      * @brief set to run command in new session
      * @note set this option to off to deliver parent's signals to command as well
@@ -323,82 +323,82 @@ public:
 
     static const size_t DefaultSyncPollDelay = 1000; // ms
     std::function<void()> FuncAfterFork = {};
-}; 
- 
-/** 
- * @brief Execute command in shell and provide its results 
- * @attention Not thread-safe 
- */ 
+};
+
+/**
+ * @brief Execute command in shell and provide its results
+ * @attention Not thread-safe
+ */
 class TShellCommand: public TNonCopyable {
-private: 
-    TShellCommand(); 
+private:
+    TShellCommand();
 
-public: 
-    enum ECommandStatus { 
-        SHELL_NONE, 
-        SHELL_RUNNING, 
-        SHELL_FINISHED, 
-        SHELL_INTERNAL_ERROR, 
-        SHELL_ERROR 
-    }; 
+public:
+    enum ECommandStatus {
+        SHELL_NONE,
+        SHELL_RUNNING,
+        SHELL_FINISHED,
+        SHELL_INTERNAL_ERROR,
+        SHELL_ERROR
+    };
 
-public: 
-    /** 
-     * @brief create the command with initial arguments list 
-     * 
-     * @param cmd binary name 
-     * @param args arguments list 
-     * @param options execution options 
+public:
+    /**
+     * @brief create the command with initial arguments list
+     *
+     * @param cmd binary name
+     * @param args arguments list
+     * @param options execution options
      * @todo store entire options structure
-     */ 
+     */
     TShellCommand(const TStringBuf cmd, const TList<TString>& args, const TShellCommandOptions& options = TShellCommandOptions(),
                   const TString& workdir = TString());
     TShellCommand(const TStringBuf cmd, const TShellCommandOptions& options = TShellCommandOptions(), const TString& workdir = TString());
     ~TShellCommand();
 
-public: 
-    /** 
-     * @brief append argument to the args list 
-     * 
-     * @param argument string argument 
-     * 
-     * @return self 
-     */ 
+public:
+    /**
+     * @brief append argument to the args list
+     *
+     * @param argument string argument
+     *
+     * @return self
+     */
     TShellCommand& operator<<(const TStringBuf argument);
- 
-    /** 
-     * @brief return the collected output from the command. 
-     * If the output stream is set, empty string will be returned 
-     * 
-     * @return collected output 
-     */ 
+
+    /**
+     * @brief return the collected output from the command.
+     * If the output stream is set, empty string will be returned
+     *
+     * @return collected output
+     */
     const TString& GetOutput() const;
- 
-    /** 
-     * @brief return the collected error output from the command. 
-     * If the error stream is set, empty string will be returned 
-     * 
-     * @return collected error output 
-     */ 
+
+    /**
+     * @brief return the collected error output from the command.
+     * If the error stream is set, empty string will be returned
+     *
+     * @return collected error output
+     */
     const TString& GetError() const;
- 
-    /** 
-     * @brief return the internal error occured while watching 
-     * the command execution. Should be called if execution 
-     * status is SHELL_INTERNAL_ERROR 
-     * 
-     * @return error text 
-     */ 
+
+    /**
+     * @brief return the internal error occured while watching
+     * the command execution. Should be called if execution
+     * status is SHELL_INTERNAL_ERROR
+     *
+     * @return error text
+     */
     const TString& GetInternalError() const;
- 
-    /** 
-     * @brief get current status of command execution 
-     * 
-     * @return current status 
-     */ 
-    ECommandStatus GetStatus() const; 
- 
-    /** 
+
+    /**
+     * @brief get current status of command execution
+     *
+     * @return current status
+     */
+    ECommandStatus GetStatus() const;
+
+    /**
      * @brief return exit code of finished process
      * The value is unspecified in case of internal errors or if the process is running
      *
@@ -436,13 +436,13 @@ public:
     TFileHandle& GetErrorHandle();
 
     /**
-     * @brief run the execution 
-     * 
-     * @return self 
-     */ 
+     * @brief run the execution
+     *
+     * @return self
+     */
     TShellCommand& Run();
- 
-    /** 
+
+    /**
      * @brief terminate the execution
      * @note if DetachSession is set, it terminates all procs in command's new process group
      *
@@ -451,10 +451,10 @@ public:
     TShellCommand& Terminate();
 
     /**
-     * @brief wait until the execution is finished 
-     * 
-     * @return self 
-     */ 
+     * @brief wait until the execution is finished
+     *
+     * @return self
+     */
     TShellCommand& Wait();
 
     /**
@@ -469,11 +469,11 @@ public:
      **/
     TString GetQuotedCommand() const;
 
-private: 
-    class TImpl; 
+private:
+    class TImpl;
     using TImplRef = TSimpleIntrusivePtr<TImpl>;
-    TImplRef Impl; 
-}; 
+    TImplRef Impl;
+};
 
 /// Appends to dst: quoted arg
 void ShellQuoteArg(TString& dst, TStringBuf arg);

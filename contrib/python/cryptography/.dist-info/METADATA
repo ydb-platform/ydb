@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: cryptography
-Version: 3.3.2 
+Version: 3.3.2
 Summary: cryptography is a package which provides cryptographic recipes and primitives to Python developers.
 Home-page: https://github.com/pyca/cryptography
 Author: The cryptography developers
@@ -23,38 +23,38 @@ Classifier: Programming Language :: Python :: 2.7
 Classifier: Programming Language :: Python :: 3
 Classifier: Programming Language :: Python :: 3.6
 Classifier: Programming Language :: Python :: 3.7
-Classifier: Programming Language :: Python :: 3.8 
-Classifier: Programming Language :: Python :: 3.9 
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: Implementation :: CPython
 Classifier: Programming Language :: Python :: Implementation :: PyPy
 Classifier: Topic :: Security :: Cryptography
-Requires-Python: >=2.7,!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,!=3.4.*,!=3.5.* 
-Description-Content-Type: text/x-rst 
+Requires-Python: >=2.7,!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,!=3.4.*,!=3.5.*
+Description-Content-Type: text/x-rst
 Requires-Dist: six (>=1.4.1)
-Requires-Dist: cffi (>=1.12) 
-Requires-Dist: enum34 ; python_version < '3' 
-Requires-Dist: ipaddress ; python_version < '3' 
+Requires-Dist: cffi (>=1.12)
+Requires-Dist: enum34 ; python_version < '3'
+Requires-Dist: ipaddress ; python_version < '3'
 Provides-Extra: docs
-Requires-Dist: sphinx (!=1.8.0,!=3.1.0,!=3.1.1,>=1.6.5) ; extra == 'docs' 
-Requires-Dist: sphinx-rtd-theme ; extra == 'docs' 
+Requires-Dist: sphinx (!=1.8.0,!=3.1.0,!=3.1.1,>=1.6.5) ; extra == 'docs'
+Requires-Dist: sphinx-rtd-theme ; extra == 'docs'
 Provides-Extra: docstest
-Requires-Dist: doc8 ; extra == 'docstest' 
-Requires-Dist: pyenchant (>=1.6.11) ; extra == 'docstest' 
-Requires-Dist: twine (>=1.12.0) ; extra == 'docstest' 
-Requires-Dist: sphinxcontrib-spelling (>=4.0.1) ; extra == 'docstest' 
+Requires-Dist: doc8 ; extra == 'docstest'
+Requires-Dist: pyenchant (>=1.6.11) ; extra == 'docstest'
+Requires-Dist: twine (>=1.12.0) ; extra == 'docstest'
+Requires-Dist: sphinxcontrib-spelling (>=4.0.1) ; extra == 'docstest'
 Provides-Extra: pep8test
-Requires-Dist: black ; extra == 'pep8test' 
-Requires-Dist: flake8 ; extra == 'pep8test' 
-Requires-Dist: flake8-import-order ; extra == 'pep8test' 
-Requires-Dist: pep8-naming ; extra == 'pep8test' 
-Provides-Extra: ssh 
-Requires-Dist: bcrypt (>=3.1.5) ; extra == 'ssh' 
+Requires-Dist: black ; extra == 'pep8test'
+Requires-Dist: flake8 ; extra == 'pep8test'
+Requires-Dist: flake8-import-order ; extra == 'pep8test'
+Requires-Dist: pep8-naming ; extra == 'pep8test'
+Provides-Extra: ssh
+Requires-Dist: bcrypt (>=3.1.5) ; extra == 'ssh'
 Provides-Extra: test
-Requires-Dist: pytest (!=3.9.0,!=3.9.1,!=3.9.2,>=3.6.0) ; extra == 'test' 
-Requires-Dist: pretend ; extra == 'test' 
-Requires-Dist: iso8601 ; extra == 'test' 
-Requires-Dist: pytz ; extra == 'test' 
-Requires-Dist: hypothesis (!=3.79.2,>=1.11.4) ; extra == 'test' 
+Requires-Dist: pytest (!=3.9.0,!=3.9.1,!=3.9.2,>=3.6.0) ; extra == 'test'
+Requires-Dist: pretend ; extra == 'test'
+Requires-Dist: iso8601 ; extra == 'test'
+Requires-Dist: pytz ; extra == 'test'
+Requires-Dist: hypothesis (!=3.79.2,>=1.11.4) ; extra == 'test'
 
 pyca/cryptography
 =================
@@ -67,8 +67,8 @@ pyca/cryptography
     :target: https://cryptography.io
     :alt: Latest Docs
 
-.. image:: https://github.com/pyca/cryptography/workflows/CI/badge.svg?branch=master 
-    :target: https://github.com/pyca/cryptography/actions?query=workflow%3ACI+branch%3Amaster 
+.. image:: https://github.com/pyca/cryptography/workflows/CI/badge.svg?branch=master
+    :target: https://github.com/pyca/cryptography/actions?query=workflow%3ACI+branch%3Amaster
 
 .. image:: https://codecov.io/github/pyca/cryptography/coverage.svg?branch=master
     :target: https://codecov.io/github/pyca/cryptography?branch=master
@@ -76,7 +76,7 @@ pyca/cryptography
 
 ``cryptography`` is a package which provides cryptographic recipes and
 primitives to Python developers.  Our goal is for it to be your "cryptographic
-standard library". It supports Python 2.7, Python 3.6+, and PyPy 5.4+. 
+standard library". It supports Python 2.7, Python 3.6+, and PyPy 5.4+.
 
 ``cryptography`` includes both high level recipes and low level interfaces to
 common cryptographic algorithms such as symmetric ciphers, message digests, and
@@ -123,9 +123,9 @@ documentation.
 
 
 .. _`documentation`: https://cryptography.io/
-.. _`the installation documentation`: https://cryptography.io/en/latest/installation.html 
+.. _`the installation documentation`: https://cryptography.io/en/latest/installation.html
 .. _`issue tracker`: https://github.com/pyca/cryptography/issues
 .. _`cryptography-dev`: https://mail.python.org/mailman/listinfo/cryptography-dev
-.. _`security reporting`: https://cryptography.io/en/latest/security.html 
+.. _`security reporting`: https://cryptography.io/en/latest/security.html
 
 

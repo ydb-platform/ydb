@@ -5,18 +5,18 @@
 from __future__ import absolute_import, division, print_function
 
 import abc
- 
-try: 
-    # Only available in math in 3.5+ 
-    from math import gcd 
-except ImportError: 
-    from fractions import gcd 
+
+try:
+    # Only available in math in 3.5+
+    from math import gcd
+except ImportError:
+    from fractions import gcd
 
 import six
 
 from cryptography import utils
 from cryptography.exceptions import UnsupportedAlgorithm, _Reasons
-from cryptography.hazmat.backends import _get_backend 
+from cryptography.hazmat.backends import _get_backend
 from cryptography.hazmat.backends.interfaces import RSABackend
 
 
@@ -106,22 +106,22 @@ class RSAPublicKey(object):
         Verifies the signature of the data.
         """
 
-    @abc.abstractmethod 
-    def recover_data_from_signature(self, signature, padding, algorithm): 
-        """ 
-        Recovers the original data from the signature. 
-        """ 
+    @abc.abstractmethod
+    def recover_data_from_signature(self, signature, padding, algorithm):
+        """
+        Recovers the original data from the signature.
+        """
 
- 
+
 RSAPublicKeyWithSerialization = RSAPublicKey
 
 
-def generate_private_key(public_exponent, key_size, backend=None): 
-    backend = _get_backend(backend) 
+def generate_private_key(public_exponent, key_size, backend=None):
+    backend = _get_backend(backend)
     if not isinstance(backend, RSABackend):
         raise UnsupportedAlgorithm(
             "Backend object does not implement RSABackend.",
-            _Reasons.BACKEND_MISSING_INTERFACE, 
+            _Reasons.BACKEND_MISSING_INTERFACE,
         )
 
     _verify_rsa_parameters(public_exponent, key_size)
@@ -129,19 +129,19 @@ def generate_private_key(public_exponent, key_size, backend=None):
 
 
 def _verify_rsa_parameters(public_exponent, key_size):
-    if public_exponent not in (3, 65537): 
-        raise ValueError( 
-            "public_exponent must be either 3 (for legacy compatibility) or " 
-            "65537. Almost everyone should choose 65537 here!" 
-        ) 
+    if public_exponent not in (3, 65537):
+        raise ValueError(
+            "public_exponent must be either 3 (for legacy compatibility) or "
+            "65537. Almost everyone should choose 65537 here!"
+        )
 
     if key_size < 512:
         raise ValueError("key_size must be at least 512-bits.")
 
 
-def _check_private_key_components( 
-    p, q, private_exponent, dmp1, dmq1, iqmp, public_exponent, modulus 
-): 
+def _check_private_key_components(
+    p, q, private_exponent, dmp1, dmq1, iqmp, public_exponent, modulus
+):
     if modulus < 3:
         raise ValueError("modulus must be >= 3.")
 
@@ -194,12 +194,12 @@ def _modinv(e, m):
     """
     Modular Multiplicative Inverse. Returns x such that: (x*e) mod m == 1
     """
-    x1, x2 = 1, 0 
+    x1, x2 = 1, 0
     a, b = e, m
     while b > 0:
         q, r = divmod(a, b)
-        xn = x1 - q * x2 
-        a, b, x1, x2 = b, r, x2, xn 
+        xn = x1 - q * x2
+        a, b, x1, x2 = b, r, x2, xn
     return x1 % m
 
 
@@ -276,14 +276,14 @@ def rsa_recover_prime_factors(n, e, d):
 
 
 class RSAPrivateNumbers(object):
-    def __init__(self, p, q, d, dmp1, dmq1, iqmp, public_numbers): 
+    def __init__(self, p, q, d, dmp1, dmq1, iqmp, public_numbers):
         if (
-            not isinstance(p, six.integer_types) 
-            or not isinstance(q, six.integer_types) 
-            or not isinstance(d, six.integer_types) 
-            or not isinstance(dmp1, six.integer_types) 
-            or not isinstance(dmq1, six.integer_types) 
-            or not isinstance(iqmp, six.integer_types) 
+            not isinstance(p, six.integer_types)
+            or not isinstance(q, six.integer_types)
+            or not isinstance(d, six.integer_types)
+            or not isinstance(dmp1, six.integer_types)
+            or not isinstance(dmq1, six.integer_types)
+            or not isinstance(iqmp, six.integer_types)
         ):
             raise TypeError(
                 "RSAPrivateNumbers p, q, d, dmp1, dmq1, iqmp arguments must"
@@ -312,8 +312,8 @@ class RSAPrivateNumbers(object):
     iqmp = utils.read_only_property("_iqmp")
     public_numbers = utils.read_only_property("_public_numbers")
 
-    def private_key(self, backend=None): 
-        backend = _get_backend(backend) 
+    def private_key(self, backend=None):
+        backend = _get_backend(backend)
         return backend.load_rsa_private_numbers(self)
 
     def __eq__(self, other):
@@ -321,36 +321,36 @@ class RSAPrivateNumbers(object):
             return NotImplemented
 
         return (
-            self.p == other.p 
-            and self.q == other.q 
-            and self.d == other.d 
-            and self.dmp1 == other.dmp1 
-            and self.dmq1 == other.dmq1 
-            and self.iqmp == other.iqmp 
-            and self.public_numbers == other.public_numbers 
+            self.p == other.p
+            and self.q == other.q
+            and self.d == other.d
+            and self.dmp1 == other.dmp1
+            and self.dmq1 == other.dmq1
+            and self.iqmp == other.iqmp
+            and self.public_numbers == other.public_numbers
         )
 
     def __ne__(self, other):
         return not self == other
 
     def __hash__(self):
-        return hash( 
-            ( 
-                self.p, 
-                self.q, 
-                self.d, 
-                self.dmp1, 
-                self.dmq1, 
-                self.iqmp, 
-                self.public_numbers, 
-            ) 
-        ) 
+        return hash(
+            (
+                self.p,
+                self.q,
+                self.d,
+                self.dmp1,
+                self.dmq1,
+                self.iqmp,
+                self.public_numbers,
+            )
+        )
 
 
 class RSAPublicNumbers(object):
     def __init__(self, e, n):
-        if not isinstance(e, six.integer_types) or not isinstance( 
-            n, six.integer_types 
+        if not isinstance(e, six.integer_types) or not isinstance(
+            n, six.integer_types
         ):
             raise TypeError("RSAPublicNumbers arguments must be integers.")
 
@@ -360,8 +360,8 @@ class RSAPublicNumbers(object):
     e = utils.read_only_property("_e")
     n = utils.read_only_property("_n")
 
-    def public_key(self, backend=None): 
-        backend = _get_backend(backend) 
+    def public_key(self, backend=None):
+        backend = _get_backend(backend)
         return backend.load_rsa_public_numbers(self)
 
     def __repr__(self):

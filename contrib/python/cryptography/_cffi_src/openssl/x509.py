@@ -29,7 +29,7 @@ typedef struct {
     ...;
 } X509_ALGOR;
 
-typedef ... X509_ATTRIBUTE; 
+typedef ... X509_ATTRIBUTE;
 typedef ... X509_EXTENSION;
 typedef ... X509_EXTENSIONS;
 typedef ... X509_REQ;
@@ -41,7 +41,7 @@ typedef ... NETSCAPE_SPKI;
 
 typedef ... PKCS8_PRIV_KEY_INFO;
 
-typedef void (*sk_X509_EXTENSION_freefunc)(X509_EXTENSION *); 
+typedef void (*sk_X509_EXTENSION_freefunc)(X509_EXTENSION *);
 """
 
 FUNCTIONS = """
@@ -49,7 +49,7 @@ X509 *X509_new(void);
 void X509_free(X509 *);
 X509 *X509_dup(X509 *);
 int X509_cmp(const X509 *, const X509 *);
-int X509_up_ref(X509 *); 
+int X509_up_ref(X509 *);
 
 int X509_print_ex(BIO *, X509 *, unsigned long, unsigned long);
 
@@ -88,13 +88,13 @@ EVP_PKEY *X509_REQ_get_pubkey(X509_REQ *);
 int X509_REQ_print_ex(BIO *, X509_REQ *, unsigned long, unsigned long);
 int X509_REQ_add_extensions(X509_REQ *, X509_EXTENSIONS *);
 X509_EXTENSIONS *X509_REQ_get_extensions(X509_REQ *);
-X509_ATTRIBUTE *X509_REQ_get_attr(const X509_REQ *, int); 
-int X509_REQ_get_attr_by_OBJ(const X509_REQ *, const ASN1_OBJECT *, int); 
-void *X509_ATTRIBUTE_get0_data(X509_ATTRIBUTE *, int, int, void *); 
-ASN1_TYPE *X509_ATTRIBUTE_get0_type(X509_ATTRIBUTE *, int); 
-int X509_ATTRIBUTE_count(const X509_ATTRIBUTE *); 
-int X509_REQ_add1_attr_by_OBJ(X509_REQ *, const ASN1_OBJECT *, 
-                              int, const unsigned char *, int); 
+X509_ATTRIBUTE *X509_REQ_get_attr(const X509_REQ *, int);
+int X509_REQ_get_attr_by_OBJ(const X509_REQ *, const ASN1_OBJECT *, int);
+void *X509_ATTRIBUTE_get0_data(X509_ATTRIBUTE *, int, int, void *);
+ASN1_TYPE *X509_ATTRIBUTE_get0_type(X509_ATTRIBUTE *, int);
+int X509_ATTRIBUTE_count(const X509_ATTRIBUTE *);
+int X509_REQ_add1_attr_by_OBJ(X509_REQ *, const ASN1_OBJECT *,
+                              int, const unsigned char *, int);
 
 int X509V3_EXT_print(BIO *, X509_EXTENSION *, unsigned long, int);
 ASN1_OCTET_STRING *X509_EXTENSION_get_data(X509_EXTENSION *);
@@ -111,7 +111,7 @@ X509_EXTENSION *X509_REVOKED_delete_ext(X509_REVOKED *, int);
 int X509_REVOKED_set_revocationDate(X509_REVOKED *, ASN1_TIME *);
 
 X509_CRL *X509_CRL_new(void);
-X509_CRL *X509_CRL_dup(X509_CRL *); 
+X509_CRL *X509_CRL_dup(X509_CRL *);
 X509_CRL *d2i_X509_CRL_bio(BIO *, X509_CRL **);
 int X509_CRL_add0_revoked(X509_CRL *, X509_REVOKED *);
 int X509_CRL_add_ext(X509_CRL *, X509_EXTENSION *, int);
@@ -184,9 +184,9 @@ X509_EXTENSION *X509_REVOKED_get_ext(X509_REVOKED *, int);
 X509_EXTENSION *X509_CRL_get_ext(X509_CRL *, int);
 int X509_CRL_get_ext_count(X509_CRL *);
 
-int X509_CRL_get0_by_serial(X509_CRL *, X509_REVOKED **, ASN1_INTEGER *); 
+int X509_CRL_get0_by_serial(X509_CRL *, X509_REVOKED **, ASN1_INTEGER *);
 
-X509_REVOKED *X509_REVOKED_dup(X509_REVOKED *); 
+X509_REVOKED *X509_REVOKED_dup(X509_REVOKED *);
 X509_REVOKED *Cryptography_X509_REVOKED_dup(X509_REVOKED *);
 
 /* new in 1.0.2 */
@@ -195,15 +195,15 @@ int X509_get_signature_nid(const X509 *);
 
 const X509_ALGOR *X509_get0_tbs_sigalg(const X509 *);
 
-void X509_get0_signature(const ASN1_BIT_STRING **, 
-                         const X509_ALGOR **, const X509 *); 
+void X509_get0_signature(const ASN1_BIT_STRING **,
+                         const X509_ALGOR **, const X509 *);
 
 long X509_get_version(X509 *);
 
 ASN1_TIME *X509_get_notBefore(X509 *);
 ASN1_TIME *X509_get_notAfter(X509 *);
-ASN1_TIME *X509_getm_notBefore(X509 *); 
-ASN1_TIME *X509_getm_notAfter(X509 *); 
+ASN1_TIME *X509_getm_notBefore(X509 *);
+ASN1_TIME *X509_getm_notAfter(X509 *);
 
 long X509_REQ_get_version(X509_REQ *);
 X509_NAME *X509_REQ_get_subject_name(X509_REQ *);
@@ -221,7 +221,7 @@ int sk_X509_EXTENSION_push(X509_EXTENSIONS *, X509_EXTENSION *);
 int sk_X509_EXTENSION_insert(X509_EXTENSIONS *, X509_EXTENSION *, int);
 X509_EXTENSION *sk_X509_EXTENSION_delete(X509_EXTENSIONS *, int);
 void sk_X509_EXTENSION_free(X509_EXTENSIONS *);
-void sk_X509_EXTENSION_pop_free(X509_EXTENSIONS *, sk_X509_EXTENSION_freefunc); 
+void sk_X509_EXTENSION_pop_free(X509_EXTENSIONS *, sk_X509_EXTENSION_freefunc);
 
 int sk_X509_REVOKED_num(Cryptography_STACK_OF_X509_REVOKED *);
 X509_REVOKED *sk_X509_REVOKED_value(Cryptography_STACK_OF_X509_REVOKED *, int);
@@ -232,7 +232,7 @@ int sk_X509_CRL_num(Cryptography_STACK_OF_X509_CRL *);
 int sk_X509_CRL_push(Cryptography_STACK_OF_X509_CRL *, X509_CRL *);
 X509_CRL *sk_X509_CRL_value(Cryptography_STACK_OF_X509_CRL *, int);
 
-long X509_CRL_get_version(X509_CRL *); 
+long X509_CRL_get_version(X509_CRL *);
 ASN1_TIME *X509_CRL_get_lastUpdate(X509_CRL *);
 ASN1_TIME *X509_CRL_get_nextUpdate(X509_CRL *);
 X509_NAME *X509_CRL_get_issuer(X509_CRL *);
@@ -243,8 +243,8 @@ int X509_CRL_set_lastUpdate(X509_CRL *, ASN1_TIME *);
 int X509_CRL_set_nextUpdate(X509_CRL *, ASN1_TIME *);
 int X509_set_notBefore(X509 *, ASN1_TIME *);
 int X509_set_notAfter(X509 *, ASN1_TIME *);
-int X509_set1_notBefore(X509 *, ASN1_TIME *); 
-int X509_set1_notAfter(X509 *, ASN1_TIME *); 
+int X509_set1_notBefore(X509 *, ASN1_TIME *);
+int X509_set1_notAfter(X509 *, ASN1_TIME *);
 
 EC_KEY *d2i_EC_PUBKEY_bio(BIO *, EC_KEY **);
 int i2d_EC_PUBKEY_bio(BIO *, EC_KEY *);
@@ -270,7 +270,7 @@ void X509_REQ_get0_signature(const X509_REQ *, const ASN1_BIT_STRING **,
 """
 
 CUSTOMIZATIONS = """
-#if CRYPTOGRAPHY_IS_LIBRESSL 
+#if CRYPTOGRAPHY_IS_LIBRESSL
 int i2d_re_X509_tbs(X509 *x, unsigned char **pp)
 {
     /* in 1.0.2+ this function also sets x->cert_info->enc.modified = 1
@@ -282,21 +282,21 @@ int i2d_re_X509_tbs(X509 *x, unsigned char **pp)
 }
 #endif
 
-/* Being kept around for pyOpenSSL */ 
+/* Being kept around for pyOpenSSL */
 X509_REVOKED *Cryptography_X509_REVOKED_dup(X509_REVOKED *rev) {
-    return X509_REVOKED_dup(rev); 
+    return X509_REVOKED_dup(rev);
 }
 /* Added in 1.1.0 but we need it in all versions now due to the great
    opaquing. */
-#if CRYPTOGRAPHY_IS_LIBRESSL 
-int i2d_re_X509_REQ_tbs(X509_REQ *req, unsigned char **pp) 
-{ 
-    req->req_info->enc.modified = 1; 
-    return i2d_X509_REQ_INFO(req->req_info, pp); 
-} 
-int i2d_re_X509_CRL_tbs(X509_CRL *crl, unsigned char **pp) { 
-    crl->crl->enc.modified = 1; 
-    return i2d_X509_CRL_INFO(crl->crl, pp); 
-} 
+#if CRYPTOGRAPHY_IS_LIBRESSL
+int i2d_re_X509_REQ_tbs(X509_REQ *req, unsigned char **pp)
+{
+    req->req_info->enc.modified = 1;
+    return i2d_X509_REQ_INFO(req->req_info, pp);
+}
+int i2d_re_X509_CRL_tbs(X509_CRL *crl, unsigned char **pp) {
+    crl->crl->enc.modified = 1;
+    return i2d_X509_CRL_INFO(crl->crl, pp);
+}
 #endif
 """

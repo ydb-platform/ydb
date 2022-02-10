@@ -16,8 +16,8 @@ ENDIF()
 PEERDIR(
     contrib/libs/openssl
     contrib/python/cffi
-    # contrib/python/idna 
-    # contrib/python/asn1crypto 
+    # contrib/python/idna
+    # contrib/python/asn1crypto
     contrib/python/setuptools
     contrib/python/six
 )
@@ -48,30 +48,30 @@ PY_SRCS(
     cryptography/exceptions.py
     cryptography/fernet.py
     cryptography/hazmat/__init__.py
-    cryptography/hazmat/_der.py 
-    cryptography/hazmat/_oid.py 
+    cryptography/hazmat/_der.py
+    cryptography/hazmat/_oid.py
     cryptography/hazmat/backends/__init__.py
     cryptography/hazmat/backends/interfaces.py
     cryptography/hazmat/backends/openssl/__init__.py
-    cryptography/hazmat/backends/openssl/aead.py 
+    cryptography/hazmat/backends/openssl/aead.py
     cryptography/hazmat/backends/openssl/backend.py
     cryptography/hazmat/backends/openssl/ciphers.py
     cryptography/hazmat/backends/openssl/cmac.py
     cryptography/hazmat/backends/openssl/decode_asn1.py
-    cryptography/hazmat/backends/openssl/dh.py 
+    cryptography/hazmat/backends/openssl/dh.py
     cryptography/hazmat/backends/openssl/dsa.py
     cryptography/hazmat/backends/openssl/ec.py
-    cryptography/hazmat/backends/openssl/ed25519.py 
-    cryptography/hazmat/backends/openssl/ed448.py 
+    cryptography/hazmat/backends/openssl/ed25519.py
+    cryptography/hazmat/backends/openssl/ed448.py
     cryptography/hazmat/backends/openssl/encode_asn1.py
     cryptography/hazmat/backends/openssl/hashes.py
     cryptography/hazmat/backends/openssl/hmac.py
-    cryptography/hazmat/backends/openssl/ocsp.py 
-    cryptography/hazmat/backends/openssl/poly1305.py 
+    cryptography/hazmat/backends/openssl/ocsp.py
+    cryptography/hazmat/backends/openssl/poly1305.py
     cryptography/hazmat/backends/openssl/rsa.py
     cryptography/hazmat/backends/openssl/utils.py
-    cryptography/hazmat/backends/openssl/x25519.py 
-    cryptography/hazmat/backends/openssl/x448.py 
+    cryptography/hazmat/backends/openssl/x25519.py
+    cryptography/hazmat/backends/openssl/x448.py
     cryptography/hazmat/backends/openssl/x509.py
     cryptography/hazmat/bindings/__init__.py
     cryptography/hazmat/bindings/openssl/__init__.py
@@ -82,15 +82,15 @@ PY_SRCS(
     cryptography/hazmat/primitives/asymmetric/dh.py
     cryptography/hazmat/primitives/asymmetric/dsa.py
     cryptography/hazmat/primitives/asymmetric/ec.py
-    cryptography/hazmat/primitives/asymmetric/ed25519.py 
-    cryptography/hazmat/primitives/asymmetric/ed448.py 
+    cryptography/hazmat/primitives/asymmetric/ed25519.py
+    cryptography/hazmat/primitives/asymmetric/ed448.py
     cryptography/hazmat/primitives/asymmetric/padding.py
     cryptography/hazmat/primitives/asymmetric/rsa.py
     cryptography/hazmat/primitives/asymmetric/utils.py
-    cryptography/hazmat/primitives/asymmetric/x25519.py 
-    cryptography/hazmat/primitives/asymmetric/x448.py 
+    cryptography/hazmat/primitives/asymmetric/x25519.py
+    cryptography/hazmat/primitives/asymmetric/x448.py
     cryptography/hazmat/primitives/ciphers/__init__.py
-    cryptography/hazmat/primitives/ciphers/aead.py 
+    cryptography/hazmat/primitives/ciphers/aead.py
     cryptography/hazmat/primitives/ciphers/algorithms.py
     cryptography/hazmat/primitives/ciphers/base.py
     cryptography/hazmat/primitives/ciphers/modes.py
@@ -107,12 +107,12 @@ PY_SRCS(
     cryptography/hazmat/primitives/kdf/x963kdf.py
     cryptography/hazmat/primitives/keywrap.py
     cryptography/hazmat/primitives/padding.py
-    cryptography/hazmat/primitives/poly1305.py 
-    cryptography/hazmat/primitives/serialization/__init__.py 
-    cryptography/hazmat/primitives/serialization/base.py 
-    cryptography/hazmat/primitives/serialization/pkcs12.py 
-    cryptography/hazmat/primitives/serialization/pkcs7.py 
-    cryptography/hazmat/primitives/serialization/ssh.py 
+    cryptography/hazmat/primitives/poly1305.py
+    cryptography/hazmat/primitives/serialization/__init__.py
+    cryptography/hazmat/primitives/serialization/base.py
+    cryptography/hazmat/primitives/serialization/pkcs12.py
+    cryptography/hazmat/primitives/serialization/pkcs7.py
+    cryptography/hazmat/primitives/serialization/ssh.py
     cryptography/hazmat/primitives/twofactor/__init__.py
     cryptography/hazmat/primitives/twofactor/hotp.py
     cryptography/hazmat/primitives/twofactor/totp.py
@@ -120,11 +120,11 @@ PY_SRCS(
     cryptography/utils.py
     cryptography/x509/__init__.py
     cryptography/x509/base.py
-    cryptography/x509/certificate_transparency.py 
+    cryptography/x509/certificate_transparency.py
     cryptography/x509/extensions.py
     cryptography/x509/general_name.py
     cryptography/x509/name.py
-    cryptography/x509/ocsp.py 
+    cryptography/x509/ocsp.py
     cryptography/x509/oid.py
 )
 

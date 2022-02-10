@@ -5,13 +5,13 @@
 from __future__ import absolute_import, division, print_function
 
 from cryptography.hazmat.primitives.ciphers.base import (
-    AEADCipherContext, 
-    AEADDecryptionContext, 
-    AEADEncryptionContext, 
-    BlockCipherAlgorithm, 
-    Cipher, 
-    CipherAlgorithm, 
-    CipherContext, 
+    AEADCipherContext,
+    AEADDecryptionContext,
+    AEADEncryptionContext,
+    BlockCipherAlgorithm,
+    Cipher,
+    CipherAlgorithm,
+    CipherContext,
 )
 
 
@@ -21,6 +21,6 @@ __all__ = [
     "BlockCipherAlgorithm",
     "CipherContext",
     "AEADCipherContext",
-    "AEADDecryptionContext", 
+    "AEADDecryptionContext",
     "AEADEncryptionContext",
 ]

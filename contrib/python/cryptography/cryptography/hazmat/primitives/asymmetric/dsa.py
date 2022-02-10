@@ -9,7 +9,7 @@ import abc
 import six
 
 from cryptography import utils
-from cryptography.hazmat.backends import _get_backend 
+from cryptography.hazmat.backends import _get_backend
 
 
 @six.add_metaclass(abc.ABCMeta)
@@ -120,23 +120,23 @@ class DSAPublicKey(object):
 DSAPublicKeyWithSerialization = DSAPublicKey
 
 
-def generate_parameters(key_size, backend=None): 
-    backend = _get_backend(backend) 
+def generate_parameters(key_size, backend=None):
+    backend = _get_backend(backend)
     return backend.generate_dsa_parameters(key_size)
 
 
-def generate_private_key(key_size, backend=None): 
-    backend = _get_backend(backend) 
+def generate_private_key(key_size, backend=None):
+    backend = _get_backend(backend)
     return backend.generate_dsa_private_key_and_parameters(key_size)
 
 
 def _check_dsa_parameters(parameters):
-    if parameters.p.bit_length() not in [1024, 2048, 3072, 4096]: 
-        raise ValueError( 
-            "p must be exactly 1024, 2048, 3072, or 4096 bits long" 
-        ) 
-    if parameters.q.bit_length() not in [160, 224, 256]: 
-        raise ValueError("q must be exactly 160, 224, or 256 bits long") 
+    if parameters.p.bit_length() not in [1024, 2048, 3072, 4096]:
+        raise ValueError(
+            "p must be exactly 1024, 2048, 3072, or 4096 bits long"
+        )
+    if parameters.q.bit_length() not in [160, 224, 256]:
+        raise ValueError("q must be exactly 160, 224, or 256 bits long")
 
     if not (1 < parameters.g < parameters.p):
         raise ValueError("g, p don't satisfy 1 < g < p.")
@@ -155,9 +155,9 @@ def _check_dsa_private_numbers(numbers):
 class DSAParameterNumbers(object):
     def __init__(self, p, q, g):
         if (
-            not isinstance(p, six.integer_types) 
-            or not isinstance(q, six.integer_types) 
-            or not isinstance(g, six.integer_types) 
+            not isinstance(p, six.integer_types)
+            or not isinstance(q, six.integer_types)
+            or not isinstance(g, six.integer_types)
         ):
             raise TypeError(
                 "DSAParameterNumbers p, q, and g arguments must be integers."
@@ -171,8 +171,8 @@ class DSAParameterNumbers(object):
     q = utils.read_only_property("_q")
     g = utils.read_only_property("_g")
 
-    def parameters(self, backend=None): 
-        backend = _get_backend(backend) 
+    def parameters(self, backend=None):
+        backend = _get_backend(backend)
         return backend.load_dsa_parameter_numbers(self)
 
     def __eq__(self, other):
@@ -186,8 +186,8 @@ class DSAParameterNumbers(object):
 
     def __repr__(self):
         return (
-            "<DSAParameterNumbers(p={self.p}, q={self.q}, " 
-            "g={self.g})>".format(self=self) 
+            "<DSAParameterNumbers(p={self.p}, q={self.q}, "
+            "g={self.g})>".format(self=self)
         )
 
 
@@ -207,8 +207,8 @@ class DSAPublicNumbers(object):
     y = utils.read_only_property("_y")
     parameter_numbers = utils.read_only_property("_parameter_numbers")
 
-    def public_key(self, backend=None): 
-        backend = _get_backend(backend) 
+    def public_key(self, backend=None):
+        backend = _get_backend(backend)
         return backend.load_dsa_public_numbers(self)
 
     def __eq__(self, other):
@@ -216,8 +216,8 @@ class DSAPublicNumbers(object):
             return NotImplemented
 
         return (
-            self.y == other.y 
-            and self.parameter_numbers == other.parameter_numbers 
+            self.y == other.y
+            and self.parameter_numbers == other.parameter_numbers
         )
 
     def __ne__(self, other):
@@ -245,8 +245,8 @@ class DSAPrivateNumbers(object):
     x = utils.read_only_property("_x")
     public_numbers = utils.read_only_property("_public_numbers")
 
-    def private_key(self, backend=None): 
-        backend = _get_backend(backend) 
+    def private_key(self, backend=None):
+        backend = _get_backend(backend)
         return backend.load_dsa_private_numbers(self)
 
     def __eq__(self, other):

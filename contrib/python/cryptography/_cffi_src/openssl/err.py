@@ -9,13 +9,13 @@ INCLUDES = """
 """
 
 TYPES = """
-static const int EVP_F_EVP_ENCRYPTFINAL_EX; 
-static const int EVP_R_DATA_NOT_MULTIPLE_OF_BLOCK_LENGTH; 
-static const int EVP_R_BAD_DECRYPT; 
-static const int EVP_R_UNSUPPORTED_PRIVATE_KEY_ALGORITHM; 
-static const int PKCS12_R_PKCS12_CIPHERFINAL_ERROR; 
-static const int PEM_R_UNSUPPORTED_ENCRYPTION; 
-static const int EVP_R_UNKNOWN_PBE_ALGORITHM; 
+static const int EVP_F_EVP_ENCRYPTFINAL_EX;
+static const int EVP_R_DATA_NOT_MULTIPLE_OF_BLOCK_LENGTH;
+static const int EVP_R_BAD_DECRYPT;
+static const int EVP_R_UNSUPPORTED_PRIVATE_KEY_ALGORITHM;
+static const int PKCS12_R_PKCS12_CIPHERFINAL_ERROR;
+static const int PEM_R_UNSUPPORTED_ENCRYPTION;
+static const int EVP_R_UNKNOWN_PBE_ALGORITHM;
 
 static const int ERR_LIB_EVP;
 static const int ERR_LIB_PEM;

@@ -9,8 +9,8 @@ INCLUDES = """
 """
 
 TYPES = """
-static const long Cryptography_HAS_MEM_FUNCTIONS; 
-static const long Cryptography_HAS_OPENSSL_CLEANUP; 
+static const long Cryptography_HAS_MEM_FUNCTIONS;
+static const long Cryptography_HAS_OPENSSL_CLEANUP;
 
 static const int SSLEAY_VERSION;
 static const int SSLEAY_CFLAGS;
@@ -25,7 +25,7 @@ static const int OPENSSL_DIR;
 """
 
 FUNCTIONS = """
-void OPENSSL_cleanup(void); 
+void OPENSSL_cleanup(void);
 
 /* SSLeay was removed in 1.1.0 */
 unsigned long SSLeay(void);
@@ -35,19 +35,19 @@ unsigned long OpenSSL_version_num(void);
 const char *OpenSSL_version(int);
 
 /* this is a macro in 1.1.0 */
-void *OPENSSL_malloc(size_t); 
+void *OPENSSL_malloc(size_t);
 void OPENSSL_free(void *);
 
- 
-/* Signature changed significantly in 1.1.0, only expose there for sanity */ 
-int Cryptography_CRYPTO_set_mem_functions( 
-    void *(*)(size_t, const char *, int), 
-    void *(*)(void *, size_t, const char *, int), 
-    void (*)(void *, const char *, int)); 
- 
-void *Cryptography_malloc_wrapper(size_t, const char *, int); 
-void *Cryptography_realloc_wrapper(void *, size_t, const char *, int); 
-void Cryptography_free_wrapper(void *, const char *, int); 
+
+/* Signature changed significantly in 1.1.0, only expose there for sanity */
+int Cryptography_CRYPTO_set_mem_functions(
+    void *(*)(size_t, const char *, int),
+    void *(*)(void *, size_t, const char *, int),
+    void (*)(void *, const char *, int));
+
+void *Cryptography_malloc_wrapper(size_t, const char *, int);
+void *Cryptography_realloc_wrapper(void *, size_t, const char *, int);
+void Cryptography_free_wrapper(void *, const char *, int);
 """
 
 CUSTOMIZATIONS = """
@@ -74,44 +74,44 @@ CUSTOMIZATIONS = """
 # define OPENSSL_PLATFORM        SSLEAY_PLATFORM
 # define OPENSSL_DIR             SSLEAY_DIR
 #endif
- 
-#if CRYPTOGRAPHY_IS_LIBRESSL 
-static const long Cryptography_HAS_OPENSSL_CLEANUP = 0; 
- 
-void (*OPENSSL_cleanup)(void) = NULL; 
- 
-/* This function has a significantly different signature pre-1.1.0. since it is 
- * for testing only, we don't bother to expose it on older OpenSSLs. 
- */ 
-static const long Cryptography_HAS_MEM_FUNCTIONS = 0; 
-int (*Cryptography_CRYPTO_set_mem_functions)( 
-    void *(*)(size_t, const char *, int), 
-    void *(*)(void *, size_t, const char *, int), 
-    void (*)(void *, const char *, int)) = NULL; 
- 
-#else 
-static const long Cryptography_HAS_OPENSSL_CLEANUP = 1; 
-static const long Cryptography_HAS_MEM_FUNCTIONS = 1; 
- 
-int Cryptography_CRYPTO_set_mem_functions( 
-    void *(*m)(size_t, const char *, int), 
-    void *(*r)(void *, size_t, const char *, int), 
-    void (*f)(void *, const char *, int) 
-) { 
-    return CRYPTO_set_mem_functions(m, r, f); 
-} 
+
+#if CRYPTOGRAPHY_IS_LIBRESSL
+static const long Cryptography_HAS_OPENSSL_CLEANUP = 0;
+
+void (*OPENSSL_cleanup)(void) = NULL;
+
+/* This function has a significantly different signature pre-1.1.0. since it is
+ * for testing only, we don't bother to expose it on older OpenSSLs.
+ */
+static const long Cryptography_HAS_MEM_FUNCTIONS = 0;
+int (*Cryptography_CRYPTO_set_mem_functions)(
+    void *(*)(size_t, const char *, int),
+    void *(*)(void *, size_t, const char *, int),
+    void (*)(void *, const char *, int)) = NULL;
+
+#else
+static const long Cryptography_HAS_OPENSSL_CLEANUP = 1;
+static const long Cryptography_HAS_MEM_FUNCTIONS = 1;
+
+int Cryptography_CRYPTO_set_mem_functions(
+    void *(*m)(size_t, const char *, int),
+    void *(*r)(void *, size_t, const char *, int),
+    void (*f)(void *, const char *, int)
+) {
+    return CRYPTO_set_mem_functions(m, r, f);
+}
 #endif
- 
-void *Cryptography_malloc_wrapper(size_t size, const char *path, int line) { 
-    return malloc(size); 
-} 
- 
-void *Cryptography_realloc_wrapper(void *ptr, size_t size, const char *path, 
-                                   int line) { 
-    return realloc(ptr, size); 
-} 
- 
-void Cryptography_free_wrapper(void *ptr, const char *path, int line) { 
-    free(ptr); 
-} 
+
+void *Cryptography_malloc_wrapper(size_t size, const char *path, int line) {
+    return malloc(size);
+}
+
+void *Cryptography_realloc_wrapper(void *ptr, size_t size, const char *path,
+                                   int line) {
+    return realloc(ptr, size);
+}
+
+void Cryptography_free_wrapper(void *ptr, const char *path, int line) {
+    free(ptr);
+}
 """

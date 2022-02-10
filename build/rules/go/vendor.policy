@@ -1024,11 +1024,11 @@ ALLOW trust/psp/core/handler -> vendor/github.com/gorilla/mux
 # CONTRIB-2337 Cloud GPU migration: validator for structs and fields
 ALLOW cloud/compute/go-common/pkg/validation -> vendor/github.com/go-playground/validator/v10
 
-# CONTRIB-2412 
-ALLOW infra/infractl/.* -> vendor/github.com/google/gnostic/openapiv3 
-ALLOW infra/infractl/.* -> vendor/github.com/google/gnostic/compiler 
-ALLOW infra/infractl/.* -> vendor/gopkg.in/yaml.v3 
- 
+# CONTRIB-2412
+ALLOW infra/infractl/.* -> vendor/github.com/google/gnostic/openapiv3
+ALLOW infra/infractl/.* -> vendor/github.com/google/gnostic/compiler
+ALLOW infra/infractl/.* -> vendor/gopkg.in/yaml.v3
+
 # CONTRIB-2445
 ALLOW psp -> vendor/github.com/zimmski/go-mutesting
 

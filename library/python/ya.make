@@ -23,7 +23,7 @@ RECURSE(
     bstr
     build_info
     build_info/ut
-    capabilities 
+    capabilities
     celery_dashboard
     certifi
     cgroups
@@ -50,7 +50,7 @@ RECURSE(
     cyson
     cyson/pymodule
     cyson/ut
-    deploy_formatter 
+    deploy_formatter
     deprecated
     dir-sync
     django
@@ -167,7 +167,7 @@ RECURSE(
     sdms_api
     sfx
     selenium_ui_test
-    sendmsg 
+    sendmsg
     stubmaker
     solomon
     spack

@@ -9,14 +9,14 @@ INCLUDES = """
 """
 
 TYPES = """
-typedef struct { 
-    int type; 
-    int alias; 
-    const char *name; 
-    const char *data; 
-} OBJ_NAME; 
- 
-static const long OBJ_NAME_TYPE_MD_METH; 
+typedef struct {
+    int type;
+    int alias;
+    const char *name;
+    const char *data;
+} OBJ_NAME;
+
+static const long OBJ_NAME_TYPE_MD_METH;
 """
 
 FUNCTIONS = """

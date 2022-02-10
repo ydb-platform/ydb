@@ -169,7 +169,7 @@ ALLOW weather/workers/common/clean_satellite/utils -> contrib/deprecated/python/
 ALLOW yql/udfs/common/python/python_arc -> contrib/deprecated/python/mipp
 DENY .* -> contrib/deprecated/python/mipp
 DENY .* -> contrib/deprecated/python/mpop
- 
+
 DENY .* -> contrib/python/pdbpp
 
 ALLOW contrib/python/pdbpp -> contrib/python/fancycompleter
@@ -177,7 +177,7 @@ DENY .* -> contrib/python/fancycompleter
 
 ALLOW infra/procman -> contrib/python/skynet_pyro4
 ALLOW skynet -> contrib/python/skynet_pyro4
-DENY .* -> contrib/python/skynet_pyro4 
+DENY .* -> contrib/python/skynet_pyro4
 
 ALLOW contrib/deprecated/python/cyordereddict -> contrib/deprecated/python/cyordereddict
 ALLOW contrib/deprecated/python/cyordereddict/cyordereddict/tests -> contrib/deprecated/python/cyordereddict
@@ -195,7 +195,7 @@ ALLOW contrib/deprecated/python/xmpppy -> contrib/deprecated/python/xmpppy
 ALLOW ads/libs/py_notifier -> contrib/deprecated/python/xmpppy
 ALLOW yql/udfs/common/python/python_arc -> contrib/deprecated/python/xmpppy
 DENY .* -> contrib/deprecated/python/xmpppy
- 
+
 ALLOW contrib/python/fancycompleter -> contrib/python/pyrepl
 DENY .* -> contrib/python/pyrepl
 

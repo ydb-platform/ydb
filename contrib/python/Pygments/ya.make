@@ -9,7 +9,7 @@ IF (PYTHON2)
 ELSE()
     PEERDIR(contrib/python/Pygments/py3)
 ENDIF()
- 
+
 NO_LINT()
 
 END()

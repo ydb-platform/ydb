@@ -5,29 +5,29 @@
 from __future__ import absolute_import, division, print_function
 
 from cryptography import utils
-from cryptography.hazmat._der import ( 
-    DERReader, 
-    INTEGER, 
-    SEQUENCE, 
-    encode_der, 
-    encode_der_integer, 
-) 
+from cryptography.hazmat._der import (
+    DERReader,
+    INTEGER,
+    SEQUENCE,
+    encode_der,
+    encode_der_integer,
+)
 from cryptography.hazmat.primitives import hashes
 
 
 def decode_dss_signature(signature):
-    with DERReader(signature).read_single_element(SEQUENCE) as seq: 
-        r = seq.read_element(INTEGER).as_integer() 
-        s = seq.read_element(INTEGER).as_integer() 
-        return r, s 
+    with DERReader(signature).read_single_element(SEQUENCE) as seq:
+        r = seq.read_element(INTEGER).as_integer()
+        s = seq.read_element(INTEGER).as_integer()
+        return r, s
 
 
 def encode_dss_signature(r, s):
-    return encode_der( 
-        SEQUENCE, 
-        encode_der(INTEGER, encode_der_integer(r)), 
-        encode_der(INTEGER, encode_der_integer(s)), 
-    ) 
+    return encode_der(
+        SEQUENCE,
+        encode_der(INTEGER, encode_der_integer(r)),
+        encode_der(INTEGER, encode_der_integer(s)),
+    )
 
 
 class Prehashed(object):

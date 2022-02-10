@@ -14,7 +14,7 @@ RECURSE(
     pytest_runner/test
     recipe
     system_info
-    types_test 
+    types_test
     yapackage
     yapackage/test
     yatest_common

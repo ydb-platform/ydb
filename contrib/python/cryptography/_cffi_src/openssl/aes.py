@@ -9,7 +9,7 @@ INCLUDES = """
 """
 
 TYPES = """
-typedef ... AES_KEY; 
+typedef ... AES_KEY;
 """
 
 FUNCTIONS = """

@@ -4,7 +4,7 @@
 
 from __future__ import absolute_import, division, print_function
 
-from cryptography.hazmat._oid import ObjectIdentifier 
+from cryptography.hazmat._oid import ObjectIdentifier
 from cryptography.hazmat.primitives import hashes
 
 
@@ -24,24 +24,24 @@ class ExtensionOID(object):
     EXTENDED_KEY_USAGE = ObjectIdentifier("2.5.29.37")
     FRESHEST_CRL = ObjectIdentifier("2.5.29.46")
     INHIBIT_ANY_POLICY = ObjectIdentifier("2.5.29.54")
-    ISSUING_DISTRIBUTION_POINT = ObjectIdentifier("2.5.29.28") 
+    ISSUING_DISTRIBUTION_POINT = ObjectIdentifier("2.5.29.28")
     AUTHORITY_INFORMATION_ACCESS = ObjectIdentifier("1.3.6.1.5.5.7.1.1")
     SUBJECT_INFORMATION_ACCESS = ObjectIdentifier("1.3.6.1.5.5.7.1.11")
     OCSP_NO_CHECK = ObjectIdentifier("1.3.6.1.5.5.7.48.1.5")
-    TLS_FEATURE = ObjectIdentifier("1.3.6.1.5.5.7.1.24") 
+    TLS_FEATURE = ObjectIdentifier("1.3.6.1.5.5.7.1.24")
     CRL_NUMBER = ObjectIdentifier("2.5.29.20")
-    DELTA_CRL_INDICATOR = ObjectIdentifier("2.5.29.27") 
-    PRECERT_SIGNED_CERTIFICATE_TIMESTAMPS = ObjectIdentifier( 
-        "1.3.6.1.4.1.11129.2.4.2" 
-    ) 
-    PRECERT_POISON = ObjectIdentifier("1.3.6.1.4.1.11129.2.4.3") 
-    SIGNED_CERTIFICATE_TIMESTAMPS = ObjectIdentifier("1.3.6.1.4.1.11129.2.4.5") 
+    DELTA_CRL_INDICATOR = ObjectIdentifier("2.5.29.27")
+    PRECERT_SIGNED_CERTIFICATE_TIMESTAMPS = ObjectIdentifier(
+        "1.3.6.1.4.1.11129.2.4.2"
+    )
+    PRECERT_POISON = ObjectIdentifier("1.3.6.1.4.1.11129.2.4.3")
+    SIGNED_CERTIFICATE_TIMESTAMPS = ObjectIdentifier("1.3.6.1.4.1.11129.2.4.5")
 
 
-class OCSPExtensionOID(object): 
-    NONCE = ObjectIdentifier("1.3.6.1.5.5.7.48.1.2") 
- 
- 
+class OCSPExtensionOID(object):
+    NONCE = ObjectIdentifier("1.3.6.1.5.5.7.48.1.2")
+
+
 class CRLEntryExtensionOID(object):
     CERTIFICATE_ISSUER = ObjectIdentifier("2.5.29.29")
     CRL_REASON = ObjectIdentifier("2.5.29.21")
@@ -75,10 +75,10 @@ class NameOID(object):
     BUSINESS_CATEGORY = ObjectIdentifier("2.5.4.15")
     POSTAL_ADDRESS = ObjectIdentifier("2.5.4.16")
     POSTAL_CODE = ObjectIdentifier("2.5.4.17")
-    INN = ObjectIdentifier("1.2.643.3.131.1.1") 
-    OGRN = ObjectIdentifier("1.2.643.100.1") 
-    SNILS = ObjectIdentifier("1.2.643.100.3") 
-    UNSTRUCTURED_NAME = ObjectIdentifier("1.2.840.113549.1.9.2") 
+    INN = ObjectIdentifier("1.2.643.3.131.1.1")
+    OGRN = ObjectIdentifier("1.2.643.100.1")
+    SNILS = ObjectIdentifier("1.2.643.100.3")
+    UNSTRUCTURED_NAME = ObjectIdentifier("1.2.840.113549.1.9.2")
 
 
 class SignatureAlgorithmOID(object):
@@ -90,7 +90,7 @@ class SignatureAlgorithmOID(object):
     RSA_WITH_SHA256 = ObjectIdentifier("1.2.840.113549.1.1.11")
     RSA_WITH_SHA384 = ObjectIdentifier("1.2.840.113549.1.1.12")
     RSA_WITH_SHA512 = ObjectIdentifier("1.2.840.113549.1.1.13")
-    RSASSA_PSS = ObjectIdentifier("1.2.840.113549.1.1.10") 
+    RSASSA_PSS = ObjectIdentifier("1.2.840.113549.1.1.10")
     ECDSA_WITH_SHA1 = ObjectIdentifier("1.2.840.10045.4.1")
     ECDSA_WITH_SHA224 = ObjectIdentifier("1.2.840.10045.4.3.1")
     ECDSA_WITH_SHA256 = ObjectIdentifier("1.2.840.10045.4.3.2")
@@ -99,11 +99,11 @@ class SignatureAlgorithmOID(object):
     DSA_WITH_SHA1 = ObjectIdentifier("1.2.840.10040.4.3")
     DSA_WITH_SHA224 = ObjectIdentifier("2.16.840.1.101.3.4.3.1")
     DSA_WITH_SHA256 = ObjectIdentifier("2.16.840.1.101.3.4.3.2")
-    ED25519 = ObjectIdentifier("1.3.101.112") 
-    ED448 = ObjectIdentifier("1.3.101.113") 
-    GOSTR3411_94_WITH_3410_2001 = ObjectIdentifier("1.2.643.2.2.3") 
-    GOSTR3410_2012_WITH_3411_2012_256 = ObjectIdentifier("1.2.643.7.1.1.3.2") 
-    GOSTR3410_2012_WITH_3411_2012_512 = ObjectIdentifier("1.2.643.7.1.1.3.3") 
+    ED25519 = ObjectIdentifier("1.3.101.112")
+    ED448 = ObjectIdentifier("1.3.101.113")
+    GOSTR3411_94_WITH_3410_2001 = ObjectIdentifier("1.2.643.2.2.3")
+    GOSTR3410_2012_WITH_3411_2012_256 = ObjectIdentifier("1.2.643.7.1.1.3.2")
+    GOSTR3410_2012_WITH_3411_2012_512 = ObjectIdentifier("1.2.643.7.1.1.3.3")
 
 
 _SIG_OIDS_TO_HASH = {
@@ -121,12 +121,12 @@ _SIG_OIDS_TO_HASH = {
     SignatureAlgorithmOID.ECDSA_WITH_SHA512: hashes.SHA512(),
     SignatureAlgorithmOID.DSA_WITH_SHA1: hashes.SHA1(),
     SignatureAlgorithmOID.DSA_WITH_SHA224: hashes.SHA224(),
-    SignatureAlgorithmOID.DSA_WITH_SHA256: hashes.SHA256(), 
-    SignatureAlgorithmOID.ED25519: None, 
-    SignatureAlgorithmOID.ED448: None, 
-    SignatureAlgorithmOID.GOSTR3411_94_WITH_3410_2001: None, 
-    SignatureAlgorithmOID.GOSTR3410_2012_WITH_3411_2012_256: None, 
-    SignatureAlgorithmOID.GOSTR3410_2012_WITH_3411_2012_512: None, 
+    SignatureAlgorithmOID.DSA_WITH_SHA256: hashes.SHA256(),
+    SignatureAlgorithmOID.ED25519: None,
+    SignatureAlgorithmOID.ED448: None,
+    SignatureAlgorithmOID.GOSTR3411_94_WITH_3410_2001: None,
+    SignatureAlgorithmOID.GOSTR3410_2012_WITH_3411_2012_256: None,
+    SignatureAlgorithmOID.GOSTR3410_2012_WITH_3411_2012_512: None,
 }
 
 
@@ -137,7 +137,7 @@ class ExtendedKeyUsageOID(object):
     EMAIL_PROTECTION = ObjectIdentifier("1.3.6.1.5.5.7.3.4")
     TIME_STAMPING = ObjectIdentifier("1.3.6.1.5.5.7.3.8")
     OCSP_SIGNING = ObjectIdentifier("1.3.6.1.5.5.7.3.9")
-    ANY_EXTENDED_KEY_USAGE = ObjectIdentifier("2.5.29.37.0") 
+    ANY_EXTENDED_KEY_USAGE = ObjectIdentifier("2.5.29.37.0")
 
 
 class AuthorityInformationAccessOID(object):
@@ -145,21 +145,21 @@ class AuthorityInformationAccessOID(object):
     OCSP = ObjectIdentifier("1.3.6.1.5.5.7.48.1")
 
 
-class SubjectInformationAccessOID(object): 
-    CA_REPOSITORY = ObjectIdentifier("1.3.6.1.5.5.7.48.5") 
- 
- 
+class SubjectInformationAccessOID(object):
+    CA_REPOSITORY = ObjectIdentifier("1.3.6.1.5.5.7.48.5")
+
+
 class CertificatePoliciesOID(object):
     CPS_QUALIFIER = ObjectIdentifier("1.3.6.1.5.5.7.2.1")
     CPS_USER_NOTICE = ObjectIdentifier("1.3.6.1.5.5.7.2.2")
     ANY_POLICY = ObjectIdentifier("2.5.29.32.0")
 
 
-class AttributeOID(object): 
-    CHALLENGE_PASSWORD = ObjectIdentifier("1.2.840.113549.1.9.7") 
-    UNSTRUCTURED_NAME = ObjectIdentifier("1.2.840.113549.1.9.2") 
- 
- 
+class AttributeOID(object):
+    CHALLENGE_PASSWORD = ObjectIdentifier("1.2.840.113549.1.9.7")
+    UNSTRUCTURED_NAME = ObjectIdentifier("1.2.840.113549.1.9.2")
+
+
 _OID_NAMES = {
     NameOID.COMMON_NAME: "commonName",
     NameOID.COUNTRY_NAME: "countryName",
@@ -187,17 +187,17 @@ _OID_NAMES = {
     NameOID.BUSINESS_CATEGORY: "businessCategory",
     NameOID.POSTAL_ADDRESS: "postalAddress",
     NameOID.POSTAL_CODE: "postalCode",
-    NameOID.INN: "INN", 
-    NameOID.OGRN: "OGRN", 
-    NameOID.SNILS: "SNILS", 
-    NameOID.UNSTRUCTURED_NAME: "unstructuredName", 
+    NameOID.INN: "INN",
+    NameOID.OGRN: "OGRN",
+    NameOID.SNILS: "SNILS",
+    NameOID.UNSTRUCTURED_NAME: "unstructuredName",
     SignatureAlgorithmOID.RSA_WITH_MD5: "md5WithRSAEncryption",
     SignatureAlgorithmOID.RSA_WITH_SHA1: "sha1WithRSAEncryption",
     SignatureAlgorithmOID.RSA_WITH_SHA224: "sha224WithRSAEncryption",
     SignatureAlgorithmOID.RSA_WITH_SHA256: "sha256WithRSAEncryption",
     SignatureAlgorithmOID.RSA_WITH_SHA384: "sha384WithRSAEncryption",
     SignatureAlgorithmOID.RSA_WITH_SHA512: "sha512WithRSAEncryption",
-    SignatureAlgorithmOID.RSASSA_PSS: "RSASSA-PSS", 
+    SignatureAlgorithmOID.RSASSA_PSS: "RSASSA-PSS",
     SignatureAlgorithmOID.ECDSA_WITH_SHA1: "ecdsa-with-SHA1",
     SignatureAlgorithmOID.ECDSA_WITH_SHA224: "ecdsa-with-SHA224",
     SignatureAlgorithmOID.ECDSA_WITH_SHA256: "ecdsa-with-SHA256",
@@ -206,17 +206,17 @@ _OID_NAMES = {
     SignatureAlgorithmOID.DSA_WITH_SHA1: "dsa-with-sha1",
     SignatureAlgorithmOID.DSA_WITH_SHA224: "dsa-with-sha224",
     SignatureAlgorithmOID.DSA_WITH_SHA256: "dsa-with-sha256",
-    SignatureAlgorithmOID.ED25519: "ed25519", 
-    SignatureAlgorithmOID.ED448: "ed448", 
-    SignatureAlgorithmOID.GOSTR3411_94_WITH_3410_2001: ( 
-        "GOST R 34.11-94 with GOST R 34.10-2001" 
-    ), 
-    SignatureAlgorithmOID.GOSTR3410_2012_WITH_3411_2012_256: ( 
-        "GOST R 34.10-2012 with GOST R 34.11-2012 (256 bit)" 
-    ), 
-    SignatureAlgorithmOID.GOSTR3410_2012_WITH_3411_2012_512: ( 
-        "GOST R 34.10-2012 with GOST R 34.11-2012 (512 bit)" 
-    ), 
+    SignatureAlgorithmOID.ED25519: "ed25519",
+    SignatureAlgorithmOID.ED448: "ed448",
+    SignatureAlgorithmOID.GOSTR3411_94_WITH_3410_2001: (
+        "GOST R 34.11-94 with GOST R 34.10-2001"
+    ),
+    SignatureAlgorithmOID.GOSTR3410_2012_WITH_3411_2012_256: (
+        "GOST R 34.10-2012 with GOST R 34.11-2012 (256 bit)"
+    ),
+    SignatureAlgorithmOID.GOSTR3410_2012_WITH_3411_2012_512: (
+        "GOST R 34.10-2012 with GOST R 34.11-2012 (512 bit)"
+    ),
     ExtendedKeyUsageOID.SERVER_AUTH: "serverAuth",
     ExtendedKeyUsageOID.CLIENT_AUTH: "clientAuth",
     ExtendedKeyUsageOID.CODE_SIGNING: "codeSigning",
@@ -229,13 +229,13 @@ _OID_NAMES = {
     ExtensionOID.SUBJECT_ALTERNATIVE_NAME: "subjectAltName",
     ExtensionOID.ISSUER_ALTERNATIVE_NAME: "issuerAltName",
     ExtensionOID.BASIC_CONSTRAINTS: "basicConstraints",
-    ExtensionOID.PRECERT_SIGNED_CERTIFICATE_TIMESTAMPS: ( 
-        "signedCertificateTimestampList" 
-    ), 
-    ExtensionOID.SIGNED_CERTIFICATE_TIMESTAMPS: ( 
-        "signedCertificateTimestampList" 
-    ), 
-    ExtensionOID.PRECERT_POISON: "ctPoison", 
+    ExtensionOID.PRECERT_SIGNED_CERTIFICATE_TIMESTAMPS: (
+        "signedCertificateTimestampList"
+    ),
+    ExtensionOID.SIGNED_CERTIFICATE_TIMESTAMPS: (
+        "signedCertificateTimestampList"
+    ),
+    ExtensionOID.PRECERT_POISON: "ctPoison",
     CRLEntryExtensionOID.CRL_REASON: "cRLReason",
     CRLEntryExtensionOID.INVALIDITY_DATE: "invalidityDate",
     CRLEntryExtensionOID.CERTIFICATE_ISSUER: "certificateIssuer",
@@ -248,18 +248,18 @@ _OID_NAMES = {
     ExtensionOID.EXTENDED_KEY_USAGE: "extendedKeyUsage",
     ExtensionOID.FRESHEST_CRL: "freshestCRL",
     ExtensionOID.INHIBIT_ANY_POLICY: "inhibitAnyPolicy",
-    ExtensionOID.ISSUING_DISTRIBUTION_POINT: ("issuingDistributionPoint"), 
+    ExtensionOID.ISSUING_DISTRIBUTION_POINT: ("issuingDistributionPoint"),
     ExtensionOID.AUTHORITY_INFORMATION_ACCESS: "authorityInfoAccess",
     ExtensionOID.SUBJECT_INFORMATION_ACCESS: "subjectInfoAccess",
     ExtensionOID.OCSP_NO_CHECK: "OCSPNoCheck",
     ExtensionOID.CRL_NUMBER: "cRLNumber",
-    ExtensionOID.DELTA_CRL_INDICATOR: "deltaCRLIndicator", 
-    ExtensionOID.TLS_FEATURE: "TLSFeature", 
+    ExtensionOID.DELTA_CRL_INDICATOR: "deltaCRLIndicator",
+    ExtensionOID.TLS_FEATURE: "TLSFeature",
     AuthorityInformationAccessOID.OCSP: "OCSP",
     AuthorityInformationAccessOID.CA_ISSUERS: "caIssuers",
-    SubjectInformationAccessOID.CA_REPOSITORY: "caRepository", 
+    SubjectInformationAccessOID.CA_REPOSITORY: "caRepository",
     CertificatePoliciesOID.CPS_QUALIFIER: "id-qt-cps",
     CertificatePoliciesOID.CPS_USER_NOTICE: "id-qt-unotice",
-    OCSPExtensionOID.NONCE: "OCSPNonce", 
-    AttributeOID.CHALLENGE_PASSWORD: "challengePassword", 
+    OCSPExtensionOID.NONCE: "OCSPNonce",
+    AttributeOID.CHALLENGE_PASSWORD: "challengePassword",
 }

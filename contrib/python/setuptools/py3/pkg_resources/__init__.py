@@ -3235,8 +3235,8 @@ from library.python import resource
 
 
 class ResProvider(EmptyProvider):
-    _resource_fs = {} 
- 
+    _resource_fs = {}
+
     def __init__(self, prefix):
         if hasattr(prefix, '__file__'):
             key = prefix.__file__.rsplit('/', 1)[0]
@@ -3284,13 +3284,13 @@ class ResProvider(EmptyProvider):
         return self._resource_fs.get(path)
 
     def _listdir(self, path):
-        result = self.__lookup(path) 
-        if result is None: 
-            return [] 
+        result = self.__lookup(path)
+        if result is None:
+            return []
         return list(result)
 
     def _isdir(self, path):
-        return bool(self.__lookup(path)) 
+        return bool(self.__lookup(path))
 
 
 class ResDistribution(DistInfoDistribution):

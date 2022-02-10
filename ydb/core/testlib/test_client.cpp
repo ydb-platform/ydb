@@ -319,7 +319,7 @@ namespace Tests {
         GRpcServer->AddService(new NGRpcService::TGRpcDataStreamsService(system, counters, grpcRequestProxyId));
         if (Settings->EnableYq) {
             GRpcServer->AddService(new NGRpcService::TGRpcYandexQueryService(system, counters, grpcRequestProxyId));
-            GRpcServer->AddService(new NGRpcService::TGRpcYqPrivateTaskService(system, counters, grpcRequestProxyId)); 
+            GRpcServer->AddService(new NGRpcService::TGRpcYqPrivateTaskService(system, counters, grpcRequestProxyId));
         }
         if (const auto& factory = Settings->GrpcServiceFactory) {
             // All services enabled by default for ut
@@ -746,7 +746,7 @@ namespace Tests {
                 controlPlaneStorageConfig.AddAvailableConnection("OBJECT_STORAGE");
                 controlPlaneStorageConfig.AddAvailableConnection("MONITORING");
             }
- 
+
             {
                 auto& commonConfig = *protoConfig.MutableCommon();
                 commonConfig.SetYdbMvpCloudEndpoint(ydbMvpEndpoint);
@@ -801,20 +801,20 @@ namespace Tests {
             };
 
             const auto ydbCredFactory = NKikimr::CreateYdbCredentialsProviderFactory;
-            auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>(); 
-            auto yqSharedResources = NYq::CreateYqSharedResources(protoConfig, ydbCredFactory, counters); 
+            auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+            auto yqSharedResources = NYq::CreateYqSharedResources(protoConfig, ydbCredFactory, counters);
             NYq::Init(
                 protoConfig,
                 Runtime->GetNodeId(nodeIdx),
                 actorRegistrator,
-                &appData, 
+                &appData,
                 "TestTenant",
                 nullptr, // MakeIntrusive<NPq::NConfigurationManager::TConnections>(),
                 yqSharedResources,
                 NKikimr::NFolderService::CreateMockFolderServiceActor,
                 NYq::CreateMockYqAuditServiceActor,
-                ydbCredFactory, 
-                /*IcPort = */0 
+                ydbCredFactory,
+                /*IcPort = */0
                 );
             NYq::InitTest(Runtime.Get(), port, Settings->GrpcPort, yqSharedResources);
         }
@@ -843,7 +843,7 @@ namespace Tests {
         //Runtime->SetLogPriority(NKikimrServices::SCHEME_BOARD_REPLICA, NActors::NLog::PRI_DEBUG);
         //Runtime->SetLogPriority(NKikimrServices::SCHEME_BOARD_POPULATOR, NActors::NLog::PRI_DEBUG);
         //Runtime->SetLogPriority(NKikimrServices::SCHEME_BOARD_SUBSCRIBER, NActors::NLog::PRI_TRACE);
-        //Runtime->SetLogPriority(NKikimrServices::YQL_PROXY, NActors::NLog::PRI_DEBUG); 
+        //Runtime->SetLogPriority(NKikimrServices::YQL_PROXY, NActors::NLog::PRI_DEBUG);
 
         if (Settings->LoggerInitializer) {
             Settings->LoggerInitializer(*Runtime);

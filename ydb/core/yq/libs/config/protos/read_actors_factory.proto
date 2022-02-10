@@ -1,17 +1,17 @@
-syntax = "proto3"; 
-option cc_enable_arenas = true; 
- 
-package NYq.NConfig; 
-option java_package = "ru.yandex.kikimr.proto"; 
- 
-import "ydb/library/yql/providers/s3/proto/retry_config.proto"; 
- 
-//////////////////////////////////////////////////////////// 
- 
-message TS3ReadActorFactoryConfig { 
-    NYql.NS3.TRetryConfig RetryConfig = 1; 
-} 
- 
-message TReadActorsFactoryConfig { 
-    TS3ReadActorFactoryConfig S3ReadActorFactoryConfig = 1; 
-} 
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package NYq.NConfig;
+option java_package = "ru.yandex.kikimr.proto";
+
+import "ydb/library/yql/providers/s3/proto/retry_config.proto";
+
+////////////////////////////////////////////////////////////
+
+message TS3ReadActorFactoryConfig {
+    NYql.NS3.TRetryConfig RetryConfig = 1;
+}
+
+message TReadActorsFactoryConfig {
+    TS3ReadActorFactoryConfig S3ReadActorFactoryConfig = 1;
+}

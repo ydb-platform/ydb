@@ -19,7 +19,7 @@ SRCS(
     draft/persqueue_error_codes.proto
     draft/ydb_long_tx.proto
     draft/ydb_logstore.proto
-    draft/yq_private.proto 
+    draft/yq_private.proto
     persqueue_error_codes_v1.proto
     ydb_auth.proto
     ydb_persqueue_v1.proto

@@ -190,8 +190,8 @@ namespace NKikimr {
 
 namespace NKikimrServicesInitializers {
 
-ui32 TYandexQueryInitializer::IcPort = 0; 
- 
+ui32 TYandexQueryInitializer::IcPort = 0;
+
 IKikimrServicesInitializer::IKikimrServicesInitializer(const TKikimrRunConfig& runConfig)
     : Config(runConfig.AppConfig)
     , NodeId(runConfig.NodeId)
@@ -594,7 +594,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             case NKikimrConfig::TStaticNameserviceConfig::NS_EXTERNAL:
                 nameservice = NActors::CreateDynamicNameserver(table, TDuration::Seconds(3), appData->IOPoolId);
                 break;
-        } 
+        }
 
         setup->LocalServices.emplace_back(
             nameserviceId,
@@ -707,12 +707,12 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             setup->Interconnect.ProxyActors.resize(maxNode + 1);
             setup->Interconnect.ProxyWrapperFactory = CreateProxyWrapperFactory(icCommon, interconnectPoolId);
 
-            std::unordered_set<ui32> staticIds; 
- 
-            for (const auto& node : table->StaticNodeTable) { 
+            std::unordered_set<ui32> staticIds;
+
+            for (const auto& node : table->StaticNodeTable) {
                 const ui32 destId = node.first;
                 if (destId != NodeId) {
-                    staticIds.insert(destId); 
+                    staticIds.insert(destId);
                     setup->Interconnect.ProxyActors[destId] = TActorSetupCmd(new TInterconnectProxyTCP(destId, icCommon),
                         TMailboxType::ReadAsFilled, interconnectPoolId);
                 } else {
@@ -2257,10 +2257,10 @@ TYandexQueryInitializer::TYandexQueryInitializer(const TKikimrRunConfig& runConf
 {
 }
 
-void TYandexQueryInitializer::SetIcPort(ui32 icPort) { 
-    IcPort = icPort; 
-} 
- 
+void TYandexQueryInitializer::SetIcPort(ui32 icPort) {
+    IcPort = icPort;
+}
+
 void TYandexQueryInitializer::InitializeServices(TActorSystemSetup* setup, const TAppData* appData) {
     const auto& protoConfig = Config.GetYandexQueryConfig();
     if (!protoConfig.GetEnabled()) {
@@ -2292,8 +2292,8 @@ void TYandexQueryInitializer::InitializeServices(TActorSystemSetup* setup, const
         YqSharedResources,
         Factories->FolderServiceFactory,
         Factories->YqAuditServiceFactory,
-        Factories->YdbCredentialProviderFactory, 
-        IcPort 
+        Factories->YdbCredentialProviderFactory,
+        IcPort
         );
 }
 

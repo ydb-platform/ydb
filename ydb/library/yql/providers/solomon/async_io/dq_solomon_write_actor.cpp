@@ -76,8 +76,8 @@ struct TMetricsInflight {
 
 class TDqSolomonWriteActor : public NActors::TActor<TDqSolomonWriteActor>, public IDqSinkActor {
 public:
-    static constexpr char ActorName[] = "DQ_SOLOMON_WRITE_ACTOR"; 
- 
+    static constexpr char ActorName[] = "DQ_SOLOMON_WRITE_ACTOR";
+
     TDqSolomonWriteActor(
         ui64 outputIndex,
         TDqSolomonWriteParams&& writeParams,

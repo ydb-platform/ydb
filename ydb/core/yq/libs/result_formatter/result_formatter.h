@@ -8,9 +8,9 @@
 
 #include <library/cpp/json/json_writer.h>
 
-namespace NYq { 
+namespace NYq {
 
 void FormatResultSet(NJson::TJsonValue& root, const NYdb::TResultSet& resultSet);
 TString FormatSchema(const YandexQuery::Schema& schema);
 
-} // namespace NYq 
+} // namespace NYq

@@ -126,8 +126,8 @@ public:
         return opts;
     }
 
-    static constexpr char ActorName[] = "DQ_PQ_READ_ACTOR"; 
- 
+    static constexpr char ActorName[] = "DQ_PQ_READ_ACTOR";
+
 public:
     void SaveState(const NDqProto::TCheckpoint& checkpoint, NDqProto::TSourceState& state) override {
         NPq::NProto::TDqPqTopicSourceState stateProto;

@@ -27,12 +27,12 @@ struct TAuditDetails {
     TString CloudId;
 };
 
-struct TNodeInfo { 
-    ui32 NodeId; 
-    TString InstanceId; 
-    TString HostName; 
-}; 
- 
+struct TNodeInfo {
+    ui32 NodeId;
+    TString InstanceId;
+    TString HostName;
+};
+
 struct TDebugItem {
     TString Query;
     NYdb::TParams Params;
@@ -108,7 +108,7 @@ struct TEvControlPlaneStorage {
         EvDeleteQueryRequest,
         EvDeleteQueryResponse,
         EvControlQueryRequest,
-        EvControlQueryResponse, 
+        EvControlQueryResponse,
         EvGetResultDataRequest,
         EvGetResultDataResponse,
         EvListJobsRequest,
@@ -141,10 +141,10 @@ struct TEvControlPlaneStorage {
         EvGetTaskResponse,
         EvPingTaskRequest,
         EvPingTaskResponse,
-        EvNodesHealthCheckRequest, 
-        EvNodesHealthCheckResponse, 
-        EvGetHealthNodesRequest, 
-        EvGetHealthNodesResponse, 
+        EvNodesHealthCheckRequest,
+        EvNodesHealthCheckResponse,
+        EvGetHealthNodesRequest,
+        EvGetHealthNodesResponse,
         EvEnd,
     };
 
@@ -931,12 +931,12 @@ struct TEvControlPlaneStorage {
 
     // internal messages
     struct TEvWriteResultDataRequest : NActors::TEventLocal<TEvWriteResultDataRequest, EvWriteResultDataRequest> {
-        explicit TEvWriteResultDataRequest(const TString& resultId, 
+        explicit TEvWriteResultDataRequest(const TString& resultId,
                                            const int32_t resultSetId,
                                            const int64_t startRowId,
                                            const TInstant& deadline,
                                            const Ydb::ResultSet& resultSet)
-            : ResultId(resultId) 
+            : ResultId(resultId)
             , ResultSetId(resultSetId)
             , StartRowId(startRowId)
             , Deadline(deadline)
@@ -944,7 +944,7 @@ struct TEvControlPlaneStorage {
         {
         }
 
-        TString ResultId; 
+        TString ResultId;
         int32_t ResultSetId = 0;
         int64_t StartRowId = 0;
         TInstant Deadline;
@@ -957,23 +957,23 @@ struct TEvControlPlaneStorage {
         {
         }
 
-        explicit TEvWriteResultDataResponse( 
-            const NYql::TIssues& issues, 
-            const ui64 requestId) 
-            : Issues(issues) 
-            , RequestId(requestId) 
-        { 
-        } 
- 
+        explicit TEvWriteResultDataResponse(
+            const NYql::TIssues& issues,
+            const ui64 requestId)
+            : Issues(issues)
+            , RequestId(requestId)
+        {
+        }
+
         NYql::TIssues Issues;
-        const ui64 RequestId = 0; 
+        const ui64 RequestId = 0;
         TDebugInfoPtr DebugInfo;
     };
 
     struct TEvGetTaskRequest : NActors::TEventLocal<TEvGetTaskRequest, EvGetTaskRequest> {
-        explicit TEvGetTaskRequest( 
-            const TString& owner, 
-            const TString& hostName) 
+        explicit TEvGetTaskRequest(
+            const TString& owner,
+            const TString& hostName)
             : Owner(owner)
             , HostName(hostName)
         {
@@ -983,19 +983,19 @@ struct TEvControlPlaneStorage {
         TString HostName;
     };
 
-    struct TTask { 
-        TString Scope; 
-        TString QueryId; 
-        YandexQuery::Query Query; 
-        YandexQuery::Internal::QueryInternal Internal; 
-        ui64 Generation = 0; 
+    struct TTask {
+        TString Scope;
+        TString QueryId;
+        YandexQuery::Query Query;
+        YandexQuery::Internal::QueryInternal Internal;
+        ui64 Generation = 0;
         TInstant Deadline;
-    }; 
- 
+    };
+
     struct TEvGetTaskResponse : NActors::TEventLocal<TEvGetTaskResponse, EvGetTaskResponse> {
-        explicit TEvGetTaskResponse(const TVector<TTask>& tasks, const TString& owner) 
-            : Tasks(tasks) 
-            , Owner(owner) 
+        explicit TEvGetTaskResponse(const TVector<TTask>& tasks, const TString& owner)
+            : Tasks(tasks)
+            , Owner(owner)
         {
         }
 
@@ -1005,8 +1005,8 @@ struct TEvControlPlaneStorage {
         }
 
         NYql::TIssues Issues;
-        TVector<TTask> Tasks; 
-        TString Owner; 
+        TVector<TTask> Tasks;
+        TString Owner;
         TDebugInfoPtr DebugInfo;
     };
 
@@ -1026,17 +1026,17 @@ struct TEvControlPlaneStorage {
         explicit TEvPingTaskRequest(const TString& scope, const TString& queryId, const TString& owner, const TInstant& deadline, const TString& resultId = "")
             : Scope(scope)
             , QueryId(queryId)
-            , Owner(owner) 
+            , Owner(owner)
             , Deadline(deadline)
-            , ResultId(resultId) 
+            , ResultId(resultId)
         {
         }
 
-        const TString Scope; 
-        const TString QueryId; 
-        const TString Owner; 
+        const TString Scope;
+        const TString QueryId;
+        const TString Owner;
         const TInstant Deadline;
-        TString ResultId; 
+        TString ResultId;
         TMaybe<YandexQuery::QueryMeta::ComputeStatus> Status;
         TMaybe<NYql::TIssues> Issues;
         TMaybe<NYql::TIssues> TransientIssues;
@@ -1069,32 +1069,32 @@ struct TEvControlPlaneStorage {
         NYql::TIssues Issues;
         TDebugInfoPtr DebugInfo;
     };
- 
-    struct TEvNodesHealthCheckRequest : NActors::TEventLocal<TEvNodesHealthCheckRequest, EvNodesHealthCheckRequest> { 
-        explicit TEvNodesHealthCheckRequest( 
-            Yq::Private::NodesHealthCheckRequest&& request) 
-            : Request(std::move(request)) 
-        {} 
-        Yq::Private::NodesHealthCheckRequest Request; 
-    }; 
- 
-    struct TEvNodesHealthCheckResponse : NActors::TEventLocal<TEvNodesHealthCheckResponse, EvNodesHealthCheckResponse> { 
- 
-        explicit TEvNodesHealthCheckResponse( 
-            const Yq::Private::NodesHealthCheckResult& record) 
-            : Record(record) 
-        {} 
- 
-        explicit TEvNodesHealthCheckResponse( 
-            const NYql::TIssues& issues) 
-            : Issues(issues) 
-        {} 
- 
-        Yq::Private::NodesHealthCheckResult Record; 
-        NYql::TIssues Issues; 
+
+    struct TEvNodesHealthCheckRequest : NActors::TEventLocal<TEvNodesHealthCheckRequest, EvNodesHealthCheckRequest> {
+        explicit TEvNodesHealthCheckRequest(
+            Yq::Private::NodesHealthCheckRequest&& request)
+            : Request(std::move(request))
+        {}
+        Yq::Private::NodesHealthCheckRequest Request;
+    };
+
+    struct TEvNodesHealthCheckResponse : NActors::TEventLocal<TEvNodesHealthCheckResponse, EvNodesHealthCheckResponse> {
+
+        explicit TEvNodesHealthCheckResponse(
+            const Yq::Private::NodesHealthCheckResult& record)
+            : Record(record)
+        {}
+
+        explicit TEvNodesHealthCheckResponse(
+            const NYql::TIssues& issues)
+            : Issues(issues)
+        {}
+
+        Yq::Private::NodesHealthCheckResult Record;
+        NYql::TIssues Issues;
         TDebugInfoPtr DebugInfo;
-    }; 
- 
+    };
+
 };
 
 }

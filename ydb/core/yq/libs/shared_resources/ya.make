@@ -9,7 +9,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/actors/core
-    library/cpp/monlib/dynamic_counters 
+    library/cpp/monlib/dynamic_counters
     ydb/core/protos
     ydb/core/yq/libs/events
     ydb/core/yq/libs/shared_resources/interface

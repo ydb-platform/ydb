@@ -318,7 +318,7 @@ private:
     {
         SendEmptyResponse<
             TEvControlPlaneStorage::TEvNodesHealthCheckRequest::TPtr,
-            Yq::Private::NodesHealthCheckResult, 
+            Yq::Private::NodesHealthCheckResult,
             TEvControlPlaneStorage::TEvNodesHealthCheckResponse>(ev, "NodesHealthCheckRequest");
     }
 

@@ -16,7 +16,7 @@ std::pair<NYql::NDq::IDqSourceActor*, NActors::IActor*> CreateS3ReadActor(
     const THashMap<TString, TString>& secureParams,
     const THashMap<TString, TString>& taskParams,
     IDqSourceActor::ICallbacks* callback,
-    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, 
-    const std::shared_ptr<NYql::NS3::TRetryConfig>& retryConfig = nullptr); 
+    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+    const std::shared_ptr<NYql::NS3::TRetryConfig>& retryConfig = nullptr);
 
 } // namespace NYql::NDq

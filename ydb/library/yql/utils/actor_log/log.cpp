@@ -57,16 +57,16 @@ NYql::NLog::ELevel GetYqlLogLevel(NActors::NLog::EPriority priority) {
 } // namespace
 
 void TActorYqlLogBackend::WriteData(const TLogRecord& rec) {
-    std::visit([&](const auto* actorCtxOrSystem){ 
-        Y_VERIFY(actorCtxOrSystem); 
-        if (TraceId.empty()) { 
-            LOG_LOG(*actorCtxOrSystem, GetActorLogPriority(rec.Priority), Component, 
-                "SessionId: %s %.*s", SessionId.c_str(), (int)rec.Len, rec.Data); 
-        } else { 
-            LOG_LOG(*actorCtxOrSystem, GetActorLogPriority(rec.Priority), Component, 
-                "TraceId: %s, SessionId: %s %.*s", TraceId.c_str(), SessionId.c_str(), (int)rec.Len, rec.Data); 
-        } 
-    }, ActorCtxOrSystem); 
+    std::visit([&](const auto* actorCtxOrSystem){
+        Y_VERIFY(actorCtxOrSystem);
+        if (TraceId.empty()) {
+            LOG_LOG(*actorCtxOrSystem, GetActorLogPriority(rec.Priority), Component,
+                "SessionId: %s %.*s", SessionId.c_str(), (int)rec.Len, rec.Data);
+        } else {
+            LOG_LOG(*actorCtxOrSystem, GetActorLogPriority(rec.Priority), Component,
+                "TraceId: %s, SessionId: %s %.*s", TraceId.c_str(), SessionId.c_str(), (int)rec.Len, rec.Data);
+        }
+    }, ActorCtxOrSystem);
 }
 
 void SetYqlLogLevels(const NActors::NLog::EPriority& priority) {

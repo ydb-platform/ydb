@@ -52,16 +52,16 @@ TDummyPqGateway& TDummyPqGateway::AddDummyTopic(const TDummyTopic& topic) {
     }
 }
 
-void TDummyPqGateway::UpdateClusterConfigs( 
-    const TString& clusterName, 
-    const TString& endpoint, 
-    const TString& database, 
-    bool secure) 
-{ 
-    Y_UNUSED(clusterName); 
-    Y_UNUSED(endpoint); 
-    Y_UNUSED(database); 
-    Y_UNUSED(secure); 
-} 
- 
+void TDummyPqGateway::UpdateClusterConfigs(
+    const TString& clusterName,
+    const TString& endpoint,
+    const TString& database,
+    bool secure)
+{
+    Y_UNUSED(clusterName);
+    Y_UNUSED(endpoint);
+    Y_UNUSED(database);
+    Y_UNUSED(secure);
+}
+
 } // namespace NYql

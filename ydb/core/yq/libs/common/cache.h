@@ -4,7 +4,7 @@
 #include <util/datetime/base.h>
 #include <util/system/mutex.h>
 
-namespace NYq { 
+namespace NYq {
 
 struct TTtlCacheSettings {
     TDuration Ttl = TDuration::Minutes(10);
@@ -113,4 +113,4 @@ private:
     TTtlCacheSettings Config;
 };
 
-} // namespace NYq 
+} // namespace NYq

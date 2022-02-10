@@ -86,7 +86,7 @@
     PROBE(WriteResultDataRequest, \
         GROUPS(), \
         TYPES(TString, i32, i64, i64, TDuration, TInstant, i64, bool), \
-        NAMES("resultId", "resulSetId", "startRowId", "countRows", "latencyMs", "deadlineSec", "size", "success")) \ 
+        NAMES("resultId", "resulSetId", "startRowId", "countRows", "latencyMs", "deadlineSec", "size", "success")) \
     PROBE(GetTaskRequest, \
         GROUPS(), \
         TYPES(TString, TString, TDuration, bool), \
@@ -95,10 +95,10 @@
         GROUPS(), \
         TYPES(TString, TDuration, bool), \
         NAMES("queryId", "latencyMs", "success")) \
-    PROBE(NodesHealthCheckRequest, \ 
-        GROUPS(), \ 
-        TYPES(TString, ui32, TString, TString, TDuration, bool), \ 
-        NAMES("tenant", "nodeId", "instanceId", "hostName", "latencyMs", "success")) \ 
+    PROBE(NodesHealthCheckRequest, \
+        GROUPS(), \
+        TYPES(TString, ui32, TString, TString, TDuration, bool), \
+        NAMES("tenant", "nodeId", "instanceId", "hostName", "latencyMs", "success")) \
 
 // YQ_CONTROL_PLANE_STORAGE_PROVIDER
 

@@ -71,7 +71,7 @@ class TDqWorker: public TRichActor<TDqWorker>
 
 public:
     static constexpr char ActorName[] = "YQL_DQ_WORKER";
- 
+
     explicit TDqWorker(
         const ITaskRunnerActorFactory::TPtr& taskRunnerActorFactory,
         const IDqSourceActorFactory::TPtr& sourceActorFactory,

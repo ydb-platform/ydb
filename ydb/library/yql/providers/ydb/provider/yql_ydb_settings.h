@@ -8,8 +8,8 @@
 #include <ydb/core/yq/libs/events/events.h>
 #include <ydb/core/yq/libs/db_resolver/db_async_resolver_with_meta.h>
 #include <ydb/core/yq/libs/common/database_token_builder.h>
- 
- 
+
+
 namespace NYql {
 
 struct TYdbSettings {
@@ -19,7 +19,7 @@ struct TYdbSettings {
 struct TClusterMainSettings {
     TString Endpoint;
     TString Database;
-    TString DatabaseId; 
+    TString DatabaseId;
     bool Secure = false;
     bool AddBearerToToken = false;
 
@@ -32,19 +32,19 @@ struct TYdbConfiguration : public TYdbSettings, public NCommon::TSettingDispatch
     TYdbConfiguration();
     TYdbConfiguration(const TYdbConfiguration&) = delete;
 
-    void Init( 
-        const TYdbGatewayConfig& config, 
-        TIntrusivePtr<TTypeAnnotationContext> typeCtx, 
-        const std::shared_ptr<NYq::TDatabaseAsyncResolverWithMeta> dbResolver, 
-        THashMap<std::pair<TString, NYq::DatabaseType>, NYq::TEvents::TDatabaseAuth>& databaseIds 
-    ); 
+    void Init(
+        const TYdbGatewayConfig& config,
+        TIntrusivePtr<TTypeAnnotationContext> typeCtx,
+        const std::shared_ptr<NYq::TDatabaseAsyncResolverWithMeta> dbResolver,
+        THashMap<std::pair<TString, NYq::DatabaseType>, NYq::TEvents::TDatabaseAuth>& databaseIds
+    );
 
     bool HasCluster(TStringBuf cluster) const;
 
     TYdbSettings::TConstPtr Snapshot() const;
     THashMap<TString, TString> Tokens;
     std::unordered_map<TString, TClusterMainSettings> Clusters;
-    THashMap<TString, TVector<TString>> DbId2Clusters; // DatabaseId -> ClusterNames 
+    THashMap<TString, TVector<TString>> DbId2Clusters; // DatabaseId -> ClusterNames
 };
 
 } // NYql

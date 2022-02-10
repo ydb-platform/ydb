@@ -61,7 +61,7 @@ public:
     void Bootstrap(const TActorContext& ctx);
 
     static constexpr char ActorName[] = "YQ_GC_ACTOR";
- 
+
 private:
     STRICT_STFUNC(StateFunc,
         HFunc(TEvCheckpointStorage::TEvNewCheckpointSucceeded, Handle);

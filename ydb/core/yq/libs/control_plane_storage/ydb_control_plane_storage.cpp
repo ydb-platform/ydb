@@ -37,18 +37,18 @@ void TYdbControlPlaneStorageActor::Bootstrap() {
     CPS_LOG_I("Starting ydb control plane storage service. Actor id: " << SelfId());
     NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YQ_CONTROL_PLANE_STORAGE_PROVIDER));
 
-    DbPool = YqSharedResources->DbPoolHolder->GetOrCreate(EDbPoolId::MAIN, 10); 
+    DbPool = YqSharedResources->DbPoolHolder->GetOrCreate(EDbPoolId::MAIN, 10);
     YdbConnection = NewYdbConnection(Config.Proto.GetStorage(), CredProviderFactory);
     auto as = NActors::TActivationContext::ActorSystem();
     CreateDirectory(as);
     CreateQueriesTable(as);
-    CreatePendingSmallTable(as); 
+    CreatePendingSmallTable(as);
     CreateConnectionsTable(as);
     CreateBindingsTable(as);
     CreateIdempotencyKeysTable(as);
     CreateResultSetsTable(as);
     CreateJobsTable(as);
-    CreateNodesTable(as); 
+    CreateNodesTable(as);
     Become(&TThis::StateFunc);
 }
 
@@ -81,8 +81,8 @@ TAsyncStatus TYdbControlPlaneStorageActor::CreateQueriesTable(TActorSystem* as)
     auto description = TTableBuilder()
         .AddNullableColumn(SCOPE_COLUMN_NAME, EPrimitiveType::String)
         .AddNullableColumn(QUERY_ID_COLUMN_NAME, EPrimitiveType::String)
-        .AddNullableColumn(RESULT_ID_COLUMN_NAME, EPrimitiveType::String) 
-        .AddNullableColumn(GENERATION_COLUMN_NAME, EPrimitiveType::Uint64) 
+        .AddNullableColumn(RESULT_ID_COLUMN_NAME, EPrimitiveType::String)
+        .AddNullableColumn(GENERATION_COLUMN_NAME, EPrimitiveType::Uint64)
         .AddNullableColumn(NAME_COLUMN_NAME, EPrimitiveType::String)
         .AddNullableColumn(USER_COLUMN_NAME, EPrimitiveType::String)
         .AddNullableColumn(VISIBILITY_COLUMN_NAME, EPrimitiveType::Int64)
@@ -115,20 +115,20 @@ TAsyncStatus TYdbControlPlaneStorageActor::CreateQueriesTable(TActorSystem* as)
         });
 }
 
-TAsyncStatus TYdbControlPlaneStorageActor::CreatePendingSmallTable(TActorSystem* as) 
-{ 
-    auto tablePath = JoinPath(YdbConnection->TablePathPrefix, PENDING_SMALL_TABLE_NAME); 
- 
-    auto description = TTableBuilder() 
-        .AddNullableColumn(SCOPE_COLUMN_NAME, EPrimitiveType::String) 
-        .AddNullableColumn(QUERY_ID_COLUMN_NAME, EPrimitiveType::String) 
+TAsyncStatus TYdbControlPlaneStorageActor::CreatePendingSmallTable(TActorSystem* as)
+{
+    auto tablePath = JoinPath(YdbConnection->TablePathPrefix, PENDING_SMALL_TABLE_NAME);
+
+    auto description = TTableBuilder()
+        .AddNullableColumn(SCOPE_COLUMN_NAME, EPrimitiveType::String)
+        .AddNullableColumn(QUERY_ID_COLUMN_NAME, EPrimitiveType::String)
         .AddNullableColumn(LAST_SEEN_AT_COLUMN_NAME, EPrimitiveType::Timestamp)
-        .AddNullableColumn(RETRY_COUNTER_COLUMN_NAME, EPrimitiveType::Uint64) 
-        .AddNullableColumn(RETRY_COUNTER_UPDATE_COLUMN_NAME, EPrimitiveType::Timestamp) 
-        .AddNullableColumn(QUERY_TYPE_COLUMN_NAME, EPrimitiveType::Int64) 
-        .AddNullableColumn(IS_RESIGN_QUERY_COLUMN_NAME, EPrimitiveType::Bool) 
-        .AddNullableColumn(HOST_NAME_COLUMN_NAME, EPrimitiveType::String) 
-        .AddNullableColumn(OWNER_COLUMN_NAME, EPrimitiveType::String) 
+        .AddNullableColumn(RETRY_COUNTER_COLUMN_NAME, EPrimitiveType::Uint64)
+        .AddNullableColumn(RETRY_COUNTER_UPDATE_COLUMN_NAME, EPrimitiveType::Timestamp)
+        .AddNullableColumn(QUERY_TYPE_COLUMN_NAME, EPrimitiveType::Int64)
+        .AddNullableColumn(IS_RESIGN_QUERY_COLUMN_NAME, EPrimitiveType::Bool)
+        .AddNullableColumn(HOST_NAME_COLUMN_NAME, EPrimitiveType::String)
+        .AddNullableColumn(OWNER_COLUMN_NAME, EPrimitiveType::String)
         .SetPrimaryKeyColumns({SCOPE_COLUMN_NAME, QUERY_ID_COLUMN_NAME})
         .Build();
 
@@ -140,7 +140,7 @@ TAsyncStatus TYdbControlPlaneStorageActor::CreatePendingSmallTable(TActorSystem*
             auto status = future.GetValue();
             if (!IsTableCreated(status)) {
                 CPS_LOG_AS_E(*as, "create pending table error: " << status.GetIssues().ToString());
-                return CreatePendingSmallTable(as); 
+                return CreatePendingSmallTable(as);
             }
             return future;
         });
@@ -202,7 +202,7 @@ TAsyncStatus TYdbControlPlaneStorageActor::CreateJobsTable(TActorSystem* as)
         .AddNullableColumn(USER_COLUMN_NAME, EPrimitiveType::String)
         .AddNullableColumn(VISIBILITY_COLUMN_NAME, EPrimitiveType::Int64)
         .AddNullableColumn(EXPIRE_AT_COLUMN_NAME, EPrimitiveType::Timestamp)
-        .SetPrimaryKeyColumns({SCOPE_COLUMN_NAME, QUERY_ID_COLUMN_NAME, JOB_ID_COLUMN_NAME}) 
+        .SetPrimaryKeyColumns({SCOPE_COLUMN_NAME, QUERY_ID_COLUMN_NAME, JOB_ID_COLUMN_NAME})
         .SetTtlSettings(EXPIRE_AT_COLUMN_NAME)
         .Build();
 
@@ -220,39 +220,39 @@ TAsyncStatus TYdbControlPlaneStorageActor::CreateJobsTable(TActorSystem* as)
         });
 }
 
-TAsyncStatus TYdbControlPlaneStorageActor::CreateNodesTable(TActorSystem* as) 
-{ 
+TAsyncStatus TYdbControlPlaneStorageActor::CreateNodesTable(TActorSystem* as)
+{
     auto tablePath = JoinPath(YdbConnection->TablePathPrefix, NODES_TABLE_NAME);
- 
-    auto description = TTableBuilder() 
-        .AddNullableColumn(TENANT_COLUMN_NAME, EPrimitiveType::String) 
-        .AddNullableColumn(INSTANCE_ID_COLUMN_NAME, EPrimitiveType::String) 
-        .AddNullableColumn(NODE_ID_COLUMN_NAME, EPrimitiveType::Uint32) 
-        .AddNullableColumn(HOST_NAME_COLUMN_NAME, EPrimitiveType::String) 
-        .AddNullableColumn(ACTIVE_WORKERS_COLUMN_NAME, EPrimitiveType::Uint64) 
+
+    auto description = TTableBuilder()
+        .AddNullableColumn(TENANT_COLUMN_NAME, EPrimitiveType::String)
+        .AddNullableColumn(INSTANCE_ID_COLUMN_NAME, EPrimitiveType::String)
+        .AddNullableColumn(NODE_ID_COLUMN_NAME, EPrimitiveType::Uint32)
+        .AddNullableColumn(HOST_NAME_COLUMN_NAME, EPrimitiveType::String)
+        .AddNullableColumn(ACTIVE_WORKERS_COLUMN_NAME, EPrimitiveType::Uint64)
         .AddNullableColumn(MEMORY_LIMIT_COLUMN_NAME, EPrimitiveType::Uint64)
         .AddNullableColumn(MEMORY_ALLOCATED_COLUMN_NAME, EPrimitiveType::Uint64)
-        .AddNullableColumn(EXPIRE_AT_COLUMN_NAME, EPrimitiveType::Timestamp) 
-        .AddNullableColumn(INTERCONNECT_PORT_COLUMN_NAME, EPrimitiveType::Uint32) 
-        .AddNullableColumn(NODE_ADDRESS_COLUMN_NAME, EPrimitiveType::String) 
-        .SetTtlSettings(EXPIRE_AT_COLUMN_NAME) 
+        .AddNullableColumn(EXPIRE_AT_COLUMN_NAME, EPrimitiveType::Timestamp)
+        .AddNullableColumn(INTERCONNECT_PORT_COLUMN_NAME, EPrimitiveType::Uint32)
+        .AddNullableColumn(NODE_ADDRESS_COLUMN_NAME, EPrimitiveType::String)
+        .SetTtlSettings(EXPIRE_AT_COLUMN_NAME)
         .SetPrimaryKeyColumns({TENANT_COLUMN_NAME, NODE_ID_COLUMN_NAME})
-        .Build(); 
- 
-    return YdbConnection->Client.RetryOperation( 
-        [tablePath = std::move(tablePath), description = std::move(description)] (TSession session) mutable { 
-            return session.CreateTable(tablePath, TTableDescription(description)); 
-        }) 
-        .Apply([=](const auto& future) { 
-            auto status = future.GetValue(); 
+        .Build();
+
+    return YdbConnection->Client.RetryOperation(
+        [tablePath = std::move(tablePath), description = std::move(description)] (TSession session) mutable {
+            return session.CreateTable(tablePath, TTableDescription(description));
+        })
+        .Apply([=](const auto& future) {
+            auto status = future.GetValue();
             if (!IsTableCreated(status)) {
-                CPS_LOG_AS_E(*as, "create nodes table error: " << status.GetIssues().ToString()); 
-                return CreateNodesTable(as); 
-            } 
-            return future; 
-        }); 
-} 
- 
+                CPS_LOG_AS_E(*as, "create nodes table error: " << status.GetIssues().ToString());
+                return CreateNodesTable(as);
+            }
+            return future;
+        });
+}
+
 TAsyncStatus TYdbControlPlaneStorageActor::CreateBindingsTable(TActorSystem* as)
 {
     auto tablePath = JoinPath(YdbConnection->TablePathPrefix, BINDINGS_TABLE_NAME);
@@ -286,7 +286,7 @@ TAsyncStatus TYdbControlPlaneStorageActor::CreateBindingsTable(TActorSystem* as)
 
 TAsyncStatus TYdbControlPlaneStorageActor::CreateIdempotencyKeysTable(TActorSystem* as)
 {
- 
+
     auto tablePath = JoinPath(YdbConnection->TablePathPrefix, IDEMPOTENCY_KEYS_TABLE_NAME);
 
     auto description = TTableBuilder()
@@ -317,13 +317,13 @@ TAsyncStatus TYdbControlPlaneStorageActor::CreateResultSetsTable(TActorSystem* a
     auto tablePath = JoinPath(YdbConnection->TablePathPrefix, RESULT_SETS_TABLE_NAME);
 
     auto description = TTableBuilder()
-        .AddNullableColumn(RESULT_ID_COLUMN_NAME, EPrimitiveType::String) 
+        .AddNullableColumn(RESULT_ID_COLUMN_NAME, EPrimitiveType::String)
         .AddNullableColumn(RESULT_SET_ID_COLUMN_NAME, EPrimitiveType::Int32)
         .AddNullableColumn(ROW_ID_COLUMN_NAME, EPrimitiveType::Int64)
         .AddNullableColumn(RESULT_SET_COLUMN_NAME, EPrimitiveType::String)
         .AddNullableColumn(EXPIRE_AT_COLUMN_NAME, EPrimitiveType::Timestamp)
         .SetTtlSettings(EXPIRE_AT_COLUMN_NAME)
-        .SetPrimaryKeyColumns({RESULT_ID_COLUMN_NAME, RESULT_SET_ID_COLUMN_NAME, ROW_ID_COLUMN_NAME}) 
+        .SetPrimaryKeyColumns({RESULT_ID_COLUMN_NAME, RESULT_SET_ID_COLUMN_NAME, ROW_ID_COLUMN_NAME})
         .Build();
 
     return YdbConnection->Client.RetryOperation(
@@ -373,31 +373,31 @@ void TYdbControlPlaneStorageActor::ReadIdempotencyKeyQuery(TSqlQueryBuilder& bui
 
 class TDbRequest: public NActors::TActorBootstrapped<TDbRequest> {
     using TFunction = std::function<NYdb::TAsyncStatus(NYdb::NTable::TSession&)>;
-    TDbPool::TPtr DbPool; 
+    TDbPool::TPtr DbPool;
     TPromise<NYdb::TStatus> Promise;
     TFunction Handler;
 
 public:
-    TDbRequest(const TDbPool::TPtr& dbPool, const TPromise<NYdb::TStatus>& promise, const TFunction& handler) 
+    TDbRequest(const TDbPool::TPtr& dbPool, const TPromise<NYdb::TStatus>& promise, const TFunction& handler)
         : DbPool(dbPool)
         , Promise(promise)
         , Handler(handler)
     {}
 
     static constexpr char ActorName[] = "YQ_CONTROL_PLANE_STORAGE_DB_REQUEST";
- 
+
     void Bootstrap() {
         CPS_LOG_T("DbRequest actor request. Actor id: " << SelfId());
         Become(&TDbRequest::StateFunc);
-        Send(DbPool->GetNextActor(), new TEvents::TEvDbFunctionRequest(Handler), IEventHandle::FlagTrackDelivery); 
+        Send(DbPool->GetNextActor(), new TEvents::TEvDbFunctionRequest(Handler), IEventHandle::FlagTrackDelivery);
     }
 
     STRICT_STFUNC(StateFunc,
-        hFunc(TEvents::TEvDbFunctionResponse, Handle); 
+        hFunc(TEvents::TEvDbFunctionResponse, Handle);
         hFunc(NActors::TEvents::TEvUndelivered, OnUndelivered)
     )
 
-    void Handle(TEvents::TEvDbFunctionResponse::TPtr& ev) { 
+    void Handle(TEvents::TEvDbFunctionResponse::TPtr& ev) {
         CPS_LOG_T("DbRequest actor response. Actor id: " << SelfId());
         Promise.SetValue(ev->Get()->Status);
         PassAway();
@@ -405,21 +405,21 @@ public:
 
     void OnUndelivered(NActors::TEvents::TEvUndelivered::TPtr&) {
         CPS_LOG_E("On delivered. Actor id: " << SelfId());
-        Send(DbPool->GetNextActor(), new TEvents::TEvDbFunctionRequest(Handler), IEventHandle::FlagTrackDelivery); 
+        Send(DbPool->GetNextActor(), new TEvents::TEvDbFunctionRequest(Handler), IEventHandle::FlagTrackDelivery);
     }
 };
 
 
-std::pair<TAsyncStatus, std::shared_ptr<TVector<NYdb::TResultSet>>> TYdbControlPlaneStorageActor::Read( 
-    const TString& query, 
-    const NYdb::TParams& params, 
-    const TRequestCountersPtr& requestCounters, 
-    TDebugInfoPtr debugInfo, 
-    TTxSettings transactionMode, 
-    bool retryOnTli) 
+std::pair<TAsyncStatus, std::shared_ptr<TVector<NYdb::TResultSet>>> TYdbControlPlaneStorageActor::Read(
+    const TString& query,
+    const NYdb::TParams& params,
+    const TRequestCountersPtr& requestCounters,
+    TDebugInfoPtr debugInfo,
+    TTxSettings transactionMode,
+    bool retryOnTli)
 {
     auto resultSet = std::make_shared<TVector<NYdb::TResultSet>>();
- 
+
     std::shared_ptr<int> retryCount = std::make_shared<int>();
     auto handler = [=](TSession& session) {
         if (*retryCount != 0) {
@@ -427,17 +427,17 @@ std::pair<TAsyncStatus, std::shared_ptr<TVector<NYdb::TResultSet>>> TYdbControlP
         }
         ++(*retryCount);
         CollectDebugInfo(query, params, session, debugInfo);
-        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx(transactionMode).CommitTx(), params, NYdb::NTable::TExecDataQuerySettings().KeepInQueryCache(true)); 
-        return result.Apply([retryOnTli, resultSet] (const TFuture<TDataQueryResult>& future) { 
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx(transactionMode).CommitTx(), params, NYdb::NTable::TExecDataQuerySettings().KeepInQueryCache(true));
+        return result.Apply([retryOnTli, resultSet] (const TFuture<TDataQueryResult>& future) {
             NYdb::NTable::TDataQueryResult result = future.GetValue();
             *resultSet = result.GetResultSets();
             auto status = static_cast<TStatus>(result);
             if (status.GetStatus() == EStatus::SCHEME_ERROR) { // retry if table does not exist
                 return TStatus{EStatus::UNAVAILABLE, NYql::TIssues{status.GetIssues()}};
             }
-            if (!retryOnTli && status.GetStatus() == EStatus::ABORTED) { 
-                return TStatus{EStatus::GENERIC_ERROR, NYql::TIssues{status.GetIssues()}}; 
-            } 
+            if (!retryOnTli && status.GetStatus() == EStatus::ABORTED) {
+                return TStatus{EStatus::GENERIC_ERROR, NYql::TIssues{status.GetIssues()}};
+            }
             return status;
         });
     };
@@ -447,15 +447,15 @@ std::pair<TAsyncStatus, std::shared_ptr<TVector<NYdb::TResultSet>>> TYdbControlP
     return {promise.GetFuture(), resultSet};
 }
 
-TAsyncStatus TYdbControlPlaneStorageActor::Validate( 
-    std::shared_ptr<TMaybe<TTransaction>> transaction, 
-    size_t item, 
-    const TVector<TValidationQuery>& validators, 
-    TSession session, 
-    std::shared_ptr<bool> successFinish, 
-    TDebugInfoPtr debugInfo, 
-    TTxSettings transactionMode) 
-{ 
+TAsyncStatus TYdbControlPlaneStorageActor::Validate(
+    std::shared_ptr<TMaybe<TTransaction>> transaction,
+    size_t item,
+    const TVector<TValidationQuery>& validators,
+    TSession session,
+    std::shared_ptr<bool> successFinish,
+    TDebugInfoPtr debugInfo,
+    TTxSettings transactionMode)
+{
     if (item >= validators.size()) {
         return MakeFuture(TStatus{EStatus::SUCCESS, NYql::TIssues{}});
     }
@@ -481,30 +481,30 @@ TAsyncStatus TYdbControlPlaneStorageActor::Validate(
     });
 }
 
-TAsyncStatus TYdbControlPlaneStorageActor::Write( 
-    NActors::TActorSystem* actorSystem, 
-    const TString& query, 
-    const NYdb::TParams& params, 
-    const TRequestCountersPtr& requestCounters, 
-    TDebugInfoPtr debugInfo, 
-    const TVector<TValidationQuery>& validators, 
-    TTxSettings transactionMode, 
-    bool retryOnTli) 
+TAsyncStatus TYdbControlPlaneStorageActor::Write(
+    NActors::TActorSystem* actorSystem,
+    const TString& query,
+    const NYdb::TParams& params,
+    const TRequestCountersPtr& requestCounters,
+    TDebugInfoPtr debugInfo,
+    const TVector<TValidationQuery>& validators,
+    TTxSettings transactionMode,
+    bool retryOnTli)
 {
     std::shared_ptr<int> retryCount = std::make_shared<int>();
     auto transaction = std::make_shared<TMaybe<TTransaction>>();
-    auto writeHandler = [=, retryOnTli=retryOnTli] (TSession session) { 
+    auto writeHandler = [=, retryOnTli=retryOnTli] (TSession session) {
         CollectDebugInfo(query, params, session, debugInfo);
-        auto result = session.ExecuteDataQuery(query, validators ? TTxControl::Tx(**transaction).CommitTx() : TTxControl::BeginTx(transactionMode).CommitTx(), params, NYdb::NTable::TExecDataQuerySettings().KeepInQueryCache(true)); 
-        return result.Apply([=] (const TFuture<TDataQueryResult>& future) { 
+        auto result = session.ExecuteDataQuery(query, validators ? TTxControl::Tx(**transaction).CommitTx() : TTxControl::BeginTx(transactionMode).CommitTx(), params, NYdb::NTable::TExecDataQuerySettings().KeepInQueryCache(true));
+        return result.Apply([=] (const TFuture<TDataQueryResult>& future) {
             NYdb::NTable::TDataQueryResult result = future.GetValue();
             auto status = static_cast<TStatus>(result);
             if (status.GetStatus() == EStatus::SCHEME_ERROR) { // retry if table does not exist
                 return TStatus{EStatus::UNAVAILABLE, NYql::TIssues{status.GetIssues()}};
             }
-            if (!retryOnTli && status.GetStatus() == EStatus::ABORTED) { 
-                return TStatus{EStatus::GENERIC_ERROR, NYql::TIssues{status.GetIssues()}}; 
-            } 
+            if (!retryOnTli && status.GetStatus() == EStatus::ABORTED) {
+                return TStatus{EStatus::GENERIC_ERROR, NYql::TIssues{status.GetIssues()}};
+            }
             return status;
         });
     };
@@ -542,42 +542,42 @@ TAsyncStatus TYdbControlPlaneStorageActor::Write(
     return promise.GetFuture();
 }
 
-NThreading::TFuture<void> TYdbControlPlaneStorageActor::PickTask( 
-    const TPickTaskParams& taskParams, 
-    const TRequestCountersPtr& requestCounters, 
-    TDebugInfoPtr debugInfo, 
-    std::shared_ptr<TResponseTasks> responseTasks, 
-    const TVector<TValidationQuery>& validators, 
-    TTxSettings transactionMode) 
+NThreading::TFuture<void> TYdbControlPlaneStorageActor::PickTask(
+    const TPickTaskParams& taskParams,
+    const TRequestCountersPtr& requestCounters,
+    TDebugInfoPtr debugInfo,
+    std::shared_ptr<TResponseTasks> responseTasks,
+    const TVector<TValidationQuery>& validators,
+    TTxSettings transactionMode)
 {
-    return ReadModifyWrite(NActors::TActivationContext::ActorSystem(), taskParams.ReadQuery, taskParams.ReadParams, 
-        taskParams.PrepareParams, requestCounters, debugInfo, validators, transactionMode, taskParams.RetryOnTli) 
-            .Apply([=, responseTasks=responseTasks, queryId = taskParams.QueryId](const auto& future) { 
-                const auto status = future.GetValue(); 
-                if (responseTasks && status.GetStatus() == EStatus::GENERIC_ERROR) { 
-                    responseTasks->SafeEraseTaskBlocking(queryId); 
-                } 
-            }); 
-} 
- 
-TAsyncStatus TYdbControlPlaneStorageActor::ReadModifyWrite( 
-    NActors::TActorSystem* actorSystem, 
-    const TString& readQuery, 
-    const NYdb::TParams& readParams, 
-    const std::function<std::pair<TString, NYdb::TParams>(const TVector<NYdb::TResultSet>&)>& prepare, 
-    const TRequestCountersPtr& requestCounters, 
-    TDebugInfoPtr debugInfo, 
-    const TVector<TValidationQuery>& validators, 
-    TTxSettings transactionMode, 
-    bool retryOnTli) 
-{ 
+    return ReadModifyWrite(NActors::TActivationContext::ActorSystem(), taskParams.ReadQuery, taskParams.ReadParams,
+        taskParams.PrepareParams, requestCounters, debugInfo, validators, transactionMode, taskParams.RetryOnTli)
+            .Apply([=, responseTasks=responseTasks, queryId = taskParams.QueryId](const auto& future) {
+                const auto status = future.GetValue();
+                if (responseTasks && status.GetStatus() == EStatus::GENERIC_ERROR) {
+                    responseTasks->SafeEraseTaskBlocking(queryId);
+                }
+            });
+}
+
+TAsyncStatus TYdbControlPlaneStorageActor::ReadModifyWrite(
+    NActors::TActorSystem* actorSystem,
+    const TString& readQuery,
+    const NYdb::TParams& readParams,
+    const std::function<std::pair<TString, NYdb::TParams>(const TVector<NYdb::TResultSet>&)>& prepare,
+    const TRequestCountersPtr& requestCounters,
+    TDebugInfoPtr debugInfo,
+    const TVector<TValidationQuery>& validators,
+    TTxSettings transactionMode,
+    bool retryOnTli)
+{
     std::shared_ptr<int> retryCount = std::make_shared<int>();
     auto resultSets = std::make_shared<TVector<NYdb::TResultSet>>();
     auto transaction = std::make_shared<TMaybe<TTransaction>>();
 
     auto readModifyWriteHandler = [=](TSession session) {
         CollectDebugInfo(readQuery, readParams, session, debugInfo);
-        auto readResult = session.ExecuteDataQuery(readQuery, validators ? TTxControl::Tx(**transaction) : TTxControl::BeginTx(transactionMode), readParams, NYdb::NTable::TExecDataQuerySettings().KeepInQueryCache(true)); 
+        auto readResult = session.ExecuteDataQuery(readQuery, validators ? TTxControl::Tx(**transaction) : TTxControl::BeginTx(transactionMode), readParams, NYdb::NTable::TExecDataQuerySettings().KeepInQueryCache(true));
         auto readResultStatus = readResult.Apply([resultSets, transaction] (const TFuture<TDataQueryResult>& future) {
             NYdb::NTable::TDataQueryResult result = future.GetValue();
             *resultSets = result.GetResultSets();
@@ -597,7 +597,7 @@ TAsyncStatus TYdbControlPlaneStorageActor::ReadModifyWrite(
             if (!readResultStatus.GetValue().IsSuccess()) {
                 return readResultStatus;
             }
- 
+
             try {
                 auto [writeQuery, params] = future.GetValue();
                 if (!writeQuery) {
@@ -612,15 +612,15 @@ TAsyncStatus TYdbControlPlaneStorageActor::ReadModifyWrite(
                 }
                 CollectDebugInfo(writeQuery, params, session, debugInfo);
                 auto writeResult = session.ExecuteDataQuery(writeQuery, TTxControl::Tx(**transaction).CommitTx(), params, NYdb::NTable::TExecDataQuerySettings().KeepInQueryCache(true));
-                return writeResult.Apply([retryOnTli] (const TFuture<TDataQueryResult>& future) { 
+                return writeResult.Apply([retryOnTli] (const TFuture<TDataQueryResult>& future) {
                     NYdb::NTable::TDataQueryResult result = future.GetValue();
                     auto status = static_cast<TStatus>(result);
                     if (status.GetStatus() == EStatus::SCHEME_ERROR) { // retry if table does not exist
                         return TStatus{EStatus::UNAVAILABLE, NYql::TIssues{status.GetIssues()}};
                     }
-                    if (!retryOnTli && status.GetStatus() == EStatus::ABORTED) { 
-                        return TStatus{EStatus::GENERIC_ERROR, NYql::TIssues{status.GetIssues()}}; 
-                    } 
+                    if (!retryOnTli && status.GetStatus() == EStatus::ABORTED) {
+                        return TStatus{EStatus::GENERIC_ERROR, NYql::TIssues{status.GetIssues()}};
+                    }
                     return status;
                 });
             } catch (const TControlPlaneStorageException& exception) {
@@ -634,7 +634,7 @@ TAsyncStatus TYdbControlPlaneStorageActor::ReadModifyWrite(
                 return MakeFuture(TStatus{EStatus::GENERIC_ERROR, NYql::TIssues{NYql::TIssue{CurrentExceptionMessage()}}});
             }
         });
-    }; 
+    };
 
     auto handler = [=] (TSession session) {
         if (*retryCount != 0) {

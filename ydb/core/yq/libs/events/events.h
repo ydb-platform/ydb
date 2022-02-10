@@ -1,5 +1,5 @@
 #pragma once
-#include "event_ids.h" 
+#include "event_ids.h"
 
 #include <ydb/library/yql/core/facade/yql_facade.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h>
@@ -14,16 +14,16 @@
 
 #include <util/digest/multi.h>
 
-namespace NYq { 
+namespace NYq {
 
 using NYdb::NYq::TScope;
 
-enum class DatabaseType { 
-    Ydb, 
+enum class DatabaseType {
+    Ydb,
     ClickHouse,
     DataStreams,
     ObjectStorage
-}; 
+};
 
 struct TQueryResult {
     TVector<Ydb::ResultSet> Sets;
@@ -39,55 +39,55 @@ struct TEvents {
         bool HasPerm = false;
     };
 
-    struct TEvPingTaskRequest : NActors::TEventLocal<TEvPingTaskRequest, TEventIds::EvPingTaskRequest>, TEvAnalyticsBase { 
-        Yq::Private::PingTaskRequest Record; 
-    }; 
- 
-    struct TEvPingTaskResponse : NActors::TEventLocal<TEvPingTaskResponse, TEventIds::EvPingTaskResponse> { 
-        Ydb::StatusIds::StatusCode Status; 
-        NYql::TIssues Issues; 
-        TMaybe<Yq::Private::PingTaskResult> Record; 
-    }; 
- 
-    struct TEvGetTaskRequest : NActors::TEventLocal<TEvGetTaskRequest, TEventIds::EvGetTaskRequest>, TEvAnalyticsBase { 
-        Yq::Private::GetTaskRequest Record; 
-    }; 
- 
-    struct TEvGetTaskResponse : NActors::TEventLocal<TEvGetTaskResponse, TEventIds::EvGetTaskResponse> { 
-        Ydb::StatusIds::StatusCode Status; 
-        NYql::TIssues Issues; 
-        TMaybe<Yq::Private::GetTaskResult> Record; 
-    }; 
- 
-    struct TEvWriteTaskResultRequest : NActors::TEventLocal<TEvWriteTaskResultRequest, TEventIds::EvWriteTaskResultRequest>, TEvAnalyticsBase { 
-        Yq::Private::WriteTaskResultRequest Record; 
-    }; 
- 
-    struct TEvWriteTaskResultResponse : NActors::TEventLocal<TEvWriteTaskResultResponse, TEventIds::EvWriteTaskResultResponse> { 
-        Ydb::StatusIds::StatusCode Status; 
-        NYql::TIssues Issues; 
-        TMaybe<Yq::Private::WriteTaskResultResult> Record; 
-    }; 
- 
-    struct TEvNodesHealthCheckRequest : NActors::TEventLocal<TEvNodesHealthCheckRequest, TEventIds::EvNodesHealthCheckRequest>{ 
-        Yq::Private::NodesHealthCheckRequest Record; 
-    }; 
- 
-    struct TEvNodesHealthCheckResponse : NActors::TEventLocal<TEvNodesHealthCheckResponse, TEventIds::EvNodesHealthCheckResponse> { 
-        Ydb::StatusIds::StatusCode Status; 
-        NYql::TIssues Issues; 
-        TMaybe<Yq::Private::NodesHealthCheckResult> Record; 
-    }; 
- 
-    struct TEvAsyncContinue : NActors::TEventLocal<TEvAsyncContinue, TEventIds::EvAsyncContinue> { 
-        const NYql::TProgram::TFutureStatus Future; 
+    struct TEvPingTaskRequest : NActors::TEventLocal<TEvPingTaskRequest, TEventIds::EvPingTaskRequest>, TEvAnalyticsBase {
+        Yq::Private::PingTaskRequest Record;
+    };
 
-        explicit TEvAsyncContinue(const NYql::TProgram::TFutureStatus& future) 
+    struct TEvPingTaskResponse : NActors::TEventLocal<TEvPingTaskResponse, TEventIds::EvPingTaskResponse> {
+        Ydb::StatusIds::StatusCode Status;
+        NYql::TIssues Issues;
+        TMaybe<Yq::Private::PingTaskResult> Record;
+    };
+
+    struct TEvGetTaskRequest : NActors::TEventLocal<TEvGetTaskRequest, TEventIds::EvGetTaskRequest>, TEvAnalyticsBase {
+        Yq::Private::GetTaskRequest Record;
+    };
+
+    struct TEvGetTaskResponse : NActors::TEventLocal<TEvGetTaskResponse, TEventIds::EvGetTaskResponse> {
+        Ydb::StatusIds::StatusCode Status;
+        NYql::TIssues Issues;
+        TMaybe<Yq::Private::GetTaskResult> Record;
+    };
+
+    struct TEvWriteTaskResultRequest : NActors::TEventLocal<TEvWriteTaskResultRequest, TEventIds::EvWriteTaskResultRequest>, TEvAnalyticsBase {
+        Yq::Private::WriteTaskResultRequest Record;
+    };
+
+    struct TEvWriteTaskResultResponse : NActors::TEventLocal<TEvWriteTaskResultResponse, TEventIds::EvWriteTaskResultResponse> {
+        Ydb::StatusIds::StatusCode Status;
+        NYql::TIssues Issues;
+        TMaybe<Yq::Private::WriteTaskResultResult> Record;
+    };
+
+    struct TEvNodesHealthCheckRequest : NActors::TEventLocal<TEvNodesHealthCheckRequest, TEventIds::EvNodesHealthCheckRequest>{
+        Yq::Private::NodesHealthCheckRequest Record;
+    };
+
+    struct TEvNodesHealthCheckResponse : NActors::TEventLocal<TEvNodesHealthCheckResponse, TEventIds::EvNodesHealthCheckResponse> {
+        Ydb::StatusIds::StatusCode Status;
+        NYql::TIssues Issues;
+        TMaybe<Yq::Private::NodesHealthCheckResult> Record;
+    };
+
+    struct TEvAsyncContinue : NActors::TEventLocal<TEvAsyncContinue, TEventIds::EvAsyncContinue> {
+        const NYql::TProgram::TFutureStatus Future;
+
+        explicit TEvAsyncContinue(const NYql::TProgram::TFutureStatus& future)
             : Future(future)
         {}
     };
 
-    struct TEvDbRequest : NActors::TEventLocal<TEvDbRequest, TEventIds::EvDbRequest> { 
+    struct TEvDbRequest : NActors::TEventLocal<TEvDbRequest, TEventIds::EvDbRequest> {
         TString Sql;
         NYdb::TParams Params;
         bool Idempotent;
@@ -99,7 +99,7 @@ struct TEvents {
         {}
     };
 
-    struct TEvDbResponse : NActors::TEventLocal<TEvDbResponse, TEventIds::EvDbResponse> { 
+    struct TEvDbResponse : NActors::TEventLocal<TEvDbResponse, TEventIds::EvDbResponse> {
         NYdb::TStatus Status;
         TVector<NYdb::TResultSet> ResultSets;
 
@@ -109,7 +109,7 @@ struct TEvents {
         {}
     };
 
-    struct TEvDbFunctionRequest : NActors::TEventLocal<TEvDbFunctionRequest, TEventIds::EvDbFunctionRequest> { 
+    struct TEvDbFunctionRequest : NActors::TEventLocal<TEvDbFunctionRequest, TEventIds::EvDbFunctionRequest> {
         using TFunction = std::function<NYdb::TAsyncStatus(NYdb::NTable::TSession&)>;
         TFunction Handler;
 
@@ -118,7 +118,7 @@ struct TEvents {
         {}
     };
 
-    struct TEvDbFunctionResponse : NActors::TEventLocal<TEvDbFunctionResponse, TEventIds::EvDbFunctionResponse> { 
+    struct TEvDbFunctionResponse : NActors::TEventLocal<TEvDbFunctionResponse, TEventIds::EvDbFunctionResponse> {
         NYdb::TStatus Status;
 
         explicit TEvDbFunctionResponse(NYdb::TStatus status)
@@ -126,21 +126,21 @@ struct TEvents {
         {}
     };
 
-    struct TEvEndpointResponse : NActors::TEventLocal<TEvEndpointResponse, TEventIds::EvEndpointResponse> { 
-        struct TEndpoint { 
-            TString Endpoint; 
-            TString Database; 
+    struct TEvEndpointResponse : NActors::TEventLocal<TEvEndpointResponse, TEventIds::EvEndpointResponse> {
+        struct TEndpoint {
+            TString Endpoint;
+            TString Database;
             bool Secure = false;
-        }; 
+        };
         THashMap<std::pair<TString, DatabaseType>, TEndpoint> DatabaseId2Endpoint;
-        bool Success; 
- 
+        bool Success;
+
         TEvEndpointResponse(THashMap<std::pair<TString, DatabaseType>, TEndpoint>&& res, bool success)
             : DatabaseId2Endpoint(std::move(res))
-            , Success(success) 
-        { } 
-    }; 
- 
+            , Success(success)
+        { }
+    };
+
     struct TDatabaseAuth {
         TString StructuredToken;
         bool AddBearerToToken = false;
@@ -153,12 +153,12 @@ struct TEvents {
         }
     };
 
-    struct TEvEndpointRequest : NActors::TEventLocal<TEvEndpointRequest, TEventIds::EvEndpointRequest> { 
+    struct TEvEndpointRequest : NActors::TEventLocal<TEvEndpointRequest, TEventIds::EvEndpointRequest> {
         THashMap<std::pair<TString, DatabaseType>, TDatabaseAuth> DatabaseIds; // DbId, DatabaseType => database auth
-        TString YdbMvpEndpoint; 
+        TString YdbMvpEndpoint;
         TString MdbGateway;
         TString TraceId;
-        bool MdbTransformHost; 
+        bool MdbTransformHost;
 
         TEvEndpointRequest(
             const THashMap<std::pair<TString, DatabaseType>, TDatabaseAuth>& databaseIds,
@@ -167,14 +167,14 @@ struct TEvents {
             const TString& traceId,
             bool mdbTransformHost)
             : DatabaseIds(databaseIds)
-            , YdbMvpEndpoint(ydbMvpEndpoint) 
+            , YdbMvpEndpoint(ydbMvpEndpoint)
             , MdbGateway(mdbGateway)
             , TraceId(traceId)
-            , MdbTransformHost(mdbTransformHost) 
+            , MdbTransformHost(mdbTransformHost)
         { }
     };
 
-    struct TEvDataStreamsReadRulesCreationResult : NActors::TEventLocal<TEvDataStreamsReadRulesCreationResult, TEventIds::EvDataStreamsReadRulesCreationResult> { 
+    struct TEvDataStreamsReadRulesCreationResult : NActors::TEventLocal<TEvDataStreamsReadRulesCreationResult, TEventIds::EvDataStreamsReadRulesCreationResult> {
         explicit TEvDataStreamsReadRulesCreationResult(NYql::TIssues issues)
             : Issues(std::move(issues))
         {
@@ -183,7 +183,7 @@ struct TEvents {
         NYql::TIssues Issues;
     };
 
-    struct TEvDataStreamsReadRulesDeletionResult : NActors::TEventLocal<TEvDataStreamsReadRulesDeletionResult, TEventIds::EvDataStreamsReadRulesDeletionResult> { 
+    struct TEvDataStreamsReadRulesDeletionResult : NActors::TEventLocal<TEvDataStreamsReadRulesDeletionResult, TEventIds::EvDataStreamsReadRulesDeletionResult> {
         explicit TEvDataStreamsReadRulesDeletionResult(NYql::TIssues transientIssues)
             : TransientIssues(std::move(transientIssues))
         {
@@ -192,7 +192,7 @@ struct TEvents {
         NYql::TIssues TransientIssues;
     };
 
-    struct TEvQueryActionResult : NActors::TEventLocal<TEvQueryActionResult, TEventIds::EvQueryActionResult> { 
+    struct TEvQueryActionResult : NActors::TEventLocal<TEvQueryActionResult, TEventIds::EvQueryActionResult> {
         explicit TEvQueryActionResult(YandexQuery::QueryAction action)
             : Action(action)
         {
@@ -201,17 +201,17 @@ struct TEvents {
         YandexQuery::QueryAction Action;
     };
 
-    struct TEvForwardPingRequest : NActors::TEventLocal<TEvForwardPingRequest, TEventIds::EvForwardPingRequest> { 
-        explicit TEvForwardPingRequest(const Yq::Private::PingTaskRequest& request, bool final = false) 
+    struct TEvForwardPingRequest : NActors::TEventLocal<TEvForwardPingRequest, TEventIds::EvForwardPingRequest> {
+        explicit TEvForwardPingRequest(const Yq::Private::PingTaskRequest& request, bool final = false)
             : Request(request)
             , Final(final)
         { }
 
-        Yq::Private::PingTaskRequest Request; 
+        Yq::Private::PingTaskRequest Request;
         bool Final; // Is this the last ping request.
     };
 
-    struct TEvForwardPingResponse : NActors::TEventLocal<TEvForwardPingResponse, TEventIds::EvForwardPingResponse> { 
+    struct TEvForwardPingResponse : NActors::TEventLocal<TEvForwardPingResponse, TEventIds::EvForwardPingResponse> {
         TEvForwardPingResponse(bool success, YandexQuery::QueryAction action)
             : Success(success)
             , Action(action)
@@ -235,11 +235,11 @@ struct TEvents {
     };
 };
 
-} // namespace NYq 
+} // namespace NYq
 
 template<>
-struct THash<NYq::TEvents::TDatabaseAuth> { 
-    inline ui64 operator()(const NYq::TEvents::TDatabaseAuth& x) const noexcept { 
+struct THash<NYq::TEvents::TDatabaseAuth> {
+    inline ui64 operator()(const NYq::TEvents::TDatabaseAuth& x) const noexcept {
         return MultiHash(x.StructuredToken, x.AddBearerToToken);
     }
 };

@@ -19,7 +19,7 @@ class TClickHouseDataSource : public TDataProviderBase {
 public:
     TClickHouseDataSource(TClickHouseState::TPtr state, IHTTPGateway::TPtr gateway)
         : State_(state)
-        , IODiscoveryTransformer_(CreateClickHouseIODiscoveryTransformer(State_)) 
+        , IODiscoveryTransformer_(CreateClickHouseIODiscoveryTransformer(State_))
         , LoadMetaDataTransformer_(CreateClickHouseLoadTableMetadataTransformer(State_, std::move(gateway)))
         , TypeAnnotationTransformer_(CreateClickHouseDataSourceTypeAnnotationTransformer(State_))
         , DqIntegration_(CreateClickHouseDqIntegration(State_))
@@ -53,10 +53,10 @@ public:
         return TypeAnnotationTransformer_->CanParse(node);
     }
 
-    IGraphTransformer& GetIODiscoveryTransformer() override { 
-        return *IODiscoveryTransformer_; 
-    } 
- 
+    IGraphTransformer& GetIODiscoveryTransformer() override {
+        return *IODiscoveryTransformer_;
+    }
+
     IGraphTransformer& GetLoadTableMetadataTransformer() override {
         return *LoadMetaDataTransformer_;
     }

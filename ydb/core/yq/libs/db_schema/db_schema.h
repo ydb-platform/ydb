@@ -6,11 +6,11 @@
 #include <util/string/builder.h>
 #include <util/generic/hash_set.h>
 
-namespace NYq { 
+namespace NYq {
 
 class TSqlQueryBuilder {
 public:
-    TSqlQueryBuilder(const TString& tablePrefix, const TString& queryName = "Unknown query name"); 
+    TSqlQueryBuilder(const TString& tablePrefix, const TString& queryName = "Unknown query name");
 
     TSqlQueryBuilder& PushPk();
     TSqlQueryBuilder& PopPk();
@@ -54,15 +54,15 @@ public:
     TSqlQueryBuilder& AddValue(const TString& name, const NYdb::TValue& value, const TString& pred);
 
     TSqlQueryBuilder& AddValue(const TString& name, const TString& value, const TString& pred) {
-        return AddValue(name, NYdb::TValueBuilder().String(value).Build(), pred); 
+        return AddValue(name, NYdb::TValueBuilder().String(value).Build(), pred);
     }
 
     TSqlQueryBuilder& AddValue(const TString& name, ui32 value, const TString& pred) {
-        return AddValue(name, NYdb::TValueBuilder().Uint32(value).Build(), pred); 
+        return AddValue(name, NYdb::TValueBuilder().Uint32(value).Build(), pred);
     }
 
     TSqlQueryBuilder& AddValue(const TString& name, ui64 value, const TString& pred) {
-        return AddValue(name, NYdb::TValueBuilder().Uint64(value).Build(), pred); 
+        return AddValue(name, NYdb::TValueBuilder().Uint64(value).Build(), pred);
     }
 
     TSqlQueryBuilder& AddValue(const TString& name, TInstant value, const TString& pred) {
@@ -79,17 +79,17 @@ public:
         return *this;
     }
 
-    TSqlQueryBuilder& AddColNames(TVector<TString>&& colNames); 
- 
+    TSqlQueryBuilder& AddColNames(TVector<TString>&& colNames);
+
     TSqlQueryBuilder& AddText(const TString& sql, const TString& tableName = "");
-    TSqlQueryBuilder& AddBeforeQuery(const TString& sql, const TString& tableName = ""); 
+    TSqlQueryBuilder& AddBeforeQuery(const TString& sql, const TString& tableName = "");
 
     TSqlQueryBuilder& Upsert(const TString& tableName);
-    TSqlQueryBuilder& Update(const TString& tableName); 
+    TSqlQueryBuilder& Update(const TString& tableName);
     TSqlQueryBuilder& Insert(const TString& tableName);
     TSqlQueryBuilder& Delete(const TString& tableName, int limit = 0);
     TSqlQueryBuilder& Get(const TString& tableName, int limit = 0);
-    TSqlQueryBuilder& GetCount(const TString& tableName); 
+    TSqlQueryBuilder& GetCount(const TString& tableName);
     TSqlQueryBuilder& GetLastDeleted();
     TSqlQueryBuilder& End();
 
@@ -108,7 +108,7 @@ private:
     void ConstructWhereFilter(TStringBuilder& text);
 
     const TString TablePrefix;
-    const TString QueryName; 
+    const TString QueryName;
     TString Table;
     int Limit = 0;
     TString Op;
@@ -123,8 +123,8 @@ private:
     TStringBuilder BeforeQuery;
     TStringBuilder Text;
     int Counter = 0;
- 
-    TVector<TString> ColNames; 
+
+    TVector<TString> ColNames;
 };
 
-} // namespace NYq 
+} // namespace NYq

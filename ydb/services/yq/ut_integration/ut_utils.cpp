@@ -17,15 +17,15 @@
 #include <util/string/printf.h>
 #include <util/string/builder.h>
 
-#include <library/cpp/protobuf/json/proto2json.h> 
- 
+#include <library/cpp/protobuf/json/proto2json.h>
+
 using namespace NYdb;
 using namespace NYdb::NYq;
 using namespace NActors;
 
-void UpsertToExistingTable(TDriver& driver, const TString& location){ 
-    Y_UNUSED(location); 
-    const TString tablePrefix = "Root/yq"; 
+void UpsertToExistingTable(TDriver& driver, const TString& location){
+    Y_UNUSED(location);
+    const TString tablePrefix = "Root/yq";
     NYdb::NTable::TClientSettings settings;
     NYdb::NTable::TTableClient client(driver, settings);
     auto sessionOp = client.CreateSession().ExtractValueSync();
@@ -36,7 +36,7 @@ void UpsertToExistingTable(TDriver& driver, const TString& location){
     auto timeProvider = CreateDefaultTimeProvider();
     auto now = timeProvider->Now();
     NYdb::TParamsBuilder paramsBuilder;
- 
+
     paramsBuilder.AddParam("$now").Timestamp(now).Build();
     auto params = paramsBuilder.Build();
 
@@ -90,4 +90,4 @@ void UpsertToExistingTable(TDriver& driver, const TString& location){
         }
     }
 }
- 
+

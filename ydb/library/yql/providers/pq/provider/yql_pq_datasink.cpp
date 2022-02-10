@@ -33,7 +33,7 @@ public:
     TPqDataSinkProvider(TPqState::TPtr state, IPqGateway::TPtr gateway)
         : State_(state)
         , Gateway_(gateway)
-        , IODiscoveryTransformer_(CreatePqDataSinkIODiscoveryTransformer(State_)) 
+        , IODiscoveryTransformer_(CreatePqDataSinkIODiscoveryTransformer(State_))
         , TypeAnnotationTransformer_(CreatePqDataSinkTypeAnnotationTransformer(State_))
         , ExecutionTransformer_(CreatePqDataSinkExecTransformer(State_))
         , LogicalOptProposalTransformer_(CreatePqLogicalOptProposalTransformer(State_))
@@ -53,10 +53,10 @@ public:
         return TypeAnnotationTransformer_->CanParse(node);
     }
 
-    IGraphTransformer& GetIODiscoveryTransformer() override { 
-        return *IODiscoveryTransformer_; 
-    } 
- 
+    IGraphTransformer& GetIODiscoveryTransformer() override {
+        return *IODiscoveryTransformer_;
+    }
+
     IGraphTransformer& GetTypeAnnotationTransformer(bool instantOnly) override {
         Y_UNUSED(instantOnly);
         return *TypeAnnotationTransformer_;
@@ -174,7 +174,7 @@ public:
 private:
     TPqState::TPtr State_;
     IPqGateway::TPtr Gateway_;
-    THolder<IGraphTransformer> IODiscoveryTransformer_; 
+    THolder<IGraphTransformer> IODiscoveryTransformer_;
     THolder<TVisitorTransformerBase> TypeAnnotationTransformer_;
     THolder<TExecTransformerBase> ExecutionTransformer_;
     THolder<IGraphTransformer> LogicalOptProposalTransformer_;

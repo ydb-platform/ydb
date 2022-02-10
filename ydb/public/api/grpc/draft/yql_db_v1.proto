@@ -1,19 +1,19 @@
 syntax = "proto3";
 
-package Yq.Private.V1; 
+package Yq.Private.V1;
 
 import "ydb/public/api/protos/draft/yq_private.proto";
 
-service YqPrivateTaskService { 
+service YqPrivateTaskService {
     // gets new task
-    rpc GetTask(Yq.Private.GetTaskRequest) returns (Yq.Private.GetTaskResponse); 
+    rpc GetTask(Yq.Private.GetTaskRequest) returns (Yq.Private.GetTaskResponse);
 
     // pings new task (also can update metadata)
-    rpc PingTask(Yq.Private.PingTaskRequest) returns (Yq.Private.PingTaskResponse); 
+    rpc PingTask(Yq.Private.PingTaskRequest) returns (Yq.Private.PingTaskResponse);
 
     // writes rows
-    rpc WriteTaskResult(Yq.Private.WriteTaskResultRequest) returns (Yq.Private.WriteTaskResultResponse); 
- 
-    //Nodes 
-    rpc NodesHealthCheck(Yq.Private.NodesHealthCheckRequest) returns (Yq.Private.NodesHealthCheckResponse); 
+    rpc WriteTaskResult(Yq.Private.WriteTaskResultRequest) returns (Yq.Private.WriteTaskResultResponse);
+
+    //Nodes
+    rpc NodesHealthCheck(Yq.Private.NodesHealthCheckRequest) returns (Yq.Private.NodesHealthCheckResponse);
 }

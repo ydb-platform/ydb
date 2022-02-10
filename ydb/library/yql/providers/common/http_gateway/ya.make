@@ -10,9 +10,9 @@ SRCS(
 )
 
 PEERDIR(
-    contrib/libs/curl 
-    library/cpp/monlib/dynamic_counters 
-    ydb/library/yql/providers/common/proto 
+    contrib/libs/curl
+    library/cpp/monlib/dynamic_counters
+    ydb/library/yql/providers/common/proto
     ydb/library/yql/public/issue
 )
 

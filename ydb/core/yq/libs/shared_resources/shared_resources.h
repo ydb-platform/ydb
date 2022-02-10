@@ -17,7 +17,7 @@ struct TYqSharedResources : public IYqSharedResources {
 
     // Resources
     NYdb::TDriver YdbDriver;
-    TDbPoolHolder::TPtr DbPoolHolder; 
+    TDbPoolHolder::TPtr DbPoolHolder;
 
 protected:
     explicit TYqSharedResources(NYdb::TDriver driver);
@@ -25,7 +25,7 @@ protected:
 
 TYqSharedResources::TPtr CreateYqSharedResourcesImpl(
     const NYq::NConfig::TConfig& config,
-    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory, 
-    const NMonitoring::TDynamicCounterPtr& counters); 
+    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
+    const NMonitoring::TDynamicCounterPtr& counters);
 
 } // namespace NYq

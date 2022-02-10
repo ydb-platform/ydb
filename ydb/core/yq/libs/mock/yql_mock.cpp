@@ -36,8 +36,8 @@ public:
         Location.Endpoint = TStringBuilder() << "localhost:" << grpcPort;
     }
 
-    static constexpr char ActorName[] = "YQL_MOCK"; 
- 
+    static constexpr char ActorName[] = "YQL_MOCK";
+
 private:
     STRICT_STFUNC(Handler, {
             HFunc(NHttp::TEvHttpProxy::TEvHttpIncomingRequest, Handle);
@@ -76,7 +76,7 @@ void InitTest(NActors::TTestActorRuntime* runtime, int httpPort, int grpcPort, c
 {
     yqSharedResources->Init(runtime->GetAnyNodeActorSystem());
 
-    auto httpProxyId = NYq::MakeYqlAnalyticsHttpProxyId(); 
+    auto httpProxyId = NYq::MakeYqlAnalyticsHttpProxyId();
 
     TActorId mockActorId = runtime->Register(CreateYqlMockActor(grpcPort));
 

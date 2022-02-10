@@ -715,7 +715,7 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
 
         if (hasYandexQuery) {
             server.AddService(new NGRpcService::TGRpcYandexQueryService(ActorSystem.Get(), Counters, grpcRequestProxyId));
-            server.AddService(new NGRpcService::TGRpcYqPrivateTaskService(ActorSystem.Get(), Counters, grpcRequestProxyId)); 
+            server.AddService(new NGRpcService::TGRpcYqPrivateTaskService(ActorSystem.Get(), Counters, grpcRequestProxyId));
         }
 
         if (hasLogStore) {
@@ -1316,8 +1316,8 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     }
 
     if (serviceMask.EnableYandexQuery && runConfig.AppConfig.GetYandexQueryConfig().GetEnabled()) {
-        YqSharedResources = NYq::CreateYqSharedResources(runConfig.AppConfig.GetYandexQueryConfig(), 
-            ModuleFactories->YdbCredentialProviderFactory, Counters->GetSubgroup("counters", "yq")); 
+        YqSharedResources = NYq::CreateYqSharedResources(runConfig.AppConfig.GetYandexQueryConfig(),
+            ModuleFactories->YdbCredentialProviderFactory, Counters->GetSubgroup("counters", "yq"));
         sil->AddServiceInitializer(new TYandexQueryInitializer(runConfig, ModuleFactories, YqSharedResources));
     }
 

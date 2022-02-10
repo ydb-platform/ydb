@@ -10,7 +10,7 @@ SRCS(
     yql_ydb_datasource_type_ann.cpp
     yql_ydb_dq_integration.cpp
     yql_ydb_exec.cpp
-    yql_ydb_io_discovery.cpp 
+    yql_ydb_io_discovery.cpp
     yql_ydb_load_meta.cpp
     yql_ydb_logical_opt.cpp
     yql_ydb_physical_opt.cpp
@@ -21,8 +21,8 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/random_provider 
-    library/cpp/time_provider 
+    library/cpp/random_provider
+    library/cpp/time_provider
     library/cpp/yson/node
     ydb/core/yq/libs/common
     ydb/core/yq/libs/db_resolver

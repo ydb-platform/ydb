@@ -28,10 +28,10 @@
 #define LOG_T(stream) \
     LOG_TRACE_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "Pinger - " <<  "QueryId: " << Id << ", Owner: " << OwnerId  << " " << stream)
 
-namespace NYq { 
+namespace NYq {
 
 using namespace NActors;
-using namespace NYql; 
+using namespace NYql;
 
 struct TEvPingResponse : public NActors::TEventLocal<TEvPingResponse, NActors::TEvents::TSystem::CallbackCompletion> {
     TPingTaskResult Result;
@@ -59,12 +59,12 @@ private:
 class TPingerActor : public NActors::TActorBootstrapped<TPingerActor> {
     class TRetryState {
     public:
-        void Init(const TInstant& now, const TInstant& startLeaseTime, const TDuration& maxRetryTime) { 
+        void Init(const TInstant& now, const TInstant& startLeaseTime, const TDuration& maxRetryTime) {
             StartRequestTime = now;
             StartLeaseTime = startLeaseTime;
             Delay = TDuration::Zero();
             RetriesCount = 0;
-            MaxRetryTime = maxRetryTime; 
+            MaxRetryTime = maxRetryTime;
         }
 
         void UpdateStartLeaseTime(TInstant startLeaseTime) {
@@ -111,7 +111,7 @@ class TPingerActor : public NActors::TActorBootstrapped<TPingerActor> {
         TInstant StartRequestTime;
         size_t RetriesCount = 0;
 
-        TDuration MaxRetryTime; 
+        TDuration MaxRetryTime;
         static constexpr TDuration MaxDelay = TDuration::Seconds(5);
         static constexpr TDuration MinDelay = TDuration::MilliSeconds(100); // from second retry
     };
@@ -134,9 +134,9 @@ class TPingerActor : public NActors::TActorBootstrapped<TPingerActor> {
         TConfig(const NConfig::TPingerConfig& config)
             : Proto(config)
         {
-            if (Proto.GetPingPeriod()) { 
-                Y_VERIFY(TDuration::TryParse(Proto.GetPingPeriod(), PingPeriod)); 
-            } 
+            if (Proto.GetPingPeriod()) {
+                Y_VERIFY(TDuration::TryParse(Proto.GetPingPeriod(), PingPeriod));
+            }
         }
     };
 
@@ -161,7 +161,7 @@ public:
     {
     }
 
-    static constexpr char ActorName[] = "YQ_PINGER"; 
+    static constexpr char ActorName[] = "YQ_PINGER";
 
     void Bootstrap() {
         LOG_D("Start Pinger");
@@ -175,7 +175,7 @@ private:
         StateFunc,
         cFunc(NActors::TEvents::TEvPoison::EventType, PassAway)
         hFunc(NActors::TEvents::TEvWakeup, Wakeup)
-        hFunc(TEvPingResponse, Handle) 
+        hFunc(TEvPingResponse, Handle)
         hFunc(TEvents::TEvForwardPingRequest, Handle)
     )
 
@@ -187,7 +187,7 @@ private:
     void ScheduleNextPing() {
         if (!Finishing) {
             SchedulerCookieHolder.Reset(ISchedulerCookie::Make2Way());
-            Schedule(Config.PingPeriod, new NActors::TEvents::TEvWakeup(ContinueLeaseWakeupTag), SchedulerCookieHolder.Get()); 
+            Schedule(Config.PingPeriod, new NActors::TEvents::TEvWakeup(ContinueLeaseWakeupTag), SchedulerCookieHolder.Get());
         }
     }
 
@@ -275,7 +275,7 @@ private:
         return false;
     }
 
-    void Handle(TEvPingResponse::TPtr& ev) { 
+    void Handle(TEvPingResponse::TPtr& ev) {
         if (FatalError) {
             LOG_D("Got ping response after fatal error. Ignore");
             return;
@@ -374,14 +374,14 @@ private:
         if (!retry) {
             RetryState.Init(TActivationContext::Now(), StartLeaseTime, Config.PingPeriod);
         }
-        Ping(Yq::Private::PingTaskRequest(), ContinueLeaseRequestCookie); 
+        Ping(Yq::Private::PingTaskRequest(), ContinueLeaseRequestCookie);
     }
 
-    void Ping(Yq::Private::PingTaskRequest request, ui64 cookie) { 
+    void Ping(Yq::Private::PingTaskRequest request, ui64 cookie) {
         // Fill ids
-        request.set_scope(Scope.ToString()); 
-        request.set_owner_id(OwnerId); 
-        request.mutable_query_id()->set_value(Id); 
+        request.set_scope(Scope.ToString());
+        request.set_owner_id(OwnerId);
+        request.mutable_query_id()->set_value(Id);
         *request.mutable_deadline() = NProtoInterop::CastToProto(Deadline);
 
         const auto* actorSystem = NActors::TActivationContext::ActorSystem();
@@ -400,7 +400,7 @@ private:
                         << CurrentExceptionMessage());
                 }
                 actorSystem->Send(new IEventHandle(selfId, selfId, ev.release(), 0, cookie));
-            } 
+            }
         );
     }
 
@@ -454,4 +454,4 @@ IActor* CreatePingerActor(
         deadline);
 }
 
-} /* NYq */ 
+} /* NYq */

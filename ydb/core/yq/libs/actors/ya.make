@@ -7,24 +7,24 @@ SRCS(
     database_resolver.cpp
     error.cpp
     nodes_health_check.cpp
-    nodes_manager.cpp 
+    nodes_manager.cpp
     pending_fetcher.cpp
     pinger.cpp
     proxy.cpp
     proxy_private.cpp
     result_writer.cpp
     run_actor.cpp
-    run_actor_params.cpp 
+    run_actor_params.cpp
     system_clusters.cpp
     table_bindings_from_bindings.cpp
     task_get.cpp
-    task_ping.cpp 
-    task_result_write.cpp 
+    task_ping.cpp
+    task_result_write.cpp
 )
 
 PEERDIR(
     library/cpp/actors/core
-    library/cpp/actors/interconnect 
+    library/cpp/actors/interconnect
     library/cpp/json/yson
     library/cpp/monlib/dynamic_counters
     library/cpp/random_provider

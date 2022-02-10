@@ -10,7 +10,7 @@
 
 namespace NYql {
 
-THolder<IGraphTransformer> CreateClickHouseIODiscoveryTransformer(TClickHouseState::TPtr state); 
+THolder<IGraphTransformer> CreateClickHouseIODiscoveryTransformer(TClickHouseState::TPtr state);
 THolder<IGraphTransformer> CreateClickHouseLoadTableMetadataTransformer(TClickHouseState::TPtr state, IHTTPGateway::TPtr gateway);
 
 THolder<TVisitorTransformerBase> CreateClickHouseDataSourceTypeAnnotationTransformer(TClickHouseState::TPtr state);

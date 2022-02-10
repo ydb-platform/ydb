@@ -102,9 +102,9 @@ public:
         Become(&TYdbReadActor::StateFunc);
         SendRequest();
     }
- 
-    static constexpr char ActorName[] = "YQL_YDB_READ_ACTOR"; 
- 
+
+    static constexpr char ActorName[] = "YQL_YDB_READ_ACTOR";
+
 private:
     void SaveState(const NDqProto::TCheckpoint&, NDqProto::TSourceState&) final {}
     void LoadState(const NDqProto::TSourceState&) final {}

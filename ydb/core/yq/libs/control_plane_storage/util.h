@@ -25,9 +25,9 @@ auto CreateArray(const T(&list)[N]) -> std::array<T, K> {
 }
 
 bool DoesPingTaskUpdateQueriesTable(const TEvControlPlaneStorage::TEvPingTaskRequest* request);
- 
-NYdb::TValue PackItemsToList(const TVector<NYdb::TValue>& items); 
- 
-std::pair<TString, TString> SplitId(const TString& id, char delim = '-'); 
- 
-} // namespace NYq 
+
+NYdb::TValue PackItemsToList(const TVector<NYdb::TValue>& items);
+
+std::pair<TString, TString> SplitId(const TString& id, char delim = '-');
+
+} // namespace NYq

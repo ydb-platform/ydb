@@ -11,7 +11,7 @@ NActors::IActor* MakeReadRuleDeleterActor(
     NActors::TActorId owner,
     TString queryId,
     NYdb::TDriver ydbDriver,
-    TVector<Yq::Private::TopicConsumer> topics, 
+    TVector<Yq::Private::TopicConsumer> topics,
     TVector<std::shared_ptr<NYdb::ICredentialsProviderFactory>> credentials, // For each topic
     size_t maxRetries = 15
 );

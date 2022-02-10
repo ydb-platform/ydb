@@ -146,10 +146,10 @@ ALLOW ydb/library/yql/providers/dq/worker_manager -> kikimr/core/kqp
 
 ALLOW ydb/library/yql/providers/clickhouse/provider -> kikimr/yq/libs/db_resolver
 ALLOW ydb/library/yql/providers/clickhouse/provider -> kikimr/yq/libs/common
- 
+
 ALLOW ydb/library/yql/providers/pq/provider -> kikimr/yq/libs/db_resolver
 ALLOW ydb/library/yql/providers/pq/provider -> kikimr/yq/libs/common
- 
+
 ALLOW yql/tools/yqlworker/dq/worker_manager -> kikimr/core/kqp
 
 ALLOW ydb/library/yql/dq/actors/compute -> kikimr/core/kqp/runtime

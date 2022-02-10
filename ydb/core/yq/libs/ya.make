@@ -6,11 +6,11 @@ RECURSE(
     checkpoint_storage
     checkpointing
     checkpointing_common
-    common 
+    common
     config
     control_plane_proxy
     control_plane_storage
-    db_resolver 
+    db_resolver
     db_schema
     events
     gateway
@@ -20,9 +20,9 @@ RECURSE(
     logs
     mock
     pretty_printers
-    private_client 
+    private_client
     read_rule
-    result_formatter 
+    result_formatter
     shared_resources
     signer
     tasks_packer

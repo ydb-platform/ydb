@@ -66,7 +66,7 @@ public:
         NActors::TActorId owner,
         TString queryId,
         NYdb::TDriver ydbDriver,
-        Yq::Private::TopicConsumer topic, 
+        Yq::Private::TopicConsumer topic,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProvider,
         ui64 index,
         size_t maxRetries
@@ -82,7 +82,7 @@ public:
     }
 
     static constexpr char ActorName[] = "YQ_SINGLE_READ_RULE_DELETER";
- 
+
     void Bootstrap() {
         Become(&TSingleReadRuleDeleter::StateFunc);
         StartRequest();
@@ -139,18 +139,18 @@ public:
                 Send(Owner, MakeHolder<TEvPrivate::TEvSingleReadRuleDeleterResult>(status.GetIssues()), 0, Index);
                 PassAway();
             } else {
-                Schedule(*nextRetryDelay, new NActors::TEvents::TEvWakeup()); 
+                Schedule(*nextRetryDelay, new NActors::TEvents::TEvWakeup());
             }
         }
     }
 
-    void Handle(NActors::TEvents::TEvWakeup::TPtr&) { 
+    void Handle(NActors::TEvents::TEvWakeup::TPtr&) {
         StartRequest();
     }
 
     STRICT_STFUNC(StateFunc,
         hFunc(TEvPrivate::TEvRemoveReadRuleStatus, Handle);
-        hFunc(NActors::TEvents::TEvWakeup, Handle); 
+        hFunc(NActors::TEvents::TEvWakeup, Handle);
         cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
     )
 
@@ -168,7 +168,7 @@ private:
 private:
     const NActors::TActorId Owner;
     const TString QueryId;
-    const Yq::Private::TopicConsumer Topic; 
+    const Yq::Private::TopicConsumer Topic;
     NYdb::TDriver YdbDriver;
     NYdb::NPersQueue::TPersQueueClient PqClient;
     ui64 Index = 0;
@@ -183,7 +183,7 @@ public:
         NActors::TActorId owner,
         TString queryId,
         NYdb::TDriver ydbDriver,
-        TVector<Yq::Private::TopicConsumer> topics, 
+        TVector<Yq::Private::TopicConsumer> topics,
         TVector<std::shared_ptr<NYdb::ICredentialsProviderFactory>> credentials,
         size_t maxRetries
     )
@@ -210,7 +210,7 @@ public:
     }
 
     static constexpr char ActorName[] = "YQ_READ_RULE_DELETER";
- 
+
     void Handle(TEvPrivate::TEvSingleReadRuleDeleterResult::TPtr& ev) {
         const ui64 index = ev->Cookie;
         Y_VERIFY(!Results[index]);
@@ -242,7 +242,7 @@ public:
                 }
                 issues.AddIssue(std::move(mainIssue));
             }
-            Send(Owner, MakeHolder<TEvents::TEvDataStreamsReadRulesDeletionResult>(std::move(issues))); 
+            Send(Owner, MakeHolder<TEvents::TEvDataStreamsReadRulesDeletionResult>(std::move(issues)));
             PassAway();
         }
     }
@@ -256,7 +256,7 @@ private:
     const NActors::TActorId Owner;
     const TString QueryId;
     NYdb::TDriver YdbDriver;
-    const TVector<Yq::Private::TopicConsumer> Topics; 
+    const TVector<Yq::Private::TopicConsumer> Topics;
     const TVector<std::shared_ptr<NYdb::ICredentialsProviderFactory>> Credentials;
     const size_t MaxRetries;
     size_t ResultsGot = 0;
@@ -271,7 +271,7 @@ NActors::IActor* MakeReadRuleDeleterActor(
     NActors::TActorId owner,
     TString queryId,
     NYdb::TDriver ydbDriver,
-    TVector<Yq::Private::TopicConsumer> topics, 
+    TVector<Yq::Private::TopicConsumer> topics,
     TVector<std::shared_ptr<NYdb::ICredentialsProviderFactory>> credentials, // For each topic
     size_t maxRetries
 )

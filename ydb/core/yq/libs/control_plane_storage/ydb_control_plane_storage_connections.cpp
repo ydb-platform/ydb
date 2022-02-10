@@ -49,7 +49,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateConne
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvCreateConnectionResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
         LWPROBE(CreateConnectionRequest, scope, user, delta, byteSize, false);
-        return; 
+        return;
     }
 
     YandexQuery::Connection connection;
@@ -65,7 +65,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateConne
     response->second.After.ConstructInPlace().CopyFrom(connection);
     response->second.CloudId = cloudId;
 
-    TSqlQueryBuilder queryBuilder(YdbConnection->TablePathPrefix, "CreateConnection"); 
+    TSqlQueryBuilder queryBuilder(YdbConnection->TablePathPrefix, "CreateConnection");
     queryBuilder.AddString("scope", scope);
     queryBuilder.AddString("connection_id", connectionId);
     queryBuilder.AddString("user", user);
@@ -161,10 +161,10 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListConnect
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvListConnectionsResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
         LWPROBE(ListConnectionsRequest, scope, user, delta, byteSize, false);
-        return; 
+        return;
     }
 
-    TSqlQueryBuilder queryBuilder(YdbConnection->TablePathPrefix, "ListConnections"); 
+    TSqlQueryBuilder queryBuilder(YdbConnection->TablePathPrefix, "ListConnections");
     queryBuilder.AddString("scope", scope);
     queryBuilder.AddString("last_connection", pageToken);
     queryBuilder.AddUint64("limit", limit + 1);
@@ -286,10 +286,10 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeCon
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvDescribeConnectionResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
         LWPROBE(DescribeConnectionRequest, scope, connectionId, user, delta, byteSize, false);
-        return; 
+        return;
     }
 
-    TSqlQueryBuilder queryBuilder(YdbConnection->TablePathPrefix, "DescribeConnection"); 
+    TSqlQueryBuilder queryBuilder(YdbConnection->TablePathPrefix, "DescribeConnection");
     queryBuilder.AddString("scope", scope);
     queryBuilder.AddString("connection_id", connectionId);
 
@@ -381,10 +381,10 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyConne
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvModifyConnectionResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
         LWPROBE(ModifyConnectionRequest, scope, connectionId, user, delta, byteSize, false);
-        return; 
+        return;
     }
- 
-    TSqlQueryBuilder readQueryBuilder(YdbConnection->TablePathPrefix, "ModifyConnection(read)"); 
+
+    TSqlQueryBuilder readQueryBuilder(YdbConnection->TablePathPrefix, "ModifyConnection(read)");
     readQueryBuilder.AddString("scope", scope);
     readQueryBuilder.AddString("connection_id", connectionId);
     readQueryBuilder.AddText(
@@ -441,7 +441,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyConne
         response->second.After.ConstructInPlace().CopyFrom(connection);
         response->second.CloudId = connectionInternal.cloud_id();
 
-        TSqlQueryBuilder writeQueryBuilder(YdbConnection->TablePathPrefix, "ModifyConnection(write)"); 
+        TSqlQueryBuilder writeQueryBuilder(YdbConnection->TablePathPrefix, "ModifyConnection(write)");
         writeQueryBuilder.AddString("scope", scope);
         writeQueryBuilder.AddString("connection_id", connectionId);
         writeQueryBuilder.AddInt64("visibility", connection.content().acl().visibility());
@@ -545,7 +545,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDeleteConne
         << "DeleteConnectionRequest: "
         << NKikimr::MaskTicket(token) << " "
         << request.DebugString());
- 
+
     NYql::TIssues issues = ValidateEvent(ev);
     if (issues) {
         CPS_LOG_D(MakeLogPrefix(scope, user, connectionId)
@@ -556,12 +556,12 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDeleteConne
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvDeleteConnectionResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
         LWPROBE(DeleteConnectionRequest, scope, connectionId, user, delta, byteSize, false);
-        return; 
+        return;
     }
- 
+
     std::shared_ptr<std::pair<YandexQuery::DeleteConnectionResult, TAuditDetails<YandexQuery::Connection>>> response = std::make_shared<std::pair<YandexQuery::DeleteConnectionResult, TAuditDetails<YandexQuery::Connection>>>();
 
-    TSqlQueryBuilder queryBuilder(YdbConnection->TablePathPrefix, "DeleteConnection"); 
+    TSqlQueryBuilder queryBuilder(YdbConnection->TablePathPrefix, "DeleteConnection");
     queryBuilder.AddString("scope", scope);
     queryBuilder.AddString("connection_id", connectionId);
 

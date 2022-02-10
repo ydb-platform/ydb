@@ -6,10 +6,10 @@
 #include <util/string/builder.h>
 #include <util/system/env.h>
 
-namespace NYq { 
+namespace NYq {
 
-using namespace NYql; 
- 
+using namespace NYql;
+
 namespace {
 
 template <typename TClusterConfig>
@@ -30,8 +30,8 @@ void FillClusterAuth(TClusterConfig& clusterCfg, const YandexQuery::IamAuth& aut
     }
 }
 
-} //namespace 
- 
+} //namespace
+
 void AddClustersFromConnections(const THashMap<TString, YandexQuery::Connection>& connections,
     bool useBearerForYdb,
     const TString& objectStorageEndpoint,
@@ -47,10 +47,10 @@ void AddClustersFromConnections(const THashMap<TString, YandexQuery::Connection>
             auto* clusterCfg = gatewaysConfig.MutableYdb()->AddClusterMapping();
             clusterCfg->SetName(connectionName);
             clusterCfg->SetId(db.database_id());
-            if (db.database()) 
-                clusterCfg->SetDatabase(db.database()); 
-            if (db.endpoint()) 
-                clusterCfg->SetEndpoint(db.endpoint()); 
+            if (db.database())
+                clusterCfg->SetDatabase(db.database());
+            if (db.endpoint())
+                clusterCfg->SetEndpoint(db.endpoint());
             clusterCfg->SetSecure(db.secure());
             clusterCfg->SetAddBearerToToken(useBearerForYdb);
             FillClusterAuth(*clusterCfg, db.auth(), authToken, accountIdSignatures);
@@ -61,11 +61,11 @@ void AddClustersFromConnections(const THashMap<TString, YandexQuery::Connection>
             const auto& ch = conn.content().setting().clickhouse_cluster();
             auto* clusterCfg = gatewaysConfig.MutableClickHouse()->AddClusterMapping();
             clusterCfg->SetName(connectionName);
-            clusterCfg->SetId(ch.database_id()); 
-            if (ch.host()) 
-                clusterCfg->SetCluster(ch.host()); 
-            clusterCfg->SetNativeHostPort(9440); 
-            clusterCfg->SetNativeSecure(true); 
+            clusterCfg->SetId(ch.database_id());
+            if (ch.host())
+                clusterCfg->SetCluster(ch.host());
+            clusterCfg->SetNativeHostPort(9440);
+            clusterCfg->SetNativeSecure(true);
             clusterCfg->SetCHToken(TStringBuilder() << "basic#" << ch.login() << "#" << ch.password());
             clusters.emplace(connectionName, ClickHouseProviderName);
             break;
@@ -89,8 +89,8 @@ void AddClustersFromConnections(const THashMap<TString, YandexQuery::Connection>
             const auto& ds = conn.content().setting().data_streams();
             auto* clusterCfg = gatewaysConfig.MutablePq()->AddClusterMapping();
             clusterCfg->SetName(connectionName);
-            if (ds.endpoint()) 
-                clusterCfg->SetEndpoint(ds.endpoint()); 
+            if (ds.endpoint())
+                clusterCfg->SetEndpoint(ds.endpoint());
             clusterCfg->SetDatabase(ds.database());
             clusterCfg->SetDatabaseId(ds.database_id());
             clusterCfg->SetUseSsl(ds.secure());
@@ -135,4 +135,4 @@ void AddClustersFromConnections(const THashMap<TString, YandexQuery::Connection>
         }
     }
 }
-} //NYq 
+} //NYq

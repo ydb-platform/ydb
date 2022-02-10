@@ -26,14 +26,14 @@ struct TClickHouseState : public TThrRefBase
     TTypeAnnotationContext* Types = nullptr;
     TClickHouseConfiguration::TPtr Configuration = MakeIntrusive<TClickHouseConfiguration>();
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
-    THashMap<std::pair<TString, NYq::DatabaseType>, NYq::TEvents::TDatabaseAuth> DatabaseIds; 
-    std::shared_ptr<NYq::TDatabaseAsyncResolverWithMeta> DbResolver; 
+    THashMap<std::pair<TString, NYq::DatabaseType>, NYq::TEvents::TDatabaseAuth> DatabaseIds;
+    std::shared_ptr<NYq::TDatabaseAsyncResolverWithMeta> DbResolver;
 };
 
-TDataProviderInitializer GetClickHouseDataProviderInitializer( 
+TDataProviderInitializer GetClickHouseDataProviderInitializer(
     IHTTPGateway::TPtr gateway,
-    std::shared_ptr<NYq::TDatabaseAsyncResolverWithMeta> dbResolverWithMeta = nullptr 
-); 
+    std::shared_ptr<NYq::TDatabaseAsyncResolverWithMeta> dbResolverWithMeta = nullptr
+);
 
 TIntrusivePtr<IDataProvider> CreateClickHouseDataSource(TClickHouseState::TPtr state, IHTTPGateway::TPtr gateway);
 TIntrusivePtr<IDataProvider> CreateClickHouseDataSink(TClickHouseState::TPtr state);

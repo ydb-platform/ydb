@@ -86,11 +86,11 @@ struct TActorSystemPtrMixin {
 struct TYqSharedResourcesImpl : public TActorSystemPtrMixin, public TYqSharedResources {
     explicit TYqSharedResourcesImpl(
         const NYq::NConfig::TConfig& config,
-        const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory, 
-        const NMonitoring::TDynamicCounterPtr& counters) 
+        const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
+        const NMonitoring::TDynamicCounterPtr& counters)
         : TYqSharedResources(NYdb::TDriver(GetYdbDriverConfig(config.GetCommon().GetYdbDriverConfig())))
     {
-        CreateDbPoolHolder(config.GetDbPool(), credentialsProviderFactory, counters); 
+        CreateDbPoolHolder(config.GetDbPool(), credentialsProviderFactory, counters);
     }
 
     void Init(NActors::TActorSystem* actorSystem) override {
@@ -120,9 +120,9 @@ struct TYqSharedResourcesImpl : public TActorSystemPtrMixin, public TYqSharedRes
 
     void CreateDbPoolHolder(
         const NYq::NConfig::TDbPoolConfig& config,
-        const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory, 
-        const NMonitoring::TDynamicCounterPtr& counters) { 
-        DbPoolHolder = MakeIntrusive<NYq::TDbPoolHolder>(config, YdbDriver, credentialsProviderFactory, counters); 
+        const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
+        const NMonitoring::TDynamicCounterPtr& counters) {
+        DbPoolHolder = MakeIntrusive<NYq::TDbPoolHolder>(config, YdbDriver, credentialsProviderFactory, counters);
     }
 };
 
@@ -130,9 +130,9 @@ struct TYqSharedResourcesImpl : public TActorSystemPtrMixin, public TYqSharedRes
 
 TYqSharedResources::TPtr CreateYqSharedResourcesImpl(
         const NYq::NConfig::TConfig& config,
-        const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory, 
-        const NMonitoring::TDynamicCounterPtr& counters) { 
-    return MakeIntrusive<TYqSharedResourcesImpl>(config, credentialsProviderFactory, counters); 
+        const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
+        const NMonitoring::TDynamicCounterPtr& counters) {
+    return MakeIntrusive<TYqSharedResourcesImpl>(config, credentialsProviderFactory, counters);
 }
 
 TYqSharedResources::TYqSharedResources(NYdb::TDriver driver)

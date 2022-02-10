@@ -4,7 +4,7 @@ LIBRARY()
 
 GENERATE_ENUM_SERIALIZATION(events.h)
 
-GENERATE_ENUM_SERIALIZATION(event_ids.h) 
+GENERATE_ENUM_SERIALIZATION(event_ids.h)
 
 PEERDIR(
     library/cpp/actors/core

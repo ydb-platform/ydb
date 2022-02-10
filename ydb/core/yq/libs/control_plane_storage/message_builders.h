@@ -151,7 +151,7 @@ public:
         Request.set_query_id(queryId);
         return *this;
     }
- 
+
     TDeleteQueryBuilder& SetIdempotencyKey(const TString& idempotencyKey)
     {
         Request.set_idempotency_key(idempotencyKey);
@@ -249,12 +249,12 @@ public:
         return *this;
     }
 
-    TModifyQueryBuilder& SetDescription(const TString& description) 
-    { 
-        Request.mutable_content()->set_description(description); 
-        return *this; 
-    } 
- 
+    TModifyQueryBuilder& SetDescription(const TString& description)
+    {
+        Request.mutable_content()->set_description(description);
+        return *this;
+    }
+
     const YandexQuery::ModifyQueryRequest& Build()
     {
         return Request;
@@ -281,7 +281,7 @@ public:
         Request.set_query_id(queryId);
         return *this;
     }
- 
+
     TControlQueryBuilder& SetIdempotencyKey(const TString& idempotencyKey)
     {
         Request.set_idempotency_key(idempotencyKey);
@@ -625,7 +625,7 @@ public:
 
     TModifyConnectionBuilder& SetDescription(const TString& description)
     {
-        Request.mutable_content()->set_description(description); 
+        Request.mutable_content()->set_description(description);
         return *this;
     }
 
@@ -662,7 +662,7 @@ public:
         Request.set_connection_id(connectionId);
         return *this;
     }
- 
+
     TDeleteConnectionBuilder& SetIdempotencyKey(const TString& idempotencyKey)
     {
         Request.set_idempotency_key(idempotencyKey);
@@ -885,7 +885,7 @@ public:
         Request.set_binding_id(bindingId);
         return *this;
     }
- 
+
     TDeleteBindingBuilder& SetIdempotencyKey(const TString& idempotencyKey)
     {
         Request.set_idempotency_key(idempotencyKey);
@@ -907,7 +907,7 @@ public:
 // internal
 
 class TWriteResultDataBuilder {
-    TString ResultId; 
+    TString ResultId;
     int32_t ResultSetId = 0;
     int64_t StartRowId = 0;
     TInstant Deadline;
@@ -923,9 +923,9 @@ public:
         SetResultSet(resultSet);
     }
 
-    TWriteResultDataBuilder& SetResultId(const TString& resultId) 
+    TWriteResultDataBuilder& SetResultId(const TString& resultId)
     {
-        ResultId = resultId; 
+        ResultId = resultId;
         return *this;
     }
 
@@ -955,7 +955,7 @@ public:
 
     std::unique_ptr<TEvControlPlaneStorage::TEvWriteResultDataRequest> Build()
     {
-        return std::make_unique<TEvControlPlaneStorage::TEvWriteResultDataRequest>(ResultId, ResultSetId, StartRowId, Deadline, ResultSet); 
+        return std::make_unique<TEvControlPlaneStorage::TEvWriteResultDataRequest>(ResultId, ResultSetId, StartRowId, Deadline, ResultSet);
     }
 };
 
@@ -984,15 +984,15 @@ public:
 
     std::unique_ptr<TEvControlPlaneStorage::TEvGetTaskRequest> Build()
     {
-        return std::make_unique<TEvControlPlaneStorage::TEvGetTaskRequest>(Owner, HostName); 
+        return std::make_unique<TEvControlPlaneStorage::TEvGetTaskRequest>(Owner, HostName);
     }
 };
 
 class TPingTaskBuilder {
     TString Scope;
     TString QueryId;
-    TString ResultId; 
-    TString Owner; 
+    TString ResultId;
+    TString Owner;
     TInstant Deadline;
     TMaybe<YandexQuery::QueryMeta::ComputeStatus> Status;
     TMaybe<NYql::TIssues> Issues;
@@ -1026,15 +1026,15 @@ public:
         return *this;
     }
 
-    TPingTaskBuilder& SetResultId(const TString& resultId) 
-    { 
-        ResultId = resultId; 
-        return *this; 
-    } 
- 
-    TPingTaskBuilder& SetOwner(const TString& owner) 
+    TPingTaskBuilder& SetResultId(const TString& resultId)
     {
-        Owner = owner; 
+        ResultId = resultId;
+        return *this;
+    }
+
+    TPingTaskBuilder& SetOwner(const TString& owner)
+    {
+        Owner = owner;
         return *this;
     }
 
@@ -1142,31 +1142,31 @@ public:
     }
 };
 
-class TNodesHealthCheckBuilder { 
-    TString Tenant; 
+class TNodesHealthCheckBuilder {
+    TString Tenant;
     ui32 NodeId = 0;
-    TString HostName; 
-    TString InstanceId; 
+    TString HostName;
+    TString InstanceId;
     ui64 ActiveWorkers = 0;
     ui64 MemoryLimit = 0;
     ui64 MemoryAllocated = 0;
 
-public: 
-    TNodesHealthCheckBuilder() 
-    {} 
- 
-    TNodesHealthCheckBuilder& SetTenant(const TString& tenant) 
-    { 
-        Tenant = tenant; 
-        return *this; 
-    } 
- 
-    TNodesHealthCheckBuilder& SetNodeId(const ui32& nodeId) 
-    { 
-        NodeId = nodeId; 
-        return *this; 
-    } 
- 
+public:
+    TNodesHealthCheckBuilder()
+    {}
+
+    TNodesHealthCheckBuilder& SetTenant(const TString& tenant)
+    {
+        Tenant = tenant;
+        return *this;
+    }
+
+    TNodesHealthCheckBuilder& SetNodeId(const ui32& nodeId)
+    {
+        NodeId = nodeId;
+        return *this;
+    }
+
     TNodesHealthCheckBuilder& SetHostName(const TString& hostName)
     {
         HostName = hostName;
@@ -1179,28 +1179,28 @@ public:
         return *this;
     }
 
-    TNodesHealthCheckBuilder& SetActiveWorkers(const ui64& activeWorkers) 
-    { 
-        ActiveWorkers = activeWorkers; 
-        return *this; 
-    } 
- 
+    TNodesHealthCheckBuilder& SetActiveWorkers(const ui64& activeWorkers)
+    {
+        ActiveWorkers = activeWorkers;
+        return *this;
+    }
+
     TNodesHealthCheckBuilder& SetMemoryLimit(const ui64& memoryLimit)
-    { 
+    {
         MemoryLimit = memoryLimit;
-        return *this; 
-    } 
- 
+        return *this;
+    }
+
     TNodesHealthCheckBuilder& SetMemoryAllocated(const ui64& memoryAllocated)
-    { 
+    {
         MemoryAllocated = memoryAllocated;
-        return *this; 
-    } 
- 
-    std::unique_ptr<TEvControlPlaneStorage::TEvNodesHealthCheckRequest> Build() 
-    { 
-        Yq::Private::NodesHealthCheckRequest request; 
-        request.set_tenant(Tenant); 
+        return *this;
+    }
+
+    std::unique_ptr<TEvControlPlaneStorage::TEvNodesHealthCheckRequest> Build()
+    {
+        Yq::Private::NodesHealthCheckRequest request;
+        request.set_tenant(Tenant);
         auto& node = *request.mutable_node();
         node.set_node_id(NodeId);
         node.set_instance_id(InstanceId);
@@ -1208,8 +1208,8 @@ public:
         node.set_active_workers(ActiveWorkers);
         node.set_memory_limit(MemoryLimit);
         node.set_memory_allocated(MemoryAllocated);
-        return std::make_unique<TEvControlPlaneStorage::TEvNodesHealthCheckRequest>(std::move(request)); 
-    } 
-}; 
- 
+        return std::make_unique<TEvControlPlaneStorage::TEvNodesHealthCheckRequest>(std::move(request));
+    }
+};
+
 }

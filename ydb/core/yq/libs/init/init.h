@@ -23,8 +23,8 @@ using TActorRegistrator = std::function<void(NActors::TActorId, NActors::IActor*
 
 IYqSharedResources::TPtr CreateYqSharedResources(
     const NYq::NConfig::TConfig& config,
-    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory, 
-    const NMonitoring::TDynamicCounterPtr& counters); 
+    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
+    const NMonitoring::TDynamicCounterPtr& counters);
 
 void Init(
     const NYq::NConfig::TConfig& config,
@@ -36,8 +36,8 @@ void Init(
     const IYqSharedResources::TPtr& yqSharedResources,
     const std::function<IActor*(const NKikimrProto::NFolderService::TFolderServiceConfig& authConfig)>& folderServiceFactory,
     const std::function<IActor*(const NYq::NConfig::TAuditConfig& auditConfig)>& auditServiceFactory,
-    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory, 
-    const ui32& icPort 
+    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
+    const ui32& icPort
 );
 
 } // NYq

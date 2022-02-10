@@ -4,7 +4,7 @@ namespace NYq {
 
 // tables
 #define QUERIES_TABLE_NAME "queries"
-#define PENDING_SMALL_TABLE_NAME "pending_small" 
+#define PENDING_SMALL_TABLE_NAME "pending_small"
 #define CONNECTIONS_TABLE_NAME "connections"
 #define BINDINGS_TABLE_NAME "bindings"
 #define RESULT_SETS_TABLE_NAME "result_sets"
@@ -21,10 +21,10 @@ namespace NYq {
 #define META_REVISION_COLUMN_NAME "meta_revision"
 #define INTERNAL_COLUMN_NAME "internal"
 #define GENERATION_COLUMN_NAME "generation"
-#define RETRY_COUNTER_COLUMN_NAME "retry_counter" 
-#define RETRY_COUNTER_UPDATE_COLUMN_NAME "retry_counter_updated_at" 
-#define IS_RESIGN_QUERY_COLUMN_NAME "is_resign_query" 
- 
+#define RETRY_COUNTER_COLUMN_NAME "retry_counter"
+#define RETRY_COUNTER_UPDATE_COLUMN_NAME "retry_counter_updated_at"
+#define IS_RESIGN_QUERY_COLUMN_NAME "is_resign_query"
+
 #define STATUS_COLUMN_NAME "status"
 #define QUERY_TYPE_COLUMN_NAME "query_type"
 #define EXECUTE_MODE_COLUMN_NAME "execute_mode"
@@ -60,8 +60,8 @@ namespace NYq {
 #define ACTIVE_WORKERS_COLUMN_NAME "active_workers"
 #define MEMORY_LIMIT_COLUMN_NAME "memory_limit"
 #define MEMORY_ALLOCATED_COLUMN_NAME "memory_allocated"
-#define INTERCONNECT_PORT_COLUMN_NAME "interconnect_port" 
-#define NODE_ADDRESS_COLUMN_NAME "node_address" 
+#define INTERCONNECT_PORT_COLUMN_NAME "interconnect_port"
+#define NODE_ADDRESS_COLUMN_NAME "node_address"
 
 #define HOST_NAME_COLUMN_NAME "hostname"
 #define OWNER_COLUMN_NAME "owner"

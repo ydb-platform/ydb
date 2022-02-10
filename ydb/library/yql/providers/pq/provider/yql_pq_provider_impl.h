@@ -15,7 +15,7 @@ TIntrusivePtr<IDataProvider> CreatePqDataSink(TPqState::TPtr state, IPqGateway::
 
 THolder<IGraphTransformer> CreatePqLoadTopicMetadataTransformer(TPqState::TPtr state);
 
-THolder<IGraphTransformer> CreatePqDataSinkIODiscoveryTransformer(TPqState::TPtr state); 
+THolder<IGraphTransformer> CreatePqDataSinkIODiscoveryTransformer(TPqState::TPtr state);
 THolder<TVisitorTransformerBase> CreatePqDataSourceTypeAnnotationTransformer(TPqState::TPtr state);
 THolder<TVisitorTransformerBase> CreatePqDataSinkTypeAnnotationTransformer(TPqState::TPtr state);
 

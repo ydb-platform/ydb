@@ -789,11 +789,11 @@ inline TDuration operator*(TDuration d, float t) noexcept {
     return d * static_cast<double>(t);
 }
 
-template <class T> 
+template <class T>
 inline TDuration operator*(T t, TDuration d) noexcept {
-    return d * t; 
-} 
- 
+    return d * t;
+}
+
 template <class T, std::enable_if_t<!std::is_same<TDuration, T>::value, int> = 0>
 constexpr TDuration operator/(const TDuration& d, const T& t) noexcept {
     return TDuration::FromValue(d.GetValue() / t);

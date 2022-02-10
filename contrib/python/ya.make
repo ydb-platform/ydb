@@ -400,7 +400,7 @@ RECURSE(
     flask-mongoengine
     Flask-OpenTracing
     Flask-Principal
-    Flask-Pydantic 
+    Flask-Pydantic
     Flask-PyMongo
     Flask-RESTful
     flask-restplus
@@ -633,8 +633,8 @@ RECURSE(
     mongomock
     monotonic
     more-itertools
-    moto 
-    moto/standalone 
+    moto
+    moto/standalone
     motor
     mpegdash
     mpi4py
@@ -1036,7 +1036,7 @@ RECURSE(
     statsd
     statsmodels
     stevedore
-    StrEnum 
+    StrEnum
     structlog
     subprocess32
     subword-nmt

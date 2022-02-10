@@ -241,7 +241,7 @@ RECURSE(
     django-db-geventpool
     django-dbtemplates
     django-debug-panel
-    django-debug-toolbar
+    django-debug-toolbar 
     django-dirtyfields
     django-dynamic-raw-id
     django-enumfields
@@ -250,7 +250,7 @@ RECURSE(
     django-export-action-py3
     django-extensions
     django-fernet-fields
-    django-filebrowser-no-grappelli
+    django-filebrowser-no-grappelli 
     django-filter
     django-fsm
     django-grappelli
@@ -435,7 +435,7 @@ RECURSE(
     gensim
     GeoAlchemy2
     geobuf
-    geoindex
+    geoindex 
     gevent
     gino
     gitdb2
@@ -514,7 +514,7 @@ RECURSE(
     importlib-resources
     incremental
     infi.clickhouse-orm
-    inflect
+    inflect 
     inflection
     influxdb
     iniconfig
@@ -896,7 +896,7 @@ RECURSE(
     python-docx
     python-dotenv
     python-editor
-    python-geohash
+    python-geohash 
     python-gnupg
     python-hglib
     python-i18n

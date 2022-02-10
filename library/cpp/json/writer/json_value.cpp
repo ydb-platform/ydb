@@ -3,7 +3,7 @@
 
 #include <util/generic/ymath.h>
 #include <util/generic/ylimits.h>
-#include <util/generic/utility.h>
+#include <util/generic/utility.h> 
 #include <util/generic/singleton.h>
 #include <util/stream/str.h>
 #include <util/stream/output.h>
@@ -286,8 +286,8 @@ namespace NJson {
             TArray::iterator it = Value.Array->begin() + index;
             Value.Array->erase(it);
         }
-    }
-
+    } 
+ 
     void TJsonValue::Clear() noexcept {
         switch (Type) {
             case JSON_STRING:
@@ -714,8 +714,8 @@ namespace NJson {
             return false;
 
         *value = Value.Array;
-        return true;
-    }
+        return true; 
+    } 
 
     bool TJsonValue::GetValue(const size_t index, TJsonValue* value) const {
         const TJsonValue* tmp = nullptr;
@@ -724,7 +724,7 @@ namespace NJson {
             return true;
         }
         return false;
-    }
+    } 
 
     bool TJsonValue::GetValue(const TStringBuf key, TJsonValue* value) const {
         const TJsonValue* tmp = nullptr;
@@ -733,15 +733,15 @@ namespace NJson {
             return true;
         }
         return false;
-    }
+    } 
 
     bool TJsonValue::GetValuePointer(const size_t index, const TJsonValue** value) const noexcept {
         if (Type == JSON_ARRAY && index < Value.Array->size()) {
             *value = &(*Value.Array)[index];
-            return true;
-        }
+            return true; 
+        } 
         return false;
-    }
+    } 
 
     bool TJsonValue::GetValuePointer(const TStringBuf key, const TJsonValue** value) const noexcept {
         if (Type == JSON_MAP) {
@@ -882,8 +882,8 @@ namespace NJson {
 
     const TJsonValue* TJsonValue::GetValueByPath(const TStringBuf key, char delim) const noexcept {
         return GetValuePtrByPath<false>(this, key, delim);
-    }
-
+    } 
+ 
     TJsonValue* TJsonValue::GetValueByPath(const TStringBuf key, char delim) noexcept {
         return GetValuePtrByPath<false>(this, key, delim);
     }
@@ -945,11 +945,11 @@ namespace NJson {
             case JSON_INTEGER: {
                 return (rhs.IsInteger() && GetInteger() == rhs.GetInteger());
             }
-
+ 
             case JSON_UINTEGER: {
                 return (rhs.IsUInteger() && GetUInteger() == rhs.GetUInteger());
             }
-
+ 
             case JSON_STRING: {
                 return (rhs.IsString() && Value.String == rhs.Value.String);
             }
@@ -978,7 +978,7 @@ namespace NJson {
         } else {
             std::memcpy(&output.Value, &Value, sizeof(Value));
         }
-
+ 
         output.Type = Type;
         Type = JSON_UNDEFINED;
     }

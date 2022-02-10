@@ -99,12 +99,12 @@ namespace NJson {
 
         void EraseValue(TStringBuf key);
         void EraseValue(size_t index);
-
+ 
         TJsonValue& operator[](size_t idx);
         TJsonValue& operator[](const TStringBuf& key);
         const TJsonValue& operator[](size_t idx) const noexcept;
         const TJsonValue& operator[](const TStringBuf& key) const noexcept;
-
+ 
         bool GetBoolean() const;
         long long GetInteger() const;
         unsigned long long GetUInteger() const;
@@ -164,7 +164,7 @@ namespace NJson {
         bool IsString() const noexcept;
         bool IsMap() const noexcept;
         bool IsArray() const noexcept;
-
+ 
         /// @return true if JSON_INTEGER or (JSON_UINTEGER and Value <= Max<long long>)
         bool IsInteger() const noexcept;
 
@@ -192,7 +192,7 @@ namespace NJson {
         void Load(IInputStream* s);
 
         static const TJsonValue UNDEFINED;
-
+ 
     private:
         EJsonValueType Type = JSON_UNDEFINED;
         union TValueUnion {
@@ -218,7 +218,7 @@ namespace NJson {
             @throw yexception if Back shouldn't be called on the object.
          */
         void BackChecks() const;
-    };
+    }; 
 
     inline bool GetBoolean(const TJsonValue& jv, size_t index, bool* value) noexcept {
         return jv[index].GetBoolean(value);

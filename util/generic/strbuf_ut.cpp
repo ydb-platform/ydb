@@ -95,17 +95,17 @@ Y_UNIT_TEST_SUITE(TStrBufTest) {
         if (str.AfterPrefix("http://", r)) {
             UNIT_ASSERT_EQUAL(r, "ya.ru");
         }
-
-        // SkipPrefix()
-        TStringBuf a = "abcdef";
+ 
+        // SkipPrefix() 
+        TStringBuf a = "abcdef"; 
         UNIT_ASSERT(a.SkipPrefix("a") && a == "bcdef");
         UNIT_ASSERT(a.SkipPrefix("bc") && a == "def");
         UNIT_ASSERT(a.SkipPrefix("") && a == "def");
-        UNIT_ASSERT(!a.SkipPrefix("xyz") && a == "def");
-        UNIT_ASSERT(!a.SkipPrefix("defg") && a == "def");
+        UNIT_ASSERT(!a.SkipPrefix("xyz") && a == "def"); 
+        UNIT_ASSERT(!a.SkipPrefix("defg") && a == "def"); 
         UNIT_ASSERT(a.SkipPrefix("def") && a == "");
         UNIT_ASSERT(a.SkipPrefix("") && a == "");
-        UNIT_ASSERT(!a.SkipPrefix("def") && a == "");
+        UNIT_ASSERT(!a.SkipPrefix("def") && a == ""); 
     }
 
     Y_UNIT_TEST(TestBeforeSuffix) {
@@ -122,17 +122,17 @@ Y_UNIT_TEST_SUITE(TStrBufTest) {
         if (str.BeforeSuffix(".ru", r)) {
             UNIT_ASSERT_EQUAL(r, "maps.yandex");
         }
-
-        // ChopSuffix()
-        TStringBuf a = "abcdef";
+ 
+        // ChopSuffix() 
+        TStringBuf a = "abcdef"; 
         UNIT_ASSERT(a.ChopSuffix("f") && a == "abcde");
         UNIT_ASSERT(a.ChopSuffix("de") && a == "abc");
         UNIT_ASSERT(a.ChopSuffix("") && a == "abc");
-        UNIT_ASSERT(!a.ChopSuffix("xyz") && a == "abc");
-        UNIT_ASSERT(!a.ChopSuffix("abcd") && a == "abc");
+        UNIT_ASSERT(!a.ChopSuffix("xyz") && a == "abc"); 
+        UNIT_ASSERT(!a.ChopSuffix("abcd") && a == "abc"); 
         UNIT_ASSERT(a.ChopSuffix("abc") && a == "");
         UNIT_ASSERT(a.ChopSuffix("") && a == "");
-        UNIT_ASSERT(!a.ChopSuffix("abc") && a == "");
+        UNIT_ASSERT(!a.ChopSuffix("abc") && a == ""); 
     }
 
     Y_UNIT_TEST(TestEmpty) {
@@ -248,12 +248,12 @@ Y_UNIT_TEST_SUITE(TStrBufTest) {
         TStringBuf buf2("a");
         UNIT_ASSERT_EQUAL(buf2.RNextTok('.'), TStringBuf("a"));
         UNIT_ASSERT_EQUAL(buf2, TStringBuf());
-
-        TStringBuf buf3("ab cd ef"), tok;
-        UNIT_ASSERT(buf3.RNextTok(' ', tok) && tok == "ef" && buf3 == "ab cd");
-        UNIT_ASSERT(buf3.RNextTok(' ', tok) && tok == "cd" && buf3 == "ab");
-        UNIT_ASSERT(buf3.RNextTok(' ', tok) && tok == "ab" && buf3 == "");
-        UNIT_ASSERT(!buf3.RNextTok(' ', tok) && tok == "ab" && buf3 == ""); // not modified
+ 
+        TStringBuf buf3("ab cd ef"), tok; 
+        UNIT_ASSERT(buf3.RNextTok(' ', tok) && tok == "ef" && buf3 == "ab cd"); 
+        UNIT_ASSERT(buf3.RNextTok(' ', tok) && tok == "cd" && buf3 == "ab"); 
+        UNIT_ASSERT(buf3.RNextTok(' ', tok) && tok == "ab" && buf3 == ""); 
+        UNIT_ASSERT(!buf3.RNextTok(' ', tok) && tok == "ab" && buf3 == ""); // not modified 
     }
 
     Y_UNIT_TEST(TestRSplitOff) {
@@ -275,50 +275,50 @@ Y_UNIT_TEST_SUITE(TStrBufTest) {
             UNIT_ASSERT_VALUES_EQUAL(helloThere[index], *it);
         }
     }
-
+ 
     Y_UNIT_TEST(TestSplitOnAt) {
-        TStringBuf s = "abcabc";
-        TStringBuf l, r;
-
-        size_t pos = s.find('a');
-        UNIT_ASSERT(s.TrySplitOn(pos, l, r));
-        UNIT_ASSERT(l == "" && r == "bcabc");
-        UNIT_ASSERT(s.TrySplitAt(pos, l, r));
-        UNIT_ASSERT(l == "" && r == "abcabc");
-
-        pos = s.find("ca");
-        UNIT_ASSERT(s.TrySplitOn(pos, l, r));
-        UNIT_ASSERT(l == "ab" && r == "abc");
-        UNIT_ASSERT(s.TrySplitOn(pos, l, r, 2));
-        UNIT_ASSERT(l == "ab" && r == "bc");
-        UNIT_ASSERT(s.TrySplitAt(pos, l, r));
-        UNIT_ASSERT(l == "ab" && r == "cabc");
-
-        // out of range
-        pos = 100500;
+        TStringBuf s = "abcabc"; 
+        TStringBuf l, r; 
+ 
+        size_t pos = s.find('a'); 
+        UNIT_ASSERT(s.TrySplitOn(pos, l, r)); 
+        UNIT_ASSERT(l == "" && r == "bcabc"); 
+        UNIT_ASSERT(s.TrySplitAt(pos, l, r)); 
+        UNIT_ASSERT(l == "" && r == "abcabc"); 
+ 
+        pos = s.find("ca"); 
+        UNIT_ASSERT(s.TrySplitOn(pos, l, r)); 
+        UNIT_ASSERT(l == "ab" && r == "abc"); 
+        UNIT_ASSERT(s.TrySplitOn(pos, l, r, 2)); 
+        UNIT_ASSERT(l == "ab" && r == "bc"); 
+        UNIT_ASSERT(s.TrySplitAt(pos, l, r)); 
+        UNIT_ASSERT(l == "ab" && r == "cabc"); 
+ 
+        // out of range 
+        pos = 100500; 
         UNIT_ASSERT(s.TrySplitOn(pos, l, r)); // still true
-        UNIT_ASSERT(l == "abcabc" && r == "");
+        UNIT_ASSERT(l == "abcabc" && r == ""); 
         l = "111";
         r = "222";
         UNIT_ASSERT(s.TrySplitAt(pos, l, r)); // still true
-        UNIT_ASSERT(l == "abcabc" && r == "");
-
-        // npos
-        pos = s.find("missing");
+        UNIT_ASSERT(l == "abcabc" && r == ""); 
+ 
+        // npos 
+        pos = s.find("missing"); 
         l = "111";
         r = "222";
-        UNIT_ASSERT(!s.TrySplitOn(pos, l, r));
+        UNIT_ASSERT(!s.TrySplitOn(pos, l, r)); 
         UNIT_ASSERT(l == "111" && r == "222"); // not modified
-        s.SplitOn(pos, l, r);
+        s.SplitOn(pos, l, r); 
         UNIT_ASSERT(l == "abcabc" && r == ""); // modified
-
+ 
         l = "111";
         r = "222";
-        UNIT_ASSERT(!s.TrySplitAt(pos, l, r));
+        UNIT_ASSERT(!s.TrySplitAt(pos, l, r)); 
         UNIT_ASSERT(l == "111" && r == "222"); // not modified
-        s.SplitAt(pos, l, r);
+        s.SplitAt(pos, l, r); 
         UNIT_ASSERT(l == "abcabc" && r == ""); // modified
-    }
+    } 
 
     template <class T>
     void PassByConstReference(const T& val) {

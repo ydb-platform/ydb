@@ -691,20 +691,20 @@ void THashTest::TestResizeOnInsertSmartPtrBug() {
     UNIT_ASSERT_EQUAL(item.Key, "key8");
     UNIT_ASSERT_EQUAL(item.Value, "value8");
 }
-
-template <typename T>
-static void EmptyAndInsertTest(typename T::value_type v) {
-    T c;
-    UNIT_ASSERT(!c);
-    c.insert(v);
-    UNIT_ASSERT(c);
-}
-
-void THashTest::TestEmpty() {
+ 
+template <typename T> 
+static void EmptyAndInsertTest(typename T::value_type v) { 
+    T c; 
+    UNIT_ASSERT(!c); 
+    c.insert(v); 
+    UNIT_ASSERT(c); 
+} 
+ 
+void THashTest::TestEmpty() { 
     EmptyAndInsertTest<THashSet<int>>(1);
     EmptyAndInsertTest<THashMap<int, int>>(std::pair<int, int>(1, 2));
     EmptyAndInsertTest<THashMultiMap<int, int>>(std::pair<int, int>(1, 2));
-}
+} 
 
 void THashTest::TestDefaultConstructor() {
     THashSet<int> set;

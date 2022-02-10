@@ -200,13 +200,13 @@ inline bool IsQuotation(wchar32 ch) {
                                      SHIFT(Pf_QUOTE) | SHIFT(Po_SINGLE_QUOTE) | SHIFT(Ps_SINGLE_QUOTE) |
                                      SHIFT(Pe_SINGLE_QUOTE) | SHIFT(Pi_SINGLE_QUOTE) | SHIFT(Pf_SINGLE_QUOTE));
 }
-
-inline bool IsSingleQuotation(wchar32 ch) {
-    return NUnicode::CharHasType(ch,
+ 
+inline bool IsSingleQuotation(wchar32 ch) { 
+    return NUnicode::CharHasType(ch, 
                                  SHIFT(Po_SINGLE_QUOTE) | SHIFT(Ps_SINGLE_QUOTE) | SHIFT(Pe_SINGLE_QUOTE) |
                                      SHIFT(Pi_SINGLE_QUOTE) | SHIFT(Pf_SINGLE_QUOTE));
-}
-
+} 
+ 
 inline bool IsTerminal(wchar32 ch) {
     return NUnicode::CharHasType(ch, SHIFT(Po_TERMINAL));
 }
@@ -381,15 +381,15 @@ inline bool IsXdigit(wchar32 ch) {
 inline bool IsDigit(wchar32 ch) {
     return IsDecdigit(ch);
 }
-
-inline bool IsCommonDigit(wchar32 ch) {
-    // IsDigit returns true for some exotic symbols like "VAI DIGIT TWO" (U+A622)
-    // and cannot be used safely with FromString() convertors
-    const wchar32 ZERO = '0';
-    const wchar32 NINE = '9';
-    return ch >= ZERO && ch <= NINE;
-}
-
+ 
+inline bool IsCommonDigit(wchar32 ch) { 
+    // IsDigit returns true for some exotic symbols like "VAI DIGIT TWO" (U+A622) 
+    // and cannot be used safely with FromString() convertors 
+    const wchar32 ZERO = '0'; 
+    const wchar32 NINE = '9'; 
+    return ch >= ZERO && ch <= NINE; 
+} 
+ 
 inline bool IsGraph(wchar32 ch) {
     return IsAlnum(ch) || IsPunct(ch) || IsSymbol(ch);
 }

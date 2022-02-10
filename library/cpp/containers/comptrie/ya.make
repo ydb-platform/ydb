@@ -11,7 +11,7 @@ SRCS(
     first_symbol_iterator.h
     key_selector.h
     leaf_skipper.h
-    set.h
+    set.h 
     comptrie.cpp
     comptrie_builder.cpp
     comptrie_impl.cpp

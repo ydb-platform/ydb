@@ -28,14 +28,14 @@ inline TStringBuf Base64Decode(const TStringBuf src, void* dst) {
 }
 
 inline void Base64Decode(const TStringBuf src, TString& dst) {
-    dst.ReserveAndResize(Base64DecodeBufSize(src.size()));
-    dst.resize(Base64Decode(src, dst.begin()).size());
-}
-
+    dst.ReserveAndResize(Base64DecodeBufSize(src.size())); 
+    dst.resize(Base64Decode(src, dst.begin()).size()); 
+} 
+ 
 //WARNING: can process not whole input silently, use Base64StrictDecode instead of this function
 inline TString Base64Decode(const TStringBuf s) {
     TString ret;
-    Base64Decode(s, ret);
+    Base64Decode(s, ret); 
     return ret;
 }
 
@@ -108,23 +108,23 @@ inline TStringBuf Base64EncodeUrl(const TStringBuf src, void* tmp) {
 }
 
 inline void Base64Encode(const TStringBuf src, TString& dst) {
-    dst.ReserveAndResize(Base64EncodeBufSize(src.size()));
-    dst.resize(Base64Encode(src, dst.begin()).size());
-}
-
+    dst.ReserveAndResize(Base64EncodeBufSize(src.size())); 
+    dst.resize(Base64Encode(src, dst.begin()).size()); 
+} 
+ 
 inline void Base64EncodeUrl(const TStringBuf src, TString& dst) {
-    dst.ReserveAndResize(Base64EncodeBufSize(src.size()));
-    dst.resize(Base64EncodeUrl(src, dst.begin()).size());
-}
-
+    dst.ReserveAndResize(Base64EncodeBufSize(src.size())); 
+    dst.resize(Base64EncodeUrl(src, dst.begin()).size()); 
+} 
+ 
 inline TString Base64Encode(const TStringBuf s) {
     TString ret;
-    Base64Encode(s, ret);
+    Base64Encode(s, ret); 
     return ret;
 }
 
 inline TString Base64EncodeUrl(const TStringBuf s) {
     TString ret;
-    Base64EncodeUrl(s, ret);
+    Base64EncodeUrl(s, ret); 
     return ret;
 }

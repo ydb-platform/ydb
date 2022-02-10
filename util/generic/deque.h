@@ -20,6 +20,6 @@ public:
     }
 
     inline explicit operator bool() const noexcept {
-        return !this->empty();
-    }
+        return !this->empty(); 
+    } 
 };

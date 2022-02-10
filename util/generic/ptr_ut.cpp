@@ -363,7 +363,7 @@ void TPointerTest::TestIntrPtr() {
     }
     UNIT_ASSERT_VALUES_EQUAL(TOp::Cnt, 0);
 }
-
+ 
 namespace NTestIntrusiveConvertion {
     struct TA: public TSimpleRefCount<TA> {
     };
@@ -429,197 +429,197 @@ void TPointerTest::TestMakeIntrusive() {
 
 void TPointerTest::TestCopyOnWritePtr1() {
     using TPtr = TCowPtr<TSimpleSharedPtr<int>>;
-    TPtr p1;
-    UNIT_ASSERT(!p1.Shared());
-
-    p1.Reset(new int(123));
-    UNIT_ASSERT(!p1.Shared());
-
-    {
-        TPtr pTmp = p1;
-
-        UNIT_ASSERT(p1.Shared());
-        UNIT_ASSERT(pTmp.Shared());
-        UNIT_ASSERT_EQUAL(p1.Get(), pTmp.Get());
-    }
-
-    UNIT_ASSERT(!p1.Shared());
-
-    TPtr p2 = p1;
-    TPtr p3;
-    p3 = p2;
-
-    UNIT_ASSERT(p2.Shared());
-    UNIT_ASSERT(p3.Shared());
-    UNIT_ASSERT_EQUAL(p1.Get(), p2.Get());
-    UNIT_ASSERT_EQUAL(p1.Get(), p3.Get());
-
-    *(p1.Mutable()) = 456;
-
-    UNIT_ASSERT(!p1.Shared());
-    UNIT_ASSERT(p2.Shared());
-    UNIT_ASSERT(p3.Shared());
-    UNIT_ASSERT_EQUAL(*p1, 456);
-    UNIT_ASSERT_EQUAL(*p2, 123);
-    UNIT_ASSERT_EQUAL(*p3, 123);
-    UNIT_ASSERT_UNEQUAL(p1.Get(), p2.Get());
-    UNIT_ASSERT_EQUAL(p2.Get(), p3.Get());
-
-    p2.Mutable();
-
-    UNIT_ASSERT(!p2.Shared());
-    UNIT_ASSERT(!p3.Shared());
-    UNIT_ASSERT_EQUAL(*p2, 123);
-    UNIT_ASSERT_EQUAL(*p3, 123);
-    UNIT_ASSERT_UNEQUAL(p2.Get(), p3.Get());
-}
-
+    TPtr p1; 
+    UNIT_ASSERT(!p1.Shared()); 
+ 
+    p1.Reset(new int(123)); 
+    UNIT_ASSERT(!p1.Shared()); 
+ 
+    { 
+        TPtr pTmp = p1; 
+ 
+        UNIT_ASSERT(p1.Shared()); 
+        UNIT_ASSERT(pTmp.Shared()); 
+        UNIT_ASSERT_EQUAL(p1.Get(), pTmp.Get()); 
+    } 
+ 
+    UNIT_ASSERT(!p1.Shared()); 
+ 
+    TPtr p2 = p1; 
+    TPtr p3; 
+    p3 = p2; 
+ 
+    UNIT_ASSERT(p2.Shared()); 
+    UNIT_ASSERT(p3.Shared()); 
+    UNIT_ASSERT_EQUAL(p1.Get(), p2.Get()); 
+    UNIT_ASSERT_EQUAL(p1.Get(), p3.Get()); 
+ 
+    *(p1.Mutable()) = 456; 
+ 
+    UNIT_ASSERT(!p1.Shared()); 
+    UNIT_ASSERT(p2.Shared()); 
+    UNIT_ASSERT(p3.Shared()); 
+    UNIT_ASSERT_EQUAL(*p1, 456); 
+    UNIT_ASSERT_EQUAL(*p2, 123); 
+    UNIT_ASSERT_EQUAL(*p3, 123); 
+    UNIT_ASSERT_UNEQUAL(p1.Get(), p2.Get()); 
+    UNIT_ASSERT_EQUAL(p2.Get(), p3.Get()); 
+ 
+    p2.Mutable(); 
+ 
+    UNIT_ASSERT(!p2.Shared()); 
+    UNIT_ASSERT(!p3.Shared()); 
+    UNIT_ASSERT_EQUAL(*p2, 123); 
+    UNIT_ASSERT_EQUAL(*p3, 123); 
+    UNIT_ASSERT_UNEQUAL(p2.Get(), p3.Get()); 
+} 
+ 
 struct X: public TSimpleRefCount<X> {
-    inline X(int v = 0)
-        : V(v)
-    {
-    }
-
-    int V;
-};
-
+    inline X(int v = 0) 
+        : V(v) 
+    { 
+    } 
+ 
+    int V; 
+}; 
+ 
 void TPointerTest::TestCopyOnWritePtr2() {
     using TPtr = TCowPtr<TIntrusivePtr<X>>;
-    TPtr p1;
-    UNIT_ASSERT(!p1.Shared());
-
-    p1.Reset(new X(123));
-    UNIT_ASSERT(!p1.Shared());
-
-    {
-        TPtr pTmp = p1;
-
-        UNIT_ASSERT(p1.Shared());
-        UNIT_ASSERT(pTmp.Shared());
-        UNIT_ASSERT_EQUAL(p1.Get(), pTmp.Get());
-    }
-
-    UNIT_ASSERT(!p1.Shared());
-
-    TPtr p2 = p1;
-    TPtr p3;
-    p3 = p2;
-
-    UNIT_ASSERT(p2.Shared());
-    UNIT_ASSERT(p3.Shared());
-    UNIT_ASSERT_EQUAL(p1.Get(), p2.Get());
-    UNIT_ASSERT_EQUAL(p1.Get(), p3.Get());
-
-    p1.Mutable()->V = 456;
-
-    UNIT_ASSERT(!p1.Shared());
-    UNIT_ASSERT(p2.Shared());
-    UNIT_ASSERT(p3.Shared());
-    UNIT_ASSERT_EQUAL(p1->V, 456);
-    UNIT_ASSERT_EQUAL(p2->V, 123);
-    UNIT_ASSERT_EQUAL(p3->V, 123);
-    UNIT_ASSERT_UNEQUAL(p1.Get(), p2.Get());
-    UNIT_ASSERT_EQUAL(p2.Get(), p3.Get());
-
-    p2.Mutable();
-
-    UNIT_ASSERT(!p2.Shared());
-    UNIT_ASSERT(!p3.Shared());
-    UNIT_ASSERT_EQUAL(p2->V, 123);
-    UNIT_ASSERT_EQUAL(p3->V, 123);
-    UNIT_ASSERT_UNEQUAL(p2.Get(), p3.Get());
-}
-
-namespace {
+    TPtr p1; 
+    UNIT_ASSERT(!p1.Shared()); 
+ 
+    p1.Reset(new X(123)); 
+    UNIT_ASSERT(!p1.Shared()); 
+ 
+    { 
+        TPtr pTmp = p1; 
+ 
+        UNIT_ASSERT(p1.Shared()); 
+        UNIT_ASSERT(pTmp.Shared()); 
+        UNIT_ASSERT_EQUAL(p1.Get(), pTmp.Get()); 
+    } 
+ 
+    UNIT_ASSERT(!p1.Shared()); 
+ 
+    TPtr p2 = p1; 
+    TPtr p3; 
+    p3 = p2; 
+ 
+    UNIT_ASSERT(p2.Shared()); 
+    UNIT_ASSERT(p3.Shared()); 
+    UNIT_ASSERT_EQUAL(p1.Get(), p2.Get()); 
+    UNIT_ASSERT_EQUAL(p1.Get(), p3.Get()); 
+ 
+    p1.Mutable()->V = 456; 
+ 
+    UNIT_ASSERT(!p1.Shared()); 
+    UNIT_ASSERT(p2.Shared()); 
+    UNIT_ASSERT(p3.Shared()); 
+    UNIT_ASSERT_EQUAL(p1->V, 456); 
+    UNIT_ASSERT_EQUAL(p2->V, 123); 
+    UNIT_ASSERT_EQUAL(p3->V, 123); 
+    UNIT_ASSERT_UNEQUAL(p1.Get(), p2.Get()); 
+    UNIT_ASSERT_EQUAL(p2.Get(), p3.Get()); 
+ 
+    p2.Mutable(); 
+ 
+    UNIT_ASSERT(!p2.Shared()); 
+    UNIT_ASSERT(!p3.Shared()); 
+    UNIT_ASSERT_EQUAL(p2->V, 123); 
+    UNIT_ASSERT_EQUAL(p3->V, 123); 
+    UNIT_ASSERT_UNEQUAL(p2.Get(), p3.Get()); 
+} 
+ 
+namespace { 
     template <class TFrom, class TTo>
     struct TImplicitlyCastable {
         struct RTYes {
             char t[2];
         };
-
+ 
         using RTNo = char;
-
+ 
         static RTYes Func(TTo);
         static RTNo Func(...);
         static TFrom Get();
-
+ 
         /*
-     * Result == (TFrom could be converted to TTo implicitly)
-     */
+     * Result == (TFrom could be converted to TTo implicitly) 
+     */ 
         enum {
             Result = (sizeof(Func(Get())) != sizeof(RTNo))
         };
-    };
-
+    }; 
+ 
     struct TImplicitlyCastableToBool {
         inline operator bool() const {
             return true;
         }
     };
-
+ 
 }
-
+ 
 void TPointerTest::TestOperatorBool() {
     using TVec = TVector<ui32>;
-
-    // to be sure TImplicitlyCastable works as expected
-    UNIT_ASSERT((TImplicitlyCastable<int, bool>::Result));
-    UNIT_ASSERT((TImplicitlyCastable<double, int>::Result));
-    UNIT_ASSERT((TImplicitlyCastable<int*, void*>::Result));
-    UNIT_ASSERT(!(TImplicitlyCastable<void*, int*>::Result));
-    UNIT_ASSERT((TImplicitlyCastable<TImplicitlyCastableToBool, bool>::Result));
-    UNIT_ASSERT((TImplicitlyCastable<TImplicitlyCastableToBool, int>::Result));
-    UNIT_ASSERT((TImplicitlyCastable<TImplicitlyCastableToBool, ui64>::Result));
-    UNIT_ASSERT(!(TImplicitlyCastable<TImplicitlyCastableToBool, void*>::Result));
-
-    // pointers
+ 
+    // to be sure TImplicitlyCastable works as expected 
+    UNIT_ASSERT((TImplicitlyCastable<int, bool>::Result)); 
+    UNIT_ASSERT((TImplicitlyCastable<double, int>::Result)); 
+    UNIT_ASSERT((TImplicitlyCastable<int*, void*>::Result)); 
+    UNIT_ASSERT(!(TImplicitlyCastable<void*, int*>::Result)); 
+    UNIT_ASSERT((TImplicitlyCastable<TImplicitlyCastableToBool, bool>::Result)); 
+    UNIT_ASSERT((TImplicitlyCastable<TImplicitlyCastableToBool, int>::Result)); 
+    UNIT_ASSERT((TImplicitlyCastable<TImplicitlyCastableToBool, ui64>::Result)); 
+    UNIT_ASSERT(!(TImplicitlyCastable<TImplicitlyCastableToBool, void*>::Result)); 
+ 
+    // pointers 
     UNIT_ASSERT(!(TImplicitlyCastable<TSimpleSharedPtr<TVec>, int>::Result));
-    UNIT_ASSERT(!(TImplicitlyCastable<TAutoPtr<ui64>, ui64>::Result));
+    UNIT_ASSERT(!(TImplicitlyCastable<TAutoPtr<ui64>, ui64>::Result)); 
     UNIT_ASSERT(!(TImplicitlyCastable<THolder<TVec>, bool>::Result)); // even this
-
-    {
-        // mostly a compilability test
-
-        THolder<TVec> a;
-        UNIT_ASSERT(!a);
-        UNIT_ASSERT(!bool(a));
+ 
+    { 
+        // mostly a compilability test 
+ 
+        THolder<TVec> a; 
+        UNIT_ASSERT(!a); 
+        UNIT_ASSERT(!bool(a)); 
         if (a) {
-            UNIT_ASSERT(false);
+            UNIT_ASSERT(false); 
         }
         if (!a) {
-            UNIT_ASSERT(true);
+            UNIT_ASSERT(true); 
         }
-
-        a.Reset(new TVec);
-        UNIT_ASSERT(a);
-        UNIT_ASSERT(bool(a));
+ 
+        a.Reset(new TVec); 
+        UNIT_ASSERT(a); 
+        UNIT_ASSERT(bool(a)); 
         if (a) {
-            UNIT_ASSERT(true);
+            UNIT_ASSERT(true); 
         }
         if (!a) {
-            UNIT_ASSERT(false);
+            UNIT_ASSERT(false); 
         }
-
-        THolder<TVec> b(new TVec);
-        UNIT_ASSERT(a.Get() != b.Get());
-        UNIT_ASSERT(a != b);
+ 
+        THolder<TVec> b(new TVec); 
+        UNIT_ASSERT(a.Get() != b.Get()); 
+        UNIT_ASSERT(a != b); 
         if (a == b) {
-            UNIT_ASSERT(false);
+            UNIT_ASSERT(false); 
         }
         if (a != b) {
-            UNIT_ASSERT(true);
+            UNIT_ASSERT(true); 
         }
         if (!(a && b)) {
-            UNIT_ASSERT(false);
+            UNIT_ASSERT(false); 
         }
         if (a && b) {
-            UNIT_ASSERT(true);
+            UNIT_ASSERT(true); 
         }
-
-        // int i = a;          // does not compile
-        // bool c = (a < b);   // does not compile
-    }
-}
+ 
+        // int i = a;          // does not compile 
+        // bool c = (a < b);   // does not compile 
+    } 
+} 
 
 void TPointerTest::TestMakeShared() {
     {

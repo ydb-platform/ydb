@@ -154,9 +154,9 @@ public:
     inline void ShrinkToFit() {
         if (Pos_ < Len_) {
             Realloc(Pos_);
-        }
+        } 
     }
-
+ 
     inline void Resize(size_t len) {
         Reserve(len);
         Pos_ = len;

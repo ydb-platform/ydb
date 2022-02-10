@@ -43,8 +43,8 @@ namespace NJsonWriter {
     public:
         TBuf(EHtmlEscapeMode mode = HEM_DONT_ESCAPE_HTML, IOutputStream* stream = nullptr);
 
-        TValueContext WriteString(const TStringBuf& s, EHtmlEscapeMode hem);
-        TValueContext WriteString(const TStringBuf& s);
+        TValueContext WriteString(const TStringBuf& s, EHtmlEscapeMode hem); 
+        TValueContext WriteString(const TStringBuf& s); 
         TValueContext WriteInt(int i);
         TValueContext WriteLongLong(long long i);
         TValueContext WriteULongLong(unsigned long long i);
@@ -58,15 +58,15 @@ namespace NJsonWriter {
         TBuf& EndList();
 
         TPairContext BeginObject();
-        TAfterColonContext WriteKey(const TStringBuf& key, EHtmlEscapeMode hem);
-        TAfterColonContext WriteKey(const TStringBuf& key);
+        TAfterColonContext WriteKey(const TStringBuf& key, EHtmlEscapeMode hem); 
+        TAfterColonContext WriteKey(const TStringBuf& key); 
         TAfterColonContext UnsafeWriteKey(const TStringBuf& key);
-        bool KeyExpected() const {
-            return Stack.back() == JE_OBJECT;
-        }
+        bool KeyExpected() const { 
+            return Stack.back() == JE_OBJECT; 
+        } 
 
         //! deprecated, do not use in new code
-        TAfterColonContext CompatWriteKeyWithoutQuotes(const TStringBuf& key);
+        TAfterColonContext CompatWriteKeyWithoutQuotes(const TStringBuf& key); 
 
         TBuf& EndObject();
 
@@ -102,7 +102,7 @@ namespace NJsonWriter {
            * j.UnsafeWriteValue("[1, 2, 3, \"o'clock\", 4, \"o'clock rock\"]");
            *
            * As in all of the Unsafe* functions, no escaping is done.     */
-        void UnsafeWriteValue(const TStringBuf& s);
+        void UnsafeWriteValue(const TStringBuf& s); 
         void UnsafeWriteValue(const char* s, size_t len);
 
         /*** When in the context of an object, write a literal string
@@ -114,10 +114,10 @@ namespace NJsonWriter {
            * j.EndObject();
            *
            * As in all of the Unsafe* functions, no escaping is done.     */
-        TPairContext UnsafeWritePair(const TStringBuf& s);
+        TPairContext UnsafeWritePair(const TStringBuf& s); 
 
         /*** Copy the supplied string directly into the output stream.    */
-        void UnsafeWriteRawBytes(const TStringBuf& s);
+        void UnsafeWriteRawBytes(const TStringBuf& s); 
         void UnsafeWriteRawBytes(const char* c, size_t len);
 
         TBufState State() const;
@@ -129,21 +129,21 @@ namespace NJsonWriter {
         void EndValue();
         void BeginKey();
         void RawWriteChar(char c);
-        bool EscapedWriteChar(const char* b, const char* c, EHtmlEscapeMode hem);
+        bool EscapedWriteChar(const char* b, const char* c, EHtmlEscapeMode hem); 
         void WriteBareString(const TStringBuf s, EHtmlEscapeMode hem);
         void WriteComma();
         void PrintIndentation(bool closing);
         void PrintWhitespaces(size_t count, bool prependWithNewLine);
         void WriteHexEscape(unsigned char c);
 
-        void StackPush(EJsonEntity e);
-        void StackPop();
-        void CheckAndPop(EJsonEntity e);
-        EJsonEntity StackTop() const;
-
+        void StackPush(EJsonEntity e); 
+        void StackPop(); 
+        void CheckAndPop(EJsonEntity e); 
+        EJsonEntity StackTop() const; 
+ 
         template <class TFloat>
         TValueContext WriteFloatImpl(TFloat f, EFloatToStringMode mode, int ndigits);
-
+ 
     private:
         IOutputStream* Stream;
         THolder<TStringStream> StringStream;
@@ -160,8 +160,8 @@ namespace NJsonWriter {
 
     // Please don't try to instantiate the classes declared below this point.
 
-    template <typename TOutContext>
-    class TValueWriter {
+    template <typename TOutContext> 
+    class TValueWriter { 
     public:
         TOutContext WriteNull();
         TOutContext WriteString(const TStringBuf&);
@@ -221,19 +221,19 @@ namespace NJsonWriter {
 
     class TPairContext {
     public:
-        TAfterColonContext WriteKey(const TStringBuf& s, EHtmlEscapeMode hem) {
+        TAfterColonContext WriteKey(const TStringBuf& s, EHtmlEscapeMode hem) { 
             return Buf.WriteKey(s, hem);
         }
-        TAfterColonContext WriteKey(const TStringBuf& s) {
+        TAfterColonContext WriteKey(const TStringBuf& s) { 
             return Buf.WriteKey(s);
         }
         TAfterColonContext UnsafeWriteKey(const TStringBuf& s) {
             return Buf.UnsafeWriteKey(s);
         }
-        TAfterColonContext CompatWriteKeyWithoutQuotes(const TStringBuf& s) {
+        TAfterColonContext CompatWriteKeyWithoutQuotes(const TStringBuf& s) { 
             return Buf.CompatWriteKeyWithoutQuotes(s);
         }
-        TPairContext UnsafeWritePair(const TStringBuf& s) {
+        TPairContext UnsafeWritePair(const TStringBuf& s) { 
             return Buf.UnsafeWritePair(s);
         }
         TBuf& EndObject() {
@@ -243,8 +243,8 @@ namespace NJsonWriter {
     private:
         TPairContext(TBuf& buf)
             : Buf(buf)
-        {
-        }
+        { 
+        } 
 
         friend class TBuf;
         friend class TValueWriter<TPairContext>;

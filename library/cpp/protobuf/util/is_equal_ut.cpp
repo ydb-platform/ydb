@@ -49,7 +49,7 @@ Y_UNIT_TEST_SUITE(ProtobufIsEqual) {
         bool equalField = NProtoBuf::IsEqualField(a, b, *InnerDescr);
         UNIT_ASSERT(!equalField);
     }
-
+ 
     Y_UNIT_TEST(IsEqual3) {
         TSampleForIsEqual a;
         TSampleForIsEqual b;
@@ -75,14 +75,14 @@ Y_UNIT_TEST_SUITE(ProtobufIsEqual) {
     }
 
     Y_UNIT_TEST(IsEqualDefault) {
-        TSampleForIsEqual a;
-        TSampleForIsEqual b;
-
-        a.SetName("");
-        UNIT_ASSERT(NProtoBuf::IsEqualDefault(a, b));
-        UNIT_ASSERT(!NProtoBuf::IsEqual(a, b));
+        TSampleForIsEqual a; 
+        TSampleForIsEqual b; 
+ 
+        a.SetName(""); 
+        UNIT_ASSERT(NProtoBuf::IsEqualDefault(a, b)); 
+        UNIT_ASSERT(!NProtoBuf::IsEqual(a, b)); 
 
         UNIT_ASSERT(!NProtoBuf::IsEqualField(a, b, *NameDescr));
         UNIT_ASSERT(NProtoBuf::IsEqualFieldDefault(a, b, *NameDescr));
-    }
+    } 
 }

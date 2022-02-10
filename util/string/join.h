@@ -22,9 +22,9 @@
 template <typename TCharType, typename T>
 inline std::enable_if_t<!std::is_arithmetic<std::remove_cv_t<T>>::value, void>
 AppendToString(TBasicString<TCharType>& dst, const T& t) {
-    dst.AppendNoAlias(ToString(t));
+    dst.AppendNoAlias(ToString(t)); 
 }
-
+ 
 template <typename TCharType, typename T>
 inline std::enable_if_t<std::is_arithmetic<std::remove_cv_t<T>>::value, void>
 AppendToString(TBasicString<TCharType>& dst, const T& t) {
@@ -34,12 +34,12 @@ AppendToString(TBasicString<TCharType>& dst, const T& t) {
 
 template <typename TCharType>
 inline void AppendToString(TBasicString<TCharType>& dst, const TCharType* t) {
-    dst.append(t);
+    dst.append(t); 
 }
 
 template <typename TCharType>
 inline void AppendToString(TBasicString<TCharType>& dst, TBasicStringBuf<TCharType> t) {
-    dst.append(t);
+    dst.append(t); 
 }
 
 namespace NPrivate {
@@ -81,11 +81,11 @@ inline void AppendJoinNoReserve(TBasicString<TCharType>&, TBasicStringBuf<TCharT
 
 template <typename TCharType, typename TFirst, typename... TRest>
 inline void AppendJoinNoReserve(TBasicString<TCharType>& dst, TBasicStringBuf<TCharType> delim, const TFirst& f, const TRest&... r) {
-    AppendToString(dst, delim);
-    AppendToString(dst, f);
+    AppendToString(dst, delim); 
+    AppendToString(dst, f); 
     AppendJoinNoReserve(dst, delim, r...);
-}
-
+} 
+ 
 template <typename... TValues>
 inline void AppendJoin(TString& dst, const TStringBuf delim, const TValues&... values) {
     const size_t appendLength = ::NPrivate::GetAppendLength(delim, values...);
@@ -95,21 +95,21 @@ inline void AppendJoin(TString& dst, const TStringBuf delim, const TValues&... v
     AppendJoinNoReserve(dst, delim, values...);
 }
 
-template <typename TFirst, typename... TRest>
+template <typename TFirst, typename... TRest> 
 inline TString Join(const TStringBuf delim, const TFirst& f, const TRest&... r) {
     TString ret = ToString(f);
-    AppendJoin(ret, delim, r...);
-    return ret;
-}
-
-// Note that char delimeter @cdelim will be printed as single char string,
-// but any char value @v will be printed as corresponding numeric code.
-// For example, Join('a', 'a', 'a') will print "97a97" (see unit-test).
-template <typename... TValues>
+    AppendJoin(ret, delim, r...); 
+    return ret; 
+} 
+ 
+// Note that char delimeter @cdelim will be printed as single char string, 
+// but any char value @v will be printed as corresponding numeric code. 
+// For example, Join('a', 'a', 'a') will print "97a97" (see unit-test). 
+template <typename... TValues> 
 inline TString Join(char cdelim, const TValues&... v) {
-    return Join(TStringBuf(&cdelim, 1), v...);
-}
-
+    return Join(TStringBuf(&cdelim, 1), v...); 
+} 
+ 
 namespace NPrivate {
     template <typename TCharType, typename TIter>
     inline TBasicString<TCharType> JoinRange(TBasicStringBuf<TCharType> delim, const TIter beg, const TIter end) {
@@ -131,7 +131,7 @@ namespace NPrivate {
 
         return out;
     }
-
+ 
 } // namespace NPrivate
 
 template <typename TIter>

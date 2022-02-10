@@ -1,16 +1,16 @@
-#pragma once
-
-#include <util/generic/typetraits.h>
-
+#pragma once 
+ 
+#include <util/generic/typetraits.h> 
+ 
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/message.h>
-
-namespace NProtoBuf {
-// this nasty windows.h macro interfers with protobuf::Reflection::GetMessage()
-#if defined(GetMessage)
-#undef GetMessage
-#endif
-
+ 
+namespace NProtoBuf { 
+// this nasty windows.h macro interfers with protobuf::Reflection::GetMessage() 
+#if defined(GetMessage) 
+#undef GetMessage 
+#endif 
+ 
     struct TCppTypeTraitsBase {
         static inline bool Has(const Message& msg, const FieldDescriptor* field) { // non-repeated
             return msg.GetReflection()->HasField(msg, field);
@@ -18,24 +18,24 @@ namespace NProtoBuf {
         static inline size_t Size(const Message& msg, const FieldDescriptor* field) { // repeated
             return msg.GetReflection()->FieldSize(msg, field);
         }
-
+ 
         static inline void Clear(Message& msg, const FieldDescriptor* field) {
             msg.GetReflection()->ClearField(&msg, field);
         }
-
+ 
         static inline void RemoveLast(Message& msg, const FieldDescriptor* field) {
             msg.GetReflection()->RemoveLast(&msg, field);
         }
-
+ 
         static inline void SwapElements(Message& msg, const FieldDescriptor* field, int index1, int index2) {
             msg.GetReflection()->SwapElements(&msg, field, index1, index2);
         }
     };
-
+ 
     // default value accessor
     template <FieldDescriptor::CppType cpptype>
     struct TCppTypeTraitsDefault;
-
+ 
 #define DECLARE_CPPTYPE_DEFAULT(cpptype, method)          \
     template <>                                           \
     struct TCppTypeTraitsDefault<cpptype> {               \
@@ -62,23 +62,23 @@ namespace NProtoBuf {
     template <FieldDescriptor::CppType cpptype>
     struct TCppTypeTraits : TCppTypeTraitsBase {
         static const FieldDescriptor::CppType CppType = cpptype;
-
+ 
         struct T {};
         static T Get(const Message& msg, const FieldDescriptor* field);
         static T GetRepeated(const Message& msg, const FieldDescriptor* field, int index);
         static T GetDefault(const FieldDescriptor* field);
-
+ 
         static void Set(Message& msg, const FieldDescriptor* field, T value);
         static void AddRepeated(Message& msg, const FieldDescriptor* field, T value);
         static void SetRepeated(Message& msg, const FieldDescriptor* field, int index, T value);
     };
-
+ 
     // any type T -> CppType
     template <typename T>
     struct TSelectCppType {
         //static const FieldDescriptor::CppType Result = FieldDescriptor::MAX_CPPTYPE;
     };
-
+ 
 #define DECLARE_CPPTYPE_TRAITS(cpptype, type, method)                                                    \
     template <>                                                                                          \
     struct TCppTypeTraits<cpptype>: public TCppTypeTraitsBase {                                          \
@@ -108,8 +108,8 @@ namespace NProtoBuf {
     struct TSelectCppType<type> {                                                                        \
         static const FieldDescriptor::CppType Result = cpptype;                                          \
         typedef type T;                                                                                  \
-    };
-
+    }; 
+ 
     DECLARE_CPPTYPE_TRAITS(FieldDescriptor::CPPTYPE_INT32, i32, Int32);
     DECLARE_CPPTYPE_TRAITS(FieldDescriptor::CPPTYPE_INT64, i64, Int64);
     DECLARE_CPPTYPE_TRAITS(FieldDescriptor::CPPTYPE_UINT32, ui32, UInt32);
@@ -120,15 +120,15 @@ namespace NProtoBuf {
     DECLARE_CPPTYPE_TRAITS(FieldDescriptor::CPPTYPE_ENUM, const EnumValueDescriptor*, Enum);
     DECLARE_CPPTYPE_TRAITS(FieldDescriptor::CPPTYPE_STRING, TString, String);
     //DECLARE_CPPTYPE_TRAITS(FieldDescriptor::CPPTYPE_MESSAGE, const Message&, Message);
-
-#undef DECLARE_CPPTYPE_TRAITS
-
+ 
+#undef DECLARE_CPPTYPE_TRAITS 
+ 
     // specialization for message pointer
     template <>
     struct TCppTypeTraits<FieldDescriptor::CPPTYPE_MESSAGE>: public TCppTypeTraitsBase {
         typedef const Message* T;
         static const FieldDescriptor::CppType CppType = FieldDescriptor::CPPTYPE_MESSAGE;
-
+ 
         static inline T Get(const Message& msg, const FieldDescriptor* field) {
             return &(msg.GetReflection()->GetMessage(msg, field));
         }
@@ -151,29 +151,29 @@ namespace NProtoBuf {
             return ret;
         }
     };
-
+ 
     template <>
     struct TSelectCppType<const Message*> {
         static const FieldDescriptor::CppType Result = FieldDescriptor::CPPTYPE_MESSAGE;
         typedef const Message* T;
     };
-
+ 
     template <>
     struct TSelectCppType<Message> {
         static const FieldDescriptor::CppType Result = FieldDescriptor::CPPTYPE_MESSAGE;
         typedef const Message* T;
     };
-
+ 
     template <FieldDescriptor::CppType CppType, bool Repeated>
     struct TFieldTraits {
         typedef TCppTypeTraits<CppType> TBaseTraits;
         typedef typename TBaseTraits::T T;
-
+ 
         static inline T Get(const Message& msg, const FieldDescriptor* field, size_t index = 0) {
             Y_ASSERT(index == 0);
             return TBaseTraits::Get(msg, field);
         }
-
+ 
         static inline T GetDefault(const FieldDescriptor* field) {
             return TBaseTraits::GetDefault(field);
         }
@@ -181,11 +181,11 @@ namespace NProtoBuf {
         static inline bool Has(const Message& msg, const FieldDescriptor* field) {
             return TBaseTraits::Has(msg, field);
         }
-
+ 
         static inline size_t Size(const Message& msg, const FieldDescriptor* field) {
             return Has(msg, field);
         }
-
+ 
         static inline void Set(Message& msg, const FieldDescriptor* field, T value, size_t index = 0) {
             Y_ASSERT(index == 0);
             TBaseTraits::Set(msg, field, value);
@@ -195,28 +195,28 @@ namespace NProtoBuf {
             TBaseTraits::Set(msg, field, value);
         }
     };
-
+ 
     template <FieldDescriptor::CppType CppType>
     struct TFieldTraits<CppType, true> {
         typedef TCppTypeTraits<CppType> TBaseTraits;
         typedef typename TBaseTraits::T T;
-
+ 
         static inline T Get(const Message& msg, const FieldDescriptor* field, size_t index = 0) {
             return TBaseTraits::GetRepeated(msg, field, index);
         }
-
+ 
         static inline T GetDefault(const FieldDescriptor* field) {
             return TBaseTraits::GetDefault(field);
         }
-
+ 
         static inline size_t Size(const Message& msg, const FieldDescriptor* field) {
             return TBaseTraits::Size(msg, field);
         }
-
+ 
         static inline bool Has(const Message& msg, const FieldDescriptor* field) {
             return Size(msg, field) > 0;
         }
-
+ 
         static inline void Set(Message& msg, const FieldDescriptor* field, T value, size_t index = 0) {
             TBaseTraits::SetRepeated(msg, field, index, value);
         }
@@ -225,28 +225,28 @@ namespace NProtoBuf {
             TBaseTraits::AddRepeated(msg, field, value);
         }
     };
-
+ 
     // Simpler interface at the cost of checking is_repeated() on each call
     template <FieldDescriptor::CppType CppType>
     struct TSimpleFieldTraits {
         typedef TFieldTraits<CppType, true> TRepeated;
         typedef TFieldTraits<CppType, false> TSingle;
         typedef typename TRepeated::T T;
-
+ 
         static inline size_t Size(const Message& msg, const FieldDescriptor* field) {
             if (field->is_repeated())
                 return TRepeated::Size(msg, field);
             else
                 return TSingle::Size(msg, field);
         }
-
+ 
         static inline bool Has(const Message& msg, const FieldDescriptor* field) {
             if (field->is_repeated())
                 return TRepeated::Has(msg, field);
             else
                 return TSingle::Has(msg, field);
         }
-
+ 
         static inline T Get(const Message& msg, const FieldDescriptor* field, size_t index = 0) {
             Y_ASSERT(index < Size(msg, field) || !field->is_repeated() && index == 0); // Get for single fields is always allowed because of default values
             if (field->is_repeated())
@@ -254,11 +254,11 @@ namespace NProtoBuf {
             else
                 return TSingle::Get(msg, field, index);
         }
-
+ 
         static inline T GetDefault(const FieldDescriptor* field) {
             return TSingle::GetDefault(field);
         }
-
+ 
         static inline void Set(Message& msg, const FieldDescriptor* field, T value, size_t index = 0) {
             Y_ASSERT(!field->is_repeated() && index == 0 || index < Size(msg, field));
             if (field->is_repeated())
@@ -266,7 +266,7 @@ namespace NProtoBuf {
             else
                 TSingle::Set(msg, field, value, index);
         }
-
+ 
         static inline void Add(Message& msg, const FieldDescriptor* field, T value) {
             if (field->is_repeated())
                 TRepeated::Add(msg, field, value);
@@ -274,9 +274,9 @@ namespace NProtoBuf {
                 TSingle::Add(msg, field, value);
         }
     };
-
+ 
     // some cpp-type groups
-
+ 
     template <FieldDescriptor::CppType CppType>
     struct TIsIntegerCppType {
         enum {
@@ -285,16 +285,16 @@ namespace NProtoBuf {
                      CppType == FieldDescriptor::CPPTYPE_UINT32 ||
                      CppType == FieldDescriptor::CPPTYPE_UINT64
         };
-    };
-
+    }; 
+ 
     template <FieldDescriptor::CppType CppType>
     struct TIsFloatCppType {
         enum {
             Result = CppType == FieldDescriptor::CPPTYPE_FLOAT ||
                      CppType == FieldDescriptor::CPPTYPE_DOUBLE
         };
-    };
-
+    }; 
+ 
     template <FieldDescriptor::CppType CppType>
     struct TIsNumericCppType {
         enum {
@@ -302,19 +302,19 @@ namespace NProtoBuf {
                      TIsIntegerCppType<CppType>::Result ||
                      TIsFloatCppType<CppType>::Result
         };
-    };
-
+    }; 
+ 
     // a helper macro for splitting flow by cpp-type (e.g. in a switch)
-
+ 
 #define APPLY_TMP_MACRO_FOR_ALL_CPPTYPES()                            \
-    TMP_MACRO_FOR_CPPTYPE(NProtoBuf::FieldDescriptor::CPPTYPE_INT32)  \
-    TMP_MACRO_FOR_CPPTYPE(NProtoBuf::FieldDescriptor::CPPTYPE_INT64)  \
-    TMP_MACRO_FOR_CPPTYPE(NProtoBuf::FieldDescriptor::CPPTYPE_UINT32) \
-    TMP_MACRO_FOR_CPPTYPE(NProtoBuf::FieldDescriptor::CPPTYPE_UINT64) \
-    TMP_MACRO_FOR_CPPTYPE(NProtoBuf::FieldDescriptor::CPPTYPE_DOUBLE) \
-    TMP_MACRO_FOR_CPPTYPE(NProtoBuf::FieldDescriptor::CPPTYPE_FLOAT)  \
-    TMP_MACRO_FOR_CPPTYPE(NProtoBuf::FieldDescriptor::CPPTYPE_BOOL)   \
-    TMP_MACRO_FOR_CPPTYPE(NProtoBuf::FieldDescriptor::CPPTYPE_ENUM)   \
-    TMP_MACRO_FOR_CPPTYPE(NProtoBuf::FieldDescriptor::CPPTYPE_STRING) \
-    TMP_MACRO_FOR_CPPTYPE(NProtoBuf::FieldDescriptor::CPPTYPE_MESSAGE)
+    TMP_MACRO_FOR_CPPTYPE(NProtoBuf::FieldDescriptor::CPPTYPE_INT32)  \ 
+    TMP_MACRO_FOR_CPPTYPE(NProtoBuf::FieldDescriptor::CPPTYPE_INT64)  \ 
+    TMP_MACRO_FOR_CPPTYPE(NProtoBuf::FieldDescriptor::CPPTYPE_UINT32) \ 
+    TMP_MACRO_FOR_CPPTYPE(NProtoBuf::FieldDescriptor::CPPTYPE_UINT64) \ 
+    TMP_MACRO_FOR_CPPTYPE(NProtoBuf::FieldDescriptor::CPPTYPE_DOUBLE) \ 
+    TMP_MACRO_FOR_CPPTYPE(NProtoBuf::FieldDescriptor::CPPTYPE_FLOAT)  \ 
+    TMP_MACRO_FOR_CPPTYPE(NProtoBuf::FieldDescriptor::CPPTYPE_BOOL)   \ 
+    TMP_MACRO_FOR_CPPTYPE(NProtoBuf::FieldDescriptor::CPPTYPE_ENUM)   \ 
+    TMP_MACRO_FOR_CPPTYPE(NProtoBuf::FieldDescriptor::CPPTYPE_STRING) \ 
+    TMP_MACRO_FOR_CPPTYPE(NProtoBuf::FieldDescriptor::CPPTYPE_MESSAGE) 
 }

@@ -39,11 +39,11 @@ public:
     inline bool IsDefined() const {
         return Path_.length() > 0;
     }
-
-    inline explicit operator bool() const {
-        return IsDefined();
-    }
-
+ 
+    inline explicit operator bool() const { 
+        return IsDefined(); 
+    } 
+ 
     inline const char* c_str() const {
         return Path_.c_str();
     }

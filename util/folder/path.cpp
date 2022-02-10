@@ -26,13 +26,13 @@ bool TFsPath::IsSubpathOf(const TFsPath& that) const {
     const TSplit& rsplit = that.GetSplit();
 
     if (rsplit.IsAbsolute != split.IsAbsolute) {
-        return false;
+        return false; 
     }
-
+ 
     if (rsplit.Drive != split.Drive) {
-        return false;
+        return false; 
     }
-
+ 
     if (rsplit.size() >= split.size()) {
         return false;
     }
@@ -102,9 +102,9 @@ TFsPath TFsPath::RelativePath(const TFsPath& root) const {
 
 TFsPath TFsPath::Parent() const {
     if (!IsDefined()) {
-        return TFsPath();
+        return TFsPath(); 
     }
-
+ 
     TSplit split = GetSplit();
     if (split.size()) {
         split.pop_back();
@@ -116,16 +116,16 @@ TFsPath TFsPath::Parent() const {
 }
 
 TFsPath& TFsPath::operator/=(const TFsPath& that) {
-    if (!IsDefined()) {
-        *this = that;
-
-    } else if (that.IsDefined() && that.GetPath() != ".") {
+    if (!IsDefined()) { 
+        *this = that; 
+ 
+    } else if (that.IsDefined() && that.GetPath() != ".") { 
         if (!that.IsRelative()) {
             ythrow TIoException() << "path should be relative: " << that.GetPath();
         }
 
-        TSplit split = GetSplit();
-        const TSplit& rsplit = that.GetSplit();
+        TSplit split = GetSplit(); 
+        const TSplit& rsplit = that.GetSplit(); 
         split.insert(split.end(), rsplit.begin(), rsplit.end());
         *this = TFsPath(split.Reconstruct());
     }
@@ -144,8 +144,8 @@ TString TFsPath::GetName() const {
         return TString();
     }
 
-    const TSplit& split = GetSplit();
-
+    const TSplit& split = GetSplit(); 
+ 
     if (split.size() > 0) {
         if (split.back() != "..") {
             return TString(split.back());
@@ -214,7 +214,7 @@ TFsPath TFsPath::Child(const TString& name) const {
     if (!name) {
         ythrow TIoException() << "child name must not be empty";
     }
-
+ 
     return *this / name;
 }
 
@@ -353,9 +353,9 @@ bool TFsPath::IsSymlink() const {
 
 void TFsPath::DeleteIfExists() const {
     if (!IsDefined()) {
-        return;
+        return; 
     }
-
+ 
     ::unlink(this->c_str());
     ::rmdir(this->c_str());
     if (Exists()) {

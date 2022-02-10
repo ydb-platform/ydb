@@ -1,13 +1,13 @@
-#pragma once
-
-#include "simple_reflection.h"
-
+#pragma once 
+ 
+#include "simple_reflection.h" 
+ 
 #include <google/protobuf/message.h>
 #include <google/protobuf/descriptor.h>
-
+ 
 #include <functional>
 
-namespace NProtoBuf {
+namespace NProtoBuf { 
     // Apply @onField processor to each field in @msg (even empty)
     // Do not walk deeper the field if the field is an empty message
     // Returned bool defines if we should walk down deeper to current node children (true), or not (false)

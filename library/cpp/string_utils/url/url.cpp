@@ -264,17 +264,17 @@ TStringBuf GetDomain(const TStringBuf host) noexcept {
 }
 
 TStringBuf GetParentDomain(const TStringBuf host, size_t level) noexcept {
-    size_t pos = host.size();
-    for (size_t i = 0; i < level; ++i) {
-        pos = host.rfind('.', pos);
+    size_t pos = host.size(); 
+    for (size_t i = 0; i < level; ++i) { 
+        pos = host.rfind('.', pos); 
         if (pos == TString::npos)
-            return host;
-    }
-    return host.SubStr(pos + 1);
-}
-
+            return host; 
+    } 
+    return host.SubStr(pos + 1); 
+} 
+ 
 TStringBuf GetZone(const TStringBuf host) noexcept {
-    return GetParentDomain(host, 1);
+    return GetParentDomain(host, 1); 
 }
 
 TStringBuf CutWWWPrefix(const TStringBuf url) noexcept {

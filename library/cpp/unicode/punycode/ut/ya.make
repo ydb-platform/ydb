@@ -1,13 +1,13 @@
 UNITTEST_FOR(library/cpp/unicode/punycode)
-
-OWNER(
+ 
+OWNER( 
     g:base
     g:middle
     g:upper
-)
-
-SRCS(
-    punycode_ut.cpp
-)
-
-END()
+) 
+ 
+SRCS( 
+    punycode_ut.cpp 
+) 
+ 
+END() 

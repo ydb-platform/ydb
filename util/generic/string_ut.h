@@ -21,7 +21,7 @@ struct TCharBuffer {
         return Data;
     }
 };
-
+ 
 template <>
 struct TCharBuffer<char, 0> {
     const char* Data;

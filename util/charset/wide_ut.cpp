@@ -6,7 +6,7 @@
 #include <util/string/reverse.h>
 
 #include <algorithm>
-
+ 
 namespace {
     //! three UTF8 encoded russian letters (A, B, V)
     const char utext[] = "\xd0\x90\xd0\x91\xd0\x92";

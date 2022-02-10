@@ -8,9 +8,9 @@ Y_UNIT_TEST_SUITE(TStripStringTest) {
     Y_UNIT_TEST(TestStrip) {
         struct TTest {
             const char* Str;
-            const char* StripLeftRes;
-            const char* StripRightRes;
-            const char* StripRes;
+            const char* StripLeftRes; 
+            const char* StripRightRes; 
+            const char* StripRes; 
         };
         static const TTest tests[] = {
             {"  012  ", "012  ", "  012", "012"},
@@ -28,15 +28,15 @@ Y_UNIT_TEST_SUITE(TStripStringTest) {
 
         for (const auto& test : tests) {
             TString inputStr(test.Str);
-
+ 
             TString s;
-            Strip(inputStr, s);
+            Strip(inputStr, s); 
             UNIT_ASSERT_EQUAL(s, test.StripRes);
-
+ 
             UNIT_ASSERT_EQUAL(StripString(inputStr), test.StripRes);
             UNIT_ASSERT_EQUAL(StripStringLeft(inputStr), test.StripLeftRes);
             UNIT_ASSERT_EQUAL(StripStringRight(inputStr), test.StripRightRes);
-
+ 
             TStringBuf inputStrBuf(test.Str);
             UNIT_ASSERT_EQUAL(StripString(inputStrBuf), test.StripRes);
             UNIT_ASSERT_EQUAL(StripStringLeft(inputStrBuf), test.StripLeftRes);

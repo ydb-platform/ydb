@@ -248,76 +248,76 @@ public:
         RSplitTemplate(delim, l, r);
     }
 
-private:
+private: 
     // splits on a delimiter at a given position; delimiter is excluded
     void DoSplitOn(size_t pos, TdSelf& l, TdSelf& r, size_t len) const noexcept {
-        Y_ASSERT(pos != TBase::npos);
-
+        Y_ASSERT(pos != TBase::npos); 
+ 
         // make a copy in case one of l/r is really *this
         const TdSelf tok = SubStr(pos + len);
         l = Head(pos);
         r = tok;
     }
 
-public:
-    // In all methods below with @pos parameter, @pos is supposed to be
-    // a result of string find()/rfind()/find_first() or other similiar functions,
+public: 
+    // In all methods below with @pos parameter, @pos is supposed to be 
+    // a result of string find()/rfind()/find_first() or other similiar functions, 
     // returning either position within string length [0..size()) or npos.
-    // For all other @pos values (out of string index range) the behaviour isn't well defined
-    // For example, for TStringBuf s("abc"):
-    // s.TrySplitOn(s.find('z'), ...) is false, but s.TrySplitOn(100500, ...) is true.
-
+    // For all other @pos values (out of string index range) the behaviour isn't well defined 
+    // For example, for TStringBuf s("abc"): 
+    // s.TrySplitOn(s.find('z'), ...) is false, but s.TrySplitOn(100500, ...) is true. 
+ 
     bool TrySplitOn(size_t pos, TdSelf& l, TdSelf& r, size_t len = 1) const noexcept {
         if (TBase::npos == pos)
             return false;
-
+ 
         DoSplitOn(pos, l, r, len);
         return true;
     }
 
     void SplitOn(size_t pos, TdSelf& l, TdSelf& r, size_t len = 1) const noexcept {
-        if (!TrySplitOn(pos, l, r, len)) {
+        if (!TrySplitOn(pos, l, r, len)) { 
             l = *this;
             r = TdSelf();
         }
     }
 
     bool TrySplitAt(size_t pos, TdSelf& l, TdSelf& r) const noexcept {
-        return TrySplitOn(pos, l, r, 0);
+        return TrySplitOn(pos, l, r, 0); 
     }
 
     void SplitAt(size_t pos, TdSelf& l, TdSelf& r) const noexcept {
-        SplitOn(pos, l, r, 0);
+        SplitOn(pos, l, r, 0); 
     }
 
     /*
-    // Not implemented intentionally, use TrySplitOn() instead
+    // Not implemented intentionally, use TrySplitOn() instead 
     void RSplitOn(size_t pos, TdSelf& l, TdSelf& r) const noexcept;
     void RSplitAt(size_t pos, TdSelf& l, TdSelf& r) const noexcept;
-*/
+*/ 
 
-public:
+public: 
     Y_PURE_FUNCTION inline TdSelf After(TCharType c) const noexcept {
         TdSelf l, r;
-        return TrySplit(c, l, r) ? r : *this;
+        return TrySplit(c, l, r) ? r : *this; 
     }
 
     Y_PURE_FUNCTION inline TdSelf Before(TCharType c) const noexcept {
         TdSelf l, r;
-        return TrySplit(c, l, r) ? l : *this;
-    }
+        return TrySplit(c, l, r) ? l : *this; 
+    } 
 
     Y_PURE_FUNCTION inline TdSelf RAfter(TCharType c) const noexcept {
         TdSelf l, r;
-        return TryRSplit(c, l, r) ? r : *this;
+        return TryRSplit(c, l, r) ? r : *this; 
     }
 
     Y_PURE_FUNCTION inline TdSelf RBefore(TCharType c) const noexcept {
         TdSelf l, r;
-        return TryRSplit(c, l, r) ? l : *this;
+        return TryRSplit(c, l, r) ? l : *this; 
     }
 
-public:
+public: 
     inline bool AfterPrefix(const TdSelf& prefix, TdSelf& result) const noexcept {
         if (this->StartsWith(prefix)) {
             result = Tail(prefix.size());
@@ -336,15 +336,15 @@ public:
 
     // returns true if string started with `prefix`, false otherwise
     inline bool SkipPrefix(const TdSelf& prefix) noexcept {
-        return AfterPrefix(prefix, *this);
-    }
-
+        return AfterPrefix(prefix, *this); 
+    } 
+ 
     // returns true if string ended with `suffix`, false otherwise
     inline bool ChopSuffix(const TdSelf& suffix) noexcept {
-        return BeforeSuffix(suffix, *this);
-    }
-
-public:
+        return BeforeSuffix(suffix, *this); 
+    } 
+ 
+public: 
     // returns tail, including pos
     TdSelf SplitOffAt(size_t pos) {
         const TdSelf tok = SubStr(pos);
@@ -371,12 +371,12 @@ public:
         return tok;
     }
     /*
-    // See comment on RSplitOn() above
-    TdSelf RSplitOffOn(size_t pos);
-    TdSelf RNextTokOn(size_t pos);
-*/
+    // See comment on RSplitOn() above 
+    TdSelf RSplitOffOn(size_t pos); 
+    TdSelf RNextTokOn(size_t pos); 
+*/ 
 
-public:
+public: 
     TdSelf SplitOff(TCharType delim) {
         TdSelf tok;
         Split(delim, *this, tok);
@@ -513,7 +513,7 @@ private:
     template <typename TDelimiterType>
     bool RNextTokTemplate(TDelimiterType delim, TdSelf& tok) {
         if (!empty()) {
-            tok = RNextTokTemplate(delim);
+            tok = RNextTokTemplate(delim); 
             return true;
         }
         return false;

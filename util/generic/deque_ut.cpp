@@ -67,15 +67,15 @@ void TDequeTest::TestConstructorsAndAssignments() {
 
 void TDequeTest::TestDeque1() {
     TDeque<int> d;
-    UNIT_ASSERT(!d);
-
+    UNIT_ASSERT(!d); 
+ 
     d.push_back(4);
     d.push_back(9);
     d.push_back(16);
     d.push_front(1);
 
-    UNIT_ASSERT(d);
-
+    UNIT_ASSERT(d); 
+ 
     UNIT_ASSERT(d[0] == 1);
     UNIT_ASSERT(d[1] == 4);
     UNIT_ASSERT(d[2] == 9);

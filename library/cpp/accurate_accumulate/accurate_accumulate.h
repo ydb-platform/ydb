@@ -11,7 +11,7 @@ public:
     using TValueType = TAccumulateType;
 
     template <typename TFloatType>
-    explicit TKahanAccumulator(const TFloatType x)
+    explicit TKahanAccumulator(const TFloatType x) 
         : Sum_(x)
         , Compensation_()
     {
@@ -30,12 +30,12 @@ public:
         return *this;
     }
 
-    TValueType Get() const {
+    TValueType Get() const { 
         return Sum_ + Compensation_;
     }
 
     template <typename TFloatType>
-    inline operator TFloatType() const {
+    inline operator TFloatType() const { 
         return Get();
     }
 
@@ -91,31 +91,31 @@ private:
 };
 
 template <typename TAccumulateType, typename TFloatType>
-inline const TKahanAccumulator<TAccumulateType>
+inline const TKahanAccumulator<TAccumulateType> 
 operator+(TKahanAccumulator<TAccumulateType> lhs, const TFloatType rhs) {
     return lhs += rhs;
 }
 
 template <typename TAccumulateType, typename TFloatType>
-inline const TKahanAccumulator<TAccumulateType>
+inline const TKahanAccumulator<TAccumulateType> 
 operator-(TKahanAccumulator<TAccumulateType> lhs, const TFloatType rhs) {
     return lhs -= rhs;
 }
 
 template <typename TAccumulateType, typename TFloatType>
-inline const TKahanAccumulator<TAccumulateType>
+inline const TKahanAccumulator<TAccumulateType> 
 operator*(TKahanAccumulator<TAccumulateType> lhs, const TFloatType rhs) {
     return lhs *= rhs;
 }
 
 template <typename TAccumulateType, typename TFloatType>
-inline const TKahanAccumulator<TAccumulateType>
+inline const TKahanAccumulator<TAccumulateType> 
 operator/(TKahanAccumulator<TAccumulateType> lhs, const TFloatType rhs) {
     return lhs /= rhs;
 }
 
 template <typename TAccumulatorType, typename It>
-static inline TAccumulatorType TypedFastAccumulate(It begin, It end) {
+static inline TAccumulatorType TypedFastAccumulate(It begin, It end) { 
     TAccumulatorType accumulator = TAccumulatorType();
 
     for (; begin + 15 < end; begin += 16) {
@@ -179,7 +179,7 @@ static inline TAccumulatorType TypedFastInnerProduct(It1 begin1, It1 end1, It2 b
 }
 
 template <typename It>
-static inline double FastAccumulate(It begin, It end) {
+static inline double FastAccumulate(It begin, It end) { 
     return TypedFastAccumulate<double>(begin, end);
 }
 
@@ -189,7 +189,7 @@ static inline double FastAccumulate(const TVector<T>& sequence) {
 }
 
 template <typename It>
-static inline double FastKahanAccumulate(It begin, It end) {
+static inline double FastKahanAccumulate(It begin, It end) { 
     return TypedFastAccumulate<TKahanAccumulator<double>>(begin, end);
 }
 
@@ -199,7 +199,7 @@ static inline double FastKahanAccumulate(const TVector<T>& sequence) {
 }
 
 template <typename It1, typename It2>
-static inline double FastInnerProduct(It1 begin1, It1 end1, It2 begin2) {
+static inline double FastInnerProduct(It1 begin1, It1 end1, It2 begin2) { 
     return TypedFastInnerProduct<double>(begin1, end1, begin2);
 }
 
@@ -210,7 +210,7 @@ static inline double FastInnerProduct(const TVector<T>& lhs, const TVector<T>& r
 }
 
 template <typename It1, typename It2>
-static inline double FastKahanInnerProduct(It1 begin1, It1 end1, It2 begin2) {
+static inline double FastKahanInnerProduct(It1 begin1, It1 end1, It2 begin2) { 
     return TypedFastInnerProduct<TKahanAccumulator<double>>(begin1, end1, begin2);
 }
 

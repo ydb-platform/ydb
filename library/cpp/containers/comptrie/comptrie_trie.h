@@ -127,7 +127,7 @@ public:
         return FindLongestPrefix(key.data(), key.size(), prefixLen, value, hasNext);
     }
 
-    // Return trie, containing all tails for the given key
+    // Return trie, containing all tails for the given key 
     inline TCompactTrie<T, D, S> FindTails(const TSymbol* key, size_t keylen) const;
     TCompactTrie<T, D, S> FindTails(const TKeyBuf& key) const {
         return FindTails(key.data(), key.size());
@@ -137,10 +137,10 @@ public:
         return FindTails(key.data(), key.size(), res);
     }
 
-    // same as FindTails(&key, 1), a bit faster
-    // return false, if no arc with @label exists
+    // same as FindTails(&key, 1), a bit faster 
+    // return false, if no arc with @label exists 
     inline bool FindTails(TSymbol label, TCompactTrie<T, D, S>& res) const;
-
+ 
     class TConstIterator {
     private:
         typedef NCompactTrie::TOpaqueTrieIterator TOpaqueTrieIterator;
@@ -343,10 +343,10 @@ void TCompactTrie<T, D, S>::FindPhrases(const TSymbol* key, size_t keylen, TPhra
 template <class T, class D, class S>
 inline TCompactTrie<T, D, S> TCompactTrie<T, D, S>::FindTails(const TSymbol* key, size_t keylen) const {
     TCompactTrie<T, D, S> ret;
-    FindTails(key, keylen, ret);
-    return ret;
-}
-
+    FindTails(key, keylen, ret); 
+    return ret; 
+} 
+ 
 template <class T, class D, class S>
 bool TCompactTrie<T, D, S>::FindTails(const TSymbol* key, size_t keylen, TCompactTrie<T, D, S>& res) const {
     using namespace NCompactTrie;
@@ -354,11 +354,11 @@ bool TCompactTrie<T, D, S>::FindTails(const TSymbol* key, size_t keylen, TCompac
     size_t len = DataHolder.Length();
 
     if (!key || !len)
-        return false;
+        return false; 
 
     if (!keylen) {
-        res = *this;
-        return true;
+        res = *this; 
+        return true; 
     }
 
     const char* datastart = DataHolder.AsCharPtr();
@@ -386,35 +386,35 @@ bool TCompactTrie<T, D, S>::FindTails(const TSymbol* key, size_t keylen, TCompac
         }
     }
 
-    return false;
+    return false; 
 }
 
 template <class T, class D, class S>
 inline bool TCompactTrie<T, D, S>::FindTails(TSymbol label, TCompactTrie<T, D, S>& res) const {
-    using namespace NCompactTrie;
-
+    using namespace NCompactTrie; 
+ 
     const size_t len = DataHolder.Length();
-    if (!len)
-        return false;
-
+    if (!len) 
+        return false; 
+ 
     const char* datastart = DataHolder.AsCharPtr();
-    const char* dataend = datastart + len;
-    const char* datapos = datastart;
+    const char* dataend = datastart + len; 
+    const char* datapos = datastart; 
     const char* value = nullptr;
 
     if (!NCompactTrie::Advance(datapos, dataend, value, label, Packer))
         return false;
-
+ 
     if (datapos) {
         Y_ASSERT(datapos >= datastart);
         res = TCompactTrie<T, D, S>(TBlob::NoCopy(datapos, dataend - datapos), value);
     } else {
         res = TCompactTrie<T, D, S>(value);
-    }
-
+    } 
+ 
     return true;
-}
-
+} 
+ 
 template <class T, class D, class S>
 typename TCompactTrie<T, D, S>::TConstIterator TCompactTrie<T, D, S>::Begin() const {
     NCompactTrie::TOpaqueTrie self(DataHolder.AsCharPtr(), DataHolder.Length(), Skipper);
@@ -495,30 +495,30 @@ bool TCompactTrie<T, D, S>::LookupLongestPrefix(const TSymbol* key, size_t keyle
 
     const char* const dataend = datapos + len;
 
-    const T* keyend = key + keylen;
+    const T* keyend = key + keylen; 
     while (key != keyend) {
         T label = *(key++);
-        for (i64 i = (i64)ExtraBits<TSymbol>(); i >= 0; i -= 8) {
+        for (i64 i = (i64)ExtraBits<TSymbol>(); i >= 0; i -= 8) { 
             const char flags = LeapByte(datapos, dataend, (char)(label >> i));
-            if (!datapos) {
-                return found; // no such arc
-            }
+            if (!datapos) { 
+                return found; // no such arc 
+            } 
 
             Y_ASSERT(datapos <= dataend);
-            if ((flags & MT_FINAL)) {
+            if ((flags & MT_FINAL)) { 
                 prefixLen = keylen - (keyend - key) - (i ? 1 : 0);
                 valuepos = datapos;
                 hasNext = flags & MT_NEXT;
                 found = true;
 
-                if (!i && key == keyend) { // last byte, and got a match
-                    return found;
-                }
-                datapos += Packer.SkipLeaf(datapos); // skip intermediate leaf nodes
-            }
+                if (!i && key == keyend) { // last byte, and got a match 
+                    return found; 
+                } 
+                datapos += Packer.SkipLeaf(datapos); // skip intermediate leaf nodes 
+            } 
 
-            if (!(flags & MT_NEXT)) {
-                return found; // no further way
+            if (!(flags & MT_NEXT)) { 
+                return found; // no further way 
             }
         }
     }

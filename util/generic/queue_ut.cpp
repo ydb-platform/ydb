@@ -12,10 +12,10 @@ Y_UNIT_TEST_SUITE(TYQueueTest) {
             using container = TQueue<int>;
 
             container c1;
-            UNIT_ASSERT(!c1);
+            UNIT_ASSERT(!c1); 
             c1.push(100);
             c1.push(200);
-            UNIT_ASSERT(c1);
+            UNIT_ASSERT(c1); 
 
             container c2(c1);
 
@@ -44,10 +44,10 @@ Y_UNIT_TEST_SUITE(TYQueueTest) {
             using container = TPriorityQueue<int>;
 
             container c1;
-            UNIT_ASSERT(!c1);
+            UNIT_ASSERT(!c1); 
             c1.push(100);
             c1.push(200);
-            UNIT_ASSERT(c1);
+            UNIT_ASSERT(c1); 
 
             container c2(c1);
 

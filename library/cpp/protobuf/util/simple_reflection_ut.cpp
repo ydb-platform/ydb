@@ -156,21 +156,21 @@ Y_UNIT_TEST_SUITE(ProtobufSimpleReflection) {
             {
                 TMaybe<TConstField> field = TConstField::ByPath(msg, "OneStr");
                 UNIT_ASSERT(field);
-                UNIT_ASSERT(field->HasValue());
+                UNIT_ASSERT(field->HasValue()); 
                 UNIT_ASSERT_VALUES_EQUAL("1", (field->Get<TString>()));
             }
 
             {
                 TMaybe<TConstField> field = TConstField::ByPath(msg, "OneMsg");
                 UNIT_ASSERT(field);
-                UNIT_ASSERT(field->HasValue());
+                UNIT_ASSERT(field->HasValue()); 
                 UNIT_ASSERT(field->IsMessageInstance<TInnerSample>());
             }
 
             {
                 TMaybe<TConstField> field = TConstField::ByPath(msg, "/OneMsg/RepInt");
                 UNIT_ASSERT(field);
-                UNIT_ASSERT(field->HasValue());
+                UNIT_ASSERT(field->HasValue()); 
                 UNIT_ASSERT_VALUES_EQUAL(2, field->Size());
                 UNIT_ASSERT_VALUES_EQUAL(2, field->Get<int>(0));
                 UNIT_ASSERT_VALUES_EQUAL(3, field->Get<int>(1));
@@ -179,7 +179,7 @@ Y_UNIT_TEST_SUITE(ProtobufSimpleReflection) {
             {
                 TMaybe<TConstField> field = TConstField::ByPath(msg, "RepMsg/RepInt");
                 UNIT_ASSERT(field);
-                UNIT_ASSERT(field->HasValue());
+                UNIT_ASSERT(field->HasValue()); 
                 UNIT_ASSERT_VALUES_EQUAL(2, field->Size());
                 UNIT_ASSERT_VALUES_EQUAL(4, field->Get<int>(0));
                 UNIT_ASSERT_VALUES_EQUAL(5, field->Get<int>(1));
@@ -194,13 +194,13 @@ Y_UNIT_TEST_SUITE(ProtobufSimpleReflection) {
             {
                 TMaybe<TConstField> field = TConstField::ByPath(msg, "OneStr");
                 UNIT_ASSERT(field);
-                UNIT_ASSERT(!field->HasValue());
+                UNIT_ASSERT(!field->HasValue()); 
             }
 
             {
                 TMaybe<TConstField> field = TConstField::ByPath(msg, "OneMsg/RepInt");
                 UNIT_ASSERT(field);
-                UNIT_ASSERT(!field->HasValue());
+                UNIT_ASSERT(!field->HasValue()); 
             }
 
             {
@@ -217,25 +217,25 @@ Y_UNIT_TEST_SUITE(ProtobufSimpleReflection) {
             {
                 TMaybe<TMutableField> field = TMutableField::ByPath(msg, "OneStr");
                 UNIT_ASSERT(field);
-                UNIT_ASSERT(!field->HasValue());
+                UNIT_ASSERT(!field->HasValue()); 
                 field->Set(TString("zz"));
-                UNIT_ASSERT(field->HasValue());
+                UNIT_ASSERT(field->HasValue()); 
                 UNIT_ASSERT_VALUES_EQUAL("zz", msg.GetOneStr());
             }
 
             {
                 TMaybe<TMutableField> field = TMutableField::ByPath(msg, "OneStr");
                 UNIT_ASSERT(field);
-                UNIT_ASSERT(field->HasValue());
+                UNIT_ASSERT(field->HasValue()); 
                 field->Set(TString("dd"));
-                UNIT_ASSERT(field->HasValue());
+                UNIT_ASSERT(field->HasValue()); 
                 UNIT_ASSERT_VALUES_EQUAL("dd", msg.GetOneStr());
             }
 
             {
                 TMaybe<TMutableField> field = TMutableField::ByPath(msg, "OneMsg/RepInt");
                 UNIT_ASSERT(field);
-                UNIT_ASSERT(!field->HasValue());
+                UNIT_ASSERT(!field->HasValue()); 
                 field->Add(10);
                 UNIT_ASSERT_VALUES_EQUAL(10, msg.GetOneMsg().GetRepInt(0));
             }
@@ -253,13 +253,13 @@ Y_UNIT_TEST_SUITE(ProtobufSimpleReflection) {
             {
                 TMaybe<TMutableField> field = TMutableField::ByPath(msg, "OneStr", true);
                 UNIT_ASSERT(field);
-                UNIT_ASSERT(!field->HasValue());
+                UNIT_ASSERT(!field->HasValue()); 
             }
 
             {
                 TMaybe<TMutableField> field = TMutableField::ByPath(msg, "OneMsg/RepInt", true);
                 UNIT_ASSERT(field);
-                UNIT_ASSERT(!field->HasValue());
+                UNIT_ASSERT(!field->HasValue()); 
                 UNIT_ASSERT(msg.HasOneMsg());
                 field->Add(10);
                 UNIT_ASSERT_VALUES_EQUAL(10, msg.GetOneMsg().GetRepInt(0));
@@ -270,7 +270,7 @@ Y_UNIT_TEST_SUITE(ProtobufSimpleReflection) {
                 TMaybe<TMutableField> fieldCopy = TMutableField::ByPath(msg, "RepMsg/RepInt", true);
                 Y_UNUSED(fieldCopy);
                 UNIT_ASSERT(field);
-                UNIT_ASSERT(!field->HasValue());
+                UNIT_ASSERT(!field->HasValue()); 
                 UNIT_ASSERT_VALUES_EQUAL(1, msg.RepMsgSize());
                 field->Add(12);
                 UNIT_ASSERT_VALUES_EQUAL(12, field->Get<int>());

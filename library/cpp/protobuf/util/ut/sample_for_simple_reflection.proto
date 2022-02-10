@@ -11,15 +11,15 @@ message TSample {
     repeated string RepStr = 4;
     optional string AnotherOneStr = 5;
 
-    optional int32 OneInt = 6;
-    repeated int32 RepInt = 7;
-
-    enum EEnum {
-        V1 = 1;
-        V2 = 2;
-    }
-    optional EEnum OneEnum = 8;
-    repeated EEnum RepEnum = 9;
-
+    optional int32 OneInt = 6; 
+    repeated int32 RepInt = 7; 
+ 
+    enum EEnum { 
+        V1 = 1; 
+        V2 = 2; 
+    } 
+    optional EEnum OneEnum = 8; 
+    repeated EEnum RepEnum = 9; 
+ 
     extensions 100 to 199;
 }

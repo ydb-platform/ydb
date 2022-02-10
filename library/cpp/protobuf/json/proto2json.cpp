@@ -24,7 +24,7 @@ namespace NProtobufJson {
                     const TProto2JsonConfig& config) {
         Proto2Json(proto, *CreateJsonMapOutput(json), config);
     }
-
+ 
     void Proto2Json(const NProtoBuf::Message& proto, NJson::TJsonWriter& writer,
                     const TProto2JsonConfig& config) {
         Proto2Json(proto, *CreateJsonMapOutput(writer), config);

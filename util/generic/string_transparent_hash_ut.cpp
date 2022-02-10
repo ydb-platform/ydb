@@ -6,7 +6,7 @@
 #include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
 
 #include <util/str_stl.h>
-
+ 
 Y_UNIT_TEST_SUITE(StringHashFunctorTests) {
     Y_UNIT_TEST(TestTransparencyWithUnorderedSet) {
         // Using Abseil hash set because `std::unordered_set` is transparent only from C++20 (while

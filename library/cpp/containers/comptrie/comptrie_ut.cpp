@@ -21,7 +21,7 @@
 #include <util/string/cast.h>
 
 #include "comptrie.h"
-#include "set.h"
+#include "set.h" 
 #include "first_symbol_iterator.h"
 #include "search_iterator.h"
 #include "pattern_searcher.h"
@@ -74,7 +74,7 @@ private:
     UNIT_TEST(TestIterateEmptyKey);
 
     UNIT_TEST(TestTrieSet);
-
+ 
     UNIT_TEST(TestTrieForVectorInt64);
     UNIT_TEST(TestTrieForListInt64);
     UNIT_TEST(TestTrieForSetInt64);
@@ -209,8 +209,8 @@ public:
     void TestClear();
 
     void TestIterateEmptyKey();
-
-    void TestTrieSet();
+ 
+    void TestTrieSet(); 
 
     void TestTrieForVectorInt64();
     void TestTrieForListInt64();
@@ -1060,48 +1060,48 @@ void TCompactTrieTest::TestIterateEmptyKey() {
     UNIT_ASSERT(it.GetValue() == 1);
 }
 
-void TCompactTrieTest::TestTrieSet() {
-    TBuffer buffer;
-    {
-        TCompactTrieSet<char>::TBuilder builder;
-        UNIT_ASSERT(builder.Add("a", 0));
-        UNIT_ASSERT(builder.Add("ab", 1));
-        UNIT_ASSERT(builder.Add("abc", 1));
-        UNIT_ASSERT(builder.Add("abcd", 0));
-        UNIT_ASSERT(!builder.Add("abcd", 1));
-
-        TBufferStream stream(buffer);
-        builder.Save(stream);
-    }
-
-    TCompactTrieSet<char> set(TBlob::FromBuffer(buffer));
-    UNIT_ASSERT(set.Has("a"));
-    UNIT_ASSERT(set.Has("ab"));
-    UNIT_ASSERT(set.Has("abc"));
-    UNIT_ASSERT(set.Has("abcd"));
-    UNIT_ASSERT(!set.Has("abcde"));
-    UNIT_ASSERT(!set.Has("aa"));
-    UNIT_ASSERT(!set.Has("b"));
-    UNIT_ASSERT(!set.Has(""));
-
-    TCompactTrieSet<char> tails;
-    UNIT_ASSERT(set.FindTails("a", tails));
-    UNIT_ASSERT(tails.Has("b"));
-    UNIT_ASSERT(tails.Has("bcd"));
-    UNIT_ASSERT(!tails.Has("ab"));
-    UNIT_ASSERT(!set.Has(""));
-
-    TCompactTrieSet<char> empty;
-    UNIT_ASSERT(set.FindTails("abcd", empty));
-    UNIT_ASSERT(!empty.Has("a"));
-    UNIT_ASSERT(!empty.Has("b"));
-    UNIT_ASSERT(!empty.Has("c"));
-    UNIT_ASSERT(!empty.Has("d"));
-    UNIT_ASSERT(!empty.Has("d"));
-
+void TCompactTrieTest::TestTrieSet() { 
+    TBuffer buffer; 
+    { 
+        TCompactTrieSet<char>::TBuilder builder; 
+        UNIT_ASSERT(builder.Add("a", 0)); 
+        UNIT_ASSERT(builder.Add("ab", 1)); 
+        UNIT_ASSERT(builder.Add("abc", 1)); 
+        UNIT_ASSERT(builder.Add("abcd", 0)); 
+        UNIT_ASSERT(!builder.Add("abcd", 1)); 
+ 
+        TBufferStream stream(buffer); 
+        builder.Save(stream); 
+    } 
+ 
+    TCompactTrieSet<char> set(TBlob::FromBuffer(buffer)); 
+    UNIT_ASSERT(set.Has("a")); 
+    UNIT_ASSERT(set.Has("ab")); 
+    UNIT_ASSERT(set.Has("abc")); 
+    UNIT_ASSERT(set.Has("abcd")); 
+    UNIT_ASSERT(!set.Has("abcde")); 
+    UNIT_ASSERT(!set.Has("aa")); 
+    UNIT_ASSERT(!set.Has("b")); 
+    UNIT_ASSERT(!set.Has("")); 
+ 
+    TCompactTrieSet<char> tails; 
+    UNIT_ASSERT(set.FindTails("a", tails)); 
+    UNIT_ASSERT(tails.Has("b")); 
+    UNIT_ASSERT(tails.Has("bcd")); 
+    UNIT_ASSERT(!tails.Has("ab")); 
+    UNIT_ASSERT(!set.Has("")); 
+ 
+    TCompactTrieSet<char> empty; 
+    UNIT_ASSERT(set.FindTails("abcd", empty)); 
+    UNIT_ASSERT(!empty.Has("a")); 
+    UNIT_ASSERT(!empty.Has("b")); 
+    UNIT_ASSERT(!empty.Has("c")); 
+    UNIT_ASSERT(!empty.Has("d")); 
+    UNIT_ASSERT(!empty.Has("d")); 
+ 
     UNIT_ASSERT(empty.Has("")); // contains only empty string
-}
-
+} 
+ 
 // Tests for trie with vector (list, set) values
 
 TVector<TUtf16String> TCompactTrieTest::GetSampleKeys(size_t nKeys) const {

@@ -301,7 +301,7 @@ RECURSE(
     sentencepiece
     serf
     snappy
-    sophos
+    sophos 
     sparrowhawk
     sparsehash
     spdk

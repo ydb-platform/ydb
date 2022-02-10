@@ -249,7 +249,7 @@ RECURSE(
     django-etc
     django-export-action-py3
     django-extensions
-    django-fernet-fields
+    django-fernet-fields 
     django-filebrowser-no-grappelli
     django-filter
     django-fsm

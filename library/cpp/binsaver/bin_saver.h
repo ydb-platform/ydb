@@ -156,13 +156,13 @@ private:
         }
     }
 
-    // hash_multimap
+    // hash_multimap 
     template <class AMM>
     void DoAnyMultiMap(AMM& data) {
-        if (IsReading()) {
-            data.clear();
+        if (IsReading()) { 
+            data.clear(); 
             TStoredSize nSize;
-            Add(3, &nSize);
+            Add(3, &nSize); 
             TVector<typename AMM::key_type, typename std::allocator_traits<typename AMM::allocator_type>::template rebind_alloc<typename AMM::key_type>> indices;
             indices.resize(nSize);
             for (TStoredSize i = 0; i < nSize; ++i)
@@ -170,19 +170,19 @@ private:
             for (TStoredSize i = 0; i < nSize; ++i) {
                 std::pair<typename AMM::key_type, typename AMM::mapped_type> valToInsert;
                 valToInsert.first = indices[i];
-                Add(2, &valToInsert.second);
-                data.insert(valToInsert);
-            }
-        } else {
+                Add(2, &valToInsert.second); 
+                data.insert(valToInsert); 
+            } 
+        } else { 
             TStoredSize nSize = data.size();
             CheckOverflow(nSize, data.size());
-            Add(3, &nSize);
+            Add(3, &nSize); 
             for (auto pos = data.begin(); pos != data.end(); ++pos)
                 Add(1, (typename AMM::key_type*)(&pos->first));
             for (auto pos = data.begin(); pos != data.end(); ++pos)
-                Add(2, &pos->second);
-        }
-    }
+                Add(2, &pos->second); 
+        } 
+    } 
 
     template <class T>
     void DoAnySet(T& data) {
@@ -270,7 +270,7 @@ private:
     IObjectBase* LoadObject();
 
     bool bRead;
-    TBufferedStream<> File;
+    TBufferedStream<> File; 
     // maps objects addresses during save(first) to addresses during load(second) - during loading
     // or serves as a sign that some object has been already stored - during storing
     bool StableOutput;
@@ -357,7 +357,7 @@ public:
     int Add(const chunk_id, THashMultiMap<T1, T2, T3, T4, T5>* pHash) {
         DoAnyMultiMap(*pHash);
         return 0;
-    }
+    } 
     template <class K, class L, class A>
     int Add(const chunk_id, TSet<K, L, A>* pSet) {
         DoAnySet(*pSet);

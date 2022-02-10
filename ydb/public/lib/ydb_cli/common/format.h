@@ -6,7 +6,7 @@
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/status/status.h>
-
+ 
 namespace NYdb {
 namespace NConsoleClient {
 
@@ -24,7 +24,7 @@ protected:
     void AddInputFormats(TClientCommand::TConfig& config, const TVector<EOutputFormat>& allowedFormats);
     void AddFormats(TClientCommand::TConfig& config, const TVector<EOutputFormat>& allowedFormats);
     void ParseFormats();
-
+ 
     // Deprecated
     void AddJsonOption(TClientCommand::TConfig& config,
         const TString& description = "(Deprecated, will be removed soon. Use --format option instead)"

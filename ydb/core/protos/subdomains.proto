@@ -19,7 +19,7 @@ message TSubDomainSettings {
     optional bool ExternalSchemeShard = 7 [default = false];
     optional bool ExternalHive = 8 [default = false];
     optional TDomainKey ResourcesDomainKey = 9;
-    optional bool ExternalSysViewProcessor = 10 [default = false];
+    optional bool ExternalSysViewProcessor = 10 [default = false]; 
     optional TSchemeQuotas DeclaredSchemeQuotas = 11;
     optional Ydb.Cms.DatabaseQuotas DatabaseQuotas = 12;
 }
@@ -33,7 +33,7 @@ message TProcessingParams {
 
     optional fixed64 SchemeShard = 6;
     optional fixed64 Hive = 7;
-    optional fixed64 SysViewProcessor = 8;
+    optional fixed64 SysViewProcessor = 8; 
 
     //put there SubSchemeShard and SubHive at the future
 }

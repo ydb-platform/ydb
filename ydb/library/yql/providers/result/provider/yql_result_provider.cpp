@@ -891,7 +891,7 @@ namespace {
             return true;
         }
 
-        bool CanParse(const TExprNode& node) override {
+        bool CanParse(const TExprNode& node) override { 
             return ResultProviderFunctions().contains(node.Content()) || node.Content() == ConfigureName;
         }
 

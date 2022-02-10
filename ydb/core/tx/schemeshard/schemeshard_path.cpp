@@ -4,7 +4,7 @@
 #include <ydb/core/base/path.h>
 
 #include <ydb/core/sys_view/common/path.h>
-
+ 
 namespace NKikimr {
 namespace NSchemeShard {
 
@@ -1617,11 +1617,11 @@ bool TPath::IsValidLeafName(TString& explain) const {
     }
 
     if (AppData()->FeatureFlags.GetEnableSystemViews() && leaf == NSysView::SysPathName) {
-        explain += TStringBuilder()
-            << "path part '" << NSysView::SysPathName << "' is reserved by the system";
-        return false;
-    }
-
+        explain += TStringBuilder() 
+            << "path part '" << NSysView::SysPathName << "' is reserved by the system"; 
+        return false; 
+    } 
+ 
     auto brokenAt = PathPartBrokenAt(leaf, schemeLimits.ExtraPathSymbolsAllowed);
     if (brokenAt != leaf.end()) {
         explain += TStringBuilder()

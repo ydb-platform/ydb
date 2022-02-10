@@ -1183,8 +1183,8 @@ namespace NKikimr {
                     bootstrapperActorId = Boot(ctx, type, [=](const TActorId& tablet, TTabletStorageInfo* info) {
                                                    return new TFakeHive(tablet, info, state, &TFakeHive::DefaultGetTabletCreationFunc);
                                                }, DataGroupErasure);
-                } else if (type == defaultTabletTypes.SysViewProcessor) {
-                    bootstrapperActorId = Boot(ctx, type, &NSysView::CreateSysViewProcessor, DataGroupErasure);
+                } else if (type == defaultTabletTypes.SysViewProcessor) { 
+                    bootstrapperActorId = Boot(ctx, type, &NSysView::CreateSysViewProcessor, DataGroupErasure); 
                 } else if (type == defaultTabletTypes.SequenceShard) {
                     bootstrapperActorId = Boot(ctx, type, &NSequenceShard::CreateSequenceShard, DataGroupErasure);
                 } else if (type == defaultTabletTypes.ReplicationController) {

@@ -61,17 +61,17 @@ public:
     NUdf::TFlatArrayBlockPtr NewFlatArrayBlock(ui32 count) const;
     NUdf::TSingleBlockPtr NewSingleBlock(const NUdf::TUnboxedValue& value) const;
 
-    bool MakeDate(ui32 year, ui32 month, ui32 day, ui16& value) const final;
-    bool SplitDate(ui16 value, ui32& year, ui32& month, ui32& day) const final;
+    bool MakeDate(ui32 year, ui32 month, ui32 day, ui16& value) const final; 
+    bool SplitDate(ui16 value, ui32& year, ui32& month, ui32& day) const final; 
 
-    bool MakeDatetime(ui32 year, ui32 month, ui32 day, ui32 hour, ui32 minute, ui32 second, ui32& value, ui16 tzId = 0) const final;
-    bool SplitDatetime(ui32 value, ui32& year, ui32& month, ui32& day, ui32& hour, ui32& minute, ui32& second, ui16 tzId = 0) const final;
+    bool MakeDatetime(ui32 year, ui32 month, ui32 day, ui32 hour, ui32 minute, ui32 second, ui32& value, ui16 tzId = 0) const final; 
+    bool SplitDatetime(ui32 value, ui32& year, ui32& month, ui32& day, ui32& hour, ui32& minute, ui32& second, ui16 tzId = 0) const final; 
 
-    bool EnrichDate(ui16 date, ui32& dayOfYear, ui32& weekOfYear, ui32& dayOfWeek) const final;
-
-    // in minutes
-    bool GetTimezoneShift(ui32 year, ui32 month, ui32 day, ui32 hour, ui32 minute, ui32 second, ui16 tzId, i32& value) const final;
-
+    bool EnrichDate(ui16 date, ui32& dayOfYear, ui32& weekOfYear, ui32& dayOfWeek) const final; 
+ 
+    // in minutes 
+    bool GetTimezoneShift(ui32 year, ui32 month, ui32 day, ui32 hour, ui32 minute, ui32 second, ui16 tzId, i32& value) const final; 
+ 
     bool FullSplitDate(ui16 value, ui32& year, ui32& month, ui32& day,
         ui32& dayOfYear, ui32& weekOfYear, ui32& dayOfWeek, ui16 timezoneId = 0) const final;
     bool FullSplitDatetime(ui32 value, ui32& year, ui32& month, ui32& day, ui32& hour, ui32& minute, ui32& second,

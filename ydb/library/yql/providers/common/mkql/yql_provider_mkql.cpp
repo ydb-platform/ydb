@@ -1568,10 +1568,10 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
 
     AddCallable("HoppingCore", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto stream = MkqlBuildExpr(node.Head(), ctx);
-
+ 
         const auto timeExtractor = [&](TRuntimeNode item) {
             return MkqlBuildLambda(*node.Child(1), ctx, {item});
-        };
+        }; 
         const auto hop = MkqlBuildExpr(*node.Child(2), ctx);
         const auto interval = MkqlBuildExpr(*node.Child(3), ctx);
         const auto delay = MkqlBuildExpr(*node.Child(4), ctx);
@@ -1581,24 +1581,24 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         };
         const auto update = [&](TRuntimeNode item, TRuntimeNode state) {
             return MkqlBuildLambda(*node.Child(6), ctx, {item, state});
-        };
+        }; 
         const auto save = node.Child(3)->IsCallable("Void") ? std::function<TRuntimeNode(TRuntimeNode)>() : [&](TRuntimeNode state) {
             return MkqlBuildLambda(*node.Child(7), ctx, {state});
-        };
+        }; 
         const auto load = node.Child(4)->IsCallable("Void") ? std::function<TRuntimeNode(TRuntimeNode)>() : [&](TRuntimeNode state) {
             return MkqlBuildLambda(*node.Child(8), ctx, {state});
-        };
+        }; 
         const auto merge = [&](TRuntimeNode state1, TRuntimeNode state2) {
             return MkqlBuildLambda(*node.Child(9), ctx, {state1, state2});
-        };
+        }; 
         const auto finish = [&](TRuntimeNode state, TRuntimeNode time) {
             return MkqlBuildLambda(*node.Child(10), ctx, {state, time});
-        };
-
+        }; 
+ 
         return ctx.ProgramBuilder.HoppingCore(
             stream, timeExtractor, init, update, save, load, merge, finish, hop, interval, delay);
-    });
-
+    }); 
+ 
     AddCallable("MultiHoppingCore", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto stream = MkqlBuildExpr(node.Head(), ctx);
 

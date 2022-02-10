@@ -449,9 +449,9 @@ namespace NSQLTranslationV0 {
         TString Name;
         TString Type;
         bool Nullable;
-        bool IsTypeString;
+        bool IsTypeString; 
 
-        TColumnSchema(TPosition pos, const TString& name, const TString& type, bool nullable, bool isTypeString);
+        TColumnSchema(TPosition pos, const TString& name, const TString& type, bool nullable, bool isTypeString); 
     };
 
     struct TColumns: public TSimpleRefCount<TColumns> {
@@ -506,23 +506,23 @@ namespace NSQLTranslationV0 {
         ~TWindowSpecification() {}
     };
 
-    struct THoppingWindowSpec: public TSimpleRefCount<THoppingWindowSpec> {
-        TNodePtr TimeExtractor;
-        TNodePtr Hop;
-        TNodePtr Interval;
-        TNodePtr Delay;
+    struct THoppingWindowSpec: public TSimpleRefCount<THoppingWindowSpec> { 
+        TNodePtr TimeExtractor; 
+        TNodePtr Hop; 
+        TNodePtr Interval; 
+        TNodePtr Delay; 
 
         TIntrusivePtr<THoppingWindowSpec> Clone() const;
         ~THoppingWindowSpec() {}
-    };
-
+    }; 
+ 
     typedef TIntrusivePtr<TWindowSpecification> TWindowSpecificationPtr;
     typedef TMap<TString, TWindowSpecificationPtr> TWinSpecs;
 
     typedef TVector<TTableRef> TTableList;
 
-    typedef TIntrusivePtr<THoppingWindowSpec> THoppingWindowSpecPtr;
-
+    typedef TIntrusivePtr<THoppingWindowSpec> THoppingWindowSpecPtr; 
+ 
     bool ValidateAllNodesForAggregation(TContext& ctx, const TVector<TNodePtr>& nodes);
 
     class TDeferredAtom {
@@ -654,7 +654,7 @@ namespace NSQLTranslationV0 {
 
         virtual TNodePtr AggregationTraitsFactory() const = 0;
 
-        virtual std::vector<ui32> GetFactoryColumnIndices() const;
+        virtual std::vector<ui32> GetFactoryColumnIndices() const; 
 
         virtual void AddFactoryArguments(TNodePtr& apply) const;
 
@@ -718,14 +718,14 @@ namespace NSQLTranslationV0 {
         virtual void AddWindowSpecs(TWinSpecs winSpecs);
         virtual bool AddAggregationOverWindow(TContext& ctx, const TString& windowName, TAggregationPtr func);
         virtual bool AddFuncOverWindow(TContext& ctx, const TString& windowName, TNodePtr func);
-        virtual void SetHoppingWindowSpec(THoppingWindowSpecPtr spec);
-        virtual THoppingWindowSpecPtr GetHoppingWindowSpec() const;
+        virtual void SetHoppingWindowSpec(THoppingWindowSpecPtr spec); 
+        virtual THoppingWindowSpecPtr GetHoppingWindowSpec() const; 
         virtual bool IsCompositeSource() const;
         virtual bool IsGroupByColumn(const TString& column) const;
         virtual bool IsFlattenByColumns() const;
         virtual bool IsCalcOverWindow() const;
         virtual bool IsOverWindowSource() const;
-        virtual bool IsStream() const;
+        virtual bool IsStream() const; 
         virtual bool IsOrdered() const;
         virtual TWriteSettings GetWriteSettings() const;
         virtual bool SetSamplingOptions(TContext& ctx, TPosition pos, ESampleMode mode, TNodePtr samplingRate, TNodePtr samplingSeed);
@@ -784,7 +784,7 @@ namespace NSQLTranslationV0 {
         TMultiMap<TString, TAggregationPtr> AggregationOverWindow;
         TMultiMap<TString, TNodePtr> FuncOverWindow;
         TWinSpecs WinSpecs;
-        THoppingWindowSpecPtr HoppingWindowSpec;
+        THoppingWindowSpecPtr HoppingWindowSpec; 
         TVector<ISource*> UsedSources;
         TString FlattenMode;
         bool FlattenColumns = false;
@@ -912,8 +912,8 @@ namespace NSQLTranslationV0 {
     TAggregationPtr BuildTwoArgsFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode);
     TAggregationPtr BuildHistogramFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode);
     TAggregationPtr BuildLinearHistogramFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode);
-    template <bool HasKey>
-    TAggregationPtr BuildTopFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode);
+    template <bool HasKey> 
+    TAggregationPtr BuildTopFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode); 
     TAggregationPtr BuildTopFreqFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode);
     TAggregationPtr BuildCountDistinctEstimateFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode);
     TAggregationPtr BuildListFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode);
@@ -949,7 +949,7 @@ namespace NSQLTranslationV0 {
     TSourcePtr BuildMuxSource(TPosition pos, TVector<TSourcePtr>&& sources);
     TSourcePtr BuildFakeSource(TPosition pos);
     TSourcePtr BuildNodeSource(TPosition pos, const TNodePtr& node);
-    TSourcePtr BuildTableSource(TPosition pos, const TTableRef& table, bool stream, const TString& label = TString());
+    TSourcePtr BuildTableSource(TPosition pos, const TTableRef& table, bool stream, const TString& label = TString()); 
     TSourcePtr BuildInnerSource(TPosition pos, TNodePtr node, const TString& label = TString());
     TSourcePtr BuildRefColumnSource(TPosition pos, const TString& partExpression);
     TSourcePtr BuildUnionAll(TPosition pos, TVector<TSourcePtr>&& sources);
@@ -968,7 +968,7 @@ namespace NSQLTranslationV0 {
         const TVector<TSortSpecificationPtr>& orderBy,
         TNodePtr having,
         TWinSpecs&& windowSpec,
-        THoppingWindowSpecPtr hoppingWindowSpec,
+        THoppingWindowSpecPtr hoppingWindowSpec, 
         TVector<TNodePtr>&& terms,
         bool distinct,
         TVector<TNodePtr>&& without,
@@ -1006,8 +1006,8 @@ namespace NSQLTranslationV0 {
     TNodePtr BuildInputOptions(TPosition pos, const TVector<TString>& hints);
     TNodePtr BuildInputTables(TPosition pos, const TTableList& tables, bool inSubquery);
     TNodePtr BuildCreateTable(TPosition pos, const TTableRef& table, const TVector<TColumnSchema>& columns,
-        const TVector<TIdentifier>& pkColumns, const TVector<TIdentifier>& partitionByColumns,
-        const TVector<std::pair<TIdentifier, bool>>& orderByColumns);
+        const TVector<TIdentifier>& pkColumns, const TVector<TIdentifier>& partitionByColumns, 
+        const TVector<std::pair<TIdentifier, bool>>& orderByColumns); 
     TNodePtr BuildAlterTable(TPosition pos, const TTableRef& tr, const TVector<TColumnSchema>& columns, EAlterTableIntentnt mode);
     TNodePtr BuildDropTable(TPosition pos, const TTableRef& table);
     TNodePtr BuildWriteTable(TPosition pos, const TString& label, const TTableRef& table, EWriteColumnMode mode, TNodePtr options = nullptr);

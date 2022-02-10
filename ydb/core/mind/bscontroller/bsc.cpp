@@ -1,7 +1,7 @@
 #include "impl.h"
 #include "config.h"
 #include "self_heal.h"
-#include "sys_view.h"
+#include "sys_view.h" 
 
 namespace NKikimr {
 
@@ -121,9 +121,9 @@ void TBlobStorageController::OnActivateExecutor(const TActorContext&) {
     // create stat processor
     StatProcessorActorId = Register(CreateStatProcessorActor());
 
-    // create system views collector
+    // create system views collector 
     SystemViewsCollectorId = Register(CreateSystemViewsCollector());
-
+ 
     Executor()->RegisterExternalTabletCounters(TabletCountersPtr);
     if (!ResponsivenessPinger) {
         ResponsivenessPinger = new TTabletResponsivenessPinger(TabletCounters->Simple()[NBlobStorageController::COUNTER_RESPONSE_TIME_USEC], TDuration::Seconds(1));

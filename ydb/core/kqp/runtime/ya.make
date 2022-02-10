@@ -13,11 +13,11 @@ SRCS(
     kqp_output_stream.cpp
     kqp_program_builder.cpp
     kqp_program_builder.h
-    kqp_read_table.cpp
-    kqp_read_table.h
+    kqp_read_table.cpp 
+    kqp_read_table.h 
     kqp_runtime_impl.h
-    kqp_scan_data.cpp
-    kqp_scan_data.h
+    kqp_scan_data.cpp 
+    kqp_scan_data.h 
     kqp_spilling_file.cpp
     kqp_tasks_runner.cpp
     kqp_tasks_runner.h

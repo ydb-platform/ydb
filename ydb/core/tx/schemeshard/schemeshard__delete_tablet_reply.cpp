@@ -89,9 +89,9 @@ struct TSchemeShard::TTxDeleteTabletReply : public TSchemeShard::TRwTxBase {
             case ETabletType::PersQueueReadBalancer:
                 Self->TabletCounters->Simple()[COUNTER_PQ_RB_SHARD_COUNT].Sub(1);
                 break;
-            case ETabletType::SysViewProcessor:
+            case ETabletType::SysViewProcessor: 
                 Self->TabletCounters->Simple()[COUNTER_SYS_VIEW_PROCESSOR_COUNT].Sub(1);
-                break;
+                break; 
             case ETabletType::ColumnShard:
                 Self->TabletCounters->Simple()[COUNTER_OLAP_COLUMN_SHARDS].Sub(-1);
                 break;

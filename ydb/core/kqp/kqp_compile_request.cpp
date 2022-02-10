@@ -24,14 +24,14 @@ public:
     }
 
     TKqpCompileRequestActor(const TActorId& owner, const TString& userToken, const TMaybe<TString>& uid,
-        TMaybe<TKqpQueryId>&& query, bool keepInCache, const TInstant& deadline, TKqpDbCountersPtr dbCounters)
+        TMaybe<TKqpQueryId>&& query, bool keepInCache, const TInstant& deadline, TKqpDbCountersPtr dbCounters) 
         : Owner(owner)
         , UserToken(userToken)
         , Uid(uid)
         , Query(std::move(query))
         , KeepInCache(keepInCache)
-        , Deadline(deadline)
-        , DbCounters(dbCounters) {}
+        , Deadline(deadline) 
+        , DbCounters(dbCounters) {} 
 
     void Bootstrap(const TActorContext& ctx) {
         TimeoutTimerId = CreateLongTimer(ctx, Deadline - TInstant::Now(),
@@ -41,7 +41,7 @@ public:
         std::swap(Query, query);
 
         auto compileEv = MakeHolder<TEvKqp::TEvCompileRequest>(UserToken, Uid, std::move(query),
-            KeepInCache, Deadline, DbCounters);
+            KeepInCache, Deadline, DbCounters); 
         ctx.Send(MakeKqpCompileServiceID(ctx.SelfID.NodeId()), compileEv.Release());
 
         Become(&TKqpCompileRequestActor::MainState);
@@ -80,7 +80,7 @@ public:
             << ", queryUid: " << compileResult.Uid);
 
         auto recompileEv = MakeHolder<TEvKqp::TEvRecompileRequest>(UserToken, compileResult.Uid, compileResult.Query,
-            Deadline, DbCounters);
+            Deadline, DbCounters); 
         ctx.Send(MakeKqpCompileServiceID(ctx.SelfID.NodeId()), recompileEv.Release());
 
         DeferredResponse.Reset();
@@ -287,7 +287,7 @@ private:
     TMaybe<TKqpQueryId> Query;
     bool KeepInCache = false;
     TInstant Deadline;
-    TKqpDbCountersPtr DbCounters;
+    TKqpDbCountersPtr DbCounters; 
     TActorId TimeoutTimerId;
     THashMap<TTableId, ui64> TableVersions;
     THolder<TEvKqp::TEvCompileResponse> DeferredResponse;
@@ -295,9 +295,9 @@ private:
 
 
 IActor* CreateKqpCompileRequestActor(const TActorId& owner, const TString& userToken, const TMaybe<TString>& uid,
-    TMaybe<TKqpQueryId>&& query, bool keepInCache, const TInstant& deadline, TKqpDbCountersPtr dbCounters)
+    TMaybe<TKqpQueryId>&& query, bool keepInCache, const TInstant& deadline, TKqpDbCountersPtr dbCounters) 
 {
-    return new TKqpCompileRequestActor(owner, userToken, uid, std::move(query), keepInCache, deadline, dbCounters);
+    return new TKqpCompileRequestActor(owner, userToken, uid, std::move(query), keepInCache, deadline, dbCounters); 
 }
 
 } // namespace NKqp

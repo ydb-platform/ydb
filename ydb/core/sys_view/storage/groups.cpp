@@ -1,22 +1,22 @@
 #include "groups.h"
 #include "base.h"
-
+ 
 namespace NKikimr::NSysView {
-
+ 
 template<> void SetField<0>(NKikimrSysView::TGroupKey& key, ui32 value) { key.SetGroupId(value); }
 
 class TGroupsScan : public TStorageScanBase<TGroupsScan, TEvSysView::TEvGetGroupsResponse> {
-public:
+public: 
     using TStorageScanBase::TStorageScanBase;
-
+ 
     static constexpr const char *GetName() { return "TGroupsScan"; }
-
+ 
     TEvSysView::TEvGetGroupsRequest *CreateQuery() {
-        auto request = MakeHolder<TEvSysView::TEvGetGroupsRequest>();
-        ConvertKeyRange<NKikimrSysView::TEvGetGroupsRequest, ui32>(request->Record, TableRange);
+        auto request = MakeHolder<TEvSysView::TEvGetGroupsRequest>(); 
+        ConvertKeyRange<NKikimrSysView::TEvGetGroupsRequest, ui32>(request->Record, TableRange); 
         return request.Release();
-    }
-
+    } 
+ 
     static const TFieldMap& GetFieldMap() {
         using T = Schema::Groups;
         using E = NKikimrSysView::TGroupEntry;
@@ -36,15 +36,15 @@ public:
             {T::PutTabletLogLatency::ColumnId, {E::kInfoFieldNumber, V::kPutTabletLogLatencyFieldNumber}},
             {T::PutUserDataLatency::ColumnId, {E::kInfoFieldNumber, V::kPutUserDataLatencyFieldNumber}},
             {T::GetFastLatency::ColumnId, {E::kInfoFieldNumber, V::kGetFastLatencyFieldNumber}},
-        };
+        }; 
         return fieldMap;
-    }
-
-};
+    } 
+ 
+}; 
 THolder<IActor> CreateGroupsScan(const TActorId& ownerId, ui32 scanId, const TTableId& tableId,
-    const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
-{
+    const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns) 
+{ 
     return MakeHolder<TGroupsScan>(ownerId, scanId, tableId, tableRange, columns);
-}
-
+} 
+ 
 } // NKikimr::NSysView

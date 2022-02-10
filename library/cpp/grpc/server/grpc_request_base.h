@@ -90,9 +90,9 @@ public:
     //! The metadata will be send at the time of rpc finish
     virtual void AddTrailingMetadata(const TString& key, const TString& value) = 0;
 
-    //! Use validated database name for counters
-    virtual void UseDatabase(const TString& database) = 0;
-
+    //! Use validated database name for counters 
+    virtual void UseDatabase(const TString& database) = 0; 
+ 
     // Streaming part
 
     //! Set callback. The callback will be called when response deliverid to the client

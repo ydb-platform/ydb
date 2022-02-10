@@ -51,22 +51,22 @@ void WriteYsonValueImpl(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod&
             auto dataType = AS_TYPE(TDataType, type);
             switch (dataType->GetSchemeType()) {
             case NUdf::TDataType<bool>::Id:
-                writer.OnBooleanScalar(value.Get<bool>());
+                writer.OnBooleanScalar(value.Get<bool>()); 
                 return;
             case NUdf::TDataType<i32>::Id:
-                writer.OnInt64Scalar(value.Get<i32>());
+                writer.OnInt64Scalar(value.Get<i32>()); 
                 return;
             case NUdf::TDataType<ui32>::Id:
-                writer.OnUint64Scalar(value.Get<ui32>());
+                writer.OnUint64Scalar(value.Get<ui32>()); 
                 return;
             case NUdf::TDataType<i64>::Id:
-                writer.OnInt64Scalar(value.Get<i64>());
+                writer.OnInt64Scalar(value.Get<i64>()); 
                 return;
             case NUdf::TDataType<ui64>::Id:
-                writer.OnUint64Scalar(value.Get<ui64>());
+                writer.OnUint64Scalar(value.Get<ui64>()); 
                 return;
             case NUdf::TDataType<ui8>::Id:
-                writer.OnUint64Scalar(value.Get<ui8>());
+                writer.OnUint64Scalar(value.Get<ui8>()); 
                 return;
             case NUdf::TDataType<i8>::Id:
                 writer.OnInt64Scalar(value.Get<i8>());

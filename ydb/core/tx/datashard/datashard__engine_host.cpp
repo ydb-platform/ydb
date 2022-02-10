@@ -195,7 +195,7 @@ public:
         : TableId(tableId)
         , Self(self)
     {
-        switch (TableId.PathId.LocalPathId) {
+        switch (TableId.PathId.LocalPathId) { 
         case TSysTables::SysTableLocks:
             TSysTables::TLocksTable::GetInfo(Columns, KeyTypes, false);
             break;
@@ -217,10 +217,10 @@ public:
         auto lock = Self->SysLocksTable().GetLock(row);
         Y_VERIFY(!lock.IsError());
 
-        if (TableId.PathId.LocalPathId == TSysTables::SysTableLocks2) {
+        if (TableId.PathId.LocalPathId == TSysTables::SysTableLocks2) { 
             return result.CreateResult(lock.MakeRow(true), holderFactory);
         }
-        Y_VERIFY(TableId.PathId.LocalPathId == TSysTables::SysTableLocks);
+        Y_VERIFY(TableId.PathId.LocalPathId == TSysTables::SysTableLocks); 
         return result.CreateResult(lock.MakeRow(false), holderFactory);
     }
 
@@ -262,11 +262,11 @@ public:
         , Locks2(TTableId(TSysTables::SysSchemeShard, TSysTables::SysTableLocks2), self)
     {}
 
-    const TDataShardSysTable& Get(const TTableId& tableId) const {
-        if (tableId.PathId.LocalPathId == TSysTables::SysTableLocks2)
+    const TDataShardSysTable& Get(const TTableId& tableId) const { 
+        if (tableId.PathId.LocalPathId == TSysTables::SysTableLocks2) 
             return Locks2;
 
-        if (tableId.PathId.LocalPathId == TSysTables::SysTableLocks)
+        if (tableId.PathId.LocalPathId == TSysTables::SysTableLocks) 
             return Locks;
 
         Y_FAIL("unexpected sys table id");
@@ -455,7 +455,7 @@ public:
         if (TSysTables::IsSystemTable(tableId))
             return DataShardSysTable(tableId).IsMyKey(row);
 
-        auto iter = Self->TableInfos.find(tableId.PathId.LocalPathId);
+        auto iter = Self->TableInfos.find(tableId.PathId.LocalPathId); 
         if (iter == Self->TableInfos.end()) {
             // TODO: can this happen?
             return false;
@@ -492,7 +492,7 @@ public:
     }
 
 private:
-    const TDataShardSysTable& DataShardSysTable(const TTableId& tableId) const {
+    const TDataShardSysTable& DataShardSysTable(const TTableId& tableId) const { 
         return static_cast<const TDataShardSysTables *>(Self->GetDataShardSysTables())->Get(tableId);
     }
 

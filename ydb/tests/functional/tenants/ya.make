@@ -3,7 +3,7 @@ PY3TEST()
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 TEST_SRCS(
     common.py
-    test_db_counters.py
+    test_db_counters.py 
     test_dynamic_tenants.py
     test_tenants.py
     test_storage_config.py

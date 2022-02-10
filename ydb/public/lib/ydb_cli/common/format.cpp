@@ -1,11 +1,11 @@
 #include "format.h"
-#include "pretty_table.h"
+#include "pretty_table.h" 
 
 #include <util/string/vector.h>
 #include <library/cpp/json/json_prettifier.h>
 
 #include <ydb/public/lib/json_value/ydb_json_value.h>
-
+ 
 namespace NYdb {
 namespace NConsoleClient {
 
@@ -142,11 +142,11 @@ void TQueryPlanPrinter::Print(const TString& plan) {
         default:
             throw TMissUseException() << "This command doesn't support " << Format << " output format";
     }
-}
+} 
 
 void TQueryPlanPrinter::PrintJson(const TString& plan) {
     Cout << NJson::PrettifyJson(plan, true) << Endl;
-}
+} 
 
 void TQueryPlanPrinter::PrintPretty(const NJson::TJsonValue& plan) {
     if (plan.GetMapSafe().contains("Plan")) {

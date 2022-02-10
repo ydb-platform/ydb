@@ -17,13 +17,13 @@ public:
         : SessionCtx(sessionCtx) {}
 
 private:
-    TStatus HandleClusterConfig(TKiClusterConfig node, TExprContext& ctx) override {
-        Y_UNUSED(node);
-        Y_UNUSED(ctx);
-
-        return TStatus::Ok;
-    }
-
+    TStatus HandleClusterConfig(TKiClusterConfig node, TExprContext& ctx) override { 
+        Y_UNUSED(node); 
+        Y_UNUSED(ctx); 
+ 
+        return TStatus::Ok; 
+    } 
+ 
     TStatus HandleWriteTable(TKiWriteTable node, TExprContext& ctx) override {
         Y_UNUSED(ctx);
 
@@ -332,35 +332,35 @@ public:
         return KikimrProviderName;
     }
 
-    TExprNode::TPtr GetClusterInfo(const TString& cluster, TExprContext& ctx) override {
-        auto config = Gateway->GetClusterConfig(cluster);
-        if (!config) {
-            return {};
-        }
-
+    TExprNode::TPtr GetClusterInfo(const TString& cluster, TExprContext& ctx) override { 
+        auto config = Gateway->GetClusterConfig(cluster); 
+        if (!config) { 
+            return {}; 
+        } 
+ 
         TPositionHandle pos;
-
-        TVector<TExprBase> locators;
-        auto& grpcData = config->GetGrpc();
-        for (size_t index = 0; index < grpcData.LocatorsSize(); ++index) {
-            locators.push_back(Build<TCoAtom>(ctx, pos)
-                .Value(grpcData.GetLocators(index))
-                .Done());
-        }
-
-        return Build<TKiClusterConfig>(ctx, pos)
-            .GrpcData<TKiGrpcData>()
-                .Locators<TCoAtomList>()
-                    .Add(locators)
-                    .Build()
-                .TimeoutMs<TCoAtom>().Build(ToString(grpcData.GetTimeoutMs()))
-                .MaxMessageSizeBytes<TCoAtom>().Build(ToString(grpcData.GetMaxMessageSizeBytes()))
-                .MaxInFlight<TCoAtom>().Build(ToString(grpcData.GetMaxInFlight()))
-                .Build()
-            .TvmId<TCoAtom>().Build(ToString(config->GetTvmId()))
-            .Done().Ptr();
-    }
-
+ 
+        TVector<TExprBase> locators; 
+        auto& grpcData = config->GetGrpc(); 
+        for (size_t index = 0; index < grpcData.LocatorsSize(); ++index) { 
+            locators.push_back(Build<TCoAtom>(ctx, pos) 
+                .Value(grpcData.GetLocators(index)) 
+                .Done()); 
+        } 
+ 
+        return Build<TKiClusterConfig>(ctx, pos) 
+            .GrpcData<TKiGrpcData>() 
+                .Locators<TCoAtomList>() 
+                    .Add(locators) 
+                    .Build() 
+                .TimeoutMs<TCoAtom>().Build(ToString(grpcData.GetTimeoutMs())) 
+                .MaxMessageSizeBytes<TCoAtom>().Build(ToString(grpcData.GetMaxMessageSizeBytes())) 
+                .MaxInFlight<TCoAtom>().Build(ToString(grpcData.GetMaxInFlight())) 
+                .Build() 
+            .TvmId<TCoAtom>().Build(ToString(config->GetTvmId())) 
+            .Done().Ptr(); 
+    } 
+ 
     IGraphTransformer& GetIntentDeterminationTransformer() override {
         return *IntentDeterminationTransformer;
     }
@@ -698,10 +698,10 @@ IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPt
 
     auto callable = TCallable(input);
 
-    if (auto node = callable.Maybe<TKiClusterConfig>()) {
-        return HandleClusterConfig(node.Cast(), ctx);
-    }
-
+    if (auto node = callable.Maybe<TKiClusterConfig>()) { 
+        return HandleClusterConfig(node.Cast(), ctx); 
+    } 
+ 
     if (auto node = callable.Maybe<TKiWriteTable>()) {
         return HandleWriteTable(node.Cast(), ctx);
     }

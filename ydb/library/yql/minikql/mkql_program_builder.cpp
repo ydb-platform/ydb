@@ -654,26 +654,26 @@ TRuntimeNode TProgramBuilder::Squeeze(TRuntimeNode stream, TRuntimeNode state,
     const auto newState = handler(itemArg, stateNodeArg);
     MKQL_ENSURE(newState.GetStaticType()->IsSameType(*state.GetStaticType()), "State type is changed by the handler");
 
-    TRuntimeNode saveArg, outSave, loadArg, outLoad;
-
+    TRuntimeNode saveArg, outSave, loadArg, outLoad; 
+ 
     if (save && load) {
         outSave = save(saveArg = Arg(state.GetStaticType()));
         outLoad = load(loadArg = Arg(outSave.GetStaticType()));
-        MKQL_ENSURE(outLoad.GetStaticType()->IsSameType(*state.GetStaticType()), "Loaded type is changed by the load handler");
-    } else {
-        saveArg = outSave = loadArg = outLoad = NewVoid();
-    }
-
+        MKQL_ENSURE(outLoad.GetStaticType()->IsSameType(*state.GetStaticType()), "Loaded type is changed by the load handler"); 
+    } else { 
+        saveArg = outSave = loadArg = outLoad = NewVoid(); 
+    } 
+ 
     TCallableBuilder callableBuilder(Env, __func__, TStreamType::Create(state.GetStaticType(), Env));
     callableBuilder.Add(stream);
     callableBuilder.Add(state);
     callableBuilder.Add(itemArg);
     callableBuilder.Add(stateNodeArg);
     callableBuilder.Add(newState);
-    callableBuilder.Add(saveArg);
-    callableBuilder.Add(outSave);
-    callableBuilder.Add(loadArg);
-    callableBuilder.Add(outLoad);
+    callableBuilder.Add(saveArg); 
+    callableBuilder.Add(outSave); 
+    callableBuilder.Add(loadArg); 
+    callableBuilder.Add(outLoad); 
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
@@ -694,26 +694,26 @@ TRuntimeNode TProgramBuilder::Squeeze1(TRuntimeNode stream, const TUnaryLambda& 
     const auto newState = handler(itemArg, stateNodeArg);
     MKQL_ENSURE(newState.GetStaticType()->IsSameType(*initState.GetStaticType()), "State type is changed by the handler");
 
-    TRuntimeNode saveArg, outSave, loadArg, outLoad;
-
+    TRuntimeNode saveArg, outSave, loadArg, outLoad; 
+ 
     if (save && load) {
         outSave = save(saveArg = Arg(initState.GetStaticType()));
         outLoad = load(loadArg = Arg(outSave.GetStaticType()));
-        MKQL_ENSURE(outLoad.GetStaticType()->IsSameType(*initState.GetStaticType()), "Loaded type is changed by the load handler");
-    } else {
-        saveArg = outSave = loadArg = outLoad = NewVoid();
-    }
-
+        MKQL_ENSURE(outLoad.GetStaticType()->IsSameType(*initState.GetStaticType()), "Loaded type is changed by the load handler"); 
+    } else { 
+        saveArg = outSave = loadArg = outLoad = NewVoid(); 
+    } 
+ 
     TCallableBuilder callableBuilder(Env, __func__, NewStreamType(newState.GetStaticType()));
     callableBuilder.Add(stream);
     callableBuilder.Add(itemArg);
     callableBuilder.Add(initState);
     callableBuilder.Add(stateNodeArg);
     callableBuilder.Add(newState);
-    callableBuilder.Add(saveArg);
-    callableBuilder.Add(outSave);
-    callableBuilder.Add(loadArg);
-    callableBuilder.Add(outLoad);
+    callableBuilder.Add(saveArg); 
+    callableBuilder.Add(outSave); 
+    callableBuilder.Add(loadArg); 
+    callableBuilder.Add(outLoad); 
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
@@ -4589,7 +4589,7 @@ TRuntimeNode TProgramBuilder::WideChopper(TRuntimeNode flow, const TWideLambda& 
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::HoppingCore(TRuntimeNode list,
+TRuntimeNode TProgramBuilder::HoppingCore(TRuntimeNode list, 
     const TUnaryLambda& timeExtractor,
     const TUnaryLambda& init,
     const TBinaryLambda& update,
@@ -4597,69 +4597,69 @@ TRuntimeNode TProgramBuilder::HoppingCore(TRuntimeNode list,
     const TUnaryLambda& load,
     const TBinaryLambda& merge,
     const TBinaryLambda& finish,
-    TRuntimeNode hop, TRuntimeNode interval, TRuntimeNode delay)
-{
-    auto streamType = AS_TYPE(TStreamType, list);
-    auto itemType = AS_TYPE(TStructType, streamType->GetItemType());
-    auto timestampType = TOptionalType::Create(TDataType::Create(NUdf::TDataType<NUdf::TTimestamp>::Id, Env), Env);
-
+    TRuntimeNode hop, TRuntimeNode interval, TRuntimeNode delay) 
+{ 
+    auto streamType = AS_TYPE(TStreamType, list); 
+    auto itemType = AS_TYPE(TStructType, streamType->GetItemType()); 
+    auto timestampType = TOptionalType::Create(TDataType::Create(NUdf::TDataType<NUdf::TTimestamp>::Id, Env), Env); 
+ 
     TRuntimeNode itemArg = Arg(itemType);
-
-    auto outTime = timeExtractor(itemArg);
-    auto outStateInit = init(itemArg);
-
-    auto stateType = outStateInit.GetStaticType();
+ 
+    auto outTime = timeExtractor(itemArg); 
+    auto outStateInit = init(itemArg); 
+ 
+    auto stateType = outStateInit.GetStaticType(); 
     TRuntimeNode stateArg = Arg(stateType);
-
-    auto outStateUpdate = update(itemArg, stateArg);
-
-    auto hasSaveLoad = (bool)save;
-    TRuntimeNode saveArg, outSave, loadArg, outLoad;
-    if (hasSaveLoad) {
+ 
+    auto outStateUpdate = update(itemArg, stateArg); 
+ 
+    auto hasSaveLoad = (bool)save; 
+    TRuntimeNode saveArg, outSave, loadArg, outLoad; 
+    if (hasSaveLoad) { 
         saveArg = Arg(stateType);
-        outSave = save(saveArg);
-
+        outSave = save(saveArg); 
+ 
         loadArg = Arg(outSave.GetStaticType());
-        outLoad = load(loadArg);
-
-        MKQL_ENSURE(outLoad.GetStaticType()->IsSameType(*stateType), "Loaded type is changed by the load handler");
-    } else {
-        saveArg = outSave = loadArg = outLoad = NewVoid();
-    }
-
+        outLoad = load(loadArg); 
+ 
+        MKQL_ENSURE(outLoad.GetStaticType()->IsSameType(*stateType), "Loaded type is changed by the load handler"); 
+    } else { 
+        saveArg = outSave = loadArg = outLoad = NewVoid(); 
+    } 
+ 
     TRuntimeNode state2Arg = Arg(stateType);
-    TRuntimeNode timeArg = Arg(timestampType);
-
-    auto outStateMerge = merge(stateArg, state2Arg);
-    auto outItemFinish = finish(stateArg, timeArg);
-
-    auto finishType = outItemFinish.GetStaticType();
-    MKQL_ENSURE(finishType->IsStruct(), "Expected struct type as finish lambda output");
-
-    auto resultType = TStreamType::Create(outItemFinish.GetStaticType(), Env);
-
+    TRuntimeNode timeArg = Arg(timestampType); 
+ 
+    auto outStateMerge = merge(stateArg, state2Arg); 
+    auto outItemFinish = finish(stateArg, timeArg); 
+ 
+    auto finishType = outItemFinish.GetStaticType(); 
+    MKQL_ENSURE(finishType->IsStruct(), "Expected struct type as finish lambda output"); 
+ 
+    auto resultType = TStreamType::Create(outItemFinish.GetStaticType(), Env); 
+ 
     TCallableBuilder callableBuilder(Env, __func__, resultType);
-    callableBuilder.Add(list);
-    callableBuilder.Add(itemArg);
-    callableBuilder.Add(stateArg);
-    callableBuilder.Add(state2Arg);
-    callableBuilder.Add(timeArg);
-    callableBuilder.Add(saveArg);
-    callableBuilder.Add(loadArg);
-    callableBuilder.Add(outTime);
-    callableBuilder.Add(outStateInit);
-    callableBuilder.Add(outStateUpdate);
-    callableBuilder.Add(outSave);
-    callableBuilder.Add(outLoad);
-    callableBuilder.Add(outStateMerge);
-    callableBuilder.Add(outItemFinish);
-    callableBuilder.Add(hop);
-    callableBuilder.Add(interval);
-    callableBuilder.Add(delay);
-
-    return TRuntimeNode(callableBuilder.Build(), false);
-}
-
+    callableBuilder.Add(list); 
+    callableBuilder.Add(itemArg); 
+    callableBuilder.Add(stateArg); 
+    callableBuilder.Add(state2Arg); 
+    callableBuilder.Add(timeArg); 
+    callableBuilder.Add(saveArg); 
+    callableBuilder.Add(loadArg); 
+    callableBuilder.Add(outTime); 
+    callableBuilder.Add(outStateInit); 
+    callableBuilder.Add(outStateUpdate); 
+    callableBuilder.Add(outSave); 
+    callableBuilder.Add(outLoad); 
+    callableBuilder.Add(outStateMerge); 
+    callableBuilder.Add(outItemFinish); 
+    callableBuilder.Add(hop); 
+    callableBuilder.Add(interval); 
+    callableBuilder.Add(delay); 
+ 
+    return TRuntimeNode(callableBuilder.Build(), false); 
+} 
+ 
 TRuntimeNode TProgramBuilder::MultiHoppingCore(TRuntimeNode list,
     const TUnaryLambda& keyExtractor,
     const TUnaryLambda& timeExtractor,

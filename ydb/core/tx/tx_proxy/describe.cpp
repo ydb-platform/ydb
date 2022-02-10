@@ -67,115 +67,115 @@ class TDescribeReq : public TActor<TDescribeReq> {
     }
 
     void FillSystemViewDescr(NKikimrSchemeOp::TDirEntry* descr, ui64 schemeShardId) {
-        descr->SetSchemeshardId(schemeShardId);
-        descr->SetPathId(InvalidLocalPathId);
-        descr->SetParentPathId(InvalidLocalPathId);
-        descr->SetCreateFinished(true);
-        descr->SetCreateTxId(0);
-        descr->SetCreateStep(0);
-    }
-
-    void SendSystemViewResult(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry, const TString& path,
-        const TActorContext& ctx)
-    {
-        auto schemeShardId = entry.DomainInfo->DomainKey.OwnerId;
-
+        descr->SetSchemeshardId(schemeShardId); 
+        descr->SetPathId(InvalidLocalPathId); 
+        descr->SetParentPathId(InvalidLocalPathId); 
+        descr->SetCreateFinished(true); 
+        descr->SetCreateTxId(0); 
+        descr->SetCreateStep(0); 
+    } 
+ 
+    void SendSystemViewResult(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry, const TString& path, 
+        const TActorContext& ctx) 
+    { 
+        auto schemeShardId = entry.DomainInfo->DomainKey.OwnerId; 
+ 
         auto result = MakeHolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder>(
-            path, schemeShardId, TPathId());
-
-        auto* pathDescription = result->Record.MutablePathDescription();
-        auto* self = pathDescription->MutableSelf();
-
-        Y_VERIFY(!entry.Path.empty());
-        self->SetName(entry.Path.back());
+            path, schemeShardId, TPathId()); 
+ 
+        auto* pathDescription = result->Record.MutablePathDescription(); 
+        auto* self = pathDescription->MutableSelf(); 
+ 
+        Y_VERIFY(!entry.Path.empty()); 
+        self->SetName(entry.Path.back()); 
         self->SetPathType(NKikimrSchemeOp::EPathTypeTable);
-        FillSystemViewDescr(self, schemeShardId);
-
-        auto* table = pathDescription->MutableTable();
-
-        TVector<ui32> keyColumnIds(entry.Columns.size());
-        size_t keySize = 0;
-
-        table->SetName(entry.Path.back());
-        table->MutableColumns()->Reserve(entry.Columns.size());
-
-        for (const auto& [id, column] : entry.Columns) {
-            auto* col = table->AddColumns();
-            col->SetName(column.Name);
-            col->SetType(AppData(ctx)->TypeRegistry->GetTypeName(column.PType));
-            col->SetTypeId(column.PType);
-            col->SetId(id);
-            if (column.KeyOrder >= 0) {
-                Y_VERIFY((size_t)column.KeyOrder < keyColumnIds.size());
-                keyColumnIds[column.KeyOrder] = id;
-                ++keySize;
-            }
-        }
-
-        table->MutableKeyColumnNames()->Reserve(keySize);
-        table->MutableKeyColumnIds()->Reserve(keySize);
-
-        for (size_t i = 0; i < keySize; ++i) {
-            auto columnId = keyColumnIds[i];
-            auto columnIt = entry.Columns.find(columnId);
-            Y_VERIFY(columnIt != entry.Columns.end());
-            table->AddKeyColumnIds(columnId);
-            table->AddKeyColumnNames(columnIt->second.Name);
-        }
-
-        auto* stats = pathDescription->MutableTableStats();
-        stats->SetPartCount(0);
-
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,
-                "Actor# " << ctx.SelfID.ToString() <<
-                " Send sysview TEvDescribeSchemeResult to# " << Source.ToString() <<
-                " Cookie: " << SourceCookie <<
-                " TEvDescribeSchemeResult: " << result->ToString());
-
-        TxProxyMon->NavigateLatency->Collect((ctx.Now() - WallClockStarted).MilliSeconds());
-
+        FillSystemViewDescr(self, schemeShardId); 
+ 
+        auto* table = pathDescription->MutableTable(); 
+ 
+        TVector<ui32> keyColumnIds(entry.Columns.size()); 
+        size_t keySize = 0; 
+ 
+        table->SetName(entry.Path.back()); 
+        table->MutableColumns()->Reserve(entry.Columns.size()); 
+ 
+        for (const auto& [id, column] : entry.Columns) { 
+            auto* col = table->AddColumns(); 
+            col->SetName(column.Name); 
+            col->SetType(AppData(ctx)->TypeRegistry->GetTypeName(column.PType)); 
+            col->SetTypeId(column.PType); 
+            col->SetId(id); 
+            if (column.KeyOrder >= 0) { 
+                Y_VERIFY((size_t)column.KeyOrder < keyColumnIds.size()); 
+                keyColumnIds[column.KeyOrder] = id; 
+                ++keySize; 
+            } 
+        } 
+ 
+        table->MutableKeyColumnNames()->Reserve(keySize); 
+        table->MutableKeyColumnIds()->Reserve(keySize); 
+ 
+        for (size_t i = 0; i < keySize; ++i) { 
+            auto columnId = keyColumnIds[i]; 
+            auto columnIt = entry.Columns.find(columnId); 
+            Y_VERIFY(columnIt != entry.Columns.end()); 
+            table->AddKeyColumnIds(columnId); 
+            table->AddKeyColumnNames(columnIt->second.Name); 
+        } 
+ 
+        auto* stats = pathDescription->MutableTableStats(); 
+        stats->SetPartCount(0); 
+ 
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY, 
+                "Actor# " << ctx.SelfID.ToString() << 
+                " Send sysview TEvDescribeSchemeResult to# " << Source.ToString() << 
+                " Cookie: " << SourceCookie << 
+                " TEvDescribeSchemeResult: " << result->ToString()); 
+ 
+        TxProxyMon->NavigateLatency->Collect((ctx.Now() - WallClockStarted).MilliSeconds()); 
+ 
         result->Record.SetStatus(NKikimrScheme::StatusSuccess);
-        ctx.Send(Source, result.Release(), 0, SourceCookie);
-        return Die(ctx);
-    }
-
-    void SendSystemViewFolderResult(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry, const TString& path,
-        const TActorContext& ctx)
-    {
-        auto schemeShardId = entry.DomainInfo->DomainKey.OwnerId;
-
+        ctx.Send(Source, result.Release(), 0, SourceCookie); 
+        return Die(ctx); 
+    } 
+ 
+    void SendSystemViewFolderResult(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry, const TString& path, 
+        const TActorContext& ctx) 
+    { 
+        auto schemeShardId = entry.DomainInfo->DomainKey.OwnerId; 
+ 
         auto result = MakeHolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder>(
-            path, schemeShardId, TPathId());
-
-        auto* pathDescription = result->Record.MutablePathDescription();
-        auto* self = pathDescription->MutableSelf();
-
-        self->SetName(TString(NSysView::SysPathName));
+            path, schemeShardId, TPathId()); 
+ 
+        auto* pathDescription = result->Record.MutablePathDescription(); 
+        auto* self = pathDescription->MutableSelf(); 
+ 
+        self->SetName(TString(NSysView::SysPathName)); 
         self->SetPathType(NKikimrSchemeOp::EPathTypeDir);
-        FillSystemViewDescr(self, schemeShardId);
-
-        if (entry.ListNodeEntry) {
-            for (const auto& child : entry.ListNodeEntry->Children) {
-                auto descr = pathDescription->AddChildren();
-                descr->SetName(child.Name);
+        FillSystemViewDescr(self, schemeShardId); 
+ 
+        if (entry.ListNodeEntry) { 
+            for (const auto& child : entry.ListNodeEntry->Children) { 
+                auto descr = pathDescription->AddChildren(); 
+                descr->SetName(child.Name); 
                 descr->SetPathType(NKikimrSchemeOp::EPathTypeTable);
-                FillSystemViewDescr(descr, schemeShardId);
-            }
-        };
-
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,
-                "Actor# " << ctx.SelfID.ToString() <<
-                " Send sysview TEvDescribeSchemeResult to# " << Source.ToString() <<
-                " Cookie: " << SourceCookie <<
-                " TEvDescribeSchemeResult: " << result->ToString());
-
-        TxProxyMon->NavigateLatency->Collect((ctx.Now() - WallClockStarted).MilliSeconds());
-
+                FillSystemViewDescr(descr, schemeShardId); 
+            } 
+        }; 
+ 
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY, 
+                "Actor# " << ctx.SelfID.ToString() << 
+                " Send sysview TEvDescribeSchemeResult to# " << Source.ToString() << 
+                " Cookie: " << SourceCookie << 
+                " TEvDescribeSchemeResult: " << result->ToString()); 
+ 
+        TxProxyMon->NavigateLatency->Collect((ctx.Now() - WallClockStarted).MilliSeconds()); 
+ 
         result->Record.SetStatus(NKikimrScheme::StatusSuccess);
-        ctx.Send(Source, result.Release(), 0, SourceCookie);
-        return Die(ctx);
-    }
-
+        ctx.Send(Source, result.Release(), 0, SourceCookie); 
+        return Die(ctx); 
+    } 
+ 
     void Handle(TEvTxProxyReq::TEvNavigateScheme::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev, const TActorContext &ctx);
@@ -283,9 +283,9 @@ void TDescribeReq::Handle(TEvTxProxyReq::TEvNavigateScheme::TPtr &ev, const TAct
     }
 
     request->ResultSet.emplace_back(entry);
-
+ 
     ctx.Send(Services.SchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(request), 0, SourceCookie);
-
+ 
     SchemeRequest = ev->Release();
     Become(&TThis::StateWaitResolve);
 }
@@ -350,24 +350,24 @@ void TDescribeReq::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &
         }
     }
 
-    const auto& describePath = SchemeRequest->Ev->Get()->Record.GetDescribePath();
-
-    if (entry.TableId.IsSystemView()) {
-        // don't go to schemeshard
-        const auto& path = describePath.GetPath();
-
-        if (entry.TableId.SysViewInfo == NSysView::SysPathName) {
-            return SendSystemViewFolderResult(entry, path, ctx);
-        }
-
-        return SendSystemViewResult(entry, path, ctx);
-    }
-
+    const auto& describePath = SchemeRequest->Ev->Get()->Record.GetDescribePath(); 
+ 
+    if (entry.TableId.IsSystemView()) { 
+        // don't go to schemeshard 
+        const auto& path = describePath.GetPath(); 
+ 
+        if (entry.TableId.SysViewInfo == NSysView::SysPathName) { 
+            return SendSystemViewFolderResult(entry, path, ctx); 
+        } 
+ 
+        return SendSystemViewResult(entry, path, ctx); 
+    } 
+ 
     const ui64 shardToRequest = entry.DomainInfo->ExtractSchemeShard();
-
+ 
     TAutoPtr<NSchemeShard::TEvSchemeShard::TEvDescribeScheme> req(
         new NSchemeShard::TEvSchemeShard::TEvDescribeScheme(describePath));
-
+ 
     LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString()
         << " SEND to# " << shardToRequest << " shardToRequest " << req->ToString());
 
@@ -387,48 +387,48 @@ void TDescribeReq::Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult:
     TxProxyMon->NavigateLatency->Collect((ctx.Now() - WallClockStarted).MilliSeconds());
 
     if (AppData()->FeatureFlags.GetEnableSystemViews()) {
-        const auto& pathDescription = ev->Get()->GetRecord().GetPathDescription();
-        const auto& self = pathDescription.GetSelf();
-
-        TDomainsInfo *domainsInfo = AppData()->DomainsInfo.Get();
-        Y_VERIFY(!domainsInfo->Domains.empty());
-
-        bool needSysFolder = false;
+        const auto& pathDescription = ev->Get()->GetRecord().GetPathDescription(); 
+        const auto& self = pathDescription.GetSelf(); 
+ 
+        TDomainsInfo *domainsInfo = AppData()->DomainsInfo.Get(); 
+        Y_VERIFY(!domainsInfo->Domains.empty()); 
+ 
+        bool needSysFolder = false; 
         if (self.GetPathType() == NKikimrSchemeOp::EPathType::EPathTypeSubDomain ||
             self.GetPathType() == NKikimrSchemeOp::EPathType::EPathTypeColumnStore ||
             self.GetPathType() == NKikimrSchemeOp::EPathType::EPathTypeColumnTable)
         {
-            needSysFolder = true;
+            needSysFolder = true; 
         } else if (self.GetPathId() == NSchemeShard::RootPathId) {
-            for (const auto& [_, domain] : domainsInfo->Domains) {
-                if (domain->SchemeRoot == self.GetSchemeshardId()) {
-                    needSysFolder = true;
-                    break;
-                }
-            }
-        }
-
-        if (needSysFolder) {
-            bool hasSysFolder = false;
-
-            const auto& children = pathDescription.GetChildren();
-            if (!children.empty()) {
-                auto size = children.size();
-                if (children[size - 1].GetName() == NSysView::SysPathName) {
-                    hasSysFolder = true;
-                }
-            }
-
-            if (!hasSysFolder) {
-                auto* record = ev->Get()->MutableRecord();
-                auto* descr = record->MutablePathDescription()->AddChildren();
-                descr->SetName(TString(NSysView::SysPathName));
+            for (const auto& [_, domain] : domainsInfo->Domains) { 
+                if (domain->SchemeRoot == self.GetSchemeshardId()) { 
+                    needSysFolder = true; 
+                    break; 
+                } 
+            } 
+        } 
+ 
+        if (needSysFolder) { 
+            bool hasSysFolder = false; 
+ 
+            const auto& children = pathDescription.GetChildren(); 
+            if (!children.empty()) { 
+                auto size = children.size(); 
+                if (children[size - 1].GetName() == NSysView::SysPathName) { 
+                    hasSysFolder = true; 
+                } 
+            } 
+ 
+            if (!hasSysFolder) { 
+                auto* record = ev->Get()->MutableRecord(); 
+                auto* descr = record->MutablePathDescription()->AddChildren(); 
+                descr->SetName(TString(NSysView::SysPathName)); 
                 descr->SetPathType(NKikimrSchemeOp::EPathTypeDir);
-                FillSystemViewDescr(descr, self.GetSchemeshardId());
-            }
-        }
-    }
-
+                FillSystemViewDescr(descr, self.GetSchemeshardId()); 
+            } 
+        } 
+    } 
+ 
     ctx.ExecutorThread.Send(ev->Forward(Source));
     return Die(ctx);
 }

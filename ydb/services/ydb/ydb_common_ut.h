@@ -24,7 +24,7 @@ struct TKikimrTestSettings {
     static constexpr bool SSL = false;
     static constexpr bool AUTH = false;
     static constexpr bool PrecreatePools = true;
-    static constexpr bool EnableSystemViews = true;
+    static constexpr bool EnableSystemViews = true; 
 };
 
 struct TKikimrTestWithAuth : TKikimrTestSettings {
@@ -35,10 +35,10 @@ struct TKikimrTestWithAuthAndSsl : TKikimrTestWithAuth {
     static constexpr bool SSL = true;
 };
 
-struct TKikimrTestNoSystemViews : TKikimrTestSettings {
-    static constexpr bool EnableSystemViews = false;
-};
-
+struct TKikimrTestNoSystemViews : TKikimrTestSettings { 
+    static constexpr bool EnableSystemViews = false; 
+}; 
+ 
 template <typename TestSettings = TKikimrTestSettings>
 class TBasicKikimrWithGrpcAndRootSchema {
 public:
@@ -308,6 +308,6 @@ struct TTestOlap {
 using TKikimrWithGrpcAndRootSchema = TBasicKikimrWithGrpcAndRootSchema<TKikimrTestSettings>;
 using TKikimrWithGrpcAndRootSchemaWithAuth = TBasicKikimrWithGrpcAndRootSchema<TKikimrTestWithAuth>;
 using TKikimrWithGrpcAndRootSchemaWithAuthAndSsl = TBasicKikimrWithGrpcAndRootSchema<TKikimrTestWithAuthAndSsl>;
-using TKikimrWithGrpcAndRootSchemaNoSystemViews = TBasicKikimrWithGrpcAndRootSchema<TKikimrTestNoSystemViews>;
+using TKikimrWithGrpcAndRootSchemaNoSystemViews = TBasicKikimrWithGrpcAndRootSchema<TKikimrTestNoSystemViews>; 
 
 }

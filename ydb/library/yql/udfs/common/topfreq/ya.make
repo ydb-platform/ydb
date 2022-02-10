@@ -2,7 +2,7 @@ YQL_UDF(topfreq_udf)
 
 YQL_ABI_VERSION(
     2
-    10
+    10 
     0
 )
 

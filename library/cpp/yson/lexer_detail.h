@@ -1,15 +1,15 @@
-#pragma once
-
-#include "detail.h"
-#include "token.h"
-
+#pragma once 
+ 
+#include "detail.h" 
+#include "token.h" 
+ 
 namespace NYson {
     ////////////////////////////////////////////////////////////////////////////////
-
+ 
     namespace NDetail {
         /*! \internal */
         ////////////////////////////////////////////////////////////////////////////////
-
+ 
         // EReadStartCase tree representation:
         // Root                                =     xb
         //     BinaryStringOrOtherSpecialToken =    x0b
@@ -29,17 +29,17 @@ namespace NYson {
         //             Plus                    = 10011b
         //             None                    = 10111b
         //             Percent                 = 11011b
-
+ 
         enum EReadStartCase : unsigned {
             BinaryString = 0,      // =    00b
             OtherSpecialToken = 2, // =    10b
-
+ 
             BinaryInt64 = 1,   // =   001b
             BinaryDouble = 5,  // =   101b
             BinaryFalse = 9,   // =  1001b
             BinaryTrue = 13,   // =  1101b
             BinaryUint64 = 17, // = 10001b
-
+ 
             Quote = 3,        // = 00011b
             DigitOrMinus = 7, // = 00111b
             String = 11,      // = 01011b
@@ -48,34 +48,34 @@ namespace NYson {
             None = 23,        // = 10111b
             Percent = 27      // = 11011b
         };
-
+ 
         template <class TBlockStream, bool EnableLinePositionInfo>
         class TLexer
            : public TLexerBase<TBlockStream, EnableLinePositionInfo> {
         private:
             using TBase = TLexerBase<TBlockStream, EnableLinePositionInfo>;
-
+ 
             static EReadStartCase GetStartState(char ch) {
-#define NN EReadStartCase::None
-#define BS EReadStartCase::BinaryString
-#define BI EReadStartCase::BinaryInt64
-#define BD EReadStartCase::BinaryDouble
-#define BF EReadStartCase::BinaryFalse
-#define BT EReadStartCase::BinaryTrue
-#define BU EReadStartCase::BinaryUint64
-#define SP NN // EReadStartCase::Space
-#define DM EReadStartCase::DigitOrMinus
-#define ST EReadStartCase::String
-#define PL EReadStartCase::Plus
-#define QU EReadStartCase::Quote
-#define PC EReadStartCase::Percent
-#define TT(name) (EReadStartCase(static_cast<ui8>(ETokenType::name) << 2) | EReadStartCase::OtherSpecialToken)
-
+#define NN EReadStartCase::None 
+#define BS EReadStartCase::BinaryString 
+#define BI EReadStartCase::BinaryInt64 
+#define BD EReadStartCase::BinaryDouble 
+#define BF EReadStartCase::BinaryFalse 
+#define BT EReadStartCase::BinaryTrue 
+#define BU EReadStartCase::BinaryUint64 
+#define SP NN // EReadStartCase::Space 
+#define DM EReadStartCase::DigitOrMinus 
+#define ST EReadStartCase::String 
+#define PL EReadStartCase::Plus 
+#define QU EReadStartCase::Quote 
+#define PC EReadStartCase::Percent 
+#define TT(name) (EReadStartCase(static_cast<ui8>(ETokenType::name) << 2) | EReadStartCase::OtherSpecialToken) 
+ 
                 static const ui8 lookupTable[] =
                     {
                         NN, BS, BI, BD, BF, BT, BU, NN, NN, SP, SP, SP, SP, SP, NN, NN,
                         NN, NN, NN, NN, NN, NN, NN, NN, NN, NN, NN, NN, NN, NN, NN, NN,
-
+ 
                         // 32
                         SP,                   // ' '
                         NN,                   // '!'
@@ -93,7 +93,7 @@ namespace NYson {
                         DM,                   // '-'
                         NN,                   // '.'
                         NN,                   // '/'
-
+ 
                         // 48
                         DM, DM, DM, DM, DM, DM, DM, DM, DM, DM, // '0' - '9'
                         TT(Colon),                              // ':'
@@ -102,7 +102,7 @@ namespace NYson {
                         TT(Equals),                             // '='
                         TT(RightAngle),                         // '>'
                         NN,                                     // '?'
-
+ 
                         // 64
                         NN,                                                 // '@'
                         ST, ST, ST, ST, ST, ST, ST, ST, ST, ST, ST, ST, ST, // 'A' - 'M'
@@ -112,10 +112,10 @@ namespace NYson {
                         TT(RightBracket),                                   // ']'
                         NN,                                                 // '^'
                         ST,                                                 // '_'
-
+ 
                         // 96
                         NN, // '`'
-
+ 
                         ST, ST, ST, ST, ST, ST, ST, ST, ST, ST, ST, ST, ST, // 'a' - 'm'
                         ST, ST, ST, ST, ST, ST, ST, ST, ST, ST, ST, ST, ST, // 'n' - 'z'
                         TT(LeftBrace),                                      // '{'
@@ -128,41 +128,41 @@ namespace NYson {
                         NN, NN, NN, NN, NN, NN, NN, NN, NN, NN, NN, NN, NN, NN, NN, NN,
                         NN, NN, NN, NN, NN, NN, NN, NN, NN, NN, NN, NN, NN, NN, NN, NN,
                         NN, NN, NN, NN, NN, NN, NN, NN, NN, NN, NN, NN, NN, NN, NN, NN,
-
+ 
                         NN, NN, NN, NN, NN, NN, NN, NN, NN, NN, NN, NN, NN, NN, NN, NN,
                         NN, NN, NN, NN, NN, NN, NN, NN, NN, NN, NN, NN, NN, NN, NN, NN,
                         NN, NN, NN, NN, NN, NN, NN, NN, NN, NN, NN, NN, NN, NN, NN, NN,
                         NN, NN, NN, NN, NN, NN, NN, NN, NN, NN, NN, NN, NN, NN, NN, NN};
-
-#undef NN
-#undef BS
-#undef BI
-#undef BD
-#undef SP
-#undef DM
-#undef ST
-#undef PL
-#undef QU
-#undef TT
+ 
+#undef NN 
+#undef BS 
+#undef BI 
+#undef BD 
+#undef SP 
+#undef DM 
+#undef ST 
+#undef PL 
+#undef QU 
+#undef TT 
                 return static_cast<EReadStartCase>(lookupTable[static_cast<ui8>(ch)]);
             }
-
+ 
         public:
             TLexer(const TBlockStream& blockStream, TMaybe<ui64> memoryLimit)
                 : TBase(blockStream, memoryLimit)
             {
             }
-
+ 
             void GetToken(TToken* token) {
                 char ch1 = TBase::SkipSpaceAndGetChar();
                 auto state = GetStartState(ch1);
                 auto stateBits = static_cast<unsigned>(state);
-
+ 
                 if (ch1 == '\0') {
                     *token = TToken::EndOfStream;
                     return;
                 }
-
+ 
                 if (stateBits & 1) {          // Other = x1b
                     if (stateBits & 1 << 1) { // Other = xxx11b
                         if (state == EReadStartCase::Quote) {
@@ -174,9 +174,9 @@ namespace NYson {
                             ReadNumeric<true>(token);
                         } else if (state == EReadStartCase::Plus) {
                             TBase::Advance(1);
-
+ 
                             char ch2 = TBase::template GetChar<true>();
-
+ 
                             if (!isdigit(ch2)) {
                                 *token = TToken(ETokenType::Plus);
                             } else {
@@ -219,9 +219,9 @@ namespace NYson {
                         } else {
                             Y_FAIL("unreachable");
                         }
-                    }
+                    } 
                 } else { // BinaryStringOrOtherSpecialToken = x0b
-                    TBase::Advance(1);
+                    TBase::Advance(1); 
                     if (stateBits & 1 << 1) { // OtherSpecialToken = 10b
                         Y_ASSERT((stateBits & 3) == static_cast<unsigned>(EReadStartCase::OtherSpecialToken));
                         *token = TToken(ETokenType(stateBits >> 2));
@@ -231,14 +231,14 @@ namespace NYson {
                         TBase::ReadBinaryString(&value);
                         *token = TToken(value);
                     }
-                }
-            }
-
+                } 
+            } 
+ 
             template <bool AllowFinish>
             void ReadNumeric(TToken* token) {
                 TStringBuf valueBuffer;
                 ENumericResult numericResult = TBase::template ReadNumeric<AllowFinish>(&valueBuffer);
-
+ 
                 if (numericResult == ENumericResult::Double) {
                     try {
                         *token = TToken(FromString<double>(valueBuffer));
@@ -258,39 +258,39 @@ namespace NYson {
                         ythrow TYsonException() << "Error parsing uint64 literal " << valueBuffer;
                     }
                 }
-            }
+            } 
         };
         ////////////////////////////////////////////////////////////////////////////////
         /*! \endinternal */
-    }
-
+    } 
+ 
     class TStatelessYsonLexerImplBase {
     public:
         virtual size_t GetToken(const TStringBuf& data, TToken* token) = 0;
-
+ 
         virtual ~TStatelessYsonLexerImplBase() {
         }
     };
-
+ 
     template <bool EnableLinePositionInfo>
     class TStatelesYsonLexerImpl: public TStatelessYsonLexerImplBase {
     private:
         using TLexer = NDetail::TLexer<TStringReader, EnableLinePositionInfo>;
         TLexer Lexer;
-
+ 
     public:
         TStatelesYsonLexerImpl()
             : Lexer(TStringReader(), Nothing())
         {
         }
-
+ 
         size_t GetToken(const TStringBuf& data, TToken* token) override {
             Lexer.SetBuffer(data.begin(), data.end());
             Lexer.GetToken(token);
             return Lexer.Begin() - data.begin();
         }
     };
-
+ 
     ////////////////////////////////////////////////////////////////////////////////
-
+ 
 } // namespace NYson

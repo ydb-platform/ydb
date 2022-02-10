@@ -312,11 +312,11 @@ protected:
         return Source->ShouldUseSourceAsColumn(source);
     }
 
-    bool IsStream() const override {
-        Y_VERIFY_DEBUG(Source);
-        return Source->IsStream();
-    }
-
+    bool IsStream() const override { 
+        Y_VERIFY_DEBUG(Source); 
+        return Source->IsStream(); 
+    } 
+ 
     bool IsOrdered() const override {
         Y_VERIFY_DEBUG(Source);
         return Source->IsOrdered();
@@ -535,9 +535,9 @@ public:
         return Node;
     }
 
-    bool IsStream() const override {
-        return Subquery->GetSource()->IsStream();
-    }
+    bool IsStream() const override { 
+        return Subquery->GetSource()->IsStream(); 
+    } 
 
     void DoUpdateState() const override {
         State.Set(ENodeState::Const, true);
@@ -565,10 +565,10 @@ TNodePtr BuildSubqueryRef(TNodePtr subquery, const TString& alias, int tupleInde
 
 class TTableSource: public IRealSource {
 public:
-    TTableSource(TPosition pos, const TTableRef& table, bool stream, const TString& label)
+    TTableSource(TPosition pos, const TTableRef& table, bool stream, const TString& label) 
         : IRealSource(pos)
         , Table(table)
-        , Stream(stream)
+        , Stream(stream) 
     {
         SetLabel(label.empty() ? Table.ShortName() : label);
     }
@@ -637,10 +637,10 @@ public:
         return AstNode(Table.RefName);
     }
 
-    bool IsStream() const override {
-        return Stream;
-    }
-
+    bool IsStream() const override { 
+        return Stream; 
+    } 
+ 
     TPtr DoClone() const final {
         return new TTableSource(Pos, Table, Stream, GetLabel());
     }
@@ -653,8 +653,8 @@ protected:
     const bool Stream;
 };
 
-TSourcePtr BuildTableSource(TPosition pos, const TTableRef& table, bool stream, const TString& label) {
-    return new TTableSource(pos, table, stream, label);
+TSourcePtr BuildTableSource(TPosition pos, const TTableRef& table, bool stream, const TString& label) { 
+    return new TTableSource(pos, table, stream, label); 
 }
 
 class TInnerSource: public IProxySource {
@@ -1049,7 +1049,7 @@ public:
         const TVector<TSortSpecificationPtr>& orderBy,
         TNodePtr having,
         TWinSpecs& winSpecs,
-        THoppingWindowSpecPtr hoppingWindowSpec,
+        THoppingWindowSpecPtr hoppingWindowSpec, 
         const TVector<TNodePtr>& terms,
         bool distinct,
         const TVector<TNodePtr>& without,
@@ -1067,7 +1067,7 @@ public:
         , Without(without)
         , Distinct(distinct)
         , HoppingWindowSpec(hoppingWindowSpec)
-        , Stream(stream)
+        , Stream(stream) 
         , Settings(settings)
     {
     }
@@ -1104,14 +1104,14 @@ public:
         if (!Source->Init(ctx, initSrc)) {
             return false;
         }
-        if (Stream && !Source->IsStream()) {
-            ctx.Error(Pos) << "SELECT STREAM is unsupported for non-streaming sources";
-            return false;
-        }
+        if (Stream && !Source->IsStream()) { 
+            ctx.Error(Pos) << "SELECT STREAM is unsupported for non-streaming sources"; 
+            return false; 
+        } 
         if (!Stream && Source->IsStream() && !ctx.PragmaDirectRead) {
-            ctx.Error(Pos) << "SELECT STREAM must be used for streaming sources";
-            return false;
-        }
+            ctx.Error(Pos) << "SELECT STREAM must be used for streaming sources"; 
+            return false; 
+        } 
 
         ctx.PushBlockShortcuts();
         auto src = Source.Get();
@@ -1649,7 +1649,7 @@ private:
     TVector<TNodePtr> Without;
     const bool Distinct;
     bool OrderByInit = false;
-    THoppingWindowSpecPtr HoppingWindowSpec;
+    THoppingWindowSpecPtr HoppingWindowSpec; 
     const bool Stream;
     const TWriteSettings Settings;
 };
@@ -1960,7 +1960,7 @@ TSourcePtr BuildSelectCore(
     const TVector<TSortSpecificationPtr>& orderBy,
     TNodePtr having,
     TWinSpecs&& winSpecs,
-    THoppingWindowSpecPtr hoppingWindowSpec,
+    THoppingWindowSpecPtr hoppingWindowSpec, 
     TVector<TNodePtr>&& terms,
     bool distinct,
     TVector<TNodePtr>&& without,

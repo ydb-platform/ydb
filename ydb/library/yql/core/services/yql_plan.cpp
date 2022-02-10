@@ -374,9 +374,9 @@ public:
             info.IsVisible = (*provider)->GetPlanFormatter().GetDependencies(*node, dependencies, true);
         } else {
             info.IsVisible = false;
-            for (auto& child : node->Children()) {
-                dependencies.push_back(child.Get());
-            }
+            for (auto& child : node->Children()) { 
+                dependencies.push_back(child.Get()); 
+            } 
         }
 
         for (const auto& child : dependencies) {

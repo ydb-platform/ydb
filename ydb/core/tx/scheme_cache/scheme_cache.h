@@ -202,15 +202,15 @@ struct TSchemeCacheNavigate {
     };
 
     struct TEntry {
-        enum class ERequestType : ui8 {
-            ByPath,
-            ByTableId
-        };
+        enum class ERequestType : ui8 { 
+            ByPath, 
+            ByTableId 
+        }; 
 
         // in
         TVector<TString> Path;
         TTableId TableId;
-        ERequestType RequestType = ERequestType::ByPath;
+        ERequestType RequestType = ERequestType::ByPath; 
         EOp Operation = OpUnknown;
         bool RedirectRequired = true;
         bool ShowPrivatePath = false;
@@ -523,8 +523,8 @@ public:
     };
 };
 
-inline TActorId MakeSchemeCacheID() {
+inline TActorId MakeSchemeCacheID() { 
     return TActorId(0, TStringBuf("SchmCcheSrv"));
 }
-
+ 
 } // NKikimr

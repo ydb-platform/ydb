@@ -186,18 +186,18 @@ void CheckLabels(TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
     allServices.insert(attrServices.begin(), attrServices.end());
 
     for (auto &service : allServices) {
-        THashSet<TString> allLabels = GetDatabaseAttributeLabels();
-        allLabels.insert(DATABASE_LABEL);
-        allLabels.insert(SLOT_LABEL);
-
+        THashSet<TString> allLabels = GetDatabaseAttributeLabels(); 
+        allLabels.insert(DATABASE_LABEL); 
+        allLabels.insert(SLOT_LABEL); 
+ 
         THashMap<TString, TString> labels;
-        if (dbServices.contains(service)) {
+        if (dbServices.contains(service)) { 
             labels.insert(dbLabels.begin(), dbLabels.end());
-            if (attrServices.contains(service)) {
-                labels.erase(SLOT_LABEL); // no slot now
-                allLabels.erase(SLOT_LABEL);
-            }
-        }
+            if (attrServices.contains(service)) { 
+                labels.erase(SLOT_LABEL); // no slot now 
+                allLabels.erase(SLOT_LABEL); 
+            } 
+        } 
         if (attrServices.contains(service))
             labels.insert(attrLabels.begin(), attrLabels.end());
         auto serviceGroup = GetServiceCounters(counters, service, false);
@@ -496,17 +496,17 @@ Y_UNIT_TEST_SUITE(TTenantPoolTests) {
 
         runtime.WaitForHiveState({{{TENANT1_1_NAME, 1, 1, 1}}});
 
-        auto &attrServices = GetDatabaseAttributeSensorServices();
+        auto &attrServices = GetDatabaseAttributeSensorServices(); 
         for (auto &service : services) {
             auto serviceGroup = GetServiceCounters(counters, service, false);
             auto tenantGroup = serviceGroup->FindSubgroup(DATABASE_LABEL, TENANT1_1_NAME);
             UNIT_ASSERT(tenantGroup);
-            TIntrusivePtr<NMonitoring::TDynamicCounters> slotGroup;
-            if (attrServices.contains(service)) {
-                slotGroup = tenantGroup->FindSubgroup(HOST_LABEL, "slot-1");
-            } else {
-                slotGroup = tenantGroup->FindSubgroup(SLOT_LABEL, "static")->FindSubgroup(HOST_LABEL, "slot-1");
-            }
+            TIntrusivePtr<NMonitoring::TDynamicCounters> slotGroup; 
+            if (attrServices.contains(service)) { 
+                slotGroup = tenantGroup->FindSubgroup(HOST_LABEL, "slot-1"); 
+            } else { 
+                slotGroup = tenantGroup->FindSubgroup(SLOT_LABEL, "static")->FindSubgroup(HOST_LABEL, "slot-1"); 
+            } 
             UNIT_ASSERT(slotGroup);
             auto counter = slotGroup->GetCounter("counter", true);
             UNIT_ASSERT(*counter == 0);
@@ -585,18 +585,18 @@ Y_UNIT_TEST_SUITE(TTenantPoolTests) {
 
         runtime.WaitForHiveState({{{TENANT1_1_NAME, 1, 1, 1}}});
 
-        auto &attrServices = GetDatabaseAttributeSensorServices();
-
+        auto &attrServices = GetDatabaseAttributeSensorServices(); 
+ 
         for (auto &service : services) {
             auto serviceGroup = GetServiceCounters(counters, service, false);
             auto tenantGroup = serviceGroup->FindSubgroup(DATABASE_LABEL, TENANT1_1_NAME);
             UNIT_ASSERT(tenantGroup);
-            NMonitoring::TDynamicCounterPtr slotGroup;
-            if (attrServices.contains(service)) {
-                slotGroup = tenantGroup->FindSubgroup(HOST_LABEL, "slot-1");
-            } else {
-                slotGroup = tenantGroup->FindSubgroup(SLOT_LABEL, "static")->FindSubgroup(HOST_LABEL, "slot-1");
-            }
+            NMonitoring::TDynamicCounterPtr slotGroup; 
+            if (attrServices.contains(service)) { 
+                slotGroup = tenantGroup->FindSubgroup(HOST_LABEL, "slot-1"); 
+            } else { 
+                slotGroup = tenantGroup->FindSubgroup(SLOT_LABEL, "static")->FindSubgroup(HOST_LABEL, "slot-1"); 
+            } 
             UNIT_ASSERT(slotGroup);
             auto counter = slotGroup->GetCounter("counter", true);
             UNIT_ASSERT(*counter == 0);
@@ -612,12 +612,12 @@ Y_UNIT_TEST_SUITE(TTenantPoolTests) {
             auto serviceGroup = GetServiceCounters(counters, service, false);
             auto tenantGroup = serviceGroup->FindSubgroup(DATABASE_LABEL, CanonizePath(DOMAIN1_NAME));
             UNIT_ASSERT(tenantGroup);
-            NMonitoring::TDynamicCounterPtr slotGroup;
-            if (attrServices.contains(service)) {
-                slotGroup = tenantGroup;
-            } else {
-                slotGroup = tenantGroup->FindSubgroup(SLOT_LABEL, "static");
-            }
+            NMonitoring::TDynamicCounterPtr slotGroup; 
+            if (attrServices.contains(service)) { 
+                slotGroup = tenantGroup; 
+            } else { 
+                slotGroup = tenantGroup->FindSubgroup(SLOT_LABEL, "static"); 
+            } 
             UNIT_ASSERT(slotGroup);
             auto counter = slotGroup->GetCounter("counter", true);
             UNIT_ASSERT(*counter == 0);
@@ -633,12 +633,12 @@ Y_UNIT_TEST_SUITE(TTenantPoolTests) {
             auto serviceGroup = GetServiceCounters(counters, service, false);
             auto tenantGroup = serviceGroup->FindSubgroup(DATABASE_LABEL, "<none>");
             UNIT_ASSERT(tenantGroup);
-            NMonitoring::TDynamicCounterPtr slotGroup;
-            if (attrServices.contains(service)) {
-                slotGroup = tenantGroup->FindSubgroup(HOST_LABEL, "unassigned");
-            } else {
-                slotGroup = tenantGroup->FindSubgroup(SLOT_LABEL, "static")->FindSubgroup(HOST_LABEL, "unassigned");
-            }
+            NMonitoring::TDynamicCounterPtr slotGroup; 
+            if (attrServices.contains(service)) { 
+                slotGroup = tenantGroup->FindSubgroup(HOST_LABEL, "unassigned"); 
+            } else { 
+                slotGroup = tenantGroup->FindSubgroup(SLOT_LABEL, "static")->FindSubgroup(HOST_LABEL, "unassigned"); 
+            } 
             UNIT_ASSERT(slotGroup);
             auto counter = slotGroup->GetCounter("counter", true);
             UNIT_ASSERT(*counter == 0);

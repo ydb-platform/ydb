@@ -5,7 +5,7 @@
 /*
   Common registry for tagging memory profiler.
   Register a new tag with MakeTag using a unique string.
-  Use registered tags with SetThreadAllocTag function in allocator API.
+  Use registered tags with SetThreadAllocTag function in allocator API. 
 */
 
 namespace NProfiling {
@@ -22,43 +22,43 @@ namespace NProfiling {
 
     class TMemoryTagScope {
     public:
-        explicit TMemoryTagScope(ui32 tag)
+        explicit TMemoryTagScope(ui32 tag) 
             : RestoreTag(SetThreadAllocTag(tag))
         {
         }
 
-        explicit TMemoryTagScope(const char* tagName) {
+        explicit TMemoryTagScope(const char* tagName) { 
             ui32 newTag = MakeTag(tagName);
             RestoreTag = SetThreadAllocTag(newTag);
         }
 
         TMemoryTagScope(TMemoryTagScope&& move)
             : RestoreTag(move.RestoreTag)
-            , Released(move.Released)
+            , Released(move.Released) 
         {
-            move.Released = true;
+            move.Released = true; 
         }
 
         TMemoryTagScope& operator=(TMemoryTagScope&& move) {
             RestoreTag = move.RestoreTag;
-            Released = move.Released;
-            move.Released = true;
+            Released = move.Released; 
+            move.Released = true; 
             return *this;
         }
 
-        static void Reset(ui32 tag) {
+        static void Reset(ui32 tag) { 
             SetThreadAllocTag(tag);
         }
 
         void Release() {
-            if (!Released) {
+            if (!Released) { 
                 SetThreadAllocTag(RestoreTag);
-                Released = true;
+                Released = true; 
             }
         }
 
         ~TMemoryTagScope() {
-            if (!Released) {
+            if (!Released) { 
                 SetThreadAllocTag(RestoreTag);
             }
         }
@@ -67,7 +67,7 @@ namespace NProfiling {
         TMemoryTagScope(const TMemoryTagScope&) = delete;
         void operator=(const TMemoryTagScope&) = delete;
 
-        ui32 RestoreTag = 0;
-        bool Released = false;
+        ui32 RestoreTag = 0; 
+        bool Released = false; 
     };
 }

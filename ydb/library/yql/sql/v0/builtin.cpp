@@ -140,14 +140,14 @@ public:
 
         auto factory = Aggr->AggregationTraitsFactory();
         auto apply = Y("Apply", factory, Y("ListType", "type"));
-
-        auto columnIndices = Aggr->GetFactoryColumnIndices();
-        if (columnIndices.size() == 1) {
+ 
+        auto columnIndices = Aggr->GetFactoryColumnIndices(); 
+        if (columnIndices.size() == 1) { 
             apply = L(apply, "extractor");
         } else {
             // make several extractors from main that returns a tuple
-            for (ui32 arg = 0; arg < columnIndices.size(); ++arg) {
-                auto partial = BuildLambda(Pos, Y("row"), Y("Nth", Y("Apply", "extractor", "row"), Q(ToString(columnIndices[arg]))));
+            for (ui32 arg = 0; arg < columnIndices.size(); ++arg) { 
+                auto partial = BuildLambda(Pos, Y("row"), Y("Nth", Y("Apply", "extractor", "row"), Q(ToString(columnIndices[arg])))); 
                 apply = L(apply, partial);
             }
         }
@@ -778,12 +778,12 @@ public:
         }
         auto aliasNode = BuildFileNameArgument(Args[1]->GetPos(), Args[1]);
         OpName = "Apply";
-        Args[0] = Y("Udf", Q("File.ByLines"), Y("Void"),
-            Y("TupleType",
-                Y("TupleType", Y("DataType", dataTypeStringNode)),
-                Y("StructType"),
-                Y("TupleType")));
-
+        Args[0] = Y("Udf", Q("File.ByLines"), Y("Void"), 
+            Y("TupleType", 
+                Y("TupleType", Y("DataType", dataTypeStringNode)), 
+                Y("StructType"), 
+                Y("TupleType"))); 
+ 
         Args[1] = Y("FilePath", aliasNode);
         return TCallNode::DoInit(ctx, src);
     }
@@ -1579,47 +1579,47 @@ private:
     TString Mode;
 };
 
-template <bool IsStart>
-class THoppingTime final: public TAstListNode {
-public:
-    THoppingTime(TPosition pos, const TVector<TNodePtr>& args = {})
-        : TAstListNode(pos)
+template <bool IsStart> 
+class THoppingTime final: public TAstListNode { 
+public: 
+    THoppingTime(TPosition pos, const TVector<TNodePtr>& args = {}) 
+        : TAstListNode(pos) 
     {
         Y_UNUSED(args);
     }
-
-private:
-    TNodePtr DoClone() const override {
-        return new THoppingTime(GetPos());
-    }
-
-    bool DoInit(TContext& ctx, ISource* src) override {
-        Y_UNUSED(ctx);
-
-        auto window = src->GetHoppingWindowSpec();
-        if (!window) {
-            ctx.Error(Pos) << "No hopping window parameters in aggregation";
-            return false;
-        }
-
-        Nodes.clear();
-
-        if (!IsStart) {
-            Add("Member", "row", Q("_yql_time"));
-            return true;
-        }
-
-        Add("Sub",
-            Y("Member", "row", Q("_yql_time")),
-            window->Interval);
-        return true;
-    }
-
-    void DoUpdateState() const override {
-        State.Set(ENodeState::Aggregated, true);
-    }
-};
-
+ 
+private: 
+    TNodePtr DoClone() const override { 
+        return new THoppingTime(GetPos()); 
+    } 
+ 
+    bool DoInit(TContext& ctx, ISource* src) override { 
+        Y_UNUSED(ctx); 
+ 
+        auto window = src->GetHoppingWindowSpec(); 
+        if (!window) { 
+            ctx.Error(Pos) << "No hopping window parameters in aggregation"; 
+            return false; 
+        } 
+ 
+        Nodes.clear(); 
+ 
+        if (!IsStart) { 
+            Add("Member", "row", Q("_yql_time")); 
+            return true; 
+        } 
+ 
+        Add("Sub", 
+            Y("Member", "row", Q("_yql_time")), 
+            window->Interval); 
+        return true; 
+    } 
+ 
+    void DoUpdateState() const override { 
+        State.Set(ENodeState::Aggregated, true); 
+    } 
+}; 
+ 
 class TInvalidBuiltin final: public INode {
 public:
     TInvalidBuiltin(TPosition pos, const TString& info)
@@ -1655,8 +1655,8 @@ enum EAggrFuncTypeCallback {
     LINEAR_HISTOGRAM,
     PERCENTILE,
     TOPFREQ,
-    TOP,
-    TOP_BY,
+    TOP, 
+    TOP_BY, 
     COUNT_DISTINCT_ESTIMATE,
     LIST,
     UDAF
@@ -1722,12 +1722,12 @@ TAggrFuncFactoryCallback BuildAggrFuncFactoryCallback(
         case TOPFREQ:
             factory = BuildTopFreqFactoryAggregation(pos, realFunctionName, factoryName, aggMode);
             break;
-        case TOP:
-            factory = BuildTopFactoryAggregation<false>(pos, realFunctionName, factoryName, aggMode);
-            break;
-        case TOP_BY:
-            factory = BuildTopFactoryAggregation<true>(pos, realFunctionName, factoryName, aggMode);
-            break;
+        case TOP: 
+            factory = BuildTopFactoryAggregation<false>(pos, realFunctionName, factoryName, aggMode); 
+            break; 
+        case TOP_BY: 
+            factory = BuildTopFactoryAggregation<true>(pos, realFunctionName, factoryName, aggMode); 
+            break; 
         case COUNT_DISTINCT_ESTIMATE:
             factory = BuildCountDistinctEstimateFactoryAggregation(pos, realFunctionName, factoryName, aggMode);
             break;
@@ -2026,7 +2026,7 @@ struct TBuiltinFuncData {
             {"tablerecordindex", BuildNamedBuiltinFactoryCallback<TCallDirectRow>("TableRecord") },
             {"weakfield", BuildSimpleBuiltinFactoryCallback<TWeakFieldOp>()},
             {"tablerow", BuildSimpleBuiltinFactoryCallback<TTableRow>() },
-
+ 
             // Hint builtins
             {"grouping", BuildSimpleBuiltinFactoryCallback<TGroupingNode>()},
 
@@ -2088,11 +2088,11 @@ struct TBuiltinFuncData {
             {"mode", BuildAggrFuncFactoryCallback("Mode", "topfreq_traits_factory", TOPFREQ) },
             {"topfreq", BuildAggrFuncFactoryCallback("TopFreq", "topfreq_traits_factory", TOPFREQ) },
 
-            {"top", BuildAggrFuncFactoryCallback("Top", "top_traits_factory", TOP)},
-            {"bottom", BuildAggrFuncFactoryCallback("Bottom", "bottom_traits_factory", TOP)},
-            {"topby", BuildAggrFuncFactoryCallback("TopBy", "top_by_traits_factory", TOP_BY)},
-            {"bottomby", BuildAggrFuncFactoryCallback("BottomBy", "bottom_by_traits_factory", TOP_BY)},
-
+            {"top", BuildAggrFuncFactoryCallback("Top", "top_traits_factory", TOP)}, 
+            {"bottom", BuildAggrFuncFactoryCallback("Bottom", "bottom_traits_factory", TOP)}, 
+            {"topby", BuildAggrFuncFactoryCallback("TopBy", "top_by_traits_factory", TOP_BY)}, 
+            {"bottomby", BuildAggrFuncFactoryCallback("BottomBy", "bottom_by_traits_factory", TOP_BY)}, 
+ 
             {"histogram", BuildAggrFuncFactoryCallback("AdaptiveWardHistogram", "histogram_adaptive_ward_traits_factory", HISTOGRAM, "Histogram")},
             {"adaptivewardhistogram", BuildAggrFuncFactoryCallback("AdaptiveWardHistogram", "histogram_adaptive_ward_traits_factory", HISTOGRAM)},
             {"adaptiveweighthistogram", BuildAggrFuncFactoryCallback("AdaptiveWeightHistogram", "histogram_adaptive_weight_traits_factory", HISTOGRAM)},
@@ -2334,9 +2334,9 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
 
             return BuildUdf(ctx, pos, moduleName, name, newArgs);
         }
-    } else if (ns == "datetime2" && (name == "Format" || name == "Parse")) {
-        return BuildUdf(ctx, pos, nameSpace, name, args);
-
+    } else if (ns == "datetime2" && (name == "Format" || name == "Parse")) { 
+        return BuildUdf(ctx, pos, nameSpace, name, args); 
+ 
     } else if (scriptType != NKikimr::NMiniKQL::EScriptType::Unknown) {
         auto scriptName = NKikimr::NMiniKQL::ScriptTypeAsStr(scriptType);
         return new TScriptUdf(pos, TString(scriptName), name, args);

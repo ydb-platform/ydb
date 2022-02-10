@@ -111,7 +111,7 @@ struct TKikimrEvents : TEvents {
         ES_TX_ALLOCATOR_CLIENT,
         ES_PQ_CLUSTER_TRACKER,
         ES_NET_CLASSIFIER,
-        ES_SYSTEM_VIEW,
+        ES_SYSTEM_VIEW, 
         ES_TENANT_NODE_ENUMERATOR,
         ES_SERVICE_ACCOUNT_SERVICE,
         ES_INDEX_BUILD,

@@ -2022,7 +2022,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         Y_VERIFY(!partitions.empty());
                         Y_VERIFY(Self->Tables.contains(prevTableId));
                         TTableInfo::TPtr tableInfo = Self->Tables.at(prevTableId);
-                        Self->SetPartitioning(prevTableId, tableInfo, std::move(partitions));
+                        Self->SetPartitioning(prevTableId, tableInfo, std::move(partitions)); 
                         partitions.clear();
                     }
 
@@ -2055,7 +2055,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 Y_VERIFY(!partitions.empty());
                 Y_VERIFY(Self->Tables.contains(prevTableId));
                 TTableInfo::TPtr tableInfo = Self->Tables.at(prevTableId);
-                Self->SetPartitioning(prevTableId, tableInfo, std::move(partitions));
+                Self->SetPartitioning(prevTableId, tableInfo, std::move(partitions)); 
             }
         }
 
@@ -3710,9 +3710,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             case ETabletType::Hive:
                 Self->TabletCounters->Simple()[COUNTER_SUB_DOMAIN_HIVE_COUNT].Add(1);
                 break;
-            case ETabletType::SysViewProcessor:
-                Self->TabletCounters->Simple()[COUNTER_SYS_VIEW_PROCESSOR_COUNT].Add(1);
-                break;
+            case ETabletType::SysViewProcessor: 
+                Self->TabletCounters->Simple()[COUNTER_SYS_VIEW_PROCESSOR_COUNT].Add(1); 
+                break; 
             case ETabletType::ColumnShard:
                 Self->TabletCounters->Simple()[COUNTER_OLAP_COLUMN_SHARDS].Add(1);
                 break;

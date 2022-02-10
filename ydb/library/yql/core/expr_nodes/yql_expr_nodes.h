@@ -180,19 +180,19 @@ public:
     }
 
     TNodeBuilder<TParent, TCoLambda>& Args(const std::vector<TCoArgument>& list)
-    {
-        Y_VERIFY_DEBUG(!this->ArgsHolder.IsValid());
-
+    { 
+        Y_VERIFY_DEBUG(!this->ArgsHolder.IsValid()); 
+ 
         TExprNode::TListType argNodes;
-        for (auto arg : list) {
-            argNodes.push_back(arg.Ptr());
-        }
-
-        auto argsNode = this->Ctx.NewArguments(this->Pos, std::move(argNodes));
+        for (auto arg : list) { 
+            argNodes.push_back(arg.Ptr()); 
+        } 
+ 
+        auto argsNode = this->Ctx.NewArguments(this->Pos, std::move(argNodes)); 
         this->ArgsHolder = TCoArguments(argsNode);
-        return *this;
-    }
-
+        return *this; 
+    } 
+ 
     TNodeBuilder<TParent, TCoLambda>& Args(const TExprNode::TListType& list)
     {
         Y_VERIFY_DEBUG(!this->ArgsHolder.IsValid());

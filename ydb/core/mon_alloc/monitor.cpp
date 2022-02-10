@@ -1,5 +1,5 @@
 #include "monitor.h"
-#include "tcmalloc.h"
+#include "tcmalloc.h" 
 
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/appdata.h>
@@ -8,7 +8,7 @@
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/prof/tag.h>
-#include <library/cpp/html/pcdata/pcdata.h>
+#include <library/cpp/html/pcdata/pcdata.h> 
 #include <library/cpp/lfalloc/dbg_info/dbg_info.h>
 #include <library/cpp/malloc/api/malloc.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
@@ -72,7 +72,7 @@ namespace NKikimr {
             }
 
             void Update() override {
-#ifdef PROFILE_MEMORY_ALLOCATIONS
+#ifdef PROFILE_MEMORY_ALLOCATIONS 
                 int maxTag = 0;
                 int numSizes = 0;
                 auto info = NAllocDbg::GetPerTagAllocInfo(true, maxTag, numSizes);
@@ -142,21 +142,21 @@ namespace NKikimr {
                         bySize.Set(bucket.Count, bucket.Size);
                     }
                 }
-#endif
+#endif 
             }
 
-            void Dump(IOutputStream& out, const TString& relPath) override {
-                Y_UNUSED(relPath);
-#ifdef PROFILE_MEMORY_ALLOCATIONS
+            void Dump(IOutputStream& out, const TString& relPath) override { 
+                Y_UNUSED(relPath); 
+#ifdef PROFILE_MEMORY_ALLOCATIONS 
                 int maxTag = 0;
                 int numSizes = 0;
                 auto info = NAllocDbg::GetPerTagAllocInfo(true, maxTag, numSizes);
 
                 HTML(out) {
-                    H3() {
-                        out << "LFAlloc" << Endl;
-                    }
-                    out << "<hr>" << Endl;
+                    H3() { 
+                        out << "LFAlloc" << Endl; 
+                    } 
+                    out << "<hr>" << Endl; 
                     TABLE_SORTABLE_CLASS("table") {
                         TABLEHEAD() {
                             TABLER() {
@@ -244,15 +244,15 @@ namespace NKikimr {
                                "{$('[data-toggle=\"tooltip\"]').tooltip();}</script>";
                     }
                 }
-#else
-                HTML(out) {
-                    H3() {
-                        out << "LFAlloc" << Endl;
-                    }
-                    out << "<hr>" << Endl;
-                    out << "PROFILE_MEMORY_ALLOCATIONS is off" << Endl;
-                }
-#endif
+#else 
+                HTML(out) { 
+                    H3() { 
+                        out << "LFAlloc" << Endl; 
+                    } 
+                    out << "<hr>" << Endl; 
+                    out << "PROFILE_MEMORY_ALLOCATIONS is off" << Endl; 
+                } 
+#endif 
             }
         };
 
@@ -267,7 +267,7 @@ namespace NKikimr {
             }
 
             void Update() override {
-#ifdef PROFILE_MEMORY_ALLOCATIONS
+#ifdef PROFILE_MEMORY_ALLOCATIONS 
                 using namespace NYT::NYTAlloc;
 
                 size_t maxTag = NProfiling::GetTagsCount();
@@ -295,12 +295,12 @@ namespace NKikimr {
 
                     *perTag = usages[tag];
                 }
-#endif
+#endif 
             }
 
-            void Dump(IOutputStream& out, const TString& relPath) override {
-                Y_UNUSED(relPath);
-#ifdef PROFILE_MEMORY_ALLOCATIONS
+            void Dump(IOutputStream& out, const TString& relPath) override { 
+                Y_UNUSED(relPath); 
+#ifdef PROFILE_MEMORY_ALLOCATIONS 
                 using namespace NYT::NYTAlloc;
 
                 size_t maxTag = NProfiling::GetTagsCount();
@@ -312,10 +312,10 @@ namespace NKikimr {
                 GetMemoryUsageForTags(tags.data(), tags.size(), usages.data());
 
                 HTML(out) {
-                    H3() {
-                        out << "YTAlloc" << Endl;
-                    }
-                    out << "<hr>" << Endl;
+                    H3() { 
+                        out << "YTAlloc" << Endl; 
+                    } 
+                    out << "<hr>" << Endl; 
                     TABLE_SORTABLE_CLASS("table") {
                         TABLEHEAD() {
                             TABLER() {
@@ -354,15 +354,15 @@ namespace NKikimr {
                         }
                     }
                 }
-#else
-                HTML(out) {
-                    H3() {
-                        out << "YTAlloc" << Endl;
-                    }
-                    out << "<hr>" << Endl;
-                    out << "PROFILE_MEMORY_ALLOCATIONS is off" << Endl;
-                }
-#endif
+#else 
+                HTML(out) { 
+                    H3() { 
+                        out << "YTAlloc" << Endl; 
+                    } 
+                    out << "<hr>" << Endl; 
+                    out << "PROFILE_MEMORY_ALLOCATIONS is off" << Endl; 
+                } 
+#endif 
             }
         };
 
@@ -370,50 +370,50 @@ namespace NKikimr {
             void Update() override {
             }
 
-            void Dump(IOutputStream& out, const TString& relPath) override {
+            void Dump(IOutputStream& out, const TString& relPath) override { 
                 Y_UNUSED(out);
-                Y_UNUSED(relPath);
+                Y_UNUSED(relPath); 
             }
         };
 
         std::unique_ptr<IAllocMonitor> CreateAllocMonitor(TDynamicCountersPtr group) {
             const auto& info = NMalloc::MallocInfo();
-            TStringBuf name(info.Name);
+            TStringBuf name(info.Name); 
 
-            std::unique_ptr<IAllocMonitor> monitor;
+            std::unique_ptr<IAllocMonitor> monitor; 
             if (name.StartsWith("lf")) {
-                monitor = std::make_unique<TLfAllocMonitor>(std::move(group));
+                monitor = std::make_unique<TLfAllocMonitor>(std::move(group)); 
             } else if (name.StartsWith("yt")) {
-                monitor = std::make_unique<TYtAllocMonitor>(std::move(group));
-            } else if (name.StartsWith("tc")) {
-                monitor = std::move(CreateTcMallocMonitor(std::move(group)));
+                monitor = std::make_unique<TYtAllocMonitor>(std::move(group)); 
+            } else if (name.StartsWith("tc")) { 
+                monitor = std::move(CreateTcMallocMonitor(std::move(group))); 
             }
-
-            return monitor ? std::move(monitor) : std::make_unique<TFakeAllocMonitor>();
+ 
+            return monitor ? std::move(monitor) : std::make_unique<TFakeAllocMonitor>(); 
         }
 
         class TMemProfMonitor: public TActorBootstrapped<TMemProfMonitor> {
-            struct TDumpLogConfig {
-                static constexpr double RssUsageHard = 0.9;
-                static constexpr double RssUsageSoft = 0.85;
-                static constexpr TDuration RepeatInterval = TDuration::Seconds(10);
-                static constexpr TDuration DumpInterval = TDuration::Minutes(10);
-            };
-
-            enum {
-                EvDumpLogStats = EventSpaceBegin(TEvents::ES_PRIVATE),
-                EvEnd
-            };
-
-            struct TEvDumpLogStats : public TEventLocal<TEvDumpLogStats, EvDumpLogStats> {};
-
+            struct TDumpLogConfig { 
+                static constexpr double RssUsageHard = 0.9; 
+                static constexpr double RssUsageSoft = 0.85; 
+                static constexpr TDuration RepeatInterval = TDuration::Seconds(10); 
+                static constexpr TDuration DumpInterval = TDuration::Minutes(10); 
+            }; 
+ 
+            enum { 
+                EvDumpLogStats = EventSpaceBegin(TEvents::ES_PRIVATE), 
+                EvEnd 
+            }; 
+ 
+            struct TEvDumpLogStats : public TEventLocal<TEvDumpLogStats, EvDumpLogStats> {}; 
+ 
             const TDuration Interval;
             const std::unique_ptr<IAllocMonitor> AllocMonitor;
 
-            TInstant LogMemoryStatsTime = TInstant::Now() - TDumpLogConfig::DumpInterval;
-
-            bool IsDangerous = false;
-
+            TInstant LogMemoryStatsTime = TInstant::Now() - TDumpLogConfig::DumpInterval; 
+ 
+            bool IsDangerous = false; 
+ 
         public:
             static constexpr EActivityType ActorActivityType() {
                 return ACTORLIB_STATS;
@@ -422,7 +422,7 @@ namespace NKikimr {
             TMemProfMonitor(TDuration interval, std::unique_ptr<IAllocMonitor> allocMonitor)
                 : Interval(interval)
                 , AllocMonitor(std::move(allocMonitor))
-            {}
+            {} 
 
             void Bootstrap(const TActorContext& ctx) {
                 NActors::TMon* mon = AppData(ctx)->Mon;
@@ -433,14 +433,14 @@ namespace NKikimr {
                     return;
                 }
 
-                auto* indexPage = mon->RegisterIndexPage("memory", "Memory");
+                auto* indexPage = mon->RegisterIndexPage("memory", "Memory"); 
                 mon->RegisterActorPage(
-                    indexPage, "statistics", "Statistics",
+                    indexPage, "statistics", "Statistics", 
                     false, ctx.ExecutorThread.ActorSystem, ctx.SelfID);
 
-                AllocMonitor->RegisterPages(mon, ctx.ExecutorThread.ActorSystem, ctx.SelfID);
-                AllocMonitor->RegisterControls(AppData(ctx)->Icb);
-
+                AllocMonitor->RegisterPages(mon, ctx.ExecutorThread.ActorSystem, ctx.SelfID); 
+                AllocMonitor->RegisterControls(AppData(ctx)->Icb); 
+ 
                 Become(&TThis::StateWork);
                 ctx.Schedule(Interval, new TEvents::TEvWakeup());
             }
@@ -449,65 +449,65 @@ namespace NKikimr {
             STFUNC(StateWork) {
                 switch (ev->GetTypeRewrite()) {
                     CFunc(TEvents::TEvWakeup::EventType, HandleWakeup);
-                    HFunc(TEvDumpLogStats, HandleDump);
+                    HFunc(TEvDumpLogStats, HandleDump); 
                     HFunc(NMon::TEvHttpInfo, HandleHttpInfo);
                 }
             }
 
-            void LogMemoryStats(const TActorContext& ctx, size_t limit) noexcept {
-                LogMemoryStatsTime = TInstant::Now();
-                TStringStream out;
-                AllocMonitor->DumpForLog(out, limit);
-
-                TVector<TString> split;
-                Split(out.Str(), "\n", split);
-                for (const auto& line : split) {
-                    LOG_WARN_S(ctx, NKikimrServices::MEMORY_PROFILER, line);
-                }
-            }
-
-            void LogMemoryStatsIfNeeded(const TActorContext& ctx) noexcept {
-                auto memoryUsage = TAllocState::GetMemoryUsage();
-
-                if (IsDangerous && memoryUsage < TDumpLogConfig::RssUsageSoft) {
-                    IsDangerous = false;
-                } else if (!IsDangerous && memoryUsage > TDumpLogConfig::RssUsageHard) {
-                    if (TInstant::Now() - LogMemoryStatsTime > TDumpLogConfig::DumpInterval) {
-                        IsDangerous = true;
-                        LOG_WARN_S(ctx, NKikimrServices::MEMORY_PROFILER,
-                            "RSS usage " << memoryUsage * 100. << "%");
-                        LogMemoryStats(ctx, 256);
-                        ctx.Schedule(TDumpLogConfig::RepeatInterval, new TEvDumpLogStats);
-                    }
-                }
-            }
-
+            void LogMemoryStats(const TActorContext& ctx, size_t limit) noexcept { 
+                LogMemoryStatsTime = TInstant::Now(); 
+                TStringStream out; 
+                AllocMonitor->DumpForLog(out, limit); 
+ 
+                TVector<TString> split; 
+                Split(out.Str(), "\n", split); 
+                for (const auto& line : split) { 
+                    LOG_WARN_S(ctx, NKikimrServices::MEMORY_PROFILER, line); 
+                } 
+            } 
+ 
+            void LogMemoryStatsIfNeeded(const TActorContext& ctx) noexcept { 
+                auto memoryUsage = TAllocState::GetMemoryUsage(); 
+ 
+                if (IsDangerous && memoryUsage < TDumpLogConfig::RssUsageSoft) { 
+                    IsDangerous = false; 
+                } else if (!IsDangerous && memoryUsage > TDumpLogConfig::RssUsageHard) { 
+                    if (TInstant::Now() - LogMemoryStatsTime > TDumpLogConfig::DumpInterval) { 
+                        IsDangerous = true; 
+                        LOG_WARN_S(ctx, NKikimrServices::MEMORY_PROFILER, 
+                            "RSS usage " << memoryUsage * 100. << "%"); 
+                        LogMemoryStats(ctx, 256); 
+                        ctx.Schedule(TDumpLogConfig::RepeatInterval, new TEvDumpLogStats); 
+                    } 
+                } 
+            } 
+ 
             void HandleWakeup(const TActorContext& ctx) noexcept {
                 AllocMonitor->Update();
-                LogMemoryStatsIfNeeded(ctx);
+                LogMemoryStatsIfNeeded(ctx); 
                 ctx.Schedule(Interval, new TEvents::TEvWakeup());
             }
 
-            void HandleDump(TEvDumpLogStats::TPtr&, const TActorContext& ctx) noexcept {
-                if (IsDangerous) {
-                    auto memoryUsage = TAllocState::GetMemoryUsage();
-                    LOG_WARN_S(ctx, NKikimrServices::MEMORY_PROFILER,
-                        "RSS usage " << memoryUsage * 100. << "%");
-                    LogMemoryStats(ctx, 256);
-                }
-            }
-
+            void HandleDump(TEvDumpLogStats::TPtr&, const TActorContext& ctx) noexcept { 
+                if (IsDangerous) { 
+                    auto memoryUsage = TAllocState::GetMemoryUsage(); 
+                    LOG_WARN_S(ctx, NKikimrServices::MEMORY_PROFILER, 
+                        "RSS usage " << memoryUsage * 100. << "%"); 
+                    LogMemoryStats(ctx, 256); 
+                } 
+            } 
+ 
             void HandleHttpInfo(NMon::TEvHttpInfo::TPtr& ev, const TActorContext& ctx) noexcept {
-                TString action = ev->Get()->Request.GetParams().Get("action");
-                TString relPath(ev->Get()->Request.GetPath());
+                TString action = ev->Get()->Request.GetParams().Get("action"); 
+                TString relPath(ev->Get()->Request.GetPath()); 
                 TStringStream out;
-                if (action == "log" && relPath == "/memory/heap") {
-                    LogMemoryStats(ctx, 2048);
-                    out << "<p>Output dumped to log</p>"
-                        << "<p><a href=\"/memory/heap\">Return</a></p>\n";
-                } else {
-                    AllocMonitor->Dump(out, relPath);
-                }
+                if (action == "log" && relPath == "/memory/heap") { 
+                    LogMemoryStats(ctx, 2048); 
+                    out << "<p>Output dumped to log</p>" 
+                        << "<p><a href=\"/memory/heap\">Return</a></p>\n"; 
+                } else { 
+                    AllocMonitor->Dump(out, relPath); 
+                } 
                 ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(out.Str()));
             }
         };

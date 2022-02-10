@@ -19,8 +19,8 @@ TMaybe<EFormat> ParseFormat(TStringBuf str) {
         return EFormat::JSON;
     } else if (str == TStringBuf("spack")) {
         return EFormat::SPACK;
-    } else if (str == TStringBuf("prometheus")) {
-        return EFormat::PROMETHEUS;
+    } else if (str == TStringBuf("prometheus")) { 
+        return EFormat::PROMETHEUS; 
     } else {
         return Nothing();
     }
@@ -84,8 +84,8 @@ void TDynamicCountersPage::Output(NMonitoring::IMonHttpRequest& request) {
         out << HTTPOKJSON;
     } else if (*format == EFormat::SPACK) {
         out << HTTPOKSPACK;
-    } else if (*format == EFormat::PROMETHEUS) {
-        out << HTTPOKPROMETHEUS;
+    } else if (*format == EFormat::PROMETHEUS) { 
+        out << HTTPOKPROMETHEUS; 
     } else {
         ythrow yexception() << "unsupported metric encoding format: " << *format;
     }

@@ -211,9 +211,9 @@ TIntrusivePtr<TTabletSetupInfo> MakeTabletSetupInfo(
     case TTabletTypes::Kesus:
         createFunc = &NKesus::CreateKesusTablet;
         break;
-    case TTabletTypes::SysViewProcessor:
-        createFunc = &NSysView::CreateSysViewProcessor;
-        break;
+    case TTabletTypes::SysViewProcessor: 
+        createFunc = &NSysView::CreateSysViewProcessor; 
+        break; 
     case TTabletTypes::TestShard:
         createFunc = &NTestShard::CreateTestShard;
         break;

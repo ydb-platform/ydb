@@ -15,24 +15,24 @@ namespace NKikimr {
             virtual void Deallocate(char*) noexcept = 0;
         };
 
-        struct TPrivateHeader {
-            size_t AllocSize;
-            size_t Pad;
-        };
-
-        static_assert(sizeof(TPrivateHeader) == 16, "TPrivateHeader has an unexpected size");
-
+        struct TPrivateHeader { 
+            size_t AllocSize; 
+            size_t Pad; 
+        }; 
+ 
+        static_assert(sizeof(TPrivateHeader) == 16, "TPrivateHeader has an unexpected size"); 
+ 
         struct THeader {
             TAtomic RefCount;
             IOwner* Owner;
         };
 
-        static_assert(sizeof(THeader) == 16, "THeader has an unexpected size");
-
+        static_assert(sizeof(THeader) == 16, "THeader has an unexpected size"); 
+ 
         enum : size_t {
-            PrivateHeaderSize = sizeof(TPrivateHeader),
-            HeaderSize = sizeof(THeader),
-            OverheadSize = PrivateHeaderSize + HeaderSize,
+            PrivateHeaderSize = sizeof(TPrivateHeader), 
+            HeaderSize = sizeof(THeader), 
+            OverheadSize = PrivateHeaderSize + HeaderSize, 
             MaxDataSize = (std::numeric_limits<size_t>::max() - OverheadSize)
         };
 

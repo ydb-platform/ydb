@@ -595,17 +595,17 @@ public:
                 }
             }
             for (auto& keyColumn : Params.PartitionByColumns) {
-                if (!columnsSet.contains(keyColumn.Name)) {
-                    ctx.Error(keyColumn.Pos) << "Undefined column: " << keyColumn.Name;
-                    return false;
-                }
-            }
+                if (!columnsSet.contains(keyColumn.Name)) { 
+                    ctx.Error(keyColumn.Pos) << "Undefined column: " << keyColumn.Name; 
+                    return false; 
+                } 
+            } 
             for (auto& keyColumn : Params.OrderByColumns) {
-                if (!columnsSet.contains(keyColumn.first.Name)) {
-                    ctx.Error(keyColumn.first.Pos) << "Undefined column: " << keyColumn.first.Name;
-                    return false;
-                }
-            }
+                if (!columnsSet.contains(keyColumn.first.Name)) { 
+                    ctx.Error(keyColumn.first.Pos) << "Undefined column: " << keyColumn.first.Name; 
+                    return false; 
+                } 
+            } 
 
             THashSet<TString> indexNames;
             for (const auto& index : Params.Indexes) {
@@ -641,9 +641,9 @@ public:
         for (auto& col : Params.Columns) {
             auto columnDesc = Y();
             columnDesc = L(columnDesc, BuildQuotedAtom(Pos, col.Name));
-            auto type = col.Type;
+            auto type = col.Type; 
             if (col.Nullable) {
-                type = Y("OptionalType", type);
+                type = Y("OptionalType", type); 
             }
             columnDesc = L(columnDesc, type);
             if (col.Families) {
@@ -668,33 +668,33 @@ public:
 
         if (Table.Service == RtmrProviderName) {
             if (!Params.PkColumns.empty() && !Params.PartitionByColumns.empty()) {
-                ctx.Error() << "Only one of PRIMARY KEY or PARTITION BY constraints may be specified";
-                return false;
-            }
-        } else {
+                ctx.Error() << "Only one of PRIMARY KEY or PARTITION BY constraints may be specified"; 
+                return false; 
+            } 
+        } else { 
             if (!Params.OrderByColumns.empty()) {
                 ctx.Error() << "ORDER BY is supported only for " << RtmrProviderName << " provider";
-                return false;
-            }
-        }
-
+                return false; 
+            } 
+        } 
+ 
         if (!Params.PkColumns.empty()) {
-            auto primaryKey = Y();
+            auto primaryKey = Y(); 
             for (auto& col : Params.PkColumns) {
-                primaryKey = L(primaryKey, BuildQuotedAtom(col.Pos, col.Name));
-            }
+                primaryKey = L(primaryKey, BuildQuotedAtom(col.Pos, col.Name)); 
+            } 
             opts = L(opts, Q(Y(Q("primarykey"), Q(primaryKey))));
             if (!Params.OrderByColumns.empty()) {
-                ctx.Error() << "PRIMARY KEY cannot be used with ORDER BY, use PARTITION BY instead";
-                return false;
-            }
+                ctx.Error() << "PRIMARY KEY cannot be used with ORDER BY, use PARTITION BY instead"; 
+                return false; 
+            } 
         }
 
         if (!Params.PartitionByColumns.empty()) {
             auto partitionBy = Y();
             for (auto& col : Params.PartitionByColumns) {
                 partitionBy = L(partitionBy, BuildQuotedAtom(col.Pos, col.Name));
-            }
+            } 
             opts = L(opts, Q(Y(Q("partitionby"), Q(partitionBy))));
         }
 
@@ -702,9 +702,9 @@ public:
             auto orderBy = Y();
             for (auto& col : Params.OrderByColumns) {
                 orderBy = L(orderBy, Q(Y(BuildQuotedAtom(col.first.Pos, col.first.Name), col.second ? Q("1") : Q("0"))));
-            }
+            } 
             opts = L(opts, Q(Y(Q("orderby"), Q(orderBy))));
-        }
+        } 
 
         for (const auto& index : Params.Indexes) {
             const auto& desc = CreateIndexDesc(index, *this);
@@ -840,9 +840,9 @@ public:
             for (auto& col : Params.AddColumns) {
                 auto columnDesc = Y();
                 columnDesc = L(columnDesc, BuildQuotedAtom(Pos, col.Name));
-                auto type = col.Type;
+                auto type = col.Type; 
                 if (col.Nullable) {
-                    type = Y("OptionalType", type);
+                    type = Y("OptionalType", type); 
                 }
                 columnDesc = L(columnDesc, type);
                 if (col.Families) {

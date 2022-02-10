@@ -27,7 +27,7 @@ struct TEvDqCompute {
 
     struct TEvChannelData : public NActors::TEventPB<TEvChannelData, NDqProto::TEvComputeChannelData,
         TDqComputeEvents::EvChannelData> {};
-
+ 
     struct TEvChannelDataAck : public NActors::TEventPB<TEvChannelDataAck, NDqProto::TEvComputeChannelDataAck,
         TDqComputeEvents::EvChannelDataAck> {};
 

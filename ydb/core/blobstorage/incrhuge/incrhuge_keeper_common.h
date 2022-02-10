@@ -201,7 +201,7 @@ namespace NKikimr {
         // event callback base; it is a class that holds some data and has an apply function which is called when
         // log entry is written or write is failed or for other event; uses NALF incremental allocator, because it
         // is short-term object
-        class IEventCallback {
+        class IEventCallback { 
         public:
             virtual ~IEventCallback() = default;
             virtual void Apply(NKikimrProto::EReplyStatus status, IEventBase *result, const TActorContext& ctx) = 0;

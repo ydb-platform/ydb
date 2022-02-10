@@ -389,7 +389,7 @@ std::pair<ui32, bool> TValuePacker::SkipEmbeddedLength(TStringBuf& buf) {
     return {length, emptySingleOptional};
 }
 
-NUdf::TUnboxedValue TValuePacker::Unpack(TStringBuf buf, const THolderFactory& holderFactory) const {
+NUdf::TUnboxedValue TValuePacker::Unpack(TStringBuf buf, const THolderFactory& holderFactory) const { 
     auto pair = SkipEmbeddedLength(buf);
     ui32 length = pair.first;
     bool emptySingleOptional = pair.second;
@@ -417,7 +417,7 @@ NUdf::TUnboxedValue TValuePacker::Unpack(TStringBuf buf, const THolderFactory& h
 }
 
 NUdf::TUnboxedValue TValuePacker::UnpackImpl(const TType* type, TStringBuf& buf, ui32 topLength,
-    const THolderFactory& holderFactory) const
+    const THolderFactory& holderFactory) const 
 {
     switch (type->GetKind()) {
     case TType::EKind::Void:
@@ -592,7 +592,7 @@ NUdf::TUnboxedValue TValuePacker::UnpackImpl(const TType* type, TStringBuf& buf,
     }
 }
 
-TStringBuf TValuePacker::Pack(const NUdf::TUnboxedValuePod& value) const {
+TStringBuf TValuePacker::Pack(const NUdf::TUnboxedValuePod& value) const { 
     OptionalUsageMask.Reset();
     const size_t lengthReserve = sizeof(ui32);
     Buffer.Proceed(lengthReserve + OptionalMaskReserve);
@@ -643,7 +643,7 @@ TStringBuf TValuePacker::Pack(const NUdf::TUnboxedValuePod& value) const {
     return TStringBuf(Buffer.Data() + delta, len - delta);
 }
 
-void TValuePacker::PackImpl(const TType* type, const NUdf::TUnboxedValuePod& value) const {
+void TValuePacker::PackImpl(const TType* type, const NUdf::TUnboxedValuePod& value) const { 
     switch (type->GetKind()) {
     case TType::EKind::Void:
         break;

@@ -799,8 +799,8 @@ struct TEvBlobStorage {
         EvControllerMigrationBatchRequest,
         EvControllerMigrationDone,
 
-        EvControllerUpdateSystemViews,
-
+        EvControllerUpdateSystemViews, 
+ 
         // proxy - node controller interface
         EvConfigureProxy = EvPut + 13 * 512,
         EvProxyConfigurationRequest, // DEPRECATED

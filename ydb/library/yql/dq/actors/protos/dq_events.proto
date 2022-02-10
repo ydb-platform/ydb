@@ -47,11 +47,11 @@ message TComputeActorStats {
     reserved 2; //optional NKqpProto.TKqpStatsRun LegacyStats = 2;
 };
 
-message TEvComputeActorState {
+message TEvComputeActorState { 
     optional uint32 State = 1; // == EComputeState
     optional TComputeActorStats LegacyStats = 2;
-    optional Ydb.StatusIds.StatusCode Status = 3;
-    repeated Ydb.Issue.IssueMessage Issues = 4;
+    optional Ydb.StatusIds.StatusCode Status = 3; 
+    repeated Ydb.Issue.IssueMessage Issues = 4; 
     optional uint64 TaskId = 5;
     optional TDqComputeActorStats Stats = 6;
 };
@@ -71,7 +71,7 @@ message TEvComputeChannelDataAck {
     optional uint64 SeqNo = 2;
     optional int64 FreeSpace = 3;
     optional bool Finish = 4;
-};
+}; 
 
 message TEvAbortExecution {
     optional Ydb.StatusIds.StatusCode StatusCode = 1;

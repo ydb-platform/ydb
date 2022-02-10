@@ -235,8 +235,8 @@ struct TEvSchemeShard {
 
         TEvDescribeScheme(TTableId tableId)
         {
-            Record.SetSchemeshardId(tableId.PathId.OwnerId);
-            Record.SetPathId(tableId.PathId.LocalPathId);
+            Record.SetSchemeshardId(tableId.PathId.OwnerId); 
+            Record.SetPathId(tableId.PathId.LocalPathId); 
         }
 
         TEvDescribeScheme(NKikimr::TPathId pathId)
@@ -425,7 +425,7 @@ struct TEvSchemeShard {
                                  ui64 effectiveACLVersion,
                                  ui64 subdomainVersion,
                                  ui64 userAttrsVersion,
-                                 ui64 tenantHive,
+                                 ui64 tenantHive, 
                                  ui64 tenantSysViewProcessor,
                                  const TString& rootACL)
         {
@@ -440,7 +440,7 @@ struct TEvSchemeShard {
             Record.SetUserAttributesVersion(userAttrsVersion);
 
             Record.SetTenantHive(tenantHive);
-            Record.SetTenantSysViewProcessor(tenantSysViewProcessor);
+            Record.SetTenantSysViewProcessor(tenantSysViewProcessor); 
 
             Record.SetTenantRootACL(rootACL);
         }
@@ -483,10 +483,10 @@ struct TEvSchemeShard {
         void SetTenantHive(ui64 hive) {
             Record.SetTenantHive(hive);
         }
-
-        void SetTenantSysViewProcessor(ui64 svp) {
-            Record.SetTenantSysViewProcessor(svp);
-        }
+ 
+        void SetTenantSysViewProcessor(ui64 svp) { 
+            Record.SetTenantSysViewProcessor(svp); 
+        } 
 
         void SetUpdateTenantRootACL(const TString& acl) {
             Record.SetUpdateTenantRootACL(acl);

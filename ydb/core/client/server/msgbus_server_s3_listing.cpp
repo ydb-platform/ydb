@@ -396,7 +396,7 @@ private:
         ui64 shardId = KeyRange->Partitions[idx].ShardId;
 
         THolder<TEvDataShard::TEvS3ListingRequest> ev(new TEvDataShard::TEvS3ListingRequest());
-        ev->Record.SetTableId(KeyRange->TableId.PathId.LocalPathId);
+        ev->Record.SetTableId(KeyRange->TableId.PathId.LocalPathId); 
         ev->Record.SetSerializedKeyPrefix(PrefixColumns.GetBuffer());
         ev->Record.SetPathColumnPrefix(Request->GetPathColumnPrefix());
         ev->Record.SetPathColumnDelimiter(Request->GetPathColumnDelimiter());

@@ -42,10 +42,10 @@ void IBinSaver::StoreObject(IObjectBase* pObject) {
         ObjectQueue.push_back(pObject);
         (*Objects)[ptrId];
         int typeId = pSaverClasses->GetObjectTypeID(pObject);
-        if (typeId == -1) {
-            fprintf(stderr, "IBinSaver: trying to save unregistered object\n");
-            abort();
-        }
+        if (typeId == -1) { 
+            fprintf(stderr, "IBinSaver: trying to save unregistered object\n"); 
+            abort(); 
+        } 
         DataChunk(&typeId, sizeof(typeId));
     }
 }
@@ -64,9 +64,9 @@ IObjectBase* IBinSaver::LoadObject() {
         IObjectBase* pObj = pSaverClasses->CreateObject(typeId);
         Y_ASSERT(pObj != nullptr);
         if (pObj == nullptr) {
-            fprintf(stderr, "IBinSaver: trying to load unregistered object\n");
-            abort();
-        }
+            fprintf(stderr, "IBinSaver: trying to load unregistered object\n"); 
+            abort(); 
+        } 
         (*Objects)[ptrId] = pObj;
         ObjectQueue.push_back(pObj);
         return pObj;

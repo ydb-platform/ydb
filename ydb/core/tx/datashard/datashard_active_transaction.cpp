@@ -7,8 +7,8 @@
 #include "datashard_failpoints.h"
 #include "key_conflicts.h"
 
-#include <library/cpp/actors/core/memory_track.h>
-
+#include <library/cpp/actors/core/memory_track.h> 
+ 
 namespace NKikimr {
 namespace NDataShard {
 
@@ -38,9 +38,9 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
         return;
     }
 
-    ComputeTxSize();
-    NActors::NMemory::TLabel<MemoryLabelValidatedDataTx>::Add(TxSize);
-
+    ComputeTxSize(); 
+    NActors::NMemory::TLabel<MemoryLabelValidatedDataTx>::Add(TxSize); 
+ 
     Y_VERIFY(Tx.HasMiniKQL() || Tx.HasReadTableTransaction() || Tx.HasKqpTransaction(),
              "One of the fields should be set: MiniKQL, ReadTableTransaction, KqpTransaction");
 
@@ -195,10 +195,10 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
     ComputeDeadline();
 }
 
-TValidatedDataTx::~TValidatedDataTx() {
-    NActors::NMemory::TLabel<MemoryLabelValidatedDataTx>::Sub(TxSize);
-}
-
+TValidatedDataTx::~TValidatedDataTx() { 
+    NActors::NMemory::TLabel<MemoryLabelValidatedDataTx>::Sub(TxSize); 
+} 
+ 
 const google::protobuf::RepeatedPtrField<NYql::NDqProto::TDqTask>& TValidatedDataTx::GetKqpTasks() const {
     Y_VERIFY(IsKqpTx());
     return Tx.GetKqpTransaction().GetTasks();
@@ -309,10 +309,10 @@ void TValidatedDataTx::ReleaseTxData() {
     Tx.SetLockTxId(lock);
     EngineBay.DestroyEngine();
     IsReleased = true;
-
-    NActors::NMemory::TLabel<MemoryLabelValidatedDataTx>::Sub(TxSize);
-    ComputeTxSize();
-    NActors::NMemory::TLabel<MemoryLabelValidatedDataTx>::Add(TxSize);
+ 
+    NActors::NMemory::TLabel<MemoryLabelValidatedDataTx>::Sub(TxSize); 
+    ComputeTxSize(); 
+    NActors::NMemory::TLabel<MemoryLabelValidatedDataTx>::Add(TxSize); 
 }
 
 void TValidatedDataTx::ComputeTxSize() {
@@ -335,7 +335,7 @@ TActiveTransaction::TActiveTransaction(const TBasicOpInfo &op,
                                        TValidatedDataTx::TPtr dataTx)
     : TActiveTransaction(op)
 {
-    TrackMemory();
+    TrackMemory(); 
     FillTxData(dataTx);
 }
 
@@ -349,15 +349,15 @@ TActiveTransaction::TActiveTransaction(TDataShard *self,
                                        ui64 artifactFlags)
     : TActiveTransaction(op)
 {
-    TrackMemory();
+    TrackMemory(); 
     FillTxData(self, txc, ctx, target, txBody, locks, artifactFlags);
 }
 
-TActiveTransaction::~TActiveTransaction()
-{
-    UntrackMemory();
-}
-
+TActiveTransaction::~TActiveTransaction() 
+{ 
+    UntrackMemory(); 
+} 
+ 
 void TActiveTransaction::FillTxData(TValidatedDataTx::TPtr dataTx)
 {
     Y_VERIFY(!DataTx);
@@ -378,8 +378,8 @@ void TActiveTransaction::FillTxData(TDataShard *self,
                                     const TVector<TSysTables::TLocksTable::TLock> &locks,
                                     ui64 artifactFlags)
 {
-    UntrackMemory();
-
+    UntrackMemory(); 
+ 
     Y_VERIFY(!DataTx);
     Y_VERIFY(TxBody.empty());
 
@@ -406,8 +406,8 @@ void TActiveTransaction::FillTxData(TDataShard *self,
     } else if (IsCommitWritesTx()) {
         BuildCommitWritesTx();
     }
-
-    TrackMemory();
+ 
+    TrackMemory(); 
 }
 
 TValidatedDataTx::TPtr TActiveTransaction::BuildDataTx(TDataShard *self,
@@ -546,11 +546,11 @@ void TActiveTransaction::ReleaseTxData(NTabletFlatExecutor::TTxMemoryProviderBas
 
     DataTx->ReleaseTxData();
     // Immediate transactions have no body stored.
-    if (!IsImmediate()) {
-        UntrackMemory();
+    if (!IsImmediate()) { 
+        UntrackMemory(); 
         TxBody.clear();
-        TrackMemory();
-    }
+        TrackMemory(); 
+    } 
 
     //InReadSets.clear();
     OutReadSets().clear();
@@ -613,8 +613,8 @@ ERestoreDataStatus TActiveTransaction::RestoreTxData(
         return ERestoreDataStatus::Ok;
     }
 
-    UntrackMemory();
-
+    UntrackMemory(); 
+ 
     // For immediate transactions we should restore just
     // from the TxBody. For planned transaction we should
     // restore from local database.
@@ -632,8 +632,8 @@ ERestoreDataStatus TActiveTransaction::RestoreTxData(
         Y_VERIFY(TxBody);
     }
 
-    TrackMemory();
-
+    TrackMemory(); 
+ 
     for (auto &lock : locks)
         LocksCache().Locks[lock.LockId] = lock;
 
@@ -912,12 +912,12 @@ void TActiveTransaction::KillAsyncJobActor(const TActorContext& ctx) {
     SetAsyncJobActor(TActorId());
 }
 
-void TActiveTransaction::TrackMemory() const {
-    NActors::NMemory::TLabel<MemoryLabelActiveTransactionBody>::Add(TxBody.size());
-}
-
-void TActiveTransaction::UntrackMemory() const {
-    NActors::NMemory::TLabel<MemoryLabelActiveTransactionBody>::Sub(TxBody.size());
-}
-
+void TActiveTransaction::TrackMemory() const { 
+    NActors::NMemory::TLabel<MemoryLabelActiveTransactionBody>::Add(TxBody.size()); 
+} 
+ 
+void TActiveTransaction::UntrackMemory() const { 
+    NActors::NMemory::TLabel<MemoryLabelActiveTransactionBody>::Sub(TxBody.size()); 
+} 
+ 
 }}

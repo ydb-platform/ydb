@@ -531,7 +531,7 @@ namespace NSQLTranslationV1 {
     struct TColumnSchema {
         TPosition Pos;
         TString Name;
-        TNodePtr Type;
+        TNodePtr Type; 
         bool Nullable;
         TVector<TIdentifier> Families;
 
@@ -604,18 +604,18 @@ namespace NSQLTranslationV1 {
     };
     typedef TIntrusivePtr<TFrameSpecification> TFrameSpecificationPtr;
 
-    struct THoppingWindowSpec: public TSimpleRefCount<THoppingWindowSpec> {
-        TNodePtr TimeExtractor;
-        TNodePtr Hop;
-        TNodePtr Interval;
-        TNodePtr Delay;
+    struct THoppingWindowSpec: public TSimpleRefCount<THoppingWindowSpec> { 
+        TNodePtr TimeExtractor; 
+        TNodePtr Hop; 
+        TNodePtr Interval; 
+        TNodePtr Delay; 
         bool DataWatermarks;
 
         TIntrusivePtr<THoppingWindowSpec> Clone() const;
         ~THoppingWindowSpec() {}
-    };
+    }; 
     typedef TIntrusivePtr<THoppingWindowSpec> THoppingWindowSpecPtr;
-
+ 
     struct TWindowSpecification: public TSimpleRefCount<TWindowSpecification> {
         TMaybe<TString> ExistingWindowName;
         TVector<TNodePtr> Partitions;
@@ -756,7 +756,7 @@ namespace NSQLTranslationV1 {
 
         virtual TNodePtr AggregationTraitsFactory() const = 0;
 
-        virtual std::vector<ui32> GetFactoryColumnIndices() const;
+        virtual std::vector<ui32> GetFactoryColumnIndices() const; 
 
         virtual void AddFactoryArguments(TNodePtr& apply) const;
 
@@ -833,8 +833,8 @@ namespace NSQLTranslationV1 {
         virtual void AddWindowSpecs(TWinSpecs winSpecs);
         virtual bool AddAggregationOverWindow(TContext& ctx, const TString& windowName, TAggregationPtr func);
         virtual bool AddFuncOverWindow(TContext& ctx, const TString& windowName, TNodePtr func);
-        virtual void SetHoppingWindowSpec(THoppingWindowSpecPtr spec);
-        virtual THoppingWindowSpecPtr GetHoppingWindowSpec() const;
+        virtual void SetHoppingWindowSpec(THoppingWindowSpecPtr spec); 
+        virtual THoppingWindowSpecPtr GetHoppingWindowSpec() const; 
         virtual TNodePtr GetSessionWindowSpec() const;
         virtual bool IsCompositeSource() const;
         virtual bool IsGroupByColumn(const TString& column) const;
@@ -842,7 +842,7 @@ namespace NSQLTranslationV1 {
         virtual bool IsFlattenByExprs() const;
         virtual bool IsCalcOverWindow() const;
         virtual bool IsOverWindowSource() const;
-        virtual bool IsStream() const;
+        virtual bool IsStream() const; 
         virtual EOrderKind GetOrderKind() const;
         virtual TWriteSettings GetWriteSettings() const;
         virtual bool SetSamplingOptions(TContext& ctx, TPosition pos, ESampleMode mode, TNodePtr samplingRate, TNodePtr samplingSeed);
@@ -910,7 +910,7 @@ namespace NSQLTranslationV1 {
         TMap<TString, TVector<TAggregationPtr>> AggregationOverWindow;
         TMap<TString, TVector<TNodePtr>> FuncOverWindow;
         TWinSpecs WinSpecs;
-        THoppingWindowSpecPtr HoppingWindowSpec;
+        THoppingWindowSpecPtr HoppingWindowSpec; 
         TNodePtr SessionWindow;
         TVector<ISource*> UsedSources;
         TString FlattenMode;
@@ -1227,8 +1227,8 @@ namespace NSQLTranslationV1 {
     TAggregationPtr BuildTwoArgsFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode);
     TAggregationPtr BuildHistogramFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode);
     TAggregationPtr BuildLinearHistogramFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode);
-    template <bool HasKey>
-    TAggregationPtr BuildTopFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode);
+    template <bool HasKey> 
+    TAggregationPtr BuildTopFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode); 
     TAggregationPtr BuildTopFreqFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode);
     TAggregationPtr BuildCountDistinctEstimateFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode);
     TAggregationPtr BuildListFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode);
@@ -1283,7 +1283,7 @@ namespace NSQLTranslationV1 {
         const TVector<TSortSpecificationPtr>& orderBy,
         TNodePtr having,
         TWinSpecs&& windowSpec,
-        THoppingWindowSpecPtr hoppingWindowSpec,
+        THoppingWindowSpecPtr hoppingWindowSpec, 
         TVector<TNodePtr>&& terms,
         bool distinct,
         TVector<TNodePtr>&& without,

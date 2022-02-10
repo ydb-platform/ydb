@@ -102,7 +102,7 @@ public:
 
     //-- configuration
     virtual IGraphTransformer& GetConfigurationTransformer() = 0;
-    virtual TExprNode::TPtr GetClusterInfo(const TString& cluster, TExprContext& ctx) = 0;
+    virtual TExprNode::TPtr GetClusterInfo(const TString& cluster, TExprContext& ctx) = 0; 
     virtual const THashMap<TString, TString>* GetClusterTokens() = 0;
 
     //-- discovery & rewrite
@@ -152,13 +152,13 @@ public:
     virtual void GetRequiredChildren(const TExprNode& node, TExprNode::TListType& children) = 0;
     virtual IGraphTransformer& GetCallableExecutionTransformer() = 0;
 
-    //-- finalizing
-    virtual IGraphTransformer& GetFinalizingTransformer() = 0;
+    //-- finalizing 
+    virtual IGraphTransformer& GetFinalizingTransformer() = 0; 
     virtual bool CollectDiagnostics(NYson::TYsonWriter& writer) = 0;
     virtual bool GetTasksInfo(NYson::TYsonWriter& writer) = 0;
     virtual bool CollectStatistics(NYson::TYsonWriter& writer, bool totalOnly) = 0;
     virtual bool CollectDiscoveredData(NYson::TYsonWriter& writer) = 0;
-
+ 
     //-- plan
     virtual IGraphTransformer& GetPlanInfoTransformer() = 0;
     virtual IPlanFormatter& GetPlanFormatter() = 0;
@@ -220,8 +220,8 @@ struct TDataProviderInfo {
         const TOperationProgressWriter& progressWriter, const TYqlOperationOptions& operationOptions,
         TIntrusivePtr<IRandomProvider> randomProvider, TIntrusivePtr<ITimeProvider> timeProvider)> OpenSession;
 
-    std::function<bool()> HasActiveProcesses;
-
+    std::function<bool()> HasActiveProcesses; 
+ 
     std::function<void(const TString& sessionId)> CloseSession;
 
     std::function<void(const TString& sessionId)> CleanupSession;

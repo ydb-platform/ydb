@@ -1,23 +1,23 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 OWNER(
     ermolovd
     g:yt
 )
-
+ 
 PEERDIR(
     library/cpp/yt/misc
     library/cpp/yt/yson
 )
 
-SRCS(
+SRCS( 
     consumer.cpp
-    lexer.cpp
+    lexer.cpp 
     parser.cpp
-    token.cpp
-    tokenizer.cpp
+    token.cpp 
+    tokenizer.cpp 
     varint.cpp
-    writer.cpp
-)
-
-END()
+    writer.cpp 
+) 
+ 
+END() 

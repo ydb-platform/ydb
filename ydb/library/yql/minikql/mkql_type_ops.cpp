@@ -667,32 +667,32 @@ public:
     TDateTable() {
         ui32 prevYear = NUdf::MIN_YEAR - 1;
         YearsOffsets_[0] = 0;
-
+ 
         ui32 dayOfYear = 365;
         ui32 dayOfWeek = 2;
         ui32 weekOfYear = 52;
         ui32 weekOfYearIso8601 = 1;
-
+ 
         for (ui16 date = 0; date < Days_.size(); ++date) {
             ui32 year, month, day;
             Y_VERIFY(SplitDateUncached(date, year, month, day));
-
-            ++dayOfYear;
-            if (++dayOfWeek > 7) {
-                dayOfWeek = 1;
-                ++weekOfYear;
+ 
+            ++dayOfYear; 
+            if (++dayOfWeek > 7) { 
+                dayOfWeek = 1; 
+                ++weekOfYear; 
                 if ((month == 12 && day >= 29) || (month == 1 && day <= 4)) {
                     weekOfYearIso8601 = 1;
                 } else {
                     ++weekOfYearIso8601;
                 }
-            }
-
+            } 
+ 
             if (year > prevYear) {
                 YearsOffsets_[year - NUdf::MIN_YEAR] = date;
                 prevYear = year;
-                dayOfYear = 1;
-                weekOfYear = 1;
+                dayOfYear = 1; 
+                weekOfYear = 1; 
             }
 
             Days_[date] = TDayInfo{month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek};
@@ -705,9 +705,9 @@ public:
         }
 
         year = NUdf::MIN_YEAR + std::distance(YearsOffsets_.cbegin(), std::upper_bound(YearsOffsets_.cbegin(), YearsOffsets_.cend(), value)) - 1;
-        auto& info = Days_[value];
-        month = info.Month;
-        day = info.Day;
+        auto& info = Days_[value]; 
+        month = info.Month; 
+        day = info.Day; 
         return true;
     }
 
@@ -726,14 +726,14 @@ public:
         const auto ptr = YearsOffsets_.data() + year - NUdf::MIN_YEAR;
         const auto begin = Days_.cbegin() + ptr[0];
         const auto end = year == NUdf::MAX_YEAR ? Days_.cend() : Days_.cbegin() + ptr[1];
-
+ 
         // search valid month/day in this year
         const auto target = PackMonthDay(month, day);
         const auto it = std::lower_bound(begin, end, target, [](const TDayInfo& info, ui16 y) {
-            return PackMonthDay(info.Month, info.Day) < y;
+            return PackMonthDay(info.Month, info.Day) < y; 
         });
 
-        if (Y_UNLIKELY(it == end || PackMonthDay(it->Month, it->Day) != target)) {
+        if (Y_UNLIKELY(it == end || PackMonthDay(it->Month, it->Day) != target)) { 
             return false;
         }
 
@@ -757,17 +757,17 @@ public:
 
     bool EnrichByOffset(ui16 value, ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek) const {
         if (Y_UNLIKELY(value >= Days_.size())) {
-            return false;
-        }
-
-        auto& info = Days_[value];
-        dayOfYear = info.DayOfYear;
-        weekOfYear = info.WeekOfYear;
+            return false; 
+        } 
+ 
+        auto& info = Days_[value]; 
+        dayOfYear = info.DayOfYear; 
+        weekOfYear = info.WeekOfYear; 
         weekOfYearIso8601 = info.WeekOfYearIso8601;
-        dayOfWeek = info.DayOfWeek;
-        return true;
-    }
-
+        dayOfWeek = info.DayOfWeek; 
+        return true; 
+    } 
+ 
     bool EnrichDate(ui16 value, ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek) const {
         return EnrichByOffset(++value, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
     }
@@ -781,15 +781,15 @@ public:
     }
 
 private:
-    struct TDayInfo {
-        ui32 Month : 4;
-        ui32 Day : 5;
-        ui32 DayOfYear : 9;
-        ui32 WeekOfYear : 6;
+    struct TDayInfo { 
+        ui32 Month : 4; 
+        ui32 Day : 5; 
+        ui32 DayOfYear : 9; 
+        ui32 WeekOfYear : 6; 
         ui32 WeekOfYearIso8601: 6;
-        ui32 DayOfWeek : 3;
-    };
-
+        ui32 DayOfWeek : 3; 
+    }; 
+ 
     std::array<ui16, NUdf::MAX_YEAR - NUdf::MIN_YEAR + 1> YearsOffsets_; // start of linear date for each year
     std::array<TDayInfo, NUdf::MAX_DATE + 2> Days_; // packed info for each date
 };
@@ -853,44 +853,44 @@ bool SplitInterval(i64 value, bool& sign, ui32& day, ui32& hour, ui32& min, ui32
     return true;
 }
 
-bool MakeTzDatetime(ui32 year, ui32 month, ui32 day, ui32 hour, ui32 min, ui32 sec, ui32& value, ui16 tzId) {
-    if (tzId) {
-        const auto& tz = Singleton<TTimezones>()->GetZone(tzId);
-        cctz::civil_second cs(year, month, day, hour, min, sec);
+bool MakeTzDatetime(ui32 year, ui32 month, ui32 day, ui32 hour, ui32 min, ui32 sec, ui32& value, ui16 tzId) { 
+    if (tzId) { 
+        const auto& tz = Singleton<TTimezones>()->GetZone(tzId); 
+        cctz::civil_second cs(year, month, day, hour, min, sec); 
         auto utcSeconds = cctz::TimePointToUnixSeconds(tz.lookup(cs).pre);
         if (utcSeconds < 0 || utcSeconds >= (std::int_fast64_t) NUdf::MAX_DATETIME) {
-            return false;
-        }
-
-        value = (ui32)utcSeconds;
-        return true;
-
-    } else {
-        ui16 date;
-        ui32 time;
-        if (!MakeDate(year, month, day, date)) {
-            return false;
-        }
-        if (!MakeTime(hour, min, sec, time)) {
-            return false;
-        }
-        value = date * 86400u + time;
-        return true;
-    }
-}
-
-bool SplitTzDatetime(ui32 value, ui32& year, ui32& month, ui32& day, ui32& hour, ui32& min, ui32& sec, ui16 tzId) {
-    if (tzId) {
-        if (value >= NUdf::MAX_DATETIME) {
-            return false;
-        }
-        ToLocalTime(value, tzId, year, month, day, hour, min, sec);
-        return true;
-    } else {
-        return SplitDatetime(value, year, month, day, hour, min, sec);
-    }
-}
-
+            return false; 
+        } 
+ 
+        value = (ui32)utcSeconds; 
+        return true; 
+ 
+    } else { 
+        ui16 date; 
+        ui32 time; 
+        if (!MakeDate(year, month, day, date)) { 
+            return false; 
+        } 
+        if (!MakeTime(hour, min, sec, time)) { 
+            return false; 
+        } 
+        value = date * 86400u + time; 
+        return true; 
+    } 
+} 
+ 
+bool SplitTzDatetime(ui32 value, ui32& year, ui32& month, ui32& day, ui32& hour, ui32& min, ui32& sec, ui16 tzId) { 
+    if (tzId) { 
+        if (value >= NUdf::MAX_DATETIME) { 
+            return false; 
+        } 
+        ToLocalTime(value, tzId, year, month, day, hour, min, sec); 
+        return true; 
+    } else { 
+        return SplitDatetime(value, year, month, day, hour, min, sec); 
+    } 
+} 
+ 
 bool SplitTzDate(ui16 value, ui32& year, ui32& month, ui32& day, ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 tzId) {
     if (tzId) {
         if (value >= NUdf::MAX_DATE) {
@@ -931,55 +931,55 @@ bool SplitTzDatetime(ui32 value, ui32& year, ui32& month, ui32& day, ui32& hour,
 
 bool EnrichDate(ui16 date, ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek) {
     return TDateTable::Instance().EnrichDate(date, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
-}
-
-bool GetTimezoneShift(ui32 year, ui32 month, ui32 day, ui32 hour, ui32 min, ui32 sec, ui16 tzId, i32& value) {
-    if (!tzId) {
-        value = 0;
-        return true;
-    }
-
-    const auto& tz = Singleton<TTimezones>()->GetZone(tzId);
-    cctz::civil_second cs(year, month, day, hour, min, sec);
-    value = tz.lookup(tz.lookup(cs).pre).offset / 60;
-    return true;
-}
-
-namespace {
-
-bool FromLocalTimeValidated(ui16 tzId, ui32 year, ui32 month, ui32 day, ui32 hour, ui32 minute, ui32 second, ui32& value) {
-    if (year < NUdf::MIN_YEAR - 1 || year > NUdf::MAX_YEAR) {
-        return false;
-    } else if (year == NUdf::MIN_YEAR - 1) {
-        if (month != 12 || day != 31) {
-            return false;
-        }
-    } else if (year == NUdf::MAX_YEAR) {
-        if (month != 1 || day != 1) {
-            return false;
-        }
-    }
-
-    const auto& tz = Singleton<TTimezones>()->GetZone(tzId);
-
-    cctz::civil_second sec(year, month, day, hour, minute, second);
+} 
+ 
+bool GetTimezoneShift(ui32 year, ui32 month, ui32 day, ui32 hour, ui32 min, ui32 sec, ui16 tzId, i32& value) { 
+    if (!tzId) { 
+        value = 0; 
+        return true; 
+    } 
+ 
+    const auto& tz = Singleton<TTimezones>()->GetZone(tzId); 
+    cctz::civil_second cs(year, month, day, hour, min, sec); 
+    value = tz.lookup(tz.lookup(cs).pre).offset / 60; 
+    return true; 
+} 
+ 
+namespace { 
+ 
+bool FromLocalTimeValidated(ui16 tzId, ui32 year, ui32 month, ui32 day, ui32 hour, ui32 minute, ui32 second, ui32& value) { 
+    if (year < NUdf::MIN_YEAR - 1 || year > NUdf::MAX_YEAR) { 
+        return false; 
+    } else if (year == NUdf::MIN_YEAR - 1) { 
+        if (month != 12 || day != 31) { 
+            return false; 
+        } 
+    } else if (year == NUdf::MAX_YEAR) { 
+        if (month != 1 || day != 1) { 
+            return false; 
+        } 
+    } 
+ 
+    const auto& tz = Singleton<TTimezones>()->GetZone(tzId); 
+ 
+    cctz::civil_second sec(year, month, day, hour, minute, second); 
     if ((ui32)sec.year() != year || (ui32)sec.month() != month || (ui32)sec.day() != day ||
         (ui32)sec.hour() != hour || (ui32)sec.minute() != minute || (ui32)sec.second() != second) {
         // normalized
         return false;
     }
 
-    const auto absoluteSeconds = std::chrono::system_clock::to_time_t(tz.lookup(sec).pre);
-    if (absoluteSeconds < 0 || (ui32)absoluteSeconds >= NUdf::MAX_DATETIME) {
-        return false;
-    }
-
-    value = (ui32)absoluteSeconds;
-    return true;
-}
-
-} // namespace
-
+    const auto absoluteSeconds = std::chrono::system_clock::to_time_t(tz.lookup(sec).pre); 
+    if (absoluteSeconds < 0 || (ui32)absoluteSeconds >= NUdf::MAX_DATETIME) { 
+        return false; 
+    } 
+ 
+    value = (ui32)absoluteSeconds; 
+    return true; 
+} 
+ 
+} // namespace 
+ 
 ui32 ParseNumber(ui32& pos, NUdf::TStringRef buf, ui32& value) {
     value = 0;
     ui32 count = 0;
@@ -1157,12 +1157,12 @@ NUdf::TUnboxedValuePod ParseTzDate(NUdf::TStringRef str) {
         return NUdf::TUnboxedValuePod();
     }
 
-    ui32 absoluteSeconds;
+    ui32 absoluteSeconds; 
     if (!FromLocalTimeValidated(*tzId, year, month, day, 0, 0, 0, absoluteSeconds)) {
         return NUdf::TUnboxedValuePod();
     }
 
-    ui16 value = absoluteSeconds / 86400u;
+    ui16 value = absoluteSeconds / 86400u; 
     NUdf::TUnboxedValuePod out(value);
     out.SetTimezoneId(*tzId);
     return out;
@@ -1276,12 +1276,12 @@ NUdf::TUnboxedValuePod ParseTzDatetime(NUdf::TStringRef str) {
         return NUdf::TUnboxedValuePod();
     }
 
-    ui32 absoluteSeconds;
-    if (!FromLocalTimeValidated(*tzId, year, month, day, hour, minute, second, absoluteSeconds)) {
+    ui32 absoluteSeconds; 
+    if (!FromLocalTimeValidated(*tzId, year, month, day, hour, minute, second, absoluteSeconds)) { 
         return NUdf::TUnboxedValuePod();
     }
 
-    ui32 value = absoluteSeconds;
+    ui32 value = absoluteSeconds; 
     NUdf::TUnboxedValuePod out(value);
     out.SetTimezoneId(*tzId);
     return out;
@@ -1449,8 +1449,8 @@ NUdf::TUnboxedValuePod ParseTzTimestamp(NUdf::TStringRef str) {
         }
     }
 
-    ui32 absoluteSeconds;
-    if (!FromLocalTimeValidated(*tzId, year, month, day, hour, minute, second, absoluteSeconds)) {
+    ui32 absoluteSeconds; 
+    if (!FromLocalTimeValidated(*tzId, year, month, day, hour, minute, second, absoluteSeconds)) { 
         return NUdf::TUnboxedValuePod();
     }
 
@@ -2013,7 +2013,7 @@ ui32 FromLocalTime(ui16 tzId, ui32 year, ui32 month, ui32 day, ui32 hour, ui32 m
     return absoluteSeconds;
 }
 
-
+ 
 void SerializeTzDate(ui16 date, ui16 tzId, IOutputStream& out) {
     date = SwapBytes(date);
     tzId = SwapBytes(tzId);

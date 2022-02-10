@@ -82,12 +82,12 @@ IGraphTransformer& TDataProviderBase::GetConfigurationTransformer() {
     return NullTransformer_;
 }
 
-TExprNode::TPtr TDataProviderBase::GetClusterInfo(const TString& cluster, TExprContext& ctx) {
-    Y_UNUSED(cluster);
-    Y_UNUSED(ctx);
-    return {};
-}
-
+TExprNode::TPtr TDataProviderBase::GetClusterInfo(const TString& cluster, TExprContext& ctx) { 
+    Y_UNUSED(cluster); 
+    Y_UNUSED(ctx); 
+    return {}; 
+} 
+ 
 const THashMap<TString, TString>* TDataProviderBase::GetClusterTokens() {
     return nullptr;
 }

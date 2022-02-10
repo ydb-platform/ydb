@@ -110,7 +110,7 @@ bool IsRenameFlatMap(const NNodes::TCoFlatMapBase& node, TExprNode::TPtr& struct
     return true;
 }
 
-bool IsPassthroughFlatMap(const TCoFlatMapBase& flatmap, TMaybe<THashSet<TStringBuf>>* passthroughFields, bool analyzeJustMember) {
+bool IsPassthroughFlatMap(const TCoFlatMapBase& flatmap, TMaybe<THashSet<TStringBuf>>* passthroughFields, bool analyzeJustMember) { 
     return IsPassthroughLambda(flatmap.Lambda(), passthroughFields, analyzeJustMember);
 }
 
@@ -143,7 +143,7 @@ bool IsPassthroughLambda(const TCoLambda& lambda, TMaybe<THashSet<TStringBuf>>* 
         for (auto child : maybeStruct.Cast()) {
             auto tuple = child.Cast<TCoNameValueTuple>();
             auto value = tuple.Value();
-            if (analyzeJustMember && value.Maybe<TCoJust>()) {
+            if (analyzeJustMember && value.Maybe<TCoJust>()) { 
                 value = value.Cast<TCoJust>().Input();
             }
 
@@ -341,15 +341,15 @@ const TTypeAnnotationNode* GetSeqItemType(const TTypeAnnotationNode* type) {
     THROW yexception() << "Impossible to get item type from " << *type;
 }
 
-TExprNode::TPtr GetSetting(const TExprNode& settings, const TStringBuf& name) {
-    for (auto& setting : settings.Children()) {
-        if (setting->ChildrenSize() != 0 && setting->Child(0)->Content() == name) {
-            return setting;
-        }
-    }
-    return nullptr;
-}
-
+TExprNode::TPtr GetSetting(const TExprNode& settings, const TStringBuf& name) { 
+    for (auto& setting : settings.Children()) { 
+        if (setting->ChildrenSize() != 0 && setting->Child(0)->Content() == name) { 
+            return setting; 
+        } 
+    } 
+    return nullptr; 
+} 
+ 
 bool HasSetting(const TExprNode& settings, const TStringBuf& name) {
     return GetSetting(settings, name) != nullptr;
 }

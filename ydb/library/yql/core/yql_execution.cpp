@@ -1,6 +1,6 @@
 #include "yql_execution.h"
 #include "yql_expr_optimize.h"
-#include "yql_opt_proposed_by_data.h"
+#include "yql_opt_proposed_by_data.h" 
 
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/utils/yql_panic.h>
@@ -45,13 +45,13 @@ public:
     }
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
-        if (FinalizingTransformer) {
+        if (FinalizingTransformer) { 
             YQL_CLOG(INFO, CoreExecution) << "FinalizingTransformer, root #" << input->UniqueId();
             auto status = FinalizingTransformer->Transform(input, output, ctx);
             YQL_CLOG(INFO, CoreExecution) << "FinalizingTransformer done, output #" << output->UniqueId() << ", status: " << status;
             return status;
-        }
-
+        } 
+ 
         YQL_CLOG(INFO, CoreExecution) << "Begin, root #" << input->UniqueId();
         output = input;
         if (RewriteSanityCheck) {
@@ -82,26 +82,26 @@ public:
         YQL_CLOG(INFO, CoreExecution) << "Finish, output #" << output->UniqueId() << ", status: " << status;
 
         if (status != TStatus::Ok || !WithFinalize) {
-            return status;
-        }
-
-        FinalizingTransformer = CreateCompositeFinalizingTransformer(Types);
-        return FinalizingTransformer->Transform(input, output, ctx);
+            return status; 
+        } 
+ 
+        FinalizingTransformer = CreateCompositeFinalizingTransformer(Types); 
+        return FinalizingTransformer->Transform(input, output, ctx); 
     }
 
     NThreading::TFuture<void> DoGetAsyncFuture(const TExprNode& input) final {
-        return FinalizingTransformer ?
-            FinalizingTransformer->GetAsyncFuture(input) :
-            State->Promise.GetFuture();
+        return FinalizingTransformer ? 
+            FinalizingTransformer->GetAsyncFuture(input) : 
+            State->Promise.GetFuture(); 
     }
 
     TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
-        if (FinalizingTransformer) {
-            return FinalizingTransformer->ApplyAsyncChanges(input, output, ctx);
-        }
-
+        if (FinalizingTransformer) { 
+            return FinalizingTransformer->ApplyAsyncChanges(input, output, ctx); 
+        } 
+ 
         output = input;
-
+ 
         TStatus combinedStatus = TStatus::Ok;
 
         TState::TQueueType completed;
@@ -630,7 +630,7 @@ private:
     const bool WithFinalize;
     TStatePtr State;
     TNodeOnNodeOwnedMap NewNodes;
-    TAutoPtr<IGraphTransformer> FinalizingTransformer;
+    TAutoPtr<IGraphTransformer> FinalizingTransformer; 
     THashMap<ui32, TOperationProgress> Progresses;
 
     struct TTrackableNodeInfo

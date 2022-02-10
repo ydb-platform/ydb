@@ -210,7 +210,7 @@ public:
     TAutoPtr<TSelfPinger> SelfPinger;
 
     TActorId SysPartitionStatsCollector;
-
+ 
     TSet<TPathId> CleanDroppedPathsCandidates;
     TSet<TPathId> CleanDroppedSubDomainsCandidates;
     bool CleanDroppedPathsInFly = false;
@@ -368,8 +368,8 @@ public:
     TSubDomainInfo::TPtr ResolveDomainInfo(TPathId pathId) const;
     TSubDomainInfo::TPtr ResolveDomainInfo(TPathElement::TPtr pathEl) const;
 
-    TPathId GetDomainKey(TPathId pathId) const;
-
+    TPathId GetDomainKey(TPathId pathId) const; 
+ 
     const NKikimrSubDomains::TProcessingParams& SelectProcessingPrarams(TPathId id) const;
     const NKikimrSubDomains::TProcessingParams& SelectProcessingPrarams(TPathElement::TPtr pathEl) const;
 
@@ -412,9 +412,9 @@ public:
 
     void DoShardsDeletion(const THashSet<TShardIdx>& shardIdx, const TActorContext& ctx);
 
-    void SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, TVector<TTableShardInfo>&& newPartitioning);
+    void SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, TVector<TTableShardInfo>&& newPartitioning); 
     auto BuildStatsForCollector(TPathId tableId, TShardIdx shardIdx, TTabletId datashardId,
-        TMaybe<ui32> nodeId, TMaybe<ui64> startTime, const TTableInfo::TPartitionStats& stats);
+        TMaybe<ui32> nodeId, TMaybe<ui64> startTime, const TTableInfo::TPartitionStats& stats); 
 
     bool ReadSysValue(NIceDb::TNiceDb& db, ui64 sysTag, TString& value, TString defValue = TString());
     bool ReadSysValue(NIceDb::TNiceDb& db, ui64 sysTag, ui64& value, ui64 defVal = 0);
@@ -818,8 +818,8 @@ public:
     void Handle(TEvPrivate::TEvRunConditionalErase::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvConditionalEraseRowsResponse::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(NSysView::TEvSysView::TEvGetPartitionStats::TPtr& ev, const TActorContext& ctx);
-
+    void Handle(NSysView::TEvSysView::TEvGetPartitionStats::TPtr& ev, const TActorContext& ctx); 
+ 
     void ScheduleServerlessStorageBilling(const TActorContext& ctx);
     void Handle(TEvPrivate::TEvServerlessStorageBilling::TPtr& ev, const TActorContext& ctx);
 

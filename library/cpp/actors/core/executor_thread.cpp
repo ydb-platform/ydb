@@ -137,7 +137,7 @@ namespace NActors {
         NHPTimer::STime hpprev = hpstart;
 
         IActor* actor = nullptr;
-        ui32 prevActivityType = std::numeric_limits<ui32>::max();
+        ui32 prevActivityType = std::numeric_limits<ui32>::max(); 
         TActorId recipient;
         for (ui32 executed = 0; executed < Ctx.EventsPerMailbox; ++executed) {
             TAutoPtr<IEventHandle> ev(mailbox->Pop());
@@ -170,14 +170,14 @@ namespace NActors {
 
                     ui32 evTypeForTracing = ev->Type;
 
-                    ui32 activityType = actor->GetActivityType();
-                    if (activityType != prevActivityType) {
-                        prevActivityType = activityType;
-                        NProfiling::TMemoryTagScope::Reset(ActorSystem->MemProfActivityBase + activityType);
+                    ui32 activityType = actor->GetActivityType(); 
+                    if (activityType != prevActivityType) { 
+                        prevActivityType = activityType; 
+                        NProfiling::TMemoryTagScope::Reset(ActorSystem->MemProfActivityBase + activityType); 
                     }
 
-                    actor->Receive(ev, ctx);
-
+                    actor->Receive(ev, ctx); 
+ 
                     size_t dyingActorsCnt = DyingActors.size();
                     Ctx.UpdateActorsStats(dyingActorsCnt);
                     if (dyingActorsCnt) {
@@ -273,7 +273,7 @@ namespace NActors {
             }
         }
 
-        NProfiling::TMemoryTagScope::Reset(0);
+        NProfiling::TMemoryTagScope::Reset(0); 
         TlsActivationContext = nullptr;
         UnlockFromExecution(mailbox, Ctx.Executor, reclaimAsFree, hint, Ctx.WorkerId, RevolvingWriteCounter);
     }

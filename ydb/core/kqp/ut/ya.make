@@ -19,7 +19,7 @@ ELSE()
 ENDIF()
 
 SRCS(
-    kqp_acl_ut.cpp
+    kqp_acl_ut.cpp 
     kqp_arrow_in_channels_ut.cpp
     kqp_document_api_ut.cpp
     kqp_effects_perf_ut.cpp
@@ -49,7 +49,7 @@ SRCS(
     kqp_sort_ut.cpp
     kqp_stats_ut.cpp
     kqp_sqlin_ut.cpp
-    kqp_sys_view_ut.cpp
+    kqp_sys_view_ut.cpp 
     kqp_sys_col_ut.cpp
     kqp_table_predicate_ut.cpp
     kqp_tx_ut.cpp

@@ -18,7 +18,7 @@ bool IsPredicateFlatMap(const TExprNode& node);
 bool IsFilterFlatMap(const NNodes::TCoLambda& lambda);
 bool IsListReorder(const TExprNode& node);
 bool IsRenameFlatMap(const NNodes::TCoFlatMapBase& node, TExprNode::TPtr& structNode);
-bool IsPassthroughFlatMap(const NNodes::TCoFlatMapBase& flatmap, TMaybe<THashSet<TStringBuf>>* passthroughFields, bool analyzeJustMember = false);
+bool IsPassthroughFlatMap(const NNodes::TCoFlatMapBase& flatmap, TMaybe<THashSet<TStringBuf>>* passthroughFields, bool analyzeJustMember = false); 
 bool IsPassthroughLambda(const NNodes::TCoLambda& lambda, TMaybe<THashSet<TStringBuf>>* passthroughFields, bool analyzeJustMember = false);
 bool IsTablePropsDependent(const TExprNode& node);
 
@@ -36,12 +36,12 @@ bool IsDepended(const TExprNode& from, const TExprNode& to);
 bool IsEmpty(const TExprNode& node, const TTypeAnnotationContext& typeCtx);
 bool IsEmptyOptional(const TExprNode& node);
 bool IsEmptyContainer(const TExprNode& node);
-
+ 
 const TTypeAnnotationNode* RemoveOptionalType(const TTypeAnnotationNode* type);
 const TTypeAnnotationNode* RemoveAllOptionals(const TTypeAnnotationNode* type);
 const TTypeAnnotationNode* GetSeqItemType(const TTypeAnnotationNode* seq);
 
-TExprNode::TPtr GetSetting(const TExprNode& settings, const TStringBuf& name);
+TExprNode::TPtr GetSetting(const TExprNode& settings, const TStringBuf& name); 
 bool HasSetting(const TExprNode& settings, const TStringBuf& name);
 bool HasAnySetting(const TExprNode& settings, const THashSet<TString>& names);
 TExprNode::TPtr RemoveSetting(const TExprNode& settings, const TStringBuf& name, TExprContext& ctx);

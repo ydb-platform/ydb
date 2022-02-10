@@ -28,7 +28,7 @@ message TTableAccessStats {
     optional TReadOpStats SelectRange = 3;
     optional TWriteOpStats UpdateRow = 4;
     optional TWriteOpStats EraseRow = 5;
-    optional uint64 ShardCount = 6;
+    optional uint64 ShardCount = 6; 
 }
 
 message TPerShardStats {

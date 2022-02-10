@@ -155,7 +155,7 @@ namespace NYql {
             auto getArgsType = pgmBuilder.NewTupleType({resourceType, ui32Type});
             auto getUserType = pgmBuilder.NewTupleType({getArgsType, emptyStructType, valueType});
             auto udfTopFreq_Get = pgmBuilder.Udf("TopFreq.TopFreq_Get", TRuntimeNode(), getUserType);
-
+ 
             TRuntimeNode pgmTopFreq;
             {
                 auto value = pgmBuilder.NewDataLiteral<ui64>(1);
@@ -245,22 +245,22 @@ namespace NYql {
             auto addValueArgsType = pgmBuilder.NewTupleType({resourceType, valueType});
             auto addValueUserType = pgmBuilder.NewTupleType({addValueArgsType, emptyStructType, valueType});
             auto udfTopFreq_AddValue = pgmBuilder.Udf("TopFreq.TopFreq_AddValue", TRuntimeNode(), addValueUserType);
-
+ 
             auto getArgsType = pgmBuilder.NewTupleType({resourceType, ui32Type});
             auto getUserType = pgmBuilder.NewTupleType({getArgsType, emptyStructType, valueType});
             auto udfTopFreq_Get = pgmBuilder.Udf("TopFreq.TopFreq_Get", TRuntimeNode(), getUserType);
-
+ 
             auto serializeArgsType = pgmBuilder.NewTupleType({resourceType});
             auto serializeUserType = pgmBuilder.NewTupleType({serializeArgsType, emptyStructType, valueType});
             auto udfTopFreq_Serialize = pgmBuilder.Udf("TopFreq.TopFreq_Serialize", TRuntimeNode(), serializeUserType);
-
+ 
             auto serializedType = pgmBuilder.NewTupleType({ui32Type, ui32Type,
                 pgmBuilder.NewListType(pgmBuilder.NewTupleType({ui64Type, valueType}))});
-
+ 
             auto deserializeArgsType = pgmBuilder.NewTupleType({serializedType});
             auto deserializeUserType = pgmBuilder.NewTupleType({deserializeArgsType, emptyStructType, valueType});
             auto udfTopFreq_Deserialize = pgmBuilder.Udf("TopFreq.TopFreq_Deserialize", TRuntimeNode(), deserializeUserType);
-
+ 
             TRuntimeNode pgmTopFreq;
             {
                 auto value = pgmBuilder.NewDataLiteral<bool>(true);
@@ -338,22 +338,22 @@ namespace NYql {
             auto mergeArgsType = pgmBuilder.NewTupleType({resourceType, resourceType});
             auto mergeUserType = pgmBuilder.NewTupleType({mergeArgsType, emptyStructType, valueType});
             auto udfTopFreq_Merge = pgmBuilder.Udf("TopFreq.TopFreq_Merge", TRuntimeNode(), mergeUserType);
-
+ 
             auto getArgsType = pgmBuilder.NewTupleType({resourceType, ui32Type});
             auto getUserType = pgmBuilder.NewTupleType({getArgsType, emptyStructType, valueType});
             auto udfTopFreq_Get = pgmBuilder.Udf("TopFreq.TopFreq_Get", TRuntimeNode(), getUserType);
-
+ 
             auto serializeArgsType = pgmBuilder.NewTupleType({resourceType});
             auto serializeUserType = pgmBuilder.NewTupleType({serializeArgsType, emptyStructType, valueType});
             auto udfTopFreq_Serialize = pgmBuilder.Udf("TopFreq.TopFreq_Serialize", TRuntimeNode(), serializeUserType);
-
+ 
             auto serializedType = pgmBuilder.NewTupleType({ui32Type, ui32Type,
                 pgmBuilder.NewListType(pgmBuilder.NewTupleType({ui64Type, valueType}))});
-
+ 
             auto deserializeArgsType = pgmBuilder.NewTupleType({serializedType});
             auto deserializeUserType = pgmBuilder.NewTupleType({deserializeArgsType, emptyStructType, valueType});
             auto udfTopFreq_Deserialize = pgmBuilder.Udf("TopFreq.TopFreq_Deserialize", TRuntimeNode(), deserializeUserType);
-
+ 
             static const ui64 BigNum = 20;
             static const ui64 BigEach = 5000;
             static const ui64 SmallNum = 500;

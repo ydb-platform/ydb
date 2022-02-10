@@ -182,8 +182,8 @@ private:
     TSmallVec<TRawTypeValue> KeyTo;
     bool InclusiveFrom;
     bool InclusiveTo;
-    ui64 RowsLimit = 100000;
-    ui64 BytesLimit = 1024*1024;
+    ui64 RowsLimit = 100000; 
+    ui64 BytesLimit = 1024*1024; 
     ui64 Restarts = 0;
     TRowVersion ReadVersion = TRowVersion::Max();
 

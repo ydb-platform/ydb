@@ -213,7 +213,7 @@ reduce_core:
 opt_set_quantifier: (ALL | DISTINCT)?;
 
 select_core:
-  (FROM join_source)? SELECT STREAM? opt_set_quantifier result_column (COMMA result_column)* (WITHOUT column_list)? (FROM join_source)? (WHERE expr)?
+  (FROM join_source)? SELECT STREAM? opt_set_quantifier result_column (COMMA result_column)* (WITHOUT column_list)? (FROM join_source)? (WHERE expr)? 
   group_by_clause? (HAVING expr)? window_clause? order_by_clause?
 ;
 
@@ -229,7 +229,7 @@ grouping_element:
   | cube_list
   | grouping_sets_specification
 //empty_grouping_set inside smart_parenthesis
-  | hopping_window_specification
+  | hopping_window_specification 
 ;
 
 /// expect column (named column), or parenthesis list columns, or expression (named expression), or list expression
@@ -242,8 +242,8 @@ cube_list: CUBE LPAREN ordinary_grouping_set_list RPAREN;
 /// SQL2003 grouping_set_list == grouping_element_list
 grouping_sets_specification: GROUPING SETS LPAREN grouping_element_list RPAREN;
 
-hopping_window_specification: HOP LPAREN expr COMMA expr COMMA expr COMMA expr RPAREN;
-
+hopping_window_specification: HOP LPAREN expr COMMA expr COMMA expr COMMA expr RPAREN; 
+ 
 result_column:
     opt_id_prefix ASTERISK
   | expr (AS id_or_string)?
@@ -306,14 +306,14 @@ alter_table_add_column: ADD COLUMN? column_schema (COMMA ADD COLUMN? column_sche
 alter_table_drop_column: DROP COLUMN? id;
 
 column_schema: id_schema flex_type (NOT? NULL)?;
-column_order_by_specification: id (ASC | DESC)?;
+column_order_by_specification: id (ASC | DESC)?; 
 
-table_constraint:
-    PRIMARY KEY LPAREN id (COMMA id)* RPAREN
-  | PARTITION BY LPAREN id (COMMA id)* RPAREN
-  | ORDER BY LPAREN column_order_by_specification (COMMA column_order_by_specification)* RPAREN
-;
-
+table_constraint: 
+    PRIMARY KEY LPAREN id (COMMA id)* RPAREN 
+  | PARTITION BY LPAREN id (COMMA id)* RPAREN 
+  | ORDER BY LPAREN column_order_by_specification (COMMA column_order_by_specification)* RPAREN 
+; 
+ 
 drop_table_stmt: DROP TABLE (IF EXISTS)? simple_table_ref;
 define_action_or_subquery_stmt: DEFINE (ACTION|SUBQUERY) bind_parameter LPAREN bind_parameter_list? RPAREN AS define_action_or_subquery_body END DEFINE;
 define_action_or_subquery_body: (sql_stmt_core SEMI)* SEMI?;
@@ -435,7 +435,7 @@ keyword_expr_uncompat:
   | EXISTS
   | FROM
   | FULL
-  | HOP
+  | HOP 
   | NOT
   | NULL
   | PROCESS
@@ -772,7 +772,7 @@ GLOB: G L O B;
 GROUP: G R O U P;
 GROUPING: G R O U P I N G;
 HAVING: H A V I N G;
-HOP: H O P;
+HOP: H O P; 
 IF: I F;
 IGNORE: I G N O R E;
 ILIKE: I L I K E;
@@ -848,7 +848,7 @@ SEMI_JOIN: S E M I;
 SET: S E T;
 SETS: S E T S;
 SUBQUERY: S U B Q U E R Y;
-STREAM: S T R E A M;
+STREAM: S T R E A M; 
 SYMBOLS: S Y M B O L S;
 SYSTEM: S Y S T E M;
 TABLE: T A B L E;

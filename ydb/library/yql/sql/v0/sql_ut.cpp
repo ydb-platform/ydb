@@ -788,7 +788,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         VerifyProgram(res, elementStat, verifyLine);
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Kikimr.PushData"]);
     }
-
+ 
     Y_UNIT_TEST(ProcessUserTypeAuth) {
         NYql::TAstParseResult res = SqlToYql("process plato.Input using YDB::PushData($ROWS, AsTuple('oauth', SecureParam('api:oauth')));", 1, TString(NYql::KikimrProviderName));
         UNIT_ASSERT(res.Root);
@@ -808,19 +808,19 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     }
 
     Y_UNIT_TEST(SelectStreamRtmr) {
-        NYql::TAstParseResult res = SqlToYql(
-            "USE plato; INSERT INTO Output SELECT STREAM key FROM Input;",
-            10, TString(NYql::RtmrProviderName));
-        UNIT_ASSERT(res.Root);
-    }
-
+        NYql::TAstParseResult res = SqlToYql( 
+            "USE plato; INSERT INTO Output SELECT STREAM key FROM Input;", 
+            10, TString(NYql::RtmrProviderName)); 
+        UNIT_ASSERT(res.Root); 
+    } 
+ 
     Y_UNIT_TEST(GroupByHopRtmr) {
-        NYql::TAstParseResult res = SqlToYql(R"(
-            USE plato; INSERT INTO Output SELECT STREAM key, SUM(value) AS value FROM Input
-            GROUP BY key, HOP(subkey, "PT10S", "PT30S", "PT20S");
-        )", 10, TString(NYql::RtmrProviderName));
-        UNIT_ASSERT(res.Root);
-    }
+        NYql::TAstParseResult res = SqlToYql(R"( 
+            USE plato; INSERT INTO Output SELECT STREAM key, SUM(value) AS value FROM Input 
+            GROUP BY key, HOP(subkey, "PT10S", "PT30S", "PT20S"); 
+        )", 10, TString(NYql::RtmrProviderName)); 
+        UNIT_ASSERT(res.Root); 
+    } 
 
     Y_UNIT_TEST(KikimrInserts) {
          NYql::TAstParseResult res = SqlToYql(R"(

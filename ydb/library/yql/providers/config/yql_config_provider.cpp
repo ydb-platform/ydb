@@ -167,7 +167,7 @@ namespace {
             return (node.Child(1)->Child(0)->Content() == ConfigProviderName);
         }
 
-        bool CanParse(const TExprNode& node) override {
+        bool CanParse(const TExprNode& node) override { 
             if (ConfigProviderFunctions().contains(node.Content()) ||
                 node.Content() == ConfigureName)
             {
@@ -246,8 +246,8 @@ namespace {
             });
 
             return *ConfigurationTransformer;
-        }
-
+        } 
+ 
         IGraphTransformer& GetTypeAnnotationTransformer(bool instantOnly) override {
             Y_UNUSED(instantOnly);
             if (!TypeAnnotationTransformer) {

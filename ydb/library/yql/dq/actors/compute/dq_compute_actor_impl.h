@@ -17,7 +17,7 @@
 #include <ydb/library/yql/core/issue/yql_issue.h>
 #include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
-
+ 
 #include <library/cpp/actors/core/interconnect.h>
 
 #include <util/generic/size_literals.h>
@@ -469,13 +469,13 @@ protected:
         auto& record = execEv->Record;
 
         record.SetState(State);
-        record.SetStatus(status);
+        record.SetStatus(status); 
         record.SetTaskId(Task.GetId());
         if (RuntimeSettings.StatsMode >= NDqProto::DQ_STATS_MODE_BASIC) {
             FillStats(record.MutableStats(), /* last */ true);
         }
         IssuesToMessage(issues, record.MutableIssues());
-
+ 
         this->Send(ExecuterId, execEv.Release());
 
         if (Checkpoints && State == NDqProto::COMPUTE_STATE_FINISHED) {

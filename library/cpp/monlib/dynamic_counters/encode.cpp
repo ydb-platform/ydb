@@ -3,7 +3,7 @@
 #include <library/cpp/monlib/encode/encoder.h>
 #include <library/cpp/monlib/encode/json/json.h>
 #include <library/cpp/monlib/encode/spack/spack_v1.h>
-#include <library/cpp/monlib/encode/prometheus/prometheus.h>
+#include <library/cpp/monlib/encode/prometheus/prometheus.h> 
 
 #include <util/stream/str.h>
 
@@ -41,10 +41,10 @@ namespace NMonitoring {
 
             void OnHistogram(
                 const TString& labelName, const TString& labelValue,
-                IHistogramSnapshotPtr snapshot, bool derivative) override {
-                NMonitoring::EMetricType metricType = derivative ? EMetricType::HIST_RATE : EMetricType::HIST;
-
-                EncoderImpl_->OnMetricBegin(metricType);
+                IHistogramSnapshotPtr snapshot, bool derivative) override { 
+                NMonitoring::EMetricType metricType = derivative ? EMetricType::HIST_RATE : EMetricType::HIST; 
+ 
+                EncoderImpl_->OnMetricBegin(metricType); 
                 EncodeLabels(labelName, labelValue);
                 EncoderImpl_->OnHistogram(ZERO_TIME, snapshot);
                 EncoderImpl_->OnMetricEnd();
@@ -104,9 +104,9 @@ namespace NMonitoring {
                     out,
                     NMonitoring::ETimePrecision::SECONDS,
                     NMonitoring::ECompression::ZSTD), vis);
-            case EFormat::PROMETHEUS:
-                return MakeHolder<TConsumer>(NMonitoring::EncoderPrometheus(
-                    out), vis);
+            case EFormat::PROMETHEUS: 
+                return MakeHolder<TConsumer>(NMonitoring::EncoderPrometheus( 
+                    out), vis); 
             default:
                 ythrow yexception() << "unsupported metric encoding format: " << format;
                 break;

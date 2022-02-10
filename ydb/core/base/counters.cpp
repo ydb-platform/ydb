@@ -47,8 +47,8 @@ static const THashSet<TString> DATABASE_ATTRIBUTE_SERVICES
 
 static const THashSet<TString> DATABASE_ATTRIBUTE_LABELS
     = {{ TString("cloud_id"),
-         TString("folder_id"),
-         TString("database_id")
+         TString("folder_id"), 
+         TString("database_id") 
     }};
 
 using NMonitoring::TDynamicCounters;

@@ -16,10 +16,10 @@ struct TKqpProxyRequest {
     TString TraceId;
     ui32 EventType;
     TString SessionId;
-    TKqpDbCountersPtr DbCounters;
+    TKqpDbCountersPtr DbCounters; 
 
     TKqpProxyRequest(const TActorId& sender, ui64 senderCookie, const TString& traceId,
-        ui32 eventType)
+        ui32 eventType) 
         : Sender(sender)
         , SenderCookie(senderCookie)
         , TraceId(traceId)
@@ -27,9 +27,9 @@ struct TKqpProxyRequest {
         , SessionId()
     {}
 
-    void SetSessionId(const TString& sessionId, TKqpDbCountersPtr dbCounters) {
+    void SetSessionId(const TString& sessionId, TKqpDbCountersPtr dbCounters) { 
         SessionId = sessionId;
-        DbCounters = dbCounters;
+        DbCounters = dbCounters; 
     }
 };
 
@@ -43,9 +43,9 @@ public:
         : RequestId(0)
     {}
 
-    ui64 RegisterRequest(const TActorId& sender, ui64 senderCookie, const TString& traceId, ui32 eventType) {
+    ui64 RegisterRequest(const TActorId& sender, ui64 senderCookie, const TString& traceId, ui32 eventType) { 
         ui64 NewRequestId = ++RequestId;
-        PendingRequests.emplace(NewRequestId, TKqpProxyRequest(sender, senderCookie, traceId, eventType));
+        PendingRequests.emplace(NewRequestId, TKqpProxyRequest(sender, senderCookie, traceId, eventType)); 
         return NewRequestId;
     }
 
@@ -53,9 +53,9 @@ public:
         return PendingRequests.FindPtr(requestId);
     }
 
-    void SetSessionId(ui64 requestId, const TString& sessionId, TKqpDbCountersPtr dbCounters) {
+    void SetSessionId(ui64 requestId, const TString& sessionId, TKqpDbCountersPtr dbCounters) { 
         TKqpProxyRequest* ptr = PendingRequests.FindPtr(requestId);
-        ptr->SetSessionId(sessionId, dbCounters);
+        ptr->SetSessionId(sessionId, dbCounters); 
     }
 
     void Erase(ui64 requestId) {
@@ -77,18 +77,18 @@ struct TKqpSessionInfo {
     TString SessionId;
     TActorId WorkerId;
     TString Database;
-    TKqpDbCountersPtr DbCounters;
+    TKqpDbCountersPtr DbCounters; 
     ui32 UseFrequency;
     TInstant LastRequestAt;
     TInstant CreatedAt;
     TInstant ShutdownStartedAt;
 
-    TKqpSessionInfo(const TString& sessionId, const TActorId& workerId,
-        const TString& database, TKqpDbCountersPtr dbCounters)
+    TKqpSessionInfo(const TString& sessionId, const TActorId& workerId, 
+        const TString& database, TKqpDbCountersPtr dbCounters) 
         : SessionId(sessionId)
         , WorkerId(workerId)
         , Database(database)
-        , DbCounters(dbCounters)
+        , DbCounters(dbCounters) 
         , UseFrequency(0)
         , ShutdownStartedAt()
     {

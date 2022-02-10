@@ -956,15 +956,15 @@ public:
     {}
 
 private:
-    ui32 GetTraverseCount() const override {
-        return 1;
-    }
-
-    NUdf::TUnboxedValue GetTraverseItem(ui32 index) const override {
-        Y_UNUSED(index);
-        return Stream;
-    }
-
+    ui32 GetTraverseCount() const override { 
+        return 1; 
+    } 
+ 
+    NUdf::TUnboxedValue GetTraverseItem(ui32 index) const override { 
+        Y_UNUSED(index); 
+        return Stream; 
+    } 
+ 
     NUdf::TUnboxedValue Save() const override {
         return NUdf::TUnboxedValue::Zero();
     }
@@ -1077,15 +1077,15 @@ public:
     {}
 
 private:
-    ui32 GetTraverseCount() const override {
-        return 1;
-    }
-
-    NUdf::TUnboxedValue GetTraverseItem(ui32 index) const override {
-        Y_UNUSED(index);
-        return Stream;
-    }
-
+    ui32 GetTraverseCount() const override { 
+        return 1; 
+    } 
+ 
+    NUdf::TUnboxedValue GetTraverseItem(ui32 index) const override { 
+        Y_UNUSED(index); 
+        return Stream; 
+    } 
+ 
     NUdf::TUnboxedValue Save() const override {
         return NUdf::TUnboxedValue::Zero();
     }

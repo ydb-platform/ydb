@@ -996,9 +996,9 @@ TWindowSpecificationPtr TWindowSpecification::Clone() const {
 THoppingWindowSpecPtr THoppingWindowSpec::Clone() const {
     auto res = MakeIntrusive<THoppingWindowSpec>();
     res->TimeExtractor = TimeExtractor->Clone();
-    res->Hop = Hop->Clone();
-    res->Interval = Interval->Clone();
-    res->Delay = Delay->Clone();
+    res->Hop = Hop->Clone(); 
+    res->Interval = Interval->Clone(); 
+    res->Delay = Delay->Clone(); 
     res->DataWatermarks = DataWatermarks;
     return res;
 }
@@ -1247,8 +1247,8 @@ void IAggregation::AddFactoryArguments(TNodePtr& apply) const {
     Y_UNUSED(apply);
 }
 
-std::vector<ui32> IAggregation::GetFactoryColumnIndices() const {
-    return {0u};
+std::vector<ui32> IAggregation::GetFactoryColumnIndices() const { 
+    return {0u}; 
 }
 
 TNodePtr IAggregation::WindowTraits(const TNodePtr& type) const {
@@ -1443,14 +1443,14 @@ const TVector<TString>& ISource::GetTmpWindowColumns() const {
     return TmpWindowColumns;
 }
 
-void ISource::SetHoppingWindowSpec(THoppingWindowSpecPtr spec) {
-    HoppingWindowSpec = spec;
-}
-
-THoppingWindowSpecPtr ISource::GetHoppingWindowSpec() const {
-    return HoppingWindowSpec;
-}
-
+void ISource::SetHoppingWindowSpec(THoppingWindowSpecPtr spec) { 
+    HoppingWindowSpec = spec; 
+} 
+ 
+THoppingWindowSpecPtr ISource::GetHoppingWindowSpec() const { 
+    return HoppingWindowSpec; 
+} 
+ 
 TNodePtr ISource::GetSessionWindowSpec() const {
     return SessionWindow;
 }
@@ -1581,10 +1581,10 @@ bool ISource::IsOverWindowSource() const {
     return !WinSpecs.empty();
 }
 
-bool ISource::IsStream() const {
-    return false;
-}
-
+bool ISource::IsStream() const { 
+    return false; 
+} 
+ 
 EOrderKind ISource::GetOrderKind() const {
     return EOrderKind::None;
 }
@@ -1773,19 +1773,19 @@ TNodePtr ISource::BuildAggregation(const TString& label) {
         options = L(options, Q(Y(Q("compact"))));
     }
 
-    if (HoppingWindowSpec) {
-        auto hoppingTraits = Y(
-            "HoppingTraits",
-            Y("ListItemType", listType),
-            BuildLambda(Pos, Y("row"), HoppingWindowSpec->TimeExtractor),
-            HoppingWindowSpec->Hop,
-            HoppingWindowSpec->Interval,
+    if (HoppingWindowSpec) { 
+        auto hoppingTraits = Y( 
+            "HoppingTraits", 
+            Y("ListItemType", listType), 
+            BuildLambda(Pos, Y("row"), HoppingWindowSpec->TimeExtractor), 
+            HoppingWindowSpec->Hop, 
+            HoppingWindowSpec->Interval, 
             HoppingWindowSpec->Delay,
             HoppingWindowSpec->DataWatermarks ? Q("true") : Q("false"));
-
+ 
         options = L(options, Q(Y(Q("hopping"), hoppingTraits)));
-    }
-
+    } 
+ 
     if (SessionWindow) {
         YQL_ENSURE(SessionWindow->GetLabel());
         auto sessionWindow = dynamic_cast<TSessionWindow*>(SessionWindow.Get());

@@ -1724,7 +1724,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         CompareYson(R"([[[1u];["One"]];[[2u];["Two"]]])", StreamResultToYson(it));
         TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
-        UNIT_ASSERT_VALUES_EQUAL(1, counters.GetQueryTypeCounter(NKikimrKqp::EQueryType::QUERY_TYPE_SQL_SCAN)->Val());
+        UNIT_ASSERT_VALUES_EQUAL(1, counters.GetQueryTypeCounter(NKikimrKqp::EQueryType::QUERY_TYPE_SQL_SCAN)->Val()); 
     }
 
     Y_UNIT_TEST(DropRedundantSortByPk) {

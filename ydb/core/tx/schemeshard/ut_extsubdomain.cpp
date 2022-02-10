@@ -674,23 +674,23 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
         UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 2));
         UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2));
     }
-
-    Y_UNIT_TEST(SysViewProcessorSync) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-
+ 
+    Y_UNIT_TEST(SysViewProcessorSync) { 
+        TTestBasicRuntime runtime; 
+        TTestEnv env(runtime); 
+        ui64 txId = 100; 
+ 
         NSchemeShard::TSchemeLimits lowLimits;
         lowLimits.MaxShardsInPath = 3;
         SetSchemeshardSchemaLimits(runtime, lowLimits);
 
-        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
-                               "Name: \"USER_0\"");
-
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", 
+                               "Name: \"USER_0\""); 
+ 
         // check that limits have a power, try create 4 shards
-        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
-                              "Name: \"USER_0\" "
-                              "PlanResolution: 50 "
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot", 
+                              "Name: \"USER_0\" " 
+                              "PlanResolution: 50 " 
                               "Coordinators: 2 "
                               "Mediators: 1 "
                               "TimeCastBucketsPerMediator: 2 "
@@ -701,68 +701,68 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
         TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
                               "Name: \"USER_0\" "
                               "PlanResolution: 50 "
-                              "Coordinators: 1 "
-                              "Mediators: 1 "
-                              "TimeCastBucketsPerMediator: 2 "
+                              "Coordinators: 1 " 
+                              "Mediators: 1 " 
+                              "TimeCastBucketsPerMediator: 2 " 
                               "ExternalSchemeShard: true "
                               "StoragePools { "
                               "  Name: \"/dc-1/users/tenant-1:hdd\" "
                               "  Kind: \"hdd\" "
                               "} ");
-        env.TestWaitNotification(runtime, {txId, txId - 1});
-
+        env.TestWaitNotification(runtime, {txId, txId - 1}); 
+ 
         lowLimits.MaxShardsInPath = 2;
         SetSchemeshardSchemaLimits(runtime, lowLimits);
 
         // one more, but for free
-        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
-                              "Name: \"USER_0\" "
-                              "ExternalSysViewProcessor: true ");
-
-        env.TestWaitNotification(runtime, txId);
-
-        ui64 tenantSchemeShard = 0;
-        ui64 tenantSVP = 0;
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
-                           {NLs::PathExist,
-                            NLs::IsExternalSubDomain("USER_0"),
-                            NLs::ExtractTenantSchemeshard(&tenantSchemeShard),
-                            NLs::ExtractTenantSysViewProcessor(&tenantSVP)});
-
-        UNIT_ASSERT(tenantSchemeShard != 0
-                    && tenantSchemeShard != (ui64)-1
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot", 
+                              "Name: \"USER_0\" " 
+                              "ExternalSysViewProcessor: true "); 
+ 
+        env.TestWaitNotification(runtime, txId); 
+ 
+        ui64 tenantSchemeShard = 0; 
+        ui64 tenantSVP = 0; 
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), 
+                           {NLs::PathExist, 
+                            NLs::IsExternalSubDomain("USER_0"), 
+                            NLs::ExtractTenantSchemeshard(&tenantSchemeShard), 
+                            NLs::ExtractTenantSysViewProcessor(&tenantSVP)}); 
+ 
+        UNIT_ASSERT(tenantSchemeShard != 0 
+                    && tenantSchemeShard != (ui64)-1 
                     && tenantSchemeShard != TTestTxConfig::SchemeShard);
-
-        UNIT_ASSERT(tenantSVP != 0 && tenantSVP != (ui64)-1);
-
-        ui64 tenantSVPOnTSS = 0;
-        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0"),
-                           {NLs::PathExist,
-                            NLs::ExtractTenantSysViewProcessor(&tenantSVPOnTSS)});
-
-        UNIT_ASSERT_EQUAL(tenantSVP, tenantSVPOnTSS);
-
+ 
+        UNIT_ASSERT(tenantSVP != 0 && tenantSVP != (ui64)-1); 
+ 
+        ui64 tenantSVPOnTSS = 0; 
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0"), 
+                           {NLs::PathExist, 
+                            NLs::ExtractTenantSysViewProcessor(&tenantSVPOnTSS)}); 
+ 
+        UNIT_ASSERT_EQUAL(tenantSVP, tenantSVPOnTSS); 
+ 
         RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
-
-        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/USER_0",
-                        "Name: \"table\""
-                        "Columns { Name: \"RowId\"      Type: \"Uint64\"}"
-                        "Columns { Name: \"Value\"      Type: \"Utf8\"}"
-                        "KeyColumnNames: [\"RowId\"]");
-
-        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
-
-        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0/table"),
-                           {NLs::PathExist});
-
+ 
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/USER_0", 
+                        "Name: \"table\"" 
+                        "Columns { Name: \"RowId\"      Type: \"Uint64\"}" 
+                        "Columns { Name: \"Value\"      Type: \"Utf8\"}" 
+                        "KeyColumnNames: [\"RowId\"]"); 
+ 
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard); 
+ 
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0/table"), 
+                           {NLs::PathExist}); 
+ 
         RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
-
-        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0"),
-                           {NLs::PathExist,
-                            NLs::ExtractTenantSysViewProcessor(&tenantSVPOnTSS)});
-
-        UNIT_ASSERT_EQUAL(tenantSVP, tenantSVPOnTSS);
-    }
+ 
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0"), 
+                           {NLs::PathExist, 
+                            NLs::ExtractTenantSysViewProcessor(&tenantSVPOnTSS)}); 
+ 
+        UNIT_ASSERT_EQUAL(tenantSVP, tenantSVPOnTSS); 
+    } 
 
     Y_UNIT_TEST(SchemeQuotas) {
         TTestBasicRuntime runtime;

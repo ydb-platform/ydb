@@ -269,19 +269,19 @@ public:
         , SessionCtx(sessionCtx) {}
 
 private:
-    virtual TStatus HandleClusterConfig(TKiClusterConfig node, TExprContext& ctx) override {
-        if (!EnsureTuple(node.GrpcData().Ref(), ctx)) {
-            return TStatus::Error;
-        }
-
-        if (!EnsureAtom(node.TvmId().Ref(), ctx)) {
-            return TStatus::Error;
-        }
-
+    virtual TStatus HandleClusterConfig(TKiClusterConfig node, TExprContext& ctx) override { 
+        if (!EnsureTuple(node.GrpcData().Ref(), ctx)) { 
+            return TStatus::Error; 
+        } 
+ 
+        if (!EnsureAtom(node.TvmId().Ref(), ctx)) { 
+            return TStatus::Error; 
+        } 
+ 
         node.Ptr()->SetTypeAnn(ctx.MakeType<TUnitExprType>());
-        return TStatus::Ok;
-    }
-
+        return TStatus::Ok; 
+    } 
+ 
     virtual TStatus HandleWriteTable(TKiWriteTable node, TExprContext& ctx) override {
         if (!EnsureWorldType(node.World().Ref(), ctx)) {
             return TStatus::Error;

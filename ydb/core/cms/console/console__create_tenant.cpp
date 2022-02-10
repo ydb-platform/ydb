@@ -126,7 +126,7 @@ public:
 
         Tenant->IsExternalSubdomain = Self->FeatureFlags.GetEnableExternalSubdomains();
         Tenant->IsExternalHive = Self->FeatureFlags.GetEnableExternalHive();
-        Tenant->IsExternalSysViewProcessor = Self->FeatureFlags.GetEnablePersistentQueryStats();
+        Tenant->IsExternalSysViewProcessor = Self->FeatureFlags.GetEnablePersistentQueryStats(); 
 
         if (rec.options().disable_external_subdomain()) {
             Tenant->IsExternalSubdomain = false;
@@ -143,11 +143,11 @@ public:
             Tenant->TimeCastBucketsPerMediator = 0;
             Tenant->IsExternalSubdomain = false;
             Tenant->IsExternalHive = false;
-            Tenant->IsExternalSysViewProcessor = false;
+            Tenant->IsExternalSysViewProcessor = false; 
         }
 
         Tenant->IsExternalHive &= Tenant->IsExternalSubdomain; // external hive without external sub domain is pointless
-        Tenant->IsExternalSysViewProcessor &= Tenant->IsExternalSubdomain;
+        Tenant->IsExternalSysViewProcessor &= Tenant->IsExternalSubdomain; 
 
         Tenant->StorageUnitsQuota = Self->Config.DefaultStorageUnitsQuota;
         Tenant->ComputationalUnitsQuota = Self->Config.DefaultComputationalUnitsQuota;

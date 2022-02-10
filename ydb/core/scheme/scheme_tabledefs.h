@@ -19,18 +19,18 @@ using TSchemaVersion = ui64;
 
 // ident for table, must be unique in selected scope
 // for global transactions ownerid is tabletid of owning schemeshard and tableid is counter designated by schemeshard
-// SysViewInfo is not empty for system views attached to corresponding table
-
+// SysViewInfo is not empty for system views attached to corresponding table 
+ 
 struct TTableId {
-    TPathId PathId;
-    TString SysViewInfo;
+    TPathId PathId; 
+    TString SysViewInfo; 
     TSchemaVersion SchemaVersion = 0;
 
-    TTableId() = default;
-
+    TTableId() = default; 
+ 
     // raw ctors
     TTableId(ui64 ownerId, ui64 tableId, const TString& sysViewInfo, ui64 schemaVersion)
-        : PathId(ownerId, tableId)
+        : PathId(ownerId, tableId) 
         , SysViewInfo(sysViewInfo)
         , SchemaVersion(schemaVersion)
     {}
@@ -65,17 +65,17 @@ struct TTableId {
     {}
 
     explicit operator bool() const noexcept {
-        return bool(PathId);
+        return bool(PathId); 
     }
 
     bool HasSamePath(const TTableId &x) const noexcept {
-        return PathId == x.PathId && SysViewInfo == x.SysViewInfo;
+        return PathId == x.PathId && SysViewInfo == x.SysViewInfo; 
     }
 
-    bool IsSystemView() const noexcept {
-        return !SysViewInfo.empty();
-    }
-
+    bool IsSystemView() const noexcept { 
+        return !SysViewInfo.empty(); 
+    } 
+ 
     bool operator==(const TTableId& x) const {
         return PathId == x.PathId && SysViewInfo == x.SysViewInfo && SchemaVersion == x.SchemaVersion;
     }
@@ -97,12 +97,12 @@ struct TTableId {
     }
 
     ui64 PathHash() const noexcept {
-        auto hash = PathId.Hash();
+        auto hash = PathId.Hash(); 
         if (SysViewInfo) {
-            hash = CombineHashes(hash, THash<TString>()(SysViewInfo));
+            hash = CombineHashes(hash, THash<TString>()(SysViewInfo)); 
         }
 
-        return hash;
+        return hash; 
     }
 };
 
@@ -580,7 +580,7 @@ struct TSecurityObject : TAtomicRefCount<TSecurityObject>, NACLib::TSecurityObje
 };
 
 // key description of one minikql operation
-class TKeyDesc : TNonCopyable {
+class TKeyDesc : TNonCopyable { 
 public:
 
     // what we do on row?

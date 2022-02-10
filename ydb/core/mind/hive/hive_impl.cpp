@@ -2322,8 +2322,8 @@ STFUNC(THive::StateWork) {
         hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
         hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
         hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
-        hFunc(NSysView::TEvSysView::TEvGetTabletIdsRequest, Handle);
-        hFunc(NSysView::TEvSysView::TEvGetTabletsRequest, Handle);
+        hFunc(NSysView::TEvSysView::TEvGetTabletIdsRequest, Handle); 
+        hFunc(NSysView::TEvSysView::TEvGetTabletsRequest, Handle); 
     default:
         if (!HandleDefaultEvents(ev, ctx)) {
             BLOG_W("THive::StateWork unhandled event type: " << ev->GetTypeRewrite()
@@ -2387,89 +2387,89 @@ void THive::Handle(TEvHive::TEvConfigureHive::TPtr& ev) {
 }
 
 
-void THive::Handle(NSysView::TEvSysView::TEvGetTabletIdsRequest::TPtr& ev) {
-    const auto& request = ev->Get()->Record;
-    auto fromId = request.GetFrom();
-    auto toId = request.GetTo();
-
-    auto response = MakeHolder<NSysView::TEvSysView::TEvGetTabletIdsResponse>();
-    auto& record = response->Record;
-
-    for (const auto& [tabletId, _] : Tablets) {
-        if (tabletId >= fromId && tabletId <= toId) {
-            record.AddTabletIds(tabletId);
-        }
-    }
-
-    Send(ev->Sender, response.Release());
-}
-
-void THive::Handle(NSysView::TEvSysView::TEvGetTabletsRequest::TPtr& ev) {
-    const auto& request = ev->Get()->Record;
-
-    auto response = MakeHolder<NSysView::TEvSysView::TEvGetTabletsResponse>();
-    auto& record = response->Record;
-
-    auto limit = request.GetBatchSizeLimit();
-    size_t count = 0;
-
-    for (size_t i = 0; i < request.TabletIdsSize(); ++i) {
-        auto tabletId = request.GetTabletIds(i);
-        auto lookup = Tablets.find(tabletId);
-        if (lookup == Tablets.end()) {
-            continue;
-        }
-
-        auto* entry = record.AddEntries();
-        ++count;
-
-        const auto& tablet = lookup->second;
-        auto tabletTypeName = TTabletTypes::TypeToStr(tablet.Type);
-
-        entry->SetTabletId(tabletId);
+void THive::Handle(NSysView::TEvSysView::TEvGetTabletIdsRequest::TPtr& ev) { 
+    const auto& request = ev->Get()->Record; 
+    auto fromId = request.GetFrom(); 
+    auto toId = request.GetTo(); 
+ 
+    auto response = MakeHolder<NSysView::TEvSysView::TEvGetTabletIdsResponse>(); 
+    auto& record = response->Record; 
+ 
+    for (const auto& [tabletId, _] : Tablets) { 
+        if (tabletId >= fromId && tabletId <= toId) { 
+            record.AddTabletIds(tabletId); 
+        } 
+    } 
+ 
+    Send(ev->Sender, response.Release()); 
+} 
+ 
+void THive::Handle(NSysView::TEvSysView::TEvGetTabletsRequest::TPtr& ev) { 
+    const auto& request = ev->Get()->Record; 
+ 
+    auto response = MakeHolder<NSysView::TEvSysView::TEvGetTabletsResponse>(); 
+    auto& record = response->Record; 
+ 
+    auto limit = request.GetBatchSizeLimit(); 
+    size_t count = 0; 
+ 
+    for (size_t i = 0; i < request.TabletIdsSize(); ++i) { 
+        auto tabletId = request.GetTabletIds(i); 
+        auto lookup = Tablets.find(tabletId); 
+        if (lookup == Tablets.end()) { 
+            continue; 
+        } 
+ 
+        auto* entry = record.AddEntries(); 
+        ++count; 
+ 
+        const auto& tablet = lookup->second; 
+        auto tabletTypeName = TTabletTypes::TypeToStr(tablet.Type); 
+ 
+        entry->SetTabletId(tabletId); 
         entry->SetFollowerId(0);
-
-        entry->SetType(tabletTypeName);
-        entry->SetState(ETabletStateName(tablet.State));
-        entry->SetVolatileState(TTabletInfo::EVolatileStateName(tablet.GetVolatileState()));
-        entry->SetBootState(tablet.BootState);
-        entry->SetGeneration(tablet.KnownGeneration);
-        entry->SetNodeId(tablet.NodeId);
-
-        const auto& resourceValues = tablet.GetResourceValues();
-        entry->SetCPU(resourceValues.GetCPU());
-        entry->SetMemory(resourceValues.GetMemory());
-        entry->SetNetwork(resourceValues.GetNetwork());
-
+ 
+        entry->SetType(tabletTypeName); 
+        entry->SetState(ETabletStateName(tablet.State)); 
+        entry->SetVolatileState(TTabletInfo::EVolatileStateName(tablet.GetVolatileState())); 
+        entry->SetBootState(tablet.BootState); 
+        entry->SetGeneration(tablet.KnownGeneration); 
+        entry->SetNodeId(tablet.NodeId); 
+ 
+        const auto& resourceValues = tablet.GetResourceValues(); 
+        entry->SetCPU(resourceValues.GetCPU()); 
+        entry->SetMemory(resourceValues.GetMemory()); 
+        entry->SetNetwork(resourceValues.GetNetwork()); 
+ 
         for (const auto& follower : tablet.Followers) {
-            auto* entry = record.AddEntries();
-            ++count;
-
-            entry->SetTabletId(tabletId);
+            auto* entry = record.AddEntries(); 
+            ++count; 
+ 
+            entry->SetTabletId(tabletId); 
             entry->SetFollowerId(follower.Id);
-
-            entry->SetType(tabletTypeName);
-            // state is null
+ 
+            entry->SetType(tabletTypeName); 
+            // state is null 
             entry->SetVolatileState(TTabletInfo::EVolatileStateName(follower.GetVolatileState()));
             entry->SetBootState(follower.BootState);
-            // generation is null
+            // generation is null 
             entry->SetNodeId(follower.NodeId);
-
+ 
             const auto& resourceValues = follower.GetResourceValues();
-            entry->SetCPU(resourceValues.GetCPU());
-            entry->SetMemory(resourceValues.GetMemory());
-            entry->SetNetwork(resourceValues.GetNetwork());
-        }
-
-        if (count >= limit && i < request.TabletIdsSize() - 1) {
-            record.SetNextTabletId(request.GetTabletIds(i + 1));
-            break;
-        }
-    }
-
-    Send(ev->Sender, response.Release());
-}
-
+            entry->SetCPU(resourceValues.GetCPU()); 
+            entry->SetMemory(resourceValues.GetMemory()); 
+            entry->SetNetwork(resourceValues.GetNetwork()); 
+        } 
+ 
+        if (count >= limit && i < request.TabletIdsSize() - 1) { 
+            record.SetNextTabletId(request.GetTabletIds(i + 1)); 
+            break; 
+        } 
+    } 
+ 
+    Send(ev->Sender, response.Release()); 
+} 
+ 
 const TTabletMetricsAggregates& THive::GetDefaultResourceMetricsAggregates() const {
     return DefaultResourceMetricsAggregates;
 }

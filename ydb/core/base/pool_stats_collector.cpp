@@ -58,9 +58,9 @@ private:
 
 IActor *CreateStatsCollector(ui32 intervalSec,
                              const TActorSystemSetup& setup,
-                             NMonitoring::TDynamicCounterPtr counters)
+                             NMonitoring::TDynamicCounterPtr counters) 
 {
-    return new TStatsCollectingActor(intervalSec, setup, counters);
+    return new TStatsCollectingActor(intervalSec, setup, counters); 
 }
 
 } // namespace NKikimr

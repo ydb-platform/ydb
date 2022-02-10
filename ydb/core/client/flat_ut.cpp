@@ -1114,7 +1114,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     Y_UNIT_TEST(Ls) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port).SetEnableSystemViews(false));
+        TServer cleverServer = TServer(TServerSettings(port).SetEnableSystemViews(false)); 
 
         TFlatMsgBusClient annoyingClient(port);
         annoyingClient.InitRoot();
@@ -1207,7 +1207,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     Y_UNIT_TEST(PathSorting) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port).SetEnableSystemViews(false));
+        TServer cleverServer = TServer(TServerSettings(port).SetEnableSystemViews(false)); 
 
         TFlatMsgBusClient annoyingClient(port);
 
@@ -1253,7 +1253,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     Y_UNIT_TEST(LsPathId) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port).SetEnableSystemViews(false));
+        TServer cleverServer = TServer(TServerSettings(port).SetEnableSystemViews(false)); 
 
         TFlatMsgBusClient annoyingClient(port);
 

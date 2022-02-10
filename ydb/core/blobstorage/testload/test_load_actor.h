@@ -51,15 +51,15 @@ namespace NKikimr {
     NActors::IActor *CreateKeyValueWriterTestLoad(const NKikimrBlobStorage::TEvTestLoadRequest::TKeyValueLoadStart& cmd,
             const NActors::TActorId& parent, const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters,
             ui64 index, ui64 tag);
-
+ 
     NActors::IActor *CreateKqpWriterTestLoad(const NKikimrBlobStorage::TEvTestLoadRequest::TKqpLoadStart& cmd,
             const NActors::TActorId& parent, const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters,
             ui64 index, ui64 tag);
 
-    NActors::IActor *CreateMemoryTestLoad(const NKikimrBlobStorage::TEvTestLoadRequest::TMemoryLoadStart& cmd,
-            const NActors::TActorId& parent, const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters,
-            ui64 index, ui64 tag);
-
+    NActors::IActor *CreateMemoryTestLoad(const NKikimrBlobStorage::TEvTestLoadRequest::TMemoryLoadStart& cmd, 
+            const NActors::TActorId& parent, const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters, 
+            ui64 index, ui64 tag); 
+ 
     struct TLoadReport : public TThrRefBase {
         enum ELoadType {
             LOAD_READ,

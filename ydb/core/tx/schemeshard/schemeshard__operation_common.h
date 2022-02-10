@@ -317,16 +317,16 @@ public:
                 context.OnComplete.BindMsgToPipe(OperationId, tabletID, idx, event);
                 break;
             }
-            case ETabletType::SysViewProcessor: {
-                LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "Send configure request to sysview processor: " << tabletID <<
-                    " opId: " << OperationId <<
-                    " schemeshard: " << ssId);
-                auto event = new NSysView::TEvSysView::TEvConfigureProcessor(path.PathString());
-                shard.Operation = TTxState::ConfigureParts;
-                context.OnComplete.BindMsgToPipe(OperationId, tabletID, idx, event);
-                break;
-            }
+            case ETabletType::SysViewProcessor: { 
+                LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, 
+                    "Send configure request to sysview processor: " << tabletID << 
+                    " opId: " << OperationId << 
+                    " schemeshard: " << ssId); 
+                auto event = new NSysView::TEvSysView::TEvConfigureProcessor(path.PathString()); 
+                shard.Operation = TTxState::ConfigureParts; 
+                context.OnComplete.BindMsgToPipe(OperationId, tabletID, idx, event); 
+                break; 
+            } 
             case ETabletType::SchemeShard: {
                 auto event = new TEvSchemeShard::TEvInitTenantSchemeShard(ui64(ssId),
                                                                               pathId.LocalPathId, path.PathString(),
@@ -622,9 +622,9 @@ public:
             case ETabletType::Hive:
                 context.SS->TabletCounters->Simple()[COUNTER_SUB_DOMAIN_HIVE_COUNT].Add(1);
                 break;
-            case ETabletType::SysViewProcessor:
-                context.SS->TabletCounters->Simple()[COUNTER_SYS_VIEW_PROCESSOR_COUNT].Add(1);
-                break;
+            case ETabletType::SysViewProcessor: 
+                context.SS->TabletCounters->Simple()[COUNTER_SYS_VIEW_PROCESSOR_COUNT].Add(1); 
+                break; 
             default:
                 break;
             }

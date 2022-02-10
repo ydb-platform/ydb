@@ -50,8 +50,8 @@ SRCS(
     stat_processor.cpp
     stat_processor.h
     storage_pool_stat.h
-    sys_view.cpp
-    sys_view.h
+    sys_view.cpp 
+    sys_view.h 
     table_merger.h
     types.h
     update_group_latencies.cpp

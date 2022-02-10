@@ -134,47 +134,47 @@ struct TSchemeShard::TTxUpdateTenant : public TSchemeShard::TRwTxBase {
             MakeSync();
         }
 
-        auto addPrivateShard = [&] (TTabletId tabletId, TTabletTypes::EType tabletType) {
+        auto addPrivateShard = [&] (TTabletId tabletId, TTabletTypes::EType tabletType) { 
             const auto shardIdx = Self->RegisterShardInfo(
                 TShardInfo(InvalidTxId, Self->RootPathId(), tabletType)
                     .WithTabletID(tabletId));
-            Self->PersistUpdateNextShardIdx(db);
+            Self->PersistUpdateNextShardIdx(db); 
 
             Self->PersistShardMapping(db, shardIdx, tabletId, Self->RootPathId(), InvalidTxId, tabletType);
 
-            Y_VERIFY(record.GetSubdomainVersion() >= subdomain->GetVersion());
-            if (record.GetSubdomainVersion() > subdomain->GetVersion()) {
-                subdomain->SetVersion(record.GetSubdomainVersion());
-            }
-
+            Y_VERIFY(record.GetSubdomainVersion() >= subdomain->GetVersion()); 
+            if (record.GetSubdomainVersion() > subdomain->GetVersion()) { 
+                subdomain->SetVersion(record.GetSubdomainVersion()); 
+            } 
+ 
             subdomain->AddPrivateShard(shardIdx);
             subdomain->AddInternalShard(shardIdx);
 
-            subdomain->Initialize(Self->ShardInfos);
-            Self->PersistSubDomain(db, Self->RootPathId(), *subdomain);
+            subdomain->Initialize(Self->ShardInfos); 
+            Self->PersistSubDomain(db, Self->RootPathId(), *subdomain); 
 
             path->IncShardsInside(1);
 
-            SideEffects.PublishToSchemeBoard(InvalidOperationId, Self->RootPathId());
-            MakeSync();
-        };
-
-        if (record.HasTenantHive()) {
-            TTabletId tenantHive = TTabletId(record.GetTenantHive());
-            if (!subdomain->GetTenantHiveID()) {
-                addPrivateShard(tenantHive, ETabletType::Hive);
+            SideEffects.PublishToSchemeBoard(InvalidOperationId, Self->RootPathId()); 
+            MakeSync(); 
+        }; 
+ 
+        if (record.HasTenantHive()) { 
+            TTabletId tenantHive = TTabletId(record.GetTenantHive()); 
+            if (!subdomain->GetTenantHiveID()) { 
+                addPrivateShard(tenantHive, ETabletType::Hive); 
             }
-            Y_VERIFY(tenantHive == subdomain->GetTenantHiveID());
+            Y_VERIFY(tenantHive == subdomain->GetTenantHiveID()); 
         }
 
-        if (record.HasTenantSysViewProcessor()) {
-            TTabletId tenantSVP = TTabletId(record.GetTenantSysViewProcessor());
-            if (!subdomain->GetTenantSysViewProcessorID()) {
-                addPrivateShard(tenantSVP, ETabletType::SysViewProcessor);
-            }
-            Y_VERIFY(tenantSVP == subdomain->GetTenantSysViewProcessorID());
-        }
-
+        if (record.HasTenantSysViewProcessor()) { 
+            TTabletId tenantSVP = TTabletId(record.GetTenantSysViewProcessor()); 
+            if (!subdomain->GetTenantSysViewProcessorID()) { 
+                addPrivateShard(tenantSVP, ETabletType::SysViewProcessor); 
+            } 
+            Y_VERIFY(tenantSVP == subdomain->GetTenantSysViewProcessorID()); 
+        } 
+ 
         if (record.HasUpdateTenantRootACL()) {
             // KIKIMR-10699: transfer tenants root ACL from GSS to the TSS
             // here TSS sees the ACL from GSS

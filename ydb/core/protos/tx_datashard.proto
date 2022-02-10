@@ -749,9 +749,9 @@ message TEvPeriodicTableStats {
     optional uint32 ShardState = 7;
     repeated uint64 UserTablePartOwners = 8;
     repeated uint64 SysTablesPartOwners = 9;
-
-    optional uint32 NodeId = 10;
-    optional uint64 StartTime = 11; // milliseconds since epoch
+ 
+    optional uint32 NodeId = 10; 
+    optional uint64 StartTime = 11; // milliseconds since epoch 
 
     optional uint64 TableOwnerId = 12;
 }

@@ -397,7 +397,7 @@ namespace NActors {
         static_assert(sizeof(TRevolvingMailbox) == 128, "expect sizeof(TRevolvingMailbox) == 128");
 
         struct THTSwapMailbox: public TMailboxHeader {
-            using TQueueType = NThreading::THTSwapQueue<IEventHandle*>;
+            using TQueueType = NThreading::THTSwapQueue<IEventHandle*>; 
 
             TQueueType Queue;
             NHPTimer::STime ScheduleMoment;
@@ -447,7 +447,7 @@ namespace NActors {
                       "expect sizeof(THTSwapMailbox) == 64");
 
         struct TReadAsFilledMailbox: public TMailboxHeader {
-            using TQueueType = NThreading::TReadAsFilledQueue<IEventHandle>;
+            using TQueueType = NThreading::TReadAsFilledQueue<IEventHandle>; 
 
             TQueueType Queue;
             NHPTimer::STime ScheduleMoment;

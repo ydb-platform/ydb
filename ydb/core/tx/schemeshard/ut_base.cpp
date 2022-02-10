@@ -9303,22 +9303,22 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, txId);
         env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets+2, TTestTxConfig::FakeHiveTablets+10));
     }
-
-    Y_UNIT_TEST(RejectSystemViewPath) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, 4, true, &CreateFlatTxSchemeShard, true);
-        ui64 txId = 100;
-
-        TestCreateTable(runtime, ++txId, "/MyRoot",
-                        "Name: \".sys\""
-                            "Columns { Name: \"key\" Type: \"Uint32\"}"
-                            "KeyColumnNames: [\"key\"]",
+ 
+    Y_UNIT_TEST(RejectSystemViewPath) { 
+        TTestBasicRuntime runtime; 
+        TTestEnv env(runtime, 4, true, &CreateFlatTxSchemeShard, true); 
+        ui64 txId = 100; 
+ 
+        TestCreateTable(runtime, ++txId, "/MyRoot", 
+                        "Name: \".sys\"" 
+                            "Columns { Name: \"key\" Type: \"Uint32\"}" 
+                            "KeyColumnNames: [\"key\"]", 
                         {NKikimrScheme::StatusSchemeError});
-
+ 
         TestMkDir(runtime, ++txId, "/MyRoot", ".sys", {NKikimrScheme::StatusSchemeError});
         TestMkDir(runtime, ++txId, "/MyRoot", ".sys/partition_stats", {NKikimrScheme::StatusSchemeError});
         TestMkDir(runtime, ++txId, "/MyRoot", "DirA/.sys/partition_stats", {NKikimrScheme::StatusSchemeError});
-    }
+    } 
 
     Y_UNIT_TEST(DocumentApiVersion) {
         TTestBasicRuntime runtime;

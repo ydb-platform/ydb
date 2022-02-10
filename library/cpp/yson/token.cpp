@@ -1,11 +1,11 @@
-#include "token.h"
-
-#include <util/string/vector.h>
-#include <util/string/printf.h>
-
+#include "token.h" 
+ 
+#include <util/string/vector.h> 
+#include <util/string/printf.h> 
+ 
 namespace NYson {
     ////////////////////////////////////////////////////////////////////////////////
-
+ 
     ETokenType CharToTokenType(char ch) {
         switch (ch) {
             case ';':
@@ -40,7 +40,7 @@ namespace NYson {
                 return ETokenType::EndOfStream;
         }
     }
-
+ 
     char TokenTypeToChar(ETokenType type) {
         switch (type) {
             case ETokenType::Semicolon:
@@ -74,16 +74,16 @@ namespace NYson {
             default:
                 Y_FAIL("unreachable");
         }
-    }
-
+    } 
+ 
     TString TokenTypeToString(ETokenType type) {
         return TString(1, TokenTypeToChar(type));
-    }
-
+    } 
+ 
     ////////////////////////////////////////////////////////////////////////////////
-
+ 
     const TToken TToken::EndOfStream;
-
+ 
     TToken::TToken()
         : Type_(ETokenType::EndOfStream)
         , Int64Value(0)
@@ -92,7 +92,7 @@ namespace NYson {
         , BooleanValue(false)
     {
     }
-
+ 
     TToken::TToken(ETokenType type)
         : Type_(type)
         , Int64Value(0)
@@ -111,7 +111,7 @@ namespace NYson {
                 break;
         }
     }
-
+ 
     TToken::TToken(const TStringBuf& stringValue)
         : Type_(ETokenType::String)
         , StringValue(stringValue)
@@ -120,8 +120,8 @@ namespace NYson {
         , DoubleValue(0.0)
         , BooleanValue(false)
     {
-    }
-
+    } 
+ 
     TToken::TToken(i64 int64Value)
         : Type_(ETokenType::Int64)
         , Int64Value(int64Value)
@@ -129,7 +129,7 @@ namespace NYson {
         , DoubleValue(0.0)
     {
     }
-
+ 
     TToken::TToken(ui64 uint64Value)
         : Type_(ETokenType::Uint64)
         , Int64Value(0)
@@ -138,7 +138,7 @@ namespace NYson {
         , BooleanValue(false)
     {
     }
-
+ 
     TToken::TToken(double doubleValue)
         : Type_(ETokenType::Double)
         , Int64Value(0)
@@ -147,7 +147,7 @@ namespace NYson {
         , BooleanValue(false)
     {
     }
-
+ 
     TToken::TToken(bool booleanValue)
         : Type_(ETokenType::Boolean)
         , Int64Value(0)
@@ -155,36 +155,36 @@ namespace NYson {
         , BooleanValue(booleanValue)
     {
     }
-
+ 
     bool TToken::IsEmpty() const {
         return Type_ == ETokenType::EndOfStream;
     }
-
+ 
     const TStringBuf& TToken::GetStringValue() const {
         CheckType(ETokenType::String);
         return StringValue;
     }
-
+ 
     i64 TToken::GetInt64Value() const {
         CheckType(ETokenType::Int64);
         return Int64Value;
     }
-
+ 
     ui64 TToken::GetUint64Value() const {
         CheckType(ETokenType::Uint64);
         return Uint64Value;
     }
-
+ 
     double TToken::GetDoubleValue() const {
         CheckType(ETokenType::Double);
         return DoubleValue;
     }
-
+ 
     bool TToken::GetBooleanValue() const {
         CheckType(ETokenType::Boolean);
         return BooleanValue;
     }
-
+ 
     void TToken::CheckType(ETokenType expectedType) const {
         if (Type_ != expectedType) {
             if (Type_ == ETokenType::EndOfStream) {
@@ -194,9 +194,9 @@ namespace NYson {
                                         << "', Type: " << TokenTypeToString(Type_)
                                         << ", ExpectedType: " << TokenTypeToString(expectedType) << ")";
             }
-        }
-    }
-
+        } 
+    } 
+ 
     void TToken::Reset() {
         Type_ = ETokenType::EndOfStream;
         Int64Value = 0;
@@ -205,32 +205,32 @@ namespace NYson {
         StringValue = TStringBuf();
         BooleanValue = false;
     }
-
+ 
     TString ToString(const TToken& token) {
         switch (token.GetType()) {
             case ETokenType::EndOfStream:
                 return TString();
-
+ 
             case ETokenType::String:
                 return TString(token.GetStringValue());
-
+ 
             case ETokenType::Int64:
                 return ::ToString(token.GetInt64Value());
-
+ 
             case ETokenType::Uint64:
                 return ::ToString(token.GetUint64Value());
-
+ 
             case ETokenType::Double:
                 return ::ToString(token.GetDoubleValue());
-
+ 
             case ETokenType::Boolean:
                 return token.GetBooleanValue() ? "true" : "false";
-
+ 
             default:
                 return TokenTypeToString(token.GetType());
         }
-    }
-
+    } 
+ 
     ////////////////////////////////////////////////////////////////////////////////
-
+ 
 } // namespace NYson

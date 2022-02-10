@@ -38,7 +38,7 @@ struct TKikimrData {
         DataSourceNames.insert(TKiReadTableScheme::CallableName());
         DataSourceNames.insert(TKiReadTableList::CallableName());
 
-        DataSinkNames.insert(TKiClusterConfig::CallableName());
+        DataSinkNames.insert(TKiClusterConfig::CallableName()); 
         DataSinkNames.insert(TKiWriteTable::CallableName());
         DataSinkNames.insert(TKiUpdateTable::CallableName());
         DataSinkNames.insert(TKiDeleteTable::CallableName());

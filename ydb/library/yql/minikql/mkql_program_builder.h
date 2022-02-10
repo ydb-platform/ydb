@@ -416,7 +416,7 @@ public:
         const TBinaryLambda& groupSwitch,
         const TUnaryLambda& keyExtractor,
         const TUnaryLambda& handler = {});
-    TRuntimeNode HoppingCore(TRuntimeNode list,
+    TRuntimeNode HoppingCore(TRuntimeNode list, 
         const TUnaryLambda& timeExtractor,
         const TUnaryLambda& init,
         const TBinaryLambda& update,
@@ -424,7 +424,7 @@ public:
         const TUnaryLambda& load,
         const TBinaryLambda& merge,
         const TBinaryLambda& finish,
-        TRuntimeNode hop, TRuntimeNode interval, TRuntimeNode delay);
+        TRuntimeNode hop, TRuntimeNode interval, TRuntimeNode delay); 
     TRuntimeNode MultiHoppingCore(TRuntimeNode list,
         const TUnaryLambda& keyExtractor,
         const TUnaryLambda& timeExtractor,

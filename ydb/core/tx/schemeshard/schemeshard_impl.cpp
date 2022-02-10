@@ -990,12 +990,12 @@ TSubDomainInfo::TPtr TSchemeShard::ResolveDomainInfo(TPathElement::TPtr pathEl) 
 }
 
 TPathId TSchemeShard::GetDomainKey(TPathId pathId) const {
-    auto domainId = ResolveDomainId(pathId);
-    TPathElement::TPtr domainElement = PathsById.at(domainId);
-    Y_VERIFY(domainElement);
-    return domainElement->IsRoot() ? ParentDomainId : domainId;
-}
-
+    auto domainId = ResolveDomainId(pathId); 
+    TPathElement::TPtr domainElement = PathsById.at(domainId); 
+    Y_VERIFY(domainElement); 
+    return domainElement->IsRoot() ? ParentDomainId : domainId; 
+} 
+ 
 const NKikimrSubDomains::TProcessingParams &TSchemeShard::SelectProcessingPrarams(TPathId id) const {
     TPathElement::TPtr item = PathsById.at(id);
     return SelectProcessingPrarams(item);
@@ -3248,11 +3248,11 @@ void TSchemeShard::PersistRemoveTable(NIceDb::TNiceDb& db, TPathId pathId, const
 
     Tables.erase(pathId);
     DecrementPathDbRefCount(pathId, "remove table");
-
+ 
     if (AppData()->FeatureFlags.GetEnableSystemViews()) {
-        auto ev = MakeHolder<NSysView::TEvSysView::TEvRemoveTable>(GetDomainKey(pathId), pathId);
-        Send(SysPartitionStatsCollector, ev.Release());
-    }
+        auto ev = MakeHolder<NSysView::TEvSysView::TEvRemoveTable>(GetDomainKey(pathId), pathId); 
+        Send(SysPartitionStatsCollector, ev.Release()); 
+    } 
 }
 
 void TSchemeShard::PersistRemoveTableIndex(NIceDb::TNiceDb &db, TPathId pathId)
@@ -3699,8 +3699,8 @@ bool TSchemeShard::IsShemeShardConfigured() const {
 void TSchemeShard::Die(const TActorContext &ctx) {
     ctx.Send(SchemeBoardPopulator, new TEvents::TEvPoisonPill());
     ctx.Send(TxAllocatorClient, new TEvents::TEvPoisonPill());
-    ctx.Send(SysPartitionStatsCollector, new TEvents::TEvPoisonPill());
-
+    ctx.Send(SysPartitionStatsCollector, new TEvents::TEvPoisonPill()); 
+ 
     ShardDeleter.Shutdown(ctx);
     ParentDomainLink.Shutdown(ctx);
 
@@ -3773,8 +3773,8 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
 
     TxAllocatorClient = RegisterWithSameMailbox(CreateTxAllocatorClient(CollectTxAllocators(appData)));
 
-    SysPartitionStatsCollector = Register(NSysView::CreatePartitionStatsCollector().Release());
-
+    SysPartitionStatsCollector = Register(NSysView::CreatePartitionStatsCollector().Release()); 
+ 
     SplitSettings.Register(appData->Icb);
 
     Executor()->RegisterExternalTabletCounters(TabletCountersPtr);
@@ -3915,8 +3915,8 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
 
         HFuncTraced(TEvPrivate::TEvServerlessStorageBilling, Handle);
 
-        HFuncTraced(NSysView::TEvSysView::TEvGetPartitionStats, Handle);
-
+        HFuncTraced(NSysView::TEvSysView::TEvGetPartitionStats, Handle); 
+ 
         HFuncTraced(TEvSubDomain::TEvConfigureStatus, Handle);
         HFuncTraced(TEvSchemeShard::TEvInitTenantSchemeShard, Handle);
         HFuncTraced(TEvSchemeShard::TEvInitTenantSchemeShardResult, Handle);
@@ -5766,19 +5766,19 @@ bool TSchemeShard::FillUniformPartitioning(TVector<TString>& rangeEnds, ui32 key
 
 void TSchemeShard::SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, TVector<TTableShardInfo>&& newPartitioning) {
     if (AppData()->FeatureFlags.GetEnableSystemViews()) {
-        TVector<std::pair<ui64, ui64>> shardIndices;
-        shardIndices.reserve(newPartitioning.size());
-        for (auto& info : newPartitioning) {
-            shardIndices.push_back(
-                std::make_pair(ui64(info.ShardIdx.GetOwnerId()), ui64(info.ShardIdx.GetLocalId())));
-        }
-
-        auto path = TPath::Init(pathId, this);
-        auto ev = MakeHolder<NSysView::TEvSysView::TEvSetPartitioning>(GetDomainKey(pathId), pathId, path.PathString());
-        ev->ShardIndices.swap(shardIndices);
-        Send(SysPartitionStatsCollector, ev.Release());
-    }
-
+        TVector<std::pair<ui64, ui64>> shardIndices; 
+        shardIndices.reserve(newPartitioning.size()); 
+        for (auto& info : newPartitioning) { 
+            shardIndices.push_back( 
+                std::make_pair(ui64(info.ShardIdx.GetOwnerId()), ui64(info.ShardIdx.GetLocalId()))); 
+        } 
+ 
+        auto path = TPath::Init(pathId, this); 
+        auto ev = MakeHolder<NSysView::TEvSysView::TEvSetPartitioning>(GetDomainKey(pathId), pathId, path.PathString()); 
+        ev->ShardIndices.swap(shardIndices); 
+        Send(SysPartitionStatsCollector, ev.Release()); 
+    } 
+ 
     if (!tableInfo->IsBackup) {
         for (const auto& p: newPartitioning) {
             ui64 searchHeight = 0;
@@ -5793,9 +5793,9 @@ void TSchemeShard::SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, T
         }
     }
 
-    tableInfo->SetPartitioning(std::move(newPartitioning));
-}
-
+    tableInfo->SetPartitioning(std::move(newPartitioning)); 
+} 
+ 
 void TSchemeShard::FillAsyncIndexInfo(const TPathId& tableId, NKikimrTxDataShard::TFlatSchemeTransaction& tx) {
     Y_VERIFY(PathsById.contains(tableId));
 

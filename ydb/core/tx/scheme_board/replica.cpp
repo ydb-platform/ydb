@@ -13,7 +13,7 @@
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/interconnect.h>
 #include <library/cpp/actors/core/log.h>
-#include <library/cpp/actors/core/memory_track.h>
+#include <library/cpp/actors/core/memory_track.h> 
 
 #include <util/generic/hash.h>
 #include <util/generic/map.h>
@@ -53,7 +53,7 @@ private:
             , WaitForAck(false)
             , LastVersionSent(0)
             , NotifiedStrongly(true)
-            , SyncRequestCookie(0)
+            , SyncRequestCookie(0) 
             , SyncResponseCookie(0)
         {
         }
@@ -145,8 +145,8 @@ private:
 
 public:
     class TDescription {
-        static constexpr char MemoryLabelDescribeResult[] = "SchemeBoard/Replica/DescribeSchemeResult";
-
+        static constexpr char MemoryLabelDescribeResult[] = "SchemeBoard/Replica/DescribeSchemeResult"; 
+ 
         void Notify() {
             if (!Subscribers) {
                 return;
@@ -166,59 +166,59 @@ public:
             MultiSend(subscribers, Owner->SelfId(), std::move(notify));
         }
 
-        void CalculateResultSize() {
-            ResultSize = DescribeSchemeResult.ByteSizeLong();
-        }
-
-        size_t FullSize() const {
-            size_t size = ResultSize;
-            if (PreSerializedDescribeSchemeResult) {
-                size += PreSerializedDescribeSchemeResult->size();
-            }
-            return size;
-        }
-
-        void TrackMemory() const {
-            NActors::NMemory::TLabel<MemoryLabelDescribeResult>::Add(FullSize());
-        }
-
-        void UntrackMemory() const {
-            NActors::NMemory::TLabel<MemoryLabelDescribeResult>::Sub(FullSize());
-        }
-
-        void Move(TDescription&& other) {
-            UntrackMemory();
-            other.UntrackMemory();
-
-            Owner = other.Owner;
-            Path = std::move(other.Path);
-            PathId = std::move(other.PathId);
-            DescribeSchemeResult = std::move(other.DescribeSchemeResult);
-            PreSerializedDescribeSchemeResult = std::move(other.PreSerializedDescribeSchemeResult);
-            ExplicitlyDeleted = other.ExplicitlyDeleted;
-            Subscribers = std::move(other.Subscribers);
-
-            ResultSize = other.ResultSize;
-            other.ResultSize = 0;
-            TrackNotify = other.TrackNotify;
-
-            TrackMemory();
-            other.TrackMemory();
-        }
-
+        void CalculateResultSize() { 
+            ResultSize = DescribeSchemeResult.ByteSizeLong(); 
+        } 
+ 
+        size_t FullSize() const { 
+            size_t size = ResultSize; 
+            if (PreSerializedDescribeSchemeResult) { 
+                size += PreSerializedDescribeSchemeResult->size(); 
+            } 
+            return size; 
+        } 
+ 
+        void TrackMemory() const { 
+            NActors::NMemory::TLabel<MemoryLabelDescribeResult>::Add(FullSize()); 
+        } 
+ 
+        void UntrackMemory() const { 
+            NActors::NMemory::TLabel<MemoryLabelDescribeResult>::Sub(FullSize()); 
+        } 
+ 
+        void Move(TDescription&& other) { 
+            UntrackMemory(); 
+            other.UntrackMemory(); 
+ 
+            Owner = other.Owner; 
+            Path = std::move(other.Path); 
+            PathId = std::move(other.PathId); 
+            DescribeSchemeResult = std::move(other.DescribeSchemeResult); 
+            PreSerializedDescribeSchemeResult = std::move(other.PreSerializedDescribeSchemeResult); 
+            ExplicitlyDeleted = other.ExplicitlyDeleted; 
+            Subscribers = std::move(other.Subscribers); 
+ 
+            ResultSize = other.ResultSize; 
+            other.ResultSize = 0; 
+            TrackNotify = other.TrackNotify; 
+ 
+            TrackMemory(); 
+            other.TrackMemory(); 
+        } 
+ 
     public:
         explicit TDescription(TReplica* owner, const TString& path)
             : Owner(owner)
             , Path(path)
         {
-            TrackMemory();
+            TrackMemory(); 
         }
 
         explicit TDescription(TReplica* owner, const TPathId& pathId)
             : Owner(owner)
             , PathId(pathId)
         {
-            TrackMemory();
+            TrackMemory(); 
         }
 
         explicit TDescription(TReplica* owner, const TString& path, const TPathId& pathId)
@@ -226,7 +226,7 @@ public:
             , Path(path)
             , PathId(pathId)
         {
-            TrackMemory();
+            TrackMemory(); 
         }
 
         explicit TDescription(
@@ -237,8 +237,8 @@ public:
             , PathId(pathId)
             , DescribeSchemeResult(std::move(describeSchemeResult))
         {
-            CalculateResultSize();
-            TrackMemory();
+            CalculateResultSize(); 
+            TrackMemory(); 
         }
 
         explicit TDescription(
@@ -251,28 +251,28 @@ public:
             , PathId(pathId)
             , DescribeSchemeResult(std::move(describeSchemeResult))
         {
-            CalculateResultSize();
-            TrackMemory();
+            CalculateResultSize(); 
+            TrackMemory(); 
         }
 
-        TDescription(TDescription&& other) {
-            TrackMemory();
-            Move(std::move(other));
-        }
-
-        TDescription& operator=(TDescription&& other) {
-            Move(std::move(other));
-            return *this;
-        }
-
-        TDescription(const TDescription& other) = delete;
-        TDescription& operator=(const TDescription& other) = delete;
-
-        ~TDescription()
-        {
-            UntrackMemory();
-        }
-
+        TDescription(TDescription&& other) { 
+            TrackMemory(); 
+            Move(std::move(other)); 
+        } 
+ 
+        TDescription& operator=(TDescription&& other) { 
+            Move(std::move(other)); 
+            return *this; 
+        } 
+ 
+        TDescription(const TDescription& other) = delete; 
+        TDescription& operator=(const TDescription& other) = delete; 
+ 
+        ~TDescription() 
+        { 
+            UntrackMemory(); 
+        } 
+ 
         bool operator<(const TDescription& other) const {
             return GetVersion() < other.GetVersion();
         }
@@ -309,11 +309,11 @@ public:
                 << ", rigth pathId# " << other.PathId
                 << ", rigth version# " << other.GetVersion());
 
-            UntrackMemory();
-            other.UntrackMemory();
-            TrackNotify = false;
-            other.TrackNotify = false;
-
+            UntrackMemory(); 
+            other.UntrackMemory(); 
+            TrackNotify = false; 
+            other.TrackNotify = false; 
+ 
             if (*this > other) {
                 other.DescribeSchemeResult.Swap(&DescribeSchemeResult);
                 other.PreSerializedDescribeSchemeResult.Clear();
@@ -328,14 +328,14 @@ public:
                 Notify();
             }
 
-            CalculateResultSize();
-            other.CalculateResultSize();
-
-            TrackNotify = true;
-            other.TrackNotify = true;
-            TrackMemory();
-            other.TrackMemory();
-
+            CalculateResultSize(); 
+            other.CalculateResultSize(); 
+ 
+            TrackNotify = true; 
+            other.TrackNotify = true; 
+            TrackMemory(); 
+            other.TrackMemory(); 
+ 
             Subscribers.insert(other.Subscribers.begin(), other.Subscribers.end());
 
             return *this;
@@ -388,11 +388,11 @@ public:
 
         void Clear() {
             ExplicitlyDeleted = true;
-            UntrackMemory();
+            UntrackMemory(); 
             TDescribeSchemeResult().Swap(&DescribeSchemeResult);
             PreSerializedDescribeSchemeResult.Clear();
-            ResultSize = 0;
-            TrackMemory();
+            ResultSize = 0; 
+            TrackMemory(); 
             Notify();
         }
 
@@ -415,13 +415,13 @@ public:
                 if (!PreSerializedDescribeSchemeResult) {
                     TString serialized;
                     Y_PROTOBUF_SUPPRESS_NODISCARD DescribeSchemeResult.SerializeToString(&serialized);
-                    if (TrackNotify) {
-                        UntrackMemory();
-                    }
+                    if (TrackNotify) { 
+                        UntrackMemory(); 
+                    } 
                     PreSerializedDescribeSchemeResult = std::move(serialized);
-                    if (TrackNotify) {
-                        TrackMemory();
-                    }
+                    if (TrackNotify) { 
+                        TrackMemory(); 
+                    } 
                 }
 
                 notify->SetDescribeSchemeResult(*PreSerializedDescribeSchemeResult);
@@ -479,10 +479,10 @@ public:
         // subscribers
         THashMap<TActorId, TSubscriberInfo> Subscribers;
 
-        // memory tracking
-        size_t ResultSize = 0;
-        bool TrackNotify = true;
-
+        // memory tracking 
+        size_t ResultSize = 0; 
+        bool TrackNotify = true; 
+ 
     }; // TDescription
 
     struct TMerger {

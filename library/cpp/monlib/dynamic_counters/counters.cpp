@@ -70,38 +70,38 @@ TDynamicCounters::TCounterPtr TDynamicCounters::GetNamedCounter(const TString& n
     return AsCounterRef(GetNamedCounterImpl<false, TCounterForPtr>(name, value, derivative, vis));
 }
 
-THistogramPtr TDynamicCounters::GetHistogram(const TString& value, IHistogramCollectorPtr collector, bool derivative, EVisibility vis) {
-    return GetNamedHistogram("sensor", value, std::move(collector), derivative, vis);
+THistogramPtr TDynamicCounters::GetHistogram(const TString& value, IHistogramCollectorPtr collector, bool derivative, EVisibility vis) { 
+    return GetNamedHistogram("sensor", value, std::move(collector), derivative, vis); 
 }
 
-THistogramPtr TDynamicCounters::GetNamedHistogram(const TString& name, const TString& value, IHistogramCollectorPtr collector, bool derivative, EVisibility vis) {
-    return AsHistogramRef(GetNamedCounterImpl<false, THistogramCounter>(name, value, std::move(collector), derivative, vis));
+THistogramPtr TDynamicCounters::GetNamedHistogram(const TString& name, const TString& value, IHistogramCollectorPtr collector, bool derivative, EVisibility vis) { 
+    return AsHistogramRef(GetNamedCounterImpl<false, THistogramCounter>(name, value, std::move(collector), derivative, vis)); 
 }
 
-THistogramPtr TDynamicCounters::GetExpiringHistogram(const TString& value, IHistogramCollectorPtr collector, bool derivative, EVisibility vis) {
-    return GetExpiringNamedHistogram("sensor", value, std::move(collector), derivative, vis);
+THistogramPtr TDynamicCounters::GetExpiringHistogram(const TString& value, IHistogramCollectorPtr collector, bool derivative, EVisibility vis) { 
+    return GetExpiringNamedHistogram("sensor", value, std::move(collector), derivative, vis); 
 }
 
-THistogramPtr TDynamicCounters::GetExpiringNamedHistogram(const TString& name, const TString& value, IHistogramCollectorPtr collector, bool derivative, EVisibility vis) {
-    return AsHistogramRef(GetNamedCounterImpl<true, TExpiringHistogramCounter>(name, value, std::move(collector), derivative, vis));
+THistogramPtr TDynamicCounters::GetExpiringNamedHistogram(const TString& name, const TString& value, IHistogramCollectorPtr collector, bool derivative, EVisibility vis) { 
+    return AsHistogramRef(GetNamedCounterImpl<true, TExpiringHistogramCounter>(name, value, std::move(collector), derivative, vis)); 
 }
 
-TDynamicCounters::TCounterPtr TDynamicCounters::FindCounter(const TString& value) const {
-    return FindNamedCounter("sensor", value);
-}
-
-TDynamicCounters::TCounterPtr TDynamicCounters::FindNamedCounter(const TString& name, const TString& value) const {
-    return AsCounterRef(FindNamedCounterImpl<TCounterForPtr>(name, value));
-}
-
-THistogramPtr TDynamicCounters::FindHistogram(const TString& value) const {
-    return FindNamedHistogram("sensor", value);
-}
-
-THistogramPtr TDynamicCounters::FindNamedHistogram(const TString& name,const TString& value) const {
-    return AsHistogramRef(FindNamedCounterImpl<THistogramCounter>(name, value));
-}
-
+TDynamicCounters::TCounterPtr TDynamicCounters::FindCounter(const TString& value) const { 
+    return FindNamedCounter("sensor", value); 
+} 
+ 
+TDynamicCounters::TCounterPtr TDynamicCounters::FindNamedCounter(const TString& name, const TString& value) const { 
+    return AsCounterRef(FindNamedCounterImpl<TCounterForPtr>(name, value)); 
+} 
+ 
+THistogramPtr TDynamicCounters::FindHistogram(const TString& value) const { 
+    return FindNamedHistogram("sensor", value); 
+} 
+ 
+THistogramPtr TDynamicCounters::FindNamedHistogram(const TString& name,const TString& value) const { 
+    return AsHistogramRef(FindNamedCounterImpl<THistogramCounter>(name, value)); 
+} 
+ 
 void TDynamicCounters::RemoveCounter(const TString &value) {
     RemoveNamedCounter("sensor", value);
 }
@@ -298,11 +298,11 @@ TDynamicCounters::TCountablePtr TDynamicCounters::GetNamedCounterImpl(const TStr
     }
     return it->second;
 }
-
-template <class TCounterType>
-TDynamicCounters::TCountablePtr TDynamicCounters::FindNamedCounterImpl(const TString& name, const TString& value) const {
-    TReadGuard g(Lock);
-    auto it = Counters.find({name, value});
-    return it != Counters.end() ? it->second : nullptr;
-}
-
+ 
+template <class TCounterType> 
+TDynamicCounters::TCountablePtr TDynamicCounters::FindNamedCounterImpl(const TString& name, const TString& value) const { 
+    TReadGuard g(Lock); 
+    auto it = Counters.find({name, value}); 
+    return it != Counters.end() ? it->second : nullptr; 
+} 
+ 

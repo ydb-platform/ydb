@@ -1,13 +1,13 @@
-#pragma once
-
+#pragma once 
+ 
 #include <ydb/core/protos/services.pb.h>
-#include "kqp_compute.h"
-
+#include "kqp_compute.h" 
+ 
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 #include <ydb/core/formats/arrow_helpers.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tablet_flat/flat_database.h>
-
+ 
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 
@@ -19,9 +19,9 @@ namespace NKikimrTxDataShard {
     class TKqpTransaction_TScanTaskMeta;
 }
 
-namespace NKikimr {
-namespace NMiniKQL {
-
+namespace NKikimr { 
+namespace NMiniKQL { 
+ 
 std::pair<ui64, ui64> GetUnboxedValueSizeForTests(const NUdf::TUnboxedValue& value, NScheme::TTypeId type);
 
 class IKqpTableReader : public TSimpleRefCount<IKqpTableReader> {
@@ -87,13 +87,13 @@ public:
 
     public:
         ui64 TaskId = 0;
-        TTableId TableId;
+        TTableId TableId; 
         TString TablePath;
-        TSerializedTableRange Range;
+        TSerializedTableRange Range; 
         TSmallVec<bool> SkipNullKeys;
 
         // shared with actor via TableReader
-        TIntrusivePtr<IKqpTableReader> TableReader;
+        TIntrusivePtr<IKqpTableReader> TableReader; 
 
         struct TBasicStats {
             size_t Rows = 0;
@@ -126,37 +126,37 @@ public:
         TQueue<RowBatch> RowBatches;
         ui64 StoredBytes = 0;
         bool Finished = false;
-    };
-
-public:
+    }; 
+ 
+public: 
     explicit TKqpScanComputeContext(NYql::NDqProto::EDqStatsMode statsMode)
         : StatsMode(statsMode) {}
-
-    TIntrusivePtr<IKqpTableReader> ReadTable(ui32 callableId) const;
-
-    void AddTableScan(ui32 callableId, const TTableId& tableId, const TTableRange& range,
+ 
+    TIntrusivePtr<IKqpTableReader> ReadTable(ui32 callableId) const; 
+ 
+    void AddTableScan(ui32 callableId, const TTableId& tableId, const TTableRange& range, 
         const TSmallVec<TColumn>& columns, const TSmallVec<TColumn>& systemColumns, const TSmallVec<bool>& skipNullKeys);
-
+ 
     void AddTableScan(ui32 callableId, const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta,
         NYql::NDqProto::EDqStatsMode statsMode);
 
-    TScanData& GetTableScan(ui32 callableId);
-    TMap<ui32, TScanData>& GetTableScans();
+    TScanData& GetTableScan(ui32 callableId); 
+    TMap<ui32, TScanData>& GetTableScans(); 
     const TMap<ui32, TScanData>& GetTableScans() const;
-
+ 
     void Clear() {
         for (auto& scan: Scans) {
             scan.second.Clear();
         }
         Scans.clear();
     }
-
-private:
+ 
+private: 
     const NYql::NDqProto::EDqStatsMode StatsMode;
-    TMap<ui32, TScanData> Scans;
-};
-
+    TMap<ui32, TScanData> Scans; 
+}; 
+ 
 TIntrusivePtr<IKqpTableReader> CreateKqpTableReader(TKqpScanComputeContext::TScanData& scanData);
-
+ 
 } // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr 

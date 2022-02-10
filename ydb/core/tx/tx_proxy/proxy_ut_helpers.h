@@ -195,7 +195,7 @@ public:
 
         GetSettings().SetNodeCount(staticNodes);
         GetSettings().SetDynamicNodeCount(dynamicNodes);
-        GetSettings().SetEnableSystemViews(false);
+        GetSettings().SetEnableSystemViews(false); 
 
         for (ui32 poolNum = 1; poolNum <= poolsCount; ++poolNum) {
             GetSettings().AddStoragePoolType("storage-pool-number-" + ToString(poolNum));

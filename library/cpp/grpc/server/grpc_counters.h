@@ -18,13 +18,13 @@ struct ICounterBlock : public TThrRefBase {
     virtual void CountRequestsWithoutDatabase() {}
     virtual void CountRequestsWithoutToken() {}
     virtual void CountRequestWithoutTls() {}
-
-    virtual TIntrusivePtr<ICounterBlock> Clone() { return this; }
-    virtual void UseDatabase(const TString& database) { Y_UNUSED(database); }
+ 
+    virtual TIntrusivePtr<ICounterBlock> Clone() { return this; } 
+    virtual void UseDatabase(const TString& database) { Y_UNUSED(database); } 
 };
 
-using ICounterBlockPtr = TIntrusivePtr<ICounterBlock>;
-
+using ICounterBlockPtr = TIntrusivePtr<ICounterBlock>; 
+ 
 class TCounterBlock final : public ICounterBlock {
     NMonitoring::TDynamicCounters::TCounterPtr TotalCounter;
     NMonitoring::TDynamicCounters::TCounterPtr InflyCounter;
@@ -113,10 +113,10 @@ public:
         }
     }
 
-    ICounterBlockPtr Clone() override {
-        return this;
-    }
-
+    ICounterBlockPtr Clone() override { 
+        return this; 
+    } 
+ 
     void Update() {
         if (Percentile) {
             RequestHistMs.Update();

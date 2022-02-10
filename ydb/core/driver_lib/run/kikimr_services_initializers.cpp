@@ -918,8 +918,8 @@ void TLocalServiceInitializer::InitializeServices(
         new TTabletSetupInfo(&NKesus::CreateKesusTablet, TMailboxType::ReadAsFilled, appData->UserPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId));
     localConfig->TabletClassInfo[appData->DefaultTabletTypes.Hive] = TLocalConfig::TTabletClassInfo(
         new TTabletSetupInfo(&CreateDefaultHive, TMailboxType::ReadAsFilled, importantPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId));
-    localConfig->TabletClassInfo[appData->DefaultTabletTypes.SysViewProcessor] = TLocalConfig::TTabletClassInfo(
-        new TTabletSetupInfo(&NSysView::CreateSysViewProcessor, TMailboxType::ReadAsFilled, appData->UserPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId));
+    localConfig->TabletClassInfo[appData->DefaultTabletTypes.SysViewProcessor] = TLocalConfig::TTabletClassInfo( 
+        new TTabletSetupInfo(&NSysView::CreateSysViewProcessor, TMailboxType::ReadAsFilled, appData->UserPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId)); 
     localConfig->TabletClassInfo[appData->DefaultTabletTypes.TestShard] = TLocalConfig::TTabletClassInfo(
         new TTabletSetupInfo(&NTestShard::CreateTestShard, TMailboxType::ReadAsFilled, appData->UserPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId));
     localConfig->TabletClassInfo[appData->DefaultTabletTypes.ColumnShard] = TLocalConfig::TTabletClassInfo(
@@ -1637,7 +1637,7 @@ void TStatsCollectorInitializer::InitializeServices(
         IActor* statsCollector = CreateStatsCollector(
                 1, // seconds
                 *setup,
-                appData->Counters);
+                appData->Counters); 
         setup->LocalServices.emplace_back(
             TActorId(),
             TActorSetupCmd(
@@ -1657,7 +1657,7 @@ void TStatsCollectorInitializer::InitializeServices(
 
         IActor* procStatCollector = CreateProcStatCollector(
                 5, // seconds
-                appData->Counters);
+                appData->Counters); 
         setup->LocalServices.emplace_back(
             TActorId(),
             TActorSetupCmd(
@@ -1904,16 +1904,16 @@ TMemoryTrackerInitializer::TMemoryTrackerInitializer(const TKikimrRunConfig& run
     : IKikimrServicesInitializer(runConfig)
 {}
 
-void TMemoryTrackerInitializer::InitializeServices(
-    NActors::TActorSystemSetup* setup,
-    const NKikimr::TAppData* appData)
-{
-    auto* actor = NMemory::CreateMemoryTrackerActor(TDuration::MilliSeconds(20), appData->Counters);
-    setup->LocalServices.emplace_back(
-        TActorId(),
-        TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId)
-    );
-}
+void TMemoryTrackerInitializer::InitializeServices( 
+    NActors::TActorSystemSetup* setup, 
+    const NKikimr::TAppData* appData) 
+{ 
+    auto* actor = NMemory::CreateMemoryTrackerActor(TDuration::MilliSeconds(20), appData->Counters); 
+    setup->LocalServices.emplace_back( 
+        TActorId(), 
+        TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId) 
+    ); 
+} 
 
 TQuoterServiceInitializer::TQuoterServiceInitializer(const TKikimrRunConfig& runConfig)
     : IKikimrServicesInitializer(runConfig)
@@ -2165,29 +2165,29 @@ void TConfigValidatorsInitializer::InitializeServices(NActors::TActorSystemSetup
     NConsole::RegisterCoreValidators();
 }
 
-TSysViewServiceInitializer::TSysViewServiceInitializer(const TKikimrRunConfig& runConfig)
-   : IKikimrServicesInitializer(runConfig)
-{
-}
+TSysViewServiceInitializer::TSysViewServiceInitializer(const TKikimrRunConfig& runConfig) 
+   : IKikimrServicesInitializer(runConfig) 
+{ 
+} 
 
-void TSysViewServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
-    NSysView::TExtCountersConfig config;
+void TSysViewServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) { 
+    NSysView::TExtCountersConfig config; 
     for (ui32 i = 0; i < setup->GetExecutorsCount(); ++i) {
-        config.Pools.push_back(NSysView::TExtCountersConfig::TPool{
+        config.Pools.push_back(NSysView::TExtCountersConfig::TPool{ 
             setup->GetPoolName(i),
             setup->GetThreads(i)});
-    }
-
-    // external counters only for dynamic nodes
-    bool hasExternalCounters = Config.GetDynamicNodeConfig().HasNodeInfo();
-
-    auto actor = NSysView::CreateSysViewService(std::move(config), hasExternalCounters);
-
+    } 
+ 
+    // external counters only for dynamic nodes 
+    bool hasExternalCounters = Config.GetDynamicNodeConfig().HasNodeInfo(); 
+ 
+    auto actor = NSysView::CreateSysViewService(std::move(config), hasExternalCounters); 
+ 
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
-        NSysView::MakeSysViewServiceID(NodeId),
-        TActorSetupCmd(actor.Release(), TMailboxType::HTSwap, appData->UserPoolId)));
-}
-
+        NSysView::MakeSysViewServiceID(NodeId), 
+        TActorSetupCmd(actor.Release(), TMailboxType::HTSwap, appData->UserPoolId))); 
+} 
+ 
 TMeteringWriterInitializer::TMeteringWriterInitializer(const TKikimrRunConfig &runConfig)
     : IKikimrServicesInitializer(runConfig)
 {

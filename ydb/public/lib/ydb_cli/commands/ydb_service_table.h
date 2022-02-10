@@ -86,28 +86,28 @@ protected:
     void CheckQueryOptions() const;
     void CheckQueryFile();
 
-protected:
+protected: 
     TString Query;
     TString QueryFile;
 };
 
 class TCommandExecuteQuery : public TTableCommand, TCommandQueryBase, TCommandWithParameters,
-    public TCommandWithFormat, public TInterruptibleCommand
-{
+    public TCommandWithFormat, public TInterruptibleCommand 
+{ 
 public:
     TCommandExecuteQuery();
     virtual void Config(TConfig& config) override;
     virtual void Parse(TConfig& config) override;
     virtual int Run(TConfig& config) override;
-
+ 
     int ExecuteDataQuery(TConfig& config);
     void PrintDataQueryResponse(NTable::TDataQueryResult& result);
-
+ 
     int ExecuteSchemeQuery(TConfig& config);
 
-    int ExecuteScanQuery(TConfig& config);
-    void PrintScanQueryResponse(NTable::TScanQueryPartIterator& result);
-
+    int ExecuteScanQuery(TConfig& config); 
+    void PrintScanQueryResponse(NTable::TScanQueryPartIterator& result); 
+ 
 private:
     TString CollectStatsMode;
     TString TxMode;
@@ -129,9 +129,9 @@ private:
     bool Analyze = false;
 };
 
-class TCommandReadTable : public TYdbCommand, public TCommandWithPath,
-    public TCommandWithFormat, public TInterruptibleCommand
-{
+class TCommandReadTable : public TYdbCommand, public TCommandWithPath, 
+    public TCommandWithFormat, public TInterruptibleCommand 
+{ 
 public:
     TCommandReadTable();
     virtual void Config(TConfig& config) override;

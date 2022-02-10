@@ -12,7 +12,7 @@ namespace NMonitoring {
     static const char HTTPOKHTML[] = "HTTP/1.1 200 Ok\r\nContent-Type: text/html\r\nConnection: Close\r\n\r\n";
     static const char HTTPOKJSON[] = "HTTP/1.1 200 Ok\r\nContent-Type: application/json\r\nConnection: Close\r\n\r\n";
     static const char HTTPOKSPACK[] = "HTTP/1.1 200 Ok\r\nContent-Type: application/x-solomon-spack\r\nConnection: Close\r\n\r\n";
-    static const char HTTPOKPROMETHEUS[] = "HTTP/1.1 200 Ok\r\nContent-Type: text/plain\r\nConnection: Close\r\n\r\n";
+    static const char HTTPOKPROMETHEUS[] = "HTTP/1.1 200 Ok\r\nContent-Type: text/plain\r\nConnection: Close\r\n\r\n"; 
     static const char HTTPOKJAVASCRIPT[] = "HTTP/1.1 200 Ok\r\nContent-Type: text/javascript\r\nConnection: Close\r\n\r\n";
     static const char HTTPOKCSS[] = "HTTP/1.1 200 Ok\r\nContent-Type: text/css\r\nConnection: Close\r\n\r\n";
     static const char HTTPNOCONTENT[] = "HTTP/1.1 204 No content\r\nConnection: Close\r\n\r\n";

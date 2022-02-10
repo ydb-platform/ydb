@@ -788,7 +788,7 @@ void TDataReq::ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus
         const auto* e = PerTablet.FindPtr(shard);
         if (!e)
             return "";
-        return Sprintf("%" PRIu64 "/%" PRIu64, e->TableId.PathId.OwnerId, e->TableId.PathId.LocalPathId);
+        return Sprintf("%" PRIu64 "/%" PRIu64, e->TableId.PathId.OwnerId, e->TableId.PathId.LocalPathId); 
     };
 
     if (FlatMKQLRequest && FlatMKQLRequest->CollectStats) {
@@ -906,12 +906,12 @@ void TDataReq::BuildTxStats(NKikimrQueryStats::TTxStats& stats) {
             TTableId tableId(table.GetTableInfo().GetSchemeshardId(), table.GetTableInfo().GetPathId());
             auto& tableStats = byTable[tableId];
             if (!tableStats.HasTableInfo()) {
-                tableStats.MutableTableInfo()->SetSchemeshardId(tableId.PathId.OwnerId);
-                tableStats.MutableTableInfo()->SetPathId(tableId.PathId.LocalPathId);
+                tableStats.MutableTableInfo()->SetSchemeshardId(tableId.PathId.OwnerId); 
+                tableStats.MutableTableInfo()->SetPathId(tableId.PathId.LocalPathId); 
                 tableStats.MutableTableInfo()->SetName(table.GetTableInfo().GetName());
             }
-            Aggregate(tableStats, table);
-            tableStats.SetShardCount(tableStats.GetShardCount() + 1);
+            Aggregate(tableStats, table); 
+            tableStats.SetShardCount(tableStats.GetShardCount() + 1); 
         }
         if (shard.second.Stats->PerShardStatsSize() == 1) {
             auto shardStats = stats.AddPerShardStats();
@@ -1418,14 +1418,14 @@ void TDataReq::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev, 
     auto &res = resp->ResultSet[0];
     ReadTableRequest->TableId = res.TableId;
 
-    if (res.TableId.IsSystemView()) {
-        IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR,
-            Sprintf("Table '%s' is a system view. Read table is not supported", ReadTableRequest->TablePath.data())));
-        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, NKikimrIssues::TStatusIds::SCHEME_ERROR, true, ctx);
-        TxProxyMon->ResolveKeySetWrongRequest->Inc();
-        return Die(ctx);
-    }
-
+    if (res.TableId.IsSystemView()) { 
+        IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, 
+            Sprintf("Table '%s' is a system view. Read table is not supported", ReadTableRequest->TablePath.data()))); 
+        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, NKikimrIssues::TStatusIds::SCHEME_ERROR, true, ctx); 
+        TxProxyMon->ResolveKeySetWrongRequest->Inc(); 
+        return Die(ctx); 
+    } 
+ 
     TVector<NScheme::TTypeId> keyColumnTypes(res.Columns.size());
     TVector<TKeyDesc::TColumnOp> columns(res.Columns.size());
     size_t keySize = 0;
@@ -1544,14 +1544,14 @@ void TDataReq::Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr &ev, c
                 switch (x.Status) {
                     case NSchemeCache::TSchemeCacheRequest::EStatus::PathErrorNotExist:
                         gotHardResolveError = true;
-                        ss << "table not exists: " << x.KeyDescription->TableId;
+                        ss << "table not exists: " << x.KeyDescription->TableId; 
                         break;
                     case NSchemeCache::TSchemeCacheRequest::EStatus::TypeCheckError:
                         gotHardResolveError = true;
-                        ss << "type check error: " << x.KeyDescription->TableId;
+                        ss << "type check error: " << x.KeyDescription->TableId; 
                         break;
                     default:
-                        ss << "unresolved table: " << x.KeyDescription->TableId << ". Status: " << x.Status;
+                        ss << "unresolved table: " << x.KeyDescription->TableId << ". Status: " << x.Status; 
                         break;
                 }
 
@@ -1599,7 +1599,7 @@ void TDataReq::Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr &ev, c
             TStringStream explanation;
             explanation << "Access denied for " << UserToken->GetUserSID()
                 << " with access " << NACLib::AccessRightsToString(access)
-                << " to tableId# " << entry.KeyDescription->TableId;
+                << " to tableId# " << entry.KeyDescription->TableId; 
 
             LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY, explanation.Str());
             IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, explanation.Str()));

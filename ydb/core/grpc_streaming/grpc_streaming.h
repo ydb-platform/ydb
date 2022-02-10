@@ -116,7 +116,7 @@ public:
     virtual TString GetPeerName() const = 0;
     virtual TVector<TStringBuf> GetPeerMetaValues(TStringBuf key) const = 0;
     virtual grpc_compression_level GetCompressionLevel() const = 0;
-    virtual void UseDatabase(const TString& database) = 0;
+    virtual void UseDatabase(const TString& database) = 0; 
 };
 
 template<class TIn, class TOut, class TServer, int LoggerServiceId>
@@ -196,7 +196,7 @@ private:
 
     void MaybeClone() {
         if (!Server->IsShuttingDown()) {
-            Start(Server, this->Service, this->CQ, AcceptRequest, AcceptCallback, ActorSystem, Name, Counters->Clone(), Limiter);
+            Start(Server, this->Service, this->CQ, AcceptRequest, AcceptCallback, ActorSystem, Name, Counters->Clone(), Limiter); 
         }
     }
 
@@ -605,10 +605,10 @@ private:
         }
     }
 
-    void UseDatabase(const TString& database) {
-        Counters->UseDatabase(database);
-    }
-
+    void UseDatabase(const TString& database) { 
+        Counters->UseDatabase(database); 
+    } 
+ 
 private:
     bool IncRequest() {
         if (Limiter) {
@@ -678,10 +678,10 @@ private:
             return Self->GetCompressionLevel();
         }
 
-        void UseDatabase(const TString& database) override {
-            Self->UseDatabase(database);
-        }
-
+        void UseDatabase(const TString& database) override { 
+            Self->UseDatabase(database); 
+        } 
+ 
     private:
         TIntrusivePtr<TSelf> Self;
     };

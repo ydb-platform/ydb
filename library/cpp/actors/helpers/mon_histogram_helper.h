@@ -16,9 +16,9 @@ namespace NActors {
 
             THistogramCounterHelper(const THistogramCounterHelper&) = default;
 
-            void Init(NMonitoring::TDynamicCounters* group, const TString& baseName, const TString& unit,
-                ui64 firstBucket, ui64 bucketCnt, bool useSensorLabelName = true)
-            {
+            void Init(NMonitoring::TDynamicCounters* group, const TString& baseName, const TString& unit, 
+                ui64 firstBucket, ui64 bucketCnt, bool useSensorLabelName = true) 
+            { 
                 Y_ASSERT(FirstBucketVal == 0);
                 Y_ASSERT(BucketCount == 0);
 
@@ -28,8 +28,8 @@ namespace NActors {
                 Buckets.reserve(BucketCount);
                 for (size_t i = 0; i < BucketCount; ++i) {
                     TString bucketName = GetBucketName(i) + " " + unit;
-                    auto labelName = useSensorLabelName ? "sensor" : "name";
-                    BucketsHolder.push_back(group->GetSubgroup(labelName, baseName)->GetNamedCounter("range", bucketName, true));
+                    auto labelName = useSensorLabelName ? "sensor" : "name"; 
+                    BucketsHolder.push_back(group->GetSubgroup(labelName, baseName)->GetNamedCounter("range", bucketName, true)); 
                     Buckets.push_back(BucketsHolder.back().Get());
                 }
             }
@@ -48,20 +48,20 @@ namespace NActors {
                 Buckets[ind]->Inc();
             }
 
-            ui64 GetBucketCount() const {
-                return BucketCount;
-            }
-
-            ui64 GetBucketValue(size_t index) const {
-                Y_ASSERT(index < BucketCount);
-                return Buckets[index]->Val();
-            }
-
-            void SetBucketValue(ui64 index, ui64 value) {
-                Y_ASSERT(index < BucketCount);
-                *Buckets[index] = value;
-            }
-
+            ui64 GetBucketCount() const { 
+                return BucketCount; 
+            } 
+ 
+            ui64 GetBucketValue(size_t index) const { 
+                Y_ASSERT(index < BucketCount); 
+                return Buckets[index]->Val(); 
+            } 
+ 
+            void SetBucketValue(ui64 index, ui64 value) { 
+                Y_ASSERT(index < BucketCount); 
+                *Buckets[index] = value; 
+            } 
+ 
         private:
             TString GetBucketName(size_t ind) const {
                 Y_ASSERT(FirstBucketVal != 0);

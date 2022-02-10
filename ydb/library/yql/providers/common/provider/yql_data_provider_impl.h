@@ -43,7 +43,7 @@ public:
 
     bool Initialize(TExprContext& ctx) override;
     IGraphTransformer& GetConfigurationTransformer() override;
-    TExprNode::TPtr GetClusterInfo(const TString& cluster, TExprContext& ctx) override;
+    TExprNode::TPtr GetClusterInfo(const TString& cluster, TExprContext& ctx) override; 
     const THashMap<TString, TString>* GetClusterTokens() override;
     IGraphTransformer& GetIODiscoveryTransformer() override;
     IGraphTransformer& GetEpochsTransformer() override;

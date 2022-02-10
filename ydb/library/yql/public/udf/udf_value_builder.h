@@ -45,21 +45,21 @@ class IDateBuilder1
 public:
     virtual ~IDateBuilder1() = default;
 
-    virtual bool MakeDate(ui32 year, ui32 month, ui32 day, ui16& value) const = 0;
-    virtual bool SplitDate(ui16 value, ui32& year, ui32& month, ui32& day) const = 0;
+    virtual bool MakeDate(ui32 year, ui32 month, ui32 day, ui16& value) const = 0; 
+    virtual bool SplitDate(ui16 value, ui32& year, ui32& month, ui32& day) const = 0; 
 
-    virtual bool MakeDatetime(ui32 year, ui32 month, ui32 day, ui32 hour, ui32 minute, ui32 second, ui32& value,
-        ui16 timezoneId = 0) const = 0;
-    virtual bool SplitDatetime(ui32 value, ui32& year, ui32& month, ui32& day, ui32& hour, ui32& minute, ui32& second,
-        ui16 timezoneId = 0) const = 0;
+    virtual bool MakeDatetime(ui32 year, ui32 month, ui32 day, ui32 hour, ui32 minute, ui32 second, ui32& value, 
+        ui16 timezoneId = 0) const = 0; 
+    virtual bool SplitDatetime(ui32 value, ui32& year, ui32& month, ui32& day, ui32& hour, ui32& minute, ui32& second, 
+        ui16 timezoneId = 0) const = 0; 
 
     // deprecated
-    virtual bool EnrichDate(ui16 date, ui32& dayOfYear, ui32& weekOfYear, ui32& dayOfWeek) const = 0;
-
-    // in minutes
-    virtual bool GetTimezoneShift(ui32 year, ui32 month, ui32 day, ui32 hour, ui32 minute, ui32 second,
-        ui16 timezoneId, i32& value) const = 0;
-
+    virtual bool EnrichDate(ui16 date, ui32& dayOfYear, ui32& weekOfYear, ui32& dayOfWeek) const = 0; 
+ 
+    // in minutes 
+    virtual bool GetTimezoneShift(ui32 year, ui32 month, ui32 day, ui32 hour, ui32 minute, ui32 second, 
+        ui16 timezoneId, i32& value) const = 0; 
+ 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT < UDF_ABI_COMPATIBILITY_VERSION(2, 23)
     virtual void Unused7() const = 0;
     virtual void Unused8() const = 0;

@@ -4,7 +4,7 @@
 #include "udf_types.h"
 #include "udf_ptr.h"
 #include "udf_string_ref.h"
-#include "udf_value.h"
+#include "udf_value.h" 
 
 #include <type_traits>
 
@@ -342,73 +342,73 @@ private:
 UDF_ASSERT_TYPE_SIZE(IFunctionArgTypesBuilder, 16);
 
 //////////////////////////////////////////////////////////////////////////////
-// IRefCounted
-//////////////////////////////////////////////////////////////////////////////
-class IRefCounted {
-public:
-    virtual ~IRefCounted() = default;
-
-    inline void Ref() noexcept {
-        Refs_++;
-    }
-
-    inline void UnRef() noexcept {
-        Y_VERIFY_DEBUG(Refs_ > 0);
-        if (--Refs_ == 0) {
-            delete this;
-        }
-    }
-
-private:
-    ui32 Refs_ = 0;
-    ui32 Reserved_ = 0;
-
-    void Unused() {
-        Y_UNUSED(Reserved_);
-    }
-};
-
-UDF_ASSERT_TYPE_SIZE(IRefCounted, 16);
-
-//////////////////////////////////////////////////////////////////////////////
-// IHash
-//////////////////////////////////////////////////////////////////////////////
-class IHash : public IRefCounted {
-public:
-    using TPtr = TRefCountedPtr<IHash>;
-
-    virtual ui64 Hash(TUnboxedValuePod value) const = 0;
-};
-
-UDF_ASSERT_TYPE_SIZE(IHash, 16);
-
-//////////////////////////////////////////////////////////////////////////////
-// IEquate
-//////////////////////////////////////////////////////////////////////////////
-class IEquate : public IRefCounted {
-public:
-    using TPtr = TRefCountedPtr<IEquate>;
-
-    virtual bool Equals(TUnboxedValuePod lhs, TUnboxedValuePod rhs) const = 0;
-};
-
-UDF_ASSERT_TYPE_SIZE(IEquate, 16);
-
-//////////////////////////////////////////////////////////////////////////////
-// ICompare
-//////////////////////////////////////////////////////////////////////////////
-class ICompare : public IRefCounted {
-public:
-    using TPtr = TRefCountedPtr<ICompare>;
-
-    virtual bool Less(TUnboxedValuePod lhs, TUnboxedValuePod rhs) const = 0;
-    // signed difference, for strings may not be just -1/0/1
-    virtual int Compare(TUnboxedValuePod lhs, TUnboxedValuePod rhs) const = 0;
-};
-
-UDF_ASSERT_TYPE_SIZE(ICompare, 16);
-
-//////////////////////////////////////////////////////////////////////////////
+// IRefCounted 
+////////////////////////////////////////////////////////////////////////////// 
+class IRefCounted { 
+public: 
+    virtual ~IRefCounted() = default; 
+ 
+    inline void Ref() noexcept { 
+        Refs_++; 
+    } 
+ 
+    inline void UnRef() noexcept { 
+        Y_VERIFY_DEBUG(Refs_ > 0); 
+        if (--Refs_ == 0) { 
+            delete this; 
+        } 
+    } 
+ 
+private: 
+    ui32 Refs_ = 0; 
+    ui32 Reserved_ = 0; 
+ 
+    void Unused() { 
+        Y_UNUSED(Reserved_); 
+    } 
+}; 
+ 
+UDF_ASSERT_TYPE_SIZE(IRefCounted, 16); 
+ 
+////////////////////////////////////////////////////////////////////////////// 
+// IHash 
+////////////////////////////////////////////////////////////////////////////// 
+class IHash : public IRefCounted { 
+public: 
+    using TPtr = TRefCountedPtr<IHash>; 
+ 
+    virtual ui64 Hash(TUnboxedValuePod value) const = 0; 
+}; 
+ 
+UDF_ASSERT_TYPE_SIZE(IHash, 16); 
+ 
+////////////////////////////////////////////////////////////////////////////// 
+// IEquate 
+////////////////////////////////////////////////////////////////////////////// 
+class IEquate : public IRefCounted { 
+public: 
+    using TPtr = TRefCountedPtr<IEquate>; 
+ 
+    virtual bool Equals(TUnboxedValuePod lhs, TUnboxedValuePod rhs) const = 0; 
+}; 
+ 
+UDF_ASSERT_TYPE_SIZE(IEquate, 16); 
+ 
+////////////////////////////////////////////////////////////////////////////// 
+// ICompare 
+////////////////////////////////////////////////////////////////////////////// 
+class ICompare : public IRefCounted { 
+public: 
+    using TPtr = TRefCountedPtr<ICompare>; 
+ 
+    virtual bool Less(TUnboxedValuePod lhs, TUnboxedValuePod rhs) const = 0; 
+    // signed difference, for strings may not be just -1/0/1 
+    virtual int Compare(TUnboxedValuePod lhs, TUnboxedValuePod rhs) const = 0; 
+}; 
+ 
+UDF_ASSERT_TYPE_SIZE(ICompare, 16); 
+ 
+////////////////////////////////////////////////////////////////////////////// 
 // IFunctionTypeInfoBuilder
 //////////////////////////////////////////////////////////////////////////////
 namespace NImpl {
@@ -516,15 +516,15 @@ public:
     virtual TSourcePosition GetSourcePosition() = 0;
 };
 #endif
-
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 10)
+ 
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 10) 
 class IFunctionTypeInfoBuilder5: public IFunctionTypeInfoBuilder4 {
 public:
-    virtual IHash::TPtr MakeHash(const TType* type) = 0;
-    virtual IEquate::TPtr MakeEquate(const TType* type) = 0;
-    virtual ICompare::TPtr MakeCompare(const TType* type) = 0;
+    virtual IHash::TPtr MakeHash(const TType* type) = 0; 
+    virtual IEquate::TPtr MakeEquate(const TType* type) = 0; 
+    virtual ICompare::TPtr MakeCompare(const TType* type) = 0; 
 };
-#endif
+#endif 
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 13)
 class IFunctionTypeInfoBuilder6: public IFunctionTypeInfoBuilder5 {

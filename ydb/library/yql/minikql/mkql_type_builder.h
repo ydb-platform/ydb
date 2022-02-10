@@ -95,10 +95,10 @@ public:
     NUdf::TScopedProbe GetScopedProbe(const NUdf::TStringRef& name) override;
     NUdf::TSourcePosition GetSourcePosition() override;
 
-    NUdf::IHash::TPtr MakeHash(const NUdf::TType* type) override;
-    NUdf::IEquate::TPtr MakeEquate(const NUdf::TType* type) override;
-    NUdf::ICompare::TPtr MakeCompare(const NUdf::TType* type) override;
-
+    NUdf::IHash::TPtr MakeHash(const NUdf::TType* type) override; 
+    NUdf::IEquate::TPtr MakeEquate(const NUdf::TType* type) override; 
+    NUdf::ICompare::TPtr MakeCompare(const NUdf::TType* type) override; 
+ 
     NUdf::TType* Decimal(ui8 precision, ui8 scale) const override;
 
     NUdf::IFunctionTypeInfoBuilder7& IRImplementationImpl(

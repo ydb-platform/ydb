@@ -224,89 +224,89 @@
 
 # list_type:type n:ui32 buffer:ui32
 # doesn't support optional values
-(let set_traits_factory_raw (lambda '(list_type count) (block '(
-    (let value_type (ListItemType list_type))
-
-    (let UdfSetCreate (Udf 'Set.Create (Void) (TupleType (TupleType value_type (DataType 'Uint32)) (StructType) value_type)))
-
-    (let resource_type (TypeOf (Apply UdfSetCreate (InstanceOf value_type) (Uint32 '0))))
-
-    (let UdfSetAddValue (Udf 'Set.AddValue (Void) (TupleType (TupleType resource_type value_type) (StructType) value_type)))
-    (let UdfSetGetResult (Udf 'Set.GetResult (Void) (TupleType (TupleType resource_type) (StructType) value_type)))
-
-    (let init (lambda '(value parent) (NamedApply UdfSetCreate '(value count) (AsStruct) (DependsOn parent))))
-    (let update (lambda '(value state parent) (NamedApply UdfSetAddValue '(state value) (AsStruct) (DependsOn parent))))
-    (let shift (lambda '(value state) (Void)))
-    (let current (lambda '(state) (Apply UdfSetGetResult state)))
-
+(let set_traits_factory_raw (lambda '(list_type count) (block '( 
+    (let value_type (ListItemType list_type)) 
+ 
+    (let UdfSetCreate (Udf 'Set.Create (Void) (TupleType (TupleType value_type (DataType 'Uint32)) (StructType) value_type))) 
+ 
+    (let resource_type (TypeOf (Apply UdfSetCreate (InstanceOf value_type) (Uint32 '0)))) 
+ 
+    (let UdfSetAddValue (Udf 'Set.AddValue (Void) (TupleType (TupleType resource_type value_type) (StructType) value_type))) 
+    (let UdfSetGetResult (Udf 'Set.GetResult (Void) (TupleType (TupleType resource_type) (StructType) value_type))) 
+ 
+    (let init (lambda '(value parent) (NamedApply UdfSetCreate '(value count) (AsStruct) (DependsOn parent)))) 
+    (let update (lambda '(value state parent) (NamedApply UdfSetAddValue '(state value) (AsStruct) (DependsOn parent)))) 
+    (let shift (lambda '(value state) (Void))) 
+    (let current (lambda '(state) (Apply UdfSetGetResult state))) 
+ 
     (return (WindowTraits value_type init update shift current (EmptyList)))
-))))
-
-# list_type:type n:ui32 buffer:ui32
-# doesn't support optional values
+)))) 
+ 
+# list_type:type n:ui32 buffer:ui32 
+# doesn't support optional values 
 (let topfreq_traits_factory_raw (lambda '(list_type n buffer) (block '(
     (let value_type (ListItemType list_type))
-
-    (let UdfTopFreqCreate (Udf 'TopFreq.TopFreq_Create (Void) (TupleType (TupleType value_type (DataType 'Uint32)) (StructType) value_type)))
-
-    (let resource_type (TypeOf (Apply UdfTopFreqCreate (InstanceOf value_type) (Uint32 '0))))
-
-    (let UdfTopFreqAddValue (Udf 'TopFreq.TopFreq_AddValue (Void) (TupleType (TupleType resource_type value_type) (StructType) value_type)))
-    (let UdfTopFreqGet (Udf 'TopFreq.TopFreq_Get (Void) (TupleType (TupleType resource_type (DataType 'Uint32)) (StructType) value_type)))
-
+ 
+    (let UdfTopFreqCreate (Udf 'TopFreq.TopFreq_Create (Void) (TupleType (TupleType value_type (DataType 'Uint32)) (StructType) value_type))) 
+ 
+    (let resource_type (TypeOf (Apply UdfTopFreqCreate (InstanceOf value_type) (Uint32 '0)))) 
+ 
+    (let UdfTopFreqAddValue (Udf 'TopFreq.TopFreq_AddValue (Void) (TupleType (TupleType resource_type value_type) (StructType) value_type))) 
+    (let UdfTopFreqGet (Udf 'TopFreq.TopFreq_Get (Void) (TupleType (TupleType resource_type (DataType 'Uint32)) (StructType) value_type))) 
+ 
     (let init (lambda '(value parent) (NamedApply UdfTopFreqCreate '(value buffer) (AsStruct) (DependsOn parent))))
     (let update (lambda '(value state parent) (NamedApply UdfTopFreqAddValue '(state value) (AsStruct) (DependsOn parent))))
     (let shift (lambda '(value state) (Void)))
     (let current (lambda '(state) (Apply UdfTopFreqGet state n)))
-
+ 
     (return (WindowTraits value_type init update shift current (EmptyList)))
 ))))
 
-# list_type:type extractor:lambda count:ui32 is_top:atom
-# doesn't support optional values
-(let top_traits_factory_raw (lambda '(list_type extractor count is_top) (block '(
-    (let value_type (ListItemType list_type))
-    (let type_config (Combine '0 is_top))
-
-    (let UdfTopCreate (Udf 'Top.Create (Void) (TupleType (TupleType value_type (DataType 'Uint32)) (StructType) value_type) type_config))
-
-    (let resource_type (TypeOf (Apply UdfTopCreate (InstanceOf value_type) (Uint32 '0))))
-
-    (let UdfTopAddValue (Udf 'Top.AddValue (Void) (TupleType (TupleType resource_type value_type) (StructType) value_type) type_config))
-    (let UdfTopGetResult (Udf 'Top.GetResult (Void) (TupleType (TupleType resource_type) (StructType) value_type) type_config))
-
-    (let init (lambda '(value parent) (NamedApply UdfTopCreate '(value count) (AsStruct) (DependsOn parent))))
-    (let update (lambda '(value state parent) (NamedApply UdfTopAddValue '(state value) (AsStruct) (DependsOn parent))))
-    (let shift (lambda '(value state) (Void)))
-    (let current (lambda '(state) (Apply UdfTopGetResult state)))
-
+# list_type:type extractor:lambda count:ui32 is_top:atom 
+# doesn't support optional values 
+(let top_traits_factory_raw (lambda '(list_type extractor count is_top) (block '( 
+    (let value_type (ListItemType list_type)) 
+    (let type_config (Combine '0 is_top)) 
+ 
+    (let UdfTopCreate (Udf 'Top.Create (Void) (TupleType (TupleType value_type (DataType 'Uint32)) (StructType) value_type) type_config)) 
+ 
+    (let resource_type (TypeOf (Apply UdfTopCreate (InstanceOf value_type) (Uint32 '0)))) 
+ 
+    (let UdfTopAddValue (Udf 'Top.AddValue (Void) (TupleType (TupleType resource_type value_type) (StructType) value_type) type_config)) 
+    (let UdfTopGetResult (Udf 'Top.GetResult (Void) (TupleType (TupleType resource_type) (StructType) value_type) type_config)) 
+ 
+    (let init (lambda '(value parent) (NamedApply UdfTopCreate '(value count) (AsStruct) (DependsOn parent)))) 
+    (let update (lambda '(value state parent) (NamedApply UdfTopAddValue '(state value) (AsStruct) (DependsOn parent)))) 
+    (let shift (lambda '(value state) (Void))) 
+    (let current (lambda '(state) (Apply UdfTopGetResult state))) 
+ 
     (return (WindowTraits value_type init update shift current (EmptyList)))
-))))
-
-# list_type:type key_extractor:lambda payload_extractor:lambda count:ui32 is_top:atom
-# doesn't support optional values
-(let top_by_traits_factory_raw (lambda '(list_type key_extractor payload_extractor count is_top) (block '(
-    (let value_type (ListItemType list_type))
-    (let key_type (TypeOf (Apply key_extractor (InstanceOf value_type))))
-    (let payload_type (TypeOf (Apply payload_extractor (InstanceOf value_type))))
-    (let key_payload_type (TupleType key_type payload_type))
-    (let type_config (Combine '1 is_top))
-
-    (let UdfTopCreate (Udf 'Top.Create (Void) (TupleType (TupleType key_type payload_type (DataType 'Uint32)) (StructType) key_payload_type) type_config))
-
-    (let resource_type (TypeOf (Apply UdfTopCreate (InstanceOf key_type) (InstanceOf payload_type) (Uint32 '0))))
-
-    (let UdfTopAddValue (Udf 'Top.AddValue (Void) (TupleType (TupleType resource_type key_type payload_type) (StructType) key_payload_type) type_config))
-    (let UdfTopGetResult (Udf 'Top.GetResult (Void) (TupleType (TupleType resource_type) (StructType) key_payload_type) type_config))
-
-    (let init (lambda '(value parent) (NamedApply UdfTopCreate '((Apply key_extractor value) (Apply payload_extractor value) count) (AsStruct) (DependsOn parent))))
-    (let update (lambda '(value state parent) (NamedApply UdfTopAddValue '(state (Apply key_extractor value) (Apply payload_extractor value)) (AsStruct) (DependsOn parent))))
-    (let shift (lambda '(value state) (Void)))
-    (let current (lambda '(state) (Apply UdfTopGetResult state)))
-
+)))) 
+ 
+# list_type:type key_extractor:lambda payload_extractor:lambda count:ui32 is_top:atom 
+# doesn't support optional values 
+(let top_by_traits_factory_raw (lambda '(list_type key_extractor payload_extractor count is_top) (block '( 
+    (let value_type (ListItemType list_type)) 
+    (let key_type (TypeOf (Apply key_extractor (InstanceOf value_type)))) 
+    (let payload_type (TypeOf (Apply payload_extractor (InstanceOf value_type)))) 
+    (let key_payload_type (TupleType key_type payload_type)) 
+    (let type_config (Combine '1 is_top)) 
+ 
+    (let UdfTopCreate (Udf 'Top.Create (Void) (TupleType (TupleType key_type payload_type (DataType 'Uint32)) (StructType) key_payload_type) type_config)) 
+ 
+    (let resource_type (TypeOf (Apply UdfTopCreate (InstanceOf key_type) (InstanceOf payload_type) (Uint32 '0)))) 
+ 
+    (let UdfTopAddValue (Udf 'Top.AddValue (Void) (TupleType (TupleType resource_type key_type payload_type) (StructType) key_payload_type) type_config)) 
+    (let UdfTopGetResult (Udf 'Top.GetResult (Void) (TupleType (TupleType resource_type) (StructType) key_payload_type) type_config)) 
+ 
+    (let init (lambda '(value parent) (NamedApply UdfTopCreate '((Apply key_extractor value) (Apply payload_extractor value) count) (AsStruct) (DependsOn parent)))) 
+    (let update (lambda '(value state parent) (NamedApply UdfTopAddValue '(state (Apply key_extractor value) (Apply payload_extractor value)) (AsStruct) (DependsOn parent)))) 
+    (let shift (lambda '(value state) (Void))) 
+    (let current (lambda '(state) (Apply UdfTopGetResult state))) 
+ 
     (return (WindowTraits value_type init update shift current (List (ListType payload_type))))
-))))
-
+)))) 
+ 
 # list_type:type n:double
 # doesn't support optional values
 (let percentile_traits_factory_raw (lambda '(list_type n) (block '(
@@ -550,10 +550,10 @@
 # support optional values
 (let percentile_traits_factory_opt (lambda '(list_type n) (Apply optional_traits_factory_parent list_type (lambda '(list_type) (Apply percentile_traits_factory_raw list_type n)))))
 
-# list_type:type count:ui32
-# support optional values
+# list_type:type count:ui32 
+# support optional values 
 (let set_traits_factory_opt (lambda '(list_type count) (Apply flatten_traits_factory_parent list_type (lambda '(list_type) (Apply set_traits_factory_raw list_type count)))))
-
+ 
 # list_type:type n:ui32 buffer:ui32
 # support optional values
 (let topfreq_traits_factory_opt (lambda '(list_type n buffer) (Apply flatten_traits_factory_parent list_type (lambda '(list_type) (Apply topfreq_traits_factory_raw list_type n buffer)))))
@@ -630,10 +630,10 @@
 # support optional values
 (let percentile_traits_factory (lambda '(list_type extractor n) (Apply extractor_traits_factory_parent list_type extractor (lambda '(list_type) (Apply percentile_traits_factory_opt list_type n)))))
 
-# list_type:type extractor:lambda count:ui32
-# support optional values
-(let set_traits_factory (lambda '(list_type extractor count) (Apply extractor_traits_factory_parent list_type extractor (lambda '(list_type) (Apply set_traits_factory_opt list_type count)))))
-
+# list_type:type extractor:lambda count:ui32 
+# support optional values 
+(let set_traits_factory (lambda '(list_type extractor count) (Apply extractor_traits_factory_parent list_type extractor (lambda '(list_type) (Apply set_traits_factory_opt list_type count))))) 
+ 
 # list_type:type extractor:lambda n:ui32 buffer:ui32
 # support optional values
 (let topfreq_traits_factory (lambda '(list_type extractor n buffer) (Apply extractor_traits_factory_parent list_type extractor (lambda '(list_type) (Apply topfreq_traits_factory_opt list_type n buffer)))))
@@ -662,7 +662,7 @@
 (let compare_traits_factory_list_raw (lambda '(list_type compare first second limit) (block '(
     (let key_type (TypeOf (Apply first (InstanceOf (ListItemType list_type)))))
     (let init (lambda '(row) '((AsList (Apply second row)) (Apply first row))))
-    (let update (lambda '(row state) (If (AggrEquals (Apply first row) (Nth state '1)) '((Take (Insert (Nth state '0) (Apply second row)) limit) (Nth state '1)) (If (Apply compare (Apply first row) (Nth state '1)) (Apply init row) state))))
+    (let update (lambda '(row state) (If (AggrEquals (Apply first row) (Nth state '1)) '((Take (Insert (Nth state '0) (Apply second row)) limit) (Nth state '1)) (If (Apply compare (Apply first row) (Nth state '1)) (Apply init row) state)))) 
     (let shift (lambda '(value state) (Void)))
     (let current (lambda '(state) (Nth state '0)))
     (return (WindowTraits (ListItemType list_type) init update shift current (Null)))
@@ -798,18 +798,18 @@
 (let histogram_linear_traits_factory (lambda '(list_type value binsize minimum maximum) (Apply double_traits_factory_opt_parent (lambda '(list_type value binsize) (Apply histogram_linear_traits_factory_raw list_type value binsize minimum maximum)) list_type value binsize)))
 (let histogram_logarithmic_traits_factory (lambda '(list_type value binsize minimum maximum) (Apply double_traits_factory_opt_parent (lambda '(list_type value binsize) (Apply histogram_logarithmic_traits_factory_raw list_type value binsize minimum maximum)) list_type value binsize)))
 
-(let compare_by_traits_factory_opt (lambda '(list_type compare first second limit) (Apply double_traits_factory_opt (lambda '(list_type first second) (Apply compare_traits_factory_raw list_type compare first second limit)) list_type first second)))
-(let list_compare_by_traits_factory_opt (lambda '(list_type compare first second limit) (Apply double_traits_factory_opt (lambda '(list_type first second) (Apply compare_traits_factory_list_raw list_type compare first second limit)) list_type first second)))
+(let compare_by_traits_factory_opt (lambda '(list_type compare first second limit) (Apply double_traits_factory_opt (lambda '(list_type first second) (Apply compare_traits_factory_raw list_type compare first second limit)) list_type first second))) 
+(let list_compare_by_traits_factory_opt (lambda '(list_type compare first second limit) (Apply double_traits_factory_opt (lambda '(list_type first second) (Apply compare_traits_factory_list_raw list_type compare first second limit)) list_type first second))) 
 
 #deprecated
 (let compare_by_traits_factory (lambda '(list_type compare first second limit) (IfType limit (VoidType)
-    (lambda '() (Apply compare_by_traits_factory_opt list_type compare first second limit))
-    (lambda '() (Apply list_compare_by_traits_factory_opt list_type compare first second limit))
+    (lambda '() (Apply compare_by_traits_factory_opt list_type compare first second limit)) 
+    (lambda '() (Apply list_compare_by_traits_factory_opt list_type compare first second limit)) 
 )))
 
 #deprecated
-(let min_by_traits_factory (lambda '(list_type first second limit) (Apply compare_by_traits_factory list_type (lambda '(one two) (AggrLess one two)) first second limit)))
-(let max_by_traits_factory (lambda '(list_type first second limit) (Apply compare_by_traits_factory list_type (lambda '(one two) (AggrLess two one)) first second limit)))
+(let min_by_traits_factory (lambda '(list_type first second limit) (Apply compare_by_traits_factory list_type (lambda '(one two) (AggrLess one two)) first second limit))) 
+(let max_by_traits_factory (lambda '(list_type first second limit) (Apply compare_by_traits_factory list_type (lambda '(one two) (AggrLess two one)) first second limit))) 
 
 (let min_by_traits_factory1 (lambda '(list_type first second) (Apply compare_by_traits_factory_opt list_type (lambda '(one two) (AggrLess one two)) first second (Void))))
 (let max_by_traits_factory1 (lambda '(list_type first second) (Apply compare_by_traits_factory_opt list_type (lambda '(one two) (AggrLess two one)) first second (Void))))
@@ -832,27 +832,27 @@
 
 (let udaf_traits_factory (lambda '(list_type extractor init update merge finish save load defval) (Apply extractor_traits_factory_parent list_type extractor (lambda '(list_type) (Apply udaf_traits_factory_opt list_type init update finish defval)))))
 
-(let top_bottom_traits_factory (lambda '(list_type extractor count is_top)
-    (Apply extractor_traits_factory_parent list_type extractor (lambda '(list_type)
+(let top_bottom_traits_factory (lambda '(list_type extractor count is_top) 
+    (Apply extractor_traits_factory_parent list_type extractor (lambda '(list_type) 
         (Apply flatten_traits_factory_parent list_type (lambda '(list_type)
-            (Apply top_traits_factory_raw list_type extractor count is_top)))))))
-
-(let top_traits_factory (lambda '(list_type extractor count)
-    (Apply top_bottom_traits_factory list_type extractor count '1)))
-
-(let bottom_traits_factory (lambda '(list_type extractor count)
-    (Apply top_bottom_traits_factory list_type extractor count '0)))
-
-(let top_bottom_by_traits_factory (lambda '(list_type key_extractor payload_extractor count is_top)
+            (Apply top_traits_factory_raw list_type extractor count is_top))))))) 
+ 
+(let top_traits_factory (lambda '(list_type extractor count) 
+    (Apply top_bottom_traits_factory list_type extractor count '1))) 
+ 
+(let bottom_traits_factory (lambda '(list_type extractor count) 
+    (Apply top_bottom_traits_factory list_type extractor count '0))) 
+ 
+(let top_bottom_by_traits_factory (lambda '(list_type key_extractor payload_extractor count is_top) 
     (Apply list_by_traits_factory_opt_parent (lambda '(list_type key_extractor payload_extractor)
-        (Apply top_by_traits_factory_raw list_type key_extractor payload_extractor count is_top)) list_type key_extractor payload_extractor)))
-
-(let top_by_traits_factory (lambda '(list_type key_extractor payload_extractor count)
-    (Apply top_bottom_by_traits_factory list_type key_extractor payload_extractor count '1)))
-
-(let bottom_by_traits_factory (lambda '(list_type key_extractor payload_extractor count)
-    (Apply top_bottom_by_traits_factory list_type key_extractor payload_extractor count '0)))
-
+        (Apply top_by_traits_factory_raw list_type key_extractor payload_extractor count is_top)) list_type key_extractor payload_extractor))) 
+ 
+(let top_by_traits_factory (lambda '(list_type key_extractor payload_extractor count) 
+    (Apply top_bottom_by_traits_factory list_type key_extractor payload_extractor count '1))) 
+ 
+(let bottom_by_traits_factory (lambda '(list_type key_extractor payload_extractor count) 
+    (Apply top_bottom_by_traits_factory list_type key_extractor payload_extractor count '0))) 
+ 
 (export min_traits_factory)
 (export max_traits_factory)
 (export sum_traits_factory)
@@ -893,7 +893,7 @@
 (export histogram_logarithmic_traits_factory)
 (export udwf_traits_factory)
 (export percentile_traits_factory)
-(export set_traits_factory)
+(export set_traits_factory) 
 (export topfreq_traits_factory)
 (export hyperloglog_traits_factory)
 (export rank_traits_factory)
@@ -903,9 +903,9 @@
 (export first_value_ignore_nulls_traits_factory)
 (export last_value_ignore_nulls_traits_factory)
 (export udaf_traits_factory)
-(export top_traits_factory)
-(export bottom_traits_factory)
-(export top_by_traits_factory)
-(export bottom_by_traits_factory)
+(export top_traits_factory) 
+(export bottom_traits_factory) 
+(export top_by_traits_factory) 
+(export bottom_by_traits_factory) 
 
 )

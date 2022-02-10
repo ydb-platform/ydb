@@ -36,12 +36,12 @@ public:
     TValuePacker(const TValuePacker& other);
 
     // Returned buffer is temporary and should be copied before next Pack() call
-    TStringBuf Pack(const NUdf::TUnboxedValuePod& value) const;
-    NUdf::TUnboxedValue Unpack(TStringBuf buf, const THolderFactory& holderFactory) const;
+    TStringBuf Pack(const NUdf::TUnboxedValuePod& value) const; 
+    NUdf::TUnboxedValue Unpack(TStringBuf buf, const THolderFactory& holderFactory) const; 
 
 private:
-    void PackImpl(const TType* type, const NUdf::TUnboxedValuePod& value) const;
-    NUdf::TUnboxedValue UnpackImpl(const TType* type, TStringBuf& buf, ui32 topLength, const THolderFactory& holderFactory) const;
+    void PackImpl(const TType* type, const NUdf::TUnboxedValuePod& value) const; 
+    NUdf::TUnboxedValue UnpackImpl(const TType* type, TStringBuf& buf, ui32 topLength, const THolderFactory& holderFactory) const; 
     static TProperties ScanTypeProperties(const TType* type);
     static bool HasOptionalFields(const TType* type);
     // Returns length and empty single optional flag
@@ -54,12 +54,12 @@ private:
 #endif
     const bool Stable;
     const TType* Type;
-    // TODO: real thread safety with external state
-    mutable TBuffer Buffer;
+    // TODO: real thread safety with external state 
+    mutable TBuffer Buffer; 
     TProperties Properties;
-    mutable size_t OptionalMaskReserve;
-    mutable NDetails::TOptionalUsageMask OptionalUsageMask;
-    mutable TPlainContainerCache TopStruct;
+    mutable size_t OptionalMaskReserve; 
+    mutable NDetails::TOptionalUsageMask OptionalUsageMask; 
+    mutable TPlainContainerCache TopStruct; 
     mutable TVector<TVector<std::pair<NUdf::TUnboxedValue, NUdf::TUnboxedValue>>> DictBuffers;
     mutable TVector<TVector<std::tuple<NUdf::TUnboxedValue, NUdf::TUnboxedValue, NUdf::TUnboxedValue>>> EncodedDictBuffers;
     TPackFunction PackFunc = nullptr;

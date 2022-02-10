@@ -1,43 +1,43 @@
-#pragma once
-
-#include "detail.h"
-
+#pragma once 
+ 
+#include "detail.h" 
+ 
 namespace NYson {
     namespace NDetail {
         ////////////////////////////////////////////////////////////////////////////////
-
+ 
         template <class TConsumer, class TBlockStream, bool EnableLinePositionInfo>
         class TParser
            : public TLexerBase<TBlockStream, EnableLinePositionInfo> {
         private:
             using TBase = TLexerBase<TBlockStream, EnableLinePositionInfo>;
             TConsumer* Consumer;
-
+ 
         public:
             TParser(const TBlockStream& blockStream, TConsumer* consumer, TMaybe<ui64> memoryLimit)
                 : TBase(blockStream, memoryLimit)
                 , Consumer(consumer)
             {
             }
-
+ 
             void DoParse(EYsonType ysonType) {
                 switch (ysonType) {
                     case ::NYson::EYsonType::Node:
                         ParseNode<true>();
                         break;
-
+ 
                     case ::NYson::EYsonType::ListFragment:
                         ParseListFragment<true>(EndSymbol);
                         break;
-
+ 
                     case ::NYson::EYsonType::MapFragment:
                         ParseMapFragment<true>(EndSymbol);
                         break;
-
+ 
                     default:
                         Y_FAIL("unreachable");
                 }
-
+ 
                 while (!(TBase::IsFinished() && TBase::IsEmpty())) {
                     if (TBase::template SkipSpaceAndGetChar<true>() != EndSymbol) {
                         ythrow TYsonException() << "Stray '" << (*TBase::Begin()) << "' found";
@@ -46,12 +46,12 @@ namespace NYson {
                     }
                 }
             }
-
+ 
             bool DoParseListFragment(bool first) {
                 bool ret = first ? first : ParseListSeparator<true>(EndSymbol);
                 return ret && ParseListItem<true>(EndSymbol);
-            }
-
+            } 
+ 
             void ParseAttributes() {
                 Consumer->OnBeginAttributes();
                 ParseMapFragment(EndAttributesSymbol);
@@ -65,19 +65,19 @@ namespace NYson {
                 TBase::SkipCharToken(EndMapSymbol);
                 Consumer->OnEndMap();
             }
-
+ 
             void ParseList() {
                 Consumer->OnBeginList();
                 ParseListFragment(EndListSymbol);
                 TBase::SkipCharToken(EndListSymbol);
                 Consumer->OnEndList();
             }
-
+ 
             template <bool AllowFinish>
             void ParseNode() {
                 return ParseNode<AllowFinish>(TBase::SkipSpaceAndGetChar());
             }
-
+ 
             template <bool AllowFinish>
             void ParseNode(char ch) {
                 if (ch == BeginAttributesSymbol) {
@@ -85,18 +85,18 @@ namespace NYson {
                     ParseAttributes();
                     ch = TBase::SkipSpaceAndGetChar();
                 }
-
+ 
                 switch (ch) {
                     case BeginMapSymbol:
                         TBase::Advance(1);
                         ParseMap();
                         break;
-
+ 
                     case BeginListSymbol:
                         TBase::Advance(1);
                         ParseList();
                         break;
-
+ 
                     case '"': {
                         TBase::Advance(1);
                         TStringBuf value;
@@ -146,7 +146,7 @@ namespace NYson {
                         TBase::Advance(1);
                         Consumer->OnEntity();
                         break;
-
+ 
                     default: {
                         if (isdigit((unsigned char)ch) || ch == '-' || ch == '+') { // case of '+' is handled in AfterPlus state
                             ReadNumeric<AllowFinish>();
@@ -167,11 +167,11 @@ namespace NYson {
                         }
                     }
                 }
-            }
+            } 
 
             void ParseKey() {
                 return ParseKey(TBase::SkipSpaceAndGetChar());
-            }
+            } 
 
             void ParseKey(char ch) {
                 switch (ch) {
@@ -199,8 +199,8 @@ namespace NYson {
                         }
                     }
                 }
-            }
-
+            } 
+ 
             template <bool AllowFinish>
             void ParseMapFragment(char endSymbol) {
                 char ch = TBase::template SkipSpaceAndGetChar<AllowFinish>();
@@ -221,13 +221,13 @@ namespace NYson {
                         ythrow TYsonException() << "Expected '" << KeyedItemSeparatorSymbol
                                                 << "' or '" << endSymbol << "' but '" << ch << "' found";
                     }
-                }
-            }
-
+                } 
+            } 
+ 
             void ParseMapFragment(char endSymbol) {
                 ParseMapFragment<false>(endSymbol);
             }
-
+ 
             template <bool AllowFinish>
             bool ParseListItem(char endSymbol) {
                 char ch = TBase::template SkipSpaceAndGetChar<AllowFinish>();
@@ -237,7 +237,7 @@ namespace NYson {
                     return true;
                 }
                 return false;
-            }
+            } 
 
             template <bool AllowFinish>
             bool ParseListSeparator(char endSymbol) {
@@ -250,17 +250,17 @@ namespace NYson {
                                             << "' or '" << endSymbol << "' but '" << ch << "' found";
                 }
                 return false;
-            }
+            } 
 
             template <bool AllowFinish>
             void ParseListFragment(char endSymbol) {
                 while (ParseListItem<AllowFinish>(endSymbol) && ParseListSeparator<AllowFinish>(endSymbol)) {
-                }
-            }
-
+                } 
+            } 
+ 
             void ParseListFragment(char endSymbol) {
                 ParseListFragment<false>(endSymbol);
-            }
+            } 
 
             template <bool AllowFinish>
             void ReadNumeric() {
@@ -295,13 +295,13 @@ namespace NYson {
                     }
                     Consumer->OnUint64Scalar(value);
                 }
-            }
+            } 
         };
-
+ 
         ////////////////////////////////////////////////////////////////////////////////
-
-    }
-
+ 
+    } 
+ 
     template <class TConsumer, class TBlockStream>
     void ParseYsonStreamImpl(
         const TBlockStream& blockStream,
@@ -317,9 +317,9 @@ namespace NYson {
             using TImpl = NDetail::TParser<TConsumer, TBlockStream, false>;
             TImpl impl(blockStream, consumer, memoryLimit);
             impl.DoParse(parsingMode);
-        }
-    }
-
+        } 
+    } 
+ 
     class TStatelessYsonParserImplBase {
     public:
         virtual void Parse(const TStringBuf& data, EYsonType type = ::NYson::EYsonType::Node) = 0;
@@ -334,27 +334,27 @@ namespace NYson {
     private:
         using TParser = NDetail::TParser<TConsumer, TStringReader, EnableLinePositionInfo>;
         TParser Parser;
-
+ 
     public:
         TStatelessYsonParserImpl(TConsumer* consumer, TMaybe<ui64> memoryLimit)
             : Parser(TStringReader(), consumer, memoryLimit)
         {
         }
-
+ 
         void Parse(const TStringBuf& data, EYsonType type = ::NYson::EYsonType::Node) override {
             Parser.SetBuffer(data.begin(), data.end());
             Parser.DoParse(type);
-        }
+        } 
     };
-
+ 
     class TYsonListParserImplBase {
     public:
         virtual bool Parse() = 0;
-
+ 
         virtual ~TYsonListParserImplBase() {
         }
     };
-
+ 
     template <class TConsumer, class TBlockStream, bool EnableLinePositionInfo>
     class TYsonListParserImpl
        : public TYsonListParserImplBase {
@@ -362,20 +362,20 @@ namespace NYson {
         using TParser = NDetail::TParser<TConsumer, TBlockStream, EnableLinePositionInfo>;
         TParser Parser;
         bool First = true;
-
+ 
     public:
         TYsonListParserImpl(const TBlockStream& blockStream, TConsumer* consumer, TMaybe<ui64> memoryLimit)
             : Parser(blockStream, consumer, memoryLimit)
         {
         }
-
+ 
         bool Parse() override {
             bool ret = Parser.DoParseListFragment(First);
             First = false;
             return ret;
         }
     };
-
+ 
     ////////////////////////////////////////////////////////////////////////////////
-
+ 
 } // namespace NYson

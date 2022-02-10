@@ -73,8 +73,8 @@ TRuntimeNode BuildKeyPrefixIndicesList(const TProgramBuilder& builder, const TSt
 
 TRuntimeNode BuildTableIdLiteral(const TTableId& tableId, TProgramBuilder& builder) {
     TVector<TRuntimeNode> tupleItems {
-        builder.NewDataLiteral<ui64>(tableId.PathId.OwnerId),
-        builder.NewDataLiteral<ui64>(tableId.PathId.LocalPathId),
+        builder.NewDataLiteral<ui64>(tableId.PathId.OwnerId), 
+        builder.NewDataLiteral<ui64>(tableId.PathId.LocalPathId), 
         builder.NewDataLiteral<NUdf::EDataSlot::String>(tableId.SysViewInfo),
         builder.NewDataLiteral<ui64>(tableId.SchemaVersion),
     };

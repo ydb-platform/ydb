@@ -33,7 +33,7 @@ Y_UNIT_TEST_SUITE(TDynamicCountersContentionTest) {
                 Response.Wait();
             }
 
-            void OnHistogram(const TString& /*labelName*/, const TString& /*labelValue*/, IHistogramSnapshotPtr /*snapshot*/, bool /*derivative*/) override {
+            void OnHistogram(const TString& /*labelName*/, const TString& /*labelValue*/, IHistogramSnapshotPtr /*snapshot*/, bool /*derivative*/) override { 
             }
 
             void OnGroupBegin(const TString& /*labelName*/, const TString& /*labelValue*/, const TDynamicCounters* /*group*/) override {

@@ -1062,7 +1062,7 @@ TUserTable::TSpecialUpdate TDataShard::SpecialUpdates(const NTable::TDatabase& d
     Y_VERIFY(tableId.PathId.OwnerId == PathOwnerId, "%" PRIu64 " vs %" PRIu64,
              tableId.PathId.OwnerId, PathOwnerId);
 
-    auto it = TableInfos.find(tableId.PathId.LocalPathId);
+    auto it = TableInfos.find(tableId.PathId.LocalPathId); 
     Y_VERIFY(it != TableInfos.end());
     const TUserTable& tableInfo = *it->second;
     Y_VERIFY(tableInfo.LocalTid != Max<ui32>());
@@ -1092,14 +1092,14 @@ TUserTable::TSpecialUpdate TDataShard::SpecialUpdates(const NTable::TDatabase& d
 
 void TDataShard::SetTableAccessTime(const TTableId& tableId, TInstant ts) {
     Y_VERIFY(!TSysTables::IsSystemTable(tableId));
-    auto iter = TableInfos.find(tableId.PathId.LocalPathId);
+    auto iter = TableInfos.find(tableId.PathId.LocalPathId); 
     Y_VERIFY(iter != TableInfos.end());
     iter->second->Stats.AccessTime = ts;
 }
 
 void TDataShard::SetTableUpdateTime(const TTableId& tableId, TInstant ts) {
     Y_VERIFY(!TSysTables::IsSystemTable(tableId));
-    auto iter = TableInfos.find(tableId.PathId.LocalPathId);
+    auto iter = TableInfos.find(tableId.PathId.LocalPathId); 
     Y_VERIFY(iter != TableInfos.end());
     iter->second->Stats.AccessTime = ts;
     iter->second->Stats.UpdateTime = ts;

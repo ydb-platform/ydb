@@ -131,24 +131,24 @@ NUdf::IDictValueBuilder::TPtr TDefaultValueBuilder::NewDict(const NUdf::TType* d
     return HolderFactory_.NewDict(dictType, flags);
 }
 
-bool TDefaultValueBuilder::MakeDate(ui32 year, ui32 month, ui32 day, ui16& value) const {
-    return ::NKikimr::NMiniKQL::MakeDate(year, month, day, value);
-}
-
-bool TDefaultValueBuilder::SplitDate(ui16 value, ui32& year, ui32& month, ui32& day) const {
-    return ::NKikimr::NMiniKQL::SplitDate(value, year, month, day);
-}
-
-bool TDefaultValueBuilder::MakeDatetime(ui32 year, ui32 month, ui32 day, ui32 hour, ui32 minute, ui32 second, ui32& value, ui16 tzId) const
-{
-    return ::NKikimr::NMiniKQL::MakeTzDatetime(year, month, day, hour, minute, second, value, tzId);
-}
-
-bool TDefaultValueBuilder::SplitDatetime(ui32 value, ui32& year, ui32& month, ui32& day, ui32& hour, ui32& minute, ui32& second, ui16 tzId) const
-{
-    return ::NKikimr::NMiniKQL::SplitTzDatetime(value, year, month, day, hour, minute, second, tzId);
-}
-
+bool TDefaultValueBuilder::MakeDate(ui32 year, ui32 month, ui32 day, ui16& value) const { 
+    return ::NKikimr::NMiniKQL::MakeDate(year, month, day, value); 
+} 
+ 
+bool TDefaultValueBuilder::SplitDate(ui16 value, ui32& year, ui32& month, ui32& day) const { 
+    return ::NKikimr::NMiniKQL::SplitDate(value, year, month, day); 
+} 
+ 
+bool TDefaultValueBuilder::MakeDatetime(ui32 year, ui32 month, ui32 day, ui32 hour, ui32 minute, ui32 second, ui32& value, ui16 tzId) const 
+{ 
+    return ::NKikimr::NMiniKQL::MakeTzDatetime(year, month, day, hour, minute, second, value, tzId); 
+} 
+ 
+bool TDefaultValueBuilder::SplitDatetime(ui32 value, ui32& year, ui32& month, ui32& day, ui32& hour, ui32& minute, ui32& second, ui16 tzId) const 
+{ 
+    return ::NKikimr::NMiniKQL::SplitTzDatetime(value, year, month, day, hour, minute, second, tzId); 
+} 
+ 
 bool TDefaultValueBuilder::FullSplitDate(ui16 value, ui32& year, ui32& month, ui32& day,
     ui32& dayOfYear, ui32& weekOfYear, ui32& dayOfWeek, ui16 tzId) const {
     ui32 unusedWeekOfYearIso8601 = 0;
@@ -171,20 +171,20 @@ bool TDefaultValueBuilder::FullSplitDatetime2(ui32 value, ui32& year, ui32& mont
     return ::NKikimr::NMiniKQL::SplitTzDatetime(value, year, month, day, hour, minute, second, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId);
 }
 
-bool TDefaultValueBuilder::EnrichDate(ui16 date, ui32& dayOfYear, ui32& weekOfYear, ui32& dayOfWeek) const {
+bool TDefaultValueBuilder::EnrichDate(ui16 date, ui32& dayOfYear, ui32& weekOfYear, ui32& dayOfWeek) const { 
     ui32 unusedWeekOfYearIso8601 = 0;
     return ::NKikimr::NMiniKQL::EnrichDate(date, dayOfYear, weekOfYear, unusedWeekOfYearIso8601, dayOfWeek);
-}
-
+} 
+ 
 bool TDefaultValueBuilder::EnrichDate2(ui16 date, ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek) const {
     return ::NKikimr::NMiniKQL::EnrichDate(date, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
 }
 
-bool TDefaultValueBuilder::GetTimezoneShift(ui32 year, ui32 month, ui32 day, ui32 hour, ui32 minute, ui32 second, ui16 tzId, i32& value) const
-{
-    return ::NKikimr::NMiniKQL::GetTimezoneShift(year, month, day, hour, minute, second, tzId, value);
-}
-
+bool TDefaultValueBuilder::GetTimezoneShift(ui32 year, ui32 month, ui32 day, ui32 hour, ui32 minute, ui32 second, ui16 tzId, i32& value) const 
+{ 
+    return ::NKikimr::NMiniKQL::GetTimezoneShift(year, month, day, hour, minute, second, tzId, value); 
+} 
+ 
 const NUdf::TSourcePosition* TDefaultValueBuilder::CalleePosition() const {
     return *CalleePositionPtr_;
 }

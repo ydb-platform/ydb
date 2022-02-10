@@ -537,10 +537,10 @@ namespace Tests {
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
                 &CreateDefaultHive, TMailboxType::Revolving, appData.UserPoolId,
                 TMailboxType::Revolving, appData.SystemPoolId));
-        localConfig.TabletClassInfo[appData.DefaultTabletTypes.SysViewProcessor] =
-            TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
-                &NSysView::CreateSysViewProcessorForTests, TMailboxType::Revolving, appData.UserPoolId,
-                TMailboxType::Revolving, appData.SystemPoolId));
+        localConfig.TabletClassInfo[appData.DefaultTabletTypes.SysViewProcessor] = 
+            TLocalConfig::TTabletClassInfo(new TTabletSetupInfo( 
+                &NSysView::CreateSysViewProcessorForTests, TMailboxType::Revolving, appData.UserPoolId, 
+                TMailboxType::Revolving, appData.SystemPoolId)); 
         localConfig.TabletClassInfo[appData.DefaultTabletTypes.SequenceShard] =
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
                 &NSequenceShard::CreateSequenceShard, TMailboxType::Revolving, appData.UserPoolId,
@@ -568,13 +568,13 @@ namespace Tests {
             Runtime->RegisterService(NConsole::MakeConfigsDispatcherID(Runtime->GetNodeId(nodeIdx)), aid);
         }
         Runtime->Register(CreateLabelsMaintainer({}), nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0);
-
-        auto sysViewService = NSysView::CreateSysViewServiceForTests();
+ 
+        auto sysViewService = NSysView::CreateSysViewServiceForTests(); 
         TActorId sysViewServiceId = Runtime->Register(sysViewService.Release(), nodeIdx);
-        Runtime->RegisterService(NSysView::MakeSysViewServiceID(Runtime->GetNodeId(nodeIdx)), sysViewServiceId, nodeIdx);
-
-        auto tenantPublisher = CreateTenantNodeEnumerationPublisher();
-        Runtime->Register(tenantPublisher, nodeIdx);
+        Runtime->RegisterService(NSysView::MakeSysViewServiceID(Runtime->GetNodeId(nodeIdx)), sysViewServiceId, nodeIdx); 
+ 
+        auto tenantPublisher = CreateTenantNodeEnumerationPublisher(); 
+        Runtime->Register(tenantPublisher, nodeIdx); 
     }
 
     void TServer::SetupConfigurators(ui32 nodeIdx) {

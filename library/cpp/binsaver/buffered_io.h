@@ -26,7 +26,7 @@ struct IBinaryStream {
     }
 
     virtual bool IsValid() const = 0;
-    virtual bool IsFailed() const = 0;
+    virtual bool IsFailed() const = 0; 
 
 private:
     virtual int WriteImpl(const void* userBuffer, int size) = 0;
@@ -36,49 +36,49 @@ private:
     i64 LongWrite(const void* userBuffer, i64 size);
 };
 
-template <int N_SIZE = 16384>
+template <int N_SIZE = 16384> 
 class TBufferedStream {
     char Buf[N_SIZE];
     i64 Pos, BufSize;
     IBinaryStream& Stream;
-    bool bIsReading, bIsEof, bFailed;
+    bool bIsReading, bIsEof, bFailed; 
 
     void ReadComplex(void* userBuffer, i64 size) {
-        if (bIsEof) {
-            memset(userBuffer, 0, size);
-            return;
-        }
+        if (bIsEof) { 
+            memset(userBuffer, 0, size); 
+            return; 
+        } 
         char* dst = (char*)userBuffer;
         i64 leftBytes = BufSize - Pos;
-        memcpy(dst, Buf + Pos, leftBytes);
-        dst += leftBytes;
-        size -= leftBytes;
-        Pos = BufSize = 0;
-        if (size > N_SIZE) {
+        memcpy(dst, Buf + Pos, leftBytes); 
+        dst += leftBytes; 
+        size -= leftBytes; 
+        Pos = BufSize = 0; 
+        if (size > N_SIZE) { 
             i64 n = Stream.Read(dst, size);
-            bFailed = Stream.IsFailed();
-            if (n != size) {
-                bIsEof = true;
-                memset(dst + n, 0, size - n);
-            }
-        } else {
-            BufSize = Stream.Read(Buf, N_SIZE);
-            bFailed = Stream.IsFailed();
-            if (BufSize == 0)
-                bIsEof = true;
-            Read(dst, size);
-        }
-    }
-
+            bFailed = Stream.IsFailed(); 
+            if (n != size) { 
+                bIsEof = true; 
+                memset(dst + n, 0, size - n); 
+            } 
+        } else { 
+            BufSize = Stream.Read(Buf, N_SIZE); 
+            bFailed = Stream.IsFailed(); 
+            if (BufSize == 0) 
+                bIsEof = true; 
+            Read(dst, size); 
+        } 
+    } 
+ 
     void WriteComplex(const void* userBuffer, i64 size) {
-        Flush();
-        if (size >= N_SIZE) {
-            Stream.Write(userBuffer, size);
-            bFailed = Stream.IsFailed();
+        Flush(); 
+        if (size >= N_SIZE) { 
+            Stream.Write(userBuffer, size); 
+            bFailed = Stream.IsFailed(); 
         } else
-            Write(userBuffer, size);
-    }
-
+            Write(userBuffer, size); 
+    } 
+ 
     void operator=(const TBufferedStream&) {
     }
 
@@ -94,16 +94,16 @@ public:
     }
     ~TBufferedStream() {
         if (!bIsReading)
-            Flush();
+            Flush(); 
     }
-    void Flush() {
+    void Flush() { 
         Y_ASSERT(!bIsReading);
-        if (bIsReading)
-            return;
-        Stream.Write(Buf, Pos);
-        bFailed = Stream.IsFailed();
-        Pos = 0;
-    }
+        if (bIsReading) 
+            return; 
+        Stream.Write(Buf, Pos); 
+        bFailed = Stream.IsFailed(); 
+        Pos = 0; 
+    } 
     bool IsEof() const {
         return bIsEof;
     }

@@ -2961,7 +2961,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
     }
 
     Y_UNIT_TEST(CopyTables) {
-        TKikimrWithGrpcAndRootSchemaNoSystemViews server;
+        TKikimrWithGrpcAndRootSchemaNoSystemViews server; 
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_NOTICE);
 
         auto connection = NYdb::TDriver(

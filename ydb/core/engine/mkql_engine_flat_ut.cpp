@@ -99,7 +99,7 @@ namespace {
 
     void TwoShardResolver(TKeyDesc& key) {
         key.Status = TKeyDesc::EStatus::Ok;
-        key.Partitions.push_back(TKeyDesc::TPartitionInfo(key.TableId.PathId.LocalPathId == Table1Id ? Shard1 : Shard2));
+        key.Partitions.push_back(TKeyDesc::TPartitionInfo(key.TableId.PathId.LocalPathId == Table1Id ? Shard1 : Shard2)); 
     }
 
     struct TDriver {

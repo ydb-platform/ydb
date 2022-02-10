@@ -367,15 +367,15 @@ TAutoPtr<IGraphTransformer> CreateTableMetadataLoader(const TTypeAnnotationConte
     );
 }
 
-TAutoPtr<IGraphTransformer> CreateCompositeFinalizingTransformer(const TTypeAnnotationContext& types) {
-    return CreateDataProposalsInspector<ESource::DataSink>(
-        types,
-        [](IDataProvider* provider) -> IGraphTransformer& {
-            return provider->GetFinalizingTransformer();
-        }
-    );
-}
-
+TAutoPtr<IGraphTransformer> CreateCompositeFinalizingTransformer(const TTypeAnnotationContext& types) { 
+    return CreateDataProposalsInspector<ESource::DataSink>( 
+        types, 
+        [](IDataProvider* provider) -> IGraphTransformer& { 
+            return provider->GetFinalizingTransformer(); 
+        } 
+    ); 
+} 
+ 
 TAutoPtr<IGraphTransformer> CreatePlanInfoTransformer(const TTypeAnnotationContext& types) {
     return CreateDataProposalsInspector<ESource::DataSink>(
         types,

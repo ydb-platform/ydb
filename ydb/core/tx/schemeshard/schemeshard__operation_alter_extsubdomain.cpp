@@ -254,8 +254,8 @@ public:
                     "Malformed subdomain request: unable to change ExternalHive, only set it up");
                 return result;
             }
-        }
-
+        } 
+ 
         if (addExternalHive) {
             shardsToCreate += 1;
             allowOverTheLimitShards += 1;
@@ -418,8 +418,8 @@ public:
 
         if (addViewProcessors) {
             DeclareShards(txState, OperationId.GetTxId(), subDomain->PathId, 1, TTabletTypes::SysViewProcessor, channelBindings, context.SS);
-        }
-
+        } 
+ 
         for (auto& shard: txState.Shards) {
             alterData->AddPrivateShard(shard.Idx);
         }

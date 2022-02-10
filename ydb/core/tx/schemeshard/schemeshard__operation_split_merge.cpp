@@ -272,7 +272,7 @@ public:
 
         // Delete the whole old partitioning and persist the whole new partitionig as the indexes have changed
         context.SS->DeleteTablePartitioning(db, tableId, tableInfo);
-        context.SS->SetPartitioning(tableId, tableInfo, std::move(newPartitioning));
+        context.SS->SetPartitioning(tableId, tableInfo, std::move(newPartitioning)); 
         context.SS->PersistTablePartitioning(db, tableId, tableInfo);
         context.SS->PersistTablePartitionStats(db, tableId, tableInfo);
         context.SS->TabletCounters->Simple()[COUNTER_TABLE_SHARD_ACTIVE_COUNT].Sub(allSrcShardIdxs.size());

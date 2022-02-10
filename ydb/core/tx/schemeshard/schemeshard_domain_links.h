@@ -40,7 +40,7 @@ public:
         ui64 SubdomainVersion = 0;
         ui64 UserAttributesVersion = 0;
         TTabletId TenantHive = InvalidTabletId;
-        TTabletId TenantSysViewProcessor = InvalidTabletId;
+        TTabletId TenantSysViewProcessor = InvalidTabletId; 
         TString TenantRootACL;
 
         TLink() = default;

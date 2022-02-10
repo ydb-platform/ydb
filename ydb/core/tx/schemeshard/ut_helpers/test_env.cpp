@@ -506,7 +506,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableProtoSourceIdInfo(opts.EnableProtoSourceIdInfo_);
     app.SetEnableBackgroundCompaction(opts.EnableBackgroundCompaction_);
     app.FeatureFlags.SetEnablePublicApiExternalBlobs(true);
-
+ 
     for (const auto& sid : opts.SystemBackupSIDs_) {
         app.AddSystemBackupSID(sid);
     }

@@ -51,7 +51,7 @@ namespace NFake {
     void SetupNodeTabletMonitor(TTestActorRuntime& runtime, ui32 nodeIndex);
     void SetupSchemeCache(TTestActorRuntime& runtime, ui32 nodeIndex, const TString& root);
     void SetupQuoterService(TTestActorRuntime& runtime, ui32 nodeIndex);
-    void SetupSysViewService(TTestActorRuntime& runtime, ui32 nodeIndex);
+    void SetupSysViewService(TTestActorRuntime& runtime, ui32 nodeIndex); 
 
     // StateStorage, NodeWarden, TabletResolver, ResourceBroker, SharedPageCache
     void SetupBasicServices(TTestActorRuntime &runtime, TAppPrepare &app, bool mockDisk = false,

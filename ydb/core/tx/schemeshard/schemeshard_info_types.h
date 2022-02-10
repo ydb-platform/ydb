@@ -1264,13 +1264,13 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         return TTabletId(ProcessingParams.GetHive());
     }
 
-    TTabletId GetTenantSysViewProcessorID() const {
-        if (!ProcessingParams.HasSysViewProcessor()) {
-            return InvalidTabletId;
-        }
-        return TTabletId(ProcessingParams.GetSysViewProcessor());
-    }
-
+    TTabletId GetTenantSysViewProcessorID() const { 
+        if (!ProcessingParams.HasSysViewProcessor()) { 
+            return InvalidTabletId; 
+        } 
+        return TTabletId(ProcessingParams.GetSysViewProcessor()); 
+    } 
+ 
     ui64 GetPathsInside() const {
         return PathsInsideCount;
     }
@@ -1606,13 +1606,13 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
             ProcessingParams.SetHive(ui64(hives.front()));
             SetSharedHive(InvalidTabletId); // set off shared hive when our own hive has found
         }
-
-        ProcessingParams.ClearSysViewProcessor();
-        TVector<TTabletId> sysViewProcessors = FilterTablets(ETabletType::SysViewProcessor, allShards);
-        Y_VERIFY_S(sysViewProcessors.size() <= 1, "size was: " << sysViewProcessors.size());
-        if (sysViewProcessors.size()) {
-            ProcessingParams.SetSysViewProcessor(ui64(sysViewProcessors.front()));
-        }
+ 
+        ProcessingParams.ClearSysViewProcessor(); 
+        TVector<TTabletId> sysViewProcessors = FilterTablets(ETabletType::SysViewProcessor, allShards); 
+        Y_VERIFY_S(sysViewProcessors.size() <= 1, "size was: " << sysViewProcessors.size()); 
+        if (sysViewProcessors.size()) { 
+            ProcessingParams.SetSysViewProcessor(ui64(sysViewProcessors.front())); 
+        } 
     }
 
     void InitializeAsGlobal(NKikimrSubDomains::TProcessingParams&& processingParams) {

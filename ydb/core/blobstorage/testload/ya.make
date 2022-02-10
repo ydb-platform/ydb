@@ -25,7 +25,7 @@ SRCS(
     test_load_gen.h
     test_load_interval_gen.h
     test_load_keyvalue_write.cpp
-    test_load_memory.cpp
+    test_load_memory.cpp 
     test_load_pdisk_read.cpp
     test_load_pdisk_write.cpp
     test_load_pdisk_log.cpp

@@ -99,15 +99,15 @@ TCheckFunc ExtractTenantSchemeshard(ui64* tenantSchemeShardId) {
 TCheckFunc ExtractTenantSysViewProcessor(ui64* tenantSVPId) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);
-        const auto& pathDescr = record.GetPathDescription();
-        UNIT_ASSERT(pathDescr.HasDomainDescription());
-        const auto& domainDesc = pathDescr.GetDomainDescription();
-        UNIT_ASSERT(domainDesc.HasProcessingParams());
-        const auto& procParams = domainDesc.GetProcessingParams();
-        *tenantSVPId = procParams.GetSysViewProcessor();
-    };
-}
-
+        const auto& pathDescr = record.GetPathDescription(); 
+        UNIT_ASSERT(pathDescr.HasDomainDescription()); 
+        const auto& domainDesc = pathDescr.GetDomainDescription(); 
+        UNIT_ASSERT(domainDesc.HasProcessingParams()); 
+        const auto& procParams = domainDesc.GetProcessingParams(); 
+        *tenantSVPId = procParams.GetSysViewProcessor(); 
+    }; 
+} 
+ 
 void InExternalSubdomain(const NKikimrScheme::TEvDescribeSchemeResult& record) {
     PathRedirected(record);
 

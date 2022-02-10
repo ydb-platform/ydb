@@ -226,14 +226,14 @@ protected:
 
     private:
         ui32 GetTraverseCount() const final {
-            return 1;
-        }
-
+            return 1; 
+        } 
+ 
         NUdf::TUnboxedValue GetTraverseItem(ui32 index) const final {
-            Y_UNUSED(index);
-            return Stream;
-        }
-
+            Y_UNUSED(index); 
+            return Stream; 
+        } 
+ 
         NUdf::TUnboxedValue Save() const final {
             return NUdf::TUnboxedValue::Zero();
         }

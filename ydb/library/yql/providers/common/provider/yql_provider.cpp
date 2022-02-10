@@ -152,8 +152,8 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
     TMaybeNode<TCoAtom> mode;
     TMaybeNode<TExprList> columns;
     TMaybeNode<TCoAtomList> primaryKey;
-    TMaybeNode<TCoAtomList> partitionBy;
-    TMaybeNode<TCoNameValueTupleList> orderBy;
+    TMaybeNode<TCoAtomList> partitionBy; 
+    TMaybeNode<TCoNameValueTupleList> orderBy; 
     TMaybeNode<TCoLambda> filter;
     TMaybeNode<TCoLambda> update;
     TVector<TCoNameValueTuple> other;
@@ -176,12 +176,12 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
             } else if (name == "primarykey")  {
                 YQL_ENSURE(tuple.Value().Maybe<TCoAtomList>());
                 primaryKey = tuple.Value().Cast<TCoAtomList>();
-            } else if (name == "partitionby")  {
-                YQL_ENSURE(tuple.Value().Maybe<TCoAtomList>());
-                partitionBy = tuple.Value().Cast<TCoAtomList>();
-            } else if (name == "orderby")  {
-                YQL_ENSURE(tuple.Value().Maybe<TCoNameValueTupleList>());
-                orderBy = tuple.Value().Cast<TCoNameValueTupleList>();
+            } else if (name == "partitionby")  { 
+                YQL_ENSURE(tuple.Value().Maybe<TCoAtomList>()); 
+                partitionBy = tuple.Value().Cast<TCoAtomList>(); 
+            } else if (name == "orderby")  { 
+                YQL_ENSURE(tuple.Value().Maybe<TCoNameValueTupleList>()); 
+                orderBy = tuple.Value().Cast<TCoNameValueTupleList>(); 
             } else if (name == "filter") {
                 YQL_ENSURE(tuple.Value().Maybe<TCoLambda>());
                 filter = tuple.Value().Cast<TCoLambda>();
@@ -270,8 +270,8 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
     ret.Mode = mode;
     ret.Columns = columns;
     ret.PrimaryKey = primaryKey;
-    ret.PartitionBy = partitionBy;
-    ret.OrderBy = orderBy;
+    ret.PartitionBy = partitionBy; 
+    ret.OrderBy = orderBy; 
     ret.Filter = filter;
     ret.Update = update;
     ret.Indexes = idx;

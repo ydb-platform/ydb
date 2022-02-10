@@ -426,24 +426,24 @@
             ]
         },
         {
-            "Name": "TKiGrpcData",
-            "Base": "TExprBase",
-            "Match": {"Type": "Tuple"},
-            "Children": [
-                {"Index": 0, "Name": "Locators", "Type": "TCoAtomList"},
-                {"Index": 1, "Name": "TimeoutMs", "Type": "TCoAtom"},
-                {"Index": 2, "Name": "MaxMessageSizeBytes", "Type": "TCoAtom"},
-                {"Index": 3, "Name": "MaxInFlight", "Type": "TCoAtom"}
-            ]
-        },
-        {
-            "Name": "TKiClusterConfig",
-            "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "KiClusterConfig"},
-            "Children": [
-                {"Index": 0, "Name": "GrpcData", "Type": "TKiGrpcData"},
-                {"Index": 1, "Name": "TvmId", "Type": "TCoAtom"}
-            ]
+            "Name": "TKiGrpcData", 
+            "Base": "TExprBase", 
+            "Match": {"Type": "Tuple"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "Locators", "Type": "TCoAtomList"}, 
+                {"Index": 1, "Name": "TimeoutMs", "Type": "TCoAtom"}, 
+                {"Index": 2, "Name": "MaxMessageSizeBytes", "Type": "TCoAtom"}, 
+                {"Index": 3, "Name": "MaxInFlight", "Type": "TCoAtom"} 
+            ] 
+        }, 
+        { 
+            "Name": "TKiClusterConfig", 
+            "Base": "TCallable", 
+            "Match": {"Type": "Callable", "Name": "KiClusterConfig"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "GrpcData", "Type": "TKiGrpcData"}, 
+                {"Index": 1, "Name": "TvmId", "Type": "TCoAtom"} 
+            ] 
         }
     ]
 }

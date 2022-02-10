@@ -817,7 +817,7 @@ public:
     }
 
     template <class TT, class = TGuardConversion<T, TT>>
-    inline TSharedPtr(THolder<TT>&& t) {
+    inline TSharedPtr(THolder<TT>&& t) { 
         Init(t);
     }
 

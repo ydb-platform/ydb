@@ -67,7 +67,7 @@ TRefCountedTypeCookie GetRefCountedTypeCookieWithLocation(
 //! A lightweight mix-in that integrates any class into TRefCountedTracker statistics.
 /*!
  *  |T| must be the actual derived type.
- *
+ * 
  *  This mix-in provides statistical tracking only, |T| is responsible for implementing
  *  lifetime management on its own.
  */

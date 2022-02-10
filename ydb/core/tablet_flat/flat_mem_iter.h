@@ -20,7 +20,7 @@ namespace NTable {
         using TCells = TArrayRef<const TCell>;
 
         TMemIt(const TMemTable* memTable,
-                TIntrusiveConstPtr<TKeyNulls> nulls,
+                TIntrusiveConstPtr<TKeyNulls> nulls, 
                 const TRemap* remap,
                 IPages *env,
                 NMem::TTreeIterator iterator)
@@ -36,12 +36,12 @@ namespace NTable {
             Y_VERIFY(Remap, "Remap cannot be NULL");
         }
 
-        static TAutoPtr<TMemIt> Make(
+        static TAutoPtr<TMemIt> Make( 
                 const TMemTable& memTable,
                 const NMem::TTreeSnapshot& snapshot,
                 TCells key,
                 ESeek seek,
-                TIntrusiveConstPtr<TKeyNulls> nulls,
+                TIntrusiveConstPtr<TKeyNulls> nulls, 
                 const TRemap *remap,
                 IPages *env,
                 EDirection direction = EDirection::Forward) noexcept
@@ -349,7 +349,7 @@ namespace NTable {
 
     public:
         const TMemTable *MemTable = nullptr;
-        const TIntrusiveConstPtr<TKeyNulls> Nulls;
+        const TIntrusiveConstPtr<TKeyNulls> Nulls; 
         const TRemap* Remap = nullptr;
         IPages * const Env = nullptr;
         ui64 InvisibleRowSkips = 0;

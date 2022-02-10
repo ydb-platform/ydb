@@ -27,8 +27,8 @@ class TLogicRedo {
 
     TCommitManager * const CommitManager;
     TAutoPtr<NPageCollection::TSteppedCookieAllocator> Cookies;
-    TAutoPtr<NRedo::TBatch> Batch;
-    TAutoPtr<NRedo::TQueue> Queue;
+    TAutoPtr<NRedo::TBatch> Batch; 
+    TAutoPtr<NRedo::TQueue> Queue; 
     NPageCollection::TSlicer Slicer;
 
     TExecutorCounters *Counters = nullptr;
@@ -38,11 +38,11 @@ class TLogicRedo {
         ui32 Step;
 
         /* vvvv argh.... */
-        TAutoPtr<TSeat> InFlyRWTransaction;
-        TVector<TAutoPtr<TSeat>> WaitingROTransactions;
-        TVector<TAutoPtr<TSeat>> WaitingTerminatedTransactions;
+        TAutoPtr<TSeat> InFlyRWTransaction; 
+        TVector<TAutoPtr<TSeat>> WaitingROTransactions; 
+        TVector<TAutoPtr<TSeat>> WaitingTerminatedTransactions; 
 
-        TCompletionEntry(TAutoPtr<TSeat> seat, ui32 step);
+        TCompletionEntry(TAutoPtr<TSeat> seat, ui32 step); 
     };
 
     TDeque<TCompletionEntry> CompletionQueue; // would be graph once data-dependencies implemented
@@ -50,7 +50,7 @@ class TLogicRedo {
 
 public:
     struct TCommitRWTransactionResult {
-        TAutoPtr<TLogCommit> Commit;
+        TAutoPtr<TLogCommit> Commit; 
         bool NeedFlush;
     };
 
@@ -59,9 +59,9 @@ public:
 
     void Describe(IOutputStream &out) const noexcept;
     void InstallCounters(TExecutorCounters *counters, TTabletCountersWithTxTypes* appTxCounters);
-    bool TerminateTransaction(TAutoPtr<TSeat>, const TActorContext &ctx, const TActorId &ownerId);
-    bool CommitROTransaction(TAutoPtr<TSeat> seat, const TActorContext &ownerCtx);
-    TCommitRWTransactionResult CommitRWTransaction(TAutoPtr<TSeat> seat, NTable::TChange &change, bool force);
+    bool TerminateTransaction(TAutoPtr<TSeat>, const TActorContext &ctx, const TActorId &ownerId); 
+    bool CommitROTransaction(TAutoPtr<TSeat> seat, const TActorContext &ownerCtx); 
+    TCommitRWTransactionResult CommitRWTransaction(TAutoPtr<TSeat> seat, NTable::TChange &change, bool force); 
     void MakeLogEntry(TLogCommit&, TString redo, TArrayRef<const ui32> affects, bool embed);
     void FlushBatchedLog();
 
@@ -73,6 +73,6 @@ public:
     TArrayRef<const NRedo::TUsage> GrabLogUsage() const noexcept;
 };
 
-void CompleteRoTransaction(TAutoPtr<TSeat>, const TActorContext &ownerCtx, TExecutorCounters *counters, TTabletCountersWithTxTypes *appTxCounters);
+void CompleteRoTransaction(TAutoPtr<TSeat>, const TActorContext &ownerCtx, TExecutorCounters *counters, TTabletCountersWithTxTypes *appTxCounters); 
 
 }}

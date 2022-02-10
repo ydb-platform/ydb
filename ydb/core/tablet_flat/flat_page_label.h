@@ -35,7 +35,7 @@ namespace NPage {
                 return Type == kind;
             }
 
-            TArrayRef<const char> operator*() const noexcept
+            TArrayRef<const char> operator*() const noexcept 
             {
                 return Page;
             }
@@ -43,12 +43,12 @@ namespace NPage {
             EPage Type;
             ui16 Version;
             ECodec Codec;
-            TArrayRef<const char> Page;
+            TArrayRef<const char> Page; 
         };
 
         TResult Read(TArrayRef<const char>, EPage type = EPage::Undef) const noexcept;
-        static TSharedData Wrap(TArrayRef<const char>, EPage, ui16 version) noexcept;
-        static TString WrapString(TArrayRef<const char>, EPage, ui16 version) noexcept;
+        static TSharedData Wrap(TArrayRef<const char>, EPage, ui16 version) noexcept; 
+        static TString WrapString(TArrayRef<const char>, EPage, ui16 version) noexcept; 
     };
 
 }

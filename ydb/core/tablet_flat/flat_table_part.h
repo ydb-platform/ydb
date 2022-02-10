@@ -48,18 +48,18 @@ namespace NTable {
 
         struct TEgg {
             TEpoch Epoch;
-            TIntrusiveConstPtr<TPartScheme> Scheme;
+            TIntrusiveConstPtr<TPartScheme> Scheme; 
             TSharedData Index;
-            TIntrusiveConstPtr<NPage::TExtBlobs> Blobs;
-            TIntrusiveConstPtr<NPage::TBloom> ByKey;
-            TIntrusiveConstPtr<NPage::TFrames> Large;
-            TIntrusiveConstPtr<NPage::TFrames> Small;
+            TIntrusiveConstPtr<NPage::TExtBlobs> Blobs; 
+            TIntrusiveConstPtr<NPage::TBloom> ByKey; 
+            TIntrusiveConstPtr<NPage::TFrames> Large; 
+            TIntrusiveConstPtr<NPage::TFrames> Small; 
             TVector<TSharedData> GroupIndexes;
             TVector<TSharedData> HistoricIndexes;
             TRowVersion MinRowVersion;
             TRowVersion MaxRowVersion;
-            TIntrusiveConstPtr<NPage::TGarbageStats> GarbageStats;
-            TIntrusiveConstPtr<NPage::TTxIdStatsPage> TxIdStats;
+            TIntrusiveConstPtr<NPage::TGarbageStats> GarbageStats; 
+            TIntrusiveConstPtr<NPage::TTxIdStatsPage> TxIdStats; 
         };
 
         struct TStat {
@@ -119,7 +119,7 @@ namespace NTable {
         /**
          * Returns a cloned part with Epoch changed to the specified epoch
          */
-        virtual TIntrusiveConstPtr<TPart> CloneWithEpoch(TEpoch epoch) const = 0;
+        virtual TIntrusiveConstPtr<TPart> CloneWithEpoch(TEpoch epoch) const = 0; 
 
         virtual ui64 DataSize() const = 0;
         virtual ui64 BackingSize() const = 0;
@@ -176,16 +176,16 @@ namespace NTable {
     public:
         const TLogoBlobID Label;
         const TEpoch Epoch;
-        const TIntrusiveConstPtr<TPartScheme> Scheme;
-        const TIntrusiveConstPtr<NPage::TExtBlobs> Blobs;
-        const TIntrusiveConstPtr<NPage::TFrames> Large;
-        const TIntrusiveConstPtr<NPage::TFrames> Small;
+        const TIntrusiveConstPtr<TPartScheme> Scheme; 
+        const TIntrusiveConstPtr<NPage::TExtBlobs> Blobs; 
+        const TIntrusiveConstPtr<NPage::TFrames> Large; 
+        const TIntrusiveConstPtr<NPage::TFrames> Small; 
         const NPage::TIndex Index;
         const TVector<NPage::TIndex> GroupIndexes;
         const TVector<NPage::TIndex> HistoricIndexes;
-        const TIntrusiveConstPtr<NPage::TBloom> ByKey;
-        const TIntrusiveConstPtr<NPage::TGarbageStats> GarbageStats;
-        const TIntrusiveConstPtr<NPage::TTxIdStatsPage> TxIdStats;
+        const TIntrusiveConstPtr<NPage::TBloom> ByKey; 
+        const TIntrusiveConstPtr<NPage::TGarbageStats> GarbageStats; 
+        const TIntrusiveConstPtr<NPage::TTxIdStatsPage> TxIdStats; 
         const TStat Stat;
         const size_t Groups;
         const size_t IndexesRawSize;
@@ -198,7 +198,7 @@ namespace NTable {
      */
     class TTxStatusPart : public virtual TThrRefBase {
     public:
-        TTxStatusPart(const TLogoBlobID &label, TEpoch epoch, TIntrusiveConstPtr<NPage::TTxStatusPage> txStatusPage)
+        TTxStatusPart(const TLogoBlobID &label, TEpoch epoch, TIntrusiveConstPtr<NPage::TTxStatusPage> txStatusPage) 
             : Label(label)
             , Epoch(epoch)
             , TxStatusPage(std::move(txStatusPage))
@@ -217,7 +217,7 @@ namespace NTable {
     public:
         const TLogoBlobID Label;
         const TEpoch Epoch;
-        const TIntrusiveConstPtr<NPage::TTxStatusPage> TxStatusPage;
+        const TIntrusiveConstPtr<NPage::TTxStatusPage> TxStatusPage; 
     };
 
 }

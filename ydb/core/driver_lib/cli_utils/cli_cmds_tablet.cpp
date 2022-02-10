@@ -94,7 +94,7 @@ public:
 
     virtual void Config(TConfig& config) override {
         TClientCommand::Config(config);
-        config.Opts->AddLongOption("follower", "connect to follower").NoArgument();
+        config.Opts->AddLongOption("follower", "connect to follower").NoArgument(); 
         config.Opts->AddLongOption("json-ui64-as-string", "json output ui64 as string").NoArgument();
         config.Opts->AddLongOption("json-binary-as-base64", "json output binary data in base64").NoArgument();
         config.SetFreeArgsNum(1, 2);
@@ -126,7 +126,7 @@ public:
             }
         }
 
-        Request->Record.SetConnectToFollower(config.ParseResult->Has("follower"));
+        Request->Record.SetConnectToFollower(config.ParseResult->Has("follower")); 
         config.JsonUi64AsText = config.ParseResult->Has("json-ui64-as-string");
         config.JsonBinaryAsBase64 = config.ParseResult->Has("json-binary-as-base64");
     }
@@ -173,7 +173,7 @@ public:
 
     virtual void Config(TConfig& config) override {
         TClientCommand::Config(config);
-        config.Opts->AddLongOption("follower",     "connect to follower");
+        config.Opts->AddLongOption("follower",     "connect to follower"); 
         config.Opts->AddLongOption("dry-run",   "test changes without applying");
         config.SetFreeArgsNum(1, 1);
         SetFreeArgTitle(0, "<SCHEME CHANGES>", "Scheme changes to apply");
@@ -191,8 +191,8 @@ public:
             ythrow TWithBackTrace<yexception>() << "Invalid scheme changes protobuf passed";
         }
 
-        if (config.ParseResult->Has("follower"))
-            Request->Record.SetConnectToFollower(true);
+        if (config.ParseResult->Has("follower")) 
+            Request->Record.SetConnectToFollower(true); 
         Request->Record.SetDryRun(config.ParseResult->Has("dry-run"));
     }
 

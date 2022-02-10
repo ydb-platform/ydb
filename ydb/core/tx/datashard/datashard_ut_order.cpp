@@ -390,7 +390,7 @@ Y_UNIT_TEST_WITH_MVCC(DelayData) {
     EvictShardCache(proxy, 500);
 
     ui64 indepTxId = proxy.LastTxId() + 2;
-    proxy.DelayData({TTestTxConfig::TxTablet0, indepTxId});
+    proxy.DelayData({TTestTxConfig::TxTablet0, indepTxId}); 
 
     const char * programRead = R"((
         (let key_ '('('key (Uint32 '0))))
@@ -524,7 +524,7 @@ Y_UNIT_TEST_WITH_MVCC(ReadWriteReorder) {
     auto txWriteLast = proxy.LastTxId();
 
     // Delay first shard readsets until last write succeeds
-    proxy.DelayReadSet(TExpectedReadSet(txMoveKey, { TTestTxConfig::TxTablet0, txWriteLast }));
+    proxy.DelayReadSet(TExpectedReadSet(txMoveKey, { TTestTxConfig::TxTablet0, txWriteLast })); 
     proxy.ExecQueue();
 
     // Sanity check: read must go first, otherwise the whole machinery would hang
@@ -678,13 +678,13 @@ static void RandomTxDeps(const TTester::TOptions& opts, ui32 numTxs, ui32 maxKey
         indepPos = 7;
         indepTxId = proxy.LastTxId() + 8;
         ui64 delayedRS = proxy.LastTxId() + 2; // 2 cause of o-o-o disabled till first complete (LastCompleteTx)
-        proxy.DelayReadSet(TExpectedReadSet(delayedRS, {TTestTxConfig::TxTablet0, indepTxId}), opts.RebootOnDelay);
+        proxy.DelayReadSet(TExpectedReadSet(delayedRS, {TTestTxConfig::TxTablet0, indepTxId}), opts.RebootOnDelay); 
     } else if (opts.DelayData) {
         UNIT_ASSERT(numTxs >= 8);
         indepPos = 7;
         EvictShardCache(proxy, 500);
         indepTxId = proxy.LastTxId() + 8;
-        proxy.DelayData({TTestTxConfig::TxTablet0, indepTxId});
+        proxy.DelayData({TTestTxConfig::TxTablet0, indepTxId}); 
     }
 
     TVector<ui32> expected(32, Max<ui32>());
@@ -1902,7 +1902,7 @@ Y_UNIT_TEST_NEW_ENGINE(TestOutOfOrderRestartLocksSingleWithoutBarrier) {
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
-        .SetEnableMvcc(false) // intentionally, because we test non-mvcc locks logic
+        .SetEnableMvcc(false) // intentionally, because we test non-mvcc locks logic 
         .SetUseRealThreads(false);
 
     Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -1971,7 +1971,7 @@ Y_UNIT_TEST_NEW_ENGINE(TestOutOfOrderRestartLocksSingleWithoutBarrier) {
 
     // Reboot table-1 tablet
     readSets.clear();
-    RebootTablet(runtime, table1shards[0], sender);
+    RebootTablet(runtime, table1shards[0], sender); 
 
     // Wait until we captured both readsets again
     if (readSets.size() < 2) {
@@ -2116,7 +2116,7 @@ Y_UNIT_TEST_NEW_ENGINE(MvccTestOutOfOrderRestartLocksSingleWithoutBarrier) {
 
     // Reboot table-1 tablet
     readSets.clear();
-    RebootTablet(runtime, table1shards[0], sender);
+    RebootTablet(runtime, table1shards[0], sender); 
 
     // Wait until we captured both readsets again
     if (readSets.size() < 2) {
@@ -2275,7 +2275,7 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderRestartLocksReorderedWithoutBarrier, UseMvcc, Use
     // Reboot table-1 tablet
     UNIT_ASSERT_VALUES_EQUAL(readSets.size(), 2u);
     readSets.clear();
-    RebootTablet(runtime, table1shards[0], sender);
+    RebootTablet(runtime, table1shards[0], sender); 
 
     // Wait until we captured both readsets again
     if (readSets.size() < 2) {
@@ -2461,7 +2461,7 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderNoBarrierRestartImmediateLongTail, UseMvcc, UseNe
     blockProgressEvents = true;
     bypassProgressEvents = 1;
     Cerr << "... rebooting tablet" << Endl;
-    RebootTablet(runtime, table1shards[0], sender);
+    RebootTablet(runtime, table1shards[0], sender); 
     Cerr << "... tablet rebooted" << Endl;
 
     // Wait until we captured both readsets again
@@ -3957,7 +3957,7 @@ Y_UNIT_TEST_NEW_ENGINE(TestSecondaryClearanceAfterShardRestartRace) {
 
     seenStreamClearanceRequests = 0;
     seenStreamClearanceResponses = 0;
-    RebootTablet(runtime, shards[0], sender);
+    RebootTablet(runtime, shards[0], sender); 
 
     waitFor([&]{ return capturedDeliveryProblem.size() >= 1; }, "intercepted TEvDeliveryProblem");
     waitFor([&]{ return seenStreamClearanceRequests >= 1; }, "observed TEvStreamClearanceRequest");

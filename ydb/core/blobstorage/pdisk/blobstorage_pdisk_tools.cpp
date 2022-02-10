@@ -51,7 +51,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void FormatPDisk(TString path, ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 userAccessibleChunkSizeBytes,
     const ui64 &diskGuid, const NPDisk::TKey &chunkKey, const NPDisk::TKey &logKey, const NPDisk::TKey &sysLogKey,
-    const NPDisk::TKey &mainKey, TString textMessage, const bool isErasureEncodeUserLog, bool trimEntireDevice,
+    const NPDisk::TKey &mainKey, TString textMessage, const bool isErasureEncodeUserLog, bool trimEntireDevice, 
     TIntrusivePtr<NPDisk::TSectorMap> sectorMap)
 {
     TActorSystemCreator creator;
@@ -110,10 +110,10 @@ void FormatPDisk(TString path, ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 us
         ythrow yexception() << "Device with path# " << path << " is not good, info# " << pDisk->BlockDevice->DebugInfo();
     }
     pDisk->WriteDiskFormat(diskSizeBytes, sectorSizeBytes, userAccessibleChunkSizeBytes, diskGuid,
-        chunkKey, logKey, sysLogKey, mainKey, textMessage, isErasureEncodeUserLog, trimEntireDevice);
+        chunkKey, logKey, sysLogKey, mainKey, textMessage, isErasureEncodeUserLog, trimEntireDevice); 
 }
 
-bool ReadPDiskFormatInfo(const TString &path, const NPDisk::TKey &mainKey, TPDiskInfo &outInfo,
+bool ReadPDiskFormatInfo(const TString &path, const NPDisk::TKey &mainKey, TPDiskInfo &outInfo, 
         const bool doLock, TIntrusivePtr<NPDisk::TSectorMap> sectorMap) {
     const TIntrusivePtr<NMonitoring::TDynamicCounters> counters(new NMonitoring::TDynamicCounters);
     auto mon = std::make_unique<TPDiskMon>(counters, 0, nullptr);
@@ -148,7 +148,7 @@ bool ReadPDiskFormatInfo(const TString &path, const NPDisk::TKey &mainKey, TPDis
             NPDisk::TReqId(NPDisk::TReqId::ReadFormatInfo, 0), {});
 
     NPDisk::TPDiskStreamCypher cypher(true); // Format record is always encrypted
-    cypher.SetKey(mainKey);
+    cypher.SetKey(mainKey); 
     bool isOk = false;
     alignas(16) NPDisk::TDiskFormat format;
     for (ui32 recordIdx = 0; recordIdx < NPDisk::ReplicationFactor; ++recordIdx) {
@@ -216,7 +216,7 @@ bool ReadPDiskFormatInfo(const TString &path, const NPDisk::TKey &mainKey, TPDis
     }
 
     TStringStream str;
-    str << "Error parsing format record, make sure you use the correct MainKey. Path# \"" << path << "\"";
+    str << "Error parsing format record, make sure you use the correct MainKey. Path# \"" << path << "\""; 
     outInfo.ErrorReason = str.Str();
     return false;
 }

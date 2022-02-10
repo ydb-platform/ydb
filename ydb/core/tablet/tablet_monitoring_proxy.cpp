@@ -27,7 +27,7 @@ public:
     TForwardingActor(const TTabletMonitoringProxyConfig& config, ui64 targetTablet, bool forceFollower, const TActorId& sender, const TString& query, HTTP_METHOD method)
         : Config(config)
         , TargetTablet(targetTablet)
-        , ForceFollower(forceFollower)
+        , ForceFollower(forceFollower) 
         , Sender(sender)
         , Query(query)
         , Method(method)
@@ -39,8 +39,8 @@ public:
 
     void Bootstrap(const TActorContext& ctx) {
         NTabletPipe::TClientConfig config;
-        config.AllowFollower = ForceFollower;
-        config.ForceFollower = ForceFollower;
+        config.AllowFollower = ForceFollower; 
+        config.ForceFollower = ForceFollower; 
         config.PreferLocal = Config.PreferLocal;
         config.RetryPolicy = Config.RetryPolicy;
 
@@ -112,7 +112,7 @@ public:
 private:
     const TTabletMonitoringProxyConfig Config;
     const ui64 TargetTablet;
-    const bool ForceFollower;
+    const bool ForceFollower; 
     const TActorId Sender;
     const TString Query;
     TActorId PipeClient;
@@ -201,9 +201,9 @@ TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorCon
         }
     }
 
-    bool hasFollowerParam = cgi->Has("FollowerID");
-    if (hasFollowerParam) {
-        const TString &tabletIdParam = cgi->Get("FollowerID");
+    bool hasFollowerParam = cgi->Has("FollowerID"); 
+    if (hasFollowerParam) { 
+        const TString &tabletIdParam = cgi->Get("FollowerID"); 
         const ui64 tabletId = TryParseTabletId(tabletIdParam);
         if (tabletId) {
             TString url = TStringBuilder() << msg->Request.GetPathInfo() << "?" << cgi->Print();

@@ -48,7 +48,7 @@ namespace NPDisk {
     void SetupSchemeCache(TTestActorRuntime& runtime, ui32 nodeIndex, const TString& root)
     {
         auto cacheConfig = MakeIntrusive<NSchemeCache::TSchemeCacheConfig>();
-        cacheConfig->Roots.emplace_back(1, TTestTxConfig::SchemeShard, root);
+        cacheConfig->Roots.emplace_back(1, TTestTxConfig::SchemeShard, root); 
         cacheConfig->Counters = new NMonitoring::TDynamicCounters();
 
         runtime.AddLocalService(MakeSchemeCacheID(),
@@ -67,9 +67,9 @@ namespace NPDisk {
 
     void SetupTabletPipePeNodeCaches(TTestActorRuntime& runtime, ui32 nodeIndex)
     {
-        TIntrusivePtr<TPipePeNodeCacheConfig> leaderPipeConfig = new TPipePeNodeCacheConfig();
-        leaderPipeConfig->PipeRefreshTime = TDuration::Zero();
-        leaderPipeConfig->PipeConfig.RetryPolicy = {.RetryLimitCount = 3};
+        TIntrusivePtr<TPipePeNodeCacheConfig> leaderPipeConfig = new TPipePeNodeCacheConfig(); 
+        leaderPipeConfig->PipeRefreshTime = TDuration::Zero(); 
+        leaderPipeConfig->PipeConfig.RetryPolicy = {.RetryLimitCount = 3}; 
 
         TIntrusivePtr<TPipePeNodeCacheConfig> followerPipeConfig = new TPipePeNodeCacheConfig();
         followerPipeConfig->PipeRefreshTime = TDuration::Seconds(30);
@@ -77,7 +77,7 @@ namespace NPDisk {
         followerPipeConfig->PipeConfig.RetryPolicy = {.RetryLimitCount = 3};
 
         runtime.AddLocalService(MakePipePeNodeCacheID(false),
-            TActorSetupCmd(CreatePipePeNodeCache(leaderPipeConfig), TMailboxType::Revolving, 0), nodeIndex);
+            TActorSetupCmd(CreatePipePeNodeCache(leaderPipeConfig), TMailboxType::Revolving, 0), nodeIndex); 
         runtime.AddLocalService(MakePipePeNodeCacheID(true),
             TActorSetupCmd(CreatePipePeNodeCache(followerPipeConfig), TMailboxType::Revolving, 0), nodeIndex);
     }

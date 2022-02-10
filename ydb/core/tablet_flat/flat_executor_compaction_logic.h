@@ -64,7 +64,7 @@ struct TCompactionLogicState {
 
     struct TSnapRequest {
         const NTable::TSnapEdge Edge;
-        TIntrusivePtr<TTableSnapshotContext> Context;
+        TIntrusivePtr<TTableSnapshotContext> Context; 
 
         TSnapRequest(NTable::TSnapEdge edge, TTableSnapshotContext *context)
             : Edge(edge)
@@ -87,7 +87,7 @@ struct TCompactionLogicState {
 
         TDeque<TSnapRequest> SnapRequests;
 
-        TIntrusiveConstPtr<TCompactionPolicy> Policy;
+        TIntrusiveConstPtr<TCompactionPolicy> Policy; 
 
         EForcedCompactionState ForcedCompactionState = EForcedCompactionState::None;
         bool ForcedCompactionQueued = false;
@@ -95,9 +95,9 @@ struct TCompactionLogicState {
         EForceCompaction ForcedCompactionMode = EForceCompaction::Full;
         EForceCompaction ForcedCompactionQueuedMode = EForceCompaction::Full;
 
-        // monotonically growing, i.e. edge-like
-        ui64 CurrentForcedMemCompactionId = 0;
-
+        // monotonically growing, i.e. edge-like 
+        ui64 CurrentForcedMemCompactionId = 0; 
+ 
         bool ChangesRequested = false;
 
         TTableInfo() = default;
@@ -190,7 +190,7 @@ public:
         NUtil::ILogger*,
         NTable::IResourceBroker*,
         NTable::ICompactionBackend*,
-        TAutoPtr<TCompactionLogicState>,
+        TAutoPtr<TCompactionLogicState>, 
         TString taskSuffix = { });
     ~TCompactionLogic();
 
@@ -210,13 +210,13 @@ public:
     void PrepareTableSnapshot(ui32 table, NTable::TSnapEdge edge, TTableSnapshotContext *snapContext);
 
     // Force compaction support
-    // See slightly simlified state diagram: jing.yandex-team.ru/files/eivanov89/ForcedCompactionPath.png
-    // or img/ForcedCompactionQueue.drawio
+    // See slightly simlified state diagram: jing.yandex-team.ru/files/eivanov89/ForcedCompactionPath.png 
+    // or img/ForcedCompactionQueue.drawio 
     bool PrepareForceCompaction();
     ui64 PrepareForceCompaction(ui32 table, EForceCompaction mode = EForceCompaction::Full);
 
-    TFinishedCompactionInfo GetFinishedCompactionInfo(ui32 table);
-
+    TFinishedCompactionInfo GetFinishedCompactionInfo(ui32 table); 
+ 
     TReflectSchemeChangesResult ReflectSchemeChanges();
     void UpdateInMemStatsStep(ui32 table, ui32 steps, ui64 size);
     void CheckInMemStats(ui32 table);
@@ -236,7 +236,7 @@ public:
         THolder<NTable::TCompactionParams> params);
 
     void BorrowedPart(ui32 tableId, NTable::TPartView partView);
-    void BorrowedPart(ui32 tableId, TIntrusiveConstPtr<NTable::TColdPart> part);
+    void BorrowedPart(ui32 tableId, TIntrusiveConstPtr<NTable::TColdPart> part); 
     ui32 BorrowedPartLevel();
 
     TTableCompactionChanges RemovedParts(ui32 tableId, TArrayRef<const TLogoBlobID> parts);

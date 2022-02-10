@@ -13,7 +13,7 @@ namespace NTable {
 // Iterates over all parts and maintains total row count and data size
 class TStatsIterator {
 public:
-    explicit TStatsIterator(TIntrusiveConstPtr<TKeyNulls> keyColumns)
+    explicit TStatsIterator(TIntrusiveConstPtr<TKeyNulls> keyColumns) 
         : KeyColumns(keyColumns)
         , Heap(TIterKeyGreater{ this })
     {}
@@ -102,7 +102,7 @@ private:
         return it->IsValid();
     }
 
-    TIntrusiveConstPtr<TKeyNulls> KeyColumns;
+    TIntrusiveConstPtr<TKeyNulls> KeyColumns; 
     THolderVector<TScreenedPartIndexIterator> Iterators;
     TPriorityQueue<TScreenedPartIndexIterator*, TSmallVec<TScreenedPartIndexIterator*>, TIterKeyGreater> Heap;
     TSerializedCellVec CurrentKey;

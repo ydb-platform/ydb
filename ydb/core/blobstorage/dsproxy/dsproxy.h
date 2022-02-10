@@ -451,11 +451,11 @@ public:
             Derived().Send(proxyId, new TEvLatencyReport(*LatencyQueueKind, now - RequestStartTime));
         }
 
-        // KIKIMR-6737
+        // KIKIMR-6737 
         if (ev->Type() == TEvBlobStorage::EvGetResult) {
             static_cast<TEvBlobStorage::TEvGetResult&>(*ev).Sent = now;
-        }
-
+        } 
+ 
         // send the reply to original request sender
         Derived().Send(source, ev.release(), 0, cookie, std::move(traceId));
     };

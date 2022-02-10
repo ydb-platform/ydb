@@ -29,12 +29,12 @@ IExecutor* TTabletExecutedFlat::CreateExecutor(const TActorContext &ctx) {
     return Executor();
 }
 
-void TTabletExecutedFlat::Execute(TAutoPtr<ITransaction> transaction, const TActorContext &ctx) {
+void TTabletExecutedFlat::Execute(TAutoPtr<ITransaction> transaction, const TActorContext &ctx) { 
     Y_UNUSED(ctx);
     Execute(transaction);
 }
 
-void TTabletExecutedFlat::Execute(TAutoPtr<ITransaction> transaction) {
+void TTabletExecutedFlat::Execute(TAutoPtr<ITransaction> transaction) { 
     if (transaction)
         static_cast<TExecutor*>(Executor())->Execute(transaction, ExecutorCtx(*TlsActivationContext));
 }
@@ -44,7 +44,7 @@ const NTable::TScheme& TTabletExecutedFlat::Scheme() const noexcept {
 }
 
 void TTabletExecutedFlat::Handle(TEvTablet::TEvBoot::TPtr &ev, const TActorContext &ctx) {
-    // Notify sys tablet that leader supports graceful shutdown
+    // Notify sys tablet that leader supports graceful shutdown 
     ctx.Send(Tablet(), new TEvTablet::TEvFeatures(TEvTablet::TEvFeatures::GracefulStop));
 
     const auto& msg = *ev->Get();
@@ -57,35 +57,35 @@ void TTabletExecutedFlat::Handle(TEvTablet::TEvRestored::TPtr &ev, const TActorC
     Executor()->Restored(ev, ExecutorCtx(ctx));
 }
 
-void TTabletExecutedFlat::Handle(TEvTablet::TEvFBoot::TPtr &ev, const TActorContext &ctx) {
+void TTabletExecutedFlat::Handle(TEvTablet::TEvFBoot::TPtr &ev, const TActorContext &ctx) { 
     UpdateTabletInfo(ev->Get()->TabletStorageInfo);
-    CreateExecutor(ctx)->FollowerBoot(ev, ExecutorCtx(ctx));
+    CreateExecutor(ctx)->FollowerBoot(ev, ExecutorCtx(ctx)); 
     TxCacheQuota = ev->Get()->TxCacheQuota;
 }
 
-void TTabletExecutedFlat::Handle(TEvTablet::TEvFUpdate::TPtr &ev) {
-    Executor()->FollowerUpdate(std::move(ev->Get()->Update));
+void TTabletExecutedFlat::Handle(TEvTablet::TEvFUpdate::TPtr &ev) { 
+    Executor()->FollowerUpdate(std::move(ev->Get()->Update)); 
 }
 
-void TTabletExecutedFlat::Handle(TEvTablet::TEvFAuxUpdate::TPtr &ev) {
-    Executor()->FollowerAuxUpdate(std::move(ev->Get()->AuxUpdate));
+void TTabletExecutedFlat::Handle(TEvTablet::TEvFAuxUpdate::TPtr &ev) { 
+    Executor()->FollowerAuxUpdate(std::move(ev->Get()->AuxUpdate)); 
 }
 
-void TTabletExecutedFlat::Handle(TEvTablet::TEvNewFollowerAttached::TPtr &ev) {
+void TTabletExecutedFlat::Handle(TEvTablet::TEvNewFollowerAttached::TPtr &ev) { 
     Y_UNUSED(ev);
     if (Executor())
-        Executor()->FollowerAttached();
+        Executor()->FollowerAttached(); 
 }
 
-void TTabletExecutedFlat::Handle(TEvTablet::TEvFollowerSyncComplete::TPtr &ev) {
+void TTabletExecutedFlat::Handle(TEvTablet::TEvFollowerSyncComplete::TPtr &ev) { 
     Y_UNUSED(ev);
     if (Executor())
-        Executor()->FollowerSyncComplete();
+        Executor()->FollowerSyncComplete(); 
 }
 
-void TTabletExecutedFlat::Handle(TEvTablet::TEvFollowerGcApplied::TPtr &ev) {
+void TTabletExecutedFlat::Handle(TEvTablet::TEvFollowerGcApplied::TPtr &ev) { 
     auto *msg = ev->Get();
-    Executor()->FollowerGcApplied(msg->Step, msg->FollowerSyncDelay);
+    Executor()->FollowerGcApplied(msg->Step, msg->FollowerSyncDelay); 
 }
 
 void TTabletExecutedFlat::Handle(TEvTablet::TEvUpdateConfig::TPtr &ev) {
@@ -199,7 +199,7 @@ void TTabletExecutedFlat::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev, cons
                 DIV_CLASS("col-md-12") {str << "Tablet type: " << TTabletTypes::TypeToStr((TTabletTypes::EType)TabletType()); }
             }
             DIV_CLASS("row") {
-                DIV_CLASS("col-md-12") {str << "Tablet id: " << TabletID() << (Executor()->GetStats().IsFollower ? " Follower" : " Leader"); }
+                DIV_CLASS("col-md-12") {str << "Tablet id: " << TabletID() << (Executor()->GetStats().IsFollower ? " Follower" : " Leader"); } 
             }
             DIV_CLASS("row") {
                 DIV_CLASS("col-md-12") {str << "Tablet generation: " << Executor()->Generation();}
@@ -221,7 +221,7 @@ void TTabletExecutedFlat::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev, cons
                 DIV_CLASS("col-md-12") {str << "<a href=\"tablets/executorInternals?" << queryString << "\">Executor DB internals</a>";}
             }
             DIV_CLASS("row") {
-                DIV_CLASS("col-md-12") {str << "<a href=\"tablets?FollowerID=" << TabletID() << "\">Connect to follower</a>";}
+                DIV_CLASS("col-md-12") {str << "<a href=\"tablets?FollowerID=" << TabletID() << "\">Connect to follower</a>";} 
             }
             DIV_CLASS("row") {
                 DIV_CLASS("col-md-12") {str << "<a href=\"tablets?SsId=" << TabletID() << "\">State Storage</a>";}
@@ -244,12 +244,12 @@ bool TTabletExecutedFlat::HandleDefaultEvents(STFUNC_SIG) {
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvTablet::TEvBoot, Handle);
         HFunc(TEvTablet::TEvRestored, Handle);
-        HFunc(TEvTablet::TEvFBoot, Handle);
-        hFunc(TEvTablet::TEvFUpdate, Handle);
-        hFunc(TEvTablet::TEvFAuxUpdate, Handle);
-        hFunc(TEvTablet::TEvFollowerGcApplied, Handle);
-        hFunc(TEvTablet::TEvNewFollowerAttached, Handle);
-        hFunc(TEvTablet::TEvFollowerSyncComplete, Handle);
+        HFunc(TEvTablet::TEvFBoot, Handle); 
+        hFunc(TEvTablet::TEvFUpdate, Handle); 
+        hFunc(TEvTablet::TEvFAuxUpdate, Handle); 
+        hFunc(TEvTablet::TEvFollowerGcApplied, Handle); 
+        hFunc(TEvTablet::TEvNewFollowerAttached, Handle); 
+        hFunc(TEvTablet::TEvFollowerSyncComplete, Handle); 
         HFunc(TEvTablet::TEvTabletStop, HandleTabletStop);
         HFunc(TEvTablet::TEvTabletDead, HandleTabletDead);
         HFunc(TEvTablet::TEvLocalMKQL, HandleLocalMKQL);
@@ -267,14 +267,14 @@ bool TTabletExecutedFlat::HandleDefaultEvents(STFUNC_SIG) {
 void TTabletExecutedFlat::StateInitImpl(STFUNC_SIG) {
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvTablet::TEvBoot, Handle);
-        HFunc(TEvTablet::TEvFBoot, Handle);
-        hFunc(TEvTablet::TEvFUpdate, Handle);
-        hFunc(TEvTablet::TEvFAuxUpdate, Handle);
-        hFunc(TEvTablet::TEvFollowerGcApplied, Handle);
+        HFunc(TEvTablet::TEvFBoot, Handle); 
+        hFunc(TEvTablet::TEvFUpdate, Handle); 
+        hFunc(TEvTablet::TEvFAuxUpdate, Handle); 
+        hFunc(TEvTablet::TEvFollowerGcApplied, Handle); 
         HFunc(TEvTablet::TEvRestored, Handle);
         HFunc(TEvTablet::TEvTabletStop, HandleTabletStop);
         HFunc(TEvTablet::TEvTabletDead, HandleTabletDead);
-        hFunc(TEvTablet::TEvFollowerSyncComplete, Handle);
+        hFunc(TEvTablet::TEvFollowerSyncComplete, Handle); 
         hFunc(TEvTablet::TEvUpdateConfig, Handle);
         HFunc(NMon::TEvRemoteHttpInfo, RenderHtmlPage);
     default:

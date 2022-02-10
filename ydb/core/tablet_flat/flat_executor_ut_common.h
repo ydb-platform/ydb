@@ -106,7 +106,7 @@ namespace NTabletFlatExecutor {
         void WaitFor(size_t num = 1)
         {
             for (; num > 0; num--) {
-                TAutoPtr<IEventHandle> handle;
+                TAutoPtr<IEventHandle> handle; 
                 Env.GrabEdgeEventRethrow<TEv>(handle);
             }
         }

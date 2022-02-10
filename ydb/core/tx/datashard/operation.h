@@ -427,8 +427,8 @@ struct TInputOpData {
     TVector<NKikimrTx::TEvReadSet> DelayedInReadSets;
     TCoverageBuilders CoverageBuilders;
     ui32 RemainReadSets;
-    TAutoPtr<IDestructable> ScanResult;
-    TAutoPtr<IDestructable> AsyncJobResult;
+    TAutoPtr<IDestructable> ScanResult; 
+    TAutoPtr<IDestructable> AsyncJobResult; 
 };
 
 struct TOutputOpData {
@@ -577,12 +577,12 @@ public:
         DelayedInReadSets().emplace_back(rs);
     }
 
-    TAutoPtr<IDestructable> &ScanResult() { return InputDataRef().ScanResult; }
-    void SetScanResult(TAutoPtr<IDestructable> prod) { InputDataRef().ScanResult = prod; }
+    TAutoPtr<IDestructable> &ScanResult() { return InputDataRef().ScanResult; } 
+    void SetScanResult(TAutoPtr<IDestructable> prod) { InputDataRef().ScanResult = prod; } 
     bool HasScanResult() const { return InputData ? (bool)InputData->ScanResult : false; }
 
-    TAutoPtr<IDestructable> &AsyncJobResult() { return InputDataRef().AsyncJobResult; }
-    void SetAsyncJobResult(TAutoPtr<IDestructable> prod) { InputDataRef().AsyncJobResult = prod; }
+    TAutoPtr<IDestructable> &AsyncJobResult() { return InputDataRef().AsyncJobResult; } 
+    void SetAsyncJobResult(TAutoPtr<IDestructable> prod) { InputDataRef().AsyncJobResult = prod; } 
     bool HasAsyncJobResult() const { return InputData ? (bool)InputData->AsyncJobResult : false; }
 
     ////////////////////////////////////////

@@ -10,7 +10,7 @@ namespace NTable {
 
 namespace {
 
-void PrintCells(IOutputStream& out, TArrayRef<const TCell> cells, const TNulls& nulls) noexcept
+void PrintCells(IOutputStream& out, TArrayRef<const TCell> cells, const TNulls& nulls) noexcept 
 {
     out << '{';
     size_t pos = 0;
@@ -230,7 +230,7 @@ void TSlices::Validate() const noexcept
     }
 }
 
-TIntrusiveConstPtr<TScreen> TSlices::ToScreen() const noexcept
+TIntrusiveConstPtr<TScreen> TSlices::ToScreen() const noexcept 
 {
     TVector<TScreen::THole> holes;
     auto it = IterateRowRanges();
@@ -242,7 +242,7 @@ TIntrusiveConstPtr<TScreen> TSlices::ToScreen() const noexcept
     return new TScreen(std::move(holes));
 }
 
-bool TSlices::EqualByRowId(const TIntrusiveConstPtr<TSlices>& a, const TIntrusiveConstPtr<TSlices>& b) noexcept
+bool TSlices::EqualByRowId(const TIntrusiveConstPtr<TSlices>& a, const TIntrusiveConstPtr<TSlices>& b) noexcept 
 {
     if (!a || !b) {
         return !a == !b;
@@ -259,7 +259,7 @@ bool TSlices::EqualByRowId(const TIntrusiveConstPtr<TSlices>& a, const TIntrusiv
     return bool(ait) == bool(bit);
 }
 
-bool TSlices::SupersetByRowId(const TIntrusiveConstPtr<TSlices>& a, const TIntrusiveConstPtr<TSlices>& b) noexcept
+bool TSlices::SupersetByRowId(const TIntrusiveConstPtr<TSlices>& a, const TIntrusiveConstPtr<TSlices>& b) noexcept 
 {
     if (!a || !b) {
         return !a == !b;
@@ -288,9 +288,9 @@ bool TSlices::SupersetByRowId(const TIntrusiveConstPtr<TSlices>& a, const TIntru
     }
 }
 
-TIntrusiveConstPtr<TSlices> TSlices::Subtract(
-        const TIntrusiveConstPtr<TSlices>& a,
-        const TIntrusiveConstPtr<TSlices>& b) noexcept
+TIntrusiveConstPtr<TSlices> TSlices::Subtract( 
+        const TIntrusiveConstPtr<TSlices>& a, 
+        const TIntrusiveConstPtr<TSlices>& b) noexcept 
 {
     if (!a || a->empty() || !b || b->empty()) {
         return a; // there's nothing to remove
@@ -375,9 +375,9 @@ TIntrusiveConstPtr<TSlices> TSlices::Subtract(
     return new TSlices(std::move(result));
 }
 
-TIntrusiveConstPtr<TSlices> TSlices::Merge(
-        const TIntrusiveConstPtr<TSlices>& a,
-        const TIntrusiveConstPtr<TSlices>& b) noexcept
+TIntrusiveConstPtr<TSlices> TSlices::Merge( 
+        const TIntrusiveConstPtr<TSlices>& a, 
+        const TIntrusiveConstPtr<TSlices>& b) noexcept 
 {
     if (!b || b->empty()) {
         return a;
@@ -425,8 +425,8 @@ TIntrusiveConstPtr<TSlices> TSlices::Merge(
     return new TSlices(std::move(r));
 }
 
-TIntrusiveConstPtr<TSlices> TSlices::Cut(
-        TIntrusiveConstPtr<TSlices> run,
+TIntrusiveConstPtr<TSlices> TSlices::Cut( 
+        TIntrusiveConstPtr<TSlices> run, 
         TRowId beginRowId,
         TRowId endRowId,
         TConstArrayRef<TCell> beginKey,
@@ -469,7 +469,7 @@ TIntrusiveConstPtr<TSlices> TSlices::Cut(
         // No modifications necessary
         return run;
     }
-    TIntrusivePtr<TSlices> result = new TSlices;
+    TIntrusivePtr<TSlices> result = new TSlices; 
     result->reserve(end - begin);
     result->insert(result->end(), begin, end);
     if (!result->empty()) {
@@ -491,7 +491,7 @@ TIntrusiveConstPtr<TSlices> TSlices::Cut(
     return result;
 }
 
-TIntrusiveConstPtr<TSlices> TSlices::Replace(TIntrusiveConstPtr<TSlices> run, TConstArrayRef<TSlice> slices) noexcept
+TIntrusiveConstPtr<TSlices> TSlices::Replace(TIntrusiveConstPtr<TSlices> run, TConstArrayRef<TSlice> slices) noexcept 
 {
     Y_VERIFY(run && !run->empty());
     Y_VERIFY(slices);
@@ -566,7 +566,7 @@ TLevels::iterator TLevels::AddLevel()
     return Levels.begin();
 }
 
-TLevels::TAddResult TLevels::Add(TIntrusiveConstPtr<TPart> part, const TSlice& slice)
+TLevels::TAddResult TLevels::Add(TIntrusiveConstPtr<TPart> part, const TSlice& slice) 
 {
     Y_VERIFY_S(part->Epoch >= MaxEpoch,
             "Adding part " << part->Label.ToString() << " (epoch " << part->Epoch << ") to levels with max epoch " << MaxEpoch);
@@ -596,14 +596,14 @@ TLevels::TAddResult TLevels::Add(TIntrusiveConstPtr<TPart> part, const TSlice& s
     return TAddResult{ insertLevel, pos };
 }
 
-void TLevels::Add(TIntrusiveConstPtr<TPart> part, const TIntrusiveConstPtr<TSlices>& run)
+void TLevels::Add(TIntrusiveConstPtr<TPart> part, const TIntrusiveConstPtr<TSlices>& run) 
 {
     for (const auto& slice : *run) {
         Add(part, slice);
     }
 }
 
-void TLevels::AddContiguous(TIntrusiveConstPtr<TPart> part, const TIntrusiveConstPtr<TSlices>& run)
+void TLevels::AddContiguous(TIntrusiveConstPtr<TPart> part, const TIntrusiveConstPtr<TSlices>& run) 
 {
     if (run->empty()) {
         return;

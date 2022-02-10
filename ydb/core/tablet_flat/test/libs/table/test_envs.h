@@ -180,7 +180,7 @@ namespace NTest {
         private:
             const ui32 Room = Max<ui32>();
             TVector<TPageId> Fetch;
-            TIntrusiveConstPtr<TStore> Store;
+            TIntrusiveConstPtr<TStore> Store; 
             TAutoPtr<NFwd::IPageLoadingLogic> PageLoadingLogic;
             bool Grow = false;
         };

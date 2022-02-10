@@ -47,7 +47,7 @@ Y_UNIT_TEST_SUITE(TFlatEraseCacheTest) {
         TVector<NScheme::TTypeIdOrder> types;
         types.emplace_back(NScheme::NTypeIds::Uint64);
         TVector<TCell> defs(1);
-        TIntrusiveConstPtr<TKeyNulls> nulls = TKeyNulls::Make(types, defs);
+        TIntrusiveConstPtr<TKeyNulls> nulls = TKeyNulls::Make(types, defs); 
         // Empty default config
         TKeyRangeCache cache(*nulls, { });
         // Empty keys, both inclusive

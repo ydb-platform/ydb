@@ -90,7 +90,7 @@ class TestSchemeShardCopyOps(object):
         )
 
         assert_that(
-            description.PathDescription.Table.PartitionConfig.FollowerGroups,
+            description.PathDescription.Table.PartitionConfig.FollowerGroups, 
             has_length(
                 equal_to(
                     1
@@ -99,9 +99,9 @@ class TestSchemeShardCopyOps(object):
         )
 
         assert_that(
-            description.PathDescription.Table.PartitionConfig.FollowerGroups[0],
+            description.PathDescription.Table.PartitionConfig.FollowerGroups[0], 
             has_property(
-                'FollowerCount',
+                'FollowerCount', 
                 equal_to(
                     2
                 )
@@ -115,7 +115,7 @@ class TestSchemeShardCopyOps(object):
         )
 
         assert_that(
-            description.PathDescription.Table.PartitionConfig.FollowerGroups,
+            description.PathDescription.Table.PartitionConfig.FollowerGroups, 
             has_length(
                 equal_to(
                     1
@@ -124,9 +124,9 @@ class TestSchemeShardCopyOps(object):
         )
 
         assert_that(
-            description.PathDescription.Table.PartitionConfig.FollowerGroups[0],
+            description.PathDescription.Table.PartitionConfig.FollowerGroups[0], 
             has_property(
-                'FollowerCount',
+                'FollowerCount', 
                 equal_to(
                     2
                 )

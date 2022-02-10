@@ -3,22 +3,22 @@
 #include <library/cpp/lwtrace/all.h>
 
 #define SQS_PROVIDER(PROBE, EVENT, GROUPS, TYPES, NAMES)                \
-    PROBE(CreateLeader, GROUPS("SqsLeadersLifeTime"),                   \
+    PROBE(CreateLeader, GROUPS("SqsLeadersLifeTime"),                   \ 
           TYPES(TString, TString, TString),                             \
           NAMES("user", "queue", "reason"))                             \
-    PROBE(DestroyLeader, GROUPS("SqsLeadersLifeTime"),                  \
+    PROBE(DestroyLeader, GROUPS("SqsLeadersLifeTime"),                  \ 
           TYPES(TString, TString, TString),                             \
           NAMES("user", "queue", "reason"))                             \
-    PROBE(IncLeaderRef, GROUPS("SqsLeadersLifeTime"),                   \
+    PROBE(IncLeaderRef, GROUPS("SqsLeadersLifeTime"),                   \ 
           TYPES(TString, TString, TString),                             \
           NAMES("user", "queue", "referer"))                            \
-    PROBE(DecLeaderRef, GROUPS("SqsLeadersLifeTime"),                   \
+    PROBE(DecLeaderRef, GROUPS("SqsLeadersLifeTime"),                   \ 
           TYPES(TString),                                               \
           NAMES("rerefer"))                                             \
-    PROBE(IncLeaderRefAlreadyHasRef, GROUPS("SqsLeadersLifeTime"),      \
+    PROBE(IncLeaderRefAlreadyHasRef, GROUPS("SqsLeadersLifeTime"),      \ 
           TYPES(TString, TString, TString),                             \
           NAMES("user", "queue", "referer"))                            \
-    PROBE(DecLeaderRefNotInRefSet, GROUPS("SqsLeadersLifeTime"),        \
+    PROBE(DecLeaderRefNotInRefSet, GROUPS("SqsLeadersLifeTime"),        \ 
           TYPES(TString),                                               \
           NAMES("rerefer"))                                             \
                                                                         \

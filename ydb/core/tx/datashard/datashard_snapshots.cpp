@@ -595,7 +595,7 @@ bool TSnapshotManager::RemoveExpiredSnapshots(NTable::TDatabase& db, TInstant no
     TRowVersion leastAcquired = TRowVersion::Max();
     for (auto &it : Self->Pipeline.GetImmediateOps()) {
         if (it.second->IsMvccSnapshotRead())
-            leastAcquired = Min(leastAcquired, it.second->GetMvccSnapshot());
+            leastAcquired = Min(leastAcquired, it.second->GetMvccSnapshot()); 
     }
 
     removed |= AdvanceWatermark(db, Min(proposed, leastPlanned, leastAcquired, CompleteEdge));

@@ -15,7 +15,7 @@ Y_UNIT_TEST_SUITE(TFlatTableLongTxLarge) {
     };
 
     struct TTxInitSchema : public ITransaction {
-        TTxInitSchema(TIntrusiveConstPtr<TCompactionPolicy> policy = nullptr)
+        TTxInitSchema(TIntrusiveConstPtr<TCompactionPolicy> policy = nullptr) 
             : Policy(std::move(policy))
         { }
 
@@ -41,7 +41,7 @@ Y_UNIT_TEST_SUITE(TFlatTableLongTxLarge) {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
 
-        const TIntrusiveConstPtr<TCompactionPolicy> Policy;
+        const TIntrusiveConstPtr<TCompactionPolicy> Policy; 
     };
 
     struct TTxCommitLongTx : public ITransaction {
@@ -157,7 +157,7 @@ Y_UNIT_TEST_SUITE(TFlatTableLongTxLarge) {
         // A special compaction policy that compacts small mem tables often
         // However the data will not be compacted and not kept in the cache
         // This is needed to limit the memory pressure for this test
-        TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy;
+        TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy; 
         policy->InMemSizeToSnapshot = 24ull * 1024 * 1024;
         policy->InMemStepsToSnapshot = 4;
         policy->InMemForceStepsToSnapshot = 4;

@@ -54,7 +54,7 @@ public:
 
 class TResourceMetricsSendState {
 public:
-    TResourceMetricsSendState(ui64 tabletId, ui32 followerId, const TActorId& launcher);
+    TResourceMetricsSendState(ui64 tabletId, ui32 followerId, const TActorId& launcher); 
     bool FillChanged(TResourceMetricsValues& src, NKikimrTabletBase::TMetrics& metrics, TInstant now = TInstant::Now(), bool forceAll = false);
     bool TryUpdate(TResourceMetricsValues& src, const TActorContext& ctx);
 
@@ -67,7 +67,7 @@ protected:
     static constexpr ui64 SignificantChangeIops = 10 /* 10 iops? */;
 
     const ui64 TabletId;
-    const ui32 FollowerId;
+    const ui32 FollowerId; 
     const TActorId Launcher;
     ui32 LevelCPU = 0;
     ui32 LevelMemory = 0;
@@ -83,8 +83,8 @@ protected:
 
 class TResourceMetrics : public TResourceMetricsValues, public TResourceMetricsSendState {
 public:
-    TResourceMetrics(ui64 tabletId, ui32 followerId, const TActorId& launcher)
-        : TResourceMetricsSendState(tabletId, followerId, launcher) {}
+    TResourceMetrics(ui64 tabletId, ui32 followerId, const TActorId& launcher) 
+        : TResourceMetricsSendState(tabletId, followerId, launcher) {} 
 
     bool FillChanged(NKikimrTabletBase::TMetrics& metrics, TInstant now = TInstant::Now(), bool forceAll = false) {
         return TResourceMetricsSendState::FillChanged(*this, metrics, now, forceAll);

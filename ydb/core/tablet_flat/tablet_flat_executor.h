@@ -77,7 +77,7 @@ private:
 
 class TMemoryToken {
 public:
-    TMemoryToken(TIntrusivePtr<TMemoryGCToken> gcToken)
+    TMemoryToken(TIntrusivePtr<TMemoryGCToken> gcToken) 
         : GCToken(gcToken)
     {}
 
@@ -85,7 +85,7 @@ public:
         GCToken->Drop();
     }
 
-    const TIntrusivePtr<TMemoryGCToken> GCToken;
+    const TIntrusivePtr<TMemoryGCToken> GCToken; 
 };
 
 struct IExecuting {
@@ -93,8 +93,8 @@ struct IExecuting {
 
     virtual ~IExecuting() = default;
 
-    virtual void MakeSnapshot(TIntrusivePtr<TTableSnapshotContext>) = 0;
-    virtual void DropSnapshot(TIntrusivePtr<TTableSnapshotContext>) = 0;
+    virtual void MakeSnapshot(TIntrusivePtr<TTableSnapshotContext>) = 0; 
+    virtual void DropSnapshot(TIntrusivePtr<TTableSnapshotContext>) = 0; 
     virtual void MoveSnapshot(const TTableSnapshotContext&, ui32 src, ui32 dst) = 0;
     virtual void ClearSnapshot(const TTableSnapshotContext&) = 0;
     virtual void LoanTable(ui32 tableId, const TString &partsInfo) = 0; // attach table parts to table (called on part destination)
@@ -171,14 +171,14 @@ public:
         return std::move(MemoryToken);
     }
 
-    TIntrusivePtr<TMemoryGCToken> GetMemoryGCToken() const { return MemoryGCToken; }
+    TIntrusivePtr<TMemoryGCToken> GetMemoryGCToken() const { return MemoryGCToken; } 
 
 private:
     const ui64 MemoryLimit;
     const ui64 TaskId;
     ui64 RequestedMemory;
     ui32 NotEnoughMemoryCount;
-    TIntrusivePtr<TMemoryGCToken> MemoryGCToken;
+    TIntrusivePtr<TMemoryGCToken> MemoryGCToken; 
     TAutoPtr<TMemoryToken> MemoryToken;
 };
 
@@ -237,18 +237,18 @@ struct TCompactedPartLoans {
     {}
 };
 
-struct TFinishedCompactionInfo {
-    ui64 Edge = 0;
-    TInstant FullCompactionTs;
-
-    TFinishedCompactionInfo() = default;
-
-    TFinishedCompactionInfo(ui64 edge, TInstant ts)
-        : Edge(edge)
-        , FullCompactionTs(ts)
-    {}
-};
-
+struct TFinishedCompactionInfo { 
+    ui64 Edge = 0; 
+    TInstant FullCompactionTs; 
+ 
+    TFinishedCompactionInfo() = default; 
+ 
+    TFinishedCompactionInfo(ui64 edge, TInstant ts) 
+        : Edge(edge) 
+        , FullCompactionTs(ts) 
+    {} 
+}; 
+ 
 enum class ETerminationReason {
     None = 0,
     MemoryLimitExceeded = 1,
@@ -304,7 +304,7 @@ public:
 
 struct TExecutorStats {
     bool IsActive = false;
-    bool IsFollower = false;
+    bool IsFollower = false; 
     bool IsAnyChannelYellowMove = false;
     bool IsAnyChannelYellowStop = false;
     ui64 TxInFly = 0;
@@ -443,15 +443,15 @@ namespace NFlatExecutorSetup {
         virtual void CompletedLoansChanged(const TActorContext &ctx); // would be no-op in default implementation
         virtual void CompactionComplete(ui32 tableId, const TActorContext &ctx); // would be no-op in default implementation
 
-        virtual void ScanComplete(NTable::EAbort status, TAutoPtr<IDestructable> prod, ui64 cookie, const TActorContext &ctx);
+        virtual void ScanComplete(NTable::EAbort status, TAutoPtr<IDestructable> prod, ui64 cookie, const TActorContext &ctx); 
 
         virtual bool ReassignChannelsEnabled() const;
 
         // memory usage excluding transactions and executor cache.
         virtual ui64 GetMemoryUsage() const { return 50 << 10; }
 
-        virtual void OnLeaderUserAuxUpdate(TString) { /* default */ }
-
+        virtual void OnLeaderUserAuxUpdate(TString) { /* default */ } 
+ 
         // create transaction?
     protected:
         ITablet(TTabletStorageInfo *info, const TActorId &tablet)
@@ -476,25 +476,25 @@ namespace NFlatExecutorSetup {
     struct IExecutor : TNonCopyable {
         virtual ~IExecutor() {}
 
-        // tablet assigned as leader, could begin loading
+        // tablet assigned as leader, could begin loading 
         virtual void Boot(TEvTablet::TEvBoot::TPtr &ev, const TActorContext &ctx) = 0;
-        // tablet generation restoration complete, tablet could act as leader
+        // tablet generation restoration complete, tablet could act as leader 
         virtual void Restored(TEvTablet::TEvRestored::TPtr &ev, const TActorContext &ctx) = 0;
         // die!
         virtual void DetachTablet(const TActorContext &ctx) = 0;
 
-        // tablet assigned as follower (or follower connection refreshed), must begin loading
-        virtual void FollowerBoot(TEvTablet::TEvFBoot::TPtr &ev, const TActorContext &ctx) = 0;
-        // next follower incremental update
-        virtual void FollowerUpdate(THolder<TEvTablet::TFUpdateBody> upd) = 0;
-        virtual void FollowerAuxUpdate(TString upd) = 0;
-        virtual void FollowerAttached() = 0;
-        // all known followers are synced to us (called once)
-        virtual void FollowerSyncComplete() = 0;
-        // all followers had completed log with requested gc-barrier
-        virtual void FollowerGcApplied(ui32 step, TDuration followerSyncDelay) = 0;
+        // tablet assigned as follower (or follower connection refreshed), must begin loading 
+        virtual void FollowerBoot(TEvTablet::TEvFBoot::TPtr &ev, const TActorContext &ctx) = 0; 
+        // next follower incremental update 
+        virtual void FollowerUpdate(THolder<TEvTablet::TFUpdateBody> upd) = 0; 
+        virtual void FollowerAuxUpdate(TString upd) = 0; 
+        virtual void FollowerAttached() = 0; 
+        // all known followers are synced to us (called once) 
+        virtual void FollowerSyncComplete() = 0; 
+        // all followers had completed log with requested gc-barrier 
+        virtual void FollowerGcApplied(ui32 step, TDuration followerSyncDelay) = 0; 
 
-        virtual void Execute(TAutoPtr<ITransaction> transaction, const TActorContext &ctx) = 0;
+        virtual void Execute(TAutoPtr<ITransaction> transaction, const TActorContext &ctx) = 0; 
 
         /* Make blob with data required for table bootstapping. Note:
             1. Once non-trivial blob obtained and commited in tx all of its
@@ -507,17 +507,17 @@ namespace NFlatExecutorSetup {
         // Prepare snapshot which can later be used for scan task.
         virtual ui64 MakeScanSnapshot(ui32 table) = 0;
         virtual void DropScanSnapshot(ui64 snapId) = 0;
-        virtual ui64 QueueScan(ui32 tableId, TAutoPtr<NTable::IScan> scan, ui64 cookie, const TScanOptions& options = TScanOptions()) = 0;
+        virtual ui64 QueueScan(ui32 tableId, TAutoPtr<NTable::IScan> scan, ui64 cookie, const TScanOptions& options = TScanOptions()) = 0; 
         virtual bool CancelScan(ui32 tableId, ui64 taskId) = 0;
 
-        // edge and ts of last full compaction
-        virtual TFinishedCompactionInfo GetFinishedCompactionInfo(ui32 tableId) const = 0;
-
+        // edge and ts of last full compaction 
+        virtual TFinishedCompactionInfo GetFinishedCompactionInfo(ui32 tableId) const = 0; 
+ 
         // Forces full compaction of the specified table in the near future
-        // Returns 0 if can't compact, otherwise compaction ID
+        // Returns 0 if can't compact, otherwise compaction ID 
         virtual ui64 CompactBorrowed(ui32 tableId) = 0;
         virtual ui64 CompactMemTable(ui32 tableId) = 0;
-        virtual ui64 CompactTable(ui32 tableId) = 0;
+        virtual ui64 CompactTable(ui32 tableId) = 0; 
         virtual bool CompactTables() = 0;
 
         virtual void RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr&) const = 0;
@@ -528,8 +528,8 @@ namespace NFlatExecutorSetup {
 
         virtual void UpdateConfig(TEvTablet::TEvUpdateConfig::TPtr&) = 0;
 
-        virtual void SendUserAuxUpdateToFollowers(TString upd, const TActorContext &ctx) = 0;
-
+        virtual void SendUserAuxUpdateToFollowers(TString upd, const TActorContext &ctx) = 0; 
+ 
         // Returns parts owned by this tablet and borrowed by other tablets
         virtual THashMap<TLogoBlobID, TVector<ui64>> GetBorrowedParts() const = 0;
 

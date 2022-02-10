@@ -71,7 +71,7 @@ struct TKesusTablet::TTxInit : public TTxBase {
                     case Schema::SysParam_NextSemaphoreOrderId:
                         Self->NextSemaphoreOrderId = FromString<ui64>(value);
                         break;
-                    case Schema::SysParam_LastLeaderActor:
+                    case Schema::SysParam_LastLeaderActor: 
                         Y_VERIFY(PreviousTabletActorID.Parse(value.data(), value.size()));
                         break;
                     case Schema::SysParam_SelfCheckPeriodMillis:
@@ -234,7 +234,7 @@ struct TKesusTablet::TTxInit : public TTxBase {
             Self->QuoterResources.ConstructTrees();
         }
 
-        Self->PersistSysParam(db, Schema::SysParam_LastLeaderActor, ctx.SelfID.ToString());
+        Self->PersistSysParam(db, Schema::SysParam_LastLeaderActor, ctx.SelfID.ToString()); 
         return true;
     }
 

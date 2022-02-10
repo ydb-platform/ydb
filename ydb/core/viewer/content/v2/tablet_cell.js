@@ -48,7 +48,7 @@ TabletCell.prototype.buildDomElement = function() {
     this.domElementCounter = counter[0];
     var tooltip = this.Type;
     if (!this.Leader) {
-        tooltip += ' (follower)';
+        tooltip += ' (follower)'; 
     }
     tablet.attr('data-original-title', tooltip);
     tablet.tooltip({html: true});

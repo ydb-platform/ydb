@@ -41,7 +41,7 @@ public:
         InitConfig(params);
         if (hiveId != 0 ) {
             THolder<TEvHive::TEvRequestHiveDomainStats> request = MakeHolder<TEvHive::TEvRequestHiveDomainStats>();
-            request->Record.SetReturnFollowers(FromStringWithDefault(params.Get("followers"), false));
+            request->Record.SetReturnFollowers(FromStringWithDefault(params.Get("followers"), false)); 
             request->Record.SetReturnMetrics(FromStringWithDefault(params.Get("metrics"), true));
             SendRequestToPipe(ConnectTabletPipe(hiveId), request.Release());
             Become(&TThis::StateRequestedInfo, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());

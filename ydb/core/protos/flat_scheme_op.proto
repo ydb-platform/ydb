@@ -250,12 +250,12 @@ message TPipelineConfig {
 message TPartitionConfig {
     optional string NamedCompactionPolicy = 1; // One of the predefined policies
     optional TCompactionPolicy CompactionPolicy = 2; // Customized policy
-    optional uint64 FollowerCount = 3;
+    optional uint64 FollowerCount = 3; 
     optional uint64 ExecutorCacheSize = 4; // Cache size for the whole tablet including all user and system tables
-    optional bool AllowFollowerPromotion = 5 [default = true]; // if true followers can upgrade to leader, if false followers only handle reads
+    optional bool AllowFollowerPromotion = 5 [default = true]; // if true followers can upgrade to leader, if false followers only handle reads 
     optional uint64 TxReadSizeLimit = 6; // Maximum size in bytes that is allowed to be read by a single Tx
-    //optional bool CrossDataCenterFollowers = 7; // deprecated -> CrossDataCenterFollowerCount
-    optional uint32 CrossDataCenterFollowerCount = 8; // deprecated -> FollowerGroups
+    //optional bool CrossDataCenterFollowers = 7; // deprecated -> CrossDataCenterFollowerCount 
+    optional uint32 CrossDataCenterFollowerCount = 8; // deprecated -> FollowerGroups 
     optional uint32 ChannelProfileId = 9;   // for configuring erasure and disk categories
     optional TPartitioningPolicy PartitioningPolicy = 10;
     optional TPipelineConfig PipelineConfig = 11;
@@ -270,7 +270,7 @@ message TPartitionConfig {
     optional uint32 EraseCacheMaxBytes = 20; // Maximum number of bytes to use for cached rows (default 1MB)
     optional EFreezeState FreezeState = 21;
     optional bool ShadowData = 22; // Table has separate shadow data for later merging
-    repeated NKikimrHive.TFollowerGroup FollowerGroups = 23;
+    repeated NKikimrHive.TFollowerGroup FollowerGroups = 23; 
     reserved 24; // EMvccState MvccState = 24; no longer used
     optional uint64 KeepSnapshotTimeout = 25; // milliseconds
 }
@@ -349,7 +349,7 @@ message TTableDescription {
 
     optional TTTLSettings TTLSettings = 35;
 
-    optional bool OmitFollowers = 36 [default = false]; // used with CopyFromTable
+    optional bool OmitFollowers = 36 [default = false]; // used with CopyFromTable 
     optional bool IsBackup = 37 [default = false];
 
     repeated TCdcStreamDescription CdcStreams = 38;
@@ -806,7 +806,7 @@ message TCopyTableConfig { //TTableDescription implemets copying a table in orig
     optional string DstPath = 2;
 
     optional bool OmitIndexes = 3 [default = false];
-    optional bool OmitFollowers = 4 [default = false];
+    optional bool OmitFollowers = 4 [default = false]; 
     optional bool IsBackup = 5 [default = false];
 }
 

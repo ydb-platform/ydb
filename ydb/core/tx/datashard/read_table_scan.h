@@ -6,7 +6,7 @@
 namespace NKikimr {
 namespace NDataShard {
 
-class TReadTableProd : public IDestructable {
+class TReadTableProd : public IDestructable { 
 public:
     TReadTableProd(const TString &error, bool schemaChanged = false)
         : Error(error)
@@ -17,7 +17,7 @@ public:
     bool SchemaChanged;
 };
 
-TAutoPtr<NTable::IScan> CreateReadTableScan(ui64 txId,
+TAutoPtr<NTable::IScan> CreateReadTableScan(ui64 txId, 
                                         ui64 shardId,
                                         TUserTable::TCPtr tableInfo,
                                         const NKikimrTxDataShard::TReadTableTransaction &tx,

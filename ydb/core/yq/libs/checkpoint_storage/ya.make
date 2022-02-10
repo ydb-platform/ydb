@@ -1,16 +1,16 @@
 OWNER(g:yq)
-
-LIBRARY()
-
-SRCS(
-    gc.cpp
-    storage_proxy.cpp
-    storage_service.cpp
-    ydb_checkpoint_storage.cpp
-    ydb_state_storage.cpp
-)
-
-PEERDIR(
+ 
+LIBRARY() 
+ 
+SRCS( 
+    gc.cpp 
+    storage_proxy.cpp 
+    storage_service.cpp 
+    ydb_checkpoint_storage.cpp 
+    ydb_state_storage.cpp 
+) 
+ 
+PEERDIR( 
     contrib/libs/fmt
     library/cpp/actors/core
     ydb/core/yq/libs/actors/logging
@@ -24,12 +24,12 @@ PEERDIR(
     ydb/public/sdk/cpp/client/ydb_table
     ydb/library/yql/dq/actors/compute
     ydb/library/yql/dq/proto
-)
-
+) 
+ 
 YQL_LAST_ABI_VERSION()
 
-END()
-
+END() 
+ 
 RECURSE(
     events
     proto

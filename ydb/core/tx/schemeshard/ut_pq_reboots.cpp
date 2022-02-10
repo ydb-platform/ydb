@@ -100,7 +100,7 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
 
         auto numChannels = runtime.GetAppData().ChannelProfiles->Profiles[0].Channels.size();
         {
-            auto itTablet = env.GetHiveState()->Tablets.find({TTestTxConfig::SchemeShard, 1});
+            auto itTablet = env.GetHiveState()->Tablets.find({TTestTxConfig::SchemeShard, 1}); 
             UNIT_ASSERT_UNEQUAL(itTablet, env.GetHiveState()->Tablets.end());
             UNIT_ASSERT_VALUES_EQUAL(itTablet->second.Type, TTabletTypes::PersQueue);
             UNIT_ASSERT_VALUES_EQUAL(itTablet->second.BoundChannels.size(), numChannels);
@@ -130,7 +130,7 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
                                     NLs::PathVersionEqual(3)});
 
         {
-            auto itTablet = env.GetHiveState()->Tablets.find({TTestTxConfig::SchemeShard, 1});
+            auto itTablet = env.GetHiveState()->Tablets.find({TTestTxConfig::SchemeShard, 1}); 
             UNIT_ASSERT_UNEQUAL(itTablet, env.GetHiveState()->Tablets.end());
             UNIT_ASSERT_VALUES_EQUAL(itTablet->second.Type, TTabletTypes::PersQueue);
             UNIT_ASSERT_VALUES_UNEQUAL(itTablet->second.BoundChannels.size(), numChannels);
@@ -269,7 +269,7 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
             TestDropPQGroup(runtime, t.TxId++, "/MyRoot/DirA", "Isolda", {ESts::StatusAccepted, ESts::StatusPathDoesNotExist});
             t.TestEnv->TestWaitNotification(runtime, t.TxId-1);
 
-            t.TestEnv->TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 1, TTestTxConfig::FakeHiveTablets + 2});
+            t.TestEnv->TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 1, TTestTxConfig::FakeHiveTablets + 2}); 
 
             TestLs(runtime, "/MyRoot/DirA/Isolda", true, NLs::PathNotExist);
             TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
@@ -292,7 +292,7 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
             TestForceDropUnsafe(runtime, txId++, 3);
             t.TestEnv->TestWaitNotification(runtime, {txId-2, txId-1});
 
-            t.TestEnv->TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 1, TTestTxConfig::FakeHiveTablets + 2});
+            t.TestEnv->TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 1, TTestTxConfig::FakeHiveTablets + 2}); 
 
             TestLs(runtime, "/MyRoot/Isolda", true, NLs::PathNotExist);
             TestDescribeResult(DescribePath(runtime, "/MyRoot"),

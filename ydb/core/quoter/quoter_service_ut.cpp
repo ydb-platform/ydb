@@ -157,7 +157,7 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
         const ui64 tabletId = pathDesc.GetKesus().GetKesusTabletId();
 
         TActorId sender = runtime->AllocateEdgeActor();
-        ForwardToTablet(*runtime, tabletId, sender, request.Release(), 0);
+        ForwardToTablet(*runtime, tabletId, sender, request.Release(), 0); 
 
         TAutoPtr<IEventHandle> handle;
         runtime->GrabEdgeEvent<NKesus::TEvKesus::TEvAddQuoterResourceResult>(handle);

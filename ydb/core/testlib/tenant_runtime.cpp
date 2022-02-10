@@ -378,7 +378,7 @@ class TFakeHive : public TActor<TFakeHive>, public TTabletExecutedFlat {
     {
         TIntrusivePtr<TBootstrapperInfo> bi(new TBootstrapperInfo(new TTabletSetupInfo(op, TMailboxType::Simple, 0,
                                                                                        TMailboxType::Simple, 0)));
-        return ctx.ExecutorThread.RegisterActor(CreateBootstrapper(CreateTestTabletInfo(State.NextTabletId, tabletType, erasure), bi.Get()));
+        return ctx.ExecutorThread.RegisterActor(CreateBootstrapper(CreateTestTabletInfo(State.NextTabletId, tabletType, erasure), bi.Get())); 
     }
 
     void SendDeletionNotification(ui64 tabletId, TActorId waiter, const TActorContext& ctx)
@@ -737,7 +737,7 @@ void TTenantTestRuntime::CreateTenantPool(ui32 nodeIndex, const TTenantTestConfi
     NKikimrTabletBase::TMetrics limit;
     TLocalConfig::TPtr localConfig = new TLocalConfig;
     localConfig->TabletClassInfo[TTabletTypes::Dummy].SetupInfo
-        = new TTabletSetupInfo(&CreateFlatDummyTablet,
+        = new TTabletSetupInfo(&CreateFlatDummyTablet, 
                                TMailboxType::Simple, 0,
                                TMailboxType::Simple, 0);
 
@@ -853,15 +853,15 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
     for (auto &pr : GetAppData().DomainsInfo->Domains) {
         auto &domain = pr.second;
         for (auto id : domain->TxAllocators) {
-            auto aid = CreateTestBootstrapper(*this, CreateTestTabletInfo(id, TTabletTypes::TX_ALLOCATOR), &CreateTxAllocator);
+            auto aid = CreateTestBootstrapper(*this, CreateTestTabletInfo(id, TTabletTypes::TX_ALLOCATOR), &CreateTxAllocator); 
             EnableScheduleForActor(aid, true);
         }
         for (auto id : domain->Coordinators) {
-            auto aid = CreateTestBootstrapper(*this, CreateTestTabletInfo(id, TTabletTypes::FLAT_TX_COORDINATOR), &CreateFlatTxCoordinator);
+            auto aid = CreateTestBootstrapper(*this, CreateTestTabletInfo(id, TTabletTypes::FLAT_TX_COORDINATOR), &CreateFlatTxCoordinator); 
             EnableScheduleForActor(aid, true);
         }
         for (auto id : domain->Mediators) {
-            auto aid = CreateTestBootstrapper(*this, CreateTestTabletInfo(id, TTabletTypes::TX_MEDIATOR), &CreateTxMediator);
+            auto aid = CreateTestBootstrapper(*this, CreateTestTabletInfo(id, TTabletTypes::TX_MEDIATOR), &CreateTxMediator); 
             EnableScheduleForActor(aid, true);
         }
     }
@@ -880,14 +880,14 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
                 subdomains.push_back(std::make_pair(subDomain, key.GetPathId()));
             }
 
-            auto info = CreateTestTabletInfo(domain.SchemeShardId, TTabletTypes::TX_DUMMY, TErasureType::ErasureNone);
-            TActorId actorId = CreateTestBootstrapper(*this, info, [sender=Sender, subdomains](const TActorId &tablet, TTabletStorageInfo *info) -> IActor* {
+            auto info = CreateTestTabletInfo(domain.SchemeShardId, TTabletTypes::TX_DUMMY, TErasureType::ErasureNone); 
+            TActorId actorId = CreateTestBootstrapper(*this, info, [sender=Sender, subdomains](const TActorId &tablet, TTabletStorageInfo *info) -> IActor* { 
                     return new TFakeSchemeShard(tablet, info, sender, subdomains);
                 });
             EnableScheduleForActor(actorId, true);
         } else {
-            auto info = CreateTestTabletInfo(domain.SchemeShardId, TTabletTypes::FLAT_SCHEMESHARD, TErasureType::ErasureNone);
-            TActorId actorId = CreateTestBootstrapper(*this, info, [](const TActorId &tablet, TTabletStorageInfo *info) -> IActor* {
+            auto info = CreateTestTabletInfo(domain.SchemeShardId, TTabletTypes::FLAT_SCHEMESHARD, TErasureType::ErasureNone); 
+            TActorId actorId = CreateTestBootstrapper(*this, info, [](const TActorId &tablet, TTabletStorageInfo *info) -> IActor* { 
                     return CreateFlatTxSchemeShard(tablet, info);
                 });
             EnableScheduleForActor(actorId, true);
@@ -953,8 +953,8 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
 
     // Create Hive.
     {
-        auto info = CreateTestTabletInfo(Config.HiveId, TTabletTypes::TX_DUMMY, TErasureType::ErasureNone);
-        TActorId actorId = CreateTestBootstrapper(*this, info, [this](const TActorId &tablet, TTabletStorageInfo *info) -> IActor* {
+        auto info = CreateTestTabletInfo(Config.HiveId, TTabletTypes::TX_DUMMY, TErasureType::ErasureNone); 
+        TActorId actorId = CreateTestBootstrapper(*this, info, [this](const TActorId &tablet, TTabletStorageInfo *info) -> IActor* { 
                 return new TFakeHive(tablet, info, Sender, Config.HiveId, SubDomainKeys);
             });
         EnableScheduleForActor(actorId, true);
@@ -962,8 +962,8 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
 
     // Create BS Controller.
     {
-        auto info = CreateTestTabletInfo(MakeBSControllerID(0), TTabletTypes::FLAT_BS_CONTROLLER);
-        TActorId actorId = CreateTestBootstrapper(*this, info, [](const TActorId &tablet, TTabletStorageInfo *info) -> IActor* {
+        auto info = CreateTestTabletInfo(MakeBSControllerID(0), TTabletTypes::FLAT_BS_CONTROLLER); 
+        TActorId actorId = CreateTestBootstrapper(*this, info, [](const TActorId &tablet, TTabletStorageInfo *info) -> IActor* { 
                 //return new TFakeBSController(tablet, info);
                 return CreateFlatBsController(tablet, info);
             });
@@ -1032,8 +1032,8 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
 
     // Create Console
     {
-        auto info = CreateTestTabletInfo(MakeConsoleID(0), TTabletTypes::CONSOLE, TErasureType::ErasureNone);
-        TActorId actorId = CreateTestBootstrapper(*this, info, [](const TActorId &tablet, TTabletStorageInfo *info) -> IActor* {
+        auto info = CreateTestTabletInfo(MakeConsoleID(0), TTabletTypes::CONSOLE, TErasureType::ErasureNone); 
+        TActorId actorId = CreateTestBootstrapper(*this, info, [](const TActorId &tablet, TTabletStorageInfo *info) -> IActor* { 
                 return CreateConsole(tablet, info);
             });
         EnableScheduleForActor(actorId, true);
@@ -1099,8 +1099,8 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
 
     // Create Tenant Slot Broker
     {
-        auto info = CreateTestTabletInfo(MakeTenantSlotBrokerID(0), TTabletTypes::TENANT_SLOT_BROKER, TErasureType::ErasureNone);
-        TActorId actorId = CreateTestBootstrapper(*this, info, [&config=this->Config](const TActorId &tablet, TTabletStorageInfo *info) -> IActor* {
+        auto info = CreateTestTabletInfo(MakeTenantSlotBrokerID(0), TTabletTypes::TENANT_SLOT_BROKER, TErasureType::ErasureNone); 
+        TActorId actorId = CreateTestBootstrapper(*this, info, [&config=this->Config](const TActorId &tablet, TTabletStorageInfo *info) -> IActor* { 
                 if (config.FakeTenantSlotBroker)
                     return new TFakeTenantSlotBroker(tablet, info);
                 else

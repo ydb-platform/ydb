@@ -38,8 +38,8 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
     TEvStateStorage::TProxyOptions ProxyOptions;
     ui32 SuggestedGeneration;
     ui32 SuggestedStep;
-    TActorId SuggestedLeader;
-    TActorId SuggestedLeaderTablet;
+    TActorId SuggestedLeader; 
+    TActorId SuggestedLeaderTablet; 
     TActorId Source;
 
     ui32 Replicas;
@@ -51,14 +51,14 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
     ui32 RepliesAfterReply;
     ui32 SignaturesMerged;
 
-    TActorId ReplyLeader;
-    TActorId ReplyLeaderTablet;
+    TActorId ReplyLeader; 
+    TActorId ReplyLeaderTablet; 
     ui32 ReplyGeneration;
     ui32 ReplyStep;
     bool ReplyLocked;
     ui64 ReplyLockedFor;
 
-    TMap<TActorId, TActorId> Followers;
+    TMap<TActorId, TActorId> Followers; 
 
     void SelectRequestReplicas(TStateStorageInfo *info) {
         THolder<TStateStorageInfo::TSelection> selection(new TStateStorageInfo::TSelection());
@@ -94,7 +94,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
     }
 
     void Reply(NKikimrProto::EReplyStatus status) {
-        Send(Source, new TEvStateStorage::TEvInfo(status, TabletID, Cookie, ReplyLeader, ReplyLeaderTablet, ReplyGeneration, ReplyStep, ReplyLocked, ReplyLockedFor, Signature.Get(), Replicas, Followers));
+        Send(Source, new TEvStateStorage::TEvInfo(status, TabletID, Cookie, ReplyLeader, ReplyLeaderTablet, ReplyGeneration, ReplyStep, ReplyLocked, ReplyLockedFor, Signature.Get(), Replicas, Followers)); 
     }
 
     void ReplyAndDie(NKikimrProto::EReplyStatus status) {
@@ -112,22 +112,22 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
 
     struct TCloneUpdateEventOp {
         const TEvStateStorage::TEvUpdate * const Ev;
-        const bool UpdateLeaderTablet;
+        const bool UpdateLeaderTablet; 
         mutable ui32 Idx;
 
         TCloneUpdateEventOp(const TEvStateStorage::TEvUpdate *ev)
             : Ev(ev)
-            , UpdateLeaderTablet(!!ev->ProposedLeaderTablet)
+            , UpdateLeaderTablet(!!ev->ProposedLeaderTablet) 
             , Idx(0)
         {}
 
         IEventBase* operator()(ui64 cookie) const {
             THolder<TEvStateStorage::TEvReplicaUpdate> req(new TEvStateStorage::TEvReplicaUpdate());
             req->Record.SetTabletID(Ev->TabletID);
-            ActorIdToProto(Ev->ProposedLeader, req->Record.MutableProposedLeader());
+            ActorIdToProto(Ev->ProposedLeader, req->Record.MutableProposedLeader()); 
 
-            if (UpdateLeaderTablet)
-                ActorIdToProto(Ev->ProposedLeaderTablet, req->Record.MutableProposedLeaderTablet());
+            if (UpdateLeaderTablet) 
+                ActorIdToProto(Ev->ProposedLeaderTablet, req->Record.MutableProposedLeaderTablet()); 
 
             req->Record.SetProposedGeneration(Ev->ProposedGeneration);
             req->Record.SetProposedStep(Ev->ProposedStep);
@@ -152,7 +152,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         IEventBase* operator()(ui64 cookie) const {
             THolder<TEvStateStorage::TEvReplicaLock> req(new TEvStateStorage::TEvReplicaLock());
             req->Record.SetTabletID(Ev->TabletID);
-            ActorIdToProto(Ev->ProposedLeader, req->Record.MutableProposedLeader());
+            ActorIdToProto(Ev->ProposedLeader, req->Record.MutableProposedLeader()); 
             req->Record.SetProposedGeneration(Ev->ProposedGeneration);
             req->Record.SetSignature(Ev->Signature[Idx]);
 
@@ -197,24 +197,24 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         if (status == NKikimrProto::OK) {
             const ui32 gen = record.GetCurrentGeneration();
             const ui32 step = record.GetCurrentStep();
-            const TActorId leader = ActorIdFromProto(record.GetCurrentLeader());
+            const TActorId leader = ActorIdFromProto(record.GetCurrentLeader()); 
 
             if (gen < ReplyGeneration || (gen == ReplyGeneration && step < ReplyStep)) {
                 ReplicaSelection->MergeReply(TStateStorageInfo::TSelection::StatusOutdated, &ReplyStatus, cookie, false);
             } else {
-                const bool reset = gen > ReplyGeneration || step > ReplyStep || leader != ReplyLeader;
-                const TActorId replyLeaderTablet = ActorIdFromProto(record.GetCurrentLeaderTablet());
+                const bool reset = gen > ReplyGeneration || step > ReplyStep || leader != ReplyLeader; 
+                const TActorId replyLeaderTablet = ActorIdFromProto(record.GetCurrentLeaderTablet()); 
 
                 ReplyGeneration = gen;
                 ReplyStep = step;
 
-                if (ReplyLeader != leader) {
-                    ReplyLeader = leader;
-                    ReplyLeaderTablet = replyLeaderTablet;
-                } else if (!ReplyLeaderTablet) {
-                    ReplyLeaderTablet = replyLeaderTablet;
+                if (ReplyLeader != leader) { 
+                    ReplyLeader = leader; 
+                    ReplyLeaderTablet = replyLeaderTablet; 
+                } else if (!ReplyLeaderTablet) { 
+                    ReplyLeaderTablet = replyLeaderTablet; 
                 } else {
-                    Y_VERIFY(ReplyLeaderTablet == replyLeaderTablet || !replyLeaderTablet);
+                    Y_VERIFY(ReplyLeaderTablet == replyLeaderTablet || !replyLeaderTablet); 
                 }
 
                 // todo: accurate handling of locked flag
@@ -229,8 +229,8 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
             Y_FAIL();
         }
 
-        for (ui32 i = 0, end = record.FollowerSize(); i < end; ++i) {
-            Followers[ActorIdFromProto(record.GetFollower(i))] = ActorIdFromProto(record.GetFollowerTablet(i));
+        for (ui32 i = 0, end = record.FollowerSize(); i < end; ++i) { 
+            Followers[ActorIdFromProto(record.GetFollower(i))] = ActorIdFromProto(record.GetFollowerTablet(i)); 
         }
     }
 
@@ -266,8 +266,8 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
 
         PrepareInit(msg, false);
 
-        SuggestedLeader = msg->ProposedLeader;
-        SuggestedLeaderTablet = msg->ProposedLeaderTablet;
+        SuggestedLeader = msg->ProposedLeader; 
+        SuggestedLeaderTablet = msg->ProposedLeaderTablet; 
         SuggestedGeneration = msg->ProposedGeneration;
         SuggestedStep = msg->ProposedStep;
 
@@ -288,7 +288,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
 
         PrepareInit(msg, false);
 
-        SuggestedLeader = msg->ProposedLeader;
+        SuggestedLeader = msg->ProposedLeader; 
         SuggestedGeneration = msg->ProposedGeneration;
         SuggestedStep = 0;
 
@@ -378,7 +378,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
             return;
         case TStateStorageInfo::TSelection::StatusOk:
             {
-                const bool race = (ReplyLeader != SuggestedLeader || ReplyGeneration != SuggestedGeneration);
+                const bool race = (ReplyLeader != SuggestedLeader || ReplyGeneration != SuggestedGeneration); 
                 const NKikimrProto::EReplyStatus status = race ? NKikimrProto::RACE : NKikimrProto::OK;
                 ReplyAndDie(status);
             }
@@ -403,7 +403,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
                 return;
             case TStateStorageInfo::TSelection::StatusOk:
             {
-                const bool race = (ReplyLeader != SuggestedLeader || ReplyGeneration != SuggestedGeneration); // step overrun is consumed
+                const bool race = (ReplyLeader != SuggestedLeader || ReplyGeneration != SuggestedGeneration); // step overrun is consumed 
                 const NKikimrProto::EReplyStatus status = race ? NKikimrProto::RACE : NKikimrProto::OK;
                 ReplyAndSig(status);
             }
@@ -750,16 +750,16 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
         TActivationContext::Register(new TStateStorageDeleteRequest(ev->Sender, Info, ev->Get()->TabletID));
     }
 
-    void SpreadCleanupRequest(const TStateStorageInfo::TSelection &selection, ui64 tabletId, TActorId proposedLeader) {
+    void SpreadCleanupRequest(const TStateStorageInfo::TSelection &selection, ui64 tabletId, TActorId proposedLeader) { 
         for (ui32 i = 0; i < selection.Sz; ++i)
-            Send(selection.SelectedReplicas[i], new TEvStateStorage::TEvReplicaCleanup(tabletId, proposedLeader));
+            Send(selection.SelectedReplicas[i], new TEvStateStorage::TEvReplicaCleanup(tabletId, proposedLeader)); 
     }
 
     void Handle(TEvStateStorage::TEvCleanup::TPtr &ev) {
         const auto *msg = ev->Get();
         THolder<TStateStorageInfo::TSelection> selection(new TStateStorageInfo::TSelection());
         Info->SelectReplicas(msg->TabletID, selection.Get());
-        SpreadCleanupRequest(*selection, msg->TabletID, msg->ProposedLeader);
+        SpreadCleanupRequest(*selection, msg->TabletID, msg->ProposedLeader); 
     }
 
     void Handle(TEvStateStorage::TEvResolveReplicas::TPtr &ev) {

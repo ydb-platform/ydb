@@ -122,14 +122,14 @@ void MockCheckpointsMetadataResponse(TTestBootstrap& bootstrap, NYql::TIssues is
         new TEvCheckpointStorage::TEvGetCheckpointsMetadataResponse(TVector<TCheckpointMetadata>(), std::move(issues))));
 }
 
-void MockCreateCheckpointResponse(TTestBootstrap& bootstrap, TCheckpointId& checkpointId, NYql::TIssues issues = NYql::TIssues()) {
+void MockCreateCheckpointResponse(TTestBootstrap& bootstrap, TCheckpointId& checkpointId, NYql::TIssues issues = NYql::TIssues()) { 
     bootstrap.Send(new IEventHandle(
         bootstrap.CheckpointCoordinator,
         bootstrap.StorageProxy,
         new TEvCheckpointStorage::TEvCreateCheckpointResponse(checkpointId, std::move(issues), "42")));
 }
 
-void MockNodeStateSavedEvent(TTestBootstrap& bootstrap, TCheckpointId& checkpointId, TActorId& sender) {
+void MockNodeStateSavedEvent(TTestBootstrap& bootstrap, TCheckpointId& checkpointId, TActorId& sender) { 
     auto ev = std::make_unique<NYql::NDq::TEvDqCompute::TEvSaveTaskStateResult>();
     ev->Record.MutableCheckpoint()->SetGeneration(checkpointId.CoordinatorGeneration);
     ev->Record.MutableCheckpoint()->SetId(checkpointId.SeqNo);
@@ -140,7 +140,7 @@ void MockNodeStateSavedEvent(TTestBootstrap& bootstrap, TCheckpointId& checkpoin
         ev.release()));
 }
 
-void MockNodeStateSaveFailedEvent(TTestBootstrap& bootstrap, TCheckpointId& checkpointId, TActorId& sender) {
+void MockNodeStateSaveFailedEvent(TTestBootstrap& bootstrap, TCheckpointId& checkpointId, TActorId& sender) { 
     auto ev = std::make_unique<NYql::NDq::TEvDqCompute::TEvSaveTaskStateResult>();
     ev->Record.MutableCheckpoint()->SetGeneration(checkpointId.CoordinatorGeneration);
     ev->Record.MutableCheckpoint()->SetId(checkpointId.SeqNo);
@@ -151,21 +151,21 @@ void MockNodeStateSaveFailedEvent(TTestBootstrap& bootstrap, TCheckpointId& chec
         ev.release()));
 }
 
-void MockSetCheckpointPendingCommitStatusResponse(TTestBootstrap& bootstrap, TCheckpointId& checkpointId, NYql::TIssues issues = NYql::TIssues()) {
+void MockSetCheckpointPendingCommitStatusResponse(TTestBootstrap& bootstrap, TCheckpointId& checkpointId, NYql::TIssues issues = NYql::TIssues()) { 
     bootstrap.Send(new IEventHandle(
         bootstrap.CheckpointCoordinator,
         bootstrap.StorageProxy,
         new TEvCheckpointStorage::TEvSetCheckpointPendingCommitStatusResponse(checkpointId, std::move(issues))));
 }
 
-void MockChangesCommittedEvent(TTestBootstrap& bootstrap, TCheckpointId& checkpointId, TActorId& sender) {
+void MockChangesCommittedEvent(TTestBootstrap& bootstrap, TCheckpointId& checkpointId, TActorId& sender) { 
     bootstrap.Send(new IEventHandle(
         bootstrap.CheckpointCoordinator,
         sender,
         new NYql::NDq::TEvDqCompute::TEvStateCommitted(checkpointId.SeqNo, checkpointId.CoordinatorGeneration, bootstrap.ActorToTask[sender])));
 }
 
-void MockCompleteCheckpointResponse(TTestBootstrap& bootstrap, TCheckpointId& checkpointId, NYql::TIssues issues = NYql::TIssues()) {
+void MockCompleteCheckpointResponse(TTestBootstrap& bootstrap, TCheckpointId& checkpointId, NYql::TIssues issues = NYql::TIssues()) { 
     bootstrap.Send(new IEventHandle(
         bootstrap.CheckpointCoordinator,
         bootstrap.StorageProxy,

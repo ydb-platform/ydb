@@ -394,8 +394,8 @@ public:
         context.SS->ClearDescribePathCaches(newRtmrVolume);
         context.OnComplete.PublishToSchemeBoard(OperationId, newRtmrVolume->PathId);
 
-        Y_VERIFY(shardsToCreate == txState.Shards.size(), "shardsToCreate=%ld != txStateShards=%ld",
-            shardsToCreate, txState.Shards.size());
+        Y_VERIFY(shardsToCreate == txState.Shards.size(), "shardsToCreate=%ld != txStateShards=%ld", 
+            shardsToCreate, txState.Shards.size()); 
 
         dstPath.DomainInfo()->IncPathsInside();
         dstPath.DomainInfo()->AddInternalShards(txState);

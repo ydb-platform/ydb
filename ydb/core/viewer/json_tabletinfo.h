@@ -26,11 +26,11 @@ struct TWhiteboardInfo<TEvWhiteboard::TEvTabletStateResponse> {
     }
 
     static std::pair<ui64, ui32> GetElementKey(const TElementType& type) {
-        return std::pair<ui64, ui32>(type.GetTabletId(), type.GetFollowerId());
+        return std::pair<ui64, ui32>(type.GetTabletId(), type.GetFollowerId()); 
     }
 
     static TString GetDefaultMergeField() {
-        return "TabletId,FollowerId";
+        return "TabletId,FollowerId"; 
     }
 
     static THolder<TResponseType> MergeResponses(TMap<ui32, THolder<TResponseType>>& responses, const TString& fields = GetDefaultMergeField()) {

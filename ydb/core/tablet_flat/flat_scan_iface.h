@@ -31,7 +31,7 @@ namespace NTable {
         At the end IDriver calls Finish() once requesting a product. After
         this IScan is left on its own and impl. have to take care of all
         owned resources and self object in particular. It is allowed for
-        IScan to return self as an IDestructable product.
+        IScan to return self as an IDestructable product. 
 
         Limitations and caveats:
 
@@ -78,7 +78,7 @@ namespace NTable {
     };
 
 
-    class IScan : public IDestructable {
+    class IScan : public IDestructable { 
     public:
         using TRow = NTable::TRowState;
         using IDriver = NTable::IDriver;
@@ -112,10 +112,10 @@ namespace NTable {
             TConf Conf;     /* Scan conveyer configuration  */
         };
 
-        virtual THello Prepare(IDriver*, TIntrusiveConstPtr<TScheme>) noexcept = 0;
+        virtual THello Prepare(IDriver*, TIntrusiveConstPtr<TScheme>) noexcept = 0; 
         virtual EScan Seek(TLead&, ui64 seq) noexcept = 0;
         virtual EScan Feed(TArrayRef<const TCell>, const TRow&) noexcept = 0;
-        virtual TAutoPtr<IDestructable> Finish(EAbort) noexcept = 0;
+        virtual TAutoPtr<IDestructable> Finish(EAbort) noexcept = 0; 
         virtual void Describe(IOutputStream&) const noexcept = 0;
 
         /**

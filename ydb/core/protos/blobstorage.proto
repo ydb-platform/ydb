@@ -179,10 +179,10 @@ message TGroupInfo {
     optional EEntityStatus EntityStatus = 5;
     optional uint32 EncryptionMode = 6 [default = 0];
     optional uint32 LifeCyclePhase = 7 [default = 0];
-    optional bytes MainKeyId = 8 [default = ""];
+    optional bytes MainKeyId = 8 [default = ""]; 
     optional bytes EncryptedGroupKey = 9 [default = ""];
     optional uint64 GroupKeyNonce = 10 [default = 0];
-    optional uint64 MainKeyVersion = 11 [default = 0];
+    optional uint64 MainKeyVersion = 11 [default = 0]; 
     optional NActorsInterconnect.TScopeId AcceptedScope = 12; // some kind of ACL for scopes; empty = no restrictions
     optional string StoragePoolName = 13;
     optional EPDiskType DeviceType = 14;
@@ -1072,9 +1072,9 @@ message TEvControllerProposeGroupKey {
     optional uint32 NodeId = 1 [default = 0];
     optional uint32 GroupId = 2 [default = 0];
     optional uint32 LifeCyclePhase = 3 [default = 0];
-    optional bytes MainKeyId = 4 [default = ""];
+    optional bytes MainKeyId = 4 [default = ""]; 
     optional bytes EncryptedGroupKey = 5 [default = ""];
-    optional uint64 MainKeyVersion = 6 [default = 0];
+    optional uint64 MainKeyVersion = 6 [default = 0]; 
     optional uint64 GroupKeyNonce = 7 [default = 0];
 }
 

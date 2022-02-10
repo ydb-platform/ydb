@@ -101,9 +101,9 @@ public:
             for (auto it = Hive->Tablets.begin(); it != Hive->Tablets.end(); ++it) {
                 it->second.UpdateWeight();
                 tablets.push_back(&it->second);
-                for (auto& follower : it->second.Followers) {
-                    follower.UpdateWeight();
-                    tablets.push_back(&follower);
+                for (auto& follower : it->second.Followers) { 
+                    follower.UpdateWeight(); 
+                    tablets.push_back(&follower); 
                 }
             }
             Sort(tablets, [](const TTabletInfo* a, const TTabletInfo* b) -> bool { return a->Weight > b->Weight; });

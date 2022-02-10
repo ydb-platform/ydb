@@ -166,10 +166,10 @@ void TProxyActor::HandleWakeup(TEvWakeup::TPtr&) {
 const TErrorClass& TProxyActor::GetErrorClass(TSqsEvents::TEvProxySqsResponse::EProxyStatus proxyStatus) {
     using EProxyStatus = TSqsEvents::TEvProxySqsResponse::EProxyStatus;
     switch (proxyStatus) {
-    case EProxyStatus::LeaderResolvingError:
-        return NErrors::LEADER_RESOLVING_ERROR;
+    case EProxyStatus::LeaderResolvingError: 
+        return NErrors::LEADER_RESOLVING_ERROR; 
     case EProxyStatus::SessionError:
-        return NErrors::LEADER_SESSION_ERROR;
+        return NErrors::LEADER_SESSION_ERROR; 
     case EProxyStatus::QueueDoesNotExist:
     case EProxyStatus::UserDoesNotExist:
         return NErrors::NON_EXISTENT_QUEUE;

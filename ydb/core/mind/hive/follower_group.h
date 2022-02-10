@@ -7,34 +7,34 @@
 namespace NKikimr {
 namespace NHive {
 
-struct TFollowerGroup {
-    TFollowerGroupId Id = 0;
-    bool AllowLeaderPromotion = false;
+struct TFollowerGroup { 
+    TFollowerGroupId Id = 0; 
+    bool AllowLeaderPromotion = false; 
     bool AllowClientRead = false;
     bool RequireAllDataCenters = true;
     TVector<TNodeId> AllowedNodes;
     TVector<TDataCenterId> AllowedDataCenters;
-    bool LocalNodeOnly = true; // run follower on the same node as leader
-    bool RequireDifferentNodes = false; // do not run followers on same nodes as another followers of the same leader
-    bool FollowerCountPerDataCenter = false; // PER_AZ KIKIMR-10443
+    bool LocalNodeOnly = true; // run follower on the same node as leader 
+    bool RequireDifferentNodes = false; // do not run followers on same nodes as another followers of the same leader 
+    bool FollowerCountPerDataCenter = false; // PER_AZ KIKIMR-10443 
 
-    TFollowerGroup() = default;
-    TFollowerGroup(const TFollowerGroup&) = delete;
-    TFollowerGroup(TFollowerGroup&&) = delete;
-    TFollowerGroup& operator =(const TFollowerGroup&) = delete;
-    TFollowerGroup& operator =(TFollowerGroup&&) = delete;
+    TFollowerGroup() = default; 
+    TFollowerGroup(const TFollowerGroup&) = delete; 
+    TFollowerGroup(TFollowerGroup&&) = delete; 
+    TFollowerGroup& operator =(const TFollowerGroup&) = delete; 
+    TFollowerGroup& operator =(TFollowerGroup&&) = delete; 
 
-    operator TFollowerGroupId() const {
+    operator TFollowerGroupId() const { 
         return Id;
     }
 
-    TFollowerGroup& operator =(const NKikimrHive::TFollowerGroup& followerGroup) {
-        FollowerCount = followerGroup.GetFollowerCount();
-        AllowLeaderPromotion = followerGroup.GetAllowLeaderPromotion();
-        AllowClientRead = followerGroup.GetAllowClientRead();
-        RequireAllDataCenters = followerGroup.GetRequireAllDataCenters();
+    TFollowerGroup& operator =(const NKikimrHive::TFollowerGroup& followerGroup) { 
+        FollowerCount = followerGroup.GetFollowerCount(); 
+        AllowLeaderPromotion = followerGroup.GetAllowLeaderPromotion(); 
+        AllowClientRead = followerGroup.GetAllowClientRead(); 
+        RequireAllDataCenters = followerGroup.GetRequireAllDataCenters(); 
         {
-            const auto& allowedNodes(followerGroup.GetAllowedNodeIDs());
+            const auto& allowedNodes(followerGroup.GetAllowedNodeIDs()); 
             std::copy(allowedNodes.begin(), allowedNodes.end(), std::back_inserter(AllowedNodes));
         }
         {
@@ -46,30 +46,30 @@ struct TFollowerGroup {
                 }
             }
         }
-        LocalNodeOnly = followerGroup.GetLocalNodeOnly();
-        RequireDifferentNodes = followerGroup.GetRequireDifferentNodes();
-        FollowerCountPerDataCenter = followerGroup.GetFollowerCountPerDataCenter();
+        LocalNodeOnly = followerGroup.GetLocalNodeOnly(); 
+        RequireDifferentNodes = followerGroup.GetRequireDifferentNodes(); 
+        FollowerCountPerDataCenter = followerGroup.GetFollowerCountPerDataCenter(); 
         return *this;
     }
 
-    ui32 GetRawFollowerCount() const {
-        return FollowerCount;
+    ui32 GetRawFollowerCount() const { 
+        return FollowerCount; 
     }
 
     ui32 GetComputedFollowerCount(ui32 dataCenters) const {
-        if (FollowerCountPerDataCenter) {
+        if (FollowerCountPerDataCenter) { 
             return FollowerCount * dataCenters;
         } else {
-            return FollowerCount;
+            return FollowerCount; 
         }
     }
 
-    void SetFollowerCount(ui32 followerCount) {
-        FollowerCount = followerCount;
+    void SetFollowerCount(ui32 followerCount) { 
+        FollowerCount = followerCount; 
     }
 
 private:
-    ui32 FollowerCount = 0;
+    ui32 FollowerCount = 0; 
 };
 
 } // NHive

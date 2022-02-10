@@ -734,7 +734,7 @@ Y_UNIT_TEST(TableStats) {
     TFakeMiniKQLProxy proxy(t);
 
     ui64 tableId = 13;
-    ui64 ds1 = TTestTxConfig::TxTablet0;
+    ui64 ds1 = TTestTxConfig::TxTablet0; 
 
     {
         auto programText = R"___((
@@ -816,7 +816,7 @@ Y_UNIT_TEST(TableStatsHistograms) {
     TFakeMiniKQLProxy proxy(t);
 
     ui64 tableId = 13;
-    ui64 ds1 = TTestTxConfig::TxTablet0;
+    ui64 ds1 = TTestTxConfig::TxTablet0; 
 
     for (int i = 0; i < 1000; ++i) {
         auto programText = R"___((
@@ -934,9 +934,9 @@ void CrossShard_1_Cycle_Impl(const TString& dispatchName, std::function<void (TT
 
 Y_UNIT_TEST(CrossShard_1_Cycle) {
     TVector<ui64> tabletIds;
-    tabletIds.push_back((ui64)TTestTxConfig::TxTablet0);
-    tabletIds.push_back((ui64)TTestTxConfig::TxTablet1);
-    tabletIds.push_back((ui64)TTestTxConfig::TxTablet2);
+    tabletIds.push_back((ui64)TTestTxConfig::TxTablet0); 
+    tabletIds.push_back((ui64)TTestTxConfig::TxTablet1); 
+    tabletIds.push_back((ui64)TTestTxConfig::TxTablet2); 
     TDatashardInitialEventsFilter initialEventsFilter(tabletIds);
     RunTestWithReboots(tabletIds, [&]() {
         return initialEventsFilter.Prepare();
@@ -1011,9 +1011,9 @@ void CrossShard_2_SwapAndCopy_Impl(const TString& dispatchName, std::function<vo
 
 Y_UNIT_TEST(CrossShard_2_SwapAndCopy) {
     TVector<ui64> tabletIds;
-    tabletIds.push_back((ui64)TTestTxConfig::TxTablet0);
-    tabletIds.push_back((ui64)TTestTxConfig::TxTablet1);
-    tabletIds.push_back((ui64)TTestTxConfig::TxTablet2);
+    tabletIds.push_back((ui64)TTestTxConfig::TxTablet0); 
+    tabletIds.push_back((ui64)TTestTxConfig::TxTablet1); 
+    tabletIds.push_back((ui64)TTestTxConfig::TxTablet2); 
     TDatashardInitialEventsFilter initialEventsFilter(tabletIds);
     RunTestWithReboots(tabletIds, [&]() {
         return initialEventsFilter.Prepare();
@@ -1089,9 +1089,9 @@ void CrossShard_3_AllToOne_Impl(const TString& dispatchName, std::function<void 
 
 Y_UNIT_TEST(CrossShard_3_AllToOne) {
     TVector<ui64> tabletIds;
-    tabletIds.push_back((ui64)TTestTxConfig::TxTablet0);
-    tabletIds.push_back((ui64)TTestTxConfig::TxTablet1);
-    tabletIds.push_back((ui64)TTestTxConfig::TxTablet2);
+    tabletIds.push_back((ui64)TTestTxConfig::TxTablet0); 
+    tabletIds.push_back((ui64)TTestTxConfig::TxTablet1); 
+    tabletIds.push_back((ui64)TTestTxConfig::TxTablet2); 
     TDatashardInitialEventsFilter initialEventsFilter(tabletIds);
     RunTestWithReboots(tabletIds, [&]() {
         return initialEventsFilter.Prepare();
@@ -1165,9 +1165,9 @@ void CrossShard_4_OneToAll_Impl(const TString& dispatchName, std::function<void 
 
 Y_UNIT_TEST(CrossShard_4_OneToAll) {
     TVector<ui64> tabletIds;
-    tabletIds.push_back((ui64)TTestTxConfig::TxTablet0);
-    tabletIds.push_back((ui64)TTestTxConfig::TxTablet1);
-    tabletIds.push_back((ui64)TTestTxConfig::TxTablet2);
+    tabletIds.push_back((ui64)TTestTxConfig::TxTablet0); 
+    tabletIds.push_back((ui64)TTestTxConfig::TxTablet1); 
+    tabletIds.push_back((ui64)TTestTxConfig::TxTablet2); 
     TDatashardInitialEventsFilter initialEventsFilter(tabletIds);
     RunTestWithReboots(tabletIds, [&]() {
         return initialEventsFilter.Prepare();
@@ -1277,9 +1277,9 @@ void CrossShard_5_AllToAll_Impl(const TString& dispatchName, std::function<void 
 
 Y_UNIT_TEST(CrossShard_5_AllToAll) {
     TVector<ui64> tabletIds;
-    tabletIds.push_back((ui64)TTestTxConfig::TxTablet0);
-    tabletIds.push_back((ui64)TTestTxConfig::TxTablet1);
-    tabletIds.push_back((ui64)TTestTxConfig::TxTablet2);
+    tabletIds.push_back((ui64)TTestTxConfig::TxTablet0); 
+    tabletIds.push_back((ui64)TTestTxConfig::TxTablet1); 
+    tabletIds.push_back((ui64)TTestTxConfig::TxTablet2); 
     TDatashardInitialEventsFilter initialEventsFilter(tabletIds);
     RunTestWithReboots(tabletIds, [&]() {
         return initialEventsFilter.Prepare();
@@ -1353,9 +1353,9 @@ void CrossShard_6_Local_Impl(const TString& dispatchName, std::function<void (TT
 
 Y_UNIT_TEST(CrossShard_6_Local) {
     TVector<ui64> tabletIds;
-    tabletIds.push_back((ui64)TTestTxConfig::TxTablet0);
-    tabletIds.push_back((ui64)TTestTxConfig::TxTablet1);
-    tabletIds.push_back((ui64)TTestTxConfig::TxTablet2);
+    tabletIds.push_back((ui64)TTestTxConfig::TxTablet0); 
+    tabletIds.push_back((ui64)TTestTxConfig::TxTablet1); 
+    tabletIds.push_back((ui64)TTestTxConfig::TxTablet2); 
     TDatashardInitialEventsFilter initialEventsFilter(tabletIds);
     RunTestWithReboots(tabletIds, [&]() {
         return initialEventsFilter.Prepare();
@@ -1543,7 +1543,7 @@ Y_UNIT_TEST(MemoryUsageImmediateSmallTx) {
         }, activeZone);
     TFakeMiniKQLProxy proxy(t);
 
-    auto counters1 = ReadTxMemoryCounters(t, TTestTxConfig::TxTablet0);
+    auto counters1 = ReadTxMemoryCounters(t, TTestTxConfig::TxTablet0); 
 
     auto programText = R"___((
         (let row '('('key (Uint32 '42))))
@@ -1558,7 +1558,7 @@ Y_UNIT_TEST(MemoryUsageImmediateSmallTx) {
     auto text = Sprintf(programText, TString(1024, 'v').data());
     UNIT_ASSERT_EQUAL(proxy.Execute(text), IEngineFlat::EStatus::Complete);
 
-    auto counters2 = ReadTxMemoryCounters(t, TTestTxConfig::TxTablet0);
+    auto counters2 = ReadTxMemoryCounters(t, TTestTxConfig::TxTablet0); 
     // Expect one allocation on prepare.
     CheckCounters(counters2, counters1, 1, 0, 0);
 
@@ -1578,7 +1578,7 @@ Y_UNIT_TEST(MemoryUsageImmediateSmallTx) {
         UNIT_ASSERT_EQUAL(proxy.Execute(programText, res), IEngineFlat::EStatus::Complete);
     }
 
-    auto counters3 = ReadTxMemoryCounters(t, TTestTxConfig::TxTablet0);
+    auto counters3 = ReadTxMemoryCounters(t, TTestTxConfig::TxTablet0); 
     // Expect one allocation on prepare.
     CheckCounters(counters3, counters2, 1, 0, 0);
 }
@@ -1590,7 +1590,7 @@ Y_UNIT_TEST(MemoryUsageImmediateMediumTx) {
         }, activeZone);
     TFakeMiniKQLProxy proxy(t);
 
-    auto counters1 = ReadTxMemoryCounters(t, TTestTxConfig::TxTablet0);
+    auto counters1 = ReadTxMemoryCounters(t, TTestTxConfig::TxTablet0); 
 
     {
         auto programText = R"___((
@@ -1609,7 +1609,7 @@ Y_UNIT_TEST(MemoryUsageImmediateMediumTx) {
         UNIT_ASSERT_EQUAL(proxy.Execute(programText, res), IEngineFlat::EStatus::Complete);
     }
 
-    auto counters2 = ReadTxMemoryCounters(t, TTestTxConfig::TxTablet0);
+    auto counters2 = ReadTxMemoryCounters(t, TTestTxConfig::TxTablet0); 
     // Expect one allocation on prepare and one or two
     // allocations during execution.
     CheckCounters(counters2, counters1, TCounterRange{2, 3}, 0, 0);
@@ -1622,7 +1622,7 @@ Y_UNIT_TEST(MemoryUsageImmediateHugeTx) {
         }, activeZone);
     TFakeMiniKQLProxy proxy(t);
 
-    auto counters1 = ReadTxMemoryCounters(t, TTestTxConfig::TxTablet0);
+    auto counters1 = ReadTxMemoryCounters(t, TTestTxConfig::TxTablet0); 
 
     {
         auto programText = R"___((
@@ -1641,7 +1641,7 @@ Y_UNIT_TEST(MemoryUsageImmediateHugeTx) {
         UNIT_ASSERT_EQUAL(proxy.Execute(programText, res), IEngineFlat::EStatus::Complete);
     }
 
-    auto counters2 = ReadTxMemoryCounters(t, TTestTxConfig::TxTablet0);
+    auto counters2 = ReadTxMemoryCounters(t, TTestTxConfig::TxTablet0); 
     // Expect one allocation on prepare and three
     // allocations during execution.
     CheckCounters(counters2, counters1, 4, 0, 0);

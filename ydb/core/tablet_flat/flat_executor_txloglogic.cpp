@@ -19,7 +19,7 @@ const static ui64 MaxSizeToEmbedInLog = 2048;
 const static ui64 MaxBytesToBatch = 2 * 1024 * 1024;
 const static ui64 MaxItemsToBatch = 64;
 
-TLogicRedo::TCompletionEntry::TCompletionEntry(TAutoPtr<TSeat> seat, ui32 step)
+TLogicRedo::TCompletionEntry::TCompletionEntry(TAutoPtr<TSeat> seat, ui32 step) 
     : Step(step)
     , InFlyRWTransaction(seat)
 {}
@@ -55,7 +55,7 @@ TArrayRef<const NRedo::TUsage> TLogicRedo::GrabLogUsage() const noexcept
     return Queue->GrabUsage();
 }
 
-bool TLogicRedo::TerminateTransaction(TAutoPtr<TSeat> seat, const TActorContext &ctx, const TActorId &ownerID) {
+bool TLogicRedo::TerminateTransaction(TAutoPtr<TSeat> seat, const TActorContext &ctx, const TActorId &ownerID) { 
     if (CompletionQueue.empty()) {
         const TTxType txType = seat->Self->GetTxType();
 
@@ -70,7 +70,7 @@ bool TLogicRedo::TerminateTransaction(TAutoPtr<TSeat> seat, const TActorContext 
     }
 }
 
-void CompleteRoTransaction(TAutoPtr<TSeat> seat, const TActorContext &ownerCtx, TExecutorCounters *counters, TTabletCountersWithTxTypes *appTxCounters ) {
+void CompleteRoTransaction(TAutoPtr<TSeat> seat, const TActorContext &ownerCtx, TExecutorCounters *counters, TTabletCountersWithTxTypes *appTxCounters ) { 
     const TTxType txType = seat->Self->GetTxType();
 
     const ui64 latencyus = ui64(1000000. * seat->LatencyTimer.Passed());
@@ -92,7 +92,7 @@ void CompleteRoTransaction(TAutoPtr<TSeat> seat, const TActorContext &ownerCtx, 
         appTxCounters->TxCumulative(txType, COUNTER_TT_COMMITED_CPUTIME).Increment(completeTimeus);
 }
 
-bool TLogicRedo::CommitROTransaction(TAutoPtr<TSeat> seat, const TActorContext &ownerCtx) {
+bool TLogicRedo::CommitROTransaction(TAutoPtr<TSeat> seat, const TActorContext &ownerCtx) { 
     if (CompletionQueue.empty()) {
         CompleteRoTransaction(seat, ownerCtx, Counters, AppTxCounters);
         return true;
@@ -105,7 +105,7 @@ bool TLogicRedo::CommitROTransaction(TAutoPtr<TSeat> seat, const TActorContext &
 
 void TLogicRedo::FlushBatchedLog()
 {
-    if (TAutoPtr<TLogCommit> commit = Batch->Commit) {
+    if (TAutoPtr<TLogCommit> commit = Batch->Commit) { 
         auto affects = Batch->Affects();
         MakeLogEntry(*commit, Batch->Flush(), affects, true);
         CommitManager->Commit(commit);
@@ -115,7 +115,7 @@ void TLogicRedo::FlushBatchedLog()
 }
 
 TLogicRedo::TCommitRWTransactionResult TLogicRedo::CommitRWTransaction(
-                TAutoPtr<TSeat> seat, NTable::TChange &change, bool force)
+                TAutoPtr<TSeat> seat, NTable::TChange &change, bool force) 
 {
     seat->CommitTimer.Reset();
 
@@ -155,7 +155,7 @@ TLogicRedo::TCommitRWTransactionResult TLogicRedo::CommitRWTransaction(
         for (auto &one: change.Annex) {
             if (one.GId.Logo.Step() != commit->Step) {
                 Y_Fail(
-                    "Leader{" << Cookies->Tablet << ":" << Cookies->Gen << "}"
+                    "Leader{" << Cookies->Tablet << ":" << Cookies->Gen << "}" 
                     << " got for " << NFmt::Do(*commit) << " annex blob "
                     << one.GId.Logo << " out of step order");
             }

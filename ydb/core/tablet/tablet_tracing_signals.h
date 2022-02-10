@@ -23,7 +23,7 @@ namespace NTracing {
             TypeOnTabletBlockBlobStorage,
             TypeOnTabletRebuildGraph,
             TypeOnWriteZeroEntry,
-            TypeOnFollowerPromoteToLeader,
+            TypeOnFollowerPromoteToLeader, 
             TypeRebuildGraphBootstrap,
             TypeErrorEntryBeyondBlocked,
             TypeErrorUnknownStatus,
@@ -46,7 +46,7 @@ namespace NTracing {
         NKikimrTracing::TOnTabletBootstrap,
         NSignalTypes::TypeOnTabletBootstrap> {
     public:
-        TOnTabletBootstrap(ui32 suggestedGeneration, bool leader, const TActorId& proxyID);
+        TOnTabletBootstrap(ui32 suggestedGeneration, bool leader, const TActorId& proxyID); 
         TOnTabletBootstrap(const TString& serializedSignal);
         void OutText(TStringStream& str, TTimestampData& tsData, const TString& prefix) const override;
     };
@@ -134,16 +134,16 @@ namespace NTracing {
         void OutText(TStringStream& str, TTimestampData& tsData, const TString& prefix) const override;
     };
 
-    class TOnFollowerPromoteToLeader : public TTraceSignal<TOnFollowerPromoteToLeader,
-        NKikimrTracing::TOnFollowerPromoteToLeader,
-        NSignalTypes::TypeOnFollowerPromoteToLeader> {
+    class TOnFollowerPromoteToLeader : public TTraceSignal<TOnFollowerPromoteToLeader, 
+        NKikimrTracing::TOnFollowerPromoteToLeader, 
+        NSignalTypes::TypeOnFollowerPromoteToLeader> { 
     public:
-        TOnFollowerPromoteToLeader(
+        TOnFollowerPromoteToLeader( 
             ui32 suggestedGeneration
-            , const TActorId& knownLeaderID
-            , const TActorId& followerStStGuardian
+            , const TActorId& knownLeaderID 
+            , const TActorId& followerStStGuardian 
         );
-        TOnFollowerPromoteToLeader(const TString& serializedSignal);
+        TOnFollowerPromoteToLeader(const TString& serializedSignal); 
         void OutText(TStringStream& str, TTimestampData& tsData, const TString& prefix) const override;
     };
 

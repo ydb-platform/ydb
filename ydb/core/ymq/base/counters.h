@@ -563,8 +563,8 @@ struct TQueueCounters : public TAtomicRefCount<TQueueCounters> {
     TLazyCachedCounter RequestTimeouts; // Requests that weren't processed in 10 minutes. They are almost sure hanged.
     TLazyCachedCounter request_timeouts_count_per_second; // Requests that weren't processed in 10 minutes. They are almost sure hanged.
     TLazyCachedCounter RequestsThrottled; // Request that ended with ThrottlingException
-    TLazyCachedCounter QueueMasterStartProblems; // TODO: remove after migration
-    TLazyCachedCounter QueueLeaderStartProblems; // Critical problems during leader start.
+    TLazyCachedCounter QueueMasterStartProblems; // TODO: remove after migration 
+    TLazyCachedCounter QueueLeaderStartProblems; // Critical problems during leader start. 
 
     TLazyCachedCounter MessagesPurged;
     TLazyCachedCounter purged_count_per_second;
@@ -633,7 +633,7 @@ struct TQueueCounters : public TAtomicRefCount<TQueueCounters> {
     TIntrusivePtrCntrCouple FolderCounters; // Folder subtree in user tree (only for Yandex Cloud).
     TIntrusivePtrCntrCouple QueueCounters; // Queue subtree in user (or folder) tree.
 
-    // Creates counters for not leader node.
+    // Creates counters for not leader node. 
     TQueueCounters(const NKikimrConfig::TSqsConfig& cfg,
                    const TIntrusivePtrCntrCouple& sqsCoreCounters,
                    const TUserCounters* userCounters,
@@ -647,8 +647,8 @@ struct TQueueCounters : public TAtomicRefCount<TQueueCounters> {
     void InsertCounters();
     void RemoveCounters();
 
-    TIntrusivePtr<TQueueCounters> GetCountersForLeaderNode();
-    TIntrusivePtr<TQueueCounters> GetCountersForNotLeaderNode();
+    TIntrusivePtr<TQueueCounters> GetCountersForLeaderNode(); 
+    TIntrusivePtr<TQueueCounters> GetCountersForNotLeaderNode(); 
 
     void ShowDetailedCounters(TInstant deadline) {
         Y_ASSERT(ShowDetailedCountersDeadline);
@@ -675,13 +675,13 @@ struct TQueueCounters : public TAtomicRefCount<TQueueCounters> {
     void SetAggregatedParent(const TIntrusivePtr<TQueueCounters>& parent);
 
 private:
-    void InitCounters(bool forLeaderNode = false);
+    void InitCounters(bool forLeaderNode = false); 
 
 private:
     const NKikimrConfig::TSqsConfig* Cfg = nullptr;
     const TString QueueName;
     bool AggregatedCounters = false;
-    TIntrusivePtr<TQueueCounters> NotLeaderNodeCounters;
+    TIntrusivePtr<TQueueCounters> NotLeaderNodeCounters; 
     std::shared_ptr<std::atomic<ui64>> ShowDetailedCountersDeadline = std::make_shared<std::atomic<ui64>>(0ul); // TInstant value
     std::shared_ptr<std::atomic<ui64>> UserShowDetailedCountersDeadline;
     TDetailedCounters DetailedCounters;

@@ -3337,16 +3337,16 @@ void InitConfigs(TKikimrWithGrpcAndRootSchema &server) {
 
     {
         REPLICATION_POLICY1.Clear();
-        REPLICATION_POLICY1.SetFollowerCount(1);
+        REPLICATION_POLICY1.SetFollowerCount(1); 
         REPLICATION_POLICY1.SetCrossDataCenter(true);
-        REPLICATION_POLICY1.SetAllowFollowerPromotion(false);
+        REPLICATION_POLICY1.SetAllowFollowerPromotion(false); 
     }
 
     {
         REPLICATION_POLICY2.Clear();
-        REPLICATION_POLICY2.SetFollowerCount(2);
+        REPLICATION_POLICY2.SetFollowerCount(2); 
         REPLICATION_POLICY2.SetCrossDataCenter(false);
-        REPLICATION_POLICY2.SetAllowFollowerPromotion(true);
+        REPLICATION_POLICY2.SetAllowFollowerPromotion(true); 
     }
 
     {
@@ -3654,20 +3654,20 @@ void Apply(const NKikimrConfig::TReplicationPolicy &policy,
 {
     auto &partition = *description.MutablePartitionConfig();
 
-    partition.ClearFollowerCount();
-    partition.ClearCrossDataCenterFollowerCount();
-    partition.ClearAllowFollowerPromotion();
-    partition.ClearFollowerGroups();
-    if (policy.HasFollowerCount()) {
-        auto& followerGroup = *partition.AddFollowerGroups();
-        followerGroup.SetFollowerCount(policy.GetFollowerCount());
+    partition.ClearFollowerCount(); 
+    partition.ClearCrossDataCenterFollowerCount(); 
+    partition.ClearAllowFollowerPromotion(); 
+    partition.ClearFollowerGroups(); 
+    if (policy.HasFollowerCount()) { 
+        auto& followerGroup = *partition.AddFollowerGroups(); 
+        followerGroup.SetFollowerCount(policy.GetFollowerCount()); 
         if (policy.GetCrossDataCenter()) {
-            followerGroup.SetRequireAllDataCenters(true);
+            followerGroup.SetRequireAllDataCenters(true); 
         } else {
-            followerGroup.SetRequireAllDataCenters(false);
+            followerGroup.SetRequireAllDataCenters(false); 
         }
-        if (policy.HasAllowFollowerPromotion()) {
-            followerGroup.SetAllowLeaderPromotion(policy.GetAllowFollowerPromotion());
+        if (policy.HasAllowFollowerPromotion()) { 
+            followerGroup.SetAllowLeaderPromotion(policy.GetAllowFollowerPromotion()); 
         }
     }
 }
@@ -4693,16 +4693,16 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
         for (auto &description : result.replication_policy_presets()) {
             if (description.name() == "default") {
                 CheckLabels(description.labels(),
-                            {{ {TString("followers"), TString("disabled")} }});
+                            {{ {TString("followers"), TString("disabled")} }}); 
             } else if (description.name() == "replication1"){
                 CheckLabels(description.labels(),
-                            {{ {TString("followers"), TString("1")},
+                            {{ {TString("followers"), TString("1")}, 
                                {TString("promotion"), TString("disabled")},
                                {TString("per_zone"), TString("true")} }});
             } else {
                 UNIT_ASSERT_VALUES_EQUAL(description.name(), "replication2");
                 CheckLabels(description.labels(),
-                            {{ {TString("followers"), TString("2")},
+                            {{ {TString("followers"), TString("2")}, 
                                {TString("promotion"), TString("enabled")},
                                {TString("per_zone"), TString("false")} }});
             }

@@ -70,7 +70,7 @@ private:
         builder
             .User(UserName_)
             .Queue(GetQueueName())
-            .QueueLeader(QueueLeader_)
+            .QueueLeader(QueueLeader_) 
             .QueryId(SET_QUEUE_ATTRIBUTES_ID)
             .Counters(QueueCounters_)
             .RetryOnTimeout();
@@ -144,7 +144,7 @@ private:
         if (status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete) {
             // OK
             RLOG_SQS_DEBUG("Sending clear attributes cache event for queue [" << UserName_ << "/" << GetQueueName() << "]");
-            Send(QueueLeader_, MakeHolder<TSqsEvents::TEvClearQueueAttributesCache>());
+            Send(QueueLeader_, MakeHolder<TSqsEvents::TEvClearQueueAttributesCache>()); 
         } else {
             RLOG_SQS_WARN("Request failed: " << record);
             MakeError(result, NErrors::INTERNAL_FAILURE);

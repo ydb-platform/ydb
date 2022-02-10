@@ -68,7 +68,7 @@ Y_UNIT_TEST_SUITE(TBSVWithReboots) {
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
                                    {NLs::PathNotExist});
-                t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+5));
+                t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+5)); 
             }
         });
     }
@@ -285,7 +285,7 @@ Y_UNIT_TEST_SUITE(TBSVWithReboots) {
             TestForceDropSubDomain(runtime, ++t.TxId,  "/MyRoot/DirA", "USER_0");
 
             t.TestEnv->TestWaitNotification(runtime, {t.TxId, t.TxId-1});
-            t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 3));
+            t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 3)); 
 
             {
                 TInactiveZone inactive(activeZone);

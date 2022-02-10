@@ -1,5 +1,5 @@
 import "ydb/core/protos/base.proto";
-
+ 
 package NKikimr.NTable.NProto;
 option java_package = "ru.yandex.kikimr.proto";
 
@@ -50,8 +50,8 @@ message TRoot { // NTable::TPart page collection metablob
     optional TEvol Evol = 6;
     optional TStat Stat = 7;   // Some stats collected on compaction
     optional TLayout Layout = 8;// Non-data pages layout information
-    optional NKikimrProto.TRowVersion MinRowVersion = 9;
-    optional NKikimrProto.TRowVersion MaxRowVersion = 10;
+    optional NKikimrProto.TRowVersion MinRowVersion = 9; 
+    optional NKikimrProto.TRowVersion MaxRowVersion = 10; 
 }
 
 message TSliceBounds {

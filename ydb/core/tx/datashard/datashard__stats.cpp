@@ -8,9 +8,9 @@ namespace NDataShard {
 
 class TAsyncTableStatsBuilder : public TActorBootstrapped<TAsyncTableStatsBuilder> {
 public:
-    TAsyncTableStatsBuilder(TActorId replyTo, ui64 tableId, ui64 indexSize, const TAutoPtr<NTable::TSubset> subset,
+    TAsyncTableStatsBuilder(TActorId replyTo, ui64 tableId, ui64 indexSize, const TAutoPtr<NTable::TSubset> subset, 
                             ui64 memRowCount, ui64 memDataSize,
-                            ui64 rowCountResolution, ui64 dataSizeResolution, ui64 searchHeight, TInstant statsUpdateTime)
+                            ui64 rowCountResolution, ui64 dataSizeResolution, ui64 searchHeight, TInstant statsUpdateTime) 
         : ReplyTo(replyTo)
         , TableId(tableId)
         , IndexSize(indexSize)
@@ -20,7 +20,7 @@ public:
         , MemDataSize(memDataSize)
         , RowCountResolution(rowCountResolution)
         , DataSizeResolution(dataSizeResolution)
-        , SearchHeight(searchHeight)
+        , SearchHeight(searchHeight) 
     {}
 
     static constexpr auto ActorActivityType() {
@@ -35,7 +35,7 @@ public:
         ev->PartCount = Subset->Flatten.size() + Subset->ColdParts.size();
         ev->MemRowCount = MemRowCount;
         ev->MemDataSize = MemDataSize;
-        ev->SearchHeight = SearchHeight;
+        ev->SearchHeight = SearchHeight; 
 
         NTable::GetPartOwners(*Subset, ev->PartOwners);
 
@@ -53,12 +53,12 @@ private:
     ui64 TableId;
     ui64 IndexSize;
     TInstant StatsUpdateTime;
-    TAutoPtr<NTable::TSubset> Subset;
+    TAutoPtr<NTable::TSubset> Subset; 
     ui64 MemRowCount;
     ui64 MemDataSize;
     ui64 RowCountResolution;
     ui64 DataSizeResolution;
-    ui64 SearchHeight;
+    ui64 SearchHeight; 
 };
 
 
@@ -124,8 +124,8 @@ public:
         }
 
         Result->Record.MutableTableStats()->SetPartCount(tableInfo.Stats.PartCount);
-        Result->Record.MutableTableStats()->SetSearchHeight(tableInfo.Stats.SearchHeight);
-        Result->Record.MutableTableStats()->SetLastFullCompactionTs(tableInfo.Stats.LastFullCompaction.Seconds());
+        Result->Record.MutableTableStats()->SetSearchHeight(tableInfo.Stats.SearchHeight); 
+        Result->Record.MutableTableStats()->SetLastFullCompactionTs(tableInfo.Stats.LastFullCompaction.Seconds()); 
 
         Result->Record.SetShardState(Self->State);
         for (const auto& pi : tableInfo.Stats.PartOwners) {
@@ -193,11 +193,11 @@ void TDataShard::Handle(TEvPrivate::TEvAsyncTableStats::TPtr& ev, const TActorCo
             ev->Get()->StatsUpdateTime);
         tableInfo.Stats.MemRowCount = ev->Get()->MemRowCount;
         tableInfo.Stats.MemDataSize = ev->Get()->MemDataSize;
-
+ 
         dataSize += tableInfo.Stats.DataStats.DataSize;
 
-        UpdateSearchHeightStats(tableInfo.Stats, ev->Get()->SearchHeight);
-
+        UpdateSearchHeightStats(tableInfo.Stats, ev->Get()->SearchHeight); 
+ 
         tableInfo.StatsUpdateInProgress = false;
 
         SendPeriodicTableStats(ctx);
@@ -251,19 +251,19 @@ public:
 
             ui64 memRowCount = txc.DB.GetTableMemRowCount(localTableId);
             ui64 memDataSize = txc.DB.GetTableMemSize(localTableId);
-            ui64 searchHeight = txc.DB.GetTableSearchHeight(localTableId);
+            ui64 searchHeight = txc.DB.GetTableSearchHeight(localTableId); 
             if (shadowTableId) {
                 memRowCount += txc.DB.GetTableMemRowCount(shadowTableId);
                 memDataSize += txc.DB.GetTableMemSize(shadowTableId);
-                searchHeight = 0;
+                searchHeight = 0; 
             }
 
-            Self->UpdateFullCompactionTsMetric(ti.second->Stats);
-
+            Self->UpdateFullCompactionTsMetric(ti.second->Stats); 
+ 
             if (!ti.second->StatsNeedUpdate) {
                 ti.second->Stats.MemRowCount = memRowCount;
                 ti.second->Stats.MemDataSize = memDataSize;
-                Self->UpdateSearchHeightStats(ti.second->Stats, searchHeight);
+                Self->UpdateSearchHeightStats(ti.second->Stats, searchHeight); 
                 continue;
             }
 
@@ -293,7 +293,7 @@ public:
                 indexSize += txc.DB.GetTableIndexSize(shadowTableId);
             }
 
-            TAutoPtr<NTable::TSubset> subsetForStats = txc.DB.Subset(localTableId, NTable::TEpoch::Max(), NTable::TRawVals(), NTable::TRawVals());
+            TAutoPtr<NTable::TSubset> subsetForStats = txc.DB.Subset(localTableId, NTable::TEpoch::Max(), NTable::TRawVals(), NTable::TRawVals()); 
             // Remove memtables from the subset as we only want to look at indexes for parts
             subsetForStats->Frozen.clear();
 
@@ -321,7 +321,7 @@ public:
                 memDataSize,
                 rowCountResolution,
                 dataSizeResolution,
-                searchHeight,
+                searchHeight, 
                 AppData(ctx)->TimeProvider->Now());
 
             ctx.Register(builder, TMailboxType::HTSwap, AppData(ctx)->BatchPoolId);
@@ -361,38 +361,38 @@ void TDataShard::UpdateTableStats(const TActorContext &ctx) {
     Executor()->Execute(new TTxInitiateStatsUpdate(this), ctx);
 }
 
-void TDataShard::UpdateSearchHeightStats(TUserTable::TStats& stats, ui64 newSearchHeight) {
-    if (TabletCounters) {
-        if (stats.LastSearchHeightMetricSet)
-            TabletCounters->Percentile()[COUNTER_SHARDS_WITH_SEARCH_HEIGHT].DecrementFor(stats.SearchHeight);
+void TDataShard::UpdateSearchHeightStats(TUserTable::TStats& stats, ui64 newSearchHeight) { 
+    if (TabletCounters) { 
+        if (stats.LastSearchHeightMetricSet) 
+            TabletCounters->Percentile()[COUNTER_SHARDS_WITH_SEARCH_HEIGHT].DecrementFor(stats.SearchHeight); 
+ 
+        TabletCounters->Percentile()[COUNTER_SHARDS_WITH_SEARCH_HEIGHT].IncrementFor(newSearchHeight); 
+        stats.LastSearchHeightMetricSet = true; 
+    } 
+    stats.SearchHeight = newSearchHeight; 
+} 
+ 
+void TDataShard::UpdateFullCompactionTsMetric(TUserTable::TStats& stats) { 
+    if (!TabletCounters) 
+        return; 
 
-        TabletCounters->Percentile()[COUNTER_SHARDS_WITH_SEARCH_HEIGHT].IncrementFor(newSearchHeight);
-        stats.LastSearchHeightMetricSet = true;
-    }
-    stats.SearchHeight = newSearchHeight;
-}
-
-void TDataShard::UpdateFullCompactionTsMetric(TUserTable::TStats& stats) {
-    if (!TabletCounters)
-        return;
-
-    auto now = AppData()->TimeProvider->Now();
-    if (now < stats.LastFullCompaction) {
-        // extra sanity check
-        return;
-    }
-
-    auto newHours = (now - stats.LastFullCompaction).Hours();
-    if (stats.HoursSinceFullCompaction && newHours == *stats.HoursSinceFullCompaction)
-        return;
-
-    if (stats.HoursSinceFullCompaction)
-        TabletCounters->Percentile()[COUNTER_SHARDS_WITH_FULL_COMPACTION].DecrementFor(*stats.HoursSinceFullCompaction);
-
-    TabletCounters->Percentile()[COUNTER_SHARDS_WITH_FULL_COMPACTION].IncrementFor(newHours);
-    stats.HoursSinceFullCompaction = newHours;
-}
-
+    auto now = AppData()->TimeProvider->Now(); 
+    if (now < stats.LastFullCompaction) { 
+        // extra sanity check 
+        return; 
+    } 
+ 
+    auto newHours = (now - stats.LastFullCompaction).Hours(); 
+    if (stats.HoursSinceFullCompaction && newHours == *stats.HoursSinceFullCompaction) 
+        return; 
+ 
+    if (stats.HoursSinceFullCompaction) 
+        TabletCounters->Percentile()[COUNTER_SHARDS_WITH_FULL_COMPACTION].DecrementFor(*stats.HoursSinceFullCompaction); 
+ 
+    TabletCounters->Percentile()[COUNTER_SHARDS_WITH_FULL_COMPACTION].IncrementFor(newHours); 
+    stats.HoursSinceFullCompaction = newHours; 
+} 
+ 
 void TDataShard::CollectCpuUsage(const TActorContext &ctx) {
     auto* metrics = Executor()->GetResourceMetrics();
     TInstant now = AppData(ctx)->TimeProvider->Now();

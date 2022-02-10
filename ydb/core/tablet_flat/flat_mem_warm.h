@@ -431,7 +431,7 @@ namespace NMem {
 
     public:
         const TEpoch Epoch;
-        const TIntrusiveConstPtr<TRowScheme> Scheme;
+        const TIntrusiveConstPtr<TRowScheme> Scheme; 
 
     private:
         NMem::TBlobs Blobs;

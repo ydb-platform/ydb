@@ -99,8 +99,8 @@ namespace NTest {
         }
 
     public:
-        const TIntrusiveConstPtr<TRowScheme> Scheme;
-        const TIntrusiveConstPtr<TKeyNulls> Nulls;
+        const TIntrusiveConstPtr<TRowScheme> Scheme; 
+        const TIntrusiveConstPtr<TKeyNulls> Nulls; 
         const TFrozen Frozen;
         const TFlatten Flatten;
         const TRowVersion Snapshot;
@@ -108,7 +108,7 @@ namespace NTest {
     private:
         IPages *Env = nullptr;
         TLevels Levels;
-        TAutoPtr<TIter> Iter;
+        TAutoPtr<TIter> Iter; 
     };
 
     using TWrapIter = TWrapIterImpl<TTableIt>;

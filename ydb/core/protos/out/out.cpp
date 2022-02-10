@@ -152,10 +152,10 @@ Y_DECLARE_OUT_SPEC(, NKikimrBlobStorage::TPDiskSpaceColor::E, stream, value) {
 Y_DECLARE_OUT_SPEC(, NKikimrWhiteboard::EFlag, stream, value) {
     stream << NKikimrWhiteboard::EFlag_Name(value);
 }
-
-Y_DECLARE_OUT_SPEC(, NKikimrTxDataShard::TEvCompactTableResult::EStatus, stream, value) {
-    stream << NKikimrTxDataShard::TEvCompactTableResult::EStatus_Name(value);
-}
+ 
+Y_DECLARE_OUT_SPEC(, NKikimrTxDataShard::TEvCompactTableResult::EStatus, stream, value) { 
+    stream << NKikimrTxDataShard::TEvCompactTableResult::EStatus_Name(value); 
+} 
 
 Y_DECLARE_OUT_SPEC(, NKikimrKqp::EQueryAction, stream, value) {
         stream << NKikimrKqp::EQueryAction_Name(value);

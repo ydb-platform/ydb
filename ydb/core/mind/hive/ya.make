@@ -25,17 +25,17 @@ SRCS(
     hive_schema.h
     hive_statics.cpp
     hive_transactions.h
-    leader_tablet_info.cpp
-    leader_tablet_info.h
+    leader_tablet_info.cpp 
+    leader_tablet_info.h 
     metrics.h
     monitoring.cpp
     node_info.cpp
     node_info.h
     sequencer.cpp
     sequencer.h
-    follower_group.h
-    follower_tablet_info.cpp
-    follower_tablet_info.h
+    follower_group.h 
+    follower_tablet_info.cpp 
+    follower_tablet_info.h 
     storage_group_info.cpp
     storage_group_info.h
     storage_pool_info.cpp

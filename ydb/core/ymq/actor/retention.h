@@ -9,7 +9,7 @@ namespace NKikimr::NSQS {
 
 class TRetentionActor : public TActorBootstrapped<TRetentionActor> {
 public:
-    TRetentionActor(const TQueuePath& queuePath, const TActorId& queueLeader);
+    TRetentionActor(const TQueuePath& queuePath, const TActorId& queueLeader); 
     ~TRetentionActor();
 
     void Bootstrap();
@@ -33,7 +33,7 @@ private:
 private:
     const TQueuePath QueuePath_;
     const TString RequestId_;
-    const TActorId QueueLeader_;
+    const TActorId QueueLeader_; 
 };
 
 } // namespace NKikimr::NSQS

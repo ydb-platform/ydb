@@ -18,11 +18,11 @@ namespace NKikimr {
 namespace NStateStorageGuardian {
 
 struct TGuardedInfo;
-struct TFollowerInfo;
+struct TFollowerInfo; 
 
 struct TEvPrivate {
     enum EEv {
-        EvRefreshFollowerState = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
+        EvRefreshFollowerState = EventSpaceBegin(TKikimrEvents::ES_PRIVATE), 
 
         EvEnd
     };
@@ -30,38 +30,38 @@ struct TEvPrivate {
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE),
         "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE)");
 
-    struct TEvRefreshFollowerState : public TEventLocal<TEvRefreshFollowerState, EvRefreshFollowerState> {
-        TIntrusiveConstPtr<TFollowerInfo> FollowerInfo;
+    struct TEvRefreshFollowerState : public TEventLocal<TEvRefreshFollowerState, EvRefreshFollowerState> { 
+        TIntrusiveConstPtr<TFollowerInfo> FollowerInfo; 
 
-        TEvRefreshFollowerState(const TIntrusivePtr<TFollowerInfo> &info)
-            : FollowerInfo(info)
+        TEvRefreshFollowerState(const TIntrusivePtr<TFollowerInfo> &info) 
+            : FollowerInfo(info) 
         {}
     };
 };
 
 struct TGuardedInfo : public TAtomicRefCount<TGuardedInfo> {
     const ui64 TabletID;
-    const TActorId Leader;
-    const TActorId TabletLeader;
+    const TActorId Leader; 
+    const TActorId TabletLeader; 
     const ui32 Generation;
 
-    TGuardedInfo(ui64 tabletId, const TActorId &leader, const TActorId &tabletLeader, ui32 generation)
+    TGuardedInfo(ui64 tabletId, const TActorId &leader, const TActorId &tabletLeader, ui32 generation) 
         : TabletID(tabletId)
-        , Leader(leader)
-        , TabletLeader(tabletLeader)
+        , Leader(leader) 
+        , TabletLeader(tabletLeader) 
         , Generation(generation)
     {}
 };
 
-struct TFollowerInfo : public TAtomicRefCount<TGuardedInfo> {
+struct TFollowerInfo : public TAtomicRefCount<TGuardedInfo> { 
     const ui64 TabletID;
-    const TActorId Follower;
+    const TActorId Follower; 
     const TActorId Tablet;
     const bool IsCandidate;
 
-    TFollowerInfo(ui64 tabletId, TActorId follower, TActorId tablet, bool isCandidate)
+    TFollowerInfo(ui64 tabletId, TActorId follower, TActorId tablet, bool isCandidate) 
         : TabletID(tabletId)
-        , Follower(follower)
+        , Follower(follower) 
         , Tablet(tablet)
         , IsCandidate(isCandidate)
     {}
@@ -105,8 +105,8 @@ class TReplicaGuardian : public TActorBootstrapped<TReplicaGuardian> {
     void UpdateInfo() {
         TAutoPtr<TEvStateStorage::TEvReplicaUpdate> req(new TEvStateStorage::TEvReplicaUpdate());
         req->Record.SetTabletID(Info->TabletID);
-        ActorIdToProto(Info->Leader, req->Record.MutableProposedLeader());
-        ActorIdToProto(Info->TabletLeader, req->Record.MutableProposedLeaderTablet());
+        ActorIdToProto(Info->Leader, req->Record.MutableProposedLeader()); 
+        ActorIdToProto(Info->TabletLeader, req->Record.MutableProposedLeaderTablet()); 
         req->Record.SetProposedGeneration(Info->Generation);
         req->Record.SetProposedStep(0);
         req->Record.SetSignature(Signature);
@@ -133,7 +133,7 @@ class TReplicaGuardian : public TActorBootstrapped<TReplicaGuardian> {
     }
 
     void Demoted() {
-        Send(Info->Leader, new TEvTablet::TEvDemoted(false));
+        Send(Info->Leader, new TEvTablet::TEvDemoted(false)); 
         return PassAway();
     }
 
@@ -150,11 +150,11 @@ class TReplicaGuardian : public TActorBootstrapped<TReplicaGuardian> {
             if (gen > Info->Generation) {
                 return Demoted();
             } else if (gen == Info->Generation) {
-                const TActorId leader = ActorIdFromProto(record.GetCurrentLeader());
-                const TActorId tabletLeader = ActorIdFromProto(record.GetCurrentLeaderTablet());
-                if (!leader || leader == Info->Leader && !tabletLeader) {
+                const TActorId leader = ActorIdFromProto(record.GetCurrentLeader()); 
+                const TActorId tabletLeader = ActorIdFromProto(record.GetCurrentLeaderTablet()); 
+                if (!leader || leader == Info->Leader && !tabletLeader) { 
                     return UpdateInfo();
-                } else if (leader != Info->Leader || tabletLeader != Info->TabletLeader) {
+                } else if (leader != Info->Leader || tabletLeader != Info->TabletLeader) { 
                     return Demoted(); // hack around cluster restarts
                 } else {
                     Become(&TThis::StateCalm);
@@ -228,18 +228,18 @@ public:
     }
 };
 
-class TFollowerGuardian : public TActorBootstrapped<TFollowerGuardian> {
-    TIntrusiveConstPtr<TFollowerInfo> Info;
+class TFollowerGuardian : public TActorBootstrapped<TFollowerGuardian> { 
+    TIntrusiveConstPtr<TFollowerInfo> Info; 
     const TActorId Replica;
     const TActorId Guard;
 
     TInstant DowntimeFrom;
 
-    void RefreshInfo(TEvPrivate::TEvRefreshFollowerState::TPtr &ev) {
-        Info = ev->Get()->FollowerInfo;
+    void RefreshInfo(TEvPrivate::TEvRefreshFollowerState::TPtr &ev) { 
+        Info = ev->Get()->FollowerInfo; 
     }
 
-    void UpdateInfo(TEvPrivate::TEvRefreshFollowerState::TPtr &ev) {
+    void UpdateInfo(TEvPrivate::TEvRefreshFollowerState::TPtr &ev) { 
         RefreshInfo(ev);
         UpdateInfo();
     }
@@ -257,7 +257,7 @@ class TFollowerGuardian : public TActorBootstrapped<TFollowerGuardian> {
     void MakeRequest() {
         Send(
             Replica,
-            new TEvStateStorage::TEvReplicaRegFollower(Info->TabletID, Info->Follower, Info->Tablet, Info->IsCandidate),
+            new TEvStateStorage::TEvReplicaRegFollower(Info->TabletID, Info->Follower, Info->Tablet, Info->IsCandidate), 
             IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
         Become(&TThis::StateCalm);
     }
@@ -274,7 +274,7 @@ class TFollowerGuardian : public TActorBootstrapped<TFollowerGuardian> {
     }
 
     void PassAway() override {
-        Send(Replica, new TEvStateStorage::TEvReplicaUnregFollower(Info->TabletID, Info->Follower));
+        Send(Replica, new TEvStateStorage::TEvReplicaUnregFollower(Info->TabletID, Info->Follower)); 
         if (Replica.NodeId() != SelfId().NodeId())
             Send(TActivationContext::InterconnectProxy(Replica.NodeId()), new TEvents::TEvUnsubscribe());
 
@@ -299,7 +299,7 @@ public:
         return NKikimrServices::TActivity::SS_REPLICA_GUARDIAN;
     }
 
-    TFollowerGuardian(TFollowerInfo *info, const TActorId replica, const TActorId guard)
+    TFollowerGuardian(TFollowerInfo *info, const TActorId replica, const TActorId guard) 
         : Info(info)
         , Replica(replica)
         , Guard(guard)
@@ -312,7 +312,7 @@ public:
 
     STATEFN(StateCalm) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvPrivate::TEvRefreshFollowerState, UpdateInfo);
+            hFunc(TEvPrivate::TEvRefreshFollowerState, UpdateInfo); 
             cFunc(TEvStateStorage::TEvReplicaProbeConnected::EventType, MakeRequest);
             cFunc(TEvStateStorage::TEvReplicaProbeDisconnected::EventType, Gone);
             cFunc(TEvents::TEvUndelivered::EventType, SomeSleep);
@@ -325,7 +325,7 @@ public:
 
     STATEFN(StateSleep) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvPrivate::TEvRefreshFollowerState, RefreshInfo);
+            hFunc(TEvPrivate::TEvRefreshFollowerState, RefreshInfo); 
 
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
             cFunc(TEvents::TEvWakeup::EventType, UpdateInfo);
@@ -337,15 +337,15 @@ public:
 
 class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
     TIntrusivePtr<TGuardedInfo> Info;
-    TIntrusivePtr<TFollowerInfo> FollowerInfo;
+    TIntrusivePtr<TFollowerInfo> FollowerInfo; 
 
     TVector<std::pair<TActorId, TActorId>> ReplicaGuardians; // replica -> guardian, position dependant so vector
     ui32 ReplicasOnlineThreshold;
 
-    THolder<TFollowerTracker> FollowerTracker;
+    THolder<TFollowerTracker> FollowerTracker; 
 
     TActorId Launcher() const {
-        return Info ? Info->Leader : FollowerInfo->Follower;
+        return Info ? Info->Leader : FollowerInfo->Follower; 
     }
 
     void HandlePoison() {
@@ -383,7 +383,7 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
                 if (Info)
                     updatedReplicaGuardians.emplace_back(replica, RegisterWithSameMailbox(new TReplicaGuardian(Info.Get(), replica, SelfId())));
                 else
-                    updatedReplicaGuardians.emplace_back(replica, RegisterWithSameMailbox(new TFollowerGuardian(FollowerInfo.Get(), replica, SelfId())));
+                    updatedReplicaGuardians.emplace_back(replica, RegisterWithSameMailbox(new TFollowerGuardian(FollowerInfo.Get(), replica, SelfId()))); 
             }
         }
 
@@ -395,8 +395,8 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
         ReplicaGuardians.swap(updatedReplicaGuardians);
         ReplicasOnlineThreshold = (ReplicaGuardians.size() == 1) ? 0 : 1;
 
-        if (!FollowerTracker || !inspectCurrent) // would notify on first change
-            FollowerTracker.Reset(new TFollowerTracker(replicaSz));
+        if (!FollowerTracker || !inspectCurrent) // would notify on first change 
+            FollowerTracker.Reset(new TFollowerTracker(replicaSz)); 
 
         Become(&TThis::StateCalm);
     }
@@ -431,7 +431,7 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
     }
 
     void SendResolveRequest(TDuration delay) {
-        const ui64 tabletId = Info ? Info->TabletID : FollowerInfo->TabletID;
+        const ui64 tabletId = Info ? Info->TabletID : FollowerInfo->TabletID; 
         const ui64 stateStorageGroup = StateStorageGroupFromTabletID(tabletId);
         const TActorId proxyActorID = MakeStateStorageProxyID(stateStorageGroup);
 
@@ -460,7 +460,7 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
     }
 
     void Handle(TEvStateStorage::TEvReplicaInfo::TPtr &ev) {
-        Y_VERIFY(FollowerTracker);
+        Y_VERIFY(FollowerTracker); 
 
         const NKikimrStateStorage::TEvInfo &record = ev->Get()->Record;
         const TActorId guardian = ev->Sender;
@@ -469,18 +469,18 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
                 continue;
 
             TVector<TActorId> reported;
-            reported.reserve(record.FollowerSize() + record.FollowerCandidatesSize());
-            for (const auto &x : record.GetFollower()) {
+            reported.reserve(record.FollowerSize() + record.FollowerCandidatesSize()); 
+            for (const auto &x : record.GetFollower()) { 
                 reported.emplace_back(ActorIdFromProto(x));
             }
 
-            for (const auto &x : record.GetFollowerCandidates()) {
+            for (const auto &x : record.GetFollowerCandidates()) { 
                 reported.emplace_back(ActorIdFromProto(x));
             }
 
             Sort(reported);
-            if (FollowerTracker->Merge(idx, reported)) {
-                const auto &merged = FollowerTracker->GetMerged();
+            if (FollowerTracker->Merge(idx, reported)) { 
+                const auto &merged = FollowerTracker->GetMerged(); 
 
                 // reuse reported so in many cases no allocation happens
                 reported.clear();
@@ -490,24 +490,24 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
                     reported.emplace_back(xpair.first);
                 }
 
-                Send(Launcher(), new TEvTablet::TEvFollowerListRefresh(std::move(reported)));
+                Send(Launcher(), new TEvTablet::TEvFollowerListRefresh(std::move(reported))); 
             }
 
             break;
         }
     }
 
-    bool RefreshFollowerInfo(TEvTablet::TEvFollowerUpdateState::TPtr &ev) {
+    bool RefreshFollowerInfo(TEvTablet::TEvFollowerUpdateState::TPtr &ev) { 
         const auto *msg = ev->Get();
-        const ui64 tabletId = FollowerInfo->TabletID;
+        const ui64 tabletId = FollowerInfo->TabletID; 
 
-        Y_VERIFY(msg->FollowerActor == FollowerInfo->Follower);
+        Y_VERIFY(msg->FollowerActor == FollowerInfo->Follower); 
 
-        const bool hasChanges = msg->TabletActor != FollowerInfo->Tablet || msg->IsCandidate != FollowerInfo->IsCandidate;
+        const bool hasChanges = msg->TabletActor != FollowerInfo->Tablet || msg->IsCandidate != FollowerInfo->IsCandidate; 
         if (hasChanges) {
-            FollowerInfo = new TFollowerInfo(
+            FollowerInfo = new TFollowerInfo( 
                 tabletId,
-                msg->FollowerActor,
+                msg->FollowerActor, 
                 msg->TabletActor,
                 msg->IsCandidate
             );
@@ -516,13 +516,13 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
         return hasChanges;
     }
 
-    void UpdateFollowerInfo(TEvTablet::TEvFollowerUpdateState::TPtr &ev) {
-        if (!RefreshFollowerInfo(ev))
+    void UpdateFollowerInfo(TEvTablet::TEvFollowerUpdateState::TPtr &ev) { 
+        if (!RefreshFollowerInfo(ev)) 
             return;
 
         for (auto &xpair : ReplicaGuardians) {
             const TActorId guardian = xpair.second;
-            Send(guardian, new TEvPrivate::TEvRefreshFollowerState(FollowerInfo));
+            Send(guardian, new TEvPrivate::TEvRefreshFollowerState(FollowerInfo)); 
         }
     }
 public:
@@ -535,8 +535,8 @@ public:
         , ReplicasOnlineThreshold(0)
     {}
 
-    TTabletGuardian(TFollowerInfo *info)
-        : FollowerInfo(info)
+    TTabletGuardian(TFollowerInfo *info) 
+        : FollowerInfo(info) 
         , ReplicasOnlineThreshold(0)
     {}
 
@@ -546,7 +546,7 @@ public:
 
     STATEFN(StateResolve) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvTablet::TEvFollowerUpdateState, UpdateFollowerInfo);
+            hFunc(TEvTablet::TEvFollowerUpdateState, UpdateFollowerInfo); 
             hFunc(TEvStateStorage::TEvResolveReplicasList, Handle);
             hFunc(TEvStateStorage::TEvReplicaInfo, Handle);
             hFunc(TEvents::TEvUndelivered, Handle);
@@ -558,7 +558,7 @@ public:
 
     STATEFN(StateCalm) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvTablet::TEvFollowerUpdateState, UpdateFollowerInfo);
+            hFunc(TEvTablet::TEvFollowerUpdateState, UpdateFollowerInfo); 
             hFunc(TEvStateStorage::TEvResolveReplicasList, Handle);
             hFunc(TEvStateStorage::TEvReplicaInfo, Handle);
             hFunc(TEvents::TEvUndelivered, Handle);
@@ -571,14 +571,14 @@ public:
 
 }
 
-IActor* CreateStateStorageTabletGuardian(ui64 tabletId, const TActorId &leader, const TActorId &tabletLeader, ui32 generation) {
-    TIntrusivePtr<NStateStorageGuardian::TGuardedInfo> info = new NStateStorageGuardian::TGuardedInfo(tabletId, leader, tabletLeader, generation);
+IActor* CreateStateStorageTabletGuardian(ui64 tabletId, const TActorId &leader, const TActorId &tabletLeader, ui32 generation) { 
+    TIntrusivePtr<NStateStorageGuardian::TGuardedInfo> info = new NStateStorageGuardian::TGuardedInfo(tabletId, leader, tabletLeader, generation); 
     return new NStateStorageGuardian::TTabletGuardian(info.Get());
 }
 
-IActor* CreateStateStorageFollowerGuardian(ui64 tabletId, const TActorId &follower) {
-    TIntrusivePtr<NStateStorageGuardian::TFollowerInfo> followerInfo = new NStateStorageGuardian::TFollowerInfo(tabletId, follower, TActorId(), true);
-    return new NStateStorageGuardian::TTabletGuardian(followerInfo.Get());
+IActor* CreateStateStorageFollowerGuardian(ui64 tabletId, const TActorId &follower) { 
+    TIntrusivePtr<NStateStorageGuardian::TFollowerInfo> followerInfo = new NStateStorageGuardian::TFollowerInfo(tabletId, follower, TActorId(), true); 
+    return new NStateStorageGuardian::TTabletGuardian(followerInfo.Get()); 
 }
 
 }

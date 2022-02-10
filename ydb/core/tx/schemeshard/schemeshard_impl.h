@@ -16,8 +16,8 @@
 
 #include "schemeshard__operation.h"
 
-#include "operation_queue_timer.h"
-
+#include "operation_queue_timer.h" 
+ 
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/storage_pools.h>
 #include <ydb/core/base/subdomain.h>
@@ -75,29 +75,29 @@ private:
         TSchemeShard* Self;
     };
 
-    using TCompactionBackendQueue = NOperationQueue::TQueueWithPriority<
-        TShardCompactionInfo,
-        TShardCompactionInfo::TLessBySearchHeight>;
-
-    using TCompactionQueue = NOperationQueue::TOperationQueueWithTimer<
-        TShardCompactionInfo,
-        TCompactionBackendQueue,
-        TEvPrivate::EvRunBackgroundCompaction>;
-
-    class TCompactionStarter : public TCompactionQueue::IStarter {
-    public:
+    using TCompactionBackendQueue = NOperationQueue::TQueueWithPriority< 
+        TShardCompactionInfo, 
+        TShardCompactionInfo::TLessBySearchHeight>; 
+ 
+    using TCompactionQueue = NOperationQueue::TOperationQueueWithTimer< 
+        TShardCompactionInfo, 
+        TCompactionBackendQueue, 
+        TEvPrivate::EvRunBackgroundCompaction>; 
+ 
+    class TCompactionStarter : public TCompactionQueue::IStarter { 
+    public: 
         TCompactionStarter(TSchemeShard* self)
-            : Self(self)
-        { }
-
-        NOperationQueue::EStartStatus StartOperation(const TShardCompactionInfo& info) {
-            return Self->StartBackgroundCompaction(info.ShardIdx);
-        }
-
-    private:
+            : Self(self) 
+        { } 
+ 
+        NOperationQueue::EStartStatus StartOperation(const TShardCompactionInfo& info) { 
+            return Self->StartBackgroundCompaction(info.ShardIdx); 
+        } 
+ 
+    private: 
         TSchemeShard* Self;
-    };
-
+    }; 
+ 
 public:
     static constexpr ui32 DefaultPQTabletPartitionsCount = 1;
     static constexpr ui32 MaxPQTabletPartitionsCount = 1000;
@@ -196,11 +196,11 @@ public:
     TPipeTracker PipeTracker;
 
     TCompactionStarter CompactionStarter;
-    TCompactionQueue* CompactionQueue = nullptr;
-    bool EnableBackgroundCompaction = false;
-    bool EnableBackgroundCompactionServerless = false;
-    ui32 CompactionSearchHeightThreshold = 0;
-
+    TCompactionQueue* CompactionQueue = nullptr; 
+    bool EnableBackgroundCompaction = false; 
+    bool EnableBackgroundCompactionServerless = false; 
+    ui32 CompactionSearchHeightThreshold = 0; 
+ 
     TShardDeleter ShardDeleter;
 
     // Counter-strike stuff
@@ -287,11 +287,11 @@ public:
     void ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfig, const TActorContext& ctx);
     void ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featureFlags, const TActorContext& ctx);
 
-    void ConfigureCompactionQueue(
-        const NKikimrConfig::TCompactionConfig::TBackgroundCompactionConfig& config,
-        const TActorContext &ctx);
-    void StartStopCompactionQueue();
-
+    void ConfigureCompactionQueue( 
+        const NKikimrConfig::TCompactionConfig::TBackgroundCompactionConfig& config, 
+        const TActorContext &ctx); 
+    void StartStopCompactionQueue(); 
+ 
     bool ApplyStorageConfig(const TStoragePools& storagePools,
                             const NKikimrSchemeOp::TStorageConfig& storageConfig,
                             TChannelsBindings& channelsBinding,
@@ -628,8 +628,8 @@ public:
     void ScheduleCleanDroppedPaths();
     void Handle(TEvPrivate::TEvCleanDroppedPaths::TPtr& ev, const TActorContext& ctx);
 
-    NOperationQueue::EStartStatus StartBackgroundCompaction(const TShardIdx& shardId);
-
+    NOperationQueue::EStartStatus StartBackgroundCompaction(const TShardIdx& shardId); 
+ 
     struct TTxCleanDroppedSubDomains;
     NTabletFlatExecutor::ITransaction* CreateTxCleanDroppedSubDomains();
 
@@ -793,7 +793,7 @@ public:
     void Handle(TEvSchemeShard::TEvMigrateSchemeShard::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvMigrateSchemeShardResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvMigrateSchemeShardResponse::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvCompactTableResult::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvDataShard::TEvCompactTableResult::TPtr &ev, const TActorContext &ctx); 
 
     void Handle(TEvSchemeShard::TEvSyncTenantSchemeShard::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvUpdateTenantSchemeShard::TPtr& ev, const TActorContext& ctx);

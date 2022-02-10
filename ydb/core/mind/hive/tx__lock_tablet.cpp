@@ -43,7 +43,7 @@ public:
             return true;
         }
 
-        TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
+        TLeaderTabletInfo* tablet = Self->FindTablet(TabletId); 
         if (tablet == nullptr) {
             Status = NKikimrProto::ERROR;
             StatusMessage = TStringBuilder() << "Trying to lock tablet " << TabletId
@@ -89,12 +89,12 @@ public:
                 ctx.Send(PreviousOwner, new TEvHive::TEvLockTabletExecutionLost(TabletId));
             }
 
-            if (TLeaderTabletInfo* tablet = Self->FindTablet(TabletId)) {
+            if (TLeaderTabletInfo* tablet = Self->FindTablet(TabletId)) { 
                 // Tablet still exists by the time transaction finished
                 if (tablet->IsLockedToActor()) {
                     // Make sure running tablets will be stopped
-                    for (auto& follower : tablet->Followers) {
-                        follower.InitiateStop();
+                    for (auto& follower : tablet->Followers) { 
+                        follower.InitiateStop(); 
                     }
                     tablet->InitiateStop();
                 }

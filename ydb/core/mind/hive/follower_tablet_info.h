@@ -2,20 +2,20 @@
 
 #include "hive.h"
 #include "tablet_info.h"
-#include "follower_group.h"
+#include "follower_group.h" 
 
 namespace NKikimr {
 namespace NHive {
 
-struct TFollowerGroup;
+struct TFollowerGroup; 
 
-struct TFollowerTabletInfo : TTabletInfo {
+struct TFollowerTabletInfo : TTabletInfo { 
 public:
-    TLeaderTabletInfo& LeaderTablet;
-    TFollowerId Id;
-    TFollowerGroup& FollowerGroup;
+    TLeaderTabletInfo& LeaderTablet; 
+    TFollowerId Id; 
+    TFollowerGroup& FollowerGroup; 
 
-    TFollowerTabletInfo(TLeaderTabletInfo& leaderTablet, TFollowerId id, TFollowerGroup& followerGroup);
+    TFollowerTabletInfo(TLeaderTabletInfo& leaderTablet, TFollowerId id, TFollowerGroup& followerGroup); 
 };
 
 } // NHive

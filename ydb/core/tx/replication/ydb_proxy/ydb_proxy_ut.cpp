@@ -36,7 +36,7 @@ Y_UNIT_TEST_SUITE(YdbProxyTests) {
             auto req = MakeHolder<NSchemeShard::TEvSchemeShard::TEvLogin>();
             req->Record.SetUser(user);
             req->Record.SetPassword(password);
-            ForwardToTablet(*Server.GetRuntime(), schemeShardId, Sender, req.Release());
+            ForwardToTablet(*Server.GetRuntime(), schemeShardId, Sender, req.Release()); 
 
             auto resp = Server.GetRuntime()->GrabEdgeEvent<NSchemeShard::TEvSchemeShard::TEvLoginResult>(Sender);
             UNIT_ASSERT(resp->Get()->Record.GetError().empty());

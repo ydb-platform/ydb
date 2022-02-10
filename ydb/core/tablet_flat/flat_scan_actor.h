@@ -46,7 +46,7 @@ namespace NOps {
             return NKikimrServices::TActivity::TABLET_OPS_HOST_A;
         }
 
-        TDriver(ui64 serial, TAutoPtr<IScan> scan, TConf args, THolder<TScanSnapshot> snapshot)
+        TDriver(ui64 serial, TAutoPtr<IScan> scan, TConf args, THolder<TScanSnapshot> snapshot) 
             : TActor(&TDriver::StateBoot)
             , NTable::TFeed(scan.Release(), *snapshot->Subset, snapshot->Snapshot)
             , Serial(serial)
@@ -108,9 +108,9 @@ namespace NOps {
             };
 
             struct TEvLoadPages : public TEventLocal<TEvLoadPages, EvLoadPages> {
-                TAutoPtr<NPageCollection::TFetch> Request;
+                TAutoPtr<NPageCollection::TFetch> Request; 
 
-                TEvLoadPages(TAutoPtr<NPageCollection::TFetch> request)
+                TEvLoadPages(TAutoPtr<NPageCollection::TFetch> request) 
                     : Request(std::move(request))
                 { }
             };
@@ -168,7 +168,7 @@ namespace NOps {
                 Y_VERIFY(!PageCollections[slot]);
                 auto& loader = PageCollectionLoaders[slot];
                 if (loader.Apply(msg->BlobId, std::move(msg->Body))) {
-                    TIntrusiveConstPtr<NPageCollection::IPageCollection> pack =
+                    TIntrusiveConstPtr<NPageCollection::IPageCollection> pack = 
                         new NPageCollection::TPageCollection(Part->LargeGlobIds[slot], loader.ExtractSharedData());
                     PageCollections[slot] = new TPrivatePageCache::TInfo(std::move(pack));
                     Y_VERIFY(PageCollectionsLeft > 0);
@@ -232,7 +232,7 @@ namespace NOps {
         private:
             TActorId Owner;
             TIntrusiveConstPtr<TColdPartStore> Part;
-            TVector<TIntrusivePtr<TPrivatePageCache::TInfo>> PageCollections;
+            TVector<TIntrusivePtr<TPrivatePageCache::TInfo>> PageCollections; 
             TVector<NPageCollection::TLargeGlobIdRestoreState> PageCollectionLoaders;
             size_t PageCollectionsLeft = 0;
             std::optional<NTable::TLoader> Loader;
@@ -292,7 +292,7 @@ namespace NOps {
             return Cache.Get();
         }
 
-        TPartView LoadPart(const TIntrusiveConstPtr<TColdPart>& part) noexcept override
+        TPartView LoadPart(const TIntrusiveConstPtr<TColdPart>& part) noexcept override 
         {
             const auto label = part->Label;
             auto itLoaded = ColdPartLoaded.find(label);
@@ -725,12 +725,12 @@ namespace NOps {
     private:
         const ui64 Serial = 0;
         const NOps::TConf Args;
-        TAutoPtr<NUtil::ILogger> Logger;
+        TAutoPtr<NUtil::ILogger> Logger; 
         TActorId Owner;
 
         THolder<TScanSnapshot> Snapshot;
-        TAutoPtr<TEnv> Cache;       /* NFwd scan read ahead cache   */
-        TAutoPtr<TSpent> Spent;     /* NBlockIO read blockage stats */
+        TAutoPtr<TEnv> Cache;       /* NFwd scan read ahead cache   */ 
+        TAutoPtr<TSpent> Spent;     /* NBlockIO read blockage stats */ 
         ui64 Depth = 0;
         ui64 Resets = 0;
 

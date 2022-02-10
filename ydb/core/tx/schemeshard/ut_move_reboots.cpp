@@ -47,7 +47,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
                     UNIT_ASSERT_VALUES_EQUAL(err, "");
                     UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);;
                 };
-                fnWriteRow(TTestTxConfig::FakeHiveTablets);
+                fnWriteRow(TTestTxConfig::FakeHiveTablets); 
 
                 pathVersion = TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                                                  {NLs::PathExist,
@@ -70,7 +70,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
 
             }
 
-            t.TestEnv->ReliablePropose(runtime, MoveTableRequest(++t.TxId, "/MyRoot/Table", "/MyRoot/TableMove", TTestTxConfig::SchemeShard, {pathVersion}),
+            t.TestEnv->ReliablePropose(runtime, MoveTableRequest(++t.TxId, "/MyRoot/Table", "/MyRoot/TableMove", TTestTxConfig::SchemeShard, {pathVersion}), 
                                        {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications, NKikimrScheme::StatusPreconditionFailed});
 
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
@@ -233,7 +233,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
             ++t.TxId;
             auto first = DropTableRequest(t.TxId,  "/MyRoot", "Table");
             ++pathVersion.Version;
-            auto second = MoveTableRequest(t.TxId,  "/MyRoot/tmp", "/MyRoot/Table", TTestTxConfig::SchemeShard, {pathVersion});
+            auto second = MoveTableRequest(t.TxId,  "/MyRoot/tmp", "/MyRoot/Table", TTestTxConfig::SchemeShard, {pathVersion}); 
             auto combination = CombineSchemeTransactions({first, second});
 
             t.TestEnv->ReliablePropose(runtime, combination,
@@ -292,8 +292,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
             }
 
             ++t.TxId;
-            auto first = MoveTableRequest(t.TxId,  "/MyRoot/Table", "/MyRoot/backup", TTestTxConfig::SchemeShard, {pathVersion});
-            auto second = MoveTableRequest(t.TxId,  "/MyRoot/tmp", "/MyRoot/Table", TTestTxConfig::SchemeShard);
+            auto first = MoveTableRequest(t.TxId,  "/MyRoot/Table", "/MyRoot/backup", TTestTxConfig::SchemeShard, {pathVersion}); 
+            auto second = MoveTableRequest(t.TxId,  "/MyRoot/tmp", "/MyRoot/Table", TTestTxConfig::SchemeShard); 
             auto combination = CombineSchemeTransactions({first, second});
 
             t.TestEnv->ReliablePropose(runtime, combination,

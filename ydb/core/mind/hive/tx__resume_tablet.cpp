@@ -21,7 +21,7 @@ public:
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
         BLOG_D("THive::TTxResumeTablet::Execute Tablet: " << TabletId);
-        TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
+        TLeaderTabletInfo* tablet = Self->FindTablet(TabletId); 
         if (tablet != nullptr) {
             ETabletState State = tablet->State;
             ETabletState NewState = State;
@@ -67,7 +67,7 @@ public:
         if (Status != NKikimrProto::UNKNOWN) {
             ctx.Send(ActorToNotify, new TEvHive::TEvResumeTabletResult(Status, TabletId), 0, 0);
             if (Status == NKikimrProto::OK) {
-                TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
+                TLeaderTabletInfo* tablet = Self->FindTablet(TabletId); 
                 if (tablet != nullptr) {
                     if (tablet->IsReadyToBoot()) {
                         tablet->InitiateBoot();

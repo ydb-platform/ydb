@@ -32,9 +32,9 @@ namespace NFake {
 
     const TBlobStorageGroupType::EErasureSpecies BootGroupErasure = TBlobStorageGroupType::ErasureNone;
 
-    TTabletStorageInfo* CreateTestTabletInfo(ui64 tabletId, TTabletTypes::EType tabletType,
+    TTabletStorageInfo* CreateTestTabletInfo(ui64 tabletId, TTabletTypes::EType tabletType, 
         TBlobStorageGroupType::EErasureSpecies erasure = BootGroupErasure, ui32 groupId = 0);
-    TActorId CreateTestBootstrapper(TTestActorRuntime &runtime, TTabletStorageInfo *info,
+    TActorId CreateTestBootstrapper(TTestActorRuntime &runtime, TTabletStorageInfo *info, 
         std::function<IActor* (const TActorId &, TTabletStorageInfo*)> op, ui32 nodeIndex = 0);
     NTabletPipe::TClientConfig GetPipeConfigWithRetries();
 
@@ -66,7 +66,7 @@ namespace NFake {
         {}
 
         void Create(const TActorContext &ctx, ui32 pDiskID, const TIntrusivePtr<TPDiskConfig> &cfg,
-            const NPDisk::TKey &mainKey, ui32 poolId, ui32 nodeId) override;
+            const NPDisk::TKey &mainKey, ui32 poolId, ui32 nodeId) override; 
 
         virtual ~TStrandedPDiskServiceFactory()
         {}

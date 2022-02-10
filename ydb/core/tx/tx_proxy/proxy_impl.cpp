@@ -63,8 +63,8 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
 
     void Die(const TActorContext &ctx) override {
         ctx.Send(Services.SchemeCache, new TEvents::TEvPoisonPill());
-        ctx.Send(Services.LeaderPipeCache, new TEvents::TEvPoisonPill());
-        ctx.Send(Services.FollowerPipeCache, new TEvents::TEvPoisonPill());
+        ctx.Send(Services.LeaderPipeCache, new TEvents::TEvPoisonPill()); 
+        ctx.Send(Services.FollowerPipeCache, new TEvents::TEvPoisonPill()); 
 
         PipeClientCache->Detach(ctx);
         PipeClientCache.Destroy();
@@ -442,7 +442,7 @@ public:
         ctx.ExecutorThread.ActorSystem->RegisterLocalService(MakeSchemeCacheID(), Services.SchemeCache);
 
         // PipePeNodeCaches are an external dependency
-        Services.LeaderPipeCache = MakePipePeNodeCacheID(false);
+        Services.LeaderPipeCache = MakePipePeNodeCacheID(false); 
         Services.FollowerPipeCache = MakePipePeNodeCacheID(true);
 
         TxAllocatorClient.Bootstrap(ctx);

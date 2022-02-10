@@ -19,7 +19,7 @@ TLogoBlobID ParseLogoBlobId(TString blobId) {
 
 struct TBlobBatch::TBatchInfo : TNonCopyable {
     TIntrusivePtr<TTabletStorageInfo> TabletInfo;
-    TAllocatedGenStepConstPtr GenStepRef;
+    TAllocatedGenStepConstPtr GenStepRef; 
     const ui32 Gen;
     const ui32 Step;
     const ui32 Channel;
@@ -30,7 +30,7 @@ struct TBlobBatch::TBatchInfo : TNonCopyable {
     ui64 TotalSizeBytes;
     TVector<TString> SmallBlobs;
 
-    TBatchInfo(TIntrusivePtr<TTabletStorageInfo> tabletInfo, TAllocatedGenStepConstPtr genStep, ui32 channel)
+    TBatchInfo(TIntrusivePtr<TTabletStorageInfo> tabletInfo, TAllocatedGenStepConstPtr genStep, ui32 channel) 
         : TabletInfo(tabletInfo)
         , GenStepRef(genStep)
         , Gen(std::get<0>(GenStepRef->GenStep))
@@ -195,7 +195,7 @@ bool TBlobManager::LoadState(IBlobManagerDb& db) {
     }
     AllocatedGenSteps.push_back(new TAllocatedGenStep({CurrentGen, 0}));
 
-    Sort(AllocatedGenSteps.begin(), AllocatedGenSteps.end(), [](const TAllocatedGenStepConstPtr& a, const TAllocatedGenStepConstPtr& b) {
+    Sort(AllocatedGenSteps.begin(), AllocatedGenSteps.end(), [](const TAllocatedGenStepConstPtr& a, const TAllocatedGenStepConstPtr& b) { 
         return a->GenStep < b->GenStep;
     });
 
@@ -390,7 +390,7 @@ TBlobBatch TBlobManager::StartBlobBatch(ui32 channel) {
     ++CountersUpdate.BatchesStarted;
     Y_VERIFY(channel == BLOB_CHANNEL, "Support for mutiple blob channels is not implemented yet");
     ++CurrentStep;
-    TAllocatedGenStepConstPtr genStepRef = new TAllocatedGenStep({CurrentGen, CurrentStep});
+    TAllocatedGenStepConstPtr genStepRef = new TAllocatedGenStep({CurrentGen, CurrentStep}); 
     AllocatedGenSteps.push_back(genStepRef);
     auto batchInfo = std::make_unique<TBlobBatch::TBatchInfo>(TabletInfo, genStepRef, channel);
     return TBlobBatch(std::move(batchInfo));

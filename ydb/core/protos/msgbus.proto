@@ -166,7 +166,7 @@ message TResponse {
     optional NKikimrQueryStats.TTxStats TxStats = 111;
 
     optional NKikimrTxUserProxy.TMiniKQLCompileResults MiniKQLCompileResults = 108;
-    optional bool HadFollowerReads = 109;
+    optional bool HadFollowerReads = 109; 
     optional bytes SerializedReadTableResponse = 110; // Serialized Ydb.Db.TResultSet
 
     optional uint32 BSAssignedID = 40;
@@ -254,7 +254,7 @@ message TFakeConfigDummy {
 
 message TTabletCountersRequest {
     optional uint64 TabletID = 1;
-    optional bool ConnectToFollower = 2;
+    optional bool ConnectToFollower = 2; 
 
     optional bool WithRetry = 10;
     optional uint64 Timeout = 11;
@@ -273,7 +273,7 @@ message TLocalMKQL {
 
     optional uint64 TabletID = 1;
     optional NKikimrTxUserProxy.TMiniKQLTransaction Program = 2;
-    optional bool ConnectToFollower = 3;
+    optional bool ConnectToFollower = 3; 
 
     optional string SecurityToken = 5;
 
@@ -283,7 +283,7 @@ message TLocalMKQL {
 
 message TLocalSchemeTx {
     optional uint64 TabletID = 1;
-    optional bool ConnectToFollower = 2;
+    optional bool ConnectToFollower = 2; 
     optional NTabletFlatScheme.TSchemeChanges SchemeChanges = 3;
     optional bool DryRun = 4;
     optional string SecurityToken = 5;

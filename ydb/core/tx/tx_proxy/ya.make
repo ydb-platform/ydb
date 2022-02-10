@@ -54,7 +54,7 @@ END()
 
 RECURSE_FOR_TESTS(
     ut_base_tenant
-    ut_encrypted_storage
+    ut_encrypted_storage 
     ut_ext_tenant
     ut_storage_tenant
 )

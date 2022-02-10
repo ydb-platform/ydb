@@ -8,27 +8,27 @@ using namespace NSchemeShardUT_Private;
 NLs::TCheckFunc LsCheckSubDomainParamsAfterAlter(const TString name,
                                               ui64 descrVersion = 2,
                                               ui64 pathId = 2,
-                                              TVector<ui64> coordinators = {TTestTxConfig::FakeHiveTablets},
-                                              TVector<ui64> mediators = {TTestTxConfig::FakeHiveTablets+1, TTestTxConfig::FakeHiveTablets+2})
+                                              TVector<ui64> coordinators = {TTestTxConfig::FakeHiveTablets}, 
+                                              TVector<ui64> mediators = {TTestTxConfig::FakeHiveTablets+1, TTestTxConfig::FakeHiveTablets+2}) 
 {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         NLs::PathExist(record);
         NLs::PathIdEqual(pathId)(record);
         NLs::IsSubDomain(name)(record);
         NLs::SubDomainVersion(descrVersion)(record);
-        NLs::DomainKey(pathId, TTestTxConfig::SchemeShard)(record);
+        NLs::DomainKey(pathId, TTestTxConfig::SchemeShard)(record); 
         NLs::DomainCoordinators(coordinators)(record);
         NLs::DomainMediators(mediators)(record);
     };
 }
 
 NLs::TCheckFunc LsCheckSubDomainParamsInCommonCase(const TString name,
-                                        ui64 pathId = 2, ui64 schemeshardId = TTestTxConfig::SchemeShard,
+                                        ui64 pathId = 2, ui64 schemeshardId = TTestTxConfig::SchemeShard, 
                                         ui64 createTxId = 100, ui64 createStep = 5000001,
                                         ui64 parentPathId = 1, ui64 descrVersion = 1,
                                         ui32 planResolution = 50, ui32 timeCastBucketsPerMediator = 2,
-                                        TVector<ui64> coordinators = {TTestTxConfig::FakeHiveTablets},
-                                        TVector<ui64> mediators = {TTestTxConfig::FakeHiveTablets+1, TTestTxConfig::FakeHiveTablets+2})
+                                        TVector<ui64> coordinators = {TTestTxConfig::FakeHiveTablets}, 
+                                        TVector<ui64> mediators = {TTestTxConfig::FakeHiveTablets+1, TTestTxConfig::FakeHiveTablets+2}) 
 {
     Y_UNUSED(createTxId);
     Y_UNUSED(schemeshardId);
@@ -40,19 +40,19 @@ NLs::TCheckFunc LsCheckSubDomainParamsInCommonCase(const TString name,
         NLs::IsSubDomain(name)(record);
         NLs::SubDomainVersion(descrVersion)(record);
         NLs::DomainSettings(planResolution, timeCastBucketsPerMediator)(record);
-        NLs::DomainKey(pathId, TTestTxConfig::SchemeShard)(record);
+        NLs::DomainKey(pathId, TTestTxConfig::SchemeShard)(record); 
         NLs::DomainCoordinators(coordinators)(record);
         NLs::DomainMediators(mediators)(record);
     };
 }
 
 NLs::TCheckFunc LsCheckSubDomainParamsInMassiveCase(const TString name = "",
-                                        ui64 pathId = 2, ui64 schemeshardId = TTestTxConfig::SchemeShard,
+                                        ui64 pathId = 2, ui64 schemeshardId = TTestTxConfig::SchemeShard, 
                                         ui64 createTxId = 100, ui64 createStep = 5000001,
                                         ui64 parentPathId = 1, ui64 descrVersion = 1,
                                         ui32 planResolution = 10, ui32 timeCastBucketsPerMediator = 2,
-                                        TVector<ui64> coordinators = {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 1, TTestTxConfig::FakeHiveTablets + 2},
-                                        TVector<ui64> mediators = {TTestTxConfig::FakeHiveTablets + 3, TTestTxConfig::FakeHiveTablets + 4, TTestTxConfig::FakeHiveTablets + 5}) {
+                                        TVector<ui64> coordinators = {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 1, TTestTxConfig::FakeHiveTablets + 2}, 
+                                        TVector<ui64> mediators = {TTestTxConfig::FakeHiveTablets + 3, TTestTxConfig::FakeHiveTablets + 4, TTestTxConfig::FakeHiveTablets + 5}) { 
 
     Y_UNUSED(createTxId);
     Y_UNUSED(schemeshardId);
@@ -64,7 +64,7 @@ NLs::TCheckFunc LsCheckSubDomainParamsInMassiveCase(const TString name = "",
         NLs::IsSubDomain(name)(record);
         NLs::SubDomainVersion(descrVersion)(record);
         NLs::DomainSettings(planResolution, timeCastBucketsPerMediator)(record);
-        NLs::DomainKey(pathId, TTestTxConfig::SchemeShard)(record);
+        NLs::DomainKey(pathId, TTestTxConfig::SchemeShard)(record); 
         NLs::DomainCoordinators(coordinators)(record);
         NLs::DomainMediators(mediators)(record);
     };
@@ -489,8 +489,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             "Name: \"USER_0\"");
 
         env.TestWaitNotification(runtime, 100);
-        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2));
-        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 2));
+        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2)); 
+        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 2)); 
 
         TestDropSubDomain(runtime, txId++,  "/MyRoot", "USER_0");
 
@@ -499,8 +499,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         TestLs(runtime, "/MyRoot/USER_0", false, NLs::PathNotExist);
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::PathExist, NLs::PathsInsideDomain(0), NLs::ShardsInsideDomain(0)});
-        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 2));
-        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2));
+        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 2)); 
+        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2)); 
     }
 
     Y_UNIT_TEST(CreateSubDomainWithoutTabletsThenForceDrop) {
@@ -514,8 +514,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             "Name: \"USER_0\"");
 
         env.TestWaitNotification(runtime, 100);
-        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2));
-        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 2));
+        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2)); 
+        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 2)); 
 
         TestForceDropSubDomain(runtime, txId++,  "/MyRoot", "USER_0");
 
@@ -524,8 +524,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         TestLs(runtime, "/MyRoot/USER_0", false, NLs::PathNotExist);
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::PathExist, NLs::PathsInsideDomain(0), NLs::ShardsInsideDomain(0)});
-        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 2));
-        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2));
+        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 2)); 
+        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2)); 
     }
 
     Y_UNIT_TEST(CreateSubDomainsInSeparateDir) {
@@ -623,8 +623,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             NLs::PathVersionEqual(7), // it is 6 if drop simultaneous with create
                             NLs::PathsInsideDomain(0),
                             NLs::ShardsInsideDomainOneOf({0, 1, 2, 3})});
-        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 2));
-        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2));
+        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 2)); 
+        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2)); 
     }
 
     Y_UNIT_TEST(ForceDropTwice) {
@@ -896,8 +896,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             NLs::PathsInsideDomain(0),
                             NLs::ShardsInsideDomainOneOf({0, 1, 2, 3, 4, 5, 6})});
 
-        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 2));
-        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2));
+        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 2)); 
+        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2)); 
     }
 
     Y_UNIT_TEST(SimultaneousCreateTenantTableFroceDrop) {
@@ -931,8 +931,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             NLs::PathsInsideDomain(0),
                             NLs::ShardsInsideDomain(0)});
 
-        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 2));
-        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2));
+        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 2)); 
+        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2)); 
     }
 
     Y_UNIT_TEST(SimultaneousCreateTenantTable) {
@@ -1114,10 +1114,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         TestCreateSolomon(runtime, txId++, "/MyRoot/USER_0", "Name: \"Solomon\" "
                                                              "PartitionCount: 40 ");
         env.TestWaitNotification(runtime, {txId-2, txId-1});
-        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2));
-        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 2));
-        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3));
-        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SolomonVolumes", "PathId", 3));
+        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2)); 
+        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 2)); 
+        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3)); 
+        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SolomonVolumes", "PathId", 3)); 
 
         TestLs(runtime, "/MyRoot", false);
         TestLs(runtime, "/MyRoot/USER_0", false, NLs::InSubdomain);
@@ -1130,13 +1130,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
         TestDropSolomon(runtime, txId++, "/MyRoot/USER_0", "Solomon");
         env.TestWaitNotification(runtime, txId-1);
-        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SolomonVolumes", "PathId", 3));
-        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3));
+        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SolomonVolumes", "PathId", 3)); 
+        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3)); 
 
         TestForceDropSubDomain(runtime, txId++, "/MyRoot", "USER_0");
         env.TestWaitNotification(runtime, txId-1);
-        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 2));
-        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2));
+        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 2)); 
+        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2)); 
 
         TestLs(runtime, "/MyRoot/USER_0/Solomon", false, NLs::PathNotExist);
         TestLs(runtime, "/MyRoot/USER_0", false, NLs::PathNotExist);
@@ -1172,10 +1172,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                                    " BlockSize: 4096 Partitions { BlockCount: 16 } } ");
 
         env.TestWaitNotification(runtime, {txId-2, txId-1});
-        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2));
-        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 2));
-        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3));
-        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "BlockStoreVolumes", "PathId", 3));
+        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2)); 
+        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 2)); 
+        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3)); 
+        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "BlockStoreVolumes", "PathId", 3)); 
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                            {NLs::SubdomainWithNoEmptyStoragePools});
@@ -1185,10 +1185,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
         TestForceDropSubDomain(runtime, txId++, "/MyRoot", "USER_0");
         env.TestWaitNotification(runtime, txId-1);
-        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "BlockStoreVolumes", "PathId", 3));
-        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3));
-        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 2));
-        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2));
+        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "BlockStoreVolumes", "PathId", 3)); 
+        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3)); 
+        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 2)); 
+        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2)); 
 
         TestLs(runtime, "/MyRoot/USER_0/BSVolume", false, NLs::PathNotExist);
         TestLs(runtime, "/MyRoot/USER_0", false, NLs::PathNotExist);
@@ -1352,7 +1352,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             NLs::ShardsInsideDomain(0)});
 
         TActorId sender = runtime.AllocateEdgeActor();
-        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender); 
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                            {NLs::PathExist,
@@ -1379,7 +1379,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             "Name: \"USER_0\"");
 
         TActorId sender = runtime.AllocateEdgeActor();
-        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender); 
 
         env.TestWaitNotification(runtime, 100);
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
@@ -1420,7 +1420,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             NLs::PathsInsideDomain(0),
                             NLs::ShardsInsideDomainOneOf({0, 1, 2, 3})});
 
-        env.TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1, TTestTxConfig::FakeHiveTablets+2});
+        env.TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1, TTestTxConfig::FakeHiveTablets+2}); 
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::PathExist,
@@ -1494,7 +1494,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
         {
             TActorId sender = runtime.AllocateEdgeActor();
-            RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+            RebootTablet(runtime, TTestTxConfig::SchemeShard, sender); 
         }
 
         env.TestWaitNotification(runtime, 101);
@@ -1502,7 +1502,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
         {
             TActorId sender = runtime.AllocateEdgeActor();
-            RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+            RebootTablet(runtime, TTestTxConfig::SchemeShard, sender); 
         }
 
         TestLs(runtime, "/MyRoot/USER_0", false, NLs::PathNotExist);
@@ -2748,7 +2748,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         // Quotas consuption is persistent, on reboot they should stay consumed
         {
             TActorId sender = runtime.AllocateEdgeActor();
-            RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+            RebootTablet(runtime, TTestTxConfig::SchemeShard, sender); 
         }
         TestCreateTable(runtime, ++txId, "/MyRoot/USER_0", R"(
                             Name: "Table7"
@@ -2791,7 +2791,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         // Quotas removal is persistent, on reboot they should not reactivate
         {
             TActorId sender = runtime.AllocateEdgeActor();
-            RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+            RebootTablet(runtime, TTestTxConfig::SchemeShard, sender); 
         }
         TestCreateTable(runtime, ++txId, "/MyRoot/USER_0", R"(
                             Name: "Table10"
@@ -2848,7 +2848,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
             return result;
         };
 
-        ui64 tabletId = TTestTxConfig::FakeHiveTablets;
+        ui64 tabletId = TTestTxConfig::FakeHiveTablets; 
         ui64 txId = 100;
 
         // single-shard table
@@ -2867,7 +2867,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
             auto du = getDiskSpaceUsage();
             UNIT_ASSERT_C(du.GetTables().GetTotalSize() > 0, du.ShortDebugString());
 
-            RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+            RebootTablet(runtime, TTestTxConfig::SchemeShard, sender); 
             UNIT_ASSERT_VALUES_EQUAL(du.ShortDebugString(), getDiskSpaceUsage().ShortDebugString());
         }
 
@@ -2891,7 +2891,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
             auto du = getDiskSpaceUsage();
             UNIT_ASSERT_C(du.GetTables().GetTotalSize() > 0, du.ShortDebugString());
 
-            RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+            RebootTablet(runtime, TTestTxConfig::SchemeShard, sender); 
             UNIT_ASSERT_VALUES_EQUAL(du.ShortDebugString(), getDiskSpaceUsage().ShortDebugString());
         }
     }
@@ -2953,7 +2953,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                            {LsCheckDiskQuotaExceeded(false)});
 
         // skip a single coordinator and mediator
-        ui64 tabletId = TTestTxConfig::FakeHiveTablets + 2;
+        ui64 tabletId = TTestTxConfig::FakeHiveTablets + 2; 
 
         TestCreateTable(runtime, ++txId, "/MyRoot/USER_0", R"(
                             Name: "Table1"

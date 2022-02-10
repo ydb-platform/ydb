@@ -28,7 +28,7 @@ namespace NTable {
             TPageId PageId = Max<TPageId>();
         };
 
-        explicit TForward(const TIndex& index, ui32 trace, const TIntrusiveConstPtr<TSlices>& bounds = nullptr)
+        explicit TForward(const TIndex& index, ui32 trace, const TIntrusiveConstPtr<TSlices>& bounds = nullptr) 
             : Trace(Max(ui32(1), trace))
             , Tail(index->Begin())
             , Head(index->Begin())

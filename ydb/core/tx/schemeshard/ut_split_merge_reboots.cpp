@@ -87,7 +87,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
             }
             supressed.clear();
 
-            t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1));
+            t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1)); 
 
             {
                 TInactiveZone inactive(activeZone);
@@ -143,7 +143,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
                 )");
 
             t.TestEnv->TestWaitNotification(runtime, {t.TxId -2, t.TxId-1, t.TxId});
-            t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+4));
+            t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+4)); 
 
             {
                 TInactiveZone inactive(activeZone);
@@ -238,7 +238,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
             AsyncDropTable(runtime, ++t.TxId, "/MyRoot", "Table");
 
             t.TestEnv->TestWaitNotification(runtime, {t.TxId -2, t.TxId-1, t.TxId});
-            t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+6));
+            t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+6)); 
 
             {
                 TInactiveZone inactive(activeZone);
@@ -297,7 +297,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
                                 })");
 
             t.TestEnv->TestWaitNotification(runtime, {t.TxId, t.TxId-1});
-            t.TestEnv->TestWaitTabletDeletion(runtime, TTestTxConfig::FakeHiveTablets+1); //delete src
+            t.TestEnv->TestWaitTabletDeletion(runtime, TTestTxConfig::FakeHiveTablets+1); //delete src 
 
             {
                 TInactiveZone inactive(activeZone);
@@ -451,9 +451,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
                         UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);;
                     };
 
-                    //fnWriteRow(TTestTxConfig::FakeHiveTablets, "AAA"); //we need to make a mix of shards which have shared blobs and don't
-                    fnWriteRow(TTestTxConfig::FakeHiveTablets + 1, "BBB");
-                    fnWriteRow(TTestTxConfig::FakeHiveTablets + 2, "CCC");
+                    //fnWriteRow(TTestTxConfig::FakeHiveTablets, "AAA"); //we need to make a mix of shards which have shared blobs and don't 
+                    fnWriteRow(TTestTxConfig::FakeHiveTablets + 1, "BBB"); 
+                    fnWriteRow(TTestTxConfig::FakeHiveTablets + 2, "CCC"); 
                 }
 
 
@@ -482,7 +482,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
                 TInactiveZone inactive(activeZone);
                 TestDropTable(runtime, ++t.TxId, "/MyRoot", "Copy");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
-                t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+10));
+                t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+10)); 
             }
         }, true);
     }
@@ -506,7 +506,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
                                    {NLs::PartitionKeys({"A", "B", ""})});
 
-                SetAllowLogBatching(runtime, TTestTxConfig::FakeHiveTablets+1, false);
+                SetAllowLogBatching(runtime, TTestTxConfig::FakeHiveTablets+1, false); 
             }
 
             AsyncSplitTable(runtime, ++t.TxId, "/MyRoot/Table", R"(
@@ -521,7 +521,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
                                 }
                             })");
 
-            t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+3));
+            t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+3)); 
             t.TestEnv->TestWaitNotification(runtime, {t.TxId-1, t.TxId});
 
             {
@@ -549,7 +549,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
                                    {NLs::PartitionKeys({"A", ""})});
 
-                SetAllowLogBatching(runtime, TTestTxConfig::FakeHiveTablets+1, false);
+                SetAllowLogBatching(runtime, TTestTxConfig::FakeHiveTablets+1, false); 
             }
 
             AsyncSplitTable(runtime, ++t.TxId, "/MyRoot/Table", R"(
@@ -566,7 +566,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
                     Columns { Name: "add_2"  Type: "Uint64"}
                 )");
 
-            t.TestEnv->TestWaitTabletDeletion(runtime, TTestTxConfig::FakeHiveTablets+1);
+            t.TestEnv->TestWaitTabletDeletion(runtime, TTestTxConfig::FakeHiveTablets+1); 
             t.TestEnv->TestWaitNotification(runtime, {t.TxId-1, t.TxId});
 
             {
@@ -710,7 +710,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
                                    {NLs::PartitionKeys({"A", ""})});
 
-                SetAllowLogBatching(runtime, TTestTxConfig::FakeHiveTablets+1, false);
+                SetAllowLogBatching(runtime, TTestTxConfig::FakeHiveTablets+1, false); 
             }
 
             AsyncSplitTable(runtime, ++t.TxId, "/MyRoot/Table",
@@ -726,7 +726,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
             AsyncDropTable(runtime, ++t.TxId, "/MyRoot", "Table");
 
             t.TestEnv->TestWaitNotification(runtime, {t.TxId-1, t.TxId});
-            t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+4));
+            t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+4)); 
 
             {
                 TInactiveZone inactive(activeZone);
@@ -776,7 +776,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
                                                  {NLs::PathVersionEqual(3),
                                                   NLs::PartitionKeys({"A", ""})});
 
-                SetAllowLogBatching(runtime, TTestTxConfig::FakeHiveTablets+2, false);
+                SetAllowLogBatching(runtime, TTestTxConfig::FakeHiveTablets+2, false); 
             }
 
             AsyncSplitTable(runtime, ++t.TxId, "/MyRoot/DirA/USER_0/Table",
@@ -815,7 +815,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
                                 )");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-                SetAllowLogBatching(runtime, TTestTxConfig::FakeHiveTablets, false);
+                SetAllowLogBatching(runtime, TTestTxConfig::FakeHiveTablets, false); 
             }
 
             AsyncCopyTable(runtime, ++t.TxId, "/MyRoot/DirA", "TableCopy", "/MyRoot/DirA/Table");
@@ -833,10 +833,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
             t.TestEnv->TestWaitNotification(runtime, {t.TxId-2, t.TxId-1, t.TxId});
 
             t.TestEnv->TestWaitTabletDeletion(runtime,
-                                              {TTestTxConfig::FakeHiveTablets     //Ds
-                                                  , TTestTxConfig::FakeHiveTablets+1 //CopyDS
-                                                  , TTestTxConfig::FakeHiveTablets+2 //FirstSplit
-                                                  , TTestTxConfig::FakeHiveTablets+3 //FirstSplit
+                                              {TTestTxConfig::FakeHiveTablets     //Ds 
+                                                  , TTestTxConfig::FakeHiveTablets+1 //CopyDS 
+                                                  , TTestTxConfig::FakeHiveTablets+2 //FirstSplit 
+                                                  , TTestTxConfig::FakeHiveTablets+3 //FirstSplit 
                                               });
 
             {
@@ -863,8 +863,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
                                 )");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-                SetAllowLogBatching(runtime, TTestTxConfig::FakeHiveTablets, false);
-                SetAllowLogBatching(runtime, TTestTxConfig::FakeHiveTablets+1, false);
+                SetAllowLogBatching(runtime, TTestTxConfig::FakeHiveTablets, false); 
+                SetAllowLogBatching(runtime, TTestTxConfig::FakeHiveTablets+1, false); 
 
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
                                    {NLs::PartitionKeys({"A", ""})});

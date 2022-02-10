@@ -401,7 +401,7 @@ void TClusterInfo::AddTablet(ui32 nodeId, const NKikimrWhiteboard::TTabletStateI
     tablet.TabletId = info.GetTabletId();
     tablet.Type = info.GetType();
     tablet.State = info.GetState();
-    tablet.Leader = info.GetLeader();
+    tablet.Leader = info.GetLeader(); 
     tablet.NodeId = nodeId;
 
     auto &node = NodeRef(nodeId);

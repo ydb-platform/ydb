@@ -1169,9 +1169,9 @@ void TTabletPipePeNodeCachesInitializer::InitializeServices(
 {
     auto counters = GetServiceCounters(appData->Counters, "tablets");
 
-    TIntrusivePtr<TPipePeNodeCacheConfig> leaderPipeConfig = new TPipePeNodeCacheConfig();
-    leaderPipeConfig->PipeRefreshTime = TDuration::Zero();
-    leaderPipeConfig->PipeConfig.RetryPolicy = {.RetryLimitCount = 3};
+    TIntrusivePtr<TPipePeNodeCacheConfig> leaderPipeConfig = new TPipePeNodeCacheConfig(); 
+    leaderPipeConfig->PipeRefreshTime = TDuration::Zero(); 
+    leaderPipeConfig->PipeConfig.RetryPolicy = {.RetryLimitCount = 3}; 
     leaderPipeConfig->Counters = counters->GetSubgroup("type", "LEADER_PIPE_CACHE");
 
     TIntrusivePtr<TPipePeNodeCacheConfig> followerPipeConfig = new TPipePeNodeCacheConfig();
@@ -1318,8 +1318,8 @@ void TBootstrapperInitializer::InitializeServices(
                                     bi->OtherNodes.push_back(x);
                             if (boot.HasWatchThreshold())
                                 bi->WatchThreshold = TDuration::MilliSeconds(boot.GetWatchThreshold());
-                            if (boot.HasStartFollowers())
-                                bi->StartFollowers = boot.GetStartFollowers();
+                            if (boot.HasStartFollowers()) 
+                                bi->StartFollowers = boot.GetStartFollowers(); 
                         }
 
                         setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeBootstrapperID(info->TabletID, bootstrapperNode), TActorSetupCmd(CreateBootstrapper(info.Get(), bi.Get(), standby), TMailboxType::HTSwap, appData->SystemPoolId)));

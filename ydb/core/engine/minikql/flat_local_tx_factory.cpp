@@ -10,19 +10,19 @@ namespace NMiniKQL {
 
 using ITransaction = TMiniKQLFactory::ITransaction;
 
-TAutoPtr<ITransaction> TMiniKQLFactory::Make(TEvTablet::TEvLocalMKQL::TPtr &ev)
+TAutoPtr<ITransaction> TMiniKQLFactory::Make(TEvTablet::TEvLocalMKQL::TPtr &ev) 
 {
     TLocalMiniKQLProgram program(*ev->Get());
 
     return new TFlatLocalMiniKQL(ev->Sender, program, this);
 }
 
-TAutoPtr<ITransaction> TMiniKQLFactory::Make(TEvTablet::TEvLocalSchemeTx::TPtr &ev)
+TAutoPtr<ITransaction> TMiniKQLFactory::Make(TEvTablet::TEvLocalSchemeTx::TPtr &ev) 
 {
     return new TFlatLocalSchemeTx(ev->Sender, ev);
 }
 
-TAutoPtr<ITransaction> TMiniKQLFactory::Make(TEvTablet::TEvLocalReadColumns::TPtr &ev)
+TAutoPtr<ITransaction> TMiniKQLFactory::Make(TEvTablet::TEvLocalReadColumns::TPtr &ev) 
 {
     return new TFlatLocalReadColumns(ev->Sender, ev);
 }

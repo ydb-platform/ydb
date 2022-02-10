@@ -51,13 +51,13 @@ struct Schema : NIceDb::Schema {
 
     struct OldTablet : Table<1> {
         struct ID : Column<0, NScheme::NTypeIds::Uint64> {};
-        struct FollowerCount : Column<14, NScheme::NTypeIds::Uint32> { static constexpr ui32 Default = 0; };
-        struct AllowFollowerPromotion : Column<15, NScheme::NTypeIds::Bool> { static constexpr bool Default = false; };
-        struct CrossDataCenterFollowers : Column<16, NScheme::NTypeIds::Bool> { static constexpr bool Default = false; };
-        struct CrossDataCenterFollowerCount : Column<18, NScheme::NTypeIds::Uint32> { static constexpr ui32 Default = 0; };
+        struct FollowerCount : Column<14, NScheme::NTypeIds::Uint32> { static constexpr ui32 Default = 0; }; 
+        struct AllowFollowerPromotion : Column<15, NScheme::NTypeIds::Bool> { static constexpr bool Default = false; }; 
+        struct CrossDataCenterFollowers : Column<16, NScheme::NTypeIds::Bool> { static constexpr bool Default = false; }; 
+        struct CrossDataCenterFollowerCount : Column<18, NScheme::NTypeIds::Uint32> { static constexpr ui32 Default = 0; }; 
 
         using TKey = TableKey<ID>;
-        using TColumns = TableColumns<ID, FollowerCount, AllowFollowerPromotion, CrossDataCenterFollowers, CrossDataCenterFollowerCount>;
+        using TColumns = TableColumns<ID, FollowerCount, AllowFollowerPromotion, CrossDataCenterFollowers, CrossDataCenterFollowerCount>; 
     };
 
     struct Tablet : Table<1> {
@@ -65,7 +65,7 @@ struct Schema : NIceDb::Schema {
         struct Owner : Column<1, NScheme::NTypeIds::PairUi64Ui64> {};
         struct KnownGeneration : Column<2, NScheme::NTypeIds::Uint64> {};
         struct TabletType : Column<3, NScheme::NTypeIds::Uint64> { using Type = TTabletTypes::EType;  };
-        struct LeaderNode : Column<4, NScheme::NTypeIds::Uint64> {};
+        struct LeaderNode : Column<4, NScheme::NTypeIds::Uint64> {}; 
         struct State : Column<5, NScheme::NTypeIds::Uint64> { using Type = ETabletState; };
         struct AllowedNodes : Column<7, NScheme::NTypeIds::String> { using Type = TVector<TNodeId>; };
         struct ActorToNotify : Column<11, NScheme::NTypeIds::ActorId> {}; // deprecated because of ActorsToNotify down here
@@ -98,7 +98,7 @@ struct Schema : NIceDb::Schema {
             Owner,
             KnownGeneration,
             TabletType,
-            LeaderNode,
+            LeaderNode, 
             State,
             AllowedNodes,
             ActorToNotify,
@@ -121,34 +121,34 @@ struct Schema : NIceDb::Schema {
         >;
     };
 
-    struct TabletFollowerGroup : Table<9> {
+    struct TabletFollowerGroup : Table<9> { 
         struct TabletID : Column<1, Schema::Tablet::ID::ColumnType> {};
         struct GroupID : Column<2, NScheme::NTypeIds::Uint32> {};
-        struct FollowerCount : Column<3, NScheme::NTypeIds::Uint32> {};
-        struct AllowLeaderPromotion : Column<4, NScheme::NTypeIds::Bool> { static constexpr bool Default = false; };
+        struct FollowerCount : Column<3, NScheme::NTypeIds::Uint32> {}; 
+        struct AllowLeaderPromotion : Column<4, NScheme::NTypeIds::Bool> { static constexpr bool Default = false; }; 
         struct AllowClientRead : Column<5, NScheme::NTypeIds::Bool> { static constexpr bool Default = false; };
         struct AllowedNodes : Column<6, NScheme::NTypeIds::String> { using Type = TVector<TNodeId>; };
         struct AllowedDataCenters : Column<7, NScheme::NTypeIds::String> { using Type = TVector<ui32>; };
         struct RequireAllDataCenters : Column<8, NScheme::NTypeIds::Bool> {};
         struct LocalNodeOnly : Column<9, NScheme::NTypeIds::Bool> { static constexpr bool Default = false; };
-        struct FollowerCountPerDataCenter : Column<10, NScheme::NTypeIds::Bool> { static constexpr bool Default = false; };
+        struct FollowerCountPerDataCenter : Column<10, NScheme::NTypeIds::Bool> { static constexpr bool Default = false; }; 
         struct RequireDifferentNodes : Column<11, NScheme::NTypeIds::Bool> {};
         struct AllowedDataCenterIds : Column<12, NScheme::NTypeIds::String> { using Type = TVector<TString>; };
 
         using TKey = TableKey<TabletID, GroupID>;
-        using TColumns = TableColumns<TabletID, GroupID, FollowerCount, AllowLeaderPromotion, AllowClientRead,
+        using TColumns = TableColumns<TabletID, GroupID, FollowerCount, AllowLeaderPromotion, AllowClientRead, 
                                       AllowedNodes, AllowedDataCenters, RequireAllDataCenters, LocalNodeOnly,
                                       FollowerCountPerDataCenter, RequireDifferentNodes, AllowedDataCenterIds>;
     };
 
-    struct TabletFollowerTablet : Table<10> {
+    struct TabletFollowerTablet : Table<10> { 
         struct TabletID : Column<1, Schema::Tablet::ID::ColumnType> {};
-        struct FollowerID : Column<2, NScheme::NTypeIds::Uint32> {};
-        struct GroupID : Column<3, Schema::TabletFollowerGroup::GroupID::ColumnType> {};
-        struct FollowerNode : Column<4, NScheme::NTypeIds::Uint32> {};
+        struct FollowerID : Column<2, NScheme::NTypeIds::Uint32> {}; 
+        struct GroupID : Column<3, Schema::TabletFollowerGroup::GroupID::ColumnType> {}; 
+        struct FollowerNode : Column<4, NScheme::NTypeIds::Uint32> {}; 
         struct Statistics : Column<5, NScheme::NTypeIds::String> { using Type = NKikimrHive::TTabletStatistics; };
 
-        using TKey = TableKey<TabletID, FollowerID>;
+        using TKey = TableKey<TabletID, FollowerID>; 
         using TColumns = TableColumns<TabletID, GroupID, FollowerID, FollowerNode, Statistics>;
     };
 
@@ -216,15 +216,15 @@ struct Schema : NIceDb::Schema {
 
     struct Metrics : Table<16> {
         struct TabletID : Column<1, Tablet::ID::ColumnType> {};
-        struct FollowerID : Column<2, TabletFollowerTablet::FollowerID::ColumnType> {};
+        struct FollowerID : Column<2, TabletFollowerTablet::FollowerID::ColumnType> {}; 
         struct ProtoMetrics : Column<3, NScheme::NTypeIds::String> { using Type = NKikimrTabletBase::TMetrics; };
 
         struct MaximumCPU : Column<100 + (int)NMetrics::EResource::CPU, NScheme::NTypeIds::String> { using Type = NKikimrMetricsProto::TMaximumValueUI64; };
         struct MaximumMemory : Column<100 + (int)NMetrics::EResource::Memory, NScheme::NTypeIds::String> { using Type = NKikimrMetricsProto::TMaximumValueUI64; };
         struct MaximumNetwork : Column<100 + (int)NMetrics::EResource::Network, NScheme::NTypeIds::String> { using Type = NKikimrMetricsProto::TMaximumValueUI64; };
 
-        using TKey = TableKey<TabletID, FollowerID>;
-        using TColumns = TableColumns<TabletID, FollowerID, ProtoMetrics, MaximumCPU, MaximumMemory, MaximumNetwork>;
+        using TKey = TableKey<TabletID, FollowerID>; 
+        using TColumns = TableColumns<TabletID, FollowerID, ProtoMetrics, MaximumCPU, MaximumMemory, MaximumNetwork>; 
     };
 
     struct TabletTypeMetrics : Table<13> {
@@ -291,8 +291,8 @@ struct Schema : NIceDb::Schema {
                                 TabletChannelGen,
                                 Node,
                                 TabletCategory,
-                                TabletFollowerGroup,
-                                TabletFollowerTablet,
+                                TabletFollowerGroup, 
+                                TabletFollowerTablet, 
                                 TabletTypeMetrics,
                                 Sequences,
                                 Metrics,

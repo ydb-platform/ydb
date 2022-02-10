@@ -32,7 +32,7 @@ public:
     void Boot() {
         const TActorId edge = Context->AllocateEdgeActor();
 
-        NKikimr::TPathId rootPathId(TTestTxConfig::SchemeShard, RootPathId);
+        NKikimr::TPathId rootPathId(TTestTxConfig::SchemeShard, RootPathId); 
 
         Context->CreateSubscriber(edge, rootPathId);
         auto ev = Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotifyUpdate>(edge);
@@ -48,7 +48,7 @@ public:
         TestMkDir(*Context, 100, "/Root", "DirA");
         auto describe = DescribePath(*Context, "/Root/DirA");
 
-        NKikimr::TPathId pathId(TTestTxConfig::SchemeShard, describe.GetPathId());
+        NKikimr::TPathId pathId(TTestTxConfig::SchemeShard, describe.GetPathId()); 
 
         Context->CreateSubscriber(edge, pathId);
         auto ev = Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotifyUpdate>(edge);
@@ -64,7 +64,7 @@ public:
         TestMkDir(*Context, 100, "/Root", "DirB");
         auto describe = DescribePath(*Context, "/Root/DirB");
 
-        NKikimr::TPathId pathId(TTestTxConfig::SchemeShard, describe.GetPathId());
+        NKikimr::TPathId pathId(TTestTxConfig::SchemeShard, describe.GetPathId()); 
 
         Context->CreateSubscriber<TSchemeBoardEvents::TEvNotifyUpdate>(edge, pathId);
         TestRmDir(*Context, 101, "/Root", "DirB");
@@ -114,7 +114,7 @@ public:
     void UpdateAck() {
         DropFirstAcks = true;
         TestMkDir(*Context, 100, "/Root", "DirC");
-        TestWaitNotification(*Context, {100}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard));
+        TestWaitNotification(*Context, {100}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard)); 
     }
 
 private:

@@ -35,18 +35,18 @@ Y_UNIT_TEST_SUITE(TBSV) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
                            {NLs::PathNotExist});
 
-        env.TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1});
+        env.TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1}); 
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::Finished, NLs::PathsInsideDomain(0), NLs::ShardsInsideDomain(0)});
 
         TActorId sender = runtime.AllocateEdgeActor();
-        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender); 
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
                            {NLs::PathNotExist});
 
-        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender); 
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
                            {NLs::PathNotExist});
@@ -76,13 +76,13 @@ Y_UNIT_TEST_SUITE(TBSV) {
         TestDropBlockStoreVolume(runtime, ++txId, "/MyRoot", "BSVolume");
         env.TestWaitNotification(runtime, txId);
 
-        env.TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1});
+        env.TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1}); 
 
         {
             // Read user table schema from new shard;
             NKikimrMiniKQL::TResult result;
             TString err;
-            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, TTestTxConfig::SchemeShard, R"(
+            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, TTestTxConfig::SchemeShard, R"( 
                                     (
                                         (let range '('('ShardIdx (Uint64 '0) (Void))))
                                         (let select '('ShardIdx))

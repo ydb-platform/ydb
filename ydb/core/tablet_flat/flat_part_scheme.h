@@ -50,7 +50,7 @@ namespace NTable {
 
         TPartScheme(const TPartScheme &scheme) = delete;
         explicit TPartScheme(TArrayRef<const TColInfo> cols);
-        static TIntrusiveConstPtr<TPartScheme> Parse(TArrayRef<const char>, bool labeled);
+        static TIntrusiveConstPtr<TPartScheme> Parse(TArrayRef<const char>, bool labeled); 
 
         /**
          * Makes a sorted pin mapping for non-key columns
@@ -128,7 +128,7 @@ namespace NTable {
 
         TGroupInfo HistoryGroup;
         TVector<TColumn> HistoryColumns;
-        TIntrusiveConstPtr<TKeyNulls> HistoryKeys;
+        TIntrusiveConstPtr<TKeyNulls> HistoryKeys; 
 
     private:
         THashMap<TTag, const TColumn*> Tag2DataInfo;

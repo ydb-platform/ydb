@@ -14,7 +14,7 @@ public:
         Reads,
     };
 
-    TCleanupActor(const TQueuePath& queuePath, const TActorId& queueLeader, ECleanupType cleanupType);
+    TCleanupActor(const TQueuePath& queuePath, const TActorId& queueLeader, ECleanupType cleanupType); 
     ~TCleanupActor();
 
     void Bootstrap();
@@ -40,7 +40,7 @@ private:
 private:
     const TQueuePath QueuePath_;
     const TString RequestId_;
-    const TActorId QueueLeader_;
+    const TActorId QueueLeader_; 
     const ECleanupType CleanupType;
     TString KeyRangeStart;
 };

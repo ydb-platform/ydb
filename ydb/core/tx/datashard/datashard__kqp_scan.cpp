@@ -25,7 +25,7 @@ constexpr ui64 READAHEAD_HI = 512_KB;
 constexpr TDuration SCAN_HARD_TIMEOUT = TDuration::Minutes(10);
 constexpr TDuration SCAN_HARD_TIMEOUT_GAP = TDuration::Seconds(5);
 
-class TKqpScanResult : public IDestructable {};
+class TKqpScanResult : public IDestructable {}; 
 
 class TKqpScan : public TActor<TKqpScan>, public NTable::IScan {
 public:
@@ -180,7 +180,7 @@ private:
     }
 
 private:
-    THello Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) noexcept final {
+    THello Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) noexcept final { 
         Y_VERIFY(scheme);
         Y_VERIFY(driver);
 
@@ -329,7 +329,7 @@ private:
     }
 
 private:
-    TAutoPtr<IDestructable> Finish(EAbort abort) noexcept final {
+    TAutoPtr<IDestructable> Finish(EAbort abort) noexcept final { 
         auto prio = abort == EAbort::None ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_ERROR;
         LOG_LOG_S(*TlsActivationContext, prio, NKikimrServices::TX_DATASHARD, "Finish scan"
             << ", at: " << ScanActorId << ", scanId: " << ScanId

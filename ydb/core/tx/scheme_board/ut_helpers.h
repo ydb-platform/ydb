@@ -201,7 +201,7 @@ class TTestWithSchemeshard: public NUnitTest::TTestBase {
         }
 
         TAppPrepare app;
-        AddDomain(runtime, app, "Root", 0, 0, TTestTxConfig::Hive, TTestTxConfig::SchemeShard);
+        AddDomain(runtime, app, "Root", 0, 0, TTestTxConfig::Hive, TTestTxConfig::SchemeShard); 
         SetupChannelProfiles(app, 0, 1);
         SetupTabletServices(runtime, &app, true);
     }
@@ -209,7 +209,7 @@ class TTestWithSchemeshard: public NUnitTest::TTestBase {
     static void BootSchemeShard(TTestActorRuntime& runtime, ui64 tabletId) {
         using namespace NSchemeShard;
 
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(tabletId, TTabletTypes::FLAT_SCHEMESHARD), &CreateFlatTxSchemeShard);
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(tabletId, TTabletTypes::FLAT_SCHEMESHARD), &CreateFlatTxSchemeShard); 
 
         const TActorId edge = runtime.AllocateEdgeActor();
 
@@ -223,7 +223,7 @@ class TTestWithSchemeshard: public NUnitTest::TTestBase {
     }
 
     static void BootTxAllocator(TTestActorRuntime& runtime, ui64 tabletId) {
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(tabletId, TTabletTypes::TX_ALLOCATOR), &CreateTxAllocator);
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(tabletId, TTabletTypes::TX_ALLOCATOR), &CreateTxAllocator); 
     }
 
     void BootCoordinator(TTestActorRuntime& runtime, ui64 tabletId) {
@@ -247,10 +247,10 @@ public:
         Context->SetObserverFunc(ObserverFunc());
 
         SetupRuntime(*Context);
-        BootSchemeShard(*Context, TTestTxConfig::SchemeShard);
-        BootTxAllocator(*Context, TTestTxConfig::TxAllocator);
-        BootCoordinator(*Context, TTestTxConfig::Coordinator);
-        BootHive(*Context, TTestTxConfig::Hive);
+        BootSchemeShard(*Context, TTestTxConfig::SchemeShard); 
+        BootTxAllocator(*Context, TTestTxConfig::TxAllocator); 
+        BootCoordinator(*Context, TTestTxConfig::Coordinator); 
+        BootHive(*Context, TTestTxConfig::Hive); 
     }
 
     void TurnOnTabletsScheduling() {
@@ -260,8 +260,8 @@ public:
 
         TActorId sender = Context->AllocateEdgeActor();
         TVector<ui64> tabletIds;
-        tabletIds.push_back((ui64)TTestTxConfig::SchemeShard);
-        for (auto x: xrange(TTestTxConfig::FakeHiveTablets,  TTestTxConfig::FakeHiveTablets + 10)) {
+        tabletIds.push_back((ui64)TTestTxConfig::SchemeShard); 
+        for (auto x: xrange(TTestTxConfig::FakeHiveTablets,  TTestTxConfig::FakeHiveTablets + 10)) { 
             tabletIds.push_back(x);
         }
 
@@ -269,7 +269,7 @@ public:
 
         // make schemeShard visible for ScheduledEventsGuard
         // trigger actor resolving for existed tablet
-        RebootTablet(*Context, (ui64)TTestTxConfig::SchemeShard, sender);
+        RebootTablet(*Context, (ui64)TTestTxConfig::SchemeShard, sender); 
     }
 
     void TearDown() override {

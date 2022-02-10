@@ -9,15 +9,15 @@
 namespace NKikimr {
 
 template<typename T>
-bool ParsePBFromFile(const TString &path, T *pb, bool allowUnknown = false) {
+bool ParsePBFromFile(const TString &path, T *pb, bool allowUnknown = false) { 
     TAutoPtr<TMappedFileInput> fileInput(new TMappedFileInput(path));
     const TString content = fileInput->ReadAll();
-    if (!allowUnknown)
-        return ::google::protobuf::TextFormat::ParseFromString(content, pb);
-    
-    ::google::protobuf::TextFormat::Parser parser;
-    parser.AllowUnknownField(true);
-    return parser.ParseFromString(content, pb);
+    if (!allowUnknown) 
+        return ::google::protobuf::TextFormat::ParseFromString(content, pb); 
+     
+    ::google::protobuf::TextFormat::Parser parser; 
+    parser.AllowUnknownField(true); 
+    return parser.ParseFromString(content, pb); 
 }
 
 template<typename T>

@@ -12,10 +12,10 @@
 
 namespace NKikimr::NSQS {
 
-TRetentionActor::TRetentionActor(const TQueuePath& queuePath, const TActorId& queueLeader)
+TRetentionActor::TRetentionActor(const TQueuePath& queuePath, const TActorId& queueLeader) 
     : QueuePath_(queuePath)
     , RequestId_(CreateGuidAsString())
-    , QueueLeader_(queueLeader)
+    , QueueLeader_(queueLeader) 
 {
     DebugInfo->QueueRetentionActors.emplace(TStringBuilder() << TLogQueueName(QueuePath_), this);
 }
@@ -53,7 +53,7 @@ void TRetentionActor::SetRetentionBoundary() {
 
                 RLOG_SQS_INFO("Set retention boundary for queue " << TLogQueueName(QueuePath_, req->Shard) << " to " << req->Boundary.MilliSeconds() << " (" << req->Boundary << ")");
 
-                Send(QueueLeader_, std::move(req));
+                Send(QueueLeader_, std::move(req)); 
             }
         } else {
             RLOG_SQS_ERROR("Failed to set retention boundary for queue " << TLogQueueName(QueuePath_));
@@ -65,7 +65,7 @@ void TRetentionActor::SetRetentionBoundary() {
     TExecutorBuilder(SelfId(), RequestId_)
         .User(QueuePath_.UserName)
         .Queue(QueuePath_.QueueName)
-        .QueueLeader(QueueLeader_)
+        .QueueLeader(QueueLeader_) 
         .QueryId(SET_RETENTION_ID)
         .RetryOnTimeout()
         .OnExecuted(onExecuted)

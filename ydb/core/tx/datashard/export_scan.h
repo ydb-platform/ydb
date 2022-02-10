@@ -70,7 +70,7 @@ struct TEvExportScan {
 
 }; // TEvExportScan
 
-struct TExportScanProduct: public IDestructable {
+struct TExportScanProduct: public IDestructable { 
     bool Success;
     TString Error;
     ui64 BytesRead;

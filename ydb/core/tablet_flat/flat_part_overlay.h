@@ -8,13 +8,13 @@ namespace NKikimr {
 namespace NTable {
 
     struct TOverlay {
-        static TOverlay Decode(TArrayRef<const char> opaque, TArrayRef<const char> ext) noexcept;
+        static TOverlay Decode(TArrayRef<const char> opaque, TArrayRef<const char> ext) noexcept; 
         TString Encode() const noexcept;
         void Validate() const noexcept;
 
-        void ApplyDelta(TArrayRef<const char> delta) noexcept;
+        void ApplyDelta(TArrayRef<const char> delta) noexcept; 
 
-        static TString EncodeRemoveSlices(const TIntrusiveConstPtr<TSlices>& slices) noexcept;
+        static TString EncodeRemoveSlices(const TIntrusiveConstPtr<TSlices>& slices) noexcept; 
         static TString EncodeChangeSlices(TConstArrayRef<TSlice> slices) noexcept;
 
         /**
@@ -24,8 +24,8 @@ namespace NTable {
          */
         static TString MaybeUnsplitSlices(const TString& opaque, size_t maxSize = 1024 * 1024) noexcept;
 
-        TIntrusiveConstPtr<TScreen> Screen;
-        TIntrusiveConstPtr<TSlices> Slices;
+        TIntrusiveConstPtr<TScreen> Screen; 
+        TIntrusiveConstPtr<TSlices> Slices; 
     };
 
 }

@@ -105,7 +105,7 @@ bool TExecutorBorrowLogic::BundlePartiallyCompacted(
         }
     }
 
-    Y_VERIFY(commit->WaitFollowerGcAck);
+    Y_VERIFY(commit->WaitFollowerGcAck); 
 
     if (haveChanges) {
         StoreBorrowProto(metaId, *info, commit);
@@ -147,7 +147,7 @@ bool TExecutorBorrowLogic::BundleCompacted(
     }
 
     CheckLoanCompletion(metaId, *info, commit->Step);
-    Y_VERIFY(commit->WaitFollowerGcAck);
+    Y_VERIFY(commit->WaitFollowerGcAck); 
 
     // must be loaned or borrowed (otherwise would be not on list)
     // in this case - changes must be propagated to lender before cleanup
@@ -209,7 +209,7 @@ bool TExecutorBorrowLogic::BundleCompacted(
     }
 
     CheckLoanCompletion(bundleId, *info, commit->Step);
-    Y_VERIFY(commit->WaitFollowerGcAck);
+    Y_VERIFY(commit->WaitFollowerGcAck); 
 
     // must be loaned or borrowed (otherwise would be not on list)
     // in this case - changes must be propagated to lender before cleanup
@@ -403,7 +403,7 @@ void TExecutorBorrowLogic::UpdateBorrow(
         // if not local - must be loaned
         CheckLoanCompletion(metaInfoId, storedInfo, commit->Step);
         StoreBorrowProto(metaInfoId, storedInfo, commit);
-        Y_VERIFY(commit->WaitFollowerGcAck);
+        Y_VERIFY(commit->WaitFollowerGcAck); 
     }
 }
 
@@ -442,7 +442,7 @@ void TExecutorBorrowLogic::ConfirmUpdateLoan(
     HasFlag = !BorrowedInfo.empty();
 }
 
-void TExecutorBorrowLogic::RestoreFollowerBorrowedInfo(const TLogoBlobID &blobId, const NKikimrExecutorFlat::TBorrowedPart &proto) {
+void TExecutorBorrowLogic::RestoreFollowerBorrowedInfo(const TLogoBlobID &blobId, const NKikimrExecutorFlat::TBorrowedPart &proto) { 
     Y_UNUSED(blobId);
     const TLogoBlobID metaInfoId = LogoBlobIDFromLogoBlobID(proto.GetMetaId());
 

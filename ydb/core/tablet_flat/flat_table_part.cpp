@@ -29,7 +29,7 @@ TPartScheme::TPartScheme(TArrayRef<const TColInfo> cols)
     FillHistoricSlots();
 }
 
-TIntrusiveConstPtr<TPartScheme> TPartScheme::Parse(TArrayRef<const char> raw, bool labeled)
+TIntrusiveConstPtr<TPartScheme> TPartScheme::Parse(TArrayRef<const char> raw, bool labeled) 
 {
     if (labeled) {
         /* New styled scheme blob prepended with generic TLabel data */

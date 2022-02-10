@@ -136,8 +136,8 @@ enum ESimpleCounters {
 
     COUNTER_STREAM_SHARDS_COUNT = 112                     [(CounterOpts) = {Name: "StreamShardsCount"}];
     COUNTER_STREAM_SHARDS_QUOTA = 113                     [(CounterOpts) = {Name: "StreamShardsQuota"}];
-
-    COUNTER_BACKGROUND_COMPACTION_QUEUE_SIZE = 114        [(CounterOpts) = {Name: "BackgroundCompactionQueueSize"}];
+ 
+    COUNTER_BACKGROUND_COMPACTION_QUEUE_SIZE = 114        [(CounterOpts) = {Name: "BackgroundCompactionQueueSize"}]; 
 
     COUNTER_STREAM_RESERVED_THROUGHPUT = 115              [(CounterOpts) = {Name: "StreamReservedThroughput"}];
     COUNTER_STREAM_RESERVED_STORAGE = 116                 [(CounterOpts) = {Name: "StreamReservedStorage"}];
@@ -227,10 +227,10 @@ enum ECumulativeCounters {
     COUNTER_FINISHED_OPS_TxCreateSequence = 64            [(CounterOpts) = {Name: "FinishedOps/CreateSequence"}];
     COUNTER_FINISHED_OPS_TxAlterSequence = 65             [(CounterOpts) = {Name: "FinishedOps/AlterSequence"}];
     COUNTER_FINISHED_OPS_TxDropSequence = 66              [(CounterOpts) = {Name: "FinishedOps/DropSequence"}];
-
-    COUNTER_BACKGROUND_COMPACTION_FAILED = 67             [(CounterOpts) = {Name: "BackgroundCompactionFailed"}];
-    COUNTER_BACKGROUND_COMPACTION_OK = 68                 [(CounterOpts) = {Name: "BackgroundCompactionOK"}];
-    COUNTER_BACKGROUND_COMPACTION_TIMEOUT = 69            [(CounterOpts) = {Name: "BackgroundCompactionTimeout"}];
+ 
+    COUNTER_BACKGROUND_COMPACTION_FAILED = 67             [(CounterOpts) = {Name: "BackgroundCompactionFailed"}]; 
+    COUNTER_BACKGROUND_COMPACTION_OK = 68                 [(CounterOpts) = {Name: "BackgroundCompactionOK"}]; 
+    COUNTER_BACKGROUND_COMPACTION_TIMEOUT = 69            [(CounterOpts) = {Name: "BackgroundCompactionTimeout"}]; 
 
     COUNTER_FINISHED_OPS_TxCreateReplication = 70         [(CounterOpts) = {Name: "FinishedOps/CreateReplication"}];
     COUNTER_FINISHED_OPS_TxAlterReplication = 71          [(CounterOpts) = {Name: "FinishedOps/AlterReplication"}];
@@ -239,27 +239,27 @@ enum ECumulativeCounters {
 
 enum EPercentileCounters {
     option (GlobalCounterOpts) = {
-        Ranges { Value: 0           Name: "(1) < 500 us"        }
-        Ranges { Value: 500         Name: "(2) 0.5-1 ms"        }
-        Ranges { Value: 1000        Name: "(3) 1-2 ms"          }
-        Ranges { Value: 2000        Name: "(4) 2-4 ms"          }
-        Ranges { Value: 4000        Name: "(5) 4-8 ms"          }
-        Ranges { Value: 8000        Name: "(6) 8-16 ms"         }
-        Ranges { Value: 16000       Name: "(7) 16-32 ms"        }
-        Ranges { Value: 32000       Name: "(8) 32-64 ms"        }
-        Ranges { Value: 64000       Name: "(9) 64-128 ms"       }
-        Ranges { Value: 128000      Name: "(10) 128-256 ms"     }
-        Ranges { Value: 256000      Name: "(11) 256-512 ms"     }
-        Ranges { Value: 512000      Name: "(12) 512-1024 ms"    }
-        Ranges { Value: 1024000     Name: "(13) 1024-2000 ms"   }
-        Ranges { Value: 2000000     Name: "(14) 2-4 s"          }
-        Ranges { Value: 4000000     Name: "(15) 4-8 s"          }
-        Ranges { Value: 8000000     Name: "(16) 8-16 s"         }
-        Ranges { Value: 16000000    Name: "(17) 16-32 s"        }
-        Ranges { Value: 32000000    Name: "(18) 32 < s"         }
+        Ranges { Value: 0           Name: "(1) < 500 us"        } 
+        Ranges { Value: 500         Name: "(2) 0.5-1 ms"        } 
+        Ranges { Value: 1000        Name: "(3) 1-2 ms"          } 
+        Ranges { Value: 2000        Name: "(4) 2-4 ms"          } 
+        Ranges { Value: 4000        Name: "(5) 4-8 ms"          } 
+        Ranges { Value: 8000        Name: "(6) 8-16 ms"         } 
+        Ranges { Value: 16000       Name: "(7) 16-32 ms"        } 
+        Ranges { Value: 32000       Name: "(8) 32-64 ms"        } 
+        Ranges { Value: 64000       Name: "(9) 64-128 ms"       } 
+        Ranges { Value: 128000      Name: "(10) 128-256 ms"     } 
+        Ranges { Value: 256000      Name: "(11) 256-512 ms"     } 
+        Ranges { Value: 512000      Name: "(12) 512-1024 ms"    } 
+        Ranges { Value: 1024000     Name: "(13) 1024-2000 ms"   } 
+        Ranges { Value: 2000000     Name: "(14) 2-4 s"          } 
+        Ranges { Value: 4000000     Name: "(15) 4-8 s"          } 
+        Ranges { Value: 8000000     Name: "(16) 8-16 s"         } 
+        Ranges { Value: 16000000    Name: "(17) 16-32 s"        } 
+        Ranges { Value: 32000000    Name: "(18) 32 < s"         } 
     };
 
-    COUNTER_BACKGROUND_COMPACTION_OK_LATENCY = 0          [(CounterOpts) = {Name: "BackgroundCompactionOkLatency"}];
+    COUNTER_BACKGROUND_COMPACTION_OK_LATENCY = 0          [(CounterOpts) = {Name: "BackgroundCompactionOkLatency"}]; 
 
     COUNTER_NUM_SHARDS_BY_TTL_LAG = 1 [(CounterOpts) = {
         Name: "NumShardsByTtlLag"

@@ -130,8 +130,8 @@ TBusResponse* ProposeTransactionStatusToResponse(EResponseStatus status,
         response->Record.MutableComplainingDataShards()->CopyFrom(result.GetComplainingDataShards());
     if (result.UnresolvedKeysSize())
         response->Record.MutableUnresolvedKeys()->CopyFrom(result.GetUnresolvedKeys());
-    if (result.HasHadFollowerReads())
-        response->Record.SetHadFollowerReads(result.GetHadFollowerReads());
+    if (result.HasHadFollowerReads()) 
+        response->Record.SetHadFollowerReads(result.GetHadFollowerReads()); 
 
     if (result.HasTxId())
         response->Record.SetTxId(result.GetTxId());

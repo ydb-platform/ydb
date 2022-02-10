@@ -2067,7 +2067,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         AssertSuccessResult(session.ExecuteSchemeQuery(R"(
             --!syntax_v1
-            CREATE TABLE `FollowersKv` (
+            CREATE TABLE `FollowersKv` ( 
                 Key Uint64,
                 Value String,
                 PRIMARY KEY (Key)
@@ -2082,7 +2082,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
             --!syntax_v1
             PRAGMA kikimr.UseNewEngine = "true";
 
-            REPLACE INTO `FollowersKv` (Key, Value) VALUES
+            REPLACE INTO `FollowersKv` (Key, Value) VALUES 
                 (1u, "One"),
                 (11u, "Two"),
                 (21u, "Three"),
@@ -2093,11 +2093,11 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::PIPE_CLIENT, NActors::NLog::PRI_DEBUG);
         //kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::PIPE_SERVER, NActors::NLog::PRI_DEBUG);
 
-        // Followers immediate
+        // Followers immediate 
         auto result = session.ExecuteDataQuery(R"(
             --!syntax_v1
             PRAGMA kikimr.UseNewEngine = "true";
-            SELECT * FROM FollowersKv WHERE Key = 21;
+            SELECT * FROM FollowersKv WHERE Key = 21; 
         )", TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx()).ExtractValueSync();
         AssertSuccessResult(result);
 
@@ -2107,11 +2107,11 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
             ]
         )", FormatResultSetYson(result.GetResultSet(0)));
 
-        // Followers distributed
+        // Followers distributed 
         result = session.ExecuteDataQuery(R"(
             --!syntax_v1
             PRAGMA kikimr.UseNewEngine = "true";
-            SELECT * FROM FollowersKv WHERE Value != "One" ORDER BY Key;
+            SELECT * FROM FollowersKv WHERE Value != "One" ORDER BY Key; 
         )", TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx()).ExtractValueSync();
         AssertSuccessResult(result);
 
@@ -2123,7 +2123,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
             ]
         )", FormatResultSetYson(result.GetResultSet(0)));
 
-        // No followers immediate
+        // No followers immediate 
         result = session.ExecuteDataQuery(R"(
             --!syntax_v1
             PRAGMA kikimr.UseNewEngine = "true";
@@ -2137,7 +2137,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
             ]
         )", FormatResultSetYson(result.GetResultSet(0)));
 
-        // No followers distributed
+        // No followers distributed 
         result = session.ExecuteDataQuery(R"(
             --!syntax_v1
             PRAGMA kikimr.UseNewEngine = "true";

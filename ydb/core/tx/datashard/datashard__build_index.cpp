@@ -254,7 +254,7 @@ public:
 
     ~TBuildIndexScan() override = default;
 
-    THello Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) noexcept override {
+    THello Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) noexcept override { 
         auto selfActorId = TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
         auto ctx = TActivationContext::AsActorContext().MakeFor(selfActorId);
 
@@ -332,7 +332,7 @@ public:
         return EScan::Feed;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort) noexcept override {
+    TAutoPtr<IDestructable> Finish(EAbort abort) noexcept override { 
         auto ctx = TActivationContext::AsActorContext().MakeFor(SelfId());
 
         if (Uploader) {
@@ -527,7 +527,7 @@ private:
     }
 };
 
-TAutoPtr<NTable::IScan> CreateBuildIndexScan(
+TAutoPtr<NTable::IScan> CreateBuildIndexScan( 
         ui64 buildIndexId,
         TString target,
         const TBuildIndexRecord::TSeqNo& seqNo,

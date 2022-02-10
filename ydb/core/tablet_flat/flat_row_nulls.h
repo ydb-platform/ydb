@@ -27,7 +27,7 @@ namespace NTable {
 
     protected:
         template<class TSelf>
-        static TIntrusiveConstPtr<TSelf> Make(
+        static TIntrusiveConstPtr<TSelf> Make( 
                 TArrayRef<const TType> types,
                 TArrayRef<const TOrder> order,
                 TArrayRef<const TCell> defs) noexcept
@@ -117,7 +117,7 @@ namespace NTable {
         }
 
     public:
-        static TIntrusiveConstPtr<TRowNulls> Make(
+        static TIntrusiveConstPtr<TRowNulls> Make( 
                 TArrayRef<const TType> types,
                 TArrayRef<const TCell> defs) noexcept
         {
@@ -142,7 +142,7 @@ namespace NTable {
         }
 
     public:
-        static TIntrusiveConstPtr<TKeyNulls> Make(
+        static TIntrusiveConstPtr<TKeyNulls> Make( 
                 TArrayRef<const TOrder> order,
                 TArrayRef<const TCell> defs) noexcept
         {

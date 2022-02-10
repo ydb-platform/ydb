@@ -456,11 +456,11 @@ void TCreateQueueSchemaActorV2::RegisterMakeDirActor(const TString& workingDir, 
     Register(new TMiniKqlExecutionActor(SelfId(), RequestId_, std::move(ev), false, QueuePath_, GetTransactionCounters(UserCounters_)));
 }
 
-void TCreateQueueSchemaActorV2::RequestLeaderTabletId() {
-    RLOG_SQS_TRACE("Requesting leader tablet id for path id " << TableWithLeaderPathId_.second);
+void TCreateQueueSchemaActorV2::RequestLeaderTabletId() { 
+    RLOG_SQS_TRACE("Requesting leader tablet id for path id " << TableWithLeaderPathId_.second); 
     THolder<TEvTxUserProxy::TEvNavigate> request(new TEvTxUserProxy::TEvNavigate());
-    request->Record.MutableDescribePath()->SetSchemeshardId(TableWithLeaderPathId_.first);
-    request->Record.MutableDescribePath()->SetPathId(TableWithLeaderPathId_.second);
+    request->Record.MutableDescribePath()->SetSchemeshardId(TableWithLeaderPathId_.first); 
+    request->Record.MutableDescribePath()->SetPathId(TableWithLeaderPathId_.second); 
     Send(MakeTxProxyID(), std::move(request));
 }
 
@@ -493,8 +493,8 @@ void TCreateQueueSchemaActorV2::CreateComponents() {
                 const TActorId actorId = Register(new TMiniKqlExecutionActor(
                     SelfId(), RequestId_, std::move(ev), false, QueuePath_, GetTransactionCounters(UserCounters_)));
 
-                if (table.HasLeaderTablet && !CreateTableWithLeaderTabletActorId_) {
-                    CreateTableWithLeaderTabletActorId_ = actorId;
+                if (table.HasLeaderTablet && !CreateTableWithLeaderTabletActorId_) { 
+                    CreateTableWithLeaderTabletActorId_ = actorId; 
                 }
             }
 
@@ -504,8 +504,8 @@ void TCreateQueueSchemaActorV2::CreateComponents() {
             SendDescribeTable();
             break;
         }
-        case ECreateComponentsStep::DiscoverLeaderTabletId: {
-            RequestLeaderTabletId();
+        case ECreateComponentsStep::DiscoverLeaderTabletId: { 
+            RequestLeaderTabletId(); 
             break;
         }
         case ECreateComponentsStep::AddQuoterResource: {
@@ -562,8 +562,8 @@ void TCreateQueueSchemaActorV2::Step() {
                 return; // do not progress
             }
 
-            Y_VERIFY(TableWithLeaderPathId_.first && TableWithLeaderPathId_.second);
-            CurrentCreationStep_ = ECreateComponentsStep::DiscoverLeaderTabletId;
+            Y_VERIFY(TableWithLeaderPathId_.first && TableWithLeaderPathId_.second); 
+            CurrentCreationStep_ = ECreateComponentsStep::DiscoverLeaderTabletId; 
             break;
         }
         case ECreateComponentsStep::DescribeTableForSetSchemeShardId: {
@@ -572,7 +572,7 @@ void TCreateQueueSchemaActorV2::Step() {
             CurrentCreationStep_ = ECreateComponentsStep::DiscoverLeaderTabletId;
             break;
         }
-        case ECreateComponentsStep::DiscoverLeaderTabletId: {
+        case ECreateComponentsStep::DiscoverLeaderTabletId: { 
             Y_VERIFY(Cfg().GetQuotingConfig().GetEnableQuoting() && Cfg().GetQuotingConfig().HasKesusQuoterConfig());
             CurrentCreationStep_ = ECreateComponentsStep::AddQuoterResource;
             break;
@@ -591,10 +591,10 @@ void TCreateQueueSchemaActorV2::OnExecuted(TSqsEvents::TEvExecuted::TPtr& ev) {
     const auto status = record.GetStatus();
     RLOG_SQS_TRACE("OnExecuted: " << ev->Get()->Record);
 
-    if (ev->Sender == CreateTableWithLeaderTabletActorId_) {
-        CreateTableWithLeaderTabletTxId_ = record.GetTxId();
-        TableWithLeaderPathId_ = std::make_pair(record.GetSchemeShardTabletId(), record.GetPathId());
-        RLOG_SQS_TRACE("Handle executed transaction with leader tablet: " << record);
+    if (ev->Sender == CreateTableWithLeaderTabletActorId_) { 
+        CreateTableWithLeaderTabletTxId_ = record.GetTxId(); 
+        TableWithLeaderPathId_ = std::make_pair(record.GetSchemeShardTabletId(), record.GetPathId()); 
+        RLOG_SQS_TRACE("Handle executed transaction with leader tablet: " << record); 
     }
 
     // Note:
@@ -643,14 +643,14 @@ void TCreateQueueSchemaActorV2::OnExecuted(TSqsEvents::TEvExecuted::TPtr& ev) {
 }
 
 void TCreateQueueSchemaActorV2::OnDescribeSchemeResult(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
-    RLOG_SQS_TRACE("OnDescribeSchemeResult for leader tablet: " << ev->Get()->GetRecord());
+    RLOG_SQS_TRACE("OnDescribeSchemeResult for leader tablet: " << ev->Get()->GetRecord()); 
     const auto& pathDescription = ev->Get()->GetRecord().GetPathDescription();
 
     if (ev->Get()->GetRecord().GetStatus() != NKikimrScheme::StatusSuccess || pathDescription.TablePartitionsSize() == 0 || !pathDescription.GetTablePartitions(0).GetDatashardId()) {
         // fail
         auto resp = MakeErrorResponse(NErrors::INTERNAL_FAILURE);
         resp->State = EQueueState::Creating;
-        resp->Error = "Failed to discover leader.";
+        resp->Error = "Failed to discover leader."; 
 
         Send(Sender_, std::move(resp));
 
@@ -658,7 +658,7 @@ void TCreateQueueSchemaActorV2::OnDescribeSchemeResult(NSchemeShard::TEvSchemeSh
         return;
     }
 
-    LeaderTabletId_ = pathDescription.GetTablePartitions(0).GetDatashardId();
+    LeaderTabletId_ = pathDescription.GetTablePartitions(0).GetDatashardId(); 
 
     if (Cfg().GetQuotingConfig().GetEnableQuoting() && Cfg().GetQuotingConfig().HasKesusQuoterConfig()) {
         Step();
@@ -729,7 +729,7 @@ static const char* const CommitQueueParamsQuery = R"__(
         (let now                    (Parameter 'NOW               (DataType 'Uint64)))
         (let shards                 (Parameter 'SHARDS            (DataType 'Uint64)))
         (let partitions             (Parameter 'PARTITIONS        (DataType 'Uint64)))
-        (let masterTabletId         (Parameter 'MASTER_TABLET_ID  (DataType 'Uint64)))
+        (let masterTabletId         (Parameter 'MASTER_TABLET_ID  (DataType 'Uint64))) 
         (let tablesFormat           (Parameter 'TABLES_FORMAT     (DataType 'Uint32)))
         (let version                (Parameter 'VERSION           (DataType 'Uint64)))
         (let queueIdNumberHash      (Parameter 'QUEUE_ID_NUMBER_HASH (DataType 'Uint64)))
@@ -966,7 +966,7 @@ void TCreateQueueSchemaActorV2::CommitNewVersion() {
 
     auto ev = MakeExecuteEvent(query);
     auto* trans = ev->Record.MutableTransaction()->MutableMiniKQLTransaction();
-    Y_VERIFY(LeaderTabletId_ != 0);
+    Y_VERIFY(LeaderTabletId_ != 0); 
     TParameters(trans->MutableParams()->MutableProto())
         .Utf8("NAME", QueuePath_.QueueName)
         .Utf8("CUSTOMNAME", CustomQueueName_)
@@ -977,7 +977,7 @@ void TCreateQueueSchemaActorV2::CommitNewVersion() {
         .Uint64("NOW", QueueCreationTimestamp_.MilliSeconds())
         .Uint64("SHARDS", RequiredShardsCount_)
         .Uint64("PARTITIONS", Request_.GetPartitions())
-        .Uint64("MASTER_TABLET_ID", LeaderTabletId_)
+        .Uint64("MASTER_TABLET_ID", LeaderTabletId_) 
         .Uint32("TABLES_FORMAT", TablesFormat_)
         .Uint64("VERSION", Version_)
         .Uint64("QUEUE_ID_NUMBER_HASH", GetHash(Version_))
@@ -1209,7 +1209,7 @@ void TCreateQueueSchemaActorV2::OnAttributesMatch(TSqsEvents::TEvExecuted::TPtr&
                 resp->ErrorClass = &NErrors::VALIDATION_ERROR;
             }
 
-            if (CurrentCreationStep_ == ECreateComponentsStep::DiscoverLeaderTabletId) {
+            if (CurrentCreationStep_ == ECreateComponentsStep::DiscoverLeaderTabletId) { 
                 // call the special version of cleanup actor
                 RLOG_SQS_WARN("Removing redundant queue version: " << Version_ << " for queue " <<
                                     QueuePath_.GetQueuePath() << ". Shards: " << RequiredShardsCount_ << " IsFifo: " << IsFifo_);

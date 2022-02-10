@@ -19,7 +19,7 @@ static const THashSet<TString> DATABASE_SERVICES
          TString("kqp"),
          TString("processing"),
          TString("proxy"),
-         TString("followers"),
+         TString("followers"), 
          TString("sqs"),
          TString("storage_pool_stat"),
          TString("tablets"),

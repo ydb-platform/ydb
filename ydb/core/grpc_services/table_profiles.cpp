@@ -323,7 +323,7 @@ bool TTableProfiles::ApplyTableProfile(const Ydb::Table::TableProfile &profile,
             replicationPolicy = ReplicationPolicies.at(tableProfile.GetReplicationPolicy());
         }
         if (policy.replicas_count())
-            replicationPolicy.SetFollowerCount(policy.replicas_count());
+            replicationPolicy.SetFollowerCount(policy.replicas_count()); 
         switch (policy.create_per_availability_zone()) {
         case Ydb::FeatureFlag::STATUS_UNSPECIFIED:
             break;
@@ -343,10 +343,10 @@ bool TTableProfiles::ApplyTableProfile(const Ydb::Table::TableProfile &profile,
         case Ydb::FeatureFlag::STATUS_UNSPECIFIED:
             break;
         case Ydb::FeatureFlag::ENABLED:
-            replicationPolicy.SetAllowFollowerPromotion(true);
+            replicationPolicy.SetAllowFollowerPromotion(true); 
             break;
         case Ydb::FeatureFlag::DISABLED:
-            replicationPolicy.SetAllowFollowerPromotion(false);
+            replicationPolicy.SetAllowFollowerPromotion(false); 
             break;
         default:
             code = Ydb::StatusIds::BAD_REQUEST;
@@ -418,15 +418,15 @@ bool TTableProfiles::ApplyTableProfile(const Ydb::Table::TableProfile &profile,
         partitionConfig.AddColumnFamilies()->CopyFrom(family);
 
     // Apply replication policy.
-    if (replicationPolicy.GetFollowerCount()) {
-        auto& followerGroup = *partitionConfig.AddFollowerGroups();
-        followerGroup.SetFollowerCount(replicationPolicy.GetFollowerCount());
+    if (replicationPolicy.GetFollowerCount()) { 
+        auto& followerGroup = *partitionConfig.AddFollowerGroups(); 
+        followerGroup.SetFollowerCount(replicationPolicy.GetFollowerCount()); 
         if (replicationPolicy.GetCrossDataCenter())
-            followerGroup.SetRequireAllDataCenters(true);
+            followerGroup.SetRequireAllDataCenters(true); 
         else
-            followerGroup.SetRequireAllDataCenters(false);
-        if (replicationPolicy.HasAllowFollowerPromotion()) {
-            followerGroup.SetAllowLeaderPromotion(replicationPolicy.GetAllowFollowerPromotion());
+            followerGroup.SetRequireAllDataCenters(false); 
+        if (replicationPolicy.HasAllowFollowerPromotion()) { 
+            followerGroup.SetAllowLeaderPromotion(replicationPolicy.GetAllowFollowerPromotion()); 
         }
     }
 

@@ -2,14 +2,14 @@
 
 #include "hive.h"
 #include "tablet_info.h"
-#include "follower_tablet_info.h"
+#include "follower_tablet_info.h" 
 
 namespace NKikimr {
 namespace NHive {
 
 struct TTabletCategoryInfo {
     TTabletCategoryId Id;
-    std::unordered_set<TLeaderTabletInfo*> Tablets;
+    std::unordered_set<TLeaderTabletInfo*> Tablets; 
     ui64 MaxDisconnectTimeout = 0;
     bool StickTogetherInDC = false;
 
@@ -20,7 +20,7 @@ struct TTabletCategoryInfo {
 
 struct TStoragePoolInfo;
 
-struct TLeaderTabletInfo : TTabletInfo {
+struct TLeaderTabletInfo : TTabletInfo { 
 protected:
     static TString DEFAULT_STORAGE_POOL_NAME;
 
@@ -39,8 +39,8 @@ public:
     NKikimrHive::TEvReassignTablet::EHiveReassignReason ChannelProfileReassignReason;
     ui32 KnownGeneration;
     TTabletCategoryInfo* Category;
-    TList<TFollowerGroup> FollowerGroups;
-    TList<TFollowerTabletInfo> Followers;
+    TList<TFollowerGroup> FollowerGroups; 
+    TList<TFollowerTabletInfo> Followers; 
     TOwnerIdxType::TValueType Owner;
     TVector<TSubDomainKey> EffectiveAllowedDomains; // AllowedDomains | ObjectDomain
     NKikimrHive::ETabletBootMode BootMode;
@@ -52,8 +52,8 @@ public:
     bool SeizedByChild = false; // transient state for migration - need to delete it later
     bool NeedToReleaseFromParent = false; // transient state for migration - need to delete it later
 
-    TLeaderTabletInfo(TTabletId id, THive& hive)
-        : TTabletInfo(ETabletRole::Leader, hive)
+    TLeaderTabletInfo(TTabletId id, THive& hive) 
+        : TTabletInfo(ETabletRole::Leader, hive) 
         , Id(id)
         , State(ETabletState::Unknown)
         , Type(TTabletTypes::TYPE_INVALID)
@@ -127,16 +127,16 @@ public:
         return !SeizedByChild && State == ETabletState::ReadyToWork;
     }
 
-    ui32 GetFollowersAliveOnDataCenter(TDataCenterId dataCenterId) const;
-    ui32 GetFollowersAliveOnDataCenterExcludingFollower(TDataCenterId dataCenterId, const TTabletInfo& excludingFollower) const;
+    ui32 GetFollowersAliveOnDataCenter(TDataCenterId dataCenterId) const; 
+    ui32 GetFollowersAliveOnDataCenterExcludingFollower(TDataCenterId dataCenterId, const TTabletInfo& excludingFollower) const; 
 
     TPathId GetTenant() const;
 
     bool IsAllAlive() const {
         if (!IsAlive())
             return false;
-        for (const TTabletInfo& follower : Followers) {
-            if (!follower.IsAlive())
+        for (const TTabletInfo& follower : Followers) { 
+            if (!follower.IsAlive()) 
                 return false;
         }
         return true;
@@ -145,27 +145,27 @@ public:
     bool IsSomeoneAlive() const {
         if (IsAlive())
             return true;
-        for (const TTabletInfo& follower : Followers) {
-            if (follower.IsAlive())
+        for (const TTabletInfo& follower : Followers) { 
+            if (follower.IsAlive()) 
                 return true;
         }
         return false;
     }
 
-    bool IsSomeFollowerAlive() const {
-        for (const TTabletInfo& follower : Followers) {
-            if (follower.IsAlive())
+    bool IsSomeFollowerAlive() const { 
+        for (const TTabletInfo& follower : Followers) { 
+            if (follower.IsAlive()) 
                 return true;
         }
         return false;
     }
 
-    bool HaveFollowers() const {
-        return !Followers.empty();
+    bool HaveFollowers() const { 
+        return !Followers.empty(); 
     }
 
-    bool IsFollowerPromotableOnNode(TNodeId nodeId) const;
-    TFollowerId GetFollowerPromotableOnNode(TNodeId nodeId) const;
+    bool IsFollowerPromotableOnNode(TNodeId nodeId) const; 
+    TFollowerId GetFollowerPromotableOnNode(TNodeId nodeId) const; 
 
     void AssignDomains(const TSubDomainKey& objectDomain, const TVector<TSubDomainKey>& allowedDomains);
 
@@ -174,20 +174,20 @@ public:
         if (IsReadyToBoot()) {
             boot |= InitiateBoot();
         }
-        if (HaveFollowers()) {
-            boot |= InitiateFollowersBoot();
+        if (HaveFollowers()) { 
+            boot |= InitiateFollowersBoot(); 
         }
         return boot;
     }
 
     bool InitiateAssignTabletGroups();
 
-    bool InitiateFollowersBoot() {
+    bool InitiateFollowersBoot() { 
         bool result = false;
         if (IsReadyToWork()) {
-            for (TFollowerTabletInfo& follower : Followers) {
-                if (follower.IsReadyToBoot()) {
-                    result |= follower.InitiateBoot();
+            for (TFollowerTabletInfo& follower : Followers) { 
+                if (follower.IsReadyToBoot()) { 
+                    result |= follower.InitiateBoot(); 
                 }
             }
         }
@@ -195,8 +195,8 @@ public:
     }
 
     void Kill() {
-        for (TFollowerTabletInfo& follower : Followers) {
-            follower.Kill();
+        for (TFollowerTabletInfo& follower : Followers) { 
+            follower.Kill(); 
         }
         TTabletInfo::Kill();
     }
@@ -210,39 +210,39 @@ public:
         ++KnownGeneration;
     }
 
-    const TTabletInfo* FindTablet(TFollowerId followerId) const { // get leader or follower tablet depending on followerId
-        if (followerId == 0) {
-            return this; // leader
+    const TTabletInfo* FindTablet(TFollowerId followerId) const { // get leader or follower tablet depending on followerId 
+        if (followerId == 0) { 
+            return this; // leader 
         }
-        auto it = std::find_if(Followers.begin(), Followers.end(), [followerId](const TFollowerTabletInfo& info) -> bool {
-            return info.Id == followerId;
+        auto it = std::find_if(Followers.begin(), Followers.end(), [followerId](const TFollowerTabletInfo& info) -> bool { 
+            return info.Id == followerId; 
         });
-        if (it != Followers.end()) {
+        if (it != Followers.end()) { 
             return &(*it);
         }
         return nullptr;
     }
 
-    const TTabletInfo& GetTablet(TFollowerId followerId) const { // get leader or follower tablet depending on followerId
-        const TTabletInfo* tablet = FindTablet(followerId);
+    const TTabletInfo& GetTablet(TFollowerId followerId) const { // get leader or follower tablet depending on followerId 
+        const TTabletInfo* tablet = FindTablet(followerId); 
         if (tablet != nullptr) {
             return *tablet;
         }
-        return *this; // leader by default
+        return *this; // leader by default 
     }
 
-    TTabletInfo* FindTablet(TFollowerId followerId) { // get leader or follower tablet depending on followerId
-        return const_cast<TTabletInfo*>(static_cast<const TLeaderTabletInfo*>(this)->FindTablet(followerId));
+    TTabletInfo* FindTablet(TFollowerId followerId) { // get leader or follower tablet depending on followerId 
+        return const_cast<TTabletInfo*>(static_cast<const TLeaderTabletInfo*>(this)->FindTablet(followerId)); 
     }
 
-    TTabletInfo&  GetTablet(TFollowerId followerId) { // get leader or follower tablet depending on followerId
-        return const_cast<TTabletInfo&>(static_cast<const TLeaderTabletInfo&>(*this).GetTablet(followerId));
+    TTabletInfo&  GetTablet(TFollowerId followerId) { // get leader or follower tablet depending on followerId 
+        return const_cast<TTabletInfo&>(static_cast<const TLeaderTabletInfo&>(*this).GetTablet(followerId)); 
     }
 
-    TFollowerTabletInfo& SpawnFollower(TFollowerGroup& followerGroup) {
-        TFollowerTabletInfo& follower = AddFollower(followerGroup);
-        follower.BecomeStopped();
-        return follower;
+    TFollowerTabletInfo& SpawnFollower(TFollowerGroup& followerGroup) { 
+        TFollowerTabletInfo& follower = AddFollower(followerGroup); 
+        follower.BecomeStopped(); 
+        return follower; 
     }
 
     template <template <typename, typename...> class Cont, typename Type, typename... Types>
@@ -261,21 +261,21 @@ public:
         return id;
     }
 
-    TFollowerId GenerateFollowerId() const {
-        return GenerateId(Followers);
+    TFollowerId GenerateFollowerId() const { 
+        return GenerateId(Followers); 
     }
 
-    TFollowerTabletInfo& AddFollower(TFollowerGroup& followerGroup, TFollowerId followerId = 0);
-    TFollowerGroupId GenerateFollowerGroupId() const;
-    TFollowerGroup& AddFollowerGroup(TFollowerGroupId followerGroupId = 0);
+    TFollowerTabletInfo& AddFollower(TFollowerGroup& followerGroup, TFollowerId followerId = 0); 
+    TFollowerGroupId GenerateFollowerGroupId() const; 
+    TFollowerGroup& AddFollowerGroup(TFollowerGroupId followerGroupId = 0); 
 
-    TFollowerGroup& GetFollowerGroup(TFollowerGroupId followerGroupId) {
-        auto it = std::find(FollowerGroups.begin(), FollowerGroups.end(), followerGroupId);
-        Y_VERIFY(it != FollowerGroups.end(), "%s", (TStringBuilder()
+    TFollowerGroup& GetFollowerGroup(TFollowerGroupId followerGroupId) { 
+        auto it = std::find(FollowerGroups.begin(), FollowerGroups.end(), followerGroupId); 
+        Y_VERIFY(it != FollowerGroups.end(), "%s", (TStringBuilder() 
                     << "TabletId=" << Id
-                    << " FollowerGroupId=" << followerGroupId
-                    << " FollowerGroupSize=" << FollowerGroups.size()
-                    << " FollowersSize=" << Followers.size()).data());
+                    << " FollowerGroupId=" << followerGroupId 
+                    << " FollowerGroupSize=" << FollowerGroups.size() 
+                    << " FollowersSize=" << Followers.size()).data()); 
         return *it;
     }
 

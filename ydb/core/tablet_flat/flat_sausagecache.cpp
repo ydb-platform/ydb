@@ -15,7 +15,7 @@ TPrivatePageCache::TPage::TPage(ui32 size, ui32 pageId, TInfo* info)
     , Info(info)
 {}
 
-TPrivatePageCache::TInfo::TInfo(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection)
+TPrivatePageCache::TInfo::TInfo(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection) 
     : Id(pageCollection->Label())
     , PageCollection(std::move(pageCollection))
     , Users(0)

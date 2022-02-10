@@ -9,7 +9,7 @@
 
 #include <ydb/core/scheme/scheme_tabledefs.h> // TODO: TTableId
 #include <ydb/core/base/kikimr_issue.h>
-#include <ydb/core/tablet_flat/util_basics.h> // TODO: IDestructable
+#include <ydb/core/tablet_flat/util_basics.h> // TODO: IDestructable 
 
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
@@ -744,11 +744,11 @@ protected:
 protected:
     // virtual methods (TODO: replace with static_cast<TDerived*>(this)->Foo()
 
-    virtual THolder<NKikimr::IDestructable> GetSourcesState() {
+    virtual THolder<NKikimr::IDestructable> GetSourcesState() { 
         return nullptr;
     }
 
-    virtual void PollSources(THolder<NKikimr::IDestructable> /* state */) {
+    virtual void PollSources(THolder<NKikimr::IDestructable> /* state */) { 
     }
 
     virtual void TerminateSources(const TString& /* message */, bool /* success */) {

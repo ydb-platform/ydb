@@ -85,7 +85,7 @@ namespace NTest {
                 << Endl;
         }
 
-        void DoAnnex(TArrayRef<const TStdPad<NPageCollection::TGlobId>> annex) noexcept
+        void DoAnnex(TArrayRef<const TStdPad<NPageCollection::TGlobId>> annex) noexcept 
         {
             Out << " | Annex " << annex.size() << " items" << Endl;
 

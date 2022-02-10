@@ -38,7 +38,7 @@ SRCS(
     proxy_actor.cpp
     purge.cpp
     purge_queue.cpp
-    queue_leader.cpp
+    queue_leader.cpp 
     receive_message.cpp
     retention.cpp
     schema.cpp

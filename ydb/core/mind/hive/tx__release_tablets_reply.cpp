@@ -84,7 +84,7 @@ public:
         }
 
         for (TTabletId tabletId : request.GetTabletIDs()) {
-            TLeaderTabletInfo* tablet = Self->FindTablet(tabletId);
+            TLeaderTabletInfo* tablet = Self->FindTablet(tabletId); 
             if (tablet != nullptr) {
                 tablet->NeedToReleaseFromParent = false;
                 if (tablet->IsReadyToAssignGroups()) {

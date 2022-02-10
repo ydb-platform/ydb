@@ -57,7 +57,7 @@ namespace NCompShard {
             const TTableInfo& Table;
         };
 
-        TPartView MakePartView(TIntrusiveConstPtr<TPart> part, TIntrusiveConstPtr<TSlices> slices) noexcept {
+        TPartView MakePartView(TIntrusiveConstPtr<TPart> part, TIntrusiveConstPtr<TSlices> slices) noexcept { 
             TPartView partView{ std::move(part), nullptr, std::move(slices) };
             partView.Screen = partView.Slices->ToScreen(); // TODO: remove screen from TPartView
             return partView;
@@ -507,7 +507,7 @@ namespace NCompShard {
     }
 
     bool TSliceSplitOp::Execute(IPages* env) {
-        const TIntrusiveConstPtr<TKeyNulls> nulls = Table->RowScheme->Keys;
+        const TIntrusiveConstPtr<TKeyNulls> nulls = Table->RowScheme->Keys; 
 
         TVector<TCell> keyCellsBuffer(nulls->Size());
         auto getKeyCells = [this, &nulls, &keyCellsBuffer](ui64 keyId) {
@@ -688,7 +688,7 @@ namespace NCompShard {
     }
 
     THolder<TUnderlayMask> TUnderlayMask::Build(
-            TIntrusiveConstPtr<TRowScheme> rowScheme,
+            TIntrusiveConstPtr<TRowScheme> rowScheme, 
             TVector<const TBounds*>& input) noexcept
     {
         const TKeyNulls& nulls = *rowScheme->Keys;
@@ -758,7 +758,7 @@ namespace NCompShard {
         return MakeHolder<TUnderlayMask>(std::move(rowScheme), std::move(results));
     }
 
-    TSplitKeys::TSplitKeys(TIntrusiveConstPtr<TRowScheme> rowScheme, TSplitKeys::TKeysVec keys)
+    TSplitKeys::TSplitKeys(TIntrusiveConstPtr<TRowScheme> rowScheme, TSplitKeys::TKeysVec keys) 
         : RowScheme(std::move(rowScheme))
         , Keys(std::move(keys))
     {
@@ -766,7 +766,7 @@ namespace NCompShard {
         Reset();
     }
 
-    TSplitKeys::TSplitKeys(TIntrusiveConstPtr<TRowScheme> rowScheme, TVector<const TBounds*> bounds)
+    TSplitKeys::TSplitKeys(TIntrusiveConstPtr<TRowScheme> rowScheme, TVector<const TBounds*> bounds) 
         : RowScheme(std::move(rowScheme))
     {
         auto boundsLess = [this](const TBounds* a, const TBounds* b) noexcept -> bool {
@@ -1028,7 +1028,7 @@ namespace NCompShard {
         return AllBackingSize;
     }
 
-    ui64 TShardedCompactionStrategy::BeginMemCompaction(TTaskId taskId, TSnapEdge edge, ui64 forcedCompactionId) {
+    ui64 TShardedCompactionStrategy::BeginMemCompaction(TTaskId taskId, TSnapEdge edge, ui64 forcedCompactionId) { 
         auto params = MakeHolder<TShardedCompactionParams>();
         params->Table = Table;
         params->TaskId = taskId;
@@ -1036,7 +1036,7 @@ namespace NCompShard {
         params->KeepInCache = true;
 
         NurseryTaken = 0;
-        if (edge.Head == TEpoch::Max() && Nursery && forcedCompactionId == 0) {
+        if (edge.Head == TEpoch::Max() && Nursery && forcedCompactionId == 0) { 
             ui64 expectedSize = Backend->TableMemSize(Table, edge.Head);
             if (expectedSize > 0) {
                 bool takeAll = (
@@ -1090,7 +1090,7 @@ namespace NCompShard {
         }
 
         MemCompactionId = Backend->BeginCompaction(std::move(params));
-        MemCompactionForced = forcedCompactionId != 0;
+        MemCompactionForced = forcedCompactionId != 0; 
         return MemCompactionId;
     }
 
@@ -1291,7 +1291,7 @@ namespace NCompShard {
         AddParts(std::move(parts));
     }
 
-    void TShardedCompactionStrategy::PartMerged(TIntrusiveConstPtr<TColdPart> part, ui32 level) {
+    void TShardedCompactionStrategy::PartMerged(TIntrusiveConstPtr<TColdPart> part, ui32 level) { 
         Y_VERIFY(level == 255, "Unexpected level of the merged part");
 
         ColdParts.emplace_back(std::move(part));
@@ -1431,7 +1431,7 @@ namespace NCompShard {
                         right->RightKey = shard->RightKey;
 
                         for (auto& kvPart : shard->Parts) {
-                            TIntrusiveConstPtr<TPart> part = kvPart.second.Part;
+                            TIntrusiveConstPtr<TPart> part = kvPart.second.Part; 
                             TVector<TSlice> slices(Reserve(kvPart.second.Slices.size()));
                             for (auto& kvSlice : kvPart.second.Slices) {
                                 slices.emplace_back(kvSlice.second.Slice);
@@ -1584,7 +1584,7 @@ namespace NCompShard {
                             next = (shard != last) ? shard->Next()->Node() : nullptr;
 
                             for (auto& kvPart : shard->Parts) {
-                                TIntrusiveConstPtr<TPart> part = kvPart.second.Part;
+                                TIntrusiveConstPtr<TPart> part = kvPart.second.Part; 
                                 TVector<TSlice> slices(Reserve(kvPart.second.Slices.size()));
                                 for (auto& kvSlice : kvPart.second.Slices) {
                                     slices.emplace_back(kvSlice.second.Slice);
@@ -1757,10 +1757,10 @@ namespace NCompShard {
 
         // A part/slice combination we scheduled to add
         struct TItem {
-            TIntrusiveConstPtr<TPart> Part;
+            TIntrusiveConstPtr<TPart> Part; 
             TSlice Slice;
 
-            TItem(TIntrusiveConstPtr<TPart> part, TSlice slice)
+            TItem(TIntrusiveConstPtr<TPart> part, TSlice slice) 
                 : Part(std::move(part))
                 , Slice(std::move(slice))
             { }
@@ -1799,11 +1799,11 @@ namespace NCompShard {
 
         // A part/slice combination that crosses at least one shard boundary
         struct TSplitItem {
-            TIntrusiveConstPtr<TPart> Part;
+            TIntrusiveConstPtr<TPart> Part; 
             TSlice Slice;
             TVector<TTableShard*> Shards;
 
-            TSplitItem(TIntrusiveConstPtr<TPart> part, TSlice slice, TTableShard* firstShard)
+            TSplitItem(TIntrusiveConstPtr<TPart> part, TSlice slice, TTableShard* firstShard) 
                 : Part(std::move(part))
                 , Slice(std::move(slice))
             {
@@ -2048,8 +2048,8 @@ namespace NCompShard {
     }
 
     TShardedCompactionStrategy::TGlobalPart* TShardedCompactionStrategy::EnsureGlobalPart(
-            const TIntrusiveConstPtr<TPart>& part,
-            const TIntrusiveConstPtr<TSlices>& slices) noexcept
+            const TIntrusiveConstPtr<TPart>& part, 
+            const TIntrusiveConstPtr<TSlices>& slices) noexcept 
     {
         auto* allInfo = AllParts.FindPtr(part->Label);
         if (!allInfo) {
@@ -2118,7 +2118,7 @@ namespace NCompShard {
         }
     }
 
-    TTablePart* TShardedCompactionStrategy::EnsurePart(TTableShard* shard, TIntrusiveConstPtr<TPart> part) noexcept {
+    TTablePart* TShardedCompactionStrategy::EnsurePart(TTableShard* shard, TIntrusiveConstPtr<TPart> part) noexcept { 
         auto* info = shard->Parts.FindPtr(part->Label);
         if (!info) {
             AllParts.at(part->Label).Shards.emplace_back(shard);
@@ -2432,10 +2432,10 @@ namespace NCompShard {
         params->InputShard = shard;
 
         struct TInput {
-            TIntrusiveConstPtr<TPart> Part;
+            TIntrusiveConstPtr<TPart> Part; 
             TVector<TSlice> Slices;
             TVector<TSlice> Reused;
-            TIntrusiveConstPtr<TSlices> ReusedRef;
+            TIntrusiveConstPtr<TSlices> ReusedRef; 
         };
 
         TEpoch maxEpoch = TEpoch::Min();
@@ -2498,16 +2498,16 @@ namespace NCompShard {
             std::sort(input.Slices.begin(), input.Slices.end(), [](const TSlice& a, const TSlice& b) noexcept -> bool {
                 return a.BeginRowId() < b.BeginRowId();
             });
-            TIntrusiveConstPtr<TSlices> original = new TSlices(std::move(input.Slices));
-            TIntrusiveConstPtr<TSlices> reused = new TSlices(std::move(input.Reused));
-            TIntrusiveConstPtr<TSlices> compacted = TSlices::Subtract(original, reused);
+            TIntrusiveConstPtr<TSlices> original = new TSlices(std::move(input.Slices)); 
+            TIntrusiveConstPtr<TSlices> reused = new TSlices(std::move(input.Reused)); 
+            TIntrusiveConstPtr<TSlices> compacted = TSlices::Subtract(original, reused); 
 
             // Everything we're compacting will become garbage soon
             if (reused && !reused->empty() && compacted && !compacted->empty()) {
                 auto* allInfo = AllParts.FindPtr(input.Part->Label);
                 Y_VERIFY(allInfo, "Reused part %s is not registered", input.Part->Label.ToString().c_str());
 
-                TIntrusiveConstPtr<TSlices> afterCompaction = TSlices::Subtract(allInfo->Slices, compacted);
+                TIntrusiveConstPtr<TSlices> afterCompaction = TSlices::Subtract(allInfo->Slices, compacted); 
 
                 // Calculate how much garbage this part would have after compaction
                 TRowId last = 0;

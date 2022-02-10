@@ -17,7 +17,7 @@ namespace NFwd {
     public:
         using TEdges = TVector<ui32>;
 
-        TBlobs(TIntrusiveConstPtr<NPage::TFrames> frames, TIntrusiveConstPtr<TSlices> slices, TEdges edge, bool trace)
+        TBlobs(TIntrusiveConstPtr<NPage::TFrames> frames, TIntrusiveConstPtr<TSlices> slices, TEdges edge, bool trace) 
             : Edge(std::move(edge))
             , Frames(std::move(frames))
             , Filter(std::move(slices))
@@ -81,12 +81,12 @@ namespace NFwd {
             return Trace ? Trace->Unwrap() : TDeque<TScreen::THole>{ };
         }
 
-        TIntrusiveConstPtr<NPage::TFrames> GetFrames() const noexcept
+        TIntrusiveConstPtr<NPage::TFrames> GetFrames() const noexcept 
         {
             return Frames;
         }
 
-        TIntrusiveConstPtr<TSlices> GetSlices() const noexcept
+        TIntrusiveConstPtr<TSlices> GetSlices() const noexcept 
         {
             return Filter.GetSlices();
         }
@@ -227,14 +227,14 @@ namespace NFwd {
 
     private:
         const TVector<ui32> Edge;       /* Desired bytes limit of blobs */
-        const TIntrusiveConstPtr<NPage::TFrames> Frames;
+        const TIntrusiveConstPtr<NPage::TFrames> Frames; 
         const TSlicesRowFilter Filter;
         TVector<ui8> Tags;              /* Ever used col tags on env    */
         TPageId Lower = 0;              /* Pinned frame lower bound ref */
         TPageId Upper = 0;              /* Pinned frame upper bound ref */
         TPageId Grow = Max<TPageId>();  /* Edge page of loading process */
 
-        TAutoPtr<THoles> Trace;
+        TAutoPtr<THoles> Trace; 
 
         /*_ Forward cache line state */
 

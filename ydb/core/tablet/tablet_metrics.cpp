@@ -84,9 +84,9 @@ void TResourceMetricsValues::Fill(NKikimrTabletBase::TMetrics& metrics) const {
     }
 }
 
-TResourceMetricsSendState::TResourceMetricsSendState(ui64 tabletId, ui32 followerId, const TActorId& launcher)
+TResourceMetricsSendState::TResourceMetricsSendState(ui64 tabletId, ui32 followerId, const TActorId& launcher) 
     : TabletId(tabletId)
-    , FollowerId(followerId)
+    , FollowerId(followerId) 
     , Launcher(launcher)
 {}
 
@@ -270,7 +270,7 @@ bool TResourceMetricsSendState::TryUpdate(TResourceMetricsValues& src, const TAc
     NKikimrTabletBase::TMetrics values;
     bool updated = FillChanged(src, values, now, past > TDuration::Seconds(60));
     if (updated) {
-        ctx.Send(Launcher, new TEvLocal::TEvTabletMetrics(TabletId, FollowerId, values));
+        ctx.Send(Launcher, new TEvLocal::TEvTabletMetrics(TabletId, FollowerId, values)); 
         LastUpdate = now;
     }
     return updated;

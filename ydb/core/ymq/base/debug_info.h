@@ -51,7 +51,7 @@ struct TDebugInfo {
     NDebug::TMultimapWithKeyValueErase<TString, class TMiniKqlExecutionActor*> ExecutorActors;
 
     // Queue activities by [username/queuename]
-    NDebug::TMultimapWithKeyValueErase<TString, class TQueueLeader*> QueueLeaders;
+    NDebug::TMultimapWithKeyValueErase<TString, class TQueueLeader*> QueueLeaders; 
     NDebug::TMultimapWithKeyValueErase<TString, class TPurgeActor*> QueuePurgeActors;
     NDebug::TMultimapWithKeyValueErase<TString, class TRetentionActor*> QueueRetentionActors;
     NDebug::TMultimapWithKeyValueErase<TString, class TCleanupActor*> QueueCleanupActors;

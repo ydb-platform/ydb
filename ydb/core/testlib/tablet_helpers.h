@@ -18,12 +18,12 @@ namespace NKikimr {
 
     const TBlobStorageGroupType::EErasureSpecies DataGroupErasure = TBlobStorageGroupType::ErasureNone;
 
-    TActorId FollowerTablet(TTestActorRuntime &runtime, const TActorId &launcher, TTabletStorageInfo *info,
+    TActorId FollowerTablet(TTestActorRuntime &runtime, const TActorId &launcher, TTabletStorageInfo *info, 
         std::function<IActor* (const TActorId &, TTabletStorageInfo*)> op);
     TActorId ResolveTablet(TTestActorRuntime& runtime, ui64 tabletId, ui32 nodeIndex = 0, bool sysTablet = false);
-    void ForwardToTablet(TTestActorRuntime& runtime, ui64 tabletId, const TActorId& sender, IEventBase *ev, ui32 nodeIndex = 0, bool sysTablet = false);
-    void InvalidateTabletResolverCache(TTestActorRuntime& runtime, ui64 tabletId, ui32 nodeIndex = 0);
-    void RebootTablet(TTestActorRuntime& runtime, ui64 tabletId, const TActorId& sender, ui32 nodeIndex = 0, bool sysTablet = false);
+    void ForwardToTablet(TTestActorRuntime& runtime, ui64 tabletId, const TActorId& sender, IEventBase *ev, ui32 nodeIndex = 0, bool sysTablet = false); 
+    void InvalidateTabletResolverCache(TTestActorRuntime& runtime, ui64 tabletId, ui32 nodeIndex = 0); 
+    void RebootTablet(TTestActorRuntime& runtime, ui64 tabletId, const TActorId& sender, ui32 nodeIndex = 0, bool sysTablet = false); 
     void GracefulRestartTablet(TTestActorRuntime& runtime, ui64 tabletId, const TActorId& sender, ui32 nodeIndex = 0);
     void SetupTabletServices(TTestActorRuntime& runtime, TAppPrepare* app = nullptr, bool mockDisk = false,
                              NFake::TStorage storage = {}, NFake::TCaches caches = {});
@@ -79,9 +79,9 @@ namespace NKikimr {
     ui64 GetFreePDiskSize(TTestActorRuntime& runtime, const TActorId& sender);
     void PrintTabletDb(TTestActorRuntime& runtime, ui64 tabletId, const TActorId& sender);
 
-    NTabletPipe::TClientConfig GetPipeConfigWithRetriesAndFollowers();
+    NTabletPipe::TClientConfig GetPipeConfigWithRetriesAndFollowers(); 
 
-    IActor* CreateFlatDummyTablet(const TActorId &tablet, TTabletStorageInfo *info);
+    IActor* CreateFlatDummyTablet(const TActorId &tablet, TTabletStorageInfo *info); 
 
     void WaitScheduledEvents(TTestActorRuntime &runtime, TDuration delay, const TActorId &sender, ui32 nodeIndex = 0);
 
@@ -140,7 +140,7 @@ namespace NKikimr {
         typedef TIntrusivePtr<TFakeHiveState> TPtr;
 
         TFakeHiveState()
-            : NextTabletId(TTestTxConfig::FakeHiveTablets)
+            : NextTabletId(TTestTxConfig::FakeHiveTablets) 
             , NextHiveNextTabletId(NextTabletId + TABLETS_PER_CHILD_HIVE)
         {}
 

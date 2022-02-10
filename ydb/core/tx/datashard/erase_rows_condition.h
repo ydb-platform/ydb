@@ -16,7 +16,7 @@ class IEraseRowsCondition {
 public:
     virtual ~IEraseRowsCondition() = default;
     virtual void AddToRequest(NKikimrTxDataShard::TEvEraseRowsRequest& request) const = 0;
-    virtual void Prepare(TIntrusiveConstPtr<NTable::TRowScheme> scheme, TMaybe<NTable::TPos> remapPos = Nothing()) = 0;
+    virtual void Prepare(TIntrusiveConstPtr<NTable::TRowScheme> scheme, TMaybe<NTable::TPos> remapPos = Nothing()) = 0; 
     virtual bool Check(const NTable::TRowState& row) const = 0;
     virtual TVector<NTable::TTag> Tags() const = 0;
 

@@ -372,34 +372,34 @@ Y_UNIT_TEST_SUITE(QueueCountersTest) {
         ASSERT_STR_COUPLE_CONTAINS(CountersString(core), CountersString(ymqCounters), "my_queue");
     }
 
-    void RemoveQueueCountersTest(bool leader, const TString& folderId) {
+    void RemoveQueueCountersTest(bool leader, const TString& folderId) { 
         NKikimrConfig::TSqsConfig cfg;
         cfg.SetCreateLazyCounters(false);
         TIntrusivePtr<NMonitoring::TDynamicCounters> core = new NMonitoring::TDynamicCounters();
         TIntrusivePtr<NMonitoring::TDynamicCounters> ymqCounters = new NMonitoring::TDynamicCounters();
         TIntrusivePtr<TUserCounters> user = new TUserCounters(cfg, core, ymqCounters, nullptr, "my_user", nullptr);
         TIntrusivePtr<TQueueCounters> queue = user->CreateQueueCounters("my_queue", folderId, true);
-        if (leader) {
-            queue = queue->GetCountersForLeaderNode();
+        if (leader) { 
+            queue = queue->GetCountersForLeaderNode(); 
         }
         ASSERT_STR_COUPLE_CONTAINS(CountersString(core), CountersString(ymqCounters), "queue=my_queue");
         queue->RemoveCounters();
         ASSERT_STR_COUPLE_DONT_CONTAIN(CountersString(core), CountersString(ymqCounters), "queue=my_queue");
     }
 
-    Y_UNIT_TEST(RemoveQueueCountersNonLeaderWithoutFolderTest) {
+    Y_UNIT_TEST(RemoveQueueCountersNonLeaderWithoutFolderTest) { 
         RemoveQueueCountersTest(false, "");
     }
 
-    Y_UNIT_TEST(RemoveQueueCountersLeaderWithoutFolderTest) {
+    Y_UNIT_TEST(RemoveQueueCountersLeaderWithoutFolderTest) { 
         RemoveQueueCountersTest(true, "");
     }
 
-    Y_UNIT_TEST(RemoveQueueCountersNonLeaderWithFolderTest) {
+    Y_UNIT_TEST(RemoveQueueCountersNonLeaderWithFolderTest) { 
         RemoveQueueCountersTest(false, "my_folder");
     }
 
-    Y_UNIT_TEST(RemoveQueueCountersLeaderWithFolderTest) {
+    Y_UNIT_TEST(RemoveQueueCountersLeaderWithFolderTest) { 
         RemoveQueueCountersTest(true, "my_folder");
     }
 
@@ -412,7 +412,7 @@ Y_UNIT_TEST_SUITE(QueueCountersTest) {
         TIntrusivePtr<TUserCounters> total = new TUserCounters(cfg, core, ymqCounters, nullptr, TOTAL_COUNTER_LABEL, nullptr);
         total->ShowDetailedCounters(TInstant::Max());
         TIntrusivePtr<TUserCounters> user = new TUserCounters(cfg, core, ymqCounters, nullptr, "my_user", total);
-        TIntrusivePtr<TQueueCounters> queue = user->CreateQueueCounters("my_queue", cloudMode ? "my_folder" : "", true)->GetCountersForLeaderNode();
+        TIntrusivePtr<TQueueCounters> queue = user->CreateQueueCounters("my_queue", cloudMode ? "my_folder" : "", true)->GetCountersForLeaderNode(); 
         UNIT_ASSERT_STRING_CONTAINS(CountersString(core), "queue=my_queue");
 
         queue->ShowDetailedCounters(TInstant::Max());

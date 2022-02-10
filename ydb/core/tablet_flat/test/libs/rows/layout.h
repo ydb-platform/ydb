@@ -61,7 +61,7 @@ namespace NTest{
             return *Scheme;
         }
 
-        TIntrusiveConstPtr<TRowScheme> RowScheme() const noexcept
+        TIntrusiveConstPtr<TRowScheme> RowScheme() const noexcept 
         {
             return Scheme;
         }
@@ -74,7 +74,7 @@ namespace NTest{
     private:
         TVector<NTable::TColumn> Cols;
         TVector<NTable::TTag> Tags_;
-        TIntrusiveConstPtr<TRowScheme> Scheme;
+        TIntrusiveConstPtr<TRowScheme> Scheme; 
     };
 }
 }

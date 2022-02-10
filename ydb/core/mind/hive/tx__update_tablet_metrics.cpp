@@ -23,23 +23,23 @@ public:
         NIceDb::TNiceDb db(txc.DB);
         for (const auto& metrics : record.GetTabletMetrics()) {
             TTabletId tabletId = metrics.GetTabletID();
-            TFollowerId followerId = metrics.GetFollowerID();
+            TFollowerId followerId = metrics.GetFollowerID(); 
             //BLOG_D("THive::TTxUpdateTabletMetrics::Execute Tablet: " << tabletId);
-            TTabletInfo* tablet = Self->FindTablet(tabletId, followerId);
+            TTabletInfo* tablet = Self->FindTablet(tabletId, followerId); 
             if (tablet != nullptr && metrics.HasResourceUsage()) {
                 tablet->UpdateResourceUsage(metrics.GetResourceUsage());
                 const NKikimrTabletBase::TMetrics& metrics(tablet->GetResourceValues());
 
-                db.Table<Schema::Metrics>().Key(tabletId, followerId).Update<Schema::Metrics::ProtoMetrics>(metrics);
+                db.Table<Schema::Metrics>().Key(tabletId, followerId).Update<Schema::Metrics::ProtoMetrics>(metrics); 
 
-                db.Table<Schema::Metrics>().Key(tabletId, followerId).Update<Schema::Metrics::MaximumCPU>(tablet->GetResourceMetricsAggregates().MaximumCPU);
-                db.Table<Schema::Metrics>().Key(tabletId, followerId).Update<Schema::Metrics::MaximumMemory>(tablet->GetResourceMetricsAggregates().MaximumMemory);
-                db.Table<Schema::Metrics>().Key(tabletId, followerId).Update<Schema::Metrics::MaximumNetwork>(tablet->GetResourceMetricsAggregates().MaximumNetwork);
+                db.Table<Schema::Metrics>().Key(tabletId, followerId).Update<Schema::Metrics::MaximumCPU>(tablet->GetResourceMetricsAggregates().MaximumCPU); 
+                db.Table<Schema::Metrics>().Key(tabletId, followerId).Update<Schema::Metrics::MaximumMemory>(tablet->GetResourceMetricsAggregates().MaximumMemory); 
+                db.Table<Schema::Metrics>().Key(tabletId, followerId).Update<Schema::Metrics::MaximumNetwork>(tablet->GetResourceMetricsAggregates().MaximumNetwork); 
 
                 tablet->Statistics.SetLastAliveTimestamp(now.MilliSeconds());
                 tablet->ActualizeTabletStatistics(now);
                     
-                if (tablet->IsLeader()) {
+                if (tablet->IsLeader()) { 
                     db.Table<Schema::Tablet>()
                         .Key(tabletId)
                         .Update<Schema::Tablet::Statistics>(tablet->Statistics);
@@ -50,7 +50,7 @@ public:
                 }
             }
             Reply->Record.AddTabletId(tabletId);
-            Reply->Record.AddFollowerId(followerId);
+            Reply->Record.AddFollowerId(followerId); 
         }
         TNodeInfo* node = Self->FindNode(nodeId);
         if (node != nullptr) {

@@ -69,7 +69,7 @@ TVector<TTable> GetStandardTables(ui64 shards, ui64 partitions, bool enableAutos
                     .SetSmall(true)
                     .SetInMemory(true)
                     .SetShard(-1)
-                    .SetHasLeaderTablet());
+                    .SetHasLeaderTablet()); 
     list.push_back(TTable("State")
                     .SetColumns(StateColumns)
                     .SetSmall(true)

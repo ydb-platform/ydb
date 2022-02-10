@@ -534,7 +534,7 @@ namespace NPage {
         }
 
     public:
-        const TIntrusiveConstPtr<TPartScheme> Scheme;
+        const TIntrusiveConstPtr<TPartScheme> Scheme; 
 
     private:
         const TPgSize PageSize = 8 * 1024;
@@ -555,7 +555,7 @@ namespace NPage {
 
     class TIndexWriter {
     public:
-        TIndexWriter(TIntrusiveConstPtr<TPartScheme> scheme, const TConf &conf, TGroupId groupId)
+        TIndexWriter(TIntrusiveConstPtr<TPartScheme> scheme, const TConf &conf, TGroupId groupId) 
             : Scheme(std::move(scheme))
             , MinSize(conf.Groups[groupId.Index].IndexMin)
             , GroupId(groupId)
@@ -629,7 +629,7 @@ namespace NPage {
         }
 
     public:
-        const TIntrusiveConstPtr<TPartScheme> Scheme;
+        const TIntrusiveConstPtr<TPartScheme> Scheme; 
 
     private:
         const TPgSize MinSize = 8 * 1024;

@@ -62,7 +62,7 @@ private:
 
     bool CalculateRangeFrom() {
         /*
-         *  Please note that TabletId and FollowerId do not have NULLs in columns
+         *  Please note that TabletId and FollowerId do not have NULLs in columns 
          */
         const auto& cellsFrom = TableRange.From.GetCells();
 
@@ -84,7 +84,7 @@ private:
 
         if (cellsFrom.size() == 2) {
             if (!cellsFrom[1].IsNull()) {
-                FromFollowerId = cellsFrom[1].AsValue<ui32>();
+                FromFollowerId = cellsFrom[1].AsValue<ui32>(); 
             }
 
             if (TableRange.FromInclusive) {
@@ -92,17 +92,17 @@ private:
             }
 
             // The range start from NULL exclusive. So, the next value after NULL will be used.
-            if (!FromFollowerId.has_value()) {
-                FromFollowerId = Min<ui32>();
+            if (!FromFollowerId.has_value()) { 
+                FromFollowerId = Min<ui32>(); 
                 return true;
             }
 
-            if (FromFollowerId.value() < Max<ui32>()) {
-                FromFollowerId = FromFollowerId.value() + 1;
+            if (FromFollowerId.value() < Max<ui32>()) { 
+                FromFollowerId = FromFollowerId.value() + 1; 
                 return true;
             }
 
-            FromFollowerId.reset();
+            FromFollowerId.reset(); 
         }
 
         if (FromTabletId < Max<ui64>()) {
@@ -139,7 +139,7 @@ private:
 
         if (cellsTo.size() == 2) {
             if (!cellsTo[1].IsNull()) {
-                ToFollowerId = cellsTo[1].AsValue<ui32>();
+                ToFollowerId = cellsTo[1].AsValue<ui32>(); 
             }
 
             if (TableRange.ToInclusive) {
@@ -147,17 +147,17 @@ private:
             }
 
             // The range ends at NULL exclusive. So, the value before NULL will be used.
-            if (!ToFollowerId.has_value()) {
-                ToFollowerId = Max<ui32>();
+            if (!ToFollowerId.has_value()) { 
+                ToFollowerId = Max<ui32>(); 
                 return decreaseTabletId();
             }
 
-            if (ToFollowerId > Min<ui32>()) {
-                ToFollowerId = ToFollowerId.value() - 1;
+            if (ToFollowerId > Min<ui32>()) { 
+                ToFollowerId = ToFollowerId.value() - 1; 
                 return true;
             }
 
-            ToFollowerId.reset();
+            ToFollowerId.reset(); 
         }
 
         return decreaseTabletId();
@@ -240,8 +240,8 @@ private:
                 insert({TSchema::TabletId::ColumnId, [] (const TEntry& entry) {
                     return TCell::Make<ui64>(entry.GetTabletId());
                 }});
-                insert({TSchema::FollowerId::ColumnId, [] (const TEntry& entry) {
-                    return TCell::Make<ui32>(entry.GetFollowerId());
+                insert({TSchema::FollowerId::ColumnId, [] (const TEntry& entry) { 
+                    return TCell::Make<ui32>(entry.GetFollowerId()); 
                 }});
                 insert({TSchema::TypeCol::ColumnId, [] (const TEntry& entry) {
                     const auto& type = entry.GetType();
@@ -285,7 +285,7 @@ private:
         static TExtractorsMap extractors;
 
         size_t index = 0;
-        ui32 fromFollowerId = FromFollowerId.value_or(Min<ui32>());
+        ui32 fromFollowerId = FromFollowerId.value_or(Min<ui32>()); 
 
         if (record.EntriesSize() > 0
             && record.GetEntries(0).GetTabletId() == FromTabletId)
@@ -293,7 +293,7 @@ private:
             for (; index < record.EntriesSize(); ++index) {
                 const auto& entry = record.GetEntries(index);
 
-                if (entry.GetTabletId() != FromTabletId || entry.GetFollowerId() >= fromFollowerId) {
+                if (entry.GetTabletId() != FromTabletId || entry.GetFollowerId() >= fromFollowerId) { 
                     break;
                 }
             }
@@ -301,12 +301,12 @@ private:
 
         auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(ScanId);
         TVector<TCell> cells;
-        ui32 toFollowerId = ToFollowerId.value_or(Max<ui32>());
+        ui32 toFollowerId = ToFollowerId.value_or(Max<ui32>()); 
 
         for (; index < record.EntriesSize(); ++index) {
             const auto& entry = record.GetEntries(index);
 
-            if (entry.GetTabletId() == ToTabletId && entry.GetFollowerId() > toFollowerId) {
+            if (entry.GetTabletId() == ToTabletId && entry.GetFollowerId() > toFollowerId) { 
                 break;
             }
 
@@ -346,10 +346,10 @@ private:
     static constexpr size_t BatchSize = 10000;
 
     ui64 FromTabletId = 0;
-    std::optional<ui32> FromFollowerId;
+    std::optional<ui32> FromFollowerId; 
 
     ui64 ToTabletId = Max<ui64>();
-    std::optional<ui32> ToFollowerId;
+    std::optional<ui32> ToFollowerId; 
 
     TVector<ui64> TabletIds;
     TVector<ui64>::const_iterator FromIterator;

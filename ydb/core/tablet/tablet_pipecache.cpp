@@ -461,9 +461,9 @@ IActor* CreatePipePeNodeCache(const TIntrusivePtr<TPipePeNodeCacheConfig> &confi
     return new TPipePeNodeCache(config);
 }
 
-TActorId MakePipePeNodeCacheID(bool allowFollower) {
+TActorId MakePipePeNodeCacheID(bool allowFollower) { 
     char x[12] = "PipeCache";
-    x[9] = allowFollower ? 'F' : 'A';
+    x[9] = allowFollower ? 'F' : 'A'; 
     return TActorId(0, TStringBuf(x, 12));
 }
 

@@ -187,7 +187,7 @@ class TestSqsMultinodeCluster(KikimrSqsTestBase):
 
         assert_that(
             call_receive,
-            raises(RuntimeError, pattern='failed with status 50.*\n.*Queue leader session error.')
+            raises(RuntimeError, pattern='failed with status 50.*\n.*Queue leader session error.') 
         )
         logging.debug('_run_receive_message finished')
         self.receive_message_finished = True

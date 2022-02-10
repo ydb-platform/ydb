@@ -23,7 +23,7 @@ namespace NTabletPipe {
             , ConnectCookie(connectCookie)
             , Features(features)
             , NeedUnsubscribe(false)
-            , Leader(true)
+            , Leader(true) 
             , Connected(false)
         {
             Y_VERIFY(tabletId != 0);
@@ -184,7 +184,7 @@ namespace NTabletPipe {
         void Handle(TEvTabletPipe::TEvActivate::TPtr& ev, const TActorContext& ctx) {
             OwnerId = ev->Get()->OwnerId;
             RecipientId = ev->Get()->RecipientId;
-            Leader = ev->Get()->Leader;
+            Leader = ev->Get()->Leader; 
             Y_VERIFY(OwnerId);
             Y_VERIFY(RecipientId);
             if (InterconnectSession) {
@@ -249,7 +249,7 @@ namespace NTabletPipe {
         const ui64 ConnectCookie;
         const ui32 Features;
         bool NeedUnsubscribe;
-        bool Leader;
+        bool Leader; 
         bool Connected;
         bool HadShutdown = false;
     };
@@ -263,7 +263,7 @@ namespace NTabletPipe {
         {
         }
 
-        TActorId Accept(TEvTabletPipe::TEvConnect::TPtr &ev, TActorIdentity owner, TActorId recipientId, bool leader) override {
+        TActorId Accept(TEvTabletPipe::TEvConnect::TPtr &ev, TActorIdentity owner, TActorId recipientId, bool leader) override { 
             Y_VERIFY(ev->Get()->Record.GetTabletId() == TabletId);
             const TActorId clientId = ActorIdFromProto(ev->Get()->Record.GetClientId());
             IActor* server = CreateServer(TabletId, clientId, ev->InterconnectSession, ev->Get()->Record.GetFeatures(), ev->Cookie);
@@ -271,16 +271,16 @@ namespace NTabletPipe {
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::PIPE_SERVER, "[" << TabletId << "]"
                 << " Accept Connect Originator# " << ev->Sender);
             ServerIds.insert(serverId);
-            ActivateServer(TabletId, serverId, owner, recipientId, leader);
+            ActivateServer(TabletId, serverId, owner, recipientId, leader); 
             return serverId;
         }
 
-        void Reject(TEvTabletPipe::TEvConnect::TPtr &ev, TActorIdentity owner, NKikimrProto::EReplyStatus status, bool leader) override {
+        void Reject(TEvTabletPipe::TEvConnect::TPtr &ev, TActorIdentity owner, NKikimrProto::EReplyStatus status, bool leader) override { 
             Y_VERIFY(ev->Get()->Record.GetTabletId() == TabletId);
             const TActorId clientId = ActorIdFromProto(ev->Get()->Record.GetClientId());
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::PIPE_SERVER, "[" << TabletId << "]"
                 << " Reject Connect Originator# " << ev->Sender);
-            owner.Send(clientId, new TEvTabletPipe::TEvConnectResult(status, TabletId, clientId, TActorId(), leader));
+            owner.Send(clientId, new TEvTabletPipe::TEvConnectResult(status, TabletId, clientId, TActorId(), leader)); 
         }
 
         void Stop(TActorIdentity owner) override {
@@ -315,10 +315,10 @@ namespace NTabletPipe {
             return serverId;
         }
 
-        void Activate(TActorIdentity owner, TActorId recipientId, bool leader) override {
+        void Activate(TActorIdentity owner, TActorId recipientId, bool leader) override { 
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::PIPE_SERVER, "[" << TabletId << "]" << " Activate");
             for (const auto& serverId : ActivatePending) {
-                ActivateServer(TabletId, serverId, owner, recipientId, leader);
+                ActivateServer(TabletId, serverId, owner, recipientId, leader); 
             }
 
             ActivatePending.clear();
@@ -356,8 +356,8 @@ namespace NTabletPipe {
         return new TConnectAcceptor(tabletId);
     }
 
-    void ActivateServer(ui64 tabletId, TActorId serverId, TActorIdentity owner, TActorId recipientId, bool leader) {
-        owner.Send(serverId, new TEvTabletPipe::TEvActivate(tabletId, owner, recipientId, leader));
+    void ActivateServer(ui64 tabletId, TActorId serverId, TActorIdentity owner, TActorId recipientId, bool leader) { 
+        owner.Send(serverId, new TEvTabletPipe::TEvActivate(tabletId, owner, recipientId, leader)); 
     }
 
     void CloseServer(TActorIdentity owner, TActorId serverId) {

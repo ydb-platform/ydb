@@ -502,8 +502,8 @@ struct TReadTarget {
         Snapshot,
         Head,
         HeadAfterSnapshot,
-        Follower,
-        FollowerAfterSnapshot
+        Follower, 
+        FollowerAfterSnapshot 
     };
 
     TReadTarget()
@@ -515,7 +515,7 @@ struct TReadTarget {
     }
 
     bool HasSnapshotTime() const {
-        return Mode == EMode::Snapshot || Mode == EMode::HeadAfterSnapshot || Mode == EMode::FollowerAfterSnapshot;
+        return Mode == EMode::Snapshot || Mode == EMode::HeadAfterSnapshot || Mode == EMode::FollowerAfterSnapshot; 
     }
 
     std::pair<ui64, ui64> GetSnapshotTime() const {
@@ -542,12 +542,12 @@ struct TReadTarget {
         return TReadTarget(EMode::HeadAfterSnapshot, snapshotTime);
     }
 
-    static TReadTarget Follower() {
-        return TReadTarget(EMode::Follower);
+    static TReadTarget Follower() { 
+        return TReadTarget(EMode::Follower); 
     }
 
-    static TReadTarget FollowerAfterSnapshot(const std::pair<ui64, ui64>& snapshotTime) {
-        return TReadTarget(EMode::FollowerAfterSnapshot, snapshotTime);
+    static TReadTarget FollowerAfterSnapshot(const std::pair<ui64, ui64>& snapshotTime) { 
+        return TReadTarget(EMode::FollowerAfterSnapshot, snapshotTime); 
     }
 
 private:

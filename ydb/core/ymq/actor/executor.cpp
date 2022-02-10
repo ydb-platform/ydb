@@ -46,7 +46,7 @@ TExecutorBuilder::TExecutorBuilder(TActorId parent, const TString& requestId)
 
 void TExecutorBuilder::Start() {
     if (HasQueryId() && QueueName_) {
-        SendToQueueLeader();
+        SendToQueueLeader(); 
     } else {
         StartExecutorActor();
     }
@@ -95,8 +95,8 @@ void TExecutorBuilder::StartExecutorActor() {
     TActivationContext::Register(actor.Release());
 }
 
-void TExecutorBuilder::SendToQueueLeader() {
-    Y_VERIFY(QueueLeaderActor_);
+void TExecutorBuilder::SendToQueueLeader() { 
+    Y_VERIFY(QueueLeaderActor_); 
 
     auto ev = MakeHolder<TSqsEvents::TEvExecute>(Parent_, RequestId_, TQueuePath(Cfg().GetRoot(), UserName_, QueueName_, QueueVersion_), QueryId_, Shard_);
     ev->RetryOnTimeout = RetryOnTimeout_;
@@ -104,9 +104,9 @@ void TExecutorBuilder::SendToQueueLeader() {
     Params(); // create params if not yet exist
     ev->Params = std::move(*Request().Record.MutableTransaction()->MutableMiniKQLTransaction()->MutableParams()->MutableProto());
 
-    RLOG_SQS_DEBUG("Sending execute request for query(idx=" << QueryId_ << ") to queue leader");
+    RLOG_SQS_DEBUG("Sending execute request for query(idx=" << QueryId_ << ") to queue leader"); 
 
-    TActivationContext::Send(new IEventHandle(QueueLeaderActor_, Parent_, ev.Release()));
+    TActivationContext::Send(new IEventHandle(QueueLeaderActor_, Parent_, ev.Release())); 
 }
 
 const char* TExecutorBuilder::GetQueryById(size_t idx) {

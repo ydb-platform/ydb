@@ -33,7 +33,7 @@
 namespace NKikimr {
 namespace NDataShard {
 
-struct TImportJobProduct: public IDestructable {
+struct TImportJobProduct: public IDestructable { 
     bool Success;
     TString Error;
     ui64 BytesWritten;

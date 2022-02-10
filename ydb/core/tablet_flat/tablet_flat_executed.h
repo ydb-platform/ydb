@@ -10,9 +10,9 @@ class TExecutor;
 struct IMiniKQLFactory {
     virtual ~IMiniKQLFactory() = default;
 
-    virtual TAutoPtr<ITransaction> Make(TEvTablet::TEvLocalMKQL::TPtr&) = 0;
-    virtual TAutoPtr<ITransaction> Make(TEvTablet::TEvLocalSchemeTx::TPtr&) = 0;
-    virtual TAutoPtr<ITransaction> Make(TEvTablet::TEvLocalReadColumns::TPtr&) = 0;
+    virtual TAutoPtr<ITransaction> Make(TEvTablet::TEvLocalMKQL::TPtr&) = 0; 
+    virtual TAutoPtr<ITransaction> Make(TEvTablet::TEvLocalSchemeTx::TPtr&) = 0; 
+    virtual TAutoPtr<ITransaction> Make(TEvTablet::TEvLocalReadColumns::TPtr&) = 0; 
 };
 
 class TTabletExecutedFlat : public NFlatExecutorSetup::ITablet {
@@ -23,8 +23,8 @@ protected:
     IExecutor* Executor() const { return Executor0; }
     const TInstant StartTime() const { return StartTime0; }
 
-    void Execute(TAutoPtr<ITransaction> transaction, const TActorContext &ctx);
-    void Execute(TAutoPtr<ITransaction> transaction);
+    void Execute(TAutoPtr<ITransaction> transaction, const TActorContext &ctx); 
+    void Execute(TAutoPtr<ITransaction> transaction); 
 
     const NTable::TScheme& Scheme() const noexcept;
 
@@ -45,12 +45,12 @@ protected:
 
     void Handle(TEvTablet::TEvBoot::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTablet::TEvRestored::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvTablet::TEvFollowerSyncComplete::TPtr&);
-    void Handle(TEvTablet::TEvFBoot::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvTablet::TEvFUpdate::TPtr&);
-    void Handle(TEvTablet::TEvFAuxUpdate::TPtr&);
-    void Handle(TEvTablet::TEvFollowerGcApplied::TPtr&);
-    void Handle(TEvTablet::TEvNewFollowerAttached::TPtr&);
+    void Handle(TEvTablet::TEvFollowerSyncComplete::TPtr&); 
+    void Handle(TEvTablet::TEvFBoot::TPtr &ev, const TActorContext &ctx); 
+    void Handle(TEvTablet::TEvFUpdate::TPtr&); 
+    void Handle(TEvTablet::TEvFAuxUpdate::TPtr&); 
+    void Handle(TEvTablet::TEvFollowerGcApplied::TPtr&); 
+    void Handle(TEvTablet::TEvNewFollowerAttached::TPtr&); 
     void Handle(TEvTablet::TEvUpdateConfig::TPtr&);
 
     void HandleTabletStop(TEvTablet::TEvTabletStop::TPtr &ev, const TActorContext &ctx);
@@ -82,11 +82,11 @@ private:
     IExecutor* CreateExecutor(const TActorContext &ctx);
 
 private:
-    TAutoPtr<IMiniKQLFactory> Factory;
+    TAutoPtr<IMiniKQLFactory> Factory; 
 
     IExecutor *Executor0;
     TInstant StartTime0;
-    TSharedQuotaPtr TxCacheQuota;
+    TSharedQuotaPtr TxCacheQuota; 
 };
 
 }}

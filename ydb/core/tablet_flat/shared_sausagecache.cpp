@@ -104,7 +104,7 @@ class TSharedPageCache : public TActor<TSharedPageCache> {
     };
 
     struct TRequest : public TSimpleRefCount<TRequest> {
-        TRequest(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection)
+        TRequest(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection) 
             : Label(pageCollection->Label())
             , PageCollection(std::move(pageCollection))
         {
@@ -115,7 +115,7 @@ class TSharedPageCache : public TActor<TSharedPageCache> {
         TActorId Source;    /* receiver of read results     */
         TActorId Owner;     /* receiver of NBlockIO::TEvStat*/
         NBlockIO::EPriority Priority;
-        TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
+        TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection; 
         ui64 EventCookie = 0;
         ui64 RequestCookie = 0;
         ui64 PendingBlocks = 0;
@@ -124,7 +124,7 @@ class TSharedPageCache : public TActor<TSharedPageCache> {
     };
 
     struct TExpectant {
-        TDeque<std::pair<TIntrusivePtr<TRequest>, ui32>> SourceRequests; // waiting request, index in ready blocks for page
+        TDeque<std::pair<TIntrusivePtr<TRequest>, ui32>> SourceRequests; // waiting request, index in ready blocks for page 
     };
 
     struct TCollection {
@@ -141,7 +141,7 @@ class TSharedPageCache : public TActor<TSharedPageCache> {
 
     struct TRequestQueue {
         struct TPagesToRequest : public TIntrusiveListItem<TPagesToRequest> {
-            TIntrusivePtr<TRequest> Request;
+            TIntrusivePtr<TRequest> Request; 
         };
 
         struct TByActorRequest {
@@ -160,7 +160,7 @@ class TSharedPageCache : public TActor<TSharedPageCache> {
     TIntrusivePtr<TSharedPageGCList> GCList = new TSharedPageGCList;
 
     TActorId Owner;
-    TAutoPtr<NUtil::ILogger> Logger;
+    TAutoPtr<NUtil::ILogger> Logger; 
     THashMap<TLogoBlobID, TCollection> Collections;
     THashMap<TActorId, TCollectionsOwner> CollectionsOwners;
 

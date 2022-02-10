@@ -82,7 +82,7 @@ private:
     void HandleConnect(TEvInterconnect::TEvNodeConnected::TPtr& ev);
     void HandleUndelivered(TEvents::TEvUndelivered::TPtr& ev);
     void HandleDisconnect(ui32 nodeId);
-    void HandleGetLeaderNodeForQueueResponse(TSqsEvents::TEvGetLeaderNodeForQueueResponse::TPtr& ev);
+    void HandleGetLeaderNodeForQueueResponse(TSqsEvents::TEvGetLeaderNodeForQueueResponse::TPtr& ev); 
 
 private:
     TIntrusivePtr<NMonitoring::TDynamicCounters> SqsCounters_;

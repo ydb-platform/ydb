@@ -27,7 +27,7 @@ class TTxCreateTablet : public TTransactionBase<THive> {
     TVector<TSubDomainKey> AllowedDomains;
     ETabletState State;
     NKikimrHive::TTabletCategory TabletCategory;
-    TVector<NKikimrHive::TFollowerGroup> FollowerGroups;
+    TVector<NKikimrHive::TFollowerGroup> FollowerGroups; 
     NKikimrHive::ETabletBootMode BootMode;
     NKikimrHive::TForwardRequest ForwardRequest;
 
@@ -71,35 +71,35 @@ public:
         if (RequestData.HasTabletCategory()) {
             TabletCategory.CopyFrom(RequestData.GetTabletCategory());
         }
-        auto& followerGroups = RequestData.GetFollowerGroups();
-        std::copy(followerGroups.begin(), followerGroups.end(), std::back_inserter(FollowerGroups));
-        if (FollowerGroups.empty() &&
-                (RequestData.HasFollowerCount()
-                 || RequestData.HasAllowFollowerPromotion()
-                 || RequestData.HasCrossDataCenterFollowers()
-                 || RequestData.HasCrossDataCenterFollowerCount())) {
-            FollowerGroups.emplace_back();
-            NKikimrHive::TFollowerGroup& compatibilityGroup(FollowerGroups.back());
-            if (RequestData.HasAllowFollowerPromotion()) {
-                compatibilityGroup.SetAllowLeaderPromotion(RequestData.GetAllowFollowerPromotion());
+        auto& followerGroups = RequestData.GetFollowerGroups(); 
+        std::copy(followerGroups.begin(), followerGroups.end(), std::back_inserter(FollowerGroups)); 
+        if (FollowerGroups.empty() && 
+                (RequestData.HasFollowerCount() 
+                 || RequestData.HasAllowFollowerPromotion() 
+                 || RequestData.HasCrossDataCenterFollowers() 
+                 || RequestData.HasCrossDataCenterFollowerCount())) { 
+            FollowerGroups.emplace_back(); 
+            NKikimrHive::TFollowerGroup& compatibilityGroup(FollowerGroups.back()); 
+            if (RequestData.HasAllowFollowerPromotion()) { 
+                compatibilityGroup.SetAllowLeaderPromotion(RequestData.GetAllowFollowerPromotion()); 
             }
-            if (RequestData.HasCrossDataCenterFollowers()) {
+            if (RequestData.HasCrossDataCenterFollowers()) { 
                 compatibilityGroup.SetFollowerCount(Self->GetDataCenters());
                 compatibilityGroup.SetRequireAllDataCenters(true);
             }
-            if (RequestData.HasCrossDataCenterFollowerCount()) {
+            if (RequestData.HasCrossDataCenterFollowerCount()) { 
                 compatibilityGroup.SetFollowerCount(RequestData.GetCrossDataCenterFollowerCount() * Self->GetDataCenters());
                 compatibilityGroup.SetRequireAllDataCenters(true);
             }
-            if (RequestData.HasFollowerCount()) {
-                compatibilityGroup.SetFollowerCount(RequestData.GetFollowerCount());
+            if (RequestData.HasFollowerCount()) { 
+                compatibilityGroup.SetFollowerCount(RequestData.GetFollowerCount()); 
             }
             compatibilityGroup.SetAllowClientRead(true);
         }
         ObjectId = RequestData.GetObjectId();
     }
 
-    void UpdateChannelsBinding(TLeaderTabletInfo& tablet, NIceDb::TNiceDb& db) {
+    void UpdateChannelsBinding(TLeaderTabletInfo& tablet, NIceDb::TNiceDb& db) { 
         Y_VERIFY(tablet.BoundChannels.size() <= BoundChannels.size(), "only expansion channels number is allowed in Binded Channels");
 
         std::bitset<MAX_TABLET_CHANNELS> newChannels;
@@ -143,7 +143,7 @@ public:
         }
     }
 
-    bool ValidateChannelsBinding(TLeaderTabletInfo& tablet) {
+    bool ValidateChannelsBinding(TLeaderTabletInfo& tablet) { 
         if (BoundChannels.size() < tablet.BoundChannels.size()) {
             ErrorReason = NKikimrHive::ERROR_REASON_CHANNELS_CANNOT_SHRINK;
             return false;
@@ -179,7 +179,7 @@ public:
             auto itOwner = Self->OwnerToTablet.find(ownerIdx);
             if (itOwner != Self->OwnerToTablet.end()) { // tablet is already created
                 const ui64 tabletId = itOwner->second;
-                TLeaderTabletInfo* tablet = Self->FindTablet(tabletId);
+                TLeaderTabletInfo* tablet = Self->FindTablet(tabletId); 
                 if (tablet != nullptr) {
                     // make sure tablet type matches the requested one
                     TTabletTypes::EType existingTabletType = tablet->Type;
@@ -197,8 +197,8 @@ public:
                     if (Status == NKikimrProto::ALREADY) {
                         if (BootMode == NKikimrHive::TABLET_BOOT_MODE_EXTERNAL) {
                             // Make sure any running tablets are stopped
-                            for (TFollowerTabletInfo& follower : tablet->Followers) {
-                                follower.InitiateStop();
+                            for (TFollowerTabletInfo& follower : tablet->Followers) { 
+                                follower.InitiateStop(); 
                             }
                             tablet->InitiateStop();
                         }
@@ -254,43 +254,43 @@ public:
 
                     UpdateChannelsBinding(*tablet, db);
 
-                    auto itFollowerGroup = tablet->FollowerGroups.begin();
-                    for (const auto& srcFollowerGroup : FollowerGroups) {
-                        TFollowerGroup& followerGroup = itFollowerGroup != tablet->FollowerGroups.end() ? *itFollowerGroup : tablet->AddFollowerGroup();
+                    auto itFollowerGroup = tablet->FollowerGroups.begin(); 
+                    for (const auto& srcFollowerGroup : FollowerGroups) { 
+                        TFollowerGroup& followerGroup = itFollowerGroup != tablet->FollowerGroups.end() ? *itFollowerGroup : tablet->AddFollowerGroup(); 
                         ui32 oldFollowerCount = followerGroup.GetComputedFollowerCount(Self->GetDataCenters());
-                        followerGroup = srcFollowerGroup;
+                        followerGroup = srcFollowerGroup; 
 
                         TVector<ui32> allowedDataCenters;
                         for (const TDataCenterId& dc : followerGroup.AllowedDataCenters) {
                             allowedDataCenters.push_back(DataCenterFromString(dc));
                         }
-                        db.Table<Schema::TabletFollowerGroup>().Key(TabletId, followerGroup.Id).Update(
-                                    NIceDb::TUpdate<Schema::TabletFollowerGroup::FollowerCount>(followerGroup.GetRawFollowerCount()),
-                                    NIceDb::TUpdate<Schema::TabletFollowerGroup::AllowLeaderPromotion>(followerGroup.AllowLeaderPromotion),
-                                    NIceDb::TUpdate<Schema::TabletFollowerGroup::AllowClientRead>(followerGroup.AllowClientRead),
-                                    NIceDb::TUpdate<Schema::TabletFollowerGroup::AllowedNodes>(followerGroup.AllowedNodes),
+                        db.Table<Schema::TabletFollowerGroup>().Key(TabletId, followerGroup.Id).Update( 
+                                    NIceDb::TUpdate<Schema::TabletFollowerGroup::FollowerCount>(followerGroup.GetRawFollowerCount()), 
+                                    NIceDb::TUpdate<Schema::TabletFollowerGroup::AllowLeaderPromotion>(followerGroup.AllowLeaderPromotion), 
+                                    NIceDb::TUpdate<Schema::TabletFollowerGroup::AllowClientRead>(followerGroup.AllowClientRead), 
+                                    NIceDb::TUpdate<Schema::TabletFollowerGroup::AllowedNodes>(followerGroup.AllowedNodes), 
                                     NIceDb::TUpdate<Schema::TabletFollowerGroup::AllowedDataCenters>(allowedDataCenters),
                                     NIceDb::TUpdate<Schema::TabletFollowerGroup::AllowedDataCenterIds>(followerGroup.AllowedDataCenters),
-                                    NIceDb::TUpdate<Schema::TabletFollowerGroup::RequireAllDataCenters>(followerGroup.RequireAllDataCenters),
-                                    NIceDb::TUpdate<Schema::TabletFollowerGroup::FollowerCountPerDataCenter>(followerGroup.FollowerCountPerDataCenter),
-                                    NIceDb::TUpdate<Schema::TabletFollowerGroup::RequireDifferentNodes>(followerGroup.RequireDifferentNodes));
+                                    NIceDb::TUpdate<Schema::TabletFollowerGroup::RequireAllDataCenters>(followerGroup.RequireAllDataCenters), 
+                                    NIceDb::TUpdate<Schema::TabletFollowerGroup::FollowerCountPerDataCenter>(followerGroup.FollowerCountPerDataCenter), 
+                                    NIceDb::TUpdate<Schema::TabletFollowerGroup::RequireDifferentNodes>(followerGroup.RequireDifferentNodes)); 
 
                         for (ui32 i = oldFollowerCount; i < followerGroup.GetComputedFollowerCount(Self->GetDataCenters()); ++i) {
-                            TFollowerTabletInfo& follower = tablet->AddFollower(followerGroup);
-                            db.Table<Schema::TabletFollowerTablet>().Key(TabletId, follower.Id).Update(
-                                        NIceDb::TUpdate<Schema::TabletFollowerTablet::GroupID>(follower.FollowerGroup.Id),
-                                        NIceDb::TUpdate<Schema::TabletFollowerTablet::FollowerNode>(0));
-                            follower.InitTabletMetrics();
-                            follower.BecomeStopped();
+                            TFollowerTabletInfo& follower = tablet->AddFollower(followerGroup); 
+                            db.Table<Schema::TabletFollowerTablet>().Key(TabletId, follower.Id).Update( 
+                                        NIceDb::TUpdate<Schema::TabletFollowerTablet::GroupID>(follower.FollowerGroup.Id), 
+                                        NIceDb::TUpdate<Schema::TabletFollowerTablet::FollowerNode>(0)); 
+                            follower.InitTabletMetrics(); 
+                            follower.BecomeStopped(); 
                         }
 
                         for (ui32 i = followerGroup.GetComputedFollowerCount(Self->GetDataCenters()); i < oldFollowerCount; ++i) {
-                            TFollowerTabletInfo& follower = tablet->Followers.back();
-                            db.Table<Schema::TabletFollowerTablet>().Key(TabletId, follower.Id).Delete();
-                            follower.InitiateStop();
-                            tablet->Followers.pop_back();
+                            TFollowerTabletInfo& follower = tablet->Followers.back(); 
+                            db.Table<Schema::TabletFollowerTablet>().Key(TabletId, follower.Id).Delete(); 
+                            follower.InitiateStop(); 
+                            tablet->Followers.pop_back(); 
                         }
-                        ++itFollowerGroup;
+                        ++itFollowerGroup; 
                     }
 
                     return true;
@@ -340,7 +340,7 @@ public:
         // insert entry for new tablet
         State = ETabletState::GroupAssignment;
 
-        TLeaderTabletInfo& tablet = Self->GetTablet(TabletId);
+        TLeaderTabletInfo& tablet = Self->GetTablet(TabletId); 
         tablet.NodeId = 0;
         tablet.Type = (TTabletTypes::EType)TabletType;
         tablet.KnownGeneration = 0; // because we will increase it on start
@@ -360,7 +360,7 @@ public:
             allowedDataCenters.push_back(DataCenterFromString(dc));
         }
         db.Table<Schema::Tablet>().Key(TabletId).Update(NIceDb::TUpdate<Schema::Tablet::Owner>(tablet.Owner),
-                                                        NIceDb::TUpdate<Schema::Tablet::LeaderNode>(tablet.NodeId),
+                                                        NIceDb::TUpdate<Schema::Tablet::LeaderNode>(tablet.NodeId), 
                                                         NIceDb::TUpdate<Schema::Tablet::TabletType>(tablet.Type),
                                                         NIceDb::TUpdate<Schema::Tablet::KnownGeneration>(tablet.KnownGeneration),
                                                         NIceDb::TUpdate<Schema::Tablet::State>(tablet.State),
@@ -423,33 +423,33 @@ public:
 
         UpdateChannelsBinding(tablet, db);
 
-        for (const auto& srcFollowerGroup : FollowerGroups) {
-            TFollowerGroup& followerGroup = tablet.AddFollowerGroup();
-            followerGroup = srcFollowerGroup;
+        for (const auto& srcFollowerGroup : FollowerGroups) { 
+            TFollowerGroup& followerGroup = tablet.AddFollowerGroup(); 
+            followerGroup = srcFollowerGroup; 
 
             TVector<ui32> allowedDataCenters;
             for (const TDataCenterId& dc : followerGroup.AllowedDataCenters) {
                 allowedDataCenters.push_back(DataCenterFromString(dc));
             }
-            db.Table<Schema::TabletFollowerGroup>().Key(TabletId, followerGroup.Id).Update(
-                        NIceDb::TUpdate<Schema::TabletFollowerGroup::FollowerCount>(followerGroup.GetRawFollowerCount()),
-                        NIceDb::TUpdate<Schema::TabletFollowerGroup::AllowLeaderPromotion>(followerGroup.AllowLeaderPromotion),
-                        NIceDb::TUpdate<Schema::TabletFollowerGroup::AllowClientRead>(followerGroup.AllowClientRead),
-                        NIceDb::TUpdate<Schema::TabletFollowerGroup::AllowedNodes>(followerGroup.AllowedNodes),
+            db.Table<Schema::TabletFollowerGroup>().Key(TabletId, followerGroup.Id).Update( 
+                        NIceDb::TUpdate<Schema::TabletFollowerGroup::FollowerCount>(followerGroup.GetRawFollowerCount()), 
+                        NIceDb::TUpdate<Schema::TabletFollowerGroup::AllowLeaderPromotion>(followerGroup.AllowLeaderPromotion), 
+                        NIceDb::TUpdate<Schema::TabletFollowerGroup::AllowClientRead>(followerGroup.AllowClientRead), 
+                        NIceDb::TUpdate<Schema::TabletFollowerGroup::AllowedNodes>(followerGroup.AllowedNodes), 
                         NIceDb::TUpdate<Schema::TabletFollowerGroup::AllowedDataCenters>(allowedDataCenters),
                         NIceDb::TUpdate<Schema::TabletFollowerGroup::AllowedDataCenterIds>(followerGroup.AllowedDataCenters),
-                        NIceDb::TUpdate<Schema::TabletFollowerGroup::RequireAllDataCenters>(followerGroup.RequireAllDataCenters),
-                        NIceDb::TUpdate<Schema::TabletFollowerGroup::FollowerCountPerDataCenter>(followerGroup.FollowerCountPerDataCenter));
+                        NIceDb::TUpdate<Schema::TabletFollowerGroup::RequireAllDataCenters>(followerGroup.RequireAllDataCenters), 
+                        NIceDb::TUpdate<Schema::TabletFollowerGroup::FollowerCountPerDataCenter>(followerGroup.FollowerCountPerDataCenter)); 
 
             for (ui32 i = 0; i < followerGroup.GetComputedFollowerCount(Self->GetDataCenters()); ++i) {
-                TFollowerTabletInfo& follower = tablet.AddFollower(followerGroup);
+                TFollowerTabletInfo& follower = tablet.AddFollower(followerGroup); 
                 follower.Statistics.SetLastAliveTimestamp(now.MilliSeconds());
-                db.Table<Schema::TabletFollowerTablet>().Key(TabletId, follower.Id).Update(
-                            NIceDb::TUpdate<Schema::TabletFollowerTablet::GroupID>(follower.FollowerGroup.Id),
+                db.Table<Schema::TabletFollowerTablet>().Key(TabletId, follower.Id).Update( 
+                            NIceDb::TUpdate<Schema::TabletFollowerTablet::GroupID>(follower.FollowerGroup.Id), 
                             NIceDb::TUpdate<Schema::TabletFollowerTablet::FollowerNode>(0),
                             NIceDb::TUpdate<Schema::TabletFollowerTablet::Statistics>(follower.Statistics));
-                follower.InitTabletMetrics();
-                follower.BecomeStopped();
+                follower.InitTabletMetrics(); 
+                follower.BecomeStopped(); 
             }
         }
 
@@ -470,7 +470,7 @@ public:
                 reply->Record.MutableForwardRequest()->CopyFrom(ForwardRequest);
             }
             ctx.Send(Sender, reply.Release(), 0, Cookie);
-            TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
+            TLeaderTabletInfo* tablet = Self->FindTablet(TabletId); 
             if (tablet != nullptr) {
                 if (Status == NKikimrProto::OK && tablet->Type == TTabletTypes::Hive) {
                     auto itSubDomain = Self->Domains.find(tablet->ObjectDomain);

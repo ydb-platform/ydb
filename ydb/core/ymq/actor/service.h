@@ -49,10 +49,10 @@ private:
     void HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev);
     void HandlePipeClientConnected(TEvTabletPipe::TEvClientConnected::TPtr& ev);
     void HandlePipeClientDisconnected(TEvTabletPipe::TEvClientDestroyed::TPtr& ev);
-    void HandleGetLeaderNodeForQueueRequest(TSqsEvents::TEvGetLeaderNodeForQueueRequest::TPtr& ev);
+    void HandleGetLeaderNodeForQueueRequest(TSqsEvents::TEvGetLeaderNodeForQueueRequest::TPtr& ev); 
     void HandleGetConfiguration(TSqsEvents::TEvGetConfiguration::TPtr& ev);
     void HandleSqsRequest(TSqsEvents::TEvSqsRequest::TPtr& ev); // request from nodes with old version
-    void HandleQueueLeaderDecRef(TSqsEvents::TEvQueueLeaderDecRef::TPtr& ev);
+    void HandleQueueLeaderDecRef(TSqsEvents::TEvQueueLeaderDecRef::TPtr& ev); 
     void HandleGetQueueId(TSqsEvents::TEvGetQueueId::TPtr& ev);
     void HandleGetQueueFolderIdAndCustomName(TSqsEvents::TEvGetQueueFolderIdAndCustomName::TPtr& ev);
     void HandleCountQueues(TSqsEvents::TEvCountQueues::TPtr& ev);
@@ -71,7 +71,7 @@ private:
     TUsersMap::iterator MutableUserIter(const TString& userName, bool moveUserRequestsToUserRecord = true, bool* requestsWereMoved = nullptr);
     TUserInfoPtr MutableUser(const TString& userName, bool moveUserRequestsToUserRecord = true, bool* requestsWereMoved = nullptr);
     void RemoveUser(const TString& userName);
-    std::map<TString, TQueueInfoPtr>::iterator AddQueue(const TString& userName, const TString& queue, ui64 leaderTabletId,
+    std::map<TString, TQueueInfoPtr>::iterator AddQueue(const TString& userName, const TString& queue, ui64 leaderTabletId, 
                                                         const TString& customName, const TString& folderId, const ui64 version,
                                                         const ui64 shardsCount, const TInstant createdTimestamp);
 
@@ -81,11 +81,11 @@ private:
     void AnswerErrorToRequests();
     void AnswerErrorToRequests(const TUserInfoPtr& user);
 
-    void AnswerLeaderlessConfiguration(TSqsEvents::TEvGetConfiguration::TPtr& ev, const TUserInfoPtr& userInfo, const TQueueInfoPtr& queueInfo);
+    void AnswerLeaderlessConfiguration(TSqsEvents::TEvGetConfiguration::TPtr& ev, const TUserInfoPtr& userInfo, const TQueueInfoPtr& queueInfo); 
     void ProcessConfigurationRequestForQueue(TSqsEvents::TEvGetConfiguration::TPtr& ev, const TUserInfoPtr& userInfo, const TQueueInfoPtr& queueInfo);
 
-    void IncLocalLeaderRef(const TActorId& referer, const TQueueInfoPtr& queueInfo, const TString& reason);
-    void DecLocalLeaderRef(const TActorId& referer, const TString& reason);
+    void IncLocalLeaderRef(const TActorId& referer, const TQueueInfoPtr& queueInfo, const TString& reason); 
+    void DecLocalLeaderRef(const TActorId& referer, const TString& reason); 
 
     template <class TEvent>
     TUserInfoPtr GetUserOrWait(TAutoPtr<TEvent>& ev);
@@ -93,13 +93,13 @@ private:
     void InsertWaitingRequest(TSqsEvents::TEvGetQueueId::TPtr&& ev);
     void InsertWaitingRequest(TSqsEvents::TEvGetQueueFolderIdAndCustomName::TPtr&& ev);
     void InsertWaitingRequest(TSqsEvents::TEvGetConfiguration::TPtr&& ev);
-    void InsertWaitingRequest(TSqsEvents::TEvGetLeaderNodeForQueueRequest::TPtr&& ev);
+    void InsertWaitingRequest(TSqsEvents::TEvGetLeaderNodeForQueueRequest::TPtr&& ev); 
     void InsertWaitingRequest(TSqsEvents::TEvCountQueues::TPtr&& ev);
 
     void InsertWaitingRequest(TSqsEvents::TEvGetQueueId::TPtr&& ev, const TUserInfoPtr& userInfo);
     void InsertWaitingRequest(TSqsEvents::TEvGetQueueFolderIdAndCustomName::TPtr&& ev, const TUserInfoPtr& userInfo);
     void InsertWaitingRequest(TSqsEvents::TEvGetConfiguration::TPtr&& ev, const TUserInfoPtr& userInfo);
-    void InsertWaitingRequest(TSqsEvents::TEvGetLeaderNodeForQueueRequest::TPtr&& ev, const TUserInfoPtr& userInfo);
+    void InsertWaitingRequest(TSqsEvents::TEvGetLeaderNodeForQueueRequest::TPtr&& ev, const TUserInfoPtr& userInfo); 
     void InsertWaitingRequest(TSqsEvents::TEvCountQueues::TPtr&& ev, const TUserInfoPtr& userInfo);
 
     template <class TMultimap>
@@ -111,13 +111,13 @@ private:
     template <class TMultimap>
     void AnswerErrorToRequests(const TUserInfoPtr& user, TMultimap& map);
 
-    void AnswerNotExists(TSqsEvents::TEvGetLeaderNodeForQueueRequest::TPtr& ev, const TUserInfoPtr& userInfo);
+    void AnswerNotExists(TSqsEvents::TEvGetLeaderNodeForQueueRequest::TPtr& ev, const TUserInfoPtr& userInfo); 
     void AnswerNotExists(TSqsEvents::TEvGetConfiguration::TPtr& ev, const TUserInfoPtr& userInfo);
     void AnswerNotExists(TSqsEvents::TEvGetQueueId::TPtr& ev, const TUserInfoPtr& userInfo);
     void AnswerNotExists(TSqsEvents::TEvGetQueueFolderIdAndCustomName::TPtr& ev, const TUserInfoPtr& userInfo);
     void AnswerNotExists(TSqsEvents::TEvCountQueues::TPtr& ev, const TUserInfoPtr& userInfo);
 
-    void AnswerFailed(TSqsEvents::TEvGetLeaderNodeForQueueRequest::TPtr& ev, const TUserInfoPtr& userInfo);
+    void AnswerFailed(TSqsEvents::TEvGetLeaderNodeForQueueRequest::TPtr& ev, const TUserInfoPtr& userInfo); 
     void AnswerFailed(TSqsEvents::TEvGetConfiguration::TPtr& ev, const TUserInfoPtr& userInfo);
     void AnswerFailed(TSqsEvents::TEvGetQueueId::TPtr& ev, const TUserInfoPtr& userInfo);
     void AnswerFailed(TSqsEvents::TEvGetQueueFolderIdAndCustomName::TPtr& ev, const TUserInfoPtr& userInfo);
@@ -127,7 +127,7 @@ private:
 
     void AnswerCountQueuesRequests(const TUserInfoPtr& user);
 
-    void NotifyLocalDeadLetterQueuesLeaders(const std::vector<TSqsEvents::TEvQueuesList::TQueueRecord>& sortedQueues) const;
+    void NotifyLocalDeadLetterQueuesLeaders(const std::vector<TSqsEvents::TEvQueuesList::TQueueRecord>& sortedQueues) const; 
 
     void MakeAndRegisterYcEventsProcessor();
 
@@ -138,8 +138,8 @@ private:
     std::shared_ptr<TAlignedPagePoolCounters> AllocPoolCounters_;
     TIntrusivePtr<TUserCounters> AggregatedUserCounters_;
     TUsersMap Users_;
-    THashMap<ui64, TQueueInfoPtr> LeaderTabletIdToQueue_;
-    THashMap<TActorId, TQueueInfoPtr> LocalLeaderRefs_; // referer -> queue info
+    THashMap<ui64, TQueueInfoPtr> LeaderTabletIdToQueue_; 
+    THashMap<TActorId, TQueueInfoPtr> LocalLeaderRefs_; // referer -> queue info 
     TActorId SchemeCache_;
     TActorId QueuesListReader_;
 
@@ -153,7 +153,7 @@ private:
     bool ScheduledRequestingQueuesList_ = false;
     i64 EarlyRequestQueuesListMinBudget_ = 0; // Defence from continuously requesting queues list.
     TInstant LastRequestQueuesListTime_;
-    THashMultiMap<TString, TSqsEvents::TEvGetLeaderNodeForQueueRequest::TPtr> GetLeaderNodeRequests_; // user name -> request
+    THashMultiMap<TString, TSqsEvents::TEvGetLeaderNodeForQueueRequest::TPtr> GetLeaderNodeRequests_; // user name -> request 
     THashMultiMap<TString, TSqsEvents::TEvGetConfiguration::TPtr> GetConfigurationRequests_; // user name -> request
     THashMultiMap<TString, TSqsEvents::TEvGetQueueId::TPtr> GetQueueIdRequests_; // user name -> request
     THashMultiMap<TString, TSqsEvents::TEvGetQueueFolderIdAndCustomName::TPtr> GetQueueFolderIdAndCustomNameRequests_; // user name -> request

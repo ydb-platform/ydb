@@ -67,24 +67,24 @@ Y_UNIT_TEST_SUITE(TTokenBucketTest) {
         tb.SetUnlimited();
         UNIT_ASSERT(tb.Available() == std::numeric_limits<double>::infinity());
     }
-
-    Y_UNIT_TEST(DelayCalculation) {
-        TTokenBucket tb;
-        TInstant now = TInstant::Now();
-        tb.SetRate(150);
-        tb.SetCapacity(1);
-        tb.Fill(now);
-
-        UNIT_ASSERT_VALUES_EQUAL(tb.NextAvailableDelay(), TDuration::Zero());
-        tb.Take(2);
-
-        auto expectedDelay = TDuration::MicroSeconds(std::ceil(1000000.0 / 150));
-        UNIT_ASSERT_VALUES_EQUAL(tb.NextAvailableDelay(), expectedDelay);
-
-        now += expectedDelay;
-        tb.Fill(now);
-        UNIT_ASSERT_VALUES_EQUAL(tb.NextAvailableDelay(), TDuration::Zero());
-    }
+ 
+    Y_UNIT_TEST(DelayCalculation) { 
+        TTokenBucket tb; 
+        TInstant now = TInstant::Now(); 
+        tb.SetRate(150); 
+        tb.SetCapacity(1); 
+        tb.Fill(now); 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(tb.NextAvailableDelay(), TDuration::Zero()); 
+        tb.Take(2); 
+ 
+        auto expectedDelay = TDuration::MicroSeconds(std::ceil(1000000.0 / 150)); 
+        UNIT_ASSERT_VALUES_EQUAL(tb.NextAvailableDelay(), expectedDelay); 
+ 
+        now += expectedDelay; 
+        tb.Fill(now); 
+        UNIT_ASSERT_VALUES_EQUAL(tb.NextAvailableDelay(), TDuration::Zero()); 
+    } 
 }
 
 } // NKikimr

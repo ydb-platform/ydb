@@ -93,7 +93,7 @@ public:
             configurationFlags |= TSqsEvents::TEvGetConfiguration::EFlags::NeedQueueAttributes;
         }
         if (TProxyActor::NeedCreateProxyActor(Action_)) {
-            configurationFlags |= TSqsEvents::TEvGetConfiguration::EFlags::NeedQueueLeader;
+            configurationFlags |= TSqsEvents::TEvGetConfiguration::EFlags::NeedQueueLeader; 
         }
         this->Send(MakeSqsServiceID(this->SelfId().NodeId()),
             MakeHolder<TSqsEvents::TEvGetConfiguration>(
@@ -303,7 +303,7 @@ protected:
     void PassAway() {
         if (TProxyActor::NeedCreateProxyActor(Action_)) {
             if (TString queueName = GetQueueName()) {
-                this->Send(MakeSqsServiceID(this->SelfId().NodeId()), new TSqsEvents::TEvQueueLeaderDecRef());
+                this->Send(MakeSqsServiceID(this->SelfId().NodeId()), new TSqsEvents::TEvQueueLeaderDecRef()); 
             }
         }
         if (StartRequestWasCalled_ != FinishRequestWasCalled_) {
@@ -508,7 +508,7 @@ private:
         SqsCoreCounters_ = std::move(ev->Get()->SqsCoreCounters);
         QueueCounters_ = std::move(ev->Get()->QueueCounters);
         UserCounters_ = std::move(ev->Get()->UserCounters);
-        QueueLeader_ = ev->Get()->QueueLeader;
+        QueueLeader_ = ev->Get()->QueueLeader; 
         QuoterResources_ = std::move(ev->Get()->QuoterResources);
 
         Y_VERIFY(SchemeCache_);
@@ -762,7 +762,7 @@ protected:
     TMaybe<TSqsEvents::TQueueAttributes> QueueAttributes_;
     NKikimrClient::TSqsResponse Response_;
     TActorId SchemeCache_;
-    TActorId QueueLeader_;
+    TActorId QueueLeader_; 
     bool StartRequestWasCalled_ = false;
     bool FinishRequestWasCalled_ = false;
     TInstant QuotaRequestTs_;

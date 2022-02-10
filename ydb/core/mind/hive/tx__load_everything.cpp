@@ -46,8 +46,8 @@ public:
             auto tabletChannelRowset = db.Table<Schema::TabletChannel>().Range().Select();
             auto tabletChannelGenRowset = db.Table<Schema::TabletChannelGen>().Range().Select();
             auto metrics = db.Table<Schema::Metrics>().Range().Select();
-            auto tabletFollowerGroupRowset = db.Table<Schema::TabletFollowerGroup>().Range().Select();
-            auto tabletFollowerRowset = db.Table<Schema::TabletFollowerTablet>().Range().Select();
+            auto tabletFollowerGroupRowset = db.Table<Schema::TabletFollowerGroup>().Range().Select(); 
+            auto tabletFollowerRowset = db.Table<Schema::TabletFollowerTablet>().Range().Select(); 
             auto tabletTypeAllowedMetrics = db.Table<Schema::TabletTypeMetrics>().Range().Select();
             auto stateRowset = db.Table<Schema::State>().Select();
             auto sequencesRowset = db.Table<Schema::Sequences>().Select();
@@ -58,8 +58,8 @@ public:
                     || !tabletChannelRowset.IsReady()
                     || !tabletChannelGenRowset.IsReady()
                     || !metrics.IsReady()
-                    || !tabletFollowerGroupRowset.IsReady()
-                    || !tabletFollowerRowset.IsReady()
+                    || !tabletFollowerGroupRowset.IsReady() 
+                    || !tabletFollowerRowset.IsReady() 
                     || !tabletTypeAllowedMetrics.IsReady()
                     || !stateRowset.IsReady()
                     || !sequencesRowset.IsReady()
@@ -336,7 +336,7 @@ public:
             while (!tabletRowset.EndOfSet()) {
                 TTabletId tabletId = tabletRowset.GetValue<Schema::Tablet::ID>();
                 maxTabletId = std::max(maxTabletId, UniqPartFromTabletID(tabletId));
-                TLeaderTabletInfo& tablet = Self->Tablets.emplace(
+                TLeaderTabletInfo& tablet = Self->Tablets.emplace( 
                             std::piecewise_construct,
                             std::tuple<TTabletId>(tabletId),
                             std::tuple<TTabletId, THive&>(tabletId, *Self)).first->second;
@@ -360,7 +360,7 @@ public:
                 TSubDomainKey objectDomain = TSubDomainKey(tabletRowset.GetValueOrDefault<Schema::Tablet::ObjectDomain>());
                 tablet.AssignDomains(objectDomain, allowedDomains);
                 //tablet.Weight = tabletRowset.GetValueOrDefault<Schema::Tablet::Weight>(1000);
-                tablet.NodeId = tabletRowset.GetValue<Schema::Tablet::LeaderNode>();
+                tablet.NodeId = tabletRowset.GetValue<Schema::Tablet::LeaderNode>(); 
                 tablet.KnownGeneration = tabletRowset.GetValue<Schema::Tablet::KnownGeneration>();
                 tablet.ActorsToNotify = tabletRowset.GetValueOrDefault<Schema::Tablet::ActorsToNotify>();
                 if (tabletRowset.HaveValue<Schema::Tablet::ActorToNotify>()) {
@@ -412,18 +412,18 @@ public:
                     }
                 }
 
-                std::unordered_map<TFollowerGroup*, ui32> followersPerGroup;
+                std::unordered_map<TFollowerGroup*, ui32> followersPerGroup; 
 
-                auto tabletFollowerGroupRowset = db.Table<Schema::TabletFollowerGroup>().Range(tabletId).Select();
-                if (!tabletFollowerGroupRowset.IsReady())
+                auto tabletFollowerGroupRowset = db.Table<Schema::TabletFollowerGroup>().Range(tabletId).Select(); 
+                if (!tabletFollowerGroupRowset.IsReady()) 
                     return false;
-                while (!tabletFollowerGroupRowset.EndOfSet()) {
-                    TFollowerGroup& followerGroup = tablet.AddFollowerGroup();
-                    followerGroup.Id = tabletFollowerGroupRowset.GetValue<Schema::TabletFollowerGroup::GroupID>();
-                    followerGroup.SetFollowerCount(tabletFollowerGroupRowset.GetValue<Schema::TabletFollowerGroup::FollowerCount>());
-                    followerGroup.AllowLeaderPromotion = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::AllowLeaderPromotion>();
-                    followerGroup.AllowClientRead = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::AllowClientRead>();
-                    followerGroup.AllowedNodes = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::AllowedNodes>();
+                while (!tabletFollowerGroupRowset.EndOfSet()) { 
+                    TFollowerGroup& followerGroup = tablet.AddFollowerGroup(); 
+                    followerGroup.Id = tabletFollowerGroupRowset.GetValue<Schema::TabletFollowerGroup::GroupID>(); 
+                    followerGroup.SetFollowerCount(tabletFollowerGroupRowset.GetValue<Schema::TabletFollowerGroup::FollowerCount>()); 
+                    followerGroup.AllowLeaderPromotion = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::AllowLeaderPromotion>(); 
+                    followerGroup.AllowClientRead = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::AllowClientRead>(); 
+                    followerGroup.AllowedNodes = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::AllowedNodes>(); 
 
                     if (tabletFollowerGroupRowset.HaveValue<Schema::TabletFollowerGroup::AllowedDataCenters>()) {
                         // this is priority format due to migration issues; when migration is complete, this code will
@@ -435,38 +435,38 @@ public:
                         followerGroup.AllowedDataCenters = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::AllowedDataCenterIds>();
                     }
 
-                    followerGroup.RequireAllDataCenters = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::RequireAllDataCenters>();
-                    followerGroup.LocalNodeOnly = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::LocalNodeOnly>();
-                    followerGroup.FollowerCountPerDataCenter = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::FollowerCountPerDataCenter>();
-                    followerGroup.RequireDifferentNodes = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::RequireDifferentNodes>();
-                    followersPerGroup.emplace(&followerGroup, 0);
-                    if (!tabletFollowerGroupRowset.Next())
+                    followerGroup.RequireAllDataCenters = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::RequireAllDataCenters>(); 
+                    followerGroup.LocalNodeOnly = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::LocalNodeOnly>(); 
+                    followerGroup.FollowerCountPerDataCenter = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::FollowerCountPerDataCenter>(); 
+                    followerGroup.RequireDifferentNodes = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::RequireDifferentNodes>(); 
+                    followersPerGroup.emplace(&followerGroup, 0); 
+                    if (!tabletFollowerGroupRowset.Next()) 
                         return false;
                 }
 
-                auto tabletFollowerRowset = db.Table<Schema::TabletFollowerTablet>().Range(tabletId).Select();
-                if (!tabletFollowerRowset.IsReady())
+                auto tabletFollowerRowset = db.Table<Schema::TabletFollowerTablet>().Range(tabletId).Select(); 
+                if (!tabletFollowerRowset.IsReady()) 
                     return false;
-                while (!tabletFollowerRowset.EndOfSet()) {
-                    TFollowerGroupId followerGroupId = tabletFollowerRowset.GetValue<Schema::TabletFollowerTablet::GroupID>();
-                    TFollowerId followerId = tabletFollowerRowset.GetValue<Schema::TabletFollowerTablet::FollowerID>();
-                    TNodeId nodeId = tabletFollowerRowset.GetValue<Schema::TabletFollowerTablet::FollowerNode>();
-                    TFollowerGroup& followerGroup = tablet.GetFollowerGroup(followerGroupId);
-                    TFollowerTabletInfo& follower = tablet.AddFollower(followerGroup, followerId);
+                while (!tabletFollowerRowset.EndOfSet()) { 
+                    TFollowerGroupId followerGroupId = tabletFollowerRowset.GetValue<Schema::TabletFollowerTablet::GroupID>(); 
+                    TFollowerId followerId = tabletFollowerRowset.GetValue<Schema::TabletFollowerTablet::FollowerID>(); 
+                    TNodeId nodeId = tabletFollowerRowset.GetValue<Schema::TabletFollowerTablet::FollowerNode>(); 
+                    TFollowerGroup& followerGroup = tablet.GetFollowerGroup(followerGroupId); 
+                    TFollowerTabletInfo& follower = tablet.AddFollower(followerGroup, followerId); 
                     follower.Statistics = tabletFollowerRowset.GetValueOrDefault<Schema::TabletFollowerTablet::Statistics>();
-                    follower.InitTabletMetrics();
+                    follower.InitTabletMetrics(); 
                     if (nodeId == 0) {
-                        follower.BecomeStopped();
+                        follower.BecomeStopped(); 
                     } else {
                         auto it = Self->Nodes.find(nodeId);
                         if (it != Self->Nodes.end() && it->second.IsUnknown()) {
-                            follower.BecomeUnknown(&it->second);
+                            follower.BecomeUnknown(&it->second); 
                         } else {
-                            follower.BecomeStopped();
+                            follower.BecomeStopped(); 
                         }
                     }
-                    followersPerGroup[&followerGroup]++;
-                    if (!tabletFollowerRowset.Next())
+                    followersPerGroup[&followerGroup]++; 
+                    if (!tabletFollowerRowset.Next()) 
                         return false;
                 }
 
@@ -474,27 +474,27 @@ public:
                 if (!metricsRowset.IsReady())
                     return false;
                 while (!metricsRowset.EndOfSet()) {
-                    TFollowerId followerId = metricsRowset.GetValue<Schema::Metrics::FollowerID>();
-                    auto* leaderOrFollower = tablet.FindTablet(followerId);
-                    if (leaderOrFollower) {
-                        leaderOrFollower->MutableResourceMetricsAggregates().MaximumCPU.InitiaizeFrom(metricsRowset.GetValueOrDefault<Schema::Metrics::MaximumCPU>());
-                        leaderOrFollower->MutableResourceMetricsAggregates().MaximumMemory.InitiaizeFrom(metricsRowset.GetValueOrDefault<Schema::Metrics::MaximumMemory>());
-                        leaderOrFollower->MutableResourceMetricsAggregates().MaximumNetwork.InitiaizeFrom(metricsRowset.GetValueOrDefault<Schema::Metrics::MaximumNetwork>());
+                    TFollowerId followerId = metricsRowset.GetValue<Schema::Metrics::FollowerID>(); 
+                    auto* leaderOrFollower = tablet.FindTablet(followerId); 
+                    if (leaderOrFollower) { 
+                        leaderOrFollower->MutableResourceMetricsAggregates().MaximumCPU.InitiaizeFrom(metricsRowset.GetValueOrDefault<Schema::Metrics::MaximumCPU>()); 
+                        leaderOrFollower->MutableResourceMetricsAggregates().MaximumMemory.InitiaizeFrom(metricsRowset.GetValueOrDefault<Schema::Metrics::MaximumMemory>()); 
+                        leaderOrFollower->MutableResourceMetricsAggregates().MaximumNetwork.InitiaizeFrom(metricsRowset.GetValueOrDefault<Schema::Metrics::MaximumNetwork>()); 
                         // do not reorder
-                        leaderOrFollower->UpdateResourceUsage(metricsRowset.GetValueOrDefault<Schema::Metrics::ProtoMetrics>());
+                        leaderOrFollower->UpdateResourceUsage(metricsRowset.GetValueOrDefault<Schema::Metrics::ProtoMetrics>()); 
                     }
                     if (!metricsRowset.Next())
                         return false;
                 }
 
-                for (auto& pr : followersPerGroup) {
-                    TFollowerGroup& followerGroup(*pr.first);
+                for (auto& pr : followersPerGroup) { 
+                    TFollowerGroup& followerGroup(*pr.first); 
                     while (followerGroup.GetComputedFollowerCount(Self->GetDataCenters()) > pr.second) {
-                        TFollowerTabletInfo& follower = tablet.AddFollower(followerGroup);
-                        follower.InitTabletMetrics();
-                        follower.BecomeStopped();
-                        db.Table<Schema::TabletFollowerTablet>().Key(tabletId, follower.Id).Update(NIceDb::TUpdate<Schema::TabletFollowerTablet::FollowerNode>(0),
-                                                                                             NIceDb::TUpdate<Schema::TabletFollowerTablet::GroupID>(followerGroup.Id));
+                        TFollowerTabletInfo& follower = tablet.AddFollower(followerGroup); 
+                        follower.InitTabletMetrics(); 
+                        follower.BecomeStopped(); 
+                        db.Table<Schema::TabletFollowerTablet>().Key(tabletId, follower.Id).Update(NIceDb::TUpdate<Schema::TabletFollowerTablet::FollowerNode>(0), 
+                                                                                             NIceDb::TUpdate<Schema::TabletFollowerTablet::GroupID>(followerGroup.Id)); 
                         ++pr.second;
                     }
                 }
@@ -622,12 +622,12 @@ public:
         i64 tabletsTotal = 0;
         for (auto it = Self->Tablets.begin(); it != Self->Tablets.end(); ++it) {
             ++tabletsTotal;
-            for (const TTabletInfo& follower : it->second.Followers) {
+            for (const TTabletInfo& follower : it->second.Followers) { 
                 ++tabletsTotal;
-                if (follower.IsLeader()) {
-                    follower.AsLeader();
+                if (follower.IsLeader()) { 
+                    follower.AsLeader(); 
                 } else {
-                    follower.AsFollower();
+                    follower.AsFollower(); 
                 }
             }
         }

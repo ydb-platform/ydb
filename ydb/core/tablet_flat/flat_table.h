@@ -32,7 +32,7 @@ class TKeyRangeCache;
 
 class TTable: public TAtomicRefCount<TTable> {
 public:
-    using TOpsRef = TArrayRef<const TUpdateOp>;
+    using TOpsRef = TArrayRef<const TUpdateOp>; 
     using TMemGlob = NPageCollection::TMemGlob;
 
     struct TStat {
@@ -66,7 +66,7 @@ public:
 
     void SetScheme(const TScheme::TTableInfo& tableScheme);
 
-    TIntrusiveConstPtr<TRowScheme> GetScheme() const noexcept;
+    TIntrusiveConstPtr<TRowScheme> GetScheme() const noexcept; 
 
     TEpoch Snapshot() noexcept;
 
@@ -75,10 +75,10 @@ public:
         return Epoch;
     }
 
-    TAutoPtr<TSubset> Subset(TArrayRef<const TLogoBlobID> bundle, TEpoch edge);
-    TAutoPtr<TSubset> Subset(TEpoch edge) const noexcept;
-    TAutoPtr<TSubset> ScanSnapshot(TRowVersion snapshot = TRowVersion::Max()) noexcept;
-    TAutoPtr<TSubset> Unwrap() noexcept; /* full Subset(..) + final Replace(..) */
+    TAutoPtr<TSubset> Subset(TArrayRef<const TLogoBlobID> bundle, TEpoch edge); 
+    TAutoPtr<TSubset> Subset(TEpoch edge) const noexcept; 
+    TAutoPtr<TSubset> ScanSnapshot(TRowVersion snapshot = TRowVersion::Max()) noexcept; 
+    TAutoPtr<TSubset> Unwrap() noexcept; /* full Subset(..) + final Replace(..) */ 
 
     /**
      * Returns current slices for bundles
@@ -99,8 +99,8 @@ public:
         be displaced from table with Clean() method eventually.
     */
 
-    void Replace(TArrayRef<const TPartView>, const TSubset&) noexcept;
-    void ReplaceTxStatus(TArrayRef<const TIntrusiveConstPtr<TTxStatusPart>>, const TSubset&) noexcept;
+    void Replace(TArrayRef<const TPartView>, const TSubset&) noexcept; 
+    void ReplaceTxStatus(TArrayRef<const TIntrusiveConstPtr<TTxStatusPart>>, const TSubset&) noexcept; 
 
     /*_ Special interface for clonig flatten part of table for outer usage.
         Cook some TPartView with Subset(...) method and/or TShrink tool first and
@@ -108,8 +108,8 @@ public:
     */
 
     void Merge(TPartView partView) noexcept;
-    void Merge(TIntrusiveConstPtr<TColdPart> part) noexcept;
-    void Merge(TIntrusiveConstPtr<TTxStatusPart> txStatus) noexcept;
+    void Merge(TIntrusiveConstPtr<TColdPart> part) noexcept; 
+    void Merge(TIntrusiveConstPtr<TTxStatusPart> txStatus) noexcept; 
     void ProcessCheckTransactions() noexcept;
 
     /**
@@ -117,17 +117,17 @@ public:
      */
     const TLevels& GetLevels() const noexcept;
 
-    /**
-     * Returns search height if there are no cold parts, 0 otherwise
-     */
-    ui64 GetSearchHeight() const noexcept;
-
+    /** 
+     * Returns search height if there are no cold parts, 0 otherwise 
+     */ 
+    ui64 GetSearchHeight() const noexcept; 
+ 
     /* Hack for filling external blobs in TMemTable tables with data */
 
     TVector<TIntrusiveConstPtr<TMemTable>> GetMemTables() const noexcept;
 
-    TAutoPtr<TTableIt> Iterate(TRawVals key, TTagsRef tags, IPages* env, ESeek, TRowVersion snapshot) const noexcept;
-    TAutoPtr<TTableReverseIt> IterateReverse(TRawVals key, TTagsRef tags, IPages* env, ESeek, TRowVersion snapshot) const noexcept;
+    TAutoPtr<TTableIt> Iterate(TRawVals key, TTagsRef tags, IPages* env, ESeek, TRowVersion snapshot) const noexcept; 
+    TAutoPtr<TTableReverseIt> IterateReverse(TRawVals key, TTagsRef tags, IPages* env, ESeek, TRowVersion snapshot) const noexcept; 
     TReady Select(TRawVals key, TTagsRef tags, IPages* env, TRowState& row,
                    ui64 flg, TRowVersion snapshot, TDeque<TPartSimpleIt>& tempIterators) const noexcept;
 
@@ -160,9 +160,9 @@ public:
         return parts;
     }
 
-    TVector<TIntrusiveConstPtr<TColdPart>> GetColdParts() const
+    TVector<TIntrusiveConstPtr<TColdPart>> GetColdParts() const 
     {
-        TVector<TIntrusiveConstPtr<TColdPart>> parts(Reserve(ColdParts.size()));
+        TVector<TIntrusiveConstPtr<TColdPart>> parts(Reserve(ColdParts.size())); 
 
         for (auto& x : ColdParts) {
             parts.emplace_back(x.second);
@@ -178,14 +178,14 @@ public:
         }
     }
 
-    void EnumerateColdParts(const std::function<void(const TIntrusiveConstPtr<TColdPart>&)>& callback) const
+    void EnumerateColdParts(const std::function<void(const TIntrusiveConstPtr<TColdPart>&)>& callback) const 
     {
         for (auto& x : ColdParts) {
             callback(x.second);
         }
     }
 
-    void EnumerateTxStatusParts(const std::function<void(const TIntrusiveConstPtr<TTxStatusPart>&)>& callback) const
+    void EnumerateTxStatusParts(const std::function<void(const TIntrusiveConstPtr<TTxStatusPart>&)>& callback) const 
     {
         for (auto& x : TxStatus) {
             callback(x.second);
@@ -263,8 +263,8 @@ public:
         return RemovedRowVersions;
     }
 
-    TCompactionStats GetCompactionStats() const;
-
+    TCompactionStats GetCompactionStats() const; 
+ 
     void FillTxStatusCache(THashMap<TLogoBlobID, TSharedData>& cache) const noexcept;
 
 private:
@@ -277,18 +277,18 @@ private:
 private:
     struct TOpenTransaction {
         THashSet<TIntrusiveConstPtr<TMemTable>> Mem;
-        THashSet<TIntrusiveConstPtr<TPart>> Parts;
+        THashSet<TIntrusiveConstPtr<TPart>> Parts; 
     };
 
 private:
     TEpoch Epoch; /* Monotonic table change number, with holes */
     ui64 Annexed = 0; /* Monotonic serial of attached external blobs */
-    TIntrusiveConstPtr<TRowScheme> Scheme;
+    TIntrusiveConstPtr<TRowScheme> Scheme; 
     TIntrusivePtr<TMemTable> Mutable;
     TSet<TIntrusiveConstPtr<TMemTable>, TOrderByEpoch<TMemTable>> Frozen;
     THashMap<TLogoBlobID, TPartView> Flatten;
-    THashMap<TLogoBlobID, TIntrusiveConstPtr<TColdPart>> ColdParts;
-    THashMap<TLogoBlobID, TIntrusiveConstPtr<TTxStatusPart>> TxStatus;
+    THashMap<TLogoBlobID, TIntrusiveConstPtr<TColdPart>> ColdParts; 
+    THashMap<TLogoBlobID, TIntrusiveConstPtr<TTxStatusPart>> TxStatus; 
     TEpoch FlattenEpoch = TEpoch::Min(); /* Current maximum flatten epoch */
     TStat Stat_;
     mutable THolder<TLevels> Levels;

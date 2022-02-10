@@ -96,14 +96,14 @@ namespace NTable {
 
         TScreen(TVec holes) : Holes(std::move(holes)) { }
 
-        static THole Iter(const TIntrusiveConstPtr<TScreen> &ref, size_t &on, TRowId rowId, int dir)
+        static THole Iter(const TIntrusiveConstPtr<TScreen> &ref, size_t &on, TRowId rowId, int dir) 
         {
             on = ref ? ref->Lookup(rowId, dir) : Max<size_t>();
 
             return ref ? ref->Hole(on) : THole(true);
         }
 
-        static THole Next(const TIntrusiveConstPtr<TScreen> &ref, size_t &on, int dir)
+        static THole Next(const TIntrusiveConstPtr<TScreen> &ref, size_t &on, int dir) 
         {
              return ref ? ref->Hole(on += dir) : THole(false);
         }
@@ -170,7 +170,7 @@ namespace NTable {
             }
         }
 
-        static TIntrusiveConstPtr<TScreen> Cut(TIntrusiveConstPtr<TScreen> scr, THole hole) noexcept
+        static TIntrusiveConstPtr<TScreen> Cut(TIntrusiveConstPtr<TScreen> scr, THole hole) noexcept 
         {
             if (hole == THole(true)) {
                 return scr;
@@ -208,7 +208,7 @@ namespace NTable {
             }
         }
 
-        static TIntrusiveConstPtr<TScreen> Join(TIntrusiveConstPtr<TScreen> one, TIntrusiveConstPtr<TScreen> two)
+        static TIntrusiveConstPtr<TScreen> Join(TIntrusiveConstPtr<TScreen> one, TIntrusiveConstPtr<TScreen> two) 
         {
             if (one == nullptr || one->Size() == 0) {
                 return two;

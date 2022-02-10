@@ -21,7 +21,7 @@ Y_UNIT_TEST_SUITE(NOther) {
 
         const TLogoBlobID mask(1, 3, 7, 0, 0, 0);
 
-        TAutoPtr<NWriter::TBundle> bundle = new NWriter::TBundle(mask, conf);
+        TAutoPtr<NWriter::TBundle> bundle = new NWriter::TBundle(mask, conf); 
 
         if (auto *out = static_cast<NTable::IPageWriter*>(bundle.Get())) {
             for (auto seq: xrange(7))

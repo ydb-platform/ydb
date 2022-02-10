@@ -39,7 +39,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
         env.TestWaitNotification(runtime, txId);
 
         TString createData = TStringBuilder()
-                << "ResourcesDomainKey { SchemeShard: " << TTestTxConfig::SchemeShard <<  " PathId: " << 2 << " } "
+                << "ResourcesDomainKey { SchemeShard: " << TTestTxConfig::SchemeShard <<  " PathId: " << 2 << " } " 
                 << "Name: \"ServerLess0\"";
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", createData);
         env.TestWaitNotification(runtime, txId);
@@ -67,7 +67,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
 
         UNIT_ASSERT(tenantSchemeShard != 0
                     && tenantSchemeShard != (ui64)-1
-                    && tenantSchemeShard != TTestTxConfig::SchemeShard);
+                    && tenantSchemeShard != TTestTxConfig::SchemeShard); 
 
         TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLess0",
                         "Name: \"dir/table0\""
@@ -94,7 +94,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
                             NLs::PathsInsideDomain(1),
                             NLs::ShardsInsideDomain(0)});
 
-        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets + 3, TTestTxConfig::FakeHiveTablets + 10));
+        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets + 3, TTestTxConfig::FakeHiveTablets + 10)); 
     }
 
     Y_UNIT_TEST(StorageBilling) {
@@ -129,7 +129,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
         runtime.UpdateCurrentTime(now);
 
         TString createData = TStringBuilder()
-                << "ResourcesDomainKey { SchemeShard: " << TTestTxConfig::SchemeShard <<  " PathId: " << 2 << " } "
+                << "ResourcesDomainKey { SchemeShard: " << TTestTxConfig::SchemeShard <<  " PathId: " << 2 << " } " 
                 << "Name: \"ServerLessDB\"";
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", createData);
         env.TestWaitNotification(runtime, txId);
@@ -186,7 +186,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
             UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);;
         };
         for (ui32 delta = 0; delta < 101; ++delta) {
-            fnWriteRow(TTestTxConfig::FakeHiveTablets + 6, 1 + delta, 1000 + delta, "aaaa", "Table");
+            fnWriteRow(TTestTxConfig::FakeHiveTablets + 6, 1 + delta, 1000 + delta, "aaaa", "Table"); 
         }
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
                            {NLs::PathExist,

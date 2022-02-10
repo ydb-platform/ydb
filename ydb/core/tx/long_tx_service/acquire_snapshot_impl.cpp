@@ -22,7 +22,7 @@ namespace NLongTxService {
             , Cookie(cookie)
             , DatabaseName(databaseName)
             , SchemeCache(MakeSchemeCacheID())
-            , LeaderPipeCache(MakePipePeNodeCacheID(false))
+            , LeaderPipeCache(MakePipePeNodeCacheID(false)) 
             , LogPrefix("LongTxService.AcquireSnapshot ")
         { }
 
@@ -37,7 +37,7 @@ namespace NLongTxService {
 
     private:
         void PassAway() override {
-            Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(0));
+            Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(0)); 
             TActor::PassAway();
         }
 
@@ -165,7 +165,7 @@ namespace NLongTxService {
 
     private:
         void SendToTablet(ui64 tabletId, THolder<IEventBase> event, bool subscribe = true) {
-            Send(LeaderPipeCache, new TEvPipeCache::TEvForward(event.Release(), tabletId, subscribe),
+            Send(LeaderPipeCache, new TEvPipeCache::TEvForward(event.Release(), tabletId, subscribe), 
                 IEventHandle::FlagTrackDelivery);
         }
 
@@ -174,7 +174,7 @@ namespace NLongTxService {
         const ui64 Cookie;
         const TString DatabaseName;
         const TActorId SchemeCache;
-        const TActorId LeaderPipeCache;
+        const TActorId LeaderPipeCache; 
         TString LogPrefix;
         THashSet<ui64> WaitingCoordinators;
     };

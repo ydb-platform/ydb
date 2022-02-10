@@ -2,8 +2,8 @@
 #include "hive_log.h"
 #include "tablet_info.h"
 #include "node_info.h"
-#include "leader_tablet_info.h"
-#include "follower_tablet_info.h"
+#include "leader_tablet_info.h" 
+#include "follower_tablet_info.h" 
 
 namespace NKikimr {
 namespace NHive {
@@ -23,67 +23,67 @@ TTabletInfo::TTabletInfo(ETabletRole role, THive& hive)
     , Weight(0)
 {}
 
-const TLeaderTabletInfo& TTabletInfo::GetLeader() const {
-    if (IsLeader()) {
-        return AsLeader();
+const TLeaderTabletInfo& TTabletInfo::GetLeader() const { 
+    if (IsLeader()) { 
+        return AsLeader(); 
     } else {
-        return AsFollower().LeaderTablet;
+        return AsFollower().LeaderTablet; 
     }
 }
 
-TLeaderTabletInfo& TTabletInfo::GetLeader() {
-    if (IsLeader()) {
-        return AsLeader();
+TLeaderTabletInfo& TTabletInfo::GetLeader() { 
+    if (IsLeader()) { 
+        return AsLeader(); 
     } else {
-        return AsFollower().LeaderTablet;
+        return AsFollower().LeaderTablet; 
     }
 }
 
-TLeaderTabletInfo& TTabletInfo::AsLeader() {
-    Y_VERIFY(TabletRole == ETabletRole::Leader);
-    return static_cast<TLeaderTabletInfo&>(*this);
+TLeaderTabletInfo& TTabletInfo::AsLeader() { 
+    Y_VERIFY(TabletRole == ETabletRole::Leader); 
+    return static_cast<TLeaderTabletInfo&>(*this); 
 }
 
-const TLeaderTabletInfo& TTabletInfo::AsLeader() const {
-    Y_VERIFY(TabletRole == ETabletRole::Leader);
-    return static_cast<const TLeaderTabletInfo&>(*this);
+const TLeaderTabletInfo& TTabletInfo::AsLeader() const { 
+    Y_VERIFY(TabletRole == ETabletRole::Leader); 
+    return static_cast<const TLeaderTabletInfo&>(*this); 
 }
 
-TFollowerTabletInfo& TTabletInfo::AsFollower() {
-    Y_VERIFY(TabletRole == ETabletRole::Follower);
-    return static_cast<TFollowerTabletInfo&>(*this);
+TFollowerTabletInfo& TTabletInfo::AsFollower() { 
+    Y_VERIFY(TabletRole == ETabletRole::Follower); 
+    return static_cast<TFollowerTabletInfo&>(*this); 
 }
 
-const TFollowerTabletInfo& TTabletInfo::AsFollower() const {
-    Y_VERIFY(TabletRole == ETabletRole::Follower);
-    return static_cast<const TFollowerTabletInfo&>(*this);
+const TFollowerTabletInfo& TTabletInfo::AsFollower() const { 
+    Y_VERIFY(TabletRole == ETabletRole::Follower); 
+    return static_cast<const TFollowerTabletInfo&>(*this); 
 }
 
-std::pair<TTabletId, TFollowerId> TTabletInfo::GetFullTabletId() const {
-    if (IsLeader()) {
-        return { GetLeader().Id, 0 };
+std::pair<TTabletId, TFollowerId> TTabletInfo::GetFullTabletId() const { 
+    if (IsLeader()) { 
+        return { GetLeader().Id, 0 }; 
     } else {
-        return { GetLeader().Id, AsFollower().Id };
+        return { GetLeader().Id, AsFollower().Id }; 
     }
 }
 
 TObjectId TTabletInfo::GetObjectId() const {
-    return GetLeader().ObjectId;
+    return GetLeader().ObjectId; 
 }
 
 TTabletTypes::EType TTabletInfo::GetTabletType() const {
-    return GetLeader().Type;
+    return GetLeader().Type; 
 }
 
 TString TTabletInfo::ToString() const {
-    const TLeaderTabletInfo& leader = GetLeader();
+    const TLeaderTabletInfo& leader = GetLeader(); 
     TStringBuilder str;
-    str << TTabletTypes::TypeToStr(leader.Type) << '.' << leader.Id << '.' << ETabletRoleName(TabletRole);
-    if (IsFollower()) {
-        const TFollowerTabletInfo& follower(AsFollower());
-        str << '.' << follower.Id;
+    str << TTabletTypes::TypeToStr(leader.Type) << '.' << leader.Id << '.' << ETabletRoleName(TabletRole); 
+    if (IsFollower()) { 
+        const TFollowerTabletInfo& follower(AsFollower()); 
+        str << '.' << follower.Id; 
     } else {
-        str << '.' << leader.KnownGeneration;
+        str << '.' << leader.KnownGeneration; 
     }
     return str;
 }
@@ -99,11 +99,11 @@ TString TTabletInfo::StateString() const {
 
 TString TTabletInfo::FamilyString() const {
     TStringBuilder family;
-    const TLeaderTabletInfo& leader = GetLeader();
+    const TLeaderTabletInfo& leader = GetLeader(); 
     family << '{';
-    family << leader.ToString() << ' ' << leader.StateString();
-    for (const TFollowerTabletInfo& follower : leader.Followers) {
-        family << ", " << follower.ToString() << ' ' << follower.StateString();
+    family << leader.ToString() << ' ' << leader.StateString(); 
+    for (const TFollowerTabletInfo& follower : leader.Followers) { 
+        family << ", " << follower.ToString() << ' ' << follower.StateString(); 
     }
     family << '}';
     return family;
@@ -131,8 +131,8 @@ void TTabletInfo::ChangeVolatileState(EVolatileState state) {
 }
 
 bool TTabletInfo::IsReadyToStart(TInstant now) const {
-    if (IsFollower()) {
-        if (!GetLeader().IsRunning()) {
+    if (IsFollower()) { 
+        if (!GetLeader().IsRunning()) { 
             return false;
         }
     }
@@ -212,10 +212,10 @@ bool TTabletInfo::InitiateStop() {
             SendStopTablet(local, GetFullTabletId());
             LastNodeId = 0;
         }
-        if (IsLeader()) {
-            for (TFollowerTabletInfo& follower : AsLeader().Followers) {
-                if (follower.FollowerGroup.LocalNodeOnly) {
-                    follower.InitiateStop();
+        if (IsLeader()) { 
+            for (TFollowerTabletInfo& follower : AsLeader().Followers) { 
+                if (follower.FollowerGroup.LocalNodeOnly) { 
+                    follower.InitiateStop(); 
                 }
             }
         }
@@ -307,7 +307,7 @@ void TTabletInfo::Kill() {
 }
 
 const TVector<i64>& TTabletInfo::GetTabletAllowedMetricIds() const {
-    return Hive.GetTabletTypeAllowedMetricIds(GetLeader().Type);
+    return Hive.GetTabletTypeAllowedMetricIds(GetLeader().Type); 
 }
 
 void TTabletInfo::UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics) {
@@ -433,18 +433,18 @@ void TTabletInfo::FilterRawValues(TResourceNormalizedValues& values) const {
 }
 
 const TVector<TNodeId>& TTabletInfo::GetAllowedNodes() const {
-    if (IsLeader()) {
-        return AsLeader().AllowedNodes;
+    if (IsLeader()) { 
+        return AsLeader().AllowedNodes; 
     } else {
-        return AsFollower().FollowerGroup.AllowedNodes;
+        return AsFollower().FollowerGroup.AllowedNodes; 
     }
 }
 
 const TVector<TDataCenterId>& TTabletInfo::GetAllowedDataCenters() const {
-    if (IsLeader()) {
-        return AsLeader().AllowedDataCenters;
+    if (IsLeader()) { 
+        return AsLeader().AllowedDataCenters; 
     } else {
-        return AsFollower().FollowerGroup.AllowedDataCenters;
+        return AsFollower().FollowerGroup.AllowedDataCenters; 
     }
 }
 

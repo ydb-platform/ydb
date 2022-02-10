@@ -26,14 +26,14 @@ namespace NBoot {
     struct TBack;
 
     struct TResult {
-        TAutoPtr<NTable::TDatabase> Database;
-        TAutoPtr<TCommitManager> CommitManager;
-        TAutoPtr<TLogicSnap> Snap;
-        TAutoPtr<TLogicRedo> Redo;
-        TAutoPtr<TExecutorGCLogic> GcLogic;
-        TAutoPtr<TLogicAlter> Alter;
-        TAutoPtr<TCompactionLogicState> Comp;
-        TAutoPtr<TExecutorBorrowLogic> Loans;
+        TAutoPtr<NTable::TDatabase> Database; 
+        TAutoPtr<TCommitManager> CommitManager; 
+        TAutoPtr<TLogicSnap> Snap; 
+        TAutoPtr<TLogicRedo> Redo; 
+        TAutoPtr<TExecutorGCLogic> GcLogic; 
+        TAutoPtr<TLogicAlter> Alter; 
+        TAutoPtr<TCompactionLogicState> Comp; 
+        TAutoPtr<TExecutorBorrowLogic> Loans; 
         THashMap<ui32, NTable::TRowVersionRanges> RemovedRowVersions;
 
         TVector<TIntrusivePtr<TPrivatePageCache::TInfo>> PageCaches;
@@ -77,11 +77,11 @@ private:
 
     TInstant BootStartTime;
 
-    const TIntrusiveConstPtr<TTabletStorageInfo> Info;
+    const TIntrusiveConstPtr<TTabletStorageInfo> Info; 
 
     TLoadBlobQueue LoadBlobQueue;
 
-    THashMap<TLogoBlobID, TIntrusivePtr<NBoot::TLoadBlobs>> EntriesToLoad;
+    THashMap<TLogoBlobID, TIntrusivePtr<NBoot::TLoadBlobs>> EntriesToLoad; 
     THashMap<const NPageCollection::IPageCollection*, TIntrusivePtr<NBoot::IStep>> Loads;
 
     ui32 GroupResolveCachedChannel;
@@ -93,8 +93,8 @@ private:
     void PrepareEnv(bool follower, ui32 generation, TExecutorCaches caches) noexcept;
     ui32 GetBSGroupFor(const TLogoBlobID &logo) const;
     ui32 GetBSGroupID(ui32 channel, ui32 generation);
-    void LoadEntry(TIntrusivePtr<NBoot::TLoadBlobs>);
-    NBoot::TSpawned LoadPages(NBoot::IStep*, TAutoPtr<NPageCollection::TFetch> req);
+    void LoadEntry(TIntrusivePtr<NBoot::TLoadBlobs>); 
+    NBoot::TSpawned LoadPages(NBoot::IStep*, TAutoPtr<NPageCollection::TFetch> req); 
 
     void OnBlobLoaded(const TLogoBlobID& id, TString body, uintptr_t cookie) override;
 
@@ -111,7 +111,7 @@ public:
     EOpResult ReceiveRestored(TEvTablet::TEvRestored::TPtr &ev);
     EOpResult Receive(::NActors::IEventHandle&);
 
-    void FollowersSyncComplete();
+    void FollowersSyncComplete(); 
     void Cancel();
 
     TAutoPtr<NBoot::TResult> ExtractState() noexcept;

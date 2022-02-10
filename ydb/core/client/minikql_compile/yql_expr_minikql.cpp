@@ -65,8 +65,8 @@ TReadTarget GetReadTarget(TExprNode* node) {
     else if (modeStr == "online") {
         return TReadTarget::Online();
     }
-    else if (modeStr == "follower") {
-        return TReadTarget::Follower();
+    else if (modeStr == "follower") { 
+        return TReadTarget::Follower(); 
     }
     else {
         ythrow TNodeException(node) << "Unknown read target mode: " << modeStr;

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "config.h"
-#include "leader.h"
+#include "leader.h" 
 #include "owner.h"
 #include "events.h"
 #include "logger.h"
@@ -50,7 +50,7 @@ namespace NFake {
             Env.SetDispatchTimeout(DEFAULT_DISPATCH_TIMEOUT);
             Env.SetLogPriority(NKikimrServices::FAKE_ENV, NActors::NLog::PRI_INFO);
 
-            Leader = Env.Register(new NFake::TLeader(8, Stopped), 0);
+            Leader = Env.Register(new NFake::TLeader(8, Stopped), 0); 
 
             NFake::TConf conf;
 
@@ -66,16 +66,16 @@ namespace NFake {
             return &Env;
         }
 
-        void FireTablet(TActorId user, ui32 tablet, TStarter::TMake make, ui32 followerId = 0)
+        void FireTablet(TActorId user, ui32 tablet, TStarter::TMake make, ui32 followerId = 0) 
         {
             const auto mbx =  EMail::Simple;
 
-            RunOn(7, { }, TStarter().Do(user, 1, tablet, std::move(make), followerId), mbx);
+            RunOn(7, { }, TStarter().Do(user, 1, tablet, std::move(make), followerId), mbx); 
         }
 
-        void FireFollower(TActorId user, ui32 tablet, TStarter::TMake make, ui32 followerId)
+        void FireFollower(TActorId user, ui32 tablet, TStarter::TMake make, ui32 followerId) 
         {
-            FireTablet(user, tablet, make, followerId);
+            FireTablet(user, tablet, make, followerId); 
         }
 
         void AddService(TActorId service, IActor *actor, EMail box)
@@ -83,7 +83,7 @@ namespace NFake {
             Env.AddLocalService(service, TActorSetupCmd(actor, box, 0), 0);
         }
 
-        void RunTest(TAutoPtr<IActor> actor) noexcept
+        void RunTest(TAutoPtr<IActor> actor) noexcept 
         {
             return RunOn(8, { }, actor.Release(), EMail::Simple);
         }
@@ -92,7 +92,7 @@ namespace NFake {
         {
             auto *event = new NFake::TEvFire{ lvl, alias, { actor, box, 0 } };
 
-            Env.SingleSys()->Send(Leader, event);
+            Env.SingleSys()->Send(Leader, event); 
         }
 
         void Finalize()
@@ -214,11 +214,11 @@ namespace NFake {
         ITimeProvider * const Time = nullptr;
         const ui32 NodeId = Max<ui32>();
         const TVector<TString> Names;   /* { Component -> Name } */
-        const TIntrusivePtr<TSink> Sink;
-        const TAutoPtr<TLogEnv> Logger;
+        const TIntrusivePtr<TSink> Sink; 
+        const TAutoPtr<TLogEnv> Logger; 
 
     private:
-        TActorId Leader;
+        TActorId Leader; 
         TAtomic Stopped = 0;
     };
 

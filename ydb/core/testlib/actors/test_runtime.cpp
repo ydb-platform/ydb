@@ -130,7 +130,7 @@ namespace NActors {
             nodeAppData->StaticBlobStorageConfig->CopyFrom(*app0->StaticBlobStorageConfig);
             nodeAppData->EnableKqpSpilling = app0->EnableKqpSpilling;
             nodeAppData->FeatureFlags = app0->FeatureFlags;
-            nodeAppData->CompactionConfig = app0->CompactionConfig;
+            nodeAppData->CompactionConfig = app0->CompactionConfig; 
             nodeAppData->HiveConfig = app0->HiveConfig;
             nodeAppData->DataShardConfig = app0->DataShardConfig;
             nodeAppData->MeteringConfig = app0->MeteringConfig;
@@ -192,9 +192,9 @@ namespace NActors {
             return true;
         case NKikimr::TEvBlobStorage::EvNotReadyRetryTimeout:
         case NKikimr::TEvTabletPipe::EvClientRetry:
-        case NKikimr::TEvTabletBase::EvFollowerRetry:
-        case NKikimr::TEvTabletBase::EvTryBuildFollowerGraph:
-        case NKikimr::TEvTabletBase::EvTrySyncFollower:
+        case NKikimr::TEvTabletBase::EvFollowerRetry: 
+        case NKikimr::TEvTabletBase::EvTryBuildFollowerGraph: 
+        case NKikimr::TEvTabletBase::EvTrySyncFollower: 
             return false;
         case NKikimr::TEvents::TEvFlushLog::EventType:
             return false;

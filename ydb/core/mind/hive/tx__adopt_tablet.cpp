@@ -54,7 +54,7 @@ public:
                     return true;
                 }
 
-                TLeaderTabletInfo* tablet = Self->FindTablet(tabletId);
+                TLeaderTabletInfo* tablet = Self->FindTablet(tabletId); 
                 if (tablet != nullptr && tablet->Type != TabletType) {
                     Explain = "there is the tablet with different type assotiated with the (owner; ownerIdx)";
                     Status = NKikimrProto::EReplyStatus::RACE;
@@ -83,7 +83,7 @@ public:
             return true;
         }
 
-        TLeaderTabletInfo* tablet = Self->FindTablet(tabletId);
+        TLeaderTabletInfo* tablet = Self->FindTablet(tabletId); 
         if (tablet != nullptr && tablet->Type != TabletType) { // tablet is the same
             Explain = "there is the tablet with different type assotiated with the (preOwner; prevOwnerIdx)";
             Status = NKikimrProto::EReplyStatus::ERROR;

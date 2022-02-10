@@ -38,13 +38,13 @@ namespace NKikimr {
             NMonitoring::TDynamicCounters::TCounterPtr MultiPutResMsgsPtr;
 
             TEvBlobStorage::TEvVMultiPut::TPtr Event;
-            TActorId LeaderId;
+            TActorId LeaderId; 
             TOutOfSpaceStatus OOSStatus;
 
             const ui64 IncarnationGuid;
 
         public:
-            TBufferVMultiPutActor(TActorId leaderId, const TBatchedVec<NKikimrProto::EReplyStatus> &statuses,
+            TBufferVMultiPutActor(TActorId leaderId, const TBatchedVec<NKikimrProto::EReplyStatus> &statuses, 
                     TOutOfSpaceStatus oosStatus, TEvBlobStorage::TEvVMultiPut::TPtr &ev,
                     TActorIDPtr skeletonFrontIDPtr, NMonitoring::TDynamicCounters::TCounterPtr multiPutResMsgsPtr,
                     ui64 incarnationGuid)
@@ -54,7 +54,7 @@ namespace NKikimr {
                 , SkeletonFrontIDPtr(skeletonFrontIDPtr)
                 , MultiPutResMsgsPtr(multiPutResMsgsPtr)
                 , Event(ev)
-                , LeaderId(leaderId)
+                , LeaderId(leaderId) 
                 , OOSStatus(oosStatus)
                 , IncarnationGuid(incarnationGuid)
             {
@@ -172,11 +172,11 @@ namespace NKikimr {
 
     } // NPrivate
 
-    IActor* CreateSkeletonVMultiPutActor(TActorId leaderId, const TBatchedVec<NKikimrProto::EReplyStatus> &statuses,
+    IActor* CreateSkeletonVMultiPutActor(TActorId leaderId, const TBatchedVec<NKikimrProto::EReplyStatus> &statuses, 
             TOutOfSpaceStatus oosStatus, TEvBlobStorage::TEvVMultiPut::TPtr &ev,
             TActorIDPtr skeletonFrontIDPtr, NMonitoring::TDynamicCounters::TCounterPtr counterPtr,
             ui64 incarnationGuid) {
-        return new NPrivate::TBufferVMultiPutActor(leaderId, statuses, oosStatus, ev,
+        return new NPrivate::TBufferVMultiPutActor(leaderId, statuses, oosStatus, ev, 
                 skeletonFrontIDPtr, counterPtr, incarnationGuid);
     }
 

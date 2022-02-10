@@ -59,7 +59,7 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
             ? Ydb::StatusIds::SUCCESS
             : Ydb::StatusIds::UNSUPPORTED;
 
-        TestBuilIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{
+        TestBuilIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{ 
             "UserDefinedIndex", NKikimrSchemeOp::EIndexTypeGlobalAsync, {"indexed"}, {}
         }, status);
 

@@ -115,7 +115,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
                                "Name: \"USER_0\"");
         TestDescribeResult(DescribePath(runtime, "/MyRoot/dir/USER_0"),
                            {NLs::PathExist,
-                            NLs::DomainKey(3, TTestTxConfig::SchemeShard),
+                            NLs::DomainKey(3, TTestTxConfig::SchemeShard), 
                             NLs::DomainCoordinators({}),
                             NLs::DomainMediators({}),
                             NLs::DomainSchemeshard(0)});
@@ -178,7 +178,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
 
         UNIT_ASSERT(tenantSchemeShard != 0
                     && tenantSchemeShard != (ui64)-1
-                    && tenantSchemeShard != TTestTxConfig::SchemeShard);
+                    && tenantSchemeShard != TTestTxConfig::SchemeShard); 
 
         ui64 tenantSchemeShard2 = 0;
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0/table"),
@@ -196,7 +196,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
         TestMkDir(runtime, tenantSchemeShard, ++txId,  "/MyRoot/USER_0", "dir");
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
 
-        TestDescribeResult(DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/USER_0/dir"),
+        TestDescribeResult(DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/USER_0/dir"), 
                            {NLs::PathRedirected});
 
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0/dir"),
@@ -263,7 +263,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
 
         UNIT_ASSERT(tenantSchemeShard != 0
                     && tenantSchemeShard != (ui64)-1
-                    && tenantSchemeShard != TTestTxConfig::SchemeShard);
+                    && tenantSchemeShard != TTestTxConfig::SchemeShard); 
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                            {NLs::PathExist,
@@ -298,7 +298,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
 
         TestUserAttrs(runtime, ++txId, "/", "MyRoot", AlterUserAttrs({{"__extra_path_symbols_allowed", lowLimits.ExtraPathSymbolsAllowed}}));
         env.TestWaitNotification(runtime, txId);
-        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor()); 
 
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
                                "Name: \"USER+0\"",
@@ -617,8 +617,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
                               "} ");
 
         env.TestWaitNotification(runtime, {txId, txId - 1});
-        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2));
-        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 2));
+        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2)); 
+        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 2)); 
 
         ui64 tenantSchemeShard = 0;
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
@@ -628,7 +628,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
 
         UNIT_ASSERT(tenantSchemeShard != 0
                     && tenantSchemeShard != (ui64)-1
-                    && tenantSchemeShard != TTestTxConfig::SchemeShard);
+                    && tenantSchemeShard != TTestTxConfig::SchemeShard); 
 
         TestMkDir(runtime, tenantSchemeShard, ++txId, "/MyRoot/USER_0", "dir");
         TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/USER_0/dir",
@@ -670,9 +670,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
                             NLs::PathsInsideDomain(0),
                             NLs::ShardsInsideDomain(0)});
 
-        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 5));
-        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 2));
-        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2));
+        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 5)); 
+        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 2)); 
+        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2)); 
     }
 
     Y_UNIT_TEST(SysViewProcessorSync) {
@@ -731,7 +731,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
 
         UNIT_ASSERT(tenantSchemeShard != 0
                     && tenantSchemeShard != (ui64)-1
-                    && tenantSchemeShard != TTestTxConfig::SchemeShard);
+                    && tenantSchemeShard != TTestTxConfig::SchemeShard); 
 
         UNIT_ASSERT(tenantSVP != 0 && tenantSVP != (ui64)-1);
 
@@ -742,7 +742,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
 
         UNIT_ASSERT_EQUAL(tenantSVP, tenantSVPOnTSS);
 
-        RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
+        RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor()); 
 
         TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/USER_0",
                         "Name: \"table\""
@@ -755,7 +755,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0/table"),
                            {NLs::PathExist});
 
-        RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
+        RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor()); 
 
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0"),
                            {NLs::PathExist,
@@ -854,7 +854,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
         // Quotas consuption is persistent, on reboot they should stay consumed
         {
             TActorId sender = runtime.AllocateEdgeActor();
-            RebootTablet(runtime, tenantSchemeShard, sender);
+            RebootTablet(runtime, tenantSchemeShard, sender); 
         }
         TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/USER_0", R"(
                             Name: "Table7"

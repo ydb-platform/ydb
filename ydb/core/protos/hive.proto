@@ -9,7 +9,7 @@ package NKikimrHive;
 option java_package = "ru.yandex.kikimr.proto";
 
 enum ETabletBootMode {
-    // Default boot mode, hive tries to keep leader tablet running
+    // Default boot mode, hive tries to keep leader tablet running 
     TABLET_BOOT_MODE_DEFAULT = 0;
 
     // External boot mode, hive will assume it starts outside of any local service
@@ -86,7 +86,7 @@ message TEvCreateTablet {
     repeated uint32 AllowedNodeIDs = 7;
     repeated uint64 AllowedDataCenterNumIDs = 14 [deprecated=true]; // array of DC IDs allowed to run the tablet; obsolete; use AllowedDataCenters instead
     optional TTabletCategory TabletCategory = 16;
-    repeated TFollowerGroup FollowerGroups = 17;
+    repeated TFollowerGroup FollowerGroups = 17; 
     optional NKikimrSubDomains.TDomainKey ObjectDomain = 18;
     optional ETabletBootMode TabletBootMode = 19;
     optional uint64 ObjectId = 20;
@@ -101,10 +101,10 @@ message TEvCreateTablet {
     optional uint32 BootTimeoutMilliSeconds = 8 [deprecated = true]; // DEPRECATED
     optional uint32 BootAttemptLimit = 9 [deprecated = true]; // DEPRECATED
     optional uint64 Weight = 10 [default = 1000, deprecated = true]; // DEPRECATED
-    optional uint32 FollowerCount = 11 [default = 0]; // DEPRECATED
-    optional bool AllowFollowerPromotion = 12 [default = false]; // DEPRECATED
-    optional bool CrossDataCenterFollowers = 13 [default = false]; // enable to make followers automatically in every DC (one follower per one datacenter) - DEPRECATED
-    optional uint32 CrossDataCenterFollowerCount = 15; // follower count per one datacenter - DEPRECATED
+    optional uint32 FollowerCount = 11 [default = 0]; // DEPRECATED 
+    optional bool AllowFollowerPromotion = 12 [default = false]; // DEPRECATED 
+    optional bool CrossDataCenterFollowers = 13 [default = false]; // enable to make followers automatically in every DC (one follower per one datacenter) - DEPRECATED 
+    optional uint32 CrossDataCenterFollowerCount = 15; // follower count per one datacenter - DEPRECATED 
 }
 
 message TEvLookupTablet {
@@ -227,7 +227,7 @@ message TEvChannelInfo {
 message TTabletMetrics {
     optional fixed64 TabletID = 1;
     optional NKikimrTabletBase.TMetrics ResourceUsage = 4;
-    optional uint32 FollowerID = 3;
+    optional uint32 FollowerID = 3; 
 }
 
 message TEvTabletMetrics {
@@ -255,8 +255,8 @@ message TForwardRequest {
 message TEvRequestHiveInfo {
     optional fixed64 TabletID = 1;
     optional NKikimrTabletBase.TTabletTypes.EType TabletType = 2;
-    optional bool ReturnFollowers = 3;
-    optional uint32 FollowerID = 4;
+    optional bool ReturnFollowers = 3; 
+    optional uint32 FollowerID = 4; 
     optional bool ReturnMetrics = 5;
 }
 
@@ -266,7 +266,7 @@ message TEvResponseHiveInfo {
 }
 
 message TEvRequestHiveDomainStats {
-    optional bool ReturnFollowers = 3;
+    optional bool ReturnFollowers = 3; 
     optional bool ReturnMetrics = 5;
 }
 
@@ -441,7 +441,7 @@ message TTabletInfo {
     repeated uint64 ExecutorCounters = 5;
     repeated uint64 ApplicationCounters = 6;
     optional TTabletOwner TabletOwner = 7;
-    optional uint32 FollowerID = 8;
+    optional uint32 FollowerID = 8; 
     optional uint32 State = 9;                  // THive::ETabletState
     optional NKikimrTabletBase.TMetrics Metrics = 10;
     optional uint32 Generation = 11;
@@ -449,7 +449,7 @@ message TTabletInfo {
     optional NKikimrSubDomains.TDomainKey ObjectDomain = 13;
     optional uint64 ObjectId = 14;
     repeated NKikimrSubDomains.TDomainKey AllowedDomains = 15;
-    repeated TFollowerGroup FollowerGroups = 16;
+    repeated TFollowerGroup FollowerGroups = 16; 
     repeated TTabletChannelInfo TabletChannels = 17;
     optional NActorsProto.TActorId LockedToActor = 18;
     optional uint64 LockedReconnectTimeout = 19;

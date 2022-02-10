@@ -6,7 +6,7 @@
 
 namespace NKikimr {
 
-IActor* CreateSkeletonVMovedPatchActor(TActorId leaderId, TOutOfSpaceStatus oosStatus,
+IActor* CreateSkeletonVMovedPatchActor(TActorId leaderId, TOutOfSpaceStatus oosStatus, 
         TEvBlobStorage::TEvVMovedPatch::TPtr &ev, TActorIDPtr skeletonFrontIDPtr,
         NMonitoring::TDynamicCounters::TCounterPtr multiPutResMsgsPtr,
         ui64 incarnationGuid, const TVDiskContextPtr &vCtx);

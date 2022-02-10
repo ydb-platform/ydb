@@ -35,7 +35,7 @@ namespace NBoot {
             Flush();
         }
 
-        void HandleStep(TIntrusivePtr<IStep> step) noexcept override
+        void HandleStep(TIntrusivePtr<IStep> step) noexcept override 
         {
             auto *load = step->ConsumeAs<TLoadBlobs>(Pending);
 
@@ -63,7 +63,7 @@ namespace NBoot {
             }
         }
 
-        void Apply(const TLogoBlobID &label, TArrayRef<const char> body) noexcept
+        void Apply(const TLogoBlobID &label, TArrayRef<const char> body) noexcept 
         {
             TProtoBox<NKikimrExecutorFlat::TBorrowedPart> proto(body);
 

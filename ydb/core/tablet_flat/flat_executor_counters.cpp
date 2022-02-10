@@ -94,7 +94,7 @@ TExecutorCounters::TExecutorCounters()
     Percentile()[TX_PERCENTILE_TABLET_BYTES_READ].Initialize(txDataRate, false);
     Percentile()[TX_PERCENTILE_TABLET_BYTES_WRITTEN].Initialize(txDataRate, false);
     Percentile()[TX_PERCENTILE_CONSUMED_CPU].Initialize(txConsumedCpu, false);
-    Percentile()[TX_PERCENTILE_FOLLOWERSYNC_LATENCY].Initialize(txLatencyConfig, false);
+    Percentile()[TX_PERCENTILE_FOLLOWERSYNC_LATENCY].Initialize(txLatencyConfig, false); 
 }
 
 }}

@@ -52,7 +52,7 @@ Y_UNIT_TEST_SUITE(TUserAttrsTestWithReboots) {
             }
 
             AsyncDropSubDomain(runtime, ++t.TxId,  "/MyRoot/DirA", "USER_0");
-            t.TestEnv->TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1, TTestTxConfig::FakeHiveTablets+2});
+            t.TestEnv->TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1, TTestTxConfig::FakeHiveTablets+2}); 
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
             {

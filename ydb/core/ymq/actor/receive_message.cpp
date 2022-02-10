@@ -138,7 +138,7 @@ private:
             receiveRequest->WaitDeadline = WaitDeadline();
         }
 
-        Send(QueueLeader_, std::move(receiveRequest));
+        Send(QueueLeader_, std::move(receiveRequest)); 
     }
 
     TString DoGetQueueName() const override {

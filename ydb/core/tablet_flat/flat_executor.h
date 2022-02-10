@@ -146,7 +146,7 @@ struct TPendingPartSwitch {
     };
 
     struct TTxStatusLoadStage {
-        TIntrusiveConstPtr<NTable::TTxStatusPart> TxStatus;
+        TIntrusiveConstPtr<NTable::TTxStatusPart> TxStatus; 
         std::optional<TLargeGlobLoader> Loader;
         NTable::TEpoch Epoch;
 
@@ -177,9 +177,9 @@ struct TPendingPartSwitch {
     };
 
     struct TTxStatusResultStage {
-        TIntrusiveConstPtr<NTable::TTxStatusPart> TxStatus;
+        TIntrusiveConstPtr<NTable::TTxStatusPart> TxStatus; 
 
-        explicit TTxStatusResultStage(TIntrusiveConstPtr<NTable::TTxStatusPart> txStatus)
+        explicit TTxStatusResultStage(TIntrusiveConstPtr<NTable::TTxStatusPart> txStatus) 
             : TxStatus(std::move(txStatus))
         { }
     };
@@ -256,7 +256,7 @@ struct TPendingPartSwitch {
 
     TList<TNewBundle> NewBundles;
     TList<TNewTxStatus> NewTxStatus;
-    TVector<TIntrusiveConstPtr<NTable::TColdPart>> NewColdParts;
+    TVector<TIntrusiveConstPtr<NTable::TColdPart>> NewColdParts; 
     TPendingBlobs PendingBlobs;
     size_t PendingLoads = 0;
 
@@ -267,7 +267,7 @@ struct TPendingPartSwitch {
     TVector<TBundleMove> Moves;
     NTable::TEpoch Head = NTable::TEpoch::Zero();
 
-    ui32 FollowerUpdateStep = 0;
+    ui32 FollowerUpdateStep = 0; 
 
     bool AddPendingBlob(const TLogoBlobID& id, TBlobWaiter waiter) {
         TPendingBlobs::insert_ctx ctx;
@@ -349,12 +349,12 @@ class TExecutor
         struct TEvBrokenTransaction : public TEventLocal<TEvBrokenTransaction, EvBrokenTransaction> {};
     };
 
-    const TIntrusivePtr<ITimeProvider> Time = nullptr;
+    const TIntrusivePtr<ITimeProvider> Time = nullptr; 
     NFlatExecutorSetup::ITablet * Owner;
     const TActorId OwnerActorId;
-    TAutoPtr<NUtil::ILogger> Logger;
+    TAutoPtr<NUtil::ILogger> Logger; 
 
-    ui32 FollowerId = 0;
+    ui32 FollowerId = 0; 
 
     using TActivationQueue = TOneOneQueueInplace<TSeat *, 64>;
     THolder<TActivationQueue, TActivationQueue::TPtrCleanDestructor> ActivationQueue;
@@ -376,8 +376,8 @@ class TExecutor
 
     using TWaitingSnaps = THashMap<TTableSnapshotContext *, TIntrusivePtr<TTableSnapshotContext>>;
 
-    const TIntrusivePtr<TIdEmitter> Emitter;
-    TAutoPtr<TBroker> Broker;
+    const TIntrusivePtr<TIdEmitter> Emitter; 
+    TAutoPtr<TBroker> Broker; 
 
     TWaitingSnaps WaitingSnapshots;
 
@@ -389,14 +389,14 @@ class TExecutor
     THolder<TTabletCountersBase> AppCountersBaseline;
     THolder<NMetrics::TResourceMetrics> ResourceMetrics;
 
-    TAutoPtr<NTable::TDatabase> Database;
+    TAutoPtr<NTable::TDatabase> Database; 
 
-    TAutoPtr<TCommitManager> CommitManager;
-    TAutoPtr<TScans> Scans;
-    TAutoPtr<TMemory> Memory;
-    TAutoPtr<TLogicSnap> LogicSnap;
-    TAutoPtr<TLogicRedo> LogicRedo;
-    TAutoPtr<TLogicAlter> LogicAlter;
+    TAutoPtr<TCommitManager> CommitManager; 
+    TAutoPtr<TScans> Scans; 
+    TAutoPtr<TMemory> Memory; 
+    TAutoPtr<TLogicSnap> LogicSnap; 
+    TAutoPtr<TLogicRedo> LogicRedo; 
+    TAutoPtr<TLogicAlter> LogicAlter; 
     THolder<TExecutorGCLogic> GcLogic;
     THolder<TCompactionLogic> CompactionLogic;
     THolder<TExecutorBorrowLogic> BorrowLogic;
@@ -417,16 +417,16 @@ class TExecutor
     ui64 CompactionReadUniqCounter = 0;
 
     bool LogBatchFlushScheduled = false;
-    bool HadFollowerAttached = false;
-    bool NeedFollowerSnapshot = false;
+    bool HadFollowerAttached = false; 
+    bool NeedFollowerSnapshot = false; 
 
     TCacheCacheConfig::TCounterPtr CounterCacheFresh;
     TCacheCacheConfig::TCounterPtr CounterCacheMemTable;
     TCacheCacheConfig::TCounterPtr CounterCacheStaging;
 
-    THashMap<ui32, TIntrusivePtr<TBarrier>> InFlyCompactionGcBarriers;
-    TDeque<THolder<TEvTablet::TFUpdateBody>> PostponedFollowerUpdates;
-    THashMap<ui32, TVector<TIntrusivePtr<TBarrier>>> InFlySnapCollectionBarriers;
+    THashMap<ui32, TIntrusivePtr<TBarrier>> InFlyCompactionGcBarriers; 
+    TDeque<THolder<TEvTablet::TFUpdateBody>> PostponedFollowerUpdates; 
+    THashMap<ui32, TVector<TIntrusivePtr<TBarrier>>> InFlySnapCollectionBarriers; 
 
     THolder<TExecutorStatsImpl> Stats;
     bool HasYellowCheckInFly = false;
@@ -445,13 +445,13 @@ class TExecutor
     void PassAway() override;
     void Broken();
     void Active(const TActorContext &ctx);
-    void ActivateFollower(const TActorContext &ctx);
+    void ActivateFollower(const TActorContext &ctx); 
     void RecreatePageCollectionsCache() noexcept;
     void ReflectSchemeSettings() noexcept;
     void OnYellowChannels(TVector<ui32> yellowMoveChannels, TVector<ui32> yellowStopChannels) override;
     void CheckYellow(TVector<ui32> &&yellowMoveChannels, TVector<ui32> &&yellowStopChannels, bool terminal = false);
     void SendReassignYellowChannels(const TVector<ui32> &yellowChannels);
-    void CheckCollectionBarrier(TIntrusivePtr<TBarrier> &barrier);
+    void CheckCollectionBarrier(TIntrusivePtr<TBarrier> &barrier); 
     void UtilizeSubset(const NTable::TSubset&, const NTable::NFwd::TSeen&,
         THashSet<TLogoBlobID> reusedBundles, TLogCommit *commit);
     bool PrepareExternalPart(TPendingPartSwitch &partSwitch, NTable::TPartComponents &&pc);
@@ -466,13 +466,13 @@ class TExecutor
     bool CanExecuteTransaction() const;
 
     void TranscriptBootOpResult(ui32 res, const TActorContext &ctx);
-    void TranscriptFollowerBootOpResult(ui32 res, const TActorContext &ctx);
+    void TranscriptFollowerBootOpResult(ui32 res, const TActorContext &ctx); 
     void ExecuteTransaction(TAutoPtr<TSeat> seat, const TActorContext &ctx);
-    void CommitTransactionLog(TAutoPtr<TSeat>, TPageCollectionTxEnv&, TAutoPtr<NTable::TChange>,
+    void CommitTransactionLog(TAutoPtr<TSeat>, TPageCollectionTxEnv&, TAutoPtr<NTable::TChange>, 
                               THPTimer &bookkeepingTimer, const TActorContext &ctx);
     void UnpinTransactionPages(TSeat &seat);
     void ReleaseTxData(TSeat &seat, ui64 requested, const TActorContext &ctx);
-    void PostponeTransaction(TAutoPtr<TSeat>, TPageCollectionTxEnv&, TAutoPtr<NTable::TChange>, THPTimer &bookkeepingTimer, const TActorContext &ctx);
+    void PostponeTransaction(TAutoPtr<TSeat>, TPageCollectionTxEnv&, TAutoPtr<NTable::TChange>, THPTimer &bookkeepingTimer, const TActorContext &ctx); 
     void PlanTransactionActivation();
     void MakeLogSnapshot();
     void ActivateWaitingTransactions(TPrivatePageCache::TPage::TWaitQueuePtr waitPadsQueue);
@@ -484,21 +484,21 @@ class TExecutor
     void TranslateCacheTouchesToSharedCache();
     void RequestInMemPagesForDatabase();
     void RequestInMemPagesForPartStore(ui32 tableId, const NTable::TPartView &partView);
-    void RequestFromSharedCache(TAutoPtr<NPageCollection::TFetch> fetch,
+    void RequestFromSharedCache(TAutoPtr<NPageCollection::TFetch> fetch, 
         NBlockIO::EPriority way, EPageCollectionRequest requestCategory);
     THolder<TScanSnapshot> PrepareScanSnapshot(ui32 table,
         const NTable::TCompactionParams* params, TRowVersion snapshot = TRowVersion::Max());
-    void ReleaseScanLocks(TIntrusivePtr<TBarrier>, const NTable::TSubset&);
+    void ReleaseScanLocks(TIntrusivePtr<TBarrier>, const NTable::TSubset&); 
     void StartScan(ui64 serial, ui32 table) noexcept;
     void StartScan(ui64 task, TResource*) noexcept;
     void StartSeat(ui64 task, TResource*) noexcept;
     void PostponedScanCleared(NResourceBroker::TEvResourceBroker::TEvResourceAllocated *msg, const TActorContext &ctx);
 
-    void ApplyFollowerUpdate(THolder<TEvTablet::TFUpdateBody> update);
-    void ApplyFollowerAuxUpdate(const TString &auxBody);
-    void ApplyFollowerPostponedUpdates();
-    void AddFollowerPartSwitch(const NKikimrExecutorFlat::TTablePartSwitch &switchProto,
-        const NKikimrExecutorFlat::TFollowerPartSwitchAux::TBySwitch *aux, ui32 updateStep, ui32 step);
+    void ApplyFollowerUpdate(THolder<TEvTablet::TFUpdateBody> update); 
+    void ApplyFollowerAuxUpdate(const TString &auxBody); 
+    void ApplyFollowerPostponedUpdates(); 
+    void AddFollowerPartSwitch(const NKikimrExecutorFlat::TTablePartSwitch &switchProto, 
+        const NKikimrExecutorFlat::TFollowerPartSwitchAux::TBySwitch *aux, ui32 updateStep, ui32 step); 
     void ApplyExternalPartSwitch(TPendingPartSwitch &partSwitch);
 
     void Wakeup(TEvents::TEvWakeup::TPtr &ev, const TActorContext &ctx);
@@ -530,12 +530,12 @@ class TExecutor
 
     ui64 OwnerTabletId() const override;
     const NTable::TScheme& DatabaseScheme() override;
-    TIntrusiveConstPtr<NTable::TRowScheme> RowScheme(ui32 table) override;
+    TIntrusiveConstPtr<NTable::TRowScheme> RowScheme(ui32 table) override; 
     const NTable::TScheme::TTableInfo* TableScheme(ui32 table) override;
     ui64 TableMemSize(ui32 table, NTable::TEpoch epoch) override;
     NTable::TPartView TablePart(ui32 table, const TLogoBlobID& label) override;
     TVector<NTable::TPartView> TableParts(ui32 table) override;
-    TVector<TIntrusiveConstPtr<NTable::TColdPart>> TableColdParts(ui32 table) override;
+    TVector<TIntrusiveConstPtr<NTable::TColdPart>> TableColdParts(ui32 table) override; 
     const NTable::TRowVersionRanges& TableRemovedRowVersions(ui32 table) override;
     ui64 BeginCompaction(THolder<NTable::TCompactionParams> params) override;
     bool CancelCompaction(ui64 compactionId) override;
@@ -564,7 +564,7 @@ public:
     void Describe(IOutputStream &out) const noexcept override
     {
         out
-            << (Stats->IsFollower ? "Follower" : "Leader")
+            << (Stats->IsFollower ? "Follower" : "Leader") 
             << "{" << Owner->TabletID()
             << ":" << Generation() << ":" << Step() << "}";
     }
@@ -573,27 +573,27 @@ public:
     void Boot(TEvTablet::TEvBoot::TPtr &ev, const TActorContext &ctx) override;
     void Restored(TEvTablet::TEvRestored::TPtr &ev, const TActorContext &ctx) override;
     void DetachTablet(const TActorContext &ctx) override;
-    void Execute(TAutoPtr<ITransaction> transaction, const TActorContext &ctx) override;
+    void Execute(TAutoPtr<ITransaction> transaction, const TActorContext &ctx) override; 
 
     TString BorrowSnapshot(ui32 tableId, const TTableSnapshotContext& snap, TRawVals from, TRawVals to, ui64 loaner) const override;
 
     ui64 MakeScanSnapshot(ui32 table) override;
     void DropScanSnapshot(ui64 snapId) override;
-    ui64 QueueScan(ui32 tableId, TAutoPtr<NTable::IScan> scan, ui64 cookie, const TScanOptions& options) override;
+    ui64 QueueScan(ui32 tableId, TAutoPtr<NTable::IScan> scan, ui64 cookie, const TScanOptions& options) override; 
     bool CancelScan(ui32 tableId, ui64 taskId) override;
-
-    TFinishedCompactionInfo GetFinishedCompactionInfo(ui32 tableId) const override;
+ 
+    TFinishedCompactionInfo GetFinishedCompactionInfo(ui32 tableId) const override; 
     ui64 CompactBorrowed(ui32 tableId) override;
     ui64 CompactMemTable(ui32 tableId) override;
-    ui64 CompactTable(ui32 tableId) override;
+    ui64 CompactTable(ui32 tableId) override; 
     bool CompactTables() override;
 
-    void FollowerAttached() override;
-    void FollowerSyncComplete() override;
-    void FollowerGcApplied(ui32 step, TDuration followerSyncDelay) override;
-    void FollowerBoot(TEvTablet::TEvFBoot::TPtr &ev, const TActorContext &ctx) override;
-    void FollowerUpdate(THolder<TEvTablet::TFUpdateBody> update) override;
-    void FollowerAuxUpdate(TString upd) override;
+    void FollowerAttached() override; 
+    void FollowerSyncComplete() override; 
+    void FollowerGcApplied(ui32 step, TDuration followerSyncDelay) override; 
+    void FollowerBoot(TEvTablet::TEvFBoot::TPtr &ev, const TActorContext &ctx) override; 
+    void FollowerUpdate(THolder<TEvTablet::TFUpdateBody> update) override; 
+    void FollowerAuxUpdate(TString upd) override; 
 
     void RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev) const override;
     void RenderHtmlCounters(NMon::TEvRemoteHttpInfo::TPtr &ev) const override;
@@ -602,8 +602,8 @@ public:
 
     void UpdateConfig(TEvTablet::TEvUpdateConfig::TPtr &ev) override;
 
-    void SendUserAuxUpdateToFollowers(TString upd, const TActorContext &ctx) override;
-
+    void SendUserAuxUpdateToFollowers(TString upd, const TActorContext &ctx) override; 
+ 
     THashMap<TLogoBlobID, TVector<ui64>> GetBorrowedParts() const override;
 
     const TExecutorStats& GetStats() const override;
@@ -621,8 +621,8 @@ public:
     STFUNC(StateInit);
     STFUNC(StateBoot);
     STFUNC(StateWork);
-    STFUNC(StateFollowerBoot);
-    STFUNC(StateFollower);
+    STFUNC(StateFollowerBoot); 
+    STFUNC(StateFollower); 
 
     // database interface
     const NTable::TScheme& Scheme() const noexcept override;

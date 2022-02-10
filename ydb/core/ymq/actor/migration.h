@@ -10,7 +10,7 @@ namespace NKikimr::NSQS {
 
 class TQueueMigrationActor : public TActorBootstrapped<TQueueMigrationActor> {
 public:
-    TQueueMigrationActor(const TString& userName, const TString& queueName, const TActorId& queueLeader, const TActorId& schemeCache, TIntrusivePtr<TQueueCounters> counters, TDuration waitBeforeMigration = TDuration::Zero());
+    TQueueMigrationActor(const TString& userName, const TString& queueName, const TActorId& queueLeader, const TActorId& schemeCache, TIntrusivePtr<TQueueCounters> counters, TDuration waitBeforeMigration = TDuration::Zero()); 
     ~TQueueMigrationActor();
 
     void Bootstrap();
@@ -43,7 +43,7 @@ private:
 private:
     const TString UserName;
     const TString QueueName;
-    const TActorId QueueLeader;
+    const TActorId QueueLeader; 
     const TActorId SchemeCache;
     TIntrusivePtr<TQueueCounters> Counters;
     TDuration WaitBeforeMigration;

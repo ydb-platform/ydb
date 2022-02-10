@@ -35,23 +35,23 @@ struct TEvTabletResolver {
         struct TResolveFlags {
             EResolvePrio LocalNodePrio;
             EResolvePrio LocalDcPrio;
-            EResolvePrio FollowerPrio;
+            EResolvePrio FollowerPrio; 
 
             TResolveFlags()
                 : LocalNodePrio(EResolvePrio::ResPrioAllow)
                 , LocalDcPrio(EResolvePrio::ResPrioPrefer)
-                , FollowerPrio(EResolvePrio::ResPrioDisallow)
+                , FollowerPrio(EResolvePrio::ResPrioDisallow) 
             {}
 
             static constexpr ui32 MaxTabletPriority() { return 4; }
 
-            ui32 GetTabletPriority(bool isLocalNode, bool isLocalDc, bool isFollower) const {
+            ui32 GetTabletPriority(bool isLocalNode, bool isLocalDc, bool isFollower) const { 
                 if (isLocalNode && (LocalNodePrio == EResolvePrio::ResPrioDisallow) ||
                     isLocalDc && (LocalDcPrio == EResolvePrio::ResPrioDisallow) ||
-                    isFollower && (FollowerPrio == EResolvePrio::ResPrioDisallow) ||
+                    isFollower && (FollowerPrio == EResolvePrio::ResPrioDisallow) || 
                     !isLocalNode && (LocalNodePrio == EResolvePrio::ResPrioForce) ||
                     !isLocalDc && (LocalDcPrio == EResolvePrio::ResPrioForce) ||
-                    !isFollower && (FollowerPrio == EResolvePrio::ResPrioForce))
+                    !isFollower && (FollowerPrio == EResolvePrio::ResPrioForce)) 
                 {
                     return 0;
                 }
@@ -61,22 +61,22 @@ struct TEvTabletResolver {
                     prio |= 2;
                 if (isLocalDc && (LocalDcPrio == EResolvePrio::ResPrioPrefer))
                     prio |= 8;
-                if (isFollower && (FollowerPrio == EResolvePrio::ResPrioPrefer))
+                if (isFollower && (FollowerPrio == EResolvePrio::ResPrioPrefer)) 
                     prio |= 4;
                 return prio;
             }
 
-            bool AllowFollower() const { return FollowerPrio != EResolvePrio::ResPrioDisallow; }
+            bool AllowFollower() const { return FollowerPrio != EResolvePrio::ResPrioDisallow; } 
 
-            void SetAllowFollower(bool flag, bool allowMeansPrefer = true) {
-                FollowerPrio = EResolvePrio::ResPrioDisallow;
+            void SetAllowFollower(bool flag, bool allowMeansPrefer = true) { 
+                FollowerPrio = EResolvePrio::ResPrioDisallow; 
                 if (flag)
-                    FollowerPrio = (allowMeansPrefer ? EResolvePrio::ResPrioPrefer : EResolvePrio::ResPrioAllow);
+                    FollowerPrio = (allowMeansPrefer ? EResolvePrio::ResPrioPrefer : EResolvePrio::ResPrioAllow); 
             }
 
-            void SetForceFollower(bool flag) {
+            void SetForceFollower(bool flag) { 
                 if (flag)
-                    FollowerPrio = EResolvePrio::ResPrioForce;
+                    FollowerPrio = EResolvePrio::ResPrioForce; 
             }
 
             void SetPreferLocal(bool flag) {
@@ -93,7 +93,7 @@ struct TEvTabletResolver {
                 TStringStream str;
                 str << (ui32) LocalNodePrio << ':'
                     << (ui32) LocalDcPrio << ':'
-                    << (ui32) FollowerPrio;
+                    << (ui32) FollowerPrio; 
                 return str.Str();
             }
         };

@@ -74,9 +74,9 @@ class TPartitionConfig(AbstractProtobufBuilder):
         self.protobuf.CompactionPolicy.InMemForceStepsToSnapshot = in_mem_force_steps_to_snapshot
         return self
 
-    def with_followers(self, follower_count, allow_follower_promotion=True):
-        self.protobuf.FollowerCount = follower_count
-        self.protobuf.AllowFollowerPromotion = allow_follower_promotion
+    def with_followers(self, follower_count, allow_follower_promotion=True): 
+        self.protobuf.FollowerCount = follower_count 
+        self.protobuf.AllowFollowerPromotion = allow_follower_promotion 
         return self
 
     def with_partitioning_policy(self, size_to_split_bytes):
@@ -529,7 +529,7 @@ class CreateTableRequest(AbstractTSchemeOperationRequest):
 
             self.__partitions_count = 1
             self.__partition_config = TPartitionConfig()
-            self.__partition_config.with_followers(follower_count=1)
+            self.__partition_config.with_followers(follower_count=1) 
             self.__columns_family = list()
             self.__storage_config = {}
 
@@ -659,7 +659,7 @@ class AlterTableRequest(AbstractTSchemeOperationRequest):
         self.protobuf.Transaction.ModifyScheme.WorkingDir = path
         self.__alter_table_protobuf.Name = table_name
 
-        self.with_partition_config(TPartitionConfig().with_followers(follower_count=1))
+        self.with_partition_config(TPartitionConfig().with_followers(follower_count=1)) 
 
     @property
     def __alter_table_protobuf(self):

@@ -25,7 +25,7 @@ SRCS(
     btree_cow_ut.cpp
     btree_ut.cpp
     cache_ut.cpp
-    circular_queue_ut.cpp
+    circular_queue_ut.cpp 
     concurrent_rw_hash_ut.cpp
     fast_tls_ut.cpp
     fragmented_buffer_ut.cpp
@@ -38,8 +38,8 @@ SRCS(
     lf_stack_ut.cpp
     log_priority_mute_checker_ut.cpp
     lz4_data_generator_ut.cpp
-    operation_queue_ut.cpp
-    operation_queue_priority_ut.cpp
+    operation_queue_ut.cpp 
+    operation_queue_priority_ut.cpp 
     page_map_ut.cpp
     queue_inplace_ut.cpp
     queue_oneone_inplace_ut.cpp

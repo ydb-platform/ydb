@@ -56,7 +56,7 @@ class TReadColumnsScan : public INoTxScan {
     TAutoPtr<TEvDataShard::TEvReadColumnsResponse> Result;
 
     IDriver *Driver = nullptr;
-    TIntrusiveConstPtr<TScheme> Scheme;
+    TIntrusiveConstPtr<TScheme> Scheme; 
 
 public:
     TReadColumnsScan(const TKeyBoundary& keyFrom,
@@ -86,7 +86,7 @@ public:
         , BlockBuilder(std::move(blockBuilder))
     {}
 
-    THello Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) noexcept override {
+    THello Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) noexcept override { 
         Driver = driver;
         Scheme = std::move(scheme);
 
@@ -127,7 +127,7 @@ public:
         return EScan::Feed;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort reason) noexcept override {
+    TAutoPtr<IDestructable> Finish(EAbort reason) noexcept override { 
         Result = new TEvDataShard::TEvReadColumnsResponse(TabletId);
 
         if (reason == EAbort::None) {
@@ -216,11 +216,11 @@ public:
 
         bool useScan = Self->ReadColumnsScanEnabled;
 
-        if (Self->IsFollower()) {
+        if (Self->IsFollower()) { 
             NKikimrTxDataShard::TError::EKind status = NKikimrTxDataShard::TError::OK;
             TString errMessage;
 
-            if (!Self->SyncSchemeOnFollower(txc, ctx, status, errMessage))
+            if (!Self->SyncSchemeOnFollower(txc, ctx, status, errMessage)) 
                 return false;
 
             if (status != NKikimrTxDataShard::TError::OK) {
@@ -279,7 +279,7 @@ public:
             if (!Self->GetSnapshotManager().FindAvailable(*snapshotKey)) {
                 SetError(NKikimrTxDataShard::TError::SNAPSHOT_NOT_EXIST,
                     TStringBuilder() << "Table id " << tableId << " has no snapshot at " << ReadVersion
-                         << " shard " << Self->TabletID() << (Self->IsFollower() ? " RO replica" : ""));
+                         << " shard " << Self->TabletID() << (Self->IsFollower() ? " RO replica" : "")); 
                 return true;
             }
         }
@@ -380,7 +380,7 @@ public:
                 if (!Self->GetSnapshotManager().AcquireReference(*snapshotKey)) {
                     SetError(NKikimrTxDataShard::TError::SNAPSHOT_NOT_EXIST,
                         TStringBuilder() << "Table id " << tableId << " has no snapshot at " << ReadVersion
-                             << " shard " << Self->TabletID() << (Self->IsFollower() ? " RO replica" : ""));
+                             << " shard " << Self->TabletID() << (Self->IsFollower() ? " RO replica" : "")); 
                     return true;
                 }
             }

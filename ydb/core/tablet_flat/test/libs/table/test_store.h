@@ -150,9 +150,9 @@ namespace NTest {
             }
         }
 
-        static TIntrusivePtr<TStore> Restore(IInputStream &in)
+        static TIntrusivePtr<TStore> Restore(IInputStream &in) 
         {
-            TIntrusivePtr<TStore> storage(new TStore(1));
+            TIntrusivePtr<TStore> storage(new TStore(1)); 
             NPage::TLabel label;
 
             while (auto got = in.Load(&label, sizeof(label))) {
@@ -231,7 +231,7 @@ namespace NTest {
             return id;
         }
 
-        void WriteInplace(TPageId page, TArrayRef<const char> body) noexcept
+        void WriteInplace(TPageId page, TArrayRef<const char> body) noexcept 
         {
             Y_VERIFY(page == Scheme);
 

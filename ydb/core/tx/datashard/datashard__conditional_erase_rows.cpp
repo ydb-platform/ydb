@@ -27,7 +27,7 @@ protected:
         TPos Pos = Max<TPos>();
     };
 
-    virtual TVector<TKey> MakeKeyOrder(TIntrusiveConstPtr<IScan::TScheme> scheme) const = 0;
+    virtual TVector<TKey> MakeKeyOrder(TIntrusiveConstPtr<IScan::TScheme> scheme) const = 0; 
     virtual TActorId CreateEraser() = 0;
     virtual void CloseEraser() = 0;
 };
@@ -235,7 +235,7 @@ public:
         << " }";
     }
 
-    IScan::THello Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) noexcept override {
+    IScan::THello Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) noexcept override { 
         TlsActivationContext->AsActorContext().RegisterWithSameMailbox(this);
 
         Driver = driver;
@@ -303,7 +303,7 @@ public:
         return EScan::Sleep;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort) noexcept override {
+    TAutoPtr<IDestructable> Finish(EAbort abort) noexcept override { 
         Reply(abort != EAbort::None);
         PassAway();
 
@@ -323,7 +323,7 @@ public:
     }
 
 protected:
-    TVector<TKey> MakeKeyOrder(TIntrusiveConstPtr<IScan::TScheme> scheme) const override {
+    TVector<TKey> MakeKeyOrder(TIntrusiveConstPtr<IScan::TScheme> scheme) const override { 
         TVector<TKey> keyOrder;
 
         for (const auto& col : scheme->Cols) {
@@ -359,7 +359,7 @@ private:
     THolder<IEraseRowsCondition> Condition;
 
     IDriver* Driver;
-    TIntrusiveConstPtr<TScheme> Scheme;
+    TIntrusiveConstPtr<TScheme> Scheme; 
     TVector<TKey> KeyOrder;
     TVector<TTag> ScanTags;
     TSerializedKeys SerializedKeys;
@@ -383,7 +383,7 @@ public:
 
 protected:
     // Enrich key with indexed columns
-    TVector<TKey> MakeKeyOrder(TIntrusiveConstPtr<IScan::TScheme> scheme) const override {
+    TVector<TKey> MakeKeyOrder(TIntrusiveConstPtr<IScan::TScheme> scheme) const override { 
         auto keyOrder = TCondEraseScan::MakeKeyOrder(scheme);
 
         THashSet<TTag> keys;

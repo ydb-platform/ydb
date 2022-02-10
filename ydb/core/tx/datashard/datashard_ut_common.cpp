@@ -67,8 +67,8 @@ TTester::TTester(ESchema schema, const TOptions& opts)
     Sender = Runtime.AllocateEdgeActor();
 
     // Schemeshard is only used to receive notifications
-    CreateTestBootstrapper(Runtime, CreateTestTabletInfo(FAKE_SCHEMESHARD_TABLET_ID, TTabletTypes::FLAT_SCHEMESHARD), &CreateFlatTxSchemeShard);
-    CreateTestBootstrapper(Runtime, CreateTestTabletInfo(FAKE_TX_ALLOCATOR_TABLET_ID, TTabletTypes::TX_ALLOCATOR), &CreateTxAllocator);
+    CreateTestBootstrapper(Runtime, CreateTestTabletInfo(FAKE_SCHEMESHARD_TABLET_ID, TTabletTypes::FLAT_SCHEMESHARD), &CreateFlatTxSchemeShard); 
+    CreateTestBootstrapper(Runtime, CreateTestTabletInfo(FAKE_TX_ALLOCATOR_TABLET_ID, TTabletTypes::TX_ALLOCATOR), &CreateTxAllocator); 
     CreateSchema(schema, opts);
 }
 
@@ -86,8 +86,8 @@ TTester::TTester(ESchema schema, const TString& dispatchName, std::function<void
     DispatchName = dispatchName;
 
     // Schemeshard is only used to receive notifications
-    CreateTestBootstrapper(Runtime, CreateTestTabletInfo(FAKE_SCHEMESHARD_TABLET_ID, TTabletTypes::FLAT_SCHEMESHARD), &CreateFlatTxSchemeShard);
-    CreateTestBootstrapper(Runtime, CreateTestTabletInfo(FAKE_TX_ALLOCATOR_TABLET_ID, TTabletTypes::TX_ALLOCATOR), &CreateTxAllocator);
+    CreateTestBootstrapper(Runtime, CreateTestTabletInfo(FAKE_SCHEMESHARD_TABLET_ID, TTabletTypes::FLAT_SCHEMESHARD), &CreateFlatTxSchemeShard); 
+    CreateTestBootstrapper(Runtime, CreateTestTabletInfo(FAKE_TX_ALLOCATOR_TABLET_ID, TTabletTypes::TX_ALLOCATOR), &CreateTxAllocator); 
     CreateSchema(schema, opts);
 }
 
@@ -98,7 +98,7 @@ void TTester::EmptyShardKeyResolver(TKeyDesc& key) {
 
 void TTester::SingleShardKeyResolver(TKeyDesc& key) {
     key.Status = TKeyDesc::EStatus::Ok;
-    key.Partitions.push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet0));
+    key.Partitions.push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet0)); 
 }
 
 void TTester::ThreeShardPointKeyResolver(TKeyDesc& key) {
@@ -109,11 +109,11 @@ void TTester::ThreeShardPointKeyResolver(TKeyDesc& key) {
     if (key.Range.Point) {
         ui32 key0 = *(ui32*)key.Range.From[0].Data();
         if (key0 < ShardBorder1) {
-            key.Partitions.push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet0));
+            key.Partitions.push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet0)); 
         } else if (key0 < ShardBorder2) {
-            key.Partitions.push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet1));
+            key.Partitions.push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet1)); 
         } else {
-            key.Partitions.push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet2));
+            key.Partitions.push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet2)); 
         }
     } else {
         UNIT_ASSERT(key.Range.From.size() > 0);
@@ -126,11 +126,11 @@ void TTester::ThreeShardPointKeyResolver(TKeyDesc& key) {
         UNIT_ASSERT(from <= to);
 
         if (from < ShardBorder1)
-            key.Partitions.push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet0));
+            key.Partitions.push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet0)); 
         if (from < ShardBorder2 && to >= ShardBorder1)
-            key.Partitions.push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet1));
+            key.Partitions.push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet1)); 
         if (to >= ShardBorder2)
-            key.Partitions.push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet2));
+            key.Partitions.push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet2)); 
     }
 }
 
@@ -148,7 +148,7 @@ TTester::TKeyResolver TTester::GetKeyResolver() const {
 }
 
 void TTester::CreateDataShard(TFakeMiniKQLProxy& proxy, ui64 tabletId, const TString& schemeText, bool withRegister) {
-    TActorId actorId = CreateTestBootstrapper(Runtime, CreateTestTabletInfo(tabletId, TTabletTypes::FLAT_DATASHARD),
+    TActorId actorId = CreateTestBootstrapper(Runtime, CreateTestTabletInfo(tabletId, TTabletTypes::FLAT_DATASHARD), 
         &::NKikimr::CreateDataShard);
     Y_UNUSED(actorId);
 
@@ -158,7 +158,7 @@ void TTester::CreateDataShard(TFakeMiniKQLProxy& proxy, ui64 tabletId, const TSt
 
     UNIT_ASSERT_EQUAL(proxy.ExecSchemeCreateTable(schemeText, {tabletId}), IEngineFlat::EStatus::Complete);
 
-    RebootTablet(Runtime, tabletId, Sender);
+    RebootTablet(Runtime, tabletId, Sender); 
 
     //Runtime.EnableScheduleForActor(actorId, true);
 
@@ -254,21 +254,21 @@ void TTester::CreateSchema(ESchema schema, const TOptions& opts) {
     TFakeMiniKQLProxy proxy(*this);
     switch (schema) {
     case ESchema_KV:
-        CreateDataShard(proxy, TTestTxConfig::TxTablet0, keyValueSchemeText, true);
+        CreateDataShard(proxy, TTestTxConfig::TxTablet0, keyValueSchemeText, true); 
         break;
     case ESchema_DoubleKV:
-        CreateDataShard(proxy, TTestTxConfig::TxTablet0, doubleKeyValueSchemeText, true);
+        CreateDataShard(proxy, TTestTxConfig::TxTablet0, doubleKeyValueSchemeText, true); 
         break;
     case ESchema_DoubleKVExternal:
-        CreateDataShard(proxy, TTestTxConfig::TxTablet0, doubleKeyValueExternalSchemeText, true);
+        CreateDataShard(proxy, TTestTxConfig::TxTablet0, doubleKeyValueExternalSchemeText, true); 
         break;
     case ESchema_SpecialKV:
-        CreateDataShard(proxy, TTestTxConfig::TxTablet0, specialKeyValueSchemeText, true);
+        CreateDataShard(proxy, TTestTxConfig::TxTablet0, specialKeyValueSchemeText, true); 
         break;
     case ESchema_MultiShardKV:
-        CreateDataShard(proxy, TTestTxConfig::TxTablet0, keyValueSchemeText, true);
-        CreateDataShard(proxy, TTestTxConfig::TxTablet1, keyValueSchemeText);
-        CreateDataShard(proxy, TTestTxConfig::TxTablet2, keyValueSchemeText);
+        CreateDataShard(proxy, TTestTxConfig::TxTablet0, keyValueSchemeText, true); 
+        CreateDataShard(proxy, TTestTxConfig::TxTablet1, keyValueSchemeText); 
+        CreateDataShard(proxy, TTestTxConfig::TxTablet2, keyValueSchemeText); 
         break;
     }
 }
@@ -668,7 +668,7 @@ void TFakeMiniKQLProxy::Propose(TFakeProxyTx& tx, bool holdImmediate) {
 void TFakeMiniKQLProxy::ResolveShards(const TSet<ui64>& shards) {
     for (ui64 shard : shards) {
         auto event = new TEvDataShard::TEvGetShardState(Tester.Sender);
-        ForwardToTablet(Tester.Runtime, shard, Tester.Sender, event);
+        ForwardToTablet(Tester.Runtime, shard, Tester.Sender, event); 
     }
 
     for (ui32 results = 0; results < shards.size(); ++results) {
@@ -870,7 +870,7 @@ ui64 TFakeMiniKQLProxy::Plan(ui64 stepId, const TMap<ui64, TFakeProxyTx::TPtr>& 
                     TExpectedReadSet::TWaitFor waitFor = DelayedReadSets.front().Freedom;
                     if (shard == waitFor.Shard && tx->TxId() == waitFor.TxId) {
                         if (RebootOnDelay) {
-                            RebootTablet(Tester.Runtime, TTestTxConfig::TxTablet0, Tester.Sender);
+                            RebootTablet(Tester.Runtime, TTestTxConfig::TxTablet0, Tester.Sender); 
                         }
 
                         Y_VERIFY(delayedEvent);
@@ -997,7 +997,7 @@ TKeyExtractor::TKeyExtractor(TTester& tester, TString programText) {
 
     for (auto& key : Engine->GetDbKeys()) {
         key->Status = TKeyDesc::EStatus::Ok;
-        key->Partitions.push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet0));
+        key->Partitions.push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet0)); 
     }
 }
 
@@ -1199,9 +1199,9 @@ void CreateShardedTable(Tests::TServer::TPtr server,
     CreateShardedTable(server, sender, root, name, opts);
 }
 
-NKikimrScheme::TEvDescribeSchemeResult DescribeTable(Tests::TServer::TPtr server,
-                                                     TActorId sender,
-                                                     const TString &path)
+NKikimrScheme::TEvDescribeSchemeResult DescribeTable(Tests::TServer::TPtr server, 
+                                                     TActorId sender, 
+                                                     const TString &path) 
 {
     auto &runtime = *server->GetRuntime();
     TAutoPtr<IEventHandle> handle;
@@ -1212,45 +1212,45 @@ NKikimrScheme::TEvDescribeSchemeResult DescribeTable(Tests::TServer::TPtr server
     request->Record.MutableDescribePath()->MutableOptions()->SetShowPrivateTable(true);
     runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
     auto reply = runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvDescribeSchemeResult>(handle);
-
-    return *reply->MutableRecord();
-}
-
-TVector<ui64> GetTableShards(Tests::TServer::TPtr server,
-                             TActorId sender,
-                             const TString &path)
-{
-    TVector<ui64> shards;
-    auto lsResult = DescribeTable(server, sender, path);
-    for (auto &part : lsResult.GetPathDescription().GetTablePartitions())
+ 
+    return *reply->MutableRecord(); 
+} 
+ 
+TVector<ui64> GetTableShards(Tests::TServer::TPtr server, 
+                             TActorId sender, 
+                             const TString &path) 
+{ 
+    TVector<ui64> shards; 
+    auto lsResult = DescribeTable(server, sender, path); 
+    for (auto &part : lsResult.GetPathDescription().GetTablePartitions()) 
         shards.push_back(part.GetDatashardId());
 
     return shards;
 }
 
-std::pair<TTableInfoMap, ui64> GetTables(
-    Tests::TServer::TPtr server,
-    ui64 tabletId)
-{
-    auto &runtime = *server->GetRuntime();
-
-    auto sender = runtime.AllocateEdgeActor();
-    auto request = MakeHolder<TEvDataShard::TEvGetInfoRequest>();
-    runtime.SendToPipe(tabletId, sender, request.Release(), 0, GetPipeConfigWithRetries());
-
-    TTableInfoMap result;
-
-    TAutoPtr<IEventHandle> handle;
-    auto response = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetInfoResponse>(handle);
-    for (auto& table: response->Record.GetUserTables()) {
-        result[table.GetName()] = table;
-    }
-
-    auto ownerId = response->Record.GetTabletInfo().GetSchemeShard();
-
-    return std::make_pair(result, ownerId);
-}
-
+std::pair<TTableInfoMap, ui64> GetTables( 
+    Tests::TServer::TPtr server, 
+    ui64 tabletId) 
+{ 
+    auto &runtime = *server->GetRuntime(); 
+ 
+    auto sender = runtime.AllocateEdgeActor(); 
+    auto request = MakeHolder<TEvDataShard::TEvGetInfoRequest>(); 
+    runtime.SendToPipe(tabletId, sender, request.Release(), 0, GetPipeConfigWithRetries()); 
+ 
+    TTableInfoMap result; 
+ 
+    TAutoPtr<IEventHandle> handle; 
+    auto response = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetInfoResponse>(handle); 
+    for (auto& table: response->Record.GetUserTables()) { 
+        result[table.GetName()] = table; 
+    } 
+ 
+    auto ownerId = response->Record.GetTabletInfo().GetSchemeShard(); 
+ 
+    return std::make_pair(result, ownerId); 
+} 
+ 
 TTableId ResolveTableId(
         Tests::TServer::TPtr server,
         TActorId sender,
@@ -1284,7 +1284,7 @@ NTable::TRowVersionRanges GetRemovedRowVersions(
 
     {
         auto request = MakeHolder<TEvDataShard::TEvGetRemovedRowVersions>(TPathId{});
-        ForwardToTablet(runtime, shardId, sender, request.Release());
+        ForwardToTablet(runtime, shardId, sender, request.Release()); 
     }
 
     auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetRemovedRowVersionsResult>(sender);

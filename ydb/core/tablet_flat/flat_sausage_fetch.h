@@ -8,7 +8,7 @@ namespace NKikimr {
 namespace NPageCollection {
 
     struct TFetch {
-        TFetch(ui64 cookie, TIntrusiveConstPtr<IPageCollection> pageCollection, TVector<ui32> pages)
+        TFetch(ui64 cookie, TIntrusiveConstPtr<IPageCollection> pageCollection, TVector<ui32> pages) 
             : Cookie(cookie)
             , PageCollection(std::move(pageCollection))
             , Pages(std::move(pages))
@@ -25,7 +25,7 @@ namespace NPageCollection {
 
         const ui64 Cookie = Max<ui64>();
 
-        TIntrusiveConstPtr<IPageCollection> PageCollection;
+        TIntrusiveConstPtr<IPageCollection> PageCollection; 
         TVector<ui32> Pages;
     };
 

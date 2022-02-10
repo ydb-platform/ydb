@@ -22,7 +22,7 @@
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
-    struct TProdCompact: public IDestructable {
+    struct TProdCompact: public IDestructable { 
         struct TResult {
             NTable::TPartView Part;
             TDeque<NTable::TScreen::THole> Growth;
@@ -45,7 +45,7 @@ namespace NTabletFlatExecutor {
         bool Success = false;
         ui32 Step = Max<ui32>();
         TResults Results;
-        TVector<TIntrusiveConstPtr<NTable::TTxStatusPart>> TxStatus;
+        TVector<TIntrusiveConstPtr<NTable::TTxStatusPart>> TxStatus; 
         THolder<NTable::TCompactionParams> Params;
         TVector<ui32> YellowMoveChannels;
         TVector<ui32> YellowStopChannels;
@@ -58,13 +58,13 @@ namespace NTabletFlatExecutor {
         using TWriter = NTable::TPartWriter;
         using TBundle = NWriter::TBundle;
         using TStorage = TIntrusivePtr<TTabletStorageInfo>;
-        using TEventHandlePtr = TAutoPtr<::NActors::IEventHandle>;
+        using TEventHandlePtr = TAutoPtr<::NActors::IEventHandle>; 
         using ELnLev = NUtil::ELnLev;
 
     public:
         constexpr static ui64 MaxFlight = 20ll * (1ll << 20);
 
-        TOpsCompact(TActorId owner, TLogoBlobID mask, TAutoPtr<TCompactCfg> conf)
+        TOpsCompact(TActorId owner, TLogoBlobID mask, TAutoPtr<TCompactCfg> conf) 
             : ::NActors::IActor(static_cast<TReceiveFunc>(&TOpsCompact::Inbox), NKikimrServices::TActivity::OPS_COMPACT_A)
             , Mask(mask)
             , Owner(owner)
@@ -94,7 +94,7 @@ namespace NTabletFlatExecutor {
             Logger = new NUtil::TLogger(sys, NKikimrServices::OPS_COMPACT);
         }
 
-        THello Prepare(IDriver *driver, TIntrusiveConstPtr<TScheme> scheme) noexcept override
+        THello Prepare(IDriver *driver, TIntrusiveConstPtr<TScheme> scheme) noexcept override 
         {
             TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
 
@@ -299,7 +299,7 @@ namespace NTabletFlatExecutor {
             TxStatus.emplace_back(new NTable::TTxStatusPartStore(dataId, Conf->Epoch, data));
         }
 
-        TAutoPtr<IDestructable> Finish(EAbort abort) noexcept override
+        TAutoPtr<IDestructable> Finish(EAbort abort) noexcept override 
         {
             const auto fail = Failed || !Finished || abort != EAbort::None;
 
@@ -393,7 +393,7 @@ namespace NTabletFlatExecutor {
             return scan;
         }
 
-        void Inbox(TEventHandlePtr &eh, const ::NActors::TActorContext&)
+        void Inbox(TEventHandlePtr &eh, const ::NActors::TActorContext&) 
         {
             if (auto *ev = eh->CastAsLocal<TEvPutResult>()) {
                 Handle(*ev);
@@ -512,20 +512,20 @@ namespace NTabletFlatExecutor {
     private:
         const TLogoBlobID Mask;
         const TActorId Owner;
-        TAutoPtr<NUtil::ILogger> Logger;
+        TAutoPtr<NUtil::ILogger> Logger; 
         IDriver * Driver = nullptr;
         THolder<TCompactCfg> Conf;
-        TIntrusiveConstPtr<TScheme> Scheme;
-        TAutoPtr<TBundle> Bundle;
-        TAutoPtr<TWriter> Writer;
+        TIntrusiveConstPtr<TScheme> Scheme; 
+        TAutoPtr<TBundle> Bundle; 
+        TAutoPtr<TWriter> Writer; 
         NTable::TWritten Stat;
         TVector<TBundle::TResult> Results;
-        TVector<TIntrusiveConstPtr<NTable::TTxStatusPart>> TxStatus;
+        TVector<TIntrusiveConstPtr<NTable::TTxStatusPart>> TxStatus; 
         const NScheme::TTypeRegistry * Registry = nullptr;
 
         bool Finished = false;
         bool Failed = false;/* Failed to write blobs    */
-        TAutoPtr<TSpent> Spent; /* Blockage on write stats  */
+        TAutoPtr<TSpent> Spent; /* Blockage on write stats  */ 
         ui64 Blobs = 0;     /* Blobs produced by writer */
         ui64 Writing = 0;   /* Bytes flying to storage  */
         ui64 Flushing = 0;  /* Bytes flushing to storage */

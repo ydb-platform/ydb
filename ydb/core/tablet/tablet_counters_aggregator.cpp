@@ -30,8 +30,8 @@
 ////////////////////////////////////////////
 namespace NKikimr {
 
-TActorId MakeTabletCountersAggregatorID(ui32 node, bool follower) {
-    if (!follower) {
+TActorId MakeTabletCountersAggregatorID(ui32 node, bool follower) { 
+    if (!follower) { 
         char x[12] = {'t','a','b','l','c','o','u','n','t','a','g','g'};
         return TActorId(node, TStringBuf(x, 12));
     } else {
@@ -470,13 +470,13 @@ private:
 class TTabletMon {
 public:
     //
-    TTabletMon(NMonitoring::TDynamicCounterPtr counters, bool isFollower, TActorId dbWatcherActorId)
-        : Counters(GetServiceCounters(counters, isFollower ? "followers" : "tablets"))
+    TTabletMon(NMonitoring::TDynamicCounterPtr counters, bool isFollower, TActorId dbWatcherActorId) 
+        : Counters(GetServiceCounters(counters, isFollower ? "followers" : "tablets")) 
         , AllTypes(Counters.Get(), "type", "all", true)
-        , IsFollower(isFollower)
+        , IsFollower(isFollower) 
         , DbWatcherActorId(dbWatcherActorId)
     {
-        if (!IsFollower) {
+        if (!IsFollower) { 
             YdbCounters = MakeIntrusive<TYdbTabletCounters>(GetServiceCounters(counters, "ydb"));
         }
     }
@@ -492,7 +492,7 @@ public:
             typeCounters->Apply(tabletID, executorCounters, appCounters, tabletType);
         }
         //
-        if (!IsFollower && AppData(ctx)->FeatureFlags.GetEnableDbCounters() && tenantPathId) {
+        if (!IsFollower && AppData(ctx)->FeatureFlags.GetEnableDbCounters() && tenantPathId) { 
             auto dbCounters = GetDbCounters(tenantPathId, ctx);
             if (dbCounters) {
                 auto* limitedAppCounters = GetOrAddLimitedAppCounters(tabletType);
@@ -1525,7 +1525,7 @@ private:
     //
     NMonitoring::TDynamicCounterPtr Counters;
     TTabletCountersForTabletType AllTypes;
-    bool IsFollower = false;
+    bool IsFollower = false; 
 
     typedef THashMap<TPathId, TIntrusivePtr<TTabletCountersForDb>> TCountersByPathId;
     typedef TMap<TTabletTypes::EType, THolder<TTabletCountersBase>> TAppCountersByTabletType;
@@ -1563,7 +1563,7 @@ public:
     }
 
     //
-    TTabletCountersAggregatorActor(bool follower);
+    TTabletCountersAggregatorActor(bool follower); 
     virtual ~TTabletCountersAggregatorActor();
 
     //
@@ -1589,14 +1589,14 @@ private:
     TActorId DbWatcherActorId;
     THashMap<TActorId, std::pair<TActorId, TAutoPtr<NMon::TEvHttpInfo>>> HttpRequestHandlers;
     THashSet<ui32> TabletTypeOfReceivedLabeledCounters;
-    bool Follower;
+    bool Follower; 
 };
 
 ////////////////////////////////////////////
 /// The TTabletCountersAggregatorActor class
 ////////////////////////////////////////////
-TTabletCountersAggregatorActor::TTabletCountersAggregatorActor(bool follower)
-    : Follower(follower)
+TTabletCountersAggregatorActor::TTabletCountersAggregatorActor(bool follower) 
+    : Follower(follower) 
 {}
 
 ////////////////////////////////////////////
@@ -1611,18 +1611,18 @@ TTabletCountersAggregatorActor::Bootstrap(const TActorContext &ctx) {
     TAppData* appData = AppData(ctx);
     Y_VERIFY(!TabletMon);
 
-    if (AppData(ctx)->FeatureFlags.GetEnableDbCounters() && !Follower) {
+    if (AppData(ctx)->FeatureFlags.GetEnableDbCounters() && !Follower) { 
         auto callback = MakeIntrusive<TTabletMon::TTabletsDbWatcherCallback>(ctx.ActorSystem());
         DbWatcherActorId = ctx.Register(NSysView::CreateDbWatcherActor(callback));
     }
 
-    TabletMon = new TTabletMon(appData->Counters, Follower, DbWatcherActorId);
+    TabletMon = new TTabletMon(appData->Counters, Follower, DbWatcherActorId); 
     auto mon = appData->Mon;
     if (mon) {
-        if (!Follower)
+        if (!Follower) 
             mon->RegisterActorPage(nullptr, "labeledcounters", "Labeled Counters", false, TlsActivationContext->ExecutorThread.ActorSystem, SelfId(), false);
         else
-            mon->RegisterActorPage(nullptr, "followercounters", "Follower Counters", false, TlsActivationContext->ExecutorThread.ActorSystem, SelfId(), false);
+            mon->RegisterActorPage(nullptr, "followercounters", "Follower Counters", false, TlsActivationContext->ExecutorThread.ActorSystem, SelfId(), false); 
     }
 
     ctx.Schedule(TDuration::Seconds(WAKEUP_TIMEOUT_SECONDS), new TEvents::TEvWakeup());
@@ -1852,12 +1852,12 @@ STFUNC(TTabletCountersAggregatorActor::StateWork) {
 static ui32 AGGREGATOR_TIMEOUT_SECONDS = 60;
 
 IActor*
-CreateTabletCountersAggregator(bool follower) {
-    return new TTabletCountersAggregatorActor(follower);
+CreateTabletCountersAggregator(bool follower) { 
+    return new TTabletCountersAggregatorActor(follower); 
 }
 
-void TabletCountersForgetTablet(ui64 tabletId, TTabletTypes::EType tabletType, TPathId tenantPathId, bool follower, TActorIdentity identity) {
-    const TActorId countersAggregator = MakeTabletCountersAggregatorID(identity.NodeId(), follower);
+void TabletCountersForgetTablet(ui64 tabletId, TTabletTypes::EType tabletType, TPathId tenantPathId, bool follower, TActorIdentity identity) { 
+    const TActorId countersAggregator = MakeTabletCountersAggregatorID(identity.NodeId(), follower); 
     identity.Send(countersAggregator, new TEvTabletCounters::TEvTabletCountersForgetTablet(tabletId, tabletType, tenantPathId));
 }
 

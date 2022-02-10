@@ -178,7 +178,7 @@ void TYqlServer::Initialize() {
 
     SetupTabletServices(*Runtime, &app, StaticNodes() == 1 && Settings->EnableMockOnSingleNode, Settings->CustomDiskParams);
 
-    CreateBootstrapTablets();
+    CreateBootstrapTablets(); 
     SetupStorage();
 
     for (ui32 nodeIdx = 0; nodeIdx < GetSettings().NodeCount; ++nodeIdx) {

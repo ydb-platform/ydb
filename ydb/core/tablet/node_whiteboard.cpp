@@ -70,7 +70,7 @@ public:
     }
 
 protected:
-    std::unordered_map<std::pair<TTabletId, TFollowerId>, NKikimrWhiteboard::TTabletStateInfo> TabletStateInfo;
+    std::unordered_map<std::pair<TTabletId, TFollowerId>, NKikimrWhiteboard::TTabletStateInfo> TabletStateInfo; 
     std::unordered_map<TString, NKikimrWhiteboard::TNodeStateInfo> NodeStateInfo;
     std::unordered_map<ui32, NKikimrWhiteboard::TPDiskStateInfo> PDiskStateInfo;
     std::unordered_map<TVDiskID, NKikimrWhiteboard::TVDiskStateInfo, THash<TVDiskID>> VDiskStateInfo;
@@ -374,7 +374,7 @@ protected:
     }
 
     void Handle(TEvWhiteboard::TEvTabletStateUpdate::TPtr &ev, const TActorContext &ctx) {
-        auto tabletId(std::make_pair(ev->Get()->Record.GetTabletId(), ev->Get()->Record.GetFollowerId()));
+        auto tabletId(std::make_pair(ev->Get()->Record.GetTabletId(), ev->Get()->Record.GetFollowerId())); 
         auto& tabletStateInfo = TabletStateInfo[tabletId];
         if (ev->Get()->Record.HasGeneration() && tabletStateInfo.GetGeneration() > ev->Get()->Record.GetGeneration()) {
             return; // skip updates from previous generations

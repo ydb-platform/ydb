@@ -21,7 +21,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TTestEnv env(runtime);
 
 
-        auto result = env.InitRoot(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor(), "MyRoot");
+        auto result = env.InitRoot(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor(), "MyRoot"); 
         UNIT_ASSERT_VALUES_EQUAL((ui32)result, (ui32)TEvSchemeShard::TEvInitRootShardResult::StatusAlreadyInitialized);
     }
 
@@ -31,7 +31,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TString newOwner = "something@builtin";
 
-        auto result = env.InitRoot(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor(), "MyRoot", {}, newOwner);
+        auto result = env.InitRoot(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor(), "MyRoot", {}, newOwner); 
         UNIT_ASSERT_VALUES_EQUAL((ui32)result, (ui32)TEvSchemeShard::TEvInitRootShardResult::StatusSuccess);
 
         auto checkOwner = [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
@@ -615,7 +615,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestUserAttrs(runtime, ++txId, "/", "MyRoot", AlterUserAttrs({{"__extra_path_symbols_allowed", "_.-"}}));
         env.TestWaitNotification(runtime, txId);
-        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor()); 
 
         TestMkDir(runtime, ++txId, "/MyRoot", "Dir1!", {NKikimrScheme::StatusSchemeError});
         TestMkDir(runtime, ++txId, "/MyRoot", "Dir1?", {NKikimrScheme::StatusSchemeError});
@@ -1421,7 +1421,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         {
             TestUserAttrs(runtime, ++txId, "/", "MyRoot", AlterUserAttrs({{"__extra_path_symbols_allowed", "-_."}}));
             env.TestWaitNotification(runtime, txId);
-            RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+            RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor()); 
 
             TestConsistentCopyTables(runtime, ++txId, "/", R"(
                            CopyTableDescriptions {
@@ -1811,7 +1811,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/Table1"),
                            {NLs::PathNotExist});
 
-        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 10));
+        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 10)); 
     }
 
     Y_UNIT_TEST(CopyIndexedTable) { //+
@@ -2143,13 +2143,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot/DirA", R"(
             TableDescription {
-              Name: "WithFollowerGroup"
+              Name: "WithFollowerGroup" 
               Columns { Name: "key"   Type: "Uint64" }
               Columns { Name: "value0" Type: "Uint64" }
               KeyColumnNames: ["key"]
               PartitionConfig {
-               FollowerGroups {
-                 FollowerCount: 1
+               FollowerGroups { 
+                 FollowerCount: 1 
                }
               }
             }
@@ -2162,12 +2162,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot/DirA", R"(
             TableDescription {
-              Name: "WithFollowerCount"
+              Name: "WithFollowerCount" 
               Columns { Name: "key"   Type: "Uint64" }
               Columns { Name: "value0" Type: "Uint64" }
               KeyColumnNames: ["key"]
               PartitionConfig {
-               FollowerCount: 1
+               FollowerCount: 1 
               }
             }
             IndexDescription {
@@ -2179,12 +2179,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot/DirA", R"(
             TableDescription {
-              Name: "WithNoFollowers"
+              Name: "WithNoFollowers" 
               Columns { Name: "key"   Type: "Uint64" }
               Columns { Name: "value0" Type: "Uint64" }
               KeyColumnNames: ["key"]
               PartitionConfig {
-               FollowerGroups {
+               FollowerGroups { 
                }
               }
             }
@@ -2196,30 +2196,30 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, txId);
 
         TestAlterTable(runtime, ++txId, "/MyRoot/DirA", R"(
-              Name: "WithNoFollowers"
+              Name: "WithNoFollowers" 
               PartitionConfig {
-                CrossDataCenterFollowerCount: 1
+                CrossDataCenterFollowerCount: 1 
               }
         )", {TEvSchemeShard::EStatus::StatusInvalidParameter});
         TestAlterTable(runtime, ++txId, "/MyRoot/DirA", R"(
-              Name: "WithNoFollowers"
+              Name: "WithNoFollowers" 
               PartitionConfig {
-                FollowerCount: 1
+                FollowerCount: 1 
               }
         )", {TEvSchemeShard::EStatus::StatusInvalidParameter});
         TestAlterTable(runtime, ++txId, "/MyRoot/DirA", R"(
-              Name: "WithNoFollowers"
+              Name: "WithNoFollowers" 
               PartitionConfig {
-                FollowerGroups {
-                  FollowerCount: 1
+                FollowerGroups { 
+                  FollowerCount: 1 
                 }
               }
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestDropTable(runtime, ++txId, "/MyRoot/DirA", "WithFollowerGroup");
-        TestDropTable(runtime, ++txId, "/MyRoot/DirA", "WithFollowerCount");
-        TestDropTable(runtime, ++txId, "/MyRoot/DirA", "WithNoFollowers");
+        TestDropTable(runtime, ++txId, "/MyRoot/DirA", "WithFollowerGroup"); 
+        TestDropTable(runtime, ++txId, "/MyRoot/DirA", "WithFollowerCount"); 
+        TestDropTable(runtime, ++txId, "/MyRoot/DirA", "WithNoFollowers"); 
         env.TestWaitNotification(runtime, {txId, txId-1, txId-2});
 
         TestDropTable(runtime, ++txId, "/", "Table1", {TEvSchemeShard::EStatus::StatusPathDoesNotExist});
@@ -2258,7 +2258,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestDropTable(runtime, ++txId, "/MyRoot/DirA", "Table1", {TEvSchemeShard::EStatus::StatusPathDoesNotExist});
 
-        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 20));
+        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 20)); 
     }
 
     Y_UNIT_TEST(CreateIndexedTableAndForceDrop) { //+
@@ -2305,7 +2305,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             NLs::PathVersionEqual(7),
                             NLs::ChildrenCount(0)});
 
-        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 5));
+        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 5)); 
     }
 
     Y_UNIT_TEST(CreateIndexedTableAndForceDropSimonteniously) { //+
@@ -2347,7 +2347,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            {NLs::Finished,
                             NLs::ChildrenCount(0)});
 
-        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 5));
+        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 5)); 
     }
 
     Y_UNIT_TEST(DropIndexedTableAndForceDropSimonteniously) { //+
@@ -2391,7 +2391,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            {NLs::Finished,
                             NLs::ChildrenCount(0)});
 
-        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 5));
+        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 5)); 
     }
 
     Y_UNIT_TEST(IgnoreUserColumnIds) { //+
@@ -2584,7 +2584,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         auto t1 = DescribePath(runtime, "/MyRoot/Table1");
 
         TActorId sender = runtime.AllocateEdgeActor();
-        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender); 
 
         auto t2 = DescribePath(runtime, "/MyRoot/Table1");
 
@@ -2610,7 +2610,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         auto t1 = DescribePath(runtime, "/MyRoot/Table2");
 
         TActorId sender = runtime.AllocateEdgeActor();
-        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender); 
 
         auto t2 = DescribePath(runtime, "/MyRoot/Table2");
 
@@ -2660,7 +2660,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         auto t1 = DescribePath(runtime, "/MyRoot/Table1");
 
         TActorId sender = runtime.AllocateEdgeActor();
-        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender); 
 
         auto t2 = DescribePath(runtime, "/MyRoot/Table1");
 
@@ -2690,7 +2690,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         auto t3 = DescribePath(runtime, "/MyRoot/Table1");
         UNIT_ASSERT(t2.DebugString() != t3.DebugString());
 
-        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender); 
 
         auto t4 = DescribePath(runtime, "/MyRoot/Table1");
         UNIT_ASSERT_VALUES_EQUAL(t3.DebugString(), t4.DebugString());
@@ -2907,8 +2907,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             UNIT_ASSERT_VALUES_EQUAL(err, "");
             UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);
         };
-        fnWriteRow(TTestTxConfig::FakeHiveTablets, 0);
-        fnWriteRow(TTestTxConfig::FakeHiveTablets+1, 0x80000000u);
+        fnWriteRow(TTestTxConfig::FakeHiveTablets, 0); 
+        fnWriteRow(TTestTxConfig::FakeHiveTablets+1, 0x80000000u); 
 
         AsyncCopyTable(runtime, ++txId, "/MyRoot", "NewTable", "/MyRoot/Table");
         AsyncCopyTable(runtime, ++txId, "/MyRoot", "NewTable2", "/MyRoot/NewTable");
@@ -3067,7 +3067,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
         env.TestWaitNotification(runtime, {txId-1, txId});
 
-        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+10));
+        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+10)); 
     }
 
     Y_UNIT_TEST(CopyTableAndConcurrentMerge) { //+
@@ -3117,7 +3117,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
         env.TestWaitNotification(runtime, {txId-1, txId});
 
-        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+10));
+        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+10)); 
     }
 
     Y_UNIT_TEST(CopyTableAndConcurrentSplitMerge) { //+
@@ -3183,7 +3183,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         AsyncDropTable(runtime, ++txId, "/MyRoot", "NewTable");
         env.TestWaitNotification(runtime, {txId-1, txId});
 
-        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 10));
+        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 10)); 
     }
 
     Y_UNIT_TEST(CopyTableWithAlterConfig) { //+
@@ -3364,25 +3364,25 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         };
 
         // /Root/Table
-        for (ui64 tabletId : {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1, TTestTxConfig::FakeHiveTablets+2}) {
+        for (ui64 tabletId : {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1, TTestTxConfig::FakeHiveTablets+2}) { 
             NKikimrSchemeOp::TTableDescription tableDescription = GetDatashardSchema(runtime, tabletId, 2);
             checher(NKikimrSchemeOp::EColumnCache::ColumnCacheEver)(tableDescription);
         }
 
         // /Root/CopyTable
-        for (ui64 tabletId : {TTestTxConfig::FakeHiveTablets+3, TTestTxConfig::FakeHiveTablets+4, TTestTxConfig::FakeHiveTablets+5}) {
+        for (ui64 tabletId : {TTestTxConfig::FakeHiveTablets+3, TTestTxConfig::FakeHiveTablets+4, TTestTxConfig::FakeHiveTablets+5}) { 
             NKikimrSchemeOp::TTableDescription tableDescription = GetDatashardSchema(runtime, tabletId, 3);
             checher(NKikimrSchemeOp::EColumnCache::ColumnCacheOnce)(tableDescription);
         }
 
         // /Root/CopyTable2
-        for (ui64 tabletId : {TTestTxConfig::FakeHiveTablets+6, TTestTxConfig::FakeHiveTablets+7, TTestTxConfig::FakeHiveTablets+8}) {
+        for (ui64 tabletId : {TTestTxConfig::FakeHiveTablets+6, TTestTxConfig::FakeHiveTablets+7, TTestTxConfig::FakeHiveTablets+8}) { 
             NKikimrSchemeOp::TTableDescription tableDescription = GetDatashardSchema(runtime, tabletId, 4);
             checher(NKikimrSchemeOp::EColumnCache::ColumnCacheNone, 2)(tableDescription);
         }
 
         // /Root/CopyTable3
-        for (ui64 tabletId : {TTestTxConfig::FakeHiveTablets+9, TTestTxConfig::FakeHiveTablets+10, TTestTxConfig::FakeHiveTablets+11}) {
+        for (ui64 tabletId : {TTestTxConfig::FakeHiveTablets+9, TTestTxConfig::FakeHiveTablets+10, TTestTxConfig::FakeHiveTablets+11}) { 
             NKikimrSchemeOp::TTableDescription tableDescription = GetDatashardSchema(runtime, tabletId, 5);
             checher(NKikimrSchemeOp::EColumnCache::ColumnCacheEver)(tableDescription);
         }
@@ -3408,7 +3408,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            {descrChecker(1)});
     }
 
-    Y_UNIT_TEST(CopyTableOmitFollowers) {
+    Y_UNIT_TEST(CopyTableOmitFollowers) { 
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -3420,7 +3420,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             Columns { Name: "Value" Type: "Utf8"}
             KeyColumnNames: ["key"]
             PartitionConfig {
-                FollowerCount: 1
+                FollowerCount: 1 
             }
         )");
         env.TestWaitNotification(runtime, txId);
@@ -3428,23 +3428,23 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true), {
             NLs::Finished,
             NLs::IsTable,
-            NLs::FollowerCount(1)
+            NLs::FollowerCount(1) 
         });
 
         // simple copy table
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "CopyTable"
             CopyFromTable: "/MyRoot/Table"
-            OmitFollowers: true
+            OmitFollowers: true 
         )");
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/CopyTable", true), {
             NLs::Finished,
             NLs::IsTable,
-            NLs::FollowerCount(0),
-            NLs::CrossDataCenterFollowerCount(0),
-            NLs::FollowerGroups({NKikimrHive::TFollowerGroup()})
+            NLs::FollowerCount(0), 
+            NLs::CrossDataCenterFollowerCount(0), 
+            NLs::FollowerGroups({NKikimrHive::TFollowerGroup()}) 
         });
 
         // consistent copy table
@@ -3452,7 +3452,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             CopyTableDescriptions {
                 SrcPath: "/MyRoot/Table"
                 DstPath: "/MyRoot/ConsistentCopyTable"
-                OmitFollowers: true
+                OmitFollowers: true 
             }
         )");
         env.TestWaitNotification(runtime, txId);
@@ -3460,9 +3460,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/ConsistentCopyTable", true), {
             NLs::Finished,
             NLs::IsTable,
-            NLs::FollowerCount(0),
-            NLs::CrossDataCenterFollowerCount(0),
-            NLs::FollowerGroups({NKikimrHive::TFollowerGroup()})
+            NLs::FollowerCount(0), 
+            NLs::CrossDataCenterFollowerCount(0), 
+            NLs::FollowerGroups({NKikimrHive::TFollowerGroup()}) 
         });
     }
 
@@ -3608,8 +3608,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             UNIT_ASSERT_VALUES_EQUAL(err, "");
             UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);
         };
-        fnWriteRow(TTestTxConfig::FakeHiveTablets, 0);
-        fnWriteRow(TTestTxConfig::FakeHiveTablets+1, 0x80000000u);
+        fnWriteRow(TTestTxConfig::FakeHiveTablets, 0); 
+        fnWriteRow(TTestTxConfig::FakeHiveTablets+1, 0x80000000u); 
 
         AsyncSplitTable(runtime, ++txId, "/MyRoot/Table", R"(
                                 SourceTabletId: 9437194
@@ -3671,22 +3671,22 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TString errStr;
 
         // Check local scheme on datashards
-        LocalSchemeTx(runtime, TTestTxConfig::FakeHiveTablets, "", true, scheme, errStr);
+        LocalSchemeTx(runtime, TTestTxConfig::FakeHiveTablets, "", true, scheme, errStr); 
         UNIT_ASSERT_VALUES_EQUAL(errStr, "");
         UNIT_ASSERT_C(!ToString(scheme).Contains("ExecutorCacheSize: 12121212"), "Old shard must not participate in ALTER");
 
-        LocalSchemeTx(runtime, TTestTxConfig::FakeHiveTablets+1, "", true, scheme, errStr);
+        LocalSchemeTx(runtime, TTestTxConfig::FakeHiveTablets+1, "", true, scheme, errStr); 
         UNIT_ASSERT_VALUES_EQUAL(errStr, "");
         UNIT_ASSERT_C(!ToString(scheme).Contains("ExecutorCacheSize: 12121212"), "Old shard must not participate in ALTER");
 
-        LocalSchemeTx(runtime, TTestTxConfig::FakeHiveTablets+2, "", true, scheme, errStr);
+        LocalSchemeTx(runtime, TTestTxConfig::FakeHiveTablets+2, "", true, scheme, errStr); 
         UNIT_ASSERT_VALUES_EQUAL(errStr, "");
         UNIT_ASSERT_STRING_CONTAINS_C(ToString(scheme), "ExecutorCacheSize: 12121212", "New shard must participate in ALTER");
         {
             // Read user table schema from new shard;
             NKikimrMiniKQL::TResult result;
             TString err;
-            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, TTestTxConfig::FakeHiveTablets+2, R"(
+            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, TTestTxConfig::FakeHiveTablets+2, R"( 
                                     (
                                         (let range '('('Tid (Uint64 '0) (Void))))
                                         (let select '('LocalTid 'Schema))
@@ -3712,7 +3712,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             UNIT_ASSERT_VALUES_EQUAL(tableDescr.GetPartitionConfig().GetCompactionPolicy().GetGeneration(1).GetForceSizeToCompact(), 536870912);
         }
 
-        LocalSchemeTx(runtime, TTestTxConfig::FakeHiveTablets+3, "", true, scheme, errStr);
+        LocalSchemeTx(runtime, TTestTxConfig::FakeHiveTablets+3, "", true, scheme, errStr); 
         UNIT_ASSERT_VALUES_EQUAL(errStr, "");
         UNIT_ASSERT_STRING_CONTAINS_C(ToString(scheme), "ExecutorCacheSize: 12121212", "Non-splitted shard must participate in ALTER");
 
@@ -3720,7 +3720,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDropTable(runtime, ++txId, "/MyRoot", "Table");
         env.TestWaitNotification(runtime, txId);
 
-        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+10));
+        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+10)); 
     }
 
     Y_UNIT_TEST(DropTableAndConcurrentSplit) { //+
@@ -3757,7 +3757,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, {txId, txId-1, txId-2});
 
         // Wait for everything to be cleaned up
-        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+10));
+        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+10)); 
     }
 
     Y_UNIT_TEST(AlterTable) { //+
@@ -4112,7 +4112,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                         )");
         env.TestWaitNotification(runtime, txId);
 
-        ui64 datashardTabletId = TTestTxConfig::FakeHiveTablets;
+        ui64 datashardTabletId = TTestTxConfig::FakeHiveTablets; 
         UNIT_ASSERT_VALUES_EQUAL(GetTxReadSizeLimit(runtime, datashardTabletId), 100);
         UNIT_ASSERT_VALUES_EQUAL(GetExecutorCacheSize(runtime, datashardTabletId), 42);
 
@@ -4175,7 +4175,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
                 Name: "Table"
                 PartitionConfig {
-                    CrossDataCenterFollowerCount: 1
+                    CrossDataCenterFollowerCount: 1 
                 }
             )");
 
@@ -4224,7 +4224,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
-        TVector<ui64> tabletIds = {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1};
+        TVector<ui64> tabletIds = {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1}; 
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table"
@@ -4555,7 +4555,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            {descrChecker(1)});
 
         TActorId sender = runtime.AllocateEdgeActor();
-        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender); 
 
         Cerr << "Checking Table1" << Endl;
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table1", true),
@@ -4660,21 +4660,21 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         // /MyRoot/Table1
         Cerr << "Checking tablets for Table1" << Endl;
-        for (ui64 tabletId : {TTestTxConfig::FakeHiveTablets+0, TTestTxConfig::FakeHiveTablets+1, TTestTxConfig::FakeHiveTablets+2}) {
+        for (ui64 tabletId : {TTestTxConfig::FakeHiveTablets+0, TTestTxConfig::FakeHiveTablets+1, TTestTxConfig::FakeHiveTablets+2}) { 
             NKikimrSchemeOp::TTableDescription tableDescription = GetDatashardSchema(runtime, tabletId, 2);
             schemaChecker()(tableDescription);
         }
 
         // /MyRoot/Table2
         Cerr << "Checking tablets for Table2" << Endl;
-        for (ui64 tabletId : {TTestTxConfig::FakeHiveTablets+3, TTestTxConfig::FakeHiveTablets+4, TTestTxConfig::FakeHiveTablets+5}) {
+        for (ui64 tabletId : {TTestTxConfig::FakeHiveTablets+3, TTestTxConfig::FakeHiveTablets+4, TTestTxConfig::FakeHiveTablets+5}) { 
             NKikimrSchemeOp::TTableDescription tableDescription = GetDatashardSchema(runtime, tabletId, 3);
             schemaChecker()(tableDescription);
         }
 
         // /MyRoot/Table3
         Cerr << "Checking tablets for Table3" << Endl;
-        for (ui64 tabletId : {TTestTxConfig::FakeHiveTablets+6, TTestTxConfig::FakeHiveTablets+7, TTestTxConfig::FakeHiveTablets+8}) {
+        for (ui64 tabletId : {TTestTxConfig::FakeHiveTablets+6, TTestTxConfig::FakeHiveTablets+7, TTestTxConfig::FakeHiveTablets+8}) { 
             NKikimrSchemeOp::TTableDescription tableDescription = GetDatashardSchema(runtime, tabletId, 4);
             schemaChecker()(tableDescription);
         }
@@ -4975,7 +4975,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         auto checkSchema = [&] (const TSchemaChecker& checker) {
             Cerr << "Checking tablets for Table1" << Endl;
-            for (ui64 tabletId : {TTestTxConfig::FakeHiveTablets+0, TTestTxConfig::FakeHiveTablets+1, TTestTxConfig::FakeHiveTablets+2}) {
+            for (ui64 tabletId : {TTestTxConfig::FakeHiveTablets+0, TTestTxConfig::FakeHiveTablets+1, TTestTxConfig::FakeHiveTablets+2}) { 
                 NKikimrSchemeOp::TTableDescription tableDescription = GetDatashardSchema(runtime, tabletId, 2);
                 checker(tableDescription);
             }
@@ -5138,7 +5138,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        const ui64 datashardTabletId = TTestTxConfig::FakeHiveTablets;
+        const ui64 datashardTabletId = TTestTxConfig::FakeHiveTablets; 
         NKikimr::NLocalDb::TCompactionPolicyPtr defaultUserTablePolicy = NKikimr::NLocalDb::CreateDefaultUserTablePolicy();
         NKikimr::NLocalDb::TCompactionPolicyPtr defaultSystemTablePolicy = NKikimr::NLocalDb::CreateDefaultTablePolicy();
 
@@ -5205,7 +5205,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             NLs::PathVersionEqual(4)});
     }
 
-    Y_UNIT_TEST(AlterTableFollowers) { //+
+    Y_UNIT_TEST(AlterTableFollowers) { //+ 
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -5216,7 +5216,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             Columns { Name: "value"  Type: "Utf8"}
                             KeyColumnNames: ["key"]
                             PartitionConfig {
-                                FollowerCount: 100
+                                FollowerCount: 100 
                             }
                         )", {NKikimrScheme::StatusInvalidParameter});
 
@@ -5226,8 +5226,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             Columns { Name: "value"  Type: "Utf8"}
                             KeyColumnNames: ["key"]
                             PartitionConfig {
-                                FollowerCount: 1
-                                CrossDataCenterFollowerCount: 1
+                                FollowerCount: 1 
+                                CrossDataCenterFollowerCount: 1 
                             }
                         )", {NKikimrScheme::StatusInvalidParameter});
 
@@ -5238,8 +5238,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             Columns { Name: "value"  Type: "Utf8"}
                             KeyColumnNames: ["key"]
                             PartitionConfig {
-                                FollowerCount: 1
-                                FollowerGroups { }
+                                FollowerCount: 1 
+                                FollowerGroups { } 
                             }
                         )", {NKikimrScheme::StatusInvalidParameter});
 
@@ -5249,8 +5249,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             Columns { Name: "value"  Type: "Utf8"}
                             KeyColumnNames: ["key"]
                             PartitionConfig {
-                                CrossDataCenterFollowerCount: 1
-                                FollowerGroups { }
+                                CrossDataCenterFollowerCount: 1 
+                                FollowerGroups { } 
                             }
                         )", {NKikimrScheme::StatusInvalidParameter});
 
@@ -5260,9 +5260,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             Columns { Name: "value"  Type: "Utf8"}
                             KeyColumnNames: ["key"]
                             PartitionConfig {
-                                FollowerCount: 1
-                                CrossDataCenterFollowerCount: 1
-                                FollowerGroups { }
+                                FollowerCount: 1 
+                                CrossDataCenterFollowerCount: 1 
+                                FollowerGroups { } 
                             }
                         )", {NKikimrScheme::StatusInvalidParameter});
 
@@ -5272,8 +5272,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             Columns { Name: "value"  Type: "Utf8"}
                             KeyColumnNames: ["key"]
                             PartitionConfig {
-                                FollowerGroups { }
-                                FollowerGroups { }
+                                FollowerGroups { } 
+                                FollowerGroups { } 
                             }
                         )", {NKikimrScheme::StatusInvalidParameter});
 
@@ -5291,32 +5291,32 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
                            {
-                               NLs::FollowerCount(0),
-                               NLs::CrossDataCenterFollowerCount(0),
-                               NLs::AllowFollowerPromotion(true),
-                               NLs::FollowerGroups({})
+                               NLs::FollowerCount(0), 
+                               NLs::CrossDataCenterFollowerCount(0), 
+                               NLs::AllowFollowerPromotion(true), 
+                               NLs::FollowerGroups({}) 
                             });
 
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
                         Name: "Table"
                         PartitionConfig {
-                            FollowerCount: 100
-                            AllowFollowerPromotion: true
+                            FollowerCount: 100 
+                            AllowFollowerPromotion: true 
                         }
                     )", {NKikimrScheme::StatusInvalidParameter});
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
                         Name: "Table"
                         PartitionConfig {
-                            CrossDataCenterFollowerCount: 100
-                            AllowFollowerPromotion: true
+                            CrossDataCenterFollowerCount: 100 
+                            AllowFollowerPromotion: true 
                         }
                     )", {NKikimrScheme::StatusInvalidParameter});
 
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
                             Name: "Table"
                             PartitionConfig {
-                                FollowerCount: 2
-                                AllowFollowerPromotion: true
+                                FollowerCount: 2 
+                                AllowFollowerPromotion: true 
                             }
                         )");
         env.TestWaitNotification(runtime, txId);
@@ -5326,10 +5326,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
                            {
-                               NLs::FollowerCount(2),
-                               NLs::CrossDataCenterFollowerCount(0),
-                               NLs::AllowFollowerPromotion(true),
-                               NLs::FollowerGroups({})
+                               NLs::FollowerCount(2), 
+                               NLs::CrossDataCenterFollowerCount(0), 
+                               NLs::AllowFollowerPromotion(true), 
+                               NLs::FollowerGroups({}) 
                            });
 
         //////////
@@ -5337,17 +5337,17 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             Name: "Table"
                             DropColumns { Name: "value" }
                             PartitionConfig {
-                                FollowerCount: 1
+                                FollowerCount: 1 
                             }
                         )");
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
                            {
-                               NLs::FollowerCount(1),
-                               NLs::CrossDataCenterFollowerCount(0),
-                               NLs::AllowFollowerPromotion(true),
-                               NLs::FollowerGroups({})
+                               NLs::FollowerCount(1), 
+                               NLs::CrossDataCenterFollowerCount(0), 
+                               NLs::AllowFollowerPromotion(true), 
+                               NLs::FollowerGroups({}) 
                            });
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
@@ -5359,24 +5359,24 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             Name: "Table"
                             Columns { Name: "value" Type: "Utf8" }
                             PartitionConfig {
-                                AllowFollowerPromotion: false
+                                AllowFollowerPromotion: false 
                             }
                         )");
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
                            {
-                               NLs::FollowerCount(1),
-                               NLs::CrossDataCenterFollowerCount(0),
-                               NLs::AllowFollowerPromotion(false),
-                               NLs::FollowerGroups({})
+                               NLs::FollowerCount(1), 
+                               NLs::CrossDataCenterFollowerCount(0), 
+                               NLs::AllowFollowerPromotion(false), 
+                               NLs::FollowerGroups({}) 
                            });
 
         //////////
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
                             Name: "Table"
                             PartitionConfig {
-                                AllowFollowerPromotion: true
+                                AllowFollowerPromotion: true 
                                 ExecutorCacheSize: 100500
                             }
                         )");
@@ -5384,113 +5384,113 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
                            {
-                               NLs::FollowerCount(1),
-                               NLs::CrossDataCenterFollowerCount(0),
-                               NLs::AllowFollowerPromotion(true),
-                               NLs::FollowerGroups({})
+                               NLs::FollowerCount(1), 
+                               NLs::CrossDataCenterFollowerCount(0), 
+                               NLs::AllowFollowerPromotion(true), 
+                               NLs::FollowerGroups({}) 
                            });
 
         //////////
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
                             Name: "Table"
                             PartitionConfig {
-                                FollowerCount: 0
-                                AllowFollowerPromotion: false
+                                FollowerCount: 0 
+                                AllowFollowerPromotion: false 
                             }
                         )");
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
                            {
-                               NLs::FollowerCount(0),
-                               NLs::CrossDataCenterFollowerCount(0),
-                               NLs::AllowFollowerPromotion(false),
-                               NLs::FollowerGroups({})
+                               NLs::FollowerCount(0), 
+                               NLs::CrossDataCenterFollowerCount(0), 
+                               NLs::AllowFollowerPromotion(false), 
+                               NLs::FollowerGroups({}) 
                            });
 
         //////////
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
                             Name: "Table"
                             PartitionConfig {
-                                CrossDataCenterFollowerCount: 1
-                                AllowFollowerPromotion: true
+                                CrossDataCenterFollowerCount: 1 
+                                AllowFollowerPromotion: true 
                             }
                         )");
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
                            {
-                               NLs::FollowerCount(0),
-                               NLs::CrossDataCenterFollowerCount(1),
-                               NLs::AllowFollowerPromotion(true),
-                               NLs::FollowerGroups({})
+                               NLs::FollowerCount(0), 
+                               NLs::CrossDataCenterFollowerCount(1), 
+                               NLs::AllowFollowerPromotion(true), 
+                               NLs::FollowerGroups({}) 
                            });
 
         //////////
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
                             Name: "Table"
                             PartitionConfig {
-                                CrossDataCenterFollowerCount: 0
+                                CrossDataCenterFollowerCount: 0 
                             }
                         )");
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
                            {
-                               NLs::FollowerCount(0),
-                               NLs::CrossDataCenterFollowerCount(0),
-                               NLs::AllowFollowerPromotion(true),
-                               NLs::FollowerGroups({})
+                               NLs::FollowerCount(0), 
+                               NLs::CrossDataCenterFollowerCount(0), 
+                               NLs::AllowFollowerPromotion(true), 
+                               NLs::FollowerGroups({}) 
                            });
 
         //////////
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
                             Name: "Table"
                             PartitionConfig {
-                                AllowFollowerPromotion: false
+                                AllowFollowerPromotion: false 
                             }
                         )");
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
                            {
-                               NLs::FollowerCount(0),
-                               NLs::CrossDataCenterFollowerCount(0),
-                               NLs::AllowFollowerPromotion(false),
-                               NLs::FollowerGroups({})
+                               NLs::FollowerCount(0), 
+                               NLs::CrossDataCenterFollowerCount(0), 
+                               NLs::AllowFollowerPromotion(false), 
+                               NLs::FollowerGroups({}) 
                            });
 
         //////////
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
                             Name: "Table"
                             PartitionConfig {
-                                CrossDataCenterFollowerCount: 2
+                                CrossDataCenterFollowerCount: 2 
                             }
                         )");
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
                            {
-                               NLs::FollowerCount(0),
-                               NLs::CrossDataCenterFollowerCount(2),
-                               NLs::AllowFollowerPromotion(false),
-                               NLs::FollowerGroups({})
+                               NLs::FollowerCount(0), 
+                               NLs::CrossDataCenterFollowerCount(2), 
+                               NLs::AllowFollowerPromotion(false), 
+                               NLs::FollowerGroups({}) 
                            });
 
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
                             Name: "Table"
                             PartitionConfig {
-                                FollowerCount: 1
+                                FollowerCount: 1 
                             }
                         )", {NKikimrScheme::StatusInvalidParameter});
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
                            {
-                               NLs::FollowerCount(0),
-                               NLs::CrossDataCenterFollowerCount(2),
-                               NLs::AllowFollowerPromotion(false),
-                               NLs::FollowerGroups({})
+                               NLs::FollowerCount(0), 
+                               NLs::CrossDataCenterFollowerCount(2), 
+                               NLs::AllowFollowerPromotion(false), 
+                               NLs::FollowerGroups({}) 
                            });
 
         /////////
@@ -5498,22 +5498,22 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             TestAlterTable(runtime, ++txId, "/MyRoot", R"(
                                 Name: "Table"
                                 PartitionConfig {
-                                    FollowerGroups {
-                                        FollowerCount: 1
+                                    FollowerGroups { 
+                                        FollowerCount: 1 
                                     }
                                 }
                             )");
             env.TestWaitNotification(runtime, txId);
 
-            NKikimrHive::TFollowerGroup control;
-            control.SetFollowerCount(1);
+            NKikimrHive::TFollowerGroup control; 
+            control.SetFollowerCount(1); 
 
             TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
                                {
-                                   NLs::FollowerCount(0),
-                                   NLs::CrossDataCenterFollowerCount(0),
-                                   NLs::AllowFollowerPromotion(false),
-                                   NLs::FollowerGroups({control})
+                                   NLs::FollowerCount(0), 
+                                   NLs::CrossDataCenterFollowerCount(0), 
+                                   NLs::AllowFollowerPromotion(false), 
+                                   NLs::FollowerGroups({control}) 
                                });
         }
 
@@ -5522,20 +5522,20 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             TestAlterTable(runtime, ++txId, "/MyRoot", R"(
                                 Name: "Table"
                                 PartitionConfig {
-                                    FollowerCount: 1
+                                    FollowerCount: 1 
                                 }
                             )", {NKikimrScheme::StatusInvalidParameter});
             env.TestWaitNotification(runtime, txId);
 
-            NKikimrHive::TFollowerGroup control;
-            control.SetFollowerCount(1);
+            NKikimrHive::TFollowerGroup control; 
+            control.SetFollowerCount(1); 
 
             TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
                                {
-                                   NLs::FollowerCount(0),
-                                   NLs::CrossDataCenterFollowerCount(0),
-                                   NLs::AllowFollowerPromotion(false),
-                                   NLs::FollowerGroups({control})
+                                   NLs::FollowerCount(0), 
+                                   NLs::CrossDataCenterFollowerCount(0), 
+                                   NLs::AllowFollowerPromotion(false), 
+                                   NLs::FollowerGroups({control}) 
                                });
         }
 
@@ -5544,20 +5544,20 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             TestAlterTable(runtime, ++txId, "/MyRoot", R"(
                                 Name: "Table"
                                 PartitionConfig {
-                                    CrossDataCenterFollowerCount: 2
+                                    CrossDataCenterFollowerCount: 2 
                                 }
                             )", {NKikimrScheme::StatusInvalidParameter});
             env.TestWaitNotification(runtime, txId);
 
-            NKikimrHive::TFollowerGroup control;
-            control.SetFollowerCount(1);
+            NKikimrHive::TFollowerGroup control; 
+            control.SetFollowerCount(1); 
 
             TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
                                {
-                                   NLs::FollowerCount(0),
-                                   NLs::CrossDataCenterFollowerCount(0),
-                                   NLs::AllowFollowerPromotion(false),
-                                   NLs::FollowerGroups({control})
+                                   NLs::FollowerCount(0), 
+                                   NLs::CrossDataCenterFollowerCount(0), 
+                                   NLs::AllowFollowerPromotion(false), 
+                                   NLs::FollowerGroups({control}) 
                                });
          }
 
@@ -5566,20 +5566,20 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
              TestAlterTable(runtime, ++txId, "/MyRoot", R"(
                                 Name: "Table"
                                 PartitionConfig {
-                                    AllowFollowerPromotion: false
+                                    AllowFollowerPromotion: false 
                                 }
                             )", {NKikimrScheme::StatusInvalidParameter});
              env.TestWaitNotification(runtime, txId);
 
-             NKikimrHive::TFollowerGroup control;
-             control.SetFollowerCount(1);
+             NKikimrHive::TFollowerGroup control; 
+             control.SetFollowerCount(1); 
 
              TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
                                 {
-                                    NLs::FollowerCount(0),
-                                    NLs::CrossDataCenterFollowerCount(0),
-                                    NLs::AllowFollowerPromotion(false),
-                                    NLs::FollowerGroups({control})
+                                    NLs::FollowerCount(0), 
+                                    NLs::CrossDataCenterFollowerCount(0), 
+                                    NLs::AllowFollowerPromotion(false), 
+                                    NLs::FollowerGroups({control}) 
                                 });
           }
 
@@ -5588,24 +5588,24 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
               TestAlterTable(runtime, ++txId, "/MyRoot", R"(
                                 Name: "Table"
                                 PartitionConfig {
-                                    FollowerGroups {
-                                        FollowerCount: 10
-                                        AllowLeaderPromotion: false
+                                    FollowerGroups { 
+                                        FollowerCount: 10 
+                                        AllowLeaderPromotion: false 
                                         RequireAllDataCenters: true
                                     }
                                 }
                             )", {NKikimrScheme::StatusInvalidParameter});
               env.TestWaitNotification(runtime, txId);
 
-              NKikimrHive::TFollowerGroup control;
-              control.SetFollowerCount(1);
+              NKikimrHive::TFollowerGroup control; 
+              control.SetFollowerCount(1); 
 
               TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
                                  {
-                                     NLs::FollowerCount(0),
-                                     NLs::CrossDataCenterFollowerCount(0),
-                                     NLs::AllowFollowerPromotion(false),
-                                     NLs::FollowerGroups({control})
+                                     NLs::FollowerCount(0), 
+                                     NLs::CrossDataCenterFollowerCount(0), 
+                                     NLs::AllowFollowerPromotion(false), 
+                                     NLs::FollowerGroups({control}) 
                                  });
           }
 
@@ -5614,22 +5614,22 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
               TestAlterTable(runtime, ++txId, "/MyRoot", R"(
                                 Name: "Table"
                                 PartitionConfig {
-                                    FollowerGroups {
+                                    FollowerGroups { 
                                         LocalNodeOnly: true
                                     }
                                 }
                             )", {NKikimrScheme::StatusInvalidParameter});
               env.TestWaitNotification(runtime, txId);
 
-              NKikimrHive::TFollowerGroup control;
-              control.SetFollowerCount(1);
+              NKikimrHive::TFollowerGroup control; 
+              control.SetFollowerCount(1); 
 
               TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
                                  {
-                                     NLs::FollowerCount(0),
-                                     NLs::CrossDataCenterFollowerCount(0),
-                                     NLs::AllowFollowerPromotion(false),
-                                     NLs::FollowerGroups({control})
+                                     NLs::FollowerCount(0), 
+                                     NLs::CrossDataCenterFollowerCount(0), 
+                                     NLs::AllowFollowerPromotion(false), 
+                                     NLs::FollowerGroups({control}) 
                                  });
           }
 
@@ -5638,22 +5638,22 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
               TestAlterTable(runtime, ++txId, "/MyRoot", R"(
                                 Name: "Table"
                                 PartitionConfig {
-                                    FollowerGroups {
+                                    FollowerGroups { 
                                         RequireDifferentNodes: true
                                     }
                                 }
                             )", {NKikimrScheme::StatusInvalidParameter});
               env.TestWaitNotification(runtime, txId);
 
-              NKikimrHive::TFollowerGroup control;
-              control.SetFollowerCount(1);
+              NKikimrHive::TFollowerGroup control; 
+              control.SetFollowerCount(1); 
 
               TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
                                  {
-                                     NLs::FollowerCount(0),
-                                     NLs::CrossDataCenterFollowerCount(0),
-                                     NLs::AllowFollowerPromotion(false),
-                                     NLs::FollowerGroups({control})
+                                     NLs::FollowerCount(0), 
+                                     NLs::CrossDataCenterFollowerCount(0), 
+                                     NLs::AllowFollowerPromotion(false), 
+                                     NLs::FollowerGroups({control}) 
                                  });
           }
 
@@ -5662,29 +5662,29 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
               TestAlterTable(runtime, ++txId, "/MyRoot", R"(
                                 Name: "Table"
                                 PartitionConfig {
-                                    FollowerGroups {
-                                        FollowerCount: 3
-                                        AllowLeaderPromotion: true
+                                    FollowerGroups { 
+                                        FollowerCount: 3 
+                                        AllowLeaderPromotion: true 
                                         RequireAllDataCenters: true
                                     }
-                                    FollowerGroups {
-                                        FollowerCount: 3
-                                        AllowLeaderPromotion: true
+                                    FollowerGroups { 
+                                        FollowerCount: 3 
+                                        AllowLeaderPromotion: true 
                                         RequireAllDataCenters: true
                                     }
                                 }
                             )", {NKikimrScheme::StatusInvalidParameter});
               env.TestWaitNotification(runtime, txId);
 
-              NKikimrHive::TFollowerGroup control;
-              control.SetFollowerCount(1);
+              NKikimrHive::TFollowerGroup control; 
+              control.SetFollowerCount(1); 
 
               TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
                                  {
-                                     NLs::FollowerCount(0),
-                                     NLs::CrossDataCenterFollowerCount(0),
-                                     NLs::AllowFollowerPromotion(false),
-                                     NLs::FollowerGroups({control})
+                                     NLs::FollowerCount(0), 
+                                     NLs::CrossDataCenterFollowerCount(0), 
+                                     NLs::AllowFollowerPromotion(false), 
+                                     NLs::FollowerGroups({control}) 
                                  });
           }
 
@@ -5693,26 +5693,26 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
               TestAlterTable(runtime, ++txId, "/MyRoot", R"(
                                 Name: "Table"
                                 PartitionConfig {
-                                    FollowerGroups {
-                                        FollowerCount: 3
-                                        AllowLeaderPromotion: true
+                                    FollowerGroups { 
+                                        FollowerCount: 3 
+                                        AllowLeaderPromotion: true 
                                         RequireAllDataCenters: true
                                     }
                                 }
                             )");
               env.TestWaitNotification(runtime, txId);
 
-              NKikimrHive::TFollowerGroup control;
-              control.SetFollowerCount(3);
-              control.SetAllowLeaderPromotion(true);
+              NKikimrHive::TFollowerGroup control; 
+              control.SetFollowerCount(3); 
+              control.SetAllowLeaderPromotion(true); 
               control.SetRequireAllDataCenters(true);
 
               TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
                                  {
-                                     NLs::FollowerCount(0),
-                                     NLs::CrossDataCenterFollowerCount(0),
-                                     NLs::AllowFollowerPromotion(false),
-                                     NLs::FollowerGroups({control})
+                                     NLs::FollowerCount(0), 
+                                     NLs::CrossDataCenterFollowerCount(0), 
+                                     NLs::AllowFollowerPromotion(false), 
+                                     NLs::FollowerGroups({control}) 
                                  });
           }
     }
@@ -5766,7 +5766,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         auto checkSchema = [&](TVector<int> tabletIdxs, TVector<TString> columns) {
             auto checker = schemaChecker(std::move(columns));
             for (int tabletIdx : tabletIdxs) {
-                ui64 tabletId = TTestTxConfig::FakeHiveTablets + tabletIdx;
+                ui64 tabletId = TTestTxConfig::FakeHiveTablets + tabletIdx; 
                 NKikimrSchemeOp::TTableDescription tableDescription = GetDatashardSchema(runtime, tabletId, 2);
                 checker(tableDescription);
             }
@@ -5843,8 +5843,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
                            {TCheckExecutorFastLogPolicy{true},
                             TCheckEnableFilterByKey{false}});
-        UNIT_ASSERT_VALUES_EQUAL_C(true, GetFastLogPolicy(runtime, TTestTxConfig::FakeHiveTablets), "FastLogPolicy must be enabled by default");
-        UNIT_ASSERT_VALUES_EQUAL_C(false, GetByKeyFilterEnabled(runtime, TTestTxConfig::FakeHiveTablets, 1001), "ByKeyFilter must be disabled by default");
+        UNIT_ASSERT_VALUES_EQUAL_C(true, GetFastLogPolicy(runtime, TTestTxConfig::FakeHiveTablets), "FastLogPolicy must be enabled by default"); 
+        UNIT_ASSERT_VALUES_EQUAL_C(false, GetByKeyFilterEnabled(runtime, TTestTxConfig::FakeHiveTablets, 1001), "ByKeyFilter must be disabled by default"); 
 
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
                         Name: "Table"
@@ -5857,8 +5857,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
                            {TCheckExecutorFastLogPolicy{false},
                             TCheckEnableFilterByKey{false}});
-        UNIT_ASSERT_VALUES_EQUAL(false, GetFastLogPolicy(runtime, TTestTxConfig::FakeHiveTablets));
-        UNIT_ASSERT_VALUES_EQUAL(false, GetByKeyFilterEnabled(runtime, TTestTxConfig::FakeHiveTablets, 1001));
+        UNIT_ASSERT_VALUES_EQUAL(false, GetFastLogPolicy(runtime, TTestTxConfig::FakeHiveTablets)); 
+        UNIT_ASSERT_VALUES_EQUAL(false, GetByKeyFilterEnabled(runtime, TTestTxConfig::FakeHiveTablets, 1001)); 
 
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
                         Name: "Table"
@@ -5871,8 +5871,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
                            {TCheckExecutorFastLogPolicy{false},
                             TCheckEnableFilterByKey{true}});
-        UNIT_ASSERT_VALUES_EQUAL(false, GetFastLogPolicy(runtime, TTestTxConfig::FakeHiveTablets));
-        UNIT_ASSERT_VALUES_EQUAL(true, GetByKeyFilterEnabled(runtime, TTestTxConfig::FakeHiveTablets, 1001));
+        UNIT_ASSERT_VALUES_EQUAL(false, GetFastLogPolicy(runtime, TTestTxConfig::FakeHiveTablets)); 
+        UNIT_ASSERT_VALUES_EQUAL(true, GetByKeyFilterEnabled(runtime, TTestTxConfig::FakeHiveTablets, 1001)); 
 
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
                         Name: "Table"
@@ -5885,9 +5885,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
                            {TCheckExecutorFastLogPolicy{false},
                             TCheckEnableFilterByKey{true}});
-        UNIT_ASSERT_VALUES_EQUAL(false, GetFastLogPolicy(runtime, TTestTxConfig::FakeHiveTablets));
-        UNIT_ASSERT_VALUES_EQUAL(true, GetByKeyFilterEnabled(runtime, TTestTxConfig::FakeHiveTablets, 1001));
-        UNIT_ASSERT_VALUES_EQUAL(true, GetEraseCacheEnabled(runtime, TTestTxConfig::FakeHiveTablets, 1001));
+        UNIT_ASSERT_VALUES_EQUAL(false, GetFastLogPolicy(runtime, TTestTxConfig::FakeHiveTablets)); 
+        UNIT_ASSERT_VALUES_EQUAL(true, GetByKeyFilterEnabled(runtime, TTestTxConfig::FakeHiveTablets, 1001)); 
+        UNIT_ASSERT_VALUES_EQUAL(true, GetEraseCacheEnabled(runtime, TTestTxConfig::FakeHiveTablets, 1001)); 
 
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
                         Name: "Table"
@@ -5900,9 +5900,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
                            {TCheckExecutorFastLogPolicy{false},
                             TCheckEnableFilterByKey{true}});
-        UNIT_ASSERT_VALUES_EQUAL(false, GetFastLogPolicy(runtime, TTestTxConfig::FakeHiveTablets));
-        UNIT_ASSERT_VALUES_EQUAL(true, GetByKeyFilterEnabled(runtime, TTestTxConfig::FakeHiveTablets, 1001));
-        UNIT_ASSERT_VALUES_EQUAL(false, GetEraseCacheEnabled(runtime, TTestTxConfig::FakeHiveTablets, 1001));
+        UNIT_ASSERT_VALUES_EQUAL(false, GetFastLogPolicy(runtime, TTestTxConfig::FakeHiveTablets)); 
+        UNIT_ASSERT_VALUES_EQUAL(true, GetByKeyFilterEnabled(runtime, TTestTxConfig::FakeHiveTablets, 1001)); 
+        UNIT_ASSERT_VALUES_EQUAL(false, GetEraseCacheEnabled(runtime, TTestTxConfig::FakeHiveTablets, 1001)); 
 
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
                         Name: "Table"
@@ -5916,9 +5916,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
                            {TCheckExecutorFastLogPolicy{true},
                             TCheckEnableFilterByKey{false}});
-        UNIT_ASSERT_VALUES_EQUAL(true, GetFastLogPolicy(runtime, TTestTxConfig::FakeHiveTablets));
-        UNIT_ASSERT_VALUES_EQUAL(false, GetByKeyFilterEnabled(runtime, TTestTxConfig::FakeHiveTablets, 1001));
-        UNIT_ASSERT_VALUES_EQUAL(false, GetEraseCacheEnabled(runtime, TTestTxConfig::FakeHiveTablets, 1001));
+        UNIT_ASSERT_VALUES_EQUAL(true, GetFastLogPolicy(runtime, TTestTxConfig::FakeHiveTablets)); 
+        UNIT_ASSERT_VALUES_EQUAL(false, GetByKeyFilterEnabled(runtime, TTestTxConfig::FakeHiveTablets, 1001)); 
+        UNIT_ASSERT_VALUES_EQUAL(false, GetEraseCacheEnabled(runtime, TTestTxConfig::FakeHiveTablets, 1001)); 
     }
 
     Y_UNIT_TEST(CreatePersQueueGroup) { //+
@@ -5967,7 +5967,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             NLs::NotFinished});
 
         TActorId sender = runtime.AllocateEdgeActor();
-        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender); 
 
         env.TestWaitNotification(runtime, txId);
 
@@ -6079,7 +6079,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
 
         TActorId sender = runtime.AllocateEdgeActor();
-        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender); 
 
         env.TestWaitNotification(runtime, txId-1);
         TestDescribeResult(DescribePath(runtime, "/MyRoot/PQGroup", true),
@@ -6275,7 +6275,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Ops"),
                            {NLs::NoChildren});
 
-        env.TestWaitTabletDeletion(runtime, TTestTxConfig::FakeHiveTablets);
+        env.TestWaitTabletDeletion(runtime, TTestTxConfig::FakeHiveTablets); 
 
 
         Cdbg << "Create, Drop (partitioned table)" << Endl;
@@ -6295,7 +6295,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Ops"),
                            {NLs::NoChildren});
 
-        env.TestWaitTabletDeletion(runtime, TTestTxConfig::FakeHiveTablets+1);
+        env.TestWaitTabletDeletion(runtime, TTestTxConfig::FakeHiveTablets+1); 
     }
 
     Y_UNIT_TEST(DropTableById) { //+
@@ -6325,7 +6325,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::NoChildren});
 
-        env.TestWaitTabletDeletion(runtime, TTestTxConfig::FakeHiveTablets);
+        env.TestWaitTabletDeletion(runtime, TTestTxConfig::FakeHiveTablets); 
     }
 
     Y_UNIT_TEST(DropPQ) { //+
@@ -6428,10 +6428,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
 
         TActorId sender = runtime.AllocateEdgeActor();
-        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender); 
 
         env.TestWaitNotification(runtime, {txId, txId-1, txId-2});
-        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+20));
+        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+20)); 
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Ops/DropMeBaby"),
                            {NLs::PathNotExist});
@@ -6447,7 +6447,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestRmDir(runtime, ++txId, "/MyRoot", "Ops", {NKikimrScheme::StatusPathDoesNotExist});
 
-        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+40));
+        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+40)); 
     }
 
     Y_UNIT_TEST(ParallelModifying) { //+
@@ -6551,7 +6551,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDropPQGroup(runtime, ++txId, "/MyRoot", "Isolda");
         env.TestWaitNotification(runtime, txId);
 
-        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+40));
+        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+40)); 
     }
 
     Y_UNIT_TEST(DropPQFail) { //+
@@ -6595,7 +6595,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDropPQGroup(runtime, ++txId, path, "Isolda");
         env.TestWaitNotification(runtime, txId);
 
-        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+5));
+        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+5)); 
     }
 
     Y_UNIT_TEST(DropPQAbort) { //+
@@ -6665,7 +6665,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDescribeResult(DescribePath(runtime, pqPath),
                            {NLs::PathNotExist});
 
-        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+20));
+        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+20)); 
     }
 
     Y_UNIT_TEST(PQGroupExplicitChannels) {
@@ -6825,7 +6825,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         AsyncMkDir(runtime, ++txId, "/MyRoot/DirA/SubDirA", "CCC");
 
         TActorId sender = runtime.AllocateEdgeActor();
-        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender); 
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::PathExist});
@@ -6863,7 +6863,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         // Set ReadOnly
         SetSchemeshardReadOnlyMode(runtime, true);
         TActorId sender = runtime.AllocateEdgeActor();
-        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender); 
 
         // Verify that table creation successfully finished
         env.TestWaitNotification(runtime, txId);
@@ -6887,7 +6887,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         // Disable ReadOnly
         SetSchemeshardReadOnlyMode(runtime, false);
         sender = runtime.AllocateEdgeActor();
-        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender); 
 
         // Check that modifications now work again
         TestMkDir(runtime, ++txId, "/MyRoot", "SubDirBBBB");
@@ -7705,7 +7705,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
                            {NLs::PathNotExist});
 
-        env.TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1});
+        env.TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1}); 
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::Finished, NLs::PathsInsideDomain(0), NLs::ShardsInsideDomain(0)});
@@ -7741,7 +7741,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
                            {NLs::PathNotExist});
 
-        env.TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1});
+        env.TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1}); 
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::Finished, NLs::PathsInsideDomain(0), NLs::ShardsInsideDomain(0)});
@@ -8493,7 +8493,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Kesus2"),
                            {NLs::Finished});
 
-        env.TestWaitTabletDeletion(runtime, TTestTxConfig::FakeHiveTablets);
+        env.TestWaitTabletDeletion(runtime, TTestTxConfig::FakeHiveTablets); 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(1)});
 
@@ -8503,7 +8503,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Kesus2"),
                            {NLs::PathNotExist});
 
-        env.TestWaitTabletDeletion(runtime, TTestTxConfig::FakeHiveTablets + 1);
+        env.TestWaitTabletDeletion(runtime, TTestTxConfig::FakeHiveTablets + 1); 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::PathsInsideDomain(0), NLs::ShardsInsideDomain(0)});
     }
@@ -8572,7 +8572,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Solomon"),
                            {NLs::PathNotExist});
 
-        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 40));
+        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 40)); 
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::Finished, NLs::PathsInsideDomain(0), NLs::ShardsInsideDomain(0)});
@@ -8668,7 +8668,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Solomon"),
                            {NLs::PathNotExist});
 
-        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 4));
+        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 4)); 
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::Finished, NLs::PathsInsideDomain(0), NLs::ShardsInsideDomain(0)});
@@ -9301,7 +9301,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         // Drop the table and wait for everytTFamilyDescriptionhing to be cleaned up
         TestDropTable(runtime, ++txId, "/MyRoot/USER_0", "Table");
         env.TestWaitNotification(runtime, txId);
-        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets+2, TTestTxConfig::FakeHiveTablets+10));
+        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets+2, TTestTxConfig::FakeHiveTablets+10)); 
     }
 
     Y_UNIT_TEST(RejectSystemViewPath) {
@@ -9722,13 +9722,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                 UNIT_ASSERT_VALUES_EQUAL(err, "");
                 UNIT_ASSERT_VALUES_EQUAL(res, 0);
             };
-            fnWriteRow(TTestTxConfig::FakeHiveTablets, 0);
+            fnWriteRow(TTestTxConfig::FakeHiveTablets, 0); 
         }
 
-        TestBuilIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table1", "Sync", {"value"});
-        env.TestWaitNotification(runtime, txId, TTestTxConfig::SchemeShard);
+        TestBuilIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table1", "Sync", {"value"}); 
+        env.TestWaitNotification(runtime, txId, TTestTxConfig::SchemeShard); 
 
-        auto descr = TestGetBuilIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", txId);
+        auto descr = TestGetBuilIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", txId); 
         Y_ASSERT(descr.GetIndexBuild().GetState() == Ydb::Table::IndexBuildState::STATE_DONE);
 
         TestCopyTable(runtime, ++txId, "/MyRoot", "Copy1", "/MyRoot/Table1");
@@ -9833,7 +9833,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             TVector<THolder<IEventHandle>> supressed;
             auto defOberver = SetSuppressObserver(runtime, supressed, TEvTxProcessing::EvPlanStep);
 
-            RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+            RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor()); 
 
             env.TestWaitNotification(runtime, 103);
 

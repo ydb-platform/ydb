@@ -20,7 +20,7 @@ struct TEvPrivate {
         EvCleanDroppedSubDomains,
         EvSubscribeToShardDeletion,
         EvNotifyShardDeleted,
-        EvRunBackgroundCompaction,
+        EvRunBackgroundCompaction, 
         EvCompletePublication,
         EvCompleteBarrier,
         EvEnd

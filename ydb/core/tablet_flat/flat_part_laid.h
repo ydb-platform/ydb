@@ -8,7 +8,7 @@
 namespace NKikimr {
 namespace NTable {
 
-    using TBundleSlicesMap = THashMap<TLogoBlobID, TIntrusiveConstPtr<TSlices>>;
+    using TBundleSlicesMap = THashMap<TLogoBlobID, TIntrusiveConstPtr<TSlices>>; 
 
     struct TPartView {
         explicit operator bool() const
@@ -47,9 +47,9 @@ namespace NTable {
             return TPartView{ Part->CloneWithEpoch(epoch), Screen, Slices };
         }
 
-        TIntrusiveConstPtr<TPart> Part;
-        TIntrusiveConstPtr<TScreen> Screen;
-        TIntrusiveConstPtr<TSlices> Slices;
+        TIntrusiveConstPtr<TPart> Part; 
+        TIntrusiveConstPtr<TScreen> Screen; 
+        TIntrusiveConstPtr<TSlices> Slices; 
     };
 
     struct TWritten {

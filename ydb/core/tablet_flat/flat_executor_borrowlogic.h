@@ -159,8 +159,8 @@ public:
     // on bootstrap
     void RestoreBorrowedInfo(const TLogoBlobID &blobId, const NKikimrExecutorFlat::TBorrowedPart &proto);
 
-    // for followers
-    void RestoreFollowerBorrowedInfo(const TLogoBlobID &blobId, const NKikimrExecutorFlat::TBorrowedPart &proto);
+    // for followers 
+    void RestoreFollowerBorrowedInfo(const TLogoBlobID &blobId, const NKikimrExecutorFlat::TBorrowedPart &proto); 
 
     // for monitoring
     void OutputHtml(IOutputStream &out);

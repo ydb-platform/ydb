@@ -34,7 +34,7 @@ SRCS(
     ut_iterator.cpp
     ut_memtable.cpp
     ut_sausage.cpp
-    ut_comp_gen.cpp
+    ut_comp_gen.cpp 
     ut_comp_shard.cpp
     ut_compaction.cpp
     ut_compaction_multi.cpp
@@ -44,7 +44,7 @@ SRCS(
     ut_proto.cpp
     ut_pages.cpp
     ut_redo.cpp
-    ut_rename_table_column.cpp
+    ut_rename_table_column.cpp 
     ut_other.cpp
     ut_forward.cpp
     ut_screen.cpp

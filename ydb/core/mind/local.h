@@ -155,17 +155,17 @@ struct TEvLocal {
         TEvBootTablet()
         {}
 
-        TEvBootTablet(const TTabletStorageInfo &info, ui32 followerId, ui32 suggestedGeneration) {
+        TEvBootTablet(const TTabletStorageInfo &info, ui32 followerId, ui32 suggestedGeneration) { 
             TabletStorageInfoToProto(info, Record.MutableInfo());
             Record.SetSuggestedGeneration(suggestedGeneration);
-            Record.SetBootMode(NKikimrLocal::BOOT_MODE_LEADER);
-            Record.SetFollowerId(followerId);
+            Record.SetBootMode(NKikimrLocal::BOOT_MODE_LEADER); 
+            Record.SetFollowerId(followerId); 
         }
 
-        TEvBootTablet(const TTabletStorageInfo &info, ui32 followerId) {
+        TEvBootTablet(const TTabletStorageInfo &info, ui32 followerId) { 
             TabletStorageInfoToProto(info, Record.MutableInfo());
-            Record.SetBootMode(NKikimrLocal::BOOT_MODE_FOLLOWER);
-            Record.SetFollowerId(followerId);
+            Record.SetBootMode(NKikimrLocal::BOOT_MODE_FOLLOWER); 
+            Record.SetFollowerId(followerId); 
         }
     };
 
@@ -176,7 +176,7 @@ struct TEvLocal {
         TEvStopTablet(std::pair<ui64, ui32> tabletId)
         {
             Record.SetTabletId(tabletId.first);
-            Record.SetFollowerId(tabletId.second);
+            Record.SetFollowerId(tabletId.second); 
         }
     };
 
@@ -187,7 +187,7 @@ struct TEvLocal {
         TEvDeadTabletAck(std::pair<ui64, ui32> tabletId, ui32 generation)
         {
             Record.SetTabletId(tabletId.first);
-            Record.SetFollowerId(tabletId.second);
+            Record.SetFollowerId(tabletId.second); 
             Record.SetGeneration(generation);
         }
     };
@@ -201,7 +201,7 @@ struct TEvLocal {
             StatusBSWriteError,
             StatusFailed,
             StatusBootQueueUnknown,
-            StatusSupersededByLeader,
+            StatusSupersededByLeader, 
         };
 
         TEvTabletStatus()
@@ -218,7 +218,7 @@ struct TEvLocal {
         TEvTabletStatus(EStatus status, std::pair<ui64, ui32> tabletId, ui32 generation) {
             Record.SetStatus(status);
             Record.SetTabletID(tabletId.first);
-            Record.SetFollowerId(tabletId.second);
+            Record.SetFollowerId(tabletId.second); 
             Record.SetGeneration(generation);
         }
     };
@@ -249,12 +249,12 @@ struct TEvLocal {
 
     struct TEvTabletMetrics : public TEventLocal<TEvTabletMetrics, EvTabletMetrics> {
         ui64 TabletId;
-        ui32 FollowerId;
+        ui32 FollowerId; 
         NKikimrTabletBase::TMetrics ResourceValues;
 
-        TEvTabletMetrics(ui64 tabletId, ui32 followerId, const NKikimrTabletBase::TMetrics& resourceValues)
+        TEvTabletMetrics(ui64 tabletId, ui32 followerId, const NKikimrTabletBase::TMetrics& resourceValues) 
             : TabletId(tabletId)
-            , FollowerId(followerId)
+            , FollowerId(followerId) 
             , ResourceValues(resourceValues)
         {}
     };

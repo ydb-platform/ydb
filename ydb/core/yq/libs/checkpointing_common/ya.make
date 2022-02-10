@@ -1,15 +1,15 @@
 OWNER(g:yq)
-
-LIBRARY()
-
-SRCS(
-    defs.cpp
-)
-
+ 
+LIBRARY() 
+ 
+SRCS( 
+    defs.cpp 
+) 
+ 
 PEERDIR(
     ydb/core/yq/libs/graph_params/proto
 )
 
-GENERATE_ENUM_SERIALIZATION(defs.h)
-
-END()
+GENERATE_ENUM_SERIALIZATION(defs.h) 
+ 
+END() 

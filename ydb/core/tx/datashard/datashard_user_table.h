@@ -307,20 +307,20 @@ struct TUserTable : public TThrRefBase {
         ui64 MemDataSize = 0;
         TInstant AccessTime;
         TInstant UpdateTime;
-        TInstant LastFullCompaction;
+        TInstant LastFullCompaction; 
         THashSet<ui64> PartOwners;
         ui64 PartCount = 0;
-        ui64 SearchHeight = 0;
+        ui64 SearchHeight = 0; 
         TInstant StatsUpdateTime;
         ui64 DataSizeResolution = 0;
         ui64 RowCountResolution = 0;
-        ui64 BackgroundCompactionRequests = 0;
+        ui64 BackgroundCompactionRequests = 0; 
         NTable::TKeyAccessSample AccessStats;
 
-        bool LastSearchHeightMetricSet = false;
-
-        std::optional<ui32> HoursSinceFullCompaction;
-
+        bool LastSearchHeightMetricSet = false; 
+ 
+        std::optional<ui32> HoursSinceFullCompaction; 
+ 
         void Update(NTable::TStats&& dataStats, ui64 indexSize, THashSet<ui64>&& partOwners, ui64 partCount, TInstant statsUpdateTime) {
             DataStats = dataStats;
             IndexSize = indexSize;

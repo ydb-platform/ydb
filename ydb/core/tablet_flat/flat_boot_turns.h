@@ -31,7 +31,7 @@ namespace NBoot {
             Flush();
         }
 
-        void HandleStep(TIntrusivePtr<IStep> step) noexcept override
+        void HandleStep(TIntrusivePtr<IStep> step) noexcept override 
         {
             auto *load = step->ConsumeAs<TLoadBlobs>(Pending);
 
@@ -47,7 +47,7 @@ namespace NBoot {
             if (!Pending && Handled >= Back->Switches.size()) Env->Finish(this);
         }
 
-        void Assign(ui32 slot, TArrayRef<const char> body) noexcept
+        void Assign(ui32 slot, TArrayRef<const char> body) noexcept 
         {
             Y_VERIFY(slot < Back->Switches.size(), "Invalid switch index");
 
@@ -63,7 +63,7 @@ namespace NBoot {
             }
         }
 
-        void Apply(TSwitch &entry, TArrayRef<const char> body) noexcept
+        void Apply(TSwitch &entry, TArrayRef<const char> body) noexcept 
         {
             TProtoBox<NKikimrExecutorFlat::TTablePartSwitch> proto(body);
 

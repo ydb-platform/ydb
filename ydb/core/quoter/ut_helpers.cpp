@@ -79,7 +79,7 @@ void TKesusQuoterTestSetup::CreateKesusResource(const TString& kesusPath, const 
 
     TActorId sender = GetEdgeActor();
     Cerr << "AddQuoterResource: " << request->Record << Endl;
-    ForwardToTablet(*runtime, GetKesusTabletId(kesusPath), sender, request.Release(), 0);
+    ForwardToTablet(*runtime, GetKesusTabletId(kesusPath), sender, request.Release(), 0); 
 
     TAutoPtr<IEventHandle> handle;
     runtime->GrabEdgeEvent<NKesus::TEvKesus::TEvAddQuoterResourceResult>(handle);
@@ -100,7 +100,7 @@ void TKesusQuoterTestSetup::DeleteKesusResource(const TString& kesusPath, const 
 
     TActorId sender = GetEdgeActor();
     Cerr << "DeleteQuoterResource: " << request->Record << Endl;
-    ForwardToTablet(*runtime, GetKesusTabletId(kesusPath), sender, request.Release(), 0);
+    ForwardToTablet(*runtime, GetKesusTabletId(kesusPath), sender, request.Release(), 0); 
 
     TAutoPtr<IEventHandle> handle;
     runtime->GrabEdgeEvent<NKesus::TEvKesus::TEvDeleteQuoterResourceResult>(handle);
@@ -155,13 +155,13 @@ void TKesusQuoterTestSetup::KillKesusTablet(const TString& kesusPath) {
 
     TActorId sender = GetEdgeActor();
     Cerr << "Kill kesus tablet: " << kesusPath << Endl;
-    ForwardToTablet(*runtime, GetKesusTabletId(kesusPath), sender, new TEvents::TEvPoisonPill(), 0);
+    ForwardToTablet(*runtime, GetKesusTabletId(kesusPath), sender, new TEvents::TEvPoisonPill(), 0); 
 }
 
 NKikimrKesus::TEvGetQuoterResourceCountersResult TKesusQuoterTestSetup::GetQuoterCounters(const TString& kesusPath) {
     TTestActorRuntime* const runtime = Server->GetRuntime();
 
-    ForwardToTablet(*runtime, GetKesusTabletId(kesusPath), GetEdgeActor(), new NKesus::TEvKesus::TEvGetQuoterResourceCounters(), 0);
+    ForwardToTablet(*runtime, GetKesusTabletId(kesusPath), GetEdgeActor(), new NKesus::TEvKesus::TEvGetQuoterResourceCounters(), 0); 
 
     TAutoPtr<IEventHandle> handle;
     runtime->GrabEdgeEvent<NKesus::TEvKesus::TEvGetQuoterResourceCountersResult>(handle);

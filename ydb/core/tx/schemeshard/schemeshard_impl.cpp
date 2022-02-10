@@ -90,8 +90,8 @@ void TSchemeShard::ActivateAfterInitialization(const TActorContext& ctx,
     ScheduleCleanDroppedPaths();
     ScheduleCleanDroppedSubDomains();
 
-    StartStopCompactionQueue();
-
+    StartStopCompactionQueue(); 
+ 
     ctx.Send(TxAllocatorClient, MakeHolder<TEvTxAllocatorClient::TEvAllocate>(InitiateCachedTxIdsCount));
 
     Become(&TThis::StateWork);
@@ -285,8 +285,8 @@ TMessageSeqNo TSchemeShard::NextRound() {
 void TSchemeShard::Clear() {
     PathsById.clear();
     Tables.clear();
-    if (CompactionQueue)
-        CompactionQueue->Clear();
+    if (CompactionQueue) 
+        CompactionQueue->Clear(); 
     PersQueueGroups.clear();
     RtmrVolumes.clear();
     SubDomains.clear();
@@ -2062,15 +2062,15 @@ void TSchemeShard::PersistTablePartitioning(NIceDb::TNiceDb& db, const TPathId p
 }
 
 void TSchemeShard::DeleteTablePartitioning(NIceDb::TNiceDb& db, const TPathId pathId, const TTableInfo::TPtr tableInfo) {
-    const auto& partitions = tableInfo->GetPartitions();
-    for (ui64 pi = 0; pi < partitions.size(); ++pi) {
+    const auto& partitions = tableInfo->GetPartitions(); 
+    for (ui64 pi = 0; pi < partitions.size(); ++pi) { 
         if (IsLocalId(pathId)) {
             db.Table<Schema::TablePartitions>().Key(pathId.LocalPathId, pi).Delete();
         }
         db.Table<Schema::MigratedTablePartitions>().Key(pathId.OwnerId, pathId.LocalPathId, pi).Delete();
         db.Table<Schema::TablePartitionStats>().Key(pathId.OwnerId, pathId.LocalPathId, pi).Delete();
-
-        CompactionQueue->Remove(TShardCompactionInfo(partitions[pi].ShardIdx));
+ 
+        CompactionQueue->Remove(TShardCompactionInfo(partitions[pi].ShardIdx)); 
     }
 }
 
@@ -3242,10 +3242,10 @@ void TSchemeShard::PersistRemoveTable(NIceDb::TNiceDb& db, TPathId pathId, const
         }
     }
 
-    for (const auto& p: tableInfo->GetPartitions()) {
-        CompactionQueue->Remove(TShardCompactionInfo(p.ShardIdx));
-    }
-
+    for (const auto& p: tableInfo->GetPartitions()) { 
+        CompactionQueue->Remove(TShardCompactionInfo(p.ShardIdx)); 
+    } 
+ 
     Tables.erase(pathId);
     DecrementPathDbRefCount(pathId, "remove table");
 
@@ -3638,7 +3638,7 @@ TSchemeShard::TSchemeShard(const TActorId &tablet, TTabletStorageInfo *info)
         GetPipeClientConfig(),
         new TPipeClientFactory(this)))
     , PipeTracker(*PipeClientCache)
-    , CompactionStarter(this)
+    , CompactionStarter(this) 
     , ShardDeleter(info->TabletID)
     , AllowDataColumnForIndexTable(0, 0, 1)
     , EnableAsyncIndexes(0, 0, 1)
@@ -3706,9 +3706,9 @@ void TSchemeShard::Die(const TActorContext &ctx) {
 
     PipeClientCache->Detach(ctx);
 
-    if (CompactionQueue)
-        CompactionQueue->Shutdown(ctx);
-
+    if (CompactionQueue) 
+        CompactionQueue->Shutdown(ctx); 
+ 
     return IActor::Die(ctx);
 }
 
@@ -3744,11 +3744,11 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
 
     EnableBackgroundCompaction = appData->FeatureFlags.GetEnableBackgroundCompaction();
     EnableBackgroundCompactionServerless = appData->FeatureFlags.GetEnableBackgroundCompactionServerless();
-    if (!CompactionQueue)
-        ConfigureCompactionQueue(appData->CompactionConfig.GetBackgroundCompactionConfig(), ctx);
-
-    ctx.RegisterWithSameMailbox(CompactionQueue);
-
+    if (!CompactionQueue) 
+        ConfigureCompactionQueue(appData->CompactionConfig.GetBackgroundCompactionConfig(), ctx); 
+ 
+    ctx.RegisterWithSameMailbox(CompactionQueue); 
+ 
     if (appData->ChannelProfiles) {
         ChannelProfiles = appData->ChannelProfiles;
     }
@@ -3926,7 +3926,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvSchemeShard::TEvPublishTenantResult, Handle);
         HFuncTraced(TEvSchemeShard::TEvMigrateSchemeShardResult, Handle);
         HFuncTraced(TEvDataShard::TEvMigrateSchemeShardResponse, Handle);
-        HFuncTraced(TEvDataShard::TEvCompactTableResult, Handle);
+        HFuncTraced(TEvDataShard::TEvCompactTableResult, Handle); 
 
         HFuncTraced(TEvSchemeShard::TEvSyncTenantSchemeShard, Handle);
         HFuncTraced(TEvSchemeShard::TEvUpdateTenantSchemeShard, Handle);
@@ -4541,7 +4541,7 @@ void TSchemeShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TAc
                     << ", status: " << NKikimrProto::EReplyStatus_Name(ev->Get()->Status)
                     << ", at schemeshard: " << TabletID());
 
-    Y_VERIFY(ev->Get()->Leader);
+    Y_VERIFY(ev->Get()->Leader); 
 
     if (PipeClientCache->OnConnect(ev)) {
         return; //all Ok
@@ -5779,20 +5779,20 @@ void TSchemeShard::SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, T
         Send(SysPartitionStatsCollector, ev.Release());
     }
 
-    if (!tableInfo->IsBackup) {
-        for (const auto& p: newPartitioning) {
-            ui64 searchHeight = 0;
-            const auto& partitionStats = tableInfo->GetStats().PartitionStats;
-            auto it = partitionStats.find(p.ShardIdx);
-            if (it != partitionStats.end())
-                searchHeight = it->second.SearchHeight;
-
-            if (searchHeight >= CompactionSearchHeightThreshold) {
-                CompactionQueue->Enqueue(TShardCompactionInfo(p.ShardIdx, searchHeight));
-            }
-        }
-    }
-
+    if (!tableInfo->IsBackup) { 
+        for (const auto& p: newPartitioning) { 
+            ui64 searchHeight = 0; 
+            const auto& partitionStats = tableInfo->GetStats().PartitionStats; 
+            auto it = partitionStats.find(p.ShardIdx); 
+            if (it != partitionStats.end()) 
+                searchHeight = it->second.SearchHeight; 
+ 
+            if (searchHeight >= CompactionSearchHeightThreshold) { 
+                CompactionQueue->Enqueue(TShardCompactionInfo(p.ShardIdx, searchHeight)); 
+            } 
+        } 
+    } 
+ 
     tableInfo->SetPartitioning(std::move(newPartitioning));
 }
 
@@ -5926,29 +5926,29 @@ bool TSchemeShard::TDedicatedPipePool::Has(TActorId actorId) const {
 }
 
 void TSchemeShard::SubscribeConsoleConfigs(const TActorContext &ctx) {
-    ctx.Send(
-        NConsole::MakeConfigsDispatcherID(ctx.SelfID.NodeId()),
-        new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({
-            (ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem,
-            (ui32)NKikimrConsole::TConfigItem::CompactionConfigItem,
-        }));
+    ctx.Send( 
+        NConsole::MakeConfigsDispatcherID(ctx.SelfID.NodeId()), 
+        new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({ 
+            (ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem, 
+            (ui32)NKikimrConsole::TConfigItem::CompactionConfigItem, 
+        })); 
 }
 
 void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfig, const TActorContext& ctx) {
     if (appConfig.HasFeatureFlags()) {
         ApplyConsoleConfigs(appConfig.GetFeatureFlags(), ctx);
     }
-
-    if (appConfig.HasCompactionConfig()) {
-        const auto& compactionConfig = appConfig.GetCompactionConfig();
-        if (compactionConfig.HasBackgroundCompactionConfig()) {
-            ConfigureCompactionQueue(compactionConfig.GetBackgroundCompactionConfig(), ctx);
-        }
-    }
-
-    if (IsShemeShardConfigured()) {
-        StartStopCompactionQueue();
-    }
+ 
+    if (appConfig.HasCompactionConfig()) { 
+        const auto& compactionConfig = appConfig.GetCompactionConfig(); 
+        if (compactionConfig.HasBackgroundCompactionConfig()) { 
+            ConfigureCompactionQueue(compactionConfig.GetBackgroundCompactionConfig(), ctx); 
+        } 
+    } 
+ 
+    if (IsShemeShardConfigured()) { 
+        StartStopCompactionQueue(); 
+    } 
 }
 
 void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featureFlags, const TActorContext& ctx) {
@@ -5969,60 +5969,60 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featu
                      << ", new: " << (bool)featureFlags.GetEnableSchemeTransactionsAtSchemeShard());
         EnableSchemeTransactionsAtSchemeShard = (i64)featureFlags.GetEnableSchemeTransactionsAtSchemeShard();
     }
-
-    EnableBackgroundCompaction = featureFlags.GetEnableBackgroundCompaction();
-    EnableBackgroundCompactionServerless = featureFlags.GetEnableBackgroundCompactionServerless();
+ 
+    EnableBackgroundCompaction = featureFlags.GetEnableBackgroundCompaction(); 
+    EnableBackgroundCompactionServerless = featureFlags.GetEnableBackgroundCompactionServerless(); 
 }
 
 void TSchemeShard::ConfigureCompactionQueue(
-    const NKikimrConfig::TCompactionConfig::TBackgroundCompactionConfig& config,
-    const TActorContext &ctx)
-{
-    CompactionSearchHeightThreshold = config.GetSearchHeightThreshold();
-
-    TCompactionQueue::TConfig compactionConfig;
-
-    // schemeshard specific
-    compactionConfig.IsCircular = true;
-
-    compactionConfig.Timeout = TDuration::Seconds(config.GetTimeoutSeconds());
-    compactionConfig.WakeupInterval = TDuration::Seconds(config.GetWakeupIntervalSeconds());
-    compactionConfig.InflightLimit = config.GetInflightLimit();
-    compactionConfig.Rate = config.GetRate();
-    compactionConfig.MinOperationRepeatDelay = TDuration::Seconds(config.GetMinCompactionRepeatDelay());
-
-    LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                 "CompactionQueue configured: Timeout# " << compactionConfig.Timeout
-                 << ", WakeupInterval# " << compactionConfig.WakeupInterval
-                 << ", InflightLimit# " << compactionConfig.InflightLimit
-                 << ", Rate# " << compactionConfig.Rate);
-
-    if (CompactionQueue) {
-        CompactionQueue->UpdateConfig(compactionConfig);
-    } else {
-        CompactionQueue = new TCompactionQueue(
-            compactionConfig,
-            CompactionStarter);
-    }
-}
-
+    const NKikimrConfig::TCompactionConfig::TBackgroundCompactionConfig& config, 
+    const TActorContext &ctx) 
+{ 
+    CompactionSearchHeightThreshold = config.GetSearchHeightThreshold(); 
+ 
+    TCompactionQueue::TConfig compactionConfig; 
+ 
+    // schemeshard specific 
+    compactionConfig.IsCircular = true; 
+ 
+    compactionConfig.Timeout = TDuration::Seconds(config.GetTimeoutSeconds()); 
+    compactionConfig.WakeupInterval = TDuration::Seconds(config.GetWakeupIntervalSeconds()); 
+    compactionConfig.InflightLimit = config.GetInflightLimit(); 
+    compactionConfig.Rate = config.GetRate(); 
+    compactionConfig.MinOperationRepeatDelay = TDuration::Seconds(config.GetMinCompactionRepeatDelay()); 
+ 
+    LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, 
+                 "CompactionQueue configured: Timeout# " << compactionConfig.Timeout 
+                 << ", WakeupInterval# " << compactionConfig.WakeupInterval 
+                 << ", InflightLimit# " << compactionConfig.InflightLimit 
+                 << ", Rate# " << compactionConfig.Rate); 
+ 
+    if (CompactionQueue) { 
+        CompactionQueue->UpdateConfig(compactionConfig); 
+    } else { 
+        CompactionQueue = new TCompactionQueue( 
+            compactionConfig, 
+            CompactionStarter); 
+    } 
+} 
+ 
 void TSchemeShard::StartStopCompactionQueue() {
-    // note, that we don't need to check current state of compaction queue
-    if (IsServerlessDomain(TPath::Init(RootPathId(), this))) {
-        if (EnableBackgroundCompactionServerless) {
-            CompactionQueue->Start();
-        } else {
-            CompactionQueue->Stop();
-        }
-    } else {
-        if (EnableBackgroundCompaction) {
-            CompactionQueue->Start();
-        } else {
-            CompactionQueue->Stop();
-        }
-    }
-}
-
+    // note, that we don't need to check current state of compaction queue 
+    if (IsServerlessDomain(TPath::Init(RootPathId(), this))) { 
+        if (EnableBackgroundCompactionServerless) { 
+            CompactionQueue->Start(); 
+        } else { 
+            CompactionQueue->Stop(); 
+        } 
+    } else { 
+        if (EnableBackgroundCompaction) { 
+            CompactionQueue->Start(); 
+        } else { 
+            CompactionQueue->Stop(); 
+        } 
+    } 
+} 
+ 
 void TSchemeShard::Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr &, const TActorContext &ctx) {
      LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                   "Subscribtion to Console has been set up"

@@ -126,14 +126,14 @@ message TEvReadLocalBaseResult {
     optional bytes Scheme = 5;
 }
 
-message TEvFollowerAttach {
+message TEvFollowerAttach { 
     optional fixed64 TabletId = 1;
-    optional uint32 FollowerAttempt = 2;
+    optional uint32 FollowerAttempt = 2; 
 }
 
-message TEvFollowerUpdate {
+message TEvFollowerUpdate { 
     optional fixed64 TabletId = 1;
-    optional uint32 FollowerAttempt = 2;
+    optional uint32 FollowerAttempt = 2; 
     optional uint64 StreamCounter = 3;
 
     optional uint32 Generation = 10;
@@ -151,33 +151,33 @@ message TEvFollowerUpdate {
     optional bool NeedGCApplyAck = 22;
 }
 
-message TEvFollowerGcAck {
+message TEvFollowerGcAck { 
     optional fixed64 TabletId = 1;
-    optional uint32 FollowerAttempt = 2;
+    optional uint32 FollowerAttempt = 2; 
     optional uint32 Generation = 3;
     optional uint32 Step = 4;
 }
 
-message TEvFollowerAuxUpdate {
+message TEvFollowerAuxUpdate { 
     optional fixed64 TabletId = 1;
-    optional uint32 FollowerAttempt = 2;
+    optional uint32 FollowerAttempt = 2; 
     optional uint64 StreamCounter = 3;
 
     optional bytes AuxPayload = 10;
 }
 
-message TEvFollowerDetach {
+message TEvFollowerDetach { 
     optional fixed64 TabletId = 1;
-    optional uint32 FollowerAttempt = 2;
+    optional uint32 FollowerAttempt = 2; 
 }
 
-message TEvFollowerDisconnect {
+message TEvFollowerDisconnect { 
     optional fixed64 TabletId = 1;
-    optional uint32 FollowerAttempt = 2;
+    optional uint32 FollowerAttempt = 2; 
     optional uint32 Reason = 3; // todo: enum
 }
 
-message TEvFollowerRefresh {
+message TEvFollowerRefresh { 
     optional fixed64 TabletId = 1;
     optional uint32 Generation = 2;
     optional bool OfflineProtocol = 3;

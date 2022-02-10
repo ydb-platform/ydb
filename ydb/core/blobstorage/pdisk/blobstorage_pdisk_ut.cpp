@@ -100,7 +100,7 @@ public:
         }
 
         auto mainCounters = TIntrusivePtr<NMonitoring::TDynamicCounters>(new NMonitoring::TDynamicCounters());
-        IActor* pDiskActor = CreatePDisk(cfg.Get(), MainKey, mainCounters);
+        IActor* pDiskActor = CreatePDisk(cfg.Get(), MainKey, mainCounters); 
         PDiskActor = Runtime->Register(pDiskActor);
     }
 
@@ -112,7 +112,7 @@ public:
         if (!PDisk) {
             // To be sure that pdisk actor is in StateOnline
             TestResponce<NPDisk::TEvYardControlResult>(
-                    new NPDisk::TEvYardControl(NPDisk::TEvYardControl::PDiskStart, &MainKey),
+                    new NPDisk::TEvYardControl(NPDisk::TEvYardControl::PDiskStart, &MainKey), 
                     NKikimrProto::OK);
 
             const auto evControlRes = TestResponce<NPDisk::TEvYardControlResult>(
@@ -211,7 +211,7 @@ public:
                 new NPDisk::TEvYardInit(3, vDiskID, testCtx.TestCtx.PDiskGuid),
                 NKikimrProto::CORRUPTED);
         testCtx.TestResponce<NPDisk::TEvYardControlResult>(
-                new NPDisk::TEvYardControl(NPDisk::TEvYardControl::PDiskStart, reinterpret_cast<void*>(&testCtx.MainKey)),
+                new NPDisk::TEvYardControl(NPDisk::TEvYardControl::PDiskStart, reinterpret_cast<void*>(&testCtx.MainKey)), 
                 NKikimrProto::OK);
         testCtx.TestResponce<NPDisk::TEvYardInitResult>(
                 new NPDisk::TEvYardInit(3, vDiskID, testCtx.TestCtx.PDiskGuid),

@@ -62,7 +62,7 @@ namespace NTest {
             TCell Cell;
         };
 
-        TRow(TIntrusivePtr<TGrowHeap> heap = new TGrowHeap(512))
+        TRow(TIntrusivePtr<TGrowHeap> heap = new TGrowHeap(512)) 
             : Heap(heap)
         {
             Cols.reserve(8);
@@ -177,7 +177,7 @@ namespace NTest {
         }
 
     private:
-        TIntrusivePtr<TGrowHeap> Heap;
+        TIntrusivePtr<TGrowHeap> Heap; 
         TVector<TUpdate> Cols;
     };
 

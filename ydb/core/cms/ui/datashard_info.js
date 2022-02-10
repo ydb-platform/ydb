@@ -101,7 +101,7 @@ function onDataShardInfoLoaded(data) {
     $('#tablet-info-mediator').html('<a href="../tablets?TabletID=' + info.Mediator
                                     + '">' + info.Mediator + '</a>');
     $('#tablet-info-generation').text(info.Generation);
-    $('#tablet-info-role').text(info.IsFollower ? 'Follower' : 'Leader');
+    $('#tablet-info-role').text(info.IsFollower ? 'Follower' : 'Leader'); 
     $('#tablet-info-state').text(info.State + (info.IsActive ? ' (active)' : ' (inactive)'));
     $('#tablet-info-shared-blobs').text(info.HasSharedBlobs);
 

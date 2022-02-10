@@ -26,7 +26,7 @@ namespace NKikimr {
             NMonitoring::TDynamicCounters::TCounterPtr MovedPatchResMsgsPtr;
 
             TEvBlobStorage::TEvVMovedPatch::TPtr Event;
-            TActorId LeaderId;
+            TActorId LeaderId; 
             TOutOfSpaceStatus OOSStatus;
 
 
@@ -38,14 +38,14 @@ namespace NKikimr {
             TVDiskContextPtr VCtx;
 
         public:
-            TVMovedPatchActor(TActorId leaderId, TOutOfSpaceStatus oosStatus, TEvBlobStorage::TEvVMovedPatch::TPtr &ev,
+            TVMovedPatchActor(TActorId leaderId, TOutOfSpaceStatus oosStatus, TEvBlobStorage::TEvVMovedPatch::TPtr &ev, 
                     TActorIDPtr skeletonFrontIDPtr, NMonitoring::TDynamicCounters::TCounterPtr movedPatchResMsgsPtr,
                     ui64 incarnationGuid, const TVDiskContextPtr &vCtx)
                 : TActorBootstrapped()
                 , SkeletonFrontIDPtr(skeletonFrontIDPtr)
                 , MovedPatchResMsgsPtr(movedPatchResMsgsPtr)
                 , Event(ev)
-                , LeaderId(leaderId)
+                , LeaderId(leaderId) 
                 , OOSStatus(oosStatus)
                 , IncarnationGuid(incarnationGuid)
                 , VCtx(vCtx)
@@ -196,12 +196,12 @@ namespace NKikimr {
 
     } // NPrivate
 
-    IActor* CreateSkeletonVMovedPatchActor(TActorId leaderId, TOutOfSpaceStatus oosStatus,
+    IActor* CreateSkeletonVMovedPatchActor(TActorId leaderId, TOutOfSpaceStatus oosStatus, 
             TEvBlobStorage::TEvVMovedPatch::TPtr &ev, TActorIDPtr skeletonFrontIDPtr,
             NMonitoring::TDynamicCounters::TCounterPtr counterPtr, ui64 incarnationGuid,
             const TVDiskContextPtr &vCtx)
     {
-        return new NPrivate::TVMovedPatchActor(leaderId, oosStatus, ev, skeletonFrontIDPtr,
+        return new NPrivate::TVMovedPatchActor(leaderId, oosStatus, ev, skeletonFrontIDPtr, 
                 counterPtr, incarnationGuid, vCtx);
     }
 

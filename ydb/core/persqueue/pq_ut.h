@@ -140,16 +140,16 @@ struct TTestContext {
         SetupLogging(*Runtime);
         SetupTabletServices(*Runtime);
         setup(*Runtime);
-        CreateTestBootstrapper(*Runtime,
-            CreateTestTabletInfo(TabletId, TabletType, TErasureType::ErasureNone),
+        CreateTestBootstrapper(*Runtime, 
+            CreateTestTabletInfo(TabletId, TabletType, TErasureType::ErasureNone), 
             &CreatePersQueue);
 
         TDispatchOptions options;
         options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
         Runtime->DispatchEvents(options);
 
-        CreateTestBootstrapper(*Runtime,
-            CreateTestTabletInfo(BalancerTabletId, TTabletTypes::PERSQUEUE_READ_BALANCER, TErasureType::ErasureNone),
+        CreateTestBootstrapper(*Runtime, 
+            CreateTestTabletInfo(BalancerTabletId, TTabletTypes::PERSQUEUE_READ_BALANCER, TErasureType::ErasureNone), 
             &CreatePersQueueReadBalancer);
 
         options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
@@ -167,16 +167,16 @@ struct TTestContext {
         Runtime->SetScheduledLimit(200);
         SetupLogging(*Runtime);
         SetupTabletServices(*Runtime);
-        CreateTestBootstrapper(*Runtime,
-            CreateTestTabletInfo(TabletId, TabletType, TErasureType::ErasureNone),
+        CreateTestBootstrapper(*Runtime, 
+            CreateTestTabletInfo(TabletId, TabletType, TErasureType::ErasureNone), 
             &CreatePersQueue);
 
         TDispatchOptions options;
         options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
         Runtime->DispatchEvents(options);
 
-        CreateTestBootstrapper(*Runtime,
-            CreateTestTabletInfo(BalancerTabletId, TTabletTypes::PERSQUEUE_READ_BALANCER, TErasureType::ErasureNone),
+        CreateTestBootstrapper(*Runtime, 
+            CreateTestTabletInfo(BalancerTabletId, TTabletTypes::PERSQUEUE_READ_BALANCER, TErasureType::ErasureNone), 
             &CreatePersQueueReadBalancer);
 
         options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
@@ -333,7 +333,7 @@ void BalancerPrepare(const TString topic, const TVector<std::pair<ui32, std::pai
     //TODO: check state
     TTestActorRuntime& runtime = *tc.Runtime;
 
-    ForwardToTablet(runtime, tc.BalancerTabletId, tc.Edge, new TEvents::TEvPoisonPill());
+    ForwardToTablet(runtime, tc.BalancerTabletId, tc.Edge, new TEvents::TEvPoisonPill()); 
     TDispatchOptions rebootOptions;
     rebootOptions.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvRestored, 2));
     runtime.DispatchEvents(rebootOptions);
@@ -375,7 +375,7 @@ void PQGetPartInfo(ui64 startOffset, ui64 endOffset, TTestContext& tc) {
 void RestartTablet(TTestContext& tc) {
     TTestActorRuntime& runtime = *tc.Runtime;
 
-    ForwardToTablet(runtime, tc.TabletId, tc.Edge, new TEvents::TEvPoisonPill());
+    ForwardToTablet(runtime, tc.TabletId, tc.Edge, new TEvents::TEvPoisonPill()); 
     TDispatchOptions rebootOptions;
     rebootOptions.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvRestored, 2));
     runtime.DispatchEvents(rebootOptions);

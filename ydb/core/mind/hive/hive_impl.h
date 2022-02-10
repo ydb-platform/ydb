@@ -43,9 +43,9 @@
 #include "hive_schema.h"
 #include "domain_info.h"
 #include "tablet_info.h"
-#include "leader_tablet_info.h"
-#include "follower_tablet_info.h"
-#include "follower_group.h"
+#include "leader_tablet_info.h" 
+#include "follower_tablet_info.h" 
+#include "follower_group.h" 
 #include "node_info.h"
 #include "storage_group_info.h"
 #include "storage_pool_info.h"
@@ -306,7 +306,7 @@ protected:
     TPipeTracker PipeTracker;
     NTabletPipe::TClientRetryPolicy PipeRetryPolicy;
     std::unordered_map<TNodeId, TNodeInfo> Nodes;
-    std::unordered_map<TTabletId, TLeaderTabletInfo> Tablets;
+    std::unordered_map<TTabletId, TLeaderTabletInfo> Tablets; 
     std::unordered_map<TOwnerIdxType::TValueType, TTabletId> OwnerToTablet;
     std::unordered_map<TTabletCategoryId, TTabletCategoryInfo> TabletCategories;
     std::unordered_map<TTabletTypes::EType, TVector<i64>> TabletTypeAllowedMetrics;
@@ -381,7 +381,7 @@ protected:
     TInstant LastResourceChangeReaction;
     //TDuration ResourceChangeReactionPeriod = TDuration::Seconds(10);
     TVector<ISubActor*> SubActors;
-    TResourceProfilesPtr ResourceProfiles;
+    TResourceProfilesPtr ResourceProfiles; 
     NKikimrLocal::TLocalConfig LocalConfig;
     bool ReadyForConnections = false; // is Hive ready for incoming connections?
     ui64 NextTabletUnlockSeqNo = 1; // sequence number for unlock events
@@ -404,7 +404,7 @@ protected:
     TString BootStateStarting = "Starting";
     TString BootStateRunning = "Running";
     TString BootStateTooManyStarting = "Too many tablets starting";
-    TString BootStateLeaderNotRunning = "Leader not running";
+    TString BootStateLeaderNotRunning = "Leader not running"; 
     TString BootStateAllNodesAreDead = "All nodes are dead";
     TString BootStateAllNodesAreDeadOrDown = "All nodes are dead or down";
     TString BootStateNoNodesAllowedToRun = "No nodes allowed to run";
@@ -553,16 +553,16 @@ protected:
     TNodeInfo* SelectNode(const std::vector<TSelectedNode>& selectedNodes);
 
 public:
-    void AssignTabletGroups(TLeaderTabletInfo& tablet);
+    void AssignTabletGroups(TLeaderTabletInfo& tablet); 
     TNodeInfo& GetNode(TNodeId nodeId);
     TNodeInfo* FindNode(TNodeId nodeId);
-    TLeaderTabletInfo& GetTablet(TTabletId tabletId);
-    TLeaderTabletInfo* FindTablet(TTabletId tabletId);
-    TLeaderTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId); // find tablets, even deleting ones
-    TTabletInfo& GetTablet(TTabletId tabletId, TFollowerId followerId);
-    TTabletInfo* FindTablet(TTabletId tabletId, TFollowerId followerId);
+    TLeaderTabletInfo& GetTablet(TTabletId tabletId); 
+    TLeaderTabletInfo* FindTablet(TTabletId tabletId); 
+    TLeaderTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId); // find tablets, even deleting ones 
+    TTabletInfo& GetTablet(TTabletId tabletId, TFollowerId followerId); 
+    TTabletInfo* FindTablet(TTabletId tabletId, TFollowerId followerId); 
     TTabletInfo* FindTablet(const TFullTabletId& tabletId) { return FindTablet(tabletId.first, tabletId.second); }
-    TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId);
+    TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId); 
     TStoragePoolInfo& GetStoragePool(const TString& name);
     TStoragePoolInfo* FindStoragePool(const TString& name);
     TDomainInfo* FindDomain(TSubDomainKey key);
@@ -570,9 +570,9 @@ public:
     void DeleteTablet(TTabletId tabletId);
     void DeleteNode(TNodeId nodeId);
     TVector<TNodeId> GetNodesForWhiteboardBroadcast(size_t maxNodesToReturn = 3);
-    void ReportTabletStateToWhiteboard(const TLeaderTabletInfo& tablet, NKikimrWhiteboard::TTabletStateInfo::ETabletState state);
-    void ReportStoppedToWhiteboard(const TLeaderTabletInfo& tablet);
-    void ReportDeletedToWhiteboard(const TLeaderTabletInfo& tablet);
+    void ReportTabletStateToWhiteboard(const TLeaderTabletInfo& tablet, NKikimrWhiteboard::TTabletStateInfo::ETabletState state); 
+    void ReportStoppedToWhiteboard(const TLeaderTabletInfo& tablet); 
+    void ReportDeletedToWhiteboard(const TLeaderTabletInfo& tablet); 
     TTabletCategoryInfo& GetTabletCategory(TTabletCategoryId tabletCategoryId);
     void KillNode(TNodeId nodeId, const TActorId& local);
     void AddToBootQueue(TTabletInfo* tablet);
@@ -599,14 +599,14 @@ public:
             const NKikimrTabletBase::TMetrics& after,
             NKikimr::NHive::TResourceRawValues deltaRaw,
             NKikimr::NHive::TResourceNormalizedValues deltaNormalized);
-    static void FillTabletInfo(NKikimrHive::TEvResponseHiveInfo& response, ui64 tabletId, const TLeaderTabletInfo* info, const NKikimrHive::TEvRequestHiveInfo& req);
+    static void FillTabletInfo(NKikimrHive::TEvResponseHiveInfo& response, ui64 tabletId, const TLeaderTabletInfo* info, const NKikimrHive::TEvRequestHiveInfo& req); 
     void ExecuteStartTablet(TFullTabletId tabletId, const TActorId& local, ui64 cookie, bool external);
     ui32 GetDataCenters();
     ui32 GetRegisteredDataCenters();
     void UpdateRegisteredDataCenters(TDataCenterId dataCenterId);
     void SendPing(const TActorId& local, TNodeId id);
     void SendReconnect(const TActorId& local);
-    static THolder<NKikimrBlobStorage::TEvControllerSelectGroups::TGroupParameters> BuildGroupParametersForChannel(const TLeaderTabletInfo& tablet, ui32 channelId);
+    static THolder<NKikimrBlobStorage::TEvControllerSelectGroups::TGroupParameters> BuildGroupParametersForChannel(const TLeaderTabletInfo& tablet, ui32 channelId); 
     void KickTablet(const TTabletInfo& tablet);
     void StopTablet(const TActorId& local, const TTabletInfo& tablet);
     void StopTablet(const TActorId& local, TFullTabletId tabletId);
@@ -755,7 +755,7 @@ public:
 
 protected:
     void ScheduleDisconnectNode(THolder<TEvPrivate::TEvProcessDisconnectNode> event);
-    void DeleteTabletWithoutStorage(TLeaderTabletInfo* tablet);
+    void DeleteTabletWithoutStorage(TLeaderTabletInfo* tablet); 
     void ScheduleUnlockTabletExecution(TNodeInfo& node);
     TString DebugDomainsActiveNodes() const;
     TResourceNormalizedValues GetStDevResourceValues() const;

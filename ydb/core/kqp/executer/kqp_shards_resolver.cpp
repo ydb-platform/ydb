@@ -113,8 +113,8 @@ private:
 
     TEvTabletResolver::TEvForward::TResolveFlags GetResolveFlags() {
         TEvTabletResolver::TEvForward::TResolveFlags resolveFlags;
-        resolveFlags.SetAllowFollower(false);
-        resolveFlags.SetForceFollower(false);
+        resolveFlags.SetAllowFollower(false); 
+        resolveFlags.SetForceFollower(false); 
         resolveFlags.SetPreferLocal(true);
         resolveFlags.SetForceLocal(false);
 

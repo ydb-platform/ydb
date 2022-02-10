@@ -104,9 +104,9 @@ void TQueuesListReader::OnQueuesList(const TSqsEvents::TEvExecuted::TRecord& rec
                 continue;
             }
 
-            const TValue leaderTabletId = row["MasterTabletId"];
-            if (!leaderTabletId.HaveValue()) {
-                LOG_SQS_ERROR("Queue [" << user << "/" << queue << "] without leader tablet id detected");
+            const TValue leaderTabletId = row["MasterTabletId"]; 
+            if (!leaderTabletId.HaveValue()) { 
+                LOG_SQS_ERROR("Queue [" << user << "/" << queue << "] without leader tablet id detected"); 
                 continue;
             }
 
@@ -114,7 +114,7 @@ void TQueuesListReader::OnQueuesList(const TSqsEvents::TEvExecuted::TRecord& rec
             auto& rec = Result->SortedQueues.back();
             rec.UserName = std::move(user);
             rec.QueueName = std::move(queue);
-            rec.LeaderTabletId = leaderTabletId;
+            rec.LeaderTabletId = leaderTabletId; 
             if (cloudMode) {
                 rec.CustomName = row["CustomQueueName"];
             } else {

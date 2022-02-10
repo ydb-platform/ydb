@@ -1147,9 +1147,9 @@ struct TEvBlobStorage {
         TString ErrorReason;
         mutable NLWTrace::TOrbit Orbit;
 
-        // to measure blobstorage->client hop
-        TInstant Sent;
-
+        // to measure blobstorage->client hop 
+        TInstant Sent; 
+ 
         TEvGetResult(NKikimrProto::EReplyStatus status, ui32 sz, ui32 groupId)
             : Status(status)
             , ResponseSz(sz)

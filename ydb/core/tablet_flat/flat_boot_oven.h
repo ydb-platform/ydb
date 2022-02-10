@@ -48,7 +48,7 @@ namespace NBoot {
                     /* Zero channel is reserved for system tablet activity */
                 } else if (group == NPageCollection::TLargeGlobId::InvalidGroup) {
                     Y_Fail(
-                        "Leader{" << Tablet << ":" << Gen << "} got reserved"
+                        "Leader{" << Tablet << ":" << Gen << "} got reserved" 
                         << " InvalidGroup value for channel " << one.Channel);
 
                 } else if (group == Max<ui32>()) {

@@ -30,7 +30,7 @@ namespace {
 
     const NTest::TMass Mass0(new NTest::TModelStd(false), 6666);
 
-    static void VerifySingleLevelNonTrivial(const TAutoPtr<TSubset>& subset)
+    static void VerifySingleLevelNonTrivial(const TAutoPtr<TSubset>& subset) 
     {
         /* parts form a single run and have non-trivial pages */
         TLevels levels(subset->Scheme->Keys);

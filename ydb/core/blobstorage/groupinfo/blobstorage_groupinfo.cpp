@@ -711,7 +711,7 @@ TIntrusivePtr<TBlobStorageGroupInfo> TBlobStorageGroupInfo::Parse(const NKikimrB
 }
 
 bool TBlobStorageGroupInfo::DecryptGroupKey(TBlobStorageGroupInfo::EEncryptionMode encryptionMode,
-        const TString& /*mainKeyId*/, const TString& encryptedGroupKey, ui64 groupKeyNonce, const TCypherKey& tenantKey,
+        const TString& /*mainKeyId*/, const TString& encryptedGroupKey, ui64 groupKeyNonce, const TCypherKey& tenantKey, 
         TCypherKey *outGroupKey, ui32 groupId) {
     switch (encryptionMode) {
         case TBlobStorageGroupInfo::EEM_NONE:

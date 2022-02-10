@@ -59,7 +59,7 @@ private:
 
 private:
     void Die(const TActorContext &ctx) override {
-        Send(Services.LeaderPipeCache, new TEvPipeCache::TEvUnlink(0));
+        Send(Services.LeaderPipeCache, new TEvPipeCache::TEvUnlink(0)); 
 
         TActor::Die(ctx);
     }
@@ -395,7 +395,7 @@ public:
                 << " affected shards " << PerShardStates.size()
                 << " marker# P3");
 
-            Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(
+            Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward( 
                     new TEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_SNAPSHOT,
                         ctx.SelfID, TxId, txBody, TxFlags),
                     shardId, true));
@@ -635,7 +635,7 @@ public:
                     state.Status == TPerShardState::EStatus::Wait ||
                     state.Status == TPerShardState::EStatus::Prepared))
             {
-                Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(
+                Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward( 
                     new TEvDataShard::TEvCancelTransactionProposal(TxId),
                     shardId, false));
             }
@@ -743,7 +743,7 @@ public:
             "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
             << " SEND EvProposeTransaction to# " << SelectedCoordinator << " Coordinator marker# P5");
 
-        Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(req.Release(), SelectedCoordinator, true));
+        Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(req.Release(), SelectedCoordinator, true)); 
         Become(&TThis::StateWaitPlan);
     }
 
@@ -1123,7 +1123,7 @@ private:
 
 private:
     void Die(const TActorContext &ctx) override {
-        Send(Services.LeaderPipeCache, new TEvPipeCache::TEvUnlink(0));
+        Send(Services.LeaderPipeCache, new TEvPipeCache::TEvUnlink(0)); 
 
         TActor::Die(ctx);
     }
@@ -1444,7 +1444,7 @@ public:
             << " SEND " << reqname << " to datashard " << shardId
             << " marker# P3");
 
-        Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(tosend.Release(), shardId, true));
+        Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(tosend.Release(), shardId, true)); 
     }
 
     void HandleResponse(TEvDataShard::TEvRefreshVolatileSnapshotResponse::TPtr& ev, const TActorContext& ctx) {

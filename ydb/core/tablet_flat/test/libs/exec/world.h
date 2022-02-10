@@ -10,7 +10,7 @@ namespace NFake {
     using EMail = NActors::TMailboxType::EType;
 
     enum class EPath : ui16 {
-        Root    = 0,    /* The leader actor, shuts the system   */
+        Root    = 0,    /* The leader actor, shuts the system   */ 
     };
 
     struct TWorld {

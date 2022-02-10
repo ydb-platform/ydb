@@ -477,11 +477,11 @@ public:
 
     const TString &GetBuffer() const { return Buf; }
 
-    TString ReleaseBuffer() {
-        Cells.clear();
-        return std::move(Buf);
-    }
-
+    TString ReleaseBuffer() { 
+        Cells.clear(); 
+        return std::move(Buf); 
+    } 
+ 
 private:
 
 #pragma pack(push,4)

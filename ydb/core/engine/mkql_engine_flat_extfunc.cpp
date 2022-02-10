@@ -429,7 +429,7 @@ namespace {
             items[structType->GetMemberIndex("TabletId")] = NUdf::TUnboxedValuePod(info.TabletId);
             items[structType->GetMemberIndex("Generation")] = NUdf::TUnboxedValuePod(info.TabletGenStep.first);
             items[structType->GetMemberIndex("GenStep")] = NUdf::TUnboxedValuePod(info.TabletGenStep.second);
-            items[structType->GetMemberIndex("IsFollower")] = NUdf::TUnboxedValuePod(info.IsFollower);
+            items[structType->GetMemberIndex("IsFollower")] = NUdf::TUnboxedValuePod(info.IsFollower); 
 
             items[structType->GetMemberIndex("TxStep")] = NUdf::TUnboxedValuePod(info.TxInfo.StepTxId.first);
             items[structType->GetMemberIndex("TxId")] = NUdf::TUnboxedValuePod(info.TxInfo.StepTxId.second);
@@ -1051,7 +1051,7 @@ TStructType* GetDiagnosticsType(const TTypeEnvironment& env) {
         std::make_pair("ExecLatency", ui64Type),
         std::make_pair("GenStep", ui64Type),
         std::make_pair("Generation", ui32Type),
-        std::make_pair("IsFollower", boolType),
+        std::make_pair("IsFollower", boolType), 
         std::make_pair("PrepareArriveTime", ui64Type),
         std::make_pair("ProposeLatency", ui64Type),
         std::make_pair("Status", ui32Type),

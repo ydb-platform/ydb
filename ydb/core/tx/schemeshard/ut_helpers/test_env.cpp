@@ -487,10 +487,10 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     , CoordinatorState(new TFakeCoordinator::TState)
     , ChannelsCount(opts.NChannels_)
 {
-    ui64 hive = TTestTxConfig::Hive;
-    ui64 schemeRoot = TTestTxConfig::SchemeShard;
-    ui64 coordinator = TTestTxConfig::Coordinator;
-    ui64 txAllocator = TTestTxConfig::TxAllocator;
+    ui64 hive = TTestTxConfig::Hive; 
+    ui64 schemeRoot = TTestTxConfig::SchemeShard; 
+    ui64 coordinator = TTestTxConfig::Coordinator; 
+    ui64 txAllocator = TTestTxConfig::TxAllocator; 
 
     TAppPrepare app(dsExportFactory ? dsExportFactory : static_cast<std::shared_ptr<NKikimr::NDataShard::IExportFactory>>(std::make_shared<TDataShardExportFactory>()));
 
@@ -511,13 +511,13 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
         app.AddSystemBackupSID(sid);
     }
 
-    AddDomain(runtime, app, TTestTxConfig::DomainUid, 0, hive, schemeRoot);
+    AddDomain(runtime, app, TTestTxConfig::DomainUid, 0, hive, schemeRoot); 
 
     SetupLogging(runtime);
-    SetupChannelProfiles(app, TTestTxConfig::DomainUid, ChannelsCount);
+    SetupChannelProfiles(app, TTestTxConfig::DomainUid, ChannelsCount); 
 
     for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
-        SetupSchemeCache(runtime, node, app.Domains->GetDomain(TTestTxConfig::DomainUid).Name);
+        SetupSchemeCache(runtime, node, app.Domains->GetDomain(TTestTxConfig::DomainUid).Name); 
     }
 
     SetupTabletServices(runtime, &app);
@@ -526,13 +526,13 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     }
 
     TActorId sender = runtime.AllocateEdgeActor();
-    //CreateTestBootstrapper(runtime, CreateTestTabletInfo(MakeBSControllerID(TTestTxConfig::DomainUid), TTabletTypes::FLAT_BS_CONTROLLER), &CreateFlatBsController);
+    //CreateTestBootstrapper(runtime, CreateTestTabletInfo(MakeBSControllerID(TTestTxConfig::DomainUid), TTabletTypes::FLAT_BS_CONTROLLER), &CreateFlatBsController); 
     BootSchemeShard(runtime, schemeRoot);
     BootTxAllocator(runtime, txAllocator);
     BootFakeCoordinator(runtime, coordinator, CoordinatorState);
     BootFakeHive(runtime, hive, HiveState, &GetTabletCreationFunc);
 
-    InitRootStoragePools(runtime, schemeRoot, sender, TTestTxConfig::DomainUid);
+    InitRootStoragePools(runtime, schemeRoot, sender, TTestTxConfig::DomainUid); 
 
     for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
         IActor* txProxy = CreateTxProxy(runtime.GetTxAllocatorTabletIds());
@@ -540,7 +540,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
         runtime.RegisterService(MakeTxProxyID(), txProxyId, node);
     }
 
-    //SetupBoxAndStoragePool(runtime, sender, TTestTxConfig::DomainUid);
+    //SetupBoxAndStoragePool(runtime, sender, TTestTxConfig::DomainUid); 
 
     TxReliablePropose = runtime.Register(new TTxReliablePropose(schemeRoot));
     CreateFakeMetering(runtime);
@@ -648,7 +648,7 @@ TAutoPtr<ITabletScheduledEventsGuard> NSchemeShardUT_Private::TTestEnv::EnableSc
     TActorId sender = runtime.AllocateEdgeActor();
     TVector<ui64> tabletIds;
     // Add schemeshard tabletId to white list
-    tabletIds.push_back((ui64)TTestTxConfig::SchemeShard);
+    tabletIds.push_back((ui64)TTestTxConfig::SchemeShard); 
     return CreateTabletScheduledEventsGuard(tabletIds, runtime, sender);
 }
 
@@ -707,7 +707,7 @@ void NSchemeShardUT_Private::TTestEnv::TestWaitTabletDeletion(NActors::TTestActo
     for (ui64 tabletId : tabletIds) {
         Cerr << "wait until " << tabletId << " is deleted" << Endl;
         auto ev = new TEvFakeHive::TEvSubscribeToTabletDeletion(tabletId);
-        ForwardToTablet(runtime, TTestTxConfig::Hive, sender, ev);
+        ForwardToTablet(runtime, TTestTxConfig::Hive, sender, ev); 
     }
 
     TAutoPtr<IEventHandle> handle;
@@ -733,7 +733,7 @@ void NSchemeShardUT_Private::TTestEnv::TestWaitShardDeletion(NActors::TTestActor
     for (auto shardIdx : shardIds) {
         Cerr << "Waiting until shard idx " << shardIdx << " is deleted" << Endl;
         auto ev = new TEvPrivate::TEvSubscribeToShardDeletion(shardIdx);
-        ForwardToTablet(runtime, schemeShard, sender, ev);
+        ForwardToTablet(runtime, schemeShard, sender, ev); 
     }
 
     while (!shardIds.empty()) {
@@ -753,7 +753,7 @@ void NSchemeShardUT_Private::TTestEnv::TestWaitShardDeletion(NActors::TTestActor
 }
 
 void NSchemeShardUT_Private::TTestEnv::TestWaitShardDeletion(NActors::TTestActorRuntime &runtime, TSet<ui64> localIds) {
-    TestWaitShardDeletion(runtime, TTestTxConfig::SchemeShard, std::move(localIds));
+    TestWaitShardDeletion(runtime, TTestTxConfig::SchemeShard, std::move(localIds)); 
 }
 
 void NSchemeShardUT_Private::TTestEnv::SimulateSleep(NActors::TTestActorRuntime &runtime, TDuration duration) {
@@ -801,7 +801,7 @@ TEvSchemeShard::TEvInitRootShardResult::EStatus NSchemeShardUT_Private::TTestEnv
 void NSchemeShardUT_Private::TTestEnv::InitRootStoragePools(NActors::TTestActorRuntime &runtime, ui64 schemeRoot, const NActors::TActorId &sender, ui64 domainUid) {
     const TDomainsInfo::TDomain& domain = runtime.GetAppData().DomainsInfo->GetDomain(domainUid);
 
-    auto evTx = new TEvSchemeShard::TEvModifySchemeTransaction(1, TTestTxConfig::SchemeShard);
+    auto evTx = new TEvSchemeShard::TEvModifySchemeTransaction(1, TTestTxConfig::SchemeShard); 
     auto transaction = evTx->Record.AddTransaction();
     transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterSubDomain);
     transaction->SetWorkingDir("/");
@@ -835,20 +835,20 @@ void NSchemeShardUT_Private::TTestEnv::InitRootStoragePools(NActors::TTestActorR
 
 
 void NSchemeShardUT_Private::TTestEnv::BootSchemeShard(NActors::TTestActorRuntime &runtime, ui64 schemeRoot) {
-    CreateTestBootstrapper(runtime, CreateTestTabletInfo(schemeRoot, TTabletTypes::FLAT_SCHEMESHARD), SchemeShardFactory);
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(schemeRoot, TTabletTypes::FLAT_SCHEMESHARD), SchemeShardFactory); 
 }
 
 void NSchemeShardUT_Private::TTestEnv::BootTxAllocator(NActors::TTestActorRuntime &runtime, ui64 tabletId) {
-    CreateTestBootstrapper(runtime, CreateTestTabletInfo(tabletId, TTabletTypes::TX_ALLOCATOR), &CreateTxAllocator);
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(tabletId, TTabletTypes::TX_ALLOCATOR), &CreateTxAllocator); 
 }
 
 NSchemeShardUT_Private::TTestWithReboots::TTestWithReboots(bool killOnCommit, NSchemeShardUT_Private::TTestEnv::TSchemeShardFactory ssFactory)
     : EnvOpts(GetDefaultTestEnvOptions())
     , SchemeShardFactory(ssFactory)
-    , HiveTabletId(TTestTxConfig::Hive)
-    , SchemeShardTabletId(TTestTxConfig::SchemeShard)
-    , CoordinatorTabletId(TTestTxConfig::Coordinator)
-    , TxAllocatorId(TTestTxConfig::TxAllocator)
+    , HiveTabletId(TTestTxConfig::Hive) 
+    , SchemeShardTabletId(TTestTxConfig::SchemeShard) 
+    , CoordinatorTabletId(TTestTxConfig::Coordinator) 
+    , TxAllocatorId(TTestTxConfig::TxAllocator) 
     , KillOnCommit(killOnCommit)
 {
     TabletIds.push_back(HiveTabletId);
@@ -856,7 +856,7 @@ NSchemeShardUT_Private::TTestWithReboots::TTestWithReboots(bool killOnCommit, NS
     TabletIds.push_back(SchemeShardTabletId);
     TabletIds.push_back(TxAllocatorId);
 
-    ui64 datashard = TTestTxConfig::FakeHiveTablets;
+    ui64 datashard = TTestTxConfig::FakeHiveTablets; 
     TabletIds.push_back(datashard+0);
     TabletIds.push_back(datashard+1);
     TabletIds.push_back(datashard+2);

@@ -44,7 +44,7 @@ namespace NPageCollection {
             return Meta.Page(page);
         }
 
-        bool Verify(ui32 page, TArrayRef<const char> body) const noexcept override
+        bool Verify(ui32 page, TArrayRef<const char> body) const noexcept override 
         {
             return
                 Meta.Page(page).Size == body.size()

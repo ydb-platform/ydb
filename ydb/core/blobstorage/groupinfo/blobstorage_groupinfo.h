@@ -316,7 +316,7 @@ public:
     static TIntrusivePtr<TBlobStorageGroupInfo> Parse(const NKikimrBlobStorage::TGroupInfo& group,
         const TEncryptionKey *key, IOutputStream *err);
 
-    static bool DecryptGroupKey(TBlobStorageGroupInfo::EEncryptionMode encryptionMode, const TString& mainKeyId,
+    static bool DecryptGroupKey(TBlobStorageGroupInfo::EEncryptionMode encryptionMode, const TString& mainKeyId, 
         const TString& encryptedGroupKey, ui64 groupKeyNonce, const TCypherKey& tenantKey, TCypherKey *outGroupKey,
         ui32 groupId);
 

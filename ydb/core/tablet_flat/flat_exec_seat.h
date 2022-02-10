@@ -11,11 +11,11 @@ namespace NKikimr {
 namespace NTabletFlatExecutor {
 
     struct TSeat {
-        using TPinned = THashMap<TLogoBlobID, THashMap<ui32, TIntrusivePtr<TPrivatePageCachePinPad>>>;
+        using TPinned = THashMap<TLogoBlobID, THashMap<ui32, TIntrusivePtr<TPrivatePageCachePinPad>>>; 
 
         TSeat(const TSeat&) = delete;
 
-        TSeat(ui32 uniqId, TAutoPtr<ITransaction> self)
+        TSeat(ui32 uniqId, TAutoPtr<ITransaction> self) 
             : UniqID(uniqId)
             , Self(self)
         {
@@ -32,7 +32,7 @@ namespace NTabletFlatExecutor {
         void Complete(const TActorContext& ctx) noexcept;
 
         const ui64 UniqID = Max<ui64>();
-        const TAutoPtr<ITransaction> Self;
+        const TAutoPtr<ITransaction> Self; 
         ui64 Retries = 0;
         TPinned Pinned;
 
@@ -50,8 +50,8 @@ namespace NTabletFlatExecutor {
         ui32 NotEnoughMemoryCount = 0;
         ui64 TaskId = 0;
 
-        TAutoPtr<TMemoryToken> AttachedMemory;
-        TIntrusivePtr<TMemoryGCToken> CapturedMemory;
+        TAutoPtr<TMemoryToken> AttachedMemory; 
+        TIntrusivePtr<TMemoryGCToken> CapturedMemory; 
         TVector<std::function<void()>> OnCommitted;
 
         ETerminationReason TerminationReason = ETerminationReason::None;

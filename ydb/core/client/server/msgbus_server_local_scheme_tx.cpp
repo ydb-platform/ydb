@@ -14,8 +14,8 @@ class TMessageBusLocalSchemeTx : public TMessageBusSecureRequest<TMessageBusSimp
     TEvTablet::TEvLocalSchemeTxResponse, NKikimrServices::TActivity::FRONT_LOCAL_TXRQ>>;
     NKikimrClient::TLocalSchemeTx Request;
 public:
-    TMessageBusLocalSchemeTx(TBusMessageContext &msg, NKikimrClient::TLocalSchemeTx &request, ui64 tabletId, bool withRetry, TDuration timeout, bool connectToFollower)
-        : TMessageBusSecureRequest(msg, tabletId, withRetry, timeout, connectToFollower)
+    TMessageBusLocalSchemeTx(TBusMessageContext &msg, NKikimrClient::TLocalSchemeTx &request, ui64 tabletId, bool withRetry, TDuration timeout, bool connectToFollower) 
+        : TMessageBusSecureRequest(msg, tabletId, withRetry, timeout, connectToFollower) 
         , Request()
     {
         Request.Swap(&request);
@@ -52,12 +52,12 @@ public:
 IActor* CreateMessageBusLocalSchemeTx(TBusMessageContext &msg) {
     auto &record = static_cast<TBusTabletLocalSchemeTx *>(msg.GetMessage())->Record;
 
-    const bool connectToFollower = record.HasConnectToFollower() ? record.GetConnectToFollower() : false;
+    const bool connectToFollower = record.HasConnectToFollower() ? record.GetConnectToFollower() : false; 
     const ui64 tabletId = record.GetTabletID();
     const bool withRetry = record.HasWithRetry() ? record.GetWithRetry() : false;
     const TDuration timeout = TDuration::MilliSeconds(record.HasTimeout() ? record.GetTimeout() : DefaultTimeout);
 
-    return new TMessageBusLocalSchemeTx(msg, record, tabletId, withRetry, timeout, connectToFollower);
+    return new TMessageBusLocalSchemeTx(msg, record, tabletId, withRetry, timeout, connectToFollower); 
 }
 
 }}

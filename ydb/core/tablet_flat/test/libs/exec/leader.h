@@ -11,7 +11,7 @@
 namespace NKikimr {
 namespace NFake {
 
-    class TLeader: public ::NActors::IActor {
+    class TLeader: public ::NActors::IActor { 
         enum class EState {
             Lock    = 0,    /* Do not start shutdown process    */
             Free    = 1,    /* Start to shut as Head will gone  */
@@ -22,8 +22,8 @@ namespace NFake {
     public:
         using ELnLev = NUtil::ELnLev;
 
-        TLeader(ui32 head, TAtomic &stopped)
-            : ::NActors::IActor(static_cast<TReceiveFunc>(&TLeader::Inbox), NKikimrServices::TActivity::FAKE_ENV_A)
+        TLeader(ui32 head, TAtomic &stopped) 
+            : ::NActors::IActor(static_cast<TReceiveFunc>(&TLeader::Inbox), NKikimrServices::TActivity::FAKE_ENV_A) 
             , Time(TAppData::TimeProvider.Get())
             , Edge(head) /* Live until this runlevel exists */
             , Stopped(stopped)
@@ -44,7 +44,7 @@ namespace NFake {
             Sys->RegisterLocalService(TWorld::Where(EPath::Root), SelfId());
         }
 
-        void Inbox(TAutoPtr<::NActors::IEventHandle> &eh, const ::NActors::TActorContext&)
+        void Inbox(TAutoPtr<::NActors::IEventHandle> &eh, const ::NActors::TActorContext&) 
         {
             if (auto *fire = eh->CastAsLocal<NFake::TEvFire>()) {
                 DoFire(fire->Level, fire->Alias, fire->Cmd);
@@ -89,7 +89,7 @@ namespace NFake {
 
             } else if (auto logl = Logger->Log(ELnLev::Abort)) {
                 logl
-                    << "Leader got gone event from actor " << actor
+                    << "Leader got gone event from actor " << actor 
                     << ", but it hasn't been registered in runlevels";
             }
         }
@@ -171,7 +171,7 @@ namespace NFake {
         TActorSystem * Sys = nullptr;
         const TDuration Gran{ TDuration::Seconds(1) };
         const TDuration Delay{ TDuration::Seconds(32) };
-        TAutoPtr<NUtil::ILogger> Logger;
+        TAutoPtr<NUtil::ILogger> Logger; 
         EState State = EState::Lock;
         bool Wait = false;
         TInstant Start = TInstant::Max();

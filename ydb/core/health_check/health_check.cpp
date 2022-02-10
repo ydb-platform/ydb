@@ -149,8 +149,8 @@ public:
                 if (itCount->Identifiers.size() < settings.MaxTabletIdsStored) {
                     TStringBuilder id;
                     id << info.tabletid();
-                    if (info.followerid()) {
-                        id << '.' << info.followerid();
+                    if (info.followerid()) { 
+                        id << '.' << info.followerid(); 
                     }
                     itCount->Identifiers.emplace_back(id);
                 }
@@ -169,7 +169,7 @@ public:
         TPathId ResourcePathId = {};
         TVector<TNodeId> ComputeNodeIds;
         TVector<TString> StoragePoolNames;
-        THashMap<std::pair<TTabletId, TFollowerId>, const NKikimrHive::TTabletInfo*> MergedTabletState;
+        THashMap<std::pair<TTabletId, TFollowerId>, const NKikimrHive::TTabletInfo*> MergedTabletState; 
         THashMap<TNodeId, TNodeTabletState> MergedNodeTabletState;
     };
 
@@ -585,13 +585,13 @@ public:
 
     void RequestHiveInfo(TTabletId hiveId) {
         THolder<TEvHive::TEvRequestHiveInfo> request = MakeHolder<TEvHive::TEvRequestHiveInfo>();
-        request->Record.SetReturnFollowers(true);
+        request->Record.SetReturnFollowers(true); 
         RequestTabletPipe(hiveId, "TEvRequestHiveInfo", request.Release());
     }
 
     void RequestHiveDomainStats(TTabletId hiveId) {
         THolder<TEvHive::TEvRequestHiveDomainStats> request = MakeHolder<TEvHive::TEvRequestHiveDomainStats>();
-        request->Record.SetReturnFollowers(true);
+        request->Record.SetReturnFollowers(true); 
         request->Record.SetReturnMetrics(true);
         RequestTabletPipe(hiveId, "TEvRequestHiveDomainStats", request.Release());
     }
@@ -980,7 +980,7 @@ public:
                         continue;
                     }
                     TDatabaseState& database = itDatabase->second;
-                    auto tabletId = std::make_pair(hiveTablet.GetTabletID(), hiveTablet.GetFollowerID());
+                    auto tabletId = std::make_pair(hiveTablet.GetTabletID(), hiveTablet.GetFollowerID()); 
                     database.MergedTabletState.emplace(tabletId, &hiveTablet);
                     TNodeId nodeId = hiveTablet.GetNodeID();
                     switch (hiveTablet.GetVolatileState()) {
@@ -1212,7 +1212,7 @@ public:
                 return Ydb::Monitoring::StatusFlag::YELLOW;
             }
         } else {
-            if (tabletStateInfo.leader()) {
+            if (tabletStateInfo.leader()) { 
                 return Ydb::Monitoring::StatusFlag::RED;
             } else {
                 return Ydb::Monitoring::StatusFlag::BLUE;

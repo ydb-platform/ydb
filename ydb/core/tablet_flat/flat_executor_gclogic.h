@@ -48,7 +48,7 @@ public:
     void HoldBarrier(ui32 step);                                // holds GC on no more than this step for channels specified
     void ReleaseBarrier(ui32 step);
     ui32 GetActiveGcBarrier();
-    void FollowersSyncComplete(bool isBoot);
+    void FollowersSyncComplete(bool isBoot); 
 
     struct TIntrospection {
         ui64 UncommitedEntries;
@@ -74,7 +74,7 @@ public:
 
     TIntrospection IntrospectStateSize() const;
 protected:
-    const TIntrusiveConstPtr<TTabletStorageInfo> TabletStorageInfo;
+    const TIntrusiveConstPtr<TTabletStorageInfo> TabletStorageInfo; 
     const TAutoPtr<NPageCollection::TSteppedCookieAllocator> Cookies;
     const ui32 Generation;
     NPageCollection::TSlicer Slicer;

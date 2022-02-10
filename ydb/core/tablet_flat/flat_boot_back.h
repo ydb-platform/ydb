@@ -60,8 +60,8 @@ namespace NBoot {
     };
 
     struct TBack {
-        TBack(bool follower, ui64 tablet, ui32 generation)
-            : Follower(follower)
+        TBack(bool follower, ui64 tablet, ui32 generation) 
+            : Follower(follower) 
             , Tablet(tablet)
             , Generation(generation)
         {
@@ -71,7 +71,7 @@ namespace NBoot {
         void Describe(IOutputStream &out) const noexcept
         {
             out
-                << (Follower ? "Follower" : "Leader")
+                << (Follower ? "Follower" : "Leader") 
                 << "{" << Tablet << ":" << Generation << ":-}";
         }
 
@@ -88,17 +88,17 @@ namespace NBoot {
             last.Head = Max(last.Head, epoch);
         }
 
-        const bool Follower = false;
+        const bool Follower = false; 
         const ui64 Tablet = Max<ui64>();
         const ui32 Generation = Max<ui32>();
 
         ui64 Serial = 0;
 
         TAutoPtr<NBoot::TSteppedCookieAllocatorFactory> SteppedCookieAllocatorFactory;
-        TIntrusivePtr<NSnap::TWaste> Waste;
-        TAutoPtr<NTable::TScheme> Scheme;
+        TIntrusivePtr<NSnap::TWaste> Waste; 
+        TAutoPtr<NTable::TScheme> Scheme; 
         TAutoPtr<NTable::TDatabaseImpl> DatabaseImpl;
-        TAutoPtr<NRedo::TQueue> Redo;
+        TAutoPtr<NRedo::TQueue> Redo; 
         NPageCollection::TLargeGlobId Snap;
         TDeque<TLogEntry> RedoLog;
         TDeque<TBody> GCELog;
@@ -107,7 +107,7 @@ namespace NBoot {
         TDeque<TBody> TurnsLog;
         TDeque<TSwitch> Switches;
         THashMap<ui32, NTable::TSnapEdge> Edges;
-        THashMap<TLogoBlobID, TIntrusivePtr<TPrivatePageCache::TInfo>> PageCaches;
+        THashMap<TLogoBlobID, TIntrusivePtr<TPrivatePageCache::TInfo>> PageCaches; 
         THashMap<TLogoBlobID, TSharedData> TxStatusCaches;
     };
 

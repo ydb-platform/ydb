@@ -37,16 +37,16 @@ namespace NCompGen {
         float GetOverloadFactor() override;
         ui64 GetBackingSize() override;
         ui64 GetBackingSize(ui64 ownerTabletId) override;
-        ui64 BeginMemCompaction(TTaskId taskId, TSnapEdge edge, ui64 forcedCompactionId) override;
+        ui64 BeginMemCompaction(TTaskId taskId, TSnapEdge edge, ui64 forcedCompactionId) override; 
         bool ScheduleBorrowedCompaction() override;
-        ui64 GetLastFinishedForcedCompactionId() const override { return FinishedForcedGenCompactionId; }
-        TInstant GetLastFinishedForcedCompactionTs() const override { return FinishedForcedGenCompactionTs; }
+        ui64 GetLastFinishedForcedCompactionId() const override { return FinishedForcedGenCompactionId; } 
+        TInstant GetLastFinishedForcedCompactionTs() const override { return FinishedForcedGenCompactionTs; } 
         TCompactionChanges CompactionFinished(
             ui64 compactionId,
             THolder<TCompactionParams> params,
             THolder<TCompactionResult> result) override;
         void PartMerged(TPartView part, ui32 level) override;
-        void PartMerged(TIntrusiveConstPtr<TColdPart> part, ui32 level) override;
+        void PartMerged(TIntrusiveConstPtr<TColdPart> part, ui32 level) override; 
         TCompactionChanges PartsRemoved(TArrayRef<const TLogoBlobID> parts) override;
         TCompactionState SnapshotState() override;
         TCompactionChanges ApplyChanges() override;
@@ -212,9 +212,9 @@ namespace NCompGen {
 
         void BeginGenCompaction(TTaskId taskId, ui32 generation);
 
-        void OnForcedGenCompactionDone();
-        void CheckForcedGenCompactionNeeded();
-
+        void OnForcedGenCompactionDone(); 
+        void CheckForcedGenCompactionNeeded(); 
+ 
         ui32 ComputeBackgroundPriority(
             ui32 generation,
             const TCompactionPolicy::TGenerationPolicy& policy,
@@ -248,10 +248,10 @@ namespace NCompGen {
                 ForcedMemCompactionId == 0);
         }
 
-        bool ShouldIncreaseOverloadWhatermarts() const {
-            return ForcedState != EForcedState::None;
-        }
-
+        bool ShouldIncreaseOverloadWhatermarts() const { 
+            return ForcedState != EForcedState::None; 
+        } 
+ 
     private:
         ui32 const Table;
         ICompactionBackend* const Backend;
@@ -259,7 +259,7 @@ namespace NCompGen {
         ITimeProvider* const Time;
         const TString TaskNameSuffix;
 
-        TIntrusiveConstPtr<TCompactionPolicy> Policy;
+        TIntrusiveConstPtr<TCompactionPolicy> Policy; 
 
         ui64 MemCompactionId = 0;
         ui64 FinalCompactionId = 0;
@@ -269,15 +269,15 @@ namespace NCompGen {
         ui64 ForcedMemCompactionId = 0;
         float MaxOverloadFactor = 0.0;
 
-        ui64 CurrentForcedGenCompactionId = 0;
-        ui64 NextForcedGenCompactionId = 0;
-        ui64 FinishedForcedGenCompactionId = 0;
-        TInstant FinishedForcedGenCompactionTs;
-
+        ui64 CurrentForcedGenCompactionId = 0; 
+        ui64 NextForcedGenCompactionId = 0; 
+        ui64 FinishedForcedGenCompactionId = 0; 
+        TInstant FinishedForcedGenCompactionTs; 
+ 
         TVector<TGeneration> Generations;
         TFinalState FinalState;
         TList<TPartInfo> FinalParts;
-        TList<TIntrusiveConstPtr<TColdPart>> ColdParts;
+        TList<TIntrusiveConstPtr<TColdPart>> ColdParts; 
         THashMap<TLogoBlobID, ui32> KnownParts;
         TStats Stats;
         THashMap<ui64, TStats> StatsPerTablet;

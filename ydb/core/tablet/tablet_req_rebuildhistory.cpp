@@ -16,11 +16,11 @@
 #error log macro definition clash
 #endif
 
-#define BLOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_MAIN, "TabletId# " << Info->TabletID << (FollowerCookie ? "f " : " ") << stream)
-#define BLOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::TABLET_MAIN, "TabletId# " << Info->TabletID << (FollowerCookie ? "f " : " ") << stream)
-#define BLOG_ERROR(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TABLET_MAIN, "TabletId# " << Info->TabletID << (FollowerCookie ? "f " : " ") << stream)
-#define BLOG_TRACE(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TABLET_MAIN, "TabletId# " << Info->TabletID << (FollowerCookie ? "f " : " ") << stream)
-#define BLOG_CRIT(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TABLET_MAIN, "TabletId# " << Info->TabletID << (FollowerCookie ? "f " : " ") << stream)
+#define BLOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_MAIN, "TabletId# " << Info->TabletID << (FollowerCookie ? "f " : " ") << stream) 
+#define BLOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::TABLET_MAIN, "TabletId# " << Info->TabletID << (FollowerCookie ? "f " : " ") << stream) 
+#define BLOG_ERROR(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TABLET_MAIN, "TabletId# " << Info->TabletID << (FollowerCookie ? "f " : " ") << stream) 
+#define BLOG_TRACE(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TABLET_MAIN, "TabletId# " << Info->TabletID << (FollowerCookie ? "f " : " ") << stream) 
+#define BLOG_CRIT(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TABLET_MAIN, "TabletId# " << Info->TabletID << (FollowerCookie ? "f " : " ") << stream) 
 
 namespace NKikimr {
 
@@ -203,7 +203,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
     NMetrics::TTabletIopsRawValue GroupReadOps;
 
     THolder<NTracing::ITrace> IntrospectionTrace;
-    const ui64 FollowerCookie;
+    const ui64 FollowerCookie; 
 
     TGenerationEntry& GenerationInfo(ui32 gen) {
         TGenerationEntry& x = LogInfo[gen];
@@ -213,7 +213,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
     }
 
     void ReplyAndDie(NKikimrProto::EReplyStatus status, const TString &reason) {
-        Send(Owner, new TEvTabletBase::TEvRebuildGraphResult(status, IntrospectionTrace.Release(), reason), 0, FollowerCookie);
+        Send(Owner, new TEvTabletBase::TEvRebuildGraphResult(status, IntrospectionTrace.Release(), reason), 0, FollowerCookie); 
         PassAway();
     }
 
@@ -348,7 +348,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
 
         gx.Ensure(step);
 
-        // ignore synth log entries, they are for follower sync only
+        // ignore synth log entries, they are for follower sync only 
         if (id.Cookie() == 0) {
             gx.Entry(step).UpdateReferences(logEntry);
         }
@@ -437,7 +437,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
         if (Confirmed.first)
             DiscoverRange(Snapshot, Confirmed, false);
 
-        if (FollowerCookie == 0) {
+        if (FollowerCookie == 0) { 
             if (lastGen != Confirmed.first || lastStep != Confirmed.second)
                 DiscoverRange({ Confirmed.first, Confirmed.second + 1 }, { lastGen, lastStep }, true);
         }
@@ -621,8 +621,8 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
                 std::pair<ui32, ui32> id(generation, step);
 
                 if (isTail) {
-                    // Ignore unconfirmed commits on followers
-                    if (FollowerCookie != 0) {
+                    // Ignore unconfirmed commits on followers 
+                    if (FollowerCookie != 0) { 
                         break;
                     }
 
@@ -776,7 +776,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
                 std::move(GroupReadBytes),
                 std::move(GroupReadOps),
                 IntrospectionTrace.Release()),
-            0, FollowerCookie);
+            0, FollowerCookie); 
 
         PassAway();
     }
@@ -790,7 +790,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
 
         switch (msg->Status) {
         case NKikimrProto::OK:
-            if (FollowerCookie == 0 && msg->Latest.Generation() > BlockedGen) {
+            if (FollowerCookie == 0 && msg->Latest.Generation() > BlockedGen) { 
                 BLOG_ERROR("TTabletReqRebuildHistoryGraph - Found entry beyond blocked generation"
                     << " LastBlobID: " << msg->Latest.ToString() << ". Blocked: " << BlockedGen);
                 if (IntrospectionTrace) {
@@ -866,13 +866,13 @@ public:
         return NKikimrServices::TActivity::TABLET_REQ_REBUILD_GRAPH;
     }
 
-    TTabletReqRebuildHistoryGraph(const TActorId &owner, TTabletStorageInfo *info, ui32 blockedGen, NTracing::ITrace *trace, ui64 followerCookie)
+    TTabletReqRebuildHistoryGraph(const TActorId &owner, TTabletStorageInfo *info, ui32 blockedGen, NTracing::ITrace *trace, ui64 followerCookie) 
         : Owner(owner)
         , Info(info)
         , BlockedGen(blockedGen)
         , RequestsLeft(0)
         , IntrospectionTrace(trace)
-        , FollowerCookie(followerCookie)
+        , FollowerCookie(followerCookie) 
     {}
 
     void Bootstrap() {
@@ -880,7 +880,7 @@ public:
             IntrospectionTrace->Attach(MakeHolder<NTracing::TRebuildGraphBootstrap>(BlockedGen));
         }
 
-        if (FollowerCookie == 0)
+        if (FollowerCookie == 0) 
             Register(CreateTabletFindLastEntry(SelfId(), true, Info.Get(), BlockedGen));
         else
             Register(CreateTabletFindLastEntry(SelfId(), true, Info.Get(), 0));
@@ -912,8 +912,8 @@ public:
     }
 };
 
-IActor* CreateTabletReqRebuildHistoryGraph(const TActorId &owner, TTabletStorageInfo *info, ui32 blockedGen, NTracing::ITrace *trace, ui64 followerCookie) {
-    return new TTabletReqRebuildHistoryGraph(owner, info, blockedGen, trace, followerCookie);
+IActor* CreateTabletReqRebuildHistoryGraph(const TActorId &owner, TTabletStorageInfo *info, ui32 blockedGen, NTracing::ITrace *trace, ui64 followerCookie) { 
+    return new TTabletReqRebuildHistoryGraph(owner, info, blockedGen, trace, followerCookie); 
 }
 
 

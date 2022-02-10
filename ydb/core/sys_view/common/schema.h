@@ -308,7 +308,7 @@ struct Schema : NIceDb::Schema {
 
     struct Tablets : Table<8> {
         struct TabletId : Column<1, NScheme::NTypeIds::Uint64> {};
-        struct FollowerId  : Column<2, NScheme::NTypeIds::Uint32> {};
+        struct FollowerId  : Column<2, NScheme::NTypeIds::Uint32> {}; 
         struct TypeCol  : Column<3, NScheme::NTypeIds::String> { static TString GetColumnName(const TString&) { return "Type"; } };
         struct State    : Column<4, NScheme::NTypeIds::String> {};
         struct VolatileState : Column<5, NScheme::NTypeIds::String> {};
@@ -319,10 +319,10 @@ struct Schema : NIceDb::Schema {
         struct Memory : Column<10, NScheme::NTypeIds::Uint64> {};
         struct Network : Column<11, NScheme::NTypeIds::Uint64> {};
 
-        using TKey = TableKey<TabletId, FollowerId>;
+        using TKey = TableKey<TabletId, FollowerId>; 
         using TColumns = TableColumns<
             TabletId,
-            FollowerId,
+            FollowerId, 
             TypeCol,
             State,
             VolatileState,

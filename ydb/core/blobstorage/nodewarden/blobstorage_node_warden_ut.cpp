@@ -256,7 +256,7 @@ void SetupServices(TTestActorRuntime &runtime, TString extraPath, TIntrusivePtr<
     }
 
     ui64 defaultStateStorageGroup = runtime.GetAppData(0).DomainsInfo->GetDefaultStateStorageGroup(DOMAIN_ID);
-    CreateTestBootstrapper(runtime, CreateTestTabletInfo(MakeBSControllerID(defaultStateStorageGroup),
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(MakeBSControllerID(defaultStateStorageGroup), 
         TTabletTypes::FLAT_BS_CONTROLLER, TBlobStorageGroupType::ErasureMirror3, groupId),
         &CreateFlatBsController);
 
@@ -477,7 +477,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         BlockGroup(runtime, sender0, tabletId, groupId, generation++, true);
 
         auto stateStorage = runtime.GetAppData().DomainsInfo->GetDefaultStateStorageGroup(DOMAIN_ID);
-        RebootTablet(runtime, MakeBSControllerID(stateStorage), sender0, sender0.NodeId() - runtime.GetNodeId(0));
+        RebootTablet(runtime, MakeBSControllerID(stateStorage), sender0, sender0.NodeId() - runtime.GetNodeId(0)); 
 
         ++generation;
         BlockGroup(runtime, sender0, tabletId, groupId, generation++, true, NKikimrProto::EReplyStatus::NO_GROUP);

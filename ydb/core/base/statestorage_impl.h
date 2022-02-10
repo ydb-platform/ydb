@@ -21,13 +21,13 @@ struct TEvStateStorage::TEvReplicaInfo : public TEventPB<TEvStateStorage::TEvRep
         Record.SetStatus(status);
     }
 
-    TEvReplicaInfo(ui64 tabletId, const TActorId &currentLeader, const TActorId &currentLeaderTablet, ui32 currentGeneration, ui32 currentStep, bool locked, ui64 lockedFor)
+    TEvReplicaInfo(ui64 tabletId, const TActorId &currentLeader, const TActorId &currentLeaderTablet, ui32 currentGeneration, ui32 currentStep, bool locked, ui64 lockedFor) 
     {
         Record.SetStatus(NKikimrProto::OK);
 
         Record.SetTabletID(tabletId);
-        ActorIdToProto(currentLeader, Record.MutableCurrentLeader());
-        ActorIdToProto(currentLeaderTablet, Record.MutableCurrentLeaderTablet());
+        ActorIdToProto(currentLeader, Record.MutableCurrentLeader()); 
+        ActorIdToProto(currentLeaderTablet, Record.MutableCurrentLeaderTablet()); 
         Record.SetCurrentGeneration(currentGeneration);
         Record.SetCurrentStep(currentStep);
         if (locked) {
@@ -40,11 +40,11 @@ struct TEvStateStorage::TEvReplicaInfo : public TEventPB<TEvStateStorage::TEvRep
         TStringStream str;
         str << "{EvReplicaInfo Status: " << (ui32)Record.GetStatus();
         str << " TabletID: " << Record.GetTabletID();
-        if (Record.HasCurrentLeader()) {
-            str << " CurrentLeader: " << ActorIdFromProto(Record.GetCurrentLeader()).ToString();
+        if (Record.HasCurrentLeader()) { 
+            str << " CurrentLeader: " << ActorIdFromProto(Record.GetCurrentLeader()).ToString(); 
         }
-        if (Record.HasCurrentLeaderTablet()) {
-            str << " CurrentLeaderTablet: " << ActorIdFromProto(Record.GetCurrentLeaderTablet()).ToString();
+        if (Record.HasCurrentLeaderTablet()) { 
+            str << " CurrentLeaderTablet: " << ActorIdFromProto(Record.GetCurrentLeaderTablet()).ToString(); 
         }
         if (Record.HasCurrentGeneration()) {
             str << " CurrentGeneration: " << Record.GetCurrentGeneration();
@@ -237,10 +237,10 @@ struct TEvStateStorage::TEvReplicaCleanup : public TEventPB<TEvStateStorage::TEv
     TEvReplicaCleanup()
     {}
 
-    TEvReplicaCleanup(ui64 tabletId, TActorId proposedLeader)
+    TEvReplicaCleanup(ui64 tabletId, TActorId proposedLeader) 
     {
         Record.SetTabletID(tabletId);
-        ActorIdToProto(proposedLeader, Record.MutableProposedLeader());
+        ActorIdToProto(proposedLeader, Record.MutableProposedLeader()); 
     }
 };
 

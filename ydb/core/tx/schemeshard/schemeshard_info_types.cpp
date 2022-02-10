@@ -423,66 +423,66 @@ bool TPartitionConfigMerger::ApplyChanges(
     }
 
 
-    if (changes.FollowerGroupsSize()) {
-        // use FollowerGroups
-        if (result.HasFollowerCount()) {
-            // migration into FollowerCount -> HasFollowerGroup
-            // just abandon FollowerCount
-            result.ClearFollowerCount();
+    if (changes.FollowerGroupsSize()) { 
+        // use FollowerGroups 
+        if (result.HasFollowerCount()) { 
+            // migration into FollowerCount -> HasFollowerGroup 
+            // just abandon FollowerCount 
+            result.ClearFollowerCount(); 
         }
 
-        if (result.HasCrossDataCenterFollowerCount()) {
-            // migration into CrossDataCenterFollowerCount -> HasFollowerGroup
-            // just abandon CrossDataCenterFollowerCount
-            result.ClearCrossDataCenterFollowerCount();
+        if (result.HasCrossDataCenterFollowerCount()) { 
+            // migration into CrossDataCenterFollowerCount -> HasFollowerGroup 
+            // just abandon CrossDataCenterFollowerCount 
+            result.ClearCrossDataCenterFollowerCount(); 
         }
 
-        if (changes.HasAllowFollowerPromotion()) {
-            // migration into AllowFollowerPromotion -> HasFollowerGroup
-            // just abandon AllowFollowerPromotion
-            result.ClearAllowFollowerPromotion();
+        if (changes.HasAllowFollowerPromotion()) { 
+            // migration into AllowFollowerPromotion -> HasFollowerGroup 
+            // just abandon AllowFollowerPromotion 
+            result.ClearAllowFollowerPromotion(); 
         }
 
-        // here is the right place to compare and check src->FollowerGroups and changes->FollowerGroup for wise update
-        result.MutableFollowerGroups()->CopyFrom(changes.GetFollowerGroups());
+        // here is the right place to compare and check src->FollowerGroups and changes->FollowerGroup for wise update 
+        result.MutableFollowerGroups()->CopyFrom(changes.GetFollowerGroups()); 
     }
 
-    if (changes.HasCrossDataCenterFollowerCount()) {
-        if (result.FollowerGroupsSize()) {
-            errDesr = TStringBuilder() << "Forbided downgrade from FollowerGroup option to the HasCrossDataCenterFollowerCount option";
+    if (changes.HasCrossDataCenterFollowerCount()) { 
+        if (result.FollowerGroupsSize()) { 
+            errDesr = TStringBuilder() << "Forbided downgrade from FollowerGroup option to the HasCrossDataCenterFollowerCount option"; 
             return false;
         }
 
-        if (result.HasFollowerCount()) {
-            // migration into FollowerCount -> CrossDataCenterFollowerCount
-            // just abandon FollowerCount
-            result.ClearFollowerCount();
+        if (result.HasFollowerCount()) { 
+            // migration into FollowerCount -> CrossDataCenterFollowerCount 
+            // just abandon FollowerCount 
+            result.ClearFollowerCount(); 
         }
 
-        result.SetCrossDataCenterFollowerCount(changes.GetCrossDataCenterFollowerCount());
+        result.SetCrossDataCenterFollowerCount(changes.GetCrossDataCenterFollowerCount()); 
     }
 
-    if (changes.HasFollowerCount()) {
-        if (result.HasCrossDataCenterFollowerCount()) {
-            errDesr = TStringBuilder() << "Forbided downgrade from CrossDataCenterFollowerCount option to the FollowerGroup option";
+    if (changes.HasFollowerCount()) { 
+        if (result.HasCrossDataCenterFollowerCount()) { 
+            errDesr = TStringBuilder() << "Forbided downgrade from CrossDataCenterFollowerCount option to the FollowerGroup option"; 
             return false;
         }
 
-        if (result.FollowerGroupsSize()) {
-            errDesr = TStringBuilder() << "Forbided downgrade from FollowerGroup option to the FollowerGroup option";
+        if (result.FollowerGroupsSize()) { 
+            errDesr = TStringBuilder() << "Forbided downgrade from FollowerGroup option to the FollowerGroup option"; 
             return false;
         }
 
-        result.SetFollowerCount(changes.GetFollowerCount());
+        result.SetFollowerCount(changes.GetFollowerCount()); 
     }
 
-    if (changes.HasAllowFollowerPromotion()) {
-        if (result.FollowerGroupsSize()) {
-            errDesr = TStringBuilder() << "Forbided downgrade from FollowerGroup option to the AllowFollowerPromotion option";
+    if (changes.HasAllowFollowerPromotion()) { 
+        if (result.FollowerGroupsSize()) { 
+            errDesr = TStringBuilder() << "Forbided downgrade from FollowerGroup option to the AllowFollowerPromotion option"; 
             return false;
         }
 
-        result.SetAllowFollowerPromotion(changes.GetAllowFollowerPromotion());
+        result.SetAllowFollowerPromotion(changes.GetAllowFollowerPromotion()); 
     }
 
     if (changes.HasExecutorCacheSize()) {
@@ -765,73 +765,73 @@ bool TPartitionConfigMerger::VerifyCreateParams(
         }
     }
 
-    if (config.HasFollowerCount()) {
-        ui32 count = config.GetFollowerCount();
-        if (count > MaxFollowersCount) {
+    if (config.HasFollowerCount()) { 
+        ui32 count = config.GetFollowerCount(); 
+        if (count > MaxFollowersCount) { 
             errDescr = TStringBuilder()
-                    << "Too much followers: " << count;
+                    << "Too much followers: " << count; 
             return false;
         }
     }
 
-    if (config.HasCrossDataCenterFollowerCount()) {
-        ui32 count = config.GetCrossDataCenterFollowerCount();
-        if (count > MaxFollowersCount) {
+    if (config.HasCrossDataCenterFollowerCount()) { 
+        ui32 count = config.GetCrossDataCenterFollowerCount(); 
+        if (count > MaxFollowersCount) { 
             errDescr = TStringBuilder()
-                    << "Too much followers: " << count;
+                    << "Too much followers: " << count; 
             return false;
         }
     }
 
-    for (const auto& followerGroup: config.GetFollowerGroups()) {
-        if (followerGroup.HasFollowerCount()) {
-            if (followerGroup.GetFollowerCount() > MaxFollowersCount) {
+    for (const auto& followerGroup: config.GetFollowerGroups()) { 
+        if (followerGroup.HasFollowerCount()) { 
+            if (followerGroup.GetFollowerCount() > MaxFollowersCount) { 
                 errDescr = TStringBuilder()
-                        << "FollowerGroup: Too much followers: " << followerGroup.GetFollowerCount();
+                        << "FollowerGroup: Too much followers: " << followerGroup.GetFollowerCount(); 
                 return false;
             }
         }
 
-        if (followerGroup.HasAllowClientRead()) {
+        if (followerGroup.HasAllowClientRead()) { 
             errDescr = TStringBuilder()
-                    << "FollowerGroup: AllowClientRead is enabled, but hasn't been tested";
+                    << "FollowerGroup: AllowClientRead is enabled, but hasn't been tested"; 
             return false;
         }
 
-        if (followerGroup.AllowedNodeIDsSize()) {
+        if (followerGroup.AllowedNodeIDsSize()) { 
             errDescr = TStringBuilder()
-                    << "FollowerGroup: AllowedNodeIDs is enabled, but hasn't been tested";
+                    << "FollowerGroup: AllowedNodeIDs is enabled, but hasn't been tested"; 
             return false;
         }
 
         if (followerGroup.AllowedDataCenterNumIDsSize() || followerGroup.AllowedDataCentersSize()) {
             errDescr = TStringBuilder()
-                    << "FollowerGroup: AllowedDataCenterIDs is enabled, hasn't been tested";
+                    << "FollowerGroup: AllowedDataCenterIDs is enabled, hasn't been tested"; 
             return false;
         }
 
-        if (followerGroup.HasLocalNodeOnly()) {
+        if (followerGroup.HasLocalNodeOnly()) { 
             errDescr = TStringBuilder()
-                    << "FollowerGroup: LocalNodeOnly is enabled, but hasn't been tested";
+                    << "FollowerGroup: LocalNodeOnly is enabled, but hasn't been tested"; 
             return false;
         }
 
-        if (followerGroup.HasRequireDifferentNodes()) {
+        if (followerGroup.HasRequireDifferentNodes()) { 
             errDescr = TStringBuilder()
-                    << "FollowerGroup: LocalNodeOnly is enabled, but hasn't been tested";
+                    << "FollowerGroup: LocalNodeOnly is enabled, but hasn't been tested"; 
             return false;
         }
     }
 
-    if (config.HasFollowerCount() + config.HasCrossDataCenterFollowerCount() + (config.FollowerGroupsSize() > 0) > 1) {
+    if (config.HasFollowerCount() + config.HasCrossDataCenterFollowerCount() + (config.FollowerGroupsSize() > 0) > 1) { 
         errDescr = TStringBuilder()
-                << "PartitionConfig: FollowerCount, CrossDataCenterFollowerCount and FollowerGroup are mutually exclusive.";
+                << "PartitionConfig: FollowerCount, CrossDataCenterFollowerCount and FollowerGroup are mutually exclusive."; 
         return false;
     }
 
-    if (config.FollowerGroupsSize() > 1) {
+    if (config.FollowerGroupsSize() > 1) { 
         errDescr = TStringBuilder()
-                << "FollowerGroup: only one follower group is allowed for now";
+                << "FollowerGroup: only one follower group is allowed for now"; 
         return false;
     }
 
@@ -1152,14 +1152,14 @@ void TTableInfo::FinishAlter() {
         if (newConfig.HasPipelineConfig()) {
             partitionConfig.MutablePipelineConfig()->CopyFrom(newConfig.GetPipelineConfig());
         }
-        if (newConfig.HasFollowerCount()) {
-            partitionConfig.SetFollowerCount(newConfig.GetFollowerCount());
+        if (newConfig.HasFollowerCount()) { 
+            partitionConfig.SetFollowerCount(newConfig.GetFollowerCount()); 
         }
-        if (newConfig.HasAllowFollowerPromotion()) {
-            partitionConfig.SetAllowFollowerPromotion(newConfig.GetAllowFollowerPromotion());
+        if (newConfig.HasAllowFollowerPromotion()) { 
+            partitionConfig.SetAllowFollowerPromotion(newConfig.GetAllowFollowerPromotion()); 
         }
-        if (newConfig.HasCrossDataCenterFollowerCount()) {
-            partitionConfig.SetCrossDataCenterFollowerCount(newConfig.GetCrossDataCenterFollowerCount());
+        if (newConfig.HasCrossDataCenterFollowerCount()) { 
+            partitionConfig.SetCrossDataCenterFollowerCount(newConfig.GetCrossDataCenterFollowerCount()); 
         }
         if (newConfig.HasEnableFilterByKey()) {
             partitionConfig.SetEnableFilterByKey(newConfig.GetEnableFilterByKey());

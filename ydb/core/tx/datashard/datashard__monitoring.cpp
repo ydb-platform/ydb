@@ -101,7 +101,7 @@ public:
         info.SetSchemeShard(Self->PathOwnerId);
         info.SetMediator(Self->LastKnownMediator);
         info.SetGeneration(Self->Generation());
-        info.SetIsFollower(Self->IsFollower());
+        info.SetIsFollower(Self->IsFollower()); 
         info.SetState(DatashardStateName(Self->State));
         info.SetIsActive(Self->IsStateActive());
         info.SetHasSharedBlobs(Self->HasSharedBlobs());

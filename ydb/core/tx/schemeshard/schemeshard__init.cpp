@@ -1762,8 +1762,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         TPartitionConfigMerger::DeduplicateColumnFamiliesById(config);
                     }
 
-                    if (config.HasCrossDataCenterFollowerCount()) {
-                        config.ClearFollowerCount();
+                    if (config.HasCrossDataCenterFollowerCount()) { 
+                        config.ClearFollowerCount(); 
                     }
                 }
 

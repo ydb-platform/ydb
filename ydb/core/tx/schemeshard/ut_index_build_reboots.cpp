@@ -82,22 +82,22 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
                 for (ui32 delta = 0; delta < 2; ++delta) {
-                    WriteRows(runtime, TTestTxConfig::FakeHiveTablets, 1 + delta, 100 + delta);
+                    WriteRows(runtime, TTestTxConfig::FakeHiveTablets, 1 + delta, 100 + delta); 
                 }
             }
 
-            AsyncBuilIndex(runtime,  ++t.TxId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/dir/Table", "index1", {"index"});
+            AsyncBuilIndex(runtime,  ++t.TxId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/dir/Table", "index1", {"index"}); 
             ui64 buildIndexId = t.TxId;
 
             {
-                auto descr = TestGetBuilIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId);
+                auto descr = TestGetBuilIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId); 
                 UNIT_ASSERT_VALUES_EQUAL((ui64)descr.GetIndexBuild().GetState(), (ui64)Ydb::Table::IndexBuildState::STATE_PREPARING);
             }
 
             t.TestEnv->TestWaitNotification(runtime, buildIndexId);
 
             {
-                auto descr = TestGetBuilIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId);
+                auto descr = TestGetBuilIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId); 
                 UNIT_ASSERT_VALUES_EQUAL((ui64)descr.GetIndexBuild().GetState(), (ui64)Ydb::Table::IndexBuildState::STATE_DONE);
             }
 
@@ -118,7 +118,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
 
                 NKikimrMiniKQL::TResult result;
                 TString err;
-                ui32 status = LocalMiniKQL(runtime, TTestTxConfig::FakeHiveTablets+2, R"(
+                ui32 status = LocalMiniKQL(runtime, TTestTxConfig::FakeHiveTablets+2, R"( 
                 (
                     (let range '( '('index (Uint32 '0) (Void) )  '('key (Uint32 '0) (Void) )))
                     (let columns '('key 'index) )
@@ -152,22 +152,22 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
                 for (ui32 delta = 0; delta < 2; ++delta) {
-                    WriteRows(runtime, TTestTxConfig::FakeHiveTablets, 1 + delta, 100 + delta);
+                    WriteRows(runtime, TTestTxConfig::FakeHiveTablets, 1 + delta, 100 + delta); 
                 }
             }
 
-            AsyncBuilIndex(runtime,  ++t.TxId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/dir/Table", "index1", {"index"}, {"value"});
+            AsyncBuilIndex(runtime,  ++t.TxId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/dir/Table", "index1", {"index"}, {"value"}); 
             ui64 buildIndexId = t.TxId;
 
             {
-                auto descr = TestGetBuilIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId);
+                auto descr = TestGetBuilIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId); 
                 UNIT_ASSERT_VALUES_EQUAL((ui64)descr.GetIndexBuild().GetState(), (ui64)Ydb::Table::IndexBuildState::STATE_PREPARING);
             }
 
             t.TestEnv->TestWaitNotification(runtime, buildIndexId);
 
             {
-                auto descr = TestGetBuilIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId);
+                auto descr = TestGetBuilIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId); 
                 UNIT_ASSERT_VALUES_EQUAL((ui64)descr.GetIndexBuild().GetState(), (ui64)Ydb::Table::IndexBuildState::STATE_DONE);
             }
 
@@ -188,7 +188,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
 
                 NKikimrMiniKQL::TResult result;
                 TString err;
-                ui32 status = LocalMiniKQL(runtime, TTestTxConfig::FakeHiveTablets+2, R"(
+                ui32 status = LocalMiniKQL(runtime, TTestTxConfig::FakeHiveTablets+2, R"( 
                 (
                     (let range '( '('index (Uint32 '0) (Void) )  '('key (Uint32 '0) (Void) )))
                     (let columns '('key 'index 'value) )
@@ -383,21 +383,21 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
                     UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);;
                 };
                 for (ui32 delta = 0; delta < 1; ++delta) {
-                    fnWriteRow(TTestTxConfig::FakeHiveTablets, 1 + delta, 100 + delta);
+                    fnWriteRow(TTestTxConfig::FakeHiveTablets, 1 + delta, 100 + delta); 
                 }
 
-                TestBuilIndex(runtime,  ++t.TxId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/dir/Table", "index1", {"index"});
+                TestBuilIndex(runtime,  ++t.TxId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/dir/Table", "index1", {"index"}); 
             }
 
             ui64 buildId = t.TxId;
 
-            auto response = TestCancelBuildIndex(runtime, ++t.TxId, TTestTxConfig::SchemeShard, "/MyRoot", buildId,
+            auto response = TestCancelBuildIndex(runtime, ++t.TxId, TTestTxConfig::SchemeShard, "/MyRoot", buildId, 
                                                  TVector<Ydb::StatusIds::StatusCode>{Ydb::StatusIds::SUCCESS, Ydb::StatusIds::PRECONDITION_FAILED});
 
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
             t.TestEnv->TestWaitNotification(runtime, buildId);
 
-            auto descr = TestGetBuilIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildId);
+            auto descr = TestGetBuilIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildId); 
 
             if (response.GetStatus() == Ydb::StatusIds::SUCCESS) {
                 Y_ASSERT(descr.GetIndexBuild().GetState() == Ydb::Table::IndexBuildState::STATE_CANCELLED);
@@ -421,7 +421,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
                                    {NLs::PathExist});
             }
 
-            TestForgetBuilIndex(runtime, ++t.TxId, TTestTxConfig::SchemeShard, "/MyRoot", buildId);
+            TestForgetBuilIndex(runtime, ++t.TxId, TTestTxConfig::SchemeShard, "/MyRoot", buildId); 
 
         });
     }

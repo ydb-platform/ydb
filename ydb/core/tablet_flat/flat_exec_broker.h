@@ -45,7 +45,7 @@ namespace NTabletFlatExecutor {
         using IOps = NActors::IActorOps;
 
     public:
-        TBroker(IOps* ops, TIntrusivePtr<TIdEmitter> emitter);
+        TBroker(IOps* ops, TIntrusivePtr<TIdEmitter> emitter); 
 
         // API implementation
         TTaskId SubmitTask(TString name, TResourceParams params, TResourceConsumer consumer) override;
@@ -57,11 +57,11 @@ namespace NTabletFlatExecutor {
         void OnResourceAllocated(TTaskId taskId);
 
     private:
-        void SendToBroker(TAutoPtr<IEventBase> event);
+        void SendToBroker(TAutoPtr<IEventBase> event); 
 
     private:
         IOps* const Ops;
-        TIntrusivePtr<TIdEmitter> const Emitter;
+        TIntrusivePtr<TIdEmitter> const Emitter; 
         THashMap<TTaskId, TResourceConsumer> Submitted;
     };
 

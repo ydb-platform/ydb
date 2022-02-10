@@ -86,9 +86,9 @@ extern const TErrorClass RECEIPT_HANDLE_IS_INVALID;
 extern const TErrorClass INVALID_ATTRIBUTE_NAME;
 extern const TErrorClass INVALID_ATTRIBUTE_VALUE;
 
-// Leader resolving errors
-extern const TErrorClass LEADER_RESOLVING_ERROR;
-extern const TErrorClass LEADER_SESSION_ERROR;
+// Leader resolving errors 
+extern const TErrorClass LEADER_RESOLVING_ERROR; 
+extern const TErrorClass LEADER_SESSION_ERROR; 
 
 // Internal timeout
 extern const TErrorClass TIMEOUT;

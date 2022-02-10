@@ -163,8 +163,8 @@ message TCompactionState {
 
 message TRowVersionState {
     message TRemovedRange {
-        optional NKikimrProto.TRowVersion Lower = 1;
-        optional NKikimrProto.TRowVersion Upper = 2;
+        optional NKikimrProto.TRowVersion Lower = 1; 
+        optional NKikimrProto.TRowVersion Upper = 2; 
     }
 
     optional uint32 Table = 1;
@@ -214,7 +214,7 @@ message TExternalGcEntry {
     repeated NKikimrProto.TLogoBlobID GcLeft = 2;
 }
 
-message TFollowerPartSwitchAux {
+message TFollowerPartSwitchAux { 
     message TBySwitch {
         optional NKikimrProto.TLogoBlobID PartSwitchRef = 1;
         repeated TBundle HotBundles = 2;
@@ -224,15 +224,15 @@ message TFollowerPartSwitchAux {
     repeated TBySwitch BySwitchAux = 1;
 }
 
-message TFollowerAux {
+message TFollowerAux { 
     message TTouchByPageCollection {
         optional NKikimrProto.TLogoBlobID MetaInfoId = 1;
         repeated uint32 TouchedPages = 2;
     }
 
     repeated TTouchByPageCollection PageCollectionsTouched = 1;
-
-    optional bytes UserAuxUpdate = 2;
+ 
+    optional bytes UserAuxUpdate = 2; 
 }
 
 message TDatabaseBorrowPart {

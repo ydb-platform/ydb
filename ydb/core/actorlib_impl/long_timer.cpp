@@ -56,14 +56,14 @@ public:
         }
     }
 
-    static TActorId Create(
-        const TActivationContext &ctx,
-        TDuration delta,
-        TAutoPtr<IEventHandle> ev,
-        ui32 poolId,
-        ISchedulerCookie *cookie,
-        const TActorId& parentId)
-    {
+    static TActorId Create( 
+        const TActivationContext &ctx, 
+        TDuration delta, 
+        TAutoPtr<IEventHandle> ev, 
+        ui32 poolId, 
+        ISchedulerCookie *cookie, 
+        const TActorId& parentId) 
+    { 
         if (delta.Seconds() < ThresholdSec) { // direct scheduling w/o creating actor
             ctx.ExecutorThread.Schedule(delta, ev, cookie);
             return TActorId();
@@ -71,39 +71,39 @@ public:
 
         TMonotonic now = ctx.Monotonic();
         TMonotonic signalTime = now + delta;
-        ui64 semirandomNumber = parentId.LocalId();
-        const TActorId timerActorID = ctx.ExecutorThread.ActorSystem->Register(new TLongTimer(now, signalTime, ev, cookie), TMailboxType::HTSwap, poolId, semirandomNumber, parentId);
+        ui64 semirandomNumber = parentId.LocalId(); 
+        const TActorId timerActorID = ctx.ExecutorThread.ActorSystem->Register(new TLongTimer(now, signalTime, ev, cookie), TMailboxType::HTSwap, poolId, semirandomNumber, parentId); 
         ctx.ExecutorThread.Schedule(TDuration::Seconds(ThresholdSec), new IEventHandle(timerActorID, timerActorID, new TEvents::TEvWakeup()));
 
         return timerActorID;
     }
-
-    static TActorId Create(
-        TDuration delta,
-        TAutoPtr<IEventHandle> ev,
-        ui32 poolId,
-        ISchedulerCookie *cookie)
-    {
-        if (delta.Seconds() < ThresholdSec) { // direct scheduling w/o creating actor
-            TActivationContext::Schedule(delta, ev, cookie);
-            return TActorId();
-        }
-
-        TMonotonic now = TActivationContext::Monotonic();
-        TMonotonic signalTime = now + delta;
-        const TActorId timerActorID = TActivationContext::Register(new TLongTimer(now, signalTime, ev, cookie), TActorId(), TMailboxType::HTSwap, poolId);
-        TActivationContext::Schedule(TDuration::Seconds(ThresholdSec), new IEventHandle(timerActorID, timerActorID, new TEvents::TEvWakeup()));
-
-        return timerActorID;
-    }
+ 
+    static TActorId Create( 
+        TDuration delta, 
+        TAutoPtr<IEventHandle> ev, 
+        ui32 poolId, 
+        ISchedulerCookie *cookie) 
+    { 
+        if (delta.Seconds() < ThresholdSec) { // direct scheduling w/o creating actor 
+            TActivationContext::Schedule(delta, ev, cookie); 
+            return TActorId(); 
+        } 
+ 
+        TMonotonic now = TActivationContext::Monotonic(); 
+        TMonotonic signalTime = now + delta; 
+        const TActorId timerActorID = TActivationContext::Register(new TLongTimer(now, signalTime, ev, cookie), TActorId(), TMailboxType::HTSwap, poolId); 
+        TActivationContext::Schedule(TDuration::Seconds(ThresholdSec), new IEventHandle(timerActorID, timerActorID, new TEvents::TEvWakeup())); 
+ 
+        return timerActorID; 
+    } 
 };
 
 TActorId CreateLongTimer(const TActorContext &ctx, TDuration delta, TAutoPtr<IEventHandle> ev, ui32 poolId, ISchedulerCookie *cookie) {
-    return TLongTimer::Create(ctx, delta, ev, poolId, cookie, ctx.SelfID);
+    return TLongTimer::Create(ctx, delta, ev, poolId, cookie, ctx.SelfID); 
 }
 
-TActorId CreateLongTimer(TDuration delta, TAutoPtr<IEventHandle> ev, ui32 poolId, ISchedulerCookie *cookie) {
-    return TLongTimer::Create(delta, ev, poolId, cookie);
+TActorId CreateLongTimer(TDuration delta, TAutoPtr<IEventHandle> ev, ui32 poolId, ISchedulerCookie *cookie) { 
+    return TLongTimer::Create(delta, ev, poolId, cookie); 
 }
-
-}
+ 
+} 

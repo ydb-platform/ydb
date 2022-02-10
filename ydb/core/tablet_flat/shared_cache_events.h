@@ -54,10 +54,10 @@ namespace NSharedCache {
     };
 
     struct TEvAttach : public TEventLocal<TEvAttach, EvAttach> {
-        TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
+        TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection; 
         TActorId Owner;
 
-        TEvAttach(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, TActorId owner)
+        TEvAttach(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, TActorId owner) 
             : PageCollection(std::move(pageCollection))
             , Owner(owner)
         {
@@ -67,10 +67,10 @@ namespace NSharedCache {
 
     struct TEvRequest : public TEventLocal<TEvRequest, EvRequest> {
         const EPriority Priority;
-        TAutoPtr<NPageCollection::TFetch> Fetch;
+        TAutoPtr<NPageCollection::TFetch> Fetch; 
         TActorId Owner;
 
-        TEvRequest(EPriority priority, TAutoPtr<NPageCollection::TFetch> fetch, TActorId owner)
+        TEvRequest(EPriority priority, TAutoPtr<NPageCollection::TFetch> fetch, TActorId owner) 
             : Priority(priority)
             , Fetch(fetch)
             , Owner(owner)
@@ -82,7 +82,7 @@ namespace NSharedCache {
     struct TEvResult : public TEventLocal<TEvResult, EvResult> {
         using EStatus = NKikimrProto::EReplyStatus;
 
-        TEvResult(TIntrusiveConstPtr<NPageCollection::IPageCollection> origin, ui64 cookie, EStatus status)
+        TEvResult(TIntrusiveConstPtr<NPageCollection::IPageCollection> origin, ui64 cookie, EStatus status) 
             : Status(status)
             , Cookie(cookie)
             , Origin(origin)
@@ -117,7 +117,7 @@ namespace NSharedCache {
 
         const EStatus Status;
         const ui64 Cookie;
-        const TIntrusiveConstPtr<NPageCollection::IPageCollection> Origin;
+        const TIntrusiveConstPtr<NPageCollection::IPageCollection> Origin; 
         TVector<TLoaded> Loaded;
     };
 

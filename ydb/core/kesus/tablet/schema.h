@@ -70,7 +70,7 @@ struct TKesusSchema : NIceDb::Schema {
     static constexpr ui64 SysParam_NextSessionId = 2;
     static constexpr ui64 SysParam_NextSemaphoreId = 3;
     static constexpr ui64 SysParam_NextSemaphoreOrderId = 4;
-    static constexpr ui64 SysParam_LastLeaderActor = 5;
+    static constexpr ui64 SysParam_LastLeaderActor = 5; 
     static constexpr ui64 SysParam_SelfCheckPeriodMillis = 6;
     static constexpr ui64 SysParam_SessionGracePeriodMillis = 7;
     static constexpr ui64 SysParam_SelfCheckCounter = 8;

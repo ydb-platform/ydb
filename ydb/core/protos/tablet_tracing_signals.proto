@@ -17,7 +17,7 @@ message TOnCancelTablet {
 
 message TOnTabletBootstrap {
     optional fixed64 TimeStamp = 1;
-    optional bool Leader = 2;
+    optional bool Leader = 2; 
     optional uint32 SuggestedGeneration = 3;
     optional NActorsProto.TActorId StateStorageProxyID = 4;
 }
@@ -67,11 +67,11 @@ message TOnWriteZeroEntry {
     optional uint32 LastInGeneration = 4;
 }
 
-message TOnFollowerPromoteToLeader {
+message TOnFollowerPromoteToLeader { 
     optional fixed64 TimeStamp = 1;
     optional uint32 SuggestedGeneration = 2;
-    optional NActorsProto.TActorId KnownLeaderID = 3;
-    optional NActorsProto.TActorId FollowerStStGuardian = 4;
+    optional NActorsProto.TActorId KnownLeaderID = 3; 
+    optional NActorsProto.TActorId FollowerStStGuardian = 4; 
 }
 
 message TRebuildGraphBootstrap {

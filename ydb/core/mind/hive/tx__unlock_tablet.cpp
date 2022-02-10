@@ -40,7 +40,7 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         BLOG_D("THive::TTxUnlockTabletExecution::Execute");
 
-        TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(TabletId);
+        TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(TabletId); 
         if (tablet == nullptr) {
             Status = NKikimrProto::ERROR;
             StatusMessage = TStringBuilder() << "Trying to unlock tablet " << TabletId
@@ -85,7 +85,7 @@ public:
                 ctx.Send(PreviousOwner, new TEvHive::TEvLockTabletExecutionLost(TabletId));
             }
 
-            if (TLeaderTabletInfo* tablet = Self->FindTablet(TabletId)) {
+            if (TLeaderTabletInfo* tablet = Self->FindTablet(TabletId)) { 
                 // Tablet still exists by the time transaction finished
                 if (!tablet->IsLockedToActor()) {
                     // Try to boot it if possible
@@ -119,7 +119,7 @@ ITransaction* THive::CreateUnlockTabletExecution(ui64 tabletId, ui64 seqNo) {
 
 void THive::ScheduleUnlockTabletExecution(TNodeInfo& node) {
     // Unlock tablets that have been locked by this node
-    for (TLeaderTabletInfo* tablet : node.LockedTablets) {
+    for (TLeaderTabletInfo* tablet : node.LockedTablets) { 
         Y_VERIFY(FindTabletEvenInDeleting(tablet->Id) == tablet);
         Y_VERIFY(tablet->LockedToActor.NodeId() == node.Id);
         if (tablet->PendingUnlockSeqNo == 0) {
@@ -139,7 +139,7 @@ void THive::Handle(TEvPrivate::TEvUnlockTabletReconnectTimeout::TPtr& ev) {
     TTabletId tabletId = ev->Get()->TabletId;
     ui64 seqNo = ev->Get()->SeqNo;
     BLOG_D("THive::Handle::TEvUnlockTabletReconnectTimeout TabletId=" << tabletId);
-    TLeaderTabletInfo* tablet = FindTabletEvenInDeleting(tabletId);
+    TLeaderTabletInfo* tablet = FindTabletEvenInDeleting(tabletId); 
     if (tablet != nullptr && tablet->IsLockedToActor() && tablet->PendingUnlockSeqNo == seqNo) {
         // We use sequence numbers to make sure unlock happens only if some
         // other pending lock/unlock transaction has not modified the lock.

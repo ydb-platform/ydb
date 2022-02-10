@@ -30,7 +30,7 @@ public:
     bool Execute(TTransactionContext &txc, const TActorContext& ctx) override {
         TStringBuilder tabletBootState;
 
-        TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
+        TLeaderTabletInfo* tablet = Self->FindTablet(TabletId); 
         if (!tablet) {
             BLOG_W("THive::TTxUpdateTabletGroups:: tablet " << TabletId << " wasn't found");
             Ignored = true;
@@ -255,7 +255,7 @@ public:
                         " - Ignored transaction");
         } else {
             BLOG_D("THive::TTxUpdateTabletGroups{" << (ui64)this << "}(" << TabletId << ")::Complete");
-            TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
+            TLeaderTabletInfo* tablet = Self->FindTablet(TabletId); 
             if (tablet != nullptr) {
                 tablet->State = NewTabletState;
                 if (Changed) {

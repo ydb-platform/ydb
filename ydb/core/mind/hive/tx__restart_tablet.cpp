@@ -34,10 +34,10 @@ public:
             if (!tablet->IsStopped()) {
                 NIceDb::TNiceDb db(txc.DB);
                 if (tablet->Node != nullptr) {
-                    if (tablet->IsLeader()) {
-                        db.Table<Schema::Tablet>().Key(tablet->GetLeader().Id).Update<Schema::Tablet::LeaderNode>(0);
+                    if (tablet->IsLeader()) { 
+                        db.Table<Schema::Tablet>().Key(tablet->GetLeader().Id).Update<Schema::Tablet::LeaderNode>(0); 
                     } else {
-                        db.Table<Schema::TabletFollowerTablet>().Key(tablet->GetFullTabletId()).Update<Schema::TabletFollowerTablet::FollowerNode>(0);
+                        db.Table<Schema::TabletFollowerTablet>().Key(tablet->GetFullTabletId()).Update<Schema::TabletFollowerTablet::FollowerNode>(0); 
                     }
                 }
                 tablet->InitiateStop();

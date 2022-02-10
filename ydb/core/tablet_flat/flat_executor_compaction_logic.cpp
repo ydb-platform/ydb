@@ -20,7 +20,7 @@ TCompactionLogicState::TTableInfo::~TTableInfo()
 TCompactionLogic::TCompactionLogic(NUtil::ILogger *logger,
                                    NTable::IResourceBroker *broker,
                                    NTable::ICompactionBackend *backend,
-                                   TAutoPtr<TCompactionLogicState> state,
+                                   TAutoPtr<TCompactionLogicState> state, 
                                    TString taskNameSuffix)
     : Logger(logger)
     , Broker(broker)
@@ -139,7 +139,7 @@ void TCompactionLogic::PrepareTableSnapshot(ui32 table, NTable::TSnapEdge edge, 
 bool TCompactionLogic::PrepareForceCompaction() {
     bool ok = true;
     for (auto &it : State->Tables) {
-        ok &= PrepareForceCompaction(it.first) != 0;
+        ok &= PrepareForceCompaction(it.first) != 0; 
     }
     return ok;
 }
@@ -147,7 +147,7 @@ bool TCompactionLogic::PrepareForceCompaction() {
 ui64 TCompactionLogic::PrepareForceCompaction(ui32 table, EForceCompaction mode) {
     TCompactionLogicState::TTableInfo *tableInfo = State->Tables.FindPtr(table);
     if (!tableInfo)
-        return 0;
+        return 0; 
 
     if (mode == EForceCompaction::Borrowed) {
         // Note: we also schedule mem table compaction below, because tx status may have borrowed data
@@ -159,7 +159,7 @@ ui64 TCompactionLogic::PrepareForceCompaction(ui32 table, EForceCompaction mode)
         case EForcedCompactionState::None:
             tableInfo->ForcedCompactionState = EForcedCompactionState::PendingMem;
             tableInfo->ForcedCompactionMode = mode;
-            ++tableInfo->CurrentForcedMemCompactionId;
+            ++tableInfo->CurrentForcedMemCompactionId; 
             switch (inMem.State) {
             case ECompactionState::Free:
                 SubmitCompactionTask(table, 0,
@@ -186,21 +186,21 @@ ui64 TCompactionLogic::PrepareForceCompaction(ui32 table, EForceCompaction mode)
         default:
             tableInfo->ForcedCompactionQueued = true;
             tableInfo->ForcedCompactionQueuedMode = Max(tableInfo->ForcedCompactionQueuedMode, mode);
-            return tableInfo->CurrentForcedMemCompactionId + 1;
+            return tableInfo->CurrentForcedMemCompactionId + 1; 
     }
 
-    return tableInfo->CurrentForcedMemCompactionId;
+    return tableInfo->CurrentForcedMemCompactionId; 
 }
 
-TFinishedCompactionInfo TCompactionLogic::GetFinishedCompactionInfo(ui32 table) {
-    TCompactionLogicState::TTableInfo *tableInfo = State->Tables.FindPtr(table);
-    if (!tableInfo || !tableInfo->Strategy)
-        return TFinishedCompactionInfo();
-    return TFinishedCompactionInfo(
-        tableInfo->Strategy->GetLastFinishedForcedCompactionId(),
-        tableInfo->Strategy->GetLastFinishedForcedCompactionTs());
-}
-
+TFinishedCompactionInfo TCompactionLogic::GetFinishedCompactionInfo(ui32 table) { 
+    TCompactionLogicState::TTableInfo *tableInfo = State->Tables.FindPtr(table); 
+    if (!tableInfo || !tableInfo->Strategy) 
+        return TFinishedCompactionInfo(); 
+    return TFinishedCompactionInfo( 
+        tableInfo->Strategy->GetLastFinishedForcedCompactionId(), 
+        tableInfo->Strategy->GetLastFinishedForcedCompactionTs()); 
+} 
+ 
 TReflectSchemeChangesResult TCompactionLogic::ReflectSchemeChanges()
 {
     TReflectSchemeChangesResult result;
@@ -488,7 +488,7 @@ bool TCompactionLogic::BeginMemTableCompaction(ui64 taskId, ui32 tableId)
         Y_FAIL("Invalid inMem.State");
     }
 
-    ui64 forcedCompactionId = 0;
+    ui64 forcedCompactionId = 0; 
     if (edge.Head == NTable::TEpoch::Max() &&
         tableInfo->ForcedCompactionState == EForcedCompactionState::PendingMem)
     {
@@ -509,7 +509,7 @@ bool TCompactionLogic::BeginMemTableCompaction(ui64 taskId, ui32 tableId)
         }
     }
 
-    inMem.CompactionTask.CompactionId = tableInfo->Strategy->BeginMemCompaction(taskId, edge, forcedCompactionId);
+    inMem.CompactionTask.CompactionId = tableInfo->Strategy->BeginMemCompaction(taskId, edge, forcedCompactionId); 
     return true;
 }
 
@@ -621,7 +621,7 @@ void TCompactionLogic::BorrowedPart(ui32 tableId, NTable::TPartView partView) {
     tableInfo->Strategy->PartMerged(std::move(partView), 255);
 }
 
-void TCompactionLogic::BorrowedPart(ui32 tableId, TIntrusiveConstPtr<NTable::TColdPart> part) {
+void TCompactionLogic::BorrowedPart(ui32 tableId, TIntrusiveConstPtr<NTable::TColdPart> part) { 
     auto *tableInfo = State->Tables.FindPtr(tableId);
     Y_VERIFY(tableInfo);
     tableInfo->Strategy->PartMerged(std::move(part), 255);

@@ -223,7 +223,7 @@ message ReplicationPolicy {
     // will be created in each availability zone.
     Ydb.FeatureFlag.Status create_per_availability_zone = 3;
     // If this feature in enabled then read-only replicas can be promoted
-    // to leader.
+    // to leader. 
     Ydb.FeatureFlag.Status allow_promotion = 4;
 }
 

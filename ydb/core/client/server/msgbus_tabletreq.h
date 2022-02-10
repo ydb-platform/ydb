@@ -24,7 +24,7 @@ class TMessageBusTabletRequest : public TActorBootstrapped<TDerived>, public TMe
 protected:
     const TDuration Timeout;
     const bool WithRetry;
-    const bool ConnectToFollower;
+    const bool ConnectToFollower; 
 
 private:
     TActorId PipeClient;
@@ -71,11 +71,11 @@ protected:
         return Die(ctx);
     }
 
-    TMessageBusTabletRequest(TBusMessageContext &msg, bool withRetry, TDuration timeout, bool connectToFollower)
+    TMessageBusTabletRequest(TBusMessageContext &msg, bool withRetry, TDuration timeout, bool connectToFollower) 
         : TMessageBusSessionIdentHolder(msg)
         , Timeout(timeout)
         , WithRetry(withRetry)
-        , ConnectToFollower(connectToFollower)
+        , ConnectToFollower(connectToFollower) 
     {
     }
 
@@ -90,9 +90,9 @@ public:
             clientConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
         }
 
-        if (ConnectToFollower) {
-            clientConfig.AllowFollower = true;
-            clientConfig.ForceFollower = true;
+        if (ConnectToFollower) { 
+            clientConfig.AllowFollower = true; 
+            clientConfig.ForceFollower = true; 
         }
 
         std::pair<ui64, TAutoPtr<IEventBase>> reqPair = static_cast<TDerived *>(this)->MakeReqPair(ctx);
@@ -124,8 +124,8 @@ class TMessageBusSimpleTabletRequest : public TMessageBusTabletRequest<TDerived,
 protected:
     const ui64 TabletID;
 
-    TMessageBusSimpleTabletRequest(TBusMessageContext &msg, ui64 tabletId, bool withRetry, TDuration timeout, bool connectToFollower)
-        : TMessageBusTabletRequest<TDerived, TTabletReplyEvent>(msg, withRetry, timeout, connectToFollower)
+    TMessageBusSimpleTabletRequest(TBusMessageContext &msg, ui64 tabletId, bool withRetry, TDuration timeout, bool connectToFollower) 
+        : TMessageBusTabletRequest<TDerived, TTabletReplyEvent>(msg, withRetry, timeout, connectToFollower) 
         , TabletID(tabletId)
     {}
 

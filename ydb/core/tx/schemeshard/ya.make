@@ -1,12 +1,12 @@
 RECURSE_FOR_TESTS(
-    ut_async_index
-    ut_base
-    ut_base_reboots
-    ut_bsvolume
-    ut_bsvolume_reboots
-    ut_cdc_stream
+    ut_async_index 
+    ut_base 
+    ut_base_reboots 
+    ut_bsvolume 
+    ut_bsvolume_reboots 
+    ut_cdc_stream 
     ut_cdc_stream_reboots
-    ut_compaction
+    ut_compaction 
     ut_export
     ut_export_reboots_s3
     ut_extsubdomain
@@ -18,16 +18,16 @@ RECURSE_FOR_TESTS(
     ut_move
     ut_move_reboots
     ut_olap
-    ut_olap_reboots
+    ut_olap_reboots 
     ut_pq
     ut_pq_reboots
     ut_reboots
     ut_replication
     ut_replication_reboots
-    ut_restore
+    ut_restore 
     ut_rtmr
     ut_rtmr_reboots
-    ut_ru_calculator
+    ut_ru_calculator 
     ut_sequence
     ut_sequence_reboots
     ut_serverless
@@ -59,7 +59,7 @@ SRCS(
     defs.h
     schemeshard.h
     schemeshard.cpp
-    schemeshard__compaction.cpp
+    schemeshard__compaction.cpp 
     schemeshard__clean_pathes.cpp
     schemeshard__conditional_erase.cpp
     schemeshard__describe_scheme.cpp
@@ -204,7 +204,7 @@ SRCS(
     schemeshard_build_index__get.cpp
     schemeshard_build_index__progress.cpp
     schemeshard_validate_ttl.cpp
-    operation_queue_timer.h
+    operation_queue_timer.h 
 )
 
 GENERATE_ENUM_SERIALIZATION(schemeshard_info_types.h)

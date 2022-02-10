@@ -103,11 +103,11 @@ enum ECumulativeCounters {
     COUNTER_TX_NOT_ENOUGH_MEMORY_2 = 77                   [(CounterOpts) = {Name: "TxNotEnoughMemory2"}];
     COUNTER_TX_NOT_ENOUGH_MEMORY_3 = 78                   [(CounterOpts) = {Name: "TxNotEnoughMemory3"}];
     COUNTER_TX_NOT_ENOUGH_MEMORY_4 = 79                   [(CounterOpts) = {Name: "TxNotEnoughMemory4"}];
-    COUNTER_TX_TABLET_NOT_READY = 80                      [(CounterOpts) = {Name: "TxTabletNotReady"}];
-    COUNTER_TX_BACKGROUND_COMPACTION = 81                 [(CounterOpts) = {Name: "TxCompactTable"}];
-    COUNTER_TX_BACKGROUND_COMPACTION_NOT_NEEDED = 82      [(CounterOpts) = {Name: "TxCompactTableNotNeeded"}];
-    COUNTER_TX_BACKGROUND_COMPACTION_FAILED_BORROWED = 83 [(CounterOpts) = {Name: "TxCompactTableFailedBorrowed"}];
-    COUNTER_TX_BACKGROUND_COMPACTION_FAILED_START = 84    [(CounterOpts) = {Name: "TxCompactTableFailedStart"}];
+    COUNTER_TX_TABLET_NOT_READY = 80                      [(CounterOpts) = {Name: "TxTabletNotReady"}]; 
+    COUNTER_TX_BACKGROUND_COMPACTION = 81                 [(CounterOpts) = {Name: "TxCompactTable"}]; 
+    COUNTER_TX_BACKGROUND_COMPACTION_NOT_NEEDED = 82      [(CounterOpts) = {Name: "TxCompactTableNotNeeded"}]; 
+    COUNTER_TX_BACKGROUND_COMPACTION_FAILED_BORROWED = 83 [(CounterOpts) = {Name: "TxCompactTableFailedBorrowed"}]; 
+    COUNTER_TX_BACKGROUND_COMPACTION_FAILED_START = 84    [(CounterOpts) = {Name: "TxCompactTableFailedStart"}]; 
 }
 
 enum EPercentileCounters {
@@ -308,41 +308,41 @@ enum EPercentileCounters {
                                                               Ranges: { Value: 15000    Name: "15000"},
                                                               Ranges: { Value: 30000    Name: "30000"}
                                                           }];
-
-    COUNTER_SHARDS_WITH_SEARCH_HEIGHT = 18                [(CounterOpts) = {Name: "ShardsWithSearchHeight",
-                                                              Integral: true,
-                                                              Ranges: { Value: 0        Name: "0"},
-                                                              Ranges: { Value: 1        Name: "1"},
-                                                              Ranges: { Value: 2        Name: "2"},
-                                                              Ranges: { Value: 3        Name: "3"},
-                                                              Ranges: { Value: 4        Name: "4"},
-                                                              Ranges: { Value: 5        Name: "5"},
-                                                              Ranges: { Value: 6        Name: "6"},
-                                                              Ranges: { Value: 7        Name: "7"},
-                                                              Ranges: { Value: 8        Name: "8"},
-                                                              Ranges: { Value: 9        Name: "9"},
-                                                              Ranges: { Value: 10       Name: "10"},
-                                                              Ranges: { Value: 11       Name: "11"},
-                                                              Ranges: { Value: 12       Name: "12"},
-                                                              Ranges: { Value: 13       Name: "13"},
-                                                              Ranges: { Value: 14       Name: "14"},
-                                                              Ranges: { Value: 15       Name: "15"},
-                                                              Ranges: { Value: 20       Name: "20"},
-                                                          }];
-
-    // buckets are hours since last full compaction ts, i.e. number of shards
-    // compacted within 1 hour or within 24 hours
-    COUNTER_SHARDS_WITH_FULL_COMPACTION = 19              [(CounterOpts) = {Name: "ShardsFullCompactionAgeHours",
-                                                              Integral: true,
-                                                              Ranges: { Value: 0        Name: "0"},
-                                                              Ranges: { Value: 1        Name: "1"},
-                                                              Ranges: { Value: 6        Name: "6"},
-                                                              Ranges: { Value: 12       Name: "12"},
-                                                              Ranges: { Value: 24       Name: "24"},
-                                                              Ranges: { Value: 48       Name: "48"},
-                                                              Ranges: { Value: 72       Name: "72"},
-                                                              Ranges: { Value: 168      Name: "inf"},
-                                                          }];
+ 
+    COUNTER_SHARDS_WITH_SEARCH_HEIGHT = 18                [(CounterOpts) = {Name: "ShardsWithSearchHeight", 
+                                                              Integral: true, 
+                                                              Ranges: { Value: 0        Name: "0"}, 
+                                                              Ranges: { Value: 1        Name: "1"}, 
+                                                              Ranges: { Value: 2        Name: "2"}, 
+                                                              Ranges: { Value: 3        Name: "3"}, 
+                                                              Ranges: { Value: 4        Name: "4"}, 
+                                                              Ranges: { Value: 5        Name: "5"}, 
+                                                              Ranges: { Value: 6        Name: "6"}, 
+                                                              Ranges: { Value: 7        Name: "7"}, 
+                                                              Ranges: { Value: 8        Name: "8"}, 
+                                                              Ranges: { Value: 9        Name: "9"}, 
+                                                              Ranges: { Value: 10       Name: "10"}, 
+                                                              Ranges: { Value: 11       Name: "11"}, 
+                                                              Ranges: { Value: 12       Name: "12"}, 
+                                                              Ranges: { Value: 13       Name: "13"}, 
+                                                              Ranges: { Value: 14       Name: "14"}, 
+                                                              Ranges: { Value: 15       Name: "15"}, 
+                                                              Ranges: { Value: 20       Name: "20"}, 
+                                                          }]; 
+ 
+    // buckets are hours since last full compaction ts, i.e. number of shards 
+    // compacted within 1 hour or within 24 hours 
+    COUNTER_SHARDS_WITH_FULL_COMPACTION = 19              [(CounterOpts) = {Name: "ShardsFullCompactionAgeHours", 
+                                                              Integral: true, 
+                                                              Ranges: { Value: 0        Name: "0"}, 
+                                                              Ranges: { Value: 1        Name: "1"}, 
+                                                              Ranges: { Value: 6        Name: "6"}, 
+                                                              Ranges: { Value: 12       Name: "12"}, 
+                                                              Ranges: { Value: 24       Name: "24"}, 
+                                                              Ranges: { Value: 48       Name: "48"}, 
+                                                              Ranges: { Value: 72       Name: "72"}, 
+                                                              Ranges: { Value: 168      Name: "inf"}, 
+                                                          }]; 
 }
 
 enum ETxTypes {

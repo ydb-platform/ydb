@@ -16,7 +16,7 @@
 namespace NKikimr {
 
 ////////////////////////////////////////////
-TActorId MakeTabletCountersAggregatorID(ui32 node, bool follower = false);
+TActorId MakeTabletCountersAggregatorID(ui32 node, bool follower = false); 
 
 
 static const ui32 WORKERS_COUNT = 0;
@@ -115,7 +115,7 @@ struct TEvTabletCounters {
 };
 
 ////////////////////////////////////////////
-void TabletCountersForgetTablet(ui64 tabletId, TTabletTypes::EType tabletType, TPathId tenantPathId, bool follower, TActorIdentity identity);
+void TabletCountersForgetTablet(ui64 tabletId, TTabletTypes::EType tabletType, TPathId tenantPathId, bool follower, TActorIdentity identity); 
 
 TStringBuf GetHistogramAggregateSimpleName(TStringBuf name);
 bool IsHistogramAggregateSimpleName(TStringBuf name);
@@ -127,7 +127,7 @@ TIntrusivePtr<NSysView::IDbCounters> CreateTabletDbCounters(
     THolder<TTabletCountersBase> executorCounters);
 
 ////////////////////////////////////////////
-IActor* CreateTabletCountersAggregator(bool follower);
+IActor* CreateTabletCountersAggregator(bool follower); 
 
 
 ////////////////////////////////////////////

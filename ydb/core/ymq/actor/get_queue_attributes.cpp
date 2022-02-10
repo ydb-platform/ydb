@@ -138,7 +138,7 @@ private:
             builder
                 .User(UserName_)
                 .Queue(GetQueueName())
-                .QueueLeader(QueueLeader_)
+                .QueueLeader(QueueLeader_) 
                 .QueryId(INTERNAL_GET_QUEUE_ATTRIBUTES_ID)
                 .Counters(QueueCounters_)
                 .RetryOnTimeout()
@@ -147,7 +147,7 @@ private:
         }
 
         if (NeedRuntimeAttributes_) {
-            Send(QueueLeader_, MakeHolder<TSqsEvents::TEvGetRuntimeQueueAttributes>(RequestId_));
+            Send(QueueLeader_, MakeHolder<TSqsEvents::TEvGetRuntimeQueueAttributes>(RequestId_)); 
             ++WaitCount_;
         }
 

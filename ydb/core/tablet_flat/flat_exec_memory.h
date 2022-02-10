@@ -42,7 +42,7 @@ namespace NTabletFlatExecutor {
         TMemory(
                 NUtil::ILogger *logger,
                 IOps *ops,
-                TIntrusivePtr<TIdEmitter> emitter,
+                TIntrusivePtr<TIdEmitter> emitter, 
                 TString taskNameSuffix = { })
             : Logger(logger)
             , Ops(ops)
@@ -311,7 +311,7 @@ namespace NTabletFlatExecutor {
         {
             GCScheduled = false;
 
-            TVector<TIntrusivePtr<TMemoryGCToken>> dropped;
+            TVector<TIntrusivePtr<TMemoryGCToken>> dropped; 
 
             for (auto it = Tokens.begin(); it != Tokens.end(); ++it) {
                 if ((*it)->IsDropped()) {
@@ -361,7 +361,7 @@ namespace NTabletFlatExecutor {
             }
         }
 
-        void SetProfiles(TResourceProfilesPtr profiles) noexcept
+        void SetProfiles(TResourceProfilesPtr profiles) noexcept 
         {
             Profiles = profiles ? profiles : new TResourceProfiles;
         }
@@ -396,7 +396,7 @@ namespace NTabletFlatExecutor {
             seat.CurrentTxDataLimit -= seat.CapturedMemory->Size;
         }
 
-        void Send(TAutoPtr<IEventBase> event)
+        void Send(TAutoPtr<IEventBase> event) 
         {
             using namespace NResourceBroker;
 
@@ -415,12 +415,12 @@ namespace NTabletFlatExecutor {
     private:
         NUtil::ILogger * const Logger = nullptr;
         IOps * const Ops = nullptr;
-        const TIntrusivePtr<TIdEmitter> Emitter;
+        const TIntrusivePtr<TIdEmitter> Emitter; 
 
         bool GCScheduled = false;
         TUsed Used;
-        THashSet<TIntrusivePtr<TMemoryGCToken>, TPtrHash> Tokens;
-        TIntrusivePtr<TResourceProfiles> Profiles;
+        THashSet<TIntrusivePtr<TMemoryGCToken>, TPtrHash> Tokens; 
+        TIntrusivePtr<TResourceProfiles> Profiles; 
         TString TaskNameSuffix;
 
     public:

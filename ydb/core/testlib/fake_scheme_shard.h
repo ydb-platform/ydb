@@ -108,7 +108,7 @@ private:
 };
 
 void BootFakeSchemeShard(TTestActorRuntime& runtime, ui64 tabletId, TFakeSchemeShardState::TPtr state) {
-    CreateTestBootstrapper(runtime, CreateTestTabletInfo(tabletId, TTabletTypes::SchemeShard), [=](const TActorId & tablet, TTabletStorageInfo* info) {
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(tabletId, TTabletTypes::SchemeShard), [=](const TActorId & tablet, TTabletStorageInfo* info) { 
             return new TFakeSchemeShard(tablet, info, state);
         });
 

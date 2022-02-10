@@ -111,7 +111,7 @@ namespace NPerf {
             auto rows = args.Value<ui64>(32768);
             const TString kind = args.Token("small");
 
-            TAutoPtr<NTest::IModel> model;
+            TAutoPtr<NTest::IModel> model; 
 
             if (kind == "2cols") {
                 model = new NTest::TModel2Cols;
@@ -152,10 +152,10 @@ namespace NPerf {
 
     private:
         int LLev = 1;
-        TAutoPtr<TLogger> Logger;
+        TAutoPtr<TLogger> Logger; 
         ui64 Test = 0xffffffff; /* Bitmask of tests to perform  */
         NPerf::TConf Conf;
-        TAutoPtr<NTest::TMass> Mass;
+        TAutoPtr<NTest::TMass> Mass; 
         NTest::ESponge Sponge = ESponge::Murmur;
     };
 

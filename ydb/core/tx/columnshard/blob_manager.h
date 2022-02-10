@@ -96,8 +96,8 @@ struct TAllocatedGenStep : public TThrRefBase {
     }
 };
 
-using TAllocatedGenStepConstPtr = TIntrusiveConstPtr<TAllocatedGenStep>;
-
+using TAllocatedGenStepConstPtr = TIntrusiveConstPtr<TAllocatedGenStep>; 
+ 
 struct TBlobManagerCounters {
     ui64 BatchesStarted = 0;
     ui64 BatchesCommitted = 0;
@@ -146,7 +146,7 @@ private:
     THashMap<TUnifiedBlobId, i64> BlobsUseCount;
 
     // Sorted queue of GenSteps that have in-flight BlobBatches
-    TDeque<TAllocatedGenStepConstPtr> AllocatedGenSteps;
+    TDeque<TAllocatedGenStepConstPtr> AllocatedGenSteps; 
 
     // The Gen:Step that has been acknowledged by the Distributed Storage
     TGenStep LastCollectedGenStep = {0, 0};

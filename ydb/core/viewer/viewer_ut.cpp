@@ -26,7 +26,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
             for (ui32 tabletId = 1; tabletId <= 10000; ++tabletId) {
                 NKikimrWhiteboard::TTabletStateInfo* tabletData = nodeData->Record.AddTabletStateInfo();
                 tabletData->SetTabletId(tabletId);
-                tabletData->SetLeader(true);
+                tabletData->SetLeader(true); 
                 tabletData->SetGeneration(13);
                 tabletData->SetChangeTime(TInstant::Now().MilliSeconds());
             }

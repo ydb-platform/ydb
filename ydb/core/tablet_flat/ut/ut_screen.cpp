@@ -35,7 +35,7 @@ Y_UNIT_TEST_SUITE(TScreen) {
         using namespace NTable::NTest;
         using THole = TScreen::THole;
 
-        TIntrusiveConstPtr<TScreen> one(new TScreen({ { 3, 10 }, { 40, 70 }, { 80, 99 } }));
+        TIntrusiveConstPtr<TScreen> one(new TScreen({ { 3, 10 }, { 40, 70 }, { 80, 99 } })); 
 
         auto cut = [=](THole hole) { return TScreen::Cut(one, hole); };
 
@@ -57,7 +57,7 @@ Y_UNIT_TEST_SUITE(TScreen) {
         using namespace NTable::NTest;
         using THole = TScreen::THole;
 
-        TIntrusiveConstPtr<TScreen> whole(new TScreen({{ 3, 10 }, { 40, 70 }, { 80, 99 }}));
+        TIntrusiveConstPtr<TScreen> whole(new TScreen({{ 3, 10 }, { 40, 70 }, { 80, 99 }})); 
 
         { /* Check simple split and merge w/o gliding edges */
 

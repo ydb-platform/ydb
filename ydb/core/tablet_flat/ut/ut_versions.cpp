@@ -50,7 +50,7 @@ namespace {
         return mass;
     }
 
-    TSubset MakeSubset(TIntrusiveConstPtr<TRowScheme> scheme, TVector<const TPartEggs*> eggs)
+    TSubset MakeSubset(TIntrusiveConstPtr<TRowScheme> scheme, TVector<const TPartEggs*> eggs) 
     {
         TVector<TPartView> partView;
 

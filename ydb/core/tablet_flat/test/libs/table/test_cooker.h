@@ -18,7 +18,7 @@ namespace NTest {
 
         }
 
-        TCooker(TIntrusiveConstPtr<TRowScheme> scheme, TEpoch epoch = TEpoch::Zero())
+        TCooker(TIntrusiveConstPtr<TRowScheme> scheme, TEpoch epoch = TEpoch::Zero()) 
             : Table(new TMemTable(std::move(scheme), epoch, 0))
             , Tool(*Table->Scheme)
         {

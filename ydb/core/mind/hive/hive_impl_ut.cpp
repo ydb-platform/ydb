@@ -31,11 +31,11 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
         TIntrusivePtr<TTabletStorageInfo> hiveStorage = new TTabletStorageInfo;
         hiveStorage->TabletType = TTabletTypes::Hive;
         THive hive(hiveStorage.Get(), TActorId());
-        std::unordered_map<ui64, TLeaderTabletInfo> tablets;
+        std::unordered_map<ui64, TLeaderTabletInfo> tablets; 
         THPTimer timer;
 
         for (ui64 i = 0; i < NUM_TABLETS; ++i) {
-            TLeaderTabletInfo& tablet = tablets.emplace(std::piecewise_construct, std::tuple<TTabletId>(i), std::tuple<TTabletId, THive&>(i, hive)).first->second;
+            TLeaderTabletInfo& tablet = tablets.emplace(std::piecewise_construct, std::tuple<TTabletId>(i), std::tuple<TTabletId, THive&>(i, hive)).first->second; 
             tablet.Weight = RandomNumber<double>();
             bootQueue.AddToBootQueue(tablet);
         }

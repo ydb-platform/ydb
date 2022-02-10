@@ -15,9 +15,9 @@ namespace NFwd {
         TSieve() { };
 
         TSieve(
-                TIntrusiveConstPtr<NPage::TExtBlobs> blobs,
-                TIntrusiveConstPtr<NPage::TFrames> frames,
-                TIntrusiveConstPtr<TSlices> slices,
+                TIntrusiveConstPtr<NPage::TExtBlobs> blobs, 
+                TIntrusiveConstPtr<NPage::TFrames> frames, 
+                TIntrusiveConstPtr<TSlices> slices, 
                 THoles holes)
             : Blobs(std::move(blobs))
             , Frames(std::move(frames))
@@ -71,8 +71,8 @@ namespace NFwd {
             }
         }
 
-        TIntrusiveConstPtr<NPage::TExtBlobs> Blobs;
-        TIntrusiveConstPtr<NPage::TFrames> Frames;
+        TIntrusiveConstPtr<NPage::TExtBlobs> Blobs; 
+        TIntrusiveConstPtr<NPage::TFrames> Frames; 
         TSlicesRowFilter Filter;
         TDeque<TScreen::THole> Holes;
     };

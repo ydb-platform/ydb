@@ -98,7 +98,7 @@ public:
         THashMap<ui32, TRoom> Rooms;
         THashMap<ui32, TFamily> Families;
 
-        TIntrusiveConstPtr<TCompactionPolicy> CompactionPolicy;
+        TIntrusiveConstPtr<TCompactionPolicy> CompactionPolicy; 
         bool ColdBorrow = false;
         bool ByKeyFilter = false;
         bool EraseCacheEnabled = false;

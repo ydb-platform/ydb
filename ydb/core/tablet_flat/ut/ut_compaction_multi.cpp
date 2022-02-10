@@ -32,7 +32,7 @@ Y_UNIT_TEST_SUITE(TCompactionMulti) {
     }
 
     void RunMainEdgeTest(
-            TIntrusiveConstPtr<TRowScheme> scheme,
+            TIntrusiveConstPtr<TRowScheme> scheme, 
             const TRowsHeap& rows,
             const NPage::TConf& initialConf,
             bool strictPageSize = true,

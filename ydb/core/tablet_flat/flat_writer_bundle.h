@@ -15,7 +15,7 @@ namespace NWriter {
         struct TResult {
             using TCache = TPrivatePageCache::TInfo;
 
-            TVector<TIntrusivePtr<TCache>> PageCollections;
+            TVector<TIntrusivePtr<TCache>> PageCollections; 
             TDeque<NTable::TScreen::THole> Growth;
             TString Overlay;
         };
@@ -58,7 +58,7 @@ namespace NWriter {
             return std::move(Results_);
         }
 
-        NPageCollection::TLargeGlobId WriteExtra(TArrayRef<const char> body) noexcept
+        NPageCollection::TLargeGlobId WriteExtra(TArrayRef<const char> body) noexcept 
         {
             return Put(/* data cookieRange */ 1, ExtraChannel, body, Groups[0].Block);
         }
@@ -75,7 +75,7 @@ namespace NWriter {
                 Blocks.back()->Write(std::move(page), EPage::Opaque);
         }
 
-        void WriteInplace(TPageId page, TArrayRef<const char> body) override
+        void WriteInplace(TPageId page, TArrayRef<const char> body) override 
         {
             Blocks[0]->WriteInplace(page, body);
         }
@@ -153,7 +153,7 @@ namespace NWriter {
         TBanks Banks;
         TVector<NPageCollection::TGlob> Blobs;
         TVector<THolder<TBlocks>> Blocks;
-        TAutoPtr<NTable::TScreen::TCook> Growth;
+        TAutoPtr<NTable::TScreen::TCook> Growth; 
         TVector<TResult> Results_;
     };
 

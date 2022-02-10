@@ -178,7 +178,7 @@ public:
     // Initialization
     TPDisk(const TIntrusivePtr<TPDiskConfig> cfg, const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters);
     TString DynamicStateToString(bool isMultiline);
-    bool ReadChunk0Format(ui8* formatSectors, const TKey& mainKey); // Called by actor
+    bool ReadChunk0Format(ui8* formatSectors, const TKey& mainKey); // Called by actor 
     bool IsFormatMagicValid(ui8 *magicData, ui32 magicDataSize); // Called by actor
     bool CheckGuid(TString *outReason); // Called by actor
     bool CheckFormatComplete(); // Called by actor
@@ -285,9 +285,9 @@ public:
     void EventUndelivered(TUndelivered &req);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // PDisk formatting
-    void WriteApplyFormatRecord(TDiskFormat format, const TKey &mainKey);
+    void WriteApplyFormatRecord(TDiskFormat format, const TKey &mainKey); 
     void WriteDiskFormat(ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 userAccessibleChunkSizeBytes, const ui64 &diskGuid,
-            const TKey &chunkKey, const TKey &logKey, const TKey &sysLogKey, const TKey &mainKey,
+            const TKey &chunkKey, const TKey &logKey, const TKey &sysLogKey, const TKey &mainKey, 
             TString textMessage, const bool isErasureEncodeUserLog, const bool trimEntireDevice);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Owner initialization

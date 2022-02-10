@@ -31,7 +31,7 @@ struct TTable {
     bool Small = false;
     bool OnePartitionPerShard = false; // <queue_name>/State table - has one datashard per SQS-shard
     i64  Shard = 0;
-    bool HasLeaderTablet = false;
+    bool HasLeaderTablet = false; 
     bool EnableAutosplit = false;
     ui64 SizeToSplit = 0;
 
@@ -71,8 +71,8 @@ struct TTable {
         return *this;
     }
 
-    TTable& SetHasLeaderTablet(bool value = true) {
-        HasLeaderTablet = value;
+    TTable& SetHasLeaderTablet(bool value = true) { 
+        HasLeaderTablet = value; 
         return *this;
     }
 

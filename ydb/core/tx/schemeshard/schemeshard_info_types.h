@@ -123,7 +123,7 @@ private:
 };
 
 struct TPartitionConfigMerger {
-    static constexpr ui32 MaxFollowersCount = 3;
+    static constexpr ui32 MaxFollowersCount = 3; 
 
     static NKikimrSchemeOp::TPartitionConfig DefaultConfig(const TAppData* appData);
     static bool ApplyChanges(
@@ -241,7 +241,7 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
 
         THashSet<TTabletId> PartOwners;
         ui64 PartCount = 0;
-        ui64 SearchHeight = 0;
+        ui64 SearchHeight = 0; 
         ui32 ShardState = NKikimrTxDataShard::Unknown;
 
         // True when PartOwners has parts from other tablets
@@ -605,16 +605,16 @@ public:
             return false;
         }
 
-        auto srcFollowerParams = std::tuple<ui64, bool, ui32>(
-                                         PartitionConfig().GetFollowerCount(),
-                                         PartitionConfig().GetAllowFollowerPromotion(),
-                                         PartitionConfig().GetCrossDataCenterFollowerCount()
+        auto srcFollowerParams = std::tuple<ui64, bool, ui32>( 
+                                         PartitionConfig().GetFollowerCount(), 
+                                         PartitionConfig().GetAllowFollowerPromotion(), 
+                                         PartitionConfig().GetCrossDataCenterFollowerCount() 
             );
 
-        auto alterFollowerParams = std::tuple<ui64, bool, ui32>(
-                                         AlterData->PartitionConfigCompatible().GetFollowerCount(),
-                                         AlterData->PartitionConfigCompatible().GetAllowFollowerPromotion(),
-                                         AlterData->PartitionConfigCompatible().GetCrossDataCenterFollowerCount()
+        auto alterFollowerParams = std::tuple<ui64, bool, ui32>( 
+                                         AlterData->PartitionConfigCompatible().GetFollowerCount(), 
+                                         AlterData->PartitionConfigCompatible().GetAllowFollowerPromotion(), 
+                                         AlterData->PartitionConfigCompatible().GetCrossDataCenterFollowerCount() 
 
             );
 
@@ -634,10 +634,10 @@ public:
 
 
 
-        return srcFollowerParams != alterFollowerParams
+        return srcFollowerParams != alterFollowerParams 
             || !equals_proto_array(
-                   PartitionConfig().GetFollowerGroups(),
-                   AlterData->PartitionConfigCompatible().GetFollowerGroups());
+                   PartitionConfig().GetFollowerGroups(), 
+                   AlterData->PartitionConfigCompatible().GetFollowerGroups()); 
     }
 
     const TTableShardInfo* GetScheduledCondEraseShard() const {

@@ -19,7 +19,7 @@ def local_cluster_configuration():
         erasure=Erasure.NONE,
         nodes=1,
         enable_metering=True,
-        disable_mvcc=True,
+        disable_mvcc=True, 
         additional_log_configs={
             'TX_PROXY': LogLevels.DEBUG,
             'KQP_PROXY': LogLevels.DEBUG,

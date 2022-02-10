@@ -24,7 +24,7 @@ namespace NTabletFlatExecutor {
 
         struct TFlush {
             ui32 Step = Max<ui32>();
-            TVector<TIntrusivePtr<TBarrier>> Barriers;
+            TVector<TIntrusivePtr<TBarrier>> Barriers; 
             THashMap<TLogoBlobID, TSet<ui64>> Bundles;
             TMap<ui32, ui32> Moved;
         };
@@ -39,7 +39,7 @@ namespace NTabletFlatExecutor {
             Pending++;
         }
 
-        bool Complete(ui32 table, TIntrusivePtr<TBarrier> barrier)
+        bool Complete(ui32 table, TIntrusivePtr<TBarrier> barrier) 
         {
             Get(table, EReady::Wait).Ready = EReady::Done;
             Holds.Barriers.push_back(barrier);

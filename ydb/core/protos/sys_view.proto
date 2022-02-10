@@ -332,7 +332,7 @@ message TEvGetStorageStatsResponse {
 
 message TTabletEntry {
     optional fixed64 TabletId = 1;
-    optional uint32 FollowerId = 2;
+    optional uint32 FollowerId = 2; 
     optional string Type = 3;
     optional string State = 4;
     optional string VolatileState = 5;

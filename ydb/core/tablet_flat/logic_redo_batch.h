@@ -40,7 +40,7 @@ namespace NRedo {
             return out;
         }
 
-        TAutoPtr<TLogCommit> Commit;
+        TAutoPtr<TLogCommit> Commit; 
         ui64 Bytes = 0;
         TVector<TString> Bodies;
 

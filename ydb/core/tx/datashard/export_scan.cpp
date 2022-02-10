@@ -169,7 +169,7 @@ public:
           << " }";
     }
 
-    IScan::THello Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) noexcept override {
+    IScan::THello Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) noexcept override { 
         TlsActivationContext->AsActorContext().RegisterWithSameMailbox(this);
 
         Driver = driver;
@@ -208,7 +208,7 @@ public:
         return MaybeSendBuffer();
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort) noexcept override {
+    TAutoPtr<IDestructable> Finish(EAbort abort) noexcept override { 
         const bool success = (abort == EAbort::None) && Success;
 
         if (abort != EAbort::None) {
@@ -236,8 +236,8 @@ private:
     THolder<TStats> Stats;
 
     IDriver* Driver;
-    TIntrusiveConstPtr<TScheme> Scheme;
-    TAutoPtr<TSpent> Spent;
+    TIntrusiveConstPtr<TScheme> Scheme; 
+    TAutoPtr<TSpent> Spent; 
 
     TBitMap<EStateBits::ES_COUNT> State;
     bool Success;

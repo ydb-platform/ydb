@@ -37,7 +37,7 @@ namespace NTable {
         TPartWriter() = delete;
         TPartWriter(const TPartWriter&) = delete;
 
-        TPartWriter(TIntrusiveConstPtr<TPartScheme> scheme, TTagsRef tags, IPageWriter& pager,
+        TPartWriter(TIntrusiveConstPtr<TPartScheme> scheme, TTagsRef tags, IPageWriter& pager, 
                         const NPage::TConf &conf, TEpoch epoch)
             : Final(conf.Final)
             , SmallEdge(conf.SmallEdge)
@@ -666,7 +666,7 @@ namespace NTable {
             return Pager.Write(std::move(page), type, group);
         }
 
-        void WriteInplace(TPageId page, TArrayRef<const char> body) noexcept
+        void WriteInplace(TPageId page, TArrayRef<const char> body) noexcept 
         {
             NSan::CheckMemIsInitialized(body.data(), body.size());
 
@@ -802,7 +802,7 @@ namespace NTable {
             return { ELargeObj::Extern, ref };
         }
 
-        TSharedData Encode(TArrayRef<const char> page, ECodec codec, bool force) noexcept
+        TSharedData Encode(TArrayRef<const char> page, ECodec codec, bool force) noexcept 
         {
             Y_VERIFY(codec == ECodec::LZ4, "Only LZ4 encoding allowed");
 
@@ -883,7 +883,7 @@ namespace NTable {
         NPage::IKeySpace* const UnderlayMask;
         NPage::ISplitKeys* const SplitKeys;
         const TRowVersion MinRowVersion;
-        const TIntrusiveConstPtr<TPartScheme> Scheme;
+        const TIntrusiveConstPtr<TPartScheme> Scheme; 
 
         const ICodec *CodecImpl = nullptr;
         IPageWriter& Pager;
@@ -916,7 +916,7 @@ namespace NTable {
             TPgSize FirstKeyIndexSize = 0;
             TPgSize LastKeyIndexSize = 0;
 
-            TGroupState(const TIntrusiveConstPtr<TPartScheme>& scheme, const NPage::TConf& conf, TTagsRef tags, NPage::TGroupId groupId)
+            TGroupState(const TIntrusiveConstPtr<TPartScheme>& scheme, const NPage::TConf& conf, TTagsRef tags, NPage::TGroupId groupId) 
                 : ForceCompression(conf.Groups[groupId.Index].ForceCompression)
                 , Codec(conf.Groups[groupId.Index].Codec)
                 , Data(scheme, conf, tags, groupId)
@@ -976,7 +976,7 @@ namespace NTable {
             bool Versioned = false;
         } Current;
 
-        TIntrusivePtr<TSlices> Slices;
+        TIntrusivePtr<TSlices> Slices; 
 
         const TSharedData SchemeData;
 

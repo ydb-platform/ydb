@@ -462,10 +462,10 @@ public:
         Table::DesiredVDiskCategory::Type DesiredVDiskCategory = NKikimrBlobStorage::TVDiskKind::Default;
         TMaybe<Table::EncryptionMode::Type> EncryptionMode; // null on old versions
         TMaybe<Table::LifeCyclePhase::Type> LifeCyclePhase; // null on old versions
-        TMaybe<Table::MainKeyId::Type> MainKeyId; // null on old versions
+        TMaybe<Table::MainKeyId::Type> MainKeyId; // null on old versions 
         TMaybe<Table::EncryptedGroupKey::Type> EncryptedGroupKey; // null on old versions
         TMaybe<Table::GroupKeyNonce::Type> GroupKeyNonce; // null on old versions
-        TMaybe<Table::MainKeyVersion::Type> MainKeyVersion; // null on old verstions
+        TMaybe<Table::MainKeyVersion::Type> MainKeyVersion; // null on old verstions 
         bool PersistedDown = false; // the value stored in the database
         bool SeenOperational = false;
 
@@ -512,10 +512,10 @@ public:
                     Table::DesiredVDiskCategory,
                     Table::EncryptionMode,
                     Table::LifeCyclePhase,
-                    Table::MainKeyId,
+                    Table::MainKeyId, 
                     Table::EncryptedGroupKey,
                     Table::GroupKeyNonce,
-                    Table::MainKeyVersion,
+                    Table::MainKeyVersion, 
                     Table::SeenOperational
                 > adapter(
                     &TGroupInfo::Generation,
@@ -525,10 +525,10 @@ public:
                     &TGroupInfo::DesiredVDiskCategory,
                     &TGroupInfo::EncryptionMode,
                     &TGroupInfo::LifeCyclePhase,
-                    &TGroupInfo::MainKeyId,
+                    &TGroupInfo::MainKeyId, 
                     &TGroupInfo::EncryptedGroupKey,
                     &TGroupInfo::GroupKeyNonce,
-                    &TGroupInfo::MainKeyVersion,
+                    &TGroupInfo::MainKeyVersion, 
                     &TGroupInfo::SeenOperational
                 );
             callback(&adapter);
@@ -542,10 +542,10 @@ public:
                    Schema::Group::DesiredVDiskCategory::Type desiredVDiskCategory,
                    Schema::Group::EncryptionMode::Type encryptionMode,
                    Schema::Group::LifeCyclePhase::Type lifeCyclePhase,
-                   Schema::Group::MainKeyId::Type mainKeyId,
+                   Schema::Group::MainKeyId::Type mainKeyId, 
                    Schema::Group::EncryptedGroupKey::Type encryptedGroupKey,
                    Schema::Group::GroupKeyNonce::Type groupKeyNonce,
-                   Schema::Group::MainKeyVersion::Type mainKeyVersion,
+                   Schema::Group::MainKeyVersion::Type mainKeyVersion, 
                    Schema::Group::Down::Type down,
                    Schema::Group::SeenOperational::Type seenOperational,
                    TBoxStoragePoolId storagePoolId,
@@ -560,10 +560,10 @@ public:
             , DesiredVDiskCategory(desiredVDiskCategory)
             , EncryptionMode(encryptionMode)
             , LifeCyclePhase(lifeCyclePhase)
-            , MainKeyId(mainKeyId)
+            , MainKeyId(mainKeyId) 
             , EncryptedGroupKey(encryptedGroupKey)
             , GroupKeyNonce(groupKeyNonce)
-            , MainKeyVersion(mainKeyVersion)
+            , MainKeyVersion(mainKeyVersion) 
             , PersistedDown(down)
             , SeenOperational(seenOperational)
             , Down(PersistedDown)
@@ -1514,7 +1514,7 @@ private:
         PassAway();
     }
 
-    void Execute(TAutoPtr<ITransaction> tx) {
+    void Execute(TAutoPtr<ITransaction> tx) { 
         TTabletExecutedFlat::Execute(tx, TActivationContext::AsActorContext());
     }
 

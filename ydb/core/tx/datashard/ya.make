@@ -40,7 +40,7 @@ SRCS(
     datashard__build_index.cpp
     datashard__cancel_tx_proposal.cpp
     datashard__compact_borrowed.cpp
-    datashard__compaction.cpp
+    datashard__compaction.cpp 
     datashard__cleanup_borrowed.cpp
     datashard__cleanup_in_rs.cpp
     datashard__cleanup_tx.cpp
@@ -59,7 +59,7 @@ SRCS(
     datashard__progress_tx.cpp
     datashard__propose_tx_base.cpp
     datashard__readset.cpp
-    datashard__read_iterator.cpp
+    datashard__read_iterator.cpp 
     datashard__read_columns.cpp
     datashard__s3.cpp
     datashard__s3_download_txs.cpp
@@ -169,7 +169,7 @@ SRCS(
     range_avl_tree.cpp
     range_ops.cpp
     range_treap.cpp
-    read_iterator.h
+    read_iterator.h 
     restore_unit.cpp
     setup_sys_locks.h
     store_and_send_out_rs_unit.cpp
@@ -248,31 +248,31 @@ ENDIF()
 END()
 
 RECURSE_FOR_TESTS(
-    ut_background_compaction
-    ut_build_index
-    ut_change_collector
-    ut_change_exchange
+    ut_background_compaction 
+    ut_build_index 
+    ut_change_collector 
+    ut_change_exchange 
     ut_compaction
-    ut_erase_rows
-    ut_followers
-    ut_init
-    ut_keys
-    ut_kqp
-    ut_kqp_errors
-    ut_kqp_scan
-    ut_locks
-    ut_minikql
-    ut_minstep
-    ut_order
-    ut_range_avl_tree
-    ut_range_ops
-    ut_range_treap
-    ut_read_iterator
-    ut_read_table
-    ut_reassign
-    ut_replication
-    ut_rs
-    ut_snapshot
-    ut_stats
-    ut_upload_rows
+    ut_erase_rows 
+    ut_followers 
+    ut_init 
+    ut_keys 
+    ut_kqp 
+    ut_kqp_errors 
+    ut_kqp_scan 
+    ut_locks 
+    ut_minikql 
+    ut_minstep 
+    ut_order 
+    ut_range_avl_tree 
+    ut_range_ops 
+    ut_range_treap 
+    ut_read_iterator 
+    ut_read_table 
+    ut_reassign 
+    ut_replication 
+    ut_rs 
+    ut_snapshot 
+    ut_stats 
+    ut_upload_rows 
 )

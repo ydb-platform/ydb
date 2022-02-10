@@ -26,8 +26,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainWithOutDesicion) {
                                "Mediators: 1 "
                                "TimeCastBucketsPerMediator: 2");
                 t.TestEnv->TestWaitNotification(runtime, {t.TxId, t.TxId - 1});
-                UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3));
-                UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 3));
+                UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3)); 
+                UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 3)); 
 
                 TestMkDir(runtime, ++t.TxId, "/MyRoot/USER_0", "DirB",
                           {NKikimrScheme::StatusAccepted}, AlterUserAttrs({{"AttrA1", "ValA1"}}));
@@ -65,8 +65,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainWithOutDesicion) {
                                 NLs::PathIdEqual(TPathId(tenantSchemeShard, 1)),
                                 NLs::IsSubDomain("MyRoot/USER_0"),
                                 NLs::DomainKey(pathId),
-                                NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}),
-                                NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1})});
+                                NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}), 
+                                NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1})}); 
 
             TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0/DirB"),
                                {NLs::PathExist});
@@ -137,8 +137,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainWithOutDesicion) {
                                 NLs::PathIdEqual(TPathId(tenantSchemeShard, 1)),
                                 NLs::IsSubDomain("MyRoot/USER_0"),
                                 NLs::DomainKey(pathId),
-                                NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}),
-                                NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1})});
+                                NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}), 
+                                NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1})}); 
         });
     }
 
@@ -199,8 +199,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainWithOutDesicion) {
                                 NLs::PathIdEqual(TPathId(tenantSchemeShard, 1)),
                                 NLs::IsSubDomain("MyRoot/USER_0"),
                                 NLs::DomainKey(pathId),
-                                NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}),
-                                NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1})});
+                                NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}), 
+                                NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1})}); 
         });
     }
 
@@ -272,8 +272,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainWithOutDesicion) {
                                 NLs::PathIdEqual(TPathId(tenantSchemeShard, 1)),
                                 NLs::IsSubDomain("MyRoot/USER_0"),
                                 NLs::DomainKey(pathId),
-                                NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}),
-                                NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1})});
+                                NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}), 
+                                NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1})}); 
         });
     }
 
@@ -345,8 +345,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainWithOutDesicion) {
                                 NLs::PathIdEqual(TPathId(tenantSchemeShard, 1)),
                                 NLs::IsSubDomain("MyRoot/USER_0"),
                                 NLs::DomainKey(pathId),
-                                NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}),
-                                NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}),
+                                NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}), 
+                                NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}), 
                                 NLs::ShardsInsideDomain(6)});
         });
     }
@@ -483,8 +483,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainCommit) {
                                 NLs::PathIdEqual(TPathId(tenantSchemeShard, 1)),
                                 NLs::IsSubDomain("MyRoot/USER_0"),
                                 NLs::DomainKey(pathId),
-                                NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}),
-                                NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1})});
+                                NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}), 
+                                NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1})}); 
 
             TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0/DirB"),
                                {NLs::PathExist});
@@ -555,7 +555,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainCommit) {
                                 )");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId, tenantSchemeShard);
 
-                RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor()); // one more reboot before propose deletion
+                RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor()); // one more reboot before propose deletion 
             }
 
             TestForceDropExtSubDomain(runtime, ++t.TxId,  "/MyRoot", "USER_0"); //110
@@ -567,12 +567,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainCommit) {
                                 NLs::PathsInsideDomain(1),
                                 NLs::ShardsInsideDomain(0)});
 
-            t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+6));
+            t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+6)); 
             {
                 TInactiveZone inactive(activeZone);
                 t.TestEnv->TestWaitShardDeletion(runtime, {1, 2, 3, 4, 5, 6});
-                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 3));
-                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3));
+                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 3)); 
+                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3)); 
             }
         });
     }
@@ -633,8 +633,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainCommit) {
                                 NLs::PathIdEqual(TPathId(tenantSchemeShard, 1)),
                                 NLs::IsSubDomain("MyRoot/USER_0"),
                                 NLs::DomainKey(pathId),
-                                NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}),
-                                NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1})});
+                                NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}), 
+                                NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1})}); 
 
             TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0/DirB"),
                                {NLs::PathExist});
@@ -1120,7 +1120,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainCommit) {
                 TestDropTable(runtime, tenantSchemeShard, ++t.TxId, "/MyRoot/USER_0/DirA", "Table");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId, tenantSchemeShard);
 
-                t.TestEnv->TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets + 2, TTestTxConfig::FakeHiveTablets + 3});
+                t.TestEnv->TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets + 2, TTestTxConfig::FakeHiveTablets + 3}); 
             }
         });
     }

@@ -12,7 +12,7 @@ namespace NTabletFlatExecutor {
     struct TLoadBlobQueueConfig {
         ui64 TabletID = 0;
         ui32 Generation = 0;
-        bool Follower = false;
+        bool Follower = false; 
         NMonitoring::TDynamicCounters::TCounterPtr NoDataCounter;
         ui64 MaxBytesInFly = 12 * 1024 * 1024;
         NKikimrBlobStorage::EGetHandleClass ReadPrio = NKikimrBlobStorage::FastRead;

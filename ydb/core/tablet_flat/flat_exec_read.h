@@ -8,7 +8,7 @@ namespace NKikimr {
 namespace NTabletFlatExecutor {
 
     struct TCompactionReadState {
-        using TPinned = THashMap<TLogoBlobID, THashMap<ui32, TIntrusivePtr<TPrivatePageCachePinPad>>>;
+        using TPinned = THashMap<TLogoBlobID, THashMap<ui32, TIntrusivePtr<TPrivatePageCachePinPad>>>; 
 
         TCompactionReadState(ui64 readId, THolder<NTable::ICompactionRead> read)
             : ReadId(readId)

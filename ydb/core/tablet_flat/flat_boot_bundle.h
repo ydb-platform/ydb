@@ -70,7 +70,7 @@ namespace NBoot {
             return msg.Status == NKikimrProto::OK;
         }
 
-        void HandleStep(TIntrusivePtr<IStep> step) noexcept override
+        void HandleStep(TIntrusivePtr<IStep> step) noexcept override 
         {
             auto *load = step->ConsumeAs<TLoadBlobs>(LeftMetas);
 
@@ -145,9 +145,9 @@ namespace NBoot {
     private:
         const ui32 Table = Max<ui32>();
 
-        TAutoPtr<NTable::TLoader> Loader;
+        TAutoPtr<NTable::TLoader> Loader; 
         TVector<NPageCollection::TLargeGlobId> LargeGlobIds;
-        TVector<TIntrusivePtr<TCache>> PageCollections;
+        TVector<TIntrusivePtr<TCache>> PageCollections; 
         TString Legacy;
         TString Opaque;
         TVector<TString> Deltas;

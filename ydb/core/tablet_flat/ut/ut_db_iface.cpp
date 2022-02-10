@@ -323,7 +323,7 @@ Y_UNIT_TEST_SUITE(DBase) {
 
     Y_UNIT_TEST(WideKey)
     {
-        const TIntrusivePtr<TGrowHeap> heap = new TGrowHeap(128 * 1024);
+        const TIntrusivePtr<TGrowHeap> heap = new TGrowHeap(128 * 1024); 
 
         for (auto keys: { 128, 512, 1024, 4096, 8192, 9999 }) {
             auto alter = MakeAlter();

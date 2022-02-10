@@ -16,15 +16,15 @@ Y_UNIT_TEST_SUITE(TUtilUrlTest) {
         UNIT_ASSERT_VALUES_EQUAL("ya.ru", GetHostAndPort("ya.ru/bebe:8080"));
         UNIT_ASSERT_VALUES_EQUAL("ya.ru", GetHost("ya.ru:8080/bebe"));
         UNIT_ASSERT_VALUES_EQUAL("ya.ru", GetHost("https://ya.ru:8080/bebe"));
-        UNIT_ASSERT_VALUES_EQUAL("www.ya.ru", GetHost("www.ya.ru:8080/bebe")); 
-        UNIT_ASSERT_VALUES_EQUAL("www.ya.ru", GetHost("https://www.ya.ru:8080/bebe")); 
+        UNIT_ASSERT_VALUES_EQUAL("www.ya.ru", GetHost("www.ya.ru:8080/bebe"));
+        UNIT_ASSERT_VALUES_EQUAL("www.ya.ru", GetHost("https://www.ya.ru:8080/bebe"));
         UNIT_ASSERT_VALUES_EQUAL("ya.ru:8080", GetHostAndPort("ya.ru:8080/bebe"));
         // irl RFC3986 sometimes gets ignored
         UNIT_ASSERT_VALUES_EQUAL("pravda-kmv.ru", GetHost("pravda-kmv.ru?page=news&id=6973"));
         UNIT_ASSERT_VALUES_EQUAL("pravda-kmv.ru", GetHostAndPort("pravda-kmv.ru?page=news&id=6973"));
-        // check simple string 
-        UNIT_ASSERT_VALUES_EQUAL("some_blender_url", GetHost("some_blender_url")); 
-        UNIT_ASSERT_VALUES_EQUAL("", GetHost("")); 
+        // check simple string
+        UNIT_ASSERT_VALUES_EQUAL("some_blender_url", GetHost("some_blender_url"));
+        UNIT_ASSERT_VALUES_EQUAL("", GetHost(""));
     }
 
     Y_UNIT_TEST(TestGetPathAndQuery) {
@@ -145,10 +145,10 @@ Y_UNIT_TEST_SUITE(TUtilUrlTest) {
         SplitUrlToHostAndPath("invalid url /", host, path);
         UNIT_ASSERT_STRINGS_EQUAL(host, "invalid url ");
         UNIT_ASSERT_STRINGS_EQUAL(path, "/");
- 
-        SplitUrlToHostAndPath("some_blender_url", host, path); 
-        UNIT_ASSERT_STRINGS_EQUAL(host, "some_blender_url"); 
-        UNIT_ASSERT_STRINGS_EQUAL(path, ""); 
+
+        SplitUrlToHostAndPath("some_blender_url", host, path);
+        UNIT_ASSERT_STRINGS_EQUAL(host, "some_blender_url");
+        UNIT_ASSERT_STRINGS_EQUAL(path, "");
     }
 
     Y_UNIT_TEST(TestSeparateUrlFromQueryAndFragment) {
@@ -248,34 +248,34 @@ Y_UNIT_TEST_SUITE(TUtilUrlTest) {
         };
         UNIT_ASSERT_EXCEPTION(testCase(), yexception);
     }
- 
-    Y_UNIT_TEST(TestCutUrlPrefixes) { 
-        UNIT_ASSERT_VALUES_EQUAL("ya.ru/bebe", CutUrlPrefixes("http://ya.ru/bebe")); 
-        UNIT_ASSERT_VALUES_EQUAL("yaru", CutUrlPrefixes("yaru")); 
-        UNIT_ASSERT_VALUES_EQUAL("ya.ru://zzz", CutUrlPrefixes("yaru://ya.ru://zzz")); 
-        UNIT_ASSERT_VALUES_EQUAL("ya.ru://zzz", CutUrlPrefixes("ya.ru://zzz")); 
-        UNIT_ASSERT_VALUES_EQUAL("ya.ru://zzz", CutUrlPrefixes("ftp://ya.ru://zzz")); 
-        UNIT_ASSERT_VALUES_EQUAL("", CutUrlPrefixes("https://")); 
- 
-        UNIT_ASSERT_VALUES_EQUAL("ya.ru/bebe", CutUrlPrefixes("https://www.ya.ru/bebe")); 
-        UNIT_ASSERT_VALUES_EQUAL("yaru", CutUrlPrefixes("www.yaru")); 
-        UNIT_ASSERT_VALUES_EQUAL("ya.ru://zzz", CutUrlPrefixes("yaru://www.ya.ru://zzz")); 
-        UNIT_ASSERT_VALUES_EQUAL("ya.ru://zzz", CutUrlPrefixes("www.ya.ru://zzz")); 
-        UNIT_ASSERT_VALUES_EQUAL("ya.ru://zzz", CutUrlPrefixes("ftp://www.ya.ru://zzz")); 
-        UNIT_ASSERT_VALUES_EQUAL("", CutUrlPrefixes("http://www.")); 
-    } 
- 
-    Y_UNIT_TEST(TestUrlPathStartWithToken) { 
-        UNIT_ASSERT_VALUES_EQUAL(true, DoesUrlPathStartWithToken("http://ya.ru/bebe/zzz", "bebe")); 
-        UNIT_ASSERT_VALUES_EQUAL(true, DoesUrlPathStartWithToken("http://ya.ru/bebe?zzz", "bebe")); 
-        UNIT_ASSERT_VALUES_EQUAL(true, DoesUrlPathStartWithToken("http://ya.ru/bebe/", "bebe")); 
-        UNIT_ASSERT_VALUES_EQUAL(true, DoesUrlPathStartWithToken("http://ya.ru/bebe?", "bebe")); 
-        UNIT_ASSERT_VALUES_EQUAL(true, DoesUrlPathStartWithToken("https://ya.ru/bebe", "bebe")); 
-        UNIT_ASSERT_VALUES_EQUAL(false, DoesUrlPathStartWithToken("http://ya.ru/bebezzz", "bebe")); 
-        UNIT_ASSERT_VALUES_EQUAL(false, DoesUrlPathStartWithToken("http://ya.ru/bebe.zzz", "bebe")); 
-        UNIT_ASSERT_VALUES_EQUAL(false, DoesUrlPathStartWithToken("http://ya.ru/", "bebe")); 
-        UNIT_ASSERT_VALUES_EQUAL(false, DoesUrlPathStartWithToken("http://ya.ru", "bebe")); 
-        UNIT_ASSERT_VALUES_EQUAL(false, DoesUrlPathStartWithToken("http://bebe", "bebe")); 
-        UNIT_ASSERT_VALUES_EQUAL(false, DoesUrlPathStartWithToken("https://bebe/", "bebe")); 
-    } 
+
+    Y_UNIT_TEST(TestCutUrlPrefixes) {
+        UNIT_ASSERT_VALUES_EQUAL("ya.ru/bebe", CutUrlPrefixes("http://ya.ru/bebe"));
+        UNIT_ASSERT_VALUES_EQUAL("yaru", CutUrlPrefixes("yaru"));
+        UNIT_ASSERT_VALUES_EQUAL("ya.ru://zzz", CutUrlPrefixes("yaru://ya.ru://zzz"));
+        UNIT_ASSERT_VALUES_EQUAL("ya.ru://zzz", CutUrlPrefixes("ya.ru://zzz"));
+        UNIT_ASSERT_VALUES_EQUAL("ya.ru://zzz", CutUrlPrefixes("ftp://ya.ru://zzz"));
+        UNIT_ASSERT_VALUES_EQUAL("", CutUrlPrefixes("https://"));
+
+        UNIT_ASSERT_VALUES_EQUAL("ya.ru/bebe", CutUrlPrefixes("https://www.ya.ru/bebe"));
+        UNIT_ASSERT_VALUES_EQUAL("yaru", CutUrlPrefixes("www.yaru"));
+        UNIT_ASSERT_VALUES_EQUAL("ya.ru://zzz", CutUrlPrefixes("yaru://www.ya.ru://zzz"));
+        UNIT_ASSERT_VALUES_EQUAL("ya.ru://zzz", CutUrlPrefixes("www.ya.ru://zzz"));
+        UNIT_ASSERT_VALUES_EQUAL("ya.ru://zzz", CutUrlPrefixes("ftp://www.ya.ru://zzz"));
+        UNIT_ASSERT_VALUES_EQUAL("", CutUrlPrefixes("http://www."));
+    }
+
+    Y_UNIT_TEST(TestUrlPathStartWithToken) {
+        UNIT_ASSERT_VALUES_EQUAL(true, DoesUrlPathStartWithToken("http://ya.ru/bebe/zzz", "bebe"));
+        UNIT_ASSERT_VALUES_EQUAL(true, DoesUrlPathStartWithToken("http://ya.ru/bebe?zzz", "bebe"));
+        UNIT_ASSERT_VALUES_EQUAL(true, DoesUrlPathStartWithToken("http://ya.ru/bebe/", "bebe"));
+        UNIT_ASSERT_VALUES_EQUAL(true, DoesUrlPathStartWithToken("http://ya.ru/bebe?", "bebe"));
+        UNIT_ASSERT_VALUES_EQUAL(true, DoesUrlPathStartWithToken("https://ya.ru/bebe", "bebe"));
+        UNIT_ASSERT_VALUES_EQUAL(false, DoesUrlPathStartWithToken("http://ya.ru/bebezzz", "bebe"));
+        UNIT_ASSERT_VALUES_EQUAL(false, DoesUrlPathStartWithToken("http://ya.ru/bebe.zzz", "bebe"));
+        UNIT_ASSERT_VALUES_EQUAL(false, DoesUrlPathStartWithToken("http://ya.ru/", "bebe"));
+        UNIT_ASSERT_VALUES_EQUAL(false, DoesUrlPathStartWithToken("http://ya.ru", "bebe"));
+        UNIT_ASSERT_VALUES_EQUAL(false, DoesUrlPathStartWithToken("http://bebe", "bebe"));
+        UNIT_ASSERT_VALUES_EQUAL(false, DoesUrlPathStartWithToken("https://bebe/", "bebe"));
+    }
 }

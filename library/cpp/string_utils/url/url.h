@@ -112,7 +112,7 @@ bool TryGetSchemeHostAndPort(const TStringBuf url, TStringBuf& scheme, TStringBu
 /**
  * Extracts scheme, host and port from URL.
  *
- * This function perform the same actions as TryGetSchemeHostAndPort(), but in 
+ * This function perform the same actions as TryGetSchemeHostAndPort(), but in
  * case of impossibility to parse port number throws yexception.
  *
  * @param[in] url       any URL
@@ -165,6 +165,6 @@ size_t NormalizeHostName(char* dest, const TStringBuf source, size_t dest_size, 
 Y_PURE_FUNCTION
 TStringBuf RemoveFinalSlash(TStringBuf str) noexcept;
 
-TStringBuf CutUrlPrefixes(TStringBuf url) noexcept; 
-bool DoesUrlPathStartWithToken(TStringBuf url, const TStringBuf& token) noexcept; 
- 
+TStringBuf CutUrlPrefixes(TStringBuf url) noexcept;
+bool DoesUrlPathStartWithToken(TStringBuf url, const TStringBuf& token) noexcept;
+

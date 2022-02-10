@@ -1,4 +1,4 @@
-Y_BENCHMARK(library-threading-future-perf) 
+Y_BENCHMARK(library-threading-future-perf)
 
 OWNER(
     g:rtmr

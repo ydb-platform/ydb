@@ -9,13 +9,13 @@ GENERATE_ENUM_SERIALIZATION(poller.h)
 GENERATE_ENUM_SERIALIZATION(stack/stack_common.h)
 
 PEERDIR(
-    contrib/libs/libc_compat 
+    contrib/libs/libc_compat
     library/cpp/containers/intrusive_rb_tree
 )
 
 SRCS(
     cont_poller.cpp
-    helper.cpp 
+    helper.cpp
     impl.cpp
     iostatus.cpp
     network.cpp

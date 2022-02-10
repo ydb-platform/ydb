@@ -127,7 +127,7 @@ ALLOW juggler/pongerd -> contrib/restricted/boost
 ALLOW lbs/locator -> contrib/restricted/boost
 ALLOW library/cpp/testing/boost_test$ -> contrib/restricted/boost/libs/test
 ALLOW library/cpp/testing/boost_test_main$ -> contrib/restricted/boost/libs/test
-ALLOW library/cpp/testing/gtest_boost_extensions -> contrib/restricted/boost 
+ALLOW library/cpp/testing/gtest_boost_extensions -> contrib/restricted/boost
 ALLOW logbroker/pipe-parser -> contrib/restricted/boost
 ALLOW mail -> contrib/restricted/boost
 ALLOW maps -> contrib/restricted/boost
@@ -158,24 +158,24 @@ ALLOW search/meta/scatter/ant -> contrib/restricted/boost
 ALLOW search/meta/scatter/ut -> contrib/restricted/boost
 
 # use GTEST target in ya.make instead of PEERDIRing contrib/restricted/googletest
-# and include <library/cpp/testing/gtest.h> instead of <gtest/gtest.h> (<gmock/gmock.h>) 
-ALLOW contrib -> contrib/restricted/googletest 
-ALLOW library/cpp/testing/gmock_in_unittest -> contrib/restricted/googletest 
-ALLOW library/cpp/testing/gtest -> contrib/restricted/googletest 
-ALLOW library/cpp/testing/gtest_boost_extensions -> contrib/restricted/googletest 
-ALLOW library/cpp/testing/gtest_extensions -> contrib/restricted/googletest 
-ALLOW library/cpp/testing/gtest_main -> contrib/restricted/googletest 
-ALLOW library/cpp/testing/gtest_protobuf -> contrib/restricted/googletest 
-ALLOW library/python/testing/gtest/test/gtest -> contrib/restricted/googletest 
-# TODO remove this lines after they will switch to library/cpp/testing/gtest 
-ALLOW mail -> contrib/restricted/googletest 
-ALLOW maps/mobile/libs -> contrib/restricted/googletest 
+# and include <library/cpp/testing/gtest.h> instead of <gtest/gtest.h> (<gmock/gmock.h>)
+ALLOW contrib -> contrib/restricted/googletest
+ALLOW library/cpp/testing/gmock_in_unittest -> contrib/restricted/googletest
+ALLOW library/cpp/testing/gtest -> contrib/restricted/googletest
+ALLOW library/cpp/testing/gtest_boost_extensions -> contrib/restricted/googletest
+ALLOW library/cpp/testing/gtest_extensions -> contrib/restricted/googletest
+ALLOW library/cpp/testing/gtest_main -> contrib/restricted/googletest
+ALLOW library/cpp/testing/gtest_protobuf -> contrib/restricted/googletest
+ALLOW library/python/testing/gtest/test/gtest -> contrib/restricted/googletest
+# TODO remove this lines after they will switch to library/cpp/testing/gtest
+ALLOW mail -> contrib/restricted/googletest
+ALLOW maps/mobile/libs -> contrib/restricted/googletest
 ALLOW maps/mobile/bundle -> contrib/restricted/googletest
-ALLOW mds -> contrib/restricted/googletest 
+ALLOW mds -> contrib/restricted/googletest
 # A mere proxy to allow using gmock in libraries without being bound to specific test framework
 # See IGNIETFERRO-1827 for details.
 ALLOW library/cpp/testing/gmock -> contrib/restricted/googletest/googlemock
- 
+
 # allow usage of MIT part
 ALLOW .* -> contrib/restricted/librseq/headeronly
 

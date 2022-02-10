@@ -10,8 +10,8 @@ PEERDIR(
     contrib/libs/gflags
     contrib/libs/protoc
     contrib/libs/grpc/src/proto/grpc/reflection/v1alpha
-    contrib/restricted/googletest/googlemock 
-    contrib/restricted/googletest/googletest 
+    contrib/restricted/googletest/googlemock
+    contrib/restricted/googletest/googletest
 )
 
 ADDINCL(

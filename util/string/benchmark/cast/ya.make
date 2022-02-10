@@ -1,4 +1,4 @@
-Y_BENCHMARK() 
+Y_BENCHMARK()
 
 OWNER(pg)
 

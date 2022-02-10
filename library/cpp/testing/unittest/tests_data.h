@@ -1,7 +1,7 @@
 #pragma once
 
-#include <library/cpp/testing/common/env.h> 
- 
+#include <library/cpp/testing/common/env.h>
+
 #include <util/generic/noncopyable.h>
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
@@ -29,7 +29,7 @@ void SetReuseAddressAndPort(const TSocketType& sock) {
 
 class TPortManager: public TNonCopyable {
 public:
-    TPortManager(bool reservePortsForCurrentTest = true); 
+    TPortManager(bool reservePortsForCurrentTest = true);
     ~TPortManager();
 
     // Gets free TCP port

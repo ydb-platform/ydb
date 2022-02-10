@@ -21,46 +21,46 @@ T* CreateDefaultLogger() {
     return nullptr;
 }
 
-namespace NLoggingImpl { 
-    template<class T, class TTraits> 
-    class TOperatorBase { 
-        struct TPtr { 
-            TPtr() 
-                : Instance(TTraits::CreateDefault()) 
-            { 
-            } 
- 
-            THolder<T> Instance; 
-        }; 
- 
-    public: 
-        inline static bool Usage() { 
+namespace NLoggingImpl {
+    template<class T, class TTraits>
+    class TOperatorBase {
+        struct TPtr {
+            TPtr()
+                : Instance(TTraits::CreateDefault())
+            {
+            }
+
+            THolder<T> Instance;
+        };
+
+    public:
+        inline static bool Usage() {
             return SingletonWithPriority<TPtr, SingletonPriority>()->Instance.Get();
         }
 
-        inline static T* Get() { 
+        inline static T* Get() {
             return SingletonWithPriority<TPtr, SingletonPriority>()->Instance.Get();
-        } 
- 
-        inline static void Set(T* v) { 
+        }
+
+        inline static void Set(T* v) {
             SingletonWithPriority<TPtr, SingletonPriority>()->Instance.Reset(v);
-        } 
+        }
     };
 
-    template<class T> 
-    struct TLoggerTraits { 
-        static T* CreateDefault() { 
-            return CreateDefaultLogger<T>(); 
-        } 
-    }; 
-} 
+    template<class T>
+    struct TLoggerTraits {
+        static T* CreateDefault() {
+            return CreateDefaultLogger<T>();
+        }
+    };
+}
 
-template <class T> 
-class TLoggerOperator : public NLoggingImpl::TOperatorBase<T, NLoggingImpl::TLoggerTraits<T>>  { 
-public: 
+template <class T>
+class TLoggerOperator : public NLoggingImpl::TOperatorBase<T, NLoggingImpl::TLoggerTraits<T>>  {
+public:
     inline static TLog& Log() {
-        Y_ASSERT(TLoggerOperator::Usage()); 
-        return *TLoggerOperator::Get(); 
+        Y_ASSERT(TLoggerOperator::Usage());
+        return *TLoggerOperator::Get();
     }
 };
 
@@ -70,11 +70,11 @@ namespace NLoggingImpl {
 
     // Returns correct log type to use
     TString PrepareToOpenLog(TString logType, int logLevel, bool rotation, bool startAsDaemon);
- 
-    template <class TLoggerType> 
-    void InitLogImpl(TString logType, const int logLevel, const bool rotation, const bool startAsDaemon) { 
+
+    template <class TLoggerType>
+    void InitLogImpl(TString logType, const int logLevel, const bool rotation, const bool startAsDaemon) {
         TLoggerOperator<TLoggerType>::Set(new TLoggerType(PrepareToOpenLog(logType, logLevel, rotation, startAsDaemon), (ELogPriority)logLevel));
-    } 
+    }
 }
 
 struct TLogRecordContext {

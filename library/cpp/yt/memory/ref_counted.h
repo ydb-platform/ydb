@@ -90,13 +90,13 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
-const TRefCounter* GetRefCounter(const T* obj); 
+const TRefCounter* GetRefCounter(const T* obj);
 
 template <class T>
-void DestroyRefCounted(const T* obj); 
+void DestroyRefCounted(const T* obj);
 
 template <class T>
-void DeallocateRefCounted(const T* obj); 
+void DeallocateRefCounted(const T* obj);
 
 ////////////////////////////////////////////////////////////////////////////////
 

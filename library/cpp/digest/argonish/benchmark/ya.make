@@ -1,6 +1,6 @@
 OWNER(e-sidorov)
 
-Y_BENCHMARK() 
+Y_BENCHMARK()
 
 PEERDIR(
     library/cpp/digest/argonish

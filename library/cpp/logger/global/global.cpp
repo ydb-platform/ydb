@@ -1,11 +1,11 @@
 #include "global.h"
 
-static void DoInitGlobalLog(THolder<TGlobalLog> logger, THolder<ILoggerFormatter> formatter) { 
-    TLoggerOperator<TGlobalLog>::Set(logger.Release()); 
-    if (!formatter) { 
-        formatter.Reset(CreateRtyLoggerFormatter()); 
-    } 
-    TLoggerFormatterOperator::Set(formatter.Release()); 
+static void DoInitGlobalLog(THolder<TGlobalLog> logger, THolder<ILoggerFormatter> formatter) {
+    TLoggerOperator<TGlobalLog>::Set(logger.Release());
+    if (!formatter) {
+        formatter.Reset(CreateRtyLoggerFormatter());
+    }
+    TLoggerFormatterOperator::Set(formatter.Release());
 }
 
 void DoInitGlobalLog(const TString& logType, const int logLevel, const bool rotation, const bool startAsDaemon, THolder<ILoggerFormatter> formatter, bool threaded) {
@@ -18,10 +18,10 @@ void DoInitGlobalLog(const TString& logType, const int logLevel, const bool rota
         std::move(formatter));
 }
 
-void DoInitGlobalLog(THolder<TLogBackend> backend, THolder<ILoggerFormatter> formatter) { 
+void DoInitGlobalLog(THolder<TLogBackend> backend, THolder<ILoggerFormatter> formatter) {
     DoInitGlobalLog(THolder(new TGlobalLog(std::move(backend))), std::move(formatter));
-} 
- 
+}
+
 bool GlobalLogInitialized() {
     return TLoggerOperator<TGlobalLog>::Usage();
 }

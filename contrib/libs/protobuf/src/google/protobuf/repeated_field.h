@@ -655,7 +655,7 @@ class PROTOBUF_EXPORT RepeatedPtrFieldBase {
   template<typename TypeHandler>
   void Truncate(int new_size) {
     GOOGLE_DCHECK_LE(new_size, current_size_);
-    for (int i = new_size; i < current_size_; i++) { 
+    for (int i = new_size; i < current_size_; i++) {
       TypeHandler::Clear(cast<TypeHandler>(rep_->elements[i]));
     }
     current_size_ = new_size;

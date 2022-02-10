@@ -12,8 +12,8 @@ PEERDIR(
     library/cpp/dbg_output
     library/cpp/diff
     library/cpp/json/writer
-    library/cpp/testing/common 
-    library/cpp/testing/hook 
+    library/cpp/testing/common
+    library/cpp/testing/hook
 )
 
 SRCS(
@@ -26,8 +26,8 @@ SRCS(
 )
 
 END()
- 
-RECURSE_FOR_TESTS( 
-    fat 
-    ut 
-) 
+
+RECURSE_FOR_TESTS(
+    fat
+    ut
+)

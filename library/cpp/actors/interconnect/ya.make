@@ -72,7 +72,7 @@ IF (OS_LINUX)
 ENDIF()
 
 PEERDIR(
-    contrib/libs/libc_compat 
+    contrib/libs/libc_compat
     contrib/libs/openssl
     library/cpp/actors/core
     library/cpp/actors/dnscachelib

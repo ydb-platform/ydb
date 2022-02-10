@@ -4,7 +4,7 @@ OWNER(
 )
 SUBSCRIBER(g:util-subscribers)
 
-Y_BENCHMARK() 
+Y_BENCHMARK()
 
 ALLOCATOR(B)
 

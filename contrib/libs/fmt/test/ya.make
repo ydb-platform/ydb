@@ -13,7 +13,7 @@ LICENSE(MIT)
 
 PEERDIR(
     contrib/libs/fmt
-    contrib/restricted/googletest/googlemock 
+    contrib/restricted/googletest/googlemock
 )
 
 NO_COMPILER_WARNINGS()

@@ -3,7 +3,7 @@ OWNER(
     g:util
 )
 
-Y_BENCHMARK() 
+Y_BENCHMARK()
 
 SRCS(
     main.cpp

@@ -1,6 +1,6 @@
 OWNER(g:util)
 
-Y_BENCHMARK() 
+Y_BENCHMARK()
 
 PEERDIR(
     util/draft

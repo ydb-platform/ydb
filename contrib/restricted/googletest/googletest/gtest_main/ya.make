@@ -12,14 +12,14 @@ LICENSE(BSD-3-Clause)
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 PEERDIR(
-    contrib/restricted/googletest/googletest 
+    contrib/restricted/googletest/googletest
 )
 
-ADDINCL( 
-    GLOBAL contrib/restricted/googletest/googletest/include 
-    contrib/restricted/googletest/googletest 
-) 
- 
+ADDINCL(
+    GLOBAL contrib/restricted/googletest/googletest/include
+    contrib/restricted/googletest/googletest
+)
+
 NO_COMPILER_WARNINGS()
 
 NO_UTIL()
@@ -30,7 +30,7 @@ CFLAGS(
     GLOBAL -DGTEST_HAS_STD_WSTRING=1
 )
 
-SRCDIR(contrib/restricted/googletest/googletest/src) 
+SRCDIR(contrib/restricted/googletest/googletest/src)
 
 SRCS(
     GLOBAL gtest_main.cc

@@ -23,7 +23,7 @@ RECURSE(
     glib-networking
     glibmm
     google
-    googletest 
+    googletest
     gst-plugins-bad
     gst-plugins-base
     gst-plugins-good

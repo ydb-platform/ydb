@@ -9,8 +9,8 @@ OWNER(
 )
 
 PEERDIR(
-    contrib/restricted/googletest/googlemock 
-    contrib/restricted/googletest/googletest 
+    contrib/restricted/googletest/googlemock
+    contrib/restricted/googletest/googletest
 )
 
 SRCS(
@@ -18,7 +18,7 @@ SRCS(
     gtest_extensions.cpp
     matchers.cpp
     pretty_printers.cpp
-    probe.cpp 
+    probe.cpp
 )
 
 END()

@@ -8,8 +8,8 @@
 #include <util/stream/str.h>
 #include <util/datetime/base.h>
 
-#include <gtest/gtest.h> 
-#include <gmock/gmock.h> 
+#include <gtest/gtest.h>
+#include <gmock/gmock.h>
 
 /**
  * Automatically define GTest pretty printer for type that can print itself to util's `IOutputStream`.

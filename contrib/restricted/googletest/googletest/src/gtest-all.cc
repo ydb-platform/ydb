@@ -26,9 +26,9 @@
 // THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- 
+
 //
-// Google C++ Testing and Mocking Framework (Google Test) 
+// Google C++ Testing and Mocking Framework (Google Test)
 //
 // Sometimes it's desirable to build Google Test by compiling a single file.
 // This file serves this purpose.
@@ -41,7 +41,7 @@
 #include "src/gtest.cc"
 #include "src/gtest-death-test.cc"
 #include "src/gtest-filepath.cc"
-#include "src/gtest-matchers.cc" 
+#include "src/gtest-matchers.cc"
 #include "src/gtest-port.cc"
 #include "src/gtest-printers.cc"
 #include "src/gtest-test-part.cc"

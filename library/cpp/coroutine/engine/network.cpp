@@ -4,7 +4,7 @@
 #include <util/generic/scope.h>
 #include <util/generic/xrange.h>
 
-#include <sys/uio.h> 
+#include <sys/uio.h>
 
 #if defined(_bionic_)
 #   define IOV_MAX 1024
@@ -18,11 +18,11 @@ namespace NCoro {
         }
 
         ssize_t DoReadVector(SOCKET fd, TContIOVector* vec) noexcept {
-            return readv(fd, (const iovec*) vec->Parts(), Min(IOV_MAX, (int) vec->Count())); 
+            return readv(fd, (const iovec*) vec->Parts(), Min(IOV_MAX, (int) vec->Count()));
         }
 
         ssize_t DoWriteVector(SOCKET fd, TContIOVector* vec) noexcept {
-            return writev(fd, (const iovec*) vec->Parts(), Min(IOV_MAX, (int) vec->Count())); 
+            return writev(fd, (const iovec*) vec->Parts(), Min(IOV_MAX, (int) vec->Count()));
         }
     }
 

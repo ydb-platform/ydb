@@ -1,6 +1,6 @@
 OWNER(yazevnul)
 
-Y_BENCHMARK() 
+Y_BENCHMARK()
 
 ALLOCATOR(B)
 

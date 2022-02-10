@@ -1,23 +1,23 @@
-LIBRARY() 
- 
-OWNER( 
-    amatanhead 
-    bulatman 
-    thegeorg 
-    g:cpp-contrib 
-) 
- 
-SRCS( 
-    env.cpp 
-    network.cpp 
+LIBRARY()
+
+OWNER(
+    amatanhead
+    bulatman
+    thegeorg
+    g:cpp-contrib
+)
+
+SRCS(
+    env.cpp
+    network.cpp
     probe.cpp
-    scope.cpp 
-) 
- 
+    scope.cpp
+)
+
 PEERDIR(
     library/cpp/json
 )
 
-END() 
- 
-RECURSE_FOR_TESTS(ut) 
+END()
+
+RECURSE_FOR_TESTS(ut)

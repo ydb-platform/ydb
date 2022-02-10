@@ -12,10 +12,10 @@ class TLockFreeStack: TNonCopyable {
         TNode* Next;
 
         TNode() = default;
- 
+
         template <class U>
-        explicit TNode(U&& val) 
-            : Value(std::forward<U>(val)) 
+        explicit TNode(U&& val)
+            : Value(std::forward<U>(val))
             , Next(nullptr)
         {
         }
@@ -49,11 +49,11 @@ class TLockFreeStack: TNonCopyable {
                 break;
         }
     }
-    template <class U> 
-    void EnqueueImpl(U&& u) { 
+    template <class U>
+    void EnqueueImpl(U&& u) {
         TNode* volatile node = new TNode(std::forward<U>(u));
-        EnqueueImpl(node, node); 
-    } 
+        EnqueueImpl(node, node);
+    }
 
 public:
     TLockFreeStack()
@@ -66,15 +66,15 @@ public:
         EraseList(Head);
         EraseList(FreePtr);
     }
- 
+
     void Enqueue(const T& t) {
-        EnqueueImpl(t); 
+        EnqueueImpl(t);
     }
- 
-    void Enqueue(T&& t) { 
-        EnqueueImpl(std::move(t)); 
-    } 
- 
+
+    void Enqueue(T&& t) {
+        EnqueueImpl(std::move(t));
+    }
+
     template <typename TCollection>
     void EnqueueAll(const TCollection& data) {
         EnqueueAll(data.begin(), data.end());
@@ -99,7 +99,7 @@ public:
         AtomicAdd(DequeueCount, 1);
         for (TNode* current = AtomicGet(Head); current; current = AtomicGet(Head)) {
             if (AtomicCas(&Head, AtomicGet(current->Next), current)) {
-                *res = std::move(current->Value); 
+                *res = std::move(current->Value);
                 // delete current; // ABA problem
                 // even more complex node deletion
                 TryToFreeMemory();
@@ -129,7 +129,7 @@ public:
         for (TNode* current = AtomicGet(Head); current; current = AtomicGet(Head)) {
             if (AtomicCas(&Head, (TNode*)nullptr, current)) {
                 for (TNode* x = current; x;) {
-                    res->push_back(std::move(x->Value)); 
+                    res->push_back(std::move(x->Value));
                     x = x->Next;
                 }
                 // EraseList(current); // ABA problem
@@ -159,7 +159,7 @@ public:
     bool DequeueSingleConsumer(T* res) {
         for (TNode* current = AtomicGet(Head); current; current = AtomicGet(Head)) {
             if (AtomicCas(&Head, current->Next, current)) {
-                *res = std::move(current->Value); 
+                *res = std::move(current->Value);
                 delete current; // with single consumer thread ABA does not happen
                 return true;
             }
@@ -173,7 +173,7 @@ public:
         for (TNode* current = AtomicGet(Head); current; current = AtomicGet(Head)) {
             if (AtomicCas(&Head, (TNode*)nullptr, current)) {
                 for (TNode* x = current; x;) {
-                    res->push_back(std::move(x->Value)); 
+                    res->push_back(std::move(x->Value));
                     x = x->Next;
                 }
                 EraseList(current); // with single consumer thread ABA does not happen

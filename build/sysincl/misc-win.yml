@@ -63,4 +63,4 @@
 
 - includes:
     - sys/queue.h:   contrib/libs/libc_compat/include/windows/sys/queue.h
-    - sys/uio.h:     contrib/libs/libc_compat/include/windows/sys/uio.h 
+    - sys/uio.h:     contrib/libs/libc_compat/include/windows/sys/uio.h

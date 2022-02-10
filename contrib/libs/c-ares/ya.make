@@ -20,10 +20,10 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-PEERDIR( 
-    contrib/libs/libc_compat 
-) 
- 
+PEERDIR(
+    contrib/libs/libc_compat
+)
+
 ADDINCL(
     contrib/libs/c-ares
 )
@@ -33,7 +33,7 @@ NO_COMPILER_WARNINGS()
 CFLAGS(
     -DCARES_BUILDING_LIBRARY
     -DCARES_SYMBOL_HIDING
-    -DHAVE_CONFIG_H 
+    -DHAVE_CONFIG_H
 )
 
 IF (NOT DLL_FOR)

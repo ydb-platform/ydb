@@ -12,8 +12,8 @@
 
 #include <memory>
 
-#include <sys/uio.h> 
- 
+#include <sys/uio.h>
+
 namespace NInterconnect {
     class TSocket: public NActors::TSharedDescriptor, public TNonCopyable {
     protected:

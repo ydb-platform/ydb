@@ -4,8 +4,8 @@
 
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
-#include <util/stream/output.h>
-#include <util/stream/str.h>
+#include <util/stream/output.h> 
+#include <util/stream/str.h> 
 #include <algorithm>
 #include "libxml-guards.h"
 
@@ -48,20 +48,20 @@ namespace NXml {
         TConstNode Root() const;
 
         void Save(IOutputStream& stream, TZtStringBuf enc = "", bool shouldFormat = true) const {
-            int bufferSize = 0;
-            xmlChar* xmlBuff = nullptr;
+            int bufferSize = 0; 
+            xmlChar* xmlBuff = nullptr; 
             const char* encoding = enc.size() ? enc.data() : Doc->encoding ? nullptr : "UTF-8";
             xmlDocDumpFormatMemoryEnc(Doc.Get(), &xmlBuff, &bufferSize, encoding, shouldFormat);
-            TCharPtr xmlCharBuffPtr(xmlBuff);
-            stream.Write(xmlBuff, bufferSize);
-        }
+            TCharPtr xmlCharBuffPtr(xmlBuff); 
+            stream.Write(xmlBuff, bufferSize); 
+        } 
 
         TString ToString(TZtStringBuf enc = "", bool shouldFormat = true) const {
-            TStringStream s;
+            TStringStream s; 
             Save(s, enc, shouldFormat);
             return s.Str();
-        }
-
+        } 
+ 
         void Swap(TDocument& that) {
             std::swap(this->Doc, that.Doc);
         }

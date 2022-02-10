@@ -13,11 +13,11 @@ inline static char DigitToChar(unsigned char digit) {
 }
 
 extern const char* const Char2DigitTable;
-
+ 
 inline static int Char2Digit(char ch) {
-    char result = Char2DigitTable[(unsigned char)ch];
+    char result = Char2DigitTable[(unsigned char)ch]; 
     Y_ENSURE(result != '\xff', "invalid hex character " << (int)ch);
-    return result;
+    return result; 
 }
 
 //! Convert a hex string of exactly 2 chars to int
@@ -26,7 +26,7 @@ inline static int String2Byte(const char* s) {
     return Char2Digit(*s) * 16 + Char2Digit(*(s + 1));
 }
 
-char* HexEncode(const void* in, size_t len, char* out);
+char* HexEncode(const void* in, size_t len, char* out); 
 
 TString HexEncode(const void* in, size_t len);
 

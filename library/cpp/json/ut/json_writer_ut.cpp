@@ -179,14 +179,14 @@ Y_UNIT_TEST_SUITE(TJsonWriterTest) {
             UNIT_ASSERT_VALUES_EQUAL(out.Str(), expected);
         }
     }
-
+ 
     Y_UNIT_TEST(Callback) {
-        NJsonWriter::TBuf json;
-        json.WriteString("A");
-        UNIT_ASSERT_VALUES_EQUAL(json.Str(), "\"A\"");
-        UNIT_ASSERT_VALUES_EQUAL(WrapJsonToCallback(json, ""), "\"A\"");
-        UNIT_ASSERT_VALUES_EQUAL(WrapJsonToCallback(json, "Foo"), "Foo(\"A\")");
-    }
+        NJsonWriter::TBuf json; 
+        json.WriteString("A"); 
+        UNIT_ASSERT_VALUES_EQUAL(json.Str(), "\"A\""); 
+        UNIT_ASSERT_VALUES_EQUAL(WrapJsonToCallback(json, ""), "\"A\""); 
+        UNIT_ASSERT_VALUES_EQUAL(WrapJsonToCallback(json, "Foo"), "Foo(\"A\")"); 
+    } 
 
     Y_UNIT_TEST(FloatPrecision) {
         const double value = 1517933989.4242;

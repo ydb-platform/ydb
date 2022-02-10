@@ -113,236 +113,236 @@ namespace NAccessors {
                 return TGet::Get(b);
             }
         };
-
-        template <typename Ta, bool Init>
-        struct TClear: public TMemoryAccessorBase<Ta> {
-            template <typename Tb>
-            struct TNoMemoryIndirectionClear {
-                static void Do(Tb& b) {
-                    Zero(b);
-                }
-            };
-
-            template <typename Tb>
-            struct TIndirectMemoryRegionClear {
+ 
+        template <typename Ta, bool Init> 
+        struct TClear: public TMemoryAccessorBase<Ta> { 
+            template <typename Tb> 
+            struct TNoMemoryIndirectionClear { 
+                static void Do(Tb& b) { 
+                    Zero(b); 
+                } 
+            }; 
+ 
+            template <typename Tb> 
+            struct TIndirectMemoryRegionClear { 
                 Y_HAS_MEMBER(Clear);
                 Y_HAS_MEMBER(clear);
-
-                template <typename Tc>
-                struct TByClear {
-                    static void Do(Tc& b) {
-                        b.Clear();
-                    }
-                };
-
-                template <typename Tc>
-                struct TByclear {
-                    static void Do(Tc& b) {
-                        b.clear();
-                    }
-                };
-
-                template <typename Tc>
-                struct TByNone {
-                    static void Do(Tc& b) {
-                        if (!Init)
-                            b = Tc();
-                    }
-                };
-
+ 
+                template <typename Tc> 
+                struct TByClear { 
+                    static void Do(Tc& b) { 
+                        b.Clear(); 
+                    } 
+                }; 
+ 
+                template <typename Tc> 
+                struct TByclear { 
+                    static void Do(Tc& b) { 
+                        b.clear(); 
+                    } 
+                }; 
+ 
+                template <typename Tc> 
+                struct TByNone { 
+                    static void Do(Tc& b) { 
+                        if (!Init) 
+                            b = Tc(); 
+                    } 
+                }; 
+ 
                 using TDo = std::conditional_t<
                     THasClear<Tb>::value,
-                    TByClear<Tb>,
+                    TByClear<Tb>, 
                     std::conditional_t<
                         THasclear<Tb>::value,
-                        TByclear<Tb>,
-                        TByNone<Tb>>>;
-
-                static void Do(Tb& b) {
-                    TDo::Do(b);
-                }
-            };
-
+                        TByclear<Tb>, 
+                        TByNone<Tb>>>; 
+ 
+                static void Do(Tb& b) { 
+                    TDo::Do(b); 
+                } 
+            }; 
+ 
             using TDo = std::conditional_t<TMemoryAccessorBase<Ta>::SimpleMemory, TNoMemoryIndirectionClear<Ta>, TIndirectMemoryRegionClear<Ta>>;
-
-            static void Do(Ta& b) {
-                TDo::Do(b);
-            }
-        };
-
-        template <typename Tb>
-        struct TReserve {
+ 
+            static void Do(Ta& b) { 
+                TDo::Do(b); 
+            } 
+        }; 
+ 
+        template <typename Tb> 
+        struct TReserve { 
             Y_HAS_MEMBER(Reserve);
             Y_HAS_MEMBER(reserve);
-
-            template <typename Tc>
-            struct TByReserve {
-                static void Do(Tc& b, size_t sz) {
-                    b.Reserve(sz);
-                }
-            };
-
-            template <typename Tc>
-            struct TByreserve {
-                static void Do(Tc& b, size_t sz) {
-                    b.reserve(sz);
-                }
-            };
-
-            template <typename Tc>
-            struct TByNone {
-                static void Do(Tc&, size_t) {
-                }
-            };
-
+ 
+            template <typename Tc> 
+            struct TByReserve { 
+                static void Do(Tc& b, size_t sz) { 
+                    b.Reserve(sz); 
+                } 
+            }; 
+ 
+            template <typename Tc> 
+            struct TByreserve { 
+                static void Do(Tc& b, size_t sz) { 
+                    b.reserve(sz); 
+                } 
+            }; 
+ 
+            template <typename Tc> 
+            struct TByNone { 
+                static void Do(Tc&, size_t) { 
+                } 
+            }; 
+ 
             using TDo = std::conditional_t<
                 THasReserve<Tb>::value,
-                TByReserve<Tb>,
+                TByReserve<Tb>, 
                 std::conditional_t<
                     THasreserve<Tb>::value,
-                    TByreserve<Tb>,
-                    TByNone<Tb>>>;
-
-            static void Do(Tb& b, size_t sz) {
-                TDo::Do(b, sz);
-            }
-        };
-
-        template <typename Tb>
-        struct TResize {
+                    TByreserve<Tb>, 
+                    TByNone<Tb>>>; 
+ 
+            static void Do(Tb& b, size_t sz) { 
+                TDo::Do(b, sz); 
+            } 
+        }; 
+ 
+        template <typename Tb> 
+        struct TResize { 
             Y_HAS_MEMBER(Resize);
             Y_HAS_MEMBER(resize);
-
-            template <typename Tc>
-            struct TByResize {
-                static void Do(Tc& b, size_t sz) {
-                    b.Resize(sz);
-                }
-            };
-
-            template <typename Tc>
-            struct TByresize {
-                static void Do(Tc& b, size_t sz) {
-                    b.resize(sz);
-                }
-            };
-
+ 
+            template <typename Tc> 
+            struct TByResize { 
+                static void Do(Tc& b, size_t sz) { 
+                    b.Resize(sz); 
+                } 
+            }; 
+ 
+            template <typename Tc> 
+            struct TByresize { 
+                static void Do(Tc& b, size_t sz) { 
+                    b.resize(sz); 
+                } 
+            }; 
+ 
             using TDo = std::conditional_t<THasResize<Tb>::value, TByResize<Tb>, TByresize<Tb>>;
-
-            static void Do(Tb& b, size_t sz) {
-                TDo::Do(b, sz);
-            }
-        };
-
-        template <typename Tb>
-        struct TAppend {
+ 
+            static void Do(Tb& b, size_t sz) { 
+                TDo::Do(b, sz); 
+            } 
+        }; 
+ 
+        template <typename Tb> 
+        struct TAppend { 
             Y_HAS_MEMBER(Append);
             Y_HAS_MEMBER(append);
             Y_HAS_MEMBER(push_back);
-
-            template <typename Tc>
-            struct TByAppend {
-                using TElementType = typename TMemoryTraits<Tc>::TElementType;
-
-                static void Do(Tc& b, const TElementType& val) {
-                    b.Append(val);
-                }
-            };
-
-            template <typename Tc>
-            struct TByappend {
-                using TElementType = typename TMemoryTraits<Tc>::TElementType;
-
-                static void Do(Tc& b, const TElementType& val) {
-                    b.append(val);
-                }
-            };
-
-            template <typename Tc>
-            struct TBypush_back {
-                using TElementType = typename TMemoryTraits<Tc>::TElementType;
-
-                static void Do(Tc& b, const TElementType& val) {
-                    b.push_back(val);
-                }
-            };
-
+ 
+            template <typename Tc> 
+            struct TByAppend { 
+                using TElementType = typename TMemoryTraits<Tc>::TElementType; 
+ 
+                static void Do(Tc& b, const TElementType& val) { 
+                    b.Append(val); 
+                } 
+            }; 
+ 
+            template <typename Tc> 
+            struct TByappend { 
+                using TElementType = typename TMemoryTraits<Tc>::TElementType; 
+ 
+                static void Do(Tc& b, const TElementType& val) { 
+                    b.append(val); 
+                } 
+            }; 
+ 
+            template <typename Tc> 
+            struct TBypush_back { 
+                using TElementType = typename TMemoryTraits<Tc>::TElementType; 
+ 
+                static void Do(Tc& b, const TElementType& val) { 
+                    b.push_back(val); 
+                } 
+            }; 
+ 
             using TDo = std::conditional_t<
                 THasAppend<Tb>::value,
-                TByAppend<Tb>,
+                TByAppend<Tb>, 
                 std::conditional_t<
                     THasappend<Tb>::value,
-                    TByappend<Tb>,
-                    TBypush_back<Tb>>>;
-
-            using TElementType = typename TMemoryTraits<Tb>::TElementType;
-
-            static void Do(Tb& b, const TElementType& val) {
-                TDo::Do(b, val);
-            }
-        };
-
-        template <typename Tb>
-        struct TAppendRegion {
+                    TByappend<Tb>, 
+                    TBypush_back<Tb>>>; 
+ 
+            using TElementType = typename TMemoryTraits<Tb>::TElementType; 
+ 
+            static void Do(Tb& b, const TElementType& val) { 
+                TDo::Do(b, val); 
+            } 
+        }; 
+ 
+        template <typename Tb> 
+        struct TAppendRegion { 
             Y_HAS_MEMBER(Append);
             Y_HAS_MEMBER(append);
             Y_HAS_MEMBER(insert);
-
-            template <typename Tc>
-            struct TByAppend {
-                using TElementType = typename TMemoryTraits<Tc>::TElementType;
-
-                static void Do(Tc& b, const TElementType* beg, const TElementType* end) {
-                    b.Append(beg, end);
-                }
-            };
-
-            template <typename Tc>
-            struct TByappend {
-                using TElementType = typename TMemoryTraits<Tc>::TElementType;
-
-                static void Do(Tc& b, const TElementType* beg, const TElementType* end) {
-                    b.append(beg, end);
-                }
-            };
-
-            template <typename Tc>
-            struct TByinsert {
-                using TElementType = typename TMemoryTraits<Tc>::TElementType;
-
-                static void Do(Tc& b, const TElementType* beg, const TElementType* end) {
-                    b.insert(b.end(), beg, end);
-                }
-            };
-
-            template <typename Tc>
-            struct TByNone {
-                using TElementType = typename TMemoryTraits<Tc>::TElementType;
-
-                static void Do(Tc& b, const TElementType* beg, const TElementType* end) {
-                    for (const TElementType* it = beg; it != end; ++it)
-                        TAppend<Tc>::Do(b, *it);
-                }
-            };
-
+ 
+            template <typename Tc> 
+            struct TByAppend { 
+                using TElementType = typename TMemoryTraits<Tc>::TElementType; 
+ 
+                static void Do(Tc& b, const TElementType* beg, const TElementType* end) { 
+                    b.Append(beg, end); 
+                } 
+            }; 
+ 
+            template <typename Tc> 
+            struct TByappend { 
+                using TElementType = typename TMemoryTraits<Tc>::TElementType; 
+ 
+                static void Do(Tc& b, const TElementType* beg, const TElementType* end) { 
+                    b.append(beg, end); 
+                } 
+            }; 
+ 
+            template <typename Tc> 
+            struct TByinsert { 
+                using TElementType = typename TMemoryTraits<Tc>::TElementType; 
+ 
+                static void Do(Tc& b, const TElementType* beg, const TElementType* end) { 
+                    b.insert(b.end(), beg, end); 
+                } 
+            }; 
+ 
+            template <typename Tc> 
+            struct TByNone { 
+                using TElementType = typename TMemoryTraits<Tc>::TElementType; 
+ 
+                static void Do(Tc& b, const TElementType* beg, const TElementType* end) { 
+                    for (const TElementType* it = beg; it != end; ++it) 
+                        TAppend<Tc>::Do(b, *it); 
+                } 
+            }; 
+ 
             using TDo = std::conditional_t<
                 THasAppend<Tb>::value,
-                TByAppend<Tb>,
+                TByAppend<Tb>, 
                 std::conditional_t<
                     THasappend<Tb>::value,
-                    TByappend<Tb>,
+                    TByappend<Tb>, 
                     std::conditional_t<
                         THasinsert<Tb>::value,
-                        TByinsert<Tb>,
-                        TByNone<Tb>>>>;
-
-            using TElementType = typename TMemoryTraits<Tb>::TElementType;
-
-            static void Do(Tb& b, const TElementType* beg, const TElementType* end) {
-                TDo::Do(b, beg, end);
-            }
-        };
-
+                        TByinsert<Tb>, 
+                        TByNone<Tb>>>>; 
+ 
+            using TElementType = typename TMemoryTraits<Tb>::TElementType; 
+ 
+            static void Do(Tb& b, const TElementType* beg, const TElementType* end) { 
+                TDo::Do(b, beg, end); 
+            } 
+        }; 
+ 
         template <typename Ta>
         struct TAssign: public TMemoryAccessorBase<Ta> {
             using TElementType = typename TMemoryTraits<Ta>::TElementType;

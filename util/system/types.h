@@ -94,11 +94,11 @@ typedef int64_t i64;
     #error "Unsupported platform"
 #endif
 
-// SUPERLONG
-#if !defined(DONT_USE_SUPERLONG) && !defined(SUPERLONG_MAX)
+// SUPERLONG 
+#if !defined(DONT_USE_SUPERLONG) && !defined(SUPERLONG_MAX) 
     #define SUPERLONG_MAX ~LL(0)
-typedef i64 SUPERLONG;
-#endif
+typedef i64 SUPERLONG; 
+#endif 
 
 // UNICODE
 #ifdef __cplusplus

@@ -284,6 +284,6 @@ namespace NJsonWriter {
     TPairContext TValueWriter<TOutContext>::BeginObject() {
         return Buf.BeginObject();
     }
-
+ 
     TString WrapJsonToCallback(const TBuf& buf, TStringBuf callback);
 }

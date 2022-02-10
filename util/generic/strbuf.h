@@ -321,19 +321,19 @@ public:
     inline bool AfterPrefix(const TdSelf& prefix, TdSelf& result) const noexcept {
         if (this->StartsWith(prefix)) {
             result = Tail(prefix.size());
-            return true;
-        }
-        return false;
-    }
-
+            return true; 
+        } 
+        return false; 
+    } 
+ 
     inline bool BeforeSuffix(const TdSelf& suffix, TdSelf& result) const noexcept {
         if (this->EndsWith(suffix)) {
             result = Head(size() - suffix.size());
-            return true;
-        }
-        return false;
-    }
-
+            return true; 
+        } 
+        return false; 
+    } 
+ 
     // returns true if string started with `prefix`, false otherwise
     inline bool SkipPrefix(const TdSelf& prefix) noexcept {
         return AfterPrefix(prefix, *this);

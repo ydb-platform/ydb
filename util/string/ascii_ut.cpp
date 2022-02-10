@@ -1,42 +1,42 @@
-#include "ascii.h"
-#include <ctype.h>
-
+#include "ascii.h" 
+#include <ctype.h> 
+ 
 #include <library/cpp/testing/unittest/registar.h>
-
+ 
 Y_UNIT_TEST_SUITE(TAsciiTest) {
     Y_UNIT_TEST(TestAscii) {
-        UNIT_ASSERT(IsAsciiDigit('3'));
-        UNIT_ASSERT(!IsAsciiDigit('x'));
-
-        UNIT_ASSERT(IsAsciiAlpha('r'));
-        UNIT_ASSERT(IsAsciiAlpha('R'));
-        UNIT_ASSERT(!IsAsciiAlpha('3'));
-
-        UNIT_ASSERT_EQUAL(AsciiToLower('3'), '3');
-        UNIT_ASSERT_EQUAL(AsciiToLower('A'), 'a');
-        UNIT_ASSERT_EQUAL(AsciiToLower('a'), 'a');
-
-        UNIT_ASSERT_EQUAL(AsciiToUpper('3'), '3');
-        UNIT_ASSERT_EQUAL(AsciiToUpper('A'), 'A');
-        UNIT_ASSERT_EQUAL(AsciiToUpper('a'), 'A');
-
-        UNIT_ASSERT(IsAscii('a'));
-        UNIT_ASSERT(!IsAscii(-100));
-        UNIT_ASSERT(!IsAscii(+200));
-        UNIT_ASSERT(!IsAscii(int('a') + 256));
-
-        for (int i = 0; i < 128; ++i) {
-            UNIT_ASSERT_VALUES_EQUAL((bool)isxdigit(i), IsAsciiHex(i));
-            UNIT_ASSERT_VALUES_EQUAL((bool)isspace(i), IsAsciiSpace((char)i));
-            UNIT_ASSERT_VALUES_EQUAL((bool)isspace(i), IsAsciiSpace((char)i));
-            UNIT_ASSERT_VALUES_EQUAL((bool)isalnum(i), IsAsciiAlnum((char)i));
-            UNIT_ASSERT_VALUES_EQUAL((bool)isalpha(i), IsAsciiAlpha((char)i));
-            UNIT_ASSERT_VALUES_EQUAL((bool)isupper(i), IsAsciiUpper((char)i));
-            UNIT_ASSERT_VALUES_EQUAL((bool)islower(i), IsAsciiLower((char)i));
-            UNIT_ASSERT_VALUES_EQUAL((bool)isdigit(i), IsAsciiDigit((char)i));
+        UNIT_ASSERT(IsAsciiDigit('3')); 
+        UNIT_ASSERT(!IsAsciiDigit('x')); 
+ 
+        UNIT_ASSERT(IsAsciiAlpha('r')); 
+        UNIT_ASSERT(IsAsciiAlpha('R')); 
+        UNIT_ASSERT(!IsAsciiAlpha('3')); 
+ 
+        UNIT_ASSERT_EQUAL(AsciiToLower('3'), '3'); 
+        UNIT_ASSERT_EQUAL(AsciiToLower('A'), 'a'); 
+        UNIT_ASSERT_EQUAL(AsciiToLower('a'), 'a'); 
+ 
+        UNIT_ASSERT_EQUAL(AsciiToUpper('3'), '3'); 
+        UNIT_ASSERT_EQUAL(AsciiToUpper('A'), 'A'); 
+        UNIT_ASSERT_EQUAL(AsciiToUpper('a'), 'A'); 
+ 
+        UNIT_ASSERT(IsAscii('a')); 
+        UNIT_ASSERT(!IsAscii(-100)); 
+        UNIT_ASSERT(!IsAscii(+200)); 
+        UNIT_ASSERT(!IsAscii(int('a') + 256)); 
+ 
+        for (int i = 0; i < 128; ++i) { 
+            UNIT_ASSERT_VALUES_EQUAL((bool)isxdigit(i), IsAsciiHex(i)); 
+            UNIT_ASSERT_VALUES_EQUAL((bool)isspace(i), IsAsciiSpace((char)i)); 
+            UNIT_ASSERT_VALUES_EQUAL((bool)isspace(i), IsAsciiSpace((char)i)); 
+            UNIT_ASSERT_VALUES_EQUAL((bool)isalnum(i), IsAsciiAlnum((char)i)); 
+            UNIT_ASSERT_VALUES_EQUAL((bool)isalpha(i), IsAsciiAlpha((char)i)); 
+            UNIT_ASSERT_VALUES_EQUAL((bool)isupper(i), IsAsciiUpper((char)i)); 
+            UNIT_ASSERT_VALUES_EQUAL((bool)islower(i), IsAsciiLower((char)i)); 
+            UNIT_ASSERT_VALUES_EQUAL((bool)isdigit(i), IsAsciiDigit((char)i)); 
             UNIT_ASSERT_VALUES_EQUAL((bool)ispunct(i), IsAsciiPunct((char)i));
-        }
-    }
+        } 
+    } 
 
     Y_UNIT_TEST(Test1) {
         for (int i = 128; i < 1000; ++i) {
@@ -95,4 +95,4 @@ Y_UNIT_TEST_SUITE(TAsciiTest) {
         UNIT_ASSERT_EQUAL(AsciiHasSuffixIgnoreCase("qweasd", "asD"), true);
         UNIT_ASSERT_EQUAL(AsciiHasSuffixIgnoreCase("qweasd", "ast"), false);
     }
-}
+} 

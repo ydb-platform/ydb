@@ -1,11 +1,11 @@
 #include <library/cpp/testing/unittest/registar.h>
-
+ 
 #include "algorithm.h"
 #include "strbuf.h"
 #include "string.h"
-
-static auto isOne = [](char c) { return c == '1'; };
-
+ 
+static auto isOne = [](char c) { return c == '1'; }; 
+ 
 Y_UNIT_TEST_SUITE(TAlgorithm) {
     Y_UNIT_TEST(AnyTest) {
         UNIT_ASSERT(0 == AnyOf(TStringBuf("00"), isOne));
@@ -18,8 +18,8 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
         UNIT_ASSERT(0 == AnyOf(array00, isOne));
         const char array01[]{'0', '1'};
         UNIT_ASSERT(1 == AnyOf(array01, isOne));
-    }
-
+    } 
+ 
     Y_UNIT_TEST(AllOfTest) {
         UNIT_ASSERT(0 == AllOf(TStringBuf("00"), isOne));
         UNIT_ASSERT(0 == AllOf(TStringBuf("01"), isOne));
@@ -31,8 +31,8 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
         UNIT_ASSERT(0 == AllOf(array01, isOne));
         const char array11[]{'1', '1'};
         UNIT_ASSERT(1 == AllOf(array11, isOne));
-    }
-
+    } 
+ 
     Y_UNIT_TEST(CountIfTest) {
         UNIT_ASSERT(3 == CountIf(TStringBuf("____1________1____1_______"), isOne));
         UNIT_ASSERT(5 == CountIf(TStringBuf("1____1________1____1_______1"), isOne));
@@ -42,8 +42,8 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
 
         const char array[] = "____1________1____1_______";
         UNIT_ASSERT(3 == CountIf(array, isOne));
-    }
-
+    } 
+ 
     Y_UNIT_TEST(CountTest) {
         UNIT_ASSERT(3 == Count("____1________1____1_______", '1'));
         UNIT_ASSERT(3 == Count(TStringBuf("____1________1____1_______"), '1'));
@@ -66,15 +66,15 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
     private:
         TStrokaNoCopy(const TStrokaNoCopy&);
         void operator=(const TStrokaNoCopy&);
-    };
-
+    }; 
+ 
     Y_UNIT_TEST(CountOfTest) {
         UNIT_ASSERT_VALUES_EQUAL(CountOf(1, 2), 0);
         UNIT_ASSERT_VALUES_EQUAL(CountOf(1, 1), 1);
         UNIT_ASSERT_VALUES_EQUAL(CountOf(2, 4, 5), 0);
         UNIT_ASSERT_VALUES_EQUAL(CountOf(2, 4, 2), 1);
         UNIT_ASSERT_VALUES_EQUAL(CountOf(3, 3, 3), 2);
-
+ 
         // Checking comparison of different types.
         UNIT_ASSERT_VALUES_EQUAL(CountOf(0x61, 'x', 'y', 'z'), 0);
         UNIT_ASSERT_VALUES_EQUAL(CountOf(0x61, 'a', 'b', 'c', 0x61), 2);
@@ -102,32 +102,32 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
     }
 
     Y_UNIT_TEST(EqualToOneOfTest) {
-        UNIT_ASSERT(1 == EqualToOneOf(1, 1, 2));
-        UNIT_ASSERT(1 == EqualToOneOf(2, 1, 2));
-        UNIT_ASSERT(0 == EqualToOneOf(3, 1, 2));
-        UNIT_ASSERT(1 == EqualToOneOf(1, 1));
-        UNIT_ASSERT(0 == EqualToOneOf(1, 2));
-        UNIT_ASSERT(0 == EqualToOneOf(3));
-
-        //test, that EqualToOneOf can compare different types, and don't copy objects:
-        TStrokaNoCopy x("x");
-        TStrokaNoCopy y("y");
-        TStrokaNoCopy z("z");
+        UNIT_ASSERT(1 == EqualToOneOf(1, 1, 2)); 
+        UNIT_ASSERT(1 == EqualToOneOf(2, 1, 2)); 
+        UNIT_ASSERT(0 == EqualToOneOf(3, 1, 2)); 
+        UNIT_ASSERT(1 == EqualToOneOf(1, 1)); 
+        UNIT_ASSERT(0 == EqualToOneOf(1, 2)); 
+        UNIT_ASSERT(0 == EqualToOneOf(3)); 
+ 
+        //test, that EqualToOneOf can compare different types, and don't copy objects: 
+        TStrokaNoCopy x("x"); 
+        TStrokaNoCopy y("y"); 
+        TStrokaNoCopy z("z"); 
         const char* px = "x";
         const char* py = "y";
         const char* pz = "z";
-
-        UNIT_ASSERT(1 == EqualToOneOf(x, px, py));
-        UNIT_ASSERT(1 == EqualToOneOf(y, px, py));
-        UNIT_ASSERT(1 == EqualToOneOf(y, px, y));
-        UNIT_ASSERT(1 == EqualToOneOf(y, x, py));
-        UNIT_ASSERT(0 == EqualToOneOf(z, px, py));
-        UNIT_ASSERT(1 == EqualToOneOf(px, x, y));
-        UNIT_ASSERT(1 == EqualToOneOf(py, x, y));
-        UNIT_ASSERT(0 == EqualToOneOf(pz, x, y));
-    }
-
-    template <class TTestConstPtr>
+ 
+        UNIT_ASSERT(1 == EqualToOneOf(x, px, py)); 
+        UNIT_ASSERT(1 == EqualToOneOf(y, px, py)); 
+        UNIT_ASSERT(1 == EqualToOneOf(y, px, y)); 
+        UNIT_ASSERT(1 == EqualToOneOf(y, x, py)); 
+        UNIT_ASSERT(0 == EqualToOneOf(z, px, py)); 
+        UNIT_ASSERT(1 == EqualToOneOf(px, x, y)); 
+        UNIT_ASSERT(1 == EqualToOneOf(py, x, y)); 
+        UNIT_ASSERT(0 == EqualToOneOf(pz, x, y)); 
+    } 
+ 
+    template <class TTestConstPtr> 
     void TestFindPtrFoundValue(int j, TTestConstPtr root) {
         if (j == 3) {
             UNIT_ASSERT(root && *root == 3);
@@ -139,35 +139,35 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
     }
 
     template <class TTestConstPtr>
-    void TestFindIfPtrFoundValue(int j, TTestConstPtr root) {
-        if (j == 3) {
+    void TestFindIfPtrFoundValue(int j, TTestConstPtr root) { 
+        if (j == 3) { 
             UNIT_ASSERT(root == nullptr);
-        } else if (j == 4) {
-            UNIT_ASSERT(root && *root == 2);
-        } else {
-            ythrow yexception() << "invalid param " << j;
-        }
-    }
-
+        } else if (j == 4) { 
+            UNIT_ASSERT(root && *root == 2); 
+        } else { 
+            ythrow yexception() << "invalid param " << j; 
+        } 
+    } 
+ 
     struct TVectorNoCopy: std::vector<int> {
-    public:
+    public: 
         TVectorNoCopy() = default;
 
-    private:
-        TVectorNoCopy(const TVectorNoCopy&);
-        void operator=(const TVectorNoCopy&);
-    };
-
+    private: 
+        TVectorNoCopy(const TVectorNoCopy&); 
+        void operator=(const TVectorNoCopy&); 
+    }; 
+ 
     Y_UNIT_TEST(FindPtrTest) {
-        TVectorNoCopy v;
-        v.push_back(1);
-        v.push_back(2);
-        v.push_back(3);
-
+        TVectorNoCopy v; 
+        v.push_back(1); 
+        v.push_back(2); 
+        v.push_back(3); 
+ 
         int array[3] = {1, 2, 3};
         const int array_const[3] = {1, 2, 3};
-
-        //test (const, non-const) * (iterator, vector, array) * (found, not found) variants.
+ 
+        //test (const, non-const) * (iterator, vector, array) * (found, not found) variants. 
         // value '3' is in container, value '4' is not
         for (int j = 3; j <= 4; ++j) {
             TestFindPtrFoundValue<int*>(j, FindPtr(v, j));
@@ -190,40 +190,40 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
         const int array_const[3] = {1, 2, 3};
 
         //test (const, non-const) * (iterator, vector, array) * (found, not found) variants.
-        // search, that 2*2 == 4, but there is no value 'x' in array that (x*x == 3)
-        for (int j = 3; j <= 4; ++j) {
+        // search, that 2*2 == 4, but there is no value 'x' in array that (x*x == 3) 
+        for (int j = 3; j <= 4; ++j) { 
             TestFindIfPtrFoundValue<int*>(j, FindIfPtr(v, [j](int i) { return i * i == j; }));
             TestFindIfPtrFoundValue<int*>(j, FindIfPtr(v.begin(), v.end(), [j](int i) { return i * i == j; }));
             const TVectorNoCopy& q = v;
             TestFindIfPtrFoundValue<const int*>(j, FindIfPtr(q, [j](int i) { return i * i == j; }));
-
+ 
             TestFindIfPtrFoundValue<const int*>(j, FindIfPtr(q.begin(), q.end(), [j](int i) { return i * i == j; }));
             TestFindIfPtrFoundValue<int*>(j, FindIfPtr(array, [j](int i) { return i * i == j; }));
             TestFindIfPtrFoundValue<const int*>(j, FindIfPtr(array_const, [j](int i) { return i * i == j; }));
-        }
-    }
-
+        } 
+    } 
+ 
     Y_UNIT_TEST(FindIndexTest) {
-        TVectorNoCopy v;
-        v.push_back(1);
-        v.push_back(2);
-        v.push_back(3);
-
-        UNIT_ASSERT_EQUAL(0, FindIndex(v, 1));
-        UNIT_ASSERT_EQUAL(1, FindIndex(v, 2));
-        UNIT_ASSERT_EQUAL(2, FindIndex(v, 3));
-        UNIT_ASSERT_EQUAL(NPOS, FindIndex(v, 42));
-
+        TVectorNoCopy v; 
+        v.push_back(1); 
+        v.push_back(2); 
+        v.push_back(3); 
+ 
+        UNIT_ASSERT_EQUAL(0, FindIndex(v, 1)); 
+        UNIT_ASSERT_EQUAL(1, FindIndex(v, 2)); 
+        UNIT_ASSERT_EQUAL(2, FindIndex(v, 3)); 
+        UNIT_ASSERT_EQUAL(NPOS, FindIndex(v, 42)); 
+ 
         int array[3] = {1, 2, 3};
-
-        UNIT_ASSERT_EQUAL(0, FindIndex(array, 1));
-        UNIT_ASSERT_EQUAL(1, FindIndex(array, 2));
-        UNIT_ASSERT_EQUAL(2, FindIndex(array, 3));
-        UNIT_ASSERT_EQUAL(NPOS, FindIndex(array, 42));
-
+ 
+        UNIT_ASSERT_EQUAL(0, FindIndex(array, 1)); 
+        UNIT_ASSERT_EQUAL(1, FindIndex(array, 2)); 
+        UNIT_ASSERT_EQUAL(2, FindIndex(array, 3)); 
+        UNIT_ASSERT_EQUAL(NPOS, FindIndex(array, 42)); 
+ 
         TVector<int> empty;
-        UNIT_ASSERT_EQUAL(NPOS, FindIndex(empty, 0));
-    }
+        UNIT_ASSERT_EQUAL(NPOS, FindIndex(empty, 0)); 
+    } 
 
     Y_UNIT_TEST(FindIndexIfTest) {
         TVectorNoCopy v;
@@ -276,10 +276,10 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
     Y_UNIT_TEST(EraseIfTest) {
         TVector<int> data = {5, 4, 3, 2, 1, 0};
         TVector<int> expected = {2, 1, 0};
-        EraseIf(data, [](int i) { return i >= 3; });
-        UNIT_ASSERT_EQUAL(data, expected);
-    }
-
+        EraseIf(data, [](int i) { return i >= 3; }); 
+        UNIT_ASSERT_EQUAL(data, expected); 
+    } 
+ 
     Y_UNIT_TEST(EraseNodesIfTest) {
         TMap<int, int> map{{1, 1}, {2, 2}, {3, 5}};
         TMap<int, int> expectedMap{{1, 1}};

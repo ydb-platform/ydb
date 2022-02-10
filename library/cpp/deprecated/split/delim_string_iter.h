@@ -136,26 +136,26 @@ private:
     TStringBuf Delim;
 };
 
-//example: for (TStringBuf field: TDelimStroka(line, "@@")) { ... }
+//example: for (TStringBuf field: TDelimStroka(line, "@@")) { ... } 
 struct TDelimStroka {
-    TStringBuf S;
-    TStringBuf Delim;
-
+    TStringBuf S; 
+    TStringBuf Delim; 
+ 
     inline TDelimStroka(TStringBuf s, TStringBuf delim)
-        : S(s)
-        , Delim(delim)
+        : S(s) 
+        , Delim(delim) 
     {
     }
-
+ 
     inline TDelimStringIter begin() const {
         return TDelimStringIter(S, Delim);
-    }
-
+    } 
+ 
     inline TDelimStringIter end() const {
         return TDelimStringIter();
-    }
-};
-
+    } 
+}; 
+ 
 inline TDelimStringIter begin_delim(const TString& str, TStringBuf delim) {
     return TDelimStringIter(str, delim);
 }

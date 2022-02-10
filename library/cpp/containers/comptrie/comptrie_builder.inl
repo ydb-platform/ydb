@@ -377,7 +377,7 @@ public:
         case DATA_MALLOCED:
         case DATA_IN_MEMPOOL:
             return PayloadAsPtr();
-        case DATA_ABSENT:
+        case DATA_ABSENT: 
         default:
             abort();
         }

@@ -47,15 +47,15 @@ static void EncodeHtmlPcdataAppendInternal(const TStringBuf str, TString& strout
                 break;
         }
     }
-}
+} 
 
 void EncodeHtmlPcdataAppend(const TStringBuf str, TString& strout) {
-    EncodeHtmlPcdataAppendInternal(str, strout, true);
-}
-
+    EncodeHtmlPcdataAppendInternal(str, strout, true); 
+} 
+ 
 TString EncodeHtmlPcdata(const TStringBuf str, bool qAmp) {
     TString strout;
-    EncodeHtmlPcdataAppendInternal(str, strout, qAmp);
+    EncodeHtmlPcdataAppendInternal(str, strout, qAmp); 
     return strout;
 }
 

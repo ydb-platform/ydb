@@ -53,7 +53,7 @@ static inline T CheckedCast(F f) {
     }
 
     return static_cast<T>(f);
-#endif // USE_DEBUG_CHECKED_CAST
+#endif // USE_DEBUG_CHECKED_CAST 
 }
 
 /*

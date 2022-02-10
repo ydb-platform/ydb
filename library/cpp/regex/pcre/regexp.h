@@ -9,7 +9,7 @@
 #include <contrib/libs/pcre/pcre.h>
 #include <contrib/libs/pcre/pcreposix.h>
 
-//THIS CODE LOOKS LIKE A TRASH, BUT WORKS.
+//THIS CODE LOOKS LIKE A TRASH, BUT WORKS. 
 
 #define NMATCHES 100
 #define REGEXP_GLOBAL 0x0080 // use this if you want to find all occurences

@@ -63,9 +63,9 @@ protected:
 };
 
 #if defined(SIMPLE_COUNTER_THREAD_CHECK)
-
+ 
     #include <util/system/thread.i>
-
+ 
 class TCheckPolicy {
 public:
     inline TCheckPolicy() {

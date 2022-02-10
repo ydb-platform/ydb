@@ -82,19 +82,19 @@ Y_UNIT_TEST_SUITE(TStrBufTest) {
     }
 
     Y_UNIT_TEST(TestAfterPrefix) {
-        TStringBuf str("cat_dog");
-
-        TStringBuf r = "the_same";
-        UNIT_ASSERT(!str.AfterPrefix("dog", r));
-        UNIT_ASSERT_EQUAL(r, "the_same");
-        UNIT_ASSERT(str.AfterPrefix("cat_", r));
-        UNIT_ASSERT_EQUAL(r, "dog");
-
-        //example:
-        str = "http://ya.ru";
-        if (str.AfterPrefix("http://", r)) {
-            UNIT_ASSERT_EQUAL(r, "ya.ru");
-        }
+        TStringBuf str("cat_dog"); 
+ 
+        TStringBuf r = "the_same"; 
+        UNIT_ASSERT(!str.AfterPrefix("dog", r)); 
+        UNIT_ASSERT_EQUAL(r, "the_same"); 
+        UNIT_ASSERT(str.AfterPrefix("cat_", r)); 
+        UNIT_ASSERT_EQUAL(r, "dog"); 
+ 
+        //example: 
+        str = "http://ya.ru"; 
+        if (str.AfterPrefix("http://", r)) { 
+            UNIT_ASSERT_EQUAL(r, "ya.ru"); 
+        } 
 
         // SkipPrefix()
         TStringBuf a = "abcdef";
@@ -106,22 +106,22 @@ Y_UNIT_TEST_SUITE(TStrBufTest) {
         UNIT_ASSERT(a.SkipPrefix("def") && a == "");
         UNIT_ASSERT(a.SkipPrefix("") && a == "");
         UNIT_ASSERT(!a.SkipPrefix("def") && a == "");
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TestBeforeSuffix) {
-        TStringBuf str("cat_dog");
-
-        TStringBuf r = "the_same";
-        UNIT_ASSERT(!str.BeforeSuffix("cat", r));
-        UNIT_ASSERT_EQUAL(r, "the_same");
-        UNIT_ASSERT(str.BeforeSuffix("_dog", r));
-        UNIT_ASSERT_EQUAL(r, "cat");
-
-        //example:
-        str = "maps.yandex.com.ua";
-        if (str.BeforeSuffix(".ru", r)) {
-            UNIT_ASSERT_EQUAL(r, "maps.yandex");
-        }
+        TStringBuf str("cat_dog"); 
+ 
+        TStringBuf r = "the_same"; 
+        UNIT_ASSERT(!str.BeforeSuffix("cat", r)); 
+        UNIT_ASSERT_EQUAL(r, "the_same"); 
+        UNIT_ASSERT(str.BeforeSuffix("_dog", r)); 
+        UNIT_ASSERT_EQUAL(r, "cat"); 
+ 
+        //example: 
+        str = "maps.yandex.com.ua"; 
+        if (str.BeforeSuffix(".ru", r)) { 
+            UNIT_ASSERT_EQUAL(r, "maps.yandex"); 
+        } 
 
         // ChopSuffix()
         TStringBuf a = "abcdef";
@@ -133,8 +133,8 @@ Y_UNIT_TEST_SUITE(TStrBufTest) {
         UNIT_ASSERT(a.ChopSuffix("abc") && a == "");
         UNIT_ASSERT(a.ChopSuffix("") && a == "");
         UNIT_ASSERT(!a.ChopSuffix("abc") && a == "");
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TestEmpty) {
         UNIT_ASSERT(TStringBuf().empty());
         UNIT_ASSERT(!TStringBuf("q").empty());

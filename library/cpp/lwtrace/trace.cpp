@@ -196,28 +196,28 @@ namespace NLWTrace {
         const TString Get(const TParams&) {
             return Dummy;
         }
-
+ 
         void Set(const TString&) {
         }
     };
-
+ 
     template <>
     class TOperand<TSymbol, OT_VARIABLE> {
     private:
         TSymbol Dummy;
-
+ 
     public:
         TOperand(TSession::TTraceVariables&, const TString&, const TString&, size_t) {
         }
-
+ 
         const TSymbol Get(const TParams&) {
             return Dummy;
         }
-
+ 
         void Set(const TSymbol&) {
         }
     };
-
+ 
     // IOperandGetter: hide concrete EOperandType, to save compilation time
     template <class T>
     struct IOperandGetter {
@@ -330,7 +330,7 @@ namespace NLWTrace {
             Func(Receiver, Param.Get(params));
             return true;
         }
-
+ 
     public:
         TBinaryInplaceStatementExecutor(TReceiver<TP>& receiver, const TOperand<TP, TParam>& param)
             : Receiver(receiver)
@@ -516,7 +516,7 @@ namespace NLWTrace {
             return y;
         }
     };
-
+ 
     void TSession::InsertExecutor(
         TTraceVariables& traceVariables, size_t bi, const TPredicate* pred,
         const NProtoBuf::RepeatedPtrField<TAction>& actions, TProbe* probe,
@@ -547,16 +547,16 @@ namespace NLWTrace {
 
                 TArgumentDescription arg0 = arguments.at(0);
                 TArgumentDescription arg1 = arguments.at(1);
-
+ 
                 const char* tName0 = arg0.ParamIdx == size_t(-1) ? nullptr : probe->Event.Signature.ParamTypes[arg0.ParamIdx];
                 const char* tName1 = arg1.ParamIdx == size_t(-1) ? nullptr : probe->Event.Signature.ParamTypes[arg1.ParamIdx];
-
+ 
                 TString var0 = op.GetArgument(0).GetVariable();
                 TString var1 = op.GetArgument(1).GetVariable();
-
+ 
                 TString val0 = op.GetArgument(0).GetValue();
                 TString val1 = op.GetArgument(1).GetValue();
-
+ 
 #define FOREACH_OPERAND_TYPE_RT(n, t, v, fn, lt, rt)                                    \
     if (rt == arg1.Type) {                                                              \
         TOperand<t, rt> rhs(traceVariables, var1, val1, arg1.ParamIdx);                 \
@@ -574,9 +574,9 @@ namespace NLWTrace {
     if ((arg0.ParamIdx == size_t(-1) || strcmp(tName0, n) == 0) && (arg1.ParamIdx == size_t(-1) || strcmp(tName1, n) == 0)) { \
         FOREACH_LEFT_TYPE(FOREACH_OPERAND_TYPE_LT, n, t, v, fn);                                                              \
     }
-
+ 
                 bool invertCompare = EqualToOneOf(op.GetType(), OT_NE, OT_GE, OT_LE);
-
+ 
                 switch (op.GetType()) {
                     case OT_EQ:
                     case OT_NE:
@@ -595,8 +595,8 @@ namespace NLWTrace {
                                             << " has not supported operator type #" << int(op.GetType());
                 }
 
-#undef FOREACH_OPERAND_TYPE_RT
-#undef FOREACH_OPERAND_TYPE_LT
+#undef FOREACH_OPERAND_TYPE_RT 
+#undef FOREACH_OPERAND_TYPE_LT 
 #undef FOREACH_PARAMTYPE_MACRO
 
                 if (!opExec) {
@@ -731,13 +731,13 @@ namespace NLWTrace {
         actExec.Reset(new TExec(receiver, firstParam));                            \
         break;                                                                     \
     }
-
+ 
 #define PARSE_BINARY_INPLACE_STATEMENT_MACRO(n, t, v, fn)                       \
     if (arg1.ParamIdx == size_t(-1) || strcmp(tName1, n) == 0) {                \
         TReceiver<t> receiver(traceVariables, var0);                            \
         FOREACH_RIGHT_TYPE(PARSE_BINARY_INPLACE_STATEMENT_MACRO2, n, t, v, fn); \
     }
-
+ 
 #define PARSE_BINARY_STATEMENT_MACRO2(n, t, v, fn, ft)                         \
     if (arg1.Type == ft) {                                                     \
         typedef TBinaryStatementExecutor<t, fn<t, t>, ft> TExec;               \
@@ -745,20 +745,20 @@ namespace NLWTrace {
         actExec.Reset(new TExec(receiver, firstParam));                        \
         break;                                                                 \
     }
-
+ 
 #define PARSE_BINARY_STATEMENT_MACRO(n, t, v, fn)                       \
     if (arg1.ParamIdx == size_t(-1) || strcmp(tName1, n) == 0) {        \
         TReceiver<t> receiver(traceVariables, var0);                    \
         FOREACH_RIGHT_TYPE(PARSE_BINARY_STATEMENT_MACRO2, n, t, v, fn); \
     }
-
+ 
 #define CREATE_OPERAND_GETTER_N(N, type, arg_type)                                                                                       \
     if (arg##N.Type == arg_type) {                                                                                                       \
-        operand##N.Reset(new TOperandGetter<type, arg_type>(TOperand<type, arg_type>(traceVariables, var##N, val##N, arg##N.ParamIdx))); \
-    }
-
+        operand##N.Reset(new TOperandGetter<type, arg_type>(TOperand<type, arg_type>(traceVariables, var##N, val##N, arg##N.ParamIdx))); \ 
+    } 
+ 
 #define TERNARY_ON_TYPE(n, t, v, fn)                                                                                          \
-    if ((arg1.ParamIdx == size_t(-1) || strcmp(tName1, n) == 0) && (arg2.ParamIdx == size_t(-1) || strcmp(tName2, n) == 0)) { \
+    if ((arg1.ParamIdx == size_t(-1) || strcmp(tName1, n) == 0) && (arg2.ParamIdx == size_t(-1) || strcmp(tName2, n) == 0)) { \ 
         TAutoPtr<IOperandGetter<t>> operand1, operand2;                                                                       \
         FOREACH_LEFT_TYPE(CREATE_OPERAND_GETTER_N, 1, t);                                                                     \
         FOREACH_RIGHT_TYPE(CREATE_OPERAND_GETTER_N, 2, t);                                                                    \
@@ -769,10 +769,10 @@ namespace NLWTrace {
                 operand2));                                                                                                   \
         }                                                                                                                     \
         break;                                                                                                                \
-    }
-
-#define IMPLEMENT_TERNARY_STATEMENT(fn) FOR_MATH_PARAMTYPE(TERNARY_ON_TYPE, fn)
-
+    } 
+ 
+#define IMPLEMENT_TERNARY_STATEMENT(fn) FOR_MATH_PARAMTYPE(TERNARY_ON_TYPE, fn) 
+ 
                         case ST_INC:
                             FOR_MATH_PARAMTYPE(PARSE_UNARY_INPLACE_STATEMENT_MACRO, TInc);
                             break;
@@ -807,13 +807,13 @@ namespace NLWTrace {
                             ythrow yexception() << "block #" << bi + 1 << " action #" << i + 1
                                                 << " has not supported statement type #" << int(statement.GetType());
                     }
-                }
+                } 
                 if (!actExec) {
-                    ythrow yexception() << "block #" << bi + 1 << " action #" << i + 1
-                                        << " can't create action";
+                    ythrow yexception() << "block #" << bi + 1 << " action #" << i + 1 
+                                        << " can't create action"; 
                 }
-#undef CREATE_OPERAND_GETTER_N
-#undef TERNARY_ON_TYPE
+#undef CREATE_OPERAND_GETTER_N 
+#undef TERNARY_ON_TYPE 
 #undef IMPLEMENT_TERNARY_STATEMENT
 #undef PARSE_TERNARY_STATEMENT_MACRO
 #undef PARSE_BINARY_STATEMENT_MACRO

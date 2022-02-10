@@ -6,10 +6,10 @@
 #include <util/generic/array_ref.h>
 #include <util/generic/object_counter.h>
 
-#ifdef _MSC_VER
-#pragma warning(push)
+#ifdef _MSC_VER 
+#pragma warning(push) 
 #pragma warning(disable : 4250) //  'NBus::NPrivate::TRemoteClientSession' : inherits 'NBus::NPrivate::TBusSessionImpl::NBus::NPrivate::TBusSessionImpl::GetConfig' via dominance
-#endif
+#endif 
 
 namespace NBus {
     namespace NPrivate {
@@ -51,9 +51,9 @@ namespace NBus {
             TBusClientConnectionPtr GetConnection(const TNetAddr&) override;
         };
 
-#ifdef _MSC_VER
-#pragma warning(pop)
-#endif
-
+#ifdef _MSC_VER 
+#pragma warning(pop) 
+#endif 
+ 
     }
 }

@@ -17,13 +17,13 @@ using TGuardConversion = typename std::enable_if_t<std::is_convertible<U*, T*>::
 
 template <class T>
 inline void AssertTypeComplete() {
-    // If compiler triggers this error from destructor of your class with
-    // smart pointer, then may be you should move the destructor definition
-    // to the .cpp file, where type T have full definition.
-    //
-    // 'delete' called on pointer to incomplete type is
-    // undefined behavior (missing destructor call/corrupted memory manager).
-    // 'sizeof' is used to trigger compile-time error.
+    // If compiler triggers this error from destructor of your class with 
+    // smart pointer, then may be you should move the destructor definition 
+    // to the .cpp file, where type T have full definition. 
+    // 
+    // 'delete' called on pointer to incomplete type is 
+    // undefined behavior (missing destructor call/corrupted memory manager). 
+    // 'sizeof' is used to trigger compile-time error. 
     static_assert(sizeof(T) != 0, "Type must be complete");
 }
 

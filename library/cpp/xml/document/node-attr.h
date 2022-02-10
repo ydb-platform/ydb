@@ -1,12 +1,12 @@
 #pragma once
 
-#include "xml-document-decl.h"
+#include "xml-document-decl.h" 
 #include "libxml-guards.h"
 #include <util/stream/str.h>
 #include <util/string/cast.h>
 
 namespace NXml {
-#define THROW(x, y) ythrow yexception() << #x << ": " << y
+#define THROW(x, y) ythrow yexception() << #x << ": " << y 
 
     // libxml defines unsigned char -> xmlChar,
     // and all functions use xmlChar.
@@ -40,7 +40,7 @@ namespace NXml {
         }
 
         T t;
-        AttrInternal(value, t, name);
+        AttrInternal(value, t, name); 
         return t;
     }
 
@@ -52,7 +52,7 @@ namespace NXml {
         }
 
         T t;
-        AttrInternal(attr, t, name);
+        AttrInternal(attr, t, name); 
         return t;
     }
 
@@ -63,7 +63,7 @@ namespace NXml {
             THROW(AttributeNotFound, Path() << name);
         }
 
-        AttrInternal(attr, value, name);
+        AttrInternal(attr, value, name); 
     }
 
     template <class T>
@@ -73,7 +73,7 @@ namespace NXml {
         if (!attr) {
             value = defvalue;
         } else {
-            AttrInternal(attr, value, name);
+            AttrInternal(attr, value, name); 
         }
     }
 
@@ -85,7 +85,7 @@ namespace NXml {
 
         TCharPtr val(xmlNodeGetContent(NodePointer));
         T t;
-        AttrInternal(val, t, this->Name());
+        AttrInternal(val, t, this->Name()); 
         return t;
     }
 
@@ -97,7 +97,7 @@ namespace NXml {
 
         TCharPtr val(xmlNodeGetContent(NodePointer));
         T t;
-        AttrInternal(val, t, this->Name());
+        AttrInternal(val, t, this->Name()); 
         return t;
     }
 

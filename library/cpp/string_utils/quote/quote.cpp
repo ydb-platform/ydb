@@ -77,9 +77,9 @@ static inline const char* FixZero(const char* s) noexcept {
 // '%',  '&', '+', ',',
 // '#',  '<', '=', '>',
 // '[',  '\\',']', '?',
-//  ':', '{', '}',
+//  ':', '{', '}', 
 // all below ' ' (0x20) and above '~' (0x7E).
-// ' ' converted to '+'
+// ' ' converted to '+' 
 static const bool chars_to_url_escape[256] = {
     //  0  1  2  3   4  5  6  7   8  9  A  B   C  D  E  F
     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, //0
@@ -111,7 +111,7 @@ static inline It1 Escape(It1 to, It2 from, It3 end, const bool* escape_map = cha
             *to++ = d2x((unsigned char)*from >> 4);
             *to++ = d2x((unsigned char)*from & 0xF);
         } else {
-            *to++ = (*from == ' ' ? '+' : *from);
+            *to++ = (*from == ' ' ? '+' : *from); 
         }
 
         ++from;
@@ -123,7 +123,7 @@ static inline It1 Escape(It1 to, It2 from, It3 end, const bool* escape_map = cha
 }
 
 template <class It1, class It2, class It3, class FromHex>
-static inline It1 Unescape(It1 to, It2 from, It3 end, FromHex fromHex) {
+static inline It1 Unescape(It1 to, It2 from, It3 end, FromHex fromHex) { 
     (void)fromHex;
 
     while (from != end) {
@@ -167,8 +167,8 @@ TString CGIEscapeRet(const TStringBuf url) {
     to.ReserveAndResize(CgiEscapeBufLen(url.size()));
     to.resize(CGIEscape(to.begin(), url.data(), url.size()) - to.data());
     return to;
-}
-
+} 
+ 
 TString& AppendCgiEscaped(const TStringBuf value, TString& to) {
     const size_t origLength = to.length();
     to.ReserveAndResize(origLength + CgiEscapeBufLen(value.size()));
@@ -215,11 +215,11 @@ void Quote(TString& url, const char* safe) {
 }
 
 char* CGIUnescape(char* to, const char* from) {
-    return Unescape(to, FixZero(from), TCStringEndIterator(), TFromHexZeroTerm());
+    return Unescape(to, FixZero(from), TCStringEndIterator(), TFromHexZeroTerm()); 
 }
 
-char* CGIUnescape(char* to, const char* from, size_t len) {
-    return Unescape(to, from, from + len, TFromHexLenLimited(from + len));
+char* CGIUnescape(char* to, const char* from, size_t len) { 
+    return Unescape(to, from, from + len, TFromHexLenLimited(from + len)); 
 }
 
 void CGIUnescape(TString& url) {
@@ -240,8 +240,8 @@ TString CGIUnescapeRet(const TStringBuf from) {
     to.ReserveAndResize(CgiUnescapeBufLen(from.size()));
     to.resize(CGIUnescape(to.begin(), from.data(), from.size()) - to.data());
     return to;
-}
-
+} 
+ 
 char* UrlUnescape(char* to, TStringBuf from) {
     while (!from.empty()) {
         char ch = from[0];

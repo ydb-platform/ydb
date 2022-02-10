@@ -725,20 +725,20 @@ public:
     void TestContains() {
         const TStringType s(Data._0123456_12345());
         const TStringType s2(Data._0123());
-
-        UNIT_ASSERT(s.Contains(Data._345()));
-        UNIT_ASSERT(!s2.Contains(Data._345()));
-
-        UNIT_ASSERT(s.Contains('1'));
-        UNIT_ASSERT(!s.Contains('*'));
-
+ 
+        UNIT_ASSERT(s.Contains(Data._345())); 
+        UNIT_ASSERT(!s2.Contains(Data._345())); 
+ 
+        UNIT_ASSERT(s.Contains('1')); 
+        UNIT_ASSERT(!s.Contains('*')); 
+ 
         TStringType empty;
-        UNIT_ASSERT(s.Contains(empty));
-        UNIT_ASSERT(!empty.Contains(s));
-        UNIT_ASSERT(empty.Contains(empty));
+        UNIT_ASSERT(s.Contains(empty)); 
+        UNIT_ASSERT(!empty.Contains(s)); 
+        UNIT_ASSERT(empty.Contains(empty)); 
         UNIT_ASSERT(s.Contains(empty, s.length()));
-    }
-
+    } 
+ 
     // Operators
 
     void TestOperators() {

@@ -113,7 +113,7 @@ namespace {
         }
 
         virtual TPerThreadStorage* MyStorageSlow() = 0;
-
+ 
         virtual ~TGenericTlsBase() = default;
     };
 }

@@ -123,7 +123,7 @@ namespace NBitIO {
 
     public:
         void WriteData(const char* begin, const char* end) {
-            NAccessors::Append(*Data, begin, end);
+            NAccessors::Append(*Data, begin, end); 
         }
 
         TBitOutputVectorImpl(TVec* data)

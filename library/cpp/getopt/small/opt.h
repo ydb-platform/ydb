@@ -94,9 +94,9 @@ public:
     }
 
     TVector<TString> GetFreeArgs() const {
-        return NLastGetopt::TOptsParseResult(&*Opts_, GetArgC(), GetArgV()).GetFreeArgs();
-    }
-
+        return NLastGetopt::TOptsParseResult(&*Opts_, GetArgC(), GetArgV()).GetFreeArgs(); 
+    } 
+ 
     // obsolete, use GetArg() instead
     char* Arg; /* option argument if any or NULL */
 

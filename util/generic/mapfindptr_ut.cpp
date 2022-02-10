@@ -2,26 +2,26 @@
 #include "hash.h"
 
 #include <library/cpp/testing/unittest/registar.h>
-
+ 
 #include <map>
 
 #include "mapfindptr.h"
 
 Y_UNIT_TEST_SUITE(TMapFindPtrTest) {
     struct TTestMap: std::map<int, TString>, TMapOps<TTestMap> {};
-
+ 
     Y_UNIT_TEST(TestDerivedClass) {
         TTestMap a;
-
+ 
         a[42] = "cat";
         UNIT_ASSERT(a.FindPtr(42));
         UNIT_ASSERT_EQUAL(*a.FindPtr(42), "cat");
         UNIT_ASSERT_EQUAL(a.FindPtr(0), nullptr);
-
+ 
         //test mutation
         if (TString* p = a.FindPtr(42)) {
             *p = "dog";
-        }
+        } 
         UNIT_ASSERT(a.FindPtr(42));
         UNIT_ASSERT_EQUAL(*a.FindPtr(42), "dog");
 

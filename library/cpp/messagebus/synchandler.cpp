@@ -91,11 +91,11 @@ private:
 
 namespace NBus {
     namespace NPrivate {
-#ifdef _MSC_VER
-#pragma warning(push)
+#ifdef _MSC_VER 
+#pragma warning(push) 
 #pragma warning(disable : 4250) //  'NBus::NPrivate::TRemoteClientSession' : inherits 'NBus::NPrivate::TBusSessionImpl::NBus::NPrivate::TBusSessionImpl::GetConfig' via dominance
-#endif
-
+#endif 
+ 
         ///////////////////////////////////////////////////////////////////////////
         class TBusSyncSourceSessionImpl
            : private TSyncHandler
@@ -147,12 +147,12 @@ namespace NBus {
             }
         };
 
-#ifdef _MSC_VER
-#pragma warning(pop)
-#endif
+#ifdef _MSC_VER 
+#pragma warning(pop) 
+#endif 
     }
 }
-
+ 
 TBusSyncSourceSession::TBusSyncSourceSession(TIntrusivePtr< ::NBus::NPrivate::TBusSyncSourceSessionImpl> session)
     : Session(session)
 {

@@ -1,5 +1,5 @@
-#include "hex.h"
-
+#include "hex.h" 
+ 
 const char* const Char2DigitTable = ("\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff"
                                      "\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff"
                                      "\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff"
@@ -16,48 +16,48 @@ const char* const Char2DigitTable = ("\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\x
                                      "\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff"
                                      "\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff"
                                      "\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff");
-
-char* HexEncode(const void* in, size_t len, char* out) {
-    const unsigned char* b = (const unsigned char*)in;
-    const unsigned char* e = b + len;
-
-    while (b != e) {
-        *out++ = DigitToChar(*b / 16);
-        *out++ = DigitToChar(*b++ % 16);
-    }
-
-    return out;
-}
-
-void* HexDecode(const void* in, size_t len, void* ptr) {
-    const char* b = (const char*)in;
-    const char* e = b + len;
+ 
+char* HexEncode(const void* in, size_t len, char* out) { 
+    const unsigned char* b = (const unsigned char*)in; 
+    const unsigned char* e = b + len; 
+ 
+    while (b != e) { 
+        *out++ = DigitToChar(*b / 16); 
+        *out++ = DigitToChar(*b++ % 16); 
+    } 
+ 
+    return out; 
+} 
+ 
+void* HexDecode(const void* in, size_t len, void* ptr) { 
+    const char* b = (const char*)in; 
+    const char* e = b + len; 
     Y_ENSURE(!(len & 1), TStringBuf("Odd buffer length passed to HexDecode"));
-
-    char* out = (char*)ptr;
-
-    while (b != e) {
+ 
+    char* out = (char*)ptr; 
+ 
+    while (b != e) { 
         *out++ = (char)String2Byte(b);
-        b += 2;
-    }
-
-    return out;
-}
-
+        b += 2; 
+    } 
+ 
+    return out; 
+} 
+ 
 TString HexEncode(const void* in, size_t len) {
     TString ret;
-
-    ret.ReserveAndResize(len << 1);
-    HexEncode(in, len, ret.begin());
-
-    return ret;
-}
-
+ 
+    ret.ReserveAndResize(len << 1); 
+    HexEncode(in, len, ret.begin()); 
+ 
+    return ret; 
+} 
+ 
 TString HexDecode(const void* in, size_t len) {
     TString ret;
-
+ 
     ret.ReserveAndResize(len >> 1);
     HexDecode(in, len, ret.begin());
-
-    return ret;
-}
+ 
+    return ret; 
+} 

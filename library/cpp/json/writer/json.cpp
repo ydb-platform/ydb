@@ -506,8 +506,8 @@ namespace NJsonWriter {
         NeedComma = from.NeedComma;
         NeedNewline = from.NeedNewline;
         Stack = from.Stack;
-    }
-
+    } 
+ 
     void TBuf::Reset(TBufState&& from) {
         NeedComma = from.NeedComma;
         NeedNewline = from.NeedNewline;

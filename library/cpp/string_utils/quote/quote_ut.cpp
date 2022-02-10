@@ -24,10 +24,10 @@ Y_UNIT_TEST_SUITE(TCGIEscapeTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(CgiEscape(tmp, "!@#$%^&*(){}[]\" "), TStringBuf("!@%23$%25^%26*%28%29%7B%7D%5B%5D%22+"));
     }
-
+ 
     Y_UNIT_TEST(StrokaRet) {
         UNIT_ASSERT_VALUES_EQUAL(CGIEscapeRet("!@#$%^&*(){}[]\" "), TString("!@%23$%25^%26*%28%29%7B%7D%5B%5D%22+"));
-    }
+    } 
 
     Y_UNIT_TEST(StrokaAppendRet) {
         TString param;
@@ -82,7 +82,7 @@ Y_UNIT_TEST_SUITE(TCGIUnescapeTest) {
         CGIUnescape(r, "12%3g34");
         UNIT_ASSERT_VALUES_EQUAL(r, "12%3g34");
 
-        CGIUnescape(r, "%3u123");
+        CGIUnescape(r, "%3u123"); 
         UNIT_ASSERT_VALUES_EQUAL(r, "%3u123");
     }
 
@@ -114,13 +114,13 @@ Y_UNIT_TEST_SUITE(TCGIUnescapeTest) {
         CGIUnescape(r, "12%3g345678", 7);
         UNIT_ASSERT_VALUES_EQUAL(r, "12%3g34");
 
-        CGIUnescape(r, "%3u1234", 2);
+        CGIUnescape(r, "%3u1234", 2); 
         UNIT_ASSERT_VALUES_EQUAL(r, "%3");
 
-        CGIUnescape(r, "%3u1234", 3);
+        CGIUnescape(r, "%3u1234", 3); 
         UNIT_ASSERT_VALUES_EQUAL(r, "%3u");
 
-        CGIUnescape(r, "%3u1234", 4);
+        CGIUnescape(r, "%3u1234", 4); 
         UNIT_ASSERT_VALUES_EQUAL(r, "%3u1");
     }
 

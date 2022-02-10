@@ -21,8 +21,8 @@ namespace NResource {
         virtual void FindMatch(const TStringBuf subkey, IMatch& cb) const = 0;
         virtual size_t Count() const noexcept = 0;
         virtual TStringBuf KeyByIndex(size_t idx) const = 0;
-        virtual ~IStore() {
-        }
+        virtual ~IStore() { 
+        } 
     };
 
     IStore* CommonStore();

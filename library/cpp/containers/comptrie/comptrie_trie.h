@@ -110,10 +110,10 @@ public:
         return Skipper;
     }
 
-    TPacker GetPacker() const {
-        return Packer;
-    }
-
+    TPacker GetPacker() const { 
+        return Packer; 
+    } 
+ 
     bool HasCorrectSkipper() const {
         return Skipper.GetPacker() == &Packer;
     }
@@ -175,9 +175,9 @@ public:
     };
 
     TConstIterator Begin() const;
-    TConstIterator begin() const;
+    TConstIterator begin() const; 
     TConstIterator End() const;
-    TConstIterator end() const;
+    TConstIterator end() const; 
 
     // Returns an iterator pointing to the smallest key in the trie >= the argument.
     // TODO: misleading name. Should be called LowerBound for consistency with stl.
@@ -422,22 +422,22 @@ typename TCompactTrie<T, D, S>::TConstIterator TCompactTrie<T, D, S>::Begin() co
 }
 
 template <class T, class D, class S>
-typename TCompactTrie<T, D, S>::TConstIterator TCompactTrie<T, D, S>::begin() const {
-    return Begin();
-}
-
-template <class T, class D, class S>
+typename TCompactTrie<T, D, S>::TConstIterator TCompactTrie<T, D, S>::begin() const { 
+    return Begin(); 
+} 
+ 
+template <class T, class D, class S> 
 typename TCompactTrie<T, D, S>::TConstIterator TCompactTrie<T, D, S>::End() const {
     NCompactTrie::TOpaqueTrie self(DataHolder.AsCharPtr(), DataHolder.Length(), Skipper);
     return TConstIterator(self, EmptyValue, true, Packer);
 }
 
 template <class T, class D, class S>
-typename TCompactTrie<T, D, S>::TConstIterator TCompactTrie<T, D, S>::end() const {
-    return End();
-}
-
-template <class T, class D, class S>
+typename TCompactTrie<T, D, S>::TConstIterator TCompactTrie<T, D, S>::end() const { 
+    return End(); 
+} 
+ 
+template <class T, class D, class S> 
 size_t TCompactTrie<T, D, S>::Size() const {
     size_t res = 0;
     for (TConstIterator it = Begin(); it != End(); ++it)

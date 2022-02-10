@@ -26,7 +26,7 @@
 #include <util/generic/buffer.h>
 #include <util/generic/singleton.h>
 
-#include <util/digest/murmur.h>
+#include <util/digest/murmur.h> 
 #include <util/digest/city.h>
 
 #include <util/ysaveload.h>

@@ -1,13 +1,13 @@
-LIBRARY()
-
-OWNER(
+LIBRARY() 
+ 
+OWNER( 
     anskor
     g:images-followers g:images-robot g:images-search-quality g:images-nonsearch-quality
-)
-
-SRCS(
+) 
+ 
+SRCS( 
     hyperloglog.h
     hyperloglog.cpp
-)
-
-END()
+) 
+ 
+END() 

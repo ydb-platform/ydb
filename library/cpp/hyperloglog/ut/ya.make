@@ -1,12 +1,12 @@
 UNITTEST_FOR(library/cpp/hyperloglog)
-
-OWNER(
+ 
+OWNER( 
     anskor
     g:images-followers g:images-robot g:images-search-quality g:images-nonsearch-quality
-)
-
-SRCS(
+) 
+ 
+SRCS( 
     hyperloglog_ut.cpp
-)
-
-END()
+) 
+ 
+END() 

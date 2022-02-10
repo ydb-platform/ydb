@@ -513,9 +513,9 @@ ALLOW .* -> vendor/github.com/blang/semver/v4
 # Go implementation of SipHash-2-4
 ALLOW .* -> vendor/github.com/dchest/siphash
 
-# CONTRIB-1415. Atomic.
-ALLOW .* -> vendor/go.uber.org/atomic
-
+# CONTRIB-1415. Atomic. 
+ALLOW .* -> vendor/go.uber.org/atomic 
+ 
 # CONTRIB-1302. Godbus goes to Arcadia
 ALLOW .* -> vendor/github.com/godbus/dbus/v5
 
@@ -708,13 +708,13 @@ ALLOW .* -> vendor/github.com/google/btree
 # CONTRIB-2136 simple lexer for go, it's like shlex.py with whitespace_split=True
 ALLOW .* -> vendor/github.com/google/shlex
 
-# CONTRIB-2084 Word transformation
-ALLOW .* -> vendor/github.com/jinzhu/inflection
+# CONTRIB-2084 Word transformation 
+ALLOW .* -> vendor/github.com/jinzhu/inflection 
 #
 # CONTRIB-2069
 ALLOW .* -> vendor/github.com/coredhcp/coredhcp
 ALLOW .* -> vendor/github.com/insomniacslk/dhcp
-
+ 
 # CONTRIB-2094
 ALLOW .* -> vendor/github.com/osrg/gobgp
 
@@ -794,9 +794,9 @@ ALLOW .* -> vendor/github.com/yourbasic/graph
 # CONTRIB-2328: histogram
 ALLOW .* -> vendor/github.com/HdrHistogram/hdrhistogram-go
 
-# CONTRIB-2348: SDP implementation
-ALLOW .* -> vendor/github.com/pion/sdp/v3
-
+# CONTRIB-2348: SDP implementation 
+ALLOW .* -> vendor/github.com/pion/sdp/v3 
+ 
 # CONTRIB-2350
 ALLOW .* -> vendor/inet.af/netaddr
 

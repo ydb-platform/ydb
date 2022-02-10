@@ -425,7 +425,7 @@ repeatable_clause: REPEATABLE LPAREN expr RPAREN;
 
 join_op:
     COMMA
-  | (NATURAL)? ((LEFT (ONLY | SEMI)? | RIGHT (ONLY | SEMI)? | EXCLUSION | FULL)? (OUTER)? | INNER | CROSS) SORTED? JOIN
+  | (NATURAL)? ((LEFT (ONLY | SEMI)? | RIGHT (ONLY | SEMI)? | EXCLUSION | FULL)? (OUTER)? | INNER | CROSS) JOIN
 ;
 
 join_constraint:
@@ -986,7 +986,6 @@ keyword_compat: (
   | SAVEPOINT
   | SEMI
   | SETS
-  | SORTED
   | SUBQUERY
   | SYMBOLS
   | SYNC
@@ -1295,7 +1294,6 @@ SELECT: S E L E C T;
 SEMI: S E M I;
 SET: S E T;
 SETS: S E T S;
-SORTED: S O R T E D;
 STREAM: S T R E A M;
 STRUCT: S T R U C T;
 SUBQUERY: S U B Q U E R Y;

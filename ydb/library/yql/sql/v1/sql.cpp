@@ -5549,7 +5549,7 @@ bool TSqlSelect::JoinOp(ISource* join, const TRule_join_source::TBlock3& block, 
     // block: (join_op (ANY)? flatten_source join_constraint?)
     // join_op:
     //    COMMA
-    //  | (NATURAL)? ((LEFT (ONLY | SEMI)? | RIGHT (ONLY | SEMI)? | EXCLUSION | FULL)? (OUTER)? | INNER | CROSS) SORTED? JOIN
+    //  | (NATURAL)? ((LEFT (ONLY | SEMI)? | RIGHT (ONLY | SEMI)? | EXCLUSION | FULL)? (OUTER)? | INNER | CROSS) JOIN
     //;
     const auto& node = block.GetRule_join_op1();
     switch (node.Alt_case()) {
@@ -5565,8 +5565,9 @@ bool TSqlSelect::JoinOp(ISource* join, const TRule_join_source::TBlock3& block, 
                 return false;
             }
             TString joinOp("Inner");
+            // TODO: custom join hints/settings should be here
             TJoinLinkSettings linkSettings;
-            linkSettings.ForceSortedMerge = alt.HasBlock3();
+            linkSettings.ForceSortedMerge = false;
             switch (alt.GetBlock2().Alt_case()) {
                 case TRule_join_op::TAlt2::TBlock2::kAlt1:
                     if (alt.GetBlock2().GetAlt1().HasBlock1()) {

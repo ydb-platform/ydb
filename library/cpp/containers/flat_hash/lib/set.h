@@ -58,9 +58,9 @@ public:
     using typename TBase::const_reference;
     using typename TBase::iterator;
     using typename TBase::const_iterator;
-    using typename TBase::allocator_type; 
-    using typename TBase::pointer; 
-    using typename TBase::const_pointer; 
+    using typename TBase::allocator_type;
+    using typename TBase::pointer;
+    using typename TBase::const_pointer;
 
 private:
     static constexpr size_type INIT_SIZE = 8;

@@ -4,7 +4,7 @@
 
 #include <util/system/defaults.h>
 
-#include <iterator> 
+#include <iterator>
 #include <type_traits>
 #include <stlfwd>
 
@@ -300,21 +300,21 @@ using TEnableIfTuple = std::enable_if_t<::TDisjunction<::TIsSpecializationOf<std
                                                        ::TIsSpecializationOf<std::pair, std::decay_t<T>>>::value,
                                         R>;
 
-namespace NPrivate { 
-    // To allow ADL with custom begin/end 
-    using std::begin; 
-    using std::end; 
- 
-    template <typename T> 
+namespace NPrivate {
+    // To allow ADL with custom begin/end
+    using std::begin;
+    using std::end;
+
+    template <typename T>
     auto IsIterableImpl(int) -> decltype(
         begin(std::declval<T&>()) != end(std::declval<T&>()),   // begin/end and operator !=
-        ++std::declval<decltype(begin(std::declval<T&>()))&>(), // operator ++ 
+        ++std::declval<decltype(begin(std::declval<T&>()))&>(), // operator ++
         *begin(std::declval<T&>()),                             // operator*
         std::true_type{});
- 
-    template <typename T> 
-    std::false_type IsIterableImpl(...); 
-} 
- 
-template <typename T> 
-using TIsIterable = decltype(NPrivate::IsIterableImpl<T>(0)); 
+
+    template <typename T>
+    std::false_type IsIterableImpl(...);
+}
+
+template <typename T>
+using TIsIterable = decltype(NPrivate::IsIterableImpl<T>(0));

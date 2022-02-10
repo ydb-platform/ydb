@@ -56,12 +56,12 @@ public:
         return *this;
     }
 
-    inline THttpServerOptions& EnableReuseAddress(bool enable) noexcept { 
-        ReuseAddress = enable; 
- 
-        return *this; 
-    } 
- 
+    inline THttpServerOptions& EnableReuseAddress(bool enable) noexcept {
+        ReuseAddress = enable;
+
+        return *this;
+    }
+
     inline THttpServerOptions& SetThreads(ui32 threads) noexcept {
         nThreads = threads;
 
@@ -150,7 +150,7 @@ public:
     bool CompressionEnabled = false;
     bool RejectExcessConnections = false;
     bool ReusePort = false; // set SO_REUSEPORT socket option
-    bool ReuseAddress = true; // set SO_REUSEADDR socket option 
+    bool ReuseAddress = true; // set SO_REUSEADDR socket option
     TAddrs BindSockaddr;
     ui16 Port = 17000;                  // The port on which to run the web server
     TString Host;                       // DNS entry

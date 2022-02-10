@@ -208,19 +208,19 @@ Y_UNIT_TEST_SUITE(TMaybeTest) {
         TMovable o6 = MakeMaybe<TMovable>(6).GetRef();
         UNIT_ASSERT_VALUES_EQUAL(o6.Flag, 6);
     }
- 
+
     Y_UNIT_TEST(TestCast) {
-        // Undefined maybe casts to undefined maybe 
-        TMaybe<short> shortMaybe; 
-        const auto undefinedMaybe = shortMaybe.Cast<long>(); 
-        UNIT_ASSERT(!undefinedMaybe.Defined()); 
- 
-        // Defined maybe casts to defined maybe of another type 
-        shortMaybe = 34; 
-        const auto longMaybe = shortMaybe.Cast<long>(); 
-        UNIT_ASSERT(longMaybe.Defined()); 
-        UNIT_ASSERT_VALUES_EQUAL(34, longMaybe.GetRef()); 
-    } 
+        // Undefined maybe casts to undefined maybe
+        TMaybe<short> shortMaybe;
+        const auto undefinedMaybe = shortMaybe.Cast<long>();
+        UNIT_ASSERT(!undefinedMaybe.Defined());
+
+        // Defined maybe casts to defined maybe of another type
+        shortMaybe = 34;
+        const auto longMaybe = shortMaybe.Cast<long>();
+        UNIT_ASSERT(longMaybe.Defined());
+        UNIT_ASSERT_VALUES_EQUAL(34, longMaybe.GetRef());
+    }
 
     Y_UNIT_TEST(TestGetOr) {
         UNIT_ASSERT_VALUES_EQUAL(TMaybe<TString>().GetOrElse("xxx"), TString("xxx"));

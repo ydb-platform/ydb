@@ -1,20 +1,20 @@
-#pragma once
-
+#pragma once 
+ 
 #include <ydb/library/yql/providers/dq/api/protos/dqs.pb.h>
 #include "worker_info.h"
 #include <ydb/library/yql/dq/common/dq_common.h>
-
+ 
 #include <ydb/library/yql/utils/log/log.h>
 
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
-
+ 
 #include <util/generic/guid.h>
 
 #include <utility>
 
-namespace NYql::NDqs {
-
+namespace NYql::NDqs { 
+ 
 using TDqResManEvents = NDq::TBaseDqResManEvents<NActors::TEvents::EEventSpace::ES_USERSPACE>;
 
     struct TEvAllocateWorkersRequest : NActors::TEventPB<TEvAllocateWorkersRequest, NYql::NDqProto::TAllocateWorkersRequest,
@@ -26,7 +26,7 @@ using TDqResManEvents = NDq::TBaseDqResManEvents<NActors::TEvents::EEventSpace::
             const TString& user,
             const TMaybe<ui64>& globalResourceId = TMaybe<ui64>());
     };
-
+ 
     struct TEvAllocateWorkersResponse
         : NActors::TEventPB<TEvAllocateWorkersResponse, NYql::NDqProto::TAllocateWorkersResponse,
                             TDqResManEvents::ES_ALLOCATE_WORKERS_RESPONSE> {
@@ -36,13 +36,13 @@ using TDqResManEvents = NDq::TBaseDqResManEvents<NActors::TEvents::EEventSpace::
         explicit TEvAllocateWorkersResponse(ui64 resourceId, const TVector<TWorkerInfo::TPtr>& workerInfos);
         explicit TEvAllocateWorkersResponse(ui64 resourceId, const TVector<ui32>& nodes);
     };
-
+ 
     struct TEvFreeWorkersNotify : NActors::TEventPB<TEvFreeWorkersNotify, NYql::NDqProto::TFreeWorkersNotify,
                                                     TDqResManEvents::ES_FREE_WORKERS_NOTIFICATION> {
         TEvFreeWorkersNotify() = default;
         explicit TEvFreeWorkersNotify(ui64 id);
     };
-
+ 
     struct TEvRegisterNode
         : NActors::TEventPB<TEvRegisterNode, NYql::NDqProto::TEvRegisterNode, TDqResManEvents::ES_REGISTER_NODE> {
 
@@ -157,4 +157,4 @@ using TDqResManEvents = NDq::TBaseDqResManEvents<NActors::TEvents::EEventSpace::
         memcpy(x + 7, &nodeId, sizeof(ui32));
         return NActors::TActorId(nodeId, TStringBuf(x, 12));
     }
-}
+} 

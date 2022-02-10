@@ -1,5 +1,5 @@
-#include "worker_actor.h"
-
+#include "worker_actor.h" 
+ 
 #include <ydb/library/yql/providers/dq/task_runner_actor/task_runner_actor.h>
 #include <ydb/library/yql/providers/dq/runtime/runtime_data.h>
 
@@ -11,17 +11,17 @@
 
 #include <library/cpp/actors/core/event_pb.h>
 #include <library/cpp/actors/core/hfunc.h>
-
+ 
 #include <util/stream/file.h>
 #include <util/string/split.h>
 #include <util/stream/output.h>
 
-using namespace NYql::NDq;
+using namespace NYql::NDq; 
 using namespace NYql::NDq::NTaskRunnerActor;
-using namespace NYql::NDqProto;
+using namespace NYql::NDqProto; 
 using namespace NActors;
-
-namespace NYql::NDqs {
+ 
+namespace NYql::NDqs { 
 
 struct TInputChannel {
     bool Finished{false};
@@ -92,7 +92,7 @@ public:
             RuntimeData->OnWorkerStart(TraceId);
         }
     }
-
+ 
     ~TDqWorker()
     {
         YQL_LOG_CTX_SCOPE(TraceId);
@@ -108,7 +108,7 @@ public:
         for (const auto& inputs : InputMap) {
             Send(inputs.first, new NActors::TEvents::TEvPoison());
         }
-
+ 
         YQL_LOG(DEBUG) << "TDqWorker passed away ";
         if (Actor) {
             Actor->PassAway();
@@ -120,8 +120,8 @@ public:
             v.SinkActor->PassAway();
         }
         Dump();
-    }
-
+    } 
+ 
 private:
     STRICT_STFUNC(Handler, {
         HFunc(TEvDqTask, OnDqTask);
@@ -141,7 +141,7 @@ private:
         HFunc(TEvContinueRun, OnContinueRun);
         cFunc(TEvents::TEvWakeup::EventType, OnWakeup);
     })
-
+ 
     TString ParseStatus(const TString& input, bool* retriableFlag, bool* fallbackFlag) {
         TString result;
         for (TStringBuf line: StringSplitter(input).SplitByString("\n").SkipEmpty()) {
@@ -366,7 +366,7 @@ private:
                         }
                     }
                 }
-
+ 
                 auto& outputs = Task.GetOutputs();
                 for (auto outputId = 0; outputId < outputs.size(); outputId++) {
                     auto& output = outputs[outputId];
@@ -402,9 +402,9 @@ private:
             }
         } catch (...) {
             OnError();
-        }
-    }
-
+        } 
+    } 
+ 
     void OnPullRequest(TEvPullDataRequest::TPtr& ev, const NActors::TActorContext& ctx) {
         Y_UNUSED(ctx);
         YQL_LOG_CTX_SCOPE(TraceId);
@@ -421,7 +421,7 @@ private:
         auto now = TInstant::Now();
         auto& outChannel = OutputMap[ev->Sender];
         outChannel.RequestTime = now;
-
+ 
         Send(TaskRunnerActor, new TEvPop(outChannel.ChannelId));
     }
 
@@ -455,9 +455,9 @@ private:
             Run(ctx);
         } catch (...) {
             OnError();
-        }
-    }
-
+        } 
+    } 
+ 
     void OnPullResponse(TEvPullDataResponse::TPtr& ev, const NActors::TActorContext& ctx) {
         Y_UNUSED(ctx);
         YQL_LOG_CTX_SCOPE(TraceId);
@@ -489,8 +489,8 @@ private:
                      channel.ChannelId,
                      std::move(*ev->Get()->Record.MutableData())));
         }
-    }
-
+    } 
+ 
     void OnPingRequest(TEvPingRequest::TPtr& ev, const NActors::TActorContext& ctx) {
         Y_UNUSED(ctx);
         Send(ev->Sender, MakeHolder<TEvPingResponse>(), IEventHandle::FlagTrackDelivery);
@@ -532,9 +532,9 @@ private:
             case TEndpoint::ENDPOINTTYPE_NOT_SET: {
                 Y_ENSURE(false, "Endpoint must be set");
             } break;
-        }
-    }
-
+        } 
+    } 
+ 
     void OnUndelivered(TEvents::TEvUndelivered::TPtr& ev, const NActors::TActorContext&) {
         Stat.AddCounter("Undelivered", TDuration::MilliSeconds(1));
 
@@ -587,7 +587,7 @@ private:
                 inputChannels.insert(channel.ChannelId);
             }
         }
-
+ 
         Send(TaskRunnerActor, new TEvContinueRun(std::move(inputChannels), Settings->MemoryLimit.Get().GetOrElse(0)));
     }
 
@@ -630,7 +630,7 @@ private:
                             OnError("PullTimeout " + TimeoutInfo(channel.ActorID, now, channel.RequestTime), false, true);
                         }
                     }
-                }
+                } 
 
                 for (auto& [inputIndex, source] : SourcesMap) {
                     auto& freeSpace = source.FreeSpace;
@@ -666,7 +666,7 @@ private:
                 break;
             }
         }
-    }
+    } 
 
     TString TimeoutInfo(TActorId actorID, TInstant now, TInstant startTime) {
         TString message = ToString(actorID)
@@ -843,6 +843,6 @@ NActors::IActor* CreateWorkerActor(
             sinkActorFactory,
             runtimeData,
             traceId), traceId);
-}
+} 
 
 } // namespace NYql::NDqs

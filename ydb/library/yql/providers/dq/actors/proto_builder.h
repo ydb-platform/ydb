@@ -1,19 +1,19 @@
-#pragma once
-
+#pragma once 
+ 
 #include <ydb/public/api/protos/ydb_value.pb.h>
 
 #include <ydb/library/yql/minikql/mkql_alloc.h>
 #include <ydb/library/yql/minikql/mkql_node.h>
-
+ 
 namespace NYql {
     class IDqFullResultWriter;
 }
-
+ 
 namespace NYql::NDqProto {
     class TData;
 }
 
-namespace NYql::NDqs {
+namespace NYql::NDqs { 
 
 class TProtoBuilder {
 public:
@@ -28,13 +28,13 @@ public:
     bool WriteData(const TVector<NYql::NDqProto::TData>& data, const std::function<bool(const NYql::NUdf::TUnboxedValuePod& value)>& func);
     TString GetSerializedType() const;
     TString AllocDebugInfo();
-
+ 
 private:
     NKikimr::NMiniKQL::TScopedAlloc Alloc;
     NKikimr::NMiniKQL::TTypeEnvironment TypeEnv;
     NKikimr::NMiniKQL::TType* ResultType;
     const TVector<ui32> ColumnOrder;
 };
-
+ 
 } // NYql::NDqs
 

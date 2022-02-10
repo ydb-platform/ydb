@@ -7,7 +7,7 @@
 namespace NKikimr::NKqp::NOpt {
 
 using namespace NYql;
-using namespace NYql::NDq;
+using namespace NYql::NDq; 
 using namespace NYql::NNodes;
 
 namespace {

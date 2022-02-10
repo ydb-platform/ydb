@@ -5,7 +5,7 @@
 namespace NKikimr::NKqp::NOpt {
 
 using namespace NYql;
-using namespace NYql::NDq;
+using namespace NYql::NDq; 
 using namespace NYql::NNodes;
 
 using TStatus = IGraphTransformer::TStatus;
@@ -101,13 +101,13 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
         return true;
     }
 
-    if (!EnsureDqUnion(node.Input(), ctx)) {
+    if (!EnsureDqUnion(node.Input(), ctx)) { 
         return false;
     }
 
     auto& table = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, node.Table().Path());
 
-    auto dqUnion = node.Input().Cast<TDqCnUnionAll>();
+    auto dqUnion = node.Input().Cast<TDqCnUnionAll>(); 
     auto input = dqUnion.Output().Stage().Program().Body();
 
     if (InplaceUpdateEnabled(*kqpCtx.Config) && IsMapWrite(table, input)) {
@@ -238,7 +238,7 @@ bool BuildEffects(TPositionHandle pos, const TVector<TKqlTableEffect>& effects,
         }
     }
 
-    auto stage = Build<TDqStage>(ctx, pos)
+    auto stage = Build<TDqStage>(ctx, pos) 
         .Inputs()
             .Add(inputs)
             .Build()

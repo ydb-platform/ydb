@@ -3,10 +3,10 @@
 #include "kqp_opt.h"
 
 #include <ydb/core/kqp/common/kqp_yql.h>
-
+ 
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
-
+ 
 namespace NKikimr::NKqp::NOpt {
 
 static inline void DumpAppliedRule(const TString& name, const NYql::TExprNode::TPtr& input,

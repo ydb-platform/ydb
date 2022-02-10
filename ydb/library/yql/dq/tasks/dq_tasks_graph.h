@@ -1,14 +1,14 @@
-#pragma once
-
+#pragma once 
+ 
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
-
+ 
 #include <library/cpp/actors/core/actorid.h>
-
+ 
 #include <variant>
 
-namespace NYql::NDq {
-
+namespace NYql::NDq { 
+ 
 struct TStageId {
     ui64 TxId = 0;
     ui64 StageId = 0;
@@ -36,32 +36,32 @@ struct TStageId {
     }
 };
 
-template <class TStageInfoMeta>
-struct TStageInfo : private TMoveOnly {
+template <class TStageInfoMeta> 
+struct TStageInfo : private TMoveOnly { 
     TStageInfo(ui64 txId, const NNodes::TDqPhyStage& stage, TStageInfoMeta&& meta)
         : Id(txId, stage.Ref().UniqueId())
-        , InputsCount(stage.Inputs().Size())
-        , Meta(std::move(meta))
-    {
+        , InputsCount(stage.Inputs().Size()) 
+        , Meta(std::move(meta)) 
+    { 
         auto result = stage.Program().Body();
-        auto resultType = result.Ref().GetTypeAnn();
-
-        if (resultType->GetKind() == ETypeAnnotationKind::Stream) {
-            auto resultItemType = resultType->Cast<TStreamExprType>()->GetItemType();
-            if (resultItemType->GetKind() == ETypeAnnotationKind::Variant) {
-                auto underlyingType = resultItemType->Cast<TVariantExprType>()->GetUnderlyingType();
-                YQL_ENSURE(underlyingType->GetKind() == ETypeAnnotationKind::Tuple);
-                OutputsCount = underlyingType->Cast<TTupleExprType>()->GetSize();
-                YQL_ENSURE(OutputsCount > 1);
-            } else {
-                OutputsCount = 1;
-            }
-        } else {
+        auto resultType = result.Ref().GetTypeAnn(); 
+ 
+        if (resultType->GetKind() == ETypeAnnotationKind::Stream) { 
+            auto resultItemType = resultType->Cast<TStreamExprType>()->GetItemType(); 
+            if (resultItemType->GetKind() == ETypeAnnotationKind::Variant) { 
+                auto underlyingType = resultItemType->Cast<TVariantExprType>()->GetUnderlyingType(); 
+                YQL_ENSURE(underlyingType->GetKind() == ETypeAnnotationKind::Tuple); 
+                OutputsCount = underlyingType->Cast<TTupleExprType>()->GetSize(); 
+                YQL_ENSURE(OutputsCount > 1); 
+            } else { 
+                OutputsCount = 1; 
+            } 
+        } else { 
             YQL_ENSURE(resultType->GetKind() == ETypeAnnotationKind::Void, "got " << *resultType);
-            OutputsCount = 0;
-        }
-    }
-
+            OutputsCount = 0; 
+        } 
+    } 
+ 
     TStageInfo(const NNodes::TDqPhyStage& stage, TStageInfoMeta&& meta)
         : TStageInfo(0, stage, std::move(meta)) {}
 
@@ -73,25 +73,25 @@ struct TStageInfo : private TMoveOnly {
 
     TStageId Id;
 
-    ui32 InputsCount = 0;
-    ui32 OutputsCount = 0;
-
-    TVector<ui64> Tasks;
-    TStageInfoMeta Meta;
-};
-
-struct TChannel {
-    ui64 Id = 0;
-    ui64 SrcTask = 0;
-    ui32 SrcOutputIndex = 0;
-    ui64 DstTask = 0;
-    ui32 DstInputIndex = 0;
+    ui32 InputsCount = 0; 
+    ui32 OutputsCount = 0; 
+ 
+    TVector<ui64> Tasks; 
+    TStageInfoMeta Meta; 
+}; 
+ 
+struct TChannel { 
+    ui64 Id = 0; 
+    ui64 SrcTask = 0; 
+    ui32 SrcOutputIndex = 0; 
+    ui64 DstTask = 0; 
+    ui32 DstInputIndex = 0; 
     bool InMemory = true;
     NDqProto::ECheckpointingMode CheckpointingMode = NDqProto::CHECKPOINTING_MODE_DEFAULT;
-};
-
-using TChannelList = TVector<ui64>;
-
+}; 
+ 
+using TChannelList = TVector<ui64>; 
+ 
 struct TSortColumn {
     std::string Column;
     bool Ascending;
@@ -116,108 +116,108 @@ enum class TTaskInputType {
     Merge
 };
 
-template <class TInputMeta>
-struct TTaskInput {
+template <class TInputMeta> 
+struct TTaskInput { 
     std::variant<std::monostate, TMergeTaskInput> ConnectionInfo;
-    TChannelList Channels;
+    TChannelList Channels; 
     TMaybe<::google::protobuf::Any> SourceSettings;
     TString SourceType;
-    TInputMeta Meta;
+    TInputMeta Meta; 
 
     TTaskInputType Type() const {
         return static_cast<TTaskInputType>(ConnectionInfo.index());
     }
-};
-
-struct TTaskOutputType {
-    enum : ui32 {
-        Undefined = 0,
-        Map,
-        HashPartition,
-        Broadcast,
+}; 
+ 
+struct TTaskOutputType { 
+    enum : ui32 { 
+        Undefined = 0, 
+        Map, 
+        HashPartition, 
+        Broadcast, 
         Effects,
         Sink,
-        COMMON_TASK_OUTPUT_TYPE_END
-    };
-};
-
-template <class TOutputMeta>
-struct TTaskOutput {
-    ui32 Type = TTaskOutputType::Undefined;
-    NYql::NDq::TChannelList Channels;
-    TVector<TString> KeyColumns;
-    ui32 PartitionsCount = 0;
+        COMMON_TASK_OUTPUT_TYPE_END 
+    }; 
+}; 
+ 
+template <class TOutputMeta> 
+struct TTaskOutput { 
+    ui32 Type = TTaskOutputType::Undefined; 
+    NYql::NDq::TChannelList Channels; 
+    TVector<TString> KeyColumns; 
+    ui32 PartitionsCount = 0; 
     TMaybe<::google::protobuf::Any> SinkSettings;
     TString SinkType;
-    TOutputMeta Meta;
-};
-
+    TOutputMeta Meta; 
+}; 
+ 
 struct TTransform {
     NDqProto::ETransformType Type;
     TString FunctionName;
     TString ConnectionName;
 };
 
-template <class TStageInfoMeta, class TTaskMeta, class TInputMeta, class TOutputMeta>
-struct TTask {
+template <class TStageInfoMeta, class TTaskMeta, class TInputMeta, class TOutputMeta> 
+struct TTask { 
     using TInputType = TTaskInput<TInputMeta>;
     using TOutputType = TTaskOutput<TOutputMeta>;
 
-    explicit TTask(const TStageInfo<TStageInfoMeta>& stageInfo)
-        : StageId(stageInfo.Id)
-        , Inputs(stageInfo.InputsCount)
-        , Outputs(stageInfo.OutputsCount) {
-    }
-
-    ui64 Id = 0;
+    explicit TTask(const TStageInfo<TStageInfoMeta>& stageInfo) 
+        : StageId(stageInfo.Id) 
+        , Inputs(stageInfo.InputsCount) 
+        , Outputs(stageInfo.OutputsCount) { 
+    } 
+ 
+    ui64 Id = 0; 
     TStageId StageId;
     TVector<TInputType> Inputs;
     TVector<TOutputType> Outputs;
     NActors::TActorId ComputeActorId;
-    TTaskMeta Meta;
+    TTaskMeta Meta; 
     NDqProto::ECheckpointingMode CheckpointingMode = NDqProto::CHECKPOINTING_MODE_DEFAULT;
     TTransform OutputTransform;
-};
-
-template <class TStageInfoMeta, class TTaskMeta, class TInputMeta, class TOutputMeta>
-class TDqTasksGraph : private TMoveOnly {
-public:
-    using TStageInfoType = TStageInfo<TStageInfoMeta>;
-    using TTaskType = TTask<TStageInfoMeta, TTaskMeta, TInputMeta, TOutputMeta>;
-
-public:
-    TDqTasksGraph() = default;
-
-    const TChannel& GetChannel(ui64 id) const {
-        YQL_ENSURE(id <= Channels.size());
-        return Channels[id - 1];
-    }
-
-    TChannel& GetChannel(ui64 id) {
-        YQL_ENSURE(id <= Channels.size());
-        return Channels[id - 1];
-    }
-
-    const TVector<TChannel>& GetChannels() const {
-        return Channels;
-    }
-
-    TVector<TChannel>& GetChannels() {
-        return Channels;
-    }
-
+}; 
+ 
+template <class TStageInfoMeta, class TTaskMeta, class TInputMeta, class TOutputMeta> 
+class TDqTasksGraph : private TMoveOnly { 
+public: 
+    using TStageInfoType = TStageInfo<TStageInfoMeta>; 
+    using TTaskType = TTask<TStageInfoMeta, TTaskMeta, TInputMeta, TOutputMeta>; 
+ 
+public: 
+    TDqTasksGraph() = default; 
+ 
+    const TChannel& GetChannel(ui64 id) const { 
+        YQL_ENSURE(id <= Channels.size()); 
+        return Channels[id - 1]; 
+    } 
+ 
+    TChannel& GetChannel(ui64 id) { 
+        YQL_ENSURE(id <= Channels.size()); 
+        return Channels[id - 1]; 
+    } 
+ 
+    const TVector<TChannel>& GetChannels() const { 
+        return Channels; 
+    } 
+ 
+    TVector<TChannel>& GetChannels() { 
+        return Channels; 
+    } 
+ 
     const TStageInfoType& GetStageInfo(const TStageId& id) const {
         auto stageInfo = StagesInfo.FindPtr(id);
         YQL_ENSURE(stageInfo, "no stage #" << id);
-        return *stageInfo;
-    }
-
+        return *stageInfo; 
+    } 
+ 
     TStageInfoType& GetStageInfo(const TStageId& id) {
         auto stageInfo = StagesInfo.FindPtr(id);
         YQL_ENSURE(stageInfo, "no stage #" << id);
-        return *stageInfo;
-    }
-
+        return *stageInfo; 
+    } 
+ 
     const TStageInfoType& GetStageInfo(ui64 txId, const NNodes::TDqStageBase& stage) const {
         return GetStageInfo(TStageId(txId, stage.Ref().UniqueId()));
     }
@@ -228,67 +228,67 @@ public:
 
     const TStageInfoType& GetStageInfo(const NNodes::TDqStageBase& stage) const {
         return GetStageInfo(0, stage);
-    }
-
+    } 
+ 
     TStageInfoType& GetStageInfo(const NNodes::TDqStageBase& stage) {
         return GetStageInfo(0, stage);
-    }
-
+    } 
+ 
     const THashMap<TStageId, TStageInfoType>& GetStagesInfo() const {
-        return StagesInfo;
-    }
-
+        return StagesInfo; 
+    } 
+ 
     THashMap<TStageId, TStageInfoType>& GetStagesInfo() {
-        return StagesInfo;
-    }
-
-    const TTaskType& GetTask(ui64 id) const {
-        YQL_ENSURE(id <= Tasks.size());
-        return Tasks[id - 1];
-    }
-
-    TTaskType& GetTask(ui64 id) {
-        YQL_ENSURE(id <= Tasks.size());
-        return Tasks[id - 1];
-    }
-
-    const TVector<TTaskType>& GetTasks() const {
-        return Tasks;
-    }
-
-    TVector<TTaskType>& GetTasks() {
-        return Tasks;
-    }
-
-    TChannel& AddChannel() {
-        TChannel channel{Channels.size() + 1};
-        return Channels.emplace_back(channel);
-    }
-
-    bool AddStageInfo(TStageInfoType stageInfo) {
-        return StagesInfo.emplace(stageInfo.Id, std::move(stageInfo)).second;
-    }
-
-    TTaskType& AddTask(TStageInfoType& stageInfo) {
-        auto& task = Tasks.emplace_back(stageInfo);
-        task.Id = Tasks.size();
-        stageInfo.Tasks.push_back(task.Id);
-        return task;
-    }
-
+        return StagesInfo; 
+    } 
+ 
+    const TTaskType& GetTask(ui64 id) const { 
+        YQL_ENSURE(id <= Tasks.size()); 
+        return Tasks[id - 1]; 
+    } 
+ 
+    TTaskType& GetTask(ui64 id) { 
+        YQL_ENSURE(id <= Tasks.size()); 
+        return Tasks[id - 1]; 
+    } 
+ 
+    const TVector<TTaskType>& GetTasks() const { 
+        return Tasks; 
+    } 
+ 
+    TVector<TTaskType>& GetTasks() { 
+        return Tasks; 
+    } 
+ 
+    TChannel& AddChannel() { 
+        TChannel channel{Channels.size() + 1}; 
+        return Channels.emplace_back(channel); 
+    } 
+ 
+    bool AddStageInfo(TStageInfoType stageInfo) { 
+        return StagesInfo.emplace(stageInfo.Id, std::move(stageInfo)).second; 
+    } 
+ 
+    TTaskType& AddTask(TStageInfoType& stageInfo) { 
+        auto& task = Tasks.emplace_back(stageInfo); 
+        task.Id = Tasks.size(); 
+        stageInfo.Tasks.push_back(task.Id); 
+        return task; 
+    } 
+ 
     void Clear() {
         StagesInfo.clear();
         Tasks.clear();
         Channels.clear();
     }
 
-private:
+private: 
     THashMap<TStageId, TStageInfoType> StagesInfo;
-    TVector<TTaskType> Tasks;
-    TVector<TChannel> Channels;
-};
-
-} // namespace NYql::NDq
+    TVector<TTaskType> Tasks; 
+    TVector<TChannel> Channels; 
+}; 
+ 
+} // namespace NYql::NDq 
 
 template<>
 struct THash<NYql::NDq::TStageId> {

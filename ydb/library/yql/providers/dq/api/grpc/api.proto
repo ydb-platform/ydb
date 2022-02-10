@@ -1,13 +1,13 @@
-syntax = "proto3";
-option cc_enable_arenas = true;
-
+syntax = "proto3"; 
+option cc_enable_arenas = true; 
+ 
 import "ydb/library/yql/providers/dq/api/protos/service.proto";
-
-package Yql.DqsProto;
-
-service DqService {
+ 
+package Yql.DqsProto; 
+ 
+service DqService { 
     rpc ExecuteGraph (ExecuteGraphRequest) returns (ExecuteGraphResponse);
-    rpc SvnRevision (SvnRevisionRequest) returns (SvnRevisionResponse);
+    rpc SvnRevision (SvnRevisionRequest) returns (SvnRevisionResponse); 
     rpc RegisterNode (RegisterNodeRequest) returns (RegisterNodeResponse);
     rpc OpenSession (OpenSessionRequest) returns (OpenSessionResponse);
     rpc CloseSession (CloseSessionRequest) returns (CloseSessionResponse);
@@ -21,4 +21,4 @@ service DqService {
     rpc IsReady (IsReadyRequest) returns (IsReadyResponse);
     rpc Routes (RoutesRequest) returns (RoutesResponse);
     rpc Benchmark (BenchmarkRequest) returns (BenchmarkResponse);
-}
+} 

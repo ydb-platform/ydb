@@ -1,27 +1,27 @@
-#pragma once
-
+#pragma once 
+ 
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/dq/common/dq_value.h>
 #include <ydb/library/yql/dq/proto/dq_transport.pb.h>
-
+ 
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-
-
-namespace NYql::NDq {
-
-class TDqDataSerializer : private TNonCopyable {
-public:
+ 
+ 
+namespace NYql::NDq { 
+ 
+class TDqDataSerializer : private TNonCopyable { 
+public: 
     TDqDataSerializer(const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
         const NKikimr::NMiniKQL::THolderFactory& holderFactory, NDqProto::EDataTransportVersion transportVersion)
         : TypeEnv(typeEnv)
         , HolderFactory(holderFactory)
         , TransportVersion(transportVersion) {}
-
+ 
     NDqProto::EDataTransportVersion GetTransportVersion() const;
-
+ 
     NDqProto::TData Serialize(const NUdf::TUnboxedValue& value, const NKikimr::NMiniKQL::TType* itemType) const;
     NDqProto::TData Serialize(NKikimr::NMiniKQL::TUnboxedValueVector& buffer, const NKikimr::NMiniKQL::TType* itemType) const;
 
@@ -63,9 +63,9 @@ public:
     static NDqProto::TData SerializeParamValue(const NKikimr::NMiniKQL::TType* type, const NUdf::TUnboxedValuePod& value);
 
 public:
-    const NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv;
-    const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
+    const NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv; 
+    const NKikimr::NMiniKQL::THolderFactory& HolderFactory; 
     const NDqProto::EDataTransportVersion TransportVersion;
-};
-
-} // namespace NYql::NDq
+}; 
+ 
+} // namespace NYql::NDq 

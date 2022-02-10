@@ -1,11 +1,11 @@
-#include "events.h"
-
+#include "events.h" 
+ 
 namespace NYql::NCommonAttrs {
     extern TString OPERATIONID_ATTR;
     extern TString JOBID_ATTR;
 }
 
-namespace NYql::NDqs {
+namespace NYql::NDqs { 
     TEvAllocateWorkersRequest::TEvAllocateWorkersRequest(
         ui32 count,
         const TString& user,
@@ -18,11 +18,11 @@ namespace NYql::NDqs {
         }
         Record.SetIsForwarded(false);
     }
-
+ 
     TEvAllocateWorkersResponse::TEvAllocateWorkersResponse() {
         Record.MutableError()->SetMessage("Unknown error");
     }
-
+ 
     TEvAllocateWorkersResponse::TEvAllocateWorkersResponse(const TString& error, NYql::NDqProto::EErrorCode code) {
         Record.MutableError()->SetMessage(error);
         Record.MutableError()->SetErrorCode(code);
@@ -35,7 +35,7 @@ namespace NYql::NDqs {
             NActors::ActorIdToProto(actorId, group.AddWorkerActor());
         }
     }
-
+ 
     TEvAllocateWorkersResponse::TEvAllocateWorkersResponse(ui64 resourceId, const TVector<ui32>& nodes) {
         auto& group = *Record.MutableNodes();
         group.SetResourceId(resourceId);
@@ -71,7 +71,7 @@ namespace NYql::NDqs {
 
     TEvFreeWorkersNotify::TEvFreeWorkersNotify(ui64 resourceId) {
         Record.SetResourceId(resourceId);
-    }
+    } 
 
     TEvRegisterNode::TEvRegisterNode(const Yql::DqsProto::RegisterNodeRequest& request) {
         *Record.MutableRequest() = request;

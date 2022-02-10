@@ -1,14 +1,14 @@
-#include "interconnect_helpers.h"
+#include "interconnect_helpers.h" 
 #include "service_node.h"
-
-#include "grpc_service.h"
-
+ 
+#include "grpc_service.h" 
+ 
 #include <library/cpp/actors/helpers/selfping_actor.h>
 
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/utils/backtrace/backtrace.h>
 #include <ydb/library/yql/utils/yql_panic.h>
-
+ 
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 
 #include <library/cpp/actors/core/executor_pool_basic.h>
@@ -21,15 +21,15 @@
 #include <library/cpp/actors/interconnect/interconnect_tcp_server.h>
 #include <library/cpp/actors/interconnect/poller_actor.h>
 #include <library/cpp/yson/node/node_io.h>
-
-#include <util/stream/file.h>
+ 
+#include <util/stream/file.h> 
 #include <util/system/env.h>
-
-namespace NYql::NDqs {
+ 
+namespace NYql::NDqs { 
     using namespace NActors;
     using namespace NActors::NDnsResolver;
     using namespace NGrpc;
-
+ 
     class TYqlLogBackend: public TLogBackend {
         void WriteData(const TLogRecord& rec) override {
             TString message(rec.Data, rec.Len);
@@ -73,9 +73,9 @@ namespace NYql::NDqs {
         const NYql::NProto::TDqConfig::TICSettings& icSettings)
     {
         auto setup = MakeHolder<TActorSystemSetup>();
-
+ 
         setup->NodeId = nodeId;
-
+ 
         const int maxActivityType = NActors::GetActivityTypeCount();
         if (threads.empty()) {
             threads = {icSettings.GetThreads()};
@@ -118,14 +118,14 @@ namespace NYql::NDqs {
 
         setup->Scheduler = CreateSchedulerThread(schedulerConfig);
         setup->MaxActivityType = maxActivityType;
-
+ 
         YQL_LOG(DEBUG) << "Initializing local services";
         setup->LocalServices.emplace_back(MakePollerActorId(), TActorSetupCmd(CreatePollerActor(), TMailboxType::ReadAsFilled, 0));
         if (IActor* schedulerActor = CreateSchedulerActor(schedulerConfig)) {
             TActorId schedulerActorId = MakeSchedulerActorId();
             setup->LocalServices.emplace_back(schedulerActorId, TActorSetupCmd(schedulerActor, TMailboxType::ReadAsFilled, 0));
         }
-
+ 
         NActors::TActorId loggerActorId(nodeId, "logger");
         auto logSettings = MakeIntrusive<NActors::NLog::TSettings>(loggerActorId,
             0, NActors::NLog::PRI_INFO);
@@ -145,13 +145,13 @@ namespace NYql::NDqs {
 
         YQL_LOG(DEBUG) << "Initializing node table";
         nameserverTable->StaticNodeTable[nodeId] = std::make_pair(interconnectAddress, port);
-
+ 
         setup->LocalServices.emplace_back(
             MakeDnsResolverActorId(), TActorSetupCmd(CreateOnDemandDnsResolver(), TMailboxType::ReadAsFilled, 0));
 
         setup->LocalServices.emplace_back(
             GetNameserviceActorId(), TActorSetupCmd(nameserverFactory(nameserverTable), TMailboxType::ReadAsFilled, 0));
-
+ 
 
         InitSelfPingActor(setup.Get(), counters);
 
@@ -172,7 +172,7 @@ namespace NYql::NDqs {
             icCommon->Settings.name = icSettings.Get ## name(); \
             YQL_LOG(DEBUG) << "IC " << #name << " set to " << icCommon->Settings.name; \
         }
-
+ 
         SET_DURATION(Handshake);
         SET_DURATION(DeadPeer);
         SET_DURATION(CloseOnIdle);
@@ -197,7 +197,7 @@ namespace NYql::NDqs {
 #undef SET_VALUE
 
         ui32 maxNodeId = static_cast<ui32>(ENodeIdLimits::MaxWorkerNodeId);
-
+ 
         YQL_LOG(DEBUG) << "Initializing proxy actors";
         setup->Interconnect.ProxyActors.resize(maxNodeId + 1);
         for (ui32 id = 1; id <= maxNodeId; ++id) {
@@ -206,7 +206,7 @@ namespace NYql::NDqs {
                 setup->Interconnect.ProxyActors[id] = TActorSetupCmd(actor, TMailboxType::ReadAsFilled, 0);
             }
         }
-
+ 
         // start listener
         YQL_LOG(DEBUG) << "Start listener";
         {
@@ -229,10 +229,10 @@ namespace NYql::NDqs {
 #ifdef _unix_
         signal(SIGPIPE, SIG_IGN);
 #endif
-
+ 
         return std::make_tuple(std::move(setup), logSettings);
-    }
-
+    } 
+ 
     std::tuple<TString, TString> GetLocalAddress(const TString* overrideHostname) {
         constexpr auto MaxLocalHostNameLength = 4096;
         std::array<char, MaxLocalHostNameLength> buffer;
@@ -300,4 +300,4 @@ namespace NYql::NDqs {
 
         return std::make_tuple(userName, token);
     }
-}
+} 

@@ -1,67 +1,67 @@
-#include "dq_type_ann.h"
-
+#include "dq_type_ann.h" 
+ 
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/core/yql_join.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/core/type_ann/type_ann_core.h>
 #include <ydb/library/yql/utils/log/log.h>
-
+ 
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
 
-namespace NYql::NDq {
-
-using namespace NYql::NNodes;
-using TStatus = NYql::IGraphTransformer::TStatus;
-
-namespace {
-
-const TTypeAnnotationNode* GetDqOutputType(const TDqOutput& output, TExprContext& ctx) {
+namespace NYql::NDq { 
+ 
+using namespace NYql::NNodes; 
+using TStatus = NYql::IGraphTransformer::TStatus; 
+ 
+namespace { 
+ 
+const TTypeAnnotationNode* GetDqOutputType(const TDqOutput& output, TExprContext& ctx) { 
     auto stageResultTuple = output.Stage().Ref().GetTypeAnn()->Cast<TTupleExprType>();
-
-    ui32 resultIndex;
-    if (!TryFromString(output.Index().Value(), resultIndex)) {
+ 
+    ui32 resultIndex; 
+    if (!TryFromString(output.Index().Value(), resultIndex)) { 
         ctx.AddError(TIssue(ctx.GetPosition(output.Pos()),
             TStringBuilder() << "Failed to convert to integer: " << output.Index().Value()));
-        return nullptr;
-    }
-
-    if (stageResultTuple->GetSize() == 0) {
-        ctx.AddError(TIssue(ctx.GetPosition(output.Pos()), "Stage result is empty"));
-        return nullptr;
-    }
-
-    if (resultIndex >= stageResultTuple->GetSize()) {
+        return nullptr; 
+    } 
+ 
+    if (stageResultTuple->GetSize() == 0) { 
+        ctx.AddError(TIssue(ctx.GetPosition(output.Pos()), "Stage result is empty")); 
+        return nullptr; 
+    } 
+ 
+    if (resultIndex >= stageResultTuple->GetSize()) { 
         ctx.AddError(TIssue(ctx.GetPosition(output.Pos()),
             TStringBuilder() << "Stage result index out of bounds: " << resultIndex));
-        return nullptr;
-    }
-
-    auto outputType = stageResultTuple->GetItems()[resultIndex];
-    if (!EnsureListType(output.Pos(), *outputType, ctx)) {
-        return nullptr;
-    }
-
-    return outputType;
-}
-
-const TTypeAnnotationNode* GetDqConnectionType(const TDqConnection& node, TExprContext& ctx) {
-    return GetDqOutputType(node.Output(), ctx);
-}
-
+        return nullptr; 
+    } 
+ 
+    auto outputType = stageResultTuple->GetItems()[resultIndex]; 
+    if (!EnsureListType(output.Pos(), *outputType, ctx)) { 
+        return nullptr; 
+    } 
+ 
+    return outputType; 
+} 
+ 
+const TTypeAnnotationNode* GetDqConnectionType(const TDqConnection& node, TExprContext& ctx) { 
+    return GetDqOutputType(node.Output(), ctx); 
+} 
+ 
 template <typename TStage>
 TStatus AnnotateStage(const TExprNode::TPtr& stage, TExprContext& ctx) {
     if (!EnsureMinMaxArgsCount(*stage, 3, 4, ctx)) {
         return TStatus::Error;
-    }
-
+    } 
+ 
     auto* inputsTuple = stage->Child(TDqStageBase::idx_Inputs);
     auto& programLambda = stage->ChildRef(TDqStageBase::idx_Program);
     auto* settingsTuple = stage->Child(TDqPhyStage::idx_Settings);
 
     if (!EnsureTuple(*inputsTuple, ctx)) {
-        return TStatus::Error;
-    }
-
+        return TStatus::Error; 
+    } 
+ 
     if constexpr (std::is_same_v<TStage, TDqPhyStage>) {
         if (!EnsureTuple(*settingsTuple, ctx)) {
             return TStatus::Error;
@@ -77,13 +77,13 @@ TStatus AnnotateStage(const TExprNode::TPtr& stage, TExprContext& ctx) {
     }
 
     if (!EnsureLambda(*programLambda, ctx)) {
-        return TStatus::Error;
-    }
-
+        return TStatus::Error; 
+    } 
+ 
     if (!EnsureArgsCount(programLambda->Head(), inputsTuple->ChildrenSize(), ctx)) {
-        return TStatus::Error;
-    }
-
+        return TStatus::Error; 
+    } 
+ 
     TVector<const TTypeAnnotationNode*> argTypes;
     argTypes.reserve(inputsTuple->ChildrenSize());
 
@@ -109,8 +109,8 @@ TStatus AnnotateStage(const TExprNode::TPtr& stage, TExprContext& ctx) {
             }
         }
         argTypes.emplace_back(argType);
-    }
-
+    } 
+ 
     if (!UpdateLambdaAllArgumentsTypes(programLambda, argTypes, ctx)) {
         return TStatus::Error;
     }
@@ -425,14 +425,14 @@ TStatus AnnotateDqOutput(const TExprNode::TPtr& input, TExprContext& ctx) {
     }
 
     auto resultType = GetDqOutputType(TDqOutput(input), ctx);
-    if (!resultType) {
-        return TStatus::Error;
-    }
-
+    if (!resultType) { 
+        return TStatus::Error; 
+    } 
+ 
     input->SetTypeAnn(resultType);
-    return TStatus::Ok;
-}
-
+    return TStatus::Ok; 
+} 
+ 
 TStatus AnnotateDqConnection(const TExprNode::TPtr& input, TExprContext& ctx) {
     if (!EnsureArgsCount(*input, 1, ctx)) {
         return TStatus::Error;
@@ -769,49 +769,49 @@ TStatus AnnotateDqQuery(const TExprNode::TPtr& input, TExprContext& ctx) {
     return TStatus::Ok;
 }
 
-THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(TTypeAnnotationContext& typesCtx) {
-    auto coreTransformer = CreateExtCallableTypeAnnotationTransformer(typesCtx);
-
-    return CreateFunctorTransformer(
+THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(TTypeAnnotationContext& typesCtx) { 
+    auto coreTransformer = CreateExtCallableTypeAnnotationTransformer(typesCtx); 
+ 
+    return CreateFunctorTransformer( 
         [coreTransformer](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
-            output = input;
-            TIssueScopeGuard issueScope(ctx.IssueManager, [&input, &ctx] {
-                return MakeIntrusive<TIssue>(ctx.GetPosition(input->Pos()),
+            output = input; 
+            TIssueScopeGuard issueScope(ctx.IssueManager, [&input, &ctx] { 
+                return MakeIntrusive<TIssue>(ctx.GetPosition(input->Pos()), 
                     TStringBuilder() << "At function: " << input->Content());
-            });
-
+            }); 
+ 
             if (TDqStage::Match(input.Get())) {
                 return AnnotateDqStage(input, ctx);
-            }
-
+            } 
+ 
             if (TDqPhyStage::Match(input.Get())) {
                 return AnnotateDqPhyStage(input, ctx);
             }
 
             if (TDqOutput::Match(input.Get())) {
                 return AnnotateDqOutput(input, ctx);
-            }
-
+            } 
+ 
             if (TDqCnUnionAll::Match(input.Get())) {
                 return AnnotateDqConnection(input, ctx);
-            }
-
+            } 
+ 
             if (TDqCnHashShuffle::Match(input.Get())) {
                 return AnnotateDqCnHashShuffle(input, ctx);
-            }
-
+            } 
+ 
             if (TDqCnMap::Match(input.Get())) {
                 return AnnotateDqConnection(input, ctx);
-            }
-
+            } 
+ 
             if (TDqCnBroadcast::Match(input.Get())) {
                 return AnnotateDqConnection(input, ctx);
-            }
-
+            } 
+ 
             if (TDqCnResult::Match(input.Get())) {
                 return AnnotateDqCnResult(input, ctx);
-            }
-
+            } 
+ 
             if (TDqCnValue::Match(input.Get())) {
                 return AnnotateDqCnValue(input, ctx);
             }
@@ -860,10 +860,10 @@ THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(TTypeAnnotationCont
                 return AnnotateDqPhyPrecompute(input, ctx);
             }
 
-            return coreTransformer->Transform(input, output, ctx);
-        });
-}
-
+            return coreTransformer->Transform(input, output, ctx); 
+        }); 
+} 
+ 
 bool IsTypeSupportedInMergeCn(EDataSlot type) {
     switch (type) {
         case EDataSlot::Bool:
@@ -936,4 +936,4 @@ TString PrintDqStageOnly(const TDqStageBase& stage, TExprContext& ctx) {
     return NCommon::ExprToPrettyString(ctx, *newStage);
 }
 
-} // namespace NYql::NDq
+} // namespace NYql::NDq 

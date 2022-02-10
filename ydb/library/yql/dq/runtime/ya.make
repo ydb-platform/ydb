@@ -1,11 +1,11 @@
-LIBRARY()
-
-OWNER(
+LIBRARY() 
+ 
+OWNER( 
     g:yql
     g:yql_ydb_core
-)
-
-PEERDIR(
+) 
+ 
+PEERDIR( 
     contrib/libs/apache/arrow
     ydb/core/util
     ydb/library/mkql_proto
@@ -16,9 +16,9 @@ PEERDIR(
     ydb/library/yql/dq/common
     ydb/library/yql/dq/expr_nodes
     ydb/library/yql/dq/type_ann
-)
-
-SRCS(
+) 
+ 
+SRCS( 
     dq_arrow_helpers.cpp
     dq_columns_resolve.cpp
     dq_compute.cpp
@@ -30,13 +30,13 @@ SRCS(
     dq_sink.cpp
     dq_tasks_runner.cpp
     dq_transport.cpp
-)
-
+) 
+ 
 GENERATE_ENUM_SERIALIZATION(dq_tasks_runner.h)
 
 YQL_LAST_ABI_VERSION()
 
-END()
+END() 
 
 RECURSE_FOR_TESTS(
     ut

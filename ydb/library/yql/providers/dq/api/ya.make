@@ -1,4 +1,4 @@
-RECURSE(
-    grpc
-    protos
-)
+RECURSE( 
+    grpc 
+    protos 
+) 

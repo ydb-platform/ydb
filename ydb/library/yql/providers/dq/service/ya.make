@@ -1,15 +1,15 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 OWNER(g:yql)
-
-SRCS(
-    grpc_service.cpp
+ 
+SRCS( 
+    grpc_service.cpp 
     grpc_session.cpp
     service_node.cpp
-    interconnect_helpers.cpp
-)
-
-PEERDIR(
+    interconnect_helpers.cpp 
+) 
+ 
+PEERDIR( 
     library/cpp/actors/core
     library/cpp/actors/dnsresolver
     library/cpp/actors/interconnect
@@ -28,8 +28,8 @@ PEERDIR(
     ydb/library/yql/providers/dq/interface
     ydb/library/yql/providers/dq/worker_manager
     ydb/library/yql/providers/dq/worker_manager/interface
-)
-
+) 
+ 
 YQL_LAST_ABI_VERSION()
 
-END()
+END() 

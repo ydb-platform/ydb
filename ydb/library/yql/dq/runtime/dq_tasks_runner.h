@@ -1,5 +1,5 @@
-#pragma once
-
+#pragma once 
+ 
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 #include <ydb/library/yql/dq/runtime/dq_compute.h>
@@ -8,19 +8,19 @@
 #include <ydb/library/yql/dq/runtime/dq_output_consumer.h>
 #include <ydb/library/yql/dq/runtime/dq_source.h>
 #include <ydb/library/yql/dq/runtime/dq_sink.h>
-
+ 
 #include <ydb/library/yql/minikql/mkql_alloc.h>
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
 #include <ydb/library/yql/minikql/mkql_node.h>
 #include <ydb/library/yql/minikql/mkql_node_visitor.h>
-
+ 
 #include <library/cpp/monlib/metrics/histogram_collector.h>
 
 #include <util/generic/size_literals.h>
-#include <util/system/types.h>
-
-namespace NYql::NDq {
-
+#include <util/system/types.h> 
+ 
+namespace NYql::NDq { 
+ 
 enum class ERunStatus : ui32 {
     Finished,
     PendingInput,
@@ -155,14 +155,14 @@ public:
         const IDqTaskRunnerExecutionContext& execCtx = TDqTaskRunnerExecutionContext(),
         const TDqTaskRunnerParameterProvider& parameterProvider = {}) = 0;
     virtual ERunStatus Run() = 0;
-
-    virtual bool HasEffects() const = 0;
-
+ 
+    virtual bool HasEffects() const = 0; 
+ 
     virtual IDqInputChannel::TPtr GetInputChannel(ui64 channelId) = 0;
     virtual IDqSource::TPtr GetSource(ui64 inputIndex) = 0;
     virtual IDqOutputChannel::TPtr GetOutputChannel(ui64 channelId) = 0;
     virtual IDqSink::TPtr GetSink(ui64 outputIndex) = 0;
-
+ 
     // if memoryLimit = Nothing()  then don't set memory limit, use existing one (if any)
     // if memoryLimit = 0          then set unlimited
     // otherwise use particular memory limit
@@ -170,7 +170,7 @@ public:
     virtual bool IsAllocatorAttached() = 0;
     virtual const NKikimr::NMiniKQL::TTypeEnvironment& GetTypeEnv() const = 0;
     virtual const NKikimr::NMiniKQL::THolderFactory& GetHolderFactory() const = 0;
-
+ 
     virtual const THashMap<TString, TString>& GetSecureParams() const = 0;
     virtual const THashMap<TString, TString>& GetTaskParams() const = 0;
 
@@ -180,9 +180,9 @@ public:
     [[nodiscard]]
     virtual TString Save() const = 0;
     virtual void Load(TStringBuf in) = 0;
-};
-
+}; 
+ 
 TIntrusivePtr<IDqTaskRunner> MakeDqTaskRunner(const TDqTaskRunnerContext& ctx, const TDqTaskRunnerSettings& settings,
     const TLogFunc& logFunc);
 
-} // namespace NYql::NDq
+} // namespace NYql::NDq 

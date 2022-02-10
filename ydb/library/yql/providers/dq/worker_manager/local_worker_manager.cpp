@@ -1,30 +1,30 @@
-#include "local_worker_manager.h"
+#include "local_worker_manager.h" 
 #include <ydb/library/yql/providers/dq/worker_manager/interface/events.h>
-
+ 
 #include <ydb/library/yql/providers/dq/actors/actor_helpers.h>
 #include <ydb/library/yql/providers/dq/actors/compute_actor.h>
 #include <ydb/library/yql/providers/dq/actors/worker_actor.h>
 #include <ydb/library/yql/providers/dq/runtime/runtime_data.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h>
 #include <ydb/library/yql/dq/common/dq_resource_quoter.h>
-
+ 
 #include <ydb/library/yql/utils/failure_injector/failure_injector.h>
 #include <ydb/library/yql/utils/log/log.h>
 
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/events.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
-
+ 
 #include "worker_manager_common.h"
 
-#include <util/generic/vector.h>
+#include <util/generic/vector.h> 
 #include <util/system/mutex.h>
 #include <util/random/random.h>
 #include <util/system/rusage.h>
-
+ 
 using namespace NActors;
 
-namespace NYql::NDqs {
+namespace NYql::NDqs { 
 
 union TDqLocalResourceId {
     struct {
@@ -112,11 +112,11 @@ private:
         for (const auto& [resourceId, _] : AllocatedWorkers) {
             FreeGroup(resourceId);
         }
-
+ 
         AllocatedWorkers.clear();
         _exit(0);
-    }
-
+    } 
+ 
     void Deallocate(ui32 nodeId) {
         TVector<ui64> toDeallocate;
 
@@ -233,7 +233,7 @@ private:
                 allocationInfo.Deadline =
                     TInstant::Now() + TDuration::MilliSeconds(ev->Get()->Record.GetFreeWorkerAfterMs());
             }
-
+ 
             auto& tasks = *ev->Get()->Record.MutableTask();
 
             if (createComputeActor) {
@@ -277,14 +277,14 @@ private:
             IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
             ev->Cookie);
         Subscribe(ev->Sender.NodeId());
-    }
-
+    } 
+ 
     void OnFreeWorkers(TEvFreeWorkersNotify::TPtr& ev) {
         ui64 resourceId = ev->Get()->Record.GetResourceId();
         YQL_LOG(DEBUG) << "TEvFreeWorkersNotify " << resourceId;
         FreeGroup(resourceId, ev->Sender);
-    }
-
+    } 
+ 
     void OnQueryStatus(TEvQueryStatus::TPtr& ev) {
         auto response = MakeHolder<TEvQueryStatusResponse>();
         Send(ev->Sender, response.Release());
@@ -306,7 +306,7 @@ private:
             Options.Counters.ActiveWorkers->Sub(it->second.WorkerActors.size());
             AllocatedWorkers.erase(it);
         }
-    }
+    } 
 
     void FreeOnDeadline() {
         auto now = TInstant::Now();

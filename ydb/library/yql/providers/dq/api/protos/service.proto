@@ -1,12 +1,12 @@
-syntax = "proto3";
-option cc_enable_arenas = true;
-
+syntax = "proto3"; 
+option cc_enable_arenas = true; 
+ 
 import "ydb/public/api/protos/ydb_operation.proto";
 import "ydb/public/api/protos/ydb_value.proto";
 import "ydb/library/yql/dq/proto/dq_tasks.proto";
-
-package Yql.DqsProto;
-
+ 
+package Yql.DqsProto; 
+ 
 message TAttr {
     string Name = 1;
     string Value = 2;
@@ -25,7 +25,7 @@ message ExecuteQueryResult {
     Ydb.ResultSet result = 1;
     bytes yson = 2;
 }
-
+ 
 message TFile {
     enum EFileType {
         EUDF_FILE = 0;
@@ -89,12 +89,12 @@ message ExecuteGraphResponse {
     bool Truncated = 3;
 }
 
-message SvnRevisionRequest {
-}
-
-message SvnRevisionResponse {
-    string Revision = 1;
-}
+message SvnRevisionRequest { 
+} 
+ 
+message SvnRevisionResponse { 
+    string Revision = 1; 
+} 
 
 message OpenSessionRequest {
     string Session = 1;

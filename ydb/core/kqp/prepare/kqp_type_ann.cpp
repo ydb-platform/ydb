@@ -12,7 +12,7 @@ namespace NKikimr {
 namespace NKqp {
 
 using namespace NYql;
-using namespace NYql::NDq;
+using namespace NYql::NDq; 
 using namespace NYql::NNodes;
 
 using TStatus = IGraphTransformer::TStatus;
@@ -1029,7 +1029,7 @@ TStatus AnnotateKqpEnsure(const TExprNode::TPtr& node, TExprContext& ctx) {
 TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cluster,
     TIntrusivePtr<TKikimrTablesData> tablesData, TTypeAnnotationContext& typesCtx, TKikimrConfiguration::TPtr config)
 {
-    TAutoPtr<IGraphTransformer> dqTransformer = CreateDqTypeAnnotationTransformer(typesCtx);
+    TAutoPtr<IGraphTransformer> dqTransformer = CreateDqTypeAnnotationTransformer(typesCtx); 
 
     return CreateFunctorTransformer(
         [cluster, tablesData, dqTransformer, config](const TExprNode::TPtr& input, TExprNode::TPtr& output,
@@ -1122,7 +1122,7 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
                 return AnnotateKqpEnsure(input, ctx);
             }
 
-            return dqTransformer->Transform(input, output, ctx);
+            return dqTransformer->Transform(input, output, ctx); 
         });
 }
 

@@ -1,19 +1,19 @@
-#pragma once
-
-#include "dqs_task_graph.h"
-
+#pragma once 
+ 
+#include "dqs_task_graph.h" 
+ 
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/core/yql_type_annotation.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
 #include <ydb/library/yql/providers/dq/api/protos/service.pb.h>
-
-#include <util/generic/vector.h>
-
+ 
+#include <util/generic/vector.h> 
+ 
 #include <tuple>
 
-namespace NYql::NDqs {
+namespace NYql::NDqs { 
     class IDqsExecutionPlanner {
     public:
         virtual ~IDqsExecutionPlanner() = default;
@@ -31,7 +31,7 @@ namespace NYql::NDqs {
                                       NYql::TExprNode::TPtr dqExprRoot,
                                       NActors::TActorId executerID = NActors::TActorId(),
                                       NActors::TActorId resultID = NActors::TActorId(1, 0, 1, 0));
-
+ 
         void Clear();
         bool CanFallback();
         ui64 MaxDataSizePerJob() {
@@ -41,10 +41,10 @@ namespace NYql::NDqs {
         ui32 PlanExecution(const TDqSettings::TPtr& settings, bool canFallback = false);
         TVector<NDqProto::TDqTask> GetTasks(const TVector<NActors::TActorId>& workers) override;
         TVector<NDqProto::TDqTask>& GetTasks() override;
-
+ 
         NActors::TActorId GetSourceID() const override;
         TString GetResultType(bool withTagged = false) const override;
-
+ 
         void SetPublicIds(const THashMap<ui64, ui32>& publicIds) {
             PublicIds = publicIds;
         }
@@ -56,7 +56,7 @@ namespace NYql::NDqs {
         void FillChannelDesc(NDqProto::TChannel& channelDesc, const NDq::TChannel& channel);
         void FillInputDesc(NDqProto::TTaskInput& inputDesc, const TTaskInput& input);
         void FillOutputDesc(NDqProto::TTaskOutput& outputDesc, const TTaskOutput& output);
-
+ 
         void GatherPhyMapping(THashMap<std::tuple<TString, TString>, TString>& clusters, THashMap<std::tuple<TString, TString, TString>, TString>& tables);
         void BuildCheckpointingMode();
         bool IsEgressTask(const TDqsTasksGraph::TTaskType& task) const;
@@ -72,7 +72,7 @@ namespace NYql::NDqs {
         TMaybe<NActors::TActorId> SourceID = {};
         ui64 SourceTaskID = 0;
         ui64 _MaxDataSizePerJob = 0;
-
+ 
         TDqsTasksGraph TasksGraph;
         TVector<NDqProto::TDqTask> Tasks;
 

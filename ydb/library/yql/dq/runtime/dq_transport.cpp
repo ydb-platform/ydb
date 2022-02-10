@@ -1,20 +1,20 @@
 #include "dq_transport.h"
 #include "dq_arrow_helpers.h"
-
+ 
 #include <ydb/library/mkql_proto/mkql_proto.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_pack.h>
 #include <ydb/library/yql/providers/common/mkql/yql_type_mkql.h>
 #include <ydb/library/yql/utils/yql_panic.h>
-
+ 
 #include <util/system/yassert.h>
 
-namespace NYql::NDq {
-
-using namespace NKikimr;
-using namespace NMiniKQL;
-using namespace NYql;
-
+namespace NYql::NDq { 
+ 
+using namespace NKikimr; 
+using namespace NMiniKQL; 
+using namespace NYql; 
+ 
 namespace {
 
 NDqProto::TData SerializeBufferArrowV1(TUnboxedValueVector& buffer, const TType* itemType);
@@ -403,4 +403,4 @@ ui64 TDqDataSerializer::EstimateSize(const NUdf::TUnboxedValue& value, const NKi
     return EstimateSizeImpl(value, type, fixed);
 }
 
-} // namespace NYql::NDq
+} // namespace NYql::NDq 

@@ -1,11 +1,11 @@
-{
-  "NodeRootType": "TExprBase",
-  "NodeBuilderBase": "TNodeBuilderBase",
-  "ListBuilderBase": "TListBuilderBase",
-  "FreeArgCallableBase": "TFreeArgCallable",
-  "FreeArgBuilderBase": "TFreeArgCallableBuilderBase",
-  "Nodes": [
-    {
+{ 
+  "NodeRootType": "TExprBase", 
+  "NodeBuilderBase": "TNodeBuilderBase", 
+  "ListBuilderBase": "TListBuilderBase", 
+  "FreeArgCallableBase": "TFreeArgCallable", 
+  "FreeArgBuilderBase": "TFreeArgCallableBuilderBase", 
+  "Nodes": [ 
+    { 
       "Name": "TDqReadWrapBase",
       "Base": "TExprBase",
       "Match": {"Type": "CallableBase"},
@@ -56,6 +56,6 @@
       "Name": "TDqSourceWideWrap",
       "Base": "TDqSourceWrapBase",
       "Match": {"Type": "Callable", "Name": "DqSourceWideWrap"}
-    }
-  ]
+    } 
+  ] 
 }

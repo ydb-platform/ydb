@@ -58,14 +58,14 @@ public:
         Backend_->ReopenLog();
     }
 
-    inline void ReopenLogNoFlush() { 
-        if (!IsOpen()) { 
-            return; 
-        } 
- 
+    inline void ReopenLogNoFlush() {
+        if (!IsOpen()) {
+            return;
+        }
+
         Backend_->ReopenLogNoFlush();
-    } 
- 
+    }
+
     inline void AddLog(ELogPriority priority, const char* format, va_list args) const {
         if (!IsOpen()) {
             return;
@@ -182,12 +182,12 @@ void TLog::ReopenLog() {
     }
 }
 
-void TLog::ReopenLogNoFlush() { 
+void TLog::ReopenLogNoFlush() {
     if (const auto copy = Impl_) {
-        copy->ReopenLogNoFlush(); 
-    } 
-} 
- 
+        copy->ReopenLogNoFlush();
+    }
+}
+
 void TLog::CloseLog() {
     Impl_->CloseLog();
 }

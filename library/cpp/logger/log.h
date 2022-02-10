@@ -73,7 +73,7 @@ public:
     // Call `ReopenLog()` of the underlying backend.
     void ReopenLog();
     // Call `ReopenLogNoFlush()` of the underlying backend.
-    void ReopenLogNoFlush(); 
+    void ReopenLogNoFlush();
     // Call `QueueSize()` of the underlying backend.
     size_t BackEndQueueSize() const;
 

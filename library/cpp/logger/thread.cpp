@@ -102,10 +102,10 @@ public:
         reopener->Wait();
     }
 
-    inline void ReopenLogNoFlush() { 
-        Slave_->ReopenLogNoFlush(); 
-    } 
- 
+    inline void ReopenLogNoFlush() {
+        Slave_->ReopenLogNoFlush();
+    }
+
     inline size_t QueueSize() const {
         return Queue_.Size();
     }
@@ -137,10 +137,10 @@ void TThreadedLogBackend::ReopenLog() {
     Impl_->ReopenLog();
 }
 
-void TThreadedLogBackend::ReopenLogNoFlush() { 
-    Impl_->ReopenLogNoFlush(); 
-} 
- 
+void TThreadedLogBackend::ReopenLogNoFlush() {
+    Impl_->ReopenLogNoFlush();
+}
+
 void TThreadedLogBackend::WriteEmergencyData(const TLogRecord& rec) {
     Impl_->WriteEmergencyData(rec);
 }

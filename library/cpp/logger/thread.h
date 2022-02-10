@@ -14,7 +14,7 @@ public:
 
     void WriteData(const TLogRecord& rec) override;
     void ReopenLog() override;
-    void ReopenLogNoFlush() override; 
+    void ReopenLogNoFlush() override;
     size_t QueueSize() const override;
 
     // Write an emergency message when the memory allocator is corrupted.

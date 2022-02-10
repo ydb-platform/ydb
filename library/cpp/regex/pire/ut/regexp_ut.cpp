@@ -156,66 +156,66 @@ Y_UNIT_TEST_SUITE(TRegExp) {
         //UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("pref bla suff"));
     }
 
-    Y_UNIT_TEST(CaptureXA) {
-        TCapturingFsm fsm(".*(xa).*");
-
-        TSearcher searcher(fsm);
-        searcher.Search("xa");
-        UNIT_ASSERT(searcher.Captured());
+    Y_UNIT_TEST(CaptureXA) { 
+        TCapturingFsm fsm(".*(xa).*"); 
+ 
+        TSearcher searcher(fsm); 
+        searcher.Search("xa"); 
+        UNIT_ASSERT(searcher.Captured()); 
         UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("xa"));
-    }
-
-    Y_UNIT_TEST(CaptureWrongXX) {
-        TCapturingFsm fsm(".*(xx).*");
-
-        TSearcher searcher(fsm);
-        searcher.Search("xx");
-        UNIT_ASSERT(searcher.Captured());
-        // Surprise!
-        // TCapturingFsm uses a fast - O(|text|) - but incorrect algorithm.
-        // It works more or less for a particular class of regexps to which ".*(xx).*" does not belong.
-        // So it returns not the expected "xx" but just the second "x" instead.
+    } 
+ 
+    Y_UNIT_TEST(CaptureWrongXX) { 
+        TCapturingFsm fsm(".*(xx).*"); 
+ 
+        TSearcher searcher(fsm); 
+        searcher.Search("xx"); 
+        UNIT_ASSERT(searcher.Captured()); 
+        // Surprise! 
+        // TCapturingFsm uses a fast - O(|text|) - but incorrect algorithm. 
+        // It works more or less for a particular class of regexps to which ".*(xx).*" does not belong. 
+        // So it returns not the expected "xx" but just the second "x" instead. 
         UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("x"));
-    }
-
-    Y_UNIT_TEST(CaptureRight1XX) {
-        TCapturingFsm fsm("[^x]+(xx).*");
-
-        TSearcher searcher(fsm);
-
-        searcher.Search("xxx");
-        UNIT_ASSERT(!searcher.Captured());
-    }
-
-    Y_UNIT_TEST(CaptureRight2XX) {
-        TCapturingFsm fsm("[^x]+(xx).*");
-
-        TSearcher searcher(fsm);
-
-        searcher.Search("axx");
-        UNIT_ASSERT(searcher.Captured());
+    } 
+ 
+    Y_UNIT_TEST(CaptureRight1XX) { 
+        TCapturingFsm fsm("[^x]+(xx).*"); 
+ 
+        TSearcher searcher(fsm); 
+ 
+        searcher.Search("xxx"); 
+        UNIT_ASSERT(!searcher.Captured()); 
+    } 
+ 
+    Y_UNIT_TEST(CaptureRight2XX) { 
+        TCapturingFsm fsm("[^x]+(xx).*"); 
+ 
+        TSearcher searcher(fsm); 
+ 
+        searcher.Search("axx"); 
+        UNIT_ASSERT(searcher.Captured()); 
         UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("xx"));
-    }
-
-    Y_UNIT_TEST(CaptureRight3XX) {
-        TCapturingFsm fsm("[^x]+(xx).*");
-
-        TSearcher searcher(fsm);
-
-        searcher.Search("axxb");
-        UNIT_ASSERT(searcher.Captured());
+    } 
+ 
+    Y_UNIT_TEST(CaptureRight3XX) { 
+        TCapturingFsm fsm("[^x]+(xx).*"); 
+ 
+        TSearcher searcher(fsm); 
+ 
+        searcher.Search("axxb"); 
+        UNIT_ASSERT(searcher.Captured()); 
         UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("xx"));
-    }
-
-    Y_UNIT_TEST(SlowCaptureXX) {
-        TSlowCapturingFsm fsm(".*(xx).*");
-
-        TSlowSearcher searcher(fsm);
-        searcher.Search("xx");
-        UNIT_ASSERT(searcher.Captured());
+    } 
+ 
+    Y_UNIT_TEST(SlowCaptureXX) { 
+        TSlowCapturingFsm fsm(".*(xx).*"); 
+ 
+        TSlowSearcher searcher(fsm); 
+        searcher.Search("xx"); 
+        UNIT_ASSERT(searcher.Captured()); 
         UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("xx"));
-    }
-
+    } 
+ 
     Y_UNIT_TEST(SlowCapture) {
         TSlowCapturingFsm fsm("^http://vk(ontakte[.]ru|[.]com)/id(\\d+)([^0-9]|$)",
                               TFsm::TOptions().SetCapture(2));

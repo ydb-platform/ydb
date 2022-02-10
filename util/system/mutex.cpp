@@ -20,7 +20,7 @@ public:
 
             inline T() {
                 int result;
-
+ 
                 memset(&Attr, 0, sizeof(Attr));
                 result = pthread_mutexattr_init(&Attr);
                 if (result != 0) {

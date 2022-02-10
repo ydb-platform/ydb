@@ -3,8 +3,8 @@
 #include "guard.h"
 #include "defaults.h"
 
-#include <util/generic/ptr.h>
-
+#include <util/generic/ptr.h> 
+ 
 class TRWMutex {
 public:
     TRWMutex();

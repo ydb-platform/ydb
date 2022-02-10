@@ -8,21 +8,21 @@
 #include <type_traits>
 #include <stlfwd>
 
-#if _LIBCPP_STD_VER >= 17
+#if _LIBCPP_STD_VER >= 17 
 template <bool B>
-using TBoolConstant = std::bool_constant<B>;
-#else
-template <bool B>
+using TBoolConstant = std::bool_constant<B>; 
+#else 
+template <bool B> 
 struct TBoolConstant: std::integral_constant<bool, B> {};
-#endif
+#endif 
 
-#if _LIBCPP_STD_VER >= 17
+#if _LIBCPP_STD_VER >= 17 
 template <class B>
-using TNegation = std::negation<B>;
-#else
-template <class B>
+using TNegation = std::negation<B>; 
+#else 
+template <class B> 
 struct TNegation: ::TBoolConstant<!bool(B::value)> {};
-#endif
+#endif 
 
 namespace NPrivate {
     template <class... Bs>
@@ -51,30 +51,30 @@ namespace NPrivate {
 #if _LIBCPP_STD_VER >= 17 && !defined(_MSC_VER)
 // Disable std::conjunction for MSVC by analogy with std::disjunction.
 template <class... Bs>
-using TConjunction = std::conjunction<Bs...>;
-#else
-template <class... Bs>
+using TConjunction = std::conjunction<Bs...>; 
+#else 
+template <class... Bs> 
 struct TConjunction: ::TBoolConstant<::NPrivate::ConjunctionImpl<Bs...>()> {};
-#endif
+#endif 
 
 #if _LIBCPP_STD_VER >= 17 && !defined(_MSC_VER)
 // Disable std::disjunction for MSVC.
 // It reduces build time (500 -> 20 seconds) and memory consumption (20 GB -> less than 1 GB)
 // for some files (notably search/dssm_boosting/dssm_boosting_calcer.cpp).
 template <class... Bs>
-using TDisjunction = std::disjunction<Bs...>;
-#else
-template <class... Bs>
+using TDisjunction = std::disjunction<Bs...>; 
+#else 
+template <class... Bs> 
 struct TDisjunction: ::TBoolConstant<::NPrivate::DisjunctionImpl<Bs...>()> {};
-#endif
+#endif 
 
-#if _LIBCPP_STD_VER >= 17
-template <class... Bs>
-using TVoidT = std::void_t<Bs...>;
-#else
+#if _LIBCPP_STD_VER >= 17 
+template <class... Bs> 
+using TVoidT = std::void_t<Bs...>; 
+#else 
 template <class...>
 using TVoidT = void;
-#endif
+#endif 
 
 template <class T>
 struct TPodTraits {

@@ -27,7 +27,7 @@ bool TSourceLocation::operator<(const TSourceLocation& other) const
     const char* otherFileName = other.FileName_ ? other.FileName_ : "";
     int fileNameResult = strcmp(fileName, otherFileName);
     if (fileNameResult != 0) {
-        return fileNameResult < 0;
+        return fileNameResult < 0; 
     }
 
     if (Line_ < other.Line_) {

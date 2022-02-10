@@ -107,7 +107,7 @@ private:
     struct TNullPayload
     { };
 
-    using THolder = TRefCountedPtr;
+    using THolder = TRefCountedPtr; 
 
     std::variant<TNullPayload, THolder, TString> Payload_;
 

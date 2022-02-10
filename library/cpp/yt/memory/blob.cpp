@@ -1,6 +1,6 @@
-#include "blob.h"
-#include "ref.h"
-
+#include "blob.h" 
+#include "ref.h" 
+ 
 #include <library/cpp/ytalloc/api/ytalloc.h>
 
 namespace NYT {
@@ -9,26 +9,26 @@ namespace NYT {
 
 static constexpr size_t InitialBlobCapacity = 16;
 static constexpr double BlobCapacityMultiplier = 1.5;
-
+ 
 TBlob::TBlob(
     TRefCountedTypeCookie tagCookie,
     size_t size,
     bool initiailizeStorage,
     bool pageAligned)
     : PageAligned_(pageAligned)
-{
+{ 
     SetTagCookie(tagCookie);
-    if (size == 0) {
-        Reset();
-    } else {
+    if (size == 0) { 
+        Reset(); 
+    } else { 
         Allocate(std::max(size, InitialBlobCapacity));
         Size_ = size;
-        if (initiailizeStorage) {
+        if (initiailizeStorage) { 
             ::memset(Begin_, 0, Size_);
-        }
-    }
-}
-
+        } 
+    } 
+} 
+ 
 TBlob::TBlob(
     TRefCountedTypeCookie tagCookie,
     TRef data,
@@ -40,80 +40,80 @@ TBlob::TBlob(
     Append(data);
 }
 
-TBlob::TBlob(const TBlob& other)
+TBlob::TBlob(const TBlob& other) 
     : PageAligned_(other.PageAligned_)
-{
+{ 
     SetTagCookie(other);
-    if (other.Size_ == 0) {
-        Reset();
-    } else {
+    if (other.Size_ == 0) { 
+        Reset(); 
+    } else { 
         Allocate(std::max(InitialBlobCapacity, other.Size_));
         ::memcpy(Begin_, other.Begin_, other.Size_);
         Size_ = other.Size_;
-    }
-}
-
+    } 
+} 
+ 
 TBlob::TBlob(TBlob&& other) noexcept
     : Begin_(other.Begin_)
-    , Size_(other.Size_)
-    , Capacity_(other.Capacity_)
+    , Size_(other.Size_) 
+    , Capacity_(other.Capacity_) 
     , PageAligned_(other.PageAligned_)
-{
+{ 
     SetTagCookie(other);
-    other.Reset();
-}
-
-TBlob::~TBlob()
-{
+    other.Reset(); 
+} 
+ 
+TBlob::~TBlob() 
+{ 
     Free();
-}
-
-void TBlob::Reserve(size_t newCapacity)
-{
-    if (newCapacity > Capacity_) {
+} 
+ 
+void TBlob::Reserve(size_t newCapacity) 
+{ 
+    if (newCapacity > Capacity_) { 
         Reallocate(newCapacity);
-    }
-}
-
-void TBlob::Resize(size_t newSize, bool initializeStorage /*= true*/)
-{
-    if (newSize > Size_) {
-        if (newSize > Capacity_) {
+    } 
+} 
+ 
+void TBlob::Resize(size_t newSize, bool initializeStorage /*= true*/) 
+{ 
+    if (newSize > Size_) { 
+        if (newSize > Capacity_) { 
             size_t newCapacity;
-            if (Capacity_ == 0) {
+            if (Capacity_ == 0) { 
                 newCapacity = std::max(InitialBlobCapacity, newSize);
-            } else {
+            } else { 
                 newCapacity = std::max(static_cast<size_t>(Capacity_ * BlobCapacityMultiplier), newSize);
-            }
+            } 
             Reallocate(newCapacity);
-        }
-        if (initializeStorage) {
+        } 
+        if (initializeStorage) { 
             ::memset(Begin_ + Size_, 0, newSize - Size_);
-        }
-    }
-    Size_ = newSize;
-}
-
-TBlob& TBlob::operator = (const TBlob& rhs)
-{
-    if (this != &rhs) {
+        } 
+    } 
+    Size_ = newSize; 
+} 
+ 
+TBlob& TBlob::operator = (const TBlob& rhs) 
+{ 
+    if (this != &rhs) { 
         this->~TBlob();
         new(this) TBlob(rhs);
-    }
-    return *this;
-}
-
+    } 
+    return *this; 
+} 
+ 
 TBlob& TBlob::operator = (TBlob&& rhs) noexcept
-{
-    if (this != &rhs) {
+{ 
+    if (this != &rhs) { 
         this->~TBlob();
         new(this) TBlob(std::move(rhs));
-    }
-    return *this;
-}
-
-void TBlob::Append(const void* data, size_t size)
-{
+    } 
+    return *this; 
+} 
+ 
+void TBlob::Append(const void* data, size_t size) 
+{ 
     if (Size_ + size > Capacity_) {
         Resize(Size_ + size, false);
         ::memcpy(Begin_ + Size_ - size, data, size);
@@ -121,13 +121,13 @@ void TBlob::Append(const void* data, size_t size)
         ::memcpy(Begin_ + Size_, data, size);
         Size_ += size;
     }
-}
-
+} 
+ 
 void TBlob::Append(TRef ref)
-{
-    Append(ref.Begin(), ref.Size());
-}
-
+{ 
+    Append(ref.Begin(), ref.Size()); 
+} 
+ 
 void TBlob::Append(char ch)
 {
     if (Size_ + 1 > Capacity_) {
@@ -138,12 +138,12 @@ void TBlob::Append(char ch)
     }
 }
 
-void TBlob::Reset()
-{
+void TBlob::Reset() 
+{ 
     Begin_ = nullptr;
-    Size_ = Capacity_ = 0;
-}
-
+    Size_ = Capacity_ = 0; 
+} 
+ 
 char* TBlob::DoAllocate(size_t size)
 {
     return static_cast<char*>(PageAligned_
@@ -219,6 +219,6 @@ void swap(TBlob& left, TBlob& right)
     }
 }
 
-////////////////////////////////////////////////////////////////////////////////
-
-} // namespace NYT
+//////////////////////////////////////////////////////////////////////////////// 
+ 
+} // namespace NYT 

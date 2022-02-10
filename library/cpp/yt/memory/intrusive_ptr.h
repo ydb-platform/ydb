@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ref_counted.h"
+#include "ref_counted.h" 
 
 #include <util/generic/hash.h>
 #include <util/generic/utility.h>
@@ -12,13 +12,13 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <class T>
+template <class T> 
 class TIntrusivePtr
 {
 public:
     typedef T TUnderlying;
 
-    constexpr TIntrusivePtr() noexcept
+    constexpr TIntrusivePtr() noexcept 
     { }
 
     constexpr TIntrusivePtr(std::nullptr_t) noexcept
@@ -32,7 +32,7 @@ public:
      * Note that it notoriously hard to make this constructor explicit
      * given the current amount of code written.
      */
-    TIntrusivePtr(T* obj, bool addReference = true) noexcept
+    TIntrusivePtr(T* obj, bool addReference = true) noexcept 
         : T_(obj)
     {
         if (T_ && addReference) {
@@ -41,7 +41,7 @@ public:
     }
 
     //! Copy constructor.
-    TIntrusivePtr(const TIntrusivePtr& other) noexcept
+    TIntrusivePtr(const TIntrusivePtr& other) noexcept 
         : T_(other.Get())
     {
         if (T_) {
@@ -51,19 +51,19 @@ public:
 
     //! Copy constructor with an upcast.
     template <class U, class = typename std::enable_if_t<std::is_convertible_v<U*, T*>>>
-    TIntrusivePtr(const TIntrusivePtr<U>& other) noexcept
+    TIntrusivePtr(const TIntrusivePtr<U>& other) noexcept 
         : T_(other.Get())
     {
-        static_assert(
-            std::is_base_of_v<TRefCountedBase, T>,
-            "Cast allowed only for types derived from TRefCountedBase");
+        static_assert( 
+            std::is_base_of_v<TRefCountedBase, T>, 
+            "Cast allowed only for types derived from TRefCountedBase"); 
         if (T_) {
             Ref(T_);
         }
     }
 
     //! Move constructor.
-    TIntrusivePtr(TIntrusivePtr&& other) noexcept
+    TIntrusivePtr(TIntrusivePtr&& other) noexcept 
         : T_(other.Get())
     {
         other.T_ = nullptr;
@@ -71,12 +71,12 @@ public:
 
     //! Move constructor with an upcast.
     template <class U, class = typename std::enable_if_t<std::is_convertible_v<U*, T*>>>
-    TIntrusivePtr(TIntrusivePtr<U>&& other) noexcept
+    TIntrusivePtr(TIntrusivePtr<U>&& other) noexcept 
         : T_(other.Get())
     {
-        static_assert(
-            std::is_base_of_v<TRefCountedBase, T>,
-            "Cast allowed only for types derived from TRefCountedBase");
+        static_assert( 
+            std::is_base_of_v<TRefCountedBase, T>, 
+            "Cast allowed only for types derived from TRefCountedBase"); 
         other.T_ = nullptr;
     }
 
@@ -101,10 +101,10 @@ public:
     {
         static_assert(
             std::is_convertible_v<U*, T*>,
-            "U* must be convertible to T*");
-        static_assert(
-            std::is_base_of_v<TRefCountedBase, T>,
-            "Cast allowed only for types derived from TRefCountedBase");
+            "U* must be convertible to T*"); 
+        static_assert( 
+            std::is_base_of_v<TRefCountedBase, T>, 
+            "Cast allowed only for types derived from TRefCountedBase"); 
         TIntrusivePtr(other).Swap(*this);
         return *this;
     }
@@ -122,10 +122,10 @@ public:
     {
         static_assert(
             std::is_convertible_v<U*, T*>,
-            "U* must be convertible to T*");
-        static_assert(
-            std::is_base_of_v<TRefCountedBase, T>,
-            "Cast allowed only for types derived from TRefCountedBase");
+            "U* must be convertible to T*"); 
+        static_assert( 
+            std::is_base_of_v<TRefCountedBase, T>, 
+            "Cast allowed only for types derived from TRefCountedBase"); 
         TIntrusivePtr(std::move(other)).Swap(*this);
         return *this;
     }
@@ -196,31 +196,31 @@ TIntrusivePtr<T> MakeStrong(T* p)
     return TIntrusivePtr<T>(p);
 }
 
-//! Tries to obtain an intrusive pointer for an object that may had
-//! already lost all of its references and, thus, is about to be deleted.
-/*!
- * You may call this method at any time provided that you have a valid
- * raw pointer to an object. The call either returns an intrusive pointer
- * for the object (thus ensuring that the object won't be destroyed until
- * you're holding this pointer) or NULL indicating that the last reference
- * had already been lost and the object is on its way to heavens.
- * All these steps happen atomically.
- *
- * Under all circumstances it is caller's responsibility the make sure that
- * the object is not destroyed during the call to #DangerousGetPtr.
- * Typically this is achieved by keeping a (lock-protected) collection of
- * raw pointers, taking a lock in object's destructor, and unregistering
- * its raw pointer from the collection there.
- */
-
-template <class T>
-Y_FORCE_INLINE TIntrusivePtr<T> DangerousGetPtr(T* object)
-{
-    return object->TryRef()
-        ? TIntrusivePtr<T>(object, false)
-        : TIntrusivePtr<T>();
-}
-
+//! Tries to obtain an intrusive pointer for an object that may had 
+//! already lost all of its references and, thus, is about to be deleted. 
+/*! 
+ * You may call this method at any time provided that you have a valid 
+ * raw pointer to an object. The call either returns an intrusive pointer 
+ * for the object (thus ensuring that the object won't be destroyed until 
+ * you're holding this pointer) or NULL indicating that the last reference 
+ * had already been lost and the object is on its way to heavens. 
+ * All these steps happen atomically. 
+ * 
+ * Under all circumstances it is caller's responsibility the make sure that 
+ * the object is not destroyed during the call to #DangerousGetPtr. 
+ * Typically this is achieved by keeping a (lock-protected) collection of 
+ * raw pointers, taking a lock in object's destructor, and unregistering 
+ * its raw pointer from the collection there. 
+ */ 
+ 
+template <class T> 
+Y_FORCE_INLINE TIntrusivePtr<T> DangerousGetPtr(T* object) 
+{ 
+    return object->TryRef() 
+        ? TIntrusivePtr<T>(object, false) 
+        : TIntrusivePtr<T>(); 
+} 
+ 
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T, class U>
@@ -272,7 +272,7 @@ bool operator==(const TIntrusivePtr<T>& lhs, const TIntrusivePtr<U>& rhs)
 {
     static_assert(
         std::is_convertible_v<U*, T*>,
-        "U* must be convertible to T*");
+        "U* must be convertible to T*"); 
     return lhs.Get() == rhs.Get();
 }
 
@@ -281,7 +281,7 @@ bool operator!=(const TIntrusivePtr<T>& lhs, const TIntrusivePtr<U>& rhs)
 {
     static_assert(
         std::is_convertible_v<U*, T*>,
-        "U* must be convertible to T*");
+        "U* must be convertible to T*"); 
     return lhs.Get() != rhs.Get();
 }
 
@@ -290,7 +290,7 @@ bool operator==(const TIntrusivePtr<T>& lhs, U* rhs)
 {
     static_assert(
         std::is_convertible_v<U*, T*>,
-        "U* must be convertible to T*");
+        "U* must be convertible to T*"); 
     return lhs.Get() == rhs;
 }
 
@@ -299,7 +299,7 @@ bool operator!=(const TIntrusivePtr<T>& lhs, U* rhs)
 {
     static_assert(
         std::is_convertible_v<U*, T*>,
-        "U* must be convertible to T*");
+        "U* must be convertible to T*"); 
     return lhs.Get() != rhs;
 }
 
@@ -308,7 +308,7 @@ bool operator==(T* lhs, const TIntrusivePtr<U>& rhs)
 {
     static_assert(
         std::is_convertible_v<U*, T*>,
-        "U* must be convertible to T*");
+        "U* must be convertible to T*"); 
     return lhs == rhs.Get();
 }
 
@@ -317,7 +317,7 @@ bool operator!=(T* lhs, const TIntrusivePtr<U>& rhs)
 {
     static_assert(
         std::is_convertible_v<U*, T*>,
-        "U* must be convertible to T*");
+        "U* must be convertible to T*"); 
     return lhs != rhs.Get();
 }
 

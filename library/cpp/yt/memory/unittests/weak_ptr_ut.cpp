@@ -1,9 +1,9 @@
-#include <library/cpp/testing/gtest/gtest.h>
+#include <library/cpp/testing/gtest/gtest.h> 
 
 #include <library/cpp/yt/memory/new.h>
 #include <library/cpp/yt/memory/weak_ptr.h>
 
-#include <array>
+#include <array> 
 
 namespace NYT {
 namespace {
@@ -91,8 +91,8 @@ MATCHER_P2(HasRefCounts, strongRefs, weakRefs,
 template <class T>
 void PrintExtrinsicRefCounted(const T& arg, ::std::ostream* os)
 {
-    *os << arg.GetRefCount() << " strong and "
-        << arg.GetWeakRefCount() << " weak references";
+    *os << arg.GetRefCount() << " strong and " 
+        << arg.GetWeakRefCount() << " weak references"; 
 }
 
 void PrintTo(const TIntricateObject& arg, ::std::ostream* os)
@@ -353,32 +353,32 @@ TEST_F(TWeakPtrTest, VirtualBase)
     ptr.Reset();
 }
 
-#if 0
-class TSlowlyDyingObject
-    : public TRefCounted
-{
-public:
-    TSlowlyDyingObject()
-    {
-        ++ConstructorShadowState;
-    }
-
-    virtual ~TSlowlyDyingObject()
-    {
-        ++DestructorShadowState;
-        DeathEvent->Wait();
-        ++DestructorShadowState;
-    }
-};
-
-void PrintTo(const TSlowlyDyingObject& arg, ::std::ostream* os)
-{
-    PrintExtrinsicRefCounted(arg, os);
-}
-
-typedef TIntrusivePtr<TSlowlyDyingObject> TSlowlyDyingObjectPtr;
-typedef TWeakPtr<TSlowlyDyingObject> TSlowlyDyingObjectWkPtr;
-
+#if 0 
+class TSlowlyDyingObject 
+    : public TRefCounted 
+{ 
+public: 
+    TSlowlyDyingObject() 
+    { 
+        ++ConstructorShadowState; 
+    } 
+ 
+    virtual ~TSlowlyDyingObject() 
+    { 
+        ++DestructorShadowState; 
+        DeathEvent->Wait(); 
+        ++DestructorShadowState; 
+    } 
+}; 
+ 
+void PrintTo(const TSlowlyDyingObject& arg, ::std::ostream* os) 
+{ 
+    PrintExtrinsicRefCounted(arg, os); 
+} 
+ 
+typedef TIntrusivePtr<TSlowlyDyingObject> TSlowlyDyingObjectPtr; 
+typedef TWeakPtr<TSlowlyDyingObject> TSlowlyDyingObjectWkPtr; 
+ 
 static void* AsynchronousDeleter(void* param)
 {
     TSlowlyDyingObjectPtr* indirectObject =
@@ -388,11 +388,11 @@ static void* AsynchronousDeleter(void* param)
 }
 
 std::unique_ptr<NThreading::TEvent> DeathEvent;
-
+ 
 TEST_F(TWeakPtrTest, DISABLED_AcquisionOfSlowlyDyingObject)
 {
     DeathEvent.reset(new NThreading::TEvent());
-
+ 
     TSlowlyDyingObjectPtr object = New<TSlowlyDyingObject>();
     TSlowlyDyingObjectWkPtr ptr(object);
 
@@ -425,8 +425,8 @@ TEST_F(TWeakPtrTest, DISABLED_AcquisionOfSlowlyDyingObject)
     EXPECT_EQ(TSlowlyDyingObjectPtr(), ptr.Lock());
 }
 
-#endif
-
+#endif 
+ 
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace

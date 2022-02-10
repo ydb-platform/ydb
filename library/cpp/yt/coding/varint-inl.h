@@ -31,14 +31,14 @@ Y_FORCE_INLINE int WriteVarUint64Impl(TWriteCallback doWrite, ui64 value)
 // These are optimized versions of these Read/Write functions in protobuf/io/coded_stream.cc.
 Y_FORCE_INLINE int WriteVarUint64(IOutputStream* output, ui64 value)
 {
-    return WriteVarUint64Impl([&] (ui8 byte) {
+    return WriteVarUint64Impl([&] (ui8 byte) { 
         output->Write(byte);
     }, value);
 }
 
 Y_FORCE_INLINE int WriteVarUint64(char* output, ui64 value)
 {
-    return WriteVarUint64Impl([&] (ui8 byte) {
+    return WriteVarUint64Impl([&] (ui8 byte) { 
         *output++ = byte;
     }, value);
 }
@@ -48,17 +48,17 @@ Y_FORCE_INLINE int WriteVarUint64(char* output, ui64 value)
 template <class TOutput>
 Y_FORCE_INLINE int WriteVarUint32Impl(TOutput output, ui32 value)
 {
-    return WriteVarUint64(output, static_cast<ui64>(value));
+    return WriteVarUint64(output, static_cast<ui64>(value)); 
 }
 
 Y_FORCE_INLINE int WriteVarUint32(IOutputStream* output, ui32 value)
 {
-    return WriteVarUint32Impl(output, value);
+    return WriteVarUint32Impl(output, value); 
 }
 
 Y_FORCE_INLINE int WriteVarUint32(char* output, ui32 value)
 {
-    return WriteVarUint32Impl(output, value);
+    return WriteVarUint32Impl(output, value); 
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -66,7 +66,7 @@ Y_FORCE_INLINE int WriteVarUint32(char* output, ui32 value)
 template <class TOutput>
 Y_FORCE_INLINE int WriteVarInt32Impl(TOutput output, i32 value)
 {
-    return WriteVarUint64(output, static_cast<ui64>(ZigZagEncode32(value)));
+    return WriteVarUint64(output, static_cast<ui64>(ZigZagEncode32(value))); 
 }
 
 Y_FORCE_INLINE int WriteVarInt32(IOutputStream* output, i32 value)
@@ -84,7 +84,7 @@ Y_FORCE_INLINE int WriteVarInt32(char* output, i32 value)
 template <class TOutput>
 Y_FORCE_INLINE int WriteVarInt64Impl(TOutput output, i64 value)
 {
-    return WriteVarUint64(output, static_cast<ui64>(ZigZagEncode64(value)));
+    return WriteVarUint64(output, static_cast<ui64>(ZigZagEncode64(value))); 
 }
 
 Y_FORCE_INLINE int WriteVarInt64(IOutputStream* output, i64 value)
@@ -121,7 +121,7 @@ Y_FORCE_INLINE int ReadVarUint64Impl(TReadCallback doRead, ui64* value)
 
 Y_FORCE_INLINE int ReadVarUint64(IInputStream* input, ui64* value)
 {
-    return ReadVarUint64Impl([&] () {
+    return ReadVarUint64Impl([&] () { 
         char byte;
         if (input->Read(&byte, 1) != 1) {
             throw TSimpleException("Premature end of stream while reading varuint64");
@@ -132,7 +132,7 @@ Y_FORCE_INLINE int ReadVarUint64(IInputStream* input, ui64* value)
 
 Y_FORCE_INLINE int ReadVarUint64(const char* input, ui64* value)
 {
-    return ReadVarUint64Impl([&] () {
+    return ReadVarUint64Impl([&] () { 
         char byte = *input;
         ++input;
         return byte;

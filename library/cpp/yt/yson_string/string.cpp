@@ -155,7 +155,7 @@ TString TYsonString::ToString() const
         [] (const TNullPayload&) -> TString {
             YT_ABORT();
         },
-        [&] (const TRefCountedPtr&) {
+        [&] (const TRefCountedPtr&) { 
             return TString(AsStringBuf());
         },
         [] (const TString& payload) {

@@ -58,7 +58,7 @@ namespace NXml {
 
         TString ToString(TZtStringBuf enc = "", bool shouldFormat = true) const {
             TStringStream s;
-            Save(s, enc, shouldFormat); 
+            Save(s, enc, shouldFormat);
             return s.Str();
         }
 

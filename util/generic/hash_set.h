@@ -114,7 +114,7 @@ public:
     // THashSet has implicit copy/move constructors and copy-/move-assignment operators
     // because its implementation is backed by THashTable.
     // See hash_ut.cpp
-
+ 
 public:
     size_type size() const {
         return rep.size();
@@ -363,7 +363,7 @@ public:
     // THashMultiSet has implicit copy/move constructors and copy-/move-assignment operators
     // because its implementation is backed by THashTable.
     // See hash_ut.cpp
-
+ 
 public:
     size_type size() const {
         return rep.size();

@@ -596,13 +596,13 @@ public:
                     deinitialize_buckets(buckets);
                     initialize_buckets_dynamic(buckets, ht.buckets.ExtSize());
                 }
-
+ 
                 copy_from_dynamic(ht);
             }
         }
         return *this;
     }
-
+ 
     THashTable& operator=(THashTable&& ht) noexcept {
         basic_clear();
         swap(ht);
@@ -1519,7 +1519,7 @@ public:
     // THashMap has implicit copy/move constructors and copy-/move-assignment operators
     // because its implementation is backed by THashTable.
     // See hash_ut.cpp
-
+ 
 public:
     size_type size() const noexcept {
         return rep.size();
@@ -1844,7 +1844,7 @@ public:
     // THashMultiMap has implicit copy/move constructors and copy-/move-assignment operators
     // because its implementation is backed by THashTable.
     // See hash_ut.cpp
-
+ 
 public:
     size_type size() const {
         return rep.size();

@@ -114,39 +114,39 @@ protected:
 
 UNIT_TEST_SUITE_REGISTRATION(THashTest);
 
-void THashTest::TestHMapConstructorsAndAssignments() {
+void THashTest::TestHMapConstructorsAndAssignments() { 
     using container = THashMap<TString, int>;
-
-    container c1;
-    c1["one"] = 1;
-    c1["two"] = 2;
-
-    container c2(c1);
-
-    UNIT_ASSERT_VALUES_EQUAL(2, c1.size());
-    UNIT_ASSERT_VALUES_EQUAL(2, c2.size());
+ 
+    container c1; 
+    c1["one"] = 1; 
+    c1["two"] = 2; 
+ 
+    container c2(c1); 
+ 
+    UNIT_ASSERT_VALUES_EQUAL(2, c1.size()); 
+    UNIT_ASSERT_VALUES_EQUAL(2, c2.size()); 
     UNIT_ASSERT_VALUES_EQUAL(1, c1.at("one")); /* Note: fails under MSVC since it does not support implicit generation of move constructors. */
-    UNIT_ASSERT_VALUES_EQUAL(2, c2.at("two"));
-
+    UNIT_ASSERT_VALUES_EQUAL(2, c2.at("two")); 
+ 
     container c3(std::move(c1));
-
-    UNIT_ASSERT_VALUES_EQUAL(0, c1.size());
-    UNIT_ASSERT_VALUES_EQUAL(2, c3.size());
-    UNIT_ASSERT_VALUES_EQUAL(1, c3.at("one"));
-
-    c2["three"] = 3;
-    c3 = c2;
-
-    UNIT_ASSERT_VALUES_EQUAL(3, c2.size());
-    UNIT_ASSERT_VALUES_EQUAL(3, c3.size());
-    UNIT_ASSERT_VALUES_EQUAL(3, c3.at("three"));
-
-    c2["four"] = 4;
+ 
+    UNIT_ASSERT_VALUES_EQUAL(0, c1.size()); 
+    UNIT_ASSERT_VALUES_EQUAL(2, c3.size()); 
+    UNIT_ASSERT_VALUES_EQUAL(1, c3.at("one")); 
+ 
+    c2["three"] = 3; 
+    c3 = c2; 
+ 
+    UNIT_ASSERT_VALUES_EQUAL(3, c2.size()); 
+    UNIT_ASSERT_VALUES_EQUAL(3, c3.size()); 
+    UNIT_ASSERT_VALUES_EQUAL(3, c3.at("three")); 
+ 
+    c2["four"] = 4; 
     c3 = std::move(c2);
-
-    UNIT_ASSERT_VALUES_EQUAL(0, c2.size());
-    UNIT_ASSERT_VALUES_EQUAL(4, c3.size());
-    UNIT_ASSERT_VALUES_EQUAL(4, c3.at("four"));
+ 
+    UNIT_ASSERT_VALUES_EQUAL(0, c2.size()); 
+    UNIT_ASSERT_VALUES_EQUAL(4, c3.size()); 
+    UNIT_ASSERT_VALUES_EQUAL(4, c3.at("four")); 
 
     const container c4{
         {"one", 1},
@@ -163,8 +163,8 @@ void THashTest::TestHMapConstructorsAndAssignments() {
 
     // non-existent values must be zero-initialized
     UNIT_ASSERT_VALUES_EQUAL(c1["nonexistent"], 0);
-}
-
+} 
+ 
 void THashTest::TestHMap1() {
     using maptype = THashMap<char, TString, THash<char>, TEqualTo<char>>;
     maptype m;
@@ -260,36 +260,36 @@ void THashTest::TestHMMapEqualityOperator() {
     UNIT_ASSERT(c3 != base);
 }
 
-void THashTest::TestHMMapConstructorsAndAssignments() {
+void THashTest::TestHMMapConstructorsAndAssignments() { 
     using container = THashMultiMap<TString, int>;
-
-    container c1;
-    c1.insert(container::value_type("one", 1));
-    c1.insert(container::value_type("two", 2));
-
-    container c2(c1);
-
-    UNIT_ASSERT_VALUES_EQUAL(2, c1.size());
-    UNIT_ASSERT_VALUES_EQUAL(2, c2.size());
-
+ 
+    container c1; 
+    c1.insert(container::value_type("one", 1)); 
+    c1.insert(container::value_type("two", 2)); 
+ 
+    container c2(c1); 
+ 
+    UNIT_ASSERT_VALUES_EQUAL(2, c1.size()); 
+    UNIT_ASSERT_VALUES_EQUAL(2, c2.size()); 
+ 
     container c3(std::move(c1));
-
-    UNIT_ASSERT_VALUES_EQUAL(0, c1.size());
-    UNIT_ASSERT_VALUES_EQUAL(2, c3.size());
-
-    c2.insert(container::value_type("three", 3));
-    c3 = c2;
-
-    UNIT_ASSERT_VALUES_EQUAL(3, c2.size());
-    UNIT_ASSERT_VALUES_EQUAL(3, c3.size());
-
-    c2.insert(container::value_type("four", 4));
+ 
+    UNIT_ASSERT_VALUES_EQUAL(0, c1.size()); 
+    UNIT_ASSERT_VALUES_EQUAL(2, c3.size()); 
+ 
+    c2.insert(container::value_type("three", 3)); 
+    c3 = c2; 
+ 
+    UNIT_ASSERT_VALUES_EQUAL(3, c2.size()); 
+    UNIT_ASSERT_VALUES_EQUAL(3, c3.size()); 
+ 
+    c2.insert(container::value_type("four", 4)); 
     c3 = std::move(c2);
-
-    UNIT_ASSERT_VALUES_EQUAL(0, c2.size());
-    UNIT_ASSERT_VALUES_EQUAL(4, c3.size());
-}
-
+ 
+    UNIT_ASSERT_VALUES_EQUAL(0, c2.size()); 
+    UNIT_ASSERT_VALUES_EQUAL(4, c3.size()); 
+} 
+ 
 void THashTest::TestHMMap1() {
     using mmap = THashMultiMap<char, int, THash<char>, TEqualTo<char>>;
     mmap m;
@@ -366,38 +366,38 @@ void THashTest::TestHMMapHas() {
     UNIT_ASSERT(!m.contains('Z'));
 }
 
-void THashTest::TestHSetConstructorsAndAssignments() {
+void THashTest::TestHSetConstructorsAndAssignments() { 
     using container = THashSet<int>;
-
-    container c1;
-    c1.insert(100);
-    c1.insert(200);
-
-    container c2(c1);
-
-    UNIT_ASSERT_VALUES_EQUAL(2, c1.size());
-    UNIT_ASSERT_VALUES_EQUAL(2, c2.size());
+ 
+    container c1; 
+    c1.insert(100); 
+    c1.insert(200); 
+ 
+    container c2(c1); 
+ 
+    UNIT_ASSERT_VALUES_EQUAL(2, c1.size()); 
+    UNIT_ASSERT_VALUES_EQUAL(2, c2.size()); 
     UNIT_ASSERT(c1.contains(100));
     UNIT_ASSERT(c2.contains(200));
-
+ 
     container c3(std::move(c1));
-
-    UNIT_ASSERT_VALUES_EQUAL(0, c1.size());
-    UNIT_ASSERT_VALUES_EQUAL(2, c3.size());
+ 
+    UNIT_ASSERT_VALUES_EQUAL(0, c1.size()); 
+    UNIT_ASSERT_VALUES_EQUAL(2, c3.size()); 
     UNIT_ASSERT(c3.contains(100));
-
-    c2.insert(300);
-    c3 = c2;
-
-    UNIT_ASSERT_VALUES_EQUAL(3, c2.size());
-    UNIT_ASSERT_VALUES_EQUAL(3, c3.size());
+ 
+    c2.insert(300); 
+    c3 = c2; 
+ 
+    UNIT_ASSERT_VALUES_EQUAL(3, c2.size()); 
+    UNIT_ASSERT_VALUES_EQUAL(3, c3.size()); 
     UNIT_ASSERT(c3.contains(300));
-
-    c2.insert(400);
+ 
+    c2.insert(400); 
     c3 = std::move(c2);
-
-    UNIT_ASSERT_VALUES_EQUAL(0, c2.size());
-    UNIT_ASSERT_VALUES_EQUAL(4, c3.size());
+ 
+    UNIT_ASSERT_VALUES_EQUAL(0, c2.size()); 
+    UNIT_ASSERT_VALUES_EQUAL(4, c3.size()); 
     UNIT_ASSERT(c3.contains(400));
 
     container c4 = {1, 2, 3};
@@ -405,8 +405,8 @@ void THashTest::TestHSetConstructorsAndAssignments() {
     UNIT_ASSERT(c4.contains(1));
     UNIT_ASSERT(c4.contains(2));
     UNIT_ASSERT(c4.contains(3));
-}
-
+} 
+ 
 void THashTest::TestHSetSize() {
     using container = THashSet<int>;
 
@@ -421,16 +421,16 @@ void THashTest::TestHSetSize() {
     UNIT_ASSERT_VALUES_EQUAL(2, c.size());
 }
 
-void THashTest::TestHSet2() {
+void THashTest::TestHSet2() { 
     THashSet<int, THash<int>, TEqualTo<int>> s;
     auto p = s.insert(42);
-    UNIT_ASSERT(p.second);
-    UNIT_ASSERT(*(p.first) == 42);
-
-    p = s.insert(42);
-    UNIT_ASSERT(!p.second);
-}
-
+    UNIT_ASSERT(p.second); 
+    UNIT_ASSERT(*(p.first) == 42); 
+ 
+    p = s.insert(42); 
+    UNIT_ASSERT(!p.second); 
+} 
+ 
 void THashTest::TestHSetEqualityOperator() {
     using container = THashSet<int>;
 
@@ -457,41 +457,41 @@ void THashTest::TestHSetEqualityOperator() {
     UNIT_ASSERT(c3 != base);
 }
 
-void THashTest::TestHMSetConstructorsAndAssignments() {
+void THashTest::TestHMSetConstructorsAndAssignments() { 
     using container = THashMultiSet<int>;
-
-    container c1;
-    c1.insert(100);
-    c1.insert(200);
-
-    container c2(c1);
-
-    UNIT_ASSERT_VALUES_EQUAL(2, c1.size());
-    UNIT_ASSERT_VALUES_EQUAL(2, c2.size());
-    UNIT_ASSERT(c1.find(100) != c1.end());
-    UNIT_ASSERT(c2.find(200) != c2.end());
-
+ 
+    container c1; 
+    c1.insert(100); 
+    c1.insert(200); 
+ 
+    container c2(c1); 
+ 
+    UNIT_ASSERT_VALUES_EQUAL(2, c1.size()); 
+    UNIT_ASSERT_VALUES_EQUAL(2, c2.size()); 
+    UNIT_ASSERT(c1.find(100) != c1.end()); 
+    UNIT_ASSERT(c2.find(200) != c2.end()); 
+ 
     container c3(std::move(c1));
-
-    UNIT_ASSERT_VALUES_EQUAL(0, c1.size());
-    UNIT_ASSERT_VALUES_EQUAL(2, c3.size());
-    UNIT_ASSERT(c3.find(100) != c3.end());
-
-    c2.insert(300);
-    c3 = c2;
-
-    UNIT_ASSERT_VALUES_EQUAL(3, c2.size());
-    UNIT_ASSERT_VALUES_EQUAL(3, c3.size());
-    UNIT_ASSERT(c3.find(300) != c3.end());
-
-    c2.insert(400);
+ 
+    UNIT_ASSERT_VALUES_EQUAL(0, c1.size()); 
+    UNIT_ASSERT_VALUES_EQUAL(2, c3.size()); 
+    UNIT_ASSERT(c3.find(100) != c3.end()); 
+ 
+    c2.insert(300); 
+    c3 = c2; 
+ 
+    UNIT_ASSERT_VALUES_EQUAL(3, c2.size()); 
+    UNIT_ASSERT_VALUES_EQUAL(3, c3.size()); 
+    UNIT_ASSERT(c3.find(300) != c3.end()); 
+ 
+    c2.insert(400); 
     c3 = std::move(c2);
-
-    UNIT_ASSERT_VALUES_EQUAL(0, c2.size());
-    UNIT_ASSERT_VALUES_EQUAL(4, c3.size());
-    UNIT_ASSERT(c3.find(400) != c3.end());
-}
-
+ 
+    UNIT_ASSERT_VALUES_EQUAL(0, c2.size()); 
+    UNIT_ASSERT_VALUES_EQUAL(4, c3.size()); 
+    UNIT_ASSERT(c3.find(400) != c3.end()); 
+} 
+ 
 void THashTest::TestHMSetSize() {
     using container = THashMultiSet<int>;
 

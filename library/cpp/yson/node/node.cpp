@@ -22,75 +22,75 @@ bool TNode::TUndefined::operator==(const TUndefined&) const {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-namespace NNodeCmp {
-
-bool IsComparableType(const TNode::EType type) {
-    switch (type) {
-        case TNode::String:
-        case TNode::Int64:
-        case TNode::Uint64:
-        case TNode::Double:
-        case TNode::Bool:
-        case TNode::Null:
-        case TNode::Undefined:
-            return true;
-        default:
-            return false;
-    }
-}
-
-bool operator<(const TNode& lhs, const TNode& rhs)
-{
-    if (!lhs.GetAttributes().Empty() || !rhs.GetAttributes().Empty()) {
-        ythrow TNode::TTypeError() << "Unsupported attributes comparison";
-    }
-
-    if (!IsComparableType(lhs.GetType()) || !IsComparableType(rhs.GetType())) {
-        ythrow TNode::TTypeError() << "Unsupported types for comparison: " << lhs.GetType() << " with " << rhs.GetType();
-    }
-
-    if (lhs.GetType() != rhs.GetType()) {
-        return lhs.GetType() < rhs.GetType();
-    }
-
-    switch (lhs.GetType()) {
-        case TNode::String:
-            return lhs.AsString() < rhs.AsString();
-        case TNode::Int64:
-            return lhs.AsInt64() < rhs.AsInt64();
-        case TNode::Uint64:
-            return lhs.AsUint64() < rhs.AsUint64();
-        case TNode::Double:
-            return lhs.AsDouble() < rhs.AsDouble();
-        case TNode::Bool:
-            return lhs.AsBool() < rhs.AsBool();
-        case TNode::Null:
-        case TNode::Undefined:
-            return false;
-        default:
-            Y_FAIL("Unexpected type: %d", lhs.GetType());
-    }
-}
-
-bool operator>(const TNode& lhs, const TNode& rhs)
-{
-    return rhs < lhs;
-}
-
-bool operator<=(const TNode& lhs, const TNode& rhs)
-{
-    return !(lhs > rhs);
-}
-
-bool operator>=(const TNode& lhs, const TNode& rhs)
-{
-    return !(lhs < rhs);
-}
-
-} // namespace NNodeCmp
-
-////////////////////////////////////////////////////////////////////////////////
-
+namespace NNodeCmp { 
+ 
+bool IsComparableType(const TNode::EType type) { 
+    switch (type) { 
+        case TNode::String: 
+        case TNode::Int64: 
+        case TNode::Uint64: 
+        case TNode::Double: 
+        case TNode::Bool: 
+        case TNode::Null: 
+        case TNode::Undefined: 
+            return true; 
+        default: 
+            return false; 
+    } 
+} 
+ 
+bool operator<(const TNode& lhs, const TNode& rhs) 
+{ 
+    if (!lhs.GetAttributes().Empty() || !rhs.GetAttributes().Empty()) { 
+        ythrow TNode::TTypeError() << "Unsupported attributes comparison"; 
+    } 
+ 
+    if (!IsComparableType(lhs.GetType()) || !IsComparableType(rhs.GetType())) { 
+        ythrow TNode::TTypeError() << "Unsupported types for comparison: " << lhs.GetType() << " with " << rhs.GetType(); 
+    } 
+ 
+    if (lhs.GetType() != rhs.GetType()) { 
+        return lhs.GetType() < rhs.GetType(); 
+    } 
+ 
+    switch (lhs.GetType()) { 
+        case TNode::String: 
+            return lhs.AsString() < rhs.AsString(); 
+        case TNode::Int64: 
+            return lhs.AsInt64() < rhs.AsInt64(); 
+        case TNode::Uint64: 
+            return lhs.AsUint64() < rhs.AsUint64(); 
+        case TNode::Double: 
+            return lhs.AsDouble() < rhs.AsDouble(); 
+        case TNode::Bool: 
+            return lhs.AsBool() < rhs.AsBool(); 
+        case TNode::Null: 
+        case TNode::Undefined: 
+            return false; 
+        default: 
+            Y_FAIL("Unexpected type: %d", lhs.GetType()); 
+    } 
+} 
+ 
+bool operator>(const TNode& lhs, const TNode& rhs) 
+{ 
+    return rhs < lhs; 
+} 
+ 
+bool operator<=(const TNode& lhs, const TNode& rhs) 
+{ 
+    return !(lhs > rhs); 
+} 
+ 
+bool operator>=(const TNode& lhs, const TNode& rhs) 
+{ 
+    return !(lhs < rhs); 
+} 
+ 
+} // namespace NNodeCmp 
+ 
+//////////////////////////////////////////////////////////////////////////////// 
+ 
 TNode::TNode()
     : Value_(TUndefined{})
 { }

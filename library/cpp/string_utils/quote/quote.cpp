@@ -302,10 +302,10 @@ void UrlEscape(TString& url, bool forceEscape) {
     char* to = tempBuf.Data();
     url.AssignNoAlias(to, UrlEscape(to, url.data(), forceEscape));
 }
-
-TString UrlEscapeRet(const TStringBuf from, bool forceEscape) {
-    TString to;
+ 
+TString UrlEscapeRet(const TStringBuf from, bool forceEscape) { 
+    TString to; 
     to.ReserveAndResize(CgiEscapeBufLen(from.size()));
     to.resize(UrlEscape(to.begin(), from.begin(), forceEscape) - to.data());
-    return to;
-}
+    return to; 
+} 

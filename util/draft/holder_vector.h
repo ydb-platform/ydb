@@ -71,13 +71,13 @@ public:
         return t;
     }
 
-    void Resize(size_t newSize) { 
-        for (size_t i = newSize; i < size(); ++i) { 
+    void Resize(size_t newSize) {
+        for (size_t i = newSize; i < size(); ++i) {
             D::Destroy((*this)[i]);
-        } 
-        TBase::resize(newSize); 
-    } 
- 
+        }
+        TBase::resize(newSize);
+    }
+
     void Swap(THolderVector& other) {
         TBase::swap(other);
     }

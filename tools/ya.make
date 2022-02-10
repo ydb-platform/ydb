@@ -52,7 +52,7 @@ RECURSE(
     groupgen
     hilite
     host_canonizer
-    hostdump 
+    hostdump
     hostpire
     html2cpp
     html2text

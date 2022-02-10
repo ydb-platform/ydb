@@ -4,9 +4,9 @@ import json
 import os
 import threading
 
-import six 
+import six
 
- 
+
 _lock = threading.Lock()
 
 
@@ -34,7 +34,7 @@ def _get_ya_plugin_instance():
 def _norm_path(path):
     if path is None:
         return None
-    assert isinstance(path, six.string_types) 
+    assert isinstance(path, six.string_types)
     if "\\" in path:
         raise AssertionError("path {} contains Windows seprators \\ - replace them with '/'".format(path))
     return os.path.normpath(path)

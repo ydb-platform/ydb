@@ -316,7 +316,7 @@ RECURSE(
     dnspython
     docker
     docopt
-    docstring-parser 
+    docstring-parser
     docutils
     dohq-teamcity
     dominate

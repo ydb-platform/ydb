@@ -126,20 +126,20 @@ static inline auto Find(C&& c, const T& v) {
     return std::find(begin(c), end(c), v);
 }
 
-// FindPtr - return NULL if not found. Works for arrays, containers, iterators 
-template <class I, class T> 
-static inline auto FindPtr(I f, I l, const T& v) -> decltype(&*f) { 
-    I found = Find(f, l, v); 
-    return (found != l) ? &*found : nullptr; 
-} 
- 
-template <class C, class T> 
-static inline auto FindPtr(C&& c, const T& v) { 
+// FindPtr - return NULL if not found. Works for arrays, containers, iterators
+template <class I, class T>
+static inline auto FindPtr(I f, I l, const T& v) -> decltype(&*f) {
+    I found = Find(f, l, v);
+    return (found != l) ? &*found : nullptr;
+}
+
+template <class C, class T>
+static inline auto FindPtr(C&& c, const T& v) {
     using std::begin;
     using std::end;
     return FindPtr(begin(c), end(c), v);
-} 
- 
+}
+
 template <class I, class P>
 static inline I FindIf(I f, I l, P p) {
     return std::find_if(f, l, p);

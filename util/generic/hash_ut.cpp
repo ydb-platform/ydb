@@ -21,11 +21,11 @@ class THashTest: public TTestBase {
     UNIT_TEST(TestHMMap1);
     UNIT_TEST(TestHMMapHas);
     UNIT_TEST(TestHSetConstructorsAndAssignments);
-    UNIT_TEST(TestHSetSize); 
+    UNIT_TEST(TestHSetSize);
     UNIT_TEST(TestHSet2);
     UNIT_TEST(TestHSetEqualityOperator);
     UNIT_TEST(TestHMSetConstructorsAndAssignments);
-    UNIT_TEST(TestHMSetSize); 
+    UNIT_TEST(TestHMSetSize);
     UNIT_TEST(TestHMSet1);
     UNIT_TEST(TestHMSetEqualityOperator);
     UNIT_TEST(TestHMSetEmplace);
@@ -52,7 +52,7 @@ class THashTest: public TTestBase {
     UNIT_TEST(TestValueInitialization);
     UNIT_TEST(TestAssignmentClear);
     UNIT_TEST(TestReleaseNodes);
-    UNIT_TEST(TestAt); 
+    UNIT_TEST(TestAt);
     UNIT_TEST(TestHMapInitializerList);
     UNIT_TEST(TestHMMapInitializerList);
     UNIT_TEST(TestHSetInitializerList);
@@ -72,11 +72,11 @@ protected:
     void TestHMMap1();
     void TestHMMapHas();
     void TestHSetConstructorsAndAssignments();
-    void TestHSetSize(); 
+    void TestHSetSize();
     void TestHSet2();
     void TestHSetEqualityOperator();
     void TestHMSetConstructorsAndAssignments();
-    void TestHMSetSize(); 
+    void TestHMSetSize();
     void TestHMSet1();
     void TestHMSetEqualityOperator();
     void TestHMSetEmplace();
@@ -103,7 +103,7 @@ protected:
     void TestValueInitialization();
     void TestAssignmentClear();
     void TestReleaseNodes();
-    void TestAt(); 
+    void TestAt();
     void TestHMapInitializerList();
     void TestHMMapInitializerList();
     void TestHSetInitializerList();
@@ -407,20 +407,20 @@ void THashTest::TestHSetConstructorsAndAssignments() {
     UNIT_ASSERT(c4.contains(3));
 }
 
-void THashTest::TestHSetSize() { 
+void THashTest::TestHSetSize() {
     using container = THashSet<int>;
- 
-    container c; 
-    c.insert(100); 
-    c.insert(200); 
- 
-    UNIT_ASSERT_VALUES_EQUAL(2, c.size()); 
- 
-    c.insert(200); 
- 
-    UNIT_ASSERT_VALUES_EQUAL(2, c.size()); 
-} 
- 
+
+    container c;
+    c.insert(100);
+    c.insert(200);
+
+    UNIT_ASSERT_VALUES_EQUAL(2, c.size());
+
+    c.insert(200);
+
+    UNIT_ASSERT_VALUES_EQUAL(2, c.size());
+}
+
 void THashTest::TestHSet2() {
     THashSet<int, THash<int>, TEqualTo<int>> s;
     auto p = s.insert(42);
@@ -492,20 +492,20 @@ void THashTest::TestHMSetConstructorsAndAssignments() {
     UNIT_ASSERT(c3.find(400) != c3.end());
 }
 
-void THashTest::TestHMSetSize() { 
+void THashTest::TestHMSetSize() {
     using container = THashMultiSet<int>;
- 
-    container c; 
-    c.insert(100); 
-    c.insert(200); 
- 
-    UNIT_ASSERT_VALUES_EQUAL(2, c.size()); 
- 
-    c.insert(200); 
- 
-    UNIT_ASSERT_VALUES_EQUAL(3, c.size()); 
-} 
- 
+
+    container c;
+    c.insert(100);
+    c.insert(200);
+
+    UNIT_ASSERT_VALUES_EQUAL(2, c.size());
+
+    c.insert(200);
+
+    UNIT_ASSERT_VALUES_EQUAL(3, c.size());
+}
+
 void THashTest::TestHMSet1() {
     hmset s;
     UNIT_ASSERT(s.count(star) == 0);
@@ -1111,8 +1111,8 @@ void THashTest::TestReleaseNodes() {
     set2.insert(1);
     UNIT_ASSERT_VALUES_EQUAL(set2.size(), 1);
 }
- 
-void THashTest::TestAt() { 
+
+void THashTest::TestAt() {
 #define TEST_AT_THROWN_EXCEPTION(SRC_TYPE, DST_TYPE, KEY_TYPE, KEY, MESSAGE)                                                                               \
     {                                                                                                                                                      \
         THashMap<SRC_TYPE, DST_TYPE> testMap;                                                                                                              \
@@ -1125,8 +1125,8 @@ void THashTest::TestAt() {
         } catch (...) {                                                                                                                                    \
             UNIT_ASSERT_C(false, "THashMap::at(\"" << KEY << "\") should throw yexception");                                                               \
         }                                                                                                                                                  \
-    } 
- 
+    }
+
     TEST_AT_THROWN_EXCEPTION(TString, TString, TString, "111", "111");
     TEST_AT_THROWN_EXCEPTION(TString, TString, const TString, "111", "111");
     TEST_AT_THROWN_EXCEPTION(TString, TString, TStringBuf, "111", "111");
@@ -1140,13 +1140,13 @@ void THashTest::TestAt() {
     TEST_AT_THROWN_EXCEPTION(int, int, unsigned int, 2, "2");
     TEST_AT_THROWN_EXCEPTION(int, int, unsigned long, 131, "131");
     TEST_AT_THROWN_EXCEPTION(int, int, unsigned long long, 1000000000000ll, "1000000000000");
- 
+
     char key[] = {11, 12, 0, 1, 2, 11, 0};
     TEST_AT_THROWN_EXCEPTION(TString, TString, char*, key, "\\x0B\\x0C");
     TEST_AT_THROWN_EXCEPTION(TString, TString, TStringBuf, TStringBuf(key, sizeof(key) - 1), "\\x0B\\x0C\\0\\1\\2\\x0B");
- 
-#undef TEST_AT_THROWN_EXCEPTION 
-} 
+
+#undef TEST_AT_THROWN_EXCEPTION
+}
 
 void THashTest::TestHMapInitializerList() {
     THashMap<TString, TString> h1 = {{"foo", "bar"}, {"bar", "baz"}, {"baz", "qux"}};

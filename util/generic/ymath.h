@@ -18,7 +18,7 @@ constexpr double M_LN2_INV = M_LOG2E;                // 1 / ln(2) == log2(e)
  * \returns                             Absolute value of the provided argument.
  */
 template <class T>
-constexpr T Abs(T value) { 
+constexpr T Abs(T value) {
     return std::abs(value);
 }
 

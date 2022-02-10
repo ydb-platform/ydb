@@ -49,19 +49,19 @@ public:
     typedef ui32 TStoredSize; // changing this will break compatibility
 
 private:
-    // This overload is required to avoid infinite recursion when overriding serialization in derived classes: 
-    // struct B { 
-    //  virtual int operator &(IBinSaver& f) { 
-    //      return 0; 
-    //  } 
-    // }; 
-    // 
-    // struct D : B { 
-    //  int operator &(IBinSaver& f) override { 
-    //      f.Add(0, static_cast<B*>(this)); 
-    //      return 0; 
-    //  } 
-    // }; 
+    // This overload is required to avoid infinite recursion when overriding serialization in derived classes:
+    // struct B {
+    //  virtual int operator &(IBinSaver& f) {
+    //      return 0;
+    //  }
+    // };
+    //
+    // struct D : B {
+    //  int operator &(IBinSaver& f) override {
+    //      f.Add(0, static_cast<B*>(this));
+    //      return 0;
+    //  }
+    // };
     template <class T, typename = decltype(std::declval<T*>()->T::operator&(std::declval<IBinSaver&>()))>
     void CallObjectSerialize(T* p, NBinSaverInternals::TOverloadPriority<2>) { // highest priority -  will be resolved first if enabled
                                            // Note: p->operator &(*this) would lead to infinite recursion
@@ -77,7 +77,7 @@ private:
     void CallObjectSerialize(T* p, NBinSaverInternals::TOverloadPriority<0>) { // lower priority - will be resolved last
 #if (!defined(_MSC_VER))
         // In MSVC __has_trivial_copy returns false to enums, primitive types and arrays.
-        static_assert(__has_trivial_copy(T), "Class is nontrivial copyable, you must define operator&, see"); 
+        static_assert(__has_trivial_copy(T), "Class is nontrivial copyable, you must define operator&, see");
 #endif
         DataChunk(p, sizeof(T));
     }
@@ -101,11 +101,11 @@ private:
 
     template <class T, int N>
     void DoArray(T (&data)[N]) {
-        for (size_t i = 0; i < N; i++) { 
-            Add(1, &(data[i])); 
-        } 
-    } 
- 
+        for (size_t i = 0; i < N; i++) {
+            Add(1, &(data[i]));
+        }
+    }
+
     template <typename TLarge>
     void CheckOverflow(TStoredSize nSize, TLarge origSize) {
         if (nSize != origSize) {
@@ -291,7 +291,7 @@ public:
         DataChunk(pData, nSize);
     }
 
-    // return type of Add() is used to detect specialized serializer (see HasNonTrivialSerializer below) 
+    // return type of Add() is used to detect specialized serializer (see HasNonTrivialSerializer below)
     template <class T>
     char Add(const chunk_id, T* p) {
         CallObjectSerialize(p, NBinSaverInternals::TOverloadPriority<2>());
@@ -333,16 +333,16 @@ public:
             DoDataVector(*pVec);
         return 0;
     }
- 
+
     template <class T, int N>
     int Add(const chunk_id, T (*pVec)[N]) {
-        if (HasNonTrivialSerializer<T>(0u)) 
-            DoArray(*pVec); 
-        else 
-            DataChunk(pVec, sizeof(*pVec)); 
-        return 0; 
-    } 
- 
+        if (HasNonTrivialSerializer<T>(0u))
+            DoArray(*pVec);
+        else
+            DataChunk(pVec, sizeof(*pVec));
+        return 0;
+    }
+
     template <class T1, class T2, class T3, class T4>
     int Add(const chunk_id, TMap<T1, T2, T3, T4>* pMap) {
         DoAnyMap(*pMap);
@@ -624,7 +624,7 @@ struct TRegisterSaveLoadType {
         f.AddMulti(__VA_ARGS__);  \
         return 0;                 \
     }
- 
+
 #define SAVELOAD_OVERRIDE_WITHOUT_BASE(...) \
     int operator&(IBinSaver& f) override {  \
         f.AddMulti(__VA_ARGS__);            \

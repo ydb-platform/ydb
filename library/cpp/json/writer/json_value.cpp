@@ -462,38 +462,38 @@ namespace NJson {
     bool TJsonValue::GetBooleanSafe(const bool defaultValue) const {
         if (Type == JSON_UNDEFINED)
             return defaultValue;
- 
+
         return GetBooleanSafe();
     }
- 
+
     long long TJsonValue::GetIntegerSafe(const long long defaultValue) const {
         if (Type == JSON_UNDEFINED)
             return defaultValue;
- 
+
         return GetIntegerSafe();
     }
- 
+
     unsigned long long TJsonValue::GetUIntegerSafe(const unsigned long long defaultValue) const {
         if (Type == JSON_UNDEFINED)
             return defaultValue;
- 
+
         return GetUIntegerSafe();
     }
- 
+
     double TJsonValue::GetDoubleSafe(const double defaultValue) const {
         if (Type == JSON_UNDEFINED)
             return defaultValue;
- 
+
         return GetDoubleSafe();
     }
- 
+
     TString TJsonValue::GetStringSafe(const TString& defaultValue) const {
         if (Type == JSON_UNDEFINED)
             return defaultValue;
- 
+
         return GetStringSafe();
     }
- 
+
     const TJsonValue::TMapType& TJsonValue::GetMapSafe() const {
         if (Type != JSON_MAP)
             ythrow TJsonException() << "Not a map";

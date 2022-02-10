@@ -197,10 +197,10 @@ Y_UNIT_TEST_SUITE(TStrBufTest) {
         UNIT_ASSERT_EQUAL(buf2.RNextTok("@@"), TStringBuf("b"));
         UNIT_ASSERT_EQUAL(buf2.RNextTok("@@"), TStringBuf("a"));
         UNIT_ASSERT_EQUAL(buf2, TStringBuf());
- 
-        TStringBuf buf3("a@@b@@c"); 
+
+        TStringBuf buf3("a@@b@@c");
         UNIT_ASSERT_EQUAL(buf3.RNextTok("@@@"), TStringBuf("a@@b@@c"));
-        UNIT_ASSERT_EQUAL(buf3, TStringBuf()); 
+        UNIT_ASSERT_EQUAL(buf3, TStringBuf());
     }
 
     Y_UNIT_TEST(TestReadLine) {

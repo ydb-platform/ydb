@@ -62,9 +62,9 @@ public:
 
     TFsPath& operator/=(const TFsPath& that);
 
-    friend TFsPath operator/(const TFsPath& s, const TFsPath& p) { 
-        TFsPath ret(s); 
-        return ret /= p; 
+    friend TFsPath operator/(const TFsPath& s, const TFsPath& p) {
+        TFsPath ret(s);
+        return ret /= p;
     }
 
     const TPathSplit& PathSplit() const;

@@ -200,9 +200,9 @@ Y_UNIT_TEST_SUITE(TSchemeTest) {
         }
         {
             NSc::TValue v;
-            UNIT_ASSERT(v.IsNull()); 
+            UNIT_ASSERT(v.IsNull());
             v = t;
-            UNIT_ASSERT(!v.IsNull()); 
+            UNIT_ASSERT(!v.IsNull());
             UNIT_ASSERT_VALUES_EQUAL_C(expectnum, v.IsNumber(), ss);
             UNIT_ASSERT_VALUES_EQUAL_C(expectint, v.IsIntNumber(), ss);
             UNIT_ASSERT_VALUES_EQUAL_C(expectbool, v.IsBool(), ss);
@@ -572,7 +572,7 @@ Y_UNIT_TEST_SUITE(TSchemeTest) {
             = NSc::NImpl::TSelfLoopContext::EMode::Stderr;
 
         NSc::TValue x;
- 
+
         x["a"]["x"] = x;
         x["b"][0] = x;
 

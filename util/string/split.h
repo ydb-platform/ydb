@@ -1,10 +1,10 @@
 #pragma once
 
 #include "strspn.h"
-#include "cast.h" 
+#include "cast.h"
 
 #include <util/generic/algorithm.h>
-#include <util/generic/fwd.h> 
+#include <util/generic/fwd.h>
 #include <util/generic/iterator.h>
 #include <util/generic/iterator_range.h>
 #include <util/generic/store_policy.h>
@@ -431,16 +431,16 @@ void GetNext(TStringBuf& s, D delim, P& param) {
     param = FromString<P>(next);
 }
 
-template <class P, class D> 
-void GetNext(TStringBuf& s, D delim, TMaybe<P>& param) { 
-    TStringBuf next = s.NextTok(delim); 
-    if (next.IsInited()) { 
-        param = FromString<P>(next); 
-    } else { 
-        param.Clear(); 
-    } 
-} 
- 
+template <class P, class D>
+void GetNext(TStringBuf& s, D delim, TMaybe<P>& param) {
+    TStringBuf next = s.NextTok(delim);
+    if (next.IsInited()) {
+        param = FromString<P>(next);
+    } else {
+        param.Clear();
+    }
+}
+
 // example:
 // Split(TStringBuf("Sherlock,2014,36.6"), ',', name, year, temperature);
 template <class D, class P1, class P2>

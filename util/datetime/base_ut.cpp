@@ -491,11 +491,11 @@ Y_UNIT_TEST_SUITE(DateTimeTest) {
     Y_UNIT_TEST(TestDurationUnits) {
         TestTimeUnits<TDuration>();
     }
- 
+
     Y_UNIT_TEST(TestNoexceptConstruction) {
         UNIT_ASSERT_EXCEPTION(TDuration::MilliSeconds(FromString(TStringBuf("not a number"))), yexception);
         UNIT_ASSERT_EXCEPTION(TDuration::Seconds(FromString(TStringBuf("not a number"))), yexception);
-    } 
+    }
 
     Y_UNIT_TEST(TestFromValueForTDuration) {
         // check that FromValue creates the same TDuration

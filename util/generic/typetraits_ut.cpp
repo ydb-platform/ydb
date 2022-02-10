@@ -227,9 +227,9 @@ Y_UNIT_TEST_SUITE(TTypeTraitsTest) {
         UNIT_ASSERT(!std::is_standard_layout<TNonStdLayoutClass4>::value);
     }
 
-    template <class T> 
+    template <class T>
     using TTrySum = decltype(std::declval<T>() + std::declval<T>());
- 
+
     Y_UNIT_TEST(TestIsTriviallyCopyable) {
         struct TPod {
             int value;

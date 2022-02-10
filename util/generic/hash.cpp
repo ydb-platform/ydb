@@ -1,18 +1,18 @@
 #include "hash.h"
 
-#include <util/string/escape.h> 
+#include <util/string/escape.h>
 #include <util/string/cast.h>
 
 const void* const _yhashtable_empty_data[] = {(void*)3, nullptr, (void*)1};
- 
+
 TString NPrivate::MapKeyToString(TStringBuf key) {
-    constexpr size_t HASH_KEY_MAX_LENGTH = 500; 
-    try { 
-        return EscapeC(key.substr(0, HASH_KEY_MAX_LENGTH)); 
-    } catch (...) { 
+    constexpr size_t HASH_KEY_MAX_LENGTH = 500;
+    try {
+        return EscapeC(key.substr(0, HASH_KEY_MAX_LENGTH));
+    } catch (...) {
         return "TStringBuf";
-    } 
-} 
+    }
+}
 
 TString NPrivate::MapKeyToString(unsigned short key) {
     return ToString(key);

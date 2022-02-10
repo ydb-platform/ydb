@@ -22,7 +22,7 @@ PY_SRCS(
     generic/hash_ut.pyx
     memory/blob_ut.pyx
     stream/str_ut.pyx
-    string/cast_ut.pyx 
+    string/cast_ut.pyx
     system/types_ut.pyx
     digest/multi_ut.pyx
 )

@@ -119,9 +119,9 @@ inline const TUtf16String& ToWtring(TUtf16String& w) {
     return w;
 }
 
-struct TFromStringException: public TBadCastException { 
-}; 
- 
+struct TFromStringException: public TBadCastException {
+};
+
 /*
  * specialized for:
  *  bool

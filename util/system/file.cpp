@@ -58,15 +58,15 @@
     #define HAVE_SYNC_FILE_RANGE 0
 #endif
 
-static bool IsStupidFlagCombination(EOpenMode oMode) {
-    // ForAppend will actually not be applied in the following combinations:
+static bool IsStupidFlagCombination(EOpenMode oMode) { 
+    // ForAppend will actually not be applied in the following combinations: 
     return (oMode & (CreateAlways | ForAppend)) == (CreateAlways | ForAppend) || (oMode & (TruncExisting | ForAppend)) == (TruncExisting | ForAppend) || (oMode & (CreateNew | ForAppend)) == (CreateNew | ForAppend);
-}
-
+} 
+ 
 TFileHandle::TFileHandle(const TString& fName, EOpenMode oMode) noexcept {
     ui32 fcMode = 0;
     EOpenMode createMode = oMode & MaskCreation;
-    Y_VERIFY(!IsStupidFlagCombination(oMode), "oMode %d makes no sense", static_cast<int>(oMode));
+    Y_VERIFY(!IsStupidFlagCombination(oMode), "oMode %d makes no sense", static_cast<int>(oMode)); 
     if (!(oMode & MaskRW)) {
         oMode |= RdWr;
     }

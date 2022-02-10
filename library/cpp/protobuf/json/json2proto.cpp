@@ -356,17 +356,17 @@ Json2RepeatedField(const NJson::TJsonValue& json,
         if (config.ReplaceRepeatedFields) {
             reflection->ClearField(&proto, &field);
         }
-        if (fieldJson.GetType() == NJson::JSON_ARRAY) {
-            const NJson::TJsonValue::TArray& jsonArray = fieldJson.GetArray();
-            for (const NJson::TJsonValue& jsonValue : jsonArray) {
-                Json2RepeatedFieldValue(jsonValue, proto, field, config, reflection);
-            }
+        if (fieldJson.GetType() == NJson::JSON_ARRAY) { 
+            const NJson::TJsonValue::TArray& jsonArray = fieldJson.GetArray(); 
+            for (const NJson::TJsonValue& jsonValue : jsonArray) { 
+                Json2RepeatedFieldValue(jsonValue, proto, field, config, reflection); 
+            } 
         } else if (config.ValueVectorizer) {
             for (const NJson::TJsonValue& jsonValue : config.ValueVectorizer(fieldJson)) {
                 Json2RepeatedFieldValue(jsonValue, proto, field, config, reflection);
             }
-        } else if (config.VectorizeScalars) {
-            Json2RepeatedFieldValue(fieldJson, proto, field, config, reflection);
+        } else if (config.VectorizeScalars) { 
+            Json2RepeatedFieldValue(fieldJson, proto, field, config, reflection); 
         }
     }
 }

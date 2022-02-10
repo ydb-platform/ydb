@@ -25,8 +25,8 @@ RECURSE(
     curl_to_ab
     diaprintkeys
     directindexer
-    doc_handle_decode
-    doc_handle_decode/ut
+    doc_handle_decode 
+    doc_handle_decode/ut 
     doc_url_index_print
     dolbilo
     domschemec
@@ -102,7 +102,7 @@ RECURSE(
     printurls
     printwzrd
     printwzrd/scripts
-    printwzrd/tests
+    printwzrd/tests 
     printxmap
     printxref
     prngrp_index_print

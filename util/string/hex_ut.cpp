@@ -13,7 +13,7 @@ Y_UNIT_TEST_SUITE(THexCodingTest) {
 
     Y_UNIT_TEST(TestDecodeCase) {
         UNIT_ASSERT_EQUAL(HexDecode("12ABCDEF"), HexDecode("12abcdef"));
-        UNIT_ASSERT_EXCEPTION(HexDecode("Hello"), yexception); //< incorrect chars
+        UNIT_ASSERT_EXCEPTION(HexDecode("Hello"), yexception); //< incorrect chars 
         UNIT_ASSERT_EXCEPTION(HexDecode("123"), yexception);   //< odd length
     }
 }

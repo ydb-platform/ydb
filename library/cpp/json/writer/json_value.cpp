@@ -9,7 +9,7 @@
 #include <util/stream/output.h>
 #include <util/string/cast.h>
 #include <util/string/type.h>
-#include <util/string/vector.h>
+#include <util/string/vector.h> 
 #include <util/system/yassert.h>
 #include <util/ysaveload.h>
 #include <util/generic/bt_exception.h>
@@ -850,7 +850,7 @@ namespace NJson {
             }
 
             return currentJson;
-        }
+        } 
     } // anonymous namespace
 
     bool TJsonValue::GetValueByPath(const TStringBuf path, TJsonValue& result, char delimiter) const {
@@ -860,8 +860,8 @@ namespace NJson {
             return true;
         }
         return false;
-    }
-
+    } 
+ 
     bool TJsonValue::SetValueByPath(const TStringBuf path, const TJsonValue& value, char delimiter) {
         TJsonValue* const ptr = GetValuePtrByPath<true>(this, path, delimiter);
         if (ptr) {
@@ -886,12 +886,12 @@ namespace NJson {
 
     TJsonValue* TJsonValue::GetValueByPath(const TStringBuf key, char delim) noexcept {
         return GetValuePtrByPath<false>(this, key, delim);
-    }
+    } 
 
     void TJsonValue::DoScan(const TString& path, TJsonValue* parent, IScanCallback& callback) {
         if (!callback.Do(path, parent, *this)) {
             return;
-        }
+        } 
 
         if (Type == JSON_MAP) {
             for (auto&& i : *Value.Map) {
@@ -901,9 +901,9 @@ namespace NJson {
             for (ui32 i = 0; i < Value.Array->size(); ++i) {
                 (*Value.Array)[i].DoScan(TString::Join(path, "[", ToString(i), "]"), this, callback);
             }
-        }
-    }
-
+        } 
+    } 
+ 
     void TJsonValue::Scan(IScanCallback& callback) {
         DoScan("", nullptr, callback);
     }

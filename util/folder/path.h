@@ -139,8 +139,8 @@ public:
      * @brief create this directory
      *
      * @param mode specifies permissions to use as described in mkdir(2), makes sense only on Unix-like systems.
-     *
-     * Nothing to do if dir exists.
+     * 
+     * Nothing to do if dir exists. 
      */
     void MkDir(const int mode = MODE0777) const;
 
@@ -187,7 +187,7 @@ public:
     void ForceRenameTo(const TString& newPath) const;
 
     void CopyTo(const TString& newPath, bool force) const;
-
+ 
     void Touch() const;
 
     TFsPath RealPath() const;

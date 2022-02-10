@@ -1,12 +1,12 @@
-#include "global.h"
-
+#include "global.h" 
+ 
 static void DoInitGlobalLog(THolder<TGlobalLog> logger, THolder<ILoggerFormatter> formatter) {
     TLoggerOperator<TGlobalLog>::Set(logger.Release());
     if (!formatter) {
         formatter.Reset(CreateRtyLoggerFormatter());
     }
     TLoggerFormatterOperator::Set(formatter.Release());
-}
+} 
 
 void DoInitGlobalLog(const TString& logType, const int logLevel, const bool rotation, const bool startAsDaemon, THolder<ILoggerFormatter> formatter, bool threaded) {
     DoInitGlobalLog(
@@ -35,9 +35,9 @@ template <>
 TNullLog* CreateDefaultLogger<TNullLog>() {
     return new TNullLog("null");
 }
-
-NPrivateGlobalLogger::TVerifyEvent::~TVerifyEvent() {
-    const TString info = Str();
-    FATAL_LOG << info << Endl;
+ 
+NPrivateGlobalLogger::TVerifyEvent::~TVerifyEvent() { 
+    const TString info = Str(); 
+    FATAL_LOG << info << Endl; 
     Y_FAIL("%s", info.data());
-}
+} 

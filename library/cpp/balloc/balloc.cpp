@@ -72,7 +72,7 @@ namespace NBalloc {
         tls.Mode = Disabled;
 #endif
     }
-
+ 
     static void Y_FORCE_INLINE Enable() {
         tls.Mode = ToBeEnabled;
     }
@@ -278,10 +278,10 @@ extern "C" bool IsOwnedByBalloc(void* ptr) {
     return NBalloc::IsOwnedByBalloc(ptr);
 }
 
-extern "C" bool BallocDisabled() {
-    return NBalloc::IsDisabled();
-}
-
+extern "C" bool BallocDisabled() { 
+    return NBalloc::IsDisabled(); 
+} 
+ 
 extern "C" void DisableBalloc() {
     NBalloc::Disable();
 }

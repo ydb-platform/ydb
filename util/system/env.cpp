@@ -3,13 +3,13 @@
 #include <util/generic/string.h>
 #include <util/generic/yexception.h>
 
-#ifdef _win_
+#ifdef _win_ 
     #include <util/generic/vector.h>
     #include "winint.h"
 #else
     #include <cerrno>
     #include <cstdlib>
-#endif
+#endif 
 
 /**
  * On Windows there may be many copies of enviroment variables, there at least two known, one is

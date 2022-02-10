@@ -82,7 +82,7 @@ TString ResolvePath(const char* path, bool isDir = false);
 TString ResolveDir(const char* path);
 
 bool SafeResolveDir(const char* path, TString& result);
-
+ 
 TString GetDirName(const TString& path);
 
 TString GetBaseName(const TString& path);

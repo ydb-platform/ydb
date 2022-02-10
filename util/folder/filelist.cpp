@@ -13,15 +13,15 @@ void TFileEntitiesList::Fill(const TString& dirname, TStringBuf prefix, TStringB
 
     TDirIterator dir(dirname, opts);
     Clear();
-
+ 
     size_t dirNameLength = dirname.length();
     while (dirNameLength && (dirname[dirNameLength - 1] == '\\' || dirname[dirNameLength - 1] == '/')) {
         --dirNameLength;
     }
-
+ 
     for (auto file = dir.begin(); file != dir.end(); ++file) {
         if (file->fts_pathlen == file->fts_namelen || file->fts_pathlen <= dirNameLength) {
-            continue;
+            continue; 
         }
 
         TStringBuf filename = file->fts_path + dirNameLength + 1;

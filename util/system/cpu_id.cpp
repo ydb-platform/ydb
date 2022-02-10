@@ -9,8 +9,8 @@
     #include <immintrin.h>
 #elif defined(_x86_)
     #include <cpuid.h>
-#endif
-
+#endif 
+ 
 #include <string.h>
 
 #if defined(_x86_) && !defined(_win_)

@@ -95,9 +95,9 @@ bool NFs::Rename(const TString& oldPath, const TString& newPath) {
 void NFs::HardLinkOrCopy(const TString& existingPath, const TString& newPath) {
     if (!NFs::HardLink(existingPath, newPath)) {
         Copy(existingPath, newPath);
-    }
-}
-
+    } 
+} 
+ 
 bool NFs::HardLink(const TString& existingPath, const TString& newPath) {
 #if defined(_win_)
     return NFsPrivate::WinHardLink(existingPath, newPath);

@@ -101,13 +101,13 @@ public:
     inline void WriteData(ELogPriority priority, const char* data, size_t len) const {
         if (IsOpen()) {
             Backend_->WriteData(TLogRecord(priority, data, len));
-        }
+        } 
     }
-
+ 
     inline ELogPriority DefaultPriority() noexcept {
         return DefaultPriority_;
     }
-
+ 
     inline void SetDefaultPriority(ELogPriority priority) noexcept {
         DefaultPriority_ = priority;
     }
@@ -197,9 +197,9 @@ void TLog::SetDefaultPriority(ELogPriority priority) noexcept {
 }
 
 ELogPriority TLog::FiltrationLevel() const noexcept {
-    return Impl_->FiltrationLevel();
-}
-
+    return Impl_->FiltrationLevel(); 
+} 
+ 
 ELogPriority TLog::DefaultPriority() const noexcept {
     return Impl_->DefaultPriority();
 }

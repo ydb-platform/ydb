@@ -37,10 +37,10 @@ def remove_prefix(text, prefix):
 def onfat_resource(unit, *args):
     unit.onpeerdir(['library/cpp/resource'])
 
-    # Since the maximum length of lpCommandLine string for CreateProcess is 8kb (windows) characters,
+    # Since the maximum length of lpCommandLine string for CreateProcess is 8kb (windows) characters, 
     # we make several calls of rescompiler
     # https://msdn.microsoft.com/ru-ru/library/windows/desktop/ms682425.aspx
-    for part_args in split(args, 8000):
+    for part_args in split(args, 8000): 
         output = listid(part_args) + '.cpp'
         inputs = [x for x, y in iterpair(part_args) if x != '-']
         if inputs:

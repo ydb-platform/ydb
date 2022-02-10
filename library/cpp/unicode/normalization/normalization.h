@@ -358,7 +358,7 @@ namespace NUnicode {
 //! decompose utf16 or utf32 string to any container supporting push_back or to T*
 template <NUnicode::ENormalization Norm, class T, typename TCharType>
 inline void Normalize(const TCharType* begin, size_t len, T& out) {
-    ::NUnicode::TNormalizer<Norm> dec;
+    ::NUnicode::TNormalizer<Norm> dec; 
     dec.Normalize(begin, len, out);
 }
 
@@ -374,7 +374,7 @@ inline TBasicString<TCharType> Normalize(const TCharType* str, size_t len) {
 
 template <NUnicode::ENormalization N, typename TCharType>
 inline TBasicString<TCharType> Normalize(const TBasicString<TCharType>& str) {
-    ::NUnicode::TNormalizer<N> dec;
+    ::NUnicode::TNormalizer<N> dec; 
     return dec.Normalize(str);
 }
 

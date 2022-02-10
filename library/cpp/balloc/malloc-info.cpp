@@ -6,7 +6,7 @@ using namespace NMalloc;
 
 extern "C" void DisableBalloc();
 extern "C" void EnableBalloc();
-extern "C" bool BallocDisabled();
+extern "C" bool BallocDisabled(); 
 
 namespace {
     bool SetAllocParam(const char* name, const char* value) {
@@ -21,13 +21,13 @@ namespace {
         }
         return false;
     }
-
+ 
     bool CheckAllocParam(const char* name, bool defaultValue) {
-        if (strcmp(name, "disable") == 0) {
-            return BallocDisabled();
-        }
-        return defaultValue;
-    }
+        if (strcmp(name, "disable") == 0) { 
+            return BallocDisabled(); 
+        } 
+        return defaultValue; 
+    } 
 }
 
 TMallocInfo NMalloc::MallocInfo() {
@@ -35,7 +35,7 @@ TMallocInfo NMalloc::MallocInfo() {
 
     r.Name = "balloc";
     r.SetParam = SetAllocParam;
-    r.CheckParam = CheckAllocParam;
+    r.CheckParam = CheckAllocParam; 
 
     return r;
 }

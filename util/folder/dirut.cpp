@@ -17,7 +17,7 @@ void SlashFolderLocal(TString& folder) {
 #ifdef _win32_
     size_t pos;
     while ((pos = folder.find('/')) != TString::npos)
-        folder.replace(pos, 1, LOCSLASH_S);
+        folder.replace(pos, 1, LOCSLASH_S); 
 #endif
     if (folder[folder.size() - 1] != LOCSLASH_C)
         folder.append(LOCSLASH_S);
@@ -506,7 +506,7 @@ const char* GetFileNameComponent(const char* f) {
 }
 
 TString GetSystemTempDir() {
-#ifdef _win_
+#ifdef _win_ 
     char buffer[1024];
     DWORD size = GetTempPath(1024, buffer);
     if (!size) {
@@ -527,14 +527,14 @@ TString ResolveDir(const char* path) {
 }
 
 bool SafeResolveDir(const char* path, TString& result) {
-    try {
-        result = ResolvePath(path, true);
-        return true;
-    } catch (...) {
-        return false;
-    }
-}
-
+    try { 
+        result = ResolvePath(path, true); 
+        return true; 
+    } catch (...) { 
+        return false; 
+    } 
+} 
+ 
 TString GetDirName(const TString& path) {
     return TFsPath(path).Dirname();
 }

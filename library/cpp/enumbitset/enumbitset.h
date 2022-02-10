@@ -2,7 +2,7 @@
 
 #include <util/ysaveload.h>
 #include <util/generic/bitmap.h>
-#include <util/generic/serialized_enum.h>
+#include <util/generic/serialized_enum.h> 
 #include <util/generic/yexception.h>
 #include <util/string/cast.h>
 #include <util/string/printf.h>
@@ -216,14 +216,14 @@ public:
         return TThis::operator^(TThis(c));
     }
 
-    auto operator[] (TEnum e) {
-        return TParent::operator[](this->Pos(e));
-    }
-
-    auto operator[] (TEnum e) const {
-        return TParent::operator[](this->Pos(e));
-    }
-
+    auto operator[] (TEnum e) { 
+        return TParent::operator[](this->Pos(e)); 
+    } 
+ 
+    auto operator[] (TEnum e) const { 
+        return TParent::operator[](this->Pos(e)); 
+    } 
+ 
     using TParent::Count;
     using TParent::Empty;
 
@@ -485,22 +485,22 @@ public:
         return ebs;
     }
 };
-
-/* For Enums with GENERATE_ENUM_SERIALIZATION_WITH_HEADER */
-template <typename TEnum>
-class TGeneratedEnumBitSet : public TEnumBitSet<TEnum, 0, GetEnumItemsCount<TEnum>()> {
-public:
-    using TParent = TEnumBitSet<TEnum, 0, GetEnumItemsCount<TEnum>()>;
-
-    TGeneratedEnumBitSet()
-        : TParent()
-    {
-    }
-
+ 
+/* For Enums with GENERATE_ENUM_SERIALIZATION_WITH_HEADER */ 
+template <typename TEnum> 
+class TGeneratedEnumBitSet : public TEnumBitSet<TEnum, 0, GetEnumItemsCount<TEnum>()> { 
+public: 
+    using TParent = TEnumBitSet<TEnum, 0, GetEnumItemsCount<TEnum>()>; 
+ 
+    TGeneratedEnumBitSet() 
+        : TParent() 
+    { 
+    } 
+ 
     explicit TGeneratedEnumBitSet(const TParent& p)
-        : TParent(p)
-    {
-    }
+        : TParent(p) 
+    { 
+    } 
 
     explicit TGeneratedEnumBitSet(TEnum c1)
         : TParent(c1)
@@ -512,4 +512,4 @@ public:
         : TParent(c1, c2, r...)
     {
     }
-};
+}; 

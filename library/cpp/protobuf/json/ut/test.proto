@@ -193,11 +193,11 @@ message TSingleRepeatedString {
 message TSingleRepeatedInt {
     repeated int32 RepeatedInt = 1;
 }
-
-message TExtensionField {
-	extensions 100 to 199;
-}
-
-extend TExtensionField {
-  optional int32 bar = 123;
-}
+ 
+message TExtensionField { 
+	extensions 100 to 199; 
+} 
+ 
+extend TExtensionField { 
+  optional int32 bar = 123; 
+} 

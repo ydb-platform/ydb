@@ -1006,17 +1006,17 @@ Y_UNIT_TEST(TestStringifyLongNumbers) {
 #undef TEST_SINGLE
 } // TestStringifyLongNumbers
 
-Y_UNIT_TEST(TestExtension) {
-    TExtensionField proto;
-    proto.SetExtension(bar, 1);
-
-    Y_ASSERT(proto.HasExtension(bar));
-    UNIT_ASSERT_EQUAL(Proto2Json(proto, TProto2JsonConfig()), "{\"NProtobufJsonTest.bar\":1}");
+Y_UNIT_TEST(TestExtension) { 
+    TExtensionField proto; 
+    proto.SetExtension(bar, 1); 
+ 
+    Y_ASSERT(proto.HasExtension(bar)); 
+    UNIT_ASSERT_EQUAL(Proto2Json(proto, TProto2JsonConfig()), "{\"NProtobufJsonTest.bar\":1}"); 
 
 
     TProto2JsonConfig cfg;
     cfg.SetExtensionFieldNameMode(TProto2JsonConfig::ExtFldNameShort);
     UNIT_ASSERT_EQUAL(Proto2Json(proto, cfg), "{\"bar\":1}");
-} // TestExtension
-
+} // TestExtension 
+ 
 } // TProto2JsonTest

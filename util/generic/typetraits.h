@@ -238,27 +238,27 @@ struct TPodTraits<std::pair<T1, T2>> {
 template <class T>
 struct TIsPointerToConstMemberFunction: std::false_type {
 };
-
+ 
 template <class R, class T, class... Args>
 struct TIsPointerToConstMemberFunction<R (T::*)(Args...) const>: std::true_type {
 };
-
+ 
 template <class R, class T, class... Args>
 struct TIsPointerToConstMemberFunction<R (T::*)(Args...) const&>: std::true_type {
 };
-
+ 
 template <class R, class T, class... Args>
 struct TIsPointerToConstMemberFunction<R (T::*)(Args...) const&&>: std::true_type {
 };
-
+ 
 template <class R, class T, class... Args>
 struct TIsPointerToConstMemberFunction<R (T::*)(Args..., ...) const>: std::true_type {
 };
-
+ 
 template <class R, class T, class... Args>
 struct TIsPointerToConstMemberFunction<R (T::*)(Args..., ...) const&>: std::true_type {
 };
-
+ 
 template <class R, class T, class... Args>
 struct TIsPointerToConstMemberFunction<R (T::*)(Args..., ...) const&&>: std::true_type {
 };

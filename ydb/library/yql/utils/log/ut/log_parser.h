@@ -2,7 +2,7 @@
 
 #include <ydb/library/yql/utils/log/log.h>
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 #include <util/datetime/base.h>
 

@@ -4,7 +4,7 @@
 
 #include <ydb/library/yql/utils/utf8.h>
 
-#include <library/cpp/containers/stack_vector/stack_vec.h> 
+#include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <util/generic/hash.h>
 #include <util/generic/size_literals.h>
 #include <util/string/cast.h>

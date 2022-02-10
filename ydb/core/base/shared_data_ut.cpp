@@ -1,6 +1,6 @@
 #include "shared_data.h"
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/deque.h>

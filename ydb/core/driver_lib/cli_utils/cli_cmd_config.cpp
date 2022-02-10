@@ -1,7 +1,7 @@
 #include <ydb/core/driver_lib/cli_config_base/config_base.h>
 #include "cli_cmd_config.h"
 #include <ydb/public/lib/deprecated/client/msgbus_client.h>
-#include <util/system/env.h> 
+#include <util/system/env.h>
 
 namespace NKikimr {
 namespace NDriverClient {
@@ -19,7 +19,7 @@ namespace NDriverClient {
 
         void TCliCmdConfig::ConfigureMsgBusLastGetopt(const NLastGetopt::TOptsParseResult& res, int argc, char** argv) {
             if (Address.empty()) {
-                TString kikimrServer = GetEnv("KIKIMR_SERVER"); 
+                TString kikimrServer = GetEnv("KIKIMR_SERVER");
                 if (kikimrServer != nullptr) {
                     Address = kikimrServer;
                 }

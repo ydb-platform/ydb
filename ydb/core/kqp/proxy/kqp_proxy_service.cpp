@@ -735,7 +735,7 @@ public:
         PeerProxyNodeResources.resize(boardInfo->InfoEntries.size());
         size_t idx = 0;
         for(auto& [ownerId, entry] : boardInfo->InfoEntries) {
-            Y_PROTOBUF_SUPPRESS_NODISCARD PeerProxyNodeResources[idx].ParseFromString(entry.Payload); 
+            Y_PROTOBUF_SUPPRESS_NODISCARD PeerProxyNodeResources[idx].ParseFromString(entry.Payload);
             ++idx;
         }
 

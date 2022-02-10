@@ -5,12 +5,12 @@
 #include <library/cpp/codecs/zstd_dict_codec.h>
 #include <library/cpp/codecs/comptable_codec.h>
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/buffer.h>
 #include <util/string/util.h>
 #include <util/string/hex.h>
-#include <library/cpp/string_utils/relaxed_escaper/relaxed_escaper.h> 
+#include <library/cpp/string_utils/relaxed_escaper/relaxed_escaper.h>
 
 namespace {
     const char* TextValues[] = {

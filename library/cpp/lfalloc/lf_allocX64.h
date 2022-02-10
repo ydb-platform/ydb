@@ -53,7 +53,7 @@ static inline long AtomicSub(TAtomic& a, long b) {
             assert(x);             \
     }
 #else
-#define Y_ASSERT_NOBT(x) ((void)0) 
+#define Y_ASSERT_NOBT(x) ((void)0)
 #endif
 
 #else
@@ -62,35 +62,35 @@ static inline long AtomicSub(TAtomic& a, long b) {
 #include <util/system/atomic.h>
 #include <util/system/yassert.h>
 
-#if !defined(NDEBUG) && !defined(__GCCXML__) 
-#define Y_ASSERT_NOBT(a)                                    \ 
-    do {                                                    \ 
-        try {                                               \ 
-            if (Y_UNLIKELY(!(a))) {                         \ 
-                if (YaIsDebuggerPresent())                  \ 
-                    __debugbreak();                         \ 
-                else {                                      \ 
-                    assert(false && (a));                   \ 
-                }                                           \ 
-            }                                               \ 
-        } catch (...) {                                     \ 
-            if (YaIsDebuggerPresent())                      \ 
-                __debugbreak();                             \ 
-            else {                                          \ 
-                assert(false && "Exception during assert"); \ 
-            }                                               \ 
-        }                                                   \ 
-    } while (0) 
-#else 
-#define Y_ASSERT_NOBT(a)                       \ 
-    do {                                       \ 
-        if (false) {                           \ 
-            bool __xxx = static_cast<bool>(a); \ 
-            Y_UNUSED(__xxx);                   \ 
-        }                                      \ 
-    } while (0) 
-#endif 
- 
+#if !defined(NDEBUG) && !defined(__GCCXML__)
+#define Y_ASSERT_NOBT(a)                                    \
+    do {                                                    \
+        try {                                               \
+            if (Y_UNLIKELY(!(a))) {                         \
+                if (YaIsDebuggerPresent())                  \
+                    __debugbreak();                         \
+                else {                                      \
+                    assert(false && (a));                   \
+                }                                           \
+            }                                               \
+        } catch (...) {                                     \
+            if (YaIsDebuggerPresent())                      \
+                __debugbreak();                             \
+            else {                                          \
+                assert(false && "Exception during assert"); \
+            }                                               \
+        }                                                   \
+    } while (0)
+#else
+#define Y_ASSERT_NOBT(a)                       \
+    do {                                       \
+        if (false) {                           \
+            bool __xxx = static_cast<bool>(a); \
+            Y_UNUSED(__xxx);                   \
+        }                                      \
+    } while (0)
+#endif
+
 #include <pthread.h>
 #include <sys/mman.h>
 #include <stdlib.h>
@@ -433,7 +433,7 @@ static void LargeBlockUnmap(void* p, size_t pages) {
     IncrementCounter(CT_MUNMAP, bytes);
     IncrementCounter(CT_MUNMAP_CNT, 1);
 #ifdef _MSC_VER
-    Y_ASSERT_NOBT(0); 
+    Y_ASSERT_NOBT(0);
 #else
     TLargeBlk::As(p)->Mark(ELarge::Gone);
     munmap((char*)p - 4096ll, bytes);
@@ -796,7 +796,7 @@ static bool DefragmentMem() {
                 if (pData) {
                     uintptr_t nChunk = (pData - ALLOC_START) / N_CHUNK_SIZE;
                     ++nFreeCount[nChunk];
-                    Y_ASSERT_NOBT(chunkSizeIdx[nChunk] == nSizeIdx); 
+                    Y_ASSERT_NOBT(chunkSizeIdx[nChunk] == nSizeIdx);
                 }
             }
         }
@@ -809,7 +809,7 @@ static bool DefragmentMem() {
         if (chunkSizeIdx[nChunk] <= 0)
             continue;
         int nEntries = N_CHUNK_SIZE / nSizeIdxToSize[static_cast<int>(chunkSizeIdx[nChunk])];
-        Y_ASSERT_NOBT(fc <= nEntries); // can not have more free blocks then total count 
+        Y_ASSERT_NOBT(fc <= nEntries); // can not have more free blocks then total count
         if (fc == nEntries) {
             bRes = true;
             nFreeCount[nChunk] = 1;
@@ -905,7 +905,7 @@ static void* SlowLFAlloc(int nSizeIdx, int blockSize, EDefrag defrag) {
             char* newPlace = ALLOC_START + nChunk * N_CHUNK_SIZE;
 #ifdef _MSC_VER
             void* pTest = VirtualAlloc(newPlace, N_CHUNK_SIZE, MEM_COMMIT, PAGE_READWRITE);
-            Y_ASSERT_NOBT(pTest == newPlace); 
+            Y_ASSERT_NOBT(pTest == newPlace);
 #endif
             chunkSizeIdx[nChunk] = (char)nSizeIdx;
             globalCurrentPtr[nSizeIdx] = newPlace + blockSize;
@@ -922,8 +922,8 @@ static void* SlowLFAlloc(int nSizeIdx, int blockSize, EDefrag defrag) {
         uintptr_t endAddr = ((largeBlock - ALLOC_START) + N_LARGE_ALLOC_SIZE) & (~(N_CHUNK_SIZE - 1));
         for (uintptr_t p = addr; p < endAddr; p += N_CHUNK_SIZE) {
             uintptr_t chunk = p / N_CHUNK_SIZE;
-            Y_ASSERT_NOBT(chunk * N_CHUNK_SIZE == p); 
-            Y_ASSERT_NOBT(chunkSizeIdx[chunk] == 0); 
+            Y_ASSERT_NOBT(chunk * N_CHUNK_SIZE == p);
+            Y_ASSERT_NOBT(chunkSizeIdx[chunk] == 0);
             AddFreeChunk(chunk);
         }
     }
@@ -980,7 +980,7 @@ static Y_FORCE_INLINE int TakeBlocksFromGlobalFreeList(int nSizeIdx, char** buf)
 static Y_FORCE_INLINE void PutBlocksToGlobalFreeList(ptrdiff_t nSizeIdx, char** buf, int count) {
     for (int startIdx = 0; startIdx < count;) {
         TFreeListGroup* g = (TFreeListGroup*)blockFreeList.Alloc();
-        Y_ASSERT_NOBT(sizeof(TFreeListGroup) == nSizeIdxToSize[FREE_LIST_GROUP_SIZEIDX]); 
+        Y_ASSERT_NOBT(sizeof(TFreeListGroup) == nSizeIdxToSize[FREE_LIST_GROUP_SIZEIDX]);
         if (!g) {
             g = (TFreeListGroup*)LFAllocNoCache(FREE_LIST_GROUP_SIZEIDX, NO_MEM_DEFRAG);
         }
@@ -1123,7 +1123,7 @@ struct TThreadAllocInfo {
             GetCurrentProcess(), GetCurrentThread(),
             GetCurrentProcess(), &hThread,
             0, FALSE, DUPLICATE_SAME_ACCESS);
-        Y_ASSERT_NOBT(b); 
+        Y_ASSERT_NOBT(b);
 #endif
         pNextInfo = *pHead;
         *pHead = this;
@@ -1147,7 +1147,7 @@ struct TThreadAllocInfo {
     }
     void Done() {
         for (auto sizeIdx : FreePtrIndex) {
-            Y_ASSERT_NOBT(sizeIdx == THREAD_BUF); 
+            Y_ASSERT_NOBT(sizeIdx == THREAD_BUF);
         }
         for (auto& localCounter : LocalCounters) {
             localCounter.Flush();
@@ -1418,7 +1418,7 @@ static inline void SampleDeallocation(TAllocHeader* p, int sizeIdx) {
 
 static inline void TrackPerTagAllocation(TAllocHeader* p, int sizeIdx) {
     if (p->Tag < DBG_ALLOC_MAX_TAG && p->Tag >= 0) {
-        Y_ASSERT_NOBT(sizeIdx < DBG_ALLOC_NUM_SIZES); 
+        Y_ASSERT_NOBT(sizeIdx < DBG_ALLOC_NUM_SIZES);
         auto& global = GlobalPerTagAllocCounters[p->Tag][sizeIdx];
 
         TThreadAllocInfo* thr = pThreadInfo;
@@ -1433,7 +1433,7 @@ static inline void TrackPerTagAllocation(TAllocHeader* p, int sizeIdx) {
 
 static inline void TrackPerTagDeallocation(TAllocHeader* p, int sizeIdx) {
     if (p->Tag < DBG_ALLOC_MAX_TAG && p->Tag >= 0) {
-        Y_ASSERT_NOBT(sizeIdx < DBG_ALLOC_NUM_SIZES); 
+        Y_ASSERT_NOBT(sizeIdx < DBG_ALLOC_NUM_SIZES);
         auto& global = GlobalPerTagAllocCounters[p->Tag][sizeIdx];
 
         TThreadAllocInfo* thr = pThreadInfo;

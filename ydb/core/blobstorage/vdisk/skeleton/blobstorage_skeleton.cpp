@@ -775,7 +775,7 @@ namespace NKikimr {
             NKikimrBlobStorage::THandoffDelLogoBlob dump;
             dump.SetIngress(msg->Ingress.Raw());
             LogoBlobIDFromLogoBlobID(msg->Id, dump.MutableBlobID());
-            Y_PROTOBUF_SUPPRESS_NODISCARD dump.SerializeToString(&serializedLogRecord); 
+            Y_PROTOBUF_SUPPRESS_NODISCARD dump.SerializeToString(&serializedLogRecord);
 
             std::unique_ptr<NSyncLog::TEvSyncLogPut> syncLogMsg(
                     new NSyncLog::TEvSyncLogPut(Db->GType, seg.Point(), msg->Id, msg->Ingress));

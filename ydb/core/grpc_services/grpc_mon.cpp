@@ -2,7 +2,7 @@
 
 #include <ydb/core/base/events.h>
 
-#include <library/cpp/cache/cache.h> 
+#include <library/cpp/cache/cache.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/actors/core/mon.h>
 #include <library/cpp/actors/core/hfunc.h>

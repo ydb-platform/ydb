@@ -1,4 +1,4 @@
-UNITTEST_FOR(library/cpp/threading/chunk_queue) 
+UNITTEST_FOR(library/cpp/threading/chunk_queue)
 
 OWNER(g:rtmr)
 

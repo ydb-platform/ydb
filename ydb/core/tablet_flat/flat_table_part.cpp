@@ -5,7 +5,7 @@
 
 #include <ydb/core/util/pb.h>
 #include <ydb/core/tablet_flat/protos/flat_table_part.pb.h>
-#include <library/cpp/containers/stack_vector/stack_vec.h> 
+#include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <util/generic/map.h>
 
 namespace NKikimr {

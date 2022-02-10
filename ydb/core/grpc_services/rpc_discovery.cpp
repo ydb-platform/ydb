@@ -336,7 +336,7 @@ public:
 
         NKikimrStateStorage::TEndpointBoardEntry entry;
         for (const TString *xpayload : entries) {
-            Y_PROTOBUF_SUPPRESS_NODISCARD entry.ParseFromString(*xpayload); 
+            Y_PROTOBUF_SUPPRESS_NODISCARD entry.ParseFromString(*xpayload);
             if (!CheckServices(services, entry))
                 continue;
 

@@ -17,7 +17,7 @@ SRCS(
 PEERDIR(
     contrib/libs/protobuf
     library/cpp/json
-    library/cpp/string_utils/relaxed_escaper 
+    library/cpp/string_utils/relaxed_escaper
 )
 
 GENERATE_ENUM_SERIALIZATION(scheme.h)

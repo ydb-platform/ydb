@@ -4,7 +4,7 @@
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/testlib/test_client.h>
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr {
 namespace NGRpcServer {

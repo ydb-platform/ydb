@@ -650,7 +650,7 @@ namespace NTable {
             }
 
             TString blob;
-            Y_PROTOBUF_SUPPRESS_NODISCARD proto.SerializeToString(&blob); 
+            Y_PROTOBUF_SUPPRESS_NODISCARD proto.SerializeToString(&blob);
 
             return blob;
         }

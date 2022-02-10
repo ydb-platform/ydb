@@ -7,7 +7,7 @@
 #include <ydb/core/protos/counters_datashard.pb.h>
 #include <ydb/core/tablet/tablet_counters.h>
 
-#include <library/cpp/cache/cache.h> 
+#include <library/cpp/cache/cache.h>
 #include <util/generic/queue.h>
 #include <util/generic/set.h>
 

@@ -31,7 +31,7 @@
 #endif
 
 #include <util/generic/utility.h>
-#include <util/system/sanitizers.h> 
+#include <util/system/sanitizers.h>
 #include "filemap.h"
 
 #undef PAGE_SIZE
@@ -260,7 +260,7 @@ public:
         } else {
             ythrow yexception() << "Can't map " << (unsigned long)size << " bytes at offset " << offset << " of '" << DbgName_ << "': " << LastSystemErrorText();
         }
-        NSan::Unpoison(result.Ptr, result.Size); 
+        NSan::Unpoison(result.Ptr, result.Size);
         if (Mode_ & oPrecharge) {
             NPrivate::Precharge(result.Ptr, result.Size, 0, result.Size);
         }

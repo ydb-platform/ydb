@@ -24,10 +24,10 @@ PEERDIR(
     library/cpp/blockcodecs
     library/cpp/codecs/greedy_dict
     library/cpp/comptable
-    library/cpp/containers/comptrie 
+    library/cpp/containers/comptrie
     library/cpp/deprecated/accessors
     library/cpp/packers
-    library/cpp/string_utils/relaxed_escaper 
+    library/cpp/string_utils/relaxed_escaper
 )
 
 END()

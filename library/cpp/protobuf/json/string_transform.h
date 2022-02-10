@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/string_utils/relaxed_escaper/relaxed_escaper.h> 
+#include <library/cpp/string_utils/relaxed_escaper/relaxed_escaper.h>
 #include <util/generic/ptr.h>
 #include <util/generic/refcount.h>
 

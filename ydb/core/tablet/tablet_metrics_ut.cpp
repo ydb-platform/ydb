@@ -1,4 +1,4 @@
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/tablet_flat/flat_database.h>
 #include "tablet_metrics.h"
 

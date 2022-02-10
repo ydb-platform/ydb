@@ -48,7 +48,7 @@ public:
         if (configRow.IsValid()) {
             auto configString = configRow.GetValue<Schema::Config::Value>();
             NKikimrTenantSlotBroker::TConfig config;
-            Y_PROTOBUF_SUPPRESS_NODISCARD config.ParseFromArray(configString.data(), configString.size()); 
+            Y_PROTOBUF_SUPPRESS_NODISCARD config.ParseFromArray(configString.data(), configString.size());
             Self->LoadConfigFromProto(config);
 
             LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,

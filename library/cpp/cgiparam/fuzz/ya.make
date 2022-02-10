@@ -10,7 +10,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/cgiparam 
+    library/cpp/cgiparam
 )
 
 END()

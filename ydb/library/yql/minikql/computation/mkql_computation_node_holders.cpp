@@ -13,7 +13,7 @@
 
 #include <ydb/library/yql/public/udf/udf_value.h>
 
-#include <library/cpp/containers/stack_vector/stack_vec.h> 
+#include <library/cpp/containers/stack_vector/stack_vec.h>
 
 namespace NKikimr {
 namespace NMiniKQL {

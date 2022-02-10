@@ -2,7 +2,7 @@
 
 #include <ydb/core/scheme_types/scheme_types.h>
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/vector.h>
 

@@ -8,7 +8,7 @@
 
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
 
-#include <library/cpp/containers/stack_vector/stack_vec.h> 
+#include <library/cpp/containers/stack_vector/stack_vec.h>
 
 namespace NKikimr {
 namespace NPDisk {

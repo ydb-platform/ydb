@@ -4,7 +4,7 @@
 #include <util/folder/path.h>
 #include <util/folder/dirut.h>
 #include <util/string/strip.h>
-#include <util/system/env.h> 
+#include <util/system/env.h>
 
 namespace NKikimr {
 namespace NDriverClient {

@@ -2354,7 +2354,7 @@ private:
     template <typename TSettingsPB>
     static TString SerializeSettings(const TSettingsPB& settings) {
         TString serialized;
-        Y_PROTOBUF_SUPPRESS_NODISCARD settings.SerializeToString(&serialized); 
+        Y_PROTOBUF_SUPPRESS_NODISCARD settings.SerializeToString(&serialized);
         return serialized;
     }
 

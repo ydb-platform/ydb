@@ -1,5 +1,5 @@
 #include "vdisk_config.h"
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 #include <google/protobuf/text_format.h>
 
 

@@ -9,7 +9,7 @@ OWNER(
 YQL_ABI_VERSION(2 21 0)
 
 PEERDIR(
-    library/cpp/containers/stack_vector 
+    library/cpp/containers/stack_vector
     library/cpp/json
     library/cpp/yson_pull
     ydb/library/yql/public/udf

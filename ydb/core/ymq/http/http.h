@@ -14,7 +14,7 @@
 
 #include <util/generic/buffer.h>
 #include <util/generic/maybe.h>
-#include <library/cpp/cgiparam/cgiparam.h> 
+#include <library/cpp/cgiparam/cgiparam.h>
 
 namespace NKikimr::NSQS {
 

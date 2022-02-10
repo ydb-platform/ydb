@@ -8,8 +8,8 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/containers/comptrie 
-    library/cpp/string_utils/relaxed_escaper 
+    library/cpp/containers/comptrie
+    library/cpp/string_utils/relaxed_escaper
 )
 
 END()

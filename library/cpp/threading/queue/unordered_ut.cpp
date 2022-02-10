@@ -1,4 +1,4 @@
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 #include <util/system/thread.h>
 #include <algorithm>
 #include <util/generic/vector.h>

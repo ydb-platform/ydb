@@ -2,7 +2,7 @@
 
 #include <library/cpp/tvmauth/client/misc/api/threaded_updater.h>
 
-#include <library/cpp/threading/future/future.h> 
+#include <library/cpp/threading/future/future.h>
 
 #include <util/generic/map.h>
 #include <util/thread/lfqueue.h>

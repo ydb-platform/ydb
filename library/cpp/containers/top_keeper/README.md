@@ -23,4 +23,4 @@ TopKeeper - структура данных для поддержания "top M
 В ситуации когда нужны чередующиеся добавления / извлечения - используйте LimitedHeap
 
 Примеры использования:
-library/cpp/containers/top_keeper/ut 
+library/cpp/containers/top_keeper/ut

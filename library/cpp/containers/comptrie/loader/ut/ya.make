@@ -1,4 +1,4 @@
-UNITTEST_FOR(library/cpp/containers/comptrie/loader) 
+UNITTEST_FOR(library/cpp/containers/comptrie/loader)
 
 OWNER(my34)
 
@@ -12,7 +12,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/containers/comptrie/loader 
+    library/cpp/containers/comptrie/loader
 )
 
 END()

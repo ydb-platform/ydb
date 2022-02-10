@@ -1,7 +1,7 @@
 #include <library/cpp/lwtrace/control.h>
 #include <library/cpp/lwtrace/all.h>
 
-#include <library/cpp/getopt/last_getopt.h> 
+#include <library/cpp/getopt/last_getopt.h>
 #include <google/protobuf/text_format.h>
 #include <util/stream/file.h>
 

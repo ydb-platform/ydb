@@ -7,7 +7,7 @@
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 #include <ydb/core/tx/datashard/sys_tables.h>
 
-#include <library/cpp/containers/stack_vector/stack_vec.h> 
+#include <library/cpp/containers/stack_vector/stack_vec.h>
 
 namespace NKikimr {
 namespace NMiniKQL {

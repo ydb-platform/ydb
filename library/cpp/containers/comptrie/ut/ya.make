@@ -1,4 +1,4 @@
-UNITTEST_FOR(library/cpp/containers/comptrie) 
+UNITTEST_FOR(library/cpp/containers/comptrie)
 
 OWNER(alzobnin)
 

@@ -6,7 +6,7 @@ OWNER(g:util)
 SUBSCRIBER(g:util-subscribers)
 
 PEERDIR(
-    library/cpp/threading/future 
+    library/cpp/threading/future
 )
 
 SRCS(

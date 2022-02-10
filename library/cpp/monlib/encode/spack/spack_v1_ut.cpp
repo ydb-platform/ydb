@@ -4,7 +4,7 @@
 #include <library/cpp/monlib/metrics/labels.h>
 #include <library/cpp/monlib/metrics/metric.h>
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/buffer.h>
 #include <util/stream/buffer.h>

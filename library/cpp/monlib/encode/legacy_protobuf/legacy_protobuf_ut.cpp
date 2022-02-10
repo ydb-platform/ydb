@@ -1,6 +1,6 @@
 #include "legacy_protobuf.h"
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 #include <library/cpp/monlib/encode/legacy_protobuf/ut/test_cases.pb.h>
 #include <library/cpp/monlib/encode/legacy_protobuf/protos/metric_meta.pb.h>

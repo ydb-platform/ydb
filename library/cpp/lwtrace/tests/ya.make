@@ -8,7 +8,7 @@ SRCS(
 
 PEERDIR(
     contrib/libs/protobuf
-    library/cpp/getopt 
+    library/cpp/getopt
     library/cpp/lwtrace
 )
 

@@ -1,4 +1,4 @@
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 #include "count_down_latch.h"
 #include "moduletest.h"

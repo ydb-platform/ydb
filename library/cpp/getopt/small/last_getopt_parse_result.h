@@ -1,9 +1,9 @@
-#pragma once 
- 
-#include "last_getopt_opts.h" 
+#pragma once
+
+#include "last_getopt_opts.h"
 #include "last_getopt_parser.h"
- 
-namespace NLastGetopt { 
+
+namespace NLastGetopt {
     /**
      * NLastGetopt::TOptParseResult contains all arguments for exactly one TOpt,
      * that have been fetched during parsing
@@ -13,13 +13,13 @@ namespace NLastGetopt {
     class TOptParseResult {
     public:
         typedef TVector<const char*> TValues;
- 
+
     public:
         TOptParseResult(const TOpt* opt = nullptr)
             : Opt_(opt)
         {
         }
- 
+
     public:
         const TOpt& Opt() const {
             return *Opt_;
@@ -49,7 +49,7 @@ namespace NLastGetopt {
         const char* Back(const char* def = nullptr) const {
             return Empty() ? DefVal(def) : Values().back();
         }
- 
+
     private:
         const TOpt* Opt_;
         TValues Values_;
@@ -67,16 +67,16 @@ namespace NLastGetopt {
     class TOptsParseResult {
     private:
         THolder<TOptsParser> Parser_; //The instance of parser.
- 
+
         // XXX: make argc, argv
         typedef TVector<TOptParseResult> TdVec;
- 
+
         TdVec Opts_;    //Parsing result for all options, that have been explicitly defined in argc/argv
         TdVec OptsDef_; //Parsing result for options, that have been defined by default values only
- 
+
     private:
         TOptParseResult& OptParseResult();
- 
+
         /**
          * Searchs for object in given container
          *
@@ -86,15 +86,15 @@ namespace NLastGetopt {
          * @retunr        ptr on corresponding TOptParseResult
          */
         static const TOptParseResult* FindParseResult(const TdVec& vec, const TOpt* opt);
- 
+
     protected:
         /**
          * Performs parsing of comand line arguments.
          */
         void Init(const TOpts* options, int argc, const char** argv);
- 
+
         TOptsParseResult() = default;
- 
+
     public:
         /**
          * The action in case of parser failure.
@@ -102,7 +102,7 @@ namespace NLastGetopt {
          * By default prints error string and aborts the program
          */
         virtual void HandleError() const;
- 
+
         /**
          * Constructs object by parsing arguments with given rules
          *
@@ -113,7 +113,7 @@ namespace NLastGetopt {
         TOptsParseResult(const TOpts* options, int argc, const char* argv[]) {
             Init(options, argc, argv);
         }
- 
+
         /**
          * Constructs object by parsing arguments with given rules
          *
@@ -124,9 +124,9 @@ namespace NLastGetopt {
         TOptsParseResult(const TOpts* options, int argc, char* argv[]) {
             Init(options, argc, const_cast<const char**>(argv));
         }
- 
+
         virtual ~TOptsParseResult() = default;
- 
+
         /**
          * Search for TOptParseResult that corresponds to given option (TOpt)
          *
@@ -136,7 +136,7 @@ namespace NLastGetopt {
          * @return                   ptr on result
          */
         const TOptParseResult* FindOptParseResult(const TOpt* opt, bool includeDefault = false) const;
- 
+
         /**
          * Search for TOptParseResult that corresponds to given long name
          *
@@ -146,7 +146,7 @@ namespace NLastGetopt {
          * @return                   ptr on result
          */
         const TOptParseResult* FindLongOptParseResult(const TString& name, bool includeDefault = false) const;
- 
+
         /**
          * Search for TOptParseResult that corresponds to given short name
          *
@@ -156,12 +156,12 @@ namespace NLastGetopt {
          * @return                   ptr on result
          */
         const TOptParseResult* FindCharOptParseResult(char c, bool includeDefault = false) const;
- 
+
         /**
          * @return argv[0]
          */
         TString GetProgramName() const;
- 
+
         /**
          * Print usage string.
          */
@@ -171,17 +171,17 @@ namespace NLastGetopt {
          * @return position in [premuted argv] of the first free argument
          */
         size_t GetFreeArgsPos() const;
- 
+
         /**
          * @return number of fetched free arguments
          */
         size_t GetFreeArgCount() const;
- 
+
         /**
          * @return all fetched free arguments
          */
         TVector<TString> GetFreeArgs() const;
- 
+
         /**
          * @return true if given option exist in results of parsing
          *
@@ -190,7 +190,7 @@ namespace NLastGetopt {
          *
          */
         bool Has(const TOpt* opt, bool includeDefault = false) const;
- 
+
         /**
          * @return nil terminated string on the last fetched argument of givne option
          *
@@ -198,7 +198,7 @@ namespace NLastGetopt {
          * @param includeDefault     search in results obtained from default values
          */
         const char* Get(const TOpt* opt, bool includeDefault = true) const;
- 
+
         /**
          * @return nil terminated string on the last fetched argument of givne option
          *    if option haven't been fetched, given defaultValue will be returned
@@ -207,7 +207,7 @@ namespace NLastGetopt {
          * @param defaultValue
          */
         const char* GetOrElse(const TOpt* opt, const char* defaultValue) const;
- 
+
         /**
          * @return true if given option exist in results of parsing
          *
@@ -216,7 +216,7 @@ namespace NLastGetopt {
          *
          */
         bool Has(const TString& name, bool includeDefault = false) const;
- 
+
         /**
          * @return nil terminated string on the last fetched argument of givne option
          *
@@ -224,7 +224,7 @@ namespace NLastGetopt {
          * @param includeDefault     search in results obtained from default values
          */
         const char* Get(const TString& name, bool includeDefault = true) const;
- 
+
         /**
          * @return nil terminated string on the last fetched argument of givne option
          *    if option haven't been fetched, given defaultValue will be returned
@@ -233,7 +233,7 @@ namespace NLastGetopt {
          * @param defaultValue
          */
         const char* GetOrElse(const TString& name, const char* defaultValue) const;
- 
+
         /**
          * @return true if given option exist in results of parsing
          *
@@ -242,7 +242,7 @@ namespace NLastGetopt {
          *
          */
         bool Has(char name, bool includeDefault = false) const;
- 
+
         /**
          * @return nil terminated string on the last fetched argument of givne option
          *
@@ -250,7 +250,7 @@ namespace NLastGetopt {
          * @param includeDefault     search in results obtained from default values
          */
         const char* Get(char name, bool includeDefault = true) const;
- 
+
         /**
          * @return nil terminated string on the last fetched argument of givne option
          *    if option haven't been fetched, given defaultValue will be returned
@@ -259,7 +259,7 @@ namespace NLastGetopt {
          * @param defaultValue
          */
         const char* GetOrElse(char name, const char* defaultValue) const;
- 
+
         /**
          * for givne option return parsed value of the last fetched argument
          * if option haven't been fetched, HandleError action is called
@@ -277,8 +277,8 @@ namespace NLastGetopt {
                 HandleError();
                 throw;
             }
-        } 
- 
+        }
+
         /**
          * for givne option return parsed value of the last fetched argument
          * if option haven't been fetched, given defaultValue will be returned
@@ -296,7 +296,7 @@ namespace NLastGetopt {
                 return defaultValue;
         }
     };
- 
+
     /**
      * NLastGetopt::TOptsParseResultException contains result of parsing argc,argv be parser.
      *
@@ -317,5 +317,5 @@ namespace NLastGetopt {
     protected:
         TOptsParseResultException() = default;
     };
- 
-} 
+
+}

@@ -5,7 +5,7 @@ OWNER(snaury)
 ALLOCATOR(LF)
 
 PEERDIR(
-    library/cpp/threading/skip_list 
+    library/cpp/threading/skip_list
     ydb/core/util
 )
 

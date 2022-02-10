@@ -1,7 +1,7 @@
 #include "statestorage.h"
 
 #include <util/generic/xrange.h>
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr {
 

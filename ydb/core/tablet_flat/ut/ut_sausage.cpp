@@ -7,7 +7,7 @@
 #include <ydb/core/tablet_flat/flat_sausage_grind.h>
 #include <ydb/core/tablet_flat/util_fmt_desc.h>
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/xrange.h>
 #include <array>
 

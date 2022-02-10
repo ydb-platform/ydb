@@ -4,7 +4,7 @@
 #include "ymath.h"
 
 #include <util/system/sys_alloc.h>
-#include <util/system/sanitizers.h> 
+#include <util/system/sanitizers.h>
 
 TBuffer::TBuffer(size_t len)
     : Data_(nullptr)
@@ -44,20 +44,20 @@ TBuffer& TBuffer::operator=(TBuffer&& b) noexcept {
     return *this;
 }
 
-void TBuffer::Append(const char* buf, size_t len) { 
-    if (len > Avail()) { 
-        Reserve(Pos_ + len); 
-    } 
- 
-    Y_ASSERT(len <= Avail()); 
- 
+void TBuffer::Append(const char* buf, size_t len) {
+    if (len > Avail()) {
+        Reserve(Pos_ + len);
+    }
+
+    Y_ASSERT(len <= Avail());
+
     MemCopy(Data() + Pos_, buf, len);
-    NSan::Unpoison(Data() + Pos_, len); 
-    Pos_ += len; 
- 
-    Y_ASSERT(Pos_ <= Len_); 
-} 
- 
+    NSan::Unpoison(Data() + Pos_, len);
+    Pos_ += len;
+
+    Y_ASSERT(Pos_ <= Len_);
+}
+
 void TBuffer::Fill(char ch, size_t len) {
     if (len > Avail()) {
         Reserve(Pos_ + len);

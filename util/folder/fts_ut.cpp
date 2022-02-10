@@ -2,7 +2,7 @@
 #include "dirut.h"
 #include "tempdir.h"
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/threading/future/async.h>
 
 #include <util/system/file.h>

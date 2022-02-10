@@ -27,7 +27,7 @@ PEERDIR(
     library/cpp/actors/interconnect
     library/cpp/dns
     library/cpp/monlib/metrics
-    library/cpp/string_utils/quote 
+    library/cpp/string_utils/quote
 )
 
 END()

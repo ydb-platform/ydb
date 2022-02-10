@@ -1,7 +1,7 @@
 #include <ydb/library/yql/public/decimal/yql_decimal.h>
 #include <ydb/library/yql/public/decimal/yql_decimal_serialize.h>
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 namespace NYql {
 namespace NDecimal {

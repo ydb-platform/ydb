@@ -3,7 +3,7 @@
 #include "grpc_request_base.h"
 #include "logger.h"
 
-#include <library/cpp/threading/future/future.h> 
+#include <library/cpp/threading/future/future.h>
 
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>

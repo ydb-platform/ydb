@@ -1,6 +1,6 @@
 #include "vector.h"
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 #include <utility>
 #include "yexception.h"
@@ -279,13 +279,13 @@ private:
         UNIT_ASSERT(v[5] == 25);
         UNIT_ASSERT(v[6] == 36);
 
-        size_t curCapacity = v.capacity(); 
+        size_t curCapacity = v.capacity();
         v.clear();
         UNIT_ASSERT(v.empty());
 
-        //check that clear save reserved data 
-        UNIT_ASSERT_EQUAL(curCapacity, v.capacity()); 
- 
+        //check that clear save reserved data
+        UNIT_ASSERT_EQUAL(curCapacity, v.capacity());
+
         v.insert(v.begin(), 5, 10);
         UNIT_ASSERT(v.size() == 5);
         UNIT_ASSERT(v[0] == 10);
@@ -312,12 +312,12 @@ private:
 
         {
             TVector<int> v(Reserve(100));
- 
-            UNIT_ASSERT(v.capacity() >= 100); 
-            UNIT_ASSERT(v.size() == 0); 
-        } 
- 
-        { 
+
+            UNIT_ASSERT(v.capacity() >= 100);
+            UNIT_ASSERT(v.size() == 0);
+        }
+
+        {
             //Test that used to generate an assertion when using __debug_alloc.
             TVector<TestStruct> va;
             va.reserve(1);

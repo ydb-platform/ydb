@@ -33,7 +33,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/getopt 
+    library/cpp/getopt
     library/cpp/svnversion
     ydb/core/testlib
     ydb/library/aclib

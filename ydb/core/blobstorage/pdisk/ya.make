@@ -11,7 +11,7 @@ PEERDIR(
     library/cpp/actors/core
     library/cpp/actors/protos
     library/cpp/actors/util
-    library/cpp/containers/stack_vector 
+    library/cpp/containers/stack_vector
     library/cpp/lwtrace
     library/cpp/monlib/dynamic_counters/percentile
     library/cpp/monlib/service/pages

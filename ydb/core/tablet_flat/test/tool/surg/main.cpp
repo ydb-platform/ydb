@@ -7,7 +7,7 @@
 #include <ydb/core/protos/tablet.pb.h>
 #include <ydb/core/util/pb.h>
 
-#include <library/cpp/getopt/last_getopt.h> 
+#include <library/cpp/getopt/last_getopt.h>
 #include <library/cpp/blockcodecs/codecs.h>
 #include <util/generic/yexception.h>
 #include <util/stream/file.h>

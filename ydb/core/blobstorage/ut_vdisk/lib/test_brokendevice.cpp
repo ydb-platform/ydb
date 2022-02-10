@@ -2,7 +2,7 @@
 #include "helpers.h"
 
 #include <ydb/core/blobstorage/vdisk/common/vdisk_pdiskctx.h>
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 #include <util/stream/null.h>
 
 using namespace NKikimr;

@@ -6,7 +6,7 @@ namespace NTld {
     const char* const* GetTlds();
 
     // Note that FindTld() returns empty string when @host is single domain label (without '.').
-    // If you need whole @host for such case, you can use GetZone() from library/cpp/string_utils/url/url.h 
+    // If you need whole @host for such case, you can use GetZone() from library/cpp/string_utils/url/url.h
     inline TStringBuf FindTld(const TStringBuf& host) {
         size_t p = host.rfind('.');
         return p != TStringBuf::npos ? host.SubStr(p + 1) : TStringBuf();

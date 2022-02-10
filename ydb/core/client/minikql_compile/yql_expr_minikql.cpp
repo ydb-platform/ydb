@@ -30,7 +30,7 @@
 #include <ydb/library/yql/providers/common/mkql/yql_type_mkql.h>
 #include <ydb/library/yql/providers/common/mkql/yql_provider_mkql.h>
 
-#include <library/cpp/threading/future/async.h> 
+#include <library/cpp/threading/future/async.h>
 
 #include <util/generic/algorithm.h>
 #include <util/generic/bt_exception.h>

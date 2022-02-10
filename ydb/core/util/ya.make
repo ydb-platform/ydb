@@ -64,7 +64,7 @@ SRCS(
 PEERDIR(
     library/cpp/actors/interconnect/mock
     library/cpp/actors/util
-    library/cpp/containers/stack_vector 
+    library/cpp/containers/stack_vector
     library/cpp/html/escape
     library/cpp/ipmath
     library/cpp/lwtrace

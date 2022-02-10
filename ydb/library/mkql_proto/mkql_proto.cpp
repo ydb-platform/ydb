@@ -7,7 +7,7 @@
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
 #include <ydb/library/yql/public/decimal/yql_decimal.h>
 
-#include <library/cpp/containers/stack_vector/stack_vec.h> 
+#include <library/cpp/containers/stack_vector/stack_vec.h>
 
 namespace NKikimr::NMiniKQL {
 

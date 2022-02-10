@@ -4,7 +4,7 @@
 #include "flat_row_scheme.h"
 
 #include <ydb/core/scheme/scheme_tablecell.h>
-#include <library/cpp/containers/stack_vector/stack_vec.h> 
+#include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <util/generic/vector.h>
 
 namespace NKikimr {

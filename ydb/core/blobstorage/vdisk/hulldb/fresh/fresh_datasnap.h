@@ -2,7 +2,7 @@
 
 #include "defs.h"
 #include "fresh_segment.h"
-#include <library/cpp/threading/skip_list/skiplist.h> 
+#include <library/cpp/threading/skip_list/skiplist.h>
 #include <util/system/align.h>
 #include <util/generic/set.h>
 

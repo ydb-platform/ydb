@@ -4,7 +4,7 @@
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 
 using namespace NKikimr;

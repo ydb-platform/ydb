@@ -7,7 +7,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/threading/light_rw_lock 
+    library/cpp/threading/light_rw_lock
 )
 
 END()

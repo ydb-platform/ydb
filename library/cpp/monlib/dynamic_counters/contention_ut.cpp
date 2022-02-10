@@ -1,5 +1,5 @@
 #include "counters.h"
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 #include <util/system/event.h>
 #include <util/system/thread.h>
 

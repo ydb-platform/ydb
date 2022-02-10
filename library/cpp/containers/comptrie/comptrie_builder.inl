@@ -745,8 +745,8 @@ void TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::Clear() {
     Pool.Clear();
     NodeAllocator.Reset(new TFixedSizeAllocator(sizeof(TNode) + PayloadSize, TDefaultAllocator::Instance()));
     Root = new (*NodeAllocator) TNode;
-    EntryCount = 0; 
-    NodeCount = 1; 
+    EntryCount = 0;
+    NodeCount = 1;
 }
 
 template <class T, class D, class S>

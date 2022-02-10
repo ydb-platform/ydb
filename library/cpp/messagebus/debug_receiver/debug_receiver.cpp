@@ -3,7 +3,7 @@
 
 #include <library/cpp/messagebus/ybus.h>
 
-#include <library/cpp/getopt/last_getopt.h> 
+#include <library/cpp/getopt/last_getopt.h>
 #include <library/cpp/lwtrace/all.h>
 
 using namespace NBus;

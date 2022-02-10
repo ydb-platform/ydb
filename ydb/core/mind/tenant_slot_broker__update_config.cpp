@@ -28,7 +28,7 @@ public:
 
         NIceDb::TNiceDb db(txc.DB);
         TString config;
-        Y_PROTOBUF_SUPPRESS_NODISCARD rec.GetConfig().GetTenantSlotBrokerConfig().SerializeToString(&config); 
+        Y_PROTOBUF_SUPPRESS_NODISCARD rec.GetConfig().GetTenantSlotBrokerConfig().SerializeToString(&config);
         db.Table<Schema::Config>().Key(ConfigKey_Config)
             .Update(NIceDb::TUpdate<Schema::Config::Value>(config));
 

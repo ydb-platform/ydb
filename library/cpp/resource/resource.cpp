@@ -1,9 +1,9 @@
 #include "resource.h"
-#include "resource.h" 
+#include "resource.h"
 #include "registry.h"
 
 #include <util/generic/yexception.h>
-#include <util/generic/xrange.h> 
+#include <util/generic/xrange.h>
 
 using namespace NResource;
 
@@ -47,11 +47,11 @@ size_t NResource::Count() noexcept {
 TStringBuf NResource::KeyByIndex(size_t idx) {
     return CommonStore()->KeyByIndex(idx);
 }
- 
+
 TVector<TStringBuf> NResource::ListAllKeys() {
     TVector<TStringBuf> res(Reserve(NResource::Count()));
-    for (auto i : xrange(NResource::Count())) { 
-        res.push_back(NResource::KeyByIndex(i)); 
-    } 
-    return res; 
-} 
+    for (auto i : xrange(NResource::Count())) {
+        res.push_back(NResource::KeyByIndex(i));
+    }
+    return res;
+}

@@ -1,4 +1,4 @@
-RECURSE( 
+RECURSE(
     2d_array
     2d_array/ut
     4d_array
@@ -14,8 +14,8 @@ RECURSE(
     coded_blob/common
     coded_blob/keys
     coded_blob/ut
-    file_with_header 
-    file_with_header/ut 
+    file_with_header
+    file_with_header/ut
     fried_trie
     head_ar
     head_ar/ut
@@ -28,4 +28,4 @@ RECURSE(
     tar_archive/ut
     st_hash
     st_hash/ut
-) 
+)

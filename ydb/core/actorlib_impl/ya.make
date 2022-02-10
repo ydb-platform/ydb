@@ -40,7 +40,7 @@ PEERDIR(
     library/cpp/actors/core
     library/cpp/actors/dnscachelib
     library/cpp/actors/protos
-    library/cpp/containers/stack_vector 
+    library/cpp/containers/stack_vector
     library/cpp/digest/crc32c
     library/cpp/html/pcdata
     library/cpp/lwtrace

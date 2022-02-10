@@ -6,7 +6,7 @@
 #include <util/generic/map.h>
 #include <util/system/protect.h>
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 static ui64 gSeed = 42;
 

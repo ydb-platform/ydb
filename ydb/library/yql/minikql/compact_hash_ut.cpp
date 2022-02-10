@@ -1,6 +1,6 @@
 #include "compact_hash.h"
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/bitmap.h>
 #include <util/generic/ylimits.h>

@@ -15,7 +15,7 @@ TUserTable::TUserTable(ui32 localTid, const NKikimrSchemeOp::TTableDescription& 
     : LocalTid(localTid)
     , ShadowTid(shadowTid)
 {
-    Y_PROTOBUF_SUPPRESS_NODISCARD descr.SerializeToString(&Schema); 
+    Y_PROTOBUF_SUPPRESS_NODISCARD descr.SerializeToString(&Schema);
     Name = descr.GetName();
     Path = descr.GetPath();
     ParseProto(descr);

@@ -3,7 +3,7 @@ LIBRARY()
 OWNER(g:messagebus)
 
 PEERDIR(
-    library/cpp/threading/future 
+    library/cpp/threading/future
 )
 
 SRCS(

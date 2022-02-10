@@ -6,7 +6,7 @@
 
 #include <util/system/type_name.h>
 #include <util/system/unaligned_mem.h>
-#include <library/cpp/containers/stack_vector/stack_vec.h> 
+#include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <utility>
 
 #include <cxxabi.h>

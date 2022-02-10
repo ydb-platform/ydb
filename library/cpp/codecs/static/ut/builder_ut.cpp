@@ -1,4 +1,4 @@
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/codecs/static/builder.h>
 #include <library/cpp/codecs/static/static_codec_info.pb.h>
 #include <util/string/vector.h>

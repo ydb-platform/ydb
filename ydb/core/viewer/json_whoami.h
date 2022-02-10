@@ -36,7 +36,7 @@ public:
 
     void ReplyAndDie(const  TActorContext &ctx) {
         NACLibProto::TUserToken userToken;
-        Y_PROTOBUF_SUPPRESS_NODISCARD userToken.ParseFromString(Event->Get()->UserToken); 
+        Y_PROTOBUF_SUPPRESS_NODISCARD userToken.ParseFromString(Event->Get()->UserToken);
         TStringStream json;
         TProtoToJson::ProtoToJson(json, userToken, JsonSettings);
         ctx.Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON() + json.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));

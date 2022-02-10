@@ -4,7 +4,7 @@
 #include <library/cpp/tvmauth/exception.h>
 #include <library/cpp/tvmauth/unittest.h>
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 using namespace NTvmAuth;
 

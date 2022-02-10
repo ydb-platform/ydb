@@ -502,7 +502,7 @@ TDatabase::TProd TDatabase::Commit(TTxStamp stamp, bool commit, TCookieAllocator
             auto delta = Alter_->Flush();
 
             if (DatabaseImpl->Apply(*delta, &prefix))
-                Y_PROTOBUF_SUPPRESS_NODISCARD delta->SerializeToString(&Change->Scheme); 
+                Y_PROTOBUF_SUPPRESS_NODISCARD delta->SerializeToString(&Change->Scheme);
         }
 
         for (auto &one: Change->Snapshots) {

@@ -1,4 +1,4 @@
-UNITTEST_FOR(library/cpp/threading/poor_man_openmp) 
+UNITTEST_FOR(library/cpp/threading/poor_man_openmp)
 
 OWNER(
     pg

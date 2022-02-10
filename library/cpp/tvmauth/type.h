@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/containers/stack_vector/stack_vec.h> 
+#include <library/cpp/containers/stack_vector/stack_vec.h>
 
 namespace NTvmAuth {
     using TScopes = TSmallVec<TStringBuf>;

@@ -2,7 +2,7 @@
 
 #include "ut_common.h"
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/vector.h>
 
 namespace NKikimr {

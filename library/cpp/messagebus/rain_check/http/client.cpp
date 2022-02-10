@@ -79,7 +79,7 @@ namespace NRainCheck {
             headers.OutTo(&headersText);
             NNeh::NHttp::MakeFullRequest(msg, headersText.Str(), TString());
             FullProtocol->ScheduleRequest(msg, callback.Get(), stat);
-            Y_UNUSED(callback.Release()); 
+            Y_UNUSED(callback.Release());
         } catch (const TNetworkResolutionError& err) {
             future->SetFail(THttpFuture::CantResolveNameError, err.AsStrBuf());
         } catch (const yexception& err) {
@@ -100,7 +100,7 @@ namespace NRainCheck {
             GetProtocol->ScheduleRequest(NNeh::TMessage::FromString(request),
                                          callback.Get(),
                                          stat);
-            Y_UNUSED(callback.Release()); 
+            Y_UNUSED(callback.Release());
         } catch (const TNetworkResolutionError& err) {
             future->SetFail(THttpFuture::CantResolveNameError, err.AsStrBuf());
         } catch (const yexception& err) {

@@ -1,6 +1,6 @@
 #include <ydb/library/yql/minikql/pack_num.h>
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/ylimits.h>
 

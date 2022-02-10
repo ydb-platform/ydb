@@ -9,7 +9,7 @@
 #include <ydb/core/testlib/basics/helpers.h>
 
 #include <library/cpp/actors/core/log.h>
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/vector.h>
 #include <util/generic/xrange.h>

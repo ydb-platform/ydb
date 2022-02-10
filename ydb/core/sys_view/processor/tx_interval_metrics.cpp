@@ -47,7 +47,7 @@ struct TSysViewProcessor::TTxIntervalMetrics : public TTxBase {
             }
 
             TString serialized;
-            Y_PROTOBUF_SUPPRESS_NODISCARD newMetrics.SerializeToString(&serialized); 
+            Y_PROTOBUF_SUPPRESS_NODISCARD newMetrics.SerializeToString(&serialized);
             db.Table<Schema::IntervalMetrics>().Key(queryHash).Update(
                 NIceDb::TUpdate<Schema::IntervalMetrics::Metrics>(serialized));
         }
@@ -63,7 +63,7 @@ struct TSysViewProcessor::TTxIntervalMetrics : public TTxBase {
                     if (query.Hash == queryHash) {
                         query.Stats = MakeHolder<NKikimrSysView::TQueryStats>();
                         query.Stats->CopyFrom(stats);
-                        Y_PROTOBUF_SUPPRESS_NODISCARD query.Stats->SerializeToString(&serialized); 
+                        Y_PROTOBUF_SUPPRESS_NODISCARD query.Stats->SerializeToString(&serialized);
                         db.Table<Schema::IntervalTops>().Key((ui32)minuteType, queryHash).Update(
                             NIceDb::TUpdate<Schema::IntervalTops::Stats>(serialized));
                         break;

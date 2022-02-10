@@ -7,7 +7,7 @@
 #include <ydb/library/yql/minikql/mkql_terminator.h>
 #include "../mkql_factories.h"
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 #define UNBOXED_VALUE_STR_EQUAL(unboxed, expected) \
     do { \

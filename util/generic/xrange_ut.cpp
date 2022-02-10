@@ -3,7 +3,7 @@
 #include "algorithm.h"
 #include "maybe.h"
 #include "vector.h"
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 #include <util/string/builder.h>
 
 Y_UNIT_TEST_SUITE(XRange) {
@@ -78,40 +78,40 @@ Y_UNIT_TEST_SUITE(XRange) {
         }
         UNIT_ASSERT_VALUES_EQUAL(digSumByPtr, digSumExpected);
     }
- 
+
     Y_UNIT_TEST(SizeMethodCheck) {
-        UNIT_ASSERT_VALUES_EQUAL(xrange(5).size(), 5); 
-        UNIT_ASSERT_VALUES_EQUAL(xrange(0, 5, 2).size(), 3); 
-        UNIT_ASSERT_VALUES_EQUAL(xrange(0, 6, 2).size(), 3); 
-    } 
- 
+        UNIT_ASSERT_VALUES_EQUAL(xrange(5).size(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(xrange(0, 5, 2).size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(xrange(0, 6, 2).size(), 3);
+    }
+
     class TVectorChild: public TVector<size_t> {
-    public: 
+    public:
         template <typename TIterator>
         TVectorChild(TIterator a, TIterator b)
             : TVector<size_t>(a, b)
         {
         }
-    }; 
- 
+    };
+
     Y_UNIT_TEST(ConvertionWorks) {
         TVector<size_t> data = {0, 1, 2, 3, 4, 5, 6, 7, 8};
- 
+
         TVector<size_t> convertionResults[] = {xrange<size_t>(9),
                                                xrange<ui32>(0, 9),
                                                xrange(0, 9, 1)};
- 
-        for (const auto& arr : convertionResults) { 
-            UNIT_ASSERT(arr == data); 
-        } 
- 
-        TVectorChild sons[] = {xrange(0, 9), 
+
+        for (const auto& arr : convertionResults) {
+            UNIT_ASSERT(arr == data);
+        }
+
+        TVectorChild sons[] = {xrange(0, 9),
                                xrange(0, 9, 1)};
- 
-        for (const auto& arr : sons) { 
-            UNIT_ASSERT(arr == data); 
-        } 
-    } 
+
+        for (const auto& arr : sons) {
+            UNIT_ASSERT(arr == data);
+        }
+    }
 
     template <class XRangeContainer>
     void TestEmptyRanges(const XRangeContainer& c) {

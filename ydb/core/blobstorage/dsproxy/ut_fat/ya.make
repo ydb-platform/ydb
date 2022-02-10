@@ -22,7 +22,7 @@ ENDIF()
 PEERDIR(
     library/cpp/actors/protos
     library/cpp/actors/util
-    library/cpp/getopt 
+    library/cpp/getopt
     library/cpp/svnversion
     ydb/core/base
     ydb/core/blobstorage/base

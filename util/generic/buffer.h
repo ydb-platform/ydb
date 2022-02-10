@@ -92,7 +92,7 @@ public:
         return Len_ - Pos_;
     }
 
-    void Append(const char* buf, size_t len); 
+    void Append(const char* buf, size_t len);
 
     inline void Append(const char* b, const char* e) {
         Append(b, e - b);

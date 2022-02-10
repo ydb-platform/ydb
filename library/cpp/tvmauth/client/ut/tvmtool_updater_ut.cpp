@@ -4,7 +4,7 @@
 #include <library/cpp/tvmauth/client/misc/tool/threaded_updater.h>
 
 #include <library/cpp/http/simple/http_client.h>
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 #include <util/system/env.h>
 

@@ -1,6 +1,6 @@
 #include "defs.h"
 #include "vdisk_pdisk_error.h"
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 #include <util/stream/null.h>
 
 #define STR Cerr

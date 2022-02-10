@@ -1,4 +1,4 @@
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 #include "client.h"
 #include "http_code_extractor.h"

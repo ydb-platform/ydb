@@ -15,7 +15,7 @@ void SerializeMetadata(const NScheme::TTypeMetadataRegistry& typesRegistry, TStr
         protoType->SetId(type.second->GetTypeId());
         protoType->SetName(type.second->GetName());
     }
-    Y_PROTOBUF_SUPPRESS_NODISCARD metadata.SerializeToString(out); 
+    Y_PROTOBUF_SUPPRESS_NODISCARD metadata.SerializeToString(out);
 }
 
 void DeserializeMetadata(TStringBuf buffer, NScheme::TTypeMetadataRegistry* registry)

@@ -1,7 +1,7 @@
 #include "mkql_alloc.h"
 #include "mkql_type_ops.h"
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 #include <util/stream/format.h>
 #include <util/stream/str.h>

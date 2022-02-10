@@ -1,6 +1,6 @@
 #include <library/cpp/regex/hyperscan/hyperscan.h>
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/set.h>
 

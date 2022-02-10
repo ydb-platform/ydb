@@ -7,8 +7,8 @@
 #include <ydb/core/testlib/test_client.h>
 
 #include <library/cpp/actors/http/http_proxy.cpp>
-#include <library/cpp/testing/unittest/tests_data.h> 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/tests_data.h>
+#include <library/cpp/testing/unittest/registar.h>
 
 #include <util/stream/file.h>
 #include <util/system/tempfile.h>

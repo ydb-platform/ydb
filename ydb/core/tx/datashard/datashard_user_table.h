@@ -390,7 +390,7 @@ struct TUserTable : public TThrRefBase {
 
     void SetSchema(const NKikimrSchemeOp::TTableDescription& description) {
         Schema.clear();
-        Y_PROTOBUF_SUPPRESS_NODISCARD description.SerializeToString(&Schema); 
+        Y_PROTOBUF_SUPPRESS_NODISCARD description.SerializeToString(&Schema);
     }
 
     void SetPath(const TString &path);

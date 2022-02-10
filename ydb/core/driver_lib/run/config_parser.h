@@ -4,7 +4,7 @@
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/driver_lib/cli_config_base/config_base.h>
 
-#include <library/cpp/getopt/last_getopt.h> 
+#include <library/cpp/getopt/last_getopt.h>
 
 #include <library/cpp/messagebus/session_config.h>
 #include <library/cpp/messagebus/queue_config.h>

@@ -32,7 +32,7 @@ public:
 
     size_t EraseAll(const TStringBuf name);
 
-    size_t NumOfValues(const TStringBuf name) const noexcept { 
+    size_t NumOfValues(const TStringBuf name) const noexcept {
         return count(name);
     }
 
@@ -53,8 +53,8 @@ public:
      */
     TString Print() const;
     char* Print(char* res) const;
- 
-    Y_PURE_FUNCTION 
+
+    Y_PURE_FUNCTION
     size_t PrintSize() const noexcept;
 
     /** The same as Print* except that RFC-3986 reserved characters are escaped.
@@ -62,19 +62,19 @@ public:
      */
     TString QuotedPrint(const char* safe = "/") const;
 
-    Y_PURE_FUNCTION 
+    Y_PURE_FUNCTION
     auto Range(const TStringBuf name) const noexcept {
         return IterateValues(MakeIteratorRange(equal_range(name)));
     }
- 
-    Y_PURE_FUNCTION 
-    const_iterator Find(const TStringBuf name, size_t numOfValue = 0) const noexcept; 
- 
-    Y_PURE_FUNCTION 
-    bool Has(const TStringBuf name, const TStringBuf value) const noexcept; 
- 
-    Y_PURE_FUNCTION 
-    bool Has(const TStringBuf name) const noexcept { 
+
+    Y_PURE_FUNCTION
+    const_iterator Find(const TStringBuf name, size_t numOfValue = 0) const noexcept;
+
+    Y_PURE_FUNCTION
+    bool Has(const TStringBuf name, const TStringBuf value) const noexcept;
+
+    Y_PURE_FUNCTION
+    bool Has(const TStringBuf name) const noexcept {
         const auto pair = equal_range(name);
         return pair.first != pair.second;
     }
@@ -82,8 +82,8 @@ public:
     /**
      * @note The returned value is CGI-unescaped.
      */
-    Y_PURE_FUNCTION 
-    const TString& Get(const TStringBuf name, size_t numOfValue = 0) const noexcept; 
+    Y_PURE_FUNCTION
+    const TString& Get(const TStringBuf name, size_t numOfValue = 0) const noexcept;
 
     void InsertEscaped(const TStringBuf name, const TStringBuf value);
 
@@ -167,17 +167,17 @@ public:
 
     explicit TQuickCgiParam(const TStringBuf cgiParamStr);
 
-    Y_PURE_FUNCTION 
-    bool Has(const TStringBuf name, const TStringBuf value) const noexcept; 
- 
-    Y_PURE_FUNCTION 
-    bool Has(const TStringBuf name) const noexcept { 
+    Y_PURE_FUNCTION
+    bool Has(const TStringBuf name, const TStringBuf value) const noexcept;
+
+    Y_PURE_FUNCTION
+    bool Has(const TStringBuf name) const noexcept {
         const auto pair = equal_range(name);
         return pair.first != pair.second;
     }
 
-    Y_PURE_FUNCTION 
-    const TStringBuf& Get(const TStringBuf name, size_t numOfValue = 0) const noexcept; 
+    Y_PURE_FUNCTION
+    const TStringBuf& Get(const TStringBuf name, size_t numOfValue = 0) const noexcept;
 
 private:
     TString UnescapeBuf;

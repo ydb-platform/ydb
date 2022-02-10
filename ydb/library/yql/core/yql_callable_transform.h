@@ -10,7 +10,7 @@
 #include <ydb/library/yql/public/issue/yql_issue.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
-#include <library/cpp/threading/future/future.h> 
+#include <library/cpp/threading/future/future.h>
 
 #include <util/generic/ptr.h>
 #include <util/string/builder.h>

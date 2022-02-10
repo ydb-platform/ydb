@@ -1,6 +1,6 @@
 #include "httpparser.h"
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 #define ENUM_OUT(arg)  \
     case type ::arg: { \

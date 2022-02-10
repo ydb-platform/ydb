@@ -74,8 +74,8 @@ namespace NThreading {
         TIntrusivePtr<TFutureState> State;
 
     public:
-        using value_type = T; 
- 
+        using value_type = T;
+
         TFuture() noexcept = default;
         TFuture(const TFuture<T>& other) noexcept = default;
         TFuture(TFuture<T>&& other) noexcept = default;
@@ -131,8 +131,8 @@ namespace NThreading {
         TIntrusivePtr<TFutureState> State = nullptr;
 
     public:
-        using value_type = void; 
- 
+        using value_type = void;
+
         TFuture() noexcept = default;
         TFuture(const TFuture<void>& other) noexcept = default;
         TFuture(TFuture<void>&& other) noexcept = default;
@@ -169,9 +169,9 @@ namespace NThreading {
         template <typename R>
         TFuture<R> Return(const R& value) const;
 
-        TFuture<void> IgnoreResult() const { 
-            return *this; 
-        } 
+        TFuture<void> IgnoreResult() const {
+            return *this;
+        }
 
         //! If the future is initialized returns the future state identifier. Otherwise returns an empty optional
         /** The state identifier is guaranteed to be unique during the future state lifetime and could be reused after its death

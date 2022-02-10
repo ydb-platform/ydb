@@ -15,7 +15,7 @@
 #include <ydb/core/tx/tx_allocator/txallocator.h>
 
 #include <library/cpp/actors/interconnect/interconnect_impl.h>
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/algorithm.h>
 #include <util/generic/string.h>

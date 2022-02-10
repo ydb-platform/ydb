@@ -12,7 +12,7 @@
 #include <ydb/core/engine/mkql_keys.h>
 #include <ydb/core/scheme_types/scheme_types_defs.h>
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr {
 namespace NMiniKQL {

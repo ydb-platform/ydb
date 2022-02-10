@@ -11,7 +11,7 @@ SRCS(
 
 PEERDIR(
     contrib/libs/protobuf
-    library/cpp/cgiparam 
+    library/cpp/cgiparam
     library/cpp/uri
     ydb/public/lib/operation_id/protos
 )

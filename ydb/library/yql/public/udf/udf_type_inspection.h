@@ -3,7 +3,7 @@
 #include "udf_string_ref.h"
 #include "udf_types.h"
 
-#include <library/cpp/containers/stack_vector/stack_vec.h> // TSmallVec 
+#include <library/cpp/containers/stack_vector/stack_vec.h> // TSmallVec
 #include <util/generic/algorithm.h>
 
 #include <util/system/yassert.h> // FAIL, VERIFY_DEBUG

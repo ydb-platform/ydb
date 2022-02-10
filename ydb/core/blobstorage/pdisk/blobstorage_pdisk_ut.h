@@ -34,8 +34,8 @@
 #include <library/cpp/actors/protos/services_common.pb.h>
 #include <library/cpp/actors/util/affinity.h>
 #include <library/cpp/svnversion/svnversion.h>
-#include <library/cpp/testing/unittest/registar.h> 
-#include <library/cpp/testing/unittest/tests_data.h> 
+#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/tests_data.h>
 
 #include <util/folder/dirut.h>
 #include <util/generic/hash.h>

@@ -1063,7 +1063,7 @@ void TPartition::AddMetaKey(TEvKeyValue::TEvRequest* request) {
     meta.SetEndOffset(Max(NewHead.GetNextOffset(), EndOffset));
 
     TString out;
-    Y_PROTOBUF_SUPPRESS_NODISCARD meta.SerializeToString(&out); 
+    Y_PROTOBUF_SUPPRESS_NODISCARD meta.SerializeToString(&out);
 
     write->SetKey(ikey.Data(), ikey.Size());
     write->SetValue(out.c_str(), out.size());
@@ -3903,7 +3903,7 @@ void TPartition::WriteClientInfo(const ui64 cookie, TUserInfo& userInfo, const T
             userData.SetOffsetRewindSum(userInfo.ReadOffsetRewindSum);
             userData.SetReadRuleGeneration(readRuleGeneration);
             TString out;
-            Y_PROTOBUF_SUPPRESS_NODISCARD userData.SerializeToString(&out); 
+            Y_PROTOBUF_SUPPRESS_NODISCARD userData.SerializeToString(&out);
 
             idata.Append(out.c_str(), out.size());
         }

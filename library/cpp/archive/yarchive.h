@@ -11,9 +11,9 @@ class IOutputStream;
 
 class TBlob;
 
-//noncompressed data will be stored with default alignment DEVTOOLS-4384 
-static constexpr size_t ArchiveWriterDefaultDataAlignment = 16; 
- 
+//noncompressed data will be stored with default alignment DEVTOOLS-4384
+static constexpr size_t ArchiveWriterDefaultDataAlignment = 16;
+
 class TArchiveWriter {
 public:
     explicit TArchiveWriter(IOutputStream* out, bool compress = true);

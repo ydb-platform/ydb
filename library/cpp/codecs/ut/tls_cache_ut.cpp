@@ -1,4 +1,4 @@
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/codecs/tls_cache.h>
 
 Y_UNIT_TEST_SUITE(CodecsBufferFactoryTest){

@@ -194,5 +194,5 @@ TBusSyncClientSessionPtr TBusMessageQueue::CreateSyncSource(TBusProtocol* proto,
 
 void TBusMessageQueue::Destroy(TBusSyncClientSessionPtr session) {
     Destroy(session->Session.Get());
-    Y_UNUSED(session->Session.Release()); 
+    Y_UNUSED(session->Session.Release());
 }

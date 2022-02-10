@@ -1,4 +1,4 @@
-UNITTEST_FOR(library/cpp/string_utils/relaxed_escaper) 
+UNITTEST_FOR(library/cpp/string_utils/relaxed_escaper)
 
 OWNER(velavokr)
 

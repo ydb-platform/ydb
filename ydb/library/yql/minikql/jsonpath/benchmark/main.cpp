@@ -10,7 +10,7 @@
 #include <ydb/library/yql/minikql/mkql_node.h>
 
 #include <library/cpp/json/json_value.h>
-#include <library/cpp/testing/benchmark/bench.h> 
+#include <library/cpp/testing/benchmark/bench.h>
 
 #include <util/random/fast.h>
 

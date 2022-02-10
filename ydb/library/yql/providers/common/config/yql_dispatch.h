@@ -4,7 +4,7 @@
 
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 
-#include <library/cpp/string_utils/parse_size/parse_size.h> 
+#include <library/cpp/string_utils/parse_size/parse_size.h>
 
 #include <util/string/cast.h>
 #include <util/string/join.h>

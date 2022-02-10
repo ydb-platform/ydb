@@ -5,7 +5,7 @@
 #include <util/generic/string.h>
 
 #include <library/cpp/http/misc/httpcodes.h>
-#include <library/cpp/threading/future/future.h> 
+#include <library/cpp/threading/future/future.h>
 #include <functional>
 
 namespace NYql {

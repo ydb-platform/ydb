@@ -2,7 +2,7 @@
 
 #include "string.h"
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 #include <util/string/reverse.h>
 
@@ -565,9 +565,9 @@ public:
 
         TStringType s9(*Data._1());
         UNIT_ASSERT(s9 == Data._1());
- 
+
         TStringType s10(Reserve(100));
-        UNIT_ASSERT(s10.empty()); 
+        UNIT_ASSERT(s10.empty());
         UNIT_ASSERT(s10.capacity() >= 100);
     }
 
@@ -1011,14 +1011,14 @@ public:
         UNIT_ASSERT(!s1.IsDetached());
 
         /* Read access shouldn't detach. */
-        UNIT_ASSERT_VALUES_EQUAL(s0[0], (ui8)'a'); 
+        UNIT_ASSERT_VALUES_EQUAL(s0[0], (ui8)'a');
         UNIT_ASSERT(!s0.IsDetached());
         UNIT_ASSERT(!s1.IsDetached());
 
         /* Writing should detach. */
-        s1[0] = (ui8)'b'; 
+        s1[0] = (ui8)'b';
         TStringType s2 = s0;
-        s0[0] = (ui8)'c'; 
+        s0[0] = (ui8)'c';
 
         UNIT_ASSERT_VALUES_EQUAL(s0, cbc);
         UNIT_ASSERT_VALUES_EQUAL(s1, bbc);
@@ -1028,9 +1028,9 @@ public:
         UNIT_ASSERT(s2.IsDetached());
 
         /* Accessing null terminator is OK. Note that writing into it is UB. */
-        UNIT_ASSERT_VALUES_EQUAL(s0[3], (ui8)'\0'); 
-        UNIT_ASSERT_VALUES_EQUAL(s1[3], (ui8)'\0'); 
-        UNIT_ASSERT_VALUES_EQUAL(s2[3], (ui8)'\0'); 
+        UNIT_ASSERT_VALUES_EQUAL(s0[3], (ui8)'\0');
+        UNIT_ASSERT_VALUES_EQUAL(s1[3], (ui8)'\0');
+        UNIT_ASSERT_VALUES_EQUAL(s2[3], (ui8)'\0');
 
         /* Assignment one char reference to another results in modification of underlying character */
         {
@@ -1053,12 +1053,12 @@ public:
         TStringType str = chars;
         const TStringType constStr = str;
 
-        UNIT_ASSERT_VALUES_EQUAL(constStr.back(), (ui8)'o'); 
-        UNIT_ASSERT_VALUES_EQUAL(str.back(), (ui8)'o'); 
+        UNIT_ASSERT_VALUES_EQUAL(constStr.back(), (ui8)'o');
+        UNIT_ASSERT_VALUES_EQUAL(str.back(), (ui8)'o');
 
         str.back() = 'r';
-        UNIT_ASSERT_VALUES_EQUAL(constStr.back(), (ui8)'o'); 
-        UNIT_ASSERT_VALUES_EQUAL(str.back(), (ui8)'r'); 
+        UNIT_ASSERT_VALUES_EQUAL(constStr.back(), (ui8)'o');
+        UNIT_ASSERT_VALUES_EQUAL(str.back(), (ui8)'r');
     }
 
     void TestFront() {
@@ -1067,12 +1067,12 @@ public:
         TStringType str = chars;
         const TStringType constStr = str;
 
-        UNIT_ASSERT_VALUES_EQUAL(constStr.front(), (ui8)'f'); 
-        UNIT_ASSERT_VALUES_EQUAL(str.front(), (ui8)'f'); 
+        UNIT_ASSERT_VALUES_EQUAL(constStr.front(), (ui8)'f');
+        UNIT_ASSERT_VALUES_EQUAL(str.front(), (ui8)'f');
 
         str.front() = 'r';
-        UNIT_ASSERT_VALUES_EQUAL(constStr.front(), (ui8)'f'); 
-        UNIT_ASSERT_VALUES_EQUAL(str.front(), (ui8)'r'); 
+        UNIT_ASSERT_VALUES_EQUAL(constStr.front(), (ui8)'f');
+        UNIT_ASSERT_VALUES_EQUAL(str.front(), (ui8)'r');
     }
 
     void TestIterators() {
@@ -1086,31 +1086,31 @@ public:
         typename TStringType::const_iterator citBegin = constStr.begin();
         typename TStringType::const_iterator citEnd = constStr.end();
 
-        UNIT_ASSERT_VALUES_EQUAL(*itBegin, (ui8)'f'); 
-        UNIT_ASSERT_VALUES_EQUAL(*citBegin, (ui8)'f'); 
+        UNIT_ASSERT_VALUES_EQUAL(*itBegin, (ui8)'f');
+        UNIT_ASSERT_VALUES_EQUAL(*citBegin, (ui8)'f');
 
         str.front() = 'r';
-        UNIT_ASSERT_VALUES_EQUAL(*itBegin, (ui8)'r'); 
-        UNIT_ASSERT_VALUES_EQUAL(*citBegin, (ui8)'f'); 
+        UNIT_ASSERT_VALUES_EQUAL(*itBegin, (ui8)'r');
+        UNIT_ASSERT_VALUES_EQUAL(*citBegin, (ui8)'f');
 
         UNIT_ASSERT_VALUES_EQUAL(2, itEnd - itBegin);
         UNIT_ASSERT_VALUES_EQUAL(2, citEnd - citBegin);
 
-        UNIT_ASSERT_VALUES_EQUAL(*(++itBegin), (ui8)'o'); 
-        UNIT_ASSERT_VALUES_EQUAL(*(++citBegin), (ui8)'o'); 
+        UNIT_ASSERT_VALUES_EQUAL(*(++itBegin), (ui8)'o');
+        UNIT_ASSERT_VALUES_EQUAL(*(++citBegin), (ui8)'o');
 
-        UNIT_ASSERT_VALUES_EQUAL(*(--itBegin), (ui8)'r'); 
-        UNIT_ASSERT_VALUES_EQUAL(*(--citBegin), (ui8)'f'); 
+        UNIT_ASSERT_VALUES_EQUAL(*(--itBegin), (ui8)'r');
+        UNIT_ASSERT_VALUES_EQUAL(*(--citBegin), (ui8)'f');
 
-        UNIT_ASSERT_VALUES_EQUAL(*(itBegin++), (ui8)'r'); 
-        UNIT_ASSERT_VALUES_EQUAL(*(citBegin++), (ui8)'f'); 
-        UNIT_ASSERT_VALUES_EQUAL(*itBegin, (ui8)'o'); 
-        UNIT_ASSERT_VALUES_EQUAL(*citBegin, (ui8)'o'); 
+        UNIT_ASSERT_VALUES_EQUAL(*(itBegin++), (ui8)'r');
+        UNIT_ASSERT_VALUES_EQUAL(*(citBegin++), (ui8)'f');
+        UNIT_ASSERT_VALUES_EQUAL(*itBegin, (ui8)'o');
+        UNIT_ASSERT_VALUES_EQUAL(*citBegin, (ui8)'o');
 
-        UNIT_ASSERT_VALUES_EQUAL(*(itBegin--), (ui8)'o'); 
-        UNIT_ASSERT_VALUES_EQUAL(*(citBegin--), (ui8)'o'); 
-        UNIT_ASSERT_VALUES_EQUAL(*itBegin, (ui8)'r'); 
-        UNIT_ASSERT_VALUES_EQUAL(*citBegin, (ui8)'f'); 
+        UNIT_ASSERT_VALUES_EQUAL(*(itBegin--), (ui8)'o');
+        UNIT_ASSERT_VALUES_EQUAL(*(citBegin--), (ui8)'o');
+        UNIT_ASSERT_VALUES_EQUAL(*itBegin, (ui8)'r');
+        UNIT_ASSERT_VALUES_EQUAL(*citBegin, (ui8)'f');
     }
 
     void TestReverseIterators() {
@@ -1124,33 +1124,33 @@ public:
         typename TStringType::const_reverse_iterator critBegin = constStr.rbegin();
         typename TStringType::const_reverse_iterator critEnd = constStr.rend();
 
-        UNIT_ASSERT_VALUES_EQUAL(*ritBegin, (ui8)'o'); 
-        UNIT_ASSERT_VALUES_EQUAL(*critBegin, (ui8)'o'); 
+        UNIT_ASSERT_VALUES_EQUAL(*ritBegin, (ui8)'o');
+        UNIT_ASSERT_VALUES_EQUAL(*critBegin, (ui8)'o');
 
-        str.back() = (ui8)'r'; 
-        UNIT_ASSERT_VALUES_EQUAL(*ritBegin, (ui8)'r'); 
-        UNIT_ASSERT_VALUES_EQUAL(*critBegin, (ui8)'o'); 
+        str.back() = (ui8)'r';
+        UNIT_ASSERT_VALUES_EQUAL(*ritBegin, (ui8)'r');
+        UNIT_ASSERT_VALUES_EQUAL(*critBegin, (ui8)'o');
 
         UNIT_ASSERT_VALUES_EQUAL(2, ritEnd - ritBegin);
         UNIT_ASSERT_VALUES_EQUAL(2, critEnd - critBegin);
 
-        UNIT_ASSERT_VALUES_EQUAL(*(++ritBegin), (ui8)'f'); 
-        UNIT_ASSERT_VALUES_EQUAL(*(++critBegin), (ui8)'f'); 
+        UNIT_ASSERT_VALUES_EQUAL(*(++ritBegin), (ui8)'f');
+        UNIT_ASSERT_VALUES_EQUAL(*(++critBegin), (ui8)'f');
 
-        UNIT_ASSERT_VALUES_EQUAL(*(--ritBegin), (ui8)'r'); 
-        UNIT_ASSERT_VALUES_EQUAL(*(--critBegin), (ui8)'o'); 
+        UNIT_ASSERT_VALUES_EQUAL(*(--ritBegin), (ui8)'r');
+        UNIT_ASSERT_VALUES_EQUAL(*(--critBegin), (ui8)'o');
 
-        UNIT_ASSERT_VALUES_EQUAL(*(ritBegin++), (ui8)'r'); 
-        UNIT_ASSERT_VALUES_EQUAL(*(critBegin++), (ui8)'o'); 
-        UNIT_ASSERT_VALUES_EQUAL(*ritBegin, (ui8)'f'); 
-        UNIT_ASSERT_VALUES_EQUAL(*critBegin, (ui8)'f'); 
+        UNIT_ASSERT_VALUES_EQUAL(*(ritBegin++), (ui8)'r');
+        UNIT_ASSERT_VALUES_EQUAL(*(critBegin++), (ui8)'o');
+        UNIT_ASSERT_VALUES_EQUAL(*ritBegin, (ui8)'f');
+        UNIT_ASSERT_VALUES_EQUAL(*critBegin, (ui8)'f');
 
-        UNIT_ASSERT_VALUES_EQUAL(*(ritBegin--), (ui8)'f'); 
-        UNIT_ASSERT_VALUES_EQUAL(*(critBegin--), (ui8)'f'); 
-        UNIT_ASSERT_VALUES_EQUAL(*ritBegin, (ui8)'r'); 
-        UNIT_ASSERT_VALUES_EQUAL(*critBegin, (ui8)'o'); 
+        UNIT_ASSERT_VALUES_EQUAL(*(ritBegin--), (ui8)'f');
+        UNIT_ASSERT_VALUES_EQUAL(*(critBegin--), (ui8)'f');
+        UNIT_ASSERT_VALUES_EQUAL(*ritBegin, (ui8)'r');
+        UNIT_ASSERT_VALUES_EQUAL(*critBegin, (ui8)'o');
 
-        *ritBegin = (ui8)'e'; 
-        UNIT_ASSERT_VALUES_EQUAL(*ritBegin, (ui8)'e'); 
+        *ritBegin = (ui8)'e';
+        UNIT_ASSERT_VALUES_EQUAL(*ritBegin, (ui8)'e');
     }
 };

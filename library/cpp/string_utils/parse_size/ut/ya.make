@@ -1,4 +1,4 @@
-UNITTEST_FOR(library/cpp/string_utils/parse_size) 
+UNITTEST_FOR(library/cpp/string_utils/parse_size)
 
 OWNER(g:images-robot)
 

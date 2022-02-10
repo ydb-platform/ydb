@@ -11,7 +11,7 @@ SRCS(
 
 PEERDIR(
     contrib/libs/nayuki_md5
-    library/cpp/string_utils/base64 
+    library/cpp/string_utils/base64
 )
 
 END()

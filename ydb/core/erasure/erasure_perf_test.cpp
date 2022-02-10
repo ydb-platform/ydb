@@ -1,7 +1,7 @@
 #include "erasure.h"
 #include "erasure_rope.h"
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/ymath.h>
 #include <util/random/entropy.h>
 #include <util/random/mersenne64.h>

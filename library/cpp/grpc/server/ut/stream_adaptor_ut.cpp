@@ -1,6 +1,6 @@
 #include <library/cpp/grpc/server/grpc_request.h>
-#include <library/cpp/testing/unittest/registar.h> 
-#include <library/cpp/testing/unittest/tests_data.h> 
+#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/tests_data.h>
 
 #include <util/system/thread.h>
 #include <util/thread/pool.h>

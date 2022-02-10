@@ -3,10 +3,10 @@
 #include "mem.h"
 #include "output.h"
 
-#include <util/datetime/base.h> 
-#include <util/generic/strbuf.h> 
+#include <util/datetime/base.h>
+#include <util/generic/strbuf.h>
 #include <util/generic/flags.h>
-#include <util/memory/tempbuf.h> 
+#include <util/memory/tempbuf.h>
 #include <util/string/cast.h>
 
 enum ENumberFormatFlag {
@@ -131,27 +131,27 @@ namespace NFormatPrivate {
         stream << str;
         return stream;
     }
- 
+
     template <typename Char, size_t Base>
     struct TBaseText {
         TBasicStringBuf<Char> Text;
- 
+
         inline TBaseText(const TBasicStringBuf<Char> text)
-            : Text(text) 
+            : Text(text)
         {
         }
-    }; 
- 
+    };
+
     template <typename Char, size_t Base>
     IOutputStream& operator<<(IOutputStream& os, const TBaseText<Char, Base>& text) {
         for (size_t i = 0; i < text.Text.size(); ++i) {
-            if (i != 0) { 
-                os << ' '; 
-            } 
+            if (i != 0) {
+                os << ' ';
+            }
             os << TUnsignedBaseNumber<Char, Base>(text.Text[i], HF_FULL);
-        } 
-        return os; 
-    } 
+        }
+        return os;
+    }
 
     template <typename T>
     struct TFloatPrecision {
@@ -170,20 +170,20 @@ namespace NFormatPrivate {
         o << TStringBuf(buf, count);
         return o;
     }
- 
-    struct THumanReadableDuration { 
-        TDuration Value; 
- 
+
+    struct THumanReadableDuration {
+        TDuration Value;
+
         constexpr THumanReadableDuration(const TDuration& value)
-            : Value(value) 
+            : Value(value)
         {
         }
-    }; 
- 
-    struct THumanReadableSize { 
-        double Value; 
+    };
+
+    struct THumanReadableSize {
+        double Value;
         ESizeFormat Format;
-    }; 
+    };
 }
 
 /**
@@ -280,7 +280,7 @@ static constexpr ::NFormatPrivate::TBaseNumber<T, 16> SHex(const T& value, const
     return {value, flags};
 }
 
-/** 
+/**
  * Output manipulator similar to `std::setbase(2)`.
  *
  * When written into a `IOutputStream`, writes out the provided value in
@@ -335,12 +335,12 @@ static constexpr ::NFormatPrivate::TBaseNumber<T, 2> SBin(const T& value, const 
  *
  * @param value                         String to output.
  */
-template <typename TChar> 
+template <typename TChar>
 static inline ::NFormatPrivate::TBaseText<TChar, 16> HexText(const TBasicStringBuf<TChar> value) {
     return ::NFormatPrivate::TBaseText<TChar, 16>(value);
-} 
- 
-/** 
+}
+
+/**
  * Output manipulator for binary string output.
  *
  * When written into a `IOutputStream`, writes out the provided characters
@@ -373,10 +373,10 @@ static inline ::NFormatPrivate::TBaseText<TChar, 2> BinText(const TBasicStringBu
  * @param value                         Value to output.
  */
 static constexpr ::NFormatPrivate::THumanReadableDuration HumanReadable(const TDuration duration) noexcept {
-    return ::NFormatPrivate::THumanReadableDuration(duration); 
-} 
- 
-/** 
+    return ::NFormatPrivate::THumanReadableDuration(duration);
+}
+
+/**
  * Output manipulator for writing out human-readable number of elements / memory
  * amount in `ls -h` style.
  *
@@ -388,22 +388,22 @@ static constexpr ::NFormatPrivate::THumanReadableDuration HumanReadable(const TD
  *
  * Example usage:
  * @code
- * stream <<  HumanReadableSize(1024, SF_QUANTITY);                          // Will output    "1.02K" 
- * stream <<  HumanReadableSize(1024, SF_BYTES);                             // Will output    "1KiB" 
- * stream << "average usage " << HumanReadableSize(100 / 3., SF_BYTES);     // Will output    "average usage "33.3B"" 
+ * stream <<  HumanReadableSize(1024, SF_QUANTITY);                          // Will output    "1.02K"
+ * stream <<  HumanReadableSize(1024, SF_BYTES);                             // Will output    "1KiB"
+ * stream << "average usage " << HumanReadableSize(100 / 3., SF_BYTES);     // Will output    "average usage "33.3B""
  * @endcode
  *
  * @param value                         Value to output.
  * @param format                        Format to use.
  */
-static constexpr ::NFormatPrivate::THumanReadableSize HumanReadableSize(const double size, ESizeFormat format) noexcept { 
+static constexpr ::NFormatPrivate::THumanReadableSize HumanReadableSize(const double size, ESizeFormat format) noexcept {
     return {size, format};
-} 
- 
+}
+
 void Time(IOutputStream& l);
 void TimeHumanReadable(IOutputStream& l);
 
-/** 
+/**
  * Output manipulator for adjusting precision of floating point values.
  *
  * When written into a `IOutputStream`, writes out the provided floating point
@@ -424,7 +424,7 @@ static constexpr ::NFormatPrivate::TFloatPrecision<T> Prec(const T& value, const
     return {value, mode, ndigits};
 }
 
-/** 
+/**
  * Output manipulator for adjusting precision of floating point values.
  *
  * When written into a `IOutputStream`, writes out the provided floating point

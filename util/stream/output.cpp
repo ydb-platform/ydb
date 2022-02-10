@@ -79,16 +79,16 @@ static void WriteString(IOutputStream& o, const wchar16* w, size_t n) {
     o.Write(data, written);
 }
 
-static void WriteString(IOutputStream& o, const wchar32* w, size_t n) { 
+static void WriteString(IOutputStream& o, const wchar32* w, size_t n) {
     const size_t buflen = (n * MAX_UTF8_BYTES); // * 4 because the conversion functions can convert unicode character into maximum 4 bytes of UTF8
-    TTempBuf buffer(buflen + 1); 
-    char* const data = buffer.Data(); 
-    size_t written = 0; 
-    WideToUTF8(w, n, data, written); 
-    data[written] = 0; 
-    o.Write(data, written); 
-} 
- 
+    TTempBuf buffer(buflen + 1);
+    char* const data = buffer.Data();
+    size_t written = 0;
+    WideToUTF8(w, n, data, written);
+    data[written] = 0;
+    o.Write(data, written);
+}
+
 template <>
 void Out<TString>(IOutputStream& o, const TString& p) {
     o.Write(p.data(), p.size());
@@ -139,24 +139,24 @@ void Out<const wchar16*>(IOutputStream& o, const wchar16* w) {
 }
 
 template <>
-void Out<const wchar32*>(IOutputStream& o, const wchar32* w) { 
-    if (w) { 
+void Out<const wchar32*>(IOutputStream& o, const wchar32* w) {
+    if (w) {
         WriteString(o, w, std::char_traits<wchar32>::length(w));
-    } else { 
-        o.Write("(null)"); 
-    } 
-} 
- 
-template <> 
+    } else {
+        o.Write("(null)");
+    }
+}
+
+template <>
 void Out<TUtf16String>(IOutputStream& o, const TUtf16String& w) {
     WriteString(o, w.c_str(), w.size());
 }
 
-template <> 
-void Out<TUtf32String>(IOutputStream& o, const TUtf32String& w) { 
-    WriteString(o, w.c_str(), w.size()); 
-} 
- 
+template <>
+void Out<TUtf32String>(IOutputStream& o, const TUtf32String& w) {
+    WriteString(o, w.c_str(), w.size());
+}
+
 #define DEF_CONV_DEFAULT(type)                  \
     template <>                                 \
     void Out<type>(IOutputStream & o, type p) { \
@@ -221,12 +221,12 @@ void Out<TBasicCharRef<TUtf16String>>(IOutputStream& o, const TBasicCharRef<TUtf
 }
 
 template <>
-void Out<TBasicCharRef<TUtf32String>>(IOutputStream& o, const TBasicCharRef<TUtf32String>& c) { 
-    o << static_cast<wchar32>(c); 
-} 
+void Out<TBasicCharRef<TUtf32String>>(IOutputStream& o, const TBasicCharRef<TUtf32String>& c) {
+    o << static_cast<wchar32>(c);
+}
 #endif
- 
-template <> 
+
+template <>
 void Out<const void*>(IOutputStream& o, const void* t) {
     o << Hex(size_t(t));
 }

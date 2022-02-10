@@ -67,7 +67,7 @@ struct TSchemeShard::TTxUpgradeAccessDatabaseRights : public TTransactionBase<TS
         }
 
         TString proto;
-        Y_PROTOBUF_SUPPRESS_NODISCARD acl.SerializeToString(&proto); 
+        Y_PROTOBUF_SUPPRESS_NODISCARD acl.SerializeToString(&proto);
 
         return proto;
     }

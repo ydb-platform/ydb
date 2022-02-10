@@ -1,7 +1,7 @@
 #include "http.h"
 #include "http_ex.h"
 
-#include <library/cpp/threading/equeue/equeue.h> 
+#include <library/cpp/threading/equeue/equeue.h>
 
 #include <util/generic/buffer.h>
 #include <util/generic/cast.h>
@@ -260,12 +260,12 @@ public:
         };
 
         if (!fail && Requests->Add(req.Get())) {
-            Y_UNUSED(req.Release()); 
+            Y_UNUSED(req.Release());
         } else {
             req = new TFailRequest(req);
 
             if (FailRequests->Add(req.Get())) {
-                Y_UNUSED(req.Release()); 
+                Y_UNUSED(req.Release());
             } else {
                 Cb_->OnFailRequest(-1);
             }
@@ -664,7 +664,7 @@ void TClientRequest::ReleaseConnection() {
     if (Conn_ && HttpConn_ && HttpServ()->Options().KeepAliveEnabled && HttpConn_->CanBeKeepAlive() && (!HttpServ()->Options().RejectExcessConnections || !HttpServ()->MaxRequestsReached())) {
         Output().Finish();
         Conn_->DeActivate();
-        Y_UNUSED(Conn_.Release()); 
+        Y_UNUSED(Conn_.Release());
     }
 }
 
@@ -720,7 +720,7 @@ void TClientRequest::Process(void* ThreadSpecificResource) {
         throw;
     }
 
-    Y_UNUSED(this_.Release()); 
+    Y_UNUSED(this_.Release());
 }
 
 void TClientRequest::ProcessFailRequest(int failstate) {

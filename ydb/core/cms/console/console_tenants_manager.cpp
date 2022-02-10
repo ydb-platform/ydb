@@ -2304,7 +2304,7 @@ void TTenantsManager::DbAddTenant(TTenant::TPtr tenant,
                     << " state=" << pool.State);
 
         TString config;
-        Y_PROTOBUF_SUPPRESS_NODISCARD pool.Config.SerializeToString(&config); 
+        Y_PROTOBUF_SUPPRESS_NODISCARD pool.Config.SerializeToString(&config);
         db.Table<Schema::TenantPools>().Key(tenant->Path, pool.Kind)
             .Update(NIceDb::TUpdate<Schema::TenantPools::Config>(config),
                     NIceDb::TUpdate<Schema::TenantPools::AllocatedNumGroups>(pool.AllocatedNumGroups),
@@ -2458,7 +2458,7 @@ bool TTenantsManager::DbLoadState(TTransactionContext &txc, const TActorContext 
         TStoragePool::EState state = static_cast<TStoragePool::EState>(stateVal);
 
         NKikimrBlobStorage::TDefineStoragePool config;
-        Y_PROTOBUF_SUPPRESS_NODISCARD config.ParseFromArray(configVal.data(), configVal.size()); 
+        Y_PROTOBUF_SUPPRESS_NODISCARD config.ParseFromArray(configVal.data(), configVal.size());
 
         TStoragePool::TPtr pool = new TStoragePool(type, config);
         pool->AllocatedNumGroups = allocated;
@@ -2653,7 +2653,7 @@ void TTenantsManager::DbUpdatePool(TTenant::TPtr tenant,
                 << " state=" << pool->State);
 
     TString config;
-    Y_PROTOBUF_SUPPRESS_NODISCARD pool->Config.SerializeToString(&config); 
+    Y_PROTOBUF_SUPPRESS_NODISCARD pool->Config.SerializeToString(&config);
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::TenantPools>().Key(tenant->Path, pool->Kind)
         .Update(NIceDb::TUpdate<Schema::TenantPools::Config>(config),
@@ -2671,7 +2671,7 @@ void TTenantsManager::DbUpdatePoolConfig(TTenant::TPtr tenant,
                 << " config=" << config.ShortDebugString());
 
     TString val;
-    Y_PROTOBUF_SUPPRESS_NODISCARD config.SerializeToString(&val); 
+    Y_PROTOBUF_SUPPRESS_NODISCARD config.SerializeToString(&val);
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::TenantPools>().Key(tenant->Path, pool->Kind)
         .Update<Schema::TenantPools::Config>(val);

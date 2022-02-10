@@ -372,7 +372,7 @@ void TNodeBroker::PrepareEpochCache()
     for (auto &entry : ExpiredNodes)
         FillNodeInfo(entry.second, *info.AddExpiredNodes());
 
-    Y_PROTOBUF_SUPPRESS_NODISCARD info.SerializeToString(&EpochCache); 
+    Y_PROTOBUF_SUPPRESS_NODISCARD info.SerializeToString(&EpochCache);
 }
 
 void TNodeBroker::AddNodeToEpochCache(const TNodeInfo &node)
@@ -384,7 +384,7 @@ void TNodeBroker::AddNodeToEpochCache(const TNodeInfo &node)
     FillNodeInfo(node, *info.AddNodes());
 
     TString delta;
-    Y_PROTOBUF_SUPPRESS_NODISCARD info.SerializeToString(&delta); 
+    Y_PROTOBUF_SUPPRESS_NODISCARD info.SerializeToString(&delta);
 
     EpochCache += delta;
 }
@@ -528,7 +528,7 @@ bool TNodeBroker::DbLoadState(TTransactionContext &txc,
     if (configRow.IsValid()) {
         auto configString = configRow.GetValue<Schema::Config::Value>();
         NKikimrNodeBroker::TConfig config;
-        Y_PROTOBUF_SUPPRESS_NODISCARD config.ParseFromArray(configString.data(), configString.size()); 
+        Y_PROTOBUF_SUPPRESS_NODISCARD config.ParseFromArray(configString.data(), configString.size());
         LoadConfigFromProto(config);
 
         LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
@@ -679,7 +679,7 @@ void TNodeBroker::DbUpdateConfig(const NKikimrNodeBroker::TConfig &config,
                 << " config=" << config.ShortDebugString());
 
     TString value;
-    Y_PROTOBUF_SUPPRESS_NODISCARD config.SerializeToString(&value); 
+    Y_PROTOBUF_SUPPRESS_NODISCARD config.SerializeToString(&value);
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::Config>().Key(ConfigKeyConfig)
         .Update<Schema::Config::Value>(value);

@@ -1,6 +1,6 @@
 #include <ydb/core/ymq/base/action.h>
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NSQS {
 

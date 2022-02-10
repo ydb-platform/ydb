@@ -10,7 +10,7 @@
 #include <util/system/hostname.h>
 #include <util/string/printf.h>
 
-#include <library/cpp/string_utils/parse_size/parse_size.h> 
+#include <library/cpp/string_utils/parse_size/parse_size.h>
 
 #include <google/protobuf/text_format.h>
 

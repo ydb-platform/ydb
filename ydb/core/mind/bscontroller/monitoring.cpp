@@ -128,8 +128,8 @@ public:
                             const auto &entry = Logs[id];
                             NKikimrBlobStorage::TConfigRequest request;
                             NKikimrBlobStorage::TConfigResponse response;
-                            Y_PROTOBUF_SUPPRESS_NODISCARD request.ParseFromString(entry.Request); 
-                            Y_PROTOBUF_SUPPRESS_NODISCARD response.ParseFromString(entry.Response); 
+                            Y_PROTOBUF_SUPPRESS_NODISCARD request.ParseFromString(entry.Request);
+                            Y_PROTOBUF_SUPPRESS_NODISCARD response.ParseFromString(entry.Response);
                             TABLED() { out << entry.Index; }
                             TABLED() { out << entry.Timestamp.ToRfc822String(); }
                             TABLED() {

@@ -13,7 +13,7 @@ PEERDIR(
     ydb/library/yql/core/expr_nodes
     ydb/library/yql/ast
     library/cpp/containers/sorted_vector
-    library/cpp/string_utils/parse_size 
+    library/cpp/string_utils/parse_size
     library/cpp/string_utils/levenshtein_diff
 )
 

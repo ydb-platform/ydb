@@ -1,6 +1,6 @@
 #include "utils.h"
 
-#include <library/cpp/string_utils/base64/base64.h> 
+#include <library/cpp/string_utils/base64/base64.h>
 
 namespace NScUtils {
 

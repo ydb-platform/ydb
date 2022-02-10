@@ -156,7 +156,7 @@ public:
             tabletConfig->SetYdbDatabasePath(databasePath);
 
             alterConfig.MutablePartitionKeySchema()->Swap(tabletConfig->MutablePartitionKeySchema());
-            Y_PROTOBUF_SUPPRESS_NODISCARD alterConfig.SerializeToString(&params->TabletConfig); 
+            Y_PROTOBUF_SUPPRESS_NODISCARD alterConfig.SerializeToString(&params->TabletConfig);
             alterConfig.Swap(tabletConfig);
         }
         if (alter.PartitionsToDeleteSize()) {

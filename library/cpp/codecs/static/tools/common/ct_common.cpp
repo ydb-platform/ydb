@@ -2,7 +2,7 @@
 
 #include <library/cpp/codecs/codecs.h>
 #include <library/cpp/codecs/static/static_codec_info.pb.h>
-#include <library/cpp/string_utils/base64/base64.h> 
+#include <library/cpp/string_utils/base64/base64.h>
 
 #include <util/stream/output.h>
 #include <util/string/builder.h>

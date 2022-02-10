@@ -18,7 +18,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/cache 
+    library/cpp/cache
     library/cpp/digest/md5
     library/cpp/logger/global
     library/cpp/threading/future

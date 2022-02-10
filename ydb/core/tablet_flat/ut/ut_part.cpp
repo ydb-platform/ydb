@@ -7,7 +7,7 @@
 #include <ydb/core/tablet_flat/test/libs/table/test_wreck.h>
 #include <ydb/core/tablet_flat/test/libs/table/test_comp.h>
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr {
 namespace NTable {

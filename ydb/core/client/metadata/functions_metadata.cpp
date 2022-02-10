@@ -23,7 +23,7 @@ void SerializeMetadata(const IBuiltinFunctionRegistry& funcRegistry, TString* ou
         }
     }
 
-    Y_PROTOBUF_SUPPRESS_NODISCARD metadata.SerializeToString(out); 
+    Y_PROTOBUF_SUPPRESS_NODISCARD metadata.SerializeToString(out);
 }
 
 void DeserializeMetadata(TStringBuf buffer, IBuiltinFunctionRegistry& funcRegistry)

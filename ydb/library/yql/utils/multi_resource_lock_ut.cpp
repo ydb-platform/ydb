@@ -1,7 +1,7 @@
 #include "multi_resource_lock.h"
 #include <util/generic/xrange.h>
-#include <library/cpp/threading/future/async.h> 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/threading/future/async.h>
+#include <library/cpp/testing/unittest/registar.h>
 
 namespace NYql {
 using namespace NThreading;

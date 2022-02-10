@@ -5,8 +5,8 @@
 
 #include <library/cpp/tvmauth/src/utils.h>
 
-#include <library/cpp/testing/unittest/registar.h> 
-#include <library/cpp/testing/unittest/tests_data.h> 
+#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/tests_data.h>
 
 #include <util/stream/file.h>
 #include <util/system/fs.h>

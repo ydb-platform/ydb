@@ -12,7 +12,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/string_utils/base64 
+    library/cpp/string_utils/base64
     ydb/public/sdk/cpp/client/ydb_table
 )
 

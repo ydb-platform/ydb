@@ -5,7 +5,7 @@ OWNER(g:passport_infra)
 DATA(arcadia/library/cpp/tvmauth/client/ut/files)
 
 PEERDIR(
-    library/cpp/cgiparam 
+    library/cpp/cgiparam
     library/cpp/testing/mock_server
 )
 

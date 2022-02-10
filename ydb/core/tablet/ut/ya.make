@@ -14,7 +14,7 @@ TIMEOUT(600)
 SPLIT_FACTOR(50)
 
 PEERDIR(
-    library/cpp/getopt 
+    library/cpp/getopt
     library/cpp/regex/pcre
     library/cpp/svnversion
     ydb/core/testlib

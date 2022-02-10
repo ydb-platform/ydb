@@ -1,5 +1,5 @@
 #include "yql_expr.h"
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 #include <util/string/hex.h>
 

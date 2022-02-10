@@ -8,8 +8,8 @@
 #include <ydb/core/blobstorage/dsproxy/dsproxy_get_impl.h>
 #include <ydb/core/blobstorage/dsproxy/dsproxy_put_impl.h>
 
-#include <library/cpp/containers/stack_vector/stack_vec.h> 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/containers/stack_vector/stack_vec.h>
+#include <library/cpp/testing/unittest/registar.h>
 #include <util/random/shuffle.h>
 #include <util/stream/str.h>
 

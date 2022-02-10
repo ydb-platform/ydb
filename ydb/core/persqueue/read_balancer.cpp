@@ -678,7 +678,7 @@ void TPersQueueReadBalancer::Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSch
     const auto& record = ev->Get()->GetRecord();
     if (record.GetStatus() == NKikimrScheme::EStatus::StatusSuccess) {
         ACL.Clear();
-        Y_PROTOBUF_SUPPRESS_NODISCARD ACL.MutableACL()->ParseFromString(record.GetPathDescription().GetSelf().GetEffectiveACL()); 
+        Y_PROTOBUF_SUPPRESS_NODISCARD ACL.MutableACL()->ParseFromString(record.GetPathDescription().GetSelf().GetEffectiveACL());
         LastACLUpdate = ctx.Now();
         ctx.Schedule(TDuration::Seconds(AppData(ctx)->PQConfig.GetBalancerMetadataRetryTimeoutSec()), new TEvPersQueue::TEvUpdateACL());
 

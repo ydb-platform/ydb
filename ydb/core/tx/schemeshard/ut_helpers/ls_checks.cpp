@@ -5,7 +5,7 @@
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 namespace NSchemeShardUT_Private {
 namespace NLs {

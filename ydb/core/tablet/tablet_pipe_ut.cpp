@@ -4,7 +4,7 @@
 #include <library/cpp/actors/protos/services_common.pb.h>
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/tx/tx.h>
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <library/cpp/actors/core/hfunc.h>

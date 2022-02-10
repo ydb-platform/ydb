@@ -235,7 +235,7 @@ struct TPodTraits<std::pair<T1, T2>> {
     };
 };
 
-template <class T> 
+template <class T>
 struct TIsPointerToConstMemberFunction: std::false_type {
 };
 

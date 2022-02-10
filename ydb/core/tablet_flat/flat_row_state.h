@@ -2,7 +2,7 @@
 
 #include "flat_row_eggs.h"
 #include <ydb/core/scheme/scheme_tablecell.h>
-#include <library/cpp/containers/stack_vector/stack_vec.h> 
+#include <library/cpp/containers/stack_vector/stack_vec.h>
 
 namespace NKikimr {
 namespace NTable {

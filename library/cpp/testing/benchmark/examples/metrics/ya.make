@@ -15,6 +15,6 @@ TAG(
 
 TEST_SRCS(main.py)
 
-DEPENDS(library/cpp/testing/benchmark/examples) 
+DEPENDS(library/cpp/testing/benchmark/examples)
 
 END()

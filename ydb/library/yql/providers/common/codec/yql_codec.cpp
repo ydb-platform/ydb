@@ -16,7 +16,7 @@
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/yson/writer.h>
 
-#include <library/cpp/string_utils/base64/base64.h> 
+#include <library/cpp/string_utils/base64/base64.h>
 #include <library/cpp/yson/parser.h>
 #include <library/cpp/yson/detail.h>
 

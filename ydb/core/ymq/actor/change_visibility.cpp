@@ -8,7 +8,7 @@
 #include <ydb/core/ymq/base/helpers.h>
 #include <ydb/core/ymq/proto/records.pb.h>
 
-#include <library/cpp/string_utils/base64/base64.h> 
+#include <library/cpp/string_utils/base64/base64.h>
 
 using NKikimr::NClient::TValue;
 

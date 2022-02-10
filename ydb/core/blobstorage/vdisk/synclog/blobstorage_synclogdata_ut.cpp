@@ -1,6 +1,6 @@
 #include "blobstorage_synclogdata.h"
 #include <ydb/core/blobstorage/vdisk/common/memusage.h>
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 #include <util/stream/null.h>
 

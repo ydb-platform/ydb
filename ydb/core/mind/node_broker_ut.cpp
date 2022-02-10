@@ -17,7 +17,7 @@
 #include <google/protobuf/text_format.h>
 #include <library/cpp/malloc/api/malloc.h>
 #include <library/cpp/svnversion/svnversion.h>
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 #include <util/string/printf.h>
 #include <util/string/subst.h>

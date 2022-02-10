@@ -1,6 +1,6 @@
 #include <library/cpp/yson_pull/detail/cescape.h>
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 using namespace NYsonPull::NDetail;
 

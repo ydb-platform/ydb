@@ -1,6 +1,6 @@
 #include "defaults.h"
 #include "gen_restarts.h"
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 // Test Suite for checking migration of HugeBlobMap, i.e. we change diapason of huge blobs and

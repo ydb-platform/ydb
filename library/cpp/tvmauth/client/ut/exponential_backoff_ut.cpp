@@ -1,6 +1,6 @@
 #include <library/cpp/tvmauth/client/misc/exponential_backoff.h>
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 #include <thread>
 

@@ -4,7 +4,7 @@
 #include <library/cpp/monlib/metrics/metric_value.h>
 #include <library/cpp/monlib/metrics/histogram_snapshot.h>
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 #include <util/stream/str.h>
 

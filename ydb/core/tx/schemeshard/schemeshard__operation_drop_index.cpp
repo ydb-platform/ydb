@@ -104,7 +104,7 @@ public:
                 PathIdFromPathId(childPathId, notice->MutableIndexPathId());
             }
 
-            Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody); 
+            Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);
         }
 
         Y_VERIFY(txState->Shards.size());

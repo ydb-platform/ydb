@@ -84,7 +84,7 @@ void TSysViewProcessor::PersistTopResults(NIceDb::TNiceDb& db,
             TString text;
             TString serialized;
             resultStats.MutableQueryText()->swap(text);
-            Y_PROTOBUF_SUPPRESS_NODISCARD resultStats.SerializeToString(&serialized); 
+            Y_PROTOBUF_SUPPRESS_NODISCARD resultStats.SerializeToString(&serialized);
             db.Table<TSchema>().Key(key).Update(
                 NIceDb::TUpdate<typename TSchema::Text>(text),
                 NIceDb::TUpdate<typename TSchema::Data>(serialized));
@@ -119,7 +119,7 @@ void TSysViewProcessor::PersistResults(NIceDb::TNiceDb& db) {
         resultMetrics.Metrics = queryMetrics.Metrics;
 
         TString serialized;
-        Y_PROTOBUF_SUPPRESS_NODISCARD resultMetrics.Metrics.SerializeToString(&serialized); 
+        Y_PROTOBUF_SUPPRESS_NODISCARD resultMetrics.Metrics.SerializeToString(&serialized);
         db.Table<Schema::MetricsOneMinute>().Key(key).Update(
             NIceDb::TUpdate<Schema::MetricsOneMinute::Text>(resultMetrics.Text),
             NIceDb::TUpdate<Schema::MetricsOneMinute::Data>(serialized));

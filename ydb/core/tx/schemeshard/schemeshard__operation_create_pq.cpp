@@ -163,7 +163,7 @@ TPersQueueGroupInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
     const TString databasePath = TPath::Init(context.SS->RootPathId(), context.SS).PathString();
     tabletConfig.SetYdbDatabasePath(databasePath);
 
-    Y_PROTOBUF_SUPPRESS_NODISCARD tabletConfig.SerializeToString(&pqGroupInfo->TabletConfig); 
+    Y_PROTOBUF_SUPPRESS_NODISCARD tabletConfig.SerializeToString(&pqGroupInfo->TabletConfig);
 
     if (op.HasBootstrapConfig()) {
         Y_PROTOBUF_SUPPRESS_NODISCARD op.GetBootstrapConfig().SerializeToString(&pqGroupInfo->BootstrapConfig);

@@ -2644,7 +2644,7 @@ namespace NCompShard {
         for (auto& shard : Shards) {
             header.AddShards(shard.Id);
         }
-        Y_PROTOBUF_SUPPRESS_NODISCARD header.SerializeToString(out); 
+        Y_PROTOBUF_SUPPRESS_NODISCARD header.SerializeToString(out);
     }
 
 }

@@ -1,4 +1,4 @@
-UNITTEST_FOR(library/cpp/threading/queue) 
+UNITTEST_FOR(library/cpp/threading/queue)
 
 OWNER(agri)
 

@@ -52,7 +52,7 @@ void TPqIoTestFixture::InitSource(
         partitioninigParams->SetDqPartitionsCount(1);
 
         TString serializedParams;
-        Y_PROTOBUF_SUPPRESS_NODISCARD params.SerializeToString(&serializedParams); 
+        Y_PROTOBUF_SUPPRESS_NODISCARD params.SerializeToString(&serializedParams);
 
         const THashMap<TString, TString> secureParams;
         const THashMap<TString, TString> taskParams { {"pq", serializedParams} };

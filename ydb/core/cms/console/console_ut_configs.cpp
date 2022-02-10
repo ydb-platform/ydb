@@ -13,7 +13,7 @@
 #include <library/cpp/actors/interconnect/interconnect_impl.h>
 
 #include <ydb/core/testlib/tenant_runtime.h>
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 #include <util/system/hostname.h>
 

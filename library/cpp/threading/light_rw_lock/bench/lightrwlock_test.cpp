@@ -1,4 +1,4 @@
-#include <library/cpp/threading/light_rw_lock/lightrwlock.h> 
+#include <library/cpp/threading/light_rw_lock/lightrwlock.h>
 #include <util/random/random.h>
 
 #ifdef _linux_

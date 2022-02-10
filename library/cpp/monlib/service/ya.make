@@ -11,7 +11,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/string_utils/base64 
+    library/cpp/string_utils/base64
     contrib/libs/protobuf
     library/cpp/coroutine/engine
     library/cpp/coroutine/listener
@@ -22,7 +22,7 @@ PEERDIR(
     library/cpp/malloc/api
     library/cpp/svnversion
     library/cpp/uri
-    library/cpp/cgiparam 
+    library/cpp/cgiparam
 )
 
 END()

@@ -1,8 +1,8 @@
 #include <util/random/shuffle.h>
 #include <ydb/core/ymq/client/cpp/client.h>
 
-#include <library/cpp/getopt/opt.h> 
-#include <library/cpp/getopt/modchooser.h> 
+#include <library/cpp/getopt/opt.h>
+#include <library/cpp/getopt/modchooser.h>
 
 #include <util/stream/file.h>
 #include <util/stream/output.h>

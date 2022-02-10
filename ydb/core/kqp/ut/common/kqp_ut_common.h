@@ -13,8 +13,8 @@
 #include <ydb/library/yql/core/issue/yql_issue.h>
 
 #include <library/cpp/json/json_reader.h>
-#include <library/cpp/testing/unittest/tests_data.h> 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/tests_data.h>
+#include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/yson/writer.h>
 
 #define Y_UNIT_TEST_TWIN(N, OPT)                                                                                   \

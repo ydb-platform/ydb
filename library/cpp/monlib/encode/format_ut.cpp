@@ -1,6 +1,6 @@
 #include "format.h"
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/string.h>
 #include <util/string/builder.h>

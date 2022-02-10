@@ -5,11 +5,11 @@
 #include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 #include <util/folder/tempdir.h>
 #include <util/generic/strbuf.h>
-#include <library/cpp/string_utils/quote/quote.h> 
+#include <library/cpp/string_utils/quote/quote.h>
 
 namespace NYdb {
 

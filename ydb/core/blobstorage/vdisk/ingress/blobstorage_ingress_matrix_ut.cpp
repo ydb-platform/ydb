@@ -1,7 +1,7 @@
 #include "blobstorage_ingress_matrix.h"
 
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 #define STR Cnull
 

@@ -1,6 +1,6 @@
 #include "yql_codec_results.h"
 
-#include <library/cpp/string_utils/base64/base64.h> 
+#include <library/cpp/string_utils/base64/base64.h>
 
 #include <ydb/library/yql/utils/utf8.h>
 

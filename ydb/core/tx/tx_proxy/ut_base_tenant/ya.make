@@ -17,9 +17,9 @@ ELSE()
 ENDIF()
 
 PEERDIR(
-    library/cpp/getopt 
+    library/cpp/getopt
     library/cpp/svnversion
-    library/cpp/testing/unittest 
+    library/cpp/testing/unittest
     ydb/core/testlib
     ydb/core/tx
     ydb/library/yql/public/udf/service/exception_policy

@@ -26,7 +26,7 @@
 #include <library/cpp/actors/core/executor_pool_basic.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/scheduler_basic.h>
-#include <library/cpp/threading/future/future.h> 
+#include <library/cpp/threading/future/future.h>
 #include <library/cpp/yson/writer.h>
 
 #include <util/generic/ptr.h>

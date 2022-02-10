@@ -9,9 +9,9 @@
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 
 #include <library/cpp/actors/interconnect/interconnect_impl.h>
-#include <library/cpp/testing/unittest/tests_data.h> 
-#include <library/cpp/testing/unittest/registar.h> 
-#include <library/cpp/diff/diff.h> 
+#include <library/cpp/testing/unittest/tests_data.h>
+#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/diff/diff.h>
 
 #include <ydb/library/yql/ast/yql_ast.h>
 #include <ydb/library/yql/ast/yql_expr.h>

@@ -43,7 +43,7 @@ TString GetTablePath(TTestActorRuntime &runtime,
     TString schema = value["myRes"]["Schema"];
 
     NKikimrSchemeOp::TTableDescription desc;
-    Y_PROTOBUF_SUPPRESS_NODISCARD desc.ParseFromArray(schema.data(), schema.size()); 
+    Y_PROTOBUF_SUPPRESS_NODISCARD desc.ParseFromArray(schema.data(), schema.size());
 
     return desc.GetPath();
 }
@@ -141,7 +141,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
                 if (rec.GetTxKind() == NKikimrTxDataShard::TX_KIND_SCHEME) {
                     TString body = rec.GetTxBody();
                     NKikimrTxDataShard::TFlatSchemeTransaction tx;
-                    Y_PROTOBUF_SUPPRESS_NODISCARD tx.ParseFromArray(body.Data(), body.Size()); 
+                    Y_PROTOBUF_SUPPRESS_NODISCARD tx.ParseFromArray(body.Data(), body.Size());
                     if (tx.HasCreateTable()) {
                         tableId = tx.GetCreateTable().GetId_Deprecated();
                         if (tx.GetCreateTable().HasPathId()) {
@@ -150,7 +150,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
                         }
                         if (oldCreate) {
                             tx.MutableCreateTable()->ClearPath();
-                            Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&body); 
+                            Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&body);
                             rec.SetTxBody(body);
                         }
                     }

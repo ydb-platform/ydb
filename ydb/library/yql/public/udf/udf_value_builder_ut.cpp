@@ -1,7 +1,7 @@
 #include "udf_value_builder.h"
 #include "udf_ut_helpers.h"
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 using namespace NYql::NUdf;
 

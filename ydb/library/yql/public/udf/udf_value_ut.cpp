@@ -2,7 +2,7 @@
 #include "udf_ut_helpers.h"
 
 #include <ydb/library/yql/minikql/mkql_alloc.h>
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 using namespace NYql::NUdf;
 

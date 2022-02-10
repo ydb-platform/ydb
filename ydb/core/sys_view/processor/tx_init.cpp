@@ -30,11 +30,11 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
             if constexpr (std::is_same<TEntry, TQueryToMetrics>::value) {
                 result.Text = std::move(text);
                 if (data) {
-                    Y_PROTOBUF_SUPPRESS_NODISCARD result.Metrics.ParseFromString(data); 
+                    Y_PROTOBUF_SUPPRESS_NODISCARD result.Metrics.ParseFromString(data);
                 }
             } else {
                 if (data) {
-                    Y_PROTOBUF_SUPPRESS_NODISCARD result.ParseFromString(data); 
+                    Y_PROTOBUF_SUPPRESS_NODISCARD result.ParseFromString(data);
                 }
                 result.SetQueryText(std::move(text));
             }
@@ -184,7 +184,7 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
                 auto& queryMetrics = Self->QueryMetrics[queryHash];
                 queryMetrics.Text = text;
                 if (metrics) {
-                    Y_PROTOBUF_SUPPRESS_NODISCARD queryMetrics.Metrics.ParseFromString(metrics); 
+                    Y_PROTOBUF_SUPPRESS_NODISCARD queryMetrics.Metrics.ParseFromString(metrics);
                 }
 
                 if (!rowset.Next()) {
@@ -222,7 +222,7 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
                 TTopQuery query{queryHash, value, nodeId, {}};
                 if (stats) {
                     query.Stats = MakeHolder<NKikimrSysView::TQueryStats>();
-                    Y_PROTOBUF_SUPPRESS_NODISCARD query.Stats->ParseFromString(stats); 
+                    Y_PROTOBUF_SUPPRESS_NODISCARD query.Stats->ParseFromString(stats);
                 }
 
                 switch ((NKikimrSysView::EStatsType)type) {

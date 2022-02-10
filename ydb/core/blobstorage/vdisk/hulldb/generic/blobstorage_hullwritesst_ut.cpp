@@ -4,7 +4,7 @@
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullds_ut.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_logoblob.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_block.h>
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 #include <util/stream/null.h>
 

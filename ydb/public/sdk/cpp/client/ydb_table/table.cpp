@@ -15,7 +15,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_table/impl/data_query.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/impl/request_migrator.h>
 
-#include <library/cpp/cache/cache.h> 
+#include <library/cpp/cache/cache.h>
 
 #include <util/generic/map.h>
 #include <util/random/random.h>

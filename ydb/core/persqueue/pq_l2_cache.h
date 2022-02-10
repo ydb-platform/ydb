@@ -5,7 +5,7 @@
 
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
-#include <library/cpp/cache/cache.h> 
+#include <library/cpp/cache/cache.h>
 
 #include <util/generic/hash.h>
 

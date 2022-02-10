@@ -39,7 +39,7 @@ PEERDIR(
     library/cpp/grpc/server/actors
     library/cpp/regex/pcre
     library/cpp/testing/gmock_in_unittest
-    library/cpp/testing/unittest 
+    library/cpp/testing/unittest
     ydb/core/base
     ydb/core/blobstorage/base
     ydb/core/blobstorage/pdisk

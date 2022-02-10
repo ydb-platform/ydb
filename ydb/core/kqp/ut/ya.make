@@ -59,7 +59,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/threading/local_executor 
+    library/cpp/threading/local_executor
     ydb/core/client/minikql_compile
     ydb/core/kqp
     ydb/core/kqp/counters

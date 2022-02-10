@@ -58,7 +58,7 @@ struct TTxCoordinator::TTxConfigure : public TTransactionBase<TTxCoordinator> {
 
         auto persistConfig = [&]() {
             TString encodedConfig;
-            Y_PROTOBUF_SUPPRESS_NODISCARD Config.SerializeToString(&encodedConfig); 
+            Y_PROTOBUF_SUPPRESS_NODISCARD Config.SerializeToString(&encodedConfig);
             db.Table<Schema::DomainConfiguration>().Key(Version).Update(
                     NIceDb::TUpdate<Schema::DomainConfiguration::Mediators>(Mediators),
                     NIceDb::TUpdate<Schema::DomainConfiguration::Resolution>(Resolution),

@@ -2,7 +2,7 @@
 
 #include <library/cpp/messagebus/queue_config.h>
 #include <library/cpp/messagebus/session_config.h>
-#include <library/cpp/getopt/last_getopt.h> 
+#include <library/cpp/getopt/last_getopt.h>
 
 namespace NKikimr {
 namespace NMsgBusProxy {

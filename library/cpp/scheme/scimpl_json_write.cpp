@@ -2,7 +2,7 @@
 #include "scimpl_private.h"
 
 #include <library/cpp/json/json_prettifier.h>
-#include <library/cpp/string_utils/relaxed_escaper/relaxed_escaper.h> 
+#include <library/cpp/string_utils/relaxed_escaper/relaxed_escaper.h>
 
 #include <util/charset/utf8.h>
 #include <util/generic/algorithm.h>

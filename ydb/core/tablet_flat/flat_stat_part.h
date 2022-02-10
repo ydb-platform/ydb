@@ -5,7 +5,7 @@
 #include "flat_page_frames.h"
 #include "util_basics.h"
 
-#include <library/cpp/containers/stack_vector/stack_vec.h> 
+#include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <util/draft/holder_vector.h>
 
 namespace NKikimr {

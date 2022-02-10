@@ -1,6 +1,6 @@
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
-#include <library/cpp/getopt/small/wrap.h> 
+#include <library/cpp/getopt/small/wrap.h>
 
 Y_UNIT_TEST_SUITE(Wrap) {
     Y_UNIT_TEST(TestWrapping) {

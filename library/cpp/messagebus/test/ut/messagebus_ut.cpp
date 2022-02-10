@@ -1,4 +1,4 @@
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 #include <library/cpp/messagebus/test/helper/example.h>
 #include <library/cpp/messagebus/test/helper/fixed_port.h>
@@ -733,7 +733,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
 
             // intentionally don't destroy the message
             // we will try to resend it
-            Y_UNUSED(message.Release()); 
+            Y_UNUSED(message.Release());
 
             TestSync.CheckAndIncrement(1);
         }

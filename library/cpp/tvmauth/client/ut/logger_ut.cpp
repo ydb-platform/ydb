@@ -2,7 +2,7 @@
 
 #include <library/cpp/tvmauth/client/logger.h>
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 using namespace NTvmAuth;
 

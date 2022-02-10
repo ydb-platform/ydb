@@ -1,7 +1,7 @@
 #include "validator_nameservice.h"
 #include "validator_ut_common.h"
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr {
 namespace NConsole {

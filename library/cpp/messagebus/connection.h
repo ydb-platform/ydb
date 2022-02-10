@@ -22,7 +22,7 @@ namespace NBus {
         EMessageStatus SendMessageAutoPtr(const TAutoPtr<T>& mes, bool wait = false) {
             EMessageStatus status = SendMessage(mes.Get(), wait);
             if (status == MESSAGE_OK)
-                Y_UNUSED(mes.Release()); 
+                Y_UNUSED(mes.Release());
             return status;
         }
 
@@ -31,7 +31,7 @@ namespace NBus {
         EMessageStatus SendMessageOneWayAutoPtr(const TAutoPtr<T>& mes, bool wait = false) {
             EMessageStatus status = SendMessageOneWay(mes.Get(), wait);
             if (status == MESSAGE_OK)
-                Y_UNUSED(mes.Release()); 
+                Y_UNUSED(mes.Release());
             return status;
         }
 

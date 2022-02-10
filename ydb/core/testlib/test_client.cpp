@@ -74,7 +74,7 @@
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/core/engine/mkql_engine_flat.h>
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/kesus/proxy/proxy.h>
 #include <ydb/core/kesus/tablet/tablet.h>
 #include <ydb/core/sys_view/processor/processor.h>
@@ -95,7 +95,7 @@
 
 #include <util/system/sanitizers.h>
 #include <util/system/valgrind.h>
-#include <util/system/env.h> 
+#include <util/system/env.h>
 
 namespace NKikimr {
 
@@ -975,7 +975,7 @@ namespace Tests {
         if (!supportsRedirect || !IsServerRedirected())
             return ChangeStateStorage(schemeRoot, domain);
 
-        TString domainRedirect = GetEnv(DomainRedirectEnvVar); 
+        TString domainRedirect = GetEnv(DomainRedirectEnvVar);
         if (!domainRedirect)
             ythrow TWithBackTrace<yexception>() << "Please set domain redirect, format: KIKIMR_TEST_DOMAIN=domain/RootShardTabletId";
 
@@ -2263,7 +2263,7 @@ namespace Tests {
     }
 
     bool IsServerRedirected() {
-        return !!GetEnv(ServerRedirectEnvVar); 
+        return !!GetEnv(ServerRedirectEnvVar);
     }
 
     TServerSetup GetServerSetup() {
@@ -2271,7 +2271,7 @@ namespace Tests {
             return TServerSetup("localhost", 0);
         }
 
-        TStringBuf str(GetEnv(ServerRedirectEnvVar)); 
+        TStringBuf str(GetEnv(ServerRedirectEnvVar));
         TStringBuf address;
         TStringBuf port;
         str.Split('/', address, port);

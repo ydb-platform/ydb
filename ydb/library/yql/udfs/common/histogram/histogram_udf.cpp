@@ -236,7 +236,7 @@ namespace {
                 THistogram proto;
                 TString result;
                 static_cast<THistogramResource*>(args[0].AsBoxed().Get())->Get()->ToProto(proto);
-                Y_PROTOBUF_SUPPRESS_NODISCARD proto.SerializeToString(&result); 
+                Y_PROTOBUF_SUPPRESS_NODISCARD proto.SerializeToString(&result);
                 return valueBuilder->NewString(result);
             } catch (const std::exception& e) {
                 UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
@@ -287,7 +287,7 @@ namespace {
             try {
                 Y_UNUSED(valueBuilder);
                 THistogram proto;
-                Y_PROTOBUF_SUPPRESS_NODISCARD proto.ParseFromString(TString(args[0].AsStringRef())); 
+                Y_PROTOBUF_SUPPRESS_NODISCARD proto.ParseFromString(TString(args[0].AsStringRef()));
                 THolder<THistogramResource> histogram(new THistogramResource(args[1].Get<ui32>()));
                 histogram->Get()->FromProto(proto);
                 return TUnboxedValuePod(histogram.Release());
@@ -511,7 +511,7 @@ namespace {
         try {
             Y_UNUSED(valueBuilder);
             THistogram proto;
-            Y_PROTOBUF_SUPPRESS_NODISCARD proto.ParseFromString(TString(args[0].AsStringRef())); 
+            Y_PROTOBUF_SUPPRESS_NODISCARD proto.ParseFromString(TString(args[0].AsStringRef()));
             THolder<THistogramResource> histogram(
                 new THistogramResource(args[1].Get<double>(), args[2].Get<double>(), args[3].Get<double>()));
             histogram->Get()->FromProto(proto);
@@ -581,7 +581,7 @@ namespace {
         try {
             Y_UNUSED(valueBuilder);
             THistogram proto;
-            Y_PROTOBUF_SUPPRESS_NODISCARD proto.ParseFromString(TString(args[0].AsStringRef())); 
+            Y_PROTOBUF_SUPPRESS_NODISCARD proto.ParseFromString(TString(args[0].AsStringRef()));
             THolder<THistogramResource> histogram(
                 new THistogramResource(args[1].Get<double>(), args[2].Get<double>(), args[3].Get<double>()));
             histogram->Get()->FromProto(proto);

@@ -235,7 +235,7 @@ private:
 
     static TString ProtobufToString(const NProtoBuf::Message& proto) {
         TString ret;
-        Y_PROTOBUF_SUPPRESS_NODISCARD proto.SerializeToString(&ret); 
+        Y_PROTOBUF_SUPPRESS_NODISCARD proto.SerializeToString(&ret);
         return ret;
     }
 

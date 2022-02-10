@@ -4,7 +4,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/sys_view/common/events.h>
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr {
 namespace NSysView {

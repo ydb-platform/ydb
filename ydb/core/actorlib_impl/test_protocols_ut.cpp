@@ -4,8 +4,8 @@
 #include <library/cpp/http/server/http_ex.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_value.h>
-#include <library/cpp/testing/unittest/registar.h> 
-#include <library/cpp/testing/unittest/tests_data.h> 
+#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <util/stream/null.h>
 #include <util/system/event.h>

@@ -4,8 +4,8 @@
 
 #include <library/cpp/grpc/server/grpc_server.h>
 
-#include <library/cpp/testing/unittest/registar.h> 
-#include <library/cpp/testing/unittest/tests_data.h> 
+#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/tests_data.h>
 
 #include <util/system/tempfile.h>
 

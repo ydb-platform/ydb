@@ -3,7 +3,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/protos/config.pb.h>
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 #include <util/string/subst.h>
 

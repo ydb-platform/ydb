@@ -2,7 +2,7 @@
 #include "yql_expr.h"
 #include "yql_ast_escaping.h"
 
-#include <library/cpp/containers/stack_vector/stack_vec.h> 
+#include <library/cpp/containers/stack_vector/stack_vec.h>
 
 #include <util/string/cast.h>
 #include <util/generic/map.h>

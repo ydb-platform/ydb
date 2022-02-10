@@ -138,7 +138,7 @@ public:
 
             int i = 0;
             for (auto& [_, entry] : event->InfoEntries) {
-                Y_PROTOBUF_SUPPRESS_NODISCARD resources[i].ParseFromString(entry.Payload); 
+                Y_PROTOBUF_SUPPRESS_NODISCARD resources[i].ParseFromString(entry.Payload);
                 LOG_D("WhiteBoard [" << i << "]: " << resources[i].ShortDebugString());
                 i++;
             }

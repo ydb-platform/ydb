@@ -682,7 +682,7 @@ def main(**kwargs):
     Additional keyword arguments passed through to ``unittest.main()``.
     For example, use ``tornado.testing.main(verbosity=2)``
     to show many test details as they are run.
-    See http://docs.python.org/library/unittest.html#unittest.main 
+    See http://docs.python.org/library/unittest.html#unittest.main
     for full argument list.
     """
     from tornado.options import define, options, parse_command_line

@@ -1,4 +1,4 @@
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 #include <library/cpp/messagebus/test/helper/example.h>
 #include <library/cpp/messagebus/test/helper/message_handler_error.h>

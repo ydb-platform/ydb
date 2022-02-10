@@ -59,7 +59,7 @@ bool TElasticQueue::Add(IObjectInQueue* obj) {
     }
 
     if (SlaveQueue_->Add(wrapper.Get())) {
-        Y_UNUSED(wrapper.Release()); 
+        Y_UNUSED(wrapper.Release());
         return true;
     } else {
         return false;

@@ -1,6 +1,6 @@
 #include <library/cpp/containers/limited_heap/limited_heap.h>
 #include <library/cpp/containers/top_keeper/top_keeper.h>
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 #include <util/random/random.h>
 
 static ui32 seed = 3;

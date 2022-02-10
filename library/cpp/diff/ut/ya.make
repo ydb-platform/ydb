@@ -2,10 +2,10 @@ UNITTEST()
 
 OWNER(antonovvk)
 
-SRCDIR(library/cpp/diff) 
+SRCDIR(library/cpp/diff)
 
 PEERDIR(
-    library/cpp/diff 
+    library/cpp/diff
 )
 
 SRCS(

@@ -35,7 +35,7 @@ namespace NXml {
                 if (!node)
                     THROW(XmlException, "Can't create root node.");
                 xmlDocSetRootElement(doc.Get(), node.Get());
-                Y_UNUSED(node.Release()); 
+                Y_UNUSED(node.Release());
                 Doc = std::move(doc);
             } break;
             default:
@@ -56,7 +56,7 @@ namespace NXml {
     }
 
     void TDocument::ParseFile(const TString& file) {
-        if (!NFs::Exists(file)) 
+        if (!NFs::Exists(file))
             THROW(XmlException, "File " << file << " doesn't exist");
 
         TParserCtxtPtr pctx(xmlNewParserCtxt());

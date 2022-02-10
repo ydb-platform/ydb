@@ -50,7 +50,7 @@ struct TSchemeShard::TTxMakeAccessDatabaseNoInheritable : public TTransactionBas
         }
 
         TString proto;
-        Y_PROTOBUF_SUPPRESS_NODISCARD acl.SerializeToString(&proto); 
+        Y_PROTOBUF_SUPPRESS_NODISCARD acl.SerializeToString(&proto);
 
         return proto;
     }

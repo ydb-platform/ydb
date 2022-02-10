@@ -9,7 +9,7 @@
 
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 template <>
 inline void Out<NKikimrTxDataShard::TEvBuildIndexProgressResponse::EStatus>

@@ -1,6 +1,6 @@
 #include <util/generic/overloaded.h>
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/variant.h>
 #include <util/generic/algorithm.h>

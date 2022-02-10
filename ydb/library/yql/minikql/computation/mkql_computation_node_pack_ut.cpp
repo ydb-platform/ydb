@@ -11,7 +11,7 @@
 
 #include <ydb/library/yql/public/udf/udf_value.h>
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/ylimits.h>
 #include <util/generic/xrange.h>
 #include <util/generic/maybe.h>

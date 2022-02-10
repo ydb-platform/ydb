@@ -11,7 +11,7 @@
 #include <library/cpp/actors/interconnect/mock/ic_mock.h>
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/time_provider/time_provider.h>
-#include <library/cpp/testing/unittest/tests_data.h> 
+#include <library/cpp/testing/unittest/tests_data.h>
 
 #include <util/datetime/base.h>
 #include <util/folder/tempdir.h>

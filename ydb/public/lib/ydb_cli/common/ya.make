@@ -24,7 +24,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/getopt 
+    library/cpp/getopt
     library/cpp/json/writer
     library/cpp/yaml/as
     ydb/public/lib/json_value

@@ -4,7 +4,7 @@
 #include <util/random/mersenne.h>
 #include <util/stream/buffer.h>
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 #include <cmath>
 

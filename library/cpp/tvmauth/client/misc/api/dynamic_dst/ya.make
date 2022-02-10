@@ -3,7 +3,7 @@ LIBRARY()
 OWNER(g:passport_infra)
 
 PEERDIR(
-    library/cpp/threading/future 
+    library/cpp/threading/future
     library/cpp/tvmauth/client
 )
 

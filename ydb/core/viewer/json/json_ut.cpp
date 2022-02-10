@@ -1,5 +1,5 @@
-#include <library/cpp/testing/unittest/registar.h> 
-#include <library/cpp/testing/unittest/tests_data.h> 
+#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/tests_data.h>
 #include "json.h"
 #include <ydb/core/viewer/protos/viewer.pb.h>
 

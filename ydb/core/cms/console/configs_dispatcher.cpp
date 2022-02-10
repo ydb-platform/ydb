@@ -328,8 +328,8 @@ void TConfigsDispatcher::ReplaceConfigItems(const NKikimrConfig::TAppConfig &fro
 bool TConfigsDispatcher::CompareConfigs(const NKikimrConfig::TAppConfig &lhs, const NKikimrConfig::TAppConfig &rhs)
 {
     TString str1, str2;
-    Y_PROTOBUF_SUPPRESS_NODISCARD lhs.SerializeToString(&str1); 
-    Y_PROTOBUF_SUPPRESS_NODISCARD rhs.SerializeToString(&str2); 
+    Y_PROTOBUF_SUPPRESS_NODISCARD lhs.SerializeToString(&str1);
+    Y_PROTOBUF_SUPPRESS_NODISCARD rhs.SerializeToString(&str2);
     return (str1 == str2);
 }
 

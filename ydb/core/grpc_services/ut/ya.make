@@ -17,7 +17,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/getopt 
+    library/cpp/getopt
     library/cpp/regex/pcre
     library/cpp/svnversion
     ydb/core/client/scheme_cache_lib

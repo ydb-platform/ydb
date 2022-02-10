@@ -55,7 +55,7 @@ struct TSyncMessageCookie : public TMessageCookie {
     }
 
     virtual void Signal(TAutoPtr<NBus::TBusMessage>& msg, NBus::EMessageStatus errorStatus, TAutoPtr<NBus::TBusMessage> reply) {
-        Y_UNUSED(msg.Release()); 
+        Y_UNUSED(msg.Release());
         ErrorStatus = errorStatus;
         Reply = reply;
         Ev.Signal();
@@ -158,8 +158,8 @@ NBus::EMessageStatus TMsgBusClient::AsyncCall(TAutoPtr<NBus::TBusMessage> msg, T
 
     if (status == NBus::MESSAGE_OK) {
         // would be destructed in onresult/onerror
-        Y_UNUSED(cookie.Release()); 
-        Y_UNUSED(msg.Release()); 
+        Y_UNUSED(cookie.Release());
+        Y_UNUSED(msg.Release());
     }
 
     return status;
@@ -178,8 +178,8 @@ NBus::EMessageStatus TMsgBusClient::AsyncCall(TAutoPtr<NBus::TBusMessage> msg, T
 
     if (status == NBus::MESSAGE_OK) {
         // would be destructed in onresult/onerror
-        Y_UNUSED(cookie.Release()); 
-        Y_UNUSED(msg.Release()); 
+        Y_UNUSED(cookie.Release());
+        Y_UNUSED(msg.Release());
     }
 
     return status;

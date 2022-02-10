@@ -2169,11 +2169,11 @@ void TSchemeShard::PersistTableAlterVersion(NIceDb::TNiceDb& db, const TPathId p
 
 void TSchemeShard::PersistTableAltered(NIceDb::TNiceDb& db, const TPathId pathId, const TTableInfo::TPtr tableInfo) {
     TString partitionConfig;
-    Y_PROTOBUF_SUPPRESS_NODISCARD tableInfo->PartitionConfig().SerializeToString(&partitionConfig); 
+    Y_PROTOBUF_SUPPRESS_NODISCARD tableInfo->PartitionConfig().SerializeToString(&partitionConfig);
 
     TString ttlSettings;
     if (tableInfo->HasTTLSettings()) {
-        Y_PROTOBUF_SUPPRESS_NODISCARD tableInfo->TTLSettings().SerializeToString(&ttlSettings); 
+        Y_PROTOBUF_SUPPRESS_NODISCARD tableInfo->TTLSettings().SerializeToString(&ttlSettings);
     }
 
     if (pathId.OwnerId == TabletID()) {
@@ -2238,7 +2238,7 @@ void TSchemeShard::PersistTableCreated(NIceDb::TNiceDb& db, const TPathId pathId
 
 void TSchemeShard::PersistAddAlterTable(NIceDb::TNiceDb& db, TPathId pathId, const TTableInfo::TAlterDataPtr alter) {
     TString proto;
-    Y_PROTOBUF_SUPPRESS_NODISCARD alter->TableDescriptionFull->SerializeToString(&proto); 
+    Y_PROTOBUF_SUPPRESS_NODISCARD alter->TableDescriptionFull->SerializeToString(&proto);
     if (pathId.OwnerId == TabletID()) {
         db.Table<Schema::Tables>().Key(pathId.LocalPathId).Update(
             NIceDb::TUpdate<Schema::Tables::AlterTableFull>(proto));
@@ -2699,7 +2699,7 @@ void TSchemeShard::PersistBlockStoreVolume(NIceDb::TNiceDb& db, TPathId pathId, 
     Y_VERIFY(IsLocalId(pathId));
 
     TString volumeConfig;
-    Y_PROTOBUF_SUPPRESS_NODISCARD volume->VolumeConfig.SerializeToString(&volumeConfig); 
+    Y_PROTOBUF_SUPPRESS_NODISCARD volume->VolumeConfig.SerializeToString(&volumeConfig);
     db.Table<Schema::BlockStoreVolumes>().Key(pathId.LocalPathId).Update(
         NIceDb::TUpdate<Schema::BlockStoreVolumes::VolumeConfig>(volumeConfig),
         NIceDb::TUpdate<Schema::BlockStoreVolumes::AlterVersion>(volume->AlterVersion),
@@ -2719,7 +2719,7 @@ void TSchemeShard::PersistAddBlockStoreVolumeAlter(NIceDb::TNiceDb& db, TPathId 
     Y_VERIFY(IsLocalId(pathId));
 
     TString volumeConfig;
-    Y_PROTOBUF_SUPPRESS_NODISCARD volume->VolumeConfig.SerializeToString(&volumeConfig); 
+    Y_PROTOBUF_SUPPRESS_NODISCARD volume->VolumeConfig.SerializeToString(&volumeConfig);
     db.Table<Schema::BlockStoreVolumeAlters>().Key(pathId.LocalPathId).Update(
         NIceDb::TUpdate<Schema::BlockStoreVolumeAlters::VolumeConfig>(volumeConfig),
         NIceDb::TUpdate<Schema::BlockStoreVolumeAlters::AlterVersion>(volume->AlterVersion),
@@ -2767,7 +2767,7 @@ void TSchemeShard::PersistFileStoreInfo(NIceDb::TNiceDb& db, TPathId pathId, con
     Y_VERIFY(IsLocalId(pathId));
 
     TString config;
-    Y_PROTOBUF_SUPPRESS_NODISCARD fs->Config.SerializeToString(&config); 
+    Y_PROTOBUF_SUPPRESS_NODISCARD fs->Config.SerializeToString(&config);
 
     db.Table<Schema::FileStoreInfos>()
         .Key(pathId.LocalPathId)
@@ -2781,7 +2781,7 @@ void TSchemeShard::PersistAddFileStoreAlter(NIceDb::TNiceDb& db, TPathId pathId,
     Y_VERIFY(IsLocalId(pathId));
 
     TString config;
-    Y_PROTOBUF_SUPPRESS_NODISCARD fs->AlterConfig->SerializeToString(&config); 
+    Y_PROTOBUF_SUPPRESS_NODISCARD fs->AlterConfig->SerializeToString(&config);
 
     db.Table<Schema::FileStoreAlters>()
         .Key(pathId.LocalPathId)
@@ -3053,7 +3053,7 @@ void TSchemeShard::PersistReplicationAlterRemove(NIceDb::TNiceDb& db, TPathId pa
 void TSchemeShard::PersistKesusInfo(NIceDb::TNiceDb& db, TPathId pathId, const TKesusInfo::TPtr kesus)
 {
     TString config;
-    Y_PROTOBUF_SUPPRESS_NODISCARD kesus->Config.SerializeToString(&config); 
+    Y_PROTOBUF_SUPPRESS_NODISCARD kesus->Config.SerializeToString(&config);
 
     if (IsLocalId((pathId))) {
         db.Table<Schema::KesusInfos>().Key(pathId.LocalPathId).Update(
@@ -3081,7 +3081,7 @@ void TSchemeShard::PersistAddKesusAlter(NIceDb::TNiceDb& db, TPathId pathId, con
     Y_VERIFY(kesus->AlterConfig);
     Y_VERIFY(kesus->AlterVersion);
     TString config;
-    Y_PROTOBUF_SUPPRESS_NODISCARD kesus->AlterConfig->SerializeToString(&config); 
+    Y_PROTOBUF_SUPPRESS_NODISCARD kesus->AlterConfig->SerializeToString(&config);
 
     if (IsLocalId((pathId))) {
         db.Table<Schema::KesusAlters>().Key(pathId.LocalPathId).Update(
@@ -3300,7 +3300,7 @@ void TSchemeShard::PersistRemoveTableIndex(NIceDb::TNiceDb &db, TPathId pathId)
 void TSchemeShard::PersistAddTableShardPartitionConfig(NIceDb::TNiceDb& db, TShardIdx shardIdx, const NKikimrSchemeOp::TPartitionConfig& config)
 {
     TString data;
-    Y_PROTOBUF_SUPPRESS_NODISCARD config.SerializeToString(&data); 
+    Y_PROTOBUF_SUPPRESS_NODISCARD config.SerializeToString(&data);
 
     if (IsLocalId(shardIdx)) {
         db.Table<Schema::TableShardPartitionConfigs>().Key(shardIdx.GetLocalId()).Update(
@@ -4386,7 +4386,7 @@ TString TSchemeShard::FillBackupTxBody(TPathId pathId, const NKikimrSchemeOp::TB
     backup->SetShardNum(shardNum);
 
     TString txBody;
-    Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody); 
+    Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);
     return txBody;
 }
 
@@ -5571,7 +5571,7 @@ TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, T
     }
 
     TString txBody;
-    Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody); 
+    Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);
     return txBody;
 }
 

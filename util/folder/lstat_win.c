@@ -5,22 +5,22 @@
     #include "lstat_win.h"
 
 int lstat(const char* fileName, stat_struct* fileStat) {
-    int len = strlen(fileName); 
-    int convRes = MultiByteToWideChar(CP_UTF8, 0, fileName, len, 0, 0); 
-    if (convRes == 0) { 
-        return -1; 
-    } 
-    WCHAR* buf = malloc(sizeof(WCHAR) * (convRes + 1)); 
-    MultiByteToWideChar(CP_UTF8, 0, fileName, len, buf, convRes); 
-    buf[convRes] = 0; 
- 
+    int len = strlen(fileName);
+    int convRes = MultiByteToWideChar(CP_UTF8, 0, fileName, len, 0, 0);
+    if (convRes == 0) {
+        return -1;
+    }
+    WCHAR* buf = malloc(sizeof(WCHAR) * (convRes + 1));
+    MultiByteToWideChar(CP_UTF8, 0, fileName, len, buf, convRes);
+    buf[convRes] = 0;
+
     HANDLE findHandle;
-    WIN32_FIND_DATAW findBuf; 
+    WIN32_FIND_DATAW findBuf;
     int result;
-    result = _wstat64(buf, fileStat); 
+    result = _wstat64(buf, fileStat);
     if (result == 0) {
         SetLastError(0);
-        findHandle = FindFirstFileW(buf, &findBuf); 
+        findHandle = FindFirstFileW(buf, &findBuf);
         if (findBuf.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT &&
             (findBuf.dwReserved0 == IO_REPARSE_TAG_MOUNT_POINT || findBuf.dwReserved0 == IO_REPARSE_TAG_SYMLINK))
         {
@@ -28,7 +28,7 @@ int lstat(const char* fileName, stat_struct* fileStat) {
         }
         FindClose(findHandle);
     }
-    free(buf); 
+    free(buf);
     return result;
 }
 

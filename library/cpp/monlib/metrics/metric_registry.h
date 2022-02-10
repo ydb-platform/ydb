@@ -5,7 +5,7 @@
 
 #include <util/system/rwlock.h>
 
-#include <library/cpp/threading/light_rw_lock/lightrwlock.h> 
+#include <library/cpp/threading/light_rw_lock/lightrwlock.h>
 
 
 namespace NMonitoring {

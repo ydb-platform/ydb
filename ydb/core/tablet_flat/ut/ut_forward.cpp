@@ -5,7 +5,7 @@
 #include <ydb/core/tablet_flat/flat_fwd_blobs.h>
 #include <ydb/core/tablet_flat/flat_fwd_sieve.h>
 #include <ydb/core/tablet_flat/test/libs/table/test_steps.h>
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 #include <util/random/shuffle.h>
 #include <util/random/mersenne.h>
 

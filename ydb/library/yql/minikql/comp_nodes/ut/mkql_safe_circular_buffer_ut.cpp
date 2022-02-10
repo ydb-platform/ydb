@@ -1,6 +1,6 @@
 #include "mkql_safe_circular_buffer.h"
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 #include <ydb/library/yql/public/udf/udf_value.h>
 

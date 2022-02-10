@@ -2,7 +2,7 @@
 
 #include <ydb/core/testlib/tablet_helpers.h>
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 #ifndef NDEBUG
 const bool ENABLE_DETAILED_RESOURCE_BROKER_LOG = true;

@@ -3,7 +3,7 @@
 #include <ydb/core/tablet_flat/test/libs/exec/dummy.h>
 #include <ydb/core/tablet_flat/test/libs/exec/nanny.h>
 #include <ydb/core/tablet_flat/test/libs/exec/fuzzy.h>
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 #include "flat_database.h"
 
 #include <util/system/sanitizers.h>

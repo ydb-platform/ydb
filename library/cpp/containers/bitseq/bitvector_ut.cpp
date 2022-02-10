@@ -1,7 +1,7 @@
 #include "bitvector.h"
 #include "readonly_bitvector.h"
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 #include <util/memory/blob.h>
 #include <util/stream/buffer.h>

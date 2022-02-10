@@ -103,7 +103,7 @@ public:
             context.SS->FillSeqNo(tx, seqNo);
 
             TString txBody;
-            Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody); 
+            Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);
 
             LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                         DebugHint() << " ProgressState"

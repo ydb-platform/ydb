@@ -216,7 +216,7 @@ private:
         result->set_result_set_index(ResultsReceived_ - 1);
 
         TString out;
-        Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out); 
+        Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out);
 
         GRpcResponsesSizeQueue_.push(out.size());
         GRpcResponsesSize_ += out.size();
@@ -267,7 +267,7 @@ private:
         result->set_result_set_index(ResultsReceived_ - 1);
 
         TString out;
-        Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out); 
+        Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out);
 
         GRpcResponsesSizeQueue_.push(out.size());
         GRpcResponsesSize_ += out.size();
@@ -363,7 +363,7 @@ private:
                 response.mutable_result()->mutable_query_stats()->set_query_plan(kqpResponse.GetQueryPlan());
             }
 
-            Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out); 
+            Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out);
             RequestPtr()->SendSerializedResult(std::move(out), record.GetYdbStatus());
         }
 
@@ -480,7 +480,7 @@ private:
         Ydb::Scripting::ExecuteYqlPartialResponse response;
         response.set_status(status);
         response.mutable_issues()->CopyFrom(message);
-        Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out); 
+        Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out);
         return out;
     }
 

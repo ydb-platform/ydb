@@ -13,16 +13,16 @@
  *  for (auto i: xrange(MyVector.size())) { // instead for (size_t i = 0; i < MyVector.size(); ++i)
  *      DoSomething(i, MyVector[i]);
  *  }
- * 
+ *
  * TVector<int> arithmeticSeq = xrange(10); // instead: TVector<int> arithmeticSeq; for(size_t i = 0; i < 10; ++i) { arithmeticSeq.push_back(i); }
- * 
+ *
  */
 
 namespace NPrivate {
     template <typename T>
     class TSimpleXRange {
-        using TDiff = decltype(T() - T()); 
- 
+        using TDiff = decltype(T() - T());
+
     public:
         constexpr TSimpleXRange(T start, T finish) noexcept
             : Start(start)
@@ -52,12 +52,12 @@ namespace NPrivate {
             }
 
             constexpr bool operator==(const TIterator& other) const noexcept {
-                return Value == other.Value; 
-            } 
- 
-            TIterator& operator++() noexcept { 
+                return Value == other.Value;
+            }
+
+            TIterator& operator++() noexcept {
                 ++Value;
-                return *this; 
+                return *this;
             }
 
             TIterator& operator--() noexcept {
@@ -66,25 +66,25 @@ namespace NPrivate {
             }
 
             constexpr TDiff operator-(const TIterator& b) const noexcept {
-                return Value - b.Value; 
-            } 
- 
+                return Value - b.Value;
+            }
+
             template <typename IntType>
             constexpr TIterator operator+(const IntType& b) const noexcept {
-                return TIterator(Value + b); 
-            } 
- 
+                return TIterator(Value + b);
+            }
+
             template <typename IntType>
             TIterator& operator+=(const IntType& b) noexcept {
-                Value += b; 
-                return *this; 
-            } 
- 
+                Value += b;
+                return *this;
+            }
+
             template <typename IntType>
             constexpr TIterator operator-(const IntType& b) const noexcept {
-                return TIterator(Value - b); 
-            } 
- 
+                return TIterator(Value - b);
+            }
+
             template <typename IntType>
             TIterator& operator-=(const IntType& b) noexcept {
                 Value -= b;
@@ -100,9 +100,9 @@ namespace NPrivate {
         };
 
         using value_type = T;
-        using iterator = TIterator; 
-        using const_iterator = TIterator; 
- 
+        using iterator = TIterator;
+        using const_iterator = TIterator;
+
         constexpr TIterator begin() const noexcept {
             return TIterator(Start);
         }
@@ -112,14 +112,14 @@ namespace NPrivate {
         }
 
         constexpr T size() const noexcept {
-            return Finish - Start; 
-        } 
- 
-        template <class Container> 
+            return Finish - Start;
+        }
+
+        template <class Container>
         operator Container() const {
-            return Container(begin(), end()); 
-        } 
- 
+            return Container(begin(), end());
+        }
+
     private:
         T Start;
         T Finish;
@@ -161,12 +161,12 @@ namespace NPrivate {
             }
 
             constexpr bool operator==(const TIterator& other) const noexcept {
-                return Value_ == other.Value_; 
-            } 
- 
-            TIterator& operator++() noexcept { 
+                return Value_ == other.Value_;
+            }
+
+            TIterator& operator++() noexcept {
                 Value_ += Parent_->Step_;
-                return *this; 
+                return *this;
             }
 
             TIterator& operator--() noexcept {
@@ -176,23 +176,23 @@ namespace NPrivate {
 
             constexpr TDiff operator-(const TIterator& b) const noexcept {
                 return (Value_ - b.Value_) / Parent_->Step_;
-            } 
- 
+            }
+
             template <typename IntType>
             constexpr TIterator operator+(const IntType& b) const noexcept {
                 return TIterator(*this) += b;
-            } 
- 
+            }
+
             template <typename IntType>
             TIterator& operator+=(const IntType& b) noexcept {
                 Value_ += b * Parent_->Step_;
-                return *this; 
-            } 
- 
+                return *this;
+            }
+
             template <typename IntType>
             constexpr TIterator operator-(const IntType& b) const noexcept {
                 return TIterator(*this) -= b;
-            } 
+            }
 
             template <typename IntType>
             TIterator& operator-=(const IntType& b) noexcept {
@@ -206,9 +206,9 @@ namespace NPrivate {
         };
 
         using value_type = T;
-        using iterator = TIterator; 
-        using const_iterator = TIterator; 
- 
+        using iterator = TIterator;
+        using const_iterator = TIterator;
+
         constexpr TIterator begin() const noexcept {
             return TIterator(Start_, *this);
         }
@@ -229,14 +229,14 @@ namespace NPrivate {
         }
 
         constexpr T size() const noexcept {
-            return (Finish_ - Start_) / Step_; 
-        } 
- 
-        template <class Container> 
+            return (Finish_ - Start_) / Step_;
+        }
+
+        template <class Container>
         operator Container() const {
-            return Container(begin(), end()); 
-        } 
- 
+            return Container(begin(), end());
+        }
+
     private:
         const T Start_;
         const TDiff Step_;

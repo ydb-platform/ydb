@@ -4,7 +4,7 @@
 #include <library/cpp/actors/interconnect/interconnect.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 #include <util/system/hostname.h>
 

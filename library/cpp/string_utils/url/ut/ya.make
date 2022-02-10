@@ -1,4 +1,4 @@
-UNITTEST_FOR(library/cpp/string_utils/url) 
+UNITTEST_FOR(library/cpp/string_utils/url)
 
 OWNER(g:util)
 

@@ -72,7 +72,7 @@ TString TOverlay::Encode() const noexcept
     }
 
     TString encoded;
-    Y_PROTOBUF_SUPPRESS_NODISCARD plain.SerializeToString(&encoded); 
+    Y_PROTOBUF_SUPPRESS_NODISCARD plain.SerializeToString(&encoded);
     return encoded;
 }
 
@@ -208,7 +208,7 @@ TString TOverlay::EncodeRemoveSlices(const TIntrusiveConstPtr<TSlices>& slices) 
     SlicesToProto(*slices, plain.MutableRemovedSlices());
 
     TString encoded;
-    Y_PROTOBUF_SUPPRESS_NODISCARD plain.SerializeToString(&encoded); 
+    Y_PROTOBUF_SUPPRESS_NODISCARD plain.SerializeToString(&encoded);
     return encoded;
 }
 
@@ -221,7 +221,7 @@ TString TOverlay::EncodeChangeSlices(TConstArrayRef<TSlice> slices) noexcept
     SlicesToProto(slices, plain.MutableChangedSlices());
 
     TString encoded;
-    Y_PROTOBUF_SUPPRESS_NODISCARD plain.SerializeToString(&encoded); 
+    Y_PROTOBUF_SUPPRESS_NODISCARD plain.SerializeToString(&encoded);
     return encoded;
 }
 

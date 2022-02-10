@@ -14,7 +14,7 @@ TAG(
 FORK_SUBTESTS()
 
 PEERDIR(
-    library/cpp/testing/unittest_main 
+    library/cpp/testing/unittest_main
     library/cpp/messagebus
     library/cpp/messagebus/test/helper
     library/cpp/messagebus/www

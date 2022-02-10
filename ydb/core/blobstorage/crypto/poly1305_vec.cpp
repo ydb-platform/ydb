@@ -16,7 +16,7 @@
  * block size
 */
 
-#include <library/cpp/sse/sse.h> // The header chooses appropriate SSE support 
+#include <library/cpp/sse/sse.h> // The header chooses appropriate SSE support
 #include <stdint.h>
 
 #define INLINE inline

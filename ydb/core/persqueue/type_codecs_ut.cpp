@@ -2,7 +2,7 @@
 #include "type_codecs_defs.h"
 #include <ydb/core/scheme_types/scheme_types_defs.h>
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/vector.h>
 #include <util/random/fast.h>

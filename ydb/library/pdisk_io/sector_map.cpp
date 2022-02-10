@@ -27,7 +27,7 @@ void TSectorMap::StoreToFile(const TString& path) {
     }
 
     TString raw;
-    Y_PROTOBUF_SUPPRESS_NODISCARD snap.SerializeToString(&raw); 
+    Y_PROTOBUF_SUPPRESS_NODISCARD snap.SerializeToString(&raw);
     TFileOutput(path).Write(raw);
 }
 

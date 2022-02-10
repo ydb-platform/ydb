@@ -8,7 +8,7 @@ OWNER(
 PEERDIR(
     library/cpp/json/writer
     library/cpp/monlib/service/pages
-    library/cpp/threading/future 
+    library/cpp/threading/future
     ydb/core/base
     ydb/core/blobstorage/base
 )

@@ -621,7 +621,7 @@ public:
     size_type max_size() const noexcept {
         return size_type(-1);
     }
- 
+
     Y_PURE_FUNCTION bool empty() const noexcept {
         return size() == 0;
     }
@@ -1530,7 +1530,7 @@ public:
     size_type max_size() const noexcept {
         return rep.max_size();
     }
- 
+
     Y_PURE_FUNCTION bool empty() const noexcept {
         return rep.empty();
     }
@@ -1855,7 +1855,7 @@ public:
     size_type max_size() const {
         return rep.max_size();
     }
- 
+
     Y_PURE_FUNCTION bool empty() const {
         return rep.empty();
     }

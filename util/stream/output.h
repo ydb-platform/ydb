@@ -45,7 +45,7 @@ public:
         inline ~TPart() = default;
 
         static inline TPart CrLf() noexcept {
-            return TPart("\r\n", 2); 
+            return TPart("\r\n", 2);
         }
 
         const void* buf;
@@ -204,9 +204,9 @@ inline void Out<const char*>(IOutputStream& o, const char* t) {
 template <>
 void Out<const wchar16*>(IOutputStream& o, const wchar16* w);
 
-template <> 
-void Out<const wchar32*>(IOutputStream& o, const wchar32* w); 
- 
+template <>
+void Out<const wchar32*>(IOutputStream& o, const wchar32* w);
+
 static inline IOutputStream& operator<<(IOutputStream& o, TStreamManipulator m) {
     m(o);
 
@@ -249,16 +249,16 @@ static inline IOutputStream& operator<<(IOutputStream& o, wchar16* t) {
     return o;
 }
 
-static inline IOutputStream& operator<<(IOutputStream& o, const wchar32* t) { 
-    Out<const wchar32*>(o, t); 
-    return o; 
-} 
- 
-static inline IOutputStream& operator<<(IOutputStream& o, wchar32* t) { 
-    Out<const wchar32*>(o, t); 
-    return o; 
-} 
- 
+static inline IOutputStream& operator<<(IOutputStream& o, const wchar32* t) {
+    Out<const wchar32*>(o, t);
+    return o;
+}
+
+static inline IOutputStream& operator<<(IOutputStream& o, wchar32* t) {
+    Out<const wchar32*>(o, t);
+    return o;
+}
+
 namespace NPrivate {
     IOutputStream& StdOutStream() noexcept;
     IOutputStream& StdErrStream() noexcept;

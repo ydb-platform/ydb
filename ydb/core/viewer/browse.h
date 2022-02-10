@@ -265,7 +265,7 @@ public:
                 Final = pbChild.GetFinal();
                 BrowseInfo.Clear();
                 MetaInfo.Clear();
-                DescribeResult.Reset(); 
+                DescribeResult.Reset();
                 return StepOnPath(ctx, currentName);
             }
         }

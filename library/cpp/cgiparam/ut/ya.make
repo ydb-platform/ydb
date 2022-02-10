@@ -1,4 +1,4 @@
-UNITTEST_FOR(library/cpp/cgiparam) 
+UNITTEST_FOR(library/cpp/cgiparam)
 
 OWNER(g:util)
 

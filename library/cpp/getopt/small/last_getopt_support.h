@@ -136,21 +136,21 @@ namespace NLastGetopt {
                 , Value(value)
             {
             }
- 
+
             void operator()(const TOptsParser*) {
                 *Target = Value;
             }
         };
- 
+
         TString OptToString(char c);
         TString OptToString(const TString& longOption);
         TString OptToString(const TOpt* opt);
- 
+
         template <typename T>
         inline T OptFromStringImpl(const TStringBuf& value) {
             return FromString<T>(value);
-        } 
- 
+        }
+
         template <>
         inline TStringBuf OptFromStringImpl<TStringBuf>(const TStringBuf& value) {
             return value;

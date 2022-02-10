@@ -88,7 +88,7 @@ namespace NBus {
         EMessageStatus SendMessageAutoPtr(const TAutoPtr<T>& mes, const TNetAddr* addr = nullptr, bool wait = false) {
             EMessageStatus status = SendMessage(mes.Get(), addr, wait);
             if (status == MESSAGE_OK)
-                Y_UNUSED(mes.Release()); 
+                Y_UNUSED(mes.Release());
             return status;
         }
 
@@ -97,7 +97,7 @@ namespace NBus {
         EMessageStatus SendMessageOneWayAutoPtr(const TAutoPtr<T>& mes, const TNetAddr* addr = nullptr, bool wait = false) {
             EMessageStatus status = SendMessageOneWay(mes.Get(), addr, wait);
             if (status == MESSAGE_OK)
-                Y_UNUSED(mes.Release()); 
+                Y_UNUSED(mes.Release());
             return status;
         }
 
@@ -138,7 +138,7 @@ namespace NBus {
         EMessageStatus SendReplyAutoPtr(TBusIdentity& ident, TAutoPtr<U>& resp) {
             EMessageStatus status = SendReply(const_cast<const TBusIdentity&>(ident), resp.Get());
             if (status == MESSAGE_OK) {
-                Y_UNUSED(resp.Release()); 
+                Y_UNUSED(resp.Release());
             }
             return status;
         }

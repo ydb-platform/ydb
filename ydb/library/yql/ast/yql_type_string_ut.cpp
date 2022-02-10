@@ -1,7 +1,7 @@
 #include "yql_type_string.h"
 #include "yql_expr.h"
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 
 using namespace NYql;

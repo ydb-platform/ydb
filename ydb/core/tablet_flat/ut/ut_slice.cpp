@@ -2,7 +2,7 @@
 #include <ydb/core/tablet_flat/flat_part_overlay.h>
 #include <ydb/core/tablet_flat/util_fmt_desc.h>
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr {
 namespace NTable {

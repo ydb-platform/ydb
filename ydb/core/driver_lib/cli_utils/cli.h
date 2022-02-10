@@ -13,8 +13,8 @@
 #include <util/stream/format.h>
 #include <util/system/hostname.h>
 
-#include <library/cpp/getopt/last_getopt.h> 
-#include <library/cpp/string_utils/parse_size/parse_size.h> 
+#include <library/cpp/getopt/last_getopt.h>
+#include <library/cpp/string_utils/parse_size/parse_size.h>
 #include <library/cpp/svnversion/svnversion.h>
 
 #include <google/protobuf/text_format.h>

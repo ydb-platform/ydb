@@ -8,7 +8,7 @@
 
 #include <ydb/core/control/immediate_control_board_wrapper.h>
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 #include <util/folder/dirut.h>
 #include <util/folder/tempdir.h>
 #include <util/system/atomic.h>
@@ -130,7 +130,7 @@ TString CreateFile(const char *baseDir, ui32 dataSize) {
         file.Resize(dataSize);
         file.Close();
     }
-    UNIT_ASSERT_EQUAL_C(NFs::Exists(path), true, "File " << path << " does not exist."); 
+    UNIT_ASSERT_EQUAL_C(NFs::Exists(path), true, "File " << path << " does not exist.");
     return path;
 }
 

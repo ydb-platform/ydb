@@ -12,7 +12,7 @@ IF (SANITIZER_TYPE OR WITH_VALGRIND)
 ENDIF()
 
 PEERDIR(
-    library/cpp/testing/unittest 
+    library/cpp/testing/unittest
     ydb/core/grpc_services/validation/ut/protos
 )
 

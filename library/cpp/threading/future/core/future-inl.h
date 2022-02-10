@@ -691,7 +691,7 @@ namespace NThreading {
         EnsureInitialized();
         return State->Wait();
     }
- 
+
     inline bool TFuture<void>::Wait(TDuration timeout) const {
         EnsureInitialized();
         return State->Wait(timeout);

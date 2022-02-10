@@ -863,7 +863,7 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         TString json;
         if (desc) {
             NKikimrScheme::TEvDescribeSchemeResult fullProto;
-            Y_PROTOBUF_SUPPRESS_NODISCARD fullProto.ParseFromString(desc->PreSerialized); 
+            Y_PROTOBUF_SUPPRESS_NODISCARD fullProto.ParseFromString(desc->PreSerialized);
             fullProto.MergeFrom(desc->Record);
 
             using namespace google::protobuf::util;

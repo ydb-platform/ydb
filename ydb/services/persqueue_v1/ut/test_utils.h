@@ -3,7 +3,7 @@
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
 #include <ydb/core/testlib/test_pq_client.h>
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 #include <google/protobuf/message.h>
 #include <contrib/libs/grpc/include/grpcpp/support/sync_stream.h>
 #include <util/string/builder.h>

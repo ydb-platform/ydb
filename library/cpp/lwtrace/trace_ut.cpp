@@ -2,7 +2,7 @@
 
 #include <library/cpp/lwtrace/protos/lwtrace.pb.h>
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 #include <google/protobuf/text_format.h>
 

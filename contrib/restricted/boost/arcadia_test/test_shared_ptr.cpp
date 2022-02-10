@@ -8,7 +8,7 @@
  * Данная ошибка исправляется путем довления константности к типу входящего артумента 'pe'.
  */
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 #include <boost/interprocess/smart_ptr/shared_ptr.hpp>
 #include <boost/interprocess/smart_ptr/enable_shared_from_this.hpp>
 #include <type_traits>

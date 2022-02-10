@@ -534,7 +534,7 @@ namespace NThreading {
 
         void Enqueue(TAutoPtr<T> value) {
             Impl.Enqueue(value.Get());
-            Y_UNUSED(value.Release()); 
+            Y_UNUSED(value.Release());
         }
 
         bool Dequeue(TAutoPtr<T>& value) {

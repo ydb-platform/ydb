@@ -12,9 +12,9 @@
 #include <util/memory/tempbuf.h>
 #include <util/stream/file.h>
 #include <util/charset/wide.h>
-#include <util/folder/iterator.h> 
-#include <util/system/fstat.h> 
-#include <util/folder/path.h> 
+#include <util/folder/iterator.h>
+#include <util/system/fstat.h>
+#include <util/folder/path.h>
 
 bool NFs::Remove(const TString& path) {
 #if defined(_win_)
@@ -25,65 +25,65 @@ bool NFs::Remove(const TString& path) {
 }
 
 void NFs::RemoveRecursive(const TString& path) {
-    static const TStringBuf errStr = "error while removing "; 
- 
-    if (!NFs::Exists(path)) { 
-        return; 
-    } 
- 
-    if (!TFileStat(path).IsDir()) { 
+    static const TStringBuf errStr = "error while removing ";
+
+    if (!NFs::Exists(path)) {
+        return;
+    }
+
+    if (!TFileStat(path).IsDir()) {
         if (!NFs::Remove(path)) {
-            ythrow TSystemError() << errStr << path << " with cwd (" << NFs::CurrentWorkingDirectory() << ")"; 
+            ythrow TSystemError() << errStr << path << " with cwd (" << NFs::CurrentWorkingDirectory() << ")";
         }
-    } 
- 
-    TDirIterator dir(path); 
- 
+    }
+
+    TDirIterator dir(path);
+
     for (auto it = dir.begin(); it != dir.end(); ++it) {
-        switch (it->fts_info) { 
-            case FTS_DOT: 
-            case FTS_D: 
+        switch (it->fts_info) {
+            case FTS_DOT:
+            case FTS_D:
                 break;
-            default: 
+            default:
                 if (!NFs::Remove(it->fts_path)) {
-                    ythrow TSystemError() << errStr << it->fts_path << " with cwd (" << NFs::CurrentWorkingDirectory() << ")"; 
+                    ythrow TSystemError() << errStr << it->fts_path << " with cwd (" << NFs::CurrentWorkingDirectory() << ")";
                 }
-                break; 
-        } 
-    } 
-} 
- 
+                break;
+        }
+    }
+}
+
 bool NFs::MakeDirectory(const TString& path, EFilePermissions mode) {
-#if defined(_win_) 
+#if defined(_win_)
     Y_UNUSED(mode);
-    return NFsPrivate::WinMakeDirectory(path); 
-#else 
+    return NFsPrivate::WinMakeDirectory(path);
+#else
     return mkdir(path.data(), mode) == 0;
-#endif 
-} 
- 
+#endif
+}
+
 bool NFs::MakeDirectoryRecursive(const TString& path, EFilePermissions mode, bool alwaysCreate) {
-    if (NFs::Exists(path) && TFileStat(path).IsDir()) { 
-        if (alwaysCreate) { 
+    if (NFs::Exists(path) && TFileStat(path).IsDir()) {
+        if (alwaysCreate) {
             ythrow TIoException() << "path " << path << " already exists"
                                   << " with cwd (" << NFs::CurrentWorkingDirectory() << ")";
-        } 
-        return true; 
-    } else { 
-        //NOTE: recursion is finite due to existence of "." and "/" 
+        }
+        return true;
+    } else {
+        //NOTE: recursion is finite due to existence of "." and "/"
         if (!NFs::MakeDirectoryRecursive(TFsPath(path).Parent(), mode, false)) {
             return false;
         }
 
         bool isDirMade = NFs::MakeDirectory(path, mode);
         if (!isDirMade && alwaysCreate) {
-            ythrow TIoException() << "failed to create " << path << " with cwd (" << NFs::CurrentWorkingDirectory() << ")"; 
-        } 
+            ythrow TIoException() << "failed to create " << path << " with cwd (" << NFs::CurrentWorkingDirectory() << ")";
+        }
 
         return TFileStat(path).IsDir();
-    } 
-} 
- 
+    }
+}
+
 bool NFs::Rename(const TString& oldPath, const TString& newPath) {
 #if defined(_win_)
     return NFsPrivate::WinRename(oldPath, newPath);
@@ -145,35 +145,35 @@ void NFs::Copy(const TString& existingPath, const TString& newPath) {
 
     TransferData(&src, &dst);
 }
- 
+
 bool NFs::Exists(const TString& path) {
-#if defined(_win_) 
+#if defined(_win_)
     return NFsPrivate::WinExists(path);
-#elif defined(_unix_) 
+#elif defined(_unix_)
     return access(path.data(), F_OK) == 0;
-#endif 
-} 
- 
+#endif
+}
+
 TString NFs::CurrentWorkingDirectory() {
-#if defined(_win_) 
-    return NFsPrivate::WinCurrentWorkingDirectory(); 
-#elif defined(_unix_) 
-    TTempBuf result; 
-    char* r = getcwd(result.Data(), result.Size()); 
+#if defined(_win_)
+    return NFsPrivate::WinCurrentWorkingDirectory();
+#elif defined(_unix_)
+    TTempBuf result;
+    char* r = getcwd(result.Data(), result.Size());
     if (r == nullptr) {
-        throw TIoSystemError() << "failed to getcwd"; 
+        throw TIoSystemError() << "failed to getcwd";
     }
-    return result.Data(); 
-#endif 
-} 
- 
+    return result.Data();
+#endif
+}
+
 void NFs::SetCurrentWorkingDirectory(TString path) {
-#ifdef _win_ 
-    bool ok = NFsPrivate::WinSetCurrentWorkingDirectory(path); 
-#else 
+#ifdef _win_
+    bool ok = NFsPrivate::WinSetCurrentWorkingDirectory(path);
+#else
     bool ok = !chdir(path.data());
-#endif 
+#endif
     if (!ok) {
-        ythrow TSystemError() << "failed to change directory to " << path.Quote(); 
+        ythrow TSystemError() << "failed to change directory to " << path.Quote();
     }
-} 
+}

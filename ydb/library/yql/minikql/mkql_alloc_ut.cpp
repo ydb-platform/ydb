@@ -1,6 +1,6 @@
 #include "mkql_alloc.h"
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr {
 namespace NMiniKQL {

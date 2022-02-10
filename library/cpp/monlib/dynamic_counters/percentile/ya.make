@@ -8,7 +8,7 @@ LIBRARY()
     )
 
     PEERDIR(
-        library/cpp/containers/stack_vector 
+        library/cpp/containers/stack_vector
         library/cpp/monlib/dynamic_counters
     )
 

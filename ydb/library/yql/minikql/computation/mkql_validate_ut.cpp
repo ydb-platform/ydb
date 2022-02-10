@@ -13,7 +13,7 @@
 #include <ydb/library/yql/minikql/mkql_utils.h>
 #include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/algorithm.h>
 

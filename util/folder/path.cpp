@@ -188,21 +188,21 @@ TFsPath::TSplit& TFsPath::GetSplit() const {
 
 static Y_FORCE_INLINE void VerifyPath(const TStringBuf path) {
     Y_VERIFY(!path.Contains('\0'), "wrong format of TFsPath");
-} 
- 
+}
+
 TFsPath::TFsPath() {
 }
 
 TFsPath::TFsPath(const TString& path)
     : Path_(path)
 {
-    VerifyPath(Path_); 
+    VerifyPath(Path_);
 }
 
 TFsPath::TFsPath(const TStringBuf path)
     : Path_(ToString(path))
 {
-    VerifyPath(Path_); 
+    VerifyPath(Path_);
 }
 
 TFsPath::TFsPath(const char* path)
@@ -330,7 +330,7 @@ TFsPath TFsPath::ReadLink() const {
 }
 
 bool TFsPath::Exists() const {
-    return IsDefined() && NFs::Exists(*this); 
+    return IsDefined() && NFs::Exists(*this);
 }
 
 void TFsPath::CheckExists() const {
@@ -459,7 +459,7 @@ void TFsPath::ForceRenameTo(const TString& newPath) const {
 }
 
 TFsPath TFsPath::Cwd() {
-    return TFsPath(::NFs::CurrentWorkingDirectory()); 
+    return TFsPath(::NFs::CurrentWorkingDirectory());
 }
 
 const TPathSplit& TFsPath::PathSplit() const {

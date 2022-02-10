@@ -9,7 +9,7 @@
 
 #include <ydb/core/scheme_types/scheme_types_defs.h>
 #include <google/protobuf/text_format.h>
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 using namespace std::string_view_literals;
 

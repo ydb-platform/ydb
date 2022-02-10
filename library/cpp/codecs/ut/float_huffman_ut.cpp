@@ -1,10 +1,10 @@
 #include <library/cpp/codecs/float_huffman.h>
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 #include <util/stream/format.h>
 #include <util/stream/output.h>
-#include <library/cpp/string_utils/base64/base64.h> 
+#include <library/cpp/string_utils/base64/base64.h>
 
 namespace fh = NCodecs::NFloatHuff;
 

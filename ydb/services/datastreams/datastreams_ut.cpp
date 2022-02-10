@@ -1022,7 +1022,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                 protoNextToken.SetMaxResults(1);
                 protoNextToken.SetCreationTimestamp(timestamp);
                 TString stringNextToken;
-                Y_PROTOBUF_SUPPRESS_NODISCARD protoNextToken.SerializeToString(&stringNextToken); 
+                Y_PROTOBUF_SUPPRESS_NODISCARD protoNextToken.SerializeToString(&stringNextToken);
                 TString encodedNextToken;
                 Base64Encode(stringNextToken, encodedNextToken);
                 return encodedNextToken;

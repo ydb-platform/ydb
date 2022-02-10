@@ -1,5 +1,5 @@
 #pragma once
-#include <library/cpp/getopt/opt.h> 
+#include <library/cpp/getopt/opt.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/string.h>

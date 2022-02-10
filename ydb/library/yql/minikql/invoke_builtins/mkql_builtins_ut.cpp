@@ -2,7 +2,7 @@
 
 #include <ydb/library/yql/public/udf/udf_value.h>
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 #include <array>
 

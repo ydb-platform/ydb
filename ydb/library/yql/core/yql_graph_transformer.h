@@ -3,7 +3,7 @@
 #include <ydb/library/yql/utils/yql_panic.h>
 #include <ydb/library/yql/core/issue/yql_issue.h>
 
-#include <library/cpp/threading/future/future.h> 
+#include <library/cpp/threading/future/future.h>
 
 #include <util/generic/hash.h>
 #include <util/datetime/base.h>

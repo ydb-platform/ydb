@@ -8,8 +8,8 @@ OWNER(
 SRCDIR(ydb/core/kesus/tablet)
 
 PEERDIR(
-    library/cpp/getopt 
-    library/cpp/testing/unittest 
+    library/cpp/getopt
+    library/cpp/testing/unittest
     ADDINCL ydb/core/kesus/tablet
     ydb/core/testlib
 )

@@ -4,7 +4,7 @@
 #include <ydb/core/tablet_flat/flat_writer_bundle.h>
 #include <ydb/core/tablet_flat/flat_sausage_chop.h>
 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {

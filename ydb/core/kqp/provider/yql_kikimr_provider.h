@@ -9,7 +9,7 @@
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
 
 #include <library/cpp/actors/core/actor.h>
-#include <library/cpp/cache/cache.h> 
+#include <library/cpp/cache/cache.h>
 
 #include <util/generic/strbuf.h>
 #include <util/generic/flags.h>

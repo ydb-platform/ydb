@@ -12,7 +12,7 @@ SIZE(MEDIUM)
 TIMEOUT(600)
 
 PEERDIR(
-    library/cpp/testing/unittest 
+    library/cpp/testing/unittest
     ydb/core/testlib
 )
 

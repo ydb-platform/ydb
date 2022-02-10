@@ -20,7 +20,7 @@ ELSE()
 ENDIF()
 
 PEERDIR(
-    library/cpp/getopt 
+    library/cpp/getopt
     library/cpp/svnversion
     ydb/core/blobstorage/storagepoolmon
     ydb/core/testlib

@@ -6,8 +6,8 @@
 #include "sigset.h"
 #include "spinlock.h"
 
-#include <library/cpp/testing/unittest/env.h> 
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/env.h>
+#include <library/cpp/testing/unittest/registar.h>
 
 #include <util/folder/dirut.h>
 #include <util/random/random.h>
@@ -315,7 +315,7 @@ Y_UNIT_TEST_SUITE(TShellCommandTest) {
             UNIT_ASSERT(cmd.GetExitCode().Defined() && -15 == cmd.GetExitCode());
         }
         sleep(1);
-        UNIT_ASSERT(!NFs::Exists(tmpfile)); 
+        UNIT_ASSERT(!NFs::Exists(tmpfile));
     }
     // this ut is unix-only (win has no signal mask)
     Y_UNIT_TEST(TestSignalMask) {
@@ -346,7 +346,7 @@ Y_UNIT_TEST_SUITE(TShellCommandTest) {
             UNIT_ASSERT(TShellCommand::SHELL_ERROR == cmd.GetStatus() || TShellCommand::SHELL_FINISHED == cmd.GetStatus());
         }
         sleep(1);
-        UNIT_ASSERT(!NFs::Exists(tmpfile)); 
+        UNIT_ASSERT(!NFs::Exists(tmpfile));
 
         // child proc should receive SIGTERM
         options.SetClearSignalMask(true);
@@ -362,7 +362,7 @@ Y_UNIT_TEST_SUITE(TShellCommandTest) {
             UNIT_ASSERT(TShellCommand::SHELL_ERROR == cmd.GetStatus());
         }
         sleep(1);
-        UNIT_ASSERT(!NFs::Exists(tmpfile)); 
+        UNIT_ASSERT(!NFs::Exists(tmpfile));
 
         // restore signal mask
         rc = SigProcMask(SIG_SETMASK, &oldmask, nullptr);

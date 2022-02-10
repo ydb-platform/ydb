@@ -1,4 +1,4 @@
-UNITTEST_FOR(library/cpp/string_utils/quote) 
+UNITTEST_FOR(library/cpp/string_utils/quote)
 
 OWNER(vladon)
 

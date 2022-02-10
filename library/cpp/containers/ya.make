@@ -1,5 +1,5 @@
 RECURSE(
-    2d_array 
+    2d_array
     absl_flat_hash
     absl_tstring_flat_hash
     atomizer
@@ -7,11 +7,11 @@ RECURSE(
     bitseq/ut
     compact_vector
     compact_vector/ut
-    comptrie 
-    comptrie/loader 
-    comptrie/loader/ut 
-    comptrie/ut 
-    comptrie/benchmark 
+    comptrie
+    comptrie/loader
+    comptrie/loader/ut
+    comptrie/ut
+    comptrie/benchmark
     concurrent_hash
     concurrent_hash_set
     concurrent_hash_set/ut
@@ -22,8 +22,8 @@ RECURSE(
     dictionary/ut
     disjoint_interval_tree
     disjoint_interval_tree/ut
-    ext_priority_queue 
-    ext_priority_queue/ut 
+    ext_priority_queue
+    ext_priority_queue/ut
     fast_trie
     fast_trie/ut
     flat_hash
@@ -59,11 +59,11 @@ RECURSE(
     spars_ar
     stack_array
     stack_array/ut
-    stack_vector 
+    stack_vector
     str_hash
     str_map
-    top_keeper 
-    top_keeper/ut 
+    top_keeper
+    top_keeper/ut
     two_level_hash
     two_level_hash/ut
     vp_tree

@@ -304,7 +304,7 @@ private:
 
     TString PackAcquiredSubnets(const NKikimrNetClassifier::TNetData& netData) const {
         TString serializedProto;
-        Y_PROTOBUF_SUPPRESS_NODISCARD netData.SerializeToString(&serializedProto); 
+        Y_PROTOBUF_SUPPRESS_NODISCARD netData.SerializeToString(&serializedProto);
 
         return PackNetData(serializedProto);
     }

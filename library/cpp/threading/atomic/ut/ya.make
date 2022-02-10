@@ -1,4 +1,4 @@
-UNITTEST_FOR(library/cpp/threading/atomic) 
+UNITTEST_FOR(library/cpp/threading/atomic)
 
 OWNER(vmordovin)
 

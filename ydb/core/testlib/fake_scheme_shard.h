@@ -9,7 +9,7 @@
 
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/core/events.h>
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/ptr.h>
 #include <util/stream/output.h>
@@ -89,7 +89,7 @@ public:
         TAutoPtr<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder> response =
             new NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder();
         TString out;
-        Y_PROTOBUF_SUPPRESS_NODISCARD State->ACL.GetACL().SerializeToString(&out); 
+        Y_PROTOBUF_SUPPRESS_NODISCARD State->ACL.GetACL().SerializeToString(&out);
         response->Record.MutablePathDescription()->MutableSelf()->SetACL(out);
         response->Record.MutablePathDescription()->MutableSelf()->SetEffectiveACL(out);
         //Fill response from State

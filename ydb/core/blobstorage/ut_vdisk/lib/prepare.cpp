@@ -13,7 +13,7 @@
 #include <library/cpp/actors/core/scheduler_basic.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
 
-#include <library/cpp/testing/unittest/tests_data.h> 
+#include <library/cpp/testing/unittest/tests_data.h>
 
 #include <util/folder/dirut.h>
 

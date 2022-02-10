@@ -54,27 +54,27 @@ void UnlockMemory(const void* addr, size_t len) {
 
 void LockAllMemory(ELockAllMemoryFlags flags) {
     Y_UNUSED(flags);
-#if defined(_android_) 
+#if defined(_android_)
 // unimplemented
-#elif defined(_cygwin_) 
+#elif defined(_cygwin_)
 // unimplemented
-#elif defined(_unix_) 
-    int sys_flags = 0; 
+#elif defined(_unix_)
+    int sys_flags = 0;
     if (flags & LockCurrentMemory) {
-        sys_flags |= MCL_CURRENT; 
-    } 
+        sys_flags |= MCL_CURRENT;
+    }
     if (flags & LockFutureMemory) {
-        sys_flags |= MCL_FUTURE; 
-    } 
+        sys_flags |= MCL_FUTURE;
+    }
     if (flags & LockMemoryOnFault) {
         sys_flags |= MCL_ONFAULT;
     }
-    if (mlockall(sys_flags)) { 
-        ythrow yexception() << LastSystemErrorText(); 
-    } 
-#endif 
-} 
- 
+    if (mlockall(sys_flags)) {
+        ythrow yexception() << LastSystemErrorText();
+    }
+#endif
+}
+
 void UnlockAllMemory() {
 #if defined(_cygwin_)
 // unimplemented

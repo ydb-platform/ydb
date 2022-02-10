@@ -6,9 +6,9 @@ OWNER(
 )
 
 PEERDIR(
-    library/cpp/string_utils/base64 
+    library/cpp/string_utils/base64
     library/cpp/codecs
-    library/cpp/string_utils/relaxed_escaper 
+    library/cpp/string_utils/relaxed_escaper
 )
 
 SRCS(

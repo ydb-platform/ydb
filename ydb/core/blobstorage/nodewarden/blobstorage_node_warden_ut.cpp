@@ -24,7 +24,7 @@
 #include <util/stream/file.h>
 
 #include <google/protobuf/text_format.h>
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 const bool STRAND_PDISK = true;
 #ifndef NDEBUG

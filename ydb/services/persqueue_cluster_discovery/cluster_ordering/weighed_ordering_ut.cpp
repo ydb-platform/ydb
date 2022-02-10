@@ -1,7 +1,7 @@
 #include <ydb/services/persqueue_cluster_discovery/cluster_ordering/weighed_ordering.h>
 
-#include <library/cpp/testing/unittest/registar.h> 
-#include <library/cpp/testing/unittest/tests_data.h> 
+#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/tests_data.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/string.h>

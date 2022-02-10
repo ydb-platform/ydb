@@ -1,6 +1,6 @@
 #include "skeleton_oos_logic.h"
 #include <ydb/core/blobstorage/vdisk/hullop/blobstorage_hull.h>
-#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/testing/unittest/registar.h>
 
 #include <util/stream/null.h>
 

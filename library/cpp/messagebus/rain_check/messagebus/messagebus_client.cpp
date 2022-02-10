@@ -31,7 +31,7 @@ void TBusClientService::SendCommon(NBus::TBusMessage* message, const NBus::TNetA
 void TBusClientService::ProcessResultCommon(NBus::TBusMessageAutoPtr message,
                                             const NBus::TNetAddr&, TBusFuture* future,
                                             NBus::EMessageStatus status) {
-    Y_UNUSED(message.Release()); 
+    Y_UNUSED(message.Release());
 
     if (status == NBus::MESSAGE_OK) {
         return;
@@ -67,7 +67,7 @@ void TBusClientService::OnReply(
     TAutoPtr<TBusMessage> response) {
     TBusFuture* future = (TBusFuture*)request->Data;
     Y_ASSERT(future->Request.Get() == request.Get());
-    Y_UNUSED(request.Release()); 
+    Y_UNUSED(request.Release());
     future->SetDoneAndSchedule(MESSAGE_OK, response);
 }
 
@@ -75,7 +75,7 @@ void NRainCheck::TBusClientService::OnMessageSentOneWay(
     TAutoPtr<NBus::TBusMessage> request) {
     TBusFuture* future = (TBusFuture*)request->Data;
     Y_ASSERT(future->Request.Get() == request.Get());
-    Y_UNUSED(request.Release()); 
+    Y_UNUSED(request.Release());
     future->SetDoneAndSchedule(MESSAGE_OK, nullptr);
 }
 
@@ -87,7 +87,7 @@ void TBusClientService::OnError(
 
     TBusFuture* future = (TBusFuture*)message->Data;
     Y_ASSERT(future->Request.Get() == message.Get());
-    Y_UNUSED(message.Release()); 
+    Y_UNUSED(message.Release());
     future->SetDoneAndSchedule(status, nullptr);
 }
 

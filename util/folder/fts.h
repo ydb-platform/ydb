@@ -10,7 +10,7 @@ typedef struct stat stat_struct;
     #define STAT_FUNC stat
 #else
     #include <util/folder/dirent_win.h>
-typedef WCHAR* dird; 
+typedef WCHAR* dird;
 typedef unsigned short u_short;
 typedef unsigned int nlink_t;
 typedef struct _stat64 stat_struct;
@@ -18,7 +18,7 @@ typedef struct _stat64 stat_struct;
     //TODO: remove from global scope stat64UTF stat64UTF
     #ifdef __cplusplus
 int stat64UTF(const char* path, struct _stat64* _Stat);
-int stat64UTF(dird path, struct _stat64* _Stat); 
+int stat64UTF(dird path, struct _stat64* _Stat);
     #endif
 #endif
 

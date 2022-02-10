@@ -106,7 +106,7 @@ RECURSE(
     httpd24
     hwloc
     hyperscan
-    i18n 
+    i18n
     i18n/ut
     icu
     ImageMagick

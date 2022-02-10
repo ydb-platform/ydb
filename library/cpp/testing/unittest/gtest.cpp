@@ -1,5 +1,5 @@
 #include "gtest.h"
-#include "simple.h" 
+#include "simple.h"
 
 #include <util/generic/map.h>
 #include <util/generic/vector.h>
@@ -12,7 +12,7 @@ IGTestFactory::~IGTestFactory() {
 }
 
 namespace {
-    struct TCurrentTest: public TSimpleTestExecutor { 
+    struct TCurrentTest: public TSimpleTestExecutor {
         inline TCurrentTest(TStringBuf name)
             : MyName(name)
         {

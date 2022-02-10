@@ -2,14 +2,14 @@
 
 #include <unordered_map>
 
-#include <util/folder/path.h> 
+#include <util/folder/path.h>
 #include <util/generic/string.h>
 #include <util/generic/strbuf.h>
 #include <util/system/src_location.h>
 
 // @brief return full path to arcadia root
 TString ArcadiaSourceRoot();
- 
+
 // @brief return full path for file or folder specified by known source location `where` and `path` which is relative to parent folder of `where`
 //        for the instance: there is 2 files in folder test example_ut.cpp and example.data, so full path to test/example.data can be obtained
 //        from example_ut.cpp as ArcadiaFromCurrentLocation(__SOURCE_FILE__, "example.data")

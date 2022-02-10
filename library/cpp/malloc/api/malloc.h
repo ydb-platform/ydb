@@ -1,8 +1,8 @@
 #pragma once
 
-#include <string.h> 
+#include <string.h>
 #include <util/system/compiler.h>
- 
+
 namespace NMalloc {
     struct TMallocInfo {
         TMallocInfo();

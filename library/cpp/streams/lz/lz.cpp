@@ -120,16 +120,16 @@ private:
         this->Save(compressed, &header);
 
         using TPart = IOutputStream::TPart;
-        if (ptr) { 
-            const TPart parts[] = { 
-                TPart(tmp, sizeof(tmp)), 
-                TPart(ptr, len), 
-            }; 
+        if (ptr) {
+            const TPart parts[] = {
+                TPart(tmp, sizeof(tmp)),
+                TPart(ptr, len),
+            };
 
-            Slave_->Write(parts, sizeof(parts) / sizeof(*parts)); 
-        } else { 
-            Slave_->Write(tmp, sizeof(tmp)); 
-        } 
+            Slave_->Write(parts, sizeof(parts) / sizeof(*parts));
+        } else {
+            Slave_->Write(tmp, sizeof(tmp));
+        }
     }
 
 private:

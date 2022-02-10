@@ -32,7 +32,7 @@ TEST_SRCS(
     fetch_from.py
     fetch_from_external.py
     fetch_from_mds.py
-    fetch_from_npm.py
+    fetch_from_npm.py 
     fetch_from_sandbox.py
     fetch_resource.py
     filter_zip.py
@@ -75,7 +75,7 @@ TEST_SRCS(
     run_llvm_dsymutil.py
     run_msvc_wine.py
     run_tool.py
-    sky.py
+    sky.py 
     stdout2stderr.py
     symlink.py
     tar_directory.py

@@ -1,17 +1,17 @@
-RESOURCES_LIBRARY()
-
-OWNER(dankolesnikov)
-
-INCLUDE(${ARCADIA_ROOT}/build/platform/nodejs/resources.inc)
-
-IF (NOT HOST_OS_LINUX AND NOT HOST_OS_DARWIN)
-    MESSAGE(FATAL_ERROR Unsupported platform for Nodejs)
-ENDIF()
-
-DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE(
-    NODEJS
-    ${NODEJS_12_18_4_LINUX} FOR LINUX
-    ${NODEJS_12_18_4_DARWIN} FOR DARWIN
-)
-
-END()
+RESOURCES_LIBRARY() 
+ 
+OWNER(dankolesnikov) 
+ 
+INCLUDE(${ARCADIA_ROOT}/build/platform/nodejs/resources.inc) 
+ 
+IF (NOT HOST_OS_LINUX AND NOT HOST_OS_DARWIN) 
+    MESSAGE(FATAL_ERROR Unsupported platform for Nodejs) 
+ENDIF() 
+ 
+DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE( 
+    NODEJS 
+    ${NODEJS_12_18_4_LINUX} FOR LINUX 
+    ${NODEJS_12_18_4_DARWIN} FOR DARWIN 
+) 
+ 
+END() 

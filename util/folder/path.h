@@ -46,7 +46,7 @@ public:
 
     inline const char* c_str() const {
         return Path_.c_str();
-    } 
+    }
 
     inline operator const TString&() const {
         return Path_;
@@ -60,17 +60,17 @@ public:
         return Path_ != that.Path_;
     }
 
-    TFsPath& operator/=(const TFsPath& that); 
+    TFsPath& operator/=(const TFsPath& that);
 
     friend TFsPath operator/(const TFsPath& s, const TFsPath& p) {
         TFsPath ret(s);
         return ret /= p;
-    } 
- 
+    }
+
     const TPathSplit& PathSplit() const;
 
-    TFsPath& Fix(); 
- 
+    TFsPath& Fix();
+
     inline const TString& GetPath() const {
         return Path_;
     }
@@ -97,7 +97,7 @@ public:
      * @param that - presumable parent path of this
      * @return True if this is a subpath of that and false otherwise.
      */
-    bool IsSubpathOf(const TFsPath& that) const; 
+    bool IsSubpathOf(const TFsPath& that) const;
 
     /**
      * TFsPath("/a/b").IsNonStrictSubpathOf("/a")        -> true
@@ -110,9 +110,9 @@ public:
      */
     bool IsNonStrictSubpathOf(const TFsPath& that) const;
 
-    bool IsContainerOf(const TFsPath& that) const { 
-        return that.IsSubpathOf(*this); 
-    } 
+    bool IsContainerOf(const TFsPath& that) const {
+        return that.IsSubpathOf(*this);
+    }
 
     TFsPath RelativeTo(const TFsPath& root) const; //must be subpath of root
 
@@ -127,11 +127,11 @@ public:
     TFsPath Parent() const;
 
     TString Basename() const {
-        return GetName(); 
-    } 
+        return GetName();
+    }
     TString Dirname() const {
-        return Parent(); 
-    } 
+        return Parent();
+    }
 
     TFsPath Child(const TString& name) const;
 
@@ -168,8 +168,8 @@ public:
     inline bool Stat(TFileStat& stat) const {
         stat = TFileStat(Path_.data());
 
-        return stat.Mode; 
-    } 
+        return stat.Mode;
+    }
 
     bool Exists() const;
     /// false if not exists
@@ -211,7 +211,7 @@ private:
     /// cache
     mutable TSimpleIntrusivePtr<TSplit> Split_;
 };
- 
+
 namespace NPrivate {
     inline void AppendToFsPath(TFsPath&) {
     }

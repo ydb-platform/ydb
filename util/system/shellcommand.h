@@ -88,7 +88,7 @@ public:
      * @note in default close-on-exec mode is off.
      * @return self
      */
-    inline TShellCommandOptions& SetCloseAllFdsOnExec(bool closeAllFdsOnExec) { 
+    inline TShellCommandOptions& SetCloseAllFdsOnExec(bool closeAllFdsOnExec) {
         CloseAllFdsOnExec = closeAllFdsOnExec;
         return *this;
     }
@@ -98,30 +98,30 @@ public:
      * in separate thread, and control will be returned immediately
      *
      * @param async true if asynchonous mode is needed
-     * @note in default async mode launcher will need 100% cpu for rapid process termination 
+     * @note in default async mode launcher will need 100% cpu for rapid process termination
      * @return self
      */
-    inline TShellCommandOptions& SetAsync(bool async) { 
+    inline TShellCommandOptions& SetAsync(bool async) {
         AsyncMode = async;
-        if (AsyncMode) 
-            PollDelayMs = 0; 
+        if (AsyncMode)
+            PollDelayMs = 0;
         return *this;
     }
 
     /**
-     * @brief specify delay for process controlling loop 
-     * @param ms number of milliseconds to poll for 
-     * @note for synchronous process default of 1s should generally fit 
-     *       for async process default is no latency and that consumes 100% one cpu 
-     *       SetAsync(true) will reset this delay to 0, so call this method after 
-     * @return self 
-     */ 
-    inline TShellCommandOptions& SetLatency(size_t ms) { 
-        PollDelayMs = ms; 
-        return *this; 
-    } 
- 
-    /** 
+     * @brief specify delay for process controlling loop
+     * @param ms number of milliseconds to poll for
+     * @note for synchronous process default of 1s should generally fit
+     *       for async process default is no latency and that consumes 100% one cpu
+     *       SetAsync(true) will reset this delay to 0, so call this method after
+     * @return self
+     */
+    inline TShellCommandOptions& SetLatency(size_t ms) {
+        PollDelayMs = ms;
+        return *this;
+    }
+
+    /**
      * @brief set the stream, which is input fetched from
      *
      * @param stream Pointer to stream.
@@ -168,17 +168,17 @@ public:
     }
 
     /**
-    * @brief set if Finish() should be called on user-supplied streams 
-    * if process is run in async mode Finish will be called in process' thread 
-    * @param val if Finish() should be called 
-    * @return self 
-    */ 
-    inline TShellCommandOptions& SetCloseStreams(bool val) { 
-        CloseStreams = val; 
-        return *this; 
-    } 
- 
-    /** 
+    * @brief set if Finish() should be called on user-supplied streams
+    * if process is run in async mode Finish will be called in process' thread
+    * @param val if Finish() should be called
+    * @return self
+    */
+    inline TShellCommandOptions& SetCloseStreams(bool val) {
+        CloseStreams = val;
+        return *this;
+    }
+
+    /**
     * @brief set if input stream should be closed after all data is read
     * call SetCloseInput(false) for interactive process
     * @param val if input stream should be closed
@@ -190,21 +190,21 @@ public:
     }
 
     /**
-    * @brief set if command should be interpreted by OS shell (/bin/sh or cmd.exe) 
-    * shell is enabled by default 
-    * call SetUseShell(false) for command to be sent to OS verbatim 
-    * @note shell operators > < | && || will not work if this option is off 
-    * @param useShell if command should be run in shell 
-    * @return self 
-    */ 
-    inline TShellCommandOptions& SetUseShell(bool useShell) { 
-        UseShell = useShell; 
-        if (!useShell) 
-            QuoteArguments = false; 
-        return *this; 
-    } 
- 
-    /** 
+    * @brief set if command should be interpreted by OS shell (/bin/sh or cmd.exe)
+    * shell is enabled by default
+    * call SetUseShell(false) for command to be sent to OS verbatim
+    * @note shell operators > < | && || will not work if this option is off
+    * @param useShell if command should be run in shell
+    * @return self
+    */
+    inline TShellCommandOptions& SetUseShell(bool useShell) {
+        UseShell = useShell;
+        if (!useShell)
+            QuoteArguments = false;
+        return *this;
+    }
+
+    /**
      * @brief set if the arguments should be wrapped in quotes.
      * Please, note that this option makes no difference between
      * real arguments and shell syntax, so if you execute something
@@ -214,28 +214,28 @@ public:
      * which will never end successfully.
      * By default, this option is turned on.
      *
-     * @note arguments will only be quoted if shell is used 
+     * @note arguments will only be quoted if shell is used
      * @param quote if the arguments should be quoted
      *
      * @return self
      */
-    inline TShellCommandOptions& SetQuoteArguments(bool quote) { 
+    inline TShellCommandOptions& SetQuoteArguments(bool quote) {
         QuoteArguments = quote;
         return *this;
     }
 
-    /** 
-     * @brief set to run command in new session 
-     * @note set this option to off to deliver parent's signals to command as well 
-     * @note currently ignored on windows 
-     * @param detach if command should be run in new session 
-     * @return self 
-    */ 
-    inline TShellCommandOptions& SetDetachSession(bool detach) { 
-        DetachSession = detach; 
-        return *this; 
-    } 
- 
+    /**
+     * @brief set to run command in new session
+     * @note set this option to off to deliver parent's signals to command as well
+     * @note currently ignored on windows
+     * @param detach if command should be run in new session
+     * @return self
+    */
+    inline TShellCommandOptions& SetDetachSession(bool detach) {
+        DetachSession = detach;
+        return *this;
+    }
+
     /**
      * @brief specifies pure function to be called in the child process after fork, before calling execve
      * @note currently ignored on windows
@@ -295,7 +295,7 @@ public:
         return *this;
     }
 
-public: 
+public:
     bool ClearSignalMask = false;
     bool CloseAllFdsOnExec = false;
     bool AsyncMode = false;
@@ -309,10 +309,10 @@ public:
     EHandleMode OutputMode = HANDLE_STREAM;
     EHandleMode ErrorMode = HANDLE_STREAM;
 
-    /// @todo more options 
-    // bool SearchPath // search exe name in $PATH 
-    // bool UnicodeConsole 
-    // bool EmulateConsole // provide isatty == true 
+    /// @todo more options
+    // bool SearchPath // search exe name in $PATH
+    // bool UnicodeConsole
+    // bool EmulateConsole // provide isatty == true
     /// @todo command's stdin should be exposet as IOutputStream to support dialogue
     IInputStream* InputStream;
     IOutputStream* OutputStream;
@@ -320,8 +320,8 @@ public:
     TUserOptions User;
     THashMap<TString, TString> Environment;
     int Nice = 0;
- 
-    static const size_t DefaultSyncPollDelay = 1000; // ms 
+
+    static const size_t DefaultSyncPollDelay = 1000; // ms
     std::function<void()> FuncAfterFork = {};
 };
 
@@ -349,7 +349,7 @@ public:
      * @param cmd binary name
      * @param args arguments list
      * @param options execution options
-     * @todo store entire options structure 
+     * @todo store entire options structure
      */
     TShellCommand(const TStringBuf cmd, const TList<TString>& args, const TShellCommandOptions& options = TShellCommandOptions(),
                   const TString& workdir = TString());
@@ -440,7 +440,7 @@ public:
      *
      * @return self
      */
-    TShellCommand& Run(); 
+    TShellCommand& Run();
 
     /**
      * @brief terminate the execution
@@ -448,14 +448,14 @@ public:
      *
      * @return self
      */
-    TShellCommand& Terminate(); 
+    TShellCommand& Terminate();
 
     /**
      * @brief wait until the execution is finished
      *
      * @return self
      */
-    TShellCommand& Wait(); 
+    TShellCommand& Wait();
 
     /**
      * @brief close process' stdin

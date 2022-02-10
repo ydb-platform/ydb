@@ -7,11 +7,11 @@
 // WARNING: Do not use this functions - use functions from wide.h or recyr.hh instead.
 
 namespace NICONVPrivate {
-    inline const char* CharsetName(ECharset code) { 
-        return NameByCharset(code); 
+    inline const char* CharsetName(ECharset code) {
+        return NameByCharset(code);
     }
 
-    inline const char* CharsetName(const char* code) { 
+    inline const char* CharsetName(const char* code) {
         return code;
     }
 

@@ -671,18 +671,18 @@ namespace NUri {
             UNIT_ASSERT_EQUAL(uri.Parse("http://hello_world", TFeature::FeatureCheckHost), TState::ParsedBadHost);
             UNIT_ASSERT_EQUAL(uri.Parse("http://hello_world", TFeature::FeatureSchemeFlexible), TState::ParsedOK);
             UNIT_ASSERT_VALUES_EQUAL(uri.GetHost(), "hello_world");
- 
+
             UNIT_ASSERT_EQUAL(uri.Parse("httpzzzzz://)(*&^$!\\][';<>`~,q?./index.html", TFeature::FeatureSchemeFlexible), TState::ParsedOK);
             UNIT_ASSERT_VALUES_EQUAL(uri.GetHost(), ")(*&^$!\\][';<>`~,q");
             UNIT_ASSERT_VALUES_EQUAL(uri.GetField(TField::FieldPath), "");
             UNIT_ASSERT_VALUES_EQUAL(uri.GetField(TField::FieldQuery), "./index.html");
- 
+
             UNIT_ASSERT_EQUAL(uri.Parse("htttttttp://)(*&^%45$!\\][';<>`~,.q/index.html", TFeature::FeatureSchemeFlexible), TState::ParsedOK);
             UNIT_ASSERT_VALUES_EQUAL(uri.GetHost(), ")(*&^e$!\\][';<>`~,.q");
             UNIT_ASSERT_VALUES_EQUAL(uri.GetField(TField::FieldPath), "/index.html");
             UNIT_ASSERT_VALUES_EQUAL(uri.GetField(TField::FieldQuery), "");
         }
- 
+
         Y_UNIT_TEST(testSpecialChar) {
             // test characters which are not always allowed
             {
@@ -899,7 +899,7 @@ namespace NUri {
            UNIT_ASSERT_VALUES_EQUAL(url.GetHost(), "www.hostname.ru");
            UNIT_ASSERT_VALUES_EQUAL(url.GetField(TField::FieldPath), "/path");
         }
-    } 
+    }
 
     Y_UNIT_TEST_SUITE(TInvertDomainTest) {
         Y_UNIT_TEST(TestInvert) {

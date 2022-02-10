@@ -41,7 +41,7 @@ static const TExample CommonTestData[] = {
     {"Slash\\\\dash!", "Slash\\dash!"},
     {R"(There\nare\r\nnewlines.)", "There\nare\r\nnewlines."},
     {"There\\tare\\ttabs.", "There\tare\ttabs."},
- 
+
     {"There are questions \\x3F\\x3F?", "There are questions ???"},
     {"There are questions \\x3F?", "There are questions ??"},
 };
@@ -94,15 +94,15 @@ Y_UNIT_TEST_SUITE(TEscapeCTest) {
         UNIT_ASSERT_VALUES_EQUAL(u"h", EscapeC(u'h'));
         UNIT_ASSERT_VALUES_EQUAL(u"\\xFF", EscapeC(wchar16(255)));
     }
- 
+
     Y_UNIT_TEST(TestEscapeTrigraphs) {
         UNIT_ASSERT_VALUES_EQUAL("?", EscapeC(TString("?")));
         UNIT_ASSERT_VALUES_EQUAL("\\x3F?", EscapeC(TString("??")));
         UNIT_ASSERT_VALUES_EQUAL("\\x3F\\x3F?", EscapeC(TString("???")));
-        // ok but may cause warning about trigraphs 
+        // ok but may cause warning about trigraphs
         // UNIT_ASSERT_VALUES_EQUAL("[x]?z", EscapeC(TString("??(x??)?z")));
         UNIT_ASSERT_VALUES_EQUAL("\\x3F?x\\x3F\\x3F?z", EscapeC(TString("??x???z")));
-    } 
+    }
 
     Y_UNIT_TEST(TestUnescapeCCharLen) {
         auto test = [](const char* str, size_t len) {

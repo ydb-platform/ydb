@@ -343,7 +343,7 @@ void Out<RECODE_RESULT>(IOutputStream& out, RECODE_RESULT val) {
 
 void TConversionTest::TestRecode() {
     for (int c = 0; c != CODES_MAX; ++c) {
-        ECharset enc = static_cast<ECharset>(c); 
+        ECharset enc = static_cast<ECharset>(c);
         if (!SingleByteCodepage(enc))
             continue;
 
@@ -385,11 +385,11 @@ void TConversionTest::TestRecode() {
 
 void TConversionTest::TestUnicodeLimit() {
     for (int i = 0; i != CODES_MAX; ++i) {
-        ECharset code = static_cast<ECharset>(i); 
+        ECharset code = static_cast<ECharset>(i);
         if (!SingleByteCodepage(code))
             continue;
 
-        const CodePage* page = CodePageByCharset(code); 
+        const CodePage* page = CodePageByCharset(code);
         Y_ASSERT(page);
 
         for (int c = 0; c < 256; ++c) {

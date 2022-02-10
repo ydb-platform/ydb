@@ -29,10 +29,10 @@ namespace NXml {
                 TDocHolder doc(xmlNewDoc(XMLCHAR("1.0")));
                 if (!doc)
                     THROW(XmlException, "Can't create xml document.");
-                doc->encoding = xmlStrdup(XMLCHAR("utf-8")); 
- 
+                doc->encoding = xmlStrdup(XMLCHAR("utf-8"));
+
                 TNodePtr node(xmlNewNode(nullptr, XMLCHAR(xml.c_str())));
-                if (!node) 
+                if (!node)
                     THROW(XmlException, "Can't create root node.");
                 xmlDocSetRootElement(doc.Get(), node.Get());
                 Y_UNUSED(node.Release());
@@ -178,7 +178,7 @@ namespace NXml {
         if (n.Size() == 0)
             return TNode();
         else
-            return n[0].ConstCast(); 
+            return n[0].ConstCast();
     }
 
     TConstNode TNode::Node(TZtStringBuf xpath, bool quiet, TXPathContext& ctxt) const {
@@ -246,14 +246,14 @@ namespace NXml {
         return AddChild(name, "");
     }
 
-    /* NOTE: source node will be copied, as otherwise it will be double-freed from this and its own document */ 
- 
-    TNode TNode::AddChild(const TConstNode& node) { 
-        xmlNodePtr copy = xmlDocCopyNode(node.ConstCast().NodePointer, DocPointer, 1 /* recursive */); 
-        copy = xmlAddChild(NodePointer, copy); 
-        return TNode(DocPointer, copy); 
-    } 
- 
+    /* NOTE: source node will be copied, as otherwise it will be double-freed from this and its own document */
+
+    TNode TNode::AddChild(const TConstNode& node) {
+        xmlNodePtr copy = xmlDocCopyNode(node.ConstCast().NodePointer, DocPointer, 1 /* recursive */);
+        copy = xmlAddChild(NodePointer, copy);
+        return TNode(DocPointer, copy);
+    }
+
     void TNode::SetPrivate(void* priv) {
         NodePointer->_private = priv;
     }
@@ -274,8 +274,8 @@ namespace NXml {
         if (IsNull())
             THROW(XmlException, "Node is null");
 
-        return CAST2CHAR(NodePointer->name); 
-    } 
+        return CAST2CHAR(NodePointer->name);
+    }
 
     TString TNode::Path() const {
         TCharPtr path(xmlGetNodePath(NodePointer));
@@ -307,20 +307,20 @@ namespace NXml {
     }
 
     static int XmlWriteToOstream(void* context, const char* buffer, int len) {
-        // possibly use to save doc as well 
+        // possibly use to save doc as well
         IOutputStream* out = (IOutputStream*)context;
-        out->Write(buffer, len); 
-        return len; 
-    } 
- 
+        out->Write(buffer, len);
+        return len;
+    }
+
     void TNode::SaveInternal(IOutputStream& stream, TZtStringBuf enc, int options) const {
         const char* encoding = enc.size() ? enc.data() : "utf-8";
         TSaveCtxtPtr ctx(xmlSaveToIO(XmlWriteToOstream, /* close */ nullptr, &stream,
                                      encoding, options));
-        if (xmlSaveTree(ctx.Get(), (xmlNode*)GetPtr()) < 0) 
-            THROW(XmlException, "Failed saving node to stream"); 
-    } 
- 
+        if (xmlSaveTree(ctx.Get(), (xmlNode*)GetPtr()) < 0)
+            THROW(XmlException, "Failed saving node to stream");
+    }
+
     void TNode::Save(IOutputStream& stream, TZtStringBuf enc, bool shouldFormat) const {
         SaveInternal(stream, enc, shouldFormat ? XML_SAVE_FORMAT : 0);
     }

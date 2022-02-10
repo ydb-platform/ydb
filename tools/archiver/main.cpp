@@ -13,44 +13,44 @@
 #include <util/string/cast.h>
 #include <util/string/escape.h>
 #include <util/string/hex.h>
-#include <util/string/subst.h> 
+#include <util/string/subst.h>
 #include <util/system/filemap.h>
 
 #include <cstring>
 
 namespace {
     class TStringArrayOutput: public IOutputStream {
-    public: 
+    public:
         TStringArrayOutput(IOutputStream* slave, size_t stride)
-            : Slave(*slave) 
-            , Stride(stride) 
-        { 
-            Buf.reserve(stride); 
-        } 
+            : Slave(*slave)
+            , Stride(stride)
+        {
+            Buf.reserve(stride);
+        }
         void DoFinish() override {
-            WriteBuf(); 
-            Flush(); 
-        } 
+            WriteBuf();
+            Flush();
+        }
         void DoWrite(const void* data, size_t len) override {
-            for (const char* p = (const char*)data; len > 0; ++p, --len) { 
-                Buf.append(*p); 
+            for (const char* p = (const char*)data; len > 0; ++p, --len) {
+                Buf.append(*p);
                 if (Buf.size() == Stride)
-                    WriteBuf(); 
-            } 
-        } 
+                    WriteBuf();
+            }
+        }
 
-    private: 
-        void WriteBuf() { 
+    private:
+        void WriteBuf() {
             Slave << '"' << Buf << "\",\n"sv;
-            Buf.clear(); 
-        } 
- 
-    private: 
+            Buf.clear();
+        }
+
+    private:
         IOutputStream& Slave;
-        const size_t Stride; 
+        const size_t Stride;
         TString Buf;
-    }; 
- 
+    };
+
     class THexOutput: public IOutputStream {
     public:
         inline THexOutput(IOutputStream* slave)
@@ -109,7 +109,7 @@ namespace {
         }
 
     private:
-        // width in source chars 
+        // width in source chars
         static const size_t Columns = 10;
         ui64 Count_ = 0;
         IOutputStream* Slave_ = nullptr;
@@ -490,7 +490,7 @@ int main(int argc, char** argv) {
         "Archiver\n"
         "Docs: https://wiki.yandex-team.ru/Development/Poisk/arcadia/tools/archiver"
     );
- 
+
     bool hexdump = false;
     opts.AddLongOption('x', "hexdump", "Produce hexdump")
         .NoArgument()
@@ -598,9 +598,9 @@ int main(int argc, char** argv) {
     opts.SetFreeArgsMin(1);
     NLastGetopt::TOptsParseResult optsRes(&opts, argc, argv);
 
-    SubstGlobal(append, "\\n", "\n"); 
-    SubstGlobal(prepend, "\\n", "\n"); 
- 
+    SubstGlobal(append, "\\n", "\n");
+    SubstGlobal(prepend, "\\n", "\n");
+
     TVector<TRec> recs;
     const auto& files = optsRes.GetFreeArgs();
 
@@ -654,9 +654,9 @@ int main(int argc, char** argv) {
             if (hexdump) {
                 hexout.Reset(new THexOutput(out));
                 out = hexout.Get();
-            } else if (stride) { 
-                hexout.Reset(new TStringArrayOutput(out, stride)); 
-                out = hexout.Get(); 
+            } else if (stride) {
+                hexout.Reset(new TStringArrayOutput(out, stride));
+                out = hexout.Get();
             } else if (yasmBase) {
                 hexout.Reset(new TYasmOutput(out, yasmBase));
                 out = hexout.Get();
@@ -690,7 +690,7 @@ int main(int argc, char** argv) {
                 out->Finish();
             } catch (...) {
             }
- 
+
             outf->Write(append.data(), append.size());
         }
     } catch (...) {

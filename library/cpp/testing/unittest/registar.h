@@ -436,7 +436,7 @@ public:                       \
     } while (false)
 
 #define UNIT_ASSERT_STRINGS_EQUAL(A, B) UNIT_ASSERT_STRINGS_EQUAL_C(A, B, "")
- 
+
 #define UNIT_ASSERT_STRING_CONTAINS_C(A, B, C)                                                                                  \
     do {                                                                                                                        \
         const TString _a(A);                                                                                                    \
@@ -729,7 +729,7 @@ public:                       \
 
 #define UNIT_ASSERT_VALUES_EQUAL(A, B) UNIT_ASSERT_VALUES_EQUAL_C(A, B, "")
 #define UNIT_ASSERT_VALUES_UNEQUAL(A, B) UNIT_ASSERT_VALUES_UNEQUAL_C(A, B, "")
- 
+
 // Checks that test will fail while executing given expression
 // Macro for using in unitests for ut helpers
 #define UNIT_ASSERT_TEST_FAILS_C(A, C)                                   \

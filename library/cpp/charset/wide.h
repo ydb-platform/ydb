@@ -1,5 +1,5 @@
 #pragma once
- 
+
 #include "codepage.h"
 #include "iconv.h"
 
@@ -22,7 +22,7 @@ inline size_t WideToChar(const TCharType* text, size_t len, char* dest, ECharset
 
     const char* start = dest;
 
-    const Encoder* const encoder = &EncoderByCharset(enc); 
+    const Encoder* const encoder = &EncoderByCharset(enc);
     const TCharType* const last = text + len;
     for (const TCharType* cur = text; cur != last; ++dest) {
         *dest = encoder->Tr(ReadSymbolAndAdvance(cur, last));
@@ -257,7 +257,7 @@ inline TUtf16String CharToWide(const char* text, size_t len, ECharset enc) {
         if (enc == CODES_UTF8)
             return UTF8ToWide<robust>(text, len);
 
-        return CharToWide(text, len, *CodePageByCharset(enc)); 
+        return CharToWide(text, len, *CodePageByCharset(enc));
     }
 
     TUtf16String w = TUtf16String::Uninitialized(len * 2);
@@ -300,7 +300,7 @@ inline TUtf16String CharToWide(const TStringBuf s, ECharset enc) {
 inline TUtf16String CharToWide(const TStringBuf s, const CodePage& cp) {
     return CharToWide(s.data(), s.size(), cp);
 }
- 
+
 // true if @text can be fully encoded to specified @encoding,
 // with possibility to recover exact original text after decoding
 bool CanBeEncoded(TWtringBuf text, ECharset encoding);

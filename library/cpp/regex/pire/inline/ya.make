@@ -16,7 +16,7 @@ SRCDIR(
 )
 
 SRCS(
-    inline.l 
+    inline.l
 )
 
 END()

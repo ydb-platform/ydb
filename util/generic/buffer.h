@@ -161,7 +161,7 @@ public:
         Reserve(len);
         Pos_ = len;
     }
- 
+
     // Method works like Resize, but allocates exact specified number of bytes
     // rather than rounded up to next power of 2
     // Use with care

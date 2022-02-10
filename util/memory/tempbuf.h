@@ -51,7 +51,7 @@ private:
 };
 
 template <typename T>
-class TTempArray: private TTempBuf { 
+class TTempArray: private TTempBuf {
 private:
     static T* TypedPointer(char* pointer) noexcept {
         return reinterpret_cast<T*>(pointer);
@@ -100,4 +100,4 @@ public:
     T* Proceed(size_t off) {
         return (T*)TTempBuf::Proceed(RawSize(off));
     }
-}; 
+};

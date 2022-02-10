@@ -23,11 +23,11 @@
 using namespace NCodepagePrivate;
 
 void Recoder::Create(const CodePage& source, const CodePage& target) {
-    const Encoder* wideTarget = &EncoderByCharset(target.CPEnum); 
+    const Encoder* wideTarget = &EncoderByCharset(target.CPEnum);
     Create(source, wideTarget);
 }
 void Recoder::Create(const CodePage& page, wchar32 (*mapfunc)(wchar32)) {
-    const Encoder* widePage = &EncoderByCharset(page.CPEnum); 
+    const Encoder* widePage = &EncoderByCharset(page.CPEnum);
     Create(page, widePage, mapfunc);
 }
 
@@ -167,7 +167,7 @@ public:
         const char* name;
 
         for (size_t i = 0; i != CODES_MAX; ++i) {
-            ECharset e = static_cast<ECharset>(i); 
+            ECharset e = static_cast<ECharset>(i);
             const CodePage* page = Singleton<NCodepagePrivate::TCodepagesMap>()->GetPrivate(e);
 
             AddName(ToString(static_cast<int>(i)), e);
@@ -193,7 +193,7 @@ public:
 };
 
 ECharset CharsetByName(TStringBuf name) {
-    return Singleton<TCodePageHash>()->CharsetByName(name); 
+    return Singleton<TCodePageHash>()->CharsetByName(name);
 }
 
 ECharset CharsetByNameOrDie(TStringBuf name) {
@@ -203,7 +203,7 @@ ECharset CharsetByNameOrDie(TStringBuf name) {
     return result;
 }
 
-template <typename TxChar> 
+template <typename TxChar>
 static inline RECODE_RESULT utf8_read_rune_from_unknown_plane(TxChar& rune, size_t& rune_len, const TxChar* s, const TxChar* end) {
     if ((*s & 0xFF00) != 0xF000) {
         rune_len = 1;
@@ -251,17 +251,17 @@ static inline RECODE_RESULT utf8_read_rune_from_unknown_plane(TxChar& rune, size
 }
 
 template <typename TxChar>
-void DoDecodeUnknownPlane(TxChar* str, TxChar*& ee, const ECharset enc) { 
-    TxChar* e = ee; 
+void DoDecodeUnknownPlane(TxChar* str, TxChar*& ee, const ECharset enc) {
+    TxChar* e = ee;
     if (SingleByteCodepage(enc)) {
-        const CodePage* cp = CodePageByCharset(enc); 
-        for (TxChar* s = str; s < e; s++) { 
+        const CodePage* cp = CodePageByCharset(enc);
+        for (TxChar* s = str; s < e; s++) {
             if (Hi8(Lo16(*s)) == 0xF0)
                 *s = (TxChar)cp->unicode[Lo8(Lo16(*s))]; // NOT mb compliant
         }
     } else if (enc == CODES_UTF8) {
-        TxChar* s; 
-        TxChar* d; 
+        TxChar* s;
+        TxChar* d;
 
         for (s = d = str; s < e;) {
             size_t l = 0;
@@ -275,7 +275,7 @@ void DoDecodeUnknownPlane(TxChar* str, TxChar*& ee, const ECharset enc) {
         }
         e = d;
     } else if (enc == CODES_UNKNOWN) {
-        for (TxChar* s = str; s < e; s++) { 
+        for (TxChar* s = str; s < e; s++) {
             if (Hi8(Lo16(*s)) == 0xF0)
                 *s = Lo8(Lo16(*s));
         }
@@ -312,11 +312,11 @@ void DoDecodeUnknownPlane(TxChar* str, TxChar*& ee, const ECharset enc) {
 }
 
 void DecodeUnknownPlane(wchar16* str, wchar16*& ee, const ECharset enc) {
-    DoDecodeUnknownPlane(str, ee, enc); 
+    DoDecodeUnknownPlane(str, ee, enc);
 }
 void DecodeUnknownPlane(wchar32* str, wchar32*& ee, const ECharset enc) {
-    DoDecodeUnknownPlane(str, ee, enc); 
-} 
+    DoDecodeUnknownPlane(str, ee, enc);
+}
 
 namespace {
     class THashSetType: public THashSet<TString> {
@@ -471,7 +471,7 @@ public:
     }
 };
 
-ECharset EncodingHintByName(const char* encname) { 
+ECharset EncodingHintByName(const char* encname) {
     if (!encname)
         return CODES_UNKNOWN; // safety check
 
@@ -501,7 +501,7 @@ ECharset EncodingHintByName(const char* encname) {
 
     NormalizeEncodingPrefixes(enc);
 
-    ECharset hint = CharsetByName(enc.c_str()); 
+    ECharset hint = CharsetByName(enc.c_str());
     if (hint != CODES_UNKNOWN)
         return hint;
 

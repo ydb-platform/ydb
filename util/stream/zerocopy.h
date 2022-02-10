@@ -1,9 +1,9 @@
 #pragma once
- 
+
 #include <util/system/yassert.h>
 #include <util/system/defaults.h>
 #include <util/generic/ylimits.h>
- 
+
 #include "input.h"
 
 class IOutputStream;
@@ -22,7 +22,7 @@ class IZeroCopyInput: public IInputStream {
 public:
     IZeroCopyInput() noexcept = default;
     ~IZeroCopyInput() override;
- 
+
     IZeroCopyInput(IZeroCopyInput&&) noexcept = default;
     IZeroCopyInput& operator=(IZeroCopyInput&&) noexcept = default;
 
@@ -54,8 +54,8 @@ protected:
     size_t DoSkip(size_t len) override;
     ui64 DoReadAll(IOutputStream& out) override;
     virtual size_t DoNext(const void** ptr, size_t len) = 0;
-}; 
- 
+};
+
 /**
 * Input stream with direct access to the input buffer and ability to undo read
 *

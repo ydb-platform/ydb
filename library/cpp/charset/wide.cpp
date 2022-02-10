@@ -1,5 +1,5 @@
-#include "wide.h" 
- 
+#include "wide.h"
+
 bool CanBeEncoded(TWtringBuf text, ECharset encoding) {
     const size_t LEN = 16;
     const size_t BUFSIZE = LEN * 4;

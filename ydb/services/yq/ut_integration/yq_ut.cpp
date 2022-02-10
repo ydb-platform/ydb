@@ -975,10 +975,10 @@ Y_UNIT_TEST_SUITE(PrivateApi) {
         {
             Yq::Private::NodesHealthCheckRequest req;
             req.set_tenant("Tenant");
-            auto& node = *req.mutable_node(); 
-            node.set_hostname("hostname"); 
-            node.set_node_id(100500); 
-            node.set_instance_id(instanceId); 
+            auto& node = *req.mutable_node();
+            node.set_hostname("hostname");
+            node.set_node_id(100500);
+            node.set_instance_id(instanceId);
             const auto result = DoWithRetryOnRetCode([&]() {
                 auto r = req;
                 auto result = client.NodesHealthCheck(std::move(r)).ExtractValueSync();

@@ -121,7 +121,7 @@ public:
         , TimeProvider(timeProvider)
         , RandomProvider(randomProvider)
         , DqCompFactory(dqCompFactory)
-        , ServiceCounters(serviceCounters, "pending_fetcher") 
+        , ServiceCounters(serviceCounters, "pending_fetcher")
         , CredentialsFactory(credentialsFactory)
         , S3Gateway(s3Gateway)
         , PqCmConnections(std::move(pqCmConnections))
@@ -237,7 +237,7 @@ private:
             YqSharedResources->YdbDriver, S3Gateway,
             FunctionRegistry, RandomProvider,
             ModuleResolver, ModuleResolver->GetNextUniqueId(),
-            DqCompFactory, PqCmConnections, 
+            DqCompFactory, PqCmConnections,
             CommonConfig, CheckpointCoordinatorConfig,
             PrivateApiConfig, GatewaysConfig, PingerConfig,
             task.text(), task.scope(), task.user_token(),
@@ -336,7 +336,7 @@ NActors::IActor* CreatePendingFetcher(
         timeProvider,
         randomProvider,
         dqCompFactory,
-        serviceCounters, 
+        serviceCounters,
         credentialsFactory,
         s3Gateway,
         std::move(pqCmConnections),

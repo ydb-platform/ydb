@@ -118,7 +118,7 @@ public:
 protected:
     TDqComputeActorBase(const NActors::TActorId& executerId, const TTxId& txId, NDqProto::TDqTask&& task,
         IDqSourceActorFactory::TPtr sourceActorFactory, IDqSinkActorFactory::TPtr sinkActorFactory,
-        const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits) 
+        const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits)
         : ExecuterId(executerId)
         , TxId(txId)
         , Task(std::move(task))
@@ -128,8 +128,8 @@ protected:
         , SourceActorFactory(std::move(sourceActorFactory))
         , SinkActorFactory(std::move(sinkActorFactory))
         , CheckpointingMode(GetTaskCheckpointingMode(Task))
-        , State(Task.GetCreateSuspended() ? NDqProto::COMPUTE_STATE_UNKNOWN : NDqProto::COMPUTE_STATE_EXECUTING) 
-        , Running(!Task.GetCreateSuspended()) 
+        , State(Task.GetCreateSuspended() ? NDqProto::COMPUTE_STATE_UNKNOWN : NDqProto::COMPUTE_STATE_EXECUTING)
+        , Running(!Task.GetCreateSuspended())
     {
         if (RuntimeSettings.StatsMode >= NDqProto::DQ_STATS_MODE_BASIC) {
             BasicStats = std::make_unique<TBasicStats>();
@@ -142,7 +142,7 @@ protected:
 
     TDqComputeActorBase(const NActors::TActorId& executerId, const TTxId& txId, const NDqProto::TDqTask& task,
         IDqSourceActorFactory::TPtr sourceActorFactory, IDqSinkActorFactory::TPtr sinkActorFactory,
-        const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits) 
+        const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits)
         : ExecuterId(executerId)
         , TxId(txId)
         , Task(task)
@@ -151,8 +151,8 @@ protected:
         , CanAllocateExtraMemory(RuntimeSettings.ExtraMemoryAllocationPool != 0 && MemoryLimits.AllocateMemoryFn)
         , SourceActorFactory(std::move(sourceActorFactory))
         , SinkActorFactory(std::move(sinkActorFactory))
-        , State(Task.GetCreateSuspended() ? NDqProto::COMPUTE_STATE_UNKNOWN : NDqProto::COMPUTE_STATE_EXECUTING) 
-        , Running(!Task.GetCreateSuspended()) 
+        , State(Task.GetCreateSuspended() ? NDqProto::COMPUTE_STATE_UNKNOWN : NDqProto::COMPUTE_STATE_EXECUTING)
+        , Running(!Task.GetCreateSuspended())
     {
         if (RuntimeSettings.StatsMode >= NDqProto::DQ_STATS_MODE_BASIC) {
             BasicStats = std::make_unique<TBasicStats>();
@@ -193,7 +193,7 @@ protected:
                 FFunc(TEvDqCompute::TEvChannelData::EventType, Channels->Receive);
                 FFunc(TEvDqCompute::TEvChannelDataAck::EventType, Channels->Receive);
                 hFunc(TEvDqCompute::TEvRun, HandleExecuteBase);
-                hFunc(TEvDqCompute::TEvStateRequest, HandleExecuteBase); 
+                hFunc(TEvDqCompute::TEvStateRequest, HandleExecuteBase);
                 hFunc(TEvDqCompute::TEvNewCheckpointCoordinator, HandleExecuteBase);
                 FFunc(TEvDqCompute::TEvInjectCheckpoint::EventType, Checkpoints->Receive);
                 FFunc(TEvDqCompute::TEvCommitState::EventType, Checkpoints->Receive);
@@ -230,18 +230,18 @@ protected:
             DoExecuteImpl();
         }
 
-        if (alloc->GetAllocated() - alloc->GetUsed() > MemoryLimits.MinMemFreeSize) { 
+        if (alloc->GetAllocated() - alloc->GetUsed() > MemoryLimits.MinMemFreeSize) {
             alloc->ReleaseFreePages();
-            if (MemoryLimits.FreeMemoryFn) { 
-                auto newLimit = std::max(alloc->GetAllocated(), CalcMkqlMemoryLimit()); 
-                if (MkqlMemoryLimit > newLimit) { 
-                    auto freedSize = MkqlMemoryLimit - newLimit; 
-                    MkqlMemoryLimit = newLimit; 
-                    alloc->SetLimit(newLimit); 
-                    MemoryLimits.FreeMemoryFn(TxId, Task.GetId(), freedSize); 
-                    CA_LOG_I("[Mem] memory shrinked, new limit: " << MkqlMemoryLimit); 
-                } 
-            } 
+            if (MemoryLimits.FreeMemoryFn) {
+                auto newLimit = std::max(alloc->GetAllocated(), CalcMkqlMemoryLimit());
+                if (MkqlMemoryLimit > newLimit) {
+                    auto freedSize = MkqlMemoryLimit - newLimit;
+                    MkqlMemoryLimit = newLimit;
+                    alloc->SetLimit(newLimit);
+                    MemoryLimits.FreeMemoryFn(TxId, Task.GetId(), freedSize);
+                    CA_LOG_I("[Mem] memory shrinked, new limit: " << MkqlMemoryLimit);
+                }
+            }
         }
 
         auto now = TInstant::Now();
@@ -378,9 +378,9 @@ protected:
                     return;
                 }
                 if (Channels->CheckInFlight("Tasks execution finished")) {
-                    State = NDqProto::COMPUTE_STATE_FINISHED; 
+                    State = NDqProto::COMPUTE_STATE_FINISHED;
                     CA_LOG_D("Compute state finished. All channels finished");
-                    ReportStateAndMaybeDie(TIssue("success")); 
+                    ReportStateAndMaybeDie(TIssue("success"));
                 }
             }
         }
@@ -388,12 +388,12 @@ protected:
 
 protected:
     void Terminate(bool success, const TString& message) {
- 
-        if (MkqlMemoryLimit && MemoryLimits.FreeMemoryFn) { 
-            MemoryLimits.FreeMemoryFn(TxId, Task.GetId(), MkqlMemoryLimit); 
-            MkqlMemoryLimit = 0; 
-        } 
- 
+
+        if (MkqlMemoryLimit && MemoryLimits.FreeMemoryFn) {
+            MemoryLimits.FreeMemoryFn(TxId, Task.GetId(), MkqlMemoryLimit);
+            MkqlMemoryLimit = 0;
+        }
+
         if (Channels) {
             TAutoPtr<NActors::IEventHandle> handle = new NActors::IEventHandle(Channels->SelfId(), this->SelfId(),
                 new NActors::TEvents::TEvPoison);
@@ -431,11 +431,11 @@ protected:
         this->PassAway();
     }
 
-    void ReportStateAndMaybeDie(TIssue&& issue) { 
-        ReportStateAndMaybeDie( 
-            State == NDqProto::COMPUTE_STATE_FINISHED ? 
-            Ydb::StatusIds::STATUS_CODE_UNSPECIFIED 
-            : Ydb::StatusIds::ABORTED, TIssues({issue})); 
+    void ReportStateAndMaybeDie(TIssue&& issue) {
+        ReportStateAndMaybeDie(
+            State == NDqProto::COMPUTE_STATE_FINISHED ?
+            Ydb::StatusIds::STATUS_CODE_UNSPECIFIED
+            : Ydb::StatusIds::ABORTED, TIssues({issue}));
     }
 
     void ReportStateAndDie(NDqProto::EComputeState state, TIssue&& issue) {
@@ -463,12 +463,12 @@ protected:
         Terminate(state == NDqProto::COMPUTE_STATE_FINISHED, issue.Message);
     }
 
-    void ReportStateAndMaybeDie(Ydb::StatusIds::StatusCode status, const TIssues& issues) 
+    void ReportStateAndMaybeDie(Ydb::StatusIds::StatusCode status, const TIssues& issues)
     {
         auto execEv = MakeHolder<TEvDqCompute::TEvState>();
         auto& record = execEv->Record;
 
-        record.SetState(State); 
+        record.SetState(State);
         record.SetStatus(status);
         record.SetTaskId(Task.GetId());
         if (RuntimeSettings.StatsMode >= NDqProto::DQ_STATS_MODE_BASIC) {
@@ -478,13 +478,13 @@ protected:
 
         this->Send(ExecuterId, execEv.Release());
 
-        if (Checkpoints && State == NDqProto::COMPUTE_STATE_FINISHED) { 
-            // checkpointed CAs must not self-destroy 
-            return; 
-        } 
- 
-        TerminateSources(NDqProto::EComputeState_Name(State), State == NDqProto::COMPUTE_STATE_FINISHED); 
-        Terminate(State == NDqProto::COMPUTE_STATE_FINISHED, NDqProto::EComputeState_Name(State)); 
+        if (Checkpoints && State == NDqProto::COMPUTE_STATE_FINISHED) {
+            // checkpointed CAs must not self-destroy
+            return;
+        }
+
+        TerminateSources(NDqProto::EComputeState_Name(State), State == NDqProto::COMPUTE_STATE_FINISHED);
+        Terminate(State == NDqProto::COMPUTE_STATE_FINISHED, NDqProto::EComputeState_Name(State));
     }
 
     void InternalError(TIssuesIds::EIssueCode issueCode, const TString& message) {
@@ -492,8 +492,8 @@ protected:
         TIssue issue(message);
         SetIssueCode(issueCode, issue);
         std::optional<TGuard<NKikimr::NMiniKQL::TScopedAlloc>> guard = MaybeBindAllocator();
-        State = NDqProto::COMPUTE_STATE_FAILURE; 
-        ReportStateAndMaybeDie(std::move(issue)); 
+        State = NDqProto::COMPUTE_STATE_FAILURE;
+        ReportStateAndMaybeDie(std::move(issue));
     }
 
     void ContinueExecute() {
@@ -657,13 +657,13 @@ protected:
 
     void Start() override {
         Running = true;
-        State = NDqProto::COMPUTE_STATE_EXECUTING; 
+        State = NDqProto::COMPUTE_STATE_EXECUTING;
         ContinueExecute();
     }
 
     void Stop() override {
         Running = false;
-        State = NDqProto::COMPUTE_STATE_UNKNOWN; 
+        State = NDqProto::COMPUTE_STATE_UNKNOWN;
     }
 
 protected:
@@ -874,8 +874,8 @@ protected:
         }
     }
 
-    void HandleExecuteBase(TEvDqCompute::TEvRun::TPtr& ev) { 
-        CA_LOG_D("Got TEvRun from actor " << ev->Sender); 
+    void HandleExecuteBase(TEvDqCompute::TEvRun::TPtr& ev) {
+        CA_LOG_D("Got TEvRun from actor " << ev->Sender);
         Start();
 
         // Event from coordinator should be processed to confirm seq no.
@@ -885,16 +885,16 @@ protected:
         }
     }
 
-    void HandleExecuteBase(TEvDqCompute::TEvStateRequest::TPtr& ev) { 
-        CA_LOG_D("Got TEvStateRequest from actor " << ev->Sender << " TaskId: " << Task.GetId() << " PingCookie: " << ev->Cookie); 
-        auto evState = MakeHolder<TEvDqCompute::TEvState>(); 
-        evState->Record.SetState(NDqProto::COMPUTE_STATE_EXECUTING); 
-        evState->Record.SetStatus(Ydb::StatusIds::SUCCESS); 
-        evState->Record.SetTaskId(Task.GetId()); 
+    void HandleExecuteBase(TEvDqCompute::TEvStateRequest::TPtr& ev) {
+        CA_LOG_D("Got TEvStateRequest from actor " << ev->Sender << " TaskId: " << Task.GetId() << " PingCookie: " << ev->Cookie);
+        auto evState = MakeHolder<TEvDqCompute::TEvState>();
+        evState->Record.SetState(NDqProto::COMPUTE_STATE_EXECUTING);
+        evState->Record.SetStatus(Ydb::StatusIds::SUCCESS);
+        evState->Record.SetTaskId(Task.GetId());
         FillStats(evState->Record.MutableStats(), /* last */ false);
-        this->Send(ev->Sender, evState.Release(), NActors::IEventHandle::FlagTrackDelivery, ev->Cookie); 
-    } 
- 
+        this->Send(ev->Sender, evState.Release(), NActors::IEventHandle::FlagTrackDelivery, ev->Cookie);
+    }
+
     void HandleExecuteBase(TEvDqCompute::TEvNewCheckpointCoordinator::TPtr& ev) {
         if (!Checkpoints) {
             Checkpoints = new TDqComputeActorCheckpoints(TxId, Task, this);
@@ -1312,14 +1312,14 @@ private:
         MkqlMemoryLimit = CalcMkqlMemoryLimit();
     }
 
-    static ui64 AlignMemorySizeToMbBoundary(ui64 memory) { 
-        // allocate memory in 1_MB (2^20B) chunks, so requested value is rounded up to MB boundary 
-        constexpr ui64 alignMask = 1_MB - 1; 
-        return (memory + alignMask) & ~alignMask; 
-    } 
- 
+    static ui64 AlignMemorySizeToMbBoundary(ui64 memory) {
+        // allocate memory in 1_MB (2^20B) chunks, so requested value is rounded up to MB boundary
+        constexpr ui64 alignMask = 1_MB - 1;
+        return (memory + alignMask) & ~alignMask;
+    }
+
     void RequestExtraMemory(ui64 memory, NKikimr::NMiniKQL::TScopedAlloc* alloc) {
-        memory = std::max(AlignMemorySizeToMbBoundary(memory), MemoryLimits.MinMemAllocSize); 
+        memory = std::max(AlignMemorySizeToMbBoundary(memory), MemoryLimits.MinMemAllocSize);
 
         CA_LOG_I("not enough memory, request +" << memory);
 
@@ -1354,8 +1354,8 @@ private:
             dst->SetMkqlMaxMemoryUsage(ProfileStats->MkqlMaxUsedMemory);
             dst->SetMkqlExtraMemoryBytes(ProfileStats->MkqlExtraMemoryBytes);
             dst->SetMkqlExtraMemoryRequests(ProfileStats->MkqlExtraMemoryRequests);
-        } 
- 
+        }
+
         if (TaskRunner) {
             TaskRunner->UpdateStats();
 
@@ -1474,7 +1474,7 @@ protected:
     THashMap<ui64, TSinkInfo> SinksMap; // Output index -> Sink info
     ui64 MkqlMemoryLimit = 0;
     bool ResumeEventScheduled = false;
-    NDqProto::EComputeState State; 
+    NDqProto::EComputeState State;
 
     struct TBasicStats {
         TDuration CpuTime;

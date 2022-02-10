@@ -120,14 +120,14 @@ private:
             Issues.AddIssues(reqIssues);
             event->Issues = Issues;
         }
-        if (!req.transient_issues().empty()) { 
-            NYql::TIssues transientIssues; 
+        if (!req.transient_issues().empty()) {
+            NYql::TIssues transientIssues;
             for (const auto& issue : req.transient_issues()) {
                 transientIssuesByteSize += issue.ByteSize();
             }
-            NYql::IssuesFromMessage(req.transient_issues(), transientIssues); 
-            event->TransientIssues = transientIssues; 
-        } 
+            NYql::IssuesFromMessage(req.transient_issues(), transientIssues);
+            event->TransientIssues = transientIssues;
+        }
         if (req.statistics()) {
             event->Statistics = req.statistics();
         }
@@ -144,7 +144,7 @@ private:
             for (const auto& rsMeta : req.result_set_meta()) {
                 resultSetMetaByteSize += rsMeta.ByteSize();
             }
-            event->ResultSetMetas = {req.result_set_meta().begin(), req.result_set_meta().end()}; 
+            event->ResultSetMetas = {req.result_set_meta().begin(), req.result_set_meta().end()};
         }
         if (req.has_started_at()) {
             event->StartedAt = TInstant::FromValue(google::protobuf::util::TimeUtil::TimestampToMicroseconds(req.started_at()));
@@ -152,7 +152,7 @@ private:
         if (req.has_finished_at()) {
             event->FinishedAt = TInstant::FromValue(google::protobuf::util::TimeUtil::TimestampToMicroseconds(req.finished_at()));
         }
-        event->ResignQuery = req.resign_query(); 
+        event->ResignQuery = req.resign_query();
 
         event->CreatedTopicConsumers.reserve(req.created_topic_consumers_size());
         for (const auto& topicConsumerProto : req.created_topic_consumers()) {
@@ -166,13 +166,13 @@ private:
             topicConsumer.TokenName = topicConsumerProto.token_name();
             topicConsumer.AddBearerToToken = topicConsumerProto.add_bearer_to_token();
         }
- 
-        event->DqGraphs.reserve(req.dq_graph_size()); 
-        for (const auto& g : req.dq_graph()) { 
+
+        event->DqGraphs.reserve(req.dq_graph_size());
+        for (const auto& g : req.dq_graph()) {
             dqGraphBytesSize += g.size();
-            event->DqGraphs.emplace_back(g); 
-        } 
- 
+            event->DqGraphs.emplace_back(g);
+        }
+
         if (req.state_load_mode()) {
             event->StateLoadMode = req.state_load_mode();
         }
@@ -191,8 +191,8 @@ private:
            << "Issues size: " << issuesByteSize << " bytes, "
            << "Transient issues size: " << transientIssuesByteSize << " bytes");
 
-        event->DqGraphIndex = req.dq_graph_index(); 
- 
+        event->DqGraphIndex = req.dq_graph_index();
+
         return std::move(event);
     }
 

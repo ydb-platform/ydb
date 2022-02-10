@@ -83,13 +83,13 @@ message PingTaskRequest {
     SignedIdentity result_id = 4;
     YandexQuery.QueryMeta.ComputeStatus status = 5;
     repeated Ydb.Issue.IssueMessage issues = 6;
-    repeated Ydb.Issue.IssueMessage transient_issues = 16; 
+    repeated Ydb.Issue.IssueMessage transient_issues = 16;
     uint32 result_set_count = 7;
     string statistics = 8;
     repeated YandexQuery.ResultSetMeta result_set_meta = 9;
     string executer_info = 10;
-    repeated bytes dq_graph = 11; 
-    int32 dq_graph_index = 20; 
+    repeated bytes dq_graph = 11;
+    int32 dq_graph_index = 20;
     string ast = 12;
     string plan = 13;
     bool resign_query = 14;
@@ -130,20 +130,20 @@ message WriteTaskResultResponse {
     Ydb.Operations.Operation operation = 1; // WriteRowsResultResult
 }
 
-message NodeInfo { 
-    uint32 node_id = 1; 
-    string instance_id = 2; 
-    string hostname = 3; 
-    uint64 active_workers = 4; 
-    uint64 memory_limit = 5; 
-    uint64 memory_allocated = 6; 
+message NodeInfo {
+    uint32 node_id = 1;
+    string instance_id = 2;
+    string hostname = 3;
+    uint64 active_workers = 4;
+    uint64 memory_limit = 5;
+    uint64 memory_allocated = 6;
     uint32 interconnect_port = 7;
     string node_address = 8;
-} 
- 
+}
+
 message NodesHealthCheckRequest {
     string tenant = 1;
-    NodeInfo node = 2; 
+    NodeInfo node = 2;
     Ydb.Operations.OperationParams operation_params = 6;
 }
 

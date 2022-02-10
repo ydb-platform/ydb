@@ -25,7 +25,7 @@ class TCheckpointCoordinator : public TActorBootstrapped<TCheckpointCoordinator>
 public:
     TCheckpointCoordinator(TCoordinatorId coordinatorId,
                            const TActorId& taskControllerId,
-                           const TActorId& storageProxy, 
+                           const TActorId& storageProxy,
                            const TActorId& runActorId,
                            const TCheckpointCoordinatorConfig& settings,
                            const NMonitoring::TDynamicCounterPtr& counters,
@@ -33,7 +33,7 @@ public:
                            const YandexQuery::StateLoadMode& stateLoadMode,
                            const YandexQuery::StreamingDisposition& streamingDisposition);
 
-    void Handle(const NYql::NDqs::TEvReadyState::TPtr&); 
+    void Handle(const NYql::NDqs::TEvReadyState::TPtr&);
     void Handle(const TEvCheckpointStorage::TEvRegisterCoordinatorResponse::TPtr&);
     void Handle(const NYql::NDq::TEvDqCompute::TEvNewCheckpointCoordinatorAck::TPtr&);
     void Handle(const TEvCheckpointStorage::TEvGetCheckpointsMetadataResponse::TPtr&);
@@ -46,7 +46,7 @@ public:
     void Handle(const TEvCheckpointStorage::TEvCompleteCheckpointResponse::TPtr&);
     void Handle(const TEvCheckpointStorage::TEvAbortCheckpointResponse::TPtr&);
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr& ev);
-    void Handle(NActors::TEvents::TEvPoison::TPtr&); 
+    void Handle(NActors::TEvents::TEvPoison::TPtr&);
     void Handle(NActors::TEvents::TEvUndelivered::TPtr&);
     void Handle(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev);
     void Handle(NActors::TEvInterconnect::TEvNodeConnected::TPtr& ev);
@@ -148,7 +148,7 @@ private:
     const TActorId StorageProxy;
     const TActorId RunActorId;
     std::unique_ptr<TCheckpointIdGenerator> CheckpointIdGenerator;
-    TCheckpointCoordinatorConfig Settings; 
+    TCheckpointCoordinatorConfig Settings;
     const TDuration CheckpointingPeriod;
     const NProto::TGraphParams GraphParams;
     TString GraphDescId;
@@ -176,5 +176,5 @@ private:
 };
 
 THolder<NActors::IActor> MakeCheckpointCoordinator(TCoordinatorId coordinatorId, const TActorId& executerId, const TActorId& storageProxy, const TActorId& runActorId, const TCheckpointCoordinatorConfig& settings, const NMonitoring::TDynamicCounterPtr& counters, const NProto::TGraphParams& graphParams, const YandexQuery::StateLoadMode& stateLoadMode = YandexQuery::StateLoadMode::FROM_LAST_CHECKPOINT, const YandexQuery::StreamingDisposition& streamingDisposition = {});
- 
+
 } // namespace NYq

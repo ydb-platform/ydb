@@ -162,14 +162,14 @@ template <>
 inline void Out<NKikimr::TEvTicketParser::TError>(IOutputStream& str, const NKikimr::TEvTicketParser::TError& error) {
     str << error.Message;
 }
- 
-namespace NKikimr { 
-namespace NGRpcService { 
- 
-class ICheckerIface { 
-public: 
-    virtual void SetEntries(const TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry>& entries) = 0; 
-}; 
- 
-} 
-} 
+
+namespace NKikimr {
+namespace NGRpcService {
+
+class ICheckerIface {
+public:
+    virtual void SetEntries(const TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry>& entries) = 0;
+};
+
+}
+}

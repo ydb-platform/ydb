@@ -21,7 +21,7 @@
 #include <library/cpp/random_provider/random_provider.h>
 
 #include <ydb/core/yq/libs/common/service_counters.h>
- 
+
 namespace NKikimr  {
     namespace NMiniKQL {
         class IFunctionRegistry;
@@ -51,10 +51,10 @@ NActors::IActor* CreatePendingFetcher(
     const NMonitoring::TDynamicCounterPtr& clientCounters
     );
 
-NActors::IActor* CreateRunActor( 
-    const ::NYq::NCommon::TServiceCounters& serviceCounters, 
+NActors::IActor* CreateRunActor(
+    const ::NYq::NCommon::TServiceCounters& serviceCounters,
     TRunActorParams&& params
-    ); 
+    );
 
 struct TResultId {
     TString Id;
@@ -66,7 +66,7 @@ struct TResultId {
 
 NActors::IActor* CreateResultWriter(
     const NYdb::TDriver& driver,
-    const NActors::TActorId& executerId, 
+    const NActors::TActorId& executerId,
     const TString& resultType,
     const NConfig::TPrivateApiConfig& privateApiConfig,
     const TResultId& resultId,

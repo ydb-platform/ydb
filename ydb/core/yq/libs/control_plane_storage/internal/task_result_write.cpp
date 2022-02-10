@@ -55,7 +55,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvWriteResult
 
     queryBuilder.AddText(
         "UPSERT INTO `" RESULT_SETS_TABLE_NAME "`\n"
-        "SELECT $result_id as result_id, $result_set_id as result_set_id,\n" 
+        "SELECT $result_id as result_id, $result_set_id as result_set_id,\n"
         " T.*, $expire_at as expire_at FROM as_table($items) AS T;\n"
     );
 

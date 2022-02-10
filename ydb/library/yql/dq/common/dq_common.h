@@ -55,7 +55,7 @@ struct TBaseDqExecuterEvents {
         ES_PULL_RESULT,
         ES_RESULT_SET,
         ES_DQ_FAILURE,
-        ES_GRAPH, 
+        ES_GRAPH,
         ES_GRAPH_FINISHED,
         ES_GRAPH_EXECUTION_EVENT,
     };

@@ -17,10 +17,10 @@ enum ETestGraphFlags : ui64 {
     SourceWithChannelInOneTask = 2,
 };
 
-NYql::NDqProto::TReadyState BuildTestGraph(ui64 flags = 0) { 
+NYql::NDqProto::TReadyState BuildTestGraph(ui64 flags = 0) {
 
-    NYql::NDqProto::TReadyState result; 
- 
+    NYql::NDqProto::TReadyState result;
+
     auto* ingress = result.AddTask();
     ingress->SetId(1);
     auto* ingressOutput = ingress->AddOutputs();
@@ -50,7 +50,7 @@ NYql::NDqProto::TReadyState BuildTestGraph(ui64 flags = 0) {
 }
 
 struct TTestBootstrap : public TTestActorRuntime {
-    NYql::NDqProto::TReadyState GraphState; 
+    NYql::NDqProto::TReadyState GraphState;
     NConfig::TCheckpointCoordinatorConfig Settings;
     NActors::TActorId StorageProxy;
     NActors::TActorId CheckpointCoordinator;
@@ -66,7 +66,7 @@ struct TTestBootstrap : public TTestActorRuntime {
 
     explicit TTestBootstrap(ui64 graphFlags = 0)
         : TTestActorRuntime(true)
-        , GraphState(BuildTestGraph(graphFlags)) 
+        , GraphState(BuildTestGraph(graphFlags))
     {
         TAutoPtr<TAppPrepare> app = new TAppPrepare();
         Initialize(app->Unwrap());
@@ -76,13 +76,13 @@ struct TTestBootstrap : public TTestActorRuntime {
         MapActor = AllocateEdgeActor();
         EgressActor = AllocateEdgeActor();
 
-        ActorIdToProto(IngressActor, GraphState.AddActorId()); 
-        ActorIdToProto(MapActor, GraphState.AddActorId()); 
-        ActorIdToProto(EgressActor, GraphState.AddActorId()); 
+        ActorIdToProto(IngressActor, GraphState.AddActorId());
+        ActorIdToProto(MapActor, GraphState.AddActorId());
+        ActorIdToProto(EgressActor, GraphState.AddActorId());
 
-        ActorToTask[IngressActor] = GraphState.GetTask()[0].GetId(); 
-        ActorToTask[MapActor]     = GraphState.GetTask()[1].GetId(); 
-        ActorToTask[EgressActor]  = GraphState.GetTask()[2].GetId(); 
+        ActorToTask[IngressActor] = GraphState.GetTask()[0].GetId();
+        ActorToTask[MapActor]     = GraphState.GetTask()[1].GetId();
+        ActorToTask[EgressActor]  = GraphState.GetTask()[2].GetId();
 
         Settings = NConfig::TCheckpointCoordinatorConfig();
         Settings.SetEnabled(true);
@@ -92,17 +92,17 @@ struct TTestBootstrap : public TTestActorRuntime {
         SetLogPriority(NKikimrServices::STREAMS_CHECKPOINT_COORDINATOR, NLog::PRI_DEBUG);
 
         CheckpointCoordinator = Register(MakeCheckpointCoordinator(TCoordinatorId("my-graph-id", 42), {}, StorageProxy, RunActor, Settings, Counters, NProto::TGraphParams()).Release());
-        WaitForBootstrap(); 
-        Send(new IEventHandle(CheckpointCoordinator, {}, new NYql::NDqs::TEvReadyState(std::move(GraphState)))); 
- 
+        WaitForBootstrap();
+        Send(new IEventHandle(CheckpointCoordinator, {}, new NYql::NDqs::TEvReadyState(std::move(GraphState))));
+
         EnableScheduleForActor(CheckpointCoordinator);
     }
- 
-    void WaitForBootstrap() { 
-        NActors::TDispatchOptions options; 
-        options.FinalEvents.emplace_back(NActors::TEvents::TSystem::Bootstrap, 1); 
-        DispatchEvents(options); 
-    } 
+
+    void WaitForBootstrap() {
+        NActors::TDispatchOptions options;
+        options.FinalEvents.emplace_back(NActors::TEvents::TSystem::Bootstrap, 1);
+        DispatchEvents(options);
+    }
 };
 } // namespace
 

@@ -14,8 +14,8 @@
 #include <ydb/library/yql/minikql/mkql_node.h>
 #include <ydb/library/yql/minikql/mkql_node_visitor.h>
 
-#include <library/cpp/monlib/metrics/histogram_collector.h> 
- 
+#include <library/cpp/monlib/metrics/histogram_collector.h>
+
 #include <util/generic/size_literals.h>
 #include <util/system/types.h>
 
@@ -79,7 +79,7 @@ struct TDqTaskRunnerStats {
     TDuration WaitOutputTime;
 
     NMonitoring::IHistogramCollectorPtr ComputeCpuTimeByRun; // in millis
- 
+
     THashMap<ui64, const TDqInputChannelStats*> InputChannels; // Channel id -> Channel stats
     THashMap<ui64, const TDqSourceStats*> Sources; // Input index -> Source stats
     THashMap<ui64, const TDqOutputChannelStats*> OutputChannels; // Channel id -> Channel stats

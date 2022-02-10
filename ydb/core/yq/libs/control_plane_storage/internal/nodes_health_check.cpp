@@ -12,13 +12,13 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvNodesHealth
 
     const auto& request = ev->Get()->Request;
     const TString tenant = request.tenant();
-    const auto& node = request.node(); 
-    const ui32 nodeId = node.node_id(); 
-    const TString instanceId = node.instance_id(); 
-    const TString hostName = node.hostname(); 
-    const ui64 activeWorkers = node.active_workers(); 
-    const ui64 memoryLimit = node.memory_limit(); 
-    const ui64 memoryAllocated = node.memory_allocated(); 
+    const auto& node = request.node();
+    const ui32 nodeId = node.node_id();
+    const TString instanceId = node.instance_id();
+    const TString hostName = node.hostname();
+    const ui64 activeWorkers = node.active_workers();
+    const ui64 memoryLimit = node.memory_limit();
+    const ui64 memoryAllocated = node.memory_allocated();
     const ui32 icPort = node.interconnect_port();
     const TString nodeAddress = node.node_address();
     const auto ttl = TDuration::Seconds(5);
@@ -36,16 +36,16 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvNodesHealth
     }
 
     std::shared_ptr<Yq::Private::NodesHealthCheckResult> response = std::make_shared<Yq::Private::NodesHealthCheckResult>();
-    { 
-        auto* node = response->add_nodes(); 
-        node->set_node_id(nodeId); 
-        node->set_instance_id(instanceId); 
-        node->set_hostname(hostName); 
-        node->set_active_workers(activeWorkers); 
-        node->set_memory_limit(memoryLimit); 
-        node->set_memory_allocated(memoryAllocated); 
+    {
+        auto* node = response->add_nodes();
+        node->set_node_id(nodeId);
+        node->set_instance_id(instanceId);
+        node->set_hostname(hostName);
+        node->set_active_workers(activeWorkers);
+        node->set_memory_limit(memoryLimit);
+        node->set_memory_allocated(memoryAllocated);
         node->set_node_address(nodeAddress);
-    } 
+    }
 
     TSqlQueryBuilder readQueryBuilder(YdbConnection->TablePathPrefix, "NodesHealthCheck(read)");
     readQueryBuilder.AddTimestamp("now", TInstant::Now());
@@ -60,18 +60,18 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvNodesHealth
         for (const auto& resultSet : resultSets) {
             TResultSetParser parser(resultSet);
             while (parser.TryNextRow()) {
-                auto nid = *parser.ColumnParser(NODE_ID_COLUMN_NAME).GetOptionalUint32(); 
-                if (nid != nodeId) { 
-                    auto* node = response->add_nodes(); 
-                    node->set_node_id(nid); 
-                    node->set_instance_id(*parser.ColumnParser(INSTANCE_ID_COLUMN_NAME).GetOptionalString()); 
-                    node->set_hostname(*parser.ColumnParser(HOST_NAME_COLUMN_NAME).GetOptionalString()); 
-                    node->set_active_workers(*parser.ColumnParser(ACTIVE_WORKERS_COLUMN_NAME).GetOptionalUint64()); 
-                    node->set_memory_limit(*parser.ColumnParser(MEMORY_LIMIT_COLUMN_NAME).GetOptionalUint64()); 
-                    node->set_memory_allocated(*parser.ColumnParser(MEMORY_ALLOCATED_COLUMN_NAME).GetOptionalUint64()); 
+                auto nid = *parser.ColumnParser(NODE_ID_COLUMN_NAME).GetOptionalUint32();
+                if (nid != nodeId) {
+                    auto* node = response->add_nodes();
+                    node->set_node_id(nid);
+                    node->set_instance_id(*parser.ColumnParser(INSTANCE_ID_COLUMN_NAME).GetOptionalString());
+                    node->set_hostname(*parser.ColumnParser(HOST_NAME_COLUMN_NAME).GetOptionalString());
+                    node->set_active_workers(*parser.ColumnParser(ACTIVE_WORKERS_COLUMN_NAME).GetOptionalUint64());
+                    node->set_memory_limit(*parser.ColumnParser(MEMORY_LIMIT_COLUMN_NAME).GetOptionalUint64());
+                    node->set_memory_allocated(*parser.ColumnParser(MEMORY_ALLOCATED_COLUMN_NAME).GetOptionalUint64());
                     node->set_interconnect_port(parser.ColumnParser(INTERCONNECT_PORT_COLUMN_NAME).GetOptionalUint32().GetOrElse(0));
                     node->set_node_address(*parser.ColumnParser(NODE_ADDRESS_COLUMN_NAME).GetOptionalString());
-                } 
+                }
             }
         }
 

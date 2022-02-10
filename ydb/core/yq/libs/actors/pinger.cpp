@@ -314,7 +314,7 @@ private:
             LOG_D("Ping response success: " << ev->Get()->Result.GetResult());
             StartLeaseTime = now;
             auto action = ev->Get()->Action;
-            if (action != YandexQuery::QUERY_ACTION_UNSPECIFIED && !Finishing) { 
+            if (action != YandexQuery::QUERY_ACTION_UNSPECIFIED && !Finishing) {
                 LOG_D("Query action: " << YandexQuery::QueryAction_Name(action));
                 SendQueryAction(action);
             }

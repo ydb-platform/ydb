@@ -1,6 +1,6 @@
-#include "result_receiver.h" 
+#include "result_receiver.h"
 #include "proto_builder.h"
- 
+
 #include <ydb/library/yql/providers/dq/actors/execution_helpers.h>
 #include <ydb/library/yql/providers/dq/actors/events.h>
 
@@ -41,7 +41,7 @@ public:
     explicit TResultReceiver(const TVector<TString>& columns, const NActors::TActorId& executerId, const TString& traceId, const TDqConfiguration::TPtr& settings,
         const THashMap<TString, TString>& secureParams, const TString& resultType, bool discard)
         : TRichActor<TResultReceiver>(&TResultReceiver::Handler)
-        , ExecuterId(executerId) 
+        , ExecuterId(executerId)
         , TraceId(traceId)
         , Settings(settings)
         , SecureParams(std::move(secureParams))
@@ -110,60 +110,60 @@ private:
         YQL_LOG(DEBUG) << "Finished: " << ev->Get()->Record.GetChannelData().GetFinished();
     }
 
-    void OnReadyState(TEvReadyState::TPtr&, const TActorContext&) { 
-        // do nothing 
+    void OnReadyState(TEvReadyState::TPtr&, const TActorContext&) {
+        // do nothing
     }
 
-    void OnQueryResult(TEvQueryResponse::TPtr& ev, const TActorContext&) { 
-        NDqProto::TQueryResponse result(ev->Get()->Record); 
-        YQL_ENSURE(!result.HasResultSet() && result.GetYson().empty()); 
- 
+    void OnQueryResult(TEvQueryResponse::TPtr& ev, const TActorContext&) {
+        NDqProto::TQueryResponse result(ev->Get()->Record);
+        YQL_ENSURE(!result.HasResultSet() && result.GetYson().empty());
+
         if (ResultBuilder) {
-            try { 
+            try {
                 TString yson = Discard ? "" : ResultBuilder->BuildYson(
                     DataParts,
                     Settings && Settings->_AllResultsBytesLimit.Get()
                         ? *Settings->_AllResultsBytesLimit.Get()
                         : 64000000 /* grpc limit*/);
                 *result.MutableYson() = yson;
-            } catch (...) { 
+            } catch (...) {
                 Issues.AddIssue(TIssue(CurrentExceptionMessage()).SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_WARNING));
                 result.SetNeedFallback(true);
             }
         } else {
             if (Rows > 0) {
-                Issues.AddIssue(TIssue("Non empty rows: " + ToString(Rows)).SetCode(0, TSeverityIds::S_WARNING)); 
+                Issues.AddIssue(TIssue("Non empty rows: " + ToString(Rows)).SetCode(0, TSeverityIds::S_WARNING));
             }
         }
- 
-        if (!Issues.Empty()) { 
-            IssuesToMessage(Issues, result.MutableIssues()); 
+
+        if (!Issues.Empty()) {
+            IssuesToMessage(Issues, result.MutableIssues());
         }
-        result.SetTruncated(Truncated); 
-        Send(ExecuterId, new TEvQueryResponse(std::move(result))); 
+        result.SetTruncated(Truncated);
+        Send(ExecuterId, new TEvQueryResponse(std::move(result)));
     }
 
     void OnError(const TString& message, bool retriable, bool needFallback) {
         YQL_LOG_CTX_SCOPE(TraceId);
         YQL_LOG(DEBUG) << "OnError " << message;
-        auto req = MakeHolder<TEvDqFailure>(TIssue(message).SetCode(-1, TSeverityIds::S_ERROR), retriable, needFallback); 
-        Send(ExecuterId, req.Release()); 
+        auto req = MakeHolder<TEvDqFailure>(TIssue(message).SetCode(-1, TSeverityIds::S_ERROR), retriable, needFallback);
+        Send(ExecuterId, req.Release());
         Finished = true;
     }
 
-    void Finish(bool truncated = false) { 
-        Send(ExecuterId, new TEvGraphFinished()); 
+    void Finish(bool truncated = false) {
+        Send(ExecuterId, new TEvGraphFinished());
         Finished = true;
-        Truncated = truncated; 
+        Truncated = truncated;
     }
 
-    const NActors::TActorId ExecuterId; 
+    const NActors::TActorId ExecuterId;
     TVector<NDqProto::TData> DataParts;
     const TString TraceId;
     TDqConfiguration::TPtr Settings;
     bool Finished = false;
-    bool Truncated = false; 
-    TIssues Issues; 
+    bool Truncated = false;
+    TIssues Issues;
     ui64 Size = 0;
     ui64 Rows = 0;
     // const Yql::DqsProto::TFullResultTable FullResultTable;

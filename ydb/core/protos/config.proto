@@ -111,14 +111,14 @@ message TActorSystemConfig {
 }
 
 message TStaticNameserviceConfig {
- 
-    enum ENameserviceType { 
-        NS_DEFAULT = 0;     // default (nodebroker) 
-        NS_FIXED = 1;       // static table lookup 
-        NS_NODE_BROKER = 2; // nodebroker based 
-        NS_EXTERNAL = 3;    // may be paired with external discovery 
-    } 
- 
+
+    enum ENameserviceType {
+        NS_DEFAULT = 0;     // default (nodebroker)
+        NS_FIXED = 1;       // static table lookup
+        NS_NODE_BROKER = 2; // nodebroker based
+        NS_EXTERNAL = 3;    // may be paired with external discovery
+    }
+
     message TEndpoint {
         optional string Name = 1;
         optional string Address = 2;
@@ -145,7 +145,7 @@ message TStaticNameserviceConfig {
     optional string ClusterUUID = 2;
     repeated string AcceptUUID = 3;
     optional bool SuppressVersionCheck = 4;
-    optional ENameserviceType Type = 5; 
+    optional ENameserviceType Type = 5;
 }
 
 message TDynamicNameserviceConfig {

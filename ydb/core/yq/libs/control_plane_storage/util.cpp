@@ -99,13 +99,13 @@ bool DoesPingTaskUpdateQueriesTable(const TEvControlPlaneStorage::TEvPingTaskReq
         request->Issues ||
         request->TransientIssues ||
         request->Statistics ||
-        request->ResultSetMetas || 
+        request->ResultSetMetas ||
         request->Ast ||
         request->Plan ||
         request->StartedAt ||
         request->FinishedAt ||
-        !request->CreatedTopicConsumers.empty() || 
-        !request->DqGraphs.empty() || 
+        !request->CreatedTopicConsumers.empty() ||
+        !request->DqGraphs.empty() ||
         request->DqGraphIndex ||
         request->StateLoadMode ||
         request->StreamingDisposition;

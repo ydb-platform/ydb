@@ -998,15 +998,15 @@ class TPingTaskBuilder {
     TMaybe<NYql::TIssues> Issues;
     TMaybe<NYql::TIssues> TransientIssues;
     TMaybe<TString> Statistics;
-    TMaybe<TVector<YandexQuery::ResultSetMeta>> ResultSetMetas; 
+    TMaybe<TVector<YandexQuery::ResultSetMeta>> ResultSetMetas;
     TMaybe<TString> Ast;
     TMaybe<TString> Plan;
     TMaybe<TInstant> StartedAt;
     TMaybe<TInstant> FinishedAt;
-    bool ResignQuery = false; 
+    bool ResignQuery = false;
     TVector<NYq::TEvControlPlaneStorage::TTopicConsumer> CreatedTopicConsumers;
-    TVector<TString> DqGraphs; 
-    i32 DqGraphIndex = 0; 
+    TVector<TString> DqGraphs;
+    i32 DqGraphIndex = 0;
 
 public:
     TPingTaskBuilder()
@@ -1068,9 +1068,9 @@ public:
         return *this;
     }
 
-    TPingTaskBuilder& SetResultSetMetas(const TVector<YandexQuery::ResultSetMeta>& resultSetMetas) 
+    TPingTaskBuilder& SetResultSetMetas(const TVector<YandexQuery::ResultSetMeta>& resultSetMetas)
     {
-        ResultSetMetas = resultSetMetas; 
+        ResultSetMetas = resultSetMetas;
         return *this;
     }
 
@@ -1099,29 +1099,29 @@ public:
     }
 
     TPingTaskBuilder& SetResignQuery(bool resignQuery = true)
-    { 
-        ResignQuery = resignQuery; 
-        return *this; 
-    } 
- 
+    {
+        ResignQuery = resignQuery;
+        return *this;
+    }
+
     TPingTaskBuilder& AddCreatedConsumer(const TString& databaseId, const TString& database, const TString& topicPath, const TString& consumerName, const TString& clusterEndpoint, bool useSsl)
     {
         CreatedTopicConsumers.emplace_back(NYq::TEvControlPlaneStorage::TTopicConsumer{databaseId, database, topicPath, consumerName, clusterEndpoint, useSsl, "", false});
         return *this;
     }
 
-    TPingTaskBuilder& AddDqGraph(const TString& dqGraph) 
-    { 
-        DqGraphs.push_back(dqGraph); 
-        return *this; 
-    } 
- 
-    TPingTaskBuilder& SetDqGraphIndex(i32 dqGraphIndex) 
-    { 
-        DqGraphIndex = dqGraphIndex; 
-        return *this; 
-    } 
- 
+    TPingTaskBuilder& AddDqGraph(const TString& dqGraph)
+    {
+        DqGraphs.push_back(dqGraph);
+        return *this;
+    }
+
+    TPingTaskBuilder& SetDqGraphIndex(i32 dqGraphIndex)
+    {
+        DqGraphIndex = dqGraphIndex;
+        return *this;
+    }
+
     std::unique_ptr<TEvControlPlaneStorage::TEvPingTaskRequest> Build()
     {
         auto request = std::make_unique<TEvControlPlaneStorage::TEvPingTaskRequest>(Scope, QueryId, Owner, Deadline, ResultId);
@@ -1129,15 +1129,15 @@ public:
         request->Issues = Issues;
         request->TransientIssues = TransientIssues;
         request->Statistics = Statistics;
-        request->ResultSetMetas = ResultSetMetas; 
+        request->ResultSetMetas = ResultSetMetas;
         request->Ast = Ast;
         request->Plan = Plan;
         request->StartedAt = StartedAt;
         request->FinishedAt = FinishedAt;
-        request->ResignQuery = ResignQuery; 
+        request->ResignQuery = ResignQuery;
         request->CreatedTopicConsumers = CreatedTopicConsumers;
-        request->DqGraphs = DqGraphs; 
-        request->DqGraphIndex = DqGraphIndex; 
+        request->DqGraphs = DqGraphs;
+        request->DqGraphIndex = DqGraphIndex;
         return request;
     }
 };
@@ -1167,33 +1167,33 @@ public:
         return *this;
     }
 
-    TNodesHealthCheckBuilder& SetHostName(const TString& hostName) 
-    { 
-        HostName = hostName; 
-        return *this; 
-    } 
- 
-    TNodesHealthCheckBuilder& SetInstanceId(const TString& instanceId) 
-    { 
-        InstanceId = instanceId; 
-        return *this; 
-    } 
- 
+    TNodesHealthCheckBuilder& SetHostName(const TString& hostName)
+    {
+        HostName = hostName;
+        return *this;
+    }
+
+    TNodesHealthCheckBuilder& SetInstanceId(const TString& instanceId)
+    {
+        InstanceId = instanceId;
+        return *this;
+    }
+
     TNodesHealthCheckBuilder& SetActiveWorkers(const ui64& activeWorkers)
     {
         ActiveWorkers = activeWorkers;
         return *this;
     }
 
-    TNodesHealthCheckBuilder& SetMemoryLimit(const ui64& memoryLimit) 
+    TNodesHealthCheckBuilder& SetMemoryLimit(const ui64& memoryLimit)
     {
-        MemoryLimit = memoryLimit; 
+        MemoryLimit = memoryLimit;
         return *this;
     }
 
-    TNodesHealthCheckBuilder& SetMemoryAllocated(const ui64& memoryAllocated) 
+    TNodesHealthCheckBuilder& SetMemoryAllocated(const ui64& memoryAllocated)
     {
-        MemoryAllocated = memoryAllocated; 
+        MemoryAllocated = memoryAllocated;
         return *this;
     }
 
@@ -1201,15 +1201,15 @@ public:
     {
         Yq::Private::NodesHealthCheckRequest request;
         request.set_tenant(Tenant);
-        auto& node = *request.mutable_node(); 
-        node.set_node_id(NodeId); 
-        node.set_instance_id(InstanceId); 
-        node.set_hostname(HostName); 
-        node.set_active_workers(ActiveWorkers); 
-        node.set_memory_limit(MemoryLimit); 
-        node.set_memory_allocated(MemoryAllocated); 
+        auto& node = *request.mutable_node();
+        node.set_node_id(NodeId);
+        node.set_instance_id(InstanceId);
+        node.set_hostname(HostName);
+        node.set_active_workers(ActiveWorkers);
+        node.set_memory_limit(MemoryLimit);
+        node.set_memory_allocated(MemoryAllocated);
         return std::make_unique<TEvControlPlaneStorage::TEvNodesHealthCheckRequest>(std::move(request));
     }
 };
 
-} 
+}

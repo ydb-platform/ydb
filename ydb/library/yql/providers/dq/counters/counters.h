@@ -60,16 +60,16 @@ struct TCounters {
         counter.Count += value;
     }
 
-    template<typename T> 
-    void SetCounter(const TString& name, T value) const { 
-        auto& counter = Counters[name]; 
-        counter.Count = value; 
-    } 
- 
-    THashMap<i64, ui64>& GetHistogram(const TString& name) { 
-        return Histograms[name]; 
-    } 
- 
+    template<typename T>
+    void SetCounter(const TString& name, T value) const {
+        auto& counter = Counters[name];
+        counter.Count = value;
+    }
+
+    THashMap<i64, ui64>& GetHistogram(const TString& name) {
+        return Histograms[name];
+    }
+
     void AddTimeCounter(const TString& name, i64 value) const {
         AddCounter(name, TDuration::MilliSeconds(value));
     }
@@ -132,10 +132,10 @@ struct TCounters {
         return Counters;
     }
 
-    const auto& GetHistograms() const { 
-        return Histograms; 
-    } 
- 
+    const auto& GetHistograms() const {
+        return Histograms;
+    }
+
     struct TEntry {
         i64 Sum = 0;
         i64 Max = 0;
@@ -285,7 +285,7 @@ struct TCounters {
 protected:
 
     mutable THashMap<TString, TEntry> Counters;
-    mutable THashMap<TString, THashMap<i64, ui64>> Histograms; 
+    mutable THashMap<TString, THashMap<i64, ui64>> Histograms;
     mutable THashMap<TString, TInstant> Start;
 };
 

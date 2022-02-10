@@ -18,7 +18,7 @@ namespace NDq {
 
 struct TEvDqCompute {
     struct TEvState : public NActors::TEventPB<TEvState, NDqProto::TEvComputeActorState, TDqComputeEvents::EvState> {};
-    struct TEvStateRequest : public NActors::TEventPB<TEvState, NDqProto::TEvComputeStateRequest, TDqComputeEvents::EvStateRequest> {}; 
+    struct TEvStateRequest : public NActors::TEventPB<TEvState, NDqProto::TEvComputeStateRequest, TDqComputeEvents::EvStateRequest> {};
 
     struct TEvResumeExecution : public NActors::TEventLocal<TEvResumeExecution, TDqComputeEvents::EvResumeExecution> {};
 
@@ -233,19 +233,19 @@ struct TComputeRuntimeSettings {
     TMaybe<NDqProto::TRlPath> RlPath;
 };
 
-using TAllocateMemoryCallback = std::function<bool(const TTxId& txId, ui64 taskId, ui64 memory)>; 
-using TFreeMemoryCallback = std::function<void(const TTxId& txId, ui64 taskId, ui64 memory)>; 
- 
+using TAllocateMemoryCallback = std::function<bool(const TTxId& txId, ui64 taskId, ui64 memory)>;
+using TFreeMemoryCallback = std::function<void(const TTxId& txId, ui64 taskId, ui64 memory)>;
+
 struct TComputeMemoryLimits {
     ui64 ChannelBufferSize = 0;
     ui64 ScanBufferSize = 0; // TODO: drop it
     ui64 MkqlLightProgramMemoryLimit = 0;
     ui64 MkqlHeavyProgramMemoryLimit = 0;
 
-    TAllocateMemoryCallback AllocateMemoryFn = nullptr; 
-    TFreeMemoryCallback FreeMemoryFn = nullptr; 
-    ui64 MinMemAllocSize = 30_MB; 
-    ui64 MinMemFreeSize = 30_MB; 
+    TAllocateMemoryCallback AllocateMemoryFn = nullptr;
+    TFreeMemoryCallback FreeMemoryFn = nullptr;
+    ui64 MinMemAllocSize = 30_MB;
+    ui64 MinMemFreeSize = 30_MB;
 };
 
 using TTaskRunnerFactory = std::function<

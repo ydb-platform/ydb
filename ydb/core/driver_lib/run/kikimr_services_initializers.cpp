@@ -577,23 +577,23 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             TActorSetupCmd(resolver, TMailboxType::HTSwap, systemPoolId));
 
         IActor *nameservice;
- 
-        switch (nsConfig.GetType()) { 
-            case NKikimrConfig::TStaticNameserviceConfig::NS_FIXED: 
-                nameservice = NActors::CreateNameserverTable(table, appData->IOPoolId); 
-                break; 
-            case NKikimrConfig::TStaticNameserviceConfig::NS_DEFAULT: 
-            case NKikimrConfig::TStaticNameserviceConfig::NS_NODE_BROKER: 
-                if (Config.GetDynamicNodeConfig().HasNodeInfo()) { 
-                    auto& info = Config.GetDynamicNodeConfig().GetNodeInfo(); 
-                    nameservice = NNodeBroker::CreateDynamicNameserver(table, info, *appData->DomainsInfo, appData->IOPoolId); 
-                } else { 
-                    nameservice = NNodeBroker::CreateDynamicNameserver(table, appData->IOPoolId); 
-                } 
-                break; 
-            case NKikimrConfig::TStaticNameserviceConfig::NS_EXTERNAL: 
-                nameservice = NActors::CreateDynamicNameserver(table, TDuration::Seconds(3), appData->IOPoolId); 
-                break; 
+
+        switch (nsConfig.GetType()) {
+            case NKikimrConfig::TStaticNameserviceConfig::NS_FIXED:
+                nameservice = NActors::CreateNameserverTable(table, appData->IOPoolId);
+                break;
+            case NKikimrConfig::TStaticNameserviceConfig::NS_DEFAULT:
+            case NKikimrConfig::TStaticNameserviceConfig::NS_NODE_BROKER:
+                if (Config.GetDynamicNodeConfig().HasNodeInfo()) {
+                    auto& info = Config.GetDynamicNodeConfig().GetNodeInfo();
+                    nameservice = NNodeBroker::CreateDynamicNameserver(table, info, *appData->DomainsInfo, appData->IOPoolId);
+                } else {
+                    nameservice = NNodeBroker::CreateDynamicNameserver(table, appData->IOPoolId);
+                }
+                break;
+            case NKikimrConfig::TStaticNameserviceConfig::NS_EXTERNAL:
+                nameservice = NActors::CreateDynamicNameserver(table, TDuration::Seconds(3), appData->IOPoolId);
+                break;
         }
 
         setup->LocalServices.emplace_back(
@@ -716,7 +716,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                     setup->Interconnect.ProxyActors[destId] = TActorSetupCmd(new TInterconnectProxyTCP(destId, icCommon),
                         TMailboxType::ReadAsFilled, interconnectPoolId);
                 } else {
-                    TYandexQueryInitializer::SetIcPort(node.second.second); 
+                    TYandexQueryInitializer::SetIcPort(node.second.second);
                     icCommon->TechnicalSelfHostName = node.second.Host;
                     TString address = "::"; //bind ipv6 interfaces by default
                     if (node.second.first)

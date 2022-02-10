@@ -4,8 +4,8 @@ namespace NYql::NDqs {
 
 TWorkerManagerCounters::TWorkerManagerCounters(NMonitoring::TDynamicCounterPtr root) {
    ActiveWorkers = root->GetCounter("ActiveWorkers");
-   MkqlMemoryLimit = root->GetCounter("MkqlMemoryLimit"); 
-   MkqlMemoryAllocated = root->GetCounter("MkqlMemoryAllocated"); 
+   MkqlMemoryLimit = root->GetCounter("MkqlMemoryLimit");
+   MkqlMemoryAllocated = root->GetCounter("MkqlMemoryAllocated");
 }
 
 TWorkerManagerCounters::TWorkerManagerCounters()

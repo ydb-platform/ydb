@@ -5,8 +5,8 @@ namespace NYql::NDqs {
 
 struct TWorkerManagerCounters {
     NMonitoring::TDynamicCounters::TCounterPtr ActiveWorkers;
-    NMonitoring::TDynamicCounters::TCounterPtr MkqlMemoryLimit; 
-    NMonitoring::TDynamicCounters::TCounterPtr MkqlMemoryAllocated; 
+    NMonitoring::TDynamicCounters::TCounterPtr MkqlMemoryLimit;
+    NMonitoring::TDynamicCounters::TCounterPtr MkqlMemoryAllocated;
 
     explicit TWorkerManagerCounters(NMonitoring::TDynamicCounterPtr root);
     TWorkerManagerCounters();

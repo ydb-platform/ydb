@@ -239,8 +239,8 @@ private:
              << PendingScanData.size() << " pending messages,"
              << " stream will be terminated");
 
-        State = NDqProto::COMPUTE_STATE_FAILURE; 
-        ReportStateAndMaybeDie(Ydb::StatusIds::OVERLOADED, TIssues({issue})); 
+        State = NDqProto::COMPUTE_STATE_FAILURE;
+        ReportStateAndMaybeDie(Ydb::StatusIds::OVERLOADED, TIssues({issue}));
     }
 
     void HandleExecute(TEvKqpCompute::TEvScanInitActor::TPtr& ev) {
@@ -499,8 +499,8 @@ private:
                         return;
                     }
 
-                    State = NDqProto::COMPUTE_STATE_FAILURE; 
-                    ReportStateAndMaybeDie(status, issues); 
+                    State = NDqProto::COMPUTE_STATE_FAILURE;
+                    ReportStateAndMaybeDie(status, issues);
                     return;
                 }
 

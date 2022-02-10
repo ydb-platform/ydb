@@ -36,7 +36,7 @@ struct TRunActorParams { // TODO2 : Change name
         const TScope& scope,
         const TString& authToken,
         const NActors::TActorId& databaseResolver,
-        const TString& queryId, 
+        const TString& queryId,
         const TString& userId,
         const TString& owner,
         const int64_t previousQueryRevision,
@@ -47,11 +47,11 @@ struct TRunActorParams { // TODO2 : Change name
         YandexQuery::QueryContent::QueryType queryType,
         YandexQuery::ExecuteMode executeMode,
         const TString& resultId,
-        const YandexQuery::StateLoadMode stateLoadMode, 
+        const YandexQuery::StateLoadMode stateLoadMode,
         const YandexQuery::StreamingDisposition& streamingDisposition,
         YandexQuery::QueryMeta::ComputeStatus status,
-        const TString& cloudId, 
-        TVector<YandexQuery::ResultSetMeta> resultSetMetas, 
+        const TString& cloudId,
+        TVector<YandexQuery::ResultSetMeta> resultSetMetas,
         TVector<TString> dqGraphs,
         int32_t dqGraphIndex,
         TVector<Yq::Private::TopicConsumer> createdTopicConsumers,
@@ -82,7 +82,7 @@ struct TRunActorParams { // TODO2 : Change name
     const TScope Scope;
     const TString AuthToken;
     const NActors::TActorId DatabaseResolver;
-    const TString QueryId; 
+    const TString QueryId;
     const TString UserId;
     const TString Owner;
     const int64_t PreviousQueryRevision;
@@ -97,9 +97,9 @@ struct TRunActorParams { // TODO2 : Change name
     const YandexQuery::StreamingDisposition StreamingDisposition;
     YandexQuery::QueryMeta::ComputeStatus Status;
     const TString CloudId;
-    const TVector<YandexQuery::ResultSetMeta> ResultSetMetas; 
-    const TVector<TString> DqGraphs; 
-    const int32_t DqGraphIndex; 
+    const TVector<YandexQuery::ResultSetMeta> ResultSetMetas;
+    const TVector<TString> DqGraphs;
+    const int32_t DqGraphIndex;
     TVector<Yq::Private::TopicConsumer> CreatedTopicConsumers;
 
     bool Automatic = false;

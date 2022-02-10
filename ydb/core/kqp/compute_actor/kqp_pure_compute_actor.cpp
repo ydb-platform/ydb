@@ -303,8 +303,8 @@ private:
         Ydb::StatusIds::StatusCode status = ev->Get()->Record.GetStatus();
         IssuesFromMessage(ev->Get()->Record.GetIssues(), issues);
 
-        State = NDqProto::COMPUTE_STATE_FAILURE; 
-        ReportStateAndMaybeDie(status, issues); 
+        State = NDqProto::COMPUTE_STATE_FAILURE;
+        ReportStateAndMaybeDie(status, issues);
     }
 
 private:

@@ -1,15 +1,15 @@
 #include "interconnect.h"
 #include "interconnect_impl.h"
 #include "interconnect_address.h"
-#include "interconnect_nameserver_base.h" 
+#include "interconnect_nameserver_base.h"
 #include "events_local.h"
 
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/memory_log/memlog.h>
 
 namespace NActors {
- 
-    class TInterconnectNameserverTable: public TInterconnectNameserverBase<TInterconnectNameserverTable> { 
+
+    class TInterconnectNameserverTable: public TInterconnectNameserverBase<TInterconnectNameserverTable> {
         TIntrusivePtr<TTableNameserverSetup> Config;
 
     public:
@@ -18,7 +18,7 @@ namespace NActors {
         }
 
         TInterconnectNameserverTable(const TIntrusivePtr<TTableNameserverSetup>& setup, ui32 /*resolvePoolId*/)
-            : TInterconnectNameserverBase<TInterconnectNameserverTable>(&TInterconnectNameserverTable::StateFunc, setup->StaticNodeTable) 
+            : TInterconnectNameserverBase<TInterconnectNameserverTable>(&TInterconnectNameserverTable::StateFunc, setup->StaticNodeTable)
             , Config(setup)
         {
             Y_VERIFY(Config->IsEntriesUnique());
@@ -26,11 +26,11 @@ namespace NActors {
 
         STFUNC(StateFunc) {
             try {
-                switch (ev->GetTypeRewrite()) { 
-                    HFunc(TEvInterconnect::TEvResolveNode, Handle); 
-                    HFunc(TEvResolveAddress, Handle); 
-                    HFunc(TEvInterconnect::TEvListNodes, Handle); 
-                    HFunc(TEvInterconnect::TEvGetNode, Handle); 
+                switch (ev->GetTypeRewrite()) {
+                    HFunc(TEvInterconnect::TEvResolveNode, Handle);
+                    HFunc(TEvResolveAddress, Handle);
+                    HFunc(TEvInterconnect::TEvListNodes, Handle);
+                    HFunc(TEvInterconnect::TEvGetNode, Handle);
                 }
             } catch (...) {
                 // on error - do nothing

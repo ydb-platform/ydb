@@ -58,8 +58,8 @@ namespace NYq {
 #define INSTANCE_ID_COLUMN_NAME "instance_id"
 #define NODE_ID_COLUMN_NAME "node_id"
 #define ACTIVE_WORKERS_COLUMN_NAME "active_workers"
-#define MEMORY_LIMIT_COLUMN_NAME "memory_limit" 
-#define MEMORY_ALLOCATED_COLUMN_NAME "memory_allocated" 
+#define MEMORY_LIMIT_COLUMN_NAME "memory_limit"
+#define MEMORY_ALLOCATED_COLUMN_NAME "memory_allocated"
 #define INTERCONNECT_PORT_COLUMN_NAME "interconnect_port"
 #define NODE_ADDRESS_COLUMN_NAME "node_address"
 
@@ -67,4 +67,4 @@ namespace NYq {
 #define OWNER_COLUMN_NAME "owner"
 #define LAST_SEEN_AT_COLUMN_NAME "last_seen_at"
 
-} // namespace NYq 
+} // namespace NYq

@@ -554,9 +554,9 @@ ALLOW .* -> vendor/github.com/zaf/g711
 # CONTRIB-1505 The exponential backoff algorithm & retry library
 ALLOW .* -> vendor/github.com/cenkalti/backoff/v4
 
-# CONTRIB-1491 A parser library for Go 
-ALLOW .* -> vendor/github.com/alecthomas/participle 
- 
+# CONTRIB-1491 A parser library for Go
+ALLOW .* -> vendor/github.com/alecthomas/participle
+
 # CONTRIB-1539 staticcheck
 ALLOW library/go/yolint -> vendor/honnef.co/go/tools
 

@@ -51,11 +51,11 @@ public:
     void AddMode(const TString& mode, TMainFunctionRawPtrV func, const TString& description, bool hidden = false, bool noCompletion = false);
     void AddMode(const TString& mode, TMainFunctionPtr func, const TString& description, bool hidden = false, bool noCompletion = false);
     void AddMode(const TString& mode, TMainFunctionPtrV func, const TString& description, bool hidden = false, bool noCompletion = false);
-    void AddMode(const TString& mode, TMainClass* func, const TString& description, bool hidden = false, bool noCompletion = false);
-    void AddMode(const TString& mode, TMainClassV* func, const TString& description, bool hidden = false, bool noCompletion = false);
+    void AddMode(const TString& mode, TMainClass* func, const TString& description, bool hidden = false, bool noCompletion = false); 
+    void AddMode(const TString& mode, TMainClassV* func, const TString& description, bool hidden = false, bool noCompletion = false); 
 
     //! Hidden groups won't be displayed in 'help' block
-    void AddGroupModeDescription(const TString& description, bool hidden = false, bool noCompletion = false);
+    void AddGroupModeDescription(const TString& description, bool hidden = false, bool noCompletion = false); 
 
     //! Set default mode (if not specified explicitly)
     void SetDefaultMode(const TString& mode);
@@ -82,7 +82,7 @@ public:
 
     void DisableSvnRevisionOption();
 
-    void AddCompletions(TString progName, const TString& name = "completion", bool hidden = false, bool noCompletion = false);
+    void AddCompletions(TString progName, const TString& name = "completion", bool hidden = false, bool noCompletion = false); 
 
     /*! Run appropriate mode.
      *
@@ -107,7 +107,7 @@ public:
         TMainClass* Main;
         TString Description;
         bool Hidden;
-        bool NoCompletion;
+        bool NoCompletion; 
         TVector<TString> Aliases;
 
         TMode()
@@ -115,7 +115,7 @@ public:
         {
         }
 
-        TMode(const TString& name, TMainClass* main, const TString& descr, bool hidden, bool noCompletion);
+        TMode(const TString& name, TMainClass* main, const TString& descr, bool hidden, bool noCompletion); 
 
         // Full name includes primary name and aliases. Also, will add ANSI colors.
         size_t CalculateFullNameLen() const;

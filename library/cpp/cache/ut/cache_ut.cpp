@@ -29,42 +29,42 @@ Y_UNIT_TEST_SUITE(TCacheTest) {
         UNIT_ASSERT_EQUAL(list.GetOldest()->Key, 1);
     }
 
-    Y_UNIT_TEST(LRUListWeightedTest) {
-        typedef TLRUList<int, TString, size_t (*)(const TString&)> TListType;
-        TListType list(7, [](auto& string) {
-            return string.size();
-        });
-
-        TListType::TItem x1(1, "ttt");
-        list.Insert(&x1);
-        while (list.RemoveIfOverflown()) {
-        }
-        UNIT_ASSERT_EQUAL(list.GetOldest()->Key, 1);
-
-        TListType::TItem x2(2, "yyy");
-        list.Insert(&x2);
-        while (list.RemoveIfOverflown()) {
-        }
-        UNIT_ASSERT_EQUAL(list.GetOldest()->Key, 1);
-
-        list.Promote(list.GetOldest());
-        while (list.RemoveIfOverflown()) {
-        }
-        UNIT_ASSERT_EQUAL(list.GetOldest()->Key, 2);
-
-        TListType::TItem x3(3, "zzz");
-        list.Insert(&x3);
-        while (list.RemoveIfOverflown()) {
-        }
-        UNIT_ASSERT_EQUAL(list.GetOldest()->Key, 1);
-
-        TListType::TItem x4(4, "longlong");
-        list.Insert(&x4);
-        while (list.RemoveIfOverflown()) {
-        }
-        UNIT_ASSERT_EQUAL(list.GetOldest()->Key, 4);
-    }
-
+    Y_UNIT_TEST(LRUListWeightedTest) { 
+        typedef TLRUList<int, TString, size_t (*)(const TString&)> TListType; 
+        TListType list(7, [](auto& string) { 
+            return string.size(); 
+        }); 
+ 
+        TListType::TItem x1(1, "ttt"); 
+        list.Insert(&x1); 
+        while (list.RemoveIfOverflown()) { 
+        } 
+        UNIT_ASSERT_EQUAL(list.GetOldest()->Key, 1); 
+ 
+        TListType::TItem x2(2, "yyy"); 
+        list.Insert(&x2); 
+        while (list.RemoveIfOverflown()) { 
+        } 
+        UNIT_ASSERT_EQUAL(list.GetOldest()->Key, 1); 
+ 
+        list.Promote(list.GetOldest()); 
+        while (list.RemoveIfOverflown()) { 
+        } 
+        UNIT_ASSERT_EQUAL(list.GetOldest()->Key, 2); 
+ 
+        TListType::TItem x3(3, "zzz"); 
+        list.Insert(&x3); 
+        while (list.RemoveIfOverflown()) { 
+        } 
+        UNIT_ASSERT_EQUAL(list.GetOldest()->Key, 1); 
+ 
+        TListType::TItem x4(4, "longlong"); 
+        list.Insert(&x4); 
+        while (list.RemoveIfOverflown()) { 
+        } 
+        UNIT_ASSERT_EQUAL(list.GetOldest()->Key, 4); 
+    } 
+ 
     Y_UNIT_TEST(LFUListTest) {
         typedef TLFUList<int, TString> TListType;
         TListType list(2);
@@ -141,37 +141,37 @@ Y_UNIT_TEST_SUITE(TCacheTest) {
         UNIT_ASSERT(s.Find(3) == s.End());
     }
 
-    Y_UNIT_TEST(LRUWithCustomSizeProviderTest) {
-        typedef TLRUCache<int, TString, TNoopDelete, size_t(*)(const TString&)> TCache;
-        TCache s(10, false, [](auto& string) { return string.size(); }); // size 10
-        s.Insert(1, "abcd");
-        UNIT_ASSERT(s.Find(1) != s.End());
-        UNIT_ASSERT_EQUAL(*s.Find(1), "abcd");
-        s.Insert(2, "defg");
-        UNIT_ASSERT(s.GetOldest() == "abcd");
-        s.Insert(3, "2c");
-        UNIT_ASSERT(s.GetOldest() == "abcd");
-        s.Insert(4, "hjkl");
-        UNIT_ASSERT(s.GetOldest() == "defg");
-        // key 1 will be deleted
-        UNIT_ASSERT(s.Find(1) == s.End());
-        UNIT_ASSERT(s.Find(2) != s.End());
-        UNIT_ASSERT(*s.Find(2) == "defg");
-        UNIT_ASSERT(s.Find(3) != s.End());
-        UNIT_ASSERT(*s.Find(3) == "2c");
-        UNIT_ASSERT(s.Find(4) != s.End());
-        UNIT_ASSERT(*s.Find(4) == "hjkl");
-
-        UNIT_ASSERT(!s.Insert(3, "abcd"));
-        UNIT_ASSERT(*s.Find(3) == "2c");
-        s.Update(3, "abcd");
-        UNIT_ASSERT(*s.Find(3) == "abcd");
-
-        TCache::TIterator it = s.Find(3);
-        s.Erase(it);
-        UNIT_ASSERT(s.Find(3) == s.End());
-    }
-
+    Y_UNIT_TEST(LRUWithCustomSizeProviderTest) { 
+        typedef TLRUCache<int, TString, TNoopDelete, size_t(*)(const TString&)> TCache; 
+        TCache s(10, false, [](auto& string) { return string.size(); }); // size 10 
+        s.Insert(1, "abcd"); 
+        UNIT_ASSERT(s.Find(1) != s.End()); 
+        UNIT_ASSERT_EQUAL(*s.Find(1), "abcd"); 
+        s.Insert(2, "defg"); 
+        UNIT_ASSERT(s.GetOldest() == "abcd"); 
+        s.Insert(3, "2c"); 
+        UNIT_ASSERT(s.GetOldest() == "abcd"); 
+        s.Insert(4, "hjkl"); 
+        UNIT_ASSERT(s.GetOldest() == "defg"); 
+        // key 1 will be deleted 
+        UNIT_ASSERT(s.Find(1) == s.End()); 
+        UNIT_ASSERT(s.Find(2) != s.End()); 
+        UNIT_ASSERT(*s.Find(2) == "defg"); 
+        UNIT_ASSERT(s.Find(3) != s.End()); 
+        UNIT_ASSERT(*s.Find(3) == "2c"); 
+        UNIT_ASSERT(s.Find(4) != s.End()); 
+        UNIT_ASSERT(*s.Find(4) == "hjkl"); 
+ 
+        UNIT_ASSERT(!s.Insert(3, "abcd")); 
+        UNIT_ASSERT(*s.Find(3) == "2c"); 
+        s.Update(3, "abcd"); 
+        UNIT_ASSERT(*s.Find(3) == "abcd"); 
+ 
+        TCache::TIterator it = s.Find(3); 
+        s.Erase(it); 
+        UNIT_ASSERT(s.Find(3) == s.End()); 
+    } 
+ 
     Y_UNIT_TEST(LRUSetMaxSizeTest) {
         typedef TLRUCache<int, TString> TCache;
         TCache s(2); // size 2

@@ -27,7 +27,7 @@ PY_SRCS(
     #urllib3/contrib/_securetransport/__init__.py
     #urllib3/contrib/_securetransport/bindings.py
     #urllib3/contrib/_securetransport/low_level.py
-    urllib3/contrib/appengine.py
+    urllib3/contrib/appengine.py 
     #urllib3/contrib/ntlmpool.py
     #urllib3/contrib/pyopenssl.py
     #urllib3/contrib/securetransport.py

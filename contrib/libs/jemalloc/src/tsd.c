@@ -1,17 +1,17 @@
 #define JEMALLOC_TSD_C_
 #include "jemalloc/internal/jemalloc_preamble.h"
 #include "jemalloc/internal/jemalloc_internal_includes.h"
-
+ 
 #include "jemalloc/internal/assert.h"
 #include "jemalloc/internal/mutex.h"
 #include "jemalloc/internal/rtree.h"
 
-/******************************************************************************/
-/* Data. */
-
-static unsigned ncleanups;
-static malloc_tsd_cleanup_t cleanups[MALLOC_TSD_CLEANUPS_MAX];
-
+/******************************************************************************/ 
+/* Data. */ 
+ 
+static unsigned ncleanups; 
+static malloc_tsd_cleanup_t cleanups[MALLOC_TSD_CLEANUPS_MAX]; 
+ 
 /* TSD_INITIALIZER triggers "-Wmissing-field-initializer" */
 JEMALLOC_DIAGNOSTIC_PUSH
 JEMALLOC_DIAGNOSTIC_IGNORE_MISSING_STRUCT_FIELD_INITIALIZERS
@@ -55,13 +55,13 @@ bool tsd_booted = false;
 
 JEMALLOC_DIAGNOSTIC_POP
 
-/******************************************************************************/
-
+/******************************************************************************/ 
+ 
 /* A list of all the tsds in the nominal state. */
 typedef ql_head(tsd_t) tsd_list_t;
 static tsd_list_t tsd_nominal_tsds = ql_head_initializer(tsd_nominal_tsds);
 static malloc_mutex_t tsd_nominal_tsds_lock;
-
+ 
 /* How many slow-path-enabling features are turned on. */
 static atomic_u32_t tsd_global_slow_count = ATOMIC_INIT(0);
 
@@ -82,8 +82,8 @@ tsd_in_nominal_list(tsd_t *tsd) {
 	}
 	malloc_mutex_unlock(TSDN_NULL, &tsd_nominal_tsds_lock);
 	return found;
-}
-
+} 
+ 
 static void
 tsd_add_nominal(tsd_t *tsd) {
 	assert(!tsd_in_nominal_list(tsd));
@@ -121,7 +121,7 @@ tsd_force_recompute(tsdn_t *tsdn) {
 	malloc_mutex_unlock(tsdn, &tsd_nominal_tsds_lock);
 }
 
-void
+void 
 tsd_global_slow_inc(tsdn_t *tsdn) {
 	atomic_fetch_add_u32(&tsd_global_slow_count, 1, ATOMIC_RELAXED);
 	/*
@@ -134,13 +134,13 @@ tsd_global_slow_inc(tsdn_t *tsdn) {
 	 */
 	tsd_force_recompute(tsdn);
 }
-
+ 
 void tsd_global_slow_dec(tsdn_t *tsdn) {
 	atomic_fetch_sub_u32(&tsd_global_slow_count, 1, ATOMIC_RELAXED);
 	/* See the note in ..._inc(). */
 	tsd_force_recompute(tsdn);
-}
-
+} 
+ 
 static bool
 tsd_local_slow(tsd_t *tsd) {
 	return !tsd_tcache_enabled_get(tsd)
@@ -167,7 +167,7 @@ tsd_state_compute(tsd_t *tsd) {
 	}
 }
 
-void
+void 
 tsd_slow_update(tsd_t *tsd) {
 	uint8_t old_state;
 	do {
@@ -176,7 +176,7 @@ tsd_slow_update(tsd_t *tsd) {
 		    ATOMIC_ACQUIRE);
 	} while (old_state == tsd_state_nominal_recompute);
 }
-
+ 
 void
 tsd_state_set(tsd_t *tsd, uint8_t new_state) {
 	/* Only the tsd module can change the state *to* recompute. */
@@ -213,8 +213,8 @@ tsd_state_set(tsd_t *tsd, uint8_t new_state) {
 			tsd_slow_update(tsd);
 		}
 	}
-}
-
+} 
+ 
 static bool
 tsd_data_init(tsd_t *tsd) {
 	/*
@@ -325,40 +325,40 @@ malloc_tsd_dalloc(void *wrapper) {
 	a0dalloc(wrapper);
 }
 
-#if defined(JEMALLOC_MALLOC_THREAD_CLEANUP) || defined(_WIN32)
-#ifndef _WIN32
-JEMALLOC_EXPORT
-#endif
-void
+#if defined(JEMALLOC_MALLOC_THREAD_CLEANUP) || defined(_WIN32) 
+#ifndef _WIN32 
+JEMALLOC_EXPORT 
+#endif 
+void 
 _malloc_thread_cleanup(void) {
-	bool pending[MALLOC_TSD_CLEANUPS_MAX], again;
-	unsigned i;
-
+	bool pending[MALLOC_TSD_CLEANUPS_MAX], again; 
+	unsigned i; 
+ 
 	for (i = 0; i < ncleanups; i++) {
-		pending[i] = true;
+		pending[i] = true; 
 	}
-
-	do {
-		again = false;
-		for (i = 0; i < ncleanups; i++) {
-			if (pending[i]) {
-				pending[i] = cleanups[i]();
+ 
+	do { 
+		again = false; 
+		for (i = 0; i < ncleanups; i++) { 
+			if (pending[i]) { 
+				pending[i] = cleanups[i](); 
 				if (pending[i]) {
-					again = true;
+					again = true; 
 				}
-			}
-		}
-	} while (again);
-}
-#endif
-
-void
+			} 
+		} 
+	} while (again); 
+} 
+#endif 
+ 
+void 
 malloc_tsd_cleanup_register(bool (*f)(void)) {
-	assert(ncleanups < MALLOC_TSD_CLEANUPS_MAX);
-	cleanups[ncleanups] = f;
-	ncleanups++;
-}
-
+	assert(ncleanups < MALLOC_TSD_CLEANUPS_MAX); 
+	cleanups[ncleanups] = f; 
+	ncleanups++; 
+} 
+ 
 static void
 tsd_do_data_cleanup(tsd_t *tsd) {
 	prof_tdata_cleanup(tsd);
@@ -369,10 +369,10 @@ tsd_do_data_cleanup(tsd_t *tsd) {
 	witnesses_cleanup(tsd_witness_tsdp_get_unsafe(tsd));
 }
 
-void
+void 
 tsd_cleanup(void *arg) {
 	tsd_t *tsd = (tsd_t *)arg;
-
+ 
 	switch (tsd_state_get(tsd)) {
 	case tsd_state_uninitialized:
 		/* Do nothing. */
@@ -418,7 +418,7 @@ tsd_t *
 malloc_tsd_boot0(void) {
 	tsd_t *tsd;
 
-	ncleanups = 0;
+	ncleanups = 0; 
 	if (malloc_mutex_init(&tsd_nominal_tsds_lock, "tsd_nominal_tsds_lock",
 	    WITNESS_RANK_OMIT, malloc_mutex_rank_exclusive)) {
 		return NULL;
@@ -429,8 +429,8 @@ malloc_tsd_boot0(void) {
 	tsd = tsd_fetch();
 	*tsd_arenas_tdata_bypassp_get(tsd) = true;
 	return tsd;
-}
-
+} 
+ 
 void
 malloc_tsd_boot1(void) {
 	tsd_boot1();
@@ -440,24 +440,24 @@ malloc_tsd_boot1(void) {
 	*tsd_arenas_tdata_bypassp_get(tsd) = false;
 }
 
-#ifdef _WIN32
-static BOOL WINAPI
+#ifdef _WIN32 
+static BOOL WINAPI 
 _tls_callback(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
-	switch (fdwReason) {
-#ifdef JEMALLOC_LAZY_LOCK
-	case DLL_THREAD_ATTACH:
-		isthreaded = true;
-		break;
-#endif
-	case DLL_THREAD_DETACH:
-		_malloc_thread_cleanup();
-		break;
-	default:
-		break;
-	}
+	switch (fdwReason) { 
+#ifdef JEMALLOC_LAZY_LOCK 
+	case DLL_THREAD_ATTACH: 
+		isthreaded = true; 
+		break; 
+#endif 
+	case DLL_THREAD_DETACH: 
+		_malloc_thread_cleanup(); 
+		break; 
+	default: 
+		break; 
+	} 
 	return true;
-}
-
+} 
+ 
 /*
  * We need to be able to say "read" here (in the "pragma section"), but have
  * hooked "read". We won't read for the rest of the file, so we can get away
@@ -467,51 +467,51 @@ _tls_callback(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
 #  undef read
 #endif
 
-#ifdef _MSC_VER
-#  ifdef _M_IX86
-#    pragma comment(linker, "/INCLUDE:__tls_used")
+#ifdef _MSC_VER 
+#  ifdef _M_IX86 
+#    pragma comment(linker, "/INCLUDE:__tls_used") 
 #    pragma comment(linker, "/INCLUDE:_tls_callback")
-#  else
-#    pragma comment(linker, "/INCLUDE:_tls_used")
+#  else 
+#    pragma comment(linker, "/INCLUDE:_tls_used") 
 #    pragma comment(linker, "/INCLUDE:" STRINGIFY(tls_callback) )
-#  endif
-#  pragma section(".CRT$XLY",long,read)
-#endif
-JEMALLOC_SECTION(".CRT$XLY") JEMALLOC_ATTR(used)
+#  endif 
+#  pragma section(".CRT$XLY",long,read) 
+#endif 
+JEMALLOC_SECTION(".CRT$XLY") JEMALLOC_ATTR(used) 
 BOOL	(WINAPI *const tls_callback)(HINSTANCE hinstDLL,
-    DWORD fdwReason, LPVOID lpvReserved) = _tls_callback;
-#endif
-
-#if (!defined(JEMALLOC_MALLOC_THREAD_CLEANUP) && !defined(JEMALLOC_TLS) && \
-    !defined(_WIN32))
-void *
+    DWORD fdwReason, LPVOID lpvReserved) = _tls_callback; 
+#endif 
+ 
+#if (!defined(JEMALLOC_MALLOC_THREAD_CLEANUP) && !defined(JEMALLOC_TLS) && \ 
+    !defined(_WIN32)) 
+void * 
 tsd_init_check_recursion(tsd_init_head_t *head, tsd_init_block_t *block) {
-	pthread_t self = pthread_self();
-	tsd_init_block_t *iter;
-
-	/* Check whether this thread has already inserted into the list. */
+	pthread_t self = pthread_self(); 
+	tsd_init_block_t *iter; 
+ 
+	/* Check whether this thread has already inserted into the list. */ 
 	malloc_mutex_lock(TSDN_NULL, &head->lock);
-	ql_foreach(iter, &head->blocks, link) {
-		if (iter->thread == self) {
+	ql_foreach(iter, &head->blocks, link) { 
+		if (iter->thread == self) { 
 			malloc_mutex_unlock(TSDN_NULL, &head->lock);
 			return iter->data;
-		}
-	}
-	/* Insert block into list. */
-	ql_elm_new(block, link);
-	block->thread = self;
-	ql_tail_insert(&head->blocks, block, link);
+		} 
+	} 
+	/* Insert block into list. */ 
+	ql_elm_new(block, link); 
+	block->thread = self; 
+	ql_tail_insert(&head->blocks, block, link); 
 	malloc_mutex_unlock(TSDN_NULL, &head->lock);
 	return NULL;
-}
-
-void
+} 
+ 
+void 
 tsd_init_finish(tsd_init_head_t *head, tsd_init_block_t *block) {
 	malloc_mutex_lock(TSDN_NULL, &head->lock);
-	ql_remove(&head->blocks, block, link);
+	ql_remove(&head->blocks, block, link); 
 	malloc_mutex_unlock(TSDN_NULL, &head->lock);
-}
-#endif
+} 
+#endif 
 
 void
 tsd_prefork(tsd_t *tsd) {

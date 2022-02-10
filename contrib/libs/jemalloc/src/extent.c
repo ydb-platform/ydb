@@ -1,7 +1,7 @@
 #define JEMALLOC_EXTENT_C_
 #include "jemalloc/internal/jemalloc_preamble.h"
 #include "jemalloc/internal/jemalloc_internal_includes.h"
-
+ 
 #include "jemalloc/internal/assert.h"
 #include "jemalloc/internal/extent_dss.h"
 #include "jemalloc/internal/extent_mmap.h"
@@ -10,15 +10,15 @@
 #include "jemalloc/internal/mutex.h"
 #include "jemalloc/internal/mutex_pool.h"
 
-/******************************************************************************/
+/******************************************************************************/ 
 /* Data. */
-
+ 
 rtree_t		extents_rtree;
 /* Keyed by the address of the extent_t being protected. */
 mutex_pool_t	extent_mutex_pool;
-
+ 
 size_t opt_lg_extent_max_active_fit = LG_EXTENT_MAX_ACTIVE_FIT_DEFAULT;
-
+ 
 static const bitmap_info_t extents_bitmap_info =
     BITMAP_INFO_INITIALIZER(SC_NPSIZES+1);
 
@@ -136,8 +136,8 @@ extent_rtree_leaf_elm_try_lock(tsdn_t *tsdn, rtree_leaf_elm_t *elm,
 	if (extent1 == NULL || (inactive_only && rtree_leaf_elm_slab_read(tsdn,
 	    &extents_rtree, elm, true))) {
 		return lock_result_no_extent;
-	}
-
+	} 
+ 
 	/*
 	 * It's possible that the extent changed out from under us, and with it
 	 * the leaf->extent mapping.  We have to recheck while holding the lock.
@@ -153,8 +153,8 @@ extent_rtree_leaf_elm_try_lock(tsdn_t *tsdn, rtree_leaf_elm_t *elm,
 		extent_unlock(tsdn, extent1);
 		return lock_result_failure;
 	}
-}
-
+} 
+ 
 /*
  * Returns a pool-locked extent_t * if there's one associated with the given
  * address, and NULL otherwise.
@@ -175,7 +175,7 @@ extent_lock_from_addr(tsdn_t *tsdn, rtree_ctx_t *rtree_ctx, void *addr,
 	} while (lock_result == lock_result_failure);
 	return ret;
 }
-
+ 
 extent_t *
 extent_alloc(tsdn_t *tsdn, arena_t *arena) {
 	malloc_mutex_lock(tsdn, &arena->extent_avail_mtx);
@@ -189,15 +189,15 @@ extent_alloc(tsdn_t *tsdn, arena_t *arena) {
 	malloc_mutex_unlock(tsdn, &arena->extent_avail_mtx);
 	return extent;
 }
-
+ 
 void
 extent_dalloc(tsdn_t *tsdn, arena_t *arena, extent_t *extent) {
 	malloc_mutex_lock(tsdn, &arena->extent_avail_mtx);
 	extent_avail_insert(&arena->extent_avail, extent);
 	atomic_fetch_add_zu(&arena->extent_avail_cnt, 1, ATOMIC_RELAXED);
 	malloc_mutex_unlock(tsdn, &arena->extent_avail_mtx);
-}
-
+} 
+ 
 extent_hooks_t *
 extent_hooks_get(arena_t *arena) {
 	return base_extent_hooks_get(arena->base);

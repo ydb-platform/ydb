@@ -1,7 +1,7 @@
 #include "session_config.h"
 
-#include <util/generic/strbuf.h>
-#include <util/string/hex.h>
+#include <util/generic/strbuf.h> 
+#include <util/string/hex.h> 
 
 using namespace NBus;
 
@@ -26,20 +26,20 @@ static int ParseDurationForMessageBus(const char* option) {
     return TDuration::Parse(option).MilliSeconds();
 }
 
-static int ParseToSForMessageBus(const char* option) {
-    int tos;
-    TStringBuf str(option);
+static int ParseToSForMessageBus(const char* option) { 
+    int tos; 
+    TStringBuf str(option); 
     if (str.StartsWith("0x")) {
-        str = str.Tail(2);
+        str = str.Tail(2); 
         Y_VERIFY(str.length() == 2, "ToS must be a number between 0x00 and 0xFF");
         tos = String2Byte(str.data());
-    } else {
-        tos = FromString<int>(option);
-    }
+    } else { 
+        tos = FromString<int>(option); 
+    } 
     Y_VERIFY(tos >= 0 && tos <= 255, "ToS must be between 0x00 and 0xFF");
-    return tos;
-}
-
+    return tos; 
+} 
+ 
 template <class T>
 static T ParseWithKmgSuffixT(const char* option) {
     TStringBuf str(option);

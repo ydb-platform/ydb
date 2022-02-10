@@ -73,13 +73,13 @@ Y_UNIT_TEST_SUITE(TSocketTest) {
     }
 
     template <class A, class S>
-    void RunInetStreamTest(const char* ip) {
+    void RunInetStreamTest(const char* ip) { 
         char buf[256];
-        A servAddr(ip, 0);
-        A newAddr;
-        S cliSock;
-        S servSock;
-        S newSock;
+        A servAddr(ip, 0); 
+        A newAddr; 
+        S cliSock; 
+        S servSock; 
+        S newSock; 
         cliSock.CheckSock();
         servSock.CheckSock();
         newSock.CheckSock();
@@ -112,13 +112,13 @@ Y_UNIT_TEST_SUITE(TSocketTest) {
     }
 
     Y_UNIT_TEST(InetStreamTest) {
-        RunInetStreamTest<TSockAddrInetStream, TInetStreamSocket>("127.0.0.1");
-    }
-
+        RunInetStreamTest<TSockAddrInetStream, TInetStreamSocket>("127.0.0.1"); 
+    } 
+ 
     Y_UNIT_TEST(Inet6StreamTest) {
-        RunInetStreamTest<TSockAddrInet6Stream, TInet6StreamSocket>("::1");
-    }
-
+        RunInetStreamTest<TSockAddrInet6Stream, TInet6StreamSocket>("::1"); 
+    } 
+ 
     void RunLocalStreamTest(const char* localServerSockName) {
         char buf[256];
         TSockAddrLocalStream servAddr(localServerSockName);

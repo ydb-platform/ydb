@@ -3,10 +3,10 @@
 
 #include "jemalloc/internal/assert.h"
 
-#ifndef JEMALLOC_ZONE
-#  error "This source file is for zones on Darwin (OS X)."
-#endif
-
+#ifndef JEMALLOC_ZONE 
+#  error "This source file is for zones on Darwin (OS X)." 
+#endif 
+ 
 /* Definitions of the following structs in malloc/malloc.h might be too old
  * for the built binary to run on newer versions of OSX. So use the newest
  * possible version of those structs.
@@ -76,140 +76,140 @@ extern void malloc_zone_register(malloc_zone_t *zone);
 
 extern void malloc_zone_unregister(malloc_zone_t *zone);
 
-/*
+/* 
  * The malloc_default_purgeable_zone() function is only available on >= 10.6.
- * We need to check whether it is present at runtime, thus the weak_import.
- */
-extern malloc_zone_t *malloc_default_purgeable_zone(void)
-JEMALLOC_ATTR(weak_import);
-
-/******************************************************************************/
-/* Data. */
-
+ * We need to check whether it is present at runtime, thus the weak_import. 
+ */ 
+extern malloc_zone_t *malloc_default_purgeable_zone(void) 
+JEMALLOC_ATTR(weak_import); 
+ 
+/******************************************************************************/ 
+/* Data. */ 
+ 
 static malloc_zone_t *default_zone, *purgeable_zone;
 static malloc_zone_t jemalloc_zone;
 static struct malloc_introspection_t jemalloc_zone_introspect;
 static pid_t zone_force_lock_pid = -1;
-
-/******************************************************************************/
-/* Function prototypes for non-inline static functions. */
-
+ 
+/******************************************************************************/ 
+/* Function prototypes for non-inline static functions. */ 
+ 
 static size_t	zone_size(malloc_zone_t *zone, const void *ptr);
-static void	*zone_malloc(malloc_zone_t *zone, size_t size);
-static void	*zone_calloc(malloc_zone_t *zone, size_t num, size_t size);
-static void	*zone_valloc(malloc_zone_t *zone, size_t size);
-static void	zone_free(malloc_zone_t *zone, void *ptr);
-static void	*zone_realloc(malloc_zone_t *zone, void *ptr, size_t size);
-static void	*zone_memalign(malloc_zone_t *zone, size_t alignment,
-    size_t size);
-static void	zone_free_definite_size(malloc_zone_t *zone, void *ptr,
-    size_t size);
+static void	*zone_malloc(malloc_zone_t *zone, size_t size); 
+static void	*zone_calloc(malloc_zone_t *zone, size_t num, size_t size); 
+static void	*zone_valloc(malloc_zone_t *zone, size_t size); 
+static void	zone_free(malloc_zone_t *zone, void *ptr); 
+static void	*zone_realloc(malloc_zone_t *zone, void *ptr, size_t size); 
+static void	*zone_memalign(malloc_zone_t *zone, size_t alignment, 
+    size_t size); 
+static void	zone_free_definite_size(malloc_zone_t *zone, void *ptr, 
+    size_t size); 
 static void	zone_destroy(malloc_zone_t *zone);
 static unsigned	zone_batch_malloc(struct _malloc_zone_t *zone, size_t size,
     void **results, unsigned num_requested);
 static void	zone_batch_free(struct _malloc_zone_t *zone,
     void **to_be_freed, unsigned num_to_be_freed);
 static size_t	zone_pressure_relief(struct _malloc_zone_t *zone, size_t goal);
-static size_t	zone_good_size(malloc_zone_t *zone, size_t size);
+static size_t	zone_good_size(malloc_zone_t *zone, size_t size); 
 static kern_return_t	zone_enumerator(task_t task, void *data, unsigned type_mask,
     vm_address_t zone_address, memory_reader_t reader,
     vm_range_recorder_t recorder);
 static boolean_t	zone_check(malloc_zone_t *zone);
 static void	zone_print(malloc_zone_t *zone, boolean_t verbose);
 static void	zone_log(malloc_zone_t *zone, void *address);
-static void	zone_force_lock(malloc_zone_t *zone);
-static void	zone_force_unlock(malloc_zone_t *zone);
+static void	zone_force_lock(malloc_zone_t *zone); 
+static void	zone_force_unlock(malloc_zone_t *zone); 
 static void	zone_statistics(malloc_zone_t *zone,
     malloc_statistics_t *stats);
 static boolean_t	zone_locked(malloc_zone_t *zone);
 static void	zone_reinit_lock(malloc_zone_t *zone);
-
-/******************************************************************************/
-/*
- * Functions.
- */
-
-static size_t
+ 
+/******************************************************************************/ 
+/* 
+ * Functions. 
+ */ 
+ 
+static size_t 
 zone_size(malloc_zone_t *zone, const void *ptr) {
-	/*
-	 * There appear to be places within Darwin (such as setenv(3)) that
-	 * cause calls to this function with pointers that *no* zone owns.  If
-	 * we knew that all pointers were owned by *some* zone, we could split
-	 * our zone into two parts, and use one as the default allocator and
-	 * the other as the default deallocator/reallocator.  Since that will
-	 * not work in practice, we must check all pointers to assure that they
+	/* 
+	 * There appear to be places within Darwin (such as setenv(3)) that 
+	 * cause calls to this function with pointers that *no* zone owns.  If 
+	 * we knew that all pointers were owned by *some* zone, we could split 
+	 * our zone into two parts, and use one as the default allocator and 
+	 * the other as the default deallocator/reallocator.  Since that will 
+	 * not work in practice, we must check all pointers to assure that they 
 	 * reside within a mapped extent before determining size.
-	 */
+	 */ 
 	return ivsalloc(tsdn_fetch(), ptr);
-}
-
-static void *
+} 
+ 
+static void * 
 zone_malloc(malloc_zone_t *zone, size_t size) {
 	return je_malloc(size);
-}
-
-static void *
+} 
+ 
+static void * 
 zone_calloc(malloc_zone_t *zone, size_t num, size_t size) {
 	return je_calloc(num, size);
-}
-
-static void *
+} 
+ 
+static void * 
 zone_valloc(malloc_zone_t *zone, size_t size) {
-	void *ret = NULL; /* Assignment avoids useless compiler warning. */
-
-	je_posix_memalign(&ret, PAGE, size);
-
+	void *ret = NULL; /* Assignment avoids useless compiler warning. */ 
+ 
+	je_posix_memalign(&ret, PAGE, size); 
+ 
 	return ret;
-}
-
-static void
+} 
+ 
+static void 
 zone_free(malloc_zone_t *zone, void *ptr) {
 	if (ivsalloc(tsdn_fetch(), ptr) != 0) {
-		je_free(ptr);
-		return;
-	}
-
-	free(ptr);
-}
-
-static void *
+		je_free(ptr); 
+		return; 
+	} 
+ 
+	free(ptr); 
+} 
+ 
+static void * 
 zone_realloc(malloc_zone_t *zone, void *ptr, size_t size) {
 	if (ivsalloc(tsdn_fetch(), ptr) != 0) {
 		return je_realloc(ptr, size);
 	}
-
+ 
 	return realloc(ptr, size);
-}
-
-static void *
+} 
+ 
+static void * 
 zone_memalign(malloc_zone_t *zone, size_t alignment, size_t size) {
-	void *ret = NULL; /* Assignment avoids useless compiler warning. */
-
-	je_posix_memalign(&ret, alignment, size);
-
+	void *ret = NULL; /* Assignment avoids useless compiler warning. */ 
+ 
+	je_posix_memalign(&ret, alignment, size); 
+ 
 	return ret;
-}
-
-static void
+} 
+ 
+static void 
 zone_free_definite_size(malloc_zone_t *zone, void *ptr, size_t size) {
 	size_t alloc_size;
-
+ 
 	alloc_size = ivsalloc(tsdn_fetch(), ptr);
 	if (alloc_size != 0) {
 		assert(alloc_size == size);
-		je_free(ptr);
-		return;
-	}
-
-	free(ptr);
-}
-
+		je_free(ptr); 
+		return; 
+	} 
+ 
+	free(ptr); 
+} 
+ 
 static void
 zone_destroy(malloc_zone_t *zone) {
-	/* This function should never be called. */
-	not_reached();
-}
-
+	/* This function should never be called. */ 
+	not_reached(); 
+} 
+ 
 static unsigned
 zone_batch_malloc(struct _malloc_zone_t *zone, size_t size, void **results,
     unsigned num_requested) {
@@ -235,19 +235,19 @@ zone_batch_free(struct _malloc_zone_t *zone, void **to_be_freed,
 	}
 }
 
-static size_t
+static size_t 
 zone_pressure_relief(struct _malloc_zone_t *zone, size_t goal) {
 	return 0;
 }
-
+ 
 static size_t
 zone_good_size(malloc_zone_t *zone, size_t size) {
 	if (size == 0) {
-		size = 1;
+		size = 1; 
 	}
 	return sz_s2u(size);
-}
-
+} 
+ 
 static kern_return_t
 zone_enumerator(task_t task, void *data, unsigned type_mask,
     vm_address_t zone_address, memory_reader_t reader,
@@ -260,10 +260,10 @@ zone_check(malloc_zone_t *zone) {
 	return true;
 }
 
-static void
+static void 
 zone_print(malloc_zone_t *zone, boolean_t verbose) {
 }
-
+ 
 static void
 zone_log(malloc_zone_t *zone, void *address) {
 }
@@ -277,11 +277,11 @@ zone_force_lock(malloc_zone_t *zone) {
 		 */
 		assert(zone_force_lock_pid == -1);
 		zone_force_lock_pid = getpid();
-		jemalloc_prefork();
+		jemalloc_prefork(); 
 	}
-}
-
-static void
+} 
+ 
+static void 
 zone_force_unlock(malloc_zone_t *zone) {
 	/*
 	 * zone_force_lock and zone_force_unlock are the entry points to the
@@ -305,7 +305,7 @@ zone_force_unlock(malloc_zone_t *zone) {
 		zone_force_lock_pid = -1;
 	}
 }
-
+ 
 static void
 zone_statistics(malloc_zone_t *zone, malloc_statistics_t *stats) {
 	/* We make no effort to actually fill the values */
@@ -313,8 +313,8 @@ zone_statistics(malloc_zone_t *zone, malloc_statistics_t *stats) {
 	stats->size_in_use = 0;
 	stats->max_size_in_use = 0;
 	stats->size_allocated = 0;
-}
-
+} 
+ 
 static boolean_t
 zone_locked(malloc_zone_t *zone) {
 	/* Pretend no lock is being held */
@@ -433,37 +433,37 @@ zone_promote(void) {
 	} while (zone != &jemalloc_zone);
 }
 
-JEMALLOC_ATTR(constructor)
-void
+JEMALLOC_ATTR(constructor) 
+void 
 zone_register(void) {
-	/*
-	 * If something else replaced the system default zone allocator, don't
-	 * register jemalloc's.
-	 */
+	/* 
+	 * If something else replaced the system default zone allocator, don't 
+	 * register jemalloc's. 
+	 */ 
 	default_zone = zone_default_get();
 	if (!default_zone->zone_name || strcmp(default_zone->zone_name,
 	    "DefaultMallocZone") != 0) {
-		return;
-	}
-
-	/*
-	 * The default purgeable zone is created lazily by OSX's libc.  It uses
-	 * the default zone when it is created for "small" allocations
-	 * (< 15 KiB), but assumes the default zone is a scalable_zone.  This
-	 * obviously fails when the default zone is the jemalloc zone, so
+		return; 
+	} 
+ 
+	/* 
+	 * The default purgeable zone is created lazily by OSX's libc.  It uses 
+	 * the default zone when it is created for "small" allocations 
+	 * (< 15 KiB), but assumes the default zone is a scalable_zone.  This 
+	 * obviously fails when the default zone is the jemalloc zone, so 
 	 * malloc_default_purgeable_zone() is called beforehand so that the
-	 * default purgeable zone is created when the default zone is still
-	 * a scalable_zone.  As purgeable zones only exist on >= 10.6, we need
-	 * to check for the existence of malloc_default_purgeable_zone() at
-	 * run time.
-	 */
+	 * default purgeable zone is created when the default zone is still 
+	 * a scalable_zone.  As purgeable zones only exist on >= 10.6, we need 
+	 * to check for the existence of malloc_default_purgeable_zone() at 
+	 * run time. 
+	 */ 
 	purgeable_zone = (malloc_default_purgeable_zone == NULL) ? NULL :
 	    malloc_default_purgeable_zone();
-
-	/* Register the custom zone.  At this point it won't be the default. */
+ 
+	/* Register the custom zone.  At this point it won't be the default. */ 
 	zone_init();
 	malloc_zone_register(&jemalloc_zone);
-
+ 
 	/* Promote the custom zone to be default. */
 	zone_promote();
-}
+} 

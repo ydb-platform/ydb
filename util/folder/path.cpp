@@ -363,7 +363,7 @@ void TFsPath::DeleteIfExists() const {
     }
 }
 
-void TFsPath::MkDir(const int mode) const {
+void TFsPath::MkDir(const int mode) const { 
     CheckDefined();
     if (!Exists()) {
         int r = Mkdir(this->c_str(), mode);
@@ -378,11 +378,11 @@ void TFsPath::MkDir(const int mode) const {
     }
 }
 
-void TFsPath::MkDirs(const int mode) const {
+void TFsPath::MkDirs(const int mode) const { 
     CheckDefined();
     if (!Exists()) {
-        Parent().MkDirs(mode);
-        MkDir(mode);
+        Parent().MkDirs(mode); 
+        MkDir(mode); 
     }
 }
 

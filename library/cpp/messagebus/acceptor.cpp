@@ -77,9 +77,9 @@ void TAcceptor::Act(TDefaultTag) {
             SetSockOptTcpCork(s, Session->Config.TcpCork);
             SetCloseOnExec(s, true);
             SetNonBlock(s, true);
-            if (Session->Config.SocketToS >= 0) {
-                SetSocketToS(s, addr.Get(), Session->Config.SocketToS);
-            }
+            if (Session->Config.SocketToS >= 0) { 
+                SetSocketToS(s, addr.Get(), Session->Config.SocketToS); 
+            } 
         } catch (...) {
             // It means that connection was reset just now
             // TODO: do something better

@@ -1,17 +1,17 @@
 #ifndef JEMALLOC_INTERNAL_MACROS_H
 #define JEMALLOC_INTERNAL_MACROS_H
-
+ 
 #ifdef JEMALLOC_DEBUG
 #  define JEMALLOC_ALWAYS_INLINE static inline
-#else
+#else 
 #  define JEMALLOC_ALWAYS_INLINE JEMALLOC_ATTR(always_inline) static inline
-#endif
+#endif 
 #ifdef _MSC_VER
 #  define inline _inline
 #endif
-
+ 
 #define UNUSED JEMALLOC_ATTR(unused)
-
+ 
 #define ZU(z)	((size_t)z)
 #define ZD(z)	((ssize_t)z)
 #define QU(q)	((uint64_t)q)
@@ -22,13 +22,13 @@
 #define KQU(q)	QU(q##ULL)
 #define KQD(q)	QI(q##LL)
 
-#ifndef __DECONST
-#  define	__DECONST(type, var)	((type)(uintptr_t)(const void *)(var))
-#endif
-
+#ifndef __DECONST 
+#  define	__DECONST(type, var)	((type)(uintptr_t)(const void *)(var)) 
+#endif 
+ 
 #if !defined(JEMALLOC_HAS_RESTRICT) || defined(__cplusplus)
-#  define restrict
-#endif
+#  define restrict 
+#endif 
 
 /* Various function pointers are static and immutable except during testing. */
 #ifdef JEMALLOC_JET

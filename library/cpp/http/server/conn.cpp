@@ -5,11 +5,11 @@
 
 class THttpServerConn::TImpl {
 public:
-    inline TImpl(const TSocket& s, size_t outputBufferSize)
+    inline TImpl(const TSocket& s, size_t outputBufferSize) 
         : S_(s)
         , SI_(S_)
         , SO_(S_)
-        , BO_(&SO_, outputBufferSize)
+        , BO_(&SO_, outputBufferSize) 
         , HI_(&SI_)
         , HO_(&BO_, &HI_)
     {
@@ -44,15 +44,15 @@ private:
 };
 
 THttpServerConn::THttpServerConn(const TSocket& s)
-    : THttpServerConn(s, s.MaximumTransferUnit())
+    : THttpServerConn(s, s.MaximumTransferUnit()) 
 {
 }
 
-THttpServerConn::THttpServerConn(const TSocket& s, size_t outputBufferSize)
-    : Impl_(new TImpl(s, outputBufferSize))
-{
-}
-
+THttpServerConn::THttpServerConn(const TSocket& s, size_t outputBufferSize) 
+    : Impl_(new TImpl(s, outputBufferSize)) 
+{ 
+} 
+ 
 THttpServerConn::~THttpServerConn() {
 }
 

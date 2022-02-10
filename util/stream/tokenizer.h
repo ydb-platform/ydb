@@ -173,11 +173,11 @@ public:
 private:
     inline size_t Fill() {
         const size_t avail = BufEnd() - End_;
-        const size_t bytesRead = Input_->Read(End_, avail);
+        const size_t bytesRead = Input_->Read(End_, avail); 
 
-        End_ += bytesRead;
+        End_ += bytesRead; 
 
-        return bytesRead;
+        return bytesRead; 
     }
 
     inline char* BufBegin() noexcept {

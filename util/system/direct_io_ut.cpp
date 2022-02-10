@@ -2,7 +2,7 @@
 
 #include <util/generic/yexception.h>
 #include <util/system/fs.h>
-#include <util/system/tempfile.h>
+#include <util/system/tempfile.h> 
 #include <util/random/random.h>
 
 #include "direct_io.h"
@@ -13,7 +13,7 @@ Y_UNIT_TEST_SUITE(TDirectIoTestSuite) {
     Y_UNIT_TEST(TestDirectFile) {
         TDirectIOBufferedFile file(FileName_, RdWr | Direct | Seq | CreateAlways, 1 << 15);
         TVector<ui64> data((1 << 15) + 1);
-        TVector<ui64> readResult(data.size());
+        TVector<ui64> readResult(data.size()); 
         for (auto& i : data) {
             i = RandomNumber<ui64>();
         }
@@ -24,10 +24,10 @@ Y_UNIT_TEST_SUITE(TDirectIoTestSuite) {
             size_t readPos = RandomNumber(writePos);
             size_t readCount = RandomNumber(writePos - readPos);
             UNIT_ASSERT_VALUES_EQUAL(
-                file.Pread(&readResult[0], readCount * sizeof(ui64), readPos * sizeof(ui64)),
+                file.Pread(&readResult[0], readCount * sizeof(ui64), readPos * sizeof(ui64)), 
                 readCount * sizeof(ui64));
             for (size_t i = 0; i < readCount; ++i) {
-                UNIT_ASSERT_VALUES_EQUAL(readResult[i], data[i + readPos]);
+                UNIT_ASSERT_VALUES_EQUAL(readResult[i], data[i + readPos]); 
             }
         }
         file.Finish();
@@ -36,56 +36,56 @@ Y_UNIT_TEST_SUITE(TDirectIoTestSuite) {
             size_t readPos = RandomNumber(data.size());
             size_t readCount = RandomNumber(data.size() - readPos);
             UNIT_ASSERT_VALUES_EQUAL(
-                fileNew.Pread(&readResult[0], readCount * sizeof(ui64), readPos * sizeof(ui64)),
+                fileNew.Pread(&readResult[0], readCount * sizeof(ui64), readPos * sizeof(ui64)), 
                 readCount * sizeof(ui64));
             for (size_t j = 0; j < readCount; ++j) {
-                UNIT_ASSERT_VALUES_EQUAL(readResult[j], data[j + readPos]);
+                UNIT_ASSERT_VALUES_EQUAL(readResult[j], data[j + readPos]); 
             }
         }
         size_t readCount = data.size();
         UNIT_ASSERT_VALUES_EQUAL(
-            fileNew.Pread(&readResult[0], readCount * sizeof(ui64), 0),
+            fileNew.Pread(&readResult[0], readCount * sizeof(ui64), 0), 
             readCount * sizeof(ui64));
         for (size_t i = 0; i < readCount; ++i) {
-            UNIT_ASSERT_VALUES_EQUAL(readResult[i], data[i]);
+            UNIT_ASSERT_VALUES_EQUAL(readResult[i], data[i]); 
         }
         NFs::Remove(FileName_);
     }
 
-    void TestHugeFile(size_t size) {
-        TTempFile tmpFile("test.file");
-
-        {
-            TDirectIOBufferedFile directIOFile(tmpFile.Name(), WrOnly | CreateAlways | Direct);
-            TVector<ui8> data(size, 'x');
-            directIOFile.Write(&data[0], data.size());
-        }
-
-        {
-            TDirectIOBufferedFile directIOFile(tmpFile.Name(), RdOnly | Direct);
-            TVector<ui8> data(size + 1, 'y');
-
-            const size_t readResult = directIOFile.Read(&data[0], data.size());
-
-            UNIT_ASSERT_VALUES_EQUAL(readResult, size);
-
-            UNIT_ASSERT_VALUES_EQUAL(data[0], 'x');
-            UNIT_ASSERT_VALUES_EQUAL(data[size / 2], 'x');
-            UNIT_ASSERT_VALUES_EQUAL(data[size - 1], 'x');
-            UNIT_ASSERT_VALUES_EQUAL(data[size], 'y');
-        }
-    }
-
-    Y_UNIT_TEST(TestHugeFile1) {
+    void TestHugeFile(size_t size) { 
+        TTempFile tmpFile("test.file"); 
+ 
+        { 
+            TDirectIOBufferedFile directIOFile(tmpFile.Name(), WrOnly | CreateAlways | Direct); 
+            TVector<ui8> data(size, 'x'); 
+            directIOFile.Write(&data[0], data.size()); 
+        } 
+ 
+        { 
+            TDirectIOBufferedFile directIOFile(tmpFile.Name(), RdOnly | Direct); 
+            TVector<ui8> data(size + 1, 'y'); 
+ 
+            const size_t readResult = directIOFile.Read(&data[0], data.size()); 
+ 
+            UNIT_ASSERT_VALUES_EQUAL(readResult, size); 
+ 
+            UNIT_ASSERT_VALUES_EQUAL(data[0], 'x'); 
+            UNIT_ASSERT_VALUES_EQUAL(data[size / 2], 'x'); 
+            UNIT_ASSERT_VALUES_EQUAL(data[size - 1], 'x'); 
+            UNIT_ASSERT_VALUES_EQUAL(data[size], 'y'); 
+        } 
+    } 
+ 
+    Y_UNIT_TEST(TestHugeFile1) { 
         if constexpr (sizeof(size_t) > 4) {
-            TestHugeFile(5 * 1024 * 1024 * 1024ULL);
-        }
-    }
-    Y_UNIT_TEST(TestHugeFile2) {
+            TestHugeFile(5 * 1024 * 1024 * 1024ULL); 
+        } 
+    } 
+    Y_UNIT_TEST(TestHugeFile2) { 
         if constexpr (sizeof(size_t) > 4) {
-            TestHugeFile(5 * 1024 * 1024 * 1024ULL + 1111);
-        }
-    }
+            TestHugeFile(5 * 1024 * 1024 * 1024ULL + 1111); 
+        } 
+    } 
 }
 
 Y_UNIT_TEST_SUITE(TDirectIoErrorHandling) {

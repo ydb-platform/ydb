@@ -85,27 +85,27 @@ Y_UNIT_TEST_SUITE(TEndpointTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(5u, he.size());
     }
-
+ 
     Y_UNIT_TEST(TestEqual) {
         const TString ip1 = "2a02:6b8:0:1410::5f6c:f3c2";
         const TString ip2 = "2a02:6b8:0:1410::5f6c:f3c3";
 
         TNetworkAddress na1(ip1, 24242);
-        TEndpoint ep1(new NAddr::TAddrInfo(&*na1.Begin()));
-
+        TEndpoint ep1(new NAddr::TAddrInfo(&*na1.Begin())); 
+ 
         TNetworkAddress na2(ip1, 24242);
-        TEndpoint ep2(new NAddr::TAddrInfo(&*na2.Begin()));
-
+        TEndpoint ep2(new NAddr::TAddrInfo(&*na2.Begin())); 
+ 
         TNetworkAddress na3(ip2, 24242);
-        TEndpoint ep3(new NAddr::TAddrInfo(&*na3.Begin()));
-
+        TEndpoint ep3(new NAddr::TAddrInfo(&*na3.Begin())); 
+ 
         TNetworkAddress na4(ip2, 24243);
-        TEndpoint ep4(new NAddr::TAddrInfo(&*na4.Begin()));
-
-        UNIT_ASSERT(ep1 == ep2);
-        UNIT_ASSERT(!(ep1 == ep3));
-        UNIT_ASSERT(!(ep1 == ep4));
-    }
+        TEndpoint ep4(new NAddr::TAddrInfo(&*na4.Begin())); 
+ 
+        UNIT_ASSERT(ep1 == ep2); 
+        UNIT_ASSERT(!(ep1 == ep3)); 
+        UNIT_ASSERT(!(ep1 == ep4)); 
+    } 
 
     Y_UNIT_TEST(TestIsUnixSocket) {
         TNetworkAddress na1(TUnixSocketPath("/tmp/unixsocket"));

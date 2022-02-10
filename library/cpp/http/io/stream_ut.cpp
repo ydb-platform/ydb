@@ -179,63 +179,63 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
     }
 
     Y_UNIT_TEST(TestKeepAlive) {
-        {
+        { 
             TString s = "GET / HTTP/1.0\r\n\r\n";
-            TStringInput si(s);
-            THttpInput in(&si);
-            UNIT_ASSERT(!in.IsKeepAlive());
-        }
-
-        {
+            TStringInput si(s); 
+            THttpInput in(&si); 
+            UNIT_ASSERT(!in.IsKeepAlive()); 
+        } 
+ 
+        { 
             TString s = "GET / HTTP/1.0\r\nConnection: keep-alive\r\n\r\n";
-            TStringInput si(s);
-            THttpInput in(&si);
-            UNIT_ASSERT(in.IsKeepAlive());
-        }
-
-        {
+            TStringInput si(s); 
+            THttpInput in(&si); 
+            UNIT_ASSERT(in.IsKeepAlive()); 
+        } 
+ 
+        { 
             TString s = "GET / HTTP/1.1\r\n\r\n";
-            TStringInput si(s);
-            THttpInput in(&si);
-            UNIT_ASSERT(in.IsKeepAlive());
-        }
-
-        {
+            TStringInput si(s); 
+            THttpInput in(&si); 
+            UNIT_ASSERT(in.IsKeepAlive()); 
+        } 
+ 
+        { 
             TString s = "GET / HTTP/1.1\r\nConnection: close\r\n\r\n";
-            TStringInput si(s);
-            THttpInput in(&si);
-            UNIT_ASSERT(!in.IsKeepAlive());
-        }
-
-        {
+            TStringInput si(s); 
+            THttpInput in(&si); 
+            UNIT_ASSERT(!in.IsKeepAlive()); 
+        } 
+ 
+        { 
             TString s = "HTTP/1.0 200 Ok\r\n\r\n";
-            TStringInput si(s);
-            THttpInput in(&si);
-            UNIT_ASSERT(!in.IsKeepAlive());
-        }
-
-        {
+            TStringInput si(s); 
+            THttpInput in(&si); 
+            UNIT_ASSERT(!in.IsKeepAlive()); 
+        } 
+ 
+        { 
             TString s = "HTTP/1.0 200 Ok\r\nConnection: keep-alive\r\n\r\n";
-            TStringInput si(s);
-            THttpInput in(&si);
-            UNIT_ASSERT(in.IsKeepAlive());
-        }
-
-        {
+            TStringInput si(s); 
+            THttpInput in(&si); 
+            UNIT_ASSERT(in.IsKeepAlive()); 
+        } 
+ 
+        { 
             TString s = "HTTP/1.1 200 Ok\r\n\r\n";
-            TStringInput si(s);
-            THttpInput in(&si);
-            UNIT_ASSERT(in.IsKeepAlive());
-        }
-
-        {
+            TStringInput si(s); 
+            THttpInput in(&si); 
+            UNIT_ASSERT(in.IsKeepAlive()); 
+        } 
+ 
+        { 
             TString s = "HTTP/1.1 200 Ok\r\nConnection: close\r\n\r\n";
-            TStringInput si(s);
-            THttpInput in(&si);
-            UNIT_ASSERT(!in.IsKeepAlive());
-        }
-    }
-
+            TStringInput si(s); 
+            THttpInput in(&si); 
+            UNIT_ASSERT(!in.IsKeepAlive()); 
+        } 
+    } 
+ 
     Y_UNIT_TEST(TestMinRequest) {
         TString res = "qqqqqq";
         TPortManager pm;

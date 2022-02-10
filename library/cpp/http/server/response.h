@@ -34,10 +34,10 @@ public:
 
     THttpResponse& AddMultipleHeaders(const THttpHeaders& headers);
 
-    const THttpHeaders& GetHeaders() const {
-        return Headers;
-    }
-
+    const THttpHeaders& GetHeaders() const { 
+        return Headers; 
+    } 
+ 
     THttpResponse& SetContentType(const TStringBuf& contentType);
 
     /**

@@ -25,9 +25,9 @@ namespace NAddr {
     TString PrintHost(const IRemoteAddr& addr);
     TString PrintHostAndPort(const IRemoteAddr& addr);
 
-    bool IsLoopback(const IRemoteAddr& addr);
-    bool IsSame(const IRemoteAddr& lhs, const IRemoteAddr& rhs);
-
+    bool IsLoopback(const IRemoteAddr& addr); 
+    bool IsSame(const IRemoteAddr& lhs, const IRemoteAddr& rhs); 
+ 
     socklen_t SockAddrLength(const sockaddr* addr);
 
     //for accept, recvfrom - see LenPtr()

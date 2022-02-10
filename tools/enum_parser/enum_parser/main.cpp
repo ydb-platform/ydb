@@ -32,7 +32,7 @@ void WriteHeader(const TString& headerName, IOutputStream& out, IOutputStream* h
     out << "#include <util/generic/typetraits.h>\n";
     out << "#include <util/generic/singleton.h>\n";
     out << "#include <util/generic/string.h>\n";
-    out << "#include <util/generic/vector.h>\n";
+    out << "#include <util/generic/vector.h>\n"; 
     out << "#include <util/generic/map.h>\n";
     out << "#include <util/generic/serialized_enum.h>\n";
     out << "#include <util/string/cast.h>\n";
@@ -331,7 +331,7 @@ void GenerateEnum(
     out << "        const " << nsName << "::TNameBufs& names = " << nsName << "::TNameBufs::Instance();\n";
     out << "        return names.AllEnumValues();\n";
     out << "    }\n\n";
-
+ 
     // template<> GetEnumAllNames
     out << "    template<>\n";
     out << "    const TString& GetEnumAllNamesImpl<" << name << ">() {\n";

@@ -38,9 +38,9 @@ TTrampoline::TTrampoline(NStack::IAllocator& allocator, ui32 stackSize, TFunc f,
         return Stack_.Get();
     }
 
-    const char* TTrampoline::ContName() const noexcept {
-        return Cont_->Name();
-    }
+    const char* TTrampoline::ContName() const noexcept { 
+        return Cont_->Name(); 
+    } 
 
     void TTrampoline::DoRunNaked() {
         DoRun();

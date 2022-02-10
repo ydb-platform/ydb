@@ -71,13 +71,13 @@ public:
 
         while (true) {
             if (MemInput_.Exhausted()) {
-                const size_t bytesRead = Slave_->Read(Buf(), BufLen());
+                const size_t bytesRead = Slave_->Read(Buf(), BufLen()); 
 
-                if (!bytesRead) {
+                if (!bytesRead) { 
                     break;
                 }
 
-                MemInput_.Reset(Buf(), bytesRead);
+                MemInput_.Reset(Buf(), bytesRead); 
             }
 
             const size_t a_len(MemInput_.Avail());

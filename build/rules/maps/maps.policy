@@ -169,9 +169,9 @@ ALLOW sdg/library/python/revision_manager -> maps/wikimap/mapspro/libs/revision
 ALLOW ydo/libs/dispatch -> maps/libs/pbstream
 ALLOW ydo/libs/dispatch -> maps/libs/kdtree
 
-# use of privacy_detector
-ALLOW toloka -> maps/wikimap/mapspro/services/mrc/libs/
-
+# use of privacy_detector 
+ALLOW toloka -> maps/wikimap/mapspro/services/mrc/libs/ 
+ 
 # allow using yacare to implement piglet sync service
 ALLOW devtools/contrib -> maps/infra/yacare
 

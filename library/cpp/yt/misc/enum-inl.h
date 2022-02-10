@@ -8,7 +8,7 @@
 #include <util/string/printf.h>
 #include <util/string/cast.h>
 
-#include <algorithm> 
+#include <algorithm>
 #include <stdexcept>
 
 namespace NYT {
@@ -36,25 +36,25 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-namespace NDetail { 
- 
-template <typename TValues> 
-static constexpr bool AreValuesDistinct(const TValues& values) 
-{ 
-    for (int i = 0; i < static_cast<int>(values.size()); ++i) { 
-        for (int j = i + 1; j < static_cast<int>(values.size()); ++j) { 
-            if (values[i] == values[j]) { 
-                return false; 
-            } 
-        } 
-    } 
-    return true; 
-} 
- 
-} // namespace NDetail 
- 
-//////////////////////////////////////////////////////////////////////////////// 
- 
+namespace NDetail {
+
+template <typename TValues>
+static constexpr bool AreValuesDistinct(const TValues& values)
+{
+    for (int i = 0; i < static_cast<int>(values.size()); ++i) {
+        for (int j = i + 1; j < static_cast<int>(values.size()); ++j) {
+            if (values[i] == values[j]) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+} // namespace NDetail
+
+////////////////////////////////////////////////////////////////////////////////
+
 #define ENUM__BEGIN_TRAITS(name, underlyingType, isBit, isStringSerializable, seq) \
     struct TEnumTraitsImpl_##name \
     { \
@@ -64,13 +64,13 @@ static constexpr bool AreValuesDistinct(const TValues& values)
         [[maybe_unused]] static constexpr bool IsStringSerializableEnum = isStringSerializable; \
         [[maybe_unused]] static constexpr int DomainSize = PP_COUNT(seq); \
         \
-        static constexpr std::array<TStringBuf, DomainSize> Names{{ \ 
-            PP_FOR_EACH(ENUM__GET_DOMAIN_NAMES_ITEM, seq) \ 
-        }}; \ 
-        static constexpr std::array<TType, DomainSize> Values{{ \ 
-            PP_FOR_EACH(ENUM__GET_DOMAIN_VALUES_ITEM, seq) \ 
-        }}; \ 
-        \ 
+        static constexpr std::array<TStringBuf, DomainSize> Names{{ \
+            PP_FOR_EACH(ENUM__GET_DOMAIN_NAMES_ITEM, seq) \
+        }}; \
+        static constexpr std::array<TType, DomainSize> Values{{ \
+            PP_FOR_EACH(ENUM__GET_DOMAIN_VALUES_ITEM, seq) \
+        }}; \
+        \
         static TStringBuf GetTypeName() \
         { \
             static constexpr TStringBuf typeName = PP_STRINGIZE(name); \
@@ -79,33 +79,33 @@ static constexpr bool AreValuesDistinct(const TValues& values)
         \
         static const TStringBuf* FindLiteralByValue(TType value) \
         { \
-            for (int i = 0; i < DomainSize; ++i) { \ 
-                if (Values[i] == value) { \ 
-                    return &Names[i]; \ 
-                } \ 
-            } \ 
+            for (int i = 0; i < DomainSize; ++i) { \
+                if (Values[i] == value) { \
+                    return &Names[i]; \
+                } \
+            } \
             return nullptr; \
         } \
         \
         static bool FindValueByLiteral(TStringBuf literal, TType* result) \
         { \
-            for (int i = 0; i < DomainSize; ++i) { \ 
-                if (Names[i] == literal) { \ 
-                    *result = Values[i]; \ 
-                    return true; \ 
-                } \ 
-            } \ 
+            for (int i = 0; i < DomainSize; ++i) { \
+                if (Names[i] == literal) { \
+                    *result = Values[i]; \
+                    return true; \
+                } \
+            } \
             return false; \
         } \
         \
         static const std::array<TStringBuf, DomainSize>& GetDomainNames() \
         { \
-            return Names; \ 
+            return Names; \
         } \
         \
         static const std::array<TType, DomainSize>& GetDomainValues() \
         { \
-            return Values; \ 
+            return Values; \
         } \
         \
         static TType FromString(TStringBuf str) \
@@ -145,34 +145,34 @@ static constexpr bool AreValuesDistinct(const TValues& values)
 #define ENUM__GET_DOMAIN_NAMES_ITEM_ATOMIC(item) \
     TStringBuf(PP_STRINGIZE(item)),
 
-#define ENUM__DECOMPOSE \ 
+#define ENUM__DECOMPOSE \
     static std::vector<TType> Decompose(TType value) \
     { \
         std::vector<TType> result; \
-        for (int i = 0; i < DomainSize; ++i) { \ 
-            if (static_cast<TUnderlying>(value) & static_cast<TUnderlying>(Values[i])) { \ 
-                result.push_back(Values[i]); \ 
-            } \ 
-        } \ 
+        for (int i = 0; i < DomainSize; ++i) { \
+            if (static_cast<TUnderlying>(value) & static_cast<TUnderlying>(Values[i])) { \
+                result.push_back(Values[i]); \
+            } \
+        } \
         return result; \
     }
 
-#define ENUM__MINMAX \ 
-    static constexpr TType GetMinValue() \ 
+#define ENUM__MINMAX \
+    static constexpr TType GetMinValue() \
     { \
-        static_assert(!Values.empty()); \ 
-        return *std::min_element(std::begin(Values), std::end(Values)); \ 
+        static_assert(!Values.empty()); \
+        return *std::min_element(std::begin(Values), std::end(Values)); \
     } \
     \
-    static constexpr TType GetMaxValue() \ 
+    static constexpr TType GetMaxValue() \
     { \
-        static_assert(!Values.empty()); \ 
-        return *std::max_element(std::begin(Values), std::end(Values)); \ 
+        static_assert(!Values.empty()); \
+        return *std::max_element(std::begin(Values), std::end(Values)); \
     }
 
-#define ENUM__VALIDATE_UNIQUE(name) \ 
-    static_assert(::NYT::NDetail::AreValuesDistinct(Values), \ 
-        "Enumeration " #name " contains duplicate values"); 
+#define ENUM__VALIDATE_UNIQUE(name) \
+    static_assert(::NYT::NDetail::AreValuesDistinct(Values), \
+        "Enumeration " #name " contains duplicate values");
 
 #define ENUM__END_TRAITS(name) \
     }; \
@@ -181,7 +181,7 @@ static constexpr bool AreValuesDistinct(const TValues& values)
     { \
         return TEnumTraitsImpl_##name(); \
     } \
-    \ 
+    \
     using ::ToString; \
     [[maybe_unused]] inline TString ToString(name value) \
     { \

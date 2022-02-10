@@ -148,10 +148,10 @@ TNode::TNode(bool b)
     : Value_(b)
 { }
 
-TNode::TNode(TMapType map) 
+TNode::TNode(TMapType map)
     : Value_(std::move(map))
-{ } 
- 
+{ }
+
 TNode::TNode(const TNode& rhs)
     : TNode()
 {
@@ -259,7 +259,7 @@ bool TNode::Empty() const
         case Map:
             return std::get<TMapType>(Value_).empty();
         default:
-            ythrow TTypeError() << "Empty() called for type " << GetType(); 
+            ythrow TTypeError() << "Empty() called for type " << GetType();
     }
 }
 
@@ -273,7 +273,7 @@ size_t TNode::Size() const
         case Map:
             return std::get<TMapType>(Value_).size();
         default:
-            ythrow TTypeError() << "Size() called for type " << GetType(); 
+            ythrow TTypeError() << "Size() called for type " << GetType();
     }
 }
 
@@ -822,7 +822,7 @@ void TNode::Move(TNode&& rhs)
 void TNode::CheckType(EType type) const
 {
     Y_ENSURE_EX(GetType() == type,
-        TTypeError() << "TNode type " << type <<  " expected, actual type " << GetType(); 
+        TTypeError() << "TNode type " << type <<  " expected, actual type " << GetType();
     );
 }
 

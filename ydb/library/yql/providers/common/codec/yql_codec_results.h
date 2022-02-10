@@ -9,7 +9,7 @@ namespace NCommon {
 
 // we should not write numbers as numbers ever
 // write numbers as strings except Yson value where we use restricted dialect
-// write bool as bool 
+// write bool as bool
 // write null as entity
 class TYsonResultWriter {
 public:

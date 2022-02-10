@@ -47,28 +47,28 @@ public:
     //! Returns type of YSON contained here. The instance must be non-null.
     EYsonType GetType() const;
 
-protected: 
+protected:
     TStringBuf Data_;
     EYsonType Type_;
-    bool Null_; 
-}; 
- 
+    bool Null_;
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 
 //! An owning version of TYsonStringBuf.
 /*!
  *  Internally captures the data either via TString or a polymorphic ref-counted holder.
  */
-class TYsonString 
-{ 
-public: 
+class TYsonString
+{
+public:
     //! Constructs a null instance.
     TYsonString();
- 
+
     //! Constructs an instance from TYsonStringBuf.
     //! Copies the data into a ref-counted payload.
-    explicit TYsonString(const TYsonStringBuf& ysonStringBuf); 
- 
+    explicit TYsonString(const TYsonStringBuf& ysonStringBuf);
+
     //! Constructs an instance from TStringBuf.
     //! Copies the data into a ref-counted payload.
     explicit TYsonString(
@@ -108,7 +108,7 @@ private:
     { };
 
     using THolder = TRefCountedPtr;
- 
+
     std::variant<TNullPayload, THolder, TString> Payload_;
 
     const char* Begin_;
@@ -119,17 +119,17 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 bool operator == (const TYsonString& lhs, const TYsonString& rhs);
-bool operator == (const TYsonString& lhs, const TYsonStringBuf& rhs); 
-bool operator == (const TYsonStringBuf& lhs, const TYsonString& rhs); 
-bool operator == (const TYsonStringBuf& lhs, const TYsonStringBuf& rhs); 
- 
+bool operator == (const TYsonString& lhs, const TYsonStringBuf& rhs);
+bool operator == (const TYsonStringBuf& lhs, const TYsonString& rhs);
+bool operator == (const TYsonStringBuf& lhs, const TYsonStringBuf& rhs);
+
 bool operator != (const TYsonString& lhs, const TYsonString& rhs);
-bool operator != (const TYsonString& lhs, const TYsonStringBuf& rhs); 
-bool operator != (const TYsonStringBuf& lhs, const TYsonString& rhs); 
-bool operator != (const TYsonStringBuf& lhs, const TYsonStringBuf& rhs); 
+bool operator != (const TYsonString& lhs, const TYsonStringBuf& rhs);
+bool operator != (const TYsonStringBuf& lhs, const TYsonString& rhs);
+bool operator != (const TYsonStringBuf& lhs, const TYsonStringBuf& rhs);
 
 TString ToString(const TYsonString& yson);
-TString ToString(const TYsonStringBuf& yson); 
+TString ToString(const TYsonStringBuf& yson);
 
 ////////////////////////////////////////////////////////////////////////////////
 

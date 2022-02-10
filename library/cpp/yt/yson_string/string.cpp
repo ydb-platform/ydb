@@ -99,8 +99,8 @@ TYsonString::TYsonString(
     TStringBuf data,
     EYsonType type)
     : TYsonString(TYsonStringBuf(data, type))
-{ } 
- 
+{ }
+
 #ifdef TSTRING_IS_STD_STRING
 TYsonString::TYsonString(
     const TString& data,
@@ -120,7 +120,7 @@ TYsonString::TYsonString(
     Type_ = type;
 }
 #endif
- 
+
 TYsonString::TYsonString(
     const TSharedRef& data,
     EYsonType type)
@@ -134,22 +134,22 @@ TYsonString::TYsonString(
 TYsonString::operator bool() const
 {
     return !std::holds_alternative<TNullPayload>(Payload_);
-} 
- 
+}
+
 EYsonType TYsonString::GetType() const
-{ 
+{
     YT_VERIFY(*this);
     return Type_;
 }
 
 TStringBuf TYsonString::AsStringBuf() const
-{ 
+{
     YT_VERIFY(*this);
     return TStringBuf(Begin_, Begin_ + Size_);
-} 
- 
+}
+
 TString TYsonString::ToString() const
-{ 
+{
     return Visit(
         Payload_,
         [] (const TNullPayload&) -> TString {
@@ -161,13 +161,13 @@ TString TYsonString::ToString() const
         [] (const TString& payload) {
             return payload;
         });
-} 
- 
+}
+
 size_t TYsonString::ComputeHash() const
-{ 
+{
     return THash<TStringBuf>()(TStringBuf(Begin_, Begin_ + Size_));
-} 
- 
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TString ToString(const TYsonString& yson)
@@ -175,11 +175,11 @@ TString ToString(const TYsonString& yson)
     return yson.ToString();
 }
 
-TString ToString(const TYsonStringBuf& yson) 
-{ 
+TString ToString(const TYsonStringBuf& yson)
+{
     return TString(yson.AsStringBuf());
-} 
- 
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NYson

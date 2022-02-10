@@ -8,8 +8,8 @@
 
 #include <util/string/cast.h>
 
-#include <cmath> 
- 
+#include <cmath>
+
 namespace NYson {
     ////////////////////////////////////////////////////////////////////////////////
 
@@ -117,7 +117,7 @@ namespace NYson {
             static const TStringBuf nanLiteral = "%nan";
             static const TStringBuf infLiteral = "%inf";
             static const TStringBuf negativeInfLiteral = "%-inf";
- 
+
             TStringBuf str;
             if (std::isnan(value)) {
                 str = nanLiteral;
@@ -128,11 +128,11 @@ namespace NYson {
             }
             return TString(str.data(), str.size());
         }
- 
-    } 
+
+    }
 
     ////////////////////////////////////////////////////////////////////////////////
- 
+
     TYsonWriter::TYsonWriter(
         IOutputStream* stream,
         EYsonFormat format,

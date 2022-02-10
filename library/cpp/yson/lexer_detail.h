@@ -230,7 +230,7 @@ namespace NYson {
                         TStringBuf value;
                         TBase::ReadBinaryString(&value);
                         *token = TToken(value);
-                    } 
+                    }
                 }
             }
 

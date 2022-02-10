@@ -1,5 +1,5 @@
 #include "string.h"
-#include "format.h" 
+#include "format.h"
 
 #include <library/cpp/yt/assert/assert.h>
 

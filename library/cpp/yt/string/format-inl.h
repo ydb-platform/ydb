@@ -4,7 +4,7 @@
 #include "format.h"
 #endif
 
-#include "enum.h" 
+#include "enum.h"
 #include "string.h"
 
 #include <library/cpp/yt/assert/assert.h>
@@ -180,12 +180,12 @@ struct TValueFormatter<TEnum, typename std::enable_if<TEnumTraits<TEnum>::IsEnum
                 lowercase = true;
             } else if (IsQuotationSpecSymbol(*current)) {
                 ++current;
-            } else { 
+            } else {
                 break;
-            } 
+            }
         }
 
-        FormatEnum(builder, value, lowercase); 
+        FormatEnum(builder, value, lowercase);
     }
 };
 

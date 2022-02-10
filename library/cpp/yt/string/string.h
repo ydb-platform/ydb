@@ -8,8 +8,8 @@
 
 #include <util/generic/string.h>
 
-#include <util/string/strip.h> 
- 
+#include <util/string/strip.h>
+
 #include <vector>
 #include <set>
 #include <map>

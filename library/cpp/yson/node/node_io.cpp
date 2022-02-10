@@ -96,12 +96,12 @@ TString NodeToYsonString(const TNode& node, NYson::EYsonFormat format)
 }
 
 TString NodeToCanonicalYsonString(const TNode& node, NYson::EYsonFormat format)
-{ 
-    TStringStream stream; 
-    NodeToCanonicalYsonStream(node, &stream, format); 
-    return stream.Str(); 
-} 
- 
+{
+    TStringStream stream;
+    NodeToCanonicalYsonStream(node, &stream, format);
+    return stream.Str();
+}
+
 TNode NodeFromYsonStream(IInputStream* input, ::NYson::EYsonType type)
 {
     TNode result = CreateEmptyNodeByType(type);
@@ -120,12 +120,12 @@ void NodeToYsonStream(const TNode& node, IOutputStream* output, NYson::EYsonForm
 }
 
 void NodeToCanonicalYsonStream(const TNode& node, IOutputStream* output, NYson::EYsonFormat format)
-{ 
+{
     ::NYson::TYsonWriter writer(output, format);
-    TNodeVisitor visitor(&writer, /*sortMapKeys*/ true); 
-    visitor.Visit(node); 
-} 
- 
+    TNodeVisitor visitor(&writer, /*sortMapKeys*/ true);
+    visitor.Visit(node);
+}
+
 TNode NodeFromJsonString(const TStringBuf input)
 {
     TMemoryInput stream(input);

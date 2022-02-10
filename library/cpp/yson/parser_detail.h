@@ -209,9 +209,9 @@ namespace NYson {
                     ch = TBase::template SkipSpaceAndGetChar<AllowFinish>();
                     if (ch == KeyValueSeparatorSymbol) {
                         TBase::Advance(1);
-                    } else { 
+                    } else {
                         ythrow TYsonException() << "Expected '" << KeyValueSeparatorSymbol << "' but '" << ch << "' found";
-                    } 
+                    }
                     ParseNode<AllowFinish>();
                     ch = TBase::template SkipSpaceAndGetChar<AllowFinish>();
                     if (ch == KeyedItemSeparatorSymbol) {

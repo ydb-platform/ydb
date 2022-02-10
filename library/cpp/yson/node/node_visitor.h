@@ -19,7 +19,7 @@ public:
 
 private:
     NYson::IYsonConsumer* Consumer_;
-    bool SortMapKeys_; 
+    bool SortMapKeys_;
 
 private:
     void VisitAny(const TNode& node);

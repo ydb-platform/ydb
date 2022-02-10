@@ -1,7 +1,7 @@
 #pragma once
 
 #include <util/generic/fwd.h>
-#include <util/generic/ptr.h> 
+#include <util/generic/ptr.h>
 
 class TGetOpt {
 public:

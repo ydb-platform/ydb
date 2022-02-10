@@ -1,4 +1,4 @@
-#include <util/system/defaults.h> 
+#include <util/system/defaults.h>
 
 #if defined(_freebsd_) && !defined(__LONG_LONG_SUPPORTED)
     #define __LONG_LONG_SUPPORTED
@@ -15,8 +15,8 @@
 #include <contrib/libs/double-conversion/double-conversion.h>
 
 #include <util/generic/string.h>
-#include <util/system/yassert.h> 
-#include <util/generic/yexception.h> 
+#include <util/system/yassert.h>
+#include <util/generic/yexception.h>
 #include <util/generic/typetraits.h>
 #include <util/generic/ylimits.h>
 #include <util/generic/singleton.h>

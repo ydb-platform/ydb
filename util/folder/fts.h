@@ -2,7 +2,7 @@
 
 #include <sys/types.h>
 
-#include <util/system/defaults.h> 
+#include <util/system/defaults.h>
 
 #ifndef _win32_
 typedef int dird;

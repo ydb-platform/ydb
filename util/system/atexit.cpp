@@ -4,7 +4,7 @@
 #include "spinlock.h"
 #include "thread.h"
 
-#include <util/generic/ylimits.h> 
+#include <util/generic/ylimits.h>
 #include <util/generic/utility.h>
 #include <util/generic/deque.h>
 #include <util/generic/queue.h>

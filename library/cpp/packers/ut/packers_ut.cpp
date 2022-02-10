@@ -6,7 +6,7 @@
 #include <util/charset/wide.h>
 #include <util/generic/algorithm.h>
 #include <util/generic/buffer.h>
-#include <util/generic/map.h> 
+#include <util/generic/map.h>
 #include <util/generic/vector.h>
 #include <util/generic/ptr.h>
 #include <util/generic/ylimits.h>

@@ -1,7 +1,7 @@
 #include "date.h"
 
 #include <util/string/cast.h>
-#include <util/generic/yexception.h> 
+#include <util/generic/yexception.h>
 #include <util/datetime/base.h>
 
 time_t GetDateStart(time_t ts) {

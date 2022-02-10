@@ -3,7 +3,7 @@
 #include "init.h"
 
 #include <util/system/yassert.h>
-#include <util/system/defaults.h> 
+#include <util/system/defaults.h>
 #include <util/system/error.h>
 #include <util/stream/output.h>
 #include <util/stream/input.h>

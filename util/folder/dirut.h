@@ -1,10 +1,10 @@
 #pragma once
 
-#include <util/system/defaults.h> 
+#include <util/system/defaults.h>
 #include <util/system/sysstat.h>
 #include <util/system/fs.h>
 #include <util/generic/string.h>
-#include <util/generic/yexception.h> 
+#include <util/generic/yexception.h>
 
 #include <sys/types.h>
 

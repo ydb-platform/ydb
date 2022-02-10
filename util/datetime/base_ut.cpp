@@ -6,7 +6,7 @@
 #include <util/generic/ylimits.h>
 #include <util/generic/ymath.h>
 #include <util/string/cast.h>
-#include <util/stream/output.h> 
+#include <util/stream/output.h>
 #include <util/system/compat.h>
 #include <util/random/random.h>
 
@@ -29,9 +29,9 @@ struct TTestTime {
         Tm_.tm_year = 101;
         Tm_.tm_wday = 4;
         Tm_.tm_yday = 108;
-    } 
+    }
 };
- 
+
 namespace {
     inline void OldDate8601(char* buf, time_t when) {
         struct tm theTm;
@@ -197,20 +197,20 @@ Y_UNIT_TEST_SUITE(TDateTimeTest) {
         ui64 mcrsecB = MicroSeconds();
         struct timeval tvB;
         gettimeofday(&tvB, nullptr);
- 
+
         usleep(100000);
- 
+
         ui64 mlsecA = millisec();
         ui64 mcrsecA = MicroSeconds();
         struct timeval tvA;
         gettimeofday(&tvA, nullptr);
- 
+
         UNIT_ASSERT(mlsecB + 90 < mlsecA);
         UNIT_ASSERT((mcrsecB + 90000 < mcrsecA));
         //UNIT_ASSERT(ToMicroSeconds(&tvB) + 90000 < ToMicroSeconds(&tvA));
         //UNIT_ASSERT(TVdiff(tvB, tvA) == long(ToMicroSeconds(&tvA) - ToMicroSeconds(&tvB)));
     }
- 
+
     Y_UNIT_TEST(TestCompatFuncs) {
         struct tm t;
         struct tm* tret = nullptr;
@@ -218,7 +218,7 @@ Y_UNIT_TEST_SUITE(TDateTimeTest) {
         tret = gmtime_r(&e.T_, &t);
         UNIT_ASSERT(tret == &t);
         UNIT_ASSERT(CompareTM(e.Tm_, t));
- 
+
         /*
          * strptime seems to be broken on Mac OS X:
          *
@@ -240,16 +240,16 @@ Y_UNIT_TEST_SUITE(TDateTimeTest) {
         time_t t3 = timegm(&t);
         UNIT_ASSERT(t3 == e.T_);
     }
- 
+
     Y_UNIT_TEST(TestSprintSscan) {
         char buf[256];
         long secs;
         TTestTime e;
- 
+
         sprint_gm_date(buf, e.T_, &secs);
         UNIT_ASSERT(strcmp(buf, e.SprintDate_) == 0);
         UNIT_ASSERT(secs == e.SprintSecs_);
- 
+
         struct tm t;
         Zero(t);
         bool ret = sscan_date(buf, t);
@@ -258,12 +258,12 @@ Y_UNIT_TEST_SUITE(TDateTimeTest) {
             t.tm_year == e.Tm_.tm_year &&
             t.tm_mon == e.Tm_.tm_mon &&
             t.tm_mday == e.Tm_.tm_mday);
- 
+
         buf[0] = 'a';
         ret = sscan_date(buf, t);
         UNIT_ASSERT(!ret);
     }
- 
+
     Y_UNIT_TEST(TestNow) {
         i64 seconds = Seconds();
         i64 milliseconds = millisec();
@@ -337,7 +337,7 @@ Y_UNIT_TEST_SUITE(TDateTimeTest) {
         }
     }
 }
- 
+
 Y_UNIT_TEST_SUITE(DateTimeTest) {
     Y_UNIT_TEST(TestDurationFromFloat) {
         UNIT_ASSERT_EQUAL(TDuration::MilliSeconds(500), TDuration::Seconds(0.5));

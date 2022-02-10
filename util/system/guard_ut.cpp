@@ -2,11 +2,11 @@
 #include "rwlock.h"
 
 #include <library/cpp/testing/unittest/registar.h>
- 
+
 #include <util/thread/pool.h>
- 
+
 struct TTestGuard: public TTestBase {
-    UNIT_TEST_SUITE(TTestGuard); 
+    UNIT_TEST_SUITE(TTestGuard);
     UNIT_TEST(TestGuard)
     UNIT_TEST(TestTryGuard)
     UNIT_TEST(TestMove)
@@ -15,20 +15,20 @@ struct TTestGuard: public TTestBase {
     UNIT_TEST(TestTryReadGuard)
     UNIT_TEST(TestWithLock)
     UNIT_TEST(TestWithLockScope);
-    UNIT_TEST_SUITE_END(); 
- 
-    struct TGuardChecker { 
-        TGuardChecker() 
-            : guarded(false) 
-        { 
-        } 
- 
-        void Acquire() { 
-            guarded = true; 
-        } 
-        void Release() { 
-            guarded = false; 
-        } 
+    UNIT_TEST_SUITE_END();
+
+    struct TGuardChecker {
+        TGuardChecker()
+            : guarded(false)
+        {
+        }
+
+        void Acquire() {
+            guarded = true;
+        }
+        void Release() {
+            guarded = false;
+        }
         bool TryAcquire() {
             if (guarded) {
                 return false;
@@ -37,10 +37,10 @@ struct TTestGuard: public TTestBase {
                 return true;
             }
         }
- 
-        bool guarded; 
-    }; 
- 
+
+        bool guarded;
+    };
+
     void TestUnguard() {
         TGuardChecker m;
 
@@ -101,16 +101,16 @@ struct TTestGuard: public TTestBase {
         UNIT_ASSERT_VALUES_EQUAL(n, 1);
     }
 
-    void TestGuard() { 
-        TGuardChecker checker; 
- 
-        UNIT_ASSERT(!checker.guarded); 
-        { 
-            TGuard<TGuardChecker> guard(checker); 
-            UNIT_ASSERT(checker.guarded); 
-        } 
-        UNIT_ASSERT(!checker.guarded); 
-    } 
+    void TestGuard() {
+        TGuardChecker checker;
+
+        UNIT_ASSERT(!checker.guarded);
+        {
+            TGuard<TGuardChecker> guard(checker);
+            UNIT_ASSERT(checker.guarded);
+        }
+        UNIT_ASSERT(!checker.guarded);
+    }
 
     void TestTryGuard() {
         TGuardChecker checker;
@@ -175,6 +175,6 @@ struct TTestGuard: public TTestBase {
             Y_UNUSED(Guard);
         }
     }
-}; 
- 
-UNIT_TEST_SUITE_REGISTRATION(TTestGuard) 
+};
+
+UNIT_TEST_SUITE_REGISTRATION(TTestGuard)

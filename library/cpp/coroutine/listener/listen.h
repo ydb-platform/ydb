@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/generic/ptr.h> 
+#include <util/generic/ptr.h>
 #include <util/generic/ylimits.h>
 
 struct TIpAddress;
@@ -112,7 +112,7 @@ public:
     void StopListenAddr(const NAddr::IRemoteAddr& addr);
     void StopListenAddr(const TIpAddress& addr);
     void StopListenAddr(const TNetworkAddress& addr);
- 
+
     template <class T>
     inline void StartListenAddr(const T& addr) {
         Bind(addr);

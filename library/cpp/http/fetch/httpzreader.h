@@ -279,17 +279,17 @@ protected:
             case 0:
                 return ret;
             case ENOMEM:
-                ythrow yexception() << "SCompressedHttpReader: not enough memory"; 
+                ythrow yexception() << "SCompressedHttpReader: not enough memory";
             case EINVAL:
                 ythrow yexception() << "SCompressedHttpReader: zlib error: " << ZMsg();
             case ENOTSUP:
-                ythrow yexception() << "SCompressedHttpReader: unsupported compression method"; 
+                ythrow yexception() << "SCompressedHttpReader: unsupported compression method";
             case EFAULT:
-                ythrow zlib_exception() << "SCompressedHttpReader: " << ZMsg(); 
+                ythrow zlib_exception() << "SCompressedHttpReader: " << ZMsg();
             case E2BIG:
-                ythrow zlib_exception() << "SCompressedHttpReader: Content exceeds maximum length"; 
+                ythrow zlib_exception() << "SCompressedHttpReader: Content exceeds maximum length";
             default:
-                ythrow yexception() << "SCompressedHttpReader: unknown error"; 
+                ythrow yexception() << "SCompressedHttpReader: unknown error";
         }
     }
 };

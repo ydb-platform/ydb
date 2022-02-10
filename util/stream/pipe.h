@@ -4,7 +4,7 @@
 #include "output.h"
 
 #include <util/system/pipe.h>
-#include <util/generic/ptr.h> 
+#include <util/generic/ptr.h>
 #include <util/generic/string.h>
 
 /**

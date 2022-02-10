@@ -6,11 +6,11 @@
 #include <util/string/builder.h>
 
 #include <util/system/yassert.h>
-#include <util/system/defaults.h> 
+#include <util/system/defaults.h>
 #include <util/generic/strbuf.h>
 #include <util/generic/string.h>
-#include <util/generic/vector.h> 
-#include <util/generic/yexception.h> 
+#include <util/generic/vector.h>
+#include <util/generic/yexception.h>
 
 #include <cstdio>
 

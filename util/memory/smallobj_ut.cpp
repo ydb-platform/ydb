@@ -2,7 +2,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/generic/hash_set.h> 
+#include <util/generic/hash_set.h>
 
 class TSmallObjAllocTest: public TTestBase {
     struct TClass: public TObjectFromPool<TClass> {

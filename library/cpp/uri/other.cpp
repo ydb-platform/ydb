@@ -1,7 +1,7 @@
 #include "other.h"
 
 #include <util/string/util.h>
-#include <util/system/yassert.h> 
+#include <util/system/yassert.h>
 
 /********************************************************/
 /********************************************************/

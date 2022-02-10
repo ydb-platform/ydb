@@ -1,6 +1,6 @@
 #include "mem.h"
 
-#include <util/generic/yexception.h> 
+#include <util/generic/yexception.h>
 
 TMemoryInput::TMemoryInput() noexcept
     : Buf_(nullptr)

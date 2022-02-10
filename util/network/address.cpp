@@ -1,5 +1,5 @@
-#include <util/stream/str.h> 
- 
+#include <util/stream/str.h>
+
 #include "address.h"
 
 #if defined(_unix_)
@@ -119,17 +119,17 @@ void NAddr::PrintHost(IOutputStream& out, const IRemoteAddr& addr) {
 }
 
 TString NAddr::PrintHost(const IRemoteAddr& addr) {
-    TStringStream ss; 
-    PrintAddr<false>(ss, addr); 
-    return ss.Str(); 
-} 
- 
+    TStringStream ss;
+    PrintAddr<false>(ss, addr);
+    return ss.Str();
+}
+
 TString NAddr::PrintHostAndPort(const IRemoteAddr& addr) {
-    TStringStream ss; 
-    PrintAddr<true>(ss, addr); 
-    return ss.Str(); 
-} 
- 
+    TStringStream ss;
+    PrintAddr<true>(ss, addr);
+    return ss.Str();
+}
+
 IRemoteAddrPtr NAddr::GetSockAddr(SOCKET s) {
     auto addr = MakeHolder<TOpaqueAddr>();
 

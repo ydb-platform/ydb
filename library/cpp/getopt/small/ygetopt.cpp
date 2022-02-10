@@ -2,8 +2,8 @@
 #include "ygetopt.h"
 
 #include <util/generic/string.h>
-#include <util/generic/vector.h> 
-#include <util/generic/yexception.h> 
+#include <util/generic/vector.h>
+#include <util/generic/yexception.h>
 
 class TGetOpt::TImpl: public TSimpleRefCount<TImpl> {
 public:

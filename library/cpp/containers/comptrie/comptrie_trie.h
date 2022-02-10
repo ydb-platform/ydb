@@ -562,7 +562,7 @@ TCompactTrieHolder<T, D, S>::TCompactTrieHolder(IInputStream& is, size_t len)
     : Storage(new char[len])
 {
     if (is.Load(Storage.Get(), len) != len) {
-        ythrow yexception() << "bad data load"; 
+        ythrow yexception() << "bad data load";
     }
     TBase::Init(Storage.Get(), len);
 }

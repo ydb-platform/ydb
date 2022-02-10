@@ -4,7 +4,7 @@
 #include "flock.h"
 
 #include <util/generic/flags.h>
-#include <util/generic/ptr.h> 
+#include <util/generic/ptr.h>
 #include <util/generic/noncopyable.h>
 
 #include <cstdio>

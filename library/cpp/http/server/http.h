@@ -6,8 +6,8 @@
 #include <util/thread/pool.h>
 #include <library/cpp/http/io/stream.h>
 #include <util/memory/blob.h>
-#include <util/generic/ptr.h> 
-#include <util/generic/vector.h> 
+#include <util/generic/ptr.h>
+#include <util/generic/vector.h>
 #include <util/system/atomic.h>
 
 class IThreadFactory;

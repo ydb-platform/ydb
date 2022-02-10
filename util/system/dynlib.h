@@ -2,7 +2,7 @@
 
 #include "defaults.h"
 
-#include <util/generic/ptr.h> 
+#include <util/generic/ptr.h>
 #include <util/generic/string.h>
 
 #define Y_GET_FUNC(dll, name) FUNC_##name((dll).Sym(#name))

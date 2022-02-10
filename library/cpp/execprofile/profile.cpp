@@ -15,8 +15,8 @@
 #include <dlfcn.h>
 
 #include <util/system/platform.h>
-#include <util/generic/hash.h> 
-#include <util/generic/map.h> 
+#include <util/generic/hash.h>
+#include <util/generic/map.h>
 #include <util/generic/noncopyable.h>
 #include <util/generic/algorithm.h>
 #include <util/generic/vector.h>

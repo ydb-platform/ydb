@@ -5,7 +5,7 @@
 
 #include <util/network/ip.h>
 #include <util/network/address.h>
-#include <util/generic/ylimits.h> 
+#include <util/generic/ylimits.h>
 #include <util/generic/intrlist.h>
 
 using namespace NAddr;
@@ -110,7 +110,7 @@ private:
                 C_ = Parent_->E_->Create<TOneSocketListener, &TOneSocketListener::Run>(this, "listen_job");
             }
         }
- 
+
         inline const IRemoteAddr* Addr() const noexcept {
             return Addr_.Get();
         }
@@ -259,9 +259,9 @@ public:
 
         if (it != L_.End()) {
             delete &*it;
-        } 
+        }
     }
- 
+
 private:
     TContExecutor* const E_;
     ICallBack* const Cb_;
@@ -318,14 +318,14 @@ void TContListener::Bind(const TNetworkAddress& addr) {
 void TContListener::Stop() noexcept {
     Impl_.Destroy();
 }
- 
+
 void TContListener::StopListenAddr(const IRemoteAddr& addr) {
     CheckImpl(Impl_)->StopListenAddr(addr);
-} 
- 
+}
+
 void TContListener::StopListenAddr(const TIpAddress& addr) {
     return StopListenAddr(TIPv4Addr(addr));
-} 
+}
 
 void TContListener::StopListenAddr(const TNetworkAddress& addr) {
     for (TNetworkAddress::TIterator it = addr.Begin(); it != addr.End(); ++it) {

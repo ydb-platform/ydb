@@ -30,7 +30,7 @@
     #error todo
 #endif
 
-#include <util/generic/utility.h> 
+#include <util/generic/utility.h>
 #include <util/system/sanitizers.h>
 #include "filemap.h"
 
@@ -512,7 +512,7 @@ void TFileMap::Unmap() {
     if (Map_.Unmap(Region_)) {
         Region_.Reset();
     } else {
-        ythrow yexception() << "can't unmap file"; 
+        ythrow yexception() << "can't unmap file";
     }
 }
 

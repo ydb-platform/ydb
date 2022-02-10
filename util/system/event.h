@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/generic/ptr.h> 
+#include <util/generic/ptr.h>
 #include <util/datetime/base.h>
 
 struct TEventResetType {

@@ -4,10 +4,10 @@
 
 #include <util/stream/output.h>
 #include <util/generic/maybe.h>
-#include <util/generic/ptr.h> 
+#include <util/generic/ptr.h>
 #include <util/generic/string.h>
 #include <util/generic/strbuf.h>
-#include <util/generic/yexception.h> 
+#include <util/generic/yexception.h>
 #include <util/generic/array_ref.h>
 
 class TSocket;

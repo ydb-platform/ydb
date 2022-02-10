@@ -1,9 +1,9 @@
 #pragma once
 
 #include <util/generic/flags.h>
-#include <util/generic/ptr.h> 
+#include <util/generic/ptr.h>
 #include <util/generic/string.h>
-#include <util/generic/utility.h> 
+#include <util/generic/utility.h>
 #include <util/generic/yexception.h>
 #include <util/system/align.h>
 #include <util/system/file.h>

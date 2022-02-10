@@ -3,7 +3,7 @@
 #include "models_archive_reader.h"
 
 #include <util/generic/fwd.h>
-#include <util/generic/ptr.h> 
+#include <util/generic/ptr.h>
 
 
 class IInputStream;

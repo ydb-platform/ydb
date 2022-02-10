@@ -40,7 +40,7 @@ static int gcry_pthread_mutex_init(void** priv) {
     int err = 0;
 
     try {
-        TMutex* lock = new TMutex; 
+        TMutex* lock = new TMutex;
         *priv = lock;
     } catch (...) {
         err = -1;
@@ -50,19 +50,19 @@ static int gcry_pthread_mutex_init(void** priv) {
 }
 
 static int gcry_pthread_mutex_destroy(void** lock) {
-    delete static_cast<TMutex*>(*lock); 
+    delete static_cast<TMutex*>(*lock);
 
     return 0;
 }
 
 static int gcry_pthread_mutex_lock(void** lock) {
-    static_cast<TMutex*>(*lock)->Acquire(); 
+    static_cast<TMutex*>(*lock)->Acquire();
 
     return 0;
 }
 
 static int gcry_pthread_mutex_unlock(void** lock) {
-    static_cast<TMutex*>(*lock)->Release(); 
+    static_cast<TMutex*>(*lock)->Release();
 
     return 0;
 }

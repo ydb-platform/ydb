@@ -1,6 +1,6 @@
 #include "file.h"
 
-#include <util/memory/blob.h> 
+#include <util/memory/blob.h>
 #include <util/generic/yexception.h>
 
 TUnbufferedFileInput::TUnbufferedFileInput(const TString& path)

@@ -3,7 +3,7 @@
 
 #include <util/stream/output.h>
 #include <util/system/atomic.h>
-#include <util/generic/vector.h> 
+#include <util/generic/vector.h>
 
 #include "task_scheduler.h"
 

@@ -2,7 +2,7 @@
 #include "filelist.h"
 #include "iterator.h"
 
-#include <util/system/defaults.h> 
+#include <util/system/defaults.h>
 
 void TFileEntitiesList::Fill(const TString& dirname, TStringBuf prefix, TStringBuf suffix, int depth, bool sort) {
     TDirIterator::TOptions opts;

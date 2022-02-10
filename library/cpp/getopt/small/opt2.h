@@ -1,8 +1,8 @@
 #pragma once
 
-#include <util/system/defaults.h> 
+#include <util/system/defaults.h>
 #include <util/generic/string.h>
-#include <util/generic/vector.h> 
+#include <util/generic/vector.h>
 
 // simplified options parser
 // No 'optional argument' (e.g. "a::" in spec.) support;

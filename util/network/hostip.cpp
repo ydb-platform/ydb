@@ -1,7 +1,7 @@
 #include "socket.h"
 #include "hostip.h"
 
-#include <util/system/defaults.h> 
+#include <util/system/defaults.h>
 #include <util/system/byteorder.h>
 
 #if defined(_unix_) || defined(_cygwin_)

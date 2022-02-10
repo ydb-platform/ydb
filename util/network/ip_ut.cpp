@@ -2,7 +2,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/generic/yexception.h> 
+#include <util/generic/yexception.h>
 
 class TSysIpTest: public TTestBase {
     UNIT_TEST_SUITE(TSysIpTest);

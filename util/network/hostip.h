@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/system/defaults.h> 
+#include <util/system/defaults.h>
 
 namespace NResolver {
     // resolve hostname and fills up to *slots slots in ip array;

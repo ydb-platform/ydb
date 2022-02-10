@@ -4,7 +4,7 @@
 #include "pollerimpl.h"
 #include "iovec.h"
 
-#include <util/system/defaults.h> 
+#include <util/system/defaults.h>
 #include <util/system/byteorder.h>
 
 #if defined(_unix_)
@@ -33,7 +33,7 @@
     #include <util/system/compat.h>
 #endif
 
-#include <util/generic/ylimits.h> 
+#include <util/generic/ylimits.h>
 
 #include <util/string/cast.h>
 #include <util/stream/mem.h>
@@ -1241,7 +1241,7 @@ ssize_t PollD(struct pollfd fds[], nfds_t nfds, const TInstant& deadLine) noexce
         if (res < 0) {
             const int err = LastSystemError();
 
-            if (err != ETIMEDOUT && err != EINTR) { 
+            if (err != ETIMEDOUT && err != EINTR) {
                 return -err;
             }
         }

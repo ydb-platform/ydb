@@ -30,7 +30,7 @@ private:
             Pmatch[MatchPos].rm_eo = MatchBuf[2 * i + 1];
             MatchPos++;
             if (MatchPos >= NMATCHES) {
-                ythrow yexception() << "TRegExBase::Exec(): Not enough space in internal buffer."; 
+                ythrow yexception() << "TRegExBase::Exec(): Not enough space in internal buffer.";
             }
         }
     }
@@ -47,7 +47,7 @@ private:
             NMATCHES);   /* number of elements in the output vector */
 
         if (rc == 0) {
-            ythrow yexception() << "TRegExBase::Exec(): Not enough space in internal buffer."; 
+            ythrow yexception() << "TRegExBase::Exec(): Not enough space in internal buffer.";
         }
 
         return rc;
@@ -161,10 +161,10 @@ public:
 
     int Exec(const char* str, regmatch_t pmatch[], int eflags, int nmatches) const {
         if (!RegExpr) {
-            ythrow yexception() << "Regular expression is not compiled"; 
+            ythrow yexception() << "Regular expression is not compiled";
         }
         if (!str) {
-            ythrow yexception() << "Empty string is passed to TRegExBaseImpl::Exec"; 
+            ythrow yexception() << "Empty string is passed to TRegExBaseImpl::Exec";
         }
         if ((eflags & REGEXP_GLOBAL) == 0) {
             return regexec(&Preg, str, nmatches, pmatch, eflags);

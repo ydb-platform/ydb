@@ -3,9 +3,9 @@
 #ifdef _unix_
     #include <sys/resource.h>
 #endif
- 
-#include "filemap.h" 
- 
+
+#include "filemap.h"
+
 #include <util/system/fs.h>
 
 #include <cstring>
@@ -13,43 +13,43 @@
 
 Y_UNIT_TEST_SUITE(TFileMapTest) {
     static const char* FileName_("./mappped_file");
- 
+
     void BasicTest(TMemoryMapCommon::EOpenMode mode) {
-        char data[] = "abcdefgh"; 
- 
+        char data[] = "abcdefgh";
+
         TFile file(FileName_, CreateAlways | WrOnly);
         file.Write(static_cast<void*>(data), sizeof(data));
-        file.Close(); 
- 
-        { 
+        file.Close();
+
+        {
             TFileMap mappedFile(FileName_, mode);
-            mappedFile.Map(0, mappedFile.Length()); 
-            UNIT_ASSERT(mappedFile.MappedSize() == sizeof(data) && mappedFile.Length() == sizeof(data)); 
-            UNIT_ASSERT(mappedFile.IsOpen()); 
-            for (size_t i = 0; i < sizeof(data); ++i) { 
-                UNIT_ASSERT(static_cast<char*>(mappedFile.Ptr())[i] == data[i]); 
-                static_cast<char*>(mappedFile.Ptr())[i] = data[i] + 1; 
-            } 
-            mappedFile.Flush(); 
+            mappedFile.Map(0, mappedFile.Length());
+            UNIT_ASSERT(mappedFile.MappedSize() == sizeof(data) && mappedFile.Length() == sizeof(data));
+            UNIT_ASSERT(mappedFile.IsOpen());
+            for (size_t i = 0; i < sizeof(data); ++i) {
+                UNIT_ASSERT(static_cast<char*>(mappedFile.Ptr())[i] == data[i]);
+                static_cast<char*>(mappedFile.Ptr())[i] = data[i] + 1;
+            }
+            mappedFile.Flush();
 
             TFileMap::TMapResult mapResult = mappedFile.Map(2, 2);
             UNIT_ASSERT(mapResult.MappedSize() == 2);
             UNIT_ASSERT(mapResult.MappedData() == mappedFile.Ptr());
-            UNIT_ASSERT(mappedFile.MappedSize() == 2); 
-            UNIT_ASSERT(static_cast<char*>(mappedFile.Ptr())[0] == 'd' && static_cast<char*>(mappedFile.Ptr())[1] == 'e'); 
+            UNIT_ASSERT(mappedFile.MappedSize() == 2);
+            UNIT_ASSERT(static_cast<char*>(mappedFile.Ptr())[0] == 'd' && static_cast<char*>(mappedFile.Ptr())[1] == 'e');
 
-            mappedFile.Unmap(); 
+            mappedFile.Unmap();
             UNIT_ASSERT(mappedFile.MappedSize() == 0);
 
             FILE* f = fopen(FileName_, "rb");
             TFileMap mappedFile2(f);
-            mappedFile2.Map(0, mappedFile2.Length()); 
-            UNIT_ASSERT(mappedFile2.MappedSize() == sizeof(data)); 
-            UNIT_ASSERT(static_cast<char*>(mappedFile2.Ptr())[0] == data[0] + 1); 
-            fclose(f); 
-        } 
+            mappedFile2.Map(0, mappedFile2.Length());
+            UNIT_ASSERT(mappedFile2.MappedSize() == sizeof(data));
+            UNIT_ASSERT(static_cast<char*>(mappedFile2.Ptr())[0] == data[0] + 1);
+            fclose(f);
+        }
         NFs::Remove(FileName_);
-    } 
+    }
 
     Y_UNIT_TEST(TestFileMap) {
         BasicTest(TMemoryMapCommon::oRdWr);
@@ -170,7 +170,7 @@ Y_UNIT_TEST_SUITE(TFileMapTest) {
                 maps.emplace_back(MakeHolder<TFileMap>(FileName_, TMemoryMapCommon::oRdOnly | TMemoryMapCommon::oNotGreedy));
                 maps.back()->Map(i * sizeof(page), sizeof(page));
             }
- 
+
             // Oh, good, we're not dead yet
             for (int i = 0; i < 16; ++i) {
                 TFileMap& map = *maps[i];
@@ -212,20 +212,20 @@ Y_UNIT_TEST_SUITE(TFileMapTest) {
 #endif
 
     Y_UNIT_TEST(TestFileMappedArray) {
-        { 
+        {
             TFileMappedArray<ui32> mappedArray;
-            ui32 data[] = {123, 456, 789, 10}; 
-            size_t sz = sizeof(data) / sizeof(data[0]); 
+            ui32 data[] = {123, 456, 789, 10};
+            size_t sz = sizeof(data) / sizeof(data[0]);
 
             TFile file(FileName_, CreateAlways | WrOnly);
             file.Write(static_cast<void*>(data), sizeof(data));
-            file.Close(); 
- 
+            file.Close();
+
             mappedArray.Init(FileName_);
             // actual test begin
             UNIT_ASSERT(mappedArray.Size() == sz);
             for (size_t i = 0; i < sz; ++i) {
-                UNIT_ASSERT(mappedArray[i] == data[i]); 
+                UNIT_ASSERT(mappedArray[i] == data[i]);
             }
 
             UNIT_ASSERT(mappedArray.GetAt(mappedArray.Size()) == 0);
@@ -234,7 +234,7 @@ Y_UNIT_TEST_SUITE(TFileMapTest) {
             UNIT_ASSERT(!mappedArray.Empty());
             // actual test end
             mappedArray.Term();
- 
+
             // Init array via file mapping
             TFileMap fileMap(FileName_);
             fileMap.Map(0, fileMap.Length());
@@ -255,41 +255,41 @@ Y_UNIT_TEST_SUITE(TFileMapTest) {
             file = TFile(FileName_, WrOnly);
             file.Seek(0, sEnd);
             file.Write("x", 1);
-            file.Close(); 
- 
+            file.Close();
+
             bool caught = false;
-            try { 
+            try {
                 mappedArray.Init(FileName_);
-            } catch (const yexception&) { 
+            } catch (const yexception&) {
                 caught = true;
-            } 
+            }
             UNIT_ASSERT(caught);
-        } 
+        }
         NFs::Remove(FileName_);
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestMappedArray) {
-        ui32 sz = 10; 
+        ui32 sz = 10;
 
         TMappedArray<ui32> mappedArray;
 
-        ui32* ptr = mappedArray.Create(sz); 
+        ui32* ptr = mappedArray.Create(sz);
         UNIT_ASSERT(ptr != nullptr);
-        UNIT_ASSERT(mappedArray.size() == sz); 
-        UNIT_ASSERT(mappedArray.begin() + sz == mappedArray.end()); 
- 
-        for (size_t i = 0; i < sz; ++i) { 
+        UNIT_ASSERT(mappedArray.size() == sz);
+        UNIT_ASSERT(mappedArray.begin() + sz == mappedArray.end());
+
+        for (size_t i = 0; i < sz; ++i) {
             mappedArray[i] = (ui32)i;
-        } 
-        for (size_t i = 0; i < sz; ++i) { 
-            UNIT_ASSERT(mappedArray[i] == i); 
-        } 
- 
+        }
+        for (size_t i = 0; i < sz; ++i) {
+            UNIT_ASSERT(mappedArray[i] == i);
+        }
+
         TMappedArray<ui32> mappedArray2(1000);
-        mappedArray.swap(mappedArray2); 
+        mappedArray.swap(mappedArray2);
         UNIT_ASSERT(mappedArray.size() == 1000 && mappedArray2.size() == sz);
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestMemoryMap) {
         TFile file(FileName_, CreateAlways | WrOnly);
         file.Close();
@@ -356,4 +356,4 @@ Y_UNIT_TEST_SUITE(TFileMapTest) {
         }
         NFs::Remove(FileName_);
     }
-}; 
+};

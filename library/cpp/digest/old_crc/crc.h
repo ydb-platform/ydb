@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/system/defaults.h> 
+#include <util/system/defaults.h>
 
 #define CRC16INIT 0
 #define CRC32INIT 0

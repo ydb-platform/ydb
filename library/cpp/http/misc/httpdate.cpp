@@ -35,7 +35,7 @@
 #include <cstring>
 #include <ctime>
 
-#include <util/system/compat.h>   /* stricmp */ 
+#include <util/system/compat.h>   /* stricmp */
 #include <util/system/yassert.h>
 #include "httpdate.h"
 #include <util/datetime/base.h>

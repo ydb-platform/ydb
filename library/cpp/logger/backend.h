@@ -2,7 +2,7 @@
 
 #include "priority.h"
 
-#include <util/generic/noncopyable.h> 
+#include <util/generic/noncopyable.h>
 
 #include <cstddef>
 

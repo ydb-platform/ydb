@@ -3,7 +3,7 @@
 #include "zerocopy.h"
 #include "zerocopy_output.h"
 
-#include <util/generic/ptr.h> 
+#include <util/generic/ptr.h>
 
 class TBuffer;
 

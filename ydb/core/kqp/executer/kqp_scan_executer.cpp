@@ -52,19 +52,19 @@ public:
         YQL_ENSURE(!Request.EraseLocks);
         YQL_ENSURE(Request.IsolationLevel == NKikimrKqp::ISOLATION_LEVEL_UNDEFINED);
         YQL_ENSURE(Request.Snapshot.IsValid());
-
-        size_t resultsSize = Request.Transactions[0].Body.ResultsSize();
-        YQL_ENSURE(resultsSize != 0);
-
-        bool streamResult = Request.Transactions[0].Body.GetResults(0).GetIsStream();
-
-        if (streamResult) {
-            YQL_ENSURE(resultsSize == 1);
-        } else {
-            for (size_t i = 1; i < resultsSize; ++i) {
-                YQL_ENSURE(Request.Transactions[0].Body.GetResults(i).GetIsStream() == streamResult);
-            }
-        }
+ 
+        size_t resultsSize = Request.Transactions[0].Body.ResultsSize(); 
+        YQL_ENSURE(resultsSize != 0); 
+ 
+        bool streamResult = Request.Transactions[0].Body.GetResults(0).GetIsStream(); 
+ 
+        if (streamResult) { 
+            YQL_ENSURE(resultsSize == 1); 
+        } else { 
+            for (size_t i = 1; i < resultsSize; ++i) { 
+                YQL_ENSURE(Request.Transactions[0].Body.GetResults(i).GetIsStream() == streamResult); 
+            } 
+        } 
     }
 
 public:
@@ -258,16 +258,16 @@ private:
             << ", enough: " << ev->Get()->Record.GetEnough()
             << ", from: " << ev->Sender);
 
-        if (ResultChannelProxies.empty()) {
-            return;
+        if (ResultChannelProxies.empty()) { 
+            return; 
         }
-
-        // Forward only for stream results, data results acks event theirselves.
-        YQL_ENSURE(!Results.empty() && Results[0].IsStream);
-
-        auto channelIt = ResultChannelProxies.begin();
-        auto handle = ev->Forward(channelIt->second->SelfId());
-        channelIt->second->Receive(handle, TlsActivationContext->AsActorContext());
+ 
+        // Forward only for stream results, data results acks event theirselves. 
+        YQL_ENSURE(!Results.empty() && Results[0].IsStream); 
+ 
+        auto channelIt = ResultChannelProxies.begin(); 
+        auto handle = ev->Forward(channelIt->second->SelfId()); 
+        channelIt->second->Receive(handle, TlsActivationContext->AsActorContext()); 
     }
 
     void HandleExecute(TEvKqpNode::TEvStartKqpTasksResponse::TPtr& ev) {
@@ -370,37 +370,37 @@ private:
     }
 
 private:
-    void FillReadInfo(TTaskMeta& taskMeta, ui64 itemsLimit, bool reverse,
-        const TMaybe<::NKqpProto::TKqpPhyOpReadOlapRanges>& readOlapRange)
-    {
-        if (taskMeta.Reads && !taskMeta.Reads.GetRef().empty()) {
-            // Validate parameters
-            YQL_ENSURE(taskMeta.ReadInfo.ItemsLimit == itemsLimit);
-            YQL_ENSURE(taskMeta.ReadInfo.Reverse == reverse);
-
-            if (!readOlapRange || readOlapRange->GetOlapProgram().empty()) {
-                YQL_ENSURE(taskMeta.ReadInfo.OlapProgram.Program.empty());
-                return;
-            }
-
-            YQL_ENSURE(taskMeta.ReadInfo.OlapProgram.Program == readOlapRange->GetOlapProgram());
-            return;
-        }
-
-        taskMeta.ReadInfo.ItemsLimit = itemsLimit;
-        taskMeta.ReadInfo.Reverse = reverse;
-
-        if (!readOlapRange || readOlapRange->GetOlapProgram().empty()) {
-            return;
-        }
-
-        taskMeta.ReadInfo.OlapProgram.Program = readOlapRange->GetOlapProgram();
-
-        for (auto& name: readOlapRange->GetOlapProgramParameterNames()) {
-            taskMeta.ReadInfo.OlapProgram.ParameterNames.insert(name);
-        }
-    };
-
+    void FillReadInfo(TTaskMeta& taskMeta, ui64 itemsLimit, bool reverse, 
+        const TMaybe<::NKqpProto::TKqpPhyOpReadOlapRanges>& readOlapRange) 
+    { 
+        if (taskMeta.Reads && !taskMeta.Reads.GetRef().empty()) { 
+            // Validate parameters 
+            YQL_ENSURE(taskMeta.ReadInfo.ItemsLimit == itemsLimit); 
+            YQL_ENSURE(taskMeta.ReadInfo.Reverse == reverse); 
+ 
+            if (!readOlapRange || readOlapRange->GetOlapProgram().empty()) { 
+                YQL_ENSURE(taskMeta.ReadInfo.OlapProgram.Program.empty()); 
+                return; 
+            } 
+ 
+            YQL_ENSURE(taskMeta.ReadInfo.OlapProgram.Program == readOlapRange->GetOlapProgram()); 
+            return; 
+        } 
+ 
+        taskMeta.ReadInfo.ItemsLimit = itemsLimit; 
+        taskMeta.ReadInfo.Reverse = reverse; 
+ 
+        if (!readOlapRange || readOlapRange->GetOlapProgram().empty()) { 
+            return; 
+        } 
+ 
+        taskMeta.ReadInfo.OlapProgram.Program = readOlapRange->GetOlapProgram(); 
+ 
+        for (auto& name: readOlapRange->GetOlapProgramParameterNames()) { 
+            taskMeta.ReadInfo.OlapProgram.ParameterNames.insert(name); 
+        } 
+    }; 
+ 
     void BuildDatashardScanTasks(TStageInfo& stageInfo, const NMiniKQL::THolderFactory& holderFactory,
         const NMiniKQL::TTypeEnvironment& typeEnv)
     {
@@ -431,81 +431,81 @@ private:
             Y_VERIFY_DEBUG(stageInfo.Meta.TablePath == op.GetTable().GetPath());
 
             auto columns = BuildKqpColumns(op, table);
-            THashMap<ui64, TShardInfo> partitions;
+            THashMap<ui64, TShardInfo> partitions; 
 
             switch (op.GetTypeCase()) {
-                case NKqpProto::TKqpPhyTableOperation::kReadRanges:
-                    partitions = PrunePartitions(TableKeys, op.GetReadRanges(), stageInfo, holderFactory, typeEnv);
-                    break;
+                case NKqpProto::TKqpPhyTableOperation::kReadRanges: 
+                    partitions = PrunePartitions(TableKeys, op.GetReadRanges(), stageInfo, holderFactory, typeEnv); 
+                    break; 
                 case NKqpProto::TKqpPhyTableOperation::kReadRange:
-                    partitions = PrunePartitions(TableKeys, op.GetReadRange(), stageInfo, holderFactory, typeEnv);
-                    break;
-                case NKqpProto::TKqpPhyTableOperation::kLookup:
-                    partitions = PrunePartitions(TableKeys, op.GetLookup(), stageInfo, holderFactory, typeEnv);
-                    break;
-                default:
-                    YQL_ENSURE(false, "Unexpected table scan operation: " << (ui32) op.GetTypeCase());
-                    break;
-            }
+                    partitions = PrunePartitions(TableKeys, op.GetReadRange(), stageInfo, holderFactory, typeEnv); 
+                    break; 
+                case NKqpProto::TKqpPhyTableOperation::kLookup: 
+                    partitions = PrunePartitions(TableKeys, op.GetLookup(), stageInfo, holderFactory, typeEnv); 
+                    break; 
+                default: 
+                    YQL_ENSURE(false, "Unexpected table scan operation: " << (ui32) op.GetTypeCase()); 
+                    break; 
+            } 
 
-            bool reverse = false;
-            ui64 itemsLimit = 0;
-            TString itemsLimitParamName;
-            NDqProto::TData itemsLimitBytes;
-            NKikimr::NMiniKQL::TType* itemsLimitType = nullptr;
+            bool reverse = false; 
+            ui64 itemsLimit = 0; 
+            TString itemsLimitParamName; 
+            NDqProto::TData itemsLimitBytes; 
+            NKikimr::NMiniKQL::TType* itemsLimitType = nullptr; 
 
-            // TODO: Support reverse, skipnull and limit for kReadRanges
-            if (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadRange) {
-                ExtractItemsLimit(stageInfo, op.GetReadRange().GetItemsLimit(), holderFactory,
-                    typeEnv, itemsLimit, itemsLimitParamName, itemsLimitBytes, itemsLimitType);
-                reverse = op.GetReadRange().GetReverse();
+            // TODO: Support reverse, skipnull and limit for kReadRanges 
+            if (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadRange) { 
+                ExtractItemsLimit(stageInfo, op.GetReadRange().GetItemsLimit(), holderFactory, 
+                    typeEnv, itemsLimit, itemsLimitParamName, itemsLimitBytes, itemsLimitType); 
+                reverse = op.GetReadRange().GetReverse(); 
 
-                YQL_ENSURE(!reverse); // TODO: not supported yet
+                YQL_ENSURE(!reverse); // TODO: not supported yet 
 
-                stageInfo.Meta.SkipNullKeys.assign(op.GetReadRange().GetSkipNullKeys().begin(),
-                                                   op.GetReadRange().GetSkipNullKeys().end());
-            }
+                stageInfo.Meta.SkipNullKeys.assign(op.GetReadRange().GetSkipNullKeys().begin(), 
+                                                   op.GetReadRange().GetSkipNullKeys().end()); 
+            } 
 
-            // TODO: take into account number of active scans on node
-            bool heavyProgram = stage.GetProgram().GetSettings().GetHasSort() ||
-                                stage.GetProgram().GetSettings().GetHasMapJoin();
-            const ui32 maxScansPerNode = heavyProgram ? 4 : 16;
-            THashMap<ui64, ui32> nTasksOnNodes; // nodeId -> tasks count
+            // TODO: take into account number of active scans on node 
+            bool heavyProgram = stage.GetProgram().GetSettings().GetHasSort() || 
+                                stage.GetProgram().GetSettings().GetHasMapJoin(); 
+            const ui32 maxScansPerNode = heavyProgram ? 4 : 16; 
+            THashMap<ui64, ui32> nTasksOnNodes; // nodeId -> tasks count 
 
-            for (auto& [shardId, shardInfo] : partitions) {
-                YQL_ENSURE(!shardInfo.KeyWriteRanges);
+            for (auto& [shardId, shardInfo] : partitions) { 
+                YQL_ENSURE(!shardInfo.KeyWriteRanges); 
 
-                ui64 nodeId = ShardIdToNodeId.at(shardId);
-                ui32 nTasksOnNode = nTasksOnNodes[nodeId]++;
-                auto& task = getNodeTask(nodeId, nTasksOnNode % maxScansPerNode);
+                ui64 nodeId = ShardIdToNodeId.at(shardId); 
+                ui32 nTasksOnNode = nTasksOnNodes[nodeId]++; 
+                auto& task = getNodeTask(nodeId, nTasksOnNode % maxScansPerNode); 
 
-                for (auto& [name, value] : shardInfo.Params) {
-                    auto ret = task.Meta.Params.emplace(name, std::move(value));
-                    YQL_ENSURE(ret.second);
-                    auto typeIterator = shardInfo.ParamTypes.find(name);
-                    YQL_ENSURE(typeIterator != shardInfo.ParamTypes.end());
-                    auto retType = task.Meta.ParamTypes.emplace(name, typeIterator->second);
-                    YQL_ENSURE(retType.second);
+                for (auto& [name, value] : shardInfo.Params) { 
+                    auto ret = task.Meta.Params.emplace(name, std::move(value)); 
+                    YQL_ENSURE(ret.second); 
+                    auto typeIterator = shardInfo.ParamTypes.find(name); 
+                    YQL_ENSURE(typeIterator != shardInfo.ParamTypes.end()); 
+                    auto retType = task.Meta.ParamTypes.emplace(name, typeIterator->second); 
+                    YQL_ENSURE(retType.second); 
+                } 
+
+                TTaskMeta::TShardReadInfo readInfo = { 
+                    .Ranges = std::move(*shardInfo.KeyReadRanges), // sorted & non-intersecting 
+                    .Columns = columns, 
+                    .ShardId = shardId, 
+                }; 
+
+                if (itemsLimit && !task.Meta.Params.contains(itemsLimitParamName)) { 
+                    task.Meta.Params.emplace(itemsLimitParamName, itemsLimitBytes); 
+                    task.Meta.ParamTypes.emplace(itemsLimitParamName, itemsLimitType); 
                 }
 
-                TTaskMeta::TShardReadInfo readInfo = {
-                    .Ranges = std::move(*shardInfo.KeyReadRanges), // sorted & non-intersecting
-                    .Columns = columns,
-                    .ShardId = shardId,
-                };
-
-                if (itemsLimit && !task.Meta.Params.contains(itemsLimitParamName)) {
-                    task.Meta.Params.emplace(itemsLimitParamName, itemsLimitBytes);
-                    task.Meta.ParamTypes.emplace(itemsLimitParamName, itemsLimitType);
+                FillReadInfo(task.Meta, itemsLimit, reverse, TMaybe<::NKqpProto::TKqpPhyOpReadOlapRanges>()); 
+ 
+                if (!task.Meta.Reads) { 
+                    task.Meta.Reads.ConstructInPlace(); 
                 }
-
-                FillReadInfo(task.Meta, itemsLimit, reverse, TMaybe<::NKqpProto::TKqpPhyOpReadOlapRanges>());
-
-                if (!task.Meta.Reads) {
-                    task.Meta.Reads.ConstructInPlace();
-                }
-
-                task.Meta.Reads->emplace_back(std::move(readInfo));
+ 
+                task.Meta.Reads->emplace_back(std::move(readInfo)); 
             }
         }
 
@@ -550,7 +550,7 @@ private:
     // NOTE: Unlike OLTP tables that store data in DataShards, data in OLAP tables is not range
     // partitioned and multiple ColumnShards store data from the same key range
     THashMap<ui64, TShardInfo> ListColumnshadsForRange(const TKqpTableKeys& tableKeys,
-        const NKqpProto::TKqpPhyOpReadOlapRanges& readRanges, const TStageInfo& stageInfo,
+        const NKqpProto::TKqpPhyOpReadOlapRanges& readRanges, const TStageInfo& stageInfo, 
         const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv)
     {
         const auto* table = tableKeys.FindTablePtr(stageInfo.Meta.TableId);
@@ -559,7 +559,7 @@ private:
         YQL_ENSURE(stageInfo.Meta.TableKind == ETableKind::Olap);
 
         const auto& keyColumnTypes = table->KeyColumnTypes;
-        auto ranges = FillReadRanges(keyColumnTypes, readRanges, stageInfo, holderFactory, typeEnv);
+        auto ranges = FillReadRanges(keyColumnTypes, readRanges, stageInfo, holderFactory, typeEnv); 
 
         THashMap<ui64, TShardInfo> shardInfoMap;
         for (const auto& partition :  stageInfo.Meta.ShardKey->Partitions) {
@@ -567,7 +567,7 @@ private:
 
             YQL_ENSURE(!shardInfo.KeyReadRanges);
             shardInfo.KeyReadRanges.ConstructInPlace();
-            shardInfo.KeyReadRanges->CopyFrom(ranges);
+            shardInfo.KeyReadRanges->CopyFrom(ranges); 
         }
 
         return shardInfoMap;
@@ -589,69 +589,69 @@ private:
         }
 
         ui64 taskCount = 0;
-
+ 
         for (auto& op : stage.GetTableOps()) {
             Y_VERIFY_DEBUG(stageInfo.Meta.TablePath == op.GetTable().GetPath());
 
             auto columns = BuildKqpColumns(op, table);
 
-            YQL_ENSURE(
-                op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadOlapRange,
-                "Unexpected OLAP table scan operation: " << (ui32) op.GetTypeCase()
-            );
+            YQL_ENSURE( 
+                op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadOlapRange, 
+                "Unexpected OLAP table scan operation: " << (ui32) op.GetTypeCase() 
+            ); 
+ 
+            const auto& readRange = op.GetReadOlapRange(); 
 
-            const auto& readRange = op.GetReadOlapRange();
+            auto allShards = ListColumnshadsForRange(TableKeys, readRange, stageInfo, holderFactory, typeEnv); 
 
-            auto allShards = ListColumnshadsForRange(TableKeys, readRange, stageInfo, holderFactory, typeEnv);
+            bool reverse = readRange.GetReverse(); 
+            ui64 itemsLimit = 0; 
+            TString itemsLimitParamName; 
+            NDqProto::TData itemsLimitBytes; 
+            NKikimr::NMiniKQL::TType* itemsLimitType; 
 
-            bool reverse = readRange.GetReverse();
-            ui64 itemsLimit = 0;
-            TString itemsLimitParamName;
-            NDqProto::TData itemsLimitBytes;
-            NKikimr::NMiniKQL::TType* itemsLimitType;
+            ExtractItemsLimit(stageInfo, op.GetReadOlapRange().GetItemsLimit(), holderFactory, typeEnv, 
+                itemsLimit, itemsLimitParamName, itemsLimitBytes, itemsLimitType); 
+ 
+            for (auto& [shardId, shardInfo] : allShards) { 
+                YQL_ENSURE(!shardInfo.KeyWriteRanges); 
 
-            ExtractItemsLimit(stageInfo, op.GetReadOlapRange().GetItemsLimit(), holderFactory, typeEnv,
-                itemsLimit, itemsLimitParamName, itemsLimitBytes, itemsLimitType);
+                if (shardInfo.KeyReadRanges->GetRanges().empty()) { 
+                    continue; 
+                } 
 
-            for (auto& [shardId, shardInfo] : allShards) {
-                YQL_ENSURE(!shardInfo.KeyWriteRanges);
+                ui64 nodeId = ShardIdToNodeId.at(shardId); 
+                auto& task = TasksGraph.AddTask(stageInfo); 
+                task.Meta.NodeId = nodeId; 
+                ++taskCount; 
 
-                if (shardInfo.KeyReadRanges->GetRanges().empty()) {
-                    continue;
+                for (auto& [name, value] : shardInfo.Params) { 
+                    auto ret = task.Meta.Params.emplace(name, std::move(value)); 
+                    YQL_ENSURE(ret.second); 
+                    auto typeIterator = shardInfo.ParamTypes.find(name); 
+                    YQL_ENSURE(typeIterator != shardInfo.ParamTypes.end()); 
+                    auto retType = task.Meta.ParamTypes.emplace(name, typeIterator->second); 
+                    YQL_ENSURE(retType.second); 
+                } 
+
+                TTaskMeta::TShardReadInfo readInfo = { 
+                    .Ranges = std::move(*shardInfo.KeyReadRanges), 
+                    .Columns = columns, 
+                    .ShardId = shardId, 
+                }; 
+
+                FillReadInfo(task.Meta, itemsLimit, reverse, readRange); 
+
+                if (itemsLimit) { 
+                    task.Meta.Params.emplace(itemsLimitParamName, itemsLimitBytes); 
+                    task.Meta.ParamTypes.emplace(itemsLimitParamName, itemsLimitType); 
                 }
 
-                ui64 nodeId = ShardIdToNodeId.at(shardId);
-                auto& task = TasksGraph.AddTask(stageInfo);
-                task.Meta.NodeId = nodeId;
-                ++taskCount;
-
-                for (auto& [name, value] : shardInfo.Params) {
-                    auto ret = task.Meta.Params.emplace(name, std::move(value));
-                    YQL_ENSURE(ret.second);
-                    auto typeIterator = shardInfo.ParamTypes.find(name);
-                    YQL_ENSURE(typeIterator != shardInfo.ParamTypes.end());
-                    auto retType = task.Meta.ParamTypes.emplace(name, typeIterator->second);
-                    YQL_ENSURE(retType.second);
-                }
-
-                TTaskMeta::TShardReadInfo readInfo = {
-                    .Ranges = std::move(*shardInfo.KeyReadRanges),
-                    .Columns = columns,
-                    .ShardId = shardId,
-                };
-
-                FillReadInfo(task.Meta, itemsLimit, reverse, readRange);
-
-                if (itemsLimit) {
-                    task.Meta.Params.emplace(itemsLimitParamName, itemsLimitBytes);
-                    task.Meta.ParamTypes.emplace(itemsLimitParamName, itemsLimitType);
-                }
-
-                task.Meta.Reads.ConstructInPlace();
-                task.Meta.Reads->emplace_back(std::move(readInfo));
-
-                LOG_D("Stage " << stageInfo.Id << " create columnshard scan task at node: " << nodeId
-                    << ", meta: " << task.Meta.ToString(keyTypes, *AppData()->TypeRegistry));
+                task.Meta.Reads.ConstructInPlace(); 
+                task.Meta.Reads->emplace_back(std::move(readInfo)); 
+ 
+                LOG_D("Stage " << stageInfo.Id << " create columnshard scan task at node: " << nodeId 
+                    << ", meta: " << task.Meta.ToString(keyTypes, *AppData()->TypeRegistry)); 
             }
         }
 
@@ -746,7 +746,7 @@ private:
             BuildKqpStageChannels(TasksGraph, TableKeys, stageInfo, TxId, AppData()->EnableKqpSpilling);
         }
 
-        BuildKqpExecuterResults(tx.Body, Results);
+        BuildKqpExecuterResults(tx.Body, Results); 
         BuildKqpTaskGraphResultChannels(TasksGraph, tx.Body, 0);
 
         TIssue validateIssue;
@@ -828,17 +828,17 @@ private:
                     protoColumn->SetName(column.Name);
                 }
 
-                if (!task.Meta.Reads->empty()) {
-                    protoTaskMeta.SetReverse(task.Meta.ReadInfo.Reverse);
-                    protoTaskMeta.SetItemsLimit(task.Meta.ReadInfo.ItemsLimit);
+                if (!task.Meta.Reads->empty()) { 
+                    protoTaskMeta.SetReverse(task.Meta.ReadInfo.Reverse); 
+                    protoTaskMeta.SetItemsLimit(task.Meta.ReadInfo.ItemsLimit); 
 
                     if (tableInfo.TableKind == ETableKind::Olap) {
                         auto* olapProgram = protoTaskMeta.MutableOlapProgram();
                         olapProgram->SetProgram(task.Meta.ReadInfo.OlapProgram.Program);
-
+ 
                         auto [schema, parameters] = SerializeKqpTasksParametersForOlap(stage, stageInfo, task,
                             holderFactory, typeEnv);
-
+ 
                         olapProgram->SetParametersSchema(schema);
                         olapProgram->SetParameters(parameters);
                     } else {
@@ -863,11 +863,11 @@ private:
                     }
                 }
 
-                LOG_D(
-                    "task: " << task.Id <<
-                    ", node: " << task.Meta.NodeId <<
-                    ", meta: " << protoTaskMeta.ShortDebugString()
-                );
+                LOG_D( 
+                    "task: " << task.Id << 
+                    ", node: " << task.Meta.NodeId << 
+                    ", meta: " << protoTaskMeta.ShortDebugString() 
+                ); 
 
                 taskDesc.MutableMeta()->PackFrom(protoTaskMeta);
 
@@ -921,7 +921,7 @@ private:
         auto planner = CreateKqpPlanner(TxId, SelfId(), std::move(computeTasks),
             std::move(scanTasks), Request.Snapshot,
             Database, UserToken, Deadline.GetOrElse(TInstant::Zero()), Request.StatsMode,
-            Request.DisableLlvmForUdfStages, Request.LlvmEnabled, AppData()->EnableKqpSpilling, Request.RlPath);
+            Request.DisableLlvmForUdfStages, Request.LlvmEnabled, AppData()->EnableKqpSpilling, Request.RlPath); 
         RegisterWithSameMailbox(planner);
     }
 
@@ -930,19 +930,19 @@ private:
 
         response.SetStatus(Ydb::StatusIds::SUCCESS);
 
-        TKqpProtoBuilder protoBuilder(*AppData()->FunctionRegistry);
-
-        for (auto& result : Results) {
+        TKqpProtoBuilder protoBuilder(*AppData()->FunctionRegistry); 
+ 
+        for (auto& result : Results) { 
             auto* protoResult = response.MutableResult()->AddResults();
-
-            if (result.IsStream) {
-                // There is no support for multiple streaming results currently
-                YQL_ENSURE(Results.size() == 1);
-                protoBuilder.BuildStream(result.Data, result.ItemType, result.ResultItemType.Get(), protoResult);
-                continue;
+ 
+            if (result.IsStream) { 
+                // There is no support for multiple streaming results currently 
+                YQL_ENSURE(Results.size() == 1); 
+                protoBuilder.BuildStream(result.Data, result.ItemType, result.ResultItemType.Get(), protoResult); 
+                continue; 
             }
-
-            protoBuilder.BuildValue(result.Data, result.ItemType, protoResult);
+ 
+            protoBuilder.BuildValue(result.Data, result.ItemType, protoResult); 
         }
 
         if (Stats) {
@@ -981,13 +981,13 @@ private:
     }
 
     void PassAway() override {
-        for (auto channelPair: ResultChannelProxies) {
-            LOG_D("terminate result channel " << channelPair.first << " proxy at " << channelPair.second->SelfId());
+        for (auto channelPair: ResultChannelProxies) { 
+            LOG_D("terminate result channel " << channelPair.first << " proxy at " << channelPair.second->SelfId()); 
 
-            TAutoPtr<IEventHandle> ev = new IEventHandle(
-                channelPair.second->SelfId(), SelfId(), new TEvents::TEvPoison
-            );
-            channelPair.second->Receive(ev, TActivationContext::AsActorContext());
+            TAutoPtr<IEventHandle> ev = new IEventHandle( 
+                channelPair.second->SelfId(), SelfId(), new TEvents::TEvPoison 
+            ); 
+            channelPair.second->Receive(ev, TActivationContext::AsActorContext()); 
         }
 
         if (KqpShardsResolverId) {
@@ -1036,35 +1036,35 @@ public:
         }
     }
 
-    IActor* GetOrCreateChannelProxy(const TChannel& channel) {
-        IActor* proxy;
-
-        if (Results[0].IsStream) {
-            if (!ResultChannelProxies.empty()) {
-                return ResultChannelProxies.begin()->second;
-            }
-
-            proxy = CreateResultStreamChannelProxy(TxId, channel.Id, Results[0].ItemType,
+    IActor* GetOrCreateChannelProxy(const TChannel& channel) { 
+        IActor* proxy; 
+ 
+        if (Results[0].IsStream) { 
+            if (!ResultChannelProxies.empty()) { 
+                return ResultChannelProxies.begin()->second; 
+            } 
+ 
+            proxy = CreateResultStreamChannelProxy(TxId, channel.Id, Results[0].ItemType, 
                 Results[0].ResultItemType.Get(), Target, Stats.get(), SelfId());
-        } else {
-            YQL_ENSURE(channel.DstInputIndex < Results.size());
-
-            auto channelIt = ResultChannelProxies.find(channel.Id);
-
-            if (channelIt != ResultChannelProxies.end()) {
-                return channelIt->second;
-            }
-
+        } else { 
+            YQL_ENSURE(channel.DstInputIndex < Results.size()); 
+ 
+            auto channelIt = ResultChannelProxies.find(channel.Id); 
+ 
+            if (channelIt != ResultChannelProxies.end()) { 
+                return channelIt->second; 
+            } 
+ 
             proxy = CreateResultDataChannelProxy(TxId, channel.Id, Stats.get(), SelfId(),
-                &Results[channel.DstInputIndex].Data);
-        }
-
-        RegisterWithSameMailbox(proxy);
-        ResultChannelProxies.emplace(std::make_pair(channel.Id, proxy));
-
-        return proxy;
-    }
-
+                &Results[channel.DstInputIndex].Data); 
+        } 
+ 
+        RegisterWithSameMailbox(proxy); 
+        ResultChannelProxies.emplace(std::make_pair(channel.Id, proxy)); 
+ 
+        return proxy; 
+    } 
+ 
     void FillChannelDesc(NYql::NDqProto::TChannel& channelDesc, const TChannel& channel) {
         channelDesc.SetId(channel.Id);
         channelDesc.SetSrcTaskId(channel.SrcTask);
@@ -1076,8 +1076,8 @@ public:
         if (channel.DstTask) {
             FillEndpointDesc(*channelDesc.MutableDstEndpoint(), TasksGraph.GetTask(channel.DstTask));
         } else {
-            auto proxy = GetOrCreateChannelProxy(channel);
-            ActorIdToProto(proxy->SelfId(), channelDesc.MutableDstEndpoint()->MutableActorId());
+            auto proxy = GetOrCreateChannelProxy(channel); 
+            ActorIdToProto(proxy->SelfId(), channelDesc.MutableDstEndpoint()->MutableActorId()); 
         }
 
         channelDesc.SetIsPersistent(IsCrossShardChannel(TasksGraph, channel));
@@ -1085,8 +1085,8 @@ public:
     }
 
 private:
-    TVector<TKqpExecuterTxResult> Results;
-    std::unordered_map<ui64, IActor*> ResultChannelProxies;
+    TVector<TKqpExecuterTxResult> Results; 
+    std::unordered_map<ui64, IActor*> ResultChannelProxies; 
     THashSet<ui64> PendingComputeTasks; // Not started yet, waiting resources
     TMap<ui64, ui64> ShardIdToNodeId;
     TMap<ui64, TVector<ui64>> ShardsOnNode;

@@ -930,19 +930,19 @@ private:
     }
 
 private:
-    void FillGeneralReadInfo(TTaskMeta& taskMeta, ui64 itemsLimit, bool reverse)
-    {
-        if (taskMeta.Reads && !taskMeta.Reads.GetRef().empty()) {
-            // Validate parameters
-            YQL_ENSURE(taskMeta.ReadInfo.ItemsLimit == itemsLimit);
-            YQL_ENSURE(taskMeta.ReadInfo.Reverse == reverse);
-            return;
-        }
-
-        taskMeta.ReadInfo.ItemsLimit = itemsLimit;
-        taskMeta.ReadInfo.Reverse = reverse;
-    };
-
+    void FillGeneralReadInfo(TTaskMeta& taskMeta, ui64 itemsLimit, bool reverse) 
+    { 
+        if (taskMeta.Reads && !taskMeta.Reads.GetRef().empty()) { 
+            // Validate parameters 
+            YQL_ENSURE(taskMeta.ReadInfo.ItemsLimit == itemsLimit); 
+            YQL_ENSURE(taskMeta.ReadInfo.Reverse == reverse); 
+            return; 
+        } 
+ 
+        taskMeta.ReadInfo.ItemsLimit = itemsLimit; 
+        taskMeta.ReadInfo.Reverse = reverse; 
+    }; 
+ 
     void BuildDatashardTasks(TStageInfo& stageInfo, const NMiniKQL::THolderFactory& holderFactory,
         const NMiniKQL::TTypeEnvironment& typeEnv)
     {
@@ -971,14 +971,14 @@ private:
             THashMap<ui64, TShardInfo> partitions;
 
             switch (op.GetTypeCase()) {
-                case NKqpProto::TKqpPhyTableOperation::kReadRanges:
+                case NKqpProto::TKqpPhyTableOperation::kReadRanges: 
                 case NKqpProto::TKqpPhyTableOperation::kReadRange:
                 case NKqpProto::TKqpPhyTableOperation::kLookup: {
                     bool reverse = false;
                     ui64 itemsLimit = 0;
                     TString itemsLimitParamName;
                     NDqProto::TData itemsLimitBytes;
-                    NKikimr::NMiniKQL::TType* itemsLimitType = nullptr;
+                    NKikimr::NMiniKQL::TType* itemsLimitType = nullptr; 
 
                     if (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadRanges) {
                         partitions = PrunePartitions(TableKeys, op.GetReadRanges(), stageInfo, holderFactory, typeEnv);
@@ -988,7 +988,7 @@ private:
                     } else if (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadRange) {
                         partitions = PrunePartitions(TableKeys, op.GetReadRange(), stageInfo, holderFactory, typeEnv);
                         ExtractItemsLimit(stageInfo, op.GetReadRange().GetItemsLimit(), holderFactory, typeEnv,
-                            itemsLimit, itemsLimitParamName, itemsLimitBytes, itemsLimitType);
+                            itemsLimit, itemsLimitParamName, itemsLimitBytes, itemsLimitType); 
                         reverse = op.GetReadRange().GetReverse();
                     } else if (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kLookup) {
                         partitions = PrunePartitions(TableKeys, op.GetLookup(), stageInfo, holderFactory, typeEnv);
@@ -1000,21 +1000,21 @@ private:
                         auto& task = getShardTask(shardId);
                         for (auto& [name, value] : shardInfo.Params) {
                             task.Meta.Params.emplace(name, std::move(value));
-                            auto typeIterator = shardInfo.ParamTypes.find(name);
-                            YQL_ENSURE(typeIterator != shardInfo.ParamTypes.end());
-                            auto retType = task.Meta.ParamTypes.emplace(name, typeIterator->second);
-                            YQL_ENSURE(retType.second);
+                            auto typeIterator = shardInfo.ParamTypes.find(name); 
+                            YQL_ENSURE(typeIterator != shardInfo.ParamTypes.end()); 
+                            auto retType = task.Meta.ParamTypes.emplace(name, typeIterator->second); 
+                            YQL_ENSURE(retType.second); 
                         }
 
-                        FillGeneralReadInfo(task.Meta, itemsLimit, reverse);
-
-                        TTaskMeta::TShardReadInfo readInfo;
+                        FillGeneralReadInfo(task.Meta, itemsLimit, reverse); 
+ 
+                        TTaskMeta::TShardReadInfo readInfo; 
                         readInfo.Ranges = std::move(*shardInfo.KeyReadRanges);
                         readInfo.Columns = columns;
 
                         if (itemsLimit) {
                             task.Meta.Params.emplace(itemsLimitParamName, itemsLimitBytes);
-                            task.Meta.ParamTypes.emplace(itemsLimitParamName, itemsLimitType);
+                            task.Meta.ParamTypes.emplace(itemsLimitParamName, itemsLimitType); 
                         }
 
                         if (!task.Meta.Reads) {
@@ -1044,7 +1044,7 @@ private:
                                     task.Meta.Writes.ConstructInPlace();
                                     task.Meta.Writes->Ranges = read.Ranges;
                                 } else {
-                                    task.Meta.Writes->Ranges.MergeWritePoints(TShardKeyRanges(read.Ranges), keyTypes);
+                                    task.Meta.Writes->Ranges.MergeWritePoints(TShardKeyRanges(read.Ranges), keyTypes); 
                                 }
                             }
                         }
@@ -1064,7 +1064,7 @@ private:
                                 task.Meta.Writes.ConstructInPlace();
                                 task.Meta.Writes->Ranges = std::move(*shardInfo.KeyWriteRanges);
                             } else {
-                                task.Meta.Writes->Ranges.MergeWritePoints(std::move(*shardInfo.KeyWriteRanges), keyTypes);
+                                task.Meta.Writes->Ranges.MergeWritePoints(std::move(*shardInfo.KeyWriteRanges), keyTypes); 
                             }
                         }
                     }
@@ -1347,8 +1347,8 @@ private:
                             protoColumn->SetType(column.Type);
                             protoColumn->SetName(column.Name);
                         }
-                        protoReadMeta->SetItemsLimit(task.Meta.ReadInfo.ItemsLimit);
-                        protoReadMeta->SetReverse(task.Meta.ReadInfo.Reverse);
+                        protoReadMeta->SetItemsLimit(task.Meta.ReadInfo.ItemsLimit); 
+                        protoReadMeta->SetReverse(task.Meta.ReadInfo.Reverse); 
                     }
                 }
                 if (task.Meta.Writes) {

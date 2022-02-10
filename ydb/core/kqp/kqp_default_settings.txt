@@ -130,5 +130,5 @@ DefaultSettings {
 
 DefaultSettings {
     Name: "_KqpDisableLlvmForUdfStages"
-    Value: "false"
+    Value: "false" 
 }

@@ -27,7 +27,7 @@ TExprBase KqpRewriteSqlInToEquiJoin(const TExprBase& node, TExprContext& ctx, co
     if (!node.Maybe<TCoFlatMap>()) {
         return node;
     }
-
+ 
     const auto flatMap = node.Cast<TCoFlatMap>();
     const auto lambdaBody = flatMap.Lambda().Body();
 

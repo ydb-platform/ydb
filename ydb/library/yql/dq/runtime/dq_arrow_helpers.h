@@ -64,26 +64,26 @@ std::unique_ptr<arrow::ArrayBuilder> MakeArrowBuilder(const NKikimr::NMiniKQL::T
  * @param itemType type of each element to parse it and to construct corresponding arrow type
  * @return std::shared_ptr<arrow::Array> data in arrow format
  */
-std::shared_ptr<arrow::Array> MakeArray(NKikimr::NMiniKQL::TUnboxedValueVector& values,
-    const NKikimr::NMiniKQL::TType* itemType);
+std::shared_ptr<arrow::Array> MakeArray(NKikimr::NMiniKQL::TUnboxedValueVector& values, 
+    const NKikimr::NMiniKQL::TType* itemType); 
 
-NKikimr::NMiniKQL::TUnboxedValueVector ExtractUnboxedValues(const std::shared_ptr<arrow::Array>& array,
-    const NKikimr::NMiniKQL::TType* itemType, const NKikimr::NMiniKQL::THolderFactory& holderFactory);
+NKikimr::NMiniKQL::TUnboxedValueVector ExtractUnboxedValues(const std::shared_ptr<arrow::Array>& array, 
+    const NKikimr::NMiniKQL::TType* itemType, const NKikimr::NMiniKQL::THolderFactory& holderFactory); 
 
 std::string SerializeArray(const std::shared_ptr<arrow::Array>& array);
 
 std::shared_ptr<arrow::Array> DeserializeArray(const std::string& blob, std::shared_ptr<arrow::DataType> type);
 
-/**
- * @brief Append UnboxedValue to arrow Array via arrow Builder
- *
- * @param value unboxed value to append
- * @param builder arrow Builder with proper type used to append converted value array
- * @param type type of element to parse it and to construct corresponding arrow type
- * @return std::shared_ptr<arrow::Array> data in arrow format
- */
-void AppendElement(NYql::NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, const NKikimr::NMiniKQL::TType* type);
+/** 
+ * @brief Append UnboxedValue to arrow Array via arrow Builder 
+ * 
+ * @param value unboxed value to append 
+ * @param builder arrow Builder with proper type used to append converted value array 
+ * @param type type of element to parse it and to construct corresponding arrow type 
+ * @return std::shared_ptr<arrow::Array> data in arrow format 
+ */ 
+void AppendElement(NYql::NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, const NKikimr::NMiniKQL::TType* type); 
 
-
+ 
 } // NArrow
 } // NYql

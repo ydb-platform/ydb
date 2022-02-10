@@ -89,9 +89,9 @@ message TEvRead {
     repeated string ColumnNames = 7;
     optional TPredicate GreaterPredicate = 8;   // Greater[OrEqual] (or From for range)
     optional TPredicate LessPredicate = 9;      // Less[OrEqual] (or To for range)
-    // Serialized Olap program
-    optional bytes OlapProgram = 10;
-    optional NKikimrSchemeOp.EOlapProgramType OlapProgramType = 11;
+    // Serialized Olap program 
+    optional bytes OlapProgram = 10; 
+    optional NKikimrSchemeOp.EOlapProgramType OlapProgramType = 11; 
 }
 
 message TEvReadResult {

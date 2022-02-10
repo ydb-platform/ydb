@@ -162,29 +162,29 @@ NArrow::TAssign MakeConstant(const std::string& name, const NKikimrSSA::TProgram
     }
 }
 
-NArrow::TAssign MaterializeParameter(const std::string& name, const NKikimrSSA::TProgram::TParameter& parameter,
-    const std::shared_ptr<arrow::RecordBatch>& parameterValues)
-{
-    using TAssign = NArrow::TAssign;
-
-    auto parameterName = parameter.GetName();
-    auto column = parameterValues->GetColumnByName(parameterName);
-
-    Y_VERIFY(
-        column,
-        "No parameter %s in serialized parameters.", parameterName.c_str()
-    );
-    Y_VERIFY(
-        column->length() == 1,
-        "Incorrect values count in parameter array"
-    );
-
-    return TAssign(name, *column->GetScalar(0));
-}
-
-void ExtractAssign(TContext& info, NArrow::TProgramStep& step, const NKikimrSSA::TProgram::TAssignment& assign,
-    const std::shared_ptr<arrow::RecordBatch>& parameterValues)
-{
+NArrow::TAssign MaterializeParameter(const std::string& name, const NKikimrSSA::TProgram::TParameter& parameter, 
+    const std::shared_ptr<arrow::RecordBatch>& parameterValues) 
+{ 
+    using TAssign = NArrow::TAssign; 
+ 
+    auto parameterName = parameter.GetName(); 
+    auto column = parameterValues->GetColumnByName(parameterName); 
+ 
+    Y_VERIFY( 
+        column, 
+        "No parameter %s in serialized parameters.", parameterName.c_str() 
+    ); 
+    Y_VERIFY( 
+        column->length() == 1, 
+        "Incorrect values count in parameter array" 
+    ); 
+ 
+    return TAssign(name, *column->GetScalar(0)); 
+} 
+ 
+void ExtractAssign(TContext& info, NArrow::TProgramStep& step, const NKikimrSSA::TProgram::TAssignment& assign, 
+    const std::shared_ptr<arrow::RecordBatch>& parameterValues) 
+{ 
     using TId = NKikimrSSA::TProgram::TAssignment;
 
     ui32 columnId = assign.GetColumn().GetId();
@@ -201,11 +201,11 @@ void ExtractAssign(TContext& info, NArrow::TProgramStep& step, const NKikimrSSA:
             step.Assignes.emplace_back(MakeConstant(columnName, assign.GetConstant()));
             break;
         }
-        case TId::kParameter:
-        {
-            step.Assignes.emplace_back(MaterializeParameter(columnName, assign.GetParameter(), parameterValues));
-            break;
-        }
+        case TId::kParameter: 
+        { 
+            step.Assignes.emplace_back(MaterializeParameter(columnName, assign.GetParameter(), parameterValues)); 
+            break; 
+        } 
         case TId::kExternalFunction:
         case TId::kNull:
         case TId::EXPRESSION_NOT_SET:
@@ -234,7 +234,7 @@ std::pair<TPredicate, TPredicate> RangePredicates(const TSerializedTableRange& r
                                                   const TVector<std::pair<TString, NScheme::TTypeId>>& columns) {
     TVector<TCell> leftCells;
     TVector<std::pair<TString, NScheme::TTypeId>> leftColumns;
-    bool leftTrailingNull = false;
+    bool leftTrailingNull = false; 
     {
         TConstArrayRef<TCell> cells = range.From.GetCells();
         size_t size = cells.size();
@@ -244,16 +244,16 @@ std::pair<TPredicate, TPredicate> RangePredicates(const TSerializedTableRange& r
             if (!cells[i].IsNull()) {
                 leftCells.push_back(cells[i]);
                 leftColumns.push_back(columns[i]);
-                leftTrailingNull = false;
-            } else {
-                leftTrailingNull = true;
+                leftTrailingNull = false; 
+            } else { 
+                leftTrailingNull = true; 
             }
         }
     }
 
     TVector<TCell> rightCells;
     TVector<std::pair<TString, NScheme::TTypeId>> rightColumns;
-    bool rightTrailingNull = false;
+    bool rightTrailingNull = false; 
     {
         TConstArrayRef<TCell> cells = range.To.GetCells();
         size_t size = cells.size();
@@ -263,25 +263,25 @@ std::pair<TPredicate, TPredicate> RangePredicates(const TSerializedTableRange& r
             if (!cells[i].IsNull()) {
                 rightCells.push_back(cells[i]);
                 rightColumns.push_back(columns[i]);
-                rightTrailingNull = false;
-            } else {
-                rightTrailingNull = true;
+                rightTrailingNull = false; 
+            } else { 
+                rightTrailingNull = true; 
             }
         }
     }
 
-    bool fromInclusive = range.FromInclusive || leftTrailingNull;
-    bool toInclusive = range.ToInclusive && !rightTrailingNull;
-
+    bool fromInclusive = range.FromInclusive || leftTrailingNull; 
+    bool toInclusive = range.ToInclusive && !rightTrailingNull; 
+ 
     TString leftBorder = FromCells(leftCells, leftColumns);
     TString rightBorder = FromCells(rightCells, rightColumns);
     return std::make_pair(
-        TPredicate(EOperation::Greater, leftBorder, NArrow::MakeArrowSchema(leftColumns), fromInclusive),
-        TPredicate(EOperation::Less, rightBorder, NArrow::MakeArrowSchema(rightColumns), toInclusive));
+        TPredicate(EOperation::Greater, leftBorder, NArrow::MakeArrowSchema(leftColumns), fromInclusive), 
+        TPredicate(EOperation::Less, rightBorder, NArrow::MakeArrowSchema(rightColumns), toInclusive)); 
 }
 
-void TReadDescription::AddProgram(const IColumnResolver& columnResolver, const NKikimrSSA::TProgram& program)
-{
+void TReadDescription::AddProgram(const IColumnResolver& columnResolver, const NKikimrSSA::TProgram& program) 
+{ 
     using TId = NKikimrSSA::TProgram::TCommand;
 
     TContext info(columnResolver);
@@ -289,7 +289,7 @@ void TReadDescription::AddProgram(const IColumnResolver& columnResolver, const N
     for (auto& cmd : program.GetCommand()) {
         switch (cmd.GetLineCase()) {
             case TId::kAssign:
-                ExtractAssign(info, *step, cmd.GetAssign(), ProgramParameters);
+                ExtractAssign(info, *step, cmd.GetAssign(), ProgramParameters); 
                 break;
             case TId::kFilter:
                 ExtractFilter(info, *step, cmd.GetFilter());

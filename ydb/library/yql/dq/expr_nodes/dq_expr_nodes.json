@@ -52,11 +52,11 @@
         "Match": {"Type": "Callable", "Name": "DqPhyCrossJoin"}
     },
     {
-        "Name": "TDqPhyJoinDict",
-        "Base": "TDqJoinBase",
-        "Match": {"Type": "Callable", "Name": "DqPhyJoinDict"}
-    },
-    {
+        "Name": "TDqPhyJoinDict", 
+        "Base": "TDqJoinBase", 
+        "Match": {"Type": "Callable", "Name": "DqPhyJoinDict"} 
+    }, 
+    { 
         "Name": "TDqSource",
         "Base": "TCallable",
         "Match": {"Type": "Callable", "Name": "DqSource"},
@@ -200,22 +200,22 @@
             {"Index": 0, "Name": "World", "Type": "TExprBase"},
             {"Index": 1, "Name": "SinkStages", "Type": "TDqStageList"}
         ]
-    },
-    {
-        "Name": "TDqPrecompute",
-        "Base": "TCallable",
-        "Match": {"Type": "Callable", "Name": "DqPrecompute"},
-        "Children": [
-            {"Index": 0, "Name": "Input", "Type": "TExprBase"}
-        ]
-    },
-    {
-        "Name": "TDqPhyPrecompute",
-        "Base": "TCallable",
-        "Match": {"Type": "Callable", "Name": "DqPhyPrecompute"},
-        "Children": [
-            {"Index": 0, "Name": "Connection", "Type": "TDqConnection"}
-        ]
+    }, 
+    { 
+        "Name": "TDqPrecompute", 
+        "Base": "TCallable", 
+        "Match": {"Type": "Callable", "Name": "DqPrecompute"}, 
+        "Children": [ 
+            {"Index": 0, "Name": "Input", "Type": "TExprBase"} 
+        ] 
+    }, 
+    { 
+        "Name": "TDqPhyPrecompute", 
+        "Base": "TCallable", 
+        "Match": {"Type": "Callable", "Name": "DqPhyPrecompute"}, 
+        "Children": [ 
+            {"Index": 0, "Name": "Connection", "Type": "TDqConnection"} 
+        ] 
     },
     {
         "Name": "TDqSqlExternalFunction",
@@ -227,5 +227,5 @@
             {"Index": 2, "Name": "Settings", "Type": "TExprBase"}
         ]
     }
-    ]
+    ] 
 }

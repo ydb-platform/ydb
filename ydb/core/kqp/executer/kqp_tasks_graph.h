@@ -86,7 +86,7 @@ struct TShardKeyRanges {
     bool IsFullRange() const { return FullRange.has_value(); }
     TVector<TSerializedPointOrRange>& GetRanges() { return Ranges; }
 
-    void MergeWritePoints(TShardKeyRanges&& other, const TVector<NScheme::TTypeId>& keyTypes);
+    void MergeWritePoints(TShardKeyRanges&& other, const TVector<NScheme::TTypeId>& keyTypes); 
 
     TString ToString(const TVector<NScheme::TTypeId>& keyTypes, const NScheme::TTypeRegistry& typeRegistry) const;
     void SerializeTo(NKikimrTxDataShard::TKqpTransaction_TDataTaskMeta_TKeyRange* proto) const;
@@ -101,7 +101,7 @@ struct TTaskMeta {
     ui64 NodeId = 0;  // only in case of scans over persistent snapshots
 
     TMap<TString, NYql::NDqProto::TData> Params;
-    TMap<TString, NKikimr::NMiniKQL::TType*> ParamTypes;
+    TMap<TString, NKikimr::NMiniKQL::TType*> ParamTypes; 
 
     struct TColumn {
         ui32 Id = 0;
@@ -109,29 +109,29 @@ struct TTaskMeta {
         TString Name;
     };
 
-    struct TShardReadInfo {
+    struct TShardReadInfo { 
         TShardKeyRanges Ranges;
         TVector<TColumn> Columns;
-        ui64 ShardId = 0; // in case of persistent scans
-    };
-
-    struct TKqpOlapProgram {
-        TString Program; // For OLAP scans with process pushdown
-        std::set<TString> ParameterNames;
-    };
-
-    struct TReadInfo {
+        ui64 ShardId = 0; // in case of persistent scans 
+    }; 
+ 
+    struct TKqpOlapProgram { 
+        TString Program; // For OLAP scans with process pushdown 
+        std::set<TString> ParameterNames; 
+    }; 
+ 
+    struct TReadInfo { 
         ui64 ItemsLimit = 0;
         bool Reverse = false;
-        TKqpOlapProgram OlapProgram;
+        TKqpOlapProgram OlapProgram; 
     };
 
     struct TWriteInfo {
         TShardKeyRanges Ranges;
     };
 
-    TReadInfo ReadInfo;
-    TMaybe<TVector<TShardReadInfo>> Reads;  // if not set -> no reads
+    TReadInfo ReadInfo; 
+    TMaybe<TVector<TShardReadInfo>> Reads;  // if not set -> no reads 
     TMaybe<TWriteInfo> Writes;         // if not set -> no writes
 
     TString ToString(const TVector<NScheme::TTypeId>& keyTypes, const NScheme::TTypeRegistry& typeRegistry) const;

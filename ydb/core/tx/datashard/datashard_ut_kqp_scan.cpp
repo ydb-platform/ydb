@@ -26,16 +26,16 @@ namespace {
         return sql;
     }
 
-    void EnableLogging(TTestActorRuntime& runtime) {
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+    void EnableLogging(TTestActorRuntime& runtime) { 
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG); 
         //runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_TRACE);
         //runtime.SetLogPriority(NKikimrServices::KQP_WORKER, NActors::NLog::PRI_DEBUG);
         //runtime.SetLogPriority(NKikimrServices::KQP_RESOURCE_MANAGER, NActors::NLog::PRI_DEBUG);
         //runtime.SetLogPriority(NKikimrServices::KQP_NODE, NActors::NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_TRACE);
-    }
-
+    } 
+ 
 }
 
 Y_UNIT_TEST_SUITE(KqpScan) {
@@ -67,7 +67,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto &runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
-        // EnableLogging(runtime);
+        // EnableLogging(runtime); 
 
         InitRoot(server, sender);
         CreateShardedTable(server, sender, "/Root", "table-1", 1);
@@ -172,7 +172,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto &runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
-        // EnableLogging(runtime);
+        // EnableLogging(runtime); 
 
         InitRoot(server, sender);
         CreateShardedTable(server, sender, "/Root", "table-1", 7);
@@ -264,7 +264,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto sender = runtime.AllocateEdgeActor();
         auto senderSplit = runtime.AllocateEdgeActor();
 
-        // EnableLogging(runtime);
+        // EnableLogging(runtime); 
 
         SetSplitMergePartCountLimit(&runtime, -1);
 
@@ -374,74 +374,74 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         UNIT_ASSERT_VALUES_EQUAL(result, 596400);
     }
 
-    Y_UNIT_TEST_WITH_MVCC(ScanRetryReadRanges) {
-        Y_UNUSED(EnableLogging);
-
-        NKikimrConfig::TAppConfig appCfg;
-
-        auto* rm = appCfg.MutableTableServiceConfig()->MutableResourceManager();
-        rm->SetChannelBufferSize(100);
-        rm->SetMinChannelBufferSize(100);
-        rm->SetScanBufferSize(100);
-
-        TPortManager pm;
-        TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(WithMvcc)
-            .SetNodeCount(2)
-            .SetAppConfig(appCfg)
-            .SetUseRealThreads(false);
-
-        Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
-        auto sender = runtime.AllocateEdgeActor();
-
-        // EnableLogging(runtime);
-
-        InitRoot(server, sender);
-        CreateShardedTable(server, sender, "/Root", "table-1", 1);
-        ExecSQL(server, sender, FillTableQuery());
-
-        TSet<TActorId> scans;
+    Y_UNIT_TEST_WITH_MVCC(ScanRetryReadRanges) { 
+        Y_UNUSED(EnableLogging); 
+ 
+        NKikimrConfig::TAppConfig appCfg; 
+ 
+        auto* rm = appCfg.MutableTableServiceConfig()->MutableResourceManager(); 
+        rm->SetChannelBufferSize(100); 
+        rm->SetMinChannelBufferSize(100); 
+        rm->SetScanBufferSize(100); 
+ 
+        TPortManager pm; 
+        TServerSettings serverSettings(pm.GetPort(2134)); 
+        serverSettings.SetDomainName("Root") 
+            .SetEnableMvcc(WithMvcc) 
+            .SetNodeCount(2) 
+            .SetAppConfig(appCfg) 
+            .SetUseRealThreads(false); 
+ 
+        Tests::TServer::TPtr server = new TServer(serverSettings); 
+        auto &runtime = *server->GetRuntime(); 
+        auto sender = runtime.AllocateEdgeActor(); 
+ 
+        // EnableLogging(runtime); 
+ 
+        InitRoot(server, sender); 
+        CreateShardedTable(server, sender, "/Root", "table-1", 1); 
+        ExecSQL(server, sender, FillTableQuery()); 
+ 
+        TSet<TActorId> scans; 
         TSet<TActorId> killedTablets;
-
-        ui64 result = 0;
-        ui64 incomingRangesSize = 0;
-
-        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) -> auto {
-            switch (ev->GetTypeRewrite()) {
-                /*
-                 * Trick executor to think that all datashard are located on node 1.
-                 */
-                case NKqp::TKqpExecuterEvents::EvShardsResolveStatus: {
-                    auto* msg = ev->Get<NKqp::TEvKqpExecuter::TEvShardsResolveStatus>();
-                    for (auto& [shardId, nodeId]: msg->ShardNodes) {
-                        Cerr << "-- nodeId: " << nodeId << Endl;
-                        nodeId = runtime.GetNodeId(0);
-                    }
-                    break;
-                }
-
-                case TEvDataShard::EvKqpScan: {
-                    Cerr << (TStringBuilder() << "-- EvScan " << ev->Sender << " -> " << ev->Recipient << Endl);
-
-                    if (!incomingRangesSize) {
-                        auto& request = ev->Get<TEvDataShard::TEvKqpScan>()->Record;
-                        incomingRangesSize = request.RangesSize();
-                    }
-
-                    break;
-                }
-
-                /*
-                 * Respond to streamData with acks. Without that execution pipeline will stop
-                 * producing new tuples.
-                 */
-                case NKqp::TKqpExecuterEvents::EvStreamData: {
-                    auto& record = ev->Get<NKqp::TEvKqpExecuter::TEvStreamData>()->Record;
-
-                    Cerr << (TStringBuilder() << "-- EvStreamData: " << record.AsJSON() << Endl);
-
+ 
+        ui64 result = 0; 
+        ui64 incomingRangesSize = 0; 
+ 
+        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) -> auto { 
+            switch (ev->GetTypeRewrite()) { 
+                /* 
+                 * Trick executor to think that all datashard are located on node 1. 
+                 */ 
+                case NKqp::TKqpExecuterEvents::EvShardsResolveStatus: { 
+                    auto* msg = ev->Get<NKqp::TEvKqpExecuter::TEvShardsResolveStatus>(); 
+                    for (auto& [shardId, nodeId]: msg->ShardNodes) { 
+                        Cerr << "-- nodeId: " << nodeId << Endl; 
+                        nodeId = runtime.GetNodeId(0); 
+                    } 
+                    break; 
+                } 
+ 
+                case TEvDataShard::EvKqpScan: { 
+                    Cerr << (TStringBuilder() << "-- EvScan " << ev->Sender << " -> " << ev->Recipient << Endl); 
+ 
+                    if (!incomingRangesSize) { 
+                        auto& request = ev->Get<TEvDataShard::TEvKqpScan>()->Record; 
+                        incomingRangesSize = request.RangesSize(); 
+                    } 
+ 
+                    break; 
+                } 
+ 
+                /* 
+                 * Respond to streamData with acks. Without that execution pipeline will stop 
+                 * producing new tuples. 
+                 */ 
+                case NKqp::TKqpExecuterEvents::EvStreamData: { 
+                    auto& record = ev->Get<NKqp::TEvKqpExecuter::TEvStreamData>()->Record; 
+ 
+                    Cerr << (TStringBuilder() << "-- EvStreamData: " << record.AsJSON() << Endl); 
+ 
                     // Empty message can come on finish
                     if (!record.GetResultSet().rows().empty()) {
                         Y_ASSERT(record.GetResultSet().rows().at(0).items().size() == 2);
@@ -450,70 +450,70 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                             auto val = record.GetResultSet().rows().at(i).items().at(1).uint32_value();
                             result += val;
                         }
-                    }
-
-                    auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
-                    resp->Record.SetEnough(false);
-                    resp->Record.SetSeqNo(ev->Get<NKqp::TEvKqpExecuter::TEvStreamData>()->Record.GetSeqNo());
-                    resp->Record.SetFreeSpace(100);
-                    runtime.Send(new IEventHandle(ev->Sender, sender, resp.Release()));
-                    return TTestActorRuntime::EEventAction::DROP;
-                }
-
-                /* Drop message and kill tablet if we already had seen this tablet */
-                case NKqp::TKqpComputeEvents::EvScanData: {
-                    if (scans.contains(ev->Sender)) {
+                    } 
+ 
+                    auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(); 
+                    resp->Record.SetEnough(false); 
+                    resp->Record.SetSeqNo(ev->Get<NKqp::TEvKqpExecuter::TEvStreamData>()->Record.GetSeqNo()); 
+                    resp->Record.SetFreeSpace(100); 
+                    runtime.Send(new IEventHandle(ev->Sender, sender, resp.Release())); 
+                    return TTestActorRuntime::EEventAction::DROP; 
+                } 
+ 
+                /* Drop message and kill tablet if we already had seen this tablet */ 
+                case NKqp::TKqpComputeEvents::EvScanData: { 
+                    if (scans.contains(ev->Sender)) { 
                         if (killedTablets.empty()) { // do only 1 kill per test
                             runtime.Send(new IEventHandle(ev->Sender, ev->Sender, new NKqp::TEvKqpCompute::TEvKillScanTablet));
                             Cerr << (TStringBuilder() << "-- EvScanData from " << ev->Sender << ": hijack event, kill tablet " << ev->Sender << Endl);
                             Cerr.Flush();
                         }
-                    } else {
-                        scans.insert(ev->Sender);
+                    } else { 
+                        scans.insert(ev->Sender); 
                         runtime.EnableScheduleForActor(ev->Sender);
 
-                        Cerr << (TStringBuilder() << "-- EvScanData from " << ev->Sender << ": pass" << Endl);
-
-                        auto scanEvent = ev->Get<NKqp::TEvKqpCompute::TEvScanData>();
-
-                        for (auto& item: scanEvent->Rows) {
-                            // Row consists of 'key', 'value'
-                            ui32 key = item[0].AsValue<ui32>();
-
-                            // Check that key correspond to query
-                            bool inRange = (key > 1 && key < 3) || (key > 20 && key < 30) || (key >= 40 && key <= 50);
-                            UNIT_ASSERT_C(inRange, TStringBuilder() << "Key " << key << "not in query range");
-                        }
-                    }
-
-                    break;
-                }
-
-                default:
-                    break;
-            }
-            return TTestActorRuntime::EEventAction::PROCESS;
-        };
-        runtime.SetObserverFunc(captureEvents);
-
-        auto query = TString(R"(
-            --!syntax_v1
-            SELECT key, value FROM `/Root/table-1`
-            WHERE
-                (key > 1 AND key < 3) OR
-                (key > 20 AND key < 30) OR
-                (key >= 40 AND key <= 50)
-            ORDER BY key;
-        )");
-
-        auto streamSender = runtime.AllocateEdgeActor();
-        SendRequest(runtime, streamSender, MakeStreamRequest(streamSender, query, false));
-        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(streamSender);
-
-        UNIT_ASSERT_VALUES_EQUAL(result, 72742);
-        UNIT_ASSERT_VALUES_EQUAL(incomingRangesSize, 3);
-    }
-
+                        Cerr << (TStringBuilder() << "-- EvScanData from " << ev->Sender << ": pass" << Endl); 
+ 
+                        auto scanEvent = ev->Get<NKqp::TEvKqpCompute::TEvScanData>(); 
+ 
+                        for (auto& item: scanEvent->Rows) { 
+                            // Row consists of 'key', 'value' 
+                            ui32 key = item[0].AsValue<ui32>(); 
+ 
+                            // Check that key correspond to query 
+                            bool inRange = (key > 1 && key < 3) || (key > 20 && key < 30) || (key >= 40 && key <= 50); 
+                            UNIT_ASSERT_C(inRange, TStringBuilder() << "Key " << key << "not in query range"); 
+                        } 
+                    } 
+ 
+                    break; 
+                } 
+ 
+                default: 
+                    break; 
+            } 
+            return TTestActorRuntime::EEventAction::PROCESS; 
+        }; 
+        runtime.SetObserverFunc(captureEvents); 
+ 
+        auto query = TString(R"( 
+            --!syntax_v1 
+            SELECT key, value FROM `/Root/table-1` 
+            WHERE 
+                (key > 1 AND key < 3) OR 
+                (key > 20 AND key < 30) OR 
+                (key >= 40 AND key <= 50) 
+            ORDER BY key; 
+        )"); 
+ 
+        auto streamSender = runtime.AllocateEdgeActor(); 
+        SendRequest(runtime, streamSender, MakeStreamRequest(streamSender, query, false)); 
+        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(streamSender); 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(result, 72742); 
+        UNIT_ASSERT_VALUES_EQUAL(incomingRangesSize, 3); 
+    } 
+ 
 }
 
 } // namespace NKqp

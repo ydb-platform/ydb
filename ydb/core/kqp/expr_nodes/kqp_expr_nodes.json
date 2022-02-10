@@ -76,51 +76,51 @@
             "Match": {"Type": "Callable", "Name": "KqpWideReadTable"}
         },
         {
-            "Name": "TKqlReadTableRangesBase",
-            "Base": "TCallable",
-            "Match": {"Type": "CallableBase"},
-            "Children": [
-                {"Index": 0, "Name": "Table", "Type": "TKqpTable"},
-                {"Index": 1, "Name": "Ranges", "Type": "TExprBase"},
-                {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"},
-                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"},
-                {"Index": 4, "Name": "ExplainPrompt", "Type": "TCoNameValueTupleList"}
-            ]
-        },
-        {
-            "Name": "TKqlReadTableRanges",
-            "Base": "TKqlReadTableRangesBase",
-            "Match": {"Type": "Callable", "Name": "KqlReadTableRanges"}
-        },
-        {
-            "Name": "TKqpReadTableRanges",
-            "Base": "TKqlReadTableRangesBase",
-            "Match": {"Type": "Callable", "Name": "KqpReadTableRanges"}
-        },
-        {
-            "Name": "TKqpWideReadTableRanges",
-            "Base": "TKqlReadTableRangesBase",
-            "Match": {"Type": "Callable", "Name": "KqpWideReadTableRanges"}
-        },
-        {
-            "Name": "TKqpReadOlapTableRangesBase",
-            "Base": "TKqlReadTableRangesBase",
-            "Match": {"Type": "CallableBase"},
-            "Children": [
-                {"Index": 5, "Name": "Process", "Type": "TCoLambda"}
-            ]
-        },
-        {
-            "Name": "TKqpReadOlapTableRanges",
-            "Base": "TKqpReadOlapTableRangesBase",
-            "Match": {"Type": "Callable", "Name": "KqpReadOlapTableRanges"}
-        },
-        {
-            "Name": "TKqpWideReadOlapTableRanges",
-            "Base": "TKqpReadOlapTableRangesBase",
-            "Match": {"Type": "Callable", "Name": "KqpWideReadOlapTableRanges"}
-        },
-        {
+            "Name": "TKqlReadTableRangesBase", 
+            "Base": "TCallable", 
+            "Match": {"Type": "CallableBase"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "Table", "Type": "TKqpTable"}, 
+                {"Index": 1, "Name": "Ranges", "Type": "TExprBase"}, 
+                {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"}, 
+                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"}, 
+                {"Index": 4, "Name": "ExplainPrompt", "Type": "TCoNameValueTupleList"} 
+            ] 
+        }, 
+        { 
+            "Name": "TKqlReadTableRanges", 
+            "Base": "TKqlReadTableRangesBase", 
+            "Match": {"Type": "Callable", "Name": "KqlReadTableRanges"} 
+        }, 
+        { 
+            "Name": "TKqpReadTableRanges", 
+            "Base": "TKqlReadTableRangesBase", 
+            "Match": {"Type": "Callable", "Name": "KqpReadTableRanges"} 
+        }, 
+        { 
+            "Name": "TKqpWideReadTableRanges", 
+            "Base": "TKqlReadTableRangesBase", 
+            "Match": {"Type": "Callable", "Name": "KqpWideReadTableRanges"} 
+        }, 
+        { 
+            "Name": "TKqpReadOlapTableRangesBase", 
+            "Base": "TKqlReadTableRangesBase", 
+            "Match": {"Type": "CallableBase"}, 
+            "Children": [ 
+                {"Index": 5, "Name": "Process", "Type": "TCoLambda"} 
+            ] 
+        }, 
+        { 
+            "Name": "TKqpReadOlapTableRanges", 
+            "Base": "TKqpReadOlapTableRangesBase", 
+            "Match": {"Type": "Callable", "Name": "KqpReadOlapTableRanges"} 
+        }, 
+        { 
+            "Name": "TKqpWideReadOlapTableRanges", 
+            "Base": "TKqpReadOlapTableRangesBase", 
+            "Match": {"Type": "Callable", "Name": "KqpWideReadOlapTableRanges"} 
+        }, 
+        { 
             "Name": "TKqlLookupTableBase",
             "Base": "TCallable",
             "Match": {"Type": "CallableBase"},
@@ -367,54 +367,54 @@
             ]
         },
         {
-            "Name": "TKqpOlapFilter",
+            "Name": "TKqpOlapFilter", 
             "Base": "TKqpOlapOperationBase",
-            "Match": {"Type": "Callable", "Name": "KqpOlapFilter"},
+            "Match": {"Type": "Callable", "Name": "KqpOlapFilter"}, 
             "Children": [
-                {"Index": 1, "Name": "Condition", "Type": "TExprBase"}
+                {"Index": 1, "Name": "Condition", "Type": "TExprBase"} 
+            ] 
+        }, 
+        { 
+            "Name": "TKqpOlapFilterCompare", 
+            "Base": "TKqpOlapOperationBase", 
+            "Match": {"Type": "CallableBase"}, 
+            "Children": [ 
+                {"Index": 1, "Name": "Left", "Type": "TExprBase"}, 
+                {"Index": 2, "Name": "Right", "Type": "TExprBase"} 
             ]
-        },
-        {
-            "Name": "TKqpOlapFilterCompare",
-            "Base": "TKqpOlapOperationBase",
-            "Match": {"Type": "CallableBase"},
-            "Children": [
-                {"Index": 1, "Name": "Left", "Type": "TExprBase"},
-                {"Index": 2, "Name": "Right", "Type": "TExprBase"}
-            ]
-        },
-        {
-            "Name": "TKqpOlapFilterEqual",
-            "Base": "TKqpOlapFilterCompare",
-            "Match": {"Type": "Callable", "Name": "KqpOlapFilterEqual"}
-        },
-        {
-            "Name": "TKqpOlapFilterLess",
-            "Base": "TKqpOlapFilterCompare",
-            "Match": {"Type": "Callable", "Name": "KqpOlapFilterLess"}
-        },
-        {
-            "Name": "TKqpOlapFilterLessOrEqual",
-            "Base": "TKqpOlapFilterCompare",
-            "Match": {"Type": "Callable", "Name": "KqpOlapFilterLessOrEqual"}
-        },
-        {
-            "Name": "TKqpOlapFilterGreater",
-            "Base": "TKqpOlapFilterCompare",
-            "Match": {"Type": "Callable", "Name": "KqpOlapFilterGreater"}
-        },
-        {
-            "Name": "TKqpOlapFilterGreaterOrEqual",
-            "Base": "TKqpOlapFilterCompare",
-            "Match": {"Type": "Callable", "Name": "KqpOlapFilterGreaterOrEqual"}
-        },
-        {
-            "Name": "TKqpOlapFilterExists",
-            "Base": "TKqpOlapOperationBase",
-            "Match": {"Type": "Callable", "Name": "TKqpOlapFilterExists"},
-            "Children": [
-                {"Index": 1, "Name": "Column", "Type": "TExprBase"}
-            ]
+        }, 
+        { 
+            "Name": "TKqpOlapFilterEqual", 
+            "Base": "TKqpOlapFilterCompare", 
+            "Match": {"Type": "Callable", "Name": "KqpOlapFilterEqual"} 
+        }, 
+        { 
+            "Name": "TKqpOlapFilterLess", 
+            "Base": "TKqpOlapFilterCompare", 
+            "Match": {"Type": "Callable", "Name": "KqpOlapFilterLess"} 
+        }, 
+        { 
+            "Name": "TKqpOlapFilterLessOrEqual", 
+            "Base": "TKqpOlapFilterCompare", 
+            "Match": {"Type": "Callable", "Name": "KqpOlapFilterLessOrEqual"} 
+        }, 
+        { 
+            "Name": "TKqpOlapFilterGreater", 
+            "Base": "TKqpOlapFilterCompare", 
+            "Match": {"Type": "Callable", "Name": "KqpOlapFilterGreater"} 
+        }, 
+        { 
+            "Name": "TKqpOlapFilterGreaterOrEqual", 
+            "Base": "TKqpOlapFilterCompare", 
+            "Match": {"Type": "Callable", "Name": "KqpOlapFilterGreaterOrEqual"} 
+        }, 
+        { 
+            "Name": "TKqpOlapFilterExists", 
+            "Base": "TKqpOlapOperationBase", 
+            "Match": {"Type": "Callable", "Name": "TKqpOlapFilterExists"}, 
+            "Children": [ 
+                {"Index": 1, "Name": "Column", "Type": "TExprBase"} 
+            ] 
         },
         {
             "Name": "TKqpEnsure",

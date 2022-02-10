@@ -34,7 +34,7 @@ public:
     TKqpPlanner(ui64 txId, const TActorId& executer, TVector<NYql::NDqProto::TDqTask>&& tasks,
         THashMap<ui64, TVector<NYql::NDqProto::TDqTask>>&& scanTasks, const IKqpGateway::TKqpSnapshot& snapshot,
         const TString& database, const TMaybe<TString>& userToken, TInstant deadline, const NYql::NDqProto::EDqStatsMode& statsMode,
-        bool disableLlvmForUdfStages, bool enableLlvm, bool withSpilling, const TMaybe<NKikimrKqp::TRlPath>& rlPath);
+        bool disableLlvmForUdfStages, bool enableLlvm, bool withSpilling, const TMaybe<NKikimrKqp::TRlPath>& rlPath); 
 
     void Bootstrap(const TActorContext& ctx);
 
@@ -65,7 +65,7 @@ private:
     const TInstant Deadline;
     const NYql::NDqProto::EDqStatsMode StatsMode;
     const bool DisableLlvmForUdfStages;
-    const bool EnableLlvm;
+    const bool EnableLlvm; 
     const bool WithSpilling;
     const TMaybe<NKikimrKqp::TRlPath> RlPath;
     THashSet<ui32> TrackingNodes;
@@ -74,6 +74,6 @@ private:
 IActor* CreateKqpPlanner(ui64 txId, const TActorId& executer, TVector<NYql::NDqProto::TDqTask>&& tasks,
     THashMap<ui64, TVector<NYql::NDqProto::TDqTask>>&& scanTasks, const IKqpGateway::TKqpSnapshot& snapshot,
     const TString& database, const TMaybe<TString>& userToken, TInstant deadline, const NYql::NDqProto::EDqStatsMode& statsMode,
-    bool disableLlvmForUdfStages, bool enableLlvm, bool withSpilling, const TMaybe<NKikimrKqp::TRlPath>& rlPath);
+    bool disableLlvmForUdfStages, bool enableLlvm, bool withSpilling, const TMaybe<NKikimrKqp::TRlPath>& rlPath); 
 
 } // namespace NKikimr::NKqp

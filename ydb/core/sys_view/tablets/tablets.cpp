@@ -60,117 +60,117 @@ private:
         }
     }
 
-    bool CalculateRangeFrom() {
-        /*
+    bool CalculateRangeFrom() { 
+        /* 
          *  Please note that TabletId and FollowerId do not have NULLs in columns
-         */
+         */ 
         const auto& cellsFrom = TableRange.From.GetCells();
 
-        // Empty means that we read from +inf, it is impossible
-        if (cellsFrom.empty()) {
-            YQL_ENSURE(false, "Range starts from +inf, can't read anything.");
-            return false;
-        }
+        // Empty means that we read from +inf, it is impossible 
+        if (cellsFrom.empty()) { 
+            YQL_ENSURE(false, "Range starts from +inf, can't read anything."); 
+            return false; 
+        } 
 
-        if (cellsFrom[0].IsNull()) {
-            return true;
-        }
-
-        FromTabletId = cellsFrom[0].AsValue<ui64>();
-
-        if (cellsFrom.size() == 1 && TableRange.FromInclusive) {
-            return true;
-        }
-
-        if (cellsFrom.size() == 2) {
-            if (!cellsFrom[1].IsNull()) {
+        if (cellsFrom[0].IsNull()) { 
+            return true; 
+        } 
+ 
+        FromTabletId = cellsFrom[0].AsValue<ui64>(); 
+ 
+        if (cellsFrom.size() == 1 && TableRange.FromInclusive) { 
+            return true; 
+        } 
+ 
+        if (cellsFrom.size() == 2) { 
+            if (!cellsFrom[1].IsNull()) { 
                 FromFollowerId = cellsFrom[1].AsValue<ui32>();
             }
 
-            if (TableRange.FromInclusive) {
-                return true;
+            if (TableRange.FromInclusive) { 
+                return true; 
             }
-
-            // The range start from NULL exclusive. So, the next value after NULL will be used.
+ 
+            // The range start from NULL exclusive. So, the next value after NULL will be used. 
             if (!FromFollowerId.has_value()) {
                 FromFollowerId = Min<ui32>();
-                return true;
-            }
-
+                return true; 
+            } 
+ 
             if (FromFollowerId.value() < Max<ui32>()) {
                 FromFollowerId = FromFollowerId.value() + 1;
-                return true;
-            }
-
+                return true; 
+            } 
+ 
             FromFollowerId.reset();
         }
 
-        if (FromTabletId < Max<ui64>()) {
-            ++FromTabletId;
-            return true;
-        }
-
-        return false;
-    }
-
-    bool CalculateRangeTo() {
+        if (FromTabletId < Max<ui64>()) { 
+            ++FromTabletId; 
+            return true; 
+        } 
+ 
+        return false; 
+    } 
+ 
+    bool CalculateRangeTo() { 
         const auto& cellsTo = TableRange.To.GetCells();
 
-        if (cellsTo.empty()) {
-            return true;
-        }
+        if (cellsTo.empty()) { 
+            return true; 
+        } 
 
-        YQL_ENSURE(!cellsTo[0].IsNull(), "Read to -inf range");
-
-        ToTabletId = cellsTo[0].AsValue<ui64>();
-
-        if (cellsTo.size() == 1 && TableRange.ToInclusive) {
-            return true;
-        }
-
-        auto decreaseTabletId = [this]() {
-            if (ToTabletId > Min<ui64>()) {
-                --ToTabletId;
-                return true;
-            }
-
-            return false;
-        };
-
-        if (cellsTo.size() == 2) {
-            if (!cellsTo[1].IsNull()) {
+        YQL_ENSURE(!cellsTo[0].IsNull(), "Read to -inf range"); 
+ 
+        ToTabletId = cellsTo[0].AsValue<ui64>(); 
+ 
+        if (cellsTo.size() == 1 && TableRange.ToInclusive) { 
+            return true; 
+        } 
+ 
+        auto decreaseTabletId = [this]() { 
+            if (ToTabletId > Min<ui64>()) { 
+                --ToTabletId; 
+                return true; 
+            } 
+ 
+            return false; 
+        }; 
+ 
+        if (cellsTo.size() == 2) { 
+            if (!cellsTo[1].IsNull()) { 
                 ToFollowerId = cellsTo[1].AsValue<ui32>();
             }
 
-            if (TableRange.ToInclusive) {
-                return true;
+            if (TableRange.ToInclusive) { 
+                return true; 
             }
-
-            // The range ends at NULL exclusive. So, the value before NULL will be used.
+ 
+            // The range ends at NULL exclusive. So, the value before NULL will be used. 
             if (!ToFollowerId.has_value()) {
                 ToFollowerId = Max<ui32>();
-                return decreaseTabletId();
-            }
-
+                return decreaseTabletId(); 
+            } 
+ 
             if (ToFollowerId > Min<ui32>()) {
                 ToFollowerId = ToFollowerId.value() - 1;
-                return true;
-            }
-
+                return true; 
+            } 
+ 
             ToFollowerId.reset();
         }
 
-        return decreaseTabletId();
-    }
-
-    void RequestTabletIds() {
-        auto request = MakeHolder<TEvSysView::TEvGetTabletIdsRequest>();
-
-        if (!CalculateRangeFrom() || !CalculateRangeTo()) {
-            ReplyEmptyAndDie();
-            return;
-        }
-
+        return decreaseTabletId(); 
+    } 
+ 
+    void RequestTabletIds() { 
+        auto request = MakeHolder<TEvSysView::TEvGetTabletIdsRequest>(); 
+ 
+        if (!CalculateRangeFrom() || !CalculateRangeTo()) { 
+            ReplyEmptyAndDie(); 
+            return; 
+        } 
+ 
         if (ToTabletId < FromTabletId) {
             ReplyEmptyAndDie();
             return;
@@ -286,13 +286,13 @@ private:
 
         size_t index = 0;
         ui32 fromFollowerId = FromFollowerId.value_or(Min<ui32>());
-
-        if (record.EntriesSize() > 0
+ 
+        if (record.EntriesSize() > 0 
             && record.GetEntries(0).GetTabletId() == FromTabletId)
         {
             for (; index < record.EntriesSize(); ++index) {
                 const auto& entry = record.GetEntries(index);
-
+ 
                 if (entry.GetTabletId() != FromTabletId || entry.GetFollowerId() >= fromFollowerId) {
                     break;
                 }

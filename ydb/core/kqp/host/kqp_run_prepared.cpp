@@ -141,7 +141,7 @@ private:
         }
 
         future = Gateway->ExecuteMkqlPrepared(Cluster, mkql.GetProgram(), std::move(execParams),
-            TransformCtx->GetMkqlSettings(false, Gateway->GetCurrentTime()),
+            TransformCtx->GetMkqlSettings(false, Gateway->GetCurrentTime()), 
             TxState->Tx().GetSnapshot());
         return true;
     }

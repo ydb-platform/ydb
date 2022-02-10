@@ -43,7 +43,7 @@ public:
         , DataFormat(dataFormat)
         , TablePath(table)
         , ReadMetadataRanges(std::move(readMetadataList))
-        , ReadMetadataIndex(0)
+        , ReadMetadataIndex(0) 
         , Deadline(TInstant::Now() + (timeout ? timeout + SCAN_HARD_TIMEOUT_GAP : SCAN_HARD_TIMEOUT))
     {
         KeyYqlSchema = ReadMetadataRanges[ReadMetadataIndex]->GetKeyYqlSchema();
@@ -144,7 +144,7 @@ private:
     bool ProduceResults() {
         Y_VERIFY(!Finished);
 
-        if (ScanIterator->Finished()) {
+        if (ScanIterator->Finished()) { 
             return false;
         }
 
@@ -435,7 +435,7 @@ private:
     const TString TablePath;
 
     TVector<NOlap::TReadMetadataBase::TConstPtr> ReadMetadataRanges;
-    ui32 ReadMetadataIndex;
+    ui32 ReadMetadataIndex; 
     std::unique_ptr<TScanIteratorBase> ScanIterator;
 
     TVector<std::pair<TString, NScheme::TTypeId>> ResultYqlSchema;
@@ -461,30 +461,30 @@ private:
 
 static void FillPredicatesFromRange(TReadDescription& read, const ::NKikimrTx::TKeyRange& keyRange,
                                     const TVector<std::pair<TString, NScheme::TTypeId>>& ydbPk, ui64 tabletId) {
-    TSerializedTableRange range(keyRange);
+    TSerializedTableRange range(keyRange); 
 
-    LOG_S_DEBUG("TTxScan.Execute range predicate. From key size: "
-        << range.From.GetCells().size() << " To key size: " << range.To.GetCells().size()
+    LOG_S_DEBUG("TTxScan.Execute range predicate. From key size: " 
+        << range.From.GetCells().size() << " To key size: " << range.To.GetCells().size() 
         << " at tablet " << tabletId);
-
-    read.GreaterPredicate = std::make_shared<NOlap::TPredicate>();
-    read.LessPredicate = std::make_shared<NOlap::TPredicate>();
+ 
+    read.GreaterPredicate = std::make_shared<NOlap::TPredicate>(); 
+    read.LessPredicate = std::make_shared<NOlap::TPredicate>(); 
     std::tie(*read.GreaterPredicate, *read.LessPredicate) = RangePredicates(range, ydbPk);
-
-    LOG_S_DEBUG("TTxScan.Execute greater predicate over columns: " << read.GreaterPredicate->ToString()
+ 
+    LOG_S_DEBUG("TTxScan.Execute greater predicate over columns: " << read.GreaterPredicate->ToString() 
         << " at tablet " << tabletId);
-    LOG_S_DEBUG("TTxScan.Execute less predicate over columns: " << read.LessPredicate->ToString()
+    LOG_S_DEBUG("TTxScan.Execute less predicate over columns: " << read.LessPredicate->ToString() 
         << " at tablet " << tabletId);
-
+ 
     if (read.GreaterPredicate && read.GreaterPredicate->Empty()) {
-        read.GreaterPredicate.reset();
-    }
-
+        read.GreaterPredicate.reset(); 
+    } 
+ 
     if (read.LessPredicate && read.LessPredicate->Empty()) {
-        read.LessPredicate.reset();
-    }
-}
-
+        read.LessPredicate.reset(); 
+    } 
+} 
+ 
 NOlap::TReadStatsMetadata::TPtr
 PrepareStatsReadMetadata(ui64 tabletId, const TReadDescription& read, const std::unique_ptr<NOlap::IColumnEngine>& index, TString& error) {
     THashSet<ui32> readColumnIds(read.ColumnIds.begin(), read.ColumnIds.end());
@@ -542,7 +542,7 @@ PrepareStatsReadMetadata(ui64 tabletId, const TReadDescription& read, const std:
     }
     return out;
 }
-
+ 
 NOlap::TReadMetadataBase::TConstPtr TTxScan::CreateReadMetadata(const TActorContext& ctx, TReadDescription& read,
     bool indexStats, bool isReverse, ui64 itemsLimit)
 {
@@ -557,18 +557,18 @@ NOlap::TReadMetadataBase::TConstPtr TTxScan::CreateReadMetadata(const TActorCont
         return {};
     }
 
-    if (isReverse) {
-        metadata->SetDescSorting();
-    }
-
-    if (itemsLimit) {
-        metadata->Limit = itemsLimit;
-    }
-
-    return metadata;
-}
-
-
+    if (isReverse) { 
+        metadata->SetDescSorting(); 
+    } 
+ 
+    if (itemsLimit) { 
+        metadata->Limit = itemsLimit; 
+    } 
+ 
+    return metadata; 
+} 
+ 
+ 
 bool TTxScan::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     Y_UNUSED(txc);
     Y_VERIFY(Ev);
@@ -577,8 +577,8 @@ bool TTxScan::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     auto& record = Ev->Get()->Record;
     const auto& snapshot = record.GetSnapshot();
 
-    ui64 itemsLimit = record.HasItemsLimit() ? record.GetItemsLimit() : 0;
-
+    ui64 itemsLimit = record.HasItemsLimit() ? record.GetItemsLimit() : 0; 
+ 
     TReadDescription read;
     read.PlanStep = snapshot.GetStep();
     read.TxId = snapshot.GetTxId();
@@ -600,35 +600,35 @@ bool TTxScan::Execute(TTransactionContext& txc, const TActorContext& ctx) {
         }
     }
 
-    bool parseResult;
+    bool parseResult; 
 
-    if (!isIndexStats) {
-        TIndexColumnResolver columnResolver(Self->PrimaryIndex->GetIndexInfo());
-        parseResult = ParseProgram(ctx, record.GetOlapProgramType(), record.GetOlapProgram(), read, columnResolver);
-    } else {
-        TStatsColumnResolver columnResolver;
-        parseResult = ParseProgram(ctx, record.GetOlapProgramType(), record.GetOlapProgram(), read, columnResolver);
+    if (!isIndexStats) { 
+        TIndexColumnResolver columnResolver(Self->PrimaryIndex->GetIndexInfo()); 
+        parseResult = ParseProgram(ctx, record.GetOlapProgramType(), record.GetOlapProgram(), read, columnResolver); 
+    } else { 
+        TStatsColumnResolver columnResolver; 
+        parseResult = ParseProgram(ctx, record.GetOlapProgramType(), record.GetOlapProgram(), read, columnResolver); 
+    } 
+
+    if (!parseResult) { 
+        return true; 
     }
 
-    if (!parseResult) {
-        return true;
-    }
-
-    if (!record.RangesSize()) {
+    if (!record.RangesSize()) { 
         auto range = CreateReadMetadata(ctx, read, isIndexStats, record.GetReverse(), itemsLimit);
         if (range) {
             ReadMetadataRanges = {range};
         }
-        return true;
-    }
+        return true; 
+    } 
 
     ReadMetadataRanges.reserve(record.RangesSize());
-
+ 
     auto ydbKey = isIndexStats ?
         NOlap::GetColumns(PrimaryIndexStatsSchema, PrimaryIndexStatsSchema.KeyColumns) :
         Self->PrimaryIndex->GetIndexInfo().GetPK();
 
-    for (auto& range: record.GetRanges()) {
+    for (auto& range: record.GetRanges()) { 
         FillPredicatesFromRange(read, range, ydbKey, Self->TabletID());
         auto newRange = CreateReadMetadata(ctx, read, isIndexStats, record.GetReverse(), itemsLimit);
         if (!newRange) {
@@ -637,7 +637,7 @@ bool TTxScan::Execute(TTransactionContext& txc, const TActorContext& ctx) {
         }
         ReadMetadataRanges.emplace_back(newRange);
     }
-
+ 
     if (record.GetReverse()) {
         std::reverse(ReadMetadataRanges.begin(), ReadMetadataRanges.end());
     }

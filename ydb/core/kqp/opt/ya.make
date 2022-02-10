@@ -25,6 +25,6 @@ PEERDIR(
     ydb/library/yql/dq/opt
 )
 
-YQL_LAST_ABI_VERSION()
+YQL_LAST_ABI_VERSION() 
 
 END()

@@ -191,14 +191,14 @@ public:
         : From(from)
         , To(to)
         , FromInclusive(fromInclusive)
-        , ToInclusive(toInclusive) {}
+        , ToInclusive(toInclusive) {} 
 
     TSerializedTableRange(TConstArrayRef<TCell> fromValues, bool inclusiveFrom, TConstArrayRef<TCell> toValues,
         bool inclusiveTo)
         : From(TSerializedCellVec::Serialize(fromValues))
         , To(TSerializedCellVec::Serialize(toValues))
         , FromInclusive(inclusiveFrom)
-        , ToInclusive(inclusiveTo) {}
+        , ToInclusive(inclusiveTo) {} 
 
 
     explicit TSerializedTableRange(const TTableRange& range)
@@ -284,9 +284,9 @@ int ComparePointAndRange(const TConstArrayRef<TCell>& point, const TTableRange& 
 // E.g. CompareBorders<true, true>(...) compares borders of ranges lying on the left
 // of compared borders (or in other words upper range borders are compared).
 template<bool FirstLeft, bool SecondLeft>
-int CompareBorders(TConstArrayRef<TCell> first, TConstArrayRef<TCell> second, bool inclusiveFirst, bool inclusiveSecond,
-    TConstArrayRef<NScheme::TTypeId> cellTypes)
-{
+int CompareBorders(TConstArrayRef<TCell> first, TConstArrayRef<TCell> second, bool inclusiveFirst, bool inclusiveSecond, 
+    TConstArrayRef<NScheme::TTypeId> cellTypes) 
+{ 
     const ui32 firstSize = first.size();
     const ui32 secondSize = second.size();
 

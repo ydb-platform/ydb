@@ -2390,16 +2390,16 @@ TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& exprContext, c
             if (name.empty()) {
                 const auto& ref = ctx.References[node.second];
                 if (!InlineNode(*node.second, ref.References, ref.Neighbors, settings)) {
-                    if (settings.PrintArguments && node.second->IsArgument()) {
-                        auto buffer = TStringBuilder() << "$" << ++uniqueNum
-                            << "{" << node.second->Content() << ":"
-                            << node.second->UniqueId() << "}";
-                        YQL_ENSURE(frame.Bindings.emplace(node.second, buffer).second);
-                    } else {
-                        char buffer[1 + 10 + 1];
-                        sprintf(buffer, "$%" PRIu32, ++uniqueNum);
-                        YQL_ENSURE(frame.Bindings.emplace(node.second, buffer).second);
-                    }
+                    if (settings.PrintArguments && node.second->IsArgument()) { 
+                        auto buffer = TStringBuilder() << "$" << ++uniqueNum 
+                            << "{" << node.second->Content() << ":" 
+                            << node.second->UniqueId() << "}"; 
+                        YQL_ENSURE(frame.Bindings.emplace(node.second, buffer).second); 
+                    } else { 
+                        char buffer[1 + 10 + 1]; 
+                        sprintf(buffer, "$%" PRIu32, ++uniqueNum); 
+                        YQL_ENSURE(frame.Bindings.emplace(node.second, buffer).second); 
+                    } 
                     frame.TopoSortedNodes.emplace_back(node.second);
                 }
             }

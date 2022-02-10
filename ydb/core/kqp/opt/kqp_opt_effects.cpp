@@ -55,7 +55,7 @@ bool IsMapWrite(const TKikimrTableDescription& table, TExprBase input) {
     return true;
 }
 
-TDqPhyPrecompute BuildPrecomputeStage(TExprBase expr, TExprContext& ctx) {
+TDqPhyPrecompute BuildPrecomputeStage(TExprBase expr, TExprContext& ctx) { 
     Y_VERIFY_DEBUG(IsDqPureExpr(expr));
 
     auto pureStage = Build<TDqStage>(ctx, expr.Pos())
@@ -79,7 +79,7 @@ TDqPhyPrecompute BuildPrecomputeStage(TExprBase expr, TExprContext& ctx) {
             .Build()
         .Done();
 
-    return Build<TDqPhyPrecompute>(ctx, expr.Pos())
+    return Build<TDqPhyPrecompute>(ctx, expr.Pos()) 
         .Connection(dqValue)
         .Done();
 }
@@ -130,7 +130,7 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
             .Settings(settings.BuildNode(ctx, node.Pos()))
             .Done();
     } else {
-        stageInput = Build<TDqPhyPrecompute>(ctx, node.Pos())
+        stageInput = Build<TDqPhyPrecompute>(ctx, node.Pos()) 
             .Connection(dqUnion)
             .Done();
 
@@ -186,7 +186,7 @@ bool BuildDeleteRowsEffect(const TKqlDeleteRows& node, TExprContext& ctx, const 
                 .Build()
             .Done();
     } else {
-        stageInput = Build<TDqPhyPrecompute>(ctx, node.Pos())
+        stageInput = Build<TDqPhyPrecompute>(ctx, node.Pos()) 
             .Connection(dqUnion)
             .Done();
 

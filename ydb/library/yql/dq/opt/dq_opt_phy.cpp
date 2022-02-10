@@ -249,10 +249,10 @@ TMaybeNode<TDqStage> DqPushLambdaToStage(const TDqStage& stage, const TCoAtom& o
         // YQL_CLOG(TRACE, CoreDq) << "-- newProgram: " << newProgram->Dump();
     }
 
-    TNodeOnNodeOwnedMap inputArgReplaces;
+    TNodeOnNodeOwnedMap inputArgReplaces; 
     TVector<TCoArgument> newArgs = PrepareArgumentsReplacement(TCoLambda(newProgram).Args(), lambdaInputs, ctx, inputArgReplaces);
     TVector<TExprBase> inputNodes;
-
+ 
     // if lambda contains precomputes -> move them to the stage inputs
     {
         TNodeOnNodeOwnedMap precomputesInsideLambda;
@@ -652,50 +652,50 @@ TExprBase DqBuildAggregationResultStage(TExprBase node, TExprContext& ctx, IOpti
         TExprNode::TPtr connection;
         bool hasDirectConnection = false;
         bool dependsOnManyConnections = false;
-        bool valueConnection = false;
-
+        bool valueConnection = false; 
+ 
         VisitExpr(asStruct.Ptr(), [&](const TExprNode::TPtr& exprPtr) {
-            // Do not try to visit any other nodes, it is useless.
-            if (hasDirectConnection || dependsOnManyConnections) {
-                return false;
-            }
-
+            // Do not try to visit any other nodes, it is useless. 
+            if (hasDirectConnection || dependsOnManyConnections) { 
+                return false; 
+            } 
+ 
             TExprBase expr{exprPtr};
-
+ 
             if (expr.Maybe<TCoToOptional>().List().Maybe<TDqCnUnionAll>()) {
-                if (connection && (connection != expr.Cast<TCoToOptional>().List().Ptr())) {
-                    dependsOnManyConnections = true;
-                    return false;
+                if (connection && (connection != expr.Cast<TCoToOptional>().List().Ptr())) { 
+                    dependsOnManyConnections = true; 
+                    return false; 
                 }
-
-                connection = expr.Cast<TCoToOptional>().List().Ptr();
+ 
+                connection = expr.Cast<TCoToOptional>().List().Ptr(); 
                 return false;
             }
-
-            if (expr.Maybe<TDqPhyPrecompute>().IsValid()) {
-                auto precompute = expr.Cast<TDqPhyPrecompute>();
-                auto maybeConnection = precompute.Connection().Maybe<TDqCnValue>();
-
-                // Here we should catch only TDqPhyPrecompute(DqCnValue)
-                if (!maybeConnection.IsValid()) {
-                    return true;
-                }
-
-                if (connection && (connection != maybeConnection.Cast().Ptr())) {
-                    dependsOnManyConnections = true;
-                    return false;
-                }
-
-                connection = precompute.Ptr();
-                valueConnection = true;
-                return false;
-            }
-
+ 
+            if (expr.Maybe<TDqPhyPrecompute>().IsValid()) { 
+                auto precompute = expr.Cast<TDqPhyPrecompute>(); 
+                auto maybeConnection = precompute.Connection().Maybe<TDqCnValue>(); 
+ 
+                // Here we should catch only TDqPhyPrecompute(DqCnValue) 
+                if (!maybeConnection.IsValid()) { 
+                    return true; 
+                } 
+ 
+                if (connection && (connection != maybeConnection.Cast().Ptr())) { 
+                    dependsOnManyConnections = true; 
+                    return false; 
+                } 
+ 
+                connection = precompute.Ptr(); 
+                valueConnection = true; 
+                return false; 
+            } 
+ 
             if (expr.Maybe<TDqConnection>()) {
                 hasDirectConnection = true;
                 return false;
             }
-
+ 
             return true;
         });
 
@@ -709,40 +709,40 @@ TExprBase DqBuildAggregationResultStage(TExprBase node, TExprContext& ctx, IOpti
 
         const auto pos = listItem.Pos();
         auto newArg = ctx.NewArgument(pos, "result");
-        auto lambda = ctx.NewLambda(pos,
-            ctx.NewArguments(pos, {newArg}),
-            ctx.ReplaceNode(asStruct.Ptr(), *connection, std::move(newArg))
-        );
-        auto programArg = TCoArgument(ctx.NewArgument(pos, "stage_lambda_arg"));
-        TExprNode::TPtr mapInput;
+        auto lambda = ctx.NewLambda(pos, 
+            ctx.NewArguments(pos, {newArg}), 
+            ctx.ReplaceNode(asStruct.Ptr(), *connection, std::move(newArg)) 
+        ); 
+        auto programArg = TCoArgument(ctx.NewArgument(pos, "stage_lambda_arg")); 
+        TExprNode::TPtr mapInput; 
 
-        if (valueConnection) {
-            // DqCnValue send only one element, need to convert it to stream
-            mapInput = Build<TCoToStream>(ctx, pos)
-                .Input<TCoAsList>()
-                    .Add(programArg)
-                    .Build()
-                .Done().Ptr();
-        } else {
-            // Input came from UnionAll, thus need to gather all elements
-            mapInput = Build<TCoCondense>(ctx, pos)
-                .Input(programArg)
-                .State<TCoList>()
-                    .ListType(ExpandType(pos, *connection->GetTypeAnn(), ctx))
-                    .Build()
-                .SwitchHandler()
-                    .Args({"item", "stub"})
-                    .Body(MakeBool<false>(pos, ctx))
-                    .Build()
-                .UpdateHandler()
-                    .Args({"item", "stub"})
-                    .Body<TCoAsList>()
-                        .Add("item")
-                        .Build()
-                    .Build()
-                .Done().Ptr();
-        }
-
+        if (valueConnection) { 
+            // DqCnValue send only one element, need to convert it to stream 
+            mapInput = Build<TCoToStream>(ctx, pos) 
+                .Input<TCoAsList>() 
+                    .Add(programArg) 
+                    .Build() 
+                .Done().Ptr(); 
+        } else { 
+            // Input came from UnionAll, thus need to gather all elements 
+            mapInput = Build<TCoCondense>(ctx, pos) 
+                .Input(programArg) 
+                .State<TCoList>() 
+                    .ListType(ExpandType(pos, *connection->GetTypeAnn(), ctx)) 
+                    .Build() 
+                .SwitchHandler() 
+                    .Args({"item", "stub"}) 
+                    .Body(MakeBool<false>(pos, ctx)) 
+                    .Build() 
+                .UpdateHandler() 
+                    .Args({"item", "stub"}) 
+                    .Body<TCoAsList>() 
+                        .Add("item") 
+                        .Build() 
+                    .Build() 
+                .Done().Ptr(); 
+        } 
+ 
         auto resultConnection = Build<TDqCnUnionAll>(ctx, pos)
             .Output()
                 .Stage<TDqStage>()
@@ -750,9 +750,9 @@ TExprBase DqBuildAggregationResultStage(TExprBase node, TExprContext& ctx, IOpti
                         .Add(std::move(connection))
                         .Build()
                     .Program()
-                        .Args(programArg)
+                        .Args(programArg) 
                         .Body<TCoMap>()
-                            .Input(mapInput)
+                            .Input(mapInput) 
                             .Lambda(std::move(lambda))
                             .Build()
                         .Build()
@@ -1123,7 +1123,7 @@ TExprBase DqBuildTakeStage(TExprBase node, TExprContext& ctx, IOptimizationConte
     }
 
     auto result = dqUnion.Output().Stage().Program().Body();
-    auto stage = dqUnion.Output().Stage();
+    auto stage = dqUnion.Output().Stage(); 
 
     auto lambda = Build<TCoLambda>(ctx, take.Pos())
             .Args({"stream"})
@@ -1426,45 +1426,45 @@ TExprBase DqBuildExtendStage(TExprBase node, TExprContext& ctx) {
         .Done();
 }
 
-/*
- * Precompute input value in a separate stage.
- */
-TExprBase DqBuildPrecomputeStage(TExprBase node, TExprContext& ctx) {
-    if (!node.Maybe<TDqPrecompute>()) {
-        return node;
-    }
-
-    auto input = node.Cast<TDqPrecompute>().Input();
-
-    TExprNode::TPtr connection;
-    bool value = false;
-
-    if (input.Maybe<TDqCnUnionAll>()) {
-        connection = input.Ptr();
-    } else if (input.Maybe<TDqCnValue>()) {
-        connection = input.Ptr();
-        value = true;
-    } else if (IsDqPureExpr(input)) {
+/* 
+ * Precompute input value in a separate stage. 
+ */ 
+TExprBase DqBuildPrecomputeStage(TExprBase node, TExprContext& ctx) { 
+    if (!node.Maybe<TDqPrecompute>()) { 
+        return node; 
+    } 
+ 
+    auto input = node.Cast<TDqPrecompute>().Input(); 
+ 
+    TExprNode::TPtr connection; 
+    bool value = false; 
+ 
+    if (input.Maybe<TDqCnUnionAll>()) { 
+        connection = input.Ptr(); 
+    } else if (input.Maybe<TDqCnValue>()) { 
+        connection = input.Ptr(); 
+        value = true; 
+    } else if (IsDqPureExpr(input)) { 
         if (input.Ref().GetTypeAnn()->GetKind() != ETypeAnnotationKind::List &&
             input.Ref().GetTypeAnn()->GetKind() != ETypeAnnotationKind::Data)
         {
-            return node;
-        }
-
-        auto dataStage = Build<TDqStage>(ctx, node.Pos())
-            .Inputs()
-                .Build()
-            .Program()
-                .Args({})
+            return node; 
+        } 
+ 
+        auto dataStage = Build<TDqStage>(ctx, node.Pos()) 
+            .Inputs() 
+                .Build() 
+            .Program() 
+                .Args({}) 
                 .Body<TCoToStream>()
                     .Input<TCoJust>()
                         .Input(input)
                         .Build()
                     .Build()
-                .Build()
-            .Settings().Build()
-            .Done();
-
+                .Build() 
+            .Settings().Build() 
+            .Done(); 
+ 
         connection = Build<TDqCnValue>(ctx, node.Pos())
             .Output()
                 .Stage(dataStage)
@@ -1473,197 +1473,197 @@ TExprBase DqBuildPrecomputeStage(TExprBase node, TExprContext& ctx) {
             .Done().Ptr();
 
         value = true;
-    } else {
-        return node;
-    }
-
-    auto phyPrecompute = Build<TDqPhyPrecompute>(ctx, node.Pos())
-        .Connection(connection)
-        .Done();
-
-    if (value) {
-        return phyPrecompute;
-    }
-
-    auto precomputeStage = Build<TDqStage>(ctx, node.Pos())
-        .Inputs()
-            .Add(phyPrecompute)
-            .Build()
-        .Program()
+    } else { 
+        return node; 
+    } 
+ 
+    auto phyPrecompute = Build<TDqPhyPrecompute>(ctx, node.Pos()) 
+        .Connection(connection) 
+        .Done(); 
+ 
+    if (value) { 
+        return phyPrecompute; 
+    } 
+ 
+    auto precomputeStage = Build<TDqStage>(ctx, node.Pos()) 
+        .Inputs() 
+            .Add(phyPrecompute) 
+            .Build() 
+        .Program() 
             .Args({"zzz"})
             .Body<TCoIterator>()
                 .List("zzz")
                 .Build()
-            .Build()
-        .Settings().Build()
-        .Done();
-
-    return Build<TDqCnUnionAll>(ctx, node.Pos())
-        .Output()
-            .Stage(precomputeStage)
-            .Index().Build("0")
-            .Build()
-        .Done();
-}
-
+            .Build() 
+        .Settings().Build() 
+        .Done(); 
+ 
+    return Build<TDqCnUnionAll>(ctx, node.Pos()) 
+        .Output() 
+            .Stage(precomputeStage) 
+            .Index().Build("0") 
+            .Build() 
+        .Done(); 
+} 
+ 
 TExprBase DqBuildHasItems(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx) {
-    if (!node.Maybe<TCoHasItems>()) {
-        return node;
-    }
-
-    auto hasItems = node.Cast<TCoHasItems>();
-
-    if (!hasItems.List().Maybe<TDqCnUnionAll>()) {
-        return node;
-    }
-
-    auto unionAll = hasItems.List().Cast<TDqCnUnionAll>();
-
-    // Add LIMIT 1 via Take
-    auto takeProgram = Build<TCoLambda>(ctx, node.Pos())
-        .Args({"take_arg"})
-        // DqOutput expects stream as input, thus form stream with one element
-        .Body<TCoToStream>()
-            .Input<TCoTake>()
-                .Input({"take_arg"})
-                .Count<TCoUint64>()
-                    .Literal().Build("1")
-                    .Build()
-                .Build()
-            .Build()
-        .Done();
-
+    if (!node.Maybe<TCoHasItems>()) { 
+        return node; 
+    } 
+ 
+    auto hasItems = node.Cast<TCoHasItems>(); 
+ 
+    if (!hasItems.List().Maybe<TDqCnUnionAll>()) { 
+        return node; 
+    } 
+ 
+    auto unionAll = hasItems.List().Cast<TDqCnUnionAll>(); 
+ 
+    // Add LIMIT 1 via Take 
+    auto takeProgram = Build<TCoLambda>(ctx, node.Pos()) 
+        .Args({"take_arg"}) 
+        // DqOutput expects stream as input, thus form stream with one element 
+        .Body<TCoToStream>() 
+            .Input<TCoTake>() 
+                .Input({"take_arg"}) 
+                .Count<TCoUint64>() 
+                    .Literal().Build("1") 
+                    .Build() 
+                .Build() 
+            .Build() 
+        .Done(); 
+ 
     auto newUnion = DqPushLambdaToStageUnionAll(unionAll, takeProgram, {}, ctx, optCtx);
-
-    if (!newUnion.IsValid()) {
-        return node;
-    }
-
-    // Build stage simulating HasItems via Condense
-    auto hasItemsProgram = Build<TCoLambda>(ctx, node.Pos())
-        .Args({"has_items_arg"})
-        .Body<TCoCondense>()
-            .Input({"has_items_arg"})
-            .State<TCoBool>()
-                .Literal().Build("false")
-                .Build()
-            .SwitchHandler()
-                .Args({"item", "state"})
-                .Body<TCoBool>()
-                    .Literal().Build("false")
-                    .Build()
-                .Build()
-            .UpdateHandler()
-                .Args({"item", "state"})
-                .Body<TCoBool>()
-                    .Literal().Build("true")
-                    .Build()
-                .Build()
-            .Build()
-        .Done();
-
-    auto hasItemsStage = Build<TDqStage>(ctx, node.Pos())
-        .Inputs()
-            .Add(newUnion.Cast())
-            .Build()
-        .Program(hasItemsProgram)
-        .Settings().Build()
-        .Done();
-
-    auto precompute = Build<TDqPrecompute>(ctx, node.Pos())
-            .Input<TDqCnValue>()
-                .Output<TDqOutput>()
-                    .Stage(hasItemsStage)
-                    .Index().Build("0")
-                    .Build()
-                .Build()
-            .Done();
-
-    return precompute;
-}
-
+ 
+    if (!newUnion.IsValid()) { 
+        return node; 
+    } 
+ 
+    // Build stage simulating HasItems via Condense 
+    auto hasItemsProgram = Build<TCoLambda>(ctx, node.Pos()) 
+        .Args({"has_items_arg"}) 
+        .Body<TCoCondense>() 
+            .Input({"has_items_arg"}) 
+            .State<TCoBool>() 
+                .Literal().Build("false") 
+                .Build() 
+            .SwitchHandler() 
+                .Args({"item", "state"}) 
+                .Body<TCoBool>() 
+                    .Literal().Build("false") 
+                    .Build() 
+                .Build() 
+            .UpdateHandler() 
+                .Args({"item", "state"}) 
+                .Body<TCoBool>() 
+                    .Literal().Build("true") 
+                    .Build() 
+                .Build() 
+            .Build() 
+        .Done(); 
+ 
+    auto hasItemsStage = Build<TDqStage>(ctx, node.Pos()) 
+        .Inputs() 
+            .Add(newUnion.Cast()) 
+            .Build() 
+        .Program(hasItemsProgram) 
+        .Settings().Build() 
+        .Done(); 
+ 
+    auto precompute = Build<TDqPrecompute>(ctx, node.Pos()) 
+            .Input<TDqCnValue>() 
+                .Output<TDqOutput>() 
+                    .Stage(hasItemsStage) 
+                    .Index().Build("0") 
+                    .Build() 
+                .Build() 
+            .Done(); 
+ 
+    return precompute; 
+} 
+ 
 TExprBase DqBuildScalarPrecompute(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx) {
-    if (!node.Maybe<TCoToOptional>()) {
-        return node;
-    }
-
-    auto toOptional = node.Cast<TCoToOptional>();
-
-    if (!toOptional.List().Maybe<TDqCnUnionAll>()) {
-        return node;
-    }
-
-    auto unionAll = toOptional.List().Cast<TDqCnUnionAll>();
-
-    if (!unionAll.Output().Maybe<TDqOutput>()) {
-        return node;
-    }
-
-    auto output = unionAll.Output().Cast<TDqOutput>();
-
-    if (!output.Stage().Maybe<TDqStage>()) {
-        return node;
-    }
-
-    auto stage = output.Stage().Cast<TDqStage>();
-
-    YQL_ENSURE(stage.Program().Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Stream ||
-               stage.Program().Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow);
-
-    auto lambdaArg = Build<TCoArgument>(ctx, node.Pos())
-        .Name("scp_np_arg")
-        .Done();
-
-    /*
-     * Need to build ToOptional(..) but this callable can't be pushed inside stage, thus simulate it
-     * via Condense over Take(X, 1)
-     */
-    TExprNode::TPtr valueExtractor = Build<TCoCondense>(ctx, node.Pos())
-        .Input<TCoTake>()
-            .Input(lambdaArg)
-            .Count<TCoUint64>()
-                .Literal().Build("1")
-                .Build()
-            .Build()
-        .State<TCoNothing>()
-            .OptionalType(ExpandType(node.Pos(), *toOptional.Ptr()->GetTypeAnn(), ctx))
-            .Build()
-        .SwitchHandler()
-            .Args({"item", "state"})
-            .Body<TCoBool>()
-                .Literal().Build("false")
-                .Build()
-            .Build()
-        .UpdateHandler()
-            .Args({"item", "state"})
-            .Body<TCoJust>()
-                .Input("item")
-                .Build()
-            .Build()
-        .Done().Ptr();
-
-    auto newProgram = Build<TCoLambda>(ctx, node.Pos())
-        .Args({lambdaArg})
-        // DqOutput expects stream as input, thus form stream with one element
-        .Body<TCoToStream>()
-            .Input(valueExtractor)
-            .Build()
-        .Done();
-
+    if (!node.Maybe<TCoToOptional>()) { 
+        return node; 
+    } 
+ 
+    auto toOptional = node.Cast<TCoToOptional>(); 
+ 
+    if (!toOptional.List().Maybe<TDqCnUnionAll>()) { 
+        return node; 
+    } 
+ 
+    auto unionAll = toOptional.List().Cast<TDqCnUnionAll>(); 
+ 
+    if (!unionAll.Output().Maybe<TDqOutput>()) { 
+        return node; 
+    } 
+ 
+    auto output = unionAll.Output().Cast<TDqOutput>(); 
+ 
+    if (!output.Stage().Maybe<TDqStage>()) { 
+        return node; 
+    } 
+ 
+    auto stage = output.Stage().Cast<TDqStage>(); 
+ 
+    YQL_ENSURE(stage.Program().Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Stream || 
+               stage.Program().Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow); 
+ 
+    auto lambdaArg = Build<TCoArgument>(ctx, node.Pos()) 
+        .Name("scp_np_arg") 
+        .Done(); 
+ 
+    /* 
+     * Need to build ToOptional(..) but this callable can't be pushed inside stage, thus simulate it 
+     * via Condense over Take(X, 1) 
+     */ 
+    TExprNode::TPtr valueExtractor = Build<TCoCondense>(ctx, node.Pos()) 
+        .Input<TCoTake>() 
+            .Input(lambdaArg) 
+            .Count<TCoUint64>() 
+                .Literal().Build("1") 
+                .Build() 
+            .Build() 
+        .State<TCoNothing>() 
+            .OptionalType(ExpandType(node.Pos(), *toOptional.Ptr()->GetTypeAnn(), ctx)) 
+            .Build() 
+        .SwitchHandler() 
+            .Args({"item", "state"}) 
+            .Body<TCoBool>() 
+                .Literal().Build("false") 
+                .Build() 
+            .Build() 
+        .UpdateHandler() 
+            .Args({"item", "state"}) 
+            .Body<TCoJust>() 
+                .Input("item") 
+                .Build() 
+            .Build() 
+        .Done().Ptr(); 
+ 
+    auto newProgram = Build<TCoLambda>(ctx, node.Pos()) 
+        .Args({lambdaArg}) 
+        // DqOutput expects stream as input, thus form stream with one element 
+        .Body<TCoToStream>() 
+            .Input(valueExtractor) 
+            .Build() 
+        .Done(); 
+ 
     auto newUnion = DqPushLambdaToStageUnionAll(unionAll, newProgram, {}, ctx, optCtx);
-
-    if (!newUnion.IsValid()) {
-        return node;
-    }
-
-    // Change connection to DqCnValue in case optional returns one element and wrap to precompute
-    auto precompute = Build<TDqPrecompute>(ctx, node.Pos())
-        .Input<TDqCnValue>()
-            .Output(newUnion.Cast().Output())
-            .Build()
-        .Done();
-
-    return precompute;
-}
-
+ 
+    if (!newUnion.IsValid()) { 
+        return node; 
+    } 
+ 
+    // Change connection to DqCnValue in case optional returns one element and wrap to precompute 
+    auto precompute = Build<TDqPrecompute>(ctx, node.Pos()) 
+        .Input<TDqCnValue>() 
+            .Output(newUnion.Cast().Output()) 
+            .Build() 
+        .Done(); 
+ 
+    return precompute; 
+} 
+ 
 } // namespace NYql::NDq

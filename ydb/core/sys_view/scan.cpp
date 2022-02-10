@@ -21,11 +21,11 @@ THolder<IActor> CreateSystemViewScan(const TActorId& ownerId, ui32 scanId, const
     if (tableId.SysViewInfo == PartitionStatsName) {
         return CreatePartitionStatsScan(ownerId, scanId, tableId, tableRange, columns);
     }
-
+ 
     if (tableId.SysViewInfo == NodesName) {
         return CreateNodesScan(ownerId, scanId, tableId, tableRange, columns);
     }
-
+ 
     if (tableId.SysViewInfo == TopQueriesByDuration1MinuteName ||
         tableId.SysViewInfo == TopQueriesByDuration1HourName ||
         tableId.SysViewInfo == TopQueriesByReadBytes1MinuteName ||
@@ -41,15 +41,15 @@ THolder<IActor> CreateSystemViewScan(const TActorId& ownerId, ui32 scanId, const
     if (tableId.SysViewInfo == PDisksName) {
         return CreatePDisksScan(ownerId, scanId, tableId, tableRange, columns);
     }
-
+ 
     if (tableId.SysViewInfo == VSlotsName) {
         return CreateVSlotsScan(ownerId, scanId, tableId, tableRange, columns);
     }
-
+ 
     if (tableId.SysViewInfo == GroupsName) {
         return CreateGroupsScan(ownerId, scanId, tableId, tableRange, columns);
     }
-
+ 
     if (tableId.SysViewInfo == StoragePoolsName) {
         return CreateStoragePoolsScan(ownerId, scanId, tableId, tableRange, columns);
     }

@@ -12,36 +12,36 @@ using namespace NYql::NNodes;
 
 namespace {
 
-bool UseReadTableRanges(const TKikimrTableDescription& tableData, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx) {
-    /*
-     * OLAP tables can not work with ordinary ReadTable in case there is no support in physical
-     * optimizers for them.
-     */
-    if (tableData.Metadata->Kind == EKikimrTableKind::Olap) {
-        return true;
-    }
-
-    auto predicateExtractSetting = kqpCtx->Config->GetOptPredicateExtract();
-
-    if (predicateExtractSetting != EOptionalFlag::Auto) {
-        return predicateExtractSetting == EOptionalFlag::Enabled;
-    }
-
-    /*
-     * SysView tables can't work with ReadRanges, because they do not support multiple ranges.
-     * KIKIMR-12434
-     */
-    if (tableData.Metadata->Kind == EKikimrTableKind::SysView) {
-        return false;
-    }
-
+bool UseReadTableRanges(const TKikimrTableDescription& tableData, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx) { 
+    /* 
+     * OLAP tables can not work with ordinary ReadTable in case there is no support in physical 
+     * optimizers for them. 
+     */ 
+    if (tableData.Metadata->Kind == EKikimrTableKind::Olap) { 
+        return true; 
+    } 
+ 
+    auto predicateExtractSetting = kqpCtx->Config->GetOptPredicateExtract(); 
+ 
+    if (predicateExtractSetting != EOptionalFlag::Auto) { 
+        return predicateExtractSetting == EOptionalFlag::Enabled; 
+    } 
+ 
+    /* 
+     * SysView tables can't work with ReadRanges, because they do not support multiple ranges. 
+     * KIKIMR-12434 
+     */ 
+    if (tableData.Metadata->Kind == EKikimrTableKind::SysView) { 
+        return false; 
+    } 
+ 
     if (kqpCtx->IsScanQuery() && kqpCtx->Config->FeatureFlags.GetEnablePredicateExtractForScanQueries()) {
-        return true;
-    }
-
-    return false;
-}
-
+        return true; 
+    } 
+ 
+    return false; 
+} 
+ 
 bool HasIndexesToWrite(const TKikimrTableDescription& tableData) {
     bool hasIndexesToWrite = false;
     YQL_ENSURE(tableData.Metadata->Indexes.size() == tableData.Metadata->SecondaryGlobalIndexMetadata.size());
@@ -56,45 +56,45 @@ bool HasIndexesToWrite(const TKikimrTableDescription& tableData) {
 }
 
 TExprBase BuildReadTable(const TKiReadTable& read, const TKikimrTableDescription& tableData,
-    bool withSystemColumns, TExprContext& ctx, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx)
+    bool withSystemColumns, TExprContext& ctx, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx) 
 {
     bool unwrapValues = HasSetting(read.Settings().Ref(), "unwrap_values");
 
-    TExprNode::TPtr readTable;
-    const auto& columns = read.GetSelectColumns(ctx, tableData, withSystemColumns);
-    const auto& tableMeta = BuildTableMeta(tableData, read.Pos(), ctx);
+    TExprNode::TPtr readTable; 
+    const auto& columns = read.GetSelectColumns(ctx, tableData, withSystemColumns); 
+    const auto& tableMeta = BuildTableMeta(tableData, read.Pos(), ctx); 
+ 
+    if (UseReadTableRanges(tableData, kqpCtx)) { 
+        readTable = Build<TKqlReadTableRanges>(ctx, read.Pos()) 
+            .Table(tableMeta) 
+            .Ranges<TCoVoid>() 
+                .Build() 
+            .Columns(read.GetSelectColumns(ctx, tableData, withSystemColumns)) 
+            .Settings() 
+                .Build() 
+            .ExplainPrompt() 
+                .Build() 
+            .Done().Ptr(); 
+    } else { 
+        readTable = Build<TKqlReadTable>(ctx, read.Pos()) 
+            .Table(tableMeta) 
+            .Range() 
+                .From<TKqlKeyInc>() 
+                    .Build() 
+                .To<TKqlKeyInc>() 
+                    .Build() 
+                .Build()
+            .Columns(columns) 
+            .Settings() 
+                .Build()
+            .Done().Ptr(); 
+    } 
 
-    if (UseReadTableRanges(tableData, kqpCtx)) {
-        readTable = Build<TKqlReadTableRanges>(ctx, read.Pos())
-            .Table(tableMeta)
-            .Ranges<TCoVoid>()
-                .Build()
-            .Columns(read.GetSelectColumns(ctx, tableData, withSystemColumns))
-            .Settings()
-                .Build()
-            .ExplainPrompt()
-                .Build()
-            .Done().Ptr();
-    } else {
-        readTable = Build<TKqlReadTable>(ctx, read.Pos())
-            .Table(tableMeta)
-            .Range()
-                .From<TKqlKeyInc>()
-                    .Build()
-                .To<TKqlKeyInc>()
-                    .Build()
-                .Build()
-            .Columns(columns)
-            .Settings()
-                .Build()
-            .Done().Ptr();
-    }
-
-    auto readNode = TExprBase(readTable);
-
+    auto readNode = TExprBase(readTable); 
+ 
     return unwrapValues
-        ? UnwrapKiReadTableValues(readNode, tableData, columns, ctx)
-        : readNode;
+        ? UnwrapKiReadTableValues(readNode, tableData, columns, ctx) 
+        : readNode; 
 }
 
 TExprBase BuildReadTableIndex(const TKiReadTable& read, const TKikimrTableDescription& tableData,
@@ -523,7 +523,7 @@ TVector<TExprBase> BuildUpdateTableWithIndex(const TKiUpdateTable& update, const
 }
 
 TExprNode::TPtr HandleReadTable(const TKiReadTable& read, TExprContext& ctx, const TKikimrTablesData& tablesData,
-    bool withSystemColumns, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx)
+    bool withSystemColumns, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx) 
 {
     TKikimrKey key(ctx);
     YQL_ENSURE(key.Extract(read.TableKey().Ref()));
@@ -558,7 +558,7 @@ TExprNode::TPtr HandleReadTable(const TKiReadTable& read, TExprContext& ctx, con
         return BuildReadTableIndex(read, tableData, indexName, withSystemColumns, ctx).Ptr();
     }
 
-    return BuildReadTable(read, tableData, withSystemColumns, ctx, kqpCtx).Ptr();
+    return BuildReadTable(read, tableData, withSystemColumns, ctx, kqpCtx).Ptr(); 
 }
 
 TExprBase WriteTableSimple(const TKiWriteTable& write, const TCoAtomList& inputColumns,
@@ -664,7 +664,7 @@ TIntrusivePtr<TKikimrTableMetadata> GetIndexMetadata(const TKqlReadTableIndex& r
 }
 
 TMaybe<TKqlQuery> BuildKqlQuery(TKiDataQuery query, const TKikimrTablesData& tablesData, TExprContext& ctx,
-    bool withSystemColumns, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx)
+    bool withSystemColumns, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx) 
 {
     TVector<TExprBase> kqlEffects;
     for (const auto& effect : query.Effects()) {
@@ -707,12 +707,12 @@ TMaybe<TKqlQuery> BuildKqlQuery(TKiDataQuery query, const TKikimrTablesData& tab
     TOptimizeExprSettings optSettings(nullptr);
     optSettings.VisitChanges = true;
     auto status = OptimizeExpr(kqlQuery.Ptr(), optResult,
-        [&tablesData, withSystemColumns, &kqpCtx](const TExprNode::TPtr& input, TExprContext& ctx) {
+        [&tablesData, withSystemColumns, &kqpCtx](const TExprNode::TPtr& input, TExprContext& ctx) { 
             auto node = TExprBase(input);
             TExprNode::TPtr effect;
 
             if (auto maybeRead = node.Maybe<TCoRight>().Input().Maybe<TKiReadTable>()) {
-                return HandleReadTable(maybeRead.Cast(), ctx, tablesData, withSystemColumns, kqpCtx);
+                return HandleReadTable(maybeRead.Cast(), ctx, tablesData, withSystemColumns, kqpCtx); 
             }
 
             return input;

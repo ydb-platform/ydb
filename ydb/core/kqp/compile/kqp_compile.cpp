@@ -164,38 +164,38 @@ void FillReadRange(const TReader& read, const TKikimrTableMetadata& tableMeta, T
     readProto.SetReverse(settings.Reverse);
 }
 
-template <typename TReader, typename TProto>
-void FillReadRanges(const TReader& read, const TKikimrTableMetadata& tableMeta, TProto& readProto)
-{
-    Y_UNUSED(tableMeta);
-
-    auto ranges = read.Ranges().template Maybe<TCoParameter>();
-
-    if (ranges.IsValid()) {
-        auto& rangesParam = *readProto.MutableKeyRanges();
-        rangesParam.SetParamName(TString(ranges.Cast().Name()));
-    } else {
-        YQL_ENSURE(
-            TCoVoid::Match(read.Ranges().Raw()),
+template <typename TReader, typename TProto> 
+void FillReadRanges(const TReader& read, const TKikimrTableMetadata& tableMeta, TProto& readProto) 
+{ 
+    Y_UNUSED(tableMeta); 
+ 
+    auto ranges = read.Ranges().template Maybe<TCoParameter>(); 
+ 
+    if (ranges.IsValid()) { 
+        auto& rangesParam = *readProto.MutableKeyRanges(); 
+        rangesParam.SetParamName(TString(ranges.Cast().Name())); 
+    } else { 
+        YQL_ENSURE( 
+            TCoVoid::Match(read.Ranges().Raw()), 
             "Read ranges should be parameter or void, got: " << read.Ranges().Ptr()->Content()
-        );
-    }
-
-    auto settings = TKqpReadTableSettings::Parse(read);
-
-    if (settings.ItemsLimit) {
-        TExprBase expr(settings.ItemsLimit);
-
-        if (expr.template Maybe<TCoParameter>()) {
-            readProto.MutableItemsLimit()->SetParamName(TString(expr.template Cast<TCoParameter>().Name().Value()));
-        } else {
-            YQL_ENSURE(false, "Unexpected ItemsLimit callable " << expr.Ref().Content());
-        }
-    }
-
-    readProto.SetReverse(settings.Reverse);
-}
-
+        ); 
+    } 
+ 
+    auto settings = TKqpReadTableSettings::Parse(read); 
+ 
+    if (settings.ItemsLimit) { 
+        TExprBase expr(settings.ItemsLimit); 
+ 
+        if (expr.template Maybe<TCoParameter>()) { 
+            readProto.MutableItemsLimit()->SetParamName(TString(expr.template Cast<TCoParameter>().Name().Value())); 
+        } else { 
+            YQL_ENSURE(false, "Unexpected ItemsLimit callable " << expr.Ref().Content()); 
+        } 
+    } 
+ 
+    readProto.SetReverse(settings.Reverse); 
+} 
+ 
 template <typename TEffectCallable, typename TEffectProto>
 void FillEffectRows(const TEffectCallable& callable, TEffectProto& proto, bool inplace) {
     if (auto maybeList = callable.Input().template Maybe<TCoIterator>().List()) {
@@ -306,10 +306,10 @@ void FillLookup(const TKqpLookupTable& lookup, NKqpProto::TKqpPhyOpLookup& looku
     }
 }
 
-void FillOlapProgram(const TCoLambda& process, const TKikimrTableMetadata& tableMeta,
-    NKqpProto::TKqpPhyOpReadOlapRanges& readProto)
+void FillOlapProgram(const TCoLambda& process, const TKikimrTableMetadata& tableMeta, 
+    NKqpProto::TKqpPhyOpReadOlapRanges& readProto) 
 {
-    CompileOlapProgram(process, tableMeta, readProto);
+    CompileOlapProgram(process, tableMeta, readProto); 
 }
 
 void FillConnection(const TDqConnection& connection, const TMap<ui64, ui32>& stagesMap,
@@ -501,30 +501,30 @@ private:
                 auto& tableOp = *stageProto.AddTableOps();
                 FillTable(deleteRows.Table(), *tableOp.MutableTable());
                 FillEffectRows(deleteRows, *tableOp.MutableDeleteRows(), false);
-            } else if (auto maybeWideReadTableRanges = node.Maybe<TKqpWideReadTableRanges>()) {
-                auto readTableRanges = maybeWideReadTableRanges.Cast();
-                auto tableMeta = TablesData->ExistingTable(Cluster, readTableRanges.Table().Path()).Metadata;
-                YQL_ENSURE(tableMeta);
+            } else if (auto maybeWideReadTableRanges = node.Maybe<TKqpWideReadTableRanges>()) { 
+                auto readTableRanges = maybeWideReadTableRanges.Cast(); 
+                auto tableMeta = TablesData->ExistingTable(Cluster, readTableRanges.Table().Path()).Metadata; 
+                YQL_ENSURE(tableMeta); 
 
-                auto& tableOp = *stageProto.AddTableOps();
-                FillTable(readTableRanges.Table(), *tableOp.MutableTable());
-                FillColumns(readTableRanges.Columns(), *tableMeta, tableOp, true);
-                FillReadRanges(readTableRanges, *tableMeta, *tableOp.MutableReadRanges());
-            } else if (auto maybeReadWideTableRanges = node.Maybe<TKqpWideReadOlapTableRanges>()) {
-                auto readTableRanges = maybeReadWideTableRanges.Cast();
-                auto tableMeta = TablesData->ExistingTable(Cluster, readTableRanges.Table().Path()).Metadata;
-                YQL_ENSURE(tableMeta);
-
-                auto& tableOp = *stageProto.AddTableOps();
-                FillTable(readTableRanges.Table(), *tableOp.MutableTable());
-                FillColumns(readTableRanges.Columns(), *tableMeta, tableOp, true);
-                FillReadRanges(readTableRanges, *tableMeta, *tableOp.MutableReadOlapRange());
-                FillOlapProgram(readTableRanges.Process(), *tableMeta, *tableOp.MutableReadOlapRange());
-            } else if (node.Maybe<TCoSort>()) {
+                auto& tableOp = *stageProto.AddTableOps(); 
+                FillTable(readTableRanges.Table(), *tableOp.MutableTable()); 
+                FillColumns(readTableRanges.Columns(), *tableMeta, tableOp, true); 
+                FillReadRanges(readTableRanges, *tableMeta, *tableOp.MutableReadRanges()); 
+            } else if (auto maybeReadWideTableRanges = node.Maybe<TKqpWideReadOlapTableRanges>()) { 
+                auto readTableRanges = maybeReadWideTableRanges.Cast(); 
+                auto tableMeta = TablesData->ExistingTable(Cluster, readTableRanges.Table().Path()).Metadata; 
+                YQL_ENSURE(tableMeta); 
+ 
+                auto& tableOp = *stageProto.AddTableOps(); 
+                FillTable(readTableRanges.Table(), *tableOp.MutableTable()); 
+                FillColumns(readTableRanges.Columns(), *tableMeta, tableOp, true); 
+                FillReadRanges(readTableRanges, *tableMeta, *tableOp.MutableReadOlapRange()); 
+                FillOlapProgram(readTableRanges.Process(), *tableMeta, *tableOp.MutableReadOlapRange()); 
+            } else if (node.Maybe<TCoSort>()) { 
                 hasSort = true;
-            } else if (node.Maybe<TCoMapJoinCore>()) {
+            } else if (node.Maybe<TCoMapJoinCore>()) { 
                 hasMapJoin = true;
-            } else if (node.Maybe<TCoUdf>()) {
+            } else if (node.Maybe<TCoUdf>()) { 
                 hasUdf = true;
             } else {
                 YQL_ENSURE(!node.Maybe<TKqpReadTable>());

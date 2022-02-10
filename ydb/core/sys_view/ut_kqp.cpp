@@ -1525,119 +1525,119 @@ Y_UNIT_TEST_SUITE(SystemView) {
             std::move(desc), settings).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
-        std::vector<std::pair<TString, TString>> testData = {
-            {
+        std::vector<std::pair<TString, TString>> testData = { 
+            { 
                 "TabletId = 72075186224037888ul AND FollowerId > 1u",
-                R"([
-                    [[2u];[72075186224037888u]];
-                    [[3u];[72075186224037888u]];
-                ])"
-            },
-            {
+                R"([ 
+                    [[2u];[72075186224037888u]]; 
+                    [[3u];[72075186224037888u]]; 
+                ])" 
+            }, 
+            { 
                 "TabletId = 72075186224037888ul AND FollowerId >= 1u",
-                R"([
-                    [[1u];[72075186224037888u]];
-                    [[2u];[72075186224037888u]];
-                    [[3u];[72075186224037888u]];
-                ])"
-            },
-            {
+                R"([ 
+                    [[1u];[72075186224037888u]]; 
+                    [[2u];[72075186224037888u]]; 
+                    [[3u];[72075186224037888u]]; 
+                ])" 
+            }, 
+            { 
                 "TabletId = 72075186224037888ul AND FollowerId < 2u",
-                R"([
-                    [[0u];[72075186224037888u]];
-                    [[1u];[72075186224037888u]];
-                ])"
-            },
-            {
+                R"([ 
+                    [[0u];[72075186224037888u]]; 
+                    [[1u];[72075186224037888u]]; 
+                ])" 
+            }, 
+            { 
                 "TabletId = 72075186224037888ul AND FollowerId <= 2u",
-                R"([
-                    [[0u];[72075186224037888u]];
-                    [[1u];[72075186224037888u]];
-                    [[2u];[72075186224037888u]];
-                ])"
-            },
-            {
-                "TabletId > 72075186224037888ul AND TabletId < 72075186224037890ul",
-                R"([
-                    [[0u];[72075186224037889u]];
-                    [[1u];[72075186224037889u]];
-                    [[2u];[72075186224037889u]];
-                    [[3u];[72075186224037889u]];
-                ])"
-            }
-        };
-
-        TString enablePredicateExtractor = R"(
-            PRAGMA Kikimr.OptEnablePredicateExtract = "true";
-        )";
-
-        for (auto& data: testData) {
-            TString query = R"(
+                R"([ 
+                    [[0u];[72075186224037888u]]; 
+                    [[1u];[72075186224037888u]]; 
+                    [[2u];[72075186224037888u]]; 
+                ])" 
+            }, 
+            { 
+                "TabletId > 72075186224037888ul AND TabletId < 72075186224037890ul", 
+                R"([ 
+                    [[0u];[72075186224037889u]]; 
+                    [[1u];[72075186224037889u]]; 
+                    [[2u];[72075186224037889u]]; 
+                    [[3u];[72075186224037889u]]; 
+                ])" 
+            } 
+        }; 
+ 
+        TString enablePredicateExtractor = R"( 
+            PRAGMA Kikimr.OptEnablePredicateExtract = "true"; 
+        )"; 
+ 
+        for (auto& data: testData) { 
+            TString query = R"( 
                 SELECT FollowerId, TabletId
                 FROM `/Root/.sys/hive_tablets`
-                WHERE <PREDICATE>;
-            )";
-
-            SubstGlobal(query, "<PREDICATE>", data.first);
-
-            auto it = client.StreamExecuteScanQuery(enablePredicateExtractor + query).GetValueSync();
+                WHERE <PREDICATE>; 
+            )"; 
+ 
+            SubstGlobal(query, "<PREDICATE>", data.first); 
+ 
+            auto it = client.StreamExecuteScanQuery(enablePredicateExtractor + query).GetValueSync(); 
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-            auto streamed = NKqp::StreamResultToYson(it);
-
-            it = client.StreamExecuteScanQuery(query).GetValueSync();
+            auto streamed = NKqp::StreamResultToYson(it); 
+ 
+            it = client.StreamExecuteScanQuery(query).GetValueSync(); 
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-            auto expected = NKqp::StreamResultToYson(it);
-
-            // Compare two ways of execution
-            NKqp::CompareYson(expected, streamed);
-            // And check with expected result from test description
-            NKqp::CompareYson(data.second, streamed);
+            auto expected = NKqp::StreamResultToYson(it); 
+ 
+            // Compare two ways of execution 
+            NKqp::CompareYson(expected, streamed); 
+            // And check with expected result from test description 
+            NKqp::CompareYson(data.second, streamed); 
         }
     }
 
-    Y_UNIT_TEST(TabletsRangesPredicateExtractDisabled) {
-        TTestEnv env(1, 0);
-
-        TTableClient client(env.GetDriver());
-        auto session = client.CreateSession().GetValueSync().GetSession();
-
-        auto desc = TTableBuilder()
-            .AddNullableColumn("Column1", EPrimitiveType::Uint64)
-            .SetPrimaryKeyColumn("Column1")
-            .Build();
-
-        auto settings = TCreateTableSettings()
-            .ReplicationPolicy(TReplicationPolicy().ReplicasCount(3))
-            .PartitioningPolicy(TPartitioningPolicy().UniformPartitions(3));
-
-        auto result = session.CreateTable("/Root/Table0",
-            std::move(desc), settings).GetValueSync();
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-
-        TString query = R"(
+    Y_UNIT_TEST(TabletsRangesPredicateExtractDisabled) { 
+        TTestEnv env(1, 0); 
+ 
+        TTableClient client(env.GetDriver()); 
+        auto session = client.CreateSession().GetValueSync().GetSession(); 
+ 
+        auto desc = TTableBuilder() 
+            .AddNullableColumn("Column1", EPrimitiveType::Uint64) 
+            .SetPrimaryKeyColumn("Column1") 
+            .Build(); 
+ 
+        auto settings = TCreateTableSettings() 
+            .ReplicationPolicy(TReplicationPolicy().ReplicasCount(3)) 
+            .PartitioningPolicy(TPartitioningPolicy().UniformPartitions(3)); 
+ 
+        auto result = session.CreateTable("/Root/Table0", 
+            std::move(desc), settings).GetValueSync(); 
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString()); 
+ 
+        TString query = R"( 
             SELECT FollowerId, TabletId
-            FROM `/Root/.sys/hive_tablets`
-            WHERE TabletId <= 72075186224037888ul OR TabletId >= 72075186224037890ul;
-        )";
-
-        TString expected = R"([
-            [[0u];[72075186224037888u]];
-            [[1u];[72075186224037888u]];
-            [[2u];[72075186224037888u]];
-            [[3u];[72075186224037888u]];
-            [[0u];[72075186224037890u]];
-            [[1u];[72075186224037890u]];
-            [[2u];[72075186224037890u]];
-            [[3u];[72075186224037890u]];
-        ])";
-
-        auto it = client.StreamExecuteScanQuery(query).GetValueSync();
-        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-        // System view dows not support multiple ranges, thus here will be an error if
-        // predicate extraction occurs.
-        NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-    }
-
+            FROM `/Root/.sys/hive_tablets` 
+            WHERE TabletId <= 72075186224037888ul OR TabletId >= 72075186224037890ul; 
+        )"; 
+ 
+        TString expected = R"([ 
+            [[0u];[72075186224037888u]]; 
+            [[1u];[72075186224037888u]]; 
+            [[2u];[72075186224037888u]]; 
+            [[3u];[72075186224037888u]]; 
+            [[0u];[72075186224037890u]]; 
+            [[1u];[72075186224037890u]]; 
+            [[2u];[72075186224037890u]]; 
+            [[3u];[72075186224037890u]]; 
+        ])"; 
+ 
+        auto it = client.StreamExecuteScanQuery(query).GetValueSync(); 
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString()); 
+        // System view dows not support multiple ranges, thus here will be an error if 
+        // predicate extraction occurs. 
+        NKqp::CompareYson(expected, NKqp::StreamResultToYson(it)); 
+    } 
+ 
     void TestQueryType(
         std::function<void(const TTestEnv&, const TString&)> execQuery,
         const TString& type)

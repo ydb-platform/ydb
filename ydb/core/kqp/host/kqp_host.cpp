@@ -372,32 +372,32 @@ public:
         output = input;
 
         auto evaluateNode = FindNode(input, [](const TExprNode::TPtr& node) {
-            return node->IsCallable({"EvaluateIf!", "EvaluateFor!", "EvaluateAtom"});
+            return node->IsCallable({"EvaluateIf!", "EvaluateFor!", "EvaluateAtom"}); 
         });
 
-        if (!evaluateNode)
-            return TStatus::Ok;
+        if (!evaluateNode) 
+            return TStatus::Ok; 
 
-        TStringBuilder builder;
+        TStringBuilder builder; 
 
         if (evaluateNode->Content() == "EvaluateAtom"sv)
-            builder << "ATOM evaluation";
+            builder << "ATOM evaluation"; 
         else if (evaluateNode->Content() == "EvaluateIf!"sv)
-            builder << "EVALUATE IF";
-        else
-            builder << "EVALUATE";
-
-        builder << " is not supported in YDB queries.";
-
-        ctx.AddError(
-            YqlIssue(
-                ctx.GetPosition(evaluateNode->Pos()),
-                TIssuesIds::KIKIMR_UNSUPPORTED,
-                builder
-            )
-        );
-
-        return TStatus::Error;
+            builder << "EVALUATE IF"; 
+        else 
+            builder << "EVALUATE"; 
+ 
+        builder << " is not supported in YDB queries."; 
+ 
+        ctx.AddError( 
+            YqlIssue( 
+                ctx.GetPosition(evaluateNode->Pos()), 
+                TIssuesIds::KIKIMR_UNSUPPORTED, 
+                builder 
+            ) 
+        ); 
+ 
+        return TStatus::Error; 
     }
 };
 

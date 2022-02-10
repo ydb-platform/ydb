@@ -168,21 +168,21 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
         auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
         UNIT_ASSERT(stats.process_cpu_time_us() > 0);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 4);
-        ui32 phaseNo = 0;
-
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 4); 
+        ui32 phaseNo = 0; 
+ 
         uint64_t totalDurationUs = 0;
         uint64_t totalCpuTimeUs = 0;
 
         for (auto& phase : stats.query_phases()) {
-            if (phaseNo++ == 3) {
-                UNIT_ASSERT_VALUES_EQUAL(phase.table_access().size(), 0);
-                UNIT_ASSERT(phase.cpu_time_us() > 0);
-                UNIT_ASSERT(phase.affected_shards() == 0);
+            if (phaseNo++ == 3) { 
+                UNIT_ASSERT_VALUES_EQUAL(phase.table_access().size(), 0); 
+                UNIT_ASSERT(phase.cpu_time_us() > 0); 
+                UNIT_ASSERT(phase.affected_shards() == 0); 
                 totalDurationUs += phase.duration_us();
                 totalCpuTimeUs += phase.cpu_time_us();
-                continue;
-            }
+                continue; 
+            } 
             UNIT_ASSERT_VALUES_EQUAL(phase.table_access().size(), 1);
             UNIT_ASSERT(phase.table_access(0).partitions_count() > 0);
             UNIT_ASSERT(phase.table_access(0).reads().rows() > 0);
@@ -444,21 +444,21 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
         CompareYson(R"([[[8u]]])", StreamResultToYson(it));
     }
 
-    Y_UNIT_TEST(StreamExecuteYqlScriptScanScalar) {
-        TKikimrRunner kikimr;
-        TScriptingClient client(kikimr.GetDriver());
-        auto it = client.StreamExecuteYqlScript(R"(
-            PRAGMA kikimr.ScanQuery = "true";
-            $key1 = (SELECT Fk21 FROM `/Root/Join1` WHERE Key = 1);
-            $key2 = (SELECT Fk21 FROM `/Root/Join1` WHERE Key = 2);
-            $limit = (SELECT Key FROM `/Root/Join1` WHERE Fk21 = 105);
-
-            SELECT Data FROM [/Root/EightShard] WHERE Key = $key1 OR Key = $key2 LIMIT COALESCE($limit, 1u);
-        )").GetValueSync();
-        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+    Y_UNIT_TEST(StreamExecuteYqlScriptScanScalar) { 
+        TKikimrRunner kikimr; 
+        TScriptingClient client(kikimr.GetDriver()); 
+        auto it = client.StreamExecuteYqlScript(R"( 
+            PRAGMA kikimr.ScanQuery = "true"; 
+            $key1 = (SELECT Fk21 FROM `/Root/Join1` WHERE Key = 1); 
+            $key2 = (SELECT Fk21 FROM `/Root/Join1` WHERE Key = 2); 
+            $limit = (SELECT Key FROM `/Root/Join1` WHERE Fk21 = 105); 
+ 
+            SELECT Data FROM [/Root/EightShard] WHERE Key = $key1 OR Key = $key2 LIMIT COALESCE($limit, 1u); 
+        )").GetValueSync(); 
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString()); 
         CompareYson(R"([[[[1]];[[3]]]])", StreamResultToYson(it));
-    }
-
+    } 
+ 
     Y_UNIT_TEST(StreamExecuteYqlScriptData) {
         TKikimrRunner kikimr;
         TScriptingClient client(kikimr.GetDriver());

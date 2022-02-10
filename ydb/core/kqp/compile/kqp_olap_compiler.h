@@ -8,8 +8,8 @@
 namespace NKikimr {
 namespace NKqp {
 
-void CompileOlapProgram(const NYql::NNodes::TCoLambda& lambda, const NYql::TKikimrTableMetadata& tableMeta,
-    NKqpProto::TKqpPhyOpReadOlapRanges& readProto);
+void CompileOlapProgram(const NYql::NNodes::TCoLambda& lambda, const NYql::TKikimrTableMetadata& tableMeta, 
+    NKqpProto::TKqpPhyOpReadOlapRanges& readProto); 
 
 } // namespace NKqp
 } // namespace NKikimr

@@ -557,9 +557,9 @@ void FetchRow(const TDbTupleRef& dbTuple, TUnboxedValue& row, TComputationContex
     return FetchRowImpl(dbTuple, row, ctx, tableStats, computeCtx, systemColumnTags);
 }
 
-IComputationNode* WrapKqpWideReadTableRanges(TCallable& callable, const TComputationNodeFactoryContext& ctx,
-    TKqpDatashardComputeContext& computeCtx)
-{
+IComputationNode* WrapKqpWideReadTableRanges(TCallable& callable, const TComputationNodeFactoryContext& ctx, 
+    TKqpDatashardComputeContext& computeCtx) 
+{ 
     auto parseResult = ParseWideReadTableRanges(callable);
     auto rangesNode = LocateNode(ctx.NodeLocator, *parseResult.Ranges);
 
@@ -580,8 +580,8 @@ IComputationNode* WrapKqpWideReadTableRanges(TCallable& callable, const TComputa
     }
 
     return new TKqpWideReadTableRangesWrapper<false>(computeCtx, ctx.Env, parseResult, rangesNode, itemsLimit);
-}
-
+} 
+ 
 IComputationNode* WrapKqpWideReadTable(TCallable& callable, const TComputationNodeFactoryContext& ctx,
     TKqpDatashardComputeContext& computeCtx)
 {

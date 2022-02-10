@@ -62,10 +62,10 @@ void BuildKqpExecuterResults(const NKqpProto::TKqpPhyTx& tx, TVector<TKqpExecute
 void PrepareKqpTaskParameters(const NKqpProto::TKqpPhyStage& stage, const TStageInfo& stageInfo, const TTask& task,
     NYql::NDqProto::TDqTask& dqTask, const NMiniKQL::TTypeEnvironment& typeEnv, const NMiniKQL::THolderFactory& holderFactory);
 
-std::pair<TString, TString> SerializeKqpTasksParametersForOlap(const NKqpProto::TKqpPhyStage& stage,
-    const TStageInfo& stageInfo, const TTask& task, const NMiniKQL::THolderFactory& holderFactory,
-    const NMiniKQL::TTypeEnvironment& typeEnv);
-
+std::pair<TString, TString> SerializeKqpTasksParametersForOlap(const NKqpProto::TKqpPhyStage& stage, 
+    const TStageInfo& stageInfo, const TTask& task, const NMiniKQL::THolderFactory& holderFactory, 
+    const NMiniKQL::TTypeEnvironment& typeEnv); 
+ 
 inline bool IsDebugLogEnabled() {
     return TlsActivationContext->LoggerSettings() &&
            TlsActivationContext->LoggerSettings()->Satisfies(NActors::NLog::PRI_DEBUG, NKikimrServices::KQP_EXECUTER);
@@ -318,34 +318,34 @@ protected:
             Y_VERIFY_DEBUG(stageInfo.Meta.TablePath == op.GetTable().GetPath());
 
             auto& task = TasksGraph.AddTask(stageInfo);
-            TShardKeyRanges keyRanges;
+            TShardKeyRanges keyRanges; 
 
-            switch (op.GetTypeCase()) {
-                case NKqpProto::TKqpPhyTableOperation::kReadRange:
-                    stageInfo.Meta.SkipNullKeys.assign(
-                        op.GetReadRange().GetSkipNullKeys().begin(),
-                        op.GetReadRange().GetSkipNullKeys().end()
-                    );
-                    keyRanges.Add(MakeKeyRange(
-                        keyTypes, op.GetReadRange().GetKeyRange(),
-                        stageInfo, holderFactory, typeEnv)
-                    );
-                    break;
-                case NKqpProto::TKqpPhyTableOperation::kReadRanges:
-                    keyRanges.CopyFrom(FillReadRanges(keyTypes, op.GetReadRanges(), stageInfo, holderFactory, typeEnv));
-                    break;
-                default:
-                    YQL_ENSURE(false, "Unexpected table scan operation: " << (ui32) op.GetTypeCase());
-            }
+            switch (op.GetTypeCase()) { 
+                case NKqpProto::TKqpPhyTableOperation::kReadRange: 
+                    stageInfo.Meta.SkipNullKeys.assign( 
+                        op.GetReadRange().GetSkipNullKeys().begin(), 
+                        op.GetReadRange().GetSkipNullKeys().end() 
+                    ); 
+                    keyRanges.Add(MakeKeyRange( 
+                        keyTypes, op.GetReadRange().GetKeyRange(), 
+                        stageInfo, holderFactory, typeEnv) 
+                    ); 
+                    break; 
+                case NKqpProto::TKqpPhyTableOperation::kReadRanges: 
+                    keyRanges.CopyFrom(FillReadRanges(keyTypes, op.GetReadRanges(), stageInfo, holderFactory, typeEnv)); 
+                    break; 
+                default: 
+                    YQL_ENSURE(false, "Unexpected table scan operation: " << (ui32) op.GetTypeCase()); 
+            } 
 
-            TTaskMeta::TShardReadInfo readInfo = {
-                .Ranges = std::move(keyRanges),
-                .Columns = BuildKqpColumns(op, table),
-            };
+            TTaskMeta::TShardReadInfo readInfo = { 
+                .Ranges = std::move(keyRanges), 
+                .Columns = BuildKqpColumns(op, table), 
+            }; 
 
             task.Meta.Reads.ConstructInPlace();
             task.Meta.Reads->emplace_back(std::move(readInfo));
-            task.Meta.ReadInfo.Reverse = op.GetReadRange().GetReverse();
+            task.Meta.ReadInfo.Reverse = op.GetReadRange().GetReverse(); 
 
             LOG_D("Stage " << stageInfo.Id << " create sysview scan task: " << task.Id);
         }
@@ -450,26 +450,26 @@ protected:
 
     void ExtractItemsLimit(const TStageInfo& stageInfo, const NKqpProto::TKqpPhyParamValue& paramValue,
         const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv,
-        ui64& itemsLimit, TString& itemsLimitParamName, NYql::NDqProto::TData& itemsLimitBytes,
-        NKikimr::NMiniKQL::TType*& itemsLimitType)
+        ui64& itemsLimit, TString& itemsLimitParamName, NYql::NDqProto::TData& itemsLimitBytes, 
+        NKikimr::NMiniKQL::TType*& itemsLimitType) 
     {
         itemsLimitParamName = paramValue.GetParamName();
 
-        if (!itemsLimitParamName) {
-            return;
-        }
+        if (!itemsLimitParamName) { 
+            return; 
+        } 
 
-        auto* itemsLimitParam = stageInfo.Meta.Tx.Params.Values.FindPtr(itemsLimitParamName);
-        YQL_ENSURE(itemsLimitParam);
+        auto* itemsLimitParam = stageInfo.Meta.Tx.Params.Values.FindPtr(itemsLimitParamName); 
+        YQL_ENSURE(itemsLimitParam); 
 
         auto [type, value] = NMiniKQL::ImportValueFromProto(itemsLimitParam->GetType(), itemsLimitParam->GetValue(), typeEnv, holderFactory);
-
-        YQL_ENSURE(type->GetKind() == NMiniKQL::TType::EKind::Data);
-        itemsLimit = value.Get<ui64>();
-
-        NYql::NDq::TDqDataSerializer dataSerializer(typeEnv, holderFactory, NYql::NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0);
-        itemsLimitBytes = dataSerializer.Serialize(value, type);
-        itemsLimitType = type;
+ 
+        YQL_ENSURE(type->GetKind() == NMiniKQL::TType::EKind::Data); 
+        itemsLimit = value.Get<ui64>(); 
+ 
+        NYql::NDq::TDqDataSerializer dataSerializer(typeEnv, holderFactory, NYql::NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0); 
+        itemsLimitBytes = dataSerializer.Serialize(value, type); 
+        itemsLimitType = type; 
     }
 
 protected:

@@ -52,58 +52,58 @@ void PrepareKqpTaskParameters(const NKqpProto::TKqpPhyStage& stage, const TStage
     }
 }
 
-std::pair<TString, TString> SerializeKqpTasksParametersForOlap(const NKqpProto::TKqpPhyStage& stage,
-    const TStageInfo& stageInfo, const TTask& task, const NMiniKQL::THolderFactory& holderFactory,
-    const NMiniKQL::TTypeEnvironment& typeEnv)
-{
-    std::vector<std::shared_ptr<arrow::Field>> columns;
-    std::vector<std::shared_ptr<arrow::Array>> data;
-    auto& parameterNames = task.Meta.ReadInfo.OlapProgram.ParameterNames;
-
-    columns.reserve(parameterNames.size());
-    data.reserve(parameterNames.size());
-
-    for (auto& name : stage.GetProgramParameters()) {
-        if (!parameterNames.contains(name)) {
-            continue;
-        }
-
-        if (auto* taskParam = task.Meta.Params.FindPtr(name)) {
-            // This parameter is the list, holding type from task.Meta.ParamTypes
-            // Those parameters can't be used in Olap programs now
-            YQL_ENSURE(false, "OLAP program contains task parameter, not supported yet.");
-            continue;
-        }
-
-        const NYql::NDq::TMkqlValueRef* mkqlValue = stageInfo.Meta.Tx.Params.Values.FindPtr(name);
-
+std::pair<TString, TString> SerializeKqpTasksParametersForOlap(const NKqpProto::TKqpPhyStage& stage, 
+    const TStageInfo& stageInfo, const TTask& task, const NMiniKQL::THolderFactory& holderFactory, 
+    const NMiniKQL::TTypeEnvironment& typeEnv) 
+{ 
+    std::vector<std::shared_ptr<arrow::Field>> columns; 
+    std::vector<std::shared_ptr<arrow::Array>> data; 
+    auto& parameterNames = task.Meta.ReadInfo.OlapProgram.ParameterNames; 
+ 
+    columns.reserve(parameterNames.size()); 
+    data.reserve(parameterNames.size()); 
+ 
+    for (auto& name : stage.GetProgramParameters()) { 
+        if (!parameterNames.contains(name)) { 
+            continue; 
+        } 
+ 
+        if (auto* taskParam = task.Meta.Params.FindPtr(name)) { 
+            // This parameter is the list, holding type from task.Meta.ParamTypes 
+            // Those parameters can't be used in Olap programs now 
+            YQL_ENSURE(false, "OLAP program contains task parameter, not supported yet."); 
+            continue; 
+        } 
+ 
+        const NYql::NDq::TMkqlValueRef* mkqlValue = stageInfo.Meta.Tx.Params.Values.FindPtr(name); 
+ 
         auto [type, value] = ImportValueFromProto(mkqlValue->GetType(), mkqlValue->GetValue(), typeEnv, holderFactory);
-
-        YQL_ENSURE(NYql::NArrow::IsArrowCompatible(type), "Incompatible parameter type. Can't convert to arrow");
-
-        std::unique_ptr<arrow::ArrayBuilder> builder = NYql::NArrow::MakeArrowBuilder(type);
-        NYql::NArrow::AppendElement(value, builder.get(), type);
-
-        std::shared_ptr<arrow::Array> array;
-        auto status = builder->Finish(&array);
-
-        YQL_ENSURE(status.ok(), "Failed to build arrow array of variables.");
-
-        auto field = std::make_shared<arrow::Field>(name, array->type());
-
-        columns.emplace_back(std::move(field));
-        data.emplace_back(std::move(array));
-    }
-
-    auto schema = std::make_shared<arrow::Schema>(columns);
-    auto recordBatch = arrow::RecordBatch::Make(schema, 1, data);
-
-    return std::make_pair<TString, TString>(
-        NArrow::SerializeSchema(*schema),
-        NArrow::SerializeBatchNoCompression(recordBatch)
-    );
-}
-
+ 
+        YQL_ENSURE(NYql::NArrow::IsArrowCompatible(type), "Incompatible parameter type. Can't convert to arrow"); 
+ 
+        std::unique_ptr<arrow::ArrayBuilder> builder = NYql::NArrow::MakeArrowBuilder(type); 
+        NYql::NArrow::AppendElement(value, builder.get(), type); 
+ 
+        std::shared_ptr<arrow::Array> array; 
+        auto status = builder->Finish(&array); 
+ 
+        YQL_ENSURE(status.ok(), "Failed to build arrow array of variables."); 
+ 
+        auto field = std::make_shared<arrow::Field>(name, array->type()); 
+ 
+        columns.emplace_back(std::move(field)); 
+        data.emplace_back(std::move(array)); 
+    } 
+ 
+    auto schema = std::make_shared<arrow::Schema>(columns); 
+    auto recordBatch = arrow::RecordBatch::Make(schema, 1, data); 
+ 
+    return std::make_pair<TString, TString>( 
+        NArrow::SerializeSchema(*schema), 
+        NArrow::SerializeBatchNoCompression(recordBatch) 
+    ); 
+} 
+ 
 TActorId ReportToRl(ui64 ru, const TString& database, const TString& userToken,
     const NKikimrKqp::TRlPath& path)
 {

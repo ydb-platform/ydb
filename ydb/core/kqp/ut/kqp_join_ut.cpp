@@ -83,8 +83,8 @@ static void CreateSampleTables(TSession session) {
             (105, "One",   "Name2", "Value27"),
             (105, "Two",   "Name4", "Value28"),
             (106, "One",   "Name3", "Value29"),
-            (108, "One",    NULL,   "Value31"),
-            (109, "Four",   NULL,   "Value41");
+            (108, "One",    NULL,   "Value31"), 
+            (109, "Four",   NULL,   "Value41"); 
 
         REPLACE INTO `/Root/Join1_3` (Key, Value) VALUES
             ("Name1", 1001),
@@ -833,47 +833,47 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         CompareYson(R"([[["Value5"];["Value31"];[108]]])",
             FormatResultSetYson(result.GetResultSet(0)));
     }
-
-    Y_UNIT_TEST_NEW_ENGINE(ExclusionJoin) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-        CreateSampleTables(session);
-
+ 
+    Y_UNIT_TEST_NEW_ENGINE(ExclusionJoin) { 
+        TKikimrRunner kikimr; 
+        auto db = kikimr.GetTableClient(); 
+        auto session = db.CreateSession().GetValueSync().GetSession(); 
+        CreateSampleTables(session); 
+ 
         auto result = session.ExecuteDataQuery(Q_(R"(
-            SELECT left.Fk21, left.Key, left.Value, right.Key1, right.Value
-            FROM `/Root/Join1_1` as left
-            EXCLUSION JOIN `/Root/Join1_2` as right
-            ON left.Fk21 = right.Key1
+            SELECT left.Fk21, left.Key, left.Value, right.Key1, right.Value 
+            FROM `/Root/Join1_1` as left 
+            EXCLUSION JOIN `/Root/Join1_2` as right 
+            ON left.Fk21 = right.Key1 
         )"), TTxControl::BeginTx().CommitTx()).GetValueSync();
-
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        CompareYson(
-            R"([[
-                [107];[7];["Value4"];#;#];
-                [#;#;#;[109];["Value41"]
-            ]])",
+ 
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString()); 
+        CompareYson( 
+            R"([[ 
+                [107];[7];["Value4"];#;#]; 
+                [#;#;#;[109];["Value41"] 
+            ]])", 
             FormatResultSetYson(result.GetResultSet(0))
-        );
-    }
-
-    Y_UNIT_TEST_NEW_ENGINE(FullOuterJoin) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-        CreateSampleTables(session);
-
+        ); 
+    } 
+ 
+    Y_UNIT_TEST_NEW_ENGINE(FullOuterJoin) { 
+        TKikimrRunner kikimr; 
+        auto db = kikimr.GetTableClient(); 
+        auto session = db.CreateSession().GetValueSync().GetSession(); 
+        CreateSampleTables(session); 
+ 
         auto result = session.ExecuteDataQuery(Q_(R"(
-            SELECT left.Fk21, left.Key, left.Value, right.Key1, right.Value
-            FROM `/Root/Join1_1` as left
-            FULL OUTER JOIN `/Root/Join1_2` as right
-            ON left.Fk21 = right.Key1
+            SELECT left.Fk21, left.Key, left.Value, right.Key1, right.Value 
+            FROM `/Root/Join1_1` as left 
+            FULL OUTER JOIN `/Root/Join1_2` as right 
+            ON left.Fk21 = right.Key1 
             ORDER BY left.Fk21, left.Key, left.Value, right.Key1, right.Value
         )"), TTxControl::BeginTx().CommitTx()).GetValueSync();
-
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        CompareYson(
-            R"([
+ 
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString()); 
+        CompareYson( 
+            R"([ 
                 [#;#;#;[109];["Value41"]];
                 [[101];[1];["Value1"];[101];["Value21"]];
                 [[101];[1];["Value1"];[101];["Value22"]];
@@ -881,15 +881,15 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                 [[102];[2];["Value1"];[102];["Value24"]];
                 [[103];[3];["Value2"];[103];["Value25"]];
                 [[104];[4];["Value2"];[104];["Value26"]];
-                [[105];[5];["Value3"];[105];["Value27"]];
-                [[105];[5];["Value3"];[105];["Value28"]];
+                [[105];[5];["Value3"];[105];["Value27"]]; 
+                [[105];[5];["Value3"];[105];["Value28"]]; 
                 [[106];[6];["Value3"];[106];["Value29"]];
-                [[107];[7];["Value4"];#;#];
+                [[107];[7];["Value4"];#;#]; 
                 [[108];[8];["Value5"];[108];["Value31"]]
-            ])",
+            ])", 
             FormatResultSetYson(result.GetResultSet(0))
-        );
-    }
+        ); 
+    } 
 
     Y_UNIT_TEST_NEW_ENGINE(FullOuterJoin2) {
         TKikimrRunner kikimr;

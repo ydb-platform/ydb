@@ -392,11 +392,11 @@ enum EColumnTableEngine {
     COLUMN_ENGINE_REPLACING_TIMESERIES = 1;
 }
 
-enum EOlapProgramType {
-    OLAP_PROGRAM_SSA_PROGRAM = 1;
-    OLAP_PROGRAM_SSA_PROGRAM_WITH_PARAMETERS = 2;
-}
-
+enum EOlapProgramType { 
+    OLAP_PROGRAM_SSA_PROGRAM = 1; 
+    OLAP_PROGRAM_SSA_PROGRAM_WITH_PARAMETERS = 2; 
+} 
+ 
 message TStorageTierConfig {
     optional string Name = 1;
     optional TS3Settings ObjectStorage = 2;

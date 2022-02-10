@@ -92,8 +92,8 @@ void FetchRow(const TDbTupleRef& dbTuple, NYql::NUdf::TUnboxedValue& row, TCompu
     TKqpTableStats& tableStats, const TKqpDatashardComputeContext& computeCtx,
     const TSmallVec<NTable::TTag>& systemColumnTags);
 
-IComputationNode* WrapKqpWideReadTableRanges(TCallable& callable, const TComputationNodeFactoryContext& ctx,
-    TKqpDatashardComputeContext& computeCtx);
+IComputationNode* WrapKqpWideReadTableRanges(TCallable& callable, const TComputationNodeFactoryContext& ctx, 
+    TKqpDatashardComputeContext& computeCtx); 
 IComputationNode* WrapKqpLookupTable(TCallable& callable, const TComputationNodeFactoryContext& ctx,
     TKqpDatashardComputeContext& computeCtx);
 IComputationNode* WrapKqpUpsertRows(TCallable& callable, const TComputationNodeFactoryContext& ctx,

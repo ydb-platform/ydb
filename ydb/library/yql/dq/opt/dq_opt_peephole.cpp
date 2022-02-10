@@ -12,60 +12,60 @@ namespace NYql::NDq {
 
 using namespace NYql::NNodes;
 
-namespace {
-
+namespace { 
+ 
 inline std::string_view GetTableLabel(const TExprBase& node) {
     static const std::string_view empty;
-
-    if (node.Maybe<TCoAtom>()) {
-        return node.Cast<TCoAtom>().Value();
-    }
-
-    return empty;
-}
-
+ 
+    if (node.Maybe<TCoAtom>()) { 
+        return node.Cast<TCoAtom>().Value(); 
+    } 
+ 
+    return empty; 
+} 
+ 
 inline TString GetColumnName(std::string_view label, const TItemExprType *key) {
     if (!label.empty()) {
-        return FullColumnName(label, key->GetName());
-    }
-
-    return ToString(key->GetName());
-}
-
-std::pair<TExprNode::TListType, TExprNode::TListType> JoinKeysToAtoms(TExprContext& ctx, const TDqJoinBase& join,
+        return FullColumnName(label, key->GetName()); 
+    } 
+ 
+    return ToString(key->GetName()); 
+} 
+ 
+std::pair<TExprNode::TListType, TExprNode::TListType> JoinKeysToAtoms(TExprContext& ctx, const TDqJoinBase& join, 
     std::string_view leftTableLabel, std::string_view rightTableLabel)
-{
-    TExprNode::TListType leftNodes;
-    TExprNode::TListType rightNodes;
-
-    for (const auto& joinOn : join.JoinKeys()) {
-        TExprNode::TPtr leftValue, rightValue;
-
-        if (leftTableLabel.empty()) {
-            leftValue = ctx.NewAtom(
-                join.Pos(),
-                FullColumnName(joinOn.LeftLabel().Value(), joinOn.LeftColumn().Value())
-            );
-        } else {
-            leftValue = joinOn.LeftColumn().Ptr();
-        }
-
-        if (rightTableLabel.empty()) {
-            rightValue = ctx.NewAtom(
-                join.Pos(),
-                FullColumnName(joinOn.RightLabel().Value(), joinOn.RightColumn().Value())
-            );
-        } else {
-            rightValue = joinOn.RightColumn().Ptr();
-        }
-
-        leftNodes.emplace_back(leftValue);
-        rightNodes.emplace_back(rightValue);
-    }
-
+{ 
+    TExprNode::TListType leftNodes; 
+    TExprNode::TListType rightNodes; 
+ 
+    for (const auto& joinOn : join.JoinKeys()) { 
+        TExprNode::TPtr leftValue, rightValue; 
+ 
+        if (leftTableLabel.empty()) { 
+            leftValue = ctx.NewAtom( 
+                join.Pos(), 
+                FullColumnName(joinOn.LeftLabel().Value(), joinOn.LeftColumn().Value()) 
+            ); 
+        } else { 
+            leftValue = joinOn.LeftColumn().Ptr(); 
+        } 
+ 
+        if (rightTableLabel.empty()) { 
+            rightValue = ctx.NewAtom( 
+                join.Pos(), 
+                FullColumnName(joinOn.RightLabel().Value(), joinOn.RightColumn().Value()) 
+            ); 
+        } else { 
+            rightValue = joinOn.RightColumn().Ptr(); 
+        } 
+ 
+        leftNodes.emplace_back(leftValue); 
+        rightNodes.emplace_back(rightValue); 
+    } 
+ 
     return {std::move(leftNodes), std::move(rightNodes)};
-}
-
+} 
+ 
 TExprNode::TPtr BuildDictKeySelector(TExprContext& ctx, TPositionHandle pos, const TExprNode::TListType& keyAtoms,
     const TTypeAnnotationNode::TListType& keyDryTypes, bool optional)
 {
@@ -120,8 +120,8 @@ TExprNode::TPtr BuildDictKeySelector(TExprContext& ctx, TPositionHandle pos, con
             .Done().Ptr();
 }
 
-} // anonymous namespace end
-
+} // anonymous namespace end 
+ 
 /**
  * Rewrites a `KqpMapJoin` to the `MapJoinCore`.
  *
@@ -141,7 +141,7 @@ TExprBase DqPeepholeRewriteMapJoin(const TExprBase& node, TExprContext& ctx) {
     const auto leftTableLabel = GetTableLabel(mapJoin.LeftLabel());
     const auto rightTableLabel = GetTableLabel(mapJoin.RightLabel());
 
-    auto [leftKeyColumnNodes, rightKeyColumnNodes] = JoinKeysToAtoms(ctx, mapJoin, leftTableLabel, rightTableLabel);
+    auto [leftKeyColumnNodes, rightKeyColumnNodes] = JoinKeysToAtoms(ctx, mapJoin, leftTableLabel, rightTableLabel); 
     const auto keyWidth = leftKeyColumnNodes.size();
 
     const auto makeRenames = [&ctx, pos](TStringBuf label, const TStructExprType& type) {
@@ -244,8 +244,8 @@ TExprBase DqPeepholeRewriteCrossJoin(const TExprBase& node, TExprContext& ctx) {
     }
     auto crossJoin = node.Cast<TDqPhyCrossJoin>();
 
-    auto leftTableLabel = GetTableLabel(crossJoin.LeftLabel());
-    auto rightTableLabel = GetTableLabel(crossJoin.RightLabel());
+    auto leftTableLabel = GetTableLabel(crossJoin.LeftLabel()); 
+    auto rightTableLabel = GetTableLabel(crossJoin.RightLabel()); 
 
     TCoArgument leftArg{ctx.NewArgument(crossJoin.Pos(), "_kqp_left")};
     TCoArgument rightArg{ctx.NewArgument(crossJoin.Pos(), "_kqp_right")};
@@ -253,7 +253,7 @@ TExprBase DqPeepholeRewriteCrossJoin(const TExprBase& node, TExprContext& ctx) {
     TExprNodeList keys;
     auto collectKeys = [&ctx, &keys](const TExprBase& input, TStringBuf label, const TCoArgument& arg) {
         for (auto key : GetSeqItemType(input.Ref().GetTypeAnn())->Cast<TStructExprType>()->GetItems()) {
-            auto fqColumnName = GetColumnName(label, key);
+            auto fqColumnName = GetColumnName(label, key); 
             keys.emplace_back(
                 Build<TCoNameValueTuple>(ctx, input.Pos())
                     .Name().Build(fqColumnName)
@@ -319,77 +319,77 @@ TExprBase DqPeepholeRewriteCrossJoin(const TExprBase& node, TExprContext& ctx) {
         .Done();
 }
 
-namespace {
-
+namespace { 
+ 
 TExprNode::TPtr UnpackJoinedData(const TStructExprType* leftRowType, const TStructExprType* rightRowType,
     std::string_view leftLabel, std::string_view rightLabel, TPositionHandle pos, TExprContext& ctx)
-{
+{ 
     auto arg = Build<TCoArgument>(ctx, pos)
-            .Name("packedItem")
-            .Done();
-
+            .Name("packedItem") 
+            .Done(); 
+ 
     const auto& leftScheme = leftRowType->GetItems();
     const auto& rightScheme = rightRowType->GetItems();
-
-    TExprNode::TListType outValueItems;
+ 
+    TExprNode::TListType outValueItems; 
     outValueItems.reserve(leftScheme.size() + rightScheme.size());
-
-    for (int tableIndex = 0; tableIndex < 2; tableIndex++) {
+ 
+    for (int tableIndex = 0; tableIndex < 2; tableIndex++) { 
         const auto& scheme = tableIndex ? rightScheme : leftScheme;
         const auto label = tableIndex ? rightLabel : leftLabel;
-
-        for (const auto& item : scheme) {
-            auto nameAtom = ctx.NewAtom(pos, item->GetName());
-
-            auto pair = ctx.Builder(pos)
-                .List()
-                    .Atom(0, GetColumnName(label, item))
-                    .Callable(1, "Member")
-                        .Callable(0, "Nth")
-                            .Add(0, arg.Ptr())
-                            .Atom(1, ToString(tableIndex), TNodeFlags::Default)
-                            .Seal()
-                        .Atom(1, item->GetName())
-                        .Seal()
-                    .Seal()
-                .Build();
-
-            outValueItems.push_back(pair);
-        }
-    }
-
-    return Build<TCoLambda>(ctx, pos)
-        .Args({arg})
-        .Body<TCoAsStruct>()
-            .Add(outValueItems)
-            .Build()
-        .Done().Ptr();
-}
-
-} //anonymous namespace end
-
-NNodes::TExprBase DqPeepholeRewriteJoinDict(const NNodes::TExprBase& node, TExprContext& ctx) {
-    if (!node.Maybe<TDqPhyJoinDict>()) {
-        return node;
-    }
-
+ 
+        for (const auto& item : scheme) { 
+            auto nameAtom = ctx.NewAtom(pos, item->GetName()); 
+ 
+            auto pair = ctx.Builder(pos) 
+                .List() 
+                    .Atom(0, GetColumnName(label, item)) 
+                    .Callable(1, "Member") 
+                        .Callable(0, "Nth") 
+                            .Add(0, arg.Ptr()) 
+                            .Atom(1, ToString(tableIndex), TNodeFlags::Default) 
+                            .Seal() 
+                        .Atom(1, item->GetName()) 
+                        .Seal() 
+                    .Seal() 
+                .Build(); 
+ 
+            outValueItems.push_back(pair); 
+        } 
+    } 
+ 
+    return Build<TCoLambda>(ctx, pos) 
+        .Args({arg}) 
+        .Body<TCoAsStruct>() 
+            .Add(outValueItems) 
+            .Build() 
+        .Done().Ptr(); 
+} 
+ 
+} //anonymous namespace end 
+ 
+NNodes::TExprBase DqPeepholeRewriteJoinDict(const NNodes::TExprBase& node, TExprContext& ctx) { 
+    if (!node.Maybe<TDqPhyJoinDict>()) { 
+        return node; 
+    } 
+ 
     const auto joinDict = node.Cast<TDqPhyJoinDict>();
     const auto joinKind = joinDict.JoinType().Value();
-
+ 
     YQL_ENSURE(joinKind != "Cross"sv);
 
     const auto leftTableLabel = GetTableLabel(joinDict.LeftLabel());
     const auto rightTableLabel = GetTableLabel(joinDict.RightLabel());
 
     auto [leftKeys, rightKeys] = JoinKeysToAtoms(ctx, joinDict, leftTableLabel, rightTableLabel);
-
+ 
     YQL_CLOG(TRACE, CoreDq) << "[DqPeepholeRewriteJoinDict] join types"
         << ", left: " << *joinDict.LeftInput().Ref().GetTypeAnn()
         << ", right: " << *joinDict.RightInput().Ref().GetTypeAnn();
-
+ 
     const auto* leftRowType = GetSeqItemType(joinDict.LeftInput().Ref().GetTypeAnn())->Cast<TStructExprType>();
     const auto* rightRowType = GetSeqItemType(joinDict.RightInput().Ref().GetTypeAnn())->Cast<TStructExprType>();
-
+ 
     bool optKeyLeft = false, optKeyRight = false, badKey = false;
     TTypeAnnotationNode::TListType keyTypeItems;
     keyTypeItems.reserve(leftKeys.size());
@@ -429,52 +429,52 @@ NNodes::TExprBase DqPeepholeRewriteJoinDict(const NNodes::TExprBase& node, TExpr
 
     auto streamToDict = [&ctx](const TExprBase& input, const TExprNode::TPtr& keySelector) {
         return Build<TCoSqueezeToDict>(ctx, input.Pos())
-            .Stream(input)
-            .KeySelector(keySelector)
-            .PayloadSelector()
+            .Stream(input) 
+            .KeySelector(keySelector) 
+            .PayloadSelector() 
                 .Args({"item"})
                 .Body("item")
-                .Build()
-            .Settings()
+                .Build() 
+            .Settings() 
                 .Add<TCoAtom>().Build("Hashed")
                 .Add<TCoAtom>().Build("Many")
                 .Add<TCoAtom>().Build("Compact")
-                .Build()
-            .Done();
-    };
-
-    auto leftDict = streamToDict(joinDict.LeftInput(), leftKeySelector);
-    auto rightDict = streamToDict(joinDict.RightInput(), rightKeySelector);
-
-    auto join = Build<TCoFlatMap>(ctx, joinDict.Pos())
+                .Build() 
+            .Done(); 
+    }; 
+ 
+    auto leftDict = streamToDict(joinDict.LeftInput(), leftKeySelector); 
+    auto rightDict = streamToDict(joinDict.RightInput(), rightKeySelector); 
+ 
+    auto join = Build<TCoFlatMap>(ctx, joinDict.Pos()) 
         .Input(leftDict) // only 1 element with dict
-        .Lambda()
+        .Lambda() 
             .Args({"left"})
-            .Body<TCoFlatMap>()
+            .Body<TCoFlatMap>() 
                 .Input(rightDict) // only 1 element with dict
-                .Lambda()
+                .Lambda() 
                     .Args({"right"})
-                    .Body<TCoJoinDict>()
+                    .Body<TCoJoinDict>() 
                         .LeftInput("left")
                         .RightInput("right")
-                        .JoinKind(joinDict.JoinType())
-                        .Build()
-                    .Build()
-                .Build()
-            .Build()
-        .Done();
-
-    // Join return list of tuple of structs. I.e. if you have tables t1 and t2 with values t1.a, t1.b and t2.c, t2.d,
-    // you will receive List<Tuple<Struct<t1.a, t1.b>, Struct<t2.c, t2.d>>> and this data should be unpacked to
-    // List<Struct<t1.a, t1.b, t2.c, t2.d>>
+                        .JoinKind(joinDict.JoinType()) 
+                        .Build() 
+                    .Build() 
+                .Build() 
+            .Build() 
+        .Done(); 
+ 
+    // Join return list of tuple of structs. I.e. if you have tables t1 and t2 with values t1.a, t1.b and t2.c, t2.d, 
+    // you will receive List<Tuple<Struct<t1.a, t1.b>, Struct<t2.c, t2.d>>> and this data should be unpacked to 
+    // List<Struct<t1.a, t1.b, t2.c, t2.d>> 
     auto unpackData = UnpackJoinedData(leftRowType, rightRowType, leftTableLabel, rightTableLabel, join.Pos(), ctx);
-
-    return Build<TCoMap>(ctx, joinDict.Pos())
-        .Input(join)
-        .Lambda(unpackData)
-        .Done();
-}
-
+ 
+    return Build<TCoMap>(ctx, joinDict.Pos()) 
+        .Input(join) 
+        .Lambda(unpackData) 
+        .Done(); 
+} 
+ 
 NNodes::TExprBase DqPeepholeRewritePureJoin(const NNodes::TExprBase& node, TExprContext& ctx) {
     if (!node.Maybe<TDqJoin>()) {
         return node;

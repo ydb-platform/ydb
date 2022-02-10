@@ -796,70 +796,70 @@ void TestCompactionInGranuleImpl(bool reboots) {
     }
 }
 
-void TestReadWithProgramImpl()
-{
-    TTestBasicRuntime runtime;
-    TTester::Setup(runtime);
-
-    TActorId sender = runtime.AllocateEdgeActor();
+void TestReadWithProgramImpl() 
+{ 
+    TTestBasicRuntime runtime; 
+    TTester::Setup(runtime); 
+ 
+    TActorId sender = runtime.AllocateEdgeActor(); 
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::COLUMNSHARD), &CreateColumnShard);
-
-    TDispatchOptions options;
-    options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
-    runtime.DispatchEvents(options);
-
+ 
+    TDispatchOptions options; 
+    options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot)); 
+    runtime.DispatchEvents(options); 
+ 
     ui64 metaShard = TTestTxConfig::TxTablet1;
-    ui64 tableId = 1;
-
-    SetupSchema(runtime, sender, tableId);
-    {
-        auto* readEvent = new TEvColumnShard::TEvRead(sender, metaShard, 0, 0, tableId);
-        auto& readProto = Proto(readEvent);
-
-        readProto.SetOlapProgramType(::NKikimrSchemeOp::EOlapProgramType::OLAP_PROGRAM_SSA_PROGRAM);
-        readProto.SetOlapProgram("XXXYYYZZZ");
-
+    ui64 tableId = 1; 
+ 
+    SetupSchema(runtime, sender, tableId); 
+    { 
+        auto* readEvent = new TEvColumnShard::TEvRead(sender, metaShard, 0, 0, tableId); 
+        auto& readProto = Proto(readEvent); 
+ 
+        readProto.SetOlapProgramType(::NKikimrSchemeOp::EOlapProgramType::OLAP_PROGRAM_SSA_PROGRAM); 
+        readProto.SetOlapProgram("XXXYYYZZZ"); 
+ 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, readEvent);
-
-        TAutoPtr<IEventHandle> handle;
-        auto result = runtime.GrabEdgeEvent<TEvColumnShard::TEvReadResult>(handle);
-        UNIT_ASSERT(result);
-
-        auto& resRead = Proto(result);
-
+ 
+        TAutoPtr<IEventHandle> handle; 
+        auto result = runtime.GrabEdgeEvent<TEvColumnShard::TEvReadResult>(handle); 
+        UNIT_ASSERT(result); 
+ 
+        auto& resRead = Proto(result); 
+ 
         UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0);
-        UNIT_ASSERT_EQUAL(resRead.GetTxInitiator(), metaShard);
-        UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::ERROR);
-        UNIT_ASSERT_EQUAL(resRead.GetBatch(), 0);
-        UNIT_ASSERT_EQUAL(resRead.GetFinished(), true);
-        UNIT_ASSERT_EQUAL(resRead.GetData(), "");
-    }
-
-    {
-        auto* readEvent = new TEvColumnShard::TEvRead(sender, metaShard, 0, 0, tableId);
-        auto& readProto = Proto(readEvent);
-
-        readProto.SetOlapProgramType(::NKikimrSchemeOp::EOlapProgramType::OLAP_PROGRAM_SSA_PROGRAM_WITH_PARAMETERS);
-        readProto.SetOlapProgram("XXXYYYZZZ");
-
+        UNIT_ASSERT_EQUAL(resRead.GetTxInitiator(), metaShard); 
+        UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::ERROR); 
+        UNIT_ASSERT_EQUAL(resRead.GetBatch(), 0); 
+        UNIT_ASSERT_EQUAL(resRead.GetFinished(), true); 
+        UNIT_ASSERT_EQUAL(resRead.GetData(), ""); 
+    } 
+ 
+    { 
+        auto* readEvent = new TEvColumnShard::TEvRead(sender, metaShard, 0, 0, tableId); 
+        auto& readProto = Proto(readEvent); 
+ 
+        readProto.SetOlapProgramType(::NKikimrSchemeOp::EOlapProgramType::OLAP_PROGRAM_SSA_PROGRAM_WITH_PARAMETERS); 
+        readProto.SetOlapProgram("XXXYYYZZZ"); 
+ 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, readEvent);
-
-        TAutoPtr<IEventHandle> handle;
-        auto result = runtime.GrabEdgeEvent<TEvColumnShard::TEvReadResult>(handle);
-        UNIT_ASSERT(result);
-
-        auto& resRead = Proto(result);
+ 
+        TAutoPtr<IEventHandle> handle; 
+        auto result = runtime.GrabEdgeEvent<TEvColumnShard::TEvReadResult>(handle); 
+        UNIT_ASSERT(result); 
+ 
+        auto& resRead = Proto(result); 
         UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0);
-        UNIT_ASSERT_EQUAL(resRead.GetTxInitiator(), metaShard);
-        UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::ERROR);
-        UNIT_ASSERT_EQUAL(resRead.GetBatch(), 0);
-        UNIT_ASSERT_EQUAL(resRead.GetFinished(), true);
-        UNIT_ASSERT_EQUAL(resRead.GetData(), "");
-    }
+        UNIT_ASSERT_EQUAL(resRead.GetTxInitiator(), metaShard); 
+        UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::ERROR); 
+        UNIT_ASSERT_EQUAL(resRead.GetBatch(), 0); 
+        UNIT_ASSERT_EQUAL(resRead.GetFinished(), true); 
+        UNIT_ASSERT_EQUAL(resRead.GetData(), ""); 
+    } 
 }
 
-}
-
+} 
+ 
 Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
     Y_UNIT_TEST(Write) {
         TestWriteImpl(TTestSchema::YdbSchema());
@@ -897,10 +897,10 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         TestCompactionInGranuleImpl(true);
     }
 
-    Y_UNIT_TEST(TestReadWithProgram) {
-        TestReadWithProgramImpl();
-    }
-
+    Y_UNIT_TEST(TestReadWithProgram) { 
+        TestReadWithProgramImpl(); 
+    } 
+ 
     Y_UNIT_TEST(CompactionSplitGranule) {
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);

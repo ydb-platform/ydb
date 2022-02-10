@@ -1770,50 +1770,50 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         }
     }
 
-    Y_UNIT_TEST(LMapFunction) {
+    Y_UNIT_TEST(LMapFunction) { 
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
             .SetEnableOlapSchemaOperations(true);
         TKikimrRunner kikimr(settings);
-        auto tableClient = kikimr.GetTableClient();
-        auto session = tableClient.CreateSession().GetValueSync().GetSession();
-
-        // EnableDebugLogging(kikimr);
-
-        UNIT_ASSERT(session.ExecuteSchemeQuery(R"(
-            CREATE TABLE [/Root/SampleMapTable] (
-                Key Int32,
-                Value String,
-                Price Int32,
-                PRIMARY KEY (Key)
-            );
-        )").GetValueSync().IsSuccess());
-
-        UNIT_ASSERT(session.ExecuteDataQuery(R"(
-            REPLACE INTO [/Root/SampleMapTable] (Key, Value, Price) VALUES
-                (1, "Bitcoin", 50000),
-                (2, "Dogecoin", 1000),
-                (3, "Ethereum", 5000),
-                (4, "XTC", 1),
-                (5, "Cardano", 2),
-                (6, "Tether", 3);
-         )", TTxControl::BeginTx().CommitTx()).GetValueSync().IsSuccess());
-
-        auto it = tableClient.StreamExecuteScanQuery(R"(
-            $func = ($stream) -> {
-                RETURN YQL::Filter($stream, ($r) -> { RETURN Coalesce($r.Price <= 1000, False); });
-            };
-
-            $inputTable = SELECT Key, Value, Price FROM SampleMapTable;
-
-            PROCESS $inputTable USING $func(TableRows());
-        )").GetValueSync();
-
-        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-        TString result = StreamResultToYson(it);
-        std::cerr << result << std::endl;
-        CompareYson(result, R"([[[2];[1000];["Dogecoin"]];[[4];[1];["XTC"]];[[5];[2];["Cardano"]];[[6];[3];["Tether"]]])");
-    }
+        auto tableClient = kikimr.GetTableClient(); 
+        auto session = tableClient.CreateSession().GetValueSync().GetSession(); 
+ 
+        // EnableDebugLogging(kikimr); 
+ 
+        UNIT_ASSERT(session.ExecuteSchemeQuery(R"( 
+            CREATE TABLE [/Root/SampleMapTable] ( 
+                Key Int32, 
+                Value String, 
+                Price Int32, 
+                PRIMARY KEY (Key) 
+            ); 
+        )").GetValueSync().IsSuccess()); 
+ 
+        UNIT_ASSERT(session.ExecuteDataQuery(R"( 
+            REPLACE INTO [/Root/SampleMapTable] (Key, Value, Price) VALUES 
+                (1, "Bitcoin", 50000), 
+                (2, "Dogecoin", 1000), 
+                (3, "Ethereum", 5000), 
+                (4, "XTC", 1), 
+                (5, "Cardano", 2), 
+                (6, "Tether", 3); 
+         )", TTxControl::BeginTx().CommitTx()).GetValueSync().IsSuccess()); 
+ 
+        auto it = tableClient.StreamExecuteScanQuery(R"( 
+            $func = ($stream) -> { 
+                RETURN YQL::Filter($stream, ($r) -> { RETURN Coalesce($r.Price <= 1000, False); }); 
+            }; 
+ 
+            $inputTable = SELECT Key, Value, Price FROM SampleMapTable; 
+ 
+            PROCESS $inputTable USING $func(TableRows()); 
+        )").GetValueSync(); 
+ 
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString()); 
+        TString result = StreamResultToYson(it); 
+        std::cerr << result << std::endl; 
+        CompareYson(result, R"([[[2];[1000];["Dogecoin"]];[[4];[1];["XTC"]];[[5];[2];["Cardano"]];[[6];[3];["Tether"]]])"); 
+    } 
 
     Y_UNIT_TEST(YqlTableSample) {
         auto setting = NKikimrKqp::TKqpSetting();
@@ -1874,31 +1874,31 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         CompareYson(R"([[192u]])", StreamResultToYson(result));
     }
-
-    Y_UNIT_TEST(SelectExistsUnexpected) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-        CreateSampleTables(kikimr);
-
-        auto result = db.StreamExecuteScanQuery(R"(
-            SELECT EXISTS(
-                SELECT * FROM `/Root/EightShard` WHERE Key > 100
-            ) as dataPresent;
-        )").GetValueSync();
-
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        CompareYson("[[%true]]", StreamResultToYson(result));
-
-        result = db.StreamExecuteScanQuery(R"(
-            SELECT EXISTS(
-                SELECT * FROM `/Root/EightShard` WHERE Key > 10000
-            ) as dataPresent;
-        )").GetValueSync();
-
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        CompareYson("[[%false]]", StreamResultToYson(result));
-    }
+ 
+    Y_UNIT_TEST(SelectExistsUnexpected) { 
+        TKikimrRunner kikimr; 
+        auto db = kikimr.GetTableClient(); 
+        auto session = db.CreateSession().GetValueSync().GetSession(); 
+        CreateSampleTables(kikimr); 
+ 
+        auto result = db.StreamExecuteScanQuery(R"( 
+            SELECT EXISTS( 
+                SELECT * FROM `/Root/EightShard` WHERE Key > 100 
+            ) as dataPresent; 
+        )").GetValueSync(); 
+ 
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString()); 
+        CompareYson("[[%true]]", StreamResultToYson(result)); 
+ 
+        result = db.StreamExecuteScanQuery(R"( 
+            SELECT EXISTS( 
+                SELECT * FROM `/Root/EightShard` WHERE Key > 10000 
+            ) as dataPresent; 
+        )").GetValueSync(); 
+ 
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString()); 
+        CompareYson("[[%false]]", StreamResultToYson(result)); 
+    } 
 }
 
 } // namespace NKqp

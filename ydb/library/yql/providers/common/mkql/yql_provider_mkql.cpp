@@ -2087,11 +2087,11 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return ctx.ProgramBuilder.JoinDict(dict1, true, dict2, true, joinKind);
     });
 
-    AddCallable("JoinDict", [](const TExprNode& node, TMkqlBuildContext& ctx) {
-        const auto dict1 = MkqlBuildExpr(*node.Child(0), ctx);
-        const auto dict2 = MkqlBuildExpr(*node.Child(1), ctx);
-        const auto joinKind = GetJoinKind(node, node.Child(2)->Content());
-
+    AddCallable("JoinDict", [](const TExprNode& node, TMkqlBuildContext& ctx) { 
+        const auto dict1 = MkqlBuildExpr(*node.Child(0), ctx); 
+        const auto dict2 = MkqlBuildExpr(*node.Child(1), ctx); 
+        const auto joinKind = GetJoinKind(node, node.Child(2)->Content()); 
+ 
         bool multi1 = true, multi2 = true;
         if (node.ChildrenSize() > 3) {
             node.Tail().ForEachChild([&](const TExprNode& flag){
@@ -2103,8 +2103,8 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         }
 
         return ctx.ProgramBuilder.JoinDict(dict1, multi1, dict2, multi2, joinKind);
-    });
-
+    }); 
+ 
     AddCallable({"FilePath", "FileContent", "FolderPath"}, [](const TExprNode& node, TMkqlBuildContext& ctx) {
         TCallableBuilder call(ctx.ProgramBuilder.GetTypeEnvironment(), node.Content(), ctx.ProgramBuilder.NewDataType(NUdf::TDataType<char*>::Id));
         call.Add(ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::String>(node.Head().Content()));

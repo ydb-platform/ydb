@@ -140,12 +140,12 @@ public:
         , Constant(std::make_shared<arrow::StringScalar>(value))
     {}
 
-    TAssign(const std::string& name, const std::shared_ptr<arrow::Scalar>& value)
-        : Name(name)
-        , Operation(EOperation::Constant)
-        , Constant(value)
-    {}
-
+    TAssign(const std::string& name, const std::shared_ptr<arrow::Scalar>& value) 
+        : Name(name) 
+        , Operation(EOperation::Constant) 
+        , Constant(value) 
+    {} 
+ 
     bool IsConstant() const { return Operation == EOperation::Constant; }
     EOperation GetOperation() const { return Operation; }
     const std::vector<std::string>& GetArguments() const { return Arguments; }

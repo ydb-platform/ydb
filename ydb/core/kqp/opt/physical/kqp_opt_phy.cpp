@@ -1,23 +1,23 @@
-#include "kqp_opt_phy_rules.h"
-
+#include "kqp_opt_phy_rules.h" 
+ 
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
 #include <ydb/core/kqp/opt/physical/effects/kqp_opt_phy_effects_rules.h>
-
+ 
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <ydb/library/yql/dq/opt/dq_opt_phy.h>
 #include <ydb/library/yql/providers/common/transform/yql_optimize.h>
-
+ 
 namespace NKikimr::NKqp::NOpt {
-
-using namespace NYql;
-using namespace NYql::NDq;
-using namespace NYql::NNodes;
-
-using TStatus = IGraphTransformer::TStatus;
-
+ 
+using namespace NYql; 
+using namespace NYql::NDq; 
+using namespace NYql::NNodes; 
+ 
+using TStatus = IGraphTransformer::TStatus; 
+ 
 class TKqpPhysicalOptTransformer : public TOptimizeTransformerBase {
 public:
     TKqpPhysicalOptTransformer(TTypeAnnotationContext& typesCtx, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx)
@@ -58,9 +58,9 @@ public:
         AddHandler(0, &TKqlInsertRowsIndex::Match, HNDL(BuildInsertIndexStages));
         AddHandler(0, &TKqlDeleteRowsIndex::Match, HNDL(BuildDeleteIndexStages));
         AddHandler(0, &TDqStage::Match, HNDL(FloatUpStage));
-        AddHandler(0, &TCoHasItems::Match, HNDL(BuildHasItems));
-        AddHandler(0, &TCoToOptional::Match, HNDL(BuildScalarPrecompute));
-
+        AddHandler(0, &TCoHasItems::Match, HNDL(BuildHasItems)); 
+        AddHandler(0, &TCoToOptional::Match, HNDL(BuildScalarPrecompute)); 
+ 
         AddHandler(1, &TCoSkipNullMembers::Match, HNDL(PushSkipNullMembersToStage<true>));
         AddHandler(1, &TCoExtractMembers::Match, HNDL(PushExtractMembersToStage<true>));
         AddHandler(1, &TCoFlatMapBase::Match, HNDL(BuildFlatmapStage<true>));
@@ -76,44 +76,44 @@ public:
 #undef HNDL
         SetGlobal(1u);
     }
-
+ 
 protected:
     TMaybeNode<TExprBase> BuildReadTableStage(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpBuildReadTableStage(node, ctx, KqpCtx);
         DumpAppliedRule("BuildReadTableStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
-
+ 
     TMaybeNode<TExprBase> BuildReadTableRangesStage(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpBuildReadTableRangesStage(node, ctx, KqpCtx);
         DumpAppliedRule("BuildReadTableRangesStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
-
+ 
     TMaybeNode<TExprBase> BuildLookupTableStage(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpBuildLookupTableStage(node, ctx);
         DumpAppliedRule("BuildLookupTableStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
-
+ 
     TMaybeNode<TExprBase> RemoveRedundantSortByPk(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpRemoveRedundantSortByPk(node, ctx, KqpCtx);
         DumpAppliedRule("RemoveRedundantSortByPk", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
-
+ 
     TMaybeNode<TExprBase> ApplyLimitToReadTable(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpApplyLimitToReadTable(node, ctx, KqpCtx);
         DumpAppliedRule("ApplyLimitToReadTable", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
-
+ 
     TMaybeNode<TExprBase> PushOlapFilter(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpPushOlapFilter(node, ctx, KqpCtx, TypesCtx);
         DumpAppliedRule("PushOlapFilter", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
-
+ 
     template <bool IsGlobal>
     TMaybeNode<TExprBase> PushSkipNullMembersToStage(TExprBase node, TExprContext& ctx,
         IOptimizationContext& optCtx, const TGetParents& getParents)
@@ -122,7 +122,7 @@ protected:
         DumpAppliedRule("PushSkipNullMembersToStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
-
+ 
     template <bool IsGlobal>
     TMaybeNode<TExprBase> PushExtractMembersToStage(TExprBase node, TExprContext& ctx,
         IOptimizationContext& optCtx, const TGetParents& getParents)
@@ -131,7 +131,7 @@ protected:
         DumpAppliedRule("PushExtractMembersToStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
-
+ 
     template <bool IsGlobal>
     TMaybeNode<TExprBase> BuildFlatmapStage(TExprBase node, TExprContext& ctx,
         IOptimizationContext& optCtx, const TGetParents& getParents)
@@ -140,7 +140,7 @@ protected:
         DumpAppliedRule("BuildFlatmapStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
-
+ 
     template <bool IsGlobal>
     TMaybeNode<TExprBase> PushCombineToStage(TExprBase node, TExprContext& ctx,
         IOptimizationContext& optCtx, const TGetParents& getParents)
@@ -149,19 +149,19 @@ protected:
         DumpAppliedRule("PushCombineToStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
-
+ 
     TMaybeNode<TExprBase> BuildPartitionsStage(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
         TExprBase output = DqBuildPartitionsStage(node, ctx, *getParents());
         DumpAppliedRule("BuildPartitionsStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
-
+ 
     TMaybeNode<TExprBase> BuildPartitionStage(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
         TExprBase output = DqBuildPartitionStage(node, ctx, *getParents());
         DumpAppliedRule("BuildPartitionStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
-
+ 
     template <bool IsGlobal>
     TMaybeNode<TExprBase> BuildTopSortStage(TExprBase node, TExprContext& ctx,
         IOptimizationContext& optCtx, const TGetParents& getParents)
@@ -170,7 +170,7 @@ protected:
         DumpAppliedRule("BuildTopSortStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
-
+ 
     template <bool IsGlobal>
     TMaybeNode<TExprBase> BuildTakeSkipStage(TExprBase node, TExprContext& ctx,
         IOptimizationContext& optCtx, const TGetParents& getParents)
@@ -179,7 +179,7 @@ protected:
         DumpAppliedRule("BuildTakeSkipStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
-
+ 
     template <bool IsGlobal>
     TMaybeNode<TExprBase> BuildSortStage(TExprBase node, TExprContext& ctx,
         IOptimizationContext& optCtx, const TGetParents& getParents)
@@ -188,7 +188,7 @@ protected:
         DumpAppliedRule("BuildSortStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
-
+ 
     template <bool IsGlobal>
     TMaybeNode<TExprBase> BuildTakeStage(TExprBase node, TExprContext& ctx,
         IOptimizationContext& optCtx, const TGetParents& getParents)
@@ -203,13 +203,13 @@ protected:
         DumpAppliedRule("RewriteLengthOfStageOutput", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
-
+ 
     TMaybeNode<TExprBase> BuildExtendStage(TExprBase node, TExprContext& ctx) {
         TExprBase output = DqBuildExtendStage(node, ctx);
         DumpAppliedRule("BuildExtendStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
-
+ 
     TMaybeNode<TExprBase> RewriteRightJoinToLeft(TExprBase node, TExprContext& ctx) {
         TExprBase output = DqRewriteRightJoinToLeft(node, ctx);
         DumpAppliedRule("RewriteRightJoinToLeft", node.Ptr(), output.Ptr(), ctx);
@@ -224,7 +224,7 @@ protected:
         DumpAppliedRule("PushJoinToStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
-
+ 
     template <bool IsGlobal>
     TMaybeNode<TExprBase> BuildJoin(TExprBase node, TExprContext& ctx,
         IOptimizationContext& optCtx, const TGetParents& getParents)
@@ -248,7 +248,7 @@ protected:
         DumpAppliedRule("PushLMapToStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
-
+ 
     template <bool IsGlobal>
     TMaybeNode<TExprBase> PushOrderedLMapToStage(TExprBase node, TExprContext& ctx,
         IOptimizationContext& optCtx, const TGetParents& getParents)
@@ -263,13 +263,13 @@ protected:
         DumpAppliedRule("BuildInsertStages", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
-
+ 
     TMaybeNode<TExprBase> BuildUpdateStages(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpBuildUpdateStages(node, ctx, KqpCtx);
         DumpAppliedRule("BuildUpdateStages", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
-
+ 
     TMaybeNode<TExprBase> BuildUpdateIndexStages(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpBuildUpdateIndexStages(node, ctx, KqpCtx);
         DumpAppliedRule("BuildUpdateIndexStages", node.Ptr(), output.Ptr(), ctx);
@@ -299,28 +299,28 @@ protected:
         DumpAppliedRule("FloatUpStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
-
+ 
     TMaybeNode<TExprBase> BuildHasItems(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx) {
         TExprBase output = DqBuildHasItems(node, ctx, optCtx);
-        DumpAppliedRule("DqBuildHasItems", node.Ptr(), output.Ptr(), ctx);
-        return output;
-    }
-
+        DumpAppliedRule("DqBuildHasItems", node.Ptr(), output.Ptr(), ctx); 
+        return output; 
+    } 
+ 
     TMaybeNode<TExprBase> BuildScalarPrecompute(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx) {
         TExprBase output = DqBuildScalarPrecompute(node, ctx, optCtx);
-        DumpAppliedRule("BuildScalarPrecompute", node.Ptr(), output.Ptr(), ctx);
-        return output;
-    }
-
+        DumpAppliedRule("BuildScalarPrecompute", node.Ptr(), output.Ptr(), ctx); 
+        return output; 
+    } 
+ 
 private:
     TTypeAnnotationContext& TypesCtx;
     const TKqpOptimizeContext& KqpCtx;
 };
-
+ 
 TAutoPtr<IGraphTransformer> CreateKqpPhyOptTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx,
     NYql::TTypeAnnotationContext& typesCtx)
 {
     return THolder<IGraphTransformer>(new TKqpPhysicalOptTransformer(typesCtx, kqpCtx));
-}
-
+} 
+ 
 } // namespace NKikimr::NKqp::NOpt

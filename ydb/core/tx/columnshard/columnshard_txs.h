@@ -203,18 +203,18 @@ protected:
                                     const std::unique_ptr<NOlap::TInsertTable>& insertTable,
                                     const std::unique_ptr<NOlap::IColumnEngine>& index,
                                     TString& error) const;
-
-protected:
-    bool ParseProgram(
-        const TActorContext& ctx,
-        NKikimrSchemeOp::EOlapProgramType programType,
-        TString serializedProgram,
-        TReadDescription& read,
-        const IColumnResolver& columnResolver
-    );
-
-protected:
-    TString ErrorDescription;
+ 
+protected: 
+    bool ParseProgram( 
+        const TActorContext& ctx, 
+        NKikimrSchemeOp::EOlapProgramType programType, 
+        TString serializedProgram, 
+        TReadDescription& read, 
+        const IColumnResolver& columnResolver 
+    ); 
+ 
+protected: 
+    TString ErrorDescription; 
 };
 
 class TTxRead : public TTxReadBase {
@@ -250,8 +250,8 @@ public:
 private:
     NOlap::TReadMetadataBase::TConstPtr CreateReadMetadata(const TActorContext& ctx, TReadDescription& read,
         bool isIndexStats, bool isReverse, ui64 limit);
-
-private:
+ 
+private: 
     TEvColumnShard::TEvScan::TPtr Ev;
     TVector<TReadMetadataPtr> ReadMetadataRanges;
 };

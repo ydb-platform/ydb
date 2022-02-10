@@ -119,7 +119,7 @@ struct TKqlTransformContext : TThrRefBase {
         return *PreparedKql;
     }
 
-    IKqpGateway::TMkqlSettings GetMkqlSettings(bool hasDataEffects, TInstant now) const;
+    IKqpGateway::TMkqlSettings GetMkqlSettings(bool hasDataEffects, TInstant now) const; 
     void AddMkqlStats(const TString& program, NKikimrQueryStats::TTxStats&& txStats);
 
     void Reset() {

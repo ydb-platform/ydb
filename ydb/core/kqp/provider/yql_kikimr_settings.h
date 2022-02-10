@@ -6,12 +6,12 @@
 
 namespace NYql {
 
-enum EOptionalFlag {
-    Disabled = 0,
-    Enabled = 1,
-    Auto = 2
-};
-
+enum EOptionalFlag { 
+    Disabled = 0, 
+    Enabled = 1, 
+    Auto = 2 
+}; 
+ 
 struct TKikimrSettings {
     using TConstPtr = std::shared_ptr<const TKikimrSettings>;
 
@@ -34,11 +34,11 @@ struct TKikimrSettings {
     NCommon::TConfSetting<ui32, false> _KqpMaxComputeActors;
     NCommon::TConfSetting<bool, false> _KqpEnableSpilling;
     NCommon::TConfSetting<bool, false> _KqpDisableLlvmForUdfStages;
-    /*
-     * Both settings for predicates push are needed.
-     */
+    /* 
+     * Both settings for predicates push are needed. 
+     */ 
     NCommon::TConfSetting<bool, false> _KqpPushOlapProcess;
-    NCommon::TConfSetting<bool, false> KqpPushOlapProcess;
+    NCommon::TConfSetting<bool, false> KqpPushOlapProcess; 
 
     /* Compile time */
     NCommon::TConfSetting<bool, false> _AllowReverseRange;
@@ -51,7 +51,7 @@ struct TKikimrSettings {
     NCommon::TConfSetting<bool, false> UnwrapReadTableValues;
     NCommon::TConfSetting<bool, false> AllowNullCompareInIndex;
     NCommon::TConfSetting<bool, false> EnableSystemColumns;
-    NCommon::TConfSetting<bool, false> EnableLlvm;
+    NCommon::TConfSetting<bool, false> EnableLlvm; 
 
     /* Disable optimizer rules */
     NCommon::TConfSetting<bool, false> OptDisableJoinRewrite;
@@ -61,7 +61,7 @@ struct TKikimrSettings {
     NCommon::TConfSetting<bool, false> OptDisableTopSort;
     NCommon::TConfSetting<bool, false> OptDisableSqlInToJoin;
     NCommon::TConfSetting<bool, false> OptEnableInplaceUpdate;
-    NCommon::TConfSetting<bool, false> OptEnablePredicateExtract;
+    NCommon::TConfSetting<bool, false> OptEnablePredicateExtract; 
 
     /* Runtime */
     NCommon::TConfSetting<bool, true> _UseLocalProvider;
@@ -91,8 +91,8 @@ struct TKikimrSettings {
     bool HasOptDisableJoinReverseTableLookupLeftSemi() const;
     bool HasOptDisableTopSort() const;
     bool HasOptDisableSqlInToJoin() const;
-    EOptionalFlag GetOptPredicateExtract() const;
-    EOptionalFlag GetEnableLlvm() const;
+    EOptionalFlag GetOptPredicateExtract() const; 
+    EOptionalFlag GetEnableLlvm() const; 
 
     // WARNING: For testing purposes only, inplace update is not ready for production usage.
     bool HasOptEnableInplaceUpdate() const;

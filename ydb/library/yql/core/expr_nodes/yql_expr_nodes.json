@@ -1366,7 +1366,7 @@
         },
         {
             "Name": "TCoMapJoinCore",
-            "Base": "TCallable",
+            "Base": "TCallable", 
             "Match": {"Type": "Callable", "Name": "MapJoinCore"},
             "Children": [
                 {"Index": 0, "Name": "LeftInput", "Type": "TExprBase"},
@@ -1378,17 +1378,17 @@
             ]
         },
         {
-            "Name": "TCoJoinDict",
-            "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "JoinDict"},
-            "Children": [
-                {"Index": 0, "Name": "LeftInput", "Type": "TExprBase"},
-                {"Index": 1, "Name": "RightInput", "Type": "TExprBase"},
+            "Name": "TCoJoinDict", 
+            "Base": "TCallable", 
+            "Match": {"Type": "Callable", "Name": "JoinDict"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "LeftInput", "Type": "TExprBase"}, 
+                {"Index": 1, "Name": "RightInput", "Type": "TExprBase"}, 
                 {"Index": 2, "Name": "JoinKind", "Type": "TCoAtom"},
                 {"Index": 3, "Name": "Flags", "Type": "TCoAtomList", "Optional": true}
-            ]
-        },
-        {
+            ] 
+        }, 
+        { 
             "Name": "TCoSortBase",
             "Base": "TCoInputBase",
             "Match": {"Type": "CallableBase"},
@@ -1952,27 +1952,27 @@
                 {"Index": 4, "Name": "OnEmpty", "Type": "TCoAtom"},
                 {"Index": 5, "Name": "OnError", "Type": "TCoAtom"}
             ]
-        },
-        {
+        }, 
+        { 
             "Name": "TCoAsRange",
             "VarArgBase": "TExprBase",
             "Match": {"Type": "Callable", "Name": "AsRange"}
-        },
-        {
+        }, 
+        { 
             "Name": "TCoRangeCreate",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "RangeCreate"},
-            "Children": [
+            "Children": [ 
                 {"Index": 0, "Name": "UserRange", "Type": "TExprBase"}
-            ]
-        },
-        {
-            "Name": "TCoRangeFinalize",
-            "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "RangeFinalize"},
-            "Children": [
-                {"Index": 0, "Name": "Range", "Type": "TExprBase"}
-            ]
+            ] 
+        }, 
+        { 
+            "Name": "TCoRangeFinalize", 
+            "Base": "TCallable", 
+            "Match": {"Type": "Callable", "Name": "RangeFinalize"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "Range", "Type": "TExprBase"} 
+            ] 
         },
         {
             "Name": "TCoCastStruct",

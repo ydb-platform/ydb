@@ -8,12 +8,12 @@
 
 #define THROW ::NKikimr::TThrowable() , __LOCATION__ +
 
-#define MKQL_ENSURE(condition, message)                               \
-    do {                                                              \
-        if (Y_UNLIKELY(!(condition))) {                               \
-            (THROW yexception() << __FUNCTION__ << "(): requirement " \
-                << #condition << " failed. " <<  message);            \
-        }                                                             \
+#define MKQL_ENSURE(condition, message)                               \ 
+    do {                                                              \ 
+        if (Y_UNLIKELY(!(condition))) {                               \ 
+            (THROW yexception() << __FUNCTION__ << "(): requirement " \ 
+                << #condition << " failed. " <<  message);            \ 
+        }                                                             \ 
     } while (0)
 
 #define MKQL_ENSURE_WITH_LOC(location, condition, message)      \

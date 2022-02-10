@@ -48,9 +48,9 @@ def main():
     dest_arch = None
     if opts.dest_arch:
         if opts.dest_arch.endswith('.tar'):
-            dest_arch = tarfile.open(opts.dest_arch, 'w', dereference=True)
+            dest_arch = tarfile.open(opts.dest_arch, 'w', dereference=True) 
         elif opts.dest_arch.endswith('.tar.gz') or opts.dest_arch.endswith('.tgz'):
-            dest_arch = tarfile.open(opts.dest_arch, 'w:gz', dereference=True)
+            dest_arch = tarfile.open(opts.dest_arch, 'w:gz', dereference=True) 
         else:
             # TODO: move check to graph generation stage
             raise Exception('Unsopported archive type for {}. Use one of: tar, tar.gz, tgz.'.format(os.path.basename(opts.dest_arch)))
@@ -60,7 +60,7 @@ def main():
         if dst.startswith(opts.build_root):
             dst = dst[len(opts.build_root) + 1:]
 
-        if dest_arch and not arg.endswith('.pkg.fake'):
+        if dest_arch and not arg.endswith('.pkg.fake'): 
             dest_arch.add(arg, arcname=dst)
 
         dst = os.path.join(opts.dest_dir, dst)

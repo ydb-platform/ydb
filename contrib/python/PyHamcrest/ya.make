@@ -75,8 +75,8 @@ PY_SRCS(
     hamcrest/__init__.py
 )
 
-NO_LINT() 
- 
+NO_LINT()
+
 END()
 
 RECURSE_FOR_TESTS(

@@ -12,7 +12,7 @@ RECURSE(
     c++filt
     calendar_extractor
     check_formula_md5
-    check_json 
+    check_json
     check_yaml
     checktrigrams
     clustermaster

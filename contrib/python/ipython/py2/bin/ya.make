@@ -7,5 +7,5 @@ PEERDIR(
 )
 
 PY_MAIN(IPython:start_ipython)
- 
+
 END()

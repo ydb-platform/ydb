@@ -17,15 +17,15 @@ def list_all_files(directory, prefix='/', hidden_files=False):
 def pattern_to_regexp(p):
     return '^' + \
            ('/' if not p.startswith('**') else '') + \
-           re.escape(p).replace( 
-               r'\*\*\/', '[_DIR_]' 
-           ).replace( 
-               r'\*', '[_FILE_]' 
-           ).replace( 
-               '[_DIR_]', '(.*/)?' 
-           ).replace( 
-               '[_FILE_]', '([^/]*)' 
-           ) + '$' 
+           re.escape(p).replace(
+               r'\*\*\/', '[_DIR_]'
+           ).replace(
+               r'\*', '[_FILE_]'
+           ).replace(
+               '[_DIR_]', '(.*/)?'
+           ).replace(
+               '[_FILE_]', '([^/]*)'
+           ) + '$'
 
 
 def resolve_java_srcs(srcdir, include_patterns, exclude_patterns, all_resources, resolve_kotlin=False, resolve_groovy=False):
@@ -87,7 +87,7 @@ def do_it(directory, sources_file, resources_file, kotlin_sources_file, groovy_s
     if groovy_sources_file:
         open(groovy_sources_file, mode).writelines(i + '\n' for i in g + j)
 
- 
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-d', '--directory', required=True)

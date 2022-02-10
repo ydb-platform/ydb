@@ -44,8 +44,8 @@ RESOURCE_FILES(
     .dist-info/top_level.txt
 )
 
-NO_LINT() 
- 
+NO_LINT()
+
 NO_COMPILER_WARNINGS()
 
 END()

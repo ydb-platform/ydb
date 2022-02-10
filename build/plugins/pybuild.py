@@ -110,13 +110,13 @@ def has_pyx(args):
 def get_srcdir(path, unit):
     return rootrel_arc_src(path, unit)[:-len(path)].rstrip('/')
 
-def add_python_lint_checks(unit, py_ver, files): 
+def add_python_lint_checks(unit, py_ver, files):
     def get_resolved_files():
-        resolved_files = [] 
-        for path in files: 
-            resolved = unit.resolve_arc_path([path]) 
+        resolved_files = []
+        for path in files:
+            resolved = unit.resolve_arc_path([path])
             if resolved.startswith('$S'):  # path was resolved as source file.
-                resolved_files.append(resolved) 
+                resolved_files.append(resolved)
         return resolved_files
 
     if unit.get('LINT_LEVEL_VALUE') == "none":
@@ -141,7 +141,7 @@ def add_python_lint_checks(unit, py_ver, files):
         resolved_files = get_resolved_files()
         flake8_cfg = 'build/config/tests/flake8/flake8.conf'
         unit.onadd_check(["flake8.py{}".format(py_ver), flake8_cfg] + resolved_files)
- 
+
 
 def is_py3(unit):
     return unit.get("PYTHON3") == "yes"
@@ -532,7 +532,7 @@ def _check_test_srcs(*args):
 def ontest_srcs(unit, *args):
     _check_test_srcs(*args)
     if unit.get('PY3TEST_BIN' if is_py3(unit) else 'PYTEST_BIN') != 'no':
-        unit.onpy_srcs(["NAMESPACE", "__tests__"] + list(args)) 
+        unit.onpy_srcs(["NAMESPACE", "__tests__"] + list(args))
 
 
 def onpy_doctests(unit, *args):

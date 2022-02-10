@@ -21,29 +21,29 @@ def main():
     except ValueError:
         skip_nocxxinc = False
 
-    spl = sys.argv.index('--cflags') 
+    spl = sys.argv.index('--cflags')
     mtime0 = sys.argv[1]
     command = sys.argv[2: spl]
-    cflags = sys.argv[spl + 1:] 
+    cflags = sys.argv[spl + 1:]
 
     dump_args = False
     if '--y_dump_args' in command:
         command.remove('--y_dump_args')
         dump_args = True
 
-    executable = command[0] 
-    if not os.path.exists(executable): 
-        print >> sys.stderr, '{} not found'.format(executable) 
-        sys.exit(1) 
+    executable = command[0]
+    if not os.path.exists(executable):
+        print >> sys.stderr, '{} not found'.format(executable)
+        sys.exit(1)
 
     if is_clang(command):
         # nvcc concatenates the sources for clang, and clang reports unused
         # things from .h files as if they they were defined in a .cpp file.
         cflags += ['-Wno-unused-function', '-Wno-unused-parameter']
 
-    if not is_clang(command) and '-fopenmp=libomp' in cflags: 
-        cflags.append('-fopenmp') 
-        cflags.remove('-fopenmp=libomp') 
+    if not is_clang(command) and '-fopenmp=libomp' in cflags:
+        cflags.append('-fopenmp')
+        cflags.remove('-fopenmp=libomp')
 
     skip_list = [
         '-gline-tables-only',

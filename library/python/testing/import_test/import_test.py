@@ -2,7 +2,7 @@ from __future__ import print_function
 
 import os
 import re
-import sys 
+import sys
 import time
 import traceback
 
@@ -65,8 +65,8 @@ def check_imports(no_check=(), extra=(), skip_func=None, py_main=None):
             s = time.time()
             if module == '__main__':
                 importer.load_module('__main__', '__main__py')
-            elif module.endswith('.__init__'): 
-                __import__(module[:-len('.__init__')]) 
+            elif module.endswith('.__init__'):
+                __import__(module[:-len('.__init__')])
             else:
                 __import__(module)
 

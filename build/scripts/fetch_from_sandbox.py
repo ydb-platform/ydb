@@ -121,13 +121,13 @@ def get_resource_info(resource_id, touch=False, no_links=False):
     if no_links:
         headers.update({'X-No-Links': '1'})
     return _query(url)
- 
- 
-def get_resource_http_links(resource_id): 
+
+
+def get_resource_http_links(resource_id):
     url = ''.join((_SANDBOX_BASE_URL, '/resource/', str(resource_id), '/data/http'))
     return [r['url'] + ORIGIN_SUFFIX for r in _query(url)]
- 
- 
+
+
 def fetch_via_script(script, resource_id):
     return subprocess.check_output([script, str(resource_id)]).rstrip()
 

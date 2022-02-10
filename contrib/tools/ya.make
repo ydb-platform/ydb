@@ -52,7 +52,7 @@ RECURSE(
     ycmd
     zookeeper
     jdk
-    jdk/test 
+    jdk/test
     xmllint
 )
 

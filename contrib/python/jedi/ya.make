@@ -92,6 +92,6 @@ RESOURCE_FILES(
     jedi/evaluate/compiled/fake/posix.pym
 )
 
-NO_LINT() 
- 
+NO_LINT()
+
 END()

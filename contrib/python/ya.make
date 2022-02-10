@@ -102,7 +102,7 @@ RECURSE(
     bandit
     bcrypt
     beautifulsoup4
-    behave 
+    behave
     betamax
     betamax-serializers
     billiard
@@ -144,7 +144,7 @@ RECURSE(
     chardet
     charset-normalizer
     channels
-    chart-studio 
+    chart-studio
     CherryPy
     cherrypy-cors
     ciso8601
@@ -198,7 +198,7 @@ RECURSE(
     dataclasses-json
     datadiff
     dateparser
-    dateutil 
+    dateutil
     DAWG-Python
     dbf_light
     debian-inspector
@@ -344,7 +344,7 @@ RECURSE(
     escapism
     etcd3
     excel-formulas-calculator
-    execnet 
+    execnet
     executing
     ExifRead
     extractcode
@@ -585,7 +585,7 @@ RECURSE(
     legacycontour
     license-expression
     line_profiler
-    linecache2 
+    linecache2
     llist
     lmdb
     localshop
@@ -597,7 +597,7 @@ RECURSE(
     LunarCalendar
     lunardate
     lunr
-    lxml 
+    lxml
     lz4
     M2Crypto
     m3u8
@@ -729,7 +729,7 @@ RECURSE(
     pdbpp
     pdfminer.six
     pecan
-    peewee 
+    peewee
     peewee/playhouse
     pefile
     pem
@@ -795,7 +795,7 @@ RECURSE(
     pybreaker
     pycares
     pycbrf
-    pycodestyle 
+    pycodestyle
     pycollada
     pycountry
     pycparser
@@ -813,7 +813,7 @@ RECURSE(
     pyelftools
     pyelftools/readelf
     pyfakefs
-    pyflakes 
+    pyflakes
     pyfst
     pygit2
     PyGithub
@@ -868,7 +868,7 @@ RECURSE(
     pytest-falcon-client
     pytest-fixture-config
     pytest-flake8
-    pytest-flakes 
+    pytest-flakes
     pytest-flask
     pytest-forked
     pytest-freezegun
@@ -918,7 +918,7 @@ RECURSE(
     python3-saml
     pytils
     pytracemalloc
-    pytz 
+    pytz
     pyudev
     pyusb
     PyWavelets
@@ -940,7 +940,7 @@ RECURSE(
     reportlab
     repoze.lru
     repr
-    requests 
+    requests
     requests-file
     requests-mock
     requests-oauthlib
@@ -969,7 +969,7 @@ RECURSE(
     sanic-testing
     scales
     scancode-toolkit
-    scandir 
+    scandir
     schedule
     schema
     schematics
@@ -999,7 +999,7 @@ RECURSE(
     simplegeneric
     simplejson
     singledispatch
-    six 
+    six
     skynet_pyro4
     slack-sdk
     slackclient

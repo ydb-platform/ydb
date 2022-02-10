@@ -1,13 +1,13 @@
 import six
 import sys
- 
 
-def to_utf8(value): 
-    """ 
-    Converts value to string encoded into utf-8 
-    :param value: 
-    :return: 
-    """ 
+
+def to_utf8(value):
+    """
+    Converts value to string encoded into utf-8
+    :param value:
+    :return:
+    """
     if sys.version_info[0] < 3:
         if not isinstance(value, basestring):  # noqa
             value = unicode(value)  # noqa

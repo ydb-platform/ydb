@@ -31,7 +31,7 @@ def ytest_base(unit, related_prj_dir, related_prj_name, args):
     data = '\"' + ';'.join(data_lst) + '\"' if data_lst else ''
     unit.set(['TEST-DATA', data])
 
-    related_dirs_list = ['{ARCADIA_ROOT}/devtools/${YA_ROOT}', '${ARCADIA_ROOT}/devtools/${YA_ROOT}', '$RELATED_TARGET_SRCDIR'] 
+    related_dirs_list = ['{ARCADIA_ROOT}/devtools/${YA_ROOT}', '${ARCADIA_ROOT}/devtools/${YA_ROOT}', '$RELATED_TARGET_SRCDIR']
     related_dirs_value = []
     for rel in related_dirs_list:
         related_dirs_value.extend(['--test-related-path', rel])

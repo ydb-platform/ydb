@@ -1,6 +1,6 @@
 import ssl
- 
- 
+
+
 def builtin_ca():
     return None, None, ssl.builtin_cadata()
 

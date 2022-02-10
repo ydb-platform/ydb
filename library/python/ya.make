@@ -3,10 +3,10 @@ OWNER(g:python-contrib)
 RECURSE(
     aho_corasick
     aho_corasick/ut
-    archive 
-    archive/benchmark 
-    archive/test 
-    archive/test/data 
+    archive
+    archive/benchmark
+    archive/test
+    archive/test/data
     asgi_yauth
     async_clients
     auth_client_parser
@@ -19,14 +19,14 @@ RECURSE(
     blackbox/tests
     blackbox/tvm2
     bloom
-    boost_test 
+    boost_test
     bstr
     build_info
     build_info/ut
     capabilities
     celery_dashboard
     certifi
-    cgroups 
+    cgroups
     charset
     charts_notes
     charts_notes/example
@@ -72,7 +72,7 @@ RECURSE(
     filelock/ut
     filesys
     filesys/ut
-    find_root 
+    find_root
     flask
     flask_passport
     fnvhash
@@ -81,7 +81,7 @@ RECURSE(
     framing/ut
     func
     func/ut
-    fs 
+    fs
     geolocation
     geolocation/ut
     geohash
@@ -184,8 +184,8 @@ RECURSE(
     svn_version
     svn_version/ut
     symbols
-    testing 
-    tmp 
+    testing
+    tmp
     toloka_client
     toloka-kit
     toloka-airflow
@@ -199,7 +199,7 @@ RECURSE(
     tvm2/tests
     type_info
     type_info/test
-    unique_id 
+    unique_id
     vault_client
     watch_dog
     watch_dog/example

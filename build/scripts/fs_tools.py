@@ -23,28 +23,28 @@ def link_or_copy(src, dst):
         raise
 
 
-if __name__ == '__main__': 
-    mode = sys.argv[1] 
+if __name__ == '__main__':
+    mode = sys.argv[1]
     args = pcf.get_args(sys.argv[2:])
 
-    if mode == 'copy': 
+    if mode == 'copy':
         shutil.copy(args[0], args[1])
     elif mode == 'copy_tree_no_link':
         dst = args[1]
         shutil.copytree(args[0], dst, ignore=lambda dirname, names: [n for n in names if os.path.islink(os.path.join(dirname, n))])
-    elif mode == 'copy_files': 
-        src = args[0] 
-        dst = args[1] 
-        files = open(args[2]).read().strip().split() 
-        for f in files: 
-            s = os.path.join(src, f) 
-            d = os.path.join(dst, f) 
-            if os.path.exists(d): 
-                continue 
-            try: 
-                os.makedirs(os.path.dirname(d)) 
-            except OSError: 
-                pass 
+    elif mode == 'copy_files':
+        src = args[0]
+        dst = args[1]
+        files = open(args[2]).read().strip().split()
+        for f in files:
+            s = os.path.join(src, f)
+            d = os.path.join(dst, f)
+            if os.path.exists(d):
+                continue
+            try:
+                os.makedirs(os.path.dirname(d))
+            except OSError:
+                pass
             shutil.copy(s, d)
     elif mode == 'copy_all_files':
         src = args[0]
@@ -61,23 +61,23 @@ if __name__ == '__main__':
                 except OSError:
                     pass
                 shutil.copy(os.path.join(root, f), file_dst)
-    elif mode == 'rename_if_exists': 
-        if os.path.exists(args[0]): 
-            shutil.move(args[0], args[1]) 
-    elif mode == 'rename': 
+    elif mode == 'rename_if_exists':
+        if os.path.exists(args[0]):
+            shutil.move(args[0], args[1])
+    elif mode == 'rename':
         targetdir = os.path.dirname(args[1])
         if targetdir and not os.path.exists(targetdir):
             os.makedirs(os.path.dirname(args[1]))
         shutil.move(args[0], args[1])
-    elif mode == 'remove': 
-        for f in args: 
-            try: 
-                if os.path.isfile(f) or os.path.islink(f): 
-                    os.remove(f) 
-                else: 
-                    shutil.rmtree(f) 
-            except OSError: 
-                pass 
+    elif mode == 'remove':
+        for f in args:
+            try:
+                if os.path.isfile(f) or os.path.islink(f):
+                    os.remove(f)
+                else:
+                    shutil.rmtree(f)
+            except OSError:
+                pass
     elif mode == 'link_or_copy':
         link_or_copy(args[0], args[1])
     elif mode == 'link_or_copy_to_dir':
@@ -100,5 +100,5 @@ if __name__ == '__main__':
             os.makedirs(args[0])
         except OSError:
             pass
-    else: 
-        raise Exception('unsupported tool %s' % mode) 
+    else:
+        raise Exception('unsupported tool %s' % mode)

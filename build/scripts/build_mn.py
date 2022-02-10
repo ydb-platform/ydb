@@ -321,7 +321,7 @@ def BuildMnF(argv):
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
-        print >>sys.stderr, "Usage: build_mn.py <funcName> <args...>" 
+        print >>sys.stderr, "Usage: build_mn.py <funcName> <args...>"
         sys.exit(1)
 
     if (sys.argv[2:]):

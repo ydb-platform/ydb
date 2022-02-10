@@ -113,8 +113,8 @@ RECURSE(
     inja
     inja/ut
     intel
-    isa-l 
-    isa-l/ut 
+    isa-l
+    isa-l/ut
     jansson
     jdk
     jemalloc

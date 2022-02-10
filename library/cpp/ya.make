@@ -92,9 +92,9 @@ RECURSE(
     edit_distance/ut
     enumbitset
     enumbitset/ut
-    erasure 
-    erasure/benchmark 
-    erasure/ut 
+    erasure
+    erasure/benchmark
+    erasure/ut
     eventlog
     eventlog/dumper
     eventlog/dumper/ut

@@ -40,7 +40,7 @@ namespace NBus {
 
             TItem(TServiceId serviceId, TBusKey start, TBusKey end, const TNetAddr& addr);
         };
-
+ 
         typedef TMultiSet<TItem> TItems;
         TItems Items;
         TMutex Lock;

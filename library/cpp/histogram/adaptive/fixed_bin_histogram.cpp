@@ -496,10 +496,10 @@ namespace NKiwiAggr {
     }
 
     double TFixedBinHistogram::CalcDensity(double value) {
-        i32 bin = CalcBin(value);
-        if (bin < 0 || bin >= (i32)Freqs.size() || BinRange == 0.0 || GetSum() == 0) {
-            return 0.0;
-        }
+        i32 bin = CalcBin(value); 
+        if (bin < 0 || bin >= (i32)Freqs.size() || BinRange == 0.0 || GetSum() == 0) { 
+            return 0.0; 
+        } 
         return Freqs[bin] / GetSum() / BinRange;
     }
 

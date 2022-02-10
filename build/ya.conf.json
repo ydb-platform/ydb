@@ -7624,7 +7624,7 @@
         "coronerctl": {
             "formula": {
                 "sandbox_id": [
-                    1183844682 
+                    1183844682
                 ],
                 "match": "infra/rsm/coroner/build/packages/coroner/pkg.json"
             },

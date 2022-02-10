@@ -273,15 +273,15 @@ class KikimrSqsTestBase(object):
 
     @classmethod
     def _init_cluster(cls, cluster, config_generator):
-        driver_config = ydb.DriverConfig( 
-            "%s:%s" % (cluster.nodes[1].host, cluster.nodes[1].port), 
-            cls.database 
-        ) 
- 
-        with ydb.Driver(driver_config) as driver: 
-            driver.wait() 
-            with ydb.SessionPool(driver, size=1) as pool: 
-                with pool.checkout() as session: 
+        driver_config = ydb.DriverConfig(
+            "%s:%s" % (cluster.nodes[1].host, cluster.nodes[1].port),
+            cls.database
+        )
+
+        with ydb.Driver(driver_config) as driver:
+            driver.wait()
+            with ydb.SessionPool(driver, size=1) as pool:
+                with pool.checkout() as session:
                     create_all_sqs_tables(cls.sqs_root, driver, session)
         cls.create_metauser(cluster, config_generator)
 

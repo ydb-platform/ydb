@@ -670,7 +670,7 @@ public:
             return result;
         }
 
-        if (!AppData()->FeatureFlags.GetEnableOlapSchemaOperations()) { 
+        if (!AppData()->FeatureFlags.GetEnableOlapSchemaOperations()) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed,
                 "Olap schema operations are not supported");
             return result;

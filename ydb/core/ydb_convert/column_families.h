@@ -5,7 +5,7 @@
 #include <ydb/public/api/protos/ydb_table.pb.h>
 
 #include <util/generic/hash.h>
-#include <util/string/builder.h> 
+#include <util/string/builder.h>
 
 namespace NKikimr {
 

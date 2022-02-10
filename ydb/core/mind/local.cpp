@@ -945,9 +945,9 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
     };
 
     struct TTenantInfo {
-        TTenantInfo(const TRegistrationInfo &info, const TSubDomainKey &domainKey) 
+        TTenantInfo(const TRegistrationInfo &info, const TSubDomainKey &domainKey)
             : Info(info)
-            , DomainKey(domainKey) 
+            , DomainKey(domainKey)
         {}
 
         TTenantInfo(const TTenantInfo &other) = default;
@@ -958,7 +958,7 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
         TActorId Subscriber;
         TVector<TTabletId> HiveIds;
         THashMap<TString, TString> Attributes;
-        TSubDomainKey DomainKey; 
+        TSubDomainKey DomainKey;
     };
 
     TString Domain;
@@ -1006,8 +1006,8 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
             ev = new TEvLocal::TEvTenantStatus(tenant,
                                                TEvLocal::TEvTenantStatus::STARTED,
                                                it->second.Info.ResourceLimit,
-                                               it->second.Attributes, 
-                                               it->second.DomainKey); 
+                                               it->second.Attributes,
+                                               it->second.DomainKey);
 
         else
             ev = new TEvLocal::TEvTenantStatus(tenant,
@@ -1064,10 +1064,10 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
                           const TActorContext &ctx)
     {
         Y_VERIFY(!RunningTenants.contains(info.TenantName));
-        const auto domainKey = TSubDomainKey(SchemeRoot, 1); 
-        RunningTenants.emplace(std::make_pair(info.TenantName, TTenantInfo(info, domainKey))); 
+        const auto domainKey = TSubDomainKey(SchemeRoot, 1);
+        RunningTenants.emplace(std::make_pair(info.TenantName, TTenantInfo(info, domainKey)));
         for (auto id : HiveIds) {
-            RegisterLocalNode(info.TenantName, info.ResourceLimit, id, {domainKey}, ctx); 
+            RegisterLocalNode(info.TenantName, info.ResourceLimit, id, {domainKey}, ctx);
 
             LOG_DEBUG_S(ctx, NKikimrServices::LOCAL,
                         LogPrefix << "Binding to hive " << id <<
@@ -1082,10 +1082,10 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
                              const TActorContext &ctx)
     {
         const auto &domainDesc = rec.GetPathDescription().GetDomainDescription();
-        const auto domainKey = TSubDomainKey(domainDesc.GetDomainKey()); 
+        const auto domainKey = TSubDomainKey(domainDesc.GetDomainKey());
 
         Y_VERIFY(!RunningTenants.contains(task.Info.TenantName));
-        TTenantInfo info(task.Info, domainKey); 
+        TTenantInfo info(task.Info, domainKey);
         for (auto &attr : rec.GetPathDescription().GetUserAttributes())
             info.Attributes.emplace(std::make_pair(attr.GetKey(), attr.GetValue()));
         RunningTenants.emplace(std::make_pair(task.Info.TenantName, info));
@@ -1097,7 +1097,7 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
                         LogPrefix << "Binding tenant " << task.Info.TenantName
                         << " to hive " << hId
                         << " (allocated resources: " << task.Info.ResourceLimit.ShortDebugString() << ")");
-            RegisterLocalNode(task.Info.TenantName, task.Info.ResourceLimit, hId, {domainKey}, ctx); 
+            RegisterLocalNode(task.Info.TenantName, task.Info.ResourceLimit, hId, {domainKey}, ctx);
         }
     }
 

@@ -3,8 +3,8 @@
 
 #include <library/cpp/threading/local_executor/local_executor.h>
 
-#include <util/string/printf.h> 
- 
+#include <util/string/printf.h>
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -19,7 +19,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         auto& tableSettings = kikimr.GetTestServer().GetSettings().AppConfig.GetTableServiceConfig();
         bool useSchemeCacheMeta = tableSettings.GetUseSchemeCacheMetadata();
- 
+
         auto result = session.ExecuteDataQuery(R"(
             SELECT * FROM [/Root/KeyValue];
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
@@ -483,46 +483,46 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
-    void AlterTableSetttings( 
-            NYdb::NTable::TSession& session, const TString& tableName, 
-            const THashMap<TString, TString>& settings, bool compat, 
-            EStatus expectedStatus = EStatus::SUCCESS, const TString& expectedMessage = {}) { 
- 
-        auto query = TStringBuilder() 
-            << "--!syntax_v1" << Endl 
-            << "ALTER TABLE `" << tableName << "` "; 
- 
-        if (compat) { 
-            query << "SET ("; 
-        } 
- 
-        bool needComma = false; 
-        for (const auto& [key, value] : settings) { 
-            if (needComma) { 
-                query << ","; 
-            } 
- 
-            needComma = true; 
- 
-            if (compat) { 
-                query << key << "=" << value; 
-            } else { 
-                query << " SET " << key << " " << value; 
-            } 
-        } 
- 
-        if (compat) { 
-            query << ")"; 
-        } 
- 
-        const auto result = session.ExecuteSchemeQuery(query << ";").GetValueSync(); 
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expectedStatus, result.GetIssues().ToString()); 
-        if (expectedMessage) { 
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), expectedMessage, "Unexpected error message"); 
-        } 
-    } 
- 
-    void CreateTableWithCompactionPolicy(bool compat) { 
+    void AlterTableSetttings(
+            NYdb::NTable::TSession& session, const TString& tableName,
+            const THashMap<TString, TString>& settings, bool compat,
+            EStatus expectedStatus = EStatus::SUCCESS, const TString& expectedMessage = {}) {
+
+        auto query = TStringBuilder()
+            << "--!syntax_v1" << Endl
+            << "ALTER TABLE `" << tableName << "` ";
+
+        if (compat) {
+            query << "SET (";
+        }
+
+        bool needComma = false;
+        for (const auto& [key, value] : settings) {
+            if (needComma) {
+                query << ",";
+            }
+
+            needComma = true;
+
+            if (compat) {
+                query << key << "=" << value;
+            } else {
+                query << " SET " << key << " " << value;
+            }
+        }
+
+        if (compat) {
+            query << ")";
+        }
+
+        const auto result = session.ExecuteSchemeQuery(query << ";").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expectedStatus, result.GetIssues().ToString());
+        if (expectedMessage) {
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), expectedMessage, "Unexpected error message");
+        }
+    }
+
+    void CreateTableWithCompactionPolicy(bool compat) {
         TKikimrRunner kikimr = TKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -545,8 +545,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(describeResult->Record.GetPathDescription().GetTable()
                 .GetPartitionConfig().GetCompactionPolicy().GetGeneration().size(), 2);
         }
- 
-        AlterTableSetttings(session, tableName, {{"COMPACTION_POLICY", "\"default\""}}, compat); 
+
+        AlterTableSetttings(session, tableName, {{"COMPACTION_POLICY", "\"default\""}}, compat);
         {
             auto describeResult = kikimr.GetTestClient().Ls(tableName);
             UNIT_ASSERT_VALUES_EQUAL(describeResult->Record.GetPathDescription().GetTable()
@@ -554,14 +554,14 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
-    Y_UNIT_TEST(CreateTableWithCompactionPolicyUncompat) { 
-        CreateTableWithCompactionPolicy(false); 
-    } 
- 
-    Y_UNIT_TEST(CreateTableWithCompactionPolicyCompat) { 
-        CreateTableWithCompactionPolicy(true); 
-    } 
- 
+    Y_UNIT_TEST(CreateTableWithCompactionPolicyUncompat) {
+        CreateTableWithCompactionPolicy(false);
+    }
+
+    Y_UNIT_TEST(CreateTableWithCompactionPolicyCompat) {
+        CreateTableWithCompactionPolicy(true);
+    }
+
     Y_UNIT_TEST(CreateAndAlterTableWithPartitionBy) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
@@ -637,7 +637,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
-    void CreateAndAlterTableWithPartitioningBySize(bool compat) { 
+    void CreateAndAlterTableWithPartitioningBySize(bool compat) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -667,7 +667,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitionSizeMb(), 2048);
         }
 
-        AlterTableSetttings(session, tableName, {{"AUTO_PARTITIONING_BY_SIZE", "DISABLED"}}, compat); 
+        AlterTableSetttings(session, tableName, {{"AUTO_PARTITIONING_BY_SIZE", "DISABLED"}}, compat);
         {
             TDescribeTableResult describe = session.DescribeTable(tableName).GetValueSync();
             UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
@@ -679,15 +679,15 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
-    Y_UNIT_TEST(CreateAndAlterTableWithPartitioningBySizeUncompat) { 
-        CreateAndAlterTableWithPartitioningBySize(false); 
-    } 
- 
-    Y_UNIT_TEST(CreateAndAlterTableWithPartitioningBySizeCompat) { 
-        CreateAndAlterTableWithPartitioningBySize(true); 
-    } 
- 
-    void CreateAndAlterTableWithPartitionSize(bool compat) { 
+    Y_UNIT_TEST(CreateAndAlterTableWithPartitioningBySizeUncompat) {
+        CreateAndAlterTableWithPartitioningBySize(false);
+    }
+
+    Y_UNIT_TEST(CreateAndAlterTableWithPartitioningBySizeCompat) {
+        CreateAndAlterTableWithPartitioningBySize(true);
+    }
+
+    void CreateAndAlterTableWithPartitionSize(bool compat) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -727,10 +727,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(sizeToSplit, 1000 * 1024 * 1024);
         }
 
-        AlterTableSetttings(session, tableName, {{"AUTO_PARTITIONING_PARTITION_SIZE_MB", "0"}}, compat, 
-            EStatus::GENERIC_ERROR, "Can't set preferred partition size to 0"); 
+        AlterTableSetttings(session, tableName, {{"AUTO_PARTITIONING_PARTITION_SIZE_MB", "0"}}, compat,
+            EStatus::GENERIC_ERROR, "Can't set preferred partition size to 0");
 
-        AlterTableSetttings(session, tableName, {{"AUTO_PARTITIONING_BY_SIZE", "DISABLED"}}, compat); 
+        AlterTableSetttings(session, tableName, {{"AUTO_PARTITIONING_BY_SIZE", "DISABLED"}}, compat);
         {
             auto describeResult = kikimr.GetTestClient().Ls(tableName);
             size_t sizeToSplit = describeResult->Record.GetPathDescription().GetTable()
@@ -738,7 +738,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(sizeToSplit, 0);
         }
 
-        AlterTableSetttings(session, tableName, {{"AUTO_PARTITIONING_PARTITION_SIZE_MB", "500"}}, compat); 
+        AlterTableSetttings(session, tableName, {{"AUTO_PARTITIONING_PARTITION_SIZE_MB", "500"}}, compat);
         {
             auto describeResult = kikimr.GetTestClient().Ls(tableName);
             size_t sizeToSplit = describeResult->Record.GetPathDescription().GetTable()
@@ -747,14 +747,14 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
-    Y_UNIT_TEST(CreateAndAlterTableWithPartitionSizeUncompat) { 
-        CreateAndAlterTableWithPartitionSize(false); 
-    } 
- 
-    Y_UNIT_TEST(CreateAndAlterTableWithPartitionSizeCompat) { 
-        CreateAndAlterTableWithPartitionSize(true); 
-    } 
- 
+    Y_UNIT_TEST(CreateAndAlterTableWithPartitionSizeUncompat) {
+        CreateAndAlterTableWithPartitionSize(false);
+    }
+
+    Y_UNIT_TEST(CreateAndAlterTableWithPartitionSizeCompat) {
+        CreateAndAlterTableWithPartitionSize(true);
+    }
+
     Y_UNIT_TEST(RenameTable) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
@@ -866,7 +866,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     }
 
-    void CreateAndAlterTableWithPartitioningByLoad(bool compat) { 
+    void CreateAndAlterTableWithPartitioningByLoad(bool compat) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -893,7 +893,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(enabled, true);
         }
 
-        AlterTableSetttings(session, tableName, {{"AUTO_PARTITIONING_BY_LOAD", "DISABLED"}}, compat); 
+        AlterTableSetttings(session, tableName, {{"AUTO_PARTITIONING_BY_LOAD", "DISABLED"}}, compat);
         {
             auto describeResult = kikimr.GetTestClient().Ls(tableName);
             bool enabled = describeResult->Record.GetPathDescription().GetTable()
@@ -901,7 +901,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(enabled, false);
         }
 
-        AlterTableSetttings(session, tableName, {{"AUTO_PARTITIONING_BY_LOAD", "ENABLED"}}, compat); 
+        AlterTableSetttings(session, tableName, {{"AUTO_PARTITIONING_BY_LOAD", "ENABLED"}}, compat);
         {
             auto describeResult = kikimr.GetTestClient().Ls(tableName);
             bool enabled = describeResult->Record.GetPathDescription().GetTable()
@@ -910,15 +910,15 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
-    Y_UNIT_TEST(CreateAndAlterTableWithPartitioningByLoadUncompat) { 
-        CreateAndAlterTableWithPartitioningByLoad(false); 
-    } 
- 
-    Y_UNIT_TEST(CreateAndAlterTableWithPartitioningByLoadCompat) { 
-        CreateAndAlterTableWithPartitioningByLoad(true); 
-    } 
- 
-    void CreateAndAlterTableWithMinMaxPartitions(bool compat) { 
+    Y_UNIT_TEST(CreateAndAlterTableWithPartitioningByLoadUncompat) {
+        CreateAndAlterTableWithPartitioningByLoad(false);
+    }
+
+    Y_UNIT_TEST(CreateAndAlterTableWithPartitioningByLoadCompat) {
+        CreateAndAlterTableWithPartitioningByLoad(true);
+    }
+
+    void CreateAndAlterTableWithMinMaxPartitions(bool compat) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -961,15 +961,15 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 .GetPartitioningPolicy().GetMaxPartitionsCount(), 100);
         }
 
-        AlterTableSetttings(session, tableName, { 
-            {"AUTO_PARTITIONING_MIN_PARTITIONS_COUNT", "20"}, 
-            {"AUTO_PARTITIONING_MAX_PARTITIONS_COUNT", "0"} 
-        }, compat, EStatus::GENERIC_ERROR, "Can't set max partition count to 0"); 
+        AlterTableSetttings(session, tableName, {
+            {"AUTO_PARTITIONING_MIN_PARTITIONS_COUNT", "20"},
+            {"AUTO_PARTITIONING_MAX_PARTITIONS_COUNT", "0"}
+        }, compat, EStatus::GENERIC_ERROR, "Can't set max partition count to 0");
 
-        AlterTableSetttings(session, tableName, { 
-            {"AUTO_PARTITIONING_MIN_PARTITIONS_COUNT", "20"}, 
-            {"AUTO_PARTITIONING_MAX_PARTITIONS_COUNT", "50"} 
-        }, compat); 
+        AlterTableSetttings(session, tableName, {
+            {"AUTO_PARTITIONING_MIN_PARTITIONS_COUNT", "20"},
+            {"AUTO_PARTITIONING_MAX_PARTITIONS_COUNT", "50"}
+        }, compat);
 
         {
             auto describeResult = kikimr.GetTestClient().Ls(tableName);
@@ -980,15 +980,15 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
-    Y_UNIT_TEST(CreateAndAlterTableWithMinMaxPartitionsUncompat) { 
-        CreateAndAlterTableWithMinMaxPartitions(false); 
-    } 
- 
-    Y_UNIT_TEST(CreateAndAlterTableWithMinMaxPartitionsCompat) { 
-        CreateAndAlterTableWithMinMaxPartitions(true); 
-    } 
- 
-    void CreateAndAlterTableWithBloomFilter(bool compat) { 
+    Y_UNIT_TEST(CreateAndAlterTableWithMinMaxPartitionsUncompat) {
+        CreateAndAlterTableWithMinMaxPartitions(false);
+    }
+
+    Y_UNIT_TEST(CreateAndAlterTableWithMinMaxPartitionsCompat) {
+        CreateAndAlterTableWithMinMaxPartitions(true);
+    }
+
+    void CreateAndAlterTableWithBloomFilter(bool compat) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1012,14 +1012,14 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 .GetEnableFilterByKey(), true);
         }
 
-        AlterTableSetttings(session, tableName, {{"KEY_BLOOM_FILTER", "DISABLED"}}, compat); 
+        AlterTableSetttings(session, tableName, {{"KEY_BLOOM_FILTER", "DISABLED"}}, compat);
         {
             auto describeResult = kikimr.GetTestClient().Ls(tableName);
             UNIT_ASSERT_VALUES_EQUAL(describeResult->Record.GetPathDescription().GetTable().GetPartitionConfig()
                 .GetEnableFilterByKey(), false);
         }
 
-        AlterTableSetttings(session, tableName, {{"KEY_BLOOM_FILTER", "ENABLED"}}, compat); 
+        AlterTableSetttings(session, tableName, {{"KEY_BLOOM_FILTER", "ENABLED"}}, compat);
         {
             auto describeResult = kikimr.GetTestClient().Ls(tableName);
             UNIT_ASSERT_VALUES_EQUAL(describeResult->Record.GetPathDescription().GetTable().GetPartitionConfig()
@@ -1027,15 +1027,15 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
-    Y_UNIT_TEST(CreateAndAlterTableWithBloomFilterUncompat) { 
-        CreateAndAlterTableWithBloomFilter(false); 
-    } 
- 
-    Y_UNIT_TEST(CreateAndAlterTableWithBloomFilterCompat) { 
-        CreateAndAlterTableWithBloomFilter(true); 
-    } 
- 
-    void CreateTableWithReadReplicas(bool compat) { 
+    Y_UNIT_TEST(CreateAndAlterTableWithBloomFilterUncompat) {
+        CreateAndAlterTableWithBloomFilter(false);
+    }
+
+    Y_UNIT_TEST(CreateAndAlterTableWithBloomFilterCompat) {
+        CreateAndAlterTableWithBloomFilter(true);
+    }
+
+    void CreateTableWithReadReplicas(bool compat) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1097,7 +1097,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(readReplicasSettings->GetReadReplicasCount(), 1);
         }
 
-        AlterTableSetttings(session, tableName, {{"READ_REPLICAS_SETTINGS", "\"PER_AZ:2\""}}, compat); 
+        AlterTableSetttings(session, tableName, {{"READ_REPLICAS_SETTINGS", "\"PER_AZ:2\""}}, compat);
         {
             const auto tableDesc = session.DescribeTable(tableName).GetValueSync().GetTableDescription();
             const auto readReplicasSettings = tableDesc.GetReadReplicasSettings();
@@ -1107,153 +1107,153 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
-    Y_UNIT_TEST(CreateTableWithReadReplicasUncompat) { 
-        CreateTableWithReadReplicas(false); 
-    } 
- 
-    Y_UNIT_TEST(CreateTableWithReadReplicasCompat) { 
-        CreateTableWithReadReplicas(true); 
-    } 
- 
-    void CreateTableWithTtlSettings(bool compat) { 
-        TKikimrRunner kikimr; 
-        auto db = kikimr.GetTableClient(); 
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
-        TString tableName = "/Root/TableWithTtlSettings"; 
- 
-        auto createTable = [&](const TString& ttlSettings, EStatus expectedStatus = EStatus::SUCCESS, const TString& expectedMessage = {}) { 
-            auto query = TStringBuilder() << R"( 
-                --!syntax_v1 
-                CREATE TABLE `)" << tableName << R"(` ( 
-                    Key Uint64, 
-                    Ts Timestamp, 
-                    StringValue String, 
-                    Uint32Value Uint32, 
-                    Uint64Value Uint64, 
-                    DyNumberValue DyNumber, 
-                    PRIMARY KEY (Key) 
-                ) WITH ( 
-                    TTL = )" << ttlSettings << R"( 
-                ))"; 
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync(); 
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expectedStatus, result.GetIssues().ToString()); 
-            if (expectedMessage) { 
-                UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), expectedMessage, "Unexpected error message"); 
-            } 
-        }; 
- 
-        createTable(R"(DateTime::IntervalFromDays(1) ON Ts)", EStatus::GENERIC_ERROR, "Literal of Interval type is expected for TTL"); 
- 
-        createTable(R"("P1D" ON Ts)", EStatus::GENERIC_ERROR, "Literal of Interval type is expected for TTL"); 
- 
-        createTable(R"(Interval("-P1D") ON Ts)", EStatus::GENERIC_ERROR, "Interval value cannot be negative"); 
- 
-        createTable(R"(Interval("P1D") ON CreatedAt)", EStatus::GENERIC_ERROR, "Cannot enable TTL on unknown column"); 
- 
-        createTable(R"(Interval("P1D") ON StringValue)", EStatus::GENERIC_ERROR, "Unsupported column type"); 
- 
-        createTable(R"(Interval("P1D") ON Uint32Value)", EStatus::GENERIC_ERROR, "'ValueSinceUnixEpochModeSettings' should be specified"); 
-        createTable(R"(Interval("P1D") ON Uint64Value)", EStatus::GENERIC_ERROR, "'ValueSinceUnixEpochModeSettings' should be specified"); 
-        createTable(R"(Interval("P1D") ON DyNumberValue)", EStatus::GENERIC_ERROR, "'ValueSinceUnixEpochModeSettings' should be specified"); 
- 
-        createTable(R"(Interval("P1D") ON Ts)"); 
-        { 
-            auto result = kikimr.GetTestClient().Ls(tableName); 
-            const auto& table = result->Record.GetPathDescription().GetTable(); 
-            UNIT_ASSERT(table.HasTTLSettings()); 
- 
-            const auto& ttl = table.GetTTLSettings(); 
-            UNIT_ASSERT(ttl.HasEnabled()); 
-            UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().GetColumnName(), "Ts"); 
-            UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().GetExpireAfterSeconds(), 86'400); 
-        } 
- 
-        { 
-            auto query = TStringBuilder() << R"( 
-                --!syntax_v1 
-                ALTER TABLE `)" << tableName << R"(` RESET (TTL);)"; 
-            const auto result = session.ExecuteSchemeQuery(query).GetValueSync(); 
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
-        } 
- 
-        { 
-            auto result = kikimr.GetTestClient().Ls(tableName); 
-            const auto& table = result->Record.GetPathDescription().GetTable(); 
-            UNIT_ASSERT(table.HasTTLSettings()); 
- 
-            const auto& ttl = table.GetTTLSettings(); 
-            UNIT_ASSERT(ttl.HasDisabled()); 
-        } 
- 
-        AlterTableSetttings(session, tableName, {{"TTL", R"(DateTime::IntervalFromDays(1) ON Ts)"}}, compat, 
-            EStatus::GENERIC_ERROR, "Literal of Interval type is expected for TTL"); 
- 
-        AlterTableSetttings(session, tableName, {{"TTL", R"("-P1D" ON Ts)"}}, compat, 
-            EStatus::GENERIC_ERROR, "Literal of Interval type is expected for TTL"); 
- 
-        AlterTableSetttings(session, tableName, {{"TTL", R"(Interval("-P1D") ON Ts)"}}, compat, 
-            EStatus::GENERIC_ERROR, "Interval value cannot be negative"); 
- 
-        AlterTableSetttings(session, tableName, {{"TTL", R"(Interval("P0D") ON CreatedAt)"}}, compat, 
-            EStatus::GENERIC_ERROR, "Cannot enable TTL on unknown column"); 
- 
-        AlterTableSetttings(session, tableName, {{"TTL", R"(Interval("P0D") ON StringValue)"}}, compat, 
-            EStatus::GENERIC_ERROR, "Unsupported column type"); 
- 
-        AlterTableSetttings(session, tableName, {{"TTL", R"(Interval("P0D") ON Uint32Value)"}}, compat, 
-            EStatus::GENERIC_ERROR, "'ValueSinceUnixEpochModeSettings' should be specified"); 
-        AlterTableSetttings(session, tableName, {{"TTL", R"(Interval("P0D") ON Uint64Value)"}}, compat, 
-            EStatus::GENERIC_ERROR, "'ValueSinceUnixEpochModeSettings' should be specified"); 
-        AlterTableSetttings(session, tableName, {{"TTL", R"(Interval("P0D") ON DyNumberValue)"}}, compat, 
-            EStatus::GENERIC_ERROR, "'ValueSinceUnixEpochModeSettings' should be specified"); 
- 
-        AlterTableSetttings(session, tableName, {{"TTL", R"(Interval("P0D") ON Ts)"}}, compat); 
-        { 
-            auto result = kikimr.GetTestClient().Ls(tableName); 
-            const auto& table = result->Record.GetPathDescription().GetTable(); 
-            UNIT_ASSERT(table.HasTTLSettings()); 
- 
-            const auto& ttl = table.GetTTLSettings(); 
-            UNIT_ASSERT(ttl.HasEnabled()); 
-            UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().GetColumnName(), "Ts"); 
-            UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().GetExpireAfterSeconds(), 0); 
-        } 
- 
-        { 
-            auto query = TStringBuilder() << R"( 
-                --!syntax_v1 
-                ALTER TABLE `)" << tableName << R"(` DROP COLUMN Ts;)"; 
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync(); 
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString()); 
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Can't drop TTL column"); 
-        } 
- 
-        { 
-            auto query = TStringBuilder() << R"( 
-                --!syntax_v1 
-                ALTER TABLE `)" << tableName << R"(` RESET (TTL);)"; 
-            const auto result = session.ExecuteSchemeQuery(query).GetValueSync(); 
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
-        } 
- 
-        { 
-            auto query = TStringBuilder() << R"( 
-                --!syntax_v1 
-                ALTER TABLE `)" << tableName << R"(` DROP COLUMN Ts;)"; 
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync(); 
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
-        } 
-    } 
- 
-    Y_UNIT_TEST(CreateTableWithTtlSettingsUncompat) { 
-        CreateTableWithTtlSettings(false); 
-    } 
- 
-    Y_UNIT_TEST(CreateTableWithTtlSettingsCompat) { 
-        CreateTableWithTtlSettings(true); 
-    } 
- 
-    void CreateTableWithUniformPartitions(bool compat) { 
+    Y_UNIT_TEST(CreateTableWithReadReplicasUncompat) {
+        CreateTableWithReadReplicas(false);
+    }
+
+    Y_UNIT_TEST(CreateTableWithReadReplicasCompat) {
+        CreateTableWithReadReplicas(true);
+    }
+
+    void CreateTableWithTtlSettings(bool compat) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        TString tableName = "/Root/TableWithTtlSettings";
+
+        auto createTable = [&](const TString& ttlSettings, EStatus expectedStatus = EStatus::SUCCESS, const TString& expectedMessage = {}) {
+            auto query = TStringBuilder() << R"(
+                --!syntax_v1
+                CREATE TABLE `)" << tableName << R"(` (
+                    Key Uint64,
+                    Ts Timestamp,
+                    StringValue String,
+                    Uint32Value Uint32,
+                    Uint64Value Uint64,
+                    DyNumberValue DyNumber,
+                    PRIMARY KEY (Key)
+                ) WITH (
+                    TTL = )" << ttlSettings << R"(
+                ))";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expectedStatus, result.GetIssues().ToString());
+            if (expectedMessage) {
+                UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), expectedMessage, "Unexpected error message");
+            }
+        };
+
+        createTable(R"(DateTime::IntervalFromDays(1) ON Ts)", EStatus::GENERIC_ERROR, "Literal of Interval type is expected for TTL");
+
+        createTable(R"("P1D" ON Ts)", EStatus::GENERIC_ERROR, "Literal of Interval type is expected for TTL");
+
+        createTable(R"(Interval("-P1D") ON Ts)", EStatus::GENERIC_ERROR, "Interval value cannot be negative");
+
+        createTable(R"(Interval("P1D") ON CreatedAt)", EStatus::GENERIC_ERROR, "Cannot enable TTL on unknown column");
+
+        createTable(R"(Interval("P1D") ON StringValue)", EStatus::GENERIC_ERROR, "Unsupported column type");
+
+        createTable(R"(Interval("P1D") ON Uint32Value)", EStatus::GENERIC_ERROR, "'ValueSinceUnixEpochModeSettings' should be specified");
+        createTable(R"(Interval("P1D") ON Uint64Value)", EStatus::GENERIC_ERROR, "'ValueSinceUnixEpochModeSettings' should be specified");
+        createTable(R"(Interval("P1D") ON DyNumberValue)", EStatus::GENERIC_ERROR, "'ValueSinceUnixEpochModeSettings' should be specified");
+
+        createTable(R"(Interval("P1D") ON Ts)");
+        {
+            auto result = kikimr.GetTestClient().Ls(tableName);
+            const auto& table = result->Record.GetPathDescription().GetTable();
+            UNIT_ASSERT(table.HasTTLSettings());
+
+            const auto& ttl = table.GetTTLSettings();
+            UNIT_ASSERT(ttl.HasEnabled());
+            UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().GetColumnName(), "Ts");
+            UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().GetExpireAfterSeconds(), 86'400);
+        }
+
+        {
+            auto query = TStringBuilder() << R"(
+                --!syntax_v1
+                ALTER TABLE `)" << tableName << R"(` RESET (TTL);)";
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = kikimr.GetTestClient().Ls(tableName);
+            const auto& table = result->Record.GetPathDescription().GetTable();
+            UNIT_ASSERT(table.HasTTLSettings());
+
+            const auto& ttl = table.GetTTLSettings();
+            UNIT_ASSERT(ttl.HasDisabled());
+        }
+
+        AlterTableSetttings(session, tableName, {{"TTL", R"(DateTime::IntervalFromDays(1) ON Ts)"}}, compat,
+            EStatus::GENERIC_ERROR, "Literal of Interval type is expected for TTL");
+
+        AlterTableSetttings(session, tableName, {{"TTL", R"("-P1D" ON Ts)"}}, compat,
+            EStatus::GENERIC_ERROR, "Literal of Interval type is expected for TTL");
+
+        AlterTableSetttings(session, tableName, {{"TTL", R"(Interval("-P1D") ON Ts)"}}, compat,
+            EStatus::GENERIC_ERROR, "Interval value cannot be negative");
+
+        AlterTableSetttings(session, tableName, {{"TTL", R"(Interval("P0D") ON CreatedAt)"}}, compat,
+            EStatus::GENERIC_ERROR, "Cannot enable TTL on unknown column");
+
+        AlterTableSetttings(session, tableName, {{"TTL", R"(Interval("P0D") ON StringValue)"}}, compat,
+            EStatus::GENERIC_ERROR, "Unsupported column type");
+
+        AlterTableSetttings(session, tableName, {{"TTL", R"(Interval("P0D") ON Uint32Value)"}}, compat,
+            EStatus::GENERIC_ERROR, "'ValueSinceUnixEpochModeSettings' should be specified");
+        AlterTableSetttings(session, tableName, {{"TTL", R"(Interval("P0D") ON Uint64Value)"}}, compat,
+            EStatus::GENERIC_ERROR, "'ValueSinceUnixEpochModeSettings' should be specified");
+        AlterTableSetttings(session, tableName, {{"TTL", R"(Interval("P0D") ON DyNumberValue)"}}, compat,
+            EStatus::GENERIC_ERROR, "'ValueSinceUnixEpochModeSettings' should be specified");
+
+        AlterTableSetttings(session, tableName, {{"TTL", R"(Interval("P0D") ON Ts)"}}, compat);
+        {
+            auto result = kikimr.GetTestClient().Ls(tableName);
+            const auto& table = result->Record.GetPathDescription().GetTable();
+            UNIT_ASSERT(table.HasTTLSettings());
+
+            const auto& ttl = table.GetTTLSettings();
+            UNIT_ASSERT(ttl.HasEnabled());
+            UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().GetColumnName(), "Ts");
+            UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().GetExpireAfterSeconds(), 0);
+        }
+
+        {
+            auto query = TStringBuilder() << R"(
+                --!syntax_v1
+                ALTER TABLE `)" << tableName << R"(` DROP COLUMN Ts;)";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Can't drop TTL column");
+        }
+
+        {
+            auto query = TStringBuilder() << R"(
+                --!syntax_v1
+                ALTER TABLE `)" << tableName << R"(` RESET (TTL);)";
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto query = TStringBuilder() << R"(
+                --!syntax_v1
+                ALTER TABLE `)" << tableName << R"(` DROP COLUMN Ts;)";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(CreateTableWithTtlSettingsUncompat) {
+        CreateTableWithTtlSettings(false);
+    }
+
+    Y_UNIT_TEST(CreateTableWithTtlSettingsCompat) {
+        CreateTableWithTtlSettings(true);
+    }
+
+    void CreateTableWithUniformPartitions(bool compat) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1276,19 +1276,19 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT_C(describeResult.IsSuccess(), result.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(describeResult.GetTableDescription().GetPartitionsCount(), 4);
 
-        AlterTableSetttings(session, tableName, {{"UNIFORM_PARTITIONS", "8"}}, compat, 
-            EStatus::GENERIC_ERROR, "UNIFORM_PARTITIONS alter is not supported"); 
+        AlterTableSetttings(session, tableName, {{"UNIFORM_PARTITIONS", "8"}}, compat,
+            EStatus::GENERIC_ERROR, "UNIFORM_PARTITIONS alter is not supported");
     }
 
-    Y_UNIT_TEST(CreateTableWithUniformPartitionsUncompat) { 
-        CreateTableWithUniformPartitions(false); 
-    } 
- 
-    Y_UNIT_TEST(CreateTableWithUniformPartitionsCompat) { 
-        CreateTableWithUniformPartitions(true); 
-    } 
- 
-    void CreateTableWithPartitionAtKeysSimple(bool compat) { 
+    Y_UNIT_TEST(CreateTableWithUniformPartitionsUncompat) {
+        CreateTableWithUniformPartitions(false);
+    }
+
+    Y_UNIT_TEST(CreateTableWithUniformPartitionsCompat) {
+        CreateTableWithUniformPartitions(true);
+    }
+
+    void CreateTableWithPartitionAtKeysSimple(bool compat) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1342,18 +1342,18 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             ++n;
         }
 
-        AlterTableSetttings(session, tableName, {{"PARTITION_AT_KEYS", "(100, 500, 1000, 10000)"}}, compat, 
-            EStatus::GENERIC_ERROR, "PARTITION_AT_KEYS alter is not supported"); 
+        AlterTableSetttings(session, tableName, {{"PARTITION_AT_KEYS", "(100, 500, 1000, 10000)"}}, compat,
+            EStatus::GENERIC_ERROR, "PARTITION_AT_KEYS alter is not supported");
     }
 
-    Y_UNIT_TEST(CreateTableWithPartitionAtKeysSimpleUncompat) { 
-        CreateTableWithPartitionAtKeysSimple(false); 
-    } 
- 
-    Y_UNIT_TEST(CreateTableWithPartitionAtKeysSimpleCompat) { 
-        CreateTableWithPartitionAtKeysSimple(true); 
-    } 
- 
+    Y_UNIT_TEST(CreateTableWithPartitionAtKeysSimpleUncompat) {
+        CreateTableWithPartitionAtKeysSimple(false);
+    }
+
+    Y_UNIT_TEST(CreateTableWithPartitionAtKeysSimpleCompat) {
+        CreateTableWithPartitionAtKeysSimple(true);
+    }
+
     Y_UNIT_TEST(CreateTableWithPartitionAtKeysComplex) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
@@ -1740,38 +1740,38 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
-    void AlterTableAddIndex(EIndexTypeSql type, bool enableAsyncIndexes = false) { 
-        TKikimrRunner kikimr(TKikimrSettings().SetEnableAsyncIndexes(enableAsyncIndexes)); 
+    void AlterTableAddIndex(EIndexTypeSql type, bool enableAsyncIndexes = false) {
+        TKikimrRunner kikimr(TKikimrSettings().SetEnableAsyncIndexes(enableAsyncIndexes));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         CreateSampleTablesWithIndex(session);
- 
-        const auto typeStr = IndexTypeSqlString(type); 
-        const auto expectedStatus = (type == EIndexTypeSql::GlobalAsync) 
-            ? (enableAsyncIndexes ? EStatus::SUCCESS : EStatus::UNSUPPORTED) 
-            : EStatus::SUCCESS; 
+
+        const auto typeStr = IndexTypeSqlString(type);
+        const auto expectedStatus = (type == EIndexTypeSql::GlobalAsync)
+            ? (enableAsyncIndexes ? EStatus::SUCCESS : EStatus::UNSUPPORTED)
+            : EStatus::SUCCESS;
 
         {
-            auto status = session.ExecuteSchemeQuery(Sprintf(R"( 
+            auto status = session.ExecuteSchemeQuery(Sprintf(R"(
                 --!syntax_v1
                 ALTER TABLE `/Root/Test` ADD INDEX NameIndex %s ON (Name);
-            )", typeStr.data())).ExtractValueSync(); 
-            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), expectedStatus, status.GetIssues().ToString()); 
+            )", typeStr.data())).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), expectedStatus, status.GetIssues().ToString());
         }
 
         {
             TDescribeTableResult describe = session.DescribeTable("/Root/Test").GetValueSync();
             UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
             auto indexDesc = describe.GetTableDescription().GetIndexDescriptions();
- 
-            if (expectedStatus != EStatus::SUCCESS) { 
-                UNIT_ASSERT_VALUES_EQUAL(indexDesc.size(), 0); 
-                return; 
-            } 
- 
+
+            if (expectedStatus != EStatus::SUCCESS) {
+                UNIT_ASSERT_VALUES_EQUAL(indexDesc.size(), 0);
+                return;
+            }
+
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexName(), "NameIndex");
-            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexType(), IndexTypeSqlToIndexType(type)); 
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexType(), IndexTypeSqlToIndexType(type));
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexColumns().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetDataColumns().size(), 0);
         }
@@ -1792,10 +1792,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
 
         {
-            auto status = session.ExecuteSchemeQuery(Sprintf(R"( 
+            auto status = session.ExecuteSchemeQuery(Sprintf(R"(
                 --!syntax_v1
                 ALTER TABLE `/Root/Test` ADD INDEX NameIndex %s ON (Name) COVER (Amount);
-            )", typeStr.data())).ExtractValueSync(); 
+            )", typeStr.data())).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
         }
 
@@ -1805,28 +1805,28 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto indexDesc = describe.GetTableDescription().GetIndexDescriptions();
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexName(), "NameIndex");
-            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexType(), IndexTypeSqlToIndexType(type)); 
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexType(), IndexTypeSqlToIndexType(type));
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexColumns().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetDataColumns().size(), 1);
         }
     }
 
-    Y_UNIT_TEST(AlterTableAddImplicitSyncIndex) { 
-        AlterTableAddIndex(EIndexTypeSql::Global); 
-    } 
- 
-    Y_UNIT_TEST(AlterTableAddExplicitSyncIndex) { 
-        AlterTableAddIndex(EIndexTypeSql::GlobalSync); 
-    } 
- 
-    Y_UNIT_TEST(AlterTableAddAsyncIndexShouldFail) { 
-        AlterTableAddIndex(EIndexTypeSql::GlobalAsync); 
-    } 
- 
-    Y_UNIT_TEST(AlterTableAddAsyncIndexShouldSucceed) { 
-        AlterTableAddIndex(EIndexTypeSql::GlobalAsync, true); 
-    } 
- 
+    Y_UNIT_TEST(AlterTableAddImplicitSyncIndex) {
+        AlterTableAddIndex(EIndexTypeSql::Global);
+    }
+
+    Y_UNIT_TEST(AlterTableAddExplicitSyncIndex) {
+        AlterTableAddIndex(EIndexTypeSql::GlobalSync);
+    }
+
+    Y_UNIT_TEST(AlterTableAddAsyncIndexShouldFail) {
+        AlterTableAddIndex(EIndexTypeSql::GlobalAsync);
+    }
+
+    Y_UNIT_TEST(AlterTableAddAsyncIndexShouldSucceed) {
+        AlterTableAddIndex(EIndexTypeSql::GlobalAsync, true);
+    }
+
     Y_UNIT_TEST(AlterTableWithDecimalColumn) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();

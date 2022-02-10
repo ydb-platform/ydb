@@ -655,21 +655,21 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
                         TABLEH() {out << "SeqNo";}
                         TABLEH() {out << "Offset";}
                         TABLEH() {out << "WriteTimestamp";}
-                        TABLEH() {out << "CreateTimestamp";} 
-                        TABLEH() {out << "Explicit";} 
-                        TABLEH() {out << "State";} 
+                        TABLEH() {out << "CreateTimestamp";}
+                        TABLEH() {out << "Explicit";}
+                        TABLEH() {out << "State";}
                     }
                 }
                 TABLEBODY() {
-                    for (const auto& [sourceId, sourceIdInfo]: SourceIdStorage.GetInMemorySourceIds()) { 
+                    for (const auto& [sourceId, sourceIdInfo]: SourceIdStorage.GetInMemorySourceIds()) {
                         TABLER() {
-                            TABLED() {out << EncodeHtmlPcdata(EscapeC(sourceId));} 
-                            TABLED() {out << sourceIdInfo.SeqNo;} 
-                            TABLED() {out << sourceIdInfo.Offset;} 
-                            TABLED() {out << ToStringLocalTimeUpToSeconds(sourceIdInfo.WriteTimestamp);} 
-                            TABLED() {out << ToStringLocalTimeUpToSeconds(sourceIdInfo.CreateTimestamp);} 
-                            TABLED() {out << (sourceIdInfo.Explicit ? "true" : "false");} 
-                            TABLED() {out << sourceIdInfo.State;} 
+                            TABLED() {out << EncodeHtmlPcdata(EscapeC(sourceId));}
+                            TABLED() {out << sourceIdInfo.SeqNo;}
+                            TABLED() {out << sourceIdInfo.Offset;}
+                            TABLED() {out << ToStringLocalTimeUpToSeconds(sourceIdInfo.WriteTimestamp);}
+                            TABLED() {out << ToStringLocalTimeUpToSeconds(sourceIdInfo.CreateTimestamp);}
+                            TABLED() {out << (sourceIdInfo.Explicit ? "true" : "false");}
+                            TABLED() {out << sourceIdInfo.State;}
                         }
                     }
                 }
@@ -1260,11 +1260,11 @@ void TPartition::CancelAllWritesOnIdle(const TActorContext& ctx)
 {
     for (const auto& w : Requests) {
         ReplyError(ctx, w.GetCookie(), NPersQueue::NErrorCode::WRITE_ERROR_DISK_IS_FULL, "Disk is full");
-        if (w.IsWrite()) { 
-            const auto& msg = w.GetWrite().Msg; 
+        if (w.IsWrite()) {
+            const auto& msg = w.GetWrite().Msg;
             Counters.Cumulative()[COUNTER_PQ_WRITE_ERROR].Increment(1);
-            Counters.Cumulative()[COUNTER_PQ_WRITE_BYTES_ERROR].Increment(msg.Data.size() + msg.SourceId.size()); 
-            WriteInflightSize -= msg.Data.size(); 
+            Counters.Cumulative()[COUNTER_PQ_WRITE_BYTES_ERROR].Increment(msg.Data.size() + msg.SourceId.size());
+            WriteInflightSize -= msg.Data.size();
         }
     }
 
@@ -1288,11 +1288,11 @@ void TPartition::FailBadClient(const TActorContext& ctx)
 
     for (const auto& w : Requests) {
         ReplyError(ctx, w.GetCookie(), NPersQueue::NErrorCode::BAD_REQUEST, "previous write request failed");
-        if (w.IsWrite()) { 
-            const auto& msg = w.GetWrite().Msg; 
+        if (w.IsWrite()) {
+            const auto& msg = w.GetWrite().Msg;
             Counters.Cumulative()[COUNTER_PQ_WRITE_ERROR].Increment(1);
-            Counters.Cumulative()[COUNTER_PQ_WRITE_BYTES_ERROR].Increment(msg.Data.size() + msg.SourceId.size()); 
-            WriteInflightSize -= msg.Data.size(); 
+            Counters.Cumulative()[COUNTER_PQ_WRITE_BYTES_ERROR].Increment(msg.Data.size() + msg.SourceId.size());
+            WriteInflightSize -= msg.Data.size();
         }
     }
     UpdateWriteBufferIsFullState(ctx.Now());
@@ -1300,7 +1300,7 @@ void TPartition::FailBadClient(const TActorContext& ctx)
     Requests.clear();
     for (const auto& w : Responses) {
         ReplyError(ctx, w.GetCookie(), NPersQueue::NErrorCode::BAD_REQUEST, "previous write request failed");
-        if (w.IsWrite()) 
+        if (w.IsWrite())
             Counters.Cumulative()[COUNTER_PQ_WRITE_ERROR].Increment(1);
     }
     Counters.Cumulative()[COUNTER_PQ_WRITE_BYTES_ERROR].Increment(WriteNewSize);
@@ -1395,9 +1395,9 @@ void TPartition::HandleInfoRangeRead(const NKikimrClient::TKeyValueResponse::TRe
 
                 key = &pair.GetKey();
                 if ((*key)[TKeyPrefix::MarkPosition()] == TKeyPrefix::MarkSourceId) {
-                    SourceIdStorage.LoadSourceIdInfo(*key, pair.GetValue(), ctx.Now()); 
-                } else if ((*key)[TKeyPrefix::MarkPosition()] == TKeyPrefix::MarkProtoSourceId) { 
-                    SourceIdStorage.LoadSourceIdInfo(*key, pair.GetValue(), ctx.Now()); 
+                    SourceIdStorage.LoadSourceIdInfo(*key, pair.GetValue(), ctx.Now());
+                } else if ((*key)[TKeyPrefix::MarkPosition()] == TKeyPrefix::MarkProtoSourceId) {
+                    SourceIdStorage.LoadSourceIdInfo(*key, pair.GetValue(), ctx.Now());
                 } else if ((*key)[TKeyPrefix::MarkPosition()] == TKeyPrefix::MarkUser) {
                     UsersInfoStorage.Parse(*key, pair.GetValue(), ctx);
                 } else if ((*key)[TKeyPrefix::MarkPosition()] == TKeyPrefix::MarkUserDeprecated) {
@@ -1725,7 +1725,7 @@ void TPartition::ProcessChangeOwnerRequest(TAutoPtr<TEvPQ::TEvChangeOwner> ev, c
 
         it->second.GenerateCookie(owner, ev->PipeClient, ev->Sender, TopicName, Partition, ctx);//will change OwnerCookie
         //cookie is generated. but answer will be sent when all inflight writes will be done - they in the same queue 'Requests'
-        Requests.emplace_back(TOwnershipMsg{ev->Cookie, it->second.OwnerCookie}, WriteQuota.GetQuotedTime(), ctx.Now().MilliSeconds(), 0); 
+        Requests.emplace_back(TOwnershipMsg{ev->Cookie, it->second.OwnerCookie}, WriteQuota.GetQuotedTime(), ctx.Now().MilliSeconds(), 0);
 
         Counters.Simple()[COUNTER_PQ_TABLET_RESERVED_BYTES_SIZE].Set(ReservedSize);
         UpdateWriteBufferIsFullState(ctx.Now());
@@ -1978,7 +1978,7 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
     result.SetAvgQuotaSpeedPerHour(AvgQuotaBytes[2].GetValue());
     result.SetAvgQuotaSpeedPerDay(AvgQuotaBytes[3].GetValue());
 
-    result.SetSourceIdCount(SourceIdStorage.GetInMemorySourceIds().size()); 
+    result.SetSourceIdCount(SourceIdStorage.GetInMemorySourceIds().size());
     result.SetSourceIdRetentionPeriodSec((ctx.Now() - SourceIdStorage.MinAvailableTimestamp(ctx.Now())).Seconds());
 
     result.SetWriteBytesQuota(WriteQuota.GetTotalSpeed());
@@ -2171,33 +2171,33 @@ void TPartition::ProcessUserActs(TUserInfo& userInfo, const TActorContext& ctx)
 }
 
 void TPartition::Handle(TEvPQ::TEvGetMaxSeqNoRequest::TPtr& ev, const TActorContext& ctx) {
-    auto response = MakeHolder<TEvPQ::TEvProxyResponse>(ev->Get()->Cookie); 
+    auto response = MakeHolder<TEvPQ::TEvProxyResponse>(ev->Get()->Cookie);
     NKikimrClient::TResponse& resp = response->Response;
 
     resp.SetStatus(NMsgBusProxy::MSTATUS_OK);
     resp.SetErrorCode(NPersQueue::NErrorCode::OK);
 
-    auto& result = *resp.MutablePartitionResponse()->MutableCmdGetMaxSeqNoResult(); 
-    for (const auto& sourceId : ev->Get()->SourceIds) { 
-        auto& protoInfo = *result.AddSourceIdInfo(); 
-        protoInfo.SetSourceId(sourceId); 
- 
-        auto it = SourceIdStorage.GetInMemorySourceIds().find(sourceId); 
-        if (it == SourceIdStorage.GetInMemorySourceIds().end()) { 
-            continue; 
+    auto& result = *resp.MutablePartitionResponse()->MutableCmdGetMaxSeqNoResult();
+    for (const auto& sourceId : ev->Get()->SourceIds) {
+        auto& protoInfo = *result.AddSourceIdInfo();
+        protoInfo.SetSourceId(sourceId);
+
+        auto it = SourceIdStorage.GetInMemorySourceIds().find(sourceId);
+        if (it == SourceIdStorage.GetInMemorySourceIds().end()) {
+            continue;
         }
- 
-        const auto& memInfo = it->second; 
-        Y_VERIFY(memInfo.Offset <= (ui64)Max<i64>(), "Offset is too big: %" PRIu64, memInfo.Offset); 
-        Y_VERIFY(memInfo.SeqNo <= (ui64)Max<i64>(), "SeqNo is too big: %" PRIu64, memInfo.SeqNo); 
- 
-        protoInfo.SetSeqNo(memInfo.SeqNo); 
-        protoInfo.SetOffset(memInfo.Offset); 
-        protoInfo.SetWriteTimestampMS(memInfo.WriteTimestamp.MilliSeconds()); 
-        protoInfo.SetExplicit(memInfo.Explicit); 
-        protoInfo.SetState(TSourceIdInfo::ConvertState(memInfo.State)); 
+
+        const auto& memInfo = it->second;
+        Y_VERIFY(memInfo.Offset <= (ui64)Max<i64>(), "Offset is too big: %" PRIu64, memInfo.Offset);
+        Y_VERIFY(memInfo.SeqNo <= (ui64)Max<i64>(), "SeqNo is too big: %" PRIu64, memInfo.SeqNo);
+
+        protoInfo.SetSeqNo(memInfo.SeqNo);
+        protoInfo.SetOffset(memInfo.Offset);
+        protoInfo.SetWriteTimestampMS(memInfo.WriteTimestamp.MilliSeconds());
+        protoInfo.SetExplicit(memInfo.Explicit);
+        protoInfo.SetState(TSourceIdInfo::ConvertState(memInfo.State));
     }
- 
+
     ctx.Send(Tablet, response.Release());
 }
 
@@ -2689,9 +2689,9 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx)
         const ui64 quotedTime = Responses.front().QuotedTime;
         const ui64 queueTime = Responses.front().QueueTime;
         const ui64 writeTime = ctx.Now().MilliSeconds() - Responses.front().WriteTime;
- 
-        if (Responses.front().IsWrite()) { 
-            const auto& writeResponse = Responses.front().GetWrite(); 
+
+        if (Responses.front().IsWrite()) {
+            const auto& writeResponse = Responses.front().GetWrite();
             const TString& s = writeResponse.Msg.SourceId;
             const ui64& seqNo = writeResponse.Msg.SeqNo;
             const ui16& partNo = writeResponse.Msg.PartNo;
@@ -2720,12 +2720,12 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx)
                 }
             }
             if (!already && partNo + 1 == totalParts) {
-                if (it == SourceIdStorage.GetInMemorySourceIds().end()) { 
+                if (it == SourceIdStorage.GetInMemorySourceIds().end()) {
                     Counters.Cumulative()[COUNTER_PQ_SID_CREATED].Increment(1);
-                    SourceIdStorage.RegisterSourceId(s, writeResponse.Msg.SeqNo, offset, CurrentTimestamp); 
-                } else { 
-                    SourceIdStorage.RegisterSourceId(s, it->second.Updated(writeResponse.Msg.SeqNo, offset, CurrentTimestamp)); 
-                } 
+                    SourceIdStorage.RegisterSourceId(s, writeResponse.Msg.SeqNo, offset, CurrentTimestamp);
+                } else {
+                    SourceIdStorage.RegisterSourceId(s, it->second.Updated(writeResponse.Msg.SeqNo, offset, CurrentTimestamp));
+                }
 
                 Counters.Cumulative()[COUNTER_PQ_WRITE_OK].Increment(1);
             }
@@ -2746,50 +2746,50 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx)
 
             if (!already && partNo + 1 == totalParts)
                 ++offset;
-        } else if (Responses.front().IsOwnership()) { 
-            const TString& ownerCookie = Responses.front().GetOwnership().OwnerCookie; 
+        } else if (Responses.front().IsOwnership()) {
+            const TString& ownerCookie = Responses.front().GetOwnership().OwnerCookie;
             auto it = Owners.find(TOwnerInfo::GetOwnerFromOwnerCookie(ownerCookie));
             if (it != Owners.end() && it->second.OwnerCookie == ownerCookie) {
                 ReplyOwnerOk(ctx, Responses.front().GetCookie(), ownerCookie);
             } else {
                 ReplyError(ctx, Responses.front().GetCookie(), NPersQueue::NErrorCode::WRONG_COOKIE, "new GetOwnership request is dropped already");
             }
-        } else if (Responses.front().IsRegisterMessageGroup()) { 
-            const auto& body = Responses.front().GetRegisterMessageGroup().Body; 
- 
-            TMaybe<TPartitionKeyRange> keyRange; 
-            if (body.KeyRange) { 
-                keyRange = TPartitionKeyRange::Parse(*body.KeyRange); 
-            } 
- 
-            Y_VERIFY(body.AssignedOffset); 
-            SourceIdStorage.RegisterSourceId(body.SourceId, body.SeqNo, *body.AssignedOffset, CurrentTimestamp, std::move(keyRange)); 
-            ReplyOk(ctx, Responses.front().GetCookie()); 
-        } else if (Responses.front().IsDeregisterMessageGroup()) { 
-            const auto& body = Responses.front().GetDeregisterMessageGroup().Body; 
- 
-            SourceIdStorage.DeregisterSourceId(body.SourceId); 
-            ReplyOk(ctx, Responses.front().GetCookie()); 
-        } else if (Responses.front().IsSplitMessageGroup()) { 
-            const auto& split = Responses.front().GetSplitMessageGroup(); 
- 
-            for (const auto& body : split.Deregistrations) { 
-                SourceIdStorage.DeregisterSourceId(body.SourceId); 
-            } 
- 
-            for (const auto& body : split.Registrations) { 
-                TMaybe<TPartitionKeyRange> keyRange; 
-                if (body.KeyRange) { 
-                    keyRange = TPartitionKeyRange::Parse(*body.KeyRange); 
-                } 
- 
-                Y_VERIFY(body.AssignedOffset); 
-                SourceIdStorage.RegisterSourceId(body.SourceId, body.SeqNo, *body.AssignedOffset, CurrentTimestamp, std::move(keyRange), true); 
-            } 
- 
-            ReplyOk(ctx, Responses.front().GetCookie()); 
-        } else { 
-            Y_FAIL("Unexpected message"); 
+        } else if (Responses.front().IsRegisterMessageGroup()) {
+            const auto& body = Responses.front().GetRegisterMessageGroup().Body;
+
+            TMaybe<TPartitionKeyRange> keyRange;
+            if (body.KeyRange) {
+                keyRange = TPartitionKeyRange::Parse(*body.KeyRange);
+            }
+
+            Y_VERIFY(body.AssignedOffset);
+            SourceIdStorage.RegisterSourceId(body.SourceId, body.SeqNo, *body.AssignedOffset, CurrentTimestamp, std::move(keyRange));
+            ReplyOk(ctx, Responses.front().GetCookie());
+        } else if (Responses.front().IsDeregisterMessageGroup()) {
+            const auto& body = Responses.front().GetDeregisterMessageGroup().Body;
+
+            SourceIdStorage.DeregisterSourceId(body.SourceId);
+            ReplyOk(ctx, Responses.front().GetCookie());
+        } else if (Responses.front().IsSplitMessageGroup()) {
+            const auto& split = Responses.front().GetSplitMessageGroup();
+
+            for (const auto& body : split.Deregistrations) {
+                SourceIdStorage.DeregisterSourceId(body.SourceId);
+            }
+
+            for (const auto& body : split.Registrations) {
+                TMaybe<TPartitionKeyRange> keyRange;
+                if (body.KeyRange) {
+                    keyRange = TPartitionKeyRange::Parse(*body.KeyRange);
+                }
+
+                Y_VERIFY(body.AssignedOffset);
+                SourceIdStorage.RegisterSourceId(body.SourceId, body.SeqNo, *body.AssignedOffset, CurrentTimestamp, std::move(keyRange), true);
+            }
+
+            ReplyOk(ctx, Responses.front().GetCookie());
+        } else {
+            Y_FAIL("Unexpected message");
         }
         Responses.pop_front();
     }
@@ -3204,10 +3204,10 @@ void TPartition::ReportLabeledCounters(const TActorContext& ctx)
     }
     //Partition counters
     bool haveChanges = false;
-    if (SourceIdStorage.GetInMemorySourceIds().size() != PartitionLabeledCounters.GetCounters()[METRIC_MAX_NUM_SIDS].Get()) { 
+    if (SourceIdStorage.GetInMemorySourceIds().size() != PartitionLabeledCounters.GetCounters()[METRIC_MAX_NUM_SIDS].Get()) {
         haveChanges = true;
-        PartitionLabeledCounters.GetCounters()[METRIC_MAX_NUM_SIDS].Set(SourceIdStorage.GetInMemorySourceIds().size()); 
-        PartitionLabeledCounters.GetCounters()[METRIC_NUM_SIDS].Set(SourceIdStorage.GetInMemorySourceIds().size()); 
+        PartitionLabeledCounters.GetCounters()[METRIC_MAX_NUM_SIDS].Set(SourceIdStorage.GetInMemorySourceIds().size());
+        PartitionLabeledCounters.GetCounters()[METRIC_NUM_SIDS].Set(SourceIdStorage.GetInMemorySourceIds().size());
     }
 
     TDuration lifetimeNow = ctx.Now() - SourceIdStorage.MinAvailableTimestamp(ctx.Now());
@@ -3656,7 +3656,7 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
     for (auto& msg: ev->Get()->Msgs) {
         size += msg.Data.size();
         bool needToChangeOffset = msg.PartNo + 1 == msg.TotalParts;
-        Requests.emplace_back(TWriteMsg{ev->Get()->Cookie, offset, std::move(msg)}, WriteQuota.GetQuotedTime(), ctx.Now().MilliSeconds(), 0); 
+        Requests.emplace_back(TWriteMsg{ev->Get()->Cookie, offset, std::move(msg)}, WriteQuota.GetQuotedTime(), ctx.Now().MilliSeconds(), 0);
         if (offset && needToChangeOffset)
             ++*offset;
     }
@@ -3668,100 +3668,100 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
     UpdateWriteBufferIsFullState(ctx.Now());
 }
 
-void TPartition::HandleOnIdle(TEvPQ::TEvRegisterMessageGroup::TPtr& ev, const TActorContext& ctx) { 
-    HandleOnWrite(ev, ctx); 
-    HandleWrites(ctx); 
-} 
- 
-void TPartition::HandleOnWrite(TEvPQ::TEvRegisterMessageGroup::TPtr& ev, const TActorContext& ctx) { 
-    const auto& body = ev->Get()->Body; 
- 
-    auto it = SourceIdStorage.GetInMemorySourceIds().find(body.SourceId); 
-    if (it != SourceIdStorage.GetInMemorySourceIds().end()) { 
-        if (!it->second.Explicit) { 
-            return ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::BAD_REQUEST, 
-                "Trying to register implicitly registered SourceId"); 
-        } 
- 
-        switch (it->second.State) { 
-        case TSourceIdInfo::EState::Registered: 
-            return ReplyOk(ctx, ev->Get()->Cookie); 
-        case TSourceIdInfo::EState::PendingRegistration: 
-            if (!body.AfterSplit) { 
-                return ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::BAD_REQUEST, 
-                    "AfterSplit must be set"); 
-            } 
-            break; 
-        default: 
-            return ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::ERROR, 
-                TStringBuilder() << "Unknown state: " << static_cast<ui32>(it->second.State)); 
-        } 
-    } else if (body.AfterSplit) { 
-        return ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::BAD_REQUEST, 
-            "SourceId not found, registration cannot be completed"); 
-    } 
- 
-    WriteQuota.Update(ctx.Now()); 
-    Requests.emplace_back(TRegisterMessageGroupMsg(*ev->Get()), WriteQuota.GetQuotedTime(), ctx.Now().MilliSeconds(), 0); 
-} 
- 
-void TPartition::HandleOnIdle(TEvPQ::TEvDeregisterMessageGroup::TPtr& ev, const TActorContext& ctx) { 
-    HandleOnWrite(ev, ctx); 
-    HandleWrites(ctx); 
-} 
- 
-void TPartition::HandleOnWrite(TEvPQ::TEvDeregisterMessageGroup::TPtr& ev, const TActorContext& ctx) { 
-    const auto& body = ev->Get()->Body; 
- 
-    auto it = SourceIdStorage.GetInMemorySourceIds().find(body.SourceId); 
-    if (it == SourceIdStorage.GetInMemorySourceIds().end()) { 
-        return ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::SOURCEID_DELETED, 
-            "SourceId doesn't exist"); 
-    } 
- 
-    WriteQuota.Update(ctx.Now()); 
-    Requests.emplace_back(TDeregisterMessageGroupMsg(*ev->Get()), WriteQuota.GetQuotedTime(), ctx.Now().MilliSeconds(), 0); 
-} 
- 
-void TPartition::HandleOnIdle(TEvPQ::TEvSplitMessageGroup::TPtr& ev, const TActorContext& ctx) { 
-    HandleOnWrite(ev, ctx); 
-    HandleWrites(ctx); 
-} 
- 
-void TPartition::HandleOnWrite(TEvPQ::TEvSplitMessageGroup::TPtr& ev, const TActorContext& ctx) { 
-    if (ev->Get()->Deregistrations.size() > 1) { 
-        return ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::BAD_REQUEST, 
-            TStringBuilder() << "Currently, single deregistrations are supported"); 
-    } 
- 
-    TSplitMessageGroupMsg msg(ev->Get()->Cookie); 
- 
-    for (auto& body : ev->Get()->Deregistrations) { 
-        auto it = SourceIdStorage.GetInMemorySourceIds().find(body.SourceId); 
-        if (it != SourceIdStorage.GetInMemorySourceIds().end()) { 
-            msg.Deregistrations.push_back(std::move(body)); 
-        } else { 
-            return ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::SOURCEID_DELETED, 
-                "SourceId doesn't exist"); 
-        } 
-    } 
- 
-    for (auto& body : ev->Get()->Registrations) { 
-        auto it = SourceIdStorage.GetInMemorySourceIds().find(body.SourceId); 
-        if (it == SourceIdStorage.GetInMemorySourceIds().end()) { 
-            msg.Registrations.push_back(std::move(body)); 
-        } else { 
-            if (!it->second.Explicit) { 
-                return ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::BAD_REQUEST, 
-                    "Trying to register implicitly registered SourceId"); 
-            } 
-        } 
-    } 
- 
-    WriteQuota.Update(ctx.Now()); 
-    Requests.emplace_back(std::move(msg), WriteQuota.GetQuotedTime(), ctx.Now().MilliSeconds(), 0); 
-} 
- 
+void TPartition::HandleOnIdle(TEvPQ::TEvRegisterMessageGroup::TPtr& ev, const TActorContext& ctx) {
+    HandleOnWrite(ev, ctx);
+    HandleWrites(ctx);
+}
+
+void TPartition::HandleOnWrite(TEvPQ::TEvRegisterMessageGroup::TPtr& ev, const TActorContext& ctx) {
+    const auto& body = ev->Get()->Body;
+
+    auto it = SourceIdStorage.GetInMemorySourceIds().find(body.SourceId);
+    if (it != SourceIdStorage.GetInMemorySourceIds().end()) {
+        if (!it->second.Explicit) {
+            return ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::BAD_REQUEST,
+                "Trying to register implicitly registered SourceId");
+        }
+
+        switch (it->second.State) {
+        case TSourceIdInfo::EState::Registered:
+            return ReplyOk(ctx, ev->Get()->Cookie);
+        case TSourceIdInfo::EState::PendingRegistration:
+            if (!body.AfterSplit) {
+                return ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::BAD_REQUEST,
+                    "AfterSplit must be set");
+            }
+            break;
+        default:
+            return ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::ERROR,
+                TStringBuilder() << "Unknown state: " << static_cast<ui32>(it->second.State));
+        }
+    } else if (body.AfterSplit) {
+        return ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::BAD_REQUEST,
+            "SourceId not found, registration cannot be completed");
+    }
+
+    WriteQuota.Update(ctx.Now());
+    Requests.emplace_back(TRegisterMessageGroupMsg(*ev->Get()), WriteQuota.GetQuotedTime(), ctx.Now().MilliSeconds(), 0);
+}
+
+void TPartition::HandleOnIdle(TEvPQ::TEvDeregisterMessageGroup::TPtr& ev, const TActorContext& ctx) {
+    HandleOnWrite(ev, ctx);
+    HandleWrites(ctx);
+}
+
+void TPartition::HandleOnWrite(TEvPQ::TEvDeregisterMessageGroup::TPtr& ev, const TActorContext& ctx) {
+    const auto& body = ev->Get()->Body;
+
+    auto it = SourceIdStorage.GetInMemorySourceIds().find(body.SourceId);
+    if (it == SourceIdStorage.GetInMemorySourceIds().end()) {
+        return ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::SOURCEID_DELETED,
+            "SourceId doesn't exist");
+    }
+
+    WriteQuota.Update(ctx.Now());
+    Requests.emplace_back(TDeregisterMessageGroupMsg(*ev->Get()), WriteQuota.GetQuotedTime(), ctx.Now().MilliSeconds(), 0);
+}
+
+void TPartition::HandleOnIdle(TEvPQ::TEvSplitMessageGroup::TPtr& ev, const TActorContext& ctx) {
+    HandleOnWrite(ev, ctx);
+    HandleWrites(ctx);
+}
+
+void TPartition::HandleOnWrite(TEvPQ::TEvSplitMessageGroup::TPtr& ev, const TActorContext& ctx) {
+    if (ev->Get()->Deregistrations.size() > 1) {
+        return ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::BAD_REQUEST,
+            TStringBuilder() << "Currently, single deregistrations are supported");
+    }
+
+    TSplitMessageGroupMsg msg(ev->Get()->Cookie);
+
+    for (auto& body : ev->Get()->Deregistrations) {
+        auto it = SourceIdStorage.GetInMemorySourceIds().find(body.SourceId);
+        if (it != SourceIdStorage.GetInMemorySourceIds().end()) {
+            msg.Deregistrations.push_back(std::move(body));
+        } else {
+            return ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::SOURCEID_DELETED,
+                "SourceId doesn't exist");
+        }
+    }
+
+    for (auto& body : ev->Get()->Registrations) {
+        auto it = SourceIdStorage.GetInMemorySourceIds().find(body.SourceId);
+        if (it == SourceIdStorage.GetInMemorySourceIds().end()) {
+            msg.Registrations.push_back(std::move(body));
+        } else {
+            if (!it->second.Explicit) {
+                return ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::BAD_REQUEST,
+                    "Trying to register implicitly registered SourceId");
+            }
+        }
+    }
+
+    WriteQuota.Update(ctx.Now());
+    Requests.emplace_back(std::move(msg), WriteQuota.GetQuotedTime(), ctx.Now().MilliSeconds(), 0);
+}
+
 std::pair<TKey, ui32> TPartition::Compact(const TKey& key, const ui32 size, bool headCleared)
 {
     std::pair<TKey, ui32> res({key, size});
@@ -3944,7 +3944,7 @@ void TPartition::ClearOldHead(const ui64 offset, const ui16 partNo, TEvKeyValue:
 }
 
 
-void TPartition::CancelAllWritesOnWrite(const TActorContext& ctx, TEvKeyValue::TEvRequest* request, const TString& errorStr, const TWriteMsg& p, TSourceIdWriter& sourceIdWriter, NPersQueue::NErrorCode::EErrorCode errorCode = NPersQueue::NErrorCode::BAD_REQUEST) { 
+void TPartition::CancelAllWritesOnWrite(const TActorContext& ctx, TEvKeyValue::TEvRequest* request, const TString& errorStr, const TWriteMsg& p, TSourceIdWriter& sourceIdWriter, NPersQueue::NErrorCode::EErrorCode errorCode = NPersQueue::NErrorCode::BAD_REQUEST) {
     ReplyError(ctx, p.Cookie, errorCode, errorStr);
     Counters.Cumulative()[COUNTER_PQ_WRITE_ERROR].Increment(1);
     Counters.Cumulative()[COUNTER_PQ_WRITE_BYTES_ERROR].Increment(p.Msg.Data.size() + p.Msg.SourceId.size());
@@ -3989,47 +3989,47 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
     while (!Requests.empty() && WriteCycleSize < MAX_WRITE_CYCLE_SIZE) { //head is not too big
         auto pp = Requests.front();
         Requests.pop_front();
- 
-        if (!pp.IsWrite()) { 
-            if (pp.IsRegisterMessageGroup()) { 
-                auto& body = pp.GetRegisterMessageGroup().Body; 
- 
-                TMaybe<TPartitionKeyRange> keyRange; 
-                if (body.KeyRange) { 
-                    keyRange = TPartitionKeyRange::Parse(*body.KeyRange); 
-                } 
- 
-                body.AssignedOffset = curOffset; 
-                sourceIdWriter.RegisterSourceId(body.SourceId, body.SeqNo, curOffset, CurrentTimestamp, std::move(keyRange)); 
-            } else if (pp.IsDeregisterMessageGroup()) { 
-                sourceIdWriter.DeregisterSourceId(pp.GetDeregisterMessageGroup().Body.SourceId); 
-            } else if (pp.IsSplitMessageGroup()) { 
-                for (auto& body : pp.GetSplitMessageGroup().Deregistrations) { 
-                    sourceIdWriter.DeregisterSourceId(body.SourceId); 
-                } 
- 
-                for (auto& body : pp.GetSplitMessageGroup().Registrations) { 
-                    TMaybe<TPartitionKeyRange> keyRange; 
-                    if (body.KeyRange) { 
-                        keyRange = TPartitionKeyRange::Parse(*body.KeyRange); 
-                    } 
- 
-                    body.AssignedOffset = curOffset; 
-                    sourceIdWriter.RegisterSourceId(body.SourceId, body.SeqNo, curOffset, CurrentTimestamp, std::move(keyRange), true); 
-                } 
-            } else { 
-                Y_VERIFY(pp.IsOwnership()); 
-            } 
- 
+
+        if (!pp.IsWrite()) {
+            if (pp.IsRegisterMessageGroup()) {
+                auto& body = pp.GetRegisterMessageGroup().Body;
+
+                TMaybe<TPartitionKeyRange> keyRange;
+                if (body.KeyRange) {
+                    keyRange = TPartitionKeyRange::Parse(*body.KeyRange);
+                }
+
+                body.AssignedOffset = curOffset;
+                sourceIdWriter.RegisterSourceId(body.SourceId, body.SeqNo, curOffset, CurrentTimestamp, std::move(keyRange));
+            } else if (pp.IsDeregisterMessageGroup()) {
+                sourceIdWriter.DeregisterSourceId(pp.GetDeregisterMessageGroup().Body.SourceId);
+            } else if (pp.IsSplitMessageGroup()) {
+                for (auto& body : pp.GetSplitMessageGroup().Deregistrations) {
+                    sourceIdWriter.DeregisterSourceId(body.SourceId);
+                }
+
+                for (auto& body : pp.GetSplitMessageGroup().Registrations) {
+                    TMaybe<TPartitionKeyRange> keyRange;
+                    if (body.KeyRange) {
+                        keyRange = TPartitionKeyRange::Parse(*body.KeyRange);
+                    }
+
+                    body.AssignedOffset = curOffset;
+                    sourceIdWriter.RegisterSourceId(body.SourceId, body.SeqNo, curOffset, CurrentTimestamp, std::move(keyRange), true);
+                }
+            } else {
+                Y_VERIFY(pp.IsOwnership());
+            }
+
             pp.QuotedTime = WriteQuota.GetQuotedTime() - pp.QuotedTime; //change to duration
             pp.QueueTime = ctx.Now().MilliSeconds() - pp.QueueTime;
             pp.WriteTime = ctx.Now().MilliSeconds();
             Responses.push_back(pp);
             continue;
         }
- 
-        Y_VERIFY(pp.IsWrite()); 
-        auto& p = pp.GetWrite(); 
+
+        Y_VERIFY(pp.IsWrite());
+        auto& p = pp.GetWrite();
 
         WriteInflightSize -= p.Msg.Data.size();
 
@@ -4250,12 +4250,12 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
                     << " FormedBlobsCount " << PartitionedBlob.GetFormedBlobs().size() << " NewHead: "
                     << NewHead);
 
-            if (it_inMemory == SourceIdStorage.GetInMemorySourceIds().end()) { 
-                sourceIdWriter.RegisterSourceId(p.Msg.SourceId, p.Msg.SeqNo, curOffset, CurrentTimestamp); 
-            } else { 
-                sourceIdWriter.RegisterSourceId(p.Msg.SourceId, it_inMemory->second.Updated(p.Msg.SeqNo, curOffset, CurrentTimestamp)); 
-            } 
- 
+            if (it_inMemory == SourceIdStorage.GetInMemorySourceIds().end()) {
+                sourceIdWriter.RegisterSourceId(p.Msg.SourceId, p.Msg.SeqNo, curOffset, CurrentTimestamp);
+            } else {
+                sourceIdWriter.RegisterSourceId(p.Msg.SourceId, it_inMemory->second.Updated(p.Msg.SeqNo, curOffset, CurrentTimestamp));
+            }
+
             ++curOffset;
             PartitionedBlob = TPartitionedBlob(Partition, 0, "", 0, 0, 0, Head, NewHead, true, false, MaxBlobSize);
         }
@@ -4468,10 +4468,10 @@ bool TPartition::ProcessWrites(TEvKeyValue::TEvRequest* request, const TActorCon
     Y_VERIFY(request->Record.CmdWriteSize() == 0);
     Y_VERIFY(request->Record.CmdRenameSize() == 0);
     Y_VERIFY(request->Record.CmdDeleteRangeSize() == 0);
-    const auto format = AppData(ctx)->PQConfig.GetEnableProtoSourceIdInfo() 
-        ? ESourceIdFormat::Proto 
-        : ESourceIdFormat::Raw; 
-    TSourceIdWriter sourceIdWriter(format); 
+    const auto format = AppData(ctx)->PQConfig.GetEnableProtoSourceIdInfo()
+        ? ESourceIdFormat::Proto
+        : ESourceIdFormat::Raw;
+    TSourceIdWriter sourceIdWriter(format);
 
     bool headCleared = AppendHeadWithNewWrites(request, ctx, sourceIdWriter);
 
@@ -4487,7 +4487,7 @@ bool TPartition::ProcessWrites(TEvKeyValue::TEvRequest* request, const TActorCon
         return request->Record.CmdWriteSize() > 0 || request->Record.CmdRenameSize() > 0 || request->Record.CmdDeleteRangeSize() > 0;
     }
 
-    sourceIdWriter.FillRequest(request, Partition); 
+    sourceIdWriter.FillRequest(request, Partition);
 
     std::pair<TKey, ui32> res = GetNewWriteKey(headCleared);
     const auto& key = res.first;
@@ -4508,11 +4508,11 @@ void TPartition::FilterDeadlinedWrites(const TActorContext& ctx)
 
     for (auto& w : Requests) {
         ReplyError(ctx, w.GetCookie(), NPersQueue::NErrorCode::OVERLOAD, "quota exceeded");
-        if (w.IsWrite()) { 
-            const auto& msg = w.GetWrite().Msg; 
+        if (w.IsWrite()) {
+            const auto& msg = w.GetWrite().Msg;
             Counters.Cumulative()[COUNTER_PQ_WRITE_ERROR].Increment(1);
-            Counters.Cumulative()[COUNTER_PQ_WRITE_BYTES_ERROR].Increment(msg.Data.size() + msg.SourceId.size()); 
-            WriteInflightSize -= msg.Data.size(); 
+            Counters.Cumulative()[COUNTER_PQ_WRITE_BYTES_ERROR].Increment(msg.Data.size() + msg.SourceId.size());
+            WriteInflightSize -= msg.Data.size();
         }
     }
     Requests.clear();

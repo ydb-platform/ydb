@@ -19,7 +19,7 @@ public:
                   const TActorContext &ctx) override;
 
 private:
-    TVector<THolder<TEvChangeExchange::TEvAddSender>> AddSenders; 
+    TVector<THolder<TEvChangeExchange::TEvAddSender>> AddSenders;
 };
 
 TCreateTableUnit::TCreateTableUnit(TDataShard &dataShard,
@@ -66,14 +66,14 @@ EExecutionStatus TCreateTableUnit::Execute(TOperation::TPtr op,
     TUserTable::TPtr info = DataShard.CreateUserTable(txc, schemeTx.GetCreateTable());
     DataShard.AddUserTable(tableId, info);
 
-    for (const auto& [indexPathId, indexInfo] : info->Indexes) { 
+    for (const auto& [indexPathId, indexInfo] : info->Indexes) {
         if (indexInfo.Type == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync) {
-            AddSenders.emplace_back(new TEvChangeExchange::TEvAddSender( 
-                tableId, TEvChangeExchange::ESenderType::AsyncIndex, indexPathId 
-            )); 
-        } 
-    } 
- 
+            AddSenders.emplace_back(new TEvChangeExchange::TEvAddSender(
+                tableId, TEvChangeExchange::ESenderType::AsyncIndex, indexPathId
+            ));
+        }
+    }
+
     BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
     op->Result()->SetStepOrderId(op->GetStepOrder().ToPair());
 
@@ -83,16 +83,16 @@ EExecutionStatus TCreateTableUnit::Execute(TOperation::TPtr op,
         DataShard.CheckMvccStateChangeCanStart(ctx); // Recheck
     }
 
-    return EExecutionStatus::DelayCompleteNoMoreRestarts; 
+    return EExecutionStatus::DelayCompleteNoMoreRestarts;
 }
 
-void TCreateTableUnit::Complete(TOperation::TPtr, const TActorContext &ctx) 
+void TCreateTableUnit::Complete(TOperation::TPtr, const TActorContext &ctx)
 {
-    for (auto& ev : AddSenders) { 
-        ctx.Send(DataShard.GetChangeSender(), ev.Release()); 
-    } 
- 
-    DataShard.MaybeActivateChangeSender(ctx); 
+    for (auto& ev : AddSenders) {
+        ctx.Send(DataShard.GetChangeSender(), ev.Release());
+    }
+
+    DataShard.MaybeActivateChangeSender(ctx);
 }
 
 THolder<TExecutionUnit> CreateCreateTableUnit(TDataShard &dataShard,

@@ -1,23 +1,23 @@
-#pragma once 
- 
+#pragma once
+
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
- 
-#include <util/datetime/base.h> 
+
+#include <util/datetime/base.h>
 #include <util/string/builder.h>
 
-namespace NKikimr { 
- 
-void MEWarning(const TString& settingName, TList<TString>& warnings); 
- 
+namespace NKikimr {
+
+void MEWarning(const TString& settingName, TList<TString>& warnings);
+
 bool FillCreateTableSettingsDesc(NKikimrSchemeOp::TTableDescription& out,
-    const Ydb::Table::CreateTableRequest& in, 
-    Ydb::StatusIds::StatusCode& code, TString& error, TList<TString>& warnings, bool tableProfileSet); 
- 
+    const Ydb::Table::CreateTableRequest& in,
+    Ydb::StatusIds::StatusCode& code, TString& error, TList<TString>& warnings, bool tableProfileSet);
+
 bool FillAlterTableSettingsDesc(NKikimrSchemeOp::TTableDescription& out,
-    const Ydb::Table::AlterTableRequest& in, 
-    Ydb::StatusIds::StatusCode& code, TString& error, bool changed); 
- 
+    const Ydb::Table::AlterTableRequest& in,
+    Ydb::StatusIds::StatusCode& code, TString& error, bool changed);
+
 template <class TTtlSettingsEnabled>
 bool FillTtlSettings(TTtlSettingsEnabled& out, const Ydb::Table::TtlSettings& in,
     Ydb::StatusIds::StatusCode& code, TString& error)
@@ -61,12 +61,12 @@ bool FillTtlSettings(TTtlSettingsEnabled& out, const Ydb::Table::TtlSettings& in
     }
 
     if constexpr (std::is_same_v<TTtlSettingsEnabled, NKikimrSchemeOp::TTTLSettings>) {
-        if (in.run_interval_seconds()) { 
-            out.MutableSysSettings()->SetRunInterval(TDuration::Seconds(in.run_interval_seconds()).GetValue()); 
-        } 
-    } 
- 
+        if (in.run_interval_seconds()) {
+            out.MutableSysSettings()->SetRunInterval(TDuration::Seconds(in.run_interval_seconds()).GetValue());
+        }
+    }
+
     return true;
 }
 
-} // namespace NKikimr 
+} // namespace NKikimr

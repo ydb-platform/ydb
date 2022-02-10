@@ -120,7 +120,7 @@ public:
             NKikimrTxDataShard::TFlatSchemeTransaction tx;
             context.SS->FillSeqNo(tx, seqNo);
             tx.MutableDropTable()->SetId_Deprecated(pathId.LocalPathId);
-            PathIdFromPathId(pathId, tx.MutableDropTable()->MutablePathId()); 
+            PathIdFromPathId(pathId, tx.MutableDropTable()->MutablePathId());
             tx.MutableDropTable()->SetName(path->Name);
             Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);
         }
@@ -416,7 +416,7 @@ public:
         THolder<TEvDataShard::TEvSchemaChangedResult> event = MakeHolder<TEvDataShard::TEvSchemaChangedResult>();
         event->Record.SetTxId(ui64(OperationId.GetTxId()));
 
-        context.OnComplete.Send(ackTo, std::move(event)); 
+        context.OnComplete.Send(ackTo, std::move(event));
         return false;
     }
 
@@ -505,9 +505,9 @@ private:
     }
 
 public:
-    TDropTable(TOperationId id, const TTxTransaction& tx) 
+    TDropTable(TOperationId id, const TTxTransaction& tx)
         : OperationId(id)
-        , Transaction(tx) 
+        , Transaction(tx)
     {}
 
     TDropTable(TOperationId id, TTxState::ETxState state)
@@ -520,10 +520,10 @@ public:
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
-        const auto& drop = Transaction.GetDrop(); 
+        const auto& drop = Transaction.GetDrop();
 
-        const TString& parentPathStr = Transaction.GetWorkingDir(); 
-        const TString& name = drop.GetName(); 
+        const TString& parentPathStr = Transaction.GetWorkingDir();
+        const TString& name = drop.GetName();
 
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "TDropTable Propose"
@@ -540,25 +540,25 @@ public:
 
         {
             TPath::TChecker checks = path.Check();
-            checks 
-                .NotEmpty() 
+            checks
+                .NotEmpty()
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
-                .IsResolved() 
-                .NotDeleted() 
-                .IsTable() 
-                .NotUnderDeleting() 
-                .NotUnderOperation(); 
+                .IsResolved()
+                .NotDeleted()
+                .IsTable()
+                .NotUnderDeleting()
+                .NotUnderOperation();
 
             if (!checks) {
                 TString explain = TStringBuilder() << "path fail checks"
                                                    << ", path: " << path.PathString();
                 auto status = checks.GetStatus(&explain);
                 result->SetError(status, explain);
-                if (path.IsResolved() && path.Base()->IsTable() && (path.Base()->PlannedToDrop() || path.Base()->Dropped())) { 
-                    result->SetPathDropTxId(ui64(path.Base()->DropTxId)); 
-                    result->SetPathId(path.Base()->PathId.LocalPathId); 
-                } 
+                if (path.IsResolved() && path.Base()->IsTable() && (path.Base()->PlannedToDrop() || path.Base()->Dropped())) {
+                    result->SetPathDropTxId(ui64(path.Base()->DropTxId));
+                    result->SetPathId(path.Base()->PathId.LocalPathId);
+                }
                 return result;
             }
         }
@@ -566,20 +566,20 @@ public:
         TPath parent = path.Parent();
         {
             TPath::TChecker checks = parent.Check();
-            checks 
-                .NotEmpty() 
+            checks
+                .NotEmpty()
                 .IsResolved()
                 .NotDeleted();
 
             if (checks) {
                 if (parent.Base()->IsTableIndex()) {
-                    checks 
-                        .IsTableIndex() 
+                    checks
+                        .IsTableIndex()
                         .IsInsideTableIndexPath()
                         .IsUnderDeleting()
                         .IsUnderTheSameOperation(OperationId.GetTxId()); //allow only as part of drop base table
                 } else {
-                    checks 
+                    checks
                         .IsLikeDirectory()
                         .IsCommonSensePath()
                         .NotUnderDeleting();
@@ -595,8 +595,8 @@ public:
             }
         }
 
-        TString errStr; 
-        if (!context.SS->CheckApplyIf(Transaction, errStr)) { 
+        TString errStr;
+        if (!context.SS->CheckApplyIf(Transaction, errStr)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;
         }
@@ -655,14 +655,14 @@ public:
                      "TDropTable AbortPropose"
                          << ", opId: " << OperationId
                          << ", at schemeshard: " << context.SS->TabletID());
-    } 
- 
+    }
+
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "TDropTable AbortUnsafe"
                          << ", opId: " << OperationId
                          << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID()); 
+                         << ", at schemeshard: " << context.SS->TabletID());
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_VERIFY(txState);
@@ -687,10 +687,10 @@ public:
 namespace NKikimr {
 namespace NSchemeShard {
 
-ISubOperationBase::TPtr CreateDropTable(TOperationId id, const TTxTransaction& tx) { 
-    return new TDropTable(id, tx); 
-} 
- 
+ISubOperationBase::TPtr CreateDropTable(TOperationId id, const TTxTransaction& tx) {
+    return new TDropTable(id, tx);
+}
+
 ISubOperationBase::TPtr CreateDropTable(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
     return new TDropTable(id, state);

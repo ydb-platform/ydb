@@ -161,7 +161,7 @@ protected:
 
         THolder<TEvPersQueue::TEvUpdateConfig> request(new TEvPersQueue::TEvUpdateConfig());
         for (size_t i : partitions) {
-            request->Record.MutableTabletConfig()->AddPartitionIds(i); 
+            request->Record.MutableTabletConfig()->AddPartitionIds(i);
         }
         request->Record.MutableTabletConfig()->SetCacheSize(10*1024*1024);
         request->Record.SetTxId(12345);

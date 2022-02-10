@@ -17,8 +17,8 @@ SRCS(
     scheme_cache.cpp
 )
 
-GENERATE_ENUM_SERIALIZATION(scheme_cache.h) 
- 
-YQL_LAST_ABI_VERSION() 
- 
+GENERATE_ENUM_SERIALIZATION(scheme_cache.h)
+
+YQL_LAST_ABI_VERSION()
+
 END()

@@ -33,8 +33,8 @@ static ESchemeEntryType ConvertProtoEntryType(::Ydb::Scheme::Entry::Type entry) 
         return ESchemeEntryType::CoordinationNode;
     case ::Ydb::Scheme::Entry::SEQUENCE:
         return ESchemeEntryType::Sequence;
-    case ::Ydb::Scheme::Entry::REPLICATION: 
-        return ESchemeEntryType::Replication; 
+    case ::Ydb::Scheme::Entry::REPLICATION:
+        return ESchemeEntryType::Replication;
     default:
         return ESchemeEntryType::Unknown;
     }
@@ -82,7 +82,7 @@ public:
                     entry.Name = result.self().name();
                     entry.Owner = result.self().owner();
                     entry.Type = ConvertProtoEntryType(result.self().type());
-                    entry.SizeBytes = result.self().size_bytes(); 
+                    entry.SizeBytes = result.self().size_bytes();
                     PermissionToSchemeEntry(result.self().effective_permissions(), &entry.EffectivePermissions);
                     PermissionToSchemeEntry(result.self().permissions(), &entry.Permissions);
                 }

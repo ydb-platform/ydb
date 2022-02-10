@@ -314,7 +314,7 @@ struct TEvLocal {
         NKikimrTabletBase::TMetrics ResourceLimit;
         TString Error;
         THashMap<TString, TString> Attributes;
-        TSubDomainKey DomainKey; 
+        TSubDomainKey DomainKey;
 
         TEvTenantStatus(const TString &tenant, EStatus status)
             : TenantName(tenant)
@@ -330,13 +330,13 @@ struct TEvLocal {
         TEvTenantStatus(const TString &tenant,
                         EStatus status,
                         NKikimrTabletBase::TMetrics resourceLimit,
-                        const THashMap<TString, TString> &attrs, 
-                        const TSubDomainKey &domainKey) 
+                        const THashMap<TString, TString> &attrs,
+                        const TSubDomainKey &domainKey)
             : TenantName(tenant)
             , Status(status)
             , ResourceLimit(resourceLimit)
             , Attributes(attrs)
-            , DomainKey(domainKey) 
+            , DomainKey(domainKey)
         {}
     };
 

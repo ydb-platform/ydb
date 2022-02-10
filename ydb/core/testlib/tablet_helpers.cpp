@@ -20,7 +20,7 @@
 #include <ydb/core/tx/tx_allocator/txallocator.h>
 #include <ydb/core/tx/coordinator/coordinator.h>
 #include <ydb/core/tx/mediator/mediator.h>
-#include <ydb/core/tx/replication/controller/controller.h> 
+#include <ydb/core/tx/replication/controller/controller.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/sequenceshard/sequenceshard.h>
 #include <ydb/core/tx/time_cast/time_cast.h>
@@ -1187,8 +1187,8 @@ namespace NKikimr {
                     bootstrapperActorId = Boot(ctx, type, &NSysView::CreateSysViewProcessor, DataGroupErasure);
                 } else if (type == defaultTabletTypes.SequenceShard) {
                     bootstrapperActorId = Boot(ctx, type, &NSequenceShard::CreateSequenceShard, DataGroupErasure);
-                } else if (type == defaultTabletTypes.ReplicationController) { 
-                    bootstrapperActorId = Boot(ctx, type, &NReplication::CreateController, DataGroupErasure); 
+                } else if (type == defaultTabletTypes.ReplicationController) {
+                    bootstrapperActorId = Boot(ctx, type, &NReplication::CreateController, DataGroupErasure);
                 } else {
                     status = NKikimrProto::ERROR;
                 }

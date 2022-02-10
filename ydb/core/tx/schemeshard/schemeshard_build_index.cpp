@@ -187,46 +187,46 @@ void TSchemeShard::PersistBuildIndexForget(NIceDb::TNiceDb& db, const TIndexBuil
 }
 
 void TSchemeShard::Resume(const TDeque<TIndexBuildId>& indexIds, const TActorContext& ctx) {
-    for (const auto& id : indexIds) { 
-        if (IndexBuilds.contains(id)) { 
-            Execute(CreateTxProgress(id), ctx); 
-        } 
-    } 
+    for (const auto& id : indexIds) {
+        if (IndexBuilds.contains(id)) {
+            Execute(CreateTxProgress(id), ctx);
+        }
+    }
 }
- 
+
 void TSchemeShard::SetupRouting(const TDeque<TIndexBuildId>& indexIds, const TActorContext &) {
-    for (const auto& id : indexIds) { 
-        if (!IndexBuilds.contains(id)) { 
-            continue; 
-        } 
- 
-        auto buildInfo = IndexBuilds.at(id); 
- 
-        if (buildInfo->LockTxId) { 
-            Y_VERIFY(!TxIdToIndexBuilds.contains(buildInfo->LockTxId) 
-                     || TxIdToIndexBuilds.at(buildInfo->LockTxId) == buildInfo->Id); 
-            TxIdToIndexBuilds[buildInfo->LockTxId] = buildInfo->Id; 
-        } 
- 
-        if (buildInfo->InitiateTxId) { 
-            Y_VERIFY(!TxIdToIndexBuilds.contains(buildInfo->InitiateTxId) 
-                     || TxIdToIndexBuilds.at(buildInfo->InitiateTxId) == buildInfo->Id); 
-            TxIdToIndexBuilds[buildInfo->InitiateTxId] = buildInfo->Id; 
-        } 
- 
-        if (buildInfo->ApplyTxId) { 
-            Y_VERIFY(!TxIdToIndexBuilds.contains(buildInfo->ApplyTxId) 
-                     || TxIdToIndexBuilds.at(buildInfo->ApplyTxId) == buildInfo->Id); 
-            TxIdToIndexBuilds[buildInfo->ApplyTxId] = buildInfo->Id; 
-        } 
- 
-        if (buildInfo->UnlockTxId) { 
-            Y_VERIFY(!TxIdToIndexBuilds.contains(buildInfo->UnlockTxId) 
-                     || TxIdToIndexBuilds.at(buildInfo->UnlockTxId) == buildInfo->Id); 
-            TxIdToIndexBuilds[buildInfo->UnlockTxId] = buildInfo->Id; 
-        } 
-    } 
+    for (const auto& id : indexIds) {
+        if (!IndexBuilds.contains(id)) {
+            continue;
+        }
+
+        auto buildInfo = IndexBuilds.at(id);
+
+        if (buildInfo->LockTxId) {
+            Y_VERIFY(!TxIdToIndexBuilds.contains(buildInfo->LockTxId)
+                     || TxIdToIndexBuilds.at(buildInfo->LockTxId) == buildInfo->Id);
+            TxIdToIndexBuilds[buildInfo->LockTxId] = buildInfo->Id;
+        }
+
+        if (buildInfo->InitiateTxId) {
+            Y_VERIFY(!TxIdToIndexBuilds.contains(buildInfo->InitiateTxId)
+                     || TxIdToIndexBuilds.at(buildInfo->InitiateTxId) == buildInfo->Id);
+            TxIdToIndexBuilds[buildInfo->InitiateTxId] = buildInfo->Id;
+        }
+
+        if (buildInfo->ApplyTxId) {
+            Y_VERIFY(!TxIdToIndexBuilds.contains(buildInfo->ApplyTxId)
+                     || TxIdToIndexBuilds.at(buildInfo->ApplyTxId) == buildInfo->Id);
+            TxIdToIndexBuilds[buildInfo->ApplyTxId] = buildInfo->Id;
+        }
+
+        if (buildInfo->UnlockTxId) {
+            Y_VERIFY(!TxIdToIndexBuilds.contains(buildInfo->UnlockTxId)
+                     || TxIdToIndexBuilds.at(buildInfo->UnlockTxId) == buildInfo->Id);
+            TxIdToIndexBuilds[buildInfo->UnlockTxId] = buildInfo->Id;
+        }
+    }
 }
- 
-} 
-} 
+
+}
+}

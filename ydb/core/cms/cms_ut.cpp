@@ -145,28 +145,28 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
     Y_UNIT_TEST(StateRequestNode)
     {
-        TCmsTestEnv env(8, TNodeTenantsMap{{1, {"user0"}}}); 
+        TCmsTestEnv env(8, TNodeTenantsMap{{1, {"user0"}}});
 
-        THashMap<ui32, TString> nodeIdxToServiceName = { 
-            {0, "storage"}, 
-            {1, "dynnode"}, 
-        }; 
+        THashMap<ui32, TString> nodeIdxToServiceName = {
+            {0, "storage"},
+            {1, "dynnode"},
+        };
 
-        for (const auto& [nodeIdx, serviceName] : nodeIdxToServiceName) { 
-            NKikimrCms::TClusterStateRequest request; 
-            request.AddHosts(ToString(env.GetNodeId(nodeIdx))); 
- 
-            auto state = env.RequestState(request); 
-            UNIT_ASSERT_VALUES_EQUAL(state.HostsSize(), 1); 
-            const auto &host = state.GetHosts(0); 
-            UNIT_ASSERT_VALUES_EQUAL(host.GetName(), "::1"); 
-            UNIT_ASSERT_VALUES_EQUAL(host.GetState(), UP); 
-            UNIT_ASSERT_VALUES_EQUAL(host.ServicesSize(), 1); 
-            const auto &service = host.GetServices(0); 
-            UNIT_ASSERT_VALUES_EQUAL(service.GetName(), serviceName); 
-            UNIT_ASSERT_VALUES_EQUAL(service.GetState(), UP); 
-            UNIT_ASSERT_VALUES_EQUAL(service.GetVersion(), ToString(GetProgramSvnRevision())); 
-        } 
+        for (const auto& [nodeIdx, serviceName] : nodeIdxToServiceName) {
+            NKikimrCms::TClusterStateRequest request;
+            request.AddHosts(ToString(env.GetNodeId(nodeIdx)));
+
+            auto state = env.RequestState(request);
+            UNIT_ASSERT_VALUES_EQUAL(state.HostsSize(), 1);
+            const auto &host = state.GetHosts(0);
+            UNIT_ASSERT_VALUES_EQUAL(host.GetName(), "::1");
+            UNIT_ASSERT_VALUES_EQUAL(host.GetState(), UP);
+            UNIT_ASSERT_VALUES_EQUAL(host.ServicesSize(), 1);
+            const auto &service = host.GetServices(0);
+            UNIT_ASSERT_VALUES_EQUAL(service.GetName(), serviceName);
+            UNIT_ASSERT_VALUES_EQUAL(service.GetState(), UP);
+            UNIT_ASSERT_VALUES_EQUAL(service.GetVersion(), ToString(GetProgramSvnRevision()));
+        }
     }
 
     Y_UNIT_TEST(StateRequestUnknownNode)
@@ -695,29 +695,29 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         env.CheckWalleListTasks(0);
     }
 
-    Y_UNIT_TEST(WalleTasksWithNodeLimit) 
-    { 
-        TCmsTestEnv env(24, 4); 
- 
-        // set limit 
-        NKikimrCms::TCmsConfig config; 
-        config.MutableClusterLimits()->SetDisabledNodesLimit(1); 
-        env.SetCmsConfig(config); 
- 
-        // ok 
-        env.CheckWalleCreateTask("task-1", "reboot", false, TStatus::ALLOW, env.GetNodeId(0)); 
-        // schedule 
-        env.CheckWalleCreateTask("task-2", "reboot", false, TStatus::DISALLOW_TEMP, env.GetNodeId(1)); 
-        // remove first task 
-        env.CheckWalleRemoveTask("task-1"); 
-        // ok for second task 
-        env.CheckWalleCheckTask("task-2", TStatus::ALLOW, env.GetNodeId(1)); 
- 
-        // check task is not removed 
-        env.AdvanceCurrentTime(TDuration::Minutes(20)); 
-        env.CheckWalleCheckTask("task-2", TStatus::ALLOW, env.GetNodeId(1)); 
-    } 
- 
+    Y_UNIT_TEST(WalleTasksWithNodeLimit)
+    {
+        TCmsTestEnv env(24, 4);
+
+        // set limit
+        NKikimrCms::TCmsConfig config;
+        config.MutableClusterLimits()->SetDisabledNodesLimit(1);
+        env.SetCmsConfig(config);
+
+        // ok
+        env.CheckWalleCreateTask("task-1", "reboot", false, TStatus::ALLOW, env.GetNodeId(0));
+        // schedule
+        env.CheckWalleCreateTask("task-2", "reboot", false, TStatus::DISALLOW_TEMP, env.GetNodeId(1));
+        // remove first task
+        env.CheckWalleRemoveTask("task-1");
+        // ok for second task
+        env.CheckWalleCheckTask("task-2", TStatus::ALLOW, env.GetNodeId(1));
+
+        // check task is not removed
+        env.AdvanceCurrentTime(TDuration::Minutes(20));
+        env.CheckWalleCheckTask("task-2", TStatus::ALLOW, env.GetNodeId(1));
+    }
+
     Y_UNIT_TEST(Notifications)
     {
         TCmsTestEnv env(8);
@@ -795,9 +795,9 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
              MakeAction(TAction::REPLACE_DEVICES, env.GetNodeId(0), 60000000, env.PDiskName(1, 0)));
 
         // Intersects with notification.
-        const TDuration _10minutes = TDuration::Minutes(10); 
-        env.CheckPermissionRequest("user", false, true, true, true, _10minutes, TStatus::DISALLOW_TEMP, 
-                                   MakeAction(TAction::REPLACE_DEVICES, env.GetNodeId(0), _10minutes.MicroSeconds(), env.PDiskName(1, 0))); 
+        const TDuration _10minutes = TDuration::Minutes(10);
+        env.CheckPermissionRequest("user", false, true, true, true, _10minutes, TStatus::DISALLOW_TEMP,
+                                   MakeAction(TAction::REPLACE_DEVICES, env.GetNodeId(0), _10minutes.MicroSeconds(), env.PDiskName(1, 0)));
 
         // OK with default duration.
         env.CheckPermissionRequest("user", false, true, true, true, TStatus::ALLOW,
@@ -850,7 +850,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"));
     }
 
-    void TestAvailabilityMode(EAvailabilityMode mode, bool disconnectNodes) 
+    void TestAvailabilityMode(EAvailabilityMode mode, bool disconnectNodes)
     {
         Y_VERIFY(mode == MODE_KEEP_AVAILABLE
                  || mode == MODE_FORCE_RESTART);
@@ -861,62 +861,62 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
             (env.CheckPermissionRequest("user", false, false, false,
                                         true, mode, TStatus::ALLOW,
                                         MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000)));
-        if (disconnectNodes) { 
-            TFakeNodeWhiteboardService::Info[env.GetNodeId(0)].Connected = false; 
-        } 
- 
-        env.CheckPermissionRequest("user", false, false, false,
-                                   true, mode, TStatus::ALLOW, 
-                                   MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(1), 60000000));
-        if (disconnectNodes) { 
-            TFakeNodeWhiteboardService::Info[env.GetNodeId(1)].Connected = false; 
-        } 
+        if (disconnectNodes) {
+            TFakeNodeWhiteboardService::Info[env.GetNodeId(0)].Connected = false;
+        }
 
-        env.CheckPermissionRequest("user", false, false, false, 
-                                   true, mode, mode == MODE_KEEP_AVAILABLE ? TStatus::DISALLOW_TEMP : TStatus::ALLOW, 
-                                   MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(2), 60000000)); 
-        if (mode != MODE_KEEP_AVAILABLE) { 
-            return; 
-        } 
- 
+        env.CheckPermissionRequest("user", false, false, false,
+                                   true, mode, TStatus::ALLOW,
+                                   MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(1), 60000000));
+        if (disconnectNodes) {
+            TFakeNodeWhiteboardService::Info[env.GetNodeId(1)].Connected = false;
+        }
+
+        env.CheckPermissionRequest("user", false, false, false,
+                                   true, mode, mode == MODE_KEEP_AVAILABLE ? TStatus::DISALLOW_TEMP : TStatus::ALLOW,
+                                   MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(2), 60000000));
+        if (mode != MODE_KEEP_AVAILABLE) {
+            return;
+        }
+
         env.CheckDonePermission("user", res1.second[0]);
 
         env.CheckPermissionRequest("user", false, false, false,
-                                   true, mode, disconnectNodes ? TStatus::DISALLOW_TEMP: TStatus::ALLOW, 
-                                   MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(3), 60000000)); 
-        if (!disconnectNodes) { 
-            return; 
-        } 
+                                   true, mode, disconnectNodes ? TStatus::DISALLOW_TEMP: TStatus::ALLOW,
+                                   MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(3), 60000000));
+        if (!disconnectNodes) {
+            return;
+        }
 
-        TFakeNodeWhiteboardService::Info[env.GetNodeId(0)].Connected = true; 
+        TFakeNodeWhiteboardService::Info[env.GetNodeId(0)].Connected = true;
 
         env.CheckPermissionRequest("user", false, false, false,
-                                   true, mode, TStatus::ALLOW, 
-                                   MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(3), 60000000)); 
+                                   true, mode, TStatus::ALLOW,
+                                   MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(3), 60000000));
     }
 
     Y_UNIT_TEST(TestKeepAvailableMode)
     {
-        TestAvailabilityMode(MODE_KEEP_AVAILABLE, false); 
+        TestAvailabilityMode(MODE_KEEP_AVAILABLE, false);
     }
 
     Y_UNIT_TEST(TestForceRestartMode)
     {
-        TestAvailabilityMode(MODE_FORCE_RESTART, false); 
+        TestAvailabilityMode(MODE_FORCE_RESTART, false);
     }
 
-    Y_UNIT_TEST(TestKeepAvailableModeDisconnects) 
+    Y_UNIT_TEST(TestKeepAvailableModeDisconnects)
     {
-        TestAvailabilityMode(MODE_KEEP_AVAILABLE, true); 
-    } 
- 
-    Y_UNIT_TEST(TestForceRestartModeDisconnects) 
-    { 
-        TestAvailabilityMode(MODE_FORCE_RESTART, true); 
-    } 
- 
-    void TestAvailabilityModeScheduled(EAvailabilityMode mode,  bool disconnectNodes) 
-    { 
+        TestAvailabilityMode(MODE_KEEP_AVAILABLE, true);
+    }
+
+    Y_UNIT_TEST(TestForceRestartModeDisconnects)
+    {
+        TestAvailabilityMode(MODE_FORCE_RESTART, true);
+    }
+
+    void TestAvailabilityModeScheduled(EAvailabilityMode mode,  bool disconnectNodes)
+    {
         Y_VERIFY(mode == MODE_KEEP_AVAILABLE
                  || mode == MODE_FORCE_RESTART);
 
@@ -928,56 +928,56 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                                         MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000),
                                         MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(1), 60000000),
                                         MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(2), 60000000)));
-        if (disconnectNodes) { 
-            TFakeNodeWhiteboardService::Info[env.GetNodeId(0)].Connected = false; 
-        } 
+        if (disconnectNodes) {
+            TFakeNodeWhiteboardService::Info[env.GetNodeId(0)].Connected = false;
+        }
 
-        env.CheckRequest("user", res1.first, false, mode, TStatus::ALLOW_PARTIAL, 1); 
-        if (disconnectNodes) { 
-            TFakeNodeWhiteboardService::Info[env.GetNodeId(1)].Connected = false; 
-        } 
+        env.CheckRequest("user", res1.first, false, mode, TStatus::ALLOW_PARTIAL, 1);
+        if (disconnectNodes) {
+            TFakeNodeWhiteboardService::Info[env.GetNodeId(1)].Connected = false;
+        }
 
-        env.CheckRequest("user", res1.first, false, mode, 
-                         mode == MODE_KEEP_AVAILABLE ? TStatus::DISALLOW_TEMP : TStatus::ALLOW, 
-                         mode == MODE_KEEP_AVAILABLE ? 0 : 1); 
-        if (mode != MODE_KEEP_AVAILABLE) { 
-            return; 
-        } 
+        env.CheckRequest("user", res1.first, false, mode,
+                         mode == MODE_KEEP_AVAILABLE ? TStatus::DISALLOW_TEMP : TStatus::ALLOW,
+                         mode == MODE_KEEP_AVAILABLE ? 0 : 1);
+        if (mode != MODE_KEEP_AVAILABLE) {
+            return;
+        }
 
-        env.CheckDonePermission("user", res1.second[0]); 
+        env.CheckDonePermission("user", res1.second[0]);
 
-        env.CheckRequest("user", res1.first, false, mode, 
-                         disconnectNodes ? TStatus::DISALLOW_TEMP : TStatus::ALLOW, 
-                         disconnectNodes ? 0 : 1); 
-        if (!disconnectNodes) { 
-            return; 
-        } 
+        env.CheckRequest("user", res1.first, false, mode,
+                         disconnectNodes ? TStatus::DISALLOW_TEMP : TStatus::ALLOW,
+                         disconnectNodes ? 0 : 1);
+        if (!disconnectNodes) {
+            return;
+        }
 
-        TFakeNodeWhiteboardService::Info[env.GetNodeId(0)].Connected = true; 
+        TFakeNodeWhiteboardService::Info[env.GetNodeId(0)].Connected = true;
 
-        env.CheckRequest("user", res1.first, false, mode, TStatus::ALLOW, 1); 
+        env.CheckRequest("user", res1.first, false, mode, TStatus::ALLOW, 1);
     }
 
     Y_UNIT_TEST(TestKeepAvailableModeScheduled)
     {
-        TestAvailabilityModeScheduled(MODE_KEEP_AVAILABLE, false); 
+        TestAvailabilityModeScheduled(MODE_KEEP_AVAILABLE, false);
     }
 
     Y_UNIT_TEST(TestForceRestartModeScheduled)
     {
-        TestAvailabilityModeScheduled(MODE_FORCE_RESTART, false); 
+        TestAvailabilityModeScheduled(MODE_FORCE_RESTART, false);
     }
 
-    Y_UNIT_TEST(TestKeepAvailableModeScheduledDisconnects) 
-    { 
-        TestAvailabilityModeScheduled(MODE_KEEP_AVAILABLE, true); 
-    } 
- 
-    Y_UNIT_TEST(TestForceRestartModeScheduledDisconnects) 
-    { 
-        TestAvailabilityModeScheduled(MODE_FORCE_RESTART, true); 
-    } 
- 
+    Y_UNIT_TEST(TestKeepAvailableModeScheduledDisconnects)
+    {
+        TestAvailabilityModeScheduled(MODE_KEEP_AVAILABLE, true);
+    }
+
+    Y_UNIT_TEST(TestForceRestartModeScheduledDisconnects)
+    {
+        TestAvailabilityModeScheduled(MODE_FORCE_RESTART, true);
+    }
+
     Y_UNIT_TEST(TestOutdatedState)
     {
         TCmsTestEnv env(8);
@@ -1007,14 +1007,14 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
     {
         TCmsTestEnv env(8, 4);
 
-        env.CheckSetMarker(MARKER_DISK_BROKEN, "", TStatus::ERROR, 
+        env.CheckSetMarker(MARKER_DISK_BROKEN, "", TStatus::ERROR,
                            "::1",
                            env.PDiskId(0, 0),
                            env.PDiskId(1, 1),
                            env.PDiskId(2, 2),
                            env.PDiskId(3, 3));
 
-        env.CheckResetMarker(MARKER_DISK_BROKEN, "", TStatus::ERROR, 
+        env.CheckResetMarker(MARKER_DISK_BROKEN, "", TStatus::ERROR,
                              "::1",
                              env.PDiskId(0, 0),
                              env.PDiskId(1, 1));

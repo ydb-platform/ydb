@@ -6,11 +6,11 @@ namespace NKikimr {
 namespace NDataShard {
 
 class TDropIndexNoticeUnit : public TExecutionUnit {
-    THolder<TEvChangeExchange::TEvRemoveSender> RemoveSender; 
- 
+    THolder<TEvChangeExchange::TEvRemoveSender> RemoveSender;
+
 public:
     TDropIndexNoticeUnit(TDataShard& dataShard, TPipeline& pipeline)
-        : TExecutionUnit(EExecutionUnitKind::DropIndexNotice, false, dataShard, pipeline) 
+        : TExecutionUnit(EExecutionUnitKind::DropIndexNotice, false, dataShard, pipeline)
     { }
 
     bool IsReadyToExecute(TOperation::TPtr) const override {
@@ -33,37 +33,37 @@ public:
         auto pathId = TPathId(params.GetPathId().GetOwnerId(), params.GetPathId().GetLocalId());
         Y_VERIFY(pathId.OwnerId == DataShard.GetPathOwnerId());
 
-        TUserTable::TPtr tableInfo; 
-        if (params.HasIndexPathId()) { 
-            auto indexPathId = TPathId(params.GetIndexPathId().GetOwnerId(), params.GetIndexPathId().GetLocalId()); 
- 
-            const auto& userTables = DataShard.GetUserTables(); 
-            Y_VERIFY(userTables.contains(pathId.LocalPathId)); 
-            const auto& indexes = userTables.at(pathId.LocalPathId)->Indexes; 
- 
-            auto it = indexes.find(indexPathId); 
+        TUserTable::TPtr tableInfo;
+        if (params.HasIndexPathId()) {
+            auto indexPathId = TPathId(params.GetIndexPathId().GetOwnerId(), params.GetIndexPathId().GetLocalId());
+
+            const auto& userTables = DataShard.GetUserTables();
+            Y_VERIFY(userTables.contains(pathId.LocalPathId));
+            const auto& indexes = userTables.at(pathId.LocalPathId)->Indexes;
+
+            auto it = indexes.find(indexPathId);
             if (it != indexes.end() && it->second.Type == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync) {
-                RemoveSender.Reset(new TEvChangeExchange::TEvRemoveSender(indexPathId)); 
-            } 
- 
-            tableInfo = DataShard.AlterTableDropIndex(ctx, txc, pathId, params.GetTableSchemaVersion(), indexPathId); 
-        } else { 
-            tableInfo = DataShard.AlterTableSchemaVersion(ctx, txc, pathId, params.GetTableSchemaVersion()); 
-        } 
- 
-        Y_VERIFY(tableInfo); 
+                RemoveSender.Reset(new TEvChangeExchange::TEvRemoveSender(indexPathId));
+            }
+
+            tableInfo = DataShard.AlterTableDropIndex(ctx, txc, pathId, params.GetTableSchemaVersion(), indexPathId);
+        } else {
+            tableInfo = DataShard.AlterTableSchemaVersion(ctx, txc, pathId, params.GetTableSchemaVersion());
+        }
+
+        Y_VERIFY(tableInfo);
         DataShard.AddUserTable(pathId, tableInfo);
 
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
         op->Result()->SetStepOrderId(op->GetStepOrder().ToPair());
 
-        return EExecutionStatus::DelayCompleteNoMoreRestarts; 
+        return EExecutionStatus::DelayCompleteNoMoreRestarts;
     }
 
-    void Complete(TOperation::TPtr, const TActorContext& ctx) override { 
-        if (RemoveSender) { 
-            ctx.Send(DataShard.GetChangeSender(), RemoveSender.Release()); 
-        } 
+    void Complete(TOperation::TPtr, const TActorContext& ctx) override {
+        if (RemoveSender) {
+            ctx.Send(DataShard.GetChangeSender(), RemoveSender.Release());
+        }
     }
 };
 

@@ -43,7 +43,7 @@ TVector<ISubOperationBase::TPtr> CreateBuildIndex(TOperationId nextId, const TTx
         }
         tableIndexCreation.MutableCreateTableIndex()->SetState(NKikimrSchemeOp::EIndexStateWriteOnly);
 
-        result.push_back(CreateNewTableIndex(NextPartId(nextId, result), tableIndexCreation)); 
+        result.push_back(CreateNewTableIndex(NextPartId(nextId, result), tableIndexCreation));
     }
 
     {
@@ -52,7 +52,7 @@ TVector<ISubOperationBase::TPtr> CreateBuildIndex(TOperationId nextId, const TTx
         auto& shapshot = *initialize.MutableInitiateBuildIndexMainTable();
         shapshot.SetTableName(table.LeafName());
 
-        result.push_back(CreateInitializeBuildIndexMainTable(NextPartId(nextId, result), initialize)); 
+        result.push_back(CreateInitializeBuildIndexMainTable(NextPartId(nextId, result), initialize));
     }
 
     {
@@ -75,7 +75,7 @@ TVector<ISubOperationBase::TPtr> CreateBuildIndex(TOperationId nextId, const TTx
         indexImplTableDescription.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(true);
         indexImplTableDescription.MutablePartitionConfig()->SetShadowData(true);
 
-        result.push_back(CreateInitializeBuildIndexImplTable(NextPartId(nextId, result), indexImplTableCreation)); 
+        result.push_back(CreateInitializeBuildIndexImplTable(NextPartId(nextId, result), indexImplTableCreation));
     }
 
     return result;

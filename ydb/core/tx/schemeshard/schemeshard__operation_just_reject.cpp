@@ -27,10 +27,10 @@ public:
         Response->SetError(status, explain);
     }
 
-    void AbortPropose(TOperationContext&) override { 
-        Y_FAIL("no AbortPropose for TReject"); 
-    } 
- 
+    void AbortPropose(TOperationContext&) override {
+        Y_FAIL("no AbortPropose for TReject");
+    }
+
     void ProgressState(TOperationContext&) override {
         Y_FAIL("no ProgressState for TReject");
     }

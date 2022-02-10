@@ -350,7 +350,7 @@ public:
             case NKikimrSchemeOp::EPathType::EPathTypeColumnTable:
             case NKikimrSchemeOp::EPathType::EPathTypeCdcStream:
             case NKikimrSchemeOp::EPathType::EPathTypeSequence:
-            case NKikimrSchemeOp::EPathType::EPathTypeReplication: 
+            case NKikimrSchemeOp::EPathType::EPathTypeReplication:
                 Y_FAIL("UNIMPLEMENTED");
             case NKikimrSchemeOp::EPathType::EPathTypeInvalid:
                 Y_UNREACHABLE();
@@ -415,7 +415,7 @@ public:
             path.Base()->Owner, path.GetEffectiveACL(), path.GetEffectiveACLVersion(),
             processing, storagePools,
             path.Base()->UserAttrs->Attrs, path.Base()->UserAttrs->AlterVersion,
-            schemeLimits, ui64(InvalidTabletId)); 
+            schemeLimits, ui64(InvalidTabletId));
         event->Record.SetInitiateMigration(true);
 
         Y_VERIFY(1 == txState->Shards.size());

@@ -8,7 +8,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_types/status/status.h>
 
 #include <library/cpp/logger/backend.h>
- 
+
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace NYdb {

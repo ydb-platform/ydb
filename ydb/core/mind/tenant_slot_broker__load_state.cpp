@@ -171,14 +171,14 @@ public:
             LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,
                         "Taking ownership of tenant pool on node " << pr.first);
 
-            ctx.Send(MakeTenantPoolID(pr.first, Self->DomainId), new TEvTenantPool::TEvTakeOwnership(Self->Generation())); 
+            ctx.Send(MakeTenantPoolID(pr.first, Self->DomainId), new TEvTenantPool::TEvTakeOwnership(Self->Generation()));
             ctx.Send(GetNameserviceActorId(), new TEvInterconnect::TEvGetNode(pr.first));
- 
-            for (auto& slot : pr.second) { 
-                const ui64 randomDelay = TAppData::RandomProvider->GenRand64() % Self->PendingTimeout.GetValue(); 
-                const TDuration pendingTimeout = Self->PendingTimeout + TDuration::FromValue(randomDelay); 
-                ctx.Schedule(pendingTimeout, new TEvPrivate::TEvCheckSlotStatus(slot, reqId)); 
-            } 
+
+            for (auto& slot : pr.second) {
+                const ui64 randomDelay = TAppData::RandomProvider->GenRand64() % Self->PendingTimeout.GetValue();
+                const TDuration pendingTimeout = Self->PendingTimeout + TDuration::FromValue(randomDelay);
+                ctx.Schedule(pendingTimeout, new TEvPrivate::TEvCheckSlotStatus(slot, reqId));
+            }
         }
 
         return true;

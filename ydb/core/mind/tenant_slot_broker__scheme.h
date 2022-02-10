@@ -82,10 +82,10 @@ struct Schema : NIceDb::Schema {
         struct SlotId : Column<2, NScheme::NTypeIds::Utf8> {};
         struct TenantName : Column<3, NScheme::NTypeIds::Utf8> {};
         struct Label : Column<4, NScheme::NTypeIds::Utf8> {};
-        struct Deadline : Column<5, NScheme::NTypeIds::Uint64> {}; 
+        struct Deadline : Column<5, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<NodeId, SlotId>;
-        using TColumns = TableColumns<NodeId, SlotId, TenantName, Label, Deadline>; 
+        using TColumns = TableColumns<NodeId, SlotId, TenantName, Label, Deadline>;
     };
 
     using TTables = SchemaTables<Config, RequiredSlots, Slots, SlotLabels, SlotsAllocations, BannedSlots, PinnedSlots>;

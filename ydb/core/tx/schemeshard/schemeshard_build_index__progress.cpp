@@ -172,7 +172,7 @@ public:
 
         case TIndexBuildInfo::EState::Locking:
             if (buildInfo->LockTxId == InvalidTxId) {
-                Send(Self->TxAllocatorClient, MakeHolder<TEvTxAllocatorClient::TEvAllocate>(), 0, ui64(BuildId)); 
+                Send(Self->TxAllocatorClient, MakeHolder<TEvTxAllocatorClient::TEvAllocate>(), 0, ui64(BuildId));
             } else if (buildInfo->LockTxStatus == NKikimrScheme::StatusSuccess) {
                 Send(Self->SelfId(), LockPropose(Self, buildInfo), 0, ui64(BuildId));
             } else if (!buildInfo->LockTxDone) {
@@ -189,7 +189,7 @@ public:
             break;
         case TIndexBuildInfo::EState::Initiating:
             if (buildInfo->InitiateTxId == InvalidTxId) {
-                Send(Self->TxAllocatorClient, MakeHolder<TEvTxAllocatorClient::TEvAllocate>(), 0, ui64(BuildId)); 
+                Send(Self->TxAllocatorClient, MakeHolder<TEvTxAllocatorClient::TEvAllocate>(), 0, ui64(BuildId));
             } else if (buildInfo->InitiateTxStatus == NKikimrScheme::StatusSuccess) {
                 Send(Self->SelfId(), InitiatePropose(Self, buildInfo), 0, ui64(BuildId));
             } else if (!buildInfo->InitiateTxDone) {
@@ -331,7 +331,7 @@ public:
             break;
         case TIndexBuildInfo::EState::Applying:
             if (buildInfo->ApplyTxId == InvalidTxId) {
-                Send(Self->TxAllocatorClient, MakeHolder<TEvTxAllocatorClient::TEvAllocate>(), 0, ui64(BuildId)); 
+                Send(Self->TxAllocatorClient, MakeHolder<TEvTxAllocatorClient::TEvAllocate>(), 0, ui64(BuildId));
             } else if (buildInfo->ApplyTxStatus == NKikimrScheme::StatusSuccess) {
                 Send(Self->SelfId(), ApplyPropose(Self, buildInfo), 0, ui64(BuildId));
             } else if (!buildInfo->ApplyTxDone) {
@@ -343,7 +343,7 @@ public:
             break;
         case TIndexBuildInfo::EState::Unlocking:
             if (buildInfo->UnlockTxId == InvalidTxId) {
-                Send(Self->TxAllocatorClient, MakeHolder<TEvTxAllocatorClient::TEvAllocate>(), 0, ui64(BuildId)); 
+                Send(Self->TxAllocatorClient, MakeHolder<TEvTxAllocatorClient::TEvAllocate>(), 0, ui64(BuildId));
             } else if (buildInfo->UnlockTxStatus == NKikimrScheme::StatusSuccess) {
                 Send(Self->SelfId(), UnlockPropose(Self, buildInfo), 0, ui64(BuildId));
             } else if (!buildInfo->UnlockTxDone) {
@@ -360,7 +360,7 @@ public:
 
         case TIndexBuildInfo::EState::Cancellation_Applying:
             if (buildInfo->ApplyTxId == InvalidTxId) {
-                Send(Self->TxAllocatorClient, MakeHolder<TEvTxAllocatorClient::TEvAllocate>(), 0, ui64(BuildId)); 
+                Send(Self->TxAllocatorClient, MakeHolder<TEvTxAllocatorClient::TEvAllocate>(), 0, ui64(BuildId));
             } else if (buildInfo->ApplyTxStatus == NKikimrScheme::StatusSuccess) {
                 Send(Self->SelfId(), CancelPropose(Self, buildInfo), 0, ui64(BuildId));
             } else if (!buildInfo->ApplyTxDone) {
@@ -372,7 +372,7 @@ public:
             break;
         case TIndexBuildInfo::EState::Cancellation_Unlocking:
             if (buildInfo->UnlockTxId == InvalidTxId) {
-                Send(Self->TxAllocatorClient, MakeHolder<TEvTxAllocatorClient::TEvAllocate>(), 0, ui64(BuildId)); 
+                Send(Self->TxAllocatorClient, MakeHolder<TEvTxAllocatorClient::TEvAllocate>(), 0, ui64(BuildId));
             } else if (buildInfo->UnlockTxStatus == NKikimrScheme::StatusSuccess) {
                 Send(Self->SelfId(), UnlockPropose(Self, buildInfo), 0, ui64(BuildId));
             } else if (!buildInfo->UnlockTxDone) {
@@ -389,7 +389,7 @@ public:
 
         case TIndexBuildInfo::EState::Rejection_Applying:
             if (buildInfo->ApplyTxId == InvalidTxId) {
-                Send(Self->TxAllocatorClient, MakeHolder<TEvTxAllocatorClient::TEvAllocate>(), 0, ui64(BuildId)); 
+                Send(Self->TxAllocatorClient, MakeHolder<TEvTxAllocatorClient::TEvAllocate>(), 0, ui64(BuildId));
             } else if (buildInfo->ApplyTxStatus == NKikimrScheme::StatusSuccess) {
                 Send(Self->SelfId(), CancelPropose(Self, buildInfo), 0, ui64(BuildId));
             } else if (!buildInfo->ApplyTxDone) {
@@ -401,7 +401,7 @@ public:
             break;
         case TIndexBuildInfo::EState::Rejection_Unlocking:
             if (buildInfo->UnlockTxId == InvalidTxId) {
-                Send(Self->TxAllocatorClient, MakeHolder<TEvTxAllocatorClient::TEvAllocate>(), 0, ui64(BuildId)); 
+                Send(Self->TxAllocatorClient, MakeHolder<TEvTxAllocatorClient::TEvAllocate>(), 0, ui64(BuildId));
             } else if (buildInfo->UnlockTxStatus == NKikimrScheme::StatusSuccess) {
                 Send(Self->SelfId(), UnlockPropose(Self, buildInfo), 0, ui64(BuildId));
             } else if (!buildInfo->UnlockTxDone) {
@@ -925,7 +925,7 @@ public:
               << ", replyTo: " << buildInfo->CreateSender.ToString());
         LOG_D("Message:\n" << responseEv->Record.ShortDebugString());
 
-        Send(buildInfo->CreateSender, std::move(responseEv), 0, buildInfo->SenderCookie); 
+        Send(buildInfo->CreateSender, std::move(responseEv), 0, buildInfo->SenderCookie);
     }
 
     bool OnModifyResult(TTransactionContext& txc, const TActorContext&) {

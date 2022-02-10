@@ -27,7 +27,7 @@ SRCS(
     blockstore_config.proto
     filestore_config.proto
     bootstrapper.proto
-    change_exchange.proto 
+    change_exchange.proto
     channel_purpose.proto
     cms.proto
     config.proto
@@ -46,7 +46,7 @@ SRCS(
     counters_keyvalue.proto
     counters_olapshard.proto
     counters_pq.proto
-    counters_replication.proto 
+    counters_replication.proto
     counters_schemeshard.proto
     counters_sequenceshard.proto
     counters_sysview_processor.proto
@@ -56,13 +56,13 @@ SRCS(
     counters.proto
     database_basic_sausage_metainfo.proto
     drivemodel.proto
-    export.proto 
+    export.proto
     flat_tx_scheme.proto
     flat_scheme_op.proto
     health.proto
     hive.proto
     http_config.proto
-    import.proto 
+    import.proto
     index_builder.proto
     issue_id.proto
     kesus.proto
@@ -83,7 +83,7 @@ SRCS(
     node_limits.proto
     profiler.proto
     query_stats.proto
-    replication.proto 
+    replication.proto
     resource_broker.proto
     scheme_log.proto
     scheme_type_metadata.proto
@@ -126,8 +126,8 @@ SRCS(
     grpc_status_proxy.proto
     ydb_result_set_old.proto
     ydb_table_impl.proto
-    scheme_board.proto 
-    scheme_board_mon.proto 
+    scheme_board.proto
+    scheme_board_mon.proto
     sys_view.proto
 )
 

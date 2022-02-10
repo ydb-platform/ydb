@@ -12,8 +12,8 @@ using namespace NKikimr;
 using namespace NSchemeShard;
 
 class TAlterBlockStoreVolume: public TSubOperation {
-    const TOperationId OperationId; 
-    const TTxTransaction Transaction; 
+    const TOperationId OperationId;
+    const TTxTransaction Transaction;
     TTxState::ETxState State = TTxState::Invalid;
 
     TTxState::ETxState NextState() {
@@ -27,8 +27,8 @@ class TAlterBlockStoreVolume: public TSubOperation {
             return TTxState::ConfigureParts;
         case TTxState::ConfigureParts:
             return TTxState::Propose; // DONE ???
-        case TTxState::Propose: 
-            return TTxState::Done; 
+        case TTxState::Propose:
+            return TTxState::Done;
         default:
             return TTxState::Invalid;
         }
@@ -44,7 +44,7 @@ class TAlterBlockStoreVolume: public TSubOperation {
             return THolder(new NBSVState::TConfigureParts(OperationId));
         case TTxState::Propose:
             return THolder(new NBSVState::TPropose(OperationId));
-        case TTxState::Done: 
+        case TTxState::Done:
             return THolder(new TDone(OperationId));
         default:
             return nullptr;
@@ -61,11 +61,11 @@ class TAlterBlockStoreVolume: public TSubOperation {
     }
 
 public:
-    TAlterBlockStoreVolume(TOperationId id, const TTxTransaction& tx) 
+    TAlterBlockStoreVolume(TOperationId id, const TTxTransaction& tx)
         : OperationId(id)
-        , Transaction(tx) 
-    { 
-    } 
+        , Transaction(tx)
+    {
+    }
 
     TAlterBlockStoreVolume(TOperationId id, TTxState::ETxState state)
         : OperationId(id)
@@ -404,10 +404,10 @@ public:
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
-        const auto& alter = Transaction.GetAlterBlockStoreVolume(); 
+        const auto& alter = Transaction.GetAlterBlockStoreVolume();
 
-        const TString& parentPathStr = Transaction.GetWorkingDir(); 
-        const TString& name = alter.GetName(); 
+        const TString& parentPathStr = Transaction.GetWorkingDir();
+        const TString& name = alter.GetName();
         const TPathId pathId = alter.HasPathId()
             ? context.SS->MakeLocalId(alter.GetPathId()) : InvalidPathId;
 
@@ -438,8 +438,8 @@ public:
 
         {
             TPath::TChecker checks = path.Check();
-            checks 
-                .NotEmpty() 
+            checks
+                .NotEmpty()
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
@@ -559,7 +559,7 @@ public:
             return result;
         }
 
-        if (!context.SS->CheckApplyIf(Transaction, errStr)) { 
+        if (!context.SS->CheckApplyIf(Transaction, errStr)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;
         }
@@ -648,16 +648,16 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override { 
-        Y_FAIL("no AbortPropose for TAlterBlockStoreVolume"); 
-    } 
- 
+    void AbortPropose(TOperationContext&) override {
+        Y_FAIL("no AbortPropose for TAlterBlockStoreVolume");
+    }
+
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "TAlterBlockStoreVolume AbortUnsafe"
                          << ", opId: " << OperationId
                          << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID()); 
+                         << ", at schemeshard: " << context.SS->TabletID());
 
         context.OnComplete.DoneOperation(OperationId);
     }
@@ -668,12 +668,12 @@ public:
 namespace NKikimr {
 namespace NSchemeShard {
 
-ISubOperationBase::TPtr CreateAlterBSV(TOperationId id, const TTxTransaction& tx) { 
-    return new TAlterBlockStoreVolume(id, tx); 
-} 
- 
+ISubOperationBase::TPtr CreateAlterBSV(TOperationId id, const TTxTransaction& tx) {
+    return new TAlterBlockStoreVolume(id, tx);
+}
+
 ISubOperationBase::TPtr CreateAlterBSV(TOperationId id, TTxState::ETxState state) {
-    Y_VERIFY(state != TTxState::Invalid); 
+    Y_VERIFY(state != TTxState::Invalid);
     return new TAlterBlockStoreVolume(id, state);
 }
 

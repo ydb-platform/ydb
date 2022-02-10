@@ -28,9 +28,9 @@ public:
         TErrorInfo error;
         if (Self->RemoveNotification(id, user, !dry, error)) {
             if (!dry) {
-                Self->AuditLog(ctx, TStringBuilder() << "Remove notification" 
-                    << ": id# " << id 
-                    << ", reason# " << "explicit remove"); 
+                Self->AuditLog(ctx, TStringBuilder() << "Remove notification"
+                    << ": id# " << id
+                    << ", reason# " << "explicit remove");
 
                 NIceDb::TNiceDb db(txc.DB);
                 db.Table<Schema::Notification>().Key(id).Delete();
@@ -42,7 +42,7 @@ public:
             Response->Record.MutableStatus()->SetReason(error.Reason);
         }
 
-        LOG_INFO(ctx, NKikimrServices::CMS, "Response status: %s %s", 
+        LOG_INFO(ctx, NKikimrServices::CMS, "Response status: %s %s",
                   ToString(Response->Record.GetStatus().GetCode()).data(),
                   Response->Record.GetStatus().GetReason().data());
 

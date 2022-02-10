@@ -1,14 +1,14 @@
-#include "format.h" 
+#include "format.h"
 #include "pretty_table.h"
- 
+
 #include <util/string/vector.h>
 #include <library/cpp/json/json_prettifier.h>
 
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 
-namespace NYdb { 
-namespace NConsoleClient { 
- 
+namespace NYdb {
+namespace NConsoleClient {
+
 namespace {
     THashMap<EOutputFormat, TString> InputFormatDescriptions = {
         { EOutputFormat::JsonUnicode, "Input in json format, binary strings are decoded with unicode characters" },
@@ -87,13 +87,13 @@ void TCommandWithFormat::AddFormats(TClientCommand::TConfig& config, const TVect
         auto findResult = FormatDescriptions.find(format);
         Y_VERIFY(findResult != FormatDescriptions.end(),
             "Couldn't find description for %s output format", (TStringBuilder() << format).c_str());
-        description << "\n  " << colors.BoldColor() << format << colors.OldColor() 
-            << "\n    " << findResult->second; 
+        description << "\n  " << colors.BoldColor() << format << colors.OldColor()
+            << "\n    " << findResult->second;
     }
     config.Opts->AddLongOption("format", description.Str())
         .RequiredArgument("STRING").StoreResult(&OutputFormat);
     AllowedFormats = allowedFormats;
-} 
+}
 
 void TCommandWithFormat::ParseFormats() {
     if (InputFormat != EOutputFormat::Default
@@ -108,7 +108,7 @@ void TCommandWithFormat::ParseFormats() {
     if (std::find(AllowedFormats.begin(), AllowedFormats.end(), OutputFormat) == AllowedFormats.end()) {
         throw TMissUseException() << "Output format " << OutputFormat << " is not available for this command";
     }
-} 
+}
 
 void TQueryPlanPrinter::Print(const TString& plan) {
     switch (Format) {

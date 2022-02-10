@@ -121,43 +121,43 @@ Y_UNIT_TEST_SUITE(KqpNewEngineAcl) {
         AssertSuccessResult(result);
         driver.Stop(true);
     }
- 
-    Y_UNIT_TEST(RecursiveCreateTableShouldSuccess) { 
-        TKikimrRunner kikimr; 
-        { 
-            auto schemeClient = kikimr.GetSchemeClient(); 
- 
-            AssertSuccessResult(schemeClient.MakeDirectory("/Root/PQ").ExtractValueSync()); 
- 
-            NYdb::NScheme::TPermissions permissions("user0@builtin", {"ydb.deprecated.create_table"}); 
-            AssertSuccessResult(schemeClient.ModifyPermissions("/Root/PQ", 
-                    NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(permissions) 
-                ).ExtractValueSync() 
-            ); 
-        } 
- 
-        auto driverConfig = TDriverConfig() 
-            .SetEndpoint(kikimr.GetEndpoint()) 
-            .SetAuthToken("user0@builtin"); 
-        auto driver = TDriver(driverConfig); 
+
+    Y_UNIT_TEST(RecursiveCreateTableShouldSuccess) {
+        TKikimrRunner kikimr;
+        {
+            auto schemeClient = kikimr.GetSchemeClient();
+
+            AssertSuccessResult(schemeClient.MakeDirectory("/Root/PQ").ExtractValueSync());
+
+            NYdb::NScheme::TPermissions permissions("user0@builtin", {"ydb.deprecated.create_table"});
+            AssertSuccessResult(schemeClient.ModifyPermissions("/Root/PQ",
+                    NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(permissions)
+                ).ExtractValueSync()
+            );
+        }
+
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(kikimr.GetEndpoint())
+            .SetAuthToken("user0@builtin");
+        auto driver = TDriver(driverConfig);
         auto db = NYdb::NTable::TTableClient(driver);
- 
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
-        const char* queryTmpl = R"( 
+
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        const char* queryTmpl = R"(
             PRAGMA kikimr.UseNewEngine = "true";
             CREATE TABLE `/Root/PQ/%s` (
-                id Int64, 
-                name String, 
-                primary key (id) 
-            ); 
-        )"; 
- 
-        AssertSuccessResult(session.ExecuteSchemeQuery(Sprintf(queryTmpl, "table")).ExtractValueSync()); 
-        AssertSuccessResult(session.ExecuteSchemeQuery(Sprintf(queryTmpl, "a/b/c/table")).ExtractValueSync()); 
- 
-        driver.Stop(true); 
-    } 
+                id Int64,
+                name String,
+                primary key (id)
+            );
+        )";
+
+        AssertSuccessResult(session.ExecuteSchemeQuery(Sprintf(queryTmpl, "table")).ExtractValueSync());
+        AssertSuccessResult(session.ExecuteSchemeQuery(Sprintf(queryTmpl, "a/b/c/table")).ExtractValueSync());
+
+        driver.Stop(true);
+    }
 }
 
 } // namespace NKqp

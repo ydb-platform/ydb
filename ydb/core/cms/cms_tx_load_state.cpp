@@ -37,7 +37,7 @@ public:
 
         if (!paramRow.IsReady() || !permissionRowset.IsReady()
             || !requestRowset.IsReady() || !walleTaskRowset.IsReady()
-            || !notificationRowset.IsReady() || !logRowset.IsReady()) 
+            || !notificationRowset.IsReady() || !logRowset.IsReady())
             return false;
 
         NKikimrCms::TCmsConfig config;
@@ -193,7 +193,7 @@ public:
         Self->SchedulePermissionsCleanup(ctx);
         Self->ScheduleNotificationsCleanup(ctx);
         Self->ScheduleLogCleanup(ctx);
-        Self->ScheduleUpdateClusterInfo(ctx, true); 
+        Self->ScheduleUpdateClusterInfo(ctx, true);
         Self->ProcessInitQueue(ctx);
     }
 };

@@ -1,5 +1,5 @@
 import functools
-from google.protobuf.empty_pb2 import Empty 
+from google.protobuf.empty_pb2 import Empty
 from . import issues, types, _apis, convert, scheme, operation, _utilities
 
 X_YDB_SERVER_HINTS = "x-ydb-server-hints"
@@ -180,11 +180,11 @@ def create_table_request_factory(session_state, path, table_description):
     for index in table_description.indexes:
         request.indexes.add().MergeFrom(index.to_pb())
 
-    if table_description.ttl_settings is not None: 
+    if table_description.ttl_settings is not None:
         request.ttl_settings.MergeFrom(table_description.ttl_settings.to_pb())
- 
-    request.attributes.update(table_description.attributes) 
- 
+
+    request.attributes.update(table_description.attributes)
+
     if table_description.column_families:
         for column_family in table_description.column_families:
             request.column_families.add().MergeFrom(column_family.to_pb())
@@ -277,7 +277,7 @@ def describe_table_request_factory(session_state, path, settings=None):
     return request
 
 
-def alter_table_request_factory( 
+def alter_table_request_factory(
     session_state,
     path,
     add_columns,
@@ -310,15 +310,15 @@ def alter_table_request_factory(
         for index in add_indexes:
             request.add_indexes.add().MergeFrom(index.to_pb())
 
-    if alter_attributes is not None: 
-        request.alter_attributes.update(alter_attributes) 
+    if alter_attributes is not None:
+        request.alter_attributes.update(alter_attributes)
 
-    if set_ttl_settings is not None: 
-        request.set_ttl_settings.MergeFrom(set_ttl_settings.to_pb()) 
- 
-    if drop_ttl_settings is not None and drop_ttl_settings: 
-        request.drop_ttl_settings.MergeFrom(Empty()) 
- 
+    if set_ttl_settings is not None:
+        request.set_ttl_settings.MergeFrom(set_ttl_settings.to_pb())
+
+    if drop_ttl_settings is not None and drop_ttl_settings:
+        request.drop_ttl_settings.MergeFrom(Empty())
+
     if add_column_families is not None:
         for column_family in add_column_families:
             request.add_column_families.add().MergeFrom(column_family.to_pb())

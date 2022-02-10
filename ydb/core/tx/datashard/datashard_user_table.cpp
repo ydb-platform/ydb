@@ -68,124 +68,124 @@ bool TUserTable::ResetTableSchemaVersion()
 }
 
 void TUserTable::AddIndex(const NKikimrSchemeOp::TIndexDescription& indexDesc) {
-    Y_VERIFY(indexDesc.HasPathOwnerId() && indexDesc.HasLocalPathId()); 
-    const auto addIndexPathId = TPathId(indexDesc.GetPathOwnerId(), indexDesc.GetLocalPathId()); 
- 
-    if (Indexes.contains(addIndexPathId)) { 
-        return; 
-    } 
- 
-    Indexes.emplace(addIndexPathId, TTableIndex(indexDesc, Columns)); 
-    AsyncIndexCount += ui32(indexDesc.GetType() == TTableIndex::EIndexType::EIndexTypeGlobalAsync); 
- 
+    Y_VERIFY(indexDesc.HasPathOwnerId() && indexDesc.HasLocalPathId());
+    const auto addIndexPathId = TPathId(indexDesc.GetPathOwnerId(), indexDesc.GetLocalPathId());
+
+    if (Indexes.contains(addIndexPathId)) {
+        return;
+    }
+
+    Indexes.emplace(addIndexPathId, TTableIndex(indexDesc, Columns));
+    AsyncIndexCount += ui32(indexDesc.GetType() == TTableIndex::EIndexType::EIndexTypeGlobalAsync);
+
     NKikimrSchemeOp::TTableDescription schema;
-    GetSchema(schema); 
- 
-    schema.MutableTableIndexes()->Add()->CopyFrom(indexDesc); 
-    SetSchema(schema); 
-} 
- 
-void TUserTable::DropIndex(const TPathId& indexPathId) { 
-    auto it = Indexes.find(indexPathId); 
-    if (it == Indexes.end()) { 
-        return; 
-    } 
- 
-    AsyncIndexCount -= ui32(it->second.Type == TTableIndex::EIndexType::EIndexTypeGlobalAsync); 
-    Indexes.erase(it); 
- 
+    GetSchema(schema);
+
+    schema.MutableTableIndexes()->Add()->CopyFrom(indexDesc);
+    SetSchema(schema);
+}
+
+void TUserTable::DropIndex(const TPathId& indexPathId) {
+    auto it = Indexes.find(indexPathId);
+    if (it == Indexes.end()) {
+        return;
+    }
+
+    AsyncIndexCount -= ui32(it->second.Type == TTableIndex::EIndexType::EIndexTypeGlobalAsync);
+    Indexes.erase(it);
+
     NKikimrSchemeOp::TTableDescription schema;
-    GetSchema(schema); 
- 
-    for (auto it = schema.GetTableIndexes().begin(); it != schema.GetTableIndexes().end(); ++it) { 
-        if (indexPathId != TPathId(it->GetPathOwnerId(), it->GetLocalPathId())) { 
-            continue; 
-        } 
- 
-        schema.MutableTableIndexes()->erase(it); 
-        SetSchema(schema); 
- 
-        return; 
-    } 
- 
-    Y_FAIL("unreachable"); 
-} 
- 
-bool TUserTable::HasAsyncIndexes() const { 
-    return AsyncIndexCount > 0; 
-} 
- 
+    GetSchema(schema);
+
+    for (auto it = schema.GetTableIndexes().begin(); it != schema.GetTableIndexes().end(); ++it) {
+        if (indexPathId != TPathId(it->GetPathOwnerId(), it->GetLocalPathId())) {
+            continue;
+        }
+
+        schema.MutableTableIndexes()->erase(it);
+        SetSchema(schema);
+
+        return;
+    }
+
+    Y_FAIL("unreachable");
+}
+
+bool TUserTable::HasAsyncIndexes() const {
+    return AsyncIndexCount > 0;
+}
+
 void TUserTable::AddCdcStream(const NKikimrSchemeOp::TCdcStreamDescription& streamDesc) {
-    Y_VERIFY(streamDesc.HasPathId()); 
-    const auto streamPathId = TPathId(streamDesc.GetPathId().GetOwnerId(), streamDesc.GetPathId().GetLocalId()); 
- 
-    if (CdcStreams.contains(streamPathId)) { 
-        return; 
-    } 
- 
-    CdcStreams.emplace(streamPathId, TCdcStream(streamDesc)); 
- 
+    Y_VERIFY(streamDesc.HasPathId());
+    const auto streamPathId = TPathId(streamDesc.GetPathId().GetOwnerId(), streamDesc.GetPathId().GetLocalId());
+
+    if (CdcStreams.contains(streamPathId)) {
+        return;
+    }
+
+    CdcStreams.emplace(streamPathId, TCdcStream(streamDesc));
+
     NKikimrSchemeOp::TTableDescription schema;
-    GetSchema(schema); 
- 
-    schema.MutableCdcStreams()->Add()->CopyFrom(streamDesc); 
-    SetSchema(schema); 
-} 
- 
-void TUserTable::DisableCdcStream(const TPathId& streamPathId) { 
-    auto it = CdcStreams.find(streamPathId); 
-    if (it == CdcStreams.end()) { 
-        return; 
-    } 
- 
-    it->second.State = TCdcStream::EState::ECdcStreamStateDisabled; 
- 
+    GetSchema(schema);
+
+    schema.MutableCdcStreams()->Add()->CopyFrom(streamDesc);
+    SetSchema(schema);
+}
+
+void TUserTable::DisableCdcStream(const TPathId& streamPathId) {
+    auto it = CdcStreams.find(streamPathId);
+    if (it == CdcStreams.end()) {
+        return;
+    }
+
+    it->second.State = TCdcStream::EState::ECdcStreamStateDisabled;
+
     NKikimrSchemeOp::TTableDescription schema;
-    GetSchema(schema); 
- 
-    for (auto it = schema.MutableCdcStreams()->begin(); it != schema.MutableCdcStreams()->end(); ++it) { 
-        if (streamPathId != TPathId(it->GetPathId().GetOwnerId(), it->GetPathId().GetLocalId())) { 
-            continue; 
-        } 
- 
-        it->SetState(TCdcStream::EState::ECdcStreamStateDisabled); 
-        SetSchema(schema); 
- 
-        return; 
-    } 
- 
-    Y_FAIL("unreachable"); 
-} 
- 
-void TUserTable::DropCdcStream(const TPathId& streamPathId) { 
-    auto it = CdcStreams.find(streamPathId); 
-    if (it == CdcStreams.end()) { 
-        return; 
-    } 
- 
-    CdcStreams.erase(it); 
- 
+    GetSchema(schema);
+
+    for (auto it = schema.MutableCdcStreams()->begin(); it != schema.MutableCdcStreams()->end(); ++it) {
+        if (streamPathId != TPathId(it->GetPathId().GetOwnerId(), it->GetPathId().GetLocalId())) {
+            continue;
+        }
+
+        it->SetState(TCdcStream::EState::ECdcStreamStateDisabled);
+        SetSchema(schema);
+
+        return;
+    }
+
+    Y_FAIL("unreachable");
+}
+
+void TUserTable::DropCdcStream(const TPathId& streamPathId) {
+    auto it = CdcStreams.find(streamPathId);
+    if (it == CdcStreams.end()) {
+        return;
+    }
+
+    CdcStreams.erase(it);
+
     NKikimrSchemeOp::TTableDescription schema;
-    GetSchema(schema); 
- 
-    for (auto it = schema.GetCdcStreams().begin(); it != schema.GetCdcStreams().end(); ++it) { 
-        if (streamPathId != TPathId(it->GetPathId().GetOwnerId(), it->GetPathId().GetLocalId())) { 
-            continue; 
-        } 
- 
-        schema.MutableCdcStreams()->erase(it); 
-        SetSchema(schema); 
- 
-        return; 
-    } 
- 
-    Y_FAIL("unreachable"); 
-} 
- 
-bool TUserTable::HasCdcStreams() const { 
-    return !CdcStreams.empty(); 
-} 
- 
+    GetSchema(schema);
+
+    for (auto it = schema.GetCdcStreams().begin(); it != schema.GetCdcStreams().end(); ++it) {
+        if (streamPathId != TPathId(it->GetPathId().GetOwnerId(), it->GetPathId().GetLocalId())) {
+            continue;
+        }
+
+        schema.MutableCdcStreams()->erase(it);
+        SetSchema(schema);
+
+        return;
+    }
+
+    Y_FAIL("unreachable");
+}
+
+bool TUserTable::HasCdcStreams() const {
+    return !CdcStreams.empty();
+}
+
 void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
 {
     // We expect schemeshard to send us full list of storage rooms
@@ -265,17 +265,17 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
     IsBackup = descr.GetIsBackup();
 
     CheckSpecialColumns();
- 
-    for (const auto& indexDesc : descr.GetTableIndexes()) { 
-        Y_VERIFY(indexDesc.HasPathOwnerId() && indexDesc.HasLocalPathId()); 
-        Indexes.emplace(TPathId(indexDesc.GetPathOwnerId(), indexDesc.GetLocalPathId()), TTableIndex(indexDesc, Columns)); 
-        AsyncIndexCount += ui32(indexDesc.GetType() == TTableIndex::EIndexType::EIndexTypeGlobalAsync); 
-    } 
- 
-    for (const auto& streamDesc : descr.GetCdcStreams()) { 
-        Y_VERIFY(streamDesc.HasPathId()); 
-        CdcStreams.emplace(TPathId(streamDesc.GetPathId().GetOwnerId(), streamDesc.GetPathId().GetLocalId()), TCdcStream(streamDesc)); 
-    } 
+
+    for (const auto& indexDesc : descr.GetTableIndexes()) {
+        Y_VERIFY(indexDesc.HasPathOwnerId() && indexDesc.HasLocalPathId());
+        Indexes.emplace(TPathId(indexDesc.GetPathOwnerId(), indexDesc.GetLocalPathId()), TTableIndex(indexDesc, Columns));
+        AsyncIndexCount += ui32(indexDesc.GetType() == TTableIndex::EIndexType::EIndexTypeGlobalAsync);
+    }
+
+    for (const auto& streamDesc : descr.GetCdcStreams()) {
+        Y_VERIFY(streamDesc.HasPathId());
+        CdcStreams.emplace(TPathId(streamDesc.GetPathId().GetOwnerId(), streamDesc.GetPathId().GetLocalId()), TCdcStream(streamDesc));
+    }
 }
 
 void TUserTable::CheckSpecialColumns() {

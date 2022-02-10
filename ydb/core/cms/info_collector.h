@@ -5,7 +5,7 @@
 namespace NKikimr {
 namespace NCms {
 
-IActor* CreateInfoCollector(const TActorId& client, const TDuration& timeout); 
+IActor* CreateInfoCollector(const TActorId& client, const TDuration& timeout);
 
 } // NCms
 } // NKikimr

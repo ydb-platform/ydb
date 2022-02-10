@@ -203,21 +203,21 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT(SqlToYql("USE plato; SELECT FAMILY FROM Input").IsOk());
     }
 
-    Y_UNIT_TEST(ResetKeywordNotReservedForNames) { 
-        UNIT_ASSERT(SqlToYql("USE plato; CREATE TABLE RESET (RESET Uint32, PRIMARY KEY (RESET));").IsOk()); 
-        UNIT_ASSERT(SqlToYql("USE plato; SELECT RESET FROM RESET").IsOk()); 
-    } 
- 
-    Y_UNIT_TEST(SyncKeywordNotReservedForNames) { 
-        UNIT_ASSERT(SqlToYql("USE plato; CREATE TABLE SYNC (SYNC Uint32, PRIMARY KEY (SYNC));").IsOk()); 
-        UNIT_ASSERT(SqlToYql("USE plato; SELECT SYNC FROM SYNC").IsOk()); 
-    } 
- 
-    Y_UNIT_TEST(AsyncKeywordNotReservedForNames) { 
-        UNIT_ASSERT(SqlToYql("USE plato; CREATE TABLE ASYNC (ASYNC Uint32, PRIMARY KEY (ASYNC));").IsOk()); 
-        UNIT_ASSERT(SqlToYql("USE plato; SELECT ASYNC FROM ASYNC").IsOk()); 
-    } 
- 
+    Y_UNIT_TEST(ResetKeywordNotReservedForNames) {
+        UNIT_ASSERT(SqlToYql("USE plato; CREATE TABLE RESET (RESET Uint32, PRIMARY KEY (RESET));").IsOk());
+        UNIT_ASSERT(SqlToYql("USE plato; SELECT RESET FROM RESET").IsOk());
+    }
+
+    Y_UNIT_TEST(SyncKeywordNotReservedForNames) {
+        UNIT_ASSERT(SqlToYql("USE plato; CREATE TABLE SYNC (SYNC Uint32, PRIMARY KEY (SYNC));").IsOk());
+        UNIT_ASSERT(SqlToYql("USE plato; SELECT SYNC FROM SYNC").IsOk());
+    }
+
+    Y_UNIT_TEST(AsyncKeywordNotReservedForNames) {
+        UNIT_ASSERT(SqlToYql("USE plato; CREATE TABLE ASYNC (ASYNC Uint32, PRIMARY KEY (ASYNC));").IsOk());
+        UNIT_ASSERT(SqlToYql("USE plato; SELECT ASYNC FROM ASYNC").IsOk());
+    }
+
     Y_UNIT_TEST(Jubilee) {
         NYql::TAstParseResult res = SqlToYql("USE plato; INSERT INTO Arcadia (r2000000) VALUES (\"2M GET!!!\");");
         UNIT_ASSERT(res.Root);
@@ -1392,28 +1392,28 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
     }
- 
-    Y_UNIT_TEST(TtlParseCorrect) { 
-        NYql::TAstParseResult res = SqlToYql( 
-            R"( USE plato; 
-                CREATE TABLE tableName (Key Uint32, CreatedAt Timestamp, PRIMARY KEY (Key)) 
-                WITH ( TTL = Interval("P1D") On CreatedAt);)" 
-        ); 
-        UNIT_ASSERT(res.Root); 
- 
-        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) { 
-            if (word == "Write") { 
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("setTtlSettings")); 
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("expireAfter")); 
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("86400000")); 
-            } 
-        }; 
- 
-        TWordCountHive elementStat = { {TString("Write"), 0} }; 
-        VerifyProgram(res, elementStat, verifyLine); 
- 
-        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]); 
-    } 
+
+    Y_UNIT_TEST(TtlParseCorrect) {
+        NYql::TAstParseResult res = SqlToYql(
+            R"( USE plato;
+                CREATE TABLE tableName (Key Uint32, CreatedAt Timestamp, PRIMARY KEY (Key))
+                WITH ( TTL = Interval("P1D") On CreatedAt);)"
+        );
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("setTtlSettings"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("expireAfter"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("86400000"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
 
     Y_UNIT_TEST(CloneForAsTableWorksWithCube) {
         UNIT_ASSERT(SqlToYql("SELECT * FROM AS_TABLE([<|k1:1, k2:1|>]) GROUP BY CUBE(k1, k2);").IsOk());
@@ -2943,18 +2943,18 @@ select FormatType($f());
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:4:3: Warning: ORDER BY without LIMIT in subquery will be ignored, code: 4504\n"
                                           "<main>:6:39: Error: Unknown correlation name: t\n");
     }
- 
-    Y_UNIT_TEST(InvalidTtl) { 
-        auto req = R"( 
-            USE plato; 
-            CREATE TABLE tableName (Key Uint32, CreatedAt Timestamp, PRIMARY KEY (Key)) 
-            WITH ( TTL = 1 On ExpireAt ); 
-        )"; 
-        auto res = SqlToYql(req); 
-        UNIT_ASSERT(!res.Root); 
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:4:26: Error: Literal of Interval type is expected for TTL\n" 
-                                          "<main>:4:26: Error: Invalid TTL settings\n"); 
-    } 
+
+    Y_UNIT_TEST(InvalidTtl) {
+        auto req = R"(
+            USE plato;
+            CREATE TABLE tableName (Key Uint32, CreatedAt Timestamp, PRIMARY KEY (Key))
+            WITH ( TTL = 1 On ExpireAt );
+        )";
+        auto res = SqlToYql(req);
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:4:26: Error: Literal of Interval type is expected for TTL\n"
+                                          "<main>:4:26: Error: Invalid TTL settings\n");
+    }
 
     Y_UNIT_TEST(ErrJoinWithGroupingSetsWithoutCorrelationName) {
         auto req = "USE plato;\n"

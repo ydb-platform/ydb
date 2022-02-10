@@ -701,47 +701,47 @@ void GenericCases(TTestEnvWithPoolsSupport& env) {
 
 Y_UNIT_TEST_SUITE(TExtSubDomainTest) {
     Y_UNIT_TEST(DeclareAndLs) {
-        TTestEnv env(1, 0); 
+        TTestEnv env(1, 0);
         DeclareAndLs(env);
     }
 
     Y_UNIT_TEST(DeclareAndDrop) {
-        TTestEnv env(1, 0); 
+        TTestEnv env(1, 0);
         DeclareAndDrop(env);
     }
 
     Y_UNIT_TEST(DeclareAndDefineWithoutNodes) {
-        TTestEnvWithPoolsSupport env(1, 0, 2); 
+        TTestEnvWithPoolsSupport env(1, 0, 2);
         DeclareAndDefineWithoutNodes(env);
     }
 
     Y_UNIT_TEST(DeclareAndDefineWithNodes) {
-        TTestEnvWithPoolsSupport env(1, 1, 2); 
+        TTestEnvWithPoolsSupport env(1, 1, 2);
         DeclareAndDefineWithNodes(env);
     }
 
     Y_UNIT_TEST(CreateTableInsideAndLs) {
-        TTestEnvWithPoolsSupport env(1, 1, 2); 
+        TTestEnvWithPoolsSupport env(1, 1, 2);
         CreateTableInsideAndLs(env);
     }
 
     Y_UNIT_TEST(DeclareAndAlterPools) {
-        TTestEnvWithPoolsSupport env(1, 1, 2); 
+        TTestEnvWithPoolsSupport env(1, 1, 2);
         DeclareAndAlterPools(env);
     }
 
     Y_UNIT_TEST(CreateTableInsideThenStopTenantAndForceDeleteSubDomain) {
-        TTestEnvWithPoolsSupport env(1, 1, 2); 
+        TTestEnvWithPoolsSupport env(1, 1, 2);
         CreateTableInsideThenStopTenantAndForceDeleteSubDomain(env);
     }
 
     Y_UNIT_TEST(CreateTableInsideAndAlterDomainAndTable) {
-        TTestEnvWithPoolsSupport env(1, 1, 2); 
+        TTestEnvWithPoolsSupport env(1, 1, 2);
         CreateTableInsideAndAlterDomainAndTable(env);
     }
 
     Y_UNIT_TEST(GenericCases) {
-        TTestEnvWithPoolsSupport env(1, 1, 2); 
+        TTestEnvWithPoolsSupport env(1, 1, 2);
         GenericCases(env);
     }
 }

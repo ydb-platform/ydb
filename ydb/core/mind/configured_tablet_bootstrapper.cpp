@@ -11,7 +11,7 @@
 #include <ydb/core/tx/mediator/mediator.h>
 #include <ydb/core/tx/tx_allocator/txallocator.h>
 #include <ydb/core/tx/datashard/datashard.h>
-#include <ydb/core/tx/replication/controller/controller.h> 
+#include <ydb/core/tx/replication/controller/controller.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/sequenceshard/sequenceshard.h>
 #include <ydb/core/keyvalue/keyvalue.h>
@@ -220,9 +220,9 @@ TIntrusivePtr<TTabletSetupInfo> MakeTabletSetupInfo(
     case TTabletTypes::SequenceShard:
         createFunc = &NSequenceShard::CreateSequenceShard;
         break;
-    case TTabletTypes::ReplicationController: 
-        createFunc = &NReplication::CreateController; 
-        break; 
+    case TTabletTypes::ReplicationController:
+        createFunc = &NReplication::CreateController;
+        break;
     default:
         return nullptr;
     }

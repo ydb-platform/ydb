@@ -73,7 +73,7 @@ PEERDIR(
     ydb/core/tx/coordinator
     ydb/core/tx/long_tx_service
     ydb/core/tx/mediator
-    ydb/core/tx/replication/controller 
+    ydb/core/tx/replication/controller
     ydb/core/tx/sequenceproxy
     ydb/core/tx/sequenceshard
     ydb/core/tx/time_cast
@@ -92,7 +92,7 @@ PEERDIR(
     ydb/public/sdk/cpp/client/ydb_driver
     ydb/public/sdk/cpp/client/ydb_persqueue_public/codecs
     ydb/public/sdk/cpp/client/ydb_table
-    ydb/services/auth 
+    ydb/services/auth
     ydb/services/cms
     ydb/services/datastreams
     ydb/services/discovery

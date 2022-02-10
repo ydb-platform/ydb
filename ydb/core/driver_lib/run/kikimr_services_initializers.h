@@ -52,43 +52,43 @@ class TBasicServicesInitializer : public IKikimrServicesInitializer {
 public:
     TBasicServicesInitializer(const TKikimrRunConfig& runConfig);
 
-    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override; 
+    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
 
 class TImmediateControlBoardInitializer : public IKikimrServicesInitializer {
 public:
     TImmediateControlBoardInitializer(const TKikimrRunConfig& runConfig);
 
-    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override; 
+    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
 
 class TBSNodeWardenInitializer : public IKikimrServicesInitializer {
 public:
     TBSNodeWardenInitializer(const TKikimrRunConfig& runConfig);
 
-    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override; 
+    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
 
-// ss: proxies, replicas; board: replicas; scheme_board: replicas 
+// ss: proxies, replicas; board: replicas; scheme_board: replicas
 class TStateStorageServiceInitializer : public IKikimrServicesInitializer {
 public:
     TStateStorageServiceInitializer(const TKikimrRunConfig& runConfig);
 
-    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override; 
+    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
 
 class TLocalServiceInitializer : public IKikimrServicesInitializer {
 public:
     TLocalServiceInitializer(const TKikimrRunConfig& runConfig);
 
-    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override; 
+    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
 
 class TSharedCacheInitializer : public IKikimrServicesInitializer {
 public:
-    TSharedCacheInitializer(const TKikimrRunConfig& runConfig); 
+    TSharedCacheInitializer(const TKikimrRunConfig& runConfig);
 
-    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override; 
+    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
 
 class TBlobCacheInitializer : public IKikimrServicesInitializer {
@@ -108,35 +108,35 @@ public:
                        TIntrusivePtr<NActors::NLog::TSettings> logSettings,
                        std::shared_ptr<TLogBackend> logBackend);
 
-    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override; 
+    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
 
 class TSchedulerActorInitializer : public IKikimrServicesInitializer {
 public:
     TSchedulerActorInitializer(const TKikimrRunConfig& runConfig);
 
-    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override; 
+    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
 
 class TProfilerInitializer : public IKikimrServicesInitializer {
 public:
     TProfilerInitializer(const TKikimrRunConfig& runConfig);
 
-    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override; 
+    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
 
 class TResourceBrokerInitializer : public IKikimrServicesInitializer {
 public:
     TResourceBrokerInitializer(const TKikimrRunConfig& runConfig);
 
-    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override; 
+    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
 
-class TTabletResolverInitializer : public IKikimrServicesInitializer { 
+class TTabletResolverInitializer : public IKikimrServicesInitializer {
 public:
     TTabletResolverInitializer(const TKikimrRunConfig& runConfig);
 
-    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override; 
+    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
 
 class TTabletPipePeNodeCachesInitializer : public IKikimrServicesInitializer {
@@ -146,25 +146,25 @@ public:
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
 
-class TTabletMonitoringProxyInitializer : public IKikimrServicesInitializer { 
+class TTabletMonitoringProxyInitializer : public IKikimrServicesInitializer {
 public:
     TTabletMonitoringProxyInitializer(const TKikimrRunConfig& runConfig);
 
-    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override; 
+    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
 
-class TTabletCountersAggregatorInitializer : public IKikimrServicesInitializer { 
+class TTabletCountersAggregatorInitializer : public IKikimrServicesInitializer {
 public:
     TTabletCountersAggregatorInitializer(const TKikimrRunConfig& runConfig);
 
-    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override; 
+    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
 
-class TGRpcProxyStatusInitializer : public IKikimrServicesInitializer { 
+class TGRpcProxyStatusInitializer : public IKikimrServicesInitializer {
 public:
     TGRpcProxyStatusInitializer(const TKikimrRunConfig& runConfig);
 
-    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override; 
+    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
 
 class TRestartsCountPublisher : public IKikimrServicesInitializer {
@@ -174,14 +174,14 @@ class TRestartsCountPublisher : public IKikimrServicesInitializer {
 public:
     TRestartsCountPublisher(const TKikimrRunConfig& runConfig);
 
-    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override; 
+    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
 
-class TBootstrapperInitializer : public IKikimrServicesInitializer { 
+class TBootstrapperInitializer : public IKikimrServicesInitializer {
 public:
     TBootstrapperInitializer(const TKikimrRunConfig& runConfig);
 
-    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override; 
+    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
 
 // alternative (RTMR-style) bootstrapper
@@ -192,23 +192,23 @@ public:
     TTabletsInitializer(const TKikimrRunConfig& runConfig,
                         TIntrusivePtr<ITabletFactory> customTablets);
 
-    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override; 
+    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
 
-class TMediatorTimeCastProxyInitializer : public IKikimrServicesInitializer { 
+class TMediatorTimeCastProxyInitializer : public IKikimrServicesInitializer {
 public:
     TMediatorTimeCastProxyInitializer(const TKikimrRunConfig& runConfig);
 
-    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override; 
+    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
 
-class TTxProxyInitializer : public IKikimrServicesInitializer { 
+class TTxProxyInitializer : public IKikimrServicesInitializer {
     TVector<ui64> CollectAllAllocatorsFromAllDomains(const NKikimr::TAppData* appData);
 
 public:
     TTxProxyInitializer(const TKikimrRunConfig& runConfig);
 
-    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override; 
+    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
 
 class TLongTxServiceInitializer : public IKikimrServicesInitializer {
@@ -229,10 +229,10 @@ class TMiniKQLCompileServiceInitializer : public IKikimrServicesInitializer {
 public:
     TMiniKQLCompileServiceInitializer(const TKikimrRunConfig& runConfig);
 
-    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override; 
+    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
 
-// msgbus: proxy, trace 
+// msgbus: proxy, trace
 class TMessageBusServicesInitializer : public IKikimrServicesInitializer {
     NMsgBusProxy::IMessageBusServer& BusServer;
 
@@ -240,7 +240,7 @@ public:
     TMessageBusServicesInitializer(const TKikimrRunConfig& runConfig,
                                    NMsgBusProxy::IMessageBusServer& busServer);
 
-    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override; 
+    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
 
 // ticket_parser and so on...
@@ -249,7 +249,7 @@ public:
     std::shared_ptr<TModuleFactories> Factories;
     TSecurityServicesInitializer(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories);
 
-    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override; 
+    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
 
 // grpc_proxy
@@ -260,7 +260,7 @@ private:
 public:
     TGRpcServicesInitializer(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories);
 
-    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override; 
+    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
 
 #ifdef ACTORSLIB_COLLECT_EXEC_STATS
@@ -269,7 +269,7 @@ class TStatsCollectorInitializer : public IKikimrServicesInitializer {
 public:
     TStatsCollectorInitializer(const TKikimrRunConfig& runConfig);
 
-    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override; 
+    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
 #endif
 
@@ -277,21 +277,21 @@ class TSelfPingInitializer : public IKikimrServicesInitializer {
 public:
     TSelfPingInitializer(const TKikimrRunConfig& runConfig);
 
-    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override; 
+    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
 
 class TWhiteBoardServiceInitializer : public IKikimrServicesInitializer {
 public:
     TWhiteBoardServiceInitializer(const TKikimrRunConfig& runConfig);
 
-    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override; 
+    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
 
 class TNodeIdentifierInitializer : public IKikimrServicesInitializer {
 public:
     TNodeIdentifierInitializer(const TKikimrRunConfig& runConfig);
 
-    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override; 
+    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
 
 class TTabletMonitorInitializer : public IKikimrServicesInitializer {
@@ -303,7 +303,7 @@ public:
                               const TIntrusivePtr<NNodeTabletMonitor::ITabletStateClassifier>& tabletStateClassifier,
                               const TIntrusivePtr<NNodeTabletMonitor::ITabletListRenderer>& tabletListRenderer);
 
-    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override; 
+    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
 
 class TViewerInitializer : public IKikimrServicesInitializer {
@@ -312,69 +312,69 @@ class TViewerInitializer : public IKikimrServicesInitializer {
 public:
     TViewerInitializer(const TKikimrRunConfig& runConfig);
 
-    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override; 
+    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
 
 class TLoadInitializer : public IKikimrServicesInitializer {
 public:
     TLoadInitializer(const TKikimrRunConfig& runConfig);
- 
-    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override; 
+
+    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
 
 class TFailureInjectionInitializer : public IKikimrServicesInitializer {
 public:
     TFailureInjectionInitializer(const TKikimrRunConfig& runConfig);
- 
-    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override; 
+
+    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
 
 class TPersQueueL2CacheInitializer : public IKikimrServicesInitializer {
 public:
     TPersQueueL2CacheInitializer(const TKikimrRunConfig& runConfig);
- 
-    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override; 
+
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
 class TNetClassifierInitializer : public IKikimrServicesInitializer {
 public:
     TNetClassifierInitializer(const TKikimrRunConfig& runConfig);
- 
-    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override; 
+
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
 class TPersQueueClusterTrackerInitializer : public IKikimrServicesInitializer {
 public:
     TPersQueueClusterTrackerInitializer(const TKikimrRunConfig& runConfig);
- 
-    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override; 
+
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
 class TPersQueueLibSharedInstanceInitializer : public IKikimrServicesInitializer {
 public:
     TPersQueueLibSharedInstanceInitializer(const TKikimrRunConfig& runConfig);
- 
-    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override; 
+
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
 class TMemProfMonitorInitializer : public IKikimrServicesInitializer {
 public:
-    TMemProfMonitorInitializer(const TKikimrRunConfig& runConfig); 
+    TMemProfMonitorInitializer(const TKikimrRunConfig& runConfig);
 
-    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override; 
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
 class TMemoryTrackerInitializer : public IKikimrServicesInitializer {
 public:
-    TMemoryTrackerInitializer(const TKikimrRunConfig& runConfig); 
+    TMemoryTrackerInitializer(const TKikimrRunConfig& runConfig);
 
-    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override; 
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
 class TQuoterServiceInitializer : public IKikimrServicesInitializer {
 public:
     TQuoterServiceInitializer(const TKikimrRunConfig& runConfig);
- 
+
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
@@ -382,33 +382,33 @@ class TKqpServiceInitializer : public IKikimrServicesInitializer {
 public:
     TKqpServiceInitializer(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories);
 
-    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override; 
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 private:
     std::shared_ptr<TModuleFactories> Factories;
 };
 
-class TMemoryLogInitializer : public IKikimrServicesInitializer { 
-    size_t LogBufferSize = 0; 
-    size_t LogGrainSize = 0; 
- 
+class TMemoryLogInitializer : public IKikimrServicesInitializer {
+    size_t LogBufferSize = 0;
+    size_t LogGrainSize = 0;
+
 public:
     TMemoryLogInitializer(const TKikimrRunConfig& runConfig);
 
-    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override; 
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
 class TCmsServiceInitializer : public IKikimrServicesInitializer {
 public:
     TCmsServiceInitializer(const TKikimrRunConfig& runConfig);
 
-    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override; 
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
 class TLeaseHolderInitializer : public IKikimrServicesInitializer {
 public:
     TLeaseHolderInitializer(const TKikimrRunConfig& runConfig);
 
-    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override; 
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
 class TSqsServiceInitializer : public IKikimrServicesInitializer {
@@ -465,13 +465,13 @@ public:
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
-class TSchemeBoardMonitoringInitializer : public IKikimrServicesInitializer { 
-public: 
-    TSchemeBoardMonitoringInitializer(const TKikimrRunConfig& runConfig); 
- 
-    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override; 
-}; 
- 
+class TSchemeBoardMonitoringInitializer : public IKikimrServicesInitializer {
+public:
+    TSchemeBoardMonitoringInitializer(const TKikimrRunConfig& runConfig);
+
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+};
+
 class TYqlLogsInitializer : public IKikimrServicesInitializer {
 public:
     TYqlLogsInitializer(const TKikimrRunConfig& runConfig);

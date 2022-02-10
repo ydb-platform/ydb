@@ -31,11 +31,11 @@ struct TSchemeShard::TTxServerlessStorageBilling : public TTransactionBase<TSche
         const TSubDomainInfo::TPtr domainDescr = Self->SubDomains.at(Self->RootPathId());
         const TSubDomainInfo::TDiskSpaceUsage& spaceUsage = domainDescr->GetDiskSpaceUsage();
 
-        if (!Self->IsServerlessDomain(TPath::Init(Self->RootPathId(), Self))) { 
+        if (!Self->IsServerlessDomain(TPath::Init(Self->RootPathId(), Self))) {
             LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                          "TTxServerlessStorageBilling: unable to make a bill, domain is not a serverless db"
                          << ", schemeshardId: " << Self->SelfTabletId()
-                         << ", domainId: " << Self->ParentDomainId); 
+                         << ", domainId: " << Self->ParentDomainId);
             return true;
         }
 

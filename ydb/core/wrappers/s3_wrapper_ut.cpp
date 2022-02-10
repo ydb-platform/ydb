@@ -3,284 +3,284 @@
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
- 
-#include <library/cpp/actors/core/log.h> 
-#include <library/cpp/digest/md5/md5.h> 
-#include <library/cpp/testing/unittest/registar.h> 
- 
-#include <util/string/printf.h> 
- 
-using namespace NActors; 
-using namespace NKikimr; 
-using namespace Aws::S3::Model; 
- 
-class TS3MockTest: public NUnitTest::TTestBase, private NWrappers::TS3User { 
-    using TS3Mock = NWrappers::NTestHelpers::TS3Mock; 
- 
-    static auto MakeClientConfig(ui16 port) { 
-        Aws::Client::ClientConfiguration config; 
- 
-        config.endpointOverride = Sprintf("localhost:%hu", port); 
-        config.verifySSL = false; 
-        config.connectTimeoutMs = 10000; 
-        config.maxConnections = 5; 
-        config.scheme = Aws::Http::Scheme::HTTP; 
- 
-        return config; 
-    } 
- 
-public: 
-    void SetUp() override { 
-        UNIT_ASSERT(!Port.Defined()); 
-        Port = PortManager.GetPort(); 
- 
-        S3Mock = MakeHolder<TS3Mock>(TS3Mock::TSettings(*Port)); 
-        UNIT_ASSERT(S3Mock->Start()); 
- 
-        Runtime = MakeHolder<TTestBasicRuntime>(); 
-        Runtime->Initialize(TAppPrepare().Unwrap()); 
-        Runtime->SetLogPriority(NKikimrServices::S3_WRAPPER, NLog::PRI_DEBUG); 
-        Wrapper = Runtime->Register(NWrappers::CreateS3Wrapper(Aws::Auth::AWSCredentials(), MakeClientConfig(*Port))); 
-    } 
- 
-    void TearDown() override { 
-        S3Mock.Reset(); 
-        Runtime.Reset(); 
-    } 
- 
-    ui16 GetPort() const { 
-        UNIT_ASSERT(Port.Defined()); 
-        return *Port; 
-    } 
- 
-    template <typename TEvResponse> 
-    auto Send(IEventBase* ev) { 
-        if (!Edge) { 
-            Edge = Runtime->AllocateEdgeActor(); 
-        } 
- 
-        Runtime->Send(new IEventHandle(Wrapper, *Edge, ev)); 
-        return Runtime->GrabEdgeEvent<TEvResponse>(*Edge); 
-    } 
- 
-private: 
-    TPortManager PortManager; 
-    TMaybe<ui16> Port; 
-    THolder<TS3Mock> S3Mock; 
-    THolder<TTestBasicRuntime> Runtime; 
-    TActorId Wrapper; 
-    TMaybe<TActorId> Edge; 
- 
-}; // TS3MockTest 
- 
-class TS3WrapperTests: public TS3MockTest { 
-    using TEvS3Wrapper = NWrappers::TEvS3Wrapper; 
- 
-    auto PutObject(const TString& key, TString&& body) { 
-        auto request = PutObjectRequest().WithBucket("").WithKey(key); 
-        auto response = Send<TEvS3Wrapper::TEvPutObjectResponse>( 
-            new TEvS3Wrapper::TEvPutObjectRequest(request, std::move(body))); 
- 
-        UNIT_ASSERT(response->Get()); 
-        return response->Get()->Result; 
-    } 
- 
-    auto HeadObject(const TString& key) { 
-        auto request = HeadObjectRequest().WithBucket("").WithKey(key); 
-        auto response = Send<TEvS3Wrapper::TEvHeadObjectResponse>( 
-            new TEvS3Wrapper::TEvHeadObjectRequest(request)); 
- 
-        UNIT_ASSERT(response->Get()); 
-        return response->Get()->Result; 
-    } 
- 
-    auto GetObject(const TString& key, ui64 bodySize) { 
-        auto request = GetObjectRequest() 
-            .WithBucket("") 
-            .WithKey(key) 
-            .WithRange(Sprintf("bytes=0-%" PRIu64, bodySize - 1)); 
-        auto response = Send<TEvS3Wrapper::TEvGetObjectResponse>( 
-            new TEvS3Wrapper::TEvGetObjectRequest(request)); 
- 
-        UNIT_ASSERT(response->Get()); 
-        return std::make_pair(response->Get()->Result, response->Get()->Body); 
-    } 
- 
-    auto CreateMultipartUpload(const TString& key) { 
-        auto request = CreateMultipartUploadRequest().WithBucket("").WithKey(key); 
-        auto response = Send<TEvS3Wrapper::TEvCreateMultipartUploadResponse>( 
-            new TEvS3Wrapper::TEvCreateMultipartUploadRequest(request)); 
- 
-        UNIT_ASSERT(response->Get()); 
-        return response->Get()->Result; 
-    } 
- 
-    auto CompleteMultipartUpload(const TString& key, const TString& uploadId, const TVector<CompletedPart>& parts) { 
-        auto request = CompleteMultipartUploadRequest() 
-            .WithBucket("") 
-            .WithKey(key) 
-            .WithUploadId(uploadId) 
-            .WithMultipartUpload(CompletedMultipartUpload().WithParts(parts)); 
-        auto response = Send<TEvS3Wrapper::TEvCompleteMultipartUploadResponse>( 
-            new TEvS3Wrapper::TEvCompleteMultipartUploadRequest(request)); 
- 
-        UNIT_ASSERT(response->Get()); 
-        return response->Get()->Result; 
-    } 
- 
-    auto AbortMultipartUpload(const TString& key, const TString& uploadId) { 
-        auto request = AbortMultipartUploadRequest() 
-            .WithBucket("") 
-            .WithKey(key) 
-            .WithUploadId(uploadId); 
-        auto response = Send<TEvS3Wrapper::TEvAbortMultipartUploadResponse>( 
-            new TEvS3Wrapper::TEvAbortMultipartUploadRequest(request)); 
- 
-        UNIT_ASSERT(response->Get()); 
-        return response->Get()->Result; 
-    } 
- 
-    auto UploadPart(const TString& key, const TString& uploadId, int partNumber, TString&& body) { 
-        auto request = UploadPartRequest() 
-            .WithBucket("") 
-            .WithKey(key) 
-            .WithUploadId(uploadId) 
-            .WithPartNumber(partNumber); 
-        auto response = Send<TEvS3Wrapper::TEvUploadPartResponse>( 
-            new TEvS3Wrapper::TEvUploadPartRequest(request, std::move(body))); 
- 
-        UNIT_ASSERT(response->Get()); 
-        return response->Get()->Result; 
-    } 
- 
-public: 
-    void PutObject() { 
-        auto result = PutObject("key", "body"); 
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage()); 
-    } 
- 
-    void HeadObject() { 
-        const TString body = "body"; 
- 
-        { 
-            auto result = PutObject("key", TString(body)); 
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage()); 
-        } 
- 
-        { 
-            auto result = HeadObject("key"); 
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage()); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().GetETag(), MD5::Data(body)); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().GetContentLength(), body.size()); 
-        } 
-    } 
- 
-    void GetObject() { 
-        const TString body = "body"; 
- 
-        { 
-            auto result = PutObject("key", TString(body)); 
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage()); 
-        } 
- 
-        { 
-            auto [result, actualBody] = GetObject("key", body.size()); 
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage()); 
-            UNIT_ASSERT_VALUES_EQUAL(actualBody, body); 
-        } 
-    } 
- 
-    void MultipartUpload() { 
-        const TString body = "body"; 
-        TString uploadId; 
-        TVector<CompletedPart> parts; 
- 
-        { 
-            auto result = CreateMultipartUpload("key"); 
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage()); 
-            uploadId = result.GetResult().GetUploadId(); 
-        } 
- 
-        { 
-            auto result = UploadPart("key", uploadId, 1, TString(body)); 
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage()); 
-            parts.push_back(CompletedPart().WithPartNumber(1).WithETag(result.GetResult().GetETag())); 
-        } 
- 
-        { 
-            auto result = CompleteMultipartUpload("key", uploadId, parts); 
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage()); 
-        } 
- 
-        { 
-            auto [result, actualBody] = GetObject("key", body.size()); 
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage()); 
-            UNIT_ASSERT_VALUES_EQUAL(actualBody, body); 
-        } 
-    } 
- 
-    void AbortMultipartUpload() { 
-        TString uploadId; 
- 
-        { 
-            auto result = CreateMultipartUpload("key"); 
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage()); 
-            uploadId = result.GetResult().GetUploadId(); 
-        } 
- 
-        { 
-            auto result = AbortMultipartUpload("key", uploadId); 
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage()); 
-        } 
- 
-        { 
-            auto result = HeadObject("key"); 
-            UNIT_ASSERT(!result.IsSuccess()); 
-        } 
-    } 
- 
-    void HeadUnknownObject() { 
-        auto result = HeadObject("key"); 
-        UNIT_ASSERT(!result.IsSuccess()); 
-    } 
- 
-    void GetUnknownObject() { 
-        auto [result, actualBody] = GetObject("key", 4); 
-        UNIT_ASSERT(!result.IsSuccess()); 
-        UNIT_ASSERT_VALUES_EQUAL(actualBody, ""); 
-    } 
- 
-    void UploadUnknownPart() { 
-        auto result = UploadPart("key", "uploadId", 1, "body"); 
-        UNIT_ASSERT(!result.IsSuccess()); 
-    } 
- 
-    void CompleteUnknownUpload() { 
-        auto result = CompleteMultipartUpload("key", "uploadId", { 
-            CompletedPart().WithPartNumber(1).WithETag("ETag"), 
-        }); 
-        UNIT_ASSERT(!result.IsSuccess()); 
-    } 
- 
-    void AbortUnknownUpload() { 
-        auto result = AbortMultipartUpload("key", "uploadId"); 
-        UNIT_ASSERT(!result.IsSuccess()); 
-    } 
- 
-private: 
-    UNIT_TEST_SUITE(TS3WrapperTests); 
-    UNIT_TEST(PutObject); 
-    UNIT_TEST(HeadObject); 
-    UNIT_TEST(GetObject); 
-    UNIT_TEST(MultipartUpload); 
-    UNIT_TEST(AbortMultipartUpload); 
-    UNIT_TEST(HeadUnknownObject); 
-    UNIT_TEST(GetUnknownObject); 
-    UNIT_TEST(UploadUnknownPart); 
-    UNIT_TEST(CompleteUnknownUpload); 
-    UNIT_TEST(AbortUnknownUpload); 
-    UNIT_TEST_SUITE_END(); 
- 
-}; // TS3WrapperTests 
- 
-UNIT_TEST_SUITE_REGISTRATION(TS3WrapperTests); 
+
+#include <library/cpp/actors/core/log.h>
+#include <library/cpp/digest/md5/md5.h>
+#include <library/cpp/testing/unittest/registar.h>
+
+#include <util/string/printf.h>
+
+using namespace NActors;
+using namespace NKikimr;
+using namespace Aws::S3::Model;
+
+class TS3MockTest: public NUnitTest::TTestBase, private NWrappers::TS3User {
+    using TS3Mock = NWrappers::NTestHelpers::TS3Mock;
+
+    static auto MakeClientConfig(ui16 port) {
+        Aws::Client::ClientConfiguration config;
+
+        config.endpointOverride = Sprintf("localhost:%hu", port);
+        config.verifySSL = false;
+        config.connectTimeoutMs = 10000;
+        config.maxConnections = 5;
+        config.scheme = Aws::Http::Scheme::HTTP;
+
+        return config;
+    }
+
+public:
+    void SetUp() override {
+        UNIT_ASSERT(!Port.Defined());
+        Port = PortManager.GetPort();
+
+        S3Mock = MakeHolder<TS3Mock>(TS3Mock::TSettings(*Port));
+        UNIT_ASSERT(S3Mock->Start());
+
+        Runtime = MakeHolder<TTestBasicRuntime>();
+        Runtime->Initialize(TAppPrepare().Unwrap());
+        Runtime->SetLogPriority(NKikimrServices::S3_WRAPPER, NLog::PRI_DEBUG);
+        Wrapper = Runtime->Register(NWrappers::CreateS3Wrapper(Aws::Auth::AWSCredentials(), MakeClientConfig(*Port)));
+    }
+
+    void TearDown() override {
+        S3Mock.Reset();
+        Runtime.Reset();
+    }
+
+    ui16 GetPort() const {
+        UNIT_ASSERT(Port.Defined());
+        return *Port;
+    }
+
+    template <typename TEvResponse>
+    auto Send(IEventBase* ev) {
+        if (!Edge) {
+            Edge = Runtime->AllocateEdgeActor();
+        }
+
+        Runtime->Send(new IEventHandle(Wrapper, *Edge, ev));
+        return Runtime->GrabEdgeEvent<TEvResponse>(*Edge);
+    }
+
+private:
+    TPortManager PortManager;
+    TMaybe<ui16> Port;
+    THolder<TS3Mock> S3Mock;
+    THolder<TTestBasicRuntime> Runtime;
+    TActorId Wrapper;
+    TMaybe<TActorId> Edge;
+
+}; // TS3MockTest
+
+class TS3WrapperTests: public TS3MockTest {
+    using TEvS3Wrapper = NWrappers::TEvS3Wrapper;
+
+    auto PutObject(const TString& key, TString&& body) {
+        auto request = PutObjectRequest().WithBucket("").WithKey(key);
+        auto response = Send<TEvS3Wrapper::TEvPutObjectResponse>(
+            new TEvS3Wrapper::TEvPutObjectRequest(request, std::move(body)));
+
+        UNIT_ASSERT(response->Get());
+        return response->Get()->Result;
+    }
+
+    auto HeadObject(const TString& key) {
+        auto request = HeadObjectRequest().WithBucket("").WithKey(key);
+        auto response = Send<TEvS3Wrapper::TEvHeadObjectResponse>(
+            new TEvS3Wrapper::TEvHeadObjectRequest(request));
+
+        UNIT_ASSERT(response->Get());
+        return response->Get()->Result;
+    }
+
+    auto GetObject(const TString& key, ui64 bodySize) {
+        auto request = GetObjectRequest()
+            .WithBucket("")
+            .WithKey(key)
+            .WithRange(Sprintf("bytes=0-%" PRIu64, bodySize - 1));
+        auto response = Send<TEvS3Wrapper::TEvGetObjectResponse>(
+            new TEvS3Wrapper::TEvGetObjectRequest(request));
+
+        UNIT_ASSERT(response->Get());
+        return std::make_pair(response->Get()->Result, response->Get()->Body);
+    }
+
+    auto CreateMultipartUpload(const TString& key) {
+        auto request = CreateMultipartUploadRequest().WithBucket("").WithKey(key);
+        auto response = Send<TEvS3Wrapper::TEvCreateMultipartUploadResponse>(
+            new TEvS3Wrapper::TEvCreateMultipartUploadRequest(request));
+
+        UNIT_ASSERT(response->Get());
+        return response->Get()->Result;
+    }
+
+    auto CompleteMultipartUpload(const TString& key, const TString& uploadId, const TVector<CompletedPart>& parts) {
+        auto request = CompleteMultipartUploadRequest()
+            .WithBucket("")
+            .WithKey(key)
+            .WithUploadId(uploadId)
+            .WithMultipartUpload(CompletedMultipartUpload().WithParts(parts));
+        auto response = Send<TEvS3Wrapper::TEvCompleteMultipartUploadResponse>(
+            new TEvS3Wrapper::TEvCompleteMultipartUploadRequest(request));
+
+        UNIT_ASSERT(response->Get());
+        return response->Get()->Result;
+    }
+
+    auto AbortMultipartUpload(const TString& key, const TString& uploadId) {
+        auto request = AbortMultipartUploadRequest()
+            .WithBucket("")
+            .WithKey(key)
+            .WithUploadId(uploadId);
+        auto response = Send<TEvS3Wrapper::TEvAbortMultipartUploadResponse>(
+            new TEvS3Wrapper::TEvAbortMultipartUploadRequest(request));
+
+        UNIT_ASSERT(response->Get());
+        return response->Get()->Result;
+    }
+
+    auto UploadPart(const TString& key, const TString& uploadId, int partNumber, TString&& body) {
+        auto request = UploadPartRequest()
+            .WithBucket("")
+            .WithKey(key)
+            .WithUploadId(uploadId)
+            .WithPartNumber(partNumber);
+        auto response = Send<TEvS3Wrapper::TEvUploadPartResponse>(
+            new TEvS3Wrapper::TEvUploadPartRequest(request, std::move(body)));
+
+        UNIT_ASSERT(response->Get());
+        return response->Get()->Result;
+    }
+
+public:
+    void PutObject() {
+        auto result = PutObject("key", "body");
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+    }
+
+    void HeadObject() {
+        const TString body = "body";
+
+        {
+            auto result = PutObject("key", TString(body));
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+        }
+
+        {
+            auto result = HeadObject("key");
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().GetETag(), MD5::Data(body));
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().GetContentLength(), body.size());
+        }
+    }
+
+    void GetObject() {
+        const TString body = "body";
+
+        {
+            auto result = PutObject("key", TString(body));
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+        }
+
+        {
+            auto [result, actualBody] = GetObject("key", body.size());
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+            UNIT_ASSERT_VALUES_EQUAL(actualBody, body);
+        }
+    }
+
+    void MultipartUpload() {
+        const TString body = "body";
+        TString uploadId;
+        TVector<CompletedPart> parts;
+
+        {
+            auto result = CreateMultipartUpload("key");
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+            uploadId = result.GetResult().GetUploadId();
+        }
+
+        {
+            auto result = UploadPart("key", uploadId, 1, TString(body));
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+            parts.push_back(CompletedPart().WithPartNumber(1).WithETag(result.GetResult().GetETag()));
+        }
+
+        {
+            auto result = CompleteMultipartUpload("key", uploadId, parts);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+        }
+
+        {
+            auto [result, actualBody] = GetObject("key", body.size());
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+            UNIT_ASSERT_VALUES_EQUAL(actualBody, body);
+        }
+    }
+
+    void AbortMultipartUpload() {
+        TString uploadId;
+
+        {
+            auto result = CreateMultipartUpload("key");
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+            uploadId = result.GetResult().GetUploadId();
+        }
+
+        {
+            auto result = AbortMultipartUpload("key", uploadId);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+        }
+
+        {
+            auto result = HeadObject("key");
+            UNIT_ASSERT(!result.IsSuccess());
+        }
+    }
+
+    void HeadUnknownObject() {
+        auto result = HeadObject("key");
+        UNIT_ASSERT(!result.IsSuccess());
+    }
+
+    void GetUnknownObject() {
+        auto [result, actualBody] = GetObject("key", 4);
+        UNIT_ASSERT(!result.IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(actualBody, "");
+    }
+
+    void UploadUnknownPart() {
+        auto result = UploadPart("key", "uploadId", 1, "body");
+        UNIT_ASSERT(!result.IsSuccess());
+    }
+
+    void CompleteUnknownUpload() {
+        auto result = CompleteMultipartUpload("key", "uploadId", {
+            CompletedPart().WithPartNumber(1).WithETag("ETag"),
+        });
+        UNIT_ASSERT(!result.IsSuccess());
+    }
+
+    void AbortUnknownUpload() {
+        auto result = AbortMultipartUpload("key", "uploadId");
+        UNIT_ASSERT(!result.IsSuccess());
+    }
+
+private:
+    UNIT_TEST_SUITE(TS3WrapperTests);
+    UNIT_TEST(PutObject);
+    UNIT_TEST(HeadObject);
+    UNIT_TEST(GetObject);
+    UNIT_TEST(MultipartUpload);
+    UNIT_TEST(AbortMultipartUpload);
+    UNIT_TEST(HeadUnknownObject);
+    UNIT_TEST(GetUnknownObject);
+    UNIT_TEST(UploadUnknownPart);
+    UNIT_TEST(CompleteUnknownUpload);
+    UNIT_TEST(AbortUnknownUpload);
+    UNIT_TEST_SUITE_END();
+
+}; // TS3WrapperTests
+
+UNIT_TEST_SUITE_REGISTRATION(TS3WrapperTests);

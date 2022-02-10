@@ -1,10 +1,10 @@
-#include "cache.h" 
-#include "double_indexed.h" 
-#include "events.h" 
-#include "helpers.h" 
-#include "monitorable_actor.h" 
-#include "subscriber.h" 
- 
+#include "cache.h"
+#include "double_indexed.h"
+#include "events.h"
+#include "helpers.h"
+#include "monitorable_actor.h"
+#include "subscriber.h"
+
 #include <ydb/core/tx/datashard/sys_tables.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
@@ -17,281 +17,281 @@
 #include <ydb/core/sys_view/common/schema.h>
 #include <ydb/core/tx/schemeshard/schemeshard_types.h>
 #include <ydb/core/util/yverify_stream.h>
- 
+
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/log.h>
-#include <library/cpp/json/writer/json.h> 
- 
-#include <util/generic/algorithm.h> 
-#include <util/generic/hash.h> 
-#include <util/generic/maybe.h> 
-#include <util/generic/ptr.h> 
-#include <util/generic/string.h> 
-#include <util/generic/variant.h> 
-#include <util/generic/vector.h> 
-#include <util/generic/xrange.h> 
-#include <util/string/builder.h> 
- 
-namespace NKikimr { 
-namespace NSchemeBoard { 
- 
-#define SBC_LOG_T(stream) SB_LOG_T(TX_PROXY_SCHEME_CACHE, stream) 
-#define SBC_LOG_D(stream) SB_LOG_D(TX_PROXY_SCHEME_CACHE, stream) 
-#define SBC_LOG_N(stream) SB_LOG_N(TX_PROXY_SCHEME_CACHE, stream) 
-#define SBC_LOG_W(stream) SB_LOG_W(TX_PROXY_SCHEME_CACHE, stream)
- 
-using TEvNavigate = TEvTxProxySchemeCache::TEvNavigateKeySet; 
-using TEvNavigateResult = TEvTxProxySchemeCache::TEvNavigateKeySetResult; 
-using TNavigate = NSchemeCache::TSchemeCacheNavigate; 
-using TNavigateContext = NSchemeCache::TSchemeCacheNavigateContext; 
-using TNavigateContextPtr = TIntrusivePtr<TNavigateContext>; 
+#include <library/cpp/json/writer/json.h>
 
-using TEvResolve = TEvTxProxySchemeCache::TEvResolveKeySet; 
-using TEvResolveResult = TEvTxProxySchemeCache::TEvResolveKeySetResult; 
-using TResolve = NSchemeCache::TSchemeCacheRequest; 
-using TResolveContext = NSchemeCache::TSchemeCacheRequestContext; 
-using TResolveContextPtr = TIntrusivePtr<TResolveContext>; 
- 
+#include <util/generic/algorithm.h>
+#include <util/generic/hash.h>
+#include <util/generic/maybe.h>
+#include <util/generic/ptr.h>
+#include <util/generic/string.h>
+#include <util/generic/variant.h>
+#include <util/generic/vector.h>
+#include <util/generic/xrange.h>
+#include <util/string/builder.h>
+
+namespace NKikimr {
+namespace NSchemeBoard {
+
+#define SBC_LOG_T(stream) SB_LOG_T(TX_PROXY_SCHEME_CACHE, stream)
+#define SBC_LOG_D(stream) SB_LOG_D(TX_PROXY_SCHEME_CACHE, stream)
+#define SBC_LOG_N(stream) SB_LOG_N(TX_PROXY_SCHEME_CACHE, stream)
+#define SBC_LOG_W(stream) SB_LOG_W(TX_PROXY_SCHEME_CACHE, stream)
+
+using TEvNavigate = TEvTxProxySchemeCache::TEvNavigateKeySet;
+using TEvNavigateResult = TEvTxProxySchemeCache::TEvNavigateKeySetResult;
+using TNavigate = NSchemeCache::TSchemeCacheNavigate;
+using TNavigateContext = NSchemeCache::TSchemeCacheNavigateContext;
+using TNavigateContextPtr = TIntrusivePtr<TNavigateContext>;
+
+using TEvResolve = TEvTxProxySchemeCache::TEvResolveKeySet;
+using TEvResolveResult = TEvTxProxySchemeCache::TEvResolveKeySetResult;
+using TResolve = NSchemeCache::TSchemeCacheRequest;
+using TResolveContext = NSchemeCache::TSchemeCacheRequestContext;
+using TResolveContextPtr = TIntrusivePtr<TResolveContext>;
+
 using TVariantContextPtr = std::variant<TNavigateContextPtr, TResolveContextPtr>;
- 
-namespace { 
- 
-    void SetError(TNavigateContext* context, TNavigate::TEntry& entry, TNavigate::EStatus status) { 
-        ++context->Request->ErrorCount; 
-        entry.Status = status; 
-    } 
- 
-    void SetError(TResolveContext* context, TResolve::TEntry& entry, TResolve::EStatus entryStatus, TKeyDesc::EStatus keyDescStatus) { 
-        entry.Status = entryStatus; 
-        entry.KeyDescription->Status = keyDescStatus; 
-        ++context->Request->ErrorCount; 
-    } 
- 
-    void SetRootUnknown(TNavigateContext* context, TNavigate::TEntry& entry) { 
-        SetError(context, entry, TNavigate::EStatus::RootUnknown); 
-    } 
- 
-    void SetRootUnknown(TResolveContext* context, TResolve::TEntry&) { 
-        ++context->Request->ErrorCount; 
-    } 
- 
-    void SetPathNotExist(TNavigateContext* context, TNavigate::TEntry& entry) { 
-        SetError(context, entry, TNavigate::EStatus::PathErrorUnknown); 
-    } 
- 
-    void SetPathNotExist(TResolveContext* context, TResolve::TEntry& entry) { 
-        SetError(context, entry, TResolve::EStatus::PathErrorNotExist, TKeyDesc::EStatus::NotExists); 
-    } 
- 
-    void SetLookupError(TNavigateContext* context, TNavigate::TEntry& entry) { 
-        SetError(context, entry, TNavigate::EStatus::LookupError); 
-    } 
- 
-    void SetLookupError(TResolveContext* context, TResolve::TEntry& entry) { 
-        SetError(context, entry, TResolve::EStatus::LookupError, TKeyDesc::EStatus::NotExists); 
-    } 
- 
-    template <typename TRequest, typename TEvRequest, typename TDerived> 
-    class TDbResolver: public TActorBootstrapped<TDerived> { 
-        void Handle() { 
-            TlsActivationContext->Send(new IEventHandle(Cache, Sender, new TEvRequest(Request.Release()))); 
-            this->PassAway(); 
-        } 
- 
-    public: 
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-            return NKikimrServices::TActivity::SCHEME_BOARD_DB_RESOLVER; 
-        } 
- 
+
+namespace {
+
+    void SetError(TNavigateContext* context, TNavigate::TEntry& entry, TNavigate::EStatus status) {
+        ++context->Request->ErrorCount;
+        entry.Status = status;
+    }
+
+    void SetError(TResolveContext* context, TResolve::TEntry& entry, TResolve::EStatus entryStatus, TKeyDesc::EStatus keyDescStatus) {
+        entry.Status = entryStatus;
+        entry.KeyDescription->Status = keyDescStatus;
+        ++context->Request->ErrorCount;
+    }
+
+    void SetRootUnknown(TNavigateContext* context, TNavigate::TEntry& entry) {
+        SetError(context, entry, TNavigate::EStatus::RootUnknown);
+    }
+
+    void SetRootUnknown(TResolveContext* context, TResolve::TEntry&) {
+        ++context->Request->ErrorCount;
+    }
+
+    void SetPathNotExist(TNavigateContext* context, TNavigate::TEntry& entry) {
+        SetError(context, entry, TNavigate::EStatus::PathErrorUnknown);
+    }
+
+    void SetPathNotExist(TResolveContext* context, TResolve::TEntry& entry) {
+        SetError(context, entry, TResolve::EStatus::PathErrorNotExist, TKeyDesc::EStatus::NotExists);
+    }
+
+    void SetLookupError(TNavigateContext* context, TNavigate::TEntry& entry) {
+        SetError(context, entry, TNavigate::EStatus::LookupError);
+    }
+
+    void SetLookupError(TResolveContext* context, TResolve::TEntry& entry) {
+        SetError(context, entry, TResolve::EStatus::LookupError, TKeyDesc::EStatus::NotExists);
+    }
+
+    template <typename TRequest, typename TEvRequest, typename TDerived>
+    class TDbResolver: public TActorBootstrapped<TDerived> {
+        void Handle() {
+            TlsActivationContext->Send(new IEventHandle(Cache, Sender, new TEvRequest(Request.Release())));
+            this->PassAway();
+        }
+
+    public:
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+            return NKikimrServices::TActivity::SCHEME_BOARD_DB_RESOLVER;
+        }
+
         TDbResolver(const TActorId& cache, const TActorId& sender, THolder<TRequest> request, ui64 domainOwnerId)
-            : Cache(cache) 
-            , Sender(sender) 
-            , Request(std::move(request)) 
-            , DomainOwnerId(domainOwnerId) 
-        { 
-        } 
- 
-        void Bootstrap() { 
-            TNavigate::TEntry entry; 
-            entry.Path = SplitPath(Request->DatabaseName); 
-            entry.Operation = TNavigate::EOp::OpPath; 
-            entry.RedirectRequired = false; 
- 
-            auto request = MakeHolder<TNavigate>(); 
-            request->ResultSet.emplace_back(std::move(entry)); 
-            request->DomainOwnerId = DomainOwnerId; 
- 
-            this->Send(Cache, new TEvNavigate(request.Release())); 
-            this->Become(&TDerived::StateWork); 
-        } 
- 
-        STATEFN(StateWork) { 
-            switch (ev->GetTypeRewrite()) { 
-                sFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle); 
-            } 
-        } 
- 
-        using TBase = TDbResolver<TRequest, TEvRequest, TDerived>; 
- 
-    private: 
+            : Cache(cache)
+            , Sender(sender)
+            , Request(std::move(request))
+            , DomainOwnerId(domainOwnerId)
+        {
+        }
+
+        void Bootstrap() {
+            TNavigate::TEntry entry;
+            entry.Path = SplitPath(Request->DatabaseName);
+            entry.Operation = TNavigate::EOp::OpPath;
+            entry.RedirectRequired = false;
+
+            auto request = MakeHolder<TNavigate>();
+            request->ResultSet.emplace_back(std::move(entry));
+            request->DomainOwnerId = DomainOwnerId;
+
+            this->Send(Cache, new TEvNavigate(request.Release()));
+            this->Become(&TDerived::StateWork);
+        }
+
+        STATEFN(StateWork) {
+            switch (ev->GetTypeRewrite()) {
+                sFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
+            }
+        }
+
+        using TBase = TDbResolver<TRequest, TEvRequest, TDerived>;
+
+    private:
         const TActorId Cache;
         const TActorId Sender;
-        THolder<TRequest> Request; 
-        const ui64 DomainOwnerId; 
- 
-    }; // TDbResolver 
- 
-    class TDbResolverNavigate: public TDbResolver<TNavigate, TEvNavigate, TDbResolverNavigate> { 
-    public: 
-        using TBase::TBase; 
-    }; 
- 
-    class TDbResolverResolve: public TDbResolver<TResolve, TEvResolve, TDbResolverResolve> { 
-    public: 
-        using TBase::TBase; 
-    }; 
- 
+        THolder<TRequest> Request;
+        const ui64 DomainOwnerId;
+
+    }; // TDbResolver
+
+    class TDbResolverNavigate: public TDbResolver<TNavigate, TEvNavigate, TDbResolverNavigate> {
+    public:
+        using TBase::TBase;
+    };
+
+    class TDbResolverResolve: public TDbResolver<TResolve, TEvResolve, TDbResolverResolve> {
+    public:
+        using TBase::TBase;
+    };
+
     IActor* CreateDbResolver(const TActorId& cache, const TActorId& sender, THolder<TNavigate> request, ui64 domainOwnerId) {
-        return new TDbResolverNavigate(cache, sender, std::move(request), domainOwnerId); 
-    } 
- 
+        return new TDbResolverNavigate(cache, sender, std::move(request), domainOwnerId);
+    }
+
     IActor* CreateDbResolver(const TActorId& cache, const TActorId& sender, THolder<TResolve> request, ui64 domainOwnerId) {
-        return new TDbResolverResolve(cache, sender, std::move(request), domainOwnerId); 
-    } 
- 
-    template <typename TContextPtr, typename TEvResult, typename TDerived> 
-    class TAclChecker: public TActorBootstrapped<TDerived> { 
-        static TIntrusivePtr<TSecurityObject> GetSecurityObject(const TNavigate::TEntry& entry) { 
-            return entry.SecurityObject; 
-        } 
- 
-        static TIntrusivePtr<TSecurityObject> GetSecurityObject(const TResolve::TEntry& entry) { 
-            return entry.KeyDescription->SecurityObject; 
-        } 
- 
-        static ui32 GetAccess(const TNavigate::TEntry&) { 
-            return NACLib::EAccessRights::DescribeSchema; 
-        } 
- 
-        static ui32 GetAccess(const TResolve::TEntry& entry) { 
-            return entry.Access; 
-        } 
- 
-        static void SetErrorAndClear(TNavigateContext* context, TNavigate::TEntry& entry) { 
-            SetError(context, entry, TNavigate::EStatus::PathErrorUnknown); 
- 
-            switch (entry.RequestType) { 
-            case TNavigate::TEntry::ERequestType::ByPath: 
-                entry.TableId = TTableId(); 
-                break; 
-            case TNavigate::TEntry::ERequestType::ByTableId: 
-                entry.Path.clear(); 
-                break; 
-            } 
- 
+        return new TDbResolverResolve(cache, sender, std::move(request), domainOwnerId);
+    }
+
+    template <typename TContextPtr, typename TEvResult, typename TDerived>
+    class TAclChecker: public TActorBootstrapped<TDerived> {
+        static TIntrusivePtr<TSecurityObject> GetSecurityObject(const TNavigate::TEntry& entry) {
+            return entry.SecurityObject;
+        }
+
+        static TIntrusivePtr<TSecurityObject> GetSecurityObject(const TResolve::TEntry& entry) {
+            return entry.KeyDescription->SecurityObject;
+        }
+
+        static ui32 GetAccess(const TNavigate::TEntry&) {
+            return NACLib::EAccessRights::DescribeSchema;
+        }
+
+        static ui32 GetAccess(const TResolve::TEntry& entry) {
+            return entry.Access;
+        }
+
+        static void SetErrorAndClear(TNavigateContext* context, TNavigate::TEntry& entry) {
+            SetError(context, entry, TNavigate::EStatus::PathErrorUnknown);
+
+            switch (entry.RequestType) {
+            case TNavigate::TEntry::ERequestType::ByPath:
+                entry.TableId = TTableId();
+                break;
+            case TNavigate::TEntry::ERequestType::ByTableId:
+                entry.Path.clear();
+                break;
+            }
+
             entry.Self.Drop();
-            entry.SecurityObject.Drop(); 
-            entry.DomainInfo.Drop(); 
-            entry.Kind = TNavigate::KindUnknown; 
-            entry.Attributes.clear(); 
-            entry.ListNodeEntry.Drop(); 
-            entry.DomainDescription.Drop(); 
-            entry.Columns.clear(); 
+            entry.SecurityObject.Drop();
+            entry.DomainInfo.Drop();
+            entry.Kind = TNavigate::KindUnknown;
+            entry.Attributes.clear();
+            entry.ListNodeEntry.Drop();
+            entry.DomainDescription.Drop();
+            entry.Columns.clear();
             entry.NotNullColumns.clear();
-            entry.Indexes.clear(); 
-            entry.CdcStreams.clear(); 
-            entry.RTMRVolumeInfo.Drop(); 
-            entry.KesusInfo.Drop(); 
-            entry.SolomonVolumeInfo.Drop(); 
-            entry.PQGroupInfo.Drop(); 
+            entry.Indexes.clear();
+            entry.CdcStreams.clear();
+            entry.RTMRVolumeInfo.Drop();
+            entry.KesusInfo.Drop();
+            entry.SolomonVolumeInfo.Drop();
+            entry.PQGroupInfo.Drop();
             entry.OlapStoreInfo.Drop();
             entry.OlapTableInfo.Drop();
-            entry.CdcStreamInfo.Drop(); 
+            entry.CdcStreamInfo.Drop();
             entry.SequenceInfo.Drop();
-            entry.ReplicationInfo.Drop(); 
-        } 
- 
-        static void SetErrorAndClear(TResolveContext* context, TResolve::TEntry& entry) { 
-            SetError(context, entry, TResolve::EStatus::PathErrorNotExist, TKeyDesc::EStatus::NotExists); 
- 
-            entry.Kind = TResolve::KindUnknown; 
-            entry.DomainInfo.Drop(); 
-            TKeyDesc& keyDesc = *entry.KeyDescription; 
-            keyDesc.ColumnInfos.clear(); 
-            keyDesc.Partitions.clear(); 
-            keyDesc.SecurityObject.Drop(); 
-        } 
- 
-        void SendResult() { 
-            SBC_LOG_D("Send result" 
-                << ": self# " << this->SelfId() 
-                << ", recipient# " << Context->Sender 
-                << ", result# " << Context->Request->ToString(*AppData()->TypeRegistry)); 
- 
-            this->Send(Context->Sender, new TEvResult(Context->Request.Release())); 
-            this->PassAway(); 
-        } 
- 
-    public: 
-        explicit TAclChecker(TContextPtr context) 
-            : Context(context) 
-        { 
-            Y_VERIFY(!Context->WaitCounter); 
-        } 
- 
-        void Bootstrap(const TActorContext&) { 
-            if (Context->Request->UserToken == nullptr) { 
-                SendResult(); 
-                return; 
-            } 
- 
-            for (auto& entry : Context->Request->ResultSet) { 
-                auto securityObject = GetSecurityObject(entry); 
-                if (securityObject == nullptr) { 
-                    continue; 
-                } 
- 
-                const ui32 access = GetAccess(entry); 
-                if (!securityObject->CheckAccess(access, *Context->Request->UserToken)) { 
-                    SBC_LOG_W("Access denied" 
-                        << ": self# " << this->SelfId() 
-                        << ", for# " << Context->Request->UserToken->GetUserSID() 
-                        << ", access# " << NACLib::AccessRightsToString(access)); 
- 
-                    SetErrorAndClear(Context.Get(), entry); 
-                } 
-            } 
- 
-            SendResult(); 
-        } 
- 
-        using TBase = TAclChecker<TContextPtr, TEvResult, TDerived>; 
- 
-    private: 
-        TContextPtr Context; 
- 
-    }; // TAclChecker 
- 
-    class TAclCheckerNavigate: public TAclChecker<TNavigateContextPtr, TEvNavigateResult, TAclCheckerNavigate> { 
-    public: 
-        using TBase::TBase; 
-    }; 
- 
-    class TAclCheckerResolve: public TAclChecker<TResolveContextPtr, TEvResolveResult, TAclCheckerResolve> { 
-    public: 
-        using TBase::TBase; 
-    }; 
- 
-    IActor* CreateAclChecker(TNavigateContextPtr context) { 
-        return new TAclCheckerNavigate(context); 
-    } 
- 
-    IActor* CreateAclChecker(TResolveContextPtr context) { 
-        return new TAclCheckerResolve(context); 
-    } 
- 
-    class TWatchCache: public TMonitorableActor<TWatchCache> { 
+            entry.ReplicationInfo.Drop();
+        }
+
+        static void SetErrorAndClear(TResolveContext* context, TResolve::TEntry& entry) {
+            SetError(context, entry, TResolve::EStatus::PathErrorNotExist, TKeyDesc::EStatus::NotExists);
+
+            entry.Kind = TResolve::KindUnknown;
+            entry.DomainInfo.Drop();
+            TKeyDesc& keyDesc = *entry.KeyDescription;
+            keyDesc.ColumnInfos.clear();
+            keyDesc.Partitions.clear();
+            keyDesc.SecurityObject.Drop();
+        }
+
+        void SendResult() {
+            SBC_LOG_D("Send result"
+                << ": self# " << this->SelfId()
+                << ", recipient# " << Context->Sender
+                << ", result# " << Context->Request->ToString(*AppData()->TypeRegistry));
+
+            this->Send(Context->Sender, new TEvResult(Context->Request.Release()));
+            this->PassAway();
+        }
+
+    public:
+        explicit TAclChecker(TContextPtr context)
+            : Context(context)
+        {
+            Y_VERIFY(!Context->WaitCounter);
+        }
+
+        void Bootstrap(const TActorContext&) {
+            if (Context->Request->UserToken == nullptr) {
+                SendResult();
+                return;
+            }
+
+            for (auto& entry : Context->Request->ResultSet) {
+                auto securityObject = GetSecurityObject(entry);
+                if (securityObject == nullptr) {
+                    continue;
+                }
+
+                const ui32 access = GetAccess(entry);
+                if (!securityObject->CheckAccess(access, *Context->Request->UserToken)) {
+                    SBC_LOG_W("Access denied"
+                        << ": self# " << this->SelfId()
+                        << ", for# " << Context->Request->UserToken->GetUserSID()
+                        << ", access# " << NACLib::AccessRightsToString(access));
+
+                    SetErrorAndClear(Context.Get(), entry);
+                }
+            }
+
+            SendResult();
+        }
+
+        using TBase = TAclChecker<TContextPtr, TEvResult, TDerived>;
+
+    private:
+        TContextPtr Context;
+
+    }; // TAclChecker
+
+    class TAclCheckerNavigate: public TAclChecker<TNavigateContextPtr, TEvNavigateResult, TAclCheckerNavigate> {
+    public:
+        using TBase::TBase;
+    };
+
+    class TAclCheckerResolve: public TAclChecker<TResolveContextPtr, TEvResolveResult, TAclCheckerResolve> {
+    public:
+        using TBase::TBase;
+    };
+
+    IActor* CreateAclChecker(TNavigateContextPtr context) {
+        return new TAclCheckerNavigate(context);
+    }
+
+    IActor* CreateAclChecker(TResolveContextPtr context) {
+        return new TAclCheckerResolve(context);
+    }
+
+    class TWatchCache: public TMonitorableActor<TWatchCache> {
         using TBase = TMonitorableActor<TWatchCache>;
 
     private:
@@ -355,14 +355,14 @@ namespace {
         }
 
     private:
-        STATEFN(StateWork) { 
+        STATEFN(StateWork) {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvTxProxySchemeCache::TEvWatchPathId, Handle);
                 hFunc(TEvTxProxySchemeCache::TEvWatchRemove, Handle);
                 hFunc(TSchemeBoardEvents::TEvNotifyUpdate, Handle);
                 hFunc(TSchemeBoardEvents::TEvNotifyDelete, Handle);
- 
-                sFunc(TEvents::TEvPoison, PassAway); 
+
+                sFunc(TEvents::TEvPoison, PassAway);
             }
         }
 
@@ -405,7 +405,7 @@ namespace {
             }
 
             if (msg->DescribeSchemeResult.HasStatus()) {
-                entry->Path = msg->DescribeSchemeResult.GetPath(); 
+                entry->Path = msg->DescribeSchemeResult.GetPath();
                 entry->Result = NSchemeCache::TDescribeResult::Create(std::move(msg->DescribeSchemeResult));
                 entry->Deleted = false;
                 entry->Unavailable = false;
@@ -511,256 +511,256 @@ namespace {
         THashMap<TActorId, TEntry*> EntriesBySubscriber;
         TMultiMap<TWatcher, TEntry*, TWatcherCompare> EntriesByWatcher;
 
-    }; // TWatchCache 
- 
-} // anonymous 
- 
-class TSchemeCache: public TMonitorableActor<TSchemeCache> { 
-    class TCounters { 
-        using TCounterPtr = NMonitoring::TDynamicCounters::TCounterPtr; 
-        using THistogramPtr = NMonitoring::THistogramPtr; 
- 
-        TCounterPtr InFlight; 
-        TCounterPtr Requests; 
-        TCounterPtr Hits; 
-        TCounterPtr Misses; 
-        TCounterPtr Syncs; 
-        THistogramPtr Latency; 
- 
-        TCounterPtr PerEntryHits; 
-        TCounterPtr PerEntryMisses; 
-        TCounterPtr PerEntrySyncs; 
+    }; // TWatchCache
 
-    public: 
-        explicit TCounters(NMonitoring::TDynamicCounterPtr counters) 
-            : InFlight(counters->GetCounter("InFlight", false)) 
-            , Requests(counters->GetCounter("Requests", true)) 
-            , Hits(counters->GetCounter("Hits", true)) 
-            , Misses(counters->GetCounter("Misses", true)) 
-            , Syncs(counters->GetCounter("Syncs", true)) 
-            , Latency(counters->GetHistogram("LatencyMs", NMonitoring::ExponentialHistogram(10, 4, 1))) 
-            , PerEntryHits(counters->GetCounter("PerEntry/Hits", true)) 
-            , PerEntryMisses(counters->GetCounter("PerEntry/Misses", true)) 
-            , PerEntrySyncs(counters->GetCounter("PerEntry/Syncs", true)) 
-        { 
-        } 
- 
-        void StartRequest(ui64 entryCount, ui64 waitCount, ui64 syncCount) { 
-            *InFlight += 1; 
-            *Requests += 1; 
- 
-            if (!waitCount || waitCount == syncCount) { 
-                *Hits += 1; 
-            } else { 
-                *Misses += 1; 
-            } 
-            if (syncCount) { 
-                *Syncs += 1; 
-            } 
- 
-            *PerEntryHits += (entryCount - (waitCount - syncCount)); 
-            *PerEntryMisses += (waitCount - syncCount); 
-            *PerEntrySyncs += syncCount; 
-        } 
- 
-        void FinishRequest(const TDuration& latency) { 
-            *InFlight -= 1; 
-            Latency->Collect(latency.MilliSeconds()); 
-        } 
-    }; 
- 
-    struct TSubscriber { 
-        enum class EType: ui8 { 
-            // from low to high priority 
-            Empty, 
-            ByPathId, 
-            ByPath, 
-        }; 
- 
+} // anonymous
+
+class TSchemeCache: public TMonitorableActor<TSchemeCache> {
+    class TCounters {
+        using TCounterPtr = NMonitoring::TDynamicCounters::TCounterPtr;
+        using THistogramPtr = NMonitoring::THistogramPtr;
+
+        TCounterPtr InFlight;
+        TCounterPtr Requests;
+        TCounterPtr Hits;
+        TCounterPtr Misses;
+        TCounterPtr Syncs;
+        THistogramPtr Latency;
+
+        TCounterPtr PerEntryHits;
+        TCounterPtr PerEntryMisses;
+        TCounterPtr PerEntrySyncs;
+
+    public:
+        explicit TCounters(NMonitoring::TDynamicCounterPtr counters)
+            : InFlight(counters->GetCounter("InFlight", false))
+            , Requests(counters->GetCounter("Requests", true))
+            , Hits(counters->GetCounter("Hits", true))
+            , Misses(counters->GetCounter("Misses", true))
+            , Syncs(counters->GetCounter("Syncs", true))
+            , Latency(counters->GetHistogram("LatencyMs", NMonitoring::ExponentialHistogram(10, 4, 1)))
+            , PerEntryHits(counters->GetCounter("PerEntry/Hits", true))
+            , PerEntryMisses(counters->GetCounter("PerEntry/Misses", true))
+            , PerEntrySyncs(counters->GetCounter("PerEntry/Syncs", true))
+        {
+        }
+
+        void StartRequest(ui64 entryCount, ui64 waitCount, ui64 syncCount) {
+            *InFlight += 1;
+            *Requests += 1;
+
+            if (!waitCount || waitCount == syncCount) {
+                *Hits += 1;
+            } else {
+                *Misses += 1;
+            }
+            if (syncCount) {
+                *Syncs += 1;
+            }
+
+            *PerEntryHits += (entryCount - (waitCount - syncCount));
+            *PerEntryMisses += (waitCount - syncCount);
+            *PerEntrySyncs += syncCount;
+        }
+
+        void FinishRequest(const TDuration& latency) {
+            *InFlight -= 1;
+            Latency->Collect(latency.MilliSeconds());
+        }
+    };
+
+    struct TSubscriber {
+        enum class EType: ui8 {
+            // from low to high priority
+            Empty,
+            ByPathId,
+            ByPath,
+        };
+
         TActorId Subscriber;
-        ui64 DomainOwnerId; 
-        EType Type; 
-        mutable ui64 SyncCookie; 
- 
-        TSubscriber() 
-            : DomainOwnerId(0) 
-            , Type(EType::Empty) 
-            , SyncCookie(0) 
-        { 
-        } 
- 
+        ui64 DomainOwnerId;
+        EType Type;
+        mutable ui64 SyncCookie;
+
+        TSubscriber()
+            : DomainOwnerId(0)
+            , Type(EType::Empty)
+            , SyncCookie(0)
+        {
+        }
+
         explicit TSubscriber(const TActorId& subscriber, const ui64 domainOwnerId, const TPathId&)
-            : Subscriber(subscriber) 
-            , DomainOwnerId(domainOwnerId) 
-            , Type(EType::ByPathId) 
-            , SyncCookie(0) 
-        { 
-        } 
- 
+            : Subscriber(subscriber)
+            , DomainOwnerId(domainOwnerId)
+            , Type(EType::ByPathId)
+            , SyncCookie(0)
+        {
+        }
+
         explicit TSubscriber(const TActorId& subscriber, const ui64 domainOwnerId, const TString&)
-            : Subscriber(subscriber) 
-            , DomainOwnerId(domainOwnerId) 
-            , Type(EType::ByPath) 
-            , SyncCookie(0) 
-        { 
-        } 
- 
-        TString ToString() const { 
-            return TStringBuilder() << "{" 
-                << " Subscriber: " << Subscriber 
-                << " DomainOwnerId: " << DomainOwnerId 
-                << " Type: " << static_cast<ui32>(Type) 
-                << " SyncCookie: " << SyncCookie 
-            << " }"; 
-        } 
- 
-        bool operator<(const TSubscriber& x) const { 
-            return Type < x.Type; 
-        } 
- 
-        explicit operator bool() const { 
-            return bool(Subscriber); 
-        } 
-    }; 
- 
-    struct TResponseProps { 
-        ui64 Cookie; 
-        bool IsSync; 
-        bool Partial; 
- 
-        TResponseProps() 
-            : Cookie(0) 
-            , IsSync(false) 
-            , Partial(false) 
-        { 
-        } 
- 
-        explicit TResponseProps(ui64 cookie, bool isSync, bool partial) 
-            : Cookie(cookie) 
-            , IsSync(isSync) 
-            , Partial(partial) 
-        { 
-        } 
- 
-        static TResponseProps FromEvent(TSchemeBoardEvents::TEvNotifyUpdate::TPtr& ev) { 
-            return TResponseProps(ev->Cookie, false, false); 
-        } 
- 
-        static TResponseProps FromEvent(TSchemeBoardEvents::TEvNotifyDelete::TPtr& ev) { 
-            return TResponseProps(ev->Cookie, false, false); 
-        } 
- 
-        static TResponseProps FromEvent(TSchemeBoardEvents::TEvSyncResponse::TPtr& ev) { 
-            return TResponseProps(ev->Cookie, true, ev->Get()->Partial); 
-        } 
- 
-        TString ToString() const { 
-            return TStringBuilder() << "{" 
-                << " Cookie: " << Cookie 
-                << " IsSync: " << (IsSync ? "true" : "false") 
-                << " Partial: " << Partial 
-            << " }"; 
-        } 
-    }; 
- 
-    class TCacheItem { 
-        struct TRequest { 
-            size_t EntryIndex; 
-            ui64 Cookie; 
-            bool IsSync; 
-        }; 
- 
-        void Clear() { 
-            Status.Clear(); 
-            Kind = TNavigate::KindUnknown; 
-            TableKind = TResolve::KindUnknown; 
-            Created = false; 
-            CreateStep = 0; 
+            : Subscriber(subscriber)
+            , DomainOwnerId(domainOwnerId)
+            , Type(EType::ByPath)
+            , SyncCookie(0)
+        {
+        }
+
+        TString ToString() const {
+            return TStringBuilder() << "{"
+                << " Subscriber: " << Subscriber
+                << " DomainOwnerId: " << DomainOwnerId
+                << " Type: " << static_cast<ui32>(Type)
+                << " SyncCookie: " << SyncCookie
+            << " }";
+        }
+
+        bool operator<(const TSubscriber& x) const {
+            return Type < x.Type;
+        }
+
+        explicit operator bool() const {
+            return bool(Subscriber);
+        }
+    };
+
+    struct TResponseProps {
+        ui64 Cookie;
+        bool IsSync;
+        bool Partial;
+
+        TResponseProps()
+            : Cookie(0)
+            , IsSync(false)
+            , Partial(false)
+        {
+        }
+
+        explicit TResponseProps(ui64 cookie, bool isSync, bool partial)
+            : Cookie(cookie)
+            , IsSync(isSync)
+            , Partial(partial)
+        {
+        }
+
+        static TResponseProps FromEvent(TSchemeBoardEvents::TEvNotifyUpdate::TPtr& ev) {
+            return TResponseProps(ev->Cookie, false, false);
+        }
+
+        static TResponseProps FromEvent(TSchemeBoardEvents::TEvNotifyDelete::TPtr& ev) {
+            return TResponseProps(ev->Cookie, false, false);
+        }
+
+        static TResponseProps FromEvent(TSchemeBoardEvents::TEvSyncResponse::TPtr& ev) {
+            return TResponseProps(ev->Cookie, true, ev->Get()->Partial);
+        }
+
+        TString ToString() const {
+            return TStringBuilder() << "{"
+                << " Cookie: " << Cookie
+                << " IsSync: " << (IsSync ? "true" : "false")
+                << " Partial: " << Partial
+            << " }";
+        }
+    };
+
+    class TCacheItem {
+        struct TRequest {
+            size_t EntryIndex;
+            ui64 Cookie;
+            bool IsSync;
+        };
+
+        void Clear() {
+            Status.Clear();
+            Kind = TNavigate::KindUnknown;
+            TableKind = TResolve::KindUnknown;
+            Created = false;
+            CreateStep = 0;
 
             // pathid is never changed (yet) so must be kept
             AbandonedSchemeShardsIds.clear();
 
-            SecurityObject.Drop(); 
+            SecurityObject.Drop();
             DomainInfo.Drop();
-            Attributes.clear(); 
- 
-            ListNodeEntry.Drop(); 
- 
-            IsPrivatePath = false; 
+            Attributes.clear();
+
+            ListNodeEntry.Drop();
+
+            IsPrivatePath = false;
 
             // virtual must be kept
 
-            Columns.clear(); 
-            KeyColumnTypes.clear(); 
+            Columns.clear();
+            KeyColumnTypes.clear();
             NotNullColumns.clear();
-            Indexes.clear(); 
-            CdcStreams.clear(); 
-            Partitioning.clear(); 
- 
+            Indexes.clear();
+            CdcStreams.clear();
+            Partitioning.clear();
+
             Self.Drop();
 
             DomainDescription.Drop();
-            RtmrVolumeInfo.Drop(); 
-            KesusInfo.Drop(); 
-            SolomonVolumeInfo.Drop(); 
-            PQGroupInfo.Drop(); 
+            RtmrVolumeInfo.Drop();
+            KesusInfo.Drop();
+            SolomonVolumeInfo.Drop();
+            PQGroupInfo.Drop();
             OlapStoreInfo.Drop();
             OlapTableInfo.Drop();
-            CdcStreamInfo.Drop(); 
+            CdcStreamInfo.Drop();
             SequenceInfo.Drop();
-            ReplicationInfo.Drop(); 
-        } 
- 
+            ReplicationInfo.Drop();
+        }
+
         void FillTableInfo(const NKikimrSchemeOp::TPathDescription& pathDesc) {
-            const auto& tableDesc = pathDesc.GetTable(); 
- 
-            for (const auto& columnDesc : tableDesc.GetColumns()) { 
-                auto& column = Columns[columnDesc.GetId()]; 
-                column.Id = columnDesc.GetId(); 
-                column.Name = columnDesc.GetName(); 
-                column.PType = columnDesc.GetTypeId(); 
+            const auto& tableDesc = pathDesc.GetTable();
+
+            for (const auto& columnDesc : tableDesc.GetColumns()) {
+                auto& column = Columns[columnDesc.GetId()];
+                column.Id = columnDesc.GetId();
+                column.Name = columnDesc.GetName();
+                column.PType = columnDesc.GetTypeId();
 
                 if (columnDesc.GetNotNull()) {
                     NotNullColumns.insert(columnDesc.GetName());
                 }
-            } 
- 
-            KeyColumnTypes.resize(tableDesc.KeyColumnIdsSize()); 
-            for (ui32 i : xrange(tableDesc.KeyColumnIdsSize())) { 
-                auto* column = Columns.FindPtr(tableDesc.GetKeyColumnIds(i)); 
-                Y_VERIFY(column != nullptr); 
-                column->KeyOrder = i; 
-                KeyColumnTypes[i] = column->PType; 
-            } 
- 
-            Indexes.reserve(tableDesc.TableIndexesSize()); 
-            for (const auto& index : tableDesc.GetTableIndexes()) { 
-                Indexes.push_back(index); 
-            } 
- 
-            CdcStreams.reserve(tableDesc.CdcStreamsSize()); 
-            for (const auto& index : tableDesc.GetCdcStreams()) { 
-                CdcStreams.push_back(index); 
-            } 
- 
-            if (pathDesc.TablePartitionsSize()) { 
-                Partitioning.resize(pathDesc.TablePartitionsSize()); 
-                for (ui32 i : xrange(pathDesc.TablePartitionsSize())) { 
-                    const auto& src = pathDesc.GetTablePartitions(i); 
-                    auto& partition = Partitioning[i]; 
-                    partition.Range = TKeyDesc::TPartitionRangeInfo(); 
-                    partition.Range->EndKeyPrefix.Parse(src.GetEndOfRangeKeyPrefix()); 
-                    partition.Range->IsInclusive = src.HasIsInclusive() && src.GetIsInclusive(); 
-                    partition.Range->IsPoint = src.HasIsPoint() && src.GetIsPoint(); 
-                    partition.ShardId = src.GetDatashardId(); 
-                } 
-            } 
- 
-            if (pathDesc.HasDomainDescription()) { 
+            }
+
+            KeyColumnTypes.resize(tableDesc.KeyColumnIdsSize());
+            for (ui32 i : xrange(tableDesc.KeyColumnIdsSize())) {
+                auto* column = Columns.FindPtr(tableDesc.GetKeyColumnIds(i));
+                Y_VERIFY(column != nullptr);
+                column->KeyOrder = i;
+                KeyColumnTypes[i] = column->PType;
+            }
+
+            Indexes.reserve(tableDesc.TableIndexesSize());
+            for (const auto& index : tableDesc.GetTableIndexes()) {
+                Indexes.push_back(index);
+            }
+
+            CdcStreams.reserve(tableDesc.CdcStreamsSize());
+            for (const auto& index : tableDesc.GetCdcStreams()) {
+                CdcStreams.push_back(index);
+            }
+
+            if (pathDesc.TablePartitionsSize()) {
+                Partitioning.resize(pathDesc.TablePartitionsSize());
+                for (ui32 i : xrange(pathDesc.TablePartitionsSize())) {
+                    const auto& src = pathDesc.GetTablePartitions(i);
+                    auto& partition = Partitioning[i];
+                    partition.Range = TKeyDesc::TPartitionRangeInfo();
+                    partition.Range->EndKeyPrefix.Parse(src.GetEndOfRangeKeyPrefix());
+                    partition.Range->IsInclusive = src.HasIsInclusive() && src.GetIsInclusive();
+                    partition.Range->IsPoint = src.HasIsPoint() && src.GetIsPoint();
+                    partition.ShardId = src.GetDatashardId();
+                }
+            }
+
+            if (pathDesc.HasDomainDescription()) {
                 DomainInfo = new NSchemeCache::TDomainInfo(pathDesc.GetDomainDescription());
-            } 
-        } 
- 
+            }
+        }
+
         void FillTableInfoFromOlapStore(const NKikimrSchemeOp::TPathDescription& pathDesc) {
             if (pathDesc.HasDomainDescription()) {
                 DomainInfo = new NSchemeCache::TDomainInfo(pathDesc.GetDomainDescription());
@@ -796,551 +796,551 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         }
 
         static TResolve::EKind PathSubTypeToTableKind(NKikimrSchemeOp::EPathSubType subType) {
-            switch (subType) { 
+            switch (subType) {
             case NKikimrSchemeOp::EPathSubTypeSyncIndexImplTable:
-                return TResolve::KindSyncIndexTable; 
+                return TResolve::KindSyncIndexTable;
             case NKikimrSchemeOp::EPathSubTypeAsyncIndexImplTable:
-                return TResolve::KindAsyncIndexTable; 
-            default: 
-                return TResolve::KindRegularTable; 
-            } 
-        } 
- 
+                return TResolve::KindAsyncIndexTable;
+            default:
+                return TResolve::KindRegularTable;
+            }
+        }
+
         static bool CalcPathIsPrivate(NKikimrSchemeOp::EPathType type, NKikimrSchemeOp::EPathSubType subType) {
-            switch (type) { 
+            switch (type) {
             case NKikimrSchemeOp::EPathTypeTable:
-                switch (subType) { 
+                switch (subType) {
                 case NKikimrSchemeOp::EPathSubTypeSyncIndexImplTable:
                 case NKikimrSchemeOp::EPathSubTypeAsyncIndexImplTable:
-                    return true; 
-                default: 
-                    return false; 
-                } 
-            case NKikimrSchemeOp::EPathTypePersQueueGroup: 
-                switch (subType) { 
-                case NKikimrSchemeOp::EPathSubTypeStreamImpl: 
-                    return true; 
-                default: 
-                    return false; 
-                } 
+                    return true;
+                default:
+                    return false;
+                }
+            case NKikimrSchemeOp::EPathTypePersQueueGroup:
+                switch (subType) {
+                case NKikimrSchemeOp::EPathSubTypeStreamImpl:
+                    return true;
+                default:
+                    return false;
+                }
             case NKikimrSchemeOp::EPathTypeTableIndex:
-                return true; 
-            case NKikimrSchemeOp::EPathTypeCdcStream: 
-                return true; 
-            default: 
-                return false; 
-            } 
-        } 
- 
-        static bool IsLikeDirectory(TNavigate::EKind kind) { 
-            switch (kind) { 
-            case TNavigate::KindSubdomain: 
-            case TNavigate::KindPath: 
-            case TNavigate::KindIndex: 
-            case TNavigate::KindCdcStream: 
-                return true; 
-            default: 
-                return false; 
-            } 
-        } 
- 
-        template <typename TPtr, typename TDesc> 
-        static void FillInfo(TNavigate::EKind kind, TPtr& ptr, TDesc&& desc) { 
-            ptr = new typename TPtr::TValueType(); 
-            ptr->Kind = kind; 
-            ptr->Description = std::move(desc); 
-        } 
- 
-        // copy-paste from core/tx/scheme_cache/scheme_cache_impl.cpp 
-        void FillRangePartitioning( 
-            const TTableRange& range, 
-            TVector<TKeyDesc::TPartitionInfo>& partitions 
-        ) const { 
-            Y_VERIFY(!Partitioning.empty()); 
- 
-            partitions.clear(); 
- 
-            // Temporary fix: for an empty range we need to return some datashard 
-            // so that it can handle readset logic (send empty result to other tx participants etc.) 
-            if (range.IsEmptyRange(KeyColumnTypes)) { 
-                partitions.push_back(*Partitioning.begin()); 
-                return; 
-            } 
- 
-            TVector<TKeyDesc::TPartitionInfo>::const_iterator low = LowerBound( 
-                Partitioning.begin(), Partitioning.end(), true, 
-                [&](const TKeyDesc::TPartitionInfo& left, bool) { 
-                    const int compares = CompareBorders<true, false>( 
-                        left.Range->EndKeyPrefix.GetCells(), range.From, 
-                        left.Range->IsInclusive || left.Range->IsPoint, 
-                        range.InclusiveFrom || range.Point, KeyColumnTypes 
-                    ); 
- 
-                    return (compares < 0); 
-                } 
-            ); 
- 
-            Y_VERIFY(low != Partitioning.end(), "last key must be (inf)"); 
- 
-            do { 
-                partitions.push_back(*low); 
- 
-                if (range.Point) { 
-                    return; 
-                } 
- 
-                const int prevComp = CompareBorders<true, true>( 
-                    low->Range->EndKeyPrefix.GetCells(), range.To, 
-                    low->Range->IsPoint || low->Range->IsInclusive, 
-                    range.InclusiveTo, KeyColumnTypes 
-                ); 
- 
-                if (prevComp >= 0) { 
-                    return; 
-                } 
- 
-            } while (++low != Partitioning.end()); 
-        } 
- 
-        bool IsSysTable() const { 
+                return true;
+            case NKikimrSchemeOp::EPathTypeCdcStream:
+                return true;
+            default:
+                return false;
+            }
+        }
+
+        static bool IsLikeDirectory(TNavigate::EKind kind) {
+            switch (kind) {
+            case TNavigate::KindSubdomain:
+            case TNavigate::KindPath:
+            case TNavigate::KindIndex:
+            case TNavigate::KindCdcStream:
+                return true;
+            default:
+                return false;
+            }
+        }
+
+        template <typename TPtr, typename TDesc>
+        static void FillInfo(TNavigate::EKind kind, TPtr& ptr, TDesc&& desc) {
+            ptr = new typename TPtr::TValueType();
+            ptr->Kind = kind;
+            ptr->Description = std::move(desc);
+        }
+
+        // copy-paste from core/tx/scheme_cache/scheme_cache_impl.cpp
+        void FillRangePartitioning(
+            const TTableRange& range,
+            TVector<TKeyDesc::TPartitionInfo>& partitions
+        ) const {
+            Y_VERIFY(!Partitioning.empty());
+
+            partitions.clear();
+
+            // Temporary fix: for an empty range we need to return some datashard
+            // so that it can handle readset logic (send empty result to other tx participants etc.)
+            if (range.IsEmptyRange(KeyColumnTypes)) {
+                partitions.push_back(*Partitioning.begin());
+                return;
+            }
+
+            TVector<TKeyDesc::TPartitionInfo>::const_iterator low = LowerBound(
+                Partitioning.begin(), Partitioning.end(), true,
+                [&](const TKeyDesc::TPartitionInfo& left, bool) {
+                    const int compares = CompareBorders<true, false>(
+                        left.Range->EndKeyPrefix.GetCells(), range.From,
+                        left.Range->IsInclusive || left.Range->IsPoint,
+                        range.InclusiveFrom || range.Point, KeyColumnTypes
+                    );
+
+                    return (compares < 0);
+                }
+            );
+
+            Y_VERIFY(low != Partitioning.end(), "last key must be (inf)");
+
+            do {
+                partitions.push_back(*low);
+
+                if (range.Point) {
+                    return;
+                }
+
+                const int prevComp = CompareBorders<true, true>(
+                    low->Range->EndKeyPrefix.GetCells(), range.To,
+                    low->Range->IsPoint || low->Range->IsInclusive,
+                    range.InclusiveTo, KeyColumnTypes
+                );
+
+                if (prevComp >= 0) {
+                    return;
+                }
+
+            } while (++low != Partitioning.end());
+        }
+
+        bool IsSysTable() const {
             return Kind == TNavigate::KindTable && PathId.OwnerId == TSysTables::SysSchemeShard;
-        } 
- 
+        }
+
         void SetPathId(const TPathId pathId) {
             if (PathId) {
                 Y_VERIFY(PathId == pathId);
-            } 
- 
+            }
+
             PathId = pathId;
-        } 
- 
-        void SendSyncRequest() const { 
-            Y_VERIFY(Subscriber, "it hangs if no subscriber"); 
-            Owner->Send(Subscriber.Subscriber, new TSchemeBoardEvents::TEvSyncRequest(), 0, ++Subscriber.SyncCookie); 
-        } 
- 
-        void ResendSyncRequests(THashMap<TVariantContextPtr, TVector<TRequest>>& inFlight) const { 
-            for (auto& [_, requests] : inFlight) { 
-                for (auto& request : requests) { 
-                    if (!request.IsSync) { 
-                        continue; 
-                    } 
- 
-                    SendSyncRequest(); 
-                    request.Cookie = Subscriber.SyncCookie; 
-                } 
-            } 
-        } 
- 
-        template <typename TContextPtr> 
-        void ProcessInFlightNoCheck(TContextPtr context, const TVector<TRequest>& requests) const { 
-            // trigger LookupError 
-            TResponseProps props(Max<ui64>(), true, true); 
- 
-            for (const auto& request : requests) { 
-                auto& entry = context->Request->ResultSet[request.EntryIndex]; 
-                FillEntry(context.Get(), entry, props); 
- 
-                Y_VERIFY(context->WaitCounter > 0); 
-                --context->WaitCounter; 
-            } 
- 
-            if (!context->WaitCounter) { 
-                Owner->Complete(context); 
-            } 
-        } 
- 
-    public: 
-        explicit TCacheItem(TSchemeCache* owner, const TSubscriber& subscriber, bool isVirtual) 
-            : Owner(owner) 
-            , Subscriber(subscriber) 
-            , Filled(false) 
+        }
+
+        void SendSyncRequest() const {
+            Y_VERIFY(Subscriber, "it hangs if no subscriber");
+            Owner->Send(Subscriber.Subscriber, new TSchemeBoardEvents::TEvSyncRequest(), 0, ++Subscriber.SyncCookie);
+        }
+
+        void ResendSyncRequests(THashMap<TVariantContextPtr, TVector<TRequest>>& inFlight) const {
+            for (auto& [_, requests] : inFlight) {
+                for (auto& request : requests) {
+                    if (!request.IsSync) {
+                        continue;
+                    }
+
+                    SendSyncRequest();
+                    request.Cookie = Subscriber.SyncCookie;
+                }
+            }
+        }
+
+        template <typename TContextPtr>
+        void ProcessInFlightNoCheck(TContextPtr context, const TVector<TRequest>& requests) const {
+            // trigger LookupError
+            TResponseProps props(Max<ui64>(), true, true);
+
+            for (const auto& request : requests) {
+                auto& entry = context->Request->ResultSet[request.EntryIndex];
+                FillEntry(context.Get(), entry, props);
+
+                Y_VERIFY(context->WaitCounter > 0);
+                --context->WaitCounter;
+            }
+
+            if (!context->WaitCounter) {
+                Owner->Complete(context);
+            }
+        }
+
+    public:
+        explicit TCacheItem(TSchemeCache* owner, const TSubscriber& subscriber, bool isVirtual)
+            : Owner(owner)
+            , Subscriber(subscriber)
+            , Filled(false)
             , Kind(TNavigate::EKind::KindUnknown)
-            , TableKind(TResolve::EKind::KindUnknown) 
+            , TableKind(TResolve::EKind::KindUnknown)
             , Created(false)
-            , CreateStep(0) 
+            , CreateStep(0)
             , IsPrivatePath(false)
             , IsVirtual(isVirtual)
             , SchemaVersion(0)
-        { 
-        } 
- 
-        TCacheItem(const TCacheItem& other) = delete; 
- 
-        explicit TCacheItem(TCacheItem&& other) 
-            : Owner(other.Owner) 
-            , Subscriber(other.Subscriber) 
-            , Filled(other.Filled) 
-            , InFlight(std::move(other.InFlight)) 
-            , Kind(other.Kind) 
-            , TableKind(other.TableKind) 
-            , Created(other.Created) 
-            , CreateStep(other.CreateStep) 
-            , PathId(other.PathId) 
+        {
+        }
+
+        TCacheItem(const TCacheItem& other) = delete;
+
+        explicit TCacheItem(TCacheItem&& other)
+            : Owner(other.Owner)
+            , Subscriber(other.Subscriber)
+            , Filled(other.Filled)
+            , InFlight(std::move(other.InFlight))
+            , Kind(other.Kind)
+            , TableKind(other.TableKind)
+            , Created(other.Created)
+            , CreateStep(other.CreateStep)
+            , PathId(other.PathId)
             , IsPrivatePath(other.IsPrivatePath)
             , IsVirtual(other.IsVirtual)
             , SchemaVersion(other.SchemaVersion)
-        { 
-            if (other.Subscriber) { 
-                other.Subscriber = TSubscriber(); 
-            } 
-        } 
- 
-        TString ToString() const { 
-            return TStringBuilder() << "{" 
-                << " Subscriber: " << Subscriber.ToString() 
-                << " Filled: " << Filled 
+        {
+            if (other.Subscriber) {
+                other.Subscriber = TSubscriber();
+            }
+        }
+
+        TString ToString() const {
+            return TStringBuilder() << "{"
+                << " Subscriber: " << Subscriber.ToString()
+                << " Filled: " << Filled
                 << " Status: " << (Status ? NKikimrScheme::EStatus_Name(*Status) : "undefined")
-                << " Kind: " << static_cast<ui32>(Kind) 
-                << " TableKind: " << static_cast<ui32>(TableKind) 
-                << " Created: " << Created 
-                << " CreateStep: " << CreateStep 
-                << " PathId: " << PathId 
-                << " DomainId: " << GetDomainId() 
-                << " IsPrivatePath: " << IsPrivatePath 
-                << " IsVirtual: " << IsVirtual 
-                << " SchemaVersion: " << SchemaVersion 
-            << " }"; 
-        } 
- 
-        template <typename T> 
-        static TString ProtoJsonString(const T& message) { 
-            using namespace google::protobuf::util; 
- 
-            JsonPrintOptions opts; 
-            opts.preserve_proto_field_names = true; 
- 
-            TString jsonString; 
-            MessageToJsonString(message, &jsonString, opts); 
- 
-            return jsonString; 
-        } 
- 
-        TString ToJsonString() const { 
-            NJsonWriter::TBuf json; 
-            auto root = json.BeginObject(); 
- 
-            root.WriteKey("Subscriber").BeginObject() 
-                .WriteKey("ActorId").WriteString(::ToString(Subscriber.Subscriber)) 
-                .WriteKey("DomainOwnerId").WriteULongLong(Subscriber.DomainOwnerId) 
-                .WriteKey("Type").WriteInt(static_cast<int>(Subscriber.Type)) 
-                .WriteKey("SyncCookie").WriteULongLong(Subscriber.SyncCookie) 
-            .EndObject(); 
- 
-            root.WriteKey("Filled").WriteBool(Filled); 
-            root.WriteKey("Path").WriteString(Path); 
-            root.WriteKey("PathId").WriteString(::ToString(PathId)); 
-            root.WriteKey("Kind").WriteInt(static_cast<int>(Kind)); 
-            root.WriteKey("TableKind").WriteInt(static_cast<int>(TableKind)); 
-            root.WriteKey("Created").WriteBool(Created); 
-            root.WriteKey("CreateStep").WriteULongLong(CreateStep); 
-            root.WriteKey("IsPrivatePath").WriteBool(IsPrivatePath); 
-            root.WriteKey("IsVirtual").WriteBool(IsVirtual); 
-            root.WriteKey("SchemaVersion").WriteULongLong(SchemaVersion); 
- 
-            if (Status) { 
+                << " Kind: " << static_cast<ui32>(Kind)
+                << " TableKind: " << static_cast<ui32>(TableKind)
+                << " Created: " << Created
+                << " CreateStep: " << CreateStep
+                << " PathId: " << PathId
+                << " DomainId: " << GetDomainId()
+                << " IsPrivatePath: " << IsPrivatePath
+                << " IsVirtual: " << IsVirtual
+                << " SchemaVersion: " << SchemaVersion
+            << " }";
+        }
+
+        template <typename T>
+        static TString ProtoJsonString(const T& message) {
+            using namespace google::protobuf::util;
+
+            JsonPrintOptions opts;
+            opts.preserve_proto_field_names = true;
+
+            TString jsonString;
+            MessageToJsonString(message, &jsonString, opts);
+
+            return jsonString;
+        }
+
+        TString ToJsonString() const {
+            NJsonWriter::TBuf json;
+            auto root = json.BeginObject();
+
+            root.WriteKey("Subscriber").BeginObject()
+                .WriteKey("ActorId").WriteString(::ToString(Subscriber.Subscriber))
+                .WriteKey("DomainOwnerId").WriteULongLong(Subscriber.DomainOwnerId)
+                .WriteKey("Type").WriteInt(static_cast<int>(Subscriber.Type))
+                .WriteKey("SyncCookie").WriteULongLong(Subscriber.SyncCookie)
+            .EndObject();
+
+            root.WriteKey("Filled").WriteBool(Filled);
+            root.WriteKey("Path").WriteString(Path);
+            root.WriteKey("PathId").WriteString(::ToString(PathId));
+            root.WriteKey("Kind").WriteInt(static_cast<int>(Kind));
+            root.WriteKey("TableKind").WriteInt(static_cast<int>(TableKind));
+            root.WriteKey("Created").WriteBool(Created);
+            root.WriteKey("CreateStep").WriteULongLong(CreateStep);
+            root.WriteKey("IsPrivatePath").WriteBool(IsPrivatePath);
+            root.WriteKey("IsVirtual").WriteBool(IsVirtual);
+            root.WriteKey("SchemaVersion").WriteULongLong(SchemaVersion);
+
+            if (Status) {
                 root.WriteKey("Status").WriteString(NKikimrScheme::EStatus_Name(*Status));
-            } else { 
-                root.WriteKey("Status").WriteNull(); 
-            } 
- 
-            if (Attributes) { 
-                auto attrs = root.WriteKey("Attributes").BeginObject(); 
- 
-                for (const auto& [key, value] : Attributes) { 
-                    attrs.WriteKey(key).WriteString(value); 
-                } 
- 
-                attrs.EndObject(); 
-            } 
- 
-            if (AbandonedSchemeShardsIds) { 
-                auto abandoned = root.WriteKey("AbandonedSchemeShardsIds").BeginList(); 
- 
-                for (const auto ssId : AbandonedSchemeShardsIds) { 
-                    abandoned.WriteULongLong(ssId); 
-                } 
- 
-                abandoned.EndList(); 
-            } 
- 
-            if (DomainInfo) { 
-                root.WriteKey("DomainInfo").BeginObject() 
-                    .WriteKey("DomainKey").WriteString(::ToString(DomainInfo->DomainKey)) 
-                    .WriteKey("ResourcesDomainKey").WriteString(::ToString(DomainInfo->ResourcesDomainKey)) 
-                    .WriteKey("Params").UnsafeWriteValue(ProtoJsonString(DomainInfo->Params)) 
-                .EndObject(); 
-            } 
- 
-            if (Self) { 
-                root.WriteKey("Self").UnsafeWriteValue(ProtoJsonString(Self->Info)); 
-            } 
- 
-            if (ListNodeEntry) { 
-                auto children = root.WriteKey("Children").BeginList(); 
- 
-                for (const auto& child : ListNodeEntry->Children) { 
-                    children.BeginObject() 
-                        .WriteKey("Name").WriteString(child.Name) 
-                        .WriteKey("PathId").WriteString(::ToString(child.PathId)) 
-                        .WriteKey("SchemaVersion").WriteULongLong(child.SchemaVersion) 
-                        .WriteKey("Kind").WriteInt(static_cast<int>(child.Kind)) 
-                    .EndObject(); 
-                } 
- 
-                children.EndList(); 
-            } 
- 
-            if (Columns) { 
-                auto columns = root.WriteKey("Columns").BeginList(); 
- 
-                for (const auto& [_, column] : Columns) { 
-                    columns.BeginObject() 
-                        .WriteKey("Id").WriteULongLong(column.Id) 
-                        .WriteKey("Name").WriteString(column.Name) 
-                        .WriteKey("Type").WriteULongLong(column.PType) 
-                        .WriteKey("KeyOrder").WriteInt(column.KeyOrder) 
-                    .EndObject(); 
-                } 
- 
-                columns.EndList(); 
-            } 
- 
-            #define DESCRIPTION_PART(name) \ 
-                if (name) { \ 
-                    root.WriteKey(#name).UnsafeWriteValue(ProtoJsonString(name->Description)); \ 
-                } 
- 
-            DESCRIPTION_PART(DomainDescription) 
-            DESCRIPTION_PART(RtmrVolumeInfo) 
-            DESCRIPTION_PART(KesusInfo); 
-            DESCRIPTION_PART(SolomonVolumeInfo); 
-            DESCRIPTION_PART(PQGroupInfo); 
-            DESCRIPTION_PART(OlapStoreInfo); 
-            DESCRIPTION_PART(OlapTableInfo); 
-            DESCRIPTION_PART(CdcStreamInfo); 
-            DESCRIPTION_PART(SequenceInfo); 
-            DESCRIPTION_PART(ReplicationInfo); 
- 
-            #undef DESCRIPTION_PART 
- 
-            root.EndObject(); 
-            return json.Str(); 
-        } 
- 
-        void OnEvict(bool respondInFlight = true) { 
-            if (Subscriber) { 
-                Owner->Send(Subscriber.Subscriber, new TEvents::TEvPoisonPill()); 
-                Subscriber = TSubscriber(); 
-            } 
- 
-            if (!respondInFlight) { 
-                return; 
-            } 
- 
-            for (const auto& [contextVariant, requests] : InFlight) { 
-                if (auto* context = std::get_if<TNavigateContextPtr>(&contextVariant)) {
-                    ProcessInFlightNoCheck(*context, requests); 
-                } else if (auto* context = std::get_if<TResolveContextPtr>(&contextVariant)) {
-                    ProcessInFlightNoCheck(*context, requests); 
-                } else { 
-                    Y_FAIL("unknown context type"); 
-                } 
-            } 
-        } 
- 
-        TCacheItem& Merge(TCacheItem&& other) noexcept { 
-            if (Subscriber < other.Subscriber) { 
-                SwapSubscriber(other.Subscriber); 
-            } else { 
-                ResendSyncRequests(other.InFlight); 
-            } 
+            } else {
+                root.WriteKey("Status").WriteNull();
+            }
 
-            InFlight.insert(other.InFlight.begin(), other.InFlight.end()); 
-            other.OnEvict(false); 
- 
-            return *this; 
-        } 
- 
-        void SwapSubscriber(TSubscriber& subscriber) { 
-            std::swap(Subscriber, subscriber); 
-            ResendSyncRequests(InFlight); 
-        } 
- 
-        void MoveInFlightNavigateByPathRequests(TCacheItem& recipient) { 
-            EraseNodesIf(InFlight, [&recipient](auto& kv) { 
-                auto* context = std::get_if<TNavigateContextPtr>(&kv.first);
-                if (!context) { 
-                    return false; 
-                } 
- 
-                EraseIf(kv.second, [context, &recipient](const TRequest& request) { 
-                    const auto& entry = context->Get()->Request->ResultSet[request.EntryIndex]; 
-                    if (entry.RequestType != TNavigate::TEntry::ERequestType::ByPath) { 
-                        return false; 
-                    } 
- 
-                    Y_VERIFY(context->Get()->WaitCounter > 0); 
-                    --context->Get()->WaitCounter; 
- 
-                    recipient.AddInFlight(*context, request.EntryIndex, request.IsSync); 
-                    return true; 
-                }); 
- 
-                return kv.second.empty(); 
-            }); 
-        } 
- 
-        const TSubscriber& GetSubcriber() const { 
-            return Subscriber; 
-        } 
- 
-        template <typename TContextPtr> 
-        void AddInFlight(TContextPtr context, const size_t entryIndex, const bool isSync) const {
-            if (IsVirtual) { 
+            if (Attributes) {
+                auto attrs = root.WriteKey("Attributes").BeginObject();
+
+                for (const auto& [key, value] : Attributes) {
+                    attrs.WriteKey(key).WriteString(value);
+                }
+
+                attrs.EndObject();
+            }
+
+            if (AbandonedSchemeShardsIds) {
+                auto abandoned = root.WriteKey("AbandonedSchemeShardsIds").BeginList();
+
+                for (const auto ssId : AbandonedSchemeShardsIds) {
+                    abandoned.WriteULongLong(ssId);
+                }
+
+                abandoned.EndList();
+            }
+
+            if (DomainInfo) {
+                root.WriteKey("DomainInfo").BeginObject()
+                    .WriteKey("DomainKey").WriteString(::ToString(DomainInfo->DomainKey))
+                    .WriteKey("ResourcesDomainKey").WriteString(::ToString(DomainInfo->ResourcesDomainKey))
+                    .WriteKey("Params").UnsafeWriteValue(ProtoJsonString(DomainInfo->Params))
+                .EndObject();
+            }
+
+            if (Self) {
+                root.WriteKey("Self").UnsafeWriteValue(ProtoJsonString(Self->Info));
+            }
+
+            if (ListNodeEntry) {
+                auto children = root.WriteKey("Children").BeginList();
+
+                for (const auto& child : ListNodeEntry->Children) {
+                    children.BeginObject()
+                        .WriteKey("Name").WriteString(child.Name)
+                        .WriteKey("PathId").WriteString(::ToString(child.PathId))
+                        .WriteKey("SchemaVersion").WriteULongLong(child.SchemaVersion)
+                        .WriteKey("Kind").WriteInt(static_cast<int>(child.Kind))
+                    .EndObject();
+                }
+
+                children.EndList();
+            }
+
+            if (Columns) {
+                auto columns = root.WriteKey("Columns").BeginList();
+
+                for (const auto& [_, column] : Columns) {
+                    columns.BeginObject()
+                        .WriteKey("Id").WriteULongLong(column.Id)
+                        .WriteKey("Name").WriteString(column.Name)
+                        .WriteKey("Type").WriteULongLong(column.PType)
+                        .WriteKey("KeyOrder").WriteInt(column.KeyOrder)
+                    .EndObject();
+                }
+
+                columns.EndList();
+            }
+
+            #define DESCRIPTION_PART(name) \
+                if (name) { \
+                    root.WriteKey(#name).UnsafeWriteValue(ProtoJsonString(name->Description)); \
+                }
+
+            DESCRIPTION_PART(DomainDescription)
+            DESCRIPTION_PART(RtmrVolumeInfo)
+            DESCRIPTION_PART(KesusInfo);
+            DESCRIPTION_PART(SolomonVolumeInfo);
+            DESCRIPTION_PART(PQGroupInfo);
+            DESCRIPTION_PART(OlapStoreInfo);
+            DESCRIPTION_PART(OlapTableInfo);
+            DESCRIPTION_PART(CdcStreamInfo);
+            DESCRIPTION_PART(SequenceInfo);
+            DESCRIPTION_PART(ReplicationInfo);
+
+            #undef DESCRIPTION_PART
+
+            root.EndObject();
+            return json.Str();
+        }
+
+        void OnEvict(bool respondInFlight = true) {
+            if (Subscriber) {
+                Owner->Send(Subscriber.Subscriber, new TEvents::TEvPoisonPill());
+                Subscriber = TSubscriber();
+            }
+
+            if (!respondInFlight) {
                 return;
-            } 
+            }
 
-            if (isSync) { 
-                SendSyncRequest(); 
-            } 
- 
-            auto it = InFlight.find(context); 
-            if (it == InFlight.end()) { 
-                it = InFlight.emplace(context, TVector<TRequest>()).first; 
-            } 
- 
-            it->second.push_back({entryIndex, Subscriber.SyncCookie, isSync}); 
-            ++context->WaitCounter; 
-        } 
- 
-        template <typename TContext> 
-        void ProcessInFlight(TContext* context, TVector<TRequest>& requests, const TResponseProps& response) const { 
-            EraseIf(requests, [this, context, response](const TRequest& request) { 
-                if (request.IsSync != response.IsSync) { 
-                    return false; 
-                } 
- 
-                if (request.IsSync && request.Cookie > response.Cookie) { 
-                    return false; 
-                } 
- 
-                auto& entry = context->Request->ResultSet[request.EntryIndex]; 
-                if (!entry.SyncVersion || (entry.SyncVersion && response.IsSync)) { 
-                    FillEntry(context, entry, response); 
-                } 
- 
-                Y_VERIFY(context->WaitCounter > 0); 
-                --context->WaitCounter; 
- 
-                return true; 
-            }); 
-        } 
- 
-        TVector<TVariantContextPtr> ProcessInFlight(const TResponseProps& response) const { 
-            TVector<TVariantContextPtr> processed(Reserve(InFlight.size())); 
- 
-            EraseNodesIf(InFlight, [this, &processed, response](auto& kv) { 
-                processed.push_back(kv.first); 
- 
+            for (const auto& [contextVariant, requests] : InFlight) {
+                if (auto* context = std::get_if<TNavigateContextPtr>(&contextVariant)) {
+                    ProcessInFlightNoCheck(*context, requests);
+                } else if (auto* context = std::get_if<TResolveContextPtr>(&contextVariant)) {
+                    ProcessInFlightNoCheck(*context, requests);
+                } else {
+                    Y_FAIL("unknown context type");
+                }
+            }
+        }
+
+        TCacheItem& Merge(TCacheItem&& other) noexcept {
+            if (Subscriber < other.Subscriber) {
+                SwapSubscriber(other.Subscriber);
+            } else {
+                ResendSyncRequests(other.InFlight);
+            }
+
+            InFlight.insert(other.InFlight.begin(), other.InFlight.end());
+            other.OnEvict(false);
+
+            return *this;
+        }
+
+        void SwapSubscriber(TSubscriber& subscriber) {
+            std::swap(Subscriber, subscriber);
+            ResendSyncRequests(InFlight);
+        }
+
+        void MoveInFlightNavigateByPathRequests(TCacheItem& recipient) {
+            EraseNodesIf(InFlight, [&recipient](auto& kv) {
+                auto* context = std::get_if<TNavigateContextPtr>(&kv.first);
+                if (!context) {
+                    return false;
+                }
+
+                EraseIf(kv.second, [context, &recipient](const TRequest& request) {
+                    const auto& entry = context->Get()->Request->ResultSet[request.EntryIndex];
+                    if (entry.RequestType != TNavigate::TEntry::ERequestType::ByPath) {
+                        return false;
+                    }
+
+                    Y_VERIFY(context->Get()->WaitCounter > 0);
+                    --context->Get()->WaitCounter;
+
+                    recipient.AddInFlight(*context, request.EntryIndex, request.IsSync);
+                    return true;
+                });
+
+                return kv.second.empty();
+            });
+        }
+
+        const TSubscriber& GetSubcriber() const {
+            return Subscriber;
+        }
+
+        template <typename TContextPtr>
+        void AddInFlight(TContextPtr context, const size_t entryIndex, const bool isSync) const {
+            if (IsVirtual) {
+                return;
+            }
+
+            if (isSync) {
+                SendSyncRequest();
+            }
+
+            auto it = InFlight.find(context);
+            if (it == InFlight.end()) {
+                it = InFlight.emplace(context, TVector<TRequest>()).first;
+            }
+
+            it->second.push_back({entryIndex, Subscriber.SyncCookie, isSync});
+            ++context->WaitCounter;
+        }
+
+        template <typename TContext>
+        void ProcessInFlight(TContext* context, TVector<TRequest>& requests, const TResponseProps& response) const {
+            EraseIf(requests, [this, context, response](const TRequest& request) {
+                if (request.IsSync != response.IsSync) {
+                    return false;
+                }
+
+                if (request.IsSync && request.Cookie > response.Cookie) {
+                    return false;
+                }
+
+                auto& entry = context->Request->ResultSet[request.EntryIndex];
+                if (!entry.SyncVersion || (entry.SyncVersion && response.IsSync)) {
+                    FillEntry(context, entry, response);
+                }
+
+                Y_VERIFY(context->WaitCounter > 0);
+                --context->WaitCounter;
+
+                return true;
+            });
+        }
+
+        TVector<TVariantContextPtr> ProcessInFlight(const TResponseProps& response) const {
+            TVector<TVariantContextPtr> processed(Reserve(InFlight.size()));
+
+            EraseNodesIf(InFlight, [this, &processed, response](auto& kv) {
+                processed.push_back(kv.first);
+
                 if (auto* context = std::get_if<TNavigateContextPtr>(&kv.first)) {
-                    ProcessInFlight(context->Get(), kv.second, response); 
+                    ProcessInFlight(context->Get(), kv.second, response);
                 } else if (auto* context = std::get_if<TResolveContextPtr>(&kv.first)) {
-                    ProcessInFlight(context->Get(), kv.second, response); 
-                } else { 
-                    Y_FAIL("unknown context type"); 
-                } 
- 
-                return kv.second.empty(); 
-            }); 
- 
-            return processed; 
-        } 
- 
-        void FillAsSysPath() { 
-            Clear(); 
-            Filled = true; 
- 
+                    ProcessInFlight(context->Get(), kv.second, response);
+                } else {
+                    Y_FAIL("unknown context type");
+                }
+
+                return kv.second.empty();
+            });
+
+            return processed;
+        }
+
+        void FillAsSysPath() {
+            Clear();
+            Filled = true;
+
             Status = NKikimrScheme::StatusSuccess;
-            Kind = TNavigate::KindPath; 
-            Created = true; 
+            Kind = TNavigate::KindPath;
+            Created = true;
             PathId = TPathId(TSysTables::SysSchemeShard, 0);
             Path = "/sys";
 
             IsVirtual = true;
-        } 
- 
-        void FillAsSysLocks(const bool v2) { 
-            Clear(); 
-            Filled = true; 
- 
+        }
+
+        void FillAsSysLocks(const bool v2) {
+            Clear();
+            Filled = true;
+
             Status = NKikimrScheme::StatusSuccess;
-            Kind = TNavigate::KindTable; 
-            Created = true; 
-            PathId = TPathId(TSysTables::SysSchemeShard, v2 ? TSysTables::SysTableLocks2 : TSysTables::SysTableLocks); 
+            Kind = TNavigate::KindTable;
+            Created = true;
+            PathId = TPathId(TSysTables::SysSchemeShard, v2 ? TSysTables::SysTableLocks2 : TSysTables::SysTableLocks);
             Path = v2 ? "/sys/locks2" : "/sys/locks";
- 
-            TVector<ui32> keyColumnTypes; 
-            TSysTables::TLocksTable::GetInfo(Columns, keyColumnTypes, v2); 
-            for (ui32 type : keyColumnTypes) { 
-                KeyColumnTypes.push_back(type); 
-            } 
+
+            TVector<ui32> keyColumnTypes;
+            TSysTables::TLocksTable::GetInfo(Columns, keyColumnTypes, v2);
+            for (ui32 type : keyColumnTypes) {
+                KeyColumnTypes.push_back(type);
+            }
 
             IsPrivatePath = true;
             IsVirtual = true;
-        } 
- 
-        void Fill(TSchemeBoardEvents::TEvNotifyUpdate& notify) { 
-            Clear(); 
-            Filled = true; 
- 
-            Y_VERIFY(notify.PathId); 
-            SetPathId(notify.PathId); 
- 
-            if (!notify.DescribeSchemeResult.HasStatus()) { 
-                return; 
-            } else { 
-                Status = notify.DescribeSchemeResult.GetStatus(); 
+        }
+
+        void Fill(TSchemeBoardEvents::TEvNotifyUpdate& notify) {
+            Clear();
+            Filled = true;
+
+            Y_VERIFY(notify.PathId);
+            SetPathId(notify.PathId);
+
+            if (!notify.DescribeSchemeResult.HasStatus()) {
+                return;
+            } else {
+                Status = notify.DescribeSchemeResult.GetStatus();
                 if (Status != NKikimrScheme::StatusSuccess) {
-                    return; 
-                } 
-            } 
- 
-            Y_VERIFY(notify.DescribeSchemeResult.HasPathDescription()); 
-            auto& pathDesc = *notify.DescribeSchemeResult.MutablePathDescription(); 
- 
+                    return;
+                }
+            }
+
+            Y_VERIFY(notify.DescribeSchemeResult.HasPathDescription());
+            auto& pathDesc = *notify.DescribeSchemeResult.MutablePathDescription();
+
             Y_VERIFY(notify.DescribeSchemeResult.HasPath());
             Path = notify.DescribeSchemeResult.GetPath();
 
-            const auto& abandoned = pathDesc.GetAbandonedTenantsSchemeShards(); 
-            AbandonedSchemeShardsIds = TSet<ui64>(abandoned.begin(), abandoned.end()); 
+            const auto& abandoned = pathDesc.GetAbandonedTenantsSchemeShards();
+            AbandonedSchemeShardsIds = TSet<ui64>(abandoned.begin(), abandoned.end());
 
-            Y_VERIFY(pathDesc.HasSelf()); 
-            const auto& entryDesc = pathDesc.GetSelf(); 
+            Y_VERIFY(pathDesc.HasSelf());
+            const auto& entryDesc = pathDesc.GetSelf();
             Self = new TNavigate::TDirEntryInfo();
             Self->Info.CopyFrom(entryDesc);
- 
-            Created = entryDesc.HasCreateFinished() && entryDesc.GetCreateFinished(); 
-            CreateStep = entryDesc.GetCreateStep(); 
-            SecurityObject = new TSecurityObject(entryDesc.GetOwner(), entryDesc.GetEffectiveACL(), false); 
+
+            Created = entryDesc.HasCreateFinished() && entryDesc.GetCreateFinished();
+            CreateStep = entryDesc.GetCreateStep();
+            SecurityObject = new TSecurityObject(entryDesc.GetOwner(), entryDesc.GetEffectiveACL(), false);
             DomainInfo = new NSchemeCache::TDomainInfo(pathDesc.GetDomainDescription());
- 
-            for (const auto& attr : pathDesc.GetUserAttributes()) { 
-                Attributes[attr.GetKey()] = attr.GetValue(); 
-            } 
- 
-            auto tableSchemaVersion = [](const auto& entryDesc) { 
-                return entryDesc.HasVersion() ? entryDesc.GetVersion().GetTableSchemaVersion() : 0; 
-            }; 
-            auto tableIndexVersion = [](const auto& entryDesc) { 
-                return entryDesc.HasVersion() ? entryDesc.GetVersion().GetTableIndexVersion() : 0; 
-            }; 
- 
-            switch (entryDesc.GetPathType()) { 
+
+            for (const auto& attr : pathDesc.GetUserAttributes()) {
+                Attributes[attr.GetKey()] = attr.GetValue();
+            }
+
+            auto tableSchemaVersion = [](const auto& entryDesc) {
+                return entryDesc.HasVersion() ? entryDesc.GetVersion().GetTableSchemaVersion() : 0;
+            };
+            auto tableIndexVersion = [](const auto& entryDesc) {
+                return entryDesc.HasVersion() ? entryDesc.GetVersion().GetTableIndexVersion() : 0;
+            };
+
+            switch (entryDesc.GetPathType()) {
             case NKikimrSchemeOp::EPathTypeSubDomain:
-                Kind = TNavigate::KindSubdomain; 
+                Kind = TNavigate::KindSubdomain;
                 FillInfo(Kind, DomainDescription, std::move(*pathDesc.MutableDomainDescription()));
-                break; 
+                break;
             case NKikimrSchemeOp::EPathTypeExtSubDomain:
                 Kind = TNavigate::KindExtSubdomain;
                 FillInfo(Kind, DomainDescription, std::move(*pathDesc.MutableDomainDescription()));
@@ -1348,20 +1348,20 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             case NKikimrSchemeOp::EPathTypeDir:
             case NKikimrSchemeOp::EPathTypeBlockStoreVolume:
             case NKikimrSchemeOp::EPathTypeFileStore:
-                Kind = TNavigate::KindPath; 
+                Kind = TNavigate::KindPath;
                 if (entryDesc.GetPathId() == entryDesc.GetParentPathId()) {
                     FillInfo(Kind, DomainDescription, std::move(*pathDesc.MutableDomainDescription()));
                 }
-                break; 
+                break;
             case NKikimrSchemeOp::EPathTypeTable:
-                Kind = TNavigate::KindTable; 
-                TableKind = PathSubTypeToTableKind(entryDesc.GetPathSubType()); 
-                IsPrivatePath = CalcPathIsPrivate(entryDesc.GetPathType(), entryDesc.GetPathSubType()); 
-                if (Created) { 
-                    FillTableInfo(pathDesc); 
-                    SchemaVersion = tableSchemaVersion(entryDesc); 
-                } 
-                break; 
+                Kind = TNavigate::KindTable;
+                TableKind = PathSubTypeToTableKind(entryDesc.GetPathSubType());
+                IsPrivatePath = CalcPathIsPrivate(entryDesc.GetPathType(), entryDesc.GetPathSubType());
+                if (Created) {
+                    FillTableInfo(pathDesc);
+                    SchemaVersion = tableSchemaVersion(entryDesc);
+                }
+                break;
             case NKikimrSchemeOp::EPathTypeColumnStore:
                 Kind = TNavigate::KindOlapStore;
                 if (Created) {
@@ -1381,71 +1381,71 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 }
                 break;
             case NKikimrSchemeOp::EPathTypeTableIndex:
-                Kind = TNavigate::KindIndex; 
-                IsPrivatePath = CalcPathIsPrivate(entryDesc.GetPathType(), entryDesc.GetPathSubType()); 
-                SchemaVersion = tableIndexVersion(entryDesc); 
-                break; 
+                Kind = TNavigate::KindIndex;
+                IsPrivatePath = CalcPathIsPrivate(entryDesc.GetPathType(), entryDesc.GetPathSubType());
+                SchemaVersion = tableIndexVersion(entryDesc);
+                break;
             case NKikimrSchemeOp::EPathTypeRtmrVolume:
-                Kind = TNavigate::KindRtmr; 
-                FillInfo(Kind, RtmrVolumeInfo, std::move(*pathDesc.MutableRtmrVolumeDescription())); 
-                break; 
+                Kind = TNavigate::KindRtmr;
+                FillInfo(Kind, RtmrVolumeInfo, std::move(*pathDesc.MutableRtmrVolumeDescription()));
+                break;
             case NKikimrSchemeOp::EPathTypeKesus:
-                Kind = TNavigate::KindKesus; 
-                FillInfo(Kind, KesusInfo, std::move(*pathDesc.MutableKesus())); 
-                break; 
+                Kind = TNavigate::KindKesus;
+                FillInfo(Kind, KesusInfo, std::move(*pathDesc.MutableKesus()));
+                break;
             case NKikimrSchemeOp::EPathTypeSolomonVolume:
-                Kind = TNavigate::KindSolomon; 
-                FillInfo(Kind, SolomonVolumeInfo, std::move(*pathDesc.MutableSolomonDescription())); 
-                break; 
+                Kind = TNavigate::KindSolomon;
+                FillInfo(Kind, SolomonVolumeInfo, std::move(*pathDesc.MutableSolomonDescription()));
+                break;
             case NKikimrSchemeOp::EPathTypePersQueueGroup:
-                Kind = TNavigate::KindTopic; 
-                IsPrivatePath = CalcPathIsPrivate(entryDesc.GetPathType(), entryDesc.GetPathSubType()); 
-                FillInfo(Kind, PQGroupInfo, std::move(*pathDesc.MutablePersQueueGroup())); 
-                break; 
+                Kind = TNavigate::KindTopic;
+                IsPrivatePath = CalcPathIsPrivate(entryDesc.GetPathType(), entryDesc.GetPathSubType());
+                FillInfo(Kind, PQGroupInfo, std::move(*pathDesc.MutablePersQueueGroup()));
+                break;
             case NKikimrSchemeOp::EPathTypeCdcStream:
-                Kind = TNavigate::KindCdcStream; 
-                IsPrivatePath = CalcPathIsPrivate(entryDesc.GetPathType(), entryDesc.GetPathSubType()); 
-                FillInfo(Kind, CdcStreamInfo, std::move(*pathDesc.MutableCdcStreamDescription())); 
-                if (CdcStreamInfo->Description.HasPathId()) { 
-                    const auto& pathId = CdcStreamInfo->Description.GetPathId(); 
-                    CdcStreamInfo->PathId = TPathId(pathId.GetOwnerId(), pathId.GetLocalId()); 
-                } 
-                break; 
+                Kind = TNavigate::KindCdcStream;
+                IsPrivatePath = CalcPathIsPrivate(entryDesc.GetPathType(), entryDesc.GetPathSubType());
+                FillInfo(Kind, CdcStreamInfo, std::move(*pathDesc.MutableCdcStreamDescription()));
+                if (CdcStreamInfo->Description.HasPathId()) {
+                    const auto& pathId = CdcStreamInfo->Description.GetPathId();
+                    CdcStreamInfo->PathId = TPathId(pathId.GetOwnerId(), pathId.GetLocalId());
+                }
+                break;
             case NKikimrSchemeOp::EPathTypeSequence:
                 Kind = TNavigate::KindSequence;
                 FillInfo(Kind, SequenceInfo, std::move(*pathDesc.MutableSequenceDescription()));
                 break;
-            case NKikimrSchemeOp::EPathTypeReplication: 
-                Kind = TNavigate::KindReplication; 
-                FillInfo(Kind, ReplicationInfo, std::move(*pathDesc.MutableReplicationDescription())); 
-                break; 
-            case NKikimrSchemeOp::EPathTypeInvalid:
-                Y_VERIFY_DEBUG(false, "Invalid path type"); 
+            case NKikimrSchemeOp::EPathTypeReplication:
+                Kind = TNavigate::KindReplication;
+                FillInfo(Kind, ReplicationInfo, std::move(*pathDesc.MutableReplicationDescription()));
                 break;
-            } 
- 
-            if (IsLikeDirectory(Kind)) { 
-                ListNodeEntry = new TNavigate::TListNodeEntry(); 
-                ListNodeEntry->Kind = TNavigate::KindPath; 
-                ListNodeEntry->Children.reserve(pathDesc.ChildrenSize()); 
- 
-                for (const auto& child : pathDesc.GetChildren()) { 
+            case NKikimrSchemeOp::EPathTypeInvalid:
+                Y_VERIFY_DEBUG(false, "Invalid path type");
+                break;
+            }
+
+            if (IsLikeDirectory(Kind)) {
+                ListNodeEntry = new TNavigate::TListNodeEntry();
+                ListNodeEntry->Kind = TNavigate::KindPath;
+                ListNodeEntry->Children.reserve(pathDesc.ChildrenSize());
+
+                for (const auto& child : pathDesc.GetChildren()) {
                     const auto& name = child.GetName();
                     const auto pathId = TPathId(child.GetSchemeshardId(), child.GetPathId());
 
-                    switch (child.GetPathType()) { 
+                    switch (child.GetPathType()) {
                     case NKikimrSchemeOp::EPathTypeSubDomain:
                     case NKikimrSchemeOp::EPathTypeDir:
                     case NKikimrSchemeOp::EPathTypeBlockStoreVolume:
                     case NKikimrSchemeOp::EPathTypeFileStore:
-                        ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindPath); 
-                        break; 
+                        ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindPath);
+                        break;
                     case NKikimrSchemeOp::EPathTypeExtSubDomain:
-                        ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindExtSubdomain); 
-                        break; 
+                        ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindExtSubdomain);
+                        break;
                     case NKikimrSchemeOp::EPathTypeTable:
-                        ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindTable, tableSchemaVersion(child)); 
-                        break; 
+                        ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindTable, tableSchemaVersion(child));
+                        break;
                     case NKikimrSchemeOp::EPathTypeColumnStore:
                         ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindOlapStore);
                         break;
@@ -1453,60 +1453,60 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                         ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindOlapTable);
                         break;
                     case NKikimrSchemeOp::EPathTypeRtmrVolume:
-                        ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindRtmr); 
-                        break; 
+                        ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindRtmr);
+                        break;
                     case NKikimrSchemeOp::EPathTypeKesus:
-                        ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindKesus); 
-                        break; 
+                        ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindKesus);
+                        break;
                     case NKikimrSchemeOp::EPathTypeSolomonVolume:
-                        ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindSolomon); 
-                        break; 
+                        ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindSolomon);
+                        break;
                     case NKikimrSchemeOp::EPathTypePersQueueGroup:
-                        ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindTopic); 
-                        break; 
+                        ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindTopic);
+                        break;
                     case NKikimrSchemeOp::EPathTypeCdcStream:
-                        ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindCdcStream); 
-                        break; 
+                        ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindCdcStream);
+                        break;
                     case NKikimrSchemeOp::EPathTypeSequence:
                         ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindSequence);
                         break;
-                    case NKikimrSchemeOp::EPathTypeReplication: 
-                        ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindReplication); 
-                        break; 
+                    case NKikimrSchemeOp::EPathTypeReplication:
+                        ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindReplication);
+                        break;
                     case NKikimrSchemeOp::EPathTypeTableIndex:
                     case NKikimrSchemeOp::EPathTypeInvalid:
-                        Y_VERIFY_DEBUG(false, "Invalid path type"); 
+                        Y_VERIFY_DEBUG(false, "Invalid path type");
                         break;
-                    } 
-                } 
-            } 
-        } 
- 
-        void Fill(TSchemeBoardEvents::TEvNotifyDelete& notify) { 
-            Clear(); 
-            Filled = true; 
- 
-            if (notify.PathId) { 
-                SetPathId(notify.PathId); 
-            } 
- 
-            Y_VERIFY_DEBUG(Subscriber.DomainOwnerId); 
-            if (notify.Strong) { 
+                    }
+                }
+            }
+        }
+
+        void Fill(TSchemeBoardEvents::TEvNotifyDelete& notify) {
+            Clear();
+            Filled = true;
+
+            if (notify.PathId) {
+                SetPathId(notify.PathId);
+            }
+
+            Y_VERIFY_DEBUG(Subscriber.DomainOwnerId);
+            if (notify.Strong) {
                 Status = NKikimrScheme::StatusPathDoesNotExist;
-            } 
-        } 
- 
-        void Fill(TSchemeBoardEvents::TEvSyncResponse&) { 
-        } 
- 
-        bool IsFilled() const { 
-            return Filled; 
-        } 
- 
+            }
+        }
+
+        void Fill(TSchemeBoardEvents::TEvSyncResponse&) {
+        }
+
+        bool IsFilled() const {
+            return Filled;
+        }
+
         TMaybe<NKikimrScheme::EStatus> GetStatus() const {
-            return Status; 
-        } 
- 
+            return Status;
+        }
+
         TPathId GetPathId() const {
             return IsFilled() ? PathId : TPathId();
         }
@@ -1515,10 +1515,10 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             return (IsFilled() && DomainInfo) ? DomainInfo->DomainKey : TDomainId();
         }
 
-        auto GetDomainInfo() const { 
-            return DomainInfo; 
-        } 
- 
+        auto GetDomainInfo() const {
+            return DomainInfo;
+        }
+
         const TSet<ui64>& GetAbandonedSchemeShardIds() const {
             return AbandonedSchemeShardsIds;
         }
@@ -1530,7 +1530,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
             if (sysViewInfo == NSysView::SysPathName) {
                 if (entry.Operation == TNavigate::OpTable) {
-                    return SetError(context, entry, TNavigate::EStatus::PathNotTable); 
+                    return SetError(context, entry, TNavigate::EStatus::PathNotTable);
                 }
 
                 auto listNodeEntry = MakeIntrusive<TNavigate::TListNodeEntry>();
@@ -1551,7 +1551,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             } else {
                 auto schema = Owner->SystemViewResolver->GetSystemViewSchema(sysViewInfo, target);
                 if (!schema) {
-                    return SetError(context, entry, TNavigate::EStatus::PathErrorUnknown); 
+                    return SetError(context, entry, TNavigate::EStatus::PathErrorUnknown);
                 }
 
                 entry.Kind = TNavigate::KindTable;
@@ -1579,33 +1579,33 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             entry.DomainInfo = DomainInfo;
         }
 
-        void FillEntry(TNavigateContext* context, TNavigate::TEntry& entry, const TResponseProps& props = TResponseProps()) const { 
+        void FillEntry(TNavigateContext* context, TNavigate::TEntry& entry, const TResponseProps& props = TResponseProps()) const {
             SBC_LOG_D("FillEntry for TNavigate"
-                << ": self# " << Owner->SelfId() 
-                << ", cacheItem# " << ToString() 
-                << ", entry# " << entry.ToString() 
-                << ", props# " << props.ToString()); 
+                << ": self# " << Owner->SelfId()
+                << ", cacheItem# " << ToString()
+                << ", entry# " << entry.ToString()
+                << ", props# " << props.ToString());
 
-            if (props.IsSync && props.Partial) { 
-                return SetError(context, entry, TNavigate::EStatus::LookupError); 
-            } 
- 
+            if (props.IsSync && props.Partial) {
+                return SetError(context, entry, TNavigate::EStatus::LookupError);
+            }
+
             if (Status && Status == NKikimrScheme::StatusPathDoesNotExist) {
-                return SetError(context, entry, TNavigate::EStatus::PathErrorUnknown); 
-            } 
- 
+                return SetError(context, entry, TNavigate::EStatus::PathErrorUnknown);
+            }
+
             if (!Status || Status != NKikimrScheme::StatusSuccess) {
-                return SetError(context, entry, TNavigate::EStatus::LookupError); 
-            } 
- 
+                return SetError(context, entry, TNavigate::EStatus::LookupError);
+            }
+
             if (!entry.TableId.SysViewInfo.empty()) {
                 if (Kind == TNavigate::KindPath) {
                     auto split = SplitPath(Path);
                     if (split.size() == 1) {
-                        return FillSystemViewEntry(context, entry, NSysView::ISystemViewResolver::ETarget::Domain); 
+                        return FillSystemViewEntry(context, entry, NSysView::ISystemViewResolver::ETarget::Domain);
                     }
                 } else if (Kind == TNavigate::KindSubdomain || Kind == TNavigate::KindExtSubdomain) {
-                    return FillSystemViewEntry(context, entry, NSysView::ISystemViewResolver::ETarget::SubDomain); 
+                    return FillSystemViewEntry(context, entry, NSysView::ISystemViewResolver::ETarget::SubDomain);
                 } else if (Kind == TNavigate::KindOlapStore) {
                     FillSystemViewEntry(context, entry, NSysView::ISystemViewResolver::ETarget::OlapStore);
                     entry.OlapStoreInfo = OlapStoreInfo;
@@ -1616,37 +1616,37 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                     entry.OlapTableInfo = OlapTableInfo;
                     return;
                 }
- 
-                return SetError(context, entry, TNavigate::EStatus::PathErrorUnknown); 
+
+                return SetError(context, entry, TNavigate::EStatus::PathErrorUnknown);
             }
 
             const bool isTable = Kind == TNavigate::KindTable || Kind == TNavigate::KindOlapTable;
             if (entry.Operation == TNavigate::OpTable && !isTable) {
-                return SetError(context, entry, TNavigate::EStatus::PathNotTable); 
-            } 
- 
+                return SetError(context, entry, TNavigate::EStatus::PathNotTable);
+            }
+
             if (!Created && isTable) {
-                return SetError(context, entry, TNavigate::EStatus::PathErrorUnknown); 
-            } 
- 
-            if (!entry.ShowPrivatePath && IsPrivatePath) { 
-                return SetError(context, entry, TNavigate::EStatus::PathErrorUnknown); 
-            } 
- 
-            // common 
+                return SetError(context, entry, TNavigate::EStatus::PathErrorUnknown);
+            }
+
+            if (!entry.ShowPrivatePath && IsPrivatePath) {
+                return SetError(context, entry, TNavigate::EStatus::PathErrorUnknown);
+            }
+
+            // common
             entry.SecurityObject = SecurityObject;
             entry.DomainInfo = DomainInfo;
-            entry.Attributes = Attributes; 
+            entry.Attributes = Attributes;
 
             entry.Status = TNavigate::EStatus::Ok;
 
             if (Kind == TNavigate::KindExtSubdomain && entry.RedirectRequired) {
-                SetError(context, entry, TNavigate::EStatus::RedirectLookupError); 
+                SetError(context, entry, TNavigate::EStatus::RedirectLookupError);
             }
 
-            entry.Kind = Kind; 
-            entry.CreateStep = CreateStep; 
- 
+            entry.Kind = Kind;
+            entry.CreateStep = CreateStep;
+
             if (entry.RequestType == TNavigate::TEntry::ERequestType::ByPath) {
                 if (Kind == TNavigate::KindTable) {
                     entry.TableId = TTableId(PathId.OwnerId, PathId.LocalPathId, SchemaVersion);
@@ -1660,90 +1660,90 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
             }
 
-            if (entry.Operation == TNavigate::OpList) { 
-                entry.ListNodeEntry = ListNodeEntry; 
-            } 
- 
-            // specific (it's safe to fill them all) 
+            if (entry.Operation == TNavigate::OpList) {
+                entry.ListNodeEntry = ListNodeEntry;
+            }
+
+            // specific (it's safe to fill them all)
             entry.Self = Self;
-            entry.Columns = Columns; 
+            entry.Columns = Columns;
             entry.NotNullColumns = NotNullColumns;
-            entry.Indexes = Indexes; 
-            entry.CdcStreams = CdcStreams; 
+            entry.Indexes = Indexes;
+            entry.CdcStreams = CdcStreams;
             entry.DomainDescription = DomainDescription;
-            entry.RTMRVolumeInfo = RtmrVolumeInfo; 
-            entry.KesusInfo = KesusInfo; 
-            entry.SolomonVolumeInfo = SolomonVolumeInfo; 
-            entry.PQGroupInfo = PQGroupInfo; 
+            entry.RTMRVolumeInfo = RtmrVolumeInfo;
+            entry.KesusInfo = KesusInfo;
+            entry.SolomonVolumeInfo = SolomonVolumeInfo;
+            entry.PQGroupInfo = PQGroupInfo;
             entry.OlapStoreInfo = OlapStoreInfo;
             entry.OlapTableInfo = OlapTableInfo;
-            entry.CdcStreamInfo = CdcStreamInfo; 
+            entry.CdcStreamInfo = CdcStreamInfo;
             entry.SequenceInfo = SequenceInfo;
-            entry.ReplicationInfo = ReplicationInfo; 
-        } 
- 
-        bool CheckColumns(TResolveContext* context, TResolve::TEntry& entry, 
+            entry.ReplicationInfo = ReplicationInfo;
+        }
+
+        bool CheckColumns(TResolveContext* context, TResolve::TEntry& entry,
             const TVector<NScheme::TTypeId>& keyColumnTypes,
             const THashMap<ui32, TSysTables::TTableColumnInfo>& columns) const
         {
-            TKeyDesc& keyDesc = *entry.KeyDescription; 
- 
+            TKeyDesc& keyDesc = *entry.KeyDescription;
+
             // check key types
             if (keyDesc.KeyColumnTypes.size() > keyColumnTypes.size()) {
-                SetError(context, entry, TResolve::EStatus::TypeCheckError, TKeyDesc::EStatus::TypeCheckFailed); 
+                SetError(context, entry, TResolve::EStatus::TypeCheckError, TKeyDesc::EStatus::TypeCheckFailed);
                 return false;
-            } 
- 
-            for (ui32 i : xrange(keyDesc.KeyColumnTypes.size())) { 
+            }
+
+            for (ui32 i : xrange(keyDesc.KeyColumnTypes.size())) {
                 if (keyDesc.KeyColumnTypes[i] != keyColumnTypes[i]) {
-                    SetError(context, entry, TResolve::EStatus::TypeCheckError, TKeyDesc::EStatus::TypeCheckFailed); 
+                    SetError(context, entry, TResolve::EStatus::TypeCheckError, TKeyDesc::EStatus::TypeCheckFailed);
                     return false;
-                } 
-            } 
- 
+                }
+            }
+
             // check operations
-            keyDesc.ColumnInfos.clear(); 
-            keyDesc.ColumnInfos.reserve(keyDesc.Columns.size()); 
-            for (auto& columnOp : keyDesc.Columns) { 
+            keyDesc.ColumnInfos.clear();
+            keyDesc.ColumnInfos.reserve(keyDesc.Columns.size());
+            for (auto& columnOp : keyDesc.Columns) {
                 if (IsSystemColumn(columnOp.Column)) {
                     continue;
                 }
- 
-                if (IsSysTable() && columnOp.Operation == TKeyDesc::EColumnOperation::InplaceUpdate) { 
-                    SetError(context, entry, TResolve::EStatus::TypeCheckError, TKeyDesc::EStatus::OperationNotSupported); 
+
+                if (IsSysTable() && columnOp.Operation == TKeyDesc::EColumnOperation::InplaceUpdate) {
+                    SetError(context, entry, TResolve::EStatus::TypeCheckError, TKeyDesc::EStatus::OperationNotSupported);
                     return false;
-                } 
- 
+                }
+
                 const auto* column = columns.FindPtr(columnOp.Column);
- 
-                if (!column) { 
-                    entry.Status = TResolve::EStatus::TypeCheckError; 
-                    keyDesc.Status = TKeyDesc::EStatus::TypeCheckFailed; 
-                    keyDesc.ColumnInfos.push_back({ 
-                        columnOp.Column, 0, 0, TKeyDesc::EStatus::NotExists 
-                    }); 
-                    continue; 
-                } 
- 
-                if (column->PType != columnOp.ExpectedType) { 
-                    entry.Status = TResolve::EStatus::TypeCheckError; 
-                    keyDesc.Status = TKeyDesc::EStatus::TypeCheckFailed; 
-                    keyDesc.ColumnInfos.push_back({ 
-                        columnOp.Column, column->PType, 0, TKeyDesc::EStatus::TypeCheckFailed 
-                    }); 
-                    continue; 
-                } 
- 
-                if (columnOp.Operation == TKeyDesc::EColumnOperation::InplaceUpdate) { 
-                    entry.Status = TResolve::EStatus::TypeCheckError; 
-                    keyDesc.Status = TKeyDesc::EStatus::OperationNotSupported; 
-                    keyDesc.ColumnInfos.push_back({ 
-                        columnOp.Column, column->PType, 0, TKeyDesc::EStatus::OperationNotSupported 
-                    }); 
-                    continue; 
-                } 
-            } 
- 
+
+                if (!column) {
+                    entry.Status = TResolve::EStatus::TypeCheckError;
+                    keyDesc.Status = TKeyDesc::EStatus::TypeCheckFailed;
+                    keyDesc.ColumnInfos.push_back({
+                        columnOp.Column, 0, 0, TKeyDesc::EStatus::NotExists
+                    });
+                    continue;
+                }
+
+                if (column->PType != columnOp.ExpectedType) {
+                    entry.Status = TResolve::EStatus::TypeCheckError;
+                    keyDesc.Status = TKeyDesc::EStatus::TypeCheckFailed;
+                    keyDesc.ColumnInfos.push_back({
+                        columnOp.Column, column->PType, 0, TKeyDesc::EStatus::TypeCheckFailed
+                    });
+                    continue;
+                }
+
+                if (columnOp.Operation == TKeyDesc::EColumnOperation::InplaceUpdate) {
+                    entry.Status = TResolve::EStatus::TypeCheckError;
+                    keyDesc.Status = TKeyDesc::EStatus::OperationNotSupported;
+                    keyDesc.ColumnInfos.push_back({
+                        columnOp.Column, column->PType, 0, TKeyDesc::EStatus::OperationNotSupported
+                    });
+                    continue;
+                }
+            }
+
             return true;
         }
 
@@ -1755,10 +1755,10 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
             auto schema = Owner->SystemViewResolver->GetSystemViewSchema(sysViewInfo, target);
             if (!schema) {
-                return SetError(context, entry, TResolve::EStatus::PathErrorNotExist, TKeyDesc::EStatus::NotExists); 
+                return SetError(context, entry, TResolve::EStatus::PathErrorNotExist, TKeyDesc::EStatus::NotExists);
             }
 
-            if (!CheckColumns(context, entry, schema->KeyColumnTypes, schema->Columns)) { 
+            if (!CheckColumns(context, entry, schema->KeyColumnTypes, schema->Columns)) {
                 return;
             }
 
@@ -1774,35 +1774,35 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             keyDesc.Status = TKeyDesc::EStatus::Ok;
         }
 
-        void FillEntry(TResolveContext* context, TResolve::TEntry& entry, const TResponseProps& props = TResponseProps()) const { 
+        void FillEntry(TResolveContext* context, TResolve::TEntry& entry, const TResponseProps& props = TResponseProps()) const {
             SBC_LOG_D("FillEntry for TResolve"
-                << ": self# " << Owner->SelfId() 
-                << ", cacheItem# " << ToString() 
-                << ", entry# " << entry.ToString() 
-                << ", props# " << props.ToString()); 
- 
+                << ": self# " << Owner->SelfId()
+                << ", cacheItem# " << ToString()
+                << ", entry# " << entry.ToString()
+                << ", props# " << props.ToString());
+
             TKeyDesc& keyDesc = *entry.KeyDescription;
 
-            if (props.IsSync && props.Partial) { 
-                return SetError(context, entry, TResolve::EStatus::LookupError, TKeyDesc::EStatus::NotExists); 
-            } 
- 
+            if (props.IsSync && props.Partial) {
+                return SetError(context, entry, TResolve::EStatus::LookupError, TKeyDesc::EStatus::NotExists);
+            }
+
             if (Status && Status == NKikimrScheme::StatusPathDoesNotExist) {
-                return SetError(context, entry, TResolve::EStatus::PathErrorNotExist, TKeyDesc::EStatus::NotExists); 
+                return SetError(context, entry, TResolve::EStatus::PathErrorNotExist, TKeyDesc::EStatus::NotExists);
             }
 
             if (!Status || Status != NKikimrScheme::StatusSuccess) {
-                return SetError(context, entry, TResolve::EStatus::LookupError, TKeyDesc::EStatus::NotExists); 
+                return SetError(context, entry, TResolve::EStatus::LookupError, TKeyDesc::EStatus::NotExists);
             }
 
-            if (!keyDesc.TableId.SysViewInfo.empty()) { 
+            if (!keyDesc.TableId.SysViewInfo.empty()) {
                 if (Kind == TNavigate::KindPath) {
                     auto split = SplitPath(Path);
                     if (split.size() == 1) {
-                        return FillSystemViewEntry(context, entry, NSysView::ISystemViewResolver::ETarget::Domain); 
+                        return FillSystemViewEntry(context, entry, NSysView::ISystemViewResolver::ETarget::Domain);
                     }
                 } else if (Kind == TNavigate::KindSubdomain || Kind == TNavigate::KindExtSubdomain) {
-                    return FillSystemViewEntry(context, entry, NSysView::ISystemViewResolver::ETarget::SubDomain); 
+                    return FillSystemViewEntry(context, entry, NSysView::ISystemViewResolver::ETarget::SubDomain);
                 } else if (Kind == TNavigate::KindOlapStore) {
                     FillSystemViewEntry(context, entry, NSysView::ISystemViewResolver::ETarget::OlapStore);
                     // Add all shards of the OLAP store
@@ -1820,241 +1820,241 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                     }
                     return;
                 }
- 
-                return SetError(context, entry, TResolve::EStatus::PathErrorNotExist, TKeyDesc::EStatus::NotExists); 
+
+                return SetError(context, entry, TResolve::EStatus::PathErrorNotExist, TKeyDesc::EStatus::NotExists);
             }
 
             if (!Created) {
-                return SetError(context, entry, TResolve::EStatus::NotMaterialized, TKeyDesc::EStatus::NotExists); 
+                return SetError(context, entry, TResolve::EStatus::NotMaterialized, TKeyDesc::EStatus::NotExists);
             }
 
-            entry.Kind = TableKind; 
+            entry.Kind = TableKind;
             entry.DomainInfo = DomainInfo;
 
-            if (!CheckColumns(context, entry, KeyColumnTypes, Columns)) { 
+            if (!CheckColumns(context, entry, KeyColumnTypes, Columns)) {
                 return;
             }
 
             // fill partition info
-            if (IsSysTable()) { 
-                if (keyDesc.Range.Point) { 
-                    ui64 shard = 0; 
-                    bool ok = TSysTables::TLocksTable::ExtractKey( 
-                        keyDesc.Range.From, TSysTables::TLocksTable::EColumns::DataShard, shard 
-                    ); 
-                    if (ok) { 
-                        keyDesc.Partitions.push_back(TKeyDesc::TPartitionInfo(shard)); 
-                    } else { 
-                        keyDesc.Status = TKeyDesc::EStatus::OperationNotSupported; 
-                        ++context->Request->ErrorCount; 
-                    } 
-                } 
+            if (IsSysTable()) {
+                if (keyDesc.Range.Point) {
+                    ui64 shard = 0;
+                    bool ok = TSysTables::TLocksTable::ExtractKey(
+                        keyDesc.Range.From, TSysTables::TLocksTable::EColumns::DataShard, shard
+                    );
+                    if (ok) {
+                        keyDesc.Partitions.push_back(TKeyDesc::TPartitionInfo(shard));
+                    } else {
+                        keyDesc.Status = TKeyDesc::EStatus::OperationNotSupported;
+                        ++context->Request->ErrorCount;
+                    }
+                }
             } else if (OlapTableInfo) {
                 // TODO: return proper partitioning info (KIKIMR-11069)
                 for (ui64 columnShard : OlapTableInfo->Description.GetSharding().GetColumnShards()) {
                     keyDesc.Partitions.push_back(TKeyDesc::TPartitionInfo(columnShard));
                     keyDesc.Partitions.back().Range = TKeyDesc::TPartitionRangeInfo();
                 }
-            } else { 
-                if (Partitioning) { 
-                    FillRangePartitioning(keyDesc.Range, keyDesc.Partitions); 
-                } 
-            } 
- 
-            if (keyDesc.Partitions.empty()) { 
-                entry.Status = TResolve::EStatus::TypeCheckError; 
-                keyDesc.Status = TKeyDesc::EStatus::OperationNotSupported; 
-            } 
- 
+            } else {
+                if (Partitioning) {
+                    FillRangePartitioning(keyDesc.Range, keyDesc.Partitions);
+                }
+            }
+
+            if (keyDesc.Partitions.empty()) {
+                entry.Status = TResolve::EStatus::TypeCheckError;
+                keyDesc.Status = TKeyDesc::EStatus::OperationNotSupported;
+            }
+
             // fill ACL info
-            keyDesc.SecurityObject = SecurityObject; 
- 
-            if (keyDesc.Status != TKeyDesc::EStatus::Unknown) { 
-                ++context->Request->ErrorCount; 
-                return; 
-            } 
- 
-            entry.Status = TResolve::EStatus::OkData; 
-            keyDesc.Status = TKeyDesc::EStatus::Ok; 
-        } 
- 
-    private: 
-        // internal 
-        TSchemeCache* Owner; 
-        TSubscriber Subscriber; 
-        bool Filled; 
- 
-        mutable THashMap<TVariantContextPtr, TVector<TRequest>> InFlight; 
- 
-        // common 
+            keyDesc.SecurityObject = SecurityObject;
+
+            if (keyDesc.Status != TKeyDesc::EStatus::Unknown) {
+                ++context->Request->ErrorCount;
+                return;
+            }
+
+            entry.Status = TResolve::EStatus::OkData;
+            keyDesc.Status = TKeyDesc::EStatus::Ok;
+        }
+
+    private:
+        // internal
+        TSchemeCache* Owner;
+        TSubscriber Subscriber;
+        bool Filled;
+
+        mutable THashMap<TVariantContextPtr, TVector<TRequest>> InFlight;
+
+        // common
         TMaybe<NKikimrScheme::EStatus> Status;
-        TNavigate::EKind Kind; 
-        TResolve::EKind TableKind; 
-        bool Created; 
-        ui64 CreateStep; 
+        TNavigate::EKind Kind;
+        TResolve::EKind TableKind;
+        bool Created;
+        ui64 CreateStep;
         TPathId PathId;
         TString Path;
         TSet<ui64> AbandonedSchemeShardsIds;
-        TIntrusivePtr<TSecurityObject> SecurityObject; 
+        TIntrusivePtr<TSecurityObject> SecurityObject;
         NSchemeCache::TDomainInfo::TPtr DomainInfo;
-        THashMap<TString, TString> Attributes; 
-        bool IsPrivatePath; 
+        THashMap<TString, TString> Attributes;
+        bool IsPrivatePath;
         bool IsVirtual;
- 
+
         // Used for Table and Index
         ui64 SchemaVersion;
 
-        // domain & path specific 
-        TIntrusivePtr<TNavigate::TListNodeEntry> ListNodeEntry; 
+        // domain & path specific
+        TIntrusivePtr<TNavigate::TListNodeEntry> ListNodeEntry;
         TIntrusivePtr<TNavigate::TDomainDescription> DomainDescription;
- 
-        // table specific 
-        THashMap<ui32, TSysTables::TTableColumnInfo> Columns; 
-        TVector<NScheme::TTypeId> KeyColumnTypes; 
+
+        // table specific
+        THashMap<ui32, TSysTables::TTableColumnInfo> Columns;
+        TVector<NScheme::TTypeId> KeyColumnTypes;
         THashSet<TString> NotNullColumns;
         TVector<NKikimrSchemeOp::TIndexDescription> Indexes;
         TVector<NKikimrSchemeOp::TCdcStreamDescription> CdcStreams;
-        TVector<TKeyDesc::TPartitionInfo> Partitioning; 
- 
+        TVector<TKeyDesc::TPartitionInfo> Partitioning;
+
         TIntrusivePtr<TNavigate::TDirEntryInfo> Self;
 
-        // RTMR specific 
-        TIntrusivePtr<TNavigate::TRtmrVolumeInfo> RtmrVolumeInfo; 
- 
-        // Kesus specific 
-        TIntrusivePtr<TNavigate::TKesusInfo> KesusInfo; 
- 
-        // Solomon specific 
-        TIntrusivePtr<TNavigate::TSolomonVolumeInfo> SolomonVolumeInfo; 
- 
-        // PQ specific 
-        TIntrusivePtr<TNavigate::TPQGroupInfo> PQGroupInfo; 
- 
+        // RTMR specific
+        TIntrusivePtr<TNavigate::TRtmrVolumeInfo> RtmrVolumeInfo;
+
+        // Kesus specific
+        TIntrusivePtr<TNavigate::TKesusInfo> KesusInfo;
+
+        // Solomon specific
+        TIntrusivePtr<TNavigate::TSolomonVolumeInfo> SolomonVolumeInfo;
+
+        // PQ specific
+        TIntrusivePtr<TNavigate::TPQGroupInfo> PQGroupInfo;
+
         // OlapStore specific
         TIntrusivePtr<TNavigate::TOlapStoreInfo> OlapStoreInfo;
         TIntrusivePtr<TNavigate::TOlapTableInfo> OlapTableInfo;
 
-        // CDC specific 
-        TIntrusivePtr<TNavigate::TCdcStreamInfo> CdcStreamInfo; 
- 
+        // CDC specific
+        TIntrusivePtr<TNavigate::TCdcStreamInfo> CdcStreamInfo;
+
         // Sequence specific
         TIntrusivePtr<TNavigate::TSequenceInfo> SequenceInfo;
 
-        // Replication specific 
-        TIntrusivePtr<TNavigate::TReplicationInfo> ReplicationInfo; 
- 
-    }; // TCacheItem 
- 
-    struct TMerger { 
-        TCacheItem& operator()(TCacheItem& dst, TCacheItem&& src) { 
-            return dst.Merge(std::move(src)); 
-        } 
-    }; 
- 
-    struct TEvicter { 
-        void operator()(TCacheItem& val) { 
-            return val.OnEvict(); 
-        } 
-    }; 
- 
-    enum class EPathType { 
-        RegularPath, 
-        SysPath, 
-        SysLocksV1, 
-        SysLocksV2, 
-    }; 
- 
-    static EPathType PathType(const TStringBuf path) { 
+        // Replication specific
+        TIntrusivePtr<TNavigate::TReplicationInfo> ReplicationInfo;
+
+    }; // TCacheItem
+
+    struct TMerger {
+        TCacheItem& operator()(TCacheItem& dst, TCacheItem&& src) {
+            return dst.Merge(std::move(src));
+        }
+    };
+
+    struct TEvicter {
+        void operator()(TCacheItem& val) {
+            return val.OnEvict();
+        }
+    };
+
+    enum class EPathType {
+        RegularPath,
+        SysPath,
+        SysLocksV1,
+        SysLocksV2,
+    };
+
+    static EPathType PathType(const TStringBuf path) {
         if (path == "/sys"sv) {
-            return EPathType::SysPath; 
+            return EPathType::SysPath;
         } else if (path == "/sys/locks"sv) {
-            return EPathType::SysLocksV1; 
+            return EPathType::SysLocksV1;
         } else if (path == "/sys/locks2"sv) {
-            return EPathType::SysLocksV2; 
-        } 
- 
-        return EPathType::RegularPath; 
-    } 
- 
-    static EPathType PathType(const TPathId& pathId) { 
-        if (pathId == TPathId(TSysTables::SysSchemeShard, TSysTables::SysTableLocks)) { 
-            return EPathType::SysLocksV1; 
-        } else if (pathId == TPathId(TSysTables::SysSchemeShard, TSysTables::SysTableLocks2)) { 
-            return EPathType::SysLocksV2; 
-        } 
- 
-        return EPathType::RegularPath; 
-    } 
- 
-    static TInstant Now() { 
-        return TlsActivationContext->Now(); 
-    } 
- 
-    template <typename TPath> 
-    TSubscriber CreateSubscriber(const TPath& path, const ui64 tabletId, const ui64 domainOwnerId) const { 
-        SBC_LOG_T("Create subscriber" 
-            << ": self# " << SelfId() 
-            << ", path# " << path 
-            << ", domainOwnerId# " << domainOwnerId); 
- 
-        const auto& domains = *AppData()->DomainsInfo; 
-        const ui32 domainId = domains.GetDomainUidByTabletId(tabletId);
-        const ui32 boardSSId = domains.GetDomain(domainId).DefaultSchemeBoardGroup;
- 
-        return TSubscriber( 
-            Register(CreateSchemeBoardSubscriber(SelfId(), path, boardSSId, domainOwnerId)), domainOwnerId, path 
-        ); 
+            return EPathType::SysLocksV2;
+        }
+
+        return EPathType::RegularPath;
     }
 
-    TSubscriber CreateSubscriber(const TPathId& pathId, const ui64 domainOwnerId) const { 
-        return CreateSubscriber(pathId, pathId.OwnerId, domainOwnerId); 
-    } 
- 
+    static EPathType PathType(const TPathId& pathId) {
+        if (pathId == TPathId(TSysTables::SysSchemeShard, TSysTables::SysTableLocks)) {
+            return EPathType::SysLocksV1;
+        } else if (pathId == TPathId(TSysTables::SysSchemeShard, TSysTables::SysTableLocks2)) {
+            return EPathType::SysLocksV2;
+        }
+
+        return EPathType::RegularPath;
+    }
+
+    static TInstant Now() {
+        return TlsActivationContext->Now();
+    }
+
+    template <typename TPath>
+    TSubscriber CreateSubscriber(const TPath& path, const ui64 tabletId, const ui64 domainOwnerId) const {
+        SBC_LOG_T("Create subscriber"
+            << ": self# " << SelfId()
+            << ", path# " << path
+            << ", domainOwnerId# " << domainOwnerId);
+
+        const auto& domains = *AppData()->DomainsInfo;
+        const ui32 domainId = domains.GetDomainUidByTabletId(tabletId);
+        const ui32 boardSSId = domains.GetDomain(domainId).DefaultSchemeBoardGroup;
+
+        return TSubscriber(
+            Register(CreateSchemeBoardSubscriber(SelfId(), path, boardSSId, domainOwnerId)), domainOwnerId, path
+        );
+    }
+
+    TSubscriber CreateSubscriber(const TPathId& pathId, const ui64 domainOwnerId) const {
+        return CreateSubscriber(pathId, pathId.OwnerId, domainOwnerId);
+    }
+
     template <typename TContextPtr, typename TEntry, typename TPathExtractor, typename TTabletIdExtractor>
     void HandleEntry(TContextPtr context, TEntry& entry, size_t index,
         TPathExtractor pathExtractor, TTabletIdExtractor tabletIdExtractor)
     {
         auto path = pathExtractor(entry);
         TCacheItem* cacheItem = Cache.FindPtr(path);
- 
+
         if (!cacheItem) {
             const EPathType pathType = PathType(path);
             switch (pathType) {
             case EPathType::RegularPath:
             {
                 const ui64 tabletId = tabletIdExtractor(entry);
-                const ui32 domainId = AppData()->DomainsInfo->GetDomainUidByTabletId(tabletId); 
+                const ui32 domainId = AppData()->DomainsInfo->GetDomainUidByTabletId(tabletId);
                 if (tabletId == ui64(NSchemeShard::InvalidTabletId) || domainId == TDomainsInfo::BadDomainId) {
-                    return SetRootUnknown(context.Get(), entry); 
-                } 
- 
-                ui64 domainOwnerId = context->Request->DomainOwnerId; 
-                if (!domainOwnerId && context->Request->DatabaseName) { 
-                    TCacheItem* dbItem = Cache.FindPtr(CanonizePath(context->Request->DatabaseName)); 
-                    if (!dbItem) { 
-                        return SetRootUnknown(context.Get(), entry); 
-                    } 
- 
-                    auto status = dbItem->GetStatus(); 
+                    return SetRootUnknown(context.Get(), entry);
+                }
+
+                ui64 domainOwnerId = context->Request->DomainOwnerId;
+                if (!domainOwnerId && context->Request->DatabaseName) {
+                    TCacheItem* dbItem = Cache.FindPtr(CanonizePath(context->Request->DatabaseName));
+                    if (!dbItem) {
+                        return SetRootUnknown(context.Get(), entry);
+                    }
+
+                    auto status = dbItem->GetStatus();
                     if (status && status == NKikimrScheme::StatusPathDoesNotExist) {
-                        return SetPathNotExist(context.Get(), entry); 
-                    } 
- 
+                        return SetPathNotExist(context.Get(), entry);
+                    }
+
                     if (!status || status != NKikimrScheme::StatusSuccess) {
-                        return SetLookupError(context.Get(), entry); 
-                    } 
- 
-                    Y_VERIFY(dbItem->GetDomainInfo()); 
-                    domainOwnerId = dbItem->GetDomainInfo()->ExtractSchemeShard(); 
-                } 
- 
-                if (!domainOwnerId) { 
-                    domainOwnerId = tabletId; 
-                } 
- 
-                cacheItem = &Cache.Upsert(path, TCacheItem(this, CreateSubscriber(path, tabletId, domainOwnerId), false)); 
+                        return SetLookupError(context.Get(), entry);
+                    }
+
+                    Y_VERIFY(dbItem->GetDomainInfo());
+                    domainOwnerId = dbItem->GetDomainInfo()->ExtractSchemeShard();
+                }
+
+                if (!domainOwnerId) {
+                    domainOwnerId = tabletId;
+                }
+
+                cacheItem = &Cache.Upsert(path, TCacheItem(this, CreateSubscriber(path, tabletId, domainOwnerId), false));
                 break;
-            } 
+            }
             case EPathType::SysPath:
                 cacheItem = &Cache.Upsert(path, TCacheItem(this, TSubscriber(), true));
                 cacheItem->FillAsSysPath();
@@ -2064,72 +2064,72 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 cacheItem = &Cache.Upsert(path, TCacheItem(this, TSubscriber(), true));
                 cacheItem->FillAsSysLocks(pathType == EPathType::SysLocksV2);
                 break;
-            } 
-        } 
- 
+            }
+        }
+
         Cache.Promote(path);
 
-        if (cacheItem->IsFilled() && !entry.SyncVersion) { 
-            cacheItem->FillEntry(context.Get(), entry); 
-        } 
- 
+        if (cacheItem->IsFilled() && !entry.SyncVersion) {
+            cacheItem->FillEntry(context.Get(), entry);
+        }
+
         if (entry.SyncVersion) {
             cacheItem->AddInFlight(context, index, true);
-        } 
+        }
 
         if (!cacheItem->IsFilled()) {
             cacheItem->AddInFlight(context, index, false);
         }
-    } 
- 
-    TCacheItem* SwapSubscriberAndUpsert(TCacheItem* byPath, const TPathId& notifyPathId, const TString& notifyPath) { 
-        TSubscriber subscriber = CreateSubscriber(byPath->GetPathId(), byPath->GetSubcriber().DomainOwnerId); 
-        byPath->SwapSubscriber(subscriber); 
- 
-        TCacheItem newItem(this, subscriber, false); 
-        byPath->MoveInFlightNavigateByPathRequests(newItem); 
- 
-        Cache.DeleteIndex(notifyPath); 
-        return &Cache.Upsert(notifyPath, notifyPathId, std::move(newItem)); 
-    } 
- 
-    TCacheItem* ResolveCacheItemCommon(const TPathId& notifyPathId, const TString& notifyPath) { 
+    }
+
+    TCacheItem* SwapSubscriberAndUpsert(TCacheItem* byPath, const TPathId& notifyPathId, const TString& notifyPath) {
+        TSubscriber subscriber = CreateSubscriber(byPath->GetPathId(), byPath->GetSubcriber().DomainOwnerId);
+        byPath->SwapSubscriber(subscriber);
+
+        TCacheItem newItem(this, subscriber, false);
+        byPath->MoveInFlightNavigateByPathRequests(newItem);
+
+        Cache.DeleteIndex(notifyPath);
+        return &Cache.Upsert(notifyPath, notifyPathId, std::move(newItem));
+    }
+
+    TCacheItem* ResolveCacheItemCommon(const TPathId& notifyPathId, const TString& notifyPath) {
         if (!notifyPathId) {
             return Cache.FindPtr(notifyPath);
         }
- 
+
         if (!notifyPath) {
             return Cache.FindPtr(notifyPathId);
         }
- 
+
         TCacheItem* byPath = Cache.FindPtr(notifyPath);
         TCacheItem* byPathId = Cache.FindPtr(notifyPathId);
 
         if (byPath == byPathId) {
             return byPathId;
         }
- 
+
         if (!byPath) {
-            TSubscriber subscriber = CreateSubscriber(notifyPath, notifyPathId.OwnerId, byPathId->GetSubcriber().DomainOwnerId); 
+            TSubscriber subscriber = CreateSubscriber(notifyPath, notifyPathId.OwnerId, byPathId->GetSubcriber().DomainOwnerId);
             return &Cache.Upsert(notifyPath, notifyPathId, TCacheItem(this, subscriber, false));
         }
- 
+
         TCacheItem* byPathByPathId = Cache.FindPtr(byPath->GetPathId());
- 
+
         if (!byPathByPathId) {
             return &Cache.Upsert(notifyPath, notifyPathId, TCacheItem(this, TSubscriber(), false));
         }
- 
+
         Y_VERIFY(byPath == byPathByPathId);
 
         if (!byPath->IsFilled() || byPath->GetPathId().OwnerId == notifyPathId.OwnerId) {
             if (byPath->GetPathId() < notifyPathId) {
-                return SwapSubscriberAndUpsert(byPath, notifyPathId, notifyPath); 
-            } 
+                return SwapSubscriberAndUpsert(byPath, notifyPathId, notifyPath);
+            }
 
             return byPathId;
-        } 
- 
+        }
+
         return nullptr;
     }
 
@@ -2141,10 +2141,10 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         TCacheItem* byPathId = Cache.FindPtr(notify.PathId);
 
         SBC_LOG_D("ResolveCacheItem"
-            << ": self# " << SelfId() 
-            << ", notify# " << notify.ToString() 
-            << ", by path# " << (byPath ? byPath->ToString() : "nullptr") 
-            << ", by pathId# " << (byPathId ? byPathId->ToString() : "nullptr")); 
+            << ": self# " << SelfId()
+            << ", notify# " << notify.ToString()
+            << ", by path# " << (byPath ? byPath->ToString() : "nullptr")
+            << ", by pathId# " << (byPathId ? byPathId->ToString() : "nullptr"));
 
         TCacheItem* commonResolve = ResolveCacheItemCommon(notify.PathId, notify.Path);
         if (commonResolve) {
@@ -2158,8 +2158,8 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         Y_VERIFY(byPath);
         Y_VERIFY(byPathId != byPath);
 
-        if (!byPath->GetDomainId() && notifyDomainId) { 
-            return SwapSubscriberAndUpsert(byPath, notify.PathId, notify.Path); 
+        if (!byPath->GetDomainId() && notifyDomainId) {
+            return SwapSubscriberAndUpsert(byPath, notify.PathId, notify.Path);
         }
 
         SBC_LOG_D("ResolveCacheItemForNotify: subdomain case"
@@ -2169,58 +2169,58 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                   << ", byPath# " << (byPath ? byPath->ToString() : "nullptr")
                   << ", byPathId# " << (byPathId ? byPathId->ToString() : "nullptr"));
 
-        if (byPath->GetDomainId() != notifyDomainId && notifyDomainId) { 
+        if (byPath->GetDomainId() != notifyDomainId && notifyDomainId) {
             SBC_LOG_D("ResolveCacheItemForNotify: recreation domain case"
-                << ": self# " << SelfId() 
-                << ", path# " << notify.Path 
-                << ", pathId# " << notify.PathId 
-                << ", byPath# " << (byPath ? byPath->ToString() : "nullptr") 
-                << ", byPathId# " << (byPathId ? byPathId->ToString() : "nullptr")); 
+                << ": self# " << SelfId()
+                << ", path# " << notify.Path
+                << ", pathId# " << notify.PathId
+                << ", byPath# " << (byPath ? byPath->ToString() : "nullptr")
+                << ", byPathId# " << (byPathId ? byPathId->ToString() : "nullptr"));
 
             if (byPath->GetPathId() < notify.PathId) {
-                return SwapSubscriberAndUpsert(byPath, notify.PathId, notify.Path); 
+                return SwapSubscriberAndUpsert(byPath, notify.PathId, notify.Path);
             }
- 
+
             return byPathId;
         }
 
         if (byPath->GetPathId() == notifyDomainId) { //Update from TSS, GSS->TSS
             if (byPath->GetAbandonedSchemeShardIds().contains(notify.PathId.OwnerId)) {
-                SBC_LOG_D("ResolveCacheItemForNotify: this is update from TSS, the update is ignored, present GSS reverted implicitly that TSS" 
-                    << ": self# " << SelfId() 
-                    << ", path# " << notify.Path 
-                    << ", pathId# " << notify.PathId); 
+                SBC_LOG_D("ResolveCacheItemForNotify: this is update from TSS, the update is ignored, present GSS reverted implicitly that TSS"
+                    << ": self# " << SelfId()
+                    << ", path# " << notify.Path
+                    << ", pathId# " << notify.PathId);
                 return byPathId;
             }
 
-            SBC_LOG_D("ResolveCacheItemForNotify: this is update from TSS, the update owerrides GSS by path" 
-                << ": self# " << SelfId() 
-                << ", path# " << notify.Path 
-                << ", pathId# " << notify.PathId); 
-            return SwapSubscriberAndUpsert(byPath, notify.PathId, notify.Path); 
+            SBC_LOG_D("ResolveCacheItemForNotify: this is update from TSS, the update owerrides GSS by path"
+                << ": self# " << SelfId()
+                << ", path# " << notify.Path
+                << ", pathId# " << notify.PathId);
+            return SwapSubscriberAndUpsert(byPath, notify.PathId, notify.Path);
         }
 
         if (byPath->GetDomainId() == notify.PathId) { //Update from GSS, TSS->GSS
             if (abandonedSchemeShardIds.contains(byPath->GetPathId().OwnerId)) { //GSS reverts TSS
-                SBC_LOG_D("ResolveCacheItemForNotify: this is update from GSS, the update owerrides TSS by path, GSS implicilty reverts that TSS" 
-                    << ": self# " << SelfId() 
-                    << ", path# " << notify.Path 
-                    << ", pathId# " << notify.PathId); 
-                return SwapSubscriberAndUpsert(byPath, notify.PathId, notify.Path); 
+                SBC_LOG_D("ResolveCacheItemForNotify: this is update from GSS, the update owerrides TSS by path, GSS implicilty reverts that TSS"
+                    << ": self# " << SelfId()
+                    << ", path# " << notify.Path
+                    << ", pathId# " << notify.PathId);
+                return SwapSubscriberAndUpsert(byPath, notify.PathId, notify.Path);
             }
 
-            if (!notifyDomainId) { 
-                SBC_LOG_D("ResolveCacheItemForNotify: this is update from GSS that removes TSS" 
-                    << ": self# " << SelfId() 
-                    << ", path# " << notify.Path 
-                    << ", pathId# " << notify.PathId); 
-                return SwapSubscriberAndUpsert(byPath, notify.PathId, notify.Path); 
-            } 
- 
-            SBC_LOG_D("ResolveCacheItemForNotify: this is update from GSS, the update us ignored, TSS is prefered" 
-                << ": self# " << SelfId() 
-                << ", path# " << notify.Path 
-                << ", pathId# " << notify.PathId); 
+            if (!notifyDomainId) {
+                SBC_LOG_D("ResolveCacheItemForNotify: this is update from GSS that removes TSS"
+                    << ": self# " << SelfId()
+                    << ", path# " << notify.Path
+                    << ", pathId# " << notify.PathId);
+                return SwapSubscriberAndUpsert(byPath, notify.PathId, notify.Path);
+            }
+
+            SBC_LOG_D("ResolveCacheItemForNotify: this is update from GSS, the update us ignored, TSS is prefered"
+                << ": self# " << SelfId()
+                << ", path# " << notify.Path
+                << ", pathId# " << notify.PathId);
             return byPathId;
         }
 
@@ -2239,14 +2239,14 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             return byPathId;
         }
 
-        if (!notifyDomainId) { 
+        if (!notifyDomainId) {
             SBC_LOG_D("ResolveCacheItemForNotify: path has gone, update only by pathId"
-                << ": self# " << SelfId() 
-                << ", path# " << notify.Path 
-                << ", pathId# " << notify.PathId); 
-            return byPathId; 
-        } 
- 
+                << ": self# " << SelfId()
+                << ", path# " << notify.Path
+                << ", pathId# " << notify.PathId);
+            return byPathId;
+        }
+
         Y_FAIL_S("Unknown update");
     }
 
@@ -2263,126 +2263,126 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
     }
 
     template <typename TEvent>
-    void HandleNotify(TEvent& ev) { 
-        const TResponseProps response = TResponseProps::FromEvent(ev); 
+    void HandleNotify(TEvent& ev) {
+        const TResponseProps response = TResponseProps::FromEvent(ev);
         auto& notify = *ev->Get();
 
-        SBC_LOG_D("HandleNotify" 
-            << ": self# " << SelfId() 
-            << ", notify# " << notify.ToString()); 
- 
+        SBC_LOG_D("HandleNotify"
+            << ": self# " << SelfId()
+            << ", notify# " << notify.ToString());
+
         if (notify.Path && notify.PathId) {
-            Y_VERIFY(!response.IsSync); 
+            Y_VERIFY(!response.IsSync);
         }
 
         TCacheItem* cacheItem = ResolveCacheItemForNotify(notify);
 
-        if (!cacheItem) { 
+        if (!cacheItem) {
             SBC_LOG_W("HandleNotify doesn't find any cacheItem for Fill"
-                << ": self# " << SelfId() 
-                << ", path# " << notify.Path 
-                << ", pathId# " << notify.PathId 
-                << ", isSync# " << response.IsSync); 
-            return; 
-        } 
- 
-        cacheItem->Fill(notify); 
- 
-        if (!response.IsSync && notify.PathId) { 
-            Y_VERIFY_S(cacheItem->GetPathId() == notify.PathId, "Inconsistent path ids" 
-                << ": cacheItem# " << cacheItem->ToString() 
-                << ", notification# " << notify.ToString()); 
-        } 
- 
-        for (const auto& x : cacheItem->ProcessInFlight(response)) { 
+                << ": self# " << SelfId()
+                << ", path# " << notify.Path
+                << ", pathId# " << notify.PathId
+                << ", isSync# " << response.IsSync);
+            return;
+        }
+
+        cacheItem->Fill(notify);
+
+        if (!response.IsSync && notify.PathId) {
+            Y_VERIFY_S(cacheItem->GetPathId() == notify.PathId, "Inconsistent path ids"
+                << ": cacheItem# " << cacheItem->ToString()
+                << ", notification# " << notify.ToString());
+        }
+
+        for (const auto& x : cacheItem->ProcessInFlight(response)) {
             if (auto* context = std::get_if<TNavigateContextPtr>(&x)) {
-                if (!context->Get()->WaitCounter) { 
-                    Complete(*context); 
-                } 
+                if (!context->Get()->WaitCounter) {
+                    Complete(*context);
+                }
             } else if (auto* context = std::get_if<TResolveContextPtr>(&x)) {
-                if (!context->Get()->WaitCounter) { 
-                    Complete(*context); 
-                } 
-            } else { 
-                Y_FAIL("unknown context type"); 
-            } 
-        } 
-    } 
- 
-    template <typename TEvent> 
-    bool MaybeRunDbResolver(TEvent& ev) { 
-        auto& request = ev->Get()->Request; 
- 
-        if (request->DomainOwnerId) { 
-            return false; 
-        } 
- 
-        if (!request->DatabaseName) { 
-            return false; 
-        } 
- 
-        const auto db = SplitPath(request->DatabaseName); 
-        if (db.empty()) { 
-            return false; 
-        } 
- 
-        const TString databaseName = CanonizePath(db); 
- 
-        TCacheItem* dbItem = Cache.FindPtr(databaseName); 
-        if (dbItem) { 
-            Cache.Promote(databaseName); 
-            if (dbItem->IsFilled()) { 
-                return false; 
-            } 
-        } 
- 
-        auto it = Roots.find(db.front()); 
-        if (it == Roots.end()) { 
-            return false; 
-        } 
- 
+                if (!context->Get()->WaitCounter) {
+                    Complete(*context);
+                }
+            } else {
+                Y_FAIL("unknown context type");
+            }
+        }
+    }
+
+    template <typename TEvent>
+    bool MaybeRunDbResolver(TEvent& ev) {
+        auto& request = ev->Get()->Request;
+
+        if (request->DomainOwnerId) {
+            return false;
+        }
+
+        if (!request->DatabaseName) {
+            return false;
+        }
+
+        const auto db = SplitPath(request->DatabaseName);
+        if (db.empty()) {
+            return false;
+        }
+
+        const TString databaseName = CanonizePath(db);
+
+        TCacheItem* dbItem = Cache.FindPtr(databaseName);
+        if (dbItem) {
+            Cache.Promote(databaseName);
+            if (dbItem->IsFilled()) {
+                return false;
+            }
+        }
+
+        auto it = Roots.find(db.front());
+        if (it == Roots.end()) {
+            return false;
+        }
+
         Register(CreateDbResolver(SelfId(), ev->Sender, THolder(request.Release()), it->second));
-        return true; 
-    } 
- 
-    template <typename TContextPtr> 
-    void MaybeComplete(TContextPtr context) { 
-        Counters.StartRequest( 
-            context->Request->ResultSet.size(), 
-            context->WaitCounter, 
-            Accumulate(context->Request->ResultSet, 0, [](ui64 sum, const auto& entry) { 
-                return sum + ui64(entry.SyncVersion); 
-            }) 
-        ); 
- 
-        if (!context->WaitCounter) { 
-            Complete(context); 
-        } 
-    } 
- 
-    template <typename TContextPtr> 
-    void Complete(TContextPtr context) { 
-        Counters.FinishRequest(Now() - context->CreatedAt); 
-        Register(CreateAclChecker(context)); 
-    } 
- 
-    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySet::TPtr& ev) { 
-        SBC_LOG_D("Handle TEvTxProxySchemeCache::TEvNavigateKeySet" 
-            << ": self# " << SelfId() 
+        return true;
+    }
+
+    template <typename TContextPtr>
+    void MaybeComplete(TContextPtr context) {
+        Counters.StartRequest(
+            context->Request->ResultSet.size(),
+            context->WaitCounter,
+            Accumulate(context->Request->ResultSet, 0, [](ui64 sum, const auto& entry) {
+                return sum + ui64(entry.SyncVersion);
+            })
+        );
+
+        if (!context->WaitCounter) {
+            Complete(context);
+        }
+    }
+
+    template <typename TContextPtr>
+    void Complete(TContextPtr context) {
+        Counters.FinishRequest(Now() - context->CreatedAt);
+        Register(CreateAclChecker(context));
+    }
+
+    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySet::TPtr& ev) {
+        SBC_LOG_D("Handle TEvTxProxySchemeCache::TEvNavigateKeySet"
+            << ": self# " << SelfId()
             << ", request# " << ev->Get()->Request->ToString(*AppData()->TypeRegistry));
- 
-        if (MaybeRunDbResolver(ev)) { 
-            return; 
-        } 
- 
-        TIntrusivePtr<TNavigateContext> context(new TNavigateContext(ev->Sender, ev->Get()->Request, Now())); 
+
+        if (MaybeRunDbResolver(ev)) {
+            return;
+        }
+
+        TIntrusivePtr<TNavigateContext> context(new TNavigateContext(ev->Sender, ev->Get()->Request, Now()));
 
         for (size_t i = 0; i < context->Request->ResultSet.size(); ++i) {
             auto& entry = context->Request->ResultSet[i];
- 
+
             if (entry.RequestType == TNavigate::TEntry::ERequestType::ByPath) {
                 auto pathExtractor = [this](TNavigate::TEntry& entry) {
-                    if (AppData()->FeatureFlags.GetEnableSystemViews() 
+                    if (AppData()->FeatureFlags.GetEnableSystemViews()
                         && (entry.Operation == TNavigate::OpPath || entry.Operation == TNavigate::OpTable))
                     {
                         NSysView::ISystemViewResolver::TSystemViewPath sysViewPath;
@@ -2391,7 +2391,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                             return CanonizePath(sysViewPath.Parent);
                         }
                     }
- 
+
                     TString path = CanonizePath(entry.Path);
                     return path ? path : TString("/");
                 };
@@ -2420,47 +2420,47 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 };
 
                 HandleEntry(context, entry, i, pathExtractor, tabletIdExtractor);
-            } 
+            }
         }
- 
-        MaybeComplete(context); 
-    } 
- 
-    void Handle(TEvTxProxySchemeCache::TEvResolveKeySet::TPtr& ev) { 
-        SBC_LOG_D("Handle TEvTxProxySchemeCache::TEvResolveKeySet" 
-            << ": self# " << SelfId() 
-            << ", request# " << ev->Get()->Request->ToString(*AppData()->TypeRegistry)); 
- 
-        if (MaybeRunDbResolver(ev)) { 
-            return; 
-        } 
- 
-        TIntrusivePtr<TResolveContext> context(new TResolveContext(ev->Sender, ev->Get()->Request, Now())); 
 
-        auto pathExtractor = [](const TResolve::TEntry& entry) { 
-            const TKeyDesc* keyDesc = entry.KeyDescription.Get(); 
-            Y_VERIFY(keyDesc != nullptr); 
+        MaybeComplete(context);
+    }
+
+    void Handle(TEvTxProxySchemeCache::TEvResolveKeySet::TPtr& ev) {
+        SBC_LOG_D("Handle TEvTxProxySchemeCache::TEvResolveKeySet"
+            << ": self# " << SelfId()
+            << ", request# " << ev->Get()->Request->ToString(*AppData()->TypeRegistry));
+
+        if (MaybeRunDbResolver(ev)) {
+            return;
+        }
+
+        TIntrusivePtr<TResolveContext> context(new TResolveContext(ev->Sender, ev->Get()->Request, Now()));
+
+        auto pathExtractor = [](const TResolve::TEntry& entry) {
+            const TKeyDesc* keyDesc = entry.KeyDescription.Get();
+            Y_VERIFY(keyDesc != nullptr);
             return TPathId(keyDesc->TableId.PathId);
-        }; 
- 
-        auto tabletIdExtractor = [](const TResolve::TEntry& entry) { 
+        };
+
+        auto tabletIdExtractor = [](const TResolve::TEntry& entry) {
             return entry.KeyDescription->TableId.PathId.OwnerId;
-        }; 
- 
+        };
+
         for (size_t i = 0; i < context->Request->ResultSet.size(); ++i) {
             auto& entry = context->Request->ResultSet[i];
             HandleEntry(context, entry, i, pathExtractor, tabletIdExtractor);
         }
 
-        MaybeComplete(context); 
-    } 
- 
-    void Handle(TEvTxProxySchemeCache::TEvInvalidateTable::TPtr& ev) { 
-        SBC_LOG_D("Handle TEvTxProxySchemeCache::TEvInvalidateTable" 
-            << ": self# " << SelfId()); 
-        Send(ev->Sender, new TEvTxProxySchemeCache::TEvInvalidateTableResult(ev->Get()->Sender)); 
-    } 
- 
+        MaybeComplete(context);
+    }
+
+    void Handle(TEvTxProxySchemeCache::TEvInvalidateTable::TPtr& ev) {
+        SBC_LOG_D("Handle TEvTxProxySchemeCache::TEvInvalidateTable"
+            << ": self# " << SelfId());
+        Send(ev->Sender, new TEvTxProxySchemeCache::TEvInvalidateTableResult(ev->Get()->Sender));
+    }
+
     TActorId EnsureWatchCache() {
         if (!WatchCache) {
             WatchCache = Register(new TWatchCache());
@@ -2480,114 +2480,114 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         TActivationContext::Send(ev.Release());
     }
 
-    void Handle(TSchemeBoardMonEvents::TEvInfoRequest::TPtr& ev) { 
-        auto response = MakeHolder<TSchemeBoardMonEvents::TEvInfoResponse>(SelfId(), ActorActivityType()); 
-        auto& record = *response->Record.MutableCacheResponse(); 
- 
-        record.SetItemsTotalCount(Cache.Size()); 
-        record.SetItemsByPathCount(Cache.GetPrimaryIndex().size()); 
-        record.SetItemsByPathIdCount(Cache.GetSecondaryIndex().size()); 
- 
-        Send(ev->Sender, std::move(response), 0, ev->Cookie); 
-    } 
- 
-    void Handle(TSchemeBoardMonEvents::TEvDescribeRequest::TPtr& ev) { 
-        const auto& record = ev->Get()->Record; 
- 
-        TCacheItem* desc = nullptr; 
-        if (record.HasPath()) { 
-            desc = Cache.FindPtr(record.GetPath()); 
-        } else if (record.HasPathId()) { 
-            desc = Cache.FindPtr(TPathId(record.GetPathId().GetOwnerId(), record.GetPathId().GetLocalPathId())); 
-        } 
- 
-        Send(ev->Sender, new TSchemeBoardMonEvents::TEvDescribeResponse(desc ? desc->ToJsonString() : "{}"), 0, ev->Cookie); 
-    } 
- 
-    void ShrinkCache() { 
-        if (Cache.Shrink()) { 
-            Send(SelfId(), new TEvents::TEvWakeup()); 
-        } else { 
-            Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup()); 
-        } 
-    } 
- 
-    void PassAway() override { 
-        auto evicter = [](const auto& index) { 
-            for (auto it = index.begin(); it != index.end(); ++it) { 
-                it->second->Value.OnEvict(); 
-            } 
-        }; 
- 
-        evicter(Cache.GetPrimaryIndex()); 
-        evicter(Cache.GetSecondaryIndex()); 
- 
+    void Handle(TSchemeBoardMonEvents::TEvInfoRequest::TPtr& ev) {
+        auto response = MakeHolder<TSchemeBoardMonEvents::TEvInfoResponse>(SelfId(), ActorActivityType());
+        auto& record = *response->Record.MutableCacheResponse();
+
+        record.SetItemsTotalCount(Cache.Size());
+        record.SetItemsByPathCount(Cache.GetPrimaryIndex().size());
+        record.SetItemsByPathIdCount(Cache.GetSecondaryIndex().size());
+
+        Send(ev->Sender, std::move(response), 0, ev->Cookie);
+    }
+
+    void Handle(TSchemeBoardMonEvents::TEvDescribeRequest::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+
+        TCacheItem* desc = nullptr;
+        if (record.HasPath()) {
+            desc = Cache.FindPtr(record.GetPath());
+        } else if (record.HasPathId()) {
+            desc = Cache.FindPtr(TPathId(record.GetPathId().GetOwnerId(), record.GetPathId().GetLocalPathId()));
+        }
+
+        Send(ev->Sender, new TSchemeBoardMonEvents::TEvDescribeResponse(desc ? desc->ToJsonString() : "{}"), 0, ev->Cookie);
+    }
+
+    void ShrinkCache() {
+        if (Cache.Shrink()) {
+            Send(SelfId(), new TEvents::TEvWakeup());
+        } else {
+            Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup());
+        }
+    }
+
+    void PassAway() override {
+        auto evicter = [](const auto& index) {
+            for (auto it = index.begin(); it != index.end(); ++it) {
+                it->second->Value.OnEvict();
+            }
+        };
+
+        evicter(Cache.GetPrimaryIndex());
+        evicter(Cache.GetSecondaryIndex());
+
         if (WatchCache) {
             Send(WatchCache, new TEvents::TEvPoison);
             WatchCache = { };
         }
 
-        TMonitorableActor::PassAway(); 
-    } 
- 
-public: 
+        TMonitorableActor::PassAway();
+    }
+
+public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::PROXY_SCHEME_CACHE;
-    } 
- 
-    TSchemeCache(NSchemeCache::TSchemeCacheConfig* config) 
-        : Counters(config->Counters) 
-        , Cache(TDuration::Minutes(2), TThis::Now) 
+    }
+
+    TSchemeCache(NSchemeCache::TSchemeCacheConfig* config)
+        : Counters(config->Counters)
+        , Cache(TDuration::Minutes(2), TThis::Now)
         , SystemViewResolver(NSysView::CreateSystemViewResolver())
-    { 
-        for (const auto& root : config->Roots) { 
-            Roots.emplace(root.Name, root.RootSchemeShard); 
-        } 
-    } 
- 
-    void Bootstrap() { 
-        TMonitorableActor::Bootstrap(); 
- 
-        Become(&TThis::StateWork); 
-        ShrinkCache(); 
-    } 
- 
-    STATEFN(StateWork) { 
-        switch (ev->GetTypeRewrite()) { 
-            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySet, Handle); 
-            hFunc(TEvTxProxySchemeCache::TEvResolveKeySet, Handle); 
-            hFunc(TEvTxProxySchemeCache::TEvInvalidateTable, Handle); 
- 
+    {
+        for (const auto& root : config->Roots) {
+            Roots.emplace(root.Name, root.RootSchemeShard);
+        }
+    }
+
+    void Bootstrap() {
+        TMonitorableActor::Bootstrap();
+
+        Become(&TThis::StateWork);
+        ShrinkCache();
+    }
+
+    STATEFN(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySet, Handle);
+            hFunc(TEvTxProxySchemeCache::TEvResolveKeySet, Handle);
+            hFunc(TEvTxProxySchemeCache::TEvInvalidateTable, Handle);
+
             hFunc(TEvTxProxySchemeCache::TEvWatchPathId, Handle);
             hFunc(TEvTxProxySchemeCache::TEvWatchRemove, Handle);
 
-            hFunc(TSchemeBoardEvents::TEvNotifyUpdate, HandleNotify); 
-            hFunc(TSchemeBoardEvents::TEvNotifyDelete, HandleNotify); 
-            hFunc(TSchemeBoardEvents::TEvSyncResponse, HandleNotify); 
- 
-            hFunc(TSchemeBoardMonEvents::TEvInfoRequest, Handle); 
-            hFunc(TSchemeBoardMonEvents::TEvDescribeRequest, Handle); 
- 
-            sFunc(TEvents::TEvWakeup, ShrinkCache); 
-            sFunc(TEvents::TEvPoison, PassAway); 
-        } 
-    } 
- 
-private: 
-    THashMap<TString, ui64> Roots; 
-    TCounters Counters; 
- 
-    TDoubleIndexedCache<TString, TPathId, TCacheItem, TMerger, TEvicter> Cache; 
+            hFunc(TSchemeBoardEvents::TEvNotifyUpdate, HandleNotify);
+            hFunc(TSchemeBoardEvents::TEvNotifyDelete, HandleNotify);
+            hFunc(TSchemeBoardEvents::TEvSyncResponse, HandleNotify);
+
+            hFunc(TSchemeBoardMonEvents::TEvInfoRequest, Handle);
+            hFunc(TSchemeBoardMonEvents::TEvDescribeRequest, Handle);
+
+            sFunc(TEvents::TEvWakeup, ShrinkCache);
+            sFunc(TEvents::TEvPoison, PassAway);
+        }
+    }
+
+private:
+    THashMap<TString, ui64> Roots;
+    TCounters Counters;
+
+    TDoubleIndexedCache<TString, TPathId, TCacheItem, TMerger, TEvicter> Cache;
     THolder<NSysView::ISystemViewResolver> SystemViewResolver;
- 
+
     TActorId WatchCache;
 
-}; // TSchemeCache 
- 
-} // NSchemeBoard 
- 
-IActor* CreateSchemeBoardSchemeCache(NSchemeCache::TSchemeCacheConfig* config) { 
-    return new NSchemeBoard::TSchemeCache(config); 
-} 
- 
-} // NKikimr 
+}; // TSchemeCache
+
+} // NSchemeBoard
+
+IActor* CreateSchemeBoardSchemeCache(NSchemeCache::TSchemeCacheConfig* config) {
+    return new NSchemeBoard::TSchemeCache(config);
+}
+
+} // NKikimr

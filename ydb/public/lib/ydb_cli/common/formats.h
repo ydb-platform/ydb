@@ -1,9 +1,9 @@
-#pragma once 
- 
-namespace NYdb { 
-namespace NConsoleClient { 
- 
-enum class EOutputFormat { 
+#pragma once
+
+namespace NYdb {
+namespace NConsoleClient {
+
+enum class EOutputFormat {
     Default /* "default" */,
     Pretty /* "pretty" */,
     Json /* "json" (deprecated) */,
@@ -14,7 +14,7 @@ enum class EOutputFormat {
     ProtoJsonBase64 /* "proto-json-base64" */,
     Csv /* "csv" */,
     Tsv /* "tsv" */,
-}; 
- 
-} 
-} 
+};
+
+}
+}

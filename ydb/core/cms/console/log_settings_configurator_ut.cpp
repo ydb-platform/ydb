@@ -62,12 +62,12 @@ NKikimrConsole::TConfigItem ITEM_TENANT2_TYPE1_LOG_1;
 TVector<TComponentSettings>
 InitLogSettingsConfigurator(TTenantTestRuntime &runtime)
 {
-    CheckCreateTenant(runtime, Ydb::StatusIds::SUCCESS, 
-        TCreateTenantRequest(TENANT1_1_NAME) 
-            .WithPools({{"hdd", 1}})); 
-    CheckCreateTenant(runtime, Ydb::StatusIds::SUCCESS, 
-        TCreateTenantRequest(TENANT1_2_NAME) 
-            .WithPools({{"hdd", 1}})); 
+    CheckCreateTenant(runtime, Ydb::StatusIds::SUCCESS,
+        TCreateTenantRequest(TENANT1_1_NAME)
+            .WithPools({{"hdd", 1}}));
+    CheckCreateTenant(runtime, Ydb::StatusIds::SUCCESS,
+        TCreateTenantRequest(TENANT1_2_NAME)
+            .WithPools({{"hdd", 1}}));
 
     ChangeTenant(runtime, TENANT1_1_NAME);
 

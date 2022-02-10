@@ -1,4 +1,4 @@
-#include "change_collector.h" 
+#include "change_collector.h"
 #include "datashard_impl.h"
 #include "datashard__engine_host.h"
 #include "sys_tables.h"
@@ -278,7 +278,7 @@ TIntrusivePtr<TThrRefBase> InitDataShardSysTables(TDataShard* self) {
 }
 
 ///
-class TDataShardEngineHost : public TEngineHost { 
+class TDataShardEngineHost : public TEngineHost {
 public:
     TDataShardEngineHost(TDataShard* self, NTable::TDatabase& db, TEngineHostCounters& counters, ui64& lockTxId, TInstant now)
         : TEngineHost(db, counters,
@@ -312,40 +312,40 @@ public:
         return ReadVersion;
     }
 
-    void SetIsImmediateTx() { 
-        IsImmediateTx = true; 
-    } 
- 
-    IChangeCollector* GetChangeCollector(const TTableId& tableId) const override { 
-        auto it = ChangeCollectors.find(tableId); 
-        if (it != ChangeCollectors.end()) { 
-            return it->second.Get(); 
-        } 
- 
-        it = ChangeCollectors.emplace(tableId, nullptr).first; 
-        if (!Self->IsUserTable(tableId)) { 
-            return it->second.Get(); 
-        } 
- 
-        it->second.Reset(CreateChangeCollector(*Self, DB, tableId.PathId.LocalPathId, IsImmediateTx)); 
-        return it->second.Get(); 
-    } 
- 
-    TVector<IChangeCollector::TChange> GetCollectedChanges() const { 
-        TVector<IChangeCollector::TChange> total; 
- 
-        for (auto& [_, collector] : ChangeCollectors) { 
-            if (!collector) { 
-                continue; 
-            } 
- 
-            auto collected = std::move(collector->GetCollected()); 
-            std::move(collected.begin(), collected.end(), std::back_inserter(total)); 
-        } 
- 
-        return total; 
-    } 
- 
+    void SetIsImmediateTx() {
+        IsImmediateTx = true;
+    }
+
+    IChangeCollector* GetChangeCollector(const TTableId& tableId) const override {
+        auto it = ChangeCollectors.find(tableId);
+        if (it != ChangeCollectors.end()) {
+            return it->second.Get();
+        }
+
+        it = ChangeCollectors.emplace(tableId, nullptr).first;
+        if (!Self->IsUserTable(tableId)) {
+            return it->second.Get();
+        }
+
+        it->second.Reset(CreateChangeCollector(*Self, DB, tableId.PathId.LocalPathId, IsImmediateTx));
+        return it->second.Get();
+    }
+
+    TVector<IChangeCollector::TChange> GetCollectedChanges() const {
+        TVector<IChangeCollector::TChange> total;
+
+        for (auto& [_, collector] : ChangeCollectors) {
+            if (!collector) {
+                continue;
+            }
+
+            auto collected = std::move(collector->GetCollected());
+            std::move(collected.begin(), collected.end(), std::back_inserter(total));
+        }
+
+        return total;
+    }
+
     bool IsValidKey(TKeyDesc& key, std::pair<ui64, ui64>& maxSnapshotTime) const override {
         if (TSysTables::IsSystemTable(key.TableId))
             return DataShardSysTable(key.TableId).IsValidKey(key);
@@ -359,7 +359,7 @@ public:
     }
 
     NUdf::TUnboxedValue SelectRow(const TTableId& tableId, const TArrayRef<const TCell>& row,
-        TStructLiteral* columnIds, TOptionalType* returnType, const TReadTarget& readTarget, 
+        TStructLiteral* columnIds, TOptionalType* returnType, const TReadTarget& readTarget,
         const THolderFactory& holderFactory) override
     {
         if (TSysTables::IsSystemTable(tableId)) {
@@ -499,11 +499,11 @@ private:
     TDataShard* Self;
     NTable::TDatabase& DB;
     const ui64& LockTxId;
-    bool IsImmediateTx = false; 
+    bool IsImmediateTx = false;
     TInstant Now;
     TRowVersion WriteVersion = TRowVersion::Max();
     TRowVersion ReadVersion = TRowVersion::Min();
-    mutable THashMap<TTableId, THolder<IChangeCollector>> ChangeCollectors; 
+    mutable THashMap<TTableId, THolder<IChangeCollector>> ChangeCollectors;
 };
 
 //
@@ -656,21 +656,21 @@ void TEngineBay::SetReadVersion(TRowVersion readVersion) {
     ComputeCtx->SetReadVersion(readVersion);
 }
 
-void TEngineBay::SetIsImmediateTx() { 
-    Y_VERIFY(EngineHost); 
- 
+void TEngineBay::SetIsImmediateTx() {
+    Y_VERIFY(EngineHost);
+
     auto* host = static_cast<TDataShardEngineHost*>(EngineHost.Get());
-    host->SetIsImmediateTx(); 
-} 
- 
-TVector<IChangeCollector::TChange> TEngineBay::GetCollectedChanges() const { 
-    Y_VERIFY(EngineHost); 
- 
+    host->SetIsImmediateTx();
+}
+
+TVector<IChangeCollector::TChange> TEngineBay::GetCollectedChanges() const {
+    Y_VERIFY(EngineHost);
+
     auto* host = static_cast<TDataShardEngineHost*>(EngineHost.Get());
-    return host->GetCollectedChanges(); 
-} 
- 
-IEngineFlat * TEngineBay::GetEngine() { 
+    return host->GetCollectedChanges();
+}
+
+IEngineFlat * TEngineBay::GetEngine() {
     if (!Engine) {
         Engine = CreateEngineFlat(*EngineSettings);
         Engine->SetStepTxId(StepTxId);
@@ -710,10 +710,10 @@ NKqp::TKqpTasksRunner& TEngineBay::GetKqpTasksRunner(const NKikimrTxDataShard::T
     return *KqpTasksRunner;
 }
 
-TKqpDatashardComputeContext& TEngineBay::GetKqpComputeCtx() { 
+TKqpDatashardComputeContext& TEngineBay::GetKqpComputeCtx() {
     Y_VERIFY(ComputeCtx);
     return *ComputeCtx;
 }
 
-} // NDataShard 
-} // NKikimr 
+} // NDataShard
+} // NKikimr

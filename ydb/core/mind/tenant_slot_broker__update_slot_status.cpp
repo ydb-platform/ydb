@@ -58,7 +58,7 @@ public:
             LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,
                         "Taking ownership of tenant pool on node " << nodeId);
 
-            ctx.Send(MakeTenantPoolID(nodeId, Self->DomainId), new TEvTenantPool::TEvTakeOwnership(Self->Generation())); 
+            ctx.Send(MakeTenantPoolID(nodeId, Self->DomainId), new TEvTenantPool::TEvTakeOwnership(Self->Generation()));
             return true;
         }
 
@@ -75,10 +75,10 @@ public:
             LOG_ERROR_S(ctx, NKikimrServices::TENANT_SLOT_BROKER, slot->IdString(true)
                         << " cannot be assigned to tenant: " << rec.GetError());
 
-            Modified = false; // prevent infinite loop (attach-detach-attach...) 
-            if (slot->AssignedTenant) { 
-                slot->AssignedTenant->GetAllocation(slot->UsedAs)->DecPending(); 
-            } 
+            Modified = false; // prevent infinite loop (attach-detach-attach...)
+            if (slot->AssignedTenant) {
+                slot->AssignedTenant->GetAllocation(slot->UsedAs)->DecPending();
+            }
             Self->DetachSlotNoConfigure(slot, txc);
             return true;
         }

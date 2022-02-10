@@ -522,7 +522,7 @@ void CopyInfo(TDstMap& dst, TDeletedSet& deleted, const TSrcMap& src, TChangedSe
 }
 
 void TBlobStorageController::UpdateSystemViews() {
-    if (!AppData()->FeatureFlags.GetEnableSystemViews()) { 
+    if (!AppData()->FeatureFlags.GetEnableSystemViews()) {
         return;
     }
 

@@ -89,27 +89,27 @@ struct TTxState {
         item(TxCreateFileStore, 44) \
         item(TxAlterFileStore, 45) \
         item(TxDropFileStore, 46) \
-        item(TxRestore, 47) \ 
+        item(TxRestore, 47) \
         item(TxCreateOlapStore, 48) \
         item(TxAlterOlapStore, 49) \
         item(TxDropOlapStore, 50) \
         item(TxCreateOlapTable, 51) \
         item(TxAlterOlapTable, 52) \
         item(TxDropOlapTable, 53) \
-        item(TxCreateCdcStream, 54) \ 
-        item(TxCreateCdcStreamAtTable, 55) \ 
-        item(TxAlterCdcStream, 56) \ 
-        item(TxAlterCdcStreamAtTable, 57) \ 
-        item(TxDropCdcStream, 58) \ 
-        item(TxDropCdcStreamAtTable, 59) \ 
+        item(TxCreateCdcStream, 54) \
+        item(TxCreateCdcStreamAtTable, 55) \
+        item(TxAlterCdcStream, 56) \
+        item(TxAlterCdcStreamAtTable, 57) \
+        item(TxDropCdcStream, 58) \
+        item(TxDropCdcStreamAtTable, 59) \
         item(TxMoveTable, 60) \
         item(TxMoveTableIndex, 61) \
         item(TxCreateSequence, 62) \
         item(TxAlterSequence, 63) \
         item(TxDropSequence, 64) \
-        item(TxCreateReplication, 65) \ 
-        item(TxAlterReplication, 66) \ 
-        item(TxDropReplication, 67) \ 
+        item(TxCreateReplication, 65) \
+        item(TxAlterReplication, 66) \
+        item(TxDropReplication, 67) \
 
     // TX_STATE_TYPE_ENUM
 
@@ -163,7 +163,7 @@ struct TTxState {
         item(ProposedDeleteParts, 130, "") \
         item(TransferData, 131, "") \
         item(NotifyPartitioningChanged, 132, "") \
-        item(Aborting, 133, "") \ 
+        item(Aborting, 133, "") \
         item(DeleteExternalShards, 134, "") \
         item(DeletePrivateShards, 135, "") \
         item(WaitShadowPathPublication, 136, "") \
@@ -201,28 +201,28 @@ struct TTxState {
         {}
     };
 
-    struct TShardStatus { 
-        bool Success = false; 
-        TString Error; 
-        ui64 BytesProcessed = 0; 
-        ui64 RowsProcessed = 0; 
- 
-        TShardStatus() = default; 
- 
-        explicit TShardStatus(bool success, const TString& error, ui64 bytes, ui64 rows) 
-            : Success(success) 
-            , Error(error) 
-            , BytesProcessed(bytes) 
-            , RowsProcessed(rows) 
-        { 
-        } 
- 
-        explicit TShardStatus(const TString& error) 
-            : TShardStatus(false, error, 0, 0) 
-        { 
-        } 
-    }; 
- 
+    struct TShardStatus {
+        bool Success = false;
+        TString Error;
+        ui64 BytesProcessed = 0;
+        ui64 RowsProcessed = 0;
+
+        TShardStatus() = default;
+
+        explicit TShardStatus(bool success, const TString& error, ui64 bytes, ui64 rows)
+            : Success(success)
+            , Error(error)
+            , BytesProcessed(bytes)
+            , RowsProcessed(rows)
+        {
+        }
+
+        explicit TShardStatus(const TString& error)
+            : TShardStatus(false, error, 0, 0)
+        {
+        }
+    };
+
     // persist - TxInFlight:
     ETxType TxType = TxInvalid;
     TPathId TargetPathId = InvalidPathId;           // path (dir or table) being modified
@@ -240,10 +240,10 @@ struct TTxState {
     std::shared_ptr<NKikimrTxDataShard::TSplitMergeDescription> SplitDescription;
     bool TxShardsListFinalized = false;
     TTxId BuildIndexId;
-    // fields below used for backup/restore 
-    bool Cancel = false; 
-    THashMap<TShardIdx, TShardStatus> ShardStatuses; 
-    ui64 DataTotalSize = 0; 
+    // fields below used for backup/restore
+    bool Cancel = false;
+    THashMap<TShardIdx, TShardStatus> ShardStatuses;
+    ui64 DataTotalSize = 0;
 
 
     TMessageSeqNo SchemeOpSeqNo;       // For SS -> DS propose events
@@ -305,12 +305,12 @@ struct TTxState {
         case TxCreateRtmrVolume:
         case TxCreateTableIndex:
         case TxFillIndex:
-        case TxCreateCdcStream: 
+        case TxCreateCdcStream:
         case TxCreateSequence:
-        case TxCreateReplication: 
+        case TxCreateReplication:
             return true;
         case TxInitializeBuildIndex: //this is more like alter
-        case TxCreateCdcStreamAtTable: 
+        case TxCreateCdcStreamAtTable:
             return false;
         case TxCreateLockForIndexBuild: //this is more like alter
         case TxDropLock: //this is more like alter
@@ -330,10 +330,10 @@ struct TTxState {
         case TxRmDir:
         case TxFinalizeBuildIndex:
         case TxDropTableIndexAtMainTable:
-        case TxDropCdcStream: 
-        case TxDropCdcStreamAtTable: 
+        case TxDropCdcStream:
+        case TxDropCdcStreamAtTable:
         case TxDropSequence:
-        case TxDropReplication: 
+        case TxDropReplication:
             return false;
         case TxAlterPQGroup:
         case TxAlterTable:
@@ -343,7 +343,7 @@ struct TTxState {
         case TxSplitTablePartition:
         case TxMergeTablePartition:
         case TxBackup:
-        case TxRestore: 
+        case TxRestore:
         case TxAlterBlockStoreVolume:
         case TxAssignBlockStoreVolume:
         case TxAlterFileStore:
@@ -355,10 +355,10 @@ struct TTxState {
         case TxAlterUserAttributes:
         case TxAlterTableIndex:
         case TxAlterSolomonVolume:
-        case TxAlterCdcStream: 
-        case TxAlterCdcStreamAtTable: 
+        case TxAlterCdcStream:
+        case TxAlterCdcStreamAtTable:
         case TxAlterSequence:
-        case TxAlterReplication: 
+        case TxAlterReplication:
             return false;
         case TxMoveTable:
         case TxMoveTableIndex:
@@ -384,9 +384,9 @@ struct TTxState {
         case TxDropTableIndex:
         case TxDropSolomonVolume:
         case TxRmDir:
-        case TxDropCdcStream: 
+        case TxDropCdcStream:
         case TxDropSequence:
-        case TxDropReplication: 
+        case TxDropReplication:
             return true;
         case TxMkDir:
         case TxCreateTable:
@@ -403,16 +403,16 @@ struct TTxState {
         case TxCreateRtmrVolume:
         case TxCreateTableIndex:
         case TxFillIndex:
-        case TxCreateCdcStream: 
-        case TxCreateCdcStreamAtTable: 
+        case TxCreateCdcStream:
+        case TxCreateCdcStreamAtTable:
         case TxCreateSequence:
-        case TxCreateReplication: 
+        case TxCreateReplication:
         case TxInitializeBuildIndex:
         case TxCreateLockForIndexBuild:
         case TxDropLock:
         case TxFinalizeBuildIndex:
         case TxDropTableIndexAtMainTable: // just increments schemaversion at main table
-        case TxDropCdcStreamAtTable: 
+        case TxDropCdcStreamAtTable:
             return false;
         case TxAlterPQGroup:
         case TxAlterTable:
@@ -422,7 +422,7 @@ struct TTxState {
         case TxSplitTablePartition:
         case TxMergeTablePartition:
         case TxBackup:
-        case TxRestore: 
+        case TxRestore:
         case TxAlterBlockStoreVolume:
         case TxAssignBlockStoreVolume:
         case TxAlterFileStore:
@@ -434,10 +434,10 @@ struct TTxState {
         case TxAlterUserAttributes:
         case TxAlterTableIndex:
         case TxAlterSolomonVolume:
-        case TxAlterCdcStream: 
-        case TxAlterCdcStreamAtTable: 
+        case TxAlterCdcStream:
+        case TxAlterCdcStreamAtTable:
         case TxAlterSequence:
-        case TxAlterReplication: 
+        case TxAlterReplication:
             return false;
         case TxMoveTable:
         case TxMoveTableIndex:
@@ -463,9 +463,9 @@ struct TTxState {
         case TxDropSolomonVolume:
         case TxSplitTablePartition:
         case TxMergeTablePartition:
-        case TxDropCdcStream: 
+        case TxDropCdcStream:
         case TxDropSequence:
-        case TxDropReplication: 
+        case TxDropReplication:
             return true;
         case TxDropTableIndex:
         case TxRmDir:
@@ -485,15 +485,15 @@ struct TTxState {
         case TxCreateSolomonVolume:
         case TxCreateRtmrVolume:
         case TxCreateTableIndex:
-        case TxCreateCdcStream: 
-        case TxCreateCdcStreamAtTable: 
+        case TxCreateCdcStream:
+        case TxCreateCdcStreamAtTable:
         case TxCreateSequence:
-        case TxCreateReplication: 
+        case TxCreateReplication:
         case TxInitializeBuildIndex:
         case TxCreateLockForIndexBuild:
         case TxDropLock:
         case TxDropTableIndexAtMainTable:
-        case TxDropCdcStreamAtTable: 
+        case TxDropCdcStreamAtTable:
             return false;
         case TxAlterPQGroup:
         case TxAlterTable:
@@ -501,7 +501,7 @@ struct TTxState {
         case TxAlterOlapTable:
         case TxModifyACL:
         case TxBackup:
-        case TxRestore: 
+        case TxRestore:
         case TxAlterBlockStoreVolume:
         case TxAssignBlockStoreVolume:
         case TxAlterFileStore:
@@ -514,12 +514,12 @@ struct TTxState {
         case TxFillIndex:
         case TxAlterTableIndex:
         case TxAlterSolomonVolume:
-        case TxAlterCdcStream: 
-        case TxAlterCdcStreamAtTable: 
+        case TxAlterCdcStream:
+        case TxAlterCdcStreamAtTable:
         case TxMoveTable:
         case TxMoveTableIndex:
         case TxAlterSequence:
-        case TxAlterReplication: 
+        case TxAlterReplication:
             return false;
         case TxInvalid:
             Y_VERIFY_DEBUG("UNREACHEBLE");

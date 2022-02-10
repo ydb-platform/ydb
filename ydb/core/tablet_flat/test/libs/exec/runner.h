@@ -148,7 +148,7 @@ namespace NFake {
                 }
 
                 {
-                    auto *actor = CreateStateStorageProxy(info, nullptr, nullptr); 
+                    auto *actor = CreateStateStorageProxy(info, nullptr, nullptr);
 
                     AddService(MakeStateStorageProxyID(0), actor, TMailboxType::Revolving);
                 }

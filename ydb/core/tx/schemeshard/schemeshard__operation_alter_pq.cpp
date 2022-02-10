@@ -12,8 +12,8 @@ using namespace NKikimr;
 using namespace NSchemeShard;
 
 class TAlterPQ: public TSubOperation {
-    const TOperationId OperationId; 
-    const TTxTransaction Transaction; 
+    const TOperationId OperationId;
+    const TTxTransaction Transaction;
     TTxState::ETxState State = TTxState::Invalid;
 
     TTxState::ETxState NextState() {
@@ -27,8 +27,8 @@ class TAlterPQ: public TSubOperation {
             return TTxState::ConfigureParts;
         case TTxState::ConfigureParts:
             return TTxState::Propose;
-        case TTxState::Propose: 
-            return TTxState::Done; 
+        case TTxState::Propose:
+            return TTxState::Done;
         default:
             return TTxState::Invalid;
         }
@@ -44,7 +44,7 @@ class TAlterPQ: public TSubOperation {
             return THolder(new NPQState::TConfigureParts(OperationId));
         case TTxState::Propose:
             return THolder(new NPQState::TPropose(OperationId));
-        case TTxState::Done: 
+        case TTxState::Done:
             return THolder(new TDone(OperationId));
         default:
             return nullptr;
@@ -61,11 +61,11 @@ class TAlterPQ: public TSubOperation {
     }
 
 public:
-    TAlterPQ(TOperationId id, const TTxTransaction& tx) 
+    TAlterPQ(TOperationId id, const TTxTransaction& tx)
         : OperationId(id)
-        , Transaction(tx) 
-    { 
-    } 
+        , Transaction(tx)
+    {
+    }
 
     TAlterPQ(TOperationId id, TTxState::ETxState state)
         : OperationId(id)
@@ -81,14 +81,14 @@ public:
             TString& errStr)
     {
         TPersQueueGroupInfo::TPtr params = new TPersQueueGroupInfo();
-        const bool hasKeySchema = tabletConfig->PartitionKeySchemaSize(); 
- 
+        const bool hasKeySchema = tabletConfig->PartitionKeySchemaSize();
+
         if (alter.HasTotalGroupCount()) {
-            if (hasKeySchema) { 
-                errStr = "Cannot change partition count. Use split/merge instead"; 
-                return nullptr; 
-            } 
- 
+            if (hasKeySchema) {
+                errStr = "Cannot change partition count. Use split/merge instead";
+                return nullptr;
+            }
+
             ui32 totalGroupCount = alter.GetTotalGroupCount();
             if (!totalGroupCount) {
                 errStr = Sprintf("Invalid total groups count specified: %u", totalGroupCount);
@@ -106,13 +106,13 @@ public:
         }
         if (alter.HasPQTabletConfig()) {
             NKikimrPQ::TPQTabletConfig alterConfig = alter.GetPQTabletConfig();
-            alterConfig.ClearPartitionIds(); 
+            alterConfig.ClearPartitionIds();
             alterConfig.ClearPartitions();
- 
+
             if (!CheckPersQueueConfig(alterConfig, false, &errStr)) {
                 return nullptr;
             }
- 
+
             if (alterConfig.GetPartitionConfig().ExplicitChannelProfilesSize() > 0) {
                 // Validate explicit channel profiles alter attempt
                 const auto& ecps = alterConfig.GetPartitionConfig().GetExplicitChannelProfiles();
@@ -133,12 +133,12 @@ public:
                 alterConfig.MutablePartitionConfig()->MutableExplicitChannelProfiles()->Swap(
                     tabletConfig->MutablePartitionConfig()->MutableExplicitChannelProfiles());
             }
- 
-            if (alterConfig.PartitionKeySchemaSize()) { 
-                errStr = "Cannot change key schema"; 
-                return nullptr; 
-            } 
- 
+
+            if (alterConfig.PartitionKeySchemaSize()) {
+                errStr = "Cannot change key schema";
+                return nullptr;
+            }
+
             const TPathElement::TPtr dbRootEl = context.SS->PathsById.at(context.SS->RootPathId());
             if (dbRootEl->UserAttrs->Attrs.contains("cloud_id")) {
                 auto cloudId = dbRootEl->UserAttrs->Attrs.at("cloud_id");
@@ -155,7 +155,7 @@ public:
             const TString databasePath = TPath::Init(context.SS->RootPathId(), context.SS).PathString();
             tabletConfig->SetYdbDatabasePath(databasePath);
 
-            alterConfig.MutablePartitionKeySchema()->Swap(tabletConfig->MutablePartitionKeySchema()); 
+            alterConfig.MutablePartitionKeySchema()->Swap(tabletConfig->MutablePartitionKeySchema());
             Y_PROTOBUF_SUPPRESS_NODISCARD alterConfig.SerializeToString(&params->TabletConfig);
             alterConfig.Swap(tabletConfig);
         }
@@ -164,16 +164,16 @@ public:
             return nullptr;
         }
         if (alter.PartitionsToAddSize()) {
-            if (hasKeySchema) { 
-                errStr = "Cannot change partition count. Use split/merge instead"; 
-                return nullptr; 
-            } 
- 
+            if (hasKeySchema) {
+                errStr = "Cannot change partition count. Use split/merge instead";
+                return nullptr;
+            }
+
             if (params->TotalGroupCount) {
                 errStr = Sprintf("providing TotalGroupCount and PartitionsToAdd at the same time is forbidden");
                 return nullptr;
             }
- 
+
             THashSet<ui32> parts;
             for (const auto& p : alter.GetPartitionsToAdd()) {
                 if (!parts.insert(p.GetPartitionId()).second) {
@@ -181,13 +181,13 @@ public:
                             << "providing partition " <<  p.GetPartitionId() << " serveral times in PartitionsToAdd is forbidden";
                     return nullptr;
                 }
-                params->PartitionsToAdd.emplace(p.GetPartitionId(), p.GetGroupId()); 
+                params->PartitionsToAdd.emplace(p.GetPartitionId(), p.GetGroupId());
             }
         }
-        if (alter.HasBootstrapConfig()) { 
-            errStr = "Bootstrap config can be passed only upon creation"; 
-            return nullptr; 
-        } 
+        if (alter.HasBootstrapConfig()) {
+            errStr = "Bootstrap config can be passed only upon creation";
+            return nullptr;
+        }
         return params;
     }
 
@@ -217,7 +217,7 @@ public:
         for (auto& shard : pqGroup->Shards) {
             auto shardIdx = shard.first;
             for (const auto& pqInfo : shard.second->PQInfos) {
-                context.SS->PersistPersQueue(db, item->PathId, shardIdx, pqInfo); 
+                context.SS->PersistPersQueue(db, item->PathId, shardIdx, pqInfo);
             }
         }
 
@@ -370,9 +370,9 @@ public:
 
         for (const auto& p : pqGroup->AlterData->PartitionsToAdd) {
             TPQShardInfo::TPersQueueInfo pqInfo;
-            pqInfo.PqId = p.PartitionId; 
-            pqInfo.GroupId = p.GroupId; 
-            pqInfo.KeyRange = p.KeyRange; 
+            pqInfo.PqId = p.PartitionId;
+            pqInfo.GroupId = p.GroupId;
+            pqInfo.KeyRange = p.KeyRange;
             pqInfo.AlterVersion = alterVersion;
             while (it->second->PQInfos.size() >= average) {
                 ++it;
@@ -384,9 +384,9 @@ public:
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
-        const auto& alter = Transaction.GetAlterPersQueueGroup(); 
+        const auto& alter = Transaction.GetAlterPersQueueGroup();
 
-        const TString& parentPathStr = Transaction.GetWorkingDir(); 
+        const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = alter.GetName();
         const TPathId pathId = alter.HasPathId() ? context.SS->MakeLocalId(alter.GetPathId()) : InvalidPathId;
 
@@ -414,13 +414,13 @@ public:
 
         {
             TPath::TChecker checks = path.Check();
-            checks 
-                .NotEmpty() 
+            checks
+                .NotEmpty()
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
                 .NotDeleted()
-                .IsPQGroup() 
+                .IsPQGroup()
                 .NotUnderOperation()
                 .IsCommonSensePath();
 
@@ -479,7 +479,7 @@ public:
         ui32 diff = alterData->TotalGroupCount - pqGroup->TotalGroupCount;
 
         for (ui32 i = 0; i < diff; ++i) {
-            alterData->PartitionsToAdd.emplace(pqGroup->NextPartitionId + i, pqGroup->TotalGroupCount + 1 + i); 
+            alterData->PartitionsToAdd.emplace(pqGroup->NextPartitionId + i, pqGroup->TotalGroupCount + 1 + i);
         }
 
         if (diff > 0) {
@@ -489,15 +489,15 @@ public:
         alterData->TotalPartitionCount = pqGroup->TotalPartitionCount + alterData->PartitionsToAdd.size();
         alterData->NextPartitionId = pqGroup->NextPartitionId;
         for (const auto& p : alterData->PartitionsToAdd) {
-            if (p.GroupId == 0 || p.GroupId > alterData->TotalGroupCount) { 
+            if (p.GroupId == 0 || p.GroupId > alterData->TotalGroupCount) {
                 errStr = TStringBuilder()
-                        << "Invalid partition group id " << p.GroupId 
+                        << "Invalid partition group id " << p.GroupId
                         << " vs " << pqGroup->TotalGroupCount;
                 result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                 return result;
             }
 
-            alterData->NextPartitionId = Max<ui32>(alterData->NextPartitionId, p.PartitionId + 1); 
+            alterData->NextPartitionId = Max<ui32>(alterData->NextPartitionId, p.PartitionId + 1);
         }
 
         if (alterData->MaxPartsPerTablet < pqGroup->MaxPartsPerTablet) {
@@ -561,7 +561,7 @@ public:
             }
         }
 
-        if (!context.SS->CheckApplyIf(Transaction, errStr)) { 
+        if (!context.SS->CheckApplyIf(Transaction, errStr)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;
         }
@@ -632,16 +632,16 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override { 
-        Y_FAIL("no AbortPropose for TAlterPQ"); 
-    } 
- 
+    void AbortPropose(TOperationContext&) override {
+        Y_FAIL("no AbortPropose for TAlterPQ");
+    }
+
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "TAlterPQ AbortUnsafe"
                          << ", opId: " << OperationId
                          << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID()); 
+                         << ", at schemeshard: " << context.SS->TabletID());
 
         context.OnComplete.DoneOperation(OperationId);
     }
@@ -652,12 +652,12 @@ public:
 namespace NKikimr {
 namespace NSchemeShard {
 
-ISubOperationBase::TPtr CreateAlterPQ(TOperationId id, const TTxTransaction& tx) { 
-    return new TAlterPQ(id, tx); 
-} 
- 
+ISubOperationBase::TPtr CreateAlterPQ(TOperationId id, const TTxTransaction& tx) {
+    return new TAlterPQ(id, tx);
+}
+
 ISubOperationBase::TPtr CreateAlterPQ(TOperationId id, TTxState::ETxState state) {
-    Y_VERIFY(state != TTxState::Invalid); 
+    Y_VERIFY(state != TTxState::Invalid);
     return new TAlterPQ(id, state);
 }
 

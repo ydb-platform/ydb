@@ -12,19 +12,19 @@
 
 namespace NYdb {
 
-TString TColumn::ToString() const { 
-    TString result; 
-    TStringOutput out(result); 
-    Out(out); 
-    return result; 
-} 
- 
-void TColumn::Out(IOutputStream& o) const { 
-    o << "{ name: \"" << Name << "\"" 
-      << ", type: " << Type 
-      << " }"; 
-} 
- 
+TString TColumn::ToString() const {
+    TString result;
+    TStringOutput out(result);
+    Out(out);
+    return result;
+}
+
+void TColumn::Out(IOutputStream& o) const {
+    o << "{ name: \"" << Name << "\""
+      << ", type: " << Type
+      << " }";
+}
+
 bool operator==(const TColumn& col1, const TColumn& col2) {
     return col1.Name == col2.Name && TypesEqual(col1.Type, col2.Type);
 }

@@ -1,22 +1,22 @@
-#pragma once 
- 
+#pragma once
+
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
- 
-#include <util/generic/strbuf.h> 
-#include <util/memory/pool.h> 
- 
+
+#include <util/generic/strbuf.h>
+#include <util/memory/pool.h>
+
 #include <contrib/libs/apache/arrow/cpp/src/arrow/csv/api.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/io/api.h>
 
 namespace NKikimr::NFormats {
- 
+
 struct TYdbDump {
     // Parse YdbDump-formatted line
     static bool ParseLine(TStringBuf line, const std::vector<std::pair<i32, ui32>>& columnOrderTypes, TMemoryPool& pool,
                           TVector<TCell>& keys, TVector<TCell>& values, TString& strError, ui64& numBytes);
 };
- 
+
 class TArrowCSV {
 public:
     static constexpr ui32 DEFAULT_BLOCK_SIZE = 1024 * 1024;

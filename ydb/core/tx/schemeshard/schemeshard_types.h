@@ -11,22 +11,22 @@ namespace NKikimr {
 namespace NSchemeShard {
 
 struct TSchemeLimits {
-    // path 
+    // path
     ui64 MaxDepth = 32;
     ui64 MaxPaths = 200*1000;
     ui64 MaxChildrenInDir = 100*1000;
-    ui64 MaxAclBytesSize = 10 << 10; 
+    ui64 MaxAclBytesSize = 10 << 10;
     ui64 MaxPathElementLength = 255;
     TString ExtraPathSymbolsAllowed = "!\"#$%&'()*+,-.:;<=>?@[\\]^_`{|}~";
- 
-    // table 
-    ui64 MaxTableColumns = 200; 
-    ui64 MaxTableColumnNameLength = 255; 
-    ui64 MaxTableKeyColumns = 20; 
-    ui64 MaxTableIndices = 20; 
+
+    // table
+    ui64 MaxTableColumns = 200;
+    ui64 MaxTableColumnNameLength = 255;
+    ui64 MaxTableKeyColumns = 20;
+    ui64 MaxTableIndices = 20;
     ui64 MaxShards = 200*1000; // In each database
     ui64 MaxShardsInPath = 35*1000; // In each path in database
-    ui64 MaxConsistentCopyTargets = 1000; 
+    ui64 MaxConsistentCopyTargets = 1000;
 
     // pq group
     ui64 MaxPQPartitions = 1000000;

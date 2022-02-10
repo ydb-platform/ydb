@@ -7,7 +7,7 @@ TEST_SRCS(
     test_dynamic_tenants.py
     test_tenants.py
     test_storage_config.py
-    test_system_views.py 
+    test_system_views.py
     test_publish_into_schemeboard_with_common_ssring.py
 )
 

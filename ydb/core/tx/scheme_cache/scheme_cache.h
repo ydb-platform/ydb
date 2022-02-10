@@ -12,7 +12,7 @@
 #include <ydb/core/tx/datashard/sys_tables.h>
 #include <ydb/library/aclib/aclib.h>
 
-#include <util/datetime/base.h> 
+#include <util/datetime/base.h>
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/ptr.h>
@@ -22,20 +22,20 @@ namespace NSchemeCache {
 
 struct TSchemeCacheConfig : public TThrRefBase {
     struct TTagEntry {
-        ui32 Tag = 0; 
-        ui64 RootSchemeShard = 0; 
+        ui32 Tag = 0;
+        ui64 RootSchemeShard = 0;
         TString Name;
 
-        explicit TTagEntry(ui32 tag, ui64 rootSchemeShard, const TString& name) 
+        explicit TTagEntry(ui32 tag, ui64 rootSchemeShard, const TString& name)
             : Tag(tag)
             , RootSchemeShard(rootSchemeShard)
             , Name(name)
         {}
     };
 
-    TSchemeCacheConfig() = default; 
-    explicit TSchemeCacheConfig(const TAppData* appData, NMonitoring::TDynamicCounterPtr counters); 
- 
+    TSchemeCacheConfig() = default;
+    explicit TSchemeCacheConfig(const TAppData* appData, NMonitoring::TDynamicCounterPtr counters);
+
     TVector<TTagEntry> Roots;
     NMonitoring::TDynamicCounterPtr Counters;
 };
@@ -43,61 +43,61 @@ struct TSchemeCacheConfig : public TThrRefBase {
 struct TDomainInfo : public TAtomicRefCount<TDomainInfo> {
     using TPtr = TIntrusivePtr<TDomainInfo>;
 
-    explicit TDomainInfo(const TPathId& domainKey, const TPathId& resourcesDomainKey) 
+    explicit TDomainInfo(const TPathId& domainKey, const TPathId& resourcesDomainKey)
         : DomainKey(domainKey)
-        , ResourcesDomainKey(resourcesDomainKey) 
+        , ResourcesDomainKey(resourcesDomainKey)
         , Coordinators(TVector<ui64>{})
     {}
 
-    explicit TDomainInfo(const NKikimrSubDomains::TDomainDescription& descr) 
-        : DomainKey(GetDomainKey(descr.GetDomainKey())) 
+    explicit TDomainInfo(const NKikimrSubDomains::TDomainDescription& descr)
+        : DomainKey(GetDomainKey(descr.GetDomainKey()))
         , Params(descr.GetProcessingParams())
         , Coordinators(descr.GetProcessingParams())
-    { 
-        if (descr.HasResourcesDomainKey()) { 
-            ResourcesDomainKey = GetDomainKey(descr.GetResourcesDomainKey()); 
-        } else { 
-            ResourcesDomainKey = DomainKey; 
-        } 
-    } 
+    {
+        if (descr.HasResourcesDomainKey()) {
+            ResourcesDomainKey = GetDomainKey(descr.GetResourcesDomainKey());
+        } else {
+            ResourcesDomainKey = DomainKey;
+        }
+    }
 
-    inline ui64 GetVersion() const { 
+    inline ui64 GetVersion() const {
         return Params.GetVersion();
     }
 
-    inline ui64 ExtractSchemeShard() const { 
-        if (Params.HasSchemeShard()) { 
-            return Params.GetSchemeShard(); 
-        } else { 
-            return DomainKey.OwnerId; 
-        } 
-    } 
- 
-    TPathId DomainKey; 
-    TPathId ResourcesDomainKey; 
+    inline ui64 ExtractSchemeShard() const {
+        if (Params.HasSchemeShard()) {
+            return Params.GetSchemeShard();
+        } else {
+            return DomainKey.OwnerId;
+        }
+    }
+
+    TPathId DomainKey;
+    TPathId ResourcesDomainKey;
     NKikimrSubDomains::TProcessingParams Params;
     TCoordinators Coordinators;
- 
-    TString ToString() const; 
- 
-private: 
-    inline static TPathId GetDomainKey(const NKikimrSubDomains::TDomainKey& protoKey) { 
-        return TPathId(protoKey.GetSchemeShard(), protoKey.GetPathId()); 
-    } 
 
-}; // TDomainInfo 
- 
+    TString ToString() const;
+
+private:
+    inline static TPathId GetDomainKey(const NKikimrSubDomains::TDomainKey& protoKey) {
+        return TPathId(protoKey.GetSchemeShard(), protoKey.GetPathId());
+    }
+
+}; // TDomainInfo
+
 struct TSchemeCacheNavigate {
     enum class EStatus {
-        Unknown = 0, 
-        RootUnknown = 1, 
-        PathErrorUnknown = 2, 
-        PathNotTable = 3, 
-        PathNotPath = 4, 
-        TableCreationNotComplete = 5, 
-        LookupError = 6, 
-        RedirectLookupError = 7, 
-        Ok = 128, 
+        Unknown = 0,
+        RootUnknown = 1,
+        PathErrorUnknown = 2,
+        PathNotTable = 3,
+        PathNotPath = 4,
+        TableCreationNotComplete = 5,
+        LookupError = 6,
+        RedirectLookupError = 7,
+        Ok = 128,
     };
 
     enum EOp {
@@ -121,27 +121,27 @@ struct TSchemeCacheNavigate {
         KindIndex = 10,
         KindOlapStore = 11,
         KindOlapTable = 12,
-        KindCdcStream = 13, 
+        KindCdcStream = 13,
         KindSequence = 14,
-        KindReplication = 15, 
+        KindReplication = 15,
     };
 
     struct TListNodeEntry : public TAtomicRefCount<TListNodeEntry> {
         struct TChild {
             const TString Name;
-            const TPathId PathId; 
+            const TPathId PathId;
             const ui64 SchemaVersion;
             const EKind Kind;
- 
-            explicit TChild(const TString& name, const TPathId& pathId, EKind kind, ui64 schemaVersion = 0) 
-                : Name(name) 
+
+            explicit TChild(const TString& name, const TPathId& pathId, EKind kind, ui64 schemaVersion = 0)
+                : Name(name)
                 , PathId(pathId)
-                , SchemaVersion(schemaVersion) 
-                , Kind(kind) 
-            {} 
+                , SchemaVersion(schemaVersion)
+                , Kind(kind)
+            {}
         };
- 
-        EKind Kind = KindUnknown; 
+
+        EKind Kind = KindUnknown;
         TVector<TChild> Children;
     };
 
@@ -185,80 +185,80 @@ struct TSchemeCacheNavigate {
         TTableId OlapStoreId;
     };
 
-    struct TCdcStreamInfo : public TAtomicRefCount<TCdcStreamInfo> { 
-        EKind Kind = KindUnknown; 
+    struct TCdcStreamInfo : public TAtomicRefCount<TCdcStreamInfo> {
+        EKind Kind = KindUnknown;
         NKikimrSchemeOp::TCdcStreamDescription Description;
-        TPathId PathId; 
-    }; 
- 
+        TPathId PathId;
+    };
+
     struct TSequenceInfo : public TAtomicRefCount<TSequenceInfo> {
         EKind Kind = KindUnknown;
         NKikimrSchemeOp::TSequenceDescription Description;
     };
 
-    struct TReplicationInfo : public TAtomicRefCount<TReplicationInfo> { 
-        EKind Kind = KindUnknown; 
-        NKikimrSchemeOp::TReplicationDescription Description; 
-    }; 
- 
+    struct TReplicationInfo : public TAtomicRefCount<TReplicationInfo> {
+        EKind Kind = KindUnknown;
+        NKikimrSchemeOp::TReplicationDescription Description;
+    };
+
     struct TEntry {
         enum class ERequestType : ui8 {
             ByPath,
             ByTableId
         };
- 
-        // in 
-        TVector<TString> Path; 
-        TTableId TableId; 
+
+        // in
+        TVector<TString> Path;
+        TTableId TableId;
         ERequestType RequestType = ERequestType::ByPath;
-        EOp Operation = OpUnknown; 
+        EOp Operation = OpUnknown;
         bool RedirectRequired = true;
-        bool ShowPrivatePath = false; 
-        bool SyncVersion = false; 
+        bool ShowPrivatePath = false;
+        bool SyncVersion = false;
 
-        // out 
+        // out
         EStatus Status = EStatus::Unknown;
-        EKind Kind = KindUnknown; 
-        ui64 CreateStep = 0; 
+        EKind Kind = KindUnknown;
+        ui64 CreateStep = 0;
 
-        // common 
-        TIntrusivePtr<TDomainInfo> DomainInfo; 
-        TIntrusivePtr<TSecurityObject> SecurityObject; 
-        TIntrusiveConstPtr<TDirEntryInfo> Self; 
-        TIntrusiveConstPtr<TListNodeEntry> ListNodeEntry; 
+        // common
+        TIntrusivePtr<TDomainInfo> DomainInfo;
+        TIntrusivePtr<TSecurityObject> SecurityObject;
+        TIntrusiveConstPtr<TDirEntryInfo> Self;
+        TIntrusiveConstPtr<TListNodeEntry> ListNodeEntry;
 
-        // table specific 
-        THashMap<TString, TString> Attributes; 
+        // table specific
+        THashMap<TString, TString> Attributes;
         THashMap<ui32, TSysTables::TTableColumnInfo> Columns;
         THashSet<TString> NotNullColumns;
         TVector<NKikimrSchemeOp::TIndexDescription> Indexes;
         TVector<NKikimrSchemeOp::TCdcStreamDescription> CdcStreams;
 
-        // other 
+        // other
         TIntrusiveConstPtr<TDomainDescription> DomainDescription;
         TIntrusiveConstPtr<TPQGroupInfo> PQGroupInfo;
         TIntrusiveConstPtr<TRtmrVolumeInfo> RTMRVolumeInfo;
         TIntrusiveConstPtr<TKesusInfo> KesusInfo;
-        TIntrusiveConstPtr<TSolomonVolumeInfo> SolomonVolumeInfo; 
+        TIntrusiveConstPtr<TSolomonVolumeInfo> SolomonVolumeInfo;
         TIntrusiveConstPtr<TOlapStoreInfo> OlapStoreInfo;
         TIntrusiveConstPtr<TOlapTableInfo> OlapTableInfo;
-        TIntrusiveConstPtr<TCdcStreamInfo> CdcStreamInfo; 
+        TIntrusiveConstPtr<TCdcStreamInfo> CdcStreamInfo;
         TIntrusiveConstPtr<TSequenceInfo> SequenceInfo;
-        TIntrusiveConstPtr<TReplicationInfo> ReplicationInfo; 
+        TIntrusiveConstPtr<TReplicationInfo> ReplicationInfo;
 
-        TString ToString() const; 
-        TString ToString(const NScheme::TTypeRegistry& typeRegistry) const; 
+        TString ToString() const;
+        TString ToString(const NScheme::TTypeRegistry& typeRegistry) const;
     };
 
     using TResultSet = TVector<TEntry>;
 
     TResultSet ResultSet;
-    TAutoPtr<const NACLib::TUserToken> UserToken; 
-    TString DatabaseName; 
-    ui64 DomainOwnerId = 0; 
-    ui64 ErrorCount = 0; 
-    const ui64 Instant; // deprecated, used by pq 
- 
+    TAutoPtr<const NACLib::TUserToken> UserToken;
+    TString DatabaseName;
+    ui64 DomainOwnerId = 0;
+    ui64 ErrorCount = 0;
+    const ui64 Instant; // deprecated, used by pq
+
     TSchemeCacheNavigate()
         : Instant(0)
     {}
@@ -267,20 +267,20 @@ struct TSchemeCacheNavigate {
         : Instant(instant)
     {}
 
-    TString ToString(const NScheme::TTypeRegistry& typeRegistry) const; 
- 
-}; // TSchemeCacheNavigate 
- 
+    TString ToString(const NScheme::TTypeRegistry& typeRegistry) const;
+
+}; // TSchemeCacheNavigate
+
 struct TSchemeCacheRequest {
     enum class EStatus {
-        Unknown = 0, 
-        TypeCheckError = 1, 
-        NotMaterialized = 2, 
-        PathErrorUnknown = 3, 
-        PathErrorNotExist = 4, 
-        LookupError = 5, 
-        OkScheme = 128, 
-        OkData = 129, 
+        Unknown = 0,
+        TypeCheckError = 1,
+        NotMaterialized = 2,
+        PathErrorUnknown = 3,
+        PathErrorNotExist = 4,
+        LookupError = 5,
+        OkScheme = 128,
+        OkData = 129,
     };
 
     enum EOp {
@@ -290,74 +290,74 @@ struct TSchemeCacheRequest {
         OpScheme = 1 << 3,
     };
 
-    enum EKind { 
-        KindUnknown = 0, 
-        KindRegularTable = 1, 
-        KindSyncIndexTable = 2, 
-        KindAsyncIndexTable= 3, 
-    }; 
- 
-    struct TEntry {
-        // in 
-        THolder<TKeyDesc> KeyDescription;
-        ui32 Access = 0; 
-        uintptr_t UserData = 0;
-        bool SyncVersion = false; 
- 
-        // out 
-        EStatus Status = EStatus::Unknown; 
-        EKind Kind = EKind::KindUnknown; 
-        TIntrusivePtr<TDomainInfo> DomainInfo; 
+    enum EKind {
+        KindUnknown = 0,
+        KindRegularTable = 1,
+        KindSyncIndexTable = 2,
+        KindAsyncIndexTable= 3,
+    };
 
-        explicit TEntry(THolder<TKeyDesc> keyDesc) 
-            : KeyDescription(std::move(keyDesc)) 
+    struct TEntry {
+        // in
+        THolder<TKeyDesc> KeyDescription;
+        ui32 Access = 0;
+        uintptr_t UserData = 0;
+        bool SyncVersion = false;
+
+        // out
+        EStatus Status = EStatus::Unknown;
+        EKind Kind = EKind::KindUnknown;
+        TIntrusivePtr<TDomainInfo> DomainInfo;
+
+        explicit TEntry(THolder<TKeyDesc> keyDesc)
+            : KeyDescription(std::move(keyDesc))
         {
             Y_VERIFY_DEBUG(KeyDescription);
         }
 
-        TEntry(TKeyDesc* keyDesc) = delete; 
+        TEntry(TKeyDesc* keyDesc) = delete;
 
-        TString ToString() const; 
-        TString ToString(const NScheme::TTypeRegistry& typeRegistry) const; 
+        TString ToString() const;
+        TString ToString(const NScheme::TTypeRegistry& typeRegistry) const;
     };
 
     using TResultSet = TVector<TEntry>;
 
     TResultSet ResultSet;
-    TAutoPtr<const NACLib::TUserToken> UserToken; 
-    TString DatabaseName; 
-    ui64 DomainOwnerId = 0; 
-    ui64 ErrorCount = 0; 
- 
-    TString ToString(const NScheme::TTypeRegistry& typeRegistry) const; 
+    TAutoPtr<const NACLib::TUserToken> UserToken;
+    TString DatabaseName;
+    ui64 DomainOwnerId = 0;
+    ui64 ErrorCount = 0;
 
-}; // TSchemeCacheRequest 
- 
-struct TSchemeCacheRequestContext : TAtomicRefCount<TSchemeCacheRequestContext>, TNonCopyable { 
+    TString ToString(const NScheme::TTypeRegistry& typeRegistry) const;
+
+}; // TSchemeCacheRequest
+
+struct TSchemeCacheRequestContext : TAtomicRefCount<TSchemeCacheRequestContext>, TNonCopyable {
     TActorId Sender;
     ui64 WaitCounter;
-    TAutoPtr<TSchemeCacheRequest> Request; 
-    const TInstant CreatedAt; 
+    TAutoPtr<TSchemeCacheRequest> Request;
+    const TInstant CreatedAt;
 
-    TSchemeCacheRequestContext(const TActorId& sender, TAutoPtr<TSchemeCacheRequest> request, const TInstant& now = TInstant::Now()) 
+    TSchemeCacheRequestContext(const TActorId& sender, TAutoPtr<TSchemeCacheRequest> request, const TInstant& now = TInstant::Now())
         : Sender(sender)
         , WaitCounter(0)
         , Request(request)
-        , CreatedAt(now) 
+        , CreatedAt(now)
     {}
 };
 
-struct TSchemeCacheNavigateContext : TAtomicRefCount<TSchemeCacheNavigateContext>, TNonCopyable { 
+struct TSchemeCacheNavigateContext : TAtomicRefCount<TSchemeCacheNavigateContext>, TNonCopyable {
     TActorId Sender;
     ui64 WaitCounter;
-    TAutoPtr<TSchemeCacheNavigate> Request; 
-    const TInstant CreatedAt; 
+    TAutoPtr<TSchemeCacheNavigate> Request;
+    const TInstant CreatedAt;
 
-    TSchemeCacheNavigateContext(const TActorId& sender, TAutoPtr<TSchemeCacheNavigate> request, const TInstant& now = TInstant::Now()) 
+    TSchemeCacheNavigateContext(const TActorId& sender, TAutoPtr<TSchemeCacheNavigate> request, const TInstant& now = TInstant::Now())
         : Sender(sender)
         , WaitCounter(0)
         , Request(request)
-        , CreatedAt(now) 
+        , CreatedAt(now)
     {}
 };
 
@@ -397,12 +397,12 @@ public:
     }
 };
 
-} // NSchemeCache 
+} // NSchemeCache
 
 struct TEvTxProxySchemeCache {
     enum EEv {
-        EvResolveKeySet = EventSpaceBegin(TKikimrEvents::ES_SCHEME_CACHE), 
-        EvInvalidateDistEntry, // unused 
+        EvResolveKeySet = EventSpaceBegin(TKikimrEvents::ES_SCHEME_CACHE),
+        EvInvalidateDistEntry, // unused
         EvResolveKeySetResult,
         EvNavigateKeySet,
         EvNavigateKeySetResult,
@@ -417,33 +417,33 @@ struct TEvTxProxySchemeCache {
         EvEnd,
     };
 
-    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_SCHEME_CACHE), "expect EvEnd < EventSpaceEnd(ES_SCHEME_CACHE)"); 
+    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_SCHEME_CACHE), "expect EvEnd < EventSpaceEnd(ES_SCHEME_CACHE)");
 
-private: 
-    template <typename TDerived, ui32 EventType, typename TRequest> 
-    struct TEvBasic : public TEventLocal<TDerived, EventType> { 
-        TAutoPtr<TRequest> Request; 
+private:
+    template <typename TDerived, ui32 EventType, typename TRequest>
+    struct TEvBasic : public TEventLocal<TDerived, EventType> {
+        TAutoPtr<TRequest> Request;
 
-        TEvBasic(TAutoPtr<TRequest> request) 
+        TEvBasic(TAutoPtr<TRequest> request)
             : Request(request)
         {}
     };
 
-public: 
-    struct TEvResolveKeySet : public TEvBasic<TEvResolveKeySet, EvResolveKeySet, NSchemeCache::TSchemeCacheRequest> { 
-        using TEvBasic::TEvBasic; 
-    }; 
-
-    struct TEvResolveKeySetResult : public TEvBasic<TEvResolveKeySetResult, EvResolveKeySetResult, NSchemeCache::TSchemeCacheRequest> { 
-        using TEvBasic::TEvBasic; 
+public:
+    struct TEvResolveKeySet : public TEvBasic<TEvResolveKeySet, EvResolveKeySet, NSchemeCache::TSchemeCacheRequest> {
+        using TEvBasic::TEvBasic;
     };
 
-    struct TEvNavigateKeySet : public TEvBasic<TEvNavigateKeySet, EvNavigateKeySet, NSchemeCache::TSchemeCacheNavigate> { 
-        using TEvBasic::TEvBasic; 
+    struct TEvResolveKeySetResult : public TEvBasic<TEvResolveKeySetResult, EvResolveKeySetResult, NSchemeCache::TSchemeCacheRequest> {
+        using TEvBasic::TEvBasic;
+    };
+
+    struct TEvNavigateKeySet : public TEvBasic<TEvNavigateKeySet, EvNavigateKeySet, NSchemeCache::TSchemeCacheNavigate> {
+        using TEvBasic::TEvBasic;
     };
 
     struct TEvNavigateKeySetResult : public TEvBasic<TEvNavigateKeySetResult, EvNavigateKeySetResult, NSchemeCache::TSchemeCacheNavigate> {
-        using TEvBasic::TEvBasic; 
+        using TEvBasic::TEvBasic;
     };
 
     struct TEvInvalidateTable : public TEventLocal<TEvInvalidateTable, EvInvalidateTable> {
@@ -483,14 +483,14 @@ public:
     };
 
     struct TEvWatchNotifyUpdated : public TEventLocal<TEvWatchNotifyUpdated, EvWatchNotifyUpdated> {
-        using TDescribeResult = NSchemeCache::TDescribeResult; 
- 
+        using TDescribeResult = NSchemeCache::TDescribeResult;
+
         const ui64 Key;
         const TString Path;
         const TPathId PathId;
-        TDescribeResult::TCPtr Result; 
+        TDescribeResult::TCPtr Result;
 
-        TEvWatchNotifyUpdated(ui64 key, const TString& path, const TPathId& pathId, TDescribeResult::TCPtr result) 
+        TEvWatchNotifyUpdated(ui64 key, const TString& path, const TPathId& pathId, TDescribeResult::TCPtr result)
             : Key(key)
             , Path(path)
             , PathId(pathId)
@@ -527,4 +527,4 @@ inline TActorId MakeSchemeCacheID() {
     return TActorId(0, TStringBuf("SchmCcheSrv"));
 }
 
-} // NKikimr 
+} // NKikimr

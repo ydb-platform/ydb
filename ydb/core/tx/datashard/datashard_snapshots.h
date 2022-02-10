@@ -1,7 +1,7 @@
 #pragma once
 
 #include "const.h"
-#include "snapshot_key.h" 
+#include "snapshot_key.h"
 
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
@@ -121,7 +121,7 @@ public:
 
     void SetCompleteEdge(NIceDb::TNiceDb& db, const TRowVersion& version);
 
-    bool PromoteCompleteEdge(const TRowVersion& version, TTransactionContext& txc); 
+    bool PromoteCompleteEdge(const TRowVersion& version, TTransactionContext& txc);
     bool PromoteCompleteEdge(TOperation* op, TTransactionContext& txc);
     bool PromoteCompleteEdge(ui64 writeStep, TTransactionContext& txc);
 

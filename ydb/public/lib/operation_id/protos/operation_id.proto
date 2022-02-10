@@ -10,16 +10,16 @@ message TOperationId {
         SESSION_YQL = 3;
         PREPARED_QUERY_ID = 4;
         CMS_REQUEST = 5;
-        EXPORT = 6; 
+        EXPORT = 6;
         BUILD_INDEX = 7;
-        IMPORT = 8; 
+        IMPORT = 8;
     }
- 
+
     message TData {
         string Key = 1;
         string Value = 2;
     }
- 
+
     EKind Kind = 1;
     repeated TData Data = 3;
 }

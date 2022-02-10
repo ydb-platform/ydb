@@ -26,7 +26,7 @@ public:
     {
         auto &rec = RequestEvent->Get()->Record;
 
-        LOG_INFO(ctx, NKikimrServices::CMS, "Processing Wall-E request: %s", 
+        LOG_INFO(ctx, NKikimrServices::CMS, "Processing Wall-E request: %s",
                   rec.ShortDebugString().data());
 
         if (rec.GetAction() != "reboot"
@@ -83,7 +83,7 @@ private:
 
     void ReplyAndDie(TAutoPtr<TEvCms::TEvWalleCreateTaskResponse> resp, const TActorContext &ctx)
     {
-        WalleAuditLog(RequestEvent->Get(), resp.Get(), ctx); 
+        WalleAuditLog(RequestEvent->Get(), resp.Get(), ctx);
         ctx.Send(RequestEvent->Sender, resp.Release());
         Die(ctx);
     }
@@ -149,38 +149,38 @@ private:
             ReplyAndDie(resp.Release(), ctx);
             return;
         } else {
-            // We always use infinite duration. 
-            // Wall-E MUST delete processed tasks. 
+            // We always use infinite duration.
+            // Wall-E MUST delete processed tasks.
             if (task.GetAction() == "reboot") {
                 action.SetType(TAction::SHUTDOWN_HOST);
-                action.SetDuration(TDuration::Max().GetValue()); 
+                action.SetDuration(TDuration::Max().GetValue());
             } else if (task.GetAction() == "power-off") {
                 action.SetType(TAction::SHUTDOWN_HOST);
-                action.SetDuration(TDuration::Max().GetValue()); 
+                action.SetDuration(TDuration::Max().GetValue());
             } else if (task.GetAction() == "change-disk") {
                 action.SetType(TAction::REPLACE_DEVICES);
-                action.SetDuration(TDuration::Max().GetValue()); 
+                action.SetDuration(TDuration::Max().GetValue());
             } else if (task.GetAction() == "change-memory") {
                 action.SetType(TAction::SHUTDOWN_HOST);
-                action.SetDuration(TDuration::Max().GetValue()); 
+                action.SetDuration(TDuration::Max().GetValue());
             } else if (task.GetAction() == "profile") {
                 action.SetType(TAction::SHUTDOWN_HOST);
-                action.SetDuration(TDuration::Max().GetValue()); 
+                action.SetDuration(TDuration::Max().GetValue());
             } else if (task.GetAction() == "redeploy") {
                 action.SetType(TAction::SHUTDOWN_HOST);
-                action.SetDuration(TDuration::Max().GetValue()); 
+                action.SetDuration(TDuration::Max().GetValue());
             } else if (task.GetAction() == "repair-link") {
                 action.SetType(TAction::SHUTDOWN_HOST);
-                action.SetDuration(TDuration::Max().GetValue()); 
+                action.SetDuration(TDuration::Max().GetValue());
             } else if (task.GetAction() == "repair-bmc") {
                 action.SetType(TAction::SHUTDOWN_HOST);
-                action.SetDuration(TDuration::Max().GetValue()); 
+                action.SetDuration(TDuration::Max().GetValue());
             } else if (task.GetAction() == "repair-overheat") {
                 action.SetType(TAction::SHUTDOWN_HOST);
-                action.SetDuration(TDuration::Max().GetValue()); 
+                action.SetDuration(TDuration::Max().GetValue());
             } else if (task.GetAction() == "repair-capping") {
                 action.SetType(TAction::SHUTDOWN_HOST);
-                action.SetDuration(TDuration::Max().GetValue()); 
+                action.SetDuration(TDuration::Max().GetValue());
             } else
                 Y_FAIL("Unknown action");
 

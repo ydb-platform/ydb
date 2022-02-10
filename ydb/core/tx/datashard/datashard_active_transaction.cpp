@@ -47,9 +47,9 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
     if (Tx.GetLockTxId())
         EngineBay.SetLockTxId(Tx.GetLockTxId());
 
-    if (Tx.GetImmediate()) 
-        EngineBay.SetIsImmediateTx(); 
- 
+    if (Tx.GetImmediate())
+        EngineBay.SetIsImmediateTx();
+
     if (Tx.HasReadTableTransaction()) {
         auto &tx = Tx.GetReadTableTransaction();
         if (self->TableInfos.contains(tx.GetTableId().GetTableId())) {
@@ -401,8 +401,8 @@ void TActiveTransaction::FillTxData(TDataShard *self,
         BuildSchemeTx();
     } else if (IsSnapshotTx()) {
         BuildSnapshotTx();
-    } else if (IsDistributedEraseTx()) { 
-        BuildDistributedEraseTx(); 
+    } else if (IsDistributedEraseTx()) {
+        BuildDistributedEraseTx();
     } else if (IsCommitWritesTx()) {
         BuildCommitWritesTx();
     }
@@ -437,54 +437,54 @@ bool TActiveTransaction::BuildSchemeTx()
         + (ui32)SchemeTx->HasDropTable()
         + (ui32)SchemeTx->HasAlterTable()
         + (ui32)SchemeTx->HasBackup()
-        + (ui32)SchemeTx->HasRestore() 
+        + (ui32)SchemeTx->HasRestore()
         + (ui32)SchemeTx->HasSendSnapshot()
         + (ui32)SchemeTx->HasCreatePersistentSnapshot()
         + (ui32)SchemeTx->HasDropPersistentSnapshot()
         + (ui32)SchemeTx->HasInitiateBuildIndex()
         + (ui32)SchemeTx->HasFinalizeBuildIndex()
         + (ui32)SchemeTx->HasDropIndexNotice()
-        + (ui32)SchemeTx->HasMoveTable() 
-        + (ui32)SchemeTx->HasCreateCdcStreamNotice() 
-        + (ui32)SchemeTx->HasAlterCdcStreamNotice() 
-        + (ui32)SchemeTx->HasDropCdcStreamNotice(); 
+        + (ui32)SchemeTx->HasMoveTable()
+        + (ui32)SchemeTx->HasCreateCdcStreamNotice()
+        + (ui32)SchemeTx->HasAlterCdcStreamNotice()
+        + (ui32)SchemeTx->HasDropCdcStreamNotice();
     if (count != 1)
         return false;
 
     if (SchemeTx->HasCreateTable())
-        SchemeTxType = TSchemaOperation::ETypeCreate; 
+        SchemeTxType = TSchemaOperation::ETypeCreate;
     else if (SchemeTx->HasDropTable())
-        SchemeTxType = TSchemaOperation::ETypeDrop; 
+        SchemeTxType = TSchemaOperation::ETypeDrop;
     else if (SchemeTx->HasAlterTable())
-        SchemeTxType = TSchemaOperation::ETypeAlter; 
+        SchemeTxType = TSchemaOperation::ETypeAlter;
     else if (SchemeTx->HasBackup())
-        SchemeTxType = TSchemaOperation::ETypeBackup; 
-    else if (SchemeTx->HasRestore()) 
-        SchemeTxType = TSchemaOperation::ETypeRestore; 
+        SchemeTxType = TSchemaOperation::ETypeBackup;
+    else if (SchemeTx->HasRestore())
+        SchemeTxType = TSchemaOperation::ETypeRestore;
     else if (SchemeTx->HasSendSnapshot())
-        SchemeTxType = TSchemaOperation::ETypeCopy; 
+        SchemeTxType = TSchemaOperation::ETypeCopy;
     else if (SchemeTx->HasCreatePersistentSnapshot())
-        SchemeTxType = TSchemaOperation::ETypeCreatePersistentSnapshot; 
+        SchemeTxType = TSchemaOperation::ETypeCreatePersistentSnapshot;
     else if (SchemeTx->HasDropPersistentSnapshot())
-        SchemeTxType = TSchemaOperation::ETypeDropPersistentSnapshot; 
+        SchemeTxType = TSchemaOperation::ETypeDropPersistentSnapshot;
     else if (SchemeTx->HasInitiateBuildIndex())
-        SchemeTxType = TSchemaOperation::ETypeInitiateBuildIndex; 
+        SchemeTxType = TSchemaOperation::ETypeInitiateBuildIndex;
     else if (SchemeTx->HasFinalizeBuildIndex())
-        SchemeTxType = TSchemaOperation::ETypeFinalizeBuildIndex; 
+        SchemeTxType = TSchemaOperation::ETypeFinalizeBuildIndex;
     else if (SchemeTx->HasDropIndexNotice())
-        SchemeTxType = TSchemaOperation::ETypeDropIndexNotice; 
+        SchemeTxType = TSchemaOperation::ETypeDropIndexNotice;
     else if (SchemeTx->HasMoveTable())
         SchemeTxType = TSchemaOperation::ETypeMoveTable;
-    else if (SchemeTx->HasCreateCdcStreamNotice()) 
-        SchemeTxType = TSchemaOperation::ETypeCreateCdcStream; 
-    else if (SchemeTx->HasAlterCdcStreamNotice()) 
-        SchemeTxType = TSchemaOperation::ETypeAlterCdcStream; 
-    else if (SchemeTx->HasDropCdcStreamNotice()) 
-        SchemeTxType = TSchemaOperation::ETypeDropCdcStream; 
+    else if (SchemeTx->HasCreateCdcStreamNotice())
+        SchemeTxType = TSchemaOperation::ETypeCreateCdcStream;
+    else if (SchemeTx->HasAlterCdcStreamNotice())
+        SchemeTxType = TSchemaOperation::ETypeAlterCdcStream;
+    else if (SchemeTx->HasDropCdcStreamNotice())
+        SchemeTxType = TSchemaOperation::ETypeDropCdcStream;
     else
-        SchemeTxType = TSchemaOperation::ETypeUnknown; 
+        SchemeTxType = TSchemaOperation::ETypeUnknown;
 
-    return SchemeTxType != TSchemaOperation::ETypeUnknown; 
+    return SchemeTxType != TSchemaOperation::ETypeUnknown;
 }
 
 bool TActiveTransaction::BuildSnapshotTx()
@@ -505,20 +505,20 @@ bool TActiveTransaction::BuildSnapshotTx()
     return true;
 }
 
-bool TDistributedEraseTx::TryParse(const TString& serialized) { 
-    if (!Body.ParseFromArray(serialized.data(), serialized.size())) { 
-        return false; 
-    } 
- 
-    return true; 
-} 
- 
-bool TActiveTransaction::BuildDistributedEraseTx() { 
-    Y_VERIFY(TxBody); 
+bool TDistributedEraseTx::TryParse(const TString& serialized) {
+    if (!Body.ParseFromArray(serialized.data(), serialized.size())) {
+        return false;
+    }
+
+    return true;
+}
+
+bool TActiveTransaction::BuildDistributedEraseTx() {
+    Y_VERIFY(TxBody);
     DistributedEraseTx.Reset(new TDistributedEraseTx);
-    return DistributedEraseTx->TryParse(TxBody); 
-} 
- 
+    return DistributedEraseTx->TryParse(TxBody);
+}
+
 //
 
 bool TCommitWritesTx::TryParse(const TString& serialized) {
@@ -806,25 +806,25 @@ void TActiveTransaction::BuildExecutionPlan(bool loaded)
             plan.push_back(EExecutionUnitKind::CompleteOperation);
         }
         plan.push_back(EExecutionUnitKind::CompletedOperations);
-    } else if (IsDistributedEraseTx()) { 
-        if (!loaded) { 
-            plan.push_back(EExecutionUnitKind::CheckDistributedEraseTx); 
-            plan.push_back(EExecutionUnitKind::StoreDistributedEraseTx); 
-            plan.push_back(EExecutionUnitKind::FinishPropose); 
-        } 
-        if (!GetStep()) { 
-            plan.push_back(EExecutionUnitKind::WaitForPlan); 
-        } 
-        plan.push_back(EExecutionUnitKind::PlanQueue); 
-        plan.push_back(EExecutionUnitKind::LoadTxDetails); 
-        plan.push_back(EExecutionUnitKind::BuildAndWaitDependencies); 
-        plan.push_back(EExecutionUnitKind::BuildDistributedEraseTxOutRS); 
-        plan.push_back(EExecutionUnitKind::StoreAndSendOutRS); 
-        plan.push_back(EExecutionUnitKind::PrepareDistributedEraseTxInRS); 
-        plan.push_back(EExecutionUnitKind::LoadAndWaitInRS); 
-        plan.push_back(EExecutionUnitKind::ExecuteDistributedEraseTx); 
-        plan.push_back(EExecutionUnitKind::CompleteOperation); 
-        plan.push_back(EExecutionUnitKind::CompletedOperations); 
+    } else if (IsDistributedEraseTx()) {
+        if (!loaded) {
+            plan.push_back(EExecutionUnitKind::CheckDistributedEraseTx);
+            plan.push_back(EExecutionUnitKind::StoreDistributedEraseTx);
+            plan.push_back(EExecutionUnitKind::FinishPropose);
+        }
+        if (!GetStep()) {
+            plan.push_back(EExecutionUnitKind::WaitForPlan);
+        }
+        plan.push_back(EExecutionUnitKind::PlanQueue);
+        plan.push_back(EExecutionUnitKind::LoadTxDetails);
+        plan.push_back(EExecutionUnitKind::BuildAndWaitDependencies);
+        plan.push_back(EExecutionUnitKind::BuildDistributedEraseTxOutRS);
+        plan.push_back(EExecutionUnitKind::StoreAndSendOutRS);
+        plan.push_back(EExecutionUnitKind::PrepareDistributedEraseTxInRS);
+        plan.push_back(EExecutionUnitKind::LoadAndWaitInRS);
+        plan.push_back(EExecutionUnitKind::ExecuteDistributedEraseTx);
+        plan.push_back(EExecutionUnitKind::CompleteOperation);
+        plan.push_back(EExecutionUnitKind::CompletedOperations);
     } else if (IsCommitWritesTx()) {
         if (IsImmediate()) {
             Y_VERIFY(!loaded);
@@ -865,8 +865,8 @@ void TActiveTransaction::BuildExecutionPlan(bool loaded)
         plan.push_back(EExecutionUnitKind::StoreAndSendOutRS);
         plan.push_back(EExecutionUnitKind::PrepareSchemeTxInRS);
         plan.push_back(EExecutionUnitKind::LoadAndWaitInRS);
-        plan.push_back(EExecutionUnitKind::Backup); 
-        plan.push_back(EExecutionUnitKind::Restore); 
+        plan.push_back(EExecutionUnitKind::Backup);
+        plan.push_back(EExecutionUnitKind::Restore);
         plan.push_back(EExecutionUnitKind::CreateTable);
         plan.push_back(EExecutionUnitKind::ReceiveSnapshot);
         plan.push_back(EExecutionUnitKind::AlterMoveShadow);
@@ -878,9 +878,9 @@ void TActiveTransaction::BuildExecutionPlan(bool loaded)
         plan.push_back(EExecutionUnitKind::FinalizeBuildIndex);
         plan.push_back(EExecutionUnitKind::DropIndexNotice);
         plan.push_back(EExecutionUnitKind::MoveTable);
-        plan.push_back(EExecutionUnitKind::CreateCdcStream); 
-        plan.push_back(EExecutionUnitKind::AlterCdcStream); 
-        plan.push_back(EExecutionUnitKind::DropCdcStream); 
+        plan.push_back(EExecutionUnitKind::CreateCdcStream);
+        plan.push_back(EExecutionUnitKind::AlterCdcStream);
+        plan.push_back(EExecutionUnitKind::DropCdcStream);
         plan.push_back(EExecutionUnitKind::CompleteOperation);
         plan.push_back(EExecutionUnitKind::CompletedOperations);
     } else {
@@ -903,15 +903,15 @@ void TActiveTransaction::FillState(NKikimrTxDataShard::TEvGetOperationResponse &
     }
 }
 
-void TActiveTransaction::KillAsyncJobActor(const TActorContext& ctx) { 
-    if (!GetAsyncJobActor()) { 
-        return; 
-    } 
- 
-    ctx.Send(GetAsyncJobActor(), new TEvents::TEvPoison()); 
-    SetAsyncJobActor(TActorId()); 
-} 
- 
+void TActiveTransaction::KillAsyncJobActor(const TActorContext& ctx) {
+    if (!GetAsyncJobActor()) {
+        return;
+    }
+
+    ctx.Send(GetAsyncJobActor(), new TEvents::TEvPoison());
+    SetAsyncJobActor(TActorId());
+}
+
 void TActiveTransaction::TrackMemory() const {
     NActors::NMemory::TLabel<MemoryLabelActiveTransactionBody>::Add(TxBody.size());
 }

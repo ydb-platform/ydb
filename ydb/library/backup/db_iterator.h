@@ -67,7 +67,7 @@ public:
                 break;
             }
             case ETraverseType::Postordering: {
-                while (NextNodes && IsDir() && !IsListed()) { 
+                while (NextNodes && IsDir() && !IsListed()) {
                     const TString& fullPath = GetFullPath();
                     NScheme::TListDirectoryResult childList = Client.ListDirectory(fullPath).GetValueSync();
                     Y_ENSURE(childList.IsSuccess(), "Can't list directory, maybe it doesn't exist, dbPath# "

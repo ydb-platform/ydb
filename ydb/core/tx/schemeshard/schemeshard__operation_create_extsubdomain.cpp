@@ -11,8 +11,8 @@ using namespace NKikimr;
 using namespace NSchemeShard;
 
 class TCreateExtSubDomain: public TSubOperation {
-    const TOperationId OperationId; 
-    const TTxTransaction Transaction; 
+    const TOperationId OperationId;
+    const TTxTransaction Transaction;
     TTxState::ETxState State = TTxState::Invalid;
 
     TTxState::ETxState NextState() {
@@ -23,8 +23,8 @@ class TCreateExtSubDomain: public TSubOperation {
         switch(state) {
         case TTxState::Waiting:
             return TTxState::Propose;
-        case TTxState::Propose: 
-            return TTxState::Done; 
+        case TTxState::Propose:
+            return TTxState::Done;
         default:
             return TTxState::Invalid;
         }
@@ -36,7 +36,7 @@ class TCreateExtSubDomain: public TSubOperation {
         case TTxState::Waiting:
         case TTxState::Propose:
             return THolder(new NSubDomainState::TPropose(OperationId));
-        case TTxState::Done: 
+        case TTxState::Done:
             return THolder(new TDone(OperationId));
         default:
             return nullptr;
@@ -53,11 +53,11 @@ class TCreateExtSubDomain: public TSubOperation {
     }
 
 public:
-    TCreateExtSubDomain(TOperationId id, const TTxTransaction& tx) 
+    TCreateExtSubDomain(TOperationId id, const TTxTransaction& tx)
         : OperationId(id)
-        , Transaction(tx) 
-    { 
-    } 
+        , Transaction(tx)
+    {
+    }
 
     TCreateExtSubDomain(TOperationId id, TTxState::ETxState state)
         : OperationId(id)
@@ -69,11 +69,11 @@ public:
     THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
-        const auto& settings = Transaction.GetSubDomain(); 
+        const auto& settings = Transaction.GetSubDomain();
         const auto acceptExisted = !Transaction.GetFailOnExist();
 
-        const TString& parentPathStr = Transaction.GetWorkingDir(); 
-        const TString& name = settings.GetName(); 
+        const TString& parentPathStr = Transaction.GetWorkingDir();
+        const TString& name = settings.GetName();
 
         ui64 shardsToCreate = settings.GetCoordinators() + settings.GetMediators();
 
@@ -120,20 +120,20 @@ public:
             }
         }
 
-        const TString acl = Transaction.GetModifyACL().GetDiffACL(); 
- 
+        const TString acl = Transaction.GetModifyACL().GetDiffACL();
+
         NSchemeShard::TPath dstPath = parentPath.Child(name);
         {
             NSchemeShard::TPath::TChecker checks = dstPath.Check();
             checks.IsAtLocalSchemeShard();
             if (dstPath.IsResolved()) {
-                checks 
-                    .IsResolved() 
+                checks
+                    .IsResolved()
                     .NotUnderDeleting()
                     .FailOnExist(TPathElement::EPathType::EPathTypeExtSubDomain, acceptExisted);
             } else {
-                checks 
-                    .NotEmpty() 
+                checks
+                    .NotEmpty()
                     .NotResolved();
             }
 
@@ -144,8 +144,8 @@ public:
                     .PathsLimit() //check capacity on root Domain
                     .DirChildrenLimit()
                     .PathShardsLimit(shardsToCreate)
-                    .ShardsLimit(shardsToCreate) //check capacity on root Domain 
-                    .IsValidACL(acl); 
+                    .ShardsLimit(shardsToCreate) //check capacity on root Domain
+                    .IsValidACL(acl);
             }
 
             if (!checks) {
@@ -173,17 +173,17 @@ public:
             return result;
         }
 
-        TPathId resourcesDomainId; 
-        if (settings.HasResourcesDomainKey()) { 
-            const auto& resourcesDomainKey = settings.GetResourcesDomainKey(); 
-            resourcesDomainId = TPathId(resourcesDomainKey.GetSchemeShard(), resourcesDomainKey.GetPathId()); 
- 
-            if (!context.SS->SubDomains.contains(resourcesDomainId)) { 
+        TPathId resourcesDomainId;
+        if (settings.HasResourcesDomainKey()) {
+            const auto& resourcesDomainKey = settings.GetResourcesDomainKey();
+            resourcesDomainId = TPathId(resourcesDomainKey.GetSchemeShard(), resourcesDomainKey.GetPathId());
+
+            if (!context.SS->SubDomains.contains(resourcesDomainId)) {
                 result->SetError(NKikimrScheme::StatusInvalidParameter, "Unknown resources domain key");
-                return result; 
-            } 
-        } 
- 
+                return result;
+            }
+        }
+
         auto domainId = parentPath.DomainId();
         Y_VERIFY(context.SS->PathsById.contains(domainId));
         Y_VERIFY(context.SS->SubDomains.contains(domainId));
@@ -201,11 +201,11 @@ public:
             return result;
         }
 
-        const auto& userAttrsDetails = Transaction.GetAlterUserAttributes(); 
+        const auto& userAttrsDetails = Transaction.GetAlterUserAttributes();
         TUserAttributes::TPtr userAttrs = new TUserAttributes(1);
- 
-        TString errStr; 
- 
+
+        TString errStr;
+
         if (!userAttrs->ApplyPatch(EUserAttributesOp::CreateExtSubDomain, userAttrsDetails, errStr) ||
             !userAttrs->CheckLimits(errStr))
         {
@@ -213,7 +213,7 @@ public:
             return result;
         }
 
-        if (!context.SS->CheckApplyIf(Transaction, errStr)) { 
+        if (!context.SS->CheckApplyIf(Transaction, errStr)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;
         }
@@ -246,19 +246,19 @@ public:
         Y_VERIFY(!context.SS->FindTx(OperationId));
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateExtSubDomain, newNode->PathId);
 
-        TSubDomainInfo::TPtr alter = new TSubDomainInfo(1, 0, 0, resourcesDomainId ? resourcesDomainId : newNode->PathId); 
+        TSubDomainInfo::TPtr alter = new TSubDomainInfo(1, 0, 0, resourcesDomainId ? resourcesDomainId : newNode->PathId);
         alter->SetSchemeLimits(parentPath.DomainInfo()->GetSchemeLimits()); //inherit from root
 
-        if (resourcesDomainId) { 
-            TSubDomainInfo::TPtr resourcesDomain = context.SS->SubDomains.at(resourcesDomainId); 
+        if (resourcesDomainId) {
+            TSubDomainInfo::TPtr resourcesDomain = context.SS->SubDomains.at(resourcesDomainId);
             TTabletId sharedHive = context.SS->GetGlobalHive(context.Ctx);
             if (resourcesDomain->GetTenantHiveID()) {
                 sharedHive = resourcesDomain->GetTenantHiveID();
-            } 
+            }
 
             alter->SetSharedHive(sharedHive);
-        } 
- 
+        }
+
         if (settings.HasDeclaredSchemeQuotas()) {
             alter->SetDeclaredSchemeQuotas(settings.GetDeclaredSchemeQuotas());
         }
@@ -303,16 +303,16 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override { 
-        Y_FAIL("no AbortPropose for TCreateExtSubDomain"); 
-    } 
- 
+    void AbortPropose(TOperationContext&) override {
+        Y_FAIL("no AbortPropose for TCreateExtSubDomain");
+    }
+
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "TCreateExtSubDomain AbortUnsafe"
                          << ", opId: " << OperationId
                          << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID()); 
+                         << ", at schemeshard: " << context.SS->TabletID());
 
         context.OnComplete.DoneOperation(OperationId);
     }
@@ -323,12 +323,12 @@ public:
 namespace NKikimr {
 namespace NSchemeShard {
 
-ISubOperationBase::TPtr CreateExtSubDomain(TOperationId id, const TTxTransaction& tx) { 
-    return new TCreateExtSubDomain(id, tx); 
-} 
- 
+ISubOperationBase::TPtr CreateExtSubDomain(TOperationId id, const TTxTransaction& tx) {
+    return new TCreateExtSubDomain(id, tx);
+}
+
 ISubOperationBase::TPtr CreateExtSubDomain(TOperationId id, TTxState::ETxState state) {
-    Y_VERIFY(state != TTxState::Invalid); 
+    Y_VERIFY(state != TTxState::Invalid);
     return new TCreateExtSubDomain(id, state);
 }
 

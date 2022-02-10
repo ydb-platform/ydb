@@ -23,7 +23,7 @@
 namespace NKikimr {
 namespace NConsole {
 
-using namespace NOperationId; 
+using namespace NOperationId;
 using namespace NTenantSlotBroker;
 
 namespace {
@@ -280,9 +280,9 @@ public:
         }
 
         const auto &scope = rec.GetStatus(0).GetStoragePool(0).GetScopeId();
-        if (TTenantsManager::TDomainId(scope.GetX1(), scope.GetX2()) != Tenant->DomainId) { 
+        if (TTenantsManager::TDomainId(scope.GetX1(), scope.GetX2()) != Tenant->DomainId) {
             BLOG_ERROR(LogPrefix << "scope id check failure "
-                        << Tenant->DomainId 
+                        << Tenant->DomainId
                         << " vs " << scope.ShortDebugString());
             ReplyAndDie(new TTenantsManager::TEvPrivate::TEvPoolFailed(Tenant, Pool, Pool->Issue), ctx);
             return;
@@ -385,9 +385,9 @@ private:
 
     TActorId OwnerId;
     TTenantsManager::TTenant::TPtr Tenant;
-    TTenantsManager::TTenant::TPtr SharedTenant; 
+    TTenantsManager::TTenant::TPtr SharedTenant;
     EAction Action;
-    // Pair of <WorkDir, DirToCreate> 
+    // Pair of <WorkDir, DirToCreate>
     std::pair<TString, TString> Subdomain;
     ui64 TxId;
     ui64 TabletId;
@@ -406,10 +406,10 @@ public:
     }
 
     TSubDomainManip(TActorId ownerId, TTenantsManager::TTenant::TPtr tenant, EAction action,
-            TTenantsManager::TTenant::TPtr sharedTenant = nullptr) 
+            TTenantsManager::TTenant::TPtr sharedTenant = nullptr)
         : OwnerId(ownerId)
         , Tenant(tenant)
-        , SharedTenant(sharedTenant) 
+        , SharedTenant(sharedTenant)
         , Action(action)
         , TxId(0)
         , TabletId(0)
@@ -417,25 +417,25 @@ public:
         , SchemeshardId(0)
         , PathId(0)
     {
-        if (Action == CREATE) { 
-            TVector<TString> parts = SplitPath(Tenant->Path); 
-            TString workDir; 
-            TString pathToCreate; 
+        if (Action == CREATE) {
+            TVector<TString> parts = SplitPath(Tenant->Path);
+            TString workDir;
+            TString pathToCreate;
 
-            for (size_t i = 0; i < parts.size(); ++i) { 
-                if (i == 0) { 
-                    workDir = "/" + parts[i]; 
+            for (size_t i = 0; i < parts.size(); ++i) {
+                if (i == 0) {
+                    workDir = "/" + parts[i];
                 } else {
-                    if (pathToCreate) { 
-                        pathToCreate += "/"; 
-                    } 
-                    pathToCreate += parts[i]; 
+                    if (pathToCreate) {
+                        pathToCreate += "/";
+                    }
+                    pathToCreate += parts[i];
                 }
             }
- 
-            Subdomain = std::make_pair(workDir, pathToCreate); 
-        } else { 
-            Subdomain = std::make_pair(ExtractParent(Tenant->Path), ExtractBase(Tenant->Path)); 
+
+            Subdomain = std::make_pair(workDir, pathToCreate);
+        } else {
+            Subdomain = std::make_pair(ExtractParent(Tenant->Path), ExtractBase(Tenant->Path));
         }
 
         if (IssuesMap.empty()) {
@@ -459,13 +459,13 @@ public:
                 subdomain.SetExternalSysViewProcessor(true);
             }
         }
- 
-        if (SharedTenant) { 
-            const auto &resourcesDomainId = SharedTenant->DomainId; 
-            auto &resourcesDomainKey = *subdomain.MutableResourcesDomainKey(); 
-            resourcesDomainKey.SetSchemeShard(resourcesDomainId.OwnerId); 
-            resourcesDomainKey.SetPathId(resourcesDomainId.LocalPathId); 
-        } 
+
+        if (SharedTenant) {
+            const auto &resourcesDomainId = SharedTenant->DomainId;
+            auto &resourcesDomainKey = *subdomain.MutableResourcesDomainKey();
+            resourcesDomainKey.SetSchemeShard(resourcesDomainId.OwnerId);
+            resourcesDomainKey.SetPathId(resourcesDomainId.LocalPathId);
+        }
     }
 
     void FillSubdomainAlterInfo(NKikimrSubDomains::TSubDomainSettings &subdomain,
@@ -487,8 +487,8 @@ public:
                 subdomain.SetExternalSysViewProcessor(true);
             }
         }
- 
-        for (auto &pr : (SharedTenant ? SharedTenant->StoragePools : Tenant->StoragePools)) { 
+
+        for (auto &pr : (SharedTenant ? SharedTenant->StoragePools : Tenant->StoragePools)) {
             // N.B. only provide schemeshard with pools that have at least one allocated group
             if (pr.second->State != TTenantsManager::TStoragePool::NOT_ALLOCATED &&
                 pr.second->AllocatedNumGroups > 0)
@@ -542,7 +542,7 @@ public:
         BLOG_D("TSubDomainManip(" << Tenant->Path << ") alter subdomain version " << Version);
 
         auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
-        request->Record.SetDatabaseName(TString(ExtractDomain(Subdomain.first))); 
+        request->Record.SetDatabaseName(TString(ExtractDomain(Subdomain.first)));
         request->Record.SetExecTimeoutPeriod(Max<ui64>());
 
         if (Tenant->UserToken.GetUserSID())
@@ -570,7 +570,7 @@ public:
         BLOG_D("TSubDomainManip(" << Tenant->Path << ") create subdomain");
 
         auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
-        request->Record.SetDatabaseName(TString(ExtractDomain(Subdomain.first))); 
+        request->Record.SetDatabaseName(TString(ExtractDomain(Subdomain.first)));
         request->Record.SetExecTimeoutPeriod(Max<ui64>());
         if (Tenant->UserToken.GetUserSID())
             request->Record.SetUserToken(Tenant->UserToken.SerializeAsString());
@@ -596,7 +596,7 @@ public:
         BLOG_D("TSubDomainManip(" << Tenant->Path << ") drop subdomain");
 
         auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
-        request->Record.SetDatabaseName(TString(ExtractDomain(Subdomain.first))); 
+        request->Record.SetDatabaseName(TString(ExtractDomain(Subdomain.first)));
         request->Record.SetExecTimeoutPeriod(Max<ui64>());
         if (Tenant->UserToken.GetUserSID())
             request->Record.SetUserToken(Tenant->UserToken.SerializeAsString());
@@ -713,8 +713,8 @@ public:
         BLOG_D("TSubdomainManip(" << Tenant->Path << ")::Bootstrap");
 
         if (Action == CREATE) {
-            Become(&TThis::StateSubdomain); 
-            CreateSubdomain(ctx); 
+            Become(&TThis::StateSubdomain);
+            CreateSubdomain(ctx);
         } else if (Action == CONFIGURE) {
             Become(&TThis::StateSubdomain);
             AlterSubdomain(ctx);
@@ -724,7 +724,7 @@ public:
         } else {
             Y_VERIFY(Action == REMOVE);
             Become(&TThis::StateSubdomain);
-            ReadSubdomainKey(ctx); 
+            ReadSubdomainKey(ctx);
         }
     }
 
@@ -809,22 +809,22 @@ public:
         BLOG_D("TSubdomainManip(" << Tenant->Path << ") got describe result: "
                     << rec.ShortDebugString());
 
-        if (Action == REMOVE) { 
-            switch (rec.GetStatus()) { 
+        if (Action == REMOVE) {
+            switch (rec.GetStatus()) {
             case NKikimrScheme::EStatus::StatusPathDoesNotExist:
-                ActionFinished(ctx); 
-                break; 
+                ActionFinished(ctx);
+                break;
             case NKikimrScheme::EStatus::StatusSuccess:
-                DropSubdomain(ctx); 
-                break; 
-            default: 
-                ReplyAndDie(new TTenantsManager::TEvPrivate::TEvSubdomainFailed(Tenant, rec.GetReason()), ctx); 
-                break; 
-            } 
- 
-            return; 
-        } 
- 
+                DropSubdomain(ctx);
+                break;
+            default:
+                ReplyAndDie(new TTenantsManager::TEvPrivate::TEvSubdomainFailed(Tenant, rec.GetReason()), ctx);
+                break;
+            }
+
+            return;
+        }
+
         if (rec.GetStatus() != NKikimrScheme::EStatus::StatusSuccess) {
             BLOG_ERROR("TSubdomainManip(" << Tenant->Path << ") "
                         << "Receive TEvDescribeSchemeResult with bad status "
@@ -1184,7 +1184,7 @@ TTenantsManager::TTenant::TTenant(const TString &path,
     , IsExternalSubdomain(false)
     , IsExternalHive(false)
     , IsExternalSysViewProcessor(false)
-    , AreResourcesShared(false) 
+    , AreResourcesShared(false)
 {
 }
 
@@ -1246,7 +1246,7 @@ bool TTenantsManager::TTenant::HasPoolsToDelete() const
 
 bool TTenantsManager::TTenant::HasSubDomainKey() const
 {
-    return bool(DomainId); 
+    return bool(DomainId);
 }
 
 TString TTenantsManager::TTenant::MakeStoragePoolName(const TString &poolTypeName)
@@ -1317,7 +1317,7 @@ void TTenantsManager::TTenant::RemoveComputationalUnits()
 void TTenantsManager::ClearState()
 {
     Tenants.clear();
-    TenantIdToName.clear(); 
+    TenantIdToName.clear();
     RemovedTenants.clear();
     SlotStats.Clear();
 }
@@ -1381,22 +1381,22 @@ TTenantsManager::TTenant::TPtr TTenantsManager::GetTenant(const TString &name)
     return nullptr;
 }
 
-TTenantsManager::TTenant::TPtr TTenantsManager::GetTenant(const TDomainId &domainId) 
-{ 
-    auto it = TenantIdToName.find(domainId); 
-    if (it != TenantIdToName.end()) 
-        return GetTenant(it->second); 
-    return nullptr; 
-} 
- 
+TTenantsManager::TTenant::TPtr TTenantsManager::GetTenant(const TDomainId &domainId)
+{
+    auto it = TenantIdToName.find(domainId);
+    if (it != TenantIdToName.end())
+        return GetTenant(it->second);
+    return nullptr;
+}
+
 void TTenantsManager::AddTenant(TTenant::TPtr tenant)
 {
     Y_VERIFY(!Tenants.contains(tenant->Path));
     Tenants[tenant->Path] = tenant;
-    if (tenant->DomainId) { 
-        Y_VERIFY(!TenantIdToName.contains(tenant->DomainId)); 
-        TenantIdToName[tenant->DomainId] = tenant->Path; 
-    } 
+    if (tenant->DomainId) {
+        Y_VERIFY(!TenantIdToName.contains(tenant->DomainId));
+        TenantIdToName[tenant->DomainId] = tenant->Path;
+    }
     SlotStats.AllocateSlots(tenant->Slots);
 
     Counters.Set(COUNTER_TENANTS, Tenants.size());
@@ -1412,15 +1412,15 @@ void TTenantsManager::AddTenant(TTenant::TPtr tenant)
 void TTenantsManager::RemoveTenant(TTenant::TPtr tenant)
 {
     Tenants.erase(tenant->Path);
-    TenantIdToName.erase(tenant->DomainId); 
+    TenantIdToName.erase(tenant->DomainId);
     SlotStats.DeallocateSlots(tenant->Slots);
 
-    if (tenant->SharedDomainId) { 
-        auto sharedTenant = GetTenant(tenant->SharedDomainId); 
-        Y_VERIFY(sharedTenant); 
-        sharedTenant->HostedTenants.erase(tenant); 
-    } 
- 
+    if (tenant->SharedDomainId) {
+        auto sharedTenant = GetTenant(tenant->SharedDomainId);
+        Y_VERIFY(sharedTenant);
+        sharedTenant->HostedTenants.erase(tenant);
+    }
+
     Counters.Set(COUNTER_TENANTS, Tenants.size());
     Counters.RemoveUnits(tenant->ComputationalUnits);
     for (auto &pr : tenant->RegisteredComputationalUnits)
@@ -1721,7 +1721,7 @@ TTenantsManager::TStoragePool::TPtr TTenantsManager::MakeStoragePool(TTenant::TP
 
     TStoragePool::TPtr pool = new TStoragePool(poolName, kind, size, config);
     if (tenant->HasSubDomainKey())
-        pool->SetScopeId(tenant->DomainId); 
+        pool->SetScopeId(tenant->DomainId);
 
     return pool;
 }
@@ -1859,12 +1859,12 @@ void TTenantsManager::FillTenantStatus(TTenant::TPtr tenant, Ydb::Cms::GetDataba
     else
         status.set_state(Ydb::Cms::GetDatabaseStatusResult::STATE_UNSPECIFIED);
 
-    auto resources = tenant->AreResourcesShared ? 
-        status.mutable_required_shared_resources() : 
-        status.mutable_required_resources(); 
- 
+    auto resources = tenant->AreResourcesShared ?
+        status.mutable_required_shared_resources() :
+        status.mutable_required_resources();
+
     for (auto &pr : tenant->StoragePools) {
-        auto &pool = *resources->add_storage_units(); 
+        auto &pool = *resources->add_storage_units();
         pool.set_unit_kind(pr.second->Kind);
         pool.set_count(pr.second->Config.GetNumGroups());
         if (pr.second->AllocatedNumGroups) {
@@ -1875,18 +1875,18 @@ void TTenantsManager::FillTenantStatus(TTenant::TPtr tenant, Ydb::Cms::GetDataba
     }
 
     for (auto &pr : tenant->ComputationalUnits) {
-        auto &unit = *resources->add_computational_units(); 
+        auto &unit = *resources->add_computational_units();
         unit.set_unit_kind(pr.first.first);
         unit.set_availability_zone(pr.first.second);
         unit.set_count(pr.second);
     }
 
-    if (tenant->SharedDomainId) { 
-        auto sharedTenant = GetTenant(tenant->SharedDomainId); 
-        Y_VERIFY(sharedTenant); 
-        status.mutable_serverless_resources()->set_shared_database_path(sharedTenant->Path); 
-    } 
- 
+    if (tenant->SharedDomainId) {
+        auto sharedTenant = GetTenant(tenant->SharedDomainId);
+        Y_VERIFY(sharedTenant);
+        status.mutable_serverless_resources()->set_shared_database_path(sharedTenant->Path);
+    }
+
     for (auto &pr : tenant->RegisteredComputationalUnits) {
         auto &unit = *status.add_registered_resources();
         unit.set_host(pr.second.Host);
@@ -1956,8 +1956,8 @@ void TTenantsManager::ConfigureTenantSubDomain(TTenant::TPtr tenant, const TActo
     Y_VERIFY(tenant->IsRunning() || tenant->IsConfiguring());
     if (tenant->SubdomainVersion != tenant->ConfirmedSubdomain
         && !tenant->Worker) {
- 
-        auto *actor = new TSubDomainManip(SelfId(), tenant, TSubDomainManip::CONFIGURE, GetTenant(tenant->SharedDomainId)); 
+
+        auto *actor = new TSubDomainManip(SelfId(), tenant, TSubDomainManip::CONFIGURE, GetTenant(tenant->SharedDomainId));
         tenant->Worker = ctx.RegisterWithSameMailbox(actor);
     }
 }
@@ -1966,7 +1966,7 @@ void TTenantsManager::CreateTenantSubDomain(TTenant::TPtr tenant, const TActorCo
 {
     Y_VERIFY(tenant->State == TTenant::CREATING_SUBDOMAIN);
     Y_VERIFY(!tenant->Worker);
-    auto *actor = new TSubDomainManip(SelfId(), tenant, TSubDomainManip::CREATE, GetTenant(tenant->SharedDomainId)); 
+    auto *actor = new TSubDomainManip(SelfId(), tenant, TSubDomainManip::CREATE, GetTenant(tenant->SharedDomainId));
     tenant->Worker = ctx.RegisterWithSameMailbox(actor);
 }
 
@@ -2119,15 +2119,15 @@ void TTenantsManager::SendTenantNotifications(TTenant::TPtr tenant,
     tenant->Subscribers.clear();
 }
 
-TString DomainIdToStringSafe(const TTenantsManager::TDomainId& value) { 
-    // <invalid> cannot be printed inside <pre> tag 
-    if (!value) { 
-        return "[Invalid]"; 
-    } 
- 
-    return value.ToString(); 
-} 
- 
+TString DomainIdToStringSafe(const TTenantsManager::TDomainId& value) {
+    // <invalid> cannot be printed inside <pre> tag
+    if (!value) {
+        return "[Invalid]";
+    }
+
+    return value.ToString();
+}
+
 void TTenantsManager::DumpStateHTML(IOutputStream &os)
 {
     HTML(os) {
@@ -2163,9 +2163,9 @@ void TTenantsManager::DumpStateHTML(IOutputStream &os)
                    << "   Worker: " << tenant->Worker << Endl
                    << "   SubdomainVersion: " << tenant->SubdomainVersion << Endl
                    << "   ConfirmedSubdomain: " << tenant->ConfirmedSubdomain << Endl
-                   << "   DomainId: " << DomainIdToStringSafe(tenant->DomainId) << Endl 
-                   << "   AreResourcesShared: " << tenant->AreResourcesShared << Endl 
-                   << "   SharedDomainId: " << DomainIdToStringSafe(tenant->SharedDomainId) << Endl 
+                   << "   DomainId: " << DomainIdToStringSafe(tenant->DomainId) << Endl
+                   << "   AreResourcesShared: " << tenant->AreResourcesShared << Endl
+                   << "   SharedDomainId: " << DomainIdToStringSafe(tenant->SharedDomainId) << Endl
                    << "   Attributes: " << tenant->Attributes.ShortDebugString() << Endl;
 
                 os << "   Storage pools:" << Endl;
@@ -2247,10 +2247,10 @@ void TTenantsManager::DbAddTenant(TTenant::TPtr tenant,
                 << " generation=" << tenant->Generation
                 << " errorcode=" << tenant->ErrorCode
                 << " isExternalSubDomain=" << tenant->IsExternalSubdomain
-                << " isExternalHive=" << tenant->IsExternalHive 
+                << " isExternalHive=" << tenant->IsExternalHive
                 << " isExternalSysViewProcessor=" << tenant->IsExternalSysViewProcessor
-                << " areResourcesShared=" << tenant->AreResourcesShared 
-                << " sharedDomainId=" << tenant->SharedDomainId); 
+                << " areResourcesShared=" << tenant->AreResourcesShared
+                << " sharedDomainId=" << tenant->SharedDomainId);
 
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::Tenants>().Key(tenant->Path)
@@ -2268,17 +2268,17 @@ void TTenantsManager::DbAddTenant(TTenant::TPtr tenant,
                 NIceDb::TUpdate<Schema::Tenants::Generation>(tenant->Generation),
                 NIceDb::TUpdate<Schema::Tenants::ErrorCode>(tenant->ErrorCode),
                 NIceDb::TUpdate<Schema::Tenants::IsExternalSubDomain>(tenant->IsExternalSubdomain),
-                NIceDb::TUpdate<Schema::Tenants::IsExternalHive>(tenant->IsExternalHive), 
+                NIceDb::TUpdate<Schema::Tenants::IsExternalHive>(tenant->IsExternalHive),
                 NIceDb::TUpdate<Schema::Tenants::IsExternalSysViewProcessor>(tenant->IsExternalSysViewProcessor),
                 NIceDb::TUpdate<Schema::Tenants::AreResourcesShared>(tenant->AreResourcesShared),
                 NIceDb::TUpdate<Schema::Tenants::CreateIdempotencyKey>(tenant->CreateIdempotencyKey));
 
-    if (tenant->SharedDomainId) { 
-        db.Table<Schema::Tenants>().Key(tenant->Path) 
-            .Update(NIceDb::TUpdate<Schema::Tenants::SharedDomainSchemeShardId>(tenant->SharedDomainId.OwnerId), 
-                    NIceDb::TUpdate<Schema::Tenants::SharedDomainPathId>(tenant->SharedDomainId.LocalPathId)); 
-    } 
- 
+    if (tenant->SharedDomainId) {
+        db.Table<Schema::Tenants>().Key(tenant->Path)
+            .Update(NIceDb::TUpdate<Schema::Tenants::SharedDomainSchemeShardId>(tenant->SharedDomainId.OwnerId),
+                    NIceDb::TUpdate<Schema::Tenants::SharedDomainPathId>(tenant->SharedDomainId.LocalPathId));
+    }
+
     if (tenant->SchemaOperationQuotas) {
         TString serialized;
         Y_VERIFY(tenant->SchemaOperationQuotas->SerializeToString(&serialized));
@@ -2323,18 +2323,18 @@ void TTenantsManager::DbAddTenant(TTenant::TPtr tenant,
     }
 }
 
-template <typename SchemeShardIdColumn, typename PathIdColumn, typename TRowSet> 
-static TTenantsManager::TDomainId LoadDomainId(const TRowSet& rowset) { 
-    const ui64 schemeShardId = rowset.template GetValueOrDefault<SchemeShardIdColumn>(0); 
-    const ui64 pathId = rowset.template GetValueOrDefault<PathIdColumn>(0); 
- 
-    if (!schemeShardId && !pathId) { 
-        return TTenantsManager::TDomainId(); 
-    } 
- 
-    return TTenantsManager::TDomainId(schemeShardId, pathId); 
-} 
- 
+template <typename SchemeShardIdColumn, typename PathIdColumn, typename TRowSet>
+static TTenantsManager::TDomainId LoadDomainId(const TRowSet& rowset) {
+    const ui64 schemeShardId = rowset.template GetValueOrDefault<SchemeShardIdColumn>(0);
+    const ui64 pathId = rowset.template GetValueOrDefault<PathIdColumn>(0);
+
+    if (!schemeShardId && !pathId) {
+        return TTenantsManager::TDomainId();
+    }
+
+    return TTenantsManager::TDomainId(schemeShardId, pathId);
+}
+
 bool TTenantsManager::DbLoadState(TTransactionContext &txc, const TActorContext &ctx)
 {
     LOG_DEBUG(ctx, NKikimrServices::CMS_TENANTS, "Loading tenants state");
@@ -2366,15 +2366,15 @@ bool TTenantsManager::DbLoadState(TTransactionContext &txc, const TActorContext 
         ui64 confirmedSubdomain = tenantRowset.GetValueOrDefault<Schema::Tenants::ConfirmedSubdomain>(0);
         NKikimrSchemeOp::TAlterUserAttributes attrs = tenantRowset.GetValueOrDefault<Schema::Tenants::Attributes>({});
         ui64 generation = tenantRowset.GetValueOrDefault<Schema::Tenants::Generation>(1);
-        const TDomainId domainId = LoadDomainId<Schema::Tenants::SchemeShardId, Schema::Tenants::PathId>(tenantRowset); 
-        const TDomainId sharedDomainId = LoadDomainId<Schema::Tenants::SharedDomainSchemeShardId, Schema::Tenants::SharedDomainPathId>(tenantRowset); 
+        const TDomainId domainId = LoadDomainId<Schema::Tenants::SchemeShardId, Schema::Tenants::PathId>(tenantRowset);
+        const TDomainId sharedDomainId = LoadDomainId<Schema::Tenants::SharedDomainSchemeShardId, Schema::Tenants::SharedDomainPathId>(tenantRowset);
         TString issue = tenantRowset.GetValueOrDefault<Schema::Tenants::Issue>("");
         Ydb::StatusIds::StatusCode errorCode
             = static_cast<Ydb::StatusIds::StatusCode>(tenantRowset.GetValueOrDefault<Schema::Tenants::ErrorCode>(0));
         bool isExternalSubDomain = tenantRowset.GetValueOrDefault<Schema::Tenants::IsExternalSubDomain>(false);
         bool isExternalHive = tenantRowset.GetValueOrDefault<Schema::Tenants::IsExternalHive>(false);
         bool isExternalSysViewProcessor = tenantRowset.GetValueOrDefault<Schema::Tenants::IsExternalSysViewProcessor>(false);
-        const bool areResourcesShared = tenantRowset.GetValueOrDefault<Schema::Tenants::AreResourcesShared>(false); 
+        const bool areResourcesShared = tenantRowset.GetValueOrDefault<Schema::Tenants::AreResourcesShared>(false);
 
         TTenant::TPtr tenant = new TTenant(path, state, userToken);
         tenant->Coordinators = coordinators;
@@ -2386,14 +2386,14 @@ bool TTenantsManager::DbLoadState(TTransactionContext &txc, const TActorContext 
         tenant->ConfirmedSubdomain = confirmedSubdomain;
         tenant->Attributes.CopyFrom(attrs);
         tenant->Generation = generation;
-        tenant->DomainId = domainId; 
-        tenant->SharedDomainId = sharedDomainId; 
+        tenant->DomainId = domainId;
+        tenant->SharedDomainId = sharedDomainId;
         tenant->ErrorCode = errorCode;
         tenant->Issue = issue;
         tenant->IsExternalSubdomain = isExternalSubDomain;
         tenant->IsExternalHive = isExternalHive;
         tenant->IsExternalSysViewProcessor = isExternalSysViewProcessor;
-        tenant->AreResourcesShared = areResourcesShared; 
+        tenant->AreResourcesShared = areResourcesShared;
 
         if (tenantRowset.HaveValue<Schema::Tenants::SchemaOperationQuotas>()) {
             auto& deserialized = tenant->SchemaOperationQuotas.ConstructInPlace();
@@ -2421,16 +2421,16 @@ bool TTenantsManager::DbLoadState(TTransactionContext &txc, const TActorContext 
             return false;
     }
 
-    for (auto [_, tenant] : Tenants) { 
-        if (!tenant->SharedDomainId) { 
-            continue; 
-        } 
- 
-        auto sharedTenant = GetTenant(tenant->SharedDomainId); 
-        Y_VERIFY(sharedTenant); 
-        sharedTenant->HostedTenants.emplace(tenant); 
-    } 
- 
+    for (auto [_, tenant] : Tenants) {
+        if (!tenant->SharedDomainId) {
+            continue;
+        }
+
+        auto sharedTenant = GetTenant(tenant->SharedDomainId);
+        Y_VERIFY(sharedTenant);
+        sharedTenant->HostedTenants.emplace(tenant);
+    }
+
     while (!removedRowset.EndOfSet()) {
         TRemovedTenant tenant;
         tenant.Path = removedRowset.GetValue<Schema::RemovedTenants::Path>();
@@ -2834,7 +2834,7 @@ void TTenantsManager::DbUpdateTenantUserToken(TTenant::TPtr tenant,
                                               const TActorContext &ctx)
 {
     LOG_TRACE_S(ctx, NKikimrServices::CMS_TENANTS,
-                "Update user token in database for " << tenant->Path); 
+                "Update user token in database for " << tenant->Path);
 
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::Tenants>().Key(tenant->Path)

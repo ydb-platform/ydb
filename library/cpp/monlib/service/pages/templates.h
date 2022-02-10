@@ -78,13 +78,13 @@
 #define OL() TAG(TOLIST)
 #define OL_CLASS(cls) TAG_CLASS(TOLIST, cls)
 
-#define DL() TAG(DLIST) 
-#define DL_CLASS(cls) TAG_CLASS(DLIST, cls) 
-#define DT() TAG(DTERM) 
-#define DT_CLASS(cls) TAG_CLASS(DTERM, cls) 
-#define DD() TAG(DDESC) 
-#define DD_CLASS(cls) TAG_CLASS(DDESC, cls) 
- 
+#define DL() TAG(DLIST)
+#define DL_CLASS(cls) TAG_CLASS(DLIST, cls)
+#define DT() TAG(DTERM)
+#define DT_CLASS(cls) TAG_CLASS(DTERM, cls)
+#define DD() TAG(DDESC)
+#define DD_CLASS(cls) TAG_CLASS(DDESC, cls)
+
 #define CAPTION() TAG(TCaption)
 #define CAPTION_CLASS(cls) CAPTION_CLASS(TCaption, cls)
 
@@ -231,9 +231,9 @@ namespace NMonitoring {
     extern const char ListTag[3];
     extern const char UListTag[3];
     extern const char OListTag[3];
-    extern const char DListTag[3]; 
-    extern const char DTermTag[3]; 
-    extern const char DDescTag[3]; 
+    extern const char DListTag[3];
+    extern const char DTermTag[3];
+    extern const char DDescTag[3];
 
     typedef TTag<HtmlTag> THtml;
     typedef TTag<HeadTag> THead;
@@ -262,7 +262,7 @@ namespace NMonitoring {
     typedef TTag<ListTag> TLIST;
     typedef TTag<UListTag> TULIST;
     typedef TTag<OListTag> TOLIST;
-    typedef TTag<DListTag> DLIST; 
-    typedef TTag<DTermTag> DTERM; 
-    typedef TTag<DDescTag> DDESC; 
+    typedef TTag<DListTag> DLIST;
+    typedef TTag<DTermTag> DTERM;
+    typedef TTag<DDescTag> DDESC;
 }

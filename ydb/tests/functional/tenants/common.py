@@ -120,8 +120,8 @@ class DBForStaticSlots(object):
 
 
 class DBWithDynamicSlot(object):
-    SLOT_COUNT = 1 
- 
+    SLOT_COUNT = 1
+
     @classmethod
     def setup_class(cls):
         cls.cluster = kikimr_cluster_factory(

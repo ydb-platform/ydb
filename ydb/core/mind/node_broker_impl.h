@@ -262,8 +262,8 @@ private:
                               TTransactionContext &txc);
     void DbUpdateNodeLease(const TNodeInfo &node,
                            TTransactionContext &txc);
-    void DbUpdateNodeLocation(const TNodeInfo &node, 
-                              TTransactionContext &txc); 
+    void DbUpdateNodeLocation(const TNodeInfo &node,
+                              TTransactionContext &txc);
 
     void Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
                 const TActorContext &ctx);

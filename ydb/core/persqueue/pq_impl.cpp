@@ -26,13 +26,13 @@ const TString TMP_REQUEST_MARKER = "__TMP__REQUEST__MARKER__";
 const ui32 CACHE_SIZE = 100 << 20; //100mb per tablet by default
 const ui32 MAX_BYTES = 25 * 1024 * 1024;
 const TDuration TOTAL_TIMEOUT = TDuration::Seconds(120);
-static constexpr ui32 MAX_SOURCE_ID_LENGTH = 10240; 
+static constexpr ui32 MAX_SOURCE_ID_LENGTH = 10240;
 
 struct TPartitionInfo {
-    TPartitionInfo(const TActorId& actor, TMaybe<TPartitionKeyRange>&& keyRange, 
-            const bool initDone, const TTabletCountersBase& baseline) 
+    TPartitionInfo(const TActorId& actor, TMaybe<TPartitionKeyRange>&& keyRange,
+            const bool initDone, const TTabletCountersBase& baseline)
         : Actor(actor)
-        , KeyRange(std::move(keyRange)) 
+        , KeyRange(std::move(keyRange))
         , InitDone(initDone)
     {
         Baseline.Populate(baseline);
@@ -40,14 +40,14 @@ struct TPartitionInfo {
 
     TPartitionInfo(const TPartitionInfo& info)
         : Actor(info.Actor)
-        , KeyRange(info.KeyRange) 
+        , KeyRange(info.KeyRange)
         , InitDone(info.InitDone)
     {
         Baseline.Populate(info.Baseline);
     }
 
     TActorId Actor;
-    TMaybe<TPartitionKeyRange> KeyRange; 
+    TMaybe<TPartitionKeyRange> KeyRange;
     bool InitDone;
     TTabletCountersBase Baseline;
     THashMap<TString, TTabletLabeledCountersBase> LabeledCounters;
@@ -75,12 +75,12 @@ struct TChangeNotification {
     ui64 TxId;
 };
 
-static TMaybe<TPartitionKeyRange> GetPartitionKeyRange(const NKikimrPQ::TPQTabletConfig::TPartition& proto) { 
-    if (!proto.HasKeyRange()) { 
-        return Nothing(); 
-    } 
-    return TPartitionKeyRange::Parse(proto.GetKeyRange()); 
-} 
+static TMaybe<TPartitionKeyRange> GetPartitionKeyRange(const NKikimrPQ::TPQTabletConfig::TPartition& proto) {
+    if (!proto.HasKeyRange()) {
+        return Nothing();
+    }
+    return TPartitionKeyRange::Parse(proto.GetKeyRange());
+}
 
 /******************************************************* ReadProxy *********************************************************/
 //megaqc - remove it when LB will be ready
@@ -563,17 +563,17 @@ void TPersQueue::FillMeteringParams(const TActorContext& ctx)
 void TPersQueue::ApplyNewConfigAndReply(const TActorContext& ctx)
 {
     THashSet<ui32> was;
-    if (NewConfig.PartitionsSize()) { 
-        for (const auto& partition : NewConfig.GetPartitions()) { 
-            was.insert(partition.GetPartitionId()); 
-        } 
-    } else { 
-        for (const auto partitionId : NewConfig.GetPartitionIds()) { 
-            was.insert(partitionId); 
-        } 
+    if (NewConfig.PartitionsSize()) {
+        for (const auto& partition : NewConfig.GetPartitions()) {
+            was.insert(partition.GetPartitionId());
+        }
+    } else {
+        for (const auto partitionId : NewConfig.GetPartitionIds()) {
+            was.insert(partitionId);
+        }
     }
-    for (const auto& partition : Config.GetPartitions()) { 
-        Y_VERIFY_S(was.contains(partition.GetPartitionId()), "New config is bad, missing partition " << partition.GetPartitionId()); 
+    for (const auto& partition : Config.GetPartitions()) {
+        Y_VERIFY_S(was.contains(partition.GetPartitionId()), "New config is bad, missing partition " << partition.GetPartitionId());
     }
 
     Y_VERIFY(ConfigInited && PartitionsInited == Partitions.size()); //in order to answer only after all parts are ready to work
@@ -584,12 +584,12 @@ void TPersQueue::ApplyNewConfigAndReply(const TActorContext& ctx)
 
     FillMeteringParams(ctx);
 
-    if (!Config.PartitionsSize()) { 
-        for (const auto partitionId : Config.GetPartitionIds()) { 
-            Config.AddPartitions()->SetPartitionId(partitionId); 
-        } 
-    } 
- 
+    if (!Config.PartitionsSize()) {
+        for (const auto partitionId : Config.GetPartitionIds()) {
+            Config.AddPartitions()->SetPartitionId(partitionId);
+        }
+    }
+
     ui32 cacheSize = CACHE_SIZE;
     if (Config.HasCacheSize())
         cacheSize = Config.GetCacheSize();
@@ -598,13 +598,13 @@ void TPersQueue::ApplyNewConfigAndReply(const TActorContext& ctx)
         TopicName = Config.GetTopicName();
         TopicPath = Config.GetTopicPath();
         LocalDC = Config.GetLocalDC();
- 
-        KeySchema.clear(); 
-        KeySchema.reserve(Config.PartitionKeySchemaSize()); 
-        for (const auto& component : Config.GetPartitionKeySchema()) { 
-            KeySchema.push_back(component.GetTypeId()); 
-        } 
- 
+
+        KeySchema.clear();
+        KeySchema.reserve(Config.PartitionKeySchemaSize());
+        for (const auto& component : Config.GetPartitionKeySchema()) {
+            KeySchema.push_back(component.GetTypeId());
+        }
+
         Y_VERIFY(TopicName.size(), "Need topic name here");
         CacheActor = ctx.Register(new TPQCacheProxy(ctx.SelfID, TopicName, cacheSize));
     } else {
@@ -615,17 +615,17 @@ void TPersQueue::ApplyNewConfigAndReply(const TActorContext& ctx)
     for (auto& p : Partitions) { //change config for already created partitions
         ctx.Send(p.second.Actor, new TEvPQ::TEvChangeConfig(TopicName, Config));
     }
-    for (const auto& partition : Config.GetPartitions()) { 
-        const auto partitionId = partition.GetPartitionId(); 
-        if (Partitions.find(partitionId) == Partitions.end()) { 
-            Partitions.emplace(partitionId, TPartitionInfo( 
-                ctx.Register(new TPartition(TabletID(), partitionId, ctx.SelfID, CacheActor, TopicName, TopicPath, LocalDC, DCId, Config, *Counters, ctx, true)), 
-                GetPartitionKeyRange(partition), 
+    for (const auto& partition : Config.GetPartitions()) {
+        const auto partitionId = partition.GetPartitionId();
+        if (Partitions.find(partitionId) == Partitions.end()) {
+            Partitions.emplace(partitionId, TPartitionInfo(
+                ctx.Register(new TPartition(TabletID(), partitionId, ctx.SelfID, CacheActor, TopicName, TopicPath, LocalDC, DCId, Config, *Counters, ctx, true)),
+                GetPartitionKeyRange(partition),
                 true,
                 *Counters
-            )); 
- 
-            // InitCompleted is true because this partition is empty 
+            ));
+
+            // InitCompleted is true because this partition is empty
             ++PartitionsInited; //newly created partition is empty and ready to work
         }
     }
@@ -696,22 +696,22 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
     if (read.GetStatus() == NKikimrProto::OK) {
         bool res = Config.ParseFromString(read.GetValue());
         Y_VERIFY(res);
- 
-        if (!Config.PartitionsSize()) { 
-            for (const auto partitionId : Config.GetPartitionIds()) { 
-                Config.AddPartitions()->SetPartitionId(partitionId); 
-            } 
-        } 
- 
+
+        if (!Config.PartitionsSize()) {
+            for (const auto partitionId : Config.GetPartitionIds()) {
+                Config.AddPartitions()->SetPartitionId(partitionId);
+            }
+        }
+
         TopicName = Config.GetTopicName();
         LocalDC = Config.GetLocalDC();
 
-        KeySchema.clear(); 
-        KeySchema.reserve(Config.PartitionKeySchemaSize()); 
-        for (const auto& component : Config.GetPartitionKeySchema()) { 
-            KeySchema.push_back(component.GetTypeId()); 
-        } 
- 
+        KeySchema.clear();
+        KeySchema.reserve(Config.PartitionKeySchemaSize());
+        for (const auto& component : Config.GetPartitionKeySchema()) {
+            KeySchema.push_back(component.GetTypeId());
+        }
+
         ui32 cacheSize = CACHE_SIZE;
         if (Config.HasCacheSize())
             cacheSize = Config.GetCacheSize();
@@ -724,14 +724,14 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
         Y_FAIL("Unexpected config read status: %d", read.GetStatus());
     }
 
-    for (const auto& partition : Config.GetPartitions()) { // no partitions will be created with empty config 
-        const auto partitionId = partition.GetPartitionId(); 
-        Partitions.emplace(partitionId, TPartitionInfo( 
-            ctx.Register(new TPartition(TabletID(), partitionId, ctx.SelfID, CacheActor, TopicName, TopicPath, LocalDC, DCId, Config, *Counters, ctx, false)), 
-            GetPartitionKeyRange(partition), 
+    for (const auto& partition : Config.GetPartitions()) { // no partitions will be created with empty config
+        const auto partitionId = partition.GetPartitionId();
+        Partitions.emplace(partitionId, TPartitionInfo(
+            ctx.Register(new TPartition(TabletID(), partitionId, ctx.SelfID, CacheActor, TopicName, TopicPath, LocalDC, DCId, Config, *Counters, ctx, false)),
+            GetPartitionKeyRange(partition),
             false,
             *Counters
-        )); 
+        ));
     }
     ConfigInited = true;
 
@@ -1059,48 +1059,48 @@ void TPersQueue::ProcessUpdateConfigRequest(TAutoPtr<TEvPersQueue::TEvUpdateConf
         return;
     }
 
-    const auto& bootstrapCfg = record.GetBootstrapConfig(); 
- 
-    if (bootstrapCfg.ExplicitMessageGroupsSize() && !AppData(ctx)->PQConfig.GetEnableProtoSourceIdInfo()) { 
-        LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() 
-                    << ": cannot apply explicit message groups unless proto source id enabled" 
-                    << ", actor " << sender 
-                    << ", txId " << record.GetTxId()); 
- 
-        THolder<TEvPersQueue::TEvUpdateConfigResponse> res{new TEvPersQueue::TEvUpdateConfigResponse}; 
-        res->Record.SetStatus(NKikimrPQ::ERROR); 
-        res->Record.SetTxId(record.GetTxId()); 
-        res->Record.SetOrigin(TabletID()); 
-        ctx.Send(sender, res.Release()); 
-        return; 
-    } 
- 
-    for (const auto& mg : bootstrapCfg.GetExplicitMessageGroups()) { 
-        TString error; 
- 
-        if (!mg.HasId() || mg.GetId().empty()) { 
-            error = "Empty Id"; 
-        } else if (mg.GetId().size() > MAX_SOURCE_ID_LENGTH) { 
-            error = "Too long Id"; 
-        } else if (mg.HasKeyRange() && !cfg.PartitionKeySchemaSize()) { 
-            error = "Missing KeySchema"; 
-        } 
- 
-        if (error) { 
-            LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() 
-                        << "Cannot apply explicit message group: " << error 
-                        << " actor " << sender 
-                        << " txId " << record.GetTxId()); 
- 
-            THolder<TEvPersQueue::TEvUpdateConfigResponse> res{new TEvPersQueue::TEvUpdateConfigResponse}; 
-            res->Record.SetStatus(NKikimrPQ::ERROR); 
-            res->Record.SetTxId(record.GetTxId()); 
-            res->Record.SetOrigin(TabletID()); 
-            ctx.Send(sender, res.Release()); 
-            return; 
-        } 
-    } 
- 
+    const auto& bootstrapCfg = record.GetBootstrapConfig();
+
+    if (bootstrapCfg.ExplicitMessageGroupsSize() && !AppData(ctx)->PQConfig.GetEnableProtoSourceIdInfo()) {
+        LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID()
+                    << ": cannot apply explicit message groups unless proto source id enabled"
+                    << ", actor " << sender
+                    << ", txId " << record.GetTxId());
+
+        THolder<TEvPersQueue::TEvUpdateConfigResponse> res{new TEvPersQueue::TEvUpdateConfigResponse};
+        res->Record.SetStatus(NKikimrPQ::ERROR);
+        res->Record.SetTxId(record.GetTxId());
+        res->Record.SetOrigin(TabletID());
+        ctx.Send(sender, res.Release());
+        return;
+    }
+
+    for (const auto& mg : bootstrapCfg.GetExplicitMessageGroups()) {
+        TString error;
+
+        if (!mg.HasId() || mg.GetId().empty()) {
+            error = "Empty Id";
+        } else if (mg.GetId().size() > MAX_SOURCE_ID_LENGTH) {
+            error = "Too long Id";
+        } else if (mg.HasKeyRange() && !cfg.PartitionKeySchemaSize()) {
+            error = "Missing KeySchema";
+        }
+
+        if (error) {
+            LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID()
+                        << "Cannot apply explicit message group: " << error
+                        << " actor " << sender
+                        << " txId " << record.GetTxId());
+
+            THolder<TEvPersQueue::TEvUpdateConfigResponse> res{new TEvPersQueue::TEvUpdateConfigResponse};
+            res->Record.SetStatus(NKikimrPQ::ERROR);
+            res->Record.SetTxId(record.GetTxId());
+            res->Record.SetOrigin(TabletID());
+            ctx.Send(sender, res.Release());
+            return;
+        }
+    }
+
     ChangeConfigNotification.insert(TChangeNotification(sender, record.GetTxId()));
 
     if (!cfg.HasPartitionConfig())
@@ -1139,29 +1139,29 @@ void TPersQueue::ProcessUpdateConfigRequest(TAutoPtr<TEvPersQueue::TEvUpdateConf
 
     bool res = cfg.SerializeToString(&str);
     Y_VERIFY(res);
- 
+
     TAutoPtr<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
     request->Record.SetCookie(WRITE_CONFIG_COOKIE);
- 
+
     auto write = request->Record.AddCmdWrite();
     write->SetKey(KeyConfig());
     write->SetValue(str);
     write->SetTactic(AppData(ctx)->PQConfig.GetTactic());
- 
-    TSourceIdWriter sourceIdWriter(ESourceIdFormat::Proto); 
-    for (const auto& mg : bootstrapCfg.GetExplicitMessageGroups()) { 
-        TMaybe<TPartitionKeyRange> keyRange; 
-        if (mg.HasKeyRange()) { 
-            keyRange = TPartitionKeyRange::Parse(mg.GetKeyRange()); 
-        } 
- 
-        sourceIdWriter.RegisterSourceId(mg.GetId(), 0, 0, ctx.Now(), std::move(keyRange)); 
- 
-        for (const auto& partition : cfg.GetPartitions()) { 
-            sourceIdWriter.FillRequest(request.Get(), partition.GetPartitionId()); 
-        } 
-    } 
- 
+
+    TSourceIdWriter sourceIdWriter(ESourceIdFormat::Proto);
+    for (const auto& mg : bootstrapCfg.GetExplicitMessageGroups()) {
+        TMaybe<TPartitionKeyRange> keyRange;
+        if (mg.HasKeyRange()) {
+            keyRange = TPartitionKeyRange::Parse(mg.GetKeyRange());
+        }
+
+        sourceIdWriter.RegisterSourceId(mg.GetId(), 0, 0, ctx.Now(), std::move(keyRange));
+
+        for (const auto& partition : cfg.GetPartitions()) {
+            sourceIdWriter.FillRequest(request.Get(), partition.GetPartitionId());
+        }
+    }
+
     NewConfig = cfg;
     ctx.Send(ctx.SelfID, request.Release());
 }
@@ -1477,7 +1477,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
             errorStr = "TotalSize must be filled for first part";
         } else if (cmd.HasTotalSize() && static_cast<size_t>(cmd.GetTotalSize()) <= cmd.GetData().size()) { // TotalSize must be > size of each part
             errorStr = "TotalSize is incorrect";
-        } else if (cmd.GetSourceId().size() > MAX_SOURCE_ID_LENGTH) { 
+        } else if (cmd.GetSourceId().size() > MAX_SOURCE_ID_LENGTH) {
             errorStr = "Too big SourceId";
         } else if (mirroredPartition && !cmd.GetDisableDeduplication()) {
             errorStr = "Write to mirrored topic is forbiden";
@@ -1673,120 +1673,120 @@ void TPersQueue::HandleReadRequest(const ui64 responseCookie, const TActorId& pa
     }
 }
 
-TMaybe<TEvPQ::TEvRegisterMessageGroup::TBody> TPersQueue::MakeRegisterMessageGroup( 
-        const NKikimrClient::TPersQueuePartitionRequest::TCmdRegisterMessageGroup& cmd, 
-        NPersQueue::NErrorCode::EErrorCode& code, TString& error) const 
-{ 
-    if (!cmd.HasId() || cmd.GetId().empty()) { 
-        code = NPersQueue::NErrorCode::BAD_REQUEST; 
-        error = "Empty Id"; 
-        return Nothing(); 
-    } else if (cmd.GetId().size() > MAX_SOURCE_ID_LENGTH) { 
-        code = NPersQueue::NErrorCode::BAD_REQUEST; 
-        error = "Too long Id"; 
-        return Nothing(); 
-    } else if (cmd.HasPartitionKeyRange() && !Config.PartitionKeySchemaSize()) { 
-        code = NPersQueue::NErrorCode::BAD_REQUEST; 
-        error = "Missing KeySchema"; 
-        return Nothing(); 
-    } 
- 
-    TMaybe<NKikimrPQ::TPartitionKeyRange> keyRange; 
-    if (cmd.HasPartitionKeyRange()) { 
-        keyRange = cmd.GetPartitionKeyRange(); 
-    } 
- 
-    return TEvPQ::TEvRegisterMessageGroup::TBody(cmd.GetId(), std::move(keyRange), cmd.GetStartingSeqNo(), cmd.GetAfterSplit()); 
-} 
- 
-TMaybe<TEvPQ::TEvDeregisterMessageGroup::TBody> TPersQueue::MakeDeregisterMessageGroup( 
-        const NKikimrClient::TPersQueuePartitionRequest::TCmdDeregisterMessageGroup& cmd, 
-        NPersQueue::NErrorCode::EErrorCode& code, TString& error) const 
-{ 
-    if (!cmd.HasId() || cmd.GetId().empty()) { 
-        code = NPersQueue::NErrorCode::BAD_REQUEST; 
-        error = "Empty Id"; 
-        return Nothing(); 
-    } else if (cmd.GetId().size() > MAX_SOURCE_ID_LENGTH) { 
-        code = NPersQueue::NErrorCode::BAD_REQUEST; 
-        error = "Too long Id"; 
-        return Nothing(); 
-    } 
- 
-    return TEvPQ::TEvDeregisterMessageGroup::TBody(cmd.GetId()); 
-} 
- 
-void TPersQueue::HandleRegisterMessageGroupRequest(ui64 responseCookie, const TActorId& partActor, 
-    const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx) 
-{ 
-    Y_VERIFY(req.HasCmdRegisterMessageGroup()); 
- 
-    NPersQueue::NErrorCode::EErrorCode code; 
-    TString error; 
-    auto body = MakeRegisterMessageGroup(req.GetCmdRegisterMessageGroup(), code, error); 
- 
-    if (!body) { 
-        return ReplyError(ctx, responseCookie, code, error); 
-    } 
- 
-    InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_REGISTER_MESSAGE_GROUP); 
-    ctx.Send(partActor, new TEvPQ::TEvRegisterMessageGroup(responseCookie, std::move(body.GetRef()))); 
-} 
- 
-void TPersQueue::HandleDeregisterMessageGroupRequest(ui64 responseCookie, const TActorId& partActor, 
-    const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx) 
-{ 
-    Y_VERIFY(req.HasCmdDeregisterMessageGroup()); 
- 
-    NPersQueue::NErrorCode::EErrorCode code; 
-    TString error; 
-    auto body = MakeDeregisterMessageGroup(req.GetCmdDeregisterMessageGroup(), code, error); 
- 
-    if (!body) { 
-        return ReplyError(ctx, responseCookie, code, error); 
-    } 
- 
-    InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_DEREGISTER_MESSAGE_GROUP); 
-    ctx.Send(partActor, new TEvPQ::TEvDeregisterMessageGroup(responseCookie, std::move(body.GetRef()))); 
-} 
- 
-void TPersQueue::HandleSplitMessageGroupRequest(ui64 responseCookie, const TActorId& partActor, 
-    const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx) 
-{ 
-    Y_VERIFY(req.HasCmdSplitMessageGroup()); 
-    const auto& cmd = req.GetCmdSplitMessageGroup(); 
- 
-    NPersQueue::NErrorCode::EErrorCode code; 
-    TString error; 
- 
-    TVector<TEvPQ::TEvDeregisterMessageGroup::TBody> deregistrations; 
-    for (const auto& group : cmd.GetDeregisterGroups()) { 
-        auto body = MakeDeregisterMessageGroup(group, code, error); 
-        if (!body) { 
-            return ReplyError(ctx, responseCookie, code, error); 
-        } 
- 
-        deregistrations.push_back(std::move(body.GetRef())); 
-    } 
- 
-    TVector<TEvPQ::TEvRegisterMessageGroup::TBody> registrations; 
-    for (const auto& group : cmd.GetRegisterGroups()) { 
-        if (group.GetAfterSplit()) { 
-            return ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, "AfterSplit cannot be set"); 
-        } 
- 
-        auto body = MakeRegisterMessageGroup(group, code, error); 
-        if (!body) { 
-            return ReplyError(ctx, responseCookie, code, error); 
-        } 
- 
-        registrations.push_back(std::move(body.GetRef())); 
-    } 
- 
-    InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_SPLIT_MESSAGE_GROUP); 
-    ctx.Send(partActor, new TEvPQ::TEvSplitMessageGroup(responseCookie, std::move(deregistrations), std::move(registrations))); 
-} 
- 
+TMaybe<TEvPQ::TEvRegisterMessageGroup::TBody> TPersQueue::MakeRegisterMessageGroup(
+        const NKikimrClient::TPersQueuePartitionRequest::TCmdRegisterMessageGroup& cmd,
+        NPersQueue::NErrorCode::EErrorCode& code, TString& error) const
+{
+    if (!cmd.HasId() || cmd.GetId().empty()) {
+        code = NPersQueue::NErrorCode::BAD_REQUEST;
+        error = "Empty Id";
+        return Nothing();
+    } else if (cmd.GetId().size() > MAX_SOURCE_ID_LENGTH) {
+        code = NPersQueue::NErrorCode::BAD_REQUEST;
+        error = "Too long Id";
+        return Nothing();
+    } else if (cmd.HasPartitionKeyRange() && !Config.PartitionKeySchemaSize()) {
+        code = NPersQueue::NErrorCode::BAD_REQUEST;
+        error = "Missing KeySchema";
+        return Nothing();
+    }
+
+    TMaybe<NKikimrPQ::TPartitionKeyRange> keyRange;
+    if (cmd.HasPartitionKeyRange()) {
+        keyRange = cmd.GetPartitionKeyRange();
+    }
+
+    return TEvPQ::TEvRegisterMessageGroup::TBody(cmd.GetId(), std::move(keyRange), cmd.GetStartingSeqNo(), cmd.GetAfterSplit());
+}
+
+TMaybe<TEvPQ::TEvDeregisterMessageGroup::TBody> TPersQueue::MakeDeregisterMessageGroup(
+        const NKikimrClient::TPersQueuePartitionRequest::TCmdDeregisterMessageGroup& cmd,
+        NPersQueue::NErrorCode::EErrorCode& code, TString& error) const
+{
+    if (!cmd.HasId() || cmd.GetId().empty()) {
+        code = NPersQueue::NErrorCode::BAD_REQUEST;
+        error = "Empty Id";
+        return Nothing();
+    } else if (cmd.GetId().size() > MAX_SOURCE_ID_LENGTH) {
+        code = NPersQueue::NErrorCode::BAD_REQUEST;
+        error = "Too long Id";
+        return Nothing();
+    }
+
+    return TEvPQ::TEvDeregisterMessageGroup::TBody(cmd.GetId());
+}
+
+void TPersQueue::HandleRegisterMessageGroupRequest(ui64 responseCookie, const TActorId& partActor,
+    const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx)
+{
+    Y_VERIFY(req.HasCmdRegisterMessageGroup());
+
+    NPersQueue::NErrorCode::EErrorCode code;
+    TString error;
+    auto body = MakeRegisterMessageGroup(req.GetCmdRegisterMessageGroup(), code, error);
+
+    if (!body) {
+        return ReplyError(ctx, responseCookie, code, error);
+    }
+
+    InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_REGISTER_MESSAGE_GROUP);
+    ctx.Send(partActor, new TEvPQ::TEvRegisterMessageGroup(responseCookie, std::move(body.GetRef())));
+}
+
+void TPersQueue::HandleDeregisterMessageGroupRequest(ui64 responseCookie, const TActorId& partActor,
+    const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx)
+{
+    Y_VERIFY(req.HasCmdDeregisterMessageGroup());
+
+    NPersQueue::NErrorCode::EErrorCode code;
+    TString error;
+    auto body = MakeDeregisterMessageGroup(req.GetCmdDeregisterMessageGroup(), code, error);
+
+    if (!body) {
+        return ReplyError(ctx, responseCookie, code, error);
+    }
+
+    InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_DEREGISTER_MESSAGE_GROUP);
+    ctx.Send(partActor, new TEvPQ::TEvDeregisterMessageGroup(responseCookie, std::move(body.GetRef())));
+}
+
+void TPersQueue::HandleSplitMessageGroupRequest(ui64 responseCookie, const TActorId& partActor,
+    const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx)
+{
+    Y_VERIFY(req.HasCmdSplitMessageGroup());
+    const auto& cmd = req.GetCmdSplitMessageGroup();
+
+    NPersQueue::NErrorCode::EErrorCode code;
+    TString error;
+
+    TVector<TEvPQ::TEvDeregisterMessageGroup::TBody> deregistrations;
+    for (const auto& group : cmd.GetDeregisterGroups()) {
+        auto body = MakeDeregisterMessageGroup(group, code, error);
+        if (!body) {
+            return ReplyError(ctx, responseCookie, code, error);
+        }
+
+        deregistrations.push_back(std::move(body.GetRef()));
+    }
+
+    TVector<TEvPQ::TEvRegisterMessageGroup::TBody> registrations;
+    for (const auto& group : cmd.GetRegisterGroups()) {
+        if (group.GetAfterSplit()) {
+            return ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, "AfterSplit cannot be set");
+        }
+
+        auto body = MakeRegisterMessageGroup(group, code, error);
+        if (!body) {
+            return ReplyError(ctx, responseCookie, code, error);
+        }
+
+        registrations.push_back(std::move(body.GetRef()));
+    }
+
+    InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_SPLIT_MESSAGE_GROUP);
+    ctx.Send(partActor, new TEvPQ::TEvSplitMessageGroup(responseCookie, std::move(deregistrations), std::move(registrations)));
+}
+
 void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext& ctx)
 {
     NKikimrClient::TPersQueueRequest& request = ev->Get()->Record;
@@ -1845,19 +1845,19 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
         return;
     }
 
-    ui32 count = req.HasCmdGetMaxSeqNo() 
-        + req.HasCmdDeleteSession() 
-        + req.HasCmdCreateSession() 
-        + req.HasCmdSetClientOffset() 
-        + req.HasCmdGetClientOffset() 
-        + req.HasCmdRead() 
-        + req.HasCmdGetOwnership() 
-        + (req.CmdWriteSize() > 0 ? 1 : 0) 
-        + req.HasCmdReserveBytes() 
-        + req.HasCmdUpdateWriteTimestamp() 
-        + req.HasCmdRegisterMessageGroup() 
-        + req.HasCmdDeregisterMessageGroup() 
-        + req.HasCmdSplitMessageGroup(); 
+    ui32 count = req.HasCmdGetMaxSeqNo()
+        + req.HasCmdDeleteSession()
+        + req.HasCmdCreateSession()
+        + req.HasCmdSetClientOffset()
+        + req.HasCmdGetClientOffset()
+        + req.HasCmdRead()
+        + req.HasCmdGetOwnership()
+        + (req.CmdWriteSize() > 0 ? 1 : 0)
+        + req.HasCmdReserveBytes()
+        + req.HasCmdUpdateWriteTimestamp()
+        + req.HasCmdRegisterMessageGroup()
+        + req.HasCmdDeregisterMessageGroup()
+        + req.HasCmdSplitMessageGroup();
 
     if (count != 1) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
@@ -1889,12 +1889,12 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
         HandleGetOwnershipRequest(responseCookie, partActor, req, ctx, pipeClient, ev->Sender);
     } else if (req.HasCmdReserveBytes()) {
         HandleReserveBytesRequest(responseCookie, partActor, req, ctx, pipeClient, ev->Sender);
-    } else if (req.HasCmdRegisterMessageGroup()) { 
-        HandleRegisterMessageGroupRequest(responseCookie, partActor, req, ctx); 
-    } else if (req.HasCmdDeregisterMessageGroup()) { 
-        HandleDeregisterMessageGroupRequest(responseCookie, partActor, req, ctx); 
-    } else if (req.HasCmdSplitMessageGroup()) { 
-        HandleSplitMessageGroupRequest(responseCookie, partActor, req, ctx); 
+    } else if (req.HasCmdRegisterMessageGroup()) {
+        HandleRegisterMessageGroupRequest(responseCookie, partActor, req, ctx);
+    } else if (req.HasCmdDeregisterMessageGroup()) {
+        HandleDeregisterMessageGroupRequest(responseCookie, partActor, req, ctx);
+    } else if (req.HasCmdSplitMessageGroup()) {
+        HandleSplitMessageGroupRequest(responseCookie, partActor, req, ctx);
     } else Y_FAIL("unknown or empty command");
 }
 

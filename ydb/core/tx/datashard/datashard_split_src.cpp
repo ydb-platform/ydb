@@ -197,7 +197,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext &) override { 
+    void Complete(const TActorContext &) override {
     }
 };
 
@@ -209,13 +209,13 @@ NTabletFlatExecutor::ITransaction* TDataShard::CreateTxStartSplit() {
 class TDataShard::TTxSplitSnapshotComplete : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 private:
     TIntrusivePtr<TSplitSnapshotContext> SnapContext;
-    bool ChangeExchangeSplit; 
+    bool ChangeExchangeSplit;
 
 public:
     TTxSplitSnapshotComplete(TDataShard* ds, TIntrusivePtr<TSplitSnapshotContext> snapContext)
         : NTabletFlatExecutor::TTransactionBase<TDataShard>(ds)
         , SnapContext(snapContext)
-        , ChangeExchangeSplit(false) 
+        , ChangeExchangeSplit(false)
     {}
 
     TTxType GetTxType() const override { return TXTYPE_SPLIT_SNASHOT_COMPLETE; }
@@ -341,16 +341,16 @@ public:
                     proto->SetTimeoutMs(kv.second.Timeout.MilliSeconds());
                 }
 
-                if (Self->ChangesQueue || tableInfo.HasCdcStreams()) { 
-                    snapshot->SetWaitForActivation(true); 
-                    Self->ChangeSenderActivator.AddDst(dstTablet); 
-                    db.Table<Schema::SrcChangeSenderActivations>().Key(dstTablet).Update(); 
- 
-                    if (tableInfo.HasCdcStreams()) { 
-                        Self->ChangeExchangeSplitter.AddDst(dstTablet); 
-                    } 
-                } 
- 
+                if (Self->ChangesQueue || tableInfo.HasCdcStreams()) {
+                    snapshot->SetWaitForActivation(true);
+                    Self->ChangeSenderActivator.AddDst(dstTablet);
+                    db.Table<Schema::SrcChangeSenderActivations>().Key(dstTablet).Update();
+
+                    if (tableInfo.HasCdcStreams()) {
+                        Self->ChangeExchangeSplitter.AddDst(dstTablet);
+                    }
+                }
+
                 if (sourceOffsetsBytes > 0) {
                     snapshot->SetReplicationSourceOffsetsBytes(sourceOffsetsBytes);
                 }
@@ -366,8 +366,8 @@ public:
             }
         }
 
-        ChangeExchangeSplit = !Self->ChangesQueue && !Self->ChangeExchangeSplitter.Done(); 
- 
+        ChangeExchangeSplit = !Self->ChangesQueue && !Self->ChangeExchangeSplitter.Done();
+
         if (needToReadPages) {
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " BorrowSnapshot is restarting for split OpId " << opId);
             return false;
@@ -384,9 +384,9 @@ public:
     void Complete(const TActorContext &ctx) override {
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " Sending snapshots from src for split OpId " << Self->SrcSplitOpId);
         Self->SplitSrcSnapshotSender.DoSend(ctx);
-        if (ChangeExchangeSplit) { 
-            Self->ChangeExchangeSplitter.DoSplit(ctx); 
-        } 
+        if (ChangeExchangeSplit) {
+            Self->ChangeExchangeSplitter.DoSplit(ctx);
+        }
     }
 };
 
@@ -400,14 +400,14 @@ class TDataShard::TTxSplitTransferSnapshotAck : public NTabletFlatExecutor::TTra
 private:
     TEvDataShard::TEvSplitTransferSnapshotAck::TPtr Ev;
     bool AllDstAcksReceived;
-    bool Activate; 
+    bool Activate;
 
 public:
     TTxSplitTransferSnapshotAck(TDataShard* ds, TEvDataShard::TEvSplitTransferSnapshotAck::TPtr& ev)
         : NTabletFlatExecutor::TTransactionBase<TDataShard>(ds)
         , Ev(ev)
         , AllDstAcksReceived(false)
-        , Activate(false) 
+        , Activate(false)
     {}
 
     TTxType GetTxType() const override { return TXTYPE_SPLIT_TRANSFER_SNAPSHOT_ACK; }
@@ -431,10 +431,10 @@ public:
         // Remove the row for acked snapshot
         db.Table<Schema::SplitSrcSnapshots>().Key(dstTabletId).Delete();
 
-        if (!Self->ChangesQueue && Self->ChangeExchangeSplitter.Done()) { 
-            Activate = !Self->ChangeSenderActivator.Acked(dstTabletId); 
-        } 
- 
+        if (!Self->ChangesQueue && Self->ChangeExchangeSplitter.Done()) {
+            Activate = !Self->ChangeSenderActivator.Acked(dstTabletId);
+        }
+
         return true;
     }
 
@@ -446,13 +446,13 @@ public:
                 ctx.Send(ackTo, new TEvDataShard::TEvSplitAck(opId, Self->TabletID()));
             }
         }
- 
-        if (Activate) { 
-            const ui64 dstTabletId = Ev->Get()->Record.GetTabletId(); 
-            if (!Self->ChangeSenderActivator.Acked(dstTabletId)) { 
-                Self->ChangeSenderActivator.DoSend(dstTabletId, ctx); 
-            } 
-        } 
+
+        if (Activate) {
+            const ui64 dstTabletId = Ev->Get()->Record.GetTabletId();
+            if (!Self->ChangeSenderActivator.Acked(dstTabletId)) {
+                Self->ChangeSenderActivator.DoSend(dstTabletId, ctx);
+            }
+        }
     }
 };
 
@@ -460,7 +460,7 @@ public:
 class TDataShard::TTxSplitPartitioningChanged : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 private:
     TEvDataShard::TEvSplitPartitioningChanged::TPtr Ev;
-    bool DelayPartitioningChangedAck = false; 
+    bool DelayPartitioningChangedAck = false;
 
 public:
     TTxSplitPartitioningChanged(TDataShard* ds, TEvDataShard::TEvSplitPartitioningChanged::TPtr& ev)
@@ -471,20 +471,20 @@ public:
     TTxType GetTxType() const override { return TXTYPE_SPLIT_PARTITIONING_CHANGED; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        ui64 opId = Ev->Get()->Record.GetOperationCookie(); 
- 
-        LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "Got TEvSplitPartitioningChanged opId %" PRIu64 " at datashard %" PRIu64 " state %s",
-                opId, Self->TabletID(), DatashardStateName(Self->State).data()); 
+        ui64 opId = Ev->Get()->Record.GetOperationCookie();
 
-        if (Self->ChangesQueue || !Self->ChangeSenderActivator.AllAcked()) { 
-            LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " delay partitioning changed ack" 
-                << " ChangesQueue size: " << Self->ChangesQueue.size() 
-                << " siblings to be activated: " << Self->ChangeSenderActivator.Dump()); 
- 
-            DelayPartitioningChangedAck = true; 
-            Self->SrcAckPartitioningChangedTo[Ev->Sender].insert(opId); 
-        } 
- 
+        LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "Got TEvSplitPartitioningChanged opId %" PRIu64 " at datashard %" PRIu64 " state %s",
+                opId, Self->TabletID(), DatashardStateName(Self->State).data());
+
+        if (Self->ChangesQueue || !Self->ChangeSenderActivator.AllAcked()) {
+            LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " delay partitioning changed ack"
+                << " ChangesQueue size: " << Self->ChangesQueue.size()
+                << " siblings to be activated: " << Self->ChangeSenderActivator.Dump());
+
+            DelayPartitioningChangedAck = true;
+            Self->SrcAckPartitioningChangedTo[Ev->Sender].insert(opId);
+        }
+
         // TODO: At this point Src should start rejecting all new Tx with SchemaChanged status
         if (Self->State != TShardState::SplitSrcWaitForPartitioningChanged) {
             Y_VERIFY(Self->State == TShardState::PreOffline || Self->State == TShardState::Offline,
@@ -507,10 +507,10 @@ public:
         TActorId ackTo = Ev->Sender;
         ui64 opId = Ev->Get()->Record.GetOperationCookie();
 
-        if (DelayPartitioningChangedAck) { 
-            return; 
-        } 
- 
+        if (DelayPartitioningChangedAck) {
+            return;
+        }
+
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " ack split partitioning changed to schemeshard " << opId);
         ctx.Send(ackTo, new TEvDataShard::TEvSplitPartitioningChangedAck(opId, Self->TabletID()));
 

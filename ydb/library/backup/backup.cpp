@@ -32,7 +32,7 @@ namespace NYdb::NBackup {
 static constexpr const char *SCHEME_FILE_NAME = "scheme.pb";
 static constexpr const char *INCOMPLETE_DATA_FILE_NAME = "incomplete.csv";
 static constexpr const char *INCOMPLETE_FILE_NAME = "incomplete";
-static constexpr const char *EMPTY_FILE_NAME = "empty_dir"; 
+static constexpr const char *EMPTY_FILE_NAME = "empty_dir";
 
 static constexpr size_t IO_BUFFER_SIZE = 2 << 20; // 2 MiB
 static constexpr i64 FILE_SPLIT_THRESHOLD = 128 << 20; // 128 MiB
@@ -121,7 +121,7 @@ void PrintPrimitive(IOutputStream& out, const TValueParser& parser) {
         CASE_PRINT_PRIMITIVE_TYPE(out, Uint64);
         CASE_PRINT_PRIMITIVE_TYPE(out, Float);
         CASE_PRINT_PRIMITIVE_TYPE(out, Double);
-        CASE_PRINT_PRIMITIVE_TYPE(out, DyNumber); 
+        CASE_PRINT_PRIMITIVE_TYPE(out, DyNumber);
         CASE_PRINT_PRIMITIVE_TYPE(out, Date);
         CASE_PRINT_PRIMITIVE_TYPE(out, Datetime);
         CASE_PRINT_PRIMITIVE_TYPE(out, Timestamp);
@@ -133,7 +133,7 @@ void PrintPrimitive(IOutputStream& out, const TValueParser& parser) {
         CASE_PRINT_PRIMITIVE_STRING_TYPE(out, Utf8);
         CASE_PRINT_PRIMITIVE_STRING_TYPE(out, Yson);
         CASE_PRINT_PRIMITIVE_STRING_TYPE(out, Json);
-        CASE_PRINT_PRIMITIVE_STRING_TYPE(out, JsonDocument); 
+        CASE_PRINT_PRIMITIVE_STRING_TYPE(out, JsonDocument);
         default:
             Y_FAIL("Unsupported type");
     }
@@ -360,8 +360,8 @@ NTable::TTableDescription DescribeTable(TDriver driver, const TString& fullTable
     NTable::TTableClient client(driver);
 
     TStatus status = client.RetryOperationSync([fullTablePath, &desc](NTable::TSession session) {
-        auto settings = NTable::TDescribeTableSettings().WithKeyShardBoundary(true); 
-        auto result = session.DescribeTable(fullTablePath, settings).GetValueSync(); 
+        auto settings = NTable::TDescribeTableSettings().WithKeyShardBoundary(true);
+        auto result = session.DescribeTable(fullTablePath, settings).GetValueSync();
 
         VerifyStatus(result);
         desc = result.GetTableDescription();
@@ -376,44 +376,44 @@ NTable::TTableDescription DescribeTable(TDriver driver, const TString& fullTable
     return *desc;
 }
 
-Ydb::Table::CreateTableRequest ProtoFromTableDescription(const NTable::TTableDescription& desc, bool preservePoolKinds) { 
+Ydb::Table::CreateTableRequest ProtoFromTableDescription(const NTable::TTableDescription& desc, bool preservePoolKinds) {
     Ydb::Table::CreateTableRequest proto;
-    desc.SerializeTo(proto); 
+    desc.SerializeTo(proto);
 
-    if (preservePoolKinds) { 
-        return proto; 
-    } 
- 
-    if (proto.has_profile()) { 
-        auto& profile = *proto.mutable_profile(); 
- 
-        if (profile.has_storage_policy()) { 
-            auto& policy = *profile.mutable_storage_policy(); 
- 
-            policy.clear_syslog(); 
-            policy.clear_log(); 
-            policy.clear_data(); 
-            policy.clear_external(); 
- 
-            for (auto& family : *policy.mutable_column_families()) { 
-                family.clear_data(); 
-                family.clear_external(); 
-            } 
-        } 
-    } 
- 
-    if (proto.has_storage_settings()) { 
-        auto& settings = *proto.mutable_storage_settings(); 
- 
-        settings.clear_tablet_commit_log0(); 
-        settings.clear_tablet_commit_log1(); 
-        settings.clear_external(); 
-    } 
- 
-    for (auto& family : *proto.mutable_column_families()) { 
-        family.clear_data(); 
-    } 
- 
+    if (preservePoolKinds) {
+        return proto;
+    }
+
+    if (proto.has_profile()) {
+        auto& profile = *proto.mutable_profile();
+
+        if (profile.has_storage_policy()) {
+            auto& policy = *profile.mutable_storage_policy();
+
+            policy.clear_syslog();
+            policy.clear_log();
+            policy.clear_data();
+            policy.clear_external();
+
+            for (auto& family : *policy.mutable_column_families()) {
+                family.clear_data();
+                family.clear_external();
+            }
+        }
+    }
+
+    if (proto.has_storage_settings()) {
+        auto& settings = *proto.mutable_storage_settings();
+
+        settings.clear_tablet_commit_log0();
+        settings.clear_tablet_commit_log1();
+        settings.clear_external();
+    }
+
+    for (auto& family : *proto.mutable_column_families()) {
+        family.clear_data();
+    }
+
     return proto;
 }
 
@@ -469,7 +469,7 @@ void DropTable(TDriver driver, const TString& path) {
 }
 
 void BackupTable(TDriver driver, const TString& dbPrefix, const TString& backupPrefix, const TString& path,
-        const TFsPath& folderPath, bool schemaOnly, bool preservePoolKinds) { 
+        const TFsPath& folderPath, bool schemaOnly, bool preservePoolKinds) {
     Y_ENSURE(!path.empty());
     Y_ENSURE(path.back() != '/', path.Quote() << " path contains / in the end");
 
@@ -477,7 +477,7 @@ void BackupTable(TDriver driver, const TString& dbPrefix, const TString& backupP
         << " backupPrefix: " << backupPrefix << " path: " << path);
 
     auto desc = DescribeTable(driver, JoinDatabasePath(schemaOnly ? dbPrefix : backupPrefix, path));
-    auto proto = ProtoFromTableDescription(desc, preservePoolKinds); 
+    auto proto = ProtoFromTableDescription(desc, preservePoolKinds);
 
     TString schemaStr;
     google::protobuf::TextFormat::PrintToString(proto, &schemaStr);
@@ -513,19 +513,19 @@ void RemoveClusterDirectoryRecursive(const TDriver& driver, const TString& path)
     LOG_DEBUG("Directory is removed recursively, path: " << path.Quote());
 }
 
-static bool IsExcluded(const TString& path, const TVector<TRegExMatch>& exclusionPatterns) { 
-    for (const auto& pattern : exclusionPatterns) { 
-        if (pattern.Match(path.c_str())) { 
-            return true; 
-        } 
-    } 
- 
-    return false; 
-} 
- 
+static bool IsExcluded(const TString& path, const TVector<TRegExMatch>& exclusionPatterns) {
+    for (const auto& pattern : exclusionPatterns) {
+        if (pattern.Match(path.c_str())) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 void BackupFolderImpl(TDriver driver, const TString& dbPrefix, const TString& backupPrefix, TString path,
-        const TFsPath folderPath, const TVector<TRegExMatch>& exclusionPatterns, 
-        bool schemaOnly, bool useConsistentCopyTable, bool avoidCopy, bool preservePoolKinds) { 
+        const TFsPath folderPath, const TVector<TRegExMatch>& exclusionPatterns,
+        bool schemaOnly, bool useConsistentCopyTable, bool avoidCopy, bool preservePoolKinds) {
     LOG_DEBUG("Going to backup folder/table, dbPrefix: " << dbPrefix << " path: " << path);
     TFile(folderPath.Child(INCOMPLETE_FILE_NAME), CreateAlways);
 
@@ -535,12 +535,12 @@ void BackupFolderImpl(TDriver driver, const TString& dbPrefix, const TString& ba
     {
         TDbIterator<ETraverseType::Preordering> dbIt(driver, dbPrefix);
         while (dbIt) {
-            if (IsExcluded(dbIt.GetFullPath(), exclusionPatterns)) { 
-                LOG_DEBUG("skip path# " << dbIt.GetFullPath()); 
-                dbIt.Next(); 
-                continue; 
-            } 
- 
+            if (IsExcluded(dbIt.GetFullPath(), exclusionPatterns)) {
+                LOG_DEBUG("skip path# " << dbIt.GetFullPath());
+                dbIt.Next();
+                continue;
+            }
+
             TFsPath childFolderPath = folderPath.Child(dbIt.GetRelPath());
             LOG_DEBUG("path to backup# " << childFolderPath.GetPath());
             childFolderPath.MkDir();
@@ -548,10 +548,10 @@ void BackupFolderImpl(TDriver driver, const TString& dbPrefix, const TString& ba
             if (schemaOnly) {
                 if (dbIt.IsTable()) {
                     BackupTable(driver, dbIt.GetTraverseRoot(), backupPrefix, dbIt.GetRelPath(),
-                            childFolderPath, schemaOnly, preservePoolKinds); 
+                            childFolderPath, schemaOnly, preservePoolKinds);
                     childFolderPath.Child(INCOMPLETE_FILE_NAME).DeleteIfExists();
                 }
-            } else if (!avoidCopy) { 
+            } else if (!avoidCopy) {
                 if (dbIt.IsTable()) {
                     const TString tmpTablePath = JoinDatabasePath(backupPrefix, dbIt.GetRelPath());
                     if (useConsistentCopyTable) {
@@ -560,7 +560,7 @@ void BackupFolderImpl(TDriver driver, const TString& dbPrefix, const TString& ba
                         auto status = CopyTableAsyncStart(driver, dbIt.GetFullPath(), tmpTablePath);
                         copiedTablesStatuses.emplace(dbIt.GetFullPath(), std::move(status));
                     }
-                } else if (dbIt.IsDir()) { 
+                } else if (dbIt.IsDir()) {
                     CreateClusterDirectory(driver, JoinDatabasePath(backupPrefix, dbIt.GetRelPath()));
                 }
             }
@@ -571,75 +571,75 @@ void BackupFolderImpl(TDriver driver, const TString& dbPrefix, const TString& ba
     if (schemaOnly) {
         TDbIterator<ETraverseType::Postordering> dbIt(driver, dbPrefix);
         while (dbIt) {
-            if (IsExcluded(dbIt.GetFullPath(), exclusionPatterns)) { 
-                dbIt.Next(); 
-                continue; 
-            } 
- 
+            if (IsExcluded(dbIt.GetFullPath(), exclusionPatterns)) {
+                dbIt.Next();
+                continue;
+            }
+
             TFsPath childFolderPath = folderPath.Child(dbIt.GetRelPath());
             if (dbIt.IsTable()) {
                 // If table backup was not successful exception should be thrown,
                 // so control flow can't reach this line. Check it just to be sure
                 Y_ENSURE(!childFolderPath.Child(INCOMPLETE_FILE_NAME).Exists());
-            } else if (dbIt.IsDir()) { 
+            } else if (dbIt.IsDir()) {
                 childFolderPath.Child(INCOMPLETE_FILE_NAME).DeleteIfExists();
- 
-                TVector<TString> children; 
-                childFolderPath.ListNames(children); 
-                if (children.empty()) { 
-                    TFile(childFolderPath.Child(EMPTY_FILE_NAME), CreateAlways); 
-                } 
+
+                TVector<TString> children;
+                childFolderPath.ListNames(children);
+                if (children.empty()) {
+                    TFile(childFolderPath.Child(EMPTY_FILE_NAME), CreateAlways);
+                }
             }
- 
-            childFolderPath.Child(INCOMPLETE_FILE_NAME).DeleteIfExists(); 
+
+            childFolderPath.Child(INCOMPLETE_FILE_NAME).DeleteIfExists();
             dbIt.Next();
         }
         folderPath.Child(INCOMPLETE_FILE_NAME).DeleteIfExists();
         return;
     }
 
-    if (useConsistentCopyTable && !avoidCopy && tablesToCopy) { 
+    if (useConsistentCopyTable && !avoidCopy && tablesToCopy) {
         CopyTables(driver, tablesToCopy);
     }
     // Read all tables from temporal folder and delete them
     {
         TDbIterator<ETraverseType::Postordering> dbIt(driver, dbPrefix);
         while (dbIt) {
-            if (IsExcluded(dbIt.GetFullPath(), exclusionPatterns)) { 
-                dbIt.Next(); 
-                continue; 
-            } 
- 
+            if (IsExcluded(dbIt.GetFullPath(), exclusionPatterns)) {
+                dbIt.Next();
+                continue;
+            }
+
             TFsPath childFolderPath = folderPath.Child(dbIt.GetRelPath());
             const TString tmpTablePath = JoinDatabasePath(backupPrefix, dbIt.GetRelPath());
- 
+
             if (dbIt.IsTable()) {
-                if (!useConsistentCopyTable && !avoidCopy) { 
+                if (!useConsistentCopyTable && !avoidCopy) {
                     // CopyTableAsyncFinish(const TAsyncStatus& status, const TString& src, const TString& dst);
                     Y_ENSURE(copiedTablesStatuses.contains(dbIt.GetFullPath()),
                             "Table was not copied but going to be backuped, path# " << dbIt.GetFullPath().Quote());
                     CopyTableAsyncFinish(copiedTablesStatuses[dbIt.GetFullPath()], dbIt.GetFullPath(), tmpTablePath);
                     copiedTablesStatuses.erase(dbIt.GetFullPath());
                 }
-                BackupTable(driver, dbIt.GetTraverseRoot(), avoidCopy ? dbIt.GetTraverseRoot() : backupPrefix, dbIt.GetRelPath(), 
-                        childFolderPath, schemaOnly, preservePoolKinds); 
-                if (!avoidCopy) { 
-                    DropTable(driver, tmpTablePath); 
-                } 
-            } else if (dbIt.IsDir()) { 
-                childFolderPath.Child(INCOMPLETE_FILE_NAME).DeleteIfExists(); 
- 
-                TVector<TString> children; 
-                childFolderPath.ListNames(children); 
-                if (children.empty()) { 
-                    TFile(childFolderPath.Child(EMPTY_FILE_NAME), CreateAlways); 
-                } 
- 
-                if (!avoidCopy) { 
-                    RemoveClusterDirectory(driver, tmpTablePath); 
-                } 
+                BackupTable(driver, dbIt.GetTraverseRoot(), avoidCopy ? dbIt.GetTraverseRoot() : backupPrefix, dbIt.GetRelPath(),
+                        childFolderPath, schemaOnly, preservePoolKinds);
+                if (!avoidCopy) {
+                    DropTable(driver, tmpTablePath);
+                }
+            } else if (dbIt.IsDir()) {
+                childFolderPath.Child(INCOMPLETE_FILE_NAME).DeleteIfExists();
+
+                TVector<TString> children;
+                childFolderPath.ListNames(children);
+                if (children.empty()) {
+                    TFile(childFolderPath.Child(EMPTY_FILE_NAME), CreateAlways);
+                }
+
+                if (!avoidCopy) {
+                    RemoveClusterDirectory(driver, tmpTablePath);
+                }
             }
- 
+
             childFolderPath.Child(INCOMPLETE_FILE_NAME).DeleteIfExists();
             dbIt.Next();
         }
@@ -665,8 +665,8 @@ void CheckedCreateBackupFolder(const TFsPath& folderPath) {
 // relDbPath - relative path to directory/table to be backuped
 // folderPath - relative path to folder in local filesystem where backup will be stored
 void BackupFolder(TDriver driver, const TString& database, const TString& relDbPath, TFsPath folderPath,
-        const TVector<TRegExMatch>& exclusionPatterns, 
-        bool schemaOnly, bool useConsistentCopyTable, bool avoidCopy, bool savePartialResult, bool preservePoolKinds) { 
+        const TVector<TRegExMatch>& exclusionPatterns,
+        bool schemaOnly, bool useConsistentCopyTable, bool avoidCopy, bool savePartialResult, bool preservePoolKinds) {
     TString temporalBackupPostfix = CreateTemporalBackupName();
     if (!folderPath) {
         folderPath = temporalBackupPostfix;
@@ -684,8 +684,8 @@ void BackupFolder(TDriver driver, const TString& database, const TString& relDbP
 
         TString dbPrefix = JoinDatabasePath(database, relDbPath);
         TString path;
-        BackupFolderImpl(driver, dbPrefix, tmpDbFolder, path, folderPath, exclusionPatterns, 
-            schemaOnly, useConsistentCopyTable, avoidCopy, preservePoolKinds); 
+        BackupFolderImpl(driver, dbPrefix, tmpDbFolder, path, folderPath, exclusionPatterns,
+            schemaOnly, useConsistentCopyTable, avoidCopy, preservePoolKinds);
     } catch (...) {
         if (!schemaOnly && !avoidCopy) {
             RemoveClusterDirectoryRecursive(driver, tmpDbFolder);
@@ -697,7 +697,7 @@ void BackupFolder(TDriver driver, const TString& database, const TString& relDbP
         }
         throw;
     }
-    if (!schemaOnly && !avoidCopy) { 
+    if (!schemaOnly && !avoidCopy) {
         RemoveClusterDirectoryRecursive(driver, tmpDbFolder);
     }
 }
@@ -818,8 +818,8 @@ void UploadDataIntoTable(TDriver driver, const NTable::TTableDescription& tableD
 
         TQueryFromFileIterator it(relPath, dataFileName, tableDesc.GetColumns(), IO_BUFFER_SIZE, params.MaxRowsPerQuery,
                 params.MaxBytesPerQuery);
-        NTable::TTableClient client(driver); 
-        TUploader uploader(opts, client, it.GetQueryString()); 
+        NTable::TTableClient client(driver);
+        TUploader uploader(opts, client, it.GetQueryString());
         if (!params.UseBulkUpsert) {
             LOG_DEBUG("Query string:\n" << it.GetQueryString());
         }

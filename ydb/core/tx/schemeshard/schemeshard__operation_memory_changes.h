@@ -21,9 +21,9 @@ class TMemoryChanges: public TSimpleRefCount<TMemoryChanges> {
     using TIndexState = std::pair<TPathId, TTableIndexInfo::TPtr>;
     TStack<TIndexState> Indexes;
 
-    using TCdcStreamState = std::pair<TPathId, TCdcStreamInfo::TPtr>; 
+    using TCdcStreamState = std::pair<TPathId, TCdcStreamInfo::TPtr>;
     TStack<TCdcStreamState> CdcStreams;
- 
+
     using TTableState = std::pair<TPathId, TTableInfo::TPtr>;
     TStack<TTableState> Tables;
 
@@ -55,7 +55,7 @@ public:
     void GrabNewIndex(TSchemeShard* ss, const TPathId& pathId);
 
     void GrabNewCdcStream(TSchemeShard* ss, const TPathId& pathId);
- 
+
     void UnDo(TSchemeShard* ss);
 };
 

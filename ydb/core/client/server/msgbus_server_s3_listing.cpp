@@ -158,7 +158,7 @@ private:
         Y_VERIFY(request.ResultSet.size() == 1);
         if (request.ResultSet.front().Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
             return ReplyWithError(MSTATUS_ERROR,  NTxProxy::TResultStatus::EStatus::ResolveError,
-                                  ToString(request.ResultSet.front().Status), ctx); 
+                                  ToString(request.ResultSet.front().Status), ctx);
         }
         ResolveNamesResult = ev->Get()->Request;
 

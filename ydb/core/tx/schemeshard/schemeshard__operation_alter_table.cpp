@@ -53,12 +53,12 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
             status = NKikimrScheme::StatusInvalidParameter;
             return nullptr;
         }
- 
-        if (alter.HasTTLSettings()) { 
-            errStr = "TTL on index table is not supported"; 
+
+        if (alter.HasTTLSettings()) {
+            errStr = "TTL on index table is not supported";
             status = NKikimrScheme::StatusInvalidParameter;
-            return nullptr; 
-        } 
+            return nullptr;
+        }
     }
 
     auto copyAlter = alter;
@@ -68,12 +68,12 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
             copyAlter.DropColumnsSize() != 0);
 
     if (copyAlter.HasIsBackup() && copyAlter.GetIsBackup() !=  table->IsBackup) {
-        errStr = Sprintf("Cannot add/remove 'IsBackup' property"); 
+        errStr = Sprintf("Cannot add/remove 'IsBackup' property");
         status = NKikimrScheme::StatusInvalidParameter;
-        return nullptr; 
-    } 
- 
-    if (!hasSchemaChanges && !copyAlter.HasPartitionConfig() && !copyAlter.HasTTLSettings()) { 
+        return nullptr;
+    }
+
+    if (!hasSchemaChanges && !copyAlter.HasPartitionConfig() && !copyAlter.HasTTLSettings()) {
         errStr = Sprintf("No changes specified");
         status = NKikimrScheme::StatusInvalidParameter;
         return nullptr;
@@ -115,9 +115,9 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
     }
     copyAlter.MutablePartitionConfig()->CopyFrom(compilationPartitionConfig);
 
-    const TSubDomainInfo& subDomain = *path.DomainInfo(); 
-    const TSchemeLimits& limits = subDomain.GetSchemeLimits(); 
-    TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(table, copyAlter, *appData->TypeRegistry, limits, subDomain, errStr); 
+    const TSubDomainInfo& subDomain = *path.DomainInfo();
+    const TSchemeLimits& limits = subDomain.GetSchemeLimits();
+    TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(table, copyAlter, *appData->TypeRegistry, limits, subDomain, errStr);
     if (!alterData) {
         status = NKikimrScheme::StatusInvalidParameter;
         return nullptr;
@@ -186,23 +186,23 @@ bool CheckDropingColumns(const TSchemeShard* ss, const NKikimrSchemeOp::TTableDe
         }
     }
 
-    for (const auto& child : tablePath.Base()->GetChildren()) { 
-        const auto& childName = child.first; 
-        const auto& childPathId = child.second; 
+    for (const auto& child : tablePath.Base()->GetChildren()) {
+        const auto& childName = child.first;
+        const auto& childPathId = child.second;
 
-        auto childPath = ss->PathsById.at(childPathId); 
-        if (!childPath->IsTableIndex() || childPath->Dropped()) { 
+        auto childPath = ss->PathsById.at(childPathId);
+        if (!childPath->IsTableIndex() || childPath->Dropped()) {
             continue;
         }
 
-        const TTableIndexInfo::TPtr indexInfo = ss->Indexes.at(childPathId); 
+        const TTableIndexInfo::TPtr indexInfo = ss->Indexes.at(childPathId);
         for (const auto& indexKey: indexInfo->IndexKeys) {
             if (deletedColumns.contains(indexKey)) {
                 errStr = TStringBuilder ()
                     << "Imposible drop column because table has an index with that column"
-                    << ", column name: " << indexKey 
+                    << ", column name: " << indexKey
                     << ", table name: " << tablePath.PathString()
-                    << ", index name: " << childName; 
+                    << ", index name: " << childName;
                 return false;
             }
         }
@@ -211,9 +211,9 @@ bool CheckDropingColumns(const TSchemeShard* ss, const NKikimrSchemeOp::TTableDe
             if (deletedColumns.contains(col)) {
                 errStr = TStringBuilder ()
                     << "Imposible drop column because table index covers that column"
-                    << ", column name: " << col 
+                    << ", column name: " << col
                     << ", table name: " << tablePath.PathString()
-                    << ", index name: " << childName; 
+                    << ", index name: " << childName;
                 return false;
             }
         }
@@ -341,28 +341,28 @@ public:
         TTableInfo::TPtr table = context.SS->Tables.at(pathId);
         table->FinishAlter();
 
-        auto ttlIt = context.SS->TTLEnabledTables.find(pathId); 
-        if (table->IsTTLEnabled() && ttlIt == context.SS->TTLEnabledTables.end()) { 
-            context.SS->TTLEnabledTables[pathId] = table; 
-            context.SS->TabletCounters->Simple()[COUNTER_TTL_ENABLED_TABLE_COUNT].Add(1); 
-        } else if (!table->IsTTLEnabled() && ttlIt != context.SS->TTLEnabledTables.end()) { 
-            context.SS->TTLEnabledTables.erase(ttlIt); 
+        auto ttlIt = context.SS->TTLEnabledTables.find(pathId);
+        if (table->IsTTLEnabled() && ttlIt == context.SS->TTLEnabledTables.end()) {
+            context.SS->TTLEnabledTables[pathId] = table;
+            context.SS->TabletCounters->Simple()[COUNTER_TTL_ENABLED_TABLE_COUNT].Add(1);
+        } else if (!table->IsTTLEnabled() && ttlIt != context.SS->TTLEnabledTables.end()) {
+            context.SS->TTLEnabledTables.erase(ttlIt);
             context.SS->TabletCounters->Simple()[COUNTER_TTL_ENABLED_TABLE_COUNT].Sub(1);
- 
-            for (ui32 i = 0; i < table->GetPartitions().size(); ++i) { 
-                auto& shardInfo = table->GetPartitions().at(i); 
-                if (auto& lag = shardInfo.LastCondEraseLag) { 
-                    context.SS->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].DecrementFor(lag->Seconds()); 
-                    lag.Clear(); 
-                } 
-            } 
-        } 
- 
+
+            for (ui32 i = 0; i < table->GetPartitions().size(); ++i) {
+                auto& shardInfo = table->GetPartitions().at(i);
+                if (auto& lag = shardInfo.LastCondEraseLag) {
+                    context.SS->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].DecrementFor(lag->Seconds());
+                    lag.Clear();
+                }
+            }
+        }
+
         context.SS->PersistTableAltered(db, pathId, table);
 
         context.SS->ClearDescribePathCaches(path);
-        context.OnComplete.PublishToSchemeBoard(OperationId, pathId); 
- 
+        context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
+
         context.SS->ChangeTxState(db, OperationId, TTxState::ProposedWaitParts);
         return true;
     }
@@ -392,8 +392,8 @@ public:
 
 class TAlterTable: public TSubOperation {
 private:
-    const TOperationId OperationId; 
-    const TTxTransaction Transaction; 
+    const TOperationId OperationId;
+    const TTxTransaction Transaction;
     TTxState::ETxState State = TTxState::Invalid;
 
     bool AllowShadowData = false;
@@ -447,11 +447,11 @@ private:
     }
 
 public:
-    TAlterTable(TOperationId id, const TTxTransaction& tx) 
+    TAlterTable(TOperationId id, const TTxTransaction& tx)
         : OperationId(id)
-        , Transaction(tx) 
-    { 
-    } 
+        , Transaction(tx)
+    {
+    }
 
     TAlterTable(TOperationId id, TTxState::ETxState state)
         : OperationId(id)
@@ -472,15 +472,15 @@ public:
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
-        const auto& alter = Transaction.GetAlterTable(); 
+        const auto& alter = Transaction.GetAlterTable();
 
-        const TString& parentPathStr = Transaction.GetWorkingDir(); 
-        const TString& name = alter.GetName(); 
+        const TString& parentPathStr = Transaction.GetWorkingDir();
+        const TString& name = alter.GetName();
 
         TPathId pathId;
         if (alter.HasId_Deprecated() || alter.HasPathId()) {
             pathId = alter.HasPathId()
-                ? PathIdFromPathId(alter.GetPathId()) 
+                ? PathIdFromPathId(alter.GetPathId())
                 : context.SS->MakeLocalId(alter.GetId_Deprecated());
         }
 
@@ -503,8 +503,8 @@ public:
             : TPath::Resolve(parentPathStr, context.SS).Dive(name);
         {
             TPath::TChecker checks = path.Check();
-            checks 
-                .NotEmpty() 
+            checks
+                .NotEmpty()
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
@@ -551,25 +551,25 @@ public:
             return result;
         }
 
-        if (path.Base()->GetAliveChildren() && alter.HasTTLSettings()) { 
-            for (const auto& [_, childPathId] : path.Base()->GetChildren()) { 
-                Y_VERIFY(context.SS->PathsById.contains(childPathId)); 
-                auto childPath = context.SS->PathsById.at(childPathId); 
- 
-                if (!childPath->IsTableIndex() || childPath->Dropped()) { 
-                    continue; 
-                } 
- 
-                Y_VERIFY(context.SS->Indexes.contains(childPathId)); 
-                auto indexInfo = context.SS->Indexes.at(childPathId); 
- 
-                if (indexInfo->Type == NKikimrSchemeOp::EIndexTypeGlobalAsync && !AppData()->FeatureFlags.GetEnableTtlOnAsyncIndexedTables()) { 
+        if (path.Base()->GetAliveChildren() && alter.HasTTLSettings()) {
+            for (const auto& [_, childPathId] : path.Base()->GetChildren()) {
+                Y_VERIFY(context.SS->PathsById.contains(childPathId));
+                auto childPath = context.SS->PathsById.at(childPathId);
+
+                if (!childPath->IsTableIndex() || childPath->Dropped()) {
+                    continue;
+                }
+
+                Y_VERIFY(context.SS->Indexes.contains(childPathId));
+                auto indexInfo = context.SS->Indexes.at(childPathId);
+
+                if (indexInfo->Type == NKikimrSchemeOp::EIndexTypeGlobalAsync && !AppData()->FeatureFlags.GetEnableTtlOnAsyncIndexedTables()) {
                     result->SetError(NKikimrScheme::StatusPreconditionFailed, "TTL is not currently supported on tables with async indices");
-                    return result; 
-                } 
-            } 
-        } 
- 
+                    return result;
+                }
+            }
+        }
+
         NKikimrScheme::EStatus status;
         TTableInfo::TAlterDataPtr alterData = ParseParams(path, table, alter, IsShadowDataAllowed(), errStr, status, context);
         if (!alterData) {
@@ -601,16 +601,16 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override { 
-        Y_FAIL("no AbortPropose for TAlterTable"); 
-    } 
- 
+    void AbortPropose(TOperationContext&) override {
+        Y_FAIL("no AbortPropose for TAlterTable");
+    }
+
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "TAlterTable AbortUnsafe"
                          << ", opId: " << OperationId
                          << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID()); 
+                         << ", at schemeshard: " << context.SS->TabletID());
 
         context.OnComplete.DoneOperation(OperationId);
     }
@@ -621,12 +621,12 @@ public:
 namespace NKikimr {
 namespace NSchemeShard {
 
-ISubOperationBase::TPtr CreateAlterTable(TOperationId id, const TTxTransaction& tx) { 
-    return new TAlterTable(id, tx); 
-} 
- 
+ISubOperationBase::TPtr CreateAlterTable(TOperationId id, const TTxTransaction& tx) {
+    return new TAlterTable(id, tx);
+}
+
 ISubOperationBase::TPtr CreateAlterTable(TOperationId id, TTxState::ETxState state) {
-    Y_VERIFY(state != TTxState::Invalid); 
+    Y_VERIFY(state != TTxState::Invalid);
     return new TAlterTable(id, state);
 }
 

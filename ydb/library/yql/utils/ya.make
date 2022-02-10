@@ -25,7 +25,7 @@ SRCS(
     proc_alive.h
     rand_guid.cpp
     rand_guid.h
-    resetable_setting.h 
+    resetable_setting.h
     retry.cpp
     retry.h
     swap_bytes.cpp

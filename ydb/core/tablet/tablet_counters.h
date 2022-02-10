@@ -166,14 +166,14 @@ public:
         return *this;
     }
 
-    TTabletPercentileCounter& DecrementFor(ui64 what) { 
-        Y_VERIFY(Integral); 
-        ui32 index = FindSlot(what); 
-        Y_VERIFY_DEBUG(Values[index] > 0); 
-        Values[index] -= 1; 
-        return *this; 
-    } 
- 
+    TTabletPercentileCounter& DecrementFor(ui64 what) {
+        Y_VERIFY(Integral);
+        ui32 index = FindSlot(what);
+        Y_VERIFY_DEBUG(Values[index] > 0);
+        Values[index] -= 1;
+        return *this;
+    }
+
     ui32 GetRangeCount() const {
         return RangeCount;
     }

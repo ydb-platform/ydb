@@ -125,7 +125,7 @@ namespace NActors {
             nodeAppData->Counters = node->DynamicCounters;
             nodeAppData->PollerThreads = node->Poller;
             nodeAppData->StreamingConfig.SetEnableOutputStreams(true);
-            nodeAppData->PQConfig = app0->PQConfig; 
+            nodeAppData->PQConfig = app0->PQConfig;
             nodeAppData->NetClassifierConfig.CopyFrom(app0->NetClassifierConfig);
             nodeAppData->StaticBlobStorageConfig->CopyFrom(*app0->StaticBlobStorageConfig);
             nodeAppData->EnableKqpSpilling = app0->EnableKqpSpilling;
@@ -133,9 +133,9 @@ namespace NActors {
             nodeAppData->CompactionConfig = app0->CompactionConfig;
             nodeAppData->HiveConfig = app0->HiveConfig;
             nodeAppData->DataShardConfig = app0->DataShardConfig;
-            nodeAppData->MeteringConfig = app0->MeteringConfig; 
+            nodeAppData->MeteringConfig = app0->MeteringConfig;
             nodeAppData->EnableMvccSnapshotWithLegacyDomainRoot = app0->EnableMvccSnapshotWithLegacyDomainRoot;
-            nodeAppData->IoContextFactory = app0->IoContextFactory; 
+            nodeAppData->IoContextFactory = app0->IoContextFactory;
             if (KeyConfigGenerator) {
                 nodeAppData->KeyConfig = KeyConfigGenerator(nodeIndex);
             } else {

@@ -2,7 +2,7 @@
 #include "resolve_local_db_table.h"
 
 #include "rpc_calls.h"
-#include "rpc_common.h" 
+#include "rpc_common.h"
 #include "rpc_deferrable.h"
 
 #include <ydb/core/actorlib_impl/long_timer.h>
@@ -101,8 +101,8 @@ public:
             req->Record.SetUserToken(token);
         }
 
-        SetDatabase(req.Get(), Request()); 
- 
+        SetDatabase(req.Get(), Request());
+
         auto* tx = req->Record.MutableTransaction()->MutableCreateVolatileSnapshot();
         for (const TString& path : proto->path()) {
             if (proto->ignore_system_views() && TryParseLocalDbPath(::NKikimr::SplitPath(path))) {
@@ -237,8 +237,8 @@ public:
             req->Record.SetUserToken(token);
         }
 
-        SetDatabase(req.Get(), Request()); 
- 
+        SetDatabase(req.Get(), Request());
+
         auto* tx = req->Record.MutableTransaction()->MutableRefreshVolatileSnapshot();
         for (const TString& path : proto->path()) {
             if (proto->ignore_system_views() && TryParseLocalDbPath(::NKikimr::SplitPath(path))) {
@@ -378,8 +378,8 @@ public:
             req->Record.SetUserToken(token);
         }
 
-        SetDatabase(req.Get(), Request()); 
- 
+        SetDatabase(req.Get(), Request());
+
         auto* tx = req->Record.MutableTransaction()->MutableDiscardVolatileSnapshot();
         for (const TString& path : proto->path()) {
             if (proto->ignore_system_views() && TryParseLocalDbPath(::NKikimr::SplitPath(path))) {

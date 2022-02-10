@@ -58,8 +58,8 @@ struct TEvSchemeShard {
 
         EvBackupDatashard = EvModifySchemeTransaction + 6 * 512,
         EvBackupDatashardResult,
-        EvCancelTx, 
-        EvCancelTxResult, 
+        EvCancelTx,
+        EvCancelTxResult,
 
         EvEnd
     };
@@ -92,21 +92,21 @@ struct TEvSchemeShard {
         }
     };
 
-    struct TEvCancelTx 
-        : public TEventPB<TEvCancelTx, 
+    struct TEvCancelTx
+        : public TEventPB<TEvCancelTx,
                           NKikimrScheme::TEvCancelTx,
-                          EvCancelTx> 
+                          EvCancelTx>
     {
     };
 
-    struct TEvCancelTxResult: 
-        public TEventPB<TEvCancelTxResult, 
+    struct TEvCancelTxResult:
+        public TEventPB<TEvCancelTxResult,
                         NKikimrScheme::TEvCancelTxResult,
-                        EvCancelTxResult> 
+                        EvCancelTxResult>
     {
-        TEvCancelTxResult() = default; 
-        TEvCancelTxResult(ui64 targetTxId, ui64 txId) { 
-            Record.SetTargetTxId(targetTxId); 
+        TEvCancelTxResult() = default;
+        TEvCancelTxResult(ui64 targetTxId, ui64 txId) {
+            Record.SetTargetTxId(targetTxId);
             Record.SetTxId(txId);
         }
     };
@@ -316,7 +316,7 @@ struct TEvSchemeShard {
                                  const NKikimrSubDomains::TProcessingParams& processingParams,
                                  const TStoragePools& storagePools,
                                  const TMap<TString, TString> userAttrData, ui64 UserAttrsVersion,
-                                 const TSchemeLimits& limits, ui64 sharedHive, const TPathId& resourcesDomainId = TPathId()); 
+                                 const TSchemeLimits& limits, ui64 sharedHive, const TPathId& resourcesDomainId = TPathId());
     };
 
     struct TEvInitTenantSchemeShardResult: public TEventPB<TEvInitTenantSchemeShardResult,

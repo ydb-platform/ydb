@@ -8,20 +8,20 @@
 #include <ydb/public/sdk/cpp/client/ydb_params/params.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/operation/operation.h>
 
-#include <util/generic/hash.h> 
+#include <util/generic/hash.h>
 #include <util/generic/maybe.h>
-#include <util/generic/variant.h> 
+#include <util/generic/variant.h>
 
 namespace Ydb {
 namespace Table {
 
 class StorageSettings;
 class ColumnFamily;
-class CreateTableRequest; 
+class CreateTableRequest;
 class DescribeTableResult;
 class PartitioningSettings;
-class DateTypeColumnModeSettings; 
-class TtlSettings; 
+class DateTypeColumnModeSettings;
+class TtlSettings;
 class TableIndex;
 class TableIndexDescription;
 class ValueSinceUnixEpochModeSettings;
@@ -134,44 +134,44 @@ struct TAlterTableColumn {
 
 //! Represents index description
 class TIndexDescription {
-    friend class NYdb::TProtoAccessor; 
- 
+    friend class NYdb::TProtoAccessor;
+
 public:
-    TIndexDescription( 
-        const TString& name, EIndexType type, 
-        const TVector<TString>& indexColumns, 
-        const TVector<TString>& dataColumns = TVector<TString>()); 
- 
+    TIndexDescription(
+        const TString& name, EIndexType type,
+        const TVector<TString>& indexColumns,
+        const TVector<TString>& dataColumns = TVector<TString>());
+
     TIndexDescription(const TString& name, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns = TVector<TString>());
 
     const TString& GetIndexName() const;
-    EIndexType GetIndexType() const; 
+    EIndexType GetIndexType() const;
     const TVector<TString>& GetIndexColumns() const;
     const TVector<TString>& GetDataColumns() const;
-    ui64 GetSizeBytes() const; 
- 
-    void SerializeTo(Ydb::Table::TableIndex& proto) const; 
-    TString ToString() const; 
-    void Out(IOutputStream& o) const; 
- 
+    ui64 GetSizeBytes() const;
+
+    void SerializeTo(Ydb::Table::TableIndex& proto) const;
+    TString ToString() const;
+    void Out(IOutputStream& o) const;
+
 private:
-    explicit TIndexDescription(const Ydb::Table::TableIndex& tableIndex); 
-    explicit TIndexDescription(const Ydb::Table::TableIndexDescription& tableIndexDesc); 
- 
-    template <typename TProto> 
-    static TIndexDescription FromProto(const TProto& proto); 
- 
-private: 
+    explicit TIndexDescription(const Ydb::Table::TableIndex& tableIndex);
+    explicit TIndexDescription(const Ydb::Table::TableIndexDescription& tableIndexDesc);
+
+    template <typename TProto>
+    static TIndexDescription FromProto(const TProto& proto);
+
+private:
     TString IndexName_;
-    EIndexType IndexType_; 
+    EIndexType IndexType_;
     TVector<TString> IndexColumns_;
     TVector<TString> DataColumns_;
-    ui64 SizeBytes = 0; 
+    ui64 SizeBytes = 0;
 };
 
-bool operator==(const TIndexDescription& lhs, const TIndexDescription& rhs); 
-bool operator!=(const TIndexDescription& lhs, const TIndexDescription& rhs); 
- 
+bool operator==(const TIndexDescription& lhs, const TIndexDescription& rhs);
+bool operator!=(const TIndexDescription& lhs, const TIndexDescription& rhs);
+
 class TBuildIndexOperation : public TOperation {
 public:
     using TOperation::TOperation;
@@ -196,117 +196,117 @@ struct TPartitionStats {
     ui64 Size = 0;
 };
 
-class TDateTypeColumnModeSettings { 
-public: 
-    explicit TDateTypeColumnModeSettings(const TString& columnName, const TDuration& expireAfter); 
-    void SerializeTo(Ydb::Table::DateTypeColumnModeSettings& proto) const; 
- 
-    const TString& GetColumnName() const; 
-    const TDuration& GetExpireAfter() const; 
- 
-private: 
-    TString ColumnName_; 
-    TDuration ExpireAfter_; 
-}; 
- 
-class TValueSinceUnixEpochModeSettings { 
-public: 
-    enum class EUnit { 
-        Seconds, 
-        MilliSeconds, 
-        MicroSeconds, 
-        NanoSeconds, 
- 
-        Unknown = std::numeric_limits<int>::max() 
-    }; 
- 
-public: 
-    explicit TValueSinceUnixEpochModeSettings(const TString& columnName, EUnit columnUnit, const TDuration& expireAfter); 
-    void SerializeTo(Ydb::Table::ValueSinceUnixEpochModeSettings& proto) const; 
- 
-    const TString& GetColumnName() const; 
-    EUnit GetColumnUnit() const; 
-    const TDuration& GetExpireAfter() const; 
- 
-    static void Out(IOutputStream& o, EUnit unit); 
-    static TString ToString(EUnit unit); 
-    static EUnit UnitFromString(const TString& value); 
- 
-private: 
-    TString ColumnName_; 
-    EUnit ColumnUnit_; 
-    TDuration ExpireAfter_; 
-}; 
- 
-//! Represents ttl settings 
-class TTtlSettings { 
-public: 
-    using EUnit = TValueSinceUnixEpochModeSettings::EUnit; 
- 
-    enum class EMode { 
-        DateTypeColumn = 0, 
-        ValueSinceUnixEpoch = 1, 
-    }; 
- 
-    explicit TTtlSettings(const TString& columnName, const TDuration& expireAfter); 
-    explicit TTtlSettings(const Ydb::Table::DateTypeColumnModeSettings& mode, ui32 runIntervalSeconds); 
-    const TDateTypeColumnModeSettings& GetDateTypeColumn() const; 
- 
-    explicit TTtlSettings(const TString& columnName, EUnit columnUnit, const TDuration& expireAfter); 
-    explicit TTtlSettings(const Ydb::Table::ValueSinceUnixEpochModeSettings& mode, ui32 runIntervalSeconds); 
-    const TValueSinceUnixEpochModeSettings& GetValueSinceUnixEpoch() const; 
- 
-    void SerializeTo(Ydb::Table::TtlSettings& proto) const; 
-    EMode GetMode() const; 
- 
-    TTtlSettings& SetRunInterval(const TDuration& value); 
-    const TDuration& GetRunInterval() const; 
- 
-private: 
+class TDateTypeColumnModeSettings {
+public:
+    explicit TDateTypeColumnModeSettings(const TString& columnName, const TDuration& expireAfter);
+    void SerializeTo(Ydb::Table::DateTypeColumnModeSettings& proto) const;
+
+    const TString& GetColumnName() const;
+    const TDuration& GetExpireAfter() const;
+
+private:
+    TString ColumnName_;
+    TDuration ExpireAfter_;
+};
+
+class TValueSinceUnixEpochModeSettings {
+public:
+    enum class EUnit {
+        Seconds,
+        MilliSeconds,
+        MicroSeconds,
+        NanoSeconds,
+
+        Unknown = std::numeric_limits<int>::max()
+    };
+
+public:
+    explicit TValueSinceUnixEpochModeSettings(const TString& columnName, EUnit columnUnit, const TDuration& expireAfter);
+    void SerializeTo(Ydb::Table::ValueSinceUnixEpochModeSettings& proto) const;
+
+    const TString& GetColumnName() const;
+    EUnit GetColumnUnit() const;
+    const TDuration& GetExpireAfter() const;
+
+    static void Out(IOutputStream& o, EUnit unit);
+    static TString ToString(EUnit unit);
+    static EUnit UnitFromString(const TString& value);
+
+private:
+    TString ColumnName_;
+    EUnit ColumnUnit_;
+    TDuration ExpireAfter_;
+};
+
+//! Represents ttl settings
+class TTtlSettings {
+public:
+    using EUnit = TValueSinceUnixEpochModeSettings::EUnit;
+
+    enum class EMode {
+        DateTypeColumn = 0,
+        ValueSinceUnixEpoch = 1,
+    };
+
+    explicit TTtlSettings(const TString& columnName, const TDuration& expireAfter);
+    explicit TTtlSettings(const Ydb::Table::DateTypeColumnModeSettings& mode, ui32 runIntervalSeconds);
+    const TDateTypeColumnModeSettings& GetDateTypeColumn() const;
+
+    explicit TTtlSettings(const TString& columnName, EUnit columnUnit, const TDuration& expireAfter);
+    explicit TTtlSettings(const Ydb::Table::ValueSinceUnixEpochModeSettings& mode, ui32 runIntervalSeconds);
+    const TValueSinceUnixEpochModeSettings& GetValueSinceUnixEpoch() const;
+
+    void SerializeTo(Ydb::Table::TtlSettings& proto) const;
+    EMode GetMode() const;
+
+    TTtlSettings& SetRunInterval(const TDuration& value);
+    const TDuration& GetRunInterval() const;
+
+private:
     std::variant<
-        TDateTypeColumnModeSettings, 
-        TValueSinceUnixEpochModeSettings 
-    > Mode_; 
-    TDuration RunInterval_ = TDuration::Zero(); 
-}; 
- 
-class TAlterTtlSettings { 
-    using EUnit = TValueSinceUnixEpochModeSettings::EUnit; 
- 
-    TAlterTtlSettings() 
-        : Action_(true) 
-    {} 
- 
-    template <typename... Args> 
-    explicit TAlterTtlSettings(Args&&... args) 
-        : Action_(TTtlSettings(std::forward<Args>(args)...)) 
-    {} 
- 
-public: 
-    enum class EAction { 
-        Drop = 0, 
-        Set = 1, 
-    }; 
- 
-    static TAlterTtlSettings Drop() { 
-        return TAlterTtlSettings(); 
-    } 
- 
-    template <typename... Args> 
-    static TAlterTtlSettings Set(Args&&... args) { 
-        return TAlterTtlSettings(std::forward<Args>(args)...); 
-    } 
- 
-    EAction GetAction() const; 
-    const TTtlSettings& GetTtlSettings() const; 
- 
-private: 
-    std::variant< 
-        bool, // EAction::Drop 
-        TTtlSettings // EAction::Set 
-    > Action_; 
-}; 
- 
+        TDateTypeColumnModeSettings,
+        TValueSinceUnixEpochModeSettings
+    > Mode_;
+    TDuration RunInterval_ = TDuration::Zero();
+};
+
+class TAlterTtlSettings {
+    using EUnit = TValueSinceUnixEpochModeSettings::EUnit;
+
+    TAlterTtlSettings()
+        : Action_(true)
+    {}
+
+    template <typename... Args>
+    explicit TAlterTtlSettings(Args&&... args)
+        : Action_(TTtlSettings(std::forward<Args>(args)...))
+    {}
+
+public:
+    enum class EAction {
+        Drop = 0,
+        Set = 1,
+    };
+
+    static TAlterTtlSettings Drop() {
+        return TAlterTtlSettings();
+    }
+
+    template <typename... Args>
+    static TAlterTtlSettings Set(Args&&... args) {
+        return TAlterTtlSettings(std::forward<Args>(args)...);
+    }
+
+    EAction GetAction() const;
+    const TTtlSettings& GetTtlSettings() const;
+
+private:
+    std::variant<
+        bool, // EAction::Drop
+        TTtlSettings // EAction::Set
+    > Action_;
+};
+
 //! Represents table storage settings
 class TStorageSettings {
 public:
@@ -387,8 +387,8 @@ class TTableDescription {
     friend class TTableBuilder;
     friend class NYdb::TProtoAccessor;
 
-    using EUnit = TValueSinceUnixEpochModeSettings::EUnit; 
- 
+    using EUnit = TValueSinceUnixEpochModeSettings::EUnit;
+
 public:
     TTableDescription(Ydb::Table::DescribeTableResult&& desc, const TDescribeTableSettings& describeSettings);
 
@@ -397,7 +397,7 @@ public:
     TVector<TColumn> GetColumns() const;
     TVector<TTableColumn> GetTableColumns() const;
     TVector<TIndexDescription> GetIndexDescriptions() const;
-    TMaybe<TTtlSettings> GetTtlSettings() const; 
+    TMaybe<TTtlSettings> GetTtlSettings() const;
 
     const TString& GetOwner() const;
     const TVector<NScheme::TPermissions>& GetPermissions() const;
@@ -428,9 +428,9 @@ public:
     // Returns column families of the table
     const TVector<TColumnFamilyDescription>& GetColumnFamilies() const;
 
-    // Attributes 
-    const THashMap<TString, TString>& GetAttributes() const; 
- 
+    // Attributes
+    const THashMap<TString, TString>& GetAttributes() const;
+
     // Returns partitioning settings of the table
     const TPartitioningSettings& GetPartitioningSettings() const;
 
@@ -440,37 +440,37 @@ public:
     // Returns read replicas settings of the table
     TMaybe<TReadReplicasSettings> GetReadReplicasSettings() const;
 
-    // Fills CreateTableRequest proto from this description 
-    void SerializeTo(Ydb::Table::CreateTableRequest& request) const; 
- 
+    // Fills CreateTableRequest proto from this description
+    void SerializeTo(Ydb::Table::CreateTableRequest& request) const;
+
 private:
     TTableDescription();
-    explicit TTableDescription(const Ydb::Table::CreateTableRequest& request); 
+    explicit TTableDescription(const Ydb::Table::CreateTableRequest& request);
 
     void AddColumn(const TString& name, const Ydb::Type& type, const TString& family);
     void SetPrimaryKeyColumns(const TVector<TString>& primaryKeyColumns);
- 
-    // common 
-    void AddSecondaryIndex(const TString& indexName, EIndexType type, const TVector<TString>& indexColumns); 
-    void AddSecondaryIndex(const TString& indexName, EIndexType type, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns); 
-    // sync 
-    void AddSyncSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns); 
-    void AddSyncSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns); 
-    // async 
-    void AddAsyncSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns); 
-    void AddAsyncSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns); 
-    // default 
+
+    // common
+    void AddSecondaryIndex(const TString& indexName, EIndexType type, const TVector<TString>& indexColumns);
+    void AddSecondaryIndex(const TString& indexName, EIndexType type, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns);
+    // sync
+    void AddSyncSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns);
+    void AddSyncSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns);
+    // async
+    void AddAsyncSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns);
+    void AddAsyncSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns);
+    // default
     void AddSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns);
     void AddSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns);
- 
-    void SetTtlSettings(TTtlSettings&& settings); 
-    void SetTtlSettings(const TTtlSettings& settings); 
- 
+
+    void SetTtlSettings(TTtlSettings&& settings);
+    void SetTtlSettings(const TTtlSettings& settings);
+
     void SetStorageSettings(const TStorageSettings& settings);
     void AddColumnFamily(const TColumnFamilyDescription& desc);
-    void AddAttribute(const TString& key, const TString& value); 
-    void SetAttributes(const THashMap<TString, TString>& attrs); 
-    void SetAttributes(THashMap<TString, TString>&& attrs); 
+    void AddAttribute(const TString& key, const TString& value);
+    void SetAttributes(const THashMap<TString, TString>& attrs);
+    void SetAttributes(THashMap<TString, TString>&& attrs);
     void SetCompactionPolicy(const TString& name);
     void SetUniformPartitions(ui64 partitionsCount);
     void SetPartitionAtKeys(const TExplicitPartitions& keys);
@@ -478,8 +478,8 @@ private:
     void SetKeyBloomFilter(bool enabled);
     void SetReadReplicasSettings(TReadReplicasSettings::EMode mode, ui64 readReplicasCount);
     const Ydb::Table::DescribeTableResult& GetProto() const;
- 
-    class TImpl; 
+
+    class TImpl;
     std::shared_ptr<TImpl> Impl_;
 };
 
@@ -641,8 +641,8 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 class TTableBuilder {
-    using EUnit = TValueSinceUnixEpochModeSettings::EUnit; 
- 
+    using EUnit = TValueSinceUnixEpochModeSettings::EUnit;
+
 public:
     TTableBuilder() = default;
 
@@ -653,39 +653,39 @@ public:
     TTableBuilder& SetPrimaryKeyColumns(const TVector<TString>& primaryKeyColumns);
     TTableBuilder& SetPrimaryKeyColumn(const TString& primaryKeyColumn);
 
-    // common 
-    TTableBuilder& AddSecondaryIndex(const TString& indexName, EIndexType type, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns); 
-    TTableBuilder& AddSecondaryIndex(const TString& indexName, EIndexType type, const TVector<TString>& indexColumns); 
-    TTableBuilder& AddSecondaryIndex(const TString& indexName, EIndexType type, const TString& indexColumn); 
- 
-    // sync 
-    TTableBuilder& AddSyncSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns); 
-    TTableBuilder& AddSyncSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns); 
-    TTableBuilder& AddSyncSecondaryIndex(const TString& indexName, const TString& indexColumn); 
+    // common
+    TTableBuilder& AddSecondaryIndex(const TString& indexName, EIndexType type, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns);
+    TTableBuilder& AddSecondaryIndex(const TString& indexName, EIndexType type, const TVector<TString>& indexColumns);
+    TTableBuilder& AddSecondaryIndex(const TString& indexName, EIndexType type, const TString& indexColumn);
 
-    // async 
-    TTableBuilder& AddAsyncSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns); 
-    TTableBuilder& AddAsyncSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns); 
-    TTableBuilder& AddAsyncSecondaryIndex(const TString& indexName, const TString& indexColumn); 
- 
-    // default 
-    TTableBuilder& AddSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns); 
-    TTableBuilder& AddSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns); 
-    TTableBuilder& AddSecondaryIndex(const TString& indexName, const TString& indexColumn); 
- 
-    TTableBuilder& SetTtlSettings(TTtlSettings&& settings); 
-    TTableBuilder& SetTtlSettings(const TTtlSettings& settings); 
-    TTableBuilder& SetTtlSettings(const TString& columnName, const TDuration& expireAfter = TDuration::Zero()); 
-    TTableBuilder& SetTtlSettings(const TString& columnName, EUnit columnUnit, const TDuration& expireAfter = TDuration::Zero()); 
- 
+    // sync
+    TTableBuilder& AddSyncSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns);
+    TTableBuilder& AddSyncSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns);
+    TTableBuilder& AddSyncSecondaryIndex(const TString& indexName, const TString& indexColumn);
+
+    // async
+    TTableBuilder& AddAsyncSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns);
+    TTableBuilder& AddAsyncSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns);
+    TTableBuilder& AddAsyncSecondaryIndex(const TString& indexName, const TString& indexColumn);
+
+    // default
+    TTableBuilder& AddSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns);
+    TTableBuilder& AddSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns);
+    TTableBuilder& AddSecondaryIndex(const TString& indexName, const TString& indexColumn);
+
+    TTableBuilder& SetTtlSettings(TTtlSettings&& settings);
+    TTableBuilder& SetTtlSettings(const TTtlSettings& settings);
+    TTableBuilder& SetTtlSettings(const TString& columnName, const TDuration& expireAfter = TDuration::Zero());
+    TTableBuilder& SetTtlSettings(const TString& columnName, EUnit columnUnit, const TDuration& expireAfter = TDuration::Zero());
+
     TTableBuilder& SetStorageSettings(const TStorageSettings& settings);
 
     TTableBuilder& AddColumnFamily(const TColumnFamilyDescription& desc);
 
-    TTableBuilder& AddAttribute(const TString& key, const TString& value); 
-    TTableBuilder& SetAttributes(const THashMap<TString, TString>& attrs); 
-    TTableBuilder& SetAttributes(THashMap<TString, TString>&& attrs); 
- 
+    TTableBuilder& AddAttribute(const TString& key, const TString& value);
+    TTableBuilder& SetAttributes(const THashMap<TString, TString>& attrs);
+    TTableBuilder& SetAttributes(THashMap<TString, TString>&& attrs);
+
     TTableBuilder& SetCompactionPolicy(const TString& name);
 
     // UniformPartitions and PartitionAtKeys are mutually exclusive
@@ -1036,23 +1036,23 @@ public:
         return TTxSettings(TS_STALE_RO);
     }
 
-    void Out(IOutputStream& out) const { 
-        switch (Mode_) { 
-        case TS_SERIALIZABLE_RW: 
-            out << "SerializableRW"; 
-            break; 
-        case TS_ONLINE_RO: 
-            out << "OnlineRO"; 
-            break; 
-        case TS_STALE_RO: 
-            out << "StaleRO"; 
-            break; 
-        default: 
-            out << "Unknown"; 
-            break; 
-        } 
-    } 
- 
+    void Out(IOutputStream& out) const {
+        switch (Mode_) {
+        case TS_SERIALIZABLE_RW:
+            out << "SerializableRW";
+            break;
+        case TS_ONLINE_RO:
+            out << "OnlineRO";
+            break;
+        case TS_STALE_RO:
+            out << "StaleRO";
+            break;
+        default:
+            out << "Unknown";
+            break;
+        }
+    }
+
 private:
     enum ETransactionMode {
         TS_SERIALIZABLE_RW,
@@ -1246,53 +1246,53 @@ private:
     TColumnFamilyBuilder Builder_;
 };
 
-class TAlterTtlSettingsBuilder { 
-    using EUnit = TValueSinceUnixEpochModeSettings::EUnit; 
- 
-public: 
-    TAlterTtlSettingsBuilder(TAlterTableSettings& parent); 
- 
-    TAlterTtlSettingsBuilder& Drop(); 
-    TAlterTtlSettingsBuilder& Set(TTtlSettings&& settings); 
-    TAlterTtlSettingsBuilder& Set(const TTtlSettings& settings); 
-    TAlterTtlSettingsBuilder& Set(const TString& columnName, const TDuration& expireAfter = TDuration::Zero()); 
-    TAlterTtlSettingsBuilder& Set(const TString& columnName, EUnit columnUnit, const TDuration& expireAfter = TDuration::Zero()); 
- 
-    TAlterTableSettings& EndAlterTtlSettings(); 
- 
-private: 
-    TAlterTableSettings& Parent_; 
- 
-    class TImpl; 
-    std::shared_ptr<TImpl> Impl_; 
-}; 
- 
-class TAlterAttributesBuilder { 
-public: 
-    TAlterAttributesBuilder(TAlterTableSettings& parent) 
-        : Parent_(parent) 
-    { } 
- 
-    TAlterAttributesBuilder& Alter(const TString& key, const TString& value) { 
-        AlterAttributes_[key] = value; 
-        return *this; 
-    } 
- 
-    TAlterAttributesBuilder& Add(const TString& key, const TString& value) { 
-        return Alter(key, value); 
-    } 
- 
-    TAlterAttributesBuilder& Drop(const TString& key) { 
-        return Alter(key, ""); 
-    } 
- 
-    TAlterTableSettings& EndAlterAttributes(); 
- 
-private: 
-    TAlterTableSettings& Parent_; 
-    THashMap<TString, TString> AlterAttributes_; 
-}; 
- 
+class TAlterTtlSettingsBuilder {
+    using EUnit = TValueSinceUnixEpochModeSettings::EUnit;
+
+public:
+    TAlterTtlSettingsBuilder(TAlterTableSettings& parent);
+
+    TAlterTtlSettingsBuilder& Drop();
+    TAlterTtlSettingsBuilder& Set(TTtlSettings&& settings);
+    TAlterTtlSettingsBuilder& Set(const TTtlSettings& settings);
+    TAlterTtlSettingsBuilder& Set(const TString& columnName, const TDuration& expireAfter = TDuration::Zero());
+    TAlterTtlSettingsBuilder& Set(const TString& columnName, EUnit columnUnit, const TDuration& expireAfter = TDuration::Zero());
+
+    TAlterTableSettings& EndAlterTtlSettings();
+
+private:
+    TAlterTableSettings& Parent_;
+
+    class TImpl;
+    std::shared_ptr<TImpl> Impl_;
+};
+
+class TAlterAttributesBuilder {
+public:
+    TAlterAttributesBuilder(TAlterTableSettings& parent)
+        : Parent_(parent)
+    { }
+
+    TAlterAttributesBuilder& Alter(const TString& key, const TString& value) {
+        AlterAttributes_[key] = value;
+        return *this;
+    }
+
+    TAlterAttributesBuilder& Add(const TString& key, const TString& value) {
+        return Alter(key, value);
+    }
+
+    TAlterAttributesBuilder& Drop(const TString& key) {
+        return Alter(key, "");
+    }
+
+    TAlterTableSettings& EndAlterAttributes();
+
+private:
+    TAlterTableSettings& Parent_;
+    THashMap<TString, TString> AlterAttributes_;
+};
+
 class TAlterPartitioningSettingsBuilder {
 public:
     explicit TAlterPartitioningSettingsBuilder(TAlterTableSettings& parent)
@@ -1333,10 +1333,10 @@ private:
 
 struct TAlterTableSettings : public TOperationRequestSettings<TAlterTableSettings> {
     using TSelf = TAlterTableSettings;
-    using TAlterAttributes = THashMap<TString, TString>; 
+    using TAlterAttributes = THashMap<TString, TString>;
 
-    TAlterTableSettings(); 
- 
+    TAlterTableSettings();
+
     FLUENT_SETTING_VECTOR(TTableColumn, AddColumns);
 
     FLUENT_SETTING_VECTOR(TString, DropColumns);
@@ -1357,12 +1357,12 @@ struct TAlterTableSettings : public TOperationRequestSettings<TAlterTableSetting
     FLUENT_SETTING_VECTOR(TColumnFamilyDescription, AddColumnFamilies);
     FLUENT_SETTING_VECTOR(TColumnFamilyDescription, AlterColumnFamilies);
 
-    // workaround for MSVC 
-    TSelf& AlterTtlSettings(const TMaybe<TAlterTtlSettings>& value); 
-    const TMaybe<TAlterTtlSettings>& GetAlterTtlSettings() const; 
- 
-    FLUENT_SETTING(TAlterAttributes, AlterAttributes); 
- 
+    // workaround for MSVC
+    TSelf& AlterTtlSettings(const TMaybe<TAlterTtlSettings>& value);
+    const TMaybe<TAlterTtlSettings>& GetAlterTtlSettings() const;
+
+    FLUENT_SETTING(TAlterAttributes, AlterAttributes);
+
     FLUENT_SETTING(TString, SetCompactionPolicy);
 
     FLUENT_SETTING_OPTIONAL(TPartitioningSettings, AlterPartitioningSettings);
@@ -1386,22 +1386,22 @@ struct TAlterTableSettings : public TOperationRequestSettings<TAlterTableSetting
     TAlterColumnFamilyBuilder BeginAlterColumnFamily(const TString& name) {
         return TAlterColumnFamilyBuilder(*this, name);
     }
- 
-    TAlterTtlSettingsBuilder BeginAlterTtlSettings() { 
-        return TAlterTtlSettingsBuilder(*this); 
-    } 
- 
-    TAlterAttributesBuilder BeginAlterAttributes() { 
-        return TAlterAttributesBuilder(*this); 
-    } 
+
+    TAlterTtlSettingsBuilder BeginAlterTtlSettings() {
+        return TAlterTtlSettingsBuilder(*this);
+    }
+
+    TAlterAttributesBuilder BeginAlterAttributes() {
+        return TAlterAttributesBuilder(*this);
+    }
 
     TAlterPartitioningSettingsBuilder BeginAlterPartitioningSettings() {
         return TAlterPartitioningSettingsBuilder(*this);
     }
- 
-private: 
-    class TImpl; 
-    std::shared_ptr<TImpl> Impl_; 
+
+private:
+    class TImpl;
+    std::shared_ptr<TImpl> Impl_;
 };
 
 inline TAlterTableSettings& TAlterStorageSettingsBuilder::EndAlterStorageSettings() {
@@ -1416,10 +1416,10 @@ inline TAlterTableSettings& TAlterColumnFamilyBuilder::EndAlterColumnFamily() {
     return Parent_.AppendAlterColumnFamilies(Builder_.Build());
 }
 
-inline TAlterTableSettings& TAlterAttributesBuilder::EndAlterAttributes() { 
-    return Parent_.AlterAttributes(AlterAttributes_); 
-} 
- 
+inline TAlterTableSettings& TAlterAttributesBuilder::EndAlterAttributes() {
+    return Parent_.AlterAttributes(AlterAttributes_);
+}
+
 inline TAlterTableSettings& TAlterPartitioningSettingsBuilder::EndAlterPartitioningSettings() {
     return Parent_.AlterPartitioningSettings(Builder_.Build());
 }
@@ -1868,15 +1868,15 @@ public:
 
 } // namespace NTable
 } // namespace NYdb
- 
-Y_DECLARE_OUT_SPEC(inline, NYdb::NTable::TIndexDescription, o, x) { 
-    return x.Out(o); 
-} 
- 
-Y_DECLARE_OUT_SPEC(inline, NYdb::NTable::TValueSinceUnixEpochModeSettings::EUnit, o, x) { 
-    return NYdb::NTable::TValueSinceUnixEpochModeSettings::Out(o, x); 
-} 
- 
-Y_DECLARE_OUT_SPEC(inline, NYdb::NTable::TTxSettings, o, x) { 
-    return x.Out(o); 
-} 
+
+Y_DECLARE_OUT_SPEC(inline, NYdb::NTable::TIndexDescription, o, x) {
+    return x.Out(o);
+}
+
+Y_DECLARE_OUT_SPEC(inline, NYdb::NTable::TValueSinceUnixEpochModeSettings::EUnit, o, x) {
+    return NYdb::NTable::TValueSinceUnixEpochModeSettings::Out(o, x);
+}
+
+Y_DECLARE_OUT_SPEC(inline, NYdb::NTable::TTxSettings, o, x) {
+    return x.Out(o);
+}

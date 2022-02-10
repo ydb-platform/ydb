@@ -67,15 +67,15 @@ TActorId InitConfigsDispatcher(TTenantTestRuntime &runtime)
                          NKikimrConfig::TAppConfig(), {}, {}, "", "", 2,
                          NKikimrConsole::TConfigItem::MERGE, "");
 
-    CheckCreateTenant(runtime, Ydb::StatusIds::SUCCESS, 
-        TCreateTenantRequest(TENANT1_1_NAME) 
-            .WithPools({{"hdd", 1}})); 
+    CheckCreateTenant(runtime, Ydb::StatusIds::SUCCESS,
+        TCreateTenantRequest(TENANT1_1_NAME)
+            .WithPools({{"hdd", 1}}));
     CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
                       Ydb::Cms::GetDatabaseStatusResult::PENDING_RESOURCES,
                       {{"hdd", 1, 1}}, {});
-    CheckCreateTenant(runtime, Ydb::StatusIds::SUCCESS, 
-        TCreateTenantRequest(TENANT1_2_NAME) 
-            .WithPools({{"hdd", 1}})); 
+    CheckCreateTenant(runtime, Ydb::StatusIds::SUCCESS,
+        TCreateTenantRequest(TENANT1_2_NAME)
+            .WithPools({{"hdd", 1}}));
     CheckTenantStatus(runtime, TENANT1_2_NAME, Ydb::StatusIds::SUCCESS,
                       Ydb::Cms::GetDatabaseStatusResult::PENDING_RESOURCES,
                       {{"hdd", 1, 1}}, {});

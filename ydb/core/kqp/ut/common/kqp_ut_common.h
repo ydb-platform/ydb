@@ -72,7 +72,7 @@ const TString KikimrDefaultUtDomainRoot = "Root";
 
 TVector<NKikimrKqp::TKqpSetting> SyntaxV1Settings();
 
-struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> { 
+struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
     NKikimrConfig::TAppConfig AppConfig;
     TVector<NKikimrKqp::TKqpSetting> KqpSettings;
     TString AuthToken;
@@ -133,7 +133,7 @@ public:
     }
 
     bool IsUsingSnapshotReads() const {
-        return Server->GetRuntime()->GetAppData().FeatureFlags.GetEnableMvccSnapshotReads(); 
+        return Server->GetRuntime()->GetAppData().FeatureFlags.GetEnableMvccSnapshotReads();
     }
 
 private:
@@ -160,33 +160,33 @@ struct TCollectedStreamResult {
 TCollectedStreamResult CollectStreamResult(NYdb::NExperimental::TStreamPartIterator& it);
 TCollectedStreamResult CollectStreamResult(NYdb::NTable::TScanQueryPartIterator& it);
 
-enum class EIndexTypeSql { 
-    Global, 
-    GlobalSync, 
-    GlobalAsync, 
-}; 
- 
-inline constexpr TStringBuf IndexTypeSqlString(EIndexTypeSql type) { 
-    switch (type) { 
-    case EIndexTypeSql::Global: 
-        return "GLOBAL"; 
-    case EIndexTypeSql::GlobalSync: 
-        return "GLOBAL SYNC"; 
-    case EIndexTypeSql::GlobalAsync: 
-        return "GLOBAL ASYNC"; 
-    } 
-} 
- 
-inline NYdb::NTable::EIndexType IndexTypeSqlToIndexType(EIndexTypeSql type) { 
-    switch (type) { 
-    case EIndexTypeSql::Global: 
-    case EIndexTypeSql::GlobalSync: 
-        return NYdb::NTable::EIndexType::GlobalSync; 
-    case EIndexTypeSql::GlobalAsync: 
-        return NYdb::NTable::EIndexType::GlobalAsync; 
-    } 
-} 
- 
+enum class EIndexTypeSql {
+    Global,
+    GlobalSync,
+    GlobalAsync,
+};
+
+inline constexpr TStringBuf IndexTypeSqlString(EIndexTypeSql type) {
+    switch (type) {
+    case EIndexTypeSql::Global:
+        return "GLOBAL";
+    case EIndexTypeSql::GlobalSync:
+        return "GLOBAL SYNC";
+    case EIndexTypeSql::GlobalAsync:
+        return "GLOBAL ASYNC";
+    }
+}
+
+inline NYdb::NTable::EIndexType IndexTypeSqlToIndexType(EIndexTypeSql type) {
+    switch (type) {
+    case EIndexTypeSql::Global:
+    case EIndexTypeSql::GlobalSync:
+        return NYdb::NTable::EIndexType::GlobalSync;
+    case EIndexTypeSql::GlobalAsync:
+        return NYdb::NTable::EIndexType::GlobalAsync;
+    }
+}
+
 TString ReformatYson(const TString& yson);
 void CompareYson(const TString& expected, const TString& actual);
 void CompareYson(const TString& expected, const NKikimrMiniKQL::TResult& actual);

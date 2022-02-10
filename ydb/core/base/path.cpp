@@ -1,10 +1,10 @@
 #include "path.h"
 
-#include <util/string/builder.h> 
+#include <util/string/builder.h>
 #include <util/string/printf.h>
 
 namespace NKikimr {
- 
+
 TVector<TString> SplitPath(TString path) {
     TVector<TString> res;
     if (path.empty())
@@ -161,47 +161,47 @@ TStringBuf ExtractBase(const TString &path) noexcept {
     return parent.RAfter('/');
 }
 
-bool TrySplitPathByDb(const TString& path, const TString& database, 
-    std::pair<TString, TString>& result, TString& error) 
-{ 
-    auto makeWrongDbError = [&]() { 
-        return TStringBuilder() << "Table path not in database, path: " << path << ", database: " << database; 
-    }; 
- 
-    auto pathParts = SplitPath(path); 
-    auto databaseParts = SplitPath(database); 
- 
-    if (pathParts.size() <= databaseParts.size()) { 
-        error = makeWrongDbError(); 
-        return false; 
-    } 
- 
-    if (databaseParts.empty()) { 
-        if (pathParts.size() < 2) { 
-            error = TStringBuilder() << "Bad table path: " << path; 
-            return false; 
-        } 
- 
-        result = std::make_pair( 
-            CombinePath(pathParts.begin(), pathParts.begin() + 1), 
-            CombinePath(pathParts.begin() + 1, pathParts.end(), false)); 
- 
-        return true; 
-    } 
- 
-    for (ui32 i = 0; i < databaseParts.size(); ++i) { 
-        if (pathParts[i] != databaseParts[i]) { 
-            error = makeWrongDbError(); 
-            return false; 
-        } 
-    } 
- 
-    result = std::make_pair( 
-        CombinePath(databaseParts.begin(), databaseParts.end()), 
-        CombinePath(pathParts.begin() + databaseParts.size(), pathParts.end(), false) 
-    ); 
- 
-    return true; 
+bool TrySplitPathByDb(const TString& path, const TString& database,
+    std::pair<TString, TString>& result, TString& error)
+{
+    auto makeWrongDbError = [&]() {
+        return TStringBuilder() << "Table path not in database, path: " << path << ", database: " << database;
+    };
+
+    auto pathParts = SplitPath(path);
+    auto databaseParts = SplitPath(database);
+
+    if (pathParts.size() <= databaseParts.size()) {
+        error = makeWrongDbError();
+        return false;
+    }
+
+    if (databaseParts.empty()) {
+        if (pathParts.size() < 2) {
+            error = TStringBuilder() << "Bad table path: " << path;
+            return false;
+        }
+
+        result = std::make_pair(
+            CombinePath(pathParts.begin(), pathParts.begin() + 1),
+            CombinePath(pathParts.begin() + 1, pathParts.end(), false));
+
+        return true;
+    }
+
+    for (ui32 i = 0; i < databaseParts.size(); ++i) {
+        if (pathParts[i] != databaseParts[i]) {
+            error = makeWrongDbError();
+            return false;
+        }
+    }
+
+    result = std::make_pair(
+        CombinePath(databaseParts.begin(), databaseParts.end()),
+        CombinePath(pathParts.begin() + databaseParts.size(), pathParts.end(), false)
+    );
+
+    return true;
 }
- 
-} 
+
+}

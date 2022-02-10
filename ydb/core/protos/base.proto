@@ -37,8 +37,8 @@ message TRowVersion {
     optional uint64 Step = 1;
     optional uint64 TxId = 2;
 }
- 
-message TPathID { 
-    optional fixed64 OwnerId = 1; 
-    optional uint64 LocalId = 2; 
-} 
+
+message TPathID {
+    optional fixed64 OwnerId = 1;
+    optional uint64 LocalId = 2;
+}

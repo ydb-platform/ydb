@@ -15,10 +15,10 @@ NKikimrSchemeOp::TModifyScheme CopyTableTask(NKikimr::NSchemeShard::TPath& src, 
     scheme.SetFailOnExist(true);
 
     auto operation = scheme.MutableCreateTable();
-    operation->SetName(dst.LeafName()); 
-    operation->SetCopyFromTable(src.PathString()); 
+    operation->SetName(dst.LeafName());
+    operation->SetCopyFromTable(src.PathString());
     operation->SetOmitFollowers(omitFollowers);
-    operation->SetIsBackup(isBackup); 
+    operation->SetIsBackup(isBackup);
 
     return scheme;
 }
@@ -49,17 +49,17 @@ NKikimrSchemeOp::TModifyScheme CreateIndexTask(NKikimr::NSchemeShard::TTableInde
 namespace NKikimr {
 namespace NSchemeShard {
 
-TVector<ISubOperationBase::TPtr> CreateConsistentCopyTables(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) { 
+TVector<ISubOperationBase::TPtr> CreateConsistentCopyTables(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
     Y_VERIFY(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateConsistentCopyTables);
 
-    auto consistentCopying = tx.GetCreateConsistentCopyTables(); 
+    auto consistentCopying = tx.GetCreateConsistentCopyTables();
 
     if (0 == consistentCopying.CopyTableDescriptionsSize()) {
         TString msg = TStringBuilder() << "no task to do, empty list CopyTableDescriptions";
         return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, msg)};
     }
 
-    TPath firstPath = TPath::Resolve(consistentCopying.GetCopyTableDescriptions(0).GetSrcPath(), context.SS); 
+    TPath firstPath = TPath::Resolve(consistentCopying.GetCopyTableDescriptions(0).GetSrcPath(), context.SS);
     {
         auto checks = TPath::TChecker(firstPath);
         checks
@@ -92,7 +92,7 @@ TVector<ISubOperationBase::TPtr> CreateConsistentCopyTables(TOperationId nextId,
 
     TVector<ISubOperationBase::TPtr> result;
 
-    for (auto& descr: consistentCopying.GetCopyTableDescriptions()) { 
+    for (auto& descr: consistentCopying.GetCopyTableDescriptions()) {
         auto& srcStr = descr.GetSrcPath();
         auto& dstStr = descr.GetDstPath();
 
@@ -124,33 +124,33 @@ TVector<ISubOperationBase::TPtr> CreateConsistentCopyTables(TOperationId nextId,
             continue;
         }
 
-        for (const auto& child: srcPath.Base()->GetChildren()) { 
-            const auto& name = child.first; 
-            const auto& pathId = child.second; 
+        for (const auto& child: srcPath.Base()->GetChildren()) {
+            const auto& name = child.first;
+            const auto& pathId = child.second;
 
             TPath srcIndexPath = srcPath.Child(name);
             TPath dstIndexPath = dstPath.Child(name);
- 
+
             if (srcIndexPath.IsDeleted()) {
                 continue;
             }
 
-            if (!srcIndexPath.IsTableIndex()) { 
-                continue; 
-            } 
- 
-            Y_VERIFY(srcIndexPath.Base()->PathId == pathId); 
+            if (!srcIndexPath.IsTableIndex()) {
+                continue;
+            }
+
+            Y_VERIFY(srcIndexPath.Base()->PathId == pathId);
             Y_VERIFY_S(srcIndexPath.Base()->GetChildren().size() == 1, srcIndexPath.PathString() << " has children " << srcIndexPath.Base()->GetChildren().size() << " but 1 exected");
 
             TTableIndexInfo::TPtr indexInfo = context.SS->Indexes.at(pathId);
-            result.push_back(CreateNewTableIndex(NextPartId(nextId, result), CreateIndexTask(indexInfo, dstIndexPath))); 
+            result.push_back(CreateNewTableIndex(NextPartId(nextId, result), CreateIndexTask(indexInfo, dstIndexPath)));
 
             TString srcImplTableName = srcIndexPath.Base()->GetChildren().begin()->first;
             TPath srcImplTable = srcIndexPath.Child(srcImplTableName);
-            Y_VERIFY(srcImplTable.Base()->PathId == srcIndexPath.Base()->GetChildren().begin()->second); 
+            Y_VERIFY(srcImplTable.Base()->PathId == srcIndexPath.Base()->GetChildren().begin()->second);
             TPath dstImplTable = dstIndexPath.Child(srcImplTableName);
 
-            result.push_back(CreateCopyTable(NextPartId(nextId, result), 
+            result.push_back(CreateCopyTable(NextPartId(nextId, result),
                 CopyTableTask(srcImplTable, dstImplTable, descr.GetOmitFollowers(), descr.GetIsBackup())));
         }
     }

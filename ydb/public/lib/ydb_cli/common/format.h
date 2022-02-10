@@ -1,15 +1,15 @@
-#pragma once 
- 
-#include "command.h" 
-#include "formats.h" 
- 
+#pragma once
+
+#include "command.h"
+#include "formats.h"
+
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/status/status.h>
 
-namespace NYdb { 
-namespace NConsoleClient { 
- 
+namespace NYdb {
+namespace NConsoleClient {
+
 class TCommandWithResponseHeaders {
 protected:
     void PrintResponseHeader(const NYdb::TStatus& status);
@@ -19,8 +19,8 @@ protected:
     static const TString ResponseHeadersHelp;
 };
 
-class TCommandWithFormat { 
-protected: 
+class TCommandWithFormat {
+protected:
     void AddInputFormats(TClientCommand::TConfig& config, const TVector<EOutputFormat>& allowedFormats);
     void AddFormats(TClientCommand::TConfig& config, const TVector<EOutputFormat>& allowedFormats);
     void ParseFormats();
@@ -29,8 +29,8 @@ protected:
     void AddJsonOption(TClientCommand::TConfig& config,
         const TString& description = "(Deprecated, will be removed soon. Use --format option instead)"
         " Output in json format");
- 
-protected: 
+
+protected:
     EOutputFormat OutputFormat = EOutputFormat::Default;
     EOutputFormat InputFormat = EOutputFormat::Default;
 
@@ -38,8 +38,8 @@ private:
     TVector<EOutputFormat> AllowedInputFormats;
     TVector<EOutputFormat> AllowedFormats;
     bool DeprecatedOptionUsed = false;
-}; 
- 
+};
+
 class TResultSetPrinter {
 public:
     TResultSetPrinter(EOutputFormat format, std::function<bool()> isInterrupted = []() { return false; });
@@ -83,5 +83,5 @@ private:
     bool AnalyzeMode;
 };
 
-} 
-} 
+}
+}

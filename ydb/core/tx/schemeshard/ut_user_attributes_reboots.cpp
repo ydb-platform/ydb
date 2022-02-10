@@ -36,8 +36,8 @@ Y_UNIT_TEST_SUITE(TUserAttrsTestWithReboots) {
                                               NLs::UserAttrsEqual(userAttrs)});
             }
 
-            t.TestEnv->ReliablePropose(runtime, UserAttrsRequest(++t.TxId,  "/MyRoot/DirA", "USER_0",  
-                                       AlterUserAttrs({}, userAttrsKeys), {pathVer}), 
+            t.TestEnv->ReliablePropose(runtime, UserAttrsRequest(++t.TxId,  "/MyRoot/DirA", "USER_0", 
+                                       AlterUserAttrs({}, userAttrsKeys), {pathVer}),
                                        {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications, NKikimrScheme::StatusPreconditionFailed});
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 

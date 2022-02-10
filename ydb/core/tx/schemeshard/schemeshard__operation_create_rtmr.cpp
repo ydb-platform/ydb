@@ -146,9 +146,9 @@ public:
         context.OnComplete.PublishToSchemeBoard(OperationId, parentDir->PathId);
 
         context.SS->ClearDescribePathCaches(path);
-        context.OnComplete.PublishToSchemeBoard(OperationId, pathId); 
- 
-        context.SS->ChangeTxState(db, OperationId, TTxState::Done); 
+        context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
+
+        context.SS->ChangeTxState(db, OperationId, TTxState::Done);
         return true;
     }
 
@@ -169,8 +169,8 @@ public:
 };
 
 class TCreateRTMR: public TSubOperation {
-    const TOperationId OperationId; 
-    const TTxTransaction Transaction; 
+    const TOperationId OperationId;
+    const TTxTransaction Transaction;
     TTxState::ETxState State = TTxState::Invalid;
 
     TTxState::ETxState NextState() {
@@ -184,8 +184,8 @@ class TCreateRTMR: public TSubOperation {
             return TTxState::ConfigureParts;
         case TTxState::ConfigureParts:
             return TTxState::Propose;
-        case TTxState::Propose: 
-            return TTxState::Done; 
+        case TTxState::Propose:
+            return TTxState::Done;
         default:
             return TTxState::Invalid;
         }
@@ -201,7 +201,7 @@ class TCreateRTMR: public TSubOperation {
             return THolder(new TConfigureParts(OperationId));
         case TTxState::Propose:
             return THolder(new TPropose(OperationId));
-        case TTxState::Done: 
+        case TTxState::Done:
             return THolder(new TDone(OperationId));
         default:
             return nullptr;
@@ -218,11 +218,11 @@ class TCreateRTMR: public TSubOperation {
     }
 
 public:
-    TCreateRTMR(TOperationId id, const TTxTransaction& tx) 
+    TCreateRTMR(TOperationId id, const TTxTransaction& tx)
         : OperationId(id)
-        , Transaction(tx) 
-    { 
-    } 
+        , Transaction(tx)
+    {
+    }
 
     TCreateRTMR(TOperationId id, TTxState::ETxState state)
         : OperationId(id)
@@ -235,9 +235,9 @@ public:
         const auto ssId = context.SS->SelfTabletId();
 
         const auto acceptExisted = !Transaction.GetFailOnExist();
-        const auto& rtmrVolumeDescription = Transaction.GetCreateRtmrVolume(); 
+        const auto& rtmrVolumeDescription = Transaction.GetCreateRtmrVolume();
 
-        const TString& parentPathStr = Transaction.GetWorkingDir(); 
+        const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = rtmrVolumeDescription.GetName();
 
         const ui64 shardsToCreate = rtmrVolumeDescription.GetPartitionsCount();
@@ -272,20 +272,20 @@ public:
             }
         }
 
-        const TString acl = Transaction.GetModifyACL().GetDiffACL(); 
- 
+        const TString acl = Transaction.GetModifyACL().GetDiffACL();
+
         NSchemeShard::TPath dstPath = parentPath.Child(name);
         {
             NSchemeShard::TPath::TChecker checks = dstPath.Check();
             checks.IsAtLocalSchemeShard();
             if (dstPath.IsResolved()) {
-                checks 
-                    .IsResolved() 
+                checks
+                    .IsResolved()
                     .NotUnderDeleting()
                     .FailOnExist(TPathElement::EPathType::EPathTypeRtmrVolume, acceptExisted);
             } else {
-                checks 
-                    .NotEmpty() 
+                checks
+                    .NotEmpty()
                     .NotResolved();
             }
 
@@ -296,8 +296,8 @@ public:
                     .PathsLimit()
                     .DirChildrenLimit()
                     .ShardsLimit(shardsToCreate)
-                    .PathShardsLimit(shardsToCreate) 
-                    .IsValidACL(acl); 
+                    .PathShardsLimit(shardsToCreate)
+                    .IsValidACL(acl);
             }
 
             if (!checks) {
@@ -313,8 +313,8 @@ public:
             }
         }
 
-        TString errStr; 
-        if (!context.SS->CheckApplyIf(Transaction, errStr)) { 
+        TString errStr;
+        if (!context.SS->CheckApplyIf(Transaction, errStr)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;
         }
@@ -408,16 +408,16 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override { 
-        Y_FAIL("no AbortPropose for TCreateRTMR"); 
-    } 
- 
+    void AbortPropose(TOperationContext&) override {
+        Y_FAIL("no AbortPropose for TCreateRTMR");
+    }
+
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "TCreateRTMR AbortUnsafe"
                          << ", opId: " << OperationId
                          << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID()); 
+                         << ", at schemeshard: " << context.SS->TabletID());
 
         context.OnComplete.DoneOperation(OperationId);
     }
@@ -428,12 +428,12 @@ public:
 namespace NKikimr {
 namespace NSchemeShard {
 
-ISubOperationBase::TPtr CreateNewRTMR(TOperationId id, const TTxTransaction& tx) { 
-    return new TCreateRTMR(id, tx); 
-} 
- 
+ISubOperationBase::TPtr CreateNewRTMR(TOperationId id, const TTxTransaction& tx) {
+    return new TCreateRTMR(id, tx);
+}
+
 ISubOperationBase::TPtr CreateNewRTMR(TOperationId id, TTxState::ETxState state) {
-    Y_VERIFY(state != TTxState::Invalid); 
+    Y_VERIFY(state != TTxState::Invalid);
     return new TCreateRTMR(id, state);
 }
 

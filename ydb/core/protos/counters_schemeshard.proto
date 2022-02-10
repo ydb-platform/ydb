@@ -92,10 +92,10 @@ enum ESimpleCounters {
     COUNTER_IN_FLIGHT_OPS_TxCreateFileStore = 77          [(CounterOpts) = {Name: "InFlightOps/CreateFileStore"}];
     COUNTER_IN_FLIGHT_OPS_TxAlterFileStore = 78           [(CounterOpts) = {Name: "InFlightOps/AlterFileStore"}];
     COUNTER_IN_FLIGHT_OPS_TxDropFileStore = 79            [(CounterOpts) = {Name: "InFlightOps/DropFileStore"}];
- 
-    COUNTER_TTL_ENABLED_TABLE_COUNT = 80                  [(CounterOpts) = {Name: "TTLEnabledTables"}]; 
- 
-    COUNTER_IN_FLIGHT_OPS_TxRestore = 81                  [(CounterOpts) = {Name: "InFlightOps/Restore"}]; 
+
+    COUNTER_TTL_ENABLED_TABLE_COUNT = 80                  [(CounterOpts) = {Name: "TTLEnabledTables"}];
+
+    COUNTER_IN_FLIGHT_OPS_TxRestore = 81                  [(CounterOpts) = {Name: "InFlightOps/Restore"}];
 
     COUNTER_IN_FLIGHT_OPS_TxCreateOlapStore = 82          [(CounterOpts) = {Name: "InFlightOps/CreateOlapStore"}];
     COUNTER_IN_FLIGHT_OPS_TxAlterOlapStore = 83           [(CounterOpts) = {Name: "InFlightOps/AlterOlapStore"}];
@@ -113,7 +113,7 @@ enum ESimpleCounters {
     COUNTER_DISK_SPACE_TABLES_INDEX_BYTES = 93            [(CounterOpts) = {Name: "DiskSpaceTablesIndexBytes"}];
     COUNTER_DISK_SPACE_TABLES_TOTAL_BYTES = 94            [(CounterOpts) = {Name: "DiskSpaceTablesTotalBytes"}];
     COUNTER_DISK_SPACE_QUOTA_EXCEEDED = 95                [(CounterOpts) = {Name: "DiskSpaceQuotaExceeded"}];
- 
+
     COUNTER_DISK_SPACE_HARD_QUOTA_BYTES = 96              [(CounterOpts) = {Name: "DiskSpaceHardQuotaBytes"}];
     COUNTER_DISK_SPACE_SOFT_QUOTA_BYTES = 97              [(CounterOpts) = {Name: "DiskSpaceSoftQuotaBytes"}];
 
@@ -142,12 +142,12 @@ enum ESimpleCounters {
     COUNTER_STREAM_RESERVED_THROUGHPUT = 115              [(CounterOpts) = {Name: "StreamReservedThroughput"}];
     COUNTER_STREAM_RESERVED_STORAGE = 116                 [(CounterOpts) = {Name: "StreamReservedStorage"}];
     COUNTER_STREAM_RESERVED_STORAGE_QUOTA = 117            [(CounterOpts) = {Name: "StreamReservedStorageQuota"}];
- 
-    COUNTER_REPLICATION_COUNT = 118                       [(CounterOpts) = {Name: "Replications"}]; 
-    COUNTER_REPLICATION_CONTROLLER_COUNT = 119            [(CounterOpts) = {Name: "ReplicationControllers"}]; 
-    COUNTER_IN_FLIGHT_OPS_TxCreateReplication = 120       [(CounterOpts) = {Name: "InFlightOps/CreateReplication"}]; 
-    COUNTER_IN_FLIGHT_OPS_TxAlterReplication = 121        [(CounterOpts) = {Name: "InFlightOps/AlterReplication"}]; 
-    COUNTER_IN_FLIGHT_OPS_TxDropReplication = 122         [(CounterOpts) = {Name: "InFlightOps/DropReplication"}]; 
+
+    COUNTER_REPLICATION_COUNT = 118                       [(CounterOpts) = {Name: "Replications"}];
+    COUNTER_REPLICATION_CONTROLLER_COUNT = 119            [(CounterOpts) = {Name: "ReplicationControllers"}];
+    COUNTER_IN_FLIGHT_OPS_TxCreateReplication = 120       [(CounterOpts) = {Name: "InFlightOps/CreateReplication"}];
+    COUNTER_IN_FLIGHT_OPS_TxAlterReplication = 121        [(CounterOpts) = {Name: "InFlightOps/AlterReplication"}];
+    COUNTER_IN_FLIGHT_OPS_TxDropReplication = 122         [(CounterOpts) = {Name: "InFlightOps/DropReplication"}];
 }
 
 enum ECumulativeCounters {
@@ -203,8 +203,8 @@ enum ECumulativeCounters {
     COUNTER_FINISHED_OPS_TxCreateFileStore = 46           [(CounterOpts) = {Name: "FinishedOps/CreateFileStore"}];
     COUNTER_FINISHED_OPS_TxAlterFileStore = 47            [(CounterOpts) = {Name: "FinishedOps/AlterFileStore"}];
     COUNTER_FINISHED_OPS_TxDropFileStore = 48             [(CounterOpts) = {Name: "FinishedOps/DropFileStore"}];
- 
-    COUNTER_FINISHED_OPS_TxRestore = 49                   [(CounterOpts) = {Name: "FinishedOps/Restore"}]; 
+
+    COUNTER_FINISHED_OPS_TxRestore = 49                   [(CounterOpts) = {Name: "FinishedOps/Restore"}];
 
     COUNTER_FINISHED_OPS_TxCreateOlapStore = 50           [(CounterOpts) = {Name: "FinishedOps/CreateOlapStore"}];
     COUNTER_FINISHED_OPS_TxAlterOlapStore = 51            [(CounterOpts) = {Name: "FinishedOps/AlterOlapStore"}];
@@ -212,14 +212,14 @@ enum ECumulativeCounters {
     COUNTER_FINISHED_OPS_TxCreateOlapTable = 53           [(CounterOpts) = {Name: "FinishedOps/CreateOlapTable"}];
     COUNTER_FINISHED_OPS_TxAlterOlapTable = 54            [(CounterOpts) = {Name: "FinishedOps/AlterOlapTable"}];
     COUNTER_FINISHED_OPS_TxDropOlapTable = 55             [(CounterOpts) = {Name: "FinishedOps/DropOlapTable"}];
- 
 
-    COUNTER_FINISHED_OPS_TxCreateCdcStream = 56           [(CounterOpts) = {Name: "FinishedOps/CreateCdcStream"}]; 
-    COUNTER_FINISHED_OPS_TxCreateCdcStreamAtTable = 57    [(CounterOpts) = {Name: "FinishedOps/CreateCdcStreamAtTable"}]; 
-    COUNTER_FINISHED_OPS_TxAlterCdcStream = 58            [(CounterOpts) = {Name: "FinishedOps/AlterCdcStream"}]; 
-    COUNTER_FINISHED_OPS_TxAlterCdcStreamAtTable = 59     [(CounterOpts) = {Name: "FinishedOps/AlterCdcStreamAtTable"}]; 
-    COUNTER_FINISHED_OPS_TxDropCdcStream = 60             [(CounterOpts) = {Name: "FinishedOps/DropCdcStream"}]; 
-    COUNTER_FINISHED_OPS_TxDropCdcStreamAtTable = 61      [(CounterOpts) = {Name: "FinishedOps/DropCdcStreamAtTable"}]; 
+
+    COUNTER_FINISHED_OPS_TxCreateCdcStream = 56           [(CounterOpts) = {Name: "FinishedOps/CreateCdcStream"}];
+    COUNTER_FINISHED_OPS_TxCreateCdcStreamAtTable = 57    [(CounterOpts) = {Name: "FinishedOps/CreateCdcStreamAtTable"}];
+    COUNTER_FINISHED_OPS_TxAlterCdcStream = 58            [(CounterOpts) = {Name: "FinishedOps/AlterCdcStream"}];
+    COUNTER_FINISHED_OPS_TxAlterCdcStreamAtTable = 59     [(CounterOpts) = {Name: "FinishedOps/AlterCdcStreamAtTable"}];
+    COUNTER_FINISHED_OPS_TxDropCdcStream = 60             [(CounterOpts) = {Name: "FinishedOps/DropCdcStream"}];
+    COUNTER_FINISHED_OPS_TxDropCdcStreamAtTable = 61      [(CounterOpts) = {Name: "FinishedOps/DropCdcStreamAtTable"}];
 
     COUNTER_FINISHED_OPS_TxMoveTable = 62                 [(CounterOpts) = {Name: "FinishedOps/MoveTable"}];
     COUNTER_FINISHED_OPS_TxMoveTableIndex = 63            [(CounterOpts) = {Name: "FinishedOps/MoveTableIndex"}];
@@ -231,10 +231,10 @@ enum ECumulativeCounters {
     COUNTER_BACKGROUND_COMPACTION_FAILED = 67             [(CounterOpts) = {Name: "BackgroundCompactionFailed"}];
     COUNTER_BACKGROUND_COMPACTION_OK = 68                 [(CounterOpts) = {Name: "BackgroundCompactionOK"}];
     COUNTER_BACKGROUND_COMPACTION_TIMEOUT = 69            [(CounterOpts) = {Name: "BackgroundCompactionTimeout"}];
- 
-    COUNTER_FINISHED_OPS_TxCreateReplication = 70         [(CounterOpts) = {Name: "FinishedOps/CreateReplication"}]; 
-    COUNTER_FINISHED_OPS_TxAlterReplication = 71          [(CounterOpts) = {Name: "FinishedOps/AlterReplication"}]; 
-    COUNTER_FINISHED_OPS_TxDropReplication = 72           [(CounterOpts) = {Name: "FinishedOps/DropReplication"}]; 
+
+    COUNTER_FINISHED_OPS_TxCreateReplication = 70         [(CounterOpts) = {Name: "FinishedOps/CreateReplication"}];
+    COUNTER_FINISHED_OPS_TxAlterReplication = 71          [(CounterOpts) = {Name: "FinishedOps/AlterReplication"}];
+    COUNTER_FINISHED_OPS_TxDropReplication = 72           [(CounterOpts) = {Name: "FinishedOps/DropReplication"}];
 }
 
 enum EPercentileCounters {
@@ -260,20 +260,20 @@ enum EPercentileCounters {
     };
 
     COUNTER_BACKGROUND_COMPACTION_OK_LATENCY = 0          [(CounterOpts) = {Name: "BackgroundCompactionOkLatency"}];
- 
-    COUNTER_NUM_SHARDS_BY_TTL_LAG = 1 [(CounterOpts) = { 
-        Name: "NumShardsByTtlLag" 
-        Integral: true 
-        Ranges { Value: 0     Name: "0"     } 
-        Ranges { Value: 900   Name: "900"   } 
-        Ranges { Value: 1800  Name: "1800"  } 
-        Ranges { Value: 3600  Name: "3600"  } 
-        Ranges { Value: 7200  Name: "7200"  } 
-        Ranges { Value: 14400 Name: "14400" } 
-        Ranges { Value: 28800 Name: "28800" } 
-        Ranges { Value: 57600 Name: "57600" } 
-        Ranges { Value: 86400 Name: "inf"   } 
-    }]; 
+
+    COUNTER_NUM_SHARDS_BY_TTL_LAG = 1 [(CounterOpts) = {
+        Name: "NumShardsByTtlLag"
+        Integral: true
+        Ranges { Value: 0     Name: "0"     }
+        Ranges { Value: 900   Name: "900"   }
+        Ranges { Value: 1800  Name: "1800"  }
+        Ranges { Value: 3600  Name: "3600"  }
+        Ranges { Value: 7200  Name: "7200"  }
+        Ranges { Value: 14400 Name: "14400" }
+        Ranges { Value: 28800 Name: "28800" }
+        Ranges { Value: 57600 Name: "57600" }
+        Ranges { Value: 86400 Name: "inf"   }
+    }];
 }
 
 enum ETxTypes {
@@ -291,23 +291,23 @@ enum ETxTypes {
     TXTYPE_INIT_SPLIT_DST_ACK = 11                        [(TxTypeOpts) = {Name: "TxInitSplitDstAck"}];
     TXTYPE_SPLIT_ACK = 12                                 [(TxTypeOpts) = {Name: "TxSplitAck"}];
     TXTYPE_SPLIT_PARTITIONING_CHANGED_DST_ACK = 13        [(TxTypeOpts) = {Name: "TxSplitPartitioningChangedAck"}];
-    TXTYPE_CANCEL_BACKUP_IMPL = 14                        [(TxTypeOpts) = {Name: "TxCancelBackupImpl"}]; 
+    TXTYPE_CANCEL_BACKUP_IMPL = 14                        [(TxTypeOpts) = {Name: "TxCancelBackupImpl"}];
     TXTYPE_MONITORING = 15                                [(TxTypeOpts) = {Name: "TxMonitoring"}];
     TXTYPE_SUBDOMAIN_CONFIGURE_RESULT = 16                [(TxTypeOpts) = {Name: "TTxSubDomainConfigureStatus"}];
     TXTYPE_BLOCKSTORE_CONFIG_RESULT = 17                  [(TxTypeOpts) = {Name: "TTxBlockStoreConfigResult"}];
     TXTYPE_KESUS_CONFIG_RESULT = 18                       [(TxTypeOpts) = {Name: "TTxKesusConfigResult"}];
     TXTYPE_PROPOSE = 19                                   [(TxTypeOpts) = {Name: "TTxOperationPropose"}];
     TXTYPE_DATASHARD_SCHEMA_CHANGED = 20                  [(TxTypeOpts) = {Name: "TxDataShardSchemaChanged"}];
-    TXTYPE_DEFERRED_UPDATE_ON_SCHEME_BOARD = 21           [(TxTypeOpts) = {Name: "TxDeferredUpdateOnSchemeBoard"}]; 
+    TXTYPE_DEFERRED_UPDATE_ON_SCHEME_BOARD = 21           [(TxTypeOpts) = {Name: "TxDeferredUpdateOnSchemeBoard"}];
     TXTYPE_CLEAN_TABLES = 22                              [(TxTypeOpts) = {Name: "TxCleanTables"}];
- 
-    TXTYPE_CREATE_EXPORT = 23                             [(TxTypeOpts) = {Name: "TxCreateExport"}]; 
-    TXTYPE_GET_EXPORT = 24                                [(TxTypeOpts) = {Name: "TxGetExport"}]; 
-    TXTYPE_CANCEL_EXPORT = 25                             [(TxTypeOpts) = {Name: "TxCancelExport"}]; 
-    TXTYPE_CANCEL_EXPORT_ACK = 26                         [(TxTypeOpts) = {Name: "TxCancelExportAck"}]; 
-    TXTYPE_FORGET_EXPORT = 27                             [(TxTypeOpts) = {Name: "TxForgetExport"}]; 
-    TXTYPE_LIST_EXPORTS = 28                              [(TxTypeOpts) = {Name: "TxListExports"}]; 
-    TXTYPE_EXPORT_PROGRESS = 29                           [(TxTypeOpts) = {Name: "TxExportProgress"}]; 
+
+    TXTYPE_CREATE_EXPORT = 23                             [(TxTypeOpts) = {Name: "TxCreateExport"}];
+    TXTYPE_GET_EXPORT = 24                                [(TxTypeOpts) = {Name: "TxGetExport"}];
+    TXTYPE_CANCEL_EXPORT = 25                             [(TxTypeOpts) = {Name: "TxCancelExport"}];
+    TXTYPE_CANCEL_EXPORT_ACK = 26                         [(TxTypeOpts) = {Name: "TxCancelExportAck"}];
+    TXTYPE_FORGET_EXPORT = 27                             [(TxTypeOpts) = {Name: "TxForgetExport"}];
+    TXTYPE_LIST_EXPORTS = 28                              [(TxTypeOpts) = {Name: "TxListExports"}];
+    TXTYPE_EXPORT_PROGRESS = 29                           [(TxTypeOpts) = {Name: "TxExportProgress"}];
 
     TXTYPE_SYNC_TENANT = 30                               [(TxTypeOpts) = {Name: "TxSyncTenant"}];
     TXTYPE_UPDATE_TENANT = 31                             [(TxTypeOpts) = {Name: "TxUpdateTenant"}];
@@ -323,23 +323,23 @@ enum ETxTypes {
     TXTYPE_FORGET_INDEX_BUILD = 40                        [(TxTypeOpts) = {Name: "TxForgetIndexBuild"}];
     TXTYPE_LIST_INDEX_BUILD = 41                          [(TxTypeOpts) = {Name: "TxListIndexBuild"}];
     TXTYPE_PROGRESS_INDEX_BUILD = 42                      [(TxTypeOpts) = {Name: "TxProgressIndexBuild"}];
- 
-    TXTYPE_SCHEDULE_CONDITIONAL_ERASE = 43                [(TxTypeOpts) = {Name: "TxScheduleConditionalErase"}]; 
-    TXTYPE_RUN_CONDITIONAL_ERASE = 44                     [(TxTypeOpts) = {Name: "TxRunConditionalErase"}]; 
- 
-    TXTYPE_STORE_PARTITION_STATS = 45                     [(TxTypeOpts) = {Name: "TxStorePartitionStats"}]; 
+
+    TXTYPE_SCHEDULE_CONDITIONAL_ERASE = 43                [(TxTypeOpts) = {Name: "TxScheduleConditionalErase"}];
+    TXTYPE_RUN_CONDITIONAL_ERASE = 44                     [(TxTypeOpts) = {Name: "TxRunConditionalErase"}];
+
+    TXTYPE_STORE_PARTITION_STATS = 45                     [(TxTypeOpts) = {Name: "TxStorePartitionStats"}];
 
     TXTYPE_FILESTORE_CONFIG_RESULT = 46                   [(TxTypeOpts) = {Name: "TxFileStoreConfigResult"}];
 
     TXTYPE_MAKEBILL_INDEX_BUILD = 47                      [(TxTypeOpts) = {Name: "TxBillingIndexBuild"}];
- 
-    TXTYPE_CREATE_IMPORT = 48                             [(TxTypeOpts) = {Name: "TxCreateImport"}]; 
-    TXTYPE_GET_IMPORT = 49                                [(TxTypeOpts) = {Name: "TxGetImport"}]; 
-    TXTYPE_CANCEL_IMPORT = 50                             [(TxTypeOpts) = {Name: "TxCancelImport"}]; 
-    TXTYPE_CANCEL_IMPORT_ACK = 51                         [(TxTypeOpts) = {Name: "TxCancelImportAck"}]; 
-    TXTYPE_FORGET_IMPORT = 52                             [(TxTypeOpts) = {Name: "TxForgetImport"}]; 
-    TXTYPE_LIST_IMPORTS = 53                              [(TxTypeOpts) = {Name: "TxListImports"}]; 
-    TXTYPE_IMPORT_PROGRESS = 54                           [(TxTypeOpts) = {Name: "TxImportProgress"}]; 
+
+    TXTYPE_CREATE_IMPORT = 48                             [(TxTypeOpts) = {Name: "TxCreateImport"}];
+    TXTYPE_GET_IMPORT = 49                                [(TxTypeOpts) = {Name: "TxGetImport"}];
+    TXTYPE_CANCEL_IMPORT = 50                             [(TxTypeOpts) = {Name: "TxCancelImport"}];
+    TXTYPE_CANCEL_IMPORT_ACK = 51                         [(TxTypeOpts) = {Name: "TxCancelImportAck"}];
+    TXTYPE_FORGET_IMPORT = 52                             [(TxTypeOpts) = {Name: "TxForgetImport"}];
+    TXTYPE_LIST_IMPORTS = 53                              [(TxTypeOpts) = {Name: "TxListImports"}];
+    TXTYPE_IMPORT_PROGRESS = 54                           [(TxTypeOpts) = {Name: "TxImportProgress"}];
     TXTYPE_SERVERLESS_STORAGE_BILLING = 55                [(TxTypeOpts) = {Name: "TxServerlessStorageBilling"}];
     TXTYPE_OLAPSHARD_PROPOSE_RESULT = 56                  [(TxTypeOpts) = {Name: "TxOlapShardProposeResult"}];
     TXTYPE_COLUMNSHARD_PROPOSE_RESULT = 57                [(TxTypeOpts) = {Name: "TxColumnShardProposeResult"}];
@@ -365,8 +365,8 @@ enum ETxTypes {
     TXTYPE_NOTIFY_OPERATION_COMPLETE_BARRIER = 72         [(TxTypeOpts) = {Name: "TxNotifyOperationCompleteBarrier"}];
 
     TXTYPE_PARTITION_HISTOGRAM = 73                       [(TxTypeOpts) = {Name: "TxPartitionHistogram"}];
- 
-    TXTYPE_CREATE_REPLICATION_RESULT = 74                 [(TxTypeOpts) = {Name: "TxCreateReplicationResult"}]; 
-    TXTYPE_ALTER_REPLICATION_RESULT = 75                  [(TxTypeOpts) = {Name: "TxAlterReplicationResult"}]; 
-    TXTYPE_DROP_REPLICATION_RESULT = 76                   [(TxTypeOpts) = {Name: "TxDropReplicationResult"}]; 
+
+    TXTYPE_CREATE_REPLICATION_RESULT = 74                 [(TxTypeOpts) = {Name: "TxCreateReplicationResult"}];
+    TXTYPE_ALTER_REPLICATION_RESULT = 75                  [(TxTypeOpts) = {Name: "TxAlterReplicationResult"}];
+    TXTYPE_DROP_REPLICATION_RESULT = 76                   [(TxTypeOpts) = {Name: "TxDropReplicationResult"}];
 }

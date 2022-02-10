@@ -57,15 +57,15 @@ bool ValidateUnit(const TColumn& column, NKikimrSchemeOp::TTTLSettings::EUnit un
 bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
     const THashMap<ui32, TTableInfo::TColumn>& sourceColumns,
     const THashMap<ui32, TTableInfo::TColumn>& alterColumns,
-    const THashMap<TString, ui32>& colName2Id, 
-    const TSubDomainInfo& subDomain, TString& errStr) 
+    const THashMap<TString, ui32>& colName2Id,
+    const TSubDomainInfo& subDomain, TString& errStr)
 {
     using TTtlProto = NKikimrSchemeOp::TTTLSettings;
 
     switch (ttl.GetStatusCase()) {
     case TTtlProto::kEnabled: {
-        const auto& enabled = ttl.GetEnabled(); 
-        const TString colName = enabled.GetColumnName(); 
+        const auto& enabled = ttl.GetEnabled();
+        const TString colName = enabled.GetColumnName();
 
         auto it = colName2Id.find(colName);
         if (it == colName2Id.end()) {
@@ -88,18 +88,18 @@ bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
             return false;
         }
 
-        const auto unit = enabled.GetColumnUnit(); 
+        const auto unit = enabled.GetColumnUnit();
         if (!ValidateUnit(*column, unit, errStr)) {
             return false;
         }
- 
+
         if (enabled.HasSysSettings()) {
             const auto& sys = enabled.GetSysSettings();
             if (TDuration::FromValue(sys.GetRunInterval()) < subDomain.GetTtlMinRunInterval()) {
                 errStr = Sprintf("TTL run interval cannot be less than limit: %" PRIu64, subDomain.GetTtlMinRunInterval().Seconds());
                 return false;
-            } 
-        } 
+            }
+        }
         break;
     }
 

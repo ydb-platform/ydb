@@ -131,21 +131,21 @@ bool TTransQueue::Load(NIceDb::TNiceDb& db) {
             ui64 maxStep = rowset.GetValue<Schema::SchemaOperations::MaxStep>();
             ui64 planStep = rowset.GetValueOrDefault<Schema::SchemaOperations::PlanStep>(0);
             ui64 readOnly = rowset.GetValueOrDefault<Schema::SchemaOperations::ReadOnly>(false);
-            bool success = rowset.GetValueOrDefault<Schema::SchemaOperations::Success>(false); 
-            TString error = rowset.GetValueOrDefault<Schema::SchemaOperations::Error>(TString()); 
-            ui64 dataSize = rowset.GetValueOrDefault<Schema::SchemaOperations::DataSize>(0); 
-            ui64 rows = rowset.GetValueOrDefault<Schema::SchemaOperations::Rows>(0); 
+            bool success = rowset.GetValueOrDefault<Schema::SchemaOperations::Success>(false);
+            TString error = rowset.GetValueOrDefault<Schema::SchemaOperations::Error>(TString());
+            ui64 dataSize = rowset.GetValueOrDefault<Schema::SchemaOperations::DataSize>(0);
+            ui64 rows = rowset.GetValueOrDefault<Schema::SchemaOperations::Rows>(0);
 
             if (!tabletId) { // Remove legacy data from DB. New schema operations has tabletId
                 db.Table<Schema::SchemaOperations>().Key(txId).Delete();
                 continue;
             }
 
-            TSchemaOperation op(txId, TSchemaOperation::EType(opType), source, 
-                               tabletId, minStep, maxStep, planStep, readOnly, 
-                               success, error, dataSize, rows); 
+            TSchemaOperation op(txId, TSchemaOperation::EType(opType), source,
+                               tabletId, minStep, maxStep, planStep, readOnly,
+                               success, error, dataSize, rows);
             auto saved = SchemaOps.insert(std::make_pair(op.TxId, op));
-            TSchemaOperation * savedOp = &saved.first->second; 
+            TSchemaOperation * savedOp = &saved.first->second;
             if (schemaTxs.contains(txId)) { // is not done yet
                 Self->Pipeline.SetSchemaOp(savedOp);
             } else {
@@ -162,7 +162,7 @@ bool TTransQueue::Load(NIceDb::TNiceDb& db) {
                 return false;
             while (!rowset.EndOfSet()) {
                 ui64 txId = rowset.GetValue<Schema::ScanProgress::TxId>();
-                TSchemaOperation* op = FindSchemaTx(txId); 
+                TSchemaOperation* op = FindSchemaTx(txId);
                 if (!op) {
                     LOG_WARN_S(TlsActivationContext->AsActorContext(), NKikimrServices::TX_DATASHARD,
                                "Op was not found for persisted scan tx id " << txId
@@ -185,7 +185,7 @@ bool TTransQueue::Load(NIceDb::TNiceDb& db) {
     return true;
 }
 
-void TTransQueue::ProposeSchemaTx(NIceDb::TNiceDb& db, const TSchemaOperation& op) { 
+void TTransQueue::ProposeSchemaTx(NIceDb::TNiceDb& db, const TSchemaOperation& op) {
     using Schema = TDataShard::Schema;
 
     // Auto-ack previous schema operation
@@ -206,13 +206,13 @@ void TTransQueue::ProposeSchemaTx(NIceDb::TNiceDb& db, const TSchemaOperation& o
         NIceDb::TUpdate<Schema::SchemaOperations::MinStep>(op.MinStep),
         NIceDb::TUpdate<Schema::SchemaOperations::MaxStep>(op.MaxStep),
         NIceDb::TUpdate<Schema::SchemaOperations::PlanStep>(op.PlanStep),
-        NIceDb::TUpdate<Schema::SchemaOperations::ReadOnly>(op.ReadOnly), 
-        NIceDb::TUpdate<Schema::SchemaOperations::Success>(op.Success), 
-        NIceDb::TUpdate<Schema::SchemaOperations::Error>(op.Error), 
-        NIceDb::TUpdate<Schema::SchemaOperations::DataSize>(op.BytesProcessed), 
-        NIceDb::TUpdate<Schema::SchemaOperations::Rows>(op.RowsProcessed)); 
+        NIceDb::TUpdate<Schema::SchemaOperations::ReadOnly>(op.ReadOnly),
+        NIceDb::TUpdate<Schema::SchemaOperations::Success>(op.Success),
+        NIceDb::TUpdate<Schema::SchemaOperations::Error>(op.Error),
+        NIceDb::TUpdate<Schema::SchemaOperations::DataSize>(op.BytesProcessed),
+        NIceDb::TUpdate<Schema::SchemaOperations::Rows>(op.RowsProcessed));
 
-    TSchemaOperation * savedOp = &saved.first->second; 
+    TSchemaOperation * savedOp = &saved.first->second;
     Y_VERIFY(savedOp->TabletId);
     Self->Pipeline.SetSchemaOp(savedOp);
 

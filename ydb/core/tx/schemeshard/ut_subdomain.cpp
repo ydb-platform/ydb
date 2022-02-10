@@ -110,7 +110,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                            {NLs::PathExist});
 
-        TestRmDir(runtime, txId++, "/MyRoot", "USER_0", {NKikimrScheme::StatusPathIsNotDirectory}); 
+        TestRmDir(runtime, txId++, "/MyRoot", "USER_0", {NKikimrScheme::StatusPathIsNotDirectory});
     }
 
     Y_UNIT_TEST(CreateAndWait) {
@@ -353,7 +353,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0/dir_0"),
                            {NLs::InSubdomain,
                             NLs::PathVersionEqual(5)});
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0/dir_0/table_1"), 
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0/dir_0/table_1"),
                            {NLs::InSubdomain,
                             NLs::PathVersionEqual(3)});
     }
@@ -814,7 +814,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             NLs::PathsInsideDomain(2),
                             NLs::ShardsInsideDomain(0)});
 
-        TestConsistentCopyTables(runtime, txId++, "/", R"( 
+        TestConsistentCopyTables(runtime, txId++, "/", R"(
             CopyTableDescriptions {
                 SrcPath: "/MyRoot/USER_0/table"
                 DstPath: "/MyRoot/USER_1/dst"
@@ -824,7 +824,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                 DstPath: "/MyRoot/USER_0/dst"
             })", {NKikimrScheme::StatusInvalidParameter});
 
-        TestConsistentCopyTables(runtime, txId++, "/", R"( 
+        TestConsistentCopyTables(runtime, txId++, "/", R"(
             CopyTableDescriptions {
                 SrcPath: "/MyRoot/USER_0/table"
                 DstPath: "/MyRoot/USER_0/dst"
@@ -835,7 +835,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
             })", {NKikimrScheme::StatusInvalidParameter});
 
 
-        TestConsistentCopyTables(runtime, txId++, "/", R"( 
+        TestConsistentCopyTables(runtime, txId++, "/", R"(
             CopyTableDescriptions {
                 SrcPath: "/MyRoot/USER_0/table"
                 DstPath: "/MyRoot/USER_0/dst"
@@ -1680,7 +1680,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
     }
 
 
-    Y_UNIT_TEST(SimultaneousDefine) { 
+    Y_UNIT_TEST(SimultaneousDefine) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -1907,9 +1907,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        TSchemeLimits lowLimits; 
-        lowLimits.MaxPaths = 3; 
-        lowLimits.MaxShards = 3; 
+        TSchemeLimits lowLimits;
+        lowLimits.MaxPaths = 3;
+        lowLimits.MaxShards = 3;
         lowLimits.MaxPQPartitions = 300;
 
         SetSchemeshardSchemaLimits(runtime, lowLimits);
@@ -1950,16 +1950,16 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        TSchemeLimits lowLimits; 
-        lowLimits.MaxDepth = 4; 
-        lowLimits.MaxPaths = 3; 
-        lowLimits.MaxChildrenInDir = 3; 
-        lowLimits.MaxAclBytesSize = 25; 
-        lowLimits.MaxTableColumns = 3; 
-        lowLimits.MaxTableColumnNameLength = 10; 
-        lowLimits.MaxTableKeyColumns = 1; 
+        TSchemeLimits lowLimits;
+        lowLimits.MaxDepth = 4;
+        lowLimits.MaxPaths = 3;
+        lowLimits.MaxChildrenInDir = 3;
+        lowLimits.MaxAclBytesSize = 25;
+        lowLimits.MaxTableColumns = 3;
+        lowLimits.MaxTableColumnNameLength = 10;
+        lowLimits.MaxTableKeyColumns = 1;
         lowLimits.MaxShards = 6;
-        lowLimits.MaxShardsInPath = 4; 
+        lowLimits.MaxShardsInPath = 4;
         lowLimits.MaxPQPartitions = 20;
 
 
@@ -2103,7 +2103,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                 UNIT_ASSERT_EQUAL(tableDest.size(), 1);
                 dataShardId = tableDest.begin()->GetDatashardId();
             };
-            TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0/1/2", true), 
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0/1/2", true),
                                {NLs::PathExist,
                                 NLs::PathVersionEqual(3),
                                 NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards),
@@ -2184,129 +2184,129 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                                 NLs::ShardsInsideDomain(2)});
         }
 
-        //create tables, column limits 
-        { 
-            TestMkDir(runtime, txId++, "/MyRoot/USER_0", "1"); 
-            env.TestWaitNotification(runtime, txId - 1); 
- 
-            // MaxTableColumns 
-            TestCreateTable(runtime, txId++, "/MyRoot/USER_0/1", R"( 
-                            Name: "2" 
-                            Columns { Name: "RowId" Type: "Uint64" } 
-                            Columns { Name: "Value0" Type: "Utf8" } 
-                            Columns { Name: "Value1" Type: "Utf8" } 
-                            Columns { Name: "Value2" Type: "Utf8" } 
-                            KeyColumnNames: ["RowId"] 
+        //create tables, column limits
+        {
+            TestMkDir(runtime, txId++, "/MyRoot/USER_0", "1");
+            env.TestWaitNotification(runtime, txId - 1);
+
+            // MaxTableColumns
+            TestCreateTable(runtime, txId++, "/MyRoot/USER_0/1", R"(
+                            Name: "2"
+                            Columns { Name: "RowId" Type: "Uint64" }
+                            Columns { Name: "Value0" Type: "Utf8" }
+                            Columns { Name: "Value1" Type: "Utf8" }
+                            Columns { Name: "Value2" Type: "Utf8" }
+                            KeyColumnNames: ["RowId"]
                 )", {NKikimrScheme::StatusSchemeError});
- 
-            // MaxTableColumnNameLength 
-            TestCreateTable(runtime, txId++, "/MyRoot/USER_0/1", R"( 
-                            Name: "3" 
-                            Columns { Name: "RowId" Type: "Uint64" } 
-                            Columns { Name: "VeryLongColumnName" Type: "Utf8" } 
-                            KeyColumnNames: ["RowId"] 
+
+            // MaxTableColumnNameLength
+            TestCreateTable(runtime, txId++, "/MyRoot/USER_0/1", R"(
+                            Name: "3"
+                            Columns { Name: "RowId" Type: "Uint64" }
+                            Columns { Name: "VeryLongColumnName" Type: "Utf8" }
+                            KeyColumnNames: ["RowId"]
                 )", {NKikimrScheme::StatusSchemeError});
- 
-            // MaxTableKeyColumns 
-            TestCreateTable(runtime, txId++, "/MyRoot/USER_0/1", R"( 
-                            Name: "4" 
-                            Columns { Name: "RowId0" Type: "Uint64" } 
-                            Columns { Name: "RowId1" Type: "Uint64" } 
-                            Columns { Name: "Value" Type: "Utf8" } 
-                            KeyColumnNames: ["RowId0", "RowId1"] 
+
+            // MaxTableKeyColumns
+            TestCreateTable(runtime, txId++, "/MyRoot/USER_0/1", R"(
+                            Name: "4"
+                            Columns { Name: "RowId0" Type: "Uint64" }
+                            Columns { Name: "RowId1" Type: "Uint64" }
+                            Columns { Name: "Value" Type: "Utf8" }
+                            KeyColumnNames: ["RowId0", "RowId1"]
                 )", {NKikimrScheme::StatusSchemeError});
-        } 
- 
-        //clear 
-        { 
-            auto dirVer = TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0/1")); 
+        }
+
+        //clear
+        {
+            auto dirVer = TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0/1"));
             TestForceDropUnsafe(runtime, txId++, dirVer.PathId.LocalPathId);
-            env.TestWaitNotification(runtime, txId - 1); 
-            TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), 
-                               {NLs::PathExist, 
+            env.TestWaitNotification(runtime, txId - 1);
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
+                               {NLs::PathExist,
                                 NLs::PathVersionEqual(18),
-                                NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards), 
-                                NLs::PathsInsideDomain(0), 
+                                NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards),
+                                NLs::PathsInsideDomain(0),
                                 NLs::ShardsInsideDomain(2)});
-        } 
- 
-        //create dirs, acl size limit 
-        { 
-            TestMkDir(runtime, txId++, "/MyRoot/USER_0", "1"); 
-            env.TestWaitNotification(runtime, txId - 1); 
- 
-            NACLib::TDiffACL tinyACL; 
-            tinyACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user0@builtin"); 
-            TestModifyACL(runtime, txId++, "/MyRoot/USER_0", "1", tinyACL.SerializeAsString(), "user0@builtin"); 
- 
-            NACLib::TDiffACL hugeACL; 
-            for (ui32 i : xrange(100)) { 
-                hugeACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, Sprintf("user%" PRIu32 "@builtin", i)); 
-            } 
-            TestModifyACL(runtime, txId++, "/MyRoot/USER_0", "1", hugeACL.SerializeAsString(), "user0@builtin", 
+        }
+
+        //create dirs, acl size limit
+        {
+            TestMkDir(runtime, txId++, "/MyRoot/USER_0", "1");
+            env.TestWaitNotification(runtime, txId - 1);
+
+            NACLib::TDiffACL tinyACL;
+            tinyACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user0@builtin");
+            TestModifyACL(runtime, txId++, "/MyRoot/USER_0", "1", tinyACL.SerializeAsString(), "user0@builtin");
+
+            NACLib::TDiffACL hugeACL;
+            for (ui32 i : xrange(100)) {
+                hugeACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, Sprintf("user%" PRIu32 "@builtin", i));
+            }
+            TestModifyACL(runtime, txId++, "/MyRoot/USER_0", "1", hugeACL.SerializeAsString(), "user0@builtin",
                           NKikimrScheme::StatusInvalidParameter);
-        } 
- 
-        //clear 
-        { 
-            auto dirVer = TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0/1")); 
+        }
+
+        //clear
+        {
+            auto dirVer = TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0/1"));
             TestForceDropUnsafe(runtime, txId++, dirVer.PathId.LocalPathId);
-            env.TestWaitNotification(runtime, txId - 1); 
-            TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), 
-                               {NLs::PathExist, 
+            env.TestWaitNotification(runtime, txId - 1);
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
+                               {NLs::PathExist,
                                 NLs::PathVersionEqual(24),
-                                NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards), 
-                                NLs::PathsInsideDomain(0), 
+                                NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards),
+                                NLs::PathsInsideDomain(0),
                                 NLs::ShardsInsideDomain(2)});
-        } 
- 
-        //create tables, consistent copy targets limit 
-        lowLimits.MaxPaths = 5; 
-        lowLimits.MaxChildrenInDir = 4; 
-        lowLimits.MaxConsistentCopyTargets = 1; 
-        SetSchemeshardSchemaLimits(runtime, lowLimits); 
-        { 
-            TestMkDir(runtime, txId++, "/MyRoot/USER_0", "1"); 
-            TestCreateTable(runtime, txId++, "/MyRoot/USER_0/1", R"( 
-                            Name: "2" 
-                            Columns { Name: "RowId" Type: "Uint64" } 
-                            Columns { Name: "Value" Type: "Utf8" } 
-                            KeyColumnNames: ["RowId"] 
-                            UniformPartitionsCount: 1 
-                )"); 
-            TestCreateTable(runtime, txId++, "/MyRoot/USER_0/1", R"( 
-                            Name: "3" 
-                            Columns { Name: "RowId" Type: "Uint64" } 
-                            Columns { Name: "Value" Type: "Utf8" } 
-                            KeyColumnNames: ["RowId"] 
-                            UniformPartitionsCount: 1 
-                )"); 
-            env.TestWaitNotification(runtime, {txId - 1, txId - 2, txId - 3}); 
- 
-            TestConsistentCopyTables(runtime, txId++, "/", R"( 
-                CopyTableDescriptions { 
-                    SrcPath: "/MyRoot/USER_0/1/2" 
-                    DstPath: "/MyRoot/USER_0/1/12" 
-                } 
-                CopyTableDescriptions { 
-                    SrcPath: "/MyRoot/USER_0/1/3" 
-                    DstPath: "/MyRoot/USER_0/1/13" 
+        }
+
+        //create tables, consistent copy targets limit
+        lowLimits.MaxPaths = 5;
+        lowLimits.MaxChildrenInDir = 4;
+        lowLimits.MaxConsistentCopyTargets = 1;
+        SetSchemeshardSchemaLimits(runtime, lowLimits);
+        {
+            TestMkDir(runtime, txId++, "/MyRoot/USER_0", "1");
+            TestCreateTable(runtime, txId++, "/MyRoot/USER_0/1", R"(
+                            Name: "2"
+                            Columns { Name: "RowId" Type: "Uint64" }
+                            Columns { Name: "Value" Type: "Utf8" }
+                            KeyColumnNames: ["RowId"]
+                            UniformPartitionsCount: 1
+                )");
+            TestCreateTable(runtime, txId++, "/MyRoot/USER_0/1", R"(
+                            Name: "3"
+                            Columns { Name: "RowId" Type: "Uint64" }
+                            Columns { Name: "Value" Type: "Utf8" }
+                            KeyColumnNames: ["RowId"]
+                            UniformPartitionsCount: 1
+                )");
+            env.TestWaitNotification(runtime, {txId - 1, txId - 2, txId - 3});
+
+            TestConsistentCopyTables(runtime, txId++, "/", R"(
+                CopyTableDescriptions {
+                    SrcPath: "/MyRoot/USER_0/1/2"
+                    DstPath: "/MyRoot/USER_0/1/12"
+                }
+                CopyTableDescriptions {
+                    SrcPath: "/MyRoot/USER_0/1/3"
+                    DstPath: "/MyRoot/USER_0/1/13"
                 })", {NKikimrScheme::StatusInvalidParameter});
-        } 
- 
-        //clear 
-        { 
-            auto dirVer = TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0/1")); 
+        }
+
+        //clear
+        {
+            auto dirVer = TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0/1"));
             TestForceDropUnsafe(runtime, txId++, dirVer.PathId.LocalPathId);
-            env.TestWaitNotification(runtime, txId - 1); 
-            TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), 
-                               {NLs::PathExist, 
+            env.TestWaitNotification(runtime, txId - 1);
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
+                               {NLs::PathExist,
                                 NLs::PathVersionEqual(28),
-                                NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards), 
-                                NLs::PathsInsideDomain(0), 
+                                NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards),
+                                NLs::PathsInsideDomain(0),
                                 NLs::ShardsInsideDomain(2)});
-        } 
- 
+        }
+
 
         //databaseQuotas limits
         {
@@ -2421,13 +2421,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        TSchemeLimits lowLimits; 
-        lowLimits.MaxDepth = 4; 
-        lowLimits.MaxPaths = 5; 
-        lowLimits.MaxChildrenInDir = 3; 
-        lowLimits.MaxTableIndices = 4; 
+        TSchemeLimits lowLimits;
+        lowLimits.MaxDepth = 4;
+        lowLimits.MaxPaths = 5;
+        lowLimits.MaxChildrenInDir = 3;
+        lowLimits.MaxTableIndices = 4;
         lowLimits.MaxShards = 7;
-        lowLimits.MaxShardsInPath = 4; 
+        lowLimits.MaxShardsInPath = 4;
         lowLimits.ExtraPathSymbolsAllowed = "_.-";
         SetSchemeshardSchemaLimits(runtime, lowLimits);
 
@@ -2573,44 +2573,44 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
             env.TestWaitNotification(runtime, {txId - 1, txId - 2, txId - 3, txId - 4, txId - 5, txId - 6});
         }
- 
-        // MaxTableIndices 
-        { 
-            TestCreateIndexedTable(runtime, txId++, "/MyRoot/USER_0", R"( 
-                TableDescription { 
-                  Name: "Table7" 
-                  Columns { Name: "RowId" Type: "Uint64" } 
-                  Columns { Name: "Value0" Type: "Utf8" } 
-                  Columns { Name: "Value1" Type: "Utf8" } 
-                  Columns { Name: "Value2" Type: "Utf8" } 
-                  Columns { Name: "Value3" Type: "Utf8" } 
-                  Columns { Name: "Value4" Type: "Utf8" } 
-                  KeyColumnNames: ["RowId"] 
-                } 
-                IndexDescription { 
-                  Name: "UserDefinedIndexByValue0" 
-                  KeyColumnNames: ["Value0"] 
-                } 
-                IndexDescription { 
-                  Name: "UserDefinedIndexByValue1" 
-                  KeyColumnNames: ["Value1"] 
-                } 
-                IndexDescription { 
-                  Name: "UserDefinedIndexByValue2" 
-                  KeyColumnNames: ["Value2"] 
-                } 
-                IndexDescription { 
-                  Name: "UserDefinedIndexByValue3" 
-                  KeyColumnNames: ["Value3"] 
-                } 
-                IndexDescription { 
-                  Name: "UserDefinedIndexByValue4" 
-                  KeyColumnNames: ["Value4"] 
-                } 
+
+        // MaxTableIndices
+        {
+            TestCreateIndexedTable(runtime, txId++, "/MyRoot/USER_0", R"(
+                TableDescription {
+                  Name: "Table7"
+                  Columns { Name: "RowId" Type: "Uint64" }
+                  Columns { Name: "Value0" Type: "Utf8" }
+                  Columns { Name: "Value1" Type: "Utf8" }
+                  Columns { Name: "Value2" Type: "Utf8" }
+                  Columns { Name: "Value3" Type: "Utf8" }
+                  Columns { Name: "Value4" Type: "Utf8" }
+                  KeyColumnNames: ["RowId"]
+                }
+                IndexDescription {
+                  Name: "UserDefinedIndexByValue0"
+                  KeyColumnNames: ["Value0"]
+                }
+                IndexDescription {
+                  Name: "UserDefinedIndexByValue1"
+                  KeyColumnNames: ["Value1"]
+                }
+                IndexDescription {
+                  Name: "UserDefinedIndexByValue2"
+                  KeyColumnNames: ["Value2"]
+                }
+                IndexDescription {
+                  Name: "UserDefinedIndexByValue3"
+                  KeyColumnNames: ["Value3"]
+                }
+                IndexDescription {
+                  Name: "UserDefinedIndexByValue4"
+                  KeyColumnNames: ["Value4"]
+                }
             )", {NKikimrScheme::StatusResourceExhausted});
- 
-            env.TestWaitNotification(runtime, txId - 1); 
-        } 
+
+            env.TestWaitNotification(runtime, txId - 1);
+        }
     }
 
     Y_UNIT_TEST(SchemeLimitsCreatePq) {
@@ -2806,95 +2806,95 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             KeyColumnNames: ["key"]
                 )", {NKikimrScheme::StatusAccepted});
     }
- 
-    Y_UNIT_TEST(DiskSpaceUsage) { 
-        TTestBasicRuntime runtime; 
-        TTestEnv env(runtime, TTestEnvOptions().EnablePersistentPartitionStats(true)); 
-        const auto sender = runtime.AllocateEdgeActor(); 
- 
-        auto writeRow = [&](ui64 tabletId, ui32 key, const TString& value, const char* table) { 
-            NKikimrMiniKQL::TResult result; 
-            TString error; 
+
+    Y_UNIT_TEST(DiskSpaceUsage) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnablePersistentPartitionStats(true));
+        const auto sender = runtime.AllocateEdgeActor();
+
+        auto writeRow = [&](ui64 tabletId, ui32 key, const TString& value, const char* table) {
+            NKikimrMiniKQL::TResult result;
+            TString error;
             NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, Sprintf(R"(
-                ( 
-                    (let key   '( '('key (Uint32 '%u ) ) ) ) 
-                    (let row   '( '('value (Utf8 '%s) ) ) ) 
-                    (return (AsList (UpdateRow '__user__%s key row) )) 
-                ) 
-            )", key, value.c_str(), table), result, error); 
- 
+                (
+                    (let key   '( '('key (Uint32 '%u ) ) ) )
+                    (let row   '( '('value (Utf8 '%s) ) ) )
+                    (return (AsList (UpdateRow '__user__%s key row) ))
+                )
+            )", key, value.c_str(), table), result, error);
+
             UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, error);
-            UNIT_ASSERT_VALUES_EQUAL(error, ""); 
-        }; 
- 
-        auto waitForTableStats = [&](ui32 shards) { 
-            TDispatchOptions options; 
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvDataShard::EvPeriodicTableStats, shards)); 
-            runtime.DispatchEvents(options); 
-        }; 
- 
-        auto getDiskSpaceUsage = [&]() { 
-            NKikimrSubDomains::TDiskSpaceUsage result; 
- 
-            TestDescribeResult( 
-                DescribePath(runtime, "/MyRoot"), { 
-                    NLs::PathExist, 
+            UNIT_ASSERT_VALUES_EQUAL(error, "");
+        };
+
+        auto waitForTableStats = [&](ui32 shards) {
+            TDispatchOptions options;
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvDataShard::EvPeriodicTableStats, shards));
+            runtime.DispatchEvents(options);
+        };
+
+        auto getDiskSpaceUsage = [&]() {
+            NKikimrSubDomains::TDiskSpaceUsage result;
+
+            TestDescribeResult(
+                DescribePath(runtime, "/MyRoot"), {
+                    NLs::PathExist,
                     NLs::Finished, [&result] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
-                        result = record.GetPathDescription().GetDomainDescription().GetDiskSpaceUsage(); 
-                    } 
-                } 
-            ); 
- 
-            return result; 
-        }; 
- 
+                        result = record.GetPathDescription().GetDomainDescription().GetDiskSpaceUsage();
+                    }
+                }
+            );
+
+            return result;
+        };
+
         ui64 tabletId = TTestTxConfig::FakeHiveTablets;
-        ui64 txId = 100; 
- 
-        // single-shard table 
-        { 
-            TestCreateTable(runtime, ++txId, "/MyRoot", R"( 
-                Name: "Table1" 
-                Columns { Name: "key" Type: "Uint32"} 
-                Columns { Name: "value" Type: "Utf8"} 
-                KeyColumnNames: ["key"] 
+        ui64 txId = 100;
+
+        // single-shard table
+        {
+            TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+                Name: "Table1"
+                Columns { Name: "key" Type: "Uint32"}
+                Columns { Name: "value" Type: "Utf8"}
+                KeyColumnNames: ["key"]
             )", {NKikimrScheme::StatusAccepted});
-            env.TestWaitNotification(runtime, txId); 
- 
-            writeRow(tabletId, 1, "value1", "Table1"); 
-            waitForTableStats(1); 
- 
-            auto du = getDiskSpaceUsage(); 
-            UNIT_ASSERT_C(du.GetTables().GetTotalSize() > 0, du.ShortDebugString()); 
- 
+            env.TestWaitNotification(runtime, txId);
+
+            writeRow(tabletId, 1, "value1", "Table1");
+            waitForTableStats(1);
+
+            auto du = getDiskSpaceUsage();
+            UNIT_ASSERT_C(du.GetTables().GetTotalSize() > 0, du.ShortDebugString());
+
             RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
-            UNIT_ASSERT_VALUES_EQUAL(du.ShortDebugString(), getDiskSpaceUsage().ShortDebugString()); 
-        } 
- 
-        // multi-shard table 
-        { 
-            tabletId = tabletId + 1; 
- 
-            TestCreateTable(runtime, ++txId, "/MyRoot", R"( 
-                Name: "Table2" 
-                Columns { Name: "key" Type: "Uint32"} 
-                Columns { Name: "value" Type: "Utf8"} 
-                KeyColumnNames: ["key"] 
-                UniformPartitionsCount: 2 
+            UNIT_ASSERT_VALUES_EQUAL(du.ShortDebugString(), getDiskSpaceUsage().ShortDebugString());
+        }
+
+        // multi-shard table
+        {
+            tabletId = tabletId + 1;
+
+            TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+                Name: "Table2"
+                Columns { Name: "key" Type: "Uint32"}
+                Columns { Name: "value" Type: "Utf8"}
+                KeyColumnNames: ["key"]
+                UniformPartitionsCount: 2
             )", {NKikimrScheme::StatusAccepted});
-            env.TestWaitNotification(runtime, txId); 
- 
-            writeRow(tabletId + 0, 1, "value1", "Table2"); 
-            writeRow(tabletId + 1, 2, "value2", "Table2"); 
-            waitForTableStats(1 /* Table1 */ + 2 /* Table2 */); 
- 
-            auto du = getDiskSpaceUsage(); 
-            UNIT_ASSERT_C(du.GetTables().GetTotalSize() > 0, du.ShortDebugString()); 
- 
+            env.TestWaitNotification(runtime, txId);
+
+            writeRow(tabletId + 0, 1, "value1", "Table2");
+            writeRow(tabletId + 1, 2, "value2", "Table2");
+            waitForTableStats(1 /* Table1 */ + 2 /* Table2 */);
+
+            auto du = getDiskSpaceUsage();
+            UNIT_ASSERT_C(du.GetTables().GetTotalSize() > 0, du.ShortDebugString());
+
             RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
-            UNIT_ASSERT_VALUES_EQUAL(du.ShortDebugString(), getDiskSpaceUsage().ShortDebugString()); 
-        } 
-    } 
+            UNIT_ASSERT_VALUES_EQUAL(du.ShortDebugString(), getDiskSpaceUsage().ShortDebugString());
+        }
+    }
 
     Y_UNIT_TEST(DiskSpaceQuotas) {
         TTestBasicRuntime runtime;

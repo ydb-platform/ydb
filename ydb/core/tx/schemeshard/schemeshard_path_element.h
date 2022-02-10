@@ -157,21 +157,21 @@ struct TUserAttributes: TSimpleRefCount<TUserAttributes> {
         return Attrs.size();
     }
 
-    ui64 Bytes() const { 
-        ui64 bytes = 0; 
- 
-        for (const auto& [key, value] : Attrs) { 
-            bytes += key.size(); 
-            bytes += value.size(); 
-        } 
- 
-        return bytes; 
-    } 
- 
+    ui64 Bytes() const {
+        ui64 bytes = 0;
+
+        for (const auto& [key, value] : Attrs) {
+            bytes += key.size();
+            bytes += value.size();
+        }
+
+        return bytes;
+    }
+
     bool CheckLimits(TString& errStr) const {
-        const ui64 bytes = Bytes(); 
+        const ui64 bytes = Bytes();
         if (bytes > TUserAttributesLimits::MaxBytes) {
-            errStr = Sprintf("UserArttibutes::CheckLimits: user attributes too big: %" PRIu64, bytes); 
+            errStr = Sprintf("UserArttibutes::CheckLimits: user attributes too big: %" PRIu64, bytes);
             return false;
         }
 
@@ -315,7 +315,7 @@ struct TPathElement : TSimpleRefCount<TPathElement> {
     TTxId LastTxId = InvalidTxId;
 
     ui64 DirAlterVersion = 0;
-    ui64 ACLVersion = 0; 
+    ui64 ACLVersion = 0;
 
     TUserAttributes::TPtr UserAttrs;
 
@@ -400,10 +400,10 @@ public:
         return PathType == EPathType::EPathTypeTableIndex;
     }
 
-    bool IsCdcStream() const { 
-        return PathType == EPathType::EPathTypeCdcStream; 
-    } 
- 
+    bool IsCdcStream() const {
+        return PathType == EPathType::EPathTypeCdcStream;
+    }
+
     bool IsTable() const {
         return PathType == EPathType::EPathTypeTable;
     }
@@ -456,10 +456,10 @@ public:
         return PathType == EPathType::EPathTypeSequence;
     }
 
-    bool IsReplication() const { 
-        return PathType == EPathType::EPathTypeReplication; 
-    } 
- 
+    bool IsReplication() const {
+        return PathType == EPathType::EPathTypeReplication;
+    }
+
     bool IsContainer() const {
         return PathType == EPathType::EPathTypeDir || PathType == EPathType::EPathTypeSubDomain
             || PathType == EPathType::EPathTypeColumnStore;

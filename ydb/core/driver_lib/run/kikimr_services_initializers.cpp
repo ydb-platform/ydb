@@ -111,7 +111,7 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/mediator/mediator.h>
-#include <ydb/core/tx/replication/controller/controller.h> 
+#include <ydb/core/tx/replication/controller/controller.h>
 #include <ydb/core/tx/scheme_board/scheme_board.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/sequenceproxy/sequenceproxy.h>
@@ -181,7 +181,7 @@
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 
 #include <util/digest/city.h>
-#include <util/generic/algorithm.h> 
+#include <util/generic/algorithm.h>
 #include <util/generic/size_literals.h>
 
 #include <util/system/hostname.h>
@@ -865,7 +865,7 @@ void TStateStorageServiceInitializer::InitializeServices(NActors::TActorSystemSe
         StartLocalStateStorageReplicas(CreateSchemeBoardReplica, sbrInfo.Get(), appData->SystemPoolId, *setup);
 
         setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeStateStorageProxyID(ssid),
-                                                                           TActorSetupCmd(CreateStateStorageProxy(ssrInfo.Get(), ssbInfo.Get(), sbrInfo.Get()), 
+                                                                           TActorSetupCmd(CreateStateStorageProxy(ssrInfo.Get(), ssbInfo.Get(), sbrInfo.Get()),
                                                                                           TMailboxType::ReadAsFilled,
                                                                                           appData->SystemPoolId)));
     }
@@ -926,8 +926,8 @@ void TLocalServiceInitializer::InitializeServices(
         new TTabletSetupInfo(&CreateColumnShard, TMailboxType::ReadAsFilled, appData->UserPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId));
     localConfig->TabletClassInfo[appData->DefaultTabletTypes.SequenceShard] = TLocalConfig::TTabletClassInfo(
         new TTabletSetupInfo(&NSequenceShard::CreateSequenceShard, TMailboxType::ReadAsFilled, appData->UserPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId));
-    localConfig->TabletClassInfo[appData->DefaultTabletTypes.ReplicationController] = TLocalConfig::TTabletClassInfo( 
-        new TTabletSetupInfo(&NReplication::CreateController, TMailboxType::ReadAsFilled, appData->UserPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId)); 
+    localConfig->TabletClassInfo[appData->DefaultTabletTypes.ReplicationController] = TLocalConfig::TTabletClassInfo(
+        new TTabletSetupInfo(&NReplication::CreateController, TMailboxType::ReadAsFilled, appData->UserPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId));
 
     TTenantPoolConfig::TPtr tenantPoolConfig = new TTenantPoolConfig(Config.GetTenantPoolConfig(), localConfig);
     if (!tenantPoolConfig->IsEnabled
@@ -1878,10 +1878,10 @@ void TPersQueueLibSharedInstanceInitializer::InitializeServices(NActors::TActorS
 
 // TMemProfMonitorInitializer
 
-TMemProfMonitorInitializer::TMemProfMonitorInitializer(const TKikimrRunConfig& runConfig) 
-    : IKikimrServicesInitializer(runConfig) 
-{} 
- 
+TMemProfMonitorInitializer::TMemProfMonitorInitializer(const TKikimrRunConfig& runConfig)
+    : IKikimrServicesInitializer(runConfig)
+{}
+
 void TMemProfMonitorInitializer::InitializeServices(
         NActors::TActorSystemSetup* setup,
         const NKikimr::TAppData* appData)
@@ -1898,12 +1898,12 @@ void TMemProfMonitorInitializer::InitializeServices(
             appData->UserPoolId));
 }
 
-// TMemoryTrackerInitializer 
- 
-TMemoryTrackerInitializer::TMemoryTrackerInitializer(const TKikimrRunConfig& runConfig) 
-    : IKikimrServicesInitializer(runConfig) 
-{} 
- 
+// TMemoryTrackerInitializer
+
+TMemoryTrackerInitializer::TMemoryTrackerInitializer(const TKikimrRunConfig& runConfig)
+    : IKikimrServicesInitializer(runConfig)
+{}
+
 void TMemoryTrackerInitializer::InitializeServices(
     NActors::TActorSystemSetup* setup,
     const NKikimr::TAppData* appData)
@@ -2216,17 +2216,17 @@ void TMeteringWriterInitializer::InitializeServices(TActorSystemSetup *setup, co
         TActorSetupCmd(actor.Release(), TMailboxType::HTSwap, appData->IOPoolId)));
 }
 
-TSchemeBoardMonitoringInitializer::TSchemeBoardMonitoringInitializer(const TKikimrRunConfig &runConfig) 
-    : IKikimrServicesInitializer(runConfig) 
-{ 
-} 
- 
-void TSchemeBoardMonitoringInitializer::InitializeServices(TActorSystemSetup* setup, const TAppData* appData) { 
-    setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>( 
-        MakeSchemeBoardMonitoringId(), 
-        TActorSetupCmd(CreateSchemeBoardMonitoring(), TMailboxType::HTSwap, appData->UserPoolId))); 
-} 
- 
+TSchemeBoardMonitoringInitializer::TSchemeBoardMonitoringInitializer(const TKikimrRunConfig &runConfig)
+    : IKikimrServicesInitializer(runConfig)
+{
+}
+
+void TSchemeBoardMonitoringInitializer::InitializeServices(TActorSystemSetup* setup, const TAppData* appData) {
+    setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
+        MakeSchemeBoardMonitoringId(),
+        TActorSetupCmd(CreateSchemeBoardMonitoring(), TMailboxType::HTSwap, appData->UserPoolId)));
+}
+
 TYqlLogsInitializer::TYqlLogsInitializer(const TKikimrRunConfig& runConfig)
     : IKikimrServicesInitializer(runConfig)
 {

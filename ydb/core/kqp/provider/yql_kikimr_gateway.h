@@ -16,7 +16,7 @@
 
 #include <library/cpp/threading/future/future.h>
 
-#include <util/datetime/base.h> 
+#include <util/datetime/base.h>
 #include <util/generic/flags.h>
 #include <util/generic/map.h>
 #include <util/generic/maybe.h>
@@ -136,15 +136,15 @@ struct TIndexDescription {
             DataColumns == other.DataColumns &&
             Type == other.Type;
     }
- 
-    bool ItUsedForWrite() const { 
-        switch (Type) { 
-            case EType::GlobalSync: 
-                return true; 
-            case EType::GlobalAsync: 
-                return false; 
-        } 
-    } 
+
+    bool ItUsedForWrite() const {
+        switch (Type) {
+            case EType::GlobalSync:
+                return true;
+            case EType::GlobalAsync:
+                return false;
+        }
+    }
 };
 
 struct TColumnFamily {
@@ -153,13 +153,13 @@ struct TColumnFamily {
     TMaybe<TString> Compression;
 };
 
-struct TTtlSettings { 
-    TString ColumnName; 
-    TDuration ExpireAfter; 
- 
-    static bool TryParse(const NNodes::TCoNameValueTupleList& node, TTtlSettings& settings, TString& error); 
-}; 
- 
+struct TTtlSettings {
+    TString ColumnName;
+    TDuration ExpireAfter;
+
+    static bool TryParse(const NNodes::TCoNameValueTupleList& node, TTtlSettings& settings, TString& error);
+};
+
 struct TTableSettings {
     TMaybe<TString> CompactionPolicy;
     TVector<TString> PartitionBy;
@@ -172,7 +172,7 @@ struct TTableSettings {
     TVector<TVector<std::pair<EDataSlot, TString>>> PartitionAtKeys;
     TMaybe<TString> KeyBloomFilter;
     TMaybe<TString> ReadReplicasSettings;
-    TResetableSetting<TTtlSettings, void> TtlSettings; 
+    TResetableSetting<TTtlSettings, void> TtlSettings;
 
     bool IsSet() const;
 };

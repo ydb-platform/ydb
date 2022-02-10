@@ -400,10 +400,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(SimpleQueryOlap) {
-        auto settings = TKikimrSettings() 
-            .SetWithSampleTables(false) 
-            .SetEnableOlapSchemaOperations(true); 
-        TKikimrRunner kikimr(settings); 
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetEnableOlapSchemaOperations(true);
+        TKikimrRunner kikimr(settings);
 
         // EnableDebugLogging(kikimr);
 
@@ -432,10 +432,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(SimpleLookupOlap) {
-        auto settings = TKikimrSettings() 
-            .SetWithSampleTables(false) 
-            .SetEnableOlapSchemaOperations(true); 
-        TKikimrRunner kikimr(settings); 
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetEnableOlapSchemaOperations(true);
+        TKikimrRunner kikimr(settings);
 
         // EnableDebugLogging(kikimr);
 
@@ -463,10 +463,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(SimpleRangeOlap) {
-        auto settings = TKikimrSettings() 
-            .SetWithSampleTables(false) 
-            .SetEnableOlapSchemaOperations(true); 
-        TKikimrRunner kikimr(settings); 
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetEnableOlapSchemaOperations(true);
+        TKikimrRunner kikimr(settings);
 
         // EnableDebugLogging(kikimr);
 
@@ -495,10 +495,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(CompositeRangeOlap) {
-        auto settings = TKikimrSettings() 
-            .SetWithSampleTables(false) 
-            .SetEnableOlapSchemaOperations(true); 
-        TKikimrRunner kikimr(settings); 
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetEnableOlapSchemaOperations(true);
+        TKikimrRunner kikimr(settings);
 
         // EnableDebugLogging(kikimr);
 
@@ -654,10 +654,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(QueryOltpAndOlap) {
-        auto settings = TKikimrSettings() 
-            .SetWithSampleTables(false) 
-            .SetEnableOlapSchemaOperations(true); 
-        TKikimrRunner kikimr(settings); 
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetEnableOlapSchemaOperations(true);
+        TKikimrRunner kikimr(settings);
 
         // EnableDebugLogging(kikimr);
 
@@ -687,10 +687,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(EmptyRange) {
-        auto settings = TKikimrSettings() 
-            .SetWithSampleTables(false) 
-            .SetEnableOlapSchemaOperations(true); 
-        TKikimrRunner kikimr(settings); 
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetEnableOlapSchemaOperations(true);
+        TKikimrRunner kikimr(settings);
 
         CreateTestOlapTable(kikimr);
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 1000);
@@ -710,10 +710,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(Aggregation) {
-        auto settings = TKikimrSettings() 
-            .SetWithSampleTables(false) 
-            .SetEnableOlapSchemaOperations(true); 
-        TKikimrRunner kikimr(settings); 
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetEnableOlapSchemaOperations(true);
+        TKikimrRunner kikimr(settings);
 
         // EnableDebugLogging(kikimr);
 
@@ -787,9 +787,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         static bool enableLog = false;
 
         auto doTest = [](std::optional<bool> viaSettings, std::optional<bool> viaPragma, bool pushdownPresent) {
-            auto settings = TKikimrSettings() 
-                .SetWithSampleTables(false) 
-                .SetEnableOlapSchemaOperations(true); 
+            auto settings = TKikimrSettings()
+                .SetWithSampleTables(false)
+                .SetEnableOlapSchemaOperations(true);
 
             if (enableLog) {
                 Cerr << "Run test:" << Endl;
@@ -810,10 +810,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 auto setting = NKikimrKqp::TKqpSetting();
                 setting.SetName("_KqpPushOlapProcess");
                 setting.SetValue(viaSettings.value() ? "true" : "false");
-                settings.KqpSettings = { setting }; 
+                settings.KqpSettings = { setting };
             }
 
-            TKikimrRunner kikimr(settings); 
+            TKikimrRunner kikimr(settings);
             kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
 
             auto client = kikimr.GetTableClient();
@@ -883,10 +883,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(PKDescScan) {
-        auto settings = TKikimrSettings() 
-            .SetWithSampleTables(false) 
-            .SetEnableOlapSchemaOperations(true); 
-        TKikimrRunner kikimr(settings); 
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetEnableOlapSchemaOperations(true);
+        TKikimrRunner kikimr(settings);
 
         TStreamExecScanQuerySettings scanSettings;
         scanSettings.Explain(true);
@@ -949,10 +949,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(ExtractRanges) {
-        auto settings = TKikimrSettings() 
-            .SetWithSampleTables(false) 
-            .SetEnableOlapSchemaOperations(true); 
-        TKikimrRunner kikimr(settings); 
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetEnableOlapSchemaOperations(true);
+        TKikimrRunner kikimr(settings);
 
         CreateTestOlapTable(kikimr);
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 2000);
@@ -977,10 +977,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(ExtractRangesReverse) {
-        auto settings = TKikimrSettings() 
-            .SetWithSampleTables(false) 
-            .SetEnableOlapSchemaOperations(true); 
-        TKikimrRunner kikimr(settings); 
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetEnableOlapSchemaOperations(true);
+        TKikimrRunner kikimr(settings);
 
         CreateTestOlapTable(kikimr);
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 2000);
@@ -1008,10 +1008,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
     Y_UNIT_TEST(PredicatePushdown) {
         constexpr bool logQueries = false;
-        auto settings = TKikimrSettings() 
-            .SetWithSampleTables(false) 
-            .SetEnableOlapSchemaOperations(true); 
-        TKikimrRunner kikimr(settings); 
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetEnableOlapSchemaOperations(true);
+        TKikimrRunner kikimr(settings);
 
         TStreamExecScanQuerySettings scanSettings;
         scanSettings.Explain(true);
@@ -1130,10 +1130,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(StatsSysView) {
-        auto settings = TKikimrSettings() 
-            .SetWithSampleTables(false) 
-            .SetEnableOlapSchemaOperations(true); 
-        TKikimrRunner kikimr(settings); 
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetEnableOlapSchemaOperations(true);
+        TKikimrRunner kikimr(settings);
 
         CreateTestOlapTable(kikimr);
         for (ui64 i = 0; i < 100; ++i) {
@@ -1171,10 +1171,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(StatsSysViewTable) {
-        auto settings = TKikimrSettings() 
-            .SetWithSampleTables(false) 
-            .SetEnableOlapSchemaOperations(true); 
-        TKikimrRunner kikimr(settings); 
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetEnableOlapSchemaOperations(true);
+        TKikimrRunner kikimr(settings);
 
         CreateTestOlapTable(kikimr, "olapTable_1");
         CreateTestOlapTable(kikimr, "olapTable_2");
@@ -1232,10 +1232,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(StatsSysViewColumns) {
-        auto settings = TKikimrSettings() 
-            .SetWithSampleTables(false) 
-            .SetEnableOlapSchemaOperations(true); 
-        TKikimrRunner kikimr(settings); 
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetEnableOlapSchemaOperations(true);
+        TKikimrRunner kikimr(settings);
 
         CreateTestOlapTable(kikimr);
         for (ui64 i = 0; i < 10; ++i) {
@@ -1292,10 +1292,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(StatsSysViewRanges) {
-        auto settings = TKikimrSettings() 
-            .SetWithSampleTables(false) 
-            .SetEnableOlapSchemaOperations(true); 
-        TKikimrRunner kikimr(settings); 
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetEnableOlapSchemaOperations(true);
+        TKikimrRunner kikimr(settings);
 
         CreateTestOlapTable(kikimr, "olapTable_1");
         CreateTestOlapTable(kikimr, "olapTable_2");
@@ -1375,10 +1375,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(StatsSysViewFilter) {
-        auto settings = TKikimrSettings() 
-            .SetWithSampleTables(false) 
-            .SetEnableOlapSchemaOperations(true); 
-        TKikimrRunner kikimr(settings); 
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetEnableOlapSchemaOperations(true);
+        TKikimrRunner kikimr(settings);
 
         CreateTestOlapTable(kikimr);
         for (ui64 i = 0; i < 10; ++i) {
@@ -1449,10 +1449,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(StatsSysViewAggregation) {
-        auto settings = TKikimrSettings() 
-            .SetWithSampleTables(false) 
-            .SetEnableOlapSchemaOperations(true); 
-        TKikimrRunner kikimr(settings); 
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetEnableOlapSchemaOperations(true);
+        TKikimrRunner kikimr(settings);
 
         CreateTestOlapTable(kikimr, "olapTable_1");
         CreateTestOlapTable(kikimr, "olapTable_2");
@@ -1626,10 +1626,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
     Y_UNIT_TEST(PredicatePushdownWithParameters) {
         constexpr bool logQueries = true;
-        auto settings = TKikimrSettings() 
-            .SetWithSampleTables(false) 
-            .SetEnableOlapSchemaOperations(true); 
-        TKikimrRunner kikimr(settings); 
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetEnableOlapSchemaOperations(true);
+        TKikimrRunner kikimr(settings);
 
         TStreamExecScanQuerySettings scanSettings;
         scanSettings.Explain(true);
@@ -1710,10 +1710,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(PredicatePushdownParameterTypesValidation) {
-        auto settings = TKikimrSettings() 
-            .SetWithSampleTables(false) 
-            .SetEnableOlapSchemaOperations(true); 
-        TKikimrRunner kikimr(settings); 
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetEnableOlapSchemaOperations(true);
+        TKikimrRunner kikimr(settings);
 
         TStreamExecScanQuerySettings scanSettings;
         scanSettings.Explain(true);
@@ -1767,10 +1767,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(PredicatePushdownCastErrors) {
-        auto settings = TKikimrSettings() 
-            .SetWithSampleTables(false) 
-            .SetEnableOlapSchemaOperations(true); 
-        TKikimrRunner kikimr(settings); 
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetEnableOlapSchemaOperations(true);
+        TKikimrRunner kikimr(settings);
 
         TStreamExecScanQuerySettings scanSettings;
         scanSettings.Explain(true);

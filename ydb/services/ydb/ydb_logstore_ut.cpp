@@ -350,7 +350,7 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
 
         // Create table with TTL settings
         {
-            NYdb::NLogStore::TTtlSettings ttlSettings("saved_at", TDuration::Seconds(2000)); 
+            NYdb::NLogStore::TTtlSettings ttlSettings("saved_at", TDuration::Seconds(2000));
             NYdb::NLogStore::TLogTableDescription tableDescr("default", {"timestamp", "uid"}, 4, ttlSettings);
             auto res = logStoreClient.CreateLogTable("/Root/LogStore/log2", std::move(tableDescr)).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, res.GetIssues().ToString());
@@ -368,7 +368,7 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
         // Add TTL to a table (currently not supported)
         {
             NYdb::NLogStore::TAlterLogTableSettings alterLogTableSettings;
-            alterLogTableSettings.AlterTtlSettings(NYdb::NTable::TAlterTtlSettings::Set("uint_timestamp", NYdb::NTable::TTtlSettings::EUnit::MilliSeconds, TDuration::Seconds(3600))); 
+            alterLogTableSettings.AlterTtlSettings(NYdb::NTable::TAlterTtlSettings::Set("uint_timestamp", NYdb::NTable::TTtlSettings::EUnit::MilliSeconds, TDuration::Seconds(3600)));
             auto res = logStoreClient.AlterLogTable("/Root/LogStore/log1", std::move(alterLogTableSettings)).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::GENERIC_ERROR, res.GetIssues().ToString());
         }
@@ -383,7 +383,7 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
         // Change TTL column (currently not supported)
         {
             NYdb::NLogStore::TAlterLogTableSettings alterLogTableSettings;
-            alterLogTableSettings.AlterTtlSettings(NYdb::NTable::TAlterTtlSettings::Set("ingested_at", TDuration::Seconds(86400))); 
+            alterLogTableSettings.AlterTtlSettings(NYdb::NTable::TAlterTtlSettings::Set("ingested_at", TDuration::Seconds(86400)));
             auto res = logStoreClient.AlterLogTable("/Root/LogStore/log2", std::move(alterLogTableSettings)).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::GENERIC_ERROR, res.GetIssues().ToString());
         }
@@ -400,7 +400,7 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
         // Change TTL expiration time
         {
             NYdb::NLogStore::TAlterLogTableSettings alterLogTableSettings;
-            alterLogTableSettings.AlterTtlSettings(NYdb::NTable::TAlterTtlSettings::Set("saved_at", TDuration::Seconds(86400))); 
+            alterLogTableSettings.AlterTtlSettings(NYdb::NTable::TAlterTtlSettings::Set("saved_at", TDuration::Seconds(86400)));
             auto res = logStoreClient.AlterLogTable("/Root/LogStore/log2", std::move(alterLogTableSettings)).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, res.GetIssues().ToString());
         }
@@ -433,7 +433,7 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
 
         // Use invalid column for TTL
         {
-            NYdb::NLogStore::TTtlSettings ttlSettings("nonexisting_column", TDuration::Seconds(2000)); 
+            NYdb::NLogStore::TTtlSettings ttlSettings("nonexisting_column", TDuration::Seconds(2000));
             NYdb::NLogStore::TLogTableDescription tableDescr("default", {"timestamp", "uid"}, 4, ttlSettings);
             auto res = logStoreClient.CreateLogTable("/Root/LogStore/log3", std::move(tableDescr)).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::GENERIC_ERROR, res.GetIssues().ToString());
@@ -441,7 +441,7 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
 
         // Use column of invalid type for TTL
         {
-            NYdb::NLogStore::TTtlSettings ttlSettings("message", NYdb::NTable::TTtlSettings::EUnit::MilliSeconds, TDuration::Seconds(3600)); 
+            NYdb::NLogStore::TTtlSettings ttlSettings("message", NYdb::NTable::TTtlSettings::EUnit::MilliSeconds, TDuration::Seconds(3600));
             NYdb::NLogStore::TLogTableDescription tableDescr("default", {"timestamp", "uid"}, 4, ttlSettings);
             auto res = logStoreClient.CreateLogTable("/Root/LogStore/log4", std::move(tableDescr)).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::GENERIC_ERROR, res.GetIssues().ToString());
@@ -449,7 +449,7 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
 
         // Use non-Timestamp column for TTL
         {
-            NYdb::NLogStore::TTtlSettings ttlSettings("uint_timestamp", NYdb::NTable::TTtlSettings::EUnit::MilliSeconds, TDuration::Seconds(3600)); 
+            NYdb::NLogStore::TTtlSettings ttlSettings("uint_timestamp", NYdb::NTable::TTtlSettings::EUnit::MilliSeconds, TDuration::Seconds(3600));
             NYdb::NLogStore::TLogTableDescription tableDescr("default", {"timestamp", "uid"}, 4, ttlSettings);
             auto res = logStoreClient.CreateLogTable("/Root/LogStore/log5", std::move(tableDescr)).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::GENERIC_ERROR, res.GetIssues().ToString());

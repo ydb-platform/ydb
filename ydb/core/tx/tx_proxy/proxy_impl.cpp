@@ -47,7 +47,7 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
     TTxProxyServices Services;
 
     THolder<NTabletPipe::IClientCache> PipeClientCache;
-    TTxAllocatorClient TxAllocatorClient; 
+    TTxAllocatorClient TxAllocatorClient;
 
     static const TDuration TimeoutDelayedRequest;
     typedef TDelayedQueue<TEvTxUserProxy::TEvProposeTransaction> TDelayedProposal;
@@ -198,7 +198,7 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
     }
 
     void Handle(TEvTxAllocator::TEvAllocateResult::TPtr &ev, const TActorContext &ctx) {
-        if (!TxAllocatorClient.OnAllocateResult(ev, ctx)) { 
+        if (!TxAllocatorClient.OnAllocateResult(ev, ctx)) {
             return;
         }
 
@@ -214,7 +214,7 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
 
         if(!PipeClientCache->OnConnect(ev)) {
             CheckTimeouts(ctx);
-            TxAllocatorClient.SendRequest(msg->TabletId, ctx); 
+            TxAllocatorClient.SendRequest(msg->TabletId, ctx);
             return;
         }
     }
@@ -228,7 +228,7 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
 
         PipeClientCache->OnDisconnect(ev);
         CheckTimeouts(ctx);
-        TxAllocatorClient.SendRequest(msg->TabletId, ctx); 
+        TxAllocatorClient.SendRequest(msg->TabletId, ctx);
     }
 
     void ProcessRequest(TEvTxUserProxy::TEvProposeTransaction::TPtr &ev, const TActorContext &ctx, ui64 txid) {
@@ -422,9 +422,9 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
     }
 
 public:
-    TTxProxy(const TVector<ui64> &txAllocators) 
-        : PipeClientCache(NTabletPipe::CreateUnboundedClientCache(GetPipeClientConfig())) 
-        , TxAllocatorClient(NKikimrServices::TX_PROXY, PipeClientCache.Get(), txAllocators) 
+    TTxProxy(const TVector<ui64> &txAllocators)
+        : PipeClientCache(NTabletPipe::CreateUnboundedClientCache(GetPipeClientConfig()))
+        , TxAllocatorClient(NKikimrServices::TX_PROXY, PipeClientCache.Get(), txAllocators)
     {
     }
 
@@ -437,15 +437,15 @@ public:
 
         Services.Proxy = SelfId();
 
-        auto cacheConfig = MakeIntrusive<NSchemeCache::TSchemeCacheConfig>(AppData(ctx), CacheCounters); 
-        Services.SchemeCache = ctx.ExecutorThread.RegisterActor(CreateSchemeBoardSchemeCache(cacheConfig.Get())); 
+        auto cacheConfig = MakeIntrusive<NSchemeCache::TSchemeCacheConfig>(AppData(ctx), CacheCounters);
+        Services.SchemeCache = ctx.ExecutorThread.RegisterActor(CreateSchemeBoardSchemeCache(cacheConfig.Get()));
         ctx.ExecutorThread.ActorSystem->RegisterLocalService(MakeSchemeCacheID(), Services.SchemeCache);
- 
+
         // PipePeNodeCaches are an external dependency
         Services.LeaderPipeCache = MakePipePeNodeCacheID(false);
         Services.FollowerPipeCache = MakePipePeNodeCacheID(true);
 
-        TxAllocatorClient.Bootstrap(ctx); 
+        TxAllocatorClient.Bootstrap(ctx);
 
         Become(&TThis::StateWork);
         LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,

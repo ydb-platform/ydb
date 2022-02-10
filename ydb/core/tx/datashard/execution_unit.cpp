@@ -16,8 +16,8 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
         return CreateCheckSchemeTxUnit(dataShard, pipeline);
     case EExecutionUnitKind::CheckSnapshotTx:
         return CreateCheckSnapshotTxUnit(dataShard, pipeline);
-    case EExecutionUnitKind::CheckDistributedEraseTx: 
-        return CreateCheckDistributedEraseTxUnit(dataShard, pipeline); 
+    case EExecutionUnitKind::CheckDistributedEraseTx:
+        return CreateCheckDistributedEraseTxUnit(dataShard, pipeline);
     case EExecutionUnitKind::CheckCommitWritesTx:
         return CreateCheckCommitWritesTxUnit(dataShard, pipeline);
     case EExecutionUnitKind::StoreDataTx:
@@ -26,8 +26,8 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
         return CreateStoreSchemeTxUnit(dataShard, pipeline);
     case EExecutionUnitKind::StoreSnapshotTx:
         return CreateStoreSnapshotTxUnit(dataShard, pipeline);
-    case EExecutionUnitKind::StoreDistributedEraseTx: 
-        return CreateStoreDistributedEraseTxUnit(dataShard, pipeline); 
+    case EExecutionUnitKind::StoreDistributedEraseTx:
+        return CreateStoreDistributedEraseTxUnit(dataShard, pipeline);
     case EExecutionUnitKind::StoreCommitWritesTx:
         return CreateStoreCommitWritesTxUnit(dataShard, pipeline);
     case EExecutionUnitKind::BuildAndWaitDependencies:
@@ -48,8 +48,8 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
         return CreateProtectSchemeEchoesUnit(dataShard, pipeline);
     case EExecutionUnitKind::BuildDataTxOutRS:
         return CreateBuildDataTxOutRSUnit(dataShard, pipeline);
-    case EExecutionUnitKind::BuildDistributedEraseTxOutRS: 
-        return CreateBuildDistributedEraseTxOutRSUnit(dataShard, pipeline); 
+    case EExecutionUnitKind::BuildDistributedEraseTxOutRS:
+        return CreateBuildDistributedEraseTxOutRSUnit(dataShard, pipeline);
     case EExecutionUnitKind::BuildKqpDataTxOutRS:
         return CreateBuildKqpDataTxOutRSUnit(dataShard, pipeline);
     case EExecutionUnitKind::StoreAndSendOutRS:
@@ -58,16 +58,16 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
         return CreatePrepareDataTxInRSUnit(dataShard, pipeline);
     case EExecutionUnitKind::PrepareKqpDataTxInRS:
         return CreatePrepareKqpDataTxInRSUnit(dataShard, pipeline);
-    case EExecutionUnitKind::PrepareDistributedEraseTxInRS: 
-        return CreatePrepareDistributedEraseTxInRSUnit(dataShard, pipeline); 
+    case EExecutionUnitKind::PrepareDistributedEraseTxInRS:
+        return CreatePrepareDistributedEraseTxInRSUnit(dataShard, pipeline);
     case EExecutionUnitKind::LoadAndWaitInRS:
         return CreateLoadAndWaitInRSUnit(dataShard, pipeline);
     case EExecutionUnitKind::ExecuteDataTx:
         return CreateExecuteDataTxUnit(dataShard, pipeline);
     case EExecutionUnitKind::ExecuteKqpDataTx:
         return CreateExecuteKqpDataTxUnit(dataShard, pipeline);
-    case EExecutionUnitKind::ExecuteDistributedEraseTx: 
-        return CreateExecuteDistributedEraseTxUnit(dataShard, pipeline); 
+    case EExecutionUnitKind::ExecuteDistributedEraseTx:
+        return CreateExecuteDistributedEraseTxUnit(dataShard, pipeline);
     case EExecutionUnitKind::ExecuteCommitWritesTx:
         return CreateExecuteCommitWritesTxUnit(dataShard, pipeline);
     case EExecutionUnitKind::CompleteOperation:
@@ -86,10 +86,10 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
         return CreateBuildSchemeTxOutRSUnit(dataShard, pipeline);
     case EExecutionUnitKind::PrepareSchemeTxInRS:
         return CreatePrepareSchemeTxInRSUnit(dataShard, pipeline);
-    case EExecutionUnitKind::Backup: 
-        return CreateBackupUnit(dataShard, pipeline); 
-    case EExecutionUnitKind::Restore: 
-        return CreateRestoreUnit(dataShard, pipeline); 
+    case EExecutionUnitKind::Backup:
+        return CreateBackupUnit(dataShard, pipeline);
+    case EExecutionUnitKind::Restore:
+        return CreateRestoreUnit(dataShard, pipeline);
     case EExecutionUnitKind::CreateTable:
         return CreateCreateTableUnit(dataShard, pipeline);
     case EExecutionUnitKind::ReceiveSnapshot:
@@ -100,8 +100,8 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
         return CreateAlterTableUnit(dataShard, pipeline);
     case EExecutionUnitKind::DropTable:
         return CreateDropTableUnit(dataShard, pipeline);
-    case EExecutionUnitKind::DirectOp: 
-        return CreateDirectOpUnit(dataShard, pipeline); 
+    case EExecutionUnitKind::DirectOp:
+        return CreateDirectOpUnit(dataShard, pipeline);
     case EExecutionUnitKind::CreatePersistentSnapshot:
         return CreateCreatePersistentSnapshotUnit(dataShard, pipeline);
     case EExecutionUnitKind::DropPersistentSnapshot:
@@ -118,12 +118,12 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
         return CreateDropIndexNoticeUnit(dataShard, pipeline);
     case EExecutionUnitKind::MoveTable:
         return CreateMoveTableUnit(dataShard, pipeline);
-    case EExecutionUnitKind::CreateCdcStream: 
-        return CreateCreateCdcStreamUnit(dataShard, pipeline); 
-    case EExecutionUnitKind::AlterCdcStream: 
-        return CreateAlterCdcStreamUnit(dataShard, pipeline); 
-    case EExecutionUnitKind::DropCdcStream: 
-        return CreateDropCdcStreamUnit(dataShard, pipeline); 
+    case EExecutionUnitKind::CreateCdcStream:
+        return CreateCreateCdcStreamUnit(dataShard, pipeline);
+    case EExecutionUnitKind::AlterCdcStream:
+        return CreateAlterCdcStreamUnit(dataShard, pipeline);
+    case EExecutionUnitKind::DropCdcStream:
+        return CreateDropCdcStreamUnit(dataShard, pipeline);
     default:
         Y_FAIL_S("Unexpected execution kind " << kind << " (" << (ui32)kind << ")");
     }
@@ -195,19 +195,19 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
         return true;
     }
 
-    if (!op->IsReadOnly() && DataShard.CheckChangesQueueOverflow()) { 
-        TString err = TStringBuilder() 
-                << "Can't execute at blocked shard: " << " tablet id: " << DataShard.TabletID(); 
-        BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::OVERLOADED) 
-                ->AddError(NKikimrTxDataShard::TError::SHARD_IS_BLOCKED, err); 
- 
-        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, 
-                     "Tablet " << DataShard.TabletID() << " rejecting tx due to changes queue overflow"); 
- 
-        op->Abort(); 
-        return true; 
-    } 
- 
+    if (!op->IsReadOnly() && DataShard.CheckChangesQueueOverflow()) {
+        TString err = TStringBuilder()
+                << "Can't execute at blocked shard: " << " tablet id: " << DataShard.TabletID();
+        BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::OVERLOADED)
+                ->AddError(NKikimrTxDataShard::TError::SHARD_IS_BLOCKED, err);
+
+        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD,
+                     "Tablet " << DataShard.TabletID() << " rejecting tx due to changes queue overflow");
+
+        op->Abort();
+        return true;
+    }
+
     return false;
 }
 
@@ -236,10 +236,10 @@ bool TExecutionUnit::WillRejectDataTx(TOperation::TPtr op) const {
         return true;
     }
 
-    if (!op->IsReadOnly() && DataShard.CheckChangesQueueOverflow()) { 
-        return true; 
-    } 
- 
+    if (!op->IsReadOnly() && DataShard.CheckChangesQueueOverflow()) {
+        return true;
+    }
+
     return false;
 }
 

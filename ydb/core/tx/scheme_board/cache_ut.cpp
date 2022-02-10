@@ -1,35 +1,35 @@
-#include "cache.h" 
-#include "ut_helpers.h" 
- 
+#include "cache.h"
+#include "ut_helpers.h"
+
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/tablet_types.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
- 
+
 #include <library/cpp/testing/unittest/registar.h>
- 
-#include <util/generic/ptr.h> 
-#include <util/generic/string.h> 
-#include <util/generic/vector.h> 
- 
-namespace NKikimr { 
-namespace NSchemeBoard { 
- 
-using namespace NSchemeShardUT_Private; 
-using TConfig = NSchemeCache::TSchemeCacheConfig; 
-using TNavigate = NSchemeCache::TSchemeCacheNavigate; 
-using TResolve = NSchemeCache::TSchemeCacheRequest; 
- 
-class TCacheTest: public TTestWithSchemeshard { 
-public: 
-    void SetUp() override { 
-        TTestWithSchemeshard::SetUp(); 
- 
-        TIntrusivePtr<TConfig> config = new TConfig(); 
-        config->Counters = new NMonitoring::TDynamicCounters; 
+
+#include <util/generic/ptr.h>
+#include <util/generic/string.h>
+#include <util/generic/vector.h>
+
+namespace NKikimr {
+namespace NSchemeBoard {
+
+using namespace NSchemeShardUT_Private;
+using TConfig = NSchemeCache::TSchemeCacheConfig;
+using TNavigate = NSchemeCache::TSchemeCacheNavigate;
+using TResolve = NSchemeCache::TSchemeCacheRequest;
+
+class TCacheTest: public TTestWithSchemeshard {
+public:
+    void SetUp() override {
+        TTestWithSchemeshard::SetUp();
+
+        TIntrusivePtr<TConfig> config = new TConfig();
+        config->Counters = new NMonitoring::TDynamicCounters;
         config->Roots.push_back(TConfig::TTagEntry(0, TTestTxConfig::SchemeShard, "Root"));
-        SchemeCache = Context->Register(CreateSchemeBoardSchemeCache(config.Get())); 
-        Context->EnableScheduleForActor(SchemeCache, true); 
+        SchemeCache = Context->Register(CreateSchemeBoardSchemeCache(config.Get()));
+        Context->EnableScheduleForActor(SchemeCache, true);
 
         TestAlterSubDomain(*Context, 1, "/",
                              "StoragePools { "
@@ -37,16 +37,16 @@ public:
                              "  Kind: \"pool-kind-1\" "
                              "} "
                              " Name: \"Root\" ");
-    } 
- 
-    UNIT_TEST_SUITE(TCacheTest); 
-    UNIT_TEST(Navigate); 
-    UNIT_TEST(Attributes); 
-    UNIT_TEST(List); 
-    UNIT_TEST(Recreate); 
-    UNIT_TEST(RacyRecreateAndSync); 
-    UNIT_TEST(RacyCreateAndSync); 
-    UNIT_TEST(CheckAccess); 
+    }
+
+    UNIT_TEST_SUITE(TCacheTest);
+    UNIT_TEST(Navigate);
+    UNIT_TEST(Attributes);
+    UNIT_TEST(List);
+    UNIT_TEST(Recreate);
+    UNIT_TEST(RacyRecreateAndSync);
+    UNIT_TEST(RacyCreateAndSync);
+    UNIT_TEST(CheckAccess);
     UNIT_TEST(CheckSystemViewAccess);
     UNIT_TEST(SystemView);
     UNIT_TEST(SysLocks);
@@ -57,15 +57,15 @@ public:
     UNIT_TEST(MigrationUndo);
     UNIT_TEST(MigrationDeletedPathNavigate);
     UNIT_TEST(WatchRoot);
-    UNIT_TEST_SUITE_END(); 
- 
-    void Navigate(); 
-    void Attributes(); 
-    void List(); 
-    void Recreate(); 
-    void RacyRecreateAndSync(); 
-    void RacyCreateAndSync(); 
-    void CheckAccess(); 
+    UNIT_TEST_SUITE_END();
+
+    void Navigate();
+    void Attributes();
+    void List();
+    void Recreate();
+    void RacyRecreateAndSync();
+    void RacyCreateAndSync();
+    void CheckAccess();
     void CheckSystemViewAccess();
     void SystemView();
     void SysLocks();
@@ -76,38 +76,38 @@ public:
     void MigrationUndo();
     void MigrationDeletedPathNavigate();
     void WatchRoot();
- 
-protected: 
-    TNavigate::TEntry TestNavigateImpl(THolder<TNavigate> request, TNavigate::EStatus expectedStatus,
-        const TString& sid, TNavigate::EOp op, bool showPrivatePath, bool redirectRequired); 
 
-    TNavigate::TEntry TestNavigate(const TString& path, TNavigate::EStatus expectedStatus = TNavigate::EStatus::Ok, 
-        const TString& sid = TString(), TNavigate::EOp op = TNavigate::EOp::OpPath, 
-        bool showPrivatePath = false, bool redirectRequired = true, bool syncVersion = false); 
- 
+protected:
+    TNavigate::TEntry TestNavigateImpl(THolder<TNavigate> request, TNavigate::EStatus expectedStatus,
+        const TString& sid, TNavigate::EOp op, bool showPrivatePath, bool redirectRequired);
+
+    TNavigate::TEntry TestNavigate(const TString& path, TNavigate::EStatus expectedStatus = TNavigate::EStatus::Ok,
+        const TString& sid = TString(), TNavigate::EOp op = TNavigate::EOp::OpPath,
+        bool showPrivatePath = false, bool redirectRequired = true, bool syncVersion = false);
+
     TNavigate::TEntry TestNavigateByTableId(const TTableId& tableId, TNavigate::EStatus expectedStatus,
         const TString& expectedPath, const TString& sid = TString(),
-        TNavigate::EOp op = TNavigate::EOp::OpPath, bool showPrivatePath = false); 
+        TNavigate::EOp op = TNavigate::EOp::OpPath, bool showPrivatePath = false);
 
     TResolve::TEntry TestResolve(const TTableId& tableId, TResolve::EStatus expectedStatus = TResolve::EStatus::OkData,
-        const TString& sid = TString()); 
- 
+        const TString& sid = TString());
+
     TActorId TestWatch(const TPathId& pathId, const TActorId& watcher = {}, ui64 key = 0);
     void TestWatchRemove(const TActorId& watcher, ui64 key = 0);
-    NSchemeCache::TDescribeResult::TCPtr ExpectWatchUpdated(const TActorId& watcher, const TString& expectedPath = {}); 
+    NSchemeCache::TDescribeResult::TCPtr ExpectWatchUpdated(const TActorId& watcher, const TString& expectedPath = {});
     TPathId ExpectWatchDeleted(const TActorId& watcher);
 
     void CreateAndMigrateWithoutDecision(ui64& txId);
 
-private: 
+private:
     TActorId SchemeCache;
- 
-}; // TCacheTest 
- 
-UNIT_TEST_SUITE_REGISTRATION(TCacheTest); 
- 
-void TCacheTest::Navigate() { 
-    TestNavigate("/Root", TNavigate::EStatus::Ok); 
+
+}; // TCacheTest
+
+UNIT_TEST_SUITE_REGISTRATION(TCacheTest);
+
+void TCacheTest::Navigate() {
+    TestNavigate("/Root", TNavigate::EStatus::Ok);
 
     ui64 txId = 100;
 
@@ -117,182 +117,182 @@ void TCacheTest::Navigate() {
     auto entry = TestNavigate("/Root/DirA", TNavigate::EStatus::Ok);
 
     TestNavigateByTableId(entry.TableId, TNavigate::EStatus::Ok, "/Root/DirA");
-    TestNavigateByTableId(TTableId(1ull << 56, 1), TNavigate::EStatus::RootUnknown, ""); 
-} 
- 
-void TCacheTest::Attributes() { 
+    TestNavigateByTableId(TTableId(1ull << 56, 1), TNavigate::EStatus::RootUnknown, "");
+}
+
+void TCacheTest::Attributes() {
     NKikimrSchemeOp::TAlterUserAttributes attrs;
-    auto& attr = *attrs.AddUserAttributes(); 
-    attr.SetKey("key"); 
-    attr.SetValue("value"); 
- 
-    ui64 txId = 100; 
+    auto& attr = *attrs.AddUserAttributes();
+    attr.SetKey("key");
+    attr.SetValue("value");
+
+    ui64 txId = 100;
     TestMkDir(*Context, ++txId, "/Root", "DirA", {NKikimrScheme::StatusAccepted}, attrs);
     TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard));
- 
-    auto entry = TestNavigate("/Root/DirA", TNavigate::EStatus::Ok); 
-    UNIT_ASSERT_VALUES_EQUAL(entry.Attributes.size(), 1); 
-    UNIT_ASSERT(entry.Attributes.contains("key")); 
-    UNIT_ASSERT_VALUES_EQUAL(entry.Attributes["key"], "value"); 
-} 
- 
-void TCacheTest::List() { 
-    ui64 txId = 100; 
- 
-    TestMkDir(*Context, ++txId, "/Root", "DirA"); 
-    TestMkDir(*Context, ++txId, "/Root/DirA", "DirB"); 
-    TestMkDir(*Context, ++txId, "/Root/DirA", "DirC"); 
+
+    auto entry = TestNavigate("/Root/DirA", TNavigate::EStatus::Ok);
+    UNIT_ASSERT_VALUES_EQUAL(entry.Attributes.size(), 1);
+    UNIT_ASSERT(entry.Attributes.contains("key"));
+    UNIT_ASSERT_VALUES_EQUAL(entry.Attributes["key"], "value");
+}
+
+void TCacheTest::List() {
+    ui64 txId = 100;
+
+    TestMkDir(*Context, ++txId, "/Root", "DirA");
+    TestMkDir(*Context, ++txId, "/Root/DirA", "DirB");
+    TestMkDir(*Context, ++txId, "/Root/DirA", "DirC");
     TestWaitNotification(*Context, {txId - 2, txId - 1, txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard));
- 
-    { 
-        auto entry = TestNavigate("/Root/DirA", TNavigate::EStatus::Ok); 
-        UNIT_ASSERT(!entry.ListNodeEntry); 
-    } 
-    { 
-        auto entry = TestNavigate("/Root/DirA", TNavigate::EStatus::Ok, TString(), TNavigate::OpList); 
-        UNIT_ASSERT(entry.ListNodeEntry); 
-        UNIT_ASSERT_VALUES_EQUAL(entry.ListNodeEntry->Children.size(), 2); 
-    } 
-} 
- 
-void TCacheTest::Recreate() { 
+
+    {
+        auto entry = TestNavigate("/Root/DirA", TNavigate::EStatus::Ok);
+        UNIT_ASSERT(!entry.ListNodeEntry);
+    }
+    {
+        auto entry = TestNavigate("/Root/DirA", TNavigate::EStatus::Ok, TString(), TNavigate::OpList);
+        UNIT_ASSERT(entry.ListNodeEntry);
+        UNIT_ASSERT_VALUES_EQUAL(entry.ListNodeEntry->Children.size(), 2);
+    }
+}
+
+void TCacheTest::Recreate() {
     const TActorId edge = Context->AllocateEdgeActor();
-    ui64 txId = 100; 
- 
-    TestMkDir(*Context, ++txId, "/Root", "DirA"); 
+    ui64 txId = 100;
+
+    TestMkDir(*Context, ++txId, "/Root", "DirA");
     TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard));
-    Context->CreateSubscriber<TSchemeBoardEvents::TEvNotifyUpdate>(edge, "/Root/DirA"); 
- 
-    TestRmDir(*Context, ++txId, "/Root", "DirA"); 
+    Context->CreateSubscriber<TSchemeBoardEvents::TEvNotifyUpdate>(edge, "/Root/DirA");
+
+    TestRmDir(*Context, ++txId, "/Root", "DirA");
     TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard));
-    auto ev = Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotifyDelete>(edge); 
+    auto ev = Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotifyDelete>(edge);
     auto pathId = ev->Get()->PathId;
     TTableId tableId(pathId.OwnerId, pathId.LocalPathId);
     TestResolve(tableId, TResolve::EStatus::PathErrorNotExist);
- 
-    TestMkDir(*Context, ++txId, "/Root", "DirA"); 
+
+    TestMkDir(*Context, ++txId, "/Root", "DirA");
     TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard));
-    Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotifyUpdate>(edge); 
-    TestNavigate("/Root/DirA", TNavigate::EStatus::Ok); 
-} 
- 
-void TCacheTest::RacyCreateAndSync() { 
-    THolder<IEventHandle> delayedSyncRequest; 
-    auto prevObserver = Context->SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) { 
-        switch (ev->GetTypeRewrite()) { 
-        case TSchemeBoardEvents::EvSyncRequest: 
-            delayedSyncRequest.Reset(ev.Release()); 
-            return TTestActorRuntime::EEventAction::DROP; 
-        default: 
-            return TTestActorRuntime::EEventAction::PROCESS; 
-        } 
-    }); 
- 
-    TNavigate::TEntry entry; 
-    entry.Path = SplitPath("/Root/DirA"); 
-    entry.SyncVersion = true; 
-    entry.Operation = TNavigate::OpPath; 
- 
-    auto request = MakeHolder<TNavigate>(); 
-    request->ResultSet.push_back(entry); 
- 
-    const TActorId edge = Context->AllocateEdgeActor(); 
-    Context->Send(SchemeCache, edge, new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()), 0, 0, 0, true); 
- 
-    if (!delayedSyncRequest) { 
-        TDispatchOptions opts; 
-        opts.FinalEvents.emplace_back([&delayedSyncRequest](IEventHandle&) -> bool { 
-            return bool(delayedSyncRequest); 
-        }); 
-        Context->DispatchEvents(opts); 
-    } 
- 
-    Context->SetObserverFunc(prevObserver); 
- 
-    ui64 txId = 100; 
-    TestMkDir(*Context, ++txId, "/Root", "DirA"); 
+    Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotifyUpdate>(edge);
+    TestNavigate("/Root/DirA", TNavigate::EStatus::Ok);
+}
+
+void TCacheTest::RacyCreateAndSync() {
+    THolder<IEventHandle> delayedSyncRequest;
+    auto prevObserver = Context->SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        switch (ev->GetTypeRewrite()) {
+        case TSchemeBoardEvents::EvSyncRequest:
+            delayedSyncRequest.Reset(ev.Release());
+            return TTestActorRuntime::EEventAction::DROP;
+        default:
+            return TTestActorRuntime::EEventAction::PROCESS;
+        }
+    });
+
+    TNavigate::TEntry entry;
+    entry.Path = SplitPath("/Root/DirA");
+    entry.SyncVersion = true;
+    entry.Operation = TNavigate::OpPath;
+
+    auto request = MakeHolder<TNavigate>();
+    request->ResultSet.push_back(entry);
+
+    const TActorId edge = Context->AllocateEdgeActor();
+    Context->Send(SchemeCache, edge, new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()), 0, 0, 0, true);
+
+    if (!delayedSyncRequest) {
+        TDispatchOptions opts;
+        opts.FinalEvents.emplace_back([&delayedSyncRequest](IEventHandle&) -> bool {
+            return bool(delayedSyncRequest);
+        });
+        Context->DispatchEvents(opts);
+    }
+
+    Context->SetObserverFunc(prevObserver);
+
+    ui64 txId = 100;
+    TestMkDir(*Context, ++txId, "/Root", "DirA");
     TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard));
- 
-    Context->TTestBasicRuntime::Send(delayedSyncRequest.Release(), 0, true); 
-    auto ev = Context->GrabEdgeEvent<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(edge); 
- 
-    UNIT_ASSERT(ev->Get()); 
-    UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Request->ErrorCount, 0); 
-} 
- 
-void TCacheTest::RacyRecreateAndSync() { 
-    ui64 txId = 100; 
- 
-    TestMkDir(*Context, ++txId, "/Root", "DirA"); 
+
+    Context->TTestBasicRuntime::Send(delayedSyncRequest.Release(), 0, true);
+    auto ev = Context->GrabEdgeEvent<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(edge);
+
+    UNIT_ASSERT(ev->Get());
+    UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Request->ErrorCount, 0);
+}
+
+void TCacheTest::RacyRecreateAndSync() {
+    ui64 txId = 100;
+
+    TestMkDir(*Context, ++txId, "/Root", "DirA");
     TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard));
-    TestNavigate("/Root/DirA", TNavigate::EStatus::Ok, "", TNavigate::EOp::OpPath, false, true, true); 
- 
-    TestRmDir(*Context, ++txId, "/Root", "DirA"); 
+    TestNavigate("/Root/DirA", TNavigate::EStatus::Ok, "", TNavigate::EOp::OpPath, false, true, true);
+
+    TestRmDir(*Context, ++txId, "/Root", "DirA");
     TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard));
-    TestNavigate("/Root/DirA", TNavigate::EStatus::PathErrorUnknown, "", TNavigate::EOp::OpPath, false, true, true); 
- 
-    THolder<IEventHandle> delayedSyncRequest; 
-    auto prevObserver = Context->SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) { 
-        switch (ev->GetTypeRewrite()) { 
-        case TSchemeBoardEvents::EvSyncRequest: 
-            delayedSyncRequest.Reset(ev.Release()); 
-            return TTestActorRuntime::EEventAction::DROP; 
-        default: 
-            return TTestActorRuntime::EEventAction::PROCESS; 
-        } 
-    }); 
- 
-    TNavigate::TEntry entry; 
-    entry.Path = SplitPath("/Root/DirA"); 
-    entry.SyncVersion = true; 
-    entry.Operation = TNavigate::OpPath; 
- 
-    auto request = MakeHolder<TNavigate>(); 
-    request->ResultSet.push_back(entry); 
- 
-    const TActorId edge = Context->AllocateEdgeActor(); 
-    Context->Send(SchemeCache, edge, new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()), 0, 0, 0, true); 
- 
-    if (!delayedSyncRequest) { 
-        TDispatchOptions opts; 
-        opts.FinalEvents.emplace_back([&delayedSyncRequest](IEventHandle&) -> bool { 
-            return bool(delayedSyncRequest); 
-        }); 
-        Context->DispatchEvents(opts); 
-    } 
- 
-    Context->SetObserverFunc(prevObserver); 
- 
-    TestMkDir(*Context, ++txId, "/Root", "DirA"); 
+    TestNavigate("/Root/DirA", TNavigate::EStatus::PathErrorUnknown, "", TNavigate::EOp::OpPath, false, true, true);
+
+    THolder<IEventHandle> delayedSyncRequest;
+    auto prevObserver = Context->SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        switch (ev->GetTypeRewrite()) {
+        case TSchemeBoardEvents::EvSyncRequest:
+            delayedSyncRequest.Reset(ev.Release());
+            return TTestActorRuntime::EEventAction::DROP;
+        default:
+            return TTestActorRuntime::EEventAction::PROCESS;
+        }
+    });
+
+    TNavigate::TEntry entry;
+    entry.Path = SplitPath("/Root/DirA");
+    entry.SyncVersion = true;
+    entry.Operation = TNavigate::OpPath;
+
+    auto request = MakeHolder<TNavigate>();
+    request->ResultSet.push_back(entry);
+
+    const TActorId edge = Context->AllocateEdgeActor();
+    Context->Send(SchemeCache, edge, new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()), 0, 0, 0, true);
+
+    if (!delayedSyncRequest) {
+        TDispatchOptions opts;
+        opts.FinalEvents.emplace_back([&delayedSyncRequest](IEventHandle&) -> bool {
+            return bool(delayedSyncRequest);
+        });
+        Context->DispatchEvents(opts);
+    }
+
+    Context->SetObserverFunc(prevObserver);
+
+    TestMkDir(*Context, ++txId, "/Root", "DirA");
     TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard));
- 
-    Context->TTestBasicRuntime::Send(delayedSyncRequest.Release(), 0, true); 
-    auto ev = Context->GrabEdgeEvent<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(edge); 
- 
-    UNIT_ASSERT(ev->Get()); 
-    UNIT_ASSERT(!ev->Get()->Request->ResultSet.empty()); 
-    UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Request->ErrorCount, 0); 
-    UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Request->ResultSet.at(0).Status, TNavigate::EStatus::Ok); 
-} 
- 
-void TCacheTest::CheckAccess() { 
-    ui64 txId = 100; 
-    TestMkDir(*Context, ++txId, "/Root", "DirA"); 
-    TestModifyACL(*Context, ++txId, "/Root", "DirA", TString(), "user0@builtin"); 
- 
-    auto entry = TestNavigate("/Root/DirA", TNavigate::EStatus::Ok); 
- 
-    auto byPath = TestNavigate("/Root/DirA", TNavigate::EStatus::PathErrorUnknown, "user1@builtin"); 
-    UNIT_ASSERT_VALUES_EQUAL(CanonizePath(byPath.Path), "/Root/DirA"); 
-    UNIT_ASSERT_VALUES_EQUAL(byPath.TableId, TTableId()); 
-    TestNavigate("/Root/DirA", TNavigate::EStatus::Ok, "user0@builtin"); 
- 
-    auto byTableId = TestNavigateByTableId(entry.TableId, TNavigate::EStatus::PathErrorUnknown, "", "user1@builtin"); 
-    UNIT_ASSERT_VALUES_EQUAL(CanonizePath(byTableId.Path), ""); 
-    UNIT_ASSERT_VALUES_EQUAL(byTableId.TableId, entry.TableId); 
-    TestNavigateByTableId(entry.TableId, TNavigate::EStatus::Ok, "/Root/DirA", "user0@builtin"); 
-} 
- 
+
+    Context->TTestBasicRuntime::Send(delayedSyncRequest.Release(), 0, true);
+    auto ev = Context->GrabEdgeEvent<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(edge);
+
+    UNIT_ASSERT(ev->Get());
+    UNIT_ASSERT(!ev->Get()->Request->ResultSet.empty());
+    UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Request->ErrorCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Request->ResultSet.at(0).Status, TNavigate::EStatus::Ok);
+}
+
+void TCacheTest::CheckAccess() {
+    ui64 txId = 100;
+    TestMkDir(*Context, ++txId, "/Root", "DirA");
+    TestModifyACL(*Context, ++txId, "/Root", "DirA", TString(), "user0@builtin");
+
+    auto entry = TestNavigate("/Root/DirA", TNavigate::EStatus::Ok);
+
+    auto byPath = TestNavigate("/Root/DirA", TNavigate::EStatus::PathErrorUnknown, "user1@builtin");
+    UNIT_ASSERT_VALUES_EQUAL(CanonizePath(byPath.Path), "/Root/DirA");
+    UNIT_ASSERT_VALUES_EQUAL(byPath.TableId, TTableId());
+    TestNavigate("/Root/DirA", TNavigate::EStatus::Ok, "user0@builtin");
+
+    auto byTableId = TestNavigateByTableId(entry.TableId, TNavigate::EStatus::PathErrorUnknown, "", "user1@builtin");
+    UNIT_ASSERT_VALUES_EQUAL(CanonizePath(byTableId.Path), "");
+    UNIT_ASSERT_VALUES_EQUAL(byTableId.TableId, entry.TableId);
+    TestNavigateByTableId(entry.TableId, TNavigate::EStatus::Ok, "/Root/DirA", "user0@builtin");
+}
+
 void TCacheTest::CheckSystemViewAccess() {
     ui64 txId = 100;
     TestCreateSubDomain(*Context, ++txId, "/Root", "Name: \"SubDomainA\"");
@@ -316,15 +316,15 @@ void TCacheTest::CheckSystemViewAccess() {
     TestResolve(tableId, TResolve::EStatus::PathErrorNotExist, "user1@builtin");
 }
 
-void TCacheTest::SystemView() { 
+void TCacheTest::SystemView() {
     auto entry = TestNavigate("/Root/.sys/partition_stats", TNavigate::EStatus::Ok, TString(), TNavigate::OpTable);
 
     auto tableId = entry.TableId;
     UNIT_ASSERT_VALUES_EQUAL(tableId.SysViewInfo, "partition_stats");
 
     TestNavigateByTableId(tableId, TNavigate::EStatus::Ok, "/Root/.sys/partition_stats", TString(), TNavigate::OpTable);
-} 
- 
+}
+
 void TCacheTest::SysLocks() {
     {
         auto entry = TestNavigate("/sys/locks", TNavigate::EStatus::Ok, TString(), TNavigate::OpTable, true);
@@ -350,7 +350,7 @@ void TCacheTest::TableSchemaVersion() {
 
     TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard));
     {
-        auto entry = TestNavigate("/Root/Table1", TNavigate::EStatus::Ok); 
+        auto entry = TestNavigate("/Root/Table1", TNavigate::EStatus::Ok);
         UNIT_ASSERT_VALUES_EQUAL(entry.TableId.SchemaVersion, 1);
     }
 
@@ -361,51 +361,51 @@ void TCacheTest::TableSchemaVersion() {
 
     TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard));
     {
-        auto entry = TestNavigate("/Root/Table1", TNavigate::EStatus::Ok); 
+        auto entry = TestNavigate("/Root/Table1", TNavigate::EStatus::Ok);
         UNIT_ASSERT_VALUES_EQUAL(entry.TableId.SchemaVersion, 2);
     }
 }
 
 TNavigate::TEntry TCacheTest::TestNavigateImpl(THolder<TNavigate> request, TNavigate::EStatus expectedStatus,
-    const TString& sid, TNavigate::EOp op, bool showPrivatePath, bool redirectRequired) 
+    const TString& sid, TNavigate::EOp op, bool showPrivatePath, bool redirectRequired)
 {
-    auto& entry = request->ResultSet.back(); 
+    auto& entry = request->ResultSet.back();
     entry.Operation = op;
-    entry.ShowPrivatePath = showPrivatePath; 
+    entry.ShowPrivatePath = showPrivatePath;
     entry.RedirectRequired = redirectRequired;
- 
-    if (sid) { 
-        request->UserToken = new NACLib::TUserToken(sid, {}); 
-    } 
- 
+
+    if (sid) {
+        request->UserToken = new NACLib::TUserToken(sid, {});
+    }
+
     const TActorId edge = Context->AllocateEdgeActor();
-    Context->Send(SchemeCache, edge, new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()), 0, 0, 0, true); 
-    auto ev = Context->GrabEdgeEvent<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(edge); 
- 
-    UNIT_ASSERT(ev->Get()); 
-    UNIT_ASSERT(!ev->Get()->Request->ResultSet.empty()); 
- 
-    const TNavigate::TEntry result = ev->Get()->Request->ResultSet[0]; 
-    UNIT_ASSERT_VALUES_EQUAL(result.Status, expectedStatus); 
+    Context->Send(SchemeCache, edge, new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()), 0, 0, 0, true);
+    auto ev = Context->GrabEdgeEvent<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(edge);
+
+    UNIT_ASSERT(ev->Get());
+    UNIT_ASSERT(!ev->Get()->Request->ResultSet.empty());
+
+    const TNavigate::TEntry result = ev->Get()->Request->ResultSet[0];
+    UNIT_ASSERT_VALUES_EQUAL(result.Status, expectedStatus);
     return result;
-} 
- 
+}
+
 TNavigate::TEntry TCacheTest::TestNavigate(const TString& path, TNavigate::EStatus expectedStatus,
-    const TString& sid, TNavigate::EOp op, bool showPrivatePath,  bool redirectRequired, bool syncVersion) 
+    const TString& sid, TNavigate::EOp op, bool showPrivatePath,  bool redirectRequired, bool syncVersion)
 {
     auto request = MakeHolder<TNavigate>();
     request->ResultSet.push_back({});
     auto& entry = request->ResultSet.back();
 
     entry.Path = SplitPath(path);
-    entry.SyncVersion = syncVersion; 
+    entry.SyncVersion = syncVersion;
 
-    auto result = TestNavigateImpl(std::move(request), expectedStatus, sid, op, showPrivatePath, redirectRequired); 
+    auto result = TestNavigateImpl(std::move(request), expectedStatus, sid, op, showPrivatePath, redirectRequired);
     return result;
 }
 
 TNavigate::TEntry TCacheTest::TestNavigateByTableId(const TTableId& tableId, TNavigate::EStatus expectedStatus,
-    const TString& expectedPath, const TString& sid, TNavigate::EOp op, bool showPrivatePath) 
+    const TString& expectedPath, const TString& sid, TNavigate::EOp op, bool showPrivatePath)
 {
     auto request = MakeHolder<TNavigate>();
     request->ResultSet.push_back({});
@@ -414,38 +414,38 @@ TNavigate::TEntry TCacheTest::TestNavigateByTableId(const TTableId& tableId, TNa
     entry.TableId = tableId;
     entry.RequestType = TNavigate::TEntry::ERequestType::ByTableId;
 
-    auto result = TestNavigateImpl(std::move(request), expectedStatus, sid, op, showPrivatePath, true); 
+    auto result = TestNavigateImpl(std::move(request), expectedStatus, sid, op, showPrivatePath, true);
     UNIT_ASSERT_VALUES_EQUAL(CanonizePath(result.Path), expectedPath);
     return result;
 }
 
 TResolve::TEntry TCacheTest::TestResolve(const TTableId& tableId, TResolve::EStatus expectedStatus, const TString& sid) {
-    auto request = MakeHolder<TResolve>(); 
- 
-    auto keyDesc = MakeHolder<TKeyDesc>( 
+    auto request = MakeHolder<TResolve>();
+
+    auto keyDesc = MakeHolder<TKeyDesc>(
         tableId,
-        TTableRange({}), 
-        TKeyDesc::ERowOperation::Unknown, 
-        TVector<NScheme::TTypeId>(), TVector<TKeyDesc::TColumnOp>() 
-    ); 
+        TTableRange({}),
+        TKeyDesc::ERowOperation::Unknown,
+        TVector<NScheme::TTypeId>(), TVector<TKeyDesc::TColumnOp>()
+    );
     request->ResultSet.emplace_back(std::move(keyDesc));
- 
-    if (sid) { 
-        request->UserToken = new NACLib::TUserToken(sid, {}); 
-    } 
- 
+
+    if (sid) {
+        request->UserToken = new NACLib::TUserToken(sid, {});
+    }
+
     const TActorId edge = Context->AllocateEdgeActor();
-    Context->Send(SchemeCache, edge, new TEvTxProxySchemeCache::TEvResolveKeySet(request.Release()), 0, 0, 0, true); 
-    auto ev = Context->GrabEdgeEvent<TEvTxProxySchemeCache::TEvResolveKeySetResult>(edge); 
- 
-    UNIT_ASSERT(ev->Get()); 
-    UNIT_ASSERT(!ev->Get()->Request->ResultSet.empty()); 
- 
+    Context->Send(SchemeCache, edge, new TEvTxProxySchemeCache::TEvResolveKeySet(request.Release()), 0, 0, 0, true);
+    auto ev = Context->GrabEdgeEvent<TEvTxProxySchemeCache::TEvResolveKeySetResult>(edge);
+
+    UNIT_ASSERT(ev->Get());
+    UNIT_ASSERT(!ev->Get()->Request->ResultSet.empty());
+
     TResolve::TEntry result = std::move(ev->Get()->Request->ResultSet[0]);
-    UNIT_ASSERT_VALUES_EQUAL(result.Status, expectedStatus); 
-    return result; 
-} 
- 
+    UNIT_ASSERT_VALUES_EQUAL(result.Status, expectedStatus);
+    return result;
+}
+
 TActorId TCacheTest::TestWatch(const TPathId& pathId, const TActorId& watcher, ui64 key) {
     const TActorId edge = watcher ? watcher : Context->AllocateEdgeActor();
     Context->Send(SchemeCache, edge, new TEvTxProxySchemeCache::TEvWatchPathId(pathId, key), 0, 0, 0, true);
@@ -456,11 +456,11 @@ void TCacheTest::TestWatchRemove(const TActorId& watcher, ui64 key) {
     Context->Send(SchemeCache, watcher, new TEvTxProxySchemeCache::TEvWatchRemove(key), 0, 0, 0, true);
 }
 
-NSchemeCache::TDescribeResult::TCPtr TCacheTest::ExpectWatchUpdated(const TActorId& watcher, const TString& expectedPath) { 
+NSchemeCache::TDescribeResult::TCPtr TCacheTest::ExpectWatchUpdated(const TActorId& watcher, const TString& expectedPath) {
     auto ev = Context->GrabEdgeEvent<TEvTxProxySchemeCache::TEvWatchNotifyUpdated>(watcher);
-    if (expectedPath) { 
-        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Path, expectedPath); 
-    } 
+    if (expectedPath) {
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Path, expectedPath);
+    }
     return ev->Get()->Result;
 }
 
@@ -895,7 +895,7 @@ void TCacheTest::WatchRoot() {
     auto watcher = TestWatch(TPathId(TTestTxConfig::SchemeShard, 1));
 
     {
-        auto result = ExpectWatchUpdated(watcher, "/Root"); 
+        auto result = ExpectWatchUpdated(watcher, "/Root");
         UNIT_ASSERT_VALUES_EQUAL(result->GetStatus(), NKikimrScheme::StatusSuccess);
         UNIT_ASSERT_VALUES_EQUAL(result->GetPathDescription().GetSelf().GetPathId(), 1u);
         UNIT_ASSERT_VALUES_EQUAL(result->GetPathDescription().GetChildren().size(), 0u);
@@ -921,7 +921,7 @@ void TCacheTest::WatchRoot() {
     TestWatch(TPathId(TTestTxConfig::SchemeShard, dirPathId), watcher);
 
     {
-        auto result = ExpectWatchUpdated(watcher, "/Root/DirA"); 
+        auto result = ExpectWatchUpdated(watcher, "/Root/DirA");
         UNIT_ASSERT_VALUES_EQUAL(result->GetStatus(), NKikimrScheme::StatusSuccess);
         UNIT_ASSERT_VALUES_EQUAL(result->GetPathDescription().GetSelf().GetPathId(), dirPathId);
     }
@@ -948,35 +948,35 @@ void TCacheTest::WatchRoot() {
     SimulateSleep(*Context, TDuration::Seconds(1));
 }
 
-class TCacheTestWithDrops: public TCacheTest { 
-public: 
-    TTestContext::TEventObserver ObserverFunc() override { 
-        return [](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) { 
-            switch (ev->GetTypeRewrite()) { 
-            case TSchemeBoardEvents::EvNotifyUpdate: 
-            case TSchemeBoardEvents::EvNotifyDelete: 
-            case TSchemeBoardEvents::EvSyncResponse: 
-                return TTestContext::EEventAction::DROP; 
-            } 
- 
-            return TTestContext::EEventAction::PROCESS; 
-        }; 
-    } 
- 
-    UNIT_TEST_SUITE(TCacheTestWithDrops); 
-    UNIT_TEST(LookupErrorUponEviction); 
-    UNIT_TEST_SUITE_END(); 
- 
-    void LookupErrorUponEviction(); 
- 
-}; // TCacheTestWithDrops 
- 
-UNIT_TEST_SUITE_REGISTRATION(TCacheTestWithDrops); 
- 
-void TCacheTestWithDrops::LookupErrorUponEviction() { 
-    TestNavigate("/Root/with_sync", TNavigate::EStatus::LookupError, "", TNavigate::EOp::OpPath, false, true, true); 
-    TestNavigate("/Root/without_sync", TNavigate::EStatus::LookupError, "", TNavigate::EOp::OpPath, false, true, false); 
-} 
- 
-} // NSchemeBoard 
-} // NKikimr 
+class TCacheTestWithDrops: public TCacheTest {
+public:
+    TTestContext::TEventObserver ObserverFunc() override {
+        return [](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+            case TSchemeBoardEvents::EvNotifyUpdate:
+            case TSchemeBoardEvents::EvNotifyDelete:
+            case TSchemeBoardEvents::EvSyncResponse:
+                return TTestContext::EEventAction::DROP;
+            }
+
+            return TTestContext::EEventAction::PROCESS;
+        };
+    }
+
+    UNIT_TEST_SUITE(TCacheTestWithDrops);
+    UNIT_TEST(LookupErrorUponEviction);
+    UNIT_TEST_SUITE_END();
+
+    void LookupErrorUponEviction();
+
+}; // TCacheTestWithDrops
+
+UNIT_TEST_SUITE_REGISTRATION(TCacheTestWithDrops);
+
+void TCacheTestWithDrops::LookupErrorUponEviction() {
+    TestNavigate("/Root/with_sync", TNavigate::EStatus::LookupError, "", TNavigate::EOp::OpPath, false, true, true);
+    TestNavigate("/Root/without_sync", TNavigate::EStatus::LookupError, "", TNavigate::EOp::OpPath, false, true, false);
+}
+
+} // NSchemeBoard
+} // NKikimr

@@ -15,7 +15,7 @@ namespace {
 
 TOlapTableInfo::TPtr CreateOlapTable(
         const NKikimrSchemeOp::TColumnTableDescription& opSrc,
-        TOlapStoreInfo::TPtr storeInfo, const TSubDomainInfo& subDomain, 
+        TOlapStoreInfo::TPtr storeInfo, const TSubDomainInfo& subDomain,
         TEvSchemeShard::EStatus& status, TString& errStr,
         TSchemeShard* ss)
 {
@@ -760,13 +760,13 @@ public:
             }
         }
 
-        if (!AppData()->FeatureFlags.GetEnableOlapSchemaOperations()) { 
+        if (!AppData()->FeatureFlags.GetEnableOlapSchemaOperations()) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed,
                 "Olap schema operations are not supported");
             return result;
         }
 
-        TOlapTableInfo::TPtr tableInfo = CreateOlapTable(createDescription, storeInfo, *parentPath.DomainInfo(), status, errStr, context.SS); 
+        TOlapTableInfo::TPtr tableInfo = CreateOlapTable(createDescription, storeInfo, *parentPath.DomainInfo(), status, errStr, context.SS);
         if (!tableInfo) {
             result->SetError(status, errStr);
             return result;

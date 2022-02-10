@@ -29,8 +29,8 @@ enum EStatus  {
     StatusInvalidParameter = 7;
     StatusMultipleModifications = 8;
     StatusReadOnly = 9;
-    StatusTxIdNotExists = 10; 
-    StatusTxIsNotCancellable = 11; 
+    StatusTxIdNotExists = 10;
+    StatusTxIsNotCancellable = 11;
     StatusAccessDenied = 12;
     StatusNotAvailable = 13;
     StatusPreconditionFailed = 14;
@@ -77,17 +77,17 @@ message TEvDescribeSchemeResult {
     optional fixed64 PathOwnerId = 10;
 }
 
-message TEvCancelTx { 
-    optional uint64 TargetTxId = 1; 
+message TEvCancelTx {
+    optional uint64 TargetTxId = 1;
     optional string Path = 2;
     optional string SecurityToken = 3;
     optional uint64 TxId = 4;
 }
 
-message TEvCancelTxResult { 
+message TEvCancelTxResult {
     optional EStatus Status = 1;
     optional string Result = 2;
-    optional uint64 TargetTxId = 3; 
+    optional uint64 TargetTxId = 3;
     optional uint64 TxId = 4;
 }
 
@@ -163,10 +163,10 @@ message TEvInitTenantSchemeShard {
     optional TSchemeLimits SchemeLimits = 11;
 
     optional bool InitiateMigration = 12;
- 
-    optional fixed64 ResourcesDomainOwnerId = 13; 
-    optional fixed64 ResourcesDomainPathId = 14; 
-    optional fixed64 SharedHive = 15; 
+
+    optional fixed64 ResourcesDomainOwnerId = 13;
+    optional fixed64 ResourcesDomainPathId = 14;
+    optional fixed64 SharedHive = 15;
 
     optional NKikimrSubDomains.TSchemeQuotas DeclaredSchemeQuotas = 16;
     optional Ydb.Cms.DatabaseQuotas DatabaseQuotas = 17;
@@ -192,8 +192,8 @@ message TMigrateShard {
 }
 
 message TMigratePath {
-    optional NKikimrProto.TPathID PathId = 1; 
-    optional NKikimrProto.TPathID ParentPathId = 2; 
+    optional NKikimrProto.TPathID PathId = 1;
+    optional NKikimrProto.TPathID ParentPathId = 2;
     optional string Name = 3;
     optional uint32 PathType = 4;
     optional uint64 StepCreated= 5;
@@ -227,7 +227,7 @@ message TMigratePartition {
 }
 
 message TMigrateTable {
-    optional NKikimrProto.TPathID PathId = 1; 
+    optional NKikimrProto.TPathID PathId = 1;
     optional uint32 NextColId = 2;
     optional string PartitionConfig = 3;
     optional uint32 AlterVersion = 4;
@@ -238,7 +238,7 @@ message TMigrateTable {
 }
 
 message TMigrateTableIndex {
-    optional NKikimrProto.TPathID PathId = 1; 
+    optional NKikimrProto.TPathID PathId = 1;
     optional uint64 AlterVersion = 2;
     optional uint32 Type = 3;
     optional uint32 State = 4;
@@ -246,7 +246,7 @@ message TMigrateTableIndex {
 }
 
 message TMigrateKesus {
-    optional NKikimrProto.TPathID PathId = 1; 
+    optional NKikimrProto.TPathID PathId = 1;
     optional uint64 Version = 2;
     optional string Config = 3;
 }
@@ -266,7 +266,7 @@ message TEvMigrate {
 message TEvMigrateResult {
     optional fixed64 TenantSchemeShard = 1;
     optional uint64 SchemeShardGeneration = 2;
-    optional NKikimrProto.TPathID PathId = 3; 
+    optional NKikimrProto.TPathID PathId = 3;
     repeated TShardID ShardIds = 4;
 }
 

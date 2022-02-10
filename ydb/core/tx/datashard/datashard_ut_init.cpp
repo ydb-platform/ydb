@@ -72,7 +72,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
 
         UNIT_ASSERT_EQUAL(datashard->GetSnapshotManager().GetMvccState(), NDataShard::EMvccState::MvccEnabled);
 
-        runtime.GetAppData().FeatureFlags.SetEnableMvccForTest(false); 
+        runtime.GetAppData().FeatureFlags.SetEnableMvccForTest(false);
 
         GracefulRestartTablet(runtime, tabletId, sender);
 
@@ -157,9 +157,9 @@ Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
                 }
             } else if (event->GetTypeRewrite() == TEvSchemeShard::EvDescribeSchemeResult) {
                 auto &rec = event->Get<TEvSchemeShard::TEvDescribeSchemeResult>()->GetRecord();
-                const bool hasPartitioning = rec.GetPathDescription().TablePartitionsSize(); 
-                // there are few in-flight TEvDescribeSchemeResult msgs, we need one with no partitioning 
-                if (!hasPartitioning && rec.GetPathDescription().GetSelf().GetPathId() == tableId) { 
+                const bool hasPartitioning = rec.GetPathDescription().TablePartitionsSize();
+                // there are few in-flight TEvDescribeSchemeResult msgs, we need one with no partitioning
+                if (!hasPartitioning && rec.GetPathDescription().GetSelf().GetPathId() == tableId) {
                     sawResolve = true;
                     if (dropResolve)
                         return TTestActorRuntime::EEventAction::DROP;

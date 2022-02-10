@@ -44,20 +44,20 @@ TCommandIndex::TCommandIndex()
     AddCommand(std::make_unique<TCommandIndexDrop>());
 }
 
-TCommandAttribute::TCommandAttribute() 
-    : TClientCommandTree("attribute", {"attr"}, "Attribute operations") 
-{ 
+TCommandAttribute::TCommandAttribute()
+    : TClientCommandTree("attribute", {"attr"}, "Attribute operations")
+{
     AddCommand(std::make_unique<TCommandAttributeAdd>());
     AddCommand(std::make_unique<TCommandAttributeDrop>());
-} 
- 
-TCommandTtl::TCommandTtl() 
-    : TClientCommandTree("ttl", {}, "Ttl operations") 
-{ 
+}
+
+TCommandTtl::TCommandTtl()
+    : TClientCommandTree("ttl", {}, "Ttl operations")
+{
     AddCommand(std::make_unique<TCommandTtlSet>());
     AddCommand(std::make_unique<TCommandTtlDrop>());
-} 
- 
+}
+
 TCommandIndexAdd::TCommandIndexAdd()
     : TClientCommandTree("add", {}, "Add index in to the specified table")
 {
@@ -838,13 +838,13 @@ void TCommandReadTable::PrintResponse(NTable::TTablePartIterator& result) {
     }
 }
 
-TCommandIndexAddGlobal::TCommandIndexAddGlobal( 
-        NTable::EIndexType type, 
-        const TString& name, 
-        const std::initializer_list<TString>& aliases, 
-        const TString& description) 
-    : TYdbCommand(name, aliases, description) 
-    , IndexType(type) 
+TCommandIndexAddGlobal::TCommandIndexAddGlobal(
+        NTable::EIndexType type,
+        const TString& name,
+        const std::initializer_list<TString>& aliases,
+        const TString& description)
+    : TYdbCommand(name, aliases, description)
+    , IndexType(type)
 {}
 
 void TCommandIndexAddGlobal::Config(TConfig& config) {
@@ -886,14 +886,14 @@ int TCommandIndexAddGlobal::Run(TConfig& config) {
     return EXIT_SUCCESS;
 }
 
-TCommandIndexAddGlobalSync::TCommandIndexAddGlobalSync() 
-    : TCommandIndexAddGlobal(NTable::EIndexType::GlobalSync, "global-sync", {"global"}, "Add global sync index. The command returns operation") 
-{} 
- 
-TCommandIndexAddGlobalAsync::TCommandIndexAddGlobalAsync() 
-    : TCommandIndexAddGlobal(NTable::EIndexType::GlobalAsync, "global-async", {}, "Add global async index. The command returns operation") 
-{} 
- 
+TCommandIndexAddGlobalSync::TCommandIndexAddGlobalSync()
+    : TCommandIndexAddGlobal(NTable::EIndexType::GlobalSync, "global-sync", {"global"}, "Add global sync index. The command returns operation")
+{}
+
+TCommandIndexAddGlobalAsync::TCommandIndexAddGlobalAsync()
+    : TCommandIndexAddGlobal(NTable::EIndexType::GlobalAsync, "global-async", {}, "Add global async index. The command returns operation")
+{}
+
 TCommandIndexDrop::TCommandIndexDrop()
     : TYdbCommand("drop", {}, "Drop index from the specified table")
 {}
@@ -926,180 +926,180 @@ int TCommandIndexDrop::Run(TConfig& config) {
     return EXIT_SUCCESS;
 }
 
-TCommandAttributeAdd::TCommandAttributeAdd() 
-    : TYdbCommand("add", {}, "Add attributes to the specified table") 
-{} 
- 
-void TCommandAttributeAdd::Config(TConfig& config) { 
-    TYdbCommand::Config(config); 
- 
-    config.Opts->AddLongOption("attribute", "key=value pair to add.") 
-        .RequiredArgument("KEY=VALUE").KVHandler([&](TString key, TString value) { 
-            Attributes[key] = value; 
-        }); 
- 
-    config.SetFreeArgsNum(1); 
-    SetFreeArgTitle(0, "<table path>", "Path to a table"); 
-}
- 
-void TCommandAttributeAdd::Parse(TConfig& config) { 
-    TClientCommand::Parse(config); 
-    ParsePath(config, 0); 
+TCommandAttributeAdd::TCommandAttributeAdd()
+    : TYdbCommand("add", {}, "Add attributes to the specified table")
+{}
+
+void TCommandAttributeAdd::Config(TConfig& config) {
+    TYdbCommand::Config(config);
+
+    config.Opts->AddLongOption("attribute", "key=value pair to add.")
+        .RequiredArgument("KEY=VALUE").KVHandler([&](TString key, TString value) {
+            Attributes[key] = value;
+        });
+
+    config.SetFreeArgsNum(1);
+    SetFreeArgTitle(0, "<table path>", "Path to a table");
 }
 
-int TCommandAttributeAdd::Run(TConfig& config) { 
-    NTable::TTableClient client(CreateDriver(config)); 
- 
-    auto settings = NTable::TAlterTableSettings() 
-        .AlterAttributes(Attributes); 
- 
-    auto session = client.GetSession().GetValueSync(); 
-    ThrowOnError(session); 
-    auto result = session.GetSession().AlterTable(Path, settings).GetValueSync(); 
-    ThrowOnError(result); 
- 
-    return EXIT_SUCCESS; 
-} 
- 
-TCommandAttributeDrop::TCommandAttributeDrop() 
-    : TYdbCommand("drop", {}, "Drop attributes from the specified table") 
-{} 
- 
-void TCommandAttributeDrop::Config(TConfig& config) { 
-    TYdbCommand::Config(config); 
- 
-    config.Opts->AddLongOption("attributes", "Attribute keys to drop.") 
-        .RequiredArgument("KEY,[KEY...]").SplitHandler(&AttributeKeys, ','); 
- 
-    config.SetFreeArgsNum(1); 
-    SetFreeArgTitle(0, "<table path>", "Path to a table"); 
-} 
- 
-void TCommandAttributeDrop::Parse(TConfig& config) { 
-    TClientCommand::Parse(config); 
-    ParsePath(config, 0); 
-} 
- 
-int TCommandAttributeDrop::Run(TConfig& config) { 
-    NTable::TTableClient client(CreateDriver(config)); 
- 
-    auto settings = NTable::TAlterTableSettings(); 
-    auto alterAttrs = settings.BeginAlterAttributes(); 
-    for (const auto& key : AttributeKeys) { 
-        alterAttrs.Drop(key); 
-    } 
-    alterAttrs.EndAlterAttributes(); 
- 
-    auto session = client.GetSession().GetValueSync(); 
-    ThrowOnError(session); 
-    auto result = session.GetSession().AlterTable(Path, settings).GetValueSync(); 
-    ThrowOnError(result); 
- 
-    return EXIT_SUCCESS; 
-} 
- 
-TCommandTtlSet::TCommandTtlSet() 
-    : TYdbCommand("set", {}, "Set ttl settings for the specified table") 
-{} 
- 
-void TCommandTtlSet::Config(TConfig& config) { 
-    TYdbCommand::Config(config); 
- 
-    config.Opts->AddLongOption("column", "Name of date- or integral-type column to be used to calculate expiration threshold.") 
-        .RequiredArgument("NAME").StoreResult(&ColumnName); 
-    config.Opts->AddLongOption("expire-after", "Additional time that must pass since expiration threshold.") 
-        .RequiredArgument("SECONDS").DefaultValue(0).Handler1T<TDuration::TValue>(0, [this](const TDuration::TValue& arg) { 
-            ExpireAfter = TDuration::Seconds(arg); 
-        }); 
- 
-    const TString allowedUnits = "seconds (s, sec), milliseconds (ms, msec), microseconds (us, usec), nanoseconds (ns, nsec)"; 
-    auto unitHelp = TStringBuilder() 
-        << "Interpretation of the value stored in integral-type column." << Endl 
-        << "Allowed units: " << allowedUnits; 
-    config.Opts->AddLongOption("unit", unitHelp) 
-        .RequiredArgument("STRING").Handler1T<TString>("", [this, allowedUnits](const TString& arg) { 
-            if (!arg) { 
-                return; 
-            } 
- 
-            const auto value = NTable::TValueSinceUnixEpochModeSettings::UnitFromString(arg); 
-            if (value == NTable::TTtlSettings::EUnit::Unknown) { 
-                throw TMissUseException() << "Unknown unit: " << arg << Endl << "Allowed units: " << allowedUnits; 
-            } 
- 
-            ColumnUnit = value; 
-        }); 
- 
-    config.Opts->AddLongOption("run-interval", "[Advanced] How often to run cleanup operation on the same partition.") 
-        .RequiredArgument("SECONDS").Handler1T<TDuration::TValue>([this](const TDuration::TValue& arg) { 
-            RunInterval = TDuration::Seconds(arg); 
-        }); 
- 
-    config.SetFreeArgsNum(1); 
-    SetFreeArgTitle(0, "<table path>", "Path to a table"); 
-} 
- 
-void TCommandTtlSet::Parse(TConfig& config) { 
-    TClientCommand::Parse(config); 
-    ParsePath(config, 0); 
-} 
- 
-int TCommandTtlSet::Run(TConfig& config) { 
-    NTable::TTableClient client(CreateDriver(config)); 
- 
-    TMaybe<NTable::TTtlSettings> ttl; 
-    if (ColumnUnit) { 
-        ttl = NTable::TTtlSettings(ColumnName, *ColumnUnit, ExpireAfter); 
-    } else { 
-        ttl = NTable::TTtlSettings(ColumnName, ExpireAfter); 
-    } 
-    if (RunInterval) { 
-        ttl->SetRunInterval(RunInterval); 
-    } 
- 
-    auto settings = NTable::TAlterTableSettings() 
-        .BeginAlterTtlSettings() 
-            .Set(std::move(ttl.GetRef())) 
-        .EndAlterTtlSettings(); 
- 
-    auto session = client.GetSession().GetValueSync(); 
-    ThrowOnError(session); 
-    auto result = session.GetSession().AlterTable(Path, settings).GetValueSync(); 
-    ThrowOnError(result); 
- 
-    return EXIT_SUCCESS; 
-} 
- 
-TCommandTtlDrop::TCommandTtlDrop() 
-    : TYdbCommand("drop", {}, "Drop ttl settings from the specified table") 
-{} 
- 
-void TCommandTtlDrop::Config(TConfig& config) { 
-    TYdbCommand::Config(config); 
-    config.SetFreeArgsNum(1); 
-    SetFreeArgTitle(0, "<table path>", "Path to a table"); 
-} 
- 
-void TCommandTtlDrop::Parse(TConfig& config) { 
-    TClientCommand::Parse(config); 
-    ParsePath(config, 0); 
-} 
- 
-int TCommandTtlDrop::Run(TConfig& config) { 
-    NTable::TTableClient client(CreateDriver(config)); 
- 
-    auto settings = NTable::TAlterTableSettings() 
-        .BeginAlterTtlSettings() 
-            .Drop() 
-        .EndAlterTtlSettings(); 
- 
-    auto session = client.GetSession().GetValueSync(); 
-    ThrowOnError(session); 
-    auto result = session.GetSession().AlterTable(Path, settings).GetValueSync(); 
-    ThrowOnError(result); 
- 
-    return EXIT_SUCCESS; 
-} 
- 
-} 
-} 
+void TCommandAttributeAdd::Parse(TConfig& config) {
+    TClientCommand::Parse(config);
+    ParsePath(config, 0);
+}
+
+int TCommandAttributeAdd::Run(TConfig& config) {
+    NTable::TTableClient client(CreateDriver(config));
+
+    auto settings = NTable::TAlterTableSettings()
+        .AlterAttributes(Attributes);
+
+    auto session = client.GetSession().GetValueSync();
+    ThrowOnError(session);
+    auto result = session.GetSession().AlterTable(Path, settings).GetValueSync();
+    ThrowOnError(result);
+
+    return EXIT_SUCCESS;
+}
+
+TCommandAttributeDrop::TCommandAttributeDrop()
+    : TYdbCommand("drop", {}, "Drop attributes from the specified table")
+{}
+
+void TCommandAttributeDrop::Config(TConfig& config) {
+    TYdbCommand::Config(config);
+
+    config.Opts->AddLongOption("attributes", "Attribute keys to drop.")
+        .RequiredArgument("KEY,[KEY...]").SplitHandler(&AttributeKeys, ',');
+
+    config.SetFreeArgsNum(1);
+    SetFreeArgTitle(0, "<table path>", "Path to a table");
+}
+
+void TCommandAttributeDrop::Parse(TConfig& config) {
+    TClientCommand::Parse(config);
+    ParsePath(config, 0);
+}
+
+int TCommandAttributeDrop::Run(TConfig& config) {
+    NTable::TTableClient client(CreateDriver(config));
+
+    auto settings = NTable::TAlterTableSettings();
+    auto alterAttrs = settings.BeginAlterAttributes();
+    for (const auto& key : AttributeKeys) {
+        alterAttrs.Drop(key);
+    }
+    alterAttrs.EndAlterAttributes();
+
+    auto session = client.GetSession().GetValueSync();
+    ThrowOnError(session);
+    auto result = session.GetSession().AlterTable(Path, settings).GetValueSync();
+    ThrowOnError(result);
+
+    return EXIT_SUCCESS;
+}
+
+TCommandTtlSet::TCommandTtlSet()
+    : TYdbCommand("set", {}, "Set ttl settings for the specified table")
+{}
+
+void TCommandTtlSet::Config(TConfig& config) {
+    TYdbCommand::Config(config);
+
+    config.Opts->AddLongOption("column", "Name of date- or integral-type column to be used to calculate expiration threshold.")
+        .RequiredArgument("NAME").StoreResult(&ColumnName);
+    config.Opts->AddLongOption("expire-after", "Additional time that must pass since expiration threshold.")
+        .RequiredArgument("SECONDS").DefaultValue(0).Handler1T<TDuration::TValue>(0, [this](const TDuration::TValue& arg) {
+            ExpireAfter = TDuration::Seconds(arg);
+        });
+
+    const TString allowedUnits = "seconds (s, sec), milliseconds (ms, msec), microseconds (us, usec), nanoseconds (ns, nsec)";
+    auto unitHelp = TStringBuilder()
+        << "Interpretation of the value stored in integral-type column." << Endl
+        << "Allowed units: " << allowedUnits;
+    config.Opts->AddLongOption("unit", unitHelp)
+        .RequiredArgument("STRING").Handler1T<TString>("", [this, allowedUnits](const TString& arg) {
+            if (!arg) {
+                return;
+            }
+
+            const auto value = NTable::TValueSinceUnixEpochModeSettings::UnitFromString(arg);
+            if (value == NTable::TTtlSettings::EUnit::Unknown) {
+                throw TMissUseException() << "Unknown unit: " << arg << Endl << "Allowed units: " << allowedUnits;
+            }
+
+            ColumnUnit = value;
+        });
+
+    config.Opts->AddLongOption("run-interval", "[Advanced] How often to run cleanup operation on the same partition.")
+        .RequiredArgument("SECONDS").Handler1T<TDuration::TValue>([this](const TDuration::TValue& arg) {
+            RunInterval = TDuration::Seconds(arg);
+        });
+
+    config.SetFreeArgsNum(1);
+    SetFreeArgTitle(0, "<table path>", "Path to a table");
+}
+
+void TCommandTtlSet::Parse(TConfig& config) {
+    TClientCommand::Parse(config);
+    ParsePath(config, 0);
+}
+
+int TCommandTtlSet::Run(TConfig& config) {
+    NTable::TTableClient client(CreateDriver(config));
+
+    TMaybe<NTable::TTtlSettings> ttl;
+    if (ColumnUnit) {
+        ttl = NTable::TTtlSettings(ColumnName, *ColumnUnit, ExpireAfter);
+    } else {
+        ttl = NTable::TTtlSettings(ColumnName, ExpireAfter);
+    }
+    if (RunInterval) {
+        ttl->SetRunInterval(RunInterval);
+    }
+
+    auto settings = NTable::TAlterTableSettings()
+        .BeginAlterTtlSettings()
+            .Set(std::move(ttl.GetRef()))
+        .EndAlterTtlSettings();
+
+    auto session = client.GetSession().GetValueSync();
+    ThrowOnError(session);
+    auto result = session.GetSession().AlterTable(Path, settings).GetValueSync();
+    ThrowOnError(result);
+
+    return EXIT_SUCCESS;
+}
+
+TCommandTtlDrop::TCommandTtlDrop()
+    : TYdbCommand("drop", {}, "Drop ttl settings from the specified table")
+{}
+
+void TCommandTtlDrop::Config(TConfig& config) {
+    TYdbCommand::Config(config);
+    config.SetFreeArgsNum(1);
+    SetFreeArgTitle(0, "<table path>", "Path to a table");
+}
+
+void TCommandTtlDrop::Parse(TConfig& config) {
+    TClientCommand::Parse(config);
+    ParsePath(config, 0);
+}
+
+int TCommandTtlDrop::Run(TConfig& config) {
+    NTable::TTableClient client(CreateDriver(config));
+
+    auto settings = NTable::TAlterTableSettings()
+        .BeginAlterTtlSettings()
+            .Drop()
+        .EndAlterTtlSettings();
+
+    auto session = client.GetSession().GetValueSync();
+    ThrowOnError(session);
+    auto result = session.GetSession().AlterTable(Path, settings).GetValueSync();
+    ThrowOnError(result);
+
+    return EXIT_SUCCESS;
+}
+
+}
+}

@@ -29,14 +29,14 @@ protected:
         }
     }
 
-    std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> CreateProposeTransaction() { 
-        std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> proposeRequest(new TEvTxUserProxy::TEvProposeTransaction()); 
-        SetAuthToken(proposeRequest, *this->Request_); 
-        SetDatabase(proposeRequest.get(), *this->Request_); 
-        SetRequestType(proposeRequest.get(), *this->Request_); 
-        return proposeRequest; 
-    } 
- 
+    std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> CreateProposeTransaction() {
+        std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> proposeRequest(new TEvTxUserProxy::TEvProposeTransaction());
+        SetAuthToken(proposeRequest, *this->Request_);
+        SetDatabase(proposeRequest.get(), *this->Request_);
+        SetRequestType(proposeRequest.get(), *this->Request_);
+        return proposeRequest;
+    }
+
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) {
         if (ev->Get()->Status != NKikimrProto::OK) {
             NYql::TIssues issues;
@@ -79,9 +79,9 @@ protected:
                 NTabletPipe::SendData(ctx, SchemePipeActorId_, request.Release());
                 return;
             }
-            case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::WrongRequest: { 
-                return this->ReplyWithResult(Ydb::StatusIds::BAD_REQUEST, issueMessage, ctx); 
-            } 
+            case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::WrongRequest: {
+                return this->ReplyWithResult(Ydb::StatusIds::BAD_REQUEST, issueMessage, ctx);
+            }
             case TEvTxUserProxy::TResultStatus::AccessDenied: {
                 return this->ReplyWithResult(Ydb::StatusIds::UNAUTHORIZED, issueMessage, ctx);
             }

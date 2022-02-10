@@ -57,36 +57,36 @@ auto TSchemeShard::BuildStatsForCollector(TPathId pathId, TShardIdx shardIdx, TT
         sysStats.SetStartTime(*startTime);
     }
 
-    return ev; 
+    return ev;
 }
 
 class TTxStorePartitionStats: public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
-    TEvDataShard::TEvPeriodicTableStats::TPtr Ev; 
- 
-    THolder<NSysView::TEvSysView::TEvSendPartitionStats> StatsCollectorEv; 
-    THolder<TEvDataShard::TEvGetTableStats> GetStatsEv; 
+    TEvDataShard::TEvPeriodicTableStats::TPtr Ev;
+
+    THolder<NSysView::TEvSysView::TEvSendPartitionStats> StatsCollectorEv;
+    THolder<TEvDataShard::TEvGetTableStats> GetStatsEv;
     THolder<TEvDataShard::TEvCompactBorrowed> CompactEv;
- 
+
     TSideEffects MergeOpSideEffects;
 
-public: 
-    explicit TTxStorePartitionStats(TSelf* self, TEvDataShard::TEvPeriodicTableStats::TPtr& ev) 
-        : TBase(self) 
-        , Ev(ev) 
-    { 
-    } 
- 
-    virtual ~TTxStorePartitionStats() = default; 
- 
-    TTxType GetTxType() const override { 
-        return TXTYPE_STORE_PARTITION_STATS; 
-    } 
- 
-    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override; 
-    void Complete(const TActorContext& ctx) override; 
- 
-}; // TTxStorePartitionStats 
- 
+public:
+    explicit TTxStorePartitionStats(TSelf* self, TEvDataShard::TEvPeriodicTableStats::TPtr& ev)
+        : TBase(self)
+        , Ev(ev)
+    {
+    }
+
+    virtual ~TTxStorePartitionStats() = default;
+
+    TTxType GetTxType() const override {
+        return TXTYPE_STORE_PARTITION_STATS;
+    }
+
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
+    void Complete(const TActorContext& ctx) override;
+
+}; // TTxStorePartitionStats
+
 THolder<TProposeRequest> MergeRequest(
     TSchemeShard* ss, TTxId& txId, TPathId& pathId, const TVector<TShardIdx>& shardsToMerge)
 {
@@ -114,15 +114,15 @@ THolder<TProposeRequest> MergeRequest(
     return std::move(request);
 }
 
-bool TTxStorePartitionStats::Execute(TTransactionContext& txc, const TActorContext& ctx) { 
-    const auto& rec = Ev->Get()->Record; 
+bool TTxStorePartitionStats::Execute(TTransactionContext& txc, const TActorContext& ctx) {
+    const auto& rec = Ev->Get()->Record;
     auto datashardId = TTabletId(rec.GetDatashardId());
     TPathId tableId = InvalidPathId;
     if (rec.HasTableOwnerId()) {
         tableId = TPathId(TOwnerId(rec.GetTableOwnerId()),
                           TLocalPathId(rec.GetTableLocalId()));
     } else {
-        tableId = Self->MakeLocalId(TLocalPathId(rec.GetTableLocalId())); 
+        tableId = Self->MakeLocalId(TLocalPathId(rec.GetTableLocalId()));
     }
 
     const auto& tableStats = rec.GetTableStats();
@@ -130,17 +130,17 @@ bool TTxStorePartitionStats::Execute(TTransactionContext& txc, const TActorConte
     ui64 dataSize = tableStats.GetDataSize();
     ui64 rowCount = tableStats.GetRowCount();
 
-    if (!Self->Tables.contains(tableId)) { 
-        return true; 
-    } 
+    if (!Self->Tables.contains(tableId)) {
+        return true;
+    }
 
-    TTableInfo::TPtr table = Self->Tables[tableId]; 
+    TTableInfo::TPtr table = Self->Tables[tableId];
 
-    if (!Self->TabletIdToShardIdx.contains(datashardId)) { 
-        return true; 
-    } 
+    if (!Self->TabletIdToShardIdx.contains(datashardId)) {
+        return true;
+    }
 
-    auto shardIdx = Self->TabletIdToShardIdx[datashardId]; 
+    auto shardIdx = Self->TabletIdToShardIdx[datashardId];
 
     TTableInfo::TPartitionStats newStats;
     newStats.SeqNo = TMessageSeqNo(rec.GetGeneration(), rec.GetRound());
@@ -187,7 +187,7 @@ bool TTxStorePartitionStats::Execute(TTransactionContext& txc, const TActorConte
     }
     newStats.ShardState = rec.GetShardState();
 
-    auto oldAggrStats = table->GetStats().Aggregated; 
+    auto oldAggrStats = table->GetStats().Aggregated;
     table->UpdateShardStats(shardIdx, newStats);
 
     if (Self->CompactionQueue) {
@@ -203,22 +203,22 @@ bool TTxStorePartitionStats::Execute(TTransactionContext& txc, const TActorConte
     NIceDb::TNiceDb db(txc.DB);
 
     if (!table->IsBackup && !table->IsShardsStatsDetached()) {
-        auto newAggrStats = table->GetStats().Aggregated; 
-        auto subDomainId = Self->ResolveDomainId(tableId); 
-        auto subDomainInfo = Self->ResolveDomainInfo(tableId); 
+        auto newAggrStats = table->GetStats().Aggregated;
+        auto subDomainId = Self->ResolveDomainId(tableId);
+        auto subDomainInfo = Self->ResolveDomainInfo(tableId);
         subDomainInfo->AggrDiskSpaceUsage(Self, newAggrStats, oldAggrStats);
         if (subDomainInfo->CheckDiskSpaceQuotas(Self)) {
-            Self->PersistSubDomainState(db, subDomainId, *subDomainInfo); 
-            // Publish is done in a separate transaction, so we may call this directly 
-            TDeque<TPathId> toPublish; 
-            toPublish.push_back(subDomainId); 
-            Self->PublishToSchemeBoard(TTxId(), std::move(toPublish), ctx); 
-        } 
+            Self->PersistSubDomainState(db, subDomainId, *subDomainInfo);
+            // Publish is done in a separate transaction, so we may call this directly
+            TDeque<TPathId> toPublish;
+            toPublish.push_back(subDomainId);
+            Self->PublishToSchemeBoard(TTxId(), std::move(toPublish), ctx);
+        }
     }
- 
-    Self->PersistTablePartitionStats(db, tableId, shardIdx, table); 
- 
-    if (AppData(ctx)->FeatureFlags.GetEnableSystemViews()) { 
+
+    Self->PersistTablePartitionStats(db, tableId, shardIdx, table);
+
+    if (AppData(ctx)->FeatureFlags.GetEnableSystemViews()) {
         TMaybe<ui32> nodeId;
         if (rec.HasNodeId()) {
             nodeId = rec.GetNodeId();
@@ -227,34 +227,34 @@ bool TTxStorePartitionStats::Execute(TTransactionContext& txc, const TActorConte
         if (rec.HasStartTime()) {
             startTime = rec.GetStartTime();
         }
-        StatsCollectorEv = Self->BuildStatsForCollector(tableId, shardIdx, datashardId, nodeId, startTime, newStats); 
+        StatsCollectorEv = Self->BuildStatsForCollector(tableId, shardIdx, datashardId, nodeId, startTime, newStats);
     }
 
-    const auto& shardToPartition = table->GetShard2PartitionIdx(); 
-    if (table->IsTTLEnabled() && shardToPartition.contains(shardIdx)) { 
-        const ui64 partitionIdx = shardToPartition.at(shardIdx); 
-        const auto& partitions = table->GetPartitions(); 
- 
-        Y_VERIFY(partitionIdx < partitions.size()); 
-        auto& shardInfo = partitions.at(partitionIdx); 
-        auto& lag = shardInfo.LastCondEraseLag; 
- 
-        if (lag) { 
-            Self->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].DecrementFor(lag->Seconds()); 
-        } 
- 
-        if (shardInfo.LastCondErase) { 
-            const auto now = ctx.Now(); 
-            if (now >= shardInfo.LastCondErase) { 
-                lag = now - shardInfo.LastCondErase; 
-            } else { 
-                lag = TDuration::Zero(); 
-            } 
- 
-            Self->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].IncrementFor(lag->Seconds()); 
-        } 
-    } 
- 
+    const auto& shardToPartition = table->GetShard2PartitionIdx();
+    if (table->IsTTLEnabled() && shardToPartition.contains(shardIdx)) {
+        const ui64 partitionIdx = shardToPartition.at(shardIdx);
+        const auto& partitions = table->GetPartitions();
+
+        Y_VERIFY(partitionIdx < partitions.size());
+        auto& shardInfo = partitions.at(partitionIdx);
+        auto& lag = shardInfo.LastCondEraseLag;
+
+        if (lag) {
+            Self->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].DecrementFor(lag->Seconds());
+        }
+
+        if (shardInfo.LastCondErase) {
+            const auto now = ctx.Now();
+            if (now >= shardInfo.LastCondErase) {
+                lag = now - shardInfo.LastCondErase;
+            } else {
+                lag = TDuration::Zero();
+            }
+
+            Self->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].IncrementFor(lag->Seconds());
+        }
+    }
+
     TVector<TShardIdx> shardsToMerge;
     if (table->CheckCanMergePartitions(Self->SplitSettings, shardIdx, shardsToMerge)) {
         TTxId txId = Self->GetCachedTxId(ctx);
@@ -279,34 +279,34 @@ bool TTxStorePartitionStats::Execute(TTransactionContext& txc, const TActorConte
         dbChanges.Apply(Self, txc, ctx);
         MergeOpSideEffects.ApplyOnExecute(Self, txc, ctx);
 
-        return true; 
+        return true;
     }
 
     if (rec.GetShardState() != NKikimrTxDataShard::Ready) {
-        return true; 
+        return true;
     }
 
     ui64 dataSizeResolution = 0; // Datashard will use default resolution
     ui64 rowCountResolution = 0; // Datashard will use default resolution
     bool collectKeySample = false;
-    if (table->CheckFastSplitForPartition(Self->SplitSettings, shardIdx, dataSize, rowCount)) { 
+    if (table->CheckFastSplitForPartition(Self->SplitSettings, shardIdx, dataSize, rowCount)) {
         dataSizeResolution = Max<ui64>(dataSize / 100, 100*1024);
         rowCountResolution = Max<ui64>(rowCount / 100, 1000);
         collectKeySample = true;
     } else if (table->CheckSplitByLoad(Self->SplitSettings, shardIdx, dataSize, rowCount)) {
         collectKeySample = true;
     } else if (dataSize < table->GetShardSizeToSplit()) {
-        return true; 
+        return true;
     }
 
     if (table->GetPartitions().size() >= table->GetMaxPartitionsCount()) {
-        return true; 
+        return true;
     }
 
     {
         constexpr ui64 deltaShards = 2;
-        TPathElement::TPtr path = Self->PathsById.at(tableId); 
-        TSubDomainInfo::TPtr domainInfo = Self->ResolveDomainInfo(tableId); 
+        TPathElement::TPtr path = Self->PathsById.at(tableId);
+        TSubDomainInfo::TPtr domainInfo = Self->ResolveDomainInfo(tableId);
 
         if (domainInfo->GetShardsInside() + deltaShards > domainInfo->GetSchemeLimits().MaxShards) {
             LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -316,7 +316,7 @@ bool TTxStorePartitionStats::Execute(TTransactionContext& txc, const TActorConte
                              << ", shards limit for domain: " << domainInfo->GetSchemeLimits().MaxShards
                              << ", shards count inside domain: " << domainInfo->GetShardsInside()
                              << ", intention to create new shards: " << deltaShards);
-            return true; 
+            return true;
         }
 
         if (path->GetShardsInside() + deltaShards > domainInfo->GetSchemeLimits().MaxShardsInPath) {
@@ -327,7 +327,7 @@ bool TTxStorePartitionStats::Execute(TTransactionContext& txc, const TActorConte
                              << ", shards limit for path: " << domainInfo->GetSchemeLimits().MaxShardsInPath
                              << ", shards count inside path: " << path->GetShardsInside()
                              << ", intention to create new shards: " << deltaShards);
-            return true; 
+            return true;
         }
     }
 
@@ -338,55 +338,55 @@ bool TTxStorePartitionStats::Execute(TTransactionContext& txc, const TActorConte
         return true;
     }
 
-    // Request histograms from the datashard 
+    // Request histograms from the datashard
     GetStatsEv.Reset(new TEvDataShard::TEvGetTableStats(tableId.LocalPathId, dataSizeResolution, rowCountResolution, collectKeySample));
 
-    return true; 
+    return true;
 }
 
-void TTxStorePartitionStats::Complete(const TActorContext& ctx) { 
+void TTxStorePartitionStats::Complete(const TActorContext& ctx) {
     MergeOpSideEffects.ApplyOnComplete(Self, ctx);
 
-    if (StatsCollectorEv) { 
-        ctx.Send(Self->SysPartitionStatsCollector, StatsCollectorEv.Release()); 
-    } 
- 
+    if (StatsCollectorEv) {
+        ctx.Send(Self->SysPartitionStatsCollector, StatsCollectorEv.Release());
+    }
+
     if (CompactEv) {
         LOG_DEBUG(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "Requesting borrowed compaction from datasbard %" PRIu64, Ev->Get()->Record.GetDatashardId());
         ctx.Send(Ev->Sender, CompactEv.Release());
     }
 
-    if (GetStatsEv) { 
-        LOG_DEBUG(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, 
-                 "Requesting full stats from datashard %" PRIu64, Ev->Get()->Record.GetDatashardId()); 
-        ctx.Send(Ev->Sender, GetStatsEv.Release()); 
-    } 
-} 
- 
+    if (GetStatsEv) {
+        LOG_DEBUG(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                 "Requesting full stats from datashard %" PRIu64, Ev->Get()->Record.GetDatashardId());
+        ctx.Send(Ev->Sender, GetStatsEv.Release());
+    }
+}
+
 void TSchemeShard::Handle(TEvDataShard::TEvPeriodicTableStats::TPtr& ev, const TActorContext& ctx) {
-    const auto& rec = ev->Get()->Record; 
- 
-    auto datashardId = TTabletId(rec.GetDatashardId()); 
-    const auto& tableStats = rec.GetTableStats(); 
-    const auto& tabletMetrics = rec.GetTabletMetrics(); 
-    ui64 dataSize = tableStats.GetDataSize(); 
-    ui64 rowCount = tableStats.GetRowCount(); 
- 
+    const auto& rec = ev->Get()->Record;
+
+    auto datashardId = TTabletId(rec.GetDatashardId());
+    const auto& tableStats = rec.GetTableStats();
+    const auto& tabletMetrics = rec.GetTabletMetrics();
+    ui64 dataSize = tableStats.GetDataSize();
+    ui64 rowCount = tableStats.GetRowCount();
+
     TPathId pathId = rec.HasTableOwnerId()
             ? TPathId(TOwnerId(rec.GetTableOwnerId()), TLocalPathId(rec.GetTableLocalId()))
             : MakeLocalId(TLocalPathId(rec.GetTableLocalId()));
 
-    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, 
-               "Got periodic table stats at tablet " << TabletID() 
+    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+               "Got periodic table stats at tablet " << TabletID()
                                                      << " from datashard " << datashardId
                                                      << " pathId " << pathId
-                                                     << " state '" << DatashardStateName(rec.GetShardState()) << "'" 
-                                                     << " dataSize " << dataSize 
-                                                     << " rowCount " << rowCount 
-                                                     << " cpuUsage " << tabletMetrics.GetCPU()/10000.0); 
- 
-    Execute(new TTxStorePartitionStats(this, ev), ctx); 
-} 
- 
+                                                     << " state '" << DatashardStateName(rec.GetShardState()) << "'"
+                                                     << " dataSize " << dataSize
+                                                     << " rowCount " << rowCount
+                                                     << " cpuUsage " << tabletMetrics.GetCPU()/10000.0);
+
+    Execute(new TTxStorePartitionStats(this, ev), ctx);
+}
+
 }}

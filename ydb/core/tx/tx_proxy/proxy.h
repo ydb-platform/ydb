@@ -42,18 +42,18 @@ struct TEvTxUserProxy {
         EvInvalidateTable,
         EvInvalidateTableResult,
 
-        EvCancelBackupRequestDeprecated, 
-        EvCancelBackupResultDeprecated, 
+        EvCancelBackupRequestDeprecated,
+        EvCancelBackupResultDeprecated,
 
         EvProposeKqpTransaction,
 
         EvAllocateTxId,
         EvAllocateTxIdResult,
 
-        // deprecated 
-        EvExportRequest = EvProposeTransaction + 2 * 512, 
-        EvExportResponse, 
- 
+        // deprecated
+        EvExportRequest = EvProposeTransaction + 2 * 512,
+        EvExportResponse,
+
         EvUploadRowsResponse,
 
         EvGetProxyServicesRequest,
@@ -177,7 +177,7 @@ struct TEvTxUserProxy {
         TEvProposeKqpTransaction(const TActorId& executerId)
             : ExecuterId(executerId) {}
     };
- 
+
     struct TEvAllocateTxId : public TEventLocal<TEvAllocateTxId, EvAllocateTxId> {
         // empty
     };

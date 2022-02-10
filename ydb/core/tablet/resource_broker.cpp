@@ -1325,11 +1325,11 @@ NKikimrResourceBroker::TResourceBrokerConfig MakeDefaultConfig()
     queue->MutableLimit()->SetCpu(2);
 
     queue = config.AddQueues();
-    queue->SetName("queue_restore"); 
-    queue->SetWeight(100); 
-    queue->MutableLimit()->SetCpu(10); 
- 
-    queue = config.AddQueues(); 
+    queue->SetName("queue_restore");
+    queue->SetWeight(100);
+    queue->MutableLimit()->SetCpu(10);
+
+    queue = config.AddQueues();
     queue->SetName(NLocalDb::KqpResourceManagerQueue);
     queue->SetWeight(30);
     queue->MutableLimit()->SetCpu(KqpRmQueueCPU);
@@ -1411,11 +1411,11 @@ NKikimrResourceBroker::TResourceBrokerConfig MakeDefaultConfig()
     task->SetDefaultDuration(TDuration::Minutes(5).GetValue());
 
     task = config.AddTasks();
-    task->SetName("restore"); 
-    task->SetQueueName("queue_restore"); 
-    task->SetDefaultDuration(TDuration::Minutes(5).GetValue()); 
- 
-    task = config.AddTasks(); 
+    task->SetName("restore");
+    task->SetQueueName("queue_restore");
+    task->SetDefaultDuration(TDuration::Minutes(5).GetValue());
+
+    task = config.AddTasks();
     task->SetName(NLocalDb::KqpResourceManagerTaskName);
     task->SetQueueName(NLocalDb::KqpResourceManagerQueue);
     task->SetDefaultDuration(TDuration::Minutes(10).GetValue());

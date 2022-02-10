@@ -9,10 +9,10 @@ OWNER(
     g:kikimr
 )
 
-PEERDIR( 
+PEERDIR(
     ydb/public/api/protos/annotations
-) 
- 
+)
+
 SRCS(
     draft/datastreams.proto
     draft/persqueue_common.proto
@@ -30,9 +30,9 @@ SRCS(
     ydb_coordination.proto
     ydb_discovery.proto
     ydb_experimental.proto
-    ydb_export.proto 
+    ydb_export.proto
     ydb_formats.proto
-    ydb_import.proto 
+    ydb_import.proto
     ydb_issue_message.proto
     ydb_monitoring.proto
     ydb_operation.proto

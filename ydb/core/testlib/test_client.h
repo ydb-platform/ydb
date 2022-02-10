@@ -76,7 +76,7 @@ namespace Tests {
     NMiniKQL::IFunctionRegistry* DefaultFrFactory(const NScheme::TTypeRegistry& typeRegistry);
 
 
-    struct TServerSettings: public TThrRefBase, public TTestFeatureFlagsHolder<TServerSettings> { 
+    struct TServerSettings: public TThrRefBase, public TTestFeatureFlagsHolder<TServerSettings> {
         static constexpr ui64 BOX_ID = 999;
         ui64 POOL_ID = 1;
 
@@ -114,8 +114,8 @@ namespace Tests {
         bool EnableKqpSpilling = false;
         bool EnableYq = false;
         TDuration KeepSnapshotTimeout = TDuration::Zero();
-        ui64 ChangesQueueItemsLimit = 0; 
-        ui64 ChangesQueueBytesLimit = 0; 
+        ui64 ChangesQueueItemsLimit = 0;
+        ui64 ChangesQueueBytesLimit = 0;
         NKikimrConfig::TAppConfig AppConfig;
         NKikimrConfig::TCompactionConfig CompactionConfig;
         TMap<ui32, TString> NodeKeys;
@@ -156,8 +156,8 @@ namespace Tests {
         TServerSettings& SetEnableDbCounters(bool value) { FeatureFlags.SetEnableDbCounters(value); return *this; }
         TServerSettings& SetEnableYq(bool value) { EnableYq = value; return *this; }
         TServerSettings& SetKeepSnapshotTimeout(TDuration value) { KeepSnapshotTimeout = value; return *this; }
-        TServerSettings& SetChangesQueueItemsLimit(ui64 value) { ChangesQueueItemsLimit = value; return *this; } 
-        TServerSettings& SetChangesQueueBytesLimit(ui64 value) { ChangesQueueBytesLimit = value; return *this; } 
+        TServerSettings& SetChangesQueueItemsLimit(ui64 value) { ChangesQueueItemsLimit = value; return *this; }
+        TServerSettings& SetChangesQueueBytesLimit(ui64 value) { ChangesQueueBytesLimit = value; return *this; }
         TServerSettings& SetMeteringFilePath(const TString& path) { EnableMetering = true; MeteringFilePath = path; return *this; }
         TServerSettings& SetPersQueueGetReadSessionsInfoWorkerFactory(
             std::shared_ptr<NKikimr::NMsgBusProxy::IPersQueueGetReadSessionsInfoWorkerFactory> factory
@@ -357,7 +357,7 @@ namespace Tests {
         NMsgBusProxy::EResponseStatus DeleteSubdomain(const TString& parent, const TString &name);
         NMsgBusProxy::EResponseStatus ForceDeleteSubdomain(const TString& parent, const TString &name);
         NMsgBusProxy::EResponseStatus ForceDeleteUnsafe(const TString& parent, const TString &name);
-        NMsgBusProxy::EResponseStatus CreateUser(const TString& parent, const TString& user, const TString& password); 
+        NMsgBusProxy::EResponseStatus CreateUser(const TString& parent, const TString& user, const TString& password);
 
         NMsgBusProxy::EResponseStatus CreateTable(const TString& parent, const TString& scheme, TDuration timeout = TDuration::Seconds(5000));
         NMsgBusProxy::EResponseStatus CreateTable(const TString& parent, const NKikimrSchemeOp::TTableDescription &table, TDuration timeout = TDuration::Seconds(5000));
@@ -494,8 +494,8 @@ namespace Tests {
             return id - offset;
         }
 
-        TAutoPtr<NMsgBusProxy::TBusResponse> LsImpl(const TString& path); 
- 
+        TAutoPtr<NMsgBusProxy::TBusResponse> LsImpl(const TString& path);
+
         static void SetApplyIf(NKikimrSchemeOp::TModifyScheme& transaction, const TApplyIf& applyIf) {
             for (auto& pathVer: applyIf) {
                 auto item = transaction.AddApplyIf();

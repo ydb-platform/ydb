@@ -58,9 +58,9 @@ struct Schema : NIceDb::Schema {
         struct CoordinatedTxCompleted : Column<21, NScheme::NTypeIds::Uint64> {};
         struct TxRejectedByOverload : Column<22, NScheme::NTypeIds::Uint64> {};
         struct TxRejectedByOutOfStorage : Column<23, NScheme::NTypeIds::Uint64> {};
-        struct LastTtlRunTime       : Column<24, NScheme::NTypeIds::Timestamp> {}; 
-        struct LastTtlRowsProcessed : Column<25, NScheme::NTypeIds::Uint64> {}; 
-        struct LastTtlRowsErased    : Column<26, NScheme::NTypeIds::Uint64> {}; 
+        struct LastTtlRunTime       : Column<24, NScheme::NTypeIds::Timestamp> {};
+        struct LastTtlRowsProcessed : Column<25, NScheme::NTypeIds::Uint64> {};
+        struct LastTtlRowsErased    : Column<26, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<OwnerId, PathId, PartIdx>;
         using TColumns = TableColumns<
@@ -86,10 +86,10 @@ struct Schema : NIceDb::Schema {
             ImmediateTxCompleted,
             CoordinatedTxCompleted,
             TxRejectedByOverload,
-            TxRejectedByOutOfStorage, 
-            LastTtlRunTime, 
-            LastTtlRowsProcessed, 
-            LastTtlRowsErased>; 
+            TxRejectedByOutOfStorage,
+            LastTtlRunTime,
+            LastTtlRowsProcessed,
+            LastTtlRowsErased>;
     };
 
     struct Nodes : Table<2> {

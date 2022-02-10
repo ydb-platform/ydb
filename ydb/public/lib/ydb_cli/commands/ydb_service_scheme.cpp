@@ -452,29 +452,29 @@ namespace {
         if (!settings) {
             return;
         }
-        Cout << Endl << "Ttl settings "; 
+        Cout << Endl << "Ttl settings ";
         switch (settings->GetMode()) {
         case NTable::TTtlSettings::EMode::DateTypeColumn:
         {
-            Cout << "(date type column):" << Endl; 
+            Cout << "(date type column):" << Endl;
             const auto& dateTypeColumn = settings->GetDateTypeColumn();
             Cout << "Column name: " << dateTypeColumn.GetColumnName() << Endl;
             Cout << "Expire after: " << dateTypeColumn.GetExpireAfter() << Endl;
             break;
         }
-        case NTable::TTtlSettings::EMode::ValueSinceUnixEpoch: 
-        { 
-            Cout << "(value since unix epoch):" << Endl; 
-            const auto& valueSinceEpoch = settings->GetValueSinceUnixEpoch(); 
-            Cout << "Column name: " << valueSinceEpoch.GetColumnName() << Endl; 
-            Cout << "Column unit: " << valueSinceEpoch.GetColumnUnit() << Endl; 
-            Cout << "Expire after: " << valueSinceEpoch.GetExpireAfter() << Endl; 
-            break; 
-        } 
+        case NTable::TTtlSettings::EMode::ValueSinceUnixEpoch:
+        {
+            Cout << "(value since unix epoch):" << Endl;
+            const auto& valueSinceEpoch = settings->GetValueSinceUnixEpoch();
+            Cout << "Column name: " << valueSinceEpoch.GetColumnName() << Endl;
+            Cout << "Column unit: " << valueSinceEpoch.GetColumnUnit() << Endl;
+            Cout << "Expire after: " << valueSinceEpoch.GetExpireAfter() << Endl;
+            break;
+        }
         default:
             NColorizer::TColors colors = NColorizer::AutoColors(Cout);
-            Cout << "(unknown):" << Endl 
-                << colors.RedColor() << "Unknown ttl settings mode. Please update your version of YDB cli" 
+            Cout << "(unknown):" << Endl
+                << colors.RedColor() << "Unknown ttl settings mode. Please update your version of YDB cli"
                 << colors.OldColor() << Endl;
         }
     }

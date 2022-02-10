@@ -43,13 +43,13 @@ struct TDynamicSlotInfo : public TThrRefBase {
 
 struct TTenantInfo : public TThrRefBase {
     using TPtr = TIntrusivePtr<TTenantInfo>;
-    using EState = NKikimrTenantPool::EState; 
+    using EState = NKikimrTenantPool::EState;
 
     TTenantInfo(const TString &name)
         : Name(name)
         , HasStaticSlot(false)
         , LastStatus(TEvLocal::TEvTenantStatus::STOPPED)
-        , State(EState::TENANT_ASSIGNED) 
+        , State(EState::TENANT_ASSIGNED)
     {
     }
 
@@ -103,26 +103,26 @@ struct TTenantInfo : public TThrRefBase {
     NKikimrTabletBase::TMetrics StaticResourceLimit;
     NKikimrTabletBase::TMetrics ResourceLimit;
     TEvLocal::TEvTenantStatus::EStatus LastStatus;
-    EState State; 
+    EState State;
     THashMap<TString, TString> Attributes;
-    TSubDomainKey DomainKey; 
+    TSubDomainKey DomainKey;
 };
 
-struct TTenantSlotBrokerInfo { 
-    ui64 TabletId = 0; 
-    ui64 Generation = 0; 
-    ui64 SeqNo = 0; 
+struct TTenantSlotBrokerInfo {
+    ui64 TabletId = 0;
+    ui64 Generation = 0;
+    ui64 SeqNo = 0;
     TActorId ActorId;
     TActorId Pipe;
-}; 
- 
+};
+
 class TDomainTenantPool : public TActorBootstrapped<TDomainTenantPool> {
     using TActorBase = TActorBootstrapped<TDomainTenantPool>;
 
     TString DomainName;
     TString LogPrefix;
     TActorId LocalID;
-    TTenantSlotBrokerInfo TenantSlotBroker; 
+    TTenantSlotBrokerInfo TenantSlotBroker;
     TTenantPoolConfig::TPtr Config;
     THashMap<TString, TDynamicSlotInfo::TPtr> DynamicSlots;
     THashMap<TString, TTenantInfo::TPtr> Tenants;
@@ -152,7 +152,7 @@ public:
 
     void Die(const TActorContext &ctx) override
     {
-        NTabletPipe::CloseAndForgetClient(SelfId(), TenantSlotBroker.Pipe); 
+        NTabletPipe::CloseAndForgetClient(SelfId(), TenantSlotBroker.Pipe);
         ctx.Send(LocalID, new TEvents::TEvPoisonPill);
 
         TActorBase::Die(ctx);
@@ -160,28 +160,28 @@ public:
 
     void TryToRegister(const TActorContext &ctx)
     {
-        Y_VERIFY(!TenantSlotBroker.Pipe); 
+        Y_VERIFY(!TenantSlotBroker.Pipe);
 
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = {
             .MinRetryTime = TDuration::MilliSeconds(10),
             .MaxRetryTime = TDuration::Seconds(1),
         };
-        auto pipe = NTabletPipe::CreateClient(ctx.SelfID, TenantSlotBroker.TabletId, pipeConfig); 
-        TenantSlotBroker.Pipe = ctx.ExecutorThread.RegisterActor(pipe); 
+        auto pipe = NTabletPipe::CreateClient(ctx.SelfID, TenantSlotBroker.TabletId, pipeConfig);
+        TenantSlotBroker.Pipe = ctx.ExecutorThread.RegisterActor(pipe);
 
         auto request = MakeHolder<TEvTenantSlotBroker::TEvRegisterPool>();
         ActorIdToProto(TenantSlotBroker.Pipe, request->Record.MutableClientId());
-        request->Record.SetSeqNo(++TenantSlotBroker.SeqNo); 
-        NTabletPipe::SendData(ctx, TenantSlotBroker.Pipe, request.Release()); 
+        request->Record.SetSeqNo(++TenantSlotBroker.SeqNo);
+        NTabletPipe::SendData(ctx, TenantSlotBroker.Pipe, request.Release());
 
         LOG_DEBUG_S(ctx, NKikimrServices::TENANT_POOL,
                     LogPrefix << "try to register in tenant slot broker (pipe "
-                    << TenantSlotBroker.Pipe << ")"); 
+                    << TenantSlotBroker.Pipe << ")");
     }
 
     void HandlePipeDestroyed(const TActorContext &ctx) {
-        NTabletPipe::CloseAndForgetClient(SelfId(), TenantSlotBroker.Pipe); 
+        NTabletPipe::CloseAndForgetClient(SelfId(), TenantSlotBroker.Pipe);
         TryToRegister(ctx);
     }
 
@@ -205,8 +205,8 @@ public:
                 attr.SetKey(pr.first);
                 attr.SetValue(pr.second);
             }
-            status.SetState(slot->AssignedTenant->State); 
-            *status.MutableDomainKey() = NKikimrSubDomains::TDomainKey(slot->AssignedTenant->DomainKey); 
+            status.SetState(slot->AssignedTenant->State);
+            *status.MutableDomainKey() = NKikimrSubDomains::TDomainKey(slot->AssignedTenant->DomainKey);
         }
         status.MutableResourceLimit()->CopyFrom(slot->ResourceLimit);
     }
@@ -361,8 +361,8 @@ public:
                         attr.SetKey(pr.first);
                         attr.SetValue(pr.second);
                     }
-                    slotStatus.SetState(it->second->State); 
-                    *slotStatus.MutableDomainKey() = NKikimrSubDomains::TDomainKey(it->second->DomainKey); 
+                    slotStatus.SetState(it->second->State);
+                    *slotStatus.MutableDomainKey() = NKikimrSubDomains::TDomainKey(it->second->DomainKey);
                 }
             }
         }
@@ -413,7 +413,7 @@ public:
 
         auto domain = AppData(ctx)->DomainsInfo->GetDomainByName(DomainName);
         Y_VERIFY(domain);
-        TenantSlotBroker.TabletId = MakeTenantSlotBrokerID(domain->DefaultStateStorageGroup); 
+        TenantSlotBroker.TabletId = MakeTenantSlotBrokerID(domain->DefaultStateStorageGroup);
 
         for (auto &pr : Config->StaticSlots) {
             TTenantInfo::TPtr tenant = new TTenantInfo(pr.second.GetTenantName());
@@ -535,14 +535,14 @@ public:
         Y_VERIFY(!tenant->HasStaticSlot || ev->Get()->Status == TEvLocal::TEvTenantStatus::STARTED,
                  "Cannot start static tenant %s: %s", ev->Get()->TenantName.data(), ev->Get()->Error.data());
 
-        bool modified = false; 
-        bool processPendingActions = false; 
-        TTenantInfo::EState state = tenant->State; 
+        bool modified = false;
+        bool processPendingActions = false;
+        TTenantInfo::EState state = tenant->State;
         tenant->LastStatus = ev->Get()->Status;
         THashSet<TDynamicSlotInfo::TPtr, TPtrHash> toProcess = tenant->AssignedSlots;
         switch(ev->Get()->Status) {
         case TEvLocal::TEvTenantStatus::STARTED:
-            state = TTenantInfo::EState::TENANT_OK; 
+            state = TTenantInfo::EState::TENANT_OK;
             if (!tenant->HasStaticSlot && !tenant->AssignedSlots.size()) {
                 LOG_DEBUG_S(ctx, NKikimrServices::TENANT_POOL,
                             LogPrefix << "started tenant " << tenant->Name
@@ -558,18 +558,18 @@ public:
                              LogPrefix << "started tenant " << tenant->Name);
                 if (tenant->Attributes != ev->Get()->Attributes) {
                     tenant->Attributes = std::move(ev->Get()->Attributes);
-                    modified = true; 
+                    modified = true;
                 }
-                if (tenant->DomainKey != ev->Get()->DomainKey) { 
-                    tenant->DomainKey = ev->Get()->DomainKey; 
-                    modified = true; 
-                } 
+                if (tenant->DomainKey != ev->Get()->DomainKey) {
+                    tenant->DomainKey = ev->Get()->DomainKey;
+                    modified = true;
+                }
                 SendTenantStatus(tenant, NKikimrTenantPool::SUCCESS, ctx);
-                processPendingActions = true; 
+                processPendingActions = true;
             }
             break;
         case TEvLocal::TEvTenantStatus::STOPPED:
-            state = TTenantInfo::EState::TENANT_OK; 
+            state = TTenantInfo::EState::TENANT_OK;
             if (tenant->AssignedSlots.size()) {
                 LOG_DEBUG_S(ctx, NKikimrServices::TENANT_POOL,
                             LogPrefix << "stopped tenant " << tenant->Name
@@ -581,31 +581,31 @@ public:
             }
             break;
         case TEvLocal::TEvTenantStatus::UNKNOWN_TENANT:
-            modified = true; 
-            state = TTenantInfo::EState::TENANT_UNKNOWN; 
+            modified = true;
+            state = TTenantInfo::EState::TENANT_UNKNOWN;
             LOG_ERROR_S(ctx, NKikimrServices::TENANT_POOL,
                         LogPrefix << "couldn't start unknown tenant "
                         << tenant->Name);
             SendTenantStatus(tenant, NKikimrTenantPool::UNKNOWN_TENANT,
                              ev->Get()->Error, ctx);
             DetachAllSlots(tenant, ctx);
-            processPendingActions = true; 
-            break; 
-        } 
- 
-        if (modified || tenant->State != state) { 
-            tenant->State = state; 
+            processPendingActions = true;
+            break;
+        }
+
+        if (modified || tenant->State != state) {
+            tenant->State = state;
             SendStatusUpdates(ctx);
-        } 
- 
-        if (processPendingActions) { 
+        }
+
+        if (processPendingActions) {
             ProcessPendingActions(toProcess, ctx);
         }
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) {
         TEvTabletPipe::TEvClientConnected *msg = ev->Get();
-        if (msg->ClientId != TenantSlotBroker.Pipe) 
+        if (msg->ClientId != TenantSlotBroker.Pipe)
             return;
         if (msg->Status == NKikimrProto::OK)
             return;
@@ -614,7 +614,7 @@ public:
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx) {
         TEvTabletPipe::TEvClientDestroyed *msg = ev->Get();
-        if (msg->ClientId != TenantSlotBroker.Pipe) 
+        if (msg->ClientId != TenantSlotBroker.Pipe)
             return;
         HandlePipeDestroyed(ctx);
     }
@@ -634,7 +634,7 @@ public:
                     LogPrefix << ev->Sender << " configures slot '" << rec.GetSlotId()
                     << "' for tenant '" << rec.GetAssignedTenant() << "'");
 
-        if (ev->Sender != TenantSlotBroker.ActorId) { 
+        if (ev->Sender != TenantSlotBroker.ActorId) {
             LOG_DEBUG_S(ctx, NKikimrServices::TENANT_POOL,
                         LogPrefix << "configure sender " << ev->Sender << " doesn't own pool");
             SendConfigureError(ev, rec.GetSlotId(), NKikimrTenantPool::NOT_OWNER,
@@ -662,37 +662,37 @@ public:
 
     void Handle(TEvTenantPool::TEvTakeOwnership::TPtr &ev, const TActorContext &ctx)
     {
-        const auto& record = ev->Get()->Record; 
-        const bool isOldStyle = !record.HasGeneration() && !record.HasSeqNo(); 
-        const ui64 generation = isOldStyle ? 0 : record.GetGeneration(); 
-        const ui64 seqNo = isOldStyle ? 0 : record.GetSeqNo(); 
- 
-        if (isOldStyle || generation > TenantSlotBroker.Generation || seqNo == TenantSlotBroker.SeqNo) { 
-            if (seqNo == Max<ui64>()) { 
-                NTabletPipe::CloseAndForgetClient(SelfId(), TenantSlotBroker.Pipe); 
-                TryToRegister(ctx); 
- 
-                return; 
-            } else if (!isOldStyle && seqNo != TenantSlotBroker.SeqNo) { 
-                return; 
-            } 
- 
-            TenantSlotBroker.Generation = generation; 
- 
-            if (TenantSlotBroker.ActorId != ev->Sender) { 
-                if (TenantSlotBroker.ActorId) { 
-                    LOG_DEBUG_S(ctx, NKikimrServices::TENANT_POOL, 
-                                LogPrefix << TenantSlotBroker.ActorId << " lost ownership"); 
-                    ctx.Send(TenantSlotBroker.ActorId, new TEvTenantPool::TEvLostOwnership); 
-                } 
- 
-                TenantSlotBroker.ActorId = ev->Sender; 
-                LOG_DEBUG_S(ctx, NKikimrServices::TENANT_POOL,
-                            LogPrefix << TenantSlotBroker.ActorId << " took ownership"); 
+        const auto& record = ev->Get()->Record;
+        const bool isOldStyle = !record.HasGeneration() && !record.HasSeqNo();
+        const ui64 generation = isOldStyle ? 0 : record.GetGeneration();
+        const ui64 seqNo = isOldStyle ? 0 : record.GetSeqNo();
+
+        if (isOldStyle || generation > TenantSlotBroker.Generation || seqNo == TenantSlotBroker.SeqNo) {
+            if (seqNo == Max<ui64>()) {
+                NTabletPipe::CloseAndForgetClient(SelfId(), TenantSlotBroker.Pipe);
+                TryToRegister(ctx);
+
+                return;
+            } else if (!isOldStyle && seqNo != TenantSlotBroker.SeqNo) {
+                return;
             }
 
-            auto event = BuildStatusEvent(); 
-            ctx.Send(ev->Sender, std::move(event), 0, ev->Cookie); 
+            TenantSlotBroker.Generation = generation;
+
+            if (TenantSlotBroker.ActorId != ev->Sender) {
+                if (TenantSlotBroker.ActorId) {
+                    LOG_DEBUG_S(ctx, NKikimrServices::TENANT_POOL,
+                                LogPrefix << TenantSlotBroker.ActorId << " lost ownership");
+                    ctx.Send(TenantSlotBroker.ActorId, new TEvTenantPool::TEvLostOwnership);
+                }
+
+                TenantSlotBroker.ActorId = ev->Sender;
+                LOG_DEBUG_S(ctx, NKikimrServices::TENANT_POOL,
+                            LogPrefix << TenantSlotBroker.ActorId << " took ownership");
+            }
+
+            auto event = BuildStatusEvent();
+            ctx.Send(ev->Sender, std::move(event), 0, ev->Cookie);
         }
     }
 
@@ -711,14 +711,14 @@ public:
             PRE() {
                 str << "Tenant pool for " << DomainName << Endl
                     << "LocalID: " << LocalID << Endl
-                    << "TenantSlotBroker:" << Endl 
-                    << "   TabletId: " << TenantSlotBroker.TabletId << Endl 
-                    << "   Generation: " << TenantSlotBroker.Generation << Endl 
-                    << "   ActorId: " << TenantSlotBroker.ActorId << Endl << Endl; 
+                    << "TenantSlotBroker:" << Endl
+                    << "   TabletId: " << TenantSlotBroker.TabletId << Endl
+                    << "   Generation: " << TenantSlotBroker.Generation << Endl
+                    << "   ActorId: " << TenantSlotBroker.ActorId << Endl << Endl;
 
                 str << "Config:" << Endl
                     << "   IsEnabled: " << Config->IsEnabled << Endl
-                    << "   NodeType: " << Config->NodeType << Endl 
+                    << "   NodeType: " << Config->NodeType << Endl
                     << "   StaticSlotLabel: " << Config->StaticSlotLabel << Endl
                     << "   DynamicSlotLabel: " << Config->DynamicSlotLabel << Endl
                     << "   StaticSlots:" << Endl;
@@ -747,9 +747,9 @@ public:
                         << "   HasStaticSlot: " << pr.second->HasStaticSlot << Endl
                         << "   StaticResourceLimit: " << pr.second->StaticResourceLimit.ShortDebugString() << Endl
                         << "   ResourceLimit: " << pr.second->ResourceLimit.ShortDebugString() << Endl
-                        << "   LastStatus: " << (int)pr.second->LastStatus << Endl 
-                        << "   State: " << (int)pr.second->State << Endl 
-                        << "   DomainKey: " << pr.second->DomainKey << Endl; 
+                        << "   LastStatus: " << (int)pr.second->LastStatus << Endl
+                        << "   State: " << (int)pr.second->State << Endl
+                        << "   DomainKey: " << pr.second->DomainKey << Endl;
 
                     str << "   AssignedSlots:" << Endl;
                     for (auto &slot : pr.second->AssignedSlots)

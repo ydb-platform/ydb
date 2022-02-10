@@ -8,7 +8,7 @@ namespace NCms {
 
 class TCms::TTxRemoveWalleTask : public TTransactionBase<TCms> {
 public:
-    TTxRemoveWalleTask(TCms *self, const TString &id) 
+    TTxRemoveWalleTask(TCms *self, const TString &id)
         : TBase(self)
         , Id(id)
     {
@@ -26,11 +26,11 @@ public:
             Self->State->WalleRequests.erase(it->second.RequestId);
             Self->State->WalleTasks.erase(it);
 
-            Self->AuditLog(ctx, TStringBuilder() << "Remove wall-e task" 
-                << ": id# " << Id); 
-        } else { 
+            Self->AuditLog(ctx, TStringBuilder() << "Remove wall-e task"
+                << ": id# " << Id);
+        } else {
             LOG_ERROR(ctx, NKikimrServices::CMS, "Can't find Wall-E task %s", Id.data());
-        } 
+        }
 
         return true;
     }
@@ -44,9 +44,9 @@ private:
     TString Id;
 };
 
-ITransaction* TCms::CreateTxRemoveWalleTask(const TString &id) 
+ITransaction* TCms::CreateTxRemoveWalleTask(const TString &id)
 {
-    return new TTxRemoveWalleTask(this, id); 
+    return new TTxRemoveWalleTask(this, id);
 }
 
 } // NCms

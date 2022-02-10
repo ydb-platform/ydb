@@ -68,7 +68,7 @@ std::optional<ui32> TryDecodeYdbSessionId(const TString& sessionId) {
     }
 
     try {
-        NOperationId::TOperationId opId(sessionId); 
+        NOperationId::TOperationId opId(sessionId);
         ui32 nodeId;
         const auto& nodeIds = opId.GetValue("node_id");
         if (nodeIds.size() != 1) {
@@ -105,10 +105,10 @@ bool IsSqlQuery(const NKikimrKqp::EQueryType& queryType) {
 
 TString EncodeSessionId(ui32 nodeId, const TString& id) {
     Ydb::TOperationId opId;
-    opId.SetKind(NOperationId::TOperationId::SESSION_YQL); 
-    NOperationId::AddOptionalValue(opId, "node_id", ToString(nodeId)); 
-    NOperationId::AddOptionalValue(opId, "id", Base64Encode(id)); 
-    return NOperationId::ProtoToString(opId); 
+    opId.SetKind(NOperationId::TOperationId::SESSION_YQL);
+    NOperationId::AddOptionalValue(opId, "node_id", ToString(nodeId));
+    NOperationId::AddOptionalValue(opId, "id", Base64Encode(id));
+    return NOperationId::ProtoToString(opId);
 }
 
 
@@ -1114,8 +1114,8 @@ private:
                 return false;
             }
 
-            /* 
-             * TODO: disabled due to SLYDB-42. Remove (or rework) it after KIKIMR-9650 & KIKIMR-9652 
+            /*
+             * TODO: disabled due to SLYDB-42. Remove (or rework) it after KIKIMR-9650 & KIKIMR-9652
             if (!Tenants.contains(database)) {
                 TString error = TStringBuilder() << "Unexpected node for database: " << database;
 
@@ -1126,7 +1126,7 @@ private:
                 result.Error = error;
                 return false;
             }
-            */ 
+            */
         }
 
         if (ShutdownRequested) {

@@ -225,8 +225,8 @@ void TWriteSessionActor::Handle(IContext::TEvWriteFinished::TPtr& ev, const TAct
 
 
 void TWriteSessionActor::Die(const TActorContext& ctx) {
-    if (Writer) 
-        ctx.Send(Writer, new TEvents::TEvPoisonPill()); 
+    if (Writer)
+        ctx.Send(Writer, new TEvents::TEvPoisonPill());
 
     if (SessionsActive) {
         SessionsActive.Dec();
@@ -318,7 +318,7 @@ void TWriteSessionActor::Handle(TEvPQProxy::TEvWriteInit::TPtr& ev, const TActor
     SourceId = init.message_group_id();
     TString encodedSourceId;
     try {
-        encodedSourceId = NPQ::NSourceIdEncoding::Encode(SourceId); 
+        encodedSourceId = NPQ::NSourceIdEncoding::Encode(SourceId);
     } catch (yexception& e) {
         CloseSession(TStringBuilder() << "incorrect sourceId \"" << SourceId << "\": " << e.what(),  PersQueue::ErrorCode::BAD_REQUEST, ctx);
         return;
@@ -698,8 +698,8 @@ void TWriteSessionActor::ProceedPartition(const ui32 partition, const TActorCont
         return;
     }
 
-    Writer = ctx.RegisterWithSameMailbox(NPQ::CreatePartitionWriter(ctx.SelfID, tabletId, Partition, SourceId)); 
-    State = ES_WAIT_WRITER_INIT; 
+    Writer = ctx.RegisterWithSameMailbox(NPQ::CreatePartitionWriter(ctx.SelfID, tabletId, Partition, SourceId));
+    State = ES_WAIT_WRITER_INIT;
 
     ui32 border = AppData(ctx)->PQConfig.GetWriteInitLatencyBigMs();
     auto subGroup = GetServiceCounters(Counters, "pqproxy|SLI");
@@ -746,83 +746,83 @@ void TWriteSessionActor::CloseSession(const TString& errorReason, const PersQueu
     Die(ctx);
 }
 
-void TWriteSessionActor::Handle(NPQ::TEvPartitionWriter::TEvInitResult::TPtr& ev, const TActorContext& ctx) { 
-    if (State != ES_WAIT_WRITER_INIT) { 
-        return CloseSession("got init result but not wait for it", PersQueue::ErrorCode::ERROR, ctx); 
-    } 
+void TWriteSessionActor::Handle(NPQ::TEvPartitionWriter::TEvInitResult::TPtr& ev, const TActorContext& ctx) {
+    if (State != ES_WAIT_WRITER_INIT) {
+        return CloseSession("got init result but not wait for it", PersQueue::ErrorCode::ERROR, ctx);
+    }
 
-    const auto& result = *ev->Get(); 
-    if (!result.IsSuccess()) { 
-        const auto& error = result.GetError(); 
-        if (error.Response.HasErrorCode()) { 
+    const auto& result = *ev->Get();
+    if (!result.IsSuccess()) {
+        const auto& error = result.GetError();
+        if (error.Response.HasErrorCode()) {
             return CloseSession("status is not ok: " + error.Response.GetErrorReason(), ConvertOldCode(error.Response.GetErrorCode()), ctx);
         } else {
-            return CloseSession("error at writer init: " + error.Reason, PersQueue::ErrorCode::ERROR, ctx); 
+            return CloseSession("error at writer init: " + error.Reason, PersQueue::ErrorCode::ERROR, ctx);
         }
     }
 
-    OwnerCookie = result.GetResult().OwnerCookie; 
-    const auto& maxSeqNo = result.GetResult().SourceIdInfo.GetSeqNo(); 
+    OwnerCookie = result.GetResult().OwnerCookie;
+    const auto& maxSeqNo = result.GetResult().SourceIdInfo.GetSeqNo();
 
-    StreamingWriteServerMessage response; 
-    response.set_status(Ydb::StatusIds::SUCCESS); 
-    auto init = response.mutable_init_response(); 
-    init->set_session_id(EscapeC(OwnerCookie)); 
-    init->set_last_sequence_number(maxSeqNo); 
-    init->set_partition_id(Partition); 
+    StreamingWriteServerMessage response;
+    response.set_status(Ydb::StatusIds::SUCCESS);
+    auto init = response.mutable_init_response();
+    init->set_session_id(EscapeC(OwnerCookie));
+    init->set_last_sequence_number(maxSeqNo);
+    init->set_partition_id(Partition);
     init->set_topic(TopicConverter->GetModernName());
     init->set_cluster(TopicConverter->GetCluster());
-    init->set_block_format_version(0); 
-    if (InitialPQTabletConfig.HasCodecs()) { 
-        for (const auto& codecName : InitialPQTabletConfig.GetCodecs().GetCodecs()) { 
-            init->add_supported_codecs(CodecByName(codecName)); 
-        } 
-    } 
+    init->set_block_format_version(0);
+    if (InitialPQTabletConfig.HasCodecs()) {
+        for (const auto& codecName : InitialPQTabletConfig.GetCodecs().GetCodecs()) {
+            init->add_supported_codecs(CodecByName(codecName));
+        }
+    }
 
-    LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session inited cookie: " << Cookie << " partition: " << Partition 
-                            << " MaxSeqNo: " << maxSeqNo << " sessionId: " << OwnerCookie); 
+    LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session inited cookie: " << Cookie << " partition: " << Partition
+                            << " MaxSeqNo: " << maxSeqNo << " sessionId: " << OwnerCookie);
 
-    if (!Request->GetStreamCtx()->Write(std::move(response))) { 
-        LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " grpc write failed"); 
-        Die(ctx); 
-        return; 
-    } 
-
-    State = ES_INITED; 
-
-    ctx.Schedule(CHECK_ACL_DELAY, new TEvents::TEvWakeup()); 
-
-    //init completed; wait for first data chunk 
-    NextRequestInited = true; 
-    if (!Request->GetStreamCtx()->Read()) { 
-        LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " grpc read failed"); 
-        Die(ctx); 
+    if (!Request->GetStreamCtx()->Write(std::move(response))) {
+        LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " grpc write failed");
+        Die(ctx);
         return;
     }
-} 
 
-void TWriteSessionActor::Handle(NPQ::TEvPartitionWriter::TEvWriteAccepted::TPtr& ev, const TActorContext& ctx) { 
-    if (State != ES_INITED) { 
-        return CloseSession("got write permission but not wait for it", PersQueue::ErrorCode::ERROR, ctx); 
-    } 
+    State = ES_INITED;
 
-    Y_VERIFY(!FormedWrites.empty()); 
-    TWriteRequestBatchInfo::TPtr writeRequest = std::move(FormedWrites.front()); 
+    ctx.Schedule(CHECK_ACL_DELAY, new TEvents::TEvWakeup());
+
+    //init completed; wait for first data chunk
+    NextRequestInited = true;
+    if (!Request->GetStreamCtx()->Read()) {
+        LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " grpc read failed");
+        Die(ctx);
+        return;
+    }
+}
+
+void TWriteSessionActor::Handle(NPQ::TEvPartitionWriter::TEvWriteAccepted::TPtr& ev, const TActorContext& ctx) {
+    if (State != ES_INITED) {
+        return CloseSession("got write permission but not wait for it", PersQueue::ErrorCode::ERROR, ctx);
+    }
+
+    Y_VERIFY(!FormedWrites.empty());
+    TWriteRequestBatchInfo::TPtr writeRequest = std::move(FormedWrites.front());
 
     if (ev->Get()->Cookie != writeRequest->Cookie) {
         return CloseSession("out of order reserve bytes response from server, may be previous is lost", PersQueue::ErrorCode::ERROR, ctx);
-    } 
+    }
 
-    FormedWrites.pop_front(); 
+    FormedWrites.pop_front();
 
-    ui64 diff = writeRequest->ByteSize; 
+    ui64 diff = writeRequest->ByteSize;
 
-    SentMessages.emplace_back(std::move(writeRequest)); 
+    SentMessages.emplace_back(std::move(writeRequest));
 
-    BytesInflight_ -= diff; 
-    BytesInflight.Dec(diff); 
+    BytesInflight_ -= diff;
+    BytesInflight.Dec(diff);
 
-    if (!NextRequestInited && BytesInflight_ < MAX_BYTES_INFLIGHT) { //allow only one big request to be readed but not sended 
+    if (!NextRequestInited && BytesInflight_ < MAX_BYTES_INFLIGHT) { //allow only one big request to be readed but not sended
         NextRequestInited = true;
         if (!Request->GetStreamCtx()->Read()) {
             LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " grpc read failed");
@@ -831,97 +831,97 @@ void TWriteSessionActor::Handle(NPQ::TEvPartitionWriter::TEvWriteAccepted::TPtr&
         }
     }
 
-    --NumReserveBytesRequests; 
-    if (!Writes.empty()) 
-        GenerateNextWriteRequest(ctx); 
-} 
+    --NumReserveBytesRequests;
+    if (!Writes.empty())
+        GenerateNextWriteRequest(ctx);
+}
 
-void TWriteSessionActor::Handle(NPQ::TEvPartitionWriter::TEvWriteResponse::TPtr& ev, const TActorContext& ctx) { 
-    if (State != ES_INITED) { 
-        return CloseSession("got write response but not wait for it", PersQueue::ErrorCode::ERROR, ctx); 
-    } 
+void TWriteSessionActor::Handle(NPQ::TEvPartitionWriter::TEvWriteResponse::TPtr& ev, const TActorContext& ctx) {
+    if (State != ES_INITED) {
+        return CloseSession("got write response but not wait for it", PersQueue::ErrorCode::ERROR, ctx);
+    }
 
-    const auto& result = *ev->Get(); 
-    if (!result.IsSuccess()) { 
-        const auto& record = result.Record; 
-        if (record.HasErrorCode()) { 
+    const auto& result = *ev->Get();
+    if (!result.IsSuccess()) {
+        const auto& record = result.Record;
+        if (record.HasErrorCode()) {
             return CloseSession("status is not ok: " + record.GetErrorReason(), ConvertOldCode(record.GetErrorCode()), ctx);
-        } else { 
-            return CloseSession("error at write: " + result.GetError().Reason, PersQueue::ErrorCode::ERROR, ctx); 
-        } 
-    } 
+        } else {
+            return CloseSession("error at write: " + result.GetError().Reason, PersQueue::ErrorCode::ERROR, ctx);
+        }
+    }
 
-    const auto& resp = result.Record.GetPartitionResponse(); 
+    const auto& resp = result.Record.GetPartitionResponse();
 
-    if (SentMessages.empty()) { 
-        CloseSession("got too many replies from server, internal error", PersQueue::ErrorCode::ERROR, ctx); 
-        return; 
-    } 
+    if (SentMessages.empty()) {
+        CloseSession("got too many replies from server, internal error", PersQueue::ErrorCode::ERROR, ctx);
+        return;
+    }
 
-    TWriteRequestBatchInfo::TPtr writeRequest = std::move(SentMessages.front()); 
-    SentMessages.pop_front(); 
+    TWriteRequestBatchInfo::TPtr writeRequest = std::move(SentMessages.front());
+    SentMessages.pop_front();
 
     if (resp.GetCookie() != writeRequest->Cookie) {
         return CloseSession("out of order write response from server, may be previous is lost", PersQueue::ErrorCode::ERROR, ctx);
-    } 
+    }
 
-    auto addAck = [](const TPersQueuePartitionResponse::TCmdWriteResult& res, StreamingWriteServerMessage::BatchWriteResponse* batchWriteResponse, 
-                         StreamingWriteServerMessage::WriteStatistics* stat) { 
-        batchWriteResponse->add_sequence_numbers(res.GetSeqNo()); 
-        batchWriteResponse->add_offsets(res.GetOffset()); 
-        batchWriteResponse->add_already_written(res.GetAlreadyWritten()); 
+    auto addAck = [](const TPersQueuePartitionResponse::TCmdWriteResult& res, StreamingWriteServerMessage::BatchWriteResponse* batchWriteResponse,
+                         StreamingWriteServerMessage::WriteStatistics* stat) {
+        batchWriteResponse->add_sequence_numbers(res.GetSeqNo());
+        batchWriteResponse->add_offsets(res.GetOffset());
+        batchWriteResponse->add_already_written(res.GetAlreadyWritten());
 
-        stat->set_queued_in_partition_duration_ms( 
-            Max((i64)res.GetTotalTimeInPartitionQueueMs(), stat->queued_in_partition_duration_ms())); 
-        stat->set_throttled_on_partition_duration_ms( 
-            Max((i64)res.GetPartitionQuotedTimeMs(), stat->throttled_on_partition_duration_ms())); 
-        stat->set_throttled_on_topic_duration_ms(Max(static_cast<i64>(res.GetTopicQuotedTimeMs()), stat->throttled_on_topic_duration_ms())); 
-        stat->set_persist_duration_ms( 
-            Max((i64)res.GetWriteTimeMs(), stat->persist_duration_ms())); 
-    }; 
+        stat->set_queued_in_partition_duration_ms(
+            Max((i64)res.GetTotalTimeInPartitionQueueMs(), stat->queued_in_partition_duration_ms()));
+        stat->set_throttled_on_partition_duration_ms(
+            Max((i64)res.GetPartitionQuotedTimeMs(), stat->throttled_on_partition_duration_ms()));
+        stat->set_throttled_on_topic_duration_ms(Max(static_cast<i64>(res.GetTopicQuotedTimeMs()), stat->throttled_on_topic_duration_ms()));
+        stat->set_persist_duration_ms(
+            Max((i64)res.GetWriteTimeMs(), stat->persist_duration_ms()));
+    };
 
-    ui32 partitionCmdWriteResultIndex = 0; 
-    // TODO: Send single batch write response for all user write requests up to some max size/count 
-    for (const auto& userWriteRequest : writeRequest->UserWriteRequests) { 
-        StreamingWriteServerMessage result; 
-        result.set_status(Ydb::StatusIds::SUCCESS); 
-        auto batchWriteResponse = result.mutable_batch_write_response(); 
-        batchWriteResponse->set_partition_id(Partition); 
+    ui32 partitionCmdWriteResultIndex = 0;
+    // TODO: Send single batch write response for all user write requests up to some max size/count
+    for (const auto& userWriteRequest : writeRequest->UserWriteRequests) {
+        StreamingWriteServerMessage result;
+        result.set_status(Ydb::StatusIds::SUCCESS);
+        auto batchWriteResponse = result.mutable_batch_write_response();
+        batchWriteResponse->set_partition_id(Partition);
 
-        for (size_t messageIndex = 0, endIndex = userWriteRequest->Request.write_request().sequence_numbers_size(); messageIndex != endIndex; ++messageIndex) { 
-            if (partitionCmdWriteResultIndex == resp.CmdWriteResultSize()) { 
-                CloseSession("too less responses from server", PersQueue::ErrorCode::ERROR, ctx); 
-                return; 
+        for (size_t messageIndex = 0, endIndex = userWriteRequest->Request.write_request().sequence_numbers_size(); messageIndex != endIndex; ++messageIndex) {
+            if (partitionCmdWriteResultIndex == resp.CmdWriteResultSize()) {
+                CloseSession("too less responses from server", PersQueue::ErrorCode::ERROR, ctx);
+                return;
             }
-            const auto& partitionCmdWriteResult = resp.GetCmdWriteResult(partitionCmdWriteResultIndex); 
-            const auto writtenSequenceNumber = userWriteRequest->Request.write_request().sequence_numbers(messageIndex); 
-            if (partitionCmdWriteResult.GetSeqNo() != writtenSequenceNumber) { 
-                CloseSession(TStringBuilder() << "Expected partition " << Partition << " write result for message with sequence number " << writtenSequenceNumber << " but got for " << partitionCmdWriteResult.GetSeqNo(), PersQueue::ErrorCode::ERROR, ctx); 
+            const auto& partitionCmdWriteResult = resp.GetCmdWriteResult(partitionCmdWriteResultIndex);
+            const auto writtenSequenceNumber = userWriteRequest->Request.write_request().sequence_numbers(messageIndex);
+            if (partitionCmdWriteResult.GetSeqNo() != writtenSequenceNumber) {
+                CloseSession(TStringBuilder() << "Expected partition " << Partition << " write result for message with sequence number " << writtenSequenceNumber << " but got for " << partitionCmdWriteResult.GetSeqNo(), PersQueue::ErrorCode::ERROR, ctx);
                 return;
             }
 
-            addAck(partitionCmdWriteResult, batchWriteResponse, batchWriteResponse->mutable_write_statistics()); 
-            ++partitionCmdWriteResultIndex; 
-        } 
+            addAck(partitionCmdWriteResult, batchWriteResponse, batchWriteResponse->mutable_write_statistics());
+            ++partitionCmdWriteResultIndex;
+        }
 
-        if (!Request->GetStreamCtx()->Write(std::move(result))) { 
-            // TODO: Log gRPC write error code 
-            LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " grpc write failed"); 
-            Die(ctx); 
-            return; 
-        } 
-    } 
+        if (!Request->GetStreamCtx()->Write(std::move(result))) {
+            // TODO: Log gRPC write error code
+            LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " grpc write failed");
+            Die(ctx);
+            return;
+        }
+    }
 
-    ui64 diff = writeRequest->ByteSize; 
+    ui64 diff = writeRequest->ByteSize;
 
-    BytesInflightTotal_ -= diff; 
-    BytesInflightTotal.Dec(diff); 
+    BytesInflightTotal_ -= diff;
+    BytesInflightTotal.Dec(diff);
 
-    CheckFinish(ctx); 
-} 
+    CheckFinish(ctx);
+}
 
-void TWriteSessionActor::Handle(NPQ::TEvPartitionWriter::TEvDisconnected::TPtr&, const TActorContext& ctx) { 
-    CloseSession("pipe to partition's tablet is dead", PersQueue::ErrorCode::ERROR, ctx); 
+void TWriteSessionActor::Handle(NPQ::TEvPartitionWriter::TEvDisconnected::TPtr&, const TActorContext& ctx) {
+    CloseSession("pipe to partition's tablet is dead", PersQueue::ErrorCode::ERROR, ctx);
 }
 
 void TWriteSessionActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
@@ -941,9 +941,9 @@ void TWriteSessionActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, con
 void TWriteSessionActor::GenerateNextWriteRequest(const TActorContext& ctx) {
     TWriteRequestBatchInfo::TPtr writeRequest = new TWriteRequestBatchInfo();
 
-    auto ev = MakeHolder<NPQ::TEvPartitionWriter::TEvWriteRequest>(++NextRequestCookie); 
-    NKikimrClient::TPersQueueRequest& request = ev->Record; 
- 
+    auto ev = MakeHolder<NPQ::TEvPartitionWriter::TEvWriteRequest>(++NextRequestCookie);
+    NKikimrClient::TPersQueueRequest& request = ev->Record;
+
     writeRequest->UserWriteRequests = std::move(Writes);
     Writes.clear();
 
@@ -952,7 +952,7 @@ void TWriteSessionActor::GenerateNextWriteRequest(const TActorContext& ctx) {
         auto w = request.MutablePartitionRequest()->AddCmdWrite();
         w->SetData(GetSerializedData(InitMeta, writeRequest, messageIndex));
         w->SetSeqNo(writeRequest.sequence_numbers(messageIndex));
-        w->SetSourceId(NPQ::NSourceIdEncoding::EncodeSimple(SourceId)); 
+        w->SetSourceId(NPQ::NSourceIdEncoding::EncodeSimple(SourceId));
         w->SetCreateTimeMS(writeRequest.created_at_ms(messageIndex));
         w->SetUncompressedSize(writeRequest.blocks_uncompressed_sizes(messageIndex));
         w->SetClientDC(ClientDC);
@@ -966,7 +966,7 @@ void TWriteSessionActor::GenerateNextWriteRequest(const TActorContext& ctx) {
         }
     }
 
-    writeRequest->Cookie = request.GetPartitionRequest().GetCookie(); 
+    writeRequest->Cookie = request.GetPartitionRequest().GetCookie();
 
     Y_VERIFY(-diff <= (i64)BytesInflight_);
     diff += request.ByteSize();
@@ -978,7 +978,7 @@ void TWriteSessionActor::GenerateNextWriteRequest(const TActorContext& ctx) {
     writeRequest->ByteSize = request.ByteSize();
     FormedWrites.push_back(writeRequest);
 
-    ctx.Send(Writer, std::move(ev)); 
+    ctx.Send(Writer, std::move(ev));
     ++NumReserveBytesRequests;
 }
 

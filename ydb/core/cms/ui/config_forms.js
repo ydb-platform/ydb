@@ -86,7 +86,7 @@ function formatCommonItemText(item) {
 function addEditButtons(div, item) {
     var buttonsHTML = `
     <div style="z-index: 1; position: absolute; top: 0; right: 0; margin: 5px;">
-        <button data-action="edit" class="${item.kind.editable ? '' : 'd-none'} btn-cfg-item cfg-item-edit-icon"></button> 
+        <button data-action="edit" class="${item.kind.editable ? '' : 'd-none'} btn-cfg-item cfg-item-edit-icon"></button>
         <button data-action="remove" class="btn-cfg-item cfg-item-remove-icon"></button>
     </div>
     `;
@@ -144,7 +144,7 @@ class GenericConfigView {
         this._div.id = 'config-item-' + this.item.getId();
         this._div.appendChild(this._pre);
 
-        addEditButtons(this._div, this.item); 
+        addEditButtons(this._div, this.item);
 
         this.item.kind.appendView(this._div);
 
@@ -246,7 +246,7 @@ class LogConfigView {
         this._div.appendChild(this._pre);
         this._div.appendChild(this._table);
 
-        addEditButtons(this._div, this.item); 
+        addEditButtons(this._div, this.item);
 
         this.item.kind.appendView(this._div);
 
@@ -351,7 +351,7 @@ class NodeBrokerConfigView {
         this._div.id = 'config-item-' + this.item.getId();
         this._div.appendChild(this._pre);
 
-        addEditButtons(this._div, this.item); 
+        addEditButtons(this._div, this.item);
 
         this.item.kind.appendView(this._div);
 
@@ -422,7 +422,7 @@ class ImmediateControlsConfigView {
         this._div.id = 'config-item-' + this.item.getId();
         this._div.appendChild(this._pre);
 
-        addEditButtons(this._div, this.item); 
+        addEditButtons(this._div, this.item);
 
         this.item.kind.appendView(this._div);
 
@@ -873,7 +873,7 @@ class LogConfigEditForm extends CommonEditForm {
         super(kind, item);
         var form = $(this._form);
 
-        var syslog; 
+        var syslog;
         var defLevel;
         var defSampling;
         var defRate;
@@ -882,7 +882,7 @@ class LogConfigEditForm extends CommonEditForm {
         if (item && item.getConfig() && item.getConfig().LogConfig) {
             cfg = item.getConfig().LogConfig;
 
-            syslog = cfg.SysLog; 
+            syslog = cfg.SysLog;
             defLevel = cfg.DefaultLevel;
             defSampling = cfg.DefaultSamplingLevel;
             defRate = cfg.DefaultSamplingRate;
@@ -890,16 +890,16 @@ class LogConfigEditForm extends CommonEditForm {
 
         var configFormHTML = `
         <div style="padding-left: 10px;">
-            <div class="form-group row"> 
-                <label class="col-form-label form-control-sm col-sm-1">Syslog:</label> 
-                <div class="col-sm-auto"> 
-                    <select class="cfg-form syslog form-control-sm"> 
-                        <option value="-1" ${syslog === undefined ? "selected" : ""}>Default</option> 
-                        <option value="1" ${syslog !== undefined && syslog == true ? "selected" : ""}>true</option> 
-                        <option value="0" ${syslog !== undefined && syslog == false ? "selected" : ""}>false</option> 
-                    </select> 
-                </div> 
-            </div> 
+            <div class="form-group row">
+                <label class="col-form-label form-control-sm col-sm-1">Syslog:</label>
+                <div class="col-sm-auto">
+                    <select class="cfg-form syslog form-control-sm">
+                        <option value="-1" ${syslog === undefined ? "selected" : ""}>Default</option>
+                        <option value="1" ${syslog !== undefined && syslog == true ? "selected" : ""}>true</option>
+                        <option value="0" ${syslog !== undefined && syslog == false ? "selected" : ""}>false</option>
+                    </select>
+                </div>
+            </div>
             <div class="form-group def-log-settings">
                 <div class="row">
                     <label class="col-form-label form-control-sm col-sm-auto">Default log settings:</label>
@@ -1015,15 +1015,15 @@ class LogConfigEditForm extends CommonEditForm {
     _prepareData() {
         var data = super._prepareData();
 
-        var syslog = +$(this._form).find(".syslog").children(":selected").val(); 
+        var syslog = +$(this._form).find(".syslog").children(":selected").val();
         var defSettings = $(this._form).find("div.def-log-settings");
         var defLevel = +defSettings.find(".def-log-level").children(":selected").val();
         var defSampling = +defSettings.find(".def-log-sampling").children(":selected").val();
         var defRate = defSettings.find(".def-log-rate").val();
 
         var config = { LogConfig: {} };
-        if (syslog != -1) 
-            config.LogConfig.SysLog = syslog ? true : false; 
+        if (syslog != -1)
+            config.LogConfig.SysLog = syslog ? true : false;
         if (defLevel != -1)
             config.LogConfig.DefaultLevel = defLevel;
         if (defSampling != -1)
@@ -1080,19 +1080,19 @@ class CmsConfigEditForm extends CommonEditForm {
         var monFaultyPrepTimeout;
         var logTTL;
 
-        // sentinel 
-        var sentinelEnabled; 
-        var sentinelDryRun; 
-        var sentinelUpdateConfigInterval; 
-        var sentinelRetryUpdateConfig; 
-        var sentinelUpdateStateInterval; 
-        var sentinelUpdateStateTimeout; 
-        var sentinelChangeStatusRetries; 
-        var sentinelRetryChangeStatus; 
-        var sentinelDefaultStateLimit; 
-        var sentinelStateLimits = new Map(); 
-        var sentinelDefaultStateLimits = new Map(); 
- 
+        // sentinel
+        var sentinelEnabled;
+        var sentinelDryRun;
+        var sentinelUpdateConfigInterval;
+        var sentinelRetryUpdateConfig;
+        var sentinelUpdateStateInterval;
+        var sentinelUpdateStateTimeout;
+        var sentinelChangeStatusRetries;
+        var sentinelRetryChangeStatus;
+        var sentinelDefaultStateLimit;
+        var sentinelStateLimits = new Map();
+        var sentinelDefaultStateLimits = new Map();
+
         if (item && item.getConfig() && item.getConfig().CmsConfig) {
             var cfg = item.getConfig().CmsConfig;
 
@@ -1113,42 +1113,42 @@ class CmsConfigEditForm extends CommonEditForm {
 
             if (cfg.LogConfig && cfg.LogConfig.TTL)
                 logTTL = cfg.LogConfig.TTL / 1000000 / 3600 / 24;
- 
-            // sentinel 
-            if (cfg.SentinelConfig) { 
-                sentinelEnabled = cfg.SentinelConfig.Enable; 
-                sentinelDryRun = cfg.SentinelConfig.DryRun; 
-                if (cfg.SentinelConfig.UpdateConfigInterval) 
-                    sentinelUpdateConfigInterval = cfg.SentinelConfig.UpdateConfigInterval / 1000000; 
-                if (cfg.SentinelConfig.RetryUpdateConfig) 
-                    sentinelRetryUpdateConfig = cfg.SentinelConfig.RetryUpdateConfig / 1000000; 
-                if (cfg.SentinelConfig.UpdateStateInterval) 
-                    sentinelUpdateStateInterval = cfg.SentinelConfig.UpdateStateInterval / 1000000; 
-                if (cfg.SentinelConfig.UpdateStateTimeout) 
-                    sentinelUpdateStateTimeout = cfg.SentinelConfig.UpdateStateTimeout / 1000000; 
-                if (cfg.SentinelConfig.ChangeStatusRetries) 
-                    sentinelChangeStatusRetries = cfg.SentinelConfig.ChangeStatusRetries; 
-                if (cfg.SentinelConfig.RetryChangeStatus) 
-                    sentinelRetryChangeStatus = cfg.SentinelConfig.RetryChangeStatus / 1000000; 
-                if (cfg.SentinelConfig.DefaultStateLimit) 
-                    sentinelDefaultStateLimit = cfg.SentinelConfig.DefaultStateLimit; 
-                if (cfg.SentinelConfig.StateLimits) { 
-                    for (var c of cfg.SentinelConfig.StateLimits) { 
-                        sentinelStateLimits.set(c.State, c.Limit); 
-                    } 
-                } 
-            } 
-        } 
- 
-        for (var e of cmsEnums['PDiskStates'].keys()) { 
-            var name = cmsEnums.get('PDiskStates', e); 
-            if (name.match(/Error$/)) { 
-                sentinelDefaultStateLimits.set(e, 1); 
-            } else if (e == 255) { 
-                sentinelDefaultStateLimits.set(e, 0); 
-            } else if (e > 250) { 
-                sentinelDefaultStateLimits.set(e, 60); 
-            } 
+
+            // sentinel
+            if (cfg.SentinelConfig) {
+                sentinelEnabled = cfg.SentinelConfig.Enable;
+                sentinelDryRun = cfg.SentinelConfig.DryRun;
+                if (cfg.SentinelConfig.UpdateConfigInterval)
+                    sentinelUpdateConfigInterval = cfg.SentinelConfig.UpdateConfigInterval / 1000000;
+                if (cfg.SentinelConfig.RetryUpdateConfig)
+                    sentinelRetryUpdateConfig = cfg.SentinelConfig.RetryUpdateConfig / 1000000;
+                if (cfg.SentinelConfig.UpdateStateInterval)
+                    sentinelUpdateStateInterval = cfg.SentinelConfig.UpdateStateInterval / 1000000;
+                if (cfg.SentinelConfig.UpdateStateTimeout)
+                    sentinelUpdateStateTimeout = cfg.SentinelConfig.UpdateStateTimeout / 1000000;
+                if (cfg.SentinelConfig.ChangeStatusRetries)
+                    sentinelChangeStatusRetries = cfg.SentinelConfig.ChangeStatusRetries;
+                if (cfg.SentinelConfig.RetryChangeStatus)
+                    sentinelRetryChangeStatus = cfg.SentinelConfig.RetryChangeStatus / 1000000;
+                if (cfg.SentinelConfig.DefaultStateLimit)
+                    sentinelDefaultStateLimit = cfg.SentinelConfig.DefaultStateLimit;
+                if (cfg.SentinelConfig.StateLimits) {
+                    for (var c of cfg.SentinelConfig.StateLimits) {
+                        sentinelStateLimits.set(c.State, c.Limit);
+                    }
+                }
+            }
+        }
+
+        for (var e of cmsEnums['PDiskStates'].keys()) {
+            var name = cmsEnums.get('PDiskStates', e);
+            if (name.match(/Error$/)) {
+                sentinelDefaultStateLimits.set(e, 1);
+            } else if (e == 255) {
+                sentinelDefaultStateLimits.set(e, 0);
+            } else if (e > 250) {
+                sentinelDefaultStateLimits.set(e, 60);
+            }
         }
 
         var configFormHTML = `
@@ -1195,84 +1195,84 @@ class CmsConfigEditForm extends CommonEditForm {
             </div>
             <div class="form-group">
                 <div class="row">
-                    <label class="col-form-label form-control-sm col-sm-auto">Sentinel (self heal) parameters</label> 
+                    <label class="col-form-label form-control-sm col-sm-auto">Sentinel (self heal) parameters</label>
                 </div>
                 <div class="row">
                     <div class="col-3">
-                        <label class="col-form-label form-control-sm">Status</label> 
+                        <label class="col-form-label form-control-sm">Status</label>
                     </div>
                     <div class="col-auto">
-                        <select class="form-control-sm sentinel-enabled"> 
-                            <option value="0" ${sentinelEnabled ? "" : "selected"}>Disabled</option> 
-                            <option value="1" ${sentinelEnabled ? "selected" : ""}>Enabled</option> 
-                        </select> 
-                    </div> 
-                </div> 
-                <div class="w-100 vs-4px"></div> 
-                <div class="row"> 
-                    <div class="col-3"> 
-                        <label class="col-form-label form-control-sm">Dry run</label> 
-                    </div> 
-                    <div class="col-auto"> 
-                        <select class="form-control-sm sentinel-dry-run"> 
-                            <option value="0" ${sentinelDryRun ? "" : "selected"}>Disable</option> 
-                            <option value="1" ${sentinelDryRun ? "selected" : ""}>Enable</option> 
-                        </select> 
-                    </div> 
-                </div> 
-            </div> 
-            <div class="form-group"> 
-                <div class="row"> 
-                    ${this._makeNumericInput("Config update interval (sec.)", "sentinel-update-config-interval", 
-                                             "Default is 3600 sec.", sentinelUpdateConfigInterval, 
-                                             "Interval used to update available (known by BSC) PDisks list")} 
-                    <div class="w-100 vs-4px"></div> 
-                    ${this._makeNumericInput("Retry interval (sec.)", "sentinel-retry-update-config", 
-                                             "Default is 60 sec.", sentinelRetryUpdateConfig, 
-                                             "Used if BSC is temporarily unavailable.")} 
-                </div> 
-            </div> 
-            <div class="form-group"> 
-                <div class="row"> 
-                    ${this._makeNumericInput("State update interval (sec.)", "sentinel-update-state-interval", 
-                                             "Default is 60 sec.", sentinelUpdateStateInterval, 
-                                             "Interval used to update states of PDisks")} 
-                    <div class="w-100 vs-4px"></div> 
-                    ${this._makeNumericInput("Timeout (sec.)", "sentinel-update-state-timeout", 
-                                             "Default is 45 sec.", sentinelUpdateStateTimeout, 
-                                             "Maximum allowed time for PDisks states collection")} 
-                </div> 
-            </div> 
-            <div class="form-group"> 
-                <div class="row"> 
-                    ${this._makeNumericInput("Change status retries", "sentinel-change-status-retries", 
-                                             "Default is 5", sentinelChangeStatusRetries, 
-                                             "Number of retries if status of PDisk cannot be changed due to BSC unavailability")} 
-                    <div class="w-100 vs-4px"></div> 
-                    ${this._makeNumericInput("Change status retry interval (sec.)", "sentinel-change-status-retry-interval", 
-                                             "Default is 10 sec.", sentinelRetryChangeStatus, 
-                                             "Used if BSC is temporarily unavailable.")} 
-                </div> 
-            </div> 
-            <div class="form-group"> 
-                <div class="row"> 
-                    ${this._makeNumericInput("Default state limit", "sentinel-default-state-limit", 
-                                             "Default is 5", sentinelDefaultStateLimit, 
-                                             "Number of 'state update' cycles before changing status")} 
-                    ${this._makeSentinelStateLimits(sentinelStateLimits, sentinelDefaultStateLimits)} 
-                </div> 
-            </div> 
-            <div class="form-group"> 
-                <div class="row"> 
-                    <label class="col-form-label form-control-sm col-sm-auto">Persistent log settings</label> 
-                </div> 
-                <div class="row"> 
-                    ${this._makeLogLevelSelects()} 
-                    <div class="w-100 vs-4px"></div> 
-                    ${this._makeNumericInput("Time to live (days)", "log-ttl", 
-                                             "Default is 14 days", logTTL)} 
-                </div> 
-            </div> 
+                        <select class="form-control-sm sentinel-enabled">
+                            <option value="0" ${sentinelEnabled ? "" : "selected"}>Disabled</option>
+                            <option value="1" ${sentinelEnabled ? "selected" : ""}>Enabled</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="w-100 vs-4px"></div>
+                <div class="row">
+                    <div class="col-3">
+                        <label class="col-form-label form-control-sm">Dry run</label>
+                    </div>
+                    <div class="col-auto">
+                        <select class="form-control-sm sentinel-dry-run">
+                            <option value="0" ${sentinelDryRun ? "" : "selected"}>Disable</option>
+                            <option value="1" ${sentinelDryRun ? "selected" : ""}>Enable</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="form-group">
+                <div class="row">
+                    ${this._makeNumericInput("Config update interval (sec.)", "sentinel-update-config-interval",
+                                             "Default is 3600 sec.", sentinelUpdateConfigInterval,
+                                             "Interval used to update available (known by BSC) PDisks list")}
+                    <div class="w-100 vs-4px"></div>
+                    ${this._makeNumericInput("Retry interval (sec.)", "sentinel-retry-update-config",
+                                             "Default is 60 sec.", sentinelRetryUpdateConfig,
+                                             "Used if BSC is temporarily unavailable.")}
+                </div>
+            </div>
+            <div class="form-group">
+                <div class="row">
+                    ${this._makeNumericInput("State update interval (sec.)", "sentinel-update-state-interval",
+                                             "Default is 60 sec.", sentinelUpdateStateInterval,
+                                             "Interval used to update states of PDisks")}
+                    <div class="w-100 vs-4px"></div>
+                    ${this._makeNumericInput("Timeout (sec.)", "sentinel-update-state-timeout",
+                                             "Default is 45 sec.", sentinelUpdateStateTimeout,
+                                             "Maximum allowed time for PDisks states collection")}
+                </div>
+            </div>
+            <div class="form-group">
+                <div class="row">
+                    ${this._makeNumericInput("Change status retries", "sentinel-change-status-retries",
+                                             "Default is 5", sentinelChangeStatusRetries,
+                                             "Number of retries if status of PDisk cannot be changed due to BSC unavailability")}
+                    <div class="w-100 vs-4px"></div>
+                    ${this._makeNumericInput("Change status retry interval (sec.)", "sentinel-change-status-retry-interval",
+                                             "Default is 10 sec.", sentinelRetryChangeStatus,
+                                             "Used if BSC is temporarily unavailable.")}
+                </div>
+            </div>
+            <div class="form-group">
+                <div class="row">
+                    ${this._makeNumericInput("Default state limit", "sentinel-default-state-limit",
+                                             "Default is 5", sentinelDefaultStateLimit,
+                                             "Number of 'state update' cycles before changing status")}
+                    ${this._makeSentinelStateLimits(sentinelStateLimits, sentinelDefaultStateLimits)}
+                </div>
+            </div>
+            <div class="form-group">
+                <div class="row">
+                    <label class="col-form-label form-control-sm col-sm-auto">Persistent log settings</label>
+                </div>
+                <div class="row">
+                    ${this._makeLogLevelSelects()}
+                    <div class="w-100 vs-4px"></div>
+                    ${this._makeNumericInput("Time to live (days)", "log-ttl",
+                                             "Default is 14 days", logTTL)}
+                </div>
+            </div>
         </div>
         `;
 
@@ -1346,32 +1346,32 @@ class CmsConfigEditForm extends CommonEditForm {
         return res;
     }
 
-    _makeSentinelStateLimits(stateLimits, defaultStateLimits) { 
-        var res = ''; 
- 
-        for (var e of cmsEnums['PDiskStates'].keys()) { 
-            var name = cmsEnums.get('PDiskStates', e); 
-            var placeholder = "Use default if empty"; 
-            if (stateLimits.size == 0 && defaultStateLimits.has(e)) { 
-                placeholder = "Default is " + defaultStateLimits.get(e) + " cycles"; 
-            } 
- 
-            var val = stateLimits.has(e) ? stateLimits.get(e) : ''; 
-            res += ` 
-                <div class="w-100 vs-4px"></div> 
-                <div class="col-3"> 
-                    <label class="col-form-label form-control-sm"><i>${name}</i></label> 
-                </div> 
-                <div class="col-auto"> 
-                    <input type="number" class="form-control-sm cfg-form sentinel-state-limit" placeholder="${placeholder}" value="${val}" data-recordtype="${e}"/> 
-                </div> 
-                <div class="help-icon" data-toggle="tooltip" title="Number of 'state update' cycles before changing status"></div> 
-            `; 
-        } 
- 
-        return res; 
-    } 
- 
+    _makeSentinelStateLimits(stateLimits, defaultStateLimits) {
+        var res = '';
+
+        for (var e of cmsEnums['PDiskStates'].keys()) {
+            var name = cmsEnums.get('PDiskStates', e);
+            var placeholder = "Use default if empty";
+            if (stateLimits.size == 0 && defaultStateLimits.has(e)) {
+                placeholder = "Default is " + defaultStateLimits.get(e) + " cycles";
+            }
+
+            var val = stateLimits.has(e) ? stateLimits.get(e) : '';
+            res += `
+                <div class="w-100 vs-4px"></div>
+                <div class="col-3">
+                    <label class="col-form-label form-control-sm"><i>${name}</i></label>
+                </div>
+                <div class="col-auto">
+                    <input type="number" class="form-control-sm cfg-form sentinel-state-limit" placeholder="${placeholder}" value="${val}" data-recordtype="${e}"/>
+                </div>
+                <div class="help-icon" data-toggle="tooltip" title="Number of 'state update' cycles before changing status"></div>
+            `;
+        }
+
+        return res;
+    }
+
     _prepareData() {
         var data = super._prepareData();
         var cfg = {};
@@ -1404,28 +1404,28 @@ class CmsConfigEditForm extends CommonEditForm {
             }
         });
 
-        // sentinel 
-        this._setBoolSelectValue(cfg, 'sentinel-enabled', ['SentinelConfig', 'Enable']); 
-        this._setBoolSelectValue(cfg, 'sentinel-dry-run', ['SentinelConfig', 'DryRun']); 
-        this._setTimeSecValue(cfg, 'sentinel-update-config-interval', ['SentinelConfig', 'UpdateConfigInterval']); 
-        this._setTimeSecValue(cfg, 'sentinel-retry-update-config', ['SentinelConfig', 'RetryUpdateConfig']); 
-        this._setTimeSecValue(cfg, 'sentinel-update-state-interval', ['SentinelConfig', 'UpdateStateInterval']); 
-        this._setTimeSecValue(cfg, 'sentinel-update-state-timeout', ['SentinelConfig', 'UpdateStateTimeout']); 
-        this._setNumValue(cfg, 'sentinel-change-status-retries', ['SentinelConfig', 'ChangeStatusRetries']); 
-        this._setTimeSecValue(cfg, 'sentinel-change-status-retry-interval', ['SentinelConfig', 'RetryChangeStatus']); 
-        this._setNumValue(cfg, 'sentinel-default-state-limit', ['SentinelConfig', 'DefaultStateLimit']); 
-        $(this._form).find('input.sentinel-state-limit').each(function() { 
-            var val = $(this).val(); 
-            if (val) { 
-                if (cfg.SentinelConfig.StateLimits === undefined) 
-                    cfg.SentinelConfig.StateLimits = []; 
-                cfg.SentinelConfig.StateLimits.push({ 
-                    State: +this.dataset.recordtype, 
-                    Limit: +val, 
-                }); 
-            } 
-        }); 
- 
+        // sentinel
+        this._setBoolSelectValue(cfg, 'sentinel-enabled', ['SentinelConfig', 'Enable']);
+        this._setBoolSelectValue(cfg, 'sentinel-dry-run', ['SentinelConfig', 'DryRun']);
+        this._setTimeSecValue(cfg, 'sentinel-update-config-interval', ['SentinelConfig', 'UpdateConfigInterval']);
+        this._setTimeSecValue(cfg, 'sentinel-retry-update-config', ['SentinelConfig', 'RetryUpdateConfig']);
+        this._setTimeSecValue(cfg, 'sentinel-update-state-interval', ['SentinelConfig', 'UpdateStateInterval']);
+        this._setTimeSecValue(cfg, 'sentinel-update-state-timeout', ['SentinelConfig', 'UpdateStateTimeout']);
+        this._setNumValue(cfg, 'sentinel-change-status-retries', ['SentinelConfig', 'ChangeStatusRetries']);
+        this._setTimeSecValue(cfg, 'sentinel-change-status-retry-interval', ['SentinelConfig', 'RetryChangeStatus']);
+        this._setNumValue(cfg, 'sentinel-default-state-limit', ['SentinelConfig', 'DefaultStateLimit']);
+        $(this._form).find('input.sentinel-state-limit').each(function() {
+            var val = $(this).val();
+            if (val) {
+                if (cfg.SentinelConfig.StateLimits === undefined)
+                    cfg.SentinelConfig.StateLimits = [];
+                cfg.SentinelConfig.StateLimits.push({
+                    State: +this.dataset.recordtype,
+                    Limit: +val,
+                });
+            }
+        });
+
         data.Config = { CmsConfig: cfg };
 
         return data;

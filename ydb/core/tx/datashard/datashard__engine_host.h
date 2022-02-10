@@ -92,10 +92,10 @@ public:
 
     void SetWriteVersion(TRowVersion writeVersion);
     void SetReadVersion(TRowVersion readVersion);
-    void SetIsImmediateTx(); 
+    void SetIsImmediateTx();
 
-    TVector<NMiniKQL::IChangeCollector::TChange> GetCollectedChanges() const; 
- 
+    TVector<NMiniKQL::IChangeCollector::TChange> GetCollectedChanges() const;
+
     void ResetCounters() { EngineHostCounters = TEngineHostCounters(); }
     const TEngineHostCounters& GetCounters() const { return EngineHostCounters; }
 

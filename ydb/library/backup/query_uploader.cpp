@@ -5,8 +5,8 @@
 
 namespace NYdb::NBackup {
 
-static const char DOC_API_REQUEST_TYPE[] = "_document_api_request"; 
- 
+static const char DOC_API_REQUEST_TYPE[] = "_document_api_request";
+
 ////////////////////////////////////////////////////////////////////////////////
 // TUploader
 ////////////////////////////////////////////////////////////////////////////////
@@ -15,12 +15,12 @@ ui32 TUploader::TOptions::GetRps() const {
     return Rate * TDuration::Seconds(1).MilliSeconds() / Interval.MilliSeconds();
 }
 
-TUploader::TUploader(const TUploader::TOptions &opts, NYdb::NTable::TTableClient& client, const TString &query) 
+TUploader::TUploader(const TUploader::TOptions &opts, NYdb::NTable::TTableClient& client, const TString &query)
     : Opts(opts)
     , Query(query)
     , ShouldStop(0)
     , RequestLimiter(opts.GetRps(), opts.GetRps())
-    , Client(client) 
+    , Client(client)
 {
     TasksQueue = MakeSimpleShared<TThreadPool>(TThreadPool::TParams().SetBlocking(true).SetCatching(true));
     TasksQueue->Start(opts.InFly, opts.InFly + 1);
@@ -49,7 +49,7 @@ bool TUploader::Push(const TString& path, TValue&& value) {
             
             auto upsert = [&] (NYdb::NTable::TSession) -> TStatus {
                 auto settings = NTable::TBulkUpsertSettings()
-                    .RequestType(DOC_API_REQUEST_TYPE) 
+                    .RequestType(DOC_API_REQUEST_TYPE)
                     .OperationTimeout(TDuration::Seconds(30))
                     .ClientTimeout(TDuration::Seconds(35));
 
@@ -102,20 +102,20 @@ bool TUploader::Push(TParams params) {
     }
 
     auto upload = [this, params] (NYdb::NTable::TSession session) -> NYdb::TStatus {
-        auto prepareSettings = NTable::TPrepareDataQuerySettings() 
-            .RequestType(DOC_API_REQUEST_TYPE); 
-        auto prepareResult = session.PrepareDataQuery(Query, prepareSettings).GetValueSync(); 
+        auto prepareSettings = NTable::TPrepareDataQuerySettings()
+            .RequestType(DOC_API_REQUEST_TYPE);
+        auto prepareResult = session.PrepareDataQuery(Query, prepareSettings).GetValueSync();
         if (!prepareResult.IsSuccess()) {
             return prepareResult;
         }
 
         auto dataQuery = prepareResult.GetQuery();
         auto transaction = NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx();
-        auto settings = NTable::TExecDataQuerySettings() 
-            .RequestType(DOC_API_REQUEST_TYPE) 
-            .OperationTimeout(TDuration::Seconds(30)) 
-            .ClientTimeout(TDuration::Seconds(35)); 
-        return dataQuery.Execute(transaction, std::move(params), settings).GetValueSync(); 
+        auto settings = NTable::TExecDataQuerySettings()
+            .RequestType(DOC_API_REQUEST_TYPE)
+            .OperationTimeout(TDuration::Seconds(30))
+            .ClientTimeout(TDuration::Seconds(35));
+        return dataQuery.Execute(transaction, std::move(params), settings).GetValueSync();
     };
 
     auto task = [this, upload] () {

@@ -926,10 +926,10 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
         }
     }
 
-    void Index(NYdb::NTable::EIndexType indexType, bool enableBulkUpsertToAsyncIndexedTables = false) { 
-        auto server = TKikimrWithGrpcAndRootSchema({}, {}, {}, false, nullptr, [=](auto& settings) { 
-            settings.SetEnableBulkUpsertToAsyncIndexedTables(enableBulkUpsertToAsyncIndexedTables); 
-        }); 
+    void Index(NYdb::NTable::EIndexType indexType, bool enableBulkUpsertToAsyncIndexedTables = false) {
+        auto server = TKikimrWithGrpcAndRootSchema({}, {}, {}, false, nullptr, [=](auto& settings) {
+            settings.SetEnableBulkUpsertToAsyncIndexedTables(enableBulkUpsertToAsyncIndexedTables);
+        });
         ui16 grpc = server.GetPort();
 
         TString location = TStringBuilder() << "localhost:" << grpc;
@@ -944,7 +944,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
             tableBuilder
                 .AddNullableColumn("Key", EPrimitiveType::Uint8)
                 .AddNullableColumn("Value", EPrimitiveType::Uint8)
-                .AddSecondaryIndex("Value_index", indexType, "Value"); 
+                .AddSecondaryIndex("Value_index", indexType, "Value");
 
             tableBuilder.SetPrimaryKeyColumns({"Key"});
             auto result = session.CreateTable("/Root/ui8", tableBuilder.Build()).ExtractValueSync();
@@ -956,24 +956,24 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
 
         {
             auto res = TestUpsertRow(client, "/Root/ui8", 1, 2);
- 
-            if (indexType == NYdb::NTable::EIndexType::GlobalAsync) { 
-                UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), enableBulkUpsertToAsyncIndexedTables 
-                    ? EStatus::SUCCESS : EStatus::SCHEME_ERROR); 
- 
-                while (enableBulkUpsertToAsyncIndexedTables) { 
-                    auto it = session.ReadTable("/Root/ui8/Value_index/indexImplTable").ExtractValueSync(); 
-                    auto streamPart = it.ReadNext().GetValueSync(); 
-                    auto str = NYdb::FormatResultSetYson(streamPart.ExtractPart()); 
-                    if (str == "[[[2u];[1u]]]") { 
-                        break; 
-                    } 
- 
-                    Sleep(TDuration::Seconds(1)); 
-                } 
-            } else { 
-                UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::SCHEME_ERROR); 
-            } 
+
+            if (indexType == NYdb::NTable::EIndexType::GlobalAsync) {
+                UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), enableBulkUpsertToAsyncIndexedTables
+                    ? EStatus::SUCCESS : EStatus::SCHEME_ERROR);
+
+                while (enableBulkUpsertToAsyncIndexedTables) {
+                    auto it = session.ReadTable("/Root/ui8/Value_index/indexImplTable").ExtractValueSync();
+                    auto streamPart = it.ReadNext().GetValueSync();
+                    auto str = NYdb::FormatResultSetYson(streamPart.ExtractPart());
+                    if (str == "[[[2u];[1u]]]") {
+                        break;
+                    }
+
+                    Sleep(TDuration::Seconds(1));
+                }
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::SCHEME_ERROR);
+            }
         }
 
         {
@@ -982,18 +982,18 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
         }
     }
 
-    Y_UNIT_TEST(SyncIndexShouldSucceed) { 
-        Index(NYdb::NTable::EIndexType::GlobalSync); 
-    } 
- 
-    Y_UNIT_TEST(AsyncIndexShouldFail) { 
-        Index(NYdb::NTable::EIndexType::GlobalAsync, false); 
-    } 
- 
-    Y_UNIT_TEST(AsyncIndexShouldSucceed) { 
-        Index(NYdb::NTable::EIndexType::GlobalAsync, true); 
-    } 
- 
+    Y_UNIT_TEST(SyncIndexShouldSucceed) {
+        Index(NYdb::NTable::EIndexType::GlobalSync);
+    }
+
+    Y_UNIT_TEST(AsyncIndexShouldFail) {
+        Index(NYdb::NTable::EIndexType::GlobalAsync, false);
+    }
+
+    Y_UNIT_TEST(AsyncIndexShouldSucceed) {
+        Index(NYdb::NTable::EIndexType::GlobalAsync, true);
+    }
+
     Y_UNIT_TEST(Timeout) {
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();

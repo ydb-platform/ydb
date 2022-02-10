@@ -166,9 +166,9 @@ public:
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_VERIFY(txState->TxType == TTxState::TxCreateTable);
 
-        NKikimrTxDataShard::TFlatSchemeTransaction txTemplate; 
-        context.SS->FillAsyncIndexInfo(txState->TargetPathId, txTemplate); 
- 
+        NKikimrTxDataShard::TFlatSchemeTransaction txTemplate;
+        context.SS->FillAsyncIndexInfo(txState->TargetPathId, txTemplate);
+
         txState->ClearShardsInProgress();
 
         const ui64 subDomainPathId = context.SS->ResolveDomainId(txState->TargetPathId).LocalPathId;
@@ -185,7 +185,7 @@ public:
                         << " datashardId: " << datashardId
                         << " seqNo: " << seqNo);
 
-            NKikimrTxDataShard::TFlatSchemeTransaction tx(txTemplate); 
+            NKikimrTxDataShard::TFlatSchemeTransaction tx(txTemplate);
             auto tableDesc = tx.MutableCreateTable();
             context.SS->FillSeqNo(tx, seqNo);
             context.SS->FillTableDescription(txState->TargetPathId, i, NEW_TABLE_ALTER_VERSION, tableDesc);
@@ -272,11 +272,11 @@ public:
         TTableInfo::TPtr table = context.SS->Tables[pathId];
         Y_VERIFY(table);
         table->AlterVersion = NEW_TABLE_ALTER_VERSION;
- 
-        if (table->IsTTLEnabled()) { 
-            context.SS->TTLEnabledTables[pathId] = table; 
-            context.SS->TabletCounters->Simple()[COUNTER_TTL_ENABLED_TABLE_COUNT].Add(1); 
-        } 
+
+        if (table->IsTTLEnabled()) {
+            context.SS->TTLEnabledTables[pathId] = table;
+            context.SS->TabletCounters->Simple()[COUNTER_TTL_ENABLED_TABLE_COUNT].Add(1);
+        }
         context.SS->PersistTableCreated(db, pathId);
 
         auto parentDir = context.SS->PathsById.at(path->ParentPathId);
@@ -319,7 +319,7 @@ public:
 
 class TCreateTable: public TSubOperation {
     const TOperationId OperationId;
-    const TTxTransaction Transaction; 
+    const TTxTransaction Transaction;
     TTxState::ETxState State = TTxState::Invalid;
 
     bool AllowShadowData = false;
@@ -374,12 +374,12 @@ class TCreateTable: public TSubOperation {
     }
 
 public:
-    TCreateTable(TOperationId id, const TTxTransaction& tx) 
-        : OperationId(id) 
-        , Transaction(tx) 
-    { 
-    } 
- 
+    TCreateTable(TOperationId id, const TTxTransaction& tx)
+        : OperationId(id)
+        , Transaction(tx)
+    {
+    }
+
     TCreateTable(TOperationId id, TTxState::ETxState state)
         : OperationId(id)
         , State(state)
@@ -403,9 +403,9 @@ public:
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const auto acceptExisted = !Transaction.GetFailOnExist();
-        auto schema = Transaction.GetCreateTable(); 
+        auto schema = Transaction.GetCreateTable();
 
-        const TString& parentPathStr = Transaction.GetWorkingDir(); 
+        const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = schema.GetName();
 
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -426,12 +426,12 @@ public:
         NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
         {
             NSchemeShard::TPath::TChecker checks = parentPath.Check();
-            checks 
+            checks
                 .NotUnderDomainUpgrade()
-                .IsAtLocalSchemeShard() 
-                .IsResolved() 
-                .NotDeleted() 
-                .NotUnderDeleting(); 
+                .IsAtLocalSchemeShard()
+                .IsResolved()
+                .NotDeleted()
+                .NotUnderDeleting();
 
             if (checks) {
                 if (parentPath.Base()->IsTableIndex()) {
@@ -454,20 +454,20 @@ public:
         }
 
         ui32 shardsToCreate = TTableInfo::ShardsToCreate(schema);
-        const TString acl = Transaction.GetModifyACL().GetDiffACL(); 
+        const TString acl = Transaction.GetModifyACL().GetDiffACL();
 
         NSchemeShard::TPath dstPath = parentPath.Child(name);
         {
             NSchemeShard::TPath::TChecker checks = dstPath.Check();
             checks.IsAtLocalSchemeShard();
             if (dstPath.IsResolved()) {
-                checks 
-                    .IsResolved() 
+                checks
+                    .IsResolved()
                     .NotUnderDeleting()
                     .FailOnExist(TPathElement::EPathType::EPathTypeTable, acceptExisted);
             } else {
-                checks 
-                    .NotEmpty() 
+                checks
+                    .NotEmpty()
                     .NotResolved();
             }
 
@@ -481,8 +481,8 @@ public:
                     .PathsLimit()
                     .DirChildrenLimit()
                     .ShardsLimit(shardsToCreate)
-                    .PathShardsLimit(shardsToCreate) 
-                    .IsValidACL(acl); 
+                    .PathShardsLimit(shardsToCreate)
+                    .IsValidACL(acl);
             }
 
             if (!checks) {
@@ -498,20 +498,20 @@ public:
             }
         }
 
-        if (schema.GetIsBackup()) { 
+        if (schema.GetIsBackup()) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, "Cannot create table with explicit 'IsBackup' property");
-            return result; 
-        } 
- 
+            return result;
+        }
+
         if (parentPath.Base()->IsTableIndex()) {
             LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                          "Creating private table for table index"
                          << ", opId: " << OperationId);
- 
-            if (schema.HasTTLSettings()) { 
+
+            if (schema.HasTTLSettings()) {
                 result->SetError(NKikimrScheme::StatusInvalidParameter, "TTL on index table is not supported");
-                return result; 
-            } 
+                return result;
+            }
         }
 
         auto domainInfo = parentPath.DomainInfo();
@@ -531,8 +531,8 @@ public:
 
         PrepareScheme(schema);
 
-        TString errStr; 
- 
+        TString errStr;
+
         NKikimrSchemeOp::TPartitionConfig compilationPartitionConfig;
         if (!TPartitionConfigMerger::ApplyChanges(compilationPartitionConfig, TPartitionConfigMerger::DefaultConfig(AppData()), schema.GetPartitionConfig(), AppData(), errStr)
             || !TPartitionConfigMerger::VerifyCreateParams(compilationPartitionConfig, AppData(), IsShadowDataAllowed(), errStr)) {
@@ -542,8 +542,8 @@ public:
         schema.MutablePartitionConfig()->CopyFrom(compilationPartitionConfig);
 
         const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;
-        const TSchemeLimits& limits = domainInfo->GetSchemeLimits(); 
-        TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(nullptr, schema, *typeRegistry, limits, *domainInfo, errStr, LocalSequences); 
+        const TSchemeLimits& limits = domainInfo->GetSchemeLimits();
+        TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(nullptr, schema, *typeRegistry, limits, *domainInfo, errStr, LocalSequences);
         if (!alterData.Get()) {
             result->SetError(NKikimrScheme::StatusSchemeError, errStr);
             return result;
@@ -592,20 +592,20 @@ public:
             }
         }
 
-        if (!context.SS->CheckApplyIf(Transaction, errStr)) { 
+        if (!context.SS->CheckApplyIf(Transaction, errStr)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;
         }
 
-        TUserAttributes::TPtr userAttrs = new TUserAttributes(1); 
-        const auto& userAttrsDetails = Transaction.GetAlterUserAttributes(); 
+        TUserAttributes::TPtr userAttrs = new TUserAttributes(1);
+        const auto& userAttrsDetails = Transaction.GetAlterUserAttributes();
         if (!userAttrs->ApplyPatch(EUserAttributesOp::CreateTable, userAttrsDetails, errStr) ||
             !userAttrs->CheckLimits(errStr))
         {
             result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
-            return result; 
-        } 
- 
+            return result;
+        }
+
         dstPath.MaterializeLeaf(owner);
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
 
@@ -614,7 +614,7 @@ public:
         newTable->LastTxId = OperationId.GetTxId();
         newTable->PathState = TPathElement::EPathState::EPathStateCreate;
         newTable->PathType = TPathElement::EPathType::EPathTypeTable;
-        newTable->UserAttrs->AlterData = userAttrs; 
+        newTable->UserAttrs->AlterData = userAttrs;
 
         NIceDb::TNiceDb db(context.Txc.DB);
 
@@ -638,7 +638,7 @@ public:
 
         context.SS->PersistPath(db, newTable->PathId);
         context.SS->ApplyAndPersistUserAttrs(db, newTable->PathId);
- 
+
         if (!acl.empty()) {
             newTable->ApplyACL(acl);
             context.SS->PersistACL(db, newTable);
@@ -684,16 +684,16 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override { 
-        Y_FAIL("no AbortPropose for TCreateTable"); 
-    } 
- 
+    void AbortPropose(TOperationContext&) override {
+        Y_FAIL("no AbortPropose for TCreateTable");
+    }
+
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "TCreateTable AbortUnsafe"
                          << ", opId: " << OperationId
                          << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID()); 
+                         << ", at schemeshard: " << context.SS->TabletID());
 
         context.OnComplete.DoneOperation(OperationId);
     }
@@ -708,8 +708,8 @@ ISubOperationBase::TPtr CreateNewTable(TOperationId id, const TTxTransaction& tx
     auto obj = MakeHolder<TCreateTable>(id, tx);
     obj->SetLocalSequences(localSequences);
     return obj.Release();
-} 
- 
+}
+
 ISubOperationBase::TPtr CreateNewTable(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
     return new TCreateTable(id, state);

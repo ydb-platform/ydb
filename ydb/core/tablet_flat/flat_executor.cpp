@@ -22,9 +22,9 @@
 #include "logic_alter_main.h"
 #include "flat_abi_evol.h"
 #include "probes.h"
-#include "shared_sausagecache.h" 
+#include "shared_sausagecache.h"
 #include "util_fmt_desc.h"
- 
+
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/compile_time_flags.h>
 #include <ydb/core/base/hive.h>
@@ -34,10 +34,10 @@
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/util/yverify_stream.h>
 
-#include <library/cpp/monlib/service/pages/templates.h> 
-#include <library/cpp/actors/core/hfunc.h> 
- 
-#include <util/generic/xrange.h> 
+#include <library/cpp/monlib/service/pages/templates.h>
+#include <library/cpp/actors/core/hfunc.h>
+
+#include <util/generic/xrange.h>
 #include <util/generic/ymath.h>
 
 namespace NKikimr {

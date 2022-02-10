@@ -43,7 +43,7 @@ SRCS(
     logoblob.h
     nameservice.h
     path.cpp
-    pathid.cpp 
+    pathid.cpp
     pool_stats_collector.cpp
     pool_stats_collector.h
     quoter.cpp

@@ -30,8 +30,8 @@ SRCS(
     actor_persqueue_client_iface.h
 )
 
-GENERATE_ENUM_SERIALIZATION(sourceid.h) 
- 
+GENERATE_ENUM_SERIALIZATION(sourceid.h)
+
 PEERDIR(
     library/cpp/actors/core
     library/cpp/html/pcdata

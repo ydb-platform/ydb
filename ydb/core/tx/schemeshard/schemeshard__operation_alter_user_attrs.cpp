@@ -8,28 +8,28 @@ using namespace NKikimr;
 using namespace NSchemeShard;
 
 class TAlterUserAttrs: public ISubOperationBase {
-    const TOperationId OperationId; 
-    const TTxTransaction Transaction; 
+    const TOperationId OperationId;
+    const TTxTransaction Transaction;
 
 public:
-    TAlterUserAttrs(TOperationId id, const TTxTransaction& tx) 
-        : OperationId(id) 
-        , Transaction(tx) 
-    { 
-    } 
- 
+    TAlterUserAttrs(TOperationId id, const TTxTransaction& tx)
+        : OperationId(id)
+        , Transaction(tx)
+    {
+    }
+
     TAlterUserAttrs(TOperationId id)
         : OperationId(id)
-    { 
-    } 
+    {
+    }
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
-        const auto& userAttrsPatch = Transaction.GetAlterUserAttributes(); 
+        const auto& userAttrsPatch = Transaction.GetAlterUserAttributes();
 
-        const TString& parentPathStr = Transaction.GetWorkingDir(); 
-        const TString& name = userAttrsPatch.GetPathName(); 
+        const TString& parentPathStr = Transaction.GetWorkingDir();
+        const TString& name = userAttrsPatch.GetPathName();
 
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "TAlterUserAttrs Propose"
@@ -39,7 +39,7 @@ public:
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
-        if (!Transaction.HasAlterUserAttributes()) { 
+        if (!Transaction.HasAlterUserAttributes()) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, "UserAttributes are not present");
             return result;
         }
@@ -69,8 +69,8 @@ public:
             }
         }
 
-        TString errStr; 
- 
+        TString errStr;
+
         TUserAttributes::TPtr alterData = path.Base()->UserAttrs->CreateNextVersion();
         if (!alterData->ApplyPatch(EUserAttributesOp::AlterUserAttrs, userAttrsPatch, errStr) ||
             !alterData->CheckLimits(errStr))
@@ -79,7 +79,7 @@ public:
             return result;
         }
 
-        if (!context.SS->CheckApplyIf(Transaction, errStr)) { 
+        if (!context.SS->CheckApplyIf(Transaction, errStr)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;
         }
@@ -101,10 +101,10 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override { 
-        Y_FAIL("no AbortPropose for TAlterUserAttrs"); 
-    } 
- 
+    void AbortPropose(TOperationContext&) override {
+        Y_FAIL("no AbortPropose for TAlterUserAttrs");
+    }
+
     void ProgressState(TOperationContext& context) override {
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    "TAlterUserAttrs ProgressState"
@@ -125,7 +125,7 @@ public:
                    "TAlterUserAttrs HandleReply TEvOperationPlan"
                        << ", opId: " << OperationId
                        << ", stepId:" << step
-                       << ", at schemeshard: " << ssId); 
+                       << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_VERIFY(txState);
@@ -133,8 +133,8 @@ public:
         if (txState->State != TTxState::Propose) {
             LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                        "Duplicate PlanStep opId#" << OperationId
-                           << " at schemeshard: " << ssId 
-                           << " txState is in state#" << TTxState::StateName(txState->State)); 
+                           << " at schemeshard: " << ssId
+                           << " txState is in state#" << TTxState::StateName(txState->State));
             return;
         }
 
@@ -152,10 +152,10 @@ public:
         context.SS->ApplyAndPersistUserAttrs(db, path->PathId);
 
         context.SS->ClearDescribePathCaches(path);
-        context.OnComplete.PublishToSchemeBoard(OperationId, pathId); 
+        context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
 
         context.OnComplete.UpdateTenants({pathId});
- 
+
         context.OnComplete.DoneOperation(OperationId);
     }
 
@@ -164,7 +164,7 @@ public:
                      "TAlterUserAttrs AbortUnsafe"
                          << ", opId: " << OperationId
                          << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID()); 
+                         << ", at schemeshard: " << context.SS->TabletID());
 
         context.OnComplete.DoneOperation(OperationId);
     }
@@ -175,10 +175,10 @@ public:
 namespace NKikimr {
 namespace NSchemeShard {
 
-ISubOperationBase::TPtr CreateAlterUserAttrs(TOperationId id, const TTxTransaction& tx) { 
-    return new TAlterUserAttrs(id, tx); 
-} 
- 
+ISubOperationBase::TPtr CreateAlterUserAttrs(TOperationId id, const TTxTransaction& tx) {
+    return new TAlterUserAttrs(id, tx);
+}
+
 ISubOperationBase::TPtr CreateAlterUserAttrs(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state == TTxState::Invalid || state == TTxState::Propose);
     return new TAlterUserAttrs(id);

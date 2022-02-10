@@ -582,7 +582,7 @@ private:
 
         if (navigate->ErrorCount > 0) {
             const NSchemeCache::TSchemeCacheNavigate::EStatus status = navigate->ResultSet.front().Status;
-            RLOG_SQS_ERROR("Failed to read ACL for " << GetActionACLSourcePath() << ". Scheme cache error: " << status); 
+            RLOG_SQS_ERROR("Failed to read ACL for " << GetActionACLSourcePath() << ". Scheme cache error: " << status);
 
             if (status == NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown) {
                 MakeError(MutableErrorDesc(), NErrors::ACCESS_DENIED);

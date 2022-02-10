@@ -2,129 +2,129 @@
 
 #include <ydb/core/base/path.h>
 
-#include <util/string/builder.h> 
+#include <util/string/builder.h>
 
 namespace NKikimr {
 namespace NSchemeCache {
 
-TSchemeCacheConfig::TSchemeCacheConfig(const TAppData* appData, NMonitoring::TDynamicCounterPtr counters) 
-    : Counters(counters) 
-{ 
-    Y_VERIFY(appData); 
-    Y_VERIFY(appData->DomainsInfo); 
+TSchemeCacheConfig::TSchemeCacheConfig(const TAppData* appData, NMonitoring::TDynamicCounterPtr counters)
+    : Counters(counters)
+{
+    Y_VERIFY(appData);
+    Y_VERIFY(appData->DomainsInfo);
 
-    for (const auto& [_, domain] : appData->DomainsInfo->Domains) { 
-        Y_VERIFY(domain); 
+    for (const auto& [_, domain] : appData->DomainsInfo->Domains) {
+        Y_VERIFY(domain);
 
-        if (!domain->SchemeRoot) { 
-            continue; 
+        if (!domain->SchemeRoot) {
+            continue;
         }
 
-        Roots.emplace_back(domain->DomainRootTag(), domain->SchemeRoot, domain->Name); 
+        Roots.emplace_back(domain->DomainRootTag(), domain->SchemeRoot, domain->Name);
     }
-} 
-
-TString TDomainInfo::ToString() const { 
-    return TStringBuilder() << "{" 
-        << " DomainKey: " << DomainKey 
-        << " ResourcesDomainKey: " << ResourcesDomainKey 
-        << " Params { " << Params.ShortDebugString() << " }" 
-    << " }"; 
 }
 
-TString TSchemeCacheNavigate::TEntry::ToString() const { 
-    return TStringBuilder() << "{" 
-        << " Path: " << JoinPath(Path) 
-        << " TableId: " << TableId 
-        << " RequestType: " << RequestType 
-        << " Operation: " << Operation 
-        << " RedirectRequired: " << (RedirectRequired ? "true" : "false") 
-        << " ShowPrivatePath: " << (ShowPrivatePath ? "true" : "false") 
-        << " SyncVersion: " << (SyncVersion ? "true" : "false") 
-        << " Status: " << Status 
-        << " Kind: " << Kind 
-        << " DomainInfo " << (DomainInfo ? DomainInfo->ToString() : "<null>") 
-    << " }"; 
+TString TDomainInfo::ToString() const {
+    return TStringBuilder() << "{"
+        << " DomainKey: " << DomainKey
+        << " ResourcesDomainKey: " << ResourcesDomainKey
+        << " Params { " << Params.ShortDebugString() << " }"
+    << " }";
 }
 
-TString TSchemeCacheNavigate::TEntry::ToString(const NScheme::TTypeRegistry& typeRegistry) const { 
-    Y_UNUSED(typeRegistry); 
-    return ToString(); 
+TString TSchemeCacheNavigate::TEntry::ToString() const {
+    return TStringBuilder() << "{"
+        << " Path: " << JoinPath(Path)
+        << " TableId: " << TableId
+        << " RequestType: " << RequestType
+        << " Operation: " << Operation
+        << " RedirectRequired: " << (RedirectRequired ? "true" : "false")
+        << " ShowPrivatePath: " << (ShowPrivatePath ? "true" : "false")
+        << " SyncVersion: " << (SyncVersion ? "true" : "false")
+        << " Status: " << Status
+        << " Kind: " << Kind
+        << " DomainInfo " << (DomainInfo ? DomainInfo->ToString() : "<null>")
+    << " }";
 }
 
-template <typename TResultSet> 
-static TString ResultSetToString(const TResultSet& rs, const NScheme::TTypeRegistry& typeRegistry) { 
-    TStringBuilder out; 
+TString TSchemeCacheNavigate::TEntry::ToString(const NScheme::TTypeRegistry& typeRegistry) const {
+    Y_UNUSED(typeRegistry);
+    return ToString();
+}
 
-    for (ui32 i = 0; i < rs.size(); ++i) { 
-        if (i) { 
-            out << ","; 
+template <typename TResultSet>
+static TString ResultSetToString(const TResultSet& rs, const NScheme::TTypeRegistry& typeRegistry) {
+    TStringBuilder out;
+
+    for (ui32 i = 0; i < rs.size(); ++i) {
+        if (i) {
+            out << ",";
         }
 
-        out << rs.at(i).ToString(typeRegistry); 
+        out << rs.at(i).ToString(typeRegistry);
     }
 
-    return out; 
+    return out;
 }
 
-TString TSchemeCacheNavigate::ToString(const NScheme::TTypeRegistry& typeRegistry) const { 
-    return TStringBuilder() << "{" 
-        << " ErrorCount: " << ErrorCount 
-        << " DatabaseName: " << DatabaseName 
-        << " DomainOwnerId: " << DomainOwnerId 
-        << " ResultSet [" << ResultSetToString(ResultSet, typeRegistry) << "]" 
-    << " }"; 
+TString TSchemeCacheNavigate::ToString(const NScheme::TTypeRegistry& typeRegistry) const {
+    return TStringBuilder() << "{"
+        << " ErrorCount: " << ErrorCount
+        << " DatabaseName: " << DatabaseName
+        << " DomainOwnerId: " << DomainOwnerId
+        << " ResultSet [" << ResultSetToString(ResultSet, typeRegistry) << "]"
+    << " }";
 }
 
-TString TSchemeCacheRequest::TEntry::ToString() const { 
-    return TStringBuilder() << "{" 
-        << " TableId: " << (KeyDescription ? ::ToString(KeyDescription->TableId.PathId) : "<moved>") 
-        << " Access: " << Access 
-        << " SyncVersion: " << (SyncVersion ? "true" : "false") 
-        << " Status: " << Status 
-        << " Kind: " << Kind 
-        << " PartitionsCount: " << (KeyDescription ? ::ToString(KeyDescription->Partitions.size()) : "<moved>") 
-        << " DomainInfo " << (DomainInfo ? DomainInfo->ToString() : "<null>") 
-    << " }"; 
+TString TSchemeCacheRequest::TEntry::ToString() const {
+    return TStringBuilder() << "{"
+        << " TableId: " << (KeyDescription ? ::ToString(KeyDescription->TableId.PathId) : "<moved>")
+        << " Access: " << Access
+        << " SyncVersion: " << (SyncVersion ? "true" : "false")
+        << " Status: " << Status
+        << " Kind: " << Kind
+        << " PartitionsCount: " << (KeyDescription ? ::ToString(KeyDescription->Partitions.size()) : "<moved>")
+        << " DomainInfo " << (DomainInfo ? DomainInfo->ToString() : "<null>")
+    << " }";
 }
 
-TString TSchemeCacheRequest::TEntry::ToString(const NScheme::TTypeRegistry& typeRegistry) const { 
-    TStringBuilder out; 
-    out << "{" 
-        << " TableId: " << (KeyDescription ? ::ToString(KeyDescription->TableId.PathId) : "<moved>") 
-        << " Access: " << Access 
-        << " SyncVersion: " << (SyncVersion ? "true" : "false") 
-        << " Status: " << Status 
-        << " Kind: " << Kind 
-        << " PartitionsCount: " << (KeyDescription ? ::ToString(KeyDescription->Partitions.size()) : "<moved>") 
-        << " DomainInfo " << (DomainInfo ? DomainInfo->ToString() : "<null>"); 
+TString TSchemeCacheRequest::TEntry::ToString(const NScheme::TTypeRegistry& typeRegistry) const {
+    TStringBuilder out;
+    out << "{"
+        << " TableId: " << (KeyDescription ? ::ToString(KeyDescription->TableId.PathId) : "<moved>")
+        << " Access: " << Access
+        << " SyncVersion: " << (SyncVersion ? "true" : "false")
+        << " Status: " << Status
+        << " Kind: " << Kind
+        << " PartitionsCount: " << (KeyDescription ? ::ToString(KeyDescription->Partitions.size()) : "<moved>")
+        << " DomainInfo " << (DomainInfo ? DomainInfo->ToString() : "<null>");
 
-    if (KeyDescription) { 
-        TDbTupleRef from(KeyDescription->KeyColumnTypes.data(), KeyDescription->Range.From.data(), KeyDescription->Range.From.size()); 
-        TDbTupleRef to(KeyDescription->KeyColumnTypes.data(), KeyDescription->Range.To.data(), KeyDescription->Range.To.size()); 
+    if (KeyDescription) {
+        TDbTupleRef from(KeyDescription->KeyColumnTypes.data(), KeyDescription->Range.From.data(), KeyDescription->Range.From.size());
+        TDbTupleRef to(KeyDescription->KeyColumnTypes.data(), KeyDescription->Range.To.data(), KeyDescription->Range.To.size());
 
-        if (KeyDescription->Range.Point) { 
-            out << " Point: " << DbgPrintTuple(from, typeRegistry); 
+        if (KeyDescription->Range.Point) {
+            out << " Point: " << DbgPrintTuple(from, typeRegistry);
         } else {
-            out << " From: " << DbgPrintTuple(from, typeRegistry) 
-                << " IncFrom: " << KeyDescription->Range.InclusiveFrom 
-                << " To: " << DbgPrintTuple(to, typeRegistry) 
-                << " IncTo: " << KeyDescription->Range.InclusiveTo; 
+            out << " From: " << DbgPrintTuple(from, typeRegistry)
+                << " IncFrom: " << KeyDescription->Range.InclusiveFrom
+                << " To: " << DbgPrintTuple(to, typeRegistry)
+                << " IncTo: " << KeyDescription->Range.InclusiveTo;
         }
     }
 
-    out << " }"; 
-    return out; 
+    out << " }";
+    return out;
 }
 
-TString TSchemeCacheRequest::ToString(const NScheme::TTypeRegistry& typeRegistry) const { 
-    return TStringBuilder() << "{" 
-        << " ErrorCount: " << ErrorCount 
-        << " DatabaseName: " << DatabaseName 
-        << " DomainOwnerId: " << DomainOwnerId 
-        << " ResultSet [" << ResultSetToString(ResultSet, typeRegistry) << "]" 
-    << " }"; 
+TString TSchemeCacheRequest::ToString(const NScheme::TTypeRegistry& typeRegistry) const {
+    return TStringBuilder() << "{"
+        << " ErrorCount: " << ErrorCount
+        << " DatabaseName: " << DatabaseName
+        << " DomainOwnerId: " << DomainOwnerId
+        << " ResultSet [" << ResultSetToString(ResultSet, typeRegistry) << "]"
+    << " }";
 }
 
-} // NSchemeCache 
-} // NKikimr 
+} // NSchemeCache
+} // NKikimr

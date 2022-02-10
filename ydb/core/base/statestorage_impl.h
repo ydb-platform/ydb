@@ -1,5 +1,5 @@
 #pragma once
-#include "pathid.h" 
+#include "pathid.h"
 #include "statestorage.h"
 
 namespace NKikimr {
@@ -127,44 +127,44 @@ struct TEvStateStorage::TEvResolveBoard : public TEventLocal<TEvResolveBoard, Ev
     {}
 };
 
-struct TEvStateStorage::TEvResolveSchemeBoard : public TEventLocal<TEvResolveSchemeBoard, EvResolveSchemeBoard> { 
-    enum EKeyType { 
-        KeyTypePath, 
-        KeyTypePathId, 
-    }; 
- 
-    const TString Path; 
-    const TPathId PathId; 
- 
-    const EKeyType KeyType; 
- 
-    TEvResolveSchemeBoard(const TString &path) 
-        : Path(path) 
-        , KeyType(KeyTypePath) 
-    {} 
- 
-    TEvResolveSchemeBoard(const TPathId& pathId) 
-        : PathId(pathId) 
-        , KeyType(KeyTypePathId) 
-    {} 
-}; 
- 
+struct TEvStateStorage::TEvResolveSchemeBoard : public TEventLocal<TEvResolveSchemeBoard, EvResolveSchemeBoard> {
+    enum EKeyType {
+        KeyTypePath,
+        KeyTypePathId,
+    };
+
+    const TString Path;
+    const TPathId PathId;
+
+    const EKeyType KeyType;
+
+    TEvResolveSchemeBoard(const TString &path)
+        : Path(path)
+        , KeyType(KeyTypePath)
+    {}
+
+    TEvResolveSchemeBoard(const TPathId& pathId)
+        : PathId(pathId)
+        , KeyType(KeyTypePathId)
+    {}
+};
+
 struct TEvStateStorage::TEvResolveReplicasList : public TEventLocal<TEvResolveReplicasList, EvResolveReplicasList> {
     TVector<TActorId> Replicas;
     ui32 ConfigContentHash = Max<ui32>();
 };
 
-struct TEvStateStorage::TEvListSchemeBoard : public TEventLocal<TEvListSchemeBoard, EvListSchemeBoard> { 
-}; 
- 
-struct TEvStateStorage::TEvListSchemeBoardResult : public TEventLocal<TEvListSchemeBoardResult, EvListSchemeBoardResult> { 
+struct TEvStateStorage::TEvListSchemeBoard : public TEventLocal<TEvListSchemeBoard, EvListSchemeBoard> {
+};
+
+struct TEvStateStorage::TEvListSchemeBoardResult : public TEventLocal<TEvListSchemeBoardResult, EvListSchemeBoardResult> {
     TIntrusiveConstPtr<TStateStorageInfo> Info;
 
     TEvListSchemeBoardResult(const TIntrusiveConstPtr<TStateStorageInfo> &info)
         : Info(info)
     {}
-}; 
- 
+};
+
 struct TEvStateStorage::TEvReplicaLookup : public TEventPB<TEvStateStorage::TEvReplicaLookup, NKikimrStateStorage::TEvLookup, TEvStateStorage::EvReplicaLookup>{
     struct TActualityCounter : public TRefCounted<TActualityCounter, TAtomicCounter> {};
     using TActualityCounterPtr = TIntrusivePtr<TActualityCounter>;

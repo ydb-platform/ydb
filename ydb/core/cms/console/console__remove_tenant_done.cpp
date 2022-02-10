@@ -3,7 +3,7 @@
 namespace NKikimr {
 namespace NConsole {
 
-using namespace NOperationId; 
+using namespace NOperationId;
 
 class TTenantsManager::TTxRemoveTenantDone : public TTransactionBase<TTenantsManager> {
 public:

@@ -2,7 +2,7 @@
 #include "grpc_request_proxy.h"
 
 #include <ydb/core/base/path.h>
- 
+
 namespace NKikimr {
 namespace NGRpcService {
 
@@ -32,17 +32,17 @@ void FillYdbStatus(Ydb::Coordination::SessionResponse& resp, const NYql::TIssues
     NYql::IssuesToMessage(issues, failure->mutable_issues());
 }
 
-std::pair<TString, TString> SplitPath(const TMaybe<TString>& database, const TString& path) { 
-    std::pair<TString, TString> pathPair; 
-    TString error; 
- 
-    if (!TrySplitPathByDb(path, database.GetOrElse(TString()), pathPair, error)) { 
-        ythrow yexception() << error; 
-    } 
- 
-    return pathPair; 
-} 
- 
+std::pair<TString, TString> SplitPath(const TMaybe<TString>& database, const TString& path) {
+    std::pair<TString, TString> pathPair;
+    TString error;
+
+    if (!TrySplitPathByDb(path, database.GetOrElse(TString()), pathPair, error)) {
+        ythrow yexception() << error;
+    }
+
+    return pathPair;
+}
+
 std::pair<TString, TString> SplitPath(const TString& path) {
     auto splitPos = path.find_last_of('/');
     if (splitPos == path.npos || splitPos + 1 == path.size()) {

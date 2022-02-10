@@ -266,13 +266,13 @@ Ydb::ResultSet TKqpProtoBuilder::BuildYdbResultSet(const TVector<NDqProto::TData
         for (auto& member : dstRowType->GetStruct().GetMember()) {
             auto* column = resultSet.add_columns();
             column->set_name(member.GetName());
-            ConvertMiniKQLTypeToYdbType(member.GetType(), *column->mutable_type()); 
+            ConvertMiniKQLTypeToYdbType(member.GetType(), *column->mutable_type());
         }
     } else {
         for (auto& member : srcRowType.GetStruct().GetMember()) {
             auto* column = resultSet.add_columns();
             column->set_name(member.GetName());
-            ConvertMiniKQLTypeToYdbType(member.GetType(), *column->mutable_type()); 
+            ConvertMiniKQLTypeToYdbType(member.GetType(), *column->mutable_type());
         }
     }
 

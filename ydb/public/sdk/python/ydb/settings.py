@@ -16,7 +16,7 @@ class BaseRequestSettings(object):
         Request settings to be used for RPC execution
         """
         self.trace_id = None
-        self.request_type = None 
+        self.request_type = None
         self.timeout = None
         self.cancel_after = None
         self.operation_timeout = None
@@ -30,15 +30,15 @@ class BaseRequestSettings(object):
         self.trace_id = trace_id
         return self
 
-    def with_request_type(self, request_type): 
-        """ 
-        Includes request type for RPC headers 
-        :param request_type: A request type string 
-        :return: The self instance 
-        """ 
-        self.request_type = request_type 
-        return self 
- 
+    def with_request_type(self, request_type):
+        """
+        Includes request type for RPC headers
+        :param request_type: A request type string
+        :return: The self instance
+        """
+        self.request_type = request_type
+        return self
+
     def with_operation_timeout(self, timeout):
         """
         Indicates that client is no longer interested in the result of operation after the specified duration

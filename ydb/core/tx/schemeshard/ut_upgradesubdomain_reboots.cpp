@@ -1,7 +1,7 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
-#include <util/system/env.h> 
- 
+#include <util/system/env.h>
+
 using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
@@ -181,9 +181,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainWithOutDesicion) {
                                 Columns { Name: "addColumn2"  Type: "Uint64"}
                            )",
                            {TEvSchemeShard::EStatus::StatusMultipleModifications});
-            TestUserAttrs(runtime, ++t.TxId, "/MyRoot/USER_0", "DirA", 
-                          {TEvSchemeShard::EStatus::StatusMultipleModifications}, 
-                          AlterUserAttrs({{"AttrA2", "ValA2"}})); 
+            TestUserAttrs(runtime, ++t.TxId, "/MyRoot/USER_0", "DirA",
+                          {TEvSchemeShard::EStatus::StatusMultipleModifications},
+                          AlterUserAttrs({{"AttrA2", "ValA2"}}));
 
             t.TestEnv->TestWaitNotification(runtime, {t.TxId-2, t.TxId-1, t.TxId});
 
@@ -251,9 +251,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainWithOutDesicion) {
                                 Columns { Name: "addColumn2"  Type: "Uint64"}
                            )",
                            {TEvSchemeShard::EStatus::StatusMultipleModifications});
-            TestUserAttrs(runtime, ++t.TxId, "/MyRoot/USER_0", "DirA", 
-                          {TEvSchemeShard::EStatus::StatusMultipleModifications}, 
-                          AlterUserAttrs({{"AttrA2", "ValA2"}})); 
+            TestUserAttrs(runtime, ++t.TxId, "/MyRoot/USER_0", "DirA",
+                          {TEvSchemeShard::EStatus::StatusMultipleModifications},
+                          AlterUserAttrs({{"AttrA2", "ValA2"}}));
 
             t.TestEnv->TestWaitNotification(runtime, {t.TxId-2, t.TxId-1, t.TxId});
 
@@ -421,7 +421,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainUndo) {
     }
 }
 
- 
+
 Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainCommit) {
     Y_UNIT_TEST(Kesus) {
         TTestWithReboots t;
@@ -854,8 +854,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainCommit) {
                                 NLs::IsExternalSubDomain("USER_0"),
                                 NLs::ExtractTenantSchemeshard(&tenantSchemeShard)});
 
-            TestUserAttrs(runtime, tenantSchemeShard, ++t.TxId, "/MyRoot/USER_0", "DirA", 
-                {NKikimrScheme::StatusAccepted}, AlterUserAttrs(attrs2, {"Name1"})); 
+            TestUserAttrs(runtime, tenantSchemeShard, ++t.TxId, "/MyRoot/USER_0", "DirA",
+                {NKikimrScheme::StatusAccepted}, AlterUserAttrs(attrs2, {"Name1"}));
             t.TestEnv->TestWaitNotification(runtime, t.TxId, tenantSchemeShard);
 
             TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0/DirA"),
@@ -911,7 +911,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainCommit) {
                                 NLs::IsExternalSubDomain("USER_0"),
                                 NLs::ExtractTenantSchemeshard(&tenantSchemeShard)});
 
-            TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0/DirA/Table", true), 
+            TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0/DirA/Table", true),
                                {NLs::PathExist,
                                 NLs::PartitionCount(1)});
 
@@ -925,7 +925,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainCommit) {
                             )");
             t.TestEnv->TestWaitNotification(runtime, t.TxId, tenantSchemeShard);
 
-            TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0/DirA/Table", true), 
+            TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0/DirA/Table", true),
                                {NLs::PathExist,
                                 NLs::PartitionCount(2)});
 
@@ -986,7 +986,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainCommit) {
                                 NLs::IsExternalSubDomain("USER_0"),
                                 NLs::ExtractTenantSchemeshard(&tenantSchemeShard)});
 
-            TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0/DirA/Table", true), 
+            TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0/DirA/Table", true),
                                {NLs::PathExist,
                                 NLs::PartitionCount(1)});
 
@@ -1042,14 +1042,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainCommit) {
                                 NLs::IsExternalSubDomain("USER_0"),
                                 NLs::ExtractTenantSchemeshard(&tenantSchemeShard)});
 
-            TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0/DirA/Table", true), 
+            TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0/DirA/Table", true),
                                {NLs::PathExist,
                                 NLs::PartitionCount(1)});
 
             TestCopyTable(runtime, tenantSchemeShard, ++t.TxId, "/MyRoot/USER_0/DirA", "Copy", "/MyRoot/USER_0/DirA/Table");
             t.TestEnv->TestWaitNotification(runtime, t.TxId, tenantSchemeShard);
 
-            TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0/DirA/Copy", true), 
+            TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0/DirA/Copy", true),
                                {NLs::PathExist,
                                 NLs::PartitionCount(1)});
         });
@@ -1087,7 +1087,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainCommit) {
                                         )");
                 t.TestEnv->TestWaitNotification(runtime, {t.TxId - 1, t.TxId});
 
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0/DirA/Table", true), 
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0/DirA/Table", true),
                                    {NLs::PathExist,
                                     NLs::PartitionCount(1),
                                     NLs::IndexesCount(1)});
@@ -1104,7 +1104,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainCommit) {
                                {NLs::PathRedirected,
                                 NLs::ExtractTenantSchemeshard(&tenantSchemeShard)});
 
-            TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0/DirA/Table", true), 
+            TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0/DirA/Table", true),
                                {NLs::PathExist,
                                 NLs::PartitionCount(1),
                                 NLs::IndexesCount(1)});

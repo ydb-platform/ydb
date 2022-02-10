@@ -485,66 +485,66 @@ Y_UNIT_TEST(ResultSetDecimalPrintTest) {
     TestResultSetParsedOk(resultSetStr, expect);
 }
 
-Y_UNIT_TEST(ResultSetDyNumberPrintTest) { 
-    TString resultSetStr = R"_( 
-        columns:{ 
-            name: "Col1" 
-            type: { type_id: DYNUMBER } 
-        } 
-        rows:{ items:{ text_value: "0" } } 
-        rows:{ items:{ text_value: ".0" } } 
-        rows:{ items:{ text_value: "0.93" } } 
-        rows:{ items:{ text_value: "1" } } 
-        rows:{ items:{ text_value: "-1" } } 
-        rows:{ items:{ text_value: "724.1" } } 
-        rows:{ items:{ text_value: "1E-130" } } 
-        rows:{ items:{ text_value: "9.9999999999999999999999999999999999999E+125" } } 
-        rows:{ items:{ text_value: "-1E-130" } } 
-        rows:{ items:{ text_value: "-9.9999999999999999999999999999999999999E+125" } } 
-        truncated: false 
-    )_"; 
- 
-    const TString expect = TStringBuilder() 
-        << "0" << Endl 
-        << ".0" << Endl 
-        << "0.93" << Endl 
-        << "1" << Endl 
-        << "-1" << Endl 
-        << "724.1" << Endl 
-        << "1E-130" << Endl 
-        << "9.9999999999999999999999999999999999999E+125" << Endl 
-        << "-1E-130" << Endl 
-        << "-9.9999999999999999999999999999999999999E+125" << Endl; 
-    TestResultSetParsedOk(resultSetStr, expect); 
+Y_UNIT_TEST(ResultSetDyNumberPrintTest) {
+    TString resultSetStr = R"_(
+        columns:{
+            name: "Col1"
+            type: { type_id: DYNUMBER }
+        }
+        rows:{ items:{ text_value: "0" } }
+        rows:{ items:{ text_value: ".0" } }
+        rows:{ items:{ text_value: "0.93" } }
+        rows:{ items:{ text_value: "1" } }
+        rows:{ items:{ text_value: "-1" } }
+        rows:{ items:{ text_value: "724.1" } }
+        rows:{ items:{ text_value: "1E-130" } }
+        rows:{ items:{ text_value: "9.9999999999999999999999999999999999999E+125" } }
+        rows:{ items:{ text_value: "-1E-130" } }
+        rows:{ items:{ text_value: "-9.9999999999999999999999999999999999999E+125" } }
+        truncated: false
+    )_";
+
+    const TString expect = TStringBuilder()
+        << "0" << Endl
+        << ".0" << Endl
+        << "0.93" << Endl
+        << "1" << Endl
+        << "-1" << Endl
+        << "724.1" << Endl
+        << "1E-130" << Endl
+        << "9.9999999999999999999999999999999999999E+125" << Endl
+        << "-1E-130" << Endl
+        << "-9.9999999999999999999999999999999999999E+125" << Endl;
+    TestResultSetParsedOk(resultSetStr, expect);
 }
 
-Y_UNIT_TEST(ResultSetJsonDocumentPrintTest) { 
-    TString resultSetStr = R"_( 
-        columns:{ 
-            name: "Col1" 
-            type: { type_id: JSON_DOCUMENT } 
-        } 
-        rows:{ items:{ text_value: '{"key": "value"}' } } 
-        rows:{ items:{ text_value: '{"key": 0}' } } 
-        rows:{ items:{ text_value: '{"key": 0.12}' } } 
-        rows:{ items:{ text_value: '{"key": -1}' } } 
-        rows:{ items:{ text_value: '{"key": [1, 2]}' } } 
-        rows:{ items:{ text_value: '{"key": {"1": "one", "2": 2}}' } } 
-        truncated: false 
-    )_"; 
- 
-    const TString expect = TStringBuilder() 
-        << "\"" << CGIEscapeRet(R"({"key": "value"})") << "\"" << Endl 
-        << "\"" << CGIEscapeRet(R"({"key": 0})") << "\"" << Endl 
-        << "\"" << CGIEscapeRet(R"({"key": 0.12})") << "\"" << Endl 
-        << "\"" << CGIEscapeRet(R"({"key": -1})") << "\"" << Endl 
-        << "\"" << CGIEscapeRet(R"({"key": [1, 2]})") << "\"" << Endl 
-        << "\"" << CGIEscapeRet(R"({"key": {"1": "one", "2": 2}})") << "\"" << Endl; 
-    TestResultSetParsedOk(resultSetStr, expect); 
-} 
- 
-} 
- 
+Y_UNIT_TEST(ResultSetJsonDocumentPrintTest) {
+    TString resultSetStr = R"_(
+        columns:{
+            name: "Col1"
+            type: { type_id: JSON_DOCUMENT }
+        }
+        rows:{ items:{ text_value: '{"key": "value"}' } }
+        rows:{ items:{ text_value: '{"key": 0}' } }
+        rows:{ items:{ text_value: '{"key": 0.12}' } }
+        rows:{ items:{ text_value: '{"key": -1}' } }
+        rows:{ items:{ text_value: '{"key": [1, 2]}' } }
+        rows:{ items:{ text_value: '{"key": {"1": "one", "2": 2}}' } }
+        truncated: false
+    )_";
+
+    const TString expect = TStringBuilder()
+        << "\"" << CGIEscapeRet(R"({"key": "value"})") << "\"" << Endl
+        << "\"" << CGIEscapeRet(R"({"key": 0})") << "\"" << Endl
+        << "\"" << CGIEscapeRet(R"({"key": 0.12})") << "\"" << Endl
+        << "\"" << CGIEscapeRet(R"({"key": -1})") << "\"" << Endl
+        << "\"" << CGIEscapeRet(R"({"key": [1, 2]})") << "\"" << Endl
+        << "\"" << CGIEscapeRet(R"({"key": {"1": "one", "2": 2}})") << "\"" << Endl;
+    TestResultSetParsedOk(resultSetStr, expect);
+}
+
+}
+
 Y_UNIT_TEST_SUITE(UtilTest) {
 
 Y_UNIT_TEST(SizeFromStringParsing) {

@@ -34,7 +34,7 @@ struct TScanState {
     NYql::TIssues Issues;
 };
 
-struct TSchemaOperation { 
+struct TSchemaOperation {
     enum EType : ui32 {
         ETypeDrop = 0,
         ETypeCreate = 1,
@@ -47,11 +47,11 @@ struct TSchemaOperation {
         ETypeInitiateBuildIndex = 8,
         ETypeFinalizeBuildIndex = 9,
         ETypeDropIndexNotice = 10,
-        ETypeRestore = 11, 
+        ETypeRestore = 11,
         ETypeMoveTable = 12,
-        ETypeCreateCdcStream = 13, 
-        ETypeAlterCdcStream = 14, 
-        ETypeDropCdcStream = 15, 
+        ETypeCreateCdcStream = 13,
+        ETypeAlterCdcStream = 14,
+        ETypeDropCdcStream = 15,
 
         ETypeUnknown = Max<ui32>()
     };
@@ -67,15 +67,15 @@ struct TSchemaOperation {
     bool Done;
 
     bool Success;
-    TString Error; 
-    ui64 BytesProcessed; 
-    ui64 RowsProcessed; 
+    TString Error;
+    ui64 BytesProcessed;
+    ui64 RowsProcessed;
 
     TScanState ScanState;
 
-    TSchemaOperation(ui64 txId, EType type, TActorId source, ui64 tabletId, 
-                    ui64 minStep, ui64 maxStep, ui64 planStep, bool readOnly, 
-                    bool success, const TString& error, ui64 bytes, ui64 rows) 
+    TSchemaOperation(ui64 txId, EType type, TActorId source, ui64 tabletId,
+                    ui64 minStep, ui64 maxStep, ui64 planStep, bool readOnly,
+                    bool success, const TString& error, ui64 bytes, ui64 rows)
         : TxId(txId)
         , Type(type)
         , Source(source)
@@ -85,17 +85,17 @@ struct TSchemaOperation {
         , PlanStep(planStep)
         , ReadOnly(readOnly)
         , Done(false)
-        , Success(success) 
-        , Error(error) 
-        , BytesProcessed(bytes) 
-        , RowsProcessed(rows) 
+        , Success(success)
+        , Error(error)
+        , BytesProcessed(bytes)
+        , RowsProcessed(rows)
     {}
 
     bool IsDrop() const { return Type == ETypeDrop; }
     bool IsCreate() const { return Type == ETypeCreate; }
     bool IsAlter() const { return Type == ETypeAlter; }
     bool IsBackup() const { return Type == ETypeBackup; }
-    bool IsRestore() const { return Type == ETypeRestore; } 
+    bool IsRestore() const { return Type == ETypeRestore; }
     bool IsCopy() const { return Type == ETypeCopy; }
     bool IsCreatePersistentSnapshot() const { return Type == ETypeCreatePersistentSnapshot; }
     bool IsDropPersistentSnapshot() const { return Type == ETypeDropPersistentSnapshot; }
@@ -103,9 +103,9 @@ struct TSchemaOperation {
     bool IsFinalizeBuildIndex() const { return Type == ETypeFinalizeBuildIndex; }
     bool IsDropIndexNotice() const { return Type == ETypeDropIndexNotice; }
     bool IsMove() const { return Type == ETypeMoveTable; }
-    bool IsCreateCdcStream() const { return Type == ETypeCreateCdcStream; } 
-    bool IsAlterCdcStream() const { return Type == ETypeAlterCdcStream; } 
-    bool IsDropCdcStream() const { return Type == ETypeDropCdcStream; } 
+    bool IsCreateCdcStream() const { return Type == ETypeCreateCdcStream; }
+    bool IsAlterCdcStream() const { return Type == ETypeAlterCdcStream; }
+    bool IsDropCdcStream() const { return Type == ETypeDropCdcStream; }
 
     bool IsReadOnly() const { return ReadOnly; }
 };
@@ -176,8 +176,8 @@ public:
     void SetWriteVersion(TRowVersion writeVersion) { EngineBay.SetWriteVersion(writeVersion); }
     void SetReadVersion(TRowVersion readVersion) { EngineBay.SetReadVersion(readVersion); }
 
-    TVector<NMiniKQL::IChangeCollector::TChange> GetCollectedChanges() const { return EngineBay.GetCollectedChanges(); } 
- 
+    TVector<NMiniKQL::IChangeCollector::TChange> GetCollectedChanges() const { return EngineBay.GetCollectedChanges(); }
+
     TActorId Source() const { return Source_; }
     void SetSource(const TActorId& actorId) { Source_ = actorId; }
     void SetStep(ui64 step) { StepTxId_.Step = step; }
@@ -256,37 +256,37 @@ enum class ERestoreDataStatus {
 };
 
 ///
-class TDistributedEraseTx { 
-public: 
-    using TPtr = THolder<TDistributedEraseTx>; 
-    using TProto = NKikimrTxDataShard::TDistributedEraseTransaction; 
- 
-public: 
-    bool TryParse(const TString& serialized); 
- 
-    const TProto& GetBody() const { return Body; } 
- 
-    bool HasDependents() const { return Body.DependentsSize(); } 
-    const auto& GetDependents() const { return Body.GetDependents(); } 
- 
-    bool HasDependencies() const { return Body.DependenciesSize(); } 
-    const auto& GetDependencies() const { return Body.GetDependencies(); } 
- 
-    const auto& GetRequest() const { return Body.GetEraseRowsRequest(); } 
- 
-    const auto& GetIndexColumnIds() const { return Body.GetIndexColumnIds(); } 
-    const auto& GetIndexColumns() const { return Body.GetIndexColumns(); } 
- 
-    void SetConfirmedRows(TDynBitMap&& confirmedRows) { ConfirmedRows = std::move(confirmedRows); } 
-    const TDynBitMap& GetConfirmedRows() const { return ConfirmedRows; } 
- 
-private: 
-    TProto Body; 
-    TDynBitMap ConfirmedRows; // available on shard of main table 
- 
-}; // TDistributedEraseTx 
- 
-/// 
+class TDistributedEraseTx {
+public:
+    using TPtr = THolder<TDistributedEraseTx>;
+    using TProto = NKikimrTxDataShard::TDistributedEraseTransaction;
+
+public:
+    bool TryParse(const TString& serialized);
+
+    const TProto& GetBody() const { return Body; }
+
+    bool HasDependents() const { return Body.DependentsSize(); }
+    const auto& GetDependents() const { return Body.GetDependents(); }
+
+    bool HasDependencies() const { return Body.DependenciesSize(); }
+    const auto& GetDependencies() const { return Body.GetDependencies(); }
+
+    const auto& GetRequest() const { return Body.GetEraseRowsRequest(); }
+
+    const auto& GetIndexColumnIds() const { return Body.GetIndexColumnIds(); }
+    const auto& GetIndexColumns() const { return Body.GetIndexColumns(); }
+
+    void SetConfirmedRows(TDynBitMap&& confirmedRows) { ConfirmedRows = std::move(confirmedRows); }
+    const TDynBitMap& GetConfirmedRows() const { return ConfirmedRows; }
+
+private:
+    TProto Body;
+    TDynBitMap ConfirmedRows; // available on shard of main table
+
+}; // TDistributedEraseTx
+
+///
 class TCommitWritesTx {
 public:
     using TPtr = THolder<TCommitWritesTx>;
@@ -318,7 +318,7 @@ public:
         , ReleasedTxDataSize(0)
         , SchemeShardId(0)
         , SubDomainPathId(0)
-        , SchemeTxType(TSchemaOperation::ETypeUnknown) 
+        , SchemeTxType(TSchemaOperation::ETypeUnknown)
         , ScanSnapshotId(0)
         , ScanTask(0)
     {
@@ -393,7 +393,7 @@ public:
     }
     bool BuildSchemeTx();
     void ClearSchemeTx() { SchemeTx = nullptr; }
-    TSchemaOperation::EType GetSchemeTxType() const { return SchemeTxType; } 
+    TSchemaOperation::EType GetSchemeTxType() const { return SchemeTxType; }
 
     const NKikimrTxDataShard::TSnapshotTransaction& GetSnapshotTx() const {
         Y_VERIFY_DEBUG(SnapshotTx);
@@ -402,13 +402,13 @@ public:
     bool BuildSnapshotTx();
     void ClearSnapshotTx() { SnapshotTx = nullptr; }
 
-    const TDistributedEraseTx::TPtr& GetDistributedEraseTx() const { 
-        Y_VERIFY_DEBUG(DistributedEraseTx); 
-        return DistributedEraseTx; 
-    } 
-    bool BuildDistributedEraseTx(); 
-    void ClearDistributedEraseTx() { DistributedEraseTx = nullptr; } 
- 
+    const TDistributedEraseTx::TPtr& GetDistributedEraseTx() const {
+        Y_VERIFY_DEBUG(DistributedEraseTx);
+        return DistributedEraseTx;
+    }
+    bool BuildDistributedEraseTx();
+    void ClearDistributedEraseTx() { DistributedEraseTx = nullptr; }
+
     const TCommitWritesTx::TPtr& GetCommitWritesTx() const {
         Y_VERIFY_DEBUG(CommitWritesTx);
         return CommitWritesTx;
@@ -519,10 +519,10 @@ public:
     void SetScanTask(ui64 id) { ScanTask = id; }
     ui64 GetScanTask() const { return ScanTask; }
 
-    void SetAsyncJobActor(TActorId aid) { AsyncJobActor = aid; } 
-    TActorId GetAsyncJobActor() const { return AsyncJobActor; } 
-    void KillAsyncJobActor(const TActorContext& ctx); 
- 
+    void SetAsyncJobActor(TActorId aid) { AsyncJobActor = aid; }
+    TActorId GetAsyncJobActor() const { return AsyncJobActor; }
+    void KillAsyncJobActor(const TActorContext& ctx);
+
     void SetStreamSink(TActorId sink) { StreamSink = sink; }
     TActorId GetStreamSink() const { return StreamSink; }
 
@@ -541,7 +541,7 @@ private:
     TValidatedDataTx::TPtr DataTx;
     THolder<NKikimrTxDataShard::TFlatSchemeTransaction> SchemeTx;
     THolder<NKikimrTxDataShard::TSnapshotTransaction> SnapshotTx;
-    TDistributedEraseTx::TPtr DistributedEraseTx; 
+    TDistributedEraseTx::TPtr DistributedEraseTx;
     TCommitWritesTx::TPtr CommitWritesTx;
     TString TxBody;
 
@@ -552,10 +552,10 @@ private:
     ui64 SchemeShardId;
     ui64 SubDomainPathId;
     NKikimrSubDomains::TProcessingParams ProcessingParams;
-    TSchemaOperation::EType SchemeTxType; 
+    TSchemaOperation::EType SchemeTxType;
     ui64 ScanSnapshotId;
     ui64 ScanTask;
-    TActorId AsyncJobActor; 
+    TActorId AsyncJobActor;
     TActorId StreamSink;
     TActorId ScanActor;
     ui64 PageFaultCount = 0;

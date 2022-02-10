@@ -70,8 +70,8 @@ void DisableBackgroundCompactionViaRestart(
     ui64 schemeShard)
 {
     // turn on background compaction and restart to apply
-    runtime.GetAppData().FeatureFlags.SetEnableBackgroundCompactionForTest(false); 
-    runtime.GetAppData().FeatureFlags.SetEnableBackgroundCompactionServerlessForTest(false); 
+    runtime.GetAppData().FeatureFlags.SetEnableBackgroundCompactionForTest(false);
+    runtime.GetAppData().FeatureFlags.SetEnableBackgroundCompactionServerlessForTest(false);
 
     // little hack to simplify life
     auto& compactionConfig = runtime.GetAppData().CompactionConfig;
@@ -88,8 +88,8 @@ void EnableBackgroundCompactionViaRestart(
     bool enableServerless)
 {
     // turn on background compaction and restart to apply
-    runtime.GetAppData().FeatureFlags.SetEnableBackgroundCompactionForTest(true); 
-    runtime.GetAppData().FeatureFlags.SetEnableBackgroundCompactionServerlessForTest(enableServerless); 
+    runtime.GetAppData().FeatureFlags.SetEnableBackgroundCompactionForTest(true);
+    runtime.GetAppData().FeatureFlags.SetEnableBackgroundCompactionServerlessForTest(enableServerless);
 
     // little hack to simplify life
     auto& compactionConfig = runtime.GetAppData().CompactionConfig;
@@ -161,7 +161,7 @@ void CheckNoCompactions(
     ui64 schemeshardId,
     const TString& path)
 {
-    auto description = DescribePrivatePath(runtime, schemeshardId, path, true, true); 
+    auto description = DescribePrivatePath(runtime, schemeshardId, path, true, true);
     TVector<ui64> shards;
     for (auto &part : description.GetPathDescription().GetTablePartitions())
         shards.push_back(part.GetDatashardId());
@@ -212,7 +212,7 @@ void TestBackgroundCompaction(
 
     enableBackgroundCompactionFunc(runtime, env);
 
-    auto description = DescribePrivatePath(runtime, "/MyRoot/Simple", true, true); 
+    auto description = DescribePrivatePath(runtime, "/MyRoot/Simple", true, true);
     TVector<ui64> shards;
     for (auto &part : description.GetPathDescription().GetTablePartitions())
         shards.push_back(part.GetDatashardId());
@@ -308,7 +308,7 @@ ui64 TestServerless(
     // turn on background compaction
     EnableBackgroundCompactionViaRestart(runtime, env, schemeshardId, enableServerless);
 
-    auto description = DescribePrivatePath(runtime, schemeshardId, "/MyRoot/User/Simple", true, true); 
+    auto description = DescribePrivatePath(runtime, schemeshardId, "/MyRoot/User/Simple", true, true);
     TVector<ui64> shards;
     for (auto &part : description.GetPathDescription().GetTablePartitions())
         shards.push_back(part.GetDatashardId());

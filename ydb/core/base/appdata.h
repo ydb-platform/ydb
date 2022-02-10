@@ -3,7 +3,7 @@
 #include "defs.h"
 #include "channel_profiles.h"
 #include "domain.h"
-#include "feature_flags.h" 
+#include "feature_flags.h"
 #include "nameservice.h"
 #include "tablet_types.h"
 #include "resource_profile.h"
@@ -60,7 +60,7 @@ namespace NSQS {
 namespace NPQ {
     class IPersQueueMirrorReaderFactory;
 }
- 
+
 class TFormatFactory;
 
 struct TAppData {
@@ -84,7 +84,7 @@ struct TAppData {
     IActor*(*FolderServiceFactory)(const NKikimrProto::NFolderService::TFolderServiceConfig&);
 
     const NPQ::IPersQueueMirrorReaderFactory* PersQueueMirrorReaderFactory = nullptr;
-    NYdb::TDriver* YdbDriver = nullptr; 
+    NYdb::TDriver* YdbDriver = nullptr;
     const NPDisk::IIoContextFactory* IoContextFactory = nullptr;
 
     struct TDefaultTabletTypes {
@@ -102,7 +102,7 @@ struct TAppData {
         TTabletTypes::EType ColumnShard;
         TTabletTypes::EType TestShard;
         TTabletTypes::EType SequenceShard;
-        TTabletTypes::EType ReplicationController; 
+        TTabletTypes::EType ReplicationController;
 
         TDefaultTabletTypes();
     };
@@ -141,10 +141,10 @@ struct TAppData {
     NKikimrProto::TAuthConfig AuthConfig;
     NKikimrProto::TKeyConfig KeyConfig;
     NKikimrProto::TKeyConfig PDiskKeyConfig;
-    TFeatureFlags FeatureFlags; 
+    TFeatureFlags FeatureFlags;
     NKikimrConfig::THiveConfig HiveConfig;
     NKikimrConfig::TDataShardConfig DataShardConfig;
-    NKikimrConfig::TMeteringConfig MeteringConfig; 
+    NKikimrConfig::TMeteringConfig MeteringConfig;
     NKikimrConfig::TCompactionConfig CompactionConfig;
     bool EnforceUserTokenRequirement = false;
     bool AllowHugeKeyValueDeletes = true; // delete when all clients limit deletes per request

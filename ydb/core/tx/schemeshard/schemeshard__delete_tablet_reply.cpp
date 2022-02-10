@@ -98,9 +98,9 @@ struct TSchemeShard::TTxDeleteTabletReply : public TSchemeShard::TRwTxBase {
             case ETabletType::SequenceShard:
                 Self->TabletCounters->Simple()[COUNTER_SEQUENCESHARD_COUNT].Sub(1);
                 break;
-            case ETabletType::ReplicationController: 
-                Self->TabletCounters->Simple()[COUNTER_REPLICATION_CONTROLLER_COUNT].Sub(1); 
-                break; 
+            case ETabletType::ReplicationController:
+                Self->TabletCounters->Simple()[COUNTER_REPLICATION_CONTROLLER_COUNT].Sub(1);
+                break;
             default:
                 Y_FAIL_S("Unknown TabletType"
                          << ", ShardIdx " << ShardIdx
@@ -124,15 +124,15 @@ struct TSchemeShard::TTxDeleteTabletReply : public TSchemeShard::TRwTxBase {
 
             auto domain = Self->ResolveDomainInfo(path);
             domain->RemoveInternalShard(ShardIdx);
-            switch (tabletType) { 
-            case ETabletType::SequenceShard: 
+            switch (tabletType) {
+            case ETabletType::SequenceShard:
                 domain->RemoveSequenceShard(ShardIdx);
-                break; 
-            case ETabletType::ReplicationController: 
-                domain->RemoveReplicationController(ShardIdx); 
-                break; 
-            default: 
-                break; 
+                break;
+            case ETabletType::ReplicationController:
+                domain->RemoveReplicationController(ShardIdx);
+                break;
+            default:
+                break;
             }
 
             TabletId = shardInfo.TabletID;

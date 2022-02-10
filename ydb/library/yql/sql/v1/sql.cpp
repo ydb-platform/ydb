@@ -596,30 +596,30 @@ static bool PureColumnOrNamedListStr(const TRule_pure_column_or_named_list& node
     return true;
 }
 
-static bool CreateTableIndex(const TRule_table_index& node, TTranslation& ctx, TVector<TIndexDescription>& indexes) { 
-    indexes.emplace_back(IdEx(node.GetRule_an_id2(), ctx)); 
+static bool CreateTableIndex(const TRule_table_index& node, TTranslation& ctx, TVector<TIndexDescription>& indexes) {
+    indexes.emplace_back(IdEx(node.GetRule_an_id2(), ctx));
 
-    const auto& indexType = node.GetRule_table_index_type3(); 
+    const auto& indexType = node.GetRule_table_index_type3();
     switch (indexType.Alt_case()) {
-        case TRule_table_index_type::kAltTableIndexType1: { 
-            auto globalIndex = indexType.GetAlt_table_index_type1().GetRule_global_index1(); 
-            if (globalIndex.HasBlock2()) { 
+        case TRule_table_index_type::kAltTableIndexType1: {
+            auto globalIndex = indexType.GetAlt_table_index_type1().GetRule_global_index1();
+            if (globalIndex.HasBlock2()) {
                 ctx.AltNotImplemented("unique", indexType);
                 return false;
             }
-            if (globalIndex.HasBlock3()) { 
-                const TString token = to_lower(ctx.Token(globalIndex.GetBlock3().GetToken1())); 
-                if (token == "sync") { 
-                    indexes.back().Type = TIndexDescription::EType::GlobalSync; 
-                } else if (token == "async") { 
-                    indexes.back().Type = TIndexDescription::EType::GlobalAsync; 
-                } else { 
-                    Y_FAIL("You should change implementation according to grammar changes"); 
-                } 
-            } 
+            if (globalIndex.HasBlock3()) {
+                const TString token = to_lower(ctx.Token(globalIndex.GetBlock3().GetToken1()));
+                if (token == "sync") {
+                    indexes.back().Type = TIndexDescription::EType::GlobalSync;
+                } else if (token == "async") {
+                    indexes.back().Type = TIndexDescription::EType::GlobalAsync;
+                } else {
+                    Y_FAIL("You should change implementation according to grammar changes");
+                }
+            }
         }
         break;
-        case TRule_table_index_type::kAltTableIndexType2: 
+        case TRule_table_index_type::kAltTableIndexType2:
             ctx.AltNotImplemented("local", indexType);
             return false;
         default:
@@ -631,75 +631,75 @@ static bool CreateTableIndex(const TRule_table_index& node, TTranslation& ctx, T
         return false;
     }
 
-    indexes.back().IndexColumns.emplace_back(IdEx(node.GetRule_an_id_schema7(), ctx)); 
+    indexes.back().IndexColumns.emplace_back(IdEx(node.GetRule_an_id_schema7(), ctx));
     for (const auto& block : node.GetBlock8()) {
-        indexes.back().IndexColumns.emplace_back(IdEx(block.GetRule_an_id_schema2(), ctx)); 
+        indexes.back().IndexColumns.emplace_back(IdEx(block.GetRule_an_id_schema2(), ctx));
     }
 
     if (node.HasBlock10()) {
         const auto& block = node.GetBlock10();
-        indexes.back().DataColumns.emplace_back(IdEx(block.GetRule_an_id_schema3(), ctx)); 
+        indexes.back().DataColumns.emplace_back(IdEx(block.GetRule_an_id_schema3(), ctx));
         for (const auto& inner : block.GetBlock4()) {
-            indexes.back().DataColumns.emplace_back(IdEx(inner.GetRule_an_id_schema2(), ctx)); 
+            indexes.back().DataColumns.emplace_back(IdEx(inner.GetRule_an_id_schema2(), ctx));
         }
     }
 
     return true;
 }
 
-static bool ChangefeedSettingsEntry(const TRule_changefeed_settings_entry& node, TTranslation& ctx, TChangefeedSettings& settings, bool alter) { 
-    const auto id = IdEx(node.GetRule_an_id1(), ctx); 
-    const TString value(ctx.Token(node.GetRule_changefeed_setting_value3().GetToken1())); 
- 
-    if (alter) { 
-        // currently we don't support alter settings 
-        ctx.Error() << to_upper(id.Name) << " alter is not supported"; 
-        return false; 
-    } 
- 
-    if (to_lower(id.Name) == "sink_type") { 
-        if (to_lower(value) == "local") { 
-            settings.SinkSettings = TChangefeedSettings::TLocalSinkSettings(); 
-        } else { 
-            ctx.Error() << "Unknown changefeed's sink type: " << to_upper(value); 
-            return false; 
-        } 
-    } else if (to_lower(id.Name) == "mode") { 
-        settings.Mode = BuildLiteralSmartString(ctx.Context(), value); 
-    } else if (to_lower(id.Name) == "format") { 
-        settings.Format = BuildLiteralSmartString(ctx.Context(), value); 
-    } else { 
-        ctx.Error() << "Unknown changefeed setting: " << id.Name; 
-        return false; 
-    } 
- 
-    return true; 
-} 
- 
-static bool ChangefeedSettings(const TRule_changefeed_settings& node, TTranslation& ctx, TChangefeedSettings& settings, bool alter) { 
-    if (!ChangefeedSettingsEntry(node.GetRule_changefeed_settings_entry1(), ctx, settings, alter)) { 
-        return false; 
-    } 
- 
-    for (auto& block : node.GetBlock2()) { 
-        if (!ChangefeedSettingsEntry(block.GetRule_changefeed_settings_entry2(), ctx, settings, alter)) { 
-            return false; 
-        } 
-    } 
- 
-    return true; 
-} 
- 
-static bool CreateChangefeed(const TRule_changefeed& node, TTranslation& ctx, TVector<TChangefeedDescription>& changefeeds) { 
-    changefeeds.emplace_back(IdEx(node.GetRule_an_id2(), ctx)); 
- 
-    if (!ChangefeedSettings(node.GetRule_changefeed_settings5(), ctx, changefeeds.back().Settings, false)) { 
-        return false; 
-    } 
- 
-    return true; 
-} 
- 
+static bool ChangefeedSettingsEntry(const TRule_changefeed_settings_entry& node, TTranslation& ctx, TChangefeedSettings& settings, bool alter) {
+    const auto id = IdEx(node.GetRule_an_id1(), ctx);
+    const TString value(ctx.Token(node.GetRule_changefeed_setting_value3().GetToken1()));
+
+    if (alter) {
+        // currently we don't support alter settings
+        ctx.Error() << to_upper(id.Name) << " alter is not supported";
+        return false;
+    }
+
+    if (to_lower(id.Name) == "sink_type") {
+        if (to_lower(value) == "local") {
+            settings.SinkSettings = TChangefeedSettings::TLocalSinkSettings();
+        } else {
+            ctx.Error() << "Unknown changefeed's sink type: " << to_upper(value);
+            return false;
+        }
+    } else if (to_lower(id.Name) == "mode") {
+        settings.Mode = BuildLiteralSmartString(ctx.Context(), value);
+    } else if (to_lower(id.Name) == "format") {
+        settings.Format = BuildLiteralSmartString(ctx.Context(), value);
+    } else {
+        ctx.Error() << "Unknown changefeed setting: " << id.Name;
+        return false;
+    }
+
+    return true;
+}
+
+static bool ChangefeedSettings(const TRule_changefeed_settings& node, TTranslation& ctx, TChangefeedSettings& settings, bool alter) {
+    if (!ChangefeedSettingsEntry(node.GetRule_changefeed_settings_entry1(), ctx, settings, alter)) {
+        return false;
+    }
+
+    for (auto& block : node.GetBlock2()) {
+        if (!ChangefeedSettingsEntry(block.GetRule_changefeed_settings_entry2(), ctx, settings, alter)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static bool CreateChangefeed(const TRule_changefeed& node, TTranslation& ctx, TVector<TChangefeedDescription>& changefeeds) {
+    changefeeds.emplace_back(IdEx(node.GetRule_an_id2(), ctx));
+
+    if (!ChangefeedSettings(node.GetRule_changefeed_settings5(), ctx, changefeeds.back().Settings, false)) {
+        return false;
+    }
+
+    return true;
+}
+
 static std::pair<TString, TString> TableKeyImpl(const std::pair<bool, TString>& nameWithAt, TString view, TTranslation& ctx) {
     if (nameWithAt.first) {
         view = "@";
@@ -845,11 +845,11 @@ protected:
     bool FillFamilySettingsEntry(const TRule_family_settings_entry& settingNode, TFamilyEntry& family);
     bool FillFamilySettings(const TRule_family_settings& settingsNode, TFamilyEntry& family);
     bool CreateTableSettings(const TRule_with_table_settings& settingsNode, TTableSettings& settings);
-    bool StoreTableSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value, TTableSettings& settings, 
-        bool alter, bool reset); 
+    bool StoreTableSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value, TTableSettings& settings,
+        bool alter, bool reset);
     bool StoreTableSettingsEntry(const TIdentifier& id, const TRule_table_setting_value& value, TTableSettings& settings,
         bool alter = false);
-    bool ResetTableSettingsEntry(const TIdentifier& id, TTableSettings& settings); 
+    bool ResetTableSettingsEntry(const TIdentifier& id, TTableSettings& settings);
 
     TNodePtr TypeSimple(const TRule_type_name_simple& node, bool onlyDataAllowed);
     TNodePtr TypeDecimal(const TRule_type_name_decimal& node);
@@ -1948,15 +1948,15 @@ bool TSqlTranslation::CreateTableEntry(const TRule_create_table_entry& node, TCr
             params.ColumnFamilies.push_back(family);
             break;
         }
-        case TRule_create_table_entry::kAltCreateTableEntry5: 
-        { 
-            // changefeed 
-            auto& changefeed = node.GetAlt_create_table_entry5().GetRule_changefeed1(); 
-            if (!CreateChangefeed(changefeed, *this, params.Changefeeds)) { 
-                return false; 
-            } 
-            break; 
-        } 
+        case TRule_create_table_entry::kAltCreateTableEntry5:
+        {
+            // changefeed
+            auto& changefeed = node.GetAlt_create_table_entry5().GetRule_changefeed1();
+            if (!CreateChangefeed(changefeed, *this, params.Changefeeds)) {
+                return false;
+            }
+            break;
+        }
         default:
             AltNotImplemented("create_table_entry", node);
             return false;
@@ -2098,30 +2098,30 @@ namespace {
         }
         return true;
     }
- 
-    bool StoreTtlSettings(const TRule_table_setting_value& from, TResetableSetting<TTtlSettings, void>& to, 
-            TSqlExpression& expr, TContext& ctx, TTranslation& txc) { 
-        switch (from.Alt_case()) { 
-        case TRule_table_setting_value::kAltTableSettingValue5: { 
-            auto columnName = IdEx(from.GetAlt_table_setting_value5().GetRule_an_id3(), txc); 
-            auto exprNode = expr.Build(from.GetAlt_table_setting_value5().GetRule_expr1()); 
-            if (!exprNode) { 
-                return false; 
-            } 
- 
-            if (exprNode->GetOpName() != "Interval") { 
-                ctx.Error() << "Literal of Interval type is expected for TTL"; 
-                return false; 
-            } 
- 
-            to.Set(TTtlSettings(columnName, exprNode)); 
-            break; 
-        } 
-        default: 
-            return false; 
-        } 
-        return true; 
-    } 
+
+    bool StoreTtlSettings(const TRule_table_setting_value& from, TResetableSetting<TTtlSettings, void>& to,
+            TSqlExpression& expr, TContext& ctx, TTranslation& txc) {
+        switch (from.Alt_case()) {
+        case TRule_table_setting_value::kAltTableSettingValue5: {
+            auto columnName = IdEx(from.GetAlt_table_setting_value5().GetRule_an_id3(), txc);
+            auto exprNode = expr.Build(from.GetAlt_table_setting_value5().GetRule_expr1());
+            if (!exprNode) {
+                return false;
+            }
+
+            if (exprNode->GetOpName() != "Interval") {
+                ctx.Error() << "Literal of Interval type is expected for TTL";
+                return false;
+            }
+
+            to.Set(TTtlSettings(columnName, exprNode));
+            break;
+        }
+        default:
+            return false;
+        }
+        return true;
+    }
 
     bool WithoutAlpha(const std::string_view& literal) {
         return literal.cend() == std::find_if(literal.cbegin(), literal.cend(), [](char c) { return std::isalpha(c) || (c & '\x80'); });
@@ -2170,113 +2170,113 @@ namespace {
     }
 }
 
-bool TSqlTranslation::StoreTableSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value, 
-        TTableSettings& settings, bool alter, bool reset) { 
-    YQL_ENSURE(value || reset); 
-    YQL_ENSURE(!reset || reset & alter); 
- 
+bool TSqlTranslation::StoreTableSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value,
+        TTableSettings& settings, bool alter, bool reset) {
+    YQL_ENSURE(value || reset);
+    YQL_ENSURE(!reset || reset & alter);
+
     if (to_lower(id.Name) == "compaction_policy") {
-        if (reset) { 
-            Ctx.Error() << to_upper(id.Name) << " reset is not supported"; 
+        if (reset) {
+            Ctx.Error() << to_upper(id.Name) << " reset is not supported";
             return false;
         }
-        if (!StoreString(*value, settings.CompactionPolicy, Ctx)) { 
-            Ctx.Error() << to_upper(id.Name) << " value should be a string literal"; 
-            return false; 
-        } 
+        if (!StoreString(*value, settings.CompactionPolicy, Ctx)) {
+            Ctx.Error() << to_upper(id.Name) << " value should be a string literal";
+            return false;
+        }
     } else if (to_lower(id.Name) == "auto_partitioning_by_size") {
-        if (reset) { 
-            Ctx.Error() << to_upper(id.Name) << " reset is not supported"; 
+        if (reset) {
+            Ctx.Error() << to_upper(id.Name) << " reset is not supported";
             return false;
         }
-        if (!StoreId(*value, settings.AutoPartitioningBySize, *this)) { 
-            Ctx.Error() << to_upper(id.Name) << " value should be an identifier"; 
-            return false; 
-        } 
+        if (!StoreId(*value, settings.AutoPartitioningBySize, *this)) {
+            Ctx.Error() << to_upper(id.Name) << " value should be an identifier";
+            return false;
+        }
     } else if (to_lower(id.Name) == "auto_partitioning_partition_size_mb") {
-        if (reset) { 
-            Ctx.Error() << to_upper(id.Name) << " reset is not supported"; 
+        if (reset) {
+            Ctx.Error() << to_upper(id.Name) << " reset is not supported";
             return false;
         }
-        if (!StoreInt(*value, settings.PartitionSizeMb, Ctx)) { 
-            Ctx.Error() << to_upper(id.Name) << " value should be an integer"; 
-            return false; 
-        } 
+        if (!StoreInt(*value, settings.PartitionSizeMb, Ctx)) {
+            Ctx.Error() << to_upper(id.Name) << " value should be an integer";
+            return false;
+        }
     } else if (to_lower(id.Name) == "auto_partitioning_by_load") {
-        if (reset) { 
-            Ctx.Error() << to_upper(id.Name) << " reset is not supported"; 
+        if (reset) {
+            Ctx.Error() << to_upper(id.Name) << " reset is not supported";
             return false;
         }
-        if (!StoreId(*value, settings.AutoPartitioningByLoad, *this)) { 
-            Ctx.Error() << to_upper(id.Name) << " value should be an identifier"; 
-            return false; 
-        } 
+        if (!StoreId(*value, settings.AutoPartitioningByLoad, *this)) {
+            Ctx.Error() << to_upper(id.Name) << " value should be an identifier";
+            return false;
+        }
     } else if (to_lower(id.Name) == "auto_partitioning_min_partitions_count") {
-        if (reset) { 
-            Ctx.Error() << to_upper(id.Name) << " reset is not supported"; 
+        if (reset) {
+            Ctx.Error() << to_upper(id.Name) << " reset is not supported";
             return false;
         }
-        if (!StoreInt(*value, settings.MinPartitions, Ctx)) { 
-            Ctx.Error() << to_upper(id.Name) << " value should be an integer"; 
-            return false; 
-        } 
+        if (!StoreInt(*value, settings.MinPartitions, Ctx)) {
+            Ctx.Error() << to_upper(id.Name) << " value should be an integer";
+            return false;
+        }
     } else if (to_lower(id.Name) == "auto_partitioning_max_partitions_count") {
-        if (reset) { 
-            Ctx.Error() << to_upper(id.Name) << " reset is not supported"; 
+        if (reset) {
+            Ctx.Error() << to_upper(id.Name) << " reset is not supported";
             return false;
         }
-        if (!StoreInt(*value, settings.MaxPartitions, Ctx)) { 
-            Ctx.Error() << to_upper(id.Name) << " value should be an integer"; 
-            return false; 
-        } 
+        if (!StoreInt(*value, settings.MaxPartitions, Ctx)) {
+            Ctx.Error() << to_upper(id.Name) << " value should be an integer";
+            return false;
+        }
     } else if (to_lower(id.Name) == "uniform_partitions") {
         if (alter) {
-            Ctx.Error() << to_upper(id.Name) << " alter is not supported"; 
+            Ctx.Error() << to_upper(id.Name) << " alter is not supported";
             return false;
         }
-        if (!StoreInt(*value, settings.UniformPartitions, Ctx)) { 
-            Ctx.Error() << to_upper(id.Name) << " value should be an integer"; 
+        if (!StoreInt(*value, settings.UniformPartitions, Ctx)) {
+            Ctx.Error() << to_upper(id.Name) << " value should be an integer";
             return false;
         }
     } else if (to_lower(id.Name) == "partition_at_keys") {
         if (alter) {
-            Ctx.Error() << to_upper(id.Name) << " alter is not supported"; 
+            Ctx.Error() << to_upper(id.Name) << " alter is not supported";
             return false;
         }
         TSqlExpression expr(Ctx, Mode);
-        if (!StoreSplitBoundaries(*value, settings.PartitionAtKeys, expr, Ctx)) { 
-            Ctx.Error() << to_upper(id.Name) << " value should be a list of keys. " 
+        if (!StoreSplitBoundaries(*value, settings.PartitionAtKeys, expr, Ctx)) {
+            Ctx.Error() << to_upper(id.Name) << " value should be a list of keys. "
                 << "Example1: (10, 1000)  Example2: ((10), (1000, \"abc\"))";
             return false;
         }
     } else if (to_lower(id.Name) == "key_bloom_filter") {
-        if (reset) { 
-            Ctx.Error() << to_upper(id.Name) << " reset is not supported"; 
+        if (reset) {
+            Ctx.Error() << to_upper(id.Name) << " reset is not supported";
             return false;
         }
-        if (!StoreId(*value, settings.KeyBloomFilter, *this)) { 
-            Ctx.Error() << to_upper(id.Name) << " value should be an identifier"; 
-            return false; 
-        } 
+        if (!StoreId(*value, settings.KeyBloomFilter, *this)) {
+            Ctx.Error() << to_upper(id.Name) << " value should be an identifier";
+            return false;
+        }
     } else if (to_lower(id.Name) == "read_replicas_settings") {
-        if (reset) { 
-            Ctx.Error() << to_upper(id.Name) << " reset is not supported"; 
+        if (reset) {
+            Ctx.Error() << to_upper(id.Name) << " reset is not supported";
             return false;
         }
-        if (!StoreString(*value, settings.ReadReplicasSettings, Ctx)) { 
-            Ctx.Error() << to_upper(id.Name) << " value should be a string literal"; 
-            return false; 
-        } 
-    } else if (to_lower(id.Name) == "ttl") { 
-        if (!reset) { 
-            TSqlExpression expr(Ctx, Mode); 
-            if (!StoreTtlSettings(*value, settings.TtlSettings, expr, Ctx, *this)) { 
-                Ctx.Error() << "Invalid TTL settings"; 
-                return false; 
-            } 
-        } else { 
-            settings.TtlSettings.Reset(); 
-        } 
+        if (!StoreString(*value, settings.ReadReplicasSettings, Ctx)) {
+            Ctx.Error() << to_upper(id.Name) << " value should be a string literal";
+            return false;
+        }
+    } else if (to_lower(id.Name) == "ttl") {
+        if (!reset) {
+            TSqlExpression expr(Ctx, Mode);
+            if (!StoreTtlSettings(*value, settings.TtlSettings, expr, Ctx, *this)) {
+                Ctx.Error() << "Invalid TTL settings";
+                return false;
+            }
+        } else {
+            settings.TtlSettings.Reset();
+        }
     } else {
         Ctx.Error() << "Unknown table setting: " << id.Name;
         return false;
@@ -2284,15 +2284,15 @@ bool TSqlTranslation::StoreTableSettingsEntry(const TIdentifier& id, const TRule
     return true;
 }
 
-bool TSqlTranslation::StoreTableSettingsEntry(const TIdentifier& id, const TRule_table_setting_value& value, 
-        TTableSettings& settings, bool alter) { 
-    return StoreTableSettingsEntry(id, &value, settings, alter, false); 
-} 
- 
-bool TSqlTranslation::ResetTableSettingsEntry(const TIdentifier& id, TTableSettings& settings) { 
-    return StoreTableSettingsEntry(id, nullptr, settings, true, true); 
-} 
- 
+bool TSqlTranslation::StoreTableSettingsEntry(const TIdentifier& id, const TRule_table_setting_value& value,
+        TTableSettings& settings, bool alter) {
+    return StoreTableSettingsEntry(id, &value, settings, alter, false);
+}
+
+bool TSqlTranslation::ResetTableSettingsEntry(const TIdentifier& id, TTableSettings& settings) {
+    return StoreTableSettingsEntry(id, nullptr, settings, true, true);
+}
+
 bool TSqlTranslation::CreateTableSettings(const TRule_with_table_settings& settingsNode, TTableSettings& settings) {
     const auto& firstEntry = settingsNode.GetRule_table_settings_entry3();
     if (!StoreTableSettingsEntry(IdEx(firstEntry.GetRule_an_id1(), *this), firstEntry.GetRule_table_setting_value3(),
@@ -8154,15 +8154,15 @@ private:
     bool AlterTableAlterColumn(const TRule_alter_table_alter_column& node, TAlterTableParameters& params);
     bool AlterTableAddFamily(const TRule_family_entry& node, TAlterTableParameters& params);
     bool AlterTableAlterFamily(const TRule_alter_table_alter_column_family& node, TAlterTableParameters& params);
-    bool AlterTableSetTableSetting(const TRule_alter_table_set_table_setting_uncompat& node, TAlterTableParameters& params); 
-    bool AlterTableSetTableSetting(const TRule_alter_table_set_table_setting_compat& node, TAlterTableParameters& params); 
-    bool AlterTableResetTableSetting(const TRule_alter_table_reset_table_setting& node, TAlterTableParameters& params); 
+    bool AlterTableSetTableSetting(const TRule_alter_table_set_table_setting_uncompat& node, TAlterTableParameters& params);
+    bool AlterTableSetTableSetting(const TRule_alter_table_set_table_setting_compat& node, TAlterTableParameters& params);
+    bool AlterTableResetTableSetting(const TRule_alter_table_reset_table_setting& node, TAlterTableParameters& params);
     bool AlterTableAddIndex(const TRule_alter_table_add_index& node, TAlterTableParameters& params);
     void AlterTableDropIndex(const TRule_alter_table_drop_index& node, TAlterTableParameters& params);
     void AlterTableRenameTo(const TRule_alter_table_rename_to& node, TAlterTableParameters& params);
-    bool AlterTableAddChangefeed(const TRule_alter_table_add_changefeed& node, TAlterTableParameters& params); 
-    bool AlterTableAlterChangefeed(const TRule_alter_table_alter_changefeed& node, TAlterTableParameters& params); 
-    void AlterTableDropChangefeed(const TRule_alter_table_drop_changefeed& node, TAlterTableParameters& params); 
+    bool AlterTableAddChangefeed(const TRule_alter_table_add_changefeed& node, TAlterTableParameters& params);
+    bool AlterTableAlterChangefeed(const TRule_alter_table_alter_changefeed& node, TAlterTableParameters& params);
+    void AlterTableDropChangefeed(const TRule_alter_table_drop_changefeed& node, TAlterTableParameters& params);
     TNodePtr PragmaStatement(const TRule_pragma_stmt& stmt, bool& success);
     void AddStatementToBlocks(TVector<TNodePtr>& blocks, TNodePtr node);
 
@@ -8877,29 +8877,29 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
         break;
     }
     case TRule_alter_table_action::kAltAlterTableAction6: {
-        // SET (uncompat) 
-        const auto& setRule = node.GetAlt_alter_table_action6().GetRule_alter_table_set_table_setting_uncompat1(); 
+        // SET (uncompat)
+        const auto& setRule = node.GetAlt_alter_table_action6().GetRule_alter_table_set_table_setting_uncompat1();
         if (!AlterTableSetTableSetting(setRule, params)) {
             return false;
         }
         break;
     }
-    case TRule_alter_table_action::kAltAlterTableAction7: { 
-        // SET (compat) 
-        const auto& setRule = node.GetAlt_alter_table_action7().GetRule_alter_table_set_table_setting_compat1(); 
-        if (!AlterTableSetTableSetting(setRule, params)) { 
-            return false; 
-        } 
-        break; 
-    } 
-    case TRule_alter_table_action::kAltAlterTableAction8: { 
-        // RESET 
-        const auto& setRule = node.GetAlt_alter_table_action8().GetRule_alter_table_reset_table_setting1(); 
-        if (!AlterTableResetTableSetting(setRule, params)) { 
-            return false; 
-        } 
-        break; 
-    } 
+    case TRule_alter_table_action::kAltAlterTableAction7: {
+        // SET (compat)
+        const auto& setRule = node.GetAlt_alter_table_action7().GetRule_alter_table_set_table_setting_compat1();
+        if (!AlterTableSetTableSetting(setRule, params)) {
+            return false;
+        }
+        break;
+    }
+    case TRule_alter_table_action::kAltAlterTableAction8: {
+        // RESET
+        const auto& setRule = node.GetAlt_alter_table_action8().GetRule_alter_table_reset_table_setting1();
+        if (!AlterTableResetTableSetting(setRule, params)) {
+            return false;
+        }
+        break;
+    }
     case TRule_alter_table_action::kAltAlterTableAction9: {
         // ADD INDEX
         const auto& addIndex = node.GetAlt_alter_table_action9().GetRule_alter_table_add_index1();
@@ -8926,28 +8926,28 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
         AlterTableRenameTo(renameTo, params);
         break;
     }
-    case TRule_alter_table_action::kAltAlterTableAction12: { 
-        // ADD CHANGEFEED 
-        const auto& rule = node.GetAlt_alter_table_action12().GetRule_alter_table_add_changefeed1(); 
-        if (!AlterTableAddChangefeed(rule, params)) { 
-            return false; 
-        } 
-        break; 
-    } 
-    case TRule_alter_table_action::kAltAlterTableAction13: { 
-        // ALTER CHANGEFEED 
-        const auto& rule = node.GetAlt_alter_table_action13().GetRule_alter_table_alter_changefeed1(); 
-        if (!AlterTableAlterChangefeed(rule, params)) { 
-            return false; 
-        } 
-        break; 
-    } 
-    case TRule_alter_table_action::kAltAlterTableAction14: { 
-        // DROP CHANGEFEED 
-        const auto& rule = node.GetAlt_alter_table_action14().GetRule_alter_table_drop_changefeed1(); 
-        AlterTableDropChangefeed(rule, params); 
-        break; 
-    } 
+    case TRule_alter_table_action::kAltAlterTableAction12: {
+        // ADD CHANGEFEED
+        const auto& rule = node.GetAlt_alter_table_action12().GetRule_alter_table_add_changefeed1();
+        if (!AlterTableAddChangefeed(rule, params)) {
+            return false;
+        }
+        break;
+    }
+    case TRule_alter_table_action::kAltAlterTableAction13: {
+        // ALTER CHANGEFEED
+        const auto& rule = node.GetAlt_alter_table_action13().GetRule_alter_table_alter_changefeed1();
+        if (!AlterTableAlterChangefeed(rule, params)) {
+            return false;
+        }
+        break;
+    }
+    case TRule_alter_table_action::kAltAlterTableAction14: {
+        // DROP CHANGEFEED
+        const auto& rule = node.GetAlt_alter_table_action14().GetRule_alter_table_drop_changefeed1();
+        AlterTableDropChangefeed(rule, params);
+        break;
+    }
 
     default:
         AltNotImplemented("alter_table_action", node);
@@ -9037,7 +9037,7 @@ bool TSqlQuery::AlterTableAlterFamily(const TRule_alter_table_alter_column_famil
     return true;
 }
 
-bool TSqlQuery::AlterTableSetTableSetting(const TRule_alter_table_set_table_setting_uncompat& node, 
+bool TSqlQuery::AlterTableSetTableSetting(const TRule_alter_table_set_table_setting_uncompat& node,
         TAlterTableParameters& params)
 {
     if (!StoreTableSettingsEntry(IdEx(node.GetRule_an_id2(), *this), node.GetRule_table_setting_value3(),
@@ -9047,40 +9047,40 @@ bool TSqlQuery::AlterTableSetTableSetting(const TRule_alter_table_set_table_sett
     return true;
 }
 
-bool TSqlQuery::AlterTableSetTableSetting(const TRule_alter_table_set_table_setting_compat& node, 
-        TAlterTableParameters& params) 
-{ 
-    const auto& firstEntry = node.GetRule_alter_table_setting_entry3(); 
-    if (!StoreTableSettingsEntry(IdEx(firstEntry.GetRule_an_id1(), *this), firstEntry.GetRule_table_setting_value3(), 
-        params.TableSettings, true)) { 
-        return false; 
-    } 
-    for (auto& block : node.GetBlock4()) { 
-        const auto& entry = block.GetRule_alter_table_setting_entry2(); 
-        if (!StoreTableSettingsEntry(IdEx(entry.GetRule_an_id1(), *this), entry.GetRule_table_setting_value3(), 
-            params.TableSettings, true)) { 
-            return false; 
-        } 
-    } 
-    return true; 
-} 
- 
-bool TSqlQuery::AlterTableResetTableSetting(const TRule_alter_table_reset_table_setting& node, 
-        TAlterTableParameters& params) 
-{ 
-    const auto& firstEntry = node.GetRule_an_id3(); 
-    if (!ResetTableSettingsEntry(IdEx(firstEntry, *this), params.TableSettings)) { 
-        return false; 
-    } 
-    for (auto& block : node.GetBlock4()) { 
-        const auto& entry = block.GetRule_an_id2(); 
-        if (!ResetTableSettingsEntry(IdEx(entry, *this), params.TableSettings)) { 
-            return false; 
-        } 
-    } 
-    return true; 
-} 
- 
+bool TSqlQuery::AlterTableSetTableSetting(const TRule_alter_table_set_table_setting_compat& node,
+        TAlterTableParameters& params)
+{
+    const auto& firstEntry = node.GetRule_alter_table_setting_entry3();
+    if (!StoreTableSettingsEntry(IdEx(firstEntry.GetRule_an_id1(), *this), firstEntry.GetRule_table_setting_value3(),
+        params.TableSettings, true)) {
+        return false;
+    }
+    for (auto& block : node.GetBlock4()) {
+        const auto& entry = block.GetRule_alter_table_setting_entry2();
+        if (!StoreTableSettingsEntry(IdEx(entry.GetRule_an_id1(), *this), entry.GetRule_table_setting_value3(),
+            params.TableSettings, true)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool TSqlQuery::AlterTableResetTableSetting(const TRule_alter_table_reset_table_setting& node,
+        TAlterTableParameters& params)
+{
+    const auto& firstEntry = node.GetRule_an_id3();
+    if (!ResetTableSettingsEntry(IdEx(firstEntry, *this), params.TableSettings)) {
+        return false;
+    }
+    for (auto& block : node.GetBlock4()) {
+        const auto& entry = block.GetRule_an_id2();
+        if (!ResetTableSettingsEntry(IdEx(entry, *this), params.TableSettings)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool TSqlQuery::AlterTableAddIndex(const TRule_alter_table_add_index& node, TAlterTableParameters& params) {
     if (!CreateTableIndex(node.GetRule_table_index2(), *this, params.AddIndexes)) {
         return false;
@@ -9096,41 +9096,41 @@ void TSqlQuery::AlterTableRenameTo(const TRule_alter_table_rename_to& node, TAlt
     params.RenameTo = IdEx(node.GetRule_an_id_table3(), *this);
 }
 
-bool TSqlQuery::AlterTableAddChangefeed(const TRule_alter_table_add_changefeed& node, TAlterTableParameters& params) { 
-    return CreateChangefeed(node.GetRule_changefeed2(), *this, params.AddChangefeeds); 
-} 
- 
-bool TSqlQuery::AlterTableAlterChangefeed(const TRule_alter_table_alter_changefeed& node, TAlterTableParameters& params) { 
-    params.AlterChangefeeds.emplace_back(IdEx(node.GetRule_an_id3(), *this)); 
- 
-    const auto& alter = node.GetRule_changefeed_alter_settings4(); 
-    switch (alter.Alt_case()) { 
-        case TRule_changefeed_alter_settings::kAltChangefeedAlterSettings1: { 
-            // DISABLE 
-            params.AlterChangefeeds.back().Disable = true; 
-            break; 
-        } 
-        case TRule_changefeed_alter_settings::kAltChangefeedAlterSettings2: { 
-            // SET 
-            const auto& rule = alter.GetAlt_changefeed_alter_settings2().GetRule_changefeed_settings3(); 
-            if (!ChangefeedSettings(rule, *this, params.AlterChangefeeds.back().Settings, true)) { 
-                return false; 
-            } 
-            break; 
-        } 
- 
-        default: 
-            AltNotImplemented("changefeed_alter_settings", alter); 
-            return false; 
-    } 
- 
-    return true; 
-} 
- 
-void TSqlQuery::AlterTableDropChangefeed(const TRule_alter_table_drop_changefeed& node, TAlterTableParameters& params) { 
-    params.DropChangefeeds.emplace_back(IdEx(node.GetRule_an_id3(), *this)); 
-} 
- 
+bool TSqlQuery::AlterTableAddChangefeed(const TRule_alter_table_add_changefeed& node, TAlterTableParameters& params) {
+    return CreateChangefeed(node.GetRule_changefeed2(), *this, params.AddChangefeeds);
+}
+
+bool TSqlQuery::AlterTableAlterChangefeed(const TRule_alter_table_alter_changefeed& node, TAlterTableParameters& params) {
+    params.AlterChangefeeds.emplace_back(IdEx(node.GetRule_an_id3(), *this));
+
+    const auto& alter = node.GetRule_changefeed_alter_settings4();
+    switch (alter.Alt_case()) {
+        case TRule_changefeed_alter_settings::kAltChangefeedAlterSettings1: {
+            // DISABLE
+            params.AlterChangefeeds.back().Disable = true;
+            break;
+        }
+        case TRule_changefeed_alter_settings::kAltChangefeedAlterSettings2: {
+            // SET
+            const auto& rule = alter.GetAlt_changefeed_alter_settings2().GetRule_changefeed_settings3();
+            if (!ChangefeedSettings(rule, *this, params.AlterChangefeeds.back().Settings, true)) {
+                return false;
+            }
+            break;
+        }
+
+        default:
+            AltNotImplemented("changefeed_alter_settings", alter);
+            return false;
+    }
+
+    return true;
+}
+
+void TSqlQuery::AlterTableDropChangefeed(const TRule_alter_table_drop_changefeed& node, TAlterTableParameters& params) {
+    params.DropChangefeeds.emplace_back(IdEx(node.GetRule_an_id3(), *this));
+}
+
 TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success) {
     success = false;
     const TString& prefix = OptIdPrefixAsStr(stmt.GetRule_opt_id_prefix_or_type2(), *this);

@@ -88,14 +88,14 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     void FlushRequests(bool force, const TActorContext& ctx);
     void FlushShardData(bool force, const TActorContext& ctx);
 
-    TMaybe<TEvPQ::TEvRegisterMessageGroup::TBody> MakeRegisterMessageGroup( 
-        const NKikimrClient::TPersQueuePartitionRequest::TCmdRegisterMessageGroup& cmd, 
-        NPersQueue::NErrorCode::EErrorCode& code, TString& error) const; 
- 
-    TMaybe<TEvPQ::TEvDeregisterMessageGroup::TBody> MakeDeregisterMessageGroup( 
-        const NKikimrClient::TPersQueuePartitionRequest::TCmdDeregisterMessageGroup& cmd, 
-        NPersQueue::NErrorCode::EErrorCode& code, TString& error) const; 
- 
+    TMaybe<TEvPQ::TEvRegisterMessageGroup::TBody> MakeRegisterMessageGroup(
+        const NKikimrClient::TPersQueuePartitionRequest::TCmdRegisterMessageGroup& cmd,
+        NPersQueue::NErrorCode::EErrorCode& code, TString& error) const;
+
+    TMaybe<TEvPQ::TEvDeregisterMessageGroup::TBody> MakeDeregisterMessageGroup(
+        const NKikimrClient::TPersQueuePartitionRequest::TCmdDeregisterMessageGroup& cmd,
+        NPersQueue::NErrorCode::EErrorCode& code, TString& error) const;
+
     //client request
     void Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext& ctx);
 #define DESCRIBE_HANDLE(A) void A(const ui64 responseCookie, const TActorId& partActor, \
@@ -108,9 +108,9 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     DESCRIBE_HANDLE(HandleWriteRequest)
     DESCRIBE_HANDLE(HandleUpdateWriteTimestampRequest)
     DESCRIBE_HANDLE(HandleReadRequest)
-    DESCRIBE_HANDLE(HandleRegisterMessageGroupRequest) 
-    DESCRIBE_HANDLE(HandleDeregisterMessageGroupRequest) 
-    DESCRIBE_HANDLE(HandleSplitMessageGroupRequest) 
+    DESCRIBE_HANDLE(HandleRegisterMessageGroupRequest)
+    DESCRIBE_HANDLE(HandleDeregisterMessageGroupRequest)
+    DESCRIBE_HANDLE(HandleSplitMessageGroupRequest)
 #undef DESCRIBE_HANDLE
 #define DESCRIBE_HANDLE_WITH_SENDER(A) void A(const ui64 responseCookie, const TActorId& partActor, \
                                   const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx,\
@@ -148,7 +148,7 @@ private:
     TString TopicPath;
     bool LocalDC;
     TString DCId;
-    TVector<NScheme::TTypeId> KeySchema; 
+    TVector<NScheme::TTypeId> KeySchema;
     NKikimrPQ::TPQTabletConfig Config;
 
     NKikimrPQ::ETabletState TabletState;

@@ -1280,7 +1280,7 @@ Y_UNIT_TEST(TestSourceIdDropBySourceIdCount) {
         }
         CmdWrite(0,"sourceid0", data, tc, false);
         Cout << "written sourceid0" << Endl;
-        PQGetPartInfo(2000, 3007, tc); 
+        PQGetPartInfo(2000, 3007, tc);
     });
 }
 

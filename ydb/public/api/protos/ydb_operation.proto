@@ -21,8 +21,8 @@ message OperationParams {
         // Server will only reply once operation is finished (ready=true), and operation object won't be
         // accessible after the reply. This is a basic request-response mode.
         SYNC = 1;
- 
-        ASYNC = 2; 
+
+        ASYNC = 2;
     }
 
     OperationMode operation_mode = 1;
@@ -41,9 +41,9 @@ message OperationParams {
     // sent back to client if it was waiting for the operation result.
     // In case when cancellation isn't possible, no action will be performed.
     google.protobuf.Duration cancel_after = 3;
- 
-    // User-defined labels of operation. 
-    map<string, string> labels = 4 [(map_key).length.le = 128, (length).le = 128]; 
+
+    // User-defined labels of operation.
+    map<string, string> labels = 4 [(map_key).length.le = 128, (length).le = 128];
 
     // If enabled, server will report cost information, if supported by the operation.
     // This flag is mostly useful for SYNC operations, to get the cost information in the response.
@@ -51,44 +51,44 @@ message OperationParams {
 }
 
 message GetOperationRequest {
-    string id = 1 [(required) = true]; 
+    string id = 1 [(required) = true];
 }
 
 message GetOperationResponse {
     Operation operation = 1;
 }
 
-message CancelOperationRequest { 
-    string id = 1 [(required) = true]; 
-} 
- 
-message CancelOperationResponse { 
-    StatusIds.StatusCode status = 1; 
-    repeated Ydb.Issue.IssueMessage issues = 2; 
-} 
- 
-message ForgetOperationRequest { 
-    string id = 1 [(required) = true]; 
-} 
- 
-message ForgetOperationResponse { 
-    StatusIds.StatusCode status = 1; 
-    repeated Ydb.Issue.IssueMessage issues = 2; 
-} 
- 
-message ListOperationsRequest { 
-    string kind = 1 [(required) = true]; 
-    uint64 page_size = 2; 
-    string page_token = 3; 
-} 
- 
-message ListOperationsResponse { 
-    StatusIds.StatusCode status = 1; 
-    repeated Ydb.Issue.IssueMessage issues = 2; 
-    repeated Operation operations = 3; 
-    string next_page_token = 4; 
-} 
- 
+message CancelOperationRequest {
+    string id = 1 [(required) = true];
+}
+
+message CancelOperationResponse {
+    StatusIds.StatusCode status = 1;
+    repeated Ydb.Issue.IssueMessage issues = 2;
+}
+
+message ForgetOperationRequest {
+    string id = 1 [(required) = true];
+}
+
+message ForgetOperationResponse {
+    StatusIds.StatusCode status = 1;
+    repeated Ydb.Issue.IssueMessage issues = 2;
+}
+
+message ListOperationsRequest {
+    string kind = 1 [(required) = true];
+    uint64 page_size = 2;
+    string page_token = 3;
+}
+
+message ListOperationsResponse {
+    StatusIds.StatusCode status = 1;
+    repeated Ydb.Issue.IssueMessage issues = 2;
+    repeated Operation operations = 3;
+    string next_page_token = 4;
+}
+
 message Operation {
     // Identifier of the operation, empty value means no active operation object is present (it was forgotten or
     // not created in the first place, as in SYNC operation mode).
@@ -104,8 +104,8 @@ message Operation {
     repeated Ydb.Issue.IssueMessage issues = 4;
     // Result data
     google.protobuf.Any result = 5;
- 
-    google.protobuf.Any metadata = 6; 
+
+    google.protobuf.Any metadata = 6;
 
     // Contains information about the cost of the operation.
     // For completed operations, it shows the final cost of the operation.

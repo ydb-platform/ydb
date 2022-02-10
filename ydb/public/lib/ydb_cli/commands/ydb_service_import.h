@@ -1,46 +1,46 @@
-#pragma once 
- 
-#include "ydb_command.h" 
-#include "ydb_common.h" 
- 
+#pragma once
+
+#include "ydb_command.h"
+#include "ydb_common.h"
+
 #include <ydb/public/sdk/cpp/client/ydb_import/import.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/lib/ydb_cli/common/aws.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/lib/ydb_cli/common/parseable_struct.h>
- 
-namespace NYdb { 
-namespace NConsoleClient { 
- 
-class TCommandImport : public TClientCommandTree { 
-public: 
-    TCommandImport(); 
-}; 
- 
-class TCommandImportFromS3 : public TYdbOperationCommand, 
-                           public TCommandWithAwsCredentials, 
-                           public TCommandWithFormat { 
-public: 
-    TCommandImportFromS3(); 
-    virtual void Config(TConfig& config) override; 
-    virtual void Parse(TConfig& config) override; 
-    virtual int Run(TConfig& config) override; 
- 
-private: 
-    struct TItemFields { 
-        TString Source; 
-        TString Destination; 
-    }; 
-    DEFINE_PARSEABLE_STRUCT(TItem, TItemFields, Source, Destination); 
- 
-    TString AwsEndpoint; 
-    ES3Scheme AwsScheme = ES3Scheme::HTTPS; 
-    TString AwsBucket; 
-    TVector<TItem> Items; 
-    TString Description; 
-    ui32 NumberOfRetries = 10; 
-}; 
- 
+
+namespace NYdb {
+namespace NConsoleClient {
+
+class TCommandImport : public TClientCommandTree {
+public:
+    TCommandImport();
+};
+
+class TCommandImportFromS3 : public TYdbOperationCommand,
+                           public TCommandWithAwsCredentials,
+                           public TCommandWithFormat {
+public:
+    TCommandImportFromS3();
+    virtual void Config(TConfig& config) override;
+    virtual void Parse(TConfig& config) override;
+    virtual int Run(TConfig& config) override;
+
+private:
+    struct TItemFields {
+        TString Source;
+        TString Destination;
+    };
+    DEFINE_PARSEABLE_STRUCT(TItem, TItemFields, Source, Destination);
+
+    TString AwsEndpoint;
+    ES3Scheme AwsScheme = ES3Scheme::HTTPS;
+    TString AwsBucket;
+    TVector<TItem> Items;
+    TString Description;
+    ui32 NumberOfRetries = 10;
+};
+
 class TCommandImportFromFile : public TClientCommandTree {
 public:
     TCommandImportFromFile();
@@ -75,5 +75,5 @@ public:
     }
 };
 
-} 
-} 
+}
+}

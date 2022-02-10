@@ -88,17 +88,17 @@ namespace NLs {
     TCheckFunc AllowFollowerPromotion(bool val);
     TCheckFunc FollowerGroups(const TVector<NKikimrHive::TFollowerGroup>& followerGroup = TVector<NKikimrHive::TFollowerGroup>{});
     TCheckFunc SizeToSplitEqual(ui32 size);
-    TCheckFunc MinPartitionsCountEqual(ui32 count); 
-    TCheckFunc MaxPartitionsCountEqual(ui32 count); 
-    TCheckFunc PartitioningByLoadStatus(bool status); 
+    TCheckFunc MinPartitionsCountEqual(ui32 count);
+    TCheckFunc MaxPartitionsCountEqual(ui32 count);
+    TCheckFunc PartitioningByLoadStatus(bool status);
     TCheckFunc ColumnFamiliesCount(ui32 size);
     TCheckFunc ColumnFamiliesHas(ui32 familyId);
     TCheckFunc ColumnFamiliesHas(ui32 familyId, const TString& familyName);
-    TCheckFunc KeyBloomFilterStatus(bool status); 
-    TCheckFunc HasTtlEnabled(const TString& columnName, const TDuration& expireAfter, 
+    TCheckFunc KeyBloomFilterStatus(bool status);
+    TCheckFunc HasTtlEnabled(const TString& columnName, const TDuration& expireAfter,
         NKikimrSchemeOp::TTTLSettings::EUnit columnUnit = NKikimrSchemeOp::TTTLSettings::UNIT_AUTO);
-    TCheckFunc HasTtlDisabled(); 
-    TCheckFunc IsBackupTable(bool value); 
+    TCheckFunc HasTtlDisabled();
+    TCheckFunc IsBackupTable(bool value);
 
     TCheckFunc HasOlapTableSchemaPreset(const TString& presetName);
     TCheckFunc HasOlapTableSchemaVersion(ui64 schemaVersion);

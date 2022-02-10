@@ -654,18 +654,18 @@ Y_UNIT_TEST_SUITE(TConsoleTxProcessorTests) {
 
 
 Y_UNIT_TEST_SUITE(TConsoleTests) {
-    void RunTestCreateTenant(TTenantTestRuntime& runtime, bool shared = false) { 
-        using EType = TCreateTenantRequest::EType; 
+    void RunTestCreateTenant(TTenantTestRuntime& runtime, bool shared = false) {
+        using EType = TCreateTenantRequest::EType;
 
-        CheckCreateTenant(runtime, Ydb::StatusIds::SUCCESS, 
-            TCreateTenantRequest(TENANT1_1_NAME, shared ? EType::Shared : EType::Common) 
-                .WithSlots({{SLOT1_TYPE, ZONE1, 3}, {SLOT2_TYPE, ZONE1, 2}, {SLOT3_TYPE, ZONE1, 1}}) 
-                .WithPools({{"hdd", 1}, {"hdd-1", 2}})); 
- 
+        CheckCreateTenant(runtime, Ydb::StatusIds::SUCCESS,
+            TCreateTenantRequest(TENANT1_1_NAME, shared ? EType::Shared : EType::Common)
+                .WithSlots({{SLOT1_TYPE, ZONE1, 3}, {SLOT2_TYPE, ZONE1, 2}, {SLOT3_TYPE, ZONE1, 1}})
+                .WithPools({{"hdd", 1}, {"hdd-1", 2}}));
+
         runtime.WaitForHiveState({{{DOMAIN1_NAME, 8, 8, 8},
                                    {TENANT1_1_NAME, 10, 10, 10}}});
 
-        CheckTenantStatus(runtime, TENANT1_1_NAME, shared, Ydb::StatusIds::SUCCESS, 
+        CheckTenantStatus(runtime, TENANT1_1_NAME, shared, Ydb::StatusIds::SUCCESS,
                           Ydb::Cms::GetDatabaseStatusResult::RUNNING,
                           {{"hdd", 1, 1}, {"hdd-1", 2, 2}}, {},
                           SLOT1_TYPE, ZONE1, 3, 3,
@@ -690,56 +690,56 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         RunTestCreateTenant(runtime);
     }
 
-    Y_UNIT_TEST(TestCreateSharedTenant) { 
-        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true); 
-        RunTestCreateTenant(runtime, true); 
-    } 
- 
-    Y_UNIT_TEST(TestCreateServerlessTenant) { 
-        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true); 
-        // create shared tenant 
-        RunTestCreateTenant(runtime, true); 
-        // create serverless tenant 
-        CheckCreateTenant(runtime, Ydb::StatusIds::SUCCESS, 
-            TCreateTenantRequest(TENANT1_2_NAME) 
-                .WithSharedDbPath(TENANT1_1_NAME)); 
-        CheckTenantStatus(runtime, TENANT1_2_NAME, Ydb::StatusIds::SUCCESS, 
-                          Ydb::Cms::GetDatabaseStatusResult::RUNNING, {}, {}); 
-        // check counters 
-        CheckCounter(runtime, {}, TTenantsManager::COUNTER_TENANTS, 2); 
-        CheckCounter(runtime, {}, TTenantsManager::COUNTER_CREATE_REQUESTS, 2); 
-        CheckCounter(runtime, {{ {"status", "SUCCESS"} }}, TTenantsManager::COUNTER_CREATE_RESPONSES, 2); 
-    } 
- 
-    Y_UNIT_TEST(TestCreateServerlessTenantWrongSharedDb) { 
-        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true); 
-        // Empty shared db path 
-        CheckCreateTenant(runtime, Ydb::StatusIds::BAD_REQUEST, 
-            TCreateTenantRequest(TENANT1_2_NAME) 
-                .WithSharedDbPath("")); 
-        // Unknown shared db 
-        CheckCreateTenant(runtime, Ydb::StatusIds::BAD_REQUEST, 
-            TCreateTenantRequest(TENANT1_2_NAME) 
-                .WithSharedDbPath(TENANT1_1_NAME)); 
-    } 
- 
+    Y_UNIT_TEST(TestCreateSharedTenant) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true);
+        RunTestCreateTenant(runtime, true);
+    }
+
+    Y_UNIT_TEST(TestCreateServerlessTenant) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true);
+        // create shared tenant
+        RunTestCreateTenant(runtime, true);
+        // create serverless tenant
+        CheckCreateTenant(runtime, Ydb::StatusIds::SUCCESS,
+            TCreateTenantRequest(TENANT1_2_NAME)
+                .WithSharedDbPath(TENANT1_1_NAME));
+        CheckTenantStatus(runtime, TENANT1_2_NAME, Ydb::StatusIds::SUCCESS,
+                          Ydb::Cms::GetDatabaseStatusResult::RUNNING, {}, {});
+        // check counters
+        CheckCounter(runtime, {}, TTenantsManager::COUNTER_TENANTS, 2);
+        CheckCounter(runtime, {}, TTenantsManager::COUNTER_CREATE_REQUESTS, 2);
+        CheckCounter(runtime, {{ {"status", "SUCCESS"} }}, TTenantsManager::COUNTER_CREATE_RESPONSES, 2);
+    }
+
+    Y_UNIT_TEST(TestCreateServerlessTenantWrongSharedDb) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true);
+        // Empty shared db path
+        CheckCreateTenant(runtime, Ydb::StatusIds::BAD_REQUEST,
+            TCreateTenantRequest(TENANT1_2_NAME)
+                .WithSharedDbPath(""));
+        // Unknown shared db
+        CheckCreateTenant(runtime, Ydb::StatusIds::BAD_REQUEST,
+            TCreateTenantRequest(TENANT1_2_NAME)
+                .WithSharedDbPath(TENANT1_1_NAME));
+    }
+
     void RunTestCreateTenantWrongName(TTenantTestRuntime& runtime) {
         // Empty path
-        CheckCreateTenant(runtime, Ydb::StatusIds::BAD_REQUEST, TCreateTenantRequest("")); 
+        CheckCreateTenant(runtime, Ydb::StatusIds::BAD_REQUEST, TCreateTenantRequest(""));
         // Root path
-        CheckCreateTenant(runtime, Ydb::StatusIds::BAD_REQUEST, TCreateTenantRequest("/")); 
+        CheckCreateTenant(runtime, Ydb::StatusIds::BAD_REQUEST, TCreateTenantRequest("/"));
         // Root path
-        CheckCreateTenant(runtime, Ydb::StatusIds::BAD_REQUEST, TCreateTenantRequest("///")); 
+        CheckCreateTenant(runtime, Ydb::StatusIds::BAD_REQUEST, TCreateTenantRequest("///"));
         // Wrong char.
-        CheckCreateTenant(runtime, Ydb::StatusIds::BAD_REQUEST, TCreateTenantRequest("tenant?")); 
+        CheckCreateTenant(runtime, Ydb::StatusIds::BAD_REQUEST, TCreateTenantRequest("tenant?"));
         // Wrong domain
-        CheckCreateTenant(runtime, Ydb::StatusIds::BAD_REQUEST, TCreateTenantRequest("/wrong-domain/tenant")); 
+        CheckCreateTenant(runtime, Ydb::StatusIds::BAD_REQUEST, TCreateTenantRequest("/wrong-domain/tenant"));
         // Tenant name starts with non-alpha
-        CheckCreateTenant(runtime, Ydb::StatusIds::BAD_REQUEST, TCreateTenantRequest("/dc-1/users/1-tenant")); 
-        CheckCreateTenant(runtime, Ydb::StatusIds::BAD_REQUEST, TCreateTenantRequest("/dc-1/users/-tenant")); 
+        CheckCreateTenant(runtime, Ydb::StatusIds::BAD_REQUEST, TCreateTenantRequest("/dc-1/users/1-tenant"));
+        CheckCreateTenant(runtime, Ydb::StatusIds::BAD_REQUEST, TCreateTenantRequest("/dc-1/users/-tenant"));
         // Dir name starts with non-alpha
-        CheckCreateTenant(runtime, Ydb::StatusIds::BAD_REQUEST, TCreateTenantRequest("/dc-1/1users/tenant")); 
-        CheckCreateTenant(runtime, Ydb::StatusIds::BAD_REQUEST, TCreateTenantRequest("/dc-1/_users/tenant")); 
+        CheckCreateTenant(runtime, Ydb::StatusIds::BAD_REQUEST, TCreateTenantRequest("/dc-1/1users/tenant"));
+        CheckCreateTenant(runtime, Ydb::StatusIds::BAD_REQUEST, TCreateTenantRequest("/dc-1/_users/tenant"));
 
         CheckCounter(runtime, {}, TTenantsManager::COUNTER_TENANTS, 0);
         CheckCounter(runtime, {}, TTenantsManager::COUNTER_CREATE_REQUESTS, 9);
@@ -757,9 +757,9 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
     }
 
     void RunTestCreateTenantWrongPool(TTenantTestRuntime& runtime) {
-        CheckCreateTenant(runtime, Ydb::StatusIds::BAD_REQUEST, TCreateTenantRequest(TENANT1_1_NAME)); 
-        CheckCreateTenant(runtime, Ydb::StatusIds::BAD_REQUEST, TCreateTenantRequest(TENANT1_1_NAME).WithPools({{"hdd", 0}})); 
-        CheckCreateTenant(runtime, Ydb::StatusIds::BAD_REQUEST, TCreateTenantRequest(TENANT1_1_NAME).WithPools({{"unknown", 1}})); 
+        CheckCreateTenant(runtime, Ydb::StatusIds::BAD_REQUEST, TCreateTenantRequest(TENANT1_1_NAME));
+        CheckCreateTenant(runtime, Ydb::StatusIds::BAD_REQUEST, TCreateTenantRequest(TENANT1_1_NAME).WithPools({{"hdd", 0}}));
+        CheckCreateTenant(runtime, Ydb::StatusIds::BAD_REQUEST, TCreateTenantRequest(TENANT1_1_NAME).WithPools({{"unknown", 1}}));
     }
 
     Y_UNIT_TEST(TestCreateTenantWrongPool) {
@@ -909,8 +909,8 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
     }
 
     void RunTestAlterTenantModifyComputationalResourcesForPending(TTenantTestRuntime& runtime) {
-        CheckCreateTenant(runtime, Ydb::StatusIds::SUCCESS, 
-            TCreateTenantRequest(TENANT1_1_NAME).WithPools({{"hdd", 1}})); 
+        CheckCreateTenant(runtime, Ydb::StatusIds::SUCCESS,
+            TCreateTenantRequest(TENANT1_1_NAME).WithPools({{"hdd", 1}}));
 
         CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
                           Ydb::Cms::GetDatabaseStatusResult::PENDING_RESOURCES, {{"hdd", 1, 1}}, {});
@@ -1007,8 +1007,8 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
     }
 
     void RunTestAlterTenantModifyStorageResourcesForPending(TTenantTestRuntime& runtime) {
-        CheckCreateTenant(runtime, Ydb::StatusIds::SUCCESS, 
-            TCreateTenantRequest(TENANT1_1_NAME).WithPools({{"hdd", 1}, {"hdd-1", 3}})); 
+        CheckCreateTenant(runtime, Ydb::StatusIds::SUCCESS,
+            TCreateTenantRequest(TENANT1_1_NAME).WithPools({{"hdd", 1}, {"hdd-1", 3}}));
 
         CheckCounter(runtime, {{ {"kind", "hdd"} }}, TTenantsManager::COUNTER_REQUESTED_STORAGE_UNITS, 1);
         CheckCounter(runtime, {{ {"kind", "hdd"} }}, TTenantsManager::COUNTER_ALLOCATED_STORAGE_UNITS, 1);
@@ -1159,58 +1159,58 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         RunTestAlterUnknownTenant(runtime);
     }
 
-    Y_UNIT_TEST(TestAlterStorageUnitsOfSharedTenant) { 
-        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true); 
-        // create shared tenant 
-        RunTestCreateTenant(runtime, true); 
- 
-        // alter shared tenant (extend existent storage pool) 
-        CheckAlterTenantPools(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS, 
-                              {{"hdd", 1}, {"hdd-1", 1}}, {}); 
-        // check status 
-        CheckTenantStatus(runtime, TENANT1_1_NAME, true, Ydb::StatusIds::SUCCESS, 
-                          Ydb::Cms::GetDatabaseStatusResult::RUNNING, 
-                          {{"hdd", 2, 2}, {"hdd-1", 3, 3}}, {}, 
-                          SLOT1_TYPE, ZONE1, 3, 3, 
-                          SLOT2_TYPE, ZONE1, 2, 2, 
-                          SLOT3_TYPE, ZONE1, 1, 1); 
-        // check counters 
-        CheckCounter(runtime, {}, TTenantsManager::COUNTER_ALTER_REQUESTS, 1); 
-        CheckCounter(runtime, {{ {"status", "SUCCESS"} }}, TTenantsManager::COUNTER_ALTER_RESPONSES, 1); 
- 
-        // alter shared tenant (add new storage pool) 
-        CheckAlterTenantPools(runtime, TENANT1_1_NAME, Ydb::StatusIds::UNSUPPORTED, 
-                              {{"hdd-2", 1}}, {}); 
-        // check counters 
-        CheckCounter(runtime, {}, TTenantsManager::COUNTER_ALTER_REQUESTS, 2); 
-        CheckCounter(runtime, {{ {"status", "UNSUPPORTED"} }}, TTenantsManager::COUNTER_ALTER_RESPONSES, 1); 
- 
-        // restart and try again 
-        RestartConsole(runtime); 
-        // alter shared tenant 
-        CheckAlterTenantPools(runtime, TENANT1_1_NAME, Ydb::StatusIds::UNSUPPORTED, 
-                              {{"hdd-2", 1}}, {}); 
-    } 
- 
-    Y_UNIT_TEST(TestAlterServerlessTenant) { 
-        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true); 
-        // create shared tenant 
-        RunTestCreateTenant(runtime, true); 
-        // create serverless tenant 
-        CheckCreateTenant(runtime, Ydb::StatusIds::SUCCESS, 
-            TCreateTenantRequest(TENANT1_2_NAME) 
-                .WithSharedDbPath(TENANT1_1_NAME)); 
-        CheckTenantStatus(runtime, TENANT1_2_NAME, Ydb::StatusIds::SUCCESS, 
-                          Ydb::Cms::GetDatabaseStatusResult::RUNNING, {}, {}); 
-        // alter serverless tenant 
+    Y_UNIT_TEST(TestAlterStorageUnitsOfSharedTenant) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true);
+        // create shared tenant
+        RunTestCreateTenant(runtime, true);
+
+        // alter shared tenant (extend existent storage pool)
+        CheckAlterTenantPools(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
+                              {{"hdd", 1}, {"hdd-1", 1}}, {});
+        // check status
+        CheckTenantStatus(runtime, TENANT1_1_NAME, true, Ydb::StatusIds::SUCCESS,
+                          Ydb::Cms::GetDatabaseStatusResult::RUNNING,
+                          {{"hdd", 2, 2}, {"hdd-1", 3, 3}}, {},
+                          SLOT1_TYPE, ZONE1, 3, 3,
+                          SLOT2_TYPE, ZONE1, 2, 2,
+                          SLOT3_TYPE, ZONE1, 1, 1);
+        // check counters
+        CheckCounter(runtime, {}, TTenantsManager::COUNTER_ALTER_REQUESTS, 1);
+        CheckCounter(runtime, {{ {"status", "SUCCESS"} }}, TTenantsManager::COUNTER_ALTER_RESPONSES, 1);
+
+        // alter shared tenant (add new storage pool)
+        CheckAlterTenantPools(runtime, TENANT1_1_NAME, Ydb::StatusIds::UNSUPPORTED,
+                              {{"hdd-2", 1}}, {});
+        // check counters
+        CheckCounter(runtime, {}, TTenantsManager::COUNTER_ALTER_REQUESTS, 2);
+        CheckCounter(runtime, {{ {"status", "UNSUPPORTED"} }}, TTenantsManager::COUNTER_ALTER_RESPONSES, 1);
+
+        // restart and try again
+        RestartConsole(runtime);
+        // alter shared tenant
+        CheckAlterTenantPools(runtime, TENANT1_1_NAME, Ydb::StatusIds::UNSUPPORTED,
+                              {{"hdd-2", 1}}, {});
+    }
+
+    Y_UNIT_TEST(TestAlterServerlessTenant) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true);
+        // create shared tenant
+        RunTestCreateTenant(runtime, true);
+        // create serverless tenant
+        CheckCreateTenant(runtime, Ydb::StatusIds::SUCCESS,
+            TCreateTenantRequest(TENANT1_2_NAME)
+                .WithSharedDbPath(TENANT1_1_NAME));
+        CheckTenantStatus(runtime, TENANT1_2_NAME, Ydb::StatusIds::SUCCESS,
+                          Ydb::Cms::GetDatabaseStatusResult::RUNNING, {}, {});
+        // alter serverless tenant
         CheckAlterTenantSlots(runtime, TENANT1_2_NAME, Ydb::StatusIds::BAD_REQUEST,
                         {{ {SLOT1_TYPE, ZONE_ANY, 1} }},
                         {});
-        // check counters 
-        CheckCounter(runtime, {}, TTenantsManager::COUNTER_ALTER_REQUESTS, 1); 
-        CheckCounter(runtime, {{ {"status", "BAD_REQUEST"} }}, TTenantsManager::COUNTER_ALTER_RESPONSES, 1); 
-    } 
- 
+        // check counters
+        CheckCounter(runtime, {}, TTenantsManager::COUNTER_ALTER_REQUESTS, 1);
+        CheckCounter(runtime, {{ {"status", "BAD_REQUEST"} }}, TTenantsManager::COUNTER_ALTER_RESPONSES, 1);
+    }
+
     void RunTestListTenants(TTenantTestRuntime& runtime) {
         CheckCreateTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
                           {{"hdd", 1}},
@@ -1522,26 +1522,26 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         runtime.WaitForHiveState({{{DOMAIN1_NAME, 8, 8, 8},
                                    {TENANT1_1_NAME, 10, 10, 10}}});
 
-        CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS, 
-                          Ydb::Cms::GetDatabaseStatusResult::RUNNING, 
-                          {{"hdd", 1, 1}, {"hdd-1", 2, 2}}, {}, 
-                          SLOT1_TYPE, ZONE1, 3, 3, 
-                          SLOT2_TYPE, ZONE1, 2, 2, 
-                          SLOT3_TYPE, ZONE1, 1, 1); 
- 
+        CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
+                          Ydb::Cms::GetDatabaseStatusResult::RUNNING,
+                          {{"hdd", 1, 1}, {"hdd-1", 2, 2}}, {},
+                          SLOT1_TYPE, ZONE1, 3, 3,
+                          SLOT2_TYPE, ZONE1, 2, 2,
+                          SLOT3_TYPE, ZONE1, 1, 1);
+
         CheckAlterRegisteredUnits(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
                                   {{ {"host1", 1, "kind1"},
                                     {"host2", 2, "kind2"} }},
                                   {});
 
-        CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS, 
-                          Ydb::Cms::GetDatabaseStatusResult::RUNNING, 
-                          {{"hdd", 1, 1}, {"hdd-1", 2, 2}}, 
-                          {{"host1", 1, "kind1"}, {"host2", 2, "kind2"}}, 
-                          SLOT1_TYPE, ZONE1, 3, 3, 
-                          SLOT2_TYPE, ZONE1, 2, 2, 
-                          SLOT3_TYPE, ZONE1, 1, 1); 
- 
+        CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
+                          Ydb::Cms::GetDatabaseStatusResult::RUNNING,
+                          {{"hdd", 1, 1}, {"hdd-1", 2, 2}},
+                          {{"host1", 1, "kind1"}, {"host2", 2, "kind2"}},
+                          SLOT1_TYPE, ZONE1, 3, 3,
+                          SLOT2_TYPE, ZONE1, 2, 2,
+                          SLOT3_TYPE, ZONE1, 1, 1);
+
         CheckRemoveTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS);
 
         CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::NOT_FOUND,
@@ -1566,13 +1566,13 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         runtime.WaitForHiveState({{{DOMAIN1_NAME, 8, 8, 8},
                                    {TENANT1_1_NAME, 10, 10, 10}}});
 
-        CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS, 
-                          Ydb::Cms::GetDatabaseStatusResult::RUNNING, 
-                          {{"hdd", 1, 1}, {"hdd-1", 2, 2}}, {}, 
-                          SLOT1_TYPE, ZONE1, 3, 3, 
-                          SLOT2_TYPE, ZONE1, 2, 2, 
-                          SLOT3_TYPE, ZONE1, 1, 1); 
- 
+        CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
+                          Ydb::Cms::GetDatabaseStatusResult::RUNNING,
+                          {{"hdd", 1, 1}, {"hdd-1", 2, 2}}, {},
+                          SLOT1_TYPE, ZONE1, 3, 3,
+                          SLOT2_TYPE, ZONE1, 2, 2,
+                          SLOT3_TYPE, ZONE1, 1, 1);
+
         CheckRemoveTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS);
 
         // Restart to check we don't load any garbage for removed tenant.
@@ -1594,78 +1594,78 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         RunTestRemoveTenant(runtime);
     }
 
-    Y_UNIT_TEST(TestRemoveSharedTenantWoServerlessTenants) { 
-        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true); 
-        // create shared tenant 
-        RunTestCreateTenant(runtime, true); 
-        // remove shared tenant 
-        CheckRemoveTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS); 
-        CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::NOT_FOUND, 
-                          Ydb::Cms::GetDatabaseStatusResult::STATE_UNSPECIFIED, {}, {}); 
-        // check counters 
-        CheckCounter(runtime, {}, TTenantsManager::COUNTER_REMOVE_REQUESTS, 1); 
-        CheckCounter(runtime, {{ {"status", "SUCCESS"} }}, TTenantsManager::COUNTER_REMOVE_RESPONSES, 1); 
-    } 
- 
-    Y_UNIT_TEST(TestRemoveSharedTenantWithServerlessTenants) { 
-        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true); 
-        // create shared tenant 
-        RunTestCreateTenant(runtime, true); 
-        // create serverless tenant 
-        CheckCreateTenant(runtime, Ydb::StatusIds::SUCCESS, 
-            TCreateTenantRequest(TENANT1_2_NAME) 
-                .WithSharedDbPath(TENANT1_1_NAME)); 
-        CheckTenantStatus(runtime, TENANT1_2_NAME, Ydb::StatusIds::SUCCESS, 
-                          Ydb::Cms::GetDatabaseStatusResult::RUNNING, {}, {}); 
-        // remove shared tenant 
-        CheckRemoveTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::PRECONDITION_FAILED); 
-        // check counters 
-        CheckCounter(runtime, {}, TTenantsManager::COUNTER_REMOVE_REQUESTS, 1); 
-        CheckCounter(runtime, {{ {"status", "PRECONDITION_FAILED"} }}, TTenantsManager::COUNTER_REMOVE_RESPONSES, 1); 
-    } 
- 
-    Y_UNIT_TEST(TestRemoveSharedTenantAfterRemoveServerlessTenant) { 
-        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true); 
-        // create shared tenant 
-        RunTestCreateTenant(runtime, true); 
-        // create serverless tenant 
-        CheckCreateTenant(runtime, Ydb::StatusIds::SUCCESS, 
-            TCreateTenantRequest(TENANT1_2_NAME) 
-                .WithSharedDbPath(TENANT1_1_NAME)); 
-        CheckTenantStatus(runtime, TENANT1_2_NAME, Ydb::StatusIds::SUCCESS, 
-                          Ydb::Cms::GetDatabaseStatusResult::RUNNING, {}, {}); 
-        // remove serverless tenant 
-        CheckRemoveTenant(runtime, TENANT1_2_NAME, Ydb::StatusIds::SUCCESS); 
-        CheckTenantStatus(runtime, TENANT1_2_NAME, Ydb::StatusIds::NOT_FOUND, 
-                          Ydb::Cms::GetDatabaseStatusResult::STATE_UNSPECIFIED, {}, {}); 
-        // remove shared tenant 
-        CheckRemoveTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS); 
-        CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::NOT_FOUND, 
-                          Ydb::Cms::GetDatabaseStatusResult::STATE_UNSPECIFIED, {}, {}); 
-        // check counters 
-        CheckCounter(runtime, {}, TTenantsManager::COUNTER_REMOVE_REQUESTS, 2); 
-        CheckCounter(runtime, {{ {"status", "SUCCESS"} }}, TTenantsManager::COUNTER_REMOVE_RESPONSES, 2); 
-    } 
- 
-    Y_UNIT_TEST(TestRemoveServerlessTenant) { 
-        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true); 
-        // create shared tenant 
-        RunTestCreateTenant(runtime, true); 
-        // create serverless tenant 
-        CheckCreateTenant(runtime, Ydb::StatusIds::SUCCESS, 
-            TCreateTenantRequest(TENANT1_2_NAME) 
-                .WithSharedDbPath(TENANT1_1_NAME)); 
-        CheckTenantStatus(runtime, TENANT1_2_NAME, Ydb::StatusIds::SUCCESS, 
-                          Ydb::Cms::GetDatabaseStatusResult::RUNNING, {}, {}); 
-        // remove serverless tenant 
-        CheckRemoveTenant(runtime, TENANT1_2_NAME, Ydb::StatusIds::SUCCESS); 
-        CheckTenantStatus(runtime, TENANT1_2_NAME, Ydb::StatusIds::NOT_FOUND, 
-                          Ydb::Cms::GetDatabaseStatusResult::STATE_UNSPECIFIED, {}, {}); 
-        // check counters 
-        CheckCounter(runtime, {}, TTenantsManager::COUNTER_REMOVE_REQUESTS, 1); 
-        CheckCounter(runtime, {{ {"status", "SUCCESS"} }}, TTenantsManager::COUNTER_REMOVE_RESPONSES, 1); 
-    } 
- 
+    Y_UNIT_TEST(TestRemoveSharedTenantWoServerlessTenants) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true);
+        // create shared tenant
+        RunTestCreateTenant(runtime, true);
+        // remove shared tenant
+        CheckRemoveTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS);
+        CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::NOT_FOUND,
+                          Ydb::Cms::GetDatabaseStatusResult::STATE_UNSPECIFIED, {}, {});
+        // check counters
+        CheckCounter(runtime, {}, TTenantsManager::COUNTER_REMOVE_REQUESTS, 1);
+        CheckCounter(runtime, {{ {"status", "SUCCESS"} }}, TTenantsManager::COUNTER_REMOVE_RESPONSES, 1);
+    }
+
+    Y_UNIT_TEST(TestRemoveSharedTenantWithServerlessTenants) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true);
+        // create shared tenant
+        RunTestCreateTenant(runtime, true);
+        // create serverless tenant
+        CheckCreateTenant(runtime, Ydb::StatusIds::SUCCESS,
+            TCreateTenantRequest(TENANT1_2_NAME)
+                .WithSharedDbPath(TENANT1_1_NAME));
+        CheckTenantStatus(runtime, TENANT1_2_NAME, Ydb::StatusIds::SUCCESS,
+                          Ydb::Cms::GetDatabaseStatusResult::RUNNING, {}, {});
+        // remove shared tenant
+        CheckRemoveTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::PRECONDITION_FAILED);
+        // check counters
+        CheckCounter(runtime, {}, TTenantsManager::COUNTER_REMOVE_REQUESTS, 1);
+        CheckCounter(runtime, {{ {"status", "PRECONDITION_FAILED"} }}, TTenantsManager::COUNTER_REMOVE_RESPONSES, 1);
+    }
+
+    Y_UNIT_TEST(TestRemoveSharedTenantAfterRemoveServerlessTenant) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true);
+        // create shared tenant
+        RunTestCreateTenant(runtime, true);
+        // create serverless tenant
+        CheckCreateTenant(runtime, Ydb::StatusIds::SUCCESS,
+            TCreateTenantRequest(TENANT1_2_NAME)
+                .WithSharedDbPath(TENANT1_1_NAME));
+        CheckTenantStatus(runtime, TENANT1_2_NAME, Ydb::StatusIds::SUCCESS,
+                          Ydb::Cms::GetDatabaseStatusResult::RUNNING, {}, {});
+        // remove serverless tenant
+        CheckRemoveTenant(runtime, TENANT1_2_NAME, Ydb::StatusIds::SUCCESS);
+        CheckTenantStatus(runtime, TENANT1_2_NAME, Ydb::StatusIds::NOT_FOUND,
+                          Ydb::Cms::GetDatabaseStatusResult::STATE_UNSPECIFIED, {}, {});
+        // remove shared tenant
+        CheckRemoveTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS);
+        CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::NOT_FOUND,
+                          Ydb::Cms::GetDatabaseStatusResult::STATE_UNSPECIFIED, {}, {});
+        // check counters
+        CheckCounter(runtime, {}, TTenantsManager::COUNTER_REMOVE_REQUESTS, 2);
+        CheckCounter(runtime, {{ {"status", "SUCCESS"} }}, TTenantsManager::COUNTER_REMOVE_RESPONSES, 2);
+    }
+
+    Y_UNIT_TEST(TestRemoveServerlessTenant) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true);
+        // create shared tenant
+        RunTestCreateTenant(runtime, true);
+        // create serverless tenant
+        CheckCreateTenant(runtime, Ydb::StatusIds::SUCCESS,
+            TCreateTenantRequest(TENANT1_2_NAME)
+                .WithSharedDbPath(TENANT1_1_NAME));
+        CheckTenantStatus(runtime, TENANT1_2_NAME, Ydb::StatusIds::SUCCESS,
+                          Ydb::Cms::GetDatabaseStatusResult::RUNNING, {}, {});
+        // remove serverless tenant
+        CheckRemoveTenant(runtime, TENANT1_2_NAME, Ydb::StatusIds::SUCCESS);
+        CheckTenantStatus(runtime, TENANT1_2_NAME, Ydb::StatusIds::NOT_FOUND,
+                          Ydb::Cms::GetDatabaseStatusResult::STATE_UNSPECIFIED, {}, {});
+        // check counters
+        CheckCounter(runtime, {}, TTenantsManager::COUNTER_REMOVE_REQUESTS, 1);
+        CheckCounter(runtime, {{ {"status", "SUCCESS"} }}, TTenantsManager::COUNTER_REMOVE_RESPONSES, 1);
+    }
+
     void RunTestCreateSubSubDomain(TTenantTestRuntime& runtime) {
         CheckCreateTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
                           {{"hdd", 1}, {"hdd-1", 2}},
@@ -1751,8 +1751,8 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
     Y_UNIT_TEST(TestRegisterComputationalUnitsForPending) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
 
-        CheckCreateTenant(runtime, Ydb::StatusIds::SUCCESS, 
-            TCreateTenantRequest(TENANT1_1_NAME).WithPools({{"hdd", 1}, {"hdd-1", 1}})); 
+        CheckCreateTenant(runtime, Ydb::StatusIds::SUCCESS,
+            TCreateTenantRequest(TENANT1_1_NAME).WithPools({{"hdd", 1}, {"hdd-1", 1}}));
 
         runtime.WaitForHiveState({{{DOMAIN1_NAME, 8, 8, 8}}});
 
@@ -1785,8 +1785,8 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
                           {{"hdd", 1, 1}, {"hdd-1", 1, 1}},
                           {{"host2", 2, "kind2"}, {"host3", 3, "kind2"}});
 
-        CheckCreateTenant(runtime, Ydb::StatusIds::SUCCESS, 
-            TCreateTenantRequest(TENANT1_2_NAME).WithPools({{"hdd", 1}, {"hdd-1", 1}})); 
+        CheckCreateTenant(runtime, Ydb::StatusIds::SUCCESS,
+            TCreateTenantRequest(TENANT1_2_NAME).WithPools({{"hdd", 1}, {"hdd-1", 1}}));
 
         CheckAlterRegisteredUnits(runtime, TENANT1_2_NAME, Ydb::StatusIds::SUCCESS,
                                   {{ {"host4", 4, "kind1"},
@@ -1935,11 +1935,11 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         // with no TEvNotifyOperationCompletionResponse.
         CheckNotificationRequest(runtime, id, Ydb::StatusIds::GENERIC_ERROR);
 
-        CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS, 
-                          Ydb::Cms::GetDatabaseStatusResult::RUNNING, 
-                          {{"hdd", 1, 1}}, {}, 
-                          SLOT1_TYPE, ZONE1, 1, 1); 
- 
+        CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
+                          Ydb::Cms::GetDatabaseStatusResult::RUNNING,
+                          {{"hdd", 1, 1}}, {},
+                          SLOT1_TYPE, ZONE1, 1, 1);
+
         // Send tenant removal command and store operation id.
         runtime.SetObserverFunc(CatchPoolEvent(captured));
         id = SendTenantRemovalCommand(runtime, TENANT1_1_NAME);
@@ -2160,10 +2160,10 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
                           {{"hdd", 1}},
                           SLOT1_TYPE, ZONE1, 1);
         // Wrong request shouldn't eat quota.
-        CheckCreateTenant(runtime, Ydb::StatusIds::BAD_REQUEST, TCreateTenantRequest("")); 
+        CheckCreateTenant(runtime, Ydb::StatusIds::BAD_REQUEST, TCreateTenantRequest(""));
         // This one should fail on subdomain creation and then release quota.
-        CheckCreateTenant(runtime, Ydb::StatusIds::GENERIC_ERROR, 
-            TCreateTenantRequest(TENANT1_1_NAME + "/sub").WithPools({{"hdd", 1}})); 
+        CheckCreateTenant(runtime, Ydb::StatusIds::GENERIC_ERROR,
+            TCreateTenantRequest(TENANT1_1_NAME + "/sub").WithPools({{"hdd", 1}}));
         // Here status is received before tenant is completely removed.
         // Wait for complete removal.
         WaitForTenantStatus(runtime, TENANT1_1_NAME + "/sub", Ydb::StatusIds::NOT_FOUND);
@@ -2210,10 +2210,10 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         CheckCreateTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
                           {{"hdd", 1}},
                           SLOT3_TYPE, ZONE_ANY, 5);
-        CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS, 
-                          Ydb::Cms::GetDatabaseStatusResult::RUNNING, 
-                          {{"hdd", 1, 1}}, {}, 
-                          SLOT3_TYPE, ZONE_ANY, 5, 5); 
+        CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
+                          Ydb::Cms::GetDatabaseStatusResult::RUNNING,
+                          {{"hdd", 1, 1}}, {},
+                          SLOT3_TYPE, ZONE_ANY, 5, 5);
         // Wrong request shouldn't eat quota.
         CheckCreateTenant(runtime, "", Ydb::StatusIds::BAD_REQUEST,
                           {{"hdd", 1}},
@@ -2224,16 +2224,16 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
                           SLOT2_TYPE, ZONE_ANY, 5);
         // Wait for complete tenant removal.
         WaitForTenantStatus(runtime, TENANT1_1_NAME + "/sub", Ydb::StatusIds::NOT_FOUND);
-        CheckTenantStatus(runtime, TENANT1_1_NAME + "/sub", Ydb::StatusIds::NOT_FOUND, 
-                          Ydb::Cms::GetDatabaseStatusResult::STATE_UNSPECIFIED, {}, {}); 
+        CheckTenantStatus(runtime, TENANT1_1_NAME + "/sub", Ydb::StatusIds::NOT_FOUND,
+                          Ydb::Cms::GetDatabaseStatusResult::STATE_UNSPECIFIED, {}, {});
         // OK.
         CheckCreateTenant(runtime, TENANT1_2_NAME, Ydb::StatusIds::SUCCESS,
                           {{"hdd", 1}},
                           SLOT2_TYPE, ZONE_ANY, 5);
-        CheckTenantStatus(runtime, TENANT1_2_NAME, Ydb::StatusIds::SUCCESS, 
-                          Ydb::Cms::GetDatabaseStatusResult::RUNNING, 
-                          {{"hdd", 1, 1}}, {}, 
-                          SLOT2_TYPE, ZONE_ANY, 5, 5); 
+        CheckTenantStatus(runtime, TENANT1_2_NAME, Ydb::StatusIds::SUCCESS,
+                          Ydb::Cms::GetDatabaseStatusResult::RUNNING,
+                          {{"hdd", 1, 1}}, {},
+                          SLOT2_TYPE, ZONE_ANY, 5, 5);
         // Out of quota.
         CheckCreateTenant(runtime, TENANT1_3_NAME, Ydb::StatusIds::UNAVAILABLE,
                           {{"hdd", 1}},
@@ -2254,23 +2254,23 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         CheckAlterTenantSlots(runtime, TENANT1_2_NAME, Ydb::StatusIds::SUCCESS,
                               {{ {SLOT3_TYPE, ZONE_ANY, 1} }},
                               {});
-        CheckTenantStatus(runtime, TENANT1_2_NAME, Ydb::StatusIds::SUCCESS, 
-                          Ydb::Cms::GetDatabaseStatusResult::RUNNING, 
-                          {{"hdd", 1, 1}}, {}, 
-                          SLOT2_TYPE, ZONE_ANY, 5, 5, 
-                          SLOT3_TYPE, ZONE_ANY, 1, 1); 
+        CheckTenantStatus(runtime, TENANT1_2_NAME, Ydb::StatusIds::SUCCESS,
+                          Ydb::Cms::GetDatabaseStatusResult::RUNNING,
+                          {{"hdd", 1, 1}}, {},
+                          SLOT2_TYPE, ZONE_ANY, 5, 5,
+                          SLOT3_TYPE, ZONE_ANY, 1, 1);
         // Remove tenant to release some resources.
         CheckRemoveTenant(runtime, TENANT1_2_NAME, Ydb::StatusIds::SUCCESS);
-        CheckTenantStatus(runtime, TENANT1_2_NAME, Ydb::StatusIds::NOT_FOUND, 
-                          Ydb::Cms::GetDatabaseStatusResult::STATE_UNSPECIFIED, {}, {}); 
+        CheckTenantStatus(runtime, TENANT1_2_NAME, Ydb::StatusIds::NOT_FOUND,
+                          Ydb::Cms::GetDatabaseStatusResult::STATE_UNSPECIFIED, {}, {});
         // OK.
         CheckCreateTenant(runtime, TENANT1_3_NAME, Ydb::StatusIds::SUCCESS,
                           {{"hdd", 1}},
                           SLOT2_TYPE, ZONE_ANY, 6);
-        CheckTenantStatus(runtime, TENANT1_3_NAME, Ydb::StatusIds::SUCCESS, 
-                          Ydb::Cms::GetDatabaseStatusResult::RUNNING, 
-                          {{"hdd", 1, 1}}, {}, 
-                          SLOT2_TYPE, ZONE_ANY, 6, 6); 
+        CheckTenantStatus(runtime, TENANT1_3_NAME, Ydb::StatusIds::SUCCESS,
+                          Ydb::Cms::GetDatabaseStatusResult::RUNNING,
+                          {{"hdd", 1, 1}}, {},
+                          SLOT2_TYPE, ZONE_ANY, 6, 6);
         // Out of quota.
         CheckAlterTenantSlots(runtime, TENANT1_1_NAME, Ydb::StatusIds::UNAVAILABLE,
                               {{ {SLOT3_TYPE, ZONE_ANY, 1} }},
@@ -2308,10 +2308,10 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         CheckCreateTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
                           {{"hdd", 1}},
                           SLOT2_TYPE, ZONE_ANY, 5);
-        CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS, 
-                          Ydb::Cms::GetDatabaseStatusResult::RUNNING, 
-                          {{"hdd", 1, 1}}, {}, 
-                          SLOT2_TYPE, ZONE_ANY, 5, 5); 
+        CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
+                          Ydb::Cms::GetDatabaseStatusResult::RUNNING,
+                          {{"hdd", 1, 1}}, {},
+                          SLOT2_TYPE, ZONE_ANY, 5, 5);
         // Out of quota for SLOT2_TYPE.
         CheckCreateTenant(runtime, TENANT1_2_NAME, Ydb::StatusIds::UNAVAILABLE,
                           {{"hdd", 1}},
@@ -2320,10 +2320,10 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         CheckCreateTenant(runtime, TENANT1_2_NAME, Ydb::StatusIds::SUCCESS,
                           {{"hdd", 1}},
                           SLOT2_TYPE, ZONE1, 1);
-        CheckTenantStatus(runtime, TENANT1_2_NAME, Ydb::StatusIds::SUCCESS, 
-                          Ydb::Cms::GetDatabaseStatusResult::RUNNING, 
-                          {{"hdd", 1, 1}}, {}, 
-                          SLOT2_TYPE, ZONE1, 1, 1); 
+        CheckTenantStatus(runtime, TENANT1_2_NAME, Ydb::StatusIds::SUCCESS,
+                          Ydb::Cms::GetDatabaseStatusResult::RUNNING,
+                          {{"hdd", 1, 1}}, {},
+                          SLOT2_TYPE, ZONE1, 1, 1);
         // Out of total quota.
         CheckCreateTenant(runtime, TENANT1_3_NAME, Ydb::StatusIds::UNAVAILABLE,
                           {{"hdd", 1}},
@@ -2332,10 +2332,10 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         CheckCreateTenant(runtime, TENANT1_3_NAME, Ydb::StatusIds::SUCCESS,
                           {{"hdd", 1}},
                           "any", ZONE_ANY, 12);
-        CheckTenantStatus(runtime, TENANT1_3_NAME, Ydb::StatusIds::SUCCESS, 
-                          Ydb::Cms::GetDatabaseStatusResult::RUNNING, 
-                          {{"hdd", 1, 1}}, {}, 
-                          "any", ZONE_ANY, 12, 12); 
+        CheckTenantStatus(runtime, TENANT1_3_NAME, Ydb::StatusIds::SUCCESS,
+                          Ydb::Cms::GetDatabaseStatusResult::RUNNING,
+                          {{"hdd", 1, 1}}, {},
+                          "any", ZONE_ANY, 12, 12);
 
         CheckCounter(runtime, {{ {"kind", SLOT2_TYPE}, {"zone", ZONE_ANY } }}, TTenantsManager::COUNTER_COMPUTATIONAL_UNITS, 5);
         CheckCounter(runtime, {{ {"kind", SLOT2_TYPE}, {"zone", ZONE1 } }}, TTenantsManager::COUNTER_COMPUTATIONAL_UNITS, 1);
@@ -2357,11 +2357,11 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         CheckAlterTenantSlots(runtime, TENANT1_3_NAME, Ydb::StatusIds::SUCCESS,
                               {{ {SLOT2_TYPE, ZONE_ANY, 1} }},
                               {{ {"any", ZONE_ANY, 1} }});
-        CheckTenantStatus(runtime, TENANT1_3_NAME, Ydb::StatusIds::SUCCESS, 
-                          Ydb::Cms::GetDatabaseStatusResult::RUNNING, 
-                          {{"hdd", 1, 1}}, {}, 
-                          "any", ZONE_ANY, 11, 11, 
-                          SLOT2_TYPE, ZONE_ANY, 1, 1); 
+        CheckTenantStatus(runtime, TENANT1_3_NAME, Ydb::StatusIds::SUCCESS,
+                          Ydb::Cms::GetDatabaseStatusResult::RUNNING,
+                          {{"hdd", 1, 1}}, {},
+                          "any", ZONE_ANY, 11, 11,
+                          SLOT2_TYPE, ZONE_ANY, 1, 1);
 
         CheckCounter(runtime, {{ {"kind", SLOT2_TYPE}, {"zone", ZONE_ANY } }}, TTenantsManager::COUNTER_COMPUTATIONAL_UNITS, 5);
         CheckCounter(runtime, {{ {"kind", SLOT2_TYPE}, {"zone", ZONE1 } }}, TTenantsManager::COUNTER_COMPUTATIONAL_UNITS, 1);
@@ -2369,8 +2369,8 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
 
         // Remove tenant to release some resources.
         CheckRemoveTenant(runtime, TENANT1_3_NAME, Ydb::StatusIds::SUCCESS);
-        CheckTenantStatus(runtime, TENANT1_3_NAME, Ydb::StatusIds::NOT_FOUND, 
-                          Ydb::Cms::GetDatabaseStatusResult::STATE_UNSPECIFIED, {}, {}); 
+        CheckTenantStatus(runtime, TENANT1_3_NAME, Ydb::StatusIds::NOT_FOUND,
+                          Ydb::Cms::GetDatabaseStatusResult::STATE_UNSPECIFIED, {}, {});
 
         CheckCounter(runtime, {{ {"kind", SLOT2_TYPE}, {"zone", ZONE_ANY } }}, TTenantsManager::COUNTER_COMPUTATIONAL_UNITS, 4);
         CheckCounter(runtime, {{ {"kind", SLOT2_TYPE}, {"zone", ZONE1 } }}, TTenantsManager::COUNTER_COMPUTATIONAL_UNITS, 1);

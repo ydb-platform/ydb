@@ -11,8 +11,8 @@ using namespace NYdb::NTable;
 Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
     Y_UNIT_TEST_NEW_ENGINE(TestSnapshotExpiration) {
         TKikimrRunner kikimr(TKikimrSettings()
-            .SetEnableMvcc(true) 
-            .SetEnableMvccSnapshotReads(true) 
+            .SetEnableMvcc(true)
+            .SetEnableMvccSnapshotReads(true)
             .SetKeepSnapshotTimeout(TDuration::Seconds(1)));
 
 //        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_BLOBS_STORAGE, NActors::NLog::PRI_DEBUG);
@@ -62,7 +62,7 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
     }
 
     Y_UNIT_TEST_NEW_ENGINE(ReadOnlyTxCommitsOnConcurrentWrite) {
-        TKikimrRunner kikimr(TKikimrSettings().SetEnableMvcc(true).SetEnableMvccSnapshotReads(true)); 
+        TKikimrRunner kikimr(TKikimrSettings().SetEnableMvcc(true).SetEnableMvccSnapshotReads(true));
 
 //        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG);
 //        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_BLOBS_STORAGE, NActors::NLog::PRI_DEBUG);
@@ -120,7 +120,7 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
     }
 
     Y_UNIT_TEST_NEW_ENGINE(ReadOnlyTxWithIndexCommitsOnConcurrentWrite) {
-        TKikimrRunner kikimr(TKikimrSettings().SetEnableMvcc(true).SetEnableMvccSnapshotReads(true)); 
+        TKikimrRunner kikimr(TKikimrSettings().SetEnableMvcc(true).SetEnableMvccSnapshotReads(true));
 
 //        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG);
 //        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_BLOBS_STORAGE, NActors::NLog::PRI_DEBUG);
@@ -181,7 +181,7 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
     }
 
     Y_UNIT_TEST_NEW_ENGINE(ReadWriteTxFailsOnConcurrentWrite1) {
-        TKikimrRunner kikimr(TKikimrSettings().SetEnableMvcc(true).SetEnableMvccSnapshotReads(true)); 
+        TKikimrRunner kikimr(TKikimrSettings().SetEnableMvcc(true).SetEnableMvccSnapshotReads(true));
 
 //        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG);
 //        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_BLOBS_STORAGE, NActors::NLog::PRI_DEBUG);
@@ -218,7 +218,7 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
     }
 
     Y_UNIT_TEST_NEW_ENGINE(ReadWriteTxFailsOnConcurrentWrite2) {
-        TKikimrRunner kikimr(TKikimrSettings().SetEnableMvcc(true).SetEnableMvccSnapshotReads(true)); 
+        TKikimrRunner kikimr(TKikimrSettings().SetEnableMvcc(true).SetEnableMvccSnapshotReads(true));
 
 //        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG);
 //        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_BLOBS_STORAGE, NActors::NLog::PRI_DEBUG);
@@ -256,7 +256,7 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
     }
 
     Y_UNIT_TEST_NEW_ENGINE(ReadWriteTxFailsOnConcurrentWrite3) {
-        TKikimrRunner kikimr(TKikimrSettings().SetEnableMvcc(true).SetEnableMvccSnapshotReads(true)); 
+        TKikimrRunner kikimr(TKikimrSettings().SetEnableMvcc(true).SetEnableMvccSnapshotReads(true));
 
 //        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG);
 //        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_BLOBS_STORAGE, NActors::NLog::PRI_DEBUG);

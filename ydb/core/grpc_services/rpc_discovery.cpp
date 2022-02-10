@@ -47,12 +47,12 @@ namespace NDiscoveryPrivate {
         THashMap<TString, THolder<TEvStateStorage::TEvBoardInfo>> OldInfo;
         THashMap<TString, THolder<TEvStateStorage::TEvBoardInfo>> NewInfo;
 
-        struct TWaiter { 
+        struct TWaiter {
             TActorId ActorId;
-            ui64 Cookie; 
-        }; 
- 
-        THashMap<TString, TVector<TWaiter>> Requested; 
+            ui64 Cookie;
+        };
+
+        THashMap<TString, TVector<TWaiter>> Requested;
         bool Scheduled;
 
         void Handle(TEvStateStorage::TEvBoardInfo::TPtr &ev) {
@@ -62,7 +62,7 @@ namespace NDiscoveryPrivate {
             auto vecIt = Requested.find(path);
             if (vecIt != Requested.end()) {
                 for (auto &x : vecIt->second)
-                    Send(x.ActorId, new TEvStateStorage::TEvBoardInfo(*msg), 0, x.Cookie); 
+                    Send(x.ActorId, new TEvStateStorage::TEvBoardInfo(*msg), 0, x.Cookie);
                 Requested.erase(vecIt);
             }
 
@@ -89,12 +89,12 @@ namespace NDiscoveryPrivate {
         void Handle(TEvPrivate::TEvRequest::TPtr &ev) {
             auto *msg = ev->Get();
             if (auto *x = OldInfo.FindPtr(msg->Database)) {
-                Send(ev->Sender, new TEvStateStorage::TEvBoardInfo(**x), 0, ev->Cookie); 
+                Send(ev->Sender, new TEvStateStorage::TEvBoardInfo(**x), 0, ev->Cookie);
                 return;
             }
 
             if (auto *x = NewInfo.FindPtr(msg->Database)) {
-                Send(ev->Sender, new TEvStateStorage::TEvBoardInfo(**x), 0, ev->Cookie); 
+                Send(ev->Sender, new TEvStateStorage::TEvBoardInfo(**x), 0, ev->Cookie);
                 return;
             }
 
@@ -103,7 +103,7 @@ namespace NDiscoveryPrivate {
                 Register(CreateBoardLookupActor(msg->Database, SelfId(), msg->StateStorageId, EBoardLookupMode::Second, false, false));
             }
 
-            rqstd.push_back({ev->Sender, ev->Cookie}); 
+            rqstd.push_back({ev->Sender, ev->Cookie});
         }
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -135,10 +135,10 @@ class TListEndpointsRPC : public TActorBootstrapped<TListEndpointsRPC> {
     THolder<TEvStateStorage::TEvBoardInfo> LookupResponse;
     THolder<TEvInterconnect::TEvNodeInfo> NameserviceResponse;
     THolder<TEvTxProxySchemeCache::TEvNavigateKeySetResult> SchemeCacheResponse;
- 
-    bool ResolveResources = false; 
-    ui64 LookupCookie = 0; 
- 
+
+    bool ResolveResources = false;
+    ui64 LookupCookie = 0;
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::GRPC_REQ;
@@ -151,14 +151,14 @@ public:
 
     void Bootstrap() {
         // request endpoints
-        Lookup(Request->GetProtoRequest()->database()); 
+        Lookup(Request->GetProtoRequest()->database());
 
         // request self node info
         Send(GetNameserviceActorId(), new TEvInterconnect::TEvGetNode(SelfId().NodeId()));
 
         // request path info
         if (RequestScheme) {
-            Navigate(Request->GetProtoRequest()->database()); 
+            Navigate(Request->GetProtoRequest()->database());
         }
 
         Become(&TThis::StateWait);
@@ -175,10 +175,10 @@ public:
     }
 
     void Handle(TEvStateStorage::TEvBoardInfo::TPtr &ev) {
-        if (ev->Cookie != LookupCookie) { 
-            return; 
-        } 
- 
+        if (ev->Cookie != LookupCookie) {
+            return;
+        }
+
         LookupResponse = THolder<TEvStateStorage::TEvBoardInfo>(ev->Release().Release());
 
         TryReplyAndDie();
@@ -201,7 +201,7 @@ public:
 
         LOG_TRACE_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY,
                     "TListEndpointsRPC: handle  TEvNavigateKeySetResult"
-                        << ", entry: " << entry.ToString()); 
+                        << ", entry: " << entry.ToString());
 
         if (navigate->ErrorCount > 0) {
             switch (entry.Status) {
@@ -218,7 +218,7 @@ public:
                 {
                     LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY,
                                 "TListEndpointsRPC: GENERIC_RESOLVE_ERROR"
-                                    << ", entry: " << entry.ToString()); 
+                                    << ", entry: " << entry.ToString());
 
                     auto issue = MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, "Database resolve failed with no certain result");
                     google::protobuf::RepeatedPtrField<TYdbIssueMessageType> issueMessages;
@@ -229,31 +229,31 @@ public:
             }
         }
 
-        if (!entry.DomainInfo) { 
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY, 
-                        "TListEndpointsRPC: GENERIC_RESOLVE_ERROR (empty domain info)" 
-                            << ", entry: " << entry.ToString()); 
- 
-            auto issue = MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, "Database resolve failed with no certain result"); 
-            google::protobuf::RepeatedPtrField<TYdbIssueMessageType> issueMessages; 
-            NYql::IssueToMessage(issue, issueMessages.Add()); 
-            Request->SendResult(Ydb::StatusIds::UNAVAILABLE, issueMessages); 
-            return PassAway(); 
-        } 
- 
-        auto info = entry.DomainInfo; 
-        if (info->DomainKey != info->ResourcesDomainKey) { 
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY, 
-                        "TListEndpointsRPC: domain key differs from resources domain key" 
-                            << ", domain key: " << info->DomainKey 
-                            << ", resources domain key: " << info->ResourcesDomainKey); 
- 
-            Navigate(info->ResourcesDomainKey); 
-            ResolveResources = true; 
-        } else if (ResolveResources) { 
-            Lookup(CanonizePath(entry.Path)); 
-        } 
- 
+        if (!entry.DomainInfo) {
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY,
+                        "TListEndpointsRPC: GENERIC_RESOLVE_ERROR (empty domain info)"
+                            << ", entry: " << entry.ToString());
+
+            auto issue = MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, "Database resolve failed with no certain result");
+            google::protobuf::RepeatedPtrField<TYdbIssueMessageType> issueMessages;
+            NYql::IssueToMessage(issue, issueMessages.Add());
+            Request->SendResult(Ydb::StatusIds::UNAVAILABLE, issueMessages);
+            return PassAway();
+        }
+
+        auto info = entry.DomainInfo;
+        if (info->DomainKey != info->ResourcesDomainKey) {
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY,
+                        "TListEndpointsRPC: domain key differs from resources domain key"
+                            << ", domain key: " << info->DomainKey
+                            << ", resources domain key: " << info->ResourcesDomainKey);
+
+            Navigate(info->ResourcesDomainKey);
+            ResolveResources = true;
+        } else if (ResolveResources) {
+            Lookup(CanonizePath(entry.Path));
+        }
+
         TryReplyAndDie();
     }
 
@@ -414,66 +414,66 @@ public:
         }
         return true;
     }
- 
-    void Lookup(const TString& db) { 
-        TVector<TString> path = NKikimr::SplitPath(db); 
-        auto domainName = path ? path[0] : TString(); 
-        auto *appdata = AppData(); 
-        auto *domainInfo = appdata->DomainsInfo->GetDomainByName(domainName); 
-        if (!domainInfo) { 
-            auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DATABASE_NOT_EXIST, "Database " + domainName + " not exists"); 
-            google::protobuf::RepeatedPtrField<TYdbIssueMessageType> issueMessages; 
-            NYql::IssueToMessage(issue, issueMessages.Add()); 
-            Request->SendResult(Ydb::StatusIds::BAD_REQUEST, issueMessages); 
-            return PassAway(); 
-        } 
- 
-        TString database; 
-        for (auto &x : path) { 
-            if (x.size() > 4100) { 
-                auto issue = MakeIssue(NKikimrIssues::TIssuesIds::KEY_PARSE_ERROR, "Requested database name too long"); 
-                google::protobuf::RepeatedPtrField<TYdbIssueMessageType> issueMessages; 
-                NYql::IssueToMessage(issue, issueMessages.Add()); 
-                Request->SendResult(Ydb::StatusIds::BAD_REQUEST, issueMessages); 
-                return PassAway(); 
-            } 
-            database.append("/").append(x); 
-        } 
- 
-        // request endpoints 
-        auto stateStorageGroupId = domainInfo->DefaultStateStorageGroup; 
-        auto reqPath = MakeEndpointsBoardPath(database); 
- 
-        Send(CacheId, new NDiscoveryPrivate::TEvPrivate::TEvRequest(reqPath, stateStorageGroupId), 0, ++LookupCookie); 
-        LookupResponse.Reset(); 
-    } 
- 
-    void FillNavigateKey(const TString& path, NSchemeCache::TSchemeCacheNavigate::TEntry& entry) { 
-        entry.Path = NKikimr::SplitPath(path); 
-        entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByPath; 
-    } 
- 
-    void FillNavigateKey(const TPathId& pathId, NSchemeCache::TSchemeCacheNavigate::TEntry& entry) { 
-        entry.TableId = TTableId(pathId.OwnerId, pathId.LocalPathId); 
-        entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId; 
-    } 
- 
-    template <typename T> 
-    void Navigate(const T& id) { 
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY, 
-                    "TListEndpointsRPC: make TEvNavigateKeySet request" 
-                        << ", path: " << id); 
- 
-        auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>(); 
- 
-        request->ResultSet.emplace_back(); 
-        FillNavigateKey(id, request->ResultSet.back()); 
-        request->ResultSet.back().Operation = NSchemeCache::TSchemeCacheNavigate::OpPath; 
-        request->ResultSet.back().RedirectRequired = false; 
- 
-        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()), IEventHandle::FlagTrackDelivery); 
-        SchemeCacheResponse.Reset(); 
-    } 
+
+    void Lookup(const TString& db) {
+        TVector<TString> path = NKikimr::SplitPath(db);
+        auto domainName = path ? path[0] : TString();
+        auto *appdata = AppData();
+        auto *domainInfo = appdata->DomainsInfo->GetDomainByName(domainName);
+        if (!domainInfo) {
+            auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DATABASE_NOT_EXIST, "Database " + domainName + " not exists");
+            google::protobuf::RepeatedPtrField<TYdbIssueMessageType> issueMessages;
+            NYql::IssueToMessage(issue, issueMessages.Add());
+            Request->SendResult(Ydb::StatusIds::BAD_REQUEST, issueMessages);
+            return PassAway();
+        }
+
+        TString database;
+        for (auto &x : path) {
+            if (x.size() > 4100) {
+                auto issue = MakeIssue(NKikimrIssues::TIssuesIds::KEY_PARSE_ERROR, "Requested database name too long");
+                google::protobuf::RepeatedPtrField<TYdbIssueMessageType> issueMessages;
+                NYql::IssueToMessage(issue, issueMessages.Add());
+                Request->SendResult(Ydb::StatusIds::BAD_REQUEST, issueMessages);
+                return PassAway();
+            }
+            database.append("/").append(x);
+        }
+
+        // request endpoints
+        auto stateStorageGroupId = domainInfo->DefaultStateStorageGroup;
+        auto reqPath = MakeEndpointsBoardPath(database);
+
+        Send(CacheId, new NDiscoveryPrivate::TEvPrivate::TEvRequest(reqPath, stateStorageGroupId), 0, ++LookupCookie);
+        LookupResponse.Reset();
+    }
+
+    void FillNavigateKey(const TString& path, NSchemeCache::TSchemeCacheNavigate::TEntry& entry) {
+        entry.Path = NKikimr::SplitPath(path);
+        entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByPath;
+    }
+
+    void FillNavigateKey(const TPathId& pathId, NSchemeCache::TSchemeCacheNavigate::TEntry& entry) {
+        entry.TableId = TTableId(pathId.OwnerId, pathId.LocalPathId);
+        entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
+    }
+
+    template <typename T>
+    void Navigate(const T& id) {
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY,
+                    "TListEndpointsRPC: make TEvNavigateKeySet request"
+                        << ", path: " << id);
+
+        auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+
+        request->ResultSet.emplace_back();
+        FillNavigateKey(id, request->ResultSet.back());
+        request->ResultSet.back().Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
+        request->ResultSet.back().RedirectRequired = false;
+
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()), IEventHandle::FlagTrackDelivery);
+        SchemeCacheResponse.Reset();
+    }
 };
 
 void TGRpcRequestProxy::Handle(TEvListEndpointsRequest::TPtr& ev, const TActorContext& ctx) {

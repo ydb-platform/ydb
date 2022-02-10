@@ -192,8 +192,8 @@ message TEvProposeTransaction {
     optional string UserToken = 4; // already built and serialized user's token
     optional bool StreamResponse = 5;
     optional uint64 CancelAfterMs = 6;
-    optional string DatabaseName = 7; 
-    optional string RequestType = 8; 
+    optional string DatabaseName = 7;
+    optional string RequestType = 8;
 }
 
 message TTxProxyTimings {
@@ -254,7 +254,7 @@ message TEvNavigate {
     optional NKikimrSchemeOp.TDescribePath DescribePath = 5;
 
     optional string UserToken = 6; // already built and serialized user's token
-    optional string DatabaseName = 7; 
+    optional string DatabaseName = 7;
 }
 
 // This message is no longer used
@@ -275,26 +275,26 @@ message TEvInvalidateTable {
     optional uint64 TableId = 2;
 }
 
-message TEvExportRequest { 
-    optional string DatabaseName = 1; 
-    optional string UserToken = 2; 
-    oneof Request { 
-        NKikimrExport.TCreateExportRequest CreateExport = 3; 
-        NKikimrExport.TGetExportRequest GetExport = 4; 
-        NKikimrExport.TCancelExportRequest CancelExport = 5; 
-        NKikimrExport.TForgetExportRequest ForgetExport = 6; 
-        NKikimrExport.TListExportsRequest ListExports = 7; 
-    } 
+message TEvExportRequest {
+    optional string DatabaseName = 1;
+    optional string UserToken = 2;
+    oneof Request {
+        NKikimrExport.TCreateExportRequest CreateExport = 3;
+        NKikimrExport.TGetExportRequest GetExport = 4;
+        NKikimrExport.TCancelExportRequest CancelExport = 5;
+        NKikimrExport.TForgetExportRequest ForgetExport = 6;
+        NKikimrExport.TListExportsRequest ListExports = 7;
+    }
 }
 
-message TEvExportResponse { 
+message TEvExportResponse {
     optional uint32 Status = 1;
-    optional string ErrorDescription = 7; 
-    oneof Response { 
-        NKikimrExport.TCreateExportResponse CreateExport = 2; 
-        NKikimrExport.TGetExportResponse GetExport = 3; 
-        NKikimrExport.TCancelExportResponse CancelExport = 4; 
-        NKikimrExport.TForgetExportResponse ForgetExport = 5; 
-        NKikimrExport.TListExportsResponse ListExports = 6; 
-    } 
+    optional string ErrorDescription = 7;
+    oneof Response {
+        NKikimrExport.TCreateExportResponse CreateExport = 2;
+        NKikimrExport.TGetExportResponse GetExport = 3;
+        NKikimrExport.TCancelExportResponse CancelExport = 4;
+        NKikimrExport.TForgetExportResponse ForgetExport = 5;
+        NKikimrExport.TListExportsResponse ListExports = 6;
+    }
 }

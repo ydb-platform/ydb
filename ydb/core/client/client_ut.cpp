@@ -15,10 +15,10 @@
 
 #include <ydb/library/yql/ast/yql_ast.h>
 #include <ydb/library/yql/ast/yql_expr.h>
- 
+
 #include <util/folder/path.h>
-#include <util/generic/xrange.h> 
-#include <util/string/subst.h> 
+#include <util/generic/xrange.h>
+#include <util/string/subst.h>
 #include <util/thread/pool.h>
 
 namespace NKikimr {

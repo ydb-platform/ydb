@@ -270,11 +270,11 @@ void TDescribeReq::Handle(TEvTxProxyReq::TEvNavigateScheme::TPtr &ev, const TAct
     }
 
     TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate());
-    request->DatabaseName = record.GetDatabaseName(); 
+    request->DatabaseName = record.GetDatabaseName();
     NSchemeCache::TSchemeCacheNavigate::TEntry entry;
     entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
-    entry.SyncVersion = true; 
-    entry.ShowPrivatePath = record.GetDescribePath().GetOptions().GetShowPrivateTable(); 
+    entry.SyncVersion = true;
+    entry.ShowPrivatePath = record.GetDescribePath().GetOptions().GetShowPrivateTable();
     entry.Path = SplitPath(record.GetDescribePath().GetPath());
     if (entry.Path.empty()) {
         ReportError(NKikimrScheme::StatusInvalidParameter, "Invalid path", ctx);
@@ -284,7 +284,7 @@ void TDescribeReq::Handle(TEvTxProxyReq::TEvNavigateScheme::TPtr &ev, const TAct
 
     request->ResultSet.emplace_back(entry);
 
-    ctx.Send(Services.SchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(request), 0, SourceCookie); 
+    ctx.Send(Services.SchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(request), 0, SourceCookie);
 
     SchemeRequest = ev->Release();
     Become(&TThis::StateWaitResolve);
@@ -363,7 +363,7 @@ void TDescribeReq::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &
         return SendSystemViewResult(entry, path, ctx);
     }
 
-    const ui64 shardToRequest = entry.DomainInfo->ExtractSchemeShard(); 
+    const ui64 shardToRequest = entry.DomainInfo->ExtractSchemeShard();
 
     TAutoPtr<NSchemeShard::TEvSchemeShard::TEvDescribeScheme> req(
         new NSchemeShard::TEvSchemeShard::TEvDescribeScheme(describePath));
@@ -386,7 +386,7 @@ void TDescribeReq::Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult:
 
     TxProxyMon->NavigateLatency->Collect((ctx.Now() - WallClockStarted).MilliSeconds());
 
-    if (AppData()->FeatureFlags.GetEnableSystemViews()) { 
+    if (AppData()->FeatureFlags.GetEnableSystemViews()) {
         const auto& pathDescription = ev->Get()->GetRecord().GetPathDescription();
         const auto& self = pathDescription.GetSelf();
 

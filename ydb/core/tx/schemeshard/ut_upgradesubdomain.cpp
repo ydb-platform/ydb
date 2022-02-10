@@ -1,7 +1,7 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
-#include <util/system/env.h> 
- 
+#include <util/system/env.h>
+
 using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;

@@ -140,10 +140,10 @@ Y_DECLARE_OUT_SPEC(, NKikimrTxDataShard::TEvProposeTransactionResult::EStatus, s
 Y_DECLARE_OUT_SPEC(, NKikimrTxDataShard::EDatashardState, stream, value) {
     stream << NKikimrTxDataShard::EDatashardState_Name(value);
 }
- 
+
 Y_DECLARE_OUT_SPEC(, NKikimrBlobStorage::TPDiskState::E, stream, value) {
     stream << NKikimrBlobStorage::TPDiskState::E_Name(value);
-} 
+}
 
 Y_DECLARE_OUT_SPEC(, NKikimrBlobStorage::TPDiskSpaceColor::E, stream, value) {
     stream << NKikimrBlobStorage::TPDiskSpaceColor::E_Name(value);

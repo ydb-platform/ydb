@@ -742,22 +742,22 @@ void TNodeBroker::DbUpdateNodeLease(const TNodeInfo &node,
         .Update<Schema::Nodes::Expire>(Epoch.NextEnd.GetValue());
 }
 
-void TNodeBroker::DbUpdateNodeLocation(const TNodeInfo &node, 
-                                       TTransactionContext &txc) 
-{ 
-    LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER, 
-                "Update node " << node.IdString() << " location in database" 
+void TNodeBroker::DbUpdateNodeLocation(const TNodeInfo &node,
+                                       TTransactionContext &txc)
+{
+    LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
+                "Update node " << node.IdString() << " location in database"
                 << " location=" << node.Location.ToString());
- 
-    NIceDb::TNiceDb db(txc.DB); 
+
+    NIceDb::TNiceDb db(txc.DB);
     using T = Schema::Nodes;
     db.Table<T>().Key(node.NodeId).Update<T::Location>(node.Location.GetSerializedLocation());
 
     // to be removed
     const auto& x = node.Location.GetLegacyValue();
     db.Table<T>().Key(node.NodeId).Update<T::DataCenter, T::Room, T::Rack, T::Body>(x.DataCenter, x.Room, x.Rack, x.Body);
-} 
- 
+}
+
 void TNodeBroker::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
                          const TActorContext &ctx)
 {
@@ -823,9 +823,9 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvResolveNode::TPtr &ev,
 void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
                          const TActorContext &ctx)
 {
-    LOG_TRACE_S(ctx, NKikimrServices::NODE_BROKER, "Handle TEvNodeBroker::TEvRegistrationRequest" 
-        << ": request# " << ev->Get()->Record.ShortDebugString()); 
- 
+    LOG_TRACE_S(ctx, NKikimrServices::NODE_BROKER, "Handle TEvNodeBroker::TEvRegistrationRequest"
+        << ": request# " << ev->Get()->Record.ShortDebugString());
+
     class TRegisterNodeActor : public TActorBootstrapped<TRegisterNodeActor> {
         TEvNodeBroker::TEvRegistrationRequest::TPtr Ev;
         TNodeBroker *Self;
@@ -845,14 +845,14 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
             Become(&TThis::StateFunc);
 
             auto& record = Ev->Get()->Record;
- 
+
             if (record.HasPath()) {
                 auto req = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
                 auto& rset = req->ResultSet;
                 rset.emplace_back();
                 auto& item = rset.back();
                 item.Path = NKikimr::SplitPath(record.GetPath());
-                item.RedirectRequired = false; 
+                item.RedirectRequired = false;
                 item.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
                 ctx.Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(req), IEventHandle::FlagTrackDelivery, 0);
             } else {
@@ -865,18 +865,18 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
             auto& rset = navigate->ResultSet;
             Y_VERIFY(rset.size() == 1);
             auto& response = rset.front();
- 
-            LOG_TRACE_S(ctx, NKikimrServices::NODE_BROKER, "Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult" 
-                << ": response# " << response.ToString(*AppData()->TypeRegistry)); 
- 
-            if (response.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok && response.DomainInfo) { 
-                ScopeId = {response.DomainInfo->DomainKey.OwnerId, response.DomainInfo->DomainKey.LocalPathId}; 
-            } else { 
-                LOG_WARN_S(ctx, NKikimrServices::NODE_BROKER, "Cannot resolve scope id" 
-                    << ": request# " << Ev->Get()->Record.ShortDebugString() 
-                    << ", response# " << response.ToString(*AppData()->TypeRegistry)); 
+
+            LOG_TRACE_S(ctx, NKikimrServices::NODE_BROKER, "Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult"
+                << ": response# " << response.ToString(*AppData()->TypeRegistry));
+
+            if (response.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok && response.DomainInfo) {
+                ScopeId = {response.DomainInfo->DomainKey.OwnerId, response.DomainInfo->DomainKey.LocalPathId};
+            } else {
+                LOG_WARN_S(ctx, NKikimrServices::NODE_BROKER, "Cannot resolve scope id"
+                    << ": request# " << Ev->Get()->Record.ShortDebugString()
+                    << ", response# " << response.ToString(*AppData()->TypeRegistry));
             }
- 
+
             Finish(ctx);
         }
 
@@ -885,10 +885,10 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
         }
 
         void Finish(const TActorContext& ctx) {
-            LOG_TRACE_S(ctx, NKikimrServices::NODE_BROKER, "Finished resolving scope id" 
-                << ": request# " << Ev->Get()->Record.ShortDebugString() 
-                << ": scope id# " << ScopeIdToString(ScopeId)); 
- 
+            LOG_TRACE_S(ctx, NKikimrServices::NODE_BROKER, "Finished resolving scope id"
+                << ": request# " << Ev->Get()->Record.ShortDebugString()
+                << ": scope id# " << ScopeIdToString(ScopeId));
+
             Self->ProcessTx(Self->CreateTxRegisterNode(Ev, ScopeId), ctx);
             Die(ctx);
         }

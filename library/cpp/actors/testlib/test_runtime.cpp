@@ -377,7 +377,7 @@ namespace NActors {
                             TlsActivationContext = &ctx;
                             recipientActor->Receive(ev, ctx);
                             TlsActivationContext = prevTlsActivationContext;
-                            // we expect the logger to never die in tests 
+                            // we expect the logger to never die in tests
                         }
                     }
                 } else {

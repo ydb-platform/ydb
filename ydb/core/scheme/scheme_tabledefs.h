@@ -28,42 +28,42 @@ struct TTableId {
 
     TTableId() = default;
 
-    // raw ctors 
-    TTableId(ui64 ownerId, ui64 tableId, const TString& sysViewInfo, ui64 schemaVersion) 
+    // raw ctors
+    TTableId(ui64 ownerId, ui64 tableId, const TString& sysViewInfo, ui64 schemaVersion)
         : PathId(ownerId, tableId)
-        , SysViewInfo(sysViewInfo) 
-        , SchemaVersion(schemaVersion) 
+        , SysViewInfo(sysViewInfo)
+        , SchemaVersion(schemaVersion)
     {}
 
-    TTableId(ui64 ownerId, ui64 tableId, const TString& sysViewInfo) 
-        : TTableId(ownerId, tableId, sysViewInfo, 0) 
-    {} 
- 
+    TTableId(ui64 ownerId, ui64 tableId, const TString& sysViewInfo)
+        : TTableId(ownerId, tableId, sysViewInfo, 0)
+    {}
+
     TTableId(ui64 ownerId, ui64 tableId, ui64 schemaVersion)
-        : TTableId(ownerId, tableId, TString(), schemaVersion) 
+        : TTableId(ownerId, tableId, TString(), schemaVersion)
     {}
 
-    TTableId(ui64 ownerId, ui64 tableId) 
-        : TTableId(ownerId, tableId, TString(), 0) 
+    TTableId(ui64 ownerId, ui64 tableId)
+        : TTableId(ownerId, tableId, TString(), 0)
     {}
 
-    // ctors from TPathId 
-    TTableId(const TPathId& pathId, const TString& sysViewInfo, ui64 schemaVersion) 
-        : TTableId(pathId.OwnerId, pathId.LocalPathId, sysViewInfo, schemaVersion) 
+    // ctors from TPathId
+    TTableId(const TPathId& pathId, const TString& sysViewInfo, ui64 schemaVersion)
+        : TTableId(pathId.OwnerId, pathId.LocalPathId, sysViewInfo, schemaVersion)
     {}
 
-    TTableId(const TPathId& pathId, const TString& sysViewInfo) 
-        : TTableId(pathId, sysViewInfo, 0) 
-    {} 
- 
-    TTableId(const TPathId& pathId, ui64 schemaVersion) 
-        : TTableId(pathId, TString(), schemaVersion) 
-    {} 
- 
-    TTableId(const TPathId& pathId) 
-        : TTableId(pathId, TString(), 0) 
-    {} 
- 
+    TTableId(const TPathId& pathId, const TString& sysViewInfo)
+        : TTableId(pathId, sysViewInfo, 0)
+    {}
+
+    TTableId(const TPathId& pathId, ui64 schemaVersion)
+        : TTableId(pathId, TString(), schemaVersion)
+    {}
+
+    TTableId(const TPathId& pathId)
+        : TTableId(pathId, TString(), 0)
+    {}
+
     explicit operator bool() const noexcept {
         return bool(PathId);
     }

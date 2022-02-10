@@ -50,20 +50,20 @@
             "ListBase": "TCoNameValueTuple"
         },
         {
-            "Name": "TCoChangefeed", 
-            "Base": "TExprBase", 
-            "Match": {"Type": "Tuple"}, 
-            "Children": [ 
-                {"Index": 0, "Name": "Name", "Type": "TCoAtom"}, 
-                {"Index": 1, "Name": "Settings", "Type": "TCoNameValueTupleList"}, 
-                {"Index": 2, "Name": "State", "Type": "TCoAtom"} 
-            ] 
-        }, 
-        { 
-            "Name": "TCoChangefeedList", 
-            "ListBase": "TCoChangefeed" 
-        }, 
-        { 
+            "Name": "TCoChangefeed",
+            "Base": "TExprBase",
+            "Match": {"Type": "Tuple"},
+            "Children": [
+                {"Index": 0, "Name": "Name", "Type": "TCoAtom"},
+                {"Index": 1, "Name": "Settings", "Type": "TCoNameValueTupleList"},
+                {"Index": 2, "Name": "State", "Type": "TCoAtom"}
+            ]
+        },
+        {
+            "Name": "TCoChangefeedList",
+            "ListBase": "TCoChangefeed"
+        },
+        {
             "Name": "TCoWorld",
             "Base": "TExprBase",
             "Match": {"Type": "NodeType", "TypeName": "World"},

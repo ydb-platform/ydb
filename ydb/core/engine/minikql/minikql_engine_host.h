@@ -1,7 +1,7 @@
 #pragma once
 
-#include "change_collector_iface.h" 
- 
+#include "change_collector_iface.h"
+
 #include <util/generic/cast.h>
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
@@ -127,8 +127,8 @@ public:
     virtual TRowVersion GetWriteVersion(const TTableId& tableId) const = 0;
     virtual TRowVersion GetReadVersion(const TTableId& tableId) const = 0;
 
-    virtual IChangeCollector* GetChangeCollector(const TTableId& tableId) const = 0; 
- 
+    virtual IChangeCollector* GetChangeCollector(const TTableId& tableId) const = 0;
+
 protected:
     virtual ui64 LocalTableId(const TTableId& tableId) const;
     void ConvertKeys(const TScheme::TTableInfo* tableInfo, const TArrayRef<const TCell>& row,
@@ -156,11 +156,11 @@ public:
         Y_UNUSED(tableId);
         return TRowVersion::Max();
     }
- 
-    IChangeCollector* GetChangeCollector(const TTableId& tableId) const override { 
-        Y_UNUSED(tableId); 
-        return nullptr; 
-    } 
+
+    IChangeCollector* GetChangeCollector(const TTableId& tableId) const override {
+        Y_UNUSED(tableId);
+        return nullptr;
+    }
 };
 
 void AnalyzeRowType(TStructLiteral* columnIds, TSmallVec<NTable::TTag>& tags, TSmallVec<NTable::TTag>& systemColumnTags);

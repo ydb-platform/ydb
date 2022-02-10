@@ -64,11 +64,11 @@ void TMemoryChanges::GrabNewIndex(TSchemeShard* ss, const TPathId& pathId) {
 }
 
 void TMemoryChanges::GrabNewCdcStream(TSchemeShard* ss, const TPathId& pathId) {
-    Y_VERIFY(!ss->CdcStreams.contains(pathId)); 
- 
+    Y_VERIFY(!ss->CdcStreams.contains(pathId));
+
     CdcStreams.emplace(pathId, nullptr);
-} 
- 
+}
+
 void TMemoryChanges::UnDo(TSchemeShard* ss) {
     // be aware of the order of grab & undo ops
     // stack is the best way to manage it right
@@ -95,14 +95,14 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
 
     while (CdcStreams) {
         const auto& [id, elem] = CdcStreams.top();
-        if (elem) { 
-            ss->CdcStreams[id] = elem; 
-        } else { 
-            ss->CdcStreams.erase(id); 
-        } 
+        if (elem) {
+            ss->CdcStreams[id] = elem;
+        } else {
+            ss->CdcStreams.erase(id);
+        }
         CdcStreams.pop();
-    } 
- 
+    }
+
     while (Tables) {
         const auto& [id, elem] = Tables.top();
         if (elem) {

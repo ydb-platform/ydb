@@ -1257,12 +1257,12 @@ void TDataReq::Handle(TEvTxProxyReq::TEvMakeRequest::TPtr &ev, const TActorConte
     if (txbody.HasReadTableTransaction()) {
         ReadTableRequest = new TReadTableRequest(txbody.GetReadTableTransaction());
         TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate());
-        request->DatabaseName = record.GetDatabaseName(); 
+        request->DatabaseName = record.GetDatabaseName();
 
         NSchemeCache::TSchemeCacheNavigate::TEntry entry;
         entry.Path = SplitPath(ReadTableRequest->TablePath);
         entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable;
-        entry.ShowPrivatePath = true; 
+        entry.ShowPrivatePath = true;
         request->ResultSet.push_back(entry);
 
         ctx.Send(Services.SchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(request));
@@ -1365,7 +1365,7 @@ void TDataReq::Handle(TEvTxProxyReq::TEvMakeRequest::TPtr &ev, const TActorConte
                 NKikimrIssues::TStatusIds::TRANSIENT, false, ctx);
     }
 
-    resolveReq->Request->DatabaseName = record.GetDatabaseName(); 
+    resolveReq->Request->DatabaseName = record.GetDatabaseName();
     TxProxyMon->MakeRequestProxyAccepted->Inc();
     LOG_DEBUG_S_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId,
         "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
@@ -1517,7 +1517,7 @@ void TDataReq::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev, 
     WallClockResolveStarted = Now();
 
     TAutoPtr<NSchemeCache::TSchemeCacheRequest> request(new NSchemeCache::TSchemeCacheRequest);
-    request->DomainOwnerId = res.DomainInfo->ExtractSchemeShard(); 
+    request->DomainOwnerId = res.DomainInfo->ExtractSchemeShard();
     request->ResultSet.emplace_back(std::move(ReadTableRequest->KeyDesc));
     ctx.Send(Services.SchemeCache, new TEvTxProxySchemeCache::TEvResolveKeySet(request));
 }
@@ -1606,25 +1606,25 @@ void TDataReq::Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr &ev, c
             ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, NKikimrIssues::TStatusIds::ACCESS_DENIED, true, ctx);
             return Die(ctx);
         }
- 
-        if (FlatMKQLRequest && entry.Kind == NSchemeCache::TSchemeCacheRequest::KindAsyncIndexTable) { 
-            TMaybe<TString> error; 
- 
-            if (entry.KeyDescription->RowOperation != TKeyDesc::ERowOperation::Read) { 
-                error = TStringBuilder() << "Non-read operations can't be performed on async index table" 
-                    << ": " << entry.KeyDescription->TableId; 
+
+        if (FlatMKQLRequest && entry.Kind == NSchemeCache::TSchemeCacheRequest::KindAsyncIndexTable) {
+            TMaybe<TString> error;
+
+            if (entry.KeyDescription->RowOperation != TKeyDesc::ERowOperation::Read) {
+                error = TStringBuilder() << "Non-read operations can't be performed on async index table"
+                    << ": " << entry.KeyDescription->TableId;
             } else if (entry.KeyDescription->ReadTarget.GetMode() != TReadTarget::EMode::Follower) {
-                error = TStringBuilder() << "Read operation can be performed on async index table" 
-                    << ": " << entry.KeyDescription->TableId << " only with StaleRO isolation level"; 
-            } 
- 
-            if (error) { 
-                LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY, *error); 
-                IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_TXPROXY_ERROR, *error)); 
-                ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecError, NKikimrIssues::TStatusIds::NOTSUPPORTED, true, ctx); 
-                return Die(ctx); 
-            } 
-        } 
+                error = TStringBuilder() << "Read operation can be performed on async index table"
+                    << ": " << entry.KeyDescription->TableId << " only with StaleRO isolation level";
+            }
+
+            if (error) {
+                LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY, *error);
+                IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_TXPROXY_ERROR, *error));
+                ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecError, NKikimrIssues::TStatusIds::NOTSUPPORTED, true, ctx);
+                return Die(ctx);
+            }
+        }
     }
 
     if (!CheckDomainLocality(*request)) {

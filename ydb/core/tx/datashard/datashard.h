@@ -1,6 +1,6 @@
 #pragma once
- 
-#include "datashard_s3_upload.h" 
+
+#include "datashard_s3_upload.h"
 
 #include <ydb/core/tx/tx.h>
 #include <ydb/core/tx/message_seqno.h>
@@ -112,8 +112,8 @@ namespace NDataShard {
             ResultSent = 1ULL << 41,
             // Operation is confirmed to be stored in shard's local database
             Stored = 1ULL << 42,
-            // Operation is waiting for async job to finish 
-            WaitingForAsyncJob = 1ULL << 43, 
+            // Operation is waiting for async job to finish
+            WaitingForAsyncJob = 1ULL << 43,
             // Operation must complete before results sending
             WaitCompletion = 1ULL << 44,
 
@@ -200,7 +200,7 @@ struct TEvDataShard {
         EvCancelBackup,
         EvMigrateSchemeShardRequest,
         EvMigrateSchemeShardResponse,
-        EvCancelRestore, 
+        EvCancelRestore,
 
         EvInitDataShardResult = EvProposeTransaction + 5 * 512,
         EvGetShardStateResult,
@@ -258,29 +258,29 @@ struct TEvDataShard {
         EvDiscardVolatileSnapshotRequest,
         EvDiscardVolatileSnapshotResponse,
 
-        EvGetS3Upload, 
-        EvStoreS3UploadId, 
-        EvS3Upload, 
- 
-        EvEraseRowsRequest, 
-        EvEraseRowsResponse, 
-        EvConditionalEraseRowsRequest, 
-        EvConditionalEraseRowsResponse, 
- 
+        EvGetS3Upload,
+        EvStoreS3UploadId,
+        EvS3Upload,
+
+        EvEraseRowsRequest,
+        EvEraseRowsResponse,
+        EvConditionalEraseRowsRequest,
+        EvConditionalEraseRowsResponse,
+
         EvBuildIndexCreateRequest,
         EvBuildIndexProgressResponse,
 
-        EvGetS3DownloadInfo, 
-        EvStoreS3DownloadInfo, 
-        EvS3DownloadInfo, 
- 
-        EvUnsafeUploadRowsRequest, 
-        EvUnsafeUploadRowsResponse, 
- 
+        EvGetS3DownloadInfo,
+        EvStoreS3DownloadInfo,
+        EvS3DownloadInfo,
+
+        EvUnsafeUploadRowsRequest,
+        EvUnsafeUploadRowsResponse,
+
         EvKqpScan,
 
-        EvChangeS3UploadStatus, 
- 
+        EvChangeS3UploadStatus,
+
         EvGetRemovedRowVersions, /* for tests */
         EvGetRemovedRowVersionsResult, /* for tests */
 
@@ -775,19 +775,19 @@ struct TEvDataShard {
         }
     };
 
-    struct TEvCancelRestore 
-        : public TEventPB<TEvCancelRestore, 
-                          NKikimrTxDataShard::TEvCancelRestore, 
-                          TEvDataShard::EvCancelRestore> 
-    { 
-        TEvCancelRestore() = default; 
- 
-        explicit TEvCancelRestore(ui64 txid, ui64 tableId) { 
-            Record.SetRestoreTxId(txid); 
-            Record.SetTableId(tableId); 
-        } 
-    }; 
- 
+    struct TEvCancelRestore
+        : public TEventPB<TEvCancelRestore,
+                          NKikimrTxDataShard::TEvCancelRestore,
+                          TEvDataShard::EvCancelRestore>
+    {
+        TEvCancelRestore() = default;
+
+        explicit TEvCancelRestore(ui64 txid, ui64 tableId) {
+            Record.SetRestoreTxId(txid);
+            Record.SetTableId(tableId);
+        }
+    };
+
     struct TEvGetTableStats : public TEventPB<TEvGetTableStats,
                                                         NKikimrTxDataShard::TEvGetTableStats,
                                                         TEvDataShard::EvGetTableStats> {
@@ -857,24 +857,24 @@ struct TEvDataShard {
         }
     };
 
-    struct TEvUnsafeUploadRowsRequest : public TEventPBWithArena<TEvUnsafeUploadRowsRequest, 
-                                                        NKikimrTxDataShard::TEvUploadRowsRequest, 
-                                                        TEvDataShard::EvUnsafeUploadRowsRequest, 
-                                                        16200, 32500> { 
-        TEvUnsafeUploadRowsRequest() = default; 
-    }; 
+    struct TEvUnsafeUploadRowsRequest : public TEventPBWithArena<TEvUnsafeUploadRowsRequest,
+                                                        NKikimrTxDataShard::TEvUploadRowsRequest,
+                                                        TEvDataShard::EvUnsafeUploadRowsRequest,
+                                                        16200, 32500> {
+        TEvUnsafeUploadRowsRequest() = default;
+    };
 
-    struct TEvUnsafeUploadRowsResponse : public TEventPB<TEvUnsafeUploadRowsResponse, 
-                                                        NKikimrTxDataShard::TEvUploadRowsResponse, 
-                                                        TEvDataShard::EvUnsafeUploadRowsResponse> { 
-        TEvUnsafeUploadRowsResponse() = default; 
+    struct TEvUnsafeUploadRowsResponse : public TEventPB<TEvUnsafeUploadRowsResponse,
+                                                        NKikimrTxDataShard::TEvUploadRowsResponse,
+                                                        TEvDataShard::EvUnsafeUploadRowsResponse> {
+        TEvUnsafeUploadRowsResponse() = default;
 
-        explicit TEvUnsafeUploadRowsResponse(ui64 tabletId, ui32 status = NKikimrTxDataShard::TError::OK) { 
-            Record.SetTabletID(tabletId); 
-            Record.SetStatus(status); 
-        } 
-    }; 
- 
+        explicit TEvUnsafeUploadRowsResponse(ui64 tabletId, ui32 status = NKikimrTxDataShard::TError::OK) {
+            Record.SetTabletID(tabletId);
+            Record.SetStatus(status);
+        }
+    };
+
     // In most cases this event is local, thus users must
     // use Keys, Ranges and Program struct members instead of corresponding
     // protobuf members. In case of remote event these struct members will
@@ -1148,190 +1148,190 @@ struct TEvDataShard {
     {
         using EStatus = NKikimrTxDataShard::TEvMigrateSchemeShardResponse::EStatus;
     };
- 
-    struct TEvGetS3Upload 
-        : public TEventLocal<TEvGetS3Upload, TEvDataShard::EvGetS3Upload> 
-    { 
+
+    struct TEvGetS3Upload
+        : public TEventLocal<TEvGetS3Upload, TEvDataShard::EvGetS3Upload>
+    {
         TActorId ReplyTo;
-        ui64 TxId; 
- 
-        explicit TEvGetS3Upload(const TActorId& replyTo, ui64 txId) 
-            : ReplyTo(replyTo) 
-            , TxId(txId) 
-        { 
-        } 
-    }; 
- 
-    struct TEvStoreS3UploadId 
-        : public TEventLocal<TEvStoreS3UploadId, TEvDataShard::EvStoreS3UploadId> 
-    { 
+        ui64 TxId;
+
+        explicit TEvGetS3Upload(const TActorId& replyTo, ui64 txId)
+            : ReplyTo(replyTo)
+            , TxId(txId)
+        {
+        }
+    };
+
+    struct TEvStoreS3UploadId
+        : public TEventLocal<TEvStoreS3UploadId, TEvDataShard::EvStoreS3UploadId>
+    {
         TActorId ReplyTo;
-        ui64 TxId; 
-        TString UploadId; 
- 
+        ui64 TxId;
+        TString UploadId;
+
         explicit TEvStoreS3UploadId(const TActorId& replyTo, ui64 txId, const TString& uploadId)
-            : ReplyTo(replyTo) 
-            , TxId(txId) 
-            , UploadId(uploadId) 
-        { 
-        } 
-    }; 
- 
-    struct TEvChangeS3UploadStatus 
-        : public TEventLocal<TEvChangeS3UploadStatus, TEvDataShard::EvChangeS3UploadStatus> 
-    { 
+            : ReplyTo(replyTo)
+            , TxId(txId)
+            , UploadId(uploadId)
+        {
+        }
+    };
+
+    struct TEvChangeS3UploadStatus
+        : public TEventLocal<TEvChangeS3UploadStatus, TEvDataShard::EvChangeS3UploadStatus>
+    {
         using EStatus = NDataShard::TS3Upload::EStatus;
- 
-        TActorId ReplyTo; 
-        ui64 TxId; 
-        EStatus Status; 
-        TMaybe<TString> Error; 
-        TVector<TString> Parts; 
- 
-        explicit TEvChangeS3UploadStatus(const TActorId& replyTo, ui64 txId, EStatus status, TVector<TString>&& parts) 
-            : ReplyTo(replyTo) 
-            , TxId(txId) 
-            , Status(status) 
-            , Parts(std::move(parts)) 
-        { 
-        } 
- 
-        explicit TEvChangeS3UploadStatus(const TActorId& replyTo, ui64 txId, EStatus status, const TString& error) 
-            : ReplyTo(replyTo) 
-            , TxId(txId) 
-            , Status(status) 
-            , Error(error) 
-        { 
-        } 
-    }; 
- 
-    struct TEvS3Upload 
-        : public TEventLocal<TEvS3Upload, TEvDataShard::EvS3Upload> 
-    { 
+
+        TActorId ReplyTo;
+        ui64 TxId;
+        EStatus Status;
+        TMaybe<TString> Error;
+        TVector<TString> Parts;
+
+        explicit TEvChangeS3UploadStatus(const TActorId& replyTo, ui64 txId, EStatus status, TVector<TString>&& parts)
+            : ReplyTo(replyTo)
+            , TxId(txId)
+            , Status(status)
+            , Parts(std::move(parts))
+        {
+        }
+
+        explicit TEvChangeS3UploadStatus(const TActorId& replyTo, ui64 txId, EStatus status, const TString& error)
+            : ReplyTo(replyTo)
+            , TxId(txId)
+            , Status(status)
+            , Error(error)
+        {
+        }
+    };
+
+    struct TEvS3Upload
+        : public TEventLocal<TEvS3Upload, TEvDataShard::EvS3Upload>
+    {
         using TS3Upload = NDataShard::TS3Upload;
- 
-        TMaybe<TS3Upload> Upload; 
- 
-        TEvS3Upload() = default; 
- 
-        explicit TEvS3Upload(const TS3Upload& upload) 
-            : Upload(upload) 
-        { 
-        } 
-    }; 
- 
-    struct TEvGetS3DownloadInfo 
-        : public TEventLocal<TEvGetS3DownloadInfo, TEvDataShard::EvGetS3DownloadInfo> 
-    { 
-        TActorId ReplyTo; 
-        ui64 TxId; 
- 
-        explicit TEvGetS3DownloadInfo(const TActorId& replyTo, ui64 txId) 
-            : ReplyTo(replyTo) 
-            , TxId(txId) 
-        { 
-        } 
-    }; 
- 
-    struct TEvStoreS3DownloadInfo 
-        : public TEventLocal<TEvStoreS3DownloadInfo, TEvDataShard::EvStoreS3DownloadInfo> 
-    { 
-        TActorId ReplyTo; 
-        ui64 TxId; 
-        TString DataETag; 
-        ui64 ProcessedBytes; 
-        ui64 WrittenBytes; 
-        ui64 WrittenRows; 
- 
-        TEvStoreS3DownloadInfo() = default; 
- 
-        explicit TEvStoreS3DownloadInfo( 
-                const TActorId& replyTo, 
-                ui64 txId, 
-                const TString& dataETag, 
-                ui64 processedBytes, 
-                ui64 writtenBytes, 
-                ui64 writtenRows) 
-            : ReplyTo(replyTo) 
-            , TxId(txId) 
-            , DataETag(dataETag) 
-            , ProcessedBytes(processedBytes) 
-            , WrittenBytes(writtenBytes) 
-            , WrittenRows(writtenRows) 
-        { 
-        } 
- 
-        TString ToString() const override { 
-            return TStringBuilder() << ToStringHeader() << " {" 
-                << " TxId: " << TxId 
-                << " DataETag: " << DataETag 
-                << " ProcessedBytes: " << ProcessedBytes 
-                << " WrittenBytes: " << WrittenBytes 
-                << " WrittenRows: " << WrittenRows 
-            << " }"; 
-        } 
-    }; 
- 
-    struct TEvS3DownloadInfo 
-        : public TEventLocal<TEvS3DownloadInfo, TEvDataShard::EvS3DownloadInfo> 
-    { 
-        struct TInfo { 
-            TMaybe<TString> DataETag; 
-            ui64 ProcessedBytes = 0; 
-            ui64 WrittenBytes = 0; 
-            ui64 WrittenRows = 0; 
- 
-            TString ToString() const { 
-                return TStringBuilder() << "{" 
-                    << " DataETag: " << DataETag 
-                    << " ProcessedBytes: " << ProcessedBytes 
-                    << " WrittenBytes: " << WrittenBytes 
-                    << " WrittenRows: " << WrittenRows 
-                << " }"; 
-            } 
-        }; 
- 
-        TInfo Info; 
- 
-        TEvS3DownloadInfo() = default; 
- 
-        explicit TEvS3DownloadInfo(const TInfo& info) 
-            : Info(info) 
-        { 
-        } 
- 
-        TString ToString() const override { 
-            return TStringBuilder() << ToStringHeader() << " " << Info.ToString(); 
-        } 
-    }; 
- 
-    struct TEvEraseRowsRequest 
-        : public TEventPB<TEvEraseRowsRequest, 
-                          NKikimrTxDataShard::TEvEraseRowsRequest, 
-                          TEvDataShard::EvEraseRowsRequest> 
-    { 
-    }; 
- 
-    struct TEvEraseRowsResponse 
-        : public TEventPB<TEvEraseRowsResponse, 
-                          NKikimrTxDataShard::TEvEraseRowsResponse, 
-                          TEvDataShard::EvEraseRowsResponse> 
-    { 
-    }; 
- 
-    struct TEvConditionalEraseRowsRequest 
-        : public TEventPB<TEvConditionalEraseRowsRequest, 
-                          NKikimrTxDataShard::TEvConditionalEraseRowsRequest, 
-                          TEvDataShard::EvConditionalEraseRowsRequest> 
-    { 
-    }; 
- 
-    struct TEvConditionalEraseRowsResponse 
-        : public TEventPB<TEvConditionalEraseRowsResponse, 
-                          NKikimrTxDataShard::TEvConditionalEraseRowsResponse, 
-                          TEvDataShard::EvConditionalEraseRowsResponse> 
-    { 
-    }; 
+
+        TMaybe<TS3Upload> Upload;
+
+        TEvS3Upload() = default;
+
+        explicit TEvS3Upload(const TS3Upload& upload)
+            : Upload(upload)
+        {
+        }
+    };
+
+    struct TEvGetS3DownloadInfo
+        : public TEventLocal<TEvGetS3DownloadInfo, TEvDataShard::EvGetS3DownloadInfo>
+    {
+        TActorId ReplyTo;
+        ui64 TxId;
+
+        explicit TEvGetS3DownloadInfo(const TActorId& replyTo, ui64 txId)
+            : ReplyTo(replyTo)
+            , TxId(txId)
+        {
+        }
+    };
+
+    struct TEvStoreS3DownloadInfo
+        : public TEventLocal<TEvStoreS3DownloadInfo, TEvDataShard::EvStoreS3DownloadInfo>
+    {
+        TActorId ReplyTo;
+        ui64 TxId;
+        TString DataETag;
+        ui64 ProcessedBytes;
+        ui64 WrittenBytes;
+        ui64 WrittenRows;
+
+        TEvStoreS3DownloadInfo() = default;
+
+        explicit TEvStoreS3DownloadInfo(
+                const TActorId& replyTo,
+                ui64 txId,
+                const TString& dataETag,
+                ui64 processedBytes,
+                ui64 writtenBytes,
+                ui64 writtenRows)
+            : ReplyTo(replyTo)
+            , TxId(txId)
+            , DataETag(dataETag)
+            , ProcessedBytes(processedBytes)
+            , WrittenBytes(writtenBytes)
+            , WrittenRows(writtenRows)
+        {
+        }
+
+        TString ToString() const override {
+            return TStringBuilder() << ToStringHeader() << " {"
+                << " TxId: " << TxId
+                << " DataETag: " << DataETag
+                << " ProcessedBytes: " << ProcessedBytes
+                << " WrittenBytes: " << WrittenBytes
+                << " WrittenRows: " << WrittenRows
+            << " }";
+        }
+    };
+
+    struct TEvS3DownloadInfo
+        : public TEventLocal<TEvS3DownloadInfo, TEvDataShard::EvS3DownloadInfo>
+    {
+        struct TInfo {
+            TMaybe<TString> DataETag;
+            ui64 ProcessedBytes = 0;
+            ui64 WrittenBytes = 0;
+            ui64 WrittenRows = 0;
+
+            TString ToString() const {
+                return TStringBuilder() << "{"
+                    << " DataETag: " << DataETag
+                    << " ProcessedBytes: " << ProcessedBytes
+                    << " WrittenBytes: " << WrittenBytes
+                    << " WrittenRows: " << WrittenRows
+                << " }";
+            }
+        };
+
+        TInfo Info;
+
+        TEvS3DownloadInfo() = default;
+
+        explicit TEvS3DownloadInfo(const TInfo& info)
+            : Info(info)
+        {
+        }
+
+        TString ToString() const override {
+            return TStringBuilder() << ToStringHeader() << " " << Info.ToString();
+        }
+    };
+
+    struct TEvEraseRowsRequest
+        : public TEventPB<TEvEraseRowsRequest,
+                          NKikimrTxDataShard::TEvEraseRowsRequest,
+                          TEvDataShard::EvEraseRowsRequest>
+    {
+    };
+
+    struct TEvEraseRowsResponse
+        : public TEventPB<TEvEraseRowsResponse,
+                          NKikimrTxDataShard::TEvEraseRowsResponse,
+                          TEvDataShard::EvEraseRowsResponse>
+    {
+    };
+
+    struct TEvConditionalEraseRowsRequest
+        : public TEventPB<TEvConditionalEraseRowsRequest,
+                          NKikimrTxDataShard::TEvConditionalEraseRowsRequest,
+                          TEvDataShard::EvConditionalEraseRowsRequest>
+    {
+    };
+
+    struct TEvConditionalEraseRowsResponse
+        : public TEventPB<TEvConditionalEraseRowsResponse,
+                          NKikimrTxDataShard::TEvConditionalEraseRowsResponse,
+                          TEvDataShard::EvConditionalEraseRowsResponse>
+    {
+    };
 
     struct TEvBuildIndexCreateRequest
         : public TEventPB<TEvBuildIndexCreateRequest,

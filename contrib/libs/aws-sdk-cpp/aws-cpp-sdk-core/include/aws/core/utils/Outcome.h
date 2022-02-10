@@ -26,19 +26,19 @@ namespace Aws
         {
         public:
 
-            Outcome() : result(), error(), success(false) 
+            Outcome() : result(), error(), success(false)
             {
             }
-            Outcome(const R& r) : result(r), error(), success(true) 
+            Outcome(const R& r) : result(r), error(), success(true)
             {
             }
-            Outcome(const E& e) : result(), error(e), success(false) 
+            Outcome(const E& e) : result(), error(e), success(false)
             {
             }
-            Outcome(R&& r) : result(std::forward<R>(r)), error(), success(true) 
+            Outcome(R&& r) : result(std::forward<R>(r)), error(), success(true)
             {
             }
-            Outcome(E&& e) : result(), error(std::forward<E>(e)), success(false) 
+            Outcome(E&& e) : result(), error(std::forward<E>(e)), success(false)
             {
             }
             Outcome(const Outcome& o) :

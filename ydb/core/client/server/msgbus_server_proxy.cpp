@@ -174,8 +174,8 @@ void TMessageBusServerProxy::Bootstrap(const TActorContext& ctx) {
     SchemeCacheCounters = GetServiceCounters(AppData(ctx)->Counters, "pqproxy|cache");
     DbOperationsCounters = new TMessageBusDbOpsCounters(AppData(ctx)->Counters);
 
-    auto cacheConfig = MakeIntrusive<NSchemeCache::TSchemeCacheConfig>(AppData(ctx), SchemeCacheCounters); 
-    SchemeCache = ctx.ExecutorThread.RegisterActor(CreateSchemeBoardSchemeCache(cacheConfig.Get())); 
+    auto cacheConfig = MakeIntrusive<NSchemeCache::TSchemeCacheConfig>(AppData(ctx), SchemeCacheCounters);
+    SchemeCache = ctx.ExecutorThread.RegisterActor(CreateSchemeBoardSchemeCache(cacheConfig.Get()));
     PqMetaCache = CreatePersQueueMetaCacheV2Id();
 
     if (Server) {

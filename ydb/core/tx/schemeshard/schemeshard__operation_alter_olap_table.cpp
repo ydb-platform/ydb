@@ -539,7 +539,7 @@ public:
         }
 
         NKikimrScheme::EStatus status;
-        TOlapTableInfo::TPtr alterData = ParseParams(path, tableInfo, storeInfo, alter, *path.DomainInfo(), status, errStr, context); 
+        TOlapTableInfo::TPtr alterData = ParseParams(path, tableInfo, storeInfo, alter, *path.DomainInfo(), status, errStr, context);
         if (!alterData) {
             result->SetError(status, errStr);
             return result;

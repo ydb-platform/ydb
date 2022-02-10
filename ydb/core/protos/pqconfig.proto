@@ -126,7 +126,7 @@ message TPQConfig {
 
     optional NKikimrNodeLimits.TNodeLimitsConfig.TPersQueueNodeConfig PersQueueNodeConfig = 36;
 
-    optional bool EnableProtoSourceIdInfo = 37 [default = false]; 
+    optional bool EnableProtoSourceIdInfo = 37 [default = false];
 
     optional string Database = 38;
 
@@ -210,24 +210,24 @@ message TPartitionConfig {
     optional TMirrorPartitionConfig MirrorFrom = 15;
 };
 
-message TPartitionKeyRange { 
-    // Inclusive left border. Emptiness means -inf. 
-    optional bytes FromBound = 1; 
-    // Exclusive right border. Emptiness means +inf. 
-    optional bytes ToBound = 2; 
-} 
- 
-message TMessageGroup { 
-    // Id of message group (SourceId) 
-    optional bytes Id = 1; 
-    // Range of the key to which it is allowed to write. 
-    optional TPartitionKeyRange KeyRange = 2; 
-} 
- 
+message TPartitionKeyRange {
+    // Inclusive left border. Emptiness means -inf.
+    optional bytes FromBound = 1;
+    // Exclusive right border. Emptiness means +inf.
+    optional bytes ToBound = 2;
+}
+
+message TMessageGroup {
+    // Id of message group (SourceId)
+    optional bytes Id = 1;
+    // Range of the key to which it is allowed to write.
+    optional TPartitionKeyRange KeyRange = 2;
+}
+
 message TPQTabletConfig {
     optional uint64 CacheSize = 1 [default = 104857600]; //100Mb, per tablet
     optional TPartitionConfig PartitionConfig = 2; //mandatory
-    repeated uint32 PartitionIds = 3; //will be filled by schemeshard, don't touch. Deprecated by Partitions (id: 31) 
+    repeated uint32 PartitionIds = 3; //will be filled by schemeshard, don't touch. Deprecated by Partitions (id: 31)
     optional string TopicName = 4;  // also filled by schemeshard
     optional uint32 Version = 5; //also filled by schemeshard
     optional bool LocalDC = 6 [default = false];
@@ -264,44 +264,44 @@ message TPQTabletConfig {
     optional string YcFolderId = 27 [default = ""];
     optional string YdbDatabaseId = 28 [default = ""];
     optional string YdbDatabasePath = 29 [default = ""];
- 
-    message TKeyComponentSchema { 
-        optional string Name = 1; 
-        optional uint32 TypeId = 2; 
-    } 
-    repeated TKeyComponentSchema PartitionKeySchema = 30; 
- 
-    message TPartition { 
-        optional uint32 PartitionId = 1; 
-        optional TPartitionKeyRange KeyRange = 2; 
-    } 
-    repeated TPartition Partitions = 31; // filled by schemeshard 
-} 
 
-message TMessageGroupInfo { 
-    enum EState { 
-        STATE_UNKNOWN = 0; 
-        STATE_REGISTERED = 1; 
-        STATE_PENDING_REGISTRATION = 2; 
-    } 
- 
-    optional uint64 SeqNo = 1; 
-    optional uint64 Offset = 2; 
-    optional uint64 WriteTimestamp = 3; // TInstant::TValue 
-    optional uint64 CreateTimestamp = 4; // TInstant::TValue 
-    optional bool Explicit = 5; 
-    optional TPartitionKeyRange KeyRange = 6; 
-    optional EState State = 7; 
-} 
+    message TKeyComponentSchema {
+        optional string Name = 1;
+        optional uint32 TypeId = 2;
+    }
+    repeated TKeyComponentSchema PartitionKeySchema = 30;
 
-message TBootstrapConfig { 
-    repeated TMessageGroup ExplicitMessageGroups = 1; 
-} 
- 
+    message TPartition {
+        optional uint32 PartitionId = 1;
+        optional TPartitionKeyRange KeyRange = 2;
+    }
+    repeated TPartition Partitions = 31; // filled by schemeshard
+}
+
+message TMessageGroupInfo {
+    enum EState {
+        STATE_UNKNOWN = 0;
+        STATE_REGISTERED = 1;
+        STATE_PENDING_REGISTRATION = 2;
+    }
+
+    optional uint64 SeqNo = 1;
+    optional uint64 Offset = 2;
+    optional uint64 WriteTimestamp = 3; // TInstant::TValue
+    optional uint64 CreateTimestamp = 4; // TInstant::TValue
+    optional bool Explicit = 5;
+    optional TPartitionKeyRange KeyRange = 6;
+    optional EState State = 7;
+}
+
+message TBootstrapConfig {
+    repeated TMessageGroup ExplicitMessageGroups = 1;
+}
+
 message TUpdateConfig {
     optional uint64 TxId = 1;
     optional TPQTabletConfig TabletConfig = 2;
-    optional TBootstrapConfig BootstrapConfig = 3; // passed only upon creation 
+    optional TBootstrapConfig BootstrapConfig = 3; // passed only upon creation
 }
 
 message TUpdateBalancerConfig { //for schemeshard use only

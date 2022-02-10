@@ -26,7 +26,7 @@ class EmptyArguments(object):
         self.ydb_udfs_dir = None
         self.yql_config_path = None
         self.auth_config_path = None
-        self.debug_logging = [] 
+        self.debug_logging = []
         self.fixed_ports = False
 
 
@@ -71,22 +71,22 @@ def wrap_path(path):
     )
 
 
-def write_file_flushed(filename, content): 
-    with open(filename, 'w') as fd: 
-        fd.write(content) 
-        fd.flush() 
-        os.fsync(fd.fileno()) 
- 
- 
+def write_file_flushed(filename, content):
+    with open(filename, 'w') as fd:
+        fd.write(content)
+        fd.flush()
+        os.fsync(fd.fileno())
+
+
 def write_file(args, suffix, content):
     if args.ydb_working_dir:
-        write_file_flushed(os.path.join(args.ydb_working_dir, suffix), content) 
+        write_file_flushed(os.path.join(args.ydb_working_dir, suffix), content)
         return
 
-    write_file_flushed(os.path.join(yatest_common.output_path(suffix)), content) 
+    write_file_flushed(os.path.join(yatest_common.output_path(suffix)), content)
 
     try:
-        write_file_flushed(suffix, content) 
+        write_file_flushed(suffix, content)
     except IOError:
         return
 
@@ -256,14 +256,14 @@ def deploy(arguments):
         arguments.ydb_binary_path = driver_path_packages(arguments.use_packages)
         arguments.ydb_udfs_dir = None
 
-    additional_log_configs = {} 
+    additional_log_configs = {}
     if getattr(arguments, 'debug_logging', []):
         debug_logging = getattr(arguments, 'debug_logging', [])
-        additional_log_configs = { 
-            k: LogLevels.DEBUG 
+        additional_log_configs = {
+            k: LogLevels.DEBUG
             for k in debug_logging
-        } 
- 
+        }
+
     port_allocator = None
     if getattr(arguments, 'fixed_ports', False):
         port_allocator = KikimrFixedPortAllocator([KikimrFixedNodePortAllocator()])
@@ -286,7 +286,7 @@ def deploy(arguments):
         load_udfs=True,
         suppress_version_check=arguments.suppress_version_check,
         udfs_path=arguments.ydb_udfs_dir,
-        additional_log_configs=additional_log_configs, 
+        additional_log_configs=additional_log_configs,
         port_allocator=port_allocator,
         use_in_memory_pdisks=use_in_memory_pdisks_flag(),
         yql_config_path=arguments.yql_config_path,

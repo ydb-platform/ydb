@@ -140,37 +140,37 @@ private:
         ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(response.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
     }
 
-    static TString DumpRequest(const NMonitoring::IMonHttpRequest& request) { 
-        TStringBuilder result; 
-        result << "{"; 
- 
-        result << " Method: " << request.GetMethod() 
-               << " Uri: " << request.GetUri(); 
- 
-        result << " Headers {"; 
-        for (const auto& header : request.GetHeaders()) { 
+    static TString DumpRequest(const NMonitoring::IMonHttpRequest& request) {
+        TStringBuilder result;
+        result << "{";
+
+        result << " Method: " << request.GetMethod()
+               << " Uri: " << request.GetUri();
+
+        result << " Headers {";
+        for (const auto& header : request.GetHeaders()) {
             if (stricmp(header.Name().data(), "Authorization") == 0) {
-                continue; 
-            } 
- 
-            result << " " << header.ToString(); 
-        } 
-        result << " }"; 
- 
-        result << " Body: " << request.GetPostContent().Head(1000); 
- 
-        result << " }"; 
-        return result; 
-    } 
- 
+                continue;
+            }
+
+            result << " " << header.ToString();
+        }
+        result << " }";
+
+        result << " Body: " << request.GetPostContent().Head(1000);
+
+        result << " }";
+        return result;
+    }
+
     void Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx)
     {
         Y_UNUSED(ctx);
 
         NMon::TEvHttpInfo *msg = ev->Get();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS, "HTTP request" 
-            << ": dump# " << DumpRequest(msg->Request)); 
+        LOG_DEBUG_S(ctx, NKikimrServices::CMS, "HTTP request"
+            << ": dump# " << DumpRequest(msg->Request));
 
         // Check for API call.
         if (msg->Request.GetPathInfo().StartsWith("/api/")) {

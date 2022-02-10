@@ -47,10 +47,10 @@ void TGRpcDataStreamsService::DecRequest() {
 
 void TGRpcDataStreamsService::InitNewSchemeCache() {
     auto appData = ActorSystem_->AppData<TAppData>();
-    auto cacheCounters = GetServiceCounters(Counters_, "pqproxy|schemecache"); 
-    auto cacheConfig = MakeIntrusive<NSchemeCache::TSchemeCacheConfig>(appData, cacheCounters); 
-    NewSchemeCache = ActorSystem_->Register(CreateSchemeBoardSchemeCache(cacheConfig.Get()), 
-        TMailboxType::HTSwap, ActorSystem_->AppData<TAppData>()->UserPoolId); 
+    auto cacheCounters = GetServiceCounters(Counters_, "pqproxy|schemecache");
+    auto cacheConfig = MakeIntrusive<NSchemeCache::TSchemeCacheConfig>(appData, cacheCounters);
+    NewSchemeCache = ActorSystem_->Register(CreateSchemeBoardSchemeCache(cacheConfig.Get()),
+        TMailboxType::HTSwap, ActorSystem_->AppData<TAppData>()->UserPoolId);
 }
 
 void TGRpcDataStreamsService::SetupIncomingRequests(NGrpc::TLoggerPtr logger)

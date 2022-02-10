@@ -70,13 +70,13 @@ public:
         }
         ServerSettings->SetAppConfig(appConfig);
         ServerSettings->AuthConfig = appConfig.GetAuthConfig();
-        ServerSettings->FeatureFlags = appConfig.GetFeatureFlags(); 
+        ServerSettings->FeatureFlags = appConfig.GetFeatureFlags();
         ServerSettings->SetKqpSettings(kqpSettings);
-        ServerSettings->SetEnableAsyncIndexes(true); 
+        ServerSettings->SetEnableAsyncIndexes(true);
         ServerSettings->SetEnableDataColumnForIndexTable(true);
         ServerSettings->SetEnableNotNullColumns(true);
-        ServerSettings->SetEnableSystemViews(TestSettings::EnableSystemViews); 
-        ServerSettings->SetEnableSchemeTransactionsAtSchemeShard(true); 
+        ServerSettings->SetEnableSystemViews(TestSettings::EnableSystemViews);
+        ServerSettings->SetEnableSchemeTransactionsAtSchemeShard(true);
         ServerSettings->SetEnableYq(enableYq);
         ServerSettings->Formats = new TFormatFactory;
         ServerSettings->PQConfig = appConfig.GetPQConfig();

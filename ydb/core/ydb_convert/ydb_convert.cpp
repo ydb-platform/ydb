@@ -1,5 +1,5 @@
-#include "ydb_convert.h" 
- 
+#include "ydb_convert.h"
+
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/base/kikimr_issue.h>
@@ -782,7 +782,7 @@ TVector<TString> ConvertACLMaskToYdbPermissionNames(ui32 mask) {
 void ConvertDirectoryEntry(const NKikimrSchemeOp::TDirEntry& from, Ydb::Scheme::Entry* to, bool processAcl) {
     to->set_name(from.GetName());
     to->set_owner(from.GetOwner());
- 
+
     switch (from.GetPathType()) {
     case NKikimrSchemeOp::EPathTypeExtSubDomain:
         to->set_type(static_cast<Ydb::Scheme::Entry::Type>(NKikimrSchemeOp::EPathTypeSubDomain));
@@ -793,27 +793,27 @@ void ConvertDirectoryEntry(const NKikimrSchemeOp::TDirEntry& from, Ydb::Scheme::
 
     if (processAcl) {
         const bool isDir = from.GetPathType() == NKikimrSchemeOp::EPathTypeDir;
-        ConvertAclToYdb(from.GetOwner(), from.GetEffectiveACL(), isDir, to->mutable_effective_permissions()); 
-        ConvertAclToYdb(from.GetOwner(), from.GetACL(), isDir, to->mutable_permissions()); 
-    } 
-} 
+        ConvertAclToYdb(from.GetOwner(), from.GetEffectiveACL(), isDir, to->mutable_effective_permissions());
+        ConvertAclToYdb(from.GetOwner(), from.GetACL(), isDir, to->mutable_permissions());
+    }
+}
 
 void ConvertDirectoryEntry(const NKikimrSchemeOp::TPathDescription& from, Ydb::Scheme::Entry* to, bool processAcl) {
-    ConvertDirectoryEntry(from.GetSelf(), to, processAcl); 
- 
-    switch (from.GetSelf().GetPathType()) { 
+    ConvertDirectoryEntry(from.GetSelf(), to, processAcl);
+
+    switch (from.GetSelf().GetPathType()) {
     case NKikimrSchemeOp::EPathTypeTable:
-        to->set_size_bytes(from.GetTableStats().GetDataSize() + from.GetTableStats().GetIndexSize()); 
-        for (const auto& index : from.GetTable().GetTableIndexes()) { 
-            to->set_size_bytes(to->size_bytes() + index.GetDataSize()); 
-        } 
-        break; 
+        to->set_size_bytes(from.GetTableStats().GetDataSize() + from.GetTableStats().GetIndexSize());
+        for (const auto& index : from.GetTable().GetTableIndexes()) {
+            to->set_size_bytes(to->size_bytes() + index.GetDataSize());
+        }
+        break;
     case NKikimrSchemeOp::EPathTypeSubDomain:
     case NKikimrSchemeOp::EPathTypeExtSubDomain:
-        to->set_size_bytes(from.GetDomainDescription().GetDiskSpaceUsage().GetTables().GetTotalSize()); 
-        break; 
-    default: 
-        break; 
+        to->set_size_bytes(from.GetDomainDescription().GetDiskSpaceUsage().GetTables().GetTotalSize());
+        break;
+    default:
+        break;
     }
 }
 

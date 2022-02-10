@@ -26,7 +26,7 @@ private:
     bool CheckDrop(TActiveTransaction *activeTx);
     bool CheckAlter(TActiveTransaction *activeTx);
     bool CheckBackup(TActiveTransaction *activeTx);
-    bool CheckRestore(TActiveTransaction *activeTx); 
+    bool CheckRestore(TActiveTransaction *activeTx);
     bool CheckCopy(TActiveTransaction *activeTx);
     bool CheckCreatePersistentSnapshot(TActiveTransaction *activeTx);
     bool CheckDropPersistentSnapshot(TActiveTransaction *activeTx);
@@ -34,20 +34,20 @@ private:
     bool CheckFinalizeBuildIndex(TActiveTransaction *activeTx);
     bool CheckDropIndexNotice(TActiveTransaction *activeTx);
     bool CheckMoveTable(TActiveTransaction *activeTx);
-    bool CheckCreateCdcStream(TActiveTransaction *activeTx); 
-    bool CheckAlterCdcStream(TActiveTransaction *activeTx); 
-    bool CheckDropCdcStream(TActiveTransaction *activeTx); 
+    bool CheckCreateCdcStream(TActiveTransaction *activeTx);
+    bool CheckAlterCdcStream(TActiveTransaction *activeTx);
+    bool CheckDropCdcStream(TActiveTransaction *activeTx);
 
     bool CheckSchemaVersion(TActiveTransaction *activeTx, ui64 proposedSchemaVersion, ui64 currentSchemaVersion, ui64 expectedSchemaVersion);
- 
-    using TPipelineHasSmthFunc = std::function<bool(TPipeline* const)>; 
-    bool HasDuplicate(TActiveTransaction *activeTx, const TStringBuf kind, TPipelineHasSmthFunc checker); 
-    bool HasConflicts(TActiveTransaction *activeTx, const TStringBuf kind, const THashMap<TString, TPipelineHasSmthFunc>& checkers); 
- 
-    template <typename T> bool HasPathId(TActiveTransaction *activeTx, const T &op, const TStringBuf kind); 
-    template <typename T> TPathId GetPathId(const T &op) const; 
-    template <typename T> bool CheckSchemaVersion(TActiveTransaction *activeTx, ui64 tableId, const T &op); 
-    template <typename T> bool CheckSchemaVersion(TActiveTransaction *activeTx, const T &op); 
+
+    using TPipelineHasSmthFunc = std::function<bool(TPipeline* const)>;
+    bool HasDuplicate(TActiveTransaction *activeTx, const TStringBuf kind, TPipelineHasSmthFunc checker);
+    bool HasConflicts(TActiveTransaction *activeTx, const TStringBuf kind, const THashMap<TString, TPipelineHasSmthFunc>& checkers);
+
+    template <typename T> bool HasPathId(TActiveTransaction *activeTx, const T &op, const TStringBuf kind);
+    template <typename T> TPathId GetPathId(const T &op) const;
+    template <typename T> bool CheckSchemaVersion(TActiveTransaction *activeTx, ui64 tableId, const T &op);
+    template <typename T> bool CheckSchemaVersion(TActiveTransaction *activeTx, const T &op);
 };
 
 TCheckSchemeTxUnit::TCheckSchemeTxUnit(TDataShard &dataShard,
@@ -231,138 +231,138 @@ bool TCheckSchemeTxUnit::CheckSchemaVersion(TActiveTransaction *activeTx,
     return true;
 }
 
-bool TCheckSchemeTxUnit::HasDuplicate(TActiveTransaction *activeTx, const TStringBuf kind, TPipelineHasSmthFunc checker) { 
-    if (!checker(&Pipeline)) { 
-        return false; 
-    } 
- 
-    LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD, 
-        "Ignoring " << kind << " duplicate" 
-            << " at tablet " << DataShard.TabletID() 
-            << " txId " << activeTx->GetTxId() 
-            << " currentTxId " << Pipeline.CurrentSchemaTxId()); 
-    BuildResult(activeTx)->SetSchemeTxDuplicate(Pipeline.CurrentSchemaTxId() == activeTx->GetTxId()); 
- 
-    return true; 
-} 
- 
-bool TCheckSchemeTxUnit::HasConflicts(TActiveTransaction *activeTx, const TStringBuf kind, const THashMap<TString, TPipelineHasSmthFunc>& checkers) { 
-    for (const auto& kv : checkers) { 
-        const auto& conflicting = kv.first; 
-        const auto& checker = kv.second; 
- 
-        if (!checker(&Pipeline)) { 
-            continue; 
-        } 
- 
-        LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD, 
-            "Ignoring " << kind << " during ongoing " << conflicting 
-                << " at tablet " << DataShard.TabletID() 
-                << " txId " << activeTx->GetTxId() 
-                << " currentTxId " << Pipeline.CurrentSchemaTxId()); 
-        BuildResult(activeTx, NKikimrTxDataShard::TEvProposeTransactionResult::ERROR); 
- 
-        return true; 
-    } 
- 
-    return false; 
-} 
- 
-template <typename T> 
-bool TCheckSchemeTxUnit::HasPathId(TActiveTransaction *activeTx, const T &op, const TStringBuf kind) { 
-    if (op.HasPathId()) { 
-        return true; 
-    } 
- 
-    LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD, 
-        kind << " description has no PathId" 
-            << " at tablet " << DataShard.TabletID() 
-            << " txId " << activeTx->GetTxId() 
-            << " currentTxId " << Pipeline.CurrentSchemaTxId()); 
-    BuildResult(activeTx, NKikimrTxDataShard::TEvProposeTransactionResult::ERROR); 
- 
-    return false; 
-} 
- 
-template <typename T> 
-TPathId TCheckSchemeTxUnit::GetPathId(const T &op) const { 
-    auto pathId = TPathId(op.GetPathId().GetOwnerId(), op.GetPathId().GetLocalId()); 
-    Y_VERIFY(DataShard.GetPathOwnerId() == pathId.OwnerId); 
-    return pathId; 
-} 
- 
-template <typename T> 
-bool TCheckSchemeTxUnit::CheckSchemaVersion(TActiveTransaction *activeTx, ui64 tableId, const T &op) { 
-    const auto tablePtr = DataShard.GetUserTables().FindPtr(tableId); 
- 
-    Y_VERIFY(tablePtr); 
-    const auto &table = **tablePtr; 
- 
-    const auto current = table.GetTableSchemaVersion(); 
-    const auto proposed = op.HasTableSchemaVersion() ? op.GetTableSchemaVersion() : 0; 
- 
-    const auto res = CheckSchemaVersion(activeTx, proposed, current, current + 1); 
-    Y_VERIFY_DEBUG(res, "Unexpected schema version mutation"); 
- 
-    return true; 
-} 
- 
-template <typename T> 
-bool TCheckSchemeTxUnit::CheckSchemaVersion(TActiveTransaction *activeTx, const T &op) { 
-    return CheckSchemaVersion(activeTx, GetPathId(op).LocalPathId, op); 
-} 
- 
+bool TCheckSchemeTxUnit::HasDuplicate(TActiveTransaction *activeTx, const TStringBuf kind, TPipelineHasSmthFunc checker) {
+    if (!checker(&Pipeline)) {
+        return false;
+    }
+
+    LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
+        "Ignoring " << kind << " duplicate"
+            << " at tablet " << DataShard.TabletID()
+            << " txId " << activeTx->GetTxId()
+            << " currentTxId " << Pipeline.CurrentSchemaTxId());
+    BuildResult(activeTx)->SetSchemeTxDuplicate(Pipeline.CurrentSchemaTxId() == activeTx->GetTxId());
+
+    return true;
+}
+
+bool TCheckSchemeTxUnit::HasConflicts(TActiveTransaction *activeTx, const TStringBuf kind, const THashMap<TString, TPipelineHasSmthFunc>& checkers) {
+    for (const auto& kv : checkers) {
+        const auto& conflicting = kv.first;
+        const auto& checker = kv.second;
+
+        if (!checker(&Pipeline)) {
+            continue;
+        }
+
+        LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
+            "Ignoring " << kind << " during ongoing " << conflicting
+                << " at tablet " << DataShard.TabletID()
+                << " txId " << activeTx->GetTxId()
+                << " currentTxId " << Pipeline.CurrentSchemaTxId());
+        BuildResult(activeTx, NKikimrTxDataShard::TEvProposeTransactionResult::ERROR);
+
+        return true;
+    }
+
+    return false;
+}
+
+template <typename T>
+bool TCheckSchemeTxUnit::HasPathId(TActiveTransaction *activeTx, const T &op, const TStringBuf kind) {
+    if (op.HasPathId()) {
+        return true;
+    }
+
+    LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
+        kind << " description has no PathId"
+            << " at tablet " << DataShard.TabletID()
+            << " txId " << activeTx->GetTxId()
+            << " currentTxId " << Pipeline.CurrentSchemaTxId());
+    BuildResult(activeTx, NKikimrTxDataShard::TEvProposeTransactionResult::ERROR);
+
+    return false;
+}
+
+template <typename T>
+TPathId TCheckSchemeTxUnit::GetPathId(const T &op) const {
+    auto pathId = TPathId(op.GetPathId().GetOwnerId(), op.GetPathId().GetLocalId());
+    Y_VERIFY(DataShard.GetPathOwnerId() == pathId.OwnerId);
+    return pathId;
+}
+
+template <typename T>
+bool TCheckSchemeTxUnit::CheckSchemaVersion(TActiveTransaction *activeTx, ui64 tableId, const T &op) {
+    const auto tablePtr = DataShard.GetUserTables().FindPtr(tableId);
+
+    Y_VERIFY(tablePtr);
+    const auto &table = **tablePtr;
+
+    const auto current = table.GetTableSchemaVersion();
+    const auto proposed = op.HasTableSchemaVersion() ? op.GetTableSchemaVersion() : 0;
+
+    const auto res = CheckSchemaVersion(activeTx, proposed, current, current + 1);
+    Y_VERIFY_DEBUG(res, "Unexpected schema version mutation");
+
+    return true;
+}
+
+template <typename T>
+bool TCheckSchemeTxUnit::CheckSchemaVersion(TActiveTransaction *activeTx, const T &op) {
+    return CheckSchemaVersion(activeTx, GetPathId(op).LocalPathId, op);
+}
+
 bool TCheckSchemeTxUnit::CheckSchemeTx(TActiveTransaction *activeTx)
 {
     const NKikimrTxDataShard::TFlatSchemeTransaction &tx = activeTx->GetSchemeTx();
 
     bool res = false;
     switch (activeTx->GetSchemeTxType()) {
-    case TSchemaOperation::ETypeCreate: 
+    case TSchemaOperation::ETypeCreate:
         res = CheckCreate(activeTx);
         break;
-    case TSchemaOperation::ETypeDrop: 
+    case TSchemaOperation::ETypeDrop:
         res = CheckDrop(activeTx);
         break;
-    case TSchemaOperation::ETypeAlter: 
+    case TSchemaOperation::ETypeAlter:
         res = CheckAlter(activeTx);
         break;
-    case TSchemaOperation::ETypeBackup: 
+    case TSchemaOperation::ETypeBackup:
         res = CheckBackup(activeTx);
         break;
-    case TSchemaOperation::ETypeRestore: 
-        res = CheckRestore(activeTx); 
-        break; 
-    case TSchemaOperation::ETypeCopy: 
+    case TSchemaOperation::ETypeRestore:
+        res = CheckRestore(activeTx);
+        break;
+    case TSchemaOperation::ETypeCopy:
         res = CheckCopy(activeTx);
         break;
-    case TSchemaOperation::ETypeCreatePersistentSnapshot: 
+    case TSchemaOperation::ETypeCreatePersistentSnapshot:
         res = CheckCreatePersistentSnapshot(activeTx);
         break;
-    case TSchemaOperation::ETypeDropPersistentSnapshot: 
+    case TSchemaOperation::ETypeDropPersistentSnapshot:
         res = CheckDropPersistentSnapshot(activeTx);
         break;
-    case TSchemaOperation::ETypeInitiateBuildIndex: 
+    case TSchemaOperation::ETypeInitiateBuildIndex:
         res = CheckInitiateBuildIndex(activeTx);
         break;
-    case TSchemaOperation::ETypeFinalizeBuildIndex: 
+    case TSchemaOperation::ETypeFinalizeBuildIndex:
         res = CheckFinalizeBuildIndex(activeTx);
         break;
-    case TSchemaOperation::ETypeDropIndexNotice: 
+    case TSchemaOperation::ETypeDropIndexNotice:
         res = CheckDropIndexNotice(activeTx);
         break;
     case TSchemaOperation::ETypeMoveTable:
         res = CheckMoveTable(activeTx);
         break;
-    case TSchemaOperation::ETypeCreateCdcStream: 
-        res = CheckCreateCdcStream(activeTx); 
+    case TSchemaOperation::ETypeCreateCdcStream:
+        res = CheckCreateCdcStream(activeTx);
         break;
-    case TSchemaOperation::ETypeAlterCdcStream: 
-        res = CheckAlterCdcStream(activeTx); 
-        break; 
-    case TSchemaOperation::ETypeDropCdcStream: 
-        res = CheckDropCdcStream(activeTx); 
-        break; 
+    case TSchemaOperation::ETypeAlterCdcStream:
+        res = CheckAlterCdcStream(activeTx);
+        break;
+    case TSchemaOperation::ETypeDropCdcStream:
+        res = CheckDropCdcStream(activeTx);
+        break;
     default:
         LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
                     "Unknown scheme tx type detected at tablet "
@@ -377,11 +377,11 @@ bool TCheckSchemeTxUnit::CheckSchemeTx(TActiveTransaction *activeTx)
 bool TCheckSchemeTxUnit::CheckCreate(TActiveTransaction *activeTx) {
     const NKikimrTxDataShard::TFlatSchemeTransaction &tx = activeTx->GetSchemeTx();
 
-    if (HasDuplicate(activeTx, "Create", &TPipeline::HasCreate)) { 
+    if (HasDuplicate(activeTx, "Create", &TPipeline::HasCreate)) {
         return false;
     }
 
-    const auto &create = tx.GetCreateTable(); 
+    const auto &create = tx.GetCreateTable();
     ui64 tableId = create.GetId_Deprecated();
     if (create.HasPathId()) {
         Y_VERIFY(DataShard.GetPathOwnerId() == create.GetPathId().GetOwnerId() || DataShard.GetPathOwnerId() == INVALID_TABLET_ID);
@@ -396,7 +396,7 @@ bool TCheckSchemeTxUnit::CheckCreate(TActiveTransaction *activeTx) {
 bool TCheckSchemeTxUnit::CheckDrop(TActiveTransaction *activeTx) {
     const NKikimrTxDataShard::TFlatSchemeTransaction &tx = activeTx->GetSchemeTx();
 
-    if (HasDuplicate(activeTx, "Drop", &TPipeline::HasDrop)) { 
+    if (HasDuplicate(activeTx, "Drop", &TPipeline::HasDrop)) {
         return false;
     }
 
@@ -417,15 +417,15 @@ bool TCheckSchemeTxUnit::CheckAlter(TActiveTransaction *activeTx)
     Y_VERIFY(!Pipeline.HasDrop());
 
     const TStringBuf kind = "Alter";
-    if (HasDuplicate(activeTx, kind, &TPipeline::HasAlter)) { 
+    if (HasDuplicate(activeTx, kind, &TPipeline::HasAlter)) {
         return false;
     }
 
-    const THashMap<TString, TPipelineHasSmthFunc> conflicting = { 
-        {"Backup", &TPipeline::HasBackup}, 
-        {"Restore", &TPipeline::HasRestore}, 
-    }; 
-    if (HasConflicts(activeTx, kind, conflicting)) { 
+    const THashMap<TString, TPipelineHasSmthFunc> conflicting = {
+        {"Backup", &TPipeline::HasBackup},
+        {"Restore", &TPipeline::HasRestore},
+    };
+    if (HasConflicts(activeTx, kind, conflicting)) {
         return false;
     }
 
@@ -521,15 +521,15 @@ bool TCheckSchemeTxUnit::CheckBackup(TActiveTransaction *activeTx)
     Y_VERIFY(!Pipeline.HasDrop());
 
     const TStringBuf kind = "Backup";
-    if (HasDuplicate(activeTx, kind, &TPipeline::HasBackup)) { 
+    if (HasDuplicate(activeTx, kind, &TPipeline::HasBackup)) {
         return false;
     }
 
-    const THashMap<TString, TPipelineHasSmthFunc> conflicting = { 
-        {"Alter", &TPipeline::HasAlter}, 
-        {"Restore", &TPipeline::HasRestore}, 
-    }; 
-    if (HasConflicts(activeTx, kind, conflicting)) { 
+    const THashMap<TString, TPipelineHasSmthFunc> conflicting = {
+        {"Alter", &TPipeline::HasAlter},
+        {"Restore", &TPipeline::HasRestore},
+    };
+    if (HasConflicts(activeTx, kind, conflicting)) {
         return false;
     }
 
@@ -539,34 +539,34 @@ bool TCheckSchemeTxUnit::CheckBackup(TActiveTransaction *activeTx)
     return true;
 }
 
-bool TCheckSchemeTxUnit::CheckRestore(TActiveTransaction *activeTx) 
-{ 
-    const NKikimrTxDataShard::TFlatSchemeTransaction &tx = activeTx->GetSchemeTx(); 
-    Y_VERIFY(!Pipeline.HasDrop()); 
- 
+bool TCheckSchemeTxUnit::CheckRestore(TActiveTransaction *activeTx)
+{
+    const NKikimrTxDataShard::TFlatSchemeTransaction &tx = activeTx->GetSchemeTx();
+    Y_VERIFY(!Pipeline.HasDrop());
+
     const TStringBuf kind = "Restore";
-    if (HasDuplicate(activeTx, kind, &TPipeline::HasRestore)) { 
-        return false; 
-    } 
- 
-    const THashMap<TString, TPipelineHasSmthFunc> conflicting = { 
-        {"Alter", &TPipeline::HasAlter}, 
-        {"Backup", &TPipeline::HasBackup}, 
-    }; 
-    if (HasConflicts(activeTx, kind, conflicting)) { 
-        return false; 
-    } 
- 
-    const auto &restore = tx.GetRestore(); 
-    Y_VERIFY(DataShard.GetUserTables().contains(restore.GetTableId())); 
- 
-    return true; 
-} 
- 
+    if (HasDuplicate(activeTx, kind, &TPipeline::HasRestore)) {
+        return false;
+    }
+
+    const THashMap<TString, TPipelineHasSmthFunc> conflicting = {
+        {"Alter", &TPipeline::HasAlter},
+        {"Backup", &TPipeline::HasBackup},
+    };
+    if (HasConflicts(activeTx, kind, conflicting)) {
+        return false;
+    }
+
+    const auto &restore = tx.GetRestore();
+    Y_VERIFY(DataShard.GetUserTables().contains(restore.GetTableId()));
+
+    return true;
+}
+
 bool TCheckSchemeTxUnit::CheckCopy(TActiveTransaction *activeTx) {
     const NKikimrTxDataShard::TFlatSchemeTransaction &tx = activeTx->GetSchemeTx();
 
-    if (HasDuplicate(activeTx, "Copy", &TPipeline::HasCopy)) { 
+    if (HasDuplicate(activeTx, "Copy", &TPipeline::HasCopy)) {
         return false;
     }
 
@@ -584,7 +584,7 @@ bool TCheckSchemeTxUnit::CheckCopy(TActiveTransaction *activeTx) {
 bool TCheckSchemeTxUnit::CheckCreatePersistentSnapshot(TActiveTransaction *activeTx) {
     const auto& tx = activeTx->GetSchemeTx();
 
-    if (HasDuplicate(activeTx, "CreatePersistentSnapshot", &TPipeline::HasCreatePersistentSnapshot)) { 
+    if (HasDuplicate(activeTx, "CreatePersistentSnapshot", &TPipeline::HasCreatePersistentSnapshot)) {
         return false;
     }
 
@@ -596,7 +596,7 @@ bool TCheckSchemeTxUnit::CheckCreatePersistentSnapshot(TActiveTransaction *activ
 bool TCheckSchemeTxUnit::CheckDropPersistentSnapshot(TActiveTransaction *activeTx) {
     const auto& tx = activeTx->GetSchemeTx();
 
-    if (HasDuplicate(activeTx, "DropPersistentSnapshot", &TPipeline::HasDropPersistentSnapshot)) { 
+    if (HasDuplicate(activeTx, "DropPersistentSnapshot", &TPipeline::HasDropPersistentSnapshot)) {
         return false;
     }
 
@@ -606,29 +606,29 @@ bool TCheckSchemeTxUnit::CheckDropPersistentSnapshot(TActiveTransaction *activeT
 }
 
 bool TCheckSchemeTxUnit::CheckInitiateBuildIndex(TActiveTransaction *activeTx) {
-    if (HasDuplicate(activeTx, "InitiateBuildIndex", &TPipeline::HasInitiateBuilIndex)) { 
+    if (HasDuplicate(activeTx, "InitiateBuildIndex", &TPipeline::HasInitiateBuilIndex)) {
         return false;
     }
 
-    const auto &initiate = activeTx->GetSchemeTx().GetInitiateBuildIndex(); 
-    if (!HasPathId(activeTx, initiate, "InitiateBuildIndex")) { 
-        return false; 
+    const auto &initiate = activeTx->GetSchemeTx().GetInitiateBuildIndex();
+    if (!HasPathId(activeTx, initiate, "InitiateBuildIndex")) {
+        return false;
     }
 
-    return CheckSchemaVersion(activeTx, initiate); 
+    return CheckSchemaVersion(activeTx, initiate);
 }
 
 bool TCheckSchemeTxUnit::CheckFinalizeBuildIndex(TActiveTransaction *activeTx) {
-    if (HasDuplicate(activeTx, "FinalizeBuildIndex", &TPipeline::HasFinalizeBuilIndex)) { 
+    if (HasDuplicate(activeTx, "FinalizeBuildIndex", &TPipeline::HasFinalizeBuilIndex)) {
         return false;
     }
 
-    const auto &finalize = activeTx->GetSchemeTx().GetFinalizeBuildIndex(); 
-    if (!HasPathId(activeTx, finalize, "FinalizeBuildIndex")) { 
-        return false; 
+    const auto &finalize = activeTx->GetSchemeTx().GetFinalizeBuildIndex();
+    if (!HasPathId(activeTx, finalize, "FinalizeBuildIndex")) {
+        return false;
     }
 
-    const auto pathId = GetPathId(finalize); 
+    const auto pathId = GetPathId(finalize);
     const auto snapshotKey = TSnapshotKey(pathId.OwnerId, pathId.LocalPathId, finalize.GetSnapshotStep(), finalize.GetSnapshotTxId());
 
     if (DataShard.GetSnapshotManager().FindAvailable(snapshotKey) == nullptr) {
@@ -639,78 +639,78 @@ bool TCheckSchemeTxUnit::CheckFinalizeBuildIndex(TActiveTransaction *activeTx) {
                         << " pathId " << pathId
                         << " snapshotKey " << snapshotKey);
         BuildResult(activeTx, NKikimrTxDataShard::TEvProposeTransactionResult::ERROR);
-        return false; 
-    }
-
-    return CheckSchemaVersion(activeTx, pathId.LocalPathId, finalize); 
-}
-
-bool TCheckSchemeTxUnit::CheckDropIndexNotice(TActiveTransaction *activeTx) {
-    if (HasDuplicate(activeTx, "DropIndexNotice", &TPipeline::HasDropIndexNotice)) { 
         return false;
     }
 
-    const auto &notice = activeTx->GetSchemeTx().GetDropIndexNotice(); 
-    if (!HasPathId(activeTx, notice, "DropIndexNotice")) { 
-        return false; 
+    return CheckSchemaVersion(activeTx, pathId.LocalPathId, finalize);
+}
+
+bool TCheckSchemeTxUnit::CheckDropIndexNotice(TActiveTransaction *activeTx) {
+    if (HasDuplicate(activeTx, "DropIndexNotice", &TPipeline::HasDropIndexNotice)) {
+        return false;
     }
 
-    return CheckSchemaVersion(activeTx, notice); 
+    const auto &notice = activeTx->GetSchemeTx().GetDropIndexNotice();
+    if (!HasPathId(activeTx, notice, "DropIndexNotice")) {
+        return false;
+    }
+
+    return CheckSchemaVersion(activeTx, notice);
 }
 
 
 bool TCheckSchemeTxUnit::CheckMoveTable(TActiveTransaction *activeTx) {
-    if (HasDuplicate(activeTx, "Move", &TPipeline::HasMove)) { 
+    if (HasDuplicate(activeTx, "Move", &TPipeline::HasMove)) {
         return false;
     }
 
-    const auto &mv = activeTx->GetSchemeTx().GetMoveTable(); 
-    if (!HasPathId(activeTx, mv, "Move")) { 
-        return false; 
+    const auto &mv = activeTx->GetSchemeTx().GetMoveTable();
+    if (!HasPathId(activeTx, mv, "Move")) {
+        return false;
     }
 
-    return CheckSchemaVersion(activeTx, mv); 
+    return CheckSchemaVersion(activeTx, mv);
 }
 
-bool TCheckSchemeTxUnit::CheckCreateCdcStream(TActiveTransaction *activeTx) { 
-    if (HasDuplicate(activeTx, "CreateCdcStream", &TPipeline::HasCreateCdcStream)) { 
-        return false; 
-    } 
+bool TCheckSchemeTxUnit::CheckCreateCdcStream(TActiveTransaction *activeTx) {
+    if (HasDuplicate(activeTx, "CreateCdcStream", &TPipeline::HasCreateCdcStream)) {
+        return false;
+    }
 
-    const auto &notice = activeTx->GetSchemeTx().GetCreateCdcStreamNotice(); 
-    if (!HasPathId(activeTx, notice, "CreateCdcStream")) { 
-        return false; 
-    } 
- 
-    return CheckSchemaVersion(activeTx, notice); 
-} 
- 
-bool TCheckSchemeTxUnit::CheckAlterCdcStream(TActiveTransaction *activeTx) { 
-    if (HasDuplicate(activeTx, "AlterCdcStream", &TPipeline::HasAlterCdcStream)) { 
-        return false; 
-    } 
- 
-    const auto &notice = activeTx->GetSchemeTx().GetAlterCdcStreamNotice(); 
-    if (!HasPathId(activeTx, notice, "AlterCdcStream")) { 
-        return false; 
-    } 
- 
-    return CheckSchemaVersion(activeTx, notice); 
-} 
- 
-bool TCheckSchemeTxUnit::CheckDropCdcStream(TActiveTransaction *activeTx) { 
-    if (HasDuplicate(activeTx, "DropCdcStream", &TPipeline::HasDropCdcStream)) { 
-        return false; 
-    } 
- 
-    const auto &notice = activeTx->GetSchemeTx().GetDropCdcStreamNotice(); 
-    if (!HasPathId(activeTx, notice, "DropCdcStream")) { 
-        return false; 
-    } 
- 
-    return CheckSchemaVersion(activeTx, notice); 
-} 
- 
+    const auto &notice = activeTx->GetSchemeTx().GetCreateCdcStreamNotice();
+    if (!HasPathId(activeTx, notice, "CreateCdcStream")) {
+        return false;
+    }
+
+    return CheckSchemaVersion(activeTx, notice);
+}
+
+bool TCheckSchemeTxUnit::CheckAlterCdcStream(TActiveTransaction *activeTx) {
+    if (HasDuplicate(activeTx, "AlterCdcStream", &TPipeline::HasAlterCdcStream)) {
+        return false;
+    }
+
+    const auto &notice = activeTx->GetSchemeTx().GetAlterCdcStreamNotice();
+    if (!HasPathId(activeTx, notice, "AlterCdcStream")) {
+        return false;
+    }
+
+    return CheckSchemaVersion(activeTx, notice);
+}
+
+bool TCheckSchemeTxUnit::CheckDropCdcStream(TActiveTransaction *activeTx) {
+    if (HasDuplicate(activeTx, "DropCdcStream", &TPipeline::HasDropCdcStream)) {
+        return false;
+    }
+
+    const auto &notice = activeTx->GetSchemeTx().GetDropCdcStreamNotice();
+    if (!HasPathId(activeTx, notice, "DropCdcStream")) {
+        return false;
+    }
+
+    return CheckSchemaVersion(activeTx, notice);
+}
+
 void TCheckSchemeTxUnit::Complete(TOperation::TPtr,
                                   const TActorContext &)
 {

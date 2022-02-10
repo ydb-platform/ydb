@@ -42,10 +42,10 @@ TConfigurationResult TNodeConfigurator::SyncGetNodeConfig(ui32 nodeId,
                                                           const TString &host,
                                                           const TString &tenant,
                                                           const TString &nodeType,
-                                                          const TString& domain, 
-                                                          const TString& token) const 
+                                                          const TString& domain,
+                                                          const TString& token) const
 {
-    auto future = Kikimr->GetNodeConfig(nodeId, host, tenant, nodeType, domain, token); 
+    auto future = Kikimr->GetNodeConfig(nodeId, host, tenant, nodeType, domain, token);
     auto result = future.GetValue(TDuration::Max());
     return TConfigurationResult(result);
 }

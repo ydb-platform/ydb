@@ -1,7 +1,7 @@
-#include "table_description.h" 
+#include "table_description.h"
 #include "table_settings.h"
 
-#include <util/generic/list.h> 
+#include <util/generic/list.h>
 #include <util/string/builder.h>
 
 namespace NKikimr {
@@ -28,8 +28,8 @@ namespace {
 }
 
 bool FillCreateTableSettingsDesc(NKikimrSchemeOp::TTableDescription& tableDesc,
-    const Ydb::Table::CreateTableRequest& proto, 
-    Ydb::StatusIds::StatusCode& code, TString& error, TList<TString>& warnings, bool tableProfileSet) 
+    const Ydb::Table::CreateTableRequest& proto,
+    Ydb::StatusIds::StatusCode& code, TString& error, TList<TString>& warnings, bool tableProfileSet)
 {
     auto &partitionConfig = *tableDesc.MutablePartitionConfig();
 
@@ -129,7 +129,7 @@ bool FillCreateTableSettingsDesc(NKikimrSchemeOp::TTableDescription& tableDesc,
         tableDesc.SetUniformPartitionsCount(proto.uniform_partitions());
         break;
     case Ydb::Table::CreateTableRequest::kPartitionAtKeys:
-        if (!CopyExplicitPartitions(tableDesc, proto.partition_at_keys(), code, error)) { 
+        if (!CopyExplicitPartitions(tableDesc, proto.partition_at_keys(), code, error)) {
             return false;
         }
         break;
@@ -190,18 +190,18 @@ bool FillCreateTableSettingsDesc(NKikimrSchemeOp::TTableDescription& tableDesc,
         }
     }
 
-    if (proto.has_ttl_settings()) { 
-        if (!FillTtlSettings(*tableDesc.MutableTTLSettings()->MutableEnabled(), proto.ttl_settings(), code, error)) { 
-            return false; 
-        } 
-    } 
- 
+    if (proto.has_ttl_settings()) {
+        if (!FillTtlSettings(*tableDesc.MutableTTLSettings()->MutableEnabled(), proto.ttl_settings(), code, error)) {
+            return false;
+        }
+    }
+
     return true;
 }
 
 bool FillAlterTableSettingsDesc(NKikimrSchemeOp::TTableDescription& tableDesc,
-    const Ydb::Table::AlterTableRequest& proto, 
-    Ydb::StatusIds::StatusCode& code, TString& error, bool changed) 
+    const Ydb::Table::AlterTableRequest& proto,
+    Ydb::StatusIds::StatusCode& code, TString& error, bool changed)
 {
     bool hadPartitionConfig = tableDesc.HasPartitionConfig();
     auto &partitionConfig = *tableDesc.MutablePartitionConfig();
@@ -338,18 +338,18 @@ bool FillAlterTableSettingsDesc(NKikimrSchemeOp::TTableDescription& tableDesc,
         changed = true;
     }
 
-    if (proto.has_set_ttl_settings()) { 
-        if (!FillTtlSettings(*tableDesc.MutableTTLSettings()->MutableEnabled(), proto.set_ttl_settings(), code, error)) { 
-            return false; 
-        } 
-    } else if (proto.has_drop_ttl_settings()) { 
-        tableDesc.MutableTTLSettings()->MutableDisabled(); 
-    } 
- 
+    if (proto.has_set_ttl_settings()) {
+        if (!FillTtlSettings(*tableDesc.MutableTTLSettings()->MutableEnabled(), proto.set_ttl_settings(), code, error)) {
+            return false;
+        }
+    } else if (proto.has_drop_ttl_settings()) {
+        tableDesc.MutableTTLSettings()->MutableDisabled();
+    }
+
     if (!changed && !hadPartitionConfig) {
         tableDesc.ClearPartitionConfig();
     }
- 
+
     return true;
 }
 

@@ -4,7 +4,7 @@ package NKikimrTenantSlotBroker;
 option java_package = "ru.yandex.kikimr.proto";
 
 message TConfig {
-    optional uint64 PendingSlotTimeout = 1 [default = 15000000]; // 15 seconds by default 
+    optional uint64 PendingSlotTimeout = 1 [default = 15000000]; // 15 seconds by default
 }
 
 message TSlotAllocation {
@@ -55,7 +55,7 @@ message TAlterTenant {
 
 message TRegisterPool {
     optional NActorsProto.TActorId ClientId = 1;
-    optional uint64 SeqNo = 2; 
+    optional uint64 SeqNo = 2;
 }
 
 message TListTenants {

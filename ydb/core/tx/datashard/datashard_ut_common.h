@@ -21,7 +21,7 @@ class TFakeMiniKQLProxy;
 class TFakeProxyTx;
 
 constexpr ui64 FAKE_SCHEMESHARD_TABLET_ID = 4200;
-constexpr ui64 FAKE_TX_ALLOCATOR_TABLET_ID = 4201; 
+constexpr ui64 FAKE_TX_ALLOCATOR_TABLET_ID = 4201;
 
 ///
 class TTester : public TNonCopyable {
@@ -367,61 +367,61 @@ enum class EShadowDataMode {
     Enabled,
 };
 
-struct TShardedTableOptions { 
-    using TSelf = TShardedTableOptions; 
- 
-    struct TColumn { 
+struct TShardedTableOptions {
+    using TSelf = TShardedTableOptions;
+
+    struct TColumn {
         TColumn(const TString& name, const TString& type, bool isKey, bool notNull)
             : Name(name)
             , Type(type)
             , IsKey(isKey)
             , NotNull(notNull) {}
 
-        TString Name; 
-        TString Type; 
-        bool IsKey; 
+        TString Name;
+        TString Type;
+        bool IsKey;
         bool NotNull;
-    }; 
- 
-    struct TIndex { 
+    };
+
+    struct TIndex {
         using EType = NKikimrSchemeOp::EIndexType;
- 
-        TString Name; 
-        TVector<TString> IndexColumns; 
-        TVector<TString> DataColumns = {}; 
-        EType Type = EType::EIndexTypeGlobal; 
-    }; 
- 
-    struct TCdcStream { 
+
+        TString Name;
+        TVector<TString> IndexColumns;
+        TVector<TString> DataColumns = {};
+        EType Type = EType::EIndexTypeGlobal;
+    };
+
+    struct TCdcStream {
         using EMode = NKikimrSchemeOp::ECdcStreamMode;
- 
-        TString Name; 
-        EMode Mode; 
-    }; 
- 
+
+        TString Name;
+        EMode Mode;
+    };
+
 #define TABLE_OPTION_IMPL(type, name, defaultValue) \
     TSelf& name(type value) {\
         name##_ = std::move(value); \
-        return *this; \ 
-    } \ 
-    type name##_ = defaultValue 
- 
+        return *this; \
+    } \
+    type name##_ = defaultValue
+
 #define TABLE_OPTION(type, name, defaultValue) TABLE_OPTION_IMPL(type, name, defaultValue)
- 
-    TABLE_OPTION(ui64, Shards, 1); 
-    TABLE_OPTION(bool, EnableOutOfOrder, true); 
+
+    TABLE_OPTION(ui64, Shards, 1);
+    TABLE_OPTION(bool, EnableOutOfOrder, true);
     TABLE_OPTION(const NLocalDb::TCompactionPolicy*, Policy, nullptr);
-    TABLE_OPTION(EShadowDataMode, ShadowData, EShadowDataMode::Default); 
+    TABLE_OPTION(EShadowDataMode, ShadowData, EShadowDataMode::Default);
     TABLE_OPTION(TVector<TColumn>, Columns, (TVector<TColumn>{{"key", "Uint32", true, false}, {"value", "Uint32", false, false}}));
-    TABLE_OPTION(TVector<TIndex>, Indexes, {}); 
+    TABLE_OPTION(TVector<TIndex>, Indexes, {});
     TABLE_OPTION(ui64, Followers, 0);
     TABLE_OPTION(bool, FollowerPromotion, false);
     TABLE_OPTION(bool, ExternalStorage, false);
- 
-#undef TABLE_OPTION 
-#undef TABLE_OPTION_IMPL 
-}; 
- 
+
+#undef TABLE_OPTION
+#undef TABLE_OPTION_IMPL
+};
+
 #define Y_UNIT_TEST_WITH_MVCC_IMPL(N, OPT)                                                                         \
     template<bool OPT> void N(NUnitTest::TTestContext&);                                                           \
     struct TTestRegistration##N {                                                                                  \
@@ -455,12 +455,12 @@ void CreateShardedTable(Tests::TServer::TPtr server,
                         TActorId sender,
                         const TString &root,
                         const TString &name,
-                        const TShardedTableOptions &opts = TShardedTableOptions()); 
- 
-void CreateShardedTable(Tests::TServer::TPtr server, 
+                        const TShardedTableOptions &opts = TShardedTableOptions());
+
+void CreateShardedTable(Tests::TServer::TPtr server,
                         TActorId sender,
-                        const TString &root, 
-                        const TString &name, 
+                        const TString &root,
+                        const TString &name,
                         ui64 shards,
                         bool enableOutOfOrder = true,
                         const NLocalDb::TCompactionPolicy* policy = nullptr,
@@ -550,30 +550,30 @@ ui64 AsyncAlterAndDisableShadow(
         const TString& name,
         const NLocalDb::TCompactionPolicy* policy = nullptr);
 
-ui64 AsyncAlterAddIndex( 
-        Tests::TServer::TPtr server, 
-        const TString& dbName, 
-        const TString& tablePath, 
-        const TShardedTableOptions::TIndex& indexDesc); 
- 
-ui64 AsyncAlterDropIndex( 
-        Tests::TServer::TPtr server, 
-        const TString& workingDir, 
-        const TString& tableName, 
-        const TString& indexName); 
- 
-ui64 AsyncAlterAddStream( 
-        Tests::TServer::TPtr server, 
-        const TString& workingDir, 
-        const TString& tableName, 
-        const TShardedTableOptions::TCdcStream& streamDesc); 
- 
-ui64 AsyncAlterDropStream( 
-        Tests::TServer::TPtr server, 
-        const TString& workingDir, 
-        const TString& tableName, 
-        const TString& streamName); 
- 
+ui64 AsyncAlterAddIndex(
+        Tests::TServer::TPtr server,
+        const TString& dbName,
+        const TString& tablePath,
+        const TShardedTableOptions::TIndex& indexDesc);
+
+ui64 AsyncAlterDropIndex(
+        Tests::TServer::TPtr server,
+        const TString& workingDir,
+        const TString& tableName,
+        const TString& indexName);
+
+ui64 AsyncAlterAddStream(
+        Tests::TServer::TPtr server,
+        const TString& workingDir,
+        const TString& tableName,
+        const TShardedTableOptions::TCdcStream& streamDesc);
+
+ui64 AsyncAlterDropStream(
+        Tests::TServer::TPtr server,
+        const TString& workingDir,
+        const TString& tableName,
+        const TString& streamName);
+
 struct TReadShardedTableState {
     TActorId Sender;
     TActorId Worker;

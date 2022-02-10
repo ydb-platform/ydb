@@ -192,12 +192,12 @@ bool IsTabletActiveEvent(IEventHandle& ev);
 
 class TTenantTestRuntime : public TTestBasicRuntime {
 private:
-    void Setup(bool createTenantPools = true); 
+    void Setup(bool createTenantPools = true);
 
 public:
     TTenantTestRuntime(const TTenantTestConfig &config,
                        const NKikimrConfig::TAppConfig &extension = {},
-                       bool createTenantPools = true); 
+                       bool createTenantPools = true);
 
     void CreateTenantPool(ui32 nodeIndex);
     void CreateTenantPool(ui32 nodeIndex, const TTenantTestConfig::TTenantPoolConfig &config);

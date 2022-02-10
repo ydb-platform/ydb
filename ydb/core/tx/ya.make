@@ -34,7 +34,7 @@ RECURSE(
     datashard
     long_tx_service
     mediator
-    replication 
+    replication
     scheme_board
     scheme_cache
     schemeshard

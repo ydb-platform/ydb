@@ -561,12 +561,12 @@ class TestStorageConfig(TBaseTenant):
     def test_create_tablet(self):
         table_path = '%s/table-1' % (self.tenant_path)
 
-        with self.pool.checkout() as session: 
-            session.execute_scheme( 
+        with self.pool.checkout() as session:
+            session.execute_scheme(
                 "create table `{}` (key Int32, value String, primary key(key));".format(
-                    table_path 
-                ) 
-            ) 
+                    table_path
+                )
+            )
 
             session.transaction().execute(
                 "upsert into `{}` (key) values (101);".format(table_path),

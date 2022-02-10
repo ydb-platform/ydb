@@ -471,7 +471,7 @@ private:
         auto& entry = request->ResultSet.emplace_back();
         entry.Path = SplitPath(Settings.TablePath);
         entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable;
-        entry.ShowPrivatePath = true; 
+        entry.ShowPrivatePath = true;
 
         TXLOG_D("Sending TEvNagivateKeySet for table '" << Settings.TablePath << "'");
         ctx.Send(Services.SchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));

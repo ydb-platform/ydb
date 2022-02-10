@@ -44,23 +44,23 @@ namespace NConsoleClient {
         return result;
     }
 
-    void AdjustPath(TString& path, const TClientCommand::TConfig& config) { 
-        if (path.StartsWith('/')) { 
-            if (!path.StartsWith(config.Database)) { 
-                throw TMissUseException() << "Provided path \"" << path << "\" starts with '/'. " 
-                    << "That means you are using an absolute path that should start with the path " 
-                    << "to your database \"" << config.Database << "\", but it doesn't. " << Endl 
-                    << "Please, provide full path starting from the domain root " 
-                    << "(example: \"/domain/my_base/dir1/table1\"). " << Endl 
-                    << "Or consider using relative path from your database (example: \"dir1/table1\")."; 
-            } 
-        } else { 
-            // allow relative path 
-            path = (config.Path ? config.Path : config.Database) + '/' + path; 
-        } 
- 
-        path = NormalizePath(path); 
-    } 
- 
+    void AdjustPath(TString& path, const TClientCommand::TConfig& config) {
+        if (path.StartsWith('/')) {
+            if (!path.StartsWith(config.Database)) {
+                throw TMissUseException() << "Provided path \"" << path << "\" starts with '/'. "
+                    << "That means you are using an absolute path that should start with the path "
+                    << "to your database \"" << config.Database << "\", but it doesn't. " << Endl
+                    << "Please, provide full path starting from the domain root "
+                    << "(example: \"/domain/my_base/dir1/table1\"). " << Endl
+                    << "Or consider using relative path from your database (example: \"dir1/table1\").";
+            }
+        } else {
+            // allow relative path
+            path = (config.Path ? config.Path : config.Database) + '/' + path;
+        }
+
+        path = NormalizePath(path);
+    }
+
 }
 }

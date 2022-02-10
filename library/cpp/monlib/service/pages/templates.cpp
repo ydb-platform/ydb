@@ -28,8 +28,8 @@ namespace NMonitoring {
     extern const char ListTag[] = "li";
     extern const char UListTag[] = "ul";
     extern const char OListTag[] = "ol";
-    extern const char DListTag[] = "dl"; 
-    extern const char DTermTag[] = "dt"; 
-    extern const char DDescTag[] = "dd"; 
+    extern const char DListTag[] = "dl";
+    extern const char DTermTag[] = "dt";
+    extern const char DDescTag[] = "dd";
 
 }

@@ -24,16 +24,16 @@ service OperationService {
 
     // Check status for a given operation.
     rpc GetOperation(Operations.GetOperationRequest) returns (Operations.GetOperationResponse);
- 
-    // Starts cancellation of a long-running operation, 
-    // Clients can use GetOperation to check whether the cancellation succeeded 
-    // or whether the operation completed despite cancellation. 
-    rpc CancelOperation(Operations.CancelOperationRequest) returns (Operations.CancelOperationResponse); 
- 
-    // Forgets long-running operation. It does not cancel the operation and returns 
-    // an error if operation was not completed. 
-    rpc ForgetOperation(Operations.ForgetOperationRequest) returns (Operations.ForgetOperationResponse); 
- 
-    // Lists operations that match the specified filter in the request. 
-    rpc ListOperations(Operations.ListOperationsRequest) returns (Operations.ListOperationsResponse); 
+
+    // Starts cancellation of a long-running operation,
+    // Clients can use GetOperation to check whether the cancellation succeeded
+    // or whether the operation completed despite cancellation.
+    rpc CancelOperation(Operations.CancelOperationRequest) returns (Operations.CancelOperationResponse);
+
+    // Forgets long-running operation. It does not cancel the operation and returns
+    // an error if operation was not completed.
+    rpc ForgetOperation(Operations.ForgetOperationRequest) returns (Operations.ForgetOperationResponse);
+
+    // Lists operations that match the specified filter in the request.
+    rpc ListOperations(Operations.ListOperationsRequest) returns (Operations.ListOperationsResponse);
 }

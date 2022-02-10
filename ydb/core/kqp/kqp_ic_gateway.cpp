@@ -1041,7 +1041,7 @@ public:
             }
 
             auto ev = MakeHolder<TRequest>();
-            ev->Record.SetDatabaseName(Database); 
+            ev->Record.SetDatabaseName(Database);
             if (UserToken) {
                 ev->Record.SetUserToken(UserToken->Serialized);
             }
@@ -1100,7 +1100,7 @@ public:
             std::pair<TString, TString> pathPair;
             if (createDir) {
                 TString error;
-                if (!TrySplitPathByDb(metadata->Name, Database, pathPair, error)) { 
+                if (!TrySplitPathByDb(metadata->Name, Database, pathPair, error)) {
                     return MakeFuture(ResultFromError<TGenericResult>(error));
                 }
             } else {
@@ -1141,7 +1141,7 @@ public:
                     profiles.Load(configResult.Config->GetTableProfilesConfig());
 
                     auto ev = MakeHolder<TRequest>();
-                    ev->Record.SetDatabaseName(Database); 
+                    ev->Record.SetDatabaseName(Database);
                     if (UserToken) {
                         ev->Record.SetUserToken(UserToken->Serialized);
                     }
@@ -1154,15 +1154,15 @@ public:
                         for (const auto& index : metadata->Indexes) {
                             auto indexDesc = schemeTx.MutableCreateIndexedTable()->AddIndexDescription();
                             indexDesc->SetName(index.Name);
-                            switch (index.Type) { 
-                                case NYql::TIndexDescription::EType::GlobalSync: 
+                            switch (index.Type) {
+                                case NYql::TIndexDescription::EType::GlobalSync:
                                     indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobal);
-                                    break; 
-                                case NYql::TIndexDescription::EType::GlobalAsync: 
+                                    break;
+                                case NYql::TIndexDescription::EType::GlobalAsync:
                                     indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync);
-                                    break; 
-                            } 
- 
+                                    break;
+                            }
+
                             indexDesc->SetState(static_cast<::NKikimrSchemeOp::EIndexState>(index.State));
                             for (const auto& col : index.KeyColumns) {
                                 indexDesc->AddKeyColumnNames(col);
@@ -2046,7 +2046,7 @@ private:
             }
 
             auto ev = MakeHolder<TRequest>();
-            ev->Record.SetDatabaseName(Database); 
+            ev->Record.SetDatabaseName(Database);
             if (UserToken) {
                 ev->Record.SetUserToken(UserToken->Serialized);
             }
@@ -2595,16 +2595,16 @@ private:
             }
         }
 
-        if (const auto& ttl = metadata->TableSettings.TtlSettings) { 
-            if (ttl.IsSet()) { 
-                ConvertTtlSettingsToProto(ttl.GetValueSet(), *proto.mutable_ttl_settings()); 
-            } else { 
-                code = Ydb::StatusIds::BAD_REQUEST; 
-                error = "Can't reset TTL settings"; 
-                return false; 
-            } 
-        } 
- 
+        if (const auto& ttl = metadata->TableSettings.TtlSettings) {
+            if (ttl.IsSet()) {
+                ConvertTtlSettingsToProto(ttl.GetValueSet(), *proto.mutable_ttl_settings());
+            } else {
+                code = Ydb::StatusIds::BAD_REQUEST;
+                error = "Can't reset TTL settings";
+                return false;
+            }
+        }
+
         return true;
     }
 
@@ -2618,7 +2618,7 @@ private:
             return false;
         }
 
-        TColumnFamilyManager families(tableDesc.MutablePartitionConfig()); 
+        TColumnFamilyManager families(tableDesc.MutablePartitionConfig());
 
         for (const auto& familySettings : createTableProto.column_families()) {
             if (!families.ApplyFamilySettings(familySettings, &code, &error)) {
@@ -2630,7 +2630,7 @@ private:
             return false;
         }
 
-        if (!NGRpcService::FillCreateTableSettingsDesc(tableDesc, createTableProto, profiles, code, error, warnings)) { 
+        if (!NGRpcService::FillCreateTableSettingsDesc(tableDesc, createTableProto, profiles, code, error, warnings)) {
             return false;
         }
         return true;

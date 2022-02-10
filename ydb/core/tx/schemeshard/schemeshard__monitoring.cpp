@@ -1119,7 +1119,7 @@ private:
                     << "State:                                   " << TTxState::StateName(txState.State) << Endl
                     << "MinStep:                                 " << txState.MinStep << Endl
                     << "ReadyForNotifications:                   " << txState.ReadyForNotifications << Endl
-                    << "DataTotalSize:                           " << txState.DataTotalSize << Endl 
+                    << "DataTotalSize:                           " << txState.DataTotalSize << Endl
                     << "TxShardsListFinalized:                   " << txState.TxShardsListFinalized << Endl
                     << "SchemeOpSeqNo:                           " << txState.SchemeOpSeqNo.Generation << ":" << txState.SchemeOpSeqNo.Round << Endl
                     << "StartTime:                               " << txState.StartTime << Endl
@@ -1217,27 +1217,27 @@ private:
                 }
             }
 
-            H4() {str << "ShardStatuses for opId " << opId << "</a>";} 
-            TABLE_SORTABLE_CLASS("ShardStatuses") { 
+            H4() {str << "ShardStatuses for opId " << opId << "</a>";}
+            TABLE_SORTABLE_CLASS("ShardStatuses") {
                 TABLEHEAD() {
                     TABLER() {
                         TABLEH() {str << "ShardId";}
-                        TABLEH() {str << "Success";} 
+                        TABLEH() {str << "Success";}
                         TABLEH() {str << "Error";}
-                        TABLEH() {str << "BytesProcessed";} 
-                        TABLEH() {str << "RowsProcessed";} 
+                        TABLEH() {str << "BytesProcessed";}
+                        TABLEH() {str << "RowsProcessed";}
                     }
                 }
                 ui32 maxItems = 10;
-                for (auto& item: txState.ShardStatuses) { 
+                for (auto& item: txState.ShardStatuses) {
                     if (0 == maxItems) { break; }
                     --maxItems;
                     TABLER() {
                         TABLED() { str << item.first; }
-                        TABLED() { str << item.second.Success; } 
-                        TABLED() { str << item.second.Error; } 
-                        TABLED() { str << item.second.BytesProcessed; } 
-                        TABLED() { str << item.second.RowsProcessed; } 
+                        TABLED() { str << item.second.Success; }
+                        TABLED() { str << item.second.Error; }
+                        TABLED() { str << item.second.BytesProcessed; }
+                        TABLED() { str << item.second.RowsProcessed; }
                     }
                 }
             }

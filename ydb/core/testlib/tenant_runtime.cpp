@@ -16,7 +16,7 @@
 #include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/tx/long_tx_service/long_tx_service.h>
 #include <ydb/core/tx/mediator/mediator.h>
-#include <ydb/core/tx/replication/controller/controller.h> 
+#include <ydb/core/tx/replication/controller/controller.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/sequenceproxy/sequenceproxy.h>
 #include <ydb/core/tx/sequenceshard/sequenceshard.h>
@@ -435,8 +435,8 @@ class TFakeHive : public TActor<TFakeHive>, public TTabletExecutedFlat {
                 bootstrapperActorId = Boot(ctx, type, &NSysView::CreateSysViewProcessor, DataGroupErasure);
             } else if (type == defaultTabletTypes.SequenceShard) {
                 bootstrapperActorId = Boot(ctx, type, &NSequenceShard::CreateSequenceShard, DataGroupErasure);
-            } else if (type == defaultTabletTypes.ReplicationController) { 
-                bootstrapperActorId = Boot(ctx, type, &NReplication::CreateController, DataGroupErasure); 
+            } else if (type == defaultTabletTypes.ReplicationController) {
+                bootstrapperActorId = Boot(ctx, type, &NReplication::CreateController, DataGroupErasure);
             } else {
                 status = NKikimrProto::ERROR;
             }
@@ -773,7 +773,7 @@ void TTenantTestRuntime::CreateTenantPool(ui32 nodeIndex)
     CreateTenantPool(nodeIndex, Config.Nodes[nodeIndex].TenantPoolConfig);
 }
 
-void TTenantTestRuntime::Setup(bool createTenantPools) 
+void TTenantTestRuntime::Setup(bool createTenantPools)
 {
     if (ENABLE_DETAILED_LOG) {
         SetLogPriority(NKikimrServices::LOCAL, NLog::PRI_DEBUG);
@@ -806,7 +806,7 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
 
     app.FeatureFlags = Extension.GetFeatureFlags();
     app.ClearDomainsAndHive();
- 
+
     ui32 planResolution = 500;
     // Add domains info.
     for (ui32 i = 0; i < Config.Domains.size(); ++i) {
@@ -1001,14 +1001,14 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
     // Create Tenant Slot Pools
     Y_VERIFY(GetNodeCount() >= Config.Nodes.size());
     TMultiSet<std::pair<TString, TEvLocal::TEvTenantStatus::EStatus>> statuses;
- 
-    if (createTenantPools) { 
-        for (size_t i = 0; i< Config.Nodes.size(); ++i) { 
-            auto &poolConfig = Config.Nodes[i].TenantPoolConfig; 
-            for (auto &slot : poolConfig.StaticSlots) 
-                statuses.insert(std::make_pair(CanonizePath(slot.Tenant), TEvLocal::TEvTenantStatus::STARTED)); 
-            CreateTenantPool(i); 
-        } 
+
+    if (createTenantPools) {
+        for (size_t i = 0; i< Config.Nodes.size(); ++i) {
+            auto &poolConfig = Config.Nodes[i].TenantPoolConfig;
+            for (auto &slot : poolConfig.StaticSlots)
+                statuses.insert(std::make_pair(CanonizePath(slot.Tenant), TEvLocal::TEvTenantStatus::STARTED));
+            CreateTenantPool(i);
+        }
     }
 
     // Create other local services
@@ -1109,7 +1109,7 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
         EnableScheduleForActor(actorId, true);
 
         // Wait until Tenant Slot Broker gets all statuses.
-        if (createTenantPools && !Config.FakeTenantSlotBroker) { 
+        if (createTenantPools && !Config.FakeTenantSlotBroker) {
             TDispatchOptions options;
             options.FinalEvents.emplace_back(TWaitTenantSlotBrokerInitialization(Config.Nodes.size()));
             DispatchEvents(options);
@@ -1119,13 +1119,13 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
 
 TTenantTestRuntime::TTenantTestRuntime(const TTenantTestConfig &config,
                                        const NKikimrConfig::TAppConfig &extension,
-                                       bool createTenantPools) 
+                                       bool createTenantPools)
     : TTestBasicRuntime(config.Nodes.size(), config.DataCenterCount, false)
     , Config(config)
     , Extension(extension)
 {
     Extension.MutableFeatureFlags()->SetEnableExternalHive(false);
-    Setup(createTenantPools); 
+    Setup(createTenantPools);
 }
 
 void TTenantTestRuntime::WaitForHiveState(const TVector<TEvTest::TEvWaitHiveState::TClientInfo> &state)

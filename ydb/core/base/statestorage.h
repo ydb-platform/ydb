@@ -22,8 +22,8 @@ struct TEvStateStorage {
         EvCleanup,
         EvResolveBoard,
         EvBoardInfo,
-        EvResolveSchemeBoard, // subset (by hash) 
-        EvListSchemeBoard, // all 
+        EvResolveSchemeBoard, // subset (by hash)
+        EvListSchemeBoard, // all
         EvUpdateGroupConfig,
 
         // replies (local, from proxy)
@@ -32,7 +32,7 @@ struct TEvStateStorage {
         EvResolveReplicasList,
         EvResponseReplicasDumps,
         EvDeleteResult,
-        EvListSchemeBoardResult, 
+        EvListSchemeBoardResult,
 
         // replicas interface
         EvReplicaLookup = EvLock + 2 * 512,
@@ -358,7 +358,7 @@ struct TEvStateStorage {
 
     struct TEvResolveReplicas;
     struct TEvResolveBoard;
-    struct TEvResolveSchemeBoard; 
+    struct TEvResolveSchemeBoard;
     struct TEvResolveReplicasList;
     struct TEvReplicaLookup;
     struct TEvReplicaInfo;
@@ -371,8 +371,8 @@ struct TEvStateStorage {
     struct TEvReplicaBoardCleanup;
     struct TEvReplicaBoardPublishAck;
     struct TEvReplicaBoardInfo;
-    struct TEvListSchemeBoard; 
-    struct TEvListSchemeBoardResult; 
+    struct TEvListSchemeBoard;
+    struct TEvListSchemeBoardResult;
     struct TEvUpdateGroupConfig;
     struct TEvReplicaProbeSubscribe;
     struct TEvReplicaProbeUnsubscribe;
@@ -514,7 +514,7 @@ void BuildStateStorageInfos(const NKikimrConfig::TDomainsConfig::TStateStorage& 
 
 IActor* CreateStateStorageWarden(const TIntrusivePtr<TStateStorageInfo> &info, const TIntrusivePtr<TStateStorageInfo> &board, const TIntrusivePtr<TStateStorageInfo> &schemeBoard);
 
-IActor* CreateStateStorageProxy(const TIntrusivePtr<TStateStorageInfo> &info, const TIntrusivePtr<TStateStorageInfo> &board, const TIntrusivePtr<TStateStorageInfo> &schemeBoard); 
+IActor* CreateStateStorageProxy(const TIntrusivePtr<TStateStorageInfo> &info, const TIntrusivePtr<TStateStorageInfo> &board, const TIntrusivePtr<TStateStorageInfo> &schemeBoard);
 IActor* CreateStateStorageProxyStub();
 IActor* CreateStateStorageReplica(const TIntrusivePtr<TStateStorageInfo> &info, ui32 replicaIndex);
 IActor* CreateStateStorageMonitoringActor(ui64 targetTablet, const TActorId &sender, const TString &query);

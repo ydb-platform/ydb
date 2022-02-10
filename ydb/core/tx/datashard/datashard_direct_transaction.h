@@ -11,32 +11,32 @@
 namespace NKikimr {
 namespace NDataShard {
 
-class IDirectTx { 
+class IDirectTx {
 public:
-    virtual ~IDirectTx() = default; 
+    virtual ~IDirectTx() = default;
     virtual bool Execute(TDataShard* self, TTransactionContext& txc, const TRowVersion& readVersion, const TRowVersion& writeVersion) = 0;
     virtual void SendResult(TDataShard* self, const TActorContext& ctx) = 0;
-    virtual TVector<NMiniKQL::IChangeCollector::TChange> GetCollectedChanges() const = 0; 
-}; 
+    virtual TVector<NMiniKQL::IChangeCollector::TChange> GetCollectedChanges() const = 0;
+};
 
-class TDirectTransaction : public TOperation { 
+class TDirectTransaction : public TOperation {
 public:
-    TDirectTransaction(ui64 txId, TInstant receivedAt, ui64 tieBreakerIndex, TEvDataShard::TEvUploadRowsRequest::TPtr& ev); 
-    TDirectTransaction(ui64 txId, TInstant receivedAt, ui64 tieBreakerIndex, TEvDataShard::TEvEraseRowsRequest::TPtr& ev); 
+    TDirectTransaction(ui64 txId, TInstant receivedAt, ui64 tieBreakerIndex, TEvDataShard::TEvUploadRowsRequest::TPtr& ev);
+    TDirectTransaction(ui64 txId, TInstant receivedAt, ui64 tieBreakerIndex, TEvDataShard::TEvEraseRowsRequest::TPtr& ev);
 
     void BuildExecutionPlan(bool) override;
 
 private:
     bool Execute(TDataShard* self, TTransactionContext& txc);
     void SendResult(TDataShard* self, const TActorContext& ctx);
-    TVector<NMiniKQL::IChangeCollector::TChange> GetCollectedChanges() const; 
+    TVector<NMiniKQL::IChangeCollector::TChange> GetCollectedChanges() const;
 
-    friend class TDirectOpUnit; 
+    friend class TDirectOpUnit;
 
-private: 
-    THolder<IDirectTx> Impl; 
-    static constexpr ui32 Flags = NTxDataShard::TTxFlags::Immediate | NTxDataShard::TTxFlags::GlobalWriter; 
+private:
+    THolder<IDirectTx> Impl;
+    static constexpr ui32 Flags = NTxDataShard::TTxFlags::Immediate | NTxDataShard::TTxFlags::GlobalWriter;
 };
 
 } // NDataShard
-} // NKikimr 
+} // NKikimr

@@ -206,36 +206,36 @@ void IKikimrGateway::BuildIndexMetadata(TTableMetadataResult& loadTableMetadataR
     }
 }
 
-bool TTtlSettings::TryParse(const NNodes::TCoNameValueTupleList& node, TTtlSettings& settings, TString& error) { 
-    using namespace NNodes; 
- 
-    for (const auto& field : node) { 
-        auto name = field.Name().Value(); 
-        if (name == "columnName") { 
-            YQL_ENSURE(field.Value().Maybe<TCoAtom>()); 
-            settings.ColumnName = field.Value().Cast<TCoAtom>().StringValue(); 
-        } else if (name == "expireAfter") { 
-            YQL_ENSURE(field.Value().Maybe<TCoInterval>()); 
-            auto value = FromString<i64>(field.Value().Cast<TCoInterval>().Literal().Value()); 
-            if (value < 0) { 
-                error = "Interval value cannot be negative"; 
-                return false; 
-            } 
- 
-            settings.ExpireAfter = TDuration::FromValue(value); 
-        } else { 
-            error = TStringBuilder() << "Unknown field: " << name; 
-            return false; 
-        } 
-    } 
- 
-    return true; 
-} 
- 
+bool TTtlSettings::TryParse(const NNodes::TCoNameValueTupleList& node, TTtlSettings& settings, TString& error) {
+    using namespace NNodes;
+
+    for (const auto& field : node) {
+        auto name = field.Name().Value();
+        if (name == "columnName") {
+            YQL_ENSURE(field.Value().Maybe<TCoAtom>());
+            settings.ColumnName = field.Value().Cast<TCoAtom>().StringValue();
+        } else if (name == "expireAfter") {
+            YQL_ENSURE(field.Value().Maybe<TCoInterval>());
+            auto value = FromString<i64>(field.Value().Cast<TCoInterval>().Literal().Value());
+            if (value < 0) {
+                error = "Interval value cannot be negative";
+                return false;
+            }
+
+            settings.ExpireAfter = TDuration::FromValue(value);
+        } else {
+            error = TStringBuilder() << "Unknown field: " << name;
+            return false;
+        }
+    }
+
+    return true;
+}
+
 bool TTableSettings::IsSet() const {
     return CompactionPolicy || PartitionBy || AutoPartitioningBySize || UniformPartitions || PartitionAtKeys
         || PartitionSizeMb || AutoPartitioningByLoad || MinPartitions || MaxPartitions || KeyBloomFilter
-        || ReadReplicasSettings || TtlSettings; 
+        || ReadReplicasSettings || TtlSettings;
 }
 
 EYqlIssueCode YqlStatusFromYdbStatus(ui32 ydbStatus) {

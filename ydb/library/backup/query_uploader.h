@@ -34,10 +34,10 @@ private:
 
     using TRpsLimiter = TBucketQuoter<ui64>;
     TRpsLimiter RequestLimiter;
-    NYdb::NTable::TTableClient& Client; 
+    NYdb::NTable::TTableClient& Client;
 
 public:
-    TUploader(const TOptions& opts, NYdb::NTable::TTableClient& client, const TString& query); 
+    TUploader(const TOptions& opts, NYdb::NTable::TTableClient& client, const TString& query);
 
     bool Push(TParams params);
     bool Push(const TString& path, TValue&& value);

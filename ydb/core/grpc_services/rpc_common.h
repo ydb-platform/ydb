@@ -32,18 +32,18 @@ inline void SetDatabase(TEv& ev, const IRequestCtx& ctx) {
 }
 
 inline void SetDatabase(TEvTxUserProxy::TEvProposeTransaction* ev, const IRequestCtx& ctx) {
-    // Empty database in case of absent header 
-    ev->Record.SetDatabaseName(CanonizePath(ctx.GetDatabaseName().GetOrElse(""))); 
-} 
- 
+    // Empty database in case of absent header
+    ev->Record.SetDatabaseName(CanonizePath(ctx.GetDatabaseName().GetOrElse("")));
+}
+
 inline void SetDatabase(TEvTxUserProxy::TEvNavigate* ev, const IRequestCtx& ctx) {
-    // Empty database in case of absent header 
-    ev->Record.SetDatabaseName(CanonizePath(ctx.GetDatabaseName().GetOrElse(""))); 
-} 
- 
+    // Empty database in case of absent header
+    ev->Record.SetDatabaseName(CanonizePath(ctx.GetDatabaseName().GetOrElse("")));
+}
+
 inline void SetRequestType(TEvTxUserProxy::TEvProposeTransaction* ev, const IRequestCtx& ctx) {
-    ev->Record.SetRequestType(ctx.GetRequestType().GetOrElse("")); 
-} 
- 
+    ev->Record.SetRequestType(ctx.GetRequestType().GetOrElse(""));
+}
+
 } // namespace NGRpcService
 } // namespace NKikimr

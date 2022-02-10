@@ -35,8 +35,8 @@ void PersistShards(NIceDb::TNiceDb& db, TTxState& txState, TSchemeShard* ss) {
 
 
 class TCreateSubDomain: public TSubOperation {
-    const TOperationId OperationId; 
-    const TTxTransaction Transaction; 
+    const TOperationId OperationId;
+    const TTxTransaction Transaction;
     TTxState::ETxState State = TTxState::Invalid;
 
     TTxState::ETxState NextState() {
@@ -50,8 +50,8 @@ class TCreateSubDomain: public TSubOperation {
             return TTxState::ConfigureParts;
         case TTxState::ConfigureParts:
             return TTxState::Propose;
-        case TTxState::Propose: 
-            return TTxState::Done; 
+        case TTxState::Propose:
+            return TTxState::Done;
         default:
             return TTxState::Invalid;
         }
@@ -67,7 +67,7 @@ class TCreateSubDomain: public TSubOperation {
             return THolder(new NSubDomainState::TConfigureParts(OperationId));
         case TTxState::Propose:
             return THolder(new NSubDomainState::TPropose(OperationId));
-        case TTxState::Done: 
+        case TTxState::Done:
             return THolder(new TDone(OperationId));
         default:
             return nullptr;
@@ -84,11 +84,11 @@ class TCreateSubDomain: public TSubOperation {
     }
 
 public:
-    TCreateSubDomain(TOperationId id, const TTxTransaction& tx) 
+    TCreateSubDomain(TOperationId id, const TTxTransaction& tx)
         : OperationId(id)
-        , Transaction(tx) 
-    { 
-    } 
+        , Transaction(tx)
+    {
+    }
 
     TCreateSubDomain(TOperationId id, TTxState::ETxState state)
         : OperationId(id)
@@ -101,10 +101,10 @@ public:
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const auto acceptExisted = !Transaction.GetFailOnExist();
-        const auto& settings = Transaction.GetSubDomain(); 
+        const auto& settings = Transaction.GetSubDomain();
 
-        const TString& parentPathStr = Transaction.GetWorkingDir(); 
-        const TString& name = settings.GetName(); 
+        const TString& parentPathStr = Transaction.GetWorkingDir();
+        const TString& name = settings.GetName();
 
         ui64 shardsToCreate = settings.GetCoordinators() + settings.GetMediators();
 
@@ -151,20 +151,20 @@ public:
             }
         }
 
-        const TString acl = Transaction.GetModifyACL().GetDiffACL(); 
- 
+        const TString acl = Transaction.GetModifyACL().GetDiffACL();
+
         NSchemeShard::TPath dstPath = parentPath.Child(name);
         {
             NSchemeShard::TPath::TChecker checks = dstPath.Check();
             checks.IsAtLocalSchemeShard();
             if (dstPath.IsResolved()) {
-                checks 
-                    .IsResolved() 
+                checks
+                    .IsResolved()
                     .NotUnderDeleting()
                     .FailOnExist(TPathElement::EPathType::EPathTypeSubDomain, acceptExisted);
             } else {
-                checks 
-                    .NotEmpty() 
+                checks
+                    .NotEmpty()
                     .NotResolved();
             }
 
@@ -175,8 +175,8 @@ public:
                     .PathsLimit() //check capacity on root Domain
                     .DirChildrenLimit()
                     .PathShardsLimit(shardsToCreate)
-                    .ShardsLimit(shardsToCreate) //check capacity on root Domain 
-                    .IsValidACL(acl); 
+                    .ShardsLimit(shardsToCreate) //check capacity on root Domain
+                    .IsValidACL(acl);
             }
 
             if (!checks) {
@@ -225,11 +225,11 @@ public:
             return result;
         }
 
-        if (settings.HasResourcesDomainKey()) { 
+        if (settings.HasResourcesDomainKey()) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, "Resources domain key unsupported for non-external subdomains");
-            return result; 
-        } 
- 
+            return result;
+        }
+
         auto domainId = parentPath.DomainId();
         Y_VERIFY(context.SS->PathsById.contains(domainId));
         Y_VERIFY(context.SS->SubDomains.contains(domainId));
@@ -256,11 +256,11 @@ public:
             }
         }
 
-        const auto& userAttrsDetails = Transaction.GetAlterUserAttributes(); 
+        const auto& userAttrsDetails = Transaction.GetAlterUserAttributes();
         TUserAttributes::TPtr userAttrs = new TUserAttributes(1);
- 
-        TString errStr; 
- 
+
+        TString errStr;
+
         if (!userAttrs->ApplyPatch(EUserAttributesOp::CreateSubDomain, userAttrsDetails, errStr) ||
             !userAttrs->CheckLimits(errStr))
         {
@@ -268,7 +268,7 @@ public:
             return result;
         }
 
-        if (!context.SS->CheckApplyIf(Transaction, errStr)) { 
+        if (!context.SS->CheckApplyIf(Transaction, errStr)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;
         }
@@ -304,8 +304,8 @@ public:
         TSubDomainInfo::TPtr alter = new TSubDomainInfo(
                     1,
                     settings.GetPlanResolution(),
-                    settings.GetTimeCastBucketsPerMediator(), 
-                    newNode->PathId); 
+                    settings.GetTimeCastBucketsPerMediator(),
+                    newNode->PathId);
 
         alter->SetSchemeLimits(parentPath.DomainInfo()->GetSchemeLimits()); //inherit from root
 
@@ -370,16 +370,16 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override { 
-        Y_FAIL("no AbortPropose for TCreateSubDomain"); 
-    } 
- 
+    void AbortPropose(TOperationContext&) override {
+        Y_FAIL("no AbortPropose for TCreateSubDomain");
+    }
+
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "TCreateSubDomain AbortUnsafe"
                          << ", opId: " << OperationId
                          << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID()); 
+                         << ", at schemeshard: " << context.SS->TabletID());
 
         context.OnComplete.DoneOperation(OperationId);
     }
@@ -390,12 +390,12 @@ public:
 namespace NKikimr {
 namespace NSchemeShard {
 
-ISubOperationBase::TPtr CreateSubDomain(TOperationId id, const TTxTransaction& tx) { 
-    return new TCreateSubDomain(id, tx); 
-} 
- 
+ISubOperationBase::TPtr CreateSubDomain(TOperationId id, const TTxTransaction& tx) {
+    return new TCreateSubDomain(id, tx);
+}
+
 ISubOperationBase::TPtr CreateSubDomain(TOperationId id, TTxState::ETxState state) {
-    Y_VERIFY(state != TTxState::Invalid); 
+    Y_VERIFY(state != TTxState::Invalid);
     return new TCreateSubDomain(id, state);
 }
 

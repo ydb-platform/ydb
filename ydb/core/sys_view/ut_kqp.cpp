@@ -177,12 +177,12 @@ public:
         UNIT_ASSERT_GE(value.AsUint64(), expected);
     }
 
-    void Uint64LessOrEquals(ui64 expected) { 
-        const auto& value = ExtractOptional(*RowIterator++); 
-        UNIT_ASSERT(value.IsUint64()); 
-        UNIT_ASSERT_LE(value.AsUint64(), expected); 
-    } 
- 
+    void Uint64LessOrEquals(ui64 expected) {
+        const auto& value = ExtractOptional(*RowIterator++);
+        UNIT_ASSERT(value.IsUint64());
+        UNIT_ASSERT_LE(value.AsUint64(), expected);
+    }
+
     void Int64(i64 expected) {
         const auto& value = ExtractOptional(*RowIterator++);
         UNIT_ASSERT(value.IsInt64());
@@ -316,7 +316,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         return; // table is currenty switched off
 
         TTestEnv env;
-        CreateTenantsAndTables(env, false); 
+        CreateTenantsAndTables(env, false);
         TTableClient client(env.GetDriver());
         {
             auto it = client.StreamExecuteScanQuery(R"(
@@ -633,60 +633,60 @@ Y_UNIT_TEST_SUITE(SystemView) {
         check.Null(); // UserSID
     }
 
-    Y_UNIT_TEST(PartitionStatsTtlFields) { 
-        TTestEnv env; 
-        env.GetClient().CreateTable("/Root", R"( 
-            Name: "Table0" 
-            Columns { Name: "Key", Type: "Uint64" } 
-            Columns { Name: "CreatedAt", Type: "Timestamp" } 
-            KeyColumnNames: ["Key"] 
-            TTLSettings { 
-              Enabled { 
-                ColumnName: "CreatedAt" 
-              } 
-            } 
-        )"); 
- 
-        TTableClient client(env.GetDriver()); 
-        auto session = client.CreateSession().GetValueSync().GetSession(); 
-        NKqp::AssertSuccessResult(session.ExecuteDataQuery( 
-            "REPLACE INTO `Root/Table0` (Key, CreatedAt) VALUES (0u, CAST(0 AS Timestamp));", 
-            TTxControl::BeginTx().CommitTx() 
-        ).GetValueSync()); 
- 
-        // wait for conditional erase 
-        for (size_t iter = 0; iter < 70; ++iter) { 
-            auto result = session.ExecuteDataQuery( 
-                "SELECT * FROM `Root/Table0`;", TTxControl::BeginTx().CommitTx() 
-            ).ExtractValueSync(); 
- 
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString()); 
-            auto ysonString = FormatResultSetYson(result.GetResultSet(0)); 
-            if (ysonString == "[[#]]") { 
-                break; 
-            } 
- 
-            Sleep(TDuration::Seconds(1)); 
-        } 
- 
-        auto it = client.StreamExecuteScanQuery(R"( 
-            SELECT 
-                LastTtlRunTime, 
-                LastTtlRowsProcessed, 
-                LastTtlRowsErased 
-            FROM `/Root/.sys/partition_stats`; 
-        )").GetValueSync(); 
- 
-        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString()); 
-        auto ysonString = NKqp::StreamResultToYson(it); 
- 
-        TYsonFieldChecker check(ysonString, 3); 
- 
-        check.Uint64LessOrEquals(TInstant::Now().MicroSeconds()); // LastTtlRunTime 
-        check.Uint64(1u); // LastTtlRowsProcessed 
-        check.Uint64(1u); // LastTtlRowsErased 
-    } 
- 
+    Y_UNIT_TEST(PartitionStatsTtlFields) {
+        TTestEnv env;
+        env.GetClient().CreateTable("/Root", R"(
+            Name: "Table0"
+            Columns { Name: "Key", Type: "Uint64" }
+            Columns { Name: "CreatedAt", Type: "Timestamp" }
+            KeyColumnNames: ["Key"]
+            TTLSettings {
+              Enabled {
+                ColumnName: "CreatedAt"
+              }
+            }
+        )");
+
+        TTableClient client(env.GetDriver());
+        auto session = client.CreateSession().GetValueSync().GetSession();
+        NKqp::AssertSuccessResult(session.ExecuteDataQuery(
+            "REPLACE INTO `Root/Table0` (Key, CreatedAt) VALUES (0u, CAST(0 AS Timestamp));",
+            TTxControl::BeginTx().CommitTx()
+        ).GetValueSync());
+
+        // wait for conditional erase
+        for (size_t iter = 0; iter < 70; ++iter) {
+            auto result = session.ExecuteDataQuery(
+                "SELECT * FROM `Root/Table0`;", TTxControl::BeginTx().CommitTx()
+            ).ExtractValueSync();
+
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            auto ysonString = FormatResultSetYson(result.GetResultSet(0));
+            if (ysonString == "[[#]]") {
+                break;
+            }
+
+            Sleep(TDuration::Seconds(1));
+        }
+
+        auto it = client.StreamExecuteScanQuery(R"(
+            SELECT
+                LastTtlRunTime,
+                LastTtlRowsProcessed,
+                LastTtlRowsErased
+            FROM `/Root/.sys/partition_stats`;
+        )").GetValueSync();
+
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        auto ysonString = NKqp::StreamResultToYson(it);
+
+        TYsonFieldChecker check(ysonString, 3);
+
+        check.Uint64LessOrEquals(TInstant::Now().MicroSeconds()); // LastTtlRunTime
+        check.Uint64(1u); // LastTtlRowsProcessed
+        check.Uint64(1u); // LastTtlRowsErased
+    }
+
     Y_UNIT_TEST(PartitionStatsFields) {
         NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
 
@@ -1181,7 +1181,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             const auto& columns = table.GetTableColumns();
             const auto& keyColumns = table.GetPrimaryKeyColumns();
 
-            UNIT_ASSERT_VALUES_EQUAL(columns.size(), 26); 
+            UNIT_ASSERT_VALUES_EQUAL(columns.size(), 26);
             UNIT_ASSERT_STRINGS_EQUAL(columns[0].Name, "OwnerId");
             UNIT_ASSERT_STRINGS_EQUAL(FormatType(columns[0].Type), "Uint64?");
 
@@ -1301,7 +1301,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
     Y_UNIT_TEST(DescribeSystemFolder) {
         TTestEnv env;
-        CreateTenantsAndTables(env, false); 
+        CreateTenantsAndTables(env, false);
 
         TSchemeClient schemeClient(env.GetDriver());
         {
@@ -1324,7 +1324,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
             auto entry = result.GetEntry();
-            UNIT_ASSERT_VALUES_EQUAL(entry.Name, "Tenant1"); 
+            UNIT_ASSERT_VALUES_EQUAL(entry.Name, "Tenant1");
             UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::SubDomain);
 
             auto children = result.GetChildren();
@@ -1377,7 +1377,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
     Y_UNIT_TEST(DescribeAccessDenied) {
         TTestEnv env;
-        CreateTenantsAndTables(env, false); 
+        CreateTenantsAndTables(env, false);
 
         auto driverConfig = TDriverConfig()
             .SetEndpoint(env.GetEndpoint())

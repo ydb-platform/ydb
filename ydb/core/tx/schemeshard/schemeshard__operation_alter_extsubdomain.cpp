@@ -37,8 +37,8 @@ void PersistShards(NIceDb::TNiceDb& db, TTxState& txState, ui64 shardsToCreate, 
 }
 
 class TAlterExtSubDomain: public TSubOperation {
-    const TOperationId OperationId; 
-    const TTxTransaction Transaction; 
+    const TOperationId OperationId;
+    const TTxTransaction Transaction;
     TTxState::ETxState State = TTxState::Invalid;
 
     TTxState::ETxState NextState() {
@@ -52,8 +52,8 @@ class TAlterExtSubDomain: public TSubOperation {
             return TTxState::ConfigureParts;
         case TTxState::ConfigureParts:
             return TTxState::Propose; // DONE ???
-        case TTxState::Propose: 
-            return TTxState::Done; 
+        case TTxState::Propose:
+            return TTxState::Done;
         default:
             return TTxState::Invalid;
         }
@@ -69,7 +69,7 @@ class TAlterExtSubDomain: public TSubOperation {
             return THolder(new NSubDomainState::TConfigureParts(OperationId));
         case TTxState::Propose:
             return THolder(new NSubDomainState::TPropose(OperationId));
-        case TTxState::Done: 
+        case TTxState::Done:
             return THolder(new TDone(OperationId));
         default:
             return nullptr;
@@ -86,11 +86,11 @@ class TAlterExtSubDomain: public TSubOperation {
     }
 
 public:
-    TAlterExtSubDomain(TOperationId id, const TTxTransaction& tx) 
+    TAlterExtSubDomain(TOperationId id, const TTxTransaction& tx)
         : OperationId(id)
-        , Transaction(tx) 
-    { 
-    } 
+        , Transaction(tx)
+    {
+    }
 
     TAlterExtSubDomain(TOperationId id, TTxState::ETxState state)
         : OperationId(id)
@@ -102,10 +102,10 @@ public:
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
-        const auto& settings = Transaction.GetSubDomain(); 
+        const auto& settings = Transaction.GetSubDomain();
 
-        const TString& parentPathStr = Transaction.GetWorkingDir(); 
-        const TString& name = settings.GetName(); 
+        const TString& parentPathStr = Transaction.GetWorkingDir();
+        const TString& name = settings.GetName();
 
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "TAlterExtSubDomain Propose"
@@ -133,8 +133,8 @@ public:
 
         {
             TPath::TChecker checks = path.Check();
-            checks 
-                .NotEmpty() 
+            checks
+                .NotEmpty()
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
@@ -377,8 +377,8 @@ public:
             }
         }
 
-        TString errStr; 
-        if (!context.SS->CheckApplyIf(Transaction, errStr)) { 
+        TString errStr;
+        if (!context.SS->CheckApplyIf(Transaction, errStr)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;
         }
@@ -412,7 +412,7 @@ public:
 
         if (addExternalHive) {
             DeclareShards(txState, OperationId.GetTxId(), subDomain->PathId, 1, TTabletTypes::Hive, channelBindings, context.SS);
-        } else if (!alterData->GetSharedHive()) { 
+        } else if (!alterData->GetSharedHive()) {
             alterData->SetSharedHive(context.SS->GetGlobalHive(context.Ctx));
         }
 
@@ -441,16 +441,16 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override { 
-        Y_FAIL("no AbortPropose for TAlterSubDomain"); 
-    } 
- 
+    void AbortPropose(TOperationContext&) override {
+        Y_FAIL("no AbortPropose for TAlterSubDomain");
+    }
+
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "TAlterSubDomain AbortUnsafe"
                          << ", opId: " << OperationId
                          << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID()); 
+                         << ", at schemeshard: " << context.SS->TabletID());
 
         context.OnComplete.DoneOperation(OperationId);
     }
@@ -461,12 +461,12 @@ public:
 namespace NKikimr {
 namespace NSchemeShard {
 
-ISubOperationBase::TPtr CreateAlterExtSubDomain(TOperationId id, const TTxTransaction& tx) { 
-    return new TAlterExtSubDomain(id, tx); 
-} 
- 
+ISubOperationBase::TPtr CreateAlterExtSubDomain(TOperationId id, const TTxTransaction& tx) {
+    return new TAlterExtSubDomain(id, tx);
+}
+
 ISubOperationBase::TPtr CreateAlterExtSubDomain(TOperationId id, TTxState::ETxState state) {
-    Y_VERIFY(state != TTxState::Invalid); 
+    Y_VERIFY(state != TTxState::Invalid);
     return new TAlterExtSubDomain(id, state);
 }
 

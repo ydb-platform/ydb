@@ -31,7 +31,7 @@ public:
                 TInstant deadline = time + TDuration::MicroSeconds(i->GetDuration());
 
                 if (deadline <= now) {
-                    LOG_INFO(ctx, NKikimrServices::CMS, "Removing expired action from notification %s: %s", 
+                    LOG_INFO(ctx, NKikimrServices::CMS, "Removing expired action from notification %s: %s",
                               info.NotificationId.data(), i->ShortDebugString().data());
 
                     i = actions->erase(i);
@@ -41,9 +41,9 @@ public:
             }
 
             if (actions->empty()) {
-                Self->AuditLog(ctx, TStringBuilder() << "Remove notification" 
-                    << ": id# " << info.NotificationId 
-                    << ", reason# " << "scheduled cleanup"); 
+                Self->AuditLog(ctx, TStringBuilder() << "Remove notification"
+                    << ": id# " << info.NotificationId
+                    << ", reason# " << "scheduled cleanup");
 
                 NIceDb::TNiceDb db(txc.DB);
                 db.Table<Schema::Notification>().Key(info.NotificationId).Delete();
@@ -57,9 +57,9 @@ public:
                 auto row = db.Table<Schema::Notification>().Key(info.NotificationId);
                 row.Update(NIceDb::TUpdate<Schema::Notification::NotificationProto>(notificationStr));
 
-                Self->AuditLog(ctx, TStringBuilder() << "Update notification" 
-                    << ": id# " << info.NotificationId 
-                    << ", body# " << notificationStr); 
+                Self->AuditLog(ctx, TStringBuilder() << "Update notification"
+                    << ": id# " << info.NotificationId
+                    << ", body# " << notificationStr);
             }
 
             entry = next;

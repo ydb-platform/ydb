@@ -4437,7 +4437,7 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
         points.add_split_points()->CopyFrom(point);
         keyVal.mutable_items(0)->set_uint64_value(20);
         points.add_split_points()->CopyFrom(point);
-        CreateTable(server, "/Root/ydb_ut_tenant/table-1", profile, Ydb::StatusIds::SCHEME_ERROR); 
+        CreateTable(server, "/Root/ydb_ut_tenant/table-1", profile, Ydb::StatusIds::SCHEME_ERROR);
     }
 
     Y_UNIT_TEST(ExplicitPartitionsComplex) {
@@ -4512,7 +4512,7 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
         keyVal.add_items()->set_bytes_value("value1");
         auto &points = *policy.mutable_explicit_partitions();
         points.add_split_points()->CopyFrom(point);
-        CreateTableComplexKey(server, "/Root/ydb_ut_tenant/table-1", profile, Ydb::StatusIds::SCHEME_ERROR); 
+        CreateTableComplexKey(server, "/Root/ydb_ut_tenant/table-1", profile, Ydb::StatusIds::SCHEME_ERROR);
     }
 
     void CheckRepeated(const ::google::protobuf::RepeatedPtrField<TString> &array,

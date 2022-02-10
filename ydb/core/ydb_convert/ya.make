@@ -1,15 +1,15 @@
-LIBRARY() 
- 
+LIBRARY()
+
 OWNER(g:kikimr)
- 
-SRCS( 
-    column_families.cpp 
-    table_settings.cpp 
-    table_description.cpp 
-    ydb_convert.cpp 
-) 
- 
-PEERDIR( 
+
+SRCS(
+    column_families.cpp
+    table_settings.cpp
+    table_description.cpp
+    ydb_convert.cpp
+)
+
+PEERDIR(
     ydb/core/base
     ydb/core/engine
     ydb/core/protos
@@ -20,8 +20,8 @@ PEERDIR(
     ydb/library/yql/minikql/dom
     ydb/library/yql/public/udf
     ydb/public/api/protos
-) 
- 
+)
+
 YQL_LAST_ABI_VERSION()
 
 END()

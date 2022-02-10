@@ -184,7 +184,7 @@ private:
             entry.RequestType = TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
             entry.Operation = TSchemeCacheNavigate::EOp::OpTable;
             entry.SyncVersion = false;
-            entry.ShowPrivatePath = true; 
+            entry.ShowPrivatePath = true;
 
             navigate->ResultSet.emplace_back(entry);
         }

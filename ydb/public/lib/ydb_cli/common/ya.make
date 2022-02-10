@@ -3,24 +3,24 @@ LIBRARY(common)
 OWNER(g:kikimr)
 
 SRCS(
-    aws.cpp 
+    aws.cpp
     command.cpp
     common.cpp
     examples.cpp
-    format.cpp 
+    format.cpp
     interruptible.cpp
     normalize_path.cpp
     parameters.cpp
-    pretty_table.cpp 
-    print_operation.cpp 
-    print_utils.cpp 
+    pretty_table.cpp
+    print_operation.cpp
+    print_utils.cpp
     profile_manager.cpp
     query_stats.cpp
-    recursive_list.cpp 
+    recursive_list.cpp
     root.cpp
     tabbed_table.cpp
     ydb_updater.cpp
-    yt.cpp 
+    yt.cpp
 )
 
 PEERDIR(
@@ -36,8 +36,8 @@ PEERDIR(
     ydb/public/sdk/cpp/client/ydb_types/credentials
 )
 
-GENERATE_ENUM_SERIALIZATION(formats.h) 
- 
+GENERATE_ENUM_SERIALIZATION(formats.h)
+
 END()
 
 RECURSE_FOR_TESTS(

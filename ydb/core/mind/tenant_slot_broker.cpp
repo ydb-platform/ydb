@@ -398,10 +398,10 @@ TTenantSlotBroker::TSlot::TPtr TTenantSlotBroker::TFreeSlotsIndex::Find(const TS
     return *it2->second.begin();
 }
 
-ui64 TTenantSlotBroker::Generation() const { 
-    return Executor()->Generation(); 
-} 
- 
+ui64 TTenantSlotBroker::Generation() const {
+    return Executor()->Generation();
+}
+
 void TTenantSlotBroker::OnActivateExecutor(const TActorContext &ctx)
 {
     RequestId = Now().GetValue();
@@ -1692,7 +1692,7 @@ void TTenantSlotBroker::Handle(TEvTenantPool::TEvLostOwnership::TPtr &ev,
     LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,
                 "Re-taking ownership of tenant pool on node " << nodeId);
 
-    ctx.Send(MakeTenantPoolID(nodeId, DomainId), new TEvTenantPool::TEvTakeOwnership(Generation())); 
+    ctx.Send(MakeTenantPoolID(nodeId, DomainId), new TEvTenantPool::TEvTakeOwnership(Generation()));
 }
 
 void TTenantSlotBroker::Handle(TEvTabletPipe::TEvServerConnected::TPtr &ev,
@@ -1769,14 +1769,14 @@ void TTenantSlotBroker::Handle(TEvTenantSlotBroker::TEvListTenants::TPtr &ev,
 void TTenantSlotBroker::Handle(TEvTenantSlotBroker::TEvRegisterPool::TPtr &ev,
                                const TActorContext &ctx)
 {
-    const auto &record = ev->Get()->Record; 
+    const auto &record = ev->Get()->Record;
     auto nodeId = ev->Sender.NodeId();
 
     KnownPoolPipes.insert(ActorIdFromProto(record.GetClientId()));
     *Counters->ConnectedPools = KnownPoolPipes.size();
 
     DisconnectNodeSlots(nodeId, ctx);
-    ctx.Send(ev->Sender, new TEvTenantPool::TEvTakeOwnership(Generation(), record.GetSeqNo())); 
+    ctx.Send(ev->Sender, new TEvTenantPool::TEvTakeOwnership(Generation(), record.GetSeqNo()));
 }
 
 IActor *CreateTenantSlotBroker(const TActorId &tablet,

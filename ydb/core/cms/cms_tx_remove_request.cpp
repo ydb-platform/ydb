@@ -8,9 +8,9 @@ namespace NCms {
 
 class TCms::TTxRemoveRequest : public TTransactionBase<TCms> {
 public:
-    TTxRemoveRequest(TCms *self, const TString &id, THolder<IEventBase> req, TAutoPtr<IEventHandle> resp) 
+    TTxRemoveRequest(TCms *self, const TString &id, THolder<IEventBase> req, TAutoPtr<IEventHandle> resp)
         : TBase(self)
-        , Request(std::move(req)) 
+        , Request(std::move(req))
         , Response(resp)
         , Id(id)
     {
@@ -24,9 +24,9 @@ public:
         db.Table<Schema::Request>().Key(Id).Delete();
         Self->State->ScheduledRequests.erase(Id);
 
-        Self->AuditLog(ctx, TStringBuilder() << "Remove request" 
-            << ": id# " << Id 
-            << ", reason# " << (Request ? "explicit remove" : "scheduled cleanup")); 
+        Self->AuditLog(ctx, TStringBuilder() << "Remove request"
+            << ": id# " << Id
+            << ", reason# " << (Request ? "explicit remove" : "scheduled cleanup"));
 
         return true;
     }
@@ -36,22 +36,22 @@ public:
         LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxRemoveRequest Complete");
 
         if (Response) {
-            Y_VERIFY(Request); 
-            Self->Reply(Request.Get(), Response, ctx); 
+            Y_VERIFY(Request);
+            Self->Reply(Request.Get(), Response, ctx);
         }
 
         Self->RemoveEmptyWalleTasks(ctx);
     }
 
 private:
-    THolder<IEventBase> Request; 
+    THolder<IEventBase> Request;
     TAutoPtr<IEventHandle> Response;
     TString Id;
 };
 
-ITransaction* TCms::CreateTxRemoveRequest(const TString &id, THolder<IEventBase> req, TAutoPtr<IEventHandle> resp) 
+ITransaction* TCms::CreateTxRemoveRequest(const TString &id, THolder<IEventBase> req, TAutoPtr<IEventHandle> resp)
 {
-    return new TTxRemoveRequest(this, id, std::move(req), std::move(resp)); 
+    return new TTxRemoveRequest(this, id, std::move(req), std::move(resp));
 }
 
 } // NCms

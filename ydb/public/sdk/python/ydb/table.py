@@ -452,77 +452,77 @@ class TableProfile(object):
         return pb
 
 
-class DateTypeColumnModeSettings(object): 
-    def __init__(self, column_name, expire_after_seconds=0): 
-        self.column_name = column_name 
-        self.expire_after_seconds = expire_after_seconds 
- 
-    def to_pb(self): 
-        pb = _apis.ydb_table.DateTypeColumnModeSettings() 
- 
-        pb.column_name = self.column_name 
-        pb.expire_after_seconds = self.expire_after_seconds 
- 
-        return pb 
- 
- 
-@enum.unique 
-class ColumnUnit(enum.IntEnum): 
-    UNIT_UNSPECIFIED = 0 
-    UNIT_SECONDS = 1 
-    UNIT_MILLISECONDS = 2 
-    UNIT_MICROSECONDS = 3 
-    UNIT_NANOSECONDS = 4 
- 
- 
-class ValueSinceUnixEpochModeSettings(object): 
-    def __init__(self, column_name, column_unit, expire_after_seconds=0): 
-        self.column_name = column_name 
-        self.column_unit = column_unit 
-        self.expire_after_seconds = expire_after_seconds 
- 
-    def to_pb(self): 
-        pb = _apis.ydb_table.ValueSinceUnixEpochModeSettings() 
- 
-        pb.column_name = self.column_name 
-        pb.column_unit = self.column_unit 
-        pb.expire_after_seconds = self.expire_after_seconds 
- 
-        return pb 
- 
- 
-class TtlSettings(object): 
-    def __init__(self): 
-        self.date_type_column = None 
-        self.value_since_unix_epoch = None 
- 
-    def with_date_type_column(self, column_name, expire_after_seconds=0): 
+class DateTypeColumnModeSettings(object):
+    def __init__(self, column_name, expire_after_seconds=0):
+        self.column_name = column_name
+        self.expire_after_seconds = expire_after_seconds
+
+    def to_pb(self):
+        pb = _apis.ydb_table.DateTypeColumnModeSettings()
+
+        pb.column_name = self.column_name
+        pb.expire_after_seconds = self.expire_after_seconds
+
+        return pb
+
+
+@enum.unique
+class ColumnUnit(enum.IntEnum):
+    UNIT_UNSPECIFIED = 0
+    UNIT_SECONDS = 1
+    UNIT_MILLISECONDS = 2
+    UNIT_MICROSECONDS = 3
+    UNIT_NANOSECONDS = 4
+
+
+class ValueSinceUnixEpochModeSettings(object):
+    def __init__(self, column_name, column_unit, expire_after_seconds=0):
+        self.column_name = column_name
+        self.column_unit = column_unit
+        self.expire_after_seconds = expire_after_seconds
+
+    def to_pb(self):
+        pb = _apis.ydb_table.ValueSinceUnixEpochModeSettings()
+
+        pb.column_name = self.column_name
+        pb.column_unit = self.column_unit
+        pb.expire_after_seconds = self.expire_after_seconds
+
+        return pb
+
+
+class TtlSettings(object):
+    def __init__(self):
+        self.date_type_column = None
+        self.value_since_unix_epoch = None
+
+    def with_date_type_column(self, column_name, expire_after_seconds=0):
         self.date_type_column = DateTypeColumnModeSettings(
             column_name, expire_after_seconds
         )
-        return self 
- 
+        return self
+
     def with_value_since_unix_epoch(
         self, column_name, column_unit, expire_after_seconds=0
     ):
         self.value_since_unix_epoch = ValueSinceUnixEpochModeSettings(
             column_name, column_unit, expire_after_seconds
         )
-        return self 
- 
-    def to_pb(self): 
-        pb = _apis.ydb_table.TtlSettings() 
- 
-        if self.date_type_column is not None: 
-            pb.date_type_column.MergeFrom(self.date_type_column.to_pb()) 
-        elif self.value_since_unix_epoch is not None: 
-            pb.value_since_unix_epoch.MergeFrom(self.value_since_unix_epoch.to_pb()) 
-        else: 
-            raise RuntimeError("Unspecified ttl settings mode") 
- 
-        return pb 
- 
- 
+        return self
+
+    def to_pb(self):
+        pb = _apis.ydb_table.TtlSettings()
+
+        if self.date_type_column is not None:
+            pb.date_type_column.MergeFrom(self.date_type_column.to_pb())
+        elif self.value_since_unix_epoch is not None:
+            pb.value_since_unix_epoch.MergeFrom(self.value_since_unix_epoch.to_pb())
+        else:
+            raise RuntimeError("Unspecified ttl settings mode")
+
+        return pb
+
+
 class TableStats(object):
     def __init__(self):
         self.partitions = None
@@ -680,8 +680,8 @@ class TableDescription(object):
         self.profile = None
         self.indexes = []
         self.column_families = []
-        self.ttl_settings = None 
-        self.attributes = {} 
+        self.ttl_settings = None
+        self.attributes = {}
         self.uniform_partitions = 0
         self.partition_at_keys = None
         self.compaction_policy = None
@@ -734,18 +734,18 @@ class TableDescription(object):
         self.profile = profile
         return self
 
-    def with_ttl(self, ttl_settings): 
-        self.ttl_settings = ttl_settings 
-        return self 
+    def with_ttl(self, ttl_settings):
+        self.ttl_settings = ttl_settings
+        return self
 
-    def with_attributes(self, attributes): 
-        self.attributes = attributes 
-        return self 
- 
+    def with_attributes(self, attributes):
+        self.attributes = attributes
+        return self
+
     def with_uniform_partitions(self, uniform_partitions):
         self.uniform_partitions = uniform_partitions
         return self
- 
+
     def with_partition_at_keys(self, partition_at_keys):
         self.partition_at_keys = partition_at_keys
         return self
@@ -1460,19 +1460,19 @@ class TableSchemeEntry(scheme.SchemeEntry):
                     getattr(partitioning_settings, field),
                 )
 
-        self.ttl_settings = None 
-        if ttl_settings is not None: 
+        self.ttl_settings = None
+        if ttl_settings is not None:
             if ttl_settings.HasField("date_type_column"):
-                self.ttl_settings = TtlSettings().with_date_type_column( 
-                    ttl_settings.date_type_column.column_name, 
+                self.ttl_settings = TtlSettings().with_date_type_column(
+                    ttl_settings.date_type_column.column_name,
                     ttl_settings.date_type_column.expire_after_seconds,
-                ) 
+                )
             elif ttl_settings.HasField("value_since_unix_epoch"):
-                self.ttl_settings = TtlSettings().with_value_since_unix_epoch( 
-                    ttl_settings.value_since_unix_epoch.column_name, 
-                    ColumnUnit(ttl_settings.value_since_unix_epoch.column_unit), 
+                self.ttl_settings = TtlSettings().with_value_since_unix_epoch(
+                    ttl_settings.value_since_unix_epoch.column_name,
+                    ColumnUnit(ttl_settings.value_since_unix_epoch.column_unit),
                     ttl_settings.value_since_unix_epoch.expire_after_seconds,
-                ) 
+                )
 
         self.table_stats = None
         if table_stats is not None:
@@ -1487,9 +1487,9 @@ class TableSchemeEntry(scheme.SchemeEntry):
                     table_stats.store_size
                 )
 
-        self.attributes = attributes 
- 
- 
+        self.attributes = attributes
+
+
 class RenameItem:
     def __init__(self, source_path, destination_path, replace_destination=False):
         self._source_path = source_path
@@ -1726,12 +1726,12 @@ class BaseSession(ISession):
         set_read_replicas_settings=None,
     ):
         return self._driver(
-            _session_impl.alter_table_request_factory( 
+            _session_impl.alter_table_request_factory(
                 self._state,
                 path,
                 add_columns,
                 drop_columns,
-                alter_attributes, 
+                alter_attributes,
                 add_indexes,
                 drop_indexes,
                 set_ttl_settings,
@@ -1743,7 +1743,7 @@ class BaseSession(ISession):
                 alter_partitioning_settings,
                 set_key_bloom_filter,
                 set_read_replicas_settings,
-            ), 
+            ),
             _apis.TableService.Stub,
             _apis.TableService.AlterTable,
             _session_impl.AlterTableOperation,
@@ -1959,12 +1959,12 @@ class Session(BaseSession):
         set_read_replicas_settings=None,
     ):
         return self._driver.future(
-            _session_impl.alter_table_request_factory( 
+            _session_impl.alter_table_request_factory(
                 self._state,
                 path,
                 add_columns,
                 drop_columns,
-                alter_attributes, 
+                alter_attributes,
                 add_indexes,
                 drop_indexes,
                 set_ttl_settings,
@@ -1976,7 +1976,7 @@ class Session(BaseSession):
                 alter_partitioning_settings,
                 set_key_bloom_filter,
                 set_read_replicas_settings,
-            ), 
+            ),
             _apis.TableService.Stub,
             _apis.TableService.AlterTable,
             _session_impl.AlterTableOperation,

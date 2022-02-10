@@ -1,7 +1,7 @@
 #pragma once
 
-#include "audit_log.h" 
- 
+#include "audit_log.h"
+
 #include <ydb/core/base/defs.h>
 
 #include <library/cpp/actors/core/actor.h>
@@ -98,7 +98,7 @@ protected:
 
     void ReplyWithErrorAndDie(const TString &err, const TActorContext &ctx)
     {
-        ReplyAndDieImpl(err, ctx); 
+        ReplyAndDieImpl(err, ctx);
     }
 
     void ReplyAndDie(const typename TResponseEvent::ProtoRecordType &resp, const TActorContext &ctx)
@@ -114,13 +114,13 @@ protected:
 
     void ReplyAndDie(const TString &json, const TActorContext &ctx)
     {
-        ReplyAndDieImpl(TString(NMonitoring::HTTPOKJSON) + json, ctx); 
-    } 
+        ReplyAndDieImpl(TString(NMonitoring::HTTPOKJSON) + json, ctx);
+    }
 
-    void ReplyAndDieImpl(const TString &data, const TActorContext &ctx) 
-    { 
-        AuditLog("JsonProxy", RequestEvent, data, ctx); 
-        ctx.Send(RequestEvent->Sender, new NMon::TEvHttpInfoRes(data, 0, NMon::IEvHttpInfoRes::EContentType::Custom)); 
+    void ReplyAndDieImpl(const TString &data, const TActorContext &ctx)
+    {
+        AuditLog("JsonProxy", RequestEvent, data, ctx);
+        ctx.Send(RequestEvent->Sender, new NMon::TEvHttpInfoRes(data, 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         TBase::Die(ctx);
     }
 

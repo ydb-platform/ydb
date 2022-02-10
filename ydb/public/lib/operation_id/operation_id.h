@@ -7,15 +7,15 @@
 #include <util/generic/vector.h>
 
 namespace NKikimr {
-namespace NOperationId { 
+namespace NOperationId {
 
 class TOperationId : public Ydb::TOperationId {
 public:
-    TOperationId(); 
-    explicit TOperationId(const TString& string, bool allowEmpty = false); 
+    TOperationId();
+    explicit TOperationId(const TString& string, bool allowEmpty = false);
     const TVector<const TString*>& GetValue(const TString& key) const;
-    TString GetSubKind() const; 
- 
+    TString GetSubKind() const;
+
 private:
      THashMap<TString, TVector<const TString*>> Index_;
 };
@@ -23,7 +23,7 @@ private:
 TString ProtoToString(const Ydb::TOperationId& proto);
 void AddOptionalValue(Ydb::TOperationId& proto, const TString& key, const TString& value);
 void AddOptionalValue(Ydb::TOperationId& proto, const TString& key, const char* value, size_t size);
-Ydb::TOperationId::EKind ParseKind(const TStringBuf value); 
+Ydb::TOperationId::EKind ParseKind(const TStringBuf value);
 
-} // namespace NOperationId 
+} // namespace NOperationId
 } // namespace NKikimr

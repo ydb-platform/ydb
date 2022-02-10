@@ -1437,9 +1437,9 @@ public:
         , DbSchemeResolver(dbSchemeResolver)
         , ResponseTo(responseTo)
         , ResolveRefreshCookies(std::move(resolveRefreshCookies))
-    { 
-        Y_UNUSED(forceCacheRefresh); 
-    } 
+    {
+        Y_UNUSED(forceCacheRefresh);
+    }
 
     void Bootstrap(const TActorContext& ctx) {
         auto* appData = AppData(ctx);

@@ -66,7 +66,7 @@ protected:
                 promise.SetValue(std::move(st));
             };
 
-        Connections_->RunDeferred<TService, TRequest, TResponse>( 
+        Connections_->RunDeferred<TService, TRequest, TResponse>(
             std::move(request),
             extractor,
             rpc,
@@ -79,37 +79,37 @@ protected:
         return promise.GetFuture();
     }
 
-    template<typename TService, typename TRequest, typename TResponse, typename TOp> 
-    NThreading::TFuture<TOp> RunOperation( 
-        TRequest&& request, 
-        TAsyncRequest<TService, TRequest, TResponse> rpc, 
+    template<typename TService, typename TRequest, typename TResponse, typename TOp>
+    NThreading::TFuture<TOp> RunOperation(
+        TRequest&& request,
+        TAsyncRequest<TService, TRequest, TResponse> rpc,
         const TRpcRequestSettings& requestSettings = {},
-        TDuration timeout = TDuration::Zero()) 
-    { 
-        auto promise = NThreading::NewPromise<TOp>(); 
- 
+        TDuration timeout = TDuration::Zero())
+    {
+        auto promise = NThreading::NewPromise<TOp>();
+
         auto extractor = [promise]
             (Ydb::Operations::Operation* operation, TPlainStatus status) mutable {
                 TStatus st(std::move(status));
-                if (!operation) { 
-                    promise.SetValue(TOp(std::move(st))); 
-                } else { 
-                    promise.SetValue(TOp(std::move(st), std::move(*operation))); 
-                } 
-            }; 
- 
-        Connections_->RunDeferred<TService, TRequest, TResponse>( 
-            std::move(request), 
-            extractor, 
-            rpc, 
-            DbDriverState_, 
+                if (!operation) {
+                    promise.SetValue(TOp(std::move(st)));
+                } else {
+                    promise.SetValue(TOp(std::move(st), std::move(*operation)));
+                }
+            };
+
+        Connections_->RunDeferred<TService, TRequest, TResponse>(
+            std::move(request),
+            extractor,
+            rpc,
+            DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
             requestSettings,
-            timeout); 
- 
-        return promise.GetFuture(); 
-    } 
- 
+            timeout);
+
+        return promise.GetFuture();
+    }
+
 protected:
     std::shared_ptr<TGRpcConnectionsImpl> Connections_;
     TDbDriverStatePtr DbDriverState_;

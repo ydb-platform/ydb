@@ -128,7 +128,7 @@ void TAddColumnActor::HandleTableInfo(TEvTxProxySchemeCache::TEvNavigateKeySetRe
     if (navigate->ErrorCount > 0) {
         LOG_SQS_ERROR("Queue " << TLogQueueName(UserName, QueueName)
                                << " migration. Failed to get table \"" << TablePath << "\" info: "
-                               << entry.Status); 
+                               << entry.Status);
         SendReplyAndDie(false);
     } else {
         LOG_SQS_DEBUG("Queue " << TLogQueueName(UserName, QueueName)

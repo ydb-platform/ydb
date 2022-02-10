@@ -95,7 +95,7 @@ TClientCommand::TClientCommand(const TString& name, const std::initializer_list<
     HideOption("svnrevision");
     Opts.AddHelpOption('h');
     ChangeOptionDescription("help", "Print usage");
-    Opts.SetWrap(Max(Opts.Wrap_, static_cast<ui32>(TermWidth()))); 
+    Opts.SetWrap(Max(Opts.Wrap_, static_cast<ui32>(TermWidth())));
 }
 
 
@@ -370,7 +370,7 @@ void TCommandWithPath::AdjustPath(const TClientCommand::TConfig& config) {
         throw TMissUseException() << "Missing required argument <path>";
     }
 
-    NConsoleClient::AdjustPath(Path, config); 
+    NConsoleClient::AdjustPath(Path, config);
 }
 
 void TCommandWithStreamName::ParseStreamName(const TClientCommand::TConfig &config, const size_t argPos) {

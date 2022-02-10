@@ -55,9 +55,9 @@ protected:
     void Handle(TEvRenameTablesRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDescribeTableRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvGetOperationRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvCancelOperationRequest::TPtr& ev, const TActorContext& ctx); 
-    void Handle(TEvForgetOperationRequest::TPtr& ev, const TActorContext& ctx); 
-    void Handle(TEvListOperationsRequest::TPtr& ev, const TActorContext& ctx); 
+    void Handle(TEvCancelOperationRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvForgetOperationRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvListOperationsRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvCreateSessionRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvKeepAliveRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDeleteSessionRequest::TPtr& ev, const TActorContext& ctx);
@@ -96,10 +96,10 @@ protected:
     void Handle(TEvPQAddReadRuleRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQRemoveReadRuleRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQDescribeTopicRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvExportToYtRequest::TPtr& ev, const TActorContext& ctx); 
-    void Handle(TEvExportToS3Request::TPtr& ev, const TActorContext& ctx); 
-    void Handle(TEvImportFromS3Request::TPtr& ev, const TActorContext& ctx); 
-    void Handle(TEvImportDataRequest::TPtr& ev, const TActorContext& ctx); 
+    void Handle(TEvExportToYtRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvExportToS3Request::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvImportFromS3Request::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvImportDataRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDiscoverPQClustersRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvBulkUpsertRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvWhoAmIRequest::TPtr& ev, const TActorContext& ctx);

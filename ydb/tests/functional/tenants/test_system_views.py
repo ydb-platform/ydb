@@ -1,77 +1,77 @@
-# -*- coding: utf-8 -*- 
-import logging 
-import os 
+# -*- coding: utf-8 -*-
+import logging
+import os
 import time
- 
-from hamcrest import ( 
-    anything, 
-    assert_that, 
+
+from hamcrest import (
+    anything,
+    assert_that,
     greater_than,
-    has_length, 
-    has_properties, 
-) 
- 
+    has_length,
+    has_properties,
+)
+
 from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.util import LogLevels
 import ydb
- 
-logger = logging.getLogger(__name__) 
- 
- 
-class BaseSystemViews(object): 
-    @classmethod 
-    def setup_class(cls): 
-        cls.cluster = kikimr_cluster_factory( 
-            KikimrConfigGenerator( 
+
+logger = logging.getLogger(__name__)
+
+
+class BaseSystemViews(object):
+    @classmethod
+    def setup_class(cls):
+        cls.cluster = kikimr_cluster_factory(
+            KikimrConfigGenerator(
                 additional_log_configs={
                     'SYSTEM_VIEWS': LogLevels.DEBUG
                 }
-            ) 
-        ) 
-        cls.cluster.start() 
- 
-    @classmethod 
-    def teardown_class(cls): 
-        if hasattr(cls, 'cluster'): 
-            cls.cluster.stop() 
- 
-    def setup_method(self, method=None): 
-        self.database = "/Root/users/{class_name}_{method_name}".format( 
+            )
+        )
+        cls.cluster.start()
+
+    @classmethod
+    def teardown_class(cls):
+        if hasattr(cls, 'cluster'):
+            cls.cluster.stop()
+
+    def setup_method(self, method=None):
+        self.database = "/Root/users/{class_name}_{method_name}".format(
             class_name=self.__class__.__name__,
             method_name=method.__name__,
-        ) 
-        logger.debug("Create database %s" % self.database) 
-        self.cluster.create_database( 
-            self.database, 
-            storage_pool_units_count={ 
-                'hdd': 1 
-            } 
-        ) 
+        )
+        logger.debug("Create database %s" % self.database)
+        self.cluster.create_database(
+            self.database,
+            storage_pool_units_count={
+                'hdd': 1
+            }
+        )
         self.cluster.register_and_start_slots(self.database, count=1)
         self.cluster.wait_tenant_up(self.database)
- 
-    def teardown_method(self, method=None): 
-        logger.debug("Remove database %s" % self.database) 
-        self.cluster.remove_database(self.database) 
-        self.database = None 
- 
-    def create_table(self, driver, table): 
-        with ydb.SessionPool(driver, size=1) as pool: 
-            with pool.checkout() as session: 
-                session.execute_scheme( 
+
+    def teardown_method(self, method=None):
+        logger.debug("Remove database %s" % self.database)
+        self.cluster.remove_database(self.database)
+        self.database = None
+
+    def create_table(self, driver, table):
+        with ydb.SessionPool(driver, size=1) as pool:
+            with pool.checkout() as session:
+                session.execute_scheme(
                     "create table `{}` (key Int32, value String, primary key(key));".format(
-                        table 
-                    ) 
-                ) 
- 
-    def read_partition_stats(self, driver, database): 
-        table = os.path.join(database, '.sys/partition_stats') 
+                        table
+                    )
+                )
+
+    def read_partition_stats(self, driver, database):
+        table = os.path.join(database, '.sys/partition_stats')
         return self._stream_query_result(
             driver,
             "select PathId, PartIdx, Path from `{}`;".format(table)
         )
- 
+
     def read_query_metrics(self, driver, database):
         table = os.path.join(database, '.sys/query_metrics_one_minute')
         return self._stream_query_result(
@@ -86,24 +86,24 @@ class BaseSystemViews(object):
             "select Duration, ReadBytes, CPUTime, RequestUnits from `{}`;".format(table)
         )
 
-    def _stream_query_result(self, driver, query): 
+    def _stream_query_result(self, driver, query):
         it = driver.table_client.scan_query(query)
-        result = [] 
- 
-        while True: 
-            try: 
-                response = next(it) 
-            except StopIteration: 
-                break 
- 
+        result = []
+
+        while True:
+            try:
+                response = next(it)
+            except StopIteration:
+                break
+
             for row in response.result_set.rows:
                 result.append(row)
 
-        return result 
- 
+        return result
+
     def check_query_metrics_and_stats(self, query_count):
         table = os.path.join(self.database, 'table')
- 
+
         driver_config = ydb.DriverConfig(
             "%s:%s" % (self.cluster.nodes[1].host, self.cluster.nodes[1].port),
             self.database
@@ -156,28 +156,28 @@ class BaseSystemViews(object):
                 }))
 
 
-class TestPartitionStats(BaseSystemViews): 
-    def test_case(self): 
-        for database in ('/Root', self.database): 
-            table = os.path.join(database, 'table') 
- 
-            driver_config = ydb.DriverConfig( 
-                "%s:%s" % (self.cluster.nodes[1].host, self.cluster.nodes[1].port), 
-                database 
-            ) 
- 
-            with ydb.Driver(driver_config) as driver: 
-                driver.wait(timeout=10) 
- 
-                self.create_table(driver, table) 
-                stats = self.read_partition_stats(driver, database) 
- 
-                assert_that(stats, has_length(1)) 
-                assert_that(stats[0], has_properties({ 
-                    'Path': table, 
-                    'PathId': anything(), 
-                    'PartIdx': 0, 
-                })) 
+class TestPartitionStats(BaseSystemViews):
+    def test_case(self):
+        for database in ('/Root', self.database):
+            table = os.path.join(database, 'table')
+
+            driver_config = ydb.DriverConfig(
+                "%s:%s" % (self.cluster.nodes[1].host, self.cluster.nodes[1].port),
+                database
+            )
+
+            with ydb.Driver(driver_config) as driver:
+                driver.wait(timeout=10)
+
+                self.create_table(driver, table)
+                stats = self.read_partition_stats(driver, database)
+
+                assert_that(stats, has_length(1))
+                assert_that(stats[0], has_properties({
+                    'Path': table,
+                    'PathId': anything(),
+                    'PartIdx': 0,
+                }))
 
 
 class TestQueryMetrics(BaseSystemViews):

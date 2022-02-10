@@ -10,12 +10,12 @@ message TPartitionStatsKey {
     optional uint64 PartIdx = 3;
 }
 
-message TTtlStats { 
-    optional uint64 LastRunTime = 1; // milliseconds since epoch 
-    optional uint64 LastRowsProcessed = 2; 
-    optional uint64 LastRowsErased = 3; 
-} 
- 
+message TTtlStats {
+    optional uint64 LastRunTime = 1; // milliseconds since epoch
+    optional uint64 LastRowsProcessed = 2;
+    optional uint64 LastRowsErased = 3;
+}
+
 message TPartitionStats {
     optional uint64 DataSize = 1;
     optional uint64 RowCount = 2;
@@ -41,8 +41,8 @@ message TPartitionStats {
     optional uint64 PlannedTxCompleted = 17;
     optional uint64 TxRejectedByOverload = 18;
     optional uint64 TxRejectedBySpace = 19;
- 
-    optional TTtlStats TtlStats = 20; 
+
+    optional TTtlStats TtlStats = 20;
 }
 
 message TPartitionStatsResult {

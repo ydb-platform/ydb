@@ -1,28 +1,28 @@
-"""
-Helpers for the API
-"""
-import re
+""" 
+Helpers for the API 
+""" 
+import re 
 from collections import namedtuple
 from textwrap import dedent
-
+ 
 from parso.python.parser import Parser
 from parso.python import tree
-
+ 
 from jedi._compatibility import u
 from jedi.evaluate.syntax_tree import eval_atom
 from jedi.evaluate.helpers import evaluate_call_of_leaf
 from jedi.evaluate.compiled import get_string_context_set
 from jedi.cache import call_signature_time_cache
-
-
+ 
+ 
 CompletionParts = namedtuple('CompletionParts', ['path', 'has_dot', 'name'])
+ 
 
-
-def sorted_definitions(defs):
-    # Note: `or ''` below is required because `module_path` could be
-    return sorted(defs, key=lambda x: (x.module_path or '', x.line or 0, x.column or 0))
-
-
+def sorted_definitions(defs): 
+    # Note: `or ''` below is required because `module_path` could be 
+    return sorted(defs, key=lambda x: (x.module_path or '', x.line or 0, x.column or 0)) 
+ 
+ 
 def get_on_completion_name(module_node, lines, position):
     leaf = module_node.get_leaf_for_position(position)
     if leaf is None or leaf.type in ('string', 'error_leaf'):
@@ -95,12 +95,12 @@ def _get_code_for_stack(code_lines, module_node, position):
 
 
 def get_stack_at_position(grammar, code_lines, module_node, pos):
-    """
+    """ 
     Returns the possible node names (e.g. import_from, xor_test or yield_stmt).
-    """
+    """ 
     class EndMarkerReached(Exception):
         pass
-
+ 
     def tokenize_without_endmarker(code):
         # TODO This is for now not an official parso API that exists purely
         #   for Jedi.
@@ -116,7 +116,7 @@ def get_stack_at_position(grammar, code_lines, module_node, pos):
                 raise EndMarkerReached()
             else:
                 yield token
-
+ 
     # The code might be indedented, just remove it.
     code = dedent(_get_code_for_stack(code_lines, module_node, pos))
     # We use a word to tell Jedi when we have reached the start of the
@@ -124,7 +124,7 @@ def get_stack_at_position(grammar, code_lines, module_node, pos):
     # Use Z as a prefix because it's not part of a number suffix.
     safeword = 'ZZZ_USER_WANTS_TO_COMPLETE_HERE_WITH_JEDI'
     code = code + ' ' + safeword
-
+ 
     p = Parser(grammar._pgen_grammar, error_recovery=True)
     try:
         p.parse(tokens=tokenize_without_endmarker(code))
@@ -134,14 +134,14 @@ def get_stack_at_position(grammar, code_lines, module_node, pos):
         "This really shouldn't happen. There's a bug in Jedi:\n%s"
         % list(tokenize_without_endmarker(code))
     )
-
-
+ 
+ 
 def evaluate_goto_definition(evaluator, context, leaf):
     if leaf.type == 'name':
         # In case of a name we can just use goto_definition which does all the
         # magic itself.
         return evaluator.goto_definitions(context, leaf)
-
+ 
     parent = leaf.parent
     if parent.type == 'atom':
         return context.eval_node(leaf.parent)
@@ -152,7 +152,7 @@ def evaluate_goto_definition(evaluator, context, leaf):
     elif leaf.type in ('fstring_string', 'fstring_start', 'fstring_end'):
         return get_string_context_set(evaluator)
     return []
-
+ 
 
 CallSignatureDetails = namedtuple(
     'CallSignatureDetails',

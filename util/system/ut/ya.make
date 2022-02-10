@@ -61,7 +61,7 @@ SRCS(
     system/progname_ut.cpp
     system/rusage_ut.cpp
     system/rwlock_ut.cpp
-    system/sanitizers_ut.cpp
+    system/sanitizers_ut.cpp 
     system/shellcommand_ut.cpp
     system/spinlock_ut.cpp
     system/src_root_ut.cpp

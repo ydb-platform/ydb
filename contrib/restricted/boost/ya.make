@@ -20,14 +20,14 @@ OWNER(
     g:cpp-contrib
 )
 
-NO_UTIL()
+NO_UTIL() 
 
-# This is the header-only version of boost
-# To use a boost library with separate compilation units, 
-# one should use `contrib/restricted/boost/libs/$lib`
-
+# This is the header-only version of boost 
+# To use a boost library with separate compilation units,  
+# one should use `contrib/restricted/boost/libs/$lib` 
+ 
 ADDINCL(
-    GLOBAL contrib/restricted/boost
+    GLOBAL contrib/restricted/boost 
 )
 
 END()

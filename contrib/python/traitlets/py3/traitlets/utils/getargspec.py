@@ -1,19 +1,19 @@
-"""
-    getargspec excerpted from:
-    
-    sphinx.util.inspect
-    ~~~~~~~~~~~~~~~~~~~
-    Helpers for inspecting Python modules.
-    :copyright: Copyright 2007-2015 by the Sphinx team, see AUTHORS.
-    :license: BSD, see LICENSE for details.
-"""
-
-import inspect
-
-# Unmodified from sphinx below this line
-
+""" 
+    getargspec excerpted from: 
+     
+    sphinx.util.inspect 
+    ~~~~~~~~~~~~~~~~~~~ 
+    Helpers for inspecting Python modules. 
+    :copyright: Copyright 2007-2015 by the Sphinx team, see AUTHORS. 
+    :license: BSD, see LICENSE for details. 
+""" 
+ 
+import inspect 
+ 
+# Unmodified from sphinx below this line 
+ 
 from functools import partial
-
+ 
 def getargspec(func):
     """Like inspect.getargspec but supports functools.partial as well."""
     if inspect.ismethod(func):
@@ -29,12 +29,12 @@ def getargspec(func):
             args = args[len(func.args):]
         for arg in func.keywords or ():
             try:
-                i = args.index(arg) - len(args)
-                del args[i]
-                try:
+                i = args.index(arg) - len(args) 
+                del args[i] 
+                try: 
                     del defaults[i]
-                except IndexError:
-                    pass
+                except IndexError: 
+                    pass 
             except ValueError:   # must be a kwonly arg
                 i = kwoargs.index(arg)
                 del kwoargs[i]

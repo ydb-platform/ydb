@@ -96,7 +96,7 @@ struct __libcpp_locale_guard {
         __setlocale(__locale_all);
         free(__locale_all);
       }
-      _configthreadlocale(__status);
+      _configthreadlocale(__status); 
     }
     static const char* __setlocale(const char* __locale) {
       const char* __new_locale = setlocale(LC_ALL, __locale);

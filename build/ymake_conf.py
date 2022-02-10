@@ -54,22 +54,22 @@ class Platform(object):
         self.is_x86_64 = self.arch in ('x86_64', 'amd64')
         self.is_intel = self.is_x86 or self.is_x86_64
 
-        self.is_armv7 = self.arch in ('armv7', 'armv7a', 'armv7a_neon', 'arm', 'armv7a_cortex_a9', 'armv7ahf_cortex_a35', 'armv7ahf_cortex_a53')
+        self.is_armv7 = self.arch in ('armv7', 'armv7a', 'armv7a_neon', 'arm', 'armv7a_cortex_a9', 'armv7ahf_cortex_a35', 'armv7ahf_cortex_a53') 
         self.is_armv8 = self.arch in ('armv8', 'armv8a', 'arm64', 'aarch64', 'armv8a_cortex_a35', 'armv8a_cortex_a53')
         self.is_armv8m = self.arch in ('armv8m_cortex_m33',)
         self.is_arm64 = self.arch in ('arm64',)
         self.is_arm = self.is_armv7 or self.is_armv8 or self.is_armv8m
-        self.is_armv7_neon = self.arch in ('armv7a_neon', 'armv7a_cortex_a9', 'armv7ahf_cortex_a35', 'armv7ahf_cortex_a53')
-        self.is_armv7hf = self.arch in ('armv7ahf_cortex_a35', 'armv7ahf_cortex_a53')
+        self.is_armv7_neon = self.arch in ('armv7a_neon', 'armv7a_cortex_a9', 'armv7ahf_cortex_a35', 'armv7ahf_cortex_a53') 
+        self.is_armv7hf = self.arch in ('armv7ahf_cortex_a35', 'armv7ahf_cortex_a53') 
 
-        self.armv7_float_abi = None
-        if self.is_armv7:
-            if self.is_armv7hf:
-                self.armv7_float_abi = 'hard'
-            else:
-                self.armv7_float_abi = 'softfp'
-
-        self.is_cortex_a9 = self.arch in ('armv7a_cortex_a9',)
+        self.armv7_float_abi = None 
+        if self.is_armv7: 
+            if self.is_armv7hf: 
+                self.armv7_float_abi = 'hard' 
+            else: 
+                self.armv7_float_abi = 'softfp' 
+ 
+        self.is_cortex_a9 = self.arch in ('armv7a_cortex_a9',) 
         self.is_cortex_a35 = self.arch in ('armv7ahf_cortex_a35', 'armv8a_cortex_a35')
         self.is_cortex_a53 = self.arch in ('armv7ahf_cortex_a53', 'armv8a_cortex_a53')
         self.is_cortex_m33 = self.arch in ('armv8m_cortex_m33',)
@@ -103,13 +103,13 @@ class Platform(object):
         self.is_windows_x86_64 = self.is_windows and self.is_x86_64
 
         self.is_android = self.os == 'android'
-        if self.is_android:
-            # This is default Android API level unless `ANDROID_API` is specified
+        if self.is_android: 
+            # This is default Android API level unless `ANDROID_API` is specified 
             # 18 is the smallest level with OpenGL support
-            # 21 is the smallest level for 64-bit platforms
+            # 21 is the smallest level for 64-bit platforms 
             default_android_api = 21 if self.is_64_bit else 18
-            self.android_api = int(preset('ANDROID_API', default_android_api))
-
+            self.android_api = int(preset('ANDROID_API', default_android_api)) 
+ 
         self.is_cygwin = self.os == 'cygwin'
         self.is_yocto = self.os == 'yocto'
 
@@ -130,11 +130,11 @@ class Platform(object):
         # 'OS_LINUX' variable
         yield 'OS_{}'.format(self.os.upper())
 
-        # yocto is linux
-        if 'yocto' in self.os:
-            yield 'LINUX'
-            yield 'OS_LINUX'
-
+        # yocto is linux 
+        if 'yocto' in self.os: 
+            yield 'LINUX' 
+            yield 'OS_LINUX' 
+ 
         if self.is_macos:
             yield 'DARWIN'
             yield 'OS_DARWIN'
@@ -542,10 +542,10 @@ class Build(object):
         return self.build_type == 'fastdebug'
 
     @property
-    def is_size_optimized(self):
-        return self.build_type == 'minsizerel'
-
-    @property
+    def is_size_optimized(self): 
+        return self.build_type == 'minsizerel' 
+ 
+    @property 
     def is_coverage(self):
         return self.build_type == 'coverage'
 
@@ -784,12 +784,12 @@ when (($USEMPROF == "yes") || ($USE_MPROF == "yes")) {
         for variable in self.platform.os_variables:
             emit(variable, 'yes')
 
-        if self.platform.is_armv7:
-            emit('ARM7_FLOAT_ABI', self.platform.armv7_float_abi)
-
-        if self.platform.is_android:
+        if self.platform.is_armv7: 
+            emit('ARM7_FLOAT_ABI', self.platform.armv7_float_abi) 
+ 
+        if self.platform.is_android: 
             emit('ANDROID_API', str(self.platform.android_api))
-
+ 
         if self.platform.is_posix:
             self.print_nix_target_const()
             if self.platform.is_linux:
@@ -962,11 +962,11 @@ class ToolchainOptions(object):
 
         # default C++ standard is set here, some older toolchains might need to redefine it in ya.conf.json
         self.cxx_std = self.params.get('cxx_std', 'c++20')
-
+ 
         self._env = tc_json.get('env', {})
 
-        self.android_ndk_version = self.params.get('android_ndk_version', None)
-
+        self.android_ndk_version = self.params.get('android_ndk_version', None) 
+ 
         logger.debug('c_compiler=%s', self.c_compiler)
         logger.debug('cxx_compiler=%s', self.cxx_compiler)
 
@@ -1039,12 +1039,12 @@ class GnuToolchainOptions(ToolchainOptions):
             if self.target.is_armv8:
                 return 'ubuntu-16'
 
-            if self.target.is_armv7 and self.target.armv7_float_abi == 'hard':
+            if self.target.is_armv7 and self.target.armv7_float_abi == 'hard': 
                 return 'ubuntu-16'
 
-            if self.target.is_armv7 and self.target.armv7_float_abi == 'softfp':
-                return 'ubuntu-18'
-
+            if self.target.is_armv7 and self.target.armv7_float_abi == 'softfp': 
+                return 'ubuntu-18' 
+ 
             if self.target.is_powerpc:
                 return 'ubuntu-14'
 
@@ -1091,7 +1091,7 @@ class GnuToolchain(Toolchain):
             sdk_native_version = 10.11 if not preset('EXPERIMENTAL_MACOS_M1_SUPPORT') else '11.1'
             if target.is_macos:
                 return '$MACOS_SDK_RESOURCE_GLOBAL/MacOSX{}.sdk'.format(sdk_native_version)
-            elif target.is_yocto:
+            elif target.is_yocto: 
                 return '$YOCTO_SDK_RESOURCE_GLOBAL'
             return '$OS_SDK_ROOT_RESOURCE_GLOBAL'
 
@@ -1160,8 +1160,8 @@ class GnuToolchain(Toolchain):
                 target_triple = select(default=None, selectors=[
                     (target.is_linux and target.is_x86_64, 'x86_64-linux-gnu'),
                     (target.is_linux and target.is_armv8, 'aarch64-linux-gnu'),
-                    (target.is_linux and target.is_armv7 and target.armv7_float_abi == 'hard', 'arm-linux-gnueabihf'),
-                    (target.is_linux and target.is_armv7 and target.armv7_float_abi == 'softfp', 'arm-linux-gnueabi'),
+                    (target.is_linux and target.is_armv7 and target.armv7_float_abi == 'hard', 'arm-linux-gnueabihf'), 
+                    (target.is_linux and target.is_armv7 and target.armv7_float_abi == 'softfp', 'arm-linux-gnueabi'), 
                     (target.is_linux and target.is_powerpc, 'powerpc64le-linux-gnu'),
                     (target.is_iossim and target.is_arm64, 'arm64-apple-ios{}-simulator'.format(ios_version_min)),
                     (target.is_apple and target.is_x86, 'i386-apple-darwin14'),
@@ -1169,18 +1169,18 @@ class GnuToolchain(Toolchain):
                     (target.is_apple and target.is_macos_arm64, 'arm64-apple-macos11'),
                     (target.is_apple and target.is_armv7, 'armv7-apple-darwin14'),
                     (target.is_apple and target.is_armv8, 'arm64-apple-darwin14'),
-                    (target.is_yocto and target.is_armv7, 'arm-poky-linux-gnueabi'),
-                    (target.is_android and target.is_x86, 'i686-linux-android'),
-                    (target.is_android and target.is_x86_64, 'x86_64-linux-android'),
-                    (target.is_android and target.is_armv7, 'armv7a-linux-androideabi'),
-                    (target.is_android and target.is_armv8, 'aarch64-linux-android'),
+                    (target.is_yocto and target.is_armv7, 'arm-poky-linux-gnueabi'), 
+                    (target.is_android and target.is_x86, 'i686-linux-android'), 
+                    (target.is_android and target.is_x86_64, 'x86_64-linux-android'), 
+                    (target.is_android and target.is_armv7, 'armv7a-linux-androideabi'), 
+                    (target.is_android and target.is_armv8, 'aarch64-linux-android'), 
                 ])
 
-            if target.is_android:
-                # Android NDK allows specification of API level in target triple, e.g.:
-                # armv7a-linux-androideabi16, aarch64-linux-android21
-                target_triple += str(target.android_api)
-
+            if target.is_android: 
+                # Android NDK allows specification of API level in target triple, e.g.: 
+                # armv7a-linux-androideabi16, aarch64-linux-android21 
+                target_triple += str(target.android_api) 
+ 
             if target_triple:
                 self.c_flags_platform.append('--target={}'.format(target_triple))
 
@@ -1188,12 +1188,12 @@ class GnuToolchain(Toolchain):
             for root in list(self.tc.isystem):
                 self.c_flags_platform.extend(['-isystem', root])
 
-        if target.is_android:
-            self.c_flags_platform.extend(['-isystem', '{}/sources/cxx-stl/llvm-libc++abi/include'.format(self.tc.name_marker)])
-
-        if target.is_cortex_a9:
-            self.c_flags_platform.append('-mcpu=cortex-a9')
-
+        if target.is_android: 
+            self.c_flags_platform.extend(['-isystem', '{}/sources/cxx-stl/llvm-libc++abi/include'.format(self.tc.name_marker)]) 
+ 
+        if target.is_cortex_a9: 
+            self.c_flags_platform.append('-mcpu=cortex-a9') 
+ 
         if target.is_cortex_a35:
             self.c_flags_platform.append('-mcpu=cortex-a35')
 
@@ -1207,15 +1207,15 @@ class GnuToolchain(Toolchain):
             self.c_flags_platform.append('-mfpu=neon')
 
         if (target.is_armv7 or target.is_armv8m) and build.is_size_optimized:
-            # Enable ARM Thumb2 variable-length instruction encoding
-            # to reduce code size
-            self.c_flags_platform.append('-mthumb')
-
+            # Enable ARM Thumb2 variable-length instruction encoding 
+            # to reduce code size 
+            self.c_flags_platform.append('-mthumb') 
+ 
         if target.is_arm or target.is_powerpc:
-            # On linux, ARM and PPC default to unsigned char
-            # However, Arcadia requires char to be signed
-            self.c_flags_platform.append('-fsigned-char')
-
+            # On linux, ARM and PPC default to unsigned char 
+            # However, Arcadia requires char to be signed 
+            self.c_flags_platform.append('-fsigned-char') 
+ 
         if self.tc.is_clang or self.tc.is_gcc and self.tc.version_at_least(8, 2):
             target_flags = select(default=[], selectors=[
                 (target.is_linux and target.is_power8le, ['-mcpu=power8', '-mtune=power8', '-maltivec']),
@@ -1361,33 +1361,33 @@ class GnuCompiler(Compiler):
             # Issue a warning if certain overload is hidden due to inheritance
             '-Woverloaded-virtual',
         ]
-
+ 
         # Disable some warnings which will fail compilation at the time
         self.c_warnings += [
             '-Wno-parentheses'
         ]
 
-        self.c_defines = ['-DFAKEID=$CPP_FAKEID']
-        if self.target.is_android:
-            self.c_defines.append('-DANDROID_FAKEID=$ANDROID_FAKEID')
-
-        self.c_defines.extend([
-            '-DARCADIA_ROOT=${ARCADIA_ROOT}',
-            '-DARCADIA_BUILD_ROOT=${ARCADIA_BUILD_ROOT}',
-        ])
-
-        self.c_defines.extend([
+        self.c_defines = ['-DFAKEID=$CPP_FAKEID'] 
+        if self.target.is_android: 
+            self.c_defines.append('-DANDROID_FAKEID=$ANDROID_FAKEID') 
+ 
+        self.c_defines.extend([ 
+            '-DARCADIA_ROOT=${ARCADIA_ROOT}', 
+            '-DARCADIA_BUILD_ROOT=${ARCADIA_BUILD_ROOT}', 
+        ]) 
+ 
+        self.c_defines.extend([ 
             '-D_THREAD_SAFE', '-D_PTHREADS', '-D_REENTRANT', '-D_LIBCPP_ENABLE_CXX17_REMOVED_FEATURES',
             '-D_LARGEFILE_SOURCE', '-D__STDC_CONSTANT_MACROS', '-D__STDC_FORMAT_MACROS',
-        ])
+        ]) 
 
         if not self.target.is_android:
             # There is no usable _FILE_OFFSET_BITS=64 support in Androids until API 21. And it's incomplete until at least API 24.
             # https://android.googlesource.com/platform/bionic/+/master/docs/32-bit-abi.md
-            # Arcadia have API 16 for 32-bit Androids.
+            # Arcadia have API 16 for 32-bit Androids. 
             self.c_defines.append('-D_FILE_OFFSET_BITS=64')
 
-        if self.target.is_linux or self.target.is_android or self.target.is_cygwin:
+        if self.target.is_linux or self.target.is_android or self.target.is_cygwin: 
             self.c_defines.append('-D_GNU_SOURCE')
 
         if self.tc.is_clang and self.target.is_linux and self.target.is_x86_64:
@@ -1400,7 +1400,7 @@ class GnuCompiler(Compiler):
 
         self.extra_compile_opts = []
 
-        self.c_flags = ['$CL_DEBUG_INFO', '$CL_DEBUG_INFO_DISABLE_CACHE__NO_UID__']
+        self.c_flags = ['$CL_DEBUG_INFO', '$CL_DEBUG_INFO_DISABLE_CACHE__NO_UID__'] 
         self.c_flags += self.tc.arch_opt + ['-pipe']
 
         self.sfdl_flags = ['-E', '-C', '-x', 'c++']
@@ -1448,11 +1448,11 @@ class GnuCompiler(Compiler):
             self.c_foptions.append('-fno-delete-null-pointer-checks')
             self.c_foptions.append('-fabi-version=8')
 
-        # Split all functions and data into separate sections for DCE and ICF linker passes
-        # NOTE: iOS build uses -fembed-bitcode which conflicts with -ffunction-sections (only relevant for ELF targets)
-        if not self.target.is_ios:
-            self.c_foptions.extend(['-ffunction-sections', '-fdata-sections'])
-
+        # Split all functions and data into separate sections for DCE and ICF linker passes 
+        # NOTE: iOS build uses -fembed-bitcode which conflicts with -ffunction-sections (only relevant for ELF targets) 
+        if not self.target.is_ios: 
+            self.c_foptions.extend(['-ffunction-sections', '-fdata-sections']) 
+ 
     def configure_build_type(self):
         if self.build.is_valgrind:
             self.c_defines.append('-DWITH_VALGRIND=1')
@@ -1465,18 +1465,18 @@ class GnuCompiler(Compiler):
 
         if self.build.is_release:
             self.c_flags.append('$OPTIMIZE')
-            if self.build.is_size_optimized:
-                # -Oz is clang's more size-aggressive version of -Os
-                # For ARM specifically, clang -Oz is on par with gcc -Os:
-                # https://github.com/android/ndk/issues/133#issuecomment-365763507
-                if self.tc.is_clang:
-                    self.optimize = '-Oz'
-                else:
-                    self.optimize = '-Os'
-
-                # Generate sections with address significance tables for ICF linker pass
-                if self.tc.is_clang:
-                    self.c_foptions.extend(['-faddrsig'])
+            if self.build.is_size_optimized: 
+                # -Oz is clang's more size-aggressive version of -Os 
+                # For ARM specifically, clang -Oz is on par with gcc -Os: 
+                # https://github.com/android/ndk/issues/133#issuecomment-365763507 
+                if self.tc.is_clang: 
+                    self.optimize = '-Oz' 
+                else: 
+                    self.optimize = '-Os' 
+ 
+                # Generate sections with address significance tables for ICF linker pass 
+                if self.tc.is_clang: 
+                    self.c_foptions.extend(['-faddrsig']) 
             else:
                 self.optimize = '-O3'
 
@@ -1505,19 +1505,19 @@ class GnuCompiler(Compiler):
         append('C_WARNING_OPTS', self.c_warnings)
         append('CXX_WARNING_OPTS', self.cxx_warnings)
 
-        # PIE is only valid for executables, while PIC implies a shared library
-        # `-pie` with a shared library is either ignored or fails to link
+        # PIE is only valid for executables, while PIC implies a shared library 
+        # `-pie` with a shared library is either ignored or fails to link 
         emit_big('''
-            when ($PIC == "yes") {
-                CFLAGS+=-fPIC
-                LDFLAGS+=-fPIC
+            when ($PIC == "yes") { 
+                CFLAGS+=-fPIC 
+                LDFLAGS+=-fPIC 
             }
-            elsewhen ($PIE == "yes") {
-                CFLAGS+=-fPIE
-                LDFLAGS+=-fPIE -pie
+            elsewhen ($PIE == "yes") { 
+                CFLAGS+=-fPIE 
+                LDFLAGS+=-fPIE -pie 
             }''')
 
-        append('CFLAGS', self.c_flags, '$DEBUG_INFO_FLAGS', self.c_foptions, '$C_WARNING_OPTS', '$GCC_PREPROCESSOR_OPTS', '$USER_CFLAGS', '$USER_CFLAGS_GLOBAL')
+        append('CFLAGS', self.c_flags, '$DEBUG_INFO_FLAGS', self.c_foptions, '$C_WARNING_OPTS', '$GCC_PREPROCESSOR_OPTS', '$USER_CFLAGS', '$USER_CFLAGS_GLOBAL') 
         append('CXXFLAGS', '$CFLAGS', '-std=' + self.tc.cxx_std, '$CXX_WARNING_OPTS', '$USER_CXXFLAGS', '$USER_CXXFLAGS_GLOBAL')
         append('CONLYFLAGS', '$USER_CONLYFLAGS', '$USER_CONLYFLAGS_GLOBAL')
         emit('CXX_COMPILER_UNQUOTED', self.tc.cxx_compiler)
@@ -1548,26 +1548,26 @@ class GnuCompiler(Compiler):
             }''')
 
         c_builtins = [
-            "-Wno-builtin-macro-redefined",
-            '-D__DATE__=\\""Sep 31 2019\\""',
-            '-D__TIME__=\\"00:00:00\\"',
+            "-Wno-builtin-macro-redefined", 
+            '-D__DATE__=\\""Sep 31 2019\\""', 
+            '-D__TIME__=\\"00:00:00\\"', 
         ]
-        compiler_supports_macro_prefix_map = (
-            self.tc.is_clang and self.tc.version_at_least(10) or
-            self.tc.is_gcc and self.tc.version_at_least(8)
-        )
-        if compiler_supports_macro_prefix_map:
-            c_builtins += [
-                # XXX does not support non-normalized paths
-                "-fmacro-prefix-map=${ARCADIA_BUILD_ROOT}/=",
-                "-fmacro-prefix-map=${ARCADIA_ROOT}/=",
-                "-fmacro-prefix-map=$(TOOL_ROOT)/=",
-            ]
-        else:
-            c_builtins += [
-                # XXX this macro substitution breaks __FILE__ in included sources
-                '-D__FILE__=\\""${input;qe;rootrel:SRC}\\""',
-            ]
+        compiler_supports_macro_prefix_map = ( 
+            self.tc.is_clang and self.tc.version_at_least(10) or 
+            self.tc.is_gcc and self.tc.version_at_least(8) 
+        ) 
+        if compiler_supports_macro_prefix_map: 
+            c_builtins += [ 
+                # XXX does not support non-normalized paths 
+                "-fmacro-prefix-map=${ARCADIA_BUILD_ROOT}/=", 
+                "-fmacro-prefix-map=${ARCADIA_ROOT}/=", 
+                "-fmacro-prefix-map=$(TOOL_ROOT)/=", 
+            ] 
+        else: 
+            c_builtins += [ 
+                # XXX this macro substitution breaks __FILE__ in included sources 
+                '-D__FILE__=\\""${input;qe;rootrel:SRC}\\""', 
+            ] 
         c_debug_map = [
             # XXX does not support non-normalized paths
             "-fdebug-prefix-map=${ARCADIA_BUILD_ROOT}=/-B",
@@ -1591,17 +1591,17 @@ class GnuCompiler(Compiler):
             "--replace=$(TOOL_ROOT)=/-T"
         ]
         emit_big('''
-            when ($FORCE_CONSISTENT_DEBUG == "yes") {{
+            when ($FORCE_CONSISTENT_DEBUG == "yes") {{ 
                 when ($CLANG == "yes") {{
-                    CL_DEBUG_INFO={c_debug_cl}
-                }}
-                otherwise {{
-                    CL_DEBUG_INFO={c_debug}
-                }}
-                YASM_DEBUG_INFO={yasm_debug}
-            }}
-            elsewhen ($CONSISTENT_DEBUG == "yes") {{
-                when ($CLANG == "yes") {{
+                    CL_DEBUG_INFO={c_debug_cl} 
+                }} 
+                otherwise {{ 
+                    CL_DEBUG_INFO={c_debug} 
+                }} 
+                YASM_DEBUG_INFO={yasm_debug} 
+            }} 
+            elsewhen ($CONSISTENT_DEBUG == "yes") {{ 
+                when ($CLANG == "yes") {{ 
                     CL_DEBUG_INFO_DISABLE_CACHE__NO_UID__={c_debug_cl}
                 }}
                 otherwise {{
@@ -1619,10 +1619,10 @@ class GnuCompiler(Compiler):
                 YASM_DEBUG_INFO_DISABLE_CACHE__NO_UID__={yasm_debug_light}
             }}
 
-            when ($FORCE_CONSISTENT_BUILD == "yes") {{
-                CL_MACRO_INFO={macro}
-            }}
-            elsewhen ($CONSISTENT_BUILD == "yes") {{
+            when ($FORCE_CONSISTENT_BUILD == "yes") {{ 
+                CL_MACRO_INFO={macro} 
+            }} 
+            elsewhen ($CONSISTENT_BUILD == "yes") {{ 
                 CL_MACRO_INFO_DISABLE_CACHE__NO_UID__={macro}
             }}
         '''.format(c_debug=' '.join(c_debug_map),
@@ -1652,16 +1652,16 @@ class GnuCompiler(Compiler):
         elif is_positive('DUMP_COMPILER_DEPS_FAST'):
             emit('DUMP_DEPS', '-E', '-M', '-MF', '${output;noauto;suf=${OBJ_SUF}.o.d:SRC}')
 
-        compiler_time_trace_requested = is_positive('TIME_TRACE') or is_positive('COMPILER_TIME_TRACE')
-        compiler_supports_time_trace = self.tc.is_clang and self.tc.version_at_least(9)
-        if compiler_time_trace_requested and compiler_supports_time_trace:
-            compiler_time_trace_granularity = preset('TIME_TRACE_GRANULARITY', '500')
-            emit('COMPILER_TIME_TRACE_FLAGS', '-ftime-trace -ftime-trace-granularity=' + compiler_time_trace_granularity)
-            emit('COMPILER_TIME_TRACE_POSTPROCESS', '${YMAKE_PYTHON}', '${input:"build/scripts/find_time_trace.py"}', '$_COMPILE_OUTPUTS', '$_COMPILE_TIME_TRACE_OUTPUTS')
-        else:
-            emit('COMPILER_TIME_TRACE_FLAGS')
-            emit('COMPILER_TIME_TRACE_POSTPROCESS')
-
+        compiler_time_trace_requested = is_positive('TIME_TRACE') or is_positive('COMPILER_TIME_TRACE') 
+        compiler_supports_time_trace = self.tc.is_clang and self.tc.version_at_least(9) 
+        if compiler_time_trace_requested and compiler_supports_time_trace: 
+            compiler_time_trace_granularity = preset('TIME_TRACE_GRANULARITY', '500') 
+            emit('COMPILER_TIME_TRACE_FLAGS', '-ftime-trace -ftime-trace-granularity=' + compiler_time_trace_granularity) 
+            emit('COMPILER_TIME_TRACE_POSTPROCESS', '${YMAKE_PYTHON}', '${input:"build/scripts/find_time_trace.py"}', '$_COMPILE_OUTPUTS', '$_COMPILE_TIME_TRACE_OUTPUTS') 
+        else: 
+            emit('COMPILER_TIME_TRACE_FLAGS') 
+            emit('COMPILER_TIME_TRACE_POSTPROCESS') 
+ 
         append('EXTRA_OUTPUT')
 
         style = ['${requirements;hide:CC_REQUIREMENTS} ${hide;kv:"p CC"} ${hide;kv:"pc green"}']
@@ -1674,14 +1674,14 @@ class GnuCompiler(Compiler):
             '$CXXFLAGS',
             '$CL_MACRO_INFO',
             '$CL_MACRO_INFO_DISABLE_CACHE__NO_UID__',
-            '$COMPILER_TIME_TRACE_FLAGS',
+            '$COMPILER_TIME_TRACE_FLAGS', 
             '$EXTRA_OUTPUT',
             '$SRCFLAGS',
             '$_LANG_CFLAGS_VALUE',
             '${input:SRC}',
             '$TOOLCHAIN_ENV',
             '$YNDEXER_OUTPUT',
-            '&& $COMPILER_TIME_TRACE_POSTPROCESS',
+            '&& $COMPILER_TIME_TRACE_POSTPROCESS', 
         ] + style
 
         c_args = [
@@ -1694,13 +1694,13 @@ class GnuCompiler(Compiler):
             '$CL_MACRO_INFO',
             '$CL_MACRO_INFO_DISABLE_CACHE__NO_UID__',
             '$CONLYFLAGS',
-            '$COMPILER_TIME_TRACE_FLAGS',
+            '$COMPILER_TIME_TRACE_FLAGS', 
             '$EXTRA_OUTPUT',
             '$SRCFLAGS',
             '${input:SRC}',
             '$TOOLCHAIN_ENV',
             '$YNDEXER_OUTPUT',
-            '&& $COMPILER_TIME_TRACE_POSTPROCESS',
+            '&& $COMPILER_TIME_TRACE_POSTPROCESS', 
         ] + style
 
         ignore_c_args_no_deps = [
@@ -1709,11 +1709,11 @@ class GnuCompiler(Compiler):
             '$CLANG_TIDY_ARGS',
             '$YNDEXER_ARGS',
             '$YNDEXER_OUTPUT',
-            '$COMPILER_TIME_TRACE_FLAGS',
+            '$COMPILER_TIME_TRACE_FLAGS', 
             '$EXTRA_OUTPUT',
             '$CL_MACRO_INFO',
-            '$CL_MACRO_INFO_DISABLE_CACHE__NO_UID__',
-            '&& $COMPILER_TIME_TRACE_POSTPROCESS',
+            '$CL_MACRO_INFO_DISABLE_CACHE__NO_UID__', 
+            '&& $COMPILER_TIME_TRACE_POSTPROCESS', 
         ]
         c_args_nodeps = [c if c != '$GCC_COMPILE_FLAGS' else '$EXTRA_C_FLAGS -c -o ${OUTFILE} ${SRC} ${pre=-I:INC}' for c in c_args if c not in ignore_c_args_no_deps]
 
@@ -1754,34 +1754,34 @@ class Linker(object):
         """
         self.tc = tc
         self.build = build
-        self.type = self._get_default_linker_type()
+        self.type = self._get_default_linker_type() 
 
-    def _get_default_linker_type(self):
-        if not self.tc.is_from_arcadia:
-            # External (e.g. system) toolchain: disable linker selection logic
-            return None
+    def _get_default_linker_type(self): 
+        if not self.tc.is_from_arcadia: 
+            # External (e.g. system) toolchain: disable linker selection logic 
+            return None 
 
-        if self.build.target.is_android:
-            # Android toolchain is NDK, LLD works on all supported platforms
-            return Linker.LLD
-
-        elif self.build.target.is_linux:
+        if self.build.target.is_android: 
+            # Android toolchain is NDK, LLD works on all supported platforms 
+            return Linker.LLD 
+ 
+        elif self.build.target.is_linux: 
             # DEVTOOLS-6782: LLD8 fails to link LTO builds with in-memory ELF objects larger than 4 GiB
             blacklist_lld = is_positive('CLANG7') and is_positive('USE_LTO') and not is_positive('MUSL')
             if self.tc.is_clang and not blacklist_lld:
                 return Linker.LLD
             else:
-                # GCC et al.
+                # GCC et al. 
 
                 if self.tc.is_gcc and is_positive('MUSL'):
                     # See MUSL_BFD comment below
                     return Linker.BFD
 
-                return Linker.GOLD
+                return Linker.GOLD 
 
-        # There is no linker choice on Darwin (ld64) or Windows (link.exe)
-        return None
-
+        # There is no linker choice on Darwin (ld64) or Windows (link.exe) 
+        return None 
+ 
     def print_linker(self):
         self._print_linker_selector()
 
@@ -1838,35 +1838,35 @@ class LD(Linker):
 
         self.ld_flags = []
 
-        # Save linker's stdout to an additional .txt output file
-        # e.g. LLD writes `--print-gc-sections` or `--print-icf-sections` to stdout
-        self.save_linker_output = False
-
-        # Enable section-level DCE (dead code elimination):
-        # remove whole unused code and data sections
-        # (needs `-ffunction-sections` and `-fdata-sections` to be useful)
-        #
-        # NOTE: CGO linker doesn't seem to support DCE, but shares common LDFLAGS
-        if target.is_macos:
-            self.ld_dce_flag = '-Wl,-dead_strip'
-        elif target.is_linux or target.is_android:
-            self.ld_dce_flag = '-Wl,--gc-sections'
-            if preset('LINKER_DCE_PRINT_SECTIONS'):
-                self.save_linker_output = True
-                self.ld_dce_flag += ' -Wl,--print-gc-sections'
-        else:
-            self.ld_dce_flag = ''
-
-        if self.type == Linker.LLD:
-            # Enable ICF (identical code folding pass) in safe mode
-            # https://research.google/pubs/pub36912/
-            self.ld_icf_flag = '-Wl,-icf=safe'
-            if preset('LINKER_ICF_PRINT_SECTIONS'):
-                self.save_linker_output = True
-                self.ld_icf_flag += ' -Wl,--print-icf-sections'
-        else:
-            self.ld_icf_flag = ''
-
+        # Save linker's stdout to an additional .txt output file 
+        # e.g. LLD writes `--print-gc-sections` or `--print-icf-sections` to stdout 
+        self.save_linker_output = False 
+ 
+        # Enable section-level DCE (dead code elimination): 
+        # remove whole unused code and data sections 
+        # (needs `-ffunction-sections` and `-fdata-sections` to be useful) 
+        # 
+        # NOTE: CGO linker doesn't seem to support DCE, but shares common LDFLAGS 
+        if target.is_macos: 
+            self.ld_dce_flag = '-Wl,-dead_strip' 
+        elif target.is_linux or target.is_android: 
+            self.ld_dce_flag = '-Wl,--gc-sections' 
+            if preset('LINKER_DCE_PRINT_SECTIONS'): 
+                self.save_linker_output = True 
+                self.ld_dce_flag += ' -Wl,--print-gc-sections' 
+        else: 
+            self.ld_dce_flag = '' 
+ 
+        if self.type == Linker.LLD: 
+            # Enable ICF (identical code folding pass) in safe mode 
+            # https://research.google/pubs/pub36912/ 
+            self.ld_icf_flag = '-Wl,-icf=safe' 
+            if preset('LINKER_ICF_PRINT_SECTIONS'): 
+                self.save_linker_output = True 
+                self.ld_icf_flag += ' -Wl,--print-icf-sections' 
+        else: 
+            self.ld_icf_flag = '' 
+ 
         if self.musl.value:
             self.ld_flags.extend(['-Wl,--no-as-needed'])
             if self.tc.is_gcc:
@@ -1880,19 +1880,19 @@ class LD(Linker):
                 self.ld_flags.extend(('-Wl,-Bstatic', '-latomic', '-Wl,-Bdynamic'))
         elif target.is_android:
             self.ld_flags.extend(['-ldl', '-Wl,--no-as-needed'])
-            if self.type == Linker.LLD and target.android_api < 29:
-                # https://github.com/android/ndk/issues/1196
-                self.ld_flags.append('-Wl,--no-rosegment')
+            if self.type == Linker.LLD and target.android_api < 29: 
+                # https://github.com/android/ndk/issues/1196 
+                self.ld_flags.append('-Wl,--no-rosegment') 
         elif target.is_macos:
             self.ld_flags.append('-Wl,-no_deduplicate')
             if not self.tc.is_clang:
                 self.ld_flags.append('-Wl,-no_compact_unwind')
 
         self.thread_library = select([
-            (target.is_linux or target.is_macos, '-lpthread'),
+            (target.is_linux or target.is_macos, '-lpthread'), 
         ])
 
-        self.ld_export_dynamic_flag = None
+        self.ld_export_dynamic_flag = None 
         self.start_group = None
         self.end_group = None
         self.whole_archive = None
@@ -1904,7 +1904,7 @@ class LD(Linker):
         self.libresolv = '-lresolv' if target.is_linux or target.is_macos or target.is_android else None
 
         if target.is_linux or target.is_android:
-            self.ld_export_dynamic_flag = '-rdynamic'
+            self.ld_export_dynamic_flag = '-rdynamic' 
             self.use_stdlib = '-nodefaultlibs'
 
         if target.is_linux or target.is_android or target.is_cygwin or target.is_none:
@@ -1947,22 +1947,22 @@ class LD(Linker):
             if target.is_armv7 and self.type != Linker.LLD:
                 self.sys_lib.append('-Wl,--fix-cortex-a8')
 
-            # NDK r23 onwards has stopped using libgcc:
-            # - https://github.com/android/ndk/wiki/Changelog-r23#changes
-            # - https://github.com/android/ndk/issues/1230
-            #   LLVM's libunwind is now used instead of libgcc for all architectures rather than just 32-bit Arm.
-            # - https://github.com/android/ndk/issues/1231
-            #   LLVM's libclang_rt.builtins is now used instead of libgcc.
-            if self.tc.android_ndk_version >= 23:
-                # Use toolchain defaults to link with libunwind/clang_rt.builtins
-                self.use_stdlib = '-nostdlib++'
-            else:
-                # Preserve old behaviour: specify runtime libs manually
-                self.use_stdlib = '-nodefaultlibs'
-                if target.is_armv7:
-                    self.sys_lib.append('-lunwind')
-                self.sys_lib.append('-lgcc')
-
+            # NDK r23 onwards has stopped using libgcc: 
+            # - https://github.com/android/ndk/wiki/Changelog-r23#changes 
+            # - https://github.com/android/ndk/issues/1230 
+            #   LLVM's libunwind is now used instead of libgcc for all architectures rather than just 32-bit Arm. 
+            # - https://github.com/android/ndk/issues/1231 
+            #   LLVM's libclang_rt.builtins is now used instead of libgcc. 
+            if self.tc.android_ndk_version >= 23: 
+                # Use toolchain defaults to link with libunwind/clang_rt.builtins 
+                self.use_stdlib = '-nostdlib++' 
+            else: 
+                # Preserve old behaviour: specify runtime libs manually 
+                self.use_stdlib = '-nodefaultlibs' 
+                if target.is_armv7: 
+                    self.sys_lib.append('-lunwind') 
+                self.sys_lib.append('-lgcc') 
+ 
         if self.tc.is_clang and not self.tc.version_at_least(4, 0) and target.is_linux_x86_64:
             self.sys_lib.append('-L/usr/lib/x86_64-linux-gnu')
 
@@ -1981,12 +1981,12 @@ class LD(Linker):
         emit('LD_STRIP_FLAG', self.ld_stripflag)
         emit('STRIP_FLAG')
 
-        emit('LD_DCE_FLAG', self.ld_dce_flag)
-        emit('DCE_FLAG')
-
-        emit('LD_ICF_FLAG', self.ld_icf_flag)
-        emit('ICF_FLAG')
-
+        emit('LD_DCE_FLAG', self.ld_dce_flag) 
+        emit('DCE_FLAG') 
+ 
+        emit('LD_ICF_FLAG', self.ld_icf_flag) 
+        emit('ICF_FLAG') 
+ 
         emit('C_LIBRARY_PATH')
         emit('C_SYSTEM_LIBRARIES_INTERCEPT')
         if self.musl.value:
@@ -2011,35 +2011,35 @@ class LD(Linker):
             emit('DWARF_TOOL', dwarf_tool)
         emit('OBJADDE')
 
-        emit('LD_EXPORT_ALL_DYNAMIC_SYMBOLS_FLAG', self.ld_export_dynamic_flag)
+        emit('LD_EXPORT_ALL_DYNAMIC_SYMBOLS_FLAG', self.ld_export_dynamic_flag) 
         emit_big('''
-            NO_EXPORT_DYNAMIC_SYMBOLS=
-            EXPORTS_VALUE=$LD_EXPORT_ALL_DYNAMIC_SYMBOLS_FLAG
+            NO_EXPORT_DYNAMIC_SYMBOLS= 
+            EXPORTS_VALUE=$LD_EXPORT_ALL_DYNAMIC_SYMBOLS_FLAG 
             when ($EXPORTS_FILE) {
-                EXPORTS_VALUE=$LD_EXPORT_ALL_DYNAMIC_SYMBOLS_FLAG -Wl,--version-script=${input:EXPORTS_FILE}
-            }
-            when ($NO_EXPORT_DYNAMIC_SYMBOLS == "yes") {
-                EXPORTS_VALUE=
+                EXPORTS_VALUE=$LD_EXPORT_ALL_DYNAMIC_SYMBOLS_FLAG -Wl,--version-script=${input:EXPORTS_FILE} 
+            } 
+            when ($NO_EXPORT_DYNAMIC_SYMBOLS == "yes") { 
+                EXPORTS_VALUE= 
             }''')
 
         emit('LINKER_SCRIPT_VALUE', '${ext=.ld;pre=-T:SRCS_GLOBAL}')
 
-        linker_time_trace_requested = is_positive('TIME_TRACE') or is_positive('LINKER_TIME_TRACE')
-        linker_supports_time_trace = self.type == Linker.LLD  # XXX: Should really check the linker version if we had one
-        if linker_time_trace_requested and linker_supports_time_trace:
-            linker_time_trace_granularity = preset('TIME_TRACE_GRANULARITY', '500')
-            emit('LINKER_TIME_TRACE_FLAG', ' '.join([
-                '-Wl,--time-trace',
-                '-Wl,--time-trace-granularity=' + linker_time_trace_granularity,
-                '-Wl,--time-trace-file=${output;rootrel;pre=$MODULE_PREFIX;suf=$MODULE_SUFFIX.time_trace.json:REALPRJNAME}',
-            ]))
-        else:
-            emit('LINKER_TIME_TRACE_FLAG')
-
+        linker_time_trace_requested = is_positive('TIME_TRACE') or is_positive('LINKER_TIME_TRACE') 
+        linker_supports_time_trace = self.type == Linker.LLD  # XXX: Should really check the linker version if we had one 
+        if linker_time_trace_requested and linker_supports_time_trace: 
+            linker_time_trace_granularity = preset('TIME_TRACE_GRANULARITY', '500') 
+            emit('LINKER_TIME_TRACE_FLAG', ' '.join([ 
+                '-Wl,--time-trace', 
+                '-Wl,--time-trace-granularity=' + linker_time_trace_granularity, 
+                '-Wl,--time-trace-file=${output;rootrel;pre=$MODULE_PREFIX;suf=$MODULE_SUFFIX.time_trace.json:REALPRJNAME}', 
+            ])) 
+        else: 
+            emit('LINKER_TIME_TRACE_FLAG') 
+ 
         exe_flags = [
             '$C_FLAGS_PLATFORM', '$BEFORE_PEERS', self.start_group, '${rootrel:PEERS}', self.end_group, '$AFTER_PEERS',
             '$EXPORTS_VALUE $LINKER_SCRIPT_VALUE $LDFLAGS $LDFLAGS_GLOBAL $OBJADDE $OBJADDE_LIB',
-            '$C_LIBRARY_PATH $C_SYSTEM_LIBRARIES_INTERCEPT $C_SYSTEM_LIBRARIES $STRIP_FLAG $DCE_FLAG $ICF_FLAG $LINKER_TIME_TRACE_FLAG']
+            '$C_LIBRARY_PATH $C_SYSTEM_LIBRARIES_INTERCEPT $C_SYSTEM_LIBRARIES $STRIP_FLAG $DCE_FLAG $ICF_FLAG $LINKER_TIME_TRACE_FLAG'] 
 
         arch_flag = '--arch={arch}'.format(arch=self.target.os_compat)
         soname_flag = '-Wl,{option},${{_SONAME}}'.format(option=self.soname_option)
@@ -2076,7 +2076,7 @@ class LD(Linker):
             emit('REAL_LINK_EXE_CMDLINE',
                  '$YMAKE_PYTHON ${input:"build/scripts/link_exe.py"}',
                  '--source-root $ARCADIA_ROOT',
-                 '--linker-output ${output;pre=$MODULE_PREFIX;suf=$MODULE_SUFFIX.linker.txt:REALPRJNAME}' if self.save_linker_output else '',
+                 '--linker-output ${output;pre=$MODULE_PREFIX;suf=$MODULE_SUFFIX.linker.txt:REALPRJNAME}' if self.save_linker_output else '', 
                  '${pre=--whole-archive-peers :WHOLE_ARCHIVE_PEERS}',
                  '${pre=--whole-archive-libs :_WHOLE_ARCHIVE_LIBS_VALUE_GLOBAL}',
                  arch_flag,
@@ -2094,7 +2094,7 @@ class LD(Linker):
         emit('REAL_LINK_EXEC_DYN_LIB_CMDLINE',
              '$YMAKE_PYTHON ${input:"build/scripts/link_dyn_lib.py"}',
              '--target $TARGET',
-             '--linker-output ${output;pre=$MODULE_PREFIX;suf=$MODULE_SUFFIX.linker.txt:REALPRJNAME}' if self.save_linker_output else '',
+             '--linker-output ${output;pre=$MODULE_PREFIX;suf=$MODULE_SUFFIX.linker.txt:REALPRJNAME}' if self.save_linker_output else '', 
              '${pre=--whole-archive-peers :WHOLE_ARCHIVE_PEERS}',
              '${pre=--whole-archive-libs :_WHOLE_ARCHIVE_LIBS_VALUE_GLOBAL}',
              arch_flag,
@@ -2141,7 +2141,7 @@ class LD(Linker):
             emit('LINK_DYN_LIB', "$REAL_LINK_EXE")
         else:
             emit('LINK_DYN_LIB', '$GENERATE_MF && $GENERATE_VCS_C_INFO_NODEP && $REAL_LINK_DYN_LIB && $DWARF_COMMAND && $LINK_ADDITIONAL_SECTIONS_COMMAND')
-        emit('LINK_EXEC_DYN_LIB', '$GENERATE_MF && $GENERATE_VCS_C_INFO_NODEP && $REAL_LINK_EXEC_DYN_LIB && $DWARF_COMMAND && $LINK_ADDITIONAL_SECTIONS_COMMAND')
+        emit('LINK_EXEC_DYN_LIB', '$GENERATE_MF && $GENERATE_VCS_C_INFO_NODEP && $REAL_LINK_EXEC_DYN_LIB && $DWARF_COMMAND && $LINK_ADDITIONAL_SECTIONS_COMMAND') 
         emit('SWIG_DLL_JAR_CMD', '$GENERATE_MF && $GENERATE_VCS_C_INFO_NODEP && $REAL_SWIG_DLL_JAR_CMD && $DWARF_COMMAND')
 
         tail_link_lib = '$AUTO_INPUT ${requirements;hide:LIB_REQUIREMENTS} ${kv;hide:"p AR"} $TOOLCHAIN_ENV ${kv;hide:"pc light-red"} ${kv;hide:"show_out"}'
@@ -2754,12 +2754,12 @@ class MSVCLinker(MSVC, Linker):
             emit('LINK_WRAPPER')
 
         emit('LINK_WRAPPER_DYNLIB', '${YMAKE_PYTHON}', '${input:"build/scripts/link_dyn_lib.py"}', '--arch', 'WINDOWS', '--target', '$TARGET')
-        emit_big('''
-            EXPORTS_VALUE=
-            when ($EXPORTS_FILE) {
-                LINK_IMPLIB_VALUE=$LINK_IMPLIB
-                EXPORTS_VALUE=/DEF:${input:EXPORTS_FILE}
-            }''')
+        emit_big(''' 
+            EXPORTS_VALUE= 
+            when ($EXPORTS_FILE) { 
+                LINK_IMPLIB_VALUE=$LINK_IMPLIB 
+                EXPORTS_VALUE=/DEF:${input:EXPORTS_FILE} 
+            }''') 
 
         emit("GENERATE_MF_CMD", '$YMAKE_PYTHON ${input:"build/scripts/generate_mf.py"}',
              '--build-root $ARCADIA_BUILD_ROOT --module-name $REALPRJNAME -o ${output;pre=$MODULE_PREFIX;suf=$MODULE_SUFFIX.mf:REALPRJNAME}',

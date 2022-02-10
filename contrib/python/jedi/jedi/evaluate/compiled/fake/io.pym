@@ -1,9 +1,9 @@
-class TextIOWrapper():
-    def __next__(self):
-        return str()
-
-    def __iter__(self):
-        yield str()
+class TextIOWrapper(): 
+    def __next__(self): 
+        return str() 
+ 
+    def __iter__(self): 
+        yield str() 
 
     def readlines(self):
         return ['']

@@ -9,7 +9,7 @@ SRCS(
 )
 
 PEERDIR(
-    contrib/restricted/boost
+    contrib/restricted/boost 
 )
 
 END()

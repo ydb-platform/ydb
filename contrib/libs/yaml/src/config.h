@@ -64,7 +64,7 @@
 #define VERSION "0.2.5"
 
 /* Define the major version number. */
-#define YAML_VERSION_MAJOR 0
+#define YAML_VERSION_MAJOR 0 
 
 /* Define the minor version number. */
 #define YAML_VERSION_MINOR 2

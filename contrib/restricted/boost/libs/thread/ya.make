@@ -10,11 +10,11 @@ OWNER(
     g:cpp-contrib
 )
 
-INCLUDE(${ARCADIA_ROOT}/contrib/restricted/boost/boost_common.inc)
+INCLUDE(${ARCADIA_ROOT}/contrib/restricted/boost/boost_common.inc) 
 
-PEERDIR(
-    ${BOOST_ROOT}/libs/chrono
-    ${BOOST_ROOT}/libs/system
+PEERDIR( 
+    ${BOOST_ROOT}/libs/chrono 
+    ${BOOST_ROOT}/libs/system 
 )
 
 IF (OS_WINDOWS)

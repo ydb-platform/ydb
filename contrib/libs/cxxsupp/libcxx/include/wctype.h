@@ -68,7 +68,7 @@ wctrans_t wctrans(const char* property);
 // of these declarations (e.g. <wchar.h>), the second `using ::wint_t` with using_if_exists
 // will fail because it does not refer to the same declaration.
 #if __has_include_next(<wctype.h>)
-#   include_next <wctype.h>
+#   include_next <wctype.h> 
 #   define _LIBCPP_INCLUDED_C_LIBRARY_WCTYPE_H
 #endif
 #endif

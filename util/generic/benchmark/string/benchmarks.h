@@ -1,5 +1,5 @@
-#pragma once
-
+#pragma once 
+ 
 // Define BENCHMARK_PREFIX and BENCHMARKED_CLASS before including this file.
 
 #include <util/generic/xrange.h>

@@ -12,15 +12,15 @@
 
 #if defined(_LIBCPP_ABI_MICROSOFT)
 #   if !defined(_LIBCPP_ABI_VCRUNTIME)
-#       include "support/runtime/new_handler_fallback.ipp"
-#   endif
+#       include "support/runtime/new_handler_fallback.ipp" 
+#   endif 
 #elif defined(LIBCXX_BUILDING_LIBCXXABI)
-#   include <cxxabi.h>
+#   include <cxxabi.h> 
 #elif defined(LIBCXX_BUILDING_LIBCXXRT)
-#   include <cxxabi.h>
-#   include "support/runtime/new_handler_fallback.ipp"
+#   include <cxxabi.h> 
+#   include "support/runtime/new_handler_fallback.ipp" 
 #elif defined(__GLIBCXX__)
-    // nothing to do
+    // nothing to do 
 #else
 #   include "support/runtime/new_handler_fallback.ipp"
 #endif
@@ -129,7 +129,7 @@ _LIBCPP_WEAK
 void
 operator delete(void* ptr) noexcept
 {
-        ::free(ptr);
+        ::free(ptr); 
 }
 
 _LIBCPP_WEAK

@@ -35,7 +35,7 @@ RECURSE(
     cgiparam/ut
     charset
     charset/ut
-    chromium_trace
+    chromium_trace 
     clang_tidy
     clickhouse
     clustered_hnsw

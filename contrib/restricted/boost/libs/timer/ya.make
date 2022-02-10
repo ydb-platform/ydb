@@ -10,7 +10,7 @@ OWNER(
     g:cpp-contrib
 )
 
-INCLUDE(${ARCADIA_ROOT}/contrib/restricted/boost/boost_common.inc)
+INCLUDE(${ARCADIA_ROOT}/contrib/restricted/boost/boost_common.inc) 
 
 SRCS(
     src/auto_timers_construction.cpp

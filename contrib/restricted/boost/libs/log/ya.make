@@ -10,10 +10,10 @@ OWNER(
     g:cpp-contrib
 )
 
-INCLUDE(${ARCADIA_ROOT}/contrib/restricted/boost/boost_common.inc)
+INCLUDE(${ARCADIA_ROOT}/contrib/restricted/boost/boost_common.inc) 
 
 ADDINCL(
-    ${BOOST_ROOT}/libs/log/src
+    ${BOOST_ROOT}/libs/log/src 
 )
 
 CFLAGS(

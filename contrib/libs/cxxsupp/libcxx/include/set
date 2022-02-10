@@ -156,7 +156,7 @@ public:
         const_iterator find(const K& x) const;  // C++14
 
     template<typename K>
-        size_type count(const K& x) const;        // C++14
+        size_type count(const K& x) const;        // C++14 
     size_type      count(const key_type& k) const;
 
         bool contains(const key_type& x) const; // C++20

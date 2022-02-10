@@ -8,11 +8,11 @@ import unittest
 class TestMultiHash(unittest.TestCase):
 
     def test_str_int(self):
-        value = MultiHash(TString(b"1234567"), 123)
+        value = MultiHash(TString(b"1234567"), 123) 
         self.assertEquals(value, 17038203285960021630)
 
     def test_int_str(self):
-        value = MultiHash(123, TString(b"1234567"))
+        value = MultiHash(123, TString(b"1234567")) 
         self.assertEquals(value, 9973288649881090712)
 
     def test_collision(self):

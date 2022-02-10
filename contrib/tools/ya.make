@@ -20,7 +20,7 @@ RECURSE(
     langid
     leveldb
     lld
-    lldb
+    lldb 
     mp4viewer
     open-vcdiff
     open-vcdiff/bin

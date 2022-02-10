@@ -1,9 +1,9 @@
 PY3_LIBRARY()
-
+ 
 OWNER(borman orivej g:python-contrib)
 
 VERSION(59.7.0)
-
+ 
 LICENSE(MIT)
 
 PEERDIR(
@@ -16,11 +16,11 @@ NO_CHECK_IMPORTS(
     setuptools.*
 )
 
-PY_SRCS(
-    TOP_LEVEL
+PY_SRCS( 
+    TOP_LEVEL 
     _distutils_hack/__init__.py
     _distutils_hack/override.py
-    pkg_resources/__init__.py
+    pkg_resources/__init__.py 
     pkg_resources/_vendor/__init__.py
     pkg_resources/_vendor/appdirs.py
     pkg_resources/_vendor/packaging/__about__.py
@@ -36,7 +36,7 @@ PY_SRCS(
     pkg_resources/_vendor/packaging/version.py
     pkg_resources/_vendor/pyparsing.py
     pkg_resources/extern/__init__.py
-    setuptools/__init__.py
+    setuptools/__init__.py 
     setuptools/_deprecation_warning.py
     setuptools/_distutils/__init__.py
     setuptools/_distutils/_msvccompiler.py
@@ -110,54 +110,54 @@ PY_SRCS(
     setuptools/_vendor/packaging/utils.py
     setuptools/_vendor/packaging/version.py
     setuptools/_vendor/pyparsing.py
-    setuptools/archive_util.py
+    setuptools/archive_util.py 
     setuptools/build_meta.py
-    setuptools/command/__init__.py
-    setuptools/command/alias.py
-    setuptools/command/bdist_egg.py
-    setuptools/command/bdist_rpm.py
+    setuptools/command/__init__.py 
+    setuptools/command/alias.py 
+    setuptools/command/bdist_egg.py 
+    setuptools/command/bdist_rpm.py 
     setuptools/command/build_clib.py
-    setuptools/command/build_ext.py
-    setuptools/command/build_py.py
-    setuptools/command/develop.py
+    setuptools/command/build_ext.py 
+    setuptools/command/build_py.py 
+    setuptools/command/develop.py 
     setuptools/command/dist_info.py
-    setuptools/command/easy_install.py
-    setuptools/command/egg_info.py
-    setuptools/command/install.py
-    setuptools/command/install_egg_info.py
-    setuptools/command/install_lib.py
-    setuptools/command/install_scripts.py
+    setuptools/command/easy_install.py 
+    setuptools/command/egg_info.py 
+    setuptools/command/install.py 
+    setuptools/command/install_egg_info.py 
+    setuptools/command/install_lib.py 
+    setuptools/command/install_scripts.py 
     setuptools/command/py36compat.py
-    setuptools/command/register.py
-    setuptools/command/rotate.py
-    setuptools/command/saveopts.py
-    setuptools/command/sdist.py
-    setuptools/command/setopt.py
-    setuptools/command/test.py
+    setuptools/command/register.py 
+    setuptools/command/rotate.py 
+    setuptools/command/saveopts.py 
+    setuptools/command/sdist.py 
+    setuptools/command/setopt.py 
+    setuptools/command/test.py 
     setuptools/command/upload.py
-    setuptools/command/upload_docs.py
+    setuptools/command/upload_docs.py 
     setuptools/config.py
     setuptools/dep_util.py
-    setuptools/depends.py
-    setuptools/dist.py
+    setuptools/depends.py 
+    setuptools/dist.py 
     setuptools/errors.py
-    setuptools/extension.py
+    setuptools/extension.py 
     setuptools/extern/__init__.py
     setuptools/glob.py
     setuptools/installer.py
-    setuptools/launch.py
+    setuptools/launch.py 
     setuptools/monkey.py
     setuptools/msvc.py
     setuptools/namespaces.py
-    setuptools/package_index.py
+    setuptools/package_index.py 
     setuptools/py34compat.py
-    setuptools/sandbox.py
-    setuptools/unicode_utils.py
-    setuptools/version.py
+    setuptools/sandbox.py 
+    setuptools/unicode_utils.py 
+    setuptools/version.py 
     setuptools/wheel.py
-    setuptools/windows_support.py
-)
-
+    setuptools/windows_support.py 
+) 
+ 
 RESOURCE_FILES(
     PREFIX contrib/python/setuptools/py3/
     .dist-info/METADATA
@@ -165,4 +165,4 @@ RESOURCE_FILES(
     .dist-info/top_level.txt
 )
 
-END()
+END() 

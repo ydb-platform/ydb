@@ -561,7 +561,7 @@ public:                       \
         }                                                                                        \
     } while (false)
 
-#define UNIT_CHECK_GENERATED_NO_EXCEPTION(A, E) UNIT_CHECK_GENERATED_NO_EXCEPTION_C(A, E, "and exception message is:\n" << CurrentExceptionMessage())
+#define UNIT_CHECK_GENERATED_NO_EXCEPTION(A, E) UNIT_CHECK_GENERATED_NO_EXCEPTION_C(A, E, "and exception message is:\n" << CurrentExceptionMessage()) 
 
 // Same as UNIT_ASSERT_EXCEPTION_SATISFIES but prints additional string C when nothing was thrown
 #define UNIT_ASSERT_EXCEPTION_SATISFIES_C(A, E, pred, C)   \
@@ -795,11 +795,11 @@ public:                       \
     };
 
     struct TBaseTestCase {
-        // NOTE: since EACH test case is instantiated for listing tests, its
-        // ctor/dtor are not the best place to do heavy preparations in test fixtures.
-        //
-        // Consider using SetUp()/TearDown() methods instead
-
+        // NOTE: since EACH test case is instantiated for listing tests, its 
+        // ctor/dtor are not the best place to do heavy preparations in test fixtures. 
+        // 
+        // Consider using SetUp()/TearDown() methods instead 
+ 
         inline TBaseTestCase()
             : TBaseTestCase(nullptr, nullptr, false)
         {
@@ -814,21 +814,21 @@ public:                       \
 
         virtual ~TBaseTestCase() = default;
 
-        // Each test case is executed in 3 steps:
-        //
-        // 1. SetUp() (from fixture)
-        // 2. Execute_() (test body from Y_UNIT_TEST macro)
-        // 3. TearDown() (from fixture)
-        //
-        // Both SetUp() and TearDown() may use UNIT_* check macros and are only
-        // called when the test is executed.
+        // Each test case is executed in 3 steps: 
+        // 
+        // 1. SetUp() (from fixture) 
+        // 2. Execute_() (test body from Y_UNIT_TEST macro) 
+        // 3. TearDown() (from fixture) 
+        // 
+        // Both SetUp() and TearDown() may use UNIT_* check macros and are only 
+        // called when the test is executed. 
 
-        virtual void SetUp(TTestContext& /* context */) {
-        }
-
-        virtual void TearDown(TTestContext& /* context */) {
-        }
-
+        virtual void SetUp(TTestContext& /* context */) { 
+        } 
+ 
+        virtual void TearDown(TTestContext& /* context */) { 
+        } 
+ 
         virtual void Execute_(TTestContext& context) {
             Body_(context);
         }
@@ -958,12 +958,12 @@ public:                       \
                         this->BeforeTest(i->Name_);                                                                     \
                         {                                                                                               \
                             TCleanUp cleaner(this);                                                                     \
-                            auto testCase = [&i, &context] {                                                            \
-                                i->SetUp(context);                                                                      \
-                                i->Execute_(context);                                                                   \
-                                i->TearDown(context);                                                                   \
-                            };                                                                                          \
-                            this->T::Run(testCase, StaticName(), i->Name_, i->ForceFork_);                              \
+                            auto testCase = [&i, &context] {                                                            \ 
+                                i->SetUp(context);                                                                      \ 
+                                i->Execute_(context);                                                                   \ 
+                                i->TearDown(context);                                                                   \ 
+                            };                                                                                          \ 
+                            this->T::Run(testCase, StaticName(), i->Name_, i->ForceFork_);                              \ 
                         }                                                                                               \
                     } catch (const ::NUnitTest::TAssertException&) {                                                    \
                     } catch (const yexception& e) {                                                                     \

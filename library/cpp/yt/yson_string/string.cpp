@@ -101,25 +101,25 @@ TYsonString::TYsonString(
     : TYsonString(TYsonStringBuf(data, type))
 { }
 
-#ifdef TSTRING_IS_STD_STRING
+#ifdef TSTRING_IS_STD_STRING 
 TYsonString::TYsonString(
-    const TString& data,
+    const TString& data, 
     EYsonType type)
-    : TYsonString(TYsonStringBuf(data, type))
-{ }
-#else
-TYsonString::TYsonString(
-    const TString& data,
-    EYsonType type)
+    : TYsonString(TYsonStringBuf(data, type)) 
+{ } 
+#else 
+TYsonString::TYsonString( 
+    const TString& data, 
+    EYsonType type) 
 {
-    // NOTE: CoW TString implementation is assumed
-    // Moving the payload MUST NOT invalidate its internal pointers
+    // NOTE: CoW TString implementation is assumed 
+    // Moving the payload MUST NOT invalidate its internal pointers 
     Payload_ = data;
     Begin_ = data.data();
     Size_ = data.length();
     Type_ = type;
 }
-#endif
+#endif 
 
 TYsonString::TYsonString(
     const TSharedRef& data,

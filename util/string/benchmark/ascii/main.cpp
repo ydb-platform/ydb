@@ -17,20 +17,20 @@ namespace {
             return Get((ui8)x) ? x + ('a' - 'A') : x;
         }
     };
-
-    struct TToLowerLookup {
-        char Table[256];
-
-        TToLowerLookup() {
-            for (size_t i : xrange(256)) {
-                Table[i] = AsciiToLower(i);
-            }
-        }
-
-        char ToLower(char x) const noexcept {
-            return Table[(ui8)x];
-        }
-    };
+ 
+    struct TToLowerLookup { 
+        char Table[256]; 
+ 
+        TToLowerLookup() { 
+            for (size_t i : xrange(256)) { 
+                Table[i] = AsciiToLower(i); 
+            } 
+        } 
+ 
+        char ToLower(char x) const noexcept { 
+            return Table[(ui8)x]; 
+        } 
+    }; 
 }
 
 static inline char FastAsciiToLower(char c) {
@@ -91,27 +91,27 @@ Y_CPU_BENCHMARK(BitMapAsciiToLower, iface) {
     }
 }
 
-Y_CPU_BENCHMARK(LookupAsciiToLower, iface) {
-    for (const auto i : xrange(iface.Iterations())) {
-        Y_UNUSED(i);
-
-        for (int j = 0; j < 256; ++j) {
-            Y_DO_NOT_OPTIMIZE_AWAY(Singleton<TToLowerLookup>()->ToLower(j));
-        }
-    }
-}
-
-Y_CPU_BENCHMARK(LookupAsciiToLowerNoSingleton, iface) {
-    TToLowerLookup lookup;
-    for (const auto i : xrange(iface.Iterations())) {
-        Y_UNUSED(i);
-
-        for (int j = 0; j < 256; ++j) {
-            Y_DO_NOT_OPTIMIZE_AWAY(lookup.ToLower(j));
-        }
-    }
-}
-
+Y_CPU_BENCHMARK(LookupAsciiToLower, iface) { 
+    for (const auto i : xrange(iface.Iterations())) { 
+        Y_UNUSED(i); 
+ 
+        for (int j = 0; j < 256; ++j) { 
+            Y_DO_NOT_OPTIMIZE_AWAY(Singleton<TToLowerLookup>()->ToLower(j)); 
+        } 
+    } 
+} 
+ 
+Y_CPU_BENCHMARK(LookupAsciiToLowerNoSingleton, iface) { 
+    TToLowerLookup lookup; 
+    for (const auto i : xrange(iface.Iterations())) { 
+        Y_UNUSED(i); 
+ 
+        for (int j = 0; j < 256; ++j) { 
+            Y_DO_NOT_OPTIMIZE_AWAY(lookup.ToLower(j)); 
+        } 
+    } 
+} 
+ 
 Y_CPU_BENCHMARK(tolower, iface) {
     for (const auto i : xrange(iface.Iterations())) {
         Y_UNUSED(i);

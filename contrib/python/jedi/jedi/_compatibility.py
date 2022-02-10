@@ -1,30 +1,30 @@
-"""
+""" 
 To ensure compatibility from Python ``2.7`` - ``3.x``, a module has been
-created. Clearly there is huge need to use conforming syntax.
-"""
+created. Clearly there is huge need to use conforming syntax. 
+""" 
 import errno
-import sys
-import os
-import re
+import sys 
+import os 
+import re 
 import pkgutil
 import warnings
 import inspect
 import subprocess
-try:
-    import importlib
-except ImportError:
-    pass
-
-is_py3 = sys.version_info[0] >= 3
+try: 
+    import importlib 
+except ImportError: 
+    pass 
+ 
+is_py3 = sys.version_info[0] >= 3 
 is_py35 = is_py3 and sys.version_info[1] >= 5
 py_version = int(str(sys.version_info[0]) + str(sys.version_info[1]))
-
-
+ 
+ 
 class DummyFile(object):
     def __init__(self, loader, string):
         self.loader = loader
         self.string = string
-
+ 
     def read(self):
         return self.loader.get_source(self.string)
 
@@ -64,8 +64,8 @@ def find_module_py34(string, path=None, full_name=None, is_global_search=True):
 def find_module_py33(string, path=None, loader=None, full_name=None, is_global_search=True):
     loader = loader or importlib.machinery.PathFinder.find_module(string, path)
 
-    if loader is None and path is None:  # Fallback to find builtins
-        try:
+    if loader is None and path is None:  # Fallback to find builtins 
+        try: 
             with warnings.catch_warnings(record=True):
                 # Mute "DeprecationWarning: Use importlib.util.find_spec()
                 # instead." While we should replace that in the future, it's
@@ -73,17 +73,17 @@ def find_module_py33(string, path=None, loader=None, full_name=None, is_global_s
                 # it was added in Python 3.4 and find_loader hasn't been
                 # removed in 3.6.
                 loader = importlib.find_loader(string)
-        except ValueError as e:
-            # See #491. Importlib might raise a ValueError, to avoid this, we
-            # just raise an ImportError to fix the issue.
+        except ValueError as e: 
+            # See #491. Importlib might raise a ValueError, to avoid this, we 
+            # just raise an ImportError to fix the issue. 
             raise ImportError("Originally  " + repr(e))
-
-    if loader is None:
+ 
+    if loader is None: 
         raise ImportError("Couldn't find a loader for {}".format(string))
-
-    try:
-        is_package = loader.is_package(string)
-        if is_package:
+ 
+    try: 
+        is_package = loader.is_package(string) 
+        if is_package: 
             if hasattr(loader, 'path'):
                 module_path = os.path.dirname(loader.path)
             else:
@@ -93,27 +93,27 @@ def find_module_py33(string, path=None, loader=None, full_name=None, is_global_s
                 module_file = DummyFile(loader, string)
             else:
                 module_file = None
-        else:
-            module_path = loader.get_filename(string)
+        else: 
+            module_path = loader.get_filename(string) 
             module_file = DummyFile(loader, string)
-    except AttributeError:
-        # ExtensionLoader has not attribute get_filename, instead it has a
-        # path attribute that we can use to retrieve the module path
-        try:
-            module_path = loader.path
+    except AttributeError: 
+        # ExtensionLoader has not attribute get_filename, instead it has a 
+        # path attribute that we can use to retrieve the module path 
+        try: 
+            module_path = loader.path 
             module_file = DummyFile(loader, string)
-        except AttributeError:
-            module_path = string
-            module_file = None
-        finally:
-            is_package = False
-
+        except AttributeError: 
+            module_path = string 
+            module_file = None 
+        finally: 
+            is_package = False 
+ 
     if hasattr(loader, 'archive'):
         module_path = loader.archive
 
-    return module_file, module_path, is_package
-
-
+    return module_file, module_path, is_package 
+ 
+ 
 def find_module_pre_py34(string, path=None, full_name=None, is_global_search=True):
     # This import is here, because in other places it will raise a
     # DeprecationWarning.
@@ -124,7 +124,7 @@ def find_module_pre_py34(string, path=None, full_name=None, is_global_search=Tru
         return module_file, module_path, module_type is imp.PKG_DIRECTORY
     except ImportError:
         pass
-
+ 
     if path is None:
         path = sys.path
     for item in path:
@@ -147,20 +147,20 @@ def find_module_pre_py34(string, path=None, full_name=None, is_global_search=Tru
             except ImportError:
                 pass
     raise ImportError("No module named {}".format(string))
-
+ 
 
 find_module = find_module_py34 if is_py3 else find_module_pre_py34
-find_module.__doc__ = """
-Provides information about a module.
-
-This function isolates the differences in importing libraries introduced with
-python 3.3 on; it gets a module name and optionally a path. It will return a
-tuple containin an open file for the module (if not builtin), the filename
-or the name of the module if it is a builtin one and a boolean indicating
-if the module is contained in a package.
-"""
-
-
+find_module.__doc__ = """ 
+Provides information about a module. 
+ 
+This function isolates the differences in importing libraries introduced with 
+python 3.3 on; it gets a module name and optionally a path. It will return a 
+tuple containin an open file for the module (if not builtin), the filename 
+or the name of the module if it is a builtin one and a boolean indicating 
+if the module is contained in a package. 
+""" 
+ 
+ 
 def _iter_modules(paths, prefix=''):
     # Copy of pkgutil.iter_modules adapted to work with namespaces
 
@@ -236,69 +236,69 @@ else:
         return [suffix for suffix, _, _ in imp.get_suffixes()]
 
 
-# unicode function
-try:
-    unicode = unicode
-except NameError:
-    unicode = str
+# unicode function 
+try: 
+    unicode = unicode 
+except NameError: 
+    unicode = str 
+ 
+ 
+# re-raise function 
+if is_py3: 
+    def reraise(exception, traceback): 
+        raise exception.with_traceback(traceback) 
+else: 
+    eval(compile(""" 
+def reraise(exception, traceback): 
+    raise exception, None, traceback 
+""", 'blub', 'exec')) 
+ 
+reraise.__doc__ = """ 
+Re-raise `exception` with a `traceback` object. 
+ 
+Usage:: 
+ 
+    reraise(Exception, sys.exc_info()[2]) 
+ 
+""" 
+ 
 
-
-# re-raise function
-if is_py3:
-    def reraise(exception, traceback):
-        raise exception.with_traceback(traceback)
-else:
-    eval(compile("""
-def reraise(exception, traceback):
-    raise exception, None, traceback
-""", 'blub', 'exec'))
-
-reraise.__doc__ = """
-Re-raise `exception` with a `traceback` object.
-
-Usage::
-
-    reraise(Exception, sys.exc_info()[2])
-
-"""
-
-
-class Python3Method(object):
-    def __init__(self, func):
-        self.func = func
-
-    def __get__(self, obj, objtype):
-        if obj is None:
-            return lambda *args, **kwargs: self.func(*args, **kwargs)
-        else:
-            return lambda *args, **kwargs: self.func(obj, *args, **kwargs)
-
-
-def use_metaclass(meta, *bases):
-    """ Create a class with a metaclass. """
-    if not bases:
-        bases = (object,)
+class Python3Method(object): 
+    def __init__(self, func): 
+        self.func = func 
+ 
+    def __get__(self, obj, objtype): 
+        if obj is None: 
+            return lambda *args, **kwargs: self.func(*args, **kwargs) 
+        else: 
+            return lambda *args, **kwargs: self.func(obj, *args, **kwargs) 
+ 
+ 
+def use_metaclass(meta, *bases): 
+    """ Create a class with a metaclass. """ 
+    if not bases: 
+        bases = (object,) 
     return meta("Py2CompatibilityMetaClass", bases, {})
-
-
-try:
-    encoding = sys.stdout.encoding
-    if encoding is None:
-        encoding = 'utf-8'
-except AttributeError:
-    encoding = 'ascii'
-
-
+ 
+ 
+try: 
+    encoding = sys.stdout.encoding 
+    if encoding is None: 
+        encoding = 'utf-8' 
+except AttributeError: 
+    encoding = 'ascii' 
+ 
+ 
 def u(string, errors='strict'):
-    """Cast to unicode DAMMIT!
-    Written because Python2 repr always implicitly casts to a string, so we
-    have to cast back to a unicode (and we now that we always deal with valid
-    unicode, because we check that in the beginning).
-    """
+    """Cast to unicode DAMMIT! 
+    Written because Python2 repr always implicitly casts to a string, so we 
+    have to cast back to a unicode (and we now that we always deal with valid 
+    unicode, because we check that in the beginning). 
+    """ 
     if isinstance(string, bytes):
         return unicode(string, encoding='UTF-8', errors=errors)
-    return string
-
+    return string 
+ 
 
 def cast_path(obj):
     """
@@ -320,29 +320,29 @@ def force_unicode(obj):
     return cast_path(obj)
 
 
-try:
-    import builtins  # module name in python 3
-except ImportError:
+try: 
+    import builtins  # module name in python 3 
+except ImportError: 
     import __builtin__ as builtins  # noqa: F401
-
-
+ 
+ 
 import ast  # noqa: F401
-
-
-def literal_eval(string):
-    return ast.literal_eval(string)
-
-
-try:
-    from itertools import zip_longest
-except ImportError:
+ 
+ 
+def literal_eval(string): 
+    return ast.literal_eval(string) 
+ 
+ 
+try: 
+    from itertools import zip_longest 
+except ImportError: 
     from itertools import izip_longest as zip_longest  # Python 2  # noqa: F401
-
+ 
 try:
     FileNotFoundError = FileNotFoundError
 except NameError:
     FileNotFoundError = IOError
-
+ 
 try:
     NotADirectoryError = NotADirectoryError
 except NameError:
@@ -354,18 +354,18 @@ except NameError:
     PermissionError = IOError
 
 
-def no_unicode_pprint(dct):
-    """
-    Python 2/3 dict __repr__ may be different, because of unicode differens
-    (with or without a `u` prefix). Normally in doctests we could use `pprint`
-    to sort dicts and check for equality, but here we have to write a separate
-    function to do that.
-    """
-    import pprint
-    s = pprint.pformat(dct)
-    print(re.sub("u'", "'", s))
-
-
+def no_unicode_pprint(dct): 
+    """ 
+    Python 2/3 dict __repr__ may be different, because of unicode differens 
+    (with or without a `u` prefix). Normally in doctests we could use `pprint` 
+    to sort dicts and check for equality, but here we have to write a separate 
+    function to do that. 
+    """ 
+    import pprint 
+    s = pprint.pformat(dct) 
+    print(re.sub("u'", "'", s)) 
+ 
+ 
 def print_to_stderr(*args):
     if is_py3:
         eval("print(*args, file=sys.stderr)")
@@ -374,22 +374,22 @@ def print_to_stderr(*args):
     sys.stderr.flush()
 
 
-def utf8_repr(func):
-    """
-    ``__repr__`` methods in Python 2 don't allow unicode objects to be
-    returned. Therefore cast them to utf-8 bytes in this decorator.
-    """
-    def wrapper(self):
-        result = func(self)
-        if isinstance(result, unicode):
-            return result.encode('utf-8')
-        else:
-            return result
-
-    if is_py3:
-        return func
-    else:
-        return wrapper
+def utf8_repr(func): 
+    """ 
+    ``__repr__`` methods in Python 2 don't allow unicode objects to be 
+    returned. Therefore cast them to utf-8 bytes in this decorator. 
+    """ 
+    def wrapper(self): 
+        result = func(self) 
+        if isinstance(result, unicode): 
+            return result.encode('utf-8') 
+        else: 
+            return result 
+ 
+    if is_py3: 
+        return func 
+    else: 
+        return wrapper 
 
 
 if is_py3:

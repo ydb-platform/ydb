@@ -1,10 +1,10 @@
-#pragma once
-
-#include <util/system/types.h>
-
-#include <algorithm>
-#include <cstring>
-
+#pragma once 
+ 
+#include <util/system/types.h> 
+ 
+#include <algorithm> 
+#include <cstring> 
+ 
 namespace NYsonPull {
     namespace NDetail {
         namespace NCEscape {
@@ -12,7 +12,7 @@ namespace NYsonPull {
                 inline ui8 as_digit(ui8 c) {
                     return c - ui8{'0'};
                 }
-
+ 
                 inline ui8 as_hexdigit(ui8 c) {
                     static constexpr ui8 hex_decode_map[256] = {
                         255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
@@ -37,10 +37,10 @@ namespace NYsonPull {
                         255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
                         255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
                         255, 255, 255, 255};
-
+ 
                     return hex_decode_map[c];
                 }
-
+ 
                 inline const ui8* read_oct(ui8& result, const ui8* p, ui8 n) {
                     auto digit = ui8{0};
                     while (n-- && (digit = as_digit(*p)) < 8) {
@@ -49,7 +49,7 @@ namespace NYsonPull {
                     }
                     return p;
                 }
-
+ 
                 inline const ui8* read_hex(ui8& result, const ui8* p, ui8 n) {
                     auto digit = ui8{0};
                     while (n-- && (digit = as_hexdigit(*p)) < 16) {
@@ -58,7 +58,7 @@ namespace NYsonPull {
                     }
                     return p;
                 }
-
+ 
                 inline const ui8* unescape_char_and_advance(
                     ui8& result,
                     const ui8* p,
@@ -88,7 +88,7 @@ namespace NYsonPull {
                             result = '\t';
                             ++p;
                             break;
-
+ 
                         case 'x': {
                             ++p;
                             result = 0;
@@ -101,7 +101,7 @@ namespace NYsonPull {
                                 result = 'x';
                             }
                         } break;
-
+ 
                         case '0':
                         case '1':
                         case '2':
@@ -111,7 +111,7 @@ namespace NYsonPull {
                                 result,
                                 p, std::min<ptrdiff_t>(3, end - p));
                             break;
-
+ 
                         case '4':
                         case '5':
                         case '6':
@@ -124,7 +124,7 @@ namespace NYsonPull {
                     }
                     return p;
                 }
-
+ 
                 template <typename T, typename U>
                 inline void unescape_impl(
                     const ui8* p,
@@ -148,7 +148,7 @@ namespace NYsonPull {
                         }
                     }
                 }
-            }
+            } 
         }     // namespace NCEscape
     }         // namespace NDetail
 }

@@ -1,7 +1,7 @@
 #include "format.h"
 #include "output.h"
 
-#include <util/generic/ymath.h>
+#include <util/generic/ymath.h> 
 #include <util/string/cast.h>
 
 namespace NFormatPrivate {
@@ -12,27 +12,27 @@ namespace NFormatPrivate {
     }
 
     static inline IOutputStream& PrintDoubleShortly(IOutputStream& os, const double& d) {
-        // General case: request 3 significant digits
-        // Side-effect: allows exponential representation
-        EFloatToStringMode mode = PREC_NDIGITS;
-        int ndigits = 3;
-
-        if (IsValidFloat(d) && Abs(d) < 1e12) {
-            // For reasonably-sized finite values, it's better to avoid
-            // exponential representation.
-            // Use compact fixed representation and determine
-            // precision based on magnitude.
-            mode = PREC_POINT_DIGITS_STRIP_ZEROES;
-            if (i64(Abs(d) * 100) < 1000) {
-                ndigits = 2;
-            } else if (i64(Abs(d) * 10) < 1000) {
-                ndigits = 1;
-            } else {
-                ndigits = 0;
-            }
-        }
-
-        return os << Prec(d, mode, ndigits);
+        // General case: request 3 significant digits 
+        // Side-effect: allows exponential representation 
+        EFloatToStringMode mode = PREC_NDIGITS; 
+        int ndigits = 3; 
+ 
+        if (IsValidFloat(d) && Abs(d) < 1e12) { 
+            // For reasonably-sized finite values, it's better to avoid 
+            // exponential representation. 
+            // Use compact fixed representation and determine 
+            // precision based on magnitude. 
+            mode = PREC_POINT_DIGITS_STRIP_ZEROES; 
+            if (i64(Abs(d) * 100) < 1000) { 
+                ndigits = 2; 
+            } else if (i64(Abs(d) * 10) < 1000) { 
+                ndigits = 1; 
+            } else { 
+                ndigits = 0; 
+            } 
+        } 
+ 
+        return os << Prec(d, mode, ndigits); 
     }
 }
 
@@ -51,11 +51,11 @@ void Out<NFormatPrivate::THumanReadableSize>(IOutputStream& stream, const NForma
 
     if (v < base) {
         NFormatPrivate::PrintDoubleShortly(stream, v);
-    } else if (v < base2) {
+    } else if (v < base2) { 
         NFormatPrivate::PrintDoubleShortly(stream, v / (double)base) << 'K';
-    } else if (v < base3) {
+    } else if (v < base3) { 
         NFormatPrivate::PrintDoubleShortly(stream, v / (double)base2) << 'M';
-    } else if (v < base4) {
+    } else if (v < base4) { 
         NFormatPrivate::PrintDoubleShortly(stream, v / (double)base3) << 'G';
     } else {
         NFormatPrivate::PrintDoubleShortly(stream, v / (double)base4) << 'T';

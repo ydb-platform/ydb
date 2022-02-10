@@ -9,10 +9,10 @@ RECURSE(
     apache
     apr
     apr-util
-    asio
+    asio 
     asmlib
     authparser
-    avs-device-sdk
+    avs-device-sdk 
     aws-sdk-cpp
     backtrace
     base64
@@ -20,8 +20,8 @@ RECURSE(
     bdb/ut
     benchmark
     bento4
-    bluez-clean-headers
-    breakpad
+    bluez-clean-headers 
+    breakpad 
     brotli
     c-ares
     cairo
@@ -153,12 +153,12 @@ RECURSE(
     libgit2
     libgraphqlparser
     libheif
-    libical
+    libical 
     libiconv
     libidn
     libidn2
     libjpeg-turbo
-    libjwt
+    libjwt 
     liblinear
     libm
     libmagic
@@ -173,7 +173,7 @@ RECURSE(
     libpng
     libpq
     libpqxx
-    libpsl
+    libpsl 
     libraw
     librdkafka
     librosa-cpp
@@ -224,12 +224,12 @@ RECURSE(
     metrohash
     mimalloc
     minilzo
-    minizip
+    minizip 
     mlir11
     mms
     mongo-c-driver
     mongo-cxx-driver
-    msgpack
+    msgpack 
     muparser
     muparser/tests
     musl
@@ -272,7 +272,7 @@ RECURSE(
     #pire/ut
     pixman
     poco
-    portaudio
+    portaudio 
     porto_api
     proj
     protobuf
@@ -337,9 +337,9 @@ RECURSE(
     tf-2.4/sample_python
     tf-2.4/tensorflow/python
     thrax
-    tinyalsa
+    tinyalsa 
     tlsh
-    trace_viewer
+    trace_viewer 
     tralics
     tree_sitter
     uatraits
@@ -351,7 +351,7 @@ RECURSE(
     vmaf
     wapiti
     webrtc
-    websocketpp
+    websocketpp 
     woff2
     xdelta3
     xmlsec
@@ -359,7 +359,7 @@ RECURSE(
     xxhash
     xz
     yajl
-    yaml
+    yaml 
     yaml-cpp
     zeromq
     zlib
@@ -402,8 +402,8 @@ IF (OS_LINUX)
         libnetfilter_log
         libnetfilter_conntrack
         openmpi
-        sdbus-cpp
-        systemd
+        sdbus-cpp 
+        systemd 
         uuid
         virtiofsd
     )

@@ -249,7 +249,7 @@ class ResourceImporter(object):
         if isinstance(relpath, bytes):
             relpath = _s(relpath)
         return relpath or modname
-
+ 
     # PEP-302 extension 3 of 3: packaging introspection.
     # Used by `linecache` (while printing tracebacks) unless module filename
     # exists on the filesystem.
@@ -265,7 +265,7 @@ class ResourceImporter(object):
                 return _s(file_bytes(abspath))
         data = resfs_read(mod_path(fullname))
         return _s(data) if data else ''
-
+ 
     def get_code(self, fullname):
         modname = fullname
         if self.is_package(fullname):
@@ -283,14 +283,14 @@ class ResourceImporter(object):
         yapyc_data = resfs_read(yapyc_path, builtin=True)
         if yapyc_data:
             return marshal.loads(yapyc_data)
-        else:
+        else: 
             py_data = resfs_read(path, builtin=True)
             if py_data:
                 return compile(py_data, _s(relpath), 'exec', dont_inherit=True)
             else:
                 # This covers packages with no __init__.py in resources.
                 return compile('', modname, 'exec', dont_inherit=True)
-
+ 
     def is_package(self, fullname):
         if fullname in self.memory:
             return False
@@ -332,7 +332,7 @@ class ResourceImporter(object):
         if self.arcadia_source_finder:
             for m in self.arcadia_source_finder.iter_modules(self._package_prefix, prefix):
                 yield m
-
+ 
     def get_resource_reader(self, fullname):
         try:
             if not self.is_package(fullname):
@@ -393,7 +393,7 @@ class BuiltinSubmoduleImporter(BuiltinImporter):
         else:
             return None
 
-
+ 
 class ArcadiaSourceFinder:
     """
         Search modules and packages in arcadia source tree.
@@ -522,17 +522,17 @@ class ArcadiaSourceFinder:
                 paths.add(rel_path)
 
 
-def excepthook(*args, **kws):
-    # traceback module cannot be imported at module level, because interpreter
-    # is not fully initialized yet
-
-    import traceback
-
-    return traceback.print_exception(*args, **kws)
-
-
+def excepthook(*args, **kws): 
+    # traceback module cannot be imported at module level, because interpreter 
+    # is not fully initialized yet 
+ 
+    import traceback 
+ 
+    return traceback.print_exception(*args, **kws) 
+ 
+ 
 importer = ResourceImporter()
-
+ 
 
 def executable_path_hook(path):
     if path == executable:
@@ -562,10 +562,10 @@ sys.path_importer_cache[executable] = importer
 # Indicator that modules and resources are built-in rather than on the file system.
 sys.is_standalone_binary = True
 sys.frozen = True
-
+ 
 # Set of names of importable modules.
 sys.extra_modules = importer.memory
-
-# Use custom implementation of traceback printer.
-# Built-in printer (PyTraceBack_Print) does not support custom module loaders
-sys.excepthook = excepthook
+ 
+# Use custom implementation of traceback printer. 
+# Built-in printer (PyTraceBack_Print) does not support custom module loaders 
+sys.excepthook = excepthook 

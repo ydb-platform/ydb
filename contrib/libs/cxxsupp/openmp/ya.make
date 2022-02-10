@@ -35,7 +35,7 @@ IF (SANITIZER_TYPE == memory)
     )
 ENDIF()
 
-COMPILE_C_AS_CXX()
+COMPILE_C_AS_CXX() 
 
 CXXFLAGS(-fno-exceptions)
 

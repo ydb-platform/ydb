@@ -1,11 +1,11 @@
-#pragma once
-
+#pragma once 
+ 
 #include <util/system/types.h>
-
-// Whether to ensure strict ASCII compatibility
-// Turns UTF-8 strings into unreadable garbage for no known reason
-//#define CESCAPE_STRICT_ASCII
-
+ 
+// Whether to ensure strict ASCII compatibility 
+// Turns UTF-8 strings into unreadable garbage for no known reason 
+//#define CESCAPE_STRICT_ASCII 
+ 
 namespace NYsonPull {
     namespace NDetail {
         namespace NCEscape {
@@ -14,29 +14,29 @@ namespace NYsonPull {
                     constexpr ui8 hex_digits[] = "0123456789ABCDEF";
                     return hex_digits[value];
                 }
-
+ 
                 inline ui8 oct_digit(ui8 value) {
                     return '0' + value;
                 }
-
+ 
                 inline bool is_printable(ui8 c) {
-#ifdef CESCAPE_STRICT_ASCII
+#ifdef CESCAPE_STRICT_ASCII 
                     return c >= 32 && c <= 126;
-#else
+#else 
                     return c >= 32;
-#endif
+#endif 
                 }
-
+ 
                 inline bool is_hex_digit(ui8 c) {
                     return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f');
                 }
-
+ 
                 inline bool is_oct_digit(ui8 c) {
                     return c >= '0' && c <= '7';
                 }
-
+ 
                 constexpr size_t ESCAPE_C_BUFFER_SIZE = 4;
-
+ 
                 inline size_t escape_char(
                     ui8 c,
                     ui8 next,
@@ -85,16 +85,16 @@ namespace NYsonPull {
                         return 4;
                     }
                 }
-
+ 
                 template <typename T>
                 inline void escape_impl(const ui8* str, size_t len, T&& consume) {
                     ui8 buffer[ESCAPE_C_BUFFER_SIZE];
-
+ 
                     size_t i, j;
                     for (i = 0, j = 0; i < len; ++i) {
                         auto next_char = i + 1 < len ? str[i + 1] : 0;
                         size_t rlen = escape_char(str[i], next_char, buffer);
-
+ 
                         if (rlen > 1) {
                             consume(str + j, i - j);
                             j = i + 1;

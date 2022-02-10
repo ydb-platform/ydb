@@ -6,11 +6,11 @@ VERSION(1.0.18)
 
 LICENSE(BSD-3-Clause)
 
-PEERDIR(
+PEERDIR( 
     contrib/python/six
     contrib/python/wcwidth
-)
-
+) 
+ 
 NO_LINT()
 
 NO_CHECK_IMPORTS(

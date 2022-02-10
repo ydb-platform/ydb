@@ -10,12 +10,12 @@ OWNER(
     g:cpp-contrib
 )
 
-INCLUDE(${ARCADIA_ROOT}/contrib/restricted/boost/boost_common.inc)
+INCLUDE(${ARCADIA_ROOT}/contrib/restricted/boost/boost_common.inc) 
 
 PEERDIR(
     contrib/libs/icu
 )
-
+ 
 CFLAGS(
     -DBOOST_LOCALE_WITH_ICU
     -DBOOST_HAS_ICU=1

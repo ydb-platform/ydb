@@ -25,7 +25,7 @@
 // Do not misrepresent host on Android and iOS.
 #undef OS
 #define OS "arcadia"
-
+ 
 // c-ares resolver is known to be buggy.
 //
 // There is no way to configure it properly without a JVM on Android,
@@ -39,7 +39,7 @@
 //
 //
 // On Linux it caches /etc/resolv.conf contents and does not invalidate it properly
-
+ 
 #if defined(ARCADIA_CURL_DNS_RESOLVER_ARES)
     #define USE_ARES
 #elif defined(ARCADIA_CURL_DNS_RESOLVER_MULTITHREADED)
@@ -64,4 +64,4 @@
     #endif
 #else
     #error "No dns resolver is specified or resolver specification is wrong"
-#endif
+#endif 

@@ -1,5 +1,5 @@
 PY23_LIBRARY()
-
+ 
 LICENSE(Service-Py23-Proxy)
 
 OWNER(g:python-contrib)
@@ -13,7 +13,7 @@ ENDIF()
 NO_LINT()
 
 END()
-
+ 
 RECURSE(
     py2
     py3

@@ -411,37 +411,37 @@ private:
     C Counter_;
 };
 
-/**
- * Atomically reference-counted base with a virtual destructor.
- *
- * @note Plays well with inheritance, should be used for refcounted base classes.
- */
+/** 
+ * Atomically reference-counted base with a virtual destructor. 
+ * 
+ * @note Plays well with inheritance, should be used for refcounted base classes. 
+ */ 
 struct TThrRefBase: public TRefCounted<TThrRefBase, TAtomicCounter> {
     virtual ~TThrRefBase();
 };
 
-/**
- * Atomically reference-counted base.
- *
- * Deletes refcounted object as type T.
- *
- * @warning Additional care should be taken with regard to inheritance.  If used
- * as a base class, @p T should either declare a virtual destructor, or be
+/** 
+ * Atomically reference-counted base. 
+ * 
+ * Deletes refcounted object as type T. 
+ * 
+ * @warning Additional care should be taken with regard to inheritance.  If used 
+ * as a base class, @p T should either declare a virtual destructor, or be 
  * derived from @p TThrRefBase instead. Otherwise, only destructor of class @p T
- * would be called, potentially slicing the object and creating memory leaks.
- *
- * @note To avoid accidental inheritance when it is not originally intended,
- * class @p T should be marked as final.
- */
+ * would be called, potentially slicing the object and creating memory leaks. 
+ * 
+ * @note To avoid accidental inheritance when it is not originally intended, 
+ * class @p T should be marked as final. 
+ */ 
 template <class T, class D = TDelete>
 using TAtomicRefCount = TRefCounted<T, TAtomicCounter, D>;
 
-/**
- * Non-atomically reference-counted base.
- *
- * @warning Not thread-safe. Use with great care. If in doubt, use @p ThrRefBase
- * or @p TAtomicRefCount instead.
- */
+/** 
+ * Non-atomically reference-counted base. 
+ * 
+ * @warning Not thread-safe. Use with great care. If in doubt, use @p ThrRefBase 
+ * or @p TAtomicRefCount instead. 
+ */ 
 template <class T, class D = TDelete>
 using TSimpleRefCount = TRefCounted<T, TSimpleCounter, D>;
 

@@ -37,11 +37,11 @@ def create_cmakelists(zoneinfo_dir):
         with open(os.path.join(generated_dir, tz_hash), 'w') as f:
             f.write(tz_content)
 
-    yamake_template =  (
-        'RESOURCE(\n'
-        '{}\n'
-        ')'
-    )
+    yamake_template =  ( 
+        'RESOURCE(\n' 
+        '{}\n' 
+        ')' 
+    ) 
     resources = '\n'.join('    generated/{} /cctz/tzdata/{}'.format(tz_hash, tz_name) for tz_name, tz_hash in sorted(tz_to_hash.iteritems()))
 
     all_hashes = set(tz_to_hash.values())
@@ -51,7 +51,7 @@ def create_cmakelists(zoneinfo_dir):
         subprocess.check_call(['svn', cmd, '--force', fn])
 
     with open('ya.make.resources', 'w') as f:
-        print >>f, yamake_template.format(resources)
+        print >>f, yamake_template.format(resources) 
 
 def get_latest_iana_version():
     index_html = urllib2.urlopen('http://www.iana.org/time-zones').read()

@@ -47,19 +47,19 @@ struct TDumper<TCopyPtr<T, C, D>> {
     }
 };
 
-//small ints
+//small ints 
 // Default dumper prints them via IOutputStream << (value), which results in raw
-// chars, not integer values. Cast to a bigger int type to force printing as
-// integers.
-// NB: i8 = signed char != char != unsigned char = ui8
-template <>
-struct TDumper<ui8>: public TDumper<i32> {
-};
-
-template <>
-struct TDumper<i8>: public TDumper<i32> {
-};
-
+// chars, not integer values. Cast to a bigger int type to force printing as 
+// integers. 
+// NB: i8 = signed char != char != unsigned char = ui8 
+template <> 
+struct TDumper<ui8>: public TDumper<i32> { 
+}; 
+ 
+template <> 
+struct TDumper<i8>: public TDumper<i32> { 
+}; 
+ 
 //chars
 template <>
 struct TDumper<char>: public TCharDumper {

@@ -1,19 +1,19 @@
-"""
-Compatibility Support for Python 2.7 and earlier
-"""
-
+""" 
+Compatibility Support for Python 2.7 and earlier 
+""" 
+ 
 import sys
 import platform
-
+ 
 from setuptools.extern import six
 
 
-def get_all_headers(message, key):
+def get_all_headers(message, key): 
     """
     Given an HTTPMessage, return all headers matching a given key.
     """
     return message.get_all(key)
-
+ 
 
 if six.PY2:
     def get_all_headers(message, key):

@@ -206,7 +206,7 @@ class Context(object):
             if not pxd_pathname:
                 if debug_find_module:
                     print("...looking for pxd file")
-                pxd_pathname = self.find_pxd_file(qualified_name, pos)
+                pxd_pathname = self.find_pxd_file(qualified_name, pos) 
                 if debug_find_module:
                     print("......found %s" % pxd_pathname)
                 if not pxd_pathname and need_pxd:
@@ -238,7 +238,7 @@ class Context(object):
                     pass
         return scope
 
-    def find_pxd_file(self, qualified_name, pos, sys_path=False):
+    def find_pxd_file(self, qualified_name, pos, sys_path=False): 
         # Search include path (and sys.path if sys_path is True) for
         # the .pxd file corresponding to the given fully-qualified
         # module name.

@@ -446,61 +446,61 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
     }
 
     Y_UNIT_TEST(SortTestTwoIterators) {
-        TVector<int> collection = {10, 2, 7};
-        Sort(collection.begin(), collection.end());
-        TVector<int> expected = {2, 7, 10};
-        UNIT_ASSERT_VALUES_EQUAL(collection, expected);
-    }
-
+        TVector<int> collection = {10, 2, 7}; 
+        Sort(collection.begin(), collection.end()); 
+        TVector<int> expected = {2, 7, 10}; 
+        UNIT_ASSERT_VALUES_EQUAL(collection, expected); 
+    } 
+ 
     Y_UNIT_TEST(SortTestTwoIteratorsAndComparator) {
-        TVector<int> collection = {10, 2, 7};
-        Sort(collection.begin(), collection.end(), [](int l, int r) { return l > r; });
-        TVector<int> expected = {10, 7, 2};
-        UNIT_ASSERT_VALUES_EQUAL(collection, expected);
-    }
-
+        TVector<int> collection = {10, 2, 7}; 
+        Sort(collection.begin(), collection.end(), [](int l, int r) { return l > r; }); 
+        TVector<int> expected = {10, 7, 2}; 
+        UNIT_ASSERT_VALUES_EQUAL(collection, expected); 
+    } 
+ 
     Y_UNIT_TEST(SortTestContainer) {
-        TVector<int> collection = {10, 2, 7};
-        Sort(collection);
-        TVector<int> expected = {2, 7, 10};
-        UNIT_ASSERT_VALUES_EQUAL(collection, expected);
-    }
-
+        TVector<int> collection = {10, 2, 7}; 
+        Sort(collection); 
+        TVector<int> expected = {2, 7, 10}; 
+        UNIT_ASSERT_VALUES_EQUAL(collection, expected); 
+    } 
+ 
     Y_UNIT_TEST(SortTestContainerAndComparator) {
-        TVector<int> collection = {10, 2, 7};
-        Sort(collection, [](int l, int r) { return l > r; });
-        TVector<int> expected = {10, 7, 2};
-        UNIT_ASSERT_VALUES_EQUAL(collection, expected);
-    }
-
+        TVector<int> collection = {10, 2, 7}; 
+        Sort(collection, [](int l, int r) { return l > r; }); 
+        TVector<int> expected = {10, 7, 2}; 
+        UNIT_ASSERT_VALUES_EQUAL(collection, expected); 
+    } 
+ 
     Y_UNIT_TEST(StableSortTestTwoIterators) {
-        TVector<int> collection = {10, 2, 7};
-        StableSort(collection.begin(), collection.end());
-        TVector<int> expected = {2, 7, 10};
-        UNIT_ASSERT_VALUES_EQUAL(collection, expected);
-    }
-
+        TVector<int> collection = {10, 2, 7}; 
+        StableSort(collection.begin(), collection.end()); 
+        TVector<int> expected = {2, 7, 10}; 
+        UNIT_ASSERT_VALUES_EQUAL(collection, expected); 
+    } 
+ 
     Y_UNIT_TEST(StableSortTestTwoIteratorsAndComparator) {
-        TVector<int> collection = {404, 101, 106, 203, 102, 205, 401};
-        StableSort(collection.begin(), collection.end(), [](int l, int r) { return (l / 100) < (r / 100); });
-        TVector<int> expected = {101, 106, 102, 203, 205, 404, 401};
-        UNIT_ASSERT_VALUES_EQUAL(collection, expected);
-    }
-
+        TVector<int> collection = {404, 101, 106, 203, 102, 205, 401}; 
+        StableSort(collection.begin(), collection.end(), [](int l, int r) { return (l / 100) < (r / 100); }); 
+        TVector<int> expected = {101, 106, 102, 203, 205, 404, 401}; 
+        UNIT_ASSERT_VALUES_EQUAL(collection, expected); 
+    } 
+ 
     Y_UNIT_TEST(StableSortTestContainer) {
-        TVector<int> collection = {10, 2, 7};
-        StableSort(collection);
-        TVector<int> expected = {2, 7, 10};
-        UNIT_ASSERT_VALUES_EQUAL(collection, expected);
-    }
-
+        TVector<int> collection = {10, 2, 7}; 
+        StableSort(collection); 
+        TVector<int> expected = {2, 7, 10}; 
+        UNIT_ASSERT_VALUES_EQUAL(collection, expected); 
+    } 
+ 
     Y_UNIT_TEST(StableSortTestContainerAndComparator) {
-        TVector<int> collection = {404, 101, 106, 203, 102, 205, 401};
-        StableSort(collection, [](int l, int r) { return (l / 100) < (r / 100); });
-        TVector<int> expected = {101, 106, 102, 203, 205, 404, 401};
-        UNIT_ASSERT_VALUES_EQUAL(collection, expected);
-    }
-
+        TVector<int> collection = {404, 101, 106, 203, 102, 205, 401}; 
+        StableSort(collection, [](int l, int r) { return (l / 100) < (r / 100); }); 
+        TVector<int> expected = {101, 106, 102, 203, 205, 404, 401}; 
+        UNIT_ASSERT_VALUES_EQUAL(collection, expected); 
+    } 
+ 
     Y_UNIT_TEST(SortByTest) {
         TVector<int> collection = {10, 2, 7};
         SortBy(collection, [](int x) { return -x; });
@@ -796,45 +796,45 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
         auto i = FindIf(range, [](auto) { return false; });
         Y_UNUSED(i);
     }
-
+ 
     Y_UNIT_TEST(TestLowerBoundBy) {
         using TIntPairs = TVector<std::pair<i32, i32>>;
-
-        auto data = TIntPairs{{1, 5}, {3, 2}, {3, 4}, {8, 0}, {5, 4}};
-        auto getKey = [](const auto& x) { return x.second; };
-
-        StableSortBy(data, getKey);
-
-        auto it = LowerBoundBy(data.begin(), data.end(), 4, getKey);
-        UNIT_ASSERT(it != data.end());
-        UNIT_ASSERT_EQUAL(it->second, 4);
-        UNIT_ASSERT_EQUAL(it->first, 3);
-
-        UNIT_ASSERT(it > data.begin());
-        UNIT_ASSERT_EQUAL((it - 1)->second, 2);
-
-        UNIT_ASSERT((it + 1) < data.end());
-        UNIT_ASSERT_EQUAL((it + 1)->second, 4);
-    }
-
+ 
+        auto data = TIntPairs{{1, 5}, {3, 2}, {3, 4}, {8, 0}, {5, 4}}; 
+        auto getKey = [](const auto& x) { return x.second; }; 
+ 
+        StableSortBy(data, getKey); 
+ 
+        auto it = LowerBoundBy(data.begin(), data.end(), 4, getKey); 
+        UNIT_ASSERT(it != data.end()); 
+        UNIT_ASSERT_EQUAL(it->second, 4); 
+        UNIT_ASSERT_EQUAL(it->first, 3); 
+ 
+        UNIT_ASSERT(it > data.begin()); 
+        UNIT_ASSERT_EQUAL((it - 1)->second, 2); 
+ 
+        UNIT_ASSERT((it + 1) < data.end()); 
+        UNIT_ASSERT_EQUAL((it + 1)->second, 4); 
+    } 
+ 
     Y_UNIT_TEST(TestUpperBoundBy) {
         using TIntPairs = TVector<std::pair<i32, i32>>;
-
-        auto data = TIntPairs{{1, 5}, {3, 2}, {3, 4}, {8, 0}, {5, 4}};
-        auto getKey = [](const auto& x) { return x.second; };
-
-        StableSortBy(data, getKey);
-
-        auto it = UpperBoundBy(data.begin(), data.end(), 4, getKey);
-        UNIT_ASSERT(it != data.end());
-        UNIT_ASSERT_EQUAL(it->second, 5);
-        UNIT_ASSERT_EQUAL(it->first, 1);
-
-        UNIT_ASSERT(it > data.begin());
-        UNIT_ASSERT_EQUAL((it - 1)->second, 4);
-
-        UNIT_ASSERT((it + 1) == data.end());
-    }
+ 
+        auto data = TIntPairs{{1, 5}, {3, 2}, {3, 4}, {8, 0}, {5, 4}}; 
+        auto getKey = [](const auto& x) { return x.second; }; 
+ 
+        StableSortBy(data, getKey); 
+ 
+        auto it = UpperBoundBy(data.begin(), data.end(), 4, getKey); 
+        UNIT_ASSERT(it != data.end()); 
+        UNIT_ASSERT_EQUAL(it->second, 5); 
+        UNIT_ASSERT_EQUAL(it->first, 1); 
+ 
+        UNIT_ASSERT(it > data.begin()); 
+        UNIT_ASSERT_EQUAL((it - 1)->second, 4); 
+ 
+        UNIT_ASSERT((it + 1) == data.end()); 
+    } 
 
     Y_UNIT_TEST(TestFindInContainer) {
         std::vector<int> v = {1, 2, 1000, 15, 100};

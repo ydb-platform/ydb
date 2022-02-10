@@ -59,10 +59,10 @@ public:
         return Value_;
     }
 
-    constexpr static TFlags FromBaseType(TInt value) {
+    constexpr static TFlags FromBaseType(TInt value) { 
         return TFlags(TFlag(value));
-    }
-
+    } 
+ 
     constexpr friend TFlags operator|(TFlags l, TFlags r) {
         return TFlags(TFlag(l.Value_ | r.Value_));
     }

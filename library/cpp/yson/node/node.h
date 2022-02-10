@@ -22,10 +22,10 @@ namespace NYT {
 class TNode
 {
 public:
-    class TLookupError
-        : public TWithBackTrace<yexception>
-    { };
-
+    class TLookupError 
+        : public TWithBackTrace<yexception> 
+    { }; 
+ 
     class TTypeError
         : public TWithBackTrace<yexception>
     { };
@@ -223,12 +223,12 @@ public:
     template<typename T>
     T ChildConvertTo(const TStringBuf key) const;
 
-    template<typename T>
-    const T& ChildAs(const TStringBuf key) const;
-
-    template<typename T>
-    T& ChildAs(const TStringBuf key);
-
+    template<typename T> 
+    const T& ChildAs(const TStringBuf key) const; 
+ 
+    template<typename T> 
+    T& ChildAs(const TStringBuf key); 
+ 
     // list getters
     // works the same way like simple getters
     const TString& ChildAsString(size_t index) const;
@@ -247,13 +247,13 @@ public:
     template<typename T>
     T ChildConvertTo(size_t index) const;
 
-    template<typename T>
-    const T& ChildAs(size_t index) const;
+    template<typename T> 
+    const T& ChildAs(size_t index) const; 
 
-    template<typename T>
-    T& ChildAs(size_t index);
-
-
+    template<typename T> 
+    T& ChildAs(size_t index); 
+ 
+ 
     // attributes
     bool HasAttributes() const;
     void ClearAttributes();
@@ -458,42 +458,42 @@ inline T TNode::ChildConvertTo(size_t index) const {
 }
 
 template<typename T>
-inline const T& TNode::ChildAs(const TStringBuf key) const {
-    const auto& node = At(key);
-    try {
-        return node.As<T>();
-    } catch (TTypeError& e) {
-        e << ", during getting key=" << key;
-        throw e;
-    } catch (...) {
-        ythrow TTypeError() << CurrentExceptionMessage() << ", during getting key=" << key;
-    }
-}
-
-template<typename T>
-inline const T& TNode::ChildAs(size_t index) const {
-    const auto& node = At(index);
-    try {
-        return node.As<T>();
-    } catch (TTypeError& e) {
-        e << ", during getting index=" << index;
-        throw e;
-    } catch (...) {
-        ythrow TTypeError() << CurrentExceptionMessage() << ", during getting index=" << index;
-    }
-}
-
-template<typename T>
-inline T& TNode::ChildAs(const TStringBuf key) {
-    return const_cast<T&>(static_cast<const TNode*>(this)->ChildAs<T>(key));
-}
-
-template<typename T>
-inline T& TNode::ChildAs(size_t index) {
-    return const_cast<T&>(static_cast<const TNode*>(this)->ChildAs<T>(index));
-}
-
-template<typename T>
+inline const T& TNode::ChildAs(const TStringBuf key) const { 
+    const auto& node = At(key); 
+    try { 
+        return node.As<T>(); 
+    } catch (TTypeError& e) { 
+        e << ", during getting key=" << key; 
+        throw e; 
+    } catch (...) { 
+        ythrow TTypeError() << CurrentExceptionMessage() << ", during getting key=" << key; 
+    } 
+} 
+ 
+template<typename T> 
+inline const T& TNode::ChildAs(size_t index) const { 
+    const auto& node = At(index); 
+    try { 
+        return node.As<T>(); 
+    } catch (TTypeError& e) { 
+        e << ", during getting index=" << index; 
+        throw e; 
+    } catch (...) { 
+        ythrow TTypeError() << CurrentExceptionMessage() << ", during getting index=" << index; 
+    } 
+} 
+ 
+template<typename T> 
+inline T& TNode::ChildAs(const TStringBuf key) { 
+    return const_cast<T&>(static_cast<const TNode*>(this)->ChildAs<T>(key)); 
+} 
+ 
+template<typename T> 
+inline T& TNode::ChildAs(size_t index) { 
+    return const_cast<T&>(static_cast<const TNode*>(this)->ChildAs<T>(index)); 
+} 
+ 
+template<typename T> 
 inline bool TNode::IsOfType() const noexcept {
     return std::holds_alternative<T>(Value_);
 }

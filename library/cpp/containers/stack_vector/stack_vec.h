@@ -1,7 +1,7 @@
 #pragma once
 
 #include <util/generic/vector.h>
-#include <util/ysaveload.h>
+#include <util/ysaveload.h> 
 
 #include <type_traits>
 
@@ -186,10 +186,10 @@ public:
         return *this;
     }
 };
-
-template <typename T, size_t CountOnStack, class Alloc>
+ 
+template <typename T, size_t CountOnStack, class Alloc> 
 class TSerializer<TStackVec<T, CountOnStack, true, Alloc>>: public TVectorSerializer<TStackVec<T, CountOnStack, true, Alloc>> {
-};
+}; 
 
 template <typename T, size_t CountOnStack, class Alloc>
 class TSerializer<TStackVec<T, CountOnStack, false, Alloc>> {

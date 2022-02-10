@@ -323,14 +323,14 @@ inline TString IntToString(T t) {
     return TString(buf, IntToString<base>(t, buf, sizeof(buf)));
 }
 
-template <int base, class TInt, class TChar>
-bool TryIntFromString(const TChar* data, size_t len, TInt& result);
-
+template <int base, class TInt, class TChar> 
+bool TryIntFromString(const TChar* data, size_t len, TInt& result); 
+ 
 template <int base, class TInt, class TStringType>
 inline bool TryIntFromString(const TStringType& s, TInt& result) {
     return TryIntFromString<base>(s.data(), s.size(), result);
-}
-
+} 
+ 
 template <class TInt, int base, class TChar>
 TInt IntFromString(const TChar* str, size_t len);
 

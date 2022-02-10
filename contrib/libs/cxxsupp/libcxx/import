@@ -17,6 +17,6 @@ cp libcxx/LICENSE.TXT ../LICENSE.TXT
 cd ..
 rm -rf tmp
 rm src/CMakeLists.txt include/CMakeLists.txt
-
-# Fix tabs and trailing spaces
-find -type f | xargs sed -e 's/\t/    /g' -e 's/ *$//' -i
+ 
+# Fix tabs and trailing spaces 
+find -type f | xargs sed -e 's/\t/    /g' -e 's/ *$//' -i 

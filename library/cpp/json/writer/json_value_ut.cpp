@@ -476,34 +476,34 @@ Y_UNIT_TEST_SUITE(TJsonValueTest) {
                 UNIT_ASSERT(false);
             }
         }
-
-        {
-            // Check non-const GetArraySafe()
-            TJsonValue json{JSON_ARRAY};
-            json.GetArraySafe().push_back(TJsonValue{"foo"});
-
-            TJsonValue expectedJson;
-            expectedJson.AppendValue(TJsonValue{"foo"});
-            UNIT_ASSERT(json == expectedJson);
-
-            TJsonValue::TArray jsonArray = std::move(json.GetArraySafe());
-            TJsonValue::TArray expectedArray = {TJsonValue{"foo"}};
-            UNIT_ASSERT(jsonArray == expectedArray);
-        }
-
-        {
-            // Check non-const GetMap()
-            TJsonValue json{JSON_MAP};
-            json.GetMapSafe()["foo"] = "bar";
-
-            TJsonValue expectedJson;
-            expectedJson.InsertValue("foo", "bar");
-            UNIT_ASSERT(json == expectedJson);
-
+ 
+        { 
+            // Check non-const GetArraySafe() 
+            TJsonValue json{JSON_ARRAY}; 
+            json.GetArraySafe().push_back(TJsonValue{"foo"}); 
+ 
+            TJsonValue expectedJson; 
+            expectedJson.AppendValue(TJsonValue{"foo"}); 
+            UNIT_ASSERT(json == expectedJson); 
+ 
+            TJsonValue::TArray jsonArray = std::move(json.GetArraySafe()); 
+            TJsonValue::TArray expectedArray = {TJsonValue{"foo"}}; 
+            UNIT_ASSERT(jsonArray == expectedArray); 
+        } 
+ 
+        { 
+            // Check non-const GetMap() 
+            TJsonValue json{JSON_MAP}; 
+            json.GetMapSafe()["foo"] = "bar"; 
+ 
+            TJsonValue expectedJson; 
+            expectedJson.InsertValue("foo", "bar"); 
+            UNIT_ASSERT(json == expectedJson); 
+ 
             TJsonValue::TMapType jsonMap = std::move(json.GetMapSafe());
             TJsonValue::TMapType expectedMap = {{"foo", TJsonValue{"bar"}}};
-            UNIT_ASSERT(jsonMap == expectedMap);
-        }
+            UNIT_ASSERT(jsonMap == expectedMap); 
+        } 
     }
 
     Y_UNIT_TEST(NonexistentFieldAccessTest) {

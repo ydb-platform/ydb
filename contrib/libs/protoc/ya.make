@@ -24,9 +24,9 @@ PEERDIR(
     contrib/libs/protobuf
 )
 
-ADDINCL(
-    GLOBAL contrib/libs/protoc/src
-)
+ADDINCL( 
+    GLOBAL contrib/libs/protoc/src 
+) 
 
 NO_COMPILER_WARNINGS()
 

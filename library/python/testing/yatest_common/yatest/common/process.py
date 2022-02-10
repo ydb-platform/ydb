@@ -468,23 +468,23 @@ def execute(
     # if subprocess.PIPE in [stdout, stderr]:
     #     raise ValueError("Don't use pipe to obtain stream data - it may leads to the deadlock")
 
-    def get_out_stream(stream, default_name):
-        if stream is None:
-            # No stream is supplied: open new temp file
+    def get_out_stream(stream, default_name): 
+        if stream is None: 
+            # No stream is supplied: open new temp file 
             return _get_command_output_file(command, default_name), False
-
+ 
         if isinstance(stream, six.string_types):
-            # User filename is supplied: open file for writing
+            # User filename is supplied: open file for writing 
             return open(stream, 'wb+'), stream.startswith('/dev/')
-
-        # Open file or PIPE sentinel is supplied
-        is_pipe = stream == subprocess.PIPE
-        return stream, not is_pipe
-
+ 
+        # Open file or PIPE sentinel is supplied 
+        is_pipe = stream == subprocess.PIPE 
+        return stream, not is_pipe 
+ 
     # to be able to have stdout/stderr and track the process time execution, we don't use subprocess.PIPE,
     # as it can cause processes hangs, but use tempfiles instead
-    out_file, user_stdout = get_out_stream(stdout, 'out')
-    err_file, user_stderr = get_out_stream(stderr, 'err')
+    out_file, user_stdout = get_out_stream(stdout, 'out') 
+    err_file, user_stderr = get_out_stream(stderr, 'err') 
     in_file = stdin
 
     if shell and type(command) == list:

@@ -3,29 +3,29 @@ OWNER(
     g:cpp-contrib
 )
 
-LIBRARY()
-
+LIBRARY() 
+ 
 VERSION(1.13)
 
 LICENSE(Service-Dll-Harness)
 
-WITHOUT_LICENSE_TEXTS()
+WITHOUT_LICENSE_TEXTS() 
 
 NO_RUNTIME()
 
-IF (USE_DYNAMIC_ICONV)
-    PEERDIR(
-        contrib/libs/libiconv/dynamic
+IF (USE_DYNAMIC_ICONV) 
+    PEERDIR( 
+        contrib/libs/libiconv/dynamic 
     )
-ELSE()
-    PEERDIR(
-        contrib/libs/libiconv/static
-    )
+ELSE() 
+    PEERDIR( 
+        contrib/libs/libiconv/static 
+    ) 
 ENDIF()
 
-END()
+END() 
 
-RECURSE(
-    dynamic
-    static
-)
+RECURSE( 
+    dynamic 
+    static 
+) 

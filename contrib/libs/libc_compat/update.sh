@@ -38,11 +38,11 @@ curl "https://raw.githubusercontent.com/openbsd/src/master/lib/libc/stdlib/reall
 > "collate.h"
 > "stdlib.h"
 > "unistd.h"
-
-mkdir -p include/uchar
-curl "https://git.musl-libc.org/cgit/musl/plain/include/uchar.h" --output "include/uchar/uchar.h"
-# TODO: provide c16rtomb, mbrtoc16, c32rtomb, mbrtoc32 implementations for uchar
-# if any code actually needs them
+ 
+mkdir -p include/uchar 
+curl "https://git.musl-libc.org/cgit/musl/plain/include/uchar.h" --output "include/uchar/uchar.h" 
+# TODO: provide c16rtomb, mbrtoc16, c32rtomb, mbrtoc32 implementations for uchar 
+# if any code actually needs them 
 
 mkdir -p include/random/sys
 curl "https://git.musl-libc.org/cgit/musl/plain/include/sys/random.h" --output "include/random/sys/random.h"

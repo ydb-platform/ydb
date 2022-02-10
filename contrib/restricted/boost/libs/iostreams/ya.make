@@ -10,11 +10,11 @@ OWNER(
     g:cpp-contrib
 )
 
-INCLUDE(${ARCADIA_ROOT}/contrib/restricted/boost/boost_common.inc)
+INCLUDE(${ARCADIA_ROOT}/contrib/restricted/boost/boost_common.inc) 
 
 PEERDIR(
-    contrib/libs/zlib
-    contrib/libs/libbz2
+    contrib/libs/zlib 
+    contrib/libs/libbz2 
 )
 
 CFLAGS(

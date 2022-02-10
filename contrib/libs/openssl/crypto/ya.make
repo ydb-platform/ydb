@@ -31,16 +31,16 @@ ADDINCL(
     contrib/libs/openssl/include
 )
 
-IF (OS_LINUX)
-    IF (ARCH_ARM64)
-        SET(LINUX_ARM64 yes)
+IF (OS_LINUX) 
+    IF (ARCH_ARM64) 
+        SET(LINUX_ARM64 yes) 
     ELSEIF (ARCH_ARM7)
-        SET(LINUX_ARMV7 yes)
+        SET(LINUX_ARMV7 yes) 
     ELSEIF (ARCH_X86_64)
-        SET(LINUX_X86_64 yes)
-    ENDIF()
-ENDIF()
-
+        SET(LINUX_X86_64 yes) 
+    ENDIF() 
+ENDIF() 
+ 
 IF (OS_IOS)
     IF (ARCH_ARM64)
         SET(IOS_ARM64 yes)
@@ -110,7 +110,7 @@ IF (NOT IOS_I386 AND NOT ANDROID_I686 AND NOT WINDOWS_I686)
     )
 ENDIF()
 
-IF (NOT IOS_ARMV7 AND NOT ANDROID_ARMV7 AND NOT LINUX_ARMV7)
+IF (NOT IOS_ARMV7 AND NOT ANDROID_ARMV7 AND NOT LINUX_ARMV7) 
     CFLAGS(
         -DVPAES_ASM
     )
@@ -845,7 +845,7 @@ IF (NOT IOS_ARM64 AND NOT IOS_ARMV7)
     )
 ENDIF()
 
-IF (NOT IOS_ARMV7 AND NOT ANDROID_ARMV7 AND NOT LINUX_ARMV7)
+IF (NOT IOS_ARMV7 AND NOT ANDROID_ARMV7 AND NOT LINUX_ARMV7) 
     SRCS(
         aes/aes_core.c
     )
@@ -936,50 +936,50 @@ IF (OS_DARWIN AND ARCH_ARM64)
     )
 ENDIF()
 
-IF (OS_LINUX AND ARCH_ARM7)
-    IF (CLANG)
+IF (OS_LINUX AND ARCH_ARM7) 
+    IF (CLANG) 
         # XXX: This is a workarond for 'out of range immediate fixup value'
-        # error with clang integrated assembler:
-        # https://github.com/openssl/openssl/issues/7878
+        # error with clang integrated assembler: 
+        # https://github.com/openssl/openssl/issues/7878 
         CFLAGS(
             -mno-thumb
         )
-    ENDIF()
-    CFLAGS(
-        -DOPENSSL_PIC
-        -DOPENSSL_BN_ASM_GF2m
-        -DAES_ASM
-        -DBSAES_ASM
-        -DGHASH_ASM
-    )
-    SRCS(
-        ../asm/android/arm/crypto/ec/ecp_nistz256-armv4.S
-        ../asm/android/arm/crypto/poly1305/poly1305-armv4.S
-        ../asm/android/arm/crypto/armv4cpuid.S
-        ../asm/android/arm/crypto/bn/armv4-mont.S
-        ../asm/android/arm/crypto/bn/armv4-gf2m.S
-        ../asm/android/arm/crypto/aes/aes-armv4.S
-        ../asm/android/arm/crypto/aes/bsaes-armv7.S
-        ../asm/android/arm/crypto/aes/aesv8-armx.S
-        ../asm/android/arm/crypto/sha/keccak1600-armv4.S
-        ../asm/android/arm/crypto/sha/sha256-armv4.S
-        ../asm/android/arm/crypto/sha/sha512-armv4.S
-        ../asm/android/arm/crypto/sha/sha1-armv4-large.S
-        ../asm/android/arm/crypto/chacha/chacha-armv4.S
-        ../asm/android/arm/crypto/modes/ghashv8-armx.S
-        ../asm/android/arm/crypto/modes/ghash-armv4.S
-        armcap.c
-        bn/bn_asm.c
-        camellia/camellia.c
-        camellia/cmll_cbc.c
-        dso/dso_dlfcn.c
-        rand/rand_vms.c
-        rc4/rc4_enc.c
-        rc4/rc4_skey.c
-        whrlpool/wp_block.c
-    )
-ENDIF()
-
+    ENDIF() 
+    CFLAGS( 
+        -DOPENSSL_PIC 
+        -DOPENSSL_BN_ASM_GF2m 
+        -DAES_ASM 
+        -DBSAES_ASM 
+        -DGHASH_ASM 
+    ) 
+    SRCS( 
+        ../asm/android/arm/crypto/ec/ecp_nistz256-armv4.S 
+        ../asm/android/arm/crypto/poly1305/poly1305-armv4.S 
+        ../asm/android/arm/crypto/armv4cpuid.S 
+        ../asm/android/arm/crypto/bn/armv4-mont.S 
+        ../asm/android/arm/crypto/bn/armv4-gf2m.S 
+        ../asm/android/arm/crypto/aes/aes-armv4.S 
+        ../asm/android/arm/crypto/aes/bsaes-armv7.S 
+        ../asm/android/arm/crypto/aes/aesv8-armx.S 
+        ../asm/android/arm/crypto/sha/keccak1600-armv4.S 
+        ../asm/android/arm/crypto/sha/sha256-armv4.S 
+        ../asm/android/arm/crypto/sha/sha512-armv4.S 
+        ../asm/android/arm/crypto/sha/sha1-armv4-large.S 
+        ../asm/android/arm/crypto/chacha/chacha-armv4.S 
+        ../asm/android/arm/crypto/modes/ghashv8-armx.S 
+        ../asm/android/arm/crypto/modes/ghash-armv4.S 
+        armcap.c 
+        bn/bn_asm.c 
+        camellia/camellia.c 
+        camellia/cmll_cbc.c 
+        dso/dso_dlfcn.c 
+        rand/rand_vms.c 
+        rc4/rc4_enc.c 
+        rc4/rc4_skey.c 
+        whrlpool/wp_block.c 
+    ) 
+ENDIF() 
+ 
 IF (OS_LINUX AND ARCH_AARCH64)
     SRCS(
         ../asm/aarch64/crypto/aes/aesv8-armx.S

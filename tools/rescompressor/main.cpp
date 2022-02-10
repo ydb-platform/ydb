@@ -42,12 +42,12 @@ private:
     }
 
     void WriteSymbolSize(TStringBuf constname) {
-        AsmOut << "%ifidn __OUTPUT_FORMAT__,elf64\n";
+        AsmOut << "%ifidn __OUTPUT_FORMAT__,elf64\n"; 
         AsmOut << "size " << AsmPrefix << constname << " " << AsmPrefix << constname << ".end - " << AsmPrefix << constname << "\n";
-        AsmOut << "size " << AsmPrefix << constname << "Size 4\n";
-        AsmOut << "%endif\n";
-    }
-
+        AsmOut << "size " << AsmPrefix << constname << "Size 4\n"; 
+        AsmOut << "%endif\n"; 
+    } 
+ 
     void WriteIncBin(TStringBuf constname, TStringBuf filename, const TString& data) {
         AsmOut << AsmPrefix << constname << ":\nincbin \"" << Basename(filename) << "\"\n";
         AsmOut << ".end:\n";

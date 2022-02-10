@@ -414,34 +414,34 @@ Y_UNIT_TEST_SUITE(YtNodeTest) {
             ("double", -3.5)
             ("list", TNode::CreateList().Add(5))
             ("map", TNode::CreateMap()("key", "value"));
-
-        UNIT_ASSERT_VALUES_EQUAL(node.ChildAs<TString>("string"), "7");
+ 
+        UNIT_ASSERT_VALUES_EQUAL(node.ChildAs<TString>("string"), "7"); 
         UNIT_ASSERT_VALUES_EQUAL(node.ChildAsString("string"), "7");
         UNIT_ASSERT_VALUES_EQUAL(node.ChildConvertTo<i64>("string"), 7);
 
-        UNIT_ASSERT_VALUES_EQUAL(node.ChildAs<i64>("int64"), 3);
+        UNIT_ASSERT_VALUES_EQUAL(node.ChildAs<i64>("int64"), 3); 
         UNIT_ASSERT_VALUES_EQUAL(node.ChildAsInt64("int64"), 3);
         UNIT_ASSERT_VALUES_EQUAL(node.ChildIntCast<ui64>("int64"), 3u);
 
-        UNIT_ASSERT_VALUES_EQUAL(node.ChildAs<ui64>("uint64"), 5u);
+        UNIT_ASSERT_VALUES_EQUAL(node.ChildAs<ui64>("uint64"), 5u); 
         UNIT_ASSERT_VALUES_EQUAL(node.ChildAsUint64("uint64"), 5u);
         UNIT_ASSERT_VALUES_EQUAL(node.ChildIntCast<i64>("uint64"), 5);
         UNIT_ASSERT_VALUES_EQUAL(node.ChildConvertTo<TString>("uint64"), "5");
 
-        UNIT_ASSERT_VALUES_EQUAL(node.ChildAs<double>("double"), -3.5);
+        UNIT_ASSERT_VALUES_EQUAL(node.ChildAs<double>("double"), -3.5); 
         UNIT_ASSERT_VALUES_EQUAL(node.ChildAsDouble("double"), -3.5);
         UNIT_ASSERT_VALUES_EQUAL(node.ChildConvertTo<TString>("double"), "-3.5");
 
-        UNIT_ASSERT_VALUES_EQUAL(node.ChildAs<TNode::TListType>("list")[0].AsInt64(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(node.ChildAs<TNode::TListType>("list")[0].AsInt64(), 5); 
         UNIT_ASSERT_VALUES_EQUAL(node.ChildAsList("list")[0].AsInt64(), 5);
-
-        UNIT_ASSERT_VALUES_EQUAL(node.ChildAs<TNode::TMapType>("map")["key"].AsString(), "value");
+ 
+        UNIT_ASSERT_VALUES_EQUAL(node.ChildAs<TNode::TMapType>("map")["key"].AsString(), "value"); 
         UNIT_ASSERT_VALUES_EQUAL(node.ChildAsMap("map")["key"].AsString(), "value");
-
-        // mutable accessor
-        auto& childString = node.ChildAs<TString>("string");
-        childString = "yaddayadda";
-        UNIT_ASSERT_VALUES_EQUAL(node.ChildAs<TString>("string"), "yaddayadda");
+ 
+        // mutable accessor 
+        auto& childString = node.ChildAs<TString>("string"); 
+        childString = "yaddayadda"; 
+        UNIT_ASSERT_VALUES_EQUAL(node.ChildAs<TString>("string"), "yaddayadda"); 
     }
 
     Y_UNIT_TEST(TestListGetters) {
@@ -452,33 +452,33 @@ Y_UNIT_TEST_SUITE(YtNodeTest) {
             .Add(-3.5)
             .Add(TNode::CreateList().Add(5))
             .Add(TNode::CreateMap()("key", "value"));
-
-        UNIT_ASSERT_VALUES_EQUAL(node.ChildAs<TString>(0), "7");
+ 
+        UNIT_ASSERT_VALUES_EQUAL(node.ChildAs<TString>(0), "7"); 
         UNIT_ASSERT_VALUES_EQUAL(node.ChildAsString(0), "7");
         UNIT_ASSERT_VALUES_EQUAL(node.ChildConvertTo<i64>(0), 7);
 
-        UNIT_ASSERT_VALUES_EQUAL(node.ChildAs<i64>(1), 3);
+        UNIT_ASSERT_VALUES_EQUAL(node.ChildAs<i64>(1), 3); 
         UNIT_ASSERT_VALUES_EQUAL(node.ChildAsInt64(1), 3);
         UNIT_ASSERT_VALUES_EQUAL(node.ChildIntCast<ui64>(1), 3u);
 
-        UNIT_ASSERT_VALUES_EQUAL(node.ChildAs<ui64>(2), 5u);
+        UNIT_ASSERT_VALUES_EQUAL(node.ChildAs<ui64>(2), 5u); 
         UNIT_ASSERT_VALUES_EQUAL(node.ChildAsUint64(2), 5u);
         UNIT_ASSERT_VALUES_EQUAL(node.ChildIntCast<i64>(2), 5);
         UNIT_ASSERT_VALUES_EQUAL(node.ChildConvertTo<TString>(2), "5");
 
-        UNIT_ASSERT_VALUES_EQUAL(node.ChildAs<double>(3), -3.5);
+        UNIT_ASSERT_VALUES_EQUAL(node.ChildAs<double>(3), -3.5); 
         UNIT_ASSERT_VALUES_EQUAL(node.ChildAsDouble(3), -3.5);
         UNIT_ASSERT_VALUES_EQUAL(node.ChildConvertTo<TString>(3), "-3.5");
 
-        UNIT_ASSERT_VALUES_EQUAL(node.ChildAs<TNode::TListType>(4)[0].AsInt64(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(node.ChildAs<TNode::TListType>(4)[0].AsInt64(), 5); 
         UNIT_ASSERT_VALUES_EQUAL(node.ChildAsList(4)[0].AsInt64(), 5);
-
-        UNIT_ASSERT_VALUES_EQUAL(node.ChildAs<TNode::TMapType>(5)["key"].AsString(), "value");
+ 
+        UNIT_ASSERT_VALUES_EQUAL(node.ChildAs<TNode::TMapType>(5)["key"].AsString(), "value"); 
         UNIT_ASSERT_VALUES_EQUAL(node.ChildAsMap(5)["key"].AsString(), "value");
-
-        // mutable accessor
-        auto& childString = node.ChildAs<TString>(0);
-        childString = "yaddayadda";
-        UNIT_ASSERT_VALUES_EQUAL(node.ChildAs<TString>(0), "yaddayadda");
+ 
+        // mutable accessor 
+        auto& childString = node.ChildAs<TString>(0); 
+        childString = "yaddayadda"; 
+        UNIT_ASSERT_VALUES_EQUAL(node.ChildAs<TString>(0), "yaddayadda"); 
     }
 }

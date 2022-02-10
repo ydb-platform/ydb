@@ -34,7 +34,7 @@ def uniq_suffix(path, unit):
     if '/' not in path:
         return ''
     return '.{}'.format(pathid(path)[:4])
-
+ 
 def pb2_arg(suf, path, mod, unit):
     return '{path}__int__{suf}={mod}{modsuf}'.format(
         path=stripext(to_build_root(path, unit)),
@@ -42,7 +42,7 @@ def pb2_arg(suf, path, mod, unit):
         mod=mod,
         modsuf=stripext(suf)
     )
-
+ 
 def proto_arg(path, mod, unit):
     return '{}.proto={}'.format(stripext(to_build_root(path, unit)), mod)
 
@@ -208,7 +208,7 @@ def onpy_srcs(unit, *args):
     unit_needs_main = unit.get('MODULE_TYPE') in ('PROGRAM', 'DLL')
     if unit_needs_main:
         py_program(unit, py3)
-
+ 
     py_namespace_value = unit.get('PY_NAMESPACE_VALUE')
     if py_namespace_value == ".":
         ns = ""

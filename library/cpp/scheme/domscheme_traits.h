@@ -4,30 +4,30 @@
 #include <util/string/cast.h>
 
 struct TSchemeTraits {
-    using TValue = NSc::TValue;
-    using TValueRef = TValue*;
-    using TConstValueRef = const TValue*;
+    using TValue = NSc::TValue; 
+    using TValueRef = TValue*; 
+    using TConstValueRef = const TValue*; 
     using TStringType = TStringBuf;
 
-    // anyvalue defaults
-    template <class T>
-    static inline TValue Value(T&& t) {
-        return TValue(std::forward<T>(t));
-    }
-
-    template <class T>
-    static inline TValue Value(std::initializer_list<T> t) {
-        return TValue().SetArray().AppendAll(t);
-    }
-
-    static inline TValueRef Ref(TValue& v) {
-        return &v;
-    }
-
-    static inline TConstValueRef Ref(const TValue& v) {
-        return &v;
-    }
-
+    // anyvalue defaults 
+    template <class T> 
+    static inline TValue Value(T&& t) { 
+        return TValue(std::forward<T>(t)); 
+    } 
+ 
+    template <class T> 
+    static inline TValue Value(std::initializer_list<T> t) { 
+        return TValue().SetArray().AppendAll(t); 
+    } 
+ 
+    static inline TValueRef Ref(TValue& v) { 
+        return &v; 
+    } 
+ 
+    static inline TConstValueRef Ref(const TValue& v) { 
+        return &v; 
+    } 
+ 
     // common ops
     static inline bool IsNull(TConstValueRef v) {
         return v->IsNull();
@@ -56,13 +56,13 @@ struct TSchemeTraits {
         v->ClearArray();
     }
 
-    using TArrayIterator = size_t;
-
-    static inline TValueRef ArrayElement(TValueRef v, TArrayIterator n) {
+    using TArrayIterator = size_t; 
+ 
+    static inline TValueRef ArrayElement(TValueRef v, TArrayIterator n) { 
         return &(*v)[n];
     }
 
-    static inline TConstValueRef ArrayElement(TConstValueRef v, TArrayIterator n) {
+    static inline TConstValueRef ArrayElement(TConstValueRef v, TArrayIterator n) { 
         return &(*v)[n];
     }
 

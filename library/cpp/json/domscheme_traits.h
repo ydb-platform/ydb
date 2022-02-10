@@ -6,32 +6,32 @@
 #include <util/generic/algorithm.h>
 
 struct TJsonTraits {
-    using TValue = NJson::TJsonValue;
-    using TValueRef = TValue*;
-    using TConstValueRef = const TValue*;
+    using TValue = NJson::TJsonValue; 
+    using TValueRef = TValue*; 
+    using TConstValueRef = const TValue*; 
     using TStringType = TStringBuf;
 
-    // anyvalue defaults
-    template <class T>
-    static inline TValue Value(T&& t) {
-        return TValue(std::forward<T>(t));
-    }
-
-    template <class T>
-    static inline TValue Value(std::initializer_list<T> t) {
-        TValue result(NJson::JSON_ARRAY);
-        result.GetArraySafe() = NJson::TJsonValue::TArray(t.begin(), t.end());
-        return result;
-    }
-
-    static inline TValueRef Ref(TValue& v) {
-        return &v;
-    }
-
-    static inline TConstValueRef Ref(const TValue& v) {
-        return &v;
-    }
-
+    // anyvalue defaults 
+    template <class T> 
+    static inline TValue Value(T&& t) { 
+        return TValue(std::forward<T>(t)); 
+    } 
+ 
+    template <class T> 
+    static inline TValue Value(std::initializer_list<T> t) { 
+        TValue result(NJson::JSON_ARRAY); 
+        result.GetArraySafe() = NJson::TJsonValue::TArray(t.begin(), t.end()); 
+        return result; 
+    } 
+ 
+    static inline TValueRef Ref(TValue& v) { 
+        return &v; 
+    } 
+ 
+    static inline TConstValueRef Ref(const TValue& v) { 
+        return &v; 
+    } 
+ 
     // common ops
     static inline bool IsNull(TConstValueRef v) {
         return v->GetType() == NJson::JSON_UNDEFINED || v->IsNull();
@@ -60,13 +60,13 @@ struct TJsonTraits {
         v->SetType(NJson::JSON_ARRAY);
     }
 
-    using TArrayIterator = size_t;
-
-    static inline TValueRef ArrayElement(TValueRef v, TArrayIterator n) {
+    using TArrayIterator = size_t; 
+ 
+    static inline TValueRef ArrayElement(TValueRef v, TArrayIterator n) { 
         return &(*v)[n];
     }
 
-    static inline TConstValueRef ArrayElement(TConstValueRef v, TArrayIterator n) {
+    static inline TConstValueRef ArrayElement(TConstValueRef v, TArrayIterator n) { 
         return &(*v)[n];
     }
 

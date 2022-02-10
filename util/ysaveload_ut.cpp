@@ -210,16 +210,16 @@ private:
             Save(&S_, h);
         }
 
-        {
+        { 
             THashMultiMap<TString, int> mm;
-
-            mm.insert({"one", 1});
-            mm.insert({"two", 2});
-            mm.insert({"two", 22});
-
-            Save(&S_, mm);
-        }
-
+ 
+            mm.insert({"one", 1}); 
+            mm.insert({"two", 2}); 
+            mm.insert({"two", 22}); 
+ 
+            Save(&S_, mm); 
+        } 
+ 
         //load part
         {
             ui8 val;
@@ -359,21 +359,21 @@ private:
             Load(&S_, h);
             UNIT_ASSERT(!h);
         }
-
-        {
+ 
+        { 
             THashMultiMap<TString, int> mm;
-
-            Load(&S_, mm);
-
-            UNIT_ASSERT_EQUAL(mm.size(), 3);
-            UNIT_ASSERT_EQUAL(mm.count("one"), 1);
-            auto oneIter = mm.equal_range("one").first;
-            UNIT_ASSERT_EQUAL(oneIter->second, 1);
-            UNIT_ASSERT_EQUAL(mm.count("two"), 2);
-            auto twoIter = mm.equal_range("two").first;
-            UNIT_ASSERT_EQUAL(twoIter->second, 2);
-            UNIT_ASSERT_EQUAL((++twoIter)->second, 22);
-        }
+ 
+            Load(&S_, mm); 
+ 
+            UNIT_ASSERT_EQUAL(mm.size(), 3); 
+            UNIT_ASSERT_EQUAL(mm.count("one"), 1); 
+            auto oneIter = mm.equal_range("one").first; 
+            UNIT_ASSERT_EQUAL(oneIter->second, 1); 
+            UNIT_ASSERT_EQUAL(mm.count("two"), 2); 
+            auto twoIter = mm.equal_range("two").first; 
+            UNIT_ASSERT_EQUAL(twoIter->second, 2); 
+            UNIT_ASSERT_EQUAL((++twoIter)->second, 22); 
+        } 
     }
 
     void TestList() {

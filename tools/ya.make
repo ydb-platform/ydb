@@ -22,7 +22,7 @@ RECURSE(
     cproxy
     crc32
     crx_creator
-    curl_to_ab 
+    curl_to_ab
     diaprintkeys
     directindexer
     doc_handle_decode
@@ -61,7 +61,7 @@ RECURSE(
     inflector
     is_holiday
     jsv8
-    json_to_jsonlines 
+    json_to_jsonlines
     langdiscr-test
     lemmas_merger_builder
     lemmer-test
@@ -75,7 +75,7 @@ RECURSE(
     mkdocs_builder/arcadium_helper_plugin
     mkdocs_builder/mkdocs_yandex
     mkdocs_builder/theme
-    mstand 
+    mstand
     mtime0
     mx_bin2info
     nehc
@@ -138,7 +138,7 @@ RECURSE(
     seinfo
     sent_index_print
     showmime
-    shutter_jing_plugin 
+    shutter_jing_plugin
     snipmake
     spamfilt
     stdin

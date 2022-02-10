@@ -9,7 +9,7 @@ PEERDIR(
 
 SRCS(
     bitvector.cpp
-    readonly_bitvector.cpp 
+    readonly_bitvector.cpp
 )
 
 END()

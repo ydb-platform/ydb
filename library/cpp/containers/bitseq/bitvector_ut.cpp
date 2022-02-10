@@ -1,11 +1,11 @@
 #include "bitvector.h"
-#include "readonly_bitvector.h" 
+#include "readonly_bitvector.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/memory/blob.h> 
-#include <util/stream/buffer.h> 
- 
+#include <util/memory/blob.h>
+#include <util/stream/buffer.h>
+
 Y_UNIT_TEST_SUITE(TBitVectorTest) {
     Y_UNIT_TEST(TestEmpty) {
         TBitVector<ui64> v64;
@@ -66,21 +66,21 @@ Y_UNIT_TEST_SUITE(TBitVectorTest) {
         v.Set(10 * 32, 100500, 32);
         UNIT_ASSERT_EQUAL(v.Get(10 * 32, 32), 100500);
     }
- 
+
     Y_UNIT_TEST(TestReadonlyVector) {
-        TBitVector<ui64> v(100); 
-        for (ui64 i = 0; i < v.Size(); ++i) { 
-            if (i % 3 == 0) { 
-                v.Set(i); 
-            } 
-        } 
-        TBufferStream bs; 
-        TReadonlyBitVector<ui64>::SaveForReadonlyAccess(&bs, v); 
-        const auto blob = TBlob::FromBuffer(bs.Buffer()); 
-        TReadonlyBitVector<ui64> rv; 
-        rv.LoadFromBlob(blob); 
-        for (ui64 i = 0; i < rv.Size(); ++i) { 
-            UNIT_ASSERT_VALUES_EQUAL(rv.Test(i), i % 3 == 0); 
-        } 
-    } 
+        TBitVector<ui64> v(100);
+        for (ui64 i = 0; i < v.Size(); ++i) {
+            if (i % 3 == 0) {
+                v.Set(i);
+            }
+        }
+        TBufferStream bs;
+        TReadonlyBitVector<ui64>::SaveForReadonlyAccess(&bs, v);
+        const auto blob = TBlob::FromBuffer(bs.Buffer());
+        TReadonlyBitVector<ui64> rv;
+        rv.LoadFromBlob(blob);
+        for (ui64 i = 0; i < rv.Size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(rv.Test(i), i % 3 == 0);
+        }
+    }
 }

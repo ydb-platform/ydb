@@ -2,7 +2,7 @@
 
 #include <util/generic/singleton.h>
 #include <util/generic/yexception.h>
-#include <util/system/info.h> 
+#include <util/system/info.h>
 #include "align.h"
 
 #ifdef _linux_
@@ -32,7 +32,7 @@ namespace {
             if (linuxVersionCode < KERNEL_VERSION(2, 4, 10)) {
                 Alignment = 0;
             } else if (linuxVersionCode < KERNEL_VERSION(2, 6, 0)) {
-                Alignment = NSystemInfo::GetPageSize(); 
+                Alignment = NSystemInfo::GetPageSize();
             } else {
                 // Default alignment used to be 512, but most modern devices rely on 4k physical blocks.
                 // 4k alignment works well for both 512 and 4k blocks and doesn't require 512e support in the kernel.

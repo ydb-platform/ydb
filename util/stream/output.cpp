@@ -272,21 +272,21 @@ namespace {
         private:
             virtual void DoWrite(const void* buf, size_t len) override {
                 with_lock (BufferMutex) {
-                    Buffer.Write(buf, len); 
-                } 
+                    Buffer.Write(buf, len);
+                }
             }
 
             virtual void DoFlush() override {
                 with_lock (BufferMutex) {
-                    LogFuncPtr(ANDROID_LOG_DEBUG, GetTag(), Buffer.Data()); 
-                    Buffer.Clear(); 
-                } 
+                    LogFuncPtr(ANDROID_LOG_DEBUG, GetTag(), Buffer.Data());
+                    Buffer.Clear();
+                }
             }
 
             virtual const char* GetTag() const = 0;
 
         private:
-            TMutex BufferMutex; 
+            TMutex BufferMutex;
             TStringStream Buffer;
             TLogFuncPtr LogFuncPtr;
         };

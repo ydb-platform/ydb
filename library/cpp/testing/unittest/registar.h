@@ -383,9 +383,9 @@ public:                       \
     } while (false)
 
 //doubles
-// UNIT_ASSERT_DOUBLES_EQUAL_DEPRECATED* macros do not handle NaNs correctly (see IGNIETFERRO-1419) and are for backward compatibility 
-// only. Consider switching to regular UNIT_ASSERT_DOUBLES_EQUAL* macros if you're still using the deprecated version. 
-#define UNIT_ASSERT_DOUBLES_EQUAL_DEPRECATED_C(E, A, D, C)                                                     \ 
+// UNIT_ASSERT_DOUBLES_EQUAL_DEPRECATED* macros do not handle NaNs correctly (see IGNIETFERRO-1419) and are for backward compatibility
+// only. Consider switching to regular UNIT_ASSERT_DOUBLES_EQUAL* macros if you're still using the deprecated version.
+#define UNIT_ASSERT_DOUBLES_EQUAL_DEPRECATED_C(E, A, D, C)                                                     \
     do {                                                                                                       \
         if (std::abs((E) - (A)) > (D)) {                                                                       \
             const auto _es = ToString((long double)(E));                                                       \
@@ -396,32 +396,32 @@ public:                       \
         }                                                                                                      \
     } while (false)
 
-#define UNIT_ASSERT_DOUBLES_EQUAL_DEPRECATED(E, A, D) UNIT_ASSERT_DOUBLES_EQUAL_DEPRECATED_C(E, A, D, "") 
- 
-#define UNIT_ASSERT_DOUBLES_EQUAL_C(E, A, D, C)                                                                                        \ 
-    do {                                                                                                                               \ 
-        const auto _ed = (E);                                                                                                          \ 
-        const auto _ad = (A);                                                                                                          \ 
-        const auto _dd = (D);                                                                                                          \ 
+#define UNIT_ASSERT_DOUBLES_EQUAL_DEPRECATED(E, A, D) UNIT_ASSERT_DOUBLES_EQUAL_DEPRECATED_C(E, A, D, "")
+
+#define UNIT_ASSERT_DOUBLES_EQUAL_C(E, A, D, C)                                                                                        \
+    do {                                                                                                                               \
+        const auto _ed = (E);                                                                                                          \
+        const auto _ad = (A);                                                                                                          \
+        const auto _dd = (D);                                                                                                          \
         if (std::isnan((long double)_ed) && !std::isnan((long double)_ad)) {                                                           \
             const auto _as = ToString((long double)_ad);                                                                               \
             auto&& failMsg = Sprintf("expected NaN, got %s %s", _as.data(), (::TStringBuilder() << C).data());                           \
-            UNIT_FAIL_IMPL("assertion failure", failMsg);                                                                              \ 
-        }                                                                                                                              \ 
+            UNIT_FAIL_IMPL("assertion failure", failMsg);                                                                              \
+        }                                                                                                                              \
         if (!std::isnan((long double)_ed) && std::isnan((long double)_ad)) {                                                           \
             const auto _es = ToString((long double)_ed);                                                                               \
             auto&& failMsg = Sprintf("expected %s, got NaN %s", _es.data(), (::TStringBuilder() << C).data());                           \
-            UNIT_FAIL_IMPL("assertion failure", failMsg);                                                                              \ 
-        }                                                                                                                              \ 
-        if (std::abs((_ed) - (_ad)) > (_dd)) {                                                                                         \ 
-            const auto _es = ToString((long double)_ed);                                                                               \ 
-            const auto _as = ToString((long double)_ad);                                                                               \ 
-            const auto _ds = ToString((long double)_dd);                                                                               \ 
+            UNIT_FAIL_IMPL("assertion failure", failMsg);                                                                              \
+        }                                                                                                                              \
+        if (std::abs((_ed) - (_ad)) > (_dd)) {                                                                                         \
+            const auto _es = ToString((long double)_ed);                                                                               \
+            const auto _as = ToString((long double)_ad);                                                                               \
+            const auto _ds = ToString((long double)_dd);                                                                               \
             auto&& failMsg = Sprintf("std::abs(%s - %s) > %s %s", _es.data(), _as.data(), _ds.data(), (::TStringBuilder() << C).data()); \
-            UNIT_FAIL_IMPL("assertion failure", failMsg);                                                                              \ 
-        }                                                                                                                              \ 
-    } while (false) 
- 
+            UNIT_FAIL_IMPL("assertion failure", failMsg);                                                                              \
+        }                                                                                                                              \
+    } while (false)
+
 #define UNIT_ASSERT_DOUBLES_EQUAL(E, A, D) UNIT_ASSERT_DOUBLES_EQUAL_C(E, A, D, "")
 
 //strings

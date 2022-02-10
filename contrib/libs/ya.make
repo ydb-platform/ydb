@@ -27,7 +27,7 @@ RECURSE(
     cairo
     cbc
     cctools
-    cctz 
+    cctz
     cereal
     ceres-solver
     chromaprint

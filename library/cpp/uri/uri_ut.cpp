@@ -127,7 +127,7 @@ namespace NUri {
             {"http://president.rf/%D0%BD%D0%BE%D0%B2%D0%BE%D1%81%D1%82%D0%B8", "http://president.rf/%D0%BD%D0%BE%D0%B2%D0%BE%D1%81%D1%82%D0%B8/1024", "http://president.rf/%D0%BD%D0%BE%D0%B2%D0%BE%D1%81%D1%82%D0%B8/1024", TUri::LinkIsLocal},
             {nullptr, nullptr, nullptr, TUri::LinkIsBad},
         };
- 
+
         Y_UNIT_TEST(test_httpURLNormalize) {
             TUri normalizedLink;
 

@@ -1327,7 +1327,7 @@
 /* #undef PACKAGE_PACKAGER_VERSION */
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "GNU M4 3.0.0" 
+#define PACKAGE_STRING "GNU M4 3.0.0"
 
 /* Define to the one symbol short name of this package. */
 #define PACKAGE_TARNAME "m4"
@@ -1336,7 +1336,7 @@
 #define PACKAGE_URL "http://www.gnu.org/software/m4/"
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "3.0.0" 
+#define PACKAGE_VERSION "3.0.0"
 
 /* the number of pending output bytes on stream 'fp' */
 /* #undef PENDING_OUTPUT_N_BYTES */
@@ -1502,7 +1502,7 @@
 /* #undef USE_WINDOWS_THREADS */
 
 /* Version number of package */
-#define VERSION "3.0.0" 
+#define VERSION "3.0.0"
 
 /* Define to 1 if unsetenv returns void instead of int. */
 /* #undef VOID_UNSETENV */

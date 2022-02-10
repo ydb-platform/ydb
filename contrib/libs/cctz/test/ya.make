@@ -1,5 +1,5 @@
 GTEST()
- 
+
 LICENSE(Apache-2.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
@@ -8,12 +8,12 @@ OWNER(
     dfyz
     petrk
 )
- 
-PEERDIR( 
+
+PEERDIR(
     contrib/libs/cctz
-    contrib/libs/cctz/tzdata 
-) 
- 
+    contrib/libs/cctz/tzdata
+)
+
 ADDINCL(
     contrib/libs/cctz/include
 )
@@ -27,10 +27,10 @@ IF (NOT AUTOCHECK)
     )
 ENDIF()
 
-SRCS( 
-    civil_time_test.cc 
+SRCS(
+    civil_time_test.cc
     time_zone_format_test.cc
-    time_zone_lookup_test.cc 
-) 
- 
-END() 
+    time_zone_lookup_test.cc
+)
+
+END()

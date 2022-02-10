@@ -254,7 +254,7 @@ RECURSE(
     django-filter
     django-fsm
     django-grappelli
-    django-guardian
+    django-guardian 
     django-hosts
     django-http-proxy
     django-import-export
@@ -893,7 +893,7 @@ RECURSE(
     python-datemath
     python-debian
     python-decouple
-    python-docx
+    python-docx 
     python-dotenv
     python-editor
     python-geohash

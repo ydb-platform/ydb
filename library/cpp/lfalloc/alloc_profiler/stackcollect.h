@@ -1,14 +1,14 @@
-#pragma once 
- 
+#pragma once
+
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <library/cpp/cache/cache.h>
 
-#include <util/generic/noncopyable.h> 
-#include <util/generic/ptr.h> 
+#include <util/generic/noncopyable.h>
+#include <util/generic/ptr.h>
 #include <util/stream/output.h>
- 
+
 namespace NAllocProfiler {
- 
+
 struct TStats {
     intptr_t Allocs = 0;
     intptr_t Frees = 0;
@@ -85,23 +85,23 @@ private:
     TLFUCache<void*, TSymbol> SymbolCache;
 };
 
-//////////////////////////////////////////////////////////////////////////////// 
- 
-class TAllocationStackCollector: private TNonCopyable { 
-private: 
-    class TImpl; 
-    THolder<TImpl> Impl; 
- 
-public: 
-    TAllocationStackCollector(); 
-    ~TAllocationStackCollector(); 
- 
-    int Alloc(void** stack, size_t frameCount, int tag, size_t size); 
-    void Free(int stackId, size_t size); 
- 
-    void Clear(); 
- 
+////////////////////////////////////////////////////////////////////////////////
+
+class TAllocationStackCollector: private TNonCopyable {
+private:
+    class TImpl;
+    THolder<TImpl> Impl;
+
+public:
+    TAllocationStackCollector();
+    ~TAllocationStackCollector();
+
+    int Alloc(void** stack, size_t frameCount, int tag, size_t size);
+    void Free(int stackId, size_t size);
+
+    void Clear();
+
     void Dump(int count, IAllocationStatsDumper& out) const;
-}; 
- 
+};
+
 }   // namespace NAllocProfiler

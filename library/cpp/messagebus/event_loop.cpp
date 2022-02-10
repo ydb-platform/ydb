@@ -79,7 +79,7 @@ public:
     const char* Name;
 
     TAtomic RunningState;
-    TAtomic StopSignal; 
+    TAtomic StopSignal;
     TSystemEvent StoppedEvent;
     TData Data;
 
@@ -255,7 +255,7 @@ void TChannel::TImpl::CallHandler() {
 TEventLoop::TImpl::TImpl(const char* name)
     : Name(name)
     , RunningState(EVENT_LOOP_CREATED)
-    , StopSignal(0) 
+    , StopSignal(0)
 {
     SOCKET wakeupSockets[2];
 
@@ -284,7 +284,7 @@ void TEventLoop::TImpl::Run() {
         SetCurrentThreadName(Name);
     }
 
-    while (AtomicGet(StopSignal) == 0) { 
+    while (AtomicGet(StopSignal) == 0) {
         void* cookies[1024];
         const size_t count = Poller.WaitI(cookies, Y_ARRAY_SIZE(cookies));
 
@@ -328,7 +328,7 @@ void TEventLoop::TImpl::Run() {
 }
 
 void TEventLoop::TImpl::Stop() {
-    AtomicSet(StopSignal, 1); 
+    AtomicSet(StopSignal, 1);
 
     if (AtomicGet(RunningState) == EVENT_LOOP_RUNNING) {
         Wakeup();

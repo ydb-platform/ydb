@@ -74,9 +74,9 @@ struct TSchemeShard::TTxDeleteTabletReply : public TSchemeShard::TRwTxBase {
             case ETabletType::BlockStorePartition2:
                 Self->TabletCounters->Simple()[COUNTER_BLOCKSTORE_PARTITION2_SHARD_COUNT].Sub(1);
                 break;
-            case ETabletType::FileStore: 
+            case ETabletType::FileStore:
                 Self->TabletCounters->Simple()[COUNTER_FILESTORE_SHARD_COUNT].Sub(1);
-                break; 
+                break;
             case ETabletType::Kesus:
                 Self->TabletCounters->Simple()[COUNTER_KESUS_SHARD_COUNT].Sub(1);
                 break;

@@ -85,8 +85,8 @@ const EnqueueFunc
                              {{default_enqueue_short, default_enqueue_long},
                               {resolver_enqueue_short, resolver_enqueue_long}};
 
-size_t threads_limit_ = 0; 
- 
+size_t threads_limit_ = 0;
+
 }  // namespace
 
 TraceFlag executor_trace(false, "executor");
@@ -95,17 +95,17 @@ Executor::Executor(const char* name) : name_(name) {
   adding_thread_lock_ = GPR_SPINLOCK_STATIC_INITIALIZER;
   gpr_atm_rel_store(&num_threads_, 0);
   max_threads_ = GPR_MAX(1, 2 * gpr_cpu_num_cores());
-  if (threads_limit_) { 
-    max_threads_ = GPR_MIN(max_threads_, threads_limit_); 
-  } 
+  if (threads_limit_) {
+    max_threads_ = GPR_MIN(max_threads_, threads_limit_);
+  }
 }
 
-size_t Executor::SetThreadsLimit(size_t count) { 
-  size_t prev = threads_limit_; 
-  threads_limit_ = count; 
-  return prev; 
-} 
- 
+size_t Executor::SetThreadsLimit(size_t count) {
+  size_t prev = threads_limit_;
+  threads_limit_ = count;
+  return prev;
+}
+
 void Executor::Init() { SetThreading(true); }
 
 size_t Executor::RunClosures(const char* executor_name,

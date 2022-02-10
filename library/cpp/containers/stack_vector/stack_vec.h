@@ -135,21 +135,21 @@ public:
     {
     }
 
-    template <class A> 
+    template <class A>
     TStackVec(const TVector<T, A>& src)
         : TStackVec(src.begin(), src.end())
-    { 
-    } 
- 
+    {
+    }
+
     TStackVec(std::initializer_list<T> il, const TAllocator& alloc = TAllocator())
         : TStackVec(il.begin(), il.end(), alloc)
-    { 
-    } 
- 
-    template <class TIter> 
+    {
+    }
+
+    template <class TIter>
     TStackVec(TIter first, TIter last, const TAllocator& alloc = TAllocator())
         : TBase(alloc)
-    { 
+    {
         // NB(eeight) Since we want to call 'reserve' here, we cannot just delegate to TVector ctor.
         // The best way to insert values afterwards is to call TVector::insert. However there is a caveat.
         // In order to call this ctor of TVector, T needs to be just move-constructible. Insert however
@@ -164,27 +164,27 @@ public:
                 TBase::push_back(*first);
             }
         }
-    } 
- 
+    }
+
 public:
     void swap(TStackVec&) = delete;
     void shrink_to_fit() = delete;
 
     TStackVec& operator=(const TStackVec& src) {
-        TBase::assign(src.begin(), src.end()); 
+        TBase::assign(src.begin(), src.end());
         return *this;
     }
- 
-    template <class A> 
+
+    template <class A>
     TStackVec& operator=(const TVector<T, A>& src) {
-        TBase::assign(src.begin(), src.end()); 
-        return *this; 
-    } 
- 
+        TBase::assign(src.begin(), src.end());
+        return *this;
+    }
+
     TStackVec& operator=(std::initializer_list<T> il) {
-        TBase::assign(il.begin(), il.end()); 
-        return *this; 
-    } 
+        TBase::assign(il.begin(), il.end());
+        return *this;
+    }
 };
 
 template <typename T, size_t CountOnStack, class Alloc>

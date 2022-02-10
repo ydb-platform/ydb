@@ -33,28 +33,28 @@ message TTabletTypes {
         TxAllocator = 23;
         PersQueueReadBalancer = 24;
         BlockStoreVolume = 25;
-        BlockStorePartition = 26; 
+        BlockStorePartition = 26;
         TenantSlotBroker = 27;
         Console = 28;
         Kesus = 29;
         BlockStorePartition2 = 30;
-        BlockStoreDiskRegistry = 31; 
+        BlockStoreDiskRegistry = 31;
         SysViewProcessor = 32;
-        FileStore = 33; 
-        OlapShard = 34; 
-        ColumnShard = 35; 
+        FileStore = 33;
+        OlapShard = 34;
+        ColumnShard = 35;
         TestShard = 36;
         SequenceShard = 37;
         ReplicationController = 38;
 
-        // when adding a new tablet type and keeping parse compatibility with the old version 
-        // rename existing reserved item to desired one, and add new reserved item to 
-        // the end of reserved list 
-        Reserved39 = 39; 
+        // when adding a new tablet type and keeping parse compatibility with the old version
+        // rename existing reserved item to desired one, and add new reserved item to
+        // the end of reserved list
+        Reserved39 = 39;
         Reserved40 = 40;
         Reserved41 = 41;
         Reserved42 = 42;
- 
+
         UserTypeStart = 255;
         TypeInvalid = -1;
     }

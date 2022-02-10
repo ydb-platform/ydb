@@ -15,9 +15,9 @@ namespace NYT::NYTAlloc {
 ////////////////////////////////////////////////////////////////////////////////
 // Macros
 
-#if defined(_linux_) && \ 
-    !defined(_asan_enabled_) && \ 
-    !defined(_msan_enabled_) && \ 
+#if defined(_linux_) && \
+    !defined(_asan_enabled_) && \
+    !defined(_msan_enabled_) && \
     !defined(_tsan_enabled_)
     #define YT_ALLOC_ENABLED
 #endif

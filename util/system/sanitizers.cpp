@@ -1,4 +1,4 @@
-#include "sanitizers.h" 
+#include "sanitizers.h"
 #include "thread.h"
 
 #if defined(_asan_enabled_)

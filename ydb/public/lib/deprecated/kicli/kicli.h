@@ -574,7 +574,7 @@ public:
         BlockStoreVolume,
         Kesus,
         SolomonVolume,
-        FileStore, 
+        FileStore,
         OlapStore,
         OlapTable,
         Sequence,

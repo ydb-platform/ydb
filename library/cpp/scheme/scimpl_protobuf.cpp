@@ -130,41 +130,41 @@ namespace NSc {
     }
 
     void TValue::To(Message& msg, const TProtoOpts& opts) const {
-        msg.Clear(); 
- 
-        if (IsNull()) { 
-            return; 
-        } 
- 
-        if (!IsDict()) { 
-            ythrow TSchemeException() << "expected dictionary"; 
-        } 
- 
-        const Descriptor* descriptor = msg.GetDescriptor(); 
-        for (int i = 0, count = descriptor->field_count(); i < count; ++i) { 
-            const FieldDescriptor* field = descriptor->field(i); 
+        msg.Clear();
+
+        if (IsNull()) {
+            return;
+        }
+
+        if (!IsDict()) {
+            ythrow TSchemeException() << "expected dictionary";
+        }
+
+        const Descriptor* descriptor = msg.GetDescriptor();
+        for (int i = 0, count = descriptor->field_count(); i < count; ++i) {
+            const FieldDescriptor* field = descriptor->field(i);
             if (field->is_map()) {
                 ToMapField(msg, field, opts);
             } else if (field->is_repeated()) {
                 ToRepeatedField(msg, field, opts);
-            } else { 
+            } else {
                 ToField(msg, field, opts);
-            } 
-        } 
-    } 
- 
+            }
+        }
+    }
+
     void TValue::ValueToField(const TValue& value, Message& msg, const FieldDescriptor* field, const TProtoOpts& opts) const {
         const TString& name = field->name();
-        if (value.IsNull()) { 
-            if (field->is_required() && !field->has_default_value()) { 
-                ythrow TSchemeException() << "has no value for required field " << name; 
-            } 
-            return; 
-        } 
- 
-        const Reflection* reflection = msg.GetReflection(); 
- 
-        switch (field->cpp_type()) { 
+        if (value.IsNull()) {
+            if (field->is_required() && !field->has_default_value()) {
+                ythrow TSchemeException() << "has no value for required field " << name;
+            }
+            return;
+        }
+
+        const Reflection* reflection = msg.GetReflection();
+
+        switch (field->cpp_type()) {
             case FieldDescriptor::CPPTYPE_INT32:
                 reflection->SetInt32(&msg, field, value.ForceIntNumber());
                 break;
@@ -199,9 +199,9 @@ namespace NSc {
                 ythrow TSchemeException()
                     << "field " << field->full_name()
                     << " unexpected type " << (int)field->cpp_type();
-        } 
-    } 
- 
+        }
+    }
+
     void TValue::ToField(Message& msg, const FieldDescriptor* field, const TProtoOpts& opts) const {
         const TString& name = field->name();
         const TValue& value = Get(name);
@@ -209,49 +209,49 @@ namespace NSc {
     }
 
     void TValue::ToEnumField(Message& msg, const FieldDescriptor* field, const TProtoOpts& opts) const {
-        const EnumDescriptor* enumField = field->enum_type(); 
- 
-        const EnumValueDescriptor* enumFieldValue = IsString() 
+        const EnumDescriptor* enumField = field->enum_type();
+
+        const EnumValueDescriptor* enumFieldValue = IsString()
                                                         ? enumField->FindValueByName(ForceString())
                                                         : enumField->FindValueByNumber(ForceIntNumber());
- 
-        if (!enumFieldValue) { 
+
+        if (!enumFieldValue) {
             if (opts.UnknownEnumValueIsDefault) {
                 enumFieldValue = field->default_value_enum();
             } else {
                 ythrow TSchemeException() << "invalid value of enum field " << field->name();
             }
-        } 
- 
-        const Reflection* reflection = msg.GetReflection(); 
- 
-        if (field->is_repeated()) { 
-            reflection->AddEnum(&msg, field, enumFieldValue); 
-        } else { 
-            reflection->SetEnum(&msg, field, enumFieldValue); 
-        } 
-    } 
- 
+        }
+
+        const Reflection* reflection = msg.GetReflection();
+
+        if (field->is_repeated()) {
+            reflection->AddEnum(&msg, field, enumFieldValue);
+        } else {
+            reflection->SetEnum(&msg, field, enumFieldValue);
+        }
+    }
+
     void TValue::ToRepeatedField(Message& msg, const FieldDescriptor* field, const TProtoOpts& opts) const {
         const TString& name = field->name();
- 
-        const TValue& fieldValue = Get(name); 
-        if (fieldValue.IsNull()) { 
-            return; 
-        } 
- 
-        if (!fieldValue.IsArray()) { 
+
+        const TValue& fieldValue = Get(name);
+        if (fieldValue.IsNull()) {
+            return;
+        }
+
+        if (!fieldValue.IsArray()) {
             if (opts.SkipTypeMismatch) {
                 return; // leave repeated field empty
             } else {
                 ythrow TSchemeException() << "invalid type of repeated field " << name << ": not an array";
             }
-        } 
- 
-        const Reflection* reflection = msg.GetReflection(); 
- 
+        }
+
+        const Reflection* reflection = msg.GetReflection();
+
         for (const TValue& value : fieldValue.GetArray()) {
-            switch (field->cpp_type()) { 
+            switch (field->cpp_type()) {
                 case FieldDescriptor::CPPTYPE_INT32:
                     reflection->AddInt32(&msg, field, value.ForceIntNumber());
                     break;
@@ -286,10 +286,10 @@ namespace NSc {
                     ythrow TSchemeException()
                         << "field " << field->full_name()
                         << " unexpected type " << (int)field->cpp_type();
-            } 
-        } 
-    } 
- 
+            }
+        }
+    }
+
     void TValue::ToMapField(Message& msg, const FieldDescriptor* field, const TProtoOpts& opts) const {
         const TString& name = field->name();
 

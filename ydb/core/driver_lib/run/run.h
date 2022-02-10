@@ -60,7 +60,7 @@ protected:
     TVector<std::pair<TString, TAutoPtr<NGrpc::TGRpcServer>>> GRpcServers;
 
     TIntrusivePtr<NActors::NLog::TSettings> LogSettings;
-    std::shared_ptr<TLogBackend> LogBackend; 
+    std::shared_ptr<TLogBackend> LogBackend;
     TAutoPtr<TActorSystem> ActorSystem;
 
     TKikimrRunner(std::shared_ptr<TModuleFactories> factories = {});
@@ -94,14 +94,14 @@ protected:
 
     void InitializeAppData(const TKikimrRunConfig& runConfig);
 
-    void InitializeActorSystem( 
-        const TKikimrRunConfig& runConfig, 
-        TIntrusivePtr<TServiceInitializersList> serviceInitializers, 
-        const TBasicKikimrServicesMask& serviceMask = {}); 
+    void InitializeActorSystem(
+        const TKikimrRunConfig& runConfig,
+        TIntrusivePtr<TServiceInitializersList> serviceInitializers,
+        const TBasicKikimrServicesMask& serviceMask = {});
 
-    TIntrusivePtr<TServiceInitializersList> CreateServiceInitializersList( 
-        const TKikimrRunConfig& runConfig, 
-        const TBasicKikimrServicesMask& serviceMask = {}); 
+    TIntrusivePtr<TServiceInitializersList> CreateServiceInitializersList(
+        const TKikimrRunConfig& runConfig,
+        const TBasicKikimrServicesMask& serviceMask = {});
 
 public:
     static void SetSignalHandlers();

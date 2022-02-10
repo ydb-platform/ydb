@@ -30,7 +30,7 @@ enum EObjectType {
     Kesus = 16;
     SolomonVolume = 17;
     SubDomain = 18;
-    FileStore = 19; 
+    FileStore = 19;
     CdcStream = 20;
     Sequence = 21;
     Replication = 22;

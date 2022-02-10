@@ -103,9 +103,9 @@ class Executor {
   // Return if the DEFAULT executor is threaded
   static bool IsThreadedDefault();
 
-  // Set the maximum numbers of executor treads 
-  static size_t SetThreadsLimit(size_t count); 
- 
+  // Set the maximum numbers of executor treads
+  static size_t SetThreadsLimit(size_t count);
+
  private:
   static size_t RunClosures(const char* executor_name, grpc_closure_list list);
   static void ThreadMain(void* arg);

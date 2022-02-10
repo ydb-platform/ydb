@@ -114,7 +114,7 @@ namespace NWilson {
 
 // generate wilson event having parent TRACE_ID and span TRACE_ID to become parent of logged event
 #define WILSON_TRACE(CTX, TRACE_ID, EVENT_NAME, ...)             \
-    if (::NWilson::TraceEnabled(CTX)) {                          \ 
+    if (::NWilson::TraceEnabled(CTX)) {                          \
         ::NWilson::TTraceId* __traceId = (TRACE_ID);             \
         if (__traceId && *__traceId) {                           \
             TInstant now = Now();                                \
@@ -123,7 +123,7 @@ namespace NWilson {
             __UNROLL_PARAMS(__FILL_PARAM, ##__VA_ARGS__)         \
             ::NWilson::TraceEvent((CTX), __traceId, event, now); \
         }                                                        \
-    } 
+    }
 
     inline ui32 GetNodeId(const NActors::TActorSystem& actorSystem) {
         return actorSystem.NodeId;
@@ -133,13 +133,13 @@ namespace NWilson {
     }
 
     constexpr ui32 WilsonComponentId = 430; // kikimrservices: wilson
- 
-    template <typename TActorSystem> 
-    bool TraceEnabled(const TActorSystem& ctx) { 
-        const auto* loggerSettings = ctx.LoggerSettings(); 
+
+    template <typename TActorSystem>
+    bool TraceEnabled(const TActorSystem& ctx) {
+        const auto* loggerSettings = ctx.LoggerSettings();
         return loggerSettings && loggerSettings->Satisfies(NActors::NLog::PRI_DEBUG, WilsonComponentId);
-    } 
- 
+    }
+
     template <typename TActorSystem, typename TEvent>
     void TraceEvent(const TActorSystem& actorSystem, TTraceId* traceId, TEvent&& event, TInstant timestamp) {
         // ensure that we are not using obsolete TraceId

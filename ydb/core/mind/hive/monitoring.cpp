@@ -1086,8 +1086,8 @@ public:
             return "K";
         case TTabletTypes::SysViewProcessor:
             return "SV";
-        case TTabletTypes::FileStore: 
-            return "FS"; 
+        case TTabletTypes::FileStore:
+            return "FS";
         case TTabletTypes::TestShard:
             return "TS";
         case TTabletTypes::SequenceShard:

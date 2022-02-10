@@ -21,12 +21,12 @@ class TLockFreeStack: TNonCopyable {
         }
     };
 
-    TNode* Head; 
-    TNode* FreePtr; 
+    TNode* Head;
+    TNode* FreePtr;
     TAtomic DequeueCount;
 
     void TryToFreeMemory() {
-        TNode* current = AtomicGet(FreePtr); 
+        TNode* current = AtomicGet(FreePtr);
         if (!current)
             return;
         if (AtomicAdd(DequeueCount, 0) == 1) {
@@ -44,7 +44,7 @@ class TLockFreeStack: TNonCopyable {
     }
     void EnqueueImpl(TNode* volatile head, TNode* volatile tail) {
         for (;;) {
-            tail->Next = AtomicGet(Head); 
+            tail->Next = AtomicGet(Head);
             if (AtomicCas(&Head, head, tail->Next))
                 break;
         }
@@ -97,7 +97,7 @@ public:
     }
     bool Dequeue(T* res) {
         AtomicAdd(DequeueCount, 1);
-        for (TNode* current = AtomicGet(Head); current; current = AtomicGet(Head)) { 
+        for (TNode* current = AtomicGet(Head); current; current = AtomicGet(Head)) {
             if (AtomicCas(&Head, AtomicGet(current->Next), current)) {
                 *res = std::move(current->Value);
                 // delete current; // ABA problem
@@ -126,7 +126,7 @@ public:
     template <typename TCollection>
     void DequeueAll(TCollection* res) {
         AtomicAdd(DequeueCount, 1);
-        for (TNode* current = AtomicGet(Head); current; current = AtomicGet(Head)) { 
+        for (TNode* current = AtomicGet(Head); current; current = AtomicGet(Head)) {
             if (AtomicCas(&Head, (TNode*)nullptr, current)) {
                 for (TNode* x = current; x;) {
                     res->push_back(std::move(x->Value));
@@ -157,7 +157,7 @@ public:
         AtomicAdd(DequeueCount, -1);
     }
     bool DequeueSingleConsumer(T* res) {
-        for (TNode* current = AtomicGet(Head); current; current = AtomicGet(Head)) { 
+        for (TNode* current = AtomicGet(Head); current; current = AtomicGet(Head)) {
             if (AtomicCas(&Head, current->Next, current)) {
                 *res = std::move(current->Value);
                 delete current; // with single consumer thread ABA does not happen
@@ -170,7 +170,7 @@ public:
     // elements are returned in order of dequeue (top to bottom; see example in unittest)
     template <typename TCollection>
     void DequeueAllSingleConsumer(TCollection* res) {
-        for (TNode* current = AtomicGet(Head); current; current = AtomicGet(Head)) { 
+        for (TNode* current = AtomicGet(Head); current; current = AtomicGet(Head)) {
             if (AtomicCas(&Head, (TNode*)nullptr, current)) {
                 for (TNode* x = current; x;) {
                     res->push_back(std::move(x->Value));
@@ -183,6 +183,6 @@ public:
     }
     bool IsEmpty() {
         AtomicAdd(DequeueCount, 0);        // mem barrier
-        return AtomicGet(Head) == nullptr; // without lock, so result is approximate 
+        return AtomicGet(Head) == nullptr; // without lock, so result is approximate
     }
 };

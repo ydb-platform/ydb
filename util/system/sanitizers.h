@@ -1,22 +1,22 @@
 #pragma once
 
-#include "defaults.h" 
+#include "defaults.h"
 
-extern "C" { // sanitizers API 
- 
+extern "C" { // sanitizers API
+
 #if defined(_asan_enabled_)
     void __lsan_ignore_object(const void* p);
 #endif
 
-#if defined(_msan_enabled_) 
+#if defined(_msan_enabled_)
     void __msan_unpoison(const volatile void* a, size_t size);
     void __msan_poison(const volatile void* a, size_t size);
     void __msan_check_mem_is_initialized(const volatile void* x, size_t size);
 #endif
 
-}; // sanitizers API 
- 
-namespace NSan { 
+}; // sanitizers API
+
+namespace NSan {
     class TFiberContext {
     public:
         TFiberContext() noexcept;
@@ -54,63 +54,63 @@ namespace NSan {
 #endif
     }
 
-    // Determines if asan present 
+    // Determines if asan present
     inline constexpr static bool ASanIsOn() noexcept {
-#if defined(_asan_enabled_) 
-        return true; 
-#else 
-        return false; 
+#if defined(_asan_enabled_)
+        return true;
+#else
+        return false;
 #endif
-    } 
+    }
 
-    // Determines if tsan present 
+    // Determines if tsan present
     inline constexpr static bool TSanIsOn() noexcept {
-#if defined(_tsan_enabled_) 
-        return true; 
-#else 
-        return false; 
+#if defined(_tsan_enabled_)
+        return true;
+#else
+        return false;
 #endif
-    } 
+    }
 
-    // Determines if msan present 
+    // Determines if msan present
     inline constexpr static bool MSanIsOn() noexcept {
-#if defined(_msan_enabled_) 
-        return true; 
-#else 
-        return false; 
+#if defined(_msan_enabled_)
+        return true;
+#else
+        return false;
 #endif
-    } 
+    }
 
-    // Make memory region fully initialized (without changing its contents). 
+    // Make memory region fully initialized (without changing its contents).
     inline static void Unpoison(const volatile void* a, size_t size) noexcept {
-#if defined(_msan_enabled_) 
-        __msan_unpoison(a, size); 
-#else 
-        Y_UNUSED(a); 
-        Y_UNUSED(size); 
-#endif 
-    } 
+#if defined(_msan_enabled_)
+        __msan_unpoison(a, size);
+#else
+        Y_UNUSED(a);
+        Y_UNUSED(size);
+#endif
+    }
 
-    // Make memory region fully uninitialized (without changing its contents). 
-    // This is a legacy interface that does not update origin information. Use __msan_allocated_memory() instead. 
+    // Make memory region fully uninitialized (without changing its contents).
+    // This is a legacy interface that does not update origin information. Use __msan_allocated_memory() instead.
     inline static void Poison(const volatile void* a, size_t size) noexcept {
-#if defined(_msan_enabled_) 
-        __msan_poison(a, size); 
+#if defined(_msan_enabled_)
+        __msan_poison(a, size);
 #else
-        Y_UNUSED(a); 
-        Y_UNUSED(size); 
+        Y_UNUSED(a);
+        Y_UNUSED(size);
 #endif
-    } 
+    }
 
-    // Checks that memory range is fully initialized, and reports an error if it is not. 
+    // Checks that memory range is fully initialized, and reports an error if it is not.
     inline static void CheckMemIsInitialized(const volatile void* a, size_t size) noexcept {
-#if defined(_msan_enabled_) 
-        __msan_check_mem_is_initialized(a, size); 
+#if defined(_msan_enabled_)
+        __msan_check_mem_is_initialized(a, size);
 #else
-        Y_UNUSED(a); 
-        Y_UNUSED(size); 
+        Y_UNUSED(a);
+        Y_UNUSED(size);
 #endif
-    } 
+    }
 
     inline static void MarkAsIntentionallyLeaked(const void* ptr) noexcept {
 #if defined(_asan_enabled_)

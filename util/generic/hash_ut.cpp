@@ -38,16 +38,16 @@ class THashTest: public TTestBase {
     UNIT_TEST(TestAllocation);
     UNIT_TEST(TestInsertCopy);
     UNIT_TEST(TestEmplace);
-    UNIT_TEST(TestEmplaceNoresize); 
-    UNIT_TEST(TestEmplaceDirect); 
+    UNIT_TEST(TestEmplaceNoresize);
+    UNIT_TEST(TestEmplaceDirect);
     UNIT_TEST(TestTryEmplace);
     UNIT_TEST(TestTryEmplaceCopyKey);
-    UNIT_TEST(TestHMMapEmplace); 
-    UNIT_TEST(TestHMMapEmplaceNoresize); 
-    UNIT_TEST(TestHMMapEmplaceDirect); 
+    UNIT_TEST(TestHMMapEmplace);
+    UNIT_TEST(TestHMMapEmplaceNoresize);
+    UNIT_TEST(TestHMMapEmplaceDirect);
     UNIT_TEST(TestHSetEmplace);
-    UNIT_TEST(TestHSetEmplaceNoresize); 
-    UNIT_TEST(TestHSetEmplaceDirect); 
+    UNIT_TEST(TestHSetEmplaceNoresize);
+    UNIT_TEST(TestHSetEmplaceDirect);
     UNIT_TEST(TestNonCopyable);
     UNIT_TEST(TestValueInitialization);
     UNIT_TEST(TestAssignmentClear);
@@ -89,16 +89,16 @@ protected:
     void TestAllocation();
     void TestInsertCopy();
     void TestEmplace();
-    void TestEmplaceNoresize(); 
-    void TestEmplaceDirect(); 
+    void TestEmplaceNoresize();
+    void TestEmplaceDirect();
     void TestTryEmplace();
     void TestTryEmplaceCopyKey();
     void TestHSetEmplace();
-    void TestHSetEmplaceNoresize(); 
-    void TestHSetEmplaceDirect(); 
-    void TestHMMapEmplace(); 
-    void TestHMMapEmplaceNoresize(); 
-    void TestHMMapEmplaceDirect(); 
+    void TestHSetEmplaceNoresize();
+    void TestHSetEmplaceDirect();
+    void TestHMMapEmplace();
+    void TestHMMapEmplaceNoresize();
+    void TestHMMapEmplaceDirect();
     void TestNonCopyable();
     void TestValueInitialization();
     void TestAssignmentClear();
@@ -632,65 +632,65 @@ void THashTest::TestInsertErase() {
         UNIT_ASSERT(values.erase("foo") == 1);
     }
 }
- 
-namespace { 
+
+namespace {
     struct TItem: public TSimpleRefCount<TItem> {
         const TString Key;
         const TString Value;
- 
+
         TItem(const TString& key, const TString& value)
-            : Key(key) 
-            , Value(value) 
+            : Key(key)
+            , Value(value)
         {
         }
-    }; 
- 
+    };
+
     using TItemPtr = TIntrusivePtr<TItem>;
- 
-    struct TSelectKey { 
+
+    struct TSelectKey {
         const TString& operator()(const TItemPtr& item) const {
-            return item->Key; 
-        } 
-    }; 
- 
+            return item->Key;
+        }
+    };
+
     using TItemMapBase = THashTable<
-        TItemPtr, 
+        TItemPtr,
         TString,
         THash<TString>,
-        TSelectKey, 
+        TSelectKey,
         TEqualTo<TString>,
         std::allocator<TItemPtr>>;
- 
-    struct TItemMap: public TItemMapBase { 
-        TItemMap() 
+
+    struct TItemMap: public TItemMapBase {
+        TItemMap()
             : TItemMapBase(1, THash<TString>(), TEqualTo<TString>())
         {
         }
- 
+
         TItem& Add(const TString& key, const TString& value) {
-            insert_ctx ins; 
-            iterator it = find_i(key, ins); 
-            if (it == end()) { 
-                it = insert_direct(new TItem(key, value), ins); 
-            } 
-            return **it; 
-        } 
-    }; 
+            insert_ctx ins;
+            iterator it = find_i(key, ins);
+            if (it == end()) {
+                it = insert_direct(new TItem(key, value), ins);
+            }
+            return **it;
+        }
+    };
 }
- 
-void THashTest::TestResizeOnInsertSmartPtrBug() { 
-    TItemMap map; 
-    map.Add("key1", "value1"); 
-    map.Add("key2", "value2"); 
-    map.Add("key3", "value3"); 
-    map.Add("key4", "value4"); 
-    map.Add("key5", "value5"); 
-    map.Add("key6", "value6"); 
-    map.Add("key7", "value7"); 
-    TItem& item = map.Add("key8", "value8"); 
-    UNIT_ASSERT_EQUAL(item.Key, "key8"); 
-    UNIT_ASSERT_EQUAL(item.Value, "value8"); 
-} 
+
+void THashTest::TestResizeOnInsertSmartPtrBug() {
+    TItemMap map;
+    map.Add("key1", "value1");
+    map.Add("key2", "value2");
+    map.Add("key3", "value3");
+    map.Add("key4", "value4");
+    map.Add("key5", "value5");
+    map.Add("key6", "value6");
+    map.Add("key7", "value7");
+    TItem& item = map.Add("key8", "value8");
+    UNIT_ASSERT_EQUAL(item.Key, "key8");
+    UNIT_ASSERT_EQUAL(item.Value, "value8");
+}
 
 template <typename T>
 static void EmptyAndInsertTest(typename T::value_type v) {
@@ -889,31 +889,31 @@ void THashTest::TestInsertCopy() {
 
 void THashTest::TestEmplace() {
     using hash_t = THashMap<int, TNonCopyableInt<0>>;
-    hash_t hash; 
+    hash_t hash;
     hash.emplace(std::piecewise_construct, std::forward_as_tuple(1), std::forward_as_tuple(0));
     auto it = hash.find(1);
     UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(it->second), 0);
 }
 
-void THashTest::TestEmplaceNoresize() { 
+void THashTest::TestEmplaceNoresize() {
     using hash_t = THashMap<int, TNonCopyableInt<0>>;
-    hash_t hash; 
-    hash.reserve(1); 
-    hash.emplace_noresize(std::piecewise_construct, std::forward_as_tuple(1), std::forward_as_tuple(0)); 
-    auto it = hash.find(1); 
-    UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(it->second), 0); 
-} 
- 
-void THashTest::TestEmplaceDirect() { 
+    hash_t hash;
+    hash.reserve(1);
+    hash.emplace_noresize(std::piecewise_construct, std::forward_as_tuple(1), std::forward_as_tuple(0));
+    auto it = hash.find(1);
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(it->second), 0);
+}
+
+void THashTest::TestEmplaceDirect() {
     using hash_t = THashMap<int, TNonCopyableInt<0>>;
-    hash_t hash; 
-    hash_t::insert_ctx ins; 
-    hash.find(1, ins); 
-    hash.emplace_direct(ins, std::piecewise_construct, std::forward_as_tuple(1), std::forward_as_tuple(0)); 
-    auto it = hash.find(1); 
-    UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(it->second), 0); 
-} 
- 
+    hash_t hash;
+    hash_t::insert_ctx ins;
+    hash.find(1, ins);
+    hash.emplace_direct(ins, std::piecewise_construct, std::forward_as_tuple(1), std::forward_as_tuple(0));
+    auto it = hash.find(1);
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(it->second), 0);
+}
+
 void THashTest::TestTryEmplace() {
     static unsigned counter = 0u;
 
@@ -980,59 +980,59 @@ void THashTest::TestTryEmplaceCopyKey() {
     }
 }
 
-void THashTest::TestHMMapEmplace() { 
+void THashTest::TestHMMapEmplace() {
     using hash_t = THashMultiMap<int, TNonCopyableInt<0>>;
-    hash_t hash; 
-    hash.emplace(std::piecewise_construct, std::forward_as_tuple(1), std::forward_as_tuple(0)); 
-    auto it = hash.find(1); 
-    UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(it->second), 0); 
-} 
- 
-void THashTest::TestHMMapEmplaceNoresize() { 
+    hash_t hash;
+    hash.emplace(std::piecewise_construct, std::forward_as_tuple(1), std::forward_as_tuple(0));
+    auto it = hash.find(1);
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(it->second), 0);
+}
+
+void THashTest::TestHMMapEmplaceNoresize() {
     using hash_t = THashMultiMap<int, TNonCopyableInt<0>>;
-    hash_t hash; 
-    hash.reserve(1); 
-    hash.emplace_noresize(std::piecewise_construct, std::forward_as_tuple(1), std::forward_as_tuple(0)); 
-    auto it = hash.find(1); 
-    UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(it->second), 0); 
-} 
- 
-void THashTest::TestHMMapEmplaceDirect() { 
+    hash_t hash;
+    hash.reserve(1);
+    hash.emplace_noresize(std::piecewise_construct, std::forward_as_tuple(1), std::forward_as_tuple(0));
+    auto it = hash.find(1);
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(it->second), 0);
+}
+
+void THashTest::TestHMMapEmplaceDirect() {
     using hash_t = THashMultiMap<int, TNonCopyableInt<0>>;
-    hash_t hash; 
-    hash_t::insert_ctx ins; 
-    hash.find(1, ins); 
-    hash.emplace_direct(ins, std::piecewise_construct, std::forward_as_tuple(1), std::forward_as_tuple(0)); 
-    auto it = hash.find(1); 
-    UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(it->second), 0); 
-} 
- 
+    hash_t hash;
+    hash_t::insert_ctx ins;
+    hash.find(1, ins);
+    hash.emplace_direct(ins, std::piecewise_construct, std::forward_as_tuple(1), std::forward_as_tuple(0));
+    auto it = hash.find(1);
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(it->second), 0);
+}
+
 void THashTest::TestHSetEmplace() {
     using hash_t = THashSet<TNonCopyableInt<0>, THash<int>, TEqualTo<int>>;
-    hash_t hash; 
+    hash_t hash;
     UNIT_ASSERT(!hash.contains(0));
     hash.emplace(0);
     UNIT_ASSERT(hash.contains(0));
     UNIT_ASSERT(!hash.contains(1));
-} 
- 
-void THashTest::TestHSetEmplaceNoresize() { 
+}
+
+void THashTest::TestHSetEmplaceNoresize() {
     using hash_t = THashSet<TNonCopyableInt<0>, THash<int>, TEqualTo<int>>;
-    hash_t hash; 
-    hash.reserve(1); 
+    hash_t hash;
+    hash.reserve(1);
     UNIT_ASSERT(!hash.contains(0));
     hash.emplace_noresize(0);
     UNIT_ASSERT(hash.contains(0));
     UNIT_ASSERT(!hash.contains(1));
 }
 
-void THashTest::TestHSetEmplaceDirect() { 
+void THashTest::TestHSetEmplaceDirect() {
     using hash_t = THashSet<TNonCopyableInt<0>, THash<int>, TEqualTo<int>>;
-    hash_t hash; 
+    hash_t hash;
     UNIT_ASSERT(!hash.contains(0));
-    hash_t::insert_ctx ins; 
-    hash.find(0, ins); 
-    hash.emplace_direct(ins, 1); 
+    hash_t::insert_ctx ins;
+    hash.find(0, ins);
+    hash.emplace_direct(ins, 1);
     UNIT_ASSERT(hash.contains(0));
     UNIT_ASSERT(!hash.contains(1));
 }

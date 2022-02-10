@@ -14,15 +14,15 @@ PEERDIR(
     library/cpp/containers/atomizer
 )
 
-IF (PROFILE_MEMORY_ALLOCATIONS) 
+IF (PROFILE_MEMORY_ALLOCATIONS)
     CFLAGS(-DPROFILE_MEMORY_ALLOCATIONS)
-    PEERDIR( 
+    PEERDIR(
         library/cpp/malloc/api
         library/cpp/lfalloc/dbg_info
         library/cpp/ytalloc/api
-    ) 
-ENDIF() 
- 
+    )
+ENDIF()
+
 IF(ALLOCATOR == "TCMALLOC_256K")
     SRCS(tcmalloc.cpp)
     PEERDIR(contrib/libs/tcmalloc)

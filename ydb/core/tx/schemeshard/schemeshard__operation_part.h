@@ -369,15 +369,15 @@ ISubOperationBase::TPtr CreateLockForIndexBuild(TOperationId id, TTxState::ETxSt
 ISubOperationBase::TPtr DropLock(TOperationId id, const TTxTransaction& tx);
 ISubOperationBase::TPtr DropLock(TOperationId id, TTxState::ETxState state);
 
-ISubOperationBase::TPtr CreateNewFileStore(TOperationId id, const TTxTransaction& tx); 
-ISubOperationBase::TPtr CreateNewFileStore(TOperationId id, TTxState::ETxState state); 
- 
-ISubOperationBase::TPtr CreateAlterFileStore(TOperationId id, const TTxTransaction& tx); 
-ISubOperationBase::TPtr CreateAlterFileStore(TOperationId id, TTxState::ETxState state); 
- 
-ISubOperationBase::TPtr CreateDropFileStore(TOperationId id, const TTxTransaction& tx); 
-ISubOperationBase::TPtr CreateDropFileStore(TOperationId id, TTxState::ETxState state); 
- 
+ISubOperationBase::TPtr CreateNewFileStore(TOperationId id, const TTxTransaction& tx);
+ISubOperationBase::TPtr CreateNewFileStore(TOperationId id, TTxState::ETxState state);
+
+ISubOperationBase::TPtr CreateAlterFileStore(TOperationId id, const TTxTransaction& tx);
+ISubOperationBase::TPtr CreateAlterFileStore(TOperationId id, TTxState::ETxState state);
+
+ISubOperationBase::TPtr CreateDropFileStore(TOperationId id, const TTxTransaction& tx);
+ISubOperationBase::TPtr CreateDropFileStore(TOperationId id, TTxState::ETxState state);
+
 ISubOperationBase::TPtr CreateAlterLogin(TOperationId id, const TTxTransaction& tx);
 ISubOperationBase::TPtr CreateAlterLogin(TOperationId id, TTxState::ETxState state);
 

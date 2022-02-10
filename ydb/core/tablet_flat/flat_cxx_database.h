@@ -257,10 +257,10 @@ public:
         return static_cast<typename NSchemeTypeMapper<NScheme::NTypeIds::String>::Type>(value);
     }
 
-    static typename NSchemeTypeMapper<NScheme::NTypeIds::String>::Type ConvertFrom(const TStringBuf& value) { 
+    static typename NSchemeTypeMapper<NScheme::NTypeIds::String>::Type ConvertFrom(const TStringBuf& value) {
         return static_cast<typename NSchemeTypeMapper<NScheme::NTypeIds::String>::Type>(TString(value));
-    } 
- 
+    }
+
     static typename NSchemeTypeMapper<NScheme::NTypeIds::String>::Type ConvertFrom(const ::google::protobuf::Message& value) {
         return static_cast<typename NSchemeTypeMapper<NScheme::NTypeIds::String>::Type>(value.SerializeAsString());
     }
@@ -1194,8 +1194,8 @@ struct Schema {
             };
 
             template <typename, typename, typename, typename>
-            class RangeKeyIterator; 
- 
+            class RangeKeyIterator;
+
             template <typename IteratorType, typename TableType, typename... MinKeyValuesTypes, typename... MaxKeyValuesTypes>
             class RangeKeyIterator<IteratorType, TableType, std::tuple<MinKeyValuesTypes...>, std::tuple<MaxKeyValuesTypes...>>
                 : public KeyIterator<IteratorType, RangeKeyIterator<IteratorType, TableType, std::tuple<MinKeyValuesTypes...>, std::tuple<MaxKeyValuesTypes...>>>
@@ -1206,7 +1206,7 @@ struct Schema {
                 using MaxKeyValuesType = std::tuple<MaxKeyValuesTypes...>;
                 using MaxKeyColumnsType = typename first_n_of<sizeof...(MaxKeyValuesTypes), typename TableType::TKey::KeyColumnsType>::type;
                 using Iterator = KeyIterator<IteratorType, RangeKeyIterator<IteratorType, TableType, MinKeyValuesType, MaxKeyValuesType>>;
- 
+
                 static constexpr auto FullKeySize = std::tuple_size<typename TableType::TKey::KeyColumnsType>::value;
 
                 RangeKeyIterator(TToughDb& database,

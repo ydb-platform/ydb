@@ -19,13 +19,13 @@ Y_WEAK void* Allocate(size_t size)
 
 Y_WEAK void* AllocatePageAligned(size_t size)
 {
-#if defined(_win_) 
-    return ::_aligned_malloc(size, PageSize); 
+#if defined(_win_)
+    return ::_aligned_malloc(size, PageSize);
 #elif defined(_darwin_) || !defined(_musl_)
     return ::valloc(size);
-#else 
+#else
     return ::memalign(PageSize, size);
-#endif 
+#endif
 }
 
 Y_WEAK void* AllocateSmall(size_t rank)

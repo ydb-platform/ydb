@@ -171,21 +171,21 @@ namespace NActors {
                                TIntrusivePtr<NMonitoring::TDynamicCounters> counters)
         : TActor(&TLoggerActor::StateFunc)
         , Settings(settings)
-        , LogBackend(logBackend.Release()) 
+        , LogBackend(logBackend.Release())
         , Metrics(std::make_unique<TLoggerCounters>(counters))
     {
-    } 
- 
-    TLoggerActor::TLoggerActor(TIntrusivePtr<NLog::TSettings> settings, 
-                               std::shared_ptr<TLogBackend> logBackend, 
-                               TIntrusivePtr<NMonitoring::TDynamicCounters> counters) 
-        : TActor(&TLoggerActor::StateFunc) 
-        , Settings(settings) 
-        , LogBackend(logBackend) 
+    }
+
+    TLoggerActor::TLoggerActor(TIntrusivePtr<NLog::TSettings> settings,
+                               std::shared_ptr<TLogBackend> logBackend,
+                               TIntrusivePtr<NMonitoring::TDynamicCounters> counters)
+        : TActor(&TLoggerActor::StateFunc)
+        , Settings(settings)
+        , LogBackend(logBackend)
         , Metrics(std::make_unique<TLoggerCounters>(counters))
-    { 
-    } 
- 
+    {
+    }
+
     TLoggerActor::TLoggerActor(TIntrusivePtr<NLog::TSettings> settings,
                                TAutoPtr<TLogBackend> logBackend,
                                std::shared_ptr<NMonitoring::TMetricRegistry> metrics)
@@ -193,7 +193,7 @@ namespace NActors {
         , Settings(settings)
         , LogBackend(logBackend.Release())
         , Metrics(std::make_unique<TLoggerMetrics>(metrics))
-    { 
+    {
     }
 
     TLoggerActor::TLoggerActor(TIntrusivePtr<NLog::TSettings> settings,
@@ -580,31 +580,31 @@ namespace NActors {
 
         char buf[TimeBufSize];
         switch (Settings->Format) {
-            case NActors::NLog::TSettings::PLAIN_FULL_FORMAT: { 
-                TStringBuilder logRecord; 
-                if (Settings->UseLocalTimestamps) { 
+            case NActors::NLog::TSettings::PLAIN_FULL_FORMAT: {
+                TStringBuilder logRecord;
+                if (Settings->UseLocalTimestamps) {
                     logRecord << FormatLocalTimestamp(time, buf);
-                } else { 
-                    logRecord << time; 
-                } 
-                logRecord 
+                } else {
+                    logRecord << time;
+                }
+                logRecord
                     << Settings->MessagePrefix
-                    << " :" << Settings->ComponentName(component) 
-                    << " "  << PriorityToString(priority) 
-                    << ": " << formatted; 
-                LogBackend->WriteData( 
-                    TLogRecord(logPrio, logRecord.data(), logRecord.size())); 
-            } break; 
- 
-            case NActors::NLog::TSettings::PLAIN_SHORT_FORMAT: { 
-                TStringBuilder logRecord; 
-                logRecord 
-                    << Settings->ComponentName(component) 
-                    << ": " << formatted; 
-                LogBackend->WriteData( 
-                    TLogRecord(logPrio, logRecord.data(), logRecord.size())); 
-            } break; 
- 
+                    << " :" << Settings->ComponentName(component)
+                    << " "  << PriorityToString(priority)
+                    << ": " << formatted;
+                LogBackend->WriteData(
+                    TLogRecord(logPrio, logRecord.data(), logRecord.size()));
+            } break;
+
+            case NActors::NLog::TSettings::PLAIN_SHORT_FORMAT: {
+                TStringBuilder logRecord;
+                logRecord
+                    << Settings->ComponentName(component)
+                    << ": " << formatted;
+                LogBackend->WriteData(
+                    TLogRecord(logPrio, logRecord.data(), logRecord.size()));
+            } break;
+
             case NActors::NLog::TSettings::JSON_FORMAT: {
                 NJsonWriter::TBuf json;
                 json.BeginObject()
@@ -629,9 +629,9 @@ namespace NActors {
                     .WriteKey("message")
                     .WriteString(formatted)
                     .EndObject();
-                auto logRecord = json.Str(); 
-                LogBackend->WriteData( 
-                    TLogRecord(logPrio, logRecord.data(), logRecord.size())); 
+                auto logRecord = json.Str();
+                LogBackend->WriteData(
+                    TLogRecord(logPrio, logRecord.data(), logRecord.size()));
             } break;
         }
 

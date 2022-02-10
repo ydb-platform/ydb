@@ -38,7 +38,7 @@ class TPathDescriber {
     void DescribeRevertedMigrations(TPathElement::TPtr pathEl);
 
     void DescribeBlockStoreVolume(TPathId pathId, TPathElement::TPtr pathEl);
-    void DescribeFileStore(TPathId pathId, TPathElement::TPtr pathEl); 
+    void DescribeFileStore(TPathId pathId, TPathElement::TPtr pathEl);
     void DescribeKesus(TPathId pathId, TPathElement::TPtr pathEl);
     void DescribeSequence(TPathId pathId, TPathElement::TPtr pathEl);
     void DescribeReplication(TPathId pathId, TPathElement::TPtr pathEl);

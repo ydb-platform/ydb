@@ -1,15 +1,15 @@
-LIBRARY() 
+LIBRARY()
 
-OWNER(vskipin) 
- 
-PEERDIR( 
+OWNER(vskipin)
+
+PEERDIR(
     library/cpp/malloc/api
-) 
- 
-SRCS( 
-    dbg_info.cpp 
-) 
- 
-SET(IDE_FOLDER "util") 
- 
-END() 
+)
+
+SRCS(
+    dbg_info.cpp
+)
+
+SET(IDE_FOLDER "util")
+
+END()

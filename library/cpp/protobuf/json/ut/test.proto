@@ -130,10 +130,10 @@ message TCompositeRequired {
 message TCompositeRepeated {
     repeated TFlatOptional Part = 1;
 };
- 
+
 message TMapType {
-    map<string, string> Items = 1; 
-}; 
+    map<string, string> Items = 1;
+};
 
 message TNameGeneratorType {
     optional int32 Field = 1;

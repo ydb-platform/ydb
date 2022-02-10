@@ -98,9 +98,9 @@ void TSchemaObject::Drop() {
     case EPathType::BlockStoreVolume:
         drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropBlockStoreVolume);
         break;
-    case EPathType::FileStore: 
+    case EPathType::FileStore:
         drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropFileStore);
-        break; 
+        break;
     case EPathType::Kesus:
         drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropKesus);
         break;
@@ -189,7 +189,7 @@ static TSchemaObject::EPathType GetType(const NKikimrSchemeOp::TDirEntry& entry)
     case NKikimrSchemeOp::EPathTypeBlockStoreVolume:
         return TSchemaObject::EPathType::BlockStoreVolume;
     case NKikimrSchemeOp::EPathTypeFileStore:
-        return TSchemaObject::EPathType::FileStore; 
+        return TSchemaObject::EPathType::FileStore;
     case NKikimrSchemeOp::EPathTypeKesus:
         return TSchemaObject::EPathType::Kesus;
     case NKikimrSchemeOp::EPathTypeSolomonVolume:

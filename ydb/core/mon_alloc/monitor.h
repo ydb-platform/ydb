@@ -4,7 +4,7 @@
 
 #include <library/cpp/actors/core/defs.h>
 #include <library/cpp/actors/core/actor.h>
- 
+
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 namespace NActors {
@@ -13,10 +13,10 @@ namespace NActors {
 
 namespace NKikimr {
     inline NActors::TActorId MakeMemProfMonitorID(ui32 node = 0) {
-        char x[12] = {'m', 'e', 'm', 'p', 'r', 'o', 'f', 'm', 'o', 'n', 'i', 't'}; 
+        char x[12] = {'m', 'e', 'm', 'p', 'r', 'o', 'f', 'm', 'o', 'n', 'i', 't'};
         return NActors::TActorId(node, TStringBuf(x, 12));
-    } 
- 
+    }
+
     struct IAllocMonitor {
         virtual ~IAllocMonitor() = default;
 
@@ -44,7 +44,7 @@ namespace NKikimr {
         }
     };
 
-    NActors::IActor* CreateMemProfMonitor( 
-        ui32 intervalSec, 
-        TIntrusivePtr<NMonitoring::TDynamicCounters> counters); 
+    NActors::IActor* CreateMemProfMonitor(
+        ui32 intervalSec,
+        TIntrusivePtr<NMonitoring::TDynamicCounters> counters);
 }

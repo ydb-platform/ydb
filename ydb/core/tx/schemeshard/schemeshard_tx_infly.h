@@ -85,10 +85,10 @@ struct TTxState {
         item(TxFinalizeBuildIndex, 40) \
         item(TxAlterSolomonVolume, 41) \
         item(TxDropLock, 42) \
-        item(TxDropTableIndexAtMainTable, 43) \ 
-        item(TxCreateFileStore, 44) \ 
-        item(TxAlterFileStore, 45) \ 
-        item(TxDropFileStore, 46) \ 
+        item(TxDropTableIndexAtMainTable, 43) \
+        item(TxCreateFileStore, 44) \
+        item(TxAlterFileStore, 45) \
+        item(TxDropFileStore, 46) \
         item(TxRestore, 47) \
         item(TxCreateOlapStore, 48) \
         item(TxAlterOlapStore, 49) \
@@ -111,9 +111,9 @@ struct TTxState {
         item(TxAlterReplication, 66) \
         item(TxDropReplication, 67) \
 
-    // TX_STATE_TYPE_ENUM 
+    // TX_STATE_TYPE_ENUM
 
-    //TxMergeTablePartition only for sensors yet 
+    //TxMergeTablePartition only for sensors yet
 
     enum ETxType {
         TX_STATE_TYPE_ENUM(TX_STATE_DECLARE_ENUM)
@@ -299,7 +299,7 @@ struct TTxState {
         case TxCreateSubDomain:
         case TxCreateExtSubDomain:
         case TxCreateBlockStoreVolume:
-        case TxCreateFileStore: 
+        case TxCreateFileStore:
         case TxCreateKesus:
         case TxCreateSolomonVolume:
         case TxCreateRtmrVolume:
@@ -321,7 +321,7 @@ struct TTxState {
         case TxDropPQGroup:
         case TxDropSubDomain:
         case TxDropBlockStoreVolume:
-        case TxDropFileStore: 
+        case TxDropFileStore:
         case TxDropKesus:
         case TxForceDropSubDomain:
         case TxForceDropExtSubDomain:
@@ -346,7 +346,7 @@ struct TTxState {
         case TxRestore:
         case TxAlterBlockStoreVolume:
         case TxAssignBlockStoreVolume:
-        case TxAlterFileStore: 
+        case TxAlterFileStore:
         case TxAlterKesus:
         case TxAlterSubDomain:
         case TxUpgradeSubDomain:
@@ -377,7 +377,7 @@ struct TTxState {
         case TxDropPQGroup:
         case TxDropSubDomain:
         case TxDropBlockStoreVolume:
-        case TxDropFileStore: 
+        case TxDropFileStore:
         case TxDropKesus:
         case TxForceDropSubDomain:
         case TxForceDropExtSubDomain:
@@ -397,7 +397,7 @@ struct TTxState {
         case TxCreateSubDomain:
         case TxCreateExtSubDomain:
         case TxCreateBlockStoreVolume:
-        case TxCreateFileStore: 
+        case TxCreateFileStore:
         case TxCreateKesus:
         case TxCreateSolomonVolume:
         case TxCreateRtmrVolume:
@@ -425,7 +425,7 @@ struct TTxState {
         case TxRestore:
         case TxAlterBlockStoreVolume:
         case TxAssignBlockStoreVolume:
-        case TxAlterFileStore: 
+        case TxAlterFileStore:
         case TxAlterKesus:
         case TxAlterSubDomain:
         case TxUpgradeSubDomain:
@@ -456,7 +456,7 @@ struct TTxState {
         case TxDropPQGroup:
         case TxDropSubDomain:
         case TxDropBlockStoreVolume:
-        case TxDropFileStore: 
+        case TxDropFileStore:
         case TxDropKesus:
         case TxForceDropSubDomain:
         case TxForceDropExtSubDomain:
@@ -480,7 +480,7 @@ struct TTxState {
         case TxCreateSubDomain:
         case TxCreateExtSubDomain:
         case TxCreateBlockStoreVolume:
-        case TxCreateFileStore: 
+        case TxCreateFileStore:
         case TxCreateKesus:
         case TxCreateSolomonVolume:
         case TxCreateRtmrVolume:
@@ -504,7 +504,7 @@ struct TTxState {
         case TxRestore:
         case TxAlterBlockStoreVolume:
         case TxAssignBlockStoreVolume:
-        case TxAlterFileStore: 
+        case TxAlterFileStore:
         case TxAlterKesus:
         case TxAlterSubDomain:
         case TxAlterExtSubDomain:

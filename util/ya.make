@@ -303,7 +303,7 @@ JOIN_SRCS(
     system/protect.cpp
     system/rusage.cpp
     system/rwlock.cpp
-    system/sanitizers.cpp 
+    system/sanitizers.cpp
     system/sem.cpp
     system/shellcommand.cpp
     system/shmat.cpp

@@ -16,7 +16,7 @@
 #include <ydb/core/base/tablet.h>
 
 #include <ydb/core/mon_alloc/profiler.h>
- 
+
 #include <ydb/core/protos/blobstorage_pdisk_config.pb.h>
 #include <ydb/core/protos/blobstorage_vdisk_config.pb.h>
 #include <ydb/core/protos/services.pb.h>

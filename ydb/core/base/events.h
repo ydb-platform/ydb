@@ -118,8 +118,8 @@ struct TKikimrEvents : TEvents {
         ES_BLOCKSTORE_PRIVATE,
         ES_YT_WRAPPER,
         ES_S3_WRAPPER,
-        ES_FILESTORE, 
-        ES_FILESTORE_PRIVATE, 
+        ES_FILESTORE,
+        ES_FILESTORE_PRIVATE,
         ES_YDB_METERING,
         ES_IMPORT_SERVICE, // 4200
         ES_TX_OLAPSHARD,

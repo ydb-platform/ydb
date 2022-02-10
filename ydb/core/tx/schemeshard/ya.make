@@ -83,14 +83,14 @@ SRCS(
     schemeshard__operation_db_changes.cpp
     schemeshard__operation_alter_bsv.cpp
     schemeshard__operation_alter_extsubdomain.cpp
-    schemeshard__operation_alter_fs.cpp 
-    schemeshard__operation_alter_index.cpp 
+    schemeshard__operation_alter_fs.cpp
+    schemeshard__operation_alter_index.cpp
     schemeshard__operation_alter_kesus.cpp
     schemeshard__operation_alter_login.cpp
     schemeshard__operation_alter_olap_store.cpp
     schemeshard__operation_alter_olap_table.cpp
     schemeshard__operation_alter_pq.cpp
-    schemeshard__operation_alter_solomon.cpp 
+    schemeshard__operation_alter_solomon.cpp
     schemeshard__operation_alter_subdomain.cpp
     schemeshard__operation_alter_table.cpp
     schemeshard__operation_alter_user_attrs.cpp
@@ -103,8 +103,8 @@ SRCS(
     schemeshard__operation_create_backup.cpp
     schemeshard__operation_create_bsv.cpp
     schemeshard__operation_create_extsubdomain.cpp
-    schemeshard__operation_create_fs.cpp 
-    schemeshard__operation_create_index.cpp 
+    schemeshard__operation_create_fs.cpp
+    schemeshard__operation_create_index.cpp
     schemeshard__operation_create_indexed_table.cpp
     schemeshard__operation_create_kesus.cpp
     schemeshard__operation_create_lock.cpp
@@ -120,10 +120,10 @@ SRCS(
     schemeshard__operation_create_table.cpp
     schemeshard__operation_drop_bsv.cpp
     schemeshard__operation_drop_extsubdomain.cpp
-    schemeshard__operation_drop_fs.cpp 
+    schemeshard__operation_drop_fs.cpp
     schemeshard__operation_drop_indexed_table.cpp
     schemeshard__operation_drop_kesus.cpp
-    schemeshard__operation_drop_lock.cpp 
+    schemeshard__operation_drop_lock.cpp
     schemeshard__operation_drop_olap_store.cpp
     schemeshard__operation_drop_olap_table.cpp
     schemeshard__operation_drop_pq.cpp

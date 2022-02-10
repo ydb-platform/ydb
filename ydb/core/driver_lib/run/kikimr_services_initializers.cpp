@@ -77,7 +77,7 @@
 #include <ydb/core/mon_alloc/monitor.h>
 #include <ydb/core/mon_alloc/profiler.h>
 #include <ydb/core/mon_alloc/stats.h>
- 
+
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 
 #include <ydb/core/persqueue/cluster_tracker.h>
@@ -1016,11 +1016,11 @@ void TBlobCacheInitializer::InitializeServices(
 // TLoggerInitializer
 
 TLoggerInitializer::TLoggerInitializer(const TKikimrRunConfig& runConfig,
-                                       TIntrusivePtr<NActors::NLog::TSettings> logSettings, 
-                                       std::shared_ptr<TLogBackend> logBackend) 
+                                       TIntrusivePtr<NActors::NLog::TSettings> logSettings,
+                                       std::shared_ptr<TLogBackend> logBackend)
     : IKikimrServicesInitializer(runConfig)
-    , LogSettings(logSettings) 
-    , LogBackend(logBackend) 
+    , LogSettings(logSettings)
+    , LogBackend(logBackend)
     , PathToConfigCacheFile(runConfig.PathToConfigCacheFile)
 {
 }
@@ -1031,7 +1031,7 @@ void TLoggerInitializer::InitializeServices(
     const TIntrusivePtr<NMonitoring::TDynamicCounters> utilsCounters = GetServiceCounters(appData->Counters, "utils");
 
     // log settings must be initialized before calling this method
-    NActors::TLoggerActor *loggerActor = new NActors::TLoggerActor(LogSettings, LogBackend, utilsCounters); 
+    NActors::TLoggerActor *loggerActor = new NActors::TLoggerActor(LogSettings, LogBackend, utilsCounters);
     NActors::TActorSetupCmd loggerActorCmd(loggerActor, NActors::TMailboxType::HTSwap, appData->IOPoolId);
     std::pair<NActors::TActorId, NActors::TActorSetupCmd> loggerActorPair(LogSettings->LoggerActorId, loggerActorCmd);
     setup->LocalServices.push_back(loggerActorPair);
@@ -1075,7 +1075,7 @@ void TProfilerInitializer::InitializeServices(
             const NKikimr::TAppData* appData) {
     const TIntrusivePtr<NMonitoring::TDynamicCounters> utilsCounters = GetServiceCounters(appData->Counters, "utils");
 
-    TActorSetupCmd profilerSetup(CreateProfilerActor(utilsCounters, "/var/tmp"), TMailboxType::HTSwap, 0); 
+    TActorSetupCmd profilerSetup(CreateProfilerActor(utilsCounters, "/var/tmp"), TMailboxType::HTSwap, 0);
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeProfilerID(NodeId), profilerSetup));
 }
 
@@ -1632,38 +1632,38 @@ TStatsCollectorInitializer::TStatsCollectorInitializer(const TKikimrRunConfig& r
 void TStatsCollectorInitializer::InitializeServices(
         NActors::TActorSystemSetup* setup,
         const NKikimr::TAppData* appData) {
- 
+
     if (appData->Mon) {
         IActor* statsCollector = CreateStatsCollector(
                 1, // seconds
                 *setup,
                 appData->Counters);
-        setup->LocalServices.emplace_back( 
+        setup->LocalServices.emplace_back(
             TActorId(),
-            TActorSetupCmd( 
-                statsCollector, 
-                TMailboxType::HTSwap, 
-                appData->UserPoolId)); 
+            TActorSetupCmd(
+                statsCollector,
+                TMailboxType::HTSwap,
+                appData->UserPoolId));
 
-        IActor* memStatsCollector = CreateMemStatsCollector( 
-                1, // seconds 
-                appData->Counters); 
-        setup->LocalServices.emplace_back( 
+        IActor* memStatsCollector = CreateMemStatsCollector(
+                1, // seconds
+                appData->Counters);
+        setup->LocalServices.emplace_back(
             TActorId(),
-            TActorSetupCmd( 
-                memStatsCollector, 
-                TMailboxType::HTSwap, 
-                appData->UserPoolId)); 
- 
+            TActorSetupCmd(
+                memStatsCollector,
+                TMailboxType::HTSwap,
+                appData->UserPoolId));
+
         IActor* procStatCollector = CreateProcStatCollector(
                 5, // seconds
                 appData->Counters);
-        setup->LocalServices.emplace_back( 
+        setup->LocalServices.emplace_back(
             TActorId(),
-            TActorSetupCmd( 
-                procStatCollector, 
-                TMailboxType::HTSwap, 
-                appData->UserPoolId)); 
+            TActorSetupCmd(
+                procStatCollector,
+                TMailboxType::HTSwap,
+                appData->UserPoolId));
     }
 }
 #endif
@@ -1861,7 +1861,7 @@ void TPersQueueClusterTrackerInitializer::InitializeServices(NActors::TActorSyst
 }
 
 // TPersQueueLibSharedInstanceInitializer
- 
+
 TPersQueueLibSharedInstanceInitializer::TPersQueueLibSharedInstanceInitializer(const TKikimrRunConfig& runConfig)
     : IKikimrServicesInitializer(runConfig)
 {}
@@ -1886,16 +1886,16 @@ void TMemProfMonitorInitializer::InitializeServices(
         NActors::TActorSystemSetup* setup,
         const NKikimr::TAppData* appData)
 {
-    IActor* monitorActor = CreateMemProfMonitor( 
-        1, // seconds 
-        appData->Counters); 
- 
-    setup->LocalServices.emplace_back( 
-        MakeMemProfMonitorID(NodeId), 
-        TActorSetupCmd( 
-            monitorActor, 
-            TMailboxType::HTSwap, 
-            appData->UserPoolId)); 
+    IActor* monitorActor = CreateMemProfMonitor(
+        1, // seconds
+        appData->Counters);
+
+    setup->LocalServices.emplace_back(
+        MakeMemProfMonitorID(NodeId),
+        TActorSetupCmd(
+            monitorActor,
+            TMailboxType::HTSwap,
+            appData->UserPoolId));
 }
 
 // TMemoryTrackerInitializer
@@ -1914,7 +1914,7 @@ void TMemoryTrackerInitializer::InitializeServices(
         TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId)
     );
 }
- 
+
 TQuoterServiceInitializer::TQuoterServiceInitializer(const TKikimrRunConfig& runConfig)
     : IKikimrServicesInitializer(runConfig)
 {}

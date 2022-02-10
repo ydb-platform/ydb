@@ -226,19 +226,19 @@ namespace NActors {
 
 
     ////////////////////////////////////////////////////////////////////////////////
-    // HTML results page 
-    //////////////////////////////////////////////////////////////////////////////// 
-    class THtmlResultMonPage: public THtmlMonPage { 
-    public: 
+    // HTML results page
+    ////////////////////////////////////////////////////////////////////////////////
+    class THtmlResultMonPage: public THtmlMonPage {
+    public:
         THtmlResultMonPage(const TString &path, const TString &title, const TString &host, bool preTag,
-                           const NMon::IEvHttpInfoRes &result) 
-            : THtmlMonPage(path, title, true) 
-            , Host(host) 
-            , PreTag(preTag) 
-            , Result(result) 
-        { 
-        } 
- 
+                           const NMon::IEvHttpInfoRes &result)
+            : THtmlMonPage(path, title, true)
+            , Host(host)
+            , PreTag(preTag)
+            , Result(result)
+        {
+        }
+
         void Output(NMonitoring::IMonHttpRequest& request) override {
             IOutputStream& out = request.Output();
 
@@ -287,23 +287,23 @@ namespace NActors {
         }
 
         void OutputContent(NMonitoring::IMonHttpRequest &request) override {
-            if (PreTag) { 
+            if (PreTag) {
                 request.Output() << "<pre>\n";
-            } 
+            }
             Result.Output(request.Output());
-            if (PreTag) { 
+            if (PreTag) {
                 request.Output() << "</pre>\n";
-            } 
-        } 
- 
-    private: 
+            }
+        }
+
+    private:
         TString Host;
-        bool PreTag; 
-        const NMon::IEvHttpInfoRes &Result; 
-    }; 
- 
- 
-    //////////////////////////////////////////////////////////////////////////////// 
+        bool PreTag;
+        const NMon::IEvHttpInfoRes &Result;
+    };
+
+
+    ////////////////////////////////////////////////////////////////////////////////
     // INDEX PAGE
     // Redirects index page to fixed url
     ////////////////////////////////////////////////////////////////////////////////
@@ -325,16 +325,16 @@ namespace NActors {
 
     ////////////////////////////////////////////////////////////////////////////////
     // ACTOR MONITORING PAGE
-    // Encapsulates a request to an actor 
+    // Encapsulates a request to an actor
     ////////////////////////////////////////////////////////////////////////////////
-    class TActorMonPage: public IMonPage { 
+    class TActorMonPage: public IMonPage {
     public:
         TActorMonPage(const TString &path, const TString &title, const TString &host, bool preTag,
                       TActorSystem *actorSystem, const TActorId &actorId, const TVector<TString> &sids,
                       TMon::TRequestAuthorizer authorizer)
-            : IMonPage(path, title) 
-            , Host(host) 
-            , PreTag(preTag) 
+            : IMonPage(path, title)
+            , Host(host)
+            , PreTag(preTag)
             , ActorSystem(actorSystem)
             , TargetActorId(actorId)
             , AllowedSIDs(sids)
@@ -353,27 +353,27 @@ namespace NActors {
             if (result) {
                 Output(request, *result);
             } else {
-                TStringStream out; 
+                TStringStream out;
                 out << "Error: timeout. We were not able to receive response from '"
-                    << Title << "'.\n"; 
-                Output(request, NMon::TEvHttpInfoRes(out.Str())); 
+                    << Title << "'.\n";
+                Output(request, NMon::TEvHttpInfoRes(out.Str()));
             }
         }
 
     private:
         void Output(IMonHttpRequest &request, const NMon::IEvHttpInfoRes &result) const {
-            if (result.GetContentType() == NMon::IEvHttpInfoRes::Html) { 
-                THtmlResultMonPage resultPage(Path, Title, Host, PreTag, result); 
+            if (result.GetContentType() == NMon::IEvHttpInfoRes::Html) {
+                THtmlResultMonPage resultPage(Path, Title, Host, PreTag, result);
                 resultPage.Parent = this->Parent;
-                resultPage.Output(request); 
-            } else { 
+                resultPage.Output(request);
+            } else {
                 result.Output(request.Output());
-            } 
-        } 
- 
-    private: 
+            }
+        }
+
+    private:
         TString Host;
-        bool PreTag; 
+        bool PreTag;
         TActorSystem *ActorSystem;
         TActorId TargetActorId;
         const TVector<TString> AllowedSIDs;

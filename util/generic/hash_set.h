@@ -147,15 +147,15 @@ public:
     }
 
 public:
-    void insert(std::initializer_list<value_type> ilist) { 
-        insert(ilist.begin(), ilist.end()); 
-    } 
- 
-    template <class InputIterator> 
-    void insert(InputIterator f, InputIterator l) { 
-        rep.insert_unique(f, l); 
-    } 
- 
+    void insert(std::initializer_list<value_type> ilist) {
+        insert(ilist.begin(), ilist.end());
+    }
+
+    template <class InputIterator>
+    void insert(InputIterator f, InputIterator l) {
+        rep.insert_unique(f, l);
+    }
+
     std::pair<iterator, bool> insert(const value_type& obj) {
         std::pair<mutable_iterator, bool> p = rep.insert_unique(obj);
         return std::pair<iterator, bool>(p.first, p.second);
@@ -165,8 +165,8 @@ public:
         std::pair<mutable_iterator, bool> p = rep.emplace_unique(std::forward<Args>(args)...);
         return std::pair<iterator, bool>(p.first, p.second);
     }
- 
-    iterator insert(const_iterator, const value_type& obj) { // insert_hint 
+
+    iterator insert(const_iterator, const value_type& obj) { // insert_hint
         std::pair<mutable_iterator, bool> p = rep.insert_unique(obj);
         return p.first;
     }
@@ -180,25 +180,25 @@ public:
         std::pair<mutable_iterator, bool> p = rep.emplace_unique_noresize(std::forward<Args>(args)...);
         return std::pair<iterator, bool>(p.first, p.second);
     }
- 
+
     template <class TheObj>
     iterator insert_direct(const TheObj& obj, const insert_ctx& ins) {
         return rep.insert_direct(obj, ins);
     }
-    template <typename... Args> 
-    iterator emplace_direct(const insert_ctx& ins, Args&&... args) { 
-        return rep.emplace_direct(ins, std::forward<Args>(args)...); 
-    } 
+    template <typename... Args>
+    iterator emplace_direct(const insert_ctx& ins, Args&&... args) {
+        return rep.emplace_direct(ins, std::forward<Args>(args)...);
+    }
 
     template <class TheKey>
-    const_iterator find(const TheKey& key) const { 
+    const_iterator find(const TheKey& key) const {
         return rep.find(key);
     }
     template <class TheKey>
     iterator find(const TheKey& key, insert_ctx& ins) {
         return rep.find_i(key, ins);
     }
- 
+
     template <class TheKey>
     bool contains(const TheKey& key) const {
         return rep.find(key) != rep.end();

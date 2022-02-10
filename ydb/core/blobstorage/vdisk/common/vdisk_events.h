@@ -398,22 +398,22 @@ namespace NKikimr {
         NWilson::TTraceId TraceId;
     };
 
-    template<typename TEv, typename TRecord /*protobuf record*/, ui32 TEventType> 
+    template<typename TEv, typename TRecord /*protobuf record*/, ui32 TEventType>
     class TEvVResultBasePB
         : public TEventPB<TEv, TRecord, TEventType>
         , public TEvVResultBase
     {
         using TEventPBBase = TEventPB<TEv, TRecord, TEventType>;
 
-    public: 
+    public:
         TEvVResultBasePB() = default;
- 
+
         TEvVResultBasePB(const TInstant &now, const NMonitoring::TDynamicCounters::TCounterPtr &counterPtr,
                 const NVDiskMon::TLtcHistoPtr &histoPtr, NWilson::TTraceId traceId, ui32 channel)
             : TEvVResultBase(now, channel, counterPtr, histoPtr, std::move(traceId))
-        {} 
-    }; 
- 
+        {}
+    };
+
     template<typename TEv, typename TRecord /*protobuf record*/, ui32 TEventType>
     class TEvVResultBaseWithQoSPB : public TEvVResultBasePB<TEv, TRecord, TEventType> {
         using TBase = TEvVResultBasePB<TEv, TRecord, TEventType>;

@@ -946,7 +946,7 @@ void TKikimrRunner::InitializeLogSettings(const TKikimrRunConfig& runConfig)
         auto logBackend = TLogBackendFactory().CreateLogBackend(runConfig, Counters);
         LogBackend.reset(logBackend.Release());
     }
- 
+
     if (!runConfig.AppConfig.HasLogConfig())
         return;
 
@@ -1027,12 +1027,12 @@ void TKikimrRunner::ApplyLogSettings(const TKikimrRunConfig& runConfig)
     }
 }
 
-void TKikimrRunner::InitializeActorSystem( 
-    const TKikimrRunConfig& runConfig, 
-    TIntrusivePtr<TServiceInitializersList> serviceInitializers, 
-    const TBasicKikimrServicesMask& servicesMask) 
+void TKikimrRunner::InitializeActorSystem(
+    const TKikimrRunConfig& runConfig,
+    TIntrusivePtr<TServiceInitializersList> serviceInitializers,
+    const TBasicKikimrServicesMask& servicesMask)
 {
-    THolder<TActorSystemSetup> setup(new TActorSystemSetup()); 
+    THolder<TActorSystemSetup> setup(new TActorSystemSetup());
 
     serviceInitializers->InitializeServices(setup.Get(), AppData.Get());
 
@@ -1046,46 +1046,46 @@ void TKikimrRunner::InitializeActorSystem(
     ActorSystem.Reset(new TActorSystem(setup, AppData.Get(), LogSettings));
 
     if (Monitoring) {
-        if (servicesMask.EnableLogger) { 
-            Monitoring->RegisterActorPage( 
-                ActorsMonPage, 
-                "logger", 
-                "Logger", 
-                false, 
-                ActorSystem.Get(), 
-                LogSettings->LoggerActorId); 
-        } 
+        if (servicesMask.EnableLogger) {
+            Monitoring->RegisterActorPage(
+                ActorsMonPage,
+                "logger",
+                "Logger",
+                false,
+                ActorSystem.Get(),
+                LogSettings->LoggerActorId);
+        }
 
-        if (servicesMask.EnableProfiler) { 
-            Monitoring->RegisterActorPage( 
-                ActorsMonPage, 
-                "profiler", 
-                "Profiler", 
-                false, 
-                ActorSystem.Get(), 
-                MakeProfilerID(runConfig.NodeId)); 
-        } 
- 
-        if (servicesMask.EnableLoadService) { 
-            Monitoring->RegisterActorPage( 
-                ActorsMonPage, 
-                "load", 
-                "Load", 
-                false, 
-                ActorSystem.Get(), 
-                MakeBlobStorageLoadID(runConfig.NodeId)); 
-        } 
- 
-        if (servicesMask.EnableFailureInjectionService) { 
-            Monitoring->RegisterActorPage( 
-                ActorsMonPage, 
-                "failure_injection", 
-                "Failure Injection", 
-                false, 
-                ActorSystem.Get(), 
-                MakeBlobStorageFailureInjectionID(runConfig.NodeId)); 
-        } 
- 
+        if (servicesMask.EnableProfiler) {
+            Monitoring->RegisterActorPage(
+                ActorsMonPage,
+                "profiler",
+                "Profiler",
+                false,
+                ActorSystem.Get(),
+                MakeProfilerID(runConfig.NodeId));
+        }
+
+        if (servicesMask.EnableLoadService) {
+            Monitoring->RegisterActorPage(
+                ActorsMonPage,
+                "load",
+                "Load",
+                false,
+                ActorSystem.Get(),
+                MakeBlobStorageLoadID(runConfig.NodeId));
+        }
+
+        if (servicesMask.EnableFailureInjectionService) {
+            Monitoring->RegisterActorPage(
+                ActorsMonPage,
+                "failure_injection",
+                "Failure Injection",
+                false,
+                ActorSystem.Get(),
+                MakeBlobStorageFailureInjectionID(runConfig.NodeId));
+        }
+
         Monitoring->Register(CreateMonGetBlobPage("get_blob", ActorSystem.Get()));
         Monitoring->Register(CreateMonBlobRangePage("blob_range", ActorSystem.Get()));
         Monitoring->Register(CreateMonVDiskStreamPage("vdisk_stream", ActorSystem.Get()));
@@ -1169,7 +1169,7 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TBlobCacheInitializer(runConfig));
     }
     if (serviceMask.EnableLogger) {
-        sil->AddServiceInitializer(new TLoggerInitializer(runConfig, LogSettings, LogBackend)); 
+        sil->AddServiceInitializer(new TLoggerInitializer(runConfig, LogSettings, LogBackend));
     }
     if (serviceMask.EnableSchedulerActor) {
         sil->AddServiceInitializer(new TSchedulerActorInitializer(runConfig));
@@ -1358,7 +1358,7 @@ void TKikimrRunner::KikimrStart() {
     }
 
     ThreadSigmask(SIG_BLOCK);
-    if (ActorSystem) { 
+    if (ActorSystem) {
         RegisterBaseTagForMemoryProfiling(ActorSystem.Get());
         ActorSystem->Start();
     }

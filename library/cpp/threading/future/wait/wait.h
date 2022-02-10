@@ -1,10 +1,10 @@
-#pragma once 
- 
+#pragma once
+
 #include "fwd.h"
 
 #include <library/cpp/threading/future/core/future.h>
 #include <library/cpp/threading/future/wait/wait_group.h>
- 
+
 #include <util/generic/array_ref.h>
 
 namespace NThreading {
@@ -27,7 +27,7 @@ namespace NThreading {
     [[nodiscard]] TFuture<void> WaitExceptionOrAll(TArrayRef<const TFuture<void>> futures);
     template <typename TContainer>
     [[nodiscard]] NImpl::EnableGenericWait<TContainer> WaitExceptionOrAll(const TContainer& futures);
- 
+
     // waits for any future
     [[nodiscard]] TFuture<void> WaitAny(const TFuture<void>& f1);
     [[nodiscard]] TFuture<void> WaitAny(const TFuture<void>& f1, const TFuture<void>& f2);
@@ -35,7 +35,7 @@ namespace NThreading {
     template <typename TContainer>
     [[nodiscard]] NImpl::EnableGenericWait<TContainer> WaitAny(const TContainer& futures);
 }
- 
-#define INCLUDE_FUTURE_INL_H 
+
+#define INCLUDE_FUTURE_INL_H
 #include "wait-inl.h"
-#undef INCLUDE_FUTURE_INL_H 
+#undef INCLUDE_FUTURE_INL_H

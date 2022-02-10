@@ -32,18 +32,18 @@ RECURSE(
     keyutils
     libelf
     libffi
-    libiscsi 
-    libntirpc 
+    libiscsi
+    libntirpc
     librseq
     libsigcxx
     libsoup
     libtorrent
-    liburcu 
+    liburcu
     libxsmm
     llhttp
     mpg123
     murmurhash
-    nfs_ganesha 
+    nfs_ganesha
     noc
     openal-soft
     patched

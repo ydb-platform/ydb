@@ -1911,7 +1911,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         // Read shards (any tipe of tablets)
         THashMap<TPathId, TShardIdx> pqBalancers; // pathId -> shardIdx
         THashMap<TPathId, TShardIdx> nbsVolumeShards; // pathId -> shardIdx
-        THashMap<TPathId, TShardIdx> fileStoreShards; // pathId -> shardIdx 
+        THashMap<TPathId, TShardIdx> fileStoreShards; // pathId -> shardIdx
         THashMap<TPathId, TShardIdx> kesusShards; // pathId -> shardIdx
         THashMap<TPathId, TVector<TShardIdx>> olapColumnShards;
         {
@@ -2968,68 +2968,68 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
-        // Read FileStoreInfos 
-        { 
-            auto rowset = db.Table<Schema::FileStoreInfos>().Range().Select(); 
-            if (!rowset.IsReady()) 
-                return false; 
- 
-            while (!rowset.EndOfSet()) { 
-                TLocalPathId localPathId = rowset.GetValue<Schema::FileStoreInfos::PathId>(); 
-                TPathId pathId(selfId, localPathId); 
- 
-                TFileStoreInfo::TPtr fs = new TFileStoreInfo(); 
-                { 
-                    auto cfg = rowset.GetValue<Schema::FileStoreInfos::Config>(); 
-                    bool parseOk = ParseFromStringNoSizeLimit(fs->Config, cfg); 
-                    Y_VERIFY(parseOk); 
-                    fs->Version = rowset.GetValueOrDefault<Schema::FileStoreInfos::Version>(); 
-                } 
-                Self->FileStoreInfos[pathId] = fs; 
+        // Read FileStoreInfos
+        {
+            auto rowset = db.Table<Schema::FileStoreInfos>().Range().Select();
+            if (!rowset.IsReady())
+                return false;
+
+            while (!rowset.EndOfSet()) {
+                TLocalPathId localPathId = rowset.GetValue<Schema::FileStoreInfos::PathId>();
+                TPathId pathId(selfId, localPathId);
+
+                TFileStoreInfo::TPtr fs = new TFileStoreInfo();
+                {
+                    auto cfg = rowset.GetValue<Schema::FileStoreInfos::Config>();
+                    bool parseOk = ParseFromStringNoSizeLimit(fs->Config, cfg);
+                    Y_VERIFY(parseOk);
+                    fs->Version = rowset.GetValueOrDefault<Schema::FileStoreInfos::Version>();
+                }
+                Self->FileStoreInfos[pathId] = fs;
                 Self->IncrementPathDbRefCount(pathId);
- 
-                auto it = fileStoreShards.find(pathId); 
-                if (it != fileStoreShards.end()) { 
-                    TShardIdx shardIdx = it->second; 
-                    const auto& shard = Self->ShardInfos[shardIdx]; 
-                    fs->IndexShardIdx = shardIdx; 
-                    fs->IndexTabletId = shard.TabletID; 
-                } 
- 
-                if (!rowset.Next()) 
-                    return false; 
-            } 
- 
-            // Read FileStoreAlters 
-            { 
-                auto rowset = db.Table<Schema::FileStoreAlters>().Range().Select(); 
-                if (!rowset.IsReady()) 
-                    return false; 
- 
-                while (!rowset.EndOfSet()) { 
-                    TLocalPathId localPathId = rowset.GetValue<Schema::FileStoreAlters::PathId>(); 
-                    TPathId pathId(selfId, localPathId); 
- 
-                    auto it = Self->FileStoreInfos.find(pathId); 
-                    Y_VERIFY(it != Self->FileStoreInfos.end()); 
- 
-                    TFileStoreInfo::TPtr fs = it->second; 
-                    Y_VERIFY(fs); 
- 
-                    { 
+
+                auto it = fileStoreShards.find(pathId);
+                if (it != fileStoreShards.end()) {
+                    TShardIdx shardIdx = it->second;
+                    const auto& shard = Self->ShardInfos[shardIdx];
+                    fs->IndexShardIdx = shardIdx;
+                    fs->IndexTabletId = shard.TabletID;
+                }
+
+                if (!rowset.Next())
+                    return false;
+            }
+
+            // Read FileStoreAlters
+            {
+                auto rowset = db.Table<Schema::FileStoreAlters>().Range().Select();
+                if (!rowset.IsReady())
+                    return false;
+
+                while (!rowset.EndOfSet()) {
+                    TLocalPathId localPathId = rowset.GetValue<Schema::FileStoreAlters::PathId>();
+                    TPathId pathId(selfId, localPathId);
+
+                    auto it = Self->FileStoreInfos.find(pathId);
+                    Y_VERIFY(it != Self->FileStoreInfos.end());
+
+                    TFileStoreInfo::TPtr fs = it->second;
+                    Y_VERIFY(fs);
+
+                    {
                         fs->AlterConfig = MakeHolder<NKikimrFileStore::TConfig>();
-                        auto cfg = rowset.GetValue<Schema::FileStoreAlters::Config>(); 
-                        bool parseOk = ParseFromStringNoSizeLimit(*fs->AlterConfig, cfg); 
-                        Y_VERIFY(parseOk); 
-                        fs->AlterVersion = rowset.GetValue<Schema::FileStoreAlters::Version>(); 
-                    } 
- 
-                    if (!rowset.Next()) 
-                        return false; 
-                } 
-            } 
-        } 
- 
+                        auto cfg = rowset.GetValue<Schema::FileStoreAlters::Config>();
+                        bool parseOk = ParseFromStringNoSizeLimit(*fs->AlterConfig, cfg);
+                        Y_VERIFY(parseOk);
+                        fs->AlterVersion = rowset.GetValue<Schema::FileStoreAlters::Version>();
+                    }
+
+                    if (!rowset.Next())
+                        return false;
+                }
+            }
+        }
+
         // Read KesusInfos
         {
             TKesusInfosRows kesusRows;

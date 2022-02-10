@@ -9,7 +9,7 @@
 
 #include <library/cpp/actors/prof/tag.h>
 #include <library/cpp/actors/util/intrinsics.h>
- 
+
 #if defined _linux_
 #include <pthread.h>
 #endif
@@ -101,7 +101,7 @@ namespace NInterconnect {
     template <>
     void
     TPollerUnit::RunLoop<false>() {
-        NProfiling::TMemoryTagScope tag("INTERCONNECT_RECEIVED_DATA"); 
+        NProfiling::TMemoryTagScope tag("INTERCONNECT_RECEIVED_DATA");
         while (!AtomicLoad(&StopFlag))
             ProcessRead();
     }
@@ -109,7 +109,7 @@ namespace NInterconnect {
     template <>
     void
     TPollerUnit::RunLoop<true>() {
-        NProfiling::TMemoryTagScope tag("INTERCONNECT_SEND_DATA"); 
+        NProfiling::TMemoryTagScope tag("INTERCONNECT_SEND_DATA");
         while (!AtomicLoad(&StopFlag))
             ProcessWrite();
     }

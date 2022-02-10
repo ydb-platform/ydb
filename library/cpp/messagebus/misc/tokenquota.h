@@ -29,7 +29,7 @@ namespace NBus {
             level = Max(TAtomicBase(level), TAtomicBase(1));
 
             if (Enabled && (Acquired < level || force)) {
-                Acquired += AtomicSwap(&Tokens_, 0); 
+                Acquired += AtomicSwap(&Tokens_, 0);
             }
 
             return !Enabled || Acquired >= level;

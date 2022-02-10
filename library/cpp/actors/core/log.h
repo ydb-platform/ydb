@@ -199,9 +199,9 @@ namespace NActors {
         TLoggerActor(TIntrusivePtr<NLog::TSettings> settings,
                      TAutoPtr<TLogBackend> logBackend,
                      TIntrusivePtr<NMonitoring::TDynamicCounters> counters);
-        TLoggerActor(TIntrusivePtr<NLog::TSettings> settings, 
-                     std::shared_ptr<TLogBackend> logBackend, 
-                     TIntrusivePtr<NMonitoring::TDynamicCounters> counters); 
+        TLoggerActor(TIntrusivePtr<NLog::TSettings> settings,
+                     std::shared_ptr<TLogBackend> logBackend,
+                     TIntrusivePtr<NMonitoring::TDynamicCounters> counters);
         TLoggerActor(TIntrusivePtr<NLog::TSettings> settings,
                      TAutoPtr<TLogBackend> logBackend,
                      std::shared_ptr<NMonitoring::TMetricRegistry> metrics);
@@ -236,9 +236,9 @@ namespace NActors {
 
     private:
         TIntrusivePtr<NLog::TSettings> Settings;
-        std::shared_ptr<TLogBackend> LogBackend; 
-        ui64 IgnoredCount = 0; 
-        ui64 PassedCount = 0; 
+        std::shared_ptr<TLogBackend> LogBackend;
+        ui64 IgnoredCount = 0;
+        ui64 PassedCount = 0;
         static TAtomic IsOverflow;
         TDuration WakeupInterval{TDuration::Seconds(5)};
         std::unique_ptr<ILoggerMetrics> Metrics;

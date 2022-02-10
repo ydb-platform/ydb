@@ -79,7 +79,7 @@ public:
         case NKikimrSchemeOp::EPathType::EPathTypeBlockStoreVolume:
             return NKikimrViewer::EObjectType::BlockStoreVolume;
         case NKikimrSchemeOp::EPathType::EPathTypeFileStore:
-            return NKikimrViewer::EObjectType::FileStore; 
+            return NKikimrViewer::EObjectType::FileStore;
         case NKikimrSchemeOp::EPathType::EPathTypeKesus:
             return NKikimrViewer::EObjectType::Kesus;
         case NKikimrSchemeOp::EPathType::EPathTypeSolomonVolume:

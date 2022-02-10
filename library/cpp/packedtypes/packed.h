@@ -89,10 +89,10 @@ void Y_FORCE_INLINE UnPackUI32(TStream& in, ui32& v) {
     UNPACK_28(v, in, TInputStream2Traits<TStream>::TTraits, size);
     (void)size;
 }
- 
+
 template <class TStream>
 ui32 Y_FORCE_INLINE UnPackUI32(TStream& in) {
-    ui32 res; 
-    UnPackUI32(in, res); 
-    return res; 
-} 
+    ui32 res;
+    UnPackUI32(in, res);
+    return res;
+}

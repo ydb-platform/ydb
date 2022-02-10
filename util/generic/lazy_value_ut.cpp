@@ -1,22 +1,22 @@
-#include "lazy_value.h" 
- 
+#include "lazy_value.h"
+
 #include <library/cpp/testing/unittest/registar.h>
- 
+
 Y_UNIT_TEST_SUITE(TLazyValueTestSuite) {
     Y_UNIT_TEST(TestLazyValue) {
         TLazyValue<int> value([]() {
-            return 5; 
-        }); 
-        UNIT_ASSERT(!value); 
-        UNIT_ASSERT_EQUAL(*value, 5); 
-        UNIT_ASSERT(value); 
-    } 
- 
+            return 5;
+        });
+        UNIT_ASSERT(!value);
+        UNIT_ASSERT_EQUAL(*value, 5);
+        UNIT_ASSERT(value);
+    }
+
     Y_UNIT_TEST(TestLazyValueInitialization) {
         TLazyValue<int> value1([]() { return 5; });
- 
+
         TLazyValue<int> value2 = []() { return 5; };
- 
+
         TLazyValue<int> notInitialized{};
 
         TLazyValue<int> copy1(value1);
@@ -90,17 +90,17 @@ Y_UNIT_TEST_SUITE(TLazyValueTestSuite) {
     }
 
     class TValueProvider {
-    public: 
+    public:
         static size_t CountParseDataCalled;
 
-        TValueProvider() 
+        TValueProvider()
             : Data_([&] { return this->ParseData(); })
-        { 
-        } 
- 
+        {
+        }
+
         const TString& GetData() const {
             return *Data_;
-        } 
+        }
 
     private:
         TLazyValue<TString> Data_;
@@ -109,16 +109,16 @@ Y_UNIT_TEST_SUITE(TLazyValueTestSuite) {
             CountParseDataCalled++;
             return "hi";
         }
-    }; 
- 
+    };
+
     size_t TValueProvider::CountParseDataCalled = 0;
 
     Y_UNIT_TEST(TestValueProvider) {
-        TValueProvider provider; 
- 
-        UNIT_ASSERT(provider.GetData() == "hi"); 
-    } 
- 
+        TValueProvider provider;
+
+        UNIT_ASSERT(provider.GetData() == "hi");
+    }
+
     Y_UNIT_TEST(TestValueProviderCopy) {
         TValueProvider provider;
         provider.GetData();
@@ -147,11 +147,11 @@ Y_UNIT_TEST_SUITE(TLazyValueTestSuite) {
     }
 
     Y_UNIT_TEST(TestMakeLazy) {
-        auto lv = MakeLazy([] { 
-            return 100500; 
-        }); 
-        UNIT_ASSERT(!lv); 
-        UNIT_ASSERT(lv.GetRef() == 100500); 
-        UNIT_ASSERT(lv); 
-    } 
-} 
+        auto lv = MakeLazy([] {
+            return 100500;
+        });
+        UNIT_ASSERT(!lv);
+        UNIT_ASSERT(lv.GetRef() == 100500);
+        UNIT_ASSERT(lv);
+    }
+}

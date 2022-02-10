@@ -141,21 +141,21 @@ Y_UNIT_TEST_SUITE(TRegExp) {
     }
 
     Y_UNIT_TEST(Capture6) {
-        TCapturingFsm fsm("(/to-match-with)"); 
-        TSearcher searcher(fsm); 
-        searcher.Search("/some/table/path/to-match-with"); 
-        UNIT_ASSERT(searcher.Captured()); 
+        TCapturingFsm fsm("(/to-match-with)");
+        TSearcher searcher(fsm);
+        searcher.Search("/some/table/path/to-match-with");
+        UNIT_ASSERT(searcher.Captured());
         UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("/to-match-with"));
-    } 
- 
+    }
+
     Y_UNIT_TEST(Capture7) {
-        TCapturingFsm fsm("(pref.*suff)"); 
-        TSearcher searcher(fsm); 
-        searcher.Search("ala pref bla suff cla"); 
-        UNIT_ASSERT(searcher.Captured()); 
+        TCapturingFsm fsm("(pref.*suff)");
+        TSearcher searcher(fsm);
+        searcher.Search("ala pref bla suff cla");
+        UNIT_ASSERT(searcher.Captured());
         //UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("pref bla suff"));
-    } 
- 
+    }
+
     Y_UNIT_TEST(CaptureXA) {
         TCapturingFsm fsm(".*(xa).*");
 

@@ -9,7 +9,7 @@
 #include <iterator>
 
 class TDelimStringIter {
-public: 
+public:
     using value_type = TStringBuf;
     using difference_type = ptrdiff_t;
     using pointer = const TStringBuf*;
@@ -23,14 +23,14 @@ public:
 
     inline TDelimStringIter(TStringBuf str, TStringBuf delim)
         : IsValid(true)
-        , Str(str) 
+        , Str(str)
         , Delim(delim)
     {
-        UpdateCurrent(); 
+        UpdateCurrent();
     }
 
     inline TDelimStringIter()
-        : IsValid(false) 
+        : IsValid(false)
     {
     }
 
@@ -40,12 +40,12 @@ public:
 
     // NOTE: this is a potentially unsafe operation (no overrun check)
     inline TDelimStringIter& operator++() {
-        if (Current.end() != Str.end()) { 
-            Str.Skip(Current.length() + Delim.length()); 
-            UpdateCurrent(); 
+        if (Current.end() != Str.end()) {
+            Str.Skip(Current.length() + Delim.length());
+            UpdateCurrent();
         } else {
-            Str.Clear(); 
-            Current.Clear(); 
+            Str.Clear();
+            Current.Clear();
             IsValid = false;
         }
         return *this;
@@ -58,26 +58,26 @@ public:
     }
 
     inline bool operator==(const TDelimStringIter& rhs) const {
-        return (IsValid == rhs.IsValid) && (!IsValid || (Current.begin() == rhs.Current.begin())); 
+        return (IsValid == rhs.IsValid) && (!IsValid || (Current.begin() == rhs.Current.begin()));
     }
 
     inline bool operator!=(const TDelimStringIter& rhs) const {
-        return !(*this == rhs); 
+        return !(*this == rhs);
     }
 
     inline TStringBuf operator*() const {
-        return Current; 
+        return Current;
     }
 
     inline const TStringBuf* operator->() const {
-        return &Current; 
-    } 
- 
+        return &Current;
+    }
+
     // Get & advance
     template <class T>
     inline bool TryNext(T& t) {
         if (IsValid) {
-            t = FromString<T>(Current); 
+            t = FromString<T>(Current);
             operator++();
             return true;
         } else {
@@ -95,26 +95,26 @@ public:
 
     template <class T>
     inline T GetNext() {
-        T res; 
-        Next(res); 
-        return res; 
-    } 
- 
+        T res;
+        Next(res);
+        return res;
+    }
+
     inline const char* GetBegin() const {
-        return Current.begin(); 
+        return Current.begin();
     }
 
     inline const char* GetEnd() const {
-        return Current.end(); 
+        return Current.end();
     }
 
     inline bool Valid() const {
         return IsValid;
     }
 
-    // contents from next token to the end of string 
+    // contents from next token to the end of string
     inline TStringBuf Cdr() const {
-        return Str.SubStr(Current.length() + Delim.length()); 
+        return Str.SubStr(Current.length() + Delim.length());
     }
 
     inline TDelimStringIter IterEnd() const {

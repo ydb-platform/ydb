@@ -34,15 +34,15 @@ struct TTestParams {
 
 template <typename X>
 void TestSaveLoadMeta(NCompProto::TMetaInfo<X>& src) {
-    TStringStream ss; 
-    src.Save(ss); 
+    TStringStream ss;
+    src.Save(ss);
     TString data = ss.Str();
-    NCompProto::TMetaInfo<X> loadedMeta(data); 
-    ss = TStringStream(); 
-    loadedMeta.Save(ss); 
-    UNIT_ASSERT_EQUAL(ss.Str(), data); 
-} 
- 
+    NCompProto::TMetaInfo<X> loadedMeta(data);
+    ss = TStringStream();
+    loadedMeta.Save(ss);
+    UNIT_ASSERT_EQUAL(ss.Str(), data);
+}
+
 template <typename TDecompressor, template <typename, typename> class TSerialize>
 void TestWithParams(const TString& metainfo, const ECompMode mode, const TTestParams& params) {
     using namespace NCompProto;
@@ -59,7 +59,7 @@ void TestWithParams(const TString& metainfo, const ECompMode mode, const TTestPa
     } else {
         meta.Reset(new TMetaInfo<THuff>(stream));
     }
-    TestSaveLoadMeta(*meta.Get()); 
+    TestSaveLoadMeta(*meta.Get());
 
     TBitBuffer buffer;
     TSerialize<THuff, TBitBuffer>::Serialize(*meta, buffer, params);
@@ -120,7 +120,7 @@ Y_UNIT_TEST_SUITE(CompProtoTestBasic) {
             scalar clicks id 0 default const 0\n\
             scalar shows id 1 default const 0\n\
         end\n\
-        scalar extra id 31 default const 0\n\ 
+        scalar extra id 31 default const 0\n\
     end\n";
 
     struct TRegInfo {
@@ -131,7 +131,7 @@ Y_UNIT_TEST_SUITE(CompProtoTestBasic) {
     struct TData {
         ui32 Clicks;
         ui32 Shows;
-        ui32 Extra; 
+        ui32 Extra;
         TMap<ui32, TRegInfo> RegClicks;
     };
 
@@ -149,7 +149,7 @@ Y_UNIT_TEST_SUITE(CompProtoTestBasic) {
 
                 data[i].Clicks = PseudoRandom(16) + 100;
                 data[i].Shows = PseudoRandom(500) * PseudoRandom(16);
-                data[i].Extra = PseudoRandom(500) + (1UL << 31); // test also saving of big values 
+                data[i].Extra = PseudoRandom(500) + (1UL << 31); // test also saving of big values
                 meta.SetScalar(0, data[i].Clicks, functor);
                 meta.SetScalar(1, data[i].Shows, functor);
 
@@ -166,7 +166,7 @@ Y_UNIT_TEST_SUITE(CompProtoTestBasic) {
                     regClicks.EndElement(functor);
                 }
                 regClicks.EndRepeated(functor);
-                meta.SetScalar(31, data[i].Extra, functor); 
+                meta.SetScalar(31, data[i].Extra, functor);
                 meta.EndElement(functor);
             }
             meta.EndRepeated(functor);
@@ -224,8 +224,8 @@ Y_UNIT_TEST_SUITE(CompProtoTestBasic) {
                 UNIT_ASSERT_EQUAL(val, Elem->Clicks);
             if (index == 1)
                 UNIT_ASSERT_EQUAL(val, Elem->Shows);
-            if (index == 31) 
-                UNIT_ASSERT_EQUAL(val, Elem->Extra); 
+            if (index == 31)
+                UNIT_ASSERT_EQUAL(val, Elem->Extra);
         }
         IDecompressor& GetDecompressor(size_t index) {
             if (index == 2) {
@@ -323,7 +323,7 @@ Y_UNIT_TEST_SUITE(CompProtoTestBasic) {
                 case InDataElem:
                     State = OutDataElem;
                     ++DataInd;
-                    break; 
+                    break;
                 case InRegClicks:
                     ++RegIter;
                     break;
@@ -339,8 +339,8 @@ Y_UNIT_TEST_SUITE(CompProtoTestBasic) {
                         UNIT_ASSERT_EQUAL(val, data[DataInd].Clicks);
                     if (index == 1)
                         UNIT_ASSERT_EQUAL(val, data[DataInd].Shows);
-                    if (index == 31) 
-                        UNIT_ASSERT_EQUAL(val, data[DataInd].Extra); 
+                    if (index == 31)
+                        UNIT_ASSERT_EQUAL(val, data[DataInd].Extra);
                     break;
                 case InRegClicks:
                     if (index == 0)

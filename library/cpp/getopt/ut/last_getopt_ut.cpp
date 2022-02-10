@@ -591,19 +591,19 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
     }
 
     Y_UNIT_TEST(TestCustomCmdLineDescr) {
-        TOpts opts; 
-        const char* prog = "my_program"; 
+        TOpts opts;
+        const char* prog = "my_program";
         TString customDescr = "<FILE|TABLE> USER [OPTIONS]";
-        int argc = 2; 
+        int argc = 2;
         const char* cmd[] = {prog};
-        opts.SetCmdLineDescr(customDescr); 
-        TOptsParser parser(&opts, argc, cmd); 
-        TStringStream out; 
-        parser.PrintUsage(out); 
-        // find custom usage 
+        opts.SetCmdLineDescr(customDescr);
+        TOptsParser parser(&opts, argc, cmd);
+        TStringStream out;
+        parser.PrintUsage(out);
+        // find custom usage
         UNIT_ASSERT(out.Str().find(customDescr) != TString::npos);
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestColorPrint) {
         TOpts opts;
         const char* prog = "my_program";

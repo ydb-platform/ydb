@@ -379,11 +379,11 @@ class PROTOC_EXPORT CommandLineInterface {
 
   Mode mode_ = MODE_COMPILE;
 
-  // For encode end decode modes only: read from input and write to output 
-  // instead of stdin and stdout. 
+  // For encode end decode modes only: read from input and write to output
+  // instead of stdin and stdout.
   TProtoStringType encode_decode_input_;
   TProtoStringType encode_decode_output_;
- 
+
   enum PrintMode {
     PRINT_NONE,         // Not in MODE_PRINT
     PRINT_FREE_FIELDS,  // --print_free_fields

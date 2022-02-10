@@ -301,7 +301,7 @@ public:
         WallClockAccepted = Now();
 
         if (!Settings.UserToken.empty()) {
-            UserToken = MakeHolder<NACLib::TUserToken>(Settings.UserToken); 
+            UserToken = MakeHolder<NACLib::TUserToken>(Settings.UserToken);
         }
 
         if (Settings.MaxRows > 0) {

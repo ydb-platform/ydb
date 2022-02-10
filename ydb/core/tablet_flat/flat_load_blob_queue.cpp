@@ -108,7 +108,7 @@ bool TLoadBlobQueue::SendRequests(const TActorId& sender) {
                 << "sending TEvGet batch " << batchSize
                 << " bytes, " << ActiveBytesInFly
                 << " total, blobs: " << TDumpLogoBlobs{ newBlobs });
-            TArrayHolder<TEvBlobStorage::TEvGet::TQuery> query(new TEvBlobStorage::TEvGet::TQuery[newBlobs.size()]); 
+            TArrayHolder<TEvBlobStorage::TEvGet::TQuery> query(new TEvBlobStorage::TEvGet::TQuery[newBlobs.size()]);
             for (size_t i = 0; i < newBlobs.size(); ++i) {
                 query[i].Set(newBlobs[i]);
             }

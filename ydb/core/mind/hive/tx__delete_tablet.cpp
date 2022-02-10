@@ -104,7 +104,7 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         BLOG_D("THive::TTxDeleteTablet::Complete(" << TabletIds << ")");
-        THolder<TEvHive::TEvDeleteTabletReply> response = MakeHolder<TEvHive::TEvDeleteTabletReply>(Status, Self->TabletID(), Event->Get()->Record.GetTxId_Deprecated(), OwnerId, LocalIdxs); 
+        THolder<TEvHive::TEvDeleteTabletReply> response = MakeHolder<TEvHive::TEvDeleteTabletReply>(Status, Self->TabletID(), Event->Get()->Record.GetTxId_Deprecated(), OwnerId, LocalIdxs);
         if (ForwardRequest.HasHiveTabletId()) {
             response->Record.MutableForwardRequest()->CopyFrom(ForwardRequest);
         }

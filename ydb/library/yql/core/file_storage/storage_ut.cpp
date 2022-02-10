@@ -57,7 +57,7 @@ Y_UNIT_TEST_SUITE(TStorageTests) {
     }
 
     Y_UNIT_TEST(Put) {
-        THolder<TStorage> storage = MakeHolder<TStorage>(10, 100); 
+        THolder<TStorage> storage = MakeHolder<TStorage>(10, 100);
         TFileLinkPtr fileInStorage = PutFile("test.file", *storage, "somename");
         TFsPath rootPath(fileInStorage->GetPath());
         UNIT_ASSERT(rootPath.Exists());
@@ -72,7 +72,7 @@ Y_UNIT_TEST_SUITE(TStorageTests) {
     }
 
     Y_UNIT_TEST(ParallelPut) {
-        THolder<TStorage> storage = MakeHolder<TStorage>(10, 100); 
+        THolder<TStorage> storage = MakeHolder<TStorage>(10, 100);
         TThreadPool queue;
         queue.Start(10);
 
@@ -96,7 +96,7 @@ Y_UNIT_TEST_SUITE(TStorageTests) {
     }
 
     Y_UNIT_TEST(CleanUp) {
-        THolder<TStorage> storage = MakeHolder<TStorage>(10, 100); 
+        THolder<TStorage> storage = MakeHolder<TStorage>(10, 100);
         TFileLinkPtr fileInStorage = PutFile("test.file", *storage);
         UNIT_ASSERT(fileInStorage->GetPath().Exists());
 
@@ -108,7 +108,7 @@ Y_UNIT_TEST_SUITE(TStorageTests) {
 
     Y_UNIT_TEST(DisplaceByCount) {
         ui64 maxCount = 2;
-        THolder<TStorage> storage = MakeHolder<TStorage>(maxCount, 100); 
+        THolder<TStorage> storage = MakeHolder<TStorage>(maxCount, 100);
 
         TFileLinkPtr file1 = PutFile("test1.file", *storage);
         TFileLinkPtr file2 = PutFile("test2.file", *storage);
@@ -145,7 +145,7 @@ Y_UNIT_TEST_SUITE(TStorageTests) {
 
     Y_UNIT_TEST(DisplaceBySize) {
         ui64 maxSize = 25;
-        THolder<TStorage> storage = MakeHolder<TStorage>(10, maxSize); 
+        THolder<TStorage> storage = MakeHolder<TStorage>(10, maxSize);
 
         TFileLinkPtr file1 = PutFile("test1.file", *storage);
         TFileLinkPtr file2 = PutFile("test2.file", *storage);
@@ -182,7 +182,7 @@ Y_UNIT_TEST_SUITE(TStorageTests) {
 
     Y_UNIT_TEST(PersistStorage) {
         TTestDir dir("PersistStorage");
-        THolder<TStorage> storage = MakeHolder<TStorage>(100, 100, dir.GetFsPath()); 
+        THolder<TStorage> storage = MakeHolder<TStorage>(100, 100, dir.GetFsPath());
         auto rootPath = storage->GetRoot();
 
         TFileLinkPtr fileInStorage = PutFile("test.file", *storage);

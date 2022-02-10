@@ -218,7 +218,7 @@ TString TFinishProposeUnit::PrintErrors(const NKikimrTxDataShard::TEvProposeTran
 THolder<TExecutionUnit> CreateFinishProposeUnit(TDataShard &dataShard,
                                                 TPipeline &pipeline)
 {
-    return THolder(new TFinishProposeUnit(dataShard, pipeline)); 
+    return THolder(new TFinishProposeUnit(dataShard, pipeline));
 }
 
 } // namespace NDataShard

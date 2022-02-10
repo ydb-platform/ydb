@@ -160,7 +160,7 @@ void TYqlLog::WriteLogPrefix(IOutputStream* out, EComponent component, ELevel le
 
 void TYqlLog::SetMaxLogLimit(ui64 limit) {
     auto backend = TLog::ReleaseBackend();
-    TLog::ResetBackend(THolder(new TLimitedLogBackend(backend, WriteTruncMsg_, limit))); 
+    TLog::ResetBackend(THolder(new TLimitedLogBackend(backend, WriteTruncMsg_, limit)));
 }
 
 void InitLogger(const TString& logType, bool startAsDaemon) {
@@ -186,7 +186,7 @@ void InitLogger(const TString& logType, bool startAsDaemon) {
             auto backend = MakeHolder<TSysLogBackend>(
                         GetProgramName().data(), TSysLogBackend::TSYSLOG_LOCAL1);
             auto& logger = TLoggerOperator<TYqlLog>::Log();
-            logger.ResetBackend(THolder(backend.Release())); 
+            logger.ResetBackend(THolder(backend.Release()));
         } else {
             TLoggerOperator<TYqlLog>::Set(new TYqlLog(logType, levels));
         }

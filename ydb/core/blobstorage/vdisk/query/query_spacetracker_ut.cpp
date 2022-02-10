@@ -184,7 +184,7 @@ namespace NKikimr {
             UNIT_ASSERT(result.ByteSizeLong() == protobufSize);
 
             NKikimrBlobStorage::TEvVGetResult desResult;
-            TArrayHolder<char> buffer(new char[protobufSize]); 
+            TArrayHolder<char> buffer(new char[protobufSize]);
             Y_PROTOBUF_SUPPRESS_NODISCARD result.SerializeToArray(buffer.Get(), protobufSize);
             UNIT_ASSERT(desResult.ParseFromArray(buffer.Get(), protobufSize));
         }

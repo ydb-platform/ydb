@@ -1749,7 +1749,7 @@ void TQueueLeader::OnInflyLoaded(ui64 shard, const TSqsEvents::TEvExecuted::TRec
             const ui32 receiveCount = message["ReceiveCount"];
             const TInstant maxVisibilityDeadline = TInstant::MilliSeconds(Max(visibilityDeadlineMs, delayDeadlineMs));
             LOG_SQS_TRACE("Adding message to infly struct for shard " << TLogQueueName(UserName_, QueueName_, shard) << ": { Offset: " << offset << ", VisibilityDeadline: " << maxVisibilityDeadline << ", ReceiveCount: " << receiveCount << " }");
-            shardInfo.Infly->Add(MakeHolder<TInflyMessage>(offset, message["RandomId"], maxVisibilityDeadline, receiveCount)); 
+            shardInfo.Infly->Add(MakeHolder<TInflyMessage>(offset, message["RandomId"], maxVisibilityDeadline, receiveCount));
         }
         LWPROBE(LoadInfly, UserName_, QueueName_, shard, list.Size());
         shardInfo.InflyVersion = val["inflyVersion"];
@@ -1868,7 +1868,7 @@ void TQueueLeader::OnAddedMessagesToInfly(ui64 shard, const TSqsEvents::TEvExecu
             const ui64 offset = message["Offset"];
             const ui32 receiveCount = 0; // as in transaction
             LOG_SQS_TRACE("Adding message to infly struct for shard " << TLogQueueName(UserName_, QueueName_, shard) << ": { Offset: " << offset << ", DelayDeadline: " << delayDeadline << ", ReceiveCount: " << receiveCount << " }");
-            shardInfo.Infly->Add(MakeHolder<TInflyMessage>(offset, message["RandomId"], delayDeadline, receiveCount)); 
+            shardInfo.Infly->Add(MakeHolder<TInflyMessage>(offset, message["RandomId"], delayDeadline, receiveCount));
         }
         LWPROBE(AddMessagesToInfly, UserName_, QueueName_, shard, list.Size());
         shardInfo.ReadOffset = val["readOffset"];

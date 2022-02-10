@@ -322,8 +322,8 @@ void TExecutor::ActivateFollower(const TActorContext &ctx) {
 
     Y_VERIFY(!CompactionLogic);
     if (!Counters) {
-        Counters = MakeHolder<TExecutorCounters>(); 
-        CountersBaseline = MakeHolder<TExecutorCounters>(); 
+        Counters = MakeHolder<TExecutorCounters>();
+        CountersBaseline = MakeHolder<TExecutorCounters>();
         Counters->RememberCurrentStateAsBaseline(*CountersBaseline);
     }
 
@@ -361,7 +361,7 @@ void TExecutor::Active(const TActorContext &ctx) {
     auto loadedState = BootLogic->ExtractState();
     BootLogic.Destroy();
 
-    Counters = MakeHolder<TExecutorCounters>(); 
+    Counters = MakeHolder<TExecutorCounters>();
 
     CommitManager = loadedState->CommitManager;
     Database = loadedState->Database;
@@ -375,9 +375,9 @@ void TExecutor::Active(const TActorContext &ctx) {
 
     CommitManager->Start(this, Owner->Tablet(), &Step0, Counters.Get());
 
-    CompactionLogic = THolder<TCompactionLogic>(new TCompactionLogic(Logger.Get(), Broker.Get(), this, loadedState->Comp, 
-                                                                     Sprintf("tablet-%" PRIu64, Owner->TabletID()))); 
-    CountersBaseline = MakeHolder<TExecutorCounters>(); 
+    CompactionLogic = THolder<TCompactionLogic>(new TCompactionLogic(Logger.Get(), Broker.Get(), this, loadedState->Comp,
+                                                                     Sprintf("tablet-%" PRIu64, Owner->TabletID())));
+    CountersBaseline = MakeHolder<TExecutorCounters>();
     Counters->RememberCurrentStateAsBaseline(*CountersBaseline);
     LogicRedo->InstallCounters(Counters.Get(), nullptr);
 
@@ -385,7 +385,7 @@ void TExecutor::Active(const TActorContext &ctx) {
     CounterCacheStaging = new NMonitoring::TCounterForPtr;
     CounterCacheMemTable = new NMonitoring::TCounterForPtr;
 
-    ResourceMetrics = MakeHolder<NMetrics::TResourceMetrics>(Owner->TabletID(), 0, Launcher); 
+    ResourceMetrics = MakeHolder<NMetrics::TResourceMetrics>(Owner->TabletID(), 0, Launcher);
 
     PendingBlobQueue.Config.TabletID = Owner->TabletID();
     PendingBlobQueue.Config.Generation = Generation();
@@ -3813,7 +3813,7 @@ const NTable::TScheme& TExecutor::Scheme() const noexcept {
 
 void TExecutor::RegisterExternalTabletCounters(TAutoPtr<TTabletCountersBase> appCounters) {
     AppCounters = appCounters;
-    AppCountersBaseline = MakeHolder<TTabletCountersBase>(); 
+    AppCountersBaseline = MakeHolder<TTabletCountersBase>();
     AppCounters->RememberCurrentStateAsBaseline(*AppCountersBaseline);
 
     if (LogicRedo) {

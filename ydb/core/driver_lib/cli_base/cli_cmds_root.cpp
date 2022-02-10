@@ -132,7 +132,7 @@ private:
 };
 
 int NewLiteClient(int argc, char** argv) {
-    THolder<TClientCommandRootLite> commandsRoot = MakeHolder<TClientCommandRootLite>(); 
+    THolder<TClientCommandRootLite> commandsRoot = MakeHolder<TClientCommandRootLite>();
     commandsRoot->Opts.SetTitle("YDB client");
     TClientCommand::TConfig config(argc, argv);
     return commandsRoot->Process(config);

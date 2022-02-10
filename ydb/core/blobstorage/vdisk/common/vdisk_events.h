@@ -1044,7 +1044,7 @@ namespace NKikimr {
                 NKikimrBlobStorage::EGetHandleClass cls, EFlags flags = EFlags::None, TMaybe<ui64> requestCookie = {},
                 std::initializer_list<TExtremeQuery> queries = {}, ui32 forceBlockedGeneration = 0) {
             std::unique_ptr<TEvVGet> res(new TEvVGet(vdisk, deadline, cls, bool(ui32(flags) & ui32(EFlags::NotifyIfNotReady)),
-                    bool(ui32(flags) & ui32(EFlags::ShowInternals)), requestCookie, true, true, forceBlockedGeneration)); 
+                    bool(ui32(flags) & ui32(EFlags::ShowInternals)), requestCookie, true, true, forceBlockedGeneration));
             for (const auto &q : queries) {
                 res->AddExtremeQuery(std::get<0>(q), std::get<1>(q), std::get<2>(q), std::get<3>(q));
             }
@@ -1055,7 +1055,7 @@ namespace NKikimr {
                 NKikimrBlobStorage::EGetHandleClass cls, EFlags flags = EFlags::None, TMaybe<ui64> requestCookie = {},
                 std::initializer_list<TExtremeQuery> queries = {}, ui32 forceBlockedGeneration = 0) {
             std::unique_ptr<TEvVGet> res(new TEvVGet(vdisk, deadline, cls, bool(ui32(flags) & ui32(EFlags::NotifyIfNotReady)),
-                    bool(ui32(flags) & ui32(EFlags::ShowInternals)), requestCookie, false, true, forceBlockedGeneration)); 
+                    bool(ui32(flags) & ui32(EFlags::ShowInternals)), requestCookie, false, true, forceBlockedGeneration));
             for (const auto &q : queries) {
                 res->AddExtremeQuery(std::get<0>(q), std::get<1>(q), std::get<2>(q), std::get<3>(q));
             }
@@ -1067,7 +1067,7 @@ namespace NKikimr {
                 const TLogoBlobID &fromId, const TLogoBlobID &toId, ui32 maxResults = 0, const ui64 *cookie = nullptr,
                 ui32 forceBlockedGeneration = 0) {
             std::unique_ptr<TEvVGet> res(new TEvVGet(vdisk, deadline, cls, bool(ui32(flags) & ui32(EFlags::NotifyIfNotReady)),
-                    bool(ui32(flags) & ui32(EFlags::ShowInternals)), requestCookie, true, false, forceBlockedGeneration)); 
+                    bool(ui32(flags) & ui32(EFlags::ShowInternals)), requestCookie, true, false, forceBlockedGeneration));
             NKikimrBlobStorage::TRangeQuery *q = res->Record.MutableRangeQuery();
             LogoBlobIDFromLogoBlobID(fromId, q->MutableFrom());
             LogoBlobIDFromLogoBlobID(toId, q->MutableTo());

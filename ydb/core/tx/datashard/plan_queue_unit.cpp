@@ -113,7 +113,7 @@ void TPlanQueueUnit::Complete(TOperation::TPtr,
 THolder<TExecutionUnit> CreatePlanQueueUnit(TDataShard &dataShard,
                                             TPipeline &pipeline)
 {
-    return THolder(new TPlanQueueUnit(dataShard, pipeline)); 
+    return THolder(new TPlanQueueUnit(dataShard, pipeline));
 }
 
 } // namespace NDataShard

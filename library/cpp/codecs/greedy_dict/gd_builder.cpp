@@ -11,7 +11,7 @@
 namespace NGreedyDict {
     void TDictBuilder::RebuildCounts(ui32 maxcand, bool final) {
         if (!Current) {
-            Current = MakeHolder<TEntrySet>(); 
+            Current = MakeHolder<TEntrySet>();
             Current->InitWithAlpha();
         }
 
@@ -24,7 +24,7 @@ namespace NGreedyDict {
         CompoundCountsPool.Clear();
 
         if (!final) {
-            CompoundCounts = MakeHolder<TCompoundCounts>(&CompoundCountsPool); 
+            CompoundCounts = MakeHolder<TCompoundCounts>(&CompoundCountsPool);
             CompoundCounts->reserve(maxcand);
         }
 

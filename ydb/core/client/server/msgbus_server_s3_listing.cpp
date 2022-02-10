@@ -718,7 +718,7 @@ private:
 public:
     TS3ListingRequestGrpc(TAutoPtr<TEvS3ListingRequest> request, TActorId schemeCache)
         : TS3ListingRequestBase(schemeCache,
-                                THolder<const NACLib::TUserToken>(request->GetInternalToken() ? new NACLib::TUserToken(request->GetInternalToken()) : nullptr)) 
+                                THolder<const NACLib::TUserToken>(request->GetInternalToken() ? new NACLib::TUserToken(request->GetInternalToken()) : nullptr))
         , GrpcRequest(request)
     {}
 

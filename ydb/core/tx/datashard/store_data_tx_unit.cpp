@@ -65,7 +65,7 @@ void TStoreDataTxUnit::Complete(TOperation::TPtr op,
 THolder<TExecutionUnit> CreateStoreDataTxUnit(TDataShard &dataShard,
                                               TPipeline &pipeline)
 {
-    return MakeHolder<TStoreDataTxUnit>(dataShard, pipeline); 
+    return MakeHolder<TStoreDataTxUnit>(dataShard, pipeline);
 }
 
 } // namespace NDataShard

@@ -95,7 +95,7 @@ void TBlockIO::Dispatch() noexcept
     while (auto more = PagesToBlobsConverter->Grow(NBlockIO::BlockSize)) {
         auto group = NPageCollection::TLargeGlobId::InvalidGroup;
 
-        TArrayHolder<TEvGet::TQuery> query(new TEvGet::TQuery[+more]); 
+        TArrayHolder<TEvGet::TQuery> query(new TEvGet::TQuery[+more]);
 
         ui32 lastBlob = Max<ui32>();
         for (const auto on : xrange(+more)) {

@@ -4409,7 +4409,7 @@ void TSchemeShard::Handle(TEvDataShard::TEvSchemaChanged::TPtr& ev, const TActor
                    << " message# " << ev->Get()->Record.DebugString());
 
         THolder<TEvDataShard::TEvSchemaChangedResult> event =
-            THolder(new TEvDataShard::TEvSchemaChangedResult(ui64(txId))); 
+            THolder(new TEvDataShard::TEvSchemaChangedResult(ui64(txId)));
         ctx.Send(ackTo, event.Release());
         return;
     }
@@ -4422,7 +4422,7 @@ void TSchemeShard::Handle(TEvDataShard::TEvSchemaChanged::TPtr& ev, const TActor
                    << " message# " << ev->Get()->Record.DebugString());
 
         THolder<TEvDataShard::TEvSchemaChangedResult> event =
-            THolder(new TEvDataShard::TEvSchemaChangedResult(ui64(txId))); 
+            THolder(new TEvDataShard::TEvSchemaChangedResult(ui64(txId)));
         ctx.Send(ackTo, event.Release());
         return;
     }

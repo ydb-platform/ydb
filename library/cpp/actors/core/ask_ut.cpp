@@ -56,7 +56,7 @@ Y_UNIT_TEST_SUITE(AskActor) {
         {
             auto fut = runtime->GetAnyNodeActorSystem()->Ask<TEvents::TEvPong>(
                 pingpong,
-                THolder(new TEvents::TEvPing)); 
+                THolder(new TEvents::TEvPing));
             runtime->DispatchEvents();
             fut.ExtractValueSync();
         }
@@ -64,7 +64,7 @@ Y_UNIT_TEST_SUITE(AskActor) {
         {
             auto fut = runtime->GetAnyNodeActorSystem()->Ask<TEvents::TEvBlob>(
                 pingpong,
-                THolder(new TEvents::TEvBlob("hello!"))); 
+                THolder(new TEvents::TEvBlob("hello!")));
             runtime->DispatchEvents();
             auto ev = fut.ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(ev->Blob, "hello!");
@@ -73,7 +73,7 @@ Y_UNIT_TEST_SUITE(AskActor) {
         {
             auto fut = runtime->GetAnyNodeActorSystem()->Ask<IEventBase>(
                 pingpong,
-                THolder(new TEvents::TEvPing)); 
+                THolder(new TEvents::TEvPing));
             runtime->DispatchEvents();
             auto ev = fut.ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(ev->Type(), TEvents::TEvPong::EventType);
@@ -87,7 +87,7 @@ Y_UNIT_TEST_SUITE(AskActor) {
         {
             auto fut = runtime->GetAnyNodeActorSystem()->Ask<TEvents::TEvBlob>(
                 pingpong,
-                THolder(new TEvents::TEvPing)); 
+                THolder(new TEvents::TEvPing));
             runtime->DispatchEvents();
             UNIT_ASSERT_EXCEPTION_CONTAINS(
                 fut.ExtractValueSync(),
@@ -103,7 +103,7 @@ Y_UNIT_TEST_SUITE(AskActor) {
         {
             auto fut = runtime->GetAnyNodeActorSystem()->Ask<TEvents::TEvPong>(
                 ping,
-                THolder(new TEvents::TEvPing), 
+                THolder(new TEvents::TEvPing),
                 TDuration::Seconds(1));
             auto start = runtime->GetCurrentTime();
             runtime->DispatchEvents({}, TDuration::Seconds(5));
@@ -117,7 +117,7 @@ Y_UNIT_TEST_SUITE(AskActor) {
         {
             auto fut = runtime->GetAnyNodeActorSystem()->Ask<IEventBase>(
                 ping,
-                THolder(new TEvents::TEvPing), 
+                THolder(new TEvents::TEvPing),
                 TDuration::Seconds(1));
             auto start = runtime->GetCurrentTime();
             runtime->DispatchEvents({}, TDuration::Seconds(5));

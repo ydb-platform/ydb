@@ -220,7 +220,7 @@ namespace NMonitoring {
     }
 
     IMetricEncoderPtr EncoderText(IOutputStream* out, bool humanReadableTs) {
-        return MakeHolder<TEncoderText>(out, humanReadableTs); 
+        return MakeHolder<TEncoderText>(out, humanReadableTs);
     }
 
 }

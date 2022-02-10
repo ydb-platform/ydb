@@ -118,7 +118,7 @@ void TReceiveSnapshotUnit::Complete(TOperation::TPtr,
 THolder<TExecutionUnit> CreateReceiveSnapshotUnit(TDataShard &dataShard,
                                                   TPipeline &pipeline)
 {
-    return MakeHolder<TReceiveSnapshotUnit>(dataShard, pipeline); 
+    return MakeHolder<TReceiveSnapshotUnit>(dataShard, pipeline);
 }
 
 } // namespace NDataShard

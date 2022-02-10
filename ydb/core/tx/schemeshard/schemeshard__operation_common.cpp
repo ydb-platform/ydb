@@ -204,7 +204,7 @@ void NTableState::AckAllSchemaChanges(const TOperationId &operationId, TTxState 
                         << ", at schemeshard: " << ssId);
 
         THolder<TEvDataShard::TEvSchemaChangedResult> event =
-                THolder(new TEvDataShard::TEvSchemaChangedResult()); 
+                THolder(new TEvDataShard::TEvSchemaChangedResult());
         event->Record.SetTxId(ui64(operationId.GetTxId()));
 
         context.OnComplete.Send(ackTo, std::move(event), ui64(shardIdx.GetLocalId()));

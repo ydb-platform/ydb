@@ -19,7 +19,7 @@ private:
 };
 
 THolder<TVisitorTransformerBase> CreateSolomonDataSourceTypeAnnotationTransformer(TSolomonState::TPtr state) {
-    return THolder(new TSolomonDataSourceTypeAnnotationTransformer(state)); 
+    return THolder(new TSolomonDataSourceTypeAnnotationTransformer(state));
 }
 
 } // namespace NYql

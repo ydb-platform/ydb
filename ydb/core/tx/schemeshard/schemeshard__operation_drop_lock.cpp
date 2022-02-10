@@ -35,7 +35,7 @@ class TDropLock: public TSubOperation {
         switch(state) {
         case TTxState::Waiting:
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId); 
+            return MakeHolder<TDone>(OperationId);
         default:
             return nullptr;
         }

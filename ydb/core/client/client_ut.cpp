@@ -2093,7 +2093,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             ))__";
 
         {
-            THolder<TEvTablet::TEvLocalMKQL> reqWrite = MakeHolder<TEvTablet::TEvLocalMKQL>(); 
+            THolder<TEvTablet::TEvLocalMKQL> reqWrite = MakeHolder<TEvTablet::TEvLocalMKQL>();
             reqWrite->Record.MutableProgram()->MutableProgram()->SetText(Sprintf(writeQuery, ui64(10)));
             runtime.Send(new IEventHandle(leaderId, edge, reqWrite.Release()));
 
@@ -2108,7 +2108,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         }
 
         {
-            THolder<TEvTablet::TEvLocalMKQL> reqRead = MakeHolder<TEvTablet::TEvLocalMKQL>(); 
+            THolder<TEvTablet::TEvLocalMKQL> reqRead = MakeHolder<TEvTablet::TEvLocalMKQL>();
             reqRead->Record.MutableProgram()->MutableProgram()->SetText(readQuery);
             runtime.Send(new IEventHandle(followerId, edge, reqRead.Release()));
 
@@ -2223,7 +2223,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             ))__";
 
         {
-            THolder<TEvTablet::TEvLocalMKQL> reqWrite = MakeHolder<TEvTablet::TEvLocalMKQL>(); 
+            THolder<TEvTablet::TEvLocalMKQL> reqWrite = MakeHolder<TEvTablet::TEvLocalMKQL>();
             reqWrite->Record.MutableProgram()->MutableProgram()->SetText(Sprintf(writeQuery, ui64(10)));
             runtime.Send(new IEventHandle(leaderId, edge, reqWrite.Release()));
 
@@ -2232,7 +2232,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         }
 
         {
-            THolder<TEvTablet::TEvLocalMKQL> reqRead = MakeHolder<TEvTablet::TEvLocalMKQL>(); 
+            THolder<TEvTablet::TEvLocalMKQL> reqRead = MakeHolder<TEvTablet::TEvLocalMKQL>();
             reqRead->Record.MutableProgram()->MutableProgram()->SetText(readQuery);
             runtime.Send(new IEventHandle(followerId, edge, reqRead.Release()));
 
@@ -2284,7 +2284,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
         {
             // Read row from offline follower
-            THolder<TEvTablet::TEvLocalMKQL> reqRead = MakeHolder<TEvTablet::TEvLocalMKQL>(); 
+            THolder<TEvTablet::TEvLocalMKQL> reqRead = MakeHolder<TEvTablet::TEvLocalMKQL>();
             reqRead->Record.MutableProgram()->MutableProgram()->SetText(readQuery);
             runtime.Send(new IEventHandle(followerId2, edge, reqRead.Release()));
 
@@ -2370,7 +2370,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         auto prevObserverFunc = runtime.SetObserverFunc(blockConfirmations);
 
         {
-            THolder<TEvTablet::TEvLocalMKQL> reqWrite = MakeHolder<TEvTablet::TEvLocalMKQL>(); 
+            THolder<TEvTablet::TEvLocalMKQL> reqWrite = MakeHolder<TEvTablet::TEvLocalMKQL>();
             reqWrite->Record.MutableProgram()->MutableProgram()->SetText(Sprintf(writeQuery, ui64(10)));
             runtime.Send(new IEventHandle(leaderId, edge, reqWrite.Release()));
 
@@ -2379,7 +2379,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         }
 
         {
-            THolder<TEvTablet::TEvLocalMKQL> reqRead = MakeHolder<TEvTablet::TEvLocalMKQL>(); 
+            THolder<TEvTablet::TEvLocalMKQL> reqRead = MakeHolder<TEvTablet::TEvLocalMKQL>();
             reqRead->Record.MutableProgram()->MutableProgram()->SetText(readQuery);
             runtime.Send(new IEventHandle(followerId, edge, reqRead.Release()));
 
@@ -2427,7 +2427,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
         {
             // Read row from offline follower (unconfirmed commit must be ignored)
-            THolder<TEvTablet::TEvLocalMKQL> reqRead = MakeHolder<TEvTablet::TEvLocalMKQL>(); 
+            THolder<TEvTablet::TEvLocalMKQL> reqRead = MakeHolder<TEvTablet::TEvLocalMKQL>();
             reqRead->Record.MutableProgram()->MutableProgram()->SetText(readQuery);
             runtime.Send(new IEventHandle(followerId2, edge, reqRead.Release()));
 
@@ -2474,7 +2474,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
         {
             // Read row from offline follower
-            THolder<TEvTablet::TEvLocalMKQL> reqRead = MakeHolder<TEvTablet::TEvLocalMKQL>(); 
+            THolder<TEvTablet::TEvLocalMKQL> reqRead = MakeHolder<TEvTablet::TEvLocalMKQL>();
             reqRead->Record.MutableProgram()->MutableProgram()->SetText(readQuery);
             runtime.Send(new IEventHandle(followerId3, edge, reqRead.Release()));
 

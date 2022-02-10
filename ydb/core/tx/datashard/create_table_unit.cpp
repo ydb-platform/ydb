@@ -98,7 +98,7 @@ void TCreateTableUnit::Complete(TOperation::TPtr, const TActorContext &ctx)
 THolder<TExecutionUnit> CreateCreateTableUnit(TDataShard &dataShard,
                                               TPipeline &pipeline)
 {
-    return THolder(new TCreateTableUnit(dataShard, pipeline)); 
+    return THolder(new TCreateTableUnit(dataShard, pipeline));
 }
 
 } // namespace NDataShard

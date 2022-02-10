@@ -54,7 +54,7 @@ THolder<TExecutionUnit> CreateDropVolatileSnapshotUnit(
         TDataShard& dataShard,
         TPipeline& pipeline)
 {
-    return THolder(new TDropVolatileSnapshotUnit(dataShard, pipeline)); 
+    return THolder(new TDropVolatileSnapshotUnit(dataShard, pipeline));
 }
 
 } // namespace NDataShard

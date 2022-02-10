@@ -56,7 +56,7 @@ void TLoadTxDetailsUnit::Complete(TOperation::TPtr,
 THolder<TExecutionUnit> CreateLoadTxDetailsUnit(TDataShard &dataShard,
                                                 TPipeline &pipeline)
 {
-    return MakeHolder<TLoadTxDetailsUnit>(dataShard, pipeline); 
+    return MakeHolder<TLoadTxDetailsUnit>(dataShard, pipeline);
 }
 
 } // namespace NDataShard

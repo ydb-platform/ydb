@@ -74,7 +74,7 @@ THolder<TInflyMessage> TInflyMessages::Delete(ui64 offset) {
         TInflyMessageWithVisibilityDeadlineKey* byVisibilityDeadline = &msg->Message();
         byVisibilityDeadline->UnLink();
         msg->UnLink();
-        return THolder<TInflyMessage>(&msg->Message()); 
+        return THolder<TInflyMessage>(&msg->Message());
     }
     return nullptr;
 }
@@ -123,7 +123,7 @@ THolder<TInflyMessage> TInflyMessages::TReceiveCandidates::Delete(ui64 offset) {
         Y_ASSERT(Parent->HoldCount > 0);
         --Parent->HoldCount;
         msg->UnLink();
-        return THolder<TInflyMessage>(&msg->Message()); 
+        return THolder<TInflyMessage>(&msg->Message());
     }
     return nullptr;
 }
@@ -218,7 +218,7 @@ THolder<TInflyMessage> TInflyMessages::TChangeVisibilityCandidates::Delete(ui64 
         msg->UnLink();
         TInflyMessageWithVisibilityDeadlineKey* byVisibilityDeadline = &msg->Message();
         byVisibilityDeadline->UnLink();
-        return THolder<TInflyMessage>(&msg->Message()); 
+        return THolder<TInflyMessage>(&msg->Message());
     }
     return nullptr;
 }

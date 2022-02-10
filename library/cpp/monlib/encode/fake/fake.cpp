@@ -46,6 +46,6 @@ namespace NMonitoring {
     };
 
     IMetricEncoderPtr EncoderFake() {
-        return MakeHolder<TFakeEncoder>(); 
+        return MakeHolder<TFakeEncoder>();
     }
 }

@@ -69,7 +69,7 @@ EExecutionStatus TPrepareKqpDataTxInRSUnit::Execute(TOperation::TPtr op, TTransa
 void TPrepareKqpDataTxInRSUnit::Complete(TOperation::TPtr, const TActorContext &) {}
 
 THolder<TExecutionUnit> CreatePrepareKqpDataTxInRSUnit(TDataShard &dataShard, TPipeline &pipeline) {
-    return THolder(new TPrepareKqpDataTxInRSUnit(dataShard, pipeline)); 
+    return THolder(new TPrepareKqpDataTxInRSUnit(dataShard, pipeline));
 }
 
 } // namespace NDataShard

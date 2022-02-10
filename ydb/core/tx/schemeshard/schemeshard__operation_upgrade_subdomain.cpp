@@ -1084,25 +1084,25 @@ private:
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) {
         switch(state) {
         case TTxState::Waiting:
-            return THolder(new TWait(OperationId)); 
+            return THolder(new TWait(OperationId));
         case TTxState::CreateParts:
-            return THolder(new TCreateParts(OperationId)); 
+            return THolder(new TCreateParts(OperationId));
         case TTxState::ConfigureParts:
-            return THolder(new TConfigure(OperationId)); 
+            return THolder(new TConfigure(OperationId));
         case TTxState::PublishTenantReadOnly:
-            return THolder(new TPublishTenantReadOnly(OperationId)); 
+            return THolder(new TPublishTenantReadOnly(OperationId));
         case TTxState::PublishGlobal:
-            return THolder(new TPublishGlobal(OperationId, UpgradeSubDomainDecision)); 
+            return THolder(new TPublishGlobal(OperationId, UpgradeSubDomainDecision));
 
         case TTxState::RewriteOwners:
-            return THolder(new TRewriteOwner(OperationId)); 
+            return THolder(new TRewriteOwner(OperationId));
         case TTxState::PublishTenant:
-            return THolder(new TPublishTenant(OperationId)); 
+            return THolder(new TPublishTenant(OperationId));
         case TTxState::DoneMigrateTree:
-            return THolder(new TDoneMigrateTree(OperationId)); 
+            return THolder(new TDoneMigrateTree(OperationId));
 
         case TTxState::DeleteTenantSS:
-            return THolder(new TDeleteTenantSS(OperationId)); 
+            return THolder(new TDeleteTenantSS(OperationId));
 
         default:
             return nullptr;
@@ -1305,7 +1305,7 @@ public:
             TOperation::TPtr operation = context.SS->Operations.at(OperationId.GetTxId());
             Y_VERIFY(operation->Parts.size());
 
-            THolder<TEvPrivate::TEvUndoTenantUpdate> msg = MakeHolder<TEvPrivate::TEvUndoTenantUpdate>(); 
+            THolder<TEvPrivate::TEvUndoTenantUpdate> msg = MakeHolder<TEvPrivate::TEvUndoTenantUpdate>();
             TEvPrivate::TEvUndoTenantUpdate::TPtr personalEv = (TEventHandle<TEvPrivate::TEvUndoTenantUpdate>*) new IEventHandle(
                 context.SS->SelfId(), context.SS->SelfId(), msg.Release());
             operation->Parts.front()->HandleReply(personalEv, context);
@@ -1381,7 +1381,7 @@ private:
         switch(state) {
         case TTxState::Waiting:
         case TTxState::Done:
-            return THolder(new TDecisionDone(OperationId)); 
+            return THolder(new TDecisionDone(OperationId));
         default:
             return nullptr;
         }
@@ -1477,14 +1477,14 @@ public:
 
         switch (decision) {
         case NKikimrSchemeOp::TUpgradeSubDomain::Commit: {
-            THolder<TEvPrivate::TEvCommitTenantUpdate> msg = MakeHolder<TEvPrivate::TEvCommitTenantUpdate>(); 
+            THolder<TEvPrivate::TEvCommitTenantUpdate> msg = MakeHolder<TEvPrivate::TEvCommitTenantUpdate>();
             TEvPrivate::TEvCommitTenantUpdate::TPtr personalEv = (TEventHandle<TEvPrivate::TEvCommitTenantUpdate>*) new IEventHandle(
                 context.SS->SelfId(), context.SS->SelfId(), msg.Release());
             operation->Parts.front()->HandleReply(personalEv, context);
             break;
         }
         case NKikimrSchemeOp::TUpgradeSubDomain::Undo: {
-            THolder<TEvPrivate::TEvUndoTenantUpdate> msg = MakeHolder<TEvPrivate::TEvUndoTenantUpdate>(); 
+            THolder<TEvPrivate::TEvUndoTenantUpdate> msg = MakeHolder<TEvPrivate::TEvUndoTenantUpdate>();
             TEvPrivate::TEvUndoTenantUpdate::TPtr personalEv = (TEventHandle<TEvPrivate::TEvUndoTenantUpdate>*) new IEventHandle(
                 context.SS->SelfId(), context.SS->SelfId(), msg.Release());
             operation->Parts.front()->HandleReply(personalEv, context);

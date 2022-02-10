@@ -289,7 +289,7 @@ void TExecuteDataTxUnit::Complete(TOperation::TPtr, const TActorContext&) {
 }
 
 THolder<TExecutionUnit> CreateExecuteDataTxUnit(TDataShard& dataShard, TPipeline& pipeline) {
-    return THolder(new TExecuteDataTxUnit(dataShard, pipeline)); 
+    return THolder(new TExecuteDataTxUnit(dataShard, pipeline));
 }
 
 } // namespace NDataShard

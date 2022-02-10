@@ -654,9 +654,9 @@ class TPopulator: public TMonitorableActor<TPopulator> {
 
         auto it = Descriptions.find(pathId);
         if (it == Descriptions.end()) {
-            update = MakeHolder<TSchemeBoardEvents::TEvUpdateBuilder>(Owner, Generation, pathId); 
+            update = MakeHolder<TSchemeBoardEvents::TEvUpdateBuilder>(Owner, Generation, pathId);
         } else {
-            update = MakeHolder<TSchemeBoardEvents::TEvUpdateBuilder>(Owner, Generation, it->second.Record); 
+            update = MakeHolder<TSchemeBoardEvents::TEvUpdateBuilder>(Owner, Generation, it->second.Record);
             update->SetDescribeSchemeResult(it->second);
         }
 

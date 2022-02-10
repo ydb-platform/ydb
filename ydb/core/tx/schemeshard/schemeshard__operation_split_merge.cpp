@@ -149,10 +149,10 @@ public:
 
             Y_VERIFY(txState->SplitDescription);
             THolder<TEvDataShard::TEvInitSplitMergeDestination> event =
-                THolder(new TEvDataShard::TEvInitSplitMergeDestination(ui64(OperationId.GetTxId()), context.SS->TabletID(), 
+                THolder(new TEvDataShard::TEvInitSplitMergeDestination(ui64(OperationId.GetTxId()), context.SS->TabletID(),
                                                                    subDomainPathId,
                                                                    splitDescForShard,
-                                                                   context.SS->SelectProcessingPrarams(txState->TargetPathId))); 
+                                                                   context.SS->SelectProcessingPrarams(txState->TargetPathId)));
 
             // Add a new-style CreateTable with correct per-shard settings
             // WARNING: legacy datashard will ignore this and use the schema
@@ -326,7 +326,7 @@ public:
                         << " at tablet " << context.SS->TabletID());
 
             THolder<TEvDataShard::TEvSplit> event =
-                THolder(new TEvDataShard::TEvSplit(ui64(OperationId.GetTxId()))); 
+                THolder(new TEvDataShard::TEvSplit(ui64(OperationId.GetTxId())));
 
             Y_VERIFY(txState->SplitDescription);
             event->Record.MutableSplitDescription()->CopyFrom(*txState->SplitDescription);
@@ -441,7 +441,7 @@ public:
                       "Notify src datashard %" PRIu64 " on partitioning changed splitOp# %" PRIu64 " at tablet %" PRIu64,
                       datashardId, OperationId.GetTxId(), context.SS->TabletID());
 
-            THolder<TEvDataShard::TEvSplitPartitioningChanged> event = MakeHolder<TEvDataShard::TEvSplitPartitioningChanged>(ui64(OperationId.GetTxId())); 
+            THolder<TEvDataShard::TEvSplitPartitioningChanged> event = MakeHolder<TEvDataShard::TEvSplitPartitioningChanged>(ui64(OperationId.GetTxId()));
 
             context.OnComplete.BindMsgToPipe(OperationId, datashardId, shard.Idx, event.Release());
 
@@ -489,13 +489,13 @@ private:
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) {
         switch(state) {
         case TTxState::CreateParts:
-            return THolder(new TCreateParts(OperationId)); 
+            return THolder(new TCreateParts(OperationId));
         case TTxState::ConfigureParts:
-            return THolder(new TConfigureDestination(OperationId)); 
+            return THolder(new TConfigureDestination(OperationId));
         case TTxState::TransferData:
-            return THolder(new TTranserData(OperationId)); 
+            return THolder(new TTranserData(OperationId));
         case TTxState::NotifyPartitioningChanged:
-            return THolder(new TNotifySrc(OperationId)); 
+            return THolder(new TNotifySrc(OperationId));
         default:
             return nullptr;
         }

@@ -85,7 +85,7 @@ struct TSchemeShard::TTxShardStateChanged : public TSchemeShard::TRwTxBase {
 
         // Ack state change notification
         THolder<TEvDataShard::TEvStateChangedResult> event =
-            THolder(new TEvDataShard::TEvStateChangedResult(Self->TabletID(), state)); 
+            THolder(new TEvDataShard::TEvStateChangedResult(Self->TabletID(), state));
         SideEffects.Send(Ev->Get()->GetSource(), std::move(event));
 
         if (state == NDataShard::TShardState::Offline) {

@@ -793,7 +793,7 @@ TOnRebuildGraphResult::TOnRebuildGraphResult(const TString& serializedSignal)
 void TOnRebuildGraphResult::OutText(TStringStream& str, TTimestampData& tsData, const TString& prefix) const {
     str << prefix << TimeStamp(tsData) << " RebuildGraph result received. Here's the trace:" << Endl;
     str << prefix << "{" << Endl;
-    THolder<ITrace> trace(CreateTrace(PbSignal.GetSerializedTrace())); 
+    THolder<ITrace> trace(CreateTrace(PbSignal.GetSerializedTrace()));
     trace->OutText(str, tsData, "    ");
     str << prefix << "}" << Endl;
 }
@@ -826,7 +826,7 @@ void TOnRebuildGraphResult::OutHtmlBody(
 ) const {
     Y_UNUSED(getMyId);
     Y_UNUSED(signalAddress);
-    THolder<ITrace> trace(CreateTrace(PbSignal.GetSerializedTrace())); 
+    THolder<ITrace> trace(CreateTrace(PbSignal.GetSerializedTrace()));
     if (signalAddress.size()) {
         // cuttent signal is not the target
         trace->OutSignalHtmlBody(str, tsInfo, getMyId, signalAddress);

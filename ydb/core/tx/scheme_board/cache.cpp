@@ -2341,7 +2341,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             return false;
         }
 
-        Register(CreateDbResolver(SelfId(), ev->Sender, THolder(request.Release()), it->second)); 
+        Register(CreateDbResolver(SelfId(), ev->Sender, THolder(request.Release()), it->second));
         return true;
     }
 

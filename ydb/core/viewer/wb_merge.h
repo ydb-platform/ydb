@@ -177,7 +177,7 @@ public:
             }
         }
 
-        THolder<TResponseType> result = MakeHolder<TResponseType>(); 
+        THolder<TResponseType> result = MakeHolder<TResponseType>();
         auto* field = TWhiteboardInfo<ResponseType>::GetElementsField(result.Get());
         field->Reserve(mergedData.size());
         for (auto it = mergedData.begin(); it != mergedData.end(); ++it) {

@@ -51,7 +51,7 @@ void TTxProcessor::ProcessTx(ITransaction *tx,
 {
     LOG_TRACE_S(ctx, Service, LogPrefix << "enqueue tx");
 
-    TxQueue.push_back(THolder<ITransaction>(tx)); 
+    TxQueue.push_back(THolder<ITransaction>(tx));
     ProcessNextTx(ctx);
 }
 

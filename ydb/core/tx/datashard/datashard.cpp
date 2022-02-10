@@ -643,7 +643,7 @@ void TDataShard::NotifySchemeshard(const TActorContext& ctx, ui64 txId) {
     }
 
     THolder<TEvDataShard::TEvSchemaChanged> event =
-        THolder(new TEvDataShard::TEvSchemaChanged(ctx.SelfID, TabletID(), State, op->TxId, op->PlanStep, Generation())); 
+        THolder(new TEvDataShard::TEvSchemaChanged(ctx.SelfID, TabletID(), State, op->TxId, op->PlanStep, Generation()));
 
     switch (op->Type) {
         case TSchemaOperation::ETypeBackup:
@@ -659,7 +659,7 @@ void TDataShard::NotifySchemeshard(const TActorContext& ctx, ui64 txId) {
             break;
     }
 
-    SendViaSchemeshardPipe(ctx, op->TabletId, THolder(event.Release())); 
+    SendViaSchemeshardPipe(ctx, op->TabletId, THolder(event.Release()));
 }
 
 bool TDataShard::CheckMediatorAuthorisation(ui64 mediatorId) {
@@ -1468,10 +1468,10 @@ bool TDataShard::CheckDataTxRejectAndReply(TEvDataShard::TEvProposeTransaction* 
 
     if (reject) {
         THolder<TEvDataShard::TEvProposeTransactionResult> result =
-            THolder(new TEvDataShard::TEvProposeTransactionResult(msg->GetTxKind(), 
+            THolder(new TEvDataShard::TEvProposeTransactionResult(msg->GetTxKind(),
                                                             TabletID(),
                                                             msg->GetTxId(),
-                                                            rejectStatus)); 
+                                                            rejectStatus));
 
         result->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, rejectReason);
         LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, rejectReason);
@@ -1529,10 +1529,10 @@ void TDataShard::Handle(TEvDataShard::TEvProposeTransaction::TPtr &ev, const TAc
     }
 
     THolder<TEvDataShard::TEvProposeTransactionResult> result
-        = THolder(new TEvDataShard::TEvProposeTransactionResult(ev->Get()->GetTxKind(), 
+        = THolder(new TEvDataShard::TEvProposeTransactionResult(ev->Get()->GetTxKind(),
                                                         TabletID(),
                                                         ev->Get()->GetTxId(),
-                                                        NKikimrTxDataShard::TEvProposeTransactionResult::ERROR)); 
+                                                        NKikimrTxDataShard::TEvProposeTransactionResult::ERROR));
     result->AddError(NKikimrTxDataShard::TError::BAD_TX_KIND, "Unknown kind of transaction");
     ctx.Send(ev->Get()->GetSource(), result.Release());
     IncCounter(COUNTER_PREPARE_ERROR);
@@ -1565,8 +1565,8 @@ void TDataShard::HandleAsFollower(TEvDataShard::TEvProposeTransaction::TPtr &ev,
 
     if (TxInFly() > GetMaxTxInFly()) {
         THolder<TEvDataShard::TEvProposeTransactionResult> result =
-            THolder(new TEvDataShard::TEvProposeTransactionResult(ev->Get()->GetTxKind(), TabletID(), 
-                ev->Get()->GetTxId(), NKikimrTxDataShard::TEvProposeTransactionResult::OVERLOADED)); 
+            THolder(new TEvDataShard::TEvProposeTransactionResult(ev->Get()->GetTxKind(), TabletID(),
+                ev->Get()->GetTxId(), NKikimrTxDataShard::TEvProposeTransactionResult::OVERLOADED));
         ctx.Send(ev->Get()->GetSource(), result.Release());
         IncCounter(COUNTER_PREPARE_OVERLOADED);
         IncCounter(COUNTER_PREPARE_COMPLETE);
@@ -1579,10 +1579,10 @@ void TDataShard::HandleAsFollower(TEvDataShard::TEvProposeTransaction::TPtr &ev,
     }
 
     THolder<TEvDataShard::TEvProposeTransactionResult> result
-        = THolder(new TEvDataShard::TEvProposeTransactionResult(ev->Get()->GetTxKind(), 
+        = THolder(new TEvDataShard::TEvProposeTransactionResult(ev->Get()->GetTxKind(),
                                                         TabletID(),
                                                         ev->Get()->GetTxId(),
-                                                        NKikimrTxDataShard::TEvProposeTransactionResult::ERROR)); 
+                                                        NKikimrTxDataShard::TEvProposeTransactionResult::ERROR));
     result->AddError(NKikimrTxDataShard::TError::BAD_TX_KIND, "Unsupported transaction kind");
     ctx.Send(ev->Get()->GetSource(), result.Release());
     IncCounter(COUNTER_PREPARE_ERROR);

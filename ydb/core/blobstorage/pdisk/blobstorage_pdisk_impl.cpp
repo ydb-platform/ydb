@@ -515,7 +515,7 @@ bool TPDisk::ReleaseUnusedLogChunks(TCompletionEventSender *completion) {
         Mon.SplicedLogChunks->Add(chunksToRelease.size());
         auto *releaseReq = ReqCreator.CreateFromArgs<TReleaseChunks>(*gapStart, *gapEnd, std::move(chunksToRelease));
 
-        auto flushAction = MakeHolder<TCompletionEventSender>(this, THolder<TReleaseChunks>(releaseReq)); 
+        auto flushAction = MakeHolder<TCompletionEventSender>(this, THolder<TReleaseChunks>(releaseReq));
         TReqId reqId(AtomicIncrement(ReqCreator.LastReqId));
         WriteSysLogRestorePoint(flushAction.Release(), reqId, {});
         PrintLogChunksInfo("log splice");
@@ -901,7 +901,7 @@ void TPDisk::SendChunkReadError(const TIntrusivePtr<TChunkRead>& read, TStringSt
     Y_VERIFY(status != NKikimrProto::OK);
     LOG_ERROR_S(*ActorSystem, NKikimrServices::BS_PDISK, error.Str());
 
-    THolder<NPDisk::TEvChunkReadResult> result = MakeHolder<NPDisk::TEvChunkReadResult>(status, 
+    THolder<NPDisk::TEvChunkReadResult> result = MakeHolder<NPDisk::TEvChunkReadResult>(status,
             read->ChunkIdx, read->Offset, read->Cookie, GetStatusFlags(read->Owner, read->OwnerGroupType), error.Str());
     ActorSystem->Send(read->Sender, result.Release());
     read->IsReplied = true;
@@ -1150,11 +1150,11 @@ void TPDisk::ChunkReserve(TChunkReserve &evChunkReserve) {
     errorReason << allocateError;
 
     if (chunks.empty()) {
-        result = MakeHolder<NPDisk::TEvChunkReserveResult>(NKikimrProto::OUT_OF_SPACE, 
+        result = MakeHolder<NPDisk::TEvChunkReserveResult>(NKikimrProto::OUT_OF_SPACE,
                 NotEnoughDiskSpaceStatusFlags(evChunkReserve.Owner, evChunkReserve.OwnerGroupType),
                 errorReason.Str());
     } else {
-        result = MakeHolder<NPDisk::TEvChunkReserveResult>(NKikimrProto::OK, 0); 
+        result = MakeHolder<NPDisk::TEvChunkReserveResult>(NKikimrProto::OK, 0);
         result->ChunkIds = std::move(chunks);
         result->StatusFlags = GetStatusFlags(evChunkReserve.Owner, evChunkReserve.OwnerGroupType);
     }

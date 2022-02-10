@@ -780,7 +780,7 @@ protected:
     TOutputOpData &OutputDataRef()
     {
         if (!OutputData)
-            OutputData = MakeHolder<TOutputOpData>(); 
+            OutputData = MakeHolder<TOutputOpData>();
         return *OutputData;
     }
     void ClearOutputData() { OutputData = nullptr; }
@@ -788,7 +788,7 @@ protected:
     TInputOpData &InputDataRef()
     {
         if (!InputData)
-            InputData = MakeHolder<TInputOpData>(); 
+            InputData = MakeHolder<TInputOpData>();
         return *InputData;
     }
     void ClearInputData() { InputData = nullptr; }

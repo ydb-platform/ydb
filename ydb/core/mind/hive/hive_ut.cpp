@@ -816,7 +816,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         TTabletTypes::EType tabletType = TTabletTypes::Dummy;
         ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 0, tabletType, BINDED_CHANNELS), 0, true);
         MakeSureTabletIsUp(runtime, tabletId, 0);
-        THolder<TEvHive::TEvDeleteOwnerTablets> deleteOwner = MakeHolder<TEvHive::TEvDeleteOwnerTablets>(testerTablet, 1); 
+        THolder<TEvHive::TEvDeleteOwnerTablets> deleteOwner = MakeHolder<TEvHive::TEvDeleteOwnerTablets>(testerTablet, 1);
         TActorId senderB = runtime.AllocateEdgeActor(0);
         runtime.SendToPipe(hiveTablet, senderB, deleteOwner.Release(), 0, GetPipeConfigWithRetries());
         TAutoPtr<IEventHandle> handle;
@@ -954,7 +954,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             }
         } while (true);
 
-        THolder<TEvHive::TEvCreateTablet> createHive = MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 0, TTabletTypes::Hive, BINDED_CHANNELS); 
+        THolder<TEvHive::TEvCreateTablet> createHive = MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 0, TTabletTypes::Hive, BINDED_CHANNELS);
         createHive->Record.AddAllowedDomains();
         createHive->Record.MutableAllowedDomains(0)->SetSchemeShard(subdomainKey.first);
         createHive->Record.MutableAllowedDomains(0)->SetPathId(subdomainKey.second);
@@ -973,7 +973,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
         MakeSureTabletIsUp(runtime, subHiveTablet, 0); // sub hive good
 
-        THolder<TEvHive::TEvCreateTablet> createTablet = MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 1, TTabletTypes::Dummy, BINDED_CHANNELS); 
+        THolder<TEvHive::TEvCreateTablet> createTablet = MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 1, TTabletTypes::Dummy, BINDED_CHANNELS);
         createTablet->Record.AddAllowedDomains();
         createTablet->Record.MutableAllowedDomains(0)->SetSchemeShard(subdomainKey.first);
         createTablet->Record.MutableAllowedDomains(0)->SetPathId(subdomainKey.second);
@@ -1016,7 +1016,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             }
         } while (true);
 
-        THolder<TEvHive::TEvCreateTablet> createHive = MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 0, TTabletTypes::Hive, BINDED_CHANNELS); 
+        THolder<TEvHive::TEvCreateTablet> createHive = MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 0, TTabletTypes::Hive, BINDED_CHANNELS);
         createHive->Record.AddAllowedDomains();
         createHive->Record.MutableAllowedDomains(0)->SetSchemeShard(subdomainKey.first);
         createHive->Record.MutableAllowedDomains(0)->SetPathId(subdomainKey.second);
@@ -1035,14 +1035,14 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
         MakeSureTabletIsUp(runtime, subHiveTablet, 0); // sub hive good
 
-        THolder<TEvHive::TEvCreateTablet> createTablet1 = MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 1, TTabletTypes::Dummy, BINDED_CHANNELS); 
+        THolder<TEvHive::TEvCreateTablet> createTablet1 = MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 1, TTabletTypes::Dummy, BINDED_CHANNELS);
         createTablet1->Record.AddAllowedDomains();
         createTablet1->Record.MutableAllowedDomains(0)->SetSchemeShard(subdomainKey.first);
         createTablet1->Record.MutableAllowedDomains(0)->SetPathId(subdomainKey.second);
         ui64 tabletId1 = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createTablet1), 0, true);
         MakeSureTabletIsUp(runtime, tabletId1, 0);
 
-        THolder<TEvHive::TEvCreateTablet> createTablet2 = MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 2, TTabletTypes::Dummy, BINDED_CHANNELS); 
+        THolder<TEvHive::TEvCreateTablet> createTablet2 = MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 2, TTabletTypes::Dummy, BINDED_CHANNELS);
         createTablet2->Record.AddAllowedDomains();
         createTablet2->Record.MutableAllowedDomains(0)->SetSchemeShard(subdomainKey.first);
         createTablet2->Record.MutableAllowedDomains(0)->SetPathId(subdomainKey.second);
@@ -1061,7 +1061,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         UNIT_ASSERT_VALUES_EQUAL(createTabletReply->Record.GetForwardRequest().GetHiveTabletId(), hiveTablet);
 
         // trying to delete same tablet from sub domain hive
-        THolder<TEvHive::TEvDeleteTablet> deleteTablet1 = MakeHolder<TEvHive::TEvDeleteTablet>(testerTablet, 1, 0); 
+        THolder<TEvHive::TEvDeleteTablet> deleteTablet1 = MakeHolder<TEvHive::TEvDeleteTablet>(testerTablet, 1, 0);
         deleteTablet1->Record.AddTabletID(tabletId1);
 
         runtime.SendToPipe(subHiveTablet, sender, deleteTablet1.Release(), 0, GetPipeConfigWithRetries());
@@ -1081,7 +1081,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         UNIT_ASSERT_VALUES_EQUAL(createTabletReply->Record.GetForwardRequest().GetHiveTabletId(), subHiveTablet);
 
         // trying to delete same tablet from root hive
-        THolder<TEvHive::TEvDeleteTablet> deleteTablet2 = MakeHolder<TEvHive::TEvDeleteTablet>(testerTablet, 2, 0); 
+        THolder<TEvHive::TEvDeleteTablet> deleteTablet2 = MakeHolder<TEvHive::TEvDeleteTablet>(testerTablet, 2, 0);
         deleteTablet2->Record.AddTabletID(tabletId2);
 
         runtime.SendToPipe(hiveTablet, sender, deleteTablet2.Release(), 0, GetPipeConfigWithRetries());
@@ -2890,7 +2890,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         }
         for (int nodeIdx = 0; nodeIdx < NUM_NODES; ++nodeIdx) {
             TActorId senderLocal = runtime.AllocateEdgeActor(nodeIdx);
-            THolder<TEvHive::TEvTabletMetrics> ev = MakeHolder<TEvHive::TEvTabletMetrics>(); 
+            THolder<TEvHive::TEvTabletMetrics> ev = MakeHolder<TEvHive::TEvTabletMetrics>();
             ev->Record.MutableTotalResourceUsage()->SetCPU(999); // KIKIMR-9870
             runtime.SendToPipe(hiveTablet, senderLocal, ev.Release(), nodeIdx, GetPipeConfigWithRetries());
             TAutoPtr<IEventHandle> handle;
@@ -2934,7 +2934,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         {
             int i = 1;
             for (ui64 tabletId : tablets) {
-                THolder<TEvHive::TEvTabletMetrics> metrics = MakeHolder<TEvHive::TEvTabletMetrics>(); 
+                THolder<TEvHive::TEvTabletMetrics> metrics = MakeHolder<TEvHive::TEvTabletMetrics>();
                 NKikimrHive::TTabletMetrics* metric = metrics->Record.AddTabletMetrics();
                 metric->SetTabletID(tabletId);
                 metric->MutableResourceUsage()->SetNetwork(100000 * i);
@@ -3221,7 +3221,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         {
             std::array<int, NUM_NODES> nodeTablets = {};
             {
-                THolder<TEvHive::TEvRequestHiveInfo> request = MakeHolder<TEvHive::TEvRequestHiveInfo>(); 
+                THolder<TEvHive::TEvRequestHiveInfo> request = MakeHolder<TEvHive::TEvRequestHiveInfo>();
                 runtime.SendToPipe(hiveTablet, senderA, request.Release());
                 TAutoPtr<IEventHandle> handle;
                 TEvHive::TEvResponseHiveInfo* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle);
@@ -3241,7 +3241,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         {
             std::array<int, NUM_NODES> nodeTablets = {};
             {
-                THolder<TEvHive::TEvRequestHiveInfo> request = MakeHolder<TEvHive::TEvRequestHiveInfo>(); 
+                THolder<TEvHive::TEvRequestHiveInfo> request = MakeHolder<TEvHive::TEvRequestHiveInfo>();
                 request->Record.SetReturnFollowers(true);
                 runtime.SendToPipe(hiveTablet, senderA, request.Release());
                 TAutoPtr<IEventHandle> handle;
@@ -3263,7 +3263,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         // report metrics for leaders only
         {
             for (ui64 tabletId : tablets) {
-                THolder<TEvHive::TEvTabletMetrics> metrics = MakeHolder<TEvHive::TEvTabletMetrics>(); 
+                THolder<TEvHive::TEvTabletMetrics> metrics = MakeHolder<TEvHive::TEvTabletMetrics>();
                 NKikimrHive::TTabletMetrics* metric = metrics->Record.AddTabletMetrics();
                 metric->SetTabletID(tabletId);
                 metric->MutableResourceUsage()->SetCPU(5000);

@@ -44,7 +44,7 @@ void TIndexMonPage::Output(IMonHttpRequest& request) {
         }
     }
     if (found) {
-        THolder<IMonHttpRequest> child(request.MakeChild(found.Get(), TString{pathInfo})); 
+        THolder<IMonHttpRequest> child(request.MakeChild(found.Get(), TString{pathInfo}));
         found->Output(*child);
     } else {
         request.Output() << HTTPNOTFOUND;

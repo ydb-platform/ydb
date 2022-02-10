@@ -84,7 +84,7 @@ THolder<TExecutionUnit> CreateInitiateBuildIndexUnit(
     TDataShard& dataShard,
     TPipeline& pipeline)
 {
-    return THolder(new TInitiateBuildIndexUnit(dataShard, pipeline)); 
+    return THolder(new TInitiateBuildIndexUnit(dataShard, pipeline));
 }
 
 } // namespace NDataShard

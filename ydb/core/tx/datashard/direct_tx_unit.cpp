@@ -64,7 +64,7 @@ public:
 }; // TDirectOpUnit
 
 THolder<TExecutionUnit> CreateDirectOpUnit(TDataShard& self, TPipeline& pipeline) {
-    return THolder(new TDirectOpUnit(self, pipeline)); 
+    return THolder(new TDirectOpUnit(self, pipeline));
 }
 
 } // NDataShard

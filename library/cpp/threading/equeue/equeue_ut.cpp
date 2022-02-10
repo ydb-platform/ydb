@@ -15,7 +15,7 @@ Y_UNIT_TEST_SUITE(TElasticQueueTest) {
 
     struct TQueueSetup {
         TQueueSetup() {
-            Queue.Reset(new TElasticQueue(MakeHolder<TSimpleThreadPool>())); 
+            Queue.Reset(new TElasticQueue(MakeHolder<TSimpleThreadPool>()));
             Queue->Start(ThreadCount, MaxQueueSize);
         }
         ~TQueueSetup() {

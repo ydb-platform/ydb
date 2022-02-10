@@ -805,20 +805,20 @@ protected:
         }
         if (IsFileOpened) {
             IoContext->SetActorSystem(ActorSystem);
-            CompletionThread = MakeHolder<TCompletionThread>(*this, MaxQueuedCompletionActions); 
-            TrimThread = MakeHolder<TTrimThread>(*this); 
-            SharedCallback = MakeHolder<TSharedCallback>(*this); 
+            CompletionThread = MakeHolder<TCompletionThread>(*this, MaxQueuedCompletionActions);
+            TrimThread = MakeHolder<TTrimThread>(*this);
+            SharedCallback = MakeHolder<TSharedCallback>(*this);
             if (Flags & TDeviceMode::UseSpdk) {
-                SpdkSubmitGetThread = MakeHolder<TSubmitGetThread>(*this); 
+                SpdkSubmitGetThread = MakeHolder<TSubmitGetThread>(*this);
                 SpdkState->LaunchThread(TSubmitGetThread::ThreadProcSpdk, SpdkSubmitGetThread.Get());
             } else {
                 if (Flags & TDeviceMode::UseSubmitGetThread) {
-                    SubmitThread = MakeHolder<TSubmitGetThread>(*this); 
+                    SubmitThread = MakeHolder<TSubmitGetThread>(*this);
                     SubmitThread->Start();
                 } else {
-                    SubmitThread = MakeHolder<TSubmitThread>(*this); 
+                    SubmitThread = MakeHolder<TSubmitThread>(*this);
                     SubmitThread->Start();
-                    GetEventsThread = MakeHolder<TGetThread>(*this); 
+                    GetEventsThread = MakeHolder<TGetThread>(*this);
                     GetEventsThread->Start();
                 }
             }

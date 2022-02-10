@@ -80,7 +80,7 @@ THolder<TKeyDesc> ExtractKeyTuple(const TTableId& tableId, TTupleLiteral* tuple,
 
     TTableRange range(TConstArrayRef<TCell>(fromValues.data(), tuple->GetValuesCount()),
         inclusiveFrom, TConstArrayRef<TCell>(toValues.data(), staticComponents), inclusiveTo, point);
-    return MakeHolder<TKeyDesc>(tableId, range, rowOperation, keyColumnTypes, columns); 
+    return MakeHolder<TKeyDesc>(tableId, range, rowOperation, keyColumnTypes, columns);
 }
 
 void ExtractReadColumns(TStructType* columnsType, TStructLiteral* tags, TVector<TKeyDesc::TColumnOp>& columns) {

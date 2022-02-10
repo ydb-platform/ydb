@@ -152,7 +152,7 @@ public:
 
     void Handle(TEvWhiteboard::TEvTabletLookupResponse::TPtr& ev, const TActorContext& ctx) {
         ui64 nodeId = ev.Get()->Cookie;
-        TracedTablets[nodeId] = THolder<TReplyStatus>(new TReplyStatus({ TReplyStatus::OK, THolder<TEvWhiteboard::TEvTabletLookupResponse>(ev->Release()) })); 
+        TracedTablets[nodeId] = THolder<TReplyStatus>(new TReplyStatus({ TReplyStatus::OK, THolder<TEvWhiteboard::TEvTabletLookupResponse>(ev->Release()) }));
         NodeTabletInfoReceived(ctx);
     }
 
@@ -165,7 +165,7 @@ public:
 
     void BadResponseReceived(ui32 nodeId, const TActorContext& ctx, TReplyStatus::EStatus status) {
         if (TracedTablets[nodeId] == nullptr) {
-            TracedTablets[nodeId] = THolder<TReplyStatus>(new TReplyStatus({ status, nullptr })); 
+            TracedTablets[nodeId] = THolder<TReplyStatus>(new TReplyStatus({ status, nullptr }));
             NodeTabletInfoReceived(ctx);
         }
     }
@@ -181,7 +181,7 @@ public:
     void HandleTimeout(const TActorContext &ctx) {
         for (auto& nodeTabletTracesPair : TracedTablets) {
             if (!nodeTabletTracesPair.second) {
-                nodeTabletTracesPair.second = THolder<TReplyStatus>(new TReplyStatus({ TReplyStatus::TIMEOUT, nullptr })); 
+                nodeTabletTracesPair.second = THolder<TReplyStatus>(new TReplyStatus({ TReplyStatus::TIMEOUT, nullptr }));
             }
         }
         ReplyAndDie(ctx);
@@ -316,7 +316,7 @@ public:
 
     void SendRequest(ui32 nodeId, const TActorContext& ctx) {
         TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId);
-        THolder<TEvWhiteboard::TEvTraceLookupRequest> request = MakeHolder<TEvWhiteboard::TEvTraceLookupRequest>(); 
+        THolder<TEvWhiteboard::TEvTraceLookupRequest> request = MakeHolder<TEvWhiteboard::TEvTraceLookupRequest>();
         auto& record = request->Record;
         record.SetTabletID(TabletId);
         ctx.Send(whiteboardServiceId, request.Release(), IEventHandle::FlagTrackDelivery, nodeId);
@@ -335,7 +335,7 @@ public:
 
     void Handle(TEvWhiteboard::TEvTraceLookupResponse::TPtr& ev, const TActorContext& ctx) {
         ui64 nodeId = ev.Get()->Cookie;
-        TabletTraces[nodeId] = THolder<TReplyStatus>(new TReplyStatus({ TReplyStatus::OK, THolder<TEvWhiteboard::TEvTraceLookupResponse>(ev->Release()) })); 
+        TabletTraces[nodeId] = THolder<TReplyStatus>(new TReplyStatus({ TReplyStatus::OK, THolder<TEvWhiteboard::TEvTraceLookupResponse>(ev->Release()) }));
         NodeTabletInfoReceived(ctx);
     }
 
@@ -348,7 +348,7 @@ public:
 
     void BadResponseReceived(ui32 nodeId, const TActorContext& ctx, TReplyStatus::EStatus status) {
         if (TabletTraces[nodeId] == nullptr) {
-            TabletTraces[nodeId] = THolder<TReplyStatus>(new TReplyStatus({ status, nullptr })); 
+            TabletTraces[nodeId] = THolder<TReplyStatus>(new TReplyStatus({ status, nullptr }));
             NodeTabletInfoReceived(ctx);
         }
     }
@@ -462,7 +462,7 @@ public:
     void HandleTimeout(const TActorContext &ctx) {
         for (auto& nodeTabletTracesPair : TabletTraces) {
             if (!nodeTabletTracesPair.second) {
-                nodeTabletTracesPair.second = THolder<TReplyStatus>(new TReplyStatus({ TReplyStatus::TIMEOUT, nullptr })); 
+                nodeTabletTracesPair.second = THolder<TReplyStatus>(new TReplyStatus({ TReplyStatus::TIMEOUT, nullptr }));
             }
         }
         ReplyAndDie(ctx);
@@ -491,7 +491,7 @@ public:
 
     void Bootstrap(const TActorContext& ctx) {
         TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(TraceInfo.NodeId);
-        THolder<TEvWhiteboard::TEvTraceRequest> request = MakeHolder<TEvWhiteboard::TEvTraceRequest>(); 
+        THolder<TEvWhiteboard::TEvTraceRequest> request = MakeHolder<TEvWhiteboard::TEvTraceRequest>();
         auto& record = request->Record;
         record.SetTabletID(TraceInfo.TabletId);
         NTracing::TraceIDFromTraceID(TraceInfo.TraceId, record.MutableTraceID());
@@ -568,7 +568,7 @@ public:
 
     void Bootstrap(const TActorContext& ctx) {
         TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(TraceInfo.NodeId);
-        THolder<TEvWhiteboard::TEvSignalBodyRequest> request = MakeHolder<TEvWhiteboard::TEvSignalBodyRequest>(); 
+        THolder<TEvWhiteboard::TEvSignalBodyRequest> request = MakeHolder<TEvWhiteboard::TEvSignalBodyRequest>();
         auto& record = request->Record;
         record.SetTabletID(TraceInfo.TabletId);
         NTracing::TraceIDFromTraceID(TraceInfo.TraceId, record.MutableTraceID());

@@ -590,7 +590,7 @@ public:
     void ErrorHandle(NPDisk::TEvChunkRead::TPtr &ev) {
         const NPDisk::TEvChunkRead &evChunkRead = *ev->Get();
         PDisk->Mon.GetReadCounter(evChunkRead.PriorityClass)->CountRequest(0);
-        THolder<NPDisk::TEvChunkReadResult> result = MakeHolder<NPDisk::TEvChunkReadResult>(NKikimrProto::CORRUPTED, 
+        THolder<NPDisk::TEvChunkReadResult> result = MakeHolder<NPDisk::TEvChunkReadResult>(NKikimrProto::CORRUPTED,
             evChunkRead.ChunkIdx, evChunkRead.Offset, evChunkRead.Cookie, 0, "PDisk is in error state");
         LOG_DEBUG(*TlsActivationContext, NKikimrServices::BS_PDISK, "PDiskId# %" PRIu32 " %s To: %" PRIu64 " Marker# BSY02",
             (ui32)PDisk->PDiskId, result->ToString().c_str(), (ui64)ev->Sender.LocalId());

@@ -39,7 +39,7 @@ private:
 };
 
 THolder<IGraphTransformer> CreateSolomonLoadTableMetadataTransformer(TSolomonState::TPtr state) {
-    return THolder(new TSolomonLoadTableMetadataTransformer(state)); 
+    return THolder(new TSolomonLoadTableMetadataTransformer(state));
 }
 
 } // namespace NYql

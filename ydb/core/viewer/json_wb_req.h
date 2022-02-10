@@ -73,7 +73,7 @@ public:
 
     THolder<RequestType> BuildRequest(TNodeId nodeId) {
         Y_UNUSED(nodeId);
-        THolder<RequestType> request = MakeHolder<RequestType>(); 
+        THolder<RequestType> request = MakeHolder<RequestType>();
         if (ChangedSince != 0) {
             request->Record.SetChangedSince(ChangedSince);
         }

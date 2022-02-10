@@ -72,7 +72,7 @@ void TTrace::OutHtml(TStringStream& str, const TTimestampInfo& tsInfo, std::func
     ui32 i = 0;
     TTimestampData tsData(tsInfo, TInstant::MicroSeconds(SelfID.CreationTime));
     for (auto& serializedSignal : Signals) {
-        THolder<ITraceSignal> signal(signalFactory.Create(serializedSignal)); 
+        THolder<ITraceSignal> signal(signalFactory.Create(serializedSignal));
         if (signal) {
             signal->OutHtmlHeader(
                 str,
@@ -99,7 +99,7 @@ void TTrace::OutText(TStringStream& str, TTimestampInfo& tsInfo, const TString& 
     TSignalFactory& signalFactory = TSignalFactory::Instance();
     TTimestampData tsData(tsInfo, TInstant::MicroSeconds(SelfID.CreationTime));
     for (auto& serializedSignal : Signals) {
-        THolder<ITraceSignal> signal(signalFactory.Create(serializedSignal)); 
+        THolder<ITraceSignal> signal(signalFactory.Create(serializedSignal));
         if (signal) {
             signal->OutText(
                 str,
@@ -167,7 +167,7 @@ void TTrace::OutSignalHtmlBody(TStringStream& str
     }
     signalAddress.pop_front();
     TSignalFactory& signalFactory = TSignalFactory::Instance();
-    THolder<ITraceSignal> signal(signalFactory.Create(*signalIterator)); 
+    THolder<ITraceSignal> signal(signalFactory.Create(*signalIterator));
     if (signal) {
         signal->OutHtmlBody(
             str,

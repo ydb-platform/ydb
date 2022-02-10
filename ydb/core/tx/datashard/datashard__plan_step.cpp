@@ -74,14 +74,14 @@ void TDataShard::TTxPlanStep::Complete(const TActorContext &ctx) {
 
     for (auto& kv : TxByAck) {
         THolder<TEvTxProcessing::TEvPlanStepAck> ack =
-            MakeHolder<TEvTxProcessing::TEvPlanStepAck>(Self->TabletID(), step, kv.second.begin(), kv.second.end()); 
+            MakeHolder<TEvTxProcessing::TEvPlanStepAck>(Self->TabletID(), step, kv.second.begin(), kv.second.end());
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Sending '" << ack->ToString());
 
         ctx.Send(kv.first, ack.Release()); // Ack to Tx coordinator
     }
 
     THolder<TEvTxProcessing::TEvPlanStepAccepted> accepted =
-        MakeHolder<TEvTxProcessing::TEvPlanStepAccepted>(Self->TabletID(), step); 
+        MakeHolder<TEvTxProcessing::TEvPlanStepAccepted>(Self->TabletID(), step);
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Sending '" << accepted->ToString());
 
     ctx.Send(Ev->Sender, accepted.Release()); // Reply to the mediator

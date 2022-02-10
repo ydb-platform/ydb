@@ -1506,7 +1506,7 @@ private:
                 info.PipeToOwner = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, ownerTabletId, clientConfig));
             }
 
-            THolder<TEvDataShard::TEvReturnBorrowedPart> ev = MakeHolder<TEvDataShard::TEvReturnBorrowedPart>(MyTabletID, partMetaVec); 
+            THolder<TEvDataShard::TEvReturnBorrowedPart> ev = MakeHolder<TEvDataShard::TEvReturnBorrowedPart>(MyTabletID, partMetaVec);
             NTabletPipe::SendData(ctx, info.PipeToOwner, ev.Release());
         }
 
@@ -1587,7 +1587,7 @@ private:
             NTabletPipe::TClientConfig clientConfig;
             PipesToDstShards[dstTabletId] = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, dstTabletId, clientConfig));
 
-            THolder<TEvDataShard::TEvSplitTransferSnapshot> ev = MakeHolder<TEvDataShard::TEvSplitTransferSnapshot>(0); 
+            THolder<TEvDataShard::TEvSplitTransferSnapshot> ev = MakeHolder<TEvDataShard::TEvSplitTransferSnapshot>(0);
             ev->Record.CopyFrom(*DataToSend[dstTabletId]);
             ev->Record.SetSrcTabletGeneration(Self->Generation());
 

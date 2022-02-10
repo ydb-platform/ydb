@@ -87,7 +87,7 @@ public:
 
 THolder<TExecutionUnit> CreateAlterMoveShadowUnit(TDataShard& dataShard, TPipeline& pipeline)
 {
-    return THolder(new TAlterMoveShadowUnit(dataShard, pipeline)); 
+    return THolder(new TAlterMoveShadowUnit(dataShard, pipeline));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -165,7 +165,7 @@ void TAlterTableUnit::Complete(TOperation::TPtr,
 THolder<TExecutionUnit> CreateAlterTableUnit(TDataShard &dataShard,
                                              TPipeline &pipeline)
 {
-    return THolder(new TAlterTableUnit(dataShard, pipeline)); 
+    return THolder(new TAlterTableUnit(dataShard, pipeline));
 }
 
 } // namespace NDataShard

@@ -88,7 +88,7 @@ public:
 
     void HandleBrowse(TEvInterconnect::TEvNodesInfo::TPtr& ev, const TActorContext& ctx) {
         if (Tablets) {
-            THolder<TEvTxUserProxy::TEvNavigate> request = MakeHolder<TEvTxUserProxy::TEvNavigate>(); 
+            THolder<TEvTxUserProxy::TEvNavigate> request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
             if (!Event->Get()->UserToken.empty()) {
                 request->Record.SetUserToken(Event->Get()->UserToken);
             }

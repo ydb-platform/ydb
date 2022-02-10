@@ -54,7 +54,7 @@ THolder<TExecutionUnit> CreateDropPersistentSnapshotUnit(
         TDataShard& dataShard,
         TPipeline& pipeline)
 {
-    return THolder(new TDropPersistentSnapshotUnit(dataShard, pipeline)); 
+    return THolder(new TDropPersistentSnapshotUnit(dataShard, pipeline));
 }
 
 } // namespace NDataShard

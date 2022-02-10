@@ -25,7 +25,7 @@ void TPersQueueCacheL2::Bootstrap(const TActorContext& ctx)
 
 void TPersQueueCacheL2::Handle(TEvPqCache::TEvCacheL2Request::TPtr& ev, const TActorContext& ctx)
 {
-    THolder<TCacheL2Request> request(ev->Get()->Data.Release()); 
+    THolder<TCacheL2Request> request(ev->Get()->Data.Release());
     TString topicName = request->TopicName;
 
     Y_VERIFY(topicName.size(), "PQ L2. Empty topic name in L2");
@@ -52,7 +52,7 @@ void TPersQueueCacheL2::SendResponses(const TActorContext& ctx, const THashMap<T
 
         THolder<TCacheL2Response>& resp = responses[evicted->GetOwner()];
         if (!resp) {
-            resp = MakeHolder<TCacheL2Response>(); 
+            resp = MakeHolder<TCacheL2Response>();
             resp->TopicName = key.TopicName;
         }
 

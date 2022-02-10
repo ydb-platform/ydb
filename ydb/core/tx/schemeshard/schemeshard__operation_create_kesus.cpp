@@ -278,13 +278,13 @@ class TCreateKesus: public TSubOperation {
         switch(state) {
         case TTxState::Waiting:
         case TTxState::CreateParts:
-            return THolder(new TCreateParts(OperationId)); 
+            return THolder(new TCreateParts(OperationId));
         case TTxState::ConfigureParts:
-            return THolder(new TConfigureParts(OperationId)); 
+            return THolder(new TConfigureParts(OperationId));
         case TTxState::Propose:
-            return THolder(new TPropose(OperationId)); 
+            return THolder(new TPropose(OperationId));
         case TTxState::Done:
-            return THolder(new TDone(OperationId)); 
+            return THolder(new TDone(OperationId));
         default:
             return nullptr;
         }

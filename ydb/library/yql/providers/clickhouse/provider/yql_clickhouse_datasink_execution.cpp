@@ -26,7 +26,7 @@ private:
 };
 
 THolder<TExecTransformerBase> CreateClickHouseDataSinkExecTransformer(TClickHouseState::TPtr state) {
-    return THolder(new TClickHouseDataSinkExecTransformer(state)); 
+    return THolder(new TClickHouseDataSinkExecTransformer(state));
 }
 
 } // namespace NYql

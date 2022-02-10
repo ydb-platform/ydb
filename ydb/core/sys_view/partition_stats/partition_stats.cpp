@@ -308,7 +308,7 @@ private:
 };
 
 THolder<IActor> CreatePartitionStatsCollector(size_t batchSize, size_t pendingRequestsLimit) {
-    return MakeHolder<TPartitionStatsCollector>(batchSize, pendingRequestsLimit); 
+    return MakeHolder<TPartitionStatsCollector>(batchSize, pendingRequestsLimit);
 }
 
 class TPartitionStatsScan : public TScanActorBase<TPartitionStatsScan> {
@@ -550,7 +550,7 @@ private:
 THolder<IActor> CreatePartitionStatsScan(const TActorId& ownerId, ui32 scanId, const TTableId& tableId,
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
-    return MakeHolder<TPartitionStatsScan>(ownerId, scanId, tableId, tableRange, columns); 
+    return MakeHolder<TPartitionStatsScan>(ownerId, scanId, tableId, tableRange, columns);
 }
 
 } // NSysView

@@ -36,7 +36,7 @@ THolder<TExecutionUnit> CreateStoreSnapshotTxUnit(
         TDataShard& dataShard,
         TPipeline& pipeline)
 {
-    return THolder(new TStoreSnapshotTxUnit(dataShard, pipeline)); 
+    return THolder(new TStoreSnapshotTxUnit(dataShard, pipeline));
 }
 
 } // namespace NDataShard

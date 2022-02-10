@@ -245,7 +245,7 @@ namespace NPQ {
                 Cache.SaveHeadBlobs(ctx, kvReq);
             }
 
-            THolder<TEvKeyValue::TEvResponse> response = MakeHolder<TEvKeyValue::TEvResponse>(); 
+            THolder<TEvKeyValue::TEvResponse> response = MakeHolder<TEvKeyValue::TEvResponse>();
             response->Record = std::move(ev->Get()->Record);
 
             response->Record.ClearCookie(); //cookie must not leak to Partition - it uses cookie for SetOffset requests
@@ -287,7 +287,7 @@ namespace NPQ {
 
             ui64 cookie = SaveKvRequest(std::move(kvReq));
 
-            THolder<TEvKeyValue::TEvRequest> request = MakeHolder<TEvKeyValue::TEvRequest>(); 
+            THolder<TEvKeyValue::TEvRequest> request = MakeHolder<TEvKeyValue::TEvRequest>();
             request->Record = std::move(ev->Get()->Record);
             request->Record.SetCookie(cookie);
             ctx.Send(Tablet, request.Release()); // -> KV
@@ -295,7 +295,7 @@ namespace NPQ {
 
         void Handle(TEvPqCache::TEvCacheL2Response::TPtr& ev, const TActorContext& ctx)
         {
-            THolder<TCacheL2Response> resp(ev->Get()->Data.Release()); 
+            THolder<TCacheL2Response> resp(ev->Get()->Data.Release());
             Y_VERIFY(resp->TopicName == TopicName);
 
             for (TCacheBlobL2& blob : resp->Removed)
@@ -354,7 +354,7 @@ namespace NPQ {
             if (now < CountersUpdateTime + TDuration::Seconds(UPDATE_TIMEOUT_S))
                 return;
 
-            THolder<TEvPQ::TEvTabletCacheCounters> event = MakeHolder<TEvPQ::TEvTabletCacheCounters>(); 
+            THolder<TEvPQ::TEvTabletCacheCounters> event = MakeHolder<TEvPQ::TEvTabletCacheCounters>();
             event->Counters.CacheSizeBytes = Cache.GetCounters().SizeBytes;
             event->Counters.CacheSizeBlobs = Cache.GetSize();
             event->Counters.CachedOnRead = Cache.GetCounters().CachedOnRead;

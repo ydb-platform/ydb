@@ -294,11 +294,11 @@ class TDropPQ: public TSubOperation {
         switch(state) {
         case TTxState::Waiting:
         case TTxState::DropParts:
-            return THolder(new TDropParts(OperationId)); 
+            return THolder(new TDropParts(OperationId));
         case TTxState::DeleteParts:
-            return THolder(new TDeleteParts(OperationId)); 
+            return THolder(new TDeleteParts(OperationId));
         case TTxState::Propose:
-            return THolder(new TPropose(OperationId)); 
+            return THolder(new TPropose(OperationId));
         case TTxState::Done:
             return THolder(new TDone(OperationId));
         default:

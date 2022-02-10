@@ -173,7 +173,7 @@ public:
         TLightWriteGuard g{ Lock };
         auto it = Factorymap.find(signalType);
         if (it == Factorymap.end()) {
-            Factorymap[signalType] = MakeHolder<TSignalCreator<TSignalType>>(); 
+            Factorymap[signalType] = MakeHolder<TSignalCreator<TSignalType>>();
         }
     }
 

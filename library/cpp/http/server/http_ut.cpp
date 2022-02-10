@@ -167,7 +167,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
             THolder<TSocket> singleReqSocket;
             if (KeepAliveConnection) {
                 if (!KeepAlivedSocket) {
-                    KeepAlivedSocket = MakeHolder<TSocket>(TNetworkAddress("localhost", Port), TDuration::Seconds(10)); 
+                    KeepAlivedSocket = MakeHolder<TSocket>(TNetworkAddress("localhost", Port), TDuration::Seconds(10));
                 }
                 s = KeepAlivedSocket.Get();
             } else {
@@ -711,7 +711,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
             for (size_t i = 0; i < 3; ++i) {
                 auto func = [&server, port, keepAlive]() {
                     server.BusyThread();
-                    THolder<TTestRequest> r = MakeHolder<TTestRequest>(port); 
+                    THolder<TTestRequest> r = MakeHolder<TTestRequest>(port);
                     r->KeepAliveConnection = keepAlive;
                     r->Execute();
                 };

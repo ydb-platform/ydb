@@ -238,7 +238,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::OnTabletNotReady(TActiveTransaction& tx,
 void TExecuteKqpDataTxUnit::Complete(TOperation::TPtr, const TActorContext&) {}
 
 THolder<TExecutionUnit> CreateExecuteKqpDataTxUnit(TDataShard& dataShard, TPipeline& pipeline) {
-    return THolder(new TExecuteKqpDataTxUnit(dataShard, pipeline)); 
+    return THolder(new TExecuteKqpDataTxUnit(dataShard, pipeline));
 }
 
 } // namespace NDataShard

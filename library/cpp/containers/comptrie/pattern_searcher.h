@@ -42,7 +42,7 @@ public:
 
 public:
     TCompactPatternSearcherBuilder() {
-        TBase::Impl = MakeHolder<TCompactPatternSearcherBuilderImpl>(); 
+        TBase::Impl = MakeHolder<TCompactPatternSearcherBuilderImpl>();
     }
 
     bool Add(const TSymbol* key, size_t keyLength, const TData& value) {

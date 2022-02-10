@@ -53,7 +53,7 @@ void TCompletedOperationsUnit::Complete(TOperation::TPtr,
 THolder<TExecutionUnit> CreateCompletedOperationsUnit(TDataShard &dataShard,
                                                       TPipeline &pipeline)
 {
-    return THolder(new TCompletedOperationsUnit(dataShard, pipeline)); 
+    return THolder(new TCompletedOperationsUnit(dataShard, pipeline));
 }
 
 } // namespace NDataShard

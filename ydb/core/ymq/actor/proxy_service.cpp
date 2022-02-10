@@ -195,7 +195,7 @@ TSqsProxyService::TNodeInfoRef TSqsProxyService::GetNodeInfo(ui32 nodeId) {
 
 void TSqsProxyService::SendProxyError(TProxyRequestInfoRef request, TSqsEvents::TEvProxySqsResponse::EProxyStatus proxyStatus) {
     RLOG_SQS_REQ_TRACE(request->RequestId, "Sending proxy status " << proxyStatus << " to proxy actor");
-    THolder<TSqsEvents::TEvProxySqsResponse> answer = MakeHolder<TSqsEvents::TEvProxySqsResponse>(); 
+    THolder<TSqsEvents::TEvProxySqsResponse> answer = MakeHolder<TSqsEvents::TEvProxySqsResponse>();
     answer->ProxyStatus = proxyStatus;
     Send(request->ProxyActorId, std::move(answer));
 }

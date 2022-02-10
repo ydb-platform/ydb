@@ -726,7 +726,7 @@ public:
 };
 
 THolder<TExecutionUnit> CreateFinalizeDataTxPlanUnit(TDataShard &dataShard, TPipeline &pipeline) {
-    return THolder(new TFinalizeDataTxPlanUnit(dataShard, pipeline)); 
+    return THolder(new TFinalizeDataTxPlanUnit(dataShard, pipeline));
 }
 
 void TActiveTransaction::BuildExecutionPlan(bool loaded)

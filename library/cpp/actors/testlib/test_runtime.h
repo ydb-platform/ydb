@@ -364,7 +364,7 @@ namespace NActors {
             TAutoPtr<IEventHandle> handle;
             std::function<bool(const TEvent&)> truth = [](const TEvent&) { return true; };
             GrabEdgeEventIf(handle, truth, simTimeout);
-            return THolder(handle ? handle->Release<TEvent>().Release() : nullptr); 
+            return THolder(handle ? handle->Release<TEvent>().Release() : nullptr);
         }
 
         template<class TEvent>
@@ -707,7 +707,7 @@ namespace NActors {
     using TReplyCheckerCreator = std::function<THolder<IReplyChecker>(void)>;
 
     inline THolder<IReplyChecker> CreateNoneReplyChecker() {
-        return MakeHolder<TNoneReplyChecker>(); 
+        return MakeHolder<TNoneReplyChecker>();
     }
 
     TAutoPtr<IStrandingDecoratorFactory> CreateStrandingDecoratorFactory(TTestActorRuntimeBase* runtime,

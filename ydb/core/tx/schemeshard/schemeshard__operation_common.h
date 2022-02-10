@@ -667,7 +667,7 @@ public:
             }
         }
 
-        THolder<TEvHive::TEvCreateTablet> ev = MakeHolder<TEvHive::TEvCreateTablet>(ui64(shardIdx.GetOwnerId()), ui64(shardIdx.GetLocalId()), shard.TabletType, shard.BindedChannels); 
+        THolder<TEvHive::TEvCreateTablet> ev = MakeHolder<TEvHive::TEvCreateTablet>(ui64(shardIdx.GetOwnerId()), ui64(shardIdx.GetLocalId()), shard.TabletType, shard.BindedChannels);
 
         TPathId domainId = context.SS->ResolveDomainId(targetPath);
 
@@ -734,7 +734,7 @@ public:
         auto& adoptedShard = context.SS->AdoptedShards[shardIdx];
         auto& shard = context.SS->ShardInfos[shardIdx];
 
-        THolder<TEvHive::TEvAdoptTablet> ev = MakeHolder<TEvHive::TEvAdoptTablet>( 
+        THolder<TEvHive::TEvAdoptTablet> ev = MakeHolder<TEvHive::TEvAdoptTablet>(
             ui64(shard.TabletID),
             adoptedShard.PrevOwner, ui64(adoptedShard.PrevShardIdx),
             shard.TabletType,

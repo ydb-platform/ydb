@@ -221,7 +221,7 @@ private:
     void HandleNavigate(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         using TNavigate = NSchemeCache::TSchemeCacheNavigate;
 
-        THolder<NSchemeCache::TSchemeCacheNavigate> request(ev->Get()->Request.Release()); 
+        THolder<NSchemeCache::TSchemeCacheNavigate> request(ev->Get()->Request.Release());
         Y_VERIFY(request->ResultSet.size() == 1);
 
         auto& entry = request->ResultSet.back();

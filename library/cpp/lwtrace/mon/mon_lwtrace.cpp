@@ -4672,7 +4672,7 @@ private:
 };
 
 void RegisterPages(NMonitoring::TMonService2* mon, bool allowUnsafe) {
-    THolder<NLwTraceMonPage::TLWTraceMonPage> p = MakeHolder<NLwTraceMonPage::TLWTraceMonPage>(allowUnsafe); 
+    THolder<NLwTraceMonPage::TLWTraceMonPage> p = MakeHolder<NLwTraceMonPage::TLWTraceMonPage>(allowUnsafe);
     mon->Register(p.Release());
 
 #define WWW_STATIC_FILE(file, type) \

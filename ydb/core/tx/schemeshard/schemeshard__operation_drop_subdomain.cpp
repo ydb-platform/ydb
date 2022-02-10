@@ -138,9 +138,9 @@ class TDropSubdomain: public TSubOperation {
         switch(state) {
         case TTxState::Waiting:
         case TTxState::Propose:
-            return THolder(new TPropose(OperationId)); 
+            return THolder(new TPropose(OperationId));
         case TTxState::ProposedDeleteParts:
-            return THolder(new TDeleteParts(OperationId)); 
+            return THolder(new TDeleteParts(OperationId));
         default:
             return nullptr;
         }

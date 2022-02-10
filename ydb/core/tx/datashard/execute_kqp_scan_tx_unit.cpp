@@ -49,7 +49,7 @@ public:
 };
 
 THolder<TExecutionUnit> CreateExecuteKqpScanTxUnit(TDataShard& dataShard, TPipeline& pipeline) {
-    return MakeHolder<TExecuteKqpScanTxUnit>(dataShard, pipeline); 
+    return MakeHolder<TExecuteKqpScanTxUnit>(dataShard, pipeline);
 }
 
 } // namespace NDataShard

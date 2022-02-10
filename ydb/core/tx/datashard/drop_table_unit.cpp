@@ -106,7 +106,7 @@ void TDropTableUnit::Complete(TOperation::TPtr,
 THolder<TExecutionUnit> CreateDropTableUnit(TDataShard &dataShard,
                                             TPipeline &pipeline)
 {
-    return THolder(new TDropTableUnit(dataShard, pipeline)); 
+    return THolder(new TDropTableUnit(dataShard, pipeline));
 }
 
 } // namespace NDataShard

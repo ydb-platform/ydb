@@ -69,6 +69,6 @@ namespace NActors {
             TDuration timeout,
             const NThreading::TPromise<THolder<IEventBase>>& promise)
     {
-        return MakeHolder<TAskActor>(expectedEventType, std::move(recipient), std::move(event), timeout, promise); 
+        return MakeHolder<TAskActor>(expectedEventType, std::move(recipient), std::move(event), timeout, promise);
     }
 }

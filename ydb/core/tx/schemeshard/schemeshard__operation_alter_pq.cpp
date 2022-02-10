@@ -39,13 +39,13 @@ class TAlterPQ: public TSubOperation {
         switch(state) {
         case TTxState::Waiting:
         case TTxState::CreateParts:
-            return THolder(new TCreateParts(OperationId)); 
+            return THolder(new TCreateParts(OperationId));
         case TTxState::ConfigureParts:
-            return THolder(new NPQState::TConfigureParts(OperationId)); 
+            return THolder(new NPQState::TConfigureParts(OperationId));
         case TTxState::Propose:
-            return THolder(new NPQState::TPropose(OperationId)); 
+            return THolder(new NPQState::TPropose(OperationId));
         case TTxState::Done:
-            return THolder(new TDone(OperationId)); 
+            return THolder(new TDone(OperationId));
         default:
             return nullptr;
         }

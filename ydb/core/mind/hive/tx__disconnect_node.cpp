@@ -22,7 +22,7 @@ public:
         if (node != nullptr) {
             Self->ScheduleUnlockTabletExecution(*node);
             if (node->BecomeDisconnecting()) {
-                THolder<TEvPrivate::TEvProcessDisconnectNode> event = MakeHolder<TEvPrivate::TEvProcessDisconnectNode>(); 
+                THolder<TEvPrivate::TEvProcessDisconnectNode> event = MakeHolder<TEvPrivate::TEvProcessDisconnectNode>();
                 event->NodeId = node->Id;
                 event->Local = node->Local;
                 event->StartTime = TActivationContext::Now();

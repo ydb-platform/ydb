@@ -340,7 +340,7 @@ void TExecutorGCLogic::TChannelInfo::SendCollectGarbageEntry(
     ValidateGCVector(tabletid, channel, "Keep", keep);
     ValidateGCVector(tabletid, channel, "DoNotKeep", notKeep);
     THolder<TEvBlobStorage::TEvCollectGarbage> ev =
-        MakeHolder<TEvBlobStorage::TEvCollectGarbage>( 
+        MakeHolder<TEvBlobStorage::TEvCollectGarbage>(
             tabletid,
             generation, GcCounter,
             channel, true,

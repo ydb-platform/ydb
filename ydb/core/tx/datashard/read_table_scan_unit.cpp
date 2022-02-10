@@ -234,7 +234,7 @@ void TReadTableScanUnit::Complete(TOperation::TPtr,
 THolder<TExecutionUnit> CreateReadTableScanUnit(TDataShard &dataShard,
                                                 TPipeline &pipeline)
 {
-    return THolder(new TReadTableScanUnit(dataShard, pipeline)); 
+    return THolder(new TReadTableScanUnit(dataShard, pipeline));
 }
 
 } // namespace NDataShard

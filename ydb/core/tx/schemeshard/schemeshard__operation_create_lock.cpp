@@ -36,7 +36,7 @@ class TCreateLockForIndexBuild: public TSubOperation {
         switch(state) {
         case TTxState::Waiting:
         case TTxState::Done:
-            return THolder(new TDone(OperationId)); 
+            return THolder(new TDone(OperationId));
         default:
             return nullptr;
         }

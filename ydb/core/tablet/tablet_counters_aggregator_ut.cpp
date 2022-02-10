@@ -43,7 +43,7 @@ void TestHeavy(const ui32 v, ui32 numWorkers) {
     options.FinalEvents.emplace_back(TEvents::TSystem::Bootstrap, numWorkers);
     runtime.DispatchEvents(options);
     for (const auto& a : cc) {
-        THolder<TEvInterconnect::TEvNodesInfo> nodesInfo = MakeHolder<TEvInterconnect::TEvNodesInfo>(); 
+        THolder<TEvInterconnect::TEvNodesInfo> nodesInfo = MakeHolder<TEvInterconnect::TEvNodesInfo>();
         for (auto i = 1; i <= NODES; ++i) {
             nodesInfo->Nodes.emplace_back(TEvInterconnect::TNodeInfo(i, "::", "localhost", "localhost", 1234, TNodeLocation()));
         }
@@ -51,7 +51,7 @@ void TestHeavy(const ui32 v, ui32 numWorkers) {
     }
 
     for (auto i = 1; i <= NODES; ++i) {
-        THolder<TEvTabletCounters::TEvTabletLabeledCountersResponse> response = MakeHolder<TEvTabletCounters::TEvTabletLabeledCountersResponse>(); 
+        THolder<TEvTabletCounters::TEvTabletLabeledCountersResponse> response = MakeHolder<TEvTabletCounters::TEvTabletLabeledCountersResponse>();
         for (auto k = 0; k < GROUPS; ++k) {
             char delim = (k % 2 == 0) ? '/' : '|';
             auto& group1 = *response->Record.AddLabeledCountersByGroup();
@@ -109,7 +109,7 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
         options.FinalEvents.emplace_back(TEvents::TSystem::Bootstrap, 1);
         runtime.DispatchEvents(options);
         for (const auto& a : cc) {
-            THolder<TEvInterconnect::TEvNodesInfo> nodesInfo = MakeHolder<TEvInterconnect::TEvNodesInfo>(); 
+            THolder<TEvInterconnect::TEvNodesInfo> nodesInfo = MakeHolder<TEvInterconnect::TEvNodesInfo>();
             nodesInfo->Nodes.emplace_back(TEvInterconnect::TNodeInfo(1, "::", "localhost", "localhost", 1234, TNodeLocation()));
             nodesInfo->Nodes.emplace_back(TEvInterconnect::TNodeInfo(2, "::", "localhost", "localhost", 1234, TNodeLocation()));
             nodesInfo->Nodes.emplace_back(TEvInterconnect::TNodeInfo(3, "::", "localhost", "localhost", 1234, TNodeLocation()));
@@ -117,7 +117,7 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
         }
 
         {
-            THolder<TEvTabletCounters::TEvTabletLabeledCountersResponse> response = MakeHolder<TEvTabletCounters::TEvTabletLabeledCountersResponse>(); 
+            THolder<TEvTabletCounters::TEvTabletLabeledCountersResponse> response = MakeHolder<TEvTabletCounters::TEvTabletLabeledCountersResponse>();
             auto& group1 = *response->Record.AddLabeledCountersByGroup();
             group1.SetGroup("group1|group2");
             group1.SetGroupNames("AAA|BBB");
@@ -131,7 +131,7 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
         }
 
         {
-            THolder<TEvTabletCounters::TEvTabletLabeledCountersResponse> response = MakeHolder<TEvTabletCounters::TEvTabletLabeledCountersResponse>(); 
+            THolder<TEvTabletCounters::TEvTabletLabeledCountersResponse> response = MakeHolder<TEvTabletCounters::TEvTabletLabeledCountersResponse>();
             response->Record.AddCounterNames("value1");
             auto& group1 = *response->Record.AddLabeledCountersByGroup();
             group1.SetGroup("group1|group2");
@@ -146,7 +146,7 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
         }
 
         {
-            THolder<TEvTabletCounters::TEvTabletLabeledCountersResponse> response = MakeHolder<TEvTabletCounters::TEvTabletLabeledCountersResponse>(); 
+            THolder<TEvTabletCounters::TEvTabletLabeledCountersResponse> response = MakeHolder<TEvTabletCounters::TEvTabletLabeledCountersResponse>();
             response->Record.AddCounterNames("value1");
             auto& group1 = *response->Record.AddLabeledCountersByGroup();
             group1.SetGroup("group1|group2");
@@ -207,7 +207,7 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
         options.FinalEvents.emplace_back(TEvents::TSystem::Bootstrap, 1);
         runtime.DispatchEvents(options);
         for (const auto& a : cc) {
-            THolder<TEvInterconnect::TEvNodesInfo> nodesInfo = MakeHolder<TEvInterconnect::TEvNodesInfo>(); 
+            THolder<TEvInterconnect::TEvNodesInfo> nodesInfo = MakeHolder<TEvInterconnect::TEvNodesInfo>();
             nodesInfo->Nodes.emplace_back(TEvInterconnect::TNodeInfo(1, "::", "localhost", "localhost", 1234, TNodeLocation()));
             nodesInfo->Nodes.emplace_back(TEvInterconnect::TNodeInfo(2, "::", "localhost", "localhost", 1234, TNodeLocation()));
             nodesInfo->Nodes.emplace_back(TEvInterconnect::TNodeInfo(3, "::", "localhost", "localhost", 1234, TNodeLocation()));
@@ -215,7 +215,7 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
         }
 
         {
-            THolder<TEvTabletCounters::TEvTabletLabeledCountersResponse> response = MakeHolder<TEvTabletCounters::TEvTabletLabeledCountersResponse>(); 
+            THolder<TEvTabletCounters::TEvTabletLabeledCountersResponse> response = MakeHolder<TEvTabletCounters::TEvTabletLabeledCountersResponse>();
             auto& group1 = *response->Record.AddLabeledCountersByGroup();
             group1.SetGroup("rt3.man--aba@caba--daba");
             group1.SetGroupNames("topic");
@@ -229,7 +229,7 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
         }
 
         {
-            THolder<TEvTabletCounters::TEvTabletLabeledCountersResponse> response = MakeHolder<TEvTabletCounters::TEvTabletLabeledCountersResponse>(); 
+            THolder<TEvTabletCounters::TEvTabletLabeledCountersResponse> response = MakeHolder<TEvTabletCounters::TEvTabletLabeledCountersResponse>();
             response->Record.AddCounterNames("value1");
             auto& group1 = *response->Record.AddLabeledCountersByGroup();
             group1.SetGroup("cons@aaa/1/rt3.man--aba@caba--daba");

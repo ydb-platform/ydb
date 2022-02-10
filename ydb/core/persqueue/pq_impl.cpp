@@ -353,7 +353,7 @@ private:
         std::sort(Result.begin(), Result.end(), [](const typename T2::TPartResult& a, const typename T2::TPartResult& b){
                                                     return a.GetPartition() < b.GetPartition();
                                                 });
-        THolder<T3> res = MakeHolder<T3>(); 
+        THolder<T3> res = MakeHolder<T3>();
         auto& resp = res->Record;
         resp.SetTabletId(TabletId);
         for (const auto& p : Result) {
@@ -778,7 +778,7 @@ void TPersQueue::ReadState(const NKikimrClient::TKeyValueResponse::TReadResult& 
 
 void TPersQueue::ReturnTabletState(const TActorContext& ctx, const TChangeNotification& req, NKikimrProto::EReplyStatus status)
 {
-    THolder<TEvPersQueue::TEvDropTabletReply> event = MakeHolder<TEvPersQueue::TEvDropTabletReply>(); 
+    THolder<TEvPersQueue::TEvDropTabletReply> event = MakeHolder<TEvPersQueue::TEvDropTabletReply>();
     event->Record.SetStatus(status);
     event->Record.SetTabletId(TabletID());
     event->Record.SetTxId(req.TxId);
@@ -1208,7 +1208,7 @@ void TPersQueue::Handle(TEvPersQueue::TEvDropTablet::TPtr& ev, const TActorConte
 void TPersQueue::Handle(TEvPersQueue::TEvOffsets::TPtr& ev, const TActorContext& ctx)
 {
     if (!ConfigInited) {
-        THolder<TEvPersQueue::TEvOffsetsResponse> res = MakeHolder<TEvPersQueue::TEvOffsetsResponse>(); 
+        THolder<TEvPersQueue::TEvOffsetsResponse> res = MakeHolder<TEvPersQueue::TEvOffsetsResponse>();
         auto& resp = res->Record;
         resp.SetTabletId(TabletID());
 
@@ -1224,7 +1224,7 @@ void TPersQueue::Handle(TEvPersQueue::TEvOffsets::TPtr& ev, const TActorContext&
     for (auto& p : Partitions) {
         if (!p.second.InitDone)
             continue;
-        THolder<TEvPQ::TEvPartitionOffsets> event = MakeHolder<TEvPQ::TEvPartitionOffsets>(ans, ev->Get()->Record.HasClientId() ? 
+        THolder<TEvPQ::TEvPartitionOffsets> event = MakeHolder<TEvPQ::TEvPartitionOffsets>(ans, ev->Get()->Record.HasClientId() ?
                                                                                         ev->Get()->Record.GetClientId() : "");
         ctx.Send(p.second.Actor, event.Release());
     }
@@ -1251,7 +1251,7 @@ void TPersQueue::Handle(TEvPersQueue::TEvPartitionClientInfo::TPtr& ev, const TA
         if (it != Partitions.end()) {
             ctx.Send(it->second.Actor, new TEvPQ::TEvGetPartitionClientInfo(ev->Sender), 0, ev->Cookie);
         } else {
-            THolder<TEvPersQueue::TEvPartitionClientInfoResponse> clientInfo = MakeHolder<TEvPersQueue::TEvPartitionClientInfoResponse>(); 
+            THolder<TEvPersQueue::TEvPartitionClientInfoResponse> clientInfo = MakeHolder<TEvPersQueue::TEvPartitionClientInfoResponse>();
             clientInfo->Record.SetPartition(partition);
             ctx.Send(ev->Sender, clientInfo.Release(), 0, ev->Cookie);
         }
@@ -1262,7 +1262,7 @@ void TPersQueue::Handle(TEvPersQueue::TEvPartitionClientInfo::TPtr& ev, const TA
 void TPersQueue::Handle(TEvPersQueue::TEvStatus::TPtr& ev, const TActorContext& ctx)
 {
     if (!ConfigInited) {
-        THolder<TEvPersQueue::TEvStatusResponse> res = MakeHolder<TEvPersQueue::TEvStatusResponse>(); 
+        THolder<TEvPersQueue::TEvStatusResponse> res = MakeHolder<TEvPersQueue::TEvStatusResponse>();
         auto& resp = res->Record;
         resp.SetTabletId(TabletID());
 
@@ -1279,7 +1279,7 @@ void TPersQueue::Handle(TEvPersQueue::TEvStatus::TPtr& ev, const TActorContext& 
     for (auto& p : Partitions) {
         if (!p.second.InitDone)
             continue;
-        THolder<TEvPQ::TEvPartitionStatus> event = MakeHolder<TEvPQ::TEvPartitionStatus>(ans, ev->Get()->Record.HasClientId() ? ev->Get()->Record.GetClientId() : ""); 
+        THolder<TEvPQ::TEvPartitionStatus> event = MakeHolder<TEvPQ::TEvPartitionStatus>(ans, ev->Get()->Record.HasClientId() ? ev->Get()->Record.GetClientId() : "");
         ctx.Send(p.second.Actor, event.Release());
     }
 }
@@ -1303,7 +1303,7 @@ void TPersQueue::HandleGetMaxSeqNoRequest(const ui64 responseCookie, const TActo
     ids.reserve(cmd.SourceIdSize());
     for (ui32 i = 0; i < cmd.SourceIdSize(); ++i)
         ids.push_back(cmd.GetSourceId(i));
-    THolder<TEvPQ::TEvGetMaxSeqNoRequest> event = MakeHolder<TEvPQ::TEvGetMaxSeqNoRequest>(responseCookie, ids); 
+    THolder<TEvPQ::TEvGetMaxSeqNoRequest> event = MakeHolder<TEvPQ::TEvGetMaxSeqNoRequest>(responseCookie, ids);
     ctx.Send(partActor, event.Release());
 }
 
@@ -1321,7 +1321,7 @@ void TPersQueue::HandleDeleteSessionRequest(const ui64 responseCookie, const TAc
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
             TStringBuilder() << "not sessionId in DeleteSession request: " << ToString(req).data());
     } else {
-        THolder<TEvPQ::TEvSetClientInfo> event = MakeHolder<TEvPQ::TEvSetClientInfo>(responseCookie, cmd.GetClientId(), 
+        THolder<TEvPQ::TEvSetClientInfo> event = MakeHolder<TEvPQ::TEvSetClientInfo>(responseCookie, cmd.GetClientId(),
                                                                 0, cmd.GetSessionId(), 0, 0, TEvPQ::TEvSetClientInfo::ESCI_DROP_SESSION);
         ctx.Send(partActor, event.Release());
     }
@@ -1347,7 +1347,7 @@ void TPersQueue::HandleCreateSessionRequest(const ui64 responseCookie, const TAc
             TStringBuilder() << "not step in CreateSession request: " << ToString(req).data());
     } else {
         InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_CREATE_SESSION);
-        THolder<TEvPQ::TEvSetClientInfo> event = MakeHolder<TEvPQ::TEvSetClientInfo>(responseCookie, cmd.GetClientId(), 
+        THolder<TEvPQ::TEvSetClientInfo> event = MakeHolder<TEvPQ::TEvSetClientInfo>(responseCookie, cmd.GetClientId(),
                                                                 0, cmd.GetSessionId(), cmd.GetGeneration(), cmd.GetStep(), TEvPQ::TEvSetClientInfo::ESCI_CREATE_SESSION);
         ctx.Send(partActor, event.Release());
     }
@@ -1370,7 +1370,7 @@ void TPersQueue::HandleSetClientOffsetRequest(const ui64 responseCookie, const T
             TStringBuilder() << "negative offset in SetClientOffset request: " << ToString(req).data());
     } else {
         InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_SET_OFFSET);
-        THolder<TEvPQ::TEvSetClientInfo> event = MakeHolder<TEvPQ::TEvSetClientInfo>(responseCookie, cmd.GetClientId(), 
+        THolder<TEvPQ::TEvSetClientInfo> event = MakeHolder<TEvPQ::TEvSetClientInfo>(responseCookie, cmd.GetClientId(),
                                                                 cmd.GetOffset(),
                                                                 cmd.HasSessionId() ? cmd.GetSessionId() : "", 0, 0);
         ctx.Send(partActor, event.Release());
@@ -1387,7 +1387,7 @@ void TPersQueue::HandleGetClientOffsetRequest(const ui64 responseCookie, const T
             TStringBuilder() << "no clientId in GetClientOffset request: " << ToString(req).data());
     } else {
         InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_GET_OFFSET);
-        THolder<TEvPQ::TEvGetClientOffset> event = MakeHolder<TEvPQ::TEvGetClientOffset>(responseCookie, cmd.GetClientId()); 
+        THolder<TEvPQ::TEvGetClientOffset> event = MakeHolder<TEvPQ::TEvGetClientOffset>(responseCookie, cmd.GetClientId());
         ctx.Send(partActor, event.Release());
     }
 }
@@ -1398,7 +1398,7 @@ void TPersQueue::HandleUpdateWriteTimestampRequest(const ui64 responseCookie, co
     Y_VERIFY(req.HasCmdUpdateWriteTimestamp());
     const auto& cmd = req.GetCmdUpdateWriteTimestamp();
     InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_GET_OFFSET);
-    THolder<TEvPQ::TEvUpdateWriteTimestamp> event = MakeHolder<TEvPQ::TEvUpdateWriteTimestamp>(responseCookie, cmd.GetWriteTimeMS()); 
+    THolder<TEvPQ::TEvUpdateWriteTimestamp> event = MakeHolder<TEvPQ::TEvUpdateWriteTimestamp>(responseCookie, cmd.GetWriteTimeMS());
     ctx.Send(partActor, event.Release());
 }
 
@@ -1586,7 +1586,7 @@ void TPersQueue::HandleReserveBytesRequest(const ui64 responseCookie, const TAct
     }
 
     InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_RESERVE_BYTES);
-    THolder<TEvPQ::TEvReserveBytes> event = MakeHolder<TEvPQ::TEvReserveBytes>(responseCookie, req.GetCmdReserveBytes().GetSize(), 
+    THolder<TEvPQ::TEvReserveBytes> event = MakeHolder<TEvPQ::TEvReserveBytes>(responseCookie, req.GetCmdReserveBytes().GetSize(),
                                                                         req.GetOwnerCookie(), req.GetMessageNo(), req.GetCmdReserveBytes().GetLastRequest());
     ctx.Send(partActor, event.Release());
 }
@@ -1615,7 +1615,7 @@ void TPersQueue::HandleGetOwnershipRequest(const ui64 responseCookie, const TAct
     it->second = {partActor, owner, it->second.ServerActors};
 
     InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_GET_OWNERSHIP);
-    THolder<TEvPQ::TEvChangeOwner> event = MakeHolder<TEvPQ::TEvChangeOwner>(responseCookie, owner, pipeClient, sender, req.GetCmdGetOwnership().GetForce()); 
+    THolder<TEvPQ::TEvChangeOwner> event = MakeHolder<TEvPQ::TEvChangeOwner>(responseCookie, owner, pipeClient, sender, req.GetCmdGetOwnership().GetForce());
     ctx.Send(partActor, event.Release());
 }
 
@@ -1958,7 +1958,7 @@ void TPersQueue::HandleDie(const TActorContext& ctx)
 
 
     for (const auto& p : ResponseProxy) {
-        THolder<TEvPQ::TEvError> ev = MakeHolder<TEvPQ::TEvError>(NPersQueue::NErrorCode::INITIALIZING, "tablet will be restarted right now", p.first); 
+        THolder<TEvPQ::TEvError> ev = MakeHolder<TEvPQ::TEvError>(NPersQueue::NErrorCode::INITIALIZING, "tablet will be restarted right now", p.first);
         bool res = p.second->HandleError(ev.Get(), ctx);
         Y_VERIFY(res);
     }

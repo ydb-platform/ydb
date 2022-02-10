@@ -137,7 +137,7 @@ IRemoteAddrPtr NAddr::GetSockAddr(SOCKET s) {
         ythrow TSystemError() << "getsockname() failed";
     }
 
-    return addr; 
+    return addr;
 }
 
 IRemoteAddrPtr NAddr::GetPeerAddr(SOCKET s) {

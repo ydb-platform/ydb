@@ -179,19 +179,19 @@ public:
             return;
         }
 
-        LookupResponse = THolder<TEvStateStorage::TEvBoardInfo>(ev->Release().Release()); 
+        LookupResponse = THolder<TEvStateStorage::TEvBoardInfo>(ev->Release().Release());
 
         TryReplyAndDie();
     }
 
     void Handle(TEvInterconnect::TEvNodeInfo::TPtr &ev) {
-        NameserviceResponse = THolder<TEvInterconnect::TEvNodeInfo>(ev->Release().Release()); 
+        NameserviceResponse = THolder<TEvInterconnect::TEvNodeInfo>(ev->Release().Release());
 
         TryReplyAndDie();
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev) {
-        SchemeCacheResponse = THolder<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(ev->Release().Release()); 
+        SchemeCacheResponse = THolder<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(ev->Release().Release());
 
         TEvTxProxySchemeCache::TEvNavigateKeySetResult *msg = SchemeCacheResponse.Get();
         NSchemeCache::TSchemeCacheNavigate *navigate = msg->Request.Get();

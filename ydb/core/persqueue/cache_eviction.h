@@ -70,7 +70,7 @@ namespace NPQ {
 
         THolder<TEvKeyValue::TEvRequest> MakeKvRequest() const
         {
-            THolder<TEvKeyValue::TEvRequest> request = MakeHolder<TEvKeyValue::TEvRequest>(); 
+            THolder<TEvKeyValue::TEvRequest> request = MakeHolder<TEvKeyValue::TEvRequest>();
             for (auto& blob : Blobs) {
                 if (blob.Value.empty()) {
                     // add reading command
@@ -106,7 +106,7 @@ namespace NPQ {
                     << ". Cropped " << cropped << " blobs of " << Blobs.size());
             }
 
-            return MakeHolder<TEvPQ::TEvBlobResponse>(CookiePQ, std::move(Blobs), error); 
+            return MakeHolder<TEvPQ::TEvBlobResponse>(CookiePQ, std::move(Blobs), error);
         }
 
         void Verify(const TRequestedBlob& blob) const {
@@ -255,7 +255,7 @@ namespace NPQ {
         {
             ui32 fromCache = GetBlobs(ctx, kvReq);
 
-            THolder<TCacheL2Request> reqData = MakeHolder<TCacheL2Request>(TopicName); 
+            THolder<TCacheL2Request> reqData = MakeHolder<TCacheL2Request>(TopicName);
 
             for (const auto& blob : kvReq.Blobs) {
                 // Touching blobs in L2. We don't need data here
@@ -266,14 +266,14 @@ namespace NPQ {
                     reqData->MissedBlobs.push_back(key);
             }
 
-            THolder<TEvPqCache::TEvCacheL2Request> l2Request = MakeHolder<TEvPqCache::TEvCacheL2Request>(reqData.Release()); 
+            THolder<TEvPqCache::TEvCacheL2Request> l2Request = MakeHolder<TEvPqCache::TEvCacheL2Request>(reqData.Release());
             ctx.Send(MakePersQueueL2CacheID(), l2Request.Release()); // -> L2
             return fromCache;
         }
 
         void SaveHeadBlobs(const TActorContext& ctx, const TKvRequest& kvReq)
         {
-            THolder<TCacheL2Request> reqData = MakeHolder<TCacheL2Request>(TopicName); 
+            THolder<TCacheL2Request> reqData = MakeHolder<TCacheL2Request>(TopicName);
 
             for (const TRequestedBlob& reqBlob : kvReq.Blobs) {
                 TBlobId blob(kvReq.Partition, reqBlob.Offset, reqBlob.PartNo, reqBlob.Count, reqBlob.InternalPartsCount);
@@ -299,7 +299,7 @@ namespace NPQ {
                     << " size " << reqBlob.Value.size() << " actorID " << ctx.SelfID);
             }
 
-            THolder<TEvPqCache::TEvCacheL2Request> l2Request = MakeHolder<TEvPqCache::TEvCacheL2Request>(reqData.Release()); 
+            THolder<TEvPqCache::TEvCacheL2Request> l2Request = MakeHolder<TEvPqCache::TEvCacheL2Request>(reqData.Release());
             ctx.Send(MakePersQueueL2CacheID(), l2Request.Release()); // -> L2
         }
 
@@ -307,7 +307,7 @@ namespace NPQ {
         {
             Y_VERIFY(store.size() == kvReq.Blobs.size());
 
-            THolder<TCacheL2Request> reqData = MakeHolder<TCacheL2Request>(TopicName); 
+            THolder<TCacheL2Request> reqData = MakeHolder<TCacheL2Request>(TopicName);
 
             bool haveSome = false;
             for (ui32 i = 0; i < kvReq.Blobs.size(); ++i) {
@@ -339,7 +339,7 @@ namespace NPQ {
             }
 
             if (haveSome) {
-                THolder<TEvPqCache::TEvCacheL2Request> l2Request = MakeHolder<TEvPqCache::TEvCacheL2Request>(reqData.Release()); 
+                THolder<TEvPqCache::TEvCacheL2Request> l2Request = MakeHolder<TEvPqCache::TEvCacheL2Request>(reqData.Release());
                 ctx.Send(MakePersQueueL2CacheID(), l2Request.Release()); // -> L2
             }
         }
@@ -371,12 +371,12 @@ namespace NPQ {
             RemoveEvicted();
 
             if (L1Strategy) {
-                THolder<TCacheL2Request> reqData = MakeHolder<TCacheL2Request>(TopicName); 
+                THolder<TCacheL2Request> reqData = MakeHolder<TCacheL2Request>(TopicName);
 
                 TDeque<TBlobId> needTouch = L1Strategy->BlobsToTouch();
                 PrepareTouch(ctx, reqData, needTouch);
 
-                THolder<TEvPqCache::TEvCacheL2Request> l2Request = MakeHolder<TEvPqCache::TEvCacheL2Request>(reqData.Release()); 
+                THolder<TEvPqCache::TEvCacheL2Request> l2Request = MakeHolder<TEvPqCache::TEvCacheL2Request>(reqData.Release());
                 ctx.Send(MakePersQueueL2CacheID(), l2Request.Release()); // -> L2
             }
         }

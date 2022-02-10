@@ -13,7 +13,7 @@ template <>
 class TWhiteboardMerger<TEvWhiteboard::TEvSystemStateResponse> {
 public:
     static THolder<TEvWhiteboard::TEvSystemStateResponse> MergeResponses(TMap<ui32, THolder<TEvWhiteboard::TEvSystemStateResponse>>& responses, const TString&) {
-        THolder<TEvWhiteboard::TEvSystemStateResponse> result = MakeHolder<TEvWhiteboard::TEvSystemStateResponse>(); 
+        THolder<TEvWhiteboard::TEvSystemStateResponse> result = MakeHolder<TEvWhiteboard::TEvSystemStateResponse>();
         ui64 minResponseTime = 0;
         auto* field = result->Record.MutableSystemStateInfo();
         field->Reserve(responses.size());

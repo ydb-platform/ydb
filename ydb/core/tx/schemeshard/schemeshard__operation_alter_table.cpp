@@ -273,7 +273,7 @@ public:
             auto seqNo = context.SS->StartRound(*txState);
             TString txBody = context.SS->FillAlterTableTxBody(txState->TargetPathId, idx, seqNo);
             THolder<TEvDataShard::TEvProposeTransaction> event =
-                MakeHolder<TEvDataShard::TEvProposeTransaction>(NKikimrTxDataShard::TX_KIND_SCHEME, 
+                MakeHolder<TEvDataShard::TEvProposeTransaction>(NKikimrTxDataShard::TX_KIND_SCHEME,
                                                         ui64(ssId), //owner schemeshard tablet id
                                                         context.Ctx.SelfID,
                                                         ui64(OperationId.GetTxId()),
@@ -423,15 +423,15 @@ private:
         switch(state) {
         case TTxState::Waiting:
         case TTxState::CreateParts:
-            return THolder(new TCreateParts(OperationId)); 
+            return THolder(new TCreateParts(OperationId));
         case TTxState::ConfigureParts:
-            return THolder(new TConfigureParts(OperationId)); 
+            return THolder(new TConfigureParts(OperationId));
         case TTxState::Propose:
-            return THolder(new TPropose(OperationId)); 
+            return THolder(new TPropose(OperationId));
         case TTxState::ProposedWaitParts:
-            return THolder(new NTableState::TProposedWaitParts(OperationId)); 
+            return THolder(new NTableState::TProposedWaitParts(OperationId));
         case TTxState::Done:
-            return THolder(new TDone(OperationId)); 
+            return THolder(new TDone(OperationId));
         default:
             return nullptr;
         }

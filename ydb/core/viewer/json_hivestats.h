@@ -40,7 +40,7 @@ public:
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
         InitConfig(params);
         if (hiveId != 0 ) {
-            THolder<TEvHive::TEvRequestHiveDomainStats> request = MakeHolder<TEvHive::TEvRequestHiveDomainStats>(); 
+            THolder<TEvHive::TEvRequestHiveDomainStats> request = MakeHolder<TEvHive::TEvRequestHiveDomainStats>();
             request->Record.SetReturnFollowers(FromStringWithDefault(params.Get("followers"), false));
             request->Record.SetReturnMetrics(FromStringWithDefault(params.Get("metrics"), true));
             SendRequestToPipe(ConnectTabletPipe(hiveId), request.Release());

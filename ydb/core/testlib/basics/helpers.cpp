@@ -80,7 +80,7 @@ namespace NKikimr {
 
         Runtime.BlockOutputForActor(pDiskServiceId);
         Runtime.BlockOutputForActor(actorId);
-        auto factory = CreateStrandingDecoratorFactory(&Runtime, []{ return MakeHolder<TPDiskReplyChecker>(); }); 
+        auto factory = CreateStrandingDecoratorFactory(&Runtime, []{ return MakeHolder<TPDiskReplyChecker>(); });
         IActor* wrappedActor = factory->Wrap(actorId, true, TVector<TActorId>());
         TActorId wrappedActorId = Runtime.Register(wrappedActor, nodeIndex, poolId, TMailboxType::Revolving);
         Runtime.RegisterService(pDiskServiceId, wrappedActorId, nodeIndex);

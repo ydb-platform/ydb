@@ -496,7 +496,7 @@ class TBackupRestoreOperationBase: public TSubOperation {
         switch(state) {
         case TTxState::Waiting:
         case TTxState::CreateParts:
-            return THolder(new TCreateParts(OperationId)); 
+            return THolder(new TCreateParts(OperationId));
         case TTxState::ConfigureParts:
             return THolder(new TConfigurePart<TKind>(TxType, OperationId));
         case TTxState::Propose:
@@ -506,7 +506,7 @@ class TBackupRestoreOperationBase: public TSubOperation {
         case TTxState::Aborting:
             return THolder(new TAborting<TKind, TEvCancel>(TxType, OperationId));
         case TTxState::Done:
-            return THolder(new TDone(OperationId)); 
+            return THolder(new TDone(OperationId));
         default:
             return nullptr;
         }

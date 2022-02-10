@@ -755,7 +755,7 @@ namespace NCompShard {
                     last->LastInclusive);
         }
 
-        return MakeHolder<TUnderlayMask>(std::move(rowScheme), std::move(results)); 
+        return MakeHolder<TUnderlayMask>(std::move(rowScheme), std::move(results));
     }
 
     TSplitKeys::TSplitKeys(TIntrusiveConstPtr<TRowScheme> rowScheme, TSplitKeys::TKeysVec keys)
@@ -1086,7 +1086,7 @@ namespace NCompShard {
                 shard = shard->Next()->Node();
             }
             Y_VERIFY(splitKeys, "Unexpected lack of split keys");
-            params->SplitKeys = MakeHolder<TSplitKeys>(TableInfo.RowScheme, std::move(splitKeys)); 
+            params->SplitKeys = MakeHolder<TSplitKeys>(TableInfo.RowScheme, std::move(splitKeys));
         }
 
         MemCompactionId = Backend->BeginCompaction(std::move(params));
@@ -2578,7 +2578,7 @@ namespace NCompShard {
         }
 
         if (edges) {
-            params->SplitKeys = MakeHolder<TSplitKeys>(TableInfo.RowScheme, std::move(edges)); 
+            params->SplitKeys = MakeHolder<TSplitKeys>(TableInfo.RowScheme, std::move(edges));
         }
 
         shard->Task.CompactionId = Backend->BeginCompaction(std::move(params));
@@ -2626,7 +2626,7 @@ namespace NCompShard {
                 shard = shard->Next()->Node();
             }
             Y_VERIFY(splitKeys, "Unexpected lack of split keys");
-            params->SplitKeys = MakeHolder<TSplitKeys>(TableInfo.RowScheme, std::move(splitKeys)); 
+            params->SplitKeys = MakeHolder<TSplitKeys>(TableInfo.RowScheme, std::move(splitKeys));
         }
 
         ForcedCompactionTask.CompactionId = Backend->BeginCompaction(std::move(params));

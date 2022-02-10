@@ -123,7 +123,7 @@ void TBuildDataTxOutRSUnit::Complete(TOperation::TPtr,
 THolder<TExecutionUnit> CreateBuildDataTxOutRSUnit(TDataShard &dataShard,
                                                    TPipeline &pipeline)
 {
-    return THolder(new TBuildDataTxOutRSUnit(dataShard, pipeline)); 
+    return THolder(new TBuildDataTxOutRSUnit(dataShard, pipeline));
 }
 
 } // namespace NDataShard

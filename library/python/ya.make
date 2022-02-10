@@ -60,7 +60,7 @@ RECURSE(
     django-sform
     django-sform/tests
     django_alive
-    django_celery_monitoring
+    django_celery_monitoring 
     django_russian
     django_template_common
     django_tools_log_context

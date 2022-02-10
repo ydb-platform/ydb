@@ -293,7 +293,7 @@ value_type(
 
 template<class Allocator>
 inline
-field 
+field
 basic_fields<Allocator>::
 value_type::
 name() const
@@ -303,7 +303,7 @@ name() const
 
 template<class Allocator>
 inline
-string_view 
+string_view
 basic_fields<Allocator>::
 value_type::
 name_string() const
@@ -315,7 +315,7 @@ name_string() const
 
 template<class Allocator>
 inline
-string_view 
+string_view
 basic_fields<Allocator>::
 value_type::
 value() const

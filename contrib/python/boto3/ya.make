@@ -9,7 +9,7 @@ LICENSE(Apache-2.0)
 PEERDIR(
     contrib/python/botocore
     contrib/python/jmespath
-    contrib/python/s3transfer
+    contrib/python/s3transfer 
 )
 
 NO_LINT()

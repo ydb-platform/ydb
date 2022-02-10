@@ -960,7 +960,7 @@ RECURSE(
     ruamel.yaml
     Rx
     s3-tests
-    s3transfer
+    s3transfer 
     sacrebleu
     salt-pepper
     saneyaml
@@ -1022,7 +1022,7 @@ RECURSE(
     spintop-openhtf
     splunk-sdk-python
     sqlalchemy
-    SQLAlchemy-Continuum
+    SQLAlchemy-Continuum 
     sqlalchemy-stubs
     SQLAlchemy-Utils
     sqlparse
@@ -1086,7 +1086,7 @@ RECURSE(
     transitions
     transliterate
     trollius
-    trollsift
+    trollsift 
     Twiggy
     twiggy-goodies
     Twisted

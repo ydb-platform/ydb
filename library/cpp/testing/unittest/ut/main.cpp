@@ -28,14 +28,14 @@ namespace {
 
         int I;
     };
-
-    struct TSimpleFixture : public NUnitTest::TBaseFixture {
-        size_t Value = 24;
-    };
-
-    struct TOtherFixture : public NUnitTest::TBaseFixture {
-        size_t TheAnswer = 42;
-    };
+ 
+    struct TSimpleFixture : public NUnitTest::TBaseFixture { 
+        size_t Value = 24; 
+    }; 
+ 
+    struct TOtherFixture : public NUnitTest::TBaseFixture { 
+        size_t TheAnswer = 42; 
+    }; 
 
     struct TSetUpTearDownFixture : public NUnitTest::TBaseFixture {
         int Magic = 3;
@@ -62,27 +62,27 @@ TEST(ETest, Test1) {
 }
 
 Y_UNIT_TEST_SUITE(TestSingleTestFixture)
-{
+{ 
     Y_UNIT_TEST_F(Test3, TSimpleFixture) {
-        UNIT_ASSERT_EQUAL(Value, 24);
-    }
-}
-
+        UNIT_ASSERT_EQUAL(Value, 24); 
+    } 
+} 
+ 
 Y_UNIT_TEST_SUITE_F(TestSuiteFixture, TSimpleFixture)
-{
+{ 
     Y_UNIT_TEST(Test1) {
-        UNIT_ASSERT(Value == 24);
-        Value = 25;
-    }
-
+        UNIT_ASSERT(Value == 24); 
+        Value = 25; 
+    } 
+ 
     Y_UNIT_TEST(Test2) {
-        UNIT_ASSERT_EQUAL(Value, 24);
-    }
-
+        UNIT_ASSERT_EQUAL(Value, 24); 
+    } 
+ 
     Y_UNIT_TEST_F(Test3, TOtherFixture) {
-        UNIT_ASSERT_EQUAL(TheAnswer, 42);
-    }
-}
+        UNIT_ASSERT_EQUAL(TheAnswer, 42); 
+    } 
+} 
 
 Y_UNIT_TEST_SUITE(TestSetUpTearDownFixture)
 {

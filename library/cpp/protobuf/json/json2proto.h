@@ -73,11 +73,11 @@ namespace NProtobufJson {
             return *this;
         }
 
-        TSelf& SetReplaceRepeatedFields(bool replaceRepeatedFields) {
-            ReplaceRepeatedFields = replaceRepeatedFields;
-            return *this;
-        }
-
+        TSelf& SetReplaceRepeatedFields(bool replaceRepeatedFields) { 
+            ReplaceRepeatedFields = replaceRepeatedFields; 
+            return *this; 
+        } 
+ 
         TSelf& SetNameGenerator(TNameGenerator callback) {
             NameGenerator = callback;
             return *this;
@@ -127,9 +127,9 @@ namespace NProtobufJson {
         /// Throw exception if there is no required fields in json object.
         bool CheckRequiredFields = true;
 
-        /// Replace repeated fields content during merging
-        bool ReplaceRepeatedFields = false;
-
+        /// Replace repeated fields content during merging 
+        bool ReplaceRepeatedFields = false; 
+ 
         /// Custom field names generator.
         TNameGenerator NameGenerator = {};
 
@@ -147,20 +147,20 @@ namespace NProtobufJson {
     };
 
     /// @throw yexception
-    void MergeJson2Proto(const NJson::TJsonValue& json, google::protobuf::Message& proto,
-                    const TJson2ProtoConfig& config = TJson2ProtoConfig());
-
-    /// @throw yexception
-    void MergeJson2Proto(const TStringBuf& json, google::protobuf::Message& proto,
-                    const TJson2ProtoConfig& config = TJson2ProtoConfig());
-
-    /// @throw yexception
-    inline void MergeJson2Proto(const TString& json, google::protobuf::Message& proto,
-                           const TJson2ProtoConfig& config = TJson2ProtoConfig()) {
-        MergeJson2Proto(TStringBuf(json), proto, config);
-    }
-
-    /// @throw yexception
+    void MergeJson2Proto(const NJson::TJsonValue& json, google::protobuf::Message& proto, 
+                    const TJson2ProtoConfig& config = TJson2ProtoConfig()); 
+ 
+    /// @throw yexception 
+    void MergeJson2Proto(const TStringBuf& json, google::protobuf::Message& proto, 
+                    const TJson2ProtoConfig& config = TJson2ProtoConfig()); 
+ 
+    /// @throw yexception 
+    inline void MergeJson2Proto(const TString& json, google::protobuf::Message& proto, 
+                           const TJson2ProtoConfig& config = TJson2ProtoConfig()) { 
+        MergeJson2Proto(TStringBuf(json), proto, config); 
+    } 
+ 
+    /// @throw yexception 
     void Json2Proto(const NJson::TJsonValue& json, google::protobuf::Message& proto,
                     const TJson2ProtoConfig& config = TJson2ProtoConfig());
 

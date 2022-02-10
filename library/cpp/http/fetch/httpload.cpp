@@ -185,7 +185,7 @@ void httpLoadAgent::dropHeaderInstructions() {
 bool httpLoadAgent::startRequest(const THttpURL& url,
                                  bool persistent,
                                  const TAddrList& addrs)
- 
+
 {
     clearReader();
     ErrCode_ = 0;
@@ -198,7 +198,7 @@ bool httpLoadAgent::startRequest(const THttpURL& url,
     if (!HandleAuthorization_ && !URL_.IsNull(THttpURL::FlagAuth))
         return false;
 
-    return doSetHost(addrs) && doStartRequest(); 
+    return doSetHost(addrs) && doStartRequest();
 }
 
 /************************************************************/
@@ -206,22 +206,22 @@ bool httpLoadAgent::startRequest(const char* url,
                                  const char* url_to_merge,
                                  bool persistent,
                                  const TAddrList& addrs) {
-    clearReader(); 
- 
-    URL_.Clear(); 
-    PersistentConn_ = persistent; 
- 
-    long flags = THttpURL::FeatureSchemeKnown | THttpURL::FeaturesNormalizeSet; 
-    if (HandleAuthorization_) 
-        flags |= THttpURL::FeatureAuthSupported; 
- 
-    if (URL_.Parse(url, flags, url_to_merge) || !URL_.IsValidGlobal()) 
-        return false; 
- 
-    return doSetHost(addrs) && doStartRequest(); 
-} 
- 
-/************************************************************/ 
+    clearReader();
+
+    URL_.Clear();
+    PersistentConn_ = persistent;
+
+    long flags = THttpURL::FeatureSchemeKnown | THttpURL::FeaturesNormalizeSet;
+    if (HandleAuthorization_)
+        flags |= THttpURL::FeatureAuthSupported;
+
+    if (URL_.Parse(url, flags, url_to_merge) || !URL_.IsValidGlobal())
+        return false;
+
+    return doSetHost(addrs) && doStartRequest();
+}
+
+/************************************************************/
 bool httpLoadAgent::startRequest(const char* url,
                                  const char* url_to_merge,
                                  bool persistent,
@@ -238,7 +238,7 @@ bool httpLoadAgent::startRequest(const char* url,
     if (URL_.Parse(url, flags, url_to_merge) || !URL_.IsValidGlobal())
         return false;
 
-    return doSetHost(TAddrList::MakeV4Addr(ip, URL_.GetPort())) && doStartRequest(); 
+    return doSetHost(TAddrList::MakeV4Addr(ip, URL_.GetPort())) && doStartRequest();
 }
 
 /************************************************************/
@@ -250,7 +250,7 @@ bool httpLoadAgent::doSetHost(const TAddrList& addrs) {
 
     if (addrs.size()) {
         ErrCode_ = SetHost(URL_.Get(THttpURL::FieldHost),
-                           URL_.GetPort(), addrs); 
+                           URL_.GetPort(), addrs);
     } else {
         ErrCode_ = SetHost(URL_.Get(THttpURL::FieldHost),
                            URL_.GetPort());
@@ -292,7 +292,7 @@ bool httpLoadAgent::setHost(const char* host_url,
     if (URL_.Parse(host_url, flags) || !URL_.IsValidGlobal())
         return false;
 
-    return doSetHost(addrs); 
+    return doSetHost(addrs);
 }
 
 /************************************************************/

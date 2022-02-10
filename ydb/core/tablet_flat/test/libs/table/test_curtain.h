@@ -16,7 +16,7 @@ namespace NTest {
             TRowsHeap::TIter Begin;
             TRowsHeap::TIter End;
 
-            TIntrusiveConstPtr<TScreen> Screen; 
+            TIntrusiveConstPtr<TScreen> Screen;
         };
 
         TCurtain(const TPartEggs &eggs): Wrap(eggs, { new TTestEnv, 0 }) { }
@@ -99,7 +99,7 @@ namespace NTest {
                 lastEnd = hole.End;
             }
 
-            TIntrusiveConstPtr<TSlices> result = new TSlices(std::move(slices)); 
+            TIntrusiveConstPtr<TSlices> result = new TSlices(std::move(slices));
             result->Validate();
             return result;
         }

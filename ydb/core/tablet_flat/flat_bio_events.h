@@ -20,7 +20,7 @@ namespace NBlockIO {
     };
 
     struct TEvFetch : public TEventLocal<TEvFetch, ui32(EEv::Fetch)> {
-        TEvFetch(EPriority priority, TAutoPtr<NPageCollection::TFetch> fetch) 
+        TEvFetch(EPriority priority, TAutoPtr<NPageCollection::TFetch> fetch)
             : Priority(priority)
             , Fetch(fetch)
         {
@@ -28,13 +28,13 @@ namespace NBlockIO {
         }
 
         const EPriority Priority = EPriority::None;
-        TAutoPtr<NPageCollection::TFetch> Fetch; 
+        TAutoPtr<NPageCollection::TFetch> Fetch;
     };
 
     struct TEvData: public TEventLocal<TEvData, ui32(EEv::Data)> {
         using EStatus = NKikimrProto::EReplyStatus;
 
-        TEvData(TIntrusiveConstPtr<NPageCollection::IPageCollection> origin, ui64 cookie, EStatus status) 
+        TEvData(TIntrusiveConstPtr<NPageCollection::IPageCollection> origin, ui64 cookie, EStatus status)
             : Status(status)
             , Cookie(cookie)
             , Origin(origin)
@@ -61,7 +61,7 @@ namespace NBlockIO {
 
         const EStatus Status;
         const ui64 Cookie = Max<ui64>();
-        TIntrusiveConstPtr<NPageCollection::IPageCollection> Origin; 
+        TIntrusiveConstPtr<NPageCollection::IPageCollection> Origin;
         TVector<NPageCollection::TLoadedPage> Blocks;
     };
 

@@ -27,7 +27,7 @@ public:
 
         TIntrusivePtr<TConfig> config = new TConfig();
         config->Counters = new NMonitoring::TDynamicCounters;
-        config->Roots.push_back(TConfig::TTagEntry(0, TTestTxConfig::SchemeShard, "Root")); 
+        config->Roots.push_back(TConfig::TTagEntry(0, TTestTxConfig::SchemeShard, "Root"));
         SchemeCache = Context->Register(CreateSchemeBoardSchemeCache(config.Get()));
         Context->EnableScheduleForActor(SchemeCache, true);
 
@@ -112,7 +112,7 @@ void TCacheTest::Navigate() {
     ui64 txId = 100;
 
     TestMkDir(*Context, ++txId, "/Root", "DirA");
-    TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard)); 
+    TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard));
 
     auto entry = TestNavigate("/Root/DirA", TNavigate::EStatus::Ok);
 
@@ -128,7 +128,7 @@ void TCacheTest::Attributes() {
 
     ui64 txId = 100;
     TestMkDir(*Context, ++txId, "/Root", "DirA", {NKikimrScheme::StatusAccepted}, attrs);
-    TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard)); 
+    TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard));
 
     auto entry = TestNavigate("/Root/DirA", TNavigate::EStatus::Ok);
     UNIT_ASSERT_VALUES_EQUAL(entry.Attributes.size(), 1);
@@ -142,7 +142,7 @@ void TCacheTest::List() {
     TestMkDir(*Context, ++txId, "/Root", "DirA");
     TestMkDir(*Context, ++txId, "/Root/DirA", "DirB");
     TestMkDir(*Context, ++txId, "/Root/DirA", "DirC");
-    TestWaitNotification(*Context, {txId - 2, txId - 1, txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard)); 
+    TestWaitNotification(*Context, {txId - 2, txId - 1, txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard));
 
     {
         auto entry = TestNavigate("/Root/DirA", TNavigate::EStatus::Ok);
@@ -160,18 +160,18 @@ void TCacheTest::Recreate() {
     ui64 txId = 100;
 
     TestMkDir(*Context, ++txId, "/Root", "DirA");
-    TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard)); 
+    TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard));
     Context->CreateSubscriber<TSchemeBoardEvents::TEvNotifyUpdate>(edge, "/Root/DirA");
 
     TestRmDir(*Context, ++txId, "/Root", "DirA");
-    TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard)); 
+    TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard));
     auto ev = Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotifyDelete>(edge);
     auto pathId = ev->Get()->PathId;
     TTableId tableId(pathId.OwnerId, pathId.LocalPathId);
     TestResolve(tableId, TResolve::EStatus::PathErrorNotExist);
 
     TestMkDir(*Context, ++txId, "/Root", "DirA");
-    TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard)); 
+    TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard));
     Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotifyUpdate>(edge);
     TestNavigate("/Root/DirA", TNavigate::EStatus::Ok);
 }
@@ -211,7 +211,7 @@ void TCacheTest::RacyCreateAndSync() {
 
     ui64 txId = 100;
     TestMkDir(*Context, ++txId, "/Root", "DirA");
-    TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard)); 
+    TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard));
 
     Context->TTestBasicRuntime::Send(delayedSyncRequest.Release(), 0, true);
     auto ev = Context->GrabEdgeEvent<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(edge);
@@ -224,11 +224,11 @@ void TCacheTest::RacyRecreateAndSync() {
     ui64 txId = 100;
 
     TestMkDir(*Context, ++txId, "/Root", "DirA");
-    TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard)); 
+    TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard));
     TestNavigate("/Root/DirA", TNavigate::EStatus::Ok, "", TNavigate::EOp::OpPath, false, true, true);
 
     TestRmDir(*Context, ++txId, "/Root", "DirA");
-    TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard)); 
+    TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard));
     TestNavigate("/Root/DirA", TNavigate::EStatus::PathErrorUnknown, "", TNavigate::EOp::OpPath, false, true, true);
 
     THolder<IEventHandle> delayedSyncRequest;
@@ -264,7 +264,7 @@ void TCacheTest::RacyRecreateAndSync() {
     Context->SetObserverFunc(prevObserver);
 
     TestMkDir(*Context, ++txId, "/Root", "DirA");
-    TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard)); 
+    TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard));
 
     Context->TTestBasicRuntime::Send(delayedSyncRequest.Release(), 0, true);
     auto ev = Context->GrabEdgeEvent<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(edge);
@@ -296,7 +296,7 @@ void TCacheTest::CheckAccess() {
 void TCacheTest::CheckSystemViewAccess() {
     ui64 txId = 100;
     TestCreateSubDomain(*Context, ++txId, "/Root", "Name: \"SubDomainA\"");
-    TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard)); 
+    TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard));
     TestModifyACL(*Context, ++txId, "/Root", "SubDomainA", TString(), "user0@builtin");
 
     auto entry = TestNavigate("/Root/SubDomainA/.sys/partition_stats",
@@ -348,7 +348,7 @@ void TCacheTest::TableSchemaVersion() {
         }
     )", {NKikimrScheme::StatusAccepted});
 
-    TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard)); 
+    TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard));
     {
         auto entry = TestNavigate("/Root/Table1", TNavigate::EStatus::Ok);
         UNIT_ASSERT_VALUES_EQUAL(entry.TableId.SchemaVersion, 1);
@@ -359,7 +359,7 @@ void TCacheTest::TableSchemaVersion() {
         Columns { Name: "added"  Type: "Uint64"}
     )");
 
-    TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard)); 
+    TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard));
     {
         auto entry = TestNavigate("/Root/Table1", TNavigate::EStatus::Ok);
         UNIT_ASSERT_VALUES_EQUAL(entry.TableId.SchemaVersion, 2);
@@ -470,7 +470,7 @@ TPathId TCacheTest::ExpectWatchDeleted(const TActorId& watcher) {
 }
 
 void TCacheTest::CreateAndMigrateWithoutDecision(ui64& txId) {
-    auto domainSSNotifier = CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard); 
+    auto domainSSNotifier = CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard);
 
     TestCreateSubDomain(*Context, ++txId,  "/Root",
                         "Name: \"USER_0\"");
@@ -498,20 +498,20 @@ void TCacheTest::CreateAndMigrateWithoutDecision(ui64& txId) {
     {
         auto entry = TestNavigate("/Root/USER_0", TNavigate::EStatus::Ok);
         UNIT_ASSERT_EQUAL(JoinPath(entry.Path), "Root/USER_0");
-        UNIT_ASSERT_EQUAL(entry.TableId.PathId, TPathId(TTestTxConfig::SchemeShard, 2)); 
+        UNIT_ASSERT_EQUAL(entry.TableId.PathId, TPathId(TTestTxConfig::SchemeShard, 2));
         UNIT_ASSERT(!entry.DomainInfo->Params.HasSchemeShard());
     }
 
     {
         auto entry = TestNavigate("/Root/USER_0/DirA", TNavigate::EStatus::Ok);
         UNIT_ASSERT_EQUAL(JoinPath(entry.Path), "Root/USER_0/DirA");
-        UNIT_ASSERT_EQUAL(entry.TableId.PathId, TPathId(TTestTxConfig::SchemeShard, 3)); 
+        UNIT_ASSERT_EQUAL(entry.TableId.PathId, TPathId(TTestTxConfig::SchemeShard, 3));
         UNIT_ASSERT(!entry.DomainInfo->Params.HasSchemeShard());
     }
     {
         auto entry = TestNavigate("/Root/USER_0/DirA/Table1", TNavigate::EStatus::Ok);
         UNIT_ASSERT_EQUAL(JoinPath(entry.Path), "Root/USER_0/DirA/Table1");
-        UNIT_ASSERT_EQUAL(entry.TableId.PathId, TPathId(TTestTxConfig::SchemeShard, 4)); 
+        UNIT_ASSERT_EQUAL(entry.TableId.PathId, TPathId(TTestTxConfig::SchemeShard, 4));
         UNIT_ASSERT(!entry.DomainInfo->Params.HasSchemeShard());
     }
 
@@ -535,7 +535,7 @@ void TCacheTest::MigrationCommon() {
         {
             auto entry = TestNavigate("/Root/USER_0", TNavigate::EStatus::Ok);
             UNIT_ASSERT_EQUAL(JoinPath(entry.Path), "Root/USER_0");
-            UNIT_ASSERT_UNEQUAL(entry.TableId.PathId, TPathId(TTestTxConfig::SchemeShard, 2)); 
+            UNIT_ASSERT_UNEQUAL(entry.TableId.PathId, TPathId(TTestTxConfig::SchemeShard, 2));
             UNIT_ASSERT(entry.DomainInfo->Params.HasSchemeShard());
             UNIT_ASSERT_EQUAL(entry.TableId.PathId, TPathId(entry.DomainInfo->Params.GetSchemeShard(), 1));
         }
@@ -543,13 +543,13 @@ void TCacheTest::MigrationCommon() {
             auto entry = TestNavigate("/Root/USER_0/DirA", TNavigate::EStatus::Ok);
             Cerr << entry.ToString() << Endl;
             UNIT_ASSERT_EQUAL(JoinPath(entry.Path), "Root/USER_0/DirA");
-            UNIT_ASSERT_EQUAL(entry.TableId.PathId, TPathId(TTestTxConfig::SchemeShard, 3)); 
+            UNIT_ASSERT_EQUAL(entry.TableId.PathId, TPathId(TTestTxConfig::SchemeShard, 3));
             UNIT_ASSERT(entry.DomainInfo->Params.HasSchemeShard());
         }
         {
             auto entry = TestNavigate("/Root/USER_0/DirA/Table1", TNavigate::EStatus::Ok);
             UNIT_ASSERT_EQUAL(JoinPath(entry.Path), "Root/USER_0/DirA/Table1");
-            UNIT_ASSERT_EQUAL(entry.TableId.PathId, TPathId(TTestTxConfig::SchemeShard, 4)); 
+            UNIT_ASSERT_EQUAL(entry.TableId.PathId, TPathId(TTestTxConfig::SchemeShard, 4));
             UNIT_ASSERT(entry.DomainInfo->Params.HasSchemeShard());
         }
     };
@@ -557,7 +557,7 @@ void TCacheTest::MigrationCommon() {
     checkMigratedPathes();
 
     // global ss do not wipe migrated pathes after restart
-    RebootTablet(*Context, (ui64)TTestTxConfig::SchemeShard, Context->AllocateEdgeActor()); 
+    RebootTablet(*Context, (ui64)TTestTxConfig::SchemeShard, Context->AllocateEdgeActor());
 
     checkMigratedPathes();
 }
@@ -573,7 +573,7 @@ void TCacheTest::MigrationCommit() {
         {
             auto entry = TestNavigate("/Root/USER_0", TNavigate::EStatus::Ok);
             UNIT_ASSERT_EQUAL(JoinPath(entry.Path), "Root/USER_0");
-            UNIT_ASSERT_UNEQUAL(entry.TableId.PathId, TPathId(TTestTxConfig::SchemeShard, 2)); 
+            UNIT_ASSERT_UNEQUAL(entry.TableId.PathId, TPathId(TTestTxConfig::SchemeShard, 2));
             UNIT_ASSERT(entry.DomainInfo->Params.HasSchemeShard());
             UNIT_ASSERT_EQUAL(entry.TableId.PathId, TPathId(entry.DomainInfo->Params.GetSchemeShard(), 1));
         }
@@ -581,13 +581,13 @@ void TCacheTest::MigrationCommit() {
             auto entry = TestNavigate("/Root/USER_0/DirA", TNavigate::EStatus::Ok);
             Cerr << entry.ToString() << Endl;
             UNIT_ASSERT_EQUAL(JoinPath(entry.Path), "Root/USER_0/DirA");
-            UNIT_ASSERT_EQUAL(entry.TableId.PathId, TPathId(TTestTxConfig::SchemeShard, 3)); 
+            UNIT_ASSERT_EQUAL(entry.TableId.PathId, TPathId(TTestTxConfig::SchemeShard, 3));
             UNIT_ASSERT(entry.DomainInfo->Params.HasSchemeShard());
         }
         {
             auto entry = TestNavigate("/Root/USER_0/DirA/Table1", TNavigate::EStatus::Ok);
             UNIT_ASSERT_EQUAL(JoinPath(entry.Path), "Root/USER_0/DirA/Table1");
-            UNIT_ASSERT_EQUAL(entry.TableId.PathId, TPathId(TTestTxConfig::SchemeShard, 4)); 
+            UNIT_ASSERT_EQUAL(entry.TableId.PathId, TPathId(TTestTxConfig::SchemeShard, 4));
             UNIT_ASSERT(entry.DomainInfo->Params.HasSchemeShard());
         }
     };
@@ -596,12 +596,12 @@ void TCacheTest::MigrationCommit() {
 
     TestUpgradeSubDomainDecision(*Context, ++txId,  "/Root", "USER_0", NKikimrSchemeOp::TUpgradeSubDomain::Commit);
 
-    auto domainSSNotifier = CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard); 
+    auto domainSSNotifier = CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard);
     TestWaitNotification(*Context, {txId}, domainSSNotifier);
 
     checkMigratedPathes();
 
-    RebootTablet(*Context, (ui64)TTestTxConfig::SchemeShard, Context->AllocateEdgeActor()); 
+    RebootTablet(*Context, (ui64)TTestTxConfig::SchemeShard, Context->AllocateEdgeActor());
 
     checkMigratedPathes();
 }
@@ -617,7 +617,7 @@ void TCacheTest::MigrationLostMessage() {
         {
             auto entry = TestNavigate("/Root/USER_0", TNavigate::EStatus::Ok);
             UNIT_ASSERT_EQUAL(JoinPath(entry.Path), "Root/USER_0");
-            UNIT_ASSERT_UNEQUAL(entry.TableId.PathId, TPathId(TTestTxConfig::SchemeShard, 2)); 
+            UNIT_ASSERT_UNEQUAL(entry.TableId.PathId, TPathId(TTestTxConfig::SchemeShard, 2));
             UNIT_ASSERT(entry.DomainInfo->Params.HasSchemeShard());
             UNIT_ASSERT_EQUAL(entry.TableId.PathId, TPathId(entry.DomainInfo->Params.GetSchemeShard(), 1));
         }
@@ -625,13 +625,13 @@ void TCacheTest::MigrationLostMessage() {
             auto entry = TestNavigate("/Root/USER_0/DirA", TNavigate::EStatus::Ok);
             Cerr << entry.ToString() << Endl;
             UNIT_ASSERT_EQUAL(JoinPath(entry.Path), "Root/USER_0/DirA");
-            UNIT_ASSERT_EQUAL(entry.TableId.PathId, TPathId(TTestTxConfig::SchemeShard, 3)); 
+            UNIT_ASSERT_EQUAL(entry.TableId.PathId, TPathId(TTestTxConfig::SchemeShard, 3));
             UNIT_ASSERT(entry.DomainInfo->Params.HasSchemeShard());
         }
         {
             auto entry = TestNavigate("/Root/USER_0/DirA/Table1", TNavigate::EStatus::Ok);
             UNIT_ASSERT_EQUAL(JoinPath(entry.Path), "Root/USER_0/DirA/Table1");
-            UNIT_ASSERT_EQUAL(entry.TableId.PathId, TPathId(TTestTxConfig::SchemeShard, 4)); 
+            UNIT_ASSERT_EQUAL(entry.TableId.PathId, TPathId(TTestTxConfig::SchemeShard, 4));
             UNIT_ASSERT(entry.DomainInfo->Params.HasSchemeShard());
         }
     };
@@ -640,7 +640,7 @@ void TCacheTest::MigrationLostMessage() {
 
     TestUpgradeSubDomainDecision(*Context, ++txId,  "/Root", "USER_0", NKikimrSchemeOp::TUpgradeSubDomain::Commit);
 
-    auto domainSSNotifier = CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard); 
+    auto domainSSNotifier = CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard);
     TestWaitNotification(*Context, {txId}, domainSSNotifier);
 
     checkMigratedPathes();
@@ -650,7 +650,7 @@ void TCacheTest::MigrationLostMessage() {
     {
         auto entry = TestNavigate("/Root/USER_0/DirA/Table1", TNavigate::EStatus::Ok);
         UNIT_ASSERT_EQUAL(JoinPath(entry.Path), "Root/USER_0/DirA/Table1");
-        UNIT_ASSERT_EQUAL(entry.TableId.PathId, TPathId(TTestTxConfig::SchemeShard, 4)); 
+        UNIT_ASSERT_EQUAL(entry.TableId.PathId, TPathId(TTestTxConfig::SchemeShard, 4));
         UNIT_ASSERT(entry.DomainInfo->Params.HasSchemeShard());
 
         tentantSchemeShard = entry.DomainInfo->Params.GetSchemeShard();
@@ -686,7 +686,7 @@ void TCacheTest::MigrationLostMessage() {
     { // hang in chache
         auto entry = TestNavigate("/Root/USER_0/DirA/Table1", TNavigate::EStatus::Ok);
         UNIT_ASSERT_EQUAL(JoinPath(entry.Path), "Root/USER_0/DirA/Table1");
-        UNIT_ASSERT_EQUAL(entry.TableId.PathId, TPathId(TTestTxConfig::SchemeShard, 4)); 
+        UNIT_ASSERT_EQUAL(entry.TableId.PathId, TPathId(TTestTxConfig::SchemeShard, 4));
         UNIT_ASSERT(entry.DomainInfo->Params.HasSchemeShard());
     }
 
@@ -696,7 +696,7 @@ void TCacheTest::MigrationLostMessage() {
     { // hang in chache
         auto entry = TestNavigate("/Root/USER_0/DirA", TNavigate::EStatus::Ok);
         UNIT_ASSERT_EQUAL(JoinPath(entry.Path), "Root/USER_0/DirA");
-        UNIT_ASSERT_EQUAL(entry.TableId.PathId, TPathId(TTestTxConfig::SchemeShard, 3)); 
+        UNIT_ASSERT_EQUAL(entry.TableId.PathId, TPathId(TTestTxConfig::SchemeShard, 3));
         UNIT_ASSERT(entry.DomainInfo->Params.HasSchemeShard());
     }
 
@@ -714,7 +714,7 @@ void TCacheTest::MigrationLostMessage() {
     }
 
     {
-        TestNavigateByTableId(TTableId(TTestTxConfig::SchemeShard, 3), TNavigate::EStatus::Ok, "/Root/USER_0/DirA"); 
+        TestNavigateByTableId(TTableId(TTestTxConfig::SchemeShard, 3), TNavigate::EStatus::Ok, "/Root/USER_0/DirA");
         TestNavigateByTableId(TTableId(tentantSchemeShard, 2), TNavigate::EStatus::Ok, "/Root/USER_0/DirA");
     }
 
@@ -723,7 +723,7 @@ void TCacheTest::MigrationLostMessage() {
     { // hang in chache still
         auto entry = TestNavigate("/Root/USER_0/DirA/Table1", TNavigate::EStatus::Ok);
         UNIT_ASSERT_EQUAL(JoinPath(entry.Path), "Root/USER_0/DirA/Table1");
-        UNIT_ASSERT_EQUAL(entry.TableId.PathId, TPathId(TTestTxConfig::SchemeShard, 4)); 
+        UNIT_ASSERT_EQUAL(entry.TableId.PathId, TPathId(TTestTxConfig::SchemeShard, 4));
         UNIT_ASSERT(entry.DomainInfo->Params.HasSchemeShard());
     }
 
@@ -765,7 +765,7 @@ void TCacheTest::MigrationUndo() {
         {
             auto entry = TestNavigate("/Root/USER_0", TNavigate::EStatus::Ok);
             UNIT_ASSERT_EQUAL(JoinPath(entry.Path), "Root/USER_0");
-            UNIT_ASSERT_UNEQUAL(entry.TableId.PathId, TPathId(TTestTxConfig::SchemeShard, 2)); 
+            UNIT_ASSERT_UNEQUAL(entry.TableId.PathId, TPathId(TTestTxConfig::SchemeShard, 2));
             UNIT_ASSERT(entry.DomainInfo->Params.HasSchemeShard());
             UNIT_ASSERT_EQUAL(entry.TableId.PathId, TPathId(entry.DomainInfo->Params.GetSchemeShard(), 1));
         }
@@ -773,13 +773,13 @@ void TCacheTest::MigrationUndo() {
             auto entry = TestNavigate("/Root/USER_0/DirA", TNavigate::EStatus::Ok);
             Cerr << entry.ToString() << Endl;
             UNIT_ASSERT_EQUAL(JoinPath(entry.Path), "Root/USER_0/DirA");
-            UNIT_ASSERT_EQUAL(entry.TableId.PathId, TPathId(TTestTxConfig::SchemeShard, 3)); 
+            UNIT_ASSERT_EQUAL(entry.TableId.PathId, TPathId(TTestTxConfig::SchemeShard, 3));
             UNIT_ASSERT(entry.DomainInfo->Params.HasSchemeShard());
         }
         {
             auto entry = TestNavigate("/Root/USER_0/DirA/Table1", TNavigate::EStatus::Ok);
             UNIT_ASSERT_EQUAL(JoinPath(entry.Path), "Root/USER_0/DirA/Table1");
-            UNIT_ASSERT_EQUAL(entry.TableId.PathId, TPathId(TTestTxConfig::SchemeShard, 4)); 
+            UNIT_ASSERT_EQUAL(entry.TableId.PathId, TPathId(TTestTxConfig::SchemeShard, 4));
             UNIT_ASSERT(entry.DomainInfo->Params.HasSchemeShard());
         }
     };
@@ -788,7 +788,7 @@ void TCacheTest::MigrationUndo() {
 
     TestUpgradeSubDomainDecision(*Context, ++txId,  "/Root", "USER_0", NKikimrSchemeOp::TUpgradeSubDomain::Undo);
 
-    auto domainSSNotifier = CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard); 
+    auto domainSSNotifier = CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard);
     TestWaitNotification(*Context, {txId}, domainSSNotifier);
 
     auto checkRevertedPathes = [&] () {
@@ -796,20 +796,20 @@ void TCacheTest::MigrationUndo() {
             auto entry = TestNavigate("/Root/USER_0", TNavigate::EStatus::Ok);
             Cerr << entry.ToString() << Endl;
             UNIT_ASSERT_EQUAL(JoinPath(entry.Path), "Root/USER_0");
-            UNIT_ASSERT_EQUAL(entry.TableId.PathId, TPathId(TTestTxConfig::SchemeShard, 2)); 
+            UNIT_ASSERT_EQUAL(entry.TableId.PathId, TPathId(TTestTxConfig::SchemeShard, 2));
             UNIT_ASSERT(!entry.DomainInfo->Params.HasSchemeShard());
         }
         {
             auto entry = TestNavigate("/Root/USER_0/DirA", TNavigate::EStatus::Ok);
             Cerr << entry.ToString() << Endl;
             UNIT_ASSERT_EQUAL(JoinPath(entry.Path), "Root/USER_0/DirA");
-            UNIT_ASSERT_EQUAL(entry.TableId.PathId, TPathId(TTestTxConfig::SchemeShard, 3)); 
+            UNIT_ASSERT_EQUAL(entry.TableId.PathId, TPathId(TTestTxConfig::SchemeShard, 3));
             UNIT_ASSERT(!entry.DomainInfo->Params.HasSchemeShard());
         }
         {
             auto entry = TestNavigate("/Root/USER_0/DirA/Table1", TNavigate::EStatus::Ok);
             UNIT_ASSERT_EQUAL(JoinPath(entry.Path), "Root/USER_0/DirA/Table1");
-            UNIT_ASSERT_EQUAL(entry.TableId.PathId, TPathId(TTestTxConfig::SchemeShard, 4)); 
+            UNIT_ASSERT_EQUAL(entry.TableId.PathId, TPathId(TTestTxConfig::SchemeShard, 4));
             UNIT_ASSERT(!entry.DomainInfo->Params.HasSchemeShard());
         }
     };
@@ -817,7 +817,7 @@ void TCacheTest::MigrationUndo() {
 
     checkRevertedPathes();
 
-    RebootTablet(*Context, (ui64)TTestTxConfig::SchemeShard, Context->AllocateEdgeActor()); 
+    RebootTablet(*Context, (ui64)TTestTxConfig::SchemeShard, Context->AllocateEdgeActor());
 
     checkRevertedPathes();
 }
@@ -837,7 +837,7 @@ void TCacheTest::MigrationDeletedPathNavigate() {
 
     TestUpgradeSubDomainDecision(*Context, ++txId,  "/Root", "USER_0", NKikimrSchemeOp::TUpgradeSubDomain::Commit);
 
-    auto domainSSNotifier = CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard); 
+    auto domainSSNotifier = CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard);
     TestWaitNotification(*Context, {txId}, domainSSNotifier);
 
     ui64 tentantSchemeShard = 0;
@@ -845,7 +845,7 @@ void TCacheTest::MigrationDeletedPathNavigate() {
     {
         auto entry = TestNavigate("/Root/USER_0/DirA/Table1", TNavigate::EStatus::Ok);
         UNIT_ASSERT_EQUAL(JoinPath(entry.Path), "Root/USER_0/DirA/Table1");
-        UNIT_ASSERT_EQUAL(entry.TableId.PathId, TPathId(TTestTxConfig::SchemeShard, 4)); 
+        UNIT_ASSERT_EQUAL(entry.TableId.PathId, TPathId(TTestTxConfig::SchemeShard, 4));
         UNIT_ASSERT(entry.DomainInfo->Params.HasSchemeShard());
 
         tentantSchemeShard = entry.DomainInfo->Params.GetSchemeShard();
@@ -872,7 +872,7 @@ void TCacheTest::MigrationDeletedPathNavigate() {
     {
         auto entry = TestNavigate("/Root/USER_0/DirA/Table1", TNavigate::EStatus::Ok);
         UNIT_ASSERT_EQUAL(JoinPath(entry.Path), "Root/USER_0/DirA/Table1");
-        UNIT_ASSERT_UNEQUAL(entry.TableId.PathId, TPathId(TTestTxConfig::SchemeShard, 4)); 
+        UNIT_ASSERT_UNEQUAL(entry.TableId.PathId, TPathId(TTestTxConfig::SchemeShard, 4));
         UNIT_ASSERT(entry.DomainInfo->Params.HasSchemeShard());
 
         newPathId = entry.TableId.PathId;
@@ -883,7 +883,7 @@ void TCacheTest::MigrationDeletedPathNavigate() {
 
         auto entry = TestNavigate("/Root/USER_0/DirA/Table1", TNavigate::EStatus::Ok);
         UNIT_ASSERT_EQUAL(JoinPath(entry.Path), "Root/USER_0/DirA/Table1");
-        UNIT_ASSERT_UNEQUAL(entry.TableId.PathId, TPathId(TTestTxConfig::SchemeShard, 4)); 
+        UNIT_ASSERT_UNEQUAL(entry.TableId.PathId, TPathId(TTestTxConfig::SchemeShard, 4));
     }
 
     {
@@ -892,7 +892,7 @@ void TCacheTest::MigrationDeletedPathNavigate() {
 }
 
 void TCacheTest::WatchRoot() {
-    auto watcher = TestWatch(TPathId(TTestTxConfig::SchemeShard, 1)); 
+    auto watcher = TestWatch(TPathId(TTestTxConfig::SchemeShard, 1));
 
     {
         auto result = ExpectWatchUpdated(watcher, "/Root");
@@ -904,7 +904,7 @@ void TCacheTest::WatchRoot() {
     ui64 txId = 100;
 
     TestMkDir(*Context, ++txId, "/Root", "DirA");
-    TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard)); 
+    TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard));
 
     // Ignore notification before create finished
     ExpectWatchUpdated(watcher);
@@ -918,7 +918,7 @@ void TCacheTest::WatchRoot() {
         dirPathId = result->GetPathDescription().GetChildren(0).GetPathId();
     }
 
-    TestWatch(TPathId(TTestTxConfig::SchemeShard, dirPathId), watcher); 
+    TestWatch(TPathId(TTestTxConfig::SchemeShard, dirPathId), watcher);
 
     {
         auto result = ExpectWatchUpdated(watcher, "/Root/DirA");
@@ -927,7 +927,7 @@ void TCacheTest::WatchRoot() {
     }
 
     TestRmDir(*Context, ++txId, "/Root", "DirA");
-    TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard)); 
+    TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard));
 
     {
         auto deleted = ExpectWatchDeleted(watcher);

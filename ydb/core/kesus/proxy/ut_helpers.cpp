@@ -16,8 +16,8 @@ void TTestContext::Setup(ui32 nodeCount) {
     SetupLogging();
     SetupTabletServices();
 
-    TActorId bootstrapper = CreateTestBootstrapper(*Runtime, 
-        CreateTestTabletInfo(TabletId, TabletType, TErasureType::ErasureNone), 
+    TActorId bootstrapper = CreateTestBootstrapper(*Runtime,
+        CreateTestTabletInfo(TabletId, TabletType, TErasureType::ErasureNone),
         &CreateKesusTablet);
     Runtime->EnableScheduleForActor(bootstrapper);
     {
@@ -49,13 +49,13 @@ void TTestContext::Sleep(ui64 millis) {
 void TTestContext::RebootTablet() {
     ui32 nodeIndex = 0;
     TActorId sender = Runtime->AllocateEdgeActor(nodeIndex);
-    ForwardToTablet(*Runtime, TabletId, sender, new TEvents::TEvPoisonPill(), nodeIndex); 
+    ForwardToTablet(*Runtime, TabletId, sender, new TEvents::TEvPoisonPill(), nodeIndex);
     {
         TDispatchOptions options;
         options.FinalEvents.emplace_back(TEvTablet::EvBoot);
         Runtime->DispatchEvents(options);
     }
-    InvalidateTabletResolverCache(*Runtime, TabletId, nodeIndex); 
+    InvalidateTabletResolverCache(*Runtime, TabletId, nodeIndex);
 }
 
 TActorId TTestContext::GetProxy(ui64 proxyId, ui32 nodeIndex) {

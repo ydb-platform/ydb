@@ -334,7 +334,7 @@ message TBootstrap {
         optional NKikimrTabletBase.TTabletStorageInfo Info = 3;
         optional bool StandBy = 4;
         optional uint64 WatchThreshold = 5;
-        optional bool StartFollowers = 6; 
+        optional bool StartFollowers = 6;
         optional bool AllowDynamicConfiguration = 7 [default = false];
     }
 
@@ -634,7 +634,7 @@ message TFeatureFlags {
     optional bool CompileMinikqlWithVersion = 19 [default = true]; // deprecated: always true
     optional bool ReadTableWithSnapshot = 20 [default = true];
     optional bool ImportantTabletsUseSystemPool = 21 [default = true];
-    optional bool EnableOfflineSlaves = 22 [default = true]; // deprecated: always true 
+    optional bool EnableOfflineSlaves = 22 [default = true]; // deprecated: always true
     optional bool CheckDatabaseAccessPermission = 23 [default = false];
     optional bool AllowOnlineIndexBuild = 24 [default = true]; // deprecated: always true
     optional bool EnablePersistentQueryStats = 25 [default = false];
@@ -659,13 +659,13 @@ message TFeatureFlags {
     optional bool EnableOlapSchemaOperations = 44 [default = false];
     optional bool EnableVPatch = 45 [default = false];
     optional bool EnableMvccSnapshotReads = 46 [default = false];
-    optional Tribool EnableMvcc = 47 [default = VALUE_TRUE]; 
+    optional Tribool EnableMvcc = 47 [default = VALUE_TRUE];
     optional bool EnableSchemeTransactionsAtSchemeShard = 48 [default = false];
     optional bool EnableArrowFormatAtDatashard = 49 [default = false];
     optional bool Enable3x3RequestsForMirror3DCMinLatencyPut = 50 [default = false];
-    optional bool EnableBackgroundCompaction = 51 [default = true]; 
+    optional bool EnableBackgroundCompaction = 51 [default = true];
     optional bool EnableArrowFormatInChannels = 52 [default = false];
-    optional bool EnableBackgroundCompactionServerless = 53 [default = false]; 
+    optional bool EnableBackgroundCompactionServerless = 53 [default = false];
     optional bool EnableNotNullColumns = 54 [default = false];
     optional bool EnableTtlOnAsyncIndexedTables = 55 [default = false];
     optional bool EnableBulkUpsertToAsyncIndexedTables = 56 [default = false];
@@ -692,8 +692,8 @@ message TSqsConfig {
     optional THttpServerConfig HttpServerConfig = 4;
 
     // Turn on queue leaders option
-    optional bool EnableQueueMaster = 6 [default = true]; // TODO: remove 
-    optional bool EnableQueueLeader = 68 [default = true]; 
+    optional bool EnableQueueMaster = 6 [default = true]; // TODO: remove
+    optional bool EnableQueueLeader = 68 [default = true];
 
     // Time to live for queue attributes cache
     optional uint64 QueueAttributesCacheTimeMs = 8 [default = 60000];
@@ -722,13 +722,13 @@ message TSqsConfig {
     repeated string MeteringCloudNetCidr = 53;
     repeated string MeteringYandexNetCidr = 54;
 
-    // TODO: remove both 
+    // TODO: remove both
     optional uint32 MastersDescriberUpdateTimeMs = 17 [default = 10000];
     optional uint32 MasterConnectTimeoutMs = 18 [default = 10000];
 
-    optional uint32 LeadersDescriberUpdateTimeMs = 69 [default = 10000]; 
-    optional uint32 LeaderConnectTimeoutMs = 70 [default = 10000]; 
- 
+    optional uint32 LeadersDescriberUpdateTimeMs = 69 [default = 10000];
+    optional uint32 LeaderConnectTimeoutMs = 70 [default = 10000];
+
     optional uint64 MinMessageRetentionPeriodMs = 19 [default = 60000];
 
     // DB requests retries
@@ -913,8 +913,8 @@ message TStoragePolicy {
 message TReplicationPolicy {
     optional string Name = 1;
 
-    optional uint64 FollowerCount = 2; 
-    optional bool AllowFollowerPromotion = 3 [default = true]; 
+    optional uint64 FollowerCount = 2;
+    optional bool AllowFollowerPromotion = 3 [default = true];
     optional bool CrossDataCenter = 4;
 }
 
@@ -1297,19 +1297,19 @@ message TDataShardConfig {
     optional uint64 CleanupSnapshotPeriod = 10 [default = 15000]; // milliseconds
 }
 
-message TCompactionConfig { 
-    message TBackgroundCompactionConfig { 
-        optional double Rate = 1 [default = 1]; // 1 compaction / s 
-        optional uint64 InflightLimit = 2 [default = 1]; 
-        optional uint64 TimeoutSeconds = 3 [default = 600]; 
-        optional uint64 WakeupIntervalSeconds = 4 [default = 60]; 
-        optional uint64 MinCompactionRepeatDelay = 5 [default = 600]; 
-        optional uint32 SearchHeightThreshold = 6 [default = 10]; 
-    } 
- 
-    optional TBackgroundCompactionConfig BackgroundCompactionConfig = 1; 
-} 
- 
+message TCompactionConfig {
+    message TBackgroundCompactionConfig {
+        optional double Rate = 1 [default = 1]; // 1 compaction / s
+        optional uint64 InflightLimit = 2 [default = 1];
+        optional uint64 TimeoutSeconds = 3 [default = 600];
+        optional uint64 WakeupIntervalSeconds = 4 [default = 60];
+        optional uint64 MinCompactionRepeatDelay = 5 [default = 600];
+        optional uint32 SearchHeightThreshold = 6 [default = 10];
+    }
+
+    optional TBackgroundCompactionConfig BackgroundCompactionConfig = 1;
+}
+
 // This message is used to upload custom service configs
 // to CMS. Config name is used to identify owner and
 // data format.
@@ -1378,7 +1378,7 @@ message TAppConfig {
     optional THiveConfig HiveConfig = 46;
     optional TDataShardConfig DataShardConfig = 49;
     optional NYq.NConfig.TConfig YandexQueryConfig = 50;
-    optional TCompactionConfig CompactionConfig = 52; 
+    optional TCompactionConfig CompactionConfig = 52;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

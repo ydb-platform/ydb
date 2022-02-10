@@ -42,7 +42,7 @@ struct TEnvironmentSetup {
         {}
 
         void Create(const TActorContext& ctx, ui32 pdiskId, const TIntrusivePtr<TPDiskConfig>& cfg,
-                const NPDisk::TKey& /*mainKey*/, ui32 poolId, ui32 nodeId) override { 
+                const NPDisk::TKey& /*mainKey*/, ui32 poolId, ui32 nodeId) override {
             const auto key = std::make_pair(nodeId, pdiskId);
             TIntrusivePtr<TPDiskMockState>& state = Env.PDiskMockStates[key];
             if (!state) {
@@ -262,8 +262,8 @@ struct TEnvironmentSetup {
     }
 
     void SetupTablet() {
-        Runtime->CreateTestBootstrapper( 
-            TTestActorSystem::CreateTestTabletInfo(TabletId, TTabletTypes::FLAT_BS_CONTROLLER, Settings.Erasure.GetErasure(), GroupId), 
+        Runtime->CreateTestBootstrapper(
+            TTestActorSystem::CreateTestTabletInfo(TabletId, TTabletTypes::FLAT_BS_CONTROLLER, Settings.Erasure.GetErasure(), GroupId),
             &CreateFlatBsController,
             Settings.ControllerNodeId);
 

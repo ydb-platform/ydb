@@ -95,7 +95,7 @@ namespace NKikimr::NPrivate {
         const TIntrusivePtr<TVPatchCtx> VPatchCtx;
         TString VDiskLogPrefix;
 
-        TActorId LeaderId; 
+        TActorId LeaderId;
 
         const ui64 IncarnationGuid;
 
@@ -117,7 +117,7 @@ namespace NKikimr::NPrivate {
         ui64 WaitedXorDiffCount = 0;
 
     public:
-        TSkeletonVPatchActor(TActorId leaderId, const TBlobStorageGroupType &gType, 
+        TSkeletonVPatchActor(TActorId leaderId, const TBlobStorageGroupType &gType,
                 TEvBlobStorage::TEvVPatchStart::TPtr &ev, TInstant now, TActorIDPtr skeletonFrontIDPtr,
                 const NMonitoring::TDynamicCounters::TCounterPtr &vPatchFoundPartsMsgsPtr,
                 const NMonitoring::TDynamicCounters::TCounterPtr &vPatchResMsgsPtr,
@@ -130,7 +130,7 @@ namespace NKikimr::NPrivate {
             , VPatchResMsgsPtr(vPatchResMsgsPtr)
             , VPatchCtx(vPatchCtx)
             , VDiskLogPrefix(vDiskLogPrefix)
-            , LeaderId(leaderId) 
+            , LeaderId(leaderId)
             , IncarnationGuid(incarnationGuid)
             , GType(gType)
         {
@@ -585,7 +585,7 @@ namespace NKikimr::NPrivate {
         }
 
         void ConfirmDying(bool forceDeath) {
-            Send(LeaderId, new TEvVPatchDyingRequest(PatchedBlobId)); 
+            Send(LeaderId, new TEvVPatchDyingRequest(PatchedBlobId));
             if (forceDeath) {
                 PassAway();
             } else {
@@ -670,13 +670,13 @@ namespace NKikimr::NPrivate {
 
 namespace NKikimr {
 
-    IActor* CreateSkeletonVPatchActor(TActorId leaderId, const TBlobStorageGroupType &gType, 
+    IActor* CreateSkeletonVPatchActor(TActorId leaderId, const TBlobStorageGroupType &gType,
             TEvBlobStorage::TEvVPatchStart::TPtr &ev, TInstant now, TActorIDPtr skeletonFrontIDPtr,
             const NMonitoring::TDynamicCounters::TCounterPtr &vPatchFoundPartsMsgsPtr,
             const NMonitoring::TDynamicCounters::TCounterPtr &vPatchResMsgsPtr,
             const TIntrusivePtr<TVPatchCtx> &vPatchCtx, const TString &vDiskLogPrefix, ui64 incarnationGuid)
     {
-        return new NPrivate::TSkeletonVPatchActor(leaderId, gType, ev, now, skeletonFrontIDPtr, 
+        return new NPrivate::TSkeletonVPatchActor(leaderId, gType, ev, now, skeletonFrontIDPtr,
                 vPatchFoundPartsMsgsPtr, vPatchResMsgsPtr, vPatchCtx, vDiskLogPrefix, incarnationGuid);
     }
 

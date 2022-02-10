@@ -37,7 +37,7 @@ struct TSignalTypeRegistrator {
         Register<TOnTabletBlockBlobStorage>(NSignalTypes::TypeOnTabletBlockBlobStorage);
         Register<TOnTabletRebuildGraph>(NSignalTypes::TypeOnTabletRebuildGraph);
         Register<TOnWriteZeroEntry>(NSignalTypes::TypeOnWriteZeroEntry);
-        Register<TOnFollowerPromoteToLeader>(NSignalTypes::TypeOnFollowerPromoteToLeader); 
+        Register<TOnFollowerPromoteToLeader>(NSignalTypes::TypeOnFollowerPromoteToLeader);
         Register<TRebuildGraphBootstrap>(NSignalTypes::TypeRebuildGraphBootstrap);
         Register<TErrorEntryBeyondBlocked>(NSignalTypes::TypeErrorEntryBeyondBlocked);
         Register<TErrorUnknownStatus>(NSignalTypes::TypeErrorUnknownStatus);
@@ -65,9 +65,9 @@ private:
 // Singleton
 static TSignalTypeRegistrator SignalTypeRegistrator;
 
-TOnTabletBootstrap::TOnTabletBootstrap(ui32 suggestedGeneration, bool leader, const TActorId& proxyID) { 
+TOnTabletBootstrap::TOnTabletBootstrap(ui32 suggestedGeneration, bool leader, const TActorId& proxyID) {
     PbSignal.SetSuggestedGeneration(suggestedGeneration);
-    PbSignal.SetLeader(leader); 
+    PbSignal.SetLeader(leader);
     NActors::ActorIdToProto(proxyID, PbSignal.MutableStateStorageProxyID());
 }
 
@@ -239,27 +239,27 @@ void TOnWriteZeroEntry::OutText(TStringStream& str, TTimestampData& tsData, cons
     str << ", LastInGeneration=" << PbSignal.GetLastInGeneration() << ")" << Endl;
 }
 
-TOnFollowerPromoteToLeader::TOnFollowerPromoteToLeader( 
+TOnFollowerPromoteToLeader::TOnFollowerPromoteToLeader(
     ui32 suggestedGeneration
-    , const TActorId& knownLeaderID 
-    , const TActorId& followerStStGuardian 
+    , const TActorId& knownLeaderID
+    , const TActorId& followerStStGuardian
 ) {
     PbSignal.SetSuggestedGeneration(suggestedGeneration);
-    NActors::ActorIdToProto(knownLeaderID, PbSignal.MutableKnownLeaderID()); 
-    NActors::ActorIdToProto(followerStStGuardian, PbSignal.MutableFollowerStStGuardian()); 
+    NActors::ActorIdToProto(knownLeaderID, PbSignal.MutableKnownLeaderID());
+    NActors::ActorIdToProto(followerStStGuardian, PbSignal.MutableFollowerStStGuardian());
 }
 
-TOnFollowerPromoteToLeader::TOnFollowerPromoteToLeader(const TString& serializedSignal) 
+TOnFollowerPromoteToLeader::TOnFollowerPromoteToLeader(const TString& serializedSignal)
     : TMyBase(serializedSignal)
 {}
 
-void TOnFollowerPromoteToLeader::OutText(TStringStream& str, TTimestampData& tsData, const TString& prefix) const { 
-    TActorId knownLeaderId = NActors::ActorIdFromProto(PbSignal.GetKnownLeaderID()); 
-    TActorId followerStStGuardianId = NActors::ActorIdFromProto(PbSignal.GetFollowerStStGuardian()); 
+void TOnFollowerPromoteToLeader::OutText(TStringStream& str, TTimestampData& tsData, const TString& prefix) const {
+    TActorId knownLeaderId = NActors::ActorIdFromProto(PbSignal.GetKnownLeaderID());
+    TActorId followerStStGuardianId = NActors::ActorIdFromProto(PbSignal.GetFollowerStStGuardian());
     str << prefix << TimeStamp(tsData)
-        << " Follower promoted to leader (SuggestedGeneration=" << PbSignal.GetSuggestedGeneration() 
-        << ", KnownLeaderID=" << knownLeaderId.ToString() 
-        << ", FollowerStStGuardian=" << followerStStGuardianId.ToString() << ")" << Endl; 
+        << " Follower promoted to leader (SuggestedGeneration=" << PbSignal.GetSuggestedGeneration()
+        << ", KnownLeaderID=" << knownLeaderId.ToString()
+        << ", FollowerStStGuardian=" << followerStStGuardianId.ToString() << ")" << Endl;
 }
 
 TRebuildGraphBootstrap::TRebuildGraphBootstrap(ui32 blockedGen) {

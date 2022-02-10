@@ -145,7 +145,7 @@ struct TAppData {
     NKikimrConfig::THiveConfig HiveConfig;
     NKikimrConfig::TDataShardConfig DataShardConfig;
     NKikimrConfig::TMeteringConfig MeteringConfig;
-    NKikimrConfig::TCompactionConfig CompactionConfig; 
+    NKikimrConfig::TCompactionConfig CompactionConfig;
     bool EnforceUserTokenRequirement = false;
     bool AllowHugeKeyValueDeletes = true; // delete when all clients limit deletes per request
     bool EnableKqpSpilling = false;
@@ -154,7 +154,7 @@ struct TAppData {
     TVector<TString> AdministrationAllowedSIDs; // users/groups which allowed to perform administrative tasks
     TVector<TString> DefaultUserSIDs;
     TString AllAuthenticatedUsers;
-    TResourceProfilesPtr ResourceProfiles; 
+    TResourceProfilesPtr ResourceProfiles;
 
     TProgramShouldContinue * const KikimrShouldContinue;
     bool EnableIntrospection = true;

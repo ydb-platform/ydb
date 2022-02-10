@@ -213,7 +213,7 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
                     UNIT_ASSERT_VALUES_EQUAL(err, "");
                     UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);;
                 };
-                fnWriteRow(TTestTxConfig::FakeHiveTablets); 
+                fnWriteRow(TTestTxConfig::FakeHiveTablets);
 
                 pathVersion = TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB"),
                                                  {NLs::PathVersionEqual(7)});
@@ -294,7 +294,7 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
                     UNIT_ASSERT_VALUES_EQUAL(err, "");
                     UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);;
                 };
-                fnWriteRow(TTestTxConfig::FakeHiveTablets); 
+                fnWriteRow(TTestTxConfig::FakeHiveTablets);
 
                 TestConsistentCopyTables(runtime, ++t.TxId, "/", R"(
                            CopyTableDescriptions {
@@ -313,7 +313,7 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
             AsyncDropTable(runtime, ++t.TxId, "/MyRoot/DirB", "dst1");
 
             t.TestEnv->TestWaitNotification(runtime, {t.TxId-1, t.TxId});
-            t.TestEnv->TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 2}); 
+            t.TestEnv->TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 2});
 
             {
                 TInactiveZone inactive(activeZone);
@@ -445,7 +445,7 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
                                     NLs::ChildrenCount(0)});
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB/Table1"),
                                    {NLs::PathNotExist});
-                t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 3)); 
+                t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 3));
             }
         });
     }
@@ -491,7 +491,7 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
 
             TestForceDropUnsafe(runtime, ++t.TxId, dirAVersion.PathId.LocalPathId);
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
-            t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 10)); 
+            t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 10));
 
             {
                 TInactiveZone inactive(activeZone);
@@ -532,7 +532,7 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
                                     })");
             AsyncForceDropUnsafe(runtime, ++t.TxId, dirAVersion.PathId.LocalPathId);
             t.TestEnv->TestWaitNotification(runtime, {t.TxId - 1, t.TxId});
-            t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 10)); 
+            t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 10));
 
             {
                 TInactiveZone inactive(activeZone);
@@ -588,7 +588,7 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
 
             t.TestEnv->TestWaitNotification(runtime, {t.TxId - 1, t.TxId});
 
-            t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 10)); 
+            t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 10));
 
             {
                 TInactiveZone inactive(activeZone);
@@ -642,7 +642,7 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
 
             TestDropTable(runtime, ++t.TxId, "/MyRoot/DirB", "TestNotNullTable");
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
-            t.TestEnv->TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 10}); 
+            t.TestEnv->TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 10});
 
             {
                 TInactiveZone inactive(activeZone);
@@ -675,7 +675,7 @@ Y_UNIT_TEST_SUITE(TSolomonReboots) {
             ++t.TxId;
             TestDropSolomon(runtime, ++t.TxId, "/MyRoot", "Solomon");
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
-            t.TestEnv->TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 1}); 
+            t.TestEnv->TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 1});
 
             {
                 TInactiveZone inactive(activeZone);
@@ -714,7 +714,7 @@ Y_UNIT_TEST_SUITE(TSolomonReboots) {
 
             TestDropSolomon(runtime, ++t.TxId, "/MyRoot", "Solomon");
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
-            t.TestEnv->TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 1}); 
+            t.TestEnv->TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 1});
 
             {
                 TInactiveZone inactive(activeZone);
@@ -753,7 +753,7 @@ Y_UNIT_TEST_SUITE(TSolomonReboots) {
             ++t.TxId;
             TestDropSolomon(runtime, ++t.TxId, "/MyRoot", "Solomon");
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
-            t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 4)); 
+            t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 4));
 
             {
                 TInactiveZone inactive(activeZone);

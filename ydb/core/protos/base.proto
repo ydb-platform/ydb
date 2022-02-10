@@ -32,11 +32,11 @@ message TLogoBlobID {
     optional fixed64 RawX2 = 2;
     optional fixed64 RawX3 = 3;
 };
- 
-message TRowVersion { 
-    optional uint64 Step = 1; 
-    optional uint64 TxId = 2; 
-} 
+
+message TRowVersion {
+    optional uint64 Step = 1;
+    optional uint64 TxId = 2;
+}
 
 message TPathID {
     optional fixed64 OwnerId = 1;

@@ -28,9 +28,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                            {NLs::PathExist,
                             NLs::IsSubDomain("USER_0"),
-                            NLs::DomainKey(2, TTestTxConfig::SchemeShard), 
-                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}), 
-                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}), 
+                            NLs::DomainKey(2, TTestTxConfig::SchemeShard),
+                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}),
+                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}),
                             NLs::PathVersionEqual(4)});
 
         TestUpgradeSubDomain(runtime, ++txId,  "/MyRoot", "USER_0");
@@ -41,20 +41,20 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainTest) {
                            {NLs::PathExist,
                             NLs::IsExternalSubDomain("USER_0"),
                             NLs::ExtractTenantSchemeshard(&tenantSchemeShard),
-                            NLs::DomainKey(2, TTestTxConfig::SchemeShard), 
-                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}), 
-                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}), 
+                            NLs::DomainKey(2, TTestTxConfig::SchemeShard),
+                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}),
+                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}),
                             NLs::PathVersionEqual(5)});
 
-        UNIT_ASSERT(tenantSchemeShard == TTestTxConfig::FakeHiveTablets + 2); 
+        UNIT_ASSERT(tenantSchemeShard == TTestTxConfig::FakeHiveTablets + 2);
 
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0"),
                            {NLs::PathExist,
                             NLs::PathIdEqual(1),
                             NLs::IsSubDomain("MyRoot/USER_0"),
-                            NLs::DomainKey(2, TTestTxConfig::SchemeShard), 
-                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}), 
-                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1})}); 
+                            NLs::DomainKey(2, TTestTxConfig::SchemeShard),
+                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}),
+                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1})});
 
         TestMkDir(runtime, ++txId, "/MyRoot/USER_0", "DirA", {NKikimrScheme::StatusMultipleModifications});
         TestMkDir(runtime, tenantSchemeShard, ++txId, "/MyRoot/USER_0", "DirA", {NKikimrScheme::StatusReadOnly});
@@ -67,18 +67,18 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainTest) {
                            {NLs::PathExist,
                             NLs::IsExternalSubDomain("USER_0"),
                             NLs::ExtractTenantSchemeshard(&tenantSchemeShard),
-                            NLs::DomainKey(2, TTestTxConfig::SchemeShard), 
-                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}), 
-                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}), 
+                            NLs::DomainKey(2, TTestTxConfig::SchemeShard),
+                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}),
+                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}),
                             NLs::PathVersionEqual(6)});
 
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0"),
                            {NLs::PathExist,
                             NLs::PathIdEqual(1),
                             NLs::IsSubDomain("MyRoot/USER_0"),
-                            NLs::DomainKey(2, TTestTxConfig::SchemeShard), 
-                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}), 
-                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1})}); 
+                            NLs::DomainKey(2, TTestTxConfig::SchemeShard),
+                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}),
+                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1})});
 
         TestMkDir(runtime, ++txId, "/MyRoot/USER_0", "DirA", {NKikimrScheme::StatusRedirectDomain});
         TestMkDir(runtime, tenantSchemeShard, ++txId, "/MyRoot/USER_0", "DirA");
@@ -104,9 +104,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                            {NLs::PathExist,
                             NLs::IsSubDomain("USER_0"),
-                            NLs::DomainKey(2, TTestTxConfig::SchemeShard), 
-                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}), 
-                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}), 
+                            NLs::DomainKey(2, TTestTxConfig::SchemeShard),
+                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}),
+                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}),
                             NLs::PathVersionEqual(4)});
 
         TestUpgradeSubDomain(runtime, ++txId,  "/MyRoot", "USER_0");
@@ -117,21 +117,21 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainTest) {
                            {NLs::PathExist,
                             NLs::IsExternalSubDomain("USER_0"),
                             NLs::ExtractTenantSchemeshard(&tenantSchemeShard),
-                            NLs::DomainKey(2, TTestTxConfig::SchemeShard), 
-                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}), 
-                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}), 
-                            NLs::DomainSchemeshard(TTestTxConfig::FakeHiveTablets + 2), 
+                            NLs::DomainKey(2, TTestTxConfig::SchemeShard),
+                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}),
+                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}),
+                            NLs::DomainSchemeshard(TTestTxConfig::FakeHiveTablets + 2),
                             NLs::PathVersionEqual(5)});
 
-        UNIT_ASSERT(tenantSchemeShard == TTestTxConfig::FakeHiveTablets + 2); 
+        UNIT_ASSERT(tenantSchemeShard == TTestTxConfig::FakeHiveTablets + 2);
 
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0"),
                            {NLs::PathExist,
                             NLs::PathIdEqual(1),
                             NLs::IsSubDomain("MyRoot/USER_0"),
-                            NLs::DomainKey(2, TTestTxConfig::SchemeShard), 
-                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}), 
-                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1})}); 
+                            NLs::DomainKey(2, TTestTxConfig::SchemeShard),
+                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}),
+                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1})});
 
         TestUpgradeSubDomainDecision(runtime, ++txId,  "/MyRoot", "USER_0", NKikimrSchemeOp::TUpgradeSubDomain::Undo); // 104
         env.TestWaitNotification(runtime, txId);
@@ -139,16 +139,16 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                            {NLs::PathExist,
                             NLs::IsSubDomain("USER_0"),
-                            NLs::DomainKey(2, TTestTxConfig::SchemeShard), 
-                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}), 
-                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}), 
+                            NLs::DomainKey(2, TTestTxConfig::SchemeShard),
+                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}),
+                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}),
                             NLs::DomainSchemeshard(0),
                             NLs::PathVersionEqual(105)});
 
         TestMkDir(runtime, ++txId, "/MyRoot/USER_0", "DirA");
         env.TestWaitNotification(runtime, txId);
 
-        env.TestWaitTabletDeletion(runtime, TTestTxConfig::FakeHiveTablets + 2); 
+        env.TestWaitTabletDeletion(runtime, TTestTxConfig::FakeHiveTablets + 2);
 
     }
 
@@ -170,9 +170,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                            {NLs::PathExist,
                             NLs::IsSubDomain("USER_0"),
-                            NLs::DomainKey(2, TTestTxConfig::SchemeShard), 
-                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}), 
-                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}), 
+                            NLs::DomainKey(2, TTestTxConfig::SchemeShard),
+                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}),
+                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}),
                             NLs::PathVersionEqual(4),
                             NLs::NoChildren});
 
@@ -187,20 +187,20 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0/DirA"),
                            {NLs::PathExist,
                             NLs::Finished,
-                            NLs::PathIdEqual(NKikimr::TPathId(TTestTxConfig::SchemeShard, 3)), 
-                            NLs::DomainKey(2, TTestTxConfig::SchemeShard), 
-                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}), 
-                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}), 
+                            NLs::PathIdEqual(NKikimr::TPathId(TTestTxConfig::SchemeShard, 3)),
+                            NLs::DomainKey(2, TTestTxConfig::SchemeShard),
+                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}),
+                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}),
                             NLs::ChildrenCount(1)});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0/DirB"),
                            {NLs::PathExist,
                             NLs::Finished,
-                            NLs::PathIdEqual(NKikimr::TPathId(TTestTxConfig::SchemeShard, 4)), 
+                            NLs::PathIdEqual(NKikimr::TPathId(TTestTxConfig::SchemeShard, 4)),
                             NLs::NoChildren});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0/DirA/DirC"),
                            {NLs::PathExist,
                             NLs::Finished,
-                            NLs::PathIdEqual(NKikimr::TPathId(TTestTxConfig::SchemeShard, 5)), 
+                            NLs::PathIdEqual(NKikimr::TPathId(TTestTxConfig::SchemeShard, 5)),
                             NLs::NoChildren});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                            {NLs::PathExist,
@@ -216,19 +216,19 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainTest) {
                            {NLs::PathExist,
                             NLs::IsExternalSubDomain("USER_0"),
                             NLs::ExtractTenantSchemeshard(&tenantSchemeShard),
-                            NLs::DomainKey(2, TTestTxConfig::SchemeShard), 
-                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}), 
-                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}), 
-                            NLs::DomainSchemeshard(TTestTxConfig::FakeHiveTablets + 2), 
+                            NLs::DomainKey(2, TTestTxConfig::SchemeShard),
+                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}),
+                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}),
+                            NLs::DomainSchemeshard(TTestTxConfig::FakeHiveTablets + 2),
                             NLs::PathVersionEqual(9)});
-        UNIT_ASSERT(tenantSchemeShard == TTestTxConfig::FakeHiveTablets + 2); 
+        UNIT_ASSERT(tenantSchemeShard == TTestTxConfig::FakeHiveTablets + 2);
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0"),
                            {NLs::PathExist,
                             NLs::PathIdEqual(1),
                             NLs::IsSubDomain("MyRoot/USER_0"),
-                            NLs::DomainKey(2, TTestTxConfig::SchemeShard), 
-                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}), 
-                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1})}); 
+                            NLs::DomainKey(2, TTestTxConfig::SchemeShard),
+                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}),
+                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1})});
 
         TestUpgradeSubDomainDecision(runtime, ++txId,  "/MyRoot", "USER_0", NKikimrSchemeOp::TUpgradeSubDomain::Commit);
         env.TestWaitNotification(runtime, txId);
@@ -236,9 +236,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                            {NLs::PathExist,
                             NLs::IsExternalSubDomain("USER_0"),
-                            NLs::DomainKey(2, TTestTxConfig::SchemeShard), 
-                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}), 
-                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}), 
+                            NLs::DomainKey(2, TTestTxConfig::SchemeShard),
+                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}),
+                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}),
                             NLs::DomainSchemeshard(tenantSchemeShard),
                             NLs::PathVersionEqual(10),
                             NLs::NoChildren});
@@ -250,28 +250,28 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainTest) {
                            {NLs::PathExist,
                             NLs::PathIdEqual(NKikimr::TPathId(tenantSchemeShard, 1)),
                             NLs::IsSubDomain("MyRoot/USER_0"),
-                            NLs::DomainKey(2, TTestTxConfig::SchemeShard), 
-                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}), 
-                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}), 
+                            NLs::DomainKey(2, TTestTxConfig::SchemeShard),
+                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}),
+                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}),
                             NLs::ChildrenCount(2)});
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0/DirA"),
                            {NLs::PathExist,
                             NLs::Finished,
-                            NLs::PathIdEqual(NKikimr::TPathId(TTestTxConfig::SchemeShard, 3)), 
-                            NLs::DomainKey(2, TTestTxConfig::SchemeShard), 
-                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}), 
-                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}), 
+                            NLs::PathIdEqual(NKikimr::TPathId(TTestTxConfig::SchemeShard, 3)),
+                            NLs::DomainKey(2, TTestTxConfig::SchemeShard),
+                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}),
+                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}),
                             NLs::ChildrenCount(1)});
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0/DirB"),
                            {NLs::PathExist,
                             NLs::Finished,
-                            NLs::PathIdEqual(NKikimr::TPathId(TTestTxConfig::SchemeShard, 4)), 
+                            NLs::PathIdEqual(NKikimr::TPathId(TTestTxConfig::SchemeShard, 4)),
                             NLs::NoChildren,
                             NLs::UserAttrsEqual(userAttrs)});
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0/DirA/DirC"),
                            {NLs::PathExist,
                             NLs::Finished,
-                            NLs::PathIdEqual(NKikimr::TPathId(TTestTxConfig::SchemeShard, 5)), 
+                            NLs::PathIdEqual(NKikimr::TPathId(TTestTxConfig::SchemeShard, 5)),
                             NLs::NoChildren});
     }
 
@@ -293,9 +293,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                            {NLs::PathExist,
                             NLs::IsSubDomain("USER_0"),
-                            NLs::DomainKey(2, TTestTxConfig::SchemeShard), 
-                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}), 
-                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}), 
+                            NLs::DomainKey(2, TTestTxConfig::SchemeShard),
+                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}),
+                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}),
                             NLs::PathVersionEqual(4),
                             NLs::NoChildren});
 
@@ -310,20 +310,20 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0/DirA"),
                            {NLs::PathExist,
                             NLs::Finished,
-                            NLs::PathIdEqual(NKikimr::TPathId(TTestTxConfig::SchemeShard, 3)), 
-                            NLs::DomainKey(2, TTestTxConfig::SchemeShard), 
-                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}), 
-                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}), 
+                            NLs::PathIdEqual(NKikimr::TPathId(TTestTxConfig::SchemeShard, 3)),
+                            NLs::DomainKey(2, TTestTxConfig::SchemeShard),
+                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}),
+                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}),
                             NLs::ChildrenCount(1)});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0/DirB"),
                            {NLs::PathExist,
                             NLs::Finished,
-                            NLs::PathIdEqual(NKikimr::TPathId(TTestTxConfig::SchemeShard, 4)), 
+                            NLs::PathIdEqual(NKikimr::TPathId(TTestTxConfig::SchemeShard, 4)),
                             NLs::NoChildren});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0/DirA/DirC"),
                            {NLs::PathExist,
                             NLs::Finished,
-                            NLs::PathIdEqual(NKikimr::TPathId(TTestTxConfig::SchemeShard, 5)), 
+                            NLs::PathIdEqual(NKikimr::TPathId(TTestTxConfig::SchemeShard, 5)),
                             NLs::NoChildren});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                            {NLs::PathExist,
@@ -340,19 +340,19 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainTest) {
                            {NLs::PathExist,
                             NLs::IsExternalSubDomain("USER_0"),
                             NLs::ExtractTenantSchemeshard(&tenantSchemeShard),
-                            NLs::DomainKey(2, TTestTxConfig::SchemeShard), 
-                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}), 
-                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}), 
-                            NLs::DomainSchemeshard(TTestTxConfig::FakeHiveTablets + 2), 
+                            NLs::DomainKey(2, TTestTxConfig::SchemeShard),
+                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}),
+                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}),
+                            NLs::DomainSchemeshard(TTestTxConfig::FakeHiveTablets + 2),
                             NLs::PathVersionEqual(9)});
-        UNIT_ASSERT(tenantSchemeShard == TTestTxConfig::FakeHiveTablets + 2); 
+        UNIT_ASSERT(tenantSchemeShard == TTestTxConfig::FakeHiveTablets + 2);
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0"),
                            {NLs::PathExist,
                             NLs::PathIdEqual(1),
                             NLs::IsSubDomain("MyRoot/USER_0"),
-                            NLs::DomainKey(2, TTestTxConfig::SchemeShard), 
-                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}), 
-                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1})}); 
+                            NLs::DomainKey(2, TTestTxConfig::SchemeShard),
+                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}),
+                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1})});
 
         TestUpgradeSubDomainDecision(runtime, ++txId,  "/MyRoot", "USER_0", NKikimrSchemeOp::TUpgradeSubDomain::Undo);
         env.TestWaitNotification(runtime, txId);
@@ -360,15 +360,15 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                            {NLs::PathExist,
                             NLs::IsSubDomain("USER_0"),
-                            NLs::DomainKey(2, TTestTxConfig::SchemeShard), 
-                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}), 
-                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}), 
+                            NLs::DomainKey(2, TTestTxConfig::SchemeShard),
+                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}),
+                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}),
                             NLs::DomainSchemeshard(0),
                             NLs::PathVersionEqual(109),
                             NLs::ChildrenCount(2),
                             NLs::PathsInsideDomain(3)});
 
-        env.TestWaitTabletDeletion(runtime, TTestTxConfig::FakeHiveTablets + 2); 
+        env.TestWaitTabletDeletion(runtime, TTestTxConfig::FakeHiveTablets + 2);
     }
 
     Y_UNIT_TEST(UpgradeDomainWithTablesCommit) {
@@ -389,9 +389,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                            {NLs::PathExist,
                             NLs::IsSubDomain("USER_0"),
-                            NLs::DomainKey(2, TTestTxConfig::SchemeShard), 
-                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}), 
-                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}), 
+                            NLs::DomainKey(2, TTestTxConfig::SchemeShard),
+                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}),
+                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}),
                             NLs::PathVersionEqual(4),
                             NLs::NoChildren,
                             NLs::ShardsInsideDomain(2)});
@@ -428,18 +428,18 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainTest) {
                            {NLs::PathExist,
                             NLs::Finished,
                             NLs::IsTable,
-                            NLs::PathIdEqual(NKikimr::TPathId(TTestTxConfig::SchemeShard, 6)), 
-                            NLs::DomainKey(2, TTestTxConfig::SchemeShard), 
-                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}), 
-                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1})}); 
+                            NLs::PathIdEqual(NKikimr::TPathId(TTestTxConfig::SchemeShard, 6)),
+                            NLs::DomainKey(2, TTestTxConfig::SchemeShard),
+                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}),
+                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1})});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0/DirB/table_2"),
                            {NLs::PathExist,
                             NLs::Finished,
                             NLs::IsTable,
-                            NLs::PathIdEqual(NKikimr::TPathId(TTestTxConfig::SchemeShard, 7)), 
-                            NLs::DomainKey(2, TTestTxConfig::SchemeShard), 
-                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}), 
-                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1})}); 
+                            NLs::PathIdEqual(NKikimr::TPathId(TTestTxConfig::SchemeShard, 7)),
+                            NLs::DomainKey(2, TTestTxConfig::SchemeShard),
+                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}),
+                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1})});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0/DirA/DirC"),
                            {NLs::PathExist,
                             NLs::Finished,
@@ -448,10 +448,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainTest) {
                            {NLs::PathExist,
                             NLs::Finished,
                             NLs::IsTable,
-                            NLs::PathIdEqual(NKikimr::TPathId(TTestTxConfig::SchemeShard, 8)), 
-                            NLs::DomainKey(2, TTestTxConfig::SchemeShard), 
-                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}), 
-                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1})}); 
+                            NLs::PathIdEqual(NKikimr::TPathId(TTestTxConfig::SchemeShard, 8)),
+                            NLs::DomainKey(2, TTestTxConfig::SchemeShard),
+                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}),
+                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1})});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                            {NLs::PathExist,
                             NLs::IsSubDomain("USER_0"),
@@ -466,44 +466,44 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainTest) {
                            {NLs::PathExist,
                             NLs::IsExternalSubDomain("USER_0"),
                             NLs::ExtractTenantSchemeshard(&tenantSchemeShard),
-                            NLs::DomainKey(2, TTestTxConfig::SchemeShard), 
-                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}), 
-                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}), 
-                            NLs::DomainSchemeshard(TTestTxConfig::FakeHiveTablets + 5), 
+                            NLs::DomainKey(2, TTestTxConfig::SchemeShard),
+                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}),
+                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}),
+                            NLs::DomainSchemeshard(TTestTxConfig::FakeHiveTablets + 5),
                             NLs::NoChildren,
                             NLs::PathVersionEqual(9)});
 
-        UNIT_ASSERT(tenantSchemeShard == TTestTxConfig::FakeHiveTablets + 5); 
+        UNIT_ASSERT(tenantSchemeShard == TTestTxConfig::FakeHiveTablets + 5);
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0"),
                            {NLs::PathExist,
                             NLs::PathIdEqual(1),
                             NLs::IsSubDomain("MyRoot/USER_0"),
-                            NLs::DomainKey(2, TTestTxConfig::SchemeShard), 
-                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}), 
-                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1})}); 
+                            NLs::DomainKey(2, TTestTxConfig::SchemeShard),
+                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}),
+                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1})});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0/DirA"),
                            {NLs::PathRedirected,
                             NLs::ExtractTenantSchemeshard(&tenantSchemeShard),
-                            NLs::DomainKey(2, TTestTxConfig::SchemeShard), 
-                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}), 
-                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}), 
-                            NLs::DomainSchemeshard(TTestTxConfig::FakeHiveTablets + 5)}); 
+                            NLs::DomainKey(2, TTestTxConfig::SchemeShard),
+                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}),
+                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}),
+                            NLs::DomainSchemeshard(TTestTxConfig::FakeHiveTablets + 5)});
 
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0/DirA"),
                            {NLs::PathExist,
-                            NLs::PathIdEqual(TPathId(TTestTxConfig::SchemeShard, 3)), 
-                            NLs::DomainKey(2, TTestTxConfig::SchemeShard), 
-                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}), 
-                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1})}); 
+                            NLs::PathIdEqual(TPathId(TTestTxConfig::SchemeShard, 3)),
+                            NLs::DomainKey(2, TTestTxConfig::SchemeShard),
+                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}),
+                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1})});
 
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0/DirA/table_1"),
                            {NLs::PathExist,
                             NLs::IsTable,
-                            NLs::PathIdEqual(TPathId(TTestTxConfig::SchemeShard, 6)), 
-                            NLs::DomainKey(2, TTestTxConfig::SchemeShard), 
-                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}), 
-                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1})}); 
+                            NLs::PathIdEqual(TPathId(TTestTxConfig::SchemeShard, 6)),
+                            NLs::DomainKey(2, TTestTxConfig::SchemeShard),
+                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}),
+                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1})});
 
         TestUpgradeSubDomainDecision(runtime, ++txId,  "/MyRoot", "USER_0", NKikimrSchemeOp::TUpgradeSubDomain::Commit);
         env.TestWaitNotification(runtime, txId);
@@ -511,9 +511,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                            {NLs::PathExist,
                             NLs::IsExternalSubDomain("USER_0"),
-                            NLs::DomainKey(2, TTestTxConfig::SchemeShard), 
-                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}), 
-                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}), 
+                            NLs::DomainKey(2, TTestTxConfig::SchemeShard),
+                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}),
+                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}),
                             NLs::DomainSchemeshard(tenantSchemeShard),
                             NLs::PathVersionEqual(10),
                             NLs::NoChildren});
@@ -522,9 +522,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainTest) {
                            {NLs::PathExist,
                             NLs::PathIdEqual(NKikimr::TPathId(tenantSchemeShard, 1)),
                             NLs::IsSubDomain("MyRoot/USER_0"),
-                            NLs::DomainKey(2, TTestTxConfig::SchemeShard), 
-                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}), 
-                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}), 
+                            NLs::DomainKey(2, TTestTxConfig::SchemeShard),
+                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}),
+                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}),
                             NLs::ChildrenCount(2),
                             NLs::PathsInsideDomain(6),
                             NLs::ShardsInsideDomain(6)});
@@ -532,19 +532,19 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainTest) {
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0/DirA"),
                            {NLs::PathExist,
                             NLs::Finished,
-                            NLs::PathIdEqual(NKikimr::TPathId(TTestTxConfig::SchemeShard, 3)), 
-                            NLs::DomainKey(2, TTestTxConfig::SchemeShard), 
-                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}), 
-                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}), 
+                            NLs::PathIdEqual(NKikimr::TPathId(TTestTxConfig::SchemeShard, 3)),
+                            NLs::DomainKey(2, TTestTxConfig::SchemeShard),
+                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}),
+                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}),
                             NLs::ChildrenCount(2)});
 
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0/DirA/table_1"),
                            {NLs::PathExist,
                             NLs::IsTable,
-                            NLs::PathIdEqual(TPathId(TTestTxConfig::SchemeShard, 6)), 
-                            NLs::DomainKey(2, TTestTxConfig::SchemeShard), 
-                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}), 
-                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1})}); 
+                            NLs::PathIdEqual(TPathId(TTestTxConfig::SchemeShard, 6)),
+                            NLs::DomainKey(2, TTestTxConfig::SchemeShard),
+                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}),
+                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1})});
     }
 
     Y_UNIT_TEST(UpgradeDomainCommitDelete) {
@@ -562,8 +562,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainTest) {
                                 TimeCastBucketsPerMediator: 2
                                 )");
         env.TestWaitNotification(runtime, {txId, txId - 1});
-        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2)); 
-        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 2)); 
+        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2));
+        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 2));
 
         TestMkDir(runtime, ++txId, "/MyRoot/USER_0", "DirA");
         TestCreateTable(runtime, ++txId, "/MyRoot/USER_0/DirA",R"(
@@ -595,8 +595,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainTest) {
                            {NLs::PathExist,
                             NLs::IsExternalSubDomain("USER_0"),
                             NLs::ExtractTenantSchemeshard(&tenantSchemeShard)});
-        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2)); 
-        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 2)); 
+        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2));
+        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 2));
         TestMkDir(runtime, tenantSchemeShard, ++txId, "/MyRoot/USER_0", "DirB");
         TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/USER_0/DirB",R"(
                                 Name: "Table3"
@@ -629,9 +629,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0/DirA/Table1"),
                            {NLs::PathNotExist});
 
-        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+9)); 
-        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 2)); 
-        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2)); 
+        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+9));
+        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 2));
+        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2));
     }
 
     Y_UNIT_TEST(UpgradeDomainCommitRecreateShard) {
@@ -677,7 +677,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainTest) {
         TestAlterTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/USER_0/DirA",R"(
                 Name: "Table1"
                 PartitionConfig {
-                    CrossDataCenterFollowerCount: 1 
+                    CrossDataCenterFollowerCount: 1
                 }
             )");
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
@@ -705,9 +705,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                            {NLs::PathExist,
                             NLs::IsSubDomain("USER_0"),
-                            NLs::DomainKey(2, TTestTxConfig::SchemeShard), 
-                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}), 
-                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}), 
+                            NLs::DomainKey(2, TTestTxConfig::SchemeShard),
+                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}),
+                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}),
                             NLs::PathVersionEqual(4),
                             NLs::NoChildren,
                             NLs::ShardsInsideDomain(2)});
@@ -739,8 +739,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainTest) {
                 UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);;
             };
 
-            fnWriteRow(TTestTxConfig::FakeHiveTablets + 2, "AAA"); 
-            fnWriteRow(TTestTxConfig::FakeHiveTablets + 2, "ZZZ"); 
+            fnWriteRow(TTestTxConfig::FakeHiveTablets + 2, "AAA");
+            fnWriteRow(TTestTxConfig::FakeHiveTablets + 2, "ZZZ");
         }
 
         TestSplitTable(runtime, ++txId, "/MyRoot/USER_0/DirA/table_1", R"(
@@ -753,8 +753,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainTest) {
         env.TestWaitNotification(runtime, txId);
 
         for (ui32 index = 2; index <= 4; ++index) {
-            auto subDomainPathId = TestFindTabletSubDomainPathId(runtime, TTestTxConfig::FakeHiveTablets + 2); 
-            UNIT_ASSERT_VALUES_EQUAL(subDomainPathId, TPathId(TTestTxConfig::SchemeShard, 2)); 
+            auto subDomainPathId = TestFindTabletSubDomainPathId(runtime, TTestTxConfig::FakeHiveTablets + 2);
+            UNIT_ASSERT_VALUES_EQUAL(subDomainPathId, TPathId(TTestTxConfig::SchemeShard, 2));
         }
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0/DirA"),
@@ -767,10 +767,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainTest) {
                            {NLs::PathExist,
                             NLs::Finished,
                             NLs::IsTable,
-                            NLs::PathIdEqual(NKikimr::TPathId(TTestTxConfig::SchemeShard, 4)), 
-                            NLs::DomainKey(2, TTestTxConfig::SchemeShard), 
-                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}), 
-                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1})}); 
+                            NLs::PathIdEqual(NKikimr::TPathId(TTestTxConfig::SchemeShard, 4)),
+                            NLs::DomainKey(2, TTestTxConfig::SchemeShard),
+                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}),
+                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1})});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                            {NLs::PathExist,
                             NLs::IsSubDomain("USER_0"),
@@ -785,10 +785,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainTest) {
                            {NLs::PathExist,
                             NLs::IsExternalSubDomain("USER_0"),
                             NLs::ExtractTenantSchemeshard(&tenantSchemeShard),
-                            NLs::DomainKey(2, TTestTxConfig::SchemeShard), 
-                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}), 
-                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}), 
-                            NLs::DomainSchemeshard(TTestTxConfig::FakeHiveTablets + 5), 
+                            NLs::DomainKey(2, TTestTxConfig::SchemeShard),
+                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}),
+                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}),
+                            NLs::DomainSchemeshard(TTestTxConfig::FakeHiveTablets + 5),
                             NLs::NoChildren,
                             NLs::PathVersionEqual(7)});
 
@@ -798,9 +798,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                            {NLs::PathExist,
                             NLs::IsExternalSubDomain("USER_0"),
-                            NLs::DomainKey(2, TTestTxConfig::SchemeShard), 
-                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}), 
-                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}), 
+                            NLs::DomainKey(2, TTestTxConfig::SchemeShard),
+                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}),
+                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}),
                             NLs::DomainSchemeshard(tenantSchemeShard),
                             NLs::PathVersionEqual(8),
                             NLs::NoChildren});
@@ -809,9 +809,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainTest) {
                            {NLs::PathExist,
                             NLs::PathIdEqual(NKikimr::TPathId(tenantSchemeShard, 1)),
                             NLs::IsSubDomain("MyRoot/USER_0"),
-                            NLs::DomainKey(2, TTestTxConfig::SchemeShard), 
-                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}), 
-                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}), 
+                            NLs::DomainKey(2, TTestTxConfig::SchemeShard),
+                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}),
+                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}),
                             NLs::ChildrenCount(1),
                             NLs::PathsInsideDomain(2),
                             NLs::ShardsInsideDomain(5)});
@@ -819,26 +819,26 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainTest) {
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0/DirA"),
                            {NLs::PathExist,
                             NLs::Finished,
-                            NLs::PathIdEqual(NKikimr::TPathId(TTestTxConfig::SchemeShard, 3)), 
-                            NLs::DomainKey(2, TTestTxConfig::SchemeShard), 
-                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}), 
-                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}), 
+                            NLs::PathIdEqual(NKikimr::TPathId(TTestTxConfig::SchemeShard, 3)),
+                            NLs::DomainKey(2, TTestTxConfig::SchemeShard),
+                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}),
+                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}),
                             NLs::ChildrenCount(1)});
 
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0/DirA/table_1"),
                            {NLs::PathExist,
                             NLs::IsTable,
-                            NLs::PathIdEqual(TPathId(TTestTxConfig::SchemeShard, 4)), 
-                            NLs::DomainKey(2, TTestTxConfig::SchemeShard), 
-                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}), 
-                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1})}); 
+                            NLs::PathIdEqual(TPathId(TTestTxConfig::SchemeShard, 4)),
+                            NLs::DomainKey(2, TTestTxConfig::SchemeShard),
+                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}),
+                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1})});
 
         // Inactive shard is not migrated
-        TestFindTabletSubDomainPathId(runtime, tenantSchemeShard, TTestTxConfig::FakeHiveTablets + 2, 
+        TestFindTabletSubDomainPathId(runtime, tenantSchemeShard, TTestTxConfig::FakeHiveTablets + 2,
             NKikimrScheme::TEvFindTabletSubDomainPathIdResult::SHARD_NOT_FOUND);
 
         for (ui32 index = 3; index <= 4; ++index) {
-            auto subDomainPathId = TestFindTabletSubDomainPathId(runtime, tenantSchemeShard, TTestTxConfig::FakeHiveTablets + index); 
+            auto subDomainPathId = TestFindTabletSubDomainPathId(runtime, tenantSchemeShard, TTestTxConfig::FakeHiveTablets + index);
             UNIT_ASSERT_VALUES_EQUAL(subDomainPathId, TPathId(tenantSchemeShard, 1));
         }
 
@@ -846,7 +846,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainTest) {
             NKikimrMiniKQL::TResult result;
             TString err;
             ui32 status = LocalMiniKQL(
-                runtime, TTestTxConfig::FakeHiveTablets + index, R"( 
+                runtime, TTestTxConfig::FakeHiveTablets + index, R"(
                     (
                         (let range '('('Id (Uint64 '33) (Uint64 '34))))
                         (let select '('Id 'Uint64))
@@ -880,19 +880,19 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainTest) {
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0/DirA/table_1"),
                            {NLs::PathNotExist});
 
-        env.TestWaitTabletDeletion(runtime, { TTestTxConfig::FakeHiveTablets + 2, TTestTxConfig::FakeHiveTablets + 3, TTestTxConfig::FakeHiveTablets + 4}); 
+        env.TestWaitTabletDeletion(runtime, { TTestTxConfig::FakeHiveTablets + 2, TTestTxConfig::FakeHiveTablets + 3, TTestTxConfig::FakeHiveTablets + 4});
 
         TActorId sender = runtime.AllocateEdgeActor();
-        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender); 
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                            {NLs::PathExist,
                             NLs::IsExternalSubDomain("USER_0"),
                             NLs::ExtractTenantSchemeshard(&tenantSchemeShard),
-                            NLs::DomainKey(2, TTestTxConfig::SchemeShard), 
-                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}), 
-                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}), 
-                            NLs::DomainSchemeshard(TTestTxConfig::FakeHiveTablets + 5), 
+                            NLs::DomainKey(2, TTestTxConfig::SchemeShard),
+                            NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}),
+                            NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1}),
+                            NLs::DomainSchemeshard(TTestTxConfig::FakeHiveTablets + 5),
                             NLs::NoChildren,
                             NLs::PathVersionEqual(8)});
 

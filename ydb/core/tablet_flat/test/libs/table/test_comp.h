@@ -27,7 +27,7 @@ namespace NTest {
                 return Env;
             }
 
-            TPartView LoadPart(const TIntrusiveConstPtr<TColdPart>&) noexcept override { 
+            TPartView LoadPart(const TIntrusiveConstPtr<TColdPart>&) noexcept override {
                 Y_FAIL("not supported in test scans");
             }
 
@@ -39,7 +39,7 @@ namespace NTest {
 
         TCompaction() : TCompaction(nullptr) { }
 
-        TCompaction(TAutoPtr<IPages> env, TConf conf = { }, ui32 ret = Max<ui32>()) 
+        TCompaction(TAutoPtr<IPages> env, TConf conf = { }, ui32 ret = Max<ui32>())
             : Conf(conf)
             , Retries(ret)
             , Env(env ? env : new TTestEnv)
@@ -57,7 +57,7 @@ namespace NTest {
             return Do(eggs.Scheme, { &eggs } );
         }
 
-        TPartEggs Do(TIntrusiveConstPtr<TRowScheme> scheme, TVector<const TPartEggs*> eggs) 
+        TPartEggs Do(TIntrusiveConstPtr<TRowScheme> scheme, TVector<const TPartEggs*> eggs)
         {
             TVector<TPartView> partView;
 
@@ -124,7 +124,7 @@ namespace NTest {
         }
 
     private:
-        virtual THello Prepare(IDriver*, TIntrusiveConstPtr<TScheme>) noexcept override 
+        virtual THello Prepare(IDriver*, TIntrusiveConstPtr<TScheme>) noexcept override
         {
             Y_FAIL("IScan::Prepare(...) isn't used in test env compaction");
         }
@@ -176,7 +176,7 @@ namespace NTest {
             return Failed = 0, EScan::Feed;
         }
 
-        TAutoPtr<IDestructable> Finish(EAbort) noexcept override 
+        TAutoPtr<IDestructable> Finish(EAbort) noexcept override
         {
             Y_FAIL("IScan::Finish(...) shouldn't be called in test env");
         }
@@ -191,9 +191,9 @@ namespace NTest {
         const ui32 Retries = Max<ui32>();
         ui32 Serial = 0;
         ui32 Failed = 0;
-        TAutoPtr<IPages> Env; 
+        TAutoPtr<IPages> Env;
         TVector<ui32> Tags;
-        TAutoPtr<TPartWriter> Writer; 
+        TAutoPtr<TPartWriter> Writer;
     };
 
 }

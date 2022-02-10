@@ -14,7 +14,7 @@
 namespace NKikimr {
 
 using TTabletId = ui64;
-using TFollowerId = ui32; 
+using TFollowerId = ui32;
 using TNodeId = ui32;
 
 namespace NNodeWhiteboard {
@@ -65,13 +65,13 @@ struct TEvWhiteboard{
     struct TEvTabletStateUpdate : TEventPB<TEvTabletStateUpdate, NKikimrWhiteboard::TTabletStateInfo, EvTabletStateUpdate> {
         TEvTabletStateUpdate() = default;
 
-        TEvTabletStateUpdate(TTabletId tabletId, TFollowerId followerId, NKikimrWhiteboard::TTabletStateInfo::ETabletState state, const TIntrusivePtr<TTabletStorageInfo>& storageInfo, ui32 generation, bool leader) { 
+        TEvTabletStateUpdate(TTabletId tabletId, TFollowerId followerId, NKikimrWhiteboard::TTabletStateInfo::ETabletState state, const TIntrusivePtr<TTabletStorageInfo>& storageInfo, ui32 generation, bool leader) {
             Record.SetTabletId(tabletId);
-            Record.SetFollowerId(followerId); 
+            Record.SetFollowerId(followerId);
             Record.SetType(storageInfo->TabletType);
             Record.SetState(state);
             Record.SetGeneration(generation);
-            Record.SetLeader(leader); 
+            Record.SetLeader(leader);
             Record.MutableChannelGroupIDs()->Resize(storageInfo->Channels.size(), 0);
             for (const auto& channel : storageInfo->Channels) {
                 const auto* latestEntry = channel.LatestEntry();
@@ -86,19 +86,19 @@ struct TEvWhiteboard{
             }
         }
 
-        TEvTabletStateUpdate(TTabletId tabletId, TFollowerId followerId, NKikimrWhiteboard::TTabletStateInfo::ETabletState state, ui32 generation) { 
+        TEvTabletStateUpdate(TTabletId tabletId, TFollowerId followerId, NKikimrWhiteboard::TTabletStateInfo::ETabletState state, ui32 generation) {
             Record.SetTabletId(tabletId);
-            Record.SetFollowerId(followerId); 
+            Record.SetFollowerId(followerId);
             Record.SetState(state);
             Record.SetGeneration(generation);
         }
 
-        TEvTabletStateUpdate(TTabletId tabletId, TFollowerId followerId, NKikimrWhiteboard::TTabletStateInfo::ETabletState state, ui32 generation, bool leader) { 
+        TEvTabletStateUpdate(TTabletId tabletId, TFollowerId followerId, NKikimrWhiteboard::TTabletStateInfo::ETabletState state, ui32 generation, bool leader) {
             Record.SetTabletId(tabletId);
-            Record.SetFollowerId(followerId); 
+            Record.SetFollowerId(followerId);
             Record.SetState(state);
             Record.SetGeneration(generation);
-            Record.SetLeader(leader); 
+            Record.SetLeader(leader);
         }
 
         TEvTabletStateUpdate(TTabletId tabletId, ui32 userState) {

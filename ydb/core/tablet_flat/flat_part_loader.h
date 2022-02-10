@@ -38,15 +38,15 @@ namespace NTable {
 
         }
 
-        TLoader(TVector<TIntrusivePtr<TCache>>, TString legacy, TString opaque, 
+        TLoader(TVector<TIntrusivePtr<TCache>>, TString legacy, TString opaque,
                 TVector<TString> deltas = { },
                 TEpoch epoch = NTable::TEpoch::Max());
         ~TLoader();
 
-        TVector<TAutoPtr<NPageCollection::TFetch>> Run() 
+        TVector<TAutoPtr<NPageCollection::TFetch>> Run()
         {
             while (Stage < EStage::Result) {
-                TAutoPtr<NPageCollection::TFetch> fetch; 
+                TAutoPtr<NPageCollection::TFetch> fetch;
 
                 switch (Stage) {
                     case EStage::Meta:
@@ -149,7 +149,7 @@ namespace NTable {
             return page == Max<TPageId>() ? nullptr : Packs[0]->Lookup(page);
         }
 
-        void ParseMeta(TArrayRef<const char> plain) noexcept 
+        void ParseMeta(TArrayRef<const char> plain) noexcept
         {
             TMemoryInput stream(plain.data(), plain.size());
             bool parsed = Root.ParseFromArcadiaStream(&stream);
@@ -158,12 +158,12 @@ namespace NTable {
         }
 
         void StageParseMeta() noexcept;
-        TAutoPtr<NPageCollection::TFetch> StageCreatePartView() noexcept; 
-        TAutoPtr<NPageCollection::TFetch> StageSliceBounds() noexcept; 
+        TAutoPtr<NPageCollection::TFetch> StageCreatePartView() noexcept;
+        TAutoPtr<NPageCollection::TFetch> StageSliceBounds() noexcept;
         void StageDeltas() noexcept;
 
     private:
-        TVector<TIntrusivePtr<TCache>> Packs; 
+        TVector<TIntrusivePtr<TCache>> Packs;
         const TString Legacy;
         const TString Opaque;
         const TVector<TString> Deltas;
@@ -185,6 +185,6 @@ namespace NTable {
         TRowVersion MaxRowVersion;
         NProto::TRoot Root;
         TPartView PartView;
-        TAutoPtr<TKeysEnv> KeysEnv; 
+        TAutoPtr<TKeysEnv> KeysEnv;
     };
 }}

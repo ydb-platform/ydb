@@ -33,19 +33,19 @@ public:
     TActorId Apply(TTabletStorageInfo *info, TActorIdentity owner);
     TActorId Apply(TTabletStorageInfo *info, const TActorContext &ctx);
     TActorId Tablet(TTabletStorageInfo *info, const TActorId &launcher, const TActorContext &ctx,
-                    ui32 suggestedGeneration, TResourceProfilesPtr profiles = nullptr, 
-                    TSharedQuotaPtr txCacheQuota = nullptr); 
-    TActorId Follower(TTabletStorageInfo *info, const TActorId &launcher, const TActorContext &ctx, 
-                   ui32 followerID, TResourceProfilesPtr profiles = nullptr, 
-                   TSharedQuotaPtr txCacheQuota = nullptr); 
+                    ui32 suggestedGeneration, TResourceProfilesPtr profiles = nullptr,
+                    TSharedQuotaPtr txCacheQuota = nullptr);
+    TActorId Follower(TTabletStorageInfo *info, const TActorId &launcher, const TActorContext &ctx,
+                   ui32 followerID, TResourceProfilesPtr profiles = nullptr,
+                   TSharedQuotaPtr txCacheQuota = nullptr);
 };
 
 IActor* CreateTablet(const TActorId &launcher, TTabletStorageInfo *info, TTabletSetupInfo *setupInfo,
-                     ui32 suggestedGeneration, TResourceProfilesPtr profiles = nullptr, 
-                     TSharedQuotaPtr txCacheQuota = nullptr); 
-IActor* CreateTabletFollower(const TActorId &launcher, TTabletStorageInfo *info, TTabletSetupInfo *setupInfo, 
-                          ui32 followerID, TResourceProfilesPtr profiles = nullptr, 
-                          TSharedQuotaPtr txCacheQuota = nullptr); 
+                     ui32 suggestedGeneration, TResourceProfilesPtr profiles = nullptr,
+                     TSharedQuotaPtr txCacheQuota = nullptr);
+IActor* CreateTabletFollower(const TActorId &launcher, TTabletStorageInfo *info, TTabletSetupInfo *setupInfo,
+                          ui32 followerID, TResourceProfilesPtr profiles = nullptr,
+                          TSharedQuotaPtr txCacheQuota = nullptr);
 
 
 struct ITabletFactory: public virtual TThrRefBase {

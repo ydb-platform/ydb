@@ -278,8 +278,8 @@ TReadTarget ExtractFlatReadTarget(TRuntimeNode modeInput) {
         return TReadTarget::Online();
     case TReadTarget::EMode::Head:
         return TReadTarget::Head();
-    case TReadTarget::EMode::Follower: 
-        return TReadTarget::Follower(); 
+    case TReadTarget::EMode::Follower:
+        return TReadTarget::Follower();
     default:
         THROW TWithBackTrace<yexception>() << "Bad read target mode";
     }

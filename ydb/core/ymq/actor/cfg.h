@@ -6,6 +6,6 @@
 namespace NKikimr::NSQS {
 
 const NKikimrConfig::TSqsConfig& Cfg();
-ui32 GetLeadersDescriberUpdateTimeMs(); 
+ui32 GetLeadersDescriberUpdateTimeMs();
 
 } // namespace NKikimr::NSQS

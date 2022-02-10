@@ -117,7 +117,7 @@ void TTestServer::CreateKesusResource(ui64 kesusTabletId, const TString& resourc
     }
 
     TActorId sender = GetEdgeActor();
-    ForwardToTablet(*runtime, kesusTabletId, sender, request.Release(), 0); 
+    ForwardToTablet(*runtime, kesusTabletId, sender, request.Release(), 0);
 
     TAutoPtr<IEventHandle> handle;
     runtime->GrabEdgeEvent<NKesus::TEvKesus::TEvAddQuoterResourceResult>(handle);

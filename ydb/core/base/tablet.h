@@ -43,13 +43,13 @@ struct TEvTablet {
         EvCommitResult,
         EvPing,
         EvDemoted,
-        EvNewFollowerAttached, 
-        EvFBoot, 
-        EvFUpdate, 
-        EvUnused, 
-        EvFAuxUpdate, 
-        EvFollowerGcApplied, // from leader to user tablet when all known followers reported consumed gc barrier 
-        EvFollowerSyncComplete, // from leader to user tablet when all old followers are touched and synced 
+        EvNewFollowerAttached,
+        EvFBoot,
+        EvFUpdate,
+        EvUnused,
+        EvFAuxUpdate,
+        EvFollowerGcApplied, // from leader to user tablet when all known followers reported consumed gc barrier
+        EvFollowerSyncComplete, // from leader to user tablet when all old followers are touched and synced
         EvCutTabletHistory,
         EvUpdateConfig,
 
@@ -58,11 +58,11 @@ struct TEvTablet {
         EvPong,
         EvPreCommit,
         EvTabletActive,
-        EvPromoteToLeader, 
-        EvFGcAck, // from user tablet to follower 
+        EvPromoteToLeader,
+        EvFGcAck, // from user tablet to follower
 
         EvTabletDead = EvBoot + 1024,
-        EvFollowerUpdateState, // notifications to guardian 
+        EvFollowerUpdateState, // notifications to guardian
         EvFeatures, // from user tablet to sys tablet, notify on supported features
         EvTabletStop, // from local to sys tablet, from sys tablet to user tablet
         EvTabletStopped, // from user tablet to sys tablet, ready to die now
@@ -78,19 +78,19 @@ struct TEvTablet {
         EvLocalReadColumns,
         EvLocalReadColumnsResponse,
 
-        // from outside to leader 
-        EvFollowerAttach = EvBoot + 2048, 
-        EvFollowerDetach, 
-        EvFollowerListRefresh, // from guardian to leader 
+        // from outside to leader
+        EvFollowerAttach = EvBoot + 2048,
+        EvFollowerDetach,
+        EvFollowerListRefresh, // from guardian to leader
         EvReserved_00,
-        EvFollowerGcAck, // from follower to leader 
+        EvFollowerGcAck, // from follower to leader
 
-        // from leader to follower 
-        EvFollowerUpdate = EvBoot + 2560, 
-        EvFollowerAuxUpdate, 
+        // from leader to follower
+        EvFollowerUpdate = EvBoot + 2560,
+        EvFollowerAuxUpdate,
         EvReserved_01,
-        EvFollowerDisconnect, 
-        EvFollowerRefresh, // from leader to follower 
+        EvFollowerDisconnect,
+        EvFollowerRefresh, // from leader to follower
 
         // utilitary
         EvCheckBlobstorageStatusResult = EvBoot + 3072,
@@ -184,8 +184,8 @@ struct TEvTablet {
 
         const TActorId Launcher;
         TIntrusivePtr<TTabletStorageInfo> TabletStorageInfo;
-        TResourceProfilesPtr ResourceProfiles; 
-        TSharedQuotaPtr TxCacheQuota; 
+        TResourceProfilesPtr ResourceProfiles;
+        TSharedQuotaPtr TxCacheQuota;
 
         NMetrics::TTabletThroughputRawValue GroupReadBytes;
         NMetrics::TTabletIopsRawValue GroupReadOps;
@@ -196,8 +196,8 @@ struct TEvTablet {
                 TDependencyGraph *dependencyGraph,
                 const TActorId& launcher,
                 TIntrusivePtr<TTabletStorageInfo> info,
-                TResourceProfilesPtr profiles = nullptr, 
-                TSharedQuotaPtr txCacheQuota = nullptr, 
+                TResourceProfilesPtr profiles = nullptr,
+                TSharedQuotaPtr txCacheQuota = nullptr,
                 NMetrics::TTabletThroughputRawValue&& read = NMetrics::TTabletThroughputRawValue(),
                 NMetrics::TTabletIopsRawValue&& readOps = NMetrics::TTabletIopsRawValue())
             : TabletID(tabletId)
@@ -217,21 +217,21 @@ struct TEvTablet {
         const ui64 TabletID;
         const ui32 Generation;
         const TActorId UserTabletActor;
-        const bool Follower; 
+        const bool Follower;
 
-        TEvRestored(ui64 tabletId, ui32 generation, const TActorId &userTabletActor, bool follower) 
+        TEvRestored(ui64 tabletId, ui32 generation, const TActorId &userTabletActor, bool follower)
             : TabletID(tabletId)
             , Generation(generation)
             , UserTabletActor(userTabletActor)
-            , Follower(follower) 
+            , Follower(follower)
         {}
     };
 
-    struct TEvNewFollowerAttached : public TEventLocal<TEvNewFollowerAttached, EvNewFollowerAttached> { 
-        const ui32 TotalFollowers; 
+    struct TEvNewFollowerAttached : public TEventLocal<TEvNewFollowerAttached, EvNewFollowerAttached> {
+        const ui32 TotalFollowers;
 
-        TEvNewFollowerAttached(ui32 totalFollowers) 
-            : TotalFollowers(totalFollowers) 
+        TEvNewFollowerAttached(ui32 totalFollowers)
+            : TotalFollowers(totalFollowers)
         {}
     };
 
@@ -243,7 +243,7 @@ struct TEvTablet {
         const TVector<ui32> DependsOn;
         const bool IsSnapshot;
         bool IsTotalSnapshot;
-        bool WaitFollowerGcAck; 
+        bool WaitFollowerGcAck;
 
         TCommitInfo(ui64 tabletId, ui32 gen, ui32 step, const TVector<ui32> &dependsOn, bool isSnapshot)
             : TabletID(tabletId)
@@ -252,7 +252,7 @@ struct TEvTablet {
             , DependsOn(dependsOn)
             , IsSnapshot(isSnapshot)
             , IsTotalSnapshot(false)
-            , WaitFollowerGcAck(false) 
+            , WaitFollowerGcAck(false)
         {}
     };
 
@@ -267,7 +267,7 @@ struct TEvTablet {
         TVector<TLogoBlobID> GcLeft;
 
         TString EmbeddedLogBody;
-        TString FollowerAux; 
+        TString FollowerAux;
 
         TEvCommit(ui64 tabletId, ui32 gen, ui32 step, const TVector<ui32> &dependsOn, bool isSnapshot
                 , bool preCommited = false
@@ -279,10 +279,10 @@ struct TEvTablet {
     };
 
     struct TEvAux : public TEventLocal<TEvAux, EvAux> {
-        TString FollowerAux; 
+        TString FollowerAux;
 
-        TEvAux(TString followerAux) 
-            : FollowerAux(std::move(followerAux)) 
+        TEvAux(TString followerAux)
+            : FollowerAux(std::move(followerAux))
         {}
     };
 
@@ -302,11 +302,11 @@ struct TEvTablet {
         {}
     };
 
-    struct TEvPromoteToLeader : public TEventLocal<TEvPromoteToLeader, EvPromoteToLeader> { 
+    struct TEvPromoteToLeader : public TEventLocal<TEvPromoteToLeader, EvPromoteToLeader> {
         const ui32 SuggestedGeneration;
         TIntrusivePtr<TTabletStorageInfo> TabletStorageInfo;
 
-        TEvPromoteToLeader(ui32 suggestedGeneration, TIntrusivePtr<TTabletStorageInfo> info) 
+        TEvPromoteToLeader(ui32 suggestedGeneration, TIntrusivePtr<TTabletStorageInfo> info)
             : SuggestedGeneration(suggestedGeneration)
             , TabletStorageInfo(info)
         {}
@@ -386,14 +386,14 @@ struct TEvTablet {
         {}
     };
 
-    struct TEvFollowerUpdateState : public TEventLocal<TEvFollowerUpdateState, EvFollowerUpdateState> { 
+    struct TEvFollowerUpdateState : public TEventLocal<TEvFollowerUpdateState, EvFollowerUpdateState> {
         const bool IsCandidate;
-        const TActorId FollowerActor; 
+        const TActorId FollowerActor;
         const TActorId TabletActor;
 
-        TEvFollowerUpdateState(bool isCandidate, TActorId followerActor, TActorId tabletActor) 
+        TEvFollowerUpdateState(bool isCandidate, TActorId followerActor, TActorId tabletActor)
             : IsCandidate(isCandidate)
-            , FollowerActor(followerActor) 
+            , FollowerActor(followerActor)
             , TabletActor(tabletActor)
         {}
     };
@@ -416,8 +416,8 @@ struct TEvTablet {
     struct TEvPong : public TEventPB<TEvPong, NKikimrTabletBase::TEvPong, EvPong> {
         enum EFlags {
             FlagBoot = 1,
-            FlagLeader = 2, 
-            FlagFollower = 4, 
+            FlagLeader = 2,
+            FlagFollower = 4,
         };
 
         TEvPong()
@@ -493,107 +493,107 @@ struct TEvTablet {
         {}
     };
 
-    struct TEvFollowerAttach : public TEventPB<TEvFollowerAttach, NKikimrTabletBase::TEvFollowerAttach, EvFollowerAttach> { 
-        TEvFollowerAttach() 
+    struct TEvFollowerAttach : public TEventPB<TEvFollowerAttach, NKikimrTabletBase::TEvFollowerAttach, EvFollowerAttach> {
+        TEvFollowerAttach()
         {}
 
-        TEvFollowerAttach(ui64 tabletId, ui32 followerAttempt) 
+        TEvFollowerAttach(ui64 tabletId, ui32 followerAttempt)
         {
             Record.SetTabletId(tabletId);
-            Record.SetFollowerAttempt(followerAttempt); 
+            Record.SetFollowerAttempt(followerAttempt);
         }
     };
 
-    struct TEvFollowerUpdate : public TEventPB<TEvFollowerUpdate, NKikimrTabletBase::TEvFollowerUpdate, EvFollowerUpdate> { 
-        TEvFollowerUpdate() 
+    struct TEvFollowerUpdate : public TEventPB<TEvFollowerUpdate, NKikimrTabletBase::TEvFollowerUpdate, EvFollowerUpdate> {
+        TEvFollowerUpdate()
         {}
 
-        TEvFollowerUpdate(ui64 tabletId, ui32 followerAttempt, ui64 streamCounter) 
+        TEvFollowerUpdate(ui64 tabletId, ui32 followerAttempt, ui64 streamCounter)
         {
             Record.SetTabletId(tabletId);
-            Record.SetFollowerAttempt(followerAttempt); 
+            Record.SetFollowerAttempt(followerAttempt);
             Record.SetStreamCounter(streamCounter);
         }
     };
 
-    struct TEvFollowerAuxUpdate : public TEventPB<TEvFollowerAuxUpdate, NKikimrTabletBase::TEvFollowerAuxUpdate, EvFollowerAuxUpdate> { 
-        TEvFollowerAuxUpdate() = default; 
+    struct TEvFollowerAuxUpdate : public TEventPB<TEvFollowerAuxUpdate, NKikimrTabletBase::TEvFollowerAuxUpdate, EvFollowerAuxUpdate> {
+        TEvFollowerAuxUpdate() = default;
 
-        TEvFollowerAuxUpdate(ui64 tabletId, ui32 followerAttempt, ui64 streamCounter) 
+        TEvFollowerAuxUpdate(ui64 tabletId, ui32 followerAttempt, ui64 streamCounter)
         {
             Record.SetTabletId(tabletId);
-            Record.SetFollowerAttempt(followerAttempt); 
+            Record.SetFollowerAttempt(followerAttempt);
             Record.SetStreamCounter(streamCounter);
         }
     };
 
-    struct TEvFollowerDetach : public TEventPB<TEvFollowerDetach, NKikimrTabletBase::TEvFollowerDetach, EvFollowerDetach> { 
-        TEvFollowerDetach() 
+    struct TEvFollowerDetach : public TEventPB<TEvFollowerDetach, NKikimrTabletBase::TEvFollowerDetach, EvFollowerDetach> {
+        TEvFollowerDetach()
         {}
 
-        TEvFollowerDetach(ui64 tabletId, ui32 followerAttempt) 
+        TEvFollowerDetach(ui64 tabletId, ui32 followerAttempt)
         {
             Record.SetTabletId(tabletId);
-            Record.SetFollowerAttempt(followerAttempt); 
+            Record.SetFollowerAttempt(followerAttempt);
         }
     };
 
-    struct TEvFollowerListRefresh : public TEventLocal<TEvFollowerListRefresh, EvFollowerListRefresh> { 
-        TVector<TActorId> FollowerList; 
+    struct TEvFollowerListRefresh : public TEventLocal<TEvFollowerListRefresh, EvFollowerListRefresh> {
+        TVector<TActorId> FollowerList;
 
-        TEvFollowerListRefresh(TVector<TActorId> &&followers) 
-            : FollowerList(std::move(followers)) 
+        TEvFollowerListRefresh(TVector<TActorId> &&followers)
+            : FollowerList(std::move(followers))
         {}
     };
 
-    struct TEvFollowerDisconnect : public TEventPB<TEvFollowerDisconnect, NKikimrTabletBase::TEvFollowerDisconnect, EvFollowerDisconnect> { 
-        TEvFollowerDisconnect() 
+    struct TEvFollowerDisconnect : public TEventPB<TEvFollowerDisconnect, NKikimrTabletBase::TEvFollowerDisconnect, EvFollowerDisconnect> {
+        TEvFollowerDisconnect()
         {}
 
-        TEvFollowerDisconnect(ui64 tabletId, ui32 followerAttempt) 
+        TEvFollowerDisconnect(ui64 tabletId, ui32 followerAttempt)
         {
             Record.SetTabletId(tabletId);
-            Record.SetFollowerAttempt(followerAttempt); 
+            Record.SetFollowerAttempt(followerAttempt);
         }
     };
 
-    struct TEvFollowerRefresh : public TEventPB<TEvFollowerRefresh, NKikimrTabletBase::TEvFollowerRefresh, EvFollowerRefresh> { 
-        TEvFollowerRefresh() 
+    struct TEvFollowerRefresh : public TEventPB<TEvFollowerRefresh, NKikimrTabletBase::TEvFollowerRefresh, EvFollowerRefresh> {
+        TEvFollowerRefresh()
         {}
 
-        TEvFollowerRefresh(ui64 tabletId, ui32 generation) 
+        TEvFollowerRefresh(ui64 tabletId, ui32 generation)
         {
             Record.SetTabletId(tabletId);
             Record.SetGeneration(generation);
         }
     };
 
-    struct TEvFollowerGcAck : public TEventPB<TEvFollowerGcAck, NKikimrTabletBase::TEvFollowerGcAck, EvFollowerGcAck> { 
-        TEvFollowerGcAck() 
+    struct TEvFollowerGcAck : public TEventPB<TEvFollowerGcAck, NKikimrTabletBase::TEvFollowerGcAck, EvFollowerGcAck> {
+        TEvFollowerGcAck()
         {}
 
-        TEvFollowerGcAck(ui64 tabletId, ui32 followerAttempt, ui32 generation, ui32 step) 
+        TEvFollowerGcAck(ui64 tabletId, ui32 followerAttempt, ui32 generation, ui32 step)
         {
             Record.SetTabletId(tabletId);
-            Record.SetFollowerAttempt(followerAttempt); 
+            Record.SetFollowerAttempt(followerAttempt);
             Record.SetGeneration(generation);
             Record.SetStep(step);
         }
     };
 
-    struct TFUpdateBody { 
+    struct TFUpdateBody {
         const bool IsSnapshot;
         const ui32 Step;
         TString EmbeddedBody;
         TVector<std::pair<TLogoBlobID, TString>> References;
         TString AuxPayload;
 
-        bool NeedFollowerGcAck; 
+        bool NeedFollowerGcAck;
 
-        TFUpdateBody(const TEvFollowerUpdate &upd) 
+        TFUpdateBody(const TEvFollowerUpdate &upd)
             : IsSnapshot(upd.Record.GetIsSnapshot())
             , Step(upd.Record.GetStep())
-            , NeedFollowerGcAck(upd.Record.HasNeedGCApplyAck() ? upd.Record.GetNeedGCApplyAck() : false) 
+            , NeedFollowerGcAck(upd.Record.HasNeedGCApplyAck() ? upd.Record.GetNeedGCApplyAck() : false)
         {
             const auto &r = upd.Record;
             if (r.HasBody())
@@ -608,49 +608,49 @@ struct TEvTablet {
             }
         }
 
-        TFUpdateBody(TString auxUpdate) 
+        TFUpdateBody(TString auxUpdate)
             : IsSnapshot(false)
             , Step(0)
-            , AuxPayload(std::move(auxUpdate)) 
-            , NeedFollowerGcAck(false) 
+            , AuxPayload(std::move(auxUpdate))
+            , NeedFollowerGcAck(false)
         {}
     };
 
-    struct TEvFBoot : public TEventLocal<TEvFBoot, EvFBoot> { 
-        // boot new round of follower 
+    struct TEvFBoot : public TEventLocal<TEvFBoot, EvFBoot> {
+        // boot new round of follower
         const ui64 TabletID;
-        const ui32 FollowerID; 
+        const ui32 FollowerID;
         const ui32 Generation;
 
         const TActorId Launcher;
 
-        // must be present one of: or loaded graph or snapshot follower update 
+        // must be present one of: or loaded graph or snapshot follower update
         TIntrusivePtr<TDependencyGraph> DependencyGraph;
-        THolder<TFUpdateBody> Update; 
+        THolder<TFUpdateBody> Update;
 
         TIntrusivePtr<TTabletStorageInfo> TabletStorageInfo;
 
-        TResourceProfilesPtr ResourceProfiles; 
-        TSharedQuotaPtr TxCacheQuota; 
+        TResourceProfilesPtr ResourceProfiles;
+        TSharedQuotaPtr TxCacheQuota;
 
-        TEvFBoot(ui64 tabletID, ui32 followerID, ui32 generation, TActorId launcher, const TEvFollowerUpdate &upd, 
-                 TIntrusivePtr<TTabletStorageInfo> info, TResourceProfilesPtr profiles = nullptr, 
-                 TSharedQuotaPtr txCacheQuota = nullptr) 
+        TEvFBoot(ui64 tabletID, ui32 followerID, ui32 generation, TActorId launcher, const TEvFollowerUpdate &upd,
+                 TIntrusivePtr<TTabletStorageInfo> info, TResourceProfilesPtr profiles = nullptr,
+                 TSharedQuotaPtr txCacheQuota = nullptr)
             : TabletID(tabletID)
-            , FollowerID(followerID) 
+            , FollowerID(followerID)
             , Generation(generation)
             , Launcher(launcher)
-            , Update(new TFUpdateBody(upd)) 
+            , Update(new TFUpdateBody(upd))
             , TabletStorageInfo(info)
             , ResourceProfiles(profiles)
             , TxCacheQuota(txCacheQuota)
         {}
 
-        TEvFBoot(ui64 tabletID, ui32 followerID, ui32 generation, TActorId launcher, TDependencyGraph *dependencyGraph, 
-            TIntrusivePtr<TTabletStorageInfo> info, TResourceProfilesPtr profiles = nullptr, 
-            TSharedQuotaPtr txCacheQuota = nullptr) 
+        TEvFBoot(ui64 tabletID, ui32 followerID, ui32 generation, TActorId launcher, TDependencyGraph *dependencyGraph,
+            TIntrusivePtr<TTabletStorageInfo> info, TResourceProfilesPtr profiles = nullptr,
+            TSharedQuotaPtr txCacheQuota = nullptr)
             : TabletID(tabletID)
-            , FollowerID(followerID) 
+            , FollowerID(followerID)
             , Generation(generation)
             , Launcher(launcher)
             , DependencyGraph(dependencyGraph)
@@ -660,44 +660,44 @@ struct TEvTablet {
         {}
     };
 
-    struct TEvFUpdate : public TEventLocal<TEvFUpdate, EvFUpdate> { 
-        THolder<TFUpdateBody> Update; 
+    struct TEvFUpdate : public TEventLocal<TEvFUpdate, EvFUpdate> {
+        THolder<TFUpdateBody> Update;
 
-        TEvFUpdate(const TEvFollowerUpdate &upd) 
-            : Update(new TFUpdateBody(upd)) 
+        TEvFUpdate(const TEvFollowerUpdate &upd)
+            : Update(new TFUpdateBody(upd))
         {}
     };
 
-    struct TEvFAuxUpdate : public TEventLocal<TEvFAuxUpdate, EvFAuxUpdate> { 
+    struct TEvFAuxUpdate : public TEventLocal<TEvFAuxUpdate, EvFAuxUpdate> {
         const TString AuxUpdate;
 
-        TEvFAuxUpdate(const TString &auxUpdate) 
+        TEvFAuxUpdate(const TString &auxUpdate)
             : AuxUpdate(auxUpdate)
         {}
     };
 
-    struct TEvFollowerGcApplied : public TEventLocal<TEvFollowerGcApplied, EvFollowerGcApplied> { 
+    struct TEvFollowerGcApplied : public TEventLocal<TEvFollowerGcApplied, EvFollowerGcApplied> {
         const ui64 TabletID;
         const ui32 Generation;
         const ui32 Step;
-        const TDuration FollowerSyncDelay; 
+        const TDuration FollowerSyncDelay;
 
-        TEvFollowerGcApplied(ui64 tabletId, ui32 gen, ui32 step, TDuration followerSyncDelay) 
+        TEvFollowerGcApplied(ui64 tabletId, ui32 gen, ui32 step, TDuration followerSyncDelay)
             : TabletID(tabletId)
             , Generation(gen)
             , Step(step)
-            , FollowerSyncDelay(followerSyncDelay) 
+            , FollowerSyncDelay(followerSyncDelay)
         {}
     };
 
-    struct TEvFollowerSyncComplete : public TEventLocal<TEvFollowerSyncComplete, EvFollowerSyncComplete> {}; 
+    struct TEvFollowerSyncComplete : public TEventLocal<TEvFollowerSyncComplete, EvFollowerSyncComplete> {};
 
-    struct TEvFGcAck : public TEventLocal<TEvFGcAck, EvFGcAck> { 
+    struct TEvFGcAck : public TEventLocal<TEvFGcAck, EvFGcAck> {
         const ui64 TabletID;
         const ui32 Generation;
         const ui32 Step;
 
-        TEvFGcAck(ui64 tabletId, ui32 gen, ui32 step) 
+        TEvFGcAck(ui64 tabletId, ui32 gen, ui32 step)
             : TabletID(tabletId)
             , Generation(gen)
             , Step(step)
@@ -733,9 +733,9 @@ struct TEvTablet {
     };
 
     struct TEvUpdateConfig : TEventLocal<TEvUpdateConfig, EvUpdateConfig> {
-        TResourceProfilesPtr ResourceProfiles; 
+        TResourceProfilesPtr ResourceProfiles;
 
-        TEvUpdateConfig(TResourceProfilesPtr profiles) 
+        TEvUpdateConfig(TResourceProfilesPtr profiles)
             : ResourceProfiles(profiles)
         {}
     };

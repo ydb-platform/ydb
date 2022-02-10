@@ -23,7 +23,7 @@ namespace NFake {
         };
 
     public:
-        using TEventHandlePtr = TAutoPtr<::NActors::IEventHandle>; 
+        using TEventHandlePtr = TAutoPtr<::NActors::IEventHandle>;
         using ELnLev = NUtil::ELnLev;
         using TInfo = TTabletStorageInfo;
         using TEvDead = TEvTablet::TEvTabletDead;
@@ -42,7 +42,7 @@ namespace NFake {
         }
 
     private:
-        void Inbox(TEventHandlePtr &eh, const ::NActors::TActorContext &ctx) 
+        void Inbox(TEventHandlePtr &eh, const ::NActors::TActorContext &ctx)
         {
             if (auto *ev = eh->CastAsLocal<NFake::TEvExecute>()) {
                 Y_VERIFY(State == EState::Work, "Cannot handle TX now");
@@ -67,7 +67,7 @@ namespace NFake {
                 if (std::exchange(State, EState::Stop) != EState::Stop) {
                     /* This hack stops TExecutor before TOwner death. TOwner
                         unbale to wait for tablet death and may yield false
-                        TEvGone to leader actor on handling its own TEvPoison. 
+                        TEvGone to leader actor on handling its own TEvPoison.
                      */
 
                     Executor()->DetachTablet(ctx), Detach(ctx);
@@ -84,7 +84,7 @@ namespace NFake {
             }
         }
 
-        void Enqueue(TEventHandlePtr &eh, const ::NActors::TActorContext&) override 
+        void Enqueue(TEventHandlePtr &eh, const ::NActors::TActorContext&) override
         {
             const auto *name = TypeName(*eh->GetBase()).c_str();
 

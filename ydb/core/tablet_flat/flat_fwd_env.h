@@ -59,11 +59,11 @@ namespace NFwd {
 
     public:
         const ui64 Cookie = Max<ui64>();
-        const TIntrusiveConstPtr<IPageCollection> PageCollection; 
+        const TIntrusiveConstPtr<IPageCollection> PageCollection;
         const TAutoPtr<IPageLoadingLogic> PageLoadingLogic;
         const ui32 Slot = Max<ui32>();
         bool Grow = false;  /* Should call Forward(...) for preloading */
-        TAutoPtr<TFetch> Fetch; 
+        TAutoPtr<TFetch> Fetch;
     };
 
     struct TEnv: public IPages {
@@ -72,7 +72,7 @@ namespace NFwd {
 
         struct TEgg {
             TAutoPtr<IPageLoadingLogic> PageLoadingLogic;
-            TIntrusiveConstPtr<IPageCollection> PageCollection; 
+            TIntrusiveConstPtr<IPageCollection> PageCollection;
         };
 
     public:
@@ -186,7 +186,7 @@ namespace NFwd {
                 std::accumulate(Queues.begin(), Queues.end(), Total, aggr);
         }
 
-        TAutoPtr<TFetch> GrabFetches() noexcept 
+        TAutoPtr<TFetch> GrabFetches() noexcept
         {
             while (auto *q = Queue ? Queue.PopFront() : nullptr) {
                 if (std::exchange(q->Grow, false))
@@ -204,7 +204,7 @@ namespace NFwd {
             return nullptr;
         }
 
-        TAutoPtr<TSeen> GrabTraces() noexcept 
+        TAutoPtr<TSeen> GrabTraces() noexcept
         {
             TDeque<TSieve> sieves(Parts.size() - ColdParts.size() + 1);
 
@@ -305,7 +305,7 @@ namespace NFwd {
             }
         }
 
-        TEgg MakeCache(const TPart *part, NPage::TGroupId groupId, TIntrusiveConstPtr<TSlices> bounds) const noexcept 
+        TEgg MakeCache(const TPart *part, NPage::TGroupId groupId, TIntrusiveConstPtr<TSlices> bounds) const noexcept
         {
             auto *partStore = dynamic_cast<const TPartStore*>(part);
 
@@ -319,7 +319,7 @@ namespace NFwd {
             return { new NFwd::TCache(index, bounds), cache->PageCollection };
         }
 
-        TEgg MakeExtern(const TPart *part, TIntrusiveConstPtr<TSlices> bounds) const noexcept 
+        TEgg MakeExtern(const TPart *part, TIntrusiveConstPtr<TSlices> bounds) const noexcept
         {
             if (auto blobs = part->Blobs) {
                 /* Should always materialize key columns to values since
@@ -349,7 +349,7 @@ namespace NFwd {
             }
         }
 
-        TEgg MakeOuter(const TPart *part, TIntrusiveConstPtr<TSlices> bounds) const noexcept 
+        TEgg MakeOuter(const TPart *part, TIntrusiveConstPtr<TSlices> bounds) const noexcept
         {
             if (auto small = part->Small) {
                 auto *partStore = CheckedCast<const TPartStore*>(part);

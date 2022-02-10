@@ -336,16 +336,16 @@ namespace NTable {
         /**
          * Converts run to a matching screen
          */
-        TIntrusiveConstPtr<TScreen> ToScreen() const noexcept; 
+        TIntrusiveConstPtr<TScreen> ToScreen() const noexcept;
 
         /**
          * Returns a special run that includes all possible rows
          *
          * Currently only used in tests when bounds are unavailable
          */
-        static TIntrusiveConstPtr<TSlices> All() noexcept 
+        static TIntrusiveConstPtr<TSlices> All() noexcept
         {
-            TIntrusivePtr<TSlices> run = new TSlices; 
+            TIntrusivePtr<TSlices> run = new TSlices;
             run->emplace_back();
             return run;
         }
@@ -353,31 +353,31 @@ namespace NTable {
         /**
          * Returns true if both a and b have matching row id ranges
          */
-        static bool EqualByRowId(const TIntrusiveConstPtr<TSlices>& a, const TIntrusiveConstPtr<TSlices>& b) noexcept; 
+        static bool EqualByRowId(const TIntrusiveConstPtr<TSlices>& a, const TIntrusiveConstPtr<TSlices>& b) noexcept;
 
         /**
          * Returns true if a is a superset of b
          */
-        static bool SupersetByRowId(const TIntrusiveConstPtr<TSlices>& a, const TIntrusiveConstPtr<TSlices>& b) noexcept; 
+        static bool SupersetByRowId(const TIntrusiveConstPtr<TSlices>& a, const TIntrusiveConstPtr<TSlices>& b) noexcept;
 
         /**
          * Returns the result of removing b from a
          */
-        static TIntrusiveConstPtr<TSlices> Subtract(const TIntrusiveConstPtr<TSlices>& a, const TIntrusiveConstPtr<TSlices>& b) noexcept; 
+        static TIntrusiveConstPtr<TSlices> Subtract(const TIntrusiveConstPtr<TSlices>& a, const TIntrusiveConstPtr<TSlices>& b) noexcept;
 
         /**
          * Merges two sorted runs
          * Runs may intersect in which case they are merged
          */
-        static TIntrusiveConstPtr<TSlices> Merge(const TIntrusiveConstPtr<TSlices>& a, const TIntrusiveConstPtr<TSlices>& b) noexcept; 
+        static TIntrusiveConstPtr<TSlices> Merge(const TIntrusiveConstPtr<TSlices>& a, const TIntrusiveConstPtr<TSlices>& b) noexcept;
 
         /**
          * Cuts run using [begin,end) range of row ids, with specified keys
          * Will only leave slices that potentially intersect with the range
          * Slices that are cut may be adjusted to the specified keys
          */
-        static TIntrusiveConstPtr<TSlices> Cut( 
-                TIntrusiveConstPtr<TSlices> run, 
+        static TIntrusiveConstPtr<TSlices> Cut(
+                TIntrusiveConstPtr<TSlices> run,
                 TRowId beginRowId,
                 TRowId endRowId,
                 TConstArrayRef<TCell> beginKey,
@@ -386,7 +386,7 @@ namespace NTable {
         /**
          * Replaces row ranges with new slices in the specified run
          */
-        static TIntrusiveConstPtr<TSlices> Replace(TIntrusiveConstPtr<TSlices> run, TConstArrayRef<TSlice> slices) noexcept; 
+        static TIntrusiveConstPtr<TSlices> Replace(TIntrusiveConstPtr<TSlices> run, TConstArrayRef<TSlice> slices) noexcept;
 
         /**
          * Walks backwards until the first potential intersection with [0, rowId] range
@@ -462,7 +462,7 @@ namespace NTable {
         {
         }
 
-        TSlicesRowFilter(TIntrusiveConstPtr<TSlices> slices) 
+        TSlicesRowFilter(TIntrusiveConstPtr<TSlices> slices)
             : Slices(std::move(slices))
         {
             if (Slices) {
@@ -491,13 +491,13 @@ namespace NTable {
             return Current != Slices->end() && Current->Has(rowBegin, rowEnd);
         }
 
-        TIntrusiveConstPtr<TSlices> GetSlices() const noexcept 
+        TIntrusiveConstPtr<TSlices> GetSlices() const noexcept
         {
             return Slices;
         }
 
     private:
-        TIntrusiveConstPtr<TSlices> Slices; 
+        TIntrusiveConstPtr<TSlices> Slices;
         mutable TSlices::const_iterator Current;
     };
 
@@ -506,7 +506,7 @@ namespace NTable {
      */
     class TRun {
         struct TItem {
-            const TIntrusiveConstPtr<TPart> Part; 
+            const TIntrusiveConstPtr<TPart> Part;
             const TSlice Slice;
         };
 
@@ -660,12 +660,12 @@ namespace NTable {
         Y_FORCE_INLINE iterator begin() { return Slices.begin(); }
         Y_FORCE_INLINE iterator end() { return Slices.end(); }
 
-        std::pair<iterator, bool> Insert(TIntrusiveConstPtr<TPart> part, const TSlice& slice) 
+        std::pair<iterator, bool> Insert(TIntrusiveConstPtr<TPart> part, const TSlice& slice)
         {
             return Slices.insert(TItem{ std::move(part), slice });
         }
 
-        iterator Insert(const_iterator hint, TIntrusiveConstPtr<TPart> part, const TSlice& slice) 
+        iterator Insert(const_iterator hint, TIntrusiveConstPtr<TPart> part, const TSlice& slice)
         {
             return Slices.insert(hint, TItem{ std::move(part), slice });
         }
@@ -783,7 +783,7 @@ namespace NTable {
             TRun::iterator Position;
         };
 
-        explicit TLevels(TIntrusiveConstPtr<TKeyNulls> nulls) 
+        explicit TLevels(TIntrusiveConstPtr<TKeyNulls> nulls)
             : Nulls(std::move(nulls))
         {
         }
@@ -797,11 +797,11 @@ namespace NTable {
         Y_FORCE_INLINE iterator begin() { return Levels.begin(); }
         Y_FORCE_INLINE iterator end() { return Levels.end(); }
 
-        TAddResult Add(TIntrusiveConstPtr<TPart> part, const TSlice& slice); 
+        TAddResult Add(TIntrusiveConstPtr<TPart> part, const TSlice& slice);
 
-        void Add(TIntrusiveConstPtr<TPart> part, const TIntrusiveConstPtr<TSlices>& run); 
+        void Add(TIntrusiveConstPtr<TPart> part, const TIntrusiveConstPtr<TSlices>& run);
 
-        void AddContiguous(TIntrusiveConstPtr<TPart> part, const TIntrusiveConstPtr<TSlices>& run); 
+        void AddContiguous(TIntrusiveConstPtr<TPart> part, const TIntrusiveConstPtr<TSlices>& run);
 
         TEpoch GetMaxEpoch() const {
             return MaxEpoch;
@@ -811,7 +811,7 @@ namespace NTable {
         iterator AddLevel();
 
     private:
-        TIntrusiveConstPtr<TKeyNulls> Nulls; 
+        TIntrusiveConstPtr<TKeyNulls> Nulls;
         TItems Levels;
         TEpoch MaxEpoch = TEpoch::Min();
     };

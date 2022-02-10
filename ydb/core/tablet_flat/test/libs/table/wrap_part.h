@@ -15,7 +15,7 @@ namespace NTest {
 
     template<EDirection Direction>
     struct TWrapPartImpl {
-        TWrapPartImpl(const TPartEggs &eggs, TIntrusiveConstPtr<TSlices> slices = nullptr, 
+        TWrapPartImpl(const TPartEggs &eggs, TIntrusiveConstPtr<TSlices> slices = nullptr,
                     bool defaults = true)
             : Eggs(eggs)
             , Scheme(eggs.Scheme)
@@ -35,7 +35,7 @@ namespace NTest {
         }
 
     private:
-        void AddPart(TIntrusiveConstPtr<TPart> part, const TSlices &slices) 
+        void AddPart(TIntrusiveConstPtr<TPart> part, const TSlices &slices)
         {
             for (const auto &slice : slices) {
                 auto got = Run.FindInsertHint(part.Get(), slice);
@@ -150,7 +150,7 @@ namespace NTest {
         }
 
         const TPartEggs Eggs;
-        const TIntrusiveConstPtr<TRowScheme> Scheme; 
+        const TIntrusiveConstPtr<TRowScheme> Scheme;
         const TRemap Remap_;
         const bool Defaults = true;
 

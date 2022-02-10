@@ -91,7 +91,7 @@ namespace NTable {
             return minVersion;
         }
 
-        TSubset(TEpoch head, TIntrusiveConstPtr<TRowScheme> scheme) 
+        TSubset(TEpoch head, TIntrusiveConstPtr<TRowScheme> scheme)
             : Head(head)
             , Scheme(std::move(scheme))
         { }
@@ -104,7 +104,7 @@ namespace NTable {
         { }
 
         // This constructor is mainly for tests
-        TSubset(TEpoch head, TIntrusiveConstPtr<TRowScheme> scheme, TVector<TPartView> flatten) 
+        TSubset(TEpoch head, TIntrusiveConstPtr<TRowScheme> scheme, TVector<TPartView> flatten)
             : Head(head)
             , Scheme(std::move(scheme))
             , Flatten(std::move(flatten))
@@ -112,15 +112,15 @@ namespace NTable {
 
         const TEpoch Head;
 
-        TIntrusiveConstPtr<TRowScheme> Scheme; 
+        TIntrusiveConstPtr<TRowScheme> Scheme;
         TVector<TMemTableSnapshot> Frozen;
         TVector<TPartView> Flatten;
-        TVector<TIntrusiveConstPtr<TColdPart>> ColdParts; 
+        TVector<TIntrusiveConstPtr<TColdPart>> ColdParts;
         TTransactionMap<TRowVersion> CommittedTransactions;
         TTransactionSet RemovedTransactions;
-        TVector<TIntrusiveConstPtr<TTxStatusPart>> TxStatus; 
+        TVector<TIntrusiveConstPtr<TTxStatusPart>> TxStatus;
     };
 
-    using TGarbage = TVector<TAutoPtr<TSubset>>; /* data of deleted tables */ 
+    using TGarbage = TVector<TAutoPtr<TSubset>>; /* data of deleted tables */
 }
 }

@@ -17,7 +17,7 @@ public:
     struct TTabletInfo {
         ui32 KnownGeneration;
         ui32 TabletType;
-        ui32 LeaderNode; 
+        ui32 LeaderNode;
         ETabletState TabletState;
     };
 
@@ -55,11 +55,11 @@ public:
                 const ui64 tabletId = rowset.GetValue<Schema::Tablet::ID>();
                 const ui32 knownGen = rowset.GetValue<Schema::Tablet::KnownGeneration>();
                 const ui32 type = rowset.GetValue<Schema::Tablet::TabletType>();
-                const ui32 leaderNode = rowset.GetValue<Schema::Tablet::LeaderNode>(); 
+                const ui32 leaderNode = rowset.GetValue<Schema::Tablet::LeaderNode>();
                 const ETabletState tabletState = rowset.GetValue<Schema::Tablet::State>();
 
-                TabletInfo[tabletId] = {knownGen, type, leaderNode, tabletState}; 
-                ++NodeInfo[leaderNode].TabletsOn; // leaderNode could be zero, then - counter of tablets w/o leader node 
+                TabletInfo[tabletId] = {knownGen, type, leaderNode, tabletState};
+                ++NodeInfo[leaderNode].TabletsOn; // leaderNode could be zero, then - counter of tablets w/o leader node
                 if (!rowset.Next())
                     return false;
             }
@@ -109,7 +109,7 @@ public:
                                   TABLEH() {out << "Tablet";}
                                   TABLEH() {out << "ID";}
                                   TABLEH() {out << "KnownGeneration";}
-                                  TABLEH() {out << "LeaderNode";} 
+                                  TABLEH() {out << "LeaderNode";}
                                   TABLEH() {out << "State";}
                                   TABLEH_CLASS("sorter-false") {}
                               }
@@ -126,8 +126,8 @@ public:
                                                   << "</a></td>";
                                       TABLED() {out << tabletId;}
                                       TABLED() {out << x.KnownGeneration;}
-                                      TABLED_CLASS(x.LeaderNode ? "" : "warning") 
-                                             {out << x.LeaderNode;} 
+                                      TABLED_CLASS(x.LeaderNode ? "" : "warning")
+                                             {out << x.LeaderNode;}
                                       TABLED() {out << ETabletStateName(x.TabletState);}
                                       TABLED() {out << " <a href=\"../tablets?SsId="
                                                   << tabletId << "\">"
@@ -155,7 +155,7 @@ public:
                                   if (nodeId != 0 || x.Local) {
                                       TABLER() {
                                           if (nodeId == 0) {
-                                             TABLED_CLASS("danger") {out << "w/o leader node"; } 
+                                             TABLED_CLASS("danger") {out << "w/o leader node"; }
                                           } else {
                                              TABLED() {out << nodeId; }
                                           }
@@ -255,7 +255,7 @@ public:
         for (const auto& tabletIdx : tabletIdIndex) {
             TTabletInfo& x = *tabletIdx.second;
             if (BadOnly) {
-                if (x.IsAlive() || x.GetLeader().IsExternalBoot()) { 
+                if (x.IsAlive() || x.GetLeader().IsExternalBoot()) {
                     continue;
                 }
                 if (x.IsLeader() && x.AsLeader().Type == TTabletTypes::BlockStoreVolume && x.IsStopped()) {
@@ -269,21 +269,21 @@ public:
             TFullTabletId tabletId = x.GetFullTabletId();
             x.UpdateWeight();
             out << "<tr>";
-            out << "<td data-text='" << TTabletTypes::TypeToStr(x.GetLeader().Type) << "'><a href=\"../tablets?TabletID=" 
+            out << "<td data-text='" << TTabletTypes::TypeToStr(x.GetLeader().Type) << "'><a href=\"../tablets?TabletID="
                 << tabletId.first << "\">"
-                << TTabletTypes::TypeToStr(x.GetLeader().Type) 
+                << TTabletTypes::TypeToStr(x.GetLeader().Type)
                 << "</a></td>";
             out << "<td data-text='" << count << "'>" << tabletId.first << '.' << tabletId.second << "</td>";
-            out << "<td style='text-align:right'>" << x.GetLeader().KnownGeneration << "</td>"; 
+            out << "<td style='text-align:right'>" << x.GetLeader().KnownGeneration << "</td>";
             out << "<td";
             if (x.NodeId == 0) {
                 out << " class='warning'";
             }
             out << " style='text-align:right'>" << x.NodeId << "</td>";
-            out << "<td>" << ETabletStateName(x.GetLeader().State) << "</td>"; 
+            out << "<td>" << ETabletStateName(x.GetLeader().State) << "</td>";
             out << "<td>" << TTabletInfo::EVolatileStateName(x.GetVolatileState()) << "</td>";
-            if (x.IsLeader()) { 
-                TLeaderTabletInfo& m(x.GetLeader()); 
+            if (x.IsLeader()) {
+                TLeaderTabletInfo& m(x.GetLeader());
                 out << "<td>" << TInstant::MilliSeconds(m.Statistics.GetLastAliveTimestamp()).ToStringUpToSeconds() << "</td>";
                 out << "<td style='text-align:right'>" << m.Statistics.RestartTimestampSize() << "</td>";
             } else {
@@ -408,7 +408,7 @@ public:
                 if (domainInfo.HiveId == Self->TabletID()) {
                     out << "<td>itself</td>";
                 } else {
-                    TLeaderTabletInfo* tablet = Self->FindTablet(domainInfo.HiveId); 
+                    TLeaderTabletInfo* tablet = Self->FindTablet(domainInfo.HiveId);
                     if (tablet) {
                         out << "<td>" << tablet->StateString() << "</td>";
                     } else {
@@ -1112,7 +1112,7 @@ public:
                 ++runningTablets;
                 ++tabletsByNodeByType[pr.second.NodeId][GetTabletType(pr.second.Type)];
             }
-            for (const auto& sl : pr.second.Followers) { 
+            for (const auto& sl : pr.second.Followers) {
                 if (sl.IsRunning()){
                     ++runningTablets;
                     ++tabletsByNodeByType[sl.NodeId][GetTabletType(pr.second.Type) + "s"];
@@ -1755,7 +1755,7 @@ public:
                 ++runningTablets;
                 ++tabletsByNodeByType[pr.second.NodeId][TTxMonEvent_Landing::GetTabletType(pr.second.Type)];
             }
-            for (const auto& sl : pr.second.Followers) { 
+            for (const auto& sl : pr.second.Followers) {
                 if (sl.IsRunning()) {
                     ++runningTablets;
                     ++tabletsByNodeByType[sl.NodeId][TTxMonEvent_Landing::GetTabletType(pr.second.Type) + "s"];
@@ -2139,7 +2139,7 @@ public:
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_REASSIGN_TABLET; }
 
-    TInstant GetMaxTimestamp(const TLeaderTabletInfo* tablet) const { 
+    TInstant GetMaxTimestamp(const TLeaderTabletInfo* tablet) const {
         TInstant max;
         for (const auto& channel : tablet->TabletStorageInfo->Channels) {
             if (TabletChannels.empty()
@@ -2161,9 +2161,9 @@ public:
             Error = "forcedGroup size should be equal to channel size";
             return true;
         }
-        TVector<TLeaderTabletInfo*> tablets; 
+        TVector<TLeaderTabletInfo*> tablets;
         if (TabletId != 0) {
-            TLeaderTabletInfo* tablet = Self->FindTablet(TabletId); 
+            TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
             if (tablet != nullptr) {
                 tablets.push_back(tablet);
             }
@@ -2180,7 +2180,7 @@ public:
             }
         }
         if (TabletPercent != 100) {
-            std::sort(tablets.begin(), tablets.end(), [this](TLeaderTabletInfo* a, TLeaderTabletInfo* b) -> bool { 
+            std::sort(tablets.begin(), tablets.end(), [this](TLeaderTabletInfo* a, TLeaderTabletInfo* b) -> bool {
                 return GetMaxTimestamp(a) < GetMaxTimestamp(b);
             });
             tablets.resize(tablets.size() * TabletPercent / 100);
@@ -2193,7 +2193,7 @@ public:
             waitActorId = ctx.RegisterWithSameMailbox(waitActor);
             Self->SubActors.emplace_back(waitActor);
         }
-        for (TLeaderTabletInfo* tablet : tablets) { 
+        for (TLeaderTabletInfo* tablet : tablets) {
             TVector<ui32> channels;
             TVector<ui32> forcedGroupIds;
             bool skip = false;
@@ -2447,7 +2447,7 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_STOP_TABLET; }
 
     bool Execute(TTransactionContext&, const TActorContext& ctx) override {
-        TLeaderTabletInfo* tablet = Self->FindTablet(TabletId); 
+        TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
         if (tablet != nullptr) {
             TActorId waitActorId;
             TStopTabletWaitActor* waitActor = nullptr;
@@ -2526,7 +2526,7 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_STOP_TABLET; }
 
     bool Execute(TTransactionContext&, const TActorContext& ctx) override {
-        TLeaderTabletInfo* tablet = Self->FindTablet(TabletId); 
+        TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
         if (tablet != nullptr) {
             TActorId waitActorId;
             TResumeTabletWaitActor* waitActor = nullptr;
@@ -2579,7 +2579,7 @@ public:
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_FIND_TABLET; }
 
-    TInstant GetMaxTimestamp(const TLeaderTabletInfo* tablet) const { 
+    TInstant GetMaxTimestamp(const TLeaderTabletInfo* tablet) const {
         TInstant max;
         for (const auto& channel : tablet->TabletStorageInfo->Channels) {
             if (channel.Channel >= ChannelFrom && channel.Channel <= ChannelTo) {
@@ -2593,9 +2593,9 @@ public:
     }
 
     bool Execute(TTransactionContext&, const TActorContext&) override {
-        TDeque<TLeaderTabletInfo*> tablets; 
+        TDeque<TLeaderTabletInfo*> tablets;
         if (TabletId != 0) {
-            TLeaderTabletInfo* tablet = Self->FindTablet(TabletId); 
+            TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
             if (tablet != nullptr) {
                 tablets.push_back(tablet);
             }
@@ -2610,11 +2610,11 @@ public:
                 tablets.push_back(&pr.second);
             }
         }
-        Sort(tablets, [this](TLeaderTabletInfo* a, TLeaderTabletInfo* b) -> bool { 
+        Sort(tablets, [this](TLeaderTabletInfo* a, TLeaderTabletInfo* b) -> bool {
             return GetMaxTimestamp(a) < GetMaxTimestamp(b);
         });
         Result.SetType(NJson::EJsonValueType::JSON_ARRAY);
-        for (TLeaderTabletInfo* tablet : tablets) { 
+        for (TLeaderTabletInfo* tablet : tablets) {
             TVector<ui32> channels;
             for (const auto& channel : tablet->TabletStorageInfo->Channels) {
                 if (channel.Channel < ChannelFrom) {
@@ -2799,7 +2799,7 @@ public:
     static NJson::TJsonValue MakeFrom(const TFollowerGroup& group) {
         NJson::TJsonValue result;
         result["Id"] = TStringBuilder() << group.Id;
-        result["AllowLeaderPromotion"] = group.AllowLeaderPromotion; 
+        result["AllowLeaderPromotion"] = group.AllowLeaderPromotion;
         result["AllowClientRead"] = group.AllowClientRead;
         result["RequireAllDataCenters"] = group.RequireAllDataCenters;
         result["AllowedNodes"] = MakeFrom(group.AllowedNodes);
@@ -2917,7 +2917,7 @@ public:
 
     bool Execute(TTransactionContext&, const TActorContext& /*ctx*/) override {
         if (TabletId) {
-            if (TLeaderTabletInfo* tablet = Self->FindTablet(TabletId)) { 
+            if (TLeaderTabletInfo* tablet = Self->FindTablet(TabletId)) {
                 Info = tablet->TabletStorageInfo;
                 KnownGeneration = tablet->KnownGeneration;
             } else {
@@ -2993,7 +2993,7 @@ public:
         return NKikimrServices::TActivity::HIVE_MON_REQUEST;
     }
 
-    TCreateTabletActor(const TActorId& source, ui64 owner, ui64 ownerIdx, TTabletTypes::EType type, ui32 channelsProfile, ui32 followers, THive* hive) 
+    TCreateTabletActor(const TActorId& source, ui64 owner, ui64 ownerIdx, TTabletTypes::EType type, ui32 channelsProfile, ui32 followers, THive* hive)
         : Source(source)
         , Event(new TEvHive::TEvCreateTablet())
         , Hive(hive)
@@ -3002,7 +3002,7 @@ public:
         Event->Record.SetOwnerIdx(ownerIdx);
         Event->Record.SetTabletType(type);
         Event->Record.SetChannelsProfile(channelsProfile);
-        Event->Record.SetFollowerCount(followers); 
+        Event->Record.SetFollowerCount(followers);
     }
 
     void HandleTimeout(const TActorContext& ctx) {
@@ -3166,9 +3166,9 @@ public:
                 TString unitSize;
                 TTabletInfo* tablet = Self->FindTablet(id);
                 if (tablet) {
-                    TLeaderTabletInfo& leader = tablet->GetLeader(); 
-                    if (channel < leader.GetChannelCount()) { 
-                        unitSize = leader.BoundChannels[channel].ShortDebugString(); 
+                    TLeaderTabletInfo& leader = tablet->GetLeader();
+                    if (channel < leader.GetChannelCount()) {
+                        unitSize = leader.BoundChannels[channel].ShortDebugString();
                     }
                 }
                 out << "<td>" << unitSize << "</td>";
@@ -3392,8 +3392,8 @@ void THive::CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorCo
         ui64 ownerIdx = FromStringWithDefault<ui64>(cgi.Get("owner_idx"), 0);
         TTabletTypes::EType type = (TTabletTypes::EType)FromStringWithDefault<ui32>(cgi.Get("type"), 0);
         ui32 channelsProfile = FromStringWithDefault<ui32>(cgi.Get("profile"), 0);
-        ui32 followers = FromStringWithDefault<ui32>(cgi.Get("followers"), 0); 
-        ctx.RegisterWithSameMailbox(new TCreateTabletActor(ev->Sender, owner, ownerIdx, type, channelsProfile, followers, this)); 
+        ui32 followers = FromStringWithDefault<ui32>(cgi.Get("followers"), 0);
+        ctx.RegisterWithSameMailbox(new TCreateTabletActor(ev->Sender, owner, ownerIdx, type, channelsProfile, followers, this));
         return;
     }
     if (page == "DeleteTablet") {

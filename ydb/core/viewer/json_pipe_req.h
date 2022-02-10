@@ -20,7 +20,7 @@ template <typename TDerived>
 class TViewerPipeClient : public TActorBootstrapped<TDerived> {
 protected:
     using TBase = TActorBootstrapped<TDerived>;
-    bool Followers = true; 
+    bool Followers = true;
     bool Metrics = true;
     bool WithRetry = true;
     ui32 Requests = 0;
@@ -90,7 +90,7 @@ protected:
     void RequestHiveDomainStats(TTabletId hiveId) {
         TActorId pipeClient = ConnectTabletPipe(hiveId);
         THolder<TEvHive::TEvRequestHiveDomainStats> request = MakeHolder<TEvHive::TEvRequestHiveDomainStats>();
-        request->Record.SetReturnFollowers(Followers); 
+        request->Record.SetReturnFollowers(Followers);
         request->Record.SetReturnMetrics(Metrics);
         SendRequestToPipe(pipeClient, request.Release(), hiveId);
     }
@@ -175,7 +175,7 @@ protected:
     }
 
     void InitConfig(const TCgiParameters& params) {
-        Followers = FromStringWithDefault(params.Get("followers"), Followers); 
+        Followers = FromStringWithDefault(params.Get("followers"), Followers);
         Metrics = FromStringWithDefault(params.Get("metrics"), Metrics);
         WithRetry = FromStringWithDefault(params.Get("with_retry"), WithRetry);
     }

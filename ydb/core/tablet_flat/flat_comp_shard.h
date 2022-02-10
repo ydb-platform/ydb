@@ -280,7 +280,7 @@ namespace NCompShard {
      */
     struct TTableInfo {
         // Current row scheme of the table, updated on schema changes
-        TIntrusiveConstPtr<TRowScheme> RowScheme; 
+        TIntrusiveConstPtr<TRowScheme> RowScheme;
 
         // Current known shard keys, changed on split/merge
         THashMap<ui64, TSerializedCellVec> SplitKeys;
@@ -333,7 +333,7 @@ namespace NCompShard {
         };
 
         // Reference to the part
-        TIntrusiveConstPtr<TPart> Part; 
+        TIntrusiveConstPtr<TPart> Part;
 
         // A sorted run of used slices
         TMap<TSliceId, TItem> Slices;
@@ -388,7 +388,7 @@ namespace NCompShard {
      * A result of a split of a single slice over a number of shards
      */
     struct TSliceSplitResult {
-        TIntrusiveConstPtr<TPart> Part; 
+        TIntrusiveConstPtr<TPart> Part;
         TSlice OldSlice;
         TVector<TSlice> NewSlices;
         TVector<TTableShard*> Shards;
@@ -422,7 +422,7 @@ namespace NCompShard {
                 ISliceSplitResultConsumer* consumer,
                 const TTableInfo* table,
                 TVector<TTableShard*> shards,
-                TIntrusiveConstPtr<TPart> part, 
+                TIntrusiveConstPtr<TPart> part,
                 TSlice slice)
             : Consumer(consumer)
             , Table(table)
@@ -454,7 +454,7 @@ namespace NCompShard {
         ISliceSplitResultConsumer* const Consumer;
         const TTableInfo* const Table;
         const TVector<TTableShard*> Shards;
-        const TIntrusiveConstPtr<TPart> Part; 
+        const TIntrusiveConstPtr<TPart> Part;
         const TSlice Slice;
 
     private:
@@ -463,7 +463,7 @@ namespace NCompShard {
 
     class TUnderlayMask final : public NPage::IKeySpace {
     public:
-        TUnderlayMask(TIntrusiveConstPtr<TRowScheme> rowScheme, TVector<TBounds> bounds) 
+        TUnderlayMask(TIntrusiveConstPtr<TRowScheme> rowScheme, TVector<TBounds> bounds)
             : RowScheme(std::move(rowScheme))
             , Bounds(std::move(bounds))
         {
@@ -483,7 +483,7 @@ namespace NCompShard {
 
     public:
         static THolder<TUnderlayMask> Build(
-                TIntrusiveConstPtr<TRowScheme> rowScheme, 
+                TIntrusiveConstPtr<TRowScheme> rowScheme,
                 TVector<const TBounds*>& input) noexcept;
 
     private:
@@ -491,7 +491,7 @@ namespace NCompShard {
         bool ValidatePosition(TCellsRef key) const noexcept;
 
     private:
-        TIntrusiveConstPtr<TRowScheme> RowScheme; 
+        TIntrusiveConstPtr<TRowScheme> RowScheme;
         TVector<TBounds> Bounds;
         TVector<TBounds>::const_iterator Position;
     };
@@ -500,8 +500,8 @@ namespace NCompShard {
     public:
         using TKeysVec = TVector<TSerializedCellVec>;
 
-        TSplitKeys(TIntrusiveConstPtr<TRowScheme> rowScheme, TKeysVec keys); 
-        TSplitKeys(TIntrusiveConstPtr<TRowScheme> rowScheme, TVector<const TBounds*> bounds); 
+        TSplitKeys(TIntrusiveConstPtr<TRowScheme> rowScheme, TKeysVec keys);
+        TSplitKeys(TIntrusiveConstPtr<TRowScheme> rowScheme, TVector<const TBounds*> bounds);
 
         const TKeysVec& GetKeys() const {
             return Keys;
@@ -519,7 +519,7 @@ namespace NCompShard {
         bool IsInclusive(TKeysVec::const_iterator pos) const noexcept;
 
     private:
-        TIntrusiveConstPtr<TRowScheme> RowScheme; 
+        TIntrusiveConstPtr<TRowScheme> RowScheme;
         TKeysVec Keys;
         TKeysVec::const_iterator Position;
         TVector<bool> Inclusive;
@@ -563,15 +563,15 @@ namespace NCompShard {
         float GetOverloadFactor() override;
         ui64 GetBackingSize() override;
         ui64 GetBackingSize(ui64 ownerTabletId) override;
-        ui64 BeginMemCompaction(TTaskId taskId, TSnapEdge edge, ui64 forcedCompactionId) override; 
-        ui64 GetLastFinishedForcedCompactionId() const override { return 0; } // TODO! 
-        TInstant GetLastFinishedForcedCompactionTs() const override { return TInstant::Zero(); } // TODO! 
+        ui64 BeginMemCompaction(TTaskId taskId, TSnapEdge edge, ui64 forcedCompactionId) override;
+        ui64 GetLastFinishedForcedCompactionId() const override { return 0; } // TODO!
+        TInstant GetLastFinishedForcedCompactionTs() const override { return TInstant::Zero(); } // TODO!
         TCompactionChanges CompactionFinished(
                 ui64 compactionId,
                 THolder<TCompactionParams> params,
                 THolder<TCompactionResult> result) override;
         void PartMerged(TPartView part, ui32 level) override;
-        void PartMerged(TIntrusiveConstPtr<TColdPart> part, ui32 level) override; 
+        void PartMerged(TIntrusiveConstPtr<TColdPart> part, ui32 level) override;
         TCompactionChanges PartsRemoved(TArrayRef<const TLogoBlobID> parts) override;
         TCompactionChanges ApplyChanges() override;
         TCompactionState SnapshotState() override;
@@ -602,7 +602,7 @@ namespace NCompShard {
         /**
          * Returns existing or creates a new TTablePart for the specified part
          */
-        TTablePart* EnsurePart(TTableShard* shard, TIntrusiveConstPtr<TPart> part) noexcept; 
+        TTablePart* EnsurePart(TTableShard* shard, TIntrusiveConstPtr<TPart> part) noexcept;
 
         /**
          * Reinitializes dynamic levels and related structures
@@ -646,15 +646,15 @@ namespace NCompShard {
         };
 
         struct TGlobalPart {
-            TIntrusiveConstPtr<TPart> Part; 
-            TIntrusiveConstPtr<TSlices> Slices; 
+            TIntrusiveConstPtr<TPart> Part;
+            TIntrusiveConstPtr<TSlices> Slices;
             TVector<TTableShard*> Shards;
             ui64 TotalSize = 0;
             ui64 GarbageSize = 0;
             size_t SplitBlocks = 0;
         };
 
-        TGlobalPart* EnsureGlobalPart(const TIntrusiveConstPtr<TPart>& part, const TIntrusiveConstPtr<TSlices>& slices) noexcept; 
+        TGlobalPart* EnsureGlobalPart(const TIntrusiveConstPtr<TPart>& part, const TIntrusiveConstPtr<TSlices>& slices) noexcept;
         void UpdateGarbageStats(TGlobalPart* allInfo) noexcept;
 
     private:
@@ -666,14 +666,14 @@ namespace NCompShard {
         const TString TaskNameSuffix;
 
         TTableInfo TableInfo;
-        TIntrusiveConstPtr<TCompactionPolicy> Policy; 
+        TIntrusiveConstPtr<TCompactionPolicy> Policy;
         TIntrusiveListWithAutoDelete<TTableShard, TDelete> Shards;
         TIntrusiveList<TSliceSplitOp> PendingSliceSplits;
         TVector<TSliceSplitResult> SliceSplitResults;
         THashMap<TLogoBlobID, TGlobalPart> AllParts; // does not include nursery
         ui64 AllBackingSize = 0;
 
-        TVector<TIntrusiveConstPtr<TColdPart>> ColdParts; 
+        TVector<TIntrusiveConstPtr<TColdPart>> ColdParts;
 
         ui64 MemCompactionId = 0;
         bool MemCompactionForced = false;

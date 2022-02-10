@@ -140,7 +140,7 @@ void TestWriteImpl(const TVector<std::pair<TString, TTypeId>>& ydbSchema) {
     TTester::Setup(runtime);
 
     TActorId sender = runtime.AllocateEdgeActor();
-    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::COLUMNSHARD), &CreateColumnShard); 
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::COLUMNSHARD), &CreateColumnShard);
 
     TDispatchOptions options;
     options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
@@ -148,7 +148,7 @@ void TestWriteImpl(const TVector<std::pair<TString, TTypeId>>& ydbSchema) {
 
     //
 
-    ui64 metaShard = TTestTxConfig::TxTablet1; 
+    ui64 metaShard = TTestTxConfig::TxTablet1;
     ui64 writeId = 0;
     ui64 tableId = 1;
 
@@ -226,7 +226,7 @@ void TestWriteReadImpl(bool reboots, const TVector<std::pair<TString, TTypeId>>&
     runtime.SetLogPriority(NKikimrServices::BLOB_CACHE, NActors::NLog::PRI_DEBUG);
 
     TActorId sender = runtime.AllocateEdgeActor();
-    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::COLUMNSHARD), &CreateColumnShard); 
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::COLUMNSHARD), &CreateColumnShard);
 
     TDispatchOptions options;
     options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
@@ -236,7 +236,7 @@ void TestWriteReadImpl(bool reboots, const TVector<std::pair<TString, TTypeId>>&
                      const TString& data) {
         bool ok = WriteData(runtime, sender, metaShard, writeId, tableId, data);
         if (reboots) {
-            RebootTablet(runtime, TTestTxConfig::TxTablet0, sender); 
+            RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
         }
         return ok;
     };
@@ -245,20 +245,20 @@ void TestWriteReadImpl(bool reboots, const TVector<std::pair<TString, TTypeId>>&
                              const TVector<ui64>& writeIds) {
         ProposeCommit(runtime, sender, metaShard, txId, writeIds);
         if (reboots) {
-            RebootTablet(runtime, TTestTxConfig::TxTablet0, sender); 
+            RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
         }
     };
 
     auto planCommit = [&](TTestBasicRuntime& runtime, TActorId& sender, ui64 planStep, ui64 txId) {
         PlanCommit(runtime, sender, planStep, txId);
         if (reboots) {
-            RebootTablet(runtime, TTestTxConfig::TxTablet0, sender); 
+            RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
         }
     };
 
     //
 
-    ui64 metaShard = TTestTxConfig::TxTablet1; 
+    ui64 metaShard = TTestTxConfig::TxTablet1;
     ui64 writeId = 0;
     ui64 tableId = 1;
 
@@ -281,14 +281,14 @@ void TestWriteReadImpl(bool reboots, const TVector<std::pair<TString, TTypeId>>&
 
     // read
 
-    ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, 
+    ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender,
                 new TEvColumnShard::TEvRead(sender, metaShard, 0, 0, tableId));
     TAutoPtr<IEventHandle> handle;
     auto event2 = runtime.GrabEdgeEvent<TEvColumnShard::TEvReadResult>(handle);
     UNIT_ASSERT(event2);
 
     auto& resRead = Proto(event2);
-    UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0); 
+    UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0);
     UNIT_ASSERT_EQUAL(resRead.GetTxInitiator(), metaShard);
     UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
     UNIT_ASSERT_EQUAL(resRead.GetBatch(), 0);
@@ -304,13 +304,13 @@ void TestWriteReadImpl(bool reboots, const TVector<std::pair<TString, TTypeId>>&
 
     // read 2 (committed, old snapshot)
 
-    ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, 
+    ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender,
                 new TEvColumnShard::TEvRead(sender, metaShard, 0, 0, tableId));
     auto event5 = runtime.GrabEdgeEvent<TEvColumnShard::TEvReadResult>(handle);
     UNIT_ASSERT(event5);
 
     auto& resRead2 = Proto(event5);
-    UNIT_ASSERT_EQUAL(resRead2.GetOrigin(), TTestTxConfig::TxTablet0); 
+    UNIT_ASSERT_EQUAL(resRead2.GetOrigin(), TTestTxConfig::TxTablet0);
     UNIT_ASSERT_EQUAL(resRead2.GetTxInitiator(), metaShard);
     UNIT_ASSERT_EQUAL(resRead2.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
     UNIT_ASSERT_EQUAL(resRead2.GetBatch(), 0);
@@ -319,13 +319,13 @@ void TestWriteReadImpl(bool reboots, const TVector<std::pair<TString, TTypeId>>&
 
     // read 3 (committed)
 
-    ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, 
+    ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender,
                 new TEvColumnShard::TEvRead(sender, metaShard, planStep, txId, tableId));
     auto event6 = runtime.GrabEdgeEvent<TEvColumnShard::TEvReadResult>(handle);
     UNIT_ASSERT(event6);
 
     auto& resRead3 = Proto(event6);
-    UNIT_ASSERT_EQUAL(resRead3.GetOrigin(), TTestTxConfig::TxTablet0); 
+    UNIT_ASSERT_EQUAL(resRead3.GetOrigin(), TTestTxConfig::TxTablet0);
     UNIT_ASSERT_EQUAL(resRead3.GetTxInitiator(), metaShard);
     UNIT_ASSERT_EQUAL(resRead3.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
     UNIT_ASSERT_EQUAL(resRead3.GetBatch(), 0);
@@ -345,12 +345,12 @@ void TestWriteReadImpl(bool reboots, const TVector<std::pair<TString, TTypeId>>&
 
     auto read_col1 = std::make_unique<TEvColumnShard::TEvRead>(sender, metaShard, planStep, txId, tableId);
     Proto(read_col1.get()).AddColumnIds(1);
-    ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, read_col1.release()); 
+    ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, read_col1.release());
     auto event7 = runtime.GrabEdgeEvent<TEvColumnShard::TEvReadResult>(handle);
     UNIT_ASSERT(event7);
 
     auto& resRead4 = Proto(event7);
-    UNIT_ASSERT_EQUAL(resRead4.GetOrigin(), TTestTxConfig::TxTablet0); 
+    UNIT_ASSERT_EQUAL(resRead4.GetOrigin(), TTestTxConfig::TxTablet0);
     UNIT_ASSERT_EQUAL(resRead4.GetTxInitiator(), metaShard);
     UNIT_ASSERT_EQUAL(resRead4.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
     UNIT_ASSERT_EQUAL(resRead4.GetBatch(), 0);
@@ -366,12 +366,12 @@ void TestWriteReadImpl(bool reboots, const TVector<std::pair<TString, TTypeId>>&
     auto read_col2 = std::make_unique<TEvColumnShard::TEvRead>(sender, metaShard, planStep, txId, tableId);
     Proto(read_col2.get()).AddColumnNames("timestamp");
     Proto(read_col2.get()).AddColumnNames("message");
-    ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, read_col2.release()); 
+    ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, read_col2.release());
     auto event8 = runtime.GrabEdgeEvent<TEvColumnShard::TEvReadResult>(handle);
     UNIT_ASSERT(event8);
 
     auto& resRead5 = Proto(event8);
-    UNIT_ASSERT_EQUAL(resRead5.GetOrigin(), TTestTxConfig::TxTablet0); 
+    UNIT_ASSERT_EQUAL(resRead5.GetOrigin(), TTestTxConfig::TxTablet0);
     UNIT_ASSERT_EQUAL(resRead5.GetTxInitiator(), metaShard);
     UNIT_ASSERT_EQUAL(resRead5.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
     UNIT_ASSERT_EQUAL(resRead5.GetBatch(), 0);
@@ -405,13 +405,13 @@ void TestWriteReadImpl(bool reboots, const TVector<std::pair<TString, TTypeId>>&
 
     // read 6, planstep 0
 
-    ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, 
+    ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender,
                 new TEvColumnShard::TEvRead(sender, metaShard, 0, 0, tableId));
     auto event9 = runtime.GrabEdgeEvent<TEvColumnShard::TEvReadResult>(handle);
     UNIT_ASSERT(event9);
 
     auto& resRead6 = Proto(event9);
-    UNIT_ASSERT_EQUAL(resRead6.GetOrigin(), TTestTxConfig::TxTablet0); 
+    UNIT_ASSERT_EQUAL(resRead6.GetOrigin(), TTestTxConfig::TxTablet0);
     UNIT_ASSERT_EQUAL(resRead6.GetTxInitiator(), metaShard);
     UNIT_ASSERT_EQUAL(resRead6.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
     UNIT_ASSERT_EQUAL(resRead6.GetBatch(), 0);
@@ -420,13 +420,13 @@ void TestWriteReadImpl(bool reboots, const TVector<std::pair<TString, TTypeId>>&
 
     // read 7, planstep 21 (part of index)
 
-    ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, 
+    ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender,
                 new TEvColumnShard::TEvRead(sender, metaShard, 21, txId, tableId));
     auto event10 = runtime.GrabEdgeEvent<TEvColumnShard::TEvReadResult>(handle);
     UNIT_ASSERT(event10);
 
     auto& resRead7 = Proto(event10);
-    UNIT_ASSERT_EQUAL(resRead7.GetOrigin(), TTestTxConfig::TxTablet0); 
+    UNIT_ASSERT_EQUAL(resRead7.GetOrigin(), TTestTxConfig::TxTablet0);
     UNIT_ASSERT_EQUAL(resRead7.GetTxInitiator(), metaShard);
     UNIT_ASSERT_EQUAL(resRead7.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
     UNIT_ASSERT_EQUAL(resRead7.GetBatch(), 0);
@@ -445,13 +445,13 @@ void TestWriteReadImpl(bool reboots, const TVector<std::pair<TString, TTypeId>>&
 
     // read 8, planstep 22 (full index)
 
-    ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, 
+    ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender,
                 new TEvColumnShard::TEvRead(sender, metaShard, 22, txId, tableId));
     auto event11 = runtime.GrabEdgeEvent<TEvColumnShard::TEvReadResult>(handle);
     UNIT_ASSERT(event11);
 
     auto& resRead8 = Proto(event11);
-    UNIT_ASSERT_EQUAL(resRead8.GetOrigin(), TTestTxConfig::TxTablet0); 
+    UNIT_ASSERT_EQUAL(resRead8.GetOrigin(), TTestTxConfig::TxTablet0);
     UNIT_ASSERT_EQUAL(resRead8.GetTxInitiator(), metaShard);
     UNIT_ASSERT_EQUAL(resRead8.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
     UNIT_ASSERT_EQUAL(resRead8.GetBatch(), 0);
@@ -482,7 +482,7 @@ void TestWriteReadImpl(bool reboots, const TVector<std::pair<TString, TTypeId>>&
 
     // read 9 (committed, indexed)
 
-    ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, 
+    ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender,
                 new TEvColumnShard::TEvRead(sender, metaShard, 23, txId, tableId));
     TVector<TString> readData;
     TString schema;
@@ -492,7 +492,7 @@ void TestWriteReadImpl(bool reboots, const TVector<std::pair<TString, TTypeId>>&
         UNIT_ASSERT(event);
 
         auto& resRead = Proto(event);
-        UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0); 
+        UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0);
         UNIT_ASSERT_EQUAL(resRead.GetTxInitiator(), metaShard);
         UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
         UNIT_ASSERT(resRead.GetData().size() > 0);
@@ -521,7 +521,7 @@ void TestWriteReadImpl(bool reboots, const TVector<std::pair<TString, TTypeId>>&
 
     // read 10
 
-    ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, 
+    ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender,
                 new TEvColumnShard::TEvRead(sender, metaShard, 24, txId, tableId));
     readData.clear();
     schema.clear();
@@ -531,7 +531,7 @@ void TestWriteReadImpl(bool reboots, const TVector<std::pair<TString, TTypeId>>&
         UNIT_ASSERT(event);
 
         auto& resRead = Proto(event);
-        UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0); 
+        UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0);
         UNIT_ASSERT_EQUAL(resRead.GetTxInitiator(), metaShard);
         UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
         UNIT_ASSERT(resRead.GetData().size() > 0);
@@ -589,7 +589,7 @@ void TestWriteReadImpl(bool reboots, const TVector<std::pair<TString, TTypeId>>&
         greater->SetInclusive(prGreater.Inclusive);
         less->SetInclusive(prLess.Inclusive);
 
-        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, evRead.release()); 
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, evRead.release());
     }
     readData.clear();
     schema.clear();
@@ -598,7 +598,7 @@ void TestWriteReadImpl(bool reboots, const TVector<std::pair<TString, TTypeId>>&
         UNIT_ASSERT(event);
 
         auto& resRead = Proto(event);
-        UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0); 
+        UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0);
         UNIT_ASSERT_EQUAL(resRead.GetTxInitiator(), metaShard);
         UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
         UNIT_ASSERT(resRead.GetData().size() > 0);
@@ -634,7 +634,7 @@ void TestWriteReadImpl(bool reboots, const TVector<std::pair<TString, TTypeId>>&
         greater->SetInclusive(prGreater.Inclusive);
         less->SetInclusive(prLess.Inclusive);
 
-        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, evRead.release()); 
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, evRead.release());
     }
     readData.clear();
     schema.clear();
@@ -643,7 +643,7 @@ void TestWriteReadImpl(bool reboots, const TVector<std::pair<TString, TTypeId>>&
         UNIT_ASSERT(event);
 
         auto& resRead = Proto(event);
-        UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0); 
+        UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0);
         UNIT_ASSERT_EQUAL(resRead.GetTxInitiator(), metaShard);
         UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
         UNIT_ASSERT(resRead.GetData().size() > 0);
@@ -664,7 +664,7 @@ void TestCompactionInGranuleImpl(bool reboots) {
     TTester::Setup(runtime);
 
     TActorId sender = runtime.AllocateEdgeActor();
-    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::COLUMNSHARD), &CreateColumnShard); 
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::COLUMNSHARD), &CreateColumnShard);
 
     TDispatchOptions options;
     options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
@@ -674,7 +674,7 @@ void TestCompactionInGranuleImpl(bool reboots) {
                      const TString& data) {
         bool ok = WriteData(runtime, sender, metaShard, writeId, tableId, data);
         if (reboots) {
-            RebootTablet(runtime, TTestTxConfig::TxTablet0, sender); 
+            RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
         }
         return ok;
     };
@@ -683,20 +683,20 @@ void TestCompactionInGranuleImpl(bool reboots) {
                              const TVector<ui64>& writeIds) {
         ProposeCommit(runtime, sender, metaShard, txId, writeIds);
         if (reboots) {
-            RebootTablet(runtime, TTestTxConfig::TxTablet0, sender); 
+            RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
         }
     };
 
     auto planCommit = [&](TTestBasicRuntime& runtime, TActorId& sender, ui64 planStep, ui64 txId) {
         PlanCommit(runtime, sender, planStep, txId);
         if (reboots) {
-            RebootTablet(runtime, TTestTxConfig::TxTablet0, sender); 
+            RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
         }
     };
 
     //
 
-    ui64 metaShard = TTestTxConfig::TxTablet1; 
+    ui64 metaShard = TTestTxConfig::TxTablet1;
     ui64 writeId = 0;
     ui64 tableId = 1;
     ui64 planStep = 100;
@@ -731,7 +731,7 @@ void TestCompactionInGranuleImpl(bool reboots) {
         }
 
         if (reboots) {
-            RebootTablet(runtime, TTestTxConfig::TxTablet0, sender); 
+            RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
         }
 
         proposeCommit(runtime, sender, metaShard, txId, ids);
@@ -759,12 +759,12 @@ void TestCompactionInGranuleImpl(bool reboots) {
         Proto(read.get()).AddColumnNames("timestamp");
         Proto(read.get()).AddColumnNames("message");
 
-        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, read.release()); 
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, read.release());
         auto event = runtime.GrabEdgeEvent<TEvColumnShard::TEvReadResult>(handle);
         UNIT_ASSERT(event);
 
         auto& resRead = Proto(event);
-        UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0); 
+        UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0);
         UNIT_ASSERT_EQUAL(resRead.GetTxInitiator(), metaShard);
         UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
         UNIT_ASSERT_EQUAL(resRead.GetBatch(), 0);
@@ -792,7 +792,7 @@ void TestCompactionInGranuleImpl(bool reboots) {
         UNIT_ASSERT_VALUES_EQUAL(readStats.GetUsedColumns(), 7); // planStep, txId + 4 PK columns + "message"
         UNIT_ASSERT(readStats.GetIndexPortions() <= 2); // got compaction
 
-        RebootTablet(runtime, TTestTxConfig::TxTablet0, sender); 
+        RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
     }
 }
 
@@ -802,13 +802,13 @@ void TestReadWithProgramImpl()
     TTester::Setup(runtime);
 
     TActorId sender = runtime.AllocateEdgeActor();
-    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::COLUMNSHARD), &CreateColumnShard); 
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::COLUMNSHARD), &CreateColumnShard);
 
     TDispatchOptions options;
     options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
     runtime.DispatchEvents(options);
 
-    ui64 metaShard = TTestTxConfig::TxTablet1; 
+    ui64 metaShard = TTestTxConfig::TxTablet1;
     ui64 tableId = 1;
 
     SetupSchema(runtime, sender, tableId);
@@ -819,7 +819,7 @@ void TestReadWithProgramImpl()
         readProto.SetOlapProgramType(::NKikimrSchemeOp::EOlapProgramType::OLAP_PROGRAM_SSA_PROGRAM);
         readProto.SetOlapProgram("XXXYYYZZZ");
 
-        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, readEvent); 
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, readEvent);
 
         TAutoPtr<IEventHandle> handle;
         auto result = runtime.GrabEdgeEvent<TEvColumnShard::TEvReadResult>(handle);
@@ -827,7 +827,7 @@ void TestReadWithProgramImpl()
 
         auto& resRead = Proto(result);
 
-        UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0); 
+        UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0);
         UNIT_ASSERT_EQUAL(resRead.GetTxInitiator(), metaShard);
         UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::ERROR);
         UNIT_ASSERT_EQUAL(resRead.GetBatch(), 0);
@@ -842,14 +842,14 @@ void TestReadWithProgramImpl()
         readProto.SetOlapProgramType(::NKikimrSchemeOp::EOlapProgramType::OLAP_PROGRAM_SSA_PROGRAM_WITH_PARAMETERS);
         readProto.SetOlapProgram("XXXYYYZZZ");
 
-        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, readEvent); 
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, readEvent);
 
         TAutoPtr<IEventHandle> handle;
         auto result = runtime.GrabEdgeEvent<TEvColumnShard::TEvReadResult>(handle);
         UNIT_ASSERT(result);
 
         auto& resRead = Proto(result);
-        UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0); 
+        UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0);
         UNIT_ASSERT_EQUAL(resRead.GetTxInitiator(), metaShard);
         UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::ERROR);
         UNIT_ASSERT_EQUAL(resRead.GetBatch(), 0);
@@ -906,13 +906,13 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         TTester::Setup(runtime);
 
         TActorId sender = runtime.AllocateEdgeActor();
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::COLUMNSHARD), &CreateColumnShard); 
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::COLUMNSHARD), &CreateColumnShard);
 
         TDispatchOptions options;
         options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
         runtime.DispatchEvents(options);
 
-        ui64 metaShard = TTestTxConfig::TxTablet1; 
+        ui64 metaShard = TTestTxConfig::TxTablet1;
         ui64 writeId = 0;
         ui64 tableId = 1;
         ui64 planStep = 100;
@@ -953,7 +953,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                 Proto(read.get()).AddColumnNames("timestamp");
                 Proto(read.get()).AddColumnNames("message");
 
-                ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, read.release()); 
+                ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, read.release());
             }
 
             ui32 expected = 0;
@@ -964,7 +964,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                 UNIT_ASSERT(event);
 
                 auto& resRead = Proto(event);
-                UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0); 
+                UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0);
                 UNIT_ASSERT_EQUAL(resRead.GetTxInitiator(), metaShard);
                 UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
                 UNIT_ASSERT(resRead.GetData().size() > 0);
@@ -1017,7 +1017,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                 less->SetRow(NArrow::SerializeBatchNoCompression(prLess.Batch));
                 //less->SetInclusive(prLess.Inclusive); TODO
 
-                ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, read.release()); 
+                ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, read.release());
             }
 
             { // one result expected
@@ -1025,7 +1025,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                 UNIT_ASSERT(event);
 
                 auto& resRead = Proto(event);
-                UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0); 
+                UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0);
                 UNIT_ASSERT_EQUAL(resRead.GetTxInitiator(), metaShard);
                 UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
                 UNIT_ASSERT(resRead.GetData().size() > 0);
@@ -1069,7 +1069,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                 greater->SetRow(NArrow::SerializeBatchNoCompression(prGreater.Batch));
                 //greater->SetInclusive(prGreater.Inclusive); TODO
 
-                ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, read.release()); 
+                ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, read.release());
             }
 
             { // one result expected
@@ -1077,7 +1077,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                 UNIT_ASSERT(event);
 
                 auto& resRead = Proto(event);
-                UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0); 
+                UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0);
                 UNIT_ASSERT_EQUAL(resRead.GetTxInitiator(), metaShard);
                 UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
                 UNIT_ASSERT(resRead.GetData().size() > 0);
@@ -1104,7 +1104,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                 // TODO: check data
             }
 
-            RebootTablet(runtime, TTestTxConfig::TxTablet0, sender); 
+            RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
         }
 
         { // Get index stats
@@ -1156,13 +1156,13 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         TTester::Setup(runtime);
 
         TActorId sender = runtime.AllocateEdgeActor();
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::COLUMNSHARD), &CreateColumnShard); 
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::COLUMNSHARD), &CreateColumnShard);
 
         TDispatchOptions options;
         options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
         runtime.DispatchEvents(options);
 
-        ui64 metaShard = TTestTxConfig::TxTablet1; 
+        ui64 metaShard = TTestTxConfig::TxTablet1;
         ui64 writeId = 0;
         ui64 tableId = 1;
         ui64 planStep = 1000000;
@@ -1191,14 +1191,14 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                 request->Record.AddColumnNames("timestamp");
                 request->Record.AddColumnNames("message");
 
-                ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, request.release()); 
+                ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, request.release());
             }
 
             auto event = runtime.GrabEdgeEvent<TEvColumnShard::TEvReadResult>(handle);
             UNIT_ASSERT(event);
 
             auto& response = event->Record;
-            UNIT_ASSERT_VALUES_EQUAL(response.GetOrigin(), TTestTxConfig::TxTablet0); 
+            UNIT_ASSERT_VALUES_EQUAL(response.GetOrigin(), TTestTxConfig::TxTablet0);
             UNIT_ASSERT_VALUES_EQUAL(response.GetTxInitiator(), metaShard);
             UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(), (ui32)NKikimrTxColumnShard::EResultStatus::ERROR);
         }
@@ -1214,7 +1214,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                 request->Record.MutableSnapshot()->SetStep(planStep - staleness.MilliSeconds());
                 request->Record.MutableSnapshot()->SetTxId(Max<ui64>());
 
-                ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, request.release()); 
+                ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, request.release());
             }
 
             auto event = runtime.GrabEdgeEvent<NKqp::TEvKqpCompute::TEvScanError>(handle);
@@ -1245,13 +1245,13 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         runtime.SetLogPriority(NKikimrServices::BLOB_CACHE, NActors::NLog::PRI_DEBUG);
 
         TActorId sender = runtime.AllocateEdgeActor();
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::COLUMNSHARD), &CreateColumnShard); 
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::COLUMNSHARD), &CreateColumnShard);
 
         TDispatchOptions options;
         options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
         runtime.DispatchEvents(options);
 
-        ui64 metaShard = TTestTxConfig::TxTablet1; 
+        ui64 metaShard = TTestTxConfig::TxTablet1;
         ui64 writeId = 0;
         ui64 tableId = 1;
 
@@ -1416,7 +1416,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         Proto(read.get()).AddColumnNames("timestamp");
         Proto(read.get()).AddColumnNames("message");
 
-        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, read.release()); 
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, read.release());
 
         ui32 expected = 0;
         ui32 num = 0;
@@ -1425,7 +1425,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             UNIT_ASSERT(event);
 
             auto& resRead = Proto(event);
-            UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0); 
+            UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0);
             UNIT_ASSERT_EQUAL(resRead.GetTxInitiator(), metaShard);
             UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
 
@@ -1471,7 +1471,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         UNIT_ASSERT_VALUES_EQUAL(inFlightReads.size(), 1);
         {
             auto read = std::make_unique<NColumnShard::TEvPrivate::TEvReadFinished>(*inFlightReads.begin());
-            ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, read.release()); 
+            ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, read.release());
         }
 
         // Advance the time and trigger some more compactions and cleanups

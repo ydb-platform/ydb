@@ -155,7 +155,7 @@ ui32 TExecutorGCLogic::GetActiveGcBarrier() {
     return HoldBarriersSet.begin()->Step;
 }
 
-void TExecutorGCLogic::FollowersSyncComplete(bool isBoot) { 
+void TExecutorGCLogic::FollowersSyncComplete(bool isBoot) {
     Y_UNUSED(isBoot);
     AllowGarbageCollection = true;
 }

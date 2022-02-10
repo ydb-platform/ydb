@@ -75,13 +75,13 @@ namespace NSchemeShardUT_Private {
         ui32 ReliablePropose(TTestActorRuntime& runtime, TEvExport::TEvForgetExportRequest* ev, const TVector<Ydb::StatusIds::StatusCode>& expectedStatuses = {Ydb::StatusIds::SUCCESS});
         ui32 ReliablePropose(TTestActorRuntime& runtime, TEvImport::TEvCancelImportRequest* ev, const TVector<Ydb::StatusIds::StatusCode>& expectedStatuses = {Ydb::StatusIds::SUCCESS});
         template <class TContainer>
-        void TestWaitNotification(TTestActorRuntime& runtime, TContainer txs, ui64 schemeshardId = TTestTxConfig::SchemeShard) { 
+        void TestWaitNotification(TTestActorRuntime& runtime, TContainer txs, ui64 schemeshardId = TTestTxConfig::SchemeShard) {
             TSet<ui64> set(txs.begin(), txs.end());
             TestWaitNotification(runtime, std::move(set), schemeshardId);
         }
-        void TestWaitNotification(TTestActorRuntime& runtime, TSet<ui64> txIds, ui64 schemeshardId = TTestTxConfig::SchemeShard); 
-        void TestWaitNotification(TTestActorRuntime& runtime, int txId, ui64 schemeshardId = TTestTxConfig::SchemeShard); 
-        void TestWaitNotification(TTestActorRuntime& runtime, ui64 txId, ui64 schemeshardId = TTestTxConfig::SchemeShard); 
+        void TestWaitNotification(TTestActorRuntime& runtime, TSet<ui64> txIds, ui64 schemeshardId = TTestTxConfig::SchemeShard);
+        void TestWaitNotification(TTestActorRuntime& runtime, int txId, ui64 schemeshardId = TTestTxConfig::SchemeShard);
+        void TestWaitNotification(TTestActorRuntime& runtime, ui64 txId, ui64 schemeshardId = TTestTxConfig::SchemeShard);
 
         template <class TContainer>
         void TestWaitTabletDeletion(TTestActorRuntime& runtime, TContainer tabletIds) {

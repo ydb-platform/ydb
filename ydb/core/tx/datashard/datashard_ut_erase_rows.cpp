@@ -1556,7 +1556,7 @@ tkey = 100, key = 4
 
         auto tabletIds = GetTableShards(server, sender, "/Root/table-1/by_skey/indexImplTable");
         UNIT_ASSERT_VALUES_EQUAL(tabletIds.size(), 1);
-        RebootTablet(runtime, tabletIds[0], sender); 
+        RebootTablet(runtime, tabletIds[0], sender);
 
         for (auto& ev : delayed) {
             runtime.Send(ev.Release(), 0, true);

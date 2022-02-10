@@ -1430,7 +1430,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 Memory,
                 Network,
                 NodeId,
-                FollowerId, 
+                FollowerId,
                 State,
                 TabletId,
                 Type,
@@ -1449,7 +1449,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         check.Uint64GreaterOrEquals(0u); // Memory
         check.Uint64(0u); // Network
         check.Uint64(env.GetServer().GetRuntime()->GetNodeId(0)); // NodeId
-        check.Uint64(0u); // FollowerId 
+        check.Uint64(0u); // FollowerId
         check.String("ReadyToWork"); // State
         check.Uint64(72075186224037888ul); // TabletId
         check.String("DataShard"); // Type
@@ -1462,7 +1462,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
         TTableClient client(env.GetDriver());
         auto it = client.StreamExecuteScanQuery(R"(
-            SELECT FollowerId, TabletId, Type 
+            SELECT FollowerId, TabletId, Type
             FROM `/Root/.sys/hive_tablets`;
         )").GetValueSync();
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -1474,7 +1474,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         ])", NKqp::StreamResultToYson(it));
     }
 
-    Y_UNIT_TEST(TabletsFollowers) { 
+    Y_UNIT_TEST(TabletsFollowers) {
         TTestEnv env(1, 0);
 
         TTableClient client(env.GetDriver());
@@ -1493,7 +1493,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
         auto it = client.StreamExecuteScanQuery(R"(
-            SELECT FollowerId, TabletId, Type 
+            SELECT FollowerId, TabletId, Type
             FROM `/Root/.sys/hive_tablets`;
         )").GetValueSync();
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -1527,14 +1527,14 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
         std::vector<std::pair<TString, TString>> testData = {
             {
-                "TabletId = 72075186224037888ul AND FollowerId > 1u", 
+                "TabletId = 72075186224037888ul AND FollowerId > 1u",
                 R"([
                     [[2u];[72075186224037888u]];
                     [[3u];[72075186224037888u]];
                 ])"
             },
             {
-                "TabletId = 72075186224037888ul AND FollowerId >= 1u", 
+                "TabletId = 72075186224037888ul AND FollowerId >= 1u",
                 R"([
                     [[1u];[72075186224037888u]];
                     [[2u];[72075186224037888u]];
@@ -1542,14 +1542,14 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 ])"
             },
             {
-                "TabletId = 72075186224037888ul AND FollowerId < 2u", 
+                "TabletId = 72075186224037888ul AND FollowerId < 2u",
                 R"([
                     [[0u];[72075186224037888u]];
                     [[1u];[72075186224037888u]];
                 ])"
             },
             {
-                "TabletId = 72075186224037888ul AND FollowerId <= 2u", 
+                "TabletId = 72075186224037888ul AND FollowerId <= 2u",
                 R"([
                     [[0u];[72075186224037888u]];
                     [[1u];[72075186224037888u]];
@@ -1573,7 +1573,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
         for (auto& data: testData) {
             TString query = R"(
-                SELECT FollowerId, TabletId 
+                SELECT FollowerId, TabletId
                 FROM `/Root/.sys/hive_tablets`
                 WHERE <PREDICATE>;
             )";
@@ -1615,7 +1615,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
         TString query = R"(
-            SELECT FollowerId, TabletId 
+            SELECT FollowerId, TabletId
             FROM `/Root/.sys/hive_tablets`
             WHERE TabletId <= 72075186224037888ul OR TabletId >= 72075186224037890ul;
         )";

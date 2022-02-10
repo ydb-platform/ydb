@@ -11,7 +11,7 @@ namespace {
         const TLoadBlobQueueConfig& Config;
 
         friend IOutputStream& operator<<(IOutputStream& out, const TLogPrefix& value) {
-            out << (value.Config.Follower ? "Follower" : "Leader") 
+            out << (value.Config.Follower ? "Follower" : "Leader")
                 << "{" << value.Config.TabletID << ":" << value.Config.Generation << ":-} ";
             return out;
         }

@@ -15,7 +15,7 @@ namespace NTable {
     public:
         using TCells = TArrayRef<const TCell>;
 
-        TShrink(IPages *env, TIntrusiveConstPtr<TKeyNulls> nulls) 
+        TShrink(IPages *env, TIntrusiveConstPtr<TKeyNulls> nulls)
             : Env(env)
             , Nulls(nulls)
         {
@@ -87,7 +87,7 @@ namespace NTable {
 
     public:
         IPages * const Env = nullptr;
-        TIntrusiveConstPtr<TKeyNulls> Nulls; 
+        TIntrusiveConstPtr<TKeyNulls> Nulls;
         size_t Skipped = 0;
         TVector<TPartView> PartView;
     };

@@ -24,7 +24,7 @@ public:
         LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "TTxDirectBase(" << GetTxType() << ") Execute"
             << ": at tablet# " << Self->TabletID());
 
-        if (Self->IsFollower()) { 
+        if (Self->IsFollower()) {
             return true; // TODO: report error
         }
 

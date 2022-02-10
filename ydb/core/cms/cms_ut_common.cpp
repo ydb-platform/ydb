@@ -428,10 +428,10 @@ static void SetupServices(TTestActorRuntime &runtime,
         runtime.DispatchEvents(options);
     }
 
-    CreateTestBootstrapper(runtime, CreateTestTabletInfo(MakeBSControllerID(0), TTabletTypes::FLAT_BS_CONTROLLER), 
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(MakeBSControllerID(0), TTabletTypes::FLAT_BS_CONTROLLER),
                      &CreateFlatBsController);
 
-    auto aid = CreateTestBootstrapper(runtime, CreateTestTabletInfo(MakeCmsID(0), TTabletTypes::CMS), &CreateCms); 
+    auto aid = CreateTestBootstrapper(runtime, CreateTestTabletInfo(MakeCmsID(0), TTabletTypes::CMS), &CreateCms);
     runtime.EnableScheduleForActor(aid, true);
 }
 

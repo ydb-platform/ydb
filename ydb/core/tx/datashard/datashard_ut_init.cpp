@@ -99,18 +99,18 @@ Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
         TTester::Setup(runtime);
 
         TActorId sender = runtime.AllocateEdgeActor();
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::FLAT_DATASHARD), &CreateDataShard); 
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::FLAT_DATASHARD), &CreateDataShard);
 
         TDispatchOptions options;
         options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
         runtime.DispatchEvents(options);
 
         Y_UNUSED(sender);
-        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvDataShard::TEvGetShardState(sender)); 
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvDataShard::TEvGetShardState(sender));
         TAutoPtr<IEventHandle> handle;
         auto event = runtime.GrabEdgeEvent<TEvDataShard::TEvGetShardStateResult>(handle);
         UNIT_ASSERT(event);
-        UNIT_ASSERT_EQUAL(event->GetOrigin(), TTestTxConfig::TxTablet0); 
+        UNIT_ASSERT_EQUAL(event->GetOrigin(), TTestTxConfig::TxTablet0);
         UNIT_ASSERT_EQUAL(event->GetState(), NDataShard::TShardState::WaitScheme);
     }
 

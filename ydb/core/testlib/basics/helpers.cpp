@@ -4,7 +4,7 @@
 
 namespace NKikimr {
 
-    TTabletStorageInfo* CreateTestTabletInfo(ui64 tabletId, TTabletTypes::EType tabletType, 
+    TTabletStorageInfo* CreateTestTabletInfo(ui64 tabletId, TTabletTypes::EType tabletType,
             TBlobStorageGroupType::EErasureSpecies erasure, ui32 groupId)
     {
         THolder<TTabletStorageInfo> x(new TTabletStorageInfo());
@@ -24,7 +24,7 @@ namespace NKikimr {
         return x.Release();
     }
 
-    TActorId CreateTestBootstrapper(TTestActorRuntime &runtime, TTabletStorageInfo *info, 
+    TActorId CreateTestBootstrapper(TTestActorRuntime &runtime, TTabletStorageInfo *info,
             std::function<IActor* (const TActorId &, TTabletStorageInfo*)> op, ui32 nodeIndex)
     {
         TIntrusivePtr<TBootstrapperInfo> bi(new TBootstrapperInfo(new TTabletSetupInfo(op, TMailboxType::Simple, 0, TMailboxType::Simple, 0)));
@@ -67,7 +67,7 @@ namespace NKikimr {
     };
 
     void TStrandedPDiskServiceFactory::Create(const TActorContext &ctx, ui32 pDiskID,
-            const TIntrusivePtr<TPDiskConfig> &cfg, const NPDisk::TKey &mainKey, ui32 poolId, ui32 nodeId) 
+            const TIntrusivePtr<TPDiskConfig> &cfg, const NPDisk::TKey &mainKey, ui32 poolId, ui32 nodeId)
     {
         Y_UNUSED(ctx);
         Y_VERIFY(!Runtime.IsRealThreads());
@@ -75,7 +75,7 @@ namespace NKikimr {
         ui32 nodeIndex = nodeId - Runtime.GetNodeId(0);
         Runtime.BlockOutputForActor(TActorId(nodeId, "actorsystem"));
 
-        TActorId actorId = Runtime.Register(CreatePDisk(cfg, mainKey, Runtime.GetAppData(0).Counters), nodeIndex, poolId, TMailboxType::Revolving); 
+        TActorId actorId = Runtime.Register(CreatePDisk(cfg, mainKey, Runtime.GetAppData(0).Counters), nodeIndex, poolId, TMailboxType::Revolving);
         TActorId pDiskServiceId = MakeBlobStoragePDiskID(nodeId, pDiskID);
 
         Runtime.BlockOutputForActor(pDiskServiceId);

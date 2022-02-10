@@ -17,7 +17,7 @@ NKikimrSchemeOp::TModifyScheme CopyTableTask(NKikimr::NSchemeShard::TPath& src, 
     auto operation = scheme.MutableCreateTable();
     operation->SetName(dst.LeafName());
     operation->SetCopyFromTable(src.PathString());
-    operation->SetOmitFollowers(omitFollowers); 
+    operation->SetOmitFollowers(omitFollowers);
     operation->SetIsBackup(isBackup);
 
     return scheme;
@@ -118,7 +118,7 @@ TVector<ISubOperationBase::TPtr> CreateConsistentCopyTables(TOperationId nextId,
 
         result.push_back(CreateCopyTable(TOperationId(nextId.GetTxId(),
                                                       nextId.GetSubTxId() + result.size()),
-                                         CopyTableTask(srcPath, dstPath, descr.GetOmitFollowers(), descr.GetIsBackup()))); 
+                                         CopyTableTask(srcPath, dstPath, descr.GetOmitFollowers(), descr.GetIsBackup())));
 
         if (descr.GetOmitIndexes()) {
             continue;
@@ -151,7 +151,7 @@ TVector<ISubOperationBase::TPtr> CreateConsistentCopyTables(TOperationId nextId,
             TPath dstImplTable = dstIndexPath.Child(srcImplTableName);
 
             result.push_back(CreateCopyTable(NextPartId(nextId, result),
-                CopyTableTask(srcImplTable, dstImplTable, descr.GetOmitFollowers(), descr.GetIsBackup()))); 
+                CopyTableTask(srcImplTable, dstImplTable, descr.GetOmitFollowers(), descr.GetIsBackup())));
         }
     }
 

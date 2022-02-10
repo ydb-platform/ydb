@@ -45,7 +45,7 @@ private:
         TExecutorBuilder(SelfId(), RequestId_)
             .User(UserName_)
             .Queue(GetQueueName())
-            .QueueLeader(QueueLeader_) 
+            .QueueLeader(QueueLeader_)
             .QueryId(SET_RETENTION_ID)
             .Counters(QueueCounters_)
             .RetryOnTimeout()
@@ -83,7 +83,7 @@ private:
 
                 RLOG_SQS_INFO("Purging queue. Set retention boundary for queue [" << req->QueuePath << "/" << req->Shard << "] to " << req->Boundary.MilliSeconds() << " (" << req->Boundary << ")");
 
-                Send(QueueLeader_, std::move(req)); 
+                Send(QueueLeader_, std::move(req));
             }
         } else {
             RLOG_SQS_ERROR("Failed to set retention boundary for queue [" << GetQueuePath() << "] while purging");

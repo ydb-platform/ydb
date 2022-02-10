@@ -13,9 +13,9 @@ TDataShard::TTxCancelTransactionProposal::TTxCancelTransactionProposal(TDataShar
 bool TDataShard::TTxCancelTransactionProposal::Execute(TTransactionContext &txc,
                                                               const TActorContext &ctx)
 {
-    if (Self->IsFollower()) { 
+    if (Self->IsFollower()) {
         LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "Unexpected TTxCancelTransactionProposal at tablet follower " 
+                    "Unexpected TTxCancelTransactionProposal at tablet follower "
                     << Self->TabletID() << " txId " << TxId);
         return true;
     }

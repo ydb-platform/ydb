@@ -70,7 +70,7 @@ namespace NTabletFlatExecutor {
         using TLogoId = TLogoBlobID;
 
         struct TBorrowSnap {
-            TIntrusivePtr<TTableSnapshotContext> SnapContext; 
+            TIntrusivePtr<TTableSnapshotContext> SnapContext;
         };
 
         struct TBorrowUpdate {
@@ -117,7 +117,7 @@ namespace NTabletFlatExecutor {
         };
 
         struct TSnapshot {
-            TVector<TIntrusivePtr<TTableSnapshotContext>> Context; 
+            TVector<TIntrusivePtr<TTableSnapshotContext>> Context;
         };
 
         using TPageCollectionReadEnv::TPageCollectionReadEnv;
@@ -134,7 +134,7 @@ namespace NTabletFlatExecutor {
         }
 
     protected: /* IExecuting, tx stage func implementation */
-        void MakeSnapshot(TIntrusivePtr<TTableSnapshotContext> snap) override 
+        void MakeSnapshot(TIntrusivePtr<TTableSnapshotContext> snap) override
         {
             Y_VERIFY(snap->TablesToSnapshot());
 
@@ -142,7 +142,7 @@ namespace NTabletFlatExecutor {
                 MakeSnap[table].Context.push_back(snap);
         }
 
-        void DropSnapshot(TIntrusivePtr<TTableSnapshotContext> snap) override 
+        void DropSnapshot(TIntrusivePtr<TTableSnapshotContext> snap) override
         {
             Y_VERIFY(!DropSnap, "only one snapshot per transaction");
 

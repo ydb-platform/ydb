@@ -27,11 +27,11 @@ public:
             for (const auto& t : node->Tablets) {
                 for (TTabletInfo* tablet : t.second) {
                     if (tablet->NodeId != 0) {
-                        TTabletId tabletId = tablet->GetLeader().Id; 
-                        if (tablet->IsLeader()) { 
-                            db.Table<Schema::Tablet>().Key(tabletId).Update<Schema::Tablet::LeaderNode>(0); 
+                        TTabletId tabletId = tablet->GetLeader().Id;
+                        if (tablet->IsLeader()) {
+                            db.Table<Schema::Tablet>().Key(tabletId).Update<Schema::Tablet::LeaderNode>(0);
                         } else {
-                            db.Table<Schema::TabletFollowerTablet>().Key(tablet->GetFullTabletId()).Update<Schema::TabletFollowerTablet::FollowerNode>(0); 
+                            db.Table<Schema::TabletFollowerTablet>().Key(tablet->GetFullTabletId()).Update<Schema::TabletFollowerTablet::FollowerNode>(0);
                         }
                     }
                 }

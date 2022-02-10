@@ -9,7 +9,7 @@
 namespace NKikimr {
 namespace NTable {
 
-TLoader::TLoader(TVector<TIntrusivePtr<TCache>> pageCollections, 
+TLoader::TLoader(TVector<TIntrusivePtr<TCache>> pageCollections,
         TString legacy,
         TString opaque,
         TVector<TString> deltas,
@@ -118,7 +118,7 @@ void TLoader::StageParseMeta() noexcept
     }
 }
 
-TAutoPtr<NPageCollection::TFetch> TLoader::StageCreatePartView() noexcept 
+TAutoPtr<NPageCollection::TFetch> TLoader::StageCreatePartView() noexcept
 {
     Y_VERIFY(!PartView, "PartView already initialized in CreatePartView stage");
     Y_VERIFY(Packs && Packs.front());
@@ -234,7 +234,7 @@ TAutoPtr<NPageCollection::TFetch> TLoader::StageCreatePartView() noexcept
     return nullptr;
 }
 
-TAutoPtr<NPageCollection::TFetch> TLoader::StageSliceBounds() noexcept 
+TAutoPtr<NPageCollection::TFetch> TLoader::StageSliceBounds() noexcept
 {
     Y_VERIFY(PartView, "Cannot generate bounds for a missing part");
 

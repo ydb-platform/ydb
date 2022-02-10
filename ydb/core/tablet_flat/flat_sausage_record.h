@@ -33,7 +33,7 @@ namespace NPageCollection {
             return Blobs.emplace_back(one), *this;
         }
 
-        ui32 Push(ui32 type, TArrayRef<const char> body) 
+        ui32 Push(ui32 type, TArrayRef<const char> body)
         {
             Index.push_back({ Offset += body.size(), Inbound.size() });
             Extra.push_back({ type, Checksum(body) });
@@ -41,7 +41,7 @@ namespace NPageCollection {
             return Index.size() - 1;
         }
 
-        void PushInplace(ui32 page, TArrayRef<const char> body) 
+        void PushInplace(ui32 page, TArrayRef<const char> body)
         {
             Y_VERIFY(Index && page == Index.size() - 1);
 

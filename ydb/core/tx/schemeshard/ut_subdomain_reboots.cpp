@@ -44,8 +44,8 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
                                     NLs::PathsInsideDomain(2),
                                     NLs::ShardsInsideDomain(0)});
 
-                UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3)); 
-                UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 3)); 
+                UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3));
+                UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 3));
             }
         });
     }
@@ -134,7 +134,7 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
                 TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                                    {NLs::PathExist,
                                     NLs::StoragePoolsEqual({"pool-1", "pool-2"}),
-                                    NLs::DomainCoordinators(TVector<ui64>{TTestTxConfig::Coordinator})}); 
+                                    NLs::DomainCoordinators(TVector<ui64>{TTestTxConfig::Coordinator})});
             }
 
             AsyncAlterSubDomain(runtime, ++t.TxId,  "/",
@@ -233,7 +233,7 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
 
             AsyncDropSubDomain(runtime, ++t.TxId,  "/MyRoot/DirA", "USER_0");
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
-            t.TestEnv->TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1}); 
+            t.TestEnv->TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1});
 
             {
                 TInactiveZone inactive(activeZone);
@@ -244,8 +244,8 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
                                     NLs::PathsInsideDomain(1),
                                     NLs::ShardsInsideDomain(0)});
                 t.TestEnv->TestWaitShardDeletion(runtime, {1, 2});
-                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 3)); 
-                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3)); 
+                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 3));
+                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3));
             }
         });
     }
@@ -274,7 +274,7 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
 
             TestDropSubDomain(runtime, ++t.TxId,  "/MyRoot/DirA", "USER_0");
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
-            t.TestEnv->TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1}); 
+            t.TestEnv->TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1});
 
             {
                 TInactiveZone inactive(activeZone);
@@ -285,8 +285,8 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
                                     NLs::PathsInsideDomain(1),
                                     NLs::ShardsInsideDomain(0)});
                 t.TestEnv->TestWaitShardDeletion(runtime, {1, 2});
-                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 3)); 
-                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3)); 
+                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 3));
+                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3));
             }
         });
     }
@@ -349,7 +349,7 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
                                     }
                                 )");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
-                t.TestEnv->TestWaitTabletDeletion(runtime, TTestTxConfig::FakeHiveTablets+2); //delete src 
+                t.TestEnv->TestWaitTabletDeletion(runtime, TTestTxConfig::FakeHiveTablets+2); //delete src
 
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/USER_0"),
                                    {NLs::PathVersionEqual(5),
@@ -364,7 +364,7 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
             TestForceDropSubDomain(runtime, ++t.TxId,  "/MyRoot/DirA", "USER_0");
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-            t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 5)); 
+            t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 5));
 
             {
                 TInactiveZone inactive(activeZone);
@@ -376,10 +376,10 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
                                     NLs::ShardsInsideDomain(0)});
                 // FIXME: DropTable breaks down during ForceDropSubDomain and leaves table half-dropped
                 //        an additional reboot "fixes" the half-dropped table
-                RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor()); 
+                RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
                 t.TestEnv->TestWaitShardDeletion(runtime, {1, 2, 3, 4, 5});
-                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 3)); 
-                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3)); 
+                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 3));
+                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3));
             }
         });
     }
@@ -450,7 +450,7 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
                                    {NLs::PathVersionEqual(5),
                                     NLs::PathsInsideDomain(1),
                                     NLs::ShardsInsideDomainOneOf({5, 6})});
-                t.TestEnv->TestWaitTabletDeletion(runtime, TTestTxConfig::FakeHiveTablets+2); //delete src 
+                t.TestEnv->TestWaitTabletDeletion(runtime, TTestTxConfig::FakeHiveTablets+2); //delete src
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/USER_0"),
                                    {NLs::PathVersionEqual(5),
                                     NLs::PathsInsideDomain(1),
@@ -526,22 +526,22 @@ Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
                                     "TimeCastBucketsPerMediator: 2 "
                                     "Name: \"USER_0\"");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
-                UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3)); 
-                UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 3)); 
+                UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3));
+                UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 3));
             }
 
             AsyncForceDropSubDomain(runtime, ++t.TxId,  "/MyRoot/DirA", "USER_0");
 
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
-            t.TestEnv->TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1}); 
+            t.TestEnv->TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1});
 
             {
                 TInactiveZone inactive(activeZone);
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/USER_0"),
                                    {NLs::PathNotExist});
                 t.TestEnv->TestWaitShardDeletion(runtime, {1, 2});
-                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 3)); 
-                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3)); 
+                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 3));
+                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3));
             }
         });
     }
@@ -559,15 +559,15 @@ Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
             AsyncForceDropSubDomain(runtime, ++t.TxId,  "/MyRoot/DirA", "USER_0");
 
             t.TestEnv->TestWaitNotification(runtime, {t.TxId-1, t.TxId} );
-            t.TestEnv->TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1}); 
+            t.TestEnv->TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1});
 
             {
                 TInactiveZone inactive(activeZone);
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/USER_0"),
                                    {NLs::PathNotExist});
                 t.TestEnv->TestWaitShardDeletion(runtime, {1, 2});
-                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 3)); 
-                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3)); 
+                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 3));
+                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3));
             }
         });
     }
@@ -594,7 +594,7 @@ Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
             t.TestEnv->TestWaitNotification(runtime, {t.TxId-3, t.TxId-2, t.TxId-1, t.TxId} );
             Cerr << Endl << "Ok notification " << Endl;
 
-            t.TestEnv->TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1, TTestTxConfig::FakeHiveTablets+2}); 
+            t.TestEnv->TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1, TTestTxConfig::FakeHiveTablets+2});
 
             {
                 TInactiveZone inactive(activeZone);
@@ -605,8 +605,8 @@ Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
                                     NLs::PathsInsideDomain(1),
                                     NLs::ShardsInsideDomain(0)});
                 t.TestEnv->TestWaitShardDeletion(runtime, {1, 2, 3});
-                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 3)); 
-                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3)); 
+                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 3));
+                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3));
             }
         });
     }
@@ -633,7 +633,7 @@ Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
             t.TestEnv->TestWaitNotification(runtime, {t.TxId-3, t.TxId-2, t.TxId-1, t.TxId} );
             Cerr << Endl << "Ok notification " << Endl;
 
-            t.TestEnv->TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1, TTestTxConfig::FakeHiveTablets+2}); 
+            t.TestEnv->TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1, TTestTxConfig::FakeHiveTablets+2});
 
             {
                 TInactiveZone inactive(activeZone);
@@ -644,8 +644,8 @@ Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
                                     NLs::PathsInsideDomain(1),
                                     NLs::ShardsInsideDomain(0)});
                 t.TestEnv->TestWaitShardDeletion(runtime, {1, 2, 3});
-                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 3)); 
-                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3)); 
+                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 3));
+                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3));
             }
         });
     }
@@ -690,7 +690,7 @@ Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
             AsyncForceDropSubDomain(runtime, ++t.TxId,  "/MyRoot/DirA", "USER_0");
 
             t.TestEnv->TestWaitNotification(runtime, {t.TxId-1, t.TxId});
-            t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 5)); 
+            t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 5));
 
             {
                 TInactiveZone inactive(activeZone);
@@ -701,8 +701,8 @@ Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
                                     NLs::PathsInsideDomain(1),
                                     NLs::ShardsInsideDomain(0)});
                 t.TestEnv->TestWaitShardDeletion(runtime, {1, 2, 3, 4, 5});
-                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 3)); 
-                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3)); 
+                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 3));
+                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3));
             }
         });
     }
@@ -740,7 +740,7 @@ Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
             TestDropTable(runtime, ++t.TxId, "/MyRoot/DirA/USER_0", "table_0");
             AsyncForceDropSubDomain(runtime, ++t.TxId,  "/MyRoot/DirA", "USER_0");
             t.TestEnv->TestWaitNotification(runtime, {t.TxId-1, t.TxId});
-            t.TestEnv->TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1, TTestTxConfig::FakeHiveTablets+2}); 
+            t.TestEnv->TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1, TTestTxConfig::FakeHiveTablets+2});
 
             {
                 TInactiveZone inactive(activeZone);
@@ -752,10 +752,10 @@ Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
                                     NLs::ShardsInsideDomain(0)});
                 // FIXME: DropTable breaks down during ForceDropSubDomain and leaves table half-dropped
                 //        an additional reboot "fixes" the half-dropped table
-                RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor()); 
+                RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
                 t.TestEnv->TestWaitShardDeletion(runtime, {1, 2, 3});
-                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 3)); 
-                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3)); 
+                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 3));
+                UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3));
             }
         });
     }
@@ -804,11 +804,11 @@ Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
                     UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);;
                 };
 
-                fnWriteRow(TTestTxConfig::FakeHiveTablets+2); 
-                SetAllowLogBatching(runtime, TTestTxConfig::FakeHiveTablets+2, false); 
+                fnWriteRow(TTestTxConfig::FakeHiveTablets+2);
+                SetAllowLogBatching(runtime, TTestTxConfig::FakeHiveTablets+2, false);
 
-                fnWriteRow(TTestTxConfig::FakeHiveTablets+3); 
-                SetAllowLogBatching(runtime, TTestTxConfig::FakeHiveTablets+3, true); 
+                fnWriteRow(TTestTxConfig::FakeHiveTablets+3);
+                SetAllowLogBatching(runtime, TTestTxConfig::FakeHiveTablets+3, true);
 
                 TestCopyTable(runtime, ++t.TxId, "/MyRoot/USER_0", "Table2", "/MyRoot/USER_0/Table1");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
@@ -826,7 +826,7 @@ Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
             TestForceDropUnsafe(runtime, ++t.TxId, pathVersion.PathId.LocalPathId);
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-            t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 6)); 
+            t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 6));
 
         });
     }

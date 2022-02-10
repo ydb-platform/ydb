@@ -79,7 +79,7 @@ public:
         return PageCollections[groupId.Index]->PageCollection->Page(id).Size;
     }
 
-    TIntrusiveConstPtr<TPart> CloneWithEpoch(TEpoch epoch) const override 
+    TIntrusiveConstPtr<TPart> CloneWithEpoch(TEpoch epoch) const override
     {
         return new TPartStore(*this, epoch);
     }
@@ -100,7 +100,7 @@ public:
         return (lob == ELargeObj::Extern ? Pseudo : PageCollections.at(Groups)).Get();
     }
 
-    TAutoPtr<NPageCollection::TFetch> DataPages() const noexcept 
+    TAutoPtr<NPageCollection::TFetch> DataPages() const noexcept
     {
         TVector<TPageId> pages;
 
@@ -115,7 +115,7 @@ public:
 
     static TVector<TIntrusivePtr<TCache>> Construct(TVector<TPageCollectionComponents> components) noexcept
     {
-        TVector<TIntrusivePtr<TCache>> caches; 
+        TVector<TIntrusivePtr<TCache>> caches;
 
         for (auto &one: components) {
             caches.emplace_back(new TCache(std::move(one.Packet)));
@@ -127,17 +127,17 @@ public:
         return caches;
     }
 
-    static TArrayRef<const TIntrusivePtr<TCache>> Storages(const TPartView &partView) noexcept 
+    static TArrayRef<const TIntrusivePtr<TCache>> Storages(const TPartView &partView) noexcept
     {
         auto *part = partView.As<TPartStore>();
 
         Y_VERIFY(!partView || part, "Got an unexpected type of TPart part");
 
-        return part ? part->PageCollections : TArrayRef<const TIntrusivePtr<TCache>> { }; 
+        return part ? part->PageCollections : TArrayRef<const TIntrusivePtr<TCache>> { };
     }
 
-    TVector<TIntrusivePtr<TCache>> PageCollections; 
-    TIntrusivePtr<TCache> Pseudo;    /* Cache for NPage::TBlobs */ 
+    TVector<TIntrusivePtr<TCache>> PageCollections;
+    TIntrusivePtr<TCache> Pseudo;    /* Cache for NPage::TBlobs */
 };
 
 class TTxStatusPartStore : public TTxStatusPart, public IBorrowBundle {

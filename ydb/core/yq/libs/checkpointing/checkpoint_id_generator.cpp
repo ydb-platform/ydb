@@ -1,7 +1,7 @@
 #include "checkpoint_id_generator.h"
- 
+
 #include <ydb/core/yq/libs/checkpointing_common/defs.h>
- 
+
 namespace NYq {
 
 TCheckpointIdGenerator::TCheckpointIdGenerator(TCoordinatorId coordinatorId, TCheckpointId lastCheckpoint)
@@ -17,7 +17,7 @@ TCheckpointIdGenerator::TCheckpointIdGenerator(TCoordinatorId coordinatorId, TCh
 }
 
 TCheckpointId NYq::TCheckpointIdGenerator::NextId() {
-    return TCheckpointId(CoordinatorId.Generation, NextNumber++); 
+    return TCheckpointId(CoordinatorId.Generation, NextNumber++);
 }
 
 } // namespace NYq

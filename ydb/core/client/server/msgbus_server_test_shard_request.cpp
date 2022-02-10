@@ -13,7 +13,7 @@ class TMessageBusTestShardControl : public TMessageBusSimpleTabletRequest<TMessa
 
 public:
     TMessageBusTestShardControl(TBusMessageContext& msg, NKikimrClient::TTestShardControlRequest& record)
-        : TBase(msg, record.GetTabletId(), true, RequestTimeout, false /* no followers */) 
+        : TBase(msg, record.GetTabletId(), true, RequestTimeout, false /* no followers */)
         , Request(std::move(record))
     {}
 

@@ -242,8 +242,8 @@ public:
 
     ~TTableItBase();
 
-    void Push(TAutoPtr<TMemIt>); 
-    void Push(TAutoPtr<TRunIt>); 
+    void Push(TAutoPtr<TMemIt>);
+    void Push(TAutoPtr<TRunIt>);
 
     void StopBefore(TArrayRef<const TCell> key);
     void StopAfter(TArrayRef<const TCell> key);
@@ -492,7 +492,7 @@ inline void TTableItBase<TIteratorOps>::AddNotReadyIterator(TIteratorId itId) {
 }
 
 template<class TIteratorOps>
-inline void TTableItBase<TIteratorOps>::Push(TAutoPtr<TMemIt> it) 
+inline void TTableItBase<TIteratorOps>::Push(TAutoPtr<TMemIt> it)
 {
     if (it && it->IsValid()) {
         TIteratorId itId = { EType::Mem, ui16(MemIters.size()), AdjustEpoch(it->MemTable->Epoch) };
@@ -504,7 +504,7 @@ inline void TTableItBase<TIteratorOps>::Push(TAutoPtr<TMemIt> it)
 }
 
 template<class TIteratorOps>
-inline void TTableItBase<TIteratorOps>::Push(TAutoPtr<TRunIt> it) 
+inline void TTableItBase<TIteratorOps>::Push(TAutoPtr<TRunIt> it)
 {
     TIteratorId itId = { EType::Run, ui16(RunIters.size()), AdjustEpoch(it->Epoch()) };
 

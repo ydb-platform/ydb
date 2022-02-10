@@ -6,13 +6,13 @@ namespace NYq {
 
 class TCheckpointIdGenerator {
 private:
-    TCoordinatorId CoordinatorId; 
+    TCoordinatorId CoordinatorId;
     ui64 NextNumber;
 
 public:
     explicit TCheckpointIdGenerator(TCoordinatorId id, TCheckpointId lastCheckpoint = TCheckpointId(0, 0));
 
-    TCheckpointId NextId(); 
+    TCheckpointId NextId();
 };
 
 } // namespace NYq

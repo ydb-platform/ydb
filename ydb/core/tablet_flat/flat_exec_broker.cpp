@@ -5,7 +5,7 @@ namespace NTabletFlatExecutor {
 
 using namespace NResourceBroker;
 
-TBroker::TBroker(IOps* ops, TIntrusivePtr<TIdEmitter> emitter) 
+TBroker::TBroker(IOps* ops, TIntrusivePtr<TIdEmitter> emitter)
     : Ops(ops)
     , Emitter(std::move(emitter))
 { }
@@ -61,7 +61,7 @@ void TBroker::OnResourceAllocated(TTaskId taskId) {
     }
 }
 
-void TBroker::SendToBroker(TAutoPtr<IEventBase> event) { 
+void TBroker::SendToBroker(TAutoPtr<IEventBase> event) {
     Ops->Send(MakeResourceBrokerID(), event.Release(), 0);
 }
 

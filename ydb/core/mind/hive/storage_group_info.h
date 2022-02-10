@@ -1,7 +1,7 @@
 #pragma once
 
 #include "hive.h"
-#include "leader_tablet_info.h" 
+#include "leader_tablet_info.h"
 
 namespace NKikimr {
 namespace NHive {
@@ -13,7 +13,7 @@ struct TStoragePoolInfo;
 struct TStorageGroupInfo {
     const TStoragePoolInfo& StoragePool;
     TStorageGroupId Id;
-    std::unordered_set<std::pair<const TLeaderTabletInfo*, ui32>> Units; // Tablet + Channel 
+    std::unordered_set<std::pair<const TLeaderTabletInfo*, ui32>> Units; // Tablet + Channel
     double AcquiredIOPS = 0;
     ui64 AcquiredThroughput = 0;
     ui64 AcquiredSize = 0;
@@ -27,8 +27,8 @@ struct TStorageGroupInfo {
     TStorageGroupInfo(TStorageGroupInfo&&) = delete;
     TStorageGroupInfo& operator =(const TStorageGroupInfo&) = delete;
     TStorageGroupInfo& operator =(TStorageGroupInfo&&) = delete;
-    bool AcquireAllocationUnit(const TLeaderTabletInfo* tablet, ui32 channel); 
-    bool ReleaseAllocationUnit(const TLeaderTabletInfo* tablet, ui32 channel); 
+    bool AcquireAllocationUnit(const TLeaderTabletInfo* tablet, ui32 channel);
+    bool ReleaseAllocationUnit(const TLeaderTabletInfo* tablet, ui32 channel);
     void UpdateStorageGroup(const TEvControllerSelectGroupsResult::TGroupParameters& groupParameters);
     bool IsMatchesParameters(const TEvControllerSelectGroups::TGroupParameters& groupParameters) const;
     double GetUsage() const;

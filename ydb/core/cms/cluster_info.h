@@ -347,7 +347,7 @@ struct TTabletInfo {
     ui64 TabletId = 0;
     EType Type = TTabletTypes::Unknown;
     EState State = NKikimrWhiteboard::TTabletStateInfo::Created;
-    bool Leader = false; 
+    bool Leader = false;
     ui32 NodeId = 0;
 };
 

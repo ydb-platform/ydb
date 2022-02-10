@@ -117,7 +117,7 @@ namespace Tests {
         ui64 ChangesQueueItemsLimit = 0;
         ui64 ChangesQueueBytesLimit = 0;
         NKikimrConfig::TAppConfig AppConfig;
-        NKikimrConfig::TCompactionConfig CompactionConfig; 
+        NKikimrConfig::TCompactionConfig CompactionConfig;
         TMap<ui32, TString> NodeKeys;
         ui64 DomainPlanResolution = 0;
         std::shared_ptr<NKikimr::NMsgBusProxy::IPersQueueGetReadSessionsInfoWorkerFactory> PersQueueGetReadSessionsInfoWorkerFactory;
@@ -152,7 +152,7 @@ namespace Tests {
         TServerSettings& SetEnableKqpSpilling(bool value) { EnableKqpSpilling = value; return *this; }
         TServerSettings& SetDomainPlanResolution(ui64 resolution) { DomainPlanResolution = resolution; return *this; }
         TServerSettings& SetFeatureFlags(const NKikimrConfig::TFeatureFlags& value) { FeatureFlags = value; return *this; }
-        TServerSettings& SetCompactionConfig(const NKikimrConfig::TCompactionConfig& value) { CompactionConfig = value; return *this; } 
+        TServerSettings& SetCompactionConfig(const NKikimrConfig::TCompactionConfig& value) { CompactionConfig = value; return *this; }
         TServerSettings& SetEnableDbCounters(bool value) { FeatureFlags.SetEnableDbCounters(value); return *this; }
         TServerSettings& SetEnableYq(bool value) { EnableYq = value; return *this; }
         TServerSettings& SetKeepSnapshotTimeout(TDuration value) { KeepSnapshotTimeout = value; return *this; }
@@ -196,7 +196,7 @@ namespace Tests {
 
         void SetupMessageBus(ui16 port, const TString &tracePath);
         void SetupDomains(TAppPrepare&);
-        void CreateBootstrapTablets(); 
+        void CreateBootstrapTablets();
         void SetupLocalConfig(TLocalConfig &localConfig, const NKikimr::TAppData &appData);
         void SetupDomainLocalService(ui32 nodeIdx);
         void SetupLocalService(ui32 nodeIdx, const TString &domainName);
@@ -418,17 +418,17 @@ namespace Tests {
         TString SendTabletMonQuery(TTestActorRuntime* runtime, ui64 tabletId, TString query);
         TString MarkNodeInHive(TTestActorRuntime* runtime, ui32 nodeIdx, bool up);
         TString KickNodeInHive(TTestActorRuntime* runtime, ui32 nodeIdx);
-        bool WaitForTabletAlive(TTestActorRuntime* runtime, ui64 tabletId, bool leader, TDuration timeout); 
-        bool WaitForTabletDown(TTestActorRuntime* runtime, ui64 tabletId, bool leader, TDuration timeout); 
-        ui32 GetLeaderNode(TTestActorRuntime* runtime, ui64 tabletId); 
+        bool WaitForTabletAlive(TTestActorRuntime* runtime, ui64 tabletId, bool leader, TDuration timeout);
+        bool WaitForTabletDown(TTestActorRuntime* runtime, ui64 tabletId, bool leader, TDuration timeout);
+        ui32 GetLeaderNode(TTestActorRuntime* runtime, ui64 tabletId);
         bool TabletExistsInHive(TTestActorRuntime* runtime, ui64 tabletId, bool evenInDeleting = false);
-        TVector<ui32> GetFollowerNodes(TTestActorRuntime *runtime, ui64 tabletId); 
+        TVector<ui32> GetFollowerNodes(TTestActorRuntime *runtime, ui64 tabletId);
         void S3Listing(const TString& table, const TString& prefixColumnsPb, const TString &pathPrefix,
                        const TString &pathDelimiter, const TString& startAfterSuffixColumnsPb,
                        const TVector<TString>& columnsToReturn, ui32 maxKeys, ui32 timeoutMillisec,
                        NKikimrClient::TS3ListingResponse &res);
 
-        void GetTabletInfoFromHive(TTestActorRuntime* runtime, ui64 tabletId, bool returnFollowers, NKikimrHive::TEvResponseHiveInfo& res); 
+        void GetTabletInfoFromHive(TTestActorRuntime* runtime, ui64 tabletId, bool returnFollowers, NKikimrHive::TEvResponseHiveInfo& res);
         void GetTabletStorageInfoFromHive(TTestActorRuntime* runtime, ui64 tabletId, NKikimrHive::TEvGetTabletStorageInfoResult& res);
 
         static void RefreshPathCache(TTestActorRuntime* runtime, const TString& path, ui32 nodeIdx = 0);

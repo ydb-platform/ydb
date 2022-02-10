@@ -76,7 +76,7 @@ TString TOverlay::Encode() const noexcept
     return encoded;
 }
 
-TOverlay TOverlay::Decode(TArrayRef<const char> opaque, TArrayRef<const char> opaqueExt) noexcept 
+TOverlay TOverlay::Decode(TArrayRef<const char> opaque, TArrayRef<const char> opaqueExt) noexcept
 {
     TOverlay overlay;
 
@@ -171,7 +171,7 @@ void TOverlay::Validate() const noexcept
     }
 }
 
-void TOverlay::ApplyDelta(TArrayRef<const char> rawDelta) noexcept 
+void TOverlay::ApplyDelta(TArrayRef<const char> rawDelta) noexcept
 {
     NProto::TOverlayDelta plain;
 
@@ -180,7 +180,7 @@ void TOverlay::ApplyDelta(TArrayRef<const char> rawDelta) noexcept
     }
 
     if (auto removedSlices = SlicesFromProto(plain.GetRemovedSlices())) {
-        TIntrusiveConstPtr<TSlices> removed = new TSlices(std::move(removedSlices)); 
+        TIntrusiveConstPtr<TSlices> removed = new TSlices(std::move(removedSlices));
         if (!TSlices::SupersetByRowId(Slices, removed)) {
             Y_Fail("Removing slices that are not a subset of existing slices");
         }
@@ -199,7 +199,7 @@ void TOverlay::ApplyDelta(TArrayRef<const char> rawDelta) noexcept
     }
 }
 
-TString TOverlay::EncodeRemoveSlices(const TIntrusiveConstPtr<TSlices>& slices) noexcept 
+TString TOverlay::EncodeRemoveSlices(const TIntrusiveConstPtr<TSlices>& slices) noexcept
 {
     NProto::TOverlayDelta plain;
 

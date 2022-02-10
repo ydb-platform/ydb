@@ -57,7 +57,7 @@ namespace NFwd {
     public:
         TCache() = delete;
 
-        TCache(const NPage::TIndex& index, const TIntrusiveConstPtr<TSlices>& bounds = nullptr) 
+        TCache(const NPage::TIndex& index, const TIntrusiveConstPtr<TSlices>& bounds = nullptr)
             : Index(index, 1, bounds)
         { }
 

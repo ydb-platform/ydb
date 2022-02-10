@@ -13,7 +13,7 @@ namespace NTabletFlatExecutor {
 
         struct TTxSchema : public ITransaction {
 
-            TTxSchema(TIntrusiveConstPtr<TCompactionPolicy> policy, bool groups = false) 
+            TTxSchema(TIntrusiveConstPtr<TCompactionPolicy> policy, bool groups = false)
                 : Policy(std::move(policy))
                 , Groups(groups)
             { }
@@ -44,7 +44,7 @@ namespace NTabletFlatExecutor {
                 ctx.Send(ctx.SelfID, new NFake::TEvReturn);
             }
 
-            TIntrusiveConstPtr<TCompactionPolicy> Policy; 
+            TIntrusiveConstPtr<TCompactionPolicy> Policy;
             const bool Groups;
         };
 
@@ -122,7 +122,7 @@ namespace NTabletFlatExecutor {
             const TRowVersion WriteVersion;
         };
 
-        NFake::TEvExecute* MakeScheme(TIntrusiveConstPtr<TCompactionPolicy> policy, bool groups = false) 
+        NFake::TEvExecute* MakeScheme(TIntrusiveConstPtr<TCompactionPolicy> policy, bool groups = false)
         {
             return new NFake::TEvExecute{ new TTxSchema(std::move(policy), groups) };
         }
@@ -234,10 +234,10 @@ namespace NTabletFlatExecutor {
 
     private:
         TVector<ui32> Tables;
-        TAutoPtr<NTable::TSubset> Subset; 
+        TAutoPtr<NTable::TSubset> Subset;
     };
 
-struct TDummyResult: public IDestructable { 
+struct TDummyResult: public IDestructable {
     TDummyResult(ui64 count, ui64 expect)
         : Count(count), Expect(expect)
     {}
@@ -276,7 +276,7 @@ public:
     }
 
 private:
-    THello Prepare(IDriver *driver, TIntrusiveConstPtr<TScheme> scheme) noexcept override 
+    THello Prepare(IDriver *driver, TIntrusiveConstPtr<TScheme> scheme) noexcept override
     {
         Driver = driver;
         Scheme = std::move(scheme);
@@ -309,7 +309,7 @@ private:
         return EScan::Feed;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort) noexcept override 
+    TAutoPtr<IDestructable> Finish(EAbort abort) noexcept override
     {
         UNIT_ASSERT_VALUES_EQUAL((int)Abort, (int)abort);
 
@@ -326,7 +326,7 @@ private:
 private:
     TActorId Tablet;
     IDriver *Driver = nullptr;
-    TIntrusiveConstPtr<TScheme> Scheme; 
+    TIntrusiveConstPtr<TScheme> Scheme;
     ui64 StoredRows = 0;
     ui64 ExpectedRowId = 1;
     ui64 ExpectedRows = 0;
@@ -419,7 +419,7 @@ class TTestFlatTablet : public TActor<TTestFlatTablet>, public TTabletExecutedFl
         Send(Sender, new NFake::TEvCompacted(table));
     }
 
-    void ScanComplete(NTable::EAbort, TAutoPtr<IDestructable>, ui64 cookie, const TActorContext&) override 
+    void ScanComplete(NTable::EAbort, TAutoPtr<IDestructable>, ui64 cookie, const TActorContext&) override
     {
         UNIT_ASSERT_VALUES_EQUAL(cookie, ScanCookie);
         Send(Sender, new TEvTestFlatTablet::TEvScanFinished);
@@ -559,7 +559,7 @@ Y_UNIT_TEST_SUITE(TFlatTableCompactionScan) {
 
         env.WaitForWakeUp();
 
-        TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy(); 
+        TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy();
         policy->InMemSizeToSnapshot = 40 * 1024 *1024;
         policy->InMemStepsToSnapshot = 10;
         policy->InMemForceStepsToSnapshot = 10;
@@ -1193,7 +1193,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorResourceProfile) {
         size_t ReqNo = 0;
         TAutoPtr<TMemoryToken> Token;
 
-        TTxRequestMemory(TRequests requests, size_t reqNo, TAutoPtr<TMemoryToken> token, TCfg cfg) 
+        TTxRequestMemory(TRequests requests, size_t reqNo, TAutoPtr<TMemoryToken> token, TCfg cfg)
             : Cfg(cfg)
             , Requests(requests)
             , ReqNo(reqNo)
@@ -1341,9 +1341,9 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorResourceProfile) {
 
         void CheckMemoryRequest(std::initializer_list<TMemoryCheckEntry> list,
                                     TTxRequestMemory::TCfg cfg = { },
-                                    bool follower = false) 
+                                    bool follower = false)
         {
-            TAutoPtr<TTxRequestMemory> event = new TTxRequestMemory({ }, 0, nullptr, cfg); 
+            TAutoPtr<TTxRequestMemory> event = new TTxRequestMemory({ }, 0, nullptr, cfg);
 
             TTaskSequence sequence;
 
@@ -1367,8 +1367,8 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorResourceProfile) {
                 }
             }
 
-            if (follower) { 
-                SendFollowerAsync(new NFake::TEvExecute{ event.Release() }); 
+            if (follower) {
+                SendFollowerAsync(new NFake::TEvExecute{ event.Release() });
             } else {
                 SendAsync(new NFake::TEvExecute{ event.Release() });
             }
@@ -1382,10 +1382,10 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorResourceProfile) {
             WaitForWakeUp();
         }
 
-        void CheckMemoryRequestFollower(std::initializer_list<TMemoryCheckEntry> list, 
+        void CheckMemoryRequestFollower(std::initializer_list<TMemoryCheckEntry> list,
                                      TTxRequestMemory::TCfg cfg = { })
         {
-            return CheckMemoryRequest(list, std::move(cfg), /* follower */ true); 
+            return CheckMemoryRequest(list, std::move(cfg), /* follower */ true);
         }
 
         TResourceProfiles::TPtr Profile;
@@ -1525,24 +1525,24 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorResourceProfile) {
                            {{{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, 95 << 10, {"large_transaction"}}});
     }
 
-    Y_UNIT_TEST(TestExecutorRequestMemoryFollower) { 
+    Y_UNIT_TEST(TestExecutorRequestMemoryFollower) {
         TMyEnvProfiles env;
 
         env.SendSync(env.Rows.MakeRows(100, 2 << 10));
 
-        env.FireDummyFollower(1); 
+        env.FireDummyFollower(1);
 
         // Static memory.
-        env.CheckMemoryRequestFollower( 
+        env.CheckMemoryRequestFollower(
                            {{{1}, 4 << 10, {}, true}});
         // Dynamic memory.
-        env.CheckMemoryRequestFollower( 
+        env.CheckMemoryRequestFollower(
                            {{{1, 2, 3, 4, 5}, 14 << 10, {"small_transaction"}}});
         // Dynamic memory.
-        env.CheckMemoryRequestFollower( 
+        env.CheckMemoryRequestFollower(
                            {{{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, 35 << 10, {"medium_transaction"}}});
         // Dynamic memory.
-        env.CheckMemoryRequestFollower( 
+        env.CheckMemoryRequestFollower(
                            {{{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, 95 << 10, {"large_transaction"}}});
     }
 
@@ -1716,7 +1716,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorSliceOverlapScan) {
 
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
 
-        TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy; 
+        TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy;
         policy->InMemForceSizeToSnapshot = 4 * 1024 * 1024;
         policy->Generations.push_back({0, 2, 2, ui64(-1),
             NLocalDb::LegacyQueueIdToTaskName(1), false});
@@ -1755,7 +1755,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorShardedCompaction) {
 
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
 
-        TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy; 
+        TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy;
         policy->InMemForceSizeToSnapshot = 1024 * 1024;
         policy->CompactionStrategy = NKikimrSchemeOp::CompactionStrategySharded;
         policy->ShardPolicy.SetMinSliceSize(0);
@@ -1790,7 +1790,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorShardedCompaction) {
 
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
 
-        TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy; 
+        TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy;
         policy->InMemForceSizeToSnapshot = 1024;
         policy->CompactionStrategy = NKikimrSchemeOp::CompactionStrategySharded;
         policy->ShardPolicy.SetMinSliceSize(0);
@@ -1825,7 +1825,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorShardedCompaction) {
 
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
 
-        TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy; 
+        TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy;
         policy->InMemForceSizeToSnapshot = 1024 * 1024;
         policy->CompactionStrategy = NKikimrSchemeOp::CompactionStrategySharded;
         policy->ShardPolicy.SetMinSliceSize(0);
@@ -1925,7 +1925,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorColumnGroups) {
 
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
 
-        TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy(); 
+        TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy();
         policy->InMemSizeToSnapshot = 40 * 1024 *1024;
         policy->InMemStepsToSnapshot = 10;
         policy->InMemForceStepsToSnapshot = 10;
@@ -2014,7 +2014,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorCachePressure) {
 
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
 
-        TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy; 
+        TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy;
         policy->InMemForceSizeToSnapshot = 256 * 1024;
 
         env.SendSync(rows.MakeScheme(std::move(policy)));
@@ -2094,7 +2094,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorCompressedSelectRows) {
 
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
 
-        TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy; 
+        TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy;
         policy->InMemForceSizeToSnapshot = 256 * 1024;
 
         env.SendSync(rows.MakeScheme(std::move(policy)));
@@ -2351,7 +2351,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorVersionedRows) {
 
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
 
-        TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy; 
+        TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy;
         policy->InMemForceSizeToSnapshot = 256 * 1024;
 
         env.SendSync(rows.MakeScheme(std::move(policy)));
@@ -2469,7 +2469,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorVersionedLargeBlobs) {
         {
             using namespace NTable::NPage;
 
-            TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy; 
+            TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy;
             policy->InMemForceSizeToSnapshot = 256 * 1024;
 
             // Values bigger than 128 bytes stored in large blobs
@@ -2745,7 +2745,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorKeepEraseMarkers) {
 
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
 
-        TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy; 
+        TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy;
 
         env.SendSync(rows.MakeScheme(std::move(policy)));
         env.SendSync(new NFake::TEvExecute{ new TTxUpdateSchema(ESchemaVariant::KeepEraseMarkers) });
@@ -3005,7 +3005,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorMoveTableData) {
 
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
 
-        TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy; 
+        TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy;
 
         env.SendSync(new NFake::TEvExecute{ new TTxInitSchema });
         env.SendSync(new NFake::TEvExecute{ new TTxGenerateRows });
@@ -3136,14 +3136,14 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorMoveTableData) {
         }
     };
 
-    Y_UNIT_TEST(TestMoveSnapshotFollower) { 
+    Y_UNIT_TEST(TestMoveSnapshotFollower) {
         TMyEnvBase env;
 
         //env->SetLogPriority(NKikimrServices::TABLET_FLATBOOT, NActors::NLog::PRI_DEBUG);
         //env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
 
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
-        env.FireDummyFollower(1); 
+        env.FireDummyFollower(1);
 
         env.SendSync(new NFake::TEvExecute{ new TTxInitSchema });
         env.SendSync(new NFake::TEvExecute{ new TTxGenerateRows });
@@ -3153,24 +3153,24 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorMoveTableData) {
         env.SendSync(move->Start());
         env.SendSync(new NFake::TEvExecute{ new TTxDropTable(TRowsModel::TableId + 1) });
 
-        // Find the last completed leader step 
-        ui32 leaderStep; 
-        env.SendSync(new NFake::TEvExecute{ new TTxCheckStep(leaderStep) }); 
-        --leaderStep; 
+        // Find the last completed leader step
+        ui32 leaderStep;
+        env.SendSync(new NFake::TEvExecute{ new TTxCheckStep(leaderStep) });
+        --leaderStep;
 
-        // Wait for that step to be synced to follower 
+        // Wait for that step to be synced to follower
         while (true) {
-            ui32 followerStep; 
-            env.SendFollowerSync(new NFake::TEvExecute{ new TTxCheckStep(followerStep) }); 
-            if (followerStep >= leaderStep) { 
+            ui32 followerStep;
+            env.SendFollowerSync(new NFake::TEvExecute{ new TTxCheckStep(followerStep) });
+            if (followerStep >= leaderStep) {
                 break;
             }
         }
 
-        // Check resulting data on a follower 
+        // Check resulting data on a follower
         {
             TString data;
-            env.SendFollowerSync(new NFake::TEvExecute{ new TTxCheckRows(data) }); 
+            env.SendFollowerSync(new NFake::TEvExecute{ new TTxCheckRows(data) });
             UNIT_ASSERT_VALUES_EQUAL(data,
                 "Key 1 = Upsert value = Set key1update\n"
                 "Key 2 = Upsert value = Set key2base\n"
@@ -3188,23 +3188,23 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorMoveTableData) {
         env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
         env.WaitFor<NFake::TEvCompacted>();
 
-        // Find the last completed leader step 
-        env.SendSync(new NFake::TEvExecute{ new TTxCheckStep(leaderStep) }); 
-        --leaderStep; 
+        // Find the last completed leader step
+        env.SendSync(new NFake::TEvExecute{ new TTxCheckStep(leaderStep) });
+        --leaderStep;
 
-        // Wait for that step to be synced to follower 
+        // Wait for that step to be synced to follower
         while (true) {
-            ui32 followerStep; 
-            env.SendFollowerSync(new NFake::TEvExecute{ new TTxCheckStep(followerStep) }); 
-            if (followerStep >= leaderStep) { 
+            ui32 followerStep;
+            env.SendFollowerSync(new NFake::TEvExecute{ new TTxCheckStep(followerStep) });
+            if (followerStep >= leaderStep) {
                 break;
             }
         }
 
-        // Check resulting data on a follower 
+        // Check resulting data on a follower
         {
             TString data;
-            env.SendFollowerSync(new NFake::TEvExecute{ new TTxCheckRows(data) }); 
+            env.SendFollowerSync(new NFake::TEvExecute{ new TTxCheckRows(data) });
             UNIT_ASSERT_VALUES_EQUAL(data,
                 "Key 1 = Upsert value = Set key1update\n"
                 "Key 2 = Upsert value = Set key2base\n"
@@ -3219,7 +3219,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorMoveTableData) {
 
 }
 
-Y_UNIT_TEST_SUITE(TFlatTableExecutorFollower) { 
+Y_UNIT_TEST_SUITE(TFlatTableExecutorFollower) {
 
     struct TTxCheckStep : public ITransaction {
         ui32& Step;
@@ -3310,7 +3310,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorFollower) {
         }
     };
 
-    Y_UNIT_TEST(BasicFollowerRead) { 
+    Y_UNIT_TEST(BasicFollowerRead) {
         TMyEnvBase env;
         TRowsModel rows;
 
@@ -3318,31 +3318,31 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorFollower) {
         //env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
 
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
-        env.FireDummyFollower(1); 
+        env.FireDummyFollower(1);
 
-        TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy; 
+        TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy;
 
         env.SendSync(rows.MakeScheme(std::move(policy)));
 
         // Insert some test rows (without waiting for completion)
-        ui32 lastLeaderStep = 0; 
+        ui32 lastLeaderStep = 0;
         for (i64 key = 1; key <= 5; ++key) {
-            env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(key, lastLeaderStep) }); 
+            env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(key, lastLeaderStep) });
         }
 
-        // Wait for follower to sync with the last leader step 
+        // Wait for follower to sync with the last leader step
         while (true) {
-            ui32 followerStep = 0; 
-            env.SendFollowerSync(new NFake::TEvExecute{ new TTxCheckStep(followerStep) }); 
-            if (followerStep >= lastLeaderStep) { 
+            ui32 followerStep = 0;
+            env.SendFollowerSync(new NFake::TEvExecute{ new TTxCheckStep(followerStep) });
+            if (followerStep >= lastLeaderStep) {
                 break;
             }
         }
 
-        // Test read from follower 
+        // Test read from follower
         {
             TString data;
-            env.SendFollowerSync(new NFake::TEvExecute{ new TTxCheckRows(data) }); 
+            env.SendFollowerSync(new NFake::TEvExecute{ new TTxCheckRows(data) });
             UNIT_ASSERT_VALUES_EQUAL(data,
                 "Key 1 = Upsert value = Set key1value\n"
                 "Key 2 = Upsert value = Set key2value\n"
@@ -3352,7 +3352,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorFollower) {
         }
     }
 
-    struct TFollowerEarlyRebootObserver { 
+    struct TFollowerEarlyRebootObserver {
         using EEventAction = TTestActorRuntimeBase::EEventAction;
 
         enum class EState {
@@ -3368,8 +3368,8 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorFollower) {
         TTestActorRuntimeBase::TEventObserver PrevObserverFunc;
 
         EState State = EState::WaitForAttach;
-        TActorId FollowerTabletActor; 
-        TActorId LeaderTabletActor; 
+        TActorId FollowerTabletActor;
+        TActorId LeaderTabletActor;
         ui32 SnapshotStep = 0;
         THolder<IEventHandle> SnapshotCommitResult;
         bool Detached = false;
@@ -3390,9 +3390,9 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorFollower) {
                 TAutoPtr<IEventHandle>& ev)
         {
             switch (ev->GetTypeRewrite()) {
-                HFunc(TEvTablet::TEvFollowerAttach, Handle); 
-                HFunc(TEvTablet::TEvFollowerDetach, Handle); 
-                HFunc(TEvTablet::TEvFollowerUpdate, Handle); 
+                HFunc(TEvTablet::TEvFollowerAttach, Handle);
+                HFunc(TEvTablet::TEvFollowerDetach, Handle);
+                HFunc(TEvTablet::TEvFollowerUpdate, Handle);
                 HFunc(TEvTablet::TEvCommit, Handle);
                 HFunc(TEvTabletBase::TEvWriteLogResult, Handle);
                 default:
@@ -3402,38 +3402,38 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorFollower) {
             return ev ? EEventAction::PROCESS : EEventAction::DROP;
         }
 
-        void Handle(TEvTablet::TEvFollowerAttach::TPtr& ev, TTestActorRuntimeBase& ctx) { 
+        void Handle(TEvTablet::TEvFollowerAttach::TPtr& ev, TTestActorRuntimeBase& ctx) {
             if (State == EState::WaitForAttach) {
                 if (Debug) {
-                    Cerr << "See first follower attach, waiting for snapshot" << Endl; 
+                    Cerr << "See first follower attach, waiting for snapshot" << Endl;
                 }
-                // On attach we kill the follower 
-                FollowerTabletActor = ev->Sender; 
-                LeaderTabletActor = ev->GetRecipientRewrite(); 
+                // On attach we kill the follower
+                FollowerTabletActor = ev->Sender;
+                LeaderTabletActor = ev->GetRecipientRewrite();
                 // We will be blocking the next snapshot
                 State = EState::WaitForSnapshot;
             } else if (State == EState::WaitForSecondAttach) {
                 if (Debug) {
-                    Cerr << "See second follower attach, unblocking result for first snapshot" << Endl; 
+                    Cerr << "See second follower attach, unblocking result for first snapshot" << Endl;
                 }
                 State = EState::Idle;
                 UnblockSnapshot(ctx);
             }
         }
 
-        void Handle(TEvTablet::TEvFollowerDetach::TPtr&, TTestActorRuntimeBase& ctx) { 
+        void Handle(TEvTablet::TEvFollowerDetach::TPtr&, TTestActorRuntimeBase& ctx) {
             if (Debug) {
-                Cerr << "See follower detach, waking up" << Endl; 
+                Cerr << "See follower detach, waking up" << Endl;
             }
             ctx.Send(new IEventHandle(Edge, Edge, new TEvents::TEvWakeup()), 0, true);
             Detached = true;
         }
 
-        void Handle(TEvTablet::TEvFollowerUpdate::TPtr& ev, TTestActorRuntimeBase&) { 
+        void Handle(TEvTablet::TEvFollowerUpdate::TPtr& ev, TTestActorRuntimeBase&) {
             ui32 step = ev->Get()->Record.GetStep();
             bool snapshot = ev->Get()->Record.GetIsSnapshot();
             if (Debug) {
-                Cerr << "See follower update, step=" << step << " snapshot=" << snapshot << Endl; 
+                Cerr << "See follower update, step=" << step << " snapshot=" << snapshot << Endl;
             }
         }
 
@@ -3447,9 +3447,9 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorFollower) {
                 State = EState::BlockSnapshotCommit;
                 // Send poison pill via actor system
                 if (Debug) {
-                    Cerr << "...killing the follower tablet" << Endl; 
+                    Cerr << "...killing the follower tablet" << Endl;
                 }
-                ctx.Send(new IEventHandle(FollowerTabletActor, LeaderTabletActor, new TEvents::TEvPoison()), 0, true); 
+                ctx.Send(new IEventHandle(FollowerTabletActor, LeaderTabletActor, new TEvents::TEvPoison()), 0, true);
             }
         }
 
@@ -3481,7 +3481,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorFollower) {
     };
 
     // Regression test for KIKIMR-7745
-    Y_UNIT_TEST(FollowerEarlyRebootHoles) { 
+    Y_UNIT_TEST(FollowerEarlyRebootHoles) {
         TMyEnvBase env;
         TRowsModel rows;
 
@@ -3490,46 +3490,46 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorFollower) {
 
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
 
-        TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy; 
+        TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy;
 
         env.SendSync(rows.MakeScheme(std::move(policy)));
 
-        TFollowerEarlyRebootObserver observer; 
+        TFollowerEarlyRebootObserver observer;
         observer.Edge = env.Edge;
         //observer.Debug = true;
         observer.Install(env.Env);
 
-        // Start follower (it will die almost immediately) 
-        env.FireDummyFollower(1, false); 
+        // Start follower (it will die almost immediately)
+        env.FireDummyFollower(1, false);
         env.WaitForGone();
         env.WaitForWakeUp();
 
         // Insert some test rows (without waiting for completion)
-        ui32 lastLeaderStep = 0; 
+        ui32 lastLeaderStep = 0;
         for (i64 key = 1; key <= 5; ++key) {
-            env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(key, lastLeaderStep) }); 
+            env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(key, lastLeaderStep) });
         }
 
-        // Start another follower 
+        // Start another follower
         observer.ReadyForSecondAttach();
-        env.FireDummyFollower(1); 
+        env.FireDummyFollower(1);
 
-        // Add one more commit (follower step is only updated on rollup) 
-        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(6, lastLeaderStep) }); 
+        // Add one more commit (follower step is only updated on rollup)
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(6, lastLeaderStep) });
 
-        // Wait for follower to sync with the last leader step 
+        // Wait for follower to sync with the last leader step
         while (true) {
-            ui32 followerStep = 0; 
-            env.SendFollowerSync(new NFake::TEvExecute{ new TTxCheckStep(followerStep) }); 
-            if (followerStep >= lastLeaderStep) { 
+            ui32 followerStep = 0;
+            env.SendFollowerSync(new NFake::TEvExecute{ new TTxCheckStep(followerStep) });
+            if (followerStep >= lastLeaderStep) {
                 break;
             }
         }
 
-        // Test read from follower 
+        // Test read from follower
         {
             TString data;
-            env.SendFollowerSync(new NFake::TEvExecute{ new TTxCheckRows(data) }); 
+            env.SendFollowerSync(new NFake::TEvExecute{ new TTxCheckRows(data) });
             UNIT_ASSERT_VALUES_EQUAL(data,
                 "Key 1 = Upsert value = Set key1value\n"
                 "Key 2 = Upsert value = Set key2value\n"
@@ -3547,9 +3547,9 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorFollower) {
 Y_UNIT_TEST_SUITE(TFlatTableExecutorRejectProbability) {
 
     struct TTxMultiSchema : public ITransaction {
-        TIntrusiveConstPtr<TCompactionPolicy> Policy; 
+        TIntrusiveConstPtr<TCompactionPolicy> Policy;
 
-        explicit TTxMultiSchema(const TIntrusiveConstPtr<TCompactionPolicy>& policy) 
+        explicit TTxMultiSchema(const TIntrusiveConstPtr<TCompactionPolicy>& policy)
             : Policy(policy)
         { }
 
@@ -3605,7 +3605,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorRejectProbability) {
 
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
 
-        TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy; 
+        TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy;
 
         env.SendSync(rows.MakeScheme(std::move(policy)));
 
@@ -3631,7 +3631,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorRejectProbability) {
 
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
 
-        TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy; 
+        TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy;
 
         env.SendSync(rows.MakeScheme(std::move(policy)));
 
@@ -3658,7 +3658,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorRejectProbability) {
 
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
 
-        TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy; 
+        TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy;
 
         env.SendSync(rows.MakeScheme(std::move(policy)));
 
@@ -3684,7 +3684,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorRejectProbability) {
 
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
 
-        TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy; 
+        TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy;
 
         env.SendSync(new NFake::TEvExecute{ new TTxMultiSchema(policy) });
 
@@ -3753,7 +3753,7 @@ Y_UNIT_TEST_SUITE(TFlatTableCold) {
     };
 
     struct TTxInitColdSchema : public ITransaction {
-        TTxInitColdSchema(TIntrusiveConstPtr<TCompactionPolicy> policy) 
+        TTxInitColdSchema(TIntrusiveConstPtr<TCompactionPolicy> policy)
             : Policy(std::move(policy))
         { }
 
@@ -3778,7 +3778,7 @@ Y_UNIT_TEST_SUITE(TFlatTableCold) {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
 
-        TIntrusiveConstPtr<TCompactionPolicy> Policy; 
+        TIntrusiveConstPtr<TCompactionPolicy> Policy;
     };
 
     struct TTxLoanSnapshot : public ITransaction {
@@ -3839,7 +3839,7 @@ Y_UNIT_TEST_SUITE(TFlatTableCold) {
 
         // Init schema
         {
-            TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy(); 
+            TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy();
             env.SendSync(rows.MakeScheme(std::move(policy)));
         }
 
@@ -3876,7 +3876,7 @@ Y_UNIT_TEST_SUITE(TFlatTableCold) {
 
         // Init destination schema with a cold table flag enabled
         {
-            TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy(); 
+            TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy();
             env.SendSync(new NFake::TEvExecute{ new TTxInitColdSchema(std::move(policy)) });
         }
 
@@ -3962,7 +3962,7 @@ Y_UNIT_TEST_SUITE(TFlatTableLongTx) {
     };
 
     struct TTxInitSchema : public ITransaction {
-        TTxInitSchema(TIntrusiveConstPtr<TCompactionPolicy> policy = nullptr) 
+        TTxInitSchema(TIntrusiveConstPtr<TCompactionPolicy> policy = nullptr)
             : Policy(std::move(policy))
         { }
 
@@ -3988,7 +3988,7 @@ Y_UNIT_TEST_SUITE(TFlatTableLongTx) {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
 
-        const TIntrusiveConstPtr<TCompactionPolicy> Policy; 
+        const TIntrusiveConstPtr<TCompactionPolicy> Policy;
     };
 
     struct TTxCommitLongTx : public ITransaction {

@@ -23,7 +23,7 @@ namespace NBoot {
         using TTxStamp = NTable::TTxStamp;
 
     public:
-        TSnap(IStep *owner, TIntrusivePtr<TDependency> deps, TAutoPtr<TBody> snap) 
+        TSnap(IStep *owner, TIntrusivePtr<TDependency> deps, TAutoPtr<TBody> snap)
             : IStep(owner, NBoot::EStep::Snap)
             , Codec(NBlockCodecs::Codec("lz4fast"))
             , Deps(std::move(deps))
@@ -48,7 +48,7 @@ namespace NBoot {
             }
         }
 
-        void HandleStep(TIntrusivePtr<IStep> step) noexcept override 
+        void HandleStep(TIntrusivePtr<IStep> step) noexcept override
         {
             auto *load = step->ConsumeAs<TLoadBlobs>(Pending);
 
@@ -56,7 +56,7 @@ namespace NBoot {
         }
 
     private:
-        void Apply(const NPageCollection::TLargeGlobId &snap, TArrayRef<const char> body) noexcept 
+        void Apply(const NPageCollection::TLargeGlobId &snap, TArrayRef<const char> body) noexcept
         {
             if (EIdx::SnapLz4 == TCookie(snap.Lead.Cookie()).Index()) {
                 Decode(snap, Codec->Decode(body));
@@ -67,7 +67,7 @@ namespace NBoot {
             ProcessSnap(snap), ProcessDeps(), Env->Finish(this);
         }
 
-        void Decode(const NPageCollection::TLargeGlobId &snap, TArrayRef<const char> body) noexcept 
+        void Decode(const NPageCollection::TLargeGlobId &snap, TArrayRef<const char> body) noexcept
         {
             bool ok = ParseFromStringNoSizeLimit(Proto, body);
             Y_VERIFY(ok);
@@ -294,7 +294,7 @@ namespace NBoot {
 
         void ProcessGcLogEntry(TDependency::TEntry &entry, bool snap)
         {
-            if (Back->Follower) // do nothing for followers 
+            if (Back->Follower) // do nothing for followers
                 return;
 
             if (auto logl = Env->Logger()->Log(ELnLev::Debug)) {
@@ -354,8 +354,8 @@ namespace NBoot {
     private:
         const NBlockCodecs::ICodec *Codec = nullptr;
         TLeft Pending;
-        TIntrusivePtr<TDependency> Deps; 
-        TAutoPtr<TBody> Snap; 
+        TIntrusivePtr<TDependency> Deps;
+        TAutoPtr<TBody> Snap;
         NKikimrExecutorFlat::TLogSnapshot Proto;
     };
 }

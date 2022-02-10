@@ -313,7 +313,7 @@ public:
 
 private:
     void SendCancelSnapshotProposal(TShardState& state, const TActorContext& ctx) {
-        ctx.Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward( 
+        ctx.Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(
             new TEvDataShard::TEvCancelTransactionProposal(TxId),
             state.ShardId, false));
     }
@@ -321,10 +321,10 @@ private:
     void SendInterruptReadTable(TShardState& state, const TActorContext& ctx) {
         // We send TEvCancelTransactionProposal for cases where datashard
         // decided to prepare our immediate read table transaction.
-        ctx.Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward( 
+        ctx.Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(
             new TEvDataShard::TEvCancelTransactionProposal(state.ReadTxId),
             state.ShardId, false));
-        ctx.Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward( 
+        ctx.Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(
             new TEvTxProcessing::TEvInterruptTransaction(state.ReadTxId),
             state.ShardId, false));
     }
@@ -392,13 +392,13 @@ private:
                 req->Record.SetPathId(TableId.PathId.LocalPathId);
                 req->Record.SetStep(PlanStep);
                 req->Record.SetTxId(TxId);
-                Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward( 
+                Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(
                     req.Release(), shardId, false));
             }
         }
 
-        Send(Services.LeaderPipeCache, new TEvPipeCache::TEvUnlink(0)); 
-        Send(Services.FollowerPipeCache, new TEvPipeCache::TEvUnlink(0)); 
+        Send(Services.LeaderPipeCache, new TEvPipeCache::TEvUnlink(0));
+        Send(Services.FollowerPipeCache, new TEvPipeCache::TEvUnlink(0));
 
         if (ResolveInProgress) {
             // Actor cannot die until it receives a reply
@@ -828,7 +828,7 @@ private:
         const ui64 txFlags = 0;
 
         TXLOG_D("Sending CreateVolatileSnapshot tx to shard " << state.ShardId);
-        ctx.Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward( 
+        ctx.Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(
                 new TEvDataShard::TEvProposeTransaction(
                     NKikimrTxDataShard::TX_KIND_SNAPSHOT,
                     ctx.SelfID, TxId, txBody, txFlags),
@@ -1047,7 +1047,7 @@ private:
                     state.State == EShardState::SnapshotPrepared))
             {
                 TXLOG_T("Sending TEvCancelTransactionProposal to shard " << shardId);
-                Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward( 
+                Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(
                     new TEvDataShard::TEvCancelTransactionProposal(TxId),
                     shardId, false));
             }
@@ -1205,7 +1205,7 @@ private:
 
         TXLOG_D("Sending EvProposeTransaction to SelectedCoordinator# " << SelectedCoordinator);
 
-        Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(req.Release(), SelectedCoordinator, true)); 
+        Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(req.Release(), SelectedCoordinator, true));
         Become(&TThis::StateReadTable);
     }
 
@@ -1443,8 +1443,8 @@ private:
         TxProxyMon->ReadTableResolveSentToShard->Inc();
         TXLOG_D("Sending TEvProposeTransaction (scan) to shard " << shardId << " ReadTxId# " << state.ReadTxId);
 
-        // TODO: support followers? 
-        Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward( 
+        // TODO: support followers?
+        Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(
                 new TEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_SCAN,
                     ctx.SelfID, state.ReadTxId, txBody, txFlags),
                 shardId, true));
@@ -1774,7 +1774,7 @@ private:
                 code = NKikimrIssues::TStatusIds::BAD_REQUEST;
 
                 // Cancel proposal so it doesn't wait unnecessarily.
-                ctx.Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward( 
+                ctx.Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(
                     new TEvDataShard::TEvCancelTransactionProposal(state.ReadTxId),
                     state.ShardId, false));
                 break;
@@ -2256,7 +2256,7 @@ private:
         req->Record.SetPathId(TableId.PathId.LocalPathId);
         req->Record.SetStep(PlanStep);
         req->Record.SetTxId(TxId);
-        Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(req.Release(), shardId, true)); 
+        Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(req.Release(), shardId, true));
     }
 
     void HandleReadTable(TEvDataShard::TEvRefreshVolatileSnapshotResponse::TPtr& ev, const TActorContext& ctx) {

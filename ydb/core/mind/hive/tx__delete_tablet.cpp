@@ -29,7 +29,7 @@ public:
         if (it != Self->OwnerToTablet.end()) {
             deletedTablet = it->second;
             BLOG_D("THive::TTxDeleteTablet::Execute Tablet " << it->second);
-            TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(it->second); 
+            TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(it->second);
             Y_VERIFY(tablet != nullptr, "%s", (TStringBuilder() << "Tablet " << it->second << " OwnerIdx " << ownerIdx).data());
             if (tablet->SeizedByChild) {
                 BLOG_W("THive::TTxDeleteTablet tablet " << it->second << " seized by child");
@@ -38,10 +38,10 @@ public:
             if (tablet->State != ETabletState::Deleting) {
                 tablet->State = ETabletState::Deleting;
                 tablet->InitiateStop();
-                db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::State, Schema::Tablet::LeaderNode>(ETabletState::Deleting, 0); 
-                for (TTabletInfo& follower : tablet->Followers) { 
-                    follower.InitiateStop(); 
-                    db.Table<Schema::TabletFollowerTablet>().Key(follower.GetFullTabletId()).Update<Schema::TabletFollowerTablet::FollowerNode>(0); 
+                db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::State, Schema::Tablet::LeaderNode>(ETabletState::Deleting, 0);
+                for (TTabletInfo& follower : tablet->Followers) {
+                    follower.InitiateStop();
+                    db.Table<Schema::TabletFollowerTablet>().Key(follower.GetFullTabletId()).Update<Schema::TabletFollowerTablet::FollowerNode>(0);
                 }
                 if (!tablet->InitiateBlockStorage(std::numeric_limits<ui32>::max())) {
                     Self->DeleteTabletWithoutStorage(tablet);
@@ -85,13 +85,13 @@ public:
             }
         }
         for (ui64 tabletId : TabletIds) {
-            TLeaderTabletInfo* tablet = Self->FindTablet(tabletId); 
+            TLeaderTabletInfo* tablet = Self->FindTablet(tabletId);
             if (tablet != nullptr) {
                 for (const TActorId& actor : tablet->ActorsToNotifyOnRestart) {
                     Notifications.Send(actor, new TEvPrivate::TEvRestartComplete(tablet->GetFullTabletId(), "delete"));
                 }
                 tablet->ActorsToNotifyOnRestart.clear();
-                for (TTabletInfo& follower : tablet->Followers) { 
+                for (TTabletInfo& follower : tablet->Followers) {
                     for (const TActorId& actor : follower.ActorsToNotifyOnRestart) {
                         Notifications.Send(actor, new TEvPrivate::TEvRestartComplete(follower.GetFullTabletId(), "delete"));
                     }
@@ -137,7 +137,7 @@ public:
         if (it != Self->OwnerToTablet.end()) {
             deletedTablet = it->second;
             BLOG_D("THive::TTxDeleteTablet::Execute Tablet " << it->second);
-            TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(it->second); 
+            TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(it->second);
             Y_VERIFY(tablet != nullptr, "%s", (TStringBuilder() << "Tablet " << it->second << " OwnerIdx " << ownerIdx).data());
             if (tablet->SeizedByChild) {
                 BLOG_W("THive::TTxDeleteTablet tablet " << it->second << " seized by child");
@@ -146,10 +146,10 @@ public:
             if (tablet->State != ETabletState::Deleting) {
                 tablet->State = ETabletState::Deleting;
                 tablet->InitiateStop();
-                db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::State, Schema::Tablet::LeaderNode>(ETabletState::Deleting, 0); 
-                for (TTabletInfo& follower : tablet->Followers) { 
-                    follower.InitiateStop(); 
-                    db.Table<Schema::TabletFollowerTablet>().Key(follower.GetFullTabletId()).Update<Schema::TabletFollowerTablet::FollowerNode>(0); 
+                db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::State, Schema::Tablet::LeaderNode>(ETabletState::Deleting, 0);
+                for (TTabletInfo& follower : tablet->Followers) {
+                    follower.InitiateStop();
+                    db.Table<Schema::TabletFollowerTablet>().Key(follower.GetFullTabletId()).Update<Schema::TabletFollowerTablet::FollowerNode>(0);
                 }
                 if (!tablet->InitiateBlockStorage(std::numeric_limits<ui32>::max())) {
                     Self->DeleteTabletWithoutStorage(tablet);
@@ -172,7 +172,7 @@ public:
             if (item.first.first != rec.GetOwner()) {
                 continue;
             }
-            const TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(item.second); 
+            const TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(item.second);
             if (tablet) {
                 if (!tablet->IsDeleting()) {
                     ToDelete.push_back(item.first.second);

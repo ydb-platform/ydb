@@ -23,7 +23,7 @@ namespace NTest {
 
         TRowsHeap(size_t heap) : Heap(new TGrowHeap(heap)) { }
 
-        TRowsHeap(TIntrusivePtr<TGrowHeap> heap) : Heap(std::move(heap)) { } 
+        TRowsHeap(TIntrusivePtr<TGrowHeap> heap) : Heap(std::move(heap)) { }
 
         template<typename TRand>
         TIter Any(TRand &rnd) const noexcept
@@ -78,7 +78,7 @@ namespace NTest {
         }
 
     private:
-        TIntrusivePtr<TGrowHeap> Heap; 
+        TIntrusivePtr<TGrowHeap> Heap;
         TDeque<TRow>    Rows;
     };
 

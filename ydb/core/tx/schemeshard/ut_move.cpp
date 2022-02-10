@@ -49,7 +49,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
             auto second = MoveTableRequest(txId,  "/MyRoot/Table2", "/MyRoot/Moved2");
             auto combination = CombineSchemeTransactions({first, second});
 
-            AsyncSendTransaction(runtime, TTestTxConfig::SchemeShard, combination); 
+            AsyncSendTransaction(runtime, TTestTxConfig::SchemeShard, combination);
             TestModificationResult(runtime, txId, NKikimrScheme::StatusInvalidParameter);
         }
     }
@@ -128,14 +128,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         {
             ++txId;
             auto op = MoveTableRequest(txId,  "/MyRoot/Table1", "/MyRoot/Table2");
-            AsyncSendTransaction(runtime, TTestTxConfig::SchemeShard, op); 
+            AsyncSendTransaction(runtime, TTestTxConfig::SchemeShard, op);
             TestModificationResult(runtime, txId, NKikimrScheme::StatusSchemeError);
         }
 
         {
             ++txId;
             auto op = MoveTableRequest(txId,  "/MyRoot/Table1", "/MyRoot/Table1");
-            AsyncSendTransaction(runtime, TTestTxConfig::SchemeShard, op); 
+            AsyncSendTransaction(runtime, TTestTxConfig::SchemeShard, op);
             TestModificationResult(runtime, txId, NKikimrScheme::StatusSchemeError);
         }
 
@@ -145,7 +145,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
             auto second = MoveTableRequest(txId,  "/MyRoot/Table1", "/MyRoot/Moved2");
             auto combination = CombineSchemeTransactions({first, second});
 
-            AsyncSendTransaction(runtime, TTestTxConfig::SchemeShard, combination); 
+            AsyncSendTransaction(runtime, TTestTxConfig::SchemeShard, combination);
             TestModificationResult(runtime, txId, NKikimrScheme::StatusInvalidParameter);
         }
 
@@ -155,7 +155,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
             auto second = MoveTableRequest(txId,  "/MyRoot/Table2", "/MyRoot/Moved1");
             auto combination = CombineSchemeTransactions({first, second});
 
-            AsyncSendTransaction(runtime, TTestTxConfig::SchemeShard, combination); 
+            AsyncSendTransaction(runtime, TTestTxConfig::SchemeShard, combination);
             TestModificationResult(runtime, txId, NKikimrScheme::StatusInvalidParameter);
         }
 
@@ -164,7 +164,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
             auto first = DropTableRequest(txId,  "/MyRoot", "Table1");
             auto second = MoveTableRequest(txId,  "/MyRoot/Table1", "/MyRoot/Table1");
             auto combination = CombineSchemeTransactions({first, second});
-            AsyncSendTransaction(runtime, TTestTxConfig::SchemeShard, combination); 
+            AsyncSendTransaction(runtime, TTestTxConfig::SchemeShard, combination);
             TestModificationResult(runtime, txId, NKikimrScheme::StatusInvalidParameter);
         }
 
@@ -174,7 +174,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
             auto second = MoveTableRequest(txId,  "/MyRoot/Table1", "/MyRoot/Moved1");
             auto third = MoveTableRequest(txId,  "/MyRoot/Table2", "/MyRoot/Moved1");
             auto combination = CombineSchemeTransactions({first, second, third});
-            AsyncSendTransaction(runtime, TTestTxConfig::SchemeShard, combination); 
+            AsyncSendTransaction(runtime, TTestTxConfig::SchemeShard, combination);
             TestModificationResult(runtime, txId, NKikimrScheme::StatusInvalidParameter);
         }
 
@@ -183,7 +183,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
             auto first = MoveTableRequest(txId,  "/MyRoot/Table1", "/MyRoot/Table2");
             auto second = MoveTableRequest(txId,  "/MyRoot/Table2", "/MyRoot/Table1");
             auto combination = CombineSchemeTransactions({first, second});
-            AsyncSendTransaction(runtime, TTestTxConfig::SchemeShard, combination); 
+            AsyncSendTransaction(runtime, TTestTxConfig::SchemeShard, combination);
             TestModificationResult(runtime, txId, NKikimrScheme::StatusSchemeError);
         }
 
@@ -216,7 +216,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
             auto first = MoveTableRequest(txId,  "/MyRoot/Table2", "/MyRoot/Moved2");
             auto second = MoveTableRequest(txId,  "/MyRoot/Table1", "/MyRoot/Table2");
             auto combination = CombineSchemeTransactions({first, second});
-            AsyncSendTransaction(runtime, TTestTxConfig::SchemeShard, combination); 
+            AsyncSendTransaction(runtime, TTestTxConfig::SchemeShard, combination);
             TestModificationResult(runtime, txId);
             env.TestWaitNotification(runtime, txId);
 
@@ -339,7 +339,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         auto first = MoveTableRequest(txId,  "/MyRoot/Table1", "/MyRoot/TableMove1");
         auto second = MoveTableRequest(txId,  "/MyRoot/Table2", "/MyRoot/TableMove2");
         auto combination = CombineSchemeTransactions({first, second});
-        AsyncSendTransaction(runtime, TTestTxConfig::SchemeShard, combination); 
+        AsyncSendTransaction(runtime, TTestTxConfig::SchemeShard, combination);
         TestModificationResult(runtime, txId);
         env.TestWaitNotification(runtime, txId);
 
@@ -423,12 +423,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
             auto first = DropTableRequest(txId,  "/MyRoot", "Dst");
             auto second = MoveTableRequest(txId,  "/MyRoot/Src", "/MyRoot/Dst");
             auto combination = CombineSchemeTransactions({first, second});
-            AsyncSendTransaction(runtime, TTestTxConfig::SchemeShard, combination); 
+            AsyncSendTransaction(runtime, TTestTxConfig::SchemeShard, combination);
             TestModificationResult(runtime, txId);
             env.TestWaitNotification(runtime, txId);
         }
 
-        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets+3, TTestTxConfig::FakeHiveTablets+6)); 
+        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets+3, TTestTxConfig::FakeHiveTablets+6));
 
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Src"),
@@ -471,12 +471,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
             auto first = DropTableRequest(txId,  "/MyRoot", "Dst");
             auto second = MoveTableRequest(txId,  "/MyRoot/Src", "/MyRoot/Dst");
             auto combination = CombineSchemeTransactions({first, second});
-            AsyncSendTransaction(runtime, TTestTxConfig::SchemeShard, combination); 
+            AsyncSendTransaction(runtime, TTestTxConfig::SchemeShard, combination);
             TestModificationResult(runtime, txId);
             env.TestWaitNotification(runtime, txId);
         }
 
-        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+3)); 
+        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+3));
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Src"),
                            {NLs::PathNotExist});
@@ -552,7 +552,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         auto first = MoveTableRequest(txId,  "/MyRoot/table2", "/MyRoot/table3");
         auto second = MoveTableRequest(txId,  "/MyRoot/table1", "/MyRoot/table2");
         auto combination = CombineSchemeTransactions({first, second});
-        AsyncSendTransaction(runtime, TTestTxConfig::SchemeShard, combination); 
+        AsyncSendTransaction(runtime, TTestTxConfig::SchemeShard, combination);
         TestModificationResult(runtime, txId);
         env.TestWaitNotification(runtime, txId);
 
@@ -816,7 +816,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
             TVector<THolder<IEventHandle>> supressed;
             auto defOberver = SetSuppressObserver(runtime, supressed, NDataShard::TEvChangeExchange::EvApplyRecords);
 
-            req1.Plan(TTestTxConfig::Coordinator); 
+            req1.Plan(TTestTxConfig::Coordinator);
 
             WaitForSuppressed(runtime, supressed, 1, defOberver);
             UNIT_ASSERT(supressed.size() == 1);
@@ -836,7 +836,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         {
             NKikimrMiniKQL::TResult result;
             TString err;
-            ui32 status = LocalMiniKQL(runtime, TTestTxConfig::FakeHiveTablets, R"( 
+            ui32 status = LocalMiniKQL(runtime, TTestTxConfig::FakeHiveTablets, R"(
             (
                 (let range '( '('indexed (Uint64 '0) (Void) )  '('key (Uint64 '0) (Void) )))
                 (let columns '('key 'indexed) )

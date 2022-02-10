@@ -252,7 +252,7 @@ namespace NTable {
     private:
         virtual IPages* MakeEnv() noexcept = 0;
 
-        virtual TPartView LoadPart(const TIntrusiveConstPtr<TColdPart>& part) noexcept = 0; 
+        virtual TPartView LoadPart(const TIntrusiveConstPtr<TColdPart>& part) noexcept = 0;
 
         EReady NotifyPageFault() noexcept
         {
@@ -504,7 +504,7 @@ namespace NTable {
         THolder<TLevels> Levels;
         TLead Lead;
         TBoots Boots;
-        TAutoPtr<TTableIt> Iter; 
+        TAutoPtr<TTableIt> Iter;
         ui64 Seeks = Max<ui64>();
         ESeekState SeekState;
         bool OnPause = false;

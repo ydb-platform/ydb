@@ -51,7 +51,7 @@ namespace NFake {
     struct TEvExecute : public TEventLocal<TEvExecute, EvExecute> {
         using ITransaction = NTabletFlatExecutor::ITransaction;
 
-        TEvExecute(TAutoPtr<ITransaction> func) { 
+        TEvExecute(TAutoPtr<ITransaction> func) {
             THolder<ITransaction> h(func.Release());
             Funcs.push_back(std::move(h));
         }

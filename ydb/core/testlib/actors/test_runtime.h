@@ -15,7 +15,7 @@ namespace NKikimrProto {
 }
 
 namespace NActors {
-    struct IDestructable { virtual ~IDestructable() = default; }; 
+    struct IDestructable { virtual ~IDestructable() = default; };
 
     using TKeyConfigGenerator = std::function<NKikimrProto::TKeyConfig (ui32)>;
 
@@ -41,7 +41,7 @@ namespace NActors {
     public:
         struct TEgg {
             TAutoPtr<NKikimr::TAppData> App0;
-            TAutoPtr<NActors::IDestructable> Opaque; 
+            TAutoPtr<NActors::IDestructable> Opaque;
             TKeyConfigGenerator KeyConfigGenerator;
         };
 
@@ -85,7 +85,7 @@ namespace NActors {
     private:
         THolder<NKikimr::TAppData> App0;
         TKeyConfigGenerator KeyConfigGenerator;
-        THolder<IDestructable> Opaque; 
+        THolder<IDestructable> Opaque;
         TVector<ui16> MonPorts;
     };
 } // namespace NActors

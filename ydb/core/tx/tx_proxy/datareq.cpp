@@ -305,7 +305,7 @@ private:
 
     TActorId RequestSource;
     ui32 TxFlags;
-    bool CanUseFollower; 
+    bool CanUseFollower;
     bool StreamResponse;
 
     TIntrusivePtr<TFlatMKQLRequest> FlatMKQLRequest;
@@ -365,8 +365,8 @@ private:
     void Die(const TActorContext &ctx) override {
         --*TxProxyMon->DataReqInFly;
 
-        Send(Services.FollowerPipeCache, new TEvPipeCache::TEvUnlink(0)); 
-        Send(Services.LeaderPipeCache, new TEvPipeCache::TEvUnlink(0)); 
+        Send(Services.FollowerPipeCache, new TEvPipeCache::TEvUnlink(0));
+        Send(Services.LeaderPipeCache, new TEvPipeCache::TEvUnlink(0));
 
         ProcessStreamClearance(false, ctx);
         if (ReadTableRequest) {
@@ -460,7 +460,7 @@ public:
         , SelectedCoordinator(0)
         , ProxyFlags(0)
         , TxFlags(0)
-        , CanUseFollower(true) 
+        , CanUseFollower(true)
         , TabletsLeft(0)
         , TabletErrors(0)
         , AggrMinStep(0)
@@ -964,7 +964,7 @@ void TDataReq::ProcessFlatMKQLResolve(NSchemeCache::TSchemeCacheRequest *cacheRe
     TxProxyMon->TxPrepareBuildShardProgramsHgram->Collect((afterBuild - beforeBuild).MicroSeconds());
 
     if (engine.GetAffectedShardCount() > 1 || FlatMKQLRequest->Snapshot) // TODO KIKIMR-11912
-        CanUseFollower = false; 
+        CanUseFollower = false;
 
     TDuration shardCancelAfter = ExecTimeoutPeriod;
     if (CancelAfter) {
@@ -1044,9 +1044,9 @@ void TDataReq::ProcessFlatMKQLResolve(NSchemeCache::TSchemeCacheRequest *cacheRe
             << " SEND TEvProposeTransaction to datashard " << shardData.ShardId
             << " with " << shardData.Program.size() << " bytes program"
             << " affected shards " << engine.GetAffectedShardCount()
-            << " followers " << (CanUseFollower ? "allowed" : "disallowed") << " marker# P4"); 
+            << " followers " << (CanUseFollower ? "allowed" : "disallowed") << " marker# P4");
 
-        const TActorId pipeCache = CanUseFollower ? Services.FollowerPipeCache : Services.LeaderPipeCache; 
+        const TActorId pipeCache = CanUseFollower ? Services.FollowerPipeCache : Services.LeaderPipeCache;
         TEvDataShard::TEvProposeTransaction* ev;
         if (FlatMKQLRequest->Snapshot && FlatMKQLRequest->ReadOnlyProgram) {
             ev = new TEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_DATA,
@@ -1073,7 +1073,7 @@ void TDataReq::ProcessReadTableResolve(NSchemeCache::TSchemeCacheRequest *cacheR
     ReadTableRequest->KeyDesc = std::move(entry.KeyDescription);
 
     bool singleShard = ReadTableRequest->KeyDesc->Partitions.size() == 1;
-    CanUseFollower = false; 
+    CanUseFollower = false;
 
     bool immediate = singleShard;
 
@@ -1121,9 +1121,9 @@ void TDataReq::ProcessReadTableResolve(NSchemeCache::TSchemeCacheRequest *cacheR
             << " SEND TEvProposeTransaction to datashard " << partition.ShardId
             << " with read table request"
             << " affected shards " << ReadTableRequest->KeyDesc->Partitions.size()
-            << " followers " << (CanUseFollower ? "allowed" : "disallowed") << " marker# P4b"); 
+            << " followers " << (CanUseFollower ? "allowed" : "disallowed") << " marker# P4b");
 
-        const TActorId pipeCache = CanUseFollower ? Services.FollowerPipeCache : Services.LeaderPipeCache; 
+        const TActorId pipeCache = CanUseFollower ? Services.FollowerPipeCache : Services.LeaderPipeCache;
 
         Send(pipeCache, new TEvPipeCache::TEvForward(
                 new TEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_SCAN,
@@ -1153,15 +1153,15 @@ TAutoPtr<TEvTxProxySchemeCache::TEvResolveKeySet> TDataReq::PrepareFlatMKQLReque
     WallClockResolveStarted = Now();
     auto &keyDescriptions = FlatMKQLRequest->Engine->GetDbKeys();
 
-    // check keys and set use follower flag 
-    CanUseFollower = true; 
+    // check keys and set use follower flag
+    CanUseFollower = true;
     request->ResultSet.reserve(keyDescriptions.size());
     for (auto &keyd : keyDescriptions) {
-        if (keyd->RowOperation != TKeyDesc::ERowOperation::Read || keyd->ReadTarget.GetMode() != TReadTarget::EMode::Follower) { 
-            CanUseFollower = false; 
+        if (keyd->RowOperation != TKeyDesc::ERowOperation::Read || keyd->ReadTarget.GetMode() != TReadTarget::EMode::Follower) {
+            CanUseFollower = false;
             LOG_DEBUG_S_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId,
                 "Actor " << ctx.SelfID.ToString() << " txid " << TxId
-                << " disallow followers cause of operation " << (ui32)keyd->RowOperation 
+                << " disallow followers cause of operation " << (ui32)keyd->RowOperation
                 << " read target mode " << (ui32)keyd->ReadTarget.GetMode());
         }
         request->ResultSet.emplace_back(std::move(keyd));
@@ -1613,7 +1613,7 @@ void TDataReq::Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr &ev, c
             if (entry.KeyDescription->RowOperation != TKeyDesc::ERowOperation::Read) {
                 error = TStringBuilder() << "Non-read operations can't be performed on async index table"
                     << ": " << entry.KeyDescription->TableId;
-            } else if (entry.KeyDescription->ReadTarget.GetMode() != TReadTarget::EMode::Follower) { 
+            } else if (entry.KeyDescription->ReadTarget.GetMode() != TReadTarget::EMode::Follower) {
                 error = TStringBuilder() << "Read operation can be performed on async index table"
                     << ": " << entry.KeyDescription->TableId << " only with StaleRO isolation level";
             }
@@ -1657,7 +1657,7 @@ void TDataReq::Handle(TEvPrivate::TEvReattachToShard::TPtr &ev, const TActorCont
         "Actor# " << ctx.SelfID << " txid# " << TxId << " sending reattach to shard " << tabletId);
 
     // Try to reattach transaction to a new tablet
-    const TActorId pipeCache = CanUseFollower ? Services.FollowerPipeCache : Services.LeaderPipeCache; 
+    const TActorId pipeCache = CanUseFollower ? Services.FollowerPipeCache : Services.LeaderPipeCache;
 
     Send(pipeCache, new TEvPipeCache::TEvForward(
                 new TEvDataShard::TEvProposeTransactionAttach(tabletId, TxId),
@@ -1944,12 +1944,12 @@ void TDataReq::HandlePrepare(TEvDataShard::TEvProposeTransactionResult::TPtr &ev
 }
 
 void TDataReq::CancelProposal(ui64 exceptTablet) {
-    if (CanUseFollower) 
+    if (CanUseFollower)
         return;
 
     for (const auto &x : PerTablet)
         if (x.first != exceptTablet) {
-            Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward( 
+            Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(
                 new TEvDataShard::TEvCancelTransactionProposal(TxId),
                 x.first,
                 false
@@ -2550,7 +2550,7 @@ void TDataReq::MergeResult(TEvDataShard::TEvProposeTransactionResult::TPtr &ev, 
             std::pair<ui64, ui64>(info.GetActorId().GetRawX1(), info.GetActorId().GetRawX2()),
             info.GetGeneration(),
             info.GetStep(),
-            info.GetIsFollower(), 
+            info.GetIsFollower(),
             std::move(txInfo)
         ));
     }
@@ -2841,7 +2841,7 @@ void TDataReq::RegisterPlan(const TActorContext &ctx) {
         "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
         << " SEND EvProposeTransaction to# " << SelectedCoordinator << " Coordinator marker# P7 ");
 
-    Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(req.Release(), SelectedCoordinator, true)); 
+    Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(req.Release(), SelectedCoordinator, true));
     CoordinatorStatus = ECoordinatorStatus::Waiting;
     Become(&TThis::StateWaitPlan);
 }

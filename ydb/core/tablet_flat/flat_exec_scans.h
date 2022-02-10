@@ -83,7 +83,7 @@ namespace NTabletFlatExecutor {
             THolder<TScanSnapshot> Snapshot;
             EState State = EState::None;
             TActorId Actor;     /* Valid just after EState::Scan*/
-            TAutoPtr<IScan> Scan;   /* Valid before EState::Scan    */ 
+            TAutoPtr<IScan> Scan;   /* Valid before EState::Scan    */
             ui64 Cookie = Max<ui64>();
             ui64 TaskId = 0;    /* Task number in res. broker   */
         };
@@ -117,7 +117,7 @@ namespace NTabletFlatExecutor {
         };
 
     public:
-        TScans(NUtil::ILogger *logger, IOps *ops, TIntrusivePtr<TIdEmitter> emitter, 
+        TScans(NUtil::ILogger *logger, IOps *ops, TIntrusivePtr<TIdEmitter> emitter,
                     ITablet *owner, const TActorId& ownerActorId)
             : Logger(logger)
             , Ops(ops)
@@ -154,7 +154,7 @@ namespace NTabletFlatExecutor {
             }
         }
 
-        ui64 Queue(ui32 table, TAutoPtr<IScan> scan, ui64 cookie, const TScanOptions& options, THolder<TScanSnapshot> snapshot) 
+        ui64 Queue(ui32 table, TAutoPtr<IScan> scan, ui64 cookie, const TScanOptions& options, THolder<TScanSnapshot> snapshot)
         {
             auto &one = Make(table, scan, EType::Client, options, std::move(snapshot));
 
@@ -207,7 +207,7 @@ namespace NTabletFlatExecutor {
             Start(one, { });
         }
 
-        ui64 StartSystem(ui32 table, TAutoPtr<IScan> scan, NOps::TConf conf, THolder<TScanSnapshot> snapshot) 
+        ui64 StartSystem(ui32 table, TAutoPtr<IScan> scan, NOps::TConf conf, THolder<TScanSnapshot> snapshot)
         {
             auto &one = Make(table, scan, EType::System, { }, std::move(snapshot));
 
@@ -276,7 +276,7 @@ namespace NTabletFlatExecutor {
             return Cancel(*one, EState::Forget);
         }
 
-        TScanOutcome Release(ui64 serial, EAbort &code, TAutoPtr<IDestructable> &result) noexcept 
+        TScanOutcome Release(ui64 serial, EAbort &code, TAutoPtr<IDestructable> &result) noexcept
         {
             auto *one = Lookup(serial, true);
 
@@ -294,7 +294,7 @@ namespace NTabletFlatExecutor {
         }
 
     private:
-        TOne& Make(ui32 table, TAutoPtr<IScan> scan, EType type, const TScanOptions& options, THolder<TScanSnapshot> snapshot) noexcept 
+        TOne& Make(ui32 table, TAutoPtr<IScan> scan, EType type, const TScanOptions& options, THolder<TScanSnapshot> snapshot) noexcept
         {
             /* odd NOps used to mark compactions (system scans) */
 
@@ -364,7 +364,7 @@ namespace NTabletFlatExecutor {
         bool Cancel(TOne &one, EState state) noexcept
         {
             if (one.State == EState::Task || one.State == EState::Ready) {
-                TAutoPtr<IDestructable> result; 
+                TAutoPtr<IDestructable> result;
                 Throw(one, state, EAbort::Term, result);
                 return true;
             } else if (one.State == EState::Scan) {
@@ -379,7 +379,7 @@ namespace NTabletFlatExecutor {
             return false;
         }
 
-        TScanOutcome Throw(TOne &one, EState last, EAbort status, TAutoPtr<IDestructable> &result) 
+        TScanOutcome Throw(TOne &one, EState last, EAbort status, TAutoPtr<IDestructable> &result)
         {
             if (auto task = std::exchange(one.TaskId, 0)) {
                 if (one.State == EState::Task) {
@@ -431,7 +431,7 @@ namespace NTabletFlatExecutor {
             return out.Str();
         }
 
-        void ToBroker(TAutoPtr<IEventBase> event) 
+        void ToBroker(TAutoPtr<IEventBase> event)
         {
             using namespace NResourceBroker;
 
@@ -447,7 +447,7 @@ namespace NTabletFlatExecutor {
 
         ui64 Serial = 0;
 
-        const TIntrusivePtr<TIdEmitter> Emitter; 
+        const TIntrusivePtr<TIdEmitter> Emitter;
         ui32 CounterAlive = 0;
         THashMap<ui64, TOne> Scans;
         THashMap<ui32, TTable> Tables;  /* only alive scans */

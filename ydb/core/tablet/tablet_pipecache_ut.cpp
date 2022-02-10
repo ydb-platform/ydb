@@ -65,7 +65,7 @@ Y_UNIT_TEST_SUITE(TPipeCacheTest) {
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
 
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::TX_DUMMY), 
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::TX_DUMMY),
             [](const TActorId& tablet, TTabletStorageInfo* info) {
                 return new TCustomTablet(tablet, info);
             });
@@ -94,7 +94,7 @@ Y_UNIT_TEST_SUITE(TPipeCacheTest) {
             runtime.AdvanceCurrentTime(TDuration::Seconds(2));
             runtime.Send(new IEventHandle(cacheActor, sender, new TEvPipeCache::TEvForward(
                 new TEvCustomTablet::TEvHelloRequest,
-                TTestTxConfig::TxTablet0, 
+                TTestTxConfig::TxTablet0,
                 false)), 0, true);
             runtime.GrabEdgeEventRethrow<TEvCustomTablet::TEvHelloResponse>(sender);
         }
@@ -112,12 +112,12 @@ Y_UNIT_TEST_SUITE(TPipeCacheTest) {
 
         TActorId sender = runtime.AllocateEdgeActor();
 
-        runtime.Send(new IEventHandle(cacheActor, sender, new TEvPipeCache::TEvGetTabletNode(TTestTxConfig::TxTablet0))); 
+        runtime.Send(new IEventHandle(cacheActor, sender, new TEvPipeCache::TEvGetTabletNode(TTestTxConfig::TxTablet0)));
         auto ev1 = runtime.GrabEdgeEventRethrow<TEvPipeCache::TEvGetTabletNodeResult>(sender);
-        UNIT_ASSERT_VALUES_EQUAL(ev1->Get()->TabletId, TTestTxConfig::TxTablet0); 
+        UNIT_ASSERT_VALUES_EQUAL(ev1->Get()->TabletId, TTestTxConfig::TxTablet0);
         UNIT_ASSERT_VALUES_EQUAL(ev1->Get()->NodeId, 0);
 
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::TX_DUMMY), 
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::TX_DUMMY),
             [](const TActorId& tablet, TTabletStorageInfo* info) {
                 return new TCustomTablet(tablet, info);
             });
@@ -128,9 +128,9 @@ Y_UNIT_TEST_SUITE(TPipeCacheTest) {
             runtime.DispatchEvents(options);
         }
 
-        runtime.Send(new IEventHandle(cacheActor, sender, new TEvPipeCache::TEvGetTabletNode(TTestTxConfig::TxTablet0))); 
+        runtime.Send(new IEventHandle(cacheActor, sender, new TEvPipeCache::TEvGetTabletNode(TTestTxConfig::TxTablet0)));
         auto ev2 = runtime.GrabEdgeEventRethrow<TEvPipeCache::TEvGetTabletNodeResult>(sender);
-        UNIT_ASSERT_VALUES_EQUAL(ev2->Get()->TabletId, TTestTxConfig::TxTablet0); 
+        UNIT_ASSERT_VALUES_EQUAL(ev2->Get()->TabletId, TTestTxConfig::TxTablet0);
         UNIT_ASSERT_VALUES_EQUAL(ev2->Get()->NodeId, runtime.GetNodeId(0));
     }
 }

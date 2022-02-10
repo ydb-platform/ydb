@@ -4,7 +4,7 @@
 #include <util/generic/array_ref.h>
 
 namespace NKikimr {
-    struct IDestructable { 
-        virtual ~IDestructable() = default; 
+    struct IDestructable {
+        virtual ~IDestructable() = default;
     };
 }

@@ -55,7 +55,7 @@ namespace NTable {
         TVector<TPartView> Parts;
 
         // Cold parts which are selected for compaction
-        TVector<TIntrusiveConstPtr<TColdPart>> ColdParts; 
+        TVector<TIntrusiveConstPtr<TColdPart>> ColdParts;
 
         // New data will be added to cache if this flag is true
         bool KeepInCache = false;
@@ -165,7 +165,7 @@ namespace NTable {
         /**
          * Returns row schema of the specified table
          */
-        virtual TIntrusiveConstPtr<TRowScheme> RowScheme(ui32 table) = 0; 
+        virtual TIntrusiveConstPtr<TRowScheme> RowScheme(ui32 table) = 0;
 
         /**
          * Returns schema of the specified table
@@ -186,7 +186,7 @@ namespace NTable {
          * Returns a complete list of parts from the specified table
          */
         virtual TVector<TPartView> TableParts(ui32 table) = 0;
-        virtual TVector<TIntrusiveConstPtr<TColdPart>> TableColdParts(ui32 table) = 0; 
+        virtual TVector<TIntrusiveConstPtr<TColdPart>> TableColdParts(ui32 table) = 0;
 
         /**
          * Returns currently removed row versions
@@ -283,10 +283,10 @@ namespace NTable {
          * may choose to compact some parts in addition to in-memory data, as
          * long as consistency guarantees are not broken.
          *
-         * When forcedCompactionId is non-zero it indicates the compaction was forced by the 
+         * When forcedCompactionId is non-zero it indicates the compaction was forced by the
          * client and strategy is expected to eventually recompact everything
-         * up to the specified snapshot edge. forcedCompactionId must be 
-         * monotonically growing. 
+         * up to the specified snapshot edge. forcedCompactionId must be
+         * monotonically growing.
          *
          * Strategy is responsible to manage lifecycle of this compaction,
          * however backend may use the returned compaction id to detect when
@@ -295,7 +295,7 @@ namespace NTable {
         virtual ui64 BeginMemCompaction(
             TTaskId taskId,
             TSnapEdge edge,
-            ui64 forcedCompactionId) = 0; 
+            ui64 forcedCompactionId) = 0;
 
         /**
          * Called when backend needs to compact borrowed data
@@ -304,10 +304,10 @@ namespace NTable {
             return false;
         }
 
-        virtual ui64 GetLastFinishedForcedCompactionId() const = 0; 
+        virtual ui64 GetLastFinishedForcedCompactionId() const = 0;
 
-        virtual TInstant GetLastFinishedForcedCompactionTs() const = 0; 
- 
+        virtual TInstant GetLastFinishedForcedCompactionTs() const = 0;
+
         /**
          * Called after BeginCompaction completes successfully and replaces
          * the initial subset with compacted results.
@@ -325,7 +325,7 @@ namespace NTable {
          * subparts with its existing subparts.
          */
         virtual void PartMerged(TPartView part, ui32 level) = 0;
-        virtual void PartMerged(TIntrusiveConstPtr<TColdPart> part, ui32 level) = 0; 
+        virtual void PartMerged(TIntrusiveConstPtr<TColdPart> part, ui32 level) = 0;
 
         /**
          * Called after some parts have been removed from the table

@@ -13,7 +13,7 @@
 
 namespace NKikimr {
 
-IActor* CreateTabletReqRebuildHistoryGraph(const TActorId &owner, TTabletStorageInfo *info, ui32 blockedGen, NTracing::ITrace *trace, ui64 followerCookie); 
+IActor* CreateTabletReqRebuildHistoryGraph(const TActorId &owner, TTabletStorageInfo *info, ui32 blockedGen, NTracing::ITrace *trace, ui64 followerCookie);
 IActor* CreateTabletFindLastEntry(const TActorId &owner, bool readBody, TTabletStorageInfo *info, ui32 blockedGen);
 IActor* CreateTabletReqWriteLog(const TActorId &owner, const TLogoBlobID &entryId, NKikimrTabletBase::TTabletLogEntry *entry, TVector<TEvTablet::TLogEntryReference> &refs, TEvBlobStorage::TEvPut::ETactic commitTactic, TTabletStorageInfo *info);
 IActor* CreateTabletReqBlockBlobStorage(const TActorId &owner, TTabletStorageInfo *info, ui32 generation, bool blockPrevEntry);
@@ -27,9 +27,9 @@ struct TEvTabletBase {
         EvWriteLogResult,
         EvDeleteTabletResult,
 
-        EvFollowerRetry = EvBlockBlobStorageResult + 512, 
-        EvTrySyncFollower, 
-        EvTryBuildFollowerGraph, 
+        EvFollowerRetry = EvBlockBlobStorageResult + 512,
+        EvTrySyncFollower,
+        EvTryBuildFollowerGraph,
 
         EvEnd
     };
@@ -135,25 +135,25 @@ struct TEvTabletBase {
         {}
     };
 
-    struct TEvFollowerRetry : public TEventLocal<TEvFollowerRetry, EvFollowerRetry> { 
+    struct TEvFollowerRetry : public TEventLocal<TEvFollowerRetry, EvFollowerRetry> {
         const ui32 Round;
 
-        TEvFollowerRetry(ui32 round) 
+        TEvFollowerRetry(ui32 round)
             : Round(round)
         {}
     };
 
-    struct TEvTrySyncFollower : public TEventLocal<TEvTrySyncFollower, EvTrySyncFollower> { 
-        const TActorId FollowerId; 
+    struct TEvTrySyncFollower : public TEventLocal<TEvTrySyncFollower, EvTrySyncFollower> {
+        const TActorId FollowerId;
         TSchedulerCookieHolder CookieHolder;
 
-        TEvTrySyncFollower(TActorId followerId, ISchedulerCookie *cookie) 
-            : FollowerId(followerId) 
+        TEvTrySyncFollower(TActorId followerId, ISchedulerCookie *cookie)
+            : FollowerId(followerId)
             , CookieHolder(cookie)
         {}
     };
 
-    struct TEvTryBuildFollowerGraph : public TEventLocal<TEvTryBuildFollowerGraph, EvTryBuildFollowerGraph> {}; 
+    struct TEvTryBuildFollowerGraph : public TEventLocal<TEvTryBuildFollowerGraph, EvTryBuildFollowerGraph> {};
 
     struct TEvDeleteTabletResult : public TEventLocal<TEvDeleteTabletResult, EvDeleteTabletResult> {
         const NKikimrProto::EReplyStatus Status;

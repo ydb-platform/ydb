@@ -67,7 +67,7 @@ namespace NFwd {
         const TArrayRef<const ui32> Tags;
         const ui32 Edge = Max<ui32>();
         ui64 Offset = Max<ui64>();
-        TIntrusiveConstPtr<NPage::TExtBlobs> Blobs; 
+        TIntrusiveConstPtr<NPage::TExtBlobs> Blobs;
         TDynBitMap Touches;
     };
 }

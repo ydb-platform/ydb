@@ -20,11 +20,11 @@ TStorageGroupInfo& TStoragePoolInfo::GetStorageGroup(TStorageGroupId groupId) {
     return it->second;
 }
 
-bool TStoragePoolInfo::AcquireAllocationUnit(const TLeaderTabletInfo* tablet, ui32 channel, TStorageGroupId groupId) { 
+bool TStoragePoolInfo::AcquireAllocationUnit(const TLeaderTabletInfo* tablet, ui32 channel, TStorageGroupId groupId) {
     return GetStorageGroup(groupId).AcquireAllocationUnit(tablet, channel);
 }
 
-bool TStoragePoolInfo::ReleaseAllocationUnit(const TLeaderTabletInfo* tablet, ui32 channel, TStorageGroupId groupId) { 
+bool TStoragePoolInfo::ReleaseAllocationUnit(const TLeaderTabletInfo* tablet, ui32 channel, TStorageGroupId groupId) {
     return GetStorageGroup(groupId).ReleaseAllocationUnit(tablet, channel);
 }
 

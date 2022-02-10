@@ -18,13 +18,13 @@ using namespace NKikimrBlobStorage;
 using namespace NKikimrCms;
 
 TTabletStateInfo MakeTabletInfo(ui64 id, TTabletTypes::EType type,
-                                TTabletStateInfo::ETabletState state, bool leader) 
+                                TTabletStateInfo::ETabletState state, bool leader)
 {
     TTabletStateInfo tablet;
     tablet.SetTabletId(id);
     tablet.SetType(type);
     tablet.SetState(state);
-    tablet.SetLeader(leader); 
+    tablet.SetLeader(leader);
     return tablet;
 }
 
@@ -352,7 +352,7 @@ Y_UNIT_TEST_SUITE(TClusterInfoTest) {
         UNIT_ASSERT_VALUES_EQUAL(cluster.Tablet(1).TabletId, 1);
         UNIT_ASSERT_VALUES_EQUAL(cluster.Tablet(1).Type, TTabletTypes::Hive);
         UNIT_ASSERT_VALUES_EQUAL(cluster.Tablet(1).State, TTabletStateInfo::Active);
-        UNIT_ASSERT_VALUES_EQUAL(cluster.Tablet(1).Leader, true); 
+        UNIT_ASSERT_VALUES_EQUAL(cluster.Tablet(1).Leader, true);
 
         auto now = Now();
         cluster.SetTimestamp(now);

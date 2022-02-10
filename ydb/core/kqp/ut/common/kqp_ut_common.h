@@ -90,7 +90,7 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
     TKikimrSettings& SetNodeCount(ui32 value) { NodeCount = value; return *this; }
     TKikimrSettings& SetWithSampleTables(bool value) { WithSampleTables = value; return *this; }
     TKikimrSettings& SetKeepSnapshotTimeout(TDuration value) { KeepSnapshotTimeout = value; return *this; }
-    TKikimrSettings& SetLogStream(IOutputStream* follower) { LogStream = follower; return *this; }; 
+    TKikimrSettings& SetLogStream(IOutputStream* follower) { LogStream = follower; return *this; };
 
 };
 

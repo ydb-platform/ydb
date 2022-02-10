@@ -28,7 +28,7 @@ namespace NTest {
 
     public:
         TPartStore(TIntrusiveConstPtr<TStore> store, TLogoBlobID label, TEgg egg, TStat stat,
-                    TIntrusiveConstPtr<TSlices> slices) 
+                    TIntrusiveConstPtr<TSlices> slices)
             : TPart(label, egg, stat)
             , Store(std::move(store))
             , Slices(std::move(slices))
@@ -51,13 +51,13 @@ namespace NTest {
             return Store->GetPage(groupId.Index, id)->size();
         }
 
-        TIntrusiveConstPtr<NTable::TPart> CloneWithEpoch(NTable::TEpoch epoch) const override 
+        TIntrusiveConstPtr<NTable::TPart> CloneWithEpoch(NTable::TEpoch epoch) const override
         {
             return new TPartStore(*this, epoch);
         }
 
-        const TIntrusiveConstPtr<TStore> Store; 
-        const TIntrusiveConstPtr<TSlices> Slices; 
+        const TIntrusiveConstPtr<TStore> Store;
+        const TIntrusiveConstPtr<TSlices> Slices;
     };
 
     class TTestEnv: public IPages {
@@ -119,8 +119,8 @@ namespace NTest {
             return { Lone(), nullptr, Lone()->Slices };
         }
 
-        TAutoPtr<TWritten> Written; 
-        TIntrusiveConstPtr<TRowScheme> Scheme; 
+        TAutoPtr<TWritten> Written;
+        TIntrusiveConstPtr<TRowScheme> Scheme;
         TVector<TIntrusiveConstPtr<TPartStore>> Parts;
     };
 

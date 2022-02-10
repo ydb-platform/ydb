@@ -87,7 +87,7 @@ namespace {
             Y_FAIL("Unexpected Glob(...) call");
         }
 
-        bool Verify(ui32, TArrayRef<const char>) const noexcept override 
+        bool Verify(ui32, TArrayRef<const char>) const noexcept override
         {
             Y_FAIL("Unexpected Verify(...) call");
         }
@@ -104,10 +104,10 @@ namespace {
 
     struct TCheckResult {
         size_t Pages;
-        TIntrusivePtr<TSlices> Run; 
+        TIntrusivePtr<TSlices> Run;
     };
 
-    void VerifyRunOrder(TIntrusiveConstPtr<TSlices> run, const TKeyNulls& keys) 
+    void VerifyRunOrder(TIntrusiveConstPtr<TSlices> run, const TKeyNulls& keys)
     {
         const TSlice* prev = nullptr;
         for (auto& slice : *run) {
@@ -127,7 +127,7 @@ namespace {
     {
         TCheckResult result;
 
-        TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection = new TTestPartPageCollection(part, 0); 
+        TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection = new TTestPartPageCollection(part, 0);
         TKeysEnv env(part.Get(), new TCache(pageCollection));
         TKeysLoader loader(part.Get(), &env);
 
@@ -175,7 +175,7 @@ Y_UNIT_TEST_SUITE(TPartSliceLoader) {
     }
 
     Y_UNIT_TEST(RestoreMissingSliceFullScreen) {
-        TIntrusiveConstPtr<TScreen> screen; 
+        TIntrusiveConstPtr<TScreen> screen;
         {
             // Construct screen from every index page
             TVector<TScreen::THole> holes;
@@ -199,7 +199,7 @@ Y_UNIT_TEST_SUITE(TPartSliceLoader) {
     }
 
     Y_UNIT_TEST(RestoreFromScreenIndexKeys) {
-        TIntrusiveConstPtr<TScreen> screen; 
+        TIntrusiveConstPtr<TScreen> screen;
         {
             // Construct screen from every even index page
             TVector<TScreen::THole> holes;
@@ -224,7 +224,7 @@ Y_UNIT_TEST_SUITE(TPartSliceLoader) {
     }
 
     Y_UNIT_TEST(RestoreFromScreenDataKeys) {
-        TIntrusiveConstPtr<TScreen> screen; 
+        TIntrusiveConstPtr<TScreen> screen;
         {
             // Use every even index page, without first and last key
             TVector<TScreen::THole> holes;

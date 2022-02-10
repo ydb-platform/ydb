@@ -17,11 +17,11 @@ TString ETabletStateName(ETabletState value) {
     }
 }
 
-TString EFollowerStrategyName(EFollowerStrategy value) { 
+TString EFollowerStrategyName(EFollowerStrategy value) {
     switch (value) {
-        case EFollowerStrategy::Unknown: return "Unknown"; 
-        case EFollowerStrategy::Backup: return "Backup"; 
-        case EFollowerStrategy::Read: return "Read"; 
+        case EFollowerStrategy::Unknown: return "Unknown";
+        case EFollowerStrategy::Backup: return "Backup";
+        case EFollowerStrategy::Read: return "Read";
         default: return Sprintf("%d", static_cast<int>(value));
     }
 }

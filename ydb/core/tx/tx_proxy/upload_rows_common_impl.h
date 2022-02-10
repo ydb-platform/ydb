@@ -102,7 +102,7 @@ private:
     static constexpr TDuration DEFAULT_TIMEOUT = TDuration::Seconds(5*60);
 
     TActorId SchemeCache;
-    TActorId LeaderPipeCache; 
+    TActorId LeaderPipeCache;
     TDuration Timeout;
     TInstant Deadline;
     TActorId TimeoutTimerActorId;
@@ -162,7 +162,7 @@ public:
     explicit TUploadRowsBase(TDuration timeout = TDuration::Max())
         : TBase()
         , SchemeCache(MakeSchemeCacheID())
-        , LeaderPipeCache(MakePipePeNodeCacheID(false)) 
+        , LeaderPipeCache(MakePipePeNodeCacheID(false))
         , Timeout((timeout && timeout <= DEFAULT_TIMEOUT) ? timeout : DEFAULT_TIMEOUT)
         , WaitingResolveReply(false)
         , Finished(false)
@@ -177,7 +177,7 @@ public:
     void Die(const NActors::TActorContext& ctx) override {
         Y_VERIFY(Finished);
         Y_VERIFY(!WaitingResolveReply);
-        ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(0)); 
+        ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(0));
         if (TimeoutTimerActorId) {
             ctx.Send(TimeoutTimerActorId, new TEvents::TEvPoisonPill());
         }
@@ -886,7 +886,7 @@ private:
 
             LOG_DEBUG_S(ctx, NKikimrServices::MSGBUS_REQUEST, "Sending request to shards " << shardId);
 
-            ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvForward(shardRequests[idx].release(), shardId, true), IEventHandle::FlagTrackDelivery); 
+            ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvForward(shardRequests[idx].release(), shardId, true), IEventHandle::FlagTrackDelivery);
 
             auto res = ShardRepliesLeft.insert(shardId);
             if (!res.second) {
@@ -931,7 +931,7 @@ private:
         const auto& shardResponse = ev->Get()->Record;
 
         // Notify the cache that we are done with the pipe
-        ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(shardResponse.GetTabletID())); 
+        ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(shardResponse.GetTabletID()));
 
         LOG_DEBUG_S(ctx, NKikimrServices::MSGBUS_REQUEST, "Upload rows: got "
                     << NKikimrTxDataShard::TError::EKind_Name((NKikimrTxDataShard::TError::EKind)shardResponse.GetStatus())

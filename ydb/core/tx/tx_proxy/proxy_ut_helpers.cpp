@@ -390,7 +390,7 @@ ui64 CreateSubDomainAndTabletInside(TBaseTestEnv &env, const TString &name, ui64
 void CheckTableIsOfline(TBaseTestEnv &env, ui64 tablet_id) {
     UNIT_ASSERT_EQUAL(
                 Max<ui32>(),
-                env.GetClient().GetLeaderNode(&env.GetRuntime(), tablet_id)); 
+                env.GetClient().GetLeaderNode(&env.GetRuntime(), tablet_id));
 }
 
 void CheckTableBecomeAlive(TBaseTestEnv &env, ui64 tablet_id) {
@@ -410,7 +410,7 @@ void CheckTableBecomeOfline(TBaseTestEnv &env, ui64 tablet_id) {
 void CheckTableRunOnProperTenantNode(TBaseTestEnv &env, const TString &tenant, ui64 tablet_id) {
     UNIT_ASSERT(
                 env.GetTenants().IsActive(tenant,
-                                          env.GetClient().GetLeaderNode(&env.GetRuntime(), 
+                                          env.GetClient().GetLeaderNode(&env.GetRuntime(),
                                                                         tablet_id)));
 }
 
@@ -450,7 +450,7 @@ NKikimrSchemeOp::TTableDescription GetTableSimpleDescription(const TString &name
         c2->SetType("Uint64");
     }
     tableDescr.SetUniformPartitionsCount(2);
-    tableDescr.MutablePartitionConfig()->SetFollowerCount(2); 
+    tableDescr.MutablePartitionConfig()->SetFollowerCount(2);
     *tableDescr.AddKeyColumnNames() = "key";
     return tableDescr;
 }

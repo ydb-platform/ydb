@@ -41,7 +41,7 @@ namespace NTabletFlatExecutor {
         static void Snap(NKikimrExecutorFlat::TLogTableSnap *snap, const TIntrusiveConstPtr<TColdPart> &part, ui32 table, ui32 level);
 
         void Do(TBundle *bundle, const TPartView &partView);
-        void Do(TBundle *bundle, const TIntrusiveConstPtr<TColdPart> &part); 
+        void Do(TBundle *bundle, const TIntrusiveConstPtr<TColdPart> &part);
         void Do(TBundle *bundle, const TPartComponents &pc);
 
         static TPartComponents MakePageCollectionComponents(const TBundle &proto, bool unsplit = false);

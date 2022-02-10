@@ -142,7 +142,7 @@ public:
             keyRange.MinInclusive = false;
         }
 
-        TAutoPtr<NTable::TTableIt> iter = txc.DB.IterateRange(localTableId, keyRange, columnsToReturn); 
+        TAutoPtr<NTable::TTableIt> iter = txc.DB.IterateRange(localTableId, keyRange, columnsToReturn);
 
         ui64 foundKeys = Result->Record.ContentsRowsSize() + Result->Record.CommonPrefixesRowsSize();
         while (iter->Next(NTable::ENext::All) == NTable::EReady::Data) {

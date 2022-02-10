@@ -30,7 +30,7 @@ void TBlockIO::Registered(TActorSystem *sys, const TActorId&)
     Logger = new NUtil::TLogger(sys, NKikimrServices::SAUSAGE_BIO);
 }
 
-void TBlockIO::Inbox(TEventHandlePtr &eh, const ::NActors::TActorContext&) 
+void TBlockIO::Inbox(TEventHandlePtr &eh, const ::NActors::TActorContext&)
 {
     if (auto *ev = eh->CastAsLocal<TEvBlobStorage::TEvGetResult>()) {
         if (ev->Status != NKikimrProto::OK)
@@ -54,7 +54,7 @@ void TBlockIO::Inbox(TEventHandlePtr &eh, const ::NActors::TActorContext&)
     }
 }
 
-void TBlockIO::Bootstrap(EPriority priority, TAutoPtr<NPageCollection::TFetch> origin) noexcept 
+void TBlockIO::Bootstrap(EPriority priority, TAutoPtr<NPageCollection::TFetch> origin) noexcept
 {
     Origin = origin;
     Priority = priority;

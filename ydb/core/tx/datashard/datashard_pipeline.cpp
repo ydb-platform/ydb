@@ -594,7 +594,7 @@ bool TPipeline::SaveInReadSet(const TEvTxProcessing::TEvReadSet &rs,
     }
 
     // If there is no required tx then we cannot assume it is finished.
-    // There are cases when tablet is not leader any more but is not dead 
+    // There are cases when tablet is not leader any more but is not dead
     // yet and can receive RS for tx executed in another generation of this
     // tablet. In this case this tablet should be dead soon and source will
     // connect to the correct tablet and resend RS.

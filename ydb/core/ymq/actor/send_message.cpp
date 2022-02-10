@@ -222,7 +222,7 @@ private:
         }
 
         if (req) {
-            Send(QueueLeader_, req.Release()); 
+            Send(QueueLeader_, req.Release());
         } else {
             SendReplyAndDie();
         }

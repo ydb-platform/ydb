@@ -10,7 +10,7 @@ class TTabletReqReset : public TActorBootstrapped<TTabletReqReset> {
     const TActorId Owner;
     const TIntrusivePtr<TTabletStorageInfo> TabletStorageInfo;
     ui32 Generation = 0;
-    TActorId CurrentLeader; 
+    TActorId CurrentLeader;
 
     void ReplyAndDie(NKikimrProto::EReplyStatus status, const TActorContext& ctx) {
         ctx.Send(Owner, new TEvTablet::TEvResetTabletResult(status, TabletStorageInfo->TabletID));
@@ -18,7 +18,7 @@ class TTabletReqReset : public TActorBootstrapped<TTabletReqReset> {
     }
 
     void Handle(TEvStateStorage::TEvInfo::TPtr& ev, const TActorContext&) {
-        CurrentLeader = ev->Get()->CurrentLeader; 
+        CurrentLeader = ev->Get()->CurrentLeader;
         Generation = std::max(Generation, ev->Get()->CurrentGeneration);
     }
 
@@ -69,8 +69,8 @@ class TTabletReqReset : public TActorBootstrapped<TTabletReqReset> {
     }
 
     void Handle(TEvTabletBase::TEvDeleteTabletResult::TPtr& ev, const TActorContext& ctx) {
-        if (CurrentLeader) { 
-            ctx.Send(CurrentLeader, new TEvents::TEvPoisonPill()); 
+        if (CurrentLeader) {
+            ctx.Send(CurrentLeader, new TEvents::TEvPoisonPill());
         }
         ReplyAndDie(ev->Get()->Status, ctx);
     }

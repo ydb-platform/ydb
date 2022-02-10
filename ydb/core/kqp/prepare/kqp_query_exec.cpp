@@ -602,7 +602,7 @@ TKqpParamsMap BuildParamsMap(const TVector<NKikimrKqp::TParameterBinding>& bindi
                     readTarget = (ui32)NKikimr::TReadTarget::EMode::Head;
                     break;
                 case NKikimrKqp::ISOLATION_LEVEL_READ_STALE:
-                    readTarget = (ui32)NKikimr::TReadTarget::EMode::Follower; 
+                    readTarget = (ui32)NKikimr::TReadTarget::EMode::Follower;
                     break;
                 default:
                     break;

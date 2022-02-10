@@ -13,10 +13,10 @@
 
 namespace NKikimr::NSQS {
 
-TCleanupActor::TCleanupActor(const TQueuePath& queuePath, const TActorId& queueLeader, ECleanupType cleanupType) 
+TCleanupActor::TCleanupActor(const TQueuePath& queuePath, const TActorId& queueLeader, ECleanupType cleanupType)
     : QueuePath_(queuePath)
     , RequestId_(CreateGuidAsString())
-    , QueueLeader_(queueLeader) 
+    , QueueLeader_(queueLeader)
     , CleanupType(cleanupType)
 {
     DebugInfo->QueueCleanupActors.emplace(TStringBuilder() << TLogQueueName(QueuePath_), this);
@@ -76,7 +76,7 @@ void TCleanupActor::RunCleanupQuery() {
     builder
         .User(QueuePath_.UserName)
         .Queue(QueuePath_.QueueName)
-        .QueueLeader(QueueLeader_) 
+        .QueueLeader(QueueLeader_)
         .QueryId(GetCleanupQueryId())
         .RetryOnTimeout()
         .Params()

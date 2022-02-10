@@ -109,7 +109,7 @@ class KikimrConfigGenerator(object):
             yql_config_path=None,
             enable_datastreams=False,
             auth_config_path=None,
-            disable_mvcc=False, 
+            disable_mvcc=False,
             enable_public_api_external_blobs=False,
     ):
         self._version = version
@@ -218,7 +218,7 @@ class KikimrConfigGenerator(object):
                     )
                 )
             )
- 
+
         self.__build()
 
         if self.grpc_ssl_enable:

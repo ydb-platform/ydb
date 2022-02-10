@@ -543,12 +543,12 @@ namespace NKikimr {
         struct TEvRequestHiveInfo : TEventPB<TEvRequestHiveInfo, NKikimrHive::TEvRequestHiveInfo, EvRequestHiveInfo> {
             TEvRequestHiveInfo() = default;
 
-            TEvRequestHiveInfo(bool returnFollowers) { 
-                Record.SetReturnFollowers(returnFollowers); 
+            TEvRequestHiveInfo(bool returnFollowers) {
+                Record.SetReturnFollowers(returnFollowers);
             }
-            TEvRequestHiveInfo(ui64 tabletId, bool returnFollowers) { 
+            TEvRequestHiveInfo(ui64 tabletId, bool returnFollowers) {
                 Record.SetTabletID(tabletId);
-                Record.SetReturnFollowers(returnFollowers); 
+                Record.SetReturnFollowers(returnFollowers);
             }
         };
 

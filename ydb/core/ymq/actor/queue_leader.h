@@ -22,7 +22,7 @@
 
 namespace NKikimr::NSQS {
 
-class TQueueLeader : public TActorBootstrapped<TQueueLeader> { 
+class TQueueLeader : public TActorBootstrapped<TQueueLeader> {
     struct TSendMessageBatchRequestProcessing;
     struct TReceiveMessageBatchRequestProcessing;
     struct TDeleteMessageBatchRequestProcessing;
@@ -30,13 +30,13 @@ class TQueueLeader : public TActorBootstrapped<TQueueLeader> {
     struct TGetRuntimeQueueAttributesRequestProcessing;
 
 public:
-    TQueueLeader(TString userName, TString queueName, TString folderId, TString rootUrl, TIntrusivePtr<TQueueCounters> counters, TIntrusivePtr<TUserCounters> userCounters, const TActorId& schemeCache, const TIntrusivePtr<TSqsEvents::TQuoterResourcesForActions>& quoterResourcesForUser); 
-    ~TQueueLeader(); 
+    TQueueLeader(TString userName, TString queueName, TString folderId, TString rootUrl, TIntrusivePtr<TQueueCounters> counters, TIntrusivePtr<TUserCounters> userCounters, const TActorId& schemeCache, const TIntrusivePtr<TSqsEvents::TQuoterResourcesForActions>& quoterResourcesForUser);
+    ~TQueueLeader();
 
     void Bootstrap();
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::SQS_QUEUE_LEADER_ACTOR; 
+        return NKikimrServices::TActivity::SQS_QUEUE_LEADER_ACTOR;
     }
 
 private:
@@ -220,7 +220,7 @@ private:
 
         virtual ~TBatchBase() = default;
 
-        void Execute(TQueueLeader*) { 
+        void Execute(TQueueLeader*) {
         }
 
         size_t Size() const {
@@ -247,7 +247,7 @@ private:
     struct TBatchingState {
         virtual ~TBatchingState();
         void Init(const NKikimrConfig::TSqsConfig::TBatchingPolicy& policy, ui64 shard, bool isFifo);
-        void TryExecute(TQueueLeader* leader); 
+        void TryExecute(TQueueLeader* leader);
         virtual bool CanExecute(const TBatch& batch) const { // Called for next batches when we have some batches in flight.
             return batch.IsFull();
         }
@@ -327,7 +327,7 @@ private:
         using TBatchWithGroupInfo<TSendBatchEntry>::TBatchWithGroupInfo;
 
         void AddEntry(TSendMessageBatchRequestProcessing& reqInfo, size_t i);
-        void Execute(TQueueLeader* leader); 
+        void Execute(TQueueLeader* leader);
 
         TInstant TransactionStartedTime;
     };
@@ -336,7 +336,7 @@ private:
         using TBatchWithGroupInfo<TDeleteBatchEntry>::TBatchWithGroupInfo;
 
         void AddEntry(TDeleteMessageBatchRequestProcessing& reqInfo, size_t i);
-        void Execute(TQueueLeader* leader); 
+        void Execute(TQueueLeader* leader);
 
         THashMultiMap<ui64, size_t> Offset2Entry;
     };
@@ -344,7 +344,7 @@ private:
     struct TLoadBatch : public TBatchBase<TLoadBatchEntry> {
         using TBatchBase<TLoadBatchEntry>::TBatchBase;
 
-        void Execute(TQueueLeader* leader); 
+        void Execute(TQueueLeader* leader);
     };
 
     template <class TBatch>
@@ -488,7 +488,7 @@ private:
 
     // requests
     std::vector<TSqsEvents::TEvGetConfiguration::TPtr> GetConfigurationRequests_;
-    std::vector<TSqsEvents::TEvExecute::TPtr> ExecuteRequests_; // execute requests that wait for queue leader init 
+    std::vector<TSqsEvents::TEvExecute::TPtr> ExecuteRequests_; // execute requests that wait for queue leader init
     THashMap<TString, TSendMessageBatchRequestProcessing> SendMessageRequests_; // request id -> request
     THashMap<TString, TReceiveMessageBatchRequestProcessing> ReceiveMessageRequests_; // request id -> request
     THashMap<std::pair<TString, ui64>, TDeleteMessageBatchRequestProcessing> DeleteMessageRequests_; // (request id, shard) -> request

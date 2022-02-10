@@ -19,7 +19,7 @@ message TEvConnectResult {
     optional uint64 TabletId = 2;
     optional NActorsProto.TActorId ClientId = 3;
     optional NActorsProto.TActorId ServerId = 4;
-    optional bool Leader = 5 [default = true]; 
+    optional bool Leader = 5 [default = true];
 };
 
 message TEvPush {

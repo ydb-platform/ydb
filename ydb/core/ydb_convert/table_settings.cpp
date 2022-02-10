@@ -161,26 +161,26 @@ bool FillCreateTableSettingsDesc(NKikimrSchemeOp::TTableDescription& tableDesc,
     if (proto.has_read_replicas_settings()) {
         if (tableProfileSet) {
             MEWarning("ReadReplicasSettings", warnings);
-            partitionConfig.ClearFollowerCount(); 
-            partitionConfig.ClearCrossDataCenterFollowerCount(); 
-            partitionConfig.ClearAllowFollowerPromotion(); 
-            partitionConfig.ClearFollowerGroups(); 
+            partitionConfig.ClearFollowerCount();
+            partitionConfig.ClearCrossDataCenterFollowerCount();
+            partitionConfig.ClearAllowFollowerPromotion();
+            partitionConfig.ClearFollowerGroups();
         }
         auto& readReplicasSettings = proto.read_replicas_settings();
         switch (readReplicasSettings.settings_case()) {
         case Ydb::Table::ReadReplicasSettings::kPerAzReadReplicasCount:
         {
-            auto& followerGroup = *partitionConfig.AddFollowerGroups(); 
-            followerGroup.SetFollowerCount(readReplicasSettings.per_az_read_replicas_count()); 
-            followerGroup.SetRequireAllDataCenters(true); 
-            followerGroup.SetFollowerCountPerDataCenter(true); 
+            auto& followerGroup = *partitionConfig.AddFollowerGroups();
+            followerGroup.SetFollowerCount(readReplicasSettings.per_az_read_replicas_count());
+            followerGroup.SetRequireAllDataCenters(true);
+            followerGroup.SetFollowerCountPerDataCenter(true);
             break;
         }
         case Ydb::Table::ReadReplicasSettings::kAnyAzReadReplicasCount:
         {
-            auto& followerGroup = *partitionConfig.AddFollowerGroups(); 
-            followerGroup.SetFollowerCount(readReplicasSettings.any_az_read_replicas_count()); 
-            followerGroup.SetRequireAllDataCenters(false); 
+            auto& followerGroup = *partitionConfig.AddFollowerGroups();
+            followerGroup.SetFollowerCount(readReplicasSettings.any_az_read_replicas_count());
+            followerGroup.SetRequireAllDataCenters(false);
             break;
         }
         default:
@@ -317,17 +317,17 @@ bool FillAlterTableSettingsDesc(NKikimrSchemeOp::TTableDescription& tableDesc,
         switch (readReplicasSettings.settings_case()) {
         case Ydb::Table::ReadReplicasSettings::kPerAzReadReplicasCount:
         {
-            auto& followerGroup = *partitionConfig.AddFollowerGroups(); 
-            followerGroup.SetFollowerCount(readReplicasSettings.per_az_read_replicas_count()); 
-            followerGroup.SetRequireAllDataCenters(true); 
-            followerGroup.SetFollowerCountPerDataCenter(true); 
+            auto& followerGroup = *partitionConfig.AddFollowerGroups();
+            followerGroup.SetFollowerCount(readReplicasSettings.per_az_read_replicas_count());
+            followerGroup.SetRequireAllDataCenters(true);
+            followerGroup.SetFollowerCountPerDataCenter(true);
             break;
         }
         case Ydb::Table::ReadReplicasSettings::kAnyAzReadReplicasCount:
         {
-            auto& followerGroup = *partitionConfig.AddFollowerGroups(); 
-            followerGroup.SetFollowerCount(readReplicasSettings.any_az_read_replicas_count()); 
-            followerGroup.SetRequireAllDataCenters(false); 
+            auto& followerGroup = *partitionConfig.AddFollowerGroups();
+            followerGroup.SetFollowerCount(readReplicasSettings.any_az_read_replicas_count());
+            followerGroup.SetRequireAllDataCenters(false);
             break;
         }
         default:

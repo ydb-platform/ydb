@@ -33,7 +33,7 @@ struct TTestContext {
     // Sleeps for millis milliseconds using fake time
     void Sleep(ui64 millis);
 
-    // Doesn't sleep unlike NKikikmr::RebootTablet 
+    // Doesn't sleep unlike NKikikmr::RebootTablet
     void RebootTablet();
 
     // Extremely pedantic version of GrabEdgeEvent

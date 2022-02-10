@@ -25,7 +25,7 @@ struct TBootQueue {
                 priority = 2;
                 break;
             default:
-                if (tablet.IsLeader()) { 
+                if (tablet.IsLeader()) {
                     priority = 1;
                 }
                 break;

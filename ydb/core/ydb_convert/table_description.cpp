@@ -664,25 +664,25 @@ void FillReadReplicasSettingsImpl(TYdbProto& out,
     }
 
     const auto& partConfig = in.GetPartitionConfig();
-    if (!partConfig.FollowerGroupsSize() && !partConfig.HasCrossDataCenterFollowerCount() && !partConfig.HasFollowerCount()) { 
+    if (!partConfig.FollowerGroupsSize() && !partConfig.HasCrossDataCenterFollowerCount() && !partConfig.HasFollowerCount()) {
         return;
     }
 
-    if (partConfig.FollowerGroupsSize()) { 
-        if (partConfig.FollowerGroupsSize() > 1) { 
+    if (partConfig.FollowerGroupsSize()) {
+        if (partConfig.FollowerGroupsSize() > 1) {
             // Not supported yet
             return;
         }
-        const auto& followerGroup = partConfig.GetFollowerGroups(0); 
-        if (followerGroup.GetFollowerCountPerDataCenter()) { 
-            out.mutable_read_replicas_settings()->set_per_az_read_replicas_count(followerGroup.GetFollowerCount()); 
+        const auto& followerGroup = partConfig.GetFollowerGroups(0);
+        if (followerGroup.GetFollowerCountPerDataCenter()) {
+            out.mutable_read_replicas_settings()->set_per_az_read_replicas_count(followerGroup.GetFollowerCount());
         } else {
-            out.mutable_read_replicas_settings()->set_any_az_read_replicas_count(followerGroup.GetFollowerCount()); 
+            out.mutable_read_replicas_settings()->set_any_az_read_replicas_count(followerGroup.GetFollowerCount());
         }
-    } else if (partConfig.HasCrossDataCenterFollowerCount()) { 
-        out.mutable_read_replicas_settings()->set_per_az_read_replicas_count(partConfig.GetCrossDataCenterFollowerCount()); 
-    } else if (partConfig.HasFollowerCount()) { 
-        out.mutable_read_replicas_settings()->set_any_az_read_replicas_count(partConfig.GetFollowerCount()); 
+    } else if (partConfig.HasCrossDataCenterFollowerCount()) {
+        out.mutable_read_replicas_settings()->set_per_az_read_replicas_count(partConfig.GetCrossDataCenterFollowerCount());
+    } else if (partConfig.HasFollowerCount()) {
+        out.mutable_read_replicas_settings()->set_any_az_read_replicas_count(partConfig.GetFollowerCount());
     }
 }
 

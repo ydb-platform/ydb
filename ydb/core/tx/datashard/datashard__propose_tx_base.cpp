@@ -35,13 +35,13 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
 
     try {
         TOutputOpData::TResultPtr result = nullptr;
-        // If tablet is in follower mode then we should sync scheme 
+        // If tablet is in follower mode then we should sync scheme
         // before we build and check operation.
-        if (Self->IsFollower()) { 
+        if (Self->IsFollower()) {
             NKikimrTxDataShard::TError::EKind status = NKikimrTxDataShard::TError::OK;
             TString errMessage;
 
-            if (!Self->SyncSchemeOnFollower(txc, ctx, status, errMessage)) 
+            if (!Self->SyncSchemeOnFollower(txc, ctx, status, errMessage))
                 return false;
 
             if (status != NKikimrTxDataShard::TError::OK) {

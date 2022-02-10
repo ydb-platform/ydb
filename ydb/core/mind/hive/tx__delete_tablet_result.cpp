@@ -7,7 +7,7 @@ namespace NHive {
 class TTxDeleteTabletResult : public TTransactionBase<THive> {
     TEvTabletBase::TEvDeleteTabletResult::TPtr Result;
     TTabletId TabletId;
-    TLeaderTabletInfo* Tablet = nullptr; 
+    TLeaderTabletInfo* Tablet = nullptr;
     TVector<TActorId> StorageInfoSubscribers;
     TActorId UnlockedFromActor;
 
@@ -34,13 +34,13 @@ public:
                     }
                     db.Table<Schema::TabletChannel>().Key(Tablet->Id, channelInfo.Channel).Delete();
                 }
-                for (TFollowerTabletInfo& follower : Tablet->Followers) { 
-                    auto fullTabletId = follower.GetFullTabletId(); 
-                    db.Table<Schema::TabletFollowerTablet>().Key(fullTabletId).Delete(); 
+                for (TFollowerTabletInfo& follower : Tablet->Followers) {
+                    auto fullTabletId = follower.GetFullTabletId();
+                    db.Table<Schema::TabletFollowerTablet>().Key(fullTabletId).Delete();
                     db.Table<Schema::Metrics>().Key(fullTabletId).Delete();
                 }
-                for (TFollowerGroup& group : Tablet->FollowerGroups) { 
-                    db.Table<Schema::TabletFollowerGroup>().Key(Tablet->Id, group.Id).Delete(); 
+                for (TFollowerGroup& group : Tablet->FollowerGroups) {
+                    db.Table<Schema::TabletFollowerGroup>().Key(Tablet->Id, group.Id).Delete();
                 }
                 db.Table<Schema::Tablet>().Key(Tablet->Id).Delete();
                 StorageInfoSubscribers.swap(Tablet->StorageInfoSubscribers);

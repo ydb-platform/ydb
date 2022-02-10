@@ -2,8 +2,8 @@
 
 #include <util/datetime/base.h>
 
-#include <cmath> 
- 
+#include <cmath>
+
 namespace NKikimr {
 
 class TTokenBucket {
@@ -26,12 +26,12 @@ public:
         Capacity = std::numeric_limits<double>::infinity(); // maximum amount of tokens allowed in bucket
     }
 
-    bool IsUnlimited() const { 
-        return Tokens == std::numeric_limits<double>::infinity() && 
-            Rate == 0.0 && 
-            Capacity == std::numeric_limits<double>::infinity(); 
-    } 
- 
+    bool IsUnlimited() const {
+        return Tokens == std::numeric_limits<double>::infinity() &&
+            Rate == 0.0 &&
+            Capacity == std::numeric_limits<double>::infinity();
+    }
+
     // Reset rate
     void SetRate(double rate) {
         Rate = rate;
@@ -69,20 +69,20 @@ public:
         return amount;
     }
 
-    // don't forget to Fill or use FillAndNextAvailableDelay() instead 
-    TDuration NextAvailableDelay() const { 
-        if (IsUnlimited() || Available() >= 0) { 
-            return TDuration::Zero(); 
-        } 
- 
-        return TDuration::MicroSeconds(std::ceil(Available() * -1000000.0 / Rate)); 
-    } 
- 
-    TDuration FillAndNextAvailableDelay(TInstant now) { 
-        Fill(now); 
-        return NextAvailableDelay(); 
-    } 
- 
+    // don't forget to Fill or use FillAndNextAvailableDelay() instead
+    TDuration NextAvailableDelay() const {
+        if (IsUnlimited() || Available() >= 0) {
+            return TDuration::Zero();
+        }
+
+        return TDuration::MicroSeconds(std::ceil(Available() * -1000000.0 / Rate));
+    }
+
+    TDuration FillAndNextAvailableDelay(TInstant now) {
+        Fill(now);
+        return NextAvailableDelay();
+    }
+
     // Amount of accumulated tokens
     double Available() const {
         return Tokens;

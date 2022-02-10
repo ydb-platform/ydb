@@ -249,11 +249,11 @@ void TKesusTablet::Handle(TEvKesus::TEvAttachSession::TPtr& ev) {
             // nothing in the underlying database is changing, then we may
             // give ownership to the requesting proxy immediately. This
             // may be unsafe if another copy of the tablet is up, making us
-            // a stale leader, and in which case we shouldn't be allowed to 
+            // a stale leader, and in which case we shouldn't be allowed to
             // make decisions.
             // However if we assume that only one session uses SessionId at a
             // time this successful attachment is fine. Eventually proxy
-            // will reconnect to the new leader anyway and situation where 
+            // will reconnect to the new leader anyway and situation where
             // two sessions successfully attached is not possible.
             // Unless they use the same SessionId that is.
             LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::KESUS_TABLET,

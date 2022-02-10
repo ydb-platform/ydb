@@ -18,7 +18,7 @@ public:
         TEvHive::TEvCutTabletHistory* msg = Event->Get();
         auto tabletId = msg->Record.GetTabletID();
         BLOG_D("THive::TTxCutTabletHistory::Execute(" << tabletId << ")");
-        TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(tabletId); 
+        TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(tabletId);
         if (tablet != nullptr && tablet->IsReadyToReassignTablet()) {
             auto channel = msg->Record.GetChannel();
             Y_VERIFY(channel < tablet->TabletStorageInfo->Channels.size());

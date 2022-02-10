@@ -78,7 +78,7 @@ EExecutionStatus TFinishProposeUnit::Execute(TOperation::TPtr op,
     if (!op->HasResultSentFlag() && (op->IsDirty() || !Pipeline.WaitCompletion(op)))
         CompleteRequest(op, ctx);
 
-    if (!DataShard.IsFollower()) 
+    if (!DataShard.IsFollower())
         DataShard.PlanCleanup(ctx);
 
     // Release acquired snapshot for immediate and aborted operations
@@ -171,7 +171,7 @@ void TFinishProposeUnit::AddDiagnosticsResult(TOutputOpData::TResultPtr &res)
     tabletInfo.SetTabletId(DataShard.TabletID());
     tabletInfo.SetGeneration(DataShard.Generation());
     tabletInfo.SetStep(DataShard.GetExecutorStep());
-    tabletInfo.SetIsFollower(DataShard.IsFollower()); 
+    tabletInfo.SetIsFollower(DataShard.IsFollower());
 }
 
 void TFinishProposeUnit::UpdateCounters(TOperation::TPtr op,

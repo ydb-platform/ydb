@@ -34,7 +34,7 @@ namespace NBoot {
             Flush();
         }
 
-        void HandleStep(TIntrusivePtr<IStep> step) noexcept override 
+        void HandleStep(TIntrusivePtr<IStep> step) noexcept override
         {
             auto *load = step->ConsumeAs<TLoadBlobs>(Pending);
 
@@ -62,7 +62,7 @@ namespace NBoot {
             }
         }
 
-        void Apply(const NPageCollection::TLargeGlobId &largeGlobId, TArrayRef<const char> body) noexcept 
+        void Apply(const NPageCollection::TLargeGlobId &largeGlobId, TArrayRef<const char> body) noexcept
         {
             if (body) {
                 TProtoBox<NTable::TSchemeChanges> alter(body);

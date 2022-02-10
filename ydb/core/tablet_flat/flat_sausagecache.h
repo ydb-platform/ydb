@@ -226,11 +226,11 @@ public:
         }
 
         const TLogoBlobID Id;
-        const TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection; 
+        const TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
         TPageMap<THolder<TPage>> PageMap;
         ui64 Users;
 
-        explicit TInfo(TIntrusiveConstPtr<NPageCollection::IPageCollection> pack); 
+        explicit TInfo(TIntrusiveConstPtr<NPageCollection::IPageCollection> pack);
         TInfo(const TInfo &info);
     };
 

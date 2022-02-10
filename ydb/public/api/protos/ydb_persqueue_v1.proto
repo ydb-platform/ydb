@@ -1047,7 +1047,7 @@ message ReadInfoResult {
             string client_node = 11;
             // Host name of proxy node that processing this reading session.
             string proxy_node = 12;
-            // Host name of node where partition leader is running. 
+            // Host name of node where partition leader is running.
             string tablet_node = 13;
 
             // Assign identifier of actual partition assignment.

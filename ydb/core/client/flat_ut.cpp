@@ -648,7 +648,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
             // Alter and freeze
             auto res = annoyingClient.AlterTable("/dc-1", R"(
                 Name: "Table"
-                PartitionConfig { FreezeState: Freeze FollowerCount: 1 } 
+                PartitionConfig { FreezeState: Freeze FollowerCount: 1 }
             )");
             UNIT_ASSERT_VALUES_EQUAL(res, NMsgBusProxy::MSTATUS_ERROR);
         }
@@ -1788,7 +1788,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         return strRes;
     }
 
-    void PrepareSourceTable(TFlatMsgBusClient& annoyingClient, bool withFollowers = false) { 
+    void PrepareSourceTable(TFlatMsgBusClient& annoyingClient, bool withFollowers = false) {
         const char * table = R"___(
                 Name: "TableOld"
                 Columns { Name: "Key"    Type: "Uint32"}
@@ -1802,7 +1802,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
                 UniformPartitionsCount: 2
 
                 PartitionConfig {
-                    FollowerCount: %d 
+                    FollowerCount: %d
                     CompactionPolicy {
                       InMemSizeToSnapshot: 100000
                       InMemStepsToSnapshot: 2
@@ -1834,7 +1834,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
 
         annoyingClient.InitRoot();
         annoyingClient.MkDir("/dc-1", "Dir");
-        annoyingClient.CreateTable("/dc-1/Dir", Sprintf(table, withFollowers ? 2 : 0)); 
+        annoyingClient.CreateTable("/dc-1/Dir", Sprintf(table, withFollowers ? 2 : 0));
 
         TMersenne<ui64> rnd;
         NTable::NTest::TRandomString<decltype(rnd)> blobs(rnd);
@@ -1845,7 +1845,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         }
     }
 
-    TString ReadFromTable(TFlatMsgBusClient& annoyingClient, TString table, ui32 fromKey = 0, bool follower = false) { 
+    TString ReadFromTable(TFlatMsgBusClient& annoyingClient, TString table, ui32 fromKey = 0, bool follower = false) {
         const char* readQuery =
                 "("
                 "(let range1 '('IncFrom '('Key (Uint32 '%d) (Void) )))"
@@ -1859,7 +1859,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
 
         TFlatMsgBusClient::TFlatQueryOptions opts;
         NKikimrClient::TResponse response;
-        annoyingClient.FlatQueryRaw(Sprintf(readQuery, fromKey, table.data(), follower ? TReadTarget::Follower().GetMode() 
+        annoyingClient.FlatQueryRaw(Sprintf(readQuery, fromKey, table.data(), follower ? TReadTarget::Follower().GetMode()
             : TReadTarget::Head().GetMode()), opts, response);
 
         UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(), NMsgBusProxy::MSTATUS_OK);
@@ -2002,7 +2002,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         UNIT_ASSERT_NO_DIFF(strResult, strResultOld);
     }
 
-    Y_UNIT_TEST(CopyTableAndAddFollowers) { 
+    Y_UNIT_TEST(CopyTableAndAddFollowers) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port));
@@ -2019,17 +2019,17 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
 
         Cerr << "Copy TableOld to Table" << Endl;
         annoyingClient.CreateTable("/dc-1/Dir", " Name: \"Table\" CopyFromTable: \"/dc-1/Dir/TableOld\""
-                        " PartitionConfig { FollowerCount: 1 }"); 
+                        " PartitionConfig { FollowerCount: 1 }");
 
-        auto fnGetFollowerCount = [&annoyingClient] (const TString& path) { 
+        auto fnGetFollowerCount = [&annoyingClient] (const TString& path) {
             auto res = annoyingClient.Ls(path);
             UNIT_ASSERT(res);
             UNIT_ASSERT(res->Record.HasPathDescription());
             UNIT_ASSERT(res->Record.GetPathDescription().HasTable());
-            return res->Record.GetPathDescription().GetTable().GetPartitionConfig().GetFollowerCount(); 
+            return res->Record.GetPathDescription().GetTable().GetPartitionConfig().GetFollowerCount();
         };
 
-        UNIT_ASSERT_VALUES_EQUAL(fnGetFollowerCount("/dc-1/Dir/Table"), 1); 
+        UNIT_ASSERT_VALUES_EQUAL(fnGetFollowerCount("/dc-1/Dir/Table"), 1);
 
         TString strResultOld = ReadFromTable(annoyingClient, "/dc-1/Dir/TableOld");
         TString strResult = ReadFromTable(annoyingClient, "/dc-1/Dir/Table");
@@ -2037,12 +2037,12 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         Cout << strResult << Endl;
         UNIT_ASSERT_NO_DIFF(strResult, strResultOld);
 
-        // Make copy of copy and disable followers 
+        // Make copy of copy and disable followers
         Cerr << "Copy TableOld to Table2" << Endl;
         annoyingClient.CreateTable("/dc-1/Dir", " Name: \"Table2\" CopyFromTable: \"/dc-1/Dir/Table\""
-                        " PartitionConfig { FollowerCount: 0 }"); 
+                        " PartitionConfig { FollowerCount: 0 }");
 
-        UNIT_ASSERT_VALUES_EQUAL(fnGetFollowerCount("/dc-1/Dir/Table2"), 0); 
+        UNIT_ASSERT_VALUES_EQUAL(fnGetFollowerCount("/dc-1/Dir/Table2"), 0);
 
         strResult = ReadFromTable(annoyingClient, "/dc-1/Dir/Table2");
         UNIT_ASSERT_NO_DIFF(strResult, strResultOld);
@@ -2712,7 +2712,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         annoyingClient.Ls("/dc-1/Dir/TableOld");
     }
 
-    Y_UNIT_TEST(WriteSplitAndReadFromFollower) { 
+    Y_UNIT_TEST(WriteSplitAndReadFromFollower) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port).SetNodeCount(2));
@@ -2759,7 +2759,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
             UNIT_ASSERT(annoyingClient.WaitForTabletAlive(cleverServer.GetRuntime(), tabletId, false, TDuration::Minutes(1)));
         }
 
-        for (ui32 i = 0; i < 20; ++i) { // multiple rounds to move some reads to followers 
+        for (ui32 i = 0; i < 20; ++i) { // multiple rounds to move some reads to followers
             TString strResultAfter = ReadFromTable(annoyingClient, "/dc-1/Dir/TableOld", 201, true);
             UNIT_ASSERT_NO_DIFF(strResultAfter, strResult);
         }
@@ -3245,7 +3245,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
 
         TAutoPtr<NKikimr::NMsgBusProxy::TBusTabletCountersRequest> request(new NKikimr::NMsgBusProxy::TBusTabletCountersRequest());
         request->Record.SetTabletID(partitions[0]);
-        request->Record.SetConnectToFollower(false); 
+        request->Record.SetConnectToFollower(false);
 
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus status = annoyingClient.SyncCall(request, reply);

@@ -11,14 +11,14 @@ namespace NFake {
     struct TStarter {
         using TMake = TTabletSetupInfo::TTabletCreationFunc;
 
-        IActor* Do(TActorId user, ui32 retry, ui32 tablet, TMake make, ui32 followerId = 0) noexcept 
+        IActor* Do(TActorId user, ui32 retry, ui32 tablet, TMake make, ui32 followerId = 0) noexcept
         {
             const auto simple = TMailboxType::Simple;
 
             auto *info = MakeTabletInfo(tablet);
             auto *setup = new TTabletSetupInfo(make, simple, 0, simple, 0);
 
-            return new NFake::TOwner(user, retry, info, setup, followerId); 
+            return new NFake::TOwner(user, retry, info, setup, followerId);
         }
 
         static TStorageInfo* MakeTabletInfo(ui64 tablet) noexcept

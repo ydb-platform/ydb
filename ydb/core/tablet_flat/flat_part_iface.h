@@ -36,7 +36,7 @@ namespace NTable {
         virtual ~IPageWriter() = default;
         virtual TPageId Write(TSharedData page, EPage type, ui32 group) = 0;
         virtual TPageId WriteOuter(TSharedData) noexcept = 0;
-        virtual void WriteInplace(TPageId page, TArrayRef<const char> body) = 0; 
+        virtual void WriteInplace(TPageId page, TArrayRef<const char> body) = 0;
         virtual NPageCollection::TGlobId WriteLarge(TString blob, ui64 ref) noexcept = 0;
         virtual void Finish(TString overlay) noexcept = 0;
     };

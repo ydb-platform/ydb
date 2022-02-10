@@ -660,8 +660,8 @@ public:
     void SetupTabletRuntime(bool isMirror3dc = false, ui32 stateStorageNodeId = 0, ui32 targetNodeId = 0);
     static NTabletPipe::TClientConfig GetPipeConfigWithRetries();
     void SendToPipe(ui64 tabletId, const TActorId& sender, IEventBase* payload, ui64 cookie, const NKikimr::NTabletPipe::TClientConfig& pipeConfig);
-    static TTabletStorageInfo *CreateTestTabletInfo(ui64 tabletId, TTabletTypes::EType tabletType, TBlobStorageGroupType::EErasureSpecies erasure, ui32 groupId); 
-    TActorId CreateTestBootstrapper(TTabletStorageInfo *info, std::function<IActor*(TActorId, TTabletStorageInfo*)> op, ui32 nodeId); 
+    static TTabletStorageInfo *CreateTestTabletInfo(ui64 tabletId, TTabletTypes::EType tabletType, TBlobStorageGroupType::EErasureSpecies erasure, ui32 groupId);
+    TActorId CreateTestBootstrapper(TTabletStorageInfo *info, std::function<IActor*(TActorId, TTabletStorageInfo*)> op, ui32 nodeId);
 
 private:
     void SetupStateStorage(ui32 nodeId, ui32 stateStorageNodeId);

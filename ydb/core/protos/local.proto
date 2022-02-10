@@ -40,7 +40,7 @@ message TEvPing {
 message TEvDeadTabletAck {
     optional fixed64 TabletId = 1;
     optional uint32 Generation = 2;
-    optional uint32 FollowerId = 3; 
+    optional uint32 FollowerId = 3;
 }
 
 message TEvStatus {
@@ -54,28 +54,28 @@ message TEvStatus {
 }
 
 enum EBootMode {
-    BOOT_MODE_LEADER = 0; 
-    BOOT_MODE_FOLLOWER = 1; 
+    BOOT_MODE_LEADER = 0;
+    BOOT_MODE_FOLLOWER = 1;
 }
 
 message TEvBootTablet {
     optional NKikimrTabletBase.TTabletStorageInfo Info = 1;
     optional uint32 SuggestedGeneration = 2;
-    optional EBootMode BootMode = 3 [default = BOOT_MODE_LEADER]; 
-    optional NKikimrHive.TFollowerGroup FollowerGroup = 4; 
-    optional uint32 FollowerId = 5; 
+    optional EBootMode BootMode = 3 [default = BOOT_MODE_LEADER];
+    optional NKikimrHive.TFollowerGroup FollowerGroup = 4;
+    optional uint32 FollowerId = 5;
 }
 
 message TEvStopTablet {
     optional fixed64 TabletId = 1;
-    optional uint32 FollowerId = 2; 
+    optional uint32 FollowerId = 2;
 }
 
 message TEvTabletStatus {
     optional uint32 Status = 1;
     optional fixed64 TabletID = 2;
     optional uint32 Generation = 3;
-    optional uint32 FollowerId = 4; 
+    optional uint32 FollowerId = 4;
     optional uint32 Reason = 5 [default = 34]; // ReasonError
 }
 
@@ -89,8 +89,8 @@ message TEvEnumerateTabletsResult {
     message TTabletInfo {
         optional uint64 TabletId = 1;
         optional NKikimrTabletBase.TTabletTypes.EType TabletType = 2;
-        optional EBootMode BootMode = 3 [default = BOOT_MODE_LEADER]; 
-        optional uint32 FollowerId = 4; 
+        optional EBootMode BootMode = 3 [default = BOOT_MODE_LEADER];
+        optional uint32 FollowerId = 4;
     }
 
     repeated TTabletInfo TabletInfo = 2;
@@ -101,7 +101,7 @@ message TEvSyncTablets {
         optional uint64 TabletId = 1;
         optional uint32 Generation = 2;
         optional EBootMode BootMode = 3;
-        optional uint32 FollowerId = 4; 
+        optional uint32 FollowerId = 4;
     }
 
     repeated TTabletInfo InbootTablets = 1;
@@ -110,7 +110,7 @@ message TEvSyncTablets {
 
 message TEvTabletMetricsAck {
     repeated fixed64 TabletId = 1;
-    repeated uint32 FollowerId = 2; 
+    repeated uint32 FollowerId = 2;
 }
 
 message TEvReconnect {

@@ -23,7 +23,7 @@ public:
         for (const NKikimrHive::TTabletInfo& protoTabletInfo : request.GetTablets()) {
             TTabletId tabletId = protoTabletInfo.GetTabletID();
             std::pair<ui64, ui64> owner(protoTabletInfo.GetTabletOwner().GetOwner(), protoTabletInfo.GetTabletOwner().GetOwnerIdx());
-            TLeaderTabletInfo& tablet = Self->GetTablet(tabletId); 
+            TLeaderTabletInfo& tablet = Self->GetTablet(tabletId);
             tablet.Type = protoTabletInfo.GetTabletType();
             tablet.NodeId = 0;
             tablet.Node = nullptr;
@@ -57,7 +57,7 @@ public:
                         NIceDb::TUpdate<Schema::Tablet::KnownGeneration>(protoTabletInfo.GetGeneration()),
                         NIceDb::TUpdate<Schema::Tablet::TabletType>(protoTabletInfo.GetTabletType()),
                         NIceDb::TUpdate<Schema::Tablet::State>(static_cast<ETabletState>(protoTabletInfo.GetState())),
-                        NIceDb::TUpdate<Schema::Tablet::LeaderNode>(protoTabletInfo.GetNodeID()), 
+                        NIceDb::TUpdate<Schema::Tablet::LeaderNode>(protoTabletInfo.GetNodeID()),
                         //NIceDb::TUpdate<Schema::Tablet::Category>(),
                         //NIceDb::TUpdate<Schema::Tablet::AllowedNodes>(),
                         //NIceDb::TUpdate<Schema::Tablet::AllowedDataCenters>(),
@@ -111,32 +111,32 @@ public:
 
             tablet.AcquireAllocationUnits();
 
-            for (const auto& protoFollowerGroup : protoTabletInfo.GetFollowerGroups()) { 
-                TFollowerGroup& followerGroup = tablet.AddFollowerGroup(); 
-                followerGroup = protoFollowerGroup; 
+            for (const auto& protoFollowerGroup : protoTabletInfo.GetFollowerGroups()) {
+                TFollowerGroup& followerGroup = tablet.AddFollowerGroup();
+                followerGroup = protoFollowerGroup;
 
                 TVector<ui32> allowedDataCenters;
                 for (const TDataCenterId& dc : followerGroup.AllowedDataCenters) {
                     allowedDataCenters.push_back(DataCenterFromString(dc));
                 }
-                db.Table<Schema::TabletFollowerGroup>().Key(tabletId, followerGroup.Id).Update( 
-                            NIceDb::TUpdate<Schema::TabletFollowerGroup::FollowerCount>(followerGroup.GetRawFollowerCount()), 
-                            NIceDb::TUpdate<Schema::TabletFollowerGroup::AllowLeaderPromotion>(followerGroup.AllowLeaderPromotion), 
-                            NIceDb::TUpdate<Schema::TabletFollowerGroup::AllowClientRead>(followerGroup.AllowClientRead), 
-                            NIceDb::TUpdate<Schema::TabletFollowerGroup::AllowedNodes>(followerGroup.AllowedNodes), 
+                db.Table<Schema::TabletFollowerGroup>().Key(tabletId, followerGroup.Id).Update(
+                            NIceDb::TUpdate<Schema::TabletFollowerGroup::FollowerCount>(followerGroup.GetRawFollowerCount()),
+                            NIceDb::TUpdate<Schema::TabletFollowerGroup::AllowLeaderPromotion>(followerGroup.AllowLeaderPromotion),
+                            NIceDb::TUpdate<Schema::TabletFollowerGroup::AllowClientRead>(followerGroup.AllowClientRead),
+                            NIceDb::TUpdate<Schema::TabletFollowerGroup::AllowedNodes>(followerGroup.AllowedNodes),
                             NIceDb::TUpdate<Schema::TabletFollowerGroup::AllowedDataCenters>(allowedDataCenters),
                             NIceDb::TUpdate<Schema::TabletFollowerGroup::AllowedDataCenterIds>(followerGroup.AllowedDataCenters),
-                            NIceDb::TUpdate<Schema::TabletFollowerGroup::RequireAllDataCenters>(followerGroup.RequireAllDataCenters), 
-                            NIceDb::TUpdate<Schema::TabletFollowerGroup::RequireDifferentNodes>(followerGroup.RequireDifferentNodes), 
-                            NIceDb::TUpdate<Schema::TabletFollowerGroup::FollowerCountPerDataCenter>(followerGroup.FollowerCountPerDataCenter)); 
+                            NIceDb::TUpdate<Schema::TabletFollowerGroup::RequireAllDataCenters>(followerGroup.RequireAllDataCenters),
+                            NIceDb::TUpdate<Schema::TabletFollowerGroup::RequireDifferentNodes>(followerGroup.RequireDifferentNodes),
+                            NIceDb::TUpdate<Schema::TabletFollowerGroup::FollowerCountPerDataCenter>(followerGroup.FollowerCountPerDataCenter));
 
                 for (ui32 i = 0; i < followerGroup.GetComputedFollowerCount(Self->GetDataCenters()); ++i) {
-                    TFollowerTabletInfo& follower = tablet.AddFollower(followerGroup); 
-                    db.Table<Schema::TabletFollowerTablet>().Key(tabletId, follower.Id).Update( 
-                                NIceDb::TUpdate<Schema::TabletFollowerTablet::GroupID>(follower.FollowerGroup.Id), 
-                                NIceDb::TUpdate<Schema::TabletFollowerTablet::FollowerNode>(0)); 
-                    follower.InitTabletMetrics(); 
-                    follower.BecomeStopped(); 
+                    TFollowerTabletInfo& follower = tablet.AddFollower(followerGroup);
+                    db.Table<Schema::TabletFollowerTablet>().Key(tabletId, follower.Id).Update(
+                                NIceDb::TUpdate<Schema::TabletFollowerTablet::GroupID>(follower.FollowerGroup.Id),
+                                NIceDb::TUpdate<Schema::TabletFollowerTablet::FollowerNode>(0));
+                    follower.InitTabletMetrics();
+                    follower.BecomeStopped();
                 }
             }
 

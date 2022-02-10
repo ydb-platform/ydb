@@ -61,13 +61,13 @@ struct TTestTables {
         bool Sharded = false;
         bool OutOfOrder = false;
         bool SoftUpdates = false;
-        ui32 FollowerCount = 0; 
+        ui32 FollowerCount = 0;
 
-        TOpts(EVariant var = OneShard_NoOpts, ui32 numFollowers = 0) 
+        TOpts(EVariant var = OneShard_NoOpts, ui32 numFollowers = 0)
             : Sharded(false)
             , OutOfOrder(false)
             , SoftUpdates(false)
-            , FollowerCount(numFollowers) 
+            , FollowerCount(numFollowers)
         {
             switch (var) {
             case OneShard_NoOpts:
@@ -99,10 +99,10 @@ struct TTestTables {
         }
     };
 
-    TTestTables(TClient& client, EVariant var, ui32 numFollowers = 0) 
+    TTestTables(TClient& client, EVariant var, ui32 numFollowers = 0)
         : Client(client)
     {
-        TOpts opts(var, numFollowers); 
+        TOpts opts(var, numFollowers);
         NKikimrSchemeOp::TTableDescription tableSimple;
         {
             tableSimple.SetName("Simple");
@@ -119,8 +119,8 @@ struct TTestTables {
             if (opts.Sharded)
                 tableSimple.SetUniformPartitionsCount(10);
 
-            if (opts.FollowerCount) 
-                tableSimple.MutablePartitionConfig()->SetFollowerCount(opts.FollowerCount); 
+            if (opts.FollowerCount)
+                tableSimple.MutablePartitionConfig()->SetFollowerCount(opts.FollowerCount);
 
             if (opts.OutOfOrder) {
                 tableSimple.MutablePartitionConfig()->MutablePipelineConfig()->SetNumActiveTx(8);
@@ -276,7 +276,7 @@ struct TTxInfo {
     ui64 TabletId;
     TActorId ActorId;
     std::pair<ui32, ui64> GenStep;
-    bool IsFollower; 
+    bool IsFollower;
     ui64 TxId;
     ui64 TxStep;
     ui32 Status;
@@ -288,7 +288,7 @@ struct TTxInfo {
         Cerr << "TabletId: " << TabletId
             << " Generation:Step: " << GenStep.first << ":" << GenStep.second
             << " ActorId: " << ActorId
-            << " IsFollower: " << (ui32)IsFollower << Endl; 
+            << " IsFollower: " << (ui32)IsFollower << Endl;
     }
 
     void PrintTxInfo() const {
@@ -313,7 +313,7 @@ void ExtractResultInfo(const NKikimrMiniKQL::TResult& result, TVector<TTxInfo>& 
         info.TabletId = row["TabletId"];
         info.ActorId = TActorId(row["ActorIdRawX1"], row["ActorIdRawX2"]);
         info.GenStep = std::make_pair(row["Generation"], row["GenStep"]);
-        info.IsFollower = row["IsFollower"]; 
+        info.IsFollower = row["IsFollower"];
         info.TxId = row["TxId"];
         info.TxStep = row["TxStep"];
         info.Status = row["Status"];
@@ -411,7 +411,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         }
     }
 
-    void ReadWriteViaMiniKQLBody(TClient &client, bool useHead, bool useFollower) { 
+    void ReadWriteViaMiniKQLBody(TClient &client, bool useHead, bool useFollower) {
         NKikimrMiniKQL::TResult writeRes;
         const TString writeQuery = R"___(
             (
@@ -446,7 +446,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         )___";
 
         TString readQuery = readQueryTemplate;
-        SubstGlobal(readQuery, "__HEAD__", !useHead ? (useFollower ? "'follower" : "'online") : "'head"); 
+        SubstGlobal(readQuery, "__HEAD__", !useHead ? (useFollower ? "'follower" : "'online") : "'head");
         UNIT_ASSERT(client.FlatQuery(readQuery, readRes));
 
         {
@@ -472,7 +472,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         )___";
 
         TString rangeQuery = rangeQueryTemplate;
-        SubstGlobal(rangeQuery, "__HEAD__", !useHead ? (useFollower ? "'follower" : "'online") : "'head"); 
+        SubstGlobal(rangeQuery, "__HEAD__", !useHead ? (useFollower ? "'follower" : "'online") : "'head");
         NKikimrMiniKQL::TResult rangeRes;
         UNIT_ASSERT(client.FlatQuery(rangeQuery, rangeRes));
 
@@ -690,11 +690,11 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         ReadWriteViaMiniKQLBody(client, true, false);
     }
 
-    Y_UNIT_TEST(ReadWriteViaMiniKQLShardedFollower) { 
+    Y_UNIT_TEST(ReadWriteViaMiniKQLShardedFollower) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
 
-        // Currently followers cannot be started at the same node with leader 
+        // Currently followers cannot be started at the same node with leader
         // so we need 2 nodes
         auto settings = TServerSettings(port);
         settings.SetNodeCount(2);
@@ -717,7 +717,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         }
 
         {
-            TTestTables tables(client, TTestTables::Sharded_NoOpts, 2); //max followers is 3 
+            TTestTables tables(client, TTestTables::Sharded_NoOpts, 2); //max followers is 3
             ReadWriteViaMiniKQLBody(client, false, true);
         }
     }
@@ -1461,7 +1461,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         }
     }
 
-    void PrepareTestData(TClient& client, bool allowFollowerPromotion) { 
+    void PrepareTestData(TClient& client, bool allowFollowerPromotion) {
         client.InitRootScheme();
         client.MkDir("/dc-1", "Berkanavt");
         client.MkDir("/dc-1/Berkanavt", "tables");
@@ -1471,8 +1471,8 @@ Y_UNIT_TEST_SUITE(TClientTest) {
                                 Columns { Name: "key"        Type: "Uint64"}
                                 Columns { Name: "uint"       Type: "Uint64"}
                                 KeyColumnNames: ["key"]
-                                PartitionConfig { FollowerCount: 1 AllowFollowerPromotion: %s } 
-                            )___", allowFollowerPromotion ? "true": "false")); 
+                                PartitionConfig { FollowerCount: 1 AllowFollowerPromotion: %s }
+                            )___", allowFollowerPromotion ? "true": "false"));
 
         NKikimrMiniKQL::TResult writeRes;
         const TString writeQuery = R"___(
@@ -1488,7 +1488,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         UNIT_ASSERT(client.FlatQuery(writeQuery, writeRes));
     }
 
-    void CheckRead(TClient& client, bool readFromFollower) { 
+    void CheckRead(TClient& client, bool readFromFollower) {
         const TString readQuery = Sprintf(
             R"___(
             (
@@ -1497,7 +1497,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
                 (let row (SelectRow '/dc-1/Berkanavt/tables/Simple key columns %s))
                 (return (AsList (SetResult 'row row)))
             )
-            )___", readFromFollower ? "'follower" : ""); 
+            )___", readFromFollower ? "'follower" : "");
 
         NKikimrMiniKQL::TResult readRes;
         UNIT_ASSERT(client.FlatQuery(readQuery, readRes));
@@ -1512,21 +1512,21 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         }
     }
 
-    void WaitForLeaderStart(TClient& client, TTestActorRuntime* runtime, ui64 tabletId, const TDuration& timeout) { 
+    void WaitForLeaderStart(TClient& client, TTestActorRuntime* runtime, ui64 tabletId, const TDuration& timeout) {
         if (client.WaitForTabletAlive(runtime, tabletId, true, timeout))
             return;
 
-        UNIT_ASSERT(!"Timeout expired while waiting for leader start"); 
+        UNIT_ASSERT(!"Timeout expired while waiting for leader start");
     }
 
-    void WaitForFollowerStart(TClient& client, TTestActorRuntime* runtime, ui64 tabletId, const TDuration& timeout) { 
+    void WaitForFollowerStart(TClient& client, TTestActorRuntime* runtime, ui64 tabletId, const TDuration& timeout) {
         if (client.WaitForTabletAlive(runtime, tabletId, false, timeout))
             return;
 
-        UNIT_ASSERT(!"Timeout expired while waiting for follower start"); 
+        UNIT_ASSERT(!"Timeout expired while waiting for follower start");
     }
 
-    Y_UNIT_TEST(ReadFromFollower) { 
+    Y_UNIT_TEST(ReadFromFollower) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
 
@@ -1541,7 +1541,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         CheckRead(client, true);
     }
 
-    Y_UNIT_TEST(FollowerCacheRefresh) { 
+    Y_UNIT_TEST(FollowerCacheRefresh) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
 
@@ -1559,8 +1559,8 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         client.MarkNodeInHive(server.GetRuntime(), 1, true);
 
         const ui64 tabletId = 72075186224037888ull;
-        WaitForLeaderStart(client, server.GetRuntime(), tabletId, TDuration::Seconds(5)); 
-        WaitForFollowerStart(client, server.GetRuntime(), tabletId, TDuration::Seconds(5)); 
+        WaitForLeaderStart(client, server.GetRuntime(), tabletId, TDuration::Seconds(5));
+        WaitForFollowerStart(client, server.GetRuntime(), tabletId, TDuration::Seconds(5));
 
         // force some rounds of compaction
         for (ui32 i : xrange(50, 3000)) {
@@ -1574,15 +1574,15 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             UNIT_ASSERT(client.FlatQuery(writeQuery, writeRes));
         }
 
-        Cout << "Read from leader" << Endl; 
+        Cout << "Read from leader" << Endl;
         CheckRead(client, false);
-        Cout << "Read from leader again" << Endl; 
+        Cout << "Read from leader again" << Endl;
         CheckRead(client, false);
-        Cout << "Read from follower" << Endl; 
+        Cout << "Read from follower" << Endl;
         CheckRead(client, true);
     }
 
-    Y_UNIT_TEST(FollowerDrop) { 
+    Y_UNIT_TEST(FollowerDrop) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
 
@@ -1596,11 +1596,11 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         PrepareTestData(client, false);
 
         const ui64 tabletId = 72075186224037888ull;
-        WaitForLeaderStart(client, server.GetRuntime(), tabletId, TDuration::Seconds(5)); 
-        WaitForFollowerStart(client, server.GetRuntime(), tabletId, TDuration::Seconds(5)); 
+        WaitForLeaderStart(client, server.GetRuntime(), tabletId, TDuration::Seconds(5));
+        WaitForFollowerStart(client, server.GetRuntime(), tabletId, TDuration::Seconds(5));
 
         NTabletPipe::TClientConfig pipeClientConfig;
-        pipeClientConfig.ForceFollower = true; 
+        pipeClientConfig.ForceFollower = true;
         server.GetRuntime()->SendToPipe(tabletId, TActorId(), new TEvents::TEvPoisonPill(), 0, pipeClientConfig);
 
         client.AlterTable(TablePlacement, Sprintf(
@@ -1609,7 +1609,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
                                 Columns { Name: "key"        Type: "Uint64"}
                                 Columns { Name: "uint"       Type: "Uint64"}
                                 KeyColumnNames: ["key"]
-                                PartitionConfig { FollowerCount: 0 } 
+                                PartitionConfig { FollowerCount: 0 }
                             )___"));
 
         // force some rounds of compaction
@@ -1625,7 +1625,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         }
     }
 
-    Y_UNIT_TEST(PromoteFollower) { 
+    Y_UNIT_TEST(PromoteFollower) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
 
@@ -1641,39 +1641,39 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
         const ui64 tabletId = 72075186224037888ull;
 
-        ui32 leaderNode = client.GetLeaderNode(server.GetRuntime(), tabletId); 
+        ui32 leaderNode = client.GetLeaderNode(server.GetRuntime(), tabletId);
 
-        WaitForLeaderStart(client, server.GetRuntime(), tabletId, TDuration::Seconds(5)); 
-        WaitForFollowerStart(client, server.GetRuntime(), tabletId, TDuration::Seconds(5)); 
+        WaitForLeaderStart(client, server.GetRuntime(), tabletId, TDuration::Seconds(5));
+        WaitForFollowerStart(client, server.GetRuntime(), tabletId, TDuration::Seconds(5));
 
-        TVector<ui32> followerNodes = client.GetFollowerNodes(server.GetRuntime(), tabletId); 
-        UNIT_ASSERT_VALUES_EQUAL(1, followerNodes.size()); 
-        UNIT_ASSERT_VALUES_UNEQUAL(leaderNode, followerNodes[0]); 
+        TVector<ui32> followerNodes = client.GetFollowerNodes(server.GetRuntime(), tabletId);
+        UNIT_ASSERT_VALUES_EQUAL(1, followerNodes.size());
+        UNIT_ASSERT_VALUES_UNEQUAL(leaderNode, followerNodes[0]);
 
-        Cout << "Read from follower" << Endl; 
+        Cout << "Read from follower" << Endl;
         CheckRead(client, true);
-        Cout << "Read from leader" << Endl; 
+        Cout << "Read from leader" << Endl;
         CheckRead(client, false);
 
-        Cout << "Disable node, leader should move back" << Endl; 
-        client.MarkNodeInHive(server.GetRuntime(), leaderNode, false); 
-        client.KickNodeInHive(server.GetRuntime(), leaderNode); 
-        WaitForLeaderStart(client, server.GetRuntime(), tabletId, TDuration::Seconds(5)); 
+        Cout << "Disable node, leader should move back" << Endl;
+        client.MarkNodeInHive(server.GetRuntime(), leaderNode, false);
+        client.KickNodeInHive(server.GetRuntime(), leaderNode);
+        WaitForLeaderStart(client, server.GetRuntime(), tabletId, TDuration::Seconds(5));
 
-        Cout << "Read from new leader" << Endl; 
+        Cout << "Read from new leader" << Endl;
         CheckRead(client, false);
-        ui32 newLeaderNode = client.GetLeaderNode(server.GetRuntime(), tabletId); 
-        UNIT_ASSERT_VALUES_UNEQUAL_C(newLeaderNode, leaderNode, "Leader has moved"); 
+        ui32 newLeaderNode = client.GetLeaderNode(server.GetRuntime(), tabletId);
+        UNIT_ASSERT_VALUES_UNEQUAL_C(newLeaderNode, leaderNode, "Leader has moved");
 
-        Cout << "Reenable node, follower should start there" << Endl; 
-        client.MarkNodeInHive(server.GetRuntime(), leaderNode, true); 
-        WaitForFollowerStart(client, server.GetRuntime(), tabletId, TDuration::Seconds(5)); 
-        followerNodes = client.GetFollowerNodes(server.GetRuntime(), tabletId); 
+        Cout << "Reenable node, follower should start there" << Endl;
+        client.MarkNodeInHive(server.GetRuntime(), leaderNode, true);
+        WaitForFollowerStart(client, server.GetRuntime(), tabletId, TDuration::Seconds(5));
+        followerNodes = client.GetFollowerNodes(server.GetRuntime(), tabletId);
 
         CheckRead(client, true);
     }
 
-    void DiagnosticsBody(TClient &client, bool testWrite, bool allowFollower = false) { 
+    void DiagnosticsBody(TClient &client, bool testWrite, bool allowFollower = false) {
         TString query;
         if (testWrite) {
             query = R"((
@@ -1693,7 +1693,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
                     (SetResult 'res result_)
                     (Diagnostics)
                 ))
-            ))", allowFollower ? "'follower" : ""); 
+            ))", allowFollower ? "'follower" : "");
         }
 
         NKikimrMiniKQL::TResult result;
@@ -1711,7 +1711,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             }
 
             UNIT_ASSERT_EQUAL(infos.size(), 1);
-            UNIT_ASSERT(allowFollower || (infos[0].IsFollower == false)); 
+            UNIT_ASSERT(allowFollower || (infos[0].IsFollower == false));
         }
     }
 
@@ -1862,7 +1862,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         TClient client(settings);
 
         server.StartDummyTablets();
-        WaitForLeaderStart(client, server.GetRuntime(), ChangeStateStorage(Tests::DummyTablet1, TestDomain), TDuration::Seconds(1)); 
+        WaitForLeaderStart(client, server.GetRuntime(), ChangeStateStorage(Tests::DummyTablet1, TestDomain), TDuration::Seconds(1));
 
         NTabletFlatScheme::TSchemeChanges schemeInitial;
         TString err;
@@ -2052,7 +2052,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         // TODO: check resluts
     }
 
-    void OfflineFollowerContinueWork() { 
+    void OfflineFollowerContinueWork() {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
 
@@ -2064,17 +2064,17 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         TTestActorRuntime &runtime = *server.GetRuntime();
 
         const ui64 tabletId = ChangeStateStorage(DummyTablet1, settings.Domain);
-        TIntrusivePtr<TTabletStorageInfo> tabletInfo = CreateTestTabletInfo(tabletId, TTabletTypes::TX_DUMMY); 
-        TIntrusivePtr<TTabletSetupInfo> setupInfo = new TTabletSetupInfo(&CreateFlatDummyTablet, TMailboxType::Simple, 0, TMailboxType::Simple, 0); 
+        TIntrusivePtr<TTabletStorageInfo> tabletInfo = CreateTestTabletInfo(tabletId, TTabletTypes::TX_DUMMY);
+        TIntrusivePtr<TTabletSetupInfo> setupInfo = new TTabletSetupInfo(&CreateFlatDummyTablet, TMailboxType::Simple, 0, TMailboxType::Simple, 0);
 
         const TActorId edge = runtime.AllocateEdgeActor();
 
-        const TActorId leaderTablet = runtime.Register(CreateTablet(edge, tabletInfo.Get(), setupInfo.Get(), 0, nullptr, nullptr)); 
-        const TActorId leaderId = runtime.GrabEdgeEvent<TEvTablet::TEvRestored>(edge)->Get()->UserTabletActor; 
+        const TActorId leaderTablet = runtime.Register(CreateTablet(edge, tabletInfo.Get(), setupInfo.Get(), 0, nullptr, nullptr));
+        const TActorId leaderId = runtime.GrabEdgeEvent<TEvTablet::TEvRestored>(edge)->Get()->UserTabletActor;
 
-        const TActorId followerTablet = runtime.Register(CreateTabletFollower(edge, tabletInfo.Get(), setupInfo.Get(), 1, nullptr, nullptr)); 
-        const TActorId followerId = runtime.GrabEdgeEvent<TEvTablet::TEvRestored>(edge)->Get()->UserTabletActor; 
-        Y_UNUSED(followerTablet); 
+        const TActorId followerTablet = runtime.Register(CreateTabletFollower(edge, tabletInfo.Get(), setupInfo.Get(), 1, nullptr, nullptr));
+        const TActorId followerId = runtime.GrabEdgeEvent<TEvTablet::TEvRestored>(edge)->Get()->UserTabletActor;
+        Y_UNUSED(followerTablet);
 
         const char *writeQuery = R"__((
                 (let row_ '('('key (Uint64 '42))))
@@ -2095,14 +2095,14 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         {
             THolder<TEvTablet::TEvLocalMKQL> reqWrite = MakeHolder<TEvTablet::TEvLocalMKQL>();
             reqWrite->Record.MutableProgram()->MutableProgram()->SetText(Sprintf(writeQuery, ui64(10)));
-            runtime.Send(new IEventHandle(leaderId, edge, reqWrite.Release())); 
+            runtime.Send(new IEventHandle(leaderId, edge, reqWrite.Release()));
 
             auto reply = runtime.GrabEdgeEvent<TEvTablet::TEvLocalMKQLResponse>(edge);
             UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetStatus(), 0);
         }
 
         {
-            runtime.Send(new IEventHandle(leaderTablet, edge, new TEvents::TEvPoisonPill())); 
+            runtime.Send(new IEventHandle(leaderTablet, edge, new TEvents::TEvPoisonPill()));
             auto reply = runtime.GrabEdgeEvent<TEvTablet::TEvTabletDead>(edge);
             UNIT_ASSERT_VALUES_EQUAL(reply->Get()->TabletID, tabletId);
         }
@@ -2110,7 +2110,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         {
             THolder<TEvTablet::TEvLocalMKQL> reqRead = MakeHolder<TEvTablet::TEvLocalMKQL>();
             reqRead->Record.MutableProgram()->MutableProgram()->SetText(readQuery);
-            runtime.Send(new IEventHandle(followerId, edge, reqRead.Release())); 
+            runtime.Send(new IEventHandle(followerId, edge, reqRead.Release()));
 
             auto reply = runtime.GrabEdgeEvent<TEvTablet::TEvLocalMKQLResponse>(edge);
             UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetStatus(), 0);
@@ -2118,21 +2118,21 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
         {
             NTabletPipe::TClientConfig pipeClientConfig;
-            pipeClientConfig.AllowFollower = true; 
-            pipeClientConfig.ForceFollower = true; 
+            pipeClientConfig.AllowFollower = true;
+            pipeClientConfig.ForceFollower = true;
             runtime.Register(NTabletPipe::CreateClient(edge, tabletId, pipeClientConfig));
 
             auto reply = runtime.GrabEdgeEvent<TEvTabletPipe::TEvClientConnected>(edge);
 
-            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Status, NKikimrProto::OK); 
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Status, NKikimrProto::OK);
         }
     }
 
-    Y_UNIT_TEST(OfflineFollowerContinueWork) { 
-        OfflineFollowerContinueWork(); 
+    Y_UNIT_TEST(OfflineFollowerContinueWork) {
+        OfflineFollowerContinueWork();
     }
 
-    void FollowerOfflineBoot() { 
+    void FollowerOfflineBoot() {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
 
@@ -2144,45 +2144,45 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         TTestActorRuntime &runtime = *server.GetRuntime();
 
         const ui64 tabletId = ChangeStateStorage(DummyTablet1, settings.Domain);
-        TIntrusivePtr<TTabletStorageInfo> tabletInfo = CreateTestTabletInfo(tabletId, TTabletTypes::TX_DUMMY); 
-        TIntrusivePtr<TTabletSetupInfo> setupInfo = new TTabletSetupInfo(&CreateFlatDummyTablet, TMailboxType::Simple, 0, TMailboxType::Simple, 0); 
+        TIntrusivePtr<TTabletStorageInfo> tabletInfo = CreateTestTabletInfo(tabletId, TTabletTypes::TX_DUMMY);
+        TIntrusivePtr<TTabletSetupInfo> setupInfo = new TTabletSetupInfo(&CreateFlatDummyTablet, TMailboxType::Simple, 0, TMailboxType::Simple, 0);
 
         const TActorId edge = runtime.AllocateEdgeActor();
 
         {
-            const TActorId leaderTablet = runtime.Register(CreateTablet(edge, tabletInfo.Get(), setupInfo.Get(), 0, nullptr, nullptr)); 
-            const TActorId leaderId = runtime.GrabEdgeEvent<TEvTablet::TEvRestored>(edge)->Get()->UserTabletActor; 
-            Y_UNUSED(leaderId); 
+            const TActorId leaderTablet = runtime.Register(CreateTablet(edge, tabletInfo.Get(), setupInfo.Get(), 0, nullptr, nullptr));
+            const TActorId leaderId = runtime.GrabEdgeEvent<TEvTablet::TEvRestored>(edge)->Get()->UserTabletActor;
+            Y_UNUSED(leaderId);
 
-            runtime.Send(new IEventHandle(leaderTablet, edge, new TEvents::TEvPoisonPill())); 
+            runtime.Send(new IEventHandle(leaderTablet, edge, new TEvents::TEvPoisonPill()));
             auto reply = runtime.GrabEdgeEvent<TEvTablet::TEvTabletDead>(edge);
             UNIT_ASSERT_VALUES_EQUAL(reply->Get()->TabletID, tabletId);
         }
 
-        const TActorId followerTablet = runtime.Register(CreateTabletFollower(edge, tabletInfo.Get(), setupInfo.Get(), 1, nullptr, nullptr)); 
-        Y_UNUSED(followerTablet); 
+        const TActorId followerTablet = runtime.Register(CreateTabletFollower(edge, tabletInfo.Get(), setupInfo.Get(), 1, nullptr, nullptr));
+        Y_UNUSED(followerTablet);
 
-        const TActorId followerId = runtime.GrabEdgeEvent<TEvTablet::TEvRestored>(edge)->Get()->UserTabletActor; 
-        Y_UNUSED(followerId); 
+        const TActorId followerId = runtime.GrabEdgeEvent<TEvTablet::TEvRestored>(edge)->Get()->UserTabletActor;
+        Y_UNUSED(followerId);
 
         {
             NTabletPipe::TClientConfig pipeClientConfig;
-            pipeClientConfig.AllowFollower = true; 
-            pipeClientConfig.ForceFollower = true; 
+            pipeClientConfig.AllowFollower = true;
+            pipeClientConfig.ForceFollower = true;
             pipeClientConfig.RetryPolicy = {.RetryLimitCount = 2};
             runtime.Register(NTabletPipe::CreateClient(edge, tabletId, pipeClientConfig));
 
             auto reply = runtime.GrabEdgeEvent<TEvTabletPipe::TEvClientConnected>(edge);
 
-            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Status, NKikimrProto::OK); 
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Status, NKikimrProto::OK);
         }
     }
 
-    Y_UNIT_TEST(FollowerOfflineBoot) { 
-        FollowerOfflineBoot(); 
+    Y_UNIT_TEST(FollowerOfflineBoot) {
+        FollowerOfflineBoot();
     }
 
-    Y_UNIT_TEST(OfflineFollowerLastConfirmedCommitRestored) { 
+    Y_UNIT_TEST(OfflineFollowerLastConfirmedCommitRestored) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
 
@@ -2195,16 +2195,16 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         TTestActorRuntime &runtime = *server.GetRuntime();
 
         const ui64 tabletId = ChangeStateStorage(DummyTablet1, settings.Domain);
-        TIntrusivePtr<TTabletStorageInfo> tabletInfo = CreateTestTabletInfo(tabletId, TTabletTypes::TX_DUMMY); 
-        TIntrusivePtr<TTabletSetupInfo> setupInfo = new TTabletSetupInfo(&CreateFlatDummyTablet, TMailboxType::Simple, 0, TMailboxType::Simple, 0); 
+        TIntrusivePtr<TTabletStorageInfo> tabletInfo = CreateTestTabletInfo(tabletId, TTabletTypes::TX_DUMMY);
+        TIntrusivePtr<TTabletSetupInfo> setupInfo = new TTabletSetupInfo(&CreateFlatDummyTablet, TMailboxType::Simple, 0, TMailboxType::Simple, 0);
 
         const TActorId edge = runtime.AllocateEdgeActor();
 
-        const TActorId leaderTablet = runtime.Register(CreateTablet(edge, tabletInfo.Get(), setupInfo.Get(), 0, nullptr, nullptr)); 
-        const TActorId leaderId = runtime.GrabEdgeEvent<TEvTablet::TEvRestored>(edge)->Get()->UserTabletActor; 
+        const TActorId leaderTablet = runtime.Register(CreateTablet(edge, tabletInfo.Get(), setupInfo.Get(), 0, nullptr, nullptr));
+        const TActorId leaderId = runtime.GrabEdgeEvent<TEvTablet::TEvRestored>(edge)->Get()->UserTabletActor;
 
-        const TActorId followerTablet = runtime.Register(CreateTabletFollower(edge, tabletInfo.Get(), setupInfo.Get(), 1, nullptr, nullptr)); 
-        const TActorId followerId = runtime.GrabEdgeEvent<TEvTablet::TEvRestored>(edge)->Get()->UserTabletActor; 
+        const TActorId followerTablet = runtime.Register(CreateTabletFollower(edge, tabletInfo.Get(), setupInfo.Get(), 1, nullptr, nullptr));
+        const TActorId followerId = runtime.GrabEdgeEvent<TEvTablet::TEvRestored>(edge)->Get()->UserTabletActor;
 
         const char *writeQuery = R"__((
                 (let row_ '('('key (Uint64 '42))))
@@ -2225,7 +2225,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         {
             THolder<TEvTablet::TEvLocalMKQL> reqWrite = MakeHolder<TEvTablet::TEvLocalMKQL>();
             reqWrite->Record.MutableProgram()->MutableProgram()->SetText(Sprintf(writeQuery, ui64(10)));
-            runtime.Send(new IEventHandle(leaderId, edge, reqWrite.Release())); 
+            runtime.Send(new IEventHandle(leaderId, edge, reqWrite.Release()));
 
             auto reply = runtime.GrabEdgeEvent<TEvTablet::TEvLocalMKQLResponse>(edge);
             UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetStatus(), 0);
@@ -2234,7 +2234,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         {
             THolder<TEvTablet::TEvLocalMKQL> reqRead = MakeHolder<TEvTablet::TEvLocalMKQL>();
             reqRead->Record.MutableProgram()->MutableProgram()->SetText(readQuery);
-            runtime.Send(new IEventHandle(followerId, edge, reqRead.Release())); 
+            runtime.Send(new IEventHandle(followerId, edge, reqRead.Release()));
 
             auto reply = runtime.GrabEdgeEvent<TEvTablet::TEvLocalMKQLResponse>(edge);
             UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetStatus(), 0);
@@ -2252,29 +2252,29 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         }
 
         {
-            // Kill leader 
-            runtime.Send(new IEventHandle(leaderTablet, edge, new TEvents::TEvPoisonPill())); 
+            // Kill leader
+            runtime.Send(new IEventHandle(leaderTablet, edge, new TEvents::TEvPoisonPill()));
             auto reply = runtime.GrabEdgeEvent<TEvTablet::TEvTabletDead>(edge);
             UNIT_ASSERT_VALUES_EQUAL(reply->Get()->TabletID, tabletId);
         }
 
         {
-            // Kill follower 
-            runtime.Send(new IEventHandle(followerTablet, edge, new TEvents::TEvPoisonPill())); 
+            // Kill follower
+            runtime.Send(new IEventHandle(followerTablet, edge, new TEvents::TEvPoisonPill()));
             auto reply = runtime.GrabEdgeEvent<TEvTablet::TEvTabletDead>(edge);
             UNIT_ASSERT_VALUES_EQUAL(reply->Get()->TabletID, tabletId);
         }
 
-        // Start a new follower (without leader) 
-        const TActorId followerTablet2 = runtime.Register(CreateTabletFollower(edge, tabletInfo.Get(), setupInfo.Get(), 1, nullptr, nullptr)); 
-        const TActorId followerId2 = runtime.GrabEdgeEvent<TEvTablet::TEvRestored>(edge)->Get()->UserTabletActor; 
-        Y_UNUSED(followerTablet2); 
+        // Start a new follower (without leader)
+        const TActorId followerTablet2 = runtime.Register(CreateTabletFollower(edge, tabletInfo.Get(), setupInfo.Get(), 1, nullptr, nullptr));
+        const TActorId followerId2 = runtime.GrabEdgeEvent<TEvTablet::TEvRestored>(edge)->Get()->UserTabletActor;
+        Y_UNUSED(followerTablet2);
 
         {
-            // Connect pipe to follower (indicates it's up and usable) 
+            // Connect pipe to follower (indicates it's up and usable)
             NTabletPipe::TClientConfig pipeClientConfig;
-            pipeClientConfig.AllowFollower = true; 
-            pipeClientConfig.ForceFollower = true; 
+            pipeClientConfig.AllowFollower = true;
+            pipeClientConfig.ForceFollower = true;
             pipeClientConfig.RetryPolicy = {.RetryLimitCount = 2};
             runtime.Register(NTabletPipe::CreateClient(edge, tabletId, pipeClientConfig));
 
@@ -2283,10 +2283,10 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         }
 
         {
-            // Read row from offline follower 
+            // Read row from offline follower
             THolder<TEvTablet::TEvLocalMKQL> reqRead = MakeHolder<TEvTablet::TEvLocalMKQL>();
             reqRead->Record.MutableProgram()->MutableProgram()->SetText(readQuery);
-            runtime.Send(new IEventHandle(followerId2, edge, reqRead.Release())); 
+            runtime.Send(new IEventHandle(followerId2, edge, reqRead.Release()));
 
             auto reply = runtime.GrabEdgeEvent<TEvTablet::TEvLocalMKQLResponse>(edge);
             UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetStatus(), 0);
@@ -2305,7 +2305,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
     }
 
-    Y_UNIT_TEST(OfflineFollowerLastUnconfirmedCommitIgnored) { 
+    Y_UNIT_TEST(OfflineFollowerLastUnconfirmedCommitIgnored) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
 
@@ -2318,16 +2318,16 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         TTestActorRuntime &runtime = *server.GetRuntime();
 
         const ui64 tabletId = ChangeStateStorage(DummyTablet1, settings.Domain);
-        TIntrusivePtr<TTabletStorageInfo> tabletInfo = CreateTestTabletInfo(tabletId, TTabletTypes::TX_DUMMY); 
-        TIntrusivePtr<TTabletSetupInfo> setupInfo = new TTabletSetupInfo(&CreateFlatDummyTablet, TMailboxType::Simple, 0, TMailboxType::Simple, 0); 
+        TIntrusivePtr<TTabletStorageInfo> tabletInfo = CreateTestTabletInfo(tabletId, TTabletTypes::TX_DUMMY);
+        TIntrusivePtr<TTabletSetupInfo> setupInfo = new TTabletSetupInfo(&CreateFlatDummyTablet, TMailboxType::Simple, 0, TMailboxType::Simple, 0);
 
         const TActorId edge = runtime.AllocateEdgeActor();
 
-        const TActorId leaderTablet = runtime.Register(CreateTablet(edge, tabletInfo.Get(), setupInfo.Get(), 0, nullptr, nullptr)); 
-        const TActorId leaderId = runtime.GrabEdgeEvent<TEvTablet::TEvRestored>(edge)->Get()->UserTabletActor; 
+        const TActorId leaderTablet = runtime.Register(CreateTablet(edge, tabletInfo.Get(), setupInfo.Get(), 0, nullptr, nullptr));
+        const TActorId leaderId = runtime.GrabEdgeEvent<TEvTablet::TEvRestored>(edge)->Get()->UserTabletActor;
 
-        const TActorId followerTablet = runtime.Register(CreateTabletFollower(edge, tabletInfo.Get(), setupInfo.Get(), 1, nullptr, nullptr)); 
-        const TActorId followerId = runtime.GrabEdgeEvent<TEvTablet::TEvRestored>(edge)->Get()->UserTabletActor; 
+        const TActorId followerTablet = runtime.Register(CreateTabletFollower(edge, tabletInfo.Get(), setupInfo.Get(), 1, nullptr, nullptr));
+        const TActorId followerId = runtime.GrabEdgeEvent<TEvTablet::TEvRestored>(edge)->Get()->UserTabletActor;
 
         const char *writeQuery = R"__((
                 (let row_ '('('key (Uint64 '42))))
@@ -2372,7 +2372,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         {
             THolder<TEvTablet::TEvLocalMKQL> reqWrite = MakeHolder<TEvTablet::TEvLocalMKQL>();
             reqWrite->Record.MutableProgram()->MutableProgram()->SetText(Sprintf(writeQuery, ui64(10)));
-            runtime.Send(new IEventHandle(leaderId, edge, reqWrite.Release())); 
+            runtime.Send(new IEventHandle(leaderId, edge, reqWrite.Release()));
 
             auto reply = runtime.GrabEdgeEvent<TEvTablet::TEvLocalMKQLResponse>(edge);
             UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetStatus(), 0);
@@ -2381,7 +2381,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         {
             THolder<TEvTablet::TEvLocalMKQL> reqRead = MakeHolder<TEvTablet::TEvLocalMKQL>();
             reqRead->Record.MutableProgram()->MutableProgram()->SetText(readQuery);
-            runtime.Send(new IEventHandle(followerId, edge, reqRead.Release())); 
+            runtime.Send(new IEventHandle(followerId, edge, reqRead.Release()));
 
             auto reply = runtime.GrabEdgeEvent<TEvTablet::TEvLocalMKQLResponse>(edge);
             UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetStatus(), 0);
@@ -2395,29 +2395,29 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         }
 
         {
-            // Kill leader 
-            runtime.Send(new IEventHandle(leaderTablet, edge, new TEvents::TEvPoisonPill())); 
+            // Kill leader
+            runtime.Send(new IEventHandle(leaderTablet, edge, new TEvents::TEvPoisonPill()));
             auto reply = runtime.GrabEdgeEvent<TEvTablet::TEvTabletDead>(edge);
             UNIT_ASSERT_VALUES_EQUAL(reply->Get()->TabletID, tabletId);
         }
 
         {
-            // Kill follower 
-            runtime.Send(new IEventHandle(followerTablet, edge, new TEvents::TEvPoisonPill())); 
+            // Kill follower
+            runtime.Send(new IEventHandle(followerTablet, edge, new TEvents::TEvPoisonPill()));
             auto reply = runtime.GrabEdgeEvent<TEvTablet::TEvTabletDead>(edge);
             UNIT_ASSERT_VALUES_EQUAL(reply->Get()->TabletID, tabletId);
         }
 
-        // Start a new follower (without leader) 
-        const TActorId followerTablet2 = runtime.Register(CreateTabletFollower(edge, tabletInfo.Get(), setupInfo.Get(), 1, nullptr, nullptr)); 
-        const TActorId followerId2 = runtime.GrabEdgeEvent<TEvTablet::TEvRestored>(edge)->Get()->UserTabletActor; 
-        Y_UNUSED(followerTablet2); 
+        // Start a new follower (without leader)
+        const TActorId followerTablet2 = runtime.Register(CreateTabletFollower(edge, tabletInfo.Get(), setupInfo.Get(), 1, nullptr, nullptr));
+        const TActorId followerId2 = runtime.GrabEdgeEvent<TEvTablet::TEvRestored>(edge)->Get()->UserTabletActor;
+        Y_UNUSED(followerTablet2);
 
         {
-            // Connect pipe to follower (indicates it's up and usable) 
+            // Connect pipe to follower (indicates it's up and usable)
             NTabletPipe::TClientConfig pipeClientConfig;
-            pipeClientConfig.AllowFollower = true; 
-            pipeClientConfig.ForceFollower = true; 
+            pipeClientConfig.AllowFollower = true;
+            pipeClientConfig.ForceFollower = true;
             pipeClientConfig.RetryPolicy = {.RetryLimitCount = 2};
             runtime.Register(NTabletPipe::CreateClient(edge, tabletId, pipeClientConfig));
 
@@ -2426,10 +2426,10 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         }
 
         {
-            // Read row from offline follower (unconfirmed commit must be ignored) 
+            // Read row from offline follower (unconfirmed commit must be ignored)
             THolder<TEvTablet::TEvLocalMKQL> reqRead = MakeHolder<TEvTablet::TEvLocalMKQL>();
             reqRead->Record.MutableProgram()->MutableProgram()->SetText(readQuery);
-            runtime.Send(new IEventHandle(followerId2, edge, reqRead.Release())); 
+            runtime.Send(new IEventHandle(followerId2, edge, reqRead.Release()));
 
             auto reply = runtime.GrabEdgeEvent<TEvTablet::TEvLocalMKQLResponse>(edge);
             UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetStatus(), 0);
@@ -2449,22 +2449,22 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         }
 
         {
-            // Kill follower 2 
-            runtime.Send(new IEventHandle(followerTablet2, edge, new TEvents::TEvPoisonPill())); 
+            // Kill follower 2
+            runtime.Send(new IEventHandle(followerTablet2, edge, new TEvents::TEvPoisonPill()));
             auto reply = runtime.GrabEdgeEvent<TEvTablet::TEvTabletDead>(edge);
             UNIT_ASSERT_VALUES_EQUAL(reply->Get()->TabletID, tabletId);
         }
 
-        // Start a new follower (without leader) 
-        const TActorId followerTablet3 = runtime.Register(CreateTabletFollower(edge, tabletInfo.Get(), setupInfo.Get(), 1, nullptr, nullptr)); 
-        const TActorId followerId3 = runtime.GrabEdgeEvent<TEvTablet::TEvRestored>(edge)->Get()->UserTabletActor; 
-        Y_UNUSED(followerTablet3); 
+        // Start a new follower (without leader)
+        const TActorId followerTablet3 = runtime.Register(CreateTabletFollower(edge, tabletInfo.Get(), setupInfo.Get(), 1, nullptr, nullptr));
+        const TActorId followerId3 = runtime.GrabEdgeEvent<TEvTablet::TEvRestored>(edge)->Get()->UserTabletActor;
+        Y_UNUSED(followerTablet3);
 
         {
-            // Connect pipe to follower (indicates it's up and usable) 
+            // Connect pipe to follower (indicates it's up and usable)
             NTabletPipe::TClientConfig pipeClientConfig;
-            pipeClientConfig.AllowFollower = true; 
-            pipeClientConfig.ForceFollower = true; 
+            pipeClientConfig.AllowFollower = true;
+            pipeClientConfig.ForceFollower = true;
             pipeClientConfig.RetryPolicy = {.RetryLimitCount = 2};
             runtime.Register(NTabletPipe::CreateClient(edge, tabletId, pipeClientConfig));
 
@@ -2473,10 +2473,10 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         }
 
         {
-            // Read row from offline follower 
+            // Read row from offline follower
             THolder<TEvTablet::TEvLocalMKQL> reqRead = MakeHolder<TEvTablet::TEvLocalMKQL>();
             reqRead->Record.MutableProgram()->MutableProgram()->SetText(readQuery);
-            runtime.Send(new IEventHandle(followerId3, edge, reqRead.Release())); 
+            runtime.Send(new IEventHandle(followerId3, edge, reqRead.Release()));
 
             auto reply = runtime.GrabEdgeEvent<TEvTablet::TEvLocalMKQLResponse>(edge);
             UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetStatus(), 0);
@@ -2495,7 +2495,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
     }
 
-    Y_UNIT_TEST(DeadFollowerDoesNotBlockGc) { 
+    Y_UNIT_TEST(DeadFollowerDoesNotBlockGc) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
 
@@ -2509,16 +2509,16 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         TTestActorRuntime &runtime = *server.GetRuntime();
 
         const ui64 tabletId = ChangeStateStorage(DummyTablet1, settings.Domain);
-        TIntrusivePtr<TTabletStorageInfo> tabletInfo = CreateTestTabletInfo(tabletId, TTabletTypes::TX_DUMMY); 
-        TIntrusivePtr<TTabletSetupInfo> setupInfo = new TTabletSetupInfo(&CreateFlatDummyTablet, TMailboxType::Simple, 0, TMailboxType::Simple, 0); 
+        TIntrusivePtr<TTabletStorageInfo> tabletInfo = CreateTestTabletInfo(tabletId, TTabletTypes::TX_DUMMY);
+        TIntrusivePtr<TTabletSetupInfo> setupInfo = new TTabletSetupInfo(&CreateFlatDummyTablet, TMailboxType::Simple, 0, TMailboxType::Simple, 0);
 
-        // Start leader on node 1 
-        const TActorId leaderEdge = runtime.AllocateEdgeActor(); 
-        const TActorId leaderTablet = runtime.Register(CreateTablet(leaderEdge, tabletInfo.Get(), setupInfo.Get(), 0, nullptr, nullptr)); 
-        const TActorId leaderId = runtime.GrabEdgeEvent<TEvTablet::TEvRestored>(leaderEdge)->Get()->UserTabletActor; 
-        Y_UNUSED(leaderTablet); 
+        // Start leader on node 1
+        const TActorId leaderEdge = runtime.AllocateEdgeActor();
+        const TActorId leaderTablet = runtime.Register(CreateTablet(leaderEdge, tabletInfo.Get(), setupInfo.Get(), 0, nullptr, nullptr));
+        const TActorId leaderId = runtime.GrabEdgeEvent<TEvTablet::TEvRestored>(leaderEdge)->Get()->UserTabletActor;
+        Y_UNUSED(leaderTablet);
 
-        auto doLeaderWrite = [&](ui64 key, ui64 value) { 
+        auto doLeaderWrite = [&](ui64 key, ui64 value) {
             const char *writeQuery = R"__((
                     (let row_ '('('key (Uint64 '%lu))))
                     (let update_ '('('v_ui64 (Uint64 '%lu))))
@@ -2528,20 +2528,20 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
             THolder<TEvTablet::TEvLocalMKQL> reqWrite = MakeHolder<TEvTablet::TEvLocalMKQL>();
             reqWrite->Record.MutableProgram()->MutableProgram()->SetText(Sprintf(writeQuery, key, value));
-            runtime.Send(new IEventHandle(leaderId, leaderEdge, reqWrite.Release())); 
+            runtime.Send(new IEventHandle(leaderId, leaderEdge, reqWrite.Release()));
 
-            auto reply = runtime.GrabEdgeEvent<TEvTablet::TEvLocalMKQLResponse>(leaderEdge); 
+            auto reply = runtime.GrabEdgeEvent<TEvTablet::TEvLocalMKQLResponse>(leaderEdge);
             UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetStatus(), 0);
         };
 
-        doLeaderWrite(42, 51); 
+        doLeaderWrite(42, 51);
 
-        // Start follower on node 2 
-        const TActorId followerEdge = runtime.AllocateEdgeActor(1); 
-        const TActorId followerTablet = runtime.Register(CreateTabletFollower(followerEdge, tabletInfo.Get(), setupInfo.Get(), 1, nullptr, nullptr), 1); 
-        const TActorId followerId = runtime.GrabEdgeEvent<TEvTablet::TEvRestored>(followerEdge)->Get()->UserTabletActor; 
+        // Start follower on node 2
+        const TActorId followerEdge = runtime.AllocateEdgeActor(1);
+        const TActorId followerTablet = runtime.Register(CreateTabletFollower(followerEdge, tabletInfo.Get(), setupInfo.Get(), 1, nullptr, nullptr), 1);
+        const TActorId followerId = runtime.GrabEdgeEvent<TEvTablet::TEvRestored>(followerEdge)->Get()->UserTabletActor;
 
-        auto doFollowerRead = [&](ui64 key) -> TMaybe<ui64> { 
+        auto doFollowerRead = [&](ui64 key) -> TMaybe<ui64> {
             const char *readQuery = R"__((
                     (let row_ '('('key (Uint64 '%lu))))
                     (let select_ '('v_ui64))
@@ -2553,9 +2553,9 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
             THolder<TEvTablet::TEvLocalMKQL> reqRead = MakeHolder<TEvTablet::TEvLocalMKQL>();
             reqRead->Record.MutableProgram()->MutableProgram()->SetText(Sprintf(readQuery, key));
-            runtime.Send(new IEventHandle(followerId, followerEdge, reqRead.Release()), 1); 
+            runtime.Send(new IEventHandle(followerId, followerEdge, reqRead.Release()), 1);
 
-            auto reply = runtime.GrabEdgeEvent<TEvTablet::TEvLocalMKQLResponse>(followerEdge); 
+            auto reply = runtime.GrabEdgeEvent<TEvTablet::TEvLocalMKQLResponse>(followerEdge);
             UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetStatus(), 0);
             // Cerr << reply->Get()->Record.DebugString() << Endl;
             const auto res = reply->Get()->Record
@@ -2575,17 +2575,17 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         };
 
         // Perform basic sanity checks
-        UNIT_ASSERT_VALUES_EQUAL(doFollowerRead(41), Nothing()); 
-        UNIT_ASSERT_VALUES_EQUAL(doFollowerRead(42), 51u); 
+        UNIT_ASSERT_VALUES_EQUAL(doFollowerRead(41), Nothing());
+        UNIT_ASSERT_VALUES_EQUAL(doFollowerRead(42), 51u);
 
         ui64 detachCounter = 0;
         ui64 gcWaitCounter = 0;
         ui64 gcAppliedCounter = 0;
         auto nemesis = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-                case TEvTablet::TEvFollowerDetach::EventType: { 
-                    // Drop TEvFollowerDetach and simulate interconnect disconnection 
-                    Cerr << "... dropping TEvFollowerDetach" << Endl; 
+                case TEvTablet::TEvFollowerDetach::EventType: {
+                    // Drop TEvFollowerDetach and simulate interconnect disconnection
+                    Cerr << "... dropping TEvFollowerDetach" << Endl;
                     ++detachCounter;
                     runtime.Send(
                         new IEventHandle(
@@ -2597,18 +2597,18 @@ Y_UNIT_TEST_SUITE(TClientTest) {
                 }
                 case TEvTablet::TEvCommit::EventType: {
                     const auto* msg = ev->Get<TEvTablet::TEvCommit>();
-                    if (msg->TabletID == tabletId && msg->WaitFollowerGcAck) { 
+                    if (msg->TabletID == tabletId && msg->WaitFollowerGcAck) {
                         Cerr << "... observing TEvCommit at "
                             << msg->Generation << ':' << msg->Step
-                            << " with WaitFollowerGcAck" << Endl; 
+                            << " with WaitFollowerGcAck" << Endl;
                         ++gcWaitCounter;
                     }
                     break;
                 }
-                case TEvTablet::TEvFollowerGcApplied::EventType: { 
-                    const auto* msg = ev->Get<TEvTablet::TEvFollowerGcApplied>(); 
+                case TEvTablet::TEvFollowerGcApplied::EventType: {
+                    const auto* msg = ev->Get<TEvTablet::TEvFollowerGcApplied>();
                     if (msg->TabletID == tabletId) {
-                        Cerr << "... observing TEvFollowerGcApplied at " 
+                        Cerr << "... observing TEvFollowerGcApplied at "
                             << msg->Generation << ':' << msg->Step
                             << Endl;
                         ++gcAppliedCounter;
@@ -2621,10 +2621,10 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         runtime.SetObserverFunc(nemesis);
 
         {
-            // Kill follower 
-            Cerr << "... killing follower " << followerTablet << Endl; 
-            runtime.Send(new IEventHandle(followerTablet, followerEdge, new TEvents::TEvPoisonPill()), 1); 
-            auto reply = runtime.GrabEdgeEvent<TEvTablet::TEvTabletDead>(followerEdge); 
+            // Kill follower
+            Cerr << "... killing follower " << followerTablet << Endl;
+            runtime.Send(new IEventHandle(followerTablet, followerEdge, new TEvents::TEvPoisonPill()), 1);
+            auto reply = runtime.GrabEdgeEvent<TEvTablet::TEvTabletDead>(followerEdge);
             UNIT_ASSERT_VALUES_EQUAL(reply->Get()->TabletID, tabletId);
         }
 
@@ -2640,8 +2640,8 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             }
         };
 
-        // Wait until follower attempts to detach 
-        waitFor([&](){ return detachCounter > 0; }, "TEvFollowerDetach message"); 
+        // Wait until follower attempts to detach
+        waitFor([&](){ return detachCounter > 0; }, "TEvFollowerDetach message");
         UNIT_ASSERT_VALUES_EQUAL(detachCounter, 1u);
 
         // Perform a large number of write transactions
@@ -2650,10 +2650,10 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         gcAppliedCounter = 0;
         Cerr << "... performing multiple writes" << Endl;
         for (ui64 key = 1; key <= 1200; ++key) {
-            doLeaderWrite(key, key); 
+            doLeaderWrite(key, key);
         }
-        waitFor([&](){ return gcWaitCounter > 0; }, "WaitForFollowerGcAck commits"); 
-        waitFor([&](){ return gcAppliedCounter >= gcWaitCounter; }, "TEvFollowerGcApplied messages"); 
+        waitFor([&](){ return gcWaitCounter > 0; }, "WaitForFollowerGcAck commits");
+        waitFor([&](){ return gcAppliedCounter >= gcWaitCounter; }, "TEvFollowerGcApplied messages");
     }
 
     Y_UNIT_TEST(ErrorWaitForEarlierCommits) {
@@ -2670,15 +2670,15 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         TTestActorRuntime &runtime = *server.GetRuntime();
 
         const ui64 tabletId = ChangeStateStorage(DummyTablet1, settings.Domain);
-        TIntrusivePtr<TTabletStorageInfo> tabletInfo = CreateTestTabletInfo(tabletId, TTabletTypes::TX_DUMMY); 
-        TIntrusivePtr<TTabletSetupInfo> setupInfo = new TTabletSetupInfo(&CreateFlatDummyTablet, TMailboxType::Simple, 0, TMailboxType::Simple, 0); 
+        TIntrusivePtr<TTabletStorageInfo> tabletInfo = CreateTestTabletInfo(tabletId, TTabletTypes::TX_DUMMY);
+        TIntrusivePtr<TTabletSetupInfo> setupInfo = new TTabletSetupInfo(&CreateFlatDummyTablet, TMailboxType::Simple, 0, TMailboxType::Simple, 0);
 
-        const TActorId leaderEdge = runtime.AllocateEdgeActor(); 
-        const TActorId leaderTablet = runtime.Register(CreateTablet(leaderEdge, tabletInfo.Get(), setupInfo.Get(), 0, nullptr, nullptr)); 
-        const TActorId leaderId = runtime.GrabEdgeEvent<TEvTablet::TEvRestored>(leaderEdge)->Get()->UserTabletActor; 
-        Y_UNUSED(leaderTablet); 
+        const TActorId leaderEdge = runtime.AllocateEdgeActor();
+        const TActorId leaderTablet = runtime.Register(CreateTablet(leaderEdge, tabletInfo.Get(), setupInfo.Get(), 0, nullptr, nullptr));
+        const TActorId leaderId = runtime.GrabEdgeEvent<TEvTablet::TEvRestored>(leaderEdge)->Get()->UserTabletActor;
+        Y_UNUSED(leaderTablet);
 
-        auto sendLeaderWrite = [&](ui64 key, ui64 value) -> TActorId { 
+        auto sendLeaderWrite = [&](ui64 key, ui64 value) -> TActorId {
             const char *writeQuery = R"__((
                     (let row_ '('('key (Uint64 '%lu))))
                     (let update_ '('('v_ui64 (Uint64 '%lu))))
@@ -2689,16 +2689,16 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             TActorId edge = runtime.AllocateEdgeActor();
             THolder<TEvTablet::TEvLocalMKQL> reqWrite = MakeHolder<TEvTablet::TEvLocalMKQL>();
             reqWrite->Record.MutableProgram()->MutableProgram()->SetText(Sprintf(writeQuery, key, value));
-            runtime.Send(new IEventHandle(leaderId, edge, reqWrite.Release())); 
+            runtime.Send(new IEventHandle(leaderId, edge, reqWrite.Release()));
             return edge;
         };
 
-        auto waitLeaderReply = [&](const TActorId& edge) { 
+        auto waitLeaderReply = [&](const TActorId& edge) {
             auto reply = runtime.GrabEdgeEvent<TEvTablet::TEvLocalMKQLResponse>(edge);
             UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetStatus(), 0);
         };
 
-        waitLeaderReply(sendLeaderWrite(42, 42)); 
+        waitLeaderReply(sendLeaderWrite(42, 42));
 
         bool logResultsCapture = true;
         TVector<THolder<IEventHandle>> logResultsEvents;
@@ -2728,11 +2728,11 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             }
         };
 
-        auto write43 = sendLeaderWrite(43, 430); 
+        auto write43 = sendLeaderWrite(43, 430);
         waitFor([&]{ return logResultsEvents.size() >= 1; }, "first log write result");
         UNIT_ASSERT_VALUES_EQUAL(logResultsEvents.size(), 1u);
 
-        auto write44 = sendLeaderWrite(44, 440); 
+        auto write44 = sendLeaderWrite(44, 440);
         waitFor([&]{ return logResultsEvents.size() >= 2; }, "second log write result");
         UNIT_ASSERT_VALUES_EQUAL(logResultsEvents.size(), 2u);
         Y_UNUSED(write44);
@@ -2751,10 +2751,10 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
         // write43 should succeed!
         Cerr << "... waiting for first tx result" << Endl;
-        waitLeaderReply(write43); 
+        waitLeaderReply(write43);
     }
 
-    Y_UNIT_TEST(OfflineFollowerNoGcReorder) { 
+    Y_UNIT_TEST(OfflineFollowerNoGcReorder) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
 
@@ -2768,19 +2768,19 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         TTestActorRuntime &runtime = *server.GetRuntime();
 
         const ui64 tabletId = ChangeStateStorage(DummyTablet1, settings.Domain);
-        TIntrusivePtr<TTabletStorageInfo> tabletInfo = CreateTestTabletInfo(tabletId, TTabletTypes::TX_DUMMY); 
-        TIntrusivePtr<TTabletSetupInfo> setupInfo = new TTabletSetupInfo(&CreateFlatDummyTablet, TMailboxType::Simple, 0, TMailboxType::Simple, 0); 
+        TIntrusivePtr<TTabletStorageInfo> tabletInfo = CreateTestTabletInfo(tabletId, TTabletTypes::TX_DUMMY);
+        TIntrusivePtr<TTabletSetupInfo> setupInfo = new TTabletSetupInfo(&CreateFlatDummyTablet, TMailboxType::Simple, 0, TMailboxType::Simple, 0);
 
         const TActorId edge = runtime.AllocateEdgeActor();
 
-        const TActorId leaderTablet = runtime.Register(CreateTablet(edge, tabletInfo.Get(), setupInfo.Get(), 0, nullptr, nullptr)); 
-        const TActorId leaderId = runtime.GrabEdgeEvent<TEvTablet::TEvRestored>(edge)->Get()->UserTabletActor; 
-        Y_UNUSED(leaderTablet); 
+        const TActorId leaderTablet = runtime.Register(CreateTablet(edge, tabletInfo.Get(), setupInfo.Get(), 0, nullptr, nullptr));
+        const TActorId leaderId = runtime.GrabEdgeEvent<TEvTablet::TEvRestored>(edge)->Get()->UserTabletActor;
+        Y_UNUSED(leaderTablet);
 
-        const TActorId followerTablet = runtime.Register(CreateTabletFollower(edge, tabletInfo.Get(), setupInfo.Get(), 1, nullptr, nullptr)); 
-        const TActorId followerId = runtime.GrabEdgeEvent<TEvTablet::TEvRestored>(edge)->Get()->UserTabletActor; 
-        Y_UNUSED(followerTablet); 
-        Y_UNUSED(followerId); 
+        const TActorId followerTablet = runtime.Register(CreateTabletFollower(edge, tabletInfo.Get(), setupInfo.Get(), 1, nullptr, nullptr));
+        const TActorId followerId = runtime.GrabEdgeEvent<TEvTablet::TEvRestored>(edge)->Get()->UserTabletActor;
+        Y_UNUSED(followerTablet);
+        Y_UNUSED(followerId);
 
         const char *writeQuery = R"__((
                 (let row_ '('('key (Uint64 '42))))
@@ -2840,7 +2840,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         for (int i = 0; i < 350; ++i) {
             THolder<TEvTablet::TEvLocalMKQL> reqWrite = MakeHolder<TEvTablet::TEvLocalMKQL>();
             reqWrite->Record.MutableProgram()->MutableProgram()->SetText(Sprintf(writeQuery, ui64(i + 10)));
-            runtime.Send(new IEventHandle(leaderId, edge, reqWrite.Release())); 
+            runtime.Send(new IEventHandle(leaderId, edge, reqWrite.Release()));
 
             auto reply = runtime.GrabEdgeEvent<TEvTablet::TEvLocalMKQLResponse>(edge);
             UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetStatus(), 0);
@@ -2856,7 +2856,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         for (int i = 0; i < 350; ++i) {
             THolder<TEvTablet::TEvLocalMKQL> reqWrite = MakeHolder<TEvTablet::TEvLocalMKQL>();
             reqWrite->Record.MutableProgram()->MutableProgram()->SetText(Sprintf(writeQuery, ui64(i + 10)));
-            runtime.Send(new IEventHandle(leaderId, edge, reqWrite.Release())); 
+            runtime.Send(new IEventHandle(leaderId, edge, reqWrite.Release()));
 
             auto reply = runtime.GrabEdgeEvent<TEvTablet::TEvLocalMKQLResponse>(edge);
             UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetStatus(), 0);

@@ -301,7 +301,7 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
                 << ", shard# " << shardId);
 
             auto cancel = MakeHolder<TEvDataShard::TEvCancelTransactionProposal>(TxId);
-            Send(LeaderPipeCache, new TEvPipeCache::TEvForward(cancel.Release(), shardId, false)); 
+            Send(LeaderPipeCache, new TEvPipeCache::TEvForward(cancel.Release(), shardId, false));
         }
     }
 
@@ -326,7 +326,7 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
         LOG_D("Handle TEvTxUserProxy::TEvAllocateTxIdResult");
 
         TxId = ev->Get()->TxId;
-        LeaderPipeCache = ev->Get()->Services.LeaderPipeCache; 
+        LeaderPipeCache = ev->Get()->Services.LeaderPipeCache;
         Mon = ev->Get()->TxProxyMon;
 
         ResolveTables();
@@ -745,7 +745,7 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
                     NKikimrTxDataShard::TX_KIND_DISTRIBUTED_ERASE, SelfId(), TxId, tx.SerializeAsString()
                 );
 
-                Send(LeaderPipeCache, new TEvPipeCache::TEvForward(propose.Release(), shardId, true)); 
+                Send(LeaderPipeCache, new TEvPipeCache::TEvForward(propose.Release(), shardId, true));
 
                 Y_VERIFY_DEBUG(!Shards.contains(shardId));
                 Shards.insert(shardId);
@@ -915,7 +915,7 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
             PendingResult.insert(shardId);
         }
 
-        Send(LeaderPipeCache, new TEvPipeCache::TEvForward(propose.Release(), SelectedCoordinator, true)); 
+        Send(LeaderPipeCache, new TEvPipeCache::TEvForward(propose.Release(), SelectedCoordinator, true));
         Become(&TThis::StatePlan);
     }
 
@@ -1093,7 +1093,7 @@ private:
     bool ResolvingKeys;
 
     ui64 TxId;
-    TActorId LeaderPipeCache; 
+    TActorId LeaderPipeCache;
     TIntrusivePtr<NTxProxy::TTxProxyMon> Mon;
 
     THashMap<TTableId, TTableInfo> TableInfos;

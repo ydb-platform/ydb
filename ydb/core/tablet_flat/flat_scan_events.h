@@ -24,7 +24,7 @@ namespace NOps {
         using EAbort = NTable::EAbort;
 
         TEvResult(ui64 serial, EAbort abort, THolder<TScanSnapshot> snapshot,
-                    TAutoPtr<IDestructable> result) 
+                    TAutoPtr<IDestructable> result)
             : Serial(serial)
             , Status(abort)
             , Result(result)
@@ -36,10 +36,10 @@ namespace NOps {
 
         ui64 Serial = 0;
         EAbort Status = EAbort::None;
-        TAutoPtr<IDestructable> Result; 
-        TIntrusivePtr<TBarrier> Barrier; 
-        TAutoPtr<NTable::TSubset> Subset; 
-        TAutoPtr<NTable::NFwd::TSeen> Trace; /* Seen blobs but not materialized */ 
+        TAutoPtr<IDestructable> Result;
+        TIntrusivePtr<TBarrier> Barrier;
+        TAutoPtr<NTable::TSubset> Subset;
+        TAutoPtr<NTable::NFwd::TSeen> Trace; /* Seen blobs but not materialized */
     };
 
     struct TEvScanStat : public TEventLocal<TEvScanStat, ui32(EEv::ScanStat)> {

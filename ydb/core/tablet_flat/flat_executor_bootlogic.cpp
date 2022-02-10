@@ -56,11 +56,11 @@ void TExecutorBootLogic::Describe(IOutputStream &out) const noexcept
     return Steps->Describe(out);
 }
 
-TExecutorBootLogic::EOpResult TExecutorBootLogic::ReceiveFollowerBoot( 
-        TEvTablet::TEvFBoot::TPtr &ev, 
+TExecutorBootLogic::EOpResult TExecutorBootLogic::ReceiveFollowerBoot(
+        TEvTablet::TEvFBoot::TPtr &ev,
         TExecutorCaches &&caches)
 {
-    TEvTablet::TEvFBoot *msg = ev->Get(); 
+    TEvTablet::TEvFBoot *msg = ev->Get();
     PrepareEnv(true, msg->Generation, std::move(caches));
 
     if (msg->DependencyGraph) {
@@ -68,11 +68,11 @@ TExecutorBootLogic::EOpResult TExecutorBootLogic::ReceiveFollowerBoot(
     } else {
         auto *update = msg->Update.Get();
         Y_VERIFY(update->IsSnapshot);
-        Y_VERIFY(!update->NeedFollowerGcAck); 
+        Y_VERIFY(!update->NeedFollowerGcAck);
 
         if (auto logl = Steps->Logger()->Log(ELnLev::Debug))
             logl
-            << NFmt::Do(State()) << " start follower from log" 
+            << NFmt::Do(State()) << " start follower from log"
             << " snapshot " << State().Generation << ":" << update->Step;
 
         TString body;
@@ -120,10 +120,10 @@ void TExecutorBootLogic::PrepareEnv(bool follower, ui32 gen, TExecutorCaches cac
 
     LoadBlobQueue.Config.TabletID = Info->TabletID;
     LoadBlobQueue.Config.Generation = gen;
-    LoadBlobQueue.Config.Follower = follower; 
+    LoadBlobQueue.Config.Follower = follower;
     LoadBlobQueue.Config.NoDataCounter = GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_boot_nodata", true);
 
-    State_ = new NBoot::TBack(follower, Info->TabletID, gen); 
+    State_ = new NBoot::TBack(follower, Info->TabletID, gen);
     State().Scheme = new NTable::TScheme;
     State().PageCaches = std::move(caches.PageCaches);
     State().TxStatusCaches = std::move(caches.TxStatusCaches);
@@ -132,7 +132,7 @@ void TExecutorBootLogic::PrepareEnv(bool follower, ui32 gen, TExecutorCaches cac
 
     Result_ = new NBoot::TResult;
 
-    if (follower) { 
+    if (follower) {
         /* Required for TLargeGlobId-less TPart data (Evolution < 12) */
 
         Result().Loans = new TExecutorBorrowLogic(nullptr);
@@ -149,7 +149,7 @@ void TExecutorBootLogic::PrepareEnv(bool follower, ui32 gen, TExecutorCaches cac
     }
 }
 
-void TExecutorBootLogic::LoadEntry(TIntrusivePtr<NBoot::TLoadBlobs> entry) { 
+void TExecutorBootLogic::LoadEntry(TIntrusivePtr<NBoot::TLoadBlobs> entry) {
     if (auto logl = Steps->Logger()->Log(ELnLev::Debug)) {
         logl
             << NFmt::Do(State()) << " Loading " << NFmt::Do(entry->LargeGlobId);
@@ -168,7 +168,7 @@ void TExecutorBootLogic::LoadEntry(TIntrusivePtr<NBoot::TLoadBlobs> entry) {
     }
 }
 
-NBoot::TSpawned TExecutorBootLogic::LoadPages(NBoot::IStep *step, TAutoPtr<NPageCollection::TFetch> req) { 
+NBoot::TSpawned TExecutorBootLogic::LoadPages(NBoot::IStep *step, TAutoPtr<NPageCollection::TFetch> req) {
     auto success = Loads.insert(std::make_pair(req->PageCollection.Get(), step)).second;
 
     Y_VERIFY(success, "IPageCollection queued twice for loading");
@@ -212,7 +212,7 @@ TExecutorBootLogic::EOpResult TExecutorBootLogic::CheckCompletion()
     if (Loads)
         return OpResultContinue;
 
-    if (State().Follower || Restored) { 
+    if (State().Follower || Restored) {
         if (auto logl = Steps->Logger()->Log(ELnLev::Info)) {
             auto spent = TAppData::TimeProvider->Now() - BootStartTime;
 
@@ -293,10 +293,10 @@ TAutoPtr<NBoot::TResult> TExecutorBootLogic::ExtractState() noexcept {
 void TExecutorBootLogic::Cancel() {
 }
 
-void TExecutorBootLogic::FollowersSyncComplete() { 
+void TExecutorBootLogic::FollowersSyncComplete() {
     Y_VERIFY(Result_);
     Y_VERIFY(Result().GcLogic);
-    Result().GcLogic->FollowersSyncComplete(true); 
+    Result().GcLogic->FollowersSyncComplete(true);
 }
 
 TExecutorCaches TExecutorBootLogic::DetachCaches() {

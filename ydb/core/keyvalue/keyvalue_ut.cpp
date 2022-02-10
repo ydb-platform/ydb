@@ -82,8 +82,8 @@ struct TTestContext {
         SetupLogging(*Runtime);
         SetupTabletServices(*Runtime);
         setup(*Runtime);
-        CreateTestBootstrapper(*Runtime, 
-            CreateTestTabletInfo(TabletId, TabletType, TErasureType::ErasureNone), 
+        CreateTestBootstrapper(*Runtime,
+            CreateTestTabletInfo(TabletId, TabletType, TErasureType::ErasureNone),
             &CreateKeyValueFlat);
 
         TDispatchOptions options;

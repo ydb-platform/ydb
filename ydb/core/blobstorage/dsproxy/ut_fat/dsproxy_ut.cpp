@@ -4194,8 +4194,8 @@ public:
         setup1->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(env->ProxyId, bsproxySetup));
 
         TTempDir tempDir;
-        NPDisk::TKey mainKey = 123; 
-        NPDisk::TKey badMainKey = 124; 
+        NPDisk::TKey mainKey = 123;
+        NPDisk::TKey badMainKey = 124;
         for (ui32 failDomainIdx = 0; failDomainIdx < env->FailDomainCount; ++failDomainIdx) {
             for (ui32 driveIdx = 0; driveIdx < env->DrivesPerFailDomain; ++driveIdx) {
                 ui32 i = env->GetVDiskTestIdx(failDomainIdx, driveIdx);
@@ -4217,7 +4217,7 @@ public:
                 if (!SectorMapByPath[filePath]) {
                     SectorMapByPath[filePath].Reset(new NPDisk::TSectorMap(diskSizeBytes));
                     FormatPDisk(filePath, diskSizeBytes, 4 << 10, chunkSize, pDiskGuid,
-                            0x123, 0x456, 0x789, isBad ? badMainKey : mainKey, "", false, false, 
+                            0x123, 0x456, 0x789, isBad ? badMainKey : mainKey, "", false, false,
                             SectorMapByPath[filePath]);
                 }
 
@@ -4228,14 +4228,14 @@ public:
                 pDiskConfig->EnableSectorEncryption = !pDiskConfig->SectorMap;
 
                 TActorSetupCmd pDiskSetup(
-                    CreatePDisk(pDiskConfig.Get(), mainKey, counters), 
+                    CreatePDisk(pDiskConfig.Get(), mainKey, counters),
                     TMailboxType::Revolving, 0);
                 setup2->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(pdiskId, pDiskSetup));
 
                 TVDiskConfig::TBaseInfo baseInfo(
                     env->VDiskIds[i],
                     pdiskId,
-                    mainKey, 
+                    mainKey,
                     i + 1,
                     args.DeviceType,
                     0,

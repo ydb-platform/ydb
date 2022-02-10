@@ -62,7 +62,7 @@ protected:
             auto& shardInfo = ShardInfo_[receipt.GetShard()];
             // Create request
             if (!shardInfo.Request_) {
-                ++RequestsToLeader_; 
+                ++RequestsToLeader_;
                 shardInfo.Request_ = MakeHolder<TSqsEvents::TEvChangeMessageVisibilityBatch>();
                 shardInfo.Request_->Shard = receipt.GetShard();
                 shardInfo.Request_->RequestId = RequestId_;
@@ -143,11 +143,11 @@ protected:
             AppendEntry(Request(), Response_.MutableChangeMessageVisibility(), 0);
         }
 
-        if (RequestsToLeader_) { 
-            Y_VERIFY(RequestsToLeader_ <= Shards_); 
+        if (RequestsToLeader_) {
+            Y_VERIFY(RequestsToLeader_ <= Shards_);
             for (auto& shardInfo : ShardInfo_) {
                 if (shardInfo.Request_) {
-                    Send(QueueLeader_, shardInfo.Request_.Release()); 
+                    Send(QueueLeader_, shardInfo.Request_.Release());
                 }
             }
         } else {
@@ -178,13 +178,13 @@ private:
                 ProcessAnswer(Response_.MutableChangeMessageVisibilityBatch()->MutableEntries(entryIndex), ev->Get()->Statuses[i]);
             }
         } else {
-            Y_VERIFY(RequestsToLeader_ == 1); 
+            Y_VERIFY(RequestsToLeader_ == 1);
             Y_VERIFY(ev->Get()->Statuses.size() == 1);
             ProcessAnswer(Response_.MutableChangeMessageVisibility(), ev->Get()->Statuses[0]);
         }
 
-        --RequestsToLeader_; 
-        if (RequestsToLeader_ == 0) { 
+        --RequestsToLeader_;
+        if (RequestsToLeader_ == 0) {
             SendReplyAndDie();
         }
     }
@@ -204,7 +204,7 @@ private:
         std::vector<size_t> RequestToReplyIndexMapping_;
         THolder<TSqsEvents::TEvChangeMessageVisibilityBatch> Request_; // actual when processing initial request, then nullptr
     };
-    size_t RequestsToLeader_ = 0; 
+    size_t RequestsToLeader_ = 0;
     std::vector<TShardInfo> ShardInfo_;
     TInstant NowTimestamp_;
 };

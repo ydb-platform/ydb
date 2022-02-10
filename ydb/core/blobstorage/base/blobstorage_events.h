@@ -281,9 +281,9 @@ namespace NKikimr {
             Record.SetNodeId(nodeId);
             Record.SetGroupId(groupId);
             Record.SetLifeCyclePhase(lifeCyclePhase);
-            Record.SetMainKeyId(mainKeyId); 
+            Record.SetMainKeyId(mainKeyId);
             Record.SetEncryptedGroupKey(encryptedGroupKey);
-            Record.SetMainKeyVersion(mainKeyVersion); 
+            Record.SetMainKeyVersion(mainKeyVersion);
             Record.SetGroupKeyNonce(groupKeyNonce);
         }
 
@@ -429,12 +429,12 @@ namespace NKikimr {
 
     struct TEvBlobStorage::TEvRestartPDisk : TEventLocal<TEvRestartPDisk, EvRestartPDisk> {
         const ui32 PDiskId;
-        NPDisk::TKey MainKey; 
+        NPDisk::TKey MainKey;
         TIntrusivePtr<TPDiskConfig> Config;
 
         TEvRestartPDisk(const ui32& pdiskId, const NPDisk::TKey& mainKey, const TIntrusivePtr<TPDiskConfig>& config)
             : PDiskId(pdiskId)
-            , MainKey(mainKey) 
+            , MainKey(mainKey)
             , Config(config)
         {}
     };

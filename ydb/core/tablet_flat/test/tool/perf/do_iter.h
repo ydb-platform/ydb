@@ -23,7 +23,7 @@ namespace NPerf {
 
         }
 
-        static TAutoPtr<TSubset> Make(const TMass &mass, ui32 parts, bool mixed) 
+        static TAutoPtr<TSubset> Make(const TMass &mass, ui32 parts, bool mixed)
         {
             using namespace NTest;
 

@@ -83,10 +83,10 @@ namespace NLs {
     void CheckBoundaries(const NKikimrScheme::TEvDescribeSchemeResult& record);
     TCheckFunc PartitionCount(ui32 count);
     TCheckFunc PartitionKeys(TVector<TString> lastShardKeys);
-    TCheckFunc FollowerCount(ui32 count); 
-    TCheckFunc CrossDataCenterFollowerCount(ui32 count); 
-    TCheckFunc AllowFollowerPromotion(bool val); 
-    TCheckFunc FollowerGroups(const TVector<NKikimrHive::TFollowerGroup>& followerGroup = TVector<NKikimrHive::TFollowerGroup>{}); 
+    TCheckFunc FollowerCount(ui32 count);
+    TCheckFunc CrossDataCenterFollowerCount(ui32 count);
+    TCheckFunc AllowFollowerPromotion(bool val);
+    TCheckFunc FollowerGroups(const TVector<NKikimrHive::TFollowerGroup>& followerGroup = TVector<NKikimrHive::TFollowerGroup>{});
     TCheckFunc SizeToSplitEqual(ui32 size);
     TCheckFunc MinPartitionsCountEqual(ui32 count);
     TCheckFunc MaxPartitionsCountEqual(ui32 count);

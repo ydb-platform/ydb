@@ -9,7 +9,7 @@ namespace NTest {
     template<class TIter>
     struct TWrapDbIterImpl {
 
-        TWrapDbIterImpl(TDatabase &base, ui32 table, TIntrusiveConstPtr<TRowScheme> scheme, 
+        TWrapDbIterImpl(TDatabase &base, ui32 table, TIntrusiveConstPtr<TRowScheme> scheme,
                 TRowVersion snapshot = TRowVersion::Max())
             : Scheme(std::move(scheme))
             , Base(base)
@@ -82,13 +82,13 @@ namespace NTest {
         }
 
     public:
-        const TIntrusiveConstPtr<TRowScheme> Scheme; 
+        const TIntrusiveConstPtr<TRowScheme> Scheme;
         TDatabase &Base;
 
     private:
         const ui32 Table = Max<ui32>();
         const TRowVersion Snapshot;
-        TAutoPtr<TIter> Iter; 
+        TAutoPtr<TIter> Iter;
     };
 
     using TWrapDbIter = TWrapDbIterImpl<TTableIt>;

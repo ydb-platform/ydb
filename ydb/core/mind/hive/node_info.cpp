@@ -113,7 +113,7 @@ bool TNodeInfo::IsAllowedToRunTablet(const TTabletInfo& tablet, TTabletDebugStat
         return false;
     }
 
-    const TVector<TSubDomainKey>& allowedDomains = tablet.GetLeader().EffectiveAllowedDomains; 
+    const TVector<TSubDomainKey>& allowedDomains = tablet.GetLeader().EffectiveAllowedDomains;
     bool result = false;
 
     for (const auto& candidate : allowedDomains) {
@@ -143,17 +143,17 @@ bool TNodeInfo::IsAllowedToRunTablet(const TTabletInfo& tablet, TTabletDebugStat
         return false;
     }
 
-    if (tablet.IsFollower() && tablet.AsFollower().FollowerGroup.LocalNodeOnly) { 
-        const TLeaderTabletInfo& leader = tablet.GetLeader(); 
-        if (!leader.IsRunning()) { 
+    if (tablet.IsFollower() && tablet.AsFollower().FollowerGroup.LocalNodeOnly) {
+        const TLeaderTabletInfo& leader = tablet.GetLeader();
+        if (!leader.IsRunning()) {
             if (debugState) {
-                debugState->LeaderNotRunning = true; 
+                debugState->LeaderNotRunning = true;
             }
             return false;
         }
-        if (leader.NodeId != Id) { 
+        if (leader.NodeId != Id) {
             if (debugState) {
-                debugState->NodesWithLeaderNotLocal++; 
+                debugState->NodesWithLeaderNotLocal++;
             }
             return false;
         }
@@ -179,40 +179,40 @@ bool TNodeInfo::IsAbleToRunTablet(const TTabletInfo& tablet, TTabletDebugState* 
     if (tablet.IsAliveOnLocal(Local)) {
         return !IsOverloaded();
     }
-    if (tablet.IsLeader()) { 
-        const TLeaderTabletInfo& leader = tablet.AsLeader(); 
-        if (leader.IsFollowerPromotableOnNode(Id)) { 
+    if (tablet.IsLeader()) {
+        const TLeaderTabletInfo& leader = tablet.AsLeader();
+        if (leader.IsFollowerPromotableOnNode(Id)) {
             return true;
         }
     }
-//            const TLeaderTabletInfo& leader = tablet.GetLeader(); 
-//            if (!leader.Followers.empty()) { 
-//                if (leader.IsSomeoneAliveOnNode(Id)) { 
+//            const TLeaderTabletInfo& leader = tablet.GetLeader();
+//            if (!leader.Followers.empty()) {
+//                if (leader.IsSomeoneAliveOnNode(Id)) {
 //                    return false;
 //                }
 //            }
-    if (tablet.IsFollower()) { 
-        const TFollowerTabletInfo& follower = tablet.AsFollower(); 
-        const TFollowerGroup& followerGroup = follower.FollowerGroup; 
-        const TLeaderTabletInfo& leader = follower.LeaderTablet; 
-        if (followerGroup.RequireAllDataCenters) { 
+    if (tablet.IsFollower()) {
+        const TFollowerTabletInfo& follower = tablet.AsFollower();
+        const TFollowerGroup& followerGroup = follower.FollowerGroup;
+        const TLeaderTabletInfo& leader = follower.LeaderTablet;
+        if (followerGroup.RequireAllDataCenters) {
             auto dataCenters = Hive.GetRegisteredDataCenters();
             ui32 maxFollowersPerDataCenter = (followerGroup.GetComputedFollowerCount(Hive.GetDataCenters()) + dataCenters - 1) / dataCenters; // ceil
-            ui32 existingFollowers; 
+            ui32 existingFollowers;
             if (tablet.IsAlive()) {
                 existingFollowers = leader.GetFollowersAliveOnDataCenterExcludingFollower(Location.GetDataCenterId(), tablet);
             } else {
                 existingFollowers = leader.GetFollowersAliveOnDataCenter(Location.GetDataCenterId());
             }
-            if (maxFollowersPerDataCenter <= existingFollowers) { 
+            if (maxFollowersPerDataCenter <= existingFollowers) {
                 if (debugState) {
-                    debugState->NodesFilledWithDatacenterFollowers++; 
+                    debugState->NodesFilledWithDatacenterFollowers++;
                 }
                 return false;
             }
         }
-        if (followerGroup.RequireDifferentNodes) { 
-            if (leader.IsSomeoneAliveOnNode(Id)) { 
+        if (followerGroup.RequireDifferentNodes) {
+            if (leader.IsSomeoneAliveOnNode(Id)) {
                 if (debugState) {
                     debugState->NodesWithSomeoneFromOurFamily++;
                 }

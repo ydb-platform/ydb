@@ -154,7 +154,7 @@ public:
                 }
                 bool inserted = InFlight.emplace(coordinator, &item).second;
                 if (inserted) {
-                    ctx.Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward( 
+                    ctx.Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(
                             new TEvSubDomain::TEvConfigure(item.Params),
                             coordinator, true),
                         IEventHandle::FlagTrackDelivery);
@@ -201,8 +201,8 @@ public:
     }
 
     void Finish(const TActorContext& ctx) {
-        if (Services.LeaderPipeCache) { 
-            ctx.Send(Services.LeaderPipeCache, new TEvPipeCache::TEvUnlink(0)); 
+        if (Services.LeaderPipeCache) {
+            ctx.Send(Services.LeaderPipeCache, new TEvPipeCache::TEvUnlink(0));
         }
         Callback(Log, ctx);
         Die(ctx);

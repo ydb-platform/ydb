@@ -38,13 +38,13 @@ namespace NTable {
         ui64 Invisible = 0;
     };
 
-    struct TCompactionStats { 
-        THashSet<ui64> PartOwners; 
-        ui64 PartCount = 0; 
-        ui64 MemRowCount = 0; 
-        ui64 MemDataSize = 0; 
-        ui64 MemDataWaste = 0; 
-    }; 
- 
+    struct TCompactionStats {
+        THashSet<ui64> PartOwners;
+        ui64 PartCount = 0;
+        ui64 MemRowCount = 0;
+        ui64 MemDataSize = 0;
+        ui64 MemDataWaste = 0;
+    };
+
 }
 }

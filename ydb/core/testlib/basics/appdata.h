@@ -35,7 +35,7 @@ namespace NKikimr {
     };
 
     struct TAppPrepare : public TTestFeatureFlagsHolder<TAppPrepare> {
-        struct TMine : public NActors::IDestructable { 
+        struct TMine : public NActors::IDestructable {
             TIntrusivePtr<NScheme::TTypeRegistry> Types;
             TIntrusivePtr<NMiniKQL::IFunctionRegistry> Funcs;
             TIntrusivePtr<TFormatFactory> Formats;
@@ -74,7 +74,7 @@ namespace NKikimr {
         TIntrusivePtr<TDomainsInfo> Domains;
         TMap<ui32, NKikimrProto::TKeyConfig> Keys;
         bool EnableKqpSpilling = false;
-        NKikimrConfig::TCompactionConfig CompactionConfig; 
+        NKikimrConfig::TCompactionConfig CompactionConfig;
         TString NetDataSourceUrl;
         NKikimrConfig::THiveConfig HiveConfig;
         NKikimrConfig::TDataShardConfig DataShardConfig;

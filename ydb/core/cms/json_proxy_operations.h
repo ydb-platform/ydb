@@ -24,8 +24,8 @@ public:
             TryFromString(cgi.Get("tabletid"), tabletId);
         }
 
-        if (!tabletId && cgi.Has("followerid")) { 
-            TryFromString(cgi.Get("followerid"), tabletId); 
+        if (!tabletId && cgi.Has("followerid")) {
+            TryFromString(cgi.Get("followerid"), tabletId);
         }
 
         return tabletId;

@@ -25,7 +25,7 @@ namespace NTest {
 
     class TLoader { /* Test env clone for NTable::TLoader */
     public:
-        TLoader(TIntrusiveConstPtr<TStore> store, TString overlay) 
+        TLoader(TIntrusiveConstPtr<TStore> store, TString overlay)
             : Store(std::move(store))
             , Overlay(std::move(overlay))
         {
@@ -135,7 +135,7 @@ namespace NTest {
         }
 
     private:
-        TIntrusiveConstPtr<TStore> Store; 
+        TIntrusiveConstPtr<TStore> Store;
         const TString Overlay;
     };
 
@@ -151,7 +151,7 @@ namespace NTest {
 
         }
 
-        TPartEggs Flush(TIntrusiveConstPtr<TRowScheme> scheme, const TWritten &written) 
+        TPartEggs Flush(TIntrusiveConstPtr<TRowScheme> scheme, const TWritten &written)
         {
             Y_VERIFY(!Store, "Writer has not been flushed");
             Y_VERIFY(written.Parts == Parts.size());
@@ -171,7 +171,7 @@ namespace NTest {
             return Back().Write(page, type, group);
         }
 
-        void WriteInplace(TPageId page, TArrayRef<const char> body) noexcept override 
+        void WriteInplace(TPageId page, TArrayRef<const char> body) noexcept override
         {
             Back().WriteInplace(page, body);
         }
@@ -203,9 +203,9 @@ namespace NTest {
     private:
         const size_t Groups;
         ui32 NextGlobOffset = 0;
-        TIntrusivePtr<TStore> Store; 
+        TIntrusivePtr<TStore> Store;
         TAutoPtr<NPageCollection::TCookieAllocator> CookieAllocator;
-        TAutoPtr<TScreen::TCook> Growth = new TScreen::TCook; 
+        TAutoPtr<TScreen::TCook> Growth = new TScreen::TCook;
         TVector<TIntrusiveConstPtr<TPartStore>> Parts;
     };
 
@@ -229,7 +229,7 @@ namespace NTest {
         }
 
         TPartCook(
-                TIntrusiveConstPtr<TRowScheme> rows, 
+                TIntrusiveConstPtr<TRowScheme> rows,
                 const NPage::TConf &opts,
                 const TLogoBlobID &token = TLogoBlobID(1, 2, 3, 1, 0, 0),
                 TEpoch epoch = TEpoch::Zero())
@@ -372,10 +372,10 @@ namespace NTest {
         }
 
     private:
-        TIntrusiveConstPtr<TRowScheme> Scheme; 
+        TIntrusiveConstPtr<TRowScheme> Scheme;
         TWriterBundle Pages;
         TMap<TTag, TPos> Remap;
-        TAutoPtr<TPartWriter> Writer; 
+        TAutoPtr<TPartWriter> Writer;
         TOwnedCellVec LastKey;
         TRowVersion NextVersion = TRowVersion::Min();
         ui64 NextTxId = 0;

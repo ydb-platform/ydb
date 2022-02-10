@@ -82,7 +82,7 @@ TVector<TTable> GetFifoTables() {
     list.push_back(TTable("Attributes")
                     .SetColumns(AttributesColumns)
                     .SetShard(-1)
-                    .SetHasLeaderTablet()); 
+                    .SetHasLeaderTablet());
     list.push_back(TTable("Data")
                     .SetColumns(DataColumns)
                     .SetShard(-1));

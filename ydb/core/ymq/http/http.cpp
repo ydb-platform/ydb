@@ -551,7 +551,7 @@ bool THttpRequest::SetupRequest() {
     const bool enableQueueLeader = Parent_->Config.HasEnableQueueMaster()
         ? Parent_->Config.GetEnableQueueMaster()
         : Parent_->Config.GetEnableQueueLeader();
- 
+
     auto httpCallback = MakeHolder<THttpCallback>(this, *requestHolder);
 
     TAuthActorData data {

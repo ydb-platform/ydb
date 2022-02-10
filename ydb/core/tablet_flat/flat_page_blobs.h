@@ -93,7 +93,7 @@ namespace NPage {
             return page < Array.size() ? Array[page] : Empty;
         }
 
-        bool Verify(ui32 page, TArrayRef<const char> data) const noexcept override 
+        bool Verify(ui32 page, TArrayRef<const char> data) const noexcept override
         {
             return data && data.size() == Array.at(page).Bytes();
         }

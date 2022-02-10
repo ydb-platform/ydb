@@ -18,18 +18,18 @@ namespace NFake {
 
     class TOwner final : public ::NActors::IActor {
     public:
-        using TEventHandlePtr = TAutoPtr<::NActors::IEventHandle>; 
+        using TEventHandlePtr = TAutoPtr<::NActors::IEventHandle>;
         using ELnLev = NUtil::ELnLev;
         using TInfo = TTabletStorageInfo;
         using TSetup = TTabletSetupInfo;
 
-        TOwner(TActorId user, ui32 limit, TIntrusivePtr<TInfo> info, TIntrusivePtr<TSetup> setup, ui32 followerId) 
+        TOwner(TActorId user, ui32 limit, TIntrusivePtr<TInfo> info, TIntrusivePtr<TSetup> setup, ui32 followerId)
             : ::NActors::IActor(static_cast<TReceiveFunc>(&TOwner::Inbox), NKikimrServices::TActivity::FAKE_ENV_A)
             , Info(std::move(info))
             , Setup(std::move(setup))
             , User(user)
             , Limit(Max(ui32(1), limit))
-            , FollowerId(followerId) 
+            , FollowerId(followerId)
         {
             Y_VERIFY(TTabletTypes::TYPE_INVALID != Info->TabletType);
         }
@@ -43,7 +43,7 @@ namespace NFake {
             sys->Send(SelfId(), new TEvents::TEvBootstrap);
         }
 
-        void Inbox(TEventHandlePtr &eh, const ::NActors::TActorContext &ctx) 
+        void Inbox(TEventHandlePtr &eh, const ::NActors::TActorContext &ctx)
         {
             if (auto *ev = eh->CastAsLocal<TEvTablet::TEvTabletDead>()) {
 
@@ -93,10 +93,10 @@ namespace NFake {
 
             auto &profile = AppData(ctx)->ResourceProfiles;
 
-            if (FollowerId == 0) { 
+            if (FollowerId == 0) {
                 Agent = Setup->Tablet(Info.Get(), SelfId(), ctx, 0, profile);
             } else {
-                Agent = Setup->Follower(Info.Get(), SelfId(), ctx, FollowerId, profile); 
+                Agent = Setup->Follower(Info.Get(), SelfId(), ctx, FollowerId, profile);
             }
 
             Y_VERIFY(Agent, "Failed to start new tablet actor");
@@ -113,16 +113,16 @@ namespace NFake {
         }
 
     private:
-        TIntrusivePtr<TInfo> Info; 
-        TIntrusivePtr<TSetup> Setup; 
-        TAutoPtr<NUtil::ILogger> Logger; 
+        TIntrusivePtr<TInfo> Info;
+        TIntrusivePtr<TSetup> Setup;
+        TAutoPtr<NUtil::ILogger> Logger;
 
         TActorId Owner;
         TActorId Agent;
         TActorId User;
         ui32 Borns = 0;
         ui32 Limit = 1;
-        const ui32 FollowerId; 
+        const ui32 FollowerId;
         bool Alive = false;
     };
 

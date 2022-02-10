@@ -229,7 +229,7 @@ message TEvProposeTransactionStatus {
 
     optional NKikimrQueryStats.TTxStats TxStats = 19;
     optional TTxProxyTimings Timings = 20;
-    optional bool HadFollowerReads = 21; 
+    optional bool HadFollowerReads = 21;
 
     optional uint32 SchemeShardStatus = 30;
     optional uint32 SchemeShardReportedId = 31;

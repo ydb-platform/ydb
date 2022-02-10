@@ -14,7 +14,7 @@ int MainFormatInfo(const TCommandConfig &cmdConf, int argc, char** argv) {
     formatInfoConfig.Parse(argc, argv);
 
     TPDiskInfo info;
-    bool isOk = ReadPDiskFormatInfo(formatInfoConfig.Path, formatInfoConfig.MainKey, info); 
+    bool isOk = ReadPDiskFormatInfo(formatInfoConfig.Path, formatInfoConfig.MainKey, info);
     if (isOk) {
         Cout << "Version: " << info.Version << Endl;
         Cout << "DiskSize: " << info.DiskSize << Endl;
@@ -58,7 +58,7 @@ int MainFormatInfo(const TCommandConfig &cmdConf, int argc, char** argv) {
 }
 
 TCmdFormatInfoConfig::TCmdFormatInfoConfig()
-    : MainKey(0) 
+    : MainKey(0)
     , IsVerbose(false)
 {}
 
@@ -68,23 +68,23 @@ void TCmdFormatInfoConfig::Parse(int argc, char **argv) {
 
     opts.AddLongOption('p', "pdisk-path", "path to pdisk to read format info").RequiredArgument("PATH").Required()
         .StoreResult(&Path);
-    opts.AddLongOption('k', "main-key", "encryption main-key to use while reading").RequiredArgument("NUM") 
-        .Optional().StoreResult(&MainKey); // TODO: make required 
-    opts.AddLongOption("master-key", "obsolete: use main-key").RequiredArgument("NUM") 
-        .Optional().StoreResult(&MainKey); // TODO: remove after migration 
+    opts.AddLongOption('k', "main-key", "encryption main-key to use while reading").RequiredArgument("NUM")
+        .Optional().StoreResult(&MainKey); // TODO: make required
+    opts.AddLongOption("master-key", "obsolete: use main-key").RequiredArgument("NUM")
+        .Optional().StoreResult(&MainKey); // TODO: remove after migration
     opts.AddLongOption('v', "verbose", "output detailed information for debugging").Optional().NoArgument()
         .SetFlag(&IsVerbose);
 
     opts.AddHelpOption('h');
 
     TOptsParseResult res(&opts, argc, argv);
- 
-    // TODO: remove after master->main key migration 
-    bool hasMainOption = res.FindLongOptParseResult("main-key"); 
-    bool hasMasterOption = res.FindLongOptParseResult("master-key"); 
-    bool hasKOption = res.FindCharOptParseResult('k'); 
-    if (!hasMainOption && !hasMasterOption && !hasKOption) 
-        ythrow yexception() << "missing main-key param"; 
+
+    // TODO: remove after master->main key migration
+    bool hasMainOption = res.FindLongOptParseResult("main-key");
+    bool hasMasterOption = res.FindLongOptParseResult("master-key");
+    bool hasKOption = res.FindCharOptParseResult('k');
+    if (!hasMainOption && !hasMasterOption && !hasKOption)
+        ythrow yexception() << "missing main-key param";
 }
 
 }

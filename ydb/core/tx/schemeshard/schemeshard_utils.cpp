@@ -394,15 +394,15 @@ NKikimrSchemeOp::TPartitionConfig PartitionConfigForIndexes(
     if (baseTablePartitionConfig.HasCompactionPolicy()) {
         result.MutableCompactionPolicy()->CopyFrom(baseTablePartitionConfig.GetCompactionPolicy());
     }
-    // skip optional uint64 FollowerCount = 3; 
+    // skip optional uint64 FollowerCount = 3;
     if (baseTablePartitionConfig.HasExecutorCacheSize()) {
         result.SetExecutorCacheSize(baseTablePartitionConfig.GetExecutorCacheSize());
     }
-    // skip     optional bool AllowFollowerPromotion = 5 [default = true]; 
+    // skip     optional bool AllowFollowerPromotion = 5 [default = true];
     if (baseTablePartitionConfig.HasTxReadSizeLimit()) {
         result.SetTxReadSizeLimit(baseTablePartitionConfig.GetTxReadSizeLimit());
     }
-    // skip optional uint32 CrossDataCenterFollowerCount = 8; 
+    // skip optional uint32 CrossDataCenterFollowerCount = 8;
     if (baseTablePartitionConfig.HasChannelProfileId()) {
         result.SetChannelProfileId(baseTablePartitionConfig.GetChannelProfileId());
     }
@@ -454,7 +454,7 @@ NKikimrSchemeOp::TPartitionConfig PartitionConfigForIndexes(
         result.SetKeepSnapshotTimeout(baseTablePartitionConfig.GetKeepSnapshotTimeout());
     }
     // skip repeated NKikimrStorageSettings.TStorageRoom StorageRooms = 17;
-    // skip optional NKikimrHive.TFollowerGroup FollowerGroup = 23; 
+    // skip optional NKikimrHive.TFollowerGroup FollowerGroup = 23;
 
     return result;
 }

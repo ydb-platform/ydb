@@ -32,7 +32,7 @@ class TDescribeReq : public TActor<TDescribeReq> {
     void Die(const TActorContext &ctx) override {
         --*TxProxyMon->NavigateReqInFly;
 
-        Send(Services.LeaderPipeCache, new TEvPipeCache::TEvUnlink(0)); 
+        Send(Services.LeaderPipeCache, new TEvPipeCache::TEvUnlink(0));
 
         TActor::Die(ctx);
     }
@@ -263,7 +263,7 @@ void TDescribeReq::Handle(TEvTxProxyReq::TEvNavigateScheme::TPtr &ev, const TAct
         LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString()
             << " SEND to# " << shardToRequest << " shardToRequest " << req->ToString());
 
-        Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(req.Release(), shardToRequest, true), 0, SourceCookie); 
+        Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(req.Release(), shardToRequest, true), 0, SourceCookie);
 
         Become(&TThis::StateWaitExec);
         return;
@@ -371,7 +371,7 @@ void TDescribeReq::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &
     LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString()
         << " SEND to# " << shardToRequest << " shardToRequest " << req->ToString());
 
-    Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(req.Release(), shardToRequest, true), 0, SourceCookie); 
+    Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(req.Release(), shardToRequest, true), 0, SourceCookie);
     Become(&TThis::StateWaitExec);
 }
 

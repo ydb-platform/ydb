@@ -29,7 +29,7 @@ struct TEvPrivate {
     static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
 
     struct TEvKickTablet : TEventLocal<TEvKickTablet, EvKickTablet> {
-        std::pair<TTabletId, TFollowerId> TabletId; 
+        std::pair<TTabletId, TFollowerId> TabletId;
 
         TEvKickTablet(const TTabletInfo& tablet)
             : TabletId(tablet.GetFullTabletId())
@@ -44,7 +44,7 @@ struct TEvPrivate {
         ui32 NodeId;
         TActorId Local;
         TInstant StartTime;
-        TMap<ui64,TVector<std::pair<TTabletId, TFollowerId>>> Tablets; 
+        TMap<ui64,TVector<std::pair<TTabletId, TFollowerId>>> Tablets;
     };
 
     struct TEvBootTablets : TEventLocal<TEvBootTablets, EvBootTablets> {};

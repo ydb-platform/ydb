@@ -8,8 +8,8 @@
 
 #include <library/cpp/monlib/service/pages/templates.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/api.h> 
- 
+#include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
+
 namespace NKikimr {
 
 IActor* CreateDataShard(const TActorId &tablet, TTabletStorageInfo *info) {
@@ -176,7 +176,7 @@ void TDataShard::OnTabletStop(TEvTablet::TEvTabletStop::TPtr &ev, const TActorCo
 
     LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "OnTabletStop: " << TabletID() << " reason = " << msg->GetReason());
 
-    if (!IsFollower() && GetState() == TShardState::Ready) { 
+    if (!IsFollower() && GetState() == TShardState::Ready) {
         if (!Stopping) {
             Stopping = true;
             OnStopGuardStarting(ctx);
@@ -301,7 +301,7 @@ void TDataShard::OnActivateExecutor(const TActorContext& ctx) {
     AppData(ctx)->Icb->RegisterSharedControl(BackupReadAheadLo, "DataShardControls.BackupReadAheadLo");
     AppData(ctx)->Icb->RegisterSharedControl(BackupReadAheadHi, "DataShardControls.BackupReadAheadHi");
 
-    // OnActivateExecutor might be called multiple times for a follower 
+    // OnActivateExecutor might be called multiple times for a follower
     // but the counters should be initialized only once
     if (TabletCountersPtr) {
         Executor()->RegisterExternalTabletCounters(TabletCountersPtr);
@@ -310,16 +310,16 @@ void TDataShard::OnActivateExecutor(const TActorContext& ctx) {
 
     AllocCounters = TAlignedPagePoolCounters(AppData(ctx)->Counters, "datashard");
 
-    if (!Executor()->GetStats().IsFollower) { 
+    if (!Executor()->GetStats().IsFollower) {
         Execute(CreateTxInitSchema(), ctx);
         Become(&TThis::StateInactive);
     } else {
         SyncConfig();
         State = TShardState::Readonly;
-        FollowerState = { }; 
-        Become(&TThis::StateWorkAsFollower); 
+        FollowerState = { };
+        Become(&TThis::StateWorkAsFollower);
         SignalTabletActive(ctx);
-        LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "Follower switched to work state: " << TabletID()); 
+        LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "Follower switched to work state: " << TabletID());
     }
 }
 
@@ -697,18 +697,18 @@ void TDataShard::PersistUserTable(NIceDb::TNiceDb& db, ui64 tableId, const TUser
         NIceDb::TUpdate<Schema::UserTables::Schema>(tableInfo.GetSchema()));
 }
 
-void TDataShard::PersistUserTableFullCompactionTs(NIceDb::TNiceDb& db, ui64 tableId, ui64 ts) { 
-    db.Table<Schema::UserTablesStats>().Key(tableId).Update<Schema::UserTablesStats::FullCompactionTs>(ts); 
-} 
- 
+void TDataShard::PersistUserTableFullCompactionTs(NIceDb::TNiceDb& db, ui64 tableId, ui64 ts) {
+    db.Table<Schema::UserTablesStats>().Key(tableId).Update<Schema::UserTablesStats::FullCompactionTs>(ts);
+}
+
 void TDataShard::PersistMoveUserTable(NIceDb::TNiceDb& db, ui64 prevTableId, ui64 tableId, const TUserTable& tableInfo) {
     db.Table<Schema::UserTables>().Key(prevTableId).Delete();
     PersistUserTable(db, tableId, tableInfo);
- 
-    db.Table<Schema::UserTablesStats>().Key(prevTableId).Delete(); 
-    if (tableInfo.Stats.LastFullCompaction) { 
-        PersistUserTableFullCompactionTs(db, tableId, tableInfo.Stats.LastFullCompaction.Seconds()); 
-    } 
+
+    db.Table<Schema::UserTablesStats>().Key(prevTableId).Delete();
+    if (tableInfo.Stats.LastFullCompaction) {
+        PersistUserTableFullCompactionTs(db, tableId, tableInfo.Stats.LastFullCompaction.Seconds());
+    }
 }
 
 TUserTable::TPtr TDataShard::AlterTableSchemaVersion(
@@ -979,7 +979,7 @@ void TDataShard::DropUserTable(TTransactionContext& txc, ui64 tableId) {
         txc.DB.Alter().DropTable(ti->second->ShadowTid);
     }
     db.Table<Schema::UserTables>().Key(ti->first).Delete();
-    db.Table<Schema::UserTablesStats>().Key(ti->first).Delete(); 
+    db.Table<Schema::UserTablesStats>().Key(ti->first).Delete();
 
     TableInfos.erase(ti);
 }
@@ -1000,7 +1000,7 @@ void TDataShard::DropAllUserTables(TTransactionContext& txc) {
     SnapshotManager.PersistRemoveAllSnapshots(db);
     for (const auto& ti : TableInfos) {
         db.Table<Schema::UserTables>().Key(ti.first).Delete();
-        db.Table<Schema::UserTablesStats>().Key(ti.first).Delete(); 
+        db.Table<Schema::UserTablesStats>().Key(ti.first).Delete();
     }
 
     TableInfos.clear();
@@ -1294,37 +1294,37 @@ NKikimrTxDataShard::TError::EKind ConvertErrCode(NMiniKQL::IEngineFlat::EResult 
     }
 }
 
-Ydb::StatusIds::StatusCode ConvertToYdbStatusCode(NKikimrTxDataShard::TError::EKind code) { 
-    switch (code) { 
-        case NKikimrTxDataShard::TError::OK: 
-            return Ydb::StatusIds::SUCCESS; 
-        case NKikimrTxDataShard::TError::BAD_TX_KIND: 
-        case NKikimrTxDataShard::TError::SCHEME_ERROR: 
-        case NKikimrTxDataShard::TError::WRONG_PAYLOAD_TYPE: 
-        case NKikimrTxDataShard::TError::LEAF_REQUIRED: 
-        case NKikimrTxDataShard::TError::WRONG_SHARD_STATE: 
-        case NKikimrTxDataShard::TError::PROGRAM_ERROR: 
-        case NKikimrTxDataShard::TError::OUT_OF_SPACE: 
-        case NKikimrTxDataShard::TError::READ_SIZE_EXECEEDED: 
-        case NKikimrTxDataShard::TError::SHARD_IS_BLOCKED: 
-        case NKikimrTxDataShard::TError::UNKNOWN: 
-        case NKikimrTxDataShard::TError::REPLY_SIZE_EXECEEDED: 
-        case NKikimrTxDataShard::TError::EXECUTION_CANCELLED: 
-            return Ydb::StatusIds::INTERNAL_ERROR; 
-        case NKikimrTxDataShard::TError::BAD_ARGUMENT: 
-        case NKikimrTxDataShard::TError::READONLY: 
-        case NKikimrTxDataShard::TError::SNAPSHOT_NOT_READY_YET: 
-        case NKikimrTxDataShard::TError::SCHEME_CHANGED: 
-        case NKikimrTxDataShard::TError::DUPLICATED_SNAPSHOT_POLICY: 
-        case NKikimrTxDataShard::TError::MISSING_SNAPSHOT_POLICY: 
-            return Ydb::StatusIds::BAD_REQUEST; 
-        case NKikimrTxDataShard::TError::SNAPSHOT_NOT_EXIST: 
-            return Ydb::StatusIds::NOT_FOUND; 
-        default: 
-            return Ydb::StatusIds::GENERIC_ERROR; 
-    } 
-} 
- 
+Ydb::StatusIds::StatusCode ConvertToYdbStatusCode(NKikimrTxDataShard::TError::EKind code) {
+    switch (code) {
+        case NKikimrTxDataShard::TError::OK:
+            return Ydb::StatusIds::SUCCESS;
+        case NKikimrTxDataShard::TError::BAD_TX_KIND:
+        case NKikimrTxDataShard::TError::SCHEME_ERROR:
+        case NKikimrTxDataShard::TError::WRONG_PAYLOAD_TYPE:
+        case NKikimrTxDataShard::TError::LEAF_REQUIRED:
+        case NKikimrTxDataShard::TError::WRONG_SHARD_STATE:
+        case NKikimrTxDataShard::TError::PROGRAM_ERROR:
+        case NKikimrTxDataShard::TError::OUT_OF_SPACE:
+        case NKikimrTxDataShard::TError::READ_SIZE_EXECEEDED:
+        case NKikimrTxDataShard::TError::SHARD_IS_BLOCKED:
+        case NKikimrTxDataShard::TError::UNKNOWN:
+        case NKikimrTxDataShard::TError::REPLY_SIZE_EXECEEDED:
+        case NKikimrTxDataShard::TError::EXECUTION_CANCELLED:
+            return Ydb::StatusIds::INTERNAL_ERROR;
+        case NKikimrTxDataShard::TError::BAD_ARGUMENT:
+        case NKikimrTxDataShard::TError::READONLY:
+        case NKikimrTxDataShard::TError::SNAPSHOT_NOT_READY_YET:
+        case NKikimrTxDataShard::TError::SCHEME_CHANGED:
+        case NKikimrTxDataShard::TError::DUPLICATED_SNAPSHOT_POLICY:
+        case NKikimrTxDataShard::TError::MISSING_SNAPSHOT_POLICY:
+            return Ydb::StatusIds::BAD_REQUEST;
+        case NKikimrTxDataShard::TError::SNAPSHOT_NOT_EXIST:
+            return Ydb::StatusIds::NOT_FOUND;
+        default:
+            return Ydb::StatusIds::GENERIC_ERROR;
+    }
+}
+
 void TDataShard::Handle(TEvents::TEvGone::TPtr &ev) {
     Actors.erase(ev->Sender);
 }
@@ -1738,7 +1738,7 @@ void TDataShard::Handle(TEvPrivate::TEvPersistScanState::TPtr& ev, const TActorC
 }
 
 void TDataShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) {
-    Y_VERIFY(ev->Get()->Leader, "Unexpectedly connected to follower of tablet %" PRIu64, ev->Get()->TabletId); 
+    Y_VERIFY(ev->Get()->Leader, "Unexpectedly connected to follower of tablet %" PRIu64, ev->Get()->TabletId);
 
     if (ev->Get()->ClientId == SchemeShardPipe) {
         if (!TransQueue.HasNotAckedSchemaTx()) {
@@ -1887,7 +1887,7 @@ void TDataShard::AckRSToDeletedTablet(ui64 tabletId, const TActorContext& ctx) {
 void TDataShard::Handle(TEvTabletPipe::TEvServerConnected::TPtr &ev, const TActorContext &ctx) {
     Y_UNUSED(ev); Y_UNUSED(ctx);
     LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "Server connected at tablet %s %" PRIu64 ,
-              Executor()->GetStats().IsFollower ? "follower" : "leader", ev->Get()->TabletId); 
+              Executor()->GetStats().IsFollower ? "follower" : "leader", ev->Get()->TabletId);
 }
 
 void TDataShard::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr &ev, const TActorContext &ctx) {
@@ -2510,7 +2510,7 @@ void TDataShard::Handle(TEvDataShard::TEvUnsafeUploadRowsRequest::TPtr& ev, cons
 }
 
 void TDataShard::ScanComplete(NTable::EAbort,
-                                     TAutoPtr<IDestructable> prod, 
+                                     TAutoPtr<IDestructable> prod,
                                      ui64 cookie,
                                      const TActorContext &ctx)
 {
@@ -2626,112 +2626,112 @@ void TDataShard::Handle(TEvDataShard::TEvGetRemovedRowVersions::TPtr& ev, const 
     Execute(new TTxGetRemovedRowVersions(this, std::move(ev)), ctx);
 }
 
-} // NDataShard 
- 
-TString TEvDataShard::TEvRead::ToString() const { 
-    TStringStream ss; 
-    ss << TBase::ToString(); 
-    if (!Keys.empty()) { 
-        ss << " KeysSize: " << Keys.size(); 
-    } 
-    if (!Ranges.empty()) { 
-        ss << " RangesSize: " << Ranges.size(); 
-    } 
-    return ss.Str(); 
-} 
- 
-NActors::IEventBase* TEvDataShard::TEvRead::Load(TEventSerializedData* data) { 
-    auto* base = TBase::Load(data); 
-    auto* event = static_cast<TEvRead*>(base); 
-    auto& record = event->Record; 
- 
-    event->Keys.reserve(record.KeysSize()); 
-    for (const auto& key: record.GetKeys()) { 
-        event->Keys.emplace_back(key); 
-    } 
- 
-    event->Ranges.reserve(record.RangesSize()); 
-    for (const auto& range: record.GetRanges()) { 
-        event->Ranges.emplace_back(range); 
-    } 
- 
-    return base; 
-} 
- 
-// really ugly hacky, because Record is not mutable and calling members are const 
-void TEvDataShard::TEvRead::FillRecord() { 
-    if (!Keys.empty()) { 
-        Record.MutableKeys()->Reserve(Keys.size()); 
-        for (auto& key: Keys) { 
-            Record.AddKeys(key.ReleaseBuffer()); 
-        } 
-        Keys.clear(); 
-    } 
- 
-    if (!Ranges.empty()) { 
-        Record.MutableRanges()->Reserve(Ranges.size()); 
-        for (auto& range: Ranges) { 
-            auto* pbRange = Record.AddRanges(); 
-            range.Serialize(*pbRange); 
-        } 
-        Ranges.clear(); 
-    } 
-} 
- 
-TString TEvDataShard::TEvReadResult::ToString() const { 
-    TStringStream ss; 
-    ss << TBase::ToString(); 
- 
-    if (ArrowBatch) { 
-        ss << " ArrowRows: " << ArrowBatch->num_rows() 
-           << " ArrowCols: " << ArrowBatch->num_columns(); 
-    } 
- 
-    if (!Rows.empty()) { 
-        ss << " RowsSize: " << Rows.size(); 
-    } 
- 
-    return ss.Str(); 
-} 
- 
-NActors::IEventBase* TEvDataShard::TEvReadResult::Load(TEventSerializedData* data) { 
-    auto* base = TBase::Load(data); 
-    auto* event = static_cast<TEvReadResult*>(base); 
-    auto& record = event->Record; 
- 
-    if (record.HasArrowBatch()) { 
-        const auto& batch = record.GetArrowBatch(); 
-        auto schema = NArrow::DeserializeSchema(batch.GetSchema()); 
-        event->ArrowBatch = NArrow::DeserializeBatch(batch.GetBatch(), schema); 
-        record.ClearArrowBatch(); 
-    } else if (record.HasCellVec()) { 
-        auto& batch = *record.MutableCellVec(); 
-        event->RowsSerialized.reserve(batch.RowsSize()); 
-        for (auto& row: *batch.MutableRows()) { 
-            event->RowsSerialized.emplace_back(std::move(row)); 
-        } 
-        record.ClearCellVec(); 
-    } 
- 
-    return base; 
-} 
- 
-void TEvDataShard::TEvReadResult::FillRecord() { 
-    if (ArrowBatch) { 
-        auto* protoBatch = Record.MutableArrowBatch(); 
-        protoBatch->SetSchema(NArrow::SerializeSchema(*ArrowBatch->schema())); 
-        protoBatch->SetBatch(NArrow::SerializeBatchNoCompression(ArrowBatch)); 
-        ArrowBatch.reset(); 
-        return; 
-    } else if (!Rows.empty()) { 
-        auto* protoBatch = Record.MutableCellVec(); 
-        protoBatch->MutableRows()->Reserve(Rows.size()); 
-        for (const auto& row: Rows) { 
-            protoBatch->AddRows(TSerializedCellVec::Serialize(row)); 
-        } 
-        Rows.clear(); 
-        return; 
-    } 
-} 
- 
-} // NKikimr 
+} // NDataShard
+
+TString TEvDataShard::TEvRead::ToString() const {
+    TStringStream ss;
+    ss << TBase::ToString();
+    if (!Keys.empty()) {
+        ss << " KeysSize: " << Keys.size();
+    }
+    if (!Ranges.empty()) {
+        ss << " RangesSize: " << Ranges.size();
+    }
+    return ss.Str();
+}
+
+NActors::IEventBase* TEvDataShard::TEvRead::Load(TEventSerializedData* data) {
+    auto* base = TBase::Load(data);
+    auto* event = static_cast<TEvRead*>(base);
+    auto& record = event->Record;
+
+    event->Keys.reserve(record.KeysSize());
+    for (const auto& key: record.GetKeys()) {
+        event->Keys.emplace_back(key);
+    }
+
+    event->Ranges.reserve(record.RangesSize());
+    for (const auto& range: record.GetRanges()) {
+        event->Ranges.emplace_back(range);
+    }
+
+    return base;
+}
+
+// really ugly hacky, because Record is not mutable and calling members are const
+void TEvDataShard::TEvRead::FillRecord() {
+    if (!Keys.empty()) {
+        Record.MutableKeys()->Reserve(Keys.size());
+        for (auto& key: Keys) {
+            Record.AddKeys(key.ReleaseBuffer());
+        }
+        Keys.clear();
+    }
+
+    if (!Ranges.empty()) {
+        Record.MutableRanges()->Reserve(Ranges.size());
+        for (auto& range: Ranges) {
+            auto* pbRange = Record.AddRanges();
+            range.Serialize(*pbRange);
+        }
+        Ranges.clear();
+    }
+}
+
+TString TEvDataShard::TEvReadResult::ToString() const {
+    TStringStream ss;
+    ss << TBase::ToString();
+
+    if (ArrowBatch) {
+        ss << " ArrowRows: " << ArrowBatch->num_rows()
+           << " ArrowCols: " << ArrowBatch->num_columns();
+    }
+
+    if (!Rows.empty()) {
+        ss << " RowsSize: " << Rows.size();
+    }
+
+    return ss.Str();
+}
+
+NActors::IEventBase* TEvDataShard::TEvReadResult::Load(TEventSerializedData* data) {
+    auto* base = TBase::Load(data);
+    auto* event = static_cast<TEvReadResult*>(base);
+    auto& record = event->Record;
+
+    if (record.HasArrowBatch()) {
+        const auto& batch = record.GetArrowBatch();
+        auto schema = NArrow::DeserializeSchema(batch.GetSchema());
+        event->ArrowBatch = NArrow::DeserializeBatch(batch.GetBatch(), schema);
+        record.ClearArrowBatch();
+    } else if (record.HasCellVec()) {
+        auto& batch = *record.MutableCellVec();
+        event->RowsSerialized.reserve(batch.RowsSize());
+        for (auto& row: *batch.MutableRows()) {
+            event->RowsSerialized.emplace_back(std::move(row));
+        }
+        record.ClearCellVec();
+    }
+
+    return base;
+}
+
+void TEvDataShard::TEvReadResult::FillRecord() {
+    if (ArrowBatch) {
+        auto* protoBatch = Record.MutableArrowBatch();
+        protoBatch->SetSchema(NArrow::SerializeSchema(*ArrowBatch->schema()));
+        protoBatch->SetBatch(NArrow::SerializeBatchNoCompression(ArrowBatch));
+        ArrowBatch.reset();
+        return;
+    } else if (!Rows.empty()) {
+        auto* protoBatch = Record.MutableCellVec();
+        protoBatch->MutableRows()->Reserve(Rows.size());
+        for (const auto& row: Rows) {
+            protoBatch->AddRows(TSerializedCellVec::Serialize(row));
+        }
+        Rows.clear();
+        return;
+    }
+}
+
+} // NKikimr

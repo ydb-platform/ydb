@@ -90,7 +90,7 @@ namespace NTabletFlatExecutor {
         ui32 Pending = 0;
         TAutoPtr<NPageCollection::TSteppedCookieAllocator> Cookies;
         NPageCollection::TSlicer Slicer;
-        TIntrusivePtr<NSnap::TWaste> Waste_; 
+        TIntrusivePtr<NSnap::TWaste> Waste_;
         NPageCollection::TLargeGlobId Last;
     };
 

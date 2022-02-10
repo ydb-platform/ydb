@@ -35,12 +35,12 @@ const TScheme& TDatabase::GetScheme() const noexcept
     return *DatabaseImpl->Scheme;
 }
 
-TIntrusiveConstPtr<TRowScheme> TDatabase::GetRowScheme(ui32 table) const noexcept 
+TIntrusiveConstPtr<TRowScheme> TDatabase::GetRowScheme(ui32 table) const noexcept
 {
     return Require(table)->GetScheme();
 }
 
-TAutoPtr<TTableIt> TDatabase::Iterate(ui32 table, TRawVals key, TTagsRef tags, ELookup mode) const noexcept 
+TAutoPtr<TTableIt> TDatabase::Iterate(ui32 table, TRawVals key, TTagsRef tags, ELookup mode) const noexcept
 {
     Y_VERIFY(!NoMoreReadsFlag, "Trying to read after reads prohibited, table %u", table);
 
@@ -72,7 +72,7 @@ TAutoPtr<TTableIt> TDatabase::Iterate(ui32 table, TRawVals key, TTagsRef tags, E
     return Require(table)->Iterate(key, tags, Env, seekBy(key, mode), TRowVersion::Max());
 }
 
-TAutoPtr<TTableIt> TDatabase::IterateExact(ui32 table, TRawVals key, TTagsRef tags, TRowVersion snapshot) const noexcept 
+TAutoPtr<TTableIt> TDatabase::IterateExact(ui32 table, TRawVals key, TTagsRef tags, TRowVersion snapshot) const noexcept
 {
     Y_VERIFY(!NoMoreReadsFlag, "Trying to read after reads prohibited, table %u", table);
 
@@ -85,7 +85,7 @@ TAutoPtr<TTableIt> TDatabase::IterateExact(ui32 table, TRawVals key, TTagsRef ta
     return iter;
 }
 
-TAutoPtr<TTableIt> TDatabase::IterateRange(ui32 table, const TKeyRange& range, TTagsRef tags, TRowVersion snapshot) const noexcept 
+TAutoPtr<TTableIt> TDatabase::IterateRange(ui32 table, const TKeyRange& range, TTagsRef tags, TRowVersion snapshot) const noexcept
 {
     Y_VERIFY(!NoMoreReadsFlag, "Trying to read after reads prohibited, table %u", table);
 
@@ -108,7 +108,7 @@ TAutoPtr<TTableIt> TDatabase::IterateRange(ui32 table, const TKeyRange& range, T
     return iter;
 }
 
-TAutoPtr<TTableReverseIt> TDatabase::IterateRangeReverse(ui32 table, const TKeyRange& range, TTagsRef tags, TRowVersion snapshot) const noexcept 
+TAutoPtr<TTableReverseIt> TDatabase::IterateRangeReverse(ui32 table, const TKeyRange& range, TTagsRef tags, TRowVersion snapshot) const noexcept
 {
     Y_VERIFY(!NoMoreReadsFlag, "Trying to read after reads prohibited, table %u", table);
 
@@ -132,13 +132,13 @@ TAutoPtr<TTableReverseIt> TDatabase::IterateRangeReverse(ui32 table, const TKeyR
 }
 
 template<>
-TAutoPtr<TTableIt> TDatabase::IterateRangeGeneric<TTableIt>(ui32 table, const TKeyRange& range, TTagsRef tags, TRowVersion snapshot) const noexcept 
+TAutoPtr<TTableIt> TDatabase::IterateRangeGeneric<TTableIt>(ui32 table, const TKeyRange& range, TTagsRef tags, TRowVersion snapshot) const noexcept
 {
     return IterateRange(table, range, tags, snapshot);
 }
 
 template<>
-TAutoPtr<TTableReverseIt> TDatabase::IterateRangeGeneric<TTableReverseIt>(ui32 table, const TKeyRange& range, TTagsRef tags, TRowVersion snapshot) const noexcept 
+TAutoPtr<TTableReverseIt> TDatabase::IterateRangeGeneric<TTableReverseIt>(ui32 table, const TKeyRange& range, TTagsRef tags, TRowVersion snapshot) const noexcept
 {
     return IterateRangeReverse(table, range, tags, snapshot);
 }
@@ -254,7 +254,7 @@ TVector<TPartView> TDatabase::GetTableParts(ui32 tableId) const {
     return Require(tableId)->GetAllParts();
 }
 
-TVector<TIntrusiveConstPtr<TColdPart>> TDatabase::GetTableColdParts(ui32 tableId) const { 
+TVector<TIntrusiveConstPtr<TColdPart>> TDatabase::GetTableColdParts(ui32 tableId) const {
     return Require(tableId)->GetColdParts();
 }
 
@@ -262,15 +262,15 @@ void TDatabase::EnumerateTableParts(ui32 tableId, const std::function<void(const
     Require(tableId)->EnumerateParts(std::move(callback));
 }
 
-void TDatabase::EnumerateTableColdParts(ui32 tableId, const std::function<void(const TIntrusiveConstPtr<TColdPart>&)>& callback) const { 
+void TDatabase::EnumerateTableColdParts(ui32 tableId, const std::function<void(const TIntrusiveConstPtr<TColdPart>&)>& callback) const {
     Require(tableId)->EnumerateColdParts(callback);
 }
 
-void TDatabase::EnumerateTableTxStatusParts(ui32 tableId, const std::function<void(const TIntrusiveConstPtr<TTxStatusPart>&)>& callback) const { 
+void TDatabase::EnumerateTableTxStatusParts(ui32 tableId, const std::function<void(const TIntrusiveConstPtr<TTxStatusPart>&)>& callback) const {
     Require(tableId)->EnumerateTxStatusParts(callback);
 }
 
-void TDatabase::EnumerateTxStatusParts(const std::function<void(const TIntrusiveConstPtr<TTxStatusPart>&)>& callback) const { 
+void TDatabase::EnumerateTxStatusParts(const std::function<void(const TIntrusiveConstPtr<TTxStatusPart>&)>& callback) const {
     DatabaseImpl->EnumerateTxStatusParts(callback);
 }
 
@@ -286,10 +286,10 @@ ui64 TDatabase::GetTableIndexSize(ui32 tableId) const {
     return Require(tableId)->Stat().Parts.IndexBytes;
 }
 
-ui64 TDatabase::GetTableSearchHeight(ui32 tableId) const { 
-    return Require(tableId)->GetSearchHeight(); 
-} 
- 
+ui64 TDatabase::GetTableSearchHeight(ui32 tableId) const {
+    return Require(tableId)->GetSearchHeight();
+}
+
 ui64 TDatabase::EstimateRowSize(ui32 tableId) const {
     return Require(tableId)->EstimateRowSize();
 }
@@ -330,12 +330,12 @@ ui32 TDatabase::TxSnapTable(ui32 table)
     return Change->Snapshots.size() - 1;
 }
 
-TAutoPtr<TSubset> TDatabase::Subset(ui32 table, TArrayRef<const TLogoBlobID> bundle, TEpoch before) const 
+TAutoPtr<TSubset> TDatabase::Subset(ui32 table, TArrayRef<const TLogoBlobID> bundle, TEpoch before) const
 {
     return Require(table)->Subset(bundle, before);
 }
 
-TAutoPtr<TSubset> TDatabase::Subset(ui32 table, TEpoch before, TRawVals from, TRawVals to) const 
+TAutoPtr<TSubset> TDatabase::Subset(ui32 table, TEpoch before, TRawVals from, TRawVals to) const
 {
     auto subset = Require(table)->Subset(before);
 
@@ -355,7 +355,7 @@ TAutoPtr<TSubset> TDatabase::Subset(ui32 table, TEpoch before, TRawVals from, TR
     return subset;
 }
 
-TAutoPtr<TSubset> TDatabase::ScanSnapshot(ui32 table, TRowVersion snapshot) 
+TAutoPtr<TSubset> TDatabase::ScanSnapshot(ui32 table, TRowVersion snapshot)
 {
     return Require(table)->ScanSnapshot(snapshot);
 }
@@ -370,12 +370,12 @@ void TDatabase::ReplaceSlices(ui32 table, TBundleSlicesMap slices)
     return DatabaseImpl->ReplaceSlices(table, std::move(slices));
 }
 
-void TDatabase::Replace(ui32 table, TArrayRef<const TPartView> partViews, const TSubset &subset) 
+void TDatabase::Replace(ui32 table, TArrayRef<const TPartView> partViews, const TSubset &subset)
 {
     return DatabaseImpl->Replace(table, partViews, subset);
 }
 
-void TDatabase::ReplaceTxStatus(ui32 table, TArrayRef<const TIntrusiveConstPtr<TTxStatusPart>> txStatus, const TSubset &subset) 
+void TDatabase::ReplaceTxStatus(ui32 table, TArrayRef<const TIntrusiveConstPtr<TTxStatusPart>> txStatus, const TSubset &subset)
 {
     return DatabaseImpl->ReplaceTxStatus(table, txStatus, subset);
 }
@@ -385,12 +385,12 @@ void TDatabase::Merge(ui32 table, TPartView partView)
     return DatabaseImpl->Merge(table, std::move(partView));
 }
 
-void TDatabase::Merge(ui32 table, TIntrusiveConstPtr<TColdPart> part) 
+void TDatabase::Merge(ui32 table, TIntrusiveConstPtr<TColdPart> part)
 {
     return DatabaseImpl->Merge(table, std::move(part));
 }
 
-void TDatabase::Merge(ui32 table, TIntrusiveConstPtr<TTxStatusPart> txStatus) 
+void TDatabase::Merge(ui32 table, TIntrusiveConstPtr<TTxStatusPart> txStatus)
 {
     return DatabaseImpl->Merge(table, std::move(txStatus));
 }
@@ -560,7 +560,7 @@ TTable* TDatabase::Require(ui32 table) const noexcept
     return DatabaseImpl->Get(table, true).Self.Get();
 }
 
-TGarbage TDatabase::RollUp(TTxStamp stamp, TArrayRef<const char> delta, TArrayRef<const char> redo, 
+TGarbage TDatabase::RollUp(TTxStamp stamp, TArrayRef<const char> delta, TArrayRef<const char> redo,
                                 TMemGlobs annex)
 {
     Y_VERIFY(!annex || redo, "Annex have to be rolled up with redo log");
@@ -591,10 +591,10 @@ void TDatabase::RollUpRemoveRowVersions(ui32 table, const TRowVersion& lower, co
     }
 }
 
-TCompactionStats TDatabase::GetCompactionStats(ui32 table) const 
-{ 
-    return Require(table)->GetCompactionStats(); 
-} 
+TCompactionStats TDatabase::GetCompactionStats(ui32 table) const
+{
+    return Require(table)->GetCompactionStats();
+}
 
 // NOTE: This helper should be used only to dump local DB contents in GDB
 void DebugDumpDb(const TDatabase &db) {

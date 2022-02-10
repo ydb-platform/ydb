@@ -11,8 +11,8 @@ class TMessageBusTabletCounters : public TMessageBusSimpleTabletRequest<TMessage
     NKikimrClient::TTabletCountersRequest Request;
 public:
     TMessageBusTabletCounters(TBusMessageContext &msg, NKikimrClient::TTabletCountersRequest &request, ui64 tabletId,
-                          bool withRetry, TDuration timeout, bool connectToFollower) 
-        : TMessageBusSimpleTabletRequest(msg, tabletId, withRetry, timeout, connectToFollower) 
+                          bool withRetry, TDuration timeout, bool connectToFollower)
+        : TMessageBusSimpleTabletRequest(msg, tabletId, withRetry, timeout, connectToFollower)
         , Request()
     {
         Request.Swap(&request);
@@ -37,12 +37,12 @@ public:
 IActor* CreateMessageBusTabletCountersRequest(TBusMessageContext &msg) {
     auto &record = static_cast<TBusTabletCountersRequest*>(msg.GetMessage())->Record;
 
-    const bool connectToFollower = record.HasConnectToFollower() ? record.GetConnectToFollower() : false; 
+    const bool connectToFollower = record.HasConnectToFollower() ? record.GetConnectToFollower() : false;
     const ui64 tabletId = record.GetTabletID();
     const bool withRetry = record.HasWithRetry() ? record.GetWithRetry() : false;
     const TDuration timeout = TDuration::MilliSeconds(record.HasTimeout() ? record.GetTimeout() : DefaultTimeout);
 
-    return new TMessageBusTabletCounters(msg, record, tabletId, withRetry, timeout, connectToFollower); 
+    return new TMessageBusTabletCounters(msg, record, tabletId, withRetry, timeout, connectToFollower);
 }
 
 }}

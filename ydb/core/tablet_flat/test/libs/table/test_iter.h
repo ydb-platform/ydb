@@ -21,7 +21,7 @@ namespace NTest {
         struct TConf {
             TConf() = default;
 
-            TConf(TAutoPtr<IPages> env, ui64 retry = 0, bool erased = true) 
+            TConf(TAutoPtr<IPages> env, ui64 retry = 0, bool erased = true)
                 : Env(env)
                 , Retry(retry)
                 , Erased(erased)
@@ -29,7 +29,7 @@ namespace NTest {
 
             }
 
-            TAutoPtr<IPages> Env; 
+            TAutoPtr<IPages> Env;
             ui64 Retry = 0;
             bool Erased = true; /* do not hide ERowOp::Erase */
         };
@@ -56,7 +56,7 @@ namespace NTest {
         }
 
         template<typename TEnv>
-        TAutoPtr<TEnv> Displace(TAutoPtr<IPages> env) noexcept 
+        TAutoPtr<TEnv> Displace(TAutoPtr<IPages> env) noexcept
         {
             auto *origin = std::exchange(Env, env).Release();
             auto *casted = dynamic_cast<TEnv*>(origin);
@@ -66,7 +66,7 @@ namespace NTest {
             return casted;
         }
 
-        TChecker& ReplaceEnv(TAutoPtr<IPages> env) 
+        TChecker& ReplaceEnv(TAutoPtr<IPages> env)
         {
             return Displace<IPages>(env), *this;
         }
@@ -320,7 +320,7 @@ namespace NTest {
         const ui64 Erased = true;
         ui64 Hoped = 0;
         EReady Ready = EReady::Gone;
-        TAutoPtr<IPages> Env; 
+        TAutoPtr<IPages> Env;
         TWrap Wrap;
         const TRowScheme &Scheme;
     };

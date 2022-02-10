@@ -709,33 +709,33 @@ TCheckFunc PartitionCount(ui32 count) {
     };
 }
 
-TCheckFunc FollowerCount(ui32 count) { 
+TCheckFunc FollowerCount(ui32 count) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
-        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetTable().GetPartitionConfig().GetFollowerCount(), count); 
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetTable().GetPartitionConfig().GetFollowerCount(), count);
     };
 }
 
-TCheckFunc CrossDataCenterFollowerCount(ui32 count) { 
+TCheckFunc CrossDataCenterFollowerCount(ui32 count) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
-        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetTable().GetPartitionConfig().GetCrossDataCenterFollowerCount(), count); 
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetTable().GetPartitionConfig().GetCrossDataCenterFollowerCount(), count);
     };
 }
 
-TCheckFunc AllowFollowerPromotion(bool val) { 
+TCheckFunc AllowFollowerPromotion(bool val) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
-        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetTable().GetPartitionConfig().GetAllowFollowerPromotion(), val); 
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetTable().GetPartitionConfig().GetAllowFollowerPromotion(), val);
     };
 }
 
-TCheckFunc FollowerGroups(const TVector<NKikimrHive::TFollowerGroup>& followerGroups) { 
+TCheckFunc FollowerGroups(const TVector<NKikimrHive::TFollowerGroup>& followerGroups) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
-        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetTable().GetPartitionConfig().FollowerGroupsSize(), followerGroups.size()); 
-        for (size_t i = 0; i < followerGroups.size(); ++i) { 
-            const auto& srcSG = record.GetPathDescription().GetTable().GetPartitionConfig().GetFollowerGroups(i); 
-            const auto& dstSG = followerGroups[i]; 
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetTable().GetPartitionConfig().FollowerGroupsSize(), followerGroups.size());
+        for (size_t i = 0; i < followerGroups.size(); ++i) {
+            const auto& srcSG = record.GetPathDescription().GetTable().GetPartitionConfig().GetFollowerGroups(i);
+            const auto& dstSG = followerGroups[i];
 
-            UNIT_ASSERT_VALUES_EQUAL(srcSG.GetFollowerCount(), dstSG.GetFollowerCount()); 
-            UNIT_ASSERT_VALUES_EQUAL(srcSG.GetAllowLeaderPromotion(), dstSG.GetAllowLeaderPromotion()); 
+            UNIT_ASSERT_VALUES_EQUAL(srcSG.GetFollowerCount(), dstSG.GetFollowerCount());
+            UNIT_ASSERT_VALUES_EQUAL(srcSG.GetAllowLeaderPromotion(), dstSG.GetAllowLeaderPromotion());
             UNIT_ASSERT_VALUES_EQUAL(srcSG.GetAllowClientRead(), dstSG.GetAllowClientRead());
 
             UNIT_ASSERT_VALUES_EQUAL(srcSG.AllowedNodeIDsSize(), dstSG.AllowedNodeIDsSize());

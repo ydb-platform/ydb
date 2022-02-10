@@ -442,9 +442,9 @@ bool TCheckSchemeTxUnit::CheckAlter(TActiveTransaction *activeTx)
             return false;
         }
 
-        if (DataShard.IsFollower()) { 
+        if (DataShard.IsFollower()) {
             LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
-                        "Ignoring alter, attempt to freeze follower, tablet " << DataShard.TabletID() 
+                        "Ignoring alter, attempt to freeze follower, tablet " << DataShard.TabletID()
                         << " txId " << activeTx->GetTxId() <<  " currentTxId "
                         << Pipeline.CurrentSchemaTxId());
             BuildResult(activeTx, NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST);

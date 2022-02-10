@@ -98,7 +98,7 @@ namespace NRedo {
 
             auto logos = snap.MutableNonSnapLogBodies();
 
-            while (TAutoPtr<TEntry> entry = was->Pop()) { 
+            while (TAutoPtr<TEntry> entry = was->Pop()) {
                 if (entry->FilterTables(Edges)) {
                     for (auto blobId : entry->LargeGlobId.Blobs()) {
                         LogoBlobIDFromLogoBlobID(blobId, logos->Add());

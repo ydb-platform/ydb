@@ -89,14 +89,14 @@ namespace NTest {
         }
 
         const TIntrusiveConstPtr<TMemTable> Table;
-        const TIntrusiveConstPtr<TRowScheme> Scheme; 
+        const TIntrusiveConstPtr<TRowScheme> Scheme;
         const TRemap Remap_;
         const bool Defaults = true;
 
     private:
         IPages *Env = nullptr;
         TRowState State;
-        TAutoPtr<TMemIt> Iter; 
+        TAutoPtr<TMemIt> Iter;
     };
 
     using TWrapMemtable = TWrapMemtableImpl<EDirection::Forward>;

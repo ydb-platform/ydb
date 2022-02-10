@@ -38,9 +38,9 @@ message TTableStats {
     optional uint64 PartCount = 24;
 
     optional THistogram KeyAccessSample = 26;
- 
-    optional uint64 SearchHeight = 27; 
- 
-    // seconds since epoch 
-    optional uint64 LastFullCompactionTs = 28; 
+
+    optional uint64 SearchHeight = 27;
+
+    // seconds since epoch
+    optional uint64 LastFullCompactionTs = 28;
 }

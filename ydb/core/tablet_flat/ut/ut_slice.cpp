@@ -39,13 +39,13 @@ namespace {
             return std::move(*this);
         }
 
-        TIntrusiveConstPtr<TSlices> Build() && 
+        TIntrusiveConstPtr<TSlices> Build() &&
         {
             return std::move(Run);
         }
 
     private:
-        TIntrusivePtr<TSlices> Run; 
+        TIntrusivePtr<TSlices> Run;
     };
 
     bool EqualByRowId(const TSlice& a, const TSlice& b)
@@ -70,12 +70,12 @@ namespace {
         return (ait == a.end()) == (bit == b.end());
     }
 
-    bool EqualByRowId(const TIntrusiveConstPtr<TSlices>& a, const TIntrusiveConstPtr<TSlices>& b) 
+    bool EqualByRowId(const TIntrusiveConstPtr<TSlices>& a, const TIntrusiveConstPtr<TSlices>& b)
     {
         return EqualByRowId(*a, *b);
     }
 
-    void VerifyEqual(const TIntrusiveConstPtr<TSlices>& value, const TIntrusiveConstPtr<TSlices>& expected) 
+    void VerifyEqual(const TIntrusiveConstPtr<TSlices>& value, const TIntrusiveConstPtr<TSlices>& expected)
     {
         UNIT_ASSERT_C(
             EqualByRowId(value, expected),
@@ -83,17 +83,17 @@ namespace {
     }
 
     void VerifyMerge(
-            const TIntrusiveConstPtr<TSlices>& a, 
-            const TIntrusiveConstPtr<TSlices>& b, 
-            const TIntrusiveConstPtr<TSlices>& expected) 
+            const TIntrusiveConstPtr<TSlices>& a,
+            const TIntrusiveConstPtr<TSlices>& b,
+            const TIntrusiveConstPtr<TSlices>& expected)
     {
         VerifyEqual(TSlices::Merge(a, b), expected);
         VerifyEqual(TSlices::Merge(b, a), expected);
     }
 
     void VerifyEqualCall(
-            const TIntrusiveConstPtr<TSlices>& a, 
-            const TIntrusiveConstPtr<TSlices>& b, 
+            const TIntrusiveConstPtr<TSlices>& a,
+            const TIntrusiveConstPtr<TSlices>& b,
             bool expected)
     {
         UNIT_ASSERT_C(
@@ -104,8 +104,8 @@ namespace {
     }
 
     void VerifySupersetCall(
-            const TIntrusiveConstPtr<TSlices>& a, 
-            const TIntrusiveConstPtr<TSlices>& b, 
+            const TIntrusiveConstPtr<TSlices>& a,
+            const TIntrusiveConstPtr<TSlices>& b,
             bool expected)
     {
         UNIT_ASSERT_C(
@@ -115,10 +115,10 @@ namespace {
             << " a superset of " << NFmt::If(b.Get()));
     }
 
-    TIntrusiveConstPtr<TSlices> VerifySubtract( 
-            const TIntrusiveConstPtr<TSlices>& a, 
-            const TIntrusiveConstPtr<TSlices>& b, 
-            const TIntrusiveConstPtr<TSlices>& expected) 
+    TIntrusiveConstPtr<TSlices> VerifySubtract(
+            const TIntrusiveConstPtr<TSlices>& a,
+            const TIntrusiveConstPtr<TSlices>& b,
+            const TIntrusiveConstPtr<TSlices>& expected)
     {
         auto result = TSlices::Subtract(a, b);
         UNIT_ASSERT_C(
@@ -368,7 +368,7 @@ Y_UNIT_TEST_SUITE(TPartSlice) {
     Y_UNIT_TEST(LookupFull)
     {
         // Build run with 16 slices, enough to test both slow and fast path
-        TIntrusivePtr<TSlices> x = new TSlices; 
+        TIntrusivePtr<TSlices> x = new TSlices;
         for (int i = 0; i < 16; ++i) {
             x->emplace_back(
                 TSerializedCellVec(), // key not important

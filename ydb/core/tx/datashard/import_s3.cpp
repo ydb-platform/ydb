@@ -436,7 +436,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader>, private TS3User {
             << ", writtenBytes# " << WrittenBytes
             << ", writtenRows# " << WrittenRows);
 
-        TAutoPtr<IDestructable> prod = new TImportJobProduct(success, error, WrittenBytes, WrittenRows); 
+        TAutoPtr<IDestructable> prod = new TImportJobProduct(success, error, WrittenBytes, WrittenRows);
         Send(DataShard, new TDataShard::TEvPrivate::TEvAsyncJobComplete(prod), 0, TxId);
 
         Y_VERIFY(TaskId);

@@ -67,7 +67,7 @@ namespace NFake {
 
 
     class TNanny : public ::NActors::IActor {
-        using TEventHandlePtr = TAutoPtr<::NActors::IEventHandle>; 
+        using TEventHandlePtr = TAutoPtr<::NActors::IEventHandle>;
 
     public:
 
@@ -116,7 +116,7 @@ namespace NFake {
             Owner = owner, StartTablet();
         }
 
-        void Inbox(TEventHandlePtr &eh, const ::NActors::TActorContext&) 
+        void Inbox(TEventHandlePtr &eh, const ::NActors::TActorContext&)
         {
             if (auto *ev = eh->CastAsLocal<NFake::TEvResult>()) {
                 Handle(*ev);
@@ -195,12 +195,12 @@ namespace NFake {
 
     private:
         const ui64 MyId = MakeTabletID(0, 0, 1);
-        TAutoPtr<NUtil::ILogger> Logger; 
+        TAutoPtr<NUtil::ILogger> Logger;
         TActorId Owner;
         TActorId Tablet;
         ui64 TxInFlight = 0;
         EDo State = EDo::Born;
-        TAutoPtr<NTable::ITestDb> Fake; 
+        TAutoPtr<NTable::ITestDb> Fake;
     };
 
 }

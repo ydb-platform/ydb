@@ -9,7 +9,7 @@ namespace NTest {
 
     struct TWrapDbSelect {
 
-        TWrapDbSelect(TDatabase &base, ui32 table, TIntrusiveConstPtr<TRowScheme> scheme, 
+        TWrapDbSelect(TDatabase &base, ui32 table, TIntrusiveConstPtr<TRowScheme> scheme,
                 TRowVersion snapshot = TRowVersion::Max())
             : Scheme(std::move(scheme))
             , Remap_(TRemap::Full(*Scheme))
@@ -58,7 +58,7 @@ namespace NTest {
         }
 
     public:
-        const TIntrusiveConstPtr<TRowScheme> Scheme; 
+        const TIntrusiveConstPtr<TRowScheme> Scheme;
         const TRemap Remap_;
         TDatabase &Base;
 

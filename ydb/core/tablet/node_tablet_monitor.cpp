@@ -372,12 +372,12 @@ public:
                                      TABLED() {str << ei.GetCurrentGeneration();}
                                      TABLED() {if (ei.HasLockedFor()) str << TDuration::MicroSeconds(ei.GetLockedFor()).Seconds();}
                                      TABLED() {
-                                         ui32 nodeId = ActorIdFromProto(ei.GetCurrentLeader()).NodeId(); 
+                                         ui32 nodeId = ActorIdFromProto(ei.GetCurrentLeader()).NodeId();
                                          str << nodeId;
                                          auto eq_it = EqualRange(NodesInfo->Nodes.begin(), NodesInfo->Nodes.end(), nodeId);
                                          if (eq_it.first != NodesInfo->Nodes.end() && eq_it.first->Host) str << " / " << eq_it.first->Host;
                                      }
-                                     TABLED() {if (ActorIdFromProto(ei.GetCurrentLeaderTablet())) str << "<span class='glyphicon glyphicon-ok' title='User Actor present'/>";} 
+                                     TABLED() {if (ActorIdFromProto(ei.GetCurrentLeaderTablet())) str << "<span class='glyphicon glyphicon-ok' title='User Actor present'/>";}
                                  }
                              }
                          }

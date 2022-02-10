@@ -92,7 +92,7 @@ SRCS(
     services.proto
     shared_cache.proto
     sqs.proto
-    follower_group.proto 
+    follower_group.proto
     ssa.proto
     statestorage.proto
     stream.proto

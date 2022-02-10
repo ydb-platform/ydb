@@ -49,8 +49,8 @@ public:
             if (params.Has("tablet_type")) {
                 request->Record.SetTabletType(static_cast<TTabletTypes::EType>(FromStringWithDefault<ui32>(params.Get("tablet_type"), 0)));
             }
-            if (FromStringWithDefault(params.Get("followers"), false)) { 
-                request->Record.SetReturnFollowers(true); 
+            if (FromStringWithDefault(params.Get("followers"), false)) {
+                request->Record.SetReturnFollowers(true);
             }
             if (FromStringWithDefault(params.Get("metrics"), false)) {
                 request->Record.SetReturnMetrics(true);

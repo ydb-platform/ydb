@@ -21,7 +21,7 @@ public:
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
         BLOG_D("THive::TTxStopTablet::Execute Tablet: " << TabletId);
-        TLeaderTabletInfo* tablet = Self->FindTablet(TabletId); 
+        TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
         if (tablet != nullptr) {
             ETabletState State = tablet->State;
             ETabletState NewState = State;
@@ -41,15 +41,15 @@ public:
             case ETabletState::ReadyToWork:
                 // Switch to Stopping
                 NewState = ETabletState::Stopped;
-                for (TTabletInfo& follower : tablet->Followers) { 
-                    if (follower.IsAlive()) { 
-                        follower.InitiateStop(); 
-                        db.Table<Schema::TabletFollowerTablet>().Key(follower.GetFullTabletId()).Update<Schema::TabletFollowerTablet::FollowerNode>(0); 
+                for (TTabletInfo& follower : tablet->Followers) {
+                    if (follower.IsAlive()) {
+                        follower.InitiateStop();
+                        db.Table<Schema::TabletFollowerTablet>().Key(follower.GetFullTabletId()).Update<Schema::TabletFollowerTablet::FollowerNode>(0);
                     }
                 }
                 if (tablet->IsAlive()) {
                     tablet->InitiateStop();
-                    db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::LeaderNode>(0); 
+                    db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::LeaderNode>(0);
                 }
                 Status = NKikimrProto::OK;
                 break;
@@ -77,7 +77,7 @@ public:
         BLOG_D("THive::TTxStopTablet::Complete TabletId: " << TabletId);
         if (Status != NKikimrProto::UNKNOWN) {
             ctx.Send(ActorToNotify, new TEvHive::TEvStopTabletResult(Status, TabletId), 0, 0);
-            TLeaderTabletInfo* tablet = Self->FindTablet(TabletId); 
+            TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
             if (tablet != nullptr) {
                 Self->ReportStoppedToWhiteboard(*tablet);
                 BLOG_D("Report tablet " << tablet->ToString() << " as stopped to Whiteboard");

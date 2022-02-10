@@ -107,7 +107,7 @@ struct TExecLevelHierarchy {
 //      or 8 data shard in domain (##0-7)
 // one scheme shard (#F0)
 
-struct TTestTxConfig { 
+struct TTestTxConfig {
     static constexpr ui64 DomainUid = 0;
     static constexpr ui64 Coordinator = 0x0000000000800001;
     static constexpr ui64 Mediator = 0x0000000000810001;

@@ -134,7 +134,7 @@ void TRunCommandConfigParser::ParseConfigFiles(const NLastGetopt::TOptsParseResu
     }
 
     if (res.Has("feature-flags-file")) {
-        Y_VERIFY(ParsePBFromFile(res.Get("feature-flags-file"), Config.AppConfig.MutableFeatureFlags(), true)); 
+        Y_VERIFY(ParsePBFromFile(res.Get("feature-flags-file"), Config.AppConfig.MutableFeatureFlags(), true));
     }
 
     if (res.Has("sqs-file")) {

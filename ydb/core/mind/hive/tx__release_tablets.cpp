@@ -24,15 +24,15 @@ public:
         BLOG_D("THive::TTxReleaseTablets::Execute " << request);
         NIceDb::TNiceDb db(txc.DB);
         for (TTabletId tabletId : request.GetTabletIDs()) {
-            TLeaderTabletInfo* tablet = Self->FindTablet(tabletId); 
+            TLeaderTabletInfo* tablet = Self->FindTablet(tabletId);
             if (tablet != nullptr) {
                 Y_VERIFY(tablet->SeizedByChild);
 
                 if (tablet->IsAlive() && tablet->Node != nullptr) {
                     tablet->SendStopTablet(tablet->Node->Local, tablet->GetFullTabletId());
-                    for (TFollowerTabletInfo& follower : tablet->Followers) { 
-                        if (follower.IsAlive() && follower.Node != nullptr) { 
-                            follower.SendStopTablet(follower.Node->Local, follower.GetFullTabletId()); 
+                    for (TFollowerTabletInfo& follower : tablet->Followers) {
+                        if (follower.IsAlive() && follower.Node != nullptr) {
+                            follower.SendStopTablet(follower.Node->Local, follower.GetFullTabletId());
                         }
                     }
                 }
@@ -44,13 +44,13 @@ public:
                     }
                     db.Table<Schema::TabletChannel>().Key(tablet->Id, channelInfo.Channel).Delete();
                 }
-                for (TFollowerTabletInfo& follower : tablet->Followers) { 
-                    auto fullTabletId = follower.GetFullTabletId(); 
-                    db.Table<Schema::TabletFollowerTablet>().Key(fullTabletId).Delete(); 
+                for (TFollowerTabletInfo& follower : tablet->Followers) {
+                    auto fullTabletId = follower.GetFullTabletId();
+                    db.Table<Schema::TabletFollowerTablet>().Key(fullTabletId).Delete();
                     db.Table<Schema::Metrics>().Key(fullTabletId).Delete();
                 }
-                for (TFollowerGroup& group : tablet->FollowerGroups) { 
-                    db.Table<Schema::TabletFollowerGroup>().Key(tablet->Id, group.Id).Delete(); 
+                for (TFollowerGroup& group : tablet->FollowerGroups) {
+                    db.Table<Schema::TabletFollowerGroup>().Key(tablet->Id, group.Id).Delete();
                 }
                 db.Table<Schema::Tablet>().Key(tablet->Id).Delete();
                 TActorId unlockedFromActor = tablet->ClearLockedToActor();

@@ -8,8 +8,8 @@
 
 namespace NKikimr {
 
-namespace { 
- 
+namespace {
+
 class TDummyFlatTablet : public TActor<TDummyFlatTablet>, public NTabletFlatExecutor::TTabletExecutedFlat {
 
     struct Schema : NIceDb::Schema {
@@ -90,7 +90,7 @@ class TDummyFlatTablet : public TActor<TDummyFlatTablet>, public NTabletFlatExec
 
     void OnActivateExecutor(const TActorContext &ctx) override {
         Become(&TThis::StateWork);
-        if (Executor()->GetStats().IsFollower) 
+        if (Executor()->GetStats().IsFollower)
             SignalTabletActive(ctx);
         else
             Execute(new TTxSchemeInit(this), ctx);
@@ -139,8 +139,8 @@ public:
     }
 };
 
-} // namespace 
- 
+} // namespace
+
 IActor* CreateFlatDummyTablet(const TActorId &tablet, TTabletStorageInfo *info) {
     return new TDummyFlatTablet(tablet, info);
 

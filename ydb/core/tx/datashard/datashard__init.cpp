@@ -162,7 +162,7 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         PRECHARGE_SYS_TABLE(Schema::ReplicationSources);
         PRECHARGE_SYS_TABLE(Schema::ReplicationSourceOffsets);
         PRECHARGE_SYS_TABLE(Schema::DstReplicationSourceOffsetsReceived);
-        PRECHARGE_SYS_TABLE(Schema::UserTablesStats); 
+        PRECHARGE_SYS_TABLE(Schema::UserTablesStats);
         PRECHARGE_SYS_TABLE(Schema::SchemaSnapshots);
 
         if (!ready)
@@ -227,25 +227,25 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         }
     }
 
-    if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::UserTablesStats::TableId)) { 
-        // Reads user tables persistent stats 
-        auto rowset = db.Table<Schema::UserTablesStats>().GreaterOrEqual(0).Select(); 
-        if (!rowset.IsReady()) 
-            return false; 
-        while (!rowset.EndOfSet()) { 
-            ui64 tableId = rowset.GetValue<Schema::UserTablesStats::Tid>(); 
-            ui64 ts = rowset.GetValueOrDefault<Schema::UserTablesStats::FullCompactionTs>(); 
-            if (ts != 0) { 
-                auto it = Self->TableInfos.find(tableId); 
-                if (it != Self->TableInfos.end()) { 
-                    it->second->Stats.LastFullCompaction = TInstant::Seconds(ts); 
-                } 
-            } 
-            if (!rowset.Next()) 
-                return false; 
-        } 
-    } 
- 
+    if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::UserTablesStats::TableId)) {
+        // Reads user tables persistent stats
+        auto rowset = db.Table<Schema::UserTablesStats>().GreaterOrEqual(0).Select();
+        if (!rowset.IsReady())
+            return false;
+        while (!rowset.EndOfSet()) {
+            ui64 tableId = rowset.GetValue<Schema::UserTablesStats::Tid>();
+            ui64 ts = rowset.GetValueOrDefault<Schema::UserTablesStats::FullCompactionTs>();
+            if (ts != 0) {
+                auto it = Self->TableInfos.find(tableId);
+                if (it != Self->TableInfos.end()) {
+                    it->second->Stats.LastFullCompaction = TInstant::Seconds(ts);
+                }
+            }
+            if (!rowset.Next())
+                return false;
+        }
+    }
+
     { // Read split snapshots on src tablet
         auto rowset = db.Table<Schema::SplitSrcSnapshots>().GreaterOrEqual(0).Select();
         if (!rowset.IsReady())
@@ -619,12 +619,12 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
 
     const auto& scheme = txc.DB.GetScheme();
 
-    // Check that TxInit from leader has been already replicated to the follower 
+    // Check that TxInit from leader has been already replicated to the follower
     // and all internal tables have already been created
     bool isInitialized = scheme.GetTableInfo(Schema::Sys::TableId);
     if (!isInitialized) {
         status = NKikimrTxDataShard::TError::WRONG_SHARD_STATE;
-        errMessage = Sprintf("Follower has not been initialized yet: tablet id: %" PRIu64, TabletID()); 
+        errMessage = Sprintf("Follower has not been initialized yet: tablet id: %" PRIu64, TabletID());
         return true;
     }
 
@@ -633,14 +633,14 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
 
     // Check if user tables schema has changed since last time we synchronized it
     ui64 lastSchemeUpdate = txc.DB.Head(Schema::UserTables::TableId).Serial;
-    if (lastSchemeUpdate > FollowerState.LastSchemeUpdate) { 
+    if (lastSchemeUpdate > FollowerState.LastSchemeUpdate) {
         NIceDb::TNiceDb db(txc.DB);
         {
             LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD,
-                      "Updating tables metadata on follower, tabletId %" PRIu64 
+                      "Updating tables metadata on follower, tabletId %" PRIu64
                       " prevGen %" PRIu64 " prevStep %" PRIu64 " newGen %" PRIu64 " newStep %" PRIu64,
-                      TabletID(), FollowerState.LastSchemeUpdate >> 32, 
-                      FollowerState.LastSchemeUpdate & (ui32)-1, 
+                      TabletID(), FollowerState.LastSchemeUpdate >> 32,
+                      FollowerState.LastSchemeUpdate & (ui32)-1,
                       lastSchemeUpdate >> 32, lastSchemeUpdate & (ui32)-1);
 
             // Reload user tables metadata
@@ -689,17 +689,17 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
                 }
             }
         }
-        FollowerState.LastSchemeUpdate = lastSchemeUpdate; 
+        FollowerState.LastSchemeUpdate = lastSchemeUpdate;
     }
 
-    // N.B. follower with snapshots support may be loaded in datashard without a snapshots table 
+    // N.B. follower with snapshots support may be loaded in datashard without a snapshots table
     if (scheme.GetTableInfo(Schema::Snapshots::TableId)) {
         ui64 lastSnapshotsUpdate = txc.DB.Head(Schema::Snapshots::TableId).Serial;
-        if (lastSnapshotsUpdate > FollowerState.LastSnapshotsUpdate) { 
+        if (lastSnapshotsUpdate > FollowerState.LastSnapshotsUpdate) {
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "Updating snapshots metadata on follower, tabletId " << TabletID() 
-                    << " prevGen " << (FollowerState.LastSnapshotsUpdate >> 32) 
-                    << " prevStep " << (FollowerState.LastSnapshotsUpdate & (ui32)-1) 
+                    "Updating snapshots metadata on follower, tabletId " << TabletID()
+                    << " prevGen " << (FollowerState.LastSnapshotsUpdate >> 32)
+                    << " prevStep " << (FollowerState.LastSnapshotsUpdate & (ui32)-1)
                     << " newGen " << (lastSnapshotsUpdate >> 32)
                     << " newStep " << (lastSnapshotsUpdate & (ui32)-1));
 
@@ -708,7 +708,7 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
                 return false;
             }
 
-            FollowerState.LastSnapshotsUpdate = lastSnapshotsUpdate; 
+            FollowerState.LastSnapshotsUpdate = lastSnapshotsUpdate;
         }
 
         // Initialize PathOwnerId (required for snapshot keys)

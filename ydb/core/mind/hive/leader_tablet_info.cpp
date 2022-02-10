@@ -3,9 +3,9 @@
 namespace NKikimr {
 namespace NHive {
 
-TString TLeaderTabletInfo::DEFAULT_STORAGE_POOL_NAME = "default"; 
+TString TLeaderTabletInfo::DEFAULT_STORAGE_POOL_NAME = "default";
 
-TPathId TLeaderTabletInfo::GetTenant() const { 
+TPathId TLeaderTabletInfo::GetTenant() const {
     // todo: must be explicit TenantPathId
     if (!ObjectDomain)
         return TPathId();
@@ -13,56 +13,56 @@ TPathId TLeaderTabletInfo::GetTenant() const {
     return TPathId(ObjectDomain.GetSchemeShard(), ObjectDomain.GetPathId());
 }
 
-bool TLeaderTabletInfo::IsSomeoneAliveOnNode(TNodeId nodeId) const { 
+bool TLeaderTabletInfo::IsSomeoneAliveOnNode(TNodeId nodeId) const {
     if (CanBeAlive() && Node->Id == nodeId) {
         return true;
     }
-    for (const TTabletInfo& follower : Followers) { 
-        if (follower.CanBeAlive() && follower.Node->Id == nodeId) 
+    for (const TTabletInfo& follower : Followers) {
+        if (follower.CanBeAlive() && follower.Node->Id == nodeId)
             return true;
     }
     return false;
 }
 
-ui32 TLeaderTabletInfo::GetFollowersAliveOnDataCenter(TDataCenterId dataCenterId) const { 
-    ui32 followers = 0; 
-    for (const TTabletInfo& follower : Followers) { 
+ui32 TLeaderTabletInfo::GetFollowersAliveOnDataCenter(TDataCenterId dataCenterId) const {
+    ui32 followers = 0;
+    for (const TTabletInfo& follower : Followers) {
         if (follower.CanBeAlive() && follower.Node->Location.GetDataCenterId() == dataCenterId) {
-            ++followers; 
+            ++followers;
         }
     }
-    return followers; 
+    return followers;
 }
 
-ui32 TLeaderTabletInfo::GetFollowersAliveOnDataCenterExcludingFollower(TDataCenterId dataCenterId, const TTabletInfo& excludingFollower) const { 
-    ui32 followers = 0; 
-    for (const TTabletInfo& follower : Followers) { 
-        if (follower == excludingFollower) 
+ui32 TLeaderTabletInfo::GetFollowersAliveOnDataCenterExcludingFollower(TDataCenterId dataCenterId, const TTabletInfo& excludingFollower) const {
+    ui32 followers = 0;
+    for (const TTabletInfo& follower : Followers) {
+        if (follower == excludingFollower)
             continue;
         if (follower.CanBeAlive() && follower.Node->Location.GetDataCenterId() == dataCenterId) {
-            ++followers; 
+            ++followers;
         }
     }
-    return followers; 
+    return followers;
 }
 
-bool TLeaderTabletInfo::IsFollowerPromotableOnNode(TNodeId nodeId) const { 
-    for (const TFollowerTabletInfo& follower : Followers) { 
-        if (follower.IsRunning() && follower.NodeId == nodeId && follower.FollowerGroup.AllowLeaderPromotion) 
+bool TLeaderTabletInfo::IsFollowerPromotableOnNode(TNodeId nodeId) const {
+    for (const TFollowerTabletInfo& follower : Followers) {
+        if (follower.IsRunning() && follower.NodeId == nodeId && follower.FollowerGroup.AllowLeaderPromotion)
             return true;
     }
     return false;
 }
 
-TFollowerId TLeaderTabletInfo::GetFollowerPromotableOnNode(TNodeId nodeId) const { 
-    for (const TFollowerTabletInfo& follower : Followers) { 
-        if (follower.IsRunning() && follower.NodeId == nodeId && follower.FollowerGroup.AllowLeaderPromotion) 
-            return follower.Id; 
+TFollowerId TLeaderTabletInfo::GetFollowerPromotableOnNode(TNodeId nodeId) const {
+    for (const TFollowerTabletInfo& follower : Followers) {
+        if (follower.IsRunning() && follower.NodeId == nodeId && follower.FollowerGroup.AllowLeaderPromotion)
+            return follower.Id;
     }
     return 0;
 }
 
-void TLeaderTabletInfo::AssignDomains(const TSubDomainKey& objectDomain, const TVector<TSubDomainKey>& allowedDomains) { 
+void TLeaderTabletInfo::AssignDomains(const TSubDomainKey& objectDomain, const TVector<TSubDomainKey>& allowedDomains) {
     if (!allowedDomains.empty()) {
         EffectiveAllowedDomains = allowedDomains;
         if (!objectDomain) {
@@ -79,12 +79,12 @@ void TLeaderTabletInfo::AssignDomains(const TSubDomainKey& objectDomain, const T
     }
 }
 
-bool TLeaderTabletInfo::InitiateAssignTabletGroups() { 
+bool TLeaderTabletInfo::InitiateAssignTabletGroups() {
     Hive.AssignTabletGroups(*this);
     return true;
 }
 
-bool TLeaderTabletInfo::InitiateBlockStorage() { 
+bool TLeaderTabletInfo::InitiateBlockStorage() {
     // attempt to kill tablet before blocking the storage group
     Kill();
     // blocks PREVIOUS entry of tablet history
@@ -93,7 +93,7 @@ bool TLeaderTabletInfo::InitiateBlockStorage() {
     return true;
 }
 
-bool TLeaderTabletInfo::InitiateBlockStorage(ui32 generation) { 
+bool TLeaderTabletInfo::InitiateBlockStorage(ui32 generation) {
     // attempt to kill tablet before blocking the storage group
     Kill();
     // blocks LATEST entry of tablet history
@@ -107,40 +107,40 @@ bool TLeaderTabletInfo::InitiateBlockStorage(ui32 generation) {
     return true;
 }
 
-bool TLeaderTabletInfo::InitiateDeleteStorage() { 
+bool TLeaderTabletInfo::InitiateDeleteStorage() {
     IActor* x = CreateTabletReqDelete(Hive.SelfId(), TabletStorageInfo);
     Hive.Register(x);
     return true;
 }
 
-TFollowerTabletInfo& TLeaderTabletInfo::AddFollower(TFollowerGroup& followerGroup, TFollowerId followerId) { 
-    Followers.emplace_back(*this, followerId, followerGroup); 
-    TFollowerTabletInfo& follower = Followers.back(); 
-    if (followerId == 0) { 
-        follower.Id = GenerateFollowerId(); 
+TFollowerTabletInfo& TLeaderTabletInfo::AddFollower(TFollowerGroup& followerGroup, TFollowerId followerId) {
+    Followers.emplace_back(*this, followerId, followerGroup);
+    TFollowerTabletInfo& follower = Followers.back();
+    if (followerId == 0) {
+        follower.Id = GenerateFollowerId();
     } else {
-        follower.Id = followerId; 
+        follower.Id = followerId;
     }
     Hive.UpdateCounterTabletsTotal(+1);
-    return follower; 
+    return follower;
 }
 
-TFollowerGroupId TLeaderTabletInfo::GenerateFollowerGroupId() const { 
-    return GenerateId(FollowerGroups); 
+TFollowerGroupId TLeaderTabletInfo::GenerateFollowerGroupId() const {
+    return GenerateId(FollowerGroups);
 }
 
-TFollowerGroup& TLeaderTabletInfo::AddFollowerGroup(TFollowerGroupId followerGroupId) { 
-    FollowerGroups.emplace_back(); 
-    TFollowerGroup& followerGroup = FollowerGroups.back(); 
-    if (followerGroupId == 0) { 
-        followerGroup.Id = GenerateFollowerGroupId(); 
+TFollowerGroup& TLeaderTabletInfo::AddFollowerGroup(TFollowerGroupId followerGroupId) {
+    FollowerGroups.emplace_back();
+    TFollowerGroup& followerGroup = FollowerGroups.back();
+    if (followerGroupId == 0) {
+        followerGroup.Id = GenerateFollowerGroupId();
     } else {
-        followerGroup.Id = followerGroupId; 
+        followerGroup.Id = followerGroupId;
     }
-    return followerGroup; 
+    return followerGroup;
 }
 
-TActorId TLeaderTabletInfo::SetLockedToActor(const TActorId& actor, const TDuration& timeout) { 
+TActorId TLeaderTabletInfo::SetLockedToActor(const TActorId& actor, const TDuration& timeout) {
     TActorId previousOwner = LockedToActor;
     if (LockedToActor != actor) {
         if (LockedToActor.NodeId() != actor.NodeId()) {
@@ -162,19 +162,19 @@ TActorId TLeaderTabletInfo::SetLockedToActor(const TActorId& actor, const TDurat
     return previousOwner;
 }
 
-void TLeaderTabletInfo::AcquireAllocationUnits() { 
+void TLeaderTabletInfo::AcquireAllocationUnits() {
     for (ui32 channel = 0; channel < TabletStorageInfo->Channels.size(); ++channel) {
         AcquireAllocationUnit(channel);
     }
 }
 
-void TLeaderTabletInfo::ReleaseAllocationUnits() { 
+void TLeaderTabletInfo::ReleaseAllocationUnits() {
     for (ui32 channel = 0; channel < TabletStorageInfo->Channels.size(); ++channel) {
         ReleaseAllocationUnit(channel);
     }
 }
 
-bool TLeaderTabletInfo::AcquireAllocationUnit(ui32 channelId) { 
+bool TLeaderTabletInfo::AcquireAllocationUnit(ui32 channelId) {
     if (channelId < TabletStorageInfo->Channels.size()) {
         const TTabletChannelInfo& channel = TabletStorageInfo->Channels[channelId];
         if (!channel.History.empty()) {
@@ -185,7 +185,7 @@ bool TLeaderTabletInfo::AcquireAllocationUnit(ui32 channelId) {
     return false;
 }
 
-bool TLeaderTabletInfo::ReleaseAllocationUnit(ui32 channelId) { 
+bool TLeaderTabletInfo::ReleaseAllocationUnit(ui32 channelId) {
     if (channelId < TabletStorageInfo->Channels.size()) {
         const TTabletChannelInfo& channel = TabletStorageInfo->Channels[channelId];
         if (!channel.History.empty()) {
@@ -196,7 +196,7 @@ bool TLeaderTabletInfo::ReleaseAllocationUnit(ui32 channelId) {
     return false;
 }
 
-const NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters* TLeaderTabletInfo::FindFreeAllocationUnit(ui32 channelId) { 
+const NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters* TLeaderTabletInfo::FindFreeAllocationUnit(ui32 channelId) {
     TStoragePoolInfo* storagePool = Hive.FindStoragePool(GetChannelStoragePoolName(channelId));
     if (storagePool != nullptr) {
         THolder<NKikimrBlobStorage::TEvControllerSelectGroups::TGroupParameters> params = Hive.BuildGroupParametersForChannel(*this, channelId);
@@ -247,15 +247,15 @@ const NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters* TLe
     return nullptr;
 }
 
-TString TLeaderTabletInfo::GetChannelStoragePoolName(const TTabletChannelInfo& channel) { 
+TString TLeaderTabletInfo::GetChannelStoragePoolName(const TTabletChannelInfo& channel) {
     return channel.StoragePool.empty() ? DEFAULT_STORAGE_POOL_NAME : channel.StoragePool;
 }
 
-TString TLeaderTabletInfo::GetChannelStoragePoolName(const TChannelProfiles::TProfile::TChannel& channel) { 
+TString TLeaderTabletInfo::GetChannelStoragePoolName(const TChannelProfiles::TProfile::TChannel& channel) {
     return channel.PoolKind.empty() ? DEFAULT_STORAGE_POOL_NAME : channel.PoolKind;
 }
 
-TString TLeaderTabletInfo::GetChannelStoragePoolName(ui32 channelId) { 
+TString TLeaderTabletInfo::GetChannelStoragePoolName(ui32 channelId) {
     if (BoundChannels.size() > channelId) {
         return BoundChannels[channelId].GetStoragePoolName();
     }
@@ -265,12 +265,12 @@ TString TLeaderTabletInfo::GetChannelStoragePoolName(ui32 channelId) {
     return DEFAULT_STORAGE_POOL_NAME;
 }
 
-TStoragePoolInfo& TLeaderTabletInfo::GetStoragePool(ui32 channelId) { 
+TStoragePoolInfo& TLeaderTabletInfo::GetStoragePool(ui32 channelId) {
     TStoragePoolInfo& storagePool = Hive.GetStoragePool(GetChannelStoragePoolName(channelId));
     return storagePool;
 }
 
-void TLeaderTabletInfo::ActualizeTabletStatistics(TInstant now) { 
+void TLeaderTabletInfo::ActualizeTabletStatistics(TInstant now) {
     TTabletInfo::ActualizeTabletStatistics(now);
     for (TTabletInfo& follower : Followers) {
         follower.ActualizeTabletStatistics(now);

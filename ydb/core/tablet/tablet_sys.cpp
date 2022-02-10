@@ -31,8 +31,8 @@ namespace {
     static constexpr size_t MaxStepsInFlight = 10000;
     static constexpr size_t MaxBytesInFlight = 256 * 1024 * 1024;
 
-    static constexpr TDuration OfflineFollowerWaitFirst = TDuration::Seconds(4); 
-    static constexpr TDuration OfflineFollowerWaitRetry = TDuration::Seconds(15); 
+    static constexpr TDuration OfflineFollowerWaitFirst = TDuration::Seconds(4);
+    static constexpr TDuration OfflineFollowerWaitRetry = TDuration::Seconds(15);
 
 }
 
@@ -44,21 +44,21 @@ ui64 TTablet::TabletID() const {
     return Info->TabletID;
 }
 
-void TTablet::NextFollowerAttempt() { 
-    const ui32 node = FollowerInfo.KnownLeaderID.NodeId(); 
+void TTablet::NextFollowerAttempt() {
+    const ui32 node = FollowerInfo.KnownLeaderID.NodeId();
     if (node && node != SelfId().NodeId()) {
         const TActorId proxy = TActivationContext::InterconnectProxy(node);
         Send(proxy, new TEvents::TEvUnsubscribe);
     }
-    FollowerInfo.NextAttempt(); 
+    FollowerInfo.NextAttempt();
 }
 
 void TTablet::ReportTabletStateChange(ETabletState state) {
     const TActorId tabletStateServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId());
-    if (state == TTabletStateInfo::Created || state == TTabletStateInfo::ResolveLeader) { 
-        Send(tabletStateServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvTabletStateUpdate(TabletID(), FollowerId, state, Info, StateStorageInfo.KnownGeneration, Leader)); 
+    if (state == TTabletStateInfo::Created || state == TTabletStateInfo::ResolveLeader) {
+        Send(tabletStateServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvTabletStateUpdate(TabletID(), FollowerId, state, Info, StateStorageInfo.KnownGeneration, Leader));
     } else {
-        Send(tabletStateServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvTabletStateUpdate(TabletID(), FollowerId, state, StateStorageInfo.KnownGeneration)); 
+        Send(tabletStateServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvTabletStateUpdate(TabletID(), FollowerId, state, StateStorageInfo.KnownGeneration));
     }
 }
 
@@ -229,7 +229,7 @@ void TTablet::WriteZeroEntry(TEvTablet::TDependencyGraph *graph) {
 
 void TTablet::StartActivePhase() {
     Graph.NextEntry = 1;
-    Graph.MinFollowerUpdate = 1; 
+    Graph.MinFollowerUpdate = 1;
 
     Send(Launcher, new TEvTablet::TEvRestored(TabletID(), StateStorageInfo.KnownGeneration, UserTablet, false));
     Send(UserTablet, new TEvTablet::TEvRestored(TabletID(), StateStorageInfo.KnownGeneration, UserTablet, false));
@@ -240,7 +240,7 @@ void TTablet::StartActivePhase() {
     StateStorageGuardian = Register(CreateStateStorageTabletGuardian(TabletID(), SelfId(), UserTablet, StateStorageInfo.KnownGeneration));
 
     // if nowhere to sync - then declare sync done
-    TryFinishFollowerSync(); 
+    TryFinishFollowerSync();
 }
 
 void TTablet::TryPumpWaitingForGc() {
@@ -248,11 +248,11 @@ void TTablet::TryPumpWaitingForGc() {
         return;
 
     ui32 minConfirmedGcStep = Max<ui32>();
-    for (auto &xpair : LeaderInfo) { 
-        const TLeaderInfo &followerInfo = xpair.second; 
-        if (followerInfo.SyncState == EFollowerSyncState::Ignore) 
+    for (auto &xpair : LeaderInfo) {
+        const TLeaderInfo &followerInfo = xpair.second;
+        if (followerInfo.SyncState == EFollowerSyncState::Ignore)
             continue;
-        minConfirmedGcStep = Min(followerInfo.ConfirmedGCStep, minConfirmedGcStep); 
+        minConfirmedGcStep = Min(followerInfo.ConfirmedGCStep, minConfirmedGcStep);
     }
 
     while (WaitingForGcAck) {
@@ -262,13 +262,13 @@ void TTablet::TryPumpWaitingForGc() {
             break;
         const TInstant commitMoment = ackFront.second;
         const TDuration delay = TActivationContext::Now() - commitMoment ;
-        Send(UserTablet, new TEvTablet::TEvFollowerGcApplied(TabletID(), StateStorageInfo.KnownGeneration, gcStep, delay)); 
+        Send(UserTablet, new TEvTablet::TEvFollowerGcApplied(TabletID(), StateStorageInfo.KnownGeneration, gcStep, delay));
         WaitingForGcAck.pop_front();
     }
 }
 
-void TTablet::TryFinishFollowerSync() { 
-    if (InitialFollowerSyncDone) 
+void TTablet::TryFinishFollowerSync() {
+    if (InitialFollowerSyncDone)
         return;
 
     // explicit state check is evil, but parallel flag is even more evil. Conceptually correct way is defining dedicated
@@ -277,14 +277,14 @@ void TTablet::TryFinishFollowerSync() {
     if (CurrentStateFunc() != &TThis::StateActivePhase)
         return;
 
-    for (const auto &xpair : LeaderInfo) { 
-        EFollowerSyncState syncState = xpair.second.SyncState; 
-        if (syncState == EFollowerSyncState::NeedSync || syncState == EFollowerSyncState::Pending) 
+    for (const auto &xpair : LeaderInfo) {
+        EFollowerSyncState syncState = xpair.second.SyncState;
+        if (syncState == EFollowerSyncState::NeedSync || syncState == EFollowerSyncState::Pending)
             return;
     }
 
-    InitialFollowerSyncDone = true; 
-    Send(UserTablet, new TEvTablet::TEvFollowerSyncComplete()); 
+    InitialFollowerSyncDone = true;
+    Send(UserTablet, new TEvTablet::TEvFollowerSyncComplete());
 }
 
 void TTablet::UpdateStateStorageSignature(TEvStateStorage::TEvUpdateSignature::TPtr &ev) {
@@ -296,16 +296,16 @@ void TTablet::HandlePingBoot(TEvTablet::TEvPing::TPtr &ev) {
     // todo: handle wait-boot flag
     NKikimrTabletBase::TEvPing &record = ev->Get()->Record;
     Y_VERIFY(record.GetTabletID() == TabletID());
-    Send(ev->Sender, new TEvTablet::TEvPong(TabletID(), TEvTablet::TEvPong::FlagBoot | TEvTablet::TEvPong::FlagLeader)); 
+    Send(ev->Sender, new TEvTablet::TEvPong(TabletID(), TEvTablet::TEvPong::FlagBoot | TEvTablet::TEvPong::FlagLeader));
 }
 
-void TTablet::HandlePingFollower(TEvTablet::TEvPing::TPtr &ev) { 
+void TTablet::HandlePingFollower(TEvTablet::TEvPing::TPtr &ev) {
     NKikimrTabletBase::TEvPing &record = ev->Get()->Record;
     Y_VERIFY(record.GetTabletID() == TabletID());
-    Send(ev->Sender, new TEvTablet::TEvPong(TabletID(), TEvTablet::TEvPong::FlagFollower)); 
+    Send(ev->Sender, new TEvTablet::TEvPong(TabletID(), TEvTablet::TEvPong::FlagFollower));
 }
 
-void TTablet::HandleStateStorageLeaderResolve(TEvStateStorage::TEvInfo::TPtr &ev) { 
+void TTablet::HandleStateStorageLeaderResolve(TEvStateStorage::TEvInfo::TPtr &ev) {
     TEvStateStorage::TEvInfo *msg = ev->Get();
 
     if (msg->SignatureSz) {
@@ -316,42 +316,42 @@ void TTablet::HandleStateStorageLeaderResolve(TEvStateStorage::TEvInfo::TPtr &ev
     StateStorageInfo.KnownGeneration = msg->CurrentGeneration;
     StateStorageInfo.Signature.Reset(msg->Signature.Release());
 
-    if (msg->Status == NKikimrProto::OK && msg->CurrentLeader) { 
-        FollowerInfo.KnownLeaderID = msg->CurrentLeader; 
-        Send(FollowerInfo.KnownLeaderID, 
-                new TEvTablet::TEvFollowerAttach(TabletID(), FollowerInfo.FollowerAttempt), 
+    if (msg->Status == NKikimrProto::OK && msg->CurrentLeader) {
+        FollowerInfo.KnownLeaderID = msg->CurrentLeader;
+        Send(FollowerInfo.KnownLeaderID,
+                new TEvTablet::TEvFollowerAttach(TabletID(), FollowerInfo.FollowerAttempt),
                 IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
-        Become(&TThis::StateFollowerSubscribe); 
+        Become(&TThis::StateFollowerSubscribe);
     } else { // something goes weird, try again a bit later
-        NextFollowerAttempt(); 
+        NextFollowerAttempt();
 
         TActivationContext::Schedule(TDuration::MilliSeconds(100),
                 new IEventHandle(SelfId(), SelfId(),
-                    new TEvTabletBase::TEvFollowerRetry(++FollowerInfo.RetryRound), 
-                    0, FollowerInfo.FollowerAttempt) 
+                    new TEvTabletBase::TEvFollowerRetry(++FollowerInfo.RetryRound),
+                    0, FollowerInfo.FollowerAttempt)
         );
     }
 }
 
-void TTablet::HandleFollowerRetry(TEvTabletBase::TEvFollowerRetry::TPtr &ev) { 
-    if (ev->Cookie != FollowerInfo.FollowerAttempt) 
+void TTablet::HandleFollowerRetry(TEvTabletBase::TEvFollowerRetry::TPtr &ev) {
+    if (ev->Cookie != FollowerInfo.FollowerAttempt)
         return;
 
-    BootstrapFollower(); 
+    BootstrapFollower();
 }
 
-void TTablet::HandleByFollower(TEvTabletBase::TEvTryBuildFollowerGraph::TPtr &ev) { 
+void TTablet::HandleByFollower(TEvTabletBase::TEvTryBuildFollowerGraph::TPtr &ev) {
     Y_UNUSED(ev);
 
     BLOG_TRACE("Follower starting to rebuild history");
     Y_VERIFY_DEBUG(!RebuildGraphRequest);
-    RebuildGraphRequest = Register(CreateTabletReqRebuildHistoryGraph(SelfId(), Info.Get(), 0, nullptr, ++FollowerInfo.RebuildGraphCookie)); 
+    RebuildGraphRequest = Register(CreateTabletReqRebuildHistoryGraph(SelfId(), Info.Get(), 0, nullptr, ++FollowerInfo.RebuildGraphCookie));
 
     // todo: tracing? at least as event
 }
 
-void TTablet::HandleByFollower(TEvTabletBase::TEvRebuildGraphResult::TPtr &ev) { 
-    if (ev->Sender != RebuildGraphRequest || ev->Cookie != FollowerInfo.RebuildGraphCookie || UserTablet) { 
+void TTablet::HandleByFollower(TEvTabletBase::TEvRebuildGraphResult::TPtr &ev) {
+    if (ev->Sender != RebuildGraphRequest || ev->Cookie != FollowerInfo.RebuildGraphCookie || UserTablet) {
         BLOG_D("Outdated TEvRebuildGraphResult ignored");
         return;
     }
@@ -365,7 +365,7 @@ void TTablet::HandleByFollower(TEvTabletBase::TEvRebuildGraphResult::TPtr &ev) {
         {
             UserTablet = SetupInfo->Apply(Info.Get(), SelfId());
             Send(UserTablet,
-                new TEvTablet::TEvFBoot(TabletID(), FollowerId, 0, 
+                new TEvTablet::TEvFBoot(TabletID(), FollowerId, 0,
                     Launcher, msg->DependencyGraph.Get(), Info,
                     ResourceProfiles, TxCacheQuota));
 
@@ -375,29 +375,29 @@ void TTablet::HandleByFollower(TEvTabletBase::TEvRebuildGraphResult::TPtr &ev) {
         break;
     case NKikimrProto::NODATA: // any not-positive cases ignored and handled by long retry
     default:
-        Schedule(OfflineFollowerWaitRetry, new TEvTabletBase::TEvTryBuildFollowerGraph()); 
+        Schedule(OfflineFollowerWaitRetry, new TEvTabletBase::TEvTryBuildFollowerGraph());
         break;
     }
 }
 
-bool TTablet::CheckFollowerUpdate(const TActorId &sender, ui32 attempt, ui64 counter) { 
-    if (sender != FollowerInfo.KnownLeaderID || attempt != FollowerInfo.FollowerAttempt) 
+bool TTablet::CheckFollowerUpdate(const TActorId &sender, ui32 attempt, ui64 counter) {
+    if (sender != FollowerInfo.KnownLeaderID || attempt != FollowerInfo.FollowerAttempt)
         return false;
 
-    if (counter != FollowerInfo.StreamCounter) { 
-        Send(FollowerInfo.KnownLeaderID, new TEvTablet::TEvFollowerDetach(TabletID(), FollowerInfo.FollowerAttempt)); 
-        NextFollowerAttempt(); 
-        RetryFollowerBootstrapOrWait(); 
+    if (counter != FollowerInfo.StreamCounter) {
+        Send(FollowerInfo.KnownLeaderID, new TEvTablet::TEvFollowerDetach(TabletID(), FollowerInfo.FollowerAttempt));
+        NextFollowerAttempt();
+        RetryFollowerBootstrapOrWait();
         return false;
     }
 
     return true;
 }
 
-void TTablet::HandleByFollower(TEvents::TEvUndelivered::TPtr &ev) { 
-    if (ev->Sender == FollowerInfo.KnownLeaderID) { 
-        NextFollowerAttempt(); 
-        RetryFollowerBootstrapOrWait(); 
+void TTablet::HandleByFollower(TEvents::TEvUndelivered::TPtr &ev) {
+    if (ev->Sender == FollowerInfo.KnownLeaderID) {
+        NextFollowerAttempt();
+        RetryFollowerBootstrapOrWait();
         return;
     }
 
@@ -406,67 +406,67 @@ void TTablet::HandleByFollower(TEvents::TEvUndelivered::TPtr &ev) {
     }
 }
 
-void TTablet::HandleByFollower(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) { 
-    if (ev->Get()->NodeId != FollowerInfo.KnownLeaderID.NodeId()) 
+void TTablet::HandleByFollower(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
+    if (ev->Get()->NodeId != FollowerInfo.KnownLeaderID.NodeId())
         return;
 
     BLOG_TRACE("Follower got TEvNodeDisconnected NodeId# " << ev->Get()->NodeId);
-    NextFollowerAttempt(); 
-    RetryFollowerBootstrapOrWait(); 
+    NextFollowerAttempt();
+    RetryFollowerBootstrapOrWait();
 }
 
-void TTablet::HandleByFollower(TEvTablet::TEvFollowerDisconnect::TPtr &ev) { 
-    // sent from PassAway of leader 
-    if (ev->Sender != FollowerInfo.KnownLeaderID) 
+void TTablet::HandleByFollower(TEvTablet::TEvFollowerDisconnect::TPtr &ev) {
+    // sent from PassAway of leader
+    if (ev->Sender != FollowerInfo.KnownLeaderID)
         return;
 
     BLOG_TRACE("Follower got TEvFollowerDisconnect Sender# " << ev->Sender);
-    NextFollowerAttempt(); 
-    RetryFollowerBootstrapOrWait(); 
+    NextFollowerAttempt();
+    RetryFollowerBootstrapOrWait();
 }
 
-void TTablet::HandleByFollower(TEvTablet::TEvFollowerRefresh::TPtr &ev) { 
+void TTablet::HandleByFollower(TEvTablet::TEvFollowerRefresh::TPtr &ev) {
     const auto &record = ev->Get()->Record;
     Y_VERIFY(record.GetTabletId() == TabletID());
-    if (record.GetGeneration() < ExpandGenStepPair(FollowerInfo.EpochGenStep).first) { 
-        Send(ev->Sender, new TEvTablet::TEvFollowerDetach(TabletID(), Max<ui32>())); 
+    if (record.GetGeneration() < ExpandGenStepPair(FollowerInfo.EpochGenStep).first) {
+        Send(ev->Sender, new TEvTablet::TEvFollowerDetach(TabletID(), Max<ui32>()));
         return;
     }
 
-    NextFollowerAttempt(); 
+    NextFollowerAttempt();
 
-    FollowerInfo.KnownLeaderID = ev->Sender; 
-    Send(FollowerInfo.KnownLeaderID, 
-        new TEvTablet::TEvFollowerAttach(TabletID(), FollowerInfo.FollowerAttempt), 
+    FollowerInfo.KnownLeaderID = ev->Sender;
+    Send(FollowerInfo.KnownLeaderID,
+        new TEvTablet::TEvFollowerAttach(TabletID(), FollowerInfo.FollowerAttempt),
         IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
 
-    Become(&TThis::StateFollowerSubscribe); 
+    Become(&TThis::StateFollowerSubscribe);
 }
 
-void TTablet::HandleByFollower(TEvTablet::TEvFollowerAuxUpdate::TPtr &ev) { 
+void TTablet::HandleByFollower(TEvTablet::TEvFollowerAuxUpdate::TPtr &ev) {
     const auto &record = ev->Get()->Record;
-    if (!CheckFollowerUpdate(ev->Sender, record.GetFollowerAttempt(), record.GetStreamCounter())) 
+    if (!CheckFollowerUpdate(ev->Sender, record.GetFollowerAttempt(), record.GetStreamCounter()))
         return;
 
-    Y_VERIFY(FollowerInfo.StreamCounter != 0); 
+    Y_VERIFY(FollowerInfo.StreamCounter != 0);
     Y_VERIFY(UserTablet);
 
-    Send(UserTablet, new TEvTablet::TEvFAuxUpdate(record.GetAuxPayload())); 
+    Send(UserTablet, new TEvTablet::TEvFAuxUpdate(record.GetAuxPayload()));
 
-    ++FollowerInfo.StreamCounter; 
+    ++FollowerInfo.StreamCounter;
 }
 
-void TTablet::HandleByFollower(TEvTablet::TEvFollowerUpdate::TPtr &ev) { 
+void TTablet::HandleByFollower(TEvTablet::TEvFollowerUpdate::TPtr &ev) {
     const auto &record = ev->Get()->Record;
 
-    BLOG_TRACE("FollowerUpdate attempt: " << record.GetFollowerAttempt() << ":" << record.GetStreamCounter() 
+    BLOG_TRACE("FollowerUpdate attempt: " << record.GetFollowerAttempt() << ":" << record.GetStreamCounter()
         << ", " << record.GetGeneration() << ":" << record.GetStep());
 
-    if (!CheckFollowerUpdate(ev->Sender, record.GetFollowerAttempt(), record.GetStreamCounter())) 
+    if (!CheckFollowerUpdate(ev->Sender, record.GetFollowerAttempt(), record.GetStreamCounter()))
         return;
 
-    if (FollowerInfo.StreamCounter == 0) { 
-        FollowerInfo.RetryRound = 0; // reset retry round counter to enable fast sync with leader 
+    if (FollowerInfo.StreamCounter == 0) {
+        FollowerInfo.RetryRound = 0; // reset retry round counter to enable fast sync with leader
 
         // first event, must be snapshot
         Y_VERIFY(record.GetIsSnapshot());
@@ -487,52 +487,52 @@ void TTablet::HandleByFollower(TEvTablet::TEvFollowerUpdate::TPtr &ev) {
             Send(Launcher, new TEvTablet::TEvRestored(TabletID(), StateStorageInfo.KnownGeneration, UserTablet, true));
         }
 
-        if (!FollowerStStGuardian) 
-            FollowerStStGuardian = Register(CreateStateStorageFollowerGuardian(TabletID(), SelfId())); 
+        if (!FollowerStStGuardian)
+            FollowerStStGuardian = Register(CreateStateStorageFollowerGuardian(TabletID(), SelfId()));
 
-        FollowerInfo.EpochGenStep = MakeGenStepPair(record.GetGeneration(), record.GetStep()); 
+        FollowerInfo.EpochGenStep = MakeGenStepPair(record.GetGeneration(), record.GetStep());
 
         Send(UserTablet,
-                 new TEvTablet::TEvFBoot(TabletID(), FollowerId, record.GetGeneration(), 
+                 new TEvTablet::TEvFBoot(TabletID(), FollowerId, record.GetGeneration(),
                                          Launcher, *ev->Get(), Info,
                                          ResourceProfiles, TxCacheQuota));
 
-        BLOG_TRACE("SBoot attempt: " << FollowerInfo.FollowerAttempt 
+        BLOG_TRACE("SBoot attempt: " << FollowerInfo.FollowerAttempt
             << ", " << record.GetGeneration() << ":" << record.GetStep());
 
     } else {
         Y_VERIFY(UserTablet);
-        Send(UserTablet, new TEvTablet::TEvFUpdate(*ev->Get())); 
+        Send(UserTablet, new TEvTablet::TEvFUpdate(*ev->Get()));
 
-        BLOG_TRACE("SUpdate attempt: " << FollowerInfo.FollowerAttempt 
+        BLOG_TRACE("SUpdate attempt: " << FollowerInfo.FollowerAttempt
             << ", " << record.GetGeneration() << ":" << record.GetStep());
     }
 
-    ++FollowerInfo.StreamCounter; 
+    ++FollowerInfo.StreamCounter;
 }
 
-void TTablet::HandleByFollower(TEvTablet::TEvPromoteToLeader::TPtr &ev) { 
-    TEvTablet::TEvPromoteToLeader *msg = ev->Get(); 
-    BLOG_TRACE("Follower got TEvPromoteToLeader Sender# " << ev->Sender << " Generation# " << msg->SuggestedGeneration); 
+void TTablet::HandleByFollower(TEvTablet::TEvPromoteToLeader::TPtr &ev) {
+    TEvTablet::TEvPromoteToLeader *msg = ev->Get();
+    BLOG_TRACE("Follower got TEvPromoteToLeader Sender# " << ev->Sender << " Generation# " << msg->SuggestedGeneration);
 
     if (IntrospectionTrace) {
-        IntrospectionTrace->Attach(MakeHolder<NTracing::TOnFollowerPromoteToLeader>( 
+        IntrospectionTrace->Attach(MakeHolder<NTracing::TOnFollowerPromoteToLeader>(
             msg->SuggestedGeneration
-            , FollowerInfo.KnownLeaderID 
-            , FollowerStStGuardian)); 
+            , FollowerInfo.KnownLeaderID
+            , FollowerStStGuardian));
     }
 
     Info = msg->TabletStorageInfo;
 
-    // detach from leader 
-    if (FollowerInfo.KnownLeaderID) { 
-        Send(FollowerInfo.KnownLeaderID, new TEvTablet::TEvFollowerDetach(TabletID(), FollowerInfo.FollowerAttempt)); 
-        NextFollowerAttempt(); 
+    // detach from leader
+    if (FollowerInfo.KnownLeaderID) {
+        Send(FollowerInfo.KnownLeaderID, new TEvTablet::TEvFollowerDetach(TabletID(), FollowerInfo.FollowerAttempt));
+        NextFollowerAttempt();
     }
 
-    if (FollowerStStGuardian) { 
-        Send(FollowerStStGuardian, new TEvents::TEvPoisonPill()); 
-        FollowerStStGuardian = TActorId(); 
+    if (FollowerStStGuardian) {
+        Send(FollowerStStGuardian, new TEvents::TEvPoisonPill());
+        FollowerStStGuardian = TActorId();
     }
 
     if (RebuildGraphRequest) {
@@ -542,106 +542,106 @@ void TTablet::HandleByFollower(TEvTablet::TEvPromoteToLeader::TPtr &ev) {
 
     // setup start info
     SuggestedGeneration = msg->SuggestedGeneration;
-    Leader = true; 
-    FollowerId = 0; 
+    Leader = true;
+    FollowerId = 0;
     Bootstrap();
 }
 
-void TTablet::HandleByFollower(TEvTablet::TEvFGcAck::TPtr &ev) { 
-    const TEvTablet::TEvFGcAck *msg = ev->Get(); 
+void TTablet::HandleByFollower(TEvTablet::TEvFGcAck::TPtr &ev) {
+    const TEvTablet::TEvFGcAck *msg = ev->Get();
 
-    if (FollowerInfo.EpochGenStep <= MakeGenStepPair(msg->Generation, msg->Step)) 
-        Send(FollowerInfo.KnownLeaderID, new TEvTablet::TEvFollowerGcAck(TabletID(), FollowerInfo.FollowerAttempt, msg->Generation, msg->Step)); 
+    if (FollowerInfo.EpochGenStep <= MakeGenStepPair(msg->Generation, msg->Step))
+        Send(FollowerInfo.KnownLeaderID, new TEvTablet::TEvFollowerGcAck(TabletID(), FollowerInfo.FollowerAttempt, msg->Generation, msg->Step));
 }
 
-TMap<TActorId, TTablet::TLeaderInfo>::iterator 
-TTablet::EraseFollowerInfo(TMap<TActorId, TLeaderInfo>::iterator followerIt) { 
-    const ui32 followerNode = followerIt->first.NodeId(); 
+TMap<TActorId, TTablet::TLeaderInfo>::iterator
+TTablet::EraseFollowerInfo(TMap<TActorId, TLeaderInfo>::iterator followerIt) {
+    const ui32 followerNode = followerIt->first.NodeId();
 
-    auto retIt = LeaderInfo.erase(followerIt); 
+    auto retIt = LeaderInfo.erase(followerIt);
 
     TryPumpWaitingForGc();
-    TryFinishFollowerSync(); 
+    TryFinishFollowerSync();
 
-    if (followerNode != SelfId().NodeId()) { 
-        bool noMoreFollowersOnNode = true; 
-        for (const auto &xpair : LeaderInfo) { 
-            if (xpair.first.NodeId() == followerNode) { 
-                noMoreFollowersOnNode = false; 
+    if (followerNode != SelfId().NodeId()) {
+        bool noMoreFollowersOnNode = true;
+        for (const auto &xpair : LeaderInfo) {
+            if (xpair.first.NodeId() == followerNode) {
+                noMoreFollowersOnNode = false;
                 break;
             }
         }
 
-        if (noMoreFollowersOnNode) 
-            Send(TActivationContext::InterconnectProxy(followerNode), new TEvents::TEvUnsubscribe); 
+        if (noMoreFollowersOnNode)
+            Send(TActivationContext::InterconnectProxy(followerNode), new TEvents::TEvUnsubscribe);
     }
 
     return retIt;
 }
 
-TMap<TActorId, TTablet::TLeaderInfo>::iterator TTablet::HandleFollowerConnectionProblem(TMap<TActorId, TLeaderInfo>::iterator followerIt) { 
-    TLeaderInfo &followerInfo = followerIt->second; 
+TMap<TActorId, TTablet::TLeaderInfo>::iterator TTablet::HandleFollowerConnectionProblem(TMap<TActorId, TLeaderInfo>::iterator followerIt) {
+    TLeaderInfo &followerInfo = followerIt->second;
     bool shouldEraseEntry = false;
 
-    switch (followerInfo.SyncState) { 
-    case EFollowerSyncState::Pending: 
-    case EFollowerSyncState::Active: 
-        followerInfo.SyncState = EFollowerSyncState::NeedSync; 
-        followerInfo.SyncAttempt = 0; 
-        BLOG_D("HandleFollowerConnectionProblem " << followerIt->first << " moved to NeedSync state"); 
+    switch (followerInfo.SyncState) {
+    case EFollowerSyncState::Pending:
+    case EFollowerSyncState::Active:
+        followerInfo.SyncState = EFollowerSyncState::NeedSync;
+        followerInfo.SyncAttempt = 0;
+        BLOG_D("HandleFollowerConnectionProblem " << followerIt->first << " moved to NeedSync state");
         break;
-    case EFollowerSyncState::NeedSync: 
-        if (!followerInfo.SyncCookieHolder && followerInfo.SyncAttempt > 3) { 
-            shouldEraseEntry = !followerInfo.PresentInList; 
-            followerInfo.SyncState = EFollowerSyncState::Ignore; 
-            BLOG_D("HandleFollowerConnectionProblem " << followerIt->first << " moved to Ignore state, shouldEraseEntry# " << shouldEraseEntry); 
+    case EFollowerSyncState::NeedSync:
+        if (!followerInfo.SyncCookieHolder && followerInfo.SyncAttempt > 3) {
+            shouldEraseEntry = !followerInfo.PresentInList;
+            followerInfo.SyncState = EFollowerSyncState::Ignore;
+            BLOG_D("HandleFollowerConnectionProblem " << followerIt->first << " moved to Ignore state, shouldEraseEntry# " << shouldEraseEntry);
         } else {
-            BLOG_D("HandleFollowerConnectionProblem " << followerIt->first << " kept in NeedSync state"); 
+            BLOG_D("HandleFollowerConnectionProblem " << followerIt->first << " kept in NeedSync state");
         }
         break;
-    case EFollowerSyncState::Ignore: 
-        BLOG_D("HandleFollowerConnectionProblem " << followerIt->first << " kept in Ignore state"); 
+    case EFollowerSyncState::Ignore:
+        BLOG_D("HandleFollowerConnectionProblem " << followerIt->first << " kept in Ignore state");
         break;
     }
 
     if (shouldEraseEntry) {
-        followerIt = EraseFollowerInfo(followerIt); 
+        followerIt = EraseFollowerInfo(followerIt);
     } else {
-        TrySyncToFollower(followerIt); 
-        ++followerIt; 
+        TrySyncToFollower(followerIt);
+        ++followerIt;
     }
 
     TryPumpWaitingForGc();
-    TryFinishFollowerSync(); 
+    TryFinishFollowerSync();
 
-    return followerIt; 
+    return followerIt;
 }
 
-void TTablet::TrySyncToFollower(TMap<TActorId, TLeaderInfo>::iterator followerIt) { 
-    TLeaderInfo &followerInfo = followerIt->second; 
-    if (followerInfo.SyncCookieHolder) // already awaiting 
+void TTablet::TrySyncToFollower(TMap<TActorId, TLeaderInfo>::iterator followerIt) {
+    TLeaderInfo &followerInfo = followerIt->second;
+    if (followerInfo.SyncCookieHolder) // already awaiting
         return;
 
-    TDuration delay = TDuration::MilliSeconds(250 + Min<ui32>(3, followerInfo.SyncAttempt) * 250); 
-    followerInfo.SyncCookieHolder.Reset(new TSchedulerCookieHolder(ISchedulerCookie::Make3Way())); 
-    auto *schedCookie = followerInfo.SyncCookieHolder->Get(); 
-    Schedule(delay, new TEvTabletBase::TEvTrySyncFollower(followerIt->first, schedCookie), schedCookie); 
+    TDuration delay = TDuration::MilliSeconds(250 + Min<ui32>(3, followerInfo.SyncAttempt) * 250);
+    followerInfo.SyncCookieHolder.Reset(new TSchedulerCookieHolder(ISchedulerCookie::Make3Way()));
+    auto *schedCookie = followerInfo.SyncCookieHolder->Get();
+    Schedule(delay, new TEvTabletBase::TEvTrySyncFollower(followerIt->first, schedCookie), schedCookie);
 }
 
-void TTablet::DoSyncToFollower(TMap<TActorId, TLeaderInfo>::iterator followerIt) { 
-    TLeaderInfo &followerInfo = followerIt->second; 
+void TTablet::DoSyncToFollower(TMap<TActorId, TLeaderInfo>::iterator followerIt) {
+    TLeaderInfo &followerInfo = followerIt->second;
 
-    Send(followerIt->first, new TEvTablet::TEvFollowerRefresh(TabletID(), StateStorageInfo.KnownGeneration), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession); 
+    Send(followerIt->first, new TEvTablet::TEvFollowerRefresh(TabletID(), StateStorageInfo.KnownGeneration), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
 
-    ++followerInfo.SyncAttempt; 
-    followerInfo.LastSyncAttempt = TActivationContext::Now(); 
+    ++followerInfo.SyncAttempt;
+    followerInfo.LastSyncAttempt = TActivationContext::Now();
 }
 
 
-void TTablet::HandleByLeader(TEvents::TEvUndelivered::TPtr &ev) { 
-    auto followerIt = LeaderInfo.find(ev->Sender); 
-    if (followerIt != LeaderInfo.end()) { 
-        HandleFollowerConnectionProblem(followerIt); 
+void TTablet::HandleByLeader(TEvents::TEvUndelivered::TPtr &ev) {
+    auto followerIt = LeaderInfo.find(ev->Sender);
+    if (followerIt != LeaderInfo.end()) {
+        HandleFollowerConnectionProblem(followerIt);
         return;
     }
 
@@ -650,39 +650,39 @@ void TTablet::HandleByLeader(TEvents::TEvUndelivered::TPtr &ev) {
     }
 }
 
-void TTablet::HandleByLeader(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) { 
-    // typical number if followers on one node is one. so we don't bother with batched check for unsubscribe 
+void TTablet::HandleByLeader(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
+    // typical number if followers on one node is one. so we don't bother with batched check for unsubscribe
     // and we still need to unsubscribe 'cuz of possible races
     const TEvInterconnect::TEvNodeDisconnected *msg = ev->Get();
-    for (auto it = LeaderInfo.begin(); it != LeaderInfo.end(); ) { 
+    for (auto it = LeaderInfo.begin(); it != LeaderInfo.end(); ) {
         if (it->first.NodeId() == msg->NodeId)
-            it = HandleFollowerConnectionProblem(it); 
+            it = HandleFollowerConnectionProblem(it);
         else
             ++it;
     }
 }
 
-void TTablet::HandleByLeader(TEvTablet::TEvFollowerListRefresh::TPtr &ev) { 
+void TTablet::HandleByLeader(TEvTablet::TEvFollowerListRefresh::TPtr &ev) {
     auto *msg = ev->Get();
-    TMap<TActorId, TLeaderInfo>::iterator infoIt = LeaderInfo.begin(); 
+    TMap<TActorId, TLeaderInfo>::iterator infoIt = LeaderInfo.begin();
 
-    for (auto it = msg->FollowerList.begin(), end = msg->FollowerList.end(); it != end; ++it) { 
-        while (infoIt != LeaderInfo.end() && infoIt->first < *it) { 
-            if (infoIt->second.SyncState == EFollowerSyncState::Ignore) { 
-                infoIt = EraseFollowerInfo(infoIt); 
+    for (auto it = msg->FollowerList.begin(), end = msg->FollowerList.end(); it != end; ++it) {
+        while (infoIt != LeaderInfo.end() && infoIt->first < *it) {
+            if (infoIt->second.SyncState == EFollowerSyncState::Ignore) {
+                infoIt = EraseFollowerInfo(infoIt);
             } else {
                 infoIt->second.PresentInList = false;
                 ++infoIt;
             }
         }
 
-        if (infoIt != LeaderInfo.end() && infoIt->first == *it) 
+        if (infoIt != LeaderInfo.end() && infoIt->first == *it)
             infoIt->second.PresentInList = true;
     }
 
-    while (infoIt != LeaderInfo.end()) { 
-        if (infoIt->second.SyncState == EFollowerSyncState::Ignore) { 
-            infoIt = EraseFollowerInfo(infoIt); 
+    while (infoIt != LeaderInfo.end()) {
+        if (infoIt->second.SyncState == EFollowerSyncState::Ignore) {
+            infoIt = EraseFollowerInfo(infoIt);
         } else {
             infoIt->second.PresentInList = false;
             ++infoIt;
@@ -690,76 +690,76 @@ void TTablet::HandleByLeader(TEvTablet::TEvFollowerListRefresh::TPtr &ev) {
     }
 }
 
-void TTablet::HandleByLeader(TEvTabletBase::TEvTrySyncFollower::TPtr &ev) { 
-    TEvTabletBase::TEvTrySyncFollower *msg = ev->Get(); 
+void TTablet::HandleByLeader(TEvTabletBase::TEvTrySyncFollower::TPtr &ev) {
+    TEvTabletBase::TEvTrySyncFollower *msg = ev->Get();
     if (msg->CookieHolder.DetachEvent()) {
-        auto it = LeaderInfo.find(msg->FollowerId); 
-        if (it == LeaderInfo.end()) 
+        auto it = LeaderInfo.find(msg->FollowerId);
+        if (it == LeaderInfo.end())
             return;
         it->second.SyncCookieHolder.Destroy();
-        DoSyncToFollower(it); 
+        DoSyncToFollower(it);
     }
 }
 
-void TTablet::HandleByLeader(TEvTablet::TEvFollowerRefresh::TPtr &ev) { 
-    // could be received by promoted leader 
-    Send(ev->Sender, new TEvTablet::TEvFollowerDetach(TabletID(), Max<ui32>())); 
+void TTablet::HandleByLeader(TEvTablet::TEvFollowerRefresh::TPtr &ev) {
+    // could be received by promoted leader
+    Send(ev->Sender, new TEvTablet::TEvFollowerDetach(TabletID(), Max<ui32>()));
 }
 
-void TTablet::HandleByLeader(TEvTablet::TEvFollowerDetach::TPtr &ev) { 
-    // could be received by leader from promoted leader, just cleanup and wait for normal termination 
+void TTablet::HandleByLeader(TEvTablet::TEvFollowerDetach::TPtr &ev) {
+    // could be received by leader from promoted leader, just cleanup and wait for normal termination
     const auto &record = ev->Get()->Record;
-    auto followerIt = LeaderInfo.find(ev->Sender); 
-    if (followerIt == LeaderInfo.end() || followerIt->second.FollowerAttempt != record.GetFollowerAttempt()) 
+    auto followerIt = LeaderInfo.find(ev->Sender);
+    if (followerIt == LeaderInfo.end() || followerIt->second.FollowerAttempt != record.GetFollowerAttempt())
         return;
-    EraseFollowerInfo(followerIt); 
+    EraseFollowerInfo(followerIt);
 }
 
-void TTablet::HandleByLeader(TEvTablet::TEvFollowerAttach::TPtr &ev) { 
-    const TActorId followerId = ev->Sender; 
+void TTablet::HandleByLeader(TEvTablet::TEvFollowerAttach::TPtr &ev) {
+    const TActorId followerId = ev->Sender;
     const auto &record = ev->Get()->Record;
 
-    auto followerIt = LeaderInfo.find(followerId); 
-    if (followerIt != LeaderInfo.end()) { 
-        // attaching follower known 
-        Y_VERIFY(followerIt->second.FollowerAttempt < record.GetFollowerAttempt() || followerIt->second.FollowerAttempt == Max<ui32>()); 
+    auto followerIt = LeaderInfo.find(followerId);
+    if (followerIt != LeaderInfo.end()) {
+        // attaching follower known
+        Y_VERIFY(followerIt->second.FollowerAttempt < record.GetFollowerAttempt() || followerIt->second.FollowerAttempt == Max<ui32>());
 
-        followerIt->second.SyncState = EFollowerSyncState::Pending; // keep ConfirmedGCStep and FromList 
+        followerIt->second.SyncState = EFollowerSyncState::Pending; // keep ConfirmedGCStep and FromList
     } else {
-        if (LeaderInfo.empty()) { 
-            // Consider sending follower updates starting with the next commit 
-            Graph.MinFollowerUpdate = Graph.NextEntry; 
+        if (LeaderInfo.empty()) {
+            // Consider sending follower updates starting with the next commit
+            Graph.MinFollowerUpdate = Graph.NextEntry;
         }
-        auto followerItPair = LeaderInfo.insert(decltype(LeaderInfo)::value_type(ev->Sender, TLeaderInfo(EFollowerSyncState::Pending))); 
-        Y_VERIFY(followerItPair.second); 
+        auto followerItPair = LeaderInfo.insert(decltype(LeaderInfo)::value_type(ev->Sender, TLeaderInfo(EFollowerSyncState::Pending)));
+        Y_VERIFY(followerItPair.second);
 
-        followerIt = followerItPair.first; 
+        followerIt = followerItPair.first;
     }
 
-    TLeaderInfo &followerInfo = followerIt->second; 
+    TLeaderInfo &followerInfo = followerIt->second;
 
-    followerInfo.FollowerAttempt = record.GetFollowerAttempt(); 
-    followerInfo.StreamCounter = 0; 
-    followerInfo.SyncAttempt = 0; 
-    followerInfo.SyncCookieHolder.Destroy(); 
+    followerInfo.FollowerAttempt = record.GetFollowerAttempt();
+    followerInfo.StreamCounter = 0;
+    followerInfo.SyncAttempt = 0;
+    followerInfo.SyncCookieHolder.Destroy();
 
     if (UserTablet)
-        Send(UserTablet, new TEvTablet::TEvNewFollowerAttached(LeaderInfo.size())); 
+        Send(UserTablet, new TEvTablet::TEvNewFollowerAttached(LeaderInfo.size()));
 }
 
-void TTablet::HandleByLeader(TEvTablet::TEvFollowerGcAck::TPtr &ev) { 
-    const TActorId followerId = ev->Sender; 
-    TLeaderInfo *followerInfo = LeaderInfo.FindPtr(followerId); 
-    if (!followerInfo || followerInfo->SyncState != EFollowerSyncState::Active) 
+void TTablet::HandleByLeader(TEvTablet::TEvFollowerGcAck::TPtr &ev) {
+    const TActorId followerId = ev->Sender;
+    TLeaderInfo *followerInfo = LeaderInfo.FindPtr(followerId);
+    if (!followerInfo || followerInfo->SyncState != EFollowerSyncState::Active)
         return;
 
     const auto &record = ev->Get()->Record;
-    if (record.GetGeneration() != StateStorageInfo.KnownGeneration || followerInfo->FollowerAttempt != record.GetFollowerAttempt()) 
+    if (record.GetGeneration() != StateStorageInfo.KnownGeneration || followerInfo->FollowerAttempt != record.GetFollowerAttempt())
         return;
 
     const ui32 step = record.GetStep();
-    Y_VERIFY_DEBUG(followerInfo->ConfirmedGCStep < step); 
-    followerInfo->ConfirmedGCStep = Max(step, followerInfo->ConfirmedGCStep); 
+    Y_VERIFY_DEBUG(followerInfo->ConfirmedGCStep < step);
+    followerInfo->ConfirmedGCStep = Max(step, followerInfo->ConfirmedGCStep);
 
     TryPumpWaitingForGc();
 }
@@ -805,7 +805,7 @@ void TTablet::HandleStateStorageInfoResolve(TEvStateStorage::TEvInfo::TPtr &ev) 
                 return CancelTablet(TEvTablet::TEvTabletDead::ReasonBootRace);
             }
 
-            if (!msg->CurrentLeader || !msg->CurrentGeneration) { 
+            if (!msg->CurrentLeader || !msg->CurrentGeneration) {
                 return LockedInitializationPath();
             }
 
@@ -865,17 +865,17 @@ void TTablet::HandleStateStorageInfoUpgrade(TEvStateStorage::TEvInfo::TPtr &ev) 
         { // ok, we marked ourselves as generation owner
             NeedCleanupOnLockedPath = false;
             StateStorageInfo.Update(msg);
-            for (const auto &xpair : msg->Followers) { 
+            for (const auto &xpair : msg->Followers) {
                 if (xpair.first == SelfId())
                     continue;
-                if (LeaderInfo.empty()) { 
-                    // Consider sending follower updates starting with the next commit 
-                    Graph.MinFollowerUpdate = Graph.NextEntry; 
+                if (LeaderInfo.empty()) {
+                    // Consider sending follower updates starting with the next commit
+                    Graph.MinFollowerUpdate = Graph.NextEntry;
                 }
-                auto itPair = LeaderInfo.insert(decltype(LeaderInfo)::value_type(xpair.first, TLeaderInfo(EFollowerSyncState::NeedSync))); 
-                // some followers could be already present by active TEvFollowerAttach 
+                auto itPair = LeaderInfo.insert(decltype(LeaderInfo)::value_type(xpair.first, TLeaderInfo(EFollowerSyncState::NeedSync)));
+                // some followers could be already present by active TEvFollowerAttach
                 if (itPair.second)
-                    TrySyncToFollower(itPair.first); 
+                    TrySyncToFollower(itPair.first);
             }
 
             return TabletBlockBlobStorage();
@@ -936,7 +936,7 @@ void TTablet::HandleBlockBlobStorageResult(TEvTabletBase::TEvBlockBlobStorageRes
 }
 
 void TTablet::HandleRebuildGraphResult(TEvTabletBase::TEvRebuildGraphResult::TPtr &ev) {
-    if (ev->Cookie != 0) // remains from follower past 
+    if (ev->Cookie != 0) // remains from follower past
         return;
 
     RebuildGraphRequest = TActorId(); // check consistency??
@@ -992,10 +992,10 @@ void TTablet::HandleWriteZeroEntry(TEvTabletBase::TEvWriteLogResult::TPtr &ev) {
 void TTablet::Handle(TEvTablet::TEvPing::TPtr &ev) {
     NKikimrTabletBase::TEvPing &record = ev->Get()->Record;
     Y_VERIFY(record.GetTabletID() == TabletID());
-    Send(ev->Sender, new TEvTablet::TEvPong(TabletID(), TEvTablet::TEvPong::FlagLeader)); 
+    Send(ev->Sender, new TEvTablet::TEvPong(TabletID(), TEvTablet::TEvPong::FlagLeader));
 }
 
-void TTablet::HandleByLeader(TEvTablet::TEvTabletActive::TPtr &ev) { 
+void TTablet::HandleByLeader(TEvTablet::TEvTabletActive::TPtr &ev) {
     Y_UNUSED(ev);
     ReportTabletStateChange(TTabletStateInfo::Active);
     ActivateTime = AppData()->TimeProvider->Now();
@@ -1006,20 +1006,20 @@ void TTablet::HandleByLeader(TEvTablet::TEvTabletActive::TPtr &ev) {
     PipeConnectAcceptor->Activate(SelfId(), UserTablet, true);
 }
 
-void TTablet::HandleByFollower(TEvTablet::TEvTabletActive::TPtr &ev) { 
+void TTablet::HandleByFollower(TEvTablet::TEvTabletActive::TPtr &ev) {
     Y_UNUSED(ev);
-    BLOG_D("Follower TabletStateActive"); 
+    BLOG_D("Follower TabletStateActive");
 
     PipeConnectAcceptor->Activate(SelfId(), UserTablet, false);
 
-    Send(FollowerStStGuardian, new TEvTablet::TEvFollowerUpdateState(false, SelfId(), UserTablet)); 
+    Send(FollowerStStGuardian, new TEvTablet::TEvFollowerUpdateState(false, SelfId(), UserTablet));
     ReportTabletStateChange(TTabletStateInfo::Active);
 }
 
 TTablet::TLogEntry* TTablet::MakeLogEntry(TEvTablet::TCommitInfo &commitInfo, NKikimrTabletBase::TTabletLogEntry *commitEv) {
-    Y_VERIFY(commitInfo.TabletID == TabletID() && commitInfo.Generation == StateStorageInfo.KnownGeneration && commitInfo.Step == Graph.NextEntry, 
-        "commitInfo.TabletID=%ld, tablet=%ld, commitInfo.Generation=%d, KnownGeneration=%d, commitInfo.Step=%d, nextEntry=%d", 
-        commitInfo.TabletID, TabletID(), commitInfo.Generation, StateStorageInfo.KnownGeneration, commitInfo.Step, Graph.NextEntry); 
+    Y_VERIFY(commitInfo.TabletID == TabletID() && commitInfo.Generation == StateStorageInfo.KnownGeneration && commitInfo.Step == Graph.NextEntry,
+        "commitInfo.TabletID=%ld, tablet=%ld, commitInfo.Generation=%d, KnownGeneration=%d, commitInfo.Step=%d, nextEntry=%d",
+        commitInfo.TabletID, TabletID(), commitInfo.Generation, StateStorageInfo.KnownGeneration, commitInfo.Step, Graph.NextEntry);
 
     const ui32 step = Graph.NextEntry++;
 
@@ -1070,12 +1070,12 @@ void TTablet::Handle(TEvTablet::TEvPreCommit::TPtr &ev) {
 }
 
 void TTablet::Handle(TEvTablet::TEvAux::TPtr &ev) {
-    TString& auxUpdate = ev->Get()->FollowerAux; 
+    TString& auxUpdate = ev->Get()->FollowerAux;
 
     if (!Graph.Queue.empty()) {
-        Graph.Queue.back()->FollowerAuxUpdates.emplace_back(std::move(auxUpdate)); 
+        Graph.Queue.back()->FollowerAuxUpdates.emplace_back(std::move(auxUpdate));
     } else {
-        SpreadFollowerAuxUpdate(auxUpdate); 
+        SpreadFollowerAuxUpdate(auxUpdate);
     }
 }
 
@@ -1104,14 +1104,14 @@ bool TTablet::HandleNext(TEvTablet::TEvCommit::TPtr &ev) {
 
     entry->Source = ev->Sender;
     entry->SourceCookie = ev->Cookie;
-    entry->WaitFollowerGcAck = msg->WaitFollowerGcAck; 
+    entry->WaitFollowerGcAck = msg->WaitFollowerGcAck;
 
     x->SetSnapshot(MakeGenStepPair(Graph.Snapshot.first, Graph.Snapshot.second));
     x->SetConfirmed(Graph.Confirmed);
 
-    const bool saveFollowerUpdate = !LeaderInfo.empty(); 
-    if (saveFollowerUpdate) 
-        entry->FollowerUpdate.Reset(new TFollowerUpdate()); 
+    const bool saveFollowerUpdate = !LeaderInfo.empty();
+    if (saveFollowerUpdate)
+        entry->FollowerUpdate.Reset(new TFollowerUpdate());
 
     if (entry->IsSnapshot)
         x->SetIsSnapshot(true);
@@ -1120,8 +1120,8 @@ bool TTablet::HandleNext(TEvTablet::TEvCommit::TPtr &ev) {
 
     x->MutableReferences()->Reserve((i32)(msg->ExternalReferences.size() + msg->References.size()));
 
-    if (saveFollowerUpdate) 
-        entry->FollowerUpdate->References.reserve(msg->References.size()); 
+    if (saveFollowerUpdate)
+        entry->FollowerUpdate->References.reserve(msg->References.size());
 
     for (TVector<TLogoBlobID>::const_iterator it = msg->ExternalReferences.begin(), end = msg->ExternalReferences.end(); it != end; ++it)
         LogoBlobIDFromLogoBlobID(*it, x->AddReferences());
@@ -1131,8 +1131,8 @@ bool TTablet::HandleNext(TEvTablet::TEvCommit::TPtr &ev) {
         Y_VERIFY(id.TabletID() == TabletID() && id.Generation() == StateStorageInfo.KnownGeneration);
         LogoBlobIDFromLogoBlobID(id, x->AddReferences());
 
-        if (saveFollowerUpdate) 
-            entry->FollowerUpdate->References.push_back(std::make_pair(it->Id, it->Buffer)); 
+        if (saveFollowerUpdate)
+            entry->FollowerUpdate->References.push_back(std::make_pair(it->Id, it->Buffer));
     }
 
     if (!msg->GcDiscovered.empty()) {
@@ -1140,8 +1140,8 @@ bool TTablet::HandleNext(TEvTablet::TEvCommit::TPtr &ev) {
         for (auto &gcx : msg->GcDiscovered)
             LogoBlobIDFromLogoBlobID(gcx, x->AddGcDiscovered());
 
-        if (saveFollowerUpdate) 
-            entry->FollowerUpdate->GcDiscovered.swap(msg->GcDiscovered); 
+        if (saveFollowerUpdate)
+            entry->FollowerUpdate->GcDiscovered.swap(msg->GcDiscovered);
     }
 
     if (!msg->GcLeft.empty()) {
@@ -1149,20 +1149,20 @@ bool TTablet::HandleNext(TEvTablet::TEvCommit::TPtr &ev) {
         for (auto &gcx : msg->GcLeft)
             LogoBlobIDFromLogoBlobID(gcx, x->AddGcLeft());
 
-        if (saveFollowerUpdate) 
-            entry->FollowerUpdate->GcLeft.swap(msg->GcLeft); 
+        if (saveFollowerUpdate)
+            entry->FollowerUpdate->GcLeft.swap(msg->GcLeft);
     }
 
     if (msg->EmbeddedLogBody) {
         Y_VERIFY(x->ReferencesSize() == 0);
         x->SetEmbeddedLogBody(msg->EmbeddedLogBody);
 
-        if (saveFollowerUpdate) 
-           entry->FollowerUpdate->Body = msg->EmbeddedLogBody; 
+        if (saveFollowerUpdate)
+           entry->FollowerUpdate->Body = msg->EmbeddedLogBody;
     }
 
-    if (saveFollowerUpdate && msg->FollowerAux) 
-        entry->FollowerUpdate->AuxPayload = msg->FollowerAux; 
+    if (saveFollowerUpdate && msg->FollowerAux)
+        entry->FollowerUpdate->AuxPayload = msg->FollowerAux;
 
     entry->ByteSize = x->ByteSizeLong();
     for (const auto& ref : msg->References) {
@@ -1322,24 +1322,24 @@ void TTablet::GcLogChannel(ui32 step) {
     GcNextStep = 0;
 }
 
-void TTablet::SpreadFollowerAuxUpdate(const TString& auxUpdate) { 
-    for (auto &xpair : LeaderInfo) { 
-        SendFollowerAuxUpdate(xpair.second, xpair.first, auxUpdate); 
-    } 
-} 
+void TTablet::SpreadFollowerAuxUpdate(const TString& auxUpdate) {
+    for (auto &xpair : LeaderInfo) {
+        SendFollowerAuxUpdate(xpair.second, xpair.first, auxUpdate);
+    }
+}
 
-void TTablet::SendFollowerAuxUpdate(TLeaderInfo& info, const TActorId& follower, const TString& auxUpdate) { 
-    if (info.FollowerAttempt == Max<ui32>()) 
-        return; 
-    if (info.StreamCounter == 0) 
-        return; 
+void TTablet::SendFollowerAuxUpdate(TLeaderInfo& info, const TActorId& follower, const TString& auxUpdate) {
+    if (info.FollowerAttempt == Max<ui32>())
+        return;
+    if (info.StreamCounter == 0)
+        return;
 
-    const ui64 tabletId = TabletID(); 
-    auto notify = MakeHolder<TEvTablet::TEvFollowerAuxUpdate>(tabletId, info.FollowerAttempt, info.StreamCounter); 
-    notify->Record.SetAuxPayload(auxUpdate); 
- 
-    Send(follower, notify.Release(), 0, IEventHandle::FlagTrackDelivery); 
-    ++info.StreamCounter; 
+    const ui64 tabletId = TabletID();
+    auto notify = MakeHolder<TEvTablet::TEvFollowerAuxUpdate>(tabletId, info.FollowerAttempt, info.StreamCounter);
+    notify->Record.SetAuxPayload(auxUpdate);
+
+    Send(follower, notify.Release(), 0, IEventHandle::FlagTrackDelivery);
+    ++info.StreamCounter;
 }
 
 bool TTablet::ProgressCommitQueue() {
@@ -1356,10 +1356,10 @@ bool TTablet::ProgressCommitQueue() {
             GcLogChannel(entry->ConfirmedOnSend);
         }
 
-        if (entry->FollowerUpdate && LeaderInfo && step >= Graph.MinFollowerUpdate) { 
+        if (entry->FollowerUpdate && LeaderInfo && step >= Graph.MinFollowerUpdate) {
             Graph.PostponedFollowerUpdates.emplace_back(std::move(Graph.Queue.front()));
-        } else if (entry->WaitFollowerGcAck) { 
-            Send(UserTablet, new TEvTablet::TEvFollowerGcApplied(tabletId, StateStorageInfo.KnownGeneration, step, TDuration::Max())); 
+        } else if (entry->WaitFollowerGcAck) {
+            Send(UserTablet, new TEvTablet::TEvFollowerGcApplied(tabletId, StateStorageInfo.KnownGeneration, step, TDuration::Max()));
         }
 
         Graph.Confirmed = step;
@@ -1370,51 +1370,51 @@ bool TTablet::ProgressCommitQueue() {
         return false;
     }
 
-    ProgressFollowerQueue(); 
-    TryFinishFollowerSync(); 
+    ProgressFollowerQueue();
+    TryFinishFollowerSync();
     return true;
 }
 
-void TTablet::ProgressFollowerQueue() { 
-    const ui32 goodUntil = LeaderInfo ? Graph.ConfirmedCommited : Max<ui32>(); 
+void TTablet::ProgressFollowerQueue() {
+    const ui32 goodUntil = LeaderInfo ? Graph.ConfirmedCommited : Max<ui32>();
 
-    while (!Graph.PostponedFollowerUpdates.empty()) { 
+    while (!Graph.PostponedFollowerUpdates.empty()) {
         TLogEntry *entry = Graph.PostponedFollowerUpdates.front().get();
         const ui32 step = entry->Step;
         if (step > goodUntil)
             break;
 
-        auto *sup = entry->FollowerUpdate.Get(); 
+        auto *sup = entry->FollowerUpdate.Get();
 
-        bool needWaitForFollowerGcAck = false; 
-        for (auto &xpair : LeaderInfo) { 
-            if (step < Graph.MinFollowerUpdate) { 
-                // We cannot be sure follower updates before LeaderInfo became 
+        bool needWaitForFollowerGcAck = false;
+        for (auto &xpair : LeaderInfo) {
+            if (step < Graph.MinFollowerUpdate) {
+                // We cannot be sure follower updates before LeaderInfo became
                 // non-empty are contiguous and without any holes. We need
                 // to ignore them, as if they didn't exist.
                 break;
             }
 
-            TLeaderInfo &followerInfo = xpair.second; 
+            TLeaderInfo &followerInfo = xpair.second;
 
-            if (!needWaitForFollowerGcAck) { 
-                if (followerInfo.SyncState != EFollowerSyncState::Ignore) 
-                    needWaitForFollowerGcAck = true; 
+            if (!needWaitForFollowerGcAck) {
+                if (followerInfo.SyncState != EFollowerSyncState::Ignore)
+                    needWaitForFollowerGcAck = true;
             }
 
-            if (followerInfo.FollowerAttempt == Max<ui32>()) 
+            if (followerInfo.FollowerAttempt == Max<ui32>())
                 continue;
 
-            if (followerInfo.SyncState == EFollowerSyncState::Active 
-                || followerInfo.SyncState == EFollowerSyncState::Pending && entry->IsSnapshot) 
+            if (followerInfo.SyncState == EFollowerSyncState::Active
+                || followerInfo.SyncState == EFollowerSyncState::Pending && entry->IsSnapshot)
             {
-                auto notify = MakeHolder<TEvTablet::TEvFollowerUpdate>(TabletID(), followerInfo.FollowerAttempt, followerInfo.StreamCounter); 
+                auto notify = MakeHolder<TEvTablet::TEvFollowerUpdate>(TabletID(), followerInfo.FollowerAttempt, followerInfo.StreamCounter);
                 auto &record = notify->Record;
 
                 record.SetGeneration(StateStorageInfo.KnownGeneration);
                 record.SetStep(step);
                 record.SetIsSnapshot(entry->IsSnapshot);
-                record.SetNeedGCApplyAck(entry->WaitFollowerGcAck); 
+                record.SetNeedGCApplyAck(entry->WaitFollowerGcAck);
 
                 if (sup->Body)
                     record.SetBody(sup->Body);
@@ -1432,33 +1432,33 @@ void TTablet::ProgressFollowerQueue() {
                     }
                 }
 
-                if (followerInfo.StreamCounter == 0) { 
+                if (followerInfo.StreamCounter == 0) {
                     TabletStorageInfoToProto(*Info, record.MutableTabletStorageInfo());
-                    followerInfo.SyncState = EFollowerSyncState::Active; 
+                    followerInfo.SyncState = EFollowerSyncState::Active;
                 }
 
-                const ui32 subscFlag = (followerInfo.StreamCounter == 0) ? IEventHandle::FlagSubscribeOnSession : 0; 
+                const ui32 subscFlag = (followerInfo.StreamCounter == 0) ? IEventHandle::FlagSubscribeOnSession : 0;
                 Send(xpair.first, notify.Release(), IEventHandle::FlagTrackDelivery | subscFlag);
 
                 ++xpair.second.StreamCounter;
             }
 
-            for (const TString &x : entry->FollowerAuxUpdates) 
-                SendFollowerAuxUpdate(xpair.second, xpair.first, x); 
+            for (const TString &x : entry->FollowerAuxUpdates)
+                SendFollowerAuxUpdate(xpair.second, xpair.first, x);
         }
 
-        if (entry->WaitFollowerGcAck) { 
-            if (needWaitForFollowerGcAck) { 
+        if (entry->WaitFollowerGcAck) {
+            if (needWaitForFollowerGcAck) {
                 WaitingForGcAck.emplace_back(step, entry->CommitedMoment);
             } else {
-                Send(UserTablet, new TEvTablet::TEvFollowerGcApplied(TabletID(), StateStorageInfo.KnownGeneration, step, TDuration::Max())); 
+                Send(UserTablet, new TEvTablet::TEvFollowerGcApplied(TabletID(), StateStorageInfo.KnownGeneration, step, TDuration::Max()));
             }
         }
 
-        Graph.PostponedFollowerUpdates.pop_front(); 
+        Graph.PostponedFollowerUpdates.pop_front();
     }
 
-    if (Graph.PostponedFollowerUpdates && Graph.Queue.empty() && Graph.SyncCommit.SyncStep == 0) { 
+    if (Graph.PostponedFollowerUpdates && Graph.Queue.empty() && Graph.SyncCommit.SyncStep == 0) {
         Graph.SyncCommit.SyncStep = Graph.NextEntry - 1;
         if (GcInFly) {
             // Since we always confirm the last commit it should be impossible
@@ -1487,9 +1487,9 @@ void TTablet::ProgressFollowerQueue() {
 
 void TTablet::Handle(TEvTabletPipe::TEvConnect::TPtr& ev) {
     if (PipeConnectAcceptor->IsStopped()) {
-        PipeConnectAcceptor->Reject(ev, SelfId(), NKikimrProto::TRYLATER, Leader); 
+        PipeConnectAcceptor->Reject(ev, SelfId(), NKikimrProto::TRYLATER, Leader);
     } else if (PipeConnectAcceptor->IsActive()) {
-        PipeConnectAcceptor->Accept(ev, SelfId(), UserTablet, Leader); 
+        PipeConnectAcceptor->Accept(ev, SelfId(), UserTablet, Leader);
     } else {
         PipeConnectAcceptor->Enqueue(ev, SelfId());
     }
@@ -1502,14 +1502,14 @@ void TTablet::Handle(TEvTabletPipe::TEvServerDestroyed::TPtr& ev) {
 void TTablet::HandleQueued(TEvTabletPipe::TEvConnect::TPtr& ev) {
     if (PipeConnectAcceptor->IsStopped()) {
         // FIXME: do we really need it?
-        PipeConnectAcceptor->Reject(ev, SelfId(), NKikimrProto::TRYLATER, Leader); 
+        PipeConnectAcceptor->Reject(ev, SelfId(), NKikimrProto::TRYLATER, Leader);
     } else {
         PipeConnectAcceptor->Enqueue(ev, SelfId());
     }
 }
 
-void TTablet::HandleByFollower(TEvTabletPipe::TEvConnect::TPtr &ev) { 
-    Y_VERIFY_DEBUG(!Leader); 
+void TTablet::HandleByFollower(TEvTabletPipe::TEvConnect::TPtr &ev) {
+    Y_VERIFY_DEBUG(!Leader);
     if (PipeConnectAcceptor->IsActive() && !PipeConnectAcceptor->IsStopped()) {
         PipeConnectAcceptor->Accept(ev, SelfId(), UserTablet, false);
     } else {
@@ -1678,9 +1678,9 @@ bool TTablet::StopTablet(
                 StateStorageGuardian = { };
             }
 
-            if (FollowerStStGuardian) { 
-                Send(FollowerStStGuardian, new TEvents::TEvPoisonPill()); 
-                FollowerStStGuardian = { }; 
+            if (FollowerStStGuardian) {
+                Send(FollowerStStGuardian, new TEvents::TEvPoisonPill());
+                FollowerStStGuardian = { };
             }
         }
 
@@ -1752,32 +1752,32 @@ void TTablet::CancelTablet(TEvTablet::TEvTabletDead::EReason reason, const TStri
     if (StateStorageGuardian)
         Send(StateStorageGuardian, new TEvents::TEvPoisonPill());
 
-    if (FollowerStStGuardian) 
-        Send(FollowerStStGuardian, new TEvents::TEvPoisonPill()); 
+    if (FollowerStStGuardian)
+        Send(FollowerStStGuardian, new TEvents::TEvPoisonPill());
 
     if (RebuildGraphRequest)
         Send(RebuildGraphRequest, new TEvents::TEvPoisonPill());
 
     TSet<ui32> nodesToUnsubsribe;
-    for (auto &xpair : LeaderInfo) { 
-        Send(xpair.first, new TEvTablet::TEvFollowerDisconnect(TabletID(), xpair.second.FollowerAttempt)); 
-        const ui32 followerNode = xpair.first.NodeId(); 
-        if (followerNode && followerNode != SelfId().NodeId()) 
-            nodesToUnsubsribe.emplace(followerNode); 
+    for (auto &xpair : LeaderInfo) {
+        Send(xpair.first, new TEvTablet::TEvFollowerDisconnect(TabletID(), xpair.second.FollowerAttempt));
+        const ui32 followerNode = xpair.first.NodeId();
+        if (followerNode && followerNode != SelfId().NodeId())
+            nodesToUnsubsribe.emplace(followerNode);
     }
-    LeaderInfo.clear(); 
+    LeaderInfo.clear();
 
-    if (FollowerInfo.KnownLeaderID) 
-        Send(FollowerInfo.KnownLeaderID, new TEvTablet::TEvFollowerDetach(TabletID(), FollowerInfo.FollowerAttempt)); 
+    if (FollowerInfo.KnownLeaderID)
+        Send(FollowerInfo.KnownLeaderID, new TEvTablet::TEvFollowerDetach(TabletID(), FollowerInfo.FollowerAttempt));
 
     if (NeedCleanupOnLockedPath)
         Send(StateStorageInfo.ProxyID, new TEvStateStorage::TEvCleanup(TabletID(), SelfId()));
 
     ReportTabletStateChange(TTabletStateInfo::Dead);
 
-    const ui32 leaderNode = FollowerInfo.KnownLeaderID.NodeId(); 
-    if (leaderNode && leaderNode != SelfId().NodeId()) 
-        nodesToUnsubsribe.emplace(leaderNode); 
+    const ui32 leaderNode = FollowerInfo.KnownLeaderID.NodeId();
+    if (leaderNode && leaderNode != SelfId().NodeId())
+        nodesToUnsubsribe.emplace(leaderNode);
 
     for (ui32 x : nodesToUnsubsribe) {
         Send(TActivationContext::InterconnectProxy(x), new TEvents::TEvUnsubscribe());
@@ -1816,10 +1816,10 @@ void TTablet::LockedInitializationPath() {
     ReportTabletStateChange(TTabletStateInfo::Lock);
 }
 
-TTablet::TTablet(const TActorId &launcher, TTabletStorageInfo *info, TTabletSetupInfo *setupInfo, bool leader, 
-                 ui32 suggestedGeneration, ui32 followerId, TResourceProfilesPtr profiles, TSharedQuotaPtr txCacheQuota) 
-        : TActor(leader ? &TThis::StateBootstrapNormal : &TThis::StateBootstrapFollower) 
-    , InitialFollowerSyncDone(false) 
+TTablet::TTablet(const TActorId &launcher, TTabletStorageInfo *info, TTabletSetupInfo *setupInfo, bool leader,
+                 ui32 suggestedGeneration, ui32 followerId, TResourceProfilesPtr profiles, TSharedQuotaPtr txCacheQuota)
+        : TActor(leader ? &TThis::StateBootstrapNormal : &TThis::StateBootstrapFollower)
+    , InitialFollowerSyncDone(false)
     , Launcher(launcher)
     , Info(info)
     , SetupInfo(setupInfo)
@@ -1827,8 +1827,8 @@ TTablet::TTablet(const TActorId &launcher, TTabletStorageInfo *info, TTabletSetu
     , NeedCleanupOnLockedPath(false)
     , GcCounter(0)
     , PipeConnectAcceptor(NTabletPipe::CreateConnectAcceptor(info->TabletID))
-    , Leader(leader) 
-    , FollowerId(followerId) 
+    , Leader(leader)
+    , FollowerId(followerId)
     , DiscoveredLastBlocked(Max<ui32>())
     , GcInFly(0)
     , GcInFlyStep(0)
@@ -1845,29 +1845,29 @@ TAutoPtr<IEventHandle> TTablet::AfterRegister(const TActorId &self, const TActor
     return new IEventHandle(self, self, new TEvents::TEvBootstrap());
 }
 
-void TTablet::RetryFollowerBootstrapOrWait() { 
-    if (FollowerInfo.RetryRound) { 
-        ReportTabletStateChange(TTabletStateInfo::ResolveLeader); 
+void TTablet::RetryFollowerBootstrapOrWait() {
+    if (FollowerInfo.RetryRound) {
+        ReportTabletStateChange(TTabletStateInfo::ResolveLeader);
 
         TActivationContext::Schedule(TDuration::MilliSeconds(2000), new IEventHandle(
             SelfId(), SelfId(),
-            new TEvTabletBase::TEvFollowerRetry(++FollowerInfo.RetryRound), 
-            0, FollowerInfo.FollowerAttempt)); 
-        Become(&TThis::StateResolveLeader); 
+            new TEvTabletBase::TEvFollowerRetry(++FollowerInfo.RetryRound),
+            0, FollowerInfo.FollowerAttempt));
+        Become(&TThis::StateResolveLeader);
     } else {
-        FollowerInfo.RetryRound = 1; 
-        BootstrapFollower(); 
+        FollowerInfo.RetryRound = 1;
+        BootstrapFollower();
     }
 }
 
-void TTablet::BootstrapFollower() { 
-    // create guardians right now and schedule offline follower boot 
-    if (!FollowerStStGuardian) { 
-        FollowerStStGuardian = Register(CreateStateStorageFollowerGuardian(TabletID(), SelfId())); 
-        Schedule(OfflineFollowerWaitFirst, new TEvTabletBase::TEvTryBuildFollowerGraph()); 
+void TTablet::BootstrapFollower() {
+    // create guardians right now and schedule offline follower boot
+    if (!FollowerStStGuardian) {
+        FollowerStStGuardian = Register(CreateStateStorageFollowerGuardian(TabletID(), SelfId()));
+        Schedule(OfflineFollowerWaitFirst, new TEvTabletBase::TEvTryBuildFollowerGraph());
     }
 
-    Leader = false; 
+    Leader = false;
     BoostrapTime = AppData()->TimeProvider->Now();
     bool enInt = AppData()->EnableIntrospection;
     if (enInt) {
@@ -1880,13 +1880,13 @@ void TTablet::BootstrapFollower() {
         IntrospectionTrace->Attach(MakeHolder<NTracing::TOnTabletBootstrap>(SuggestedGeneration, false, StateStorageInfo.ProxyID));
     }
 
-    Become(&TThis::StateResolveLeader); 
-    ReportTabletStateChange(TTabletStateInfo::ResolveLeader); 
+    Become(&TThis::StateResolveLeader);
+    ReportTabletStateChange(TTabletStateInfo::ResolveLeader);
 }
 
 void TTablet::Bootstrap() {
     DiscoveredLastBlocked = Max<ui32>();
-    Leader = true; 
+    Leader = true;
     BoostrapTime = AppData()->TimeProvider->Now();
     bool enInt = AppData()->EnableIntrospection;
     if (enInt) {
@@ -1923,25 +1923,25 @@ TActorId TTabletSetupInfo::Apply(TTabletStorageInfo *info, const TActorContext &
 }
 
 TActorId TTabletSetupInfo::Tablet(TTabletStorageInfo *info, const TActorId &launcher, const TActorContext &ctx,
-                                  ui32 suggestedGeneration, TResourceProfilesPtr profiles, TSharedQuotaPtr txCacheQuota) { 
+                                  ui32 suggestedGeneration, TResourceProfilesPtr profiles, TSharedQuotaPtr txCacheQuota) {
     return ctx.ExecutorThread.RegisterActor(CreateTablet(launcher, info, this, suggestedGeneration, profiles, txCacheQuota),
                                             TabletMailboxType, TabletPoolId);
 }
 
-TActorId TTabletSetupInfo::Follower(TTabletStorageInfo *info, const TActorId &launcher, const TActorContext &ctx, 
-                                 ui32 followerId, TResourceProfilesPtr profiles, TSharedQuotaPtr txCacheQuota) { 
-    return ctx.ExecutorThread.RegisterActor(CreateTabletFollower(launcher, info, this, followerId, profiles, txCacheQuota), 
+TActorId TTabletSetupInfo::Follower(TTabletStorageInfo *info, const TActorId &launcher, const TActorContext &ctx,
+                                 ui32 followerId, TResourceProfilesPtr profiles, TSharedQuotaPtr txCacheQuota) {
+    return ctx.ExecutorThread.RegisterActor(CreateTabletFollower(launcher, info, this, followerId, profiles, txCacheQuota),
                                             TabletMailboxType, TabletPoolId);
 }
 
 IActor* CreateTablet(const TActorId &launcher, TTabletStorageInfo *info, TTabletSetupInfo *setupInfo,
-                     ui32 suggestedGeneration, TResourceProfilesPtr profiles, TSharedQuotaPtr txCacheQuota) { 
+                     ui32 suggestedGeneration, TResourceProfilesPtr profiles, TSharedQuotaPtr txCacheQuota) {
     return new TTablet(launcher, info, setupInfo, true, suggestedGeneration, 0, profiles, txCacheQuota);
 }
 
-IActor* CreateTabletFollower(const TActorId &launcher, TTabletStorageInfo *info, TTabletSetupInfo *setupInfo, 
-                          ui32 followerId, TResourceProfilesPtr profiles, TSharedQuotaPtr txCacheQuota) { 
-    return new TTablet(launcher, info, setupInfo, false, 0, followerId, profiles, txCacheQuota); 
+IActor* CreateTabletFollower(const TActorId &launcher, TTabletStorageInfo *info, TTabletSetupInfo *setupInfo,
+                          ui32 followerId, TResourceProfilesPtr profiles, TSharedQuotaPtr txCacheQuota) {
+    return new TTablet(launcher, info, setupInfo, false, 0, followerId, profiles, txCacheQuota);
 }
 
 void TTablet::SendIntrospectionData() {

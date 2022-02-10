@@ -54,13 +54,13 @@ namespace NKikimr {
         struct TEvConnectResult : public TEventPB<TEvConnectResult, NKikimrTabletPipe::TEvConnectResult, EvConnectResult> {
             TEvConnectResult() {}
 
-            TEvConnectResult(NKikimrProto::EReplyStatus status, ui64 tabletId, const TActorId& clientId, const TActorId& serverId, bool leader) 
+            TEvConnectResult(NKikimrProto::EReplyStatus status, ui64 tabletId, const TActorId& clientId, const TActorId& serverId, bool leader)
             {
                 Record.SetStatus(status);
                 Record.SetTabletId(tabletId);
                 ActorIdToProto(clientId, Record.MutableClientId());
                 ActorIdToProto(serverId, Record.MutableServerId());
-                Record.SetLeader(leader); 
+                Record.SetLeader(leader);
             }
         };
 
@@ -114,12 +114,12 @@ namespace NKikimr {
         };
 
         struct TEvClientConnected : public TEventLocal<TEvClientConnected, EvClientConnected> {
-            TEvClientConnected(ui64 tabletId, NKikimrProto::EReplyStatus status, const TActorId& clientId, const TActorId& serverId, bool leader, bool dead) 
+            TEvClientConnected(ui64 tabletId, NKikimrProto::EReplyStatus status, const TActorId& clientId, const TActorId& serverId, bool leader, bool dead)
                 : TabletId(tabletId)
                 , Status(status)
                 , ClientId(clientId)
                 , ServerId(serverId)
-                , Leader(leader) 
+                , Leader(leader)
                 , Dead(dead)
             {}
 
@@ -127,7 +127,7 @@ namespace NKikimr {
             const NKikimrProto::EReplyStatus Status;
             const TActorId ClientId;
             const TActorId ServerId;
-            const bool Leader; 
+            const bool Leader;
             const bool Dead;
         };
 
@@ -194,17 +194,17 @@ namespace NKikimr {
         };
 
         struct TEvActivate : public TEventLocal<TEvActivate, EvActivate> {
-            TEvActivate(ui64 tabletId, const TActorId& ownerId, const TActorId& recipientId, bool leader) 
+            TEvActivate(ui64 tabletId, const TActorId& ownerId, const TActorId& recipientId, bool leader)
                 : TabletId(tabletId)
                 , OwnerId(ownerId)
                 , RecipientId(recipientId)
-                , Leader(leader) 
+                , Leader(leader)
             {}
 
             const ui64 TabletId;
             const TActorId OwnerId;
             const TActorId RecipientId;
-            const bool Leader; 
+            const bool Leader;
         };
 
         struct TEvShutdown : public TEventLocal<TEvShutdown, EvShutdown> {
@@ -282,10 +282,10 @@ namespace NKikimr {
             // Creates and activated server, returns serverId.
             // Created server will forward messages to the specified recipent.
             virtual TActorId Accept(TEvTabletPipe::TEvConnect::TPtr &ev,
-                TActorIdentity owner, TActorId recipient, bool leader = true) = 0; 
+                TActorIdentity owner, TActorId recipient, bool leader = true) = 0;
 
             // Rejects connect with an error.
-            virtual void Reject(TEvTabletPipe::TEvConnect::TPtr &ev, TActorIdentity owner, NKikimrProto::EReplyStatus status, bool leader = true) = 0; 
+            virtual void Reject(TEvTabletPipe::TEvConnect::TPtr &ev, TActorIdentity owner, NKikimrProto::EReplyStatus status, bool leader = true) = 0;
 
             // Stop all servers, gracefully notifying clients.
             virtual void Stop(TActorIdentity owner) = 0;
@@ -299,7 +299,7 @@ namespace NKikimr {
 
             // Activates all inactive servers, created by Enqueue.
             // All activated servers will forward messages to the specified recipent.
-            virtual void Activate(TActorIdentity owner, TActorId recipientId, bool leader = true) = 0; 
+            virtual void Activate(TActorIdentity owner, TActorId recipientId, bool leader = true) = 0;
 
             // Cleanup resources after reset
             virtual void Erase(TEvTabletPipe::TEvServerDestroyed::TPtr &ev) = 0;
@@ -344,8 +344,8 @@ namespace NKikimr {
 
         struct TClientConfig {
             bool ConnectToUserTablet = false;
-            bool AllowFollower = false; 
-            bool ForceFollower = false; 
+            bool AllowFollower = false;
+            bool ForceFollower = false;
             bool ForceLocal = false;
             bool PreferLocal = false;
             bool CheckAliveness = false;
@@ -387,7 +387,7 @@ namespace NKikimr {
         IActor* CreateServer(ui64 tabletId, const TActorId& clientId, const TActorId& interconnectSession, ui32 features, ui64 connectCookie);
 
         // Promotes server actor to the active state.
-        void ActivateServer(ui64 tabletId, TActorId serverId, TActorIdentity owner, TActorId recipientId, bool leader); 
+        void ActivateServer(ui64 tabletId, TActorId serverId, TActorIdentity owner, TActorId recipientId, bool leader);
 
         // Destroys server actor.
         void CloseServer(TActorIdentity owner, TActorId serverId);

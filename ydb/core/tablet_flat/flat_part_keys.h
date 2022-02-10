@@ -12,7 +12,7 @@ namespace NTable {
     public:
         using TCache = NTabletFlatExecutor::TPrivatePageCache::TInfo;
 
-        TKeysEnv(const TPart *part, TIntrusivePtr<TCache> cache) 
+        TKeysEnv(const TPart *part, TIntrusivePtr<TCache> cache)
             : Part(part)
             , Cache(std::move(cache))
         {
@@ -50,7 +50,7 @@ namespace NTable {
             Y_VERIFY(bool(NeedPages) == has, "Loader does not have some ne");
         }
 
-        TAutoPtr<NPageCollection::TFetch> GetFetches() 
+        TAutoPtr<NPageCollection::TFetch> GetFetches()
         {
             if (NeedPages) {
                 TVector<TPageId> pages(NeedPages.begin(), NeedPages.end());
@@ -71,7 +71,7 @@ namespace NTable {
 
     private:
         const TPart* Part;
-        TIntrusivePtr<TCache> Cache; 
+        TIntrusivePtr<TCache> Cache;
         THashMap<TPageId, TSharedData> ExtraPages;
         THashSet<TPageId> NeedPages;
     };
@@ -85,14 +85,14 @@ namespace NTable {
 
         }
 
-        TIntrusivePtr<TSlices> Do(TIntrusiveConstPtr<TScreen> screen) 
+        TIntrusivePtr<TSlices> Do(TIntrusiveConstPtr<TScreen> screen)
         {
             if (!screen) {
                 // Use a full screen to simplify logic below
                 screen = new TScreen({ TScreen::THole(true) });
             }
 
-            TIntrusivePtr<TSlices> run = new TSlices; 
+            TIntrusivePtr<TSlices> run = new TSlices;
 
             bool ok = SeekLastRow();
 

@@ -24,7 +24,7 @@ namespace NTest {
         };
 
         struct TPart : IBand {
-            TPart(TIntrusiveConstPtr<TScheme> scheme, TEpoch epoch, ui32, NPage::TConf conf, const TLogoBlobID &token) 
+            TPart(TIntrusiveConstPtr<TScheme> scheme, TEpoch epoch, ui32, NPage::TConf conf, const TLogoBlobID &token)
                 : Epoch(epoch)
                 , Cook(std::move(scheme), conf, token, epoch)
             {
@@ -41,7 +41,7 @@ namespace NTest {
         };
 
         struct TMem : IBand {
-            TMem(TIntrusiveConstPtr<TScheme> scheme, TEpoch epoch, ui32) 
+            TMem(TIntrusiveConstPtr<TScheme> scheme, TEpoch epoch, ui32)
                 : Cooker(std::move(scheme), epoch)
             {
 
@@ -77,9 +77,9 @@ namespace NTest {
             return cook.Add(Saved.begin(), Saved.end()).Finish();
         }
 
-        TAutoPtr<TSubset> Mixed(ui32 frozen, ui32 flatten, THash hash) 
+        TAutoPtr<TSubset> Mixed(ui32 frozen, ui32 flatten, THash hash)
         {
-            TDeque<TAutoPtr<IBand>> bands; 
+            TDeque<TAutoPtr<IBand>> bands;
 
             for (auto it: xrange(flatten)) {
                 TLogoBlobID token(0, 0, ++Serial, 0, 0, 0);
@@ -94,7 +94,7 @@ namespace NTest {
                     bands[hash(row) % slots]->Add(row);
             }
 
-            TAutoPtr<TSubset> subset = new TSubset(TEpoch::FromIndex(bands.size()), Scheme); 
+            TAutoPtr<TSubset> subset = new TSubset(TEpoch::FromIndex(bands.size()), Scheme);
 
             for (auto &one: bands) {
                 if (auto *mem = dynamic_cast<TMem*>(one.Get())) {
@@ -124,7 +124,7 @@ namespace NTest {
         const NPage::TConf Pages { true, 7 * 1024 };
         ui32 Serial = 0;
         const TRowsHeap &Saved;
-        TIntrusiveConstPtr<TScheme> Scheme; 
+        TIntrusiveConstPtr<TScheme> Scheme;
     };
 
 }

@@ -14,20 +14,20 @@ public:
 
     bool IsVerbose;
     bool LockDevice;
-    ui64 MainKey; 
+    ui64 MainKey;
     TString Path;
 
     virtual void Config(TConfig& config) override {
         TClientCommand::Config(config);
         IsVerbose = false;
         LockDevice = false;
-        MainKey = 0; 
+        MainKey = 0;
         config.SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<PATH>", "Disk path");
-        config.Opts->AddLongOption('k', "main-key", "encryption main-key to use while reading").RequiredArgument("NUM") 
-            .Optional().StoreResult(&MainKey); // TODO: make required 
-        config.Opts->AddLongOption("master-key", "obsolete: use main-key").RequiredArgument("NUM") 
-            .Optional().StoreResult(&MainKey); // TODO: remove after migration 
+        config.Opts->AddLongOption('k', "main-key", "encryption main-key to use while reading").RequiredArgument("NUM")
+            .Optional().StoreResult(&MainKey); // TODO: make required
+        config.Opts->AddLongOption("master-key", "obsolete: use main-key").RequiredArgument("NUM")
+            .Optional().StoreResult(&MainKey); // TODO: remove after migration
         config.Opts->AddLongOption('v', "verbose", "output detailed information for debugging").Optional().NoArgument()
             .SetFlag(&IsVerbose);
         config.Opts->AddLongOption('l', "lock", "lock device before reading disk info").Optional().NoArgument()
@@ -37,17 +37,17 @@ public:
     virtual void Parse(TConfig& config) override {
         TClientCommand::Parse(config);
         Path = config.ParseResult->GetFreeArgs()[0];
-        // TODO: remove after master->main key migration 
-        bool hasMainOption = config.ParseResult->FindLongOptParseResult("main-key"); 
-        bool hasMasterOption = config.ParseResult->FindLongOptParseResult("master-key"); 
-        bool hasKOption = config.ParseResult->FindCharOptParseResult('k'); 
-        if (!hasMainOption && !hasMasterOption && !hasKOption) 
-            ythrow yexception() << "missing main-key param"; 
+        // TODO: remove after master->main key migration
+        bool hasMainOption = config.ParseResult->FindLongOptParseResult("main-key");
+        bool hasMasterOption = config.ParseResult->FindLongOptParseResult("master-key");
+        bool hasKOption = config.ParseResult->FindCharOptParseResult('k');
+        if (!hasMainOption && !hasMasterOption && !hasKOption)
+            ythrow yexception() << "missing main-key param";
     }
 
     virtual int Run(TConfig&) override {
         TPDiskInfo info;
-        bool isOk = ReadPDiskFormatInfo(Path, MainKey, info, LockDevice); 
+        bool isOk = ReadPDiskFormatInfo(Path, MainKey, info, LockDevice);
         if (isOk) {
             Cout << "Version: " << info.Version << Endl;
             Cout << "DiskSize: " << info.DiskSize << Endl;
@@ -108,13 +108,13 @@ public:
     NSize::TSize ChunkSize;
     NSize::TSize SectorSize;
     ui64 Guid;
-    ui64 MainKey; 
+    ui64 MainKey;
     TString TextMessage;
     bool IsErasureEncode;
 
     virtual void Config(TConfig& config) override {
         TClientCommand::Config(config);
-        MainKey = 0; 
+        MainKey = 0;
         DiskSize = 0;
         ChunkSize = 128 << 20;
         SectorSize = 4 << 10;
@@ -134,11 +134,11 @@ public:
             .OptionalArgument("BYTES").StoreResult(&SectorSize);
         config.Opts->AddLongOption('g', "guid", "guid to set while formatting").RequiredArgument("NUM").Required()
             .StoreResult(&Guid);
-        config.Opts->AddLongOption('k', "main-key", "encryption main-key to set while formatting.\n" 
+        config.Opts->AddLongOption('k', "main-key", "encryption main-key to set while formatting.\n"
             "Make sure you use the same master key when you format your pdisks and when you run kikimr.")
-            .RequiredArgument("NUM").Optional().StoreResult(&MainKey); 
-        config.Opts->AddLongOption("master-key", "obsolete: user main-key") 
-            .RequiredArgument("NUM").Optional().StoreResult(&MainKey); 
+            .RequiredArgument("NUM").Optional().StoreResult(&MainKey);
+        config.Opts->AddLongOption("master-key", "obsolete: user main-key")
+            .RequiredArgument("NUM").Optional().StoreResult(&MainKey);
         config.Opts->AddLongOption('t', "text-message", "text message to store in format sector (up to 4000 characters long)")
             .OptionalArgument("STR").Optional().StoreResult(&TextMessage);
         config.Opts->AddLongOption('e', "erasure-encode", "erasure-encode data to recover from single-sector failures")
@@ -160,15 +160,15 @@ public:
         EntropyPool().Read(&ChunkKey, sizeof(NKikimr::NPDisk::TKey));
         EntropyPool().Read(&LogKey, sizeof(NKikimr::NPDisk::TKey));
         EntropyPool().Read(&SysLogKey, sizeof(NKikimr::NPDisk::TKey));
-        bool hasMainOption = config.ParseResult->FindLongOptParseResult("main-key"); 
-        bool hasMasterOption = config.ParseResult->FindLongOptParseResult("master-key"); 
-        bool hasKOption = config.ParseResult->FindCharOptParseResult('k'); 
-        if (!hasMainOption && !hasMasterOption && !hasKOption) 
-            ythrow yexception() << "missing main-key param"; 
+        bool hasMainOption = config.ParseResult->FindLongOptParseResult("main-key");
+        bool hasMasterOption = config.ParseResult->FindLongOptParseResult("master-key");
+        bool hasKOption = config.ParseResult->FindCharOptParseResult('k');
+        if (!hasMainOption && !hasMasterOption && !hasKOption)
+            ythrow yexception() << "missing main-key param";
     }
 
     virtual int Run(TConfig&) override {
-        FormatPDisk(Path, DiskSize, SectorSize, ChunkSize, Guid, ChunkKey, LogKey, SysLogKey, MainKey, TextMessage, 
+        FormatPDisk(Path, DiskSize, SectorSize, ChunkSize, Guid, ChunkKey, LogKey, SysLogKey, MainKey, TextMessage,
                 IsErasureEncode);
         return 0;
     }

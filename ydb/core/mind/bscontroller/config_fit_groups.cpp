@@ -117,17 +117,17 @@ namespace NKikimr {
                 }
 
                 // create group info
-                const ui64 MainKeyVersion = 0; 
+                const ui64 MainKeyVersion = 0;
                 ui32 lifeCyclePhase = 0;
-                TString mainKeyId = ""; 
+                TString mainKeyId = "";
                 TString encryptedGroupKey = "";
                 ui64 groupKeyNonce = groupId; // For the first time use groupId, then use low 32 bits of the
                                               // NextGroupKeyNonce to produce high 32 bits of the groupKeyNonce.
 
                 TGroupInfo *groupInfo = State.Groups.ConstructInplaceNewEntry(groupId, groupId, 1,
                     0, Geometry.GetErasure(), desiredPDiskCategory.GetOrElse(0), StoragePool.VDiskKind,
-                    StoragePool.EncryptionMode.GetOrElse(0), lifeCyclePhase, mainKeyId, encryptedGroupKey, 
-                    groupKeyNonce, MainKeyVersion, false, false, StoragePoolId, Geometry.GetNumFailRealms(), 
+                    StoragePool.EncryptionMode.GetOrElse(0), lifeCyclePhase, mainKeyId, encryptedGroupKey,
+                    groupKeyNonce, MainKeyVersion, false, false, StoragePoolId, Geometry.GetNumFailRealms(),
                     Geometry.GetNumFailDomainsPerFailRealm(), Geometry.GetNumVDisksPerFailDomain());
 
                 // bind group to storage pool

@@ -28,7 +28,7 @@ namespace NTable {
                 Cells[idx] = cell;
             }
 
-            TIntrusiveConstPtr<TNullsType> operator*() const noexcept 
+            TIntrusiveConstPtr<TNullsType> operator*() const noexcept
             {
                 return TNullsType::Make(Types, Cells);
             }
@@ -39,8 +39,8 @@ namespace NTable {
 
         TRowScheme(
                 TVector<TColInfo> cols,
-                TIntrusiveConstPtr<TKeyNulls> keys, 
-                TIntrusiveConstPtr<TRowNulls> nulls, 
+                TIntrusiveConstPtr<TKeyNulls> keys,
+                TIntrusiveConstPtr<TRowNulls> nulls,
                 TVector<ui32> families)
             : Cols(std::move(cols))
             , Keys(std::move(keys))
@@ -53,7 +53,7 @@ namespace NTable {
 
     public:
         template<typename TGet, typename TSeq>
-        static TIntrusiveConstPtr<TRowScheme> Make(const TSeq &cols_, TGet) 
+        static TIntrusiveConstPtr<TRowScheme> Make(const TSeq &cols_, TGet)
         {
             size_t keyCount = 0;
             TSet<ui32> familySet;
@@ -151,8 +151,8 @@ namespace NTable {
 
     public:
         const TVector<TColInfo> Cols;
-        const TIntrusiveConstPtr<TKeyNulls> Keys; 
-        const TIntrusiveConstPtr<TRowNulls> Nulls; 
+        const TIntrusiveConstPtr<TKeyNulls> Keys;
+        const TIntrusiveConstPtr<TRowNulls> Nulls;
         const TVector<ui32> Families; // per-group families
 
     private:

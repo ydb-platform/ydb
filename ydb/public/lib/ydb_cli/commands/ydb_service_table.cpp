@@ -172,7 +172,7 @@ void TCommandCreateTable::Config(TConfig& config) {
         "will be created in each availability zone.")
         .StoreTrue(&CreatePerAvailabilityZone);
     config.Opts->AddLongOption("allow-promotion", "If this feature in enabled then read-only replicas can be promoted "
-        "to leader.") 
+        "to leader.")
         .StoreTrue(&AllowPromotion);
 }
 

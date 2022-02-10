@@ -298,7 +298,7 @@ class TestSchemeShardAlterTest(object):
             AlterTableRequest(os.path.join(self.root_dir, dirname), tablename)
             .with_partition_config(
                 TPartitionConfig()
-                .with_followers(1) 
+                .with_followers(1)
                 .with_executor_cache_size(scheme.ExecutorCacheSize * 2)
                 .with_tx_read_size_limit(scheme.TxReadSizeLimit * 3)
             ).protobuf,
@@ -319,7 +319,7 @@ class TestSchemeShardAlterTest(object):
             CreateTableRequest(self.root_dir, table_name)
             .add_column('key', PType.Uint32, is_key=True).with_partitions(100)
             .with_partition_config(
-                TPartitionConfig().with_followers(1) 
+                TPartitionConfig().with_followers(1)
                 .with_in_mem_force_size_to_snapshot(16777216)
                 .with_in_mem_steps_to_snapshot(300)
             ).protobuf,
@@ -335,7 +335,7 @@ class TestSchemeShardAlterTest(object):
             AlterTableRequest(self.root_dir, table_name)
             .with_partition_config(
                 TPartitionConfig()
-                .with_followers(1) 
+                .with_followers(1)
                 .with_in_mem_force_size_to_snapshot(c_policy.InMemForceSizeToSnapshot * 2)
                 .with_in_mem_steps_to_snapshot(c_policy.InMemStepsToSnapshot // 2)
             ).protobuf,
@@ -362,7 +362,7 @@ class TestSchemeShardAlterTest(object):
         resp = self.cluster.client.send(
             AlterTableRequest(self.root_dir, table_name)
             .with_partition_config(
-                TPartitionConfig().with_followers(1) 
+                TPartitionConfig().with_followers(1)
                 .with_in_mem_force_size_to_snapshot(16777216)
                 .with_in_mem_steps_to_snapshot(300)
             ).protobuf,

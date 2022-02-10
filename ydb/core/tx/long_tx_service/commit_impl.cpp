@@ -41,8 +41,8 @@ namespace NLongTxService {
 
     private:
         void PassAway() override {
-            if (Services.LeaderPipeCache) { 
-                Send(Services.LeaderPipeCache, new TEvPipeCache::TEvUnlink(0)); 
+            if (Services.LeaderPipeCache) {
+                Send(Services.LeaderPipeCache, new TEvPipeCache::TEvUnlink(0));
             }
             TActor::PassAway();
         }
@@ -327,7 +327,7 @@ namespace NLongTxService {
 
     private:
         void SendToTablet(ui64 tabletId, THolder<IEventBase> event, bool subscribe = true) {
-            Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(event.Release(), tabletId, subscribe)); 
+            Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(event.Release(), tabletId, subscribe));
         }
 
     private:

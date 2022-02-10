@@ -24,7 +24,7 @@ namespace NFake {
         };
 
     public:
-        using TEventHandlePtr = TAutoPtr<::NActors::IEventHandle>; 
+        using TEventHandlePtr = TAutoPtr<::NActors::IEventHandle>;
         using ELnLev = NUtil::ELnLev;
 
         TWarden(ui32 groups)
@@ -44,7 +44,7 @@ namespace NFake {
             Logger = new NUtil::TLogger(sys, NKikimrServices::FAKE_ENV);
         }
 
-        void Inbox(TEventHandlePtr &eh, const ::NActors::TActorContext&) 
+        void Inbox(TEventHandlePtr &eh, const ::NActors::TActorContext&)
         {
             if (ShouldForward(eh->GetTypeRewrite())) {
                 auto proxy = eh.Get()->GetForwardOnNondeliveryRecipient();
@@ -157,8 +157,8 @@ namespace NFake {
 
     public:
         TActorSystem * Sys = nullptr;
-        TAutoPtr<NUtil::ILogger> Logger; 
-        TActorId Owner;         /* ActorID of the leader proceess   */ 
+        TAutoPtr<NUtil::ILogger> Logger;
+        TActorId Owner;         /* ActorID of the leader proceess   */
         ui32 Alive = 0;         /* Groups in EState::{Fired,Shut}   */
         bool Shutting = false;  /* Storages is being in shutted     */
         std::array<EState, 32> State{ };

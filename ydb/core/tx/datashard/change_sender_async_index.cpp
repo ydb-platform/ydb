@@ -51,7 +51,7 @@ class TAsyncIndexChangeSenderShard: public TActorBootstrapped<TAsyncIndexChangeS
     void Handle(TEvTxUserProxy::TEvGetProxyServicesResponse::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
 
-        LeaderPipeCache = ev->Get()->Services.LeaderPipeCache; 
+        LeaderPipeCache = ev->Get()->Services.LeaderPipeCache;
         Handshake();
     }
 
@@ -62,7 +62,7 @@ class TAsyncIndexChangeSenderShard: public TActorBootstrapped<TAsyncIndexChangeS
         ev->Record.SetOrigin(DataShard.TabletId);
         ev->Record.SetGeneration(DataShard.Generation);
 
-        Send(LeaderPipeCache, new TEvPipeCache::TEvForward(ev.Release(), ShardId, true)); 
+        Send(LeaderPipeCache, new TEvPipeCache::TEvForward(ev.Release(), ShardId, true));
         Become(&TThis::StateHandshake);
     }
 
@@ -126,7 +126,7 @@ class TAsyncIndexChangeSenderShard: public TActorBootstrapped<TAsyncIndexChangeS
             return Ready();
         }
 
-        Send(LeaderPipeCache, new TEvPipeCache::TEvForward(records.Release(), ShardId, false)); 
+        Send(LeaderPipeCache, new TEvPipeCache::TEvForward(records.Release(), ShardId, false));
         Become(&TThis::StateWaitingStatus);
     }
 
@@ -236,7 +236,7 @@ private:
     const TMap<TTag, TTag> TagMap; // from main to index
     mutable TMaybe<TString> LogPrefix;
 
-    TActorId LeaderPipeCache; 
+    TActorId LeaderPipeCache;
     ui64 LastRecordOrder;
 
 }; // TAsyncIndexChangeSenderShard

@@ -889,10 +889,10 @@ namespace NKikimr::NBsController {
 
             group->SetEncryptionMode(groupInfo.EncryptionMode.GetOrElse(0));
             group->SetLifeCyclePhase(groupInfo.LifeCyclePhase.GetOrElse(0));
-            group->SetMainKeyId(groupInfo.MainKeyId.GetOrElse("")); 
+            group->SetMainKeyId(groupInfo.MainKeyId.GetOrElse(""));
             group->SetEncryptedGroupKey(groupInfo.EncryptedGroupKey.GetOrElse(""));
             group->SetGroupKeyNonce(groupInfo.GroupKeyNonce.GetOrElse(0));
-            group->SetMainKeyVersion(groupInfo.MainKeyVersion.GetOrElse(0)); 
+            group->SetMainKeyVersion(groupInfo.MainKeyVersion.GetOrElse(0));
 
             if (scopeId) {
                 auto *pb = group->MutableAcceptedScope();

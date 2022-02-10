@@ -651,7 +651,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         // Snapshots table must still have snapshot (used by paused ReadTable)
         UNIT_ASSERT_VALUES_EQUAL(GetSnapshotCount(runtime, shards1[0]), 1u);
 
-        RebootTablet(runtime, shards1[0], sender); 
+        RebootTablet(runtime, shards1[0], sender);
 
         // Snapshots table should be cleaned up on reboot
         UNIT_ASSERT_VALUES_EQUAL(GetSnapshotCount(runtime, shards1[0]), 0u);
@@ -726,7 +726,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetEnableMvcc(false) 
+            .SetEnableMvcc(false)
             .SetDomainPlanResolution(1000);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -788,7 +788,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             UNIT_ASSERT_VALUES_EQUAL(ranges.begin()->Upper, snapshot);
         }
 
-        RebootTablet(runtime, shards1[0], sender); 
+        RebootTablet(runtime, shards1[0], sender);
 
         // Snapshots table should be cleaned up on reboot
         UNIT_ASSERT_VALUES_EQUAL(GetSnapshotCount(runtime, shards1[0]), 0u);
@@ -809,7 +809,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetEnableMvcc(false) 
+            .SetEnableMvcc(false)
             .SetDomainPlanResolution(1000);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);

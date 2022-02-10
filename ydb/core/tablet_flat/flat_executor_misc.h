@@ -20,7 +20,7 @@ namespace NTabletFlatExecutor {
         const ui32 Step = Max<ui32>();
     };
 
-    struct TCompactCfg final : public IDestructable { 
+    struct TCompactCfg final : public IDestructable {
         using TConf = NTable::NPage::TConf;
 
         explicit TCompactCfg(THolder<NTable::TCompactionParams> params)
@@ -39,7 +39,7 @@ namespace NTabletFlatExecutor {
         NTable::TTransactionSet RemovedTransactions;
         // The above may contain extra keys, these allow them to be narrowed
         TVector<TIntrusiveConstPtr<NTable::TMemTable>> Frozen;
-        TVector<TIntrusiveConstPtr<NTable::TTxStatusPart>> TxStatus; 
+        TVector<TIntrusiveConstPtr<NTable::TTxStatusPart>> TxStatus;
     };
 
 }

@@ -13,11 +13,11 @@ using NKikimr::NClient::TValue;
 
 namespace NKikimr::NSQS {
 
-TPurgeActor::TPurgeActor(const TQueuePath& queuePath, TIntrusivePtr<TQueueCounters> counters, const TActorId& queueLeader, bool isFifo) 
+TPurgeActor::TPurgeActor(const TQueuePath& queuePath, TIntrusivePtr<TQueueCounters> counters, const TActorId& queueLeader, bool isFifo)
     : QueuePath_(queuePath)
     , RequestId_(CreateGuidAsString())
     , Counters_(std::move(counters))
-    , QueueLeader_(queueLeader) 
+    , QueueLeader_(queueLeader)
     , IsFifo_(isFifo)
 {
     DebugInfo->QueuePurgeActors.emplace(TStringBuilder() << TLogQueueName(QueuePath_), this);
@@ -62,7 +62,7 @@ void TPurgeActor::MakeGetRetentionOffsetRequest(const ui64 shardId, TShard* shar
         .User(QueuePath_.UserName)
         .Queue(QueuePath_.QueueName)
         .Shard(shardId)
-        .QueueLeader(QueueLeader_) 
+        .QueueLeader(QueueLeader_)
         .QueryId(GET_RETENTION_OFFSET_ID)
         .Counters(Counters_)
         .RetryOnTimeout()
@@ -106,7 +106,7 @@ void TPurgeActor::MakeStage1Request(const ui64 shardId, TShard* shard, const std
         .User(QueuePath_.UserName)
         .Queue(QueuePath_.QueueName)
         .Shard(shardId)
-        .QueueLeader(QueueLeader_) 
+        .QueueLeader(QueueLeader_)
         .QueryId(PURGE_QUEUE_ID)
         .Counters(Counters_)
         .RetryOnTimeout()
@@ -158,7 +158,7 @@ void TPurgeActor::MakeStage2Request(ui64 cleanupVersion, const TValue& messages,
                 auto notification = MakeHolder<TSqsEvents::TEvQueuePurgedNotification>();
                 notification->Shard = shardId;
                 notification->NewMessagesCount = static_cast<ui64>(newMessagesCount);
-                Send(QueueLeader_, std::move(notification)); 
+                Send(QueueLeader_, std::move(notification));
             }
 
             shard->BoundaryPurged = shard->CurrentLastMessage.SentTimestamp;
@@ -179,7 +179,7 @@ void TPurgeActor::MakeStage2Request(ui64 cleanupVersion, const TValue& messages,
         .User(QueuePath_.UserName)
         .Queue(QueuePath_.QueueName)
         .Shard(shardId)
-        .QueueLeader(QueueLeader_) 
+        .QueueLeader(QueueLeader_)
         .QueryId(PURGE_QUEUE_STAGE2_ID)
         .Counters(Counters_)
         .RetryOnTimeout()
@@ -197,7 +197,7 @@ void TPurgeActor::MakeStage2Request(ui64 cleanupVersion, const TValue& messages,
         notification->Shard = shardId;
         FillMessagesParam(messagesParam, *inflyMessages, shard->CurrentLastMessage.Offset, shard->CurrentLastMessage.SentTimestamp, notification.Get());
         if (!notification->Offsets.empty()) {
-            Send(QueueLeader_, std::move(notification)); 
+            Send(QueueLeader_, std::move(notification));
         }
     }
 

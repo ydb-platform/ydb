@@ -17,7 +17,7 @@ namespace {
     struct TWrap : public NTest::TSteps<TWrap>, protected NFwd::IPageLoadingQueue {
         using TFrames = NPage::TFrames;
 
-        TWrap(TIntrusiveConstPtr<TFrames> frames, TIntrusiveConstPtr<TSlices> run, ui32 edge, ui64 aLo = 999, ui64 aHi = 999) 
+        TWrap(TIntrusiveConstPtr<TFrames> frames, TIntrusiveConstPtr<TSlices> run, ui32 edge, ui64 aLo = 999, ui64 aHi = 999)
             : Large(std::move(frames))
             , Run(std::move(run))
             , Edge(edge)
@@ -29,7 +29,7 @@ namespace {
             Cache = new NFwd::TBlobs(Large, Run, edges, true);
         }
 
-        TWrap(TIntrusiveConstPtr<TFrames> frames, ui32 edge, ui64 aLo = 999, ui64 aHi = 999) 
+        TWrap(TIntrusiveConstPtr<TFrames> frames, ui32 edge, ui64 aLo = 999, ui64 aHi = 999)
             : TWrap(std::move(frames), TSlices::All(), edge, aLo, aHi)
         {
         }
@@ -114,8 +114,8 @@ namespace {
         }
 
     public:
-        const TIntrusiveConstPtr<TFrames> Large; 
-        const TIntrusiveConstPtr<TSlices> Run; 
+        const TIntrusiveConstPtr<TFrames> Large;
+        const TIntrusiveConstPtr<TSlices> Run;
         const ui32 Edge = Max<ui32>();
         const ui64 AheadLo = 0;
         const ui64 AheadHi = Max<ui64>();
@@ -130,7 +130,7 @@ namespace {
 
 Y_UNIT_TEST_SUITE(NFwd) {
 
-    static TIntrusiveConstPtr<NPage::TFrames> Cook() 
+    static TIntrusiveConstPtr<NPage::TFrames> Cook()
     {
         NPage::TFrameWriter writer(3);
 
@@ -243,7 +243,7 @@ Y_UNIT_TEST_SUITE(NFwd) {
 
         const auto blobs = new NPage::TExtBlobs(out.Make(), { });
 
-        TIntrusiveConstPtr<NPage::TFrames> frames; 
+        TIntrusiveConstPtr<NPage::TFrames> frames;
 
         {
             NPage::TFrameWriter writer(3);
@@ -257,7 +257,7 @@ Y_UNIT_TEST_SUITE(NFwd) {
         }
 
         // Construct a run with [13,27] and [33,35] ranges
-        TIntrusivePtr<TSlices> run = new TSlices; 
+        TIntrusivePtr<TSlices> run = new TSlices;
         {
             run->emplace_back(
                 TSerializedCellVec(), // key not important
@@ -365,7 +365,7 @@ Y_UNIT_TEST_SUITE(NFwd) {
 
     Y_UNIT_TEST(Filtered)
     {
-        TIntrusivePtr<TSlices> run = new TSlices; 
+        TIntrusivePtr<TSlices> run = new TSlices;
         run->emplace_back(TSlice({ }, { }, 0, 15, true, false));
         run->emplace_back(TSlice({ }, { }, 18, 22, true, true));
         TWrap wrap(Cook(), run, Max<ui32>(), 999, 999);

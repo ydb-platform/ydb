@@ -6,9 +6,9 @@
 namespace NKikimr {
 namespace NStateStorageGuardian {
 
-struct TFollowerTracker { 
-    TVector<TVector<TActorId>> Reported; // reported followers by replica index 
-    TMap<TActorId, ui32> Merged; // follower -> referenced by 
+struct TFollowerTracker {
+    TVector<TVector<TActorId>> Reported; // reported followers by replica index
+    TMap<TActorId, ui32> Merged; // follower -> referenced by
 
     bool AddMerged(TActorId x) {
         auto itPair = Merged.emplace(x, 1);
@@ -22,7 +22,7 @@ struct TFollowerTracker {
 
     bool DelMerged(TActorId x) {
         auto it = Merged.find(x);
-        Y_VERIFY(it != Merged.end(), "follower tracker consistency broken"); 
+        Y_VERIFY(it != Merged.end(), "follower tracker consistency broken");
 
         if (it->second == 1) {
             Merged.erase(it);
@@ -33,7 +33,7 @@ struct TFollowerTracker {
         }
     }
 public:
-    TFollowerTracker(ui32 replicas) 
+    TFollowerTracker(ui32 replicas)
         : Reported(replicas)
     {}
 

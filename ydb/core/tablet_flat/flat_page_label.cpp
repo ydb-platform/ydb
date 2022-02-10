@@ -55,7 +55,7 @@ namespace NPage {
         }
     }
 
-    TSharedData THello::Wrap(TArrayRef<const char> plain, EPage page, ui16 version) noexcept 
+    TSharedData THello::Wrap(TArrayRef<const char> plain, EPage page, ui16 version) noexcept
     {
         Y_VERIFY(!(version >> 15), "Version can use only 15 bits");
 
@@ -70,7 +70,7 @@ namespace NPage {
         return blob;
     }
 
-    TString THello::WrapString(TArrayRef<const char> plain, EPage page, ui16 version) noexcept 
+    TString THello::WrapString(TArrayRef<const char> plain, EPage page, ui16 version) noexcept
     {
         Y_VERIFY(!(version >> 15), "Version can use only 15 bits");
 

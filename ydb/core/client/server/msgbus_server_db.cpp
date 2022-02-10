@@ -412,8 +412,8 @@ public:
             if (readTargetValue == "Head") {
                 readTarget = TReadTarget::Head();
             } else
-            if (readTargetValue == "Follower") { 
-                readTarget = TReadTarget::Follower(); 
+            if (readTargetValue == "Follower") {
+                readTarget = TReadTarget::Follower();
             }
         }
 

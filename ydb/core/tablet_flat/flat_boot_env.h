@@ -10,7 +10,7 @@ namespace NBoot {
 
     class TRoot : public IEnv, private IStep {
     public:
-        TRoot(TLogic *logic, TBack *state, TAutoPtr<NUtil::ILogger> logger) 
+        TRoot(TLogic *logic, TBack *state, TAutoPtr<NUtil::ILogger> logger)
             : IStep(logic, state)
             , Logger_(logger)
         {
@@ -19,7 +19,7 @@ namespace NBoot {
 
         ~TRoot()
         {
-            Y_VERIFY(RefCount() == 1, "Boot env shouldn't be deleted by TIntrusivePtr"); 
+            Y_VERIFY(RefCount() == 1, "Boot env shouldn't be deleted by TIntrusivePtr");
         }
 
         const NUtil::ILogger* Logger() const noexcept override
@@ -59,7 +59,7 @@ namespace NBoot {
                     }
 
                     case EOp::Finish: {
-                        TIntrusivePtr<IStep> owner = order.Step->Owner; 
+                        TIntrusivePtr<IStep> owner = order.Step->Owner;
 
                         owner->HandleStep(std::move(order.Step));
                         break;
@@ -71,7 +71,7 @@ namespace NBoot {
     protected:
         void Start() noexcept override { }
 
-        void Start(TIntrusivePtr<IStep> step) noexcept override 
+        void Start(TIntrusivePtr<IStep> step) noexcept override
         {
             Y_VERIFY(step->Env == nullptr, "IStep is already fired");
             Y_VERIFY(step->Owner, "Start called on step without an owner");
@@ -79,7 +79,7 @@ namespace NBoot {
             Queue.emplace_back(EOp::Start, std::move(step));
         }
 
-        void Finish(TIntrusivePtr<IStep> step) noexcept override 
+        void Finish(TIntrusivePtr<IStep> step) noexcept override
         {
             Y_VERIFY(step, "Finish called without a step");
             Y_VERIFY(step->Owner, "Finish called on step without an owner");
@@ -94,7 +94,7 @@ namespace NBoot {
         };
 
         struct TOrder {
-            TOrder(EOp op, TIntrusivePtr<IStep> step) 
+            TOrder(EOp op, TIntrusivePtr<IStep> step)
                 : Op(op)
                 , Step(std::move(step))
             {
@@ -102,10 +102,10 @@ namespace NBoot {
             }
 
             const EOp Op;
-            TIntrusivePtr<IStep> Step; 
+            TIntrusivePtr<IStep> Step;
         };
 
-        TAutoPtr<NUtil::ILogger> Logger_; 
+        TAutoPtr<NUtil::ILogger> Logger_;
         TDeque<TOrder> Queue;
     };
 }

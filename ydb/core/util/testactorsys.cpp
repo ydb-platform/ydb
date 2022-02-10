@@ -109,7 +109,7 @@ void TTestActorSystem::SendToPipe(ui64 tabletId, const TActorId& sender, IEventB
     });
 }
 
-TTabletStorageInfo *TTestActorSystem::CreateTestTabletInfo(ui64 tabletId, TTabletTypes::EType tabletType, TBlobStorageGroupType::EErasureSpecies erasure, ui32 groupId) { 
+TTabletStorageInfo *TTestActorSystem::CreateTestTabletInfo(ui64 tabletId, TTabletTypes::EType tabletType, TBlobStorageGroupType::EErasureSpecies erasure, ui32 groupId) {
     auto x = std::make_unique<TTabletStorageInfo>();
 
     x->TabletID = tabletId;
@@ -127,7 +127,7 @@ TTabletStorageInfo *TTestActorSystem::CreateTestTabletInfo(ui64 tabletId, TTable
     return x.release();
 }
 
-TActorId TTestActorSystem::CreateTestBootstrapper(TTabletStorageInfo *info, std::function<IActor*(TActorId, TTabletStorageInfo*)> op, ui32 nodeId) { 
+TActorId TTestActorSystem::CreateTestBootstrapper(TTabletStorageInfo *info, std::function<IActor*(TActorId, TTabletStorageInfo*)> op, ui32 nodeId) {
     auto bi = MakeIntrusive<TBootstrapperInfo>(new TTabletSetupInfo(op, TMailboxType::Simple, 0, TMailboxType::Simple, 0));
     return Register(CreateBootstrapper(info, bi.Get()), nodeId);
 }

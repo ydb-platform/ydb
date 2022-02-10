@@ -200,10 +200,10 @@ void TAddColumnActor::OnTableAltered(const TSqsEvents::TEvExecuted::TRecord& ev)
 }
 
 
-TQueueMigrationActor::TQueueMigrationActor(const TString& userName, const TString& queueName, const TActorId& queueLeader, const TActorId& schemeCache, TIntrusivePtr<TQueueCounters> counters, TDuration waitBeforeMigration) 
+TQueueMigrationActor::TQueueMigrationActor(const TString& userName, const TString& queueName, const TActorId& queueLeader, const TActorId& schemeCache, TIntrusivePtr<TQueueCounters> counters, TDuration waitBeforeMigration)
     : UserName(userName)
     , QueueName(queueName)
-    , QueueLeader(queueLeader) 
+    , QueueLeader(queueLeader)
     , SchemeCache(schemeCache)
     , Counters(std::move(counters))
     , WaitBeforeMigration(waitBeforeMigration)
@@ -247,7 +247,7 @@ void TQueueMigrationActor::SendReplyAndDie(bool ok) {
         LOG_SQS_DEBUG("Queue " << TLogQueueName(UserName, QueueName)
                                << " migration. Migration failed");
     }
-    Send(QueueLeader, new TSqsEvents::TEvMigrationDone(ok)); 
+    Send(QueueLeader, new TSqsEvents::TEvMigrationDone(ok));
     PassAway();
 }
 

@@ -27,7 +27,7 @@ class TPurgeActor : public TActorBootstrapped<TPurgeActor> {
     };
 
 public:
-    TPurgeActor(const TQueuePath& queuePath, TIntrusivePtr<TQueueCounters> counters, const TActorId& queueLeader, bool isFifo); 
+    TPurgeActor(const TQueuePath& queuePath, TIntrusivePtr<TQueueCounters> counters, const TActorId& queueLeader, bool isFifo);
     ~TPurgeActor();
 
     void Bootstrap();
@@ -61,7 +61,7 @@ private:
     const TString RequestId_;
     TIntrusivePtr<TQueueCounters> Counters_;
     TIntrusivePtr<NMonitoring::TCounterForPtr> PurgedMessagesCounter_;
-    const TActorId QueueLeader_; 
+    const TActorId QueueLeader_;
     const bool IsFifo_;
 };
 

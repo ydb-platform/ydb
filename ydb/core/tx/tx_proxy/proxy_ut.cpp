@@ -22,7 +22,7 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
             c2->SetType("Uint64");
         }
         tableDescr.SetUniformPartitionsCount(2);
-        tableDescr.MutablePartitionConfig()->SetFollowerCount(2); 
+        tableDescr.MutablePartitionConfig()->SetFollowerCount(2);
         *tableDescr.AddKeyColumnNames() = "key";
         return tableDescr;
     }
@@ -161,7 +161,7 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
 
         UNIT_ASSERT_EQUAL(
             Max<ui32>(),
-            env.GetClient().GetLeaderNode(&env.GetRuntime(), result.GetTabletId())); 
+            env.GetClient().GetLeaderNode(&env.GetRuntime(), result.GetTabletId()));
     }
 
     Y_UNIT_TEST(CreateDummyTabletsInDifferentDomains) {
@@ -568,20 +568,20 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
         ui64 somedatashard = partitions.back().GetDatashardId();
 
         //datashard run on dynamic node
-        ui32 nodeId = env.GetClient().GetLeaderNode(&env.GetRuntime(), somedatashard); 
+        ui32 nodeId = env.GetClient().GetLeaderNode(&env.GetRuntime(), somedatashard);
         UNIT_ASSERT(env.GetTenants().IsActive("/dc-1/USER_0", nodeId));
 
         env.GetTenants().Stop("/dc-1/USER_0");
         UNIT_ASSERT(env.GetClient().WaitForTabletDown(&env.GetRuntime(), somedatashard, true, WaitTimeOut));
 
         // make sure that hive has seen tablet stopped
-        ui32 leaderNodeForDataShard = 1; 
-        while (leaderNodeForDataShard != Max<ui32>()) { 
-            leaderNodeForDataShard = env.GetClient().GetLeaderNode(&env.GetRuntime(), somedatashard); 
+        ui32 leaderNodeForDataShard = 1;
+        while (leaderNodeForDataShard != Max<ui32>()) {
+            leaderNodeForDataShard = env.GetClient().GetLeaderNode(&env.GetRuntime(), somedatashard);
         }
 
         //datashard is not running
-        UNIT_ASSERT_VALUES_EQUAL(Max<ui32>(), env.GetClient().GetLeaderNode(&env.GetRuntime(), somedatashard)); 
+        UNIT_ASSERT_VALUES_EQUAL(Max<ui32>(), env.GetClient().GetLeaderNode(&env.GetRuntime(), somedatashard));
 
         //and there is no hope to run it up
         UNIT_ASSERT(!env.GetClient().WaitForTabletAlive(&env.GetRuntime(), somedatashard, true, WaitTimeOut));
@@ -609,7 +609,7 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
         ui64 somedatashard = partitions.back().GetDatashardId();
 
         //datashard run on dynamic node
-        ui32 nodeId = env.GetClient().GetLeaderNode(&env.GetRuntime(), somedatashard); 
+        ui32 nodeId = env.GetClient().GetLeaderNode(&env.GetRuntime(), somedatashard);
         UNIT_ASSERT(env.GetTenants().IsActive("/dc-1/USER_0", nodeId));
 
         //switch off the node
@@ -619,7 +619,7 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
         env.GetClient().WaitForTabletDown(&env.GetRuntime(), somedatashard, true, WaitTimeOut);
         UNIT_ASSERT(env.GetClient().WaitForTabletAlive(&env.GetRuntime(), somedatashard, true, WaitTimeOut));
 
-        ui32 newNodeId = env.GetClient().GetLeaderNode(&env.GetRuntime(), somedatashard); 
+        ui32 newNodeId = env.GetClient().GetLeaderNode(&env.GetRuntime(), somedatashard);
         UNIT_ASSERT(env.GetTenants().IsActive("/dc-1/USER_0", newNodeId));
     }
 
@@ -672,7 +672,7 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
         ui64 coordinator = domaindescr.GetProcessingParams().GetCoordinators(0);
 
         //coordinator runs on dynamic node
-        ui32 nodeId = env.GetClient().GetLeaderNode(&env.GetRuntime(), coordinator); 
+        ui32 nodeId = env.GetClient().GetLeaderNode(&env.GetRuntime(), coordinator);
         UNIT_ASSERT_C(env.GetTenants().IsActive("/dc-1/USER_0", nodeId), "assert IsActive nodeId " << nodeId);
 
         //create table, if it is OK then tenant node awakes
@@ -685,7 +685,7 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
         UNIT_ASSERT(env.GetClient().WaitForTabletAlive(&env.GetRuntime(), coordinator, true, WaitTimeOut));
 
         //coordinator runs on dynamic node
-        ui32 newNodeId = env.GetClient().GetLeaderNode(&env.GetRuntime(), coordinator); 
+        ui32 newNodeId = env.GetClient().GetLeaderNode(&env.GetRuntime(), coordinator);
         UNIT_ASSERT_C(env.GetTenants().IsActive("/dc-1/USER_0", newNodeId), "assert IsActive nodeId " << nodeId);
 
         //coordinator no runs on static node, when dynamic is offline
@@ -752,7 +752,7 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
         ui64 coordinator = domaindescr.GetProcessingParams().GetCoordinators(0);
 
         //coordinator runs on dynamic node
-        ui32 nodeId = env.GetClient().GetLeaderNode(&env.GetRuntime(), coordinator); 
+        ui32 nodeId = env.GetClient().GetLeaderNode(&env.GetRuntime(), coordinator);
         UNIT_ASSERT_C(env.GetTenants().IsActive("/dc-1/USER_0", nodeId), "assert IsActive nodeId " << nodeId);
     }
 

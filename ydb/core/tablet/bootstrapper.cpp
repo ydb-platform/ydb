@@ -54,7 +54,7 @@ class TBootstrapper : public TActor<TBootstrapper> {
     TIntrusivePtr<TBootstrapperInfo> BootstrapperInfo;
 
     TActorId LookOnActorID;
-    TActorId FollowerActorID; 
+    TActorId FollowerActorID;
 
     ui64 RoundCounter;
     ui64 SelfSeed;
@@ -215,10 +215,10 @@ class TBootstrapper : public TActor<TBootstrapper> {
         LOG_NOTICE(ctx, NKikimrServices::BOOTSTRAPPER, "tablet: %" PRIu64 ", type: %s, boot",
                    TabletInfo->TabletID, GetTabletTypeName());
 
-        if (FollowerActorID) { 
-            LookOnActorID = FollowerActorID; 
-            FollowerActorID = TActorId(); 
-            ctx.Send(LookOnActorID, new TEvTablet::TEvPromoteToLeader(0, TabletInfo)); 
+        if (FollowerActorID) {
+            LookOnActorID = FollowerActorID;
+            FollowerActorID = TActorId();
+            ctx.Send(LookOnActorID, new TEvTablet::TEvPromoteToLeader(0, TabletInfo));
         } else {
             TTabletSetupInfo *x = BootstrapperInfo->SetupInfo.Get();
             LookOnActorID = x->Tablet(TabletInfo.Get(), ctx.SelfID, ctx, 0, AppData(ctx)->ResourceProfiles);
@@ -247,9 +247,9 @@ class TBootstrapper : public TActor<TBootstrapper> {
             LookOnActorID = TActorId();
         }
 
-        if (FollowerActorID) { 
-            Send(FollowerActorID, new TEvents::TEvPoisonPill()); 
-            FollowerActorID = TActorId(); 
+        if (FollowerActorID) {
+            Send(FollowerActorID, new TEvents::TEvPoisonPill());
+            FollowerActorID = TActorId();
         }
 
         NotifyWatchers();
@@ -284,11 +284,11 @@ class TBootstrapper : public TActor<TBootstrapper> {
                   TabletInfo->TabletID, GetTabletTypeName(), watchOn.NodeId());
         Watches->Watched.push_back(TWatch::TWatched(watchOn, owner));
 
-        if (BootstrapperInfo->StartFollowers && !FollowerActorID) { 
+        if (BootstrapperInfo->StartFollowers && !FollowerActorID) {
             LOG_NOTICE(ctx, NKikimrServices::BOOTSTRAPPER, "tablet: %" PRIu64 ", type: %s, boot follower",
                        TabletInfo->TabletID, GetTabletTypeName());
             TTabletSetupInfo *x = BootstrapperInfo->SetupInfo.Get();
-            FollowerActorID = x->Follower(TabletInfo.Get(), ctx.SelfID, ctx, 0, AppData(ctx)->ResourceProfiles); 
+            FollowerActorID = x->Follower(TabletInfo.Get(), ctx.SelfID, ctx, 0, AppData(ctx)->ResourceProfiles);
         }
 
         Become(&TThis::StateWatch);

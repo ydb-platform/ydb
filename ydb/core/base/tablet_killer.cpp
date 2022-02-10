@@ -15,23 +15,23 @@ private:
 
     void Handle(TEvStateStorage::TEvInfo::TPtr &ev, const TActorContext &ctx) {
         TEvStateStorage::TEvInfo *msg = ev->Get();
-        TActorId LeaderActor; 
+        TActorId LeaderActor;
         if (NodeId == 0) {
-            LeaderActor = msg->CurrentLeader; 
+            LeaderActor = msg->CurrentLeader;
         } else {
-            if (msg->CurrentLeader && msg->CurrentLeader.NodeId() == NodeId) { 
-                LeaderActor = msg->CurrentLeader; 
+            if (msg->CurrentLeader && msg->CurrentLeader.NodeId() == NodeId) {
+                LeaderActor = msg->CurrentLeader;
             } else {
-                for (const auto& pr : msg->Followers) { 
+                for (const auto& pr : msg->Followers) {
                     if (pr.first.NodeId() == NodeId) {
-                        LeaderActor = pr.first; 
+                        LeaderActor = pr.first;
                         break;
                     }
                 }
             }
         }
-        if (LeaderActor && msg->CurrentGeneration <= MaxGeneration) 
-            ctx.Send(LeaderActor, new TEvents::TEvPoisonPill()); 
+        if (LeaderActor && msg->CurrentGeneration <= MaxGeneration)
+            ctx.Send(LeaderActor, new TEvents::TEvPoisonPill());
         return Die(ctx);
     }
 public:

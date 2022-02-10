@@ -32,7 +32,7 @@ void TDataShard::CheckMvccStateChangeCanStart(const TActorContext& ctx) {
                     [[fallthrough]];
 
                 case TShardState::Readonly:
-                    // Don't switch the state on follower 
+                    // Don't switch the state on follower
                     [[fallthrough]];
 
                 case TShardState::Offline:

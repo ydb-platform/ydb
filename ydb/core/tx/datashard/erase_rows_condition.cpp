@@ -124,7 +124,7 @@ public:
         proto.SetColumnUnit(Unit);
     }
 
-    void Prepare(TIntrusiveConstPtr<NTable::TRowScheme> scheme, TMaybe<NTable::TPos> remapPos) override { 
+    void Prepare(TIntrusiveConstPtr<NTable::TRowScheme> scheme, TMaybe<NTable::TPos> remapPos) override {
         const auto* columnInfo = scheme->ColInfo(ColumnId);
         Y_VERIFY(columnInfo);
 

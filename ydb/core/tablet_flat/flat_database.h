@@ -67,13 +67,13 @@ public:
 
     /*_ Call Next() before accessing each row including the 1st row. */
 
-    TAutoPtr<TTableIt> Iterate(ui32 table, TRawVals key, TTagsRef tags, ELookup) const noexcept; 
-    TAutoPtr<TTableIt> IterateExact(ui32 table, TRawVals key, TTagsRef tags, TRowVersion snapshot = TRowVersion::Max()) const noexcept; 
-    TAutoPtr<TTableIt> IterateRange(ui32 table, const TKeyRange& range, TTagsRef tags, TRowVersion snapshot = TRowVersion::Max()) const noexcept; 
-    TAutoPtr<TTableReverseIt> IterateRangeReverse(ui32 table, const TKeyRange& range, TTagsRef tags, TRowVersion snapshot = TRowVersion::Max()) const noexcept; 
+    TAutoPtr<TTableIt> Iterate(ui32 table, TRawVals key, TTagsRef tags, ELookup) const noexcept;
+    TAutoPtr<TTableIt> IterateExact(ui32 table, TRawVals key, TTagsRef tags, TRowVersion snapshot = TRowVersion::Max()) const noexcept;
+    TAutoPtr<TTableIt> IterateRange(ui32 table, const TKeyRange& range, TTagsRef tags, TRowVersion snapshot = TRowVersion::Max()) const noexcept;
+    TAutoPtr<TTableReverseIt> IterateRangeReverse(ui32 table, const TKeyRange& range, TTagsRef tags, TRowVersion snapshot = TRowVersion::Max()) const noexcept;
 
     template<class TIteratorType>
-    TAutoPtr<TIteratorType> IterateRangeGeneric(ui32 table, const TKeyRange& range, TTagsRef tags, TRowVersion snapshot = TRowVersion::Max()) const noexcept; 
+    TAutoPtr<TIteratorType> IterateRangeGeneric(ui32 table, const TKeyRange& range, TTagsRef tags, TRowVersion snapshot = TRowVersion::Max()) const noexcept;
 
     // NOTE: the row refeneces data in some internal buffers that get invalidated on the next Select() or Commit() call
     EReady Select(ui32 table, TRawVals key, TTagsRef tags, TRowState& row,
@@ -122,35 +122,35 @@ public:
 
     const TScheme& GetScheme() const noexcept;
 
-    TIntrusiveConstPtr<TRowScheme> GetRowScheme(ui32 table) const noexcept; 
+    TIntrusiveConstPtr<TRowScheme> GetRowScheme(ui32 table) const noexcept;
 
     TPartView GetPartView(ui32 table, const TLogoBlobID &bundle) const;
     TVector<TPartView> GetTableParts(ui32 table) const;
-    TVector<TIntrusiveConstPtr<TColdPart>> GetTableColdParts(ui32 table) const; 
+    TVector<TIntrusiveConstPtr<TColdPart>> GetTableColdParts(ui32 table) const;
     void EnumerateTableParts(ui32 table, const std::function<void(const TPartView&)>& callback) const;
-    void EnumerateTableColdParts(ui32 table, const std::function<void(const TIntrusiveConstPtr<TColdPart>&)>& callback) const; 
-    void EnumerateTableTxStatusParts(ui32 table, const std::function<void(const TIntrusiveConstPtr<TTxStatusPart>&)>& callback) const; 
-    void EnumerateTxStatusParts(const std::function<void(const TIntrusiveConstPtr<TTxStatusPart>&)>& callback) const; 
+    void EnumerateTableColdParts(ui32 table, const std::function<void(const TIntrusiveConstPtr<TColdPart>&)>& callback) const;
+    void EnumerateTableTxStatusParts(ui32 table, const std::function<void(const TIntrusiveConstPtr<TTxStatusPart>&)>& callback) const;
+    void EnumerateTxStatusParts(const std::function<void(const TIntrusiveConstPtr<TTxStatusPart>&)>& callback) const;
     ui64 GetTableMemSize(ui32 table, TEpoch epoch = TEpoch::Max()) const;
     ui64 GetTableMemRowCount(ui32 tableId) const;
     ui64 GetTableIndexSize(ui32 table) const;
-    ui64 GetTableSearchHeight(ui32 table) const; 
+    ui64 GetTableSearchHeight(ui32 table) const;
     ui64 EstimateRowSize(ui32 table) const;
     const TCounters& Counters() const noexcept;
     TString SnapshotToLog(ui32 table, TTxStamp);
 
-    TAutoPtr<TSubset> Subset(ui32 table, TArrayRef<const TLogoBlobID> bundle, TEpoch before) const; 
-    TAutoPtr<TSubset> Subset(ui32 table, TEpoch before, TRawVals from, TRawVals to) const; 
-    TAutoPtr<TSubset> ScanSnapshot(ui32 table, TRowVersion snapshot = TRowVersion::Max()); 
+    TAutoPtr<TSubset> Subset(ui32 table, TArrayRef<const TLogoBlobID> bundle, TEpoch before) const;
+    TAutoPtr<TSubset> Subset(ui32 table, TEpoch before, TRawVals from, TRawVals to) const;
+    TAutoPtr<TSubset> ScanSnapshot(ui32 table, TRowVersion snapshot = TRowVersion::Max());
 
     TBundleSlicesMap LookupSlices(ui32 table, TArrayRef<const TLogoBlobID> bundles) const;
     void ReplaceSlices(ui32 table, TBundleSlicesMap slices);
 
-    void Replace(ui32 table, TArrayRef<const TPartView>, const TSubset&); 
-    void ReplaceTxStatus(ui32 table, TArrayRef<const TIntrusiveConstPtr<TTxStatusPart>>, const TSubset&); 
+    void Replace(ui32 table, TArrayRef<const TPartView>, const TSubset&);
+    void ReplaceTxStatus(ui32 table, TArrayRef<const TIntrusiveConstPtr<TTxStatusPart>>, const TSubset&);
     void Merge(ui32 table, TPartView);
-    void Merge(ui32 table, TIntrusiveConstPtr<TColdPart>); 
-    void Merge(ui32 table, TIntrusiveConstPtr<TTxStatusPart>); 
+    void Merge(ui32 table, TIntrusiveConstPtr<TColdPart>);
+    void Merge(ui32 table, TIntrusiveConstPtr<TTxStatusPart>);
 
     void DebugDumpTable(ui32 table, IOutputStream& str, const NScheme::TTypeRegistry& typeRegistry) const;
     void DebugDump(IOutputStream& str, const NScheme::TTypeRegistry& typeRegistry) const;
@@ -160,14 +160,14 @@ public:
     // executor interface
     void Begin(TTxStamp, IPages& env);
     TProd Commit(TTxStamp, bool commit, TCookieAllocator* = nullptr);
-    TGarbage RollUp(TTxStamp, TArrayRef<const char> delta, TArrayRef<const char> redo, TMemGlobs annex); 
+    TGarbage RollUp(TTxStamp, TArrayRef<const char> delta, TArrayRef<const char> redo, TMemGlobs annex);
 
     void RollUpRemoveRowVersions(ui32 table, const TRowVersion& lower, const TRowVersion& upper);
 
     bool ValidateCommit(TString&);
 
-    TCompactionStats GetCompactionStats(ui32 table) const; 
- 
+    TCompactionStats GetCompactionStats(ui32 table) const;
+
 private:
     TTable* Require(ui32 tableId) const noexcept;
 
@@ -178,9 +178,9 @@ private:
     bool NoMoreReadsFlag;
     IPages* Env = nullptr;
     THolder<TChange> Change;
-    TAutoPtr<TAlter> Alter_; 
-    TAutoPtr<TAnnex> Annex; 
-    TAutoPtr<NRedo::TWriter> Redo; 
+    TAutoPtr<TAlter> Alter_;
+    TAutoPtr<TAnnex> Annex;
+    TAutoPtr<NRedo::TWriter> Redo;
 
     mutable TDeque<TPartSimpleIt> TempIterators; // Keeps the last result of Select() valid
     mutable THashSet<ui32> IteratedTables;

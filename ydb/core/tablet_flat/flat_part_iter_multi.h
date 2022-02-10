@@ -669,7 +669,7 @@ namespace NTable {
         using TCells = NPage::TCells;
         using TGroupId = NPage::TGroupId;
 
-        TPartSimpleIt(const TPart* part, TTagsRef tags, TIntrusiveConstPtr<TKeyNulls> nulls, IPages* env) 
+        TPartSimpleIt(const TPart* part, TTagsRef tags, TIntrusiveConstPtr<TKeyNulls> nulls, IPages* env)
             : Part(part)
             , Env(env)
             , Pinout(Part->Scheme->MakePinout(tags))
@@ -1172,7 +1172,7 @@ namespace NTable {
 
     private:
         const TPinout Pinout;
-        const TIntrusiveConstPtr<TKeyNulls> Nulls; 
+        const TIntrusiveConstPtr<TKeyNulls> Nulls;
 
         TPartGroupKeyIt Main;
 
@@ -1211,7 +1211,7 @@ namespace NTable {
     public:
         using TCells = NPage::TCells;
 
-        TRunIt(const TRun& run, TTagsRef tags, TIntrusiveConstPtr<TKeyNulls> nulls, IPages* env) 
+        TRunIt(const TRun& run, TTagsRef tags, TIntrusiveConstPtr<TKeyNulls> nulls, IPages* env)
             : Run(run)
             , Tags(tags)
             , Nulls(std::move(nulls))
@@ -1582,7 +1582,7 @@ namespace NTable {
     public:
         const TRun& Run;
         TTagsRef const Tags;
-        TIntrusiveConstPtr<TKeyNulls> const Nulls; 
+        TIntrusiveConstPtr<TKeyNulls> const Nulls;
         IPages* const Env;
         ui64 InvisibleRowSkips = 0;
 

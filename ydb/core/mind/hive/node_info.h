@@ -56,7 +56,7 @@ public:
     TVector<TSubDomainKey> ServicedDomains;
     TVector<TSubDomainKey> LastSeenServicedDomains;
     TVector<TActorId> PipeServers;
-    THashSet<TLeaderTabletInfo*> LockedTablets; 
+    THashSet<TLeaderTabletInfo*> LockedTablets;
     mutable TInstant LastResourceChangeReaction;
     NKikimrHive::TNodeStatistics Statistics;
 

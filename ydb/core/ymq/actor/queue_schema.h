@@ -50,7 +50,7 @@ public:
     void RequestTablesFormatSettings(const TString& accountName);
     void RegisterMakeDirActor(const TString& workingDir, const TString& dirName);
 
-    void RequestLeaderTabletId(); 
+    void RequestLeaderTabletId();
 
     void CreateComponents();
 
@@ -98,7 +98,7 @@ private:
         MakeShards,
         MakeTables,
         DescribeTableForSetSchemeShardId,
-        DiscoverLeaderTabletId, 
+        DiscoverLeaderTabletId,
         AddQuoterResource,
     };
 
@@ -129,10 +129,10 @@ private:
     ui64 CreatedTablesCount_ = 0;
     TQueueAttributes ValidatedAttributes_;
 
-    ui64 LeaderTabletId_ = 0; 
-    TActorId CreateTableWithLeaderTabletActorId_; 
-    ui64 CreateTableWithLeaderTabletTxId_ = 0; 
-    std::pair<ui64, ui64> TableWithLeaderPathId_ = std::make_pair(0, 0); // (scheme shard, path id) are required for describing table 
+    ui64 LeaderTabletId_ = 0;
+    TActorId CreateTableWithLeaderTabletActorId_;
+    ui64 CreateTableWithLeaderTabletTxId_ = 0;
+    std::pair<ui64, ui64> TableWithLeaderPathId_ = std::make_pair(0, 0); // (scheme shard, path id) are required for describing table
 
     ECreateComponentsStep CurrentCreationStep_ = ECreateComponentsStep::GetTablesFormatSetting;
 

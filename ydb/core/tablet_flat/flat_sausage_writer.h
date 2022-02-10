@@ -23,7 +23,7 @@ namespace NPageCollection {
             return Record.Pages() || Blobs || Buffer;
         }
 
-        ui32 AddPage(const TArrayRef<const char> body, ui32 type) 
+        ui32 AddPage(const TArrayRef<const char> body, ui32 type)
         {
             for (size_t offset = 0; offset < body.size(); ) {
                 if (Buffer.capacity() == 0 && Block != Max<ui32>())
@@ -41,7 +41,7 @@ namespace NPageCollection {
             return Record.Push(type, body);
         }
 
-        void AddInplace(ui32 page, TArrayRef<const char> body) 
+        void AddInplace(ui32 page, TArrayRef<const char> body)
         {
             Record.PushInplace(page, body);
         }

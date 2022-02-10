@@ -16,9 +16,9 @@ namespace NPageCollection {
 
 namespace {
     struct TMyPageCollection {
-        using TArrayRef = TArrayRef<const TGlobId>; 
+        using TArrayRef = TArrayRef<const TGlobId>;
 
-        TMyPageCollection(TArrayRef globs) : Globs(globs) { } 
+        TMyPageCollection(TArrayRef globs) : Globs(globs) { }
 
         inline TBorder Bounds(ui32 page) const noexcept
         {
@@ -32,7 +32,7 @@ namespace {
             return at < Globs.size() ? Globs[at] : TGlobId{ };
         }
 
-        const TArrayRef Globs; 
+        const TArrayRef Globs;
     };
 }
 

@@ -34,7 +34,7 @@ struct TTestContext {
     // Sleeps for millis milliseconds using fake time
     void Sleep(ui64 millis);
 
-    // Doesn't sleep unlike NKikimr::RebootTablet 
+    // Doesn't sleep unlike NKikimr::RebootTablet
     void RebootTablet();
 
     // Returns tablet actor for direct manipulation

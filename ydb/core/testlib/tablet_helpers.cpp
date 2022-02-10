@@ -170,16 +170,16 @@ namespace NKikimr {
                 auto info = static_cast<TEvStateStorage::TEvInfo*>(event->GetBase());
                 if (info->Status == NKikimrProto::OK && (Find(TabletIds.begin(), TabletIds.end(), info->TabletID) != TabletIds.end())) {
                     if (ENABLE_REBOOT_DISPATCH_LOG) {
-                        Cerr << "Leader for TabletID " << info->TabletID << " is " << info->CurrentLeaderTablet << " sender: " << event->Sender << " recipient: " << event->Recipient << Endl; 
+                        Cerr << "Leader for TabletID " << info->TabletID << " is " << info->CurrentLeaderTablet << " sender: " << event->Sender << " recipient: " << event->Recipient << Endl;
                     }
-                    if (info->CurrentLeaderTablet) { 
-                        TabletLeaders[info->TabletID] = info->CurrentLeaderTablet; 
+                    if (info->CurrentLeaderTablet) {
+                        TabletLeaders[info->TabletID] = info->CurrentLeaderTablet;
                     } else {
                         if (ENABLE_REBOOT_DISPATCH_LOG) {
-                            Cerr << "IGNORE Leader for TabletID " << info->TabletID << " is " << info->CurrentLeaderTablet << " sender: " << event->Sender << " recipient: " << event->Recipient << Endl; 
+                            Cerr << "IGNORE Leader for TabletID " << info->TabletID << " is " << info->CurrentLeaderTablet << " sender: " << event->Sender << " recipient: " << event->Recipient << Endl;
                         }
                     }
-                    TabletRelatedActors[info->CurrentLeaderTablet] = info->TabletID; 
+                    TabletRelatedActors[info->CurrentLeaderTablet] = info->TabletID;
 
                 }
             } else if (event->GetTypeRewrite() == TEvFakeHive::EvNotifyTabletDeleted) {
@@ -199,12 +199,12 @@ namespace NKikimr {
             }
         }
 
-        const TMap<ui64, TActorId>& GetTabletLeaders() const { 
-            return TabletLeaders; 
+        const TMap<ui64, TActorId>& GetTabletLeaders() const {
+            return TabletLeaders;
         }
 
         bool IsTabletEvent(const TAutoPtr<IEventHandle>& event) const {
-            for (const auto& kv : TabletLeaders) { 
+            for (const auto& kv : TabletLeaders) {
                 if (event->GetRecipientRewrite() == kv.second) {
                     return true;
                 }
@@ -217,8 +217,8 @@ namespace NKikimr {
             if (DeletedTablets.contains(tabletId))
                 return false;
 
-            auto it = TabletLeaders.find(tabletId); 
-            if (it != TabletLeaders.end() && event->GetRecipientRewrite() == it->second) { 
+            auto it = TabletLeaders.find(tabletId);
+            if (it != TabletLeaders.end() && event->GetRecipientRewrite() == it->second) {
                 return true;
             }
 
@@ -255,7 +255,7 @@ namespace NKikimr {
         }
 
     protected:
-        TMap<ui64, TActorId> TabletLeaders; 
+        TMap<ui64, TActorId> TabletLeaders;
         TMap<TActorId, ui64> TabletRelatedActors;
         TSet<ui64> DeletedTablets;
         bool& TracingActive;
@@ -313,7 +313,7 @@ namespace NKikimr {
                 runtime.PushFront(event);
             }
 
-            TActorId targetActorId = TabletLeaders[TabletId]; 
+            TActorId targetActorId = TabletLeaders[TabletId];
 
             if (targetActorId == TActorId()) {
                 if (ENABLE_REBOOT_DISPATCH_LOG)
@@ -337,7 +337,7 @@ namespace NKikimr {
             if (ENABLE_REBOOT_DISPATCH_LOG)
                 Cerr << "!Reboot " << TabletId << " (actor " << targetActorId << ") rebooted!\n";
 
-            InvalidateTabletResolverCache(runtime, TabletId); 
+            InvalidateTabletResolverCache(runtime, TabletId);
             TDispatchOptions invalidateOptions;
             invalidateOptions.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvStateStorage::EvInfo));
             runtime.DispatchEvents(invalidateOptions);
@@ -568,8 +568,8 @@ namespace NKikimr {
         TTabletTracer& Tracer;
     };
 
-    TActorId FollowerTablet(TTestActorRuntime &runtime, const TActorId &launcher, TTabletStorageInfo *info, std::function<IActor * (const TActorId &, TTabletStorageInfo *)> op) { 
-        return runtime.Register(CreateTabletFollower(launcher, info, new TTabletSetupInfo(op, TMailboxType::Simple, 0, TMailboxType::Simple, 0), 0, new TResourceProfiles)); 
+    TActorId FollowerTablet(TTestActorRuntime &runtime, const TActorId &launcher, TTabletStorageInfo *info, std::function<IActor * (const TActorId &, TTabletStorageInfo *)> op) {
+        return runtime.Register(CreateTabletFollower(launcher, info, new TTabletSetupInfo(op, TMailboxType::Simple, 0, TMailboxType::Simple, 0), 0, new TResourceProfiles));
     }
 
     TActorId ResolveTablet(TTestActorRuntime &runtime, ui64 tabletId, ui32 nodeIndex, bool sysTablet) {
@@ -585,34 +585,34 @@ namespace NKikimr {
         }
     }
 
-    void ForwardToTablet(TTestActorRuntime &runtime, ui64 tabletId, const TActorId& sender, IEventBase *ev, ui32 nodeIndex, bool sysTablet) { 
+    void ForwardToTablet(TTestActorRuntime &runtime, ui64 tabletId, const TActorId& sender, IEventBase *ev, ui32 nodeIndex, bool sysTablet) {
         runtime.Send(new IEventHandle(MakeTabletResolverID(), sender,
             new TEvTabletResolver::TEvForward(tabletId, new IEventHandle(TActorId(), sender, ev), { },
                 sysTablet ? TEvTabletResolver::TEvForward::EActor::SysTablet : TEvTabletResolver::TEvForward::EActor::Tablet)), nodeIndex);
     }
 
-    void InvalidateTabletResolverCache(TTestActorRuntime &runtime, ui64 tabletId, ui32 nodeIndex) { 
+    void InvalidateTabletResolverCache(TTestActorRuntime &runtime, ui64 tabletId, ui32 nodeIndex) {
         runtime.Send(new IEventHandle(MakeTabletResolverID(), TActorId(),
             new TEvTabletResolver::TEvTabletProblem(tabletId, TActorId())), nodeIndex);
     }
 
-    void RebootTablet(TTestActorRuntime &runtime, ui64 tabletId, const TActorId& sender, ui32 nodeIndex, bool sysTablet) { 
-        ForwardToTablet(runtime, tabletId, sender, new TEvents::TEvPoisonPill(), nodeIndex, sysTablet); 
+    void RebootTablet(TTestActorRuntime &runtime, ui64 tabletId, const TActorId& sender, ui32 nodeIndex, bool sysTablet) {
+        ForwardToTablet(runtime, tabletId, sender, new TEvents::TEvPoisonPill(), nodeIndex, sysTablet);
         TDispatchOptions rebootOptions;
         rebootOptions.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 1));
         runtime.DispatchEvents(rebootOptions);
 
-        InvalidateTabletResolverCache(runtime, tabletId, nodeIndex); 
+        InvalidateTabletResolverCache(runtime, tabletId, nodeIndex);
         WaitScheduledEvents(runtime, TDuration::Seconds(1), sender, nodeIndex);
     }
 
     void GracefulRestartTablet(TTestActorRuntime &runtime, ui64 tabletId, const TActorId &sender, ui32 nodeIndex) {
-        ForwardToTablet(runtime, tabletId, sender, new TEvTablet::TEvTabletStop(tabletId, TEvTablet::TEvTabletStop::ReasonStop), nodeIndex, /* sysTablet = */ true); 
+        ForwardToTablet(runtime, tabletId, sender, new TEvTablet::TEvTabletStop(tabletId, TEvTablet::TEvTabletStop::ReasonStop), nodeIndex, /* sysTablet = */ true);
         TDispatchOptions rebootOptions;
         rebootOptions.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 1));
         runtime.DispatchEvents(rebootOptions);
 
-        InvalidateTabletResolverCache(runtime, tabletId, nodeIndex); 
+        InvalidateTabletResolverCache(runtime, tabletId, nodeIndex);
         WaitScheduledEvents(runtime, TDuration::Seconds(1), sender, nodeIndex);
     }
 
@@ -1062,10 +1062,10 @@ namespace NKikimr {
         return totalFreeSize;
     };
 
-    NTabletPipe::TClientConfig GetPipeConfigWithRetriesAndFollowers() { // with blackjack and hookers... (c) 
+    NTabletPipe::TClientConfig GetPipeConfigWithRetriesAndFollowers() { // with blackjack and hookers... (c)
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
-        pipeConfig.AllowFollower = true; 
+        pipeConfig.AllowFollower = true;
         return pipeConfig;
     }
 
@@ -1379,7 +1379,7 @@ namespace NKikimr {
             auto it = State->Tablets.find(key);
             Y_VERIFY(it != State->Tablets.end());
 
-            THolder<TTabletStorageInfo> tabletInfo(CreateTestTabletInfo(tabletId, it->second.Type)); 
+            THolder<TTabletStorageInfo> tabletInfo(CreateTestTabletInfo(tabletId, it->second.Type));
             ctx.Send(ev->Sender, new TEvLocal::TEvBootTablet(*tabletInfo.Get(), 0), 0, ev->Cookie);
         }
 
@@ -1411,7 +1411,7 @@ namespace NKikimr {
             TIntrusivePtr<TBootstrapperInfo> bi(new TBootstrapperInfo(new TTabletSetupInfo(op, TMailboxType::Simple, 0,
                 TMailboxType::Simple, 0)));
             return ctx.ExecutorThread.RegisterActor(CreateBootstrapper(
-                CreateTestTabletInfo(State->NextTabletId, tabletType, erasure), bi.Get())); 
+                CreateTestTabletInfo(State->NextTabletId, tabletType, erasure), bi.Get()));
         }
 
         void FillTabletInfo(NKikimrHive::TEvResponseHiveInfo& response, ui64 tabletId, const TFakeHiveTabletInfo *info) {
@@ -1434,7 +1434,7 @@ namespace NKikimr {
     void BootFakeHive(TTestActorRuntime& runtime, ui64 tabletId, TFakeHiveState::TPtr state,
                       TGetTabletCreationFunc getTabletCreationFunc)
     {
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(tabletId, TTabletTypes::Hive), [=](const TActorId & tablet, TTabletStorageInfo* info) { 
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(tabletId, TTabletTypes::Hive), [=](const TActorId & tablet, TTabletStorageInfo* info) {
             return new TFakeHive(tablet, info, state,
                                  (getTabletCreationFunc == nullptr) ? &TFakeHive::DefaultGetTabletCreationFunc : getTabletCreationFunc);
         });

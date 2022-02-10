@@ -207,7 +207,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
                 SchemeShard: %lu
                 PathId: 2
             }
-        )", TTestTxConfig::SchemeShard), attrs); 
+        )", TTestTxConfig::SchemeShard), attrs);
         env.TestWaitNotification(runtime, txId);
 
         TString alterData = TStringBuilder()
@@ -256,7 +256,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
             UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);;
         };
         for (ui32 delta = 0; delta < 101; ++delta) {
-            fnWriteRow(TTestTxConfig::FakeHiveTablets + 6, 1 + delta, 1000 + delta, "aaaa", "Table"); 
+            fnWriteRow(TTestTxConfig::FakeHiveTablets + 6, 1 + delta, 1000 + delta, "aaaa", "Table");
         }
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -314,7 +314,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         )");
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
 
-        RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor()); 
+        RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
 
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
                            {NLs::PathExist,
@@ -371,7 +371,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
 
         for (ui32 delta = 0; delta < 101; ++delta) {
-            fnWriteRow(TTestTxConfig::FakeHiveTablets + 12, 1 + delta, 1000 + delta, "aaaa", "Table"); 
+            fnWriteRow(TTestTxConfig::FakeHiveTablets + 12, 1 + delta, 1000 + delta, "aaaa", "Table");
         }
 
         TVector<TString> billRecords;
@@ -432,7 +432,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         TVector<char> longStrData(100000, 'a');
         TString longString(longStrData.begin(), longStrData.end());
         for (ui32 delta = 0; delta < 1000; ++delta) {
-            fnWriteRow(TTestTxConfig::FakeHiveTablets, 1 + delta, 1000 + delta, longString, "Table"); 
+            fnWriteRow(TTestTxConfig::FakeHiveTablets, 1 + delta, 1000 + delta, longString, "Table");
         }
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
@@ -483,7 +483,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
             auto request = new TEvIndexBuilder::TEvCreateRequest(++txId, "/MyRoot", std::move(settings));
             auto sender = runtime.AllocateEdgeActor();
 
-            ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, request); 
+            ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, request);
 
             TAutoPtr<IEventHandle> handle;
             TEvIndexBuilder::TEvCreateResponse* event = runtime.GrabEdgeEvent<TEvIndexBuilder::TEvCreateResponse>(handle);
@@ -497,12 +497,12 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         }
         ui64 builIndexId = txId;
 
-        auto listing = TestListBuilIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot"); 
+        auto listing = TestListBuilIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
         Y_ASSERT(listing.EntriesSize() == 1);
 
         env.TestWaitNotification(runtime, txId);
 
-        auto descr = TestGetBuilIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", txId); 
+        auto descr = TestGetBuilIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", txId);
         UNIT_ASSERT_EQUAL(descr.GetIndexBuild().GetState(),Ydb::Table::IndexBuildState::STATE_REJECTED);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
@@ -513,8 +513,8 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table/index1", true, true, true),
                            {NLs::PathNotExist});
 
-        TestForgetBuilIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", builIndexId); 
-        listing = TestListBuilIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot"); 
+        TestForgetBuilIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", builIndexId);
+        listing = TestListBuilIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
         Y_ASSERT(listing.EntriesSize() == 0);
     }
 
@@ -523,52 +523,52 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        TestBuilIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "index1", {"index"}, Ydb::StatusIds::BAD_REQUEST); 
+        TestBuilIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "index1", {"index"}, Ydb::StatusIds::BAD_REQUEST);
         env.TestWaitNotification(runtime, txId);
 
-        NKikimrIndexBuilder::TEvListResponse listing = TestListBuilIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot"); 
+        NKikimrIndexBuilder::TEvListResponse listing = TestListBuilIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
         Y_ASSERT(listing.EntriesSize() == 0);
     }
 
-    Y_UNIT_TEST(WithFollowers) { 
+    Y_UNIT_TEST(WithFollowers) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "WithFollowers" 
+            Name: "WithFollowers"
             Columns { Name: "key"   Type: "Uint64" }
             Columns { Name: "value0" Type: "Utf8" }
             Columns { Name: "value1" Type: "Utf8" }
             Columns { Name: "valueFloat" Type: "Float" }
             KeyColumnNames: ["key"]
             PartitionConfig {
-              FollowerGroups { 
-                FollowerCount: 1 
+              FollowerGroups {
+                FollowerCount: 1
               }
             }
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestBuilIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/WithFollowers", "UserDefinedIndexByValue0", {"value0"}); 
+        TestBuilIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/WithFollowers", "UserDefinedIndexByValue0", {"value0"});
         env.TestWaitNotification(runtime, txId);
 
         ui64 buildId = txId;
 
-        auto descr = TestGetBuilIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildId); 
+        auto descr = TestGetBuilIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildId);
         Y_ASSERT(descr.GetIndexBuild().GetState() == Ydb::Table::IndexBuildState::STATE_DONE);
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/WithFollowers"), 
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/WithFollowers"),
                            {NLs::PathExist,
                             NLs::IndexesCount(1),
                             NLs::PathVersionEqual(5)});
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/WithFollowers/UserDefinedIndexByValue0", true, true, true), 
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/WithFollowers/UserDefinedIndexByValue0", true, true, true),
                            {NLs::PathExist,
                             NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady)});
 
-        TestForgetBuilIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", buildId); 
-        auto listing = TestListBuilIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot"); 
+        TestForgetBuilIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", buildId);
+        auto listing = TestListBuilIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
         Y_ASSERT(listing.EntriesSize() == 0);
 
         TestDropTableIndex(runtime, ++txId, "/MyRoot", R"(
@@ -577,7 +577,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/WithFollowers"), 
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/WithFollowers"),
                            {NLs::PathExist,
                             NLs::IndexesCount(0),
                             NLs::PathVersionEqual(7)});
@@ -588,13 +588,13 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        TestBuilIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/NotExist", "index1", {"index"}, Ydb::StatusIds::BAD_REQUEST); 
+        TestBuilIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/NotExist", "index1", {"index"}, Ydb::StatusIds::BAD_REQUEST);
         env.TestWaitNotification(runtime, txId);
 
-        TestMkDir(runtime, TTestTxConfig::SchemeShard, ++txId, "/MyRoot", "DIR"); 
+        TestMkDir(runtime, TTestTxConfig::SchemeShard, ++txId, "/MyRoot", "DIR");
         env.TestWaitNotification(runtime, txId);
 
-        TestBuilIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/DIR", "index1", {"index"}, Ydb::StatusIds::BAD_REQUEST); 
+        TestBuilIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/DIR", "index1", {"index"}, Ydb::StatusIds::BAD_REQUEST);
         env.TestWaitNotification(runtime, txId);
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
@@ -617,16 +617,16 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestBuilIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "UserDefinedIndexByValue0", {"value0"}, Ydb::StatusIds::BAD_REQUEST); 
+        TestBuilIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "UserDefinedIndexByValue0", {"value0"}, Ydb::StatusIds::BAD_REQUEST);
         env.TestWaitNotification(runtime, txId);
 
-        TestBuilIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "UserDefinedIndexByValue0", {"value1"}, Ydb::StatusIds::BAD_REQUEST); 
+        TestBuilIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "UserDefinedIndexByValue0", {"value1"}, Ydb::StatusIds::BAD_REQUEST);
         env.TestWaitNotification(runtime, txId);
 
-        TestBuilIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "nameOK", {"NotExist"}, Ydb::StatusIds::BAD_REQUEST); 
+        TestBuilIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "nameOK", {"NotExist"}, Ydb::StatusIds::BAD_REQUEST);
         env.TestWaitNotification(runtime, txId);
 
-        TestBuilIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "nameOK", {"valueFloat"}, Ydb::StatusIds::BAD_REQUEST); 
+        TestBuilIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "nameOK", {"valueFloat"}, Ydb::StatusIds::BAD_REQUEST);
         env.TestWaitNotification(runtime, txId);
 
         TSchemeLimits lowLimits;
@@ -634,25 +634,25 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         lowLimits.ExtraPathSymbolsAllowed = "_-.";
         lowLimits.MaxTableIndices = 2;
         SetSchemeshardSchemaLimits(runtime, lowLimits);
-        TestBuilIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "!name!", {"value0"}, Ydb::StatusIds::BAD_REQUEST); 
+        TestBuilIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "!name!", {"value0"}, Ydb::StatusIds::BAD_REQUEST);
         env.TestWaitNotification(runtime, txId);
 
         lowLimits.MaxTableIndices = 2;
         SetSchemeshardSchemaLimits(runtime, lowLimits);
-        TestBuilIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "nameOK", {"value0", "value1"}, Ydb::StatusIds::PRECONDITION_FAILED); 
+        TestBuilIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "nameOK", {"value0", "value1"}, Ydb::StatusIds::PRECONDITION_FAILED);
         env.TestWaitNotification(runtime, txId);
 
         lowLimits.MaxTableIndices = 3;
         lowLimits.MaxChildrenInDir = 2;
         SetSchemeshardSchemaLimits(runtime, lowLimits);
-        TestBuilIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "nameOK", {"value0", "value1"}, Ydb::StatusIds::PRECONDITION_FAILED); 
+        TestBuilIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "nameOK", {"value0", "value1"}, Ydb::StatusIds::PRECONDITION_FAILED);
         env.TestWaitNotification(runtime, txId);
 
         lowLimits.MaxTableIndices = 3;
         lowLimits.MaxChildrenInDir = 3;
         SetSchemeshardSchemaLimits(runtime, lowLimits);
-        TestBuilIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "nameOK", {"value0", "value1"}, Ydb::StatusIds::SUCCESS); 
-        TestBuilIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "nameOK", {"value0", "value1"}, Ydb::StatusIds::OVERLOADED); 
+        TestBuilIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "nameOK", {"value0", "value1"}, Ydb::StatusIds::SUCCESS);
+        TestBuilIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "nameOK", {"value0", "value1"}, Ydb::StatusIds::OVERLOADED);
         env.TestWaitNotification(runtime, {txId, txId - 1});
     }
 
@@ -671,7 +671,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestBuilIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "nameOK", {"index"}); 
+        TestBuilIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "nameOK", {"index"});
         ui64 builIndexId = txId;
 
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
@@ -702,7 +702,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
                            {NLs::PathExist,
                             NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady)});
 
-        NKikimrIndexBuilder::TEvGetResponse descr = TestGetBuilIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", builIndexId); 
+        NKikimrIndexBuilder::TEvGetResponse descr = TestGetBuilIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", builIndexId);
         Y_ASSERT(descr.GetIndexBuild().GetState() == Ydb::Table::IndexBuildState::STATE_DONE);
 
 //        KIKIMR-9945
@@ -895,7 +895,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
             UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);;
         };
         for (ui32 delta = 0; delta < 101; ++delta) {
-            fnWriteRow(TTestTxConfig::FakeHiveTablets, 1 + delta, 1000 + delta, "aaaa", "Table"); 
+            fnWriteRow(TTestTxConfig::FakeHiveTablets, 1 + delta, 1000 + delta, "aaaa", "Table");
         }
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -905,17 +905,17 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
                             NLs::IndexesCount(0),
                             NLs::PathVersionEqual(3)});
 
-        TestBuilIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "index1", {"index"}); 
+        TestBuilIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "index1", {"index"});
         ui64 buildIndexId = txId;
 
-        auto listing = TestListBuilIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot"); 
+        auto listing = TestListBuilIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
         Y_ASSERT(listing.EntriesSize() == 1);
 
-        TestCancelBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId); 
+        TestCancelBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId);
 
         env.TestWaitNotification(runtime, buildIndexId);
 
-        auto descr = TestGetBuilIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId); 
+        auto descr = TestGetBuilIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId);
         Y_ASSERT(descr.GetIndexBuild().GetState() == Ydb::Table::IndexBuildState::STATE_CANCELLED);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
@@ -958,7 +958,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
             UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);
         };
         for (ui32 delta = 0; delta < 101; ++delta) {
-            fnWriteRow(TTestTxConfig::FakeHiveTablets, 1 + delta, 1000 + delta, "aaaa", "Table"); 
+            fnWriteRow(TTestTxConfig::FakeHiveTablets, 1 + delta, 1000 + delta, "aaaa", "Table");
         }
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -968,24 +968,24 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
                             NLs::IndexesCount(0),
                             NLs::PathVersionEqual(3)});
 
-        TestBuilIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "index1", {"index"}); 
+        TestBuilIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "index1", {"index"});
         ui64 buildIndexId = txId;
 
         {
-            auto descr = TestGetBuilIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId); 
+            auto descr = TestGetBuilIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId);
             Y_ASSERT(descr.GetIndexBuild().GetState() == Ydb::Table::IndexBuildState::STATE_PREPARING);
         }
 
         //
-        TestCancelBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId + 1, TVector<Ydb::StatusIds::StatusCode>{Ydb::StatusIds::NOT_FOUND}); 
-        TestCancelBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot/DirNoExist", buildIndexId, TVector<Ydb::StatusIds::StatusCode>{Ydb::StatusIds::NOT_FOUND}); 
+        TestCancelBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId + 1, TVector<Ydb::StatusIds::StatusCode>{Ydb::StatusIds::NOT_FOUND});
+        TestCancelBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot/DirNoExist", buildIndexId, TVector<Ydb::StatusIds::StatusCode>{Ydb::StatusIds::NOT_FOUND});
 
         env.TestWaitNotification(runtime, buildIndexId);
 
-        TestCancelBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId, TVector<Ydb::StatusIds::StatusCode>{Ydb::StatusIds::PRECONDITION_FAILED}); 
+        TestCancelBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId, TVector<Ydb::StatusIds::StatusCode>{Ydb::StatusIds::PRECONDITION_FAILED});
 
         {
-            auto descr = TestGetBuilIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId); 
+            auto descr = TestGetBuilIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId);
             Y_ASSERT(descr.GetIndexBuild().GetState() == Ydb::Table::IndexBuildState::STATE_DONE);
         }
 

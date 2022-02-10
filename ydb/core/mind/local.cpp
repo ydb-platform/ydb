@@ -48,14 +48,14 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         ui32 Generation;
         TTabletTypes::EType TabletType;
         NKikimrLocal::EBootMode BootMode;
-        ui32 FollowerId; 
+        ui32 FollowerId;
 
         TTablet()
             : Tablet()
             , Generation(0)
             , TabletType()
-            , BootMode(NKikimrLocal::EBootMode::BOOT_MODE_LEADER) 
-            , FollowerId(0) 
+            , BootMode(NKikimrLocal::EBootMode::BOOT_MODE_LEADER)
+            , FollowerId(0)
         {}
     };
 
@@ -88,9 +88,9 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     TActorId BootQueue;
     ui32 HiveGeneration;
 
-    TActorId KnownHiveLeader; 
+    TActorId KnownHiveLeader;
 
-    using TTabletId = std::pair<ui64, ui32>; // <TTabletId, TFollowerId> 
+    using TTabletId = std::pair<ui64, ui32>; // <TTabletId, TFollowerId>
     TInstant StartTime;
     std::unordered_map<TTabletId, TTabletEntry> InbootTablets;
     std::unordered_map<TTabletId, TOnlineTabletEntry> OnlineTablets;
@@ -113,12 +113,12 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     TIntrusivePtr<TDrainProgress> LastDrainRequest;
 
     NKikimrTabletBase::TMetrics ResourceLimit;
-    TResourceProfilesPtr ResourceProfiles; 
-    TSharedQuotaPtr TxCacheQuota; 
+    TResourceProfilesPtr ResourceProfiles;
+    TSharedQuotaPtr TxCacheQuota;
     NMonitoring::TDynamicCounterPtr Counters;
 
     NMonitoring::TDynamicCounters::TCounterPtr CounterStartAttempts;
-    NMonitoring::TDynamicCounters::TCounterPtr CounterFollowerAttempts; 
+    NMonitoring::TDynamicCounters::TCounterPtr CounterFollowerAttempts;
     NMonitoring::TDynamicCounters::TCounterPtr CounterRestored;
     NMonitoring::TDynamicCounters::TCounterPtr CounterCancelLocked;
     NMonitoring::TDynamicCounters::TCounterPtr CounterCancelSSTimeout;
@@ -230,7 +230,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             if (!isFilteringNeeded || tablet.second.TabletType == tabletType) {
                 auto *info = result->Record.AddTabletInfo();
                 info->SetTabletId(tablet.first.first);
-                info->SetFollowerId(tablet.first.second); 
+                info->SetFollowerId(tablet.first.second);
                 info->SetTabletType(tablet.second.TabletType);
                 info->SetBootMode(tablet.second.BootMode);
                 ++tabletIdx;
@@ -346,7 +346,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             for (const auto& pr : InbootTablets) {
                 auto* tablet = eventSyncTablets->Record.AddInbootTablets();
                 tablet->SetTabletId(pr.first.first);
-                tablet->SetFollowerId(pr.first.second); 
+                tablet->SetFollowerId(pr.first.second);
                 tablet->SetGeneration(pr.second.Generation);
                 tablet->SetBootMode(pr.second.BootMode);
 
@@ -355,7 +355,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             for (const auto& pr : OnlineTablets) {
                 auto* tablet = eventSyncTablets->Record.AddOnlineTablets();
                 tablet->SetTabletId(pr.first.first);
-                tablet->SetFollowerId(pr.first.second); 
+                tablet->SetFollowerId(pr.first.second);
                 tablet->SetGeneration(pr.second.Generation);
                 tablet->SetBootMode(pr.second.BootMode);
 
@@ -380,10 +380,10 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         NKikimrLocal::TEvBootTablet &record = ev->Get()->Record;
         TIntrusivePtr<TTabletStorageInfo> info(TabletStorageInfoFromProto(record.GetInfo()));
         info->HiveId = HiveId;
-        TTabletId tabletId(info->TabletID, record.GetFollowerId()); 
+        TTabletId tabletId(info->TabletID, record.GetFollowerId());
         LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar::Handle TEvLocal::TEvBootTablet tabletId:"
                     << tabletId
-                    << (record.HasBootMode() && record.GetBootMode() == NKikimrLocal::EBootMode::BOOT_MODE_FOLLOWER ? ".Follower" : ".Leader") 
+                    << (record.HasBootMode() && record.GetBootMode() == NKikimrLocal::EBootMode::BOOT_MODE_FOLLOWER ? ".Follower" : ".Leader")
                     << " storage:"
                     << info->ToString());
         Y_VERIFY(!info->Channels.empty() && !info->Channels[0].History.empty());
@@ -416,22 +416,22 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         {
             auto it = OnlineTablets.find(tabletId);
             if (it != OnlineTablets.end()) {
-                if (it->second.BootMode == NKikimrLocal::EBootMode::BOOT_MODE_FOLLOWER 
-                        && record.GetBootMode() == NKikimrLocal::EBootMode::BOOT_MODE_LEADER) { 
-                    // promote to leader 
-                    it->second.BootMode = NKikimrLocal::EBootMode::BOOT_MODE_LEADER; 
+                if (it->second.BootMode == NKikimrLocal::EBootMode::BOOT_MODE_FOLLOWER
+                        && record.GetBootMode() == NKikimrLocal::EBootMode::BOOT_MODE_LEADER) {
+                    // promote to leader
+                    it->second.BootMode = NKikimrLocal::EBootMode::BOOT_MODE_LEADER;
                     it->second.Generation = suggestedGen;
-                    tabletId.second = 0; // FollowerId = 0 
+                    tabletId.second = 0; // FollowerId = 0
                     TTabletEntry &entry = InbootTablets[tabletId];
                     entry = it->second;
                     entry.From = ctx.Now();
-                    entry.BootMode = NKikimrLocal::EBootMode::BOOT_MODE_LEADER; 
+                    entry.BootMode = NKikimrLocal::EBootMode::BOOT_MODE_LEADER;
                     entry.Generation = suggestedGen;
-                    ctx.Send(entry.Tablet, new TEvTablet::TEvPromoteToLeader(suggestedGen, info)); 
-                    MarkDeadTablet(it->first, 0, TEvLocal::TEvTabletStatus::StatusSupersededByLeader, TEvTablet::TEvTabletDead::ReasonError, ctx); 
+                    ctx.Send(entry.Tablet, new TEvTablet::TEvPromoteToLeader(suggestedGen, info));
+                    MarkDeadTablet(it->first, 0, TEvLocal::TEvTabletStatus::StatusSupersededByLeader, TEvTablet::TEvTabletDead::ReasonError, ctx);
                     OnlineTablets.erase(it);
                     LOG_DEBUG_S(ctx, NKikimrServices::LOCAL,
-                        "TLocalNodeRegistrar::Handle TEvLocal::TEvBootTablet follower tablet " << tabletId << " promoted to leader"); 
+                        "TLocalNodeRegistrar::Handle TEvLocal::TEvBootTablet follower tablet " << tabletId << " promoted to leader");
                     return;
                 }
                 ctx.Send(it->second.Tablet, new TEvTablet::TEvTabletStop(tabletId.first, TEvTablet::TEvTabletStop::ReasonStop));
@@ -446,13 +446,13 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
 
         TTabletSetupInfo *setupInfo = it->second.SetupInfo.Get();
         switch (record.GetBootMode()) {
-        case NKikimrLocal::BOOT_MODE_LEADER: 
+        case NKikimrLocal::BOOT_MODE_LEADER:
             entry.Tablet = setupInfo->Tablet(info.Get(), ctx.SelfID, ctx, suggestedGen, ResourceProfiles, TxCacheQuota);
             CounterStartAttempts->Inc();
             break;
-        case NKikimrLocal::BOOT_MODE_FOLLOWER: 
-            entry.Tablet = setupInfo->Follower(info.Get(), ctx.SelfID, ctx, tabletId.second, ResourceProfiles, TxCacheQuota); 
-            CounterFollowerAttempts->Inc(); 
+        case NKikimrLocal::BOOT_MODE_FOLLOWER:
+            entry.Tablet = setupInfo->Follower(info.Get(), ctx.SelfID, ctx, tabletId.second, ResourceProfiles, TxCacheQuota);
+            CounterFollowerAttempts->Inc();
             break;
         }
 
@@ -463,7 +463,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
 
         LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar::Handle TEvLocal::TEvBootTablet tabletId:" << tabletId << " tablet entry created");
 
-        if (record.GetBootMode() == NKikimrLocal::BOOT_MODE_FOLLOWER) { 
+        if (record.GetBootMode() == NKikimrLocal::BOOT_MODE_FOLLOWER) {
             MarkRunningTablet(tabletId, suggestedGen, ctx);
         }
     }
@@ -471,7 +471,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     void Handle(TEvLocal::TEvStopTablet::TPtr &ev, const TActorContext &ctx) {
         const NKikimrLocal::TEvStopTablet &record = ev->Get()->Record;
         Y_VERIFY(record.HasTabletId());
-        TTabletId tabletId(record.GetTabletId(), record.GetFollowerId()); 
+        TTabletId tabletId(record.GetTabletId(), record.GetFollowerId());
         LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar: Handle TEvStopTablet TabletId:" << tabletId);
 
         auto onlineTabletIt = OnlineTablets.find(tabletId);
@@ -490,13 +490,13 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     void Handle(TEvLocal::TEvDeadTabletAck::TPtr &ev, const TActorContext &ctx) {
         const NKikimrLocal::TEvDeadTabletAck &record = ev->Get()->Record;
         Y_VERIFY(record.HasTabletId());
-        TTabletId tabletId(record.GetTabletId(), record.GetFollowerId()); 
+        TTabletId tabletId(record.GetTabletId(), record.GetFollowerId());
         LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar: Handle TEvDeadTabletAck TabletId:" << tabletId);
     }
 
     void Handle(TEvLocal::TEvTabletMetrics::TPtr& ev, const TActorContext& ctx) {
         TEvLocal::TEvTabletMetrics* msg = ev->Get();
-        const TTabletId tabletId(msg->TabletId, msg->FollowerId); 
+        const TTabletId tabletId(msg->TabletId, msg->FollowerId);
         auto it = OnlineTablets.find(tabletId);
         if (it != OnlineTablets.end()) {
             const auto& metrics(msg->ResourceValues);
@@ -590,7 +590,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             TOnlineTabletEntry& tablet = it->second;
             auto& metrics = *record.AddTabletMetrics();
             metrics.SetTabletID(tabletId.first);
-            metrics.SetFollowerID(tabletId.second); 
+            metrics.SetFollowerID(tabletId.second);
             metrics.MutableResourceUsage()->MergeFrom(tablet.ResourceValues);
         }
     }
@@ -598,9 +598,9 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     void Handle(TEvLocal::TEvTabletMetricsAck::TPtr& ev, const TActorContext& ctx) {
         TEvLocal::TEvTabletMetricsAck* msg = ev->Get();
         auto size = msg->Record.TabletIdSize();
-        Y_VERIFY(msg->Record.FollowerIdSize() == size); 
+        Y_VERIFY(msg->Record.FollowerIdSize() == size);
         for (decltype(size) i = 0; i < size; ++i) {
-            TTabletId tabletId(msg->Record.GetTabletId(i), msg->Record.GetFollowerId(i)); 
+            TTabletId tabletId(msg->Record.GetTabletId(i), msg->Record.GetFollowerId(i));
             auto uit = UpdatedTabletMetrics.find(tabletId);
             if (uit != UpdatedTabletMetrics.end() && --uit->second == 0) {
                 UpdatedTabletMetrics.erase(uit);
@@ -688,7 +688,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     void Handle(TEvTablet::TEvRestored::TPtr &ev, const TActorContext &ctx) {
         TEvTablet::TEvRestored *msg = ev->Get();
 
-        if (msg->Follower) // ignore follower notifications 
+        if (msg->Follower) // ignore follower notifications
             return;
 
         CounterRestored->Inc(); // always update counter for every tablet, even non-actual one. it's about tracking not resource allocation
@@ -879,7 +879,7 @@ public:
                                         Counters->GetCounter("TxDataCacheSize"));
 
         CounterStartAttempts = Counters->GetCounter("Local_StartAttempts", true);
-        CounterFollowerAttempts = Counters->GetCounter("Local_FollowerAttempts", true); 
+        CounterFollowerAttempts = Counters->GetCounter("Local_FollowerAttempts", true);
         CounterRestored = Counters->GetCounter("Local_Restored", true);
         CounterCancelLocked = Counters->GetCounter("Local_CancelLocked", true);
         CounterCancelSSTimeout = Counters->GetCounter("Local_CancelSSTimeout", true);

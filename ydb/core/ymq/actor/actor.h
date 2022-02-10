@@ -21,12 +21,12 @@ public:
 };
 
 // Create actor that would process request.
-// Called from leader node. 
+// Called from leader node.
 IActor* CreateActionActor(const NKikimrClient::TSqsRequest& req, THolder<IReplyCallback> cb);
 
-// Create actor that would proxy request to leader 
-// or process it if leader is not required for given operation type. 
-IActor* CreateProxyActionActor(const NKikimrClient::TSqsRequest& req, THolder<IReplyCallback> cb, bool enableQueueLeader); 
+// Create actor that would proxy request to leader
+// or process it if leader is not required for given operation type.
+IActor* CreateProxyActionActor(const NKikimrClient::TSqsRequest& req, THolder<IReplyCallback> cb, bool enableQueueLeader);
 
 IActor* CreatePingActor(THolder<IPingReplyCallback> cb, const TString& requestId);
 

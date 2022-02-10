@@ -17,7 +17,7 @@ using namespace NKikimr;
 // Sets up everything needed for the tests (actually we need only boot txallocator tablet)
 class TTestEnv {
 public:
-    static constexpr ui64 TxAllocatorTablet = TTestTxConfig::TxAllocator; 
+    static constexpr ui64 TxAllocatorTablet = TTestTxConfig::TxAllocator;
     static const TDuration SimTimeOut;
 
 public:

@@ -31,7 +31,7 @@ private:
 
     TAutoPtr<TEvReadColumnsRequest> Request;
     TActorId SchemeCache;
-    TActorId LeaderPipeCache; 
+    TActorId LeaderPipeCache;
     TDuration Timeout;
     TActorId TimeoutTimerActorId;
     bool WaitingResolveReply;
@@ -77,7 +77,7 @@ public:
         : TBase()
         , Request(request)
         , SchemeCache(MakeSchemeCacheID())
-        , LeaderPipeCache(MakePipePeNodeCacheID(false)) 
+        , LeaderPipeCache(MakePipePeNodeCacheID(false))
         , Timeout(TDuration::Seconds(DEFAULT_TIMEOUT_SEC))
         , WaitingResolveReply(false)
         , Finished(false)
@@ -103,7 +103,7 @@ public:
     void Die(const NActors::TActorContext& ctx) override {
         Y_VERIFY(Finished);
         Y_VERIFY(!WaitingResolveReply);
-        ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(0)); 
+        ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(0));
         if (TimeoutTimerActorId) {
             ctx.Send(TimeoutTimerActorId, new TEvents::TEvPoisonPill());
         }
@@ -353,7 +353,7 @@ private:
 
         LOG_DEBUG_S(ctx, NKikimrServices::MSGBUS_REQUEST, "Sending request to tablet " << tabletId);
 
-        ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvForward(ev.release(), tabletId, true), IEventHandle::FlagTrackDelivery); 
+        ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvForward(ev.release(), tabletId, true), IEventHandle::FlagTrackDelivery);
 
         ++ShardRequestCount;
 
@@ -633,7 +633,7 @@ private:
 
         LOG_DEBUG_S(ctx, NKikimrServices::MSGBUS_REQUEST, "Sending request to shards " << shardId);
 
-        ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvForward(ev.release(), shardId, true), IEventHandle::FlagTrackDelivery); 
+        ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvForward(ev.release(), shardId, true), IEventHandle::FlagTrackDelivery);
 
         ++ShardRequestCount;
 
@@ -673,7 +673,7 @@ private:
         const auto& shardResponse = ev->Get()->Record;
 
         // Notify the cache that we are done with the pipe
-        ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(shardResponse.GetTabletID())); 
+        ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(shardResponse.GetTabletID()));
 
         if (shardResponse.GetStatus() != NKikimrTxDataShard::TError::OK) {
             StatusIds::StatusCode status = Ydb::StatusIds::GENERIC_ERROR;
@@ -715,7 +715,7 @@ private:
         const auto& shardResponse = ev->Get()->Record;
 
         // Notify the cache that we are done with the pipe
-        ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(shardResponse.GetTabletID())); 
+        ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(shardResponse.GetTabletID()));
 
         if (shardResponse.GetStatus() != Ydb::StatusIds::SUCCESS) {
             ReplyWithError((StatusIds::StatusCode)shardResponse.GetStatus(), shardResponse.GetErrorDescription(), ctx);

@@ -24,12 +24,12 @@ namespace NTest {
 
     enum class EPlay {
         Boot    = 1,    /* Apply redo log through base booter   */
-        Redo    = 2,    /* Roll up redo log through follower iface */ 
+        Redo    = 2,    /* Roll up redo log through follower iface */
     };
 
     struct TDbExec : public TSteps<TDbExec> {
         using TRow = NTest::TRow;
-        using TRedoLog = TDeque<TAutoPtr<TChange>>; 
+        using TRedoLog = TDeque<TAutoPtr<TChange>>;
         using TSteppedCookieAllocator = NPageCollection::TSteppedCookieAllocator;
 
         using TCheckIter = TChecker<NTest::TWrapDbIter, TDatabase&>;
@@ -49,9 +49,9 @@ namespace NTest {
             ui32 Pad0;
         };
 
-        static TAutoPtr<TDatabase> Make(TAutoPtr<TSchemeChanges> delta) 
+        static TAutoPtr<TDatabase> Make(TAutoPtr<TSchemeChanges> delta)
         {
-            TAutoPtr<TScheme> scheme = new TScheme; 
+            TAutoPtr<TScheme> scheme = new TScheme;
 
             TSchemeModifier(*scheme).Apply(*delta);
 
@@ -60,7 +60,7 @@ namespace NTest {
 
         TDbExec() : Base(new TDatabase) { Birth(); }
 
-        TDbExec(TAutoPtr<TSchemeChanges> delta) : Base(Make(delta)) { } 
+        TDbExec(TAutoPtr<TSchemeChanges> delta) : Base(Make(delta)) { }
 
         const TRedoLog& GetLog() const noexcept { return RedoLog; }
 
@@ -169,7 +169,7 @@ namespace NTest {
 
         TDbExec& Compact(ui32 table, bool last = true)
         {
-            TAutoPtr<TSubset> subset; 
+            TAutoPtr<TSubset> subset;
 
             if (last /* make full subset */) {
                 subset = Base->Subset(table, TEpoch::Max(), { }, { });
@@ -195,7 +195,7 @@ namespace NTest {
                 materialize it on this compaction.
              */
 
-            TAutoPtr<IPages> env = new TForwardEnv(128, 256, keys, Max<ui32>()); 
+            TAutoPtr<IPages> env = new TForwardEnv(128, 256, keys, Max<ui32>());
 
             auto eggs = TCompaction(env, conf).Do(*subset, logo);
 
@@ -222,7 +222,7 @@ namespace NTest {
             WriteVersion = TRowVersion::Min();
 
             if (play == EPlay::Boot) {
-                TAutoPtr<TScheme> scheme = new TScheme; 
+                TAutoPtr<TScheme> scheme = new TScheme;
 
                 for (auto &change: RedoLog) {
                     if (auto &raw = change->Scheme) {
@@ -409,14 +409,14 @@ namespace NTest {
         }
 
     private:
-        TAutoPtr<TDatabase> Base; 
+        TAutoPtr<TDatabase> Base;
         std::optional<TTestEnv> Env;
         ui32 Gen = 0;
         ui32 Step = 0;
         ui32 Last = Max<ui32>();
         bool Altered = false;
         EOnTx OnTx = EOnTx::None;
-        TIntrusiveConstPtr<TRowScheme> Scheme; 
+        TIntrusiveConstPtr<TRowScheme> Scheme;
         TRedoLog RedoLog;
         TAutoPtr<TSteppedCookieAllocator> Annex;
         TRowVersion ReadVersion = TRowVersion::Max();

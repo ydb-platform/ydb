@@ -40,8 +40,8 @@ namespace NBoot {
     struct IEnv {
         virtual const NUtil::ILogger* Logger() const noexcept = 0;
         virtual void Describe(IOutputStream&) const noexcept = 0;
-        virtual void Start(TIntrusivePtr<IStep>) noexcept = 0; 
-        virtual void Finish(TIntrusivePtr<IStep>) noexcept = 0; 
+        virtual void Start(TIntrusivePtr<IStep>) noexcept = 0;
+        virtual void Finish(TIntrusivePtr<IStep>) noexcept = 0;
     };
 
     class IStep : public TSimpleRefCount<IStep> {
@@ -77,7 +77,7 @@ namespace NBoot {
             Y_FAIL("Boot IStep got an unhandled NSharedCache::TEvResult event");
         }
 
-        virtual void HandleStep(TIntrusivePtr<IStep>) noexcept 
+        virtual void HandleStep(TIntrusivePtr<IStep>) noexcept
         {
             Y_FAIL("Boot IStep got an unhandled child step result");
         }
@@ -112,7 +112,7 @@ namespace NBoot {
 
     protected:
         const EStep Kind__ = EStep::None;
-        const TIntrusivePtr<IStep> Owner; 
+        const TIntrusivePtr<IStep> Owner;
         TLogic * const Logic = nullptr;
         TBack * const Back = nullptr;
         IEnv * const Env = nullptr;

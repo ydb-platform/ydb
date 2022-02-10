@@ -6,20 +6,20 @@
 #include <ydb/core/tx/message_seqno.h>
 #include <ydb/core/base/domain.h>
 #include <ydb/core/base/row_version.h>
-#include <ydb/core/scheme/scheme_tabledefs.h> 
-#include <ydb/core/scheme/scheme_tablecell.h> 
+#include <ydb/core/scheme/scheme_tabledefs.h>
+#include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_type_registry.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/tablet_flat/flat_row_versions.h>
- 
+
 #include <library/cpp/time_provider/time_provider.h>
 
-namespace arrow { 
- 
-class RecordBatch; 
- 
-} 
- 
+namespace arrow {
+
+class RecordBatch;
+
+}
+
 namespace NKikimr {
 
 namespace NDataShard {
@@ -284,20 +284,20 @@ struct TEvDataShard {
         EvGetRemovedRowVersions, /* for tests */
         EvGetRemovedRowVersionsResult, /* for tests */
 
-        EvCompactTable, 
-        EvCompactTableResult, 
- 
+        EvCompactTable,
+        EvCompactTableResult,
+
         EvCompactBorrowed, /* +60 */
 
-        EvGetCompactTableStats,       /* for tests */ 
-        EvGetCompactTableStatsResult, /* for tests */ 
- 
-        EvRead, 
-        EvReadResult, 
-        EvReadContinue, 
-        EvReadAck, 
-        EvReadCancel, 
- 
+        EvGetCompactTableStats,       /* for tests */
+        EvGetCompactTableStatsResult, /* for tests */
+
+        EvRead,
+        EvReadResult,
+        EvReadContinue,
+        EvReadAck,
+        EvReadCancel,
+
         EvEnd
     };
 
@@ -875,134 +875,134 @@ struct TEvDataShard {
         }
     };
 
-    // In most cases this event is local, thus users must 
-    // use Keys, Ranges and Program struct members instead of corresponding 
-    // protobuf members. In case of remote event these struct members will 
-    // be serialized and deserialized. 
-    struct TEvRead : public TEventPB<TEvRead, 
-                                     NKikimrTxDataShard::TEvRead, 
-                                     TEvDataShard::EvRead> { 
-        using TBase = TEventPB<TEvRead, 
-                               NKikimrTxDataShard::TEvRead, 
-                               TEvDataShard::EvRead>; 
- 
-        TEvRead() = default; 
- 
-        TString ToString() const override; 
- 
-        ui32 CalculateSerializedSize() const override { 
-            const_cast<TEvRead*>(this)->FillRecord(); 
-            return TBase::CalculateSerializedSize(); 
-        } 
- 
-        bool SerializeToArcadiaStream(NActors::TChunkSerializer* chunker) const override { 
-            const_cast<TEvRead*>(this)->FillRecord(); 
-            return TBase::SerializeToArcadiaStream(chunker); 
-        } 
- 
-        static NActors::IEventBase* Load(TEventSerializedData* data); 
- 
-    private: 
-        void FillRecord(); 
- 
-    public: 
-        // Either one of Keys, Ranges or Record.Program is allowed 
- 
-        // TODO: consider TOwnedCellVec depending on kqp 
-        TVector<TSerializedCellVec> Keys; 
- 
-        // In current kqp impl ranges are already in TSerializedTableRange 
-        // format, thus same format here 
-        TVector<TSerializedTableRange> Ranges; 
-    }; 
- 
-    struct TEvReadResult : public TEventPB<TEvReadResult, 
-                                           NKikimrTxDataShard::TEvReadResult, 
-                                           TEvDataShard::EvReadResult> { 
-        using TBase = TEventPB<TEvReadResult, 
-                               NKikimrTxDataShard::TEvReadResult, 
-                               TEvDataShard::EvReadResult>; 
- 
-        TEvReadResult() = default; 
- 
-        TString ToString() const override; 
- 
-        ui32 CalculateSerializedSize() const override { 
-            const_cast<TEvReadResult*>(this)->FillRecord(); 
-            return TBase::CalculateSerializedSize(); 
-        } 
- 
-        bool SerializeToArcadiaStream(NActors::TChunkSerializer* chunker) const override { 
-            const_cast<TEvReadResult*>(this)->FillRecord(); 
-            return TBase::SerializeToArcadiaStream(chunker); 
-        } 
- 
-        static NActors::IEventBase* Load(TEventSerializedData* data); 
- 
-    private: 
-        void FillRecord(); 
- 
-    public: 
-        // CellVec (TODO: add schema?) 
- 
-        size_t GetRowsCount() const { 
-            return Rows.size() + RowsSerialized.size(); 
-        } 
- 
-        TConstArrayRef<TCell> GetCells(size_t row) const { 
-            if (!Rows.empty()) { 
-                return Rows[row]; 
-            } 
-            return RowsSerialized[row].GetCells(); 
-        } 
- 
-        void SetRows(TVector<TOwnedCellVec>&& rows) { 
-            Rows = std::move(rows); 
-        } 
- 
-        // Arrow 
- 
-        std::shared_ptr<arrow::RecordBatch> ArrowBatch; 
-     
-    private: 
-        // for local events 
-        TVector<TOwnedCellVec> Rows; 
- 
-        // for remote events to avoid extra copying 
-        TVector<TSerializedCellVec> RowsSerialized; 
-    }; 
- 
-    struct TEvReadContinue : public TEventLocal<TEvReadContinue, TEvDataShard::EvReadContinue> { 
-        TActorId Reader; 
-        ui64 ReadId; 
- 
-        TEvReadContinue(TActorId reader, ui64 readId) 
-            : Reader(reader) 
-            , ReadId(readId) 
-        {} 
-    }; 
- 
-    struct TEvReadAck : public TEventPB<TEvReadAck, 
-                                        NKikimrTxDataShard::TEvReadAck, 
-                                        TEvDataShard::EvReadAck> { 
-        TEvReadAck() = default; 
-    }; 
- 
-    struct TEvReadCancel : public TEventPB<TEvReadCancel, 
-                                           NKikimrTxDataShard::TEvReadCancel, 
-                                           TEvDataShard::EvReadCancel> { 
-        TEvReadCancel() = default; 
-    }; 
- 
+    // In most cases this event is local, thus users must
+    // use Keys, Ranges and Program struct members instead of corresponding
+    // protobuf members. In case of remote event these struct members will
+    // be serialized and deserialized.
+    struct TEvRead : public TEventPB<TEvRead,
+                                     NKikimrTxDataShard::TEvRead,
+                                     TEvDataShard::EvRead> {
+        using TBase = TEventPB<TEvRead,
+                               NKikimrTxDataShard::TEvRead,
+                               TEvDataShard::EvRead>;
+
+        TEvRead() = default;
+
+        TString ToString() const override;
+
+        ui32 CalculateSerializedSize() const override {
+            const_cast<TEvRead*>(this)->FillRecord();
+            return TBase::CalculateSerializedSize();
+        }
+
+        bool SerializeToArcadiaStream(NActors::TChunkSerializer* chunker) const override {
+            const_cast<TEvRead*>(this)->FillRecord();
+            return TBase::SerializeToArcadiaStream(chunker);
+        }
+
+        static NActors::IEventBase* Load(TEventSerializedData* data);
+
+    private:
+        void FillRecord();
+
+    public:
+        // Either one of Keys, Ranges or Record.Program is allowed
+
+        // TODO: consider TOwnedCellVec depending on kqp
+        TVector<TSerializedCellVec> Keys;
+
+        // In current kqp impl ranges are already in TSerializedTableRange
+        // format, thus same format here
+        TVector<TSerializedTableRange> Ranges;
+    };
+
+    struct TEvReadResult : public TEventPB<TEvReadResult,
+                                           NKikimrTxDataShard::TEvReadResult,
+                                           TEvDataShard::EvReadResult> {
+        using TBase = TEventPB<TEvReadResult,
+                               NKikimrTxDataShard::TEvReadResult,
+                               TEvDataShard::EvReadResult>;
+
+        TEvReadResult() = default;
+
+        TString ToString() const override;
+
+        ui32 CalculateSerializedSize() const override {
+            const_cast<TEvReadResult*>(this)->FillRecord();
+            return TBase::CalculateSerializedSize();
+        }
+
+        bool SerializeToArcadiaStream(NActors::TChunkSerializer* chunker) const override {
+            const_cast<TEvReadResult*>(this)->FillRecord();
+            return TBase::SerializeToArcadiaStream(chunker);
+        }
+
+        static NActors::IEventBase* Load(TEventSerializedData* data);
+
+    private:
+        void FillRecord();
+
+    public:
+        // CellVec (TODO: add schema?)
+
+        size_t GetRowsCount() const {
+            return Rows.size() + RowsSerialized.size();
+        }
+
+        TConstArrayRef<TCell> GetCells(size_t row) const {
+            if (!Rows.empty()) {
+                return Rows[row];
+            }
+            return RowsSerialized[row].GetCells();
+        }
+
+        void SetRows(TVector<TOwnedCellVec>&& rows) {
+            Rows = std::move(rows);
+        }
+
+        // Arrow
+
+        std::shared_ptr<arrow::RecordBatch> ArrowBatch;
+    
+    private:
+        // for local events
+        TVector<TOwnedCellVec> Rows;
+
+        // for remote events to avoid extra copying
+        TVector<TSerializedCellVec> RowsSerialized;
+    };
+
+    struct TEvReadContinue : public TEventLocal<TEvReadContinue, TEvDataShard::EvReadContinue> {
+        TActorId Reader;
+        ui64 ReadId;
+
+        TEvReadContinue(TActorId reader, ui64 readId)
+            : Reader(reader)
+            , ReadId(readId)
+        {}
+    };
+
+    struct TEvReadAck : public TEventPB<TEvReadAck,
+                                        NKikimrTxDataShard::TEvReadAck,
+                                        TEvDataShard::EvReadAck> {
+        TEvReadAck() = default;
+    };
+
+    struct TEvReadCancel : public TEventPB<TEvReadCancel,
+                                           NKikimrTxDataShard::TEvReadCancel,
+                                           TEvDataShard::EvReadCancel> {
+        TEvReadCancel() = default;
+    };
+
     struct TEvReadColumnsRequest : public TEventPB<TEvReadColumnsRequest,
-                                                   NKikimrTxDataShard::TEvReadColumnsRequest, 
-                                                   TEvDataShard::EvReadColumnsRequest> { 
+                                                   NKikimrTxDataShard::TEvReadColumnsRequest,
+                                                   TEvDataShard::EvReadColumnsRequest> {
         TEvReadColumnsRequest() = default;
     };
 
     struct TEvReadColumnsResponse : public TEventPB<TEvReadColumnsResponse,
-                                                    NKikimrTxDataShard::TEvReadColumnsResponse, 
-                                                    TEvDataShard::EvReadColumnsResponse> { 
+                                                    NKikimrTxDataShard::TEvReadColumnsResponse,
+                                                    TEvDataShard::EvReadColumnsResponse> {
         TEvReadColumnsResponse() = default;
 
         explicit TEvReadColumnsResponse(ui64 tabletId, ui32 status = NKikimrTxDataShard::TError::OK) {
@@ -1369,31 +1369,31 @@ struct TEvDataShard {
             : RemovedRowVersions(removedRowVersions)
         { }
     };
- 
-    struct TEvCompactTable : public TEventPB<TEvCompactTable, NKikimrTxDataShard::TEvCompactTable, 
-                                             TEvDataShard::EvCompactTable> { 
-        TEvCompactTable() = default; 
-        TEvCompactTable(ui64 ownerId, ui64 localId) { 
-            Record.MutablePathId()->SetOwnerId(ownerId); 
-            Record.MutablePathId()->SetLocalId(localId); 
-        } 
-    }; 
- 
-    struct TEvCompactTableResult : public TEventPB<TEvCompactTableResult, NKikimrTxDataShard::TEvCompactTableResult, 
-                                                   TEvDataShard::EvCompactTableResult> { 
-        TEvCompactTableResult() = default; 
- 
-        TEvCompactTableResult(ui64 tabletId, const TPathId& pathId, NKikimrTxDataShard::TEvCompactTableResult::EStatus status) 
-            : TEvCompactTableResult(tabletId, pathId.OwnerId, pathId.LocalPathId, status) 
-        { } 
- 
-        TEvCompactTableResult(ui64 tabletId, ui64 ownerId, ui64 localId, NKikimrTxDataShard::TEvCompactTableResult::EStatus status) { 
-            Record.SetTabletId(tabletId); 
-            Record.MutablePathId()->SetOwnerId(ownerId); 
-            Record.MutablePathId()->SetLocalId(localId); 
-            Record.SetStatus(status); 
-        } 
-    }; 
+
+    struct TEvCompactTable : public TEventPB<TEvCompactTable, NKikimrTxDataShard::TEvCompactTable,
+                                             TEvDataShard::EvCompactTable> {
+        TEvCompactTable() = default;
+        TEvCompactTable(ui64 ownerId, ui64 localId) {
+            Record.MutablePathId()->SetOwnerId(ownerId);
+            Record.MutablePathId()->SetLocalId(localId);
+        }
+    };
+
+    struct TEvCompactTableResult : public TEventPB<TEvCompactTableResult, NKikimrTxDataShard::TEvCompactTableResult,
+                                                   TEvDataShard::EvCompactTableResult> {
+        TEvCompactTableResult() = default;
+
+        TEvCompactTableResult(ui64 tabletId, const TPathId& pathId, NKikimrTxDataShard::TEvCompactTableResult::EStatus status)
+            : TEvCompactTableResult(tabletId, pathId.OwnerId, pathId.LocalPathId, status)
+        { }
+
+        TEvCompactTableResult(ui64 tabletId, ui64 ownerId, ui64 localId, NKikimrTxDataShard::TEvCompactTableResult::EStatus status) {
+            Record.SetTabletId(tabletId);
+            Record.MutablePathId()->SetOwnerId(ownerId);
+            Record.MutablePathId()->SetLocalId(localId);
+            Record.SetStatus(status);
+        }
+    };
 
     /**
      * This message is used to ask datashard to compact any borrowed parts it has
@@ -1414,20 +1414,20 @@ struct TEvDataShard {
                     "EvCompactBorrowed event has an unexpected value");
     };
 
-    struct TEvGetCompactTableStats : public TEventPB<TEvGetCompactTableStats, NKikimrTxDataShard::TEvGetCompactTableStats, 
-                                                     TEvDataShard::EvGetCompactTableStats> { 
-        TEvGetCompactTableStats() = default; 
-        TEvGetCompactTableStats(ui64 ownerId, ui64 localId) { 
-            Record.MutablePathId()->SetOwnerId(ownerId); 
-            Record.MutablePathId()->SetLocalId(localId); 
-        } 
-    }; 
- 
-    struct TEvGetCompactTableStatsResult : public TEventPB<TEvGetCompactTableStatsResult, NKikimrTxDataShard::TEvGetCompactTableStatsResult, 
-                                                           TEvDataShard::EvGetCompactTableStatsResult> { 
-        TEvGetCompactTableStatsResult() = default; 
-    }; 
- 
+    struct TEvGetCompactTableStats : public TEventPB<TEvGetCompactTableStats, NKikimrTxDataShard::TEvGetCompactTableStats,
+                                                     TEvDataShard::EvGetCompactTableStats> {
+        TEvGetCompactTableStats() = default;
+        TEvGetCompactTableStats(ui64 ownerId, ui64 localId) {
+            Record.MutablePathId()->SetOwnerId(ownerId);
+            Record.MutablePathId()->SetLocalId(localId);
+        }
+    };
+
+    struct TEvGetCompactTableStatsResult : public TEventPB<TEvGetCompactTableStatsResult, NKikimrTxDataShard::TEvGetCompactTableStatsResult,
+                                                           TEvDataShard::EvGetCompactTableStatsResult> {
+        TEvGetCompactTableStatsResult() = default;
+    };
+
     struct TEvApplyReplicationChanges
         : public TEventPB<TEvApplyReplicationChanges,
                           NKikimrTxDataShard::TEvApplyReplicationChanges,

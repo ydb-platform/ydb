@@ -380,7 +380,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
             ? Ydb::StatusIds::SUCCESS
             : Ydb::StatusIds::PRECONDITION_FAILED;
 
-        TestBuilIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/TTLEnabledTable", 
+        TestBuilIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/TTLEnabledTable",
             TBuildIndexConfig{"UserDefinedIndexByValue", indexType, {"value"}, {}}, status);
 
         if (shouldSucceed) {
@@ -478,7 +478,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         const TInstant now = TInstant::ParseIso8601("2020-09-18T18:00:00.000000Z");
         runtime.UpdateCurrentTime(now);
 
-        ui64 tabletId = TTestTxConfig::FakeHiveTablets; 
+        ui64 tabletId = TTestTxConfig::FakeHiveTablets;
         ui64 txId = 100;
 
         {

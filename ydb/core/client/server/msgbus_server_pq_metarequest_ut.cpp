@@ -122,8 +122,8 @@ protected:
     }
 
     TActorId StartBalancer(ui64 balancerTabletId) {
-        TActorId id = CreateTestBootstrapper(*Runtime, 
-                                       CreateTestTabletInfo(balancerTabletId, TTabletTypes::PERSQUEUE_READ_BALANCER, TErasureType::ErasureNone), 
+        TActorId id = CreateTestBootstrapper(*Runtime,
+                                       CreateTestTabletInfo(balancerTabletId, TTabletTypes::PERSQUEUE_READ_BALANCER, TErasureType::ErasureNone),
                                        &CreatePersQueueReadBalancer);
 
         TDispatchOptions options;
@@ -148,7 +148,7 @@ protected:
         UNIT_ASSERT(rec.HasTxId() && rec.GetTxId() == 12345);
         UNIT_ASSERT(rec.HasOrigin() && result->GetOrigin() == balancerTabletId);
 
-        ForwardToTablet(*Runtime, balancerTabletId, EdgeActorId, new TEvents::TEvPoisonPill()); 
+        ForwardToTablet(*Runtime, balancerTabletId, EdgeActorId, new TEvents::TEvPoisonPill());
         TDispatchOptions rebootOptions;
         rebootOptions.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvRestored, 2));
         Runtime->DispatchEvents(rebootOptions);
@@ -180,8 +180,8 @@ protected:
     }
 
     TActorId StartPQTablet(ui64 tabletId) {
-        TActorId id = CreateTestBootstrapper(*Runtime, 
-                                       CreateTestTabletInfo(tabletId, TTabletTypes::PERSQUEUE, TErasureType::ErasureNone), 
+        TActorId id = CreateTestBootstrapper(*Runtime,
+                                       CreateTestTabletInfo(tabletId, TTabletTypes::PERSQUEUE, TErasureType::ErasureNone),
                                        &CreatePersQueue);
 
         TDispatchOptions options;

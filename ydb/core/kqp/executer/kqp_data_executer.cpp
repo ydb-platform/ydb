@@ -113,7 +113,7 @@ class TKqpDataExecuter : public TKqpExecuterBase<TKqpDataExecuter, EExecType::Da
             ui64 ShardMaxStep = 0;
             ui64 ReadSize = 0;
             bool ShardReadLocks = false;
-            bool Follower = false; 
+            bool Follower = false;
         };
         TMaybe<TDatashardState> DatashardState;
 
@@ -354,9 +354,9 @@ private:
             {
                 state.State = TShardState::EState::Finished;
 
-                YQL_ENSURE(!state.DatashardState->Follower); 
+                YQL_ENSURE(!state.DatashardState->Follower);
 
-                Send(MakePipePeNodeCacheID(/* allowFollowers */ false), new TEvPipeCache::TEvForward( 
+                Send(MakePipePeNodeCacheID(/* allowFollowers */ false), new TEvPipeCache::TEvForward(
                     new TEvDataShard::TEvCancelTransactionProposal(TxId), shardId, /* subscribe */ false));
             }
         }
@@ -517,7 +517,7 @@ private:
             state.State = TShardState::EState::Executing;
 
             YQL_ENSURE(state.DatashardState.Defined());
-            YQL_ENSURE(!state.DatashardState->Follower); 
+            YQL_ENSURE(!state.DatashardState->Follower);
 
             aggrMinStep = Max(aggrMinStep, state.DatashardState->ShardMinStep);
             aggrMaxStep = Min(aggrMaxStep, state.DatashardState->ShardMaxStep);
@@ -725,7 +725,7 @@ private:
 
         LOG_I("Reattach to shard " << tabletId);
 
-        Send(MakePipePeNodeCacheID(UseFollowers), new TEvPipeCache::TEvForward( 
+        Send(MakePipePeNodeCacheID(UseFollowers), new TEvPipeCache::TEvForward(
             new TEvDataShard::TEvProposeTransactionAttach(tabletId, TxId),
             tabletId, /* subscribe */ true), 0, ++shardState->ReattachState.Cookie);
     }
@@ -1144,7 +1144,7 @@ private:
         TShardState shardState;
         shardState.State = ImmediateTx ? TShardState::EState::Executing : TShardState::EState::Preparing;
         shardState.DatashardState.ConstructInPlace();
-        shardState.DatashardState->Follower = UseFollowers; 
+        shardState.DatashardState->Follower = UseFollowers;
 
         if (Deadline) {
             TDuration timeout = *Deadline - TAppData::TimeProvider->Now();
@@ -1203,7 +1203,7 @@ private:
                 ImmediateTx ? NTxDataShard::TTxFlags::Immediate : 0);
         }
 
-        Send(MakePipePeNodeCacheID(UseFollowers), new TEvPipeCache::TEvForward(ev, shardId, true)); 
+        Send(MakePipePeNodeCacheID(UseFollowers), new TEvPipeCache::TEvForward(ev, shardId, true));
 
         auto result = ShardStates.emplace(shardId, std::move(shardState));
         YQL_ENSURE(result.second);
@@ -1456,17 +1456,17 @@ private:
             ImmediateTx = true;
         }
 
-        UseFollowers = Request.IsolationLevel == NKikimrKqp::ISOLATION_LEVEL_READ_STALE; 
+        UseFollowers = Request.IsolationLevel == NKikimrKqp::ISOLATION_LEVEL_READ_STALE;
         if (datashardTxs.size() > 1) {
             // Followers only allowed for single shard transactions.
             // (legacy behaviour, for compatibility with current execution engine)
-            UseFollowers = false; 
+            UseFollowers = false;
         }
         if (Request.Snapshot.IsValid()) {
             // TODO: KIKIMR-11912
-            UseFollowers = false; 
+            UseFollowers = false;
         }
-        if (UseFollowers) { 
+        if (UseFollowers) {
             YQL_ENSURE(ReadOnlyTx);
         }
 
@@ -1603,7 +1603,7 @@ private:
             << ", readonly: " << ReadOnlyTx
             << ", datashardTxs: " << datashardTxs.size()
             << ", immediate: " << ImmediateTx
-            << ", useFollowers: " << UseFollowers); 
+            << ", useFollowers: " << UseFollowers);
 
         LOG_T("Updating channels after the creation of compute actors");
         THashMap<TActorId, THashSet<ui64>> updates;
@@ -1749,7 +1749,7 @@ private:
     TVector<TKqpExecuterTxResult> Results;
     bool ReadOnlyTx = true;
     bool ImmediateTx = false;
-    bool UseFollowers = false; 
+    bool UseFollowers = false;
     bool TxPlanned = false;
 
     TInstant FirstPrepareReply;

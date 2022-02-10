@@ -16,7 +16,7 @@ Y_UNIT_TEST_SUITE(Bloom) {
     static const NTest::TMass Mass0(new NTest::TModelS3Hash, 24000, 42, 0.5);
 
     struct TCooker {
-        static TIntrusiveConstPtr<NPage::TBloom> Make(const TMass &mass, float rate) 
+        static TIntrusiveConstPtr<NPage::TBloom> Make(const TMass &mass, float rate)
         {
             TCooker cooker(*mass.Model->Scheme, mass.Saved.Size(), rate);
 
@@ -44,7 +44,7 @@ Y_UNIT_TEST_SUITE(Bloom) {
             return Writer.Add(key), *this;
         }
 
-        TIntrusiveConstPtr<NPage::TBloom> Flush() noexcept 
+        TIntrusiveConstPtr<NPage::TBloom> Flush() noexcept
         {
             return new NPage::TBloom(Writer.Make());
         }
@@ -55,7 +55,7 @@ Y_UNIT_TEST_SUITE(Bloom) {
     };
 
     struct TRater {
-        TRater(const TRowScheme &scheme, TIntrusiveConstPtr<NPage::TBloom> page) 
+        TRater(const TRowScheme &scheme, TIntrusiveConstPtr<NPage::TBloom> page)
             : Tool(scheme)
             , Page(std::move(page))
         {
@@ -87,7 +87,7 @@ Y_UNIT_TEST_SUITE(Bloom) {
 
     public:
         const NTest::TRowTool Tool;
-        const TIntrusiveConstPtr<NPage::TBloom> Page; 
+        const TIntrusiveConstPtr<NPage::TBloom> Page;
     };
 
     static TAlter MakeAlter(const ui32 table = 1)
@@ -251,7 +251,7 @@ Y_UNIT_TEST_SUITE(Bloom) {
 
         me.To(10).Begin().Apply(*MakeAlter()).Commit();
 
-        const TIntrusivePtr<TGrowHeap> heap = new TGrowHeap(128 * 1024); 
+        const TIntrusivePtr<TGrowHeap> heap = new TGrowHeap(128 * 1024);
 
         TDeque<NTest::TRow> ladder;
 

@@ -100,10 +100,10 @@ TString TPDisk::DynamicStateToString(bool isMultiline) {
     return str.Str();
 }
 
-bool TPDisk::ReadChunk0Format(ui8* formatSectors, const TKey& mainKey) { 
+bool TPDisk::ReadChunk0Format(ui8* formatSectors, const TKey& mainKey) {
     TGuard<TMutex> guard(StateMutex);
     TPDiskStreamCypher cypher(true); // Format record is always encrypted
-    cypher.SetKey(mainKey); 
+    cypher.SetKey(mainKey);
     Format.SectorSize = FormatSectorSize;
 
     ui32 lastGoodIdx = (ui32)-1;
@@ -1280,7 +1280,7 @@ void TPDisk::CommitLogChunks(TCommitLogChunks &req) {
 // PDisk formatting
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void TPDisk::WriteApplyFormatRecord(TDiskFormat format, const TKey &mainKey) { 
+void TPDisk::WriteApplyFormatRecord(TDiskFormat format, const TKey &mainKey) {
     // Use temporal copy of format to restore from that copy because we can damage 'format' variable
     // by writing Magic in first bytes
     const TDiskFormat originalFormat = format;
@@ -1290,10 +1290,10 @@ void TPDisk::WriteApplyFormatRecord(TDiskFormat format, const TKey &mainKey) {
 
     {
 
-        // Encrypt chunk0 format record using mainKey 
+        // Encrypt chunk0 format record using mainKey
         ui64 nonce = 1;
-        bool encrypt = true; // Always write encrypter format because some tests use wrong main key to initiate errors 
-        TSysLogWriter formatWriter(Mon, *BlockDevice.Get(), Format, nonce, mainKey, BufferPool.Get(), 
+        bool encrypt = true; // Always write encrypter format because some tests use wrong main key to initiate errors
+        TSysLogWriter formatWriter(Mon, *BlockDevice.Get(), Format, nonce, mainKey, BufferPool.Get(),
                 0, ReplicationFactor, Format.MagicFormatChunk, 0, nullptr, 0, nullptr, ActorSystem, PDiskId,
                 &DriveModel, Cfg->UseT1ha0HashInFooter, encrypt);
 
@@ -1316,7 +1316,7 @@ void TPDisk::WriteApplyFormatRecord(TDiskFormat format, const TKey &mainKey) {
 
 
 void TPDisk::WriteDiskFormat(ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 userAccessibleChunkSizeBytes,
-        const ui64 &diskGuid, const TKey &chunkKey, const TKey &logKey, const TKey &sysLogKey, const TKey &mainKey, 
+        const ui64 &diskGuid, const TKey &chunkKey, const TKey &logKey, const TKey &sysLogKey, const TKey &mainKey,
         TString textMessage, const bool isErasureEncodeUserLog, const bool trimEntireDevice) {
     TGuard<TMutex> guard(StateMutex);
     // Prepare format record
@@ -1365,7 +1365,7 @@ void TPDisk::WriteDiskFormat(ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 user
     // Write and apply format record with magic in first bytes
     format.SetFormatInProgress(true);
     format.SetHash();
-    WriteApplyFormatRecord(format, mainKey); 
+    WriteApplyFormatRecord(format, mainKey);
 
     // Prepare initial SysLogRecord
     memset(&SysLogRecord, 0, sizeof(SysLogRecord));
@@ -1398,7 +1398,7 @@ void TPDisk::WriteDiskFormat(ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 user
     // Write and apply format record
     format.SetFormatInProgress(false);
     format.SetHash();
-    WriteApplyFormatRecord(format, mainKey); 
+    WriteApplyFormatRecord(format, mainKey);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

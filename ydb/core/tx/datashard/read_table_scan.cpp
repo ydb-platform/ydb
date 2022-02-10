@@ -427,7 +427,7 @@ private:
                  IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
     }
 
-    THello Prepare(IDriver *driver, TIntrusiveConstPtr<TScheme> scheme) noexcept override 
+    THello Prepare(IDriver *driver, TIntrusiveConstPtr<TScheme> scheme) noexcept override
     {
         Driver = driver;
 
@@ -564,7 +564,7 @@ private:
         return cmp <= 0;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort) noexcept override 
+    TAutoPtr<IDestructable> Finish(EAbort abort) noexcept override
     {
         auto ctx = TActivationContext::ActorContextFor(SelfId());
 
@@ -614,7 +614,7 @@ private:
     bool SchemaChanged = false;
 };
 
-TAutoPtr<NTable::IScan> CreateReadTableScan(ui64 txId, 
+TAutoPtr<NTable::IScan> CreateReadTableScan(ui64 txId,
                                         ui64 shardId,
                                         TUserTable::TCPtr tableInfo,
                                         const NKikimrTxDataShard::TReadTableTransaction &tx,

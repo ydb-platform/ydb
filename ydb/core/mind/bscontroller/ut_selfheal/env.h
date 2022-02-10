@@ -178,8 +178,8 @@ struct TEnvironmentSetup {
     }
 
     void SetupTablet() {
-        Runtime->CreateTestBootstrapper( 
-            TTestActorSystem::CreateTestTabletInfo(TabletId, TTabletTypes::FLAT_BS_CONTROLLER, TErasureType::ErasureNone, GroupId), 
+        Runtime->CreateTestBootstrapper(
+            TTestActorSystem::CreateTestTabletInfo(TabletId, TTabletTypes::FLAT_BS_CONTROLLER, TErasureType::ErasureNone, GroupId),
             &CreateFlatBsController,
             NodeId);
 

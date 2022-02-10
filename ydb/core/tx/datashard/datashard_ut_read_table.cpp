@@ -45,7 +45,7 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
             "key = 4, value = 44\n");
 
         Cerr << "---Rebooting tablet---" << Endl;
-        RebootTablet(runtime, shards[0], sender); 
+        RebootTablet(runtime, shards[0], sender);
 
         // We must be able to finish reading from the acquired snapshot
         auto table1snapshot = table1state.All();

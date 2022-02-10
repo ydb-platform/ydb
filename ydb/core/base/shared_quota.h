@@ -72,6 +72,6 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr SizeCounter;
 };
 
-using TSharedQuotaPtr = TIntrusivePtr<TSharedQuota>; 
- 
+using TSharedQuotaPtr = TIntrusivePtr<TSharedQuota>;
+
 } // namespace NKikimr

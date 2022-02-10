@@ -14,7 +14,7 @@ namespace NTest {
 
     class IModel {
     public:
-        IModel(TIntrusiveConstPtr<TRowScheme> scheme) : Scheme(scheme) { } 
+        IModel(TIntrusiveConstPtr<TRowScheme> scheme) : Scheme(scheme) { }
 
         virtual ~IModel() = default;
         virtual TRow Make(ui64 seq, bool hole) noexcept = 0;
@@ -22,12 +22,12 @@ namespace NTest {
         virtual void Check(TArrayRef<const ui64>) const = 0;
         virtual void Describe(IOutputStream&) const noexcept = 0;
 
-        const TIntrusiveConstPtr<TRowScheme> Scheme; 
+        const TIntrusiveConstPtr<TRowScheme> Scheme;
     };
 
     class TMass {
     public:
-        TMass(TAutoPtr<IModel> model, ui64 caps, ui64 seed = 0, float holes = 0.1) 
+        TMass(TAutoPtr<IModel> model, ui64 caps, ui64 seed = 0, float holes = 0.1)
             : Model(model)
             , Heap(new TGrowHeap(64 * 1024))
             , Saved(Heap)
@@ -77,8 +77,8 @@ namespace NTest {
             }
         }
 
-        const TAutoPtr<IModel> Model; 
-        TIntrusivePtr<TGrowHeap> Heap; 
+        const TAutoPtr<IModel> Model;
+        TIntrusivePtr<TGrowHeap> Heap;
         TRowsHeap Saved;
         TRowsHeap Holes;
     };

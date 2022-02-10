@@ -956,11 +956,11 @@ private:
     }
 
 private:
-    struct TScanFreeSpace : public IDestructable { 
+    struct TScanFreeSpace : public IDestructable {
         ui64 FreeSpace = 0;
     };
 
-    THolder<IDestructable> GetSourcesState() override { 
+    THolder<IDestructable> GetSourcesState() override {
         if (ScanData) {
             auto state = MakeHolder<TScanFreeSpace>();
             state->FreeSpace = GetMemoryLimits().ScanBufferSize > ScanData->GetStoredBytes()
@@ -971,7 +971,7 @@ private:
         return nullptr;
     }
 
-    void PollSources(THolder<IDestructable> prev) override { 
+    void PollSources(THolder<IDestructable> prev) override {
         if (!prev || !ScanData || Shards.empty()) {
             return;
         }

@@ -255,11 +255,11 @@ Y_UNIT_TEST_SUITE(TDataShardMinStepTest) {
         switch (rebootOnPropose) {
             case ERebootOnPropose::DataShard:
                 Cerr << "Rebooting datashard and waiting for new propose..." << Endl;
-                RebootTablet(runtime, table1shard, sender); 
+                RebootTablet(runtime, table1shard, sender);
                 break;
             case ERebootOnPropose::SchemeShard:
                 Cerr << "Rebooting schemeshard and waiting for datashard propose..." << Endl;
-                RebootTablet(runtime, schemeShard, sender); 
+                RebootTablet(runtime, schemeShard, sender);
                 break;
         }
         if (proposes.size() < 1) {

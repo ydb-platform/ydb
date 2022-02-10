@@ -10,7 +10,7 @@ namespace NTabletFlatExecutor {
 namespace NBlockIO {
 
     class TBlockIO : public ::NActors::IActor {
-        using TEventHandlePtr = TAutoPtr<::NActors::IEventHandle>; 
+        using TEventHandlePtr = TAutoPtr<::NActors::IEventHandle>;
         using ELnLev = NUtil::ELnLev;
         using EStatus = NKikimrProto::EReplyStatus;
         using TPagesToBlobsConverter = NPageCollection::TPagesToBlobsConverter<NPageCollection::IPageCollection>;
@@ -23,8 +23,8 @@ namespace NBlockIO {
 
     private:
         void Registered(TActorSystem*, const TActorId&) override;
-        void Inbox(TEventHandlePtr &eh, const ::NActors::TActorContext &ctx); 
-        void Bootstrap(EPriority priority, TAutoPtr<NPageCollection::TFetch>) noexcept; 
+        void Inbox(TEventHandlePtr &eh, const ::NActors::TActorContext &ctx);
+        void Bootstrap(EPriority priority, TAutoPtr<NPageCollection::TFetch>) noexcept;
         void Dispatch() noexcept;
         void Handle(ui32 offset, TArrayRef<TLoaded>) noexcept;
         void Terminate(EStatus code) noexcept;
@@ -32,13 +32,13 @@ namespace NBlockIO {
     private:
         const TActorId Service;
         const ui64 Cookie = Max<ui64>();
-        TAutoPtr<NUtil::ILogger> Logger; 
+        TAutoPtr<NUtil::ILogger> Logger;
 
         /*_ immutable request settings  */
 
         TActorId Owner;
         EPriority Priority = EPriority::None;
-        TAutoPtr<NPageCollection::TFetch> Origin; 
+        TAutoPtr<NPageCollection::TFetch> Origin;
 
         /*_ request operational state   */
 

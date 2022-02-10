@@ -49,16 +49,16 @@ void TTable::SetScheme(const TScheme::TTableInfo &table)
     }
 }
 
-TIntrusiveConstPtr<TRowScheme> TTable::GetScheme() const noexcept 
+TIntrusiveConstPtr<TRowScheme> TTable::GetScheme() const noexcept
 {
     return Scheme;
 }
 
-TAutoPtr<TSubset> TTable::Subset(TArrayRef<const TLogoBlobID> bundle, TEpoch head) 
+TAutoPtr<TSubset> TTable::Subset(TArrayRef<const TLogoBlobID> bundle, TEpoch head)
 {
     head = Min(head, Epoch);
 
-    TAutoPtr<TSubset> subset = new TSubset(head, Scheme); 
+    TAutoPtr<TSubset> subset = new TSubset(head, Scheme);
 
     if (head > TEpoch::Zero()) {
         for (auto &x : Frozen) {
@@ -90,11 +90,11 @@ TAutoPtr<TSubset> TTable::Subset(TArrayRef<const TLogoBlobID> bundle, TEpoch hea
     return subset;
 }
 
-TAutoPtr<TSubset> TTable::Subset(TEpoch head) const noexcept 
+TAutoPtr<TSubset> TTable::Subset(TEpoch head) const noexcept
 {
     head = Min(head, Epoch);
 
-    TAutoPtr<TSubset> subset = new TSubset(head, Scheme); 
+    TAutoPtr<TSubset> subset = new TSubset(head, Scheme);
 
     for (const auto &it : TxStatus) {
         if (it.second->Epoch < head) {
@@ -122,9 +122,9 @@ TAutoPtr<TSubset> TTable::Subset(TEpoch head) const noexcept
     return subset;
 }
 
-TAutoPtr<TSubset> TTable::ScanSnapshot(TRowVersion snapshot) noexcept 
+TAutoPtr<TSubset> TTable::ScanSnapshot(TRowVersion snapshot) noexcept
 {
-    TAutoPtr<TSubset> subset = new TSubset(Epoch, Scheme); 
+    TAutoPtr<TSubset> subset = new TSubset(Epoch, Scheme);
 
     // TODO: we could filter LSM by the provided snapshot version, but it
     // cannot be a simple if condition since row versions may intersect in
@@ -153,7 +153,7 @@ TAutoPtr<TSubset> TTable::ScanSnapshot(TRowVersion snapshot) noexcept
     return subset;
 }
 
-TAutoPtr<TSubset> TTable::Unwrap() noexcept 
+TAutoPtr<TSubset> TTable::Unwrap() noexcept
 {
     Snapshot();
 
@@ -194,7 +194,7 @@ void TTable::ReplaceSlices(TBundleSlicesMap slices) noexcept
     }
 }
 
-void TTable::Replace(TArrayRef<const TPartView> partViews, const TSubset &subset) noexcept 
+void TTable::Replace(TArrayRef<const TPartView> partViews, const TSubset &subset) noexcept
 {
     for (const auto &partView : partViews) {
         Y_VERIFY(partView, "Replace(...) shouldn't get empty parts");
@@ -322,7 +322,7 @@ void TTable::Replace(TArrayRef<const TPartView> partViews, const TSubset &subset
     ErasedKeysCache.Reset();
 }
 
-void TTable::ReplaceTxStatus(TArrayRef<const TIntrusiveConstPtr<TTxStatusPart>> newTxStatus, const TSubset &subset) noexcept 
+void TTable::ReplaceTxStatus(TArrayRef<const TIntrusiveConstPtr<TTxStatusPart>> newTxStatus, const TSubset &subset) noexcept
 {
     for (auto &part : subset.TxStatus) {
         Y_VERIFY(part, "Unexpected empty TTxStatusPart in TSubset");
@@ -378,7 +378,7 @@ void TTable::Merge(TPartView partView) noexcept
     ErasedKeysCache.Reset();
 }
 
-void TTable::Merge(TIntrusiveConstPtr<TColdPart> part) noexcept 
+void TTable::Merge(TIntrusiveConstPtr<TColdPart> part) noexcept
 {
     Y_VERIFY(part, "Merge(...) shouldn't get empty parts");
 
@@ -405,7 +405,7 @@ void TTable::Merge(TIntrusiveConstPtr<TColdPart> part) noexcept
     Levels.Reset();
 }
 
-void TTable::Merge(TIntrusiveConstPtr<TTxStatusPart> txStatus) noexcept 
+void TTable::Merge(TIntrusiveConstPtr<TTxStatusPart> txStatus) noexcept
 {
     Y_VERIFY(txStatus, "Unexpected empty TTxStatusPart");
 
@@ -484,18 +484,18 @@ const TLevels& TTable::GetLevels() const noexcept
     return *Levels;
 }
 
-ui64 TTable::GetSearchHeight() const noexcept 
-{ 
-    if (!ColdParts.empty()) 
-        return 0; 
- 
-    ui64 height = GetLevels().size() + Frozen.size(); 
-    if (Mutable) 
-        ++height; 
- 
-    return height; 
-} 
- 
+ui64 TTable::GetSearchHeight() const noexcept
+{
+    if (!ColdParts.empty())
+        return 0;
+
+    ui64 height = GetLevels().size() + Frozen.size();
+    if (Mutable)
+        ++height;
+
+    return height;
+}
+
 TVector<TIntrusiveConstPtr<TMemTable>> TTable::GetMemTables() const noexcept
 {
     TVector<TIntrusiveConstPtr<TMemTable>> vec(Frozen.begin(), Frozen.end());
@@ -679,14 +679,14 @@ TMemTable& TTable::MemTable()
         *(Mutable ? Mutable : (Mutable = new TMemTable(Scheme, Epoch, Annexed)));
 }
 
-TAutoPtr<TTableIt> TTable::Iterate(TRawVals key_, TTagsRef tags, IPages* env, ESeek seek, TRowVersion snapshot) const noexcept 
+TAutoPtr<TTableIt> TTable::Iterate(TRawVals key_, TTagsRef tags, IPages* env, ESeek seek, TRowVersion snapshot) const noexcept
 {
     Y_VERIFY(ColdParts.empty(), "Cannot iterate with cold parts");
 
     const TCelled key(key_, *Scheme->Keys, false);
     const ui64 limit = seek == ESeek::Exact ? 1 : Max<ui64>();
 
-    TAutoPtr<TTableIt> dbIter(new TTableIt(Scheme.Get(), tags, limit, snapshot, CommittedTransactions)); 
+    TAutoPtr<TTableIt> dbIter(new TTableIt(Scheme.Get(), tags, limit, snapshot, CommittedTransactions));
 
     if (Mutable) {
         dbIter->Push(TMemIt::Make(*Mutable, Mutable->Immediate(), key, seek, Scheme->Keys, &dbIter->Remap, env, EDirection::Forward));
@@ -717,14 +717,14 @@ TAutoPtr<TTableIt> TTable::Iterate(TRawVals key_, TTagsRef tags, IPages* env, ES
     return dbIter;
 }
 
-TAutoPtr<TTableReverseIt> TTable::IterateReverse(TRawVals key_, TTagsRef tags, IPages* env, ESeek seek, TRowVersion snapshot) const noexcept 
+TAutoPtr<TTableReverseIt> TTable::IterateReverse(TRawVals key_, TTagsRef tags, IPages* env, ESeek seek, TRowVersion snapshot) const noexcept
 {
     Y_VERIFY(ColdParts.empty(), "Cannot iterate with cold parts");
 
     const TCelled key(key_, *Scheme->Keys, false);
     const ui64 limit = seek == ESeek::Exact ? 1 : Max<ui64>();
 
-    TAutoPtr<TTableReverseIt> dbIter(new TTableReverseIt(Scheme.Get(), tags, limit, snapshot, CommittedTransactions)); 
+    TAutoPtr<TTableReverseIt> dbIter(new TTableReverseIt(Scheme.Get(), tags, limit, snapshot, CommittedTransactions));
 
     if (Mutable) {
         dbIter->Push(TMemIt::Make(*Mutable, Mutable->Immediate(), key, seek, Scheme->Keys, &dbIter->Remap, env, EDirection::Reverse));
@@ -909,27 +909,27 @@ bool TTable::RemoveRowVersions(const TRowVersion& lower, const TRowVersion& uppe
     return RemovedRowVersions.Add(lower, upper);
 }
 
-TCompactionStats TTable::GetCompactionStats() const 
-{ 
-    TCompactionStats stats; 
-    stats.MemRowCount = GetMemRowCount(); 
-    stats.MemDataSize = GetMemSize(); 
-    stats.MemDataWaste = GetMemWaste(); 
- 
-    for (auto &it: ColdParts) 
-        stats.PartOwners.insert(it.second->Label.TabletID()); 
- 
-    for (auto &it: Flatten) 
-        stats.PartOwners.insert(it.second->Label.TabletID()); 
- 
+TCompactionStats TTable::GetCompactionStats() const
+{
+    TCompactionStats stats;
+    stats.MemRowCount = GetMemRowCount();
+    stats.MemDataSize = GetMemSize();
+    stats.MemDataWaste = GetMemWaste();
+
+    for (auto &it: ColdParts)
+        stats.PartOwners.insert(it.second->Label.TabletID());
+
+    for (auto &it: Flatten)
+        stats.PartOwners.insert(it.second->Label.TabletID());
+
     for (auto &it: TxStatus)
         stats.PartOwners.insert(it.second->Label.TabletID());
 
-    stats.PartCount = Flatten.size() + ColdParts.size(); 
- 
-    return stats; 
-} 
- 
+    stats.PartCount = Flatten.size() + ColdParts.size();
+
+    return stats;
+}
+
 void TPartStats::Add(const TPartView& partView)
 {
     PartsCount += 1;

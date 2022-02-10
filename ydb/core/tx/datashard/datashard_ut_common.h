@@ -117,8 +117,8 @@ private:
     void RegisterTableInResolver(const TString& schemeText);
 
     static void EmptyShardKeyResolver(TKeyDesc& key);
-    static void SingleShardKeyResolver(TKeyDesc& key); // uses TTestTxConfig::TxTablet0 
-    static void ThreeShardPointKeyResolver(TKeyDesc& key); // uses TTestTxConfig::TxTablet0,1,2 
+    static void SingleShardKeyResolver(TKeyDesc& key); // uses TTestTxConfig::TxTablet0
+    static void ThreeShardPointKeyResolver(TKeyDesc& key); // uses TTestTxConfig::TxTablet0,1,2
 };
 
 ///
@@ -134,8 +134,8 @@ struct TExpectedReadSet {
     TWaitFor Freedom;
 
     TExpectedReadSet(ui64 txId, TWaitFor freedom)
-        : SrcTablet(TTestTxConfig::TxTablet1) 
-        , DstTablet(TTestTxConfig::TxTablet0) 
+        : SrcTablet(TTestTxConfig::TxTablet1)
+        , DstTablet(TTestTxConfig::TxTablet0)
         , TxId(txId)
         , Freedom(freedom)
     {}
@@ -333,9 +333,9 @@ public:
 
     static TDatashardInitialEventsFilter CreateDefault() {
         TVector<ui64> tabletIds;
-        tabletIds.push_back((ui64)TTestTxConfig::TxTablet0); 
-        tabletIds.push_back((ui64)TTestTxConfig::TxTablet1); 
-        tabletIds.push_back((ui64)TTestTxConfig::TxTablet2); 
+        tabletIds.push_back((ui64)TTestTxConfig::TxTablet0);
+        tabletIds.push_back((ui64)TTestTxConfig::TxTablet1);
+        tabletIds.push_back((ui64)TTestTxConfig::TxTablet2);
         return TDatashardInitialEventsFilter(tabletIds);
     }
 
@@ -470,11 +470,11 @@ TVector<ui64> GetTableShards(Tests::TServer::TPtr server,
                              TActorId sender,
                              const TString &path);
 
-using TTableInfoMap = THashMap<TString, NKikimrTxDataShard::TEvGetInfoResponse::TUserTable>; 
- 
-std::pair<TTableInfoMap, ui64> GetTables(Tests::TServer::TPtr server, 
-                                         ui64 tabletId); 
- 
+using TTableInfoMap = THashMap<TString, NKikimrTxDataShard::TEvGetInfoResponse::TUserTable>;
+
+std::pair<TTableInfoMap, ui64> GetTables(Tests::TServer::TPtr server,
+                                         ui64 tabletId);
+
 TTableId ResolveTableId(
         Tests::TServer::TPtr server,
         TActorId sender,

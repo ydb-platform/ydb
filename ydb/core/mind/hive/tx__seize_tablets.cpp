@@ -16,12 +16,12 @@ public:
 
     TTxType GetTxType() const override { return NHive::TXTYPE_SEIZE_TABLETS; }
 
-    static bool IsMatch(const TLeaderTabletInfo& tablet, const NKikimrHive::TEvSeizeTablets& record) { 
+    static bool IsMatch(const TLeaderTabletInfo& tablet, const NKikimrHive::TEvSeizeTablets& record) {
         return tablet.ObjectDomain == TSubDomainKey(record.GetFilterDomain())
                 && record.GetNewOwnerID() != tablet.Id;
     }
 
-    static bool IsAbleToMigrate(const TLeaderTabletInfo& tablet) { 
+    static bool IsAbleToMigrate(const TLeaderTabletInfo& tablet) {
         // we can only migrate 'big' tablet ids, which have non-zero bits in 44+
         // that's because it stored in the same id space, where ownerIdx is stored
         // return !tablet.IsDeleting() && StateStorageGroupFromTabletID(tablet.Id) > 0 || HiveUidFromTabletID(tablet.Id) > 0;
@@ -52,7 +52,7 @@ public:
                 // Schema::Tablet::AllowedNodes - because nobody is using it now
                 // Schema::Tablet::AllowedDataCenters - because nobody is using it now
 
-                // we also skip current metrics state for followers 
+                // we also skip current metrics state for followers
 
                 TTabletId id = tabletId;
                 BLOG_D("THive::TTxSeizeTablets is migrating tablet " << id << " to " << newOwnerId);
@@ -120,21 +120,21 @@ public:
                         return false;
                 }
 
-                auto tabletFollowerGroupRowset = db.Table<Schema::TabletFollowerGroup>().Range(tabletId).Select(); 
-                if (!tabletFollowerGroupRowset.IsReady()) 
+                auto tabletFollowerGroupRowset = db.Table<Schema::TabletFollowerGroup>().Range(tabletId).Select();
+                if (!tabletFollowerGroupRowset.IsReady())
                     return false;
 
-                while (!tabletFollowerGroupRowset.EndOfSet()) { 
-                    NKikimrHive::TFollowerGroup& followerGroup = *tabletInfo.AddFollowerGroups(); 
-                    followerGroup.SetFollowerCount(tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::FollowerCount>()); 
-                    followerGroup.SetAllowLeaderPromotion(tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::AllowLeaderPromotion>()); 
-                    followerGroup.SetAllowClientRead(tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::AllowClientRead>()); 
-                    followerGroup.SetRequireAllDataCenters(tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::RequireAllDataCenters>()); 
-                    followerGroup.SetLocalNodeOnly(tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::LocalNodeOnly>()); 
-                    followerGroup.SetRequireAllDataCenters(tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::RequireAllDataCenters>()); 
-                    followerGroup.SetRequireDifferentNodes(tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::RequireDifferentNodes>()); 
-                    followerGroup.SetFollowerCountPerDataCenter(tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::FollowerCountPerDataCenter>()); 
-                    if (!tabletFollowerGroupRowset.Next()) { 
+                while (!tabletFollowerGroupRowset.EndOfSet()) {
+                    NKikimrHive::TFollowerGroup& followerGroup = *tabletInfo.AddFollowerGroups();
+                    followerGroup.SetFollowerCount(tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::FollowerCount>());
+                    followerGroup.SetAllowLeaderPromotion(tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::AllowLeaderPromotion>());
+                    followerGroup.SetAllowClientRead(tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::AllowClientRead>());
+                    followerGroup.SetRequireAllDataCenters(tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::RequireAllDataCenters>());
+                    followerGroup.SetLocalNodeOnly(tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::LocalNodeOnly>());
+                    followerGroup.SetRequireAllDataCenters(tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::RequireAllDataCenters>());
+                    followerGroup.SetRequireDifferentNodes(tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::RequireDifferentNodes>());
+                    followerGroup.SetFollowerCountPerDataCenter(tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::FollowerCountPerDataCenter>());
+                    if (!tabletFollowerGroupRowset.Next()) {
                         return false;
                     }
                 }

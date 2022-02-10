@@ -49,7 +49,7 @@ namespace {
     };
 
     struct TShardDbState {
-        THashMap<ui64, TAutoPtr<NTable::TDatabase>> Dbs; 
+        THashMap<ui64, TAutoPtr<NTable::TDatabase>> Dbs;
         THashMap<ui64, NTable::TDummyEnv> Envs;
         THashMap<ui64, ui32> Steps;
 
@@ -4606,7 +4606,7 @@ Value {
                     }
                   }
                   Member {
-                    Name: "IsFollower" 
+                    Name: "IsFollower"
                     Type {
                       Kind: Data
                       Data {

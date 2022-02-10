@@ -59,7 +59,7 @@ void AllocateAndCheck(NActors::TTestActorRuntime &runtime, ui64 size, TResultSta
 }
 
 void TTestEnv::Boot(TTestActorRuntime &runtime) {
-    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TxAllocatorTablet, TTabletTypes::TX_ALLOCATOR), &CreateTxAllocator); 
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TxAllocatorTablet, TTabletTypes::TX_ALLOCATOR), &CreateTxAllocator);
 
     TDispatchOptions options;
     options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
@@ -91,7 +91,7 @@ void TTestEnv::Setup(TTestActorRuntime &runtime) {
 
 void TTestEnv::Reboot(TTestActorRuntime &runtime) {
     TActorId sender = runtime.AllocateEdgeActor();
-    RebootTablet(runtime, TxAllocatorTablet, sender); 
+    RebootTablet(runtime, TxAllocatorTablet, sender);
 }
 
 void TIntersectionChecker::AssertIntersection(bool continuous) {

@@ -37,13 +37,13 @@ struct TBootstrapperInfo : public TThrRefBase {
     TVector<ui32> OtherNodes;
     TDuration WatchThreshold;
     TDuration OfflineDelay;
-    bool StartFollowers; 
+    bool StartFollowers;
 
     TBootstrapperInfo(TTabletSetupInfo *setupInfo)
         : SetupInfo(setupInfo)
         , WatchThreshold(TDuration::MilliSeconds(200))
         , OfflineDelay(TDuration::Seconds(3))
-        , StartFollowers(false) 
+        , StartFollowers(false)
     {}
 };
 

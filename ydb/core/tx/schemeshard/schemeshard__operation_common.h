@@ -698,17 +698,17 @@ public:
         allowedDomain->SetPathId(resourcesDomainId.LocalPathId);
 
         if (tablePartitionConfig) {
-            if (tablePartitionConfig->FollowerGroupsSize()) { 
-                ev->Record.MutableFollowerGroups()->CopyFrom(tablePartitionConfig->GetFollowerGroups()); 
+            if (tablePartitionConfig->FollowerGroupsSize()) {
+                ev->Record.MutableFollowerGroups()->CopyFrom(tablePartitionConfig->GetFollowerGroups());
             } else {
-                if (tablePartitionConfig->HasAllowFollowerPromotion()) { 
-                    ev->Record.SetAllowFollowerPromotion(tablePartitionConfig->GetAllowFollowerPromotion()); 
+                if (tablePartitionConfig->HasAllowFollowerPromotion()) {
+                    ev->Record.SetAllowFollowerPromotion(tablePartitionConfig->GetAllowFollowerPromotion());
                 }
 
-                if (tablePartitionConfig->HasCrossDataCenterFollowerCount()) { 
-                    ev->Record.SetCrossDataCenterFollowerCount(tablePartitionConfig->GetCrossDataCenterFollowerCount()); 
-                } else if (tablePartitionConfig->HasFollowerCount()) { 
-                    ev->Record.SetFollowerCount(tablePartitionConfig->GetFollowerCount()); 
+                if (tablePartitionConfig->HasCrossDataCenterFollowerCount()) {
+                    ev->Record.SetCrossDataCenterFollowerCount(tablePartitionConfig->GetCrossDataCenterFollowerCount());
+                } else if (tablePartitionConfig->HasFollowerCount()) {
+                    ev->Record.SetFollowerCount(tablePartitionConfig->GetFollowerCount());
                 }
             }
         }

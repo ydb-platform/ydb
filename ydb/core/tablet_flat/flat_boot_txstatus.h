@@ -30,7 +30,7 @@ namespace NBoot {
             TryFinish();
         }
 
-        void HandleStep(TIntrusivePtr<IStep> step) noexcept override 
+        void HandleStep(TIntrusivePtr<IStep> step) noexcept override
         {
             auto *load = step->ConsumeAs<TLoadBlobs>(LeftBlobs);
             TSharedData data = load->PlainData();

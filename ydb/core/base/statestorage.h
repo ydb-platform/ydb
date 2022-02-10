@@ -38,11 +38,11 @@ struct TEvStateStorage {
         EvReplicaLookup = EvLock + 2 * 512,
         EvReplicaUpdate,
         EvReplicaLock,
-        EvReplicaLeaderDemoted, 
+        EvReplicaLeaderDemoted,
         EvReplicaDumpRequest,
         EvReplicaDump,
-        EvReplicaRegFollower, 
-        EvReplicaUnregFollower, 
+        EvReplicaRegFollower,
+        EvReplicaUnregFollower,
         EvReplicaDelete,
         EvReplicaCleanup,
 
@@ -113,19 +113,19 @@ struct TEvStateStorage {
     struct TEvUpdate : public TEventLocal<TEvUpdate, EvUpdate> {
         const ui64 TabletID;
         const ui64 Cookie;
-        const TActorId ProposedLeader; 
-        const TActorId ProposedLeaderTablet; 
+        const TActorId ProposedLeader;
+        const TActorId ProposedLeaderTablet;
         const ui32 ProposedGeneration;
         const ui32 ProposedStep;
         const ui32 SignatureSz;
         const TArrayHolder<ui64> Signature;
         const TProxyOptions ProxyOptions;
 
-        TEvUpdate(ui64 tabletId, ui64 cookie, const TActorId &leader, const TActorId &leaderTablet, ui32 gen, ui32 step, const ui64 *sig, ui32 sigsz, const TProxyOptions &proxyOptions = TProxyOptions()) 
+        TEvUpdate(ui64 tabletId, ui64 cookie, const TActorId &leader, const TActorId &leaderTablet, ui32 gen, ui32 step, const ui64 *sig, ui32 sigsz, const TProxyOptions &proxyOptions = TProxyOptions())
             : TabletID(tabletId)
             , Cookie(cookie)
-            , ProposedLeader(leader) 
-            , ProposedLeaderTablet(leaderTablet) 
+            , ProposedLeader(leader)
+            , ProposedLeaderTablet(leaderTablet)
             , ProposedGeneration(gen)
             , ProposedStep(step)
             , SignatureSz(sigsz)
@@ -139,8 +139,8 @@ struct TEvStateStorage {
             TStringStream str;
             str << "{EvUpdate TabletID: " << TabletID;
             str << " Cookie: " << Cookie;
-            str << " ProposedLeader: " << ProposedLeader.ToString(); 
-            str << " ProposedLeaderTablet: " << ProposedLeaderTablet.ToString(); 
+            str << " ProposedLeader: " << ProposedLeader.ToString();
+            str << " ProposedLeaderTablet: " << ProposedLeaderTablet.ToString();
             str << " ProposedGeneration: " << ProposedGeneration;
             str << " ProposedStep: " << ProposedStep;
             str << " SignatureSz: " << SignatureSz;
@@ -177,11 +177,11 @@ struct TEvStateStorage {
 
     struct TEvCleanup : TEventLocal<TEvCleanup, EvCleanup> {
         const ui64 TabletID;
-        const TActorId ProposedLeader; 
+        const TActorId ProposedLeader;
 
-        TEvCleanup(ui64 tabletId, TActorId proposedLeader) 
+        TEvCleanup(ui64 tabletId, TActorId proposedLeader)
             : TabletID(tabletId)
-            , ProposedLeader(proposedLeader) 
+            , ProposedLeader(proposedLeader)
         {}
     };
 
@@ -206,16 +206,16 @@ struct TEvStateStorage {
     struct TEvLock : public TEventLocal<TEvLock, EvLock> {
         const ui64 TabletID;
         const ui64 Cookie;
-        const TActorId ProposedLeader; 
+        const TActorId ProposedLeader;
         const ui32 ProposedGeneration;
         const ui32 SignatureSz;
         const TArrayHolder<ui64> Signature;
         const TProxyOptions ProxyOptions;
 
-        TEvLock(ui64 tabletId, ui64 cookie, const TActorId &leader, ui32 gen, const ui64 *sig, ui32 sigsz, const TProxyOptions &proxyOptions = TProxyOptions()) 
+        TEvLock(ui64 tabletId, ui64 cookie, const TActorId &leader, ui32 gen, const ui64 *sig, ui32 sigsz, const TProxyOptions &proxyOptions = TProxyOptions())
             : TabletID(tabletId)
             , Cookie(cookie)
-            , ProposedLeader(leader) 
+            , ProposedLeader(leader)
             , ProposedGeneration(gen)
             , SignatureSz(sigsz)
             , Signature(new ui64[sigsz])
@@ -228,7 +228,7 @@ struct TEvStateStorage {
             TStringStream str;
             str << "{EvLock TabletID: " << TabletID;
             str << " Cookie: " << Cookie;
-            str << " ProposedLeader: " << ProposedLeader.ToString(); 
+            str << " ProposedLeader: " << ProposedLeader.ToString();
             str << " ProposedGeneration: " << ProposedGeneration;
             str << " SignatureSz: " << SignatureSz;
             if (SignatureSz) {
@@ -257,29 +257,29 @@ struct TEvStateStorage {
         const NKikimrProto::EReplyStatus Status;
         const ui64 TabletID;
         const ui64 Cookie;
-        const TActorId CurrentLeader; 
-        const TActorId CurrentLeaderTablet; 
+        const TActorId CurrentLeader;
+        const TActorId CurrentLeaderTablet;
         const ui32 CurrentGeneration;
         const ui32 CurrentStep;
         const bool Locked;
         const ui64 LockedFor;
         const ui32 SignatureSz;
         TArrayHolder<ui64> Signature;
-        TVector<std::pair<TActorId, TActorId>> Followers; 
+        TVector<std::pair<TActorId, TActorId>> Followers;
 
-        TEvInfo(NKikimrProto::EReplyStatus status, ui64 tabletId, ui64 cookie, const TActorId &leader, const TActorId &leaderTablet, ui32 gen, ui32 step, bool locked, ui64 lockedFor, const ui64 *sig, ui32 sigsz, const TMap<TActorId, TActorId> &followers) 
+        TEvInfo(NKikimrProto::EReplyStatus status, ui64 tabletId, ui64 cookie, const TActorId &leader, const TActorId &leaderTablet, ui32 gen, ui32 step, bool locked, ui64 lockedFor, const ui64 *sig, ui32 sigsz, const TMap<TActorId, TActorId> &followers)
             : Status(status)
             , TabletID(tabletId)
             , Cookie(cookie)
-            , CurrentLeader(leader) 
-            , CurrentLeaderTablet(leaderTablet) 
+            , CurrentLeader(leader)
+            , CurrentLeaderTablet(leaderTablet)
             , CurrentGeneration(gen)
             , CurrentStep(step)
             , Locked(locked)
             , LockedFor(lockedFor)
             , SignatureSz(sigsz)
             , Signature(new ui64[sigsz])
-            , Followers(followers.begin(), followers.end()) 
+            , Followers(followers.begin(), followers.end())
         {
             MakeFilteredSignatureCopy(sig, sigsz, Signature.Get());
         }
@@ -289,8 +289,8 @@ struct TEvStateStorage {
             str << "{EvInfo Status: " << (ui32)Status;
             str << " TabletID: " << TabletID;
             str << " Cookie: " << Cookie;
-            str << " CurrentLeader: " << CurrentLeader.ToString(); 
-            str << " CurrentLeaderTablet: " << CurrentLeaderTablet.ToString(); 
+            str << " CurrentLeader: " << CurrentLeader.ToString();
+            str << " CurrentLeaderTablet: " << CurrentLeaderTablet.ToString();
             str << " CurrentGeneration: " << CurrentGeneration;
             str << " CurrentStep: " << CurrentStep;
             str << " Locked: " << (Locked ? "true" : "false");
@@ -303,10 +303,10 @@ struct TEvStateStorage {
                 }
                 str << "}";
             }
-            if (!Followers.empty()) { 
-                str << " Followers: ["; 
-                for (auto it = Followers.begin(); it != Followers.end(); ++it) { 
-                    if (it != Followers.begin()) { 
+            if (!Followers.empty()) {
+                str << " Followers: [";
+                for (auto it = Followers.begin(); it != Followers.end(); ++it) {
+                    if (it != Followers.begin()) {
                         str << ',';
                     }
                     str << '{' << it->first.ToString() << ',' << it->second.ToString() << '}';
@@ -347,9 +347,9 @@ struct TEvStateStorage {
         }
     };
 
-    struct TEvReplicaLeaderDemoted : public TEventPB<TEvReplicaLeaderDemoted, NKikimrStateStorage::TEvReplicaLeaderDemoted, EvReplicaLeaderDemoted> { 
-        TEvReplicaLeaderDemoted() {} 
-        TEvReplicaLeaderDemoted(ui64 tabletId, ui64 signature) 
+    struct TEvReplicaLeaderDemoted : public TEventPB<TEvReplicaLeaderDemoted, NKikimrStateStorage::TEvReplicaLeaderDemoted, EvReplicaLeaderDemoted> {
+        TEvReplicaLeaderDemoted() {}
+        TEvReplicaLeaderDemoted(ui64 tabletId, ui64 signature)
         {
             Record.SetTabletID(tabletId);
             Record.SetSignature(signature);
@@ -396,27 +396,27 @@ struct TEvStateStorage {
         TVector<std::pair<TActorId, TAutoPtr<TEvReplicaDump>>> ReplicasDumps;
     };
 
-    struct TEvReplicaRegFollower : public TEventPB<TEvReplicaRegFollower, NKikimrStateStorage::TEvRegisterFollower, EvReplicaRegFollower> { 
-        TEvReplicaRegFollower() 
+    struct TEvReplicaRegFollower : public TEventPB<TEvReplicaRegFollower, NKikimrStateStorage::TEvRegisterFollower, EvReplicaRegFollower> {
+        TEvReplicaRegFollower()
         {}
 
-        TEvReplicaRegFollower(ui64 tabletId, TActorId follower, TActorId tablet, bool isCandidate) 
+        TEvReplicaRegFollower(ui64 tabletId, TActorId follower, TActorId tablet, bool isCandidate)
         {
             Record.SetTabletID(tabletId);
-            ActorIdToProto(follower, Record.MutableFollower()); 
-            ActorIdToProto(tablet, Record.MutableFollowerTablet()); 
+            ActorIdToProto(follower, Record.MutableFollower());
+            ActorIdToProto(tablet, Record.MutableFollowerTablet());
             Record.SetCandidate(isCandidate);
         }
     };
 
-    struct TEvReplicaUnregFollower : public TEventPB<TEvReplicaUnregFollower, NKikimrStateStorage::TEvUnregisterFollower, EvReplicaUnregFollower> { 
-        TEvReplicaUnregFollower() 
+    struct TEvReplicaUnregFollower : public TEventPB<TEvReplicaUnregFollower, NKikimrStateStorage::TEvUnregisterFollower, EvReplicaUnregFollower> {
+        TEvReplicaUnregFollower()
         {}
 
-        TEvReplicaUnregFollower(ui64 tabletId, const TActorId &follower) 
+        TEvReplicaUnregFollower(ui64 tabletId, const TActorId &follower)
         {
             Record.SetTabletID(tabletId);
-            ActorIdToProto(follower, Record.MutableFollower()); 
+            ActorIdToProto(follower, Record.MutableFollower());
         }
     };
 
@@ -518,8 +518,8 @@ IActor* CreateStateStorageProxy(const TIntrusivePtr<TStateStorageInfo> &info, co
 IActor* CreateStateStorageProxyStub();
 IActor* CreateStateStorageReplica(const TIntrusivePtr<TStateStorageInfo> &info, ui32 replicaIndex);
 IActor* CreateStateStorageMonitoringActor(ui64 targetTablet, const TActorId &sender, const TString &query);
-IActor* CreateStateStorageTabletGuardian(ui64 tabletId, const TActorId &leader, const TActorId &tabletLeader, ui32 generation); 
-IActor* CreateStateStorageFollowerGuardian(ui64 tabletId, const TActorId &follower); // created as followerCandidate 
+IActor* CreateStateStorageTabletGuardian(ui64 tabletId, const TActorId &leader, const TActorId &tabletLeader, ui32 generation);
+IActor* CreateStateStorageFollowerGuardian(ui64 tabletId, const TActorId &follower); // created as followerCandidate
 IActor* CreateStateStorageBoardReplica(const TIntrusivePtr<TStateStorageInfo> &, ui32);
 IActor* CreateSchemeBoardReplica(const TIntrusivePtr<TStateStorageInfo>&, ui32);
 IActor* CreateBoardLookupActor(const TString &path, const TActorId &owner, ui32 groupId, EBoardLookupMode mode, bool sub, bool useNodeSubscriptions);

@@ -155,13 +155,13 @@ public:
         return SiftDown(value) || SiftUp(value);
     }
 
-    void Clear() { 
-        for (auto& x: Data) { 
-            HeapIndex(x) = size_t(-1); 
-        } 
-        Data.clear(); 
-    } 
- 
+    void Clear() {
+        for (auto& x: Data) {
+            HeapIndex(x) = size_t(-1);
+        }
+        Data.clear();
+    }
+
 private:
     inline size_t& HeapIndex(T* value) const {
         return static_cast<const THeapIndex&>(*this)(*value);

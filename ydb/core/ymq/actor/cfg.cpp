@@ -8,12 +8,12 @@ const NKikimrConfig::TSqsConfig& Cfg() {
     return AppData()->SqsConfig;
 }
 
-ui32 GetLeadersDescriberUpdateTimeMs() { 
-    const auto& config = AppData()->SqsConfig; 
-    if (config.HasMastersDescriberUpdateTimeMs()) { 
-        return config.GetMastersDescriberUpdateTimeMs(); 
-    } 
-    return config.GetLeadersDescriberUpdateTimeMs(); 
-} 
- 
+ui32 GetLeadersDescriberUpdateTimeMs() {
+    const auto& config = AppData()->SqsConfig;
+    if (config.HasMastersDescriberUpdateTimeMs()) {
+        return config.GetMastersDescriberUpdateTimeMs();
+    }
+    return config.GetLeadersDescriberUpdateTimeMs();
+}
+
 } // namespace NKikimr::NSQS

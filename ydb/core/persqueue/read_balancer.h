@@ -195,8 +195,8 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     void OnActivateExecutor(const TActorContext &ctx) override {
         ResourceMetrics = Executor()->GetResourceMetrics();
         Become(&TThis::StateWork);
-        if (Executor()->GetStats().IsFollower) 
-            Y_FAIL("is follower works well with Balancer?"); 
+        if (Executor()->GetStats().IsFollower)
+            Y_FAIL("is follower works well with Balancer?");
         else
             Execute(new TTxPreInit(this), ctx);
     }

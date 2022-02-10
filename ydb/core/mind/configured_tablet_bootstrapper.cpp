@@ -86,8 +86,8 @@ class TConfiguredTabletBootstrapper : public TActorBootstrapped<TConfiguredTable
                 }
                 if (config.HasWatchThreshold())
                     bi->WatchThreshold = TDuration::MilliSeconds(config.GetWatchThreshold());
-                if (config.HasStartFollowers()) 
-                    bi->StartFollowers = config.GetStartFollowers(); 
+                if (config.HasStartFollowers())
+                    bi->StartFollowers = config.GetStartFollowers();
             }
 
             BootstrapperInstance = Register(CreateBootstrapper(storageInfo.Get(), bi.Get(), false), TMailboxType::HTSwap, appData->SystemPoolId);

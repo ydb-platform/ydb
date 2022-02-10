@@ -27,8 +27,8 @@ namespace NTxProxy {
     struct TTxProxyServices {
         TActorId Proxy;
         TActorId SchemeCache;
-        TActorId LeaderPipeCache; 
-        TActorId FollowerPipeCache; 
+        TActorId LeaderPipeCache;
+        TActorId FollowerPipeCache;
     };
 }
 

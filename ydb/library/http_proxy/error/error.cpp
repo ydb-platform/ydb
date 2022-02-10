@@ -197,16 +197,16 @@ extern const TErrorClass INVALID_ATTRIBUTE_VALUE = {
     "The specified attribute value is invalid."
 };
 
-extern const TErrorClass LEADER_RESOLVING_ERROR = { 
+extern const TErrorClass LEADER_RESOLVING_ERROR = {
     "InternalFailure",
     500,
-    "Queue leader resolving error." 
+    "Queue leader resolving error."
 };
 
-extern const TErrorClass LEADER_SESSION_ERROR = { 
+extern const TErrorClass LEADER_SESSION_ERROR = {
     "InternalFailure",
     500,
-    "Queue leader session error." 
+    "Queue leader session error."
 };
 
 extern const TErrorClass TIMEOUT = {

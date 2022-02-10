@@ -21,7 +21,7 @@ namespace {
 
         ui64 txId = 100;
 
-        ui64 schemeshardId = TTestTxConfig::SchemeShard; 
+        ui64 schemeshardId = TTestTxConfig::SchemeShard;
         if (dbName != "/MyRoot") {
             TestCreateExtSubDomain(runtime, ++txId, "/MyRoot", Sprintf(R"(
                 Name: "%s"
@@ -59,7 +59,7 @@ namespace {
                         SchemeShard: %lu
                         PathId: 2
                     }
-                )", TStringBuf(dbName).RNextTok('/').data(), TTestTxConfig::SchemeShard), attrs); 
+                )", TStringBuf(dbName).RNextTok('/').data(), TTestTxConfig::SchemeShard), attrs);
                 env.TestWaitNotification(runtime, txId);
 
                 TestAlterExtSubDomain(runtime, ++txId, "/MyRoot", Sprintf(R"(
@@ -597,8 +597,8 @@ Y_UNIT_TEST_SUITE(TExportToS3Tests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        writeRow(TTestTxConfig::FakeHiveTablets, "a", "valueA"); 
-        writeRow(TTestTxConfig::FakeHiveTablets, "b", "valueB"); 
+        writeRow(TTestTxConfig::FakeHiveTablets, "a", "valueA");
+        writeRow(TTestTxConfig::FakeHiveTablets, "b", "valueB");
 
         runtime.SetLogPriority(NKikimrServices::S3_WRAPPER, NActors::NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
@@ -681,7 +681,7 @@ Y_UNIT_TEST_SUITE(TExportToS3Tests) {
 
         runtime.SetObserverFunc(prevObserver);
 
-        RebootTablet(runtime, *tabletId, runtime.AllocateEdgeActor()); 
+        RebootTablet(runtime, *tabletId, runtime.AllocateEdgeActor());
         env.TestWaitNotification(runtime, exportId);
 
         TestGetExport(runtime, exportId, "/MyRoot", expectedStatus);
@@ -753,7 +753,7 @@ Y_UNIT_TEST_SUITE(TExportToS3Tests) {
         env.TestWaitNotification(runtime, txId);
 
         for (int i = 1; i < 500; ++i) {
-            writeRow(TTestTxConfig::FakeHiveTablets, Sprintf("a%i", i), "value"); 
+            writeRow(TTestTxConfig::FakeHiveTablets, Sprintf("a%i", i), "value");
         }
 
         // trigger memtable's compaction

@@ -28,8 +28,8 @@ public:
                 event->StartTime = TActivationContext::Now();
                 for (const auto& t : node->Tablets) {
                     for (TTabletInfo* tablet : t.second) {
-                        TLeaderTabletInfo& leader = tablet->GetLeader(); 
-                        TTabletCategoryId tabletCategoryId = leader.Category ? leader.Category->Id : 0; 
+                        TLeaderTabletInfo& leader = tablet->GetLeader();
+                        TTabletCategoryId tabletCategoryId = leader.Category ? leader.Category->Id : 0;
                         event->Tablets[tabletCategoryId].emplace_back(tablet->GetFullTabletId());
                     }
                 }

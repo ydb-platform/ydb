@@ -14,9 +14,9 @@ class TStateStorageMonitoringActor : public TActorBootstrapped<TStateStorageMoni
         TActorId ActorID;
         TInstant ReplyTime;
 
-        TActorId CurrentLeader; 
-        TActorId CurrentLeaderTablet; 
-        TVector<TActorId> Followers; 
+        TActorId CurrentLeader;
+        TActorId CurrentLeaderTablet;
+        TVector<TActorId> Followers;
         ui32 CurrentGeneration;
         ui64 ConfigContentHash;
         bool Locked;
@@ -25,8 +25,8 @@ class TStateStorageMonitoringActor : public TActorBootstrapped<TStateStorageMoni
         TReplicaInfo(const TActorId &x)
             : ActorID(x)
             , ReplyTime(TInstant::MicroSeconds(Max<ui64>()))
-            , CurrentLeader() 
-            , CurrentLeaderTablet() 
+            , CurrentLeader()
+            , CurrentLeaderTablet()
             , CurrentGeneration(Max<ui32>())
             , ConfigContentHash(0)
             , Locked(false)
@@ -68,8 +68,8 @@ class TStateStorageMonitoringActor : public TActorBootstrapped<TStateStorageMoni
                 TABLEHEAD() {
                     TABLER() {
                         TABLEH() { str << "NodeId";}
-                        TABLEH() { str << "Leader";} 
-                        TABLEH() { str << "Followers"; } 
+                        TABLEH() { str << "Leader";}
+                        TABLEH() { str << "Followers"; }
                         TABLEH() { str << "Locked";}
                         TABLEH() { str << "Generation";}
                         TABLEH() { str << "Reply time";}
@@ -95,10 +95,10 @@ class TStateStorageMonitoringActor : public TActorBootstrapped<TStateStorageMoni
                                 TABLED() { str << "-"; }
                                 TABLED() { str << replica.ConfigContentHash; }
                             } else {
-                                TABLED() {str << replica.CurrentLeader;} 
+                                TABLED() {str << replica.CurrentLeader;}
                                 TABLED() {
-                                    if (replica.Followers) 
-                                        for (auto &s : replica.Followers) 
+                                    if (replica.Followers)
+                                        for (auto &s : replica.Followers)
                                             str << s << "; ";
                                     else
                                         str << "-";
@@ -161,10 +161,10 @@ class TStateStorageMonitoringActor : public TActorBootstrapped<TStateStorageMoni
         --WaitingForReplicas;
 
         if (record.GetStatus() == NKikimrProto::OK) {
-            if (record.HasCurrentLeader()) 
-                xinfo.CurrentLeader = ActorIdFromProto(record.GetCurrentLeader()); 
-            if (record.HasCurrentLeaderTablet()) 
-                xinfo.CurrentLeaderTablet = ActorIdFromProto(record.GetCurrentLeaderTablet()); 
+            if (record.HasCurrentLeader())
+                xinfo.CurrentLeader = ActorIdFromProto(record.GetCurrentLeader());
+            if (record.HasCurrentLeaderTablet())
+                xinfo.CurrentLeaderTablet = ActorIdFromProto(record.GetCurrentLeaderTablet());
             xinfo.CurrentGeneration = record.HasCurrentGeneration() ? record.GetCurrentGeneration() : 0;
             xinfo.Locked = record.HasLocked() ? record.GetLocked() : false;
             xinfo.LockedFor = record.HasLockedFor() ? record.GetLockedFor() : 0;

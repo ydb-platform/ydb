@@ -9,7 +9,7 @@ namespace NFake {
 
     class TStorage : public ::NActors::IActor {
     public:
-        using TEventHandlePtr = TAutoPtr<::NActors::IEventHandle>; 
+        using TEventHandlePtr = TAutoPtr<::NActors::IEventHandle>;
         using ELnLev = NUtil::ELnLev;
         using NStore = TEvBlobStorage;
 
@@ -29,7 +29,7 @@ namespace NFake {
             Logger = new NUtil::TLogger(sys, NKikimrServices::FAKE_ENV);
         }
 
-        void Inbox(TEventHandlePtr &eh, const ::NActors::TActorContext&) 
+        void Inbox(TEventHandlePtr &eh, const ::NActors::TActorContext&)
         {
             if (auto *ev = eh->CastAsLocal<NStore::TEvPut>()) {
 
@@ -72,7 +72,7 @@ namespace NFake {
             }
         }
 
-        void Reply(TEventHandlePtr &eh, IEventBase *ev) 
+        void Reply(TEventHandlePtr &eh, IEventBase *ev)
         {
             Send(eh->Sender, ev, 0, eh->Cookie);
         }
@@ -97,7 +97,7 @@ namespace NFake {
         const ui32 Group = NPageCollection::TLargeGlobId::InvalidGroup;
 
         TActorId Owner;
-        TAutoPtr<NUtil::ILogger> Logger; 
+        TAutoPtr<NUtil::ILogger> Logger;
         TAutoPtr<NFake::TProxyDS> Model;
 
         ui64 PutItems = 0;

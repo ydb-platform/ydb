@@ -46,7 +46,7 @@ namespace NBoot {
             Flush();
         }
 
-        void HandleStep(TIntrusivePtr<IStep> step) noexcept override 
+        void HandleStep(TIntrusivePtr<IStep> step) noexcept override
         {
             auto *load = step->ConsumeAs<TLoadBlobs>(Pending);
 

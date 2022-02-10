@@ -266,7 +266,7 @@ static const auto QueueCountersDescriptor =
     TMemberCountersDescriptor(&TQueueCounters::RequestTimeouts,
                               &TQueueCounters::RequestsThrottled,
                               &TQueueCounters::QueueMasterStartProblems,
-                              &TQueueCounters::QueueLeaderStartProblems, 
+                              &TQueueCounters::QueueLeaderStartProblems,
                               &TQueueCounters::MessagesPurged,
                               &TQueueCounters::MessageReceiveAttempts,
                               &TQueueCounters::ClientMessageProcessing_Duration,
@@ -537,7 +537,7 @@ TQueueCounters::TQueueCounters(const NKikimrConfig::TSqsConfig& cfg,
     InitCounters();
 }
 
-void TQueueCounters::InitCounters(bool forLeaderNode) { 
+void TQueueCounters::InitCounters(bool forLeaderNode) {
     if (!RequestTimeouts) {
         INIT_COUNTERS_COUPLE(
                 QueueCounters,
@@ -548,11 +548,11 @@ void TQueueCounters::InitCounters(bool forLeaderNode) {
     }
 
 
-    if (forLeaderNode) { 
+    if (forLeaderNode) {
         INIT_COUNTER(QueueCounters.SqsCounters, RequestsThrottled, ELifetime::Expiring, EValueType::Derivative, ELaziness::OnStart);
 
         INIT_COUNTER(QueueCounters.SqsCounters, QueueMasterStartProblems, ELifetime::Persistent, EValueType::Derivative, ELaziness::OnStart);
-        INIT_COUNTER(QueueCounters.SqsCounters, QueueLeaderStartProblems, ELifetime::Persistent, EValueType::Derivative, ELaziness::OnStart); 
+        INIT_COUNTER(QueueCounters.SqsCounters, QueueLeaderStartProblems, ELifetime::Persistent, EValueType::Derivative, ELaziness::OnStart);
 
         INIT_COUNTERS_COUPLE(
                 QueueCounters,
@@ -649,21 +649,21 @@ void TQueueCounters::InitCounters(bool forLeaderNode) {
 
     for (EAction action = static_cast<EAction>(EAction::Unknown + 1); action < EAction::ActionsArraySize; action = static_cast<EAction>(action + 1)) {
         if (IsActionForQueue(action)) {
-            if (forLeaderNode && IsProxyAction(action) || !forLeaderNode && !IsProxyAction(action)) { 
-                SqsActionCounters[action].Init(*Cfg, QueueCounters.SqsCounters, action, forLeaderNode ? ELifetime::Expiring : ELifetime::Persistent); 
+            if (forLeaderNode && IsProxyAction(action) || !forLeaderNode && !IsProxyAction(action)) {
+                SqsActionCounters[action].Init(*Cfg, QueueCounters.SqsCounters, action, forLeaderNode ? ELifetime::Expiring : ELifetime::Persistent);
             }
         }
         if (IsActionForQueueYMQ(action) && QueueCounters.YmqCounters && !AggregatedCounters) {
-            if (forLeaderNode && IsProxyAction(action) || !forLeaderNode && !IsProxyAction(action)) { 
+            if (forLeaderNode && IsProxyAction(action) || !forLeaderNode && !IsProxyAction(action)) {
                 YmqActionCounters[action].Init(
                         *Cfg, QueueCounters.YmqCounters, action, METHOD_LABLE, ACTION_CNTR_PREFIX,
-                        forLeaderNode ? ELifetime::Expiring : ELifetime::Persistent 
+                        forLeaderNode ? ELifetime::Expiring : ELifetime::Persistent
                 );
             }
         }
     }
 
-    DetailedCounters.Init(QueueCounters.SqsCounters, AllocPoolCounters, forLeaderNode); 
+    DetailedCounters.Init(QueueCounters.SqsCounters, AllocPoolCounters, forLeaderNode);
 }
 
 void TQueueCounters::TDetailedCounters::Init(const TIntrusivePtr<NMonitoring::TDynamicCounters>& queueCounters,
@@ -672,7 +672,7 @@ void TQueueCounters::TDetailedCounters::Init(const TIntrusivePtr<NMonitoring::TD
         INIT_HISTOGRAM_COUNTER(queueCounters, GetConfiguration_Duration, ELifetime::Expiring, DurationBucketsMs, ELaziness::OnDemand);
     }
 
-    if (forLeaderNode) { 
+    if (forLeaderNode) {
         TransactionCounters = new TTransactionCounters();
         TransactionCounters->Init(queueCounters, allocPoolCounters, true);
 
@@ -724,9 +724,9 @@ void TQueueCounters::RemoveCounters() {
         couple.YmqCounters->RemoveSubgroup(QUEUE_LABEL, QueueName);
 }
 
-TIntrusivePtr<TQueueCounters> TQueueCounters::GetCountersForLeaderNode() { 
+TIntrusivePtr<TQueueCounters> TQueueCounters::GetCountersForLeaderNode() {
     TIntrusivePtr<TQueueCounters> counters = new TQueueCounters(*this);
-    counters->NotLeaderNodeCounters = this; 
+    counters->NotLeaderNodeCounters = this;
     counters->InitCounters(true);
     if (AggregatedParent) {
         counters->SetAggregatedParent(AggregatedParent);
@@ -734,8 +734,8 @@ TIntrusivePtr<TQueueCounters> TQueueCounters::GetCountersForLeaderNode() {
     return counters;
 }
 
-TIntrusivePtr<TQueueCounters> TQueueCounters::GetCountersForNotLeaderNode() { 
-    return NotLeaderNodeCounters; 
+TIntrusivePtr<TQueueCounters> TQueueCounters::GetCountersForNotLeaderNode() {
+    return NotLeaderNodeCounters;
 }
 
 void TUserCounters::InitCounters(const TString& userName, const std::shared_ptr<TAlignedPagePoolCounters>& allocPoolCounters) {
@@ -759,7 +759,7 @@ void TUserCounters::InitCounters(const TString& userName, const std::shared_ptr<
     // ToDo. Errors codes here. Will probably need this in Ymq counters further
     DetailedCounters.Init(UserCounters, allocPoolCounters, *Cfg);
 
-    AggregatedQueueCounters = CreateQueueCountersImpl(TOTAL_COUNTER_LABEL, Cfg->GetYandexCloudMode() ? TOTAL_COUNTER_LABEL : TString(), true, true)->GetCountersForLeaderNode(); 
+    AggregatedQueueCounters = CreateQueueCountersImpl(TOTAL_COUNTER_LABEL, Cfg->GetYandexCloudMode() ? TOTAL_COUNTER_LABEL : TString(), true, true)->GetCountersForLeaderNode();
 
     if (AggregatedParent) {
         AggregatedQueueCounters->SetAggregatedParent(AggregatedParent->AggregatedQueueCounters);

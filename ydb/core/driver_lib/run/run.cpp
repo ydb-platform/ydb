@@ -205,7 +205,7 @@ public:
         appData->AllowHugeKeyValueDeletes = Config.GetFeatureFlags().GetAllowHugeKeyValueDeletes();
         appData->EnableKqpSpilling = Config.GetTableServiceConfig().GetSpillingServiceConfig().GetLocalFileConfig().GetEnable();
 
-        appData->CompactionConfig = Config.GetCompactionConfig(); 
+        appData->CompactionConfig = Config.GetCompactionConfig();
     }
 };
 

@@ -68,7 +68,7 @@ public:
     }
 };
 
-using TResourceProfilesPtr = TIntrusivePtr<TResourceProfiles>; 
- 
- 
+using TResourceProfilesPtr = TIntrusivePtr<TResourceProfiles>;
+
+
 } // namespace NKikimr

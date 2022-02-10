@@ -124,18 +124,18 @@ public:
             TDuration ExecLatency;
         };
 
-        TTabletInfo(ui64 tabletId, const std::pair<ui64, ui64>& actorId, ui32 gen, ui64 step, bool isFollower, TTxInfo&& txInfo) 
+        TTabletInfo(ui64 tabletId, const std::pair<ui64, ui64>& actorId, ui32 gen, ui64 step, bool isFollower, TTxInfo&& txInfo)
             : TabletId(tabletId)
             , ActorId(actorId)
             , TabletGenStep(gen, step)
-            , IsFollower(isFollower) 
+            , IsFollower(isFollower)
             , TxInfo(txInfo)
         {}
 
         ui64 TabletId;
         std::pair<ui64, ui64> ActorId;
         std::pair<ui32, ui64> TabletGenStep;
-        bool IsFollower; 
+        bool IsFollower;
         TTxInfo TxInfo;
     };
 

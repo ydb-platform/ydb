@@ -38,9 +38,9 @@ namespace NWriter {
             return Writer || Regular || Sticky;
         }
 
-        TIntrusivePtr<TCache> Finish() noexcept 
+        TIntrusivePtr<TCache> Finish() noexcept
         {
-            TIntrusivePtr<TCache> pageCollection; 
+            TIntrusivePtr<TCache> pageCollection;
 
             if (auto meta = Writer.Finish(false /* omit empty page collection */)) {
                 for (auto &glob : Writer.Grab())
@@ -71,19 +71,19 @@ namespace NWriter {
             return pageId;
         }
 
-        void WriteInplace(TPageId page, TArrayRef<const char> body) 
+        void WriteInplace(TPageId page, TArrayRef<const char> body)
         {
             Writer.AddInplace(page, body);
         }
 
     private:
-        TIntrusivePtr<TCache> MakePageCollection(TSharedData body) noexcept 
+        TIntrusivePtr<TCache> MakePageCollection(TSharedData body) noexcept
         {
             auto largeGlobId = CutToChunks(body);
 
             auto *pack = new NPageCollection::TPageCollection(largeGlobId, std::move(body));
 
-            TIntrusivePtr<TCache> cache = new TCache(pack); 
+            TIntrusivePtr<TCache> cache = new TCache(pack);
 
             const bool sticky = (Cache == ECache::Ever);
 
@@ -96,7 +96,7 @@ namespace NWriter {
             return cache;
         }
 
-        NPageCollection::TLargeGlobId CutToChunks(TArrayRef<const char> body) 
+        NPageCollection::TLargeGlobId CutToChunks(TArrayRef<const char> body)
         {
             return Cone->Put(0, Channel, body, Writer.Block);
         }

@@ -36,24 +36,24 @@ public:
                 NIceDb::TNiceDb db(txc.DB);
                 auto tabletRowset = db.Table<Schema::OldTablet>().Range().Select<
                         Schema::OldTablet::ID,
-                        Schema::OldTablet::CrossDataCenterFollowers, 
-                        Schema::OldTablet::FollowerCount, 
-                        Schema::OldTablet::AllowFollowerPromotion>(); 
+                        Schema::OldTablet::CrossDataCenterFollowers,
+                        Schema::OldTablet::FollowerCount,
+                        Schema::OldTablet::AllowFollowerPromotion>();
                 if (!tabletRowset.IsReady())
                     return false;
                 while (!tabletRowset.EndOfSet()) {
                     TTabletId tabletId = tabletRowset.GetValue<Schema::OldTablet::ID>();
-                    ui32 followerCount = tabletRowset.GetValueOrDefault<Schema::OldTablet::FollowerCount>(0); 
-                    bool crossDataCenterFollowers = tabletRowset.GetValueOrDefault<Schema::OldTablet::CrossDataCenterFollowers>(false); 
-                    if (followerCount == 0 && crossDataCenterFollowers) { 
+                    ui32 followerCount = tabletRowset.GetValueOrDefault<Schema::OldTablet::FollowerCount>(0);
+                    bool crossDataCenterFollowers = tabletRowset.GetValueOrDefault<Schema::OldTablet::CrossDataCenterFollowers>(false);
+                    if (followerCount == 0 && crossDataCenterFollowers) {
                         followerCount = Self->GetDataCenters();
                     }
-                    bool allowFollowerPromotion = tabletRowset.GetValueOrDefault<Schema::OldTablet::AllowFollowerPromotion>(); 
-                    if (followerCount > 0) { 
-                        db.Table<Schema::TabletFollowerGroup>().Key(tabletId, 1).Update( 
-                                    NIceDb::TUpdate<Schema::TabletFollowerGroup::FollowerCount>(followerCount), 
-                                    NIceDb::TUpdate<Schema::TabletFollowerGroup::AllowLeaderPromotion>(allowFollowerPromotion), 
-                                    NIceDb::TUpdate<Schema::TabletFollowerGroup::AllowClientRead>(true)); 
+                    bool allowFollowerPromotion = tabletRowset.GetValueOrDefault<Schema::OldTablet::AllowFollowerPromotion>();
+                    if (followerCount > 0) {
+                        db.Table<Schema::TabletFollowerGroup>().Key(tabletId, 1).Update(
+                                    NIceDb::TUpdate<Schema::TabletFollowerGroup::FollowerCount>(followerCount),
+                                    NIceDb::TUpdate<Schema::TabletFollowerGroup::AllowLeaderPromotion>(allowFollowerPromotion),
+                                    NIceDb::TUpdate<Schema::TabletFollowerGroup::AllowClientRead>(true));
                     }
                     if (!tabletRowset.Next())
                         return false;
@@ -65,21 +65,21 @@ public:
                 NIceDb::TNiceDb db(txc.DB);
                 auto tabletRowset = db.Table<Schema::OldTablet>().Range().Select<
                         Schema::OldTablet::ID,
-                        Schema::OldTablet::CrossDataCenterFollowerCount, 
-                        Schema::OldTablet::FollowerCount, 
-                        Schema::OldTablet::AllowFollowerPromotion>(); 
+                        Schema::OldTablet::CrossDataCenterFollowerCount,
+                        Schema::OldTablet::FollowerCount,
+                        Schema::OldTablet::AllowFollowerPromotion>();
                 if (!tabletRowset.IsReady())
                     return false;
                 while (!tabletRowset.EndOfSet()) {
                     TTabletId tabletId = tabletRowset.GetValue<Schema::OldTablet::ID>();
-                    ui32 crossDataCenterFollowerCount = tabletRowset.GetValueOrDefault<Schema::OldTablet::CrossDataCenterFollowerCount>(0); 
+                    ui32 crossDataCenterFollowerCount = tabletRowset.GetValueOrDefault<Schema::OldTablet::CrossDataCenterFollowerCount>(0);
                     ui32 followerCount = tabletRowset.GetValueOrDefault<Schema::OldTablet::FollowerCount>(Self->GetDataCenters() * crossDataCenterFollowerCount);
-                    bool allowFollowerPromotion = tabletRowset.GetValueOrDefault<Schema::OldTablet::AllowFollowerPromotion>(); 
-                    if (followerCount > 0) { 
-                        db.Table<Schema::TabletFollowerGroup>().Key(tabletId, 1).Update( 
-                                    NIceDb::TUpdate<Schema::TabletFollowerGroup::FollowerCount>(followerCount), 
-                                    NIceDb::TUpdate<Schema::TabletFollowerGroup::AllowLeaderPromotion>(allowFollowerPromotion), 
-                                    NIceDb::TUpdate<Schema::TabletFollowerGroup::AllowClientRead>(true)); 
+                    bool allowFollowerPromotion = tabletRowset.GetValueOrDefault<Schema::OldTablet::AllowFollowerPromotion>();
+                    if (followerCount > 0) {
+                        db.Table<Schema::TabletFollowerGroup>().Key(tabletId, 1).Update(
+                                    NIceDb::TUpdate<Schema::TabletFollowerGroup::FollowerCount>(followerCount),
+                                    NIceDb::TUpdate<Schema::TabletFollowerGroup::AllowLeaderPromotion>(allowFollowerPromotion),
+                                    NIceDb::TUpdate<Schema::TabletFollowerGroup::AllowClientRead>(true));
                     }
                     if (!tabletRowset.Next())
                         return false;

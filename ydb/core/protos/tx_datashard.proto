@@ -94,7 +94,7 @@ message TROTransaction {
 message TTableId {
     optional uint64 OwnerId = 1;
     optional uint64 TableId = 2;
-    optional uint64 SchemaVersion = 3; 
+    optional uint64 SchemaVersion = 3;
 }
 
 message TReadTableTransaction {
@@ -529,7 +529,7 @@ message TTabletInfo {
     optional uint32 Generation = 2;
     optional uint64 Step = 3;
     optional NActorsProto.TActorId ActorId = 4;
-    optional bool IsFollower = 5; 
+    optional bool IsFollower = 5;
 }
 
 message TEvProposeTransactionResult {
@@ -865,7 +865,7 @@ message TEvGetInfoResponse {
         optional uint64 SchemeShard = 1;
         optional uint64 Mediator = 2;
         optional uint32 Generation = 3;
-        optional bool IsFollower = 4; 
+        optional bool IsFollower = 4;
         optional string State = 5;
         optional bool IsActive = 6;
         optional bool HasSharedBlobs = 7;
@@ -1397,181 +1397,181 @@ message TEvKqpScan {
     optional bytes OlapProgram = 19;
     optional NKikimrSchemeOp.EOlapProgramType OlapProgramType = 20;
 }
- 
-message TEvCompactTable { 
+
+message TEvCompactTable {
     optional NKikimrProto.TPathID PathId = 1;
     optional bool CompactBorrowed = 2;
-} 
- 
-message TEvCompactTableResult { 
-    enum EStatus { 
-        OK = 0; 
-        NOT_NEEDED = 1; 
-        FAILED = 2; 
-    }; 
- 
-    optional uint64 TabletId = 1; 
+}
+
+message TEvCompactTableResult {
+    enum EStatus {
+        OK = 0;
+        NOT_NEEDED = 1;
+        FAILED = 2;
+    };
+
+    optional uint64 TabletId = 1;
     optional NKikimrProto.TPathID PathId = 2;
-    optional EStatus Status = 3; 
-} 
+    optional EStatus Status = 3;
+}
 
 message TEvCompactBorrowed {
     optional NKikimrProto.TPathID PathId = 1;
 }
- 
-message TEvGetCompactTableStats { 
+
+message TEvGetCompactTableStats {
     optional NKikimrProto.TPathID PathId = 1;
-} 
- 
-message TEvGetCompactTableStatsResult { 
-    optional uint64 BackgroundCompactionRequests = 1; 
-} 
- 
-// TEvRead is used to request multiple queries from a shard and 
-// to read results possibly splitted into multiple replies. 
-// 
-// The TEvRead message starts a new read request with given queries 
-// and starts streaming a single resultset in the requested format. 
-// The TEvRead contains number of bytes/rows (quota) the client can handle, 
-// the server is allowed to reply with multiple TEvReadResult messages 
-// within the quota. To update quota user uses TEvReadAck message. 
-// 
-// The protocol works as follows: 
-// 1. Optionally user obtains LockTxId from TxProxy. 
-// 2. Optionally user obtains snapshot version. 
-// 3. User starts reading by sending TEvRead to the shard. 
-// 4. Shard replies with TEvReadResult, which contains: 
-//    - ReadId which is the same as in TEvRead 
-//    - Snapshot version, which is useful when it wasn't specified in TEvRead. 
-//    Shard gives no guarantee that the ReadId will be valid any time. 
-//    - SeqNo that should be used by user in TEvReadAck 
-//    - ContinuationToken, which user can use to restart the read. 
-// 5. User reads until the end using TEvReadAck to update the quota. 
-// 6. User stops reading by TEvReadCancel. 
-message TEvRead { 
-    // User must always provide unique ReadId 
-    // Note that shard distinguishes equal ReadId's 
-    // from different users. 
-    optional uint64 ReadId = 1; 
- 
-    // To read regular user tables client must specify proper 
-    // owner of the table (schemeshard). 
-    // Only for internal usage we support reading shard system tables: 
-    // in this case owner is shard itself, TableId is LocalTid, SchemaVersion 
-    // must not be set 
-    optional TTableId TableId = 2; 
- 
-    // A list of column ids that are returned in the result set 
-    repeated uint32 Columns = 3; 
- 
-    // An optional snapshot for point in time queries 
-    // When snapshot is unspecified datashard will read the most recent data 
-    // and try to allocate an appropriate point in time for repeatable reads 
-    // appropriate for this shard. 
-    optional NKikimrProto.TRowVersion Snapshot = 4; 
- 
-    // An optional LockTxId for acquiring locks 
-    // When specified shard adds read locks with the specified TxId on processed ranges 
-    optional uint64 LockTxId = 5; 
- 
-    // Specifies the format for result data in TEvReadResult 
-    optional EScanDataFormat ResultFormat = 6; 
- 
-    // Limits the total number of rows or bytes client currently can handle 
-    optional uint32 MaxRows = 7; 
-    optional uint32 MaxBytes = 8; 
- 
-    // mainly for testing purposes, limits number of rows in single result message 
-    optional uint32 MaxRowsInResult = 9; 
- 
-    // When specified requests are handled in reverse order as well as range reads 
-    optional bool Reverse = 10; 
- 
-    // Request must contain either keys, queries or program 
-    // mixed requests are not supported 
- 
-    // TSerializedCellVec containing a PK prefix 
-    repeated bytes Keys = 900; 
- 
-    // A range of PK values where From is always the left border 
-    // and To is always the right border. Both From and To can 
-    // be PK prefixes. 
-    repeated NKikimrTx.TKeyRange Ranges = 901; 
- 
-    optional bytes Program = 902; 
-    optional NKikimrSchemeOp.EOlapProgramType ProgramType = 903; 
-} 
- 
-message TReadContinuationToken { 
-    // An index of the last query that datashard attempted to process 
-    // When starting a new TEvRead call for the same query, this would be 
-    // the first query that needs to be resent. 
-    optional uint32 FirstUnprocessedQuery = 1; 
- 
-    // TSerializedCellVec of the last observed key before returning the result 
-    // When starting a new TEvRead call for the same query, this would be 
-    // the first non-inclusive from key for the first range. 
-    optional bytes LastProcessedKey = 2; 
-} 
- 
-// Every TEvRead and TEvReadNext produces a result 
-// The result may be partial, in which case client may continue streaming more 
-// results using TEvReadNext. 
-// 
-// Note the condition that everything has been read: FirstUnprocessedQuery equals to 
-// the size of Queries from TEvRead and LastProcessedKey is not set. 
-message TEvReadResult { 
-    message TArrowBatch { 
-        optional bytes Schema = 1; 
-        optional bytes Batch = 2; 
-    } 
- 
-    message TCellVecBatch { 
-        // TODO: add schema? 
-        repeated bytes Rows = 1; 
-    } 
- 
-    // same as ReadId from the TEvRead 
-    optional uint64 ReadId = 1; 
- 
-    // Specifies SeqNo for the next TEvReadNext call 
-    optional uint64 SeqNo = 2; 
- 
-    optional TStatus Status = 3; 
-    optional EScanDataFormat ResultFormat = 4; 
-    optional NKikimrProto.TRowVersion Snapshot = 5; 
- 
-    optional bytes ContinuationToken = 6; 
- 
-    // True when shard may have possibly returned more data, but 
-    // stopped because it reached MaxRows or MaxBytes limits. 
-    optional bool LimitReached = 7; 
- 
-    optional NKikimrQueryStats.TReadOpStats Stats = 8; 
- 
-    optional bool Finished = 9; 
- 
-    repeated TLock TxLocks = 10; 
-    repeated TLock BrokenTxLocks = 11; 
- 
-    // Data for the possibly partial result 
-    oneof ReadResult { 
-        TArrowBatch ArrowBatch = 900; 
-        TCellVecBatch CellVec = 901; 
-    } 
-} 
- 
-message TEvReadAck { 
-    optional uint64 ReadId = 1; 
-    optional uint64 SeqNo = 2; 
-    optional uint32 MaxRows = 3; 
-    optional uint32 MaxBytes = 4; 
-}; 
- 
-// Cancels a possibly active previously started read 
-message TEvReadCancel { 
-    optional uint64 ReadId = 1; 
-}; 
+}
+
+message TEvGetCompactTableStatsResult {
+    optional uint64 BackgroundCompactionRequests = 1;
+}
+
+// TEvRead is used to request multiple queries from a shard and
+// to read results possibly splitted into multiple replies.
+//
+// The TEvRead message starts a new read request with given queries
+// and starts streaming a single resultset in the requested format.
+// The TEvRead contains number of bytes/rows (quota) the client can handle,
+// the server is allowed to reply with multiple TEvReadResult messages
+// within the quota. To update quota user uses TEvReadAck message.
+//
+// The protocol works as follows:
+// 1. Optionally user obtains LockTxId from TxProxy.
+// 2. Optionally user obtains snapshot version.
+// 3. User starts reading by sending TEvRead to the shard.
+// 4. Shard replies with TEvReadResult, which contains:
+//    - ReadId which is the same as in TEvRead
+//    - Snapshot version, which is useful when it wasn't specified in TEvRead.
+//    Shard gives no guarantee that the ReadId will be valid any time.
+//    - SeqNo that should be used by user in TEvReadAck
+//    - ContinuationToken, which user can use to restart the read.
+// 5. User reads until the end using TEvReadAck to update the quota.
+// 6. User stops reading by TEvReadCancel.
+message TEvRead {
+    // User must always provide unique ReadId
+    // Note that shard distinguishes equal ReadId's
+    // from different users.
+    optional uint64 ReadId = 1;
+
+    // To read regular user tables client must specify proper
+    // owner of the table (schemeshard).
+    // Only for internal usage we support reading shard system tables:
+    // in this case owner is shard itself, TableId is LocalTid, SchemaVersion
+    // must not be set
+    optional TTableId TableId = 2;
+
+    // A list of column ids that are returned in the result set
+    repeated uint32 Columns = 3;
+
+    // An optional snapshot for point in time queries
+    // When snapshot is unspecified datashard will read the most recent data
+    // and try to allocate an appropriate point in time for repeatable reads
+    // appropriate for this shard.
+    optional NKikimrProto.TRowVersion Snapshot = 4;
+
+    // An optional LockTxId for acquiring locks
+    // When specified shard adds read locks with the specified TxId on processed ranges
+    optional uint64 LockTxId = 5;
+
+    // Specifies the format for result data in TEvReadResult
+    optional EScanDataFormat ResultFormat = 6;
+
+    // Limits the total number of rows or bytes client currently can handle
+    optional uint32 MaxRows = 7;
+    optional uint32 MaxBytes = 8;
+
+    // mainly for testing purposes, limits number of rows in single result message
+    optional uint32 MaxRowsInResult = 9;
+
+    // When specified requests are handled in reverse order as well as range reads
+    optional bool Reverse = 10;
+
+    // Request must contain either keys, queries or program
+    // mixed requests are not supported
+
+    // TSerializedCellVec containing a PK prefix
+    repeated bytes Keys = 900;
+
+    // A range of PK values where From is always the left border
+    // and To is always the right border. Both From and To can
+    // be PK prefixes.
+    repeated NKikimrTx.TKeyRange Ranges = 901;
+
+    optional bytes Program = 902;
+    optional NKikimrSchemeOp.EOlapProgramType ProgramType = 903;
+}
+
+message TReadContinuationToken {
+    // An index of the last query that datashard attempted to process
+    // When starting a new TEvRead call for the same query, this would be
+    // the first query that needs to be resent.
+    optional uint32 FirstUnprocessedQuery = 1;
+
+    // TSerializedCellVec of the last observed key before returning the result
+    // When starting a new TEvRead call for the same query, this would be
+    // the first non-inclusive from key for the first range.
+    optional bytes LastProcessedKey = 2;
+}
+
+// Every TEvRead and TEvReadNext produces a result
+// The result may be partial, in which case client may continue streaming more
+// results using TEvReadNext.
+//
+// Note the condition that everything has been read: FirstUnprocessedQuery equals to
+// the size of Queries from TEvRead and LastProcessedKey is not set.
+message TEvReadResult {
+    message TArrowBatch {
+        optional bytes Schema = 1;
+        optional bytes Batch = 2;
+    }
+
+    message TCellVecBatch {
+        // TODO: add schema?
+        repeated bytes Rows = 1;
+    }
+
+    // same as ReadId from the TEvRead
+    optional uint64 ReadId = 1;
+
+    // Specifies SeqNo for the next TEvReadNext call
+    optional uint64 SeqNo = 2;
+
+    optional TStatus Status = 3;
+    optional EScanDataFormat ResultFormat = 4;
+    optional NKikimrProto.TRowVersion Snapshot = 5;
+
+    optional bytes ContinuationToken = 6;
+
+    // True when shard may have possibly returned more data, but
+    // stopped because it reached MaxRows or MaxBytes limits.
+    optional bool LimitReached = 7;
+
+    optional NKikimrQueryStats.TReadOpStats Stats = 8;
+
+    optional bool Finished = 9;
+
+    repeated TLock TxLocks = 10;
+    repeated TLock BrokenTxLocks = 11;
+
+    // Data for the possibly partial result
+    oneof ReadResult {
+        TArrowBatch ArrowBatch = 900;
+        TCellVecBatch CellVec = 901;
+    }
+}
+
+message TEvReadAck {
+    optional uint64 ReadId = 1;
+    optional uint64 SeqNo = 2;
+    optional uint32 MaxRows = 3;
+    optional uint32 MaxBytes = 4;
+};
+
+// Cancels a possibly active previously started read
+message TEvReadCancel {
+    optional uint64 ReadId = 1;
+};
 
 // Applies a batch of replication changes
 message TEvApplyReplicationChanges {

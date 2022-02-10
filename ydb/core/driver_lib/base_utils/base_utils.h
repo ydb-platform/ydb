@@ -22,7 +22,7 @@ struct TCmdFormatConfig {
     NSize::TSize ChunkSize;
     NSize::TSize SectorSize;
     ui64 Guid;
-    ui64 MainKey; 
+    ui64 MainKey;
     TString TextMessage;
 
     TCmdFormatConfig();
@@ -32,7 +32,7 @@ struct TCmdFormatConfig {
 
 struct TCmdFormatInfoConfig {
     TString Path;
-    ui64 MainKey; 
+    ui64 MainKey;
     bool IsVerbose;
 
     TCmdFormatInfoConfig();

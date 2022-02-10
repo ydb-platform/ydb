@@ -77,8 +77,8 @@ IActor* CreateActionActor(const NKikimrClient::TSqsRequest& req, THolder<IReplyC
     Y_FAIL();
 }
 
-IActor* CreateProxyActionActor(const NKikimrClient::TSqsRequest& req, THolder<IReplyCallback> cb, bool enableQueueLeader) { 
-    if (enableQueueLeader && TProxyActor::NeedCreateProxyActor(req)) { 
+IActor* CreateProxyActionActor(const NKikimrClient::TSqsRequest& req, THolder<IReplyCallback> cb, bool enableQueueLeader) {
+    if (enableQueueLeader && TProxyActor::NeedCreateProxyActor(req)) {
         return new TProxyActor(req, std::move(cb));
     } else {
         return CreateActionActor(req, std::move(cb));

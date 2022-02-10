@@ -35,7 +35,7 @@ namespace NBoot {
     public:
         TStages() = delete;
 
-        TStages(IStep *owner, TIntrusivePtr<TDependency> deps, TAutoPtr<TBody> snap) 
+        TStages(IStep *owner, TIntrusivePtr<TDependency> deps, TAutoPtr<TBody> snap)
             : IStep(owner, NBoot::EStep::Stages)
             , Deps(std::move(deps))
             , Snap(std::move(snap))
@@ -49,7 +49,7 @@ namespace NBoot {
             Execute();
         }
 
-        void HandleStep(TIntrusivePtr<IStep>) noexcept override 
+        void HandleStep(TIntrusivePtr<IStep>) noexcept override
         {
             Pending -=1, Execute();
         }
@@ -116,7 +116,7 @@ namespace NBoot {
 
             Back->DatabaseImpl = new NTable::TDatabaseImpl(weak, Back->Scheme, &Back->Edges);
 
-            if (!Back->Follower) { 
+            if (!Back->Follower) {
                 Back->Redo = new NRedo::TQueue(std::move(Back->Edges));
             }
 
@@ -204,7 +204,7 @@ namespace NBoot {
                     << " -> " << serial << "} snap on " << Back->Serial;
             }
 
-            if (!Back->Follower) { 
+            if (!Back->Follower) {
                 FinalizeLeaderLogics(result, *Back->SteppedCookieAllocatorFactory);
             }
         }
@@ -214,8 +214,8 @@ namespace NBoot {
     private:
         EStage Next = EStage::Snap;   /* Next stage to execute */
         TLeft Pending;
-        TIntrusivePtr<TDependency> Deps; 
-        TAutoPtr<TBody> Snap; 
+        TIntrusivePtr<TDependency> Deps;
+        TAutoPtr<TBody> Snap;
     };
 }
 }

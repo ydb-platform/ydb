@@ -54,7 +54,7 @@ public:
         return NKikimrServices::TActivity::SQS_PROXY_ACTOR;
     }
 
-    // Watches request type and returns true if this type assumes proxying request to other queue leader node. 
+    // Watches request type and returns true if this type assumes proxying request to other queue leader node.
     // So, TProxyActor must be created only if this function returns true.
     static bool NeedCreateProxyActor(const NKikimrClient::TSqsRequest& req);
     static bool NeedCreateProxyActor(EAction action);

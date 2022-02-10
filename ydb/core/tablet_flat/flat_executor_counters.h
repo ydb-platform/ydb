@@ -126,7 +126,7 @@ namespace NTabletFlatExecutor {
     XX(TX_PERCENTILE_TABLET_BYTES_WRITTEN, "HIST(TabletBytesWritten)") \
     XX(TX_PERCENTILE_TABLET_BYTES_READ, "HIST(TabletBytesRead)") \
     XX(TX_PERCENTILE_CONSUMED_CPU, "HIST(ConsumedCPU)") \
-    XX(TX_PERCENTILE_FOLLOWERSYNC_LATENCY, "FollowerSyncLatency") 
+    XX(TX_PERCENTILE_FOLLOWERSYNC_LATENCY, "FollowerSyncLatency")
 
 class TExecutorCounters : public TTabletCountersBase {
 public:

@@ -63,7 +63,7 @@ private:
         builder
             .User(UserName_)
             .Queue(GetQueueName())
-            .QueueLeader(QueueLeader_) 
+            .QueueLeader(QueueLeader_)
             .QueryId(LIST_DEAD_LETTER_SOURCE_QUEUES_ID)
             .Counters(QueueCounters_)
             .RetryOnTimeout()

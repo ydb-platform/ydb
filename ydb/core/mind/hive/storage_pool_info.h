@@ -54,8 +54,8 @@ struct TStoragePoolInfo {
     TStoragePoolInfo(TStoragePoolInfo&&) = delete;
     TStoragePoolInfo& operator =(const TStoragePoolInfo&) = delete;
     TStoragePoolInfo& operator =(TStoragePoolInfo&&) = delete;
-    bool AcquireAllocationUnit(const TLeaderTabletInfo* tablet, ui32 channel, TStorageGroupId groupId); 
-    bool ReleaseAllocationUnit(const TLeaderTabletInfo* tablet, ui32 channel, TStorageGroupId groupId); 
+    bool AcquireAllocationUnit(const TLeaderTabletInfo* tablet, ui32 channel, TStorageGroupId groupId);
+    bool ReleaseAllocationUnit(const TLeaderTabletInfo* tablet, ui32 channel, TStorageGroupId groupId);
     TStorageGroupInfo& GetStorageGroup(TStorageGroupId groupId);
     void UpdateStorageGroup(TStorageGroupId groupId, const TEvControllerSelectGroupsResult::TGroupParameters& groupParameters);
     void DeleteStorageGroup(TStorageGroupId groupId);

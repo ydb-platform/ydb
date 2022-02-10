@@ -37,7 +37,7 @@ namespace NTabletFlatExecutor {
             out
                 << "Commit{" << Step << " orig " << ui32(Type)
                 << ", " << (Sync ? "S" : "-")  << (Embedded ? "E" : "-")
-                << (FollowerAux ? "X" : "-") << " " << Refs.size() << " refs" 
+                << (FollowerAux ? "X" : "-") << " " << Refs.size() << " refs"
                 << ", Gc (+" << +GcDelta.Created.size()
                     << " -" << GcDelta.Deleted.size() << ")}";
         }
@@ -48,9 +48,9 @@ namespace NTabletFlatExecutor {
         const ui32 Step = Max<ui32>();
         const ECommit Type = ECommit::Misc;
         const bool Sync = false;
-        bool WaitFollowerGcAck = false; 
+        bool WaitFollowerGcAck = false;
         TString Embedded;
-        TString FollowerAux; 
+        TString FollowerAux;
         TVector<TLogoBlob> Refs;
         TGCBlobDelta GcDelta;
         TSeat *FirstTx = nullptr;

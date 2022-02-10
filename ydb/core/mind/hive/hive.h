@@ -41,10 +41,10 @@ using TTabletId = ui64;
 using TTabletCategoryId = ui64;
 using TNodeId = ui32;
 using TDataCenterId = TString;
-using TFollowerId = ui32; 
-using TFollowerGroupId = ui32; 
+using TFollowerId = ui32;
+using TFollowerGroupId = ui32;
 using TStorageGroupId = ui32;
-using TFullTabletId = std::pair<TTabletId, TFollowerId>; 
+using TFullTabletId = std::pair<TTabletId, TFollowerId>;
 using TObjectId = ui64; // schema object id, used to organize tablets of the same schema object
 using TOwnerId = ui64;
 using TResourceRawValues = std::tuple<i64, i64, i64, i64>; // CPU, Memory, Network, Counter
@@ -66,13 +66,13 @@ enum class ETabletState : ui64 {
 
 TString ETabletStateName(ETabletState value);
 
-enum class EFollowerStrategy : ui32 { 
+enum class EFollowerStrategy : ui32 {
     Unknown,
     Backup,
     Read,
 };
 
-TString EFollowerStrategyName(EFollowerStrategy value); 
+TString EFollowerStrategyName(EFollowerStrategy value);
 
 struct ISubActor {
     virtual void Cleanup() = 0;

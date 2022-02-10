@@ -476,7 +476,7 @@ public:
         using TBase = TComputationValue<TIterator<TTableIt>>;
 
     public:
-        TIterator(TMemoryUsageInfo* memInfo, const TSelectRangeLazyRowsList& list, TAutoPtr<TTableIt>&& iter, 
+        TIterator(TMemoryUsageInfo* memInfo, const TSelectRangeLazyRowsList& list, TAutoPtr<TTableIt>&& iter,
             const TSmallVec<NTable::TTag>& systemColumnTags, ui64 shardId)
             : TBase(memInfo)
             , List(list)

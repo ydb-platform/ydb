@@ -10,7 +10,7 @@ SRCS(
     cache.cpp
     cache.h
     cache_cache.h
-    circular_queue.h 
+    circular_queue.h
     concurrent_rw_hash.cpp
     concurrent_rw_hash.h
     console.cpp
@@ -35,7 +35,7 @@ SRCS(
     log_priority_mute_checker.h
     memory_tracker.cpp
     memory_tracker.h
-    operation_queue.h 
+    operation_queue.h
     page_map.cpp
     pb.h
     proto_duration.h

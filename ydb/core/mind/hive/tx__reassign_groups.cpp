@@ -26,7 +26,7 @@ public:
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
         //SetTxType(NHive::TXTYPE_KILL_TABLET);
-        TLeaderTabletInfo* tablet = Self->FindTablet(TabletId); 
+        TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
         if (tablet != nullptr) {
             BLOG_D("THive::TTxReassignGroups(" << tablet->Id << "," << ChannelProfileNewGroup << ")::Execute");
             if (tablet->IsReadyToReassignTablet()) {

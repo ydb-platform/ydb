@@ -19,15 +19,15 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         TEvTabletBase::TEvBlockBlobStorageResult* msg = Result->Get();
         BLOG_D("THive::TTxBlockStorageResult::Execute(" << TabletId << " " << NKikimrProto::EReplyStatus_Name(msg->Status) << ")");
-        TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(TabletId); 
+        TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(TabletId);
         if (tablet != nullptr) {
             NIceDb::TNiceDb db(txc.DB);
             if (msg->Status == NKikimrProto::OK) {
                 if (tablet->State == ETabletState::BlockStorage) {
                     db.Table<Schema::Tablet>().Key(tablet->Id).Update(NIceDb::TUpdate<Schema::Tablet::State>(ETabletState::ReadyToWork));
                 } else if (tablet->State == ETabletState::Deleting) {
-                    for (TFollowerTabletInfo& follower : tablet->Followers) { 
-                        follower.InitiateStop(); 
+                    for (TFollowerTabletInfo& follower : tablet->Followers) {
+                        follower.InitiateStop();
                     }
                 }
             }
@@ -38,7 +38,7 @@ public:
     void Complete(const TActorContext& ctx) override {
         TEvTabletBase::TEvBlockBlobStorageResult* msg = Result->Get();
         BLOG_D("THive::TTxBlockStorageResult::Complete(" << TabletId << " " << NKikimrProto::EReplyStatus_Name(msg->Status) << ")");
-        TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(TabletId); 
+        TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(TabletId);
         if (tablet != nullptr) {
             if (msg->Status == NKikimrProto::OK
                     || msg->Status == NKikimrProto::RACE

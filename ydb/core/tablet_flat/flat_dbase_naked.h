@@ -78,7 +78,7 @@ namespace NTable {
             }
 
             const ui32 Table = Max<ui32>();
-            const TIntrusivePtr<TTable> Self; 
+            const TIntrusivePtr<TTable> Self;
             const TTxStamp Edge = 0;    /* Stamp of last snapshot       */
             ui64 Serial = 0;
         };
@@ -150,7 +150,7 @@ namespace NTable {
             wrap.Aggr(Stats, true /* enter */);
         }
 
-        void Replace(ui32 tid, TArrayRef<const TPartView> partViews, const TSubset &subset) noexcept 
+        void Replace(ui32 tid, TArrayRef<const TPartView> partViews, const TSubset &subset) noexcept
         {
             auto &wrap = Get(tid, true);
 
@@ -159,7 +159,7 @@ namespace NTable {
             wrap.Aggr(Stats, true /* enter */);
         }
 
-        void ReplaceTxStatus(ui32 tid, TArrayRef<const TIntrusiveConstPtr<TTxStatusPart>> txStatus, const TSubset &subset) noexcept 
+        void ReplaceTxStatus(ui32 tid, TArrayRef<const TIntrusiveConstPtr<TTxStatusPart>> txStatus, const TSubset &subset) noexcept
         {
             auto &wrap = Get(tid, true);
 
@@ -177,7 +177,7 @@ namespace NTable {
             wrap.Aggr(Stats, true /* enter */);
         }
 
-        void Merge(ui32 tid, TIntrusiveConstPtr<TColdPart> part) noexcept 
+        void Merge(ui32 tid, TIntrusiveConstPtr<TColdPart> part) noexcept
         {
             auto &wrap = Get(tid, true);
 
@@ -186,7 +186,7 @@ namespace NTable {
             wrap.Aggr(Stats, true /* enter */);
         }
 
-        void Merge(ui32 tid, TIntrusiveConstPtr<TTxStatusPart> txStatus) noexcept 
+        void Merge(ui32 tid, TIntrusiveConstPtr<TTxStatusPart> txStatus) noexcept
         {
             auto &wrap = Get(tid, true);
 
@@ -332,7 +332,7 @@ namespace NTable {
             First_ = Min(First_, Serial_);
         }
 
-        void DoAnnex(TArrayRef<const TStdPad<NPageCollection::TGlobId>> annex) noexcept 
+        void DoAnnex(TArrayRef<const TStdPad<NPageCollection::TGlobId>> annex) noexcept
         {
             if (Annex) {
                 Y_VERIFY(annex.size() == Annex.size());
@@ -423,7 +423,7 @@ namespace NTable {
         }
 
     public:
-        void EnumerateTxStatusParts(const std::function<void(const TIntrusiveConstPtr<TTxStatusPart>&)>& callback) { 
+        void EnumerateTxStatusParts(const std::function<void(const TIntrusiveConstPtr<TTxStatusPart>&)>& callback) {
             for (auto &it : Tables) {
                 it.second->EnumerateTxStatusParts(callback);
             }
@@ -442,7 +442,7 @@ namespace NTable {
         TVector<TMemGlob> Annex;
 
     public:
-        const TAutoPtr<TScheme> Scheme; 
+        const TAutoPtr<TScheme> Scheme;
         TGarbage Garbage;       /* Unused full table subsets */
         TVector<ui32> Deleted;
         TDbStats Stats;

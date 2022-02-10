@@ -17,9 +17,9 @@ namespace NSequenceShard {
         SetupLogging();
         SetupTabletServices();
 
-        TActorId bootstrapper = CreateTestBootstrapper( 
+        TActorId bootstrapper = CreateTestBootstrapper(
             *Runtime,
-            CreateTestTabletInfo(TabletId, TabletType, TErasureType::ErasureNone), 
+            CreateTestTabletInfo(TabletId, TabletType, TErasureType::ErasureNone),
             &CreateSequenceShard);
         Runtime->EnableScheduleForActor(bootstrapper);
 
@@ -36,9 +36,9 @@ namespace NSequenceShard {
 
     void TTestContext::RebootTablet() {
         ui32 nodeIndex = 0;
-        ForwardToTablet(*Runtime, TabletId, TActorId(), new TEvents::TEvPoison, nodeIndex); 
+        ForwardToTablet(*Runtime, TabletId, TActorId(), new TEvents::TEvPoison, nodeIndex);
         WaitTabletBoot();
-        InvalidateTabletResolverCache(*Runtime, TabletId, nodeIndex); 
+        InvalidateTabletResolverCache(*Runtime, TabletId, nodeIndex);
         ClientId = UnmarkedClientId = {};
     }
 

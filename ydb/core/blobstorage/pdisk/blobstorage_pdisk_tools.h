@@ -42,11 +42,11 @@ void ObliterateDisk(TString path);
 
 void FormatPDisk(TString path, ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 userAccessibleChunkSizeBytes,
     const ui64 &diskGuid, const NPDisk::TKey &chunkKey, const NPDisk::TKey &logKey,
-    const NPDisk::TKey &sysLogKey, const NPDisk::TKey &mainKey, TString textMessage, 
+    const NPDisk::TKey &sysLogKey, const NPDisk::TKey &mainKey, TString textMessage,
     const bool isErasureEncodeUserLog = false, const bool trimEntireDevice = false,
     TIntrusivePtr<NPDisk::TSectorMap> sectorMap = nullptr);
 
-bool ReadPDiskFormatInfo(const TString &path, const NPDisk::TKey &mainKey, TPDiskInfo &outInfo, 
+bool ReadPDiskFormatInfo(const TString &path, const NPDisk::TKey &mainKey, TPDiskInfo &outInfo,
     const bool doLock = false, TIntrusivePtr<NPDisk::TSectorMap> sectorMap = nullptr);
 
 

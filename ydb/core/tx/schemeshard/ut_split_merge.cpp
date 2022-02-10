@@ -54,7 +54,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTest) {
             UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);;
         };
         for (ui64 key = 0; key < 1000; ++key) {
-            fnWriteRow(TTestTxConfig::FakeHiveTablets, key* 1'000'000); 
+            fnWriteRow(TTestTxConfig::FakeHiveTablets, key* 1'000'000);
         }
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
@@ -170,7 +170,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTest) {
                            {NLs::PartitionCount(1000)});
 
 
-        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1000)); 
+        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1000));
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
                            {NLs::PartitionCount(1)});
@@ -218,7 +218,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTest) {
         }
         suppressed.clear();
 
-        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+111)); 
+        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+111));
         // test requeres more txids than cached at start
     }
 
@@ -263,7 +263,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTest) {
 
             WaitForSuppressed(runtime, suppressed, 1, prevObserver);
 
-            t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1)); 
+            t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1));
 
             TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
                                {NLs::PartitionKeys({""})});

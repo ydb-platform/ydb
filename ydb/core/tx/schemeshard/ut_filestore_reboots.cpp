@@ -182,7 +182,7 @@ Y_UNIT_TEST_SUITE(TFileStoreWithReboots) {
             TestForceDropSubDomain(runtime, ++t.TxId,  "/MyRoot/DirA", "USER_0");
 
             t.TestEnv->TestWaitNotification(runtime, {t.TxId, t.TxId-1});
-            t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 3)); 
+            t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 3));
 
             {
                 TInactiveZone inactive(activeZone);
@@ -224,7 +224,7 @@ Y_UNIT_TEST_SUITE(TFileStoreWithReboots) {
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/FS"),
                                    {NLs::PathNotExist});
-                t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+5)); 
+                t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+5));
             }
         });
     }

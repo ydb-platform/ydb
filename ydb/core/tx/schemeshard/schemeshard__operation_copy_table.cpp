@@ -466,11 +466,11 @@ public:
         }
 
         auto schema = Transaction.GetCreateTable();
-        const bool omitFollowers = schema.GetOmitFollowers(); 
+        const bool omitFollowers = schema.GetOmitFollowers();
         const bool isBackup = schema.GetIsBackup();
         PrepareScheme(&schema, name, srcTableInfo, context);
-        if (omitFollowers) { 
-            schema.MutablePartitionConfig()->AddFollowerGroups()->Clear(); 
+        if (omitFollowers) {
+            schema.MutablePartitionConfig()->AddFollowerGroups()->Clear();
         }
         schema.SetIsBackup(isBackup);
 
@@ -699,7 +699,7 @@ TVector<ISubOperationBase::TPtr> CreateCopyTable(TOperationId nextId, const TTxT
         auto operation = schema.MutableCreateTable();
         operation->SetName(copying.GetName());
         operation->SetCopyFromTable(copying.GetCopyFromTable());
-        operation->SetOmitFollowers(copying.GetOmitFollowers()); 
+        operation->SetOmitFollowers(copying.GetOmitFollowers());
         operation->SetIsBackup(copying.GetIsBackup());
         operation->MutablePartitionConfig()->CopyFrom(copying.GetPartitionConfig());
 
@@ -749,7 +749,7 @@ TVector<ISubOperationBase::TPtr> CreateCopyTable(TOperationId nextId, const TTxT
             auto operation = schema.MutableCreateTable();
             operation->SetName(implTableName);
             operation->SetCopyFromTable(implTable.PathString());
-            operation->SetOmitFollowers(copying.GetOmitFollowers()); 
+            operation->SetOmitFollowers(copying.GetOmitFollowers());
             operation->SetIsBackup(copying.GetIsBackup());
 
             result.push_back(CreateCopyTable(NextPartId(nextId, result), schema));

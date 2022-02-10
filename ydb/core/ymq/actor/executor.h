@@ -19,7 +19,7 @@
 namespace NKikimr::NSQS {
 
 // Builds transaction request and properly executes it
-// Can either send TEvExecute to queue leader or create execution actor. 
+// Can either send TEvExecute to queue leader or create execution actor.
 class TExecutorBuilder {
 public:
     explicit TExecutorBuilder(TActorId parent, const TString& requestId);
@@ -40,8 +40,8 @@ public:
         QueueVersion_ = version;
         return *this;
     }
-    TExecutorBuilder& QueueLeader(const TActorId& queueLeaderActor) { 
-        QueueLeaderActor_ = queueLeaderActor; 
+    TExecutorBuilder& QueueLeader(const TActorId& queueLeaderActor) {
+        QueueLeaderActor_ = queueLeaderActor;
         return *this;
     }
     TExecutorBuilder& Text(const TString& text, bool miniKql = true) {
@@ -120,7 +120,7 @@ public:
     void StartExecutorActor(); // explicilty choose a way to start actor
 
 private:
-    void SendToQueueLeader(); // make transaction throught leader to use cached compiled query 
+    void SendToQueueLeader(); // make transaction throught leader to use cached compiled query
 
     bool HasQueryId() const {
         return QueryId_ != EQueryId::QUERY_VECTOR_SIZE;
@@ -139,7 +139,7 @@ private:
     TString QueueName_;
     ui64 Shard_ = 0;
     ui64 QueueVersion_ = 0;
-    TActorId QueueLeaderActor_; 
+    TActorId QueueLeaderActor_;
     TSqsEvents::TExecutedCallback Callback_;
     EQueryId QueryId_ = EQueryId::QUERY_VECTOR_SIZE;
     TIntrusivePtr<TTransactionCounters> TransactionCounters_;

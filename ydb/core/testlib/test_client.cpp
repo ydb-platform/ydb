@@ -163,7 +163,7 @@ namespace Tests {
         app.SetKeepSnapshotTimeout(Settings->KeepSnapshotTimeout);
         app.SetChangesQueueItemsLimit(Settings->ChangesQueueItemsLimit);
         app.SetChangesQueueBytesLimit(Settings->ChangesQueueBytesLimit);
-        app.CompactionConfig = Settings->CompactionConfig; 
+        app.CompactionConfig = Settings->CompactionConfig;
         app.FeatureFlags = Settings->FeatureFlags;
 
         Runtime = MakeHolder<TTestBasicRuntime>(StaticNodes() + DynamicNodes(), Settings->UseRealThreads);
@@ -206,7 +206,7 @@ namespace Tests {
 
         SetupTabletServices(*Runtime, &app, (StaticNodes() + DynamicNodes()) == 1 && Settings->EnableMockOnSingleNode, Settings->CustomDiskParams);
 
-        CreateBootstrapTablets(); 
+        CreateBootstrapTablets();
         SetupStorage();
 
         for (ui32 nodeIdx = 0; nodeIdx < StaticNodes() + DynamicNodes(); ++nodeIdx) {
@@ -358,20 +358,20 @@ namespace Tests {
         app.AddDomain(domain.Release());
     }
 
-    void TServer::CreateBootstrapTablets() { 
+    void TServer::CreateBootstrapTablets() {
         const ui32 domainId = Settings->Domain;
         Y_VERIFY(TDomainsInfo::MakeTxAllocatorIDFixed(domainId, 1) == ChangeStateStorage(TxAllocator, domainId));
-        CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(ChangeStateStorage(TxAllocator, domainId), TTabletTypes::TX_ALLOCATOR), &CreateTxAllocator); 
+        CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(ChangeStateStorage(TxAllocator, domainId), TTabletTypes::TX_ALLOCATOR), &CreateTxAllocator);
         Y_VERIFY(TDomainsInfo::MakeTxCoordinatorIDFixed(domainId, 1) == ChangeStateStorage(Coordinator, domainId));
-        CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(ChangeStateStorage(Coordinator, domainId), TTabletTypes::FLAT_TX_COORDINATOR), &CreateFlatTxCoordinator); 
+        CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(ChangeStateStorage(Coordinator, domainId), TTabletTypes::FLAT_TX_COORDINATOR), &CreateFlatTxCoordinator);
         Y_VERIFY(TDomainsInfo::MakeTxMediatorIDFixed(domainId, 1) == ChangeStateStorage(Mediator, domainId));
-        CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(ChangeStateStorage(Mediator, domainId), TTabletTypes::TX_MEDIATOR), &CreateTxMediator); 
-        CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(ChangeStateStorage(SchemeRoot, domainId), TTabletTypes::FLAT_SCHEMESHARD), &CreateFlatTxSchemeShard); 
-        CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(ChangeStateStorage(Hive, domainId), TTabletTypes::FLAT_HIVE), &CreateDefaultHive); 
-        CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(MakeBSControllerID(domainId), TTabletTypes::FLAT_BS_CONTROLLER), &CreateFlatBsController); 
-        CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(MakeTenantSlotBrokerID(domainId), TTabletTypes::TENANT_SLOT_BROKER), &NTenantSlotBroker::CreateTenantSlotBroker); 
+        CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(ChangeStateStorage(Mediator, domainId), TTabletTypes::TX_MEDIATOR), &CreateTxMediator);
+        CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(ChangeStateStorage(SchemeRoot, domainId), TTabletTypes::FLAT_SCHEMESHARD), &CreateFlatTxSchemeShard);
+        CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(ChangeStateStorage(Hive, domainId), TTabletTypes::FLAT_HIVE), &CreateDefaultHive);
+        CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(MakeBSControllerID(domainId), TTabletTypes::FLAT_BS_CONTROLLER), &CreateFlatBsController);
+        CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(MakeTenantSlotBrokerID(domainId), TTabletTypes::TENANT_SLOT_BROKER), &NTenantSlotBroker::CreateTenantSlotBroker);
         if (Settings->EnableConsole)
-            CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(MakeConsoleID(domainId), TTabletTypes::CONSOLE), &NConsole::CreateConsole); 
+            CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(MakeConsoleID(domainId), TTabletTypes::CONSOLE), &NConsole::CreateConsole);
     }
 
     void TServer::SetupStorage() {
@@ -495,7 +495,7 @@ namespace Tests {
     void TServer::SetupLocalConfig(TLocalConfig &localConfig, const NKikimr::TAppData &appData) {
         localConfig.TabletClassInfo[appData.DefaultTabletTypes.Dummy] =
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
-                &CreateFlatDummyTablet, TMailboxType::Revolving, appData.UserPoolId, 
+                &CreateFlatDummyTablet, TMailboxType::Revolving, appData.UserPoolId,
                 TMailboxType::Revolving, appData.SystemPoolId));
         localConfig.TabletClassInfo[appData.DefaultTabletTypes.DataShard] =
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
@@ -854,8 +854,8 @@ namespace Tests {
         if (!Runtime)
             ythrow TWithBackTrace<yexception>() << "Server is redirected";
 
-        CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(ChangeStateStorage(DummyTablet1, Settings->Domain), TTabletTypes::TX_DUMMY), &CreateFlatDummyTablet); 
-        CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(ChangeStateStorage(DummyTablet2, Settings->Domain), TTabletTypes::TX_DUMMY), &CreateFlatDummyTablet); 
+        CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(ChangeStateStorage(DummyTablet1, Settings->Domain), TTabletTypes::TX_DUMMY), &CreateFlatDummyTablet);
+        CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(ChangeStateStorage(DummyTablet2, Settings->Domain), TTabletTypes::TX_DUMMY), &CreateFlatDummyTablet);
     }
 
     TTestActorRuntime* TServer::GetRuntime() const {
@@ -1588,7 +1588,7 @@ namespace Tests {
         request->Record.SetPath(path);
         const ui64 schemeRoot = GetPatchedSchemeRoot(SchemeRoot, Domain, SupportsRedirect);
         TActorId sender = runtime->AllocateEdgeActor(0);
-        ForwardToTablet(*runtime, schemeRoot, sender, request.Release(), 0); 
+        ForwardToTablet(*runtime, schemeRoot, sender, request.Release(), 0);
 
         TAutoPtr<IEventHandle> handle;
         runtime->GrabEdgeEvent<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>(handle);
@@ -1966,8 +1966,8 @@ namespace Tests {
                 Cerr << "error: " << err.Str() << Endl;
             }
         }
-        if (response.HasHadFollowerReads() && response.GetHadFollowerReads()) { 
-            Cerr << "had follower reads" << Endl; 
+        if (response.HasHadFollowerReads() && response.GetHadFollowerReads()) {
+            Cerr << "had follower reads" << Endl;
         }
 
         if (expectedResponse.HasStatus()) {
@@ -2007,7 +2007,7 @@ namespace Tests {
 
     TString TClient::SendTabletMonQuery(TTestActorRuntime* runtime, ui64 tabletId, TString query) {
         TActorId sender = runtime->AllocateEdgeActor(0);
-        ForwardToTablet(*runtime, tabletId, sender, new NActors::NMon::TEvRemoteHttpInfo(query), 0); 
+        ForwardToTablet(*runtime, tabletId, sender, new NActors::NMon::TEvRemoteHttpInfo(query), 0);
         TAutoPtr<IEventHandle> handle;
         // Timeout for DEBUG purposes only
         runtime->GrabEdgeEvent<NMon::TEvRemoteJsonInfoRes>(handle);
@@ -2038,11 +2038,11 @@ namespace Tests {
         return SendTabletMonQuery(runtime, hive, TString("/app?page=KickNode&node=") + ToString(nodeId));
     }
 
-    bool TClient::WaitForTabletAlive(TTestActorRuntime* runtime, ui64 tabletId, bool leader, TDuration timeout) { 
+    bool TClient::WaitForTabletAlive(TTestActorRuntime* runtime, ui64 tabletId, bool leader, TDuration timeout) {
         TActorId edge = runtime->AllocateEdgeActor();
         NTabletPipe::TClientConfig clientConfig;
-        clientConfig.AllowFollower = !leader; 
-        clientConfig.ForceFollower = !leader; 
+        clientConfig.AllowFollower = !leader;
+        clientConfig.ForceFollower = !leader;
         clientConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
         TActorId pipeClient = runtime->Register(NTabletPipe::CreateClient(edge, tabletId, clientConfig));
         TAutoPtr<IEventHandle> handle;
@@ -2066,11 +2066,11 @@ namespace Tests {
         return res;
     }
 
-    bool TClient::WaitForTabletDown(TTestActorRuntime* runtime, ui64 tabletId, bool leader, TDuration timeout) { 
+    bool TClient::WaitForTabletDown(TTestActorRuntime* runtime, ui64 tabletId, bool leader, TDuration timeout) {
         TActorId edge = runtime->AllocateEdgeActor();
         NTabletPipe::TClientConfig clientConfig;
-        clientConfig.AllowFollower = !leader; 
-        clientConfig.ForceFollower = !leader; 
+        clientConfig.AllowFollower = !leader;
+        clientConfig.ForceFollower = !leader;
         clientConfig.RetryPolicy = {
             .RetryLimitCount = 5,
             .MinRetryTime = TDuration::MilliSeconds(500),
@@ -2111,10 +2111,10 @@ namespace Tests {
         return res;
     }
 
-    void TClient::GetTabletInfoFromHive(TTestActorRuntime* runtime, ui64 tabletId, bool returnFollowers, NKikimrHive::TEvResponseHiveInfo& res) { 
+    void TClient::GetTabletInfoFromHive(TTestActorRuntime* runtime, ui64 tabletId, bool returnFollowers, NKikimrHive::TEvResponseHiveInfo& res) {
         TAutoPtr<TEvHive::TEvRequestHiveInfo> ev(new TEvHive::TEvRequestHiveInfo);
         ev->Record.SetTabletID(tabletId);
-        ev->Record.SetReturnFollowers(returnFollowers); 
+        ev->Record.SetReturnFollowers(returnFollowers);
 
         ui64 hive = ChangeStateStorage(Tests::Hive, Domain);
         TActorId edge = runtime->AllocateEdgeActor();
@@ -2124,7 +2124,7 @@ namespace Tests {
         res.Swap(&response->Record);
     }
 
-    ui32 TClient::GetLeaderNode(TTestActorRuntime* runtime, ui64 tabletId) { 
+    ui32 TClient::GetLeaderNode(TTestActorRuntime* runtime, ui64 tabletId) {
         NKikimrHive::TEvResponseHiveInfo res;
         GetTabletInfoFromHive(runtime, tabletId, false, res);
         // Cerr << res << Endl;
@@ -2177,19 +2177,19 @@ namespace Tests {
         }
     }
 
-    TVector<ui32> TClient::GetFollowerNodes(TTestActorRuntime* runtime, ui64 tabletId) { 
+    TVector<ui32> TClient::GetFollowerNodes(TTestActorRuntime* runtime, ui64 tabletId) {
         NKikimrHive::TEvResponseHiveInfo res;
         GetTabletInfoFromHive(runtime, tabletId, true, res);
         // Cerr << res << Endl;
 
-        TVector<ui32> followerNodes; 
+        TVector<ui32> followerNodes;
         for (const NKikimrHive::TTabletInfo& tablet : res.GetTablets()) {
-            if (tablet.GetTabletID() == tabletId && tablet.HasFollowerID()) { 
-                followerNodes.push_back(NodeIdToIndex(runtime, tablet.GetNodeID())); 
+            if (tablet.GetTabletID() == tabletId && tablet.HasFollowerID()) {
+                followerNodes.push_back(NodeIdToIndex(runtime, tablet.GetNodeID()));
             }
         }
 
-        return followerNodes; 
+        return followerNodes;
     }
 
     void TClient::S3Listing(const TString& table, const TString& prefixColumnsPb,
@@ -2243,7 +2243,7 @@ namespace Tests {
         *request->Record.MutableResource()->MutableHierarhicalDRRResourceConfig() = props;
 
         TActorId sender = runtime->AllocateEdgeActor(0);
-        ForwardToTablet(*runtime, GetKesusTabletId(kesusPath), sender, request.Release(), 0); 
+        ForwardToTablet(*runtime, GetKesusTabletId(kesusPath), sender, request.Release(), 0);
 
         TAutoPtr<IEventHandle> handle;
         runtime->GrabEdgeEvent<NKesus::TEvKesus::TEvAddQuoterResourceResult>(handle);
@@ -2255,7 +2255,7 @@ namespace Tests {
         THolder<NKesus::TEvKesus::TEvGetConfig> request = MakeHolder<NKesus::TEvKesus::TEvGetConfig>();
 
         TActorId sender = runtime->AllocateEdgeActor(0);
-        ForwardToTablet(*runtime, GetKesusTabletId(kesusPath), sender, request.Release(), 0); 
+        ForwardToTablet(*runtime, GetKesusTabletId(kesusPath), sender, request.Release(), 0);
 
         TAutoPtr<IEventHandle> handle;
         runtime->GrabEdgeEvent<NKesus::TEvKesus::TEvGetConfigResult>(handle);

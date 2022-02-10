@@ -16,7 +16,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, transaction.release());
         auto resultLogin = Login(runtime, "user1", "password1");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
-        auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot"); 
+        auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
         UNIT_ASSERT(describe.HasPathDescription());
         UNIT_ASSERT(describe.GetPathDescription().HasDomainDescription());
         UNIT_ASSERT(describe.GetPathDescription().GetDomainDescription().HasSecurityState());

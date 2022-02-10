@@ -2436,8 +2436,8 @@ const ui64 CONFIG_PROXY_TABLET_ID = 0x0000000000840103;
 
 void StartConfigProxy(TTenantTestRuntime &runtime)
 {
-    auto info = CreateTestTabletInfo(CONFIG_PROXY_TABLET_ID, TTabletTypes::TX_DUMMY, TErasureType::ErasureNone); 
-    TActorId actorId = CreateTestBootstrapper(runtime, info, [&runtime](const TActorId &tablet, TTabletStorageInfo *info) -> IActor* { 
+    auto info = CreateTestTabletInfo(CONFIG_PROXY_TABLET_ID, TTabletTypes::TX_DUMMY, TErasureType::ErasureNone);
+    TActorId actorId = CreateTestBootstrapper(runtime, info, [&runtime](const TActorId &tablet, TTabletStorageInfo *info) -> IActor* {
         return new TConfigProxy(tablet, info, runtime.Sender);
     });
     runtime.EnableScheduleForActor(actorId, true);

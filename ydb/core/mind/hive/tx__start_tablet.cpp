@@ -26,13 +26,13 @@ public:
         BLOG_D("THive::TTxStartTablet::Execute Tablet " << TabletId);
         TTabletInfo* tablet = Self->FindTablet(TabletId);
         if (tablet != nullptr) {
-            if (tablet->IsLeader()) { 
-                TLeaderTabletInfo& leader = tablet->AsLeader(); 
-                if (leader.IsStarting() || leader.IsBootingSuppressed() && External) { 
+            if (tablet->IsLeader()) {
+                TLeaderTabletInfo& leader = tablet->AsLeader();
+                if (leader.IsStarting() || leader.IsBootingSuppressed() && External) {
                     NIceDb::TNiceDb db(txc.DB);
-                    leader.IncreaseGeneration(); 
-                    KnownGeneration = leader.KnownGeneration; 
-                    db.Table<Schema::Tablet>().Key(leader.Id).Update<Schema::Tablet::KnownGeneration>(leader.KnownGeneration); 
+                    leader.IncreaseGeneration();
+                    KnownGeneration = leader.KnownGeneration;
+                    db.Table<Schema::Tablet>().Key(leader.Id).Update<Schema::Tablet::KnownGeneration>(leader.KnownGeneration);
                 } else {
                     BLOG_W("THive::TTxStartTablet::Execute Tablet " << TabletId << " skipped generation increment");        
                 }
@@ -53,38 +53,38 @@ public:
                 }
                 tablet->LastNodeId = 0;
             }
-            if (tablet->IsLeader()) { 
-                TLeaderTabletInfo& leader = tablet->AsLeader(); 
-                if (leader.IsStartingOnNode(Local.NodeId()) || leader.IsBootingSuppressed() && External) { 
-                    if (KnownGeneration == leader.KnownGeneration) { 
-                        BLOG_D("THive::TTxStartTablet::Complete, Sending TEvBootTablet(" << leader.ToString() << ")" 
+            if (tablet->IsLeader()) {
+                TLeaderTabletInfo& leader = tablet->AsLeader();
+                if (leader.IsStartingOnNode(Local.NodeId()) || leader.IsBootingSuppressed() && External) {
+                    if (KnownGeneration == leader.KnownGeneration) {
+                        BLOG_D("THive::TTxStartTablet::Complete, Sending TEvBootTablet(" << leader.ToString() << ")"
                                << " to node " << Local.NodeId()
-                               << " storage " << leader.TabletStorageInfo->ToString()); 
-                        TFollowerId promotableFollowerId = leader.GetFollowerPromotableOnNode(Local.NodeId()); 
+                               << " storage " << leader.TabletStorageInfo->ToString());
+                        TFollowerId promotableFollowerId = leader.GetFollowerPromotableOnNode(Local.NodeId());
                         ctx.Send(Local,
-                                 new TEvLocal::TEvBootTablet(*leader.TabletStorageInfo, promotableFollowerId, KnownGeneration), 
+                                 new TEvLocal::TEvBootTablet(*leader.TabletStorageInfo, promotableFollowerId, KnownGeneration),
                                  IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
                                  Cookie);
                         return;
                     } else {
-                        BLOG_W("THive::TTxStartTablet::Complete, ignoring outstanding TEvBootTablet(" << leader.ToString() << ") - wrong generation"); 
+                        BLOG_W("THive::TTxStartTablet::Complete, ignoring outstanding TEvBootTablet(" << leader.ToString() << ") - wrong generation");
                     }
                 } else {
-                    BLOG_W("THive::TTxStartTablet::Complete, ignoring outstanding TEvBootTablet(" << leader.ToString() << ") - wrong state or node"); 
+                    BLOG_W("THive::TTxStartTablet::Complete, ignoring outstanding TEvBootTablet(" << leader.ToString() << ") - wrong state or node");
                 }
             } else {
-                TFollowerTabletInfo& follower = tablet->AsFollower(); 
-                if (follower.IsStartingOnNode(Local.NodeId())) { 
-                    BLOG_D("THive::TTxStartTablet::Complete, Sending TEvBootTablet(" << follower.ToString() << ")" 
+                TFollowerTabletInfo& follower = tablet->AsFollower();
+                if (follower.IsStartingOnNode(Local.NodeId())) {
+                    BLOG_D("THive::TTxStartTablet::Complete, Sending TEvBootTablet(" << follower.ToString() << ")"
                            << " to node " << Local.NodeId()
-                           << " storage " << follower.LeaderTablet.TabletStorageInfo->ToString()); 
+                           << " storage " << follower.LeaderTablet.TabletStorageInfo->ToString());
                     ctx.Send(Local,
-                             new TEvLocal::TEvBootTablet(*follower.LeaderTablet.TabletStorageInfo, follower.Id), 
+                             new TEvLocal::TEvBootTablet(*follower.LeaderTablet.TabletStorageInfo, follower.Id),
                              IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
                              Cookie);
                     return;
                 } else {
-                    BLOG_W("THive::TTxStartTablet::Complete, ignoring outstanding TEvBootTablet(" << follower.ToString() << ") - wrong state or node"); 
+                    BLOG_W("THive::TTxStartTablet::Complete, ignoring outstanding TEvBootTablet(" << follower.ToString() << ") - wrong state or node");
                 }
             }
             // if anything wrong - attempt to restart the tablet

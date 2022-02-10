@@ -13,9 +13,9 @@ namespace NRedo {
 
     class TReader {
     public:
-        TReader(TArrayRef<const char> plain): Plain(plain), On(Plain.data()) { } 
+        TReader(TArrayRef<const char> plain): Plain(plain), On(Plain.data()) { }
 
-        TArrayRef<const char> Next() noexcept 
+        TArrayRef<const char> Next() noexcept
         {
             if (On >= Plain.end()) {
                 return { nullptr, size_t(0) };
@@ -30,7 +30,7 @@ namespace NRedo {
         }
 
     private:
-        TArrayRef<const char> Plain; 
+        TArrayRef<const char> Plain;
         const char *On = nullptr;
     };
 
@@ -39,7 +39,7 @@ namespace NRedo {
     public:
         TPlayer(TBase &base) : Base(base) { }
 
-        void Replay(TArrayRef<const char> plain) 
+        void Replay(TArrayRef<const char> plain)
         {
             TReader iter(plain);
 
@@ -58,7 +58,7 @@ namespace NRedo {
         }
 
     private:
-        void Handle(const TChunk* label, const TArrayRef<const char> chunk) 
+        void Handle(const TChunk* label, const TArrayRef<const char> chunk)
         {
             switch (label->Event) {
                 case ERedo::Noop:
@@ -86,7 +86,7 @@ namespace NRedo {
             Y_FAIL("Unexpected rodo log chunk type");
         }
 
-        void HandleLegacy(const TChunk_Legacy* label, const TArrayRef<const char> chunk) 
+        void HandleLegacy(const TChunk_Legacy* label, const TArrayRef<const char> chunk)
         {
             if (!Base.NeedIn(label->RootId)) {
                 return;
@@ -115,7 +115,7 @@ namespace NRedo {
         }
 
     private:
-        void DoBegin(const TArrayRef<const char> chunk) 
+        void DoBegin(const TArrayRef<const char> chunk)
         {
             if (chunk.size() < sizeof(TEvBegin_v0)) {
                 Y_Fail("EvBegin event is tool small, " << chunk.size() << "b");
@@ -132,7 +132,7 @@ namespace NRedo {
             }
         }
 
-        void DoAnnex(const TArrayRef<const char> chunk) 
+        void DoAnnex(const TArrayRef<const char> chunk)
         {
             Y_VERIFY(chunk.size() >= sizeof(TEvAnnex));
 
@@ -144,7 +144,7 @@ namespace NRedo {
             Base.DoAnnex({ raw, ev->Items });
         }
 
-        void DoFlush(const TArrayRef<const char> chunk) 
+        void DoFlush(const TArrayRef<const char> chunk)
         {
             Y_VERIFY(chunk.size() >= sizeof(TEvFlush));
 
@@ -154,7 +154,7 @@ namespace NRedo {
                 Base.DoFlush(ev->Table, ev->Stamp, TEpoch(ev->Epoch));
         }
 
-        void DoUpdate(const TArrayRef<const char> chunk) 
+        void DoUpdate(const TArrayRef<const char> chunk)
         {
             auto *ev = reinterpret_cast<const TEvUpdate*>(chunk.data());
 
@@ -178,7 +178,7 @@ namespace NRedo {
             }
         }
 
-        void DoUpdateTx(const TArrayRef<const char> chunk) 
+        void DoUpdateTx(const TArrayRef<const char> chunk)
         {
             auto *ev = reinterpret_cast<const TEvUpdate*>(chunk.data());
 
@@ -195,7 +195,7 @@ namespace NRedo {
             }
         }
 
-        void DoCommitTx(const TArrayRef<const char> chunk) 
+        void DoCommitTx(const TArrayRef<const char> chunk)
         {
             auto *ev = reinterpret_cast<const TEvCommitTx*>(chunk.data());
 
@@ -206,7 +206,7 @@ namespace NRedo {
             }
         }
 
-        void DoRemoveTx(const TArrayRef<const char> chunk) 
+        void DoRemoveTx(const TArrayRef<const char> chunk)
         {
             auto *ev = reinterpret_cast<const TEvRemoveTx*>(chunk.data());
 
@@ -215,7 +215,7 @@ namespace NRedo {
             }
         }
 
-        void DoUpdateLegacy(const TArrayRef<const char> chunk) 
+        void DoUpdateLegacy(const TArrayRef<const char> chunk)
         {
             const char *buf = chunk.begin();
             auto *op = (const TEvUpdate_Legacy*)buf;
@@ -226,7 +226,7 @@ namespace NRedo {
             Base.DoUpdate(op->OpHeader.RootId, ERowOp::Upsert, KeyVec, OpsVec, TRowVersion::Min());
         }
 
-        void DoEraseLegacy(const TArrayRef<const char> chunk) 
+        void DoEraseLegacy(const TArrayRef<const char> chunk)
         {
             const char *buf = chunk.begin();
             auto *op = (const TEvErase_Legacy*)buf;
@@ -236,7 +236,7 @@ namespace NRedo {
             Base.DoUpdate(op->OpHeader.RootId, ERowOp::Erase, KeyVec, { }, TRowVersion::Min());
         }
 
-        void DoFlushLegacy(const TArrayRef<const char> chunk) 
+        void DoFlushLegacy(const TArrayRef<const char> chunk)
         {
             Y_VERIFY(chunk.size() >= sizeof(TEvFlush_Legacy));
 

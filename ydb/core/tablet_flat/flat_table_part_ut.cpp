@@ -20,7 +20,7 @@ Y_UNIT_TEST_SUITE(TLegacy) {
 
     /* This is legacy place for UT, do not put here more tests */
 
-    static TIntrusiveConstPtr<NPage::TFrames> CookFrames() 
+    static TIntrusiveConstPtr<NPage::TFrames> CookFrames()
     {
         NPage::TFrameWriter writer(3);
 
@@ -117,7 +117,7 @@ Y_UNIT_TEST_SUITE(TLegacy) {
             "Unexpected " << eggs.Parts.size() << " results");
 
         auto fnIterate = [&dbgOut, &typeRegistry] (TIntrusiveConstPtr<TPartStore> part, TIntrusiveConstPtr<TScreen> screen,
-                            TIntrusiveConstPtr<TRowScheme> scheme, TIntrusiveConstPtr<NPage::TFrames> frames) -> std::pair<ui64, ui64> { 
+                            TIntrusiveConstPtr<TRowScheme> scheme, TIntrusiveConstPtr<NPage::TFrames> frames) -> std::pair<ui64, ui64> {
             TScreenedPartIndexIterator idxIter(TPartView{part, screen, nullptr}, scheme->Keys, std::move(frames));
 
             ui64 rowCount = 0;
@@ -140,7 +140,7 @@ Y_UNIT_TEST_SUITE(TLegacy) {
 
         dbgOut << "Hide all" << Endl;
         {
-            TIntrusiveConstPtr<TScreen> screen = new TScreen({}); 
+            TIntrusiveConstPtr<TScreen> screen = new TScreen({});
             auto res = fnIterate(eggs.At(0), screen, eggs.Scheme, nullptr);
             UNIT_ASSERT_VALUES_EQUAL_C(res.first, 0, "RowCount should be 0");
             UNIT_ASSERT_VALUES_EQUAL_C(res.second, 0, "DataSize should be 0");
@@ -157,7 +157,7 @@ Y_UNIT_TEST_SUITE(TLegacy) {
 
         dbgOut << "Hide none" << Endl;
         {
-            TIntrusiveConstPtr<TScreen> screen = new TScreen({TScreen::THole(true)}); 
+            TIntrusiveConstPtr<TScreen> screen = new TScreen({TScreen::THole(true)});
             auto res = fnIterate(eggs.At(0), screen, eggs.Scheme, nullptr);
             UNIT_ASSERT_VALUES_EQUAL_C(res.first, expectedRowCount, "RowCount doesn't match");
             UNIT_ASSERT_VALUES_EQUAL_C(res.second, expectedTotalSize, "DataSize doesn't match");
@@ -165,7 +165,7 @@ Y_UNIT_TEST_SUITE(TLegacy) {
 
         dbgOut << "Hide 2 pages" << Endl;
         {
-            TIntrusiveConstPtr<TScreen> screen = new TScreen({TScreen::THole(0,150), TScreen::THole(550, 10000)}); 
+            TIntrusiveConstPtr<TScreen> screen = new TScreen({TScreen::THole(0,150), TScreen::THole(550, 10000)});
             auto res = fnIterate(eggs.At(0), screen, eggs.Scheme, nullptr);
             UNIT_ASSERT_VALUES_EQUAL_C(res.first, expectedRowCount - 400, "RowCount doesn't match");
             UNIT_ASSERT_VALUES_EQUAL_C(res.second, expectedTotalSize - REAL_PAGE_SIZE*2, "DataSize doesn't match");
@@ -173,7 +173,7 @@ Y_UNIT_TEST_SUITE(TLegacy) {
 
         dbgOut << "Hide all except 3 pages" << Endl;
         {
-            TIntrusiveConstPtr<TScreen> screen = new TScreen({TScreen::THole(150, 400)}); 
+            TIntrusiveConstPtr<TScreen> screen = new TScreen({TScreen::THole(150, 400)});
             auto res = fnIterate(eggs.At(0), screen, eggs.Scheme, nullptr);
             UNIT_ASSERT_VALUES_EQUAL_C(res.first, 250, "RowCount doesn't match");
             UNIT_ASSERT_VALUES_EQUAL_C(res.second, REAL_PAGE_SIZE*3, "DataSize doesn't match");
@@ -181,7 +181,7 @@ Y_UNIT_TEST_SUITE(TLegacy) {
 
         dbgOut << "Hide 2 rows in one page - we just ignore this" << Endl;
         {
-            TIntrusiveConstPtr<TScreen> screen = new TScreen({TScreen::THole(0,150), TScreen::THole(152, 10000)}); 
+            TIntrusiveConstPtr<TScreen> screen = new TScreen({TScreen::THole(0,150), TScreen::THole(152, 10000)});
             auto res = fnIterate(eggs.At(0), screen, eggs.Scheme, nullptr);
             UNIT_ASSERT_VALUES_EQUAL_C(res.first, expectedRowCount - 2, "RowCount doesn't match");
             UNIT_ASSERT_VALUES_EQUAL_C(res.second, expectedTotalSize, "DataSize doesn't match");
@@ -189,7 +189,7 @@ Y_UNIT_TEST_SUITE(TLegacy) {
 
         dbgOut << "Hide 4 pages in 3 different ranges" << Endl;
         {
-            TIntrusiveConstPtr<TScreen> screen = new TScreen({ 
+            TIntrusiveConstPtr<TScreen> screen = new TScreen({
                 TScreen::THole(400, 600),
                 TScreen::THole(850, 950),
                 TScreen::THole(1200, 10000)
@@ -204,7 +204,7 @@ Y_UNIT_TEST_SUITE(TLegacy) {
             auto frames = CookFrames();
 
             // This screen takes two pages, one of them has 4 small blobs, 1800 total bytes
-            TIntrusiveConstPtr<TScreen> screen = new TScreen({ 
+            TIntrusiveConstPtr<TScreen> screen = new TScreen({
                 TScreen::THole(169, 338),
                 TScreen::THole(845, 1014)
             });
@@ -270,13 +270,13 @@ Y_UNIT_TEST_SUITE(TLegacy) {
         UNIT_ASSERT_C(eggs2.Parts.size() == 1,
             "Unexpected " << eggs2.Parts.size() << " results");
 
-        TIntrusiveConstPtr<TScreen> screen1 = new TScreen({ 
+        TIntrusiveConstPtr<TScreen> screen1 = new TScreen({
                 TScreen::THole(400, 600),
                 TScreen::THole(700, 800),
                 TScreen::THole(1200, 100000)
                 });
 
-        TIntrusiveConstPtr<TScreen> screen2 = new TScreen({ 
+        TIntrusiveConstPtr<TScreen> screen2 = new TScreen({
                 TScreen::THole(2400, 2600),
                 TScreen::THole(2700, 2800),
                 TScreen::THole(4200, 100000)

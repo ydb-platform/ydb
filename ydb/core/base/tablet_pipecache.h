@@ -92,6 +92,6 @@ struct TPipePeNodeCacheConfig : public TAtomicRefCount<TPipePeNodeCacheConfig>{
 };
 
 IActor* CreatePipePeNodeCache(const TIntrusivePtr<TPipePeNodeCacheConfig> &config);
-TActorId MakePipePeNodeCacheID(bool allowFollower); 
+TActorId MakePipePeNodeCacheID(bool allowFollower);
 
 }

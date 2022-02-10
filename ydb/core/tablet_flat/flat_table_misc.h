@@ -6,7 +6,7 @@ namespace NTable {
 
     template<typename TItem>
     struct TOrderByEpoch {
-        using TUnit = TIntrusiveConstPtr<TItem>; 
+        using TUnit = TIntrusiveConstPtr<TItem>;
 
         bool operator()(const TUnit &left, const TUnit &right) const noexcept
         {

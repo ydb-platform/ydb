@@ -2031,7 +2031,7 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
 
     bool CheckAttrsPresent(TTenantTestRuntime& runtime, const TString& tenantName, THashMap<TString, TString> attrs, bool skipAbsent = false) {
         auto request = MakeHolder<TEvSchemeShard::TEvDescribeScheme>(tenantName);
-        ForwardToTablet(runtime, SCHEME_SHARD1_ID, runtime.Sender, request.Release()); 
+        ForwardToTablet(runtime, SCHEME_SHARD1_ID, runtime.Sender, request.Release());
 
         TAutoPtr<IEventHandle> handle;
         auto reply = runtime.GrabEdgeEvent<TEvSchemeShard::TEvDescribeSchemeResult>(handle);

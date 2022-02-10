@@ -447,7 +447,7 @@ void CreateTableInsideAndAlterTable(TTestEnvWithPoolsSupport& env) {
             description.ClearKeyColumnNames();
             description.ClearSplitBoundary();
             description.ClearTableIndexes();
-            description.MutablePartitionConfig()->SetFollowerCount(1); 
+            description.MutablePartitionConfig()->SetFollowerCount(1);
 
             UNIT_ASSERT_VALUES_EQUAL(env.GetClient().AlterTable("/dc-1/USER_0", description),
                                      NMsgBusProxy::MSTATUS_OK);
@@ -456,7 +456,7 @@ void CreateTableInsideAndAlterTable(TTestEnvWithPoolsSupport& env) {
             env.GetClient().RefreshPathCache(&env.GetRuntime(), "/dc-1/USER_0/SimpleTable");
             auto ls = env.GetClient().Ls("/dc-1/USER_0/SimpleTable");
             NKikimrSchemeOp::TTableDescription description = NTestLs::ExtractTableDescription(ls);
-            UNIT_ASSERT_VALUES_EQUAL(description.GetPartitionConfig().GetFollowerCount(), 1); 
+            UNIT_ASSERT_VALUES_EQUAL(description.GetPartitionConfig().GetFollowerCount(), 1);
         }
 
         env.GetTenants().Stop();
@@ -518,7 +518,7 @@ void CreateTableInsideAndAlterDomainAndTable(TTestEnvWithPoolsSupport& env) {
 
         {
             auto tableDesc = GetTableSimpleDescription("SimpleTable");
-            tableDesc.MutablePartitionConfig()->SetFollowerCount(0); 
+            tableDesc.MutablePartitionConfig()->SetFollowerCount(0);
 
             UNIT_ASSERT_VALUES_EQUAL(env.GetClient().CreateTable("/dc-1/USER_0", tableDesc),
                                      NMsgBusProxy::MSTATUS_OK);
@@ -535,7 +535,7 @@ void CreateTableInsideAndAlterDomainAndTable(TTestEnvWithPoolsSupport& env) {
             env.GetClient().RefreshPathCache(&env.GetRuntime(), "/dc-1/USER_0/SimpleTable");
             auto ls = env.GetClient().Ls("/dc-1/USER_0/SimpleTable");
             NKikimrSchemeOp::TTableDescription description = NTestLs::ExtractTableDescription(ls);
-            UNIT_ASSERT_VALUES_EQUAL(description.GetPartitionConfig().GetFollowerCount(), 0); 
+            UNIT_ASSERT_VALUES_EQUAL(description.GetPartitionConfig().GetFollowerCount(), 0);
         }
 
         {
@@ -588,7 +588,7 @@ void CreateTableInsideAndAlterDomainAndTable(TTestEnvWithPoolsSupport& env) {
             description.ClearKeyColumnNames();
             description.ClearSplitBoundary();
             description.ClearTableIndexes();
-            description.MutablePartitionConfig()->SetFollowerCount(1); 
+            description.MutablePartitionConfig()->SetFollowerCount(1);
 
             UNIT_ASSERT_VALUES_EQUAL(env.GetClient().AlterTable("/dc-1/USER_0", description),
                                      NMsgBusProxy::MSTATUS_OK);
@@ -597,7 +597,7 @@ void CreateTableInsideAndAlterDomainAndTable(TTestEnvWithPoolsSupport& env) {
             env.GetClient().RefreshPathCache(&env.GetRuntime(), "/dc-1/USER_0/SimpleTable");
             auto ls = env.GetClient().Ls("/dc-1/USER_0/SimpleTable");
             NKikimrSchemeOp::TTableDescription description = NTestLs::ExtractTableDescription(ls);
-            UNIT_ASSERT_VALUES_EQUAL(description.GetPartitionConfig().GetFollowerCount(), 1); 
+            UNIT_ASSERT_VALUES_EQUAL(description.GetPartitionConfig().GetFollowerCount(), 1);
         }
 
         env.GetTenants().Stop();

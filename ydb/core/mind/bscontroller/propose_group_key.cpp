@@ -10,9 +10,9 @@ protected:
     ui32 NodeId = 0;
     ui32 GroupId = 0;
     ui32 LifeCyclePhase = 0;
-    TString MainKeyId = ""; 
+    TString MainKeyId = "";
     TString EncryptedGroupKey = "";
-    ui64 MainKeyVersion = 0; 
+    ui64 MainKeyVersion = 0;
     ui64 GroupKeyNonce = 0;
     bool IsAnotherTxInProgress = false;
 public:
@@ -23,9 +23,9 @@ public:
         NodeId = Proto.GetNodeId();
         GroupId = Proto.GetGroupId();
         LifeCyclePhase = Proto.GetLifeCyclePhase();
-        MainKeyId =  Proto.GetMainKeyId(); 
+        MainKeyId =  Proto.GetMainKeyId();
         EncryptedGroupKey = Proto.GetEncryptedGroupKey();
-        MainKeyVersion = Proto.GetMainKeyVersion(); 
+        MainKeyVersion = Proto.GetMainKeyVersion();
         GroupKeyNonce = Proto.GetGroupKeyNonce();
     }
 
@@ -44,10 +44,10 @@ public:
             STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXPGK04, "Group LifeCyclePhase does not match ELCP_INITIAL",
                 (GroupId, GroupId), (LifeCyclePhase, group->LifeCyclePhase.GetOrElse(0)));
             IsAnotherTxInProgress = (group->LifeCyclePhase.GetOrElse(0) == TBlobStorageGroupInfo::ELCP_IN_TRANSITION);
-        } else if (group->MainKeyVersion.GetOrElse(0) != (MainKeyVersion - 1)) { 
-            STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXPGK05, "Group MainKeyVersion does not match required MainKeyVersion", 
-                (GroupId, GroupId), (MainKeyVersion, group->MainKeyVersion.GetOrElse(0)), 
-                (RequiredMainKeyVersion, MainKeyVersion - 1)); 
+        } else if (group->MainKeyVersion.GetOrElse(0) != (MainKeyVersion - 1)) {
+            STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXPGK05, "Group MainKeyVersion does not match required MainKeyVersion",
+                (GroupId, GroupId), (MainKeyVersion, group->MainKeyVersion.GetOrElse(0)),
+                (RequiredMainKeyVersion, MainKeyVersion - 1));
         } else if (EncryptedGroupKey.size() != 32 + sizeof(ui32)) {
             STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXPGK06, "Group does not accept EncryptedGroupKey size",
                 (GroupId, GroupId), (EncryptedGroupKeySize, EncryptedGroupKey.size()),
@@ -64,16 +64,16 @@ public:
         TGroupInfo *group = Self->FindGroup(GroupId);
         Y_VERIFY(group); // the existence of this group must have been checked during ReadStep
         group->LifeCyclePhase = TBlobStorageGroupInfo::ELCP_IN_TRANSITION;
-        group->MainKeyId = MainKeyId; 
+        group->MainKeyId = MainKeyId;
         group->EncryptedGroupKey = EncryptedGroupKey;
         group->GroupKeyNonce = GroupKeyNonce;
-        group->MainKeyVersion = MainKeyVersion; 
+        group->MainKeyVersion = MainKeyVersion;
         db.Table<Schema::Group>().Key(GroupId).Update(
             NIceDb::TUpdate<Schema::Group::LifeCyclePhase>(TBlobStorageGroupInfo::ELCP_IN_USE),
-            NIceDb::TUpdate<Schema::Group::MainKeyId>(MainKeyId), 
+            NIceDb::TUpdate<Schema::Group::MainKeyId>(MainKeyId),
             NIceDb::TUpdate<Schema::Group::EncryptedGroupKey>(EncryptedGroupKey),
             NIceDb::TUpdate<Schema::Group::GroupKeyNonce>(GroupKeyNonce),
-            NIceDb::TUpdate<Schema::Group::MainKeyVersion>(MainKeyVersion)); 
+            NIceDb::TUpdate<Schema::Group::MainKeyVersion>(MainKeyVersion));
     }
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {

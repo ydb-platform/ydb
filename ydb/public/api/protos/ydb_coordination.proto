@@ -26,7 +26,7 @@ enum ConsistencyMode {
     // The default or current value
     CONSISTENCY_MODE_UNSET = 0;
 
-    // Strict mode makes sure operations may only complete on current leader 
+    // Strict mode makes sure operations may only complete on current leader
     CONSISTENCY_MODE_STRICT = 1;
 
     // Relaxed mode allows operations to complete on stale masters
@@ -57,7 +57,7 @@ message Config {
     // Period in milliseconds for self-checks (default 1 second)
     uint32 self_check_period_millis = 2;
 
-    // Grace period for sessions on leader change (default 10 seconds) 
+    // Grace period for sessions on leader change (default 10 seconds)
     uint32 session_grace_period_millis = 3;
 
     // Concistency mode for read operations

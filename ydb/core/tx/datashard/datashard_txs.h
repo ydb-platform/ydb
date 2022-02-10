@@ -91,7 +91,7 @@ public:
     TTxType GetTxType() const override { return TXTYPE_PROPOSE; }
 
 private:
-    bool SyncSchemeOnFollower(TOutputOpData::TResultPtr &result, 
+    bool SyncSchemeOnFollower(TOutputOpData::TResultPtr &result,
                            TTransactionContext &txc,
                            const TActorContext &ctx);
 

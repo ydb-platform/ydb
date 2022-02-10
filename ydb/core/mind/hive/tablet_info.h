@@ -7,8 +7,8 @@ namespace NKikimr {
 namespace NHive {
 
 struct TNodeInfo;
-struct TLeaderTabletInfo; 
-struct TFollowerTabletInfo; 
+struct TLeaderTabletInfo;
+struct TFollowerTabletInfo;
 
 struct TCounters {
     TVector<ui64> Simple;
@@ -82,10 +82,10 @@ struct TTabletDebugState {
     ui32 NodesDown = 0;
     ui32 NodesNotAllowed = 0;
     ui32 NodesInDatacentersNotAllowed = 0;
-    bool LeaderNotRunning = false; 
-    ui32 NodesWithLeaderNotLocal = 0; 
+    bool LeaderNotRunning = false;
+    ui32 NodesWithLeaderNotLocal = 0;
     ui32 NodesWithoutDomain = 0;
-    ui32 NodesFilledWithDatacenterFollowers = 0; 
+    ui32 NodesFilledWithDatacenterFollowers = 0;
     ui32 NodesWithoutResources = 0;
     ui32 NodesWithSomeoneFromOurFamily = 0;
     ui32 NodesWithoutLocation = 0;
@@ -97,8 +97,8 @@ public:
     using EVolatileState = NKikimrHive::ETabletVolatileState;
 
     enum class ETabletRole {
-        Leader, 
-        Follower 
+        Leader,
+        Follower
     };
 
 protected:
@@ -122,8 +122,8 @@ public:
 
     static TString ETabletRoleName(ETabletRole value) {
         switch(value) {
-        case ETabletRole::Leader: return "Leader"; 
-        case ETabletRole::Follower: return "Follower"; 
+        case ETabletRole::Leader: return "Leader";
+        case ETabletRole::Follower: return "Follower";
         default: return Sprintf("%d", static_cast<int>(value));
         }
     }
@@ -173,21 +173,21 @@ public:
         return VolatileState;
     }
 
-    bool IsLeader() const { 
-        return TabletRole == ETabletRole::Leader; 
+    bool IsLeader() const {
+        return TabletRole == ETabletRole::Leader;
     }
 
-    bool IsFollower() const { 
-        return TabletRole == ETabletRole::Follower; 
+    bool IsFollower() const {
+        return TabletRole == ETabletRole::Follower;
     }
 
-    const TLeaderTabletInfo& GetLeader() const; 
-    TLeaderTabletInfo& GetLeader(); 
-    TLeaderTabletInfo& AsLeader(); 
-    const TLeaderTabletInfo& AsLeader() const; 
-    TFollowerTabletInfo& AsFollower(); 
-    const TFollowerTabletInfo& AsFollower() const; 
-    std::pair<TTabletId, TFollowerId> GetFullTabletId() const; 
+    const TLeaderTabletInfo& GetLeader() const;
+    TLeaderTabletInfo& GetLeader();
+    TLeaderTabletInfo& AsLeader();
+    const TLeaderTabletInfo& AsLeader() const;
+    TFollowerTabletInfo& AsFollower();
+    const TFollowerTabletInfo& AsFollower() const;
+    std::pair<TTabletId, TFollowerId> GetFullTabletId() const;
     TObjectId GetObjectId() const;
     TTabletTypes::EType GetTabletType() const;
     TString ToString() const;

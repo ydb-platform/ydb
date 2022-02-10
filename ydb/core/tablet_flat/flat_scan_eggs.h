@@ -22,8 +22,8 @@ namespace NTabletFlatExecutor {
 
     struct TScanSnapshot {
         const ui32 Table;
-        TIntrusivePtr<TBarrier> Barrier; 
-        TAutoPtr<NTable::TSubset> Subset; 
+        TIntrusivePtr<TBarrier> Barrier;
+        TAutoPtr<NTable::TSubset> Subset;
         TRowVersion Snapshot;
     };
 

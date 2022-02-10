@@ -94,7 +94,7 @@ namespace NTabletFlatExecutor {
             return NTable::TTxStamp{ Gen, Head };
         }
 
-        TAutoPtr<TLogCommit> Begin(bool sync, ECommit type) noexcept 
+        TAutoPtr<TLogCommit> Begin(bool sync, ECommit type) noexcept
         {
             const auto step = Head;
 
@@ -111,7 +111,7 @@ namespace NTabletFlatExecutor {
             return new TLogCommit(sync, step, type);
         }
 
-        void Commit(TAutoPtr<TLogCommit> commit) noexcept 
+        void Commit(TAutoPtr<TLogCommit> commit) noexcept
         {
             if (commit->Step != Tail || (commit->Sync && !Sync)) {
                 Y_Fail(
@@ -171,8 +171,8 @@ namespace NTabletFlatExecutor {
             ev->CommitTactic = Tactic;
             ev->References = std::move(commit.Refs);
             ev->EmbeddedLogBody = std::move(commit.Embedded);
-            ev->WaitFollowerGcAck = commit.WaitFollowerGcAck; 
-            ev->FollowerAux = std::move(commit.FollowerAux); 
+            ev->WaitFollowerGcAck = commit.WaitFollowerGcAck;
+            ev->FollowerAux = std::move(commit.FollowerAux);
             ev->GcDiscovered = std::move(commit.GcDelta.Created);
             ev->GcLeft = std::move(commit.GcDelta.Deleted);
 
@@ -191,7 +191,7 @@ namespace NTabletFlatExecutor {
         ui32 Head = 0;          /* Tablet current step, AKA Step0   */
         ui32 *Step0 = nullptr;  /* Compatability for tablet Step0   */
         bool Sync = false;      /* Synchromous commit in progress   */
-        TIntrusivePtr<NSnap::TWaste> Waste; 
+        TIntrusivePtr<NSnap::TWaste> Waste;
         ETactic Tactic = ETactic::TacticDefault;
         TGcLogic * const GcLogic = nullptr;
         TMonCo * MonCo = nullptr;

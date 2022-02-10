@@ -92,7 +92,7 @@ private:
                 continue;
 
             NTabletPipe::TClientConfig clientConfig;
-            clientConfig.AllowFollower = false; 
+            clientConfig.AllowFollower = false;
             clientConfig.CheckAliveness = false;
             clientConfig.RetryPolicy = {
                 .RetryLimitCount = 2,

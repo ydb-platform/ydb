@@ -21,7 +21,7 @@ namespace NFake {
 
         }
 
-        void Put(TInstant stamp, ui32 level, EComp comp, TArrayRef<const char> line) noexcept 
+        void Put(TInstant stamp, ui32 level, EComp comp, TArrayRef<const char> line) noexcept
         {
             Y_VERIFY(line.size() < 8192 * 16, "Too large log line");
 
@@ -78,7 +78,7 @@ namespace NFake {
         using EPrio = ::NActors::NLog::EPriority;
         using ELnLev = NUtil::ELnLev;
 
-        TLogEnv(ITimeProvider *time, ELnLev level,TIntrusivePtr<TSink> sink) 
+        TLogEnv(ITimeProvider *time, ELnLev level,TIntrusivePtr<TSink> sink)
             : Time(time)
             , Level(level)
             , Sink(std::move(sink))
@@ -108,23 +108,23 @@ namespace NFake {
     private:
         ITimeProvider * const Time = nullptr;
         const ELnLev Level = ELnLev::Warn;
-        const TIntrusivePtr<TSink> Sink; 
+        const TIntrusivePtr<TSink> Sink;
     };
 
 
     class TLogFwd : public ::NActors::IActor {
     public:
-        using TEventHandlePtr = TAutoPtr<::NActors::IEventHandle>; 
+        using TEventHandlePtr = TAutoPtr<::NActors::IEventHandle>;
         using ELnLev = NUtil::ELnLev;
 
-        TLogFwd(TIntrusivePtr<TSink> sink) 
+        TLogFwd(TIntrusivePtr<TSink> sink)
             : ::NActors::IActor(static_cast<TReceiveFunc>(&TLogFwd::Inbox), IActor::LOG_ACTOR)
             , Sink(std::move(sink))
         {
         }
 
     private:
-        void Inbox(TEventHandlePtr &eh, const ::NActors::TActorContext&) 
+        void Inbox(TEventHandlePtr &eh, const ::NActors::TActorContext&)
         {
             if (auto *ev = eh->CastAsLocal<NActors::NLog::TEvLog>()) {
                 Sink->Put(ev->Stamp, ev->Level.Raw, ev->Component, ev->Line);
@@ -138,7 +138,7 @@ namespace NFake {
         }
 
     private:
-        TIntrusivePtr<TSink> Sink; 
+        TIntrusivePtr<TSink> Sink;
     };
 
 }

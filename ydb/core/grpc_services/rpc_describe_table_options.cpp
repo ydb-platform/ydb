@@ -132,12 +132,12 @@ private:
             auto &description = *result.add_replication_policy_presets();
             description.set_name(pr.first);
             auto &labels = *description.mutable_labels();
-            if (pr.second.GetFollowerCount()) { 
-                labels["followers"] = ToString(pr.second.GetFollowerCount()); 
-                labels["promotion"] = pr.second.GetAllowFollowerPromotion() ? "enabled" : "disabled"; 
+            if (pr.second.GetFollowerCount()) {
+                labels["followers"] = ToString(pr.second.GetFollowerCount());
+                labels["promotion"] = pr.second.GetAllowFollowerPromotion() ? "enabled" : "disabled";
                 labels["per_zone"] = pr.second.GetCrossDataCenter() ? "true" : "false";
             } else {
-                labels["followers"] = "disabled"; 
+                labels["followers"] = "disabled";
             }
         }
 

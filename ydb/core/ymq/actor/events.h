@@ -72,10 +72,10 @@ struct TSqsEvents {
         EvAtomicCounterIncrementResult,
 
         /// Request for finding leader node for the given queue
-        EvGetLeaderNodeForQueueRequest, 
-        EvGetLeaderNodeForQueueResponse, 
+        EvGetLeaderNodeForQueueRequest,
+        EvGetLeaderNodeForQueueResponse,
 
-        EvQueueLeaderDecRef, 
+        EvQueueLeaderDecRef,
 
         EvGetQueueId,
         EvQueueId,
@@ -86,7 +86,7 @@ struct TSqsEvents {
         EvCountQueues,
         EvCountQueuesResponse,
 
-        // Send/Receive/Delete requests. Action actor sends these requests to queue leader 
+        // Send/Receive/Delete requests. Action actor sends these requests to queue leader
         EvSendMessageBatch,
         EvSendMessageBatchResponse,
 
@@ -150,8 +150,8 @@ struct TSqsEvents {
         ui64 Flags = 0;
 
         enum EFlags {
-            NeedQueueLeader = 1, 
-            NeedQueueAttributes = NeedQueueLeader | 2, // attributes are stored in leader actor, so, when you need attributes, you need leader 
+            NeedQueueLeader = 1,
+            NeedQueueAttributes = NeedQueueLeader | 2, // attributes are stored in leader actor, so, when you need attributes, you need leader
         };
 
         TEvGetConfiguration() = default;
@@ -199,7 +199,7 @@ struct TSqsEvents {
         // Common info
         TString RootUrl;
         TActorId SchemeCache;
-        TActorId QueueLeader; 
+        TActorId QueueLeader;
     };
 
     struct TEvClearQueueAttributesCache : public NActors::TEventLocal<TEvClearQueueAttributesCache, EvClearQueueAttributesCache> {
@@ -382,7 +382,7 @@ struct TSqsEvents {
         }
     };
 
-    // Request that is sent from proxy to sqs service actor on other (leader) node 
+    // Request that is sent from proxy to sqs service actor on other (leader) node
     struct TEvSqsRequest : public NActors::TEventPB<TEvSqsRequest, NKikimrClient::TSqsRequest, EvSqsRequest> {
         using TEventPB::TEventPB;
     };
@@ -392,11 +392,11 @@ struct TSqsEvents {
         using TEventPB::TEventPB;
     };
 
-    // Request for proxying request to sqs service actor on other (leader) node 
+    // Request for proxying request to sqs service actor on other (leader) node
     struct TEvProxySqsRequest : public NActors::TEventLocal<TEvProxySqsRequest, EvProxySqsRequest> {
         NKikimrClient::TSqsRequest Record;
 
-        // Information to identify leader node 
+        // Information to identify leader node
         TString UserName;
         TString QueueName;
 
@@ -425,7 +425,7 @@ struct TSqsEvents {
     struct TEvProxySqsResponse : public NActors::TEventLocal<TEvProxySqsResponse, EvProxySqsResponse> {
         enum class EProxyStatus { // can be written to text stream
             OK,
-            LeaderResolvingError, 
+            LeaderResolvingError,
             SessionError,
             QueueDoesNotExist,
             UserDoesNotExist,
@@ -449,12 +449,12 @@ struct TSqsEvents {
         }
     };
 
-    struct TEvGetLeaderNodeForQueueRequest : public NActors::TEventLocal<TEvGetLeaderNodeForQueueRequest, EvGetLeaderNodeForQueueRequest> { 
+    struct TEvGetLeaderNodeForQueueRequest : public NActors::TEventLocal<TEvGetLeaderNodeForQueueRequest, EvGetLeaderNodeForQueueRequest> {
         TString RequestId;
         TString UserName;
         TString QueueName;
 
-        TEvGetLeaderNodeForQueueRequest(TString requestId, TString user, TString queue) 
+        TEvGetLeaderNodeForQueueRequest(TString requestId, TString user, TString queue)
             : RequestId(std::move(requestId))
             , UserName(std::move(user))
             , QueueName(std::move(queue))
@@ -462,12 +462,12 @@ struct TSqsEvents {
         }
     };
 
-    struct TEvGetLeaderNodeForQueueResponse : public NActors::TEventLocal<TEvGetLeaderNodeForQueueResponse, EvGetLeaderNodeForQueueResponse> { 
+    struct TEvGetLeaderNodeForQueueResponse : public NActors::TEventLocal<TEvGetLeaderNodeForQueueResponse, EvGetLeaderNodeForQueueResponse> {
         enum class EStatus {
             OK,
             NoUser,
             NoQueue,
-            FailedToConnectToLeader, 
+            FailedToConnectToLeader,
             Error,
         };
 
@@ -477,7 +477,7 @@ struct TSqsEvents {
         ui64 NodeId = 0;
         EStatus Status = EStatus::OK;
 
-        TEvGetLeaderNodeForQueueResponse(TString requestId, TString user, TString queue, ui64 nodeId) 
+        TEvGetLeaderNodeForQueueResponse(TString requestId, TString user, TString queue, ui64 nodeId)
             : RequestId(std::move(requestId))
             , UserName(std::move(user))
             , QueueName(std::move(queue))
@@ -485,7 +485,7 @@ struct TSqsEvents {
         {
         }
 
-        TEvGetLeaderNodeForQueueResponse(TString requestId, TString user, TString queue, EStatus error) 
+        TEvGetLeaderNodeForQueueResponse(TString requestId, TString user, TString queue, EStatus error)
             : RequestId(std::move(requestId))
             , UserName(std::move(user))
             , QueueName(std::move(queue))
@@ -494,7 +494,7 @@ struct TSqsEvents {
         }
     };
 
-    struct TEvQueueLeaderDecRef : public NActors::TEventLocal<TEvQueueLeaderDecRef, EvQueueLeaderDecRef> { 
+    struct TEvQueueLeaderDecRef : public NActors::TEventLocal<TEvQueueLeaderDecRef, EvQueueLeaderDecRef> {
     };
 
     struct TEvGetQueueId : public NActors::TEventLocal<TEvGetQueueId, EvGetQueueId> {
@@ -624,7 +624,7 @@ struct TSqsEvents {
     };
 
     // Request to try to receive message batch.
-    // While processing this request leader doesn't perform long polling. 
+    // While processing this request leader doesn't perform long polling.
     struct TEvReceiveMessageBatch : public NActors::TEventLocal<TEvReceiveMessageBatch, EvReceiveMessageBatch> {
         TString RequestId;
         size_t MaxMessagesCount = 0;
@@ -756,16 +756,16 @@ struct TSqsEvents {
     };
 
     struct TEvInsertQueueCounters : public NActors::TEventLocal<TEvInsertQueueCounters, EvInsertQueueCounters> {
-        TEvInsertQueueCounters(const TString& user, const TString& queue, ui64 leaderTabletId) 
+        TEvInsertQueueCounters(const TString& user, const TString& queue, ui64 leaderTabletId)
             : User(user)
             , Queue(queue)
-            , LeaderTabletId(leaderTabletId) 
+            , LeaderTabletId(leaderTabletId)
         {
         }
 
         TString User;
         TString Queue;
-        ui64 LeaderTabletId; 
+        ui64 LeaderTabletId;
     };
 
     struct TEvUserSettingsChanged : public NActors::TEventLocal<TEvUserSettingsChanged, EvUserSettingsChanged> {
@@ -789,7 +789,7 @@ struct TSqsEvents {
         struct TQueueRecord {
             TString UserName;
             TString QueueName;
-            ui64 LeaderTabletId = 0; 
+            ui64 LeaderTabletId = 0;
             TString CustomName;
             TString FolderId;
             TString DlqName;
@@ -811,7 +811,7 @@ struct TSqsEvents {
         }
     };
 
-    // Used by service to notify dead letter queue leader 
+    // Used by service to notify dead letter queue leader
     struct TEvDeadLetterQueueNotification : public NActors::TEventLocal<TEvDeadLetterQueueNotification, EvDeadLetterQueueNotification> {
     };
 

@@ -47,10 +47,10 @@ Log2(T value) {
     return Log2(static_cast<double>(value));
 }
 
-/** Returns 2^x */ 
-double Exp2(double); 
-float Exp2f(float); 
- 
+/** Returns 2^x */
+double Exp2(double);
+float Exp2f(float);
+
 template <class T>
 static constexpr T Sqr(const T t) noexcept {
     return t * t;

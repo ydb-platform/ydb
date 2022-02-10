@@ -155,9 +155,9 @@ inline const CodePage* CodePageByCharset(ECharset e) {
 
 ECharset CharsetByName(TStringBuf name);
 
-// Same as CharsetByName, but throws yexception() if name is invalid 
+// Same as CharsetByName, but throws yexception() if name is invalid
 ECharset CharsetByNameOrDie(TStringBuf name);
- 
+
 inline ECharset CharsetByCodePage(const CodePage* CP) {
     return CP->CPEnum;
 }

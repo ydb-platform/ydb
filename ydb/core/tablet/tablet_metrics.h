@@ -15,23 +15,23 @@ enum EResource { // DO NOT REORDER, DO NOT REMOVE ITEMS
     Counter, // ALWAYS 1
 };
 
-class TDecayingAverageWithSum 
-    : public TDecayingAverageValue<ui64, DurationPerMinute, DurationPerSecond> 
-{ 
-public: 
-    void Increment(std::make_signed_t<ui64> value, TInstant now = TInstant::Now()); 
-    ui64 GetRawValue() const; 
- 
-private: 
-    ui64 RawValue = 0; 
-}; 
- 
+class TDecayingAverageWithSum
+    : public TDecayingAverageValue<ui64, DurationPerMinute, DurationPerSecond>
+{
+public:
+    void Increment(std::make_signed_t<ui64> value, TInstant now = TInstant::Now());
+    ui64 GetRawValue() const;
+
+private:
+    ui64 RawValue = 0;
+};
+
 using TChannel = ui8;
 using TGroupId = ui32;
-using TGroupThroughputValue = TDecayingAverageWithSum; 
+using TGroupThroughputValue = TDecayingAverageWithSum;
 using TTabletThroughputValue = std::unordered_map<std::pair<TChannel, TGroupId>, TGroupThroughputValue>;
 using TTabletThroughputRawValue = std::unordered_map<std::pair<TChannel, TGroupId>, ui64>; // TStackYHash ?
-using TGroupIopsValue = TDecayingAverageWithSum; 
+using TGroupIopsValue = TDecayingAverageWithSum;
 using TTabletIopsValue = std::unordered_map<std::pair<TChannel, TGroupId>, TGroupIopsValue>;
 using TTabletIopsRawValue = std::unordered_map<std::pair<TChannel, TGroupId>, ui64>;
 

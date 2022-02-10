@@ -444,12 +444,12 @@
         },
         "black": {
             "description": "Python styler, Python 3 only"
-        },
+        }, 
         "black_py2": {
             "description": "Python styler with Python 2 support"
         },
-        "yadi": {
-            "description": "Arcadia version of Yadi"
+        "yadi": { 
+            "description": "Arcadia version of Yadi" 
         },
         "grpc_cli": {
             "description": "GRPC command-line tool"
@@ -468,9 +468,9 @@
         },
         "rtcdiag": {
             "description": "RTC hosts diag tool"
-        },
-        "skotty": {
-            "description": "Skotty (SSH-agent) launcher"
+        }, 
+        "skotty": { 
+            "description": "Skotty (SSH-agent) launcher" 
         },
         "license_analyzer": {
             "description": "Run devtools license analyzer"
@@ -4872,14 +4872,14 @@
                 "version": "1.18beta2"
             }
         },
-        "godoc": {
-            "tools": {
+        "godoc": { 
+            "tools": { 
                 "godoc": {
                     "bottle": "godoc",
                     "executable": "godoc"
                 }
-            },
-            "platforms": [
+            }, 
+            "platforms": [ 
                 {
                     "host": {
                         "os": "LINUX"
@@ -4898,8 +4898,8 @@
                     },
                     "default": true
                 }
-            ]
-        },
+            ] 
+        }, 
         "qemu": {
             "tools": {
                 "qemu": {
@@ -5448,7 +5448,7 @@
                     "default": true
                 }
             ]
-        },
+        }, 
         "black_py2": {
             "tools": {
                 "black_py2": {
@@ -5484,33 +5484,33 @@
                 }
             ]
         },
-        "yadi": {
-            "tools": {
-                "yadi": {
-                    "bottle": "yadi",
-                    "executable": "yadi-arc"
-                }
-            },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "WIN"
-                    },
-                    "default": true
-                }
-            ]
+        "yadi": { 
+            "tools": { 
+                "yadi": { 
+                    "bottle": "yadi", 
+                    "executable": "yadi-arc" 
+                } 
+            }, 
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "WIN" 
+                    }, 
+                    "default": true 
+                } 
+            ] 
         },
         "grpc_cli": {
             "tools": {
@@ -5622,34 +5622,34 @@
                 }
             ]
         },
-        "skotty": {
-            "tools": {
-                "skotty": {
-                    "bottle": "skotty",
-                    "executable": "launcher"
-                }
-            },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "WIN"
-                    },
-                    "default": true
-                }
-            ]
-        },
+        "skotty": { 
+            "tools": { 
+                "skotty": { 
+                    "bottle": "skotty", 
+                    "executable": "launcher" 
+                } 
+            }, 
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "WIN" 
+                    }, 
+                    "default": true 
+                } 
+            ] 
+        }, 
         "gcc102-arm-none-eabi": {
             "tools": {
                 "cc": {
@@ -5808,17 +5808,17 @@
                 ]
             }
         },
-        "godoc": {
-            "formula": {
-                "sandbox_id": 511821444,
-                "match": "godoc"
-            },
-            "executable": {
+        "godoc": { 
+            "formula": { 
+                "sandbox_id": 511821444, 
+                "match": "godoc" 
+            }, 
+            "executable": { 
                 "godoc": [
                     "godoc"
                 ]
-            }
-        },
+            } 
+        }, 
         "yo": {
             "formula": {
                 "sandbox_id": 1183539336,
@@ -5861,7 +5861,7 @@
         "delve": {
             "formula": {
                 "sandbox_id": [
-                    1192022937
+                    1192022937 
                 ],
                 "match": "delve"
             },
@@ -5887,7 +5887,7 @@
         },
         "yoimports": {
             "formula": {
-                "sandbox_id": 1113620552,
+                "sandbox_id": 1113620552, 
                 "match": "yoimports"
             },
             "executable": {
@@ -7827,7 +7827,7 @@
                     "black"
                 ]
             }
-        },
+        }, 
         "black_py2": {
             "formula": {
                 "sandbox_id": [
@@ -7841,16 +7841,16 @@
                 ]
             }
         },
-        "yadi": {
-            "formula": {
-                "sandbox_id": 1155032720,
-                "match": "yadi-arc"
-            },
-            "executable": {
-                "yadi-arc": [
-                    "yadi-arc"
-                ]
-            }
+        "yadi": { 
+            "formula": { 
+                "sandbox_id": 1155032720, 
+                "match": "yadi-arc" 
+            }, 
+            "executable": { 
+                "yadi-arc": [ 
+                    "yadi-arc" 
+                ] 
+            } 
         },
         "grpc_cli": {
             "formula": {
@@ -7907,17 +7907,17 @@
                 ]
             }
         },
-        "skotty": {
-            "formula": {
-                "sandbox_id": 1160938937,
-                "match": "launcher"
-            },
-            "executable": {
-                "launcher": [
-                    "launcher"
-                ]
-            }
-        },
+        "skotty": { 
+            "formula": { 
+                "sandbox_id": 1160938937, 
+                "match": "launcher" 
+            }, 
+            "executable": { 
+                "launcher": [ 
+                    "launcher" 
+                ] 
+            } 
+        }, 
         "gcc102-arm-none-eabi": {
             "formula": {
                 "sandbox_id": 1020757602,

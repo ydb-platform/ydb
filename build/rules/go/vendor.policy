@@ -69,8 +69,8 @@ ALLOW .* -> vendor/github.com/go-logr/logr
 
 # CONTRIB-2195
 ALLOW .* -> vendor/github.com/timakin/bodyclose
-# github.com/gostaticanalysis/comment tests depends on the unlicensed package https://github.com/tenntenn/text
-DENY .* -> vendor/github.com/gostaticanalysis/comment;test
+# github.com/gostaticanalysis/comment tests depends on the unlicensed package https://github.com/tenntenn/text 
+DENY .* -> vendor/github.com/gostaticanalysis/comment;test 
 
 # CONTRIB-2196
 ALLOW .* -> vendor/github.com/jingyugao/rowserrcheck
@@ -135,9 +135,9 @@ ALLOW .* -> vendor/github.com/aws/aws-sdk-go/service/route53
 ALLOW .* -> vendor/github.com/aws/aws-sdk-go/service/kinesis
 ALLOW .* -> vendor/github.com/aws/aws-sdk-go/service/sts
 
-# TOML parser/encoder with reflection
-ALLOW .* -> vendor/github.com/BurntSushi/toml
-
+# TOML parser/encoder with reflection 
+ALLOW .* -> vendor/github.com/BurntSushi/toml 
+ 
 # helpers for data sizes (kilobytes, petabytes), human readable sizes, parsing
 ALLOW .* -> vendor/github.com/c2h5oh/datasize
 
@@ -185,10 +185,10 @@ ALLOW .* -> vendor/github.com/davecgh/go-spew/spew
 ALLOW .* -> vendor/github.com/golang-jwt/jwt
 
 # Docker API client
-# docker tests depends on broken package: gotest.tools
-DENY .* -> vendor/github.com/docker/docker;test
-DENY .* -> vendor/github.com/docker/docker/api/server
-DENY .* -> vendor/github.com/docker/docker/api/types/backend
+# docker tests depends on broken package: gotest.tools 
+DENY .* -> vendor/github.com/docker/docker;test 
+DENY .* -> vendor/github.com/docker/docker/api/server 
+DENY .* -> vendor/github.com/docker/docker/api/types/backend 
 ALLOW .* -> vendor/github.com/docker/docker/client
 ALLOW .* -> vendor/github.com/docker/docker/api
 ALLOW .* -> vendor/github.com/docker/go-connections
@@ -197,7 +197,7 @@ ALLOW .* -> vendor/github.com/docker/go-connections
 ALLOW .* -> vendor/github.com/fsnotify/fsnotify
 
 # lightweight, idiomatic and composable router
-ALLOW .* -> vendor/github.com/go-chi/chi/v5
+ALLOW .* -> vendor/github.com/go-chi/chi/v5 
 
 # a pure Go MySQL driver
 ALLOW .* -> vendor/github.com/go-sql-driver/mysql
@@ -314,9 +314,9 @@ ALLOW .* -> vendor/github.com/go-swagger/go-swagger/cmd/swagger
 # redis client
 ALLOW .* -> vendor/github.com/go-redis/redis/v8
 
-# library for accessing the GitHub API v3
-ALLOW .* -> vendor/github.com/google/go-github/v35/github
-
+# library for accessing the GitHub API v3 
+ALLOW .* -> vendor/github.com/google/go-github/v35/github 
+ 
 # fast JSON serializer for golang. relies on code generation.
 ALLOW .* -> vendor/github.com/mailru/easyjson
 
@@ -337,9 +337,9 @@ ALLOW .* -> vendor/github.com/go-zookeeper/zk
 # Consistent hashring implementation (using the same algorithm as libketama)
 ALLOW .* -> vendor/github.com/serialx/hashring
 
-# Slack API in Go
-ALLOW .* -> vendor/github.com/slack-go/slack
-
+# Slack API in Go 
+ALLOW .* -> vendor/github.com/slack-go/slack 
+ 
 # Text diffing.
 ALLOW .* -> vendor/github.com/pmezard/go-difflib
 
@@ -481,7 +481,7 @@ ALLOW .* -> vendor/github.com/tus/tusd
 ALLOW .* -> vendor/github.com/twmb/murmur3
 
 # gopsutil: psutil for golang
-ALLOW .* -> vendor/github.com/shirou/gopsutil/v3
+ALLOW .* -> vendor/github.com/shirou/gopsutil/v3 
 
 # Go Imagick is a Go bind to ImageMagick's MagickWand C API
 ALLOW .* -> vendor/gopkg.in/gographics/imagick.v2
@@ -508,7 +508,7 @@ ALLOW .* -> vendor/github.com/opentracing-contrib/go-stdlib
 ALLOW .* -> vendor/github.com/araddon/dateparse
 
 # Semantic versioning parsing and comparision library
-ALLOW .* -> vendor/github.com/blang/semver/v4
+ALLOW .* -> vendor/github.com/blang/semver/v4 
 
 # Go implementation of SipHash-2-4
 ALLOW .* -> vendor/github.com/dchest/siphash
@@ -517,7 +517,7 @@ ALLOW .* -> vendor/github.com/dchest/siphash
 ALLOW .* -> vendor/go.uber.org/atomic
 
 # CONTRIB-1302. Godbus goes to Arcadia
-ALLOW .* -> vendor/github.com/godbus/dbus/v5
+ALLOW .* -> vendor/github.com/godbus/dbus/v5 
 
 # CONTRIB-1300. Osquery SDK goes to Arcadia
 ALLOW .* -> vendor/github.com/kolide/osquery-go
@@ -551,9 +551,9 @@ ALLOW .* -> vendor/google.golang.org/api/firebaseremoteconfig/v1
 # CONTRIB-1497 Go package to encode and decode ITU-T G.711 sound data
 ALLOW .* -> vendor/github.com/zaf/g711
 
-# CONTRIB-1505 The exponential backoff algorithm & retry library
-ALLOW .* -> vendor/github.com/cenkalti/backoff/v4
-
+# CONTRIB-1505 The exponential backoff algorithm & retry library 
+ALLOW .* -> vendor/github.com/cenkalti/backoff/v4 
+ 
 # CONTRIB-1491 A parser library for Go
 ALLOW .* -> vendor/github.com/alecthomas/participle
 
@@ -569,9 +569,9 @@ ALLOW .* -> vendor/github.com/vishvananda/netns
 # CONTRIB-1545 Go bindings for creating BPF programs.
 ALLOW .* -> vendor/github.com/iovisor/gobpf
 
-# CONTRIB-1878 pure Go library for loading, compiling, and debugging eBPF programs
-ALLOW .* -> vendor/github.com/cilium/ebpf
-
+# CONTRIB-1878 pure Go library for loading, compiling, and debugging eBPF programs 
+ALLOW .* -> vendor/github.com/cilium/ebpf 
+ 
 # CONTRIB-1561 Go pretty format for numbers
 ALLOW .* -> vendor/github.com/dustin/go-humanize
 
@@ -604,9 +604,9 @@ ALLOW .* -> vendor/github.com/pkg/sftp
 # CONTRIB-1670
 ALLOW .* -> vendor/github.com/soniah/gosnmp
 
-# CONTRIB-1686 markdown parser
-ALLOW .* -> vendor/github.com/yuin/goldmark
-
+# CONTRIB-1686 markdown parser 
+ALLOW .* -> vendor/github.com/yuin/goldmark 
+ 
 # CONTRIB-1681 A FileSystem Abstraction System for Go
 ALLOW .* -> vendor/github.com/spf13/afero
 
@@ -742,10 +742,10 @@ ALLOW .* -> vendor/github.com/google/go-jsonnet
 # CONTRIB-2152 JMESPath is a query language for JSON
 ALLOW .* -> vendor/github.com/jmespath/go-jmespath
 
-# CONTRIB-2156 library that communicates directly with a TPM device on Linux or Windows machines
-ALLOW .* -> vendor/github.com/google/go-tpm/tpm2
-ALLOW .* -> vendor/github.com/google/go-tpm/tpmutil
-
+# CONTRIB-2156 library that communicates directly with a TPM device on Linux or Windows machines 
+ALLOW .* -> vendor/github.com/google/go-tpm/tpm2 
+ALLOW .* -> vendor/github.com/google/go-tpm/tpmutil 
+ 
 # CONTRIB-2165: Go-bindings for using parsers generated by ANTLR4
 ALLOW .* -> vendor/github.com/antlr/antlr4/runtime/Go/antlr
 
@@ -755,15 +755,15 @@ ALLOW .* -> vendor/github.com/DataDog/zstd
 # CONTRIB-2234
 ALLOW .* -> vendor/github.com/google/gopacket
 
-# CONTRIB-2235 library for building interactive prompts on terminals.
-ALLOW .* -> vendor/github.com/AlecAivazis/survey/v2
-
-# CONTRIB-2224
-ALLOW .* -> vendor/github.com/segmentio/kafka-go
-
-# CONTRIB-2240 utilities for efficiently performing Win32 IO operations in Go.
-ALLOW .* -> vendor/github.com/Microsoft/go-winio
-
+# CONTRIB-2235 library for building interactive prompts on terminals. 
+ALLOW .* -> vendor/github.com/AlecAivazis/survey/v2 
+ 
+# CONTRIB-2224 
+ALLOW .* -> vendor/github.com/segmentio/kafka-go 
+ 
+# CONTRIB-2240 utilities for efficiently performing Win32 IO operations in Go. 
+ALLOW .* -> vendor/github.com/Microsoft/go-winio 
+ 
 # CONTRIB-2241
 ALLOW .* -> vendor/github.com/aymerick/raymond
 
@@ -800,9 +800,9 @@ ALLOW .* -> vendor/github.com/pion/sdp/v3
 # CONTRIB-2350
 ALLOW .* -> vendor/inet.af/netaddr
 
-# CONTRIB-2368: embedding resources in a Windows executable
-ALLOW .* -> vendor/github.com/tc-hib/winres
-
+# CONTRIB-2368: embedding resources in a Windows executable 
+ALLOW .* -> vendor/github.com/tc-hib/winres 
+ 
 # CONTRIB-2346: repatriate ydb-go-sdk
 ALLOW .* -> vendor/github.com/ydb-platform/ydb-go-genproto
 ALLOW .* -> vendor/github.com/ydb-platform/ydb-go-sdk/v3
@@ -878,7 +878,7 @@ ALLOW vendor -> vendor/github.com/fullstorydev/grpcurl/cmd/grpcurl
 # Temporary exceptions.
 #
 
-
+ 
 # CONTRIB-1863. resposible: tserakhau@
 
 ALLOW transfer_manager/go/pkg/source/mysql/canal -> vendor/github.com/pingcap/errors
@@ -949,7 +949,7 @@ ALLOW yabs/telephony/platform/registrar-agent -> vendor/github.com/jackc/pgx
 ALLOW yabs/vh/cms-pgaas/dhdd/db -> vendor/github.com/jackc/pgx
 ALLOW yabs/vh/cms-pgaas/transcoded -> vendor/github.com/jackc/pgx
 
-
+ 
 #
 # Permanent exceptions.
 #

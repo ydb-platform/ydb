@@ -131,73 +131,73 @@ private:
 };
 
 class TRegExBaseImpl: public TAtomicRefCount<TRegExBaseImpl> {
-    friend class TRegExBase;
-
-protected:
+    friend class TRegExBase; 
+ 
+protected: 
     int CompileOptions;
     TString RegExpr;
     regex_t Preg;
 
-public:
-    TRegExBaseImpl()
-        : CompileOptions(0)
-    {
-        memset(&Preg, 0, sizeof(Preg));
-    }
-
+public: 
+    TRegExBaseImpl() 
+        : CompileOptions(0) 
+    { 
+        memset(&Preg, 0, sizeof(Preg)); 
+    } 
+ 
     TRegExBaseImpl(const TString& re, int cflags)
-        : CompileOptions(cflags)
-        , RegExpr(re)
-    {
+        : CompileOptions(cflags) 
+        , RegExpr(re) 
+    { 
         int rc = regcomp(&Preg, re.data(), cflags);
-        if (rc) {
-            const size_t ERRBUF_SIZE = 100;
-            char errbuf[ERRBUF_SIZE];
-            regerror(rc, &Preg, errbuf, ERRBUF_SIZE);
+        if (rc) { 
+            const size_t ERRBUF_SIZE = 100; 
+            char errbuf[ERRBUF_SIZE]; 
+            regerror(rc, &Preg, errbuf, ERRBUF_SIZE); 
             Error = "Error: regular expression " + re + " is wrong: " + errbuf;
             ythrow yexception() << "RegExp " << re << ": " << Error.data();
         }
     }
-
+ 
     int Exec(const char* str, regmatch_t pmatch[], int eflags, int nmatches) const {
-        if (!RegExpr) {
+        if (!RegExpr) { 
             ythrow yexception() << "Regular expression is not compiled";
-        }
-        if (!str) {
+        } 
+        if (!str) { 
             ythrow yexception() << "Empty string is passed to TRegExBaseImpl::Exec";
-        }
-        if ((eflags & REGEXP_GLOBAL) == 0) {
-            return regexec(&Preg, str, nmatches, pmatch, eflags);
-        } else {
-            int options = 0;
+        } 
+        if ((eflags & REGEXP_GLOBAL) == 0) { 
+            return regexec(&Preg, str, nmatches, pmatch, eflags); 
+        } else { 
+            int options = 0; 
             if ((eflags & REG_NOTBOL) != 0)
                 options |= PCRE_NOTBOL;
             if ((eflags & REG_NOTEOL) != 0)
                 options |= PCRE_NOTEOL;
-
+ 
             return TGlobalImpl(str, pmatch[0], options, (pcre*)Preg.re_pcre).ExecGlobal();
-        }
-    }
-
-    bool IsCompiled() {
-        return Preg.re_pcre;
-    }
-
-    ~TRegExBaseImpl() {
-        regfree(&Preg);
-    }
-
-private:
+        } 
+    } 
+ 
+    bool IsCompiled() { 
+        return Preg.re_pcre; 
+    } 
+ 
+    ~TRegExBaseImpl() { 
+        regfree(&Preg); 
+    } 
+ 
+private: 
     TString Error;
-};
-
-bool TRegExBase::IsCompiled() const {
+}; 
+ 
+bool TRegExBase::IsCompiled() const { 
     return Impl && Impl->IsCompiled();
 }
 
 TRegExBase::TRegExBase(const char* re, int cflags) {
-    if (re) {
-        Compile(re, cflags);
+    if (re) { 
+        Compile(re, cflags); 
     }
 }
 
@@ -209,25 +209,25 @@ TRegExBase::~TRegExBase() {
 }
 
 void TRegExBase::Compile(const TString& re, int cflags) {
-    Impl = new TRegExBaseImpl(re, cflags);
-}
+    Impl = new TRegExBaseImpl(re, cflags); 
+} 
 
 int TRegExBase::Exec(const char* str, regmatch_t pmatch[], int eflags, int nmatches) const {
     if (!Impl)
         ythrow yexception() << "!Regular expression is not compiled";
-    return Impl->Exec(str, pmatch, eflags, nmatches);
+    return Impl->Exec(str, pmatch, eflags, nmatches); 
 }
 
 int TRegExBase::GetCompileOptions() const {
     if (!Impl)
         ythrow yexception() << "!Regular expression is not compiled";
-    return Impl->CompileOptions;
+    return Impl->CompileOptions; 
 }
 
 TString TRegExBase::GetRegExpr() const {
     if (!Impl)
         ythrow yexception() << "!Regular expression is not compiled";
-    return Impl->RegExpr;
+    return Impl->RegExpr; 
 }
 
 TRegExMatch::TRegExMatch(const char* re, int cflags)
@@ -270,7 +270,7 @@ TString TRegExSubst::Replace(const char* str, int eflags) {
 }
 
 //***
-// ��� ������������ ������ aaa.$1.$$$$.$2.bbb.$$$ccc Brfs ����� �����:
+// ��� ������������ ������ aaa.$1.$$$$.$2.bbb.$$$ccc Brfs ����� �����: 
 // {beg = 0,  end = 4,  Refer =  1} => "aaa." + $1_match
 // {beg = 6,  end = 8,  Refer = -1} => ".$"
 // {beg = 9,  end = 10, Refer = -1} => "$"

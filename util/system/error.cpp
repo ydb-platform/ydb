@@ -20,7 +20,7 @@ void ClearLastSystemError() {
 #if defined(_win_)
     SetLastError(0);
 #else
-    errno = 0;
+    errno = 0; 
 #endif
 }
 

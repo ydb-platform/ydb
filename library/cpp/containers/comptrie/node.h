@@ -1,6 +1,6 @@
-#pragma once
+#pragma once 
 
-#include <cstddef>
+#include <cstddef> 
 
 namespace NCompactTrie {
     class ILeafSkipper;
@@ -17,18 +17,18 @@ namespace NCompactTrie {
         direction = static_cast<TDirection>(direction + 1);
         return direction;
     }
-
+ 
     inline TDirection& operator--(TDirection& direction) {
         direction = static_cast<TDirection>(direction - 1);
         return direction;
     }
-
+ 
     class TNode {
     public:
         TNode();
         // Processes epsilon links and sets ForwardOffset to correct value. Assumes an epsilon link doesn't point to an epsilon link.
         TNode(const char* data, size_t offset, const ILeafSkipper& skipFunction);
-
+ 
         size_t GetOffset() const {
             return Offset;
         }
@@ -59,7 +59,7 @@ namespace NCompactTrie {
         char GetLabel() const {
             return Label;
         }
-
+ 
         bool IsFinal() const {
             return GetLeafOffset() != 0;
         }
@@ -73,7 +73,7 @@ namespace NCompactTrie {
         size_t Offset;
         size_t LeafLength;
         size_t CoreLength;
-
+ 
         char Label;
     };
 

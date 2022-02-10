@@ -30,17 +30,17 @@ namespace NCompactTrie {
         return !(flags & (MT_FINAL | MT_NEXT));
     }
 
-    static inline void TraverseEpsilon(const char*& datapos) {
-        const char flags = *datapos;
-        if (!IsEpsilonLink(flags)) {
-            return;
-        }
-        const size_t offsetlength = flags & MT_SIZEMASK;
-        const size_t offset = UnpackOffset(datapos + 1, offsetlength);
+    static inline void TraverseEpsilon(const char*& datapos) { 
+        const char flags = *datapos; 
+        if (!IsEpsilonLink(flags)) { 
+            return; 
+        } 
+        const size_t offsetlength = flags & MT_SIZEMASK; 
+        const size_t offset = UnpackOffset(datapos + 1, offsetlength); 
         Y_ASSERT(offset);
-        datapos += offset;
-    }
-
+        datapos += offset; 
+    } 
+ 
     static inline size_t LeftOffsetLen(const char flags) {
         return (flags >> MT_LEFTSHIFT) & MT_SIZEMASK;
     }
@@ -176,12 +176,12 @@ namespace NCompactTrie {
         return 0;
     }
 
-    // Auxiliary function: consumes one (multibyte) symbol from the input.
-    // Advances the data pointer to the root of the subtrie beginning after the symbol,
-    // zeroes it if this subtrie is empty.
-    // If there is a value associated with the symbol, makes the value pointer point to it,
+    // Auxiliary function: consumes one (multibyte) symbol from the input. 
+    // Advances the data pointer to the root of the subtrie beginning after the symbol, 
+    // zeroes it if this subtrie is empty. 
+    // If there is a value associated with the symbol, makes the value pointer point to it, 
     // otherwise sets it to nullptr.
-    // Returns true if the symbol was succesfully found in the trie, false otherwise.
+    // Returns true if the symbol was succesfully found in the trie, false otherwise. 
     template <typename TSymbol, class TPacker>
     Y_FORCE_INLINE bool Advance(const char*& datapos, const char* const dataend, const char*& value,
                                 TSymbol label, TPacker packer) {

@@ -1,8 +1,8 @@
-#include "opaque_trie_iterator.h"
+#include "opaque_trie_iterator.h" 
 #include "comptrie_impl.h"
-#include "node.h"
+#include "node.h" 
 
-namespace NCompactTrie {
+namespace NCompactTrie { 
     TOpaqueTrieIterator::TOpaqueTrieIterator(const TOpaqueTrie& trie, const char* emptyValue, bool atend,
                                              size_t maxKeyLength)
         : Trie(trie)
@@ -69,20 +69,20 @@ namespace NCompactTrie {
 
     bool TOpaqueTrieIterator::Backward() {
         if (AtEmptyValue)
-            return false;
-
+            return false; 
+ 
         if (!Trie.Length) {
             if (EmptyValue) {
                 // A trie that has only the empty value;
                 // we are not at the empty value, so move to it.
-                AtEmptyValue = true;
-                return true;
+                AtEmptyValue = true; 
+                return true; 
             } else {
                 // Empty trie.
                 return false;
-            }
-        }
-
+            } 
+        } 
+ 
         if (Forks.Empty()) {
             TFork fork(Trie.Data, 0, Trie.Length, Trie.SkipFunction);
             fork.LastDirection();
@@ -123,8 +123,8 @@ namespace NCompactTrie {
             Forks.Clear();
         }
         return true;
-    }
-
+    } 
+ 
     const char* TOpaqueTrieIterator::GetValuePtr() const {
         if (!Forks.Empty()) {
             const TFork& lastFork = Forks.Top();
@@ -133,10 +133,10 @@ namespace NCompactTrie {
         }
         Y_ASSERT(AtEmptyValue);
         return EmptyValue;
-    }
-
+    } 
+ 
     //-------------------------------------------------------------------------
-
+ 
     TString TForkStack::GetKey() const {
         if (HasEmptyKey()) {
             return TString();
@@ -147,7 +147,7 @@ namespace NCompactTrie {
             result.append(Top().GetLabel());
         }
         return result;
-    }
+    } 
 
     bool TForkStack::HasEmptyKey() const {
         // Special case: if we get a single zero label, treat it as an empty key
@@ -175,14 +175,14 @@ namespace NCompactTrie {
         , Limit(limit)
         , CurrentDirection(TDirection(0))
     {
-#if COMPTRIE_DATA_CHECK
+#if COMPTRIE_DATA_CHECK 
         if (Node.GetOffset() >= Limit - 1)
             ythrow yexception() << "gone beyond the limit, data is corrupted";
-#endif
+#endif 
         while (CurrentDirection < D_MAX && !HasDirection(CurrentDirection)) {
             ++CurrentDirection;
         }
-    }
+    } 
 
     bool TFork::operator==(const TFork& rhs) const {
         return (Data == rhs.Data &&
@@ -206,12 +206,12 @@ namespace NCompactTrie {
         } while (CurrentDirection > 0 && !HasDirection(CurrentDirection));
         return HasDirection(CurrentDirection);
     }
-
+ 
     void TFork::LastDirection() {
         CurrentDirection = D_MAX;
         PrevDirection();
-    }
-
+    } 
+ 
     bool TFork::SetDirection(TDirection direction) {
         if (!HasDirection(direction)) {
             return false;
@@ -219,13 +219,13 @@ namespace NCompactTrie {
         CurrentDirection = direction;
         return true;
     }
-
+ 
     char TFork::GetLabel() const {
         return Node.GetLabel();
     }
-
+ 
     size_t TFork::GetValueOffset() const {
         return Node.GetLeafOffset();
-    }
-
+    } 
+ 
 }

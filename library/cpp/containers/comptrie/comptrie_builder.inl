@@ -2,26 +2,26 @@
 
 #include "comptrie_impl.h"
 #include "comptrie_trie.h"
-#include "make_fast_layout.h"
-#include "array_with_size.h"
-
+#include "make_fast_layout.h" 
+#include "array_with_size.h" 
+ 
 #include <library/cpp/containers/compact_vector/compact_vector.h>
-
+ 
 #include <util/memory/alloc.h>
-#include <util/memory/blob.h>
-#include <util/memory/pool.h>
-#include <util/memory/tempbuf.h>
-#include <util/memory/smallobj.h>
-#include <util/generic/algorithm.h>
-#include <util/generic/buffer.h>
+#include <util/memory/blob.h> 
+#include <util/memory/pool.h> 
+#include <util/memory/tempbuf.h> 
+#include <util/memory/smallobj.h> 
+#include <util/generic/algorithm.h> 
+#include <util/generic/buffer.h> 
 #include <util/generic/strbuf.h>
-
-#include <util/system/align.h>
+ 
+#include <util/system/align.h> 
 #include <util/stream/buffer.h>
-
-#define CONSTEXPR_MAX2(a, b) (a) > (b) ? (a) : (b)
-#define CONSTEXPR_MAX3(a, b, c) CONSTEXPR_MAX2(CONSTEXPR_MAX2(a, b), c)
-
+ 
+#define CONSTEXPR_MAX2(a, b) (a) > (b) ? (a) : (b) 
+#define CONSTEXPR_MAX3(a, b, c) CONSTEXPR_MAX2(CONSTEXPR_MAX2(a, b), c) 
+ 
 // TCompactTrieBuilder::TCompactTrieBuilderImpl
 
 template <class T, class D, class S>
@@ -33,7 +33,7 @@ protected:
     class TNode;
     class TArc;
     TNode* Root;
-    TCompactTrieBuilderFlags Flags;
+    TCompactTrieBuilderFlags Flags; 
     size_t EntryCount;
     size_t NodeCount;
     TPacker Packer;
@@ -73,11 +73,11 @@ public:
     void DestroyNode(TNode* node);
     void NodeReleasePayload(TNode* thiz);
 
-    char* AddEntryForData(const TSymbol* key, size_t keylen, size_t dataLen, bool& isNewAddition);
-    TNode* AddEntryForSomething(const TSymbol* key, size_t keylen, bool& isNewAddition);
+    char* AddEntryForData(const TSymbol* key, size_t keylen, size_t dataLen, bool& isNewAddition); 
+    TNode* AddEntryForSomething(const TSymbol* key, size_t keylen, bool& isNewAddition); 
 
-    bool AddEntry(const TSymbol* key, size_t keylen, const TData& value);
-    bool AddEntryPtr(const TSymbol* key, size_t keylen, const char* value);
+    bool AddEntry(const TSymbol* key, size_t keylen, const TData& value); 
+    bool AddEntryPtr(const TSymbol* key, size_t keylen, const char* value); 
     bool AddSubtreeInFile(const TSymbol* key, size_t keylen, const TString& fileName);
     bool AddSubtreeInBuffer(const TSymbol* key, size_t keylen, TArrayWithSizeHolder<char>&& buffer);
     bool FindEntry(const TSymbol* key, size_t keylen, TData* value) const;
@@ -131,7 +131,7 @@ public:
 
     class TArcSet: public ISubtree, public TCompactVector<TArc> {
     public:
-        typedef typename TCompactVector<TArc>::iterator iterator;
+        typedef typename TCompactVector<TArc>::iterator iterator; 
         typedef typename TCompactVector<TArc>::const_iterator const_iterator;
 
         TArcSet() {
@@ -334,7 +334,7 @@ public:
     };
 
     union {
-        char ArcsData[CONSTEXPR_MAX3(sizeof(TArcSet), sizeof(TBufferedSubtree), sizeof(TSubtreeInFile))];
+        char ArcsData[CONSTEXPR_MAX3(sizeof(TArcSet), sizeof(TBufferedSubtree), sizeof(TSubtreeInFile))]; 
         union {
             void* Data1;
             long long int Data2;
@@ -426,18 +426,18 @@ TCompactTrieBuilder<T, D, S>::TCompactTrieBuilder(TCompactTrieBuilderFlags flags
 }
 
 template <class T, class D, class S>
-bool TCompactTrieBuilder<T, D, S>::Add(const TSymbol* key, size_t keylen, const TData& value) {
-    return Impl->AddEntry(key, keylen, value);
+bool TCompactTrieBuilder<T, D, S>::Add(const TSymbol* key, size_t keylen, const TData& value) { 
+    return Impl->AddEntry(key, keylen, value); 
 }
 
 template <class T, class D, class S>
-bool TCompactTrieBuilder<T, D, S>::AddPtr(const TSymbol* key, size_t keylen, const char* value) {
-    return Impl->AddEntryPtr(key, keylen, value);
+bool TCompactTrieBuilder<T, D, S>::AddPtr(const TSymbol* key, size_t keylen, const char* value) { 
+    return Impl->AddEntryPtr(key, keylen, value); 
 }
 
 template <class T, class D, class S>
 bool TCompactTrieBuilder<T, D, S>::AddSubtreeInFile(const TSymbol* key, size_t keylen, const TString& fileName) {
-    return Impl->AddSubtreeInFile(key, keylen, fileName);
+    return Impl->AddSubtreeInFile(key, keylen, fileName); 
 }
 
 template <class T, class D, class S>
@@ -488,7 +488,7 @@ TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TCompactTrieBuilderImpl(T
     : Pool(1000000, TMemoryPool::TLinearGrow::Instance(), alloc)
     , PayloadSize(sizeof(void*)) // XXX: find better value
     , NodeAllocator(new TFixedSizeAllocator(sizeof(TNode) + PayloadSize, alloc))
-    , Flags(flags)
+    , Flags(flags) 
     , EntryCount(0)
     , NodeCount(1)
     , Packer(packer)
@@ -543,40 +543,40 @@ void TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::NodeReleasePayload(T
 }
 
 template <class T, class D, class S>
-bool TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::AddEntry(
+bool TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::AddEntry( 
                 const TSymbol* key, size_t keylen, const TData& value) {
     size_t datalen = Packer.MeasureLeaf(value);
 
-    bool isNewAddition = false;
-    char* place = AddEntryForData(key, keylen, datalen, isNewAddition);
+    bool isNewAddition = false; 
+    char* place = AddEntryForData(key, keylen, datalen, isNewAddition); 
     Packer.PackLeaf(place, value, datalen);
-    return isNewAddition;
+    return isNewAddition; 
 }
 
 template <class T, class D, class S>
-bool TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::AddEntryPtr(
+bool TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::AddEntryPtr( 
                 const TSymbol* key, size_t keylen, const char* value) {
     size_t datalen = Packer.SkipLeaf(value);
 
-    bool isNewAddition = false;
-    char* place = AddEntryForData(key, keylen, datalen, isNewAddition);
+    bool isNewAddition = false; 
+    char* place = AddEntryForData(key, keylen, datalen, isNewAddition); 
     memcpy(place, value, datalen);
-    return isNewAddition;
+    return isNewAddition; 
 }
 
 template <class T, class D, class S>
-bool TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::AddSubtreeInFile(
+bool TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::AddSubtreeInFile( 
                 const TSymbol* key, size_t keylen, const TString& fileName) {
     typedef typename TNode::ISubtree ISubtree;
     typedef typename TNode::TSubtreeInFile TSubtreeInFile;
 
-    bool isNewAddition = false;
-    TNode* node = AddEntryForSomething(key, keylen, isNewAddition);
+    bool isNewAddition = false; 
+    TNode* node = AddEntryForSomething(key, keylen, isNewAddition); 
     node->Subtree()->Destroy(this);
     node->Subtree()->~ISubtree();
 
     new (node->Subtree()) TSubtreeInFile(fileName);
-    return isNewAddition;
+    return isNewAddition; 
 }
 
 template <class T, class D, class S>
@@ -599,56 +599,56 @@ bool TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::AddSubtreeInBuffer(
 template <class T, class D, class S>
 typename TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode*
                 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::AddEntryForSomething(
-                                const TSymbol* key, size_t keylen, bool& isNewAddition) {
+                                const TSymbol* key, size_t keylen, bool& isNewAddition) { 
     using namespace NCompactTrie;
 
     EntryCount++;
 
-    if (Flags & CTBF_VERBOSE)
+    if (Flags & CTBF_VERBOSE) 
         ShowProgress(EntryCount);
 
     TNode* current = Root;
     size_t passed;
 
-    // Special case of empty key: replace it by 1-byte "\0" key.
-    size_t ckeylen = keylen ? keylen * sizeof(TSymbol) : 1;
-    TTempBuf ckeybuf(ckeylen);
+    // Special case of empty key: replace it by 1-byte "\0" key. 
+    size_t ckeylen = keylen ? keylen * sizeof(TSymbol) : 1; 
+    TTempBuf ckeybuf(ckeylen); 
     if (keylen == 0) {
-        ckeybuf.Append("\0", 1);
+        ckeybuf.Append("\0", 1); 
     } else {
         ConvertSymbolArrayToChar(key, keylen, ckeybuf, ckeylen);
-    }
+    } 
 
-    char* ckey = ckeybuf.Data();
+    char* ckey = ckeybuf.Data(); 
 
-    TNode* next;
+    TNode* next; 
     while ((ckeylen > 0) && (next = NodeForwardAdd(current, ckey, ckeylen, passed, &NodeCount)) != nullptr) {
-        current = next;
-        ckeylen -= passed;
-        ckey += passed;
+        current = next; 
+        ckeylen -= passed; 
+        ckey += passed; 
     }
-
-    if (ckeylen != 0) {
-        //new leaf
-        NodeCount++;
-        TNode* leaf = new (*NodeAllocator) TNode();
-        NodeLinkTo(current, TBlob::Copy(ckey, ckeylen), leaf);
-        current = leaf;
-    }
-    isNewAddition = (current->PayloadType == DATA_ABSENT);
-    if ((Flags & CTBF_UNIQUE) && !isNewAddition)
-        ythrow yexception() << "Duplicate key";
+ 
+    if (ckeylen != 0) { 
+        //new leaf 
+        NodeCount++; 
+        TNode* leaf = new (*NodeAllocator) TNode(); 
+        NodeLinkTo(current, TBlob::Copy(ckey, ckeylen), leaf); 
+        current = leaf; 
+    } 
+    isNewAddition = (current->PayloadType == DATA_ABSENT); 
+    if ((Flags & CTBF_UNIQUE) && !isNewAddition) 
+        ythrow yexception() << "Duplicate key"; 
     return current;
 }
 
 template <class T, class D, class S>
-char* TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::AddEntryForData(const TSymbol* key, size_t keylen,
-        size_t datalen, bool& isNewAddition) {
-    TNode* current = AddEntryForSomething(key, keylen, isNewAddition);
+char* TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::AddEntryForData(const TSymbol* key, size_t keylen, 
+        size_t datalen, bool& isNewAddition) { 
+    TNode* current = AddEntryForSomething(key, keylen, isNewAddition); 
     NodeReleasePayload(current);
     if (datalen <= PayloadSize) {
         current->PayloadType = DATA_INSIDE;
-    } else if (Flags & CTBF_PREFIX_GROUPED) {
+    } else if (Flags & CTBF_PREFIX_GROUPED) { 
         current->PayloadType = DATA_MALLOCED;
         current->PayloadAsPtr() = new char[datalen];
     } else {
@@ -782,9 +782,9 @@ typename TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode*
                 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::NodeForwardAdd(
                                 TNode* thiz, const char* label, size_t len, size_t& passed, size_t* nodeCount) {
     typename TNode::TArcSet* arcSet = dynamic_cast<typename TNode::TArcSet*>(thiz->Subtree());
-    if (!arcSet)
-        ythrow yexception() << "Bad input order - expected input strings to be prefix-grouped.";
-
+    if (!arcSet) 
+        ythrow yexception() << "Bad input order - expected input strings to be prefix-grouped."; 
+ 
     typename TNode::TArcSet::iterator it = arcSet->Find(*label);
 
     if (it != arcSet->end()) {
@@ -814,10 +814,10 @@ template <class T, class D, class S>
 void TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::NodeLinkTo(TNode* thiz, const TBlob& label, TNode* node) {
     typename TNode::TArcSet* arcSet = dynamic_cast<typename TNode::TArcSet*>(thiz->Subtree());
     if (!arcSet)
-        ythrow yexception() << "Bad input order - expected input strings to be prefix-grouped.";
+        ythrow yexception() << "Bad input order - expected input strings to be prefix-grouped."; 
 
     // Buffer the node at the last arc
-    if ((Flags & CTBF_PREFIX_GROUPED) && !arcSet->empty())
+    if ((Flags & CTBF_PREFIX_GROUPED) && !arcSet->empty()) 
         NodeBufferSubtree(arcSet->back().Node);
 
     arcSet->Add(label, node);
@@ -1047,19 +1047,19 @@ const typename TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode*
 
 // Different
 
-//----------------------------------------------------------------------------------------------------------------------
-// Minimize the trie. The result is equivalent to the original
-// trie, except that it takes less space (and has marginally lower
-// performance, because of eventual epsilon links).
-// The algorithm is as follows: starting from the largest pieces, we find
-// nodes that have identical continuations  (Daciuk's right language),
-// and repack the trie. Repacking is done in-place, so memory is less
-// of an issue; however, it may take considerable time.
-
-// IMPORTANT: never try to reminimize an already minimized trie or a trie with fast layout.
-// Because of non-local structure and epsilon links, it won't work
-// as you expect it to, and can destroy the trie in the making.
-
+//---------------------------------------------------------------------------------------------------------------------- 
+// Minimize the trie. The result is equivalent to the original 
+// trie, except that it takes less space (and has marginally lower 
+// performance, because of eventual epsilon links). 
+// The algorithm is as follows: starting from the largest pieces, we find 
+// nodes that have identical continuations  (Daciuk's right language), 
+// and repack the trie. Repacking is done in-place, so memory is less 
+// of an issue; however, it may take considerable time. 
+ 
+// IMPORTANT: never try to reminimize an already minimized trie or a trie with fast layout. 
+// Because of non-local structure and epsilon links, it won't work 
+// as you expect it to, and can destroy the trie in the making. 
+ 
 template <class TPacker>
 size_t CompactTrieMinimize(IOutputStream& os, const char* data, size_t datalength, bool verbose /*= false*/, const TPacker& packer /*= TPacker()*/, NCompactTrie::EMinimizeMode mode) {
     using namespace NCompactTrie;
@@ -1072,38 +1072,38 @@ size_t CompactTrieMinimize(IOutputStream& os, const TTrieBuilder& builder, bool 
     size_t len = builder.Save(buftmp);
     return CompactTrieMinimize<typename TTrieBuilder::TPacker>(os, buftmp.Buffer().Data(), len, verbose);
 }
-
-//----------------------------------------------------------------------------------------------------------------
-// Lay the trie in memory in such a way that there are less cache misses when jumping from root to leaf.
-// The trie becomes about 2% larger, but the access became about 25% faster in our experiments.
-// Can be called on minimized and non-minimized tries, in the first case in requires half a trie more memory.
-// Calling it the second time on the same trie does nothing.
-//
-// The algorithm is based on van Emde Boas layout as described in the yandex data school lectures on external memory algoritms
-// by Maxim Babenko and Ivan Puzyrevsky. The difference is that when we cut the tree into levels
-// two nodes connected by a forward link are put into the same level (because they usually lie near each other in the original tree).
-// The original paper (describing the layout in Section 2.1) is:
+ 
+//---------------------------------------------------------------------------------------------------------------- 
+// Lay the trie in memory in such a way that there are less cache misses when jumping from root to leaf. 
+// The trie becomes about 2% larger, but the access became about 25% faster in our experiments. 
+// Can be called on minimized and non-minimized tries, in the first case in requires half a trie more memory. 
+// Calling it the second time on the same trie does nothing. 
+// 
+// The algorithm is based on van Emde Boas layout as described in the yandex data school lectures on external memory algoritms 
+// by Maxim Babenko and Ivan Puzyrevsky. The difference is that when we cut the tree into levels 
+// two nodes connected by a forward link are put into the same level (because they usually lie near each other in the original tree). 
+// The original paper (describing the layout in Section 2.1) is: 
 // Michael A. Bender, Erik D. Demaine, Martin Farach-Colton. Cache-Oblivious B-Trees
 //      SIAM Journal on Computing, volume 35, number 2, 2005, pages 341-358.
-// Available on the web: http://erikdemaine.org/papers/CacheObliviousBTrees_SICOMP/
+// Available on the web: http://erikdemaine.org/papers/CacheObliviousBTrees_SICOMP/ 
 // Or: Michael A. Bender, Erik D. Demaine, and Martin Farach-Colton. Cache-Oblivious B-Trees
 //      Proceedings of the 41st Annual Symposium
 //      on Foundations of Computer Science (FOCS 2000), Redondo Beach, California, November 12-14, 2000, pages 399-409.
-// Available on the web: http://erikdemaine.org/papers/FOCS2000b/
-// (there is not much difference between these papers, actually).
-//
-template <class TPacker>
+// Available on the web: http://erikdemaine.org/papers/FOCS2000b/ 
+// (there is not much difference between these papers, actually). 
+// 
+template <class TPacker> 
 size_t CompactTrieMakeFastLayout(IOutputStream& os, const char* data, size_t datalength, bool verbose /*= false*/, const TPacker& packer /*= TPacker()*/) {
-    using namespace NCompactTrie;
-    return CompactTrieMakeFastLayoutImpl(os, data, datalength, verbose, &packer);
-}
-
-template <class TTrieBuilder>
+    using namespace NCompactTrie; 
+    return CompactTrieMakeFastLayoutImpl(os, data, datalength, verbose, &packer); 
+} 
+ 
+template <class TTrieBuilder> 
 size_t CompactTrieMakeFastLayout(IOutputStream& os, const TTrieBuilder& builder, bool verbose /*=false*/) {
-    TBufferStream buftmp;
-    size_t len = builder.Save(buftmp);
-    return CompactTrieMakeFastLayout<typename TTrieBuilder::TPacker>(os, buftmp.Buffer().Data(), len, verbose);
-}
+    TBufferStream buftmp; 
+    size_t len = builder.Save(buftmp); 
+    return CompactTrieMakeFastLayout<typename TTrieBuilder::TPacker>(os, buftmp.Buffer().Data(), len, verbose); 
+} 
 
 template <class TPacker>
 size_t CompactTrieMinimizeAndMakeFastLayout(IOutputStream& os, const char* data, size_t datalength, bool verbose/*=false*/, const TPacker& packer/*= TPacker()*/) {

@@ -1,11 +1,11 @@
-#include "minimize.h"
-#include "node.h"
-#include "writeable_node.h"
-#include "write_trie_backwards.h"
-#include "comptrie_impl.h"
+#include "minimize.h" 
+#include "node.h" 
+#include "writeable_node.h" 
+#include "write_trie_backwards.h" 
+#include "comptrie_impl.h" 
 
 #include <util/generic/hash.h>
-#include <util/generic/algorithm.h>
+#include <util/generic/algorithm.h> 
 
 namespace NCompactTrie {
     // Minimize the trie. The result is equivalent to the original
@@ -27,7 +27,7 @@ namespace NCompactTrie {
         using TSizePair = std::pair<size_t, size_t>;
         using TSizePairVector = TVector<TSizePair>;
         using TSizePairVectorVector = TVector<TSizePairVector>;
-
+ 
         class TOffsetMap {
         protected:
             TSizePairVectorVector Data;
@@ -180,7 +180,7 @@ namespace NCompactTrie {
                             if (Node.GetRightOffset())
                                 nextOffset = Node.GetRightOffset();
                             break;
-
+ 
                         case 2:
                             if (Node.GetLeftOffset())
                                 nextOffset = Node.GetLeftOffset();
@@ -280,7 +280,7 @@ namespace NCompactTrie {
     static void AddPiece(TPieceIndex& index, size_t offset, size_t len) {
         index[len].push_back(offset);
     }
-
+ 
     static TOffsetMap FindEquivalentSubtries(const TOpaqueTrie& trie, bool verbose, size_t minMergeSize) {
         // Tree nodes, arranged by span length.
         // When all nodes of a given size are considered, they pop off the queue.
@@ -354,6 +354,6 @@ namespace NCompactTrie {
             return WriteTrieBackwards(os, enumerator, verbose);
         else
             return WriteTrieBackwardsNoAlloc(os, enumerator, trie, mode);
-    }
-
-}
+    } 
+ 
+} 

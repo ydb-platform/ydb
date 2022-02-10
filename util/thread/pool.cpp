@@ -592,7 +592,7 @@ size_t TAdaptiveThreadPool::Size() const noexcept {
 void TAdaptiveThreadPool::SetMaxIdleTime(TDuration interval) {
     Y_ENSURE_EX(Impl_.Get(), TThreadPoolException() << TStringBuf("mtp queue not started"));
 
-    Impl_->SetMaxIdleTime(interval);
+    Impl_->SetMaxIdleTime(interval); 
 }
 
 TSimpleThreadPool::~TSimpleThreadPool() {
@@ -623,7 +623,7 @@ void TSimpleThreadPool::Start(size_t thrnum, size_t maxque) {
     tmp->Start(thrnum, maxque);
 
     if (adaptive) {
-        adaptive->SetMaxIdleTime(TDuration::Seconds(100));
+        adaptive->SetMaxIdleTime(TDuration::Seconds(100)); 
     }
 
     Slave_.Swap(tmp);

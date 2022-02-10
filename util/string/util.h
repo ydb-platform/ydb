@@ -152,32 +152,32 @@ protected:
 };
 
 // an analogue of tr/$from/$to/
-class Tr {
-public:
+class Tr { 
+public: 
     Tr(const char* from, const char* to);
-
-    char ConvertChar(char ch) const {
-        return Map[(ui8)ch];
-    }
-
+ 
+    char ConvertChar(char ch) const { 
+        return Map[(ui8)ch]; 
+    } 
+ 
     void Do(char* s) const {
         for (; *s; s++)
-            *s = ConvertChar(*s);
+            *s = ConvertChar(*s); 
     }
     void Do(const char* src, char* dst) const {
         for (; *src; src++)
-            *dst++ = ConvertChar(*src);
+            *dst++ = ConvertChar(*src); 
         *dst = 0;
     }
     void Do(char* s, size_t l) const {
         for (size_t i = 0; i < l && s[i]; i++)
-            s[i] = ConvertChar(s[i]);
+            s[i] = ConvertChar(s[i]); 
     }
     void Do(TString& str) const;
-
-private:
-    char Map[256];
-
+ 
+private: 
+    char Map[256]; 
+ 
     size_t FindFirstChangePosition(const TString& str) const;
 };
 

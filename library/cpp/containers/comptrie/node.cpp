@@ -1,9 +1,9 @@
-#include "node.h"
-#include "leaf_skipper.h"
+#include "node.h" 
+#include "leaf_skipper.h" 
 #include "comptrie_impl.h"
 
-#include <util/system/yassert.h>
-#include <util/generic/yexception.h>
+#include <util/system/yassert.h> 
+#include <util/generic/yexception.h> 
 
 namespace NCompactTrie {
     TNode::TNode()
@@ -15,7 +15,7 @@ namespace NCompactTrie {
         for (auto& offset : Offsets) {
             offset = 0;
         }
-    }
+    } 
 
     // We believe that epsilon links are found only on the forward-position and that afer jumping an epsilon link you come to an ordinary node.
 

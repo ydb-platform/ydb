@@ -51,22 +51,22 @@ Tr::Tr(const char* from, const char* to) {
 
 size_t Tr::FindFirstChangePosition(const TString& str) const {
     for (auto it = str.begin(); it != str.end(); ++it) {
-        if (ConvertChar(*it) != *it) {
-            return it - str.begin();
-        }
-    }
+        if (ConvertChar(*it) != *it) { 
+            return it - str.begin(); 
+        } 
+    } 
 
     return TString::npos;
-}
-
+} 
+ 
 void Tr::Do(TString& str) const {
-    const size_t changePosition = FindFirstChangePosition(str);
+    const size_t changePosition = FindFirstChangePosition(str); 
 
     if (changePosition == TString::npos) {
-        return;
+        return; 
     }
 
     for (auto it = str.begin() + changePosition; it != str.end(); ++it) {
-        *it = ConvertChar(*it);
+        *it = ConvertChar(*it); 
     }
 }

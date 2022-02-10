@@ -30,7 +30,7 @@ private:
 
 public:
     TTrieSetWriter(bool isSorted = sorted)
-        : Builder(isSorted ? CTBF_PREFIX_GROUPED : CTBF_NONE)
+        : Builder(isSorted ? CTBF_PREFIX_GROUPED : CTBF_NONE) 
     {
     }
 
@@ -118,7 +118,7 @@ private:
 
 public:
     TTrieMapWriter(bool isSorted = sorted)
-        : Builder(isSorted ? CTBF_PREFIX_GROUPED : CTBF_NONE)
+        : Builder(isSorted ? CTBF_PREFIX_GROUPED : CTBF_NONE) 
 #ifndef NDEBUG
         , IsSorted(isSorted)
 #endif

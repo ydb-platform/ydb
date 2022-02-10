@@ -22,14 +22,14 @@
 
 #include "comptrie.h"
 #include "set.h"
-#include "first_symbol_iterator.h"
-#include "search_iterator.h"
+#include "first_symbol_iterator.h" 
+#include "search_iterator.h" 
 #include "pattern_searcher.h"
 
 #include <array>
 #include <iterator>
 
-
+ 
 class TCompactTrieTest: public TTestBase {
 private:
     UNIT_TEST_SUITE(TCompactTrieTest);
@@ -40,7 +40,7 @@ private:
     UNIT_TEST(TestFastTrie8);
     UNIT_TEST(TestFastTrie16);
     UNIT_TEST(TestFastTrie32);
-
+ 
     UNIT_TEST(TestMinimizedTrie8);
     UNIT_TEST(TestMinimizedTrie16);
     UNIT_TEST(TestMinimizedTrie32);
@@ -48,7 +48,7 @@ private:
     UNIT_TEST(TestFastMinimizedTrie8);
     UNIT_TEST(TestFastMinimizedTrie16);
     UNIT_TEST(TestFastMinimizedTrie32);
-
+ 
     UNIT_TEST(TestTrieIterator8);
     UNIT_TEST(TestTrieIterator16);
     UNIT_TEST(TestTrieIterator32);
@@ -98,12 +98,12 @@ private:
     UNIT_TEST(TestSearchIterWchar32)
 
     UNIT_TEST(TestCopyAndAssignment);
-
+ 
     UNIT_TEST(TestFirstSymbolIterator8);
     UNIT_TEST(TestFirstSymbolIterator16);
     UNIT_TEST(TestFirstSymbolIterator32);
     UNIT_TEST(TestFirstSymbolIteratorChar32);
-
+ 
     UNIT_TEST(TestArrayPacker);
 
     UNIT_TEST(TestBuilderFindLongestPrefix);
@@ -124,13 +124,13 @@ private:
     void CheckData(const char* src, size_t len);
 
     template <class T>
-    void CheckUpperBound(const char* src, size_t len);
-
-    template <class T>
+    void CheckUpperBound(const char* src, size_t len); 
+ 
+    template <class T> 
     void CheckIterator(const char* src, size_t len);
 
     template <class T>
-    void TestTrie(bool minimize, bool useFastLayout);
+    void TestTrie(bool minimize, bool useFastLayout); 
 
     template <class T>
     void TestTrieIterator(bool minimize);
@@ -140,8 +140,8 @@ private:
 
     void TestFindTailsImpl(const TString& prefix);
 
-    void TestUniqueImpl(bool isPrefixGrouped);
-
+    void TestUniqueImpl(bool isPrefixGrouped); 
+ 
     TVector<TUtf16String> GetSampleKeys(size_t nKeys) const;
     template <class TContainer>
     TVector<TContainer> GetSampleVectorData(size_t nValues);
@@ -155,12 +155,12 @@ private:
     template <typename TChar>
     void TestSearchIterImpl();
 
-    template <class TTrie>
-    void TestFirstSymbolIteratorForTrie(const TTrie& trie, const TStringBuf& narrowAnswers);
-
-    template <typename TSymbol>
-    void TestFirstSymbolIterator();
-
+    template <class TTrie> 
+    void TestFirstSymbolIteratorForTrie(const TTrie& trie, const TStringBuf& narrowAnswers); 
+ 
+    template <typename TSymbol> 
+    void TestFirstSymbolIterator(); 
+ 
     template <class T>
     class TIntPacker;
     template <class T>
@@ -174,18 +174,18 @@ public:
     void TestTrie16();
     void TestTrie32();
 
-    void TestFastTrie8();
-    void TestFastTrie16();
-    void TestFastTrie32();
-
+    void TestFastTrie8(); 
+    void TestFastTrie16(); 
+    void TestFastTrie32(); 
+ 
     void TestMinimizedTrie8();
     void TestMinimizedTrie16();
     void TestMinimizedTrie32();
 
-    void TestFastMinimizedTrie8();
-    void TestFastMinimizedTrie16();
-    void TestFastMinimizedTrie32();
-
+    void TestFastMinimizedTrie8(); 
+    void TestFastMinimizedTrie16(); 
+    void TestFastMinimizedTrie32(); 
+ 
     void TestTrieIterator8();
     void TestTrieIterator16();
     void TestTrieIterator32();
@@ -197,15 +197,15 @@ public:
     void TestPhraseSearch();
     void TestAddGet();
     void TestEmpty();
-    void TestUninitializedNonEmpty();
+    void TestUninitializedNonEmpty(); 
     void TestRandom();
     void TestFindTails();
-    void TestPrefixGrouped();
-    void CrashTestPrefixGrouped();
+    void TestPrefixGrouped(); 
+    void CrashTestPrefixGrouped(); 
     void TestMergeFromFile();
     void TestMergeFromBuffer();
-    void TestUnique();
-    void TestAddRetValue();
+    void TestUnique(); 
+    void TestAddRetValue(); 
     void TestClear();
 
     void TestIterateEmptyKey();
@@ -227,20 +227,20 @@ public:
     void TestTrieForListVectorInt64();
     void TestTrieForPairWtrokaVectorInt64();
 
-    void TestEmptyValueOutOfOrder();
+    void TestEmptyValueOutOfOrder(); 
     void TestFindLongestPrefixWithEmptyValue();
 
     void TestSearchIterChar();
     void TestSearchIterWchar();
     void TestSearchIterWchar32();
-
-    void TestCopyAndAssignment();
-
-    void TestFirstSymbolIterator8();
-    void TestFirstSymbolIterator16();
-    void TestFirstSymbolIterator32();
+ 
+    void TestCopyAndAssignment(); 
+ 
+    void TestFirstSymbolIterator8(); 
+    void TestFirstSymbolIterator16(); 
+    void TestFirstSymbolIterator32(); 
     void TestFirstSymbolIteratorChar32();
-
+ 
     void TestArrayPacker();
 
     void TestBuilderFindLongestPrefix();
@@ -278,7 +278,7 @@ const char* TCompactTrieTest::SampleData[] = {
 
 template <class T>
 typename TCompactTrie<T>::TKey MakeWideKey(const char* str, size_t len) {
-    typename TCompactTrie<T>::TKey buffer;
+    typename TCompactTrie<T>::TKey buffer; 
     for (size_t i = 0; i < len; i++) {
         unsigned int ch = (str[i] & 0xFF);
         buffer.push_back((T)(ch | ch << 8 | ch << 16 | ch << 24));
@@ -288,17 +288,17 @@ typename TCompactTrie<T>::TKey MakeWideKey(const char* str, size_t len) {
 
 template <class T>
 typename TCompactTrie<T>::TKey MakeWideKey(const TString& str) {
-    return MakeWideKey<T>(str.c_str(), str.length());
-}
-
+    return MakeWideKey<T>(str.c_str(), str.length()); 
+} 
+ 
 template <class T>
-typename TCompactTrie<T>::TKey MakeWideKey(const TStringBuf& buf) {
-    return MakeWideKey<T>(buf.data(), buf.length());
-}
-
+typename TCompactTrie<T>::TKey MakeWideKey(const TStringBuf& buf) { 
+    return MakeWideKey<T>(buf.data(), buf.length()); 
+} 
+ 
 template <class T>
 void TCompactTrieTest::CreateTrie(IOutputStream& out, bool minimize, bool useFastLayout) {
-    TCompactTrieBuilder<T> builder;
+    TCompactTrieBuilder<T> builder; 
 
     for (auto& i : SampleData) {
         size_t len = strlen(i);
@@ -306,57 +306,57 @@ void TCompactTrieTest::CreateTrie(IOutputStream& out, bool minimize, bool useFas
         builder.Add(MakeWideKey<T>(i, len), len * 2);
     }
 
-    TBufferOutput tmp2;
+    TBufferOutput tmp2; 
     IOutputStream& currentOutput = useFastLayout ? tmp2 : out;
     if (minimize) {
         TBufferOutput buftmp;
         builder.Save(buftmp);
         CompactTrieMinimize<TCompactTriePacker<ui64>>(currentOutput, buftmp.Buffer().Data(), buftmp.Buffer().Size(), false);
     } else {
-        builder.Save(currentOutput);
+        builder.Save(currentOutput); 
     }
-    if (useFastLayout) {
+    if (useFastLayout) { 
         CompactTrieMakeFastLayout<TCompactTriePacker<T>>(out, tmp2.Buffer().Data(), tmp2.Buffer().Size(), false);
-    }
+    } 
 }
 
-// Iterates over all strings of length <= 4 made of letters a-g.
+// Iterates over all strings of length <= 4 made of letters a-g. 
 static bool LexicographicStep(TString& s) {
-    if (s.length() < 4) {
-        s += "a";
-        return true;
-    }
-    while (!s.empty() && s.back() == 'g')
-        s.pop_back();
-    if (s.empty())
-        return false;
-    char last = s.back();
-    last++;
-    s.pop_back();
-    s.push_back(last);
-    return true;
-}
-
+    if (s.length() < 4) { 
+        s += "a"; 
+        return true; 
+    } 
+    while (!s.empty() && s.back() == 'g') 
+        s.pop_back(); 
+    if (s.empty()) 
+        return false; 
+    char last = s.back(); 
+    last++; 
+    s.pop_back(); 
+    s.push_back(last); 
+    return true; 
+} 
+ 
 template <class T>
-void TCompactTrieTest::CheckUpperBound(const char* data, size_t datalen) {
-    TCompactTrie<T> trie(data, datalen);
+void TCompactTrieTest::CheckUpperBound(const char* data, size_t datalen) { 
+    TCompactTrie<T> trie(data, datalen); 
     typedef typename TCompactTrie<T>::TKey TKey;
     typedef typename TCompactTrie<T>::TData TData;
-
+ 
     TString key;
-    do {
-        const TKey wideKey = MakeWideKey<T>(key);
+    do { 
+        const TKey wideKey = MakeWideKey<T>(key); 
         typename TCompactTrie<T>::TConstIterator it = trie.UpperBound(wideKey);
-        UNIT_ASSERT_C(it == trie.End() || it.GetKey() >= wideKey, "key=" + key);
-        TData data;
-        const bool found = trie.Find(wideKey, &data);
-        if (found)
-            UNIT_ASSERT_C(it.GetKey() == wideKey && it.GetValue() == data, "key=" + key);
-        if (it != trie.Begin())
-            UNIT_ASSERT_C((--it).GetKey() < wideKey, "key=" + key);
-    } while (LexicographicStep(key));
-}
-
+        UNIT_ASSERT_C(it == trie.End() || it.GetKey() >= wideKey, "key=" + key); 
+        TData data; 
+        const bool found = trie.Find(wideKey, &data); 
+        if (found) 
+            UNIT_ASSERT_C(it.GetKey() == wideKey && it.GetValue() == data, "key=" + key); 
+        if (it != trie.Begin()) 
+            UNIT_ASSERT_C((--it).GetKey() < wideKey, "key=" + key); 
+    } while (LexicographicStep(key)); 
+} 
+ 
 template <class T>
 void TCompactTrieTest::CheckData(const char* data, size_t datalen) {
     TCompactTrie<T> trie(data, datalen);
@@ -377,7 +377,7 @@ void TCompactTrieTest::CheckData(const char* data, size_t datalen) {
 
         TString badkey("bb");
         badkey += i;
-        key = MakeWideKey<T>(badkey);
+        key = MakeWideKey<T>(badkey); 
         UNIT_ASSERT(!trie.Find(key));
         value = 123;
         UNIT_ASSERT(!trie.Find(key, &value));
@@ -388,7 +388,7 @@ void TCompactTrieTest::CheckData(const char* data, size_t datalen) {
 
         badkey = i;
         badkey += "x";
-        key = MakeWideKey<T>(badkey);
+        key = MakeWideKey<T>(badkey); 
         UNIT_ASSERT(!trie.Find(key));
         value = 1234;
         UNIT_ASSERT(!trie.Find(key, &value));
@@ -401,7 +401,7 @@ void TCompactTrieTest::CheckData(const char* data, size_t datalen) {
     }
 
     TString testkey("fbbaa");
-    typename TCompactTrie<T>::TKey key = MakeWideKey<T>(testkey);
+    typename TCompactTrie<T>::TKey key = MakeWideKey<T>(testkey); 
     ui64 value = 0;
     size_t prefixLen = 0;
     UNIT_ASSERT(trie.FindLongestPrefix(key.data(), testkey.length() - 1, &prefixLen, &value));
@@ -409,7 +409,7 @@ void TCompactTrieTest::CheckData(const char* data, size_t datalen) {
     UNIT_ASSERT_EQUAL(6, value);
 
     testkey = "fbbax";
-    key = MakeWideKey<T>(testkey);
+    key = MakeWideKey<T>(testkey); 
     UNIT_ASSERT(trie.FindLongestPrefix(key, &prefixLen, &value));
     UNIT_ASSERT_EQUAL(prefixLen, 3);
     UNIT_ASSERT_EQUAL(6, value);
@@ -422,7 +422,7 @@ void TCompactTrieTest::CheckData(const char* data, size_t datalen) {
 template <class T>
 void TCompactTrieTest::CheckIterator(const char* data, size_t datalen) {
     typedef typename TCompactTrie<T>::TKey TKey;
-    typedef typename TCompactTrie<T>::TValueType TValue;
+    typedef typename TCompactTrie<T>::TValueType TValue; 
     TMap<TKey, ui64> stored;
 
     for (auto& i : SampleData) {
@@ -439,7 +439,7 @@ void TCompactTrieTest::CheckIterator(const char* data, size_t datalen) {
     while (it != trie.End()) {
         UNIT_ASSERT_VALUES_EQUAL(it.GetKeySize(), it.GetKey().size());
         received.insert(*it);
-        items.push_back(*it);
+        items.push_back(*it); 
         entry_count++;
         it++;
     }
@@ -450,53 +450,53 @@ void TCompactTrieTest::CheckIterator(const char* data, size_t datalen) {
     UNIT_ASSERT(entry_count == stored.size());
     UNIT_ASSERT(received == stored);
     UNIT_ASSERT(received2 == stored);
-
-    std::reverse(items.begin(), items.end());
-    typename TCompactTrie<T>::TConstIterator revIt = trie.End();
-    typename TCompactTrie<T>::TConstIterator const begin = trie.Begin();
+ 
+    std::reverse(items.begin(), items.end()); 
+    typename TCompactTrie<T>::TConstIterator revIt = trie.End(); 
+    typename TCompactTrie<T>::TConstIterator const begin = trie.Begin(); 
     typename TCompactTrie<T>::TConstIterator emptyIt;
-    size_t pos = 0;
-    while (revIt != begin) {
-        revIt--;
-        UNIT_ASSERT(*revIt == items[pos]);
-        pos++;
-    }
-    // Checking the assignment operator.
-    revIt = begin;
-    UNIT_ASSERT(revIt == trie.Begin());
-    UNIT_ASSERT(!revIt.IsEmpty());
+    size_t pos = 0; 
+    while (revIt != begin) { 
+        revIt--; 
+        UNIT_ASSERT(*revIt == items[pos]); 
+        pos++; 
+    } 
+    // Checking the assignment operator. 
+    revIt = begin; 
+    UNIT_ASSERT(revIt == trie.Begin()); 
+    UNIT_ASSERT(!revIt.IsEmpty()); 
     UNIT_ASSERT(revIt != emptyIt);
-    UNIT_ASSERT(revIt != trie.End());
-    ++revIt; // Call a method that uses Skipper.
+    UNIT_ASSERT(revIt != trie.End()); 
+    ++revIt; // Call a method that uses Skipper. 
     revIt = emptyIt;
     UNIT_ASSERT(revIt == emptyIt);
-    UNIT_ASSERT(revIt.IsEmpty());
-    UNIT_ASSERT(revIt != trie.End());
-    // Checking the move assignment operator.
-    revIt = trie.Begin();
-    UNIT_ASSERT(revIt == trie.Begin());
-    UNIT_ASSERT(!revIt.IsEmpty());
-    UNIT_ASSERT(revIt != emptyIt);
-    UNIT_ASSERT(revIt != trie.End());
-    ++revIt; // Call a method that uses Skipper.
-    revIt = typename TCompactTrie<T>::TConstIterator();
-    UNIT_ASSERT(revIt == emptyIt);
-    UNIT_ASSERT(revIt.IsEmpty());
-    UNIT_ASSERT(revIt != trie.End());
+    UNIT_ASSERT(revIt.IsEmpty()); 
+    UNIT_ASSERT(revIt != trie.End()); 
+    // Checking the move assignment operator. 
+    revIt = trie.Begin(); 
+    UNIT_ASSERT(revIt == trie.Begin()); 
+    UNIT_ASSERT(!revIt.IsEmpty()); 
+    UNIT_ASSERT(revIt != emptyIt); 
+    UNIT_ASSERT(revIt != trie.End()); 
+    ++revIt; // Call a method that uses Skipper. 
+    revIt = typename TCompactTrie<T>::TConstIterator(); 
+    UNIT_ASSERT(revIt == emptyIt); 
+    UNIT_ASSERT(revIt.IsEmpty()); 
+    UNIT_ASSERT(revIt != trie.End()); 
 }
 
 template <class T>
-void TCompactTrieTest::TestTrie(bool minimize, bool useFastLayout) {
+void TCompactTrieTest::TestTrie(bool minimize, bool useFastLayout) { 
     TBufferOutput bufout;
-    CreateTrie<T>(bufout, minimize, useFastLayout);
+    CreateTrie<T>(bufout, minimize, useFastLayout); 
     CheckData<T>(bufout.Buffer().Data(), bufout.Buffer().Size());
-    CheckUpperBound<T>(bufout.Buffer().Data(), bufout.Buffer().Size());
+    CheckUpperBound<T>(bufout.Buffer().Data(), bufout.Buffer().Size()); 
 }
 
 template <class T>
 void TCompactTrieTest::TestTrieIterator(bool minimize) {
     TBufferOutput bufout;
-    CreateTrie<T>(bufout, minimize, false);
+    CreateTrie<T>(bufout, minimize, false); 
     CheckIterator<T>(bufout.Buffer().Data(), bufout.Buffer().Size());
 }
 
@@ -539,7 +539,7 @@ void TCompactTrieTest::TestFastMinimizedTrie16() {
 void TCompactTrieTest::TestFastMinimizedTrie32() {
     TestTrie<wchar32>(true, true);
 }
-
+ 
 void TCompactTrieTest::TestTrieIterator8() {
     TestTrieIterator<char>(false);
 }
@@ -549,7 +549,7 @@ void TCompactTrieTest::TestTrieIterator16() {
 void TCompactTrieTest::TestTrieIterator32() {
     TestTrieIterator<wchar32>(false);
 }
-
+ 
 void TCompactTrieTest::TestMinimizedTrieIterator8() {
     TestTrieIterator<char>(true);
 }
@@ -566,7 +566,7 @@ void TCompactTrieTest::TestPhraseSearch() {
     static const char* const badphrase = "cd ef gh ab";
     TBufferOutput bufout;
 
-    TCompactTrieBuilder<char> builder;
+    TCompactTrieBuilder<char> builder; 
     for (size_t i = 0; i < Y_ARRAY_SIZE(phrases); i++) {
         builder.Add(phrases[i], strlen(phrases[i]), i);
     }
@@ -626,26 +626,26 @@ void TCompactTrieTest::TestEmpty() {
     UNIT_ASSERT(trieNull.Begin() == trieNull.End());
 }
 
-void TCompactTrieTest::TestUninitializedNonEmpty() {
-    TBufferOutput bufout;
-    CreateTrie<char>(bufout, false, false);
-    TCompactTrie<char> trie(bufout.Buffer().Data(), bufout.Buffer().Size());
-    typedef TCompactTrie<char>::TKey TKey;
-    typedef TCompactTrie<char>::TConstIterator TIter;
-
-    TCompactTrie<char> tails = trie.FindTails("abd", 3); // A trie that has empty value and no data.
-    UNIT_ASSERT(!tails.IsEmpty());
-    UNIT_ASSERT(!tails.IsInitialized());
-    const TKey wideKey = MakeWideKey<char>("c", 1);
-    TIter it = tails.UpperBound(wideKey);
-    UNIT_ASSERT(it == tails.End());
-    UNIT_ASSERT(it != tails.Begin());
-    --it;
-    UNIT_ASSERT(it == tails.Begin());
-    ++it;
-    UNIT_ASSERT(it == tails.End());
-}
-
+void TCompactTrieTest::TestUninitializedNonEmpty() { 
+    TBufferOutput bufout; 
+    CreateTrie<char>(bufout, false, false); 
+    TCompactTrie<char> trie(bufout.Buffer().Data(), bufout.Buffer().Size()); 
+    typedef TCompactTrie<char>::TKey TKey; 
+    typedef TCompactTrie<char>::TConstIterator TIter; 
+ 
+    TCompactTrie<char> tails = trie.FindTails("abd", 3); // A trie that has empty value and no data. 
+    UNIT_ASSERT(!tails.IsEmpty()); 
+    UNIT_ASSERT(!tails.IsInitialized()); 
+    const TKey wideKey = MakeWideKey<char>("c", 1); 
+    TIter it = tails.UpperBound(wideKey); 
+    UNIT_ASSERT(it == tails.End()); 
+    UNIT_ASSERT(it != tails.Begin()); 
+    --it; 
+    UNIT_ASSERT(it == tails.Begin()); 
+    ++it; 
+    UNIT_ASSERT(it == tails.End()); 
+} 
+ 
 static char RandChar() {
     return char(RandomNumber<size_t>() % 256);
 }
@@ -688,7 +688,7 @@ void TCompactTrieTest::TestRandom(const size_t n, const size_t maxKeySize) {
     }
     TCompactTrie<char, typename T::TData, T> trieMin(buftmp.Buffer().Data(), buftmp.Buffer().Size());
 
-    TCompactTrieBuilder<char, typename T::TData, T> prefixGroupedBuilder(CTBF_PREFIX_GROUPED);
+    TCompactTrieBuilder<char, typename T::TData, T> prefixGroupedBuilder(CTBF_PREFIX_GROUPED); 
 
     for (typename TKeys::const_iterator i = keys.begin(), mi = keys.end(); i != mi; ++i) {
         UNIT_ASSERT(!prefixGroupedBuilder.Find(i->first.c_str(), i->first.size(), &dummy));
@@ -699,7 +699,7 @@ void TCompactTrieTest::TestRandom(const size_t n, const size_t maxKeySize) {
             UNIT_ASSERT(dummy == i->second);
         }
 
-        prefixGroupedBuilder.Add(i->first.c_str(), i->first.size(), dummy);
+        prefixGroupedBuilder.Add(i->first.c_str(), i->first.size(), dummy); 
         UNIT_ASSERT(prefixGroupedBuilder.Find(i->first.c_str(), i->first.size(), &dummy));
 
         for (typename TKeys::const_iterator j = keys.begin(), end = keys.end(); j != end; ++j) {
@@ -713,11 +713,11 @@ void TCompactTrieTest::TestRandom(const size_t n, const size_t maxKeySize) {
         }
     }
 
-    TBufferStream prefixGroupedBuffer;
-    prefixGroupedBuilder.Save(prefixGroupedBuffer);
+    TBufferStream prefixGroupedBuffer; 
+    prefixGroupedBuilder.Save(prefixGroupedBuffer); 
 
-    UNIT_ASSERT_VALUES_EQUAL(stream.Buffer().Size(), prefixGroupedBuffer.Buffer().Size());
-    UNIT_ASSERT(0 == memcmp(stream.Buffer().Data(), prefixGroupedBuffer.Buffer().Data(), stream.Buffer().Size()));
+    UNIT_ASSERT_VALUES_EQUAL(stream.Buffer().Size(), prefixGroupedBuffer.Buffer().Size()); 
+    UNIT_ASSERT(0 == memcmp(stream.Buffer().Data(), prefixGroupedBuffer.Buffer().Data(), stream.Buffer().Size())); 
 }
 
 void TCompactTrieTest::TestRandom() {
@@ -730,7 +730,7 @@ void TCompactTrieTest::TestRandom() {
 }
 
 void TCompactTrieTest::TestFindTailsImpl(const TString& prefix) {
-    TCompactTrieBuilder<> builder;
+    TCompactTrieBuilder<> builder; 
 
     TMap<TString, ui64> input;
 
@@ -775,9 +775,9 @@ void TCompactTrieTest::TestFindTailsImpl(const TString& prefix) {
     UNIT_ASSERT(input == output);
 }
 
-void TCompactTrieTest::TestPrefixGrouped() {
+void TCompactTrieTest::TestPrefixGrouped() { 
     TBuffer b1b;
-    TCompactTrieBuilder<char, ui32> b1(CTBF_PREFIX_GROUPED);
+    TCompactTrieBuilder<char, ui32> b1(CTBF_PREFIX_GROUPED); 
     const char* data[] = {
         "Kazan",
         "Moscow",
@@ -820,27 +820,27 @@ void TCompactTrieTest::TestPrefixGrouped() {
     }
 }
 
-void TCompactTrieTest::CrashTestPrefixGrouped() {
-    TCompactTrieBuilder<char, ui32> builder(CTBF_PREFIX_GROUPED);
-    const char* data[] = {
-        "Fryazino",
-        "Fryanovo",
-        "Monino",
-        "",
-        "Fryazevo",
-    };
-    bool wasException = false;
-    try {
+void TCompactTrieTest::CrashTestPrefixGrouped() { 
+    TCompactTrieBuilder<char, ui32> builder(CTBF_PREFIX_GROUPED); 
+    const char* data[] = { 
+        "Fryazino", 
+        "Fryanovo", 
+        "Monino", 
+        "", 
+        "Fryazevo", 
+    }; 
+    bool wasException = false; 
+    try { 
         for (size_t i = 0; i < Y_ARRAY_SIZE(data); ++i) {
-            builder.Add(data[i], strlen(data[i]), i + 1);
-        }
-    } catch (const yexception& e) {
-        wasException = true;
-        UNIT_ASSERT(strstr(e.what(), "Bad input order - expected input strings to be prefix-grouped."));
-    }
-    UNIT_ASSERT_C(wasException, "CrashTestPrefixGrouped");
-}
-
+            builder.Add(data[i], strlen(data[i]), i + 1); 
+        } 
+    } catch (const yexception& e) { 
+        wasException = true; 
+        UNIT_ASSERT(strstr(e.what(), "Bad input order - expected input strings to be prefix-grouped.")); 
+    } 
+    UNIT_ASSERT_C(wasException, "CrashTestPrefixGrouped"); 
+} 
+ 
 void TCompactTrieTest::TestMergeFromFile() {
     {
         TCompactTrieBuilder<> b;
@@ -863,7 +863,7 @@ void TCompactTrieTest::TestMergeFromFile() {
     {
         TCompactTrieBuilder<> b;
         UNIT_ASSERT(b.AddSubtreeInFile("com.", GetSystemTempDir() + "/TCompactTrieTest-TestMerge-com"));
-        UNIT_ASSERT(b.Add("org.kernel", 22));
+        UNIT_ASSERT(b.Add("org.kernel", 22)); 
         UNIT_ASSERT(b.AddSubtreeInFile("ru.", GetSystemTempDir() + "/TCompactTrieTest-TestMerge-ru"));
         TUnbufferedFileOutput out(GetSystemTempDir() + "/TCompactTrieTest-TestMerge-res");
         b.Save(out);
@@ -929,14 +929,14 @@ void TCompactTrieTest::TestMergeFromBuffer() {
     unlink((GetSystemTempDir() + "/TCompactTrieTest-TestMergeFromBuffer-res").data());
 }
 
-void TCompactTrieTest::TestUnique() {
-    TestUniqueImpl(false);
-    TestUniqueImpl(true);
-}
-
-void TCompactTrieTest::TestUniqueImpl(bool isPrefixGrouped) {
-    TCompactTrieBuilder<char, ui32> builder(CTBF_UNIQUE | (isPrefixGrouped ? CTBF_PREFIX_GROUPED : CTBF_NONE));
-    const char* data[] = {
+void TCompactTrieTest::TestUnique() { 
+    TestUniqueImpl(false); 
+    TestUniqueImpl(true); 
+} 
+ 
+void TCompactTrieTest::TestUniqueImpl(bool isPrefixGrouped) { 
+    TCompactTrieBuilder<char, ui32> builder(CTBF_UNIQUE | (isPrefixGrouped ? CTBF_PREFIX_GROUPED : CTBF_NONE)); 
+    const char* data[] = { 
         "Kazan",
         "Moscow",
         "Monino",
@@ -946,23 +946,23 @@ void TCompactTrieTest::TestUniqueImpl(bool isPrefixGrouped) {
         "Fryazevo",
         "Fry",
         "Tumen",
-    };
+    }; 
     for (size_t i = 0; i < Y_ARRAY_SIZE(data); ++i) {
-        UNIT_ASSERT_C(builder.Add(data[i], strlen(data[i]), i + 1), i);
-    }
-    bool wasException = false;
-    try {
-        builder.Add(data[4], strlen(data[4]), 20);
-    } catch (const yexception& e) {
-        wasException = true;
-        UNIT_ASSERT(strstr(e.what(), "Duplicate key"));
-    }
-    UNIT_ASSERT_C(wasException, "TestUnique");
-}
-
-void TCompactTrieTest::TestAddRetValue() {
-    TCompactTrieBuilder<char, ui32> builder;
-    const char* data[] = {
+        UNIT_ASSERT_C(builder.Add(data[i], strlen(data[i]), i + 1), i); 
+    } 
+    bool wasException = false; 
+    try { 
+        builder.Add(data[4], strlen(data[4]), 20); 
+    } catch (const yexception& e) { 
+        wasException = true; 
+        UNIT_ASSERT(strstr(e.what(), "Duplicate key")); 
+    } 
+    UNIT_ASSERT_C(wasException, "TestUnique"); 
+} 
+ 
+void TCompactTrieTest::TestAddRetValue() { 
+    TCompactTrieBuilder<char, ui32> builder; 
+    const char* data[] = { 
         "Kazan",
         "Moscow",
         "Monino",
@@ -972,16 +972,16 @@ void TCompactTrieTest::TestAddRetValue() {
         "Fryazevo",
         "Fry",
         "Tumen",
-    };
+    }; 
     for (size_t i = 0; i < Y_ARRAY_SIZE(data); ++i) {
-        UNIT_ASSERT(builder.Add(data[i], strlen(data[i]), i + 1));
-        UNIT_ASSERT(!builder.Add(data[i], strlen(data[i]), i + 2));
-        ui32 value;
-        UNIT_ASSERT(builder.Find(data[i], strlen(data[i]), &value));
-        UNIT_ASSERT(value == i + 2);
-    }
-}
-
+        UNIT_ASSERT(builder.Add(data[i], strlen(data[i]), i + 1)); 
+        UNIT_ASSERT(!builder.Add(data[i], strlen(data[i]), i + 2)); 
+        ui32 value; 
+        UNIT_ASSERT(builder.Find(data[i], strlen(data[i]), &value)); 
+        UNIT_ASSERT(value == i + 2); 
+    } 
+} 
+ 
 void TCompactTrieTest::TestClear() {
     TCompactTrieBuilder<char, ui32> builder;
     const char* data[] = {
@@ -1253,22 +1253,22 @@ void TCompactTrieTest::TestTrieForPairWtrokaVectorInt64() {
     TestTrieWithContainers<std::pair<TUtf16String, TVector<i64>>>(keys, data, "pair-str-v-i64");
 }
 
-void TCompactTrieTest::TestEmptyValueOutOfOrder() {
-    TBufferOutput buffer;
-    using TSymbol = ui32;
-    {
-        TCompactTrieBuilder<TSymbol, ui32> builder;
-        TSymbol key = 1;
-        builder.Add(&key, 1, 10);
-        builder.Add(nullptr, 0, 14);
-        builder.Save(buffer);
-    }
-    {
-        TCompactTrie<TSymbol, ui32> trie(buffer.Buffer().Data(), buffer.Buffer().Size());
-        UNIT_ASSERT(trie.Find(nullptr, 0));
-    }
-}
-
+void TCompactTrieTest::TestEmptyValueOutOfOrder() { 
+    TBufferOutput buffer; 
+    using TSymbol = ui32; 
+    { 
+        TCompactTrieBuilder<TSymbol, ui32> builder; 
+        TSymbol key = 1; 
+        builder.Add(&key, 1, 10); 
+        builder.Add(nullptr, 0, 14); 
+        builder.Save(buffer); 
+    } 
+    { 
+        TCompactTrie<TSymbol, ui32> trie(buffer.Buffer().Data(), buffer.Buffer().Size()); 
+        UNIT_ASSERT(trie.Find(nullptr, 0)); 
+    } 
+} 
+ 
 void TCompactTrieTest::TestFindLongestPrefixWithEmptyValue() {
     TBufferOutput buffer;
     {
@@ -1340,25 +1340,25 @@ void TCompactTrieTest::TestSearchIterImpl() {
 
     TCompactTrie<TChar, ui32> trie(buffer.Buffer().Data(), buffer.Buffer().Size());
     ui32 value = 0;
-    auto iter(MakeSearchIterator(trie));
+    auto iter(MakeSearchIterator(trie)); 
     MoveIter(iter, TConvertKey<TChar>::Convert(TStringBuf("abc")));
     UNIT_ASSERT(!iter.GetValue(&value));
 
-    iter = MakeSearchIterator(trie);
+    iter = MakeSearchIterator(trie); 
     MoveIter(iter, TConvertKey<TChar>::Convert(TStringBuf("abbbc")));
     UNIT_ASSERT(iter.GetValue(&value));
     UNIT_ASSERT_EQUAL(value, 3);
 
-    iter = MakeSearchIterator(trie);
+    iter = MakeSearchIterator(trie); 
     UNIT_ASSERT(iter.Advance(TConvertKey<TChar>::Convert(TStringBuf("bdfa"))));
     UNIT_ASSERT(!iter.GetValue(&value));
 
-    iter = MakeSearchIterator(trie);
+    iter = MakeSearchIterator(trie); 
     UNIT_ASSERT(iter.Advance(TConvertKey<TChar>::Convert(TStringBuf("bdfaa"))));
     UNIT_ASSERT(iter.GetValue(&value));
     UNIT_ASSERT_EQUAL(value, 4);
 
-    UNIT_ASSERT(!MakeSearchIterator(trie).Advance(TChar('z')));
+    UNIT_ASSERT(!MakeSearchIterator(trie).Advance(TChar('z'))); 
     UNIT_ASSERT(!MakeSearchIterator(trie).Advance(TConvertKey<TChar>::Convert(TStringBuf("cdf"))));
     UNIT_ASSERT(!MakeSearchIterator(trie).Advance(TConvertKey<TChar>::Convert(TStringBuf("abca"))));
 }
@@ -1370,69 +1370,69 @@ void TCompactTrieTest::TestSearchIterChar() {
 void TCompactTrieTest::TestSearchIterWchar() {
     TestSearchIterImpl<wchar16>();
 }
-
+ 
 void TCompactTrieTest::TestSearchIterWchar32() {
     TestSearchIterImpl<wchar32>();
 }
 
-void TCompactTrieTest::TestCopyAndAssignment() {
-    TBufferOutput bufout;
-    typedef TCompactTrie<> TTrie;
-    CreateTrie<char>(bufout, false, false);
-    TTrie trie(bufout.Buffer().Data(), bufout.Buffer().Size());
-    TTrie copy(trie);
-    UNIT_ASSERT(copy.HasCorrectSkipper());
-    TTrie assign;
-    assign = trie;
-    UNIT_ASSERT(assign.HasCorrectSkipper());
+void TCompactTrieTest::TestCopyAndAssignment() { 
+    TBufferOutput bufout; 
+    typedef TCompactTrie<> TTrie; 
+    CreateTrie<char>(bufout, false, false); 
+    TTrie trie(bufout.Buffer().Data(), bufout.Buffer().Size()); 
+    TTrie copy(trie); 
+    UNIT_ASSERT(copy.HasCorrectSkipper()); 
+    TTrie assign; 
+    assign = trie; 
+    UNIT_ASSERT(assign.HasCorrectSkipper()); 
     TTrie move(std::move(trie));
-    UNIT_ASSERT(move.HasCorrectSkipper());
-    TTrie moveAssign;
-    moveAssign = TTrie(bufout.Buffer().Data(), bufout.Buffer().Size());
-    UNIT_ASSERT(moveAssign.HasCorrectSkipper());
-}
-
-template <class TTrie>
-void TCompactTrieTest::TestFirstSymbolIteratorForTrie(const TTrie& trie, const TStringBuf& narrowAnswers) {
-    NCompactTrie::TFirstSymbolIterator<TTrie> it;
-    it.SetTrie(trie, trie.GetSkipper());
-    typename TTrie::TKey answers = MakeWideKey<typename TTrie::TSymbol>(narrowAnswers);
-    auto answer = answers.begin();
-    for (; !it.AtEnd(); it.MakeStep(), ++answer) {
-        UNIT_ASSERT(answer != answers.end());
-        UNIT_ASSERT(it.GetKey() == *answer);
-    }
-    UNIT_ASSERT(answer == answers.end());
-}
-
-template <class TSymbol>
-void TCompactTrieTest::TestFirstSymbolIterator() {
-    TBufferOutput bufout;
-    typedef TCompactTrie<TSymbol> TTrie;
-    CreateTrie<TSymbol>(bufout, false, false);
-    TTrie trie(bufout.Buffer().Data(), bufout.Buffer().Size());
+    UNIT_ASSERT(move.HasCorrectSkipper()); 
+    TTrie moveAssign; 
+    moveAssign = TTrie(bufout.Buffer().Data(), bufout.Buffer().Size()); 
+    UNIT_ASSERT(moveAssign.HasCorrectSkipper()); 
+} 
+ 
+template <class TTrie> 
+void TCompactTrieTest::TestFirstSymbolIteratorForTrie(const TTrie& trie, const TStringBuf& narrowAnswers) { 
+    NCompactTrie::TFirstSymbolIterator<TTrie> it; 
+    it.SetTrie(trie, trie.GetSkipper()); 
+    typename TTrie::TKey answers = MakeWideKey<typename TTrie::TSymbol>(narrowAnswers); 
+    auto answer = answers.begin(); 
+    for (; !it.AtEnd(); it.MakeStep(), ++answer) { 
+        UNIT_ASSERT(answer != answers.end()); 
+        UNIT_ASSERT(it.GetKey() == *answer); 
+    } 
+    UNIT_ASSERT(answer == answers.end()); 
+} 
+ 
+template <class TSymbol> 
+void TCompactTrieTest::TestFirstSymbolIterator() { 
+    TBufferOutput bufout; 
+    typedef TCompactTrie<TSymbol> TTrie; 
+    CreateTrie<TSymbol>(bufout, false, false); 
+    TTrie trie(bufout.Buffer().Data(), bufout.Buffer().Size()); 
     TStringBuf rootAnswers = "abcdf";
-    TestFirstSymbolIteratorForTrie(trie, rootAnswers);
+    TestFirstSymbolIteratorForTrie(trie, rootAnswers); 
     TStringBuf aAnswers = "abcd";
-    TestFirstSymbolIteratorForTrie(trie.FindTails(MakeWideKey<TSymbol>("a", 1)), aAnswers);
-}
-
-void TCompactTrieTest::TestFirstSymbolIterator8() {
-    TestFirstSymbolIterator<char>();
-}
-
-void TCompactTrieTest::TestFirstSymbolIterator16() {
-    TestFirstSymbolIterator<wchar16>();
-}
-
-void TCompactTrieTest::TestFirstSymbolIterator32() {
-    TestFirstSymbolIterator<ui32>();
-}
-
+    TestFirstSymbolIteratorForTrie(trie.FindTails(MakeWideKey<TSymbol>("a", 1)), aAnswers); 
+} 
+ 
+void TCompactTrieTest::TestFirstSymbolIterator8() { 
+    TestFirstSymbolIterator<char>(); 
+} 
+ 
+void TCompactTrieTest::TestFirstSymbolIterator16() { 
+    TestFirstSymbolIterator<wchar16>(); 
+} 
+ 
+void TCompactTrieTest::TestFirstSymbolIterator32() { 
+    TestFirstSymbolIterator<ui32>(); 
+} 
+ 
 void TCompactTrieTest::TestFirstSymbolIteratorChar32() {
     TestFirstSymbolIterator<wchar32>();
 }
-
+ 
 
 void TCompactTrieTest::TestArrayPacker() {
     using TDataInt = std::array<int, 2>;

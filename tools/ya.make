@@ -5,7 +5,7 @@ RECURSE(
     archiver/alignment_test
     archiver/tests
     base64
-    bigram_compiler
+    bigram_compiler 
     blender
     bmdump
     bstr

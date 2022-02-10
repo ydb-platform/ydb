@@ -530,8 +530,8 @@ public:
 
     inline size_t find_last_of(const TStringView set, size_t pos = npos) const noexcept {
         return find_last_of(set.data(), pos, set.length());
-    }
-
+    } 
+ 
     inline size_t find_last_of(const TCharType* set, size_t pos, size_t n) const noexcept {
         return AsStringView().find_last_of(set, pos, n);
     }

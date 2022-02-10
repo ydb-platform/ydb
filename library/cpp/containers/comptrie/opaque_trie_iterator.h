@@ -1,14 +1,14 @@
 #pragma once
 
 #include "comptrie_impl.h"
-#include "node.h"
-#include "key_selector.h"
-#include "leaf_skipper.h"
+#include "node.h" 
+#include "key_selector.h" 
+#include "leaf_skipper.h" 
 
-#include <util/generic/vector.h>
-#include <util/generic/yexception.h>
-
-namespace NCompactTrie {
+#include <util/generic/vector.h> 
+#include <util/generic/yexception.h> 
+ 
+namespace NCompactTrie { 
     class ILeafSkipper;
 
     class TFork { // Auxiliary class for a branching point in the iterator
@@ -30,7 +30,7 @@ namespace NCompactTrie {
         bool NextDirection();
         bool PrevDirection();
         void LastDirection();
-
+ 
         bool HasDirection(TDirection direction) const {
             return Node.GetOffsetByDirection(direction);
         }
@@ -48,8 +48,8 @@ namespace NCompactTrie {
         Y_ASSERT(CurrentDirection != D_FINAL);
         size_t offset = Node.GetOffsetByDirection(CurrentDirection);
         return TFork(Data, offset, Limit, skipper);
-    }
-
+    } 
+ 
     //------------------------------------------------------------------------------------------------
     class TForkStack {
     public:
@@ -66,10 +66,10 @@ namespace NCompactTrie {
                 Key.pop_back();
             }
         }
-
+ 
         TFork& Top() {
             return Forks.back();
-        }
+        } 
         const TFork& Top() const {
             return Forks.back();
         }
@@ -77,35 +77,35 @@ namespace NCompactTrie {
         bool Empty() const {
             return Forks.empty();
         }
-
+ 
         void Clear() {
             Forks.clear();
             Key.clear();
-        }
-
+        } 
+ 
         bool operator==(const TForkStack& other) const {
             return Forks == other.Forks;
         }
         bool operator!=(const TForkStack& other) const {
             return !(*this == other);
         }
-
+ 
         TString GetKey() const;
         size_t MeasureKey() const;
-
+ 
     private:
         TVector<TFork> Forks;
         TString Key;
-
+ 
     private:
         bool TopHasLabelInKey() const {
             return !Empty() && Top().HasLabelInKey();
         }
         bool HasEmptyKey() const;
     };
-
+ 
     //------------------------------------------------------------------------------------------------
-
+ 
     template <class TSymbol>
     struct TConvertRawKey {
         typedef typename TCompactTrieKeySelector<TSymbol>::TKey TKey;
@@ -127,37 +127,37 @@ namespace NCompactTrie {
             }
             return result;
         }
-
+ 
         static size_t Size(size_t rawsize) {
             return rawsize / sizeof(TSymbol);
         }
     };
-
+ 
     template <>
     struct TConvertRawKey<char> {
         static TString Get(const TString& rawkey) {
             return rawkey;
         }
-
+ 
         static size_t Size(size_t rawsize) {
             return rawsize;
-        }
+        } 
     };
-
+ 
     //------------------------------------------------------------------------------------------------
     class TOpaqueTrieIterator { // Iterator stuff. Stores a stack of visited forks.
     public:
         TOpaqueTrieIterator(const TOpaqueTrie& trie, const char* emptyValue, bool atend,
                             size_t maxKeyLength = size_t(-1));
-
+ 
         bool operator==(const TOpaqueTrieIterator& rhs) const;
         bool operator!=(const TOpaqueTrieIterator& rhs) const {
             return !(*this == rhs);
         }
-
+ 
         bool Forward();
         bool Backward();
-
+ 
         template <class TSymbol>
         bool UpperBound(const typename TCompactTrieKeySelector<TSymbol>::TKeyBuf& key); // True if matched exactly.
 
@@ -185,22 +185,22 @@ namespace NCompactTrie {
         const TOpaqueTrie& GetTrie() const {
             return Trie;
         }
-
+ 
     private:
         TOpaqueTrie Trie;
         TForkStack Forks;
         const char* const EmptyValue;
         bool AtEmptyValue;
         const size_t MaxKeyLength;
-
+ 
     private:
         bool HasMaxKeyLength() const;
-
+ 
         template <class TSymbol>
         int LongestPrefix(const typename TCompactTrieKeySelector<TSymbol>::TKeyBuf& key); // Used in UpperBound.
     };
 
-    template <class TSymbol>
+    template <class TSymbol> 
     int TOpaqueTrieIterator::LongestPrefix(const typename TCompactTrieKeySelector<TSymbol>::TKeyBuf& key) {
         Forks.Clear();
         TFork next(Trie.Data, 0, Trie.Length, Trie.SkipFunction);
@@ -230,17 +230,17 @@ namespace NCompactTrie {
                         }
                     } else if (!top.SetDirection(D_NEXT)) {
                         top.SetDirection(D_FINAL);
-                        return -1;
-                    }
+                        return -1; 
+                    } 
                     next = top.NextFork(Trie.SkipFunction);
                 } while (Forks.Top().CurrentDirection != D_NEXT); // Proceed to the next byte.
             }
-        }
+        } 
         // We get here only if the key was empty.
         Forks.Push(next);
         return 1;
-    }
-
+    } 
+ 
     template <class TSymbol>
     bool TOpaqueTrieIterator::UpperBound(const typename TCompactTrieKeySelector<TSymbol>::TKeyBuf& key) {
         Forks.Clear();
@@ -249,7 +249,7 @@ namespace NCompactTrie {
             return true;
         } else {
             AtEmptyValue = false;
-        }
+        } 
         const int defect = LongestPrefix<TSymbol>(key);
         if (defect > 0) {
             // Continue the constructed forks with the smallest key possible.
@@ -261,6 +261,6 @@ namespace NCompactTrie {
             Forward();
         }
         return defect == 0;
-    }
+    } 
 
-}
+} 

@@ -1,16 +1,16 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 NO_UTIL()
-
+ 
 OWNER(alzobnin)
-
-SRCS(
-    generated/composition.cpp
-    generated/decomposition.cpp
-    decomposition_table.h
-    normalization.cpp
-)
-
+ 
+SRCS( 
+    generated/composition.cpp 
+    generated/decomposition.cpp 
+    decomposition_table.h 
+    normalization.cpp 
+) 
+ 
 IF(NOT CATBOOST_OPENSOURCE)
     SRCS(
         custom_encoder.cpp
@@ -20,5 +20,5 @@ IF(NOT CATBOOST_OPENSOURCE)
     )
     GENERATE_ENUM_SERIALIZATION(normalization.h)
 ENDIF()
-
-END()
+ 
+END() 

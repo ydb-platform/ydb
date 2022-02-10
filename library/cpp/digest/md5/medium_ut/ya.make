@@ -13,6 +13,6 @@ SRCS(
     md5_medium_ut.cpp
 )
 
-REQUIREMENTS(ram:10)
-
+REQUIREMENTS(ram:10) 
+ 
 END()

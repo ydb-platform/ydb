@@ -31,6 +31,6 @@ SRCS(
     utils_ut.cpp
 )
 
-REQUIREMENTS(ram:11)
-
+REQUIREMENTS(ram:11) 
+ 
 END()

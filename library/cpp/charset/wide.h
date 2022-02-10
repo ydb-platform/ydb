@@ -184,7 +184,7 @@ namespace NDetail {
 
     // special implementation for robust utf8 functions
     template <typename TResult>
-    TWtringBuf RecodeUTF8Robust(const TStringBuf src, TResult& dst) {
+    TWtringBuf RecodeUTF8Robust(const TStringBuf src, TResult& dst) { 
         // make enough room for re-coded string
         wchar16* dstbuf = TRecodeResultOps<TResult>::Reserve(dst, src.size() * TRecodeTraits<wchar16>::ReserveSize);
 
@@ -208,17 +208,17 @@ namespace NDetail {
 // Write result into @dst. Return string-buffer pointing to re-coded content of @dst.
 
 template <bool robust>
-inline TWtringBuf CharToWide(const TStringBuf src, TUtf16String& dst, ECharset encoding) {
+inline TWtringBuf CharToWide(const TStringBuf src, TUtf16String& dst, ECharset encoding) { 
     if (robust && CODES_UTF8 == encoding)
         return ::NDetail::RecodeUTF8Robust(src, dst);
     return ::NDetail::Recode<char>(src, dst, encoding);
 }
 
-inline TWtringBuf CharToWide(const TStringBuf src, TUtf16String& dst, ECharset encoding) {
+inline TWtringBuf CharToWide(const TStringBuf src, TUtf16String& dst, ECharset encoding) { 
     return ::NDetail::Recode<char>(src, dst, encoding);
 }
 
-inline TStringBuf WideToChar(const TWtringBuf src, TString& dst, ECharset encoding) {
+inline TStringBuf WideToChar(const TWtringBuf src, TString& dst, ECharset encoding) { 
     return ::NDetail::Recode<wchar16>(src, dst, encoding);
 }
 
@@ -284,20 +284,20 @@ inline TUtf16String UTF8ToWide(const char* text, size_t len, const CodePage& cp)
     return w;
 }
 
-inline TString WideToChar(const TWtringBuf w, ECharset enc) {
+inline TString WideToChar(const TWtringBuf w, ECharset enc) { 
     return WideToChar(w.data(), w.size(), enc);
 }
 
-inline TUtf16String CharToWide(const TStringBuf s, ECharset enc) {
+inline TUtf16String CharToWide(const TStringBuf s, ECharset enc) { 
     return CharToWide<false>(s.data(), s.size(), enc);
 }
 
 template <bool robust>
-inline TUtf16String CharToWide(const TStringBuf s, ECharset enc) {
+inline TUtf16String CharToWide(const TStringBuf s, ECharset enc) { 
     return CharToWide<robust>(s.data(), s.size(), enc);
 }
 
-inline TUtf16String CharToWide(const TStringBuf s, const CodePage& cp) {
+inline TUtf16String CharToWide(const TStringBuf s, const CodePage& cp) { 
     return CharToWide(s.data(), s.size(), cp);
 }
 

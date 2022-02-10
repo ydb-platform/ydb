@@ -130,12 +130,12 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
             : TExampleClient(std::forward<Args>(args)...)
         {
         }
-
+ 
         ~TestNoServerImplClient() override {
             Session->Shutdown();
         }
 
-        void OnError(TAutoPtr<TBusMessage> message, EMessageStatus status) override {
+        void OnError(TAutoPtr<TBusMessage> message, EMessageStatus status) override { 
             Y_UNUSED(message);
 
             Y_VERIFY(status == MESSAGE_CONNECT_FAILED, "must be MESSAGE_CONNECT_FAILED, got %s", ToString(status).data());
@@ -1066,8 +1066,8 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
 
         TNetAddr noServerAddr("localhost", 17);
         TBusClientSessionConfig clientConfig;
-        clientConfig.RetryInterval = 100;
-        TestNoServerImplClient client(clientConfig);
+        clientConfig.RetryInterval = 100; 
+        TestNoServerImplClient client(clientConfig); 
 
         int count = 0;
         for (; count < 10; ++count) {
@@ -1098,9 +1098,9 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
 
         TNetAddr noServerAddr("localhost", 17);
         TBusClientSessionConfig clientConfig;
-        clientConfig.RetryInterval = 100;
-        clientConfig.ReconnectWhenIdle = false;
-        TestNoServerImplClient client(clientConfig);
+        clientConfig.RetryInterval = 100; 
+        clientConfig.ReconnectWhenIdle = false; 
+        TestNoServerImplClient client(clientConfig); 
 
         int count = 0;
         for (; count < 10; ++count) {
@@ -1114,38 +1114,38 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
             UNIT_ASSERT_EQUAL(client.Session->GetConnectSyscallsNumForTest(noServerAddr), 2);
         }
 
-        Sleep(TDuration::MilliSeconds(clientConfig.RetryInterval / 2));
+        Sleep(TDuration::MilliSeconds(clientConfig.RetryInterval / 2)); 
         UNIT_ASSERT_EQUAL(client.Session->GetConnectSyscallsNumForTest(noServerAddr), 2);
-        Sleep(TDuration::MilliSeconds(10 * clientConfig.RetryInterval));
+        Sleep(TDuration::MilliSeconds(10 * clientConfig.RetryInterval)); 
         UNIT_ASSERT_EQUAL(client.Session->GetConnectSyscallsNumForTest(noServerAddr), 2);
     };
-
+ 
     Y_UNIT_TEST(TestConnectionAttemptsOnNoMessagesAndReconnectWhenIdle) {
-        TObjectCountCheck objectCountCheck;
-
-        TNetAddr noServerAddr("localhost", 17);
-        TBusClientSessionConfig clientConfig;
-        clientConfig.ReconnectWhenIdle = true;
-        clientConfig.RetryInterval = 100;
-        TestNoServerImplClient client(clientConfig);
-
-        int count = 0;
-        for (; count < 10; ++count) {
-            EMessageStatus status = client.Session->SendMessageOneWay(new TExampleRequest(&client.Proto.RequestCount),
-                                                                      &noServerAddr);
-
+        TObjectCountCheck objectCountCheck; 
+ 
+        TNetAddr noServerAddr("localhost", 17); 
+        TBusClientSessionConfig clientConfig; 
+        clientConfig.ReconnectWhenIdle = true; 
+        clientConfig.RetryInterval = 100; 
+        TestNoServerImplClient client(clientConfig); 
+ 
+        int count = 0; 
+        for (; count < 10; ++count) { 
+            EMessageStatus status = client.Session->SendMessageOneWay(new TExampleRequest(&client.Proto.RequestCount), 
+                                                                      &noServerAddr); 
+ 
             Y_VERIFY(status == MESSAGE_OK, "must be MESSAGE_OK, got %s", ToString(status).data());
-            client.TestSync.WaitForAndIncrement(count * 2 + 1);
-
-            // First connection attempt is for connect call; second one is to get connect result.
-            UNIT_ASSERT_VALUES_EQUAL(client.Session->GetConnectSyscallsNumForTest(noServerAddr), 2);
-        }
-
-        Sleep(TDuration::MilliSeconds(clientConfig.RetryInterval / 2));
-        UNIT_ASSERT_EQUAL(client.Session->GetConnectSyscallsNumForTest(noServerAddr), 2);
-        Sleep(TDuration::MilliSeconds(10 * clientConfig.RetryInterval));
-        // it is undeterministic how many reconnects will be during that amount of time
-        // but it should occur at least once
-        UNIT_ASSERT(client.Session->GetConnectSyscallsNumForTest(noServerAddr) > 2);
-    };
+            client.TestSync.WaitForAndIncrement(count * 2 + 1); 
+ 
+            // First connection attempt is for connect call; second one is to get connect result. 
+            UNIT_ASSERT_VALUES_EQUAL(client.Session->GetConnectSyscallsNumForTest(noServerAddr), 2); 
+        } 
+ 
+        Sleep(TDuration::MilliSeconds(clientConfig.RetryInterval / 2)); 
+        UNIT_ASSERT_EQUAL(client.Session->GetConnectSyscallsNumForTest(noServerAddr), 2); 
+        Sleep(TDuration::MilliSeconds(10 * clientConfig.RetryInterval)); 
+        // it is undeterministic how many reconnects will be during that amount of time 
+        // but it should occur at least once 
+        UNIT_ASSERT(client.Session->GetConnectSyscallsNumForTest(noServerAddr) > 2); 
+    }; 
 };

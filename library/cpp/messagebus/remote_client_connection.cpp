@@ -76,7 +76,7 @@ void TRemoteClientConnection::TryConnect() {
         WriterData.SetChannel(Session->WriteEventLoop.Register(connectSocket, this, WriteCookie));
     }
 
-    if (BeforeSendQueue.IsEmpty() && WriterData.SendQueue.Empty() && !Config.ReconnectWhenIdle) {
+    if (BeforeSendQueue.IsEmpty() && WriterData.SendQueue.Empty() && !Config.ReconnectWhenIdle) { 
         // TryConnect is called from Writer::Act, which is called in cycle
         // from session's ScheduleTimeoutMessages via Cron. This prevent these excessive connects.
         return;

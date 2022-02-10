@@ -14,7 +14,7 @@
 Y_UNIT_TEST_SUITE(TFileMapTest) {
     static const char* FileName_("./mappped_file");
 
-    void BasicTest(TMemoryMapCommon::EOpenMode mode) {
+    void BasicTest(TMemoryMapCommon::EOpenMode mode) { 
         char data[] = "abcdefgh";
 
         TFile file(FileName_, CreateAlways | WrOnly);
@@ -22,7 +22,7 @@ Y_UNIT_TEST_SUITE(TFileMapTest) {
         file.Close();
 
         {
-            TFileMap mappedFile(FileName_, mode);
+            TFileMap mappedFile(FileName_, mode); 
             mappedFile.Map(0, mappedFile.Length());
             UNIT_ASSERT(mappedFile.MappedSize() == sizeof(data) && mappedFile.Length() == sizeof(data));
             UNIT_ASSERT(mappedFile.IsOpen());
@@ -51,14 +51,14 @@ Y_UNIT_TEST_SUITE(TFileMapTest) {
         NFs::Remove(FileName_);
     }
 
-    Y_UNIT_TEST(TestFileMap) {
-        BasicTest(TMemoryMapCommon::oRdWr);
-    }
-
-    Y_UNIT_TEST(TestFileMapPopulate) {
-        BasicTest(TMemoryMapCommon::oRdWr | TMemoryMapCommon::oPopulate);
-    }
-
+    Y_UNIT_TEST(TestFileMap) { 
+        BasicTest(TMemoryMapCommon::oRdWr); 
+    } 
+ 
+    Y_UNIT_TEST(TestFileMapPopulate) { 
+        BasicTest(TMemoryMapCommon::oRdWr | TMemoryMapCommon::oPopulate); 
+    } 
+ 
     Y_UNIT_TEST(TestFileRemap) {
         const char data1[] = "01234";
         const char data2[] = "abcdefg";

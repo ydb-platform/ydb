@@ -869,8 +869,8 @@ namespace NJson {
             return true;
         }
         return false;
-    } 
- 
+    }
+
     bool TJsonValue::SetValueByPath(const TStringBuf path, TJsonValue&& value, char delimiter) {
         TJsonValue* const ptr = GetValuePtrByPath<true>(this, path, delimiter);
         if (ptr) {
@@ -878,8 +878,8 @@ namespace NJson {
             return true;
         }
         return false;
-    } 
- 
+    }
+
     const TJsonValue* TJsonValue::GetValueByPath(const TStringBuf key, char delim) const noexcept {
         return GetValuePtrByPath<false>(this, key, delim);
     }

@@ -1,8 +1,8 @@
 #include "write_trie_backwards.h"
 
 #include "comptrie_impl.h"
-#include "leaf_skipper.h" 
- 
+#include "leaf_skipper.h"
+
 #include <util/generic/buffer.h>
 #include <util/generic/vector.h>
 
@@ -85,14 +85,14 @@ namespace NCompactTrie {
             size_t nodeLength = enumerator.RecreateNode(nullptr, end - pos);
             if (nodeLength > buf.size())
                 buf.resize(nodeLength);
- 
+
             size_t realLength = enumerator.RecreateNode(buf.data(), end - pos);
             Y_ASSERT(realLength == nodeLength);
- 
+
             pos -= nodeLength;
             memcpy(pos, buf.data(), nodeLength);
         }
- 
+
         switch (mode) {
             case MM_NOALLOC:
                 os.Write(pos, end - pos);
@@ -103,8 +103,8 @@ namespace NCompactTrie {
             default:
                 Y_VERIFY(false);
         }
- 
+
         return end - pos;
-    } 
- 
-} 
+    }
+
+}

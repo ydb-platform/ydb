@@ -85,7 +85,7 @@ public:
 
     size_t Save(IOutputStream& os) const;
     size_t SaveAndDestroy(IOutputStream& os);
- 
+
     void Clear();
 
     // lies if some key was added at least twice
@@ -171,11 +171,11 @@ public:
         }
 
         ui64 SaveAndDestroy(TBuilderImpl* builder, IOutputStream& os) override {
-            ui64 result = SaveRangeAndDestroy(builder, 0, this->size(), os); 
-            Destroy(builder); 
-            return result; 
-        } 
- 
+            ui64 result = SaveRangeAndDestroy(builder, 0, this->size(), os);
+            Destroy(builder);
+            return result;
+        }
+
         ui64 SaveRange(const TBuilderImpl* builder, size_t from, size_t to, IOutputStream& os) const {
             if (from >= to)
                 return 0;
@@ -189,17 +189,17 @@ public:
         }
 
         ui64 SaveRangeAndDestroy(TBuilderImpl* builder, size_t from, size_t to, IOutputStream& os) {
-            if (from >= to) 
-                return 0; 
- 
-            size_t median = (from + to) / 2; 
- 
-            ui64 written = builder->ArcSaveAndDestroy(&(*this)[median], os); 
-            written += SaveRangeAndDestroy(builder, from, median, os); 
-            written += SaveRangeAndDestroy(builder, median + 1, to, os); 
-            return written; 
-        } 
- 
+            if (from >= to)
+                return 0;
+
+            size_t median = (from + to) / 2;
+
+            ui64 written = builder->ArcSaveAndDestroy(&(*this)[median], os);
+            written += SaveRangeAndDestroy(builder, from, median, os);
+            written += SaveRangeAndDestroy(builder, median + 1, to, os);
+            return written;
+        }
+
         void Destroy(TBuilderImpl* builder) override {
             // Delete all nodes down the stream.
             for (iterator it = this->begin(); it != this->end(); ++it) {
@@ -259,12 +259,12 @@ public:
             os.Write(Buffer.Get(), Buffer.Size());
             return Buffer.Size();
         }
- 
+
         ui64 SaveAndDestroy(TBuilderImpl* builder, IOutputStream& os) override {
-            ui64 result = Save(builder, os); 
-            TArrayWithSizeHolder<char>().Swap(Buffer); 
-            return result; 
-        } 
+            ui64 result = Save(builder, os);
+            TArrayWithSizeHolder<char>().Swap(Buffer);
+            return result;
+        }
     };
 
     struct TSubtreeInFile: public ISubtree {
@@ -327,10 +327,10 @@ public:
                 ythrow yexception() << "file " << Data->FileName.Quote() << " size changed";
             return written;
         }
- 
+
         ui64 SaveAndDestroy(TBuilderImpl* builder, IOutputStream& os) override {
-            return Save(builder, os); 
-        } 
+            return Save(builder, os);
+        }
     };
 
     union {
@@ -463,10 +463,10 @@ size_t TCompactTrieBuilder<T, D, S>::Save(IOutputStream& os) const {
 
 template <class T, class D, class S>
 size_t TCompactTrieBuilder<T, D, S>::SaveAndDestroy(IOutputStream& os) {
-    return Impl->SaveAndDestroy(os); 
-} 
- 
-template <class T, class D, class S> 
+    return Impl->SaveAndDestroy(os);
+}
+
+template <class T, class D, class S>
 void TCompactTrieBuilder<T, D, S>::Clear() {
     Impl->Clear();
 }
@@ -760,14 +760,14 @@ size_t TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::Save(IOutputStream
 
 template <class T, class D, class S>
 size_t TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::SaveAndDestroy(IOutputStream& os) {
-    const size_t len = NodeMeasureSubtree(Root); 
-    if (len != NodeSaveSubtreeAndDestroy(Root, os)) 
-        ythrow yexception() << "something wrong"; 
- 
-    return len; 
-} 
- 
-template <class T, class D, class S> 
+    const size_t len = NodeMeasureSubtree(Root);
+    if (len != NodeSaveSubtreeAndDestroy(Root, os))
+        ythrow yexception() << "something wrong";
+
+    return len;
+}
+
+template <class T, class D, class S>
 size_t TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::GetEntryCount() const {
     return EntryCount;
 }
@@ -835,10 +835,10 @@ ui64 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::NodeSaveSubtree(TNod
 
 template <class T, class D, class S>
 ui64 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::NodeSaveSubtreeAndDestroy(TNode* thiz, IOutputStream& os) {
-    return thiz->Subtree()->SaveAndDestroy(this, os); 
-} 
- 
-template <class T, class D, class S> 
+    return thiz->Subtree()->SaveAndDestroy(this, os);
+}
+
+template <class T, class D, class S>
 void TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::NodeBufferSubtree(TNode* thiz) {
     typedef typename TNode::TArcSet TArcSet;
 
@@ -958,23 +958,23 @@ ui64 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::ArcSaveSelf(const TA
     }
 
     written += NodeSaveLeafValue(thiz->Node, os);
-    return written; 
-} 
- 
-template <class T, class D, class S> 
+    return written;
+}
+
+template <class T, class D, class S>
 ui64 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::ArcSave(const TArc* thiz, IOutputStream& os) const {
-    ui64 written =  ArcSaveSelf(thiz, os); 
+    ui64 written =  ArcSaveSelf(thiz, os);
     written += NodeSaveSubtree(thiz->Node, os);
     return written;
 }
 
-template <class T, class D, class S> 
+template <class T, class D, class S>
 ui64 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::ArcSaveAndDestroy(const TArc* thiz, IOutputStream& os) {
-    ui64 written = ArcSaveSelf(thiz, os); 
-    written += NodeSaveSubtreeAndDestroy(thiz->Node, os); 
-    return written; 
-} 
- 
+    ui64 written = ArcSaveSelf(thiz, os);
+    written += NodeSaveSubtreeAndDestroy(thiz->Node, os);
+    return written;
+}
+
 // TCompactTrieBuilder::TCompactTrieBuilderImpl::TNode::TArcSet
 
 template <class T, class D, class S>
@@ -1063,7 +1063,7 @@ const typename TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode*
 template <class TPacker>
 size_t CompactTrieMinimize(IOutputStream& os, const char* data, size_t datalength, bool verbose /*= false*/, const TPacker& packer /*= TPacker()*/, NCompactTrie::EMinimizeMode mode) {
     using namespace NCompactTrie;
-    return CompactTrieMinimizeImpl(os, data, datalength, verbose, &packer, mode); 
+    return CompactTrieMinimizeImpl(os, data, datalength, verbose, &packer, mode);
 }
 
 template <class TTrieBuilder>

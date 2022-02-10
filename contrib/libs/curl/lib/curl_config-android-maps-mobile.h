@@ -1,9 +1,9 @@
 /* lib/curl_config.h.  Generated from curl_config.h.in by configure.  */
 /* lib/curl_config.h.in.  Generated from configure.ac by autoheader.  */
 
-// for SIZEOF_* macroses
-#include <util/system/platform.h>
-
+// for SIZEOF_* macroses 
+#include <util/system/platform.h> 
+ 
 /* to enable curl debug memory tracking */
 /* #undef CURLDEBUG */
 
@@ -906,7 +906,7 @@
 #define SIZEOF_OFF_T 8
 
 /* The number of bytes in type time_t */
-#define SIZEOF_TIME_T SIZEOF_LONG
+#define SIZEOF_TIME_T SIZEOF_LONG 
 
 /* Define to 1 if you have the ANSI C header files. */
 #define STDC_HEADERS 1

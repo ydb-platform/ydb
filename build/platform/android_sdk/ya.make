@@ -7,7 +7,7 @@ IF (NOT OS_ANDROID)
 ENDIF()
 
 IF (HOST_OS_LINUX)
-    # Android SDK for linux: Build-Tools 30.0.3, Platform 30
+    # Android SDK for linux: Build-Tools 30.0.3, Platform 30 
     DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE(
         ANDROID_SDK
         sbr:2564045529 FOR LINUX

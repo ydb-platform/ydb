@@ -25,7 +25,7 @@ extern const i32 DEFAULT_MAX_AGE;           /// == -1
 extern const i8 DEFAULT_REQUEST_PRIORITY;   /// == -1
 extern const i32 DEFAULT_RESPONSE_TIMEOUT;  /// == -1
 
-#define HTTP_PREFIX "http://"
+#define HTTP_PREFIX "http://" 
 #define MAX_LANGREGION_LEN 4
 #define MAXWORD_LEN 55
 
@@ -39,28 +39,28 @@ enum HTTP_COMPRESSION {
     HTTP_COMPRESSION_MAX = 6
 };
 
-enum HTTP_METHOD {
-    HTTP_METHOD_UNDEFINED = -1,
-    HTTP_METHOD_OPTIONS,
-    HTTP_METHOD_GET,
-    HTTP_METHOD_HEAD,
-    HTTP_METHOD_POST,
-    HTTP_METHOD_PUT,
-    HTTP_METHOD_DELETE,
-    HTTP_METHOD_TRACE,
-    HTTP_METHOD_CONNECT,
-    HTTP_METHOD_EXTENSION
-};
-
-enum HTTP_CONNECTION {
-    HTTP_CONNECTION_UNDEFINED = -1,
-    HTTP_CONNECTION_KEEP_ALIVE = 0,
-    HTTP_CONNECTION_CLOSE = 1
-};
-
-/// Class represents general http header fields.
-struct THttpBaseHeader {
-public:
+enum HTTP_METHOD { 
+    HTTP_METHOD_UNDEFINED = -1, 
+    HTTP_METHOD_OPTIONS, 
+    HTTP_METHOD_GET, 
+    HTTP_METHOD_HEAD, 
+    HTTP_METHOD_POST, 
+    HTTP_METHOD_PUT, 
+    HTTP_METHOD_DELETE, 
+    HTTP_METHOD_TRACE, 
+    HTTP_METHOD_CONNECT, 
+    HTTP_METHOD_EXTENSION 
+}; 
+ 
+enum HTTP_CONNECTION { 
+    HTTP_CONNECTION_UNDEFINED = -1, 
+    HTTP_CONNECTION_KEEP_ALIVE = 0, 
+    HTTP_CONNECTION_CLOSE = 1 
+}; 
+ 
+/// Class represents general http header fields. 
+struct THttpBaseHeader { 
+public: 
     i16 error;
     i32 header_size;
     i32 entity_size;
@@ -77,7 +77,7 @@ public:
     i8 connection_closed;
     TString base;
 
-public:
+public: 
     void Init() {
         error = 0;
         header_size = 0;
@@ -89,7 +89,7 @@ public:
         charset = -1;
         compression_method = HTTP_COMPRESSION_UNSET;
         transfer_chunked = -1;
-        connection_closed = HTTP_CONNECTION_UNDEFINED;
+        connection_closed = HTTP_CONNECTION_UNDEFINED; 
         content_range_start = -1;
         content_range_end = -1;
         content_range_entity_length = -1;
@@ -127,9 +127,9 @@ public:
 };
 
 enum { HREFLANG_MAX = FETCHER_URL_MAX * 2 };
-/// Class represents Http Response Header.
-struct THttpHeader: public THttpBaseHeader {
-public:
+/// Class represents Http Response Header. 
+struct THttpHeader: public THttpBaseHeader { 
+public: 
     i8 accept_ranges;
     i8 squid_error;
     i8 x_robots_tag; // deprecated, use x_robots_state instead
@@ -140,38 +140,38 @@ public:
     i64 retry_after;
     TString x_robots_state; // 'xxxxx' format, see `library/html/zoneconf/parsefunc.cpp`
 
-public:
-    void Init() {
-        THttpBaseHeader::Init();
-        accept_ranges = -1;
+public: 
+    void Init() { 
+        THttpBaseHeader::Init(); 
+        accept_ranges = -1; 
         squid_error = 0;
         x_robots_tag = 0;
         rel_canonical.clear();
-        http_status = -1;
+        http_status = -1; 
         location.clear();
         hreflangs[0] = 0;
         retry_after = DEFAULT_RETRY_AFTER;
         x_robots_state = "xxxxx";
-    }
+    } 
 
-    void Print() const {
-        THttpBaseHeader::Print();
+    void Print() const { 
+        THttpBaseHeader::Print(); 
         printf("http_status: %" PRIi16 "\n", http_status);
         printf("squid_error: %" PRIi8 "\n", squid_error);
         printf("accept_ranges: %" PRIi8 "\n", accept_ranges);
         printf("location: \"%s\"\n", location.c_str());
         printf("retry_after: %" PRIi64 "\n", retry_after);
-    }
-};
-
-struct THttpRequestHeader: public THttpBaseHeader {
+    } 
+}; 
+ 
+struct THttpRequestHeader: public THttpBaseHeader { 
 public:
     TString request_uri;
-    char host[HOST_MAX];
-    char from[MAXWORD_LEN];
-    char user_agent[MAXWORD_LEN];
+    char host[HOST_MAX]; 
+    char from[MAXWORD_LEN]; 
+    char user_agent[MAXWORD_LEN]; 
     char x_yandex_langregion[MAX_LANGREGION_LEN];
-    char x_yandex_sourcename[MAXWORD_LEN];
+    char x_yandex_sourcename[MAXWORD_LEN]; 
     char x_yandex_requesttype[MAXWORD_LEN];
     char x_yandex_fetchoptions[MAXWORD_LEN];
     i8 http_method;
@@ -180,78 +180,78 @@ public:
     i32 max_age;
     i64 if_modified_since;
 
-public:
-    THttpRequestHeader() {
-        Init();
-    }
+public: 
+    THttpRequestHeader() { 
+        Init(); 
+    } 
 
-    void Init() {
+    void Init() { 
         request_uri.clear();
-        host[0] = 0;
-        from[0] = 0;
-        user_agent[0] = 0;
+        host[0] = 0; 
+        from[0] = 0; 
+        user_agent[0] = 0; 
         x_yandex_langregion[0] = 0;
-        x_yandex_sourcename[0] = 0;
+        x_yandex_sourcename[0] = 0; 
         x_yandex_requesttype[0] = 0;
         x_yandex_fetchoptions[0] = 0;
-        http_method = HTTP_METHOD_UNDEFINED;
-        x_yandex_request_priority = DEFAULT_REQUEST_PRIORITY;
-        x_yandex_response_timeout = DEFAULT_RESPONSE_TIMEOUT;
-        max_age = DEFAULT_MAX_AGE;
-        if_modified_since = DEFAULT_IF_MODIFIED_SINCE;
-        THttpBaseHeader::Init();
-    }
+        http_method = HTTP_METHOD_UNDEFINED; 
+        x_yandex_request_priority = DEFAULT_REQUEST_PRIORITY; 
+        x_yandex_response_timeout = DEFAULT_RESPONSE_TIMEOUT; 
+        max_age = DEFAULT_MAX_AGE; 
+        if_modified_since = DEFAULT_IF_MODIFIED_SINCE; 
+        THttpBaseHeader::Init(); 
+    } 
 
-    void Print() const {
-        THttpBaseHeader::Print();
+    void Print() const { 
+        THttpBaseHeader::Print(); 
         printf("request_uri: \"%s\"\n", request_uri.c_str());
-        printf("host: \"%s\"\n", host);
-        printf("from: \"%s\"\n", from);
-        printf("user_agent: \"%s\"\n", user_agent);
+        printf("host: \"%s\"\n", host); 
+        printf("from: \"%s\"\n", from); 
+        printf("user_agent: \"%s\"\n", user_agent); 
         printf("http_method: %" PRIi8 "\n", http_method);
         printf("response_timeout: %" PRIi32 "\n", x_yandex_response_timeout);
         printf("max_age: %" PRIi32 "\n", max_age);
         printf("if_modified_since: %" PRIi64 "\n", if_modified_since);
-    }
+    } 
 
-    /// It doesn't care about errors in request or headers, where
-    /// request_uri equals to '*'.
-    /// This returns copy of the string, which you have to delete.
+    /// It doesn't care about errors in request or headers, where 
+    /// request_uri equals to '*'. 
+    /// This returns copy of the string, which you have to delete. 
     TString GetUrl() {
         TString url;
-        if (host[0] == 0 || !strcmp(host, "")) {
-            url = request_uri;
-        } else {
-            url = HTTP_PREFIX;
-            url += host;
-            url += request_uri;
+        if (host[0] == 0 || !strcmp(host, "")) { 
+            url = request_uri; 
+        } else { 
+            url = HTTP_PREFIX; 
+            url += host; 
+            url += request_uri; 
         }
-        return url;
-    }
+        return url; 
+    } 
 
     char* GetUrl(char* buffer, size_t size) {
-        if (host[0] == 0 || !strcmp(host, "")) {
+        if (host[0] == 0 || !strcmp(host, "")) { 
             strlcpy(buffer, request_uri.c_str(), size);
-        } else {
+        } else { 
             snprintf(buffer, size, "http://%s%s", host, request_uri.c_str());
         }
-        return buffer;
-    }
-};
+        return buffer; 
+    } 
+}; 
 
-class THttpAuthHeader: public THttpHeader {
-public:
-    char* realm;
-    char* nonce;
-    char* opaque;
+class THttpAuthHeader: public THttpHeader { 
+public: 
+    char* realm; 
+    char* nonce; 
+    char* opaque; 
     bool stale;
     int algorithm;
     bool qop_auth;
     bool use_auth;
-
-    //we do not provide auth-int variant as too heavy
-    //bool  qop_auth_int;
-
+ 
+    //we do not provide auth-int variant as too heavy 
+    //bool  qop_auth_int; 
+ 
     THttpAuthHeader()
         : realm(nullptr)
         , nonce(nullptr)
@@ -260,28 +260,28 @@ public:
         , algorithm(0)
         , qop_auth(false)
         , use_auth(true)
-    {
-        THttpHeader::Init();
-    }
-
+    { 
+        THttpHeader::Init(); 
+    } 
+ 
     ~THttpAuthHeader() {
-        free(realm);
-        free(nonce);
-        free(opaque);
-    }
-
-    void Print() {
-        THttpHeader::Print();
+        free(realm); 
+        free(nonce); 
+        free(opaque); 
+    } 
+ 
+    void Print() { 
+        THttpHeader::Print(); 
         if (use_auth) {
-            if (realm)
-                printf("realm: \"%s\"\n", realm);
-            if (nonce)
-                printf("nonce: \"%s\"\n", nonce);
-            if (opaque)
-                printf("opaque: \"%s\"\n", opaque);
-            printf("stale: %d\n", stale);
-            printf("algorithm: %d\n", algorithm);
-            printf("qop_auth: %d\n", qop_auth);
+            if (realm) 
+                printf("realm: \"%s\"\n", realm); 
+            if (nonce) 
+                printf("nonce: \"%s\"\n", nonce); 
+            if (opaque) 
+                printf("opaque: \"%s\"\n", opaque); 
+            printf("stale: %d\n", stale); 
+            printf("algorithm: %d\n", algorithm); 
+            printf("qop_auth: %d\n", qop_auth); 
         }
-    }
+    } 
 };

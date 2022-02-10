@@ -65,60 +65,60 @@ action clear_buf   { buflen = 0; }
 action update_buf  { if (buflen < sizeof(buf)) buf[buflen++] = fc; }
 
 ###################################################
-############ response status line #################
-action set_minor  { base_hd->http_minor = I; }
-action set_status {
-    if (hd) {
-        hd->http_status = I;
-    }
-    if (request_hd) {
-        return -3;
-    }
-}
+############ response status line ################# 
+action set_minor  { base_hd->http_minor = I; } 
+action set_status { 
+    if (hd) { 
+        hd->http_status = I; 
+    } 
+    if (request_hd) { 
+        return -3; 
+    } 
+} 
 
-status_code          = int3;
-http_major           = int;
-http_minor           = int;
-reason_phrase        = ws+ text_char*;
-http_version         = "http/"i http_major '.' http_minor %set_minor;
-response_status_line = http_version ws+ status_code reason_phrase? eol %set_status;
+status_code          = int3; 
+http_major           = int; 
+http_minor           = int; 
+reason_phrase        = ws+ text_char*; 
+http_version         = "http/"i http_major '.' http_minor %set_minor; 
+response_status_line = http_version ws+ status_code reason_phrase? eol %set_status; 
 
-############ request status line #################
-action set_request_uri {
+############ request status line ################# 
+action set_request_uri { 
     if (request_hd && buflen < FETCHER_URL_MAX) {
         if (!request_hd->request_uri.empty()) {
-            return -2;
-        }
+            return -2; 
+        } 
         request_hd->request_uri =TStringBuf(buf, buflen);
-    }
-}
-action set_http_method {
-    if (request_hd) {
-        request_hd->http_method = I;
-    }
-    if (hd) {
-        return -3;
-    }
-}
-
-http_extension_method = token;
-http_method           = ("options"i            %{c(0)} @1
-                      | "get"i                %{c(1)} @1
-                      | "head"i               %{c(2)} @1
-                      | "post"i               %{c(3)} @1
-                      | "put"i                %{c(4)} @1
-                      | "delete"i             %{c(5)} @1
-                      | "trace"i              %{c(6)} @1
-                      | "connect"i            %{c(7)} @1
-                      | http_extension_method %{c(8)} $0)
-                        %set_http_method;
-request_uri          = (token_char | separator)+ >clear_buf $update_buf
-                        %set_request_uri;
-request_status_line   = http_method ws+ request_uri ws+ http_version eoh;
-
+    } 
+} 
+action set_http_method { 
+    if (request_hd) { 
+        request_hd->http_method = I; 
+    } 
+    if (hd) { 
+        return -3; 
+    } 
+} 
+ 
+http_extension_method = token; 
+http_method           = ("options"i            %{c(0)} @1 
+                      | "get"i                %{c(1)} @1 
+                      | "head"i               %{c(2)} @1 
+                      | "post"i               %{c(3)} @1 
+                      | "put"i                %{c(4)} @1 
+                      | "delete"i             %{c(5)} @1 
+                      | "trace"i              %{c(6)} @1 
+                      | "connect"i            %{c(7)} @1 
+                      | http_extension_method %{c(8)} $0) 
+                        %set_http_method; 
+request_uri          = (token_char | separator)+ >clear_buf $update_buf 
+                        %set_request_uri; 
+request_status_line   = http_method ws+ request_uri ws+ http_version eoh; 
+ 
 ################# connection ######################
-action beg_connection { guard(base_hd->connection_closed); I = -1; }
-action set_connection { setguarded(base_hd->connection_closed, I); }
+action beg_connection { guard(base_hd->connection_closed); I = -1; } 
+action set_connection { setguarded(base_hd->connection_closed, I); } 
 
 c_token         = "close"i      %{m(1)}
                 | "keep-alive"i %{m(0)};
@@ -127,7 +127,7 @@ connection      = "connection"i def %beg_connection c_tokenlist eoh %set_connect
 
 ################# content-encoding ################
 action beg_content_encoding { I = HTTP_COMPRESSION_ERROR; }
-action set_content_encoding { base_hd->compression_method =
+action set_content_encoding { base_hd->compression_method = 
                              ((base_hd->compression_method == HTTP_COMPRESSION_UNSET ||
                                base_hd->compression_method == I) ?
                                  I : (int)HTTP_COMPRESSION_ERROR); }
@@ -141,51 +141,51 @@ ce_tokenlist      = "identity"i   %{c(HTTP_COMPRESSION_IDENTITY)}
 content_encoding = "content-encoding"i def %beg_content_encoding ce_tokenlist eoh %set_content_encoding;
 
 ################# transfer-encoding ###############
-action beg_encoding { guard(base_hd->transfer_chunked); }
-action set_encoding { setguarded(base_hd->transfer_chunked, I); }
+action beg_encoding { guard(base_hd->transfer_chunked); } 
+action set_encoding { setguarded(base_hd->transfer_chunked, I); } 
 
 e_tokenlist       = "identity"i %{c(0)}
                   | "chunked"i  %{c(1)};
 transfer_encoding = "transfer-encoding"i def %beg_encoding e_tokenlist eoh %set_encoding;
 
 ################# content-length ##################
-action beg_content_length { guard(base_hd->content_length); }
-action set_content_length { setguarded(base_hd->content_length, I); }
+action beg_content_length { guard(base_hd->content_length); } 
+action set_content_length { setguarded(base_hd->content_length, I); } 
 
 content_length  = "content-length"i def %beg_content_length int eoh %set_content_length;
 
 ################# content-range ###################
-action beg_content_range_start { guard(base_hd->content_range_start); I = -1; }
-action set_content_range_start { setguarded(base_hd->content_range_start, I); }
-action beg_content_range_end { guard(base_hd->content_range_end); I = -1; }
-action set_content_range_end { setguarded(base_hd->content_range_end, I); }
-action beg_content_range_el { guard(base_hd->content_range_entity_length); I = -1; }
-action set_content_range_el { setguarded(base_hd->content_range_entity_length, I); }
+action beg_content_range_start { guard(base_hd->content_range_start); I = -1; } 
+action set_content_range_start { setguarded(base_hd->content_range_start, I); } 
+action beg_content_range_end { guard(base_hd->content_range_end); I = -1; } 
+action set_content_range_end { setguarded(base_hd->content_range_end, I); } 
+action beg_content_range_el { guard(base_hd->content_range_entity_length); I = -1; } 
+action set_content_range_el { setguarded(base_hd->content_range_entity_length, I); } 
 
 content_range   = "content-range"i def "bytes"i sp %beg_content_range_start int '-' %set_content_range_start
                                                    %beg_content_range_end int '/' %set_content_range_end
                                                    %beg_content_range_el int eoh %set_content_range_el;
 
 ################# accept-ranges ###################
-action beg_accept_ranges {
-    if (hd) {
-        guard(hd->accept_ranges);
-        I = -1;
-    }
-}
-action set_accept_ranges { if (hd) setguarded(hd->accept_ranges, I); }
+action beg_accept_ranges { 
+    if (hd) { 
+        guard(hd->accept_ranges); 
+        I = -1; 
+    } 
+} 
+action set_accept_ranges { if (hd) setguarded(hd->accept_ranges, I); } 
 
 ar_tokenlist    = "bytes"i %{c(1)}
                 | "none"i  %{c(0)};
 accept_ranges   = "accept-ranges"i def %beg_accept_ranges ar_tokenlist eoh %set_accept_ranges;
 
 ################# content-type ####################
-action beg_mime { guard(base_hd->mime_type); }
-action set_mime { setguarded(base_hd->mime_type, I); }
+action beg_mime { guard(base_hd->mime_type); } 
+action set_mime { setguarded(base_hd->mime_type, I); } 
 action set_charset {
     if (buflen < FETCHER_URL_MAX) {
         buf[buflen++] = 0;
-        base_hd->charset = EncodingHintByName((const char*)buf);
+        base_hd->charset = EncodingHintByName((const char*)buf); 
     }
 }
 
@@ -240,10 +240,10 @@ mime_parms      = (lws ';' lws mime_param)*;
 content_type    = "content-type"i def %beg_mime mime_type mime_parms eoh %set_mime;
 
 ################# last modified ###################
-action beg_modtime { guard(base_hd->http_time); }
-action set_modtime {
-    setguarded(base_hd->http_time, DateTimeFields.ToTimeT(-1));
-}
+action beg_modtime { guard(base_hd->http_time); } 
+action set_modtime { 
+    setguarded(base_hd->http_time, DateTimeFields.ToTimeT(-1)); 
+} 
 
 last_modified   = "last-modified"i def %beg_modtime http_date eoh %set_modtime;
 
@@ -257,7 +257,7 @@ action set_location {
     }
 }
 
-action set_status_303{ if (hd) hd->http_status = 303; }
+action set_status_303{ if (hd) hd->http_status = 303; } 
 
 url             = url_char+ >clear_buf $update_buf;
 loc_url         = any_text_char+ >clear_buf $update_buf;
@@ -399,48 +399,48 @@ digest_challenge =  ("digest"i %init_auth ws+ auth_params) |
 
 auth  = "www-authenticate"i def digest_challenge eoh;
 
-###################### host #######################
-action set_host {
-    if (request_hd && buflen < HOST_MAX) {
-        buf[buflen++] = 0;
-        if (request_hd->host[0] != 0) {
-            return -2;
-        }
-        memcpy(request_hd->host, buf, buflen);
-    }
-}
-
-host = (url_char | [:])* >clear_buf $update_buf;
-host_header  = "host"i def host eoh %set_host;
-
-###################### from #######################
-action set_from {
-    if (request_hd && buflen < MAXWORD_LEN) {
-        buf[buflen++] = 0;
-        if (request_hd->from[0] != 0) {
-            return -2;
-        }
-        memcpy(request_hd->from, buf, buflen);
-    }
-}
-
-mailbox     = (token "@" token) >clear_buf $update_buf;
-from_header = "from"i def mailbox eoh %set_from;
-
-################### user-agent ####################
-action set_user_agent {
-    if (request_hd && buflen < MAXWORD_LEN) {
-        buf[buflen++] = 0;
-        if (request_hd->user_agent[0] != 0) {
-            return -2;
-        }
-        memcpy(request_hd->user_agent, buf, buflen);
-    }
-}
-
-user_agent        = any_text_char* >clear_buf $update_buf;
-user_agent_header = "user-agent"i def user_agent eoh %set_user_agent;
-
+###################### host ####################### 
+action set_host { 
+    if (request_hd && buflen < HOST_MAX) { 
+        buf[buflen++] = 0; 
+        if (request_hd->host[0] != 0) { 
+            return -2; 
+        } 
+        memcpy(request_hd->host, buf, buflen); 
+    } 
+} 
+ 
+host = (url_char | [:])* >clear_buf $update_buf; 
+host_header  = "host"i def host eoh %set_host; 
+ 
+###################### from ####################### 
+action set_from { 
+    if (request_hd && buflen < MAXWORD_LEN) { 
+        buf[buflen++] = 0; 
+        if (request_hd->from[0] != 0) { 
+            return -2; 
+        } 
+        memcpy(request_hd->from, buf, buflen); 
+    } 
+} 
+ 
+mailbox     = (token "@" token) >clear_buf $update_buf; 
+from_header = "from"i def mailbox eoh %set_from; 
+ 
+################### user-agent #################### 
+action set_user_agent { 
+    if (request_hd && buflen < MAXWORD_LEN) { 
+        buf[buflen++] = 0; 
+        if (request_hd->user_agent[0] != 0) { 
+            return -2; 
+        } 
+        memcpy(request_hd->user_agent, buf, buflen); 
+    } 
+} 
+ 
+user_agent        = any_text_char* >clear_buf $update_buf; 
+user_agent_header = "user-agent"i def user_agent eoh %set_user_agent; 
+ 
 ############### x-yandex-langregion ################
 action set_langregion {
     if (request_hd && buflen < MAX_LANGREGION_LEN) {
@@ -455,20 +455,20 @@ action set_langregion {
 langregion = any_text_char* >clear_buf $update_buf;
 langregion_header = "x-yandex-langregion"i def langregion eoh %set_langregion;
 
-############### x-yandex-sourcename ################
-action set_sourcename {
-    if (request_hd && buflen < MAXWORD_LEN) {
-        buf[buflen++] = 0;
-        if (request_hd->x_yandex_sourcename[0] != 0) {
-            return -2;
-        }
-        memcpy(request_hd->x_yandex_sourcename, buf, buflen);
-    }
-}
-
-sourcename        = any_text_char* >clear_buf $update_buf;
-sourcename_header = "x-yandex-sourcename"i def sourcename eoh %set_sourcename;
-
+############### x-yandex-sourcename ################ 
+action set_sourcename { 
+    if (request_hd && buflen < MAXWORD_LEN) { 
+        buf[buflen++] = 0; 
+        if (request_hd->x_yandex_sourcename[0] != 0) { 
+            return -2; 
+        } 
+        memcpy(request_hd->x_yandex_sourcename, buf, buflen); 
+    } 
+} 
+ 
+sourcename        = any_text_char* >clear_buf $update_buf; 
+sourcename_header = "x-yandex-sourcename"i def sourcename eoh %set_sourcename; 
+ 
 ############### x-yandex-requesttype ###############
 action set_requesttype {
     if (request_hd && buflen < MAXWORD_LEN) {
@@ -497,16 +497,16 @@ action set_fetchoptions {
 fetchoptions    = any_text_char* >clear_buf $update_buf;
 fetchoptions_header = "x-yandex-fetchoptions"i def fetchoptions eoh %set_fetchoptions;
 
-################ if-modified-since ################
-action set_if_modified_since {
-    if (request_hd) {
-        request_hd->if_modified_since = DateTimeFields.ToTimeT(-1);
-    }
-}
-
-if_modified_since = "if-modified-since"i def http_date eoh
-                    %set_if_modified_since;
-
+################ if-modified-since ################ 
+action set_if_modified_since { 
+    if (request_hd) { 
+        request_hd->if_modified_since = DateTimeFields.ToTimeT(-1); 
+    } 
+} 
+ 
+if_modified_since = "if-modified-since"i def http_date eoh 
+                    %set_if_modified_since; 
+ 
 ################ retry-after ################
 action set_retry_after_withdate {
     if (hd) {
@@ -525,57 +525,57 @@ retry_after_withdate = "retry-after"i def http_date eoh
 retry_after_withdelta = "retry-after"i def int eoh
                     %set_retry_after_withdelta;
 
-############## request-cache-control ##############
-action SETMAXAGE { if (request_hd) request_hd->max_age = I; }
-
-delta_seconds           = int;
-cache_extension         = token ("=" (token | quoted_str))?;
-request_cache_directive = "no-cache"i
-                        | "no-store"i
-                        | ("max-age"i "=" delta_seconds %SETMAXAGE)
-                        | ("max-stale"i ("=" delta_seconds)?)
-                        | ("min-fresh"i "=" delta_seconds)
-                        | "non-transform"i
-                        | "only-if-cached"i
-                        | cache_extension;
-request_cache_control   = "cache-control"i def request_cache_directive eoh;
-
-############ x-yandex-response-timeout #############
-
-action set_response_timeout {
-    if (request_hd) {
-        request_hd->x_yandex_response_timeout = I;
-    }
-}
-
-response_timeout = "x-yandex-response-timeout"i def int eoh
-                   %set_response_timeout;
-
-############ x-yandex-request-priority #############
-
-action set_request_priority {
-    if (request_hd) {
-        request_hd->x_yandex_request_priority = I;
-    }
-}
-
-request_priority = "x-yandex-request-priority"i def int eoh
-                   %set_request_priority;
-
+############## request-cache-control ############## 
+action SETMAXAGE { if (request_hd) request_hd->max_age = I; } 
+ 
+delta_seconds           = int; 
+cache_extension         = token ("=" (token | quoted_str))?; 
+request_cache_directive = "no-cache"i 
+                        | "no-store"i 
+                        | ("max-age"i "=" delta_seconds %SETMAXAGE) 
+                        | ("max-stale"i ("=" delta_seconds)?) 
+                        | ("min-fresh"i "=" delta_seconds) 
+                        | "non-transform"i 
+                        | "only-if-cached"i 
+                        | cache_extension; 
+request_cache_control   = "cache-control"i def request_cache_directive eoh; 
+ 
+############ x-yandex-response-timeout ############# 
+ 
+action set_response_timeout { 
+    if (request_hd) { 
+        request_hd->x_yandex_response_timeout = I; 
+    } 
+} 
+ 
+response_timeout = "x-yandex-response-timeout"i def int eoh 
+                   %set_response_timeout; 
+ 
+############ x-yandex-request-priority ############# 
+ 
+action set_request_priority { 
+    if (request_hd) { 
+        request_hd->x_yandex_request_priority = I; 
+    } 
+} 
+ 
+request_priority = "x-yandex-request-priority"i def int eoh 
+                   %set_request_priority; 
+ 
 ################# message header ##################
 other_header    = ( ex_token - "www-authenticate"i ) def any_text eoh;
-message_header  = other_header          $0
-                | connection            @1
-                | content_encoding      @1
-                | transfer_encoding     @1
-                | content_length        @1
-                | content_type          @1
-                | last_modified         @1
-                | refresh               @1
-                | content_range         @1;
-response_header = message_header        $0
-                | auth                  @1
-                | accept_ranges         @1
+message_header  = other_header          $0 
+                | connection            @1 
+                | content_encoding      @1 
+                | transfer_encoding     @1 
+                | content_length        @1 
+                | content_type          @1 
+                | last_modified         @1 
+                | refresh               @1 
+                | content_range         @1; 
+response_header = message_header        $0 
+                | auth                  @1 
+                | accept_ranges         @1 
                 | location              @1
                 | x_robots_tag          @1
                 | rel_canonical         @1
@@ -583,25 +583,25 @@ response_header = message_header        $0
                 | squid_error           @1
                 | retry_after_withdate  @1
                 | retry_after_withdelta @1;
-request_header  = message_header        $0
-                | from_header           @1
-                | host_header           @1
-                | user_agent_header     @1
-                | sourcename_header     @1
+request_header  = message_header        $0 
+                | from_header           @1 
+                | host_header           @1 
+                | user_agent_header     @1 
+                | sourcename_header     @1 
                 | requesttype_header    @1
                 | langregion_header     @1
                 | fetchoptions_header   @1
-                | if_modified_since     @1
-                | request_cache_control @1
-                | response_timeout      @1
-                | request_priority      @1;
+                | if_modified_since     @1 
+                | request_cache_control @1 
+                | response_timeout      @1 
+                | request_priority      @1; 
 
 ################# main ############################
 action accepted { lastchar = (char*)fpc; return 2; }
 
-main            := ((response_status_line ('\r'? response_header)*)
-                 | (request_status_line ('\r' ? request_header)*))
-                 eol @accepted;
+main            := ((response_status_line ('\r'? response_header)*) 
+                 | (request_status_line ('\r' ? request_header)*)) 
+                 eol @accepted; 
 
 }%%
 

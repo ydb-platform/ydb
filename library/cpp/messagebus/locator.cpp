@@ -146,8 +146,8 @@ namespace NBus {
             RegisterBreak(serviceId, starts[i], addr);
         }
         return 0;
-    }
-
+    } 
+ 
     int TBusLocator::RegisterBreak(TServiceId serviceId, const TBusKey start, const TNetAddr& addr) {
         TItems::const_iterator it = Items.lower_bound(TItem(serviceId, 0, start, addr));
         TItems::const_iterator service_it =
@@ -169,7 +169,7 @@ namespace NBus {
             if (start < YBUS_KEYMAX) {
                 right.Reset(new TItem(serviceId, start + 1, YBUS_KEYMAX, addr));
             }
-        }
+        } 
         Items.insert(*left);
         Items.insert(*right);
         NormalizeBreaks(serviceId);
@@ -182,7 +182,7 @@ namespace NBus {
         TServiceId serviceId = GetServiceId(service);
         return UnregisterBreak(serviceId, addr);
     }
-
+ 
     int TBusLocator::UnregisterBreak(TServiceId serviceId, const TNetAddr& addr) {
         int deleted = 0;
         TItems::iterator it = Items.begin();
@@ -198,7 +198,7 @@ namespace NBus {
                 deleted += 1;
             }
         }
-
+ 
         if (Items.begin() == Items.end()) {
             return deleted;
         }
@@ -227,13 +227,13 @@ namespace NBus {
         }
 
         NormalizeBreaks(serviceId);
-        return deleted;
-    }
-
+        return deleted; 
+    } 
+ 
     void TBusLocator::NormalizeBreaks(TServiceId serviceId) {
         TItems::const_iterator first = Items.lower_bound(TItem(serviceId, YBUS_KEYMIN, YBUS_KEYMIN, TNetAddr()));
         TItems::const_iterator last = Items.end();
-
+ 
         if ((Items.end() != first) && (first->ServiceId == serviceId)) {
             if (serviceId != Max<TServiceId>()) {
                 last = Items.lower_bound(TItem(serviceId + 1, YBUS_KEYMIN, YBUS_KEYMIN, TNetAddr()));
@@ -246,8 +246,8 @@ namespace NBus {
             TItem& beg = const_cast<TItem&>(*first);
             beg.Addr = last->Addr;
         }
-    }
-
+    } 
+ 
     int TBusLocator::LocateAll(TBusService service, TBusKey key, TVector<TNetAddr>& addrs) {
         TGuard<TMutex> G(Lock);
         Y_VERIFY(addrs.empty(), "Non emtpy addresses");

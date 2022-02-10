@@ -12,7 +12,7 @@
 
 #if defined(PROFILE_MEMORY_ALLOCATIONS)
 #include <library/cpp/lfalloc/alloc_profiler/profiler.h>
-#include <library/cpp/ytalloc/api/ytalloc.h> 
+#include <library/cpp/ytalloc/api/ytalloc.h>
 #endif
 
 #if defined(_linux_) && !defined(WITH_VALGRIND)

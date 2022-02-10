@@ -3,14 +3,14 @@ LIBRARY()
 OWNER(g:yt)
 
 SRCS(
-    blob.cpp 
-    ref.cpp 
+    blob.cpp
+    ref.cpp
     ref_tracked.cpp
 )
 
 PEERDIR(
-    library/cpp/yt/assert 
-    library/cpp/yt/misc 
+    library/cpp/yt/assert
+    library/cpp/yt/misc
     library/cpp/ytalloc/api
 )
 
@@ -20,8 +20,8 @@ CHECK_DEPENDENT_DIRS(
     contrib
     library
     util
-    library/cpp/yt/assert 
-    library/cpp/yt/misc 
+    library/cpp/yt/assert
+    library/cpp/yt/misc
 )
 
 END()

@@ -7,7 +7,7 @@
 
 #if defined(PROFILE_MEMORY_ALLOCATIONS)
 #include <library/cpp/lfalloc/dbg_info/dbg_info.h>
-#include <library/cpp/ytalloc/api/ytalloc.h> 
+#include <library/cpp/ytalloc/api/ytalloc.h>
 #endif
 
 #include <util/generic/singleton.h>

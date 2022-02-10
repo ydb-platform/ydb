@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/yt/misc/enum.h> 
+#include <library/cpp/yt/misc/enum.h>
 #include <util/generic/yexception.h>
 
 #include <library/cpp/yt/yson_string/public.h>

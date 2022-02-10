@@ -1,4 +1,4 @@
-//===- llvm/ADT/SmallSet.h - 'Normally small' sets --------------*- C++ -*-===// 
+//===- llvm/ADT/SmallSet.h - 'Normally small' sets --------------*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -32,7 +32,7 @@ namespace NYT {
 /// Note that any modification of the set may invalidate *all* iterators.
 template <typename T, unsigned N, typename C = std::less<T>>
 class TCompactSet
-{ 
+{
 private:
     /// Use a CompactVector to hold the elements here (even though it will never
     /// reach its 'large' stage) to avoid calling the default ctors of elements

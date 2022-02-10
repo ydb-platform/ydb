@@ -6,7 +6,7 @@ OWNER(
 )
 
 PEERDIR(
-    library/cpp/yt/misc 
+    library/cpp/yt/misc
     library/cpp/yt/yson
 )
 

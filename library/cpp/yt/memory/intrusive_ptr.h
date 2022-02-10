@@ -1,29 +1,29 @@
-#pragma once 
- 
+#pragma once
+
 #include "ref_counted.h"
- 
-#include <util/generic/hash.h> 
+
+#include <util/generic/hash.h>
 #include <util/generic/utility.h>
 
 #include <utility>
 #include <type_traits>
 
-namespace NYT { 
- 
-//////////////////////////////////////////////////////////////////////////////// 
- 
+namespace NYT {
+
+////////////////////////////////////////////////////////////////////////////////
+
 template <class T>
 class TIntrusivePtr
 {
 public:
-    typedef T TUnderlying; 
- 
+    typedef T TUnderlying;
+
     constexpr TIntrusivePtr() noexcept
-    { } 
- 
+    { }
+
     constexpr TIntrusivePtr(std::nullptr_t) noexcept
-    { } 
- 
+    { }
+
     //! Constructor from an unqualified reference.
     /*!
      * Note that this constructor could be racy due to unsynchronized operations
@@ -33,22 +33,22 @@ public:
      * given the current amount of code written.
      */
     TIntrusivePtr(T* obj, bool addReference = true) noexcept
-        : T_(obj) 
+        : T_(obj)
     {
         if (T_ && addReference) {
-            Ref(T_); 
-        } 
-    } 
- 
+            Ref(T_);
+        }
+    }
+
     //! Copy constructor.
     TIntrusivePtr(const TIntrusivePtr& other) noexcept
         : T_(other.Get())
     {
-        if (T_) { 
-            Ref(T_); 
+        if (T_) {
+            Ref(T_);
         }
     }
- 
+
     //! Copy constructor with an upcast.
     template <class U, class = typename std::enable_if_t<std::is_convertible_v<U*, T*>>>
     TIntrusivePtr(const TIntrusivePtr<U>& other) noexcept
@@ -57,16 +57,16 @@ public:
         static_assert(
             std::is_base_of_v<TRefCountedBase, T>,
             "Cast allowed only for types derived from TRefCountedBase");
-        if (T_) { 
-            Ref(T_); 
-        } 
+        if (T_) {
+            Ref(T_);
+        }
     }
- 
+
     //! Move constructor.
     TIntrusivePtr(TIntrusivePtr&& other) noexcept
         : T_(other.Get())
     {
-        other.T_ = nullptr; 
+        other.T_ = nullptr;
     }
 
     //! Move constructor with an upcast.
@@ -77,19 +77,19 @@ public:
         static_assert(
             std::is_base_of_v<TRefCountedBase, T>,
             "Cast allowed only for types derived from TRefCountedBase");
-        other.T_ = nullptr; 
+        other.T_ = nullptr;
     }
 
     //! Destructor.
     ~TIntrusivePtr()
     {
-        if (T_) { 
-            Unref(T_); 
-        } 
+        if (T_) {
+            Unref(T_);
+        }
     }
- 
+
     //! Copy assignment operator.
-    TIntrusivePtr& operator=(const TIntrusivePtr& other) noexcept 
+    TIntrusivePtr& operator=(const TIntrusivePtr& other) noexcept
     {
         TIntrusivePtr(other).Swap(*this);
         return *this;
@@ -97,7 +97,7 @@ public:
 
     //! Copy assignment operator with an upcast.
     template <class U>
-    TIntrusivePtr& operator=(const TIntrusivePtr<U>& other) noexcept 
+    TIntrusivePtr& operator=(const TIntrusivePtr<U>& other) noexcept
     {
         static_assert(
             std::is_convertible_v<U*, T*>,
@@ -118,7 +118,7 @@ public:
 
     //! Move assignment operator with an upcast.
     template <class U>
-    TIntrusivePtr& operator=(TIntrusivePtr<U>&& other) noexcept 
+    TIntrusivePtr& operator=(TIntrusivePtr<U>&& other) noexcept
     {
         static_assert(
             std::is_convertible_v<U*, T*>,
@@ -130,21 +130,21 @@ public:
         return *this;
     }
 
-    //! Drop the pointer. 
+    //! Drop the pointer.
     void Reset() // noexcept
     {
         TIntrusivePtr().Swap(*this);
     }
 
-    //! Replace the pointer with a specified one. 
+    //! Replace the pointer with a specified one.
     void Reset(T* p) // noexcept
     {
         TIntrusivePtr(p).Swap(*this);
     }
 
-    //! Returns the pointer. 
-    T* Get() const noexcept 
-    { 
+    //! Returns the pointer.
+    T* Get() const noexcept
+    {
         return T_;
     }
 
@@ -156,46 +156,46 @@ public:
         return p;
     }
 
-    T& operator*() const noexcept 
+    T& operator*() const noexcept
     {
-        YT_ASSERT(T_); 
+        YT_ASSERT(T_);
         return *T_;
     }
 
-    T* operator->() const noexcept 
+    T* operator->() const noexcept
     {
-        YT_ASSERT(T_); 
+        YT_ASSERT(T_);
         return T_;
     }
 
-    explicit operator bool() const noexcept 
-    { 
+    explicit operator bool() const noexcept
+    {
         return T_ != nullptr;
-    } 
- 
+    }
+
     //! Swap the pointer with the other one.
-    void Swap(TIntrusivePtr& r) noexcept 
-    { 
+    void Swap(TIntrusivePtr& r) noexcept
+    {
         DoSwap(T_, r.T_);
     }
 
 private:
     template <class U>
     friend class TIntrusivePtr;
- 
-    T* T_ = nullptr; 
-}; 
- 
-//////////////////////////////////////////////////////////////////////////////// 
- 
-//! Creates a strong pointer wrapper for a given raw pointer. 
-//! Compared to |TIntrusivePtr<T>::ctor|, type inference enables omitting |T|. 
+
+    T* T_ = nullptr;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+//! Creates a strong pointer wrapper for a given raw pointer.
+//! Compared to |TIntrusivePtr<T>::ctor|, type inference enables omitting |T|.
 template <class T>
-TIntrusivePtr<T> MakeStrong(T* p) 
-{ 
-    return TIntrusivePtr<T>(p); 
-} 
- 
+TIntrusivePtr<T> MakeStrong(T* p)
+{
+    return TIntrusivePtr<T>(p);
+}
+
 //! Tries to obtain an intrusive pointer for an object that may had
 //! already lost all of its references and, thus, is about to be deleted.
 /*!
@@ -221,8 +221,8 @@ Y_FORCE_INLINE TIntrusivePtr<T> DangerousGetPtr(T* object)
         : TIntrusivePtr<T>();
 }
 
-//////////////////////////////////////////////////////////////////////////////// 
- 
+////////////////////////////////////////////////////////////////////////////////
+
 template <class T, class U>
 TIntrusivePtr<T> StaticPointerCast(const TIntrusivePtr<U>& ptr)
 {
@@ -255,18 +255,18 @@ TIntrusivePtr<T> DynamicPointerCast(const TIntrusivePtr<U>& ptr)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <class T> 
-bool operator<(const TIntrusivePtr<T>& lhs, const TIntrusivePtr<T>& rhs) 
-{ 
-    return lhs.Get() < rhs.Get(); 
-} 
- 
 template <class T>
-bool operator>(const TIntrusivePtr<T>& lhs, const TIntrusivePtr<T>& rhs) 
-{ 
-    return lhs.Get() > rhs.Get(); 
-} 
- 
+bool operator<(const TIntrusivePtr<T>& lhs, const TIntrusivePtr<T>& rhs)
+{
+    return lhs.Get() < rhs.Get();
+}
+
+template <class T>
+bool operator>(const TIntrusivePtr<T>& lhs, const TIntrusivePtr<T>& rhs)
+{
+    return lhs.Get() > rhs.Get();
+}
+
 template <class T, class U>
 bool operator==(const TIntrusivePtr<T>& lhs, const TIntrusivePtr<U>& rhs)
 {
@@ -345,16 +345,16 @@ bool operator!=(const TIntrusivePtr<T>& lhs, std::nullptr_t)
     return nullptr != lhs.Get();
 }
 
-//////////////////////////////////////////////////////////////////////////////// 
- 
-} //namespace NYT 
- 
-//! A hasher for TIntrusivePtr. 
-template <class T> 
+////////////////////////////////////////////////////////////////////////////////
+
+} //namespace NYT
+
+//! A hasher for TIntrusivePtr.
+template <class T>
 struct THash<NYT::TIntrusivePtr<T>>
-{ 
-    Y_FORCE_INLINE size_t operator () (const NYT::TIntrusivePtr<T>& ptr) const 
-    { 
-        return THash<T*>()(ptr.Get()); 
-    } 
-}; 
+{
+    Y_FORCE_INLINE size_t operator () (const NYT::TIntrusivePtr<T>& ptr) const
+    {
+        return THash<T*>()(ptr.Get());
+    }
+};

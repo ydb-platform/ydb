@@ -1,8 +1,8 @@
 LIBRARY()
 
 PEERDIR(
-    library/cpp/yt/assert 
-    library/cpp/yt/malloc 
+    library/cpp/yt/assert
+    library/cpp/yt/malloc
 )
 
 CHECK_DEPENDENT_DIRS(

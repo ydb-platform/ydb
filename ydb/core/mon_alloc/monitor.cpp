@@ -13,7 +13,7 @@
 #include <library/cpp/malloc/api/malloc.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/monlib/service/pages/templates.h>
-#include <library/cpp/ytalloc/api/ytalloc.h> 
+#include <library/cpp/ytalloc/api/ytalloc.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/hash.h>

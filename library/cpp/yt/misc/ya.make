@@ -8,7 +8,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/yt/exception 
+    library/cpp/yt/exception
 )
 
 CHECK_DEPENDENT_DIRS(
@@ -21,7 +21,7 @@ CHECK_DEPENDENT_DIRS(
 )
 
 END()
- 
-RECURSE_FOR_TESTS( 
-    unittests 
-) 
+
+RECURSE_FOR_TESTS(
+    unittests
+)

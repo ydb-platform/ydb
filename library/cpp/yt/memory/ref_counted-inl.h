@@ -47,7 +47,7 @@ using TDeleter = void (*)(void*);
 void ScheduleObjectDeletion(void* ptr, TDeleter deleter);
 
 template <class T>
-struct TMemoryReleaser<T, std::enable_if_t<T::EnableHazard>> 
+struct TMemoryReleaser<T, std::enable_if_t<T::EnableHazard>>
 {
     static void Do(void* ptr, uint16_t offset)
     {
@@ -94,7 +94,7 @@ Y_FORCE_INLINE bool TRefCounter::Unref() const
     // See http://www.boost.org/doc/libs/1_55_0/doc/html/atomic/usage_examples.html#boost_atomic.usage_examples.example_reference_counters
     //
     auto oldStrongCount = StrongCount_.fetch_sub(1, std::memory_order_release);
-    YT_ASSERT(oldStrongCount > 0); 
+    YT_ASSERT(oldStrongCount > 0);
     if (oldStrongCount == 1) {
         StrongCount_.load(std::memory_order_acquire);
         return true;

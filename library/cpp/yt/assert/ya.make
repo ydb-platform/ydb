@@ -1,9 +1,9 @@
-LIBRARY() 
- 
-OWNER(g:yt) 
- 
-SRCS( 
-    assert.cpp 
-) 
- 
-END() 
+LIBRARY()
+
+OWNER(g:yt)
+
+SRCS(
+    assert.cpp
+)
+
+END()

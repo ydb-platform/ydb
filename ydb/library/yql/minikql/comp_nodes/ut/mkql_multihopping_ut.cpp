@@ -14,6 +14,48 @@ namespace NKikimr {
 namespace NMiniKQL {
 
 namespace {
+    struct TInputItem {
+        ui32 Key = 0;
+        i64 Time = 0;
+        ui32 Val = 0;
+    };
+
+    struct TOutputItem {
+        ui32 Key = 0;
+        ui32 Val = 0;
+        ui64 Time = 0;
+
+        constexpr bool operator==(const TOutputItem& rhs) const
+        {
+            return this->Key == rhs.Key && this->Val == rhs.Val && this->Time == rhs.Time;
+        }
+    };
+
+    struct TOutputGroup {
+        TOutputGroup(std::initializer_list<TOutputItem> items) : Items(items) {}
+
+        std::vector<TOutputItem> Items;
+    };
+
+    std::vector<TOutputItem> Ordered(std::vector<TOutputItem> vec) {
+        auto res = vec;
+        std::sort(res.begin(), res.end(), [](auto l, auto r) {
+            return std::make_tuple(l.Key, l.Val, l.Time) < std::make_tuple(r.Key, r.Val, r.Time);
+        });
+        return res;
+    }
+
+    IOutputStream &operator<<(IOutputStream &output, std::vector<TOutputItem> items) {
+        output << "[";
+        for (ui32 i = 0; i < items.size(); ++i) {
+            output << "(" << items.at(i).Key << ";" << items.at(i).Val << ";" << items.at(i).Time << ")";
+            if (i != items.size() - 1)
+                output << ",";
+        }
+        output << "]";
+        return output;
+    }
+
     TIntrusivePtr<IRandomProvider> CreateRandomProvider() {
         return CreateDeterministicRandomProvider(1);
     }
@@ -24,7 +66,7 @@ namespace {
 
     TComputationNodeFactory GetAuxCallableFactory() {
         return [](TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
-            if (callable.GetType()->GetName() == "OneYieldStream") {
+            if (callable.GetType()->GetName() == "MyStream") {
                 return new TExternalComputationNode(ctx.Mutables);
             }
 
@@ -66,44 +108,35 @@ namespace {
         IComputationPattern::TPtr Pattern;
     };
 
-    struct TStreamWithYield : public NUdf::TBoxedValue {
-        TStreamWithYield(const TUnboxedValueVector& items, ui32 yieldPos, ui32 index)
+    struct TStream : public NUdf::TBoxedValue {
+        TStream(const TUnboxedValueVector& items, std::function<void()> fetchCallback)
             : Items(items)
-            , YieldPos(yieldPos)
-            , Index(index)
-        {}
+            , FetchCallback(fetchCallback) {}
 
     private:
         TUnboxedValueVector Items;
-        ui32 YieldPos;
         ui32 Index;
-
-        ui32 GetTraverseCount() const override {
-            return 0;
-        }
-
-        NUdf::TUnboxedValue Save() const override {
-            return NUdf::TUnboxedValue::Zero();
-        }
-
-        void Load(const NUdf::TStringRef& state) override {
-            Y_UNUSED(state);
-        }
+        std::function<void()> FetchCallback;
 
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) final {
+            FetchCallback();
             if (Index >= Items.size()) {
                 return NUdf::EFetchStatus::Finish;
-            }
-            if (Index == YieldPos) {
-                return NUdf::EFetchStatus::Yield;
             }
             result = Items[Index++];
             return NUdf::EFetchStatus::Ok;
         }
     };
 
-    THolder<IComputationGraph> BuildGraph(TSetup& setup, const std::vector<std::tuple<ui32, i64, ui32>> items,
-                                          ui32 yieldPos, ui32 startIndex, bool dataWatermarks) {
+    THolder<IComputationGraph> BuildGraph(
+        TSetup& setup,
+        const std::vector<TInputItem> items,
+        std::function<void()> fetchCallback,
+        bool dataWatermarks,
+        ui64 hop = 10,
+        ui64 interval = 30,
+        ui64 delay = 20)
+    {
         TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
 
         auto structType = pgmBuilder.NewEmptyStructType();
@@ -119,10 +152,8 @@ namespace {
 
         auto inStreamType = pgmBuilder.NewStreamType(structType);
 
-        TCallableBuilder inStream(pgmBuilder.GetTypeEnvironment(), "OneYieldStream", inStreamType);
+        TCallableBuilder inStream(pgmBuilder.GetTypeEnvironment(), "MyStream", inStreamType);
         auto streamNode = inStream.Build();
-
-        ui64 hop = 10, interval = 30, delay = 20;
 
         auto pgmReturn = pgmBuilder.MultiHoppingCore(
             TRuntimeNode(streamNode, false),
@@ -162,10 +193,10 @@ namespace {
                 return pgmBuilder.NewStruct(members);
             },
             [&](TRuntimeNode key, TRuntimeNode state, TRuntimeNode time) { // finish
-                Y_UNUSED(time);
                 std::vector<std::pair<std::string_view, TRuntimeNode>> members;
                 members.emplace_back("key", key);
                 members.emplace_back("sum", pgmBuilder.Member(state, "sum"));
+                members.emplace_back("time", time);
                 return pgmBuilder.NewStruct(members);
             },
             pgmBuilder.NewDataLiteral<NUdf::EDataSlot::Interval>(NUdf::TStringRef((const char*)&hop, sizeof(hop))), // hop
@@ -180,155 +211,194 @@ namespace {
         for (size_t i = 0; i < items.size(); ++i) {
             NUdf::TUnboxedValue* itemsPtr;
             auto structValues = graph->GetHolderFactory().CreateDirectArrayHolder(3, itemsPtr);
-            itemsPtr[keyIndex] = NUdf::TUnboxedValuePod(std::get<0>(items[i]));
-            itemsPtr[timeIndex] = NUdf::TUnboxedValuePod(std::get<1>(items[i]));
-            itemsPtr[sumIndex] = NUdf::TUnboxedValuePod(std::get<2>(items[i]));
+            itemsPtr[keyIndex] = NUdf::TUnboxedValuePod(items.at(i).Key);
+            itemsPtr[timeIndex] = NUdf::TUnboxedValuePod(items.at(i).Time);
+            itemsPtr[sumIndex] = NUdf::TUnboxedValuePod(items.at(i).Val);
             streamItems.push_back(std::move(structValues));
         }
 
-        auto streamValue = NUdf::TUnboxedValuePod(new TStreamWithYield(streamItems, yieldPos, startIndex));
+        auto streamValue = NUdf::TUnboxedValuePod(new TStream(streamItems, fetchCallback));
         graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), std::move(streamValue));
         return graph;
     }
 }
 
 Y_UNIT_TEST_SUITE(TMiniKQLMultiHoppingTest) {
-    void TestWithSaveLoadImpl(
-        const std::vector<std::tuple<ui32, i64, ui32>> input,
-        const std::vector<std::tuple<ui32, ui32>> expected,
-        std::vector<std::tuple<ui32, ui32>> expectedFinish,
-        bool withTraverse,
-        bool dataWatermarks)
+    void TestImpl(
+        const std::vector<TInputItem> input,
+        const std::vector<TOutputGroup> expected,
+        bool dataWatermarks,
+        ui64 hop = 10,
+        ui64 interval = 30,
+        ui64 delay = 20)
     {
         TScopedAlloc alloc;
+        TSetup setup1(alloc);
 
-        for (ui32 yieldPos = 0; yieldPos < input.size(); ++yieldPos) {
-            std::vector<std::tuple<ui32, ui32>> result;
+        ui32 curGroupId = 0;
+        std::vector<TOutputItem> curResult;
 
-            TSetup setup1(alloc);
-            auto graph1 = BuildGraph(setup1, input, yieldPos, 0, dataWatermarks);
-            auto root1 = graph1->GetValue();
+        auto check = [&curResult, &curGroupId, &expected]() {
+            auto expectedItems = Ordered(expected.at(curGroupId).Items);
+            curResult = Ordered(curResult);
+            UNIT_ASSERT_EQUAL_C(curResult, expectedItems, "curGroup: " << curGroupId << " actual: " << curResult << " expected: " << expectedItems);
+            curGroupId++;
+            curResult.clear();
+        };
 
-            NUdf::EFetchStatus status = NUdf::EFetchStatus::Ok;
-            while (status == NUdf::EFetchStatus::Ok) {
-                NUdf::TUnboxedValue val;
-                status = root1.Fetch(val);
-                if (status == NUdf::EFetchStatus::Ok) {
-                    result.emplace_back(val.GetElement(0).Get<ui32>(), val.GetElement(1).Get<ui32>());
-                }
+        auto graph1 = BuildGraph(setup1, input, check, dataWatermarks, hop, interval, delay);
+
+        auto root1 = graph1->GetValue();
+
+        NUdf::EFetchStatus status = NUdf::EFetchStatus::Ok;
+        while (status == NUdf::EFetchStatus::Ok) {
+            NUdf::TUnboxedValue val;
+            status = root1.Fetch(val);
+            if (status == NUdf::EFetchStatus::Ok) {
+                curResult.emplace_back(TOutputItem{val.GetElement(0).Get<ui32>(), val.GetElement(1).Get<ui32>(), val.GetElement(2).Get<ui64>()});
             }
-            UNIT_ASSERT_EQUAL(status, NUdf::EFetchStatus::Yield);
-
-            TString graphState;
-            if (withTraverse) {
-                SaveGraphState(&root1, 1, 0ULL, graphState);
-            } else {
-                graphState = graph1->SaveGraphState();
-            }
-
-            TSetup setup2(alloc);
-            auto graph2 = BuildGraph(setup2, input, -1, yieldPos, dataWatermarks);
-            NUdf::TUnboxedValue root2;
-            if (withTraverse) {
-                root2 = graph2->GetValue();
-                LoadGraphState(&root2, 1, 0ULL, graphState);
-            } else {
-                graph2->LoadGraphState(graphState);
-                root2 = graph2->GetValue();
-            }
-
-            status = NUdf::EFetchStatus::Ok;
-            while (status == NUdf::EFetchStatus::Ok) {
-                NUdf::TUnboxedValue val;
-                status = root2.Fetch(val);
-                if (status == NUdf::EFetchStatus::Ok) {
-                    result.emplace_back(val.GetElement(0).Get<ui32>(), val.GetElement(1).Get<ui32>());
-                }
-            }
-            UNIT_ASSERT_EQUAL(status, NUdf::EFetchStatus::Finish);
-
-            // After getting finish, current windows will be closed in random order.
-            // So check last part of result as unordered.
-            std::vector<std::tuple<ui32, ui32>> resultPart1 = {result.begin(), result.end() - expectedFinish.size()};
-            std::vector<std::tuple<ui32, ui32>> resultPart2 = {result.begin() + expected.size(), result.end()};
-            std::sort(resultPart2.begin(), resultPart2.end());
-            std::sort(expectedFinish.begin(), expectedFinish.end());
-            UNIT_ASSERT_EQUAL(resultPart1, expected);
-            UNIT_ASSERT_EQUAL(resultPart2, expectedFinish);
         }
+
+        check();
+        // TODO: some problem with parallel run
+        //UNIT_ASSERT_EQUAL_C(curGroupId, expected.size(), "1: " << curGroupId << " 2: "  << expected.size());
     }
 
-    const std::vector<std::tuple<ui32, i64, ui32>> input1 = {
-        // Group; Time; Value
-        {2, 1, 2},
-        {1, 1, 2},
-        {2, 2, 3},
-        {1, 2, 3},
-        {2, 15, 4},
-        {1, 15, 4},
-        {2, 23, 6},
-        {1, 23, 6},
-        {2, 24, 5},
-        {1, 24, 5},
-        {2, 25, 7},
-        {1, 25, 7},
-        {2, 40, 2},
-        {1, 40, 2},
-        {2, 47, 1},
-        {1, 47, 1},
-        {2, 51, 6},
-        {1, 51, 6},
-        {2, 59, 2},
-        {1, 59, 2},
-        {2, 85, 8},
-        {1, 85, 8},
-        {2, 55, 1000},
-        {1, 55, 1000},
-        {2, 200, 2},
-        {1, 200, 3}
-    };
-
-    const std::vector<std::tuple<ui32, ui32>> expected1 = {
-        {2, 5}, {2, 9}, {1, 5},
-        {1, 9}, {2, 27}, {1, 27},
-        {2, 22}, {2, 21}, {2, 11},
-        {1, 22}, {1, 21}, {1, 11},
-        {2, 11}, {2, 8}, {2, 8},
-        {2, 8}, {2, 8}, {1, 11},
-        {1, 8}, {1, 8}, {1, 8},
-        {1, 8}};
-
-    const std::vector<std::tuple<ui32, ui32>> expected1Finish = {{2, 2}, {1, 3}};
-
-    const std::vector<std::tuple<ui32, i64, ui32>> input2 = {
-        // Group; Time; Value
-        {1, 1, 2},
-        {2, 1, 2},
-        {1, 11, 3},
-        {2, 40, 5},
-        {2, 60, 1}
-    };
-
-    const std::vector<std::tuple<ui32, ui32>> expected2Finish = {{2, 5}, {2, 5}, {2, 6}, {2, 1}, {2, 1}, {1, 5}, {1, 3}};
-
-    const std::vector<std::tuple<ui32, ui32>> expected2 = {
-        {2, 2}, {2, 2}, {2, 2},
-        {1, 2}, {1, 5}};
-
-    Y_UNIT_TEST(TestWithSaveLoad) {
-        TestWithSaveLoadImpl(input1, expected1, expected1Finish, true, false);
+    Y_UNIT_TEST(TestDataWatermarks) {
+        const std::vector<TInputItem> input = {
+            // Group; Time; Value
+            {1, 101, 2},
+            {2, 101, 2},
+            {1, 111, 3},
+            {2, 140, 5},
+            {2, 160, 1}
+        };
+        const std::vector<TOutputGroup> expected = {
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({{1, 2, 110}, {1, 5, 120}, {2, 2, 110}, {2, 2, 120}}),
+            TOutputGroup({{2, 2, 130}, {1, 5, 130}, {1, 3, 140}}),
+            TOutputGroup({{2, 5, 150}, {2, 5, 160}, {2, 6, 170}, {2, 1, 180}, {2, 1, 190}}),
+        };
+        TestImpl(input, expected, true);
     }
 
-    Y_UNIT_TEST(TestWithSaveLoad2) {
-        TestWithSaveLoadImpl(input1, expected1, expected1Finish, false, false);
+    Y_UNIT_TEST(TestValidness1) {
+        const std::vector<TInputItem> input1 = {
+            // Group; Time; Value
+            {1, 101, 2},
+            {2, 101, 2},
+            {1, 111, 3},
+            {2, 140, 5},
+            {2, 160, 1}
+        };
+
+        const std::vector<TOutputGroup> expected = {
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({{2, 2, 110}, {2, 2, 120}}),
+            TOutputGroup({{2, 2, 130}}),
+            TOutputGroup({{1, 2, 110}, {1, 5, 120}, {1, 5, 130}, {1, 3, 140}, {2, 5, 150},
+                          {2, 5, 160}, {2, 6, 170}, {2, 1, 190}, {2, 1, 180}}),
+        };
+        TestImpl(input1, expected, false);
     }
 
-    Y_UNIT_TEST(TestWithSaveLoad3) {
-        TestWithSaveLoadImpl(input2, expected2, expected2Finish, true, true);
+    Y_UNIT_TEST(TestValidness2) {
+        const std::vector<TInputItem> input = {
+            // Group; Time; Value
+            {2, 101, 2}, {1, 101, 2}, {2, 102, 3}, {1, 102, 3}, {2, 115, 4},
+            {1, 115, 4}, {2, 123, 6}, {1, 123, 6}, {2, 124, 5}, {1, 124, 5},
+            {2, 125, 7}, {1, 125, 7}, {2, 140, 2}, {1, 140, 2}, {2, 147, 1},
+            {1, 147, 1}, {2, 151, 6}, {1, 151, 6}, {2, 159, 2}, {1, 159, 2},
+            {2, 185, 8}, {1, 185, 8}
+        };
+        const std::vector<TOutputGroup> expected = {
+            TOutputGroup({}),
+            TOutputGroup({}), TOutputGroup({}), TOutputGroup({}), TOutputGroup({}),
+            TOutputGroup({}), TOutputGroup({}), TOutputGroup({}), TOutputGroup({}),
+            TOutputGroup({}), TOutputGroup({}), TOutputGroup({}), TOutputGroup({}),
+            TOutputGroup({{1, 5, 110}, {1, 9, 120}, {2, 5, 110}, {2, 9, 120}}),
+            TOutputGroup({}),
+            TOutputGroup({}), TOutputGroup({}),
+            TOutputGroup({{2, 27, 130}, {1, 27, 130}}),
+            TOutputGroup({}), TOutputGroup({}), TOutputGroup({}),
+            TOutputGroup({{2, 22, 140}, {2, 21, 150},  {2, 11, 160}, {1, 22, 140}, {1, 21, 150}, {1, 11, 160}}),
+            TOutputGroup({}),
+            TOutputGroup({{1, 11, 170}, {1, 8, 180}, {1, 8, 190}, {1, 8, 200}, {1, 8, 210}, {2, 11, 170},
+                          {2, 8, 180}, {2, 8, 190}, {2, 8, 200}, {2, 8, 210}}),
+        };
+
+        TestImpl(input, expected, true);
     }
 
-    Y_UNIT_TEST(TestWithSaveLoad4) {
-        TestWithSaveLoadImpl(input2, expected2, expected2Finish, false, true);
+    Y_UNIT_TEST(TestValidness3) {
+        const std::vector<TInputItem> input = {
+            // Group; Time; Value
+            {1, 105, 1}, {1, 107, 4}, {2, 106, 3}, {1, 111, 7}, {1, 117, 3},
+            {2, 110, 2}, {1, 108, 9}, {1, 121, 4}, {2, 107, 2}, {2, 141, 5},
+            {1, 141, 10}
+        };
+        const std::vector<TOutputGroup> expected = {
+            TOutputGroup({}),
+            TOutputGroup({}), TOutputGroup({}), TOutputGroup({}), TOutputGroup({}),
+            TOutputGroup({}), TOutputGroup({}), TOutputGroup({}),
+            TOutputGroup({{1, 14, 110}, {2, 3, 110}}),
+            TOutputGroup({}),
+            TOutputGroup({{2, 7, 115}, {2, 2, 120}, {1, 21, 115}, {1, 10, 120}, {1, 7, 125}, {1, 4, 130}}),
+            TOutputGroup({}),
+            TOutputGroup({{1, 10, 145}, {1, 10, 150}, {2, 5, 145}, {2, 5, 150}})
+        };
+
+        TestImpl(input, expected, true, 5, 10, 10);
+    }
+
+    Y_UNIT_TEST(TestDelay) {
+        const std::vector<TInputItem> input = {
+            // Group; Time; Value
+            {1, 101, 3}, {1, 111, 5}, {1, 120, 7}, {1, 80, 9}, {1, 79, 11}
+        };
+        const std::vector<TOutputGroup> expected = {
+            TOutputGroup({}),
+            TOutputGroup({}), TOutputGroup({}), TOutputGroup({}),
+            TOutputGroup({}), TOutputGroup({}),
+            TOutputGroup({{1, 12, 110}, {1, 8, 120}, {1, 15, 130}, {1, 12, 140}, {1, 7, 150}})
+        };
+
+        TestImpl(input, expected, false);
+    }
+
+    Y_UNIT_TEST(TestWindowsBeforeFirstElement) {
+        const std::vector<TInputItem> input = {
+            // Group; Time; Value
+            {1, 101, 2}, {1, 111, 3}
+        };
+        const std::vector<TOutputGroup> expected = {
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({{1, 2, 110}, {1, 5, 120}, {1, 5, 130}, {1, 3, 140}})
+        };
+
+        TestImpl(input, expected, false);
+    }
+
+    Y_UNIT_TEST(TestSubzeroValues) {
+        const std::vector<TInputItem> input = {
+            // Group; Time; Value
+            {1, 1, 2}
+        };
+        const std::vector<TOutputGroup> expected = {
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({{1, 2, 30}}),
+        };
+
+        TestImpl(input, expected, false);
     }
 }
 

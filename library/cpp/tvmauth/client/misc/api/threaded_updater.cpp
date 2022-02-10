@@ -102,7 +102,7 @@ namespace NTvmAuth::NTvmApi {
     }
 
     TThreadedUpdater::TThreadedUpdater(const TClientSettings& settings, TLoggerPtr logger)
-        : TThreadedUpdaterBase( 
+        : TThreadedUpdaterBase(
               TRetrySettings{}.WorkerAwakingPeriod,
               std::move(logger),
               settings.GetTvmHost(),

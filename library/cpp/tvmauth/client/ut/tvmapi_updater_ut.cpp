@@ -1222,24 +1222,24 @@ Y_UNIT_TEST_SUITE(ApiUpdater) {
             TNotInitedUpdater::AppendToJsonArray("[kek]",
                                                  {"sdlzkjvbsdljhfbsdajlhfbsakjdfb", "o92q83yh2uhq2eri23r"}));
     }
- 
-    Y_UNIT_TEST(UpdaterTimeouts) { 
-        NTvmApi::TClientSettings s; 
-        s.SetSelfTvmId(100500); 
-        s.EnableServiceTicketChecking(); 
+
+    Y_UNIT_TEST(UpdaterTimeouts) {
+        NTvmApi::TClientSettings s;
+        s.SetSelfTvmId(100500);
+        s.EnableServiceTicketChecking();
         s.TvmHost = "localhost";
         s.TvmPort = GetRandomPort();
-        const auto timeout = TDuration::MilliSeconds(10); 
+        const auto timeout = TDuration::MilliSeconds(10);
         s.TvmConnectTimeout = timeout;
         s.TvmSocketTimeout = timeout;
- 
-        { 
-            auto l = MakeIntrusive<TLogger>(); 
-            auto startTs = ::Now(); 
-            UNIT_ASSERT_EXCEPTION(NTvmApi::TThreadedUpdater::Create(s, l), yexception); 
-            UNIT_ASSERT_LT(::Now() - startTs, timeout * 2); 
-        } 
-    } 
+
+        {
+            auto l = MakeIntrusive<TLogger>();
+            auto startTs = ::Now();
+            UNIT_ASSERT_EXCEPTION(NTvmApi::TThreadedUpdater::Create(s, l), yexception);
+            UNIT_ASSERT_LT(::Now() - startTs, timeout * 2);
+        }
+    }
 }
 
 template <>

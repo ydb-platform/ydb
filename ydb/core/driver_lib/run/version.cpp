@@ -15,7 +15,7 @@ TMaybe<NActors::TInterconnectProxyCommon::TVersionInfo> VERSION = NActors::TInte
 TString GetBranchName(TString url) {
     bool found = false;
     for (const char *prefix : {"arcadia.yandex.ru/arc/", "arcadia/arc/", "arcadia.arc.yandex.ru/arc/"}) {
-        const char *base = url.data(); 
+        const char *base = url.data();
         const char *p = strstr(base, prefix);
         if (p) {
             url = url.substr(p + strlen(prefix) - base);
@@ -53,7 +53,7 @@ void CheckVersionTag() {
                 TString url(p, end);
                 TString branch = GetBranchName(url);
                 if (branch != "trunk" && VERSION->Tag == "trunk") {
-                    Y_FAIL("non-trunk branch %s from URL# %s contains VersionTag# trunk", branch.data(), url.data()); 
+                    Y_FAIL("non-trunk branch %s from URL# %s contains VersionTag# trunk", branch.data(), url.data());
                 }
             }
         }

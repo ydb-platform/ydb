@@ -42,7 +42,7 @@ namespace NKikimr {
                 {}
 
                 TString ToString() const {
-                    return Sprintf("%s step: %u", WriterConclusion.ToString().data(), Step); 
+                    return Sprintf("%s step: %u", WriterConclusion.ToString().data(), Step);
                 }
             };
 
@@ -164,11 +164,11 @@ namespace NKikimr {
                 TMemRecLogoBlob memRec(ingress);
 
                 TString blobBuf;
-                TDiskBlob::Create(blobBuf, data.size(), 1, data); 
-                memRec.SetDiskBlob(TDiskPart(0, 0, blobBuf.size())); 
+                TDiskBlob::Create(blobBuf, data.size(), 1, data);
+                memRec.SetDiskBlob(TDiskPart(0, 0, blobBuf.size()));
                 merger.Clear();
                 merger.SetLoadDataMode(true);
-                merger.Add(memRec, blobBuf.data(), key); 
+                merger.Add(memRec, blobBuf.data(), key);
                 merger.Finish();
 
                 bool pushRes = WriterPtr->Push(key, memRec, merger.GetDataMerger());

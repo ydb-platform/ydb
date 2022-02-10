@@ -247,8 +247,8 @@ public:
     void Print() const {
         fprintf(stderr, "TExpectedSet:\n");
         for (auto i : Map) {
-            fprintf(stderr, "  id=%s status=%s data=%s\n", i.first.ToString().data(), 
-                    NKikimrProto::EReplyStatus_Name(i.second.Status).data(), i.second.Data.data()); 
+            fprintf(stderr, "  id=%s status=%s data=%s\n", i.first.ToString().data(),
+                    NKikimrProto::EReplyStatus_Name(i.second.Status).data(), i.second.Data.data());
         }
     }
 

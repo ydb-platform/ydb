@@ -590,16 +590,16 @@ public:
             } else {
                 *out << "  " << LeftPad(pos, 4, '0') << outline;
                 TStringBuf s(outline);
-                const re2::StringPiece piece(s.data(), s.size()); 
+                const re2::StringPiece piece(s.data(), s.size());
                 std::array<re2::StringPiece, 2> captures;
-                if (Patterns_->Imm_.Match(piece, 0, s.size(), re2::RE2::UNANCHORED, captures.data(), captures.size())) { 
+                if (Patterns_->Imm_.Match(piece, 0, s.size(), re2::RE2::UNANCHORED, captures.data(), captures.size())) {
                     auto numBuf = TStringBuf(captures[1].data(), captures[1].size());
                     ui64 addr = FromString<ui64>(numBuf);
                     auto it = ReverseGlobalMapping_.find((void*)addr);
                     if (it != ReverseGlobalMapping_.end()) {
                         *out << " ; &" << it->second;
                     }
-                } else if (Patterns_->Jump_.Match(piece, 0, s.size(), re2::RE2::UNANCHORED, captures.data(), captures.size())) { 
+                } else if (Patterns_->Jump_.Match(piece, 0, s.size(), re2::RE2::UNANCHORED, captures.data(), captures.size())) {
                     auto numBuf = TStringBuf(captures[1].data(), captures[1].size());
                     i64 offset = FromString<i64>(numBuf);
                     *out << " ; -> " << pos + l + offset;
@@ -618,7 +618,7 @@ public:
         }
         llvm::SMDiagnostic error;
         auto buffer = llvm::MemoryBuffer::getMemBuffer(
-            llvm::StringRef(bitcode.data(), bitcode.size())); 
+            llvm::StringRef(bitcode.data(), bitcode.size()));
         std::unique_ptr<llvm::Module> module = llvm::parseIR(buffer->getMemBufferRef(), error, Context_);
 
         if (!module) {
@@ -631,7 +631,7 @@ public:
         module->setTargetTriple(Triple_);
         module->setDataLayout(Engine_->getDataLayout().getStringRepresentation());
         if (uniqId) {
-            module->setModuleIdentifier(llvm::StringRef(uniqId.data(), uniqId.size())); 
+            module->setModuleIdentifier(llvm::StringRef(uniqId.data(), uniqId.size()));
         }
 
         if (llvm::Linker::linkModules(*Module_, std::move(module))) {
@@ -653,7 +653,7 @@ public:
 
     void AddGlobalMapping(TStringBuf name, const void* address) override {
         ReverseGlobalMapping_[address] = TString(name);
-        Engine_->updateGlobalMapping(llvm::StringRef(name.data(), name.size()), (uint64_t)address); 
+        Engine_->updateGlobalMapping(llvm::StringRef(name.data(), name.size()), (uint64_t)address);
     }
 
     void notifyObjectLoaded(ObjectKey key, const llvm::object::ObjectFile &obj,
@@ -699,7 +699,7 @@ private:
                 TStringBuf name(nameRef.data(), nameRef.size());
                 TString fullName = TString("__emutls_v.") + name;
                 auto ctl = TlsManager_.Add(fullName, size, align);
-                Engine_->updateGlobalMapping(llvm::StringRef(fullName.data(), fullName.size()), (uint64_t)ctl); 
+                Engine_->updateGlobalMapping(llvm::StringRef(fullName.data(), fullName.size()), (uint64_t)ctl);
                 ReverseGlobalMapping_[&ctl] = fullName;
             }
         }

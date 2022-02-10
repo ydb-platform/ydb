@@ -53,7 +53,7 @@ namespace NBus {
 
         // Simple check that we have to deal with ipv6 address specification or
         // just host name or ipv4 address.
-        if (!host.empty() && (host[0] == '[')) { 
+        if (!host.empty() && (host[0] == '[')) {
             size_t pos = host.find(']');
             if (pos < 2 || pos == TString::npos) {
                 // '[]' and '[<address>' are errors.
@@ -98,7 +98,7 @@ namespace NBus {
             hostName = host;
         }
 
-        if (port.empty()) { 
+        if (port.empty()) {
             portNum = GetProto()->GetPort();
         } else {
             try {
@@ -109,7 +109,7 @@ namespace NBus {
         }
 
         TBusService service = GetProto()->GetService();
-        return GetQueue()->GetLocator()->Register(service, hostName.data(), portNum, start, end, ipVersion); 
+        return GetQueue()->GetLocator()->Register(service, hostName.data(), portNum, start, end, ipVersion);
     }
 
     TBusSession::~TBusSession() {

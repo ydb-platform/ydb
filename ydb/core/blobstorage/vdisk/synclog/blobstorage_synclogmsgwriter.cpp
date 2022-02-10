@@ -33,7 +33,7 @@ namespace NKikimr {
 
             // finalize
             respData->clear();
-            respData->reserve(hdr.second + compressed.size()); 
+            respData->reserve(hdr.second + compressed.size());
             respData->append(hdr.first, hdr.second);
             respData->append(compressed);
         }
@@ -52,7 +52,7 @@ namespace NKikimr {
 
             // finalize
             respData->clear();
-            respData->reserve(hdr.second + compressed.size()); 
+            respData->reserve(hdr.second + compressed.size());
             respData->append(hdr.first, hdr.second);
             respData->append(compressed);
         }
@@ -69,7 +69,7 @@ namespace NKikimr {
 
             // finalize
             respData->clear();
-            respData->reserve(hdr.second + result.size()); 
+            respData->reserve(hdr.second + result.size());
             respData->append(hdr.first, hdr.second);
             respData->append(result);
         }

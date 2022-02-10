@@ -51,7 +51,7 @@ namespace NKikimr {
         void Bootstrap(const TActorContext &ctx) {
             LOG_DEBUG(ctx, NKikimrServices::BS_SYNCER,
                       VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidProxyBase: START: targetVDiskId# %s",
-                            TargetVDiskId.ToString().data())); 
+                            TargetVDiskId.ToString().data()));
 
             SendRequestAndWaitForResponse(ctx);
         }
@@ -59,7 +59,7 @@ namespace NKikimr {
         void Handle(TEvBlobStorage::TEvVSyncGuidResult::TPtr& ev, const TActorContext &ctx) {
             LOG_DEBUG(ctx, NKikimrServices::BS_SYNCER,
                       VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidProxyBase::Handle(TEvVSyncGuidResult): msg# %s",
-                            ev->Get()->ToString().data())); 
+                            ev->Get()->ToString().data()));
 
             const NKikimrBlobStorage::TEvVSyncGuidResult &record = ev->Get()->Record;
             // check status
@@ -71,7 +71,7 @@ namespace NKikimr {
                 LOG_LOG_THROTTLE(LogThrottler, ctx, pri, NKikimrServices::BS_SYNCER,
                                  VDISKP(VCtx->VDiskLogPrefix,
                                     "TVDiskGuidProxyBase::Handle(TEvVSyncGuidResult): NOT OK: msg# %s",
-                                    ev->Get()->ToString().data())); 
+                                    ev->Get()->ToString().data()));
 
                 // retry in case of error
                 Become(&TThis::StateSleep, ctx, RetryPeriod, new TEvents::TEvWakeup());
@@ -85,7 +85,7 @@ namespace NKikimr {
                 LOG_WARN(ctx, NKikimrServices::BS_SYNCER,
                          VDISKP(VCtx->VDiskLogPrefix,
                             "TVDiskGuidProxyBase::Handle(TEvVSyncGuidResult): RACE: msg# %s",
-                            ev->Get()->ToString().data())); 
+                            ev->Get()->ToString().data()));
 
                 Become(&TThis::StateSleep, ctx, RetryPeriod, new TEvents::TEvWakeup());
                 return;
@@ -99,7 +99,7 @@ namespace NKikimr {
         void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr &ev, const TActorContext &ctx) {
             LOG_DEBUG(ctx, NKikimrServices::BS_SYNCER,
                       VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidProxyBase::Handle(TEvNodeDisconnected): msg# %s",
-                            ev->Get()->ToString().data())); 
+                            ev->Get()->ToString().data()));
 
             Become(&TThis::StateSleep, ctx, RetryPeriod, new TEvents::TEvWakeup());
         }
@@ -107,7 +107,7 @@ namespace NKikimr {
         void Handle(TEvents::TEvUndelivered::TPtr &ev, const TActorContext &ctx) {
             LOG_DEBUG(ctx, NKikimrServices::BS_SYNCER,
                       VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidProxyBase::Handle(TEvUndelivered): msg# %s",
-                            ev->Get()->ToString().data())); 
+                            ev->Get()->ToString().data()));
 
             Become(&TThis::StateSleep, ctx, RetryPeriod, new TEvents::TEvWakeup());
         }

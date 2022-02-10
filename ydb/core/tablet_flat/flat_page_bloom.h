@@ -40,13 +40,13 @@ namespace NPage {
 
             Hashes = header->Hashes;
             Items = header->Items;
-            Array = { ptr, (got.Page.size() - sizeof(THeader)) / sizeof(ui64) }; 
+            Array = { ptr, (got.Page.size() - sizeof(THeader)) / sizeof(ui64) };
 
             if (Items == 0) {
                 Y_FAIL("NPage::TBloom page has zero items in index");
             } else if (Hashes == 0) {
                 Y_FAIL("NPage::TBloom page has zero hash count");
-            } else if (ui64(Array.size()) << 6 != header->Items) { 
+            } else if (ui64(Array.size()) << 6 != header->Items) {
                 Y_FAIL("Items in TBloom header isn't match with array");
             } else if (header->Type != 0) {
                 Y_FAIL("NPage::TBloom page made with unknown hash type");

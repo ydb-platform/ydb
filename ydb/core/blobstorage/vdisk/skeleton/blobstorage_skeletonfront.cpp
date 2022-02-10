@@ -286,8 +286,8 @@ namespace NKikimr {
                 Y_VERIFY(InFlightCount >= 1 && InFlightBytes >= msgCtx.RecByteSize && InFlightCost >= msgCtx.Cost,
                          "IntQueueId# %s InFlightCount# %" PRIu64 " InFlightBytes# %" PRIu64
                          " InFlightCost# %" PRIu64 " msgCtx# %s Deadlines# %" PRIu64,
-                         NKikimrBlobStorage::EVDiskInternalQueueId_Name(IntQueueId).data(), 
-                         InFlightCount, InFlightBytes, InFlightCost, msgCtx.ToString().data(), Deadlines); 
+                         NKikimrBlobStorage::EVDiskInternalQueueId_Name(IntQueueId).data(),
+                         InFlightCount, InFlightBytes, InFlightCost, msgCtx.ToString().data(), Deadlines);
 
                 --InFlightCount;
                 InFlightCost -= msgCtx.Cost;
@@ -649,7 +649,7 @@ namespace NKikimr {
                 const auto &bi = Config->BaseInfo;
                 TString path = Sprintf("vdisk%09" PRIu32 "_%09" PRIu32, bi.PDiskId, bi.VDiskSlotId);
                 TString name = Sprintf("%s VDisk%09" PRIu32 "_%09" PRIu32,
-                                      VCtx->VDiskLogPrefix.data(), bi.PDiskId, bi.VDiskSlotId); 
+                                      VCtx->VDiskLogPrefix.data(), bi.PDiskId, bi.VDiskSlotId);
                 mon->RegisterActorPage(vdisksMonPage, path, name, false, ctx.ExecutorThread.ActorSystem, ctx.SelfID);
             }
         }
@@ -1038,8 +1038,8 @@ namespace NKikimr {
 
             bool compatible = Compatible(extQueueId, intQueueId);
             Y_VERIFY(compatible, "%s: %s: extQueue is incompatible with intQueue; intQueue# %s extQueue# %s",
-                   VCtx->VDiskLogPrefix.data(), msgName, NKikimrBlobStorage::EVDiskInternalQueueId_Name(intQueueId).data(), 
-                   NKikimrBlobStorage::EVDiskQueueId_Name(extQueueId).data()); 
+                   VCtx->VDiskLogPrefix.data(), msgName, NKikimrBlobStorage::EVDiskInternalQueueId_Name(intQueueId).data(),
+                   NKikimrBlobStorage::EVDiskQueueId_Name(extQueueId).data());
 
             TExtQueueClass &extQueue = GetExtQueue(extQueueId);
             NBackpressure::TQueueClientId clientId(msgQoS);

@@ -83,7 +83,7 @@ public:
     {}
 
     TTypeValue(const TStringBuf& value, NScheme::TTypeId type = NScheme::NTypeIds::String)
-        : TRawTypeValue(value.empty() ? (const char*)0xDEADBEEFDEADBEEF : value.data(), value.size(), type) 
+        : TRawTypeValue(value.empty() ? (const char*)0xDEADBEEFDEADBEEF : value.data(), value.size(), type)
     {}
 
     explicit TTypeValue(const TRawTypeValue& rawTypeValue)

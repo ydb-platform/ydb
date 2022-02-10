@@ -291,7 +291,7 @@ public:
     }
 
     void EstimateCost(const TDriveModel &drive) override {
-        ui64 totalBytes = (Data.size() + sizeof(TLogRecordHeader)) * (LogErasureDataParts + 1) / LogErasureDataParts; 
+        ui64 totalBytes = (Data.size() + sizeof(TLogRecordHeader)) * (LogErasureDataParts + 1) / LogErasureDataParts;
         Cost = drive.TimeForSizeNs(totalBytes, EstimatedChunkIdx, TDriveModel::OP_TYPE_WRITE);
     }
 

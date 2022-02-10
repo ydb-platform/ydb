@@ -98,7 +98,7 @@ struct TKesusTablet::THtmlRenderer {
 
     void RenderProxyDetails(IOutputStream& out, const TString& actorIdText) {
         TActorId actorId;
-        if (!actorId.Parse(actorIdText.data(), actorIdText.size())) { 
+        if (!actorId.Parse(actorIdText.data(), actorIdText.size())) {
             RenderError(out, "Invalid proxy id");
             return;
         }

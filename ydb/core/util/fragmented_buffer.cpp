@@ -64,7 +64,7 @@ void TFragmentedBuffer::Write(i32 begin, const char* buffer, i32 size) {
             Y_VERIFY(it->first + i32(it->second.size()) > offset);
             i32 bytesToNext = it->first + it->second.size() - offset;
             i32 bytesToInsert = Min(bytesToCopy, bytesToNext);
-            char *destination = const_cast<char*>(it->second.data()) + offset - it->first; 
+            char *destination = const_cast<char*>(it->second.data()) + offset - it->first;
             memcpy(destination, source, bytesToInsert);
             source += bytesToInsert;
             offset += bytesToInsert;
@@ -97,7 +97,7 @@ void TFragmentedBuffer::Read(i32 begin, char* buffer, i32 size) const {
         Y_VERIFY(it->first + i32(it->second.size()) > offset);
         i32 bytesToNext = it->first + it->second.size() - offset;
         i32 bytesToInsert = Min(bytesToCopy, bytesToNext);
-        const char *source = it->second.data() + offset - it->first; 
+        const char *source = it->second.data() + offset - it->first;
         memcpy(destination, source, bytesToInsert);
         destination += bytesToInsert;
         offset += bytesToInsert;

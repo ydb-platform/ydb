@@ -1431,7 +1431,7 @@ private:
             bool hasName = true;
             if (label.empty()) {
                 auto source = term->GetSourceName();
-                if (term->IsAsterisk() && !source->empty()) { 
+                if (term->IsAsterisk() && !source->empty()) {
                     Columns.QualifiedAll = true;
                     label = DotJoin(*source, "*");
                 } else if (column) {
@@ -1598,7 +1598,7 @@ private:
                     for (auto& term: Terms) {
                         if (term->IsAsterisk()) {
                             auto sourceName = term->GetSourceName();
-                            YQL_ENSURE(*sourceName && !sourceName->empty()); 
+                            YQL_ENSURE(*sourceName && !sourceName->empty());
                             if (isJoin) {
                                 members = L(members, BuildQuotedAtom(Pos, *sourceName + "."));
                             } else {

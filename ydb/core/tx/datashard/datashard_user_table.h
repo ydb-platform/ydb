@@ -384,7 +384,7 @@ struct TUserTable : public TThrRefBase {
     const TString& GetSchema() const { return Schema; }
 
     void GetSchema(NKikimrSchemeOp::TTableDescription& description) const {
-        bool ok = description.ParseFromArray(Schema.data(), Schema.size()); 
+        bool ok = description.ParseFromArray(Schema.data(), Schema.size());
         Y_VERIFY(ok);
     }
 

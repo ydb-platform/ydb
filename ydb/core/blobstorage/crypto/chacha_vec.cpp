@@ -399,7 +399,7 @@ void ChaChaVec::EncipherOld(const ui8* plaintext, ui8* ciphertext, size_t len)
             ui32* kp = (ui32*)&s1_;
             ui32* np = (ui32*)&s3_ + 2;
 
-            ui32 x0, x1, x2, x3, x4, x5, x6, x7, x8, 
+            ui32 x0, x1, x2, x3, x4, x5, x6, x7, x8,
                           x9, x10, x11, x12, x13, x14, x15;
             x0 = chacha_const[0]; x1 = chacha_const[1];
             x2 = chacha_const[2]; x3 = chacha_const[3];

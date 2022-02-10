@@ -403,7 +403,7 @@ namespace NTypeAnnImpl {
                 return IGraphTransformer::TStatus::Error;
             }
 
-            if (newName->Content().empty()) { 
+            if (newName->Content().empty()) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(newName->Pos()), "Empty column is not allowed"));
                 return IGraphTransformer::TStatus::Error;
             }
@@ -447,7 +447,7 @@ namespace NTypeAnnImpl {
                     return IGraphTransformer::TStatus::Error;
                 }
 
-                if (newName->Content().empty()) { 
+                if (newName->Content().empty()) {
                     ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(newName->Pos()), "Empty column is not allowed"));
                     return IGraphTransformer::TStatus::Error;
                 }

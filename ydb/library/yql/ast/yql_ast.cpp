@@ -61,7 +61,7 @@ namespace {
         }
 
         inline bool AtEnd() const {
-            return Str_.size() == Offset_; 
+            return Str_.size() == Offset_;
         }
 
         inline char Next() {
@@ -447,7 +447,7 @@ namespace {
         if (idx == TString::npos) {
             out << str;
         } else {
-            const char* begin = str.data(); 
+            const char* begin = str.data();
             do {
                 ui32 count = 0;
                 for (; idx < str.length() && str[idx] == '@'; ++idx) {
@@ -455,8 +455,8 @@ namespace {
                 }
 
                 if (count % 2 == 0) {
-                    out.Write(begin, idx - (begin - str.data()) - count); 
-                    begin = str.data() + idx; 
+                    out.Write(begin, idx - (begin - str.data()) - count);
+                    begin = str.data() + idx;
 
                     while (count--) {
                         out.Write(TStringBuf("@@"));

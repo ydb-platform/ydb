@@ -931,7 +931,7 @@ public:
             CFunc(TEvents::TSystem::PoisonPill, HandlePoison);
             default:
                 LOG_DEBUG(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar: Unhandled in StateWork type: %" PRIx32
-                    " event: %s", ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"); 
+                    " event: %s", ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
                 break;
         }
     }
@@ -1359,7 +1359,7 @@ public:
 
         PipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
 
-        LogPrefix = Sprintf("TDomainLocal(%s): ", Domain.data()); 
+        LogPrefix = Sprintf("TDomainLocal(%s): ", Domain.data());
     }
 
     void Bootstrap(const TActorContext &ctx)
@@ -1481,7 +1481,7 @@ public:
     void HandleTenant(TEvLocal::TEvTenantStatus::TPtr &ev, const TActorContext &/*ctx*/)
     {
         Y_VERIFY(ev->Get()->Status != TEvLocal::TEvTenantStatus::UNKNOWN_TENANT,
-                 "Unknown tenant %s", ev->Get()->TenantName.data()); 
+                 "Unknown tenant %s", ev->Get()->TenantName.data());
     }
 
     STFUNC(StateWork) {
@@ -1497,7 +1497,7 @@ public:
         default:
             LOG_DEBUG_S(ctx, NKikimrServices::LOCAL,
                         "TLocal: Unhandled in StateResolveSubDomain type: " <<  ev->GetTypeRewrite() <<
-                        " event: " << ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"); 
+                        " event: " << ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
             break;
         }
     }

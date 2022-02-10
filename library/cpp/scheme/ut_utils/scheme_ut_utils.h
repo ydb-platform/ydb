@@ -31,8 +31,8 @@ namespace NSc {
         if (_a != _b) {                                                                                                               \
             UNIT_FAIL_IMPL(                                                                                                           \
                 "json values are different (" #A " != " #B ")",                                                                       \
-                Sprintf("%s\n!=\n%s\n%s\n%s", _a.data(), _b.data(),                                                                               \ 
-                        ::NUnitTest::ColoredDiff(NJson::PrettifyJson(_a), NJson::PrettifyJson(_b), " \t\n,:\"{}[]").data(), ToString(c).data())); \ 
+                Sprintf("%s\n!=\n%s\n%s\n%s", _a.data(), _b.data(),                                                                               \
+                        ::NUnitTest::ColoredDiff(NJson::PrettifyJson(_a), NJson::PrettifyJson(_b), " \t\n,:\"{}[]").data(), ToString(c).data())); \
         }                                                                                                                             \
     } while (false)
 

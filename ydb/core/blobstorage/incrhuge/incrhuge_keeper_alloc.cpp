@@ -58,10 +58,10 @@ namespace NKikimr {
                         // copy just allocated and confirmed chunks to write intent queue and kick writer (it may be
                         // waiting for new chunks to arrive); we assign sequential identifiers to each allocated chunk
                         // to enable strict ordering of write intent queue on recovery
-                        for (size_t i = 0; i < chunks.size(); ++i) { 
+                        for (size_t i = 0; i < chunks.size(); ++i) {
                             TChunkSerNum chunkSerNum = baseSerNum.Add(i);
                             const ui32 chunkIdx = chunks[i];
-                            IHLOG_DEBUG(ctx, "ChunkIdx# %" PRIu32 " ChunkSerNum# %s", chunkIdx, chunkSerNum.ToString().data()); 
+                            IHLOG_DEBUG(ctx, "ChunkIdx# %" PRIu32 " ChunkSerNum# %s", chunkIdx, chunkSerNum.ToString().data());
                             Keeper.State.WriteIntentQueue.push(chunks[i]);
                             Keeper.State.Chunks.emplace(chunks[i], TChunkInfo{
                                     EChunkState::WriteIntent, // State

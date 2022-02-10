@@ -174,8 +174,8 @@ void TLogTest::TestWrite() {
         for (size_t i = 0; i < 1000; ++i) {
             TVector<char> buf(i, (char)i);
 
-            test.append(buf.data(), buf.size()); 
-            log.Write(buf.data(), buf.size()); 
+            test.append(buf.data(), buf.size());
+            log.Write(buf.data(), buf.size());
         }
     }
 

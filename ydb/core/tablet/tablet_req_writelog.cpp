@@ -131,7 +131,7 @@ public:
             LogEntryID.Generation(),
             LogEntryID.Step(),
             LogEntryID.Channel(),
-            logEntryBuffer.size(), 
+            logEntryBuffer.size(),
             LogEntryID.Cookie()
         );
         SendToBS(actualLogEntryId, logEntryBuffer, ctx, NKikimrBlobStorage::TabletLog);

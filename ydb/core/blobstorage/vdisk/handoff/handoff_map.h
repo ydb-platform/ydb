@@ -359,7 +359,7 @@ namespace NKikimr {
 
         LOG_INFO(ctx, NKikimrServices::BS_HANDOFF,
                  VDISKP(HullCtx->VCtx->VDiskLogPrefix,
-                    "THandoffMap: map build: %s", Stat.ToStringBuildPlanStat().data())); 
+                    "THandoffMap: map build: %s", Stat.ToStringBuildPlanStat().data()));
 
         return ProxyID;
     }
@@ -368,7 +368,7 @@ namespace NKikimr {
     inline void THandoffMap<TKeyLogoBlob, TMemRecLogoBlob>::Finish(const TActorContext &ctx) {
         LOG_INFO(ctx, NKikimrServices::BS_HANDOFF,
             VDISKP(HullCtx->VCtx->VDiskLogPrefix,
-                "THandoffMap: finished: %s", Stat.ToStringRuntimeStat().data())); 
+                "THandoffMap: finished: %s", Stat.ToStringRuntimeStat().data()));
 
         if (RunHandoff) {
             Y_VERIFY_DEBUG(ProxyID != TActorId());

@@ -41,13 +41,13 @@ namespace NKikimr {
             // generate message into text log
             auto makeIdList = [&] {
                 TStringStream s;
-                for (size_t i = 0; i < msg->Ids.size(); ++i) { 
+                for (size_t i = 0; i < msg->Ids.size(); ++i) {
                     s << (i == 0 ? "" : " ") << Sprintf("%016" PRIx64, msg->Ids[i]);
                 }
                 return s.Str();
             };
             IHLOG_DEBUG(ctx, "Owner# %d SeqNo# %" PRIu64 " HandleDelete Ids# [%s]", msg->Owner, msg->SeqNo,
-                    makeIdList().data()); 
+                    makeIdList().data());
 
             // verify sequence number -- it should exceed maximum value of stored number and all requests in-flight or
             // else this is duplicate query
@@ -183,7 +183,7 @@ namespace NKikimr {
             }
 
             // ensure that we generated locator for each item
-            Y_VERIFY(item.DeleteLocators.size() == item.Ids.size()); 
+            Y_VERIFY(item.DeleteLocators.size() == item.Ids.size());
 
             // sort locators as needed
             std::sort(item.DeleteLocators.begin(), item.DeleteLocators.end());
@@ -193,7 +193,7 @@ namespace NKikimr {
                 TDeleteQueueItem& item = *it;
 
                 IHLOG_DEBUG(ctx, "Owner# %d SeqNo# %" PRIu64 " finished Status# %s",
-                        item.Owner, item.SeqNo, NKikimrProto::EReplyStatus_Name(status).data()); 
+                        item.Owner, item.SeqNo, NKikimrProto::EReplyStatus_Name(status).data());
 
                 if (status == NKikimrProto::OK) {
                     // handle deleted locators; remove them from lookup also
@@ -306,7 +306,7 @@ namespace NKikimr {
             // create callback that will actually delete this chunk from index when log is completed
             auto callback = [this, chunkIdx](NKikimrProto::EReplyStatus status, const TActorContext& ctx) {
                 IHLOG_DEBUG(ctx, "finished chunk delete ChunkIdx# %" PRIu32 " Status# %s", chunkIdx,
-                        NKikimrProto::EReplyStatus_Name(status).data()); 
+                        NKikimrProto::EReplyStatus_Name(status).data());
 
                 // find chunk and ensure that it is in deleting state
                 auto it = Keeper.State.Chunks.find(chunkIdx);

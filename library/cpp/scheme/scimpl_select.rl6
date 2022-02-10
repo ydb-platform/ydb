@@ -67,8 +67,8 @@ namespace NSc {
 
         TSelectorCtx(TSelector sel, TStringBuf data)
             : Selector(sel)
-            , p0(data.data()) 
-            , p(data.data()) 
+            , p0(data.data())
+            , p(data.data())
             , pe(data.end())
             , eof(data.end())
         {}

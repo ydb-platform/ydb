@@ -126,7 +126,7 @@ namespace NKikimr {
             TChunkInfo& chunk = *chunkPtr;
 
             // process current index until there are records to process
-            while (IndexPos < Index.size() && InFlightReads < MaxInFlightReads && InFlightReadBytes < MaxInFlightReadBytes 
+            while (IndexPos < Index.size() && InFlightReads < MaxInFlightReads && InFlightReadBytes < MaxInFlightReadBytes
                     && InFlightWrites < MaxInFlightWrites) {
                 // get record header
                 const TBlobIndexRecord& record = Index[IndexPos];
@@ -175,7 +175,7 @@ namespace NKikimr {
             }
 
             // if current chunks ends and there are no more reads in flight, time to switch to another chunk
-            if (IndexPos == Index.size() && !InFlightReads && !InFlightWrites) { 
+            if (IndexPos == Index.size() && !InFlightReads && !InFlightWrites) {
                 Y_VERIFY(chunk.State == EChunkState::Complete);
                 FinishChunkInProgress(ctx);
             }
@@ -188,7 +188,7 @@ namespace NKikimr {
             const ui32 totalSize = sizeof(TBlobHeader) + record.PayloadSize;
 
             IHLOG_DEBUG(ctx, "ApplyRead offsetInBlocks# %" PRIu32 " index# %" PRIu32 " Status# %s", offsetInBlocks,
-                    index, NKikimrProto::EReplyStatus_Name(status).data()); 
+                    index, NKikimrProto::EReplyStatus_Name(status).data());
 
             // adjust number of in-flight requests
             const ui32 bytes = sizeInBlocks * Keeper.State.BlockSize;
@@ -228,7 +228,7 @@ namespace NKikimr {
                 Y_VERIFY(locator.ChunkIdx == ChunkInProgress && locator.OffsetInBlocks == offsetInBlocks
                         && locator.PayloadSize == record.PayloadSize && locator.IndexInsideChunk == index
                         && locator.Owner == record.Owner, "locator# %s offsetInBlocks# %" PRIu32 " index# %" PRIu32
-                        " record# %s", locator.ToString().data(), offsetInBlocks, index, record.ToString().data()); 
+                        " record# %s", locator.ToString().data(), offsetInBlocks, index, record.ToString().data());
 
                 const TBlobHeader& header = *result.Data.DataPtr<const TBlobHeader>(0);
                 if (!locator.DeleteInProgress && result.Data.IsReadable(0, totalSize)) {
@@ -265,7 +265,7 @@ namespace NKikimr {
             if (status != NKikimrProto::RACE) {
                 // ensure that write succeeds FIXME: error handling
                 Y_VERIFY(status == NKikimrProto::OK);
-                IHLOG_DEBUG(ctx, "generating virtual log record deleteLocator# %s", deleteLocator.ToString().data()); 
+                IHLOG_DEBUG(ctx, "generating virtual log record deleteLocator# %s", deleteLocator.ToString().data());
 
                 // delete this locator right now; we do not log it, because on recovery it's easy to find
                 // duplicate items by their id
@@ -286,7 +286,7 @@ namespace NKikimr {
 
         void TDefragmenter::FinishChunkInProgress(const TActorContext& ctx) {
             IHLOG_DEBUG(ctx, "finishing ChunkIdx# %" PRIu32 " ChunkSerNum# %s", ChunkInProgress,
-                    ChunkInProgressSerNum.ToString().data()); 
+                    ChunkInProgressSerNum.ToString().data());
             ChunkInProgress = 0;
             ChunkInProgressSerNum = {};
             Index.clear();

@@ -62,7 +62,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
         }
 
         if (!IsValidColumnName(colName)) {
-            errStr = Sprintf("Invalid name for column '%s'", colName.data()); 
+            errStr = Sprintf("Invalid name for column '%s'", colName.data());
             return nullptr;
         }
 
@@ -91,12 +91,12 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             }
 
             if (col.HasType()) {
-                errStr = Sprintf("Cannot alter type for column '%s'", colName.data()); 
+                errStr = Sprintf("Cannot alter type for column '%s'", colName.data());
                 return nullptr;
             }
 
             if (!columnFamily) {
-                errStr = Sprintf("Nothing to alter for column '%s'", colName.data()); 
+                errStr = Sprintf("Nothing to alter for column '%s'", colName.data());
                 return nullptr;
             }
 
@@ -111,7 +111,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             column.Family = columnFamily->GetId();
         } else {
             if (colName2Id.contains(colName)) {
-                errStr = Sprintf("Column '%s' specified more than once", colName.data()); 
+                errStr = Sprintf("Column '%s' specified more than once", colName.data());
                 return nullptr;
             }
 
@@ -121,13 +121,13 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             }
 
             if (!type) {
-                errStr = Sprintf("Type '%s' specified for column '%s' is not supported by storage", col.GetType().data(), colName.data()); 
+                errStr = Sprintf("Type '%s' specified for column '%s' is not supported by storage", col.GetType().data(), colName.data());
                 return nullptr;
             }
 
             // Only allow YQL types
             if (!NScheme::NTypeIds::IsYqlType(type->GetTypeId())) {
-                errStr = Sprintf("Type '%s' specified for column '%s' is no longer supported", col.GetType().data(), colName.data()); 
+                errStr = Sprintf("Type '%s' specified for column '%s' is no longer supported", col.GetType().data(), colName.data());
                 return nullptr;
             }
 
@@ -170,17 +170,17 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             TString colName = col.GetName();
             auto it = colName2Id.find(colName);
             if (it == colName2Id.end()) {
-                errStr = Sprintf("Can't drop unknown column: '%s'", colName.data()); 
+                errStr = Sprintf("Can't drop unknown column: '%s'", colName.data());
                 return nullptr;
             }
 
             ui32 colId = it->second;
             if (source->Columns.find(colId) == source->Columns.end()) {
-                errStr = Sprintf("Add + drop same column: '%s'", colName.data()); 
+                errStr = Sprintf("Add + drop same column: '%s'", colName.data());
                 return nullptr;
             }
             if (keys.find(colId) != keys.end()) {
-                errStr = Sprintf("Can't drop key column: '%s'", colName.data()); 
+                errStr = Sprintf("Can't drop key column: '%s'", colName.data());
                 return nullptr;
             }
             if (alterData->Columns[colId].DeleteVersion == alterData->AlterVersion) {
@@ -226,14 +226,14 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
     ui32 keyOrder = 0;
     for (auto& keyName : op.GetKeyColumnNames()) {
         if (!colName2Id.contains(keyName)) {
-            errStr = Sprintf("Unknown column '%s' specified in key column list", keyName.data()); 
+            errStr = Sprintf("Unknown column '%s' specified in key column list", keyName.data());
             return nullptr;
         }
 
         ui32 colId = colName2Id[keyName];
         TTableInfo::TColumn& column = alterData->Columns[colId];
         if (column.KeyOrder != (ui32)-1) {
-            errStr = Sprintf("Column '%s' specified more than once in key column list", keyName.data()); 
+            errStr = Sprintf("Column '%s' specified more than once in key column list", keyName.data());
             return nullptr;
         }
         if (source && colId < source->NextColumnId && !keys.contains(colId)) {

@@ -326,7 +326,7 @@ Y_UNIT_TEST_SUITE(TPart) {
 
     Y_UNIT_TEST(MassCheck)
     {
-        UNIT_ASSERT_C(Eggs0().Parts.size() == 1, "Eggs0 has " << Eggs0().Parts.size() << "p"); 
+        UNIT_ASSERT_C(Eggs0().Parts.size() == 1, "Eggs0 has " << Eggs0().Parts.size() << "p");
 
         auto &part = *Eggs0().Lone();
         auto pages = part.Index->End() - part.Index->Begin();

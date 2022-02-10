@@ -1,8 +1,8 @@
 //===--------------------------- new.cpp ----------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions. 
-// See https://llvm.org/LICENSE.txt for license information. 
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception 
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -29,7 +29,7 @@ namespace std
 {
 
 #ifndef __GLIBCXX__
-const nothrow_t nothrow{}; 
+const nothrow_t nothrow{};
 #endif
 
 #ifndef LIBSTDCXX
@@ -167,7 +167,7 @@ operator delete[] (void* ptr, size_t) noexcept
     ::operator delete[](ptr);
 }
 
-#if !defined(_LIBCPP_HAS_NO_LIBRARY_ALIGNED_ALLOCATION) 
+#if !defined(_LIBCPP_HAS_NO_LIBRARY_ALIGNED_ALLOCATION)
 
 _LIBCPP_WEAK
 void *
@@ -288,5 +288,5 @@ operator delete[] (void* ptr, size_t, std::align_val_t alignment) noexcept
     ::operator delete[](ptr, alignment);
 }
 
-#endif // !_LIBCPP_HAS_NO_LIBRARY_ALIGNED_ALLOCATION 
+#endif // !_LIBCPP_HAS_NO_LIBRARY_ALIGNED_ALLOCATION
 #endif // !__GLIBCXX__ && !_LIBCPP_ABI_VCRUNTIME && !_LIBCPP_DISABLE_NEW_DELETE_DEFINITIONS

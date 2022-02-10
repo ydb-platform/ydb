@@ -145,8 +145,8 @@ namespace NKikimr {
         }
 
         bool TSerializeRoutines::CheckData(const TString &data, TString &errorString) {
-            const TRecordHdr *begin = (const TRecordHdr *)(data.data()); 
-            const TRecordHdr *end = (const TRecordHdr *)(data.data() + data.size()); 
+            const TRecordHdr *begin = (const TRecordHdr *)(data.data());
+            const TRecordHdr *end = (const TRecordHdr *)(data.data() + data.size());
 
             for (const TRecordHdr *it = begin; it < end; it = it->Next()) {
                 switch (it->RecType) {
@@ -157,7 +157,7 @@ namespace NKikimr {
                         break;
                     default: {
                         TStringStream str;
-                        str << "Unknown RecType; it# " << it->ToString() << " dataSize# " << data.size(); 
+                        str << "Unknown RecType; it# " << it->ToString() << " dataSize# " << data.size();
                         errorString = str.Str();
                         return false;
                     }
@@ -217,7 +217,7 @@ namespace NKikimr {
             Y_VERIFY(Size == 0);
             size_t size = NSyncLog::MaxRecFullSize * phantoms.size();
             HeapBuf.resize(size);
-            Size = NSyncLog::TSerializeRoutines::SetGC(gtype, HeapBuf.data(), lsn, phantoms); 
+            Size = NSyncLog::TSerializeRoutines::SetGC(gtype, HeapBuf.data(), lsn, phantoms);
         }
 
         void TSequenceOfRecs::Output(IOutputStream &str) const {

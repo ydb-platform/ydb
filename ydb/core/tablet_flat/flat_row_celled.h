@@ -11,14 +11,14 @@ namespace NTable {
         using TRaw = TArrayRef<const TRawTypeValue>;
 
         TCelled(TRaw key, const TKeyNulls &nulls, bool extend)
-            : Size(extend ? nulls->size() : Min(nulls->size(), key.size())) 
+            : Size(extend ? nulls->size() : Min(nulls->size(), key.size()))
             , Large(Size > Small.size() ? Size : 0)
             , Cells(Large ? Large.begin() : Small.begin())
         {
-            Y_VERIFY(key.size() <= nulls->size(), "Key is tool large"); 
+            Y_VERIFY(key.size() <= nulls->size(), "Key is tool large");
 
             for (ui32 it = 0; it < Size; it++) {
-                if (it >= key.size()) { 
+                if (it >= key.size()) {
                     Cells[it] = nulls[it];
                 } else if (key[it] && key[it].Type() != nulls.Types[it].GetTypeId()) {
                     Y_FAIL("Key does not comply table schema");

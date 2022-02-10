@@ -49,18 +49,18 @@ namespace NKikimr {
                     LOG_INFO(ctx, NKikimrServices::BS_SKELETON,
                                VDISKP(SlCtx->VCtx->VDiskLogPrefix,
                                     "synclog commit CommitChunks# %s "
-                                     " DeleteChunks# %s", FormatList(CommitRecord.CommitChunks).data(), 
-                                     FormatList(CommitRecord.DeleteChunks).data())); 
+                                     " DeleteChunks# %s", FormatList(CommitRecord.CommitChunks).data(),
+                                     FormatList(CommitRecord.DeleteChunks).data()));
                 }
 
                 LOG_DEBUG(ctx, BS_SYNCLOG,
                           VDISKP(SlCtx->VCtx->VDiskLogPrefix,
                                 "COMMITTER: commit message: %s",
-                                commitMsg->ToString().data())); 
+                                commitMsg->ToString().data()));
                 LOG_DEBUG(ctx, NKikimrServices::BS_VDISK_CHUNKS,
                           VDISKP(SlCtx->VCtx->VDiskLogPrefix,
                                 "COMMIT: type# SyncLog msg# %s",
-                                commitMsg->CommitRecord.ToString().data())); 
+                                commitMsg->CommitRecord.ToString().data()));
 
                 ctx.Send(SlCtx->LoggerID, commitMsg.release());
                 Become(&TThis::StateCommit);

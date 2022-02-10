@@ -6,7 +6,7 @@ OWNER(
 )
 
 NO_UTIL()
-NO_COMPILER_WARNINGS() 
+NO_COMPILER_WARNINGS()
 
 IF (OS_WINDOWS)
     PEERDIR(
@@ -17,12 +17,12 @@ ELSE()
         balloc.cpp
         malloc-info.cpp
     )
- 
+
     PEERDIR(
         library/cpp/balloc/lib
     )
 ENDIF()
 
 END()
- 
-NEED_CHECK() 
+
+NEED_CHECK()

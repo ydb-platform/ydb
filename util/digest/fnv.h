@@ -69,5 +69,5 @@ static constexpr T FnvHash(const void* buf, size_t len) {
 
 template <class T, class Buf>
 static constexpr T FnvHash(const Buf& buf) {
-    return FnvHash<T>(buf.data(), buf.size() * sizeof(*buf.data())); 
+    return FnvHash<T>(buf.data(), buf.size() * sizeof(*buf.data()));
 }

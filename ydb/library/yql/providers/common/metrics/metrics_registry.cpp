@@ -70,7 +70,7 @@ private:
             const TString& labelName, const TString& labelValue,
             const TSensorsGroup*) override
     {
-        if (labelName.empty() && labelValue.empty()) { 
+        if (labelName.empty() && labelValue.empty()) {
             // root group is alrady present
             return;
         }

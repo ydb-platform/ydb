@@ -343,7 +343,7 @@ private:
             return resp;
         };
         GRPC_LOG_DEBUG(Logger_, "[%p] received request Name# %s ok# %s data# %s peer# %s", this, Name_,
-            ok ? "true" : "false", makeRequestString().data(), this->Context.peer().c_str()); 
+            ok ? "true" : "false", makeRequestString().data(), this->Context.peer().c_str());
 
         if (this->Context.c_call() == nullptr) {
             Y_VERIFY(!ok);

@@ -221,7 +221,7 @@ public:
     }
 
     void WriteMany(TStringBuf str) {
-        WriteMany(str.data(), str.size()); 
+        WriteMany(str.data(), str.size());
     }
 
     void WriteMany(const char* buffer, size_t count) {

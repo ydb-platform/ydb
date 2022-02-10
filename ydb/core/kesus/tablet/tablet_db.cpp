@@ -154,7 +154,7 @@ void TKesusTablet::DoProcessSemaphoreQueue(
         auto* session = Sessions.FindPtr(sessionId);
         Y_VERIFY(session,
             "Semaphore %s points to missing session: %" PRIu64 " (wait order %" PRIu64 ")",
-            semaphore->Name.Quote().data(), sessionId, orderId); 
+            semaphore->Name.Quote().data(), sessionId, orderId);
 
         Y_VERIFY(!session->OwnedSemaphores.contains(semaphoreId));
         auto* owner = &session->OwnedSemaphores[semaphoreId];

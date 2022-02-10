@@ -39,7 +39,7 @@ public:
         if (Request.GetDomainPath()) {
             auto *domain = dinfo->GetDomainByName(Request.GetDomainPath());
             if (!domain) {
-                auto error = Sprintf("Unknown domain %s", Request.GetDomainPath().data()); 
+                auto error = Sprintf("Unknown domain %s", Request.GetDomainPath().data());
                 ReplyWithErrorAndDie(error, ctx);
                 return;
             }

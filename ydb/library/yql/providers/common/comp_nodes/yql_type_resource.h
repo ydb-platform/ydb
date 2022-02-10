@@ -7,9 +7,9 @@ namespace NMiniKQL {
 
 struct TComputationContext;
 
-extern const char YqlTypeResourceTag[6]; 
-extern const char YqlCodeResourceTag[6]; 
-extern const char YqlExprContextResourceTag[13]; 
+extern const char YqlTypeResourceTag[6];
+extern const char YqlCodeResourceTag[6];
+extern const char YqlExprContextResourceTag[13];
 
 using TYqlTypeResource = NUdf::TBoxedResource<std::pair<std::shared_ptr<NYql::TExprContext>,
     const NYql::TTypeAnnotationNode*>, YqlTypeResourceTag>;

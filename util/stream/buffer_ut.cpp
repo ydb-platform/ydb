@@ -67,12 +67,12 @@ Y_UNIT_TEST_SUITE(TBufferTest) {
                << "4444"
                << "55555";
 
-        UNIT_ASSERT(0 == memcmp(buffer.data(), "1" 
+        UNIT_ASSERT(0 == memcmp(buffer.data(), "1"
                                                "22"
                                                "333"
                                                "4444"
                                                "55555",
-                                buffer.size())); 
+                                buffer.size()));
     }
 
     Y_UNIT_TEST(WriteChars) {
@@ -80,6 +80,6 @@ Y_UNIT_TEST_SUITE(TBufferTest) {
         TBufferOutput output(buffer);
         output << '1' << '2' << '3' << '4' << '5' << '6' << '7' << '8' << '9' << '0';
 
-        UNIT_ASSERT(0 == memcmp(buffer.data(), "1234567890", buffer.size())); 
+        UNIT_ASSERT(0 == memcmp(buffer.data(), "1234567890", buffer.size()));
     }
 }

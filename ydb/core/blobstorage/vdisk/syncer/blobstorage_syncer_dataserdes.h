@@ -43,7 +43,7 @@ namespace NKikimr {
             GroupId = vdisk.GroupID;
             GroupGeneration = vdisk.GroupGeneration;
             Y_VERIFY(val.VDiskIdShort == vdisk, "val.VDiskId# %s vdisk# %s",
-                     val.VDiskIdShort.ToString().data(), vdisk.ToString().data()); 
+                     val.VDiskIdShort.ToString().data(), vdisk.ToString().data());
             val.Get().ParseFromArcadiaStream(Str);
         }
 
@@ -136,7 +136,7 @@ namespace NKikimr {
             TVDiskID vdisk = VDiskIDFromVDiskID(item.GetVDiskID());
             Y_VERIFY(val.VDiskIdShort == TVDiskIdShort(vdisk),
                      "val.VDiskId# %s vdisk# %s",
-                     val.VDiskIdShort.ToString().data(), vdisk.ToString().data()); 
+                     val.VDiskIdShort.ToString().data(), vdisk.ToString().data());
             val.Get().Parse(item);
         }
 

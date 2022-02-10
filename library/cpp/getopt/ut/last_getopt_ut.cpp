@@ -6,7 +6,7 @@
 #include <util/generic/array_size.h>
 #include <util/string/subst.h>
 #include <util/string/vector.h>
-#include <util/string/split.h> 
+#include <util/string/split.h>
 
 using namespace NLastGetopt;
 
@@ -25,7 +25,7 @@ namespace {
         TOptsParseResultTestWrapper(const TOpts* opts, TVector<const char*> argv)
             : Argv_(argv)
         {
-            Init(opts, (int)Argv_.size(), Argv_.data()); 
+            Init(opts, (int)Argv_.size(), Argv_.data());
         }
     };
 
@@ -40,7 +40,7 @@ struct TOptsParserTester {
 
     void Initialize() {
         if (!Parser_)
-            Parser_.Reset(new TOptsParser(&Opts_, (int)Argv_.size(), Argv_.data())); 
+            Parser_.Reset(new TOptsParser(&Opts_, (int)Argv_.size(), Argv_.data()));
     }
 
     void Accept() {
@@ -684,7 +684,7 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
                 SubstGlobal(printed, TString(colors.OldColor()), "");
             }
             TVector<TString> lines;
-            StringSplitter(printed).Split('\n').SkipEmpty().Collect(&lines); 
+            StringSplitter(printed).Split('\n').SkipEmpty().Collect(&lines);
             UNIT_ASSERT(!lines.empty());
             TVector<size_t> indents;
             for (const TString& line : lines) {

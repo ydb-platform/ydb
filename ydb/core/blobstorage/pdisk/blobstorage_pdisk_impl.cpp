@@ -704,13 +704,13 @@ void TPDisk::AskVDisksToCutLogs(TOwner ownerFilter, bool doForce) {
                                     (InsaneLogChunks + cutThreshold) / 2, InsaneLogChunks));
                         LOG_DEBUG_S(*ActorSystem, NKikimrServices::BS_PDISK,
                                 "PDiskId# " << (ui32)PDiskId
-                                << " Send CutLog to# " << OwnerData[chunkOwner].CutLogId.ToString().data() 
+                                << " Send CutLog to# " << OwnerData[chunkOwner].CutLogId.ToString().data()
                                 << " ownerId#" << ui32(chunkOwner)
                                 << " cutLog# " << cutLog->ToString()
                                 << " Marker# BPD67");
                         Y_VERIFY_S(cutLog->FreeUpToLsn, "Error! Should not ask to cut log at 0 lsn."
                                 "PDiskId# " << (ui32)PDiskId
-                                << " Send CutLog to# " << OwnerData[chunkOwner].CutLogId.ToString().data() 
+                                << " Send CutLog to# " << OwnerData[chunkOwner].CutLogId.ToString().data()
                                 << " ownerId#" << ui32(chunkOwner)
                                 << " cutLog# " << cutLog->ToString());
                         ActorSystem->Send(new IEventHandle(OwnerData[chunkOwner].CutLogId, PDiskActor, cutLog.Release(),
@@ -735,7 +735,7 @@ void TPDisk::AskVDisksToCutLogs(TOwner ownerFilter, bool doForce) {
                                 (InsaneLogChunks + cutThreshold) / 2, InsaneLogChunks));
                     LOG_DEBUG_S(*ActorSystem, NKikimrServices::BS_PDISK,
                             "PDiskId# " << (ui32)PDiskId
-                            << " Send CutLog to# " << OwnerData[ownerFilter].CutLogId.ToString().data() 
+                            << " Send CutLog to# " << OwnerData[ownerFilter].CutLogId.ToString().data()
                             << " ownerId#" << ui32(ownerFilter)
                             << " cutLog# " << cutLog->ToString()
                             << " Marker# BPD68");
@@ -751,7 +751,7 @@ void TPDisk::AskVDisksToCutLogs(TOwner ownerFilter, bool doForce) {
                         str << "}";
                         Y_VERIFY_S(cutLog->FreeUpToLsn, "Error! Should not ask to cut log at 0 lsn."
                                 "PDiskId# " << (ui32)PDiskId
-                                << " Send CutLog to# " << OwnerData[ownerFilter].CutLogId.ToString().data() 
+                                << " Send CutLog to# " << OwnerData[ownerFilter].CutLogId.ToString().data()
                                 << " ownerId#" << ui32(ownerFilter)
                                 << " cutLog# " << cutLog->ToString()
                                 << " LogChunks# " << str.Str());
@@ -1332,7 +1332,7 @@ void TPDisk::WriteDiskFormat(ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 user
     format.LogKey = logKey;
     format.SysLogKey = sysLogKey;
     format.InitMagic();
-    memcpy(format.FormatText, textMessage.data(), Min(sizeof(format.FormatText) - 1, textMessage.size())); 
+    memcpy(format.FormatText, textMessage.data(), Min(sizeof(format.FormatText) - 1, textMessage.size()));
     format.SysLogSectorCount = RecordsInSysLog * format.SysLogSectorsPerRecord();
     ui64 firstSectorIdx = format.FirstSysLogSectorIdx();
     ui64 endSectorIdx = firstSectorIdx + format.SysLogSectorCount * ReplicationFactor;

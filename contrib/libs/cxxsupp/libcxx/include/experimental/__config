@@ -1,9 +1,9 @@
 // -*- C++ -*-
 //===--------------------------- __config ---------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions. 
-// See https://llvm.org/LICENSE.txt for license information. 
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception 
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -65,11 +65,11 @@
 #define _LIBCPP_END_NAMESPACE_EXPERIMENTAL_SIMD_ABI \
     } _LIBCPP_END_NAMESPACE_EXPERIMENTAL_SIMD
 
-// TODO: support more targets 
-#if defined(__AVX__) 
-#define _LIBCPP_NATIVE_SIMD_WIDTH_IN_BYTES 32 
-#else 
-#define _LIBCPP_NATIVE_SIMD_WIDTH_IN_BYTES 16 
+// TODO: support more targets
+#if defined(__AVX__)
+#define _LIBCPP_NATIVE_SIMD_WIDTH_IN_BYTES 32
+#else
+#define _LIBCPP_NATIVE_SIMD_WIDTH_IN_BYTES 16
 #endif
- 
-#endif 
+
+#endif

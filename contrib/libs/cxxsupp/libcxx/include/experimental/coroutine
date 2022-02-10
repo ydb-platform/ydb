@@ -1,9 +1,9 @@
 // -*- C++ -*-
 //===----------------------------- coroutine -----------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions. 
-// See https://llvm.org/LICENSE.txt for license information. 
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception 
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -212,7 +212,7 @@ public:
     _LIBCPP_INLINE_VISIBILITY
     _Promise& promise() const {
         return *static_cast<_Promise*>(
-            __builtin_coro_promise(this->__handle_, _LIBCPP_ALIGNOF(_Promise), false)); 
+            __builtin_coro_promise(this->__handle_, _LIBCPP_ALIGNOF(_Promise), false));
     }
 
 public:
@@ -252,7 +252,7 @@ public:
         coroutine_handle __tmp;
         __tmp.__handle_ = __builtin_coro_promise(
             _VSTD::addressof(const_cast<_RawPromise&>(__promise)),
-             _LIBCPP_ALIGNOF(_Promise), true); 
+             _LIBCPP_ALIGNOF(_Promise), true);
         return __tmp;
     }
 };
@@ -270,7 +270,7 @@ public:
   _LIBCPP_INLINE_VISIBILITY
   _Promise& promise() const {
     return *static_cast<_Promise*>(
-      __builtin_coro_promise(this->__handle_, _LIBCPP_ALIGNOF(_Promise), false)); 
+      __builtin_coro_promise(this->__handle_, _LIBCPP_ALIGNOF(_Promise), false));
   }
 
   _LIBCPP_CONSTEXPR explicit operator bool() const _NOEXCEPT { return true; }

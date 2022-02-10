@@ -2141,7 +2141,7 @@ public:
             return false;
         }
         auto scriptStrPtr = Args.back()->GetLiteral("String");
-        if (scriptStrPtr && scriptStrPtr->size() > SQL_MAX_INLINE_SCRIPT_LEN) { 
+        if (scriptStrPtr && scriptStrPtr->size() > SQL_MAX_INLINE_SCRIPT_LEN) {
             scriptNode = ctx.UniversalAlias("scriptudf", std::move(scriptNode));
         }
 

@@ -13,14 +13,14 @@ static TString ProgSelectRow(TString key) {
     return Sprintf(R"((
         (let select_ (SelectRow 'table2 '(%s) '('value)))
         (return (AsList (SetResult 'Result select_)))
-    ))", key.data()); 
+    ))", key.data());
 }
 
 static TString ProgSelectRange(TString key) {
     return Sprintf(R"((
         (let select_ (SelectRange 'table2 '(%s) '('value) '()))
         (return (AsList (SetResult 'Result select_)))
-    ))", key.data()); 
+    ))", key.data());
 }
 
 static void ComparePointsStr(TTester& t, TString xKey, TString yKey, int cmpExpected) {
@@ -59,12 +59,12 @@ static void ComparePointAndRangeStr(TTester& t, TString pointKey, TString rangeK
 
 static TString ToPointKey(std::pair<ui32, TString> x) {
     const char * keyPattern = "'('key1 (Uint32 '%u)) '('key2 (Utf8 '@@%s@@))";
-    return Sprintf(keyPattern, x.first, x.second.data()); 
+    return Sprintf(keyPattern, x.first, x.second.data());
 }
 
 static TString ToRangeKey(std::pair<ui32, TString> begin, std::pair<ui32, TString> end, TString includes) {
     const char * keyPattern = "%s '('key1 (Uint32 '%u) (Uint32 '%u)) '('key2 (Utf8 '@@%s@@) (Utf8 '@@%s@@))";
-    return Sprintf(keyPattern, includes.data(), begin.first, end.first, begin.second.data(), end.second.data()); 
+    return Sprintf(keyPattern, includes.data(), begin.first, end.first, begin.second.data(), end.second.data());
 }
 
 static void ComparePoints(TTester& t, std::pair<ui32, TString> x, std::pair<ui32, TString> y, int cmpExpected) {

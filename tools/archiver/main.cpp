@@ -34,7 +34,7 @@ namespace {
         void DoWrite(const void* data, size_t len) override {
             for (const char* p = (const char*)data; len > 0; ++p, --len) {
                 Buf.append(*p);
-                if (Buf.size() == Stride) 
+                if (Buf.size() == Stride)
                     WriteBuf();
             }
         }
@@ -319,7 +319,7 @@ static inline TString GetFile(const TString& s) {
 }
 
 static inline TString Fix(TString f) {
-    if (!f.empty() && IsDelim(f[f.size() - 1])) { 
+    if (!f.empty() && IsDelim(f[f.size() - 1])) {
         f.pop_back();
     }
 
@@ -374,7 +374,7 @@ namespace {
             if (IsDir(Path)) {
                 DoRecurse(w, "/");
             } else {
-                Append(w, Path, Key.size() ? Key : Prefix + "/" + GetFile(Path)); 
+                Append(w, Path, Key.size() ? Key : Prefix + "/" + GetFile(Path));
             }
         }
 
@@ -605,15 +605,15 @@ int main(int argc, char** argv) {
     const auto& files = optsRes.GetFreeArgs();
 
     TVector<TStringBuf> keys;
-    if (forceKeys.size()) 
-        StringSplitter(forceKeys).Split(':').SkipEmpty().Collect(&keys); 
+    if (forceKeys.size())
+        StringSplitter(forceKeys).Split(':').SkipEmpty().Collect(&keys);
 
-    if (keys.size() && keys.size() != files.size()) { 
+    if (keys.size() && keys.size() != files.size()) {
         Cerr << "Invalid number of keys=" << keys.size() << " (!= number of files=" << files.size() << ")" << Endl;
         return 1;
     }
 
-    for (size_t i = 0; i < files.size(); ++i) { 
+    for (size_t i = 0; i < files.size(); ++i) {
         const auto& path = files[i];
         size_t off = 0;
 #ifdef _win_
@@ -625,7 +625,7 @@ int main(int argc, char** argv) {
         cur.Path = path.substr(0, pos);
         if (pos != TString::npos)
             cur.Prefix = path.substr(pos + 1);
-        if (keys.size()) 
+        if (keys.size())
             cur.Key = keys[i];
         cur.Recursive = recursive;
         cur.Fix();
@@ -665,7 +665,7 @@ int main(int argc, char** argv) {
                 out = hexout.Get();
             }
 
-            outf->Write(prepend.data(), prepend.size()); 
+            outf->Write(prepend.data(), prepend.size());
 
             if (cat) {
                 for (const auto& rec: recs) {
@@ -691,7 +691,7 @@ int main(int argc, char** argv) {
             } catch (...) {
             }
 
-            outf->Write(append.data(), append.size()); 
+            outf->Write(append.data(), append.size());
         }
     } catch (...) {
         Cerr << CurrentExceptionMessage() << Endl;

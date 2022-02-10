@@ -53,15 +53,15 @@ static const bool MessageAttributesCharactersAreMade = MakeMessageAttributesChar
 
 // https://docs.aws.amazon.com/en_us/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-message-attributes.html
 bool ValidateMessageAttributeName(TStringBuf str, bool& hasYandexPrefix, bool allowYandexPrefix) {
-    if (!str || str.size() > 256) { 
+    if (!str || str.size() > 256) {
         return false;
     }
 
-    if (str[0] == '.' || str[str.size() - 1] == '.') { 
+    if (str[0] == '.' || str[str.size() - 1] == '.') {
         return false;
     }
 
-    for (size_t i = 0; i < str.size() - 1; ++i) { 
+    for (size_t i = 0; i < str.size() - 1; ++i) {
         if (!MessageAttributesCharacters[static_cast<unsigned char>(str[i])]) {
             return false;
         }
@@ -70,7 +70,7 @@ bool ValidateMessageAttributeName(TStringBuf str, bool& hasYandexPrefix, bool al
         }
     }
 
-    if (!MessageAttributesCharacters[static_cast<unsigned char>(str[str.size() - 1])]) { 
+    if (!MessageAttributesCharacters[static_cast<unsigned char>(str[str.size() - 1])]) {
         return false;
     }
 
@@ -103,16 +103,16 @@ static bool MakeQueueNameCharacters() {
 static const bool QueueNameCharactersAreMade = MakeQueueNameCharacters();
 
 bool ValidateQueueNameOrUserName(TStringBuf name) {
-    if (name.size() > 80) { 
+    if (name.size() > 80) {
         return false;
     }
     if (AsciiHasSuffixIgnoreCase(name, FIFO_SUFFIX)) {
-        name = name.SubStr(0, name.size() - FIFO_SUFFIX.size()); 
+        name = name.SubStr(0, name.size() - FIFO_SUFFIX.size());
     }
-    if (name.empty()) { 
+    if (name.empty()) {
         return false;
     }
-    for (size_t i = 0; i < name.size(); ++i) { 
+    for (size_t i = 0; i < name.size(); ++i) {
         if (!QueueNameCharacters[static_cast<unsigned char>(name[i])]) {
             return false;
         }

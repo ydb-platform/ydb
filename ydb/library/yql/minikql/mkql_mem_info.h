@@ -78,7 +78,7 @@ public:
         }
         auto res = AllocationsMap_.insert({mem, { size, std::move(location), false }});
         Y_VERIFY_DEBUG(res.second, "Duplicate allocation at: %p, "
-                                   "already allocated at: %s", mem, res.first->second.Location.data()); 
+                                   "already allocated at: %s", mem, res.first->second.Location.data());
         //Clog << Title_ << " take: " << size << " -> " << mem << " " << AllocationsMap_.size() << Endl;
     }
 #endif
@@ -103,7 +103,7 @@ public:
 
         Y_VERIFY_DEBUG(size == it->second.Size,
                     "Deallocating wrong size at: %p, "
-                    "allocated at: %s", mem, it->second.Location.data()); 
+                    "allocated at: %s", mem, it->second.Location.data());
         if (AllowMissing_) {
             it->second.IsDeleted = true;
         } else {

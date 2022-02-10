@@ -184,7 +184,7 @@ namespace NKikimr {
             LOG_DEBUG(ctx, BS_HULLHUGE,
                       VDISKP(HugeKeeperCtx->VCtx->VDiskLogPrefix,
                             "Writer: bootstrap: id# %s chunkId# %u offset# %u storedBlobSize# %u "
-                            "writtenSize# %u", HugeSlot.ToString().data(), chunkId, offset, 
+                            "writtenSize# %u", HugeSlot.ToString().data(), chunkId, offset,
                             storedBlobSize, writtenSize));
             ctx.Send(HugeKeeperCtx->PDiskCtx->PDiskId,
                     new NPDisk::TEvChunkWrite(HugeKeeperCtx->PDiskCtx->Dsk->Owner,
@@ -205,7 +205,7 @@ namespace NKikimr {
             LOG_DEBUG(ctx, BS_HULLHUGE,
                       VDISKP(HugeKeeperCtx->VCtx->VDiskLogPrefix,
                             "Writer: finish: id# %s diskAddr# %s",
-                            HugeSlot.ToString().data(), DiskAddr.ToString().data())); 
+                            HugeSlot.ToString().data(), DiskAddr.ToString().data()));
             Die(ctx);
         }
 
@@ -680,8 +680,8 @@ namespace NKikimr {
             LOG_DEBUG(ctx, BS_LOGCUTTER,
                 VDISKP(HugeKeeperCtx->VCtx->VDiskLogPrefix,
                     "THullHugeKeeper: TryToCutLog: state# %s firstLsnToKeep# %" PRIu64
-                    " FirstLsnToKeepDecomposed# %s", State.ToString().data(), firstLsnToKeep, 
-                    State.FirstLsnToKeepDecomposed().data())); 
+                    " FirstLsnToKeepDecomposed# %s", State.ToString().data(), firstLsnToKeep,
+                    State.FirstLsnToKeepDecomposed().data()));
 
             // notify log cutter if the FirstLsnToKeep has changed since last reporting
             if (firstLsnToKeep != State.LastReportedFirstLsnToKeep) {
@@ -772,7 +772,7 @@ namespace NKikimr {
                 LOG_DEBUG(ctx, BS_HULLHUGE,
                           VDISKP(HugeKeeperCtx->VCtx->VDiskLogPrefix,
                                 "THullHugeKeeper: TEvHullFreeHugeSlots: one slot: addr# %s freeRes# %s",
-                                x.ToString().data(), freeRes.ToString().data())); 
+                                x.ToString().data(), freeRes.ToString().data()));
             }
 
             auto checkAndSet = [this, msg] (ui64 &dbLsn) {

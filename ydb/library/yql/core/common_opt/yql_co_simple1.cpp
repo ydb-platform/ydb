@@ -362,7 +362,7 @@ TExprNode::TPtr RemoveDeadPayloadColumns(const TExprNode::TPtr& node, TExprConte
     for (auto& setting : settings->Children()) {
         auto name = setting->Head().Content();
         if (name == "rename") {
-            if (setting->Child(2)->Content().empty()) { 
+            if (setting->Child(2)->Content().empty()) {
                 drops.insert(TString(setting->Child(1)->Content()));
             }
         }
@@ -371,7 +371,7 @@ TExprNode::TPtr RemoveDeadPayloadColumns(const TExprNode::TPtr& node, TExprConte
     for (auto& setting : settings->Children()) {
         auto name = setting->Head().Content();
         if (name == "rename") {
-            if (!setting->Child(2)->Content().empty()) { 
+            if (!setting->Child(2)->Content().empty()) {
                 drops.erase(TString(setting->Child(1)->Content()));
             }
         }
@@ -442,7 +442,7 @@ TExprNode::TPtr RemoveDeadPayloadColumns(const TExprNode::TPtr& node, TExprConte
     TExprNode::TListType settingsChildren;
     for (const auto& setting : settings->Children()) {
         auto name = setting->Head().Content();
-        if (name != "rename" || !setting->Child(2)->Content().empty() || !drops.contains(setting->Child(1)->Content())) { 
+        if (name != "rename" || !setting->Child(2)->Content().empty() || !drops.contains(setting->Child(1)->Content())) {
             settingsChildren.push_back(setting);
         }
     }

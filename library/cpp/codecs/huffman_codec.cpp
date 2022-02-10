@@ -69,7 +69,7 @@ namespace NCodecs {
 
         TStringBuf r;
         while (in->NextRegion(r)) {
-            for (ui64 i = 0; i < r.size(); ++i) 
+            for (ui64 i = 0; i < r.size(); ++i)
                 ++freqs[(ui8)r[i]];
         }
 
@@ -249,11 +249,11 @@ namespace NCodecs {
         ui8 Encode(TStringBuf in, TBuffer& out) const {
             out.Clear();
 
-            if (in.empty()) { 
+            if (in.empty()) {
                 return 0;
             }
 
-            out.Reserve(in.size() * 2); 
+            out.Reserve(in.size() * 2);
 
             {
                 NBitIO::TBitOutputVector<TBuffer> bout(&out);
@@ -282,7 +282,7 @@ namespace NCodecs {
         void Decode(TStringBuf in, TBuffer& out) const {
             out.Clear();
 
-            if (in.empty()) { 
+            if (in.empty()) {
                 return;
             }
 
@@ -293,9 +293,9 @@ namespace NCodecs {
             // if data is uncompressed
             if (!f) {
                 in.Skip(1);
-                out.Append(in.data(), in.size()); 
+                out.Append(in.data(), in.size());
             } else {
-                out.Reserve(in.size() * 8); 
+                out.Reserve(in.size() * 8);
 
                 if (Cache.Get()) {
                     Cache->Decode(bin, out);

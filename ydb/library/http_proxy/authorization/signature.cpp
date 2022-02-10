@@ -21,7 +21,7 @@ namespace NKikimr::NSQS {
 static TString HmacSHA256(TStringBuf key, TStringBuf data) {
     unsigned char hash[SHA256_DIGEST_LENGTH];
     ui32 hl = SHA256_DIGEST_LENGTH;
-    const auto* res = HMAC(EVP_sha256(), key.data(), key.size(), reinterpret_cast<const unsigned char*>(data.data()), data.size(), hash, &hl); 
+    const auto* res = HMAC(EVP_sha256(), key.data(), key.size(), reinterpret_cast<const unsigned char*>(data.data()), data.size(), hash, &hl);
     Y_ENSURE(res);
     Y_ENSURE(hl == SHA256_DIGEST_LENGTH);
     return TString{reinterpret_cast<const char*>(res), hl};
@@ -116,7 +116,7 @@ TString TAwsRequestSignV4::CalcSignature(const TString& secretKey) const {
     const auto signingKey = HmacSHA256(dateRegionServiceKey, AwsRequest_);
     const auto signatureHmac = HmacSHA256(signingKey, FinalStringToSignStr_);
 
-    return to_lower(HexEncode(signatureHmac.data(), signatureHmac.size())); 
+    return to_lower(HexEncode(signatureHmac.data(), signatureHmac.size()));
 }
 
 void TAwsRequestSignV4::ParseAuthorization(const THttpInput& input) {

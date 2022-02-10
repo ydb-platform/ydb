@@ -26,7 +26,7 @@ TTempDir::TTempDir(const TString& tempDir)
     , Remove(true)
 {
     NFs::Remove(TempDir);
-    MakeDirIfNotExist(TempDir.c_str()); 
+    MakeDirIfNotExist(TempDir.c_str());
 }
 
 TTempDir TTempDir::NewTempDir(const TString& root) {

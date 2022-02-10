@@ -35,7 +35,7 @@ namespace NBoot {
                 const auto last = Queue ? Queue.back().Stamp + 1 : 0;
 
                 logl
-                    << NFmt::Do(*Back) << " redo log has " << Queue.size() 
+                    << NFmt::Do(*Back) << " redo log has " << Queue.size()
                     << " records, last before " << NFmt::TStamp(last);
             }
 

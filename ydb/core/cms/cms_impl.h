@@ -194,7 +194,7 @@ private:
     STFUNC(StateInit)
     {
         LOG_DEBUG(ctx, NKikimrServices::CMS, "StateInit event type: %" PRIx32 " event: %s",
-                  ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"); 
+                  ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
         StateInitImpl(ev, ctx);
     }
 
@@ -228,7 +228,7 @@ private:
         default:
             if (!HandleDefaultEvents(ev, ctx)) {
                 LOG_DEBUG(ctx, NKikimrServices::CMS, "StateNotSupported unexpected event type: %" PRIx32 " event: %s",
-                          ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"); 
+                          ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
             }
         }
     }
@@ -272,7 +272,7 @@ private:
         default:
             if (!HandleDefaultEvents(ev, ctx)) {
                 LOG_DEBUG(ctx, NKikimrServices::CMS, "StateWork unexpected event type: %" PRIx32 " event: %s",
-                          ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"); 
+                          ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
             }
         }
     }

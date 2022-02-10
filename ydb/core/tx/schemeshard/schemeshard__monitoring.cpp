@@ -1333,7 +1333,7 @@ bool TSchemeShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const T
     if (!ev)
         return true;
 
-    LOG_DEBUG(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Handle TEvRemoteHttpInfo: %s", ev->Get()->Query.data()); 
+    LOG_DEBUG(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Handle TEvRemoteHttpInfo: %s", ev->Get()->Query.data());
     Execute(new TTxMonitoring(this, ev), ctx);
 
     return true;

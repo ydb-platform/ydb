@@ -627,10 +627,10 @@ namespace {
                 continue;
             }
 
-            MKQL_ENSURE(firstKey.size() >= sizeof(ui32), "Corrupted key"); 
+            MKQL_ENSURE(firstKey.size() >= sizeof(ui32), "Corrupted key");
             ui32 partKeyColumnsCount = ReadUnaligned<ui32>(firstKey.data());
             ui32 typesSize = sizeof(ui32) + partKeyColumnsCount * sizeof(NUdf::TDataTypeId);
-            MKQL_ENSURE(firstKey.size() >= typesSize, "Corrupted key"); 
+            MKQL_ENSURE(firstKey.size() >= typesSize, "Corrupted key");
             const char* partTypes = firstKey.data() + sizeof(ui32);
             if (!keyColumnsCount) {
                 keyColumnsCount = partKeyColumnsCount;
@@ -646,7 +646,7 @@ namespace {
                 }
             }
 
-            dataBuffers.emplace_back(firstKey.substr(typesSize, firstKey.size() - typesSize)); 
+            dataBuffers.emplace_back(firstKey.substr(typesSize, firstKey.size() - typesSize));
             parts.emplace_back(nullptr, std::move(list), sizeInBytes, itemsCount, std::move(firstKeyValue), truncated);
         }
 
@@ -943,7 +943,7 @@ TComputationNodeFactory GetFlatProxyExecutionFactory(TProxyExecData& execData)
             } else if (nameStr == strings.Builtins.Length) {
                 return WrapMergedLength(callable, resultIt, ctx);
             } else {
-                Y_FAIL("Don't know how to merge results for callable: %s", TString(nameStr.Str()).data()); 
+                Y_FAIL("Don't know how to merge results for callable: %s", TString(nameStr.Str()).data());
             }
         }
 

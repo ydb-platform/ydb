@@ -2240,7 +2240,7 @@ TString IdContent(TContext& ctx, const TString& s) {
     }
     size_t skipSymbols = 1;
 
-    TStringBuf atom(s.data() + skipSymbols, s.size() - 2 * skipSymbols + 1); 
+    TStringBuf atom(s.data() + skipSymbols, s.size() - 2 * skipSymbols + 1);
     TString unescapedStr;
     TStringOutput sout(unescapedStr);
     unescapedStr.reserve(s.size());
@@ -2257,7 +2257,7 @@ TString IdContent(TContext& ctx, const TString& s) {
         return {};
     }
 
-    if (readBytes != atom.size()) { 
+    if (readBytes != atom.size()) {
         ctx.Error() << "The identifier not parsed completely";
         return {};
     }
@@ -2553,7 +2553,7 @@ TString TDeferredAtom::GetRepr() const {
 }
 
 bool TDeferredAtom::Empty() const {
-    return !Node || Repr.empty(); 
+    return !Node || Repr.empty();
 }
 
 TTupleNode::TTupleNode(TPosition pos, const TVector<TNodePtr>& exprs)

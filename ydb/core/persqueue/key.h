@@ -31,7 +31,7 @@ public:
     {
         Resize(UnmarkedSize());
         *PtrType() = type;
-        memcpy(PtrPartition(),  Sprintf("%.10" PRIu32, partition).data(), 10); 
+        memcpy(PtrPartition(),  Sprintf("%.10" PRIu32, partition).data(), 10);
     }
 
     TKeyPrefix(EType type, const ui32 partition, EMark mark)
@@ -119,7 +119,7 @@ public:
 
     TKey(const TString& data)
     {
-        Assign(data.data(), data.size()); 
+        Assign(data.data(), data.size());
         Y_VERIFY(data.size() == KeySize() + IsHead());
         Y_VERIFY(*(PtrOffset() - 1) == '_');
         Y_VERIFY(*(PtrCount() - 1) == '_');
@@ -153,7 +153,7 @@ public:
     void SetOffset(const ui64 offset) {
         Y_VERIFY(Size() == KeySize() + IsHead());
         Offset = offset;
-        memcpy(PtrOffset(), Sprintf("%.20" PRIu64, offset).data(), 20); 
+        memcpy(PtrOffset(), Sprintf("%.20" PRIu64, offset).data(), 20);
     }
 
     ui64 GetOffset() const {
@@ -164,7 +164,7 @@ public:
     void SetCount(const ui32 count) {
         Y_VERIFY(Size() == KeySize() + IsHead());
         Count = count;
-        memcpy(PtrCount(), Sprintf("%.10" PRIu32, count).data(), 10); 
+        memcpy(PtrCount(), Sprintf("%.10" PRIu32, count).data(), 10);
     }
 
     ui32 GetCount() const {
@@ -175,7 +175,7 @@ public:
     void SetPartNo(const ui16 partNo) {
         Y_VERIFY(Size() == KeySize() + IsHead());
         PartNo = partNo;
-        memcpy(PtrPartNo(), Sprintf("%.5" PRIu16, partNo).data(), 5); 
+        memcpy(PtrPartNo(), Sprintf("%.5" PRIu16, partNo).data(), 5);
     }
 
     ui16 GetPartNo() const {
@@ -186,7 +186,7 @@ public:
     void SetInternalPartsCount(const ui16 internalPartsCount) {
         Y_VERIFY(Size() == KeySize() + IsHead());
         InternalPartsCount = internalPartsCount;
-        memcpy(PtrInternalPartsCount(), Sprintf("%.5" PRIu16, internalPartsCount).data(), 5); 
+        memcpy(PtrInternalPartsCount(), Sprintf("%.5" PRIu16, internalPartsCount).data(), 5);
     }
 
     ui16 GetInternalPartsCount() const {

@@ -232,7 +232,7 @@ public:
             }
 
             TCompactTrie<char, D, S> trie(Buffer.Get(), Buffer.Size(), packer);
-            result = trie.Find(key.data(), key.size(), value); 
+            result = trie.Find(key.data(), key.size(), value);
 
             return nullptr;
         }
@@ -245,7 +245,7 @@ public:
 
             TCompactTrie<char, D, S> trie(Buffer.Get(), Buffer.Size(), packer);
             size_t prefixLen = 0;
-            result = trie.FindLongestPrefix(key.data(), key.size(), &prefixLen, value); 
+            result = trie.FindLongestPrefix(key.data(), key.size(), &prefixLen, value);
             key = key.SubStr(prefixLen);
 
             return nullptr;
@@ -298,7 +298,7 @@ public:
             }
 
             TCompactTrie<char, D, S> trie(TBlob::FromFile(Data->FileName), packer);
-            result = trie.Find(key.data(), key.size(), value); 
+            result = trie.Find(key.data(), key.size(), value);
             return nullptr;
         }
 
@@ -310,7 +310,7 @@ public:
 
             TCompactTrie<char, D, S> trie(TBlob::FromFile(Data->FileName), packer);
             size_t prefixLen = 0;
-            result = trie.FindLongestPrefix(key.data(), key.size(), &prefixLen, value); 
+            result = trie.FindLongestPrefix(key.data(), key.size(), &prefixLen, value);
             key = key.SubStr(prefixLen);
 
             return nullptr;
@@ -735,7 +735,7 @@ bool TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::FindLongestPrefixImp
         endResult = true;
     }
     if (endResult && prefixLen)
-        *prefixLen = keyTail ? key.size() - keyTail.size() : key.size(); 
+        *prefixLen = keyTail ? key.size() - keyTail.size() : key.size();
     return endResult;
 }
 
@@ -1021,11 +1021,11 @@ const typename TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode*
     if (it != this->end()) {
         const char* const arcLabel = it->Label.AsCharPtr();
         const size_t arcLabelLen = it->Label.Length();
-        if (key.size() >= arcLabelLen && memcmp(key.data(), arcLabel, arcLabelLen) == 0) { 
+        if (key.size() >= arcLabelLen && memcmp(key.data(), arcLabel, arcLabelLen) == 0) {
             const TStringBuf srcKey = key;
             key = key.SubStr(arcLabelLen);
             const TNode* const node = it->Node;
-            if (srcKey.size() == arcLabelLen) { 
+            if (srcKey.size() == arcLabelLen) {
                 // unpack value of it->Node, if it has value
                 if (!node->IsFinal())
                     return nullptr;

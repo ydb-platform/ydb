@@ -1226,7 +1226,7 @@ class TTestBlobStorageProxyPutGetMany: public TTestBlobStorageProxy {
     TString Prepare(ui64 idx, ui64 size) {
         TString data;
         data.resize(size);
-        ui8 *d = (ui8*)const_cast<char*>(data.data()); 
+        ui8 *d = (ui8*)const_cast<char*>(data.data());
         for (ui64 i = 0; i < size; ++i) {
             d[i] = 'A' + ((idx + i) & 0xf);
         }
@@ -1281,7 +1281,7 @@ class TTestBlobStorageProxyPutGetStatus: public TTestBlobStorageProxy {
     TString Prepare(ui64 idx, ui64 size) {
         TString data;
         data.resize(size);
-        ui8 *d = (ui8*)const_cast<char*>(data.data()); 
+        ui8 *d = (ui8*)const_cast<char*>(data.data());
         for (ui64 i = 0; i < size; ++i) {
             d[i] = 'A' + ((idx + i) & 0xf);
         }
@@ -1379,7 +1379,7 @@ class TTestBlobStorageProxyVPutVGet : public TTestBlobStorageProxy {
         TLogoBlobID blobId(1, 0, 0, 0, testData2.size(), 0);
         TString encryptedTestData2;
         encryptedTestData2.resize(testData2.size());
-        Encrypt(encryptedTestData2.Detach(), testData2.data(), 0, testData2.size(), blobId, *BsInfo); 
+        Encrypt(encryptedTestData2.Detach(), testData2.data(), 0, testData2.size(), blobId, *BsInfo);
         switch (TestStep) {
             case 0:
             {
@@ -1480,7 +1480,7 @@ class TTestBlobStorageProxyVPutVGetLimit : public TTestBlobStorageProxy {
                     TLogoBlobID blobId(1, 0, i/*step*/, 0, testData2.size(), 0);
                     TString encryptedTestData2;
                     encryptedTestData2.resize(testData2.size());
-                    Encrypt(encryptedTestData2.Detach(), testData2.data(), 0, testData2.size(), blobId, *BsInfo); 
+                    Encrypt(encryptedTestData2.Detach(), testData2.data(), 0, testData2.size(), blobId, *BsInfo);
 
                     type.SplitData((TErasureType::ECrcMode)blobId.CrcMode(), encryptedTestData2, partSet);
 
@@ -1661,7 +1661,7 @@ class TTestBlobStorageProxyVGet : public TTestBlobStorageProxy {
         TLogoBlobID blobId(1, 0, 0, 0, testData2.size(), 0);
         TString encryptedTestData2;
         encryptedTestData2.resize(testData2.size());
-        Encrypt(encryptedTestData2.Detach(), testData2.data(), 0, testData2.size(), blobId, *BsInfo); 
+        Encrypt(encryptedTestData2.Detach(), testData2.data(), 0, testData2.size(), blobId, *BsInfo);
 
         switch (TestStep) {
             case 0:
@@ -2241,7 +2241,7 @@ class TTestBlobStorageProxyGarbageCollectAfterLargeData : public TTestBlobStorag
     TString Prepare(ui64 idx, ui64 size) {
         TString data;
         data.resize(size);
-        ui8 *d = (ui8*)const_cast<char*>(data.data()); 
+        ui8 *d = (ui8*)const_cast<char*>(data.data());
         for (ui64 i = 0; i < size; ++i) {
             d[i] = 'A' + ((idx + i) & 0xf);
         }
@@ -2594,7 +2594,7 @@ class TTestBlobStorageProxyLongTailDiscoverPut : public TTestBlobStorageProxy {
 
                 TBlobStorageGroupType type(ErasureSpecies);
                 NKikimr::TDataPartSet partSet;
-                TLogoBlobID from0(1, 0, 2 + Iteration/*step*/, 0, testData3.size(), 0); 
+                TLogoBlobID from0(1, 0, 2 + Iteration/*step*/, 0, testData3.size(), 0);
                 type.SplitData((TErasureType::ECrcMode)from0.CrcMode(), testData3, partSet);
 
 
@@ -2607,7 +2607,7 @@ class TTestBlobStorageProxyLongTailDiscoverPut : public TTestBlobStorageProxy {
 
                 ui32 vDiskIdx = vDiskId.FailDomain * BsInfo->GetNumVDisksPerFailDomain() + vDiskId.VDisk;
 
-                TLogoBlobID from(1, 0, 2 + Iteration/*step*/, 0, testData3.size(), cookie, partIdx + 1); 
+                TLogoBlobID from(1, 0, 2 + Iteration/*step*/, 0, testData3.size(), cookie, partIdx + 1);
                 VERBOSE_COUT(" Sending TEvVPut partId# " << (partIdx + 1) << " cookie# " << cookie);
 
                 TAutoPtr<TEvBlobStorage::TEvVPut> vPut(
@@ -2635,7 +2635,7 @@ class TTestBlobStorageProxyLongTailDiscoverPut : public TTestBlobStorageProxy {
 
                 VERBOSE_COUT(" Sending TEvVPut");
                 TVDiskID vDiskId(0, 1, 0, 1, 0);
-                TLogoBlobID from0(1, 0, 2 + Iteration/*step*/, 0, testData3.size(), 0); 
+                TLogoBlobID from0(1, 0, 2 + Iteration/*step*/, 0, testData3.size(), 0);
                 ui32 partIdx = 0;
                 ui32 cookie = FindCookieFor(from0, vDiskId, &partIdx);
                 if (partIdx >= BsInfo->Type.TotalPartCount()) {
@@ -3121,7 +3121,7 @@ class TTestBlobStorageProxyBasic1 : public TTestBlobStorageProxy {
                 }
                 VERBOSE_COUT(" Sending TEvPut");
                 TString putData = TString::Uninitialized(1 << 18);
-                memset(const_cast<char*>(putData.data()), 1, putData.size()); 
+                memset(const_cast<char*>(putData.data()), 1, putData.size());
 
                 TLogoBlobID logoblobid(1, 11, 0, 0, putData.size(), 0);
                 ctx.Send(Proxy, new TEvBlobStorage::TEvPut(logoblobid, putData, TInstant::Max()));
@@ -3971,21 +3971,21 @@ public:
 
     void TestGetMultipart() {
         TTempDir tempDir;
-        TestBlobStorage<TTestBlobStorageProxyPut>(0, TBlobStorageGroupType::Erasure3Plus1Block, tempDir().data()); 
-        TestBlobStorage<TTestGetMultipart>(0, TBlobStorageGroupType::Erasure3Plus1Block, tempDir().data()); 
+        TestBlobStorage<TTestBlobStorageProxyPut>(0, TBlobStorageGroupType::Erasure3Plus1Block, tempDir().data());
+        TestBlobStorage<TTestGetMultipart>(0, TBlobStorageGroupType::Erasure3Plus1Block, tempDir().data());
         SectorMapByPath.clear();
     }
 
     void TestCompactedGetMultipart() {
         return;  // TODO https://st.yandex-team.ru/KIKIMR-2244
         TTempDir tempDir;
-        TestBlobStorage<TTestBlobStorageProxyPut>(0, TBlobStorageGroupType::Erasure3Plus1Block, tempDir().data()); 
-        TestBlobStorage<TTestVDiskCompacted<0>>(0, TBlobStorageGroupType::Erasure3Plus1Block, tempDir().data()); 
-        TestBlobStorage<TTestVDiskCompacted<1>>(0, TBlobStorageGroupType::Erasure3Plus1Block, tempDir().data()); 
-        TestBlobStorage<TTestVDiskCompacted<2>>(0, TBlobStorageGroupType::Erasure3Plus1Block, tempDir().data()); 
-        TestBlobStorage<TTestVDiskCompacted<3>>(0, TBlobStorageGroupType::Erasure3Plus1Block, tempDir().data()); 
-        TestBlobStorage<TTestVDiskCompacted<4>>(0, TBlobStorageGroupType::Erasure3Plus1Block, tempDir().data()); 
-        TestBlobStorage<TTestGetMultipart>(0, TBlobStorageGroupType::Erasure3Plus1Block, tempDir().data()); 
+        TestBlobStorage<TTestBlobStorageProxyPut>(0, TBlobStorageGroupType::Erasure3Plus1Block, tempDir().data());
+        TestBlobStorage<TTestVDiskCompacted<0>>(0, TBlobStorageGroupType::Erasure3Plus1Block, tempDir().data());
+        TestBlobStorage<TTestVDiskCompacted<1>>(0, TBlobStorageGroupType::Erasure3Plus1Block, tempDir().data());
+        TestBlobStorage<TTestVDiskCompacted<2>>(0, TBlobStorageGroupType::Erasure3Plus1Block, tempDir().data());
+        TestBlobStorage<TTestVDiskCompacted<3>>(0, TBlobStorageGroupType::Erasure3Plus1Block, tempDir().data());
+        TestBlobStorage<TTestVDiskCompacted<4>>(0, TBlobStorageGroupType::Erasure3Plus1Block, tempDir().data());
+        TestBlobStorage<TTestGetMultipart>(0, TBlobStorageGroupType::Erasure3Plus1Block, tempDir().data());
         SectorMapByPath.clear();
     }
 

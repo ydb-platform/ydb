@@ -51,11 +51,11 @@ public:
         Tenant = Self->GetTenant(path);
         if (!Tenant)
             return Error(Ydb::StatusIds::NOT_FOUND,
-                         Sprintf("Database '%s' doesn't exist", path.data()), ctx); 
+                         Sprintf("Database '%s' doesn't exist", path.data()), ctx);
 
         if (!Tenant->IsRunning() && !Tenant->IsConfiguring())
             return Error(Ydb::StatusIds::UNAVAILABLE,
-                         Sprintf("Database '%s' is busy", path.data()), ctx); 
+                         Sprintf("Database '%s' is busy", path.data()), ctx);
 
         // Check idempotency key
         if (rec.idempotency_key() && Tenant->AlterIdempotencyKey == rec.idempotency_key()) {
@@ -149,7 +149,7 @@ public:
             if (it == Tenant->RegisteredComputationalUnits.end())
                 return Error(Ydb::StatusIds::BAD_REQUEST,
                              Sprintf("Cannot deregister unknown unit %s:%" PRIu32,
-                                     key.first.data(), key.second), 
+                                     key.first.data(), key.second),
                              ctx);
             UnitsToDeregister.insert(key);
         }
@@ -166,7 +166,7 @@ public:
                 if (it1->second.Kind != unit.unit_kind())
                     return Error(Ydb::StatusIds::BAD_REQUEST,
                                  Sprintf("Computational unit %s:%" PRIu32 " is already registered with another kind",
-                                         key.first.data(), key.second), 
+                                         key.first.data(), key.second),
                                  ctx);
             } else {
                 auto it2 = UnitsToRegister.find(key);
@@ -174,7 +174,7 @@ public:
                     && it2->second.Kind != unit.unit_kind())
                     return Error(Ydb::StatusIds::BAD_REQUEST,
                                  Sprintf("Computational unit %s:%" PRIu32 " is registered with different kind",
-                                         key.first.data(), key.second), 
+                                         key.first.data(), key.second),
                                  ctx);
                 UnitsToRegister[key] = TAllocatedComputationalUnit{key.first, key.second, unit.unit_kind()};
             }

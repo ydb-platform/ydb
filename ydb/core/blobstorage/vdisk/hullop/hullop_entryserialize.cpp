@@ -21,16 +21,16 @@ namespace NKikimr {
                                          const TString &source,
                                          TString &explanation) {
         TStringStream str;
-        if (source.size() < sizeof(ui32)) { 
+        if (source.size() < sizeof(ui32)) {
             str << "Can't check signature because serialized data size is less than sizeof(ui32)";
             explanation = str.Str();
             return false;
         }
 
-        const ui32 s = *(const ui32*)source.data(); 
+        const ui32 s = *(const ui32*)source.data();
         if (s == CurSignature) {
             // new format -- protobuf
-            bool success = pb.ParseFromArray(source.data() + sizeof(ui32), source.size() - sizeof(ui32)); 
+            bool success = pb.ParseFromArray(source.data() + sizeof(ui32), source.size() - sizeof(ui32));
             if (!success) {
                 str << "Failed to parse protobuf";
                 explanation = str.Str();

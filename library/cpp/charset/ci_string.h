@@ -248,14 +248,14 @@ struct TCIHash<const char*> {
 template <>
 struct TCIHash<TStringBuf> {
     inline size_t operator()(const TStringBuf& s) const {
-        return TCiString::hashVal(s.data(), s.size()); 
+        return TCiString::hashVal(s.data(), s.size());
     }
 };
 
 template <>
 struct TCIHash<TString> {
     inline size_t operator()(const TString& s) const {
-        return TCiString::hashVal(s.data(), s.size()); 
+        return TCiString::hashVal(s.data(), s.size());
     }
 };
 

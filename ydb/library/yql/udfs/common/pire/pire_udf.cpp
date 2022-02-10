@@ -106,7 +106,7 @@ namespace {
                             if (Fsm_) try {
                                 *Fsm_ = *Fsm_ | TFsm(TString(part), options);
                             } catch (const yexception&) {
-                                UdfTerminate((TStringBuilder() << Pos_ << " Failed to glue up regexes, probably the finite state machine appeared to be too large").data()); 
+                                UdfTerminate((TStringBuilder() << Pos_ << " Failed to glue up regexes, probably the finite state machine appeared to be too large").data());
                             } else {
                                 Fsm_.Reset(new TFsm(TString(part), options));
                             }
@@ -116,7 +116,7 @@ namespace {
                     Fsm_.Reset(new TFsm(TString(regex), options));
                 }
             } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data()); 
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
             }
         }
 

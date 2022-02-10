@@ -35,7 +35,7 @@ namespace NKikimr {
         // prepare data from the field Data for inserting into Hull database
         void UnpackData(const TIntrusivePtr<TVDiskContext> &vctx);
         size_t ByteSize() const {
-            return sizeof(TVDiskID) + sizeof(TSyncState) + sizeof(ui32) + Data.size(); 
+            return sizeof(TVDiskID) + sizeof(TSyncState) + sizeof(ui32) + Data.size();
         }
 
     protected:

@@ -88,7 +88,7 @@ namespace {
         struct tm inputTm;
         memset(&inputTm, 0, sizeof(tm));
         inputTm.tm_mday = 1;
-        if (strptime(input.data(), format.data(), &inputTm) != nullptr) { 
+        if (strptime(input.data(), format.data(), &inputTm) != nullptr) {
             const time_t seconds = TimeGM(&inputTm);
             if (seconds != static_cast<time_t>(-1)) {
                 result = TInstant::Seconds(seconds);

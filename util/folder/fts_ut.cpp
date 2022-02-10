@@ -58,27 +58,27 @@ void TFtsTest::TestSimple() {
     TFileTree currentDirTree((char* const*)dotPath, 0, FtsCmp);
     UNIT_ASSERT(currentDirTree());
     TTempDir tempDir = MakeTempName(yfts_read(currentDirTree())->fts_path);
-    MakeDirIfNotExist(tempDir().data()); 
-    MakeDirIfNotExist((tempDir() + LOCSLASH_S "dir1").data()); 
-    MakeFile((tempDir() + LOCSLASH_S "dir1" LOCSLASH_S "file1").data()); 
-    MakeFile((tempDir() + LOCSLASH_S "dir1" LOCSLASH_S "file2").data()); 
-    MakeDirIfNotExist((tempDir() + LOCSLASH_S "dir2").data()); 
-    MakeFile((tempDir() + LOCSLASH_S "dir2" LOCSLASH_S "file3").data()); 
-    MakeFile((tempDir() + LOCSLASH_S "dir2" LOCSLASH_S "file4").data()); 
+    MakeDirIfNotExist(tempDir().data());
+    MakeDirIfNotExist((tempDir() + LOCSLASH_S "dir1").data());
+    MakeFile((tempDir() + LOCSLASH_S "dir1" LOCSLASH_S "file1").data());
+    MakeFile((tempDir() + LOCSLASH_S "dir1" LOCSLASH_S "file2").data());
+    MakeDirIfNotExist((tempDir() + LOCSLASH_S "dir2").data());
+    MakeFile((tempDir() + LOCSLASH_S "dir2" LOCSLASH_S "file3").data());
+    MakeFile((tempDir() + LOCSLASH_S "dir2" LOCSLASH_S "file4").data());
 
-    const char* path[2] = {tempDir().data(), nullptr}; 
+    const char* path[2] = {tempDir().data(), nullptr};
     TFileTree fileTree((char* const*)path, 0, FtsCmp);
     UNIT_ASSERT(fileTree());
-    CheckEnt(yfts_read(fileTree()), tempDir().data(), FTS_D); 
-    CheckEnt(yfts_read(fileTree()), (tempDir() + LOCSLASH_S "dir1").data(), FTS_D); 
-    CheckEnt(yfts_read(fileTree()), (tempDir() + LOCSLASH_S "dir1" LOCSLASH_S "file1").data(), FTS_F); 
-    CheckEnt(yfts_read(fileTree()), (tempDir() + LOCSLASH_S "dir1" LOCSLASH_S "file2").data(), FTS_F); 
-    CheckEnt(yfts_read(fileTree()), (tempDir() + LOCSLASH_S "dir1").data(), FTS_DP); 
-    CheckEnt(yfts_read(fileTree()), (tempDir() + LOCSLASH_S "dir2").data(), FTS_D); 
-    CheckEnt(yfts_read(fileTree()), (tempDir() + LOCSLASH_S "dir2" LOCSLASH_S "file3").data(), FTS_F); 
-    CheckEnt(yfts_read(fileTree()), (tempDir() + LOCSLASH_S "dir2" LOCSLASH_S "file4").data(), FTS_F); 
-    CheckEnt(yfts_read(fileTree()), (tempDir() + LOCSLASH_S "dir2").data(), FTS_DP); 
-    CheckEnt(yfts_read(fileTree()), (tempDir()).data(), FTS_DP); 
+    CheckEnt(yfts_read(fileTree()), tempDir().data(), FTS_D);
+    CheckEnt(yfts_read(fileTree()), (tempDir() + LOCSLASH_S "dir1").data(), FTS_D);
+    CheckEnt(yfts_read(fileTree()), (tempDir() + LOCSLASH_S "dir1" LOCSLASH_S "file1").data(), FTS_F);
+    CheckEnt(yfts_read(fileTree()), (tempDir() + LOCSLASH_S "dir1" LOCSLASH_S "file2").data(), FTS_F);
+    CheckEnt(yfts_read(fileTree()), (tempDir() + LOCSLASH_S "dir1").data(), FTS_DP);
+    CheckEnt(yfts_read(fileTree()), (tempDir() + LOCSLASH_S "dir2").data(), FTS_D);
+    CheckEnt(yfts_read(fileTree()), (tempDir() + LOCSLASH_S "dir2" LOCSLASH_S "file3").data(), FTS_F);
+    CheckEnt(yfts_read(fileTree()), (tempDir() + LOCSLASH_S "dir2" LOCSLASH_S "file4").data(), FTS_F);
+    CheckEnt(yfts_read(fileTree()), (tempDir() + LOCSLASH_S "dir2").data(), FTS_DP);
+    CheckEnt(yfts_read(fileTree()), (tempDir()).data(), FTS_DP);
     UNIT_ASSERT_EQUAL(yfts_read(fileTree()), nullptr);
 }
 

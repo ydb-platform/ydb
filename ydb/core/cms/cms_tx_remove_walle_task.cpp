@@ -29,7 +29,7 @@ public:
             Self->AuditLog(ctx, TStringBuilder() << "Remove wall-e task"
                 << ": id# " << Id);
         } else {
-            LOG_ERROR(ctx, NKikimrServices::CMS, "Can't find Wall-E task %s", Id.data()); 
+            LOG_ERROR(ctx, NKikimrServices::CMS, "Can't find Wall-E task %s", Id.data());
         }
 
         return true;

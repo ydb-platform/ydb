@@ -799,7 +799,7 @@ protected:
 
         IoContext->InitializeMonitoring(Mon);
         //IoContext->InitializeMonitoring(Mon.DeviceOperationPoolTotalAllocations, Mon.DeviceOperationPoolFreeObjectsMin);
-        if (!LastWarning.empty() && ActorSystem) { 
+        if (!LastWarning.empty() && ActorSystem) {
             LOG_WARN_S(*ActorSystem, NKikimrServices::BS_DEVICE, "PDiskId# " << PDiskId
                 << " Warning# " << LastWarning);
         }

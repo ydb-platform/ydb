@@ -663,13 +663,13 @@ namespace {
             auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Callable"), pool);
             auto callable = annotation.Cast<TCallableExprType>();
             TSmallVec<TAstNode*> mainSettings;
-            if (callable->GetOptionalArgumentsCount() > 0 || !callable->GetPayload().empty()) { 
+            if (callable->GetOptionalArgumentsCount() > 0 || !callable->GetPayload().empty()) {
                 auto optArgs = TAstNode::NewAtom(TPosition(), ToString(callable->GetOptionalArgumentsCount()), pool);
 
                 mainSettings.push_back(optArgs);
             }
 
-            if (!callable->GetPayload().empty()) { 
+            if (!callable->GetPayload().empty()) {
                 auto payload = TAstNode::NewAtom(TPosition(), callable->GetPayload(), pool, TNodeFlags::ArbitraryContent);
                 mainSettings.push_back(payload);
             }
@@ -686,7 +686,7 @@ namespace {
             for (auto& arg : callable->GetArguments()) {
                 TSmallVec<TAstNode*> argSettings;
                 argSettings.push_back(ConvertTypeAnnotationToAst(*arg.Type, pool, refAtoms));
-                if (!arg.Name.empty() || arg.Flags != 0) { 
+                if (!arg.Name.empty() || arg.Flags != 0) {
                     auto name = TAstNode::NewAtom(TPosition(), arg.Name, pool, TNodeFlags::ArbitraryContent);
                     argSettings.push_back(name);
                 }
@@ -1053,7 +1053,7 @@ namespace {
         }
 
         TString nameStr = TString(name->GetContent());
-        if (nameStr.size() < 2) { 
+        if (nameStr.size() < 2) {
             ctx.AddError(*name, "Parameter name should be at least 2 characters long.");
             return false;
         }
@@ -2827,7 +2827,7 @@ bool TCallableExprType::Validate(TPosition position, TExprContext& ctx) const {
     bool startedNames = false;
     std::unordered_set<std::string_view> usedNames(Arguments.size());
     for (ui32 index = 0; index < Arguments.size(); ++index) {
-        bool hasName = !Arguments[index].Name.empty(); 
+        bool hasName = !Arguments[index].Name.empty();
         if (startedNames) {
             if (!hasName) {
                 ctx.AddError(TIssue(position, TStringBuilder() << "Unexpected positional argument at position "

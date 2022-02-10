@@ -1,7 +1,7 @@
 #pragma once
 #include <util/string/vector.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
-#include <util/string/split.h> 
+#include <util/string/split.h>
 
 namespace NKikimr {
 namespace NViewer {
@@ -284,7 +284,7 @@ public:
         const Descriptor& descriptor = *TElementType::descriptor();
         TVector<TString> requestedFields;
         TVector<const FieldDescriptor*> foundFields;
-        StringSplitter(fields).Split(',').SkipEmpty().Collect(&requestedFields); 
+        StringSplitter(fields).Split(',').SkipEmpty().Collect(&requestedFields);
         for (const TString& str : requestedFields) {
             const FieldDescriptor* fieldDescriptor = descriptor.FindFieldByName(str);
             if (fieldDescriptor != nullptr) {

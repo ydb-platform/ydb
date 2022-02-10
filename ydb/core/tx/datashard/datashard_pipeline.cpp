@@ -530,7 +530,7 @@ bool TPipeline::LoadTxDetails(TTransactionContext &txc,
             return false;
 
         // Check we have enough memory to parse tx.
-        ui64 requiredMem = txBody.size() * 10; 
+        ui64 requiredMem = txBody.size() * 10;
         if (MaybeRequestMoreTxMemory(requiredMem, txc))
             return false;
 

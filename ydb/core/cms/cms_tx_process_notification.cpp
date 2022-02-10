@@ -22,8 +22,8 @@ public:
         Response = new TEvCms::TEvNotificationResponse;
 
         LOG_INFO(ctx, NKikimrServices::CMS, "Processing notification from %s (time=%s reason='%s')",
-                  rec.GetUser().data(), TInstant::MicroSeconds(rec.GetTime()).ToStringLocalUpToSeconds().data(), 
-                  rec.GetReason().data()); 
+                  rec.GetUser().data(), TInstant::MicroSeconds(rec.GetTime()).ToStringLocalUpToSeconds().data(),
+                  rec.GetReason().data());
 
         if (Self->CheckNotification(rec, Response->Record, ctx)) {
             TString id = Self->AcceptNotification(rec, ctx);
@@ -51,7 +51,7 @@ public:
     void Complete(const TActorContext &ctx) override
     {
         LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxProcessNotification complete with response: %s",
-                  Response->Record.ShortDebugString().data()); 
+                  Response->Record.ShortDebugString().data());
 
         Self->Reply(Event, std::move(Response), ctx);
         Self->ScheduleNotificationsCleanup(ctx);

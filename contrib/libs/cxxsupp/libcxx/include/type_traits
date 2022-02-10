@@ -1,9 +1,9 @@
 // -*- C++ -*-
 //===------------------------ type_traits ---------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions. 
-// See https://llvm.org/LICENSE.txt for license information. 
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception 
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -75,10 +75,10 @@ namespace std
     template <class T> struct remove_pointer;
     template <class T> struct add_pointer;
 
-    template<class T> struct type_identity;                     // C++20 
-    template<class T> 
-      using type_identity_t = typename type_identity<T>::type;  // C++20 
- 
+    template<class T> struct type_identity;                     // C++20
+    template<class T>
+      using type_identity_t = typename type_identity<T>::type;  // C++20
+
     // Integral properties:
     template <class T> struct is_signed;
     template <class T> struct is_unsigned;
@@ -375,7 +375,7 @@ namespace std
         = is_nothrow_destructible<T>::value;                             // C++17
       template <class T> inline constexpr bool has_virtual_destructor_v
         = has_virtual_destructor<T>::value;                              // C++17
-      template<class T> inline constexpr bool has_unique_object_representations_v // C++17 
+      template<class T> inline constexpr bool has_unique_object_representations_v // C++17
         = has_unique_object_representations<T>::value;
 
       // See C++14 20.10.5, type property queries
@@ -418,7 +418,7 @@ namespace std
 */
 #include <__config>
 #include <cstddef>
-#include <version> 
+#include <version>
 #include <__utility/declval.h>
 
 #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
@@ -1436,12 +1436,12 @@ template <class _Tp> struct _LIBCPP_TEMPLATE_VIS add_pointer
 template <class _Tp> using add_pointer_t = typename add_pointer<_Tp>::type;
 #endif
 
-// type_identity 
-#if _LIBCPP_STD_VER > 17 
-template<class _Tp> struct type_identity { typedef _Tp type; }; 
-template<class _Tp> using type_identity_t = typename type_identity<_Tp>::type; 
-#endif 
- 
+// type_identity
+#if _LIBCPP_STD_VER > 17
+template<class _Tp> struct type_identity { typedef _Tp type; };
+template<class _Tp> using type_identity_t = typename type_identity<_Tp>::type;
+#endif
+
 // is_signed
 
 // Before Clang 10, __is_signed didn't work for floating-point types or enums.
@@ -1911,7 +1911,7 @@ inline constexpr bool has_unique_object_representations_v = has_unique_object_re
 // alignment_of
 
 template <class _Tp> struct _LIBCPP_TEMPLATE_VIS alignment_of
-    : public integral_constant<size_t, _LIBCPP_ALIGNOF(_Tp)> {}; 
+    : public integral_constant<size_t, _LIBCPP_ALIGNOF(_Tp)> {};
 
 #if _LIBCPP_STD_VER > 14
 template <class _Tp>
@@ -1940,7 +1940,7 @@ struct __nat
 template <class _Tp>
 struct __align_type
 {
-    static const size_t value = _LIBCPP_PREFERRED_ALIGNOF(_Tp); 
+    static const size_t value = _LIBCPP_PREFERRED_ALIGNOF(_Tp);
     typedef _Tp type;
 };
 
@@ -2086,8 +2086,8 @@ struct __static_max<_I0, _I1, _In...>
 template <size_t _Len, class _Type0, class ..._Types>
 struct aligned_union
 {
-    static const size_t alignment_value = __static_max<_LIBCPP_PREFERRED_ALIGNOF(_Type0), 
-                                                       _LIBCPP_PREFERRED_ALIGNOF(_Types)...>::value; 
+    static const size_t alignment_value = __static_max<_LIBCPP_PREFERRED_ALIGNOF(_Type0),
+                                                       _LIBCPP_PREFERRED_ALIGNOF(_Types)...>::value;
     static const size_t __len = __static_max<_Len, sizeof(_Type0),
                                              sizeof(_Types)...>::value;
     typedef typename aligned_storage<__len, alignment_value>::type type;
@@ -2754,13 +2754,13 @@ inline constexpr bool is_destructible_v = __is_destructible(_Tp);
 //  Otherwise, return "declval<_Up&>().~_Up()" is well-formed
 //    where _Up is remove_all_extents<_Tp>::type
 
-#if defined(_LIBCPP_COMPILER_MSVC) 
- 
-template <typename _Tp> 
+#if defined(_LIBCPP_COMPILER_MSVC)
+
+template <typename _Tp>
 struct is_destructible : integral_constant<bool, __is_destructible(_Tp)> {};
- 
-#else 
- 
+
+#else
+
 template <class>
 struct __is_destructible_apply { typedef int type; };
 
@@ -2810,8 +2810,8 @@ template <>
 struct is_destructible<void>
     : public false_type {};
 
-#endif 
- 
+#endif
+
 #if _LIBCPP_STD_VER > 14
 template <class _Tp>
 inline constexpr bool is_destructible_v = is_destructible<_Tp>::value;
@@ -3728,27 +3728,27 @@ __invoke_constexpr(_Fp&& __f, _Args&& ...__args)
 template <class _Ret, class _Fp, class ..._Args>
 struct __invokable_r
 {
-  template <class _XFp, class ..._XArgs> 
-  static auto __try_call(int) -> decltype( 
+  template <class _XFp, class ..._XArgs>
+  static auto __try_call(int) -> decltype(
     _VSTD::__invoke(declval<_XFp>(), declval<_XArgs>()...));
-  template <class _XFp, class ..._XArgs> 
-  static __nat __try_call(...); 
+  template <class _XFp, class ..._XArgs>
+  static __nat __try_call(...);
 
-  // FIXME: Check that _Ret, _Fp, and _Args... are all complete types, cv void, 
-  // or incomplete array types as required by the standard. 
-  using _Result = decltype(__try_call<_Fp, _Args...>(0)); 
- 
-  using type = 
-  typename conditional< 
+  // FIXME: Check that _Ret, _Fp, and _Args... are all complete types, cv void,
+  // or incomplete array types as required by the standard.
+  using _Result = decltype(__try_call<_Fp, _Args...>(0));
+
+  using type =
+  typename conditional<
       _IsNotSame<_Result, __nat>::value,
-      typename conditional< 
-          is_void<_Ret>::value, 
-          true_type, 
-          is_convertible<_Result, _Ret> 
-      >::type, 
-      false_type 
-  >::type; 
-  static const bool value = type::value; 
+      typename conditional<
+          is_void<_Ret>::value,
+          true_type,
+          is_convertible<_Result, _Ret>
+      >::type,
+      false_type
+  >::type;
+  static const bool value = type::value;
 };
 template <class _Fp, class ..._Args>
 using __invokable = __invokable_r<void, _Fp, _Args...>;

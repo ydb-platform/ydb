@@ -294,7 +294,7 @@ TPreparedQuery TPrepareResult::GetQuery() const {
         compileResult.ProgramCompileErrorsSize(),
         (compileResult.ProgramCompileErrorsSize() ? compileResult.GetProgramCompileErrors(0).position().row() : 0u),
         (compileResult.ProgramCompileErrorsSize() ? compileResult.GetProgramCompileErrors(0).position().column() : 0u),
-        (compileResult.ProgramCompileErrorsSize() ? compileResult.GetProgramCompileErrors(0).message().data() : "") 
+        (compileResult.ProgramCompileErrorsSize() ? compileResult.GetProgramCompileErrors(0).message().data() : "")
     );
     return TPreparedQuery(*Query, compileResult.GetCompiledProgram());
 }

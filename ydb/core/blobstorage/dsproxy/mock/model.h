@@ -61,7 +61,7 @@ namespace NFake {
             }
 
             // check if this blob is not being collected -- writing such blob is a violation of BS contract
-            Y_VERIFY(!IsCollectedByBarrier(id), "Id# %s", id.ToString().data()); 
+            Y_VERIFY(!IsCollectedByBarrier(id), "Id# %s", id.ToString().data());
 
             // validate that there are no blobs with the same gen/step, channel, cookie, but with different size
             const TLogoBlobID base(id.TabletID(), id.Generation(), id.Step(), id.Channel(), 0, id.Cookie());
@@ -75,7 +75,7 @@ namespace NFake {
                     id.Cookie() != existing.Cookie() ||
                     id.Channel() != existing.Channel() ||
                     id == existing,
-                    "id# %s existing# %s", id.ToString().data(), existing.ToString().data()); 
+                    "id# %s existing# %s", id.ToString().data(), existing.ToString().data());
                 if (id == existing) {
                     Y_VERIFY(iter->second.Buffer == msg->Buffer);
                 }
@@ -120,7 +120,7 @@ namespace NFake {
                     response.Buffer = data.Buffer.substr(size ? query.Shift : 0, size);
                 } else {
                     // ensure this blob is not under GC
-                    Y_VERIFY(!IsCollectedByBarrier(id), "Id# %s", id.ToString().data()); 
+                    Y_VERIFY(!IsCollectedByBarrier(id), "Id# %s", id.ToString().data());
 
                     // reply with NODATA -- we haven't got this blob
                     response.Status = NKikimrProto::NODATA;
@@ -258,9 +258,9 @@ namespace NFake {
                 if (msg->Keep) {
                     for (const TLogoBlobID& id : *msg->Keep) {
                         auto it = Blobs.find(id);
-                        Y_VERIFY(it != Blobs.end(), "Id# %s", id.ToString().data()); 
+                        Y_VERIFY(it != Blobs.end(), "Id# %s", id.ToString().data());
                         Y_VERIFY(!IsCollectedByBarrier(id) || (it->second.Keep && !it->second.DoNotKeep),
-                            "Id# %s Keep# %s DoNotKeep# %s", id.ToString().data(), 
+                            "Id# %s Keep# %s DoNotKeep# %s", id.ToString().data(),
                             it->second.Keep ? "true" : "false",
                             it->second.DoNotKeep ? "true" : "false");
                         Y_VERIFY(!it->second.DoNotKeep);

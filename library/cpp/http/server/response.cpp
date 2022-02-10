@@ -39,10 +39,10 @@ void THttpResponse::OutTo(IOutputStream& os) const {
 
     char buf[50];
 
-    if (!Content.empty()) { 
+    if (!Content.empty()) {
         TMemoryOutput mo(buf, sizeof(buf));
 
-        mo << Content.size(); 
+        mo << Content.size();
 
         parts.push_back(IOutputStream::TPart(TStringBuf("Content-Length: ")));
         parts.push_back(IOutputStream::TPart(buf, mo.Buf() - buf));
@@ -52,11 +52,11 @@ void THttpResponse::OutTo(IOutputStream& os) const {
     // content
     parts.push_back(IOutputStream::TPart::CrLf());
 
-    if (!Content.empty()) { 
+    if (!Content.empty()) {
         parts.push_back(IOutputStream::TPart(Content));
     }
 
-    os.Write(parts.data(), parts.size()); 
+    os.Write(parts.data(), parts.size());
 }
 
 template <>

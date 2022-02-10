@@ -67,7 +67,7 @@ private:
             res << ":\n\n" << TStringBuf(messageStr) << "\n\n";
         }
 
-        UdfTerminate(res.data()); 
+        UdfTerminate(res.data());
     }
 
     void RegisterDependencies() const final {

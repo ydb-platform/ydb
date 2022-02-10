@@ -182,7 +182,7 @@ TNodePtr TContext::GetPrefixedPath(const TString& cluster, const TDeferredAtom& 
         auto* providerPrefix = ProviderPathPrefixes.FindPtr(*provider);
         if (providerPrefix && !providerPrefix->empty()) {
             return AddTablePathPrefix(*this, *providerPrefix, path);
-        } else if (!PathPrefix.empty()) { 
+        } else if (!PathPrefix.empty()) {
             return AddTablePathPrefix(*this, PathPrefix, path);
         }
 
@@ -302,7 +302,7 @@ TString TContext::AddImport(const TVector<TString>& modulePath) {
 
 TString TContext::AddSimpleUdf(const TString& udf) {
     auto& name = SimpleUdfs[udf];
-    if (name.empty()) { 
+    if (name.empty()) {
         name = TStringBuilder() << "Udf" << SimpleUdfs.size();
     }
 

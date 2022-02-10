@@ -75,7 +75,7 @@ namespace NTest {
                         ythrow yexception()
                             << "Cell at " << info->Key << " is out of"
                             << " key size " <<  Scheme.Keys->Size();
-                    } else if (info->Key >= pair.Key.size()) { 
+                    } else if (info->Key >= pair.Key.size()) {
                         pair.Key.resize(info->Key + 1);
                     }
 

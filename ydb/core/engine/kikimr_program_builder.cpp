@@ -413,7 +413,7 @@ TRuntimeNode TKikimrProgramBuilder::Prepare(TRuntimeNode listOfVoid)
 TRuntimeNode TKikimrProgramBuilder::Parameter(
         const TStringBuf& name, TType* type)
 {
-    MKQL_ENSURE(!name.empty(), "Empty parameter name is not allowed"); 
+    MKQL_ENSURE(!name.empty(), "Empty parameter name is not allowed");
 
     TCallableBuilder callableBuilder(Env, "Parameter", type, true);
     callableBuilder.SetTypePayload(name);
@@ -645,7 +645,7 @@ TRuntimeNode TKikimrProgramBuilder::StepTxId() {
 }
 
 TRuntimeNode TKikimrProgramBuilder::SetResult(const TStringBuf& label, TRuntimeNode payload) {
-    MKQL_ENSURE(!label.empty(), "label must not be empty"); 
+    MKQL_ENSURE(!label.empty(), "label must not be empty");
     MKQL_ENSURE(CanExportType(payload.GetStaticType(), Env),
         TStringBuilder() << "Failed to export type:" << *payload.GetStaticType());
     TCallableBuilder builder(Env, "SetResult", Env.GetTypeOfVoid());

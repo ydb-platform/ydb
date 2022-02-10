@@ -31,9 +31,9 @@ namespace NKikimr {
         }
 
         bool TAllocChunkRecoveryLogRec::ParseFromString(const TString &data) {
-            if (data.size() != sizeof(ui32) + sizeof(ui64)) // refPointLsn(ui64) (for backward compatibility, can be removed) 
+            if (data.size() != sizeof(ui32) + sizeof(ui64)) // refPointLsn(ui64) (for backward compatibility, can be removed)
                 return false;
-            const char *cur = data.data(); 
+            const char *cur = data.data();
             ChunkId = ReadUnaligned<ui32>(cur);
 
             return true;
@@ -62,8 +62,8 @@ namespace NKikimr {
 
         bool TFreeChunkRecoveryLogRec::ParseFromString(const TString &data) {
             ChunkIds.clear();
-            const char *cur = data.data(); 
-            const char *end = cur + data.size(); 
+            const char *cur = data.data();
+            const char *end = cur + data.size();
             if (size_t(end - cur) < sizeof(ui64) + sizeof(ui32))
                 return false;
 
@@ -115,9 +115,9 @@ namespace NKikimr {
             TString lbSerialized;
             bool res = proto.SerializeToString(&lbSerialized);
             Y_VERIFY(res);
-            ui16 lbSerializedSize = lbSerialized.size(); 
+            ui16 lbSerializedSize = lbSerialized.size();
             str.Write(&lbSerializedSize, sizeof(ui16));
-            str.Write(lbSerialized.data(), lbSerializedSize); 
+            str.Write(lbSerialized.data(), lbSerializedSize);
 
             // Ingress
             ui64 ingressData = Ingress.Raw();
@@ -134,8 +134,8 @@ namespace NKikimr {
         }
 
         bool TPutRecoveryLogRec::ParseFromString(const TString &data) {
-            const char *cur = data.data(); 
-            const char *end = cur + data.size(); 
+            const char *cur = data.data();
+            const char *end = cur + data.size();
 
             // LogoBlobID
             if (size_t(end - cur) < sizeof(ui16))

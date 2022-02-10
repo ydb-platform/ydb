@@ -20,7 +20,7 @@ static PyObject *
 _my_PyUnicode_FromChar32(const cffi_char32_t *w, Py_ssize_t size)
 {
     PyObject *unicode;
-    Py_ssize_t i; 
+    Py_ssize_t i;
     Py_ssize_t alloc;
     const cffi_char32_t *orig_w;
 
@@ -38,7 +38,7 @@ _my_PyUnicode_FromChar32(const cffi_char32_t *w, Py_ssize_t size)
 
     /* Copy the wchar_t data into the new object */
     {
-        Py_UNICODE *u; 
+        Py_UNICODE *u;
         u = PyUnicode_AS_UNICODE(unicode);
         for (i = size; i > 0; i--) {
             if (*w > 0xFFFF) {

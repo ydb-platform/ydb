@@ -47,7 +47,7 @@ namespace NRedo {
                 auto *legacy = reinterpret_cast<const TChunk_Legacy*>(chunk.data());
 
                 if (Y_LIKELY(legacy->RootId & (ui32(1) << 31))) {
-                    auto *label = reinterpret_cast<const TChunk*>(chunk.data()); 
+                    auto *label = reinterpret_cast<const TChunk*>(chunk.data());
 
                     Handle(label, chunk);
                 } else {
@@ -120,11 +120,11 @@ namespace NRedo {
             if (chunk.size() < sizeof(TEvBegin_v0)) {
                 Y_Fail("EvBegin event is tool small, " << chunk.size() << "b");
             } else if (chunk.size() < sizeof(TEvBegin_v1)) {
-                auto *ev = reinterpret_cast<const TEvBegin_v0*>(chunk.data()); 
+                auto *ev = reinterpret_cast<const TEvBegin_v0*>(chunk.data());
 
                 Base.DoBegin(ev->Tail, ev->Head, 0 /* scn */, 0 /* stamp */);
             } else {
-                auto *ev = reinterpret_cast<const TEvBegin_v1*>(chunk.data()); 
+                auto *ev = reinterpret_cast<const TEvBegin_v1*>(chunk.data());
 
                 Y_VERIFY(ev->Serial > 0, "Invalid serial in EvBegin record");
 
@@ -138,7 +138,7 @@ namespace NRedo {
 
             using TGlobId = TStdPad<NPageCollection::TGlobId>;
 
-            auto *ev = reinterpret_cast<const TEvAnnex*>(chunk.data()); 
+            auto *ev = reinterpret_cast<const TEvAnnex*>(chunk.data());
             auto *raw = reinterpret_cast<const TGlobId*>(ev + 1);
 
             Base.DoAnnex({ raw, ev->Items });
@@ -156,7 +156,7 @@ namespace NRedo {
 
         void DoUpdate(const TArrayRef<const char> chunk)
         {
-            auto *ev = reinterpret_cast<const TEvUpdate*>(chunk.data()); 
+            auto *ev = reinterpret_cast<const TEvUpdate*>(chunk.data());
 
             if (Base.NeedIn(ev->Table)) {
                 const char *buf = chunk.begin() + sizeof(*ev);

@@ -17,10 +17,10 @@ Y_UNIT_TEST_SUITE(ReadBatcher) {
                 ranges.emplace_back(start, end);
             }
         }
-        for (ui32 a = 0; a < ranges.size(); ++a) { 
-            for (ui32 b = 0; b < ranges.size(); ++b) { 
-                for (ui32 c = 0; c < ranges.size(); ++c) { 
-                    for (ui32 d = 0; d < ranges.size(); ++d) { 
+        for (ui32 a = 0; a < ranges.size(); ++a) {
+            for (ui32 b = 0; b < ranges.size(); ++b) {
+                for (ui32 c = 0; c < ranges.size(); ++c) {
+                    for (ui32 d = 0; d < ranges.size(); ++d) {
                         TDynBitMap bm;
                         TRangeSet<ui32> range;
                         for (const auto& r : {ranges[a], ranges[b], ranges[c], ranges[d]}) {
@@ -50,7 +50,7 @@ Y_UNIT_TEST_SUITE(ReadBatcher) {
             TString data(chunkSize, ' ');
             ui64 pattern = RandomNumber<ui64>();
             for (ui32 pos = 0; pos + sizeof(ui64) <= chunkSize; pos += sizeof(ui64)) {
-                *reinterpret_cast<ui64 *>(const_cast<char *>(data.data()) + pos) = pattern; 
+                *reinterpret_cast<ui64 *>(const_cast<char *>(data.data()) + pos) = pattern;
             }
             chunks.emplace(chunkIdx, data);
         }
@@ -76,7 +76,7 @@ Y_UNIT_TEST_SUITE(ReadBatcher) {
         for (;;) {
             ui32 action = rng() % 100;
             if (pendingReads && action < 20) {
-                ui32 index = rng() % pendingReads.size(); 
+                ui32 index = rng() % pendingReads.size();
                 std::unique_ptr<NPDisk::TEvChunkRead> msg = std::move(pendingReads[index]);
                 pendingReads.erase(pendingReads.begin() + index);
                 NPDisk::TEvChunkReadResult result(NKikimrProto::OK, msg->ChunkIdx, msg->Offset, msg->Cookie, 0, "");

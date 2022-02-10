@@ -88,7 +88,7 @@ class TMutableFunctionRegistry: public IMutableFunctionRegistry
         }
 
         const TString& GetError() const { return Error; }
-        bool HasError() const { return !Error.empty(); } 
+        bool HasError() const { return !Error.empty(); }
 
     private:
         TUdfModulesMap& ModulesMap;
@@ -457,7 +457,7 @@ void FindUdfsInDir(const TString& dirPath, TVector<TString>* paths)
     static const TStringBuf libPrefix = TStringBuf(MKQL_UDF_LIB_PREFIX);
     static const TStringBuf libSuffix = TStringBuf(MKQL_UDF_LIB_SUFFIX);
 
-    if (!dirPath.empty()) { 
+    if (!dirPath.empty()) {
         std::vector<TString> dirs;
         StringSplitter(dirPath).Split(';').AddTo(&dirs);
 

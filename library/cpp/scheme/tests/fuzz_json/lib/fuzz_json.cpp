@@ -79,7 +79,7 @@ namespace NSc::NUt {
 
 
     void FuzzJson(TStringBuf wire) {
-        if (wire.size() < 2) { 
+        if (wire.size() < 2) {
             return;
         }
 

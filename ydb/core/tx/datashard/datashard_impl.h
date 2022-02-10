@@ -2108,7 +2108,7 @@ protected:
 
     void Enqueue(STFUNC_SIG) override {
         LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::StateInit unhandled event type: " << ev->GetTypeRewrite()
-                           << " event: " << (ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?")); 
+                           << " event: " << (ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"));
     }
 
     // In this state we are not handling external pipes to datashard tablet (it's just another init phase)
@@ -2120,7 +2120,7 @@ protected:
         default:
             if (!HandleDefaultEvents(ev, ctx)) {
                 LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::StateInactive unhandled event type: " << ev->GetTypeRewrite()
-                           << " event: " << (ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?")); 
+                           << " event: " << (ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"));
             }
             break;
         }
@@ -2231,7 +2231,7 @@ protected:
             if (!HandleDefaultEvents(ev, ctx)) {
                 LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD,
                            "TDataShard::StateWork unhandled event type: "<< ev->GetTypeRewrite()
-                           << " event: " << (ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?")); 
+                           << " event: " << (ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"));
             }
             break;
         }
@@ -2251,7 +2251,7 @@ protected:
         default:
             if (!HandleDefaultEvents(ev, ctx)) {
                 LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::StateWorkAsFollower unhandled event type: " << ev->GetTypeRewrite()
-                           << " event: " << (ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?")); 
+                           << " event: " << (ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"));
             }
             break;
         }
@@ -2266,7 +2266,7 @@ protected:
         default:
             LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::BrokenState at tablet " << TabletID()
                        << " unhandled event type: " << ev->GetTypeRewrite()
-                       << " event: " << (ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?")); 
+                       << " event: " << (ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"));
             ctx.Send(ev->ForwardOnNondelivery(TEvents::TEvUndelivered::ReasonActorUnknown));
             break;
         }

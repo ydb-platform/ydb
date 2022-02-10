@@ -3441,7 +3441,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 TString tableDesc = std::get<6>(rec);
                 ui32 nRetries = std::get<7>(rec);
 
-                Y_VERIFY(tableName.size() > 0); 
+                Y_VERIFY(tableName.size() > 0);
 
                 TTableInfo::TPtr tableInfo = Self->Tables.at(pathId);
                 Y_VERIFY(tableInfo.Get() != nullptr);

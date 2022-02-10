@@ -404,7 +404,7 @@ void THttpHeaderParserTestSuite::TestHreflangOnLongInput() {
     httpHeaderParser->Init(&httpHeader);
     TStringBuf testInput(hreflang_ut_in);
     TStringBuf testOut(hreflang_ut_out);
-    i32 result = httpHeaderParser->Execute(testInput.data(), testInput.size()); 
+    i32 result = httpHeaderParser->Execute(testInput.data(), testInput.size());
     UNIT_ASSERT_VALUES_EQUAL(result, 2);
     UNIT_ASSERT_VALUES_EQUAL(httpHeader.hreflangs, testOut);
     TestFinish();
@@ -496,11 +496,11 @@ Y_UNIT_TEST_SUITE(TestHttpChunkParser) {
     }
 
     static THttpChunkParser parseByteByByte(const TStringBuf& blob, const TVector<int>& states) {
-        UNIT_ASSERT(states.size() <= blob.size()); 
+        UNIT_ASSERT(states.size() <= blob.size());
         THttpChunkParser parser{initParser()};
         for (size_t n = 0; n < states.size(); n++) {
             const TStringBuf d{blob, n, 1};
-            int code = parser.Execute(d.data(), d.size()); 
+            int code = parser.Execute(d.data(), d.size());
             Cout << TString(d).Quote() << " " << code << Endl;
             UNIT_ASSERT_EQUAL(code, states[n]);
         }

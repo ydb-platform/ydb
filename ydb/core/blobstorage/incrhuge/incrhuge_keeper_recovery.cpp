@@ -108,7 +108,7 @@ namespace NKikimr {
             TDynBitMap& deletedItems = delIt->second;
 
             // traverse index and extract required items
-            for (ui32 i = 0; i < msg.Index.size(); ++i) { 
+            for (ui32 i = 0; i < msg.Index.size(); ++i) {
                 const TBlobIndexRecord& record = msg.Index[i];
                 if (!deletedItems.Get(i) && record.Owner == item.Owner && record.Lsn >= item.FirstLsn) {
                     item.Items.push_back(TEvIncrHugeInitResult::TItem{
@@ -174,14 +174,14 @@ namespace NKikimr {
                 }
 
                 TChunkSerNum chunkSerNum(chunk.GetChunkSerNum());
-                str << Sprintf("{Chunk# %" PRIu32 "@%s State# %s}", chunk.GetChunkIdx(), chunkSerNum.ToString().data(), 
+                str << Sprintf("{Chunk# %" PRIu32 "@%s State# %s}", chunk.GetChunkIdx(), chunkSerNum.ToString().data(),
                         state);
             }
             str << "] Deletes# [";
             first = true;
             for (const auto& chunk : msg.Deletes.GetChunks()) {
                 str << (first ? first = false, "" : " ");
-                str << Sprintf("{ChunkSerNum# %s Items# [", TChunkSerNum(chunk.GetChunkSerNum()).ToString().data()); 
+                str << Sprintf("{ChunkSerNum# %s Items# [", TChunkSerNum(chunk.GetChunkSerNum()).ToString().data());
                 bool itemFirst = true;
                 TDynBitMap deletedItems;
                 DeserializeDeletes(deletedItems, chunk);
@@ -196,8 +196,8 @@ namespace NKikimr {
                 str << (first ? first = false, "" : " ") << owner.GetOwner() << ": " << owner.GetSeqNo();
             }
             str << Sprintf("} CurrentSerNum# %s NextLsn# %" PRIu64,
-                    TChunkSerNum(msg.Chunks.GetCurrentSerNum()).ToString().data(), msg.NextLsn); 
-            IHLOG_DEBUG(ctx, "ApplyReadLog %s", str.Str().data()); 
+                    TChunkSerNum(msg.Chunks.GetCurrentSerNum()).ToString().data(), msg.NextLsn);
+            IHLOG_DEBUG(ctx, "ApplyReadLog %s", str.Str().data());
 
             // apply LSN and set starting points flag
             Keeper.Logger.SetLsnOnRecovery(msg.NextLsn, msg.IssueInitialStartingPoints);
@@ -345,7 +345,7 @@ namespace NKikimr {
             TChunkInfo& chunk = Keeper.State.Chunks.at(scanResult.ChunkIdx);
 
             IHLOG_DEBUG(ctx, "ProcessScanResult ChunkIdx# %" PRIu32 " ChunkSerNum# %s IndexOnly# %s IndexValid# %s",
-                    scanResult.ChunkIdx, chunk.ChunkSerNum.ToString().data(), scanResult.IndexOnly ? "true" : "false", 
+                    scanResult.ChunkIdx, chunk.ChunkSerNum.ToString().data(), scanResult.IndexOnly ? "true" : "false",
                     scanResult.IndexValid ? "true" : "false");
 
             if (scanResult.Status == NKikimrProto::NODATA) {
@@ -358,7 +358,7 @@ namespace NKikimr {
                 ui32 numUsedBlocks = 0;
                 ui32 offsetInBlocks = 0;
                 TVector<TBlobDeleteLocator> deleteLocators;
-                for (ui32 index = 0; index < scanResult.Index.size(); ++index) { 
+                for (ui32 index = 0; index < scanResult.Index.size(); ++index) {
                     const TBlobIndexRecord& record = scanResult.Index[index];
 
                     // calculate item size in blocks
@@ -407,8 +407,8 @@ namespace NKikimr {
                                 // chunks are the same; this could happen if defragmenter was processing the current
                                 // chunk we were writing into, but this is completely incorrect behavior
                                 Y_FAIL("duplicate records; Old# %s New# %s ChunkSerNum# %s index# %" PRIu32,
-                                        existing->ToString().data(), locator.ToString().data(), 
-                                        existingChunk.ChunkSerNum.ToString().data(), index); 
+                                        existing->ToString().data(), locator.ToString().data(),
+                                        existingChunk.ChunkSerNum.ToString().data(), index);
                             }
 
                             // schedule this record for deletion; do not delete it right now as it can be occasionally
@@ -431,7 +431,7 @@ namespace NKikimr {
 
                 // update number of used blocks
                 chunk.NumUsedBlocks = numUsedBlocks;
-                chunk.NumItems = scanResult.Index.size(); 
+                chunk.NumItems = scanResult.Index.size();
 
                 // make actual deletes
                 Keeper.Deleter.DeleteDefrag(std::move(deleteLocators), ctx);

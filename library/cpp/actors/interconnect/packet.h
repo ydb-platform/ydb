@@ -260,7 +260,7 @@ public:
     }
 
     bool DropBufs(size_t& amount) {
-        while (BufferIndex != Bufs.size()) { 
+        while (BufferIndex != Bufs.size()) {
             TConstIoVec& item = Bufs[BufferIndex];
             // calculate number of bytes to the end in current buffer
             const size_t remain = item.Size - FirstBufferOffset;

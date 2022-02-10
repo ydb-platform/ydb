@@ -26,7 +26,7 @@ void DoTest(const TCompressorTable& table, const TVector<TString>& lines) {
         compSize += compressed.size();
         TStringBuf in(compressed.data(), compressed.size());
         deCompressor.Decompress(in, &decompressed);
-        if (decompressed.size() != line.size() || memcmp(decompressed.data(), line.data(), decompressed.size())) { 
+        if (decompressed.size() != line.size() || memcmp(decompressed.data(), line.data(), decompressed.size())) {
             Cout << i << "\n";
             Cout << line << "\n"
                  << TString(decompressed.data(), decompressed.size()) << "\n";

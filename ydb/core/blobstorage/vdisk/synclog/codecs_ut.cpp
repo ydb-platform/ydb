@@ -24,8 +24,8 @@ void CheckCodec(const TVector<TNumber> &v, TCodecPtr codec = new TCodec) {
 
     TStringBuf res(decoded.Begin(), decoded.End());
 
-    UNIT_ASSERT(src.size() == res.size()); 
-    UNIT_ASSERT(memcmp(src.data(), res.data(), src.size()) == 0); 
+    UNIT_ASSERT(src.size() == res.size());
+    UNIT_ASSERT(memcmp(src.data(), res.data(), src.size()) == 0);
 }
 
 Y_UNIT_TEST_SUITE(VarLengthIntCodec) {

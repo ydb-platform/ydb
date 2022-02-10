@@ -216,7 +216,7 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
 
     for (const auto& col : descr.GetColumns()) {
         TUserColumn& column = Columns[col.GetId()];
-        if (column.Name.empty()) { 
+        if (column.Name.empty()) {
             column = TUserColumn(col.GetTypeId(), col.GetName());
         }
         column.Family = col.GetFamily();

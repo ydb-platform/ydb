@@ -9,7 +9,7 @@ namespace NMonitoring {
 
         auto [it, isInserted] = StrMap_.try_emplace(str, Max<ui32>(), 0);
         if (isInserted) {
-            BytesSize_ += str.size(); 
+            BytesSize_ += str.size();
             it->second.Index = StrVector_.size();
             StrVector_.emplace_back(it->first, &it->second);
         }

@@ -31,7 +31,7 @@ namespace NCodecs {
                 if (!(b & 0x80)) {
                     value = result;
                     return;
-                } else if (Y_UNLIKELY(r.empty())) { 
+                } else if (Y_UNLIKELY(r.empty())) {
                     break;
                 }
             }
@@ -54,7 +54,7 @@ namespace NCodecs {
             ui32 result = static_cast<ui8>(r[0]);
             r.Skip(1);
             if (result >= 0x80) {
-                Y_ENSURE_EX(!r.empty(), TCodecException() << "Bad data"); 
+                Y_ENSURE_EX(!r.empty(), TCodecException() << "Bad data");
                 result = ((result << 8) & 0x7FFF) | static_cast<ui8>(r[0]);
                 r.Skip(1);
             }
@@ -140,8 +140,8 @@ namespace NCodecs {
         template <class TTraits>
         Y_FORCE_INLINE void EncodeImpl(TStringBuf r, TBuffer& b) const {
             b.Clear();
-            b.Reserve(r.size()); 
-            while (!r.empty()) { 
+            b.Reserve(r.size());
+            while (!r.empty()) {
                 size_t sz = 0;
                 ui32 val = (ui32)-1;
                 Encoder.FindLongestPrefix(r, &sz, &val);
@@ -153,12 +153,12 @@ namespace NCodecs {
         template <class TTraits>
         Y_FORCE_INLINE void DecodeImpl(TStringBuf r, TBuffer& b) const {
             b.Clear();
-            b.Reserve(r.size()); 
+            b.Reserve(r.size());
             ui32 v = 0;
-            while (!r.empty()) { 
+            while (!r.empty()) {
                 TTraits::Read(r, v);
                 TStringBuf s = DoDecode(v);
-                b.Append(s.data(), s.size()); 
+                b.Append(s.data(), s.size());
             }
         }
 

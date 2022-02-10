@@ -175,7 +175,7 @@ bool ApplyPositionAnnotationsInplace(TAstNode& root, ui32 annotationIndex) {
 TAstNode* PositionAsNode(TPosition position, TMemoryPool& pool) {
     TStringBuilder str;
     str << position.Row << ':' << position.Column;
-    if (!position.File.empty()) { 
+    if (!position.File.empty()) {
         str << ':' << position.File;
     }
 

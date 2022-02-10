@@ -206,7 +206,7 @@ public:
         if (msg->Status != NKikimrProto::OK) {
             PipeClient = TActorId();
             ErrorReason = Sprintf("Client pipe to Hive connection error, Status# %s, Marker# HC10",
-                NKikimrProto::EReplyStatus_Name(msg->Status).data()); 
+                NKikimrProto::EReplyStatus_Name(msg->Status).data());
             return SendReplyAndDie(CreateErrorReply(MSTATUS_ERROR, ctx), ctx);
         }
     }
@@ -237,7 +237,7 @@ public:
         THolder<ResponseType> result(new ResponseType());
         auto &rec = result->Record;
         rec.SetStatus(status);
-        if (ErrorReason.size()) { 
+        if (ErrorReason.size()) {
             rec.SetErrorReason(ErrorReason);
         } else {
             rec.SetErrorReason("Unknown, Marker# HC1");

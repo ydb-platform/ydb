@@ -128,7 +128,7 @@ namespace NActors {
             Y_VERIFY(Socket);
             PeerAddr = TString::Uninitialized(1024);
             if (GetRemoteAddr(*Socket, PeerAddr.Detach(), PeerAddr.size())) {
-                PeerAddr.resize(strlen(PeerAddr.data())); 
+                PeerAddr.resize(strlen(PeerAddr.data()));
             } else {
                 PeerAddr.clear();
             }
@@ -223,7 +223,7 @@ namespace NActors {
         void ProcessUnexpectedEvent(TAutoPtr<IEventHandle> ev) override {
             switch (const ui32 type = ev->GetTypeRewrite()) {
                 case TEvents::TSystem::Wakeup:
-                    Fail(TEvHandshakeFail::HANDSHAKE_FAIL_TRANSIENT, Sprintf("Handshake timed out, State# %s", State.data()), true); 
+                    Fail(TEvHandshakeFail::HANDSHAKE_FAIL_TRANSIENT, Sprintf("Handshake timed out, State# %s", State.data()), true);
                     [[fallthrough]];
 
                 case ui32(ENetwork::NodeInfo):
@@ -318,7 +318,7 @@ namespace NActors {
                         }
                     }
                     if (!matching) {
-                        errorCallback(Sprintf("Peer ClusterUUID# %s mismatch, AcceptUUID# %s", uuid->data(), formatList(Common->AcceptUUID).data())); 
+                        errorCallback(Sprintf("Peer ClusterUUID# %s mismatch, AcceptUUID# %s", uuid->data(), formatList(Common->AcceptUUID).data()));
                     }
                 }
                 return; // remote side did not fill in this field -- old version, symmetric protocol is not supported
@@ -342,7 +342,7 @@ namespace NActors {
             }
 
             // no match
-            errorCallback(Sprintf("Peer ClusterUUID# %s mismatch, AcceptUUID# %s", remoteUUID.data(), formatList(Common->AcceptUUID).data())); 
+            errorCallback(Sprintf("Peer ClusterUUID# %s mismatch, AcceptUUID# %s", remoteUUID.data(), formatList(Common->AcceptUUID).data()));
         }
 
         void ParsePeerScopeId(const NActorsInterconnect::TScopeId& proto) {
@@ -562,7 +562,7 @@ namespace NActors {
             // extract peer node id from the peer
             PeerNodeId = request.Header.SelfVirtualId.NodeId();
             if (!PeerNodeId) {
-                Y_VERIFY_DEBUG(false, "PeerNodeId is zero request# %s", request.ToString().data()); 
+                Y_VERIFY_DEBUG(false, "PeerNodeId is zero request# %s", request.ToString().data());
                 Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "SelfVirtualId.NodeId is empty in initial packet");
             }
             UpdatePrefix();
@@ -646,8 +646,8 @@ namespace NActors {
                     generateError(Sprintf("Incorrect ReceiverNodeId# %" PRIu32 " from the peer, expected# %" PRIu32,
                         request.GetReceiverNodeId(), SelfActorId.NodeId()));
                 } else if (request.GetReceiverHostName() != Common->TechnicalSelfHostName) {
-                    generateError(Sprintf("ReceiverHostName# %s mismatch, expected# %s", request.GetReceiverHostName().data(), 
-                        Common->TechnicalSelfHostName.data())); 
+                    generateError(Sprintf("ReceiverHostName# %s mismatch, expected# %s", request.GetReceiverHostName().data(),
+                        Common->TechnicalSelfHostName.data()));
                 }
                 ValidateVersionTag(request, generateError);
 

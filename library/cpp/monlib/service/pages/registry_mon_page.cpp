@@ -11,7 +11,7 @@ namespace NMonitoring {
         const auto formatStr = TStringBuf{request.GetPathInfo()}.RNextTok('/');
         auto& out = request.Output();
 
-        if (!formatStr.empty()) { 
+        if (!formatStr.empty()) {
             IMetricEncoderPtr encoder;
             TString resp;
 

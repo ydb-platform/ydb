@@ -56,7 +56,7 @@ namespace NTypeAnnImpl {
     bool IsValidSmallData(TExprNode& atomNode, const TStringBuf& type, TExprContext& ctx, NKikimr::NUdf::EDataSlot slot, TMaybe<TString>& plainValue) {
         bool isValid;
         if (atomNode.Flags() & TNodeFlags::BinaryContent) {
-            if (atomNode.Content().size() != NKikimr::NUdf::GetDataTypeInfo(slot).FixedSize) { 
+            if (atomNode.Content().size() != NKikimr::NUdf::GetDataTypeInfo(slot).FixedSize) {
                 isValid = false;
             } else {
                 const auto data = *reinterpret_cast<const T*>(atomNode.Content().data());
@@ -7253,7 +7253,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         for (ui32 i = tupleSize; i < type->GetArgumentsSize() - type->GetOptionalArgumentsCount(); ++i) {
             if (!usedIndices.contains(i)) {
                 const auto& arg = type->GetArguments()[i];
-                if (arg.Name.empty()) { 
+                if (arg.Name.empty()) {
                     ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(2)->Pos()), TStringBuilder() << "Argument # " << (i + 1)
                         << " is required, but has not been set"));
                 }
@@ -10920,7 +10920,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return false;
         }
         auto typeExpr = ctx.Expr.Builder(resourceArg->Pos()).Callable("ParseType")
-                .Atom(0, TString(resourceTag.data()+ResourceQueuePrefix.size(), resourceTag.size()-ResourceQueuePrefix.size())) 
+                .Atom(0, TString(resourceTag.data()+ResourceQueuePrefix.size(), resourceTag.size()-ResourceQueuePrefix.size()))
             .Seal().Build();
         auto parseTypeResult = ParseTypeWrapper(typeExpr, typeExpr, ctx);
         if (parseTypeResult == IGraphTransformer::TStatus::Error) {

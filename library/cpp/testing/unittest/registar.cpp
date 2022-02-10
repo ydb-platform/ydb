@@ -35,7 +35,7 @@ currentTest;
 ::NUnitTest::TRaiseErrorHandler RaiseErrorHandler;
 
 void ::NUnitTest::NPrivate::RaiseError(const char* what, const TString& msg, bool fatalFailure) {
-    Y_VERIFY(UnittestThread, "%s in non-unittest thread with message:\n%s", what, msg.data()); 
+    Y_VERIFY(UnittestThread, "%s in non-unittest thread with message:\n%s", what, msg.data());
     Y_VERIFY(GetCurrentTest());
 
     if (RaiseErrorHandler) {
@@ -46,7 +46,7 @@ void ::NUnitTest::NPrivate::RaiseError(const char* what, const TString& msg, boo
     // Default handler
     TBackTrace bt;
     bt.Capture();
-    GetCurrentTest()->AddError(msg.data(), bt.PrintToString()); 
+    GetCurrentTest()->AddError(msg.data(), bt.PrintToString());
     if (::NUnitTest::ContinueOnFail || !fatalFailure) {
         return;
     }
@@ -414,7 +414,7 @@ NUnitTest::TTestBase::TCleanUp::~TCleanUp() {
     try {
         Base_->AfterTest();
     } catch (...) {
-        Base_->AddError(CurrentExceptionMessage().data()); 
+        Base_->AddError(CurrentExceptionMessage().data());
     }
     ::NUnitTest::NPrivate::SetUnittestThread(false);
     ::NUnitTest::NPrivate::SetCurrentTest(nullptr);
@@ -434,7 +434,7 @@ namespace {
     struct TCmp {
         template <class T>
         inline bool operator()(const T& l, const T& r) const noexcept {
-            return stricmp(Fix(l.Name().data()), Fix(r.Name().data())) < 0; 
+            return stricmp(Fix(l.Name().data()), Fix(r.Name().data())) < 0;
         }
 
         static inline const char* Fix(const char* n) noexcept {

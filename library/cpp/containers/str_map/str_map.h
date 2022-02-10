@@ -6,7 +6,7 @@
 #include <util/generic/buffer.h>
 #include <util/str_stl.h> // less<> and equal_to<> for const char*
 #include <utility>
-#include <util/generic/noncopyable.h> 
+#include <util/generic/noncopyable.h>
 
 template <class T, class HashFcn = THash<const char*>, class EqualTo = TEqualTo<const char*>, class Alloc = std::allocator<const char*>>
 class string_hash;

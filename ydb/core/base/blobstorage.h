@@ -896,12 +896,12 @@ struct TEvBlobStorage {
             , Tactic(tactic)
         {
             Y_VERIFY(Id, "EvPut invalid: LogoBlobId must have non-zero tablet field, id# %s", Id.ToString().c_str());
-            Y_VERIFY(buffer.size() < (40 * 1024 * 1024), 
+            Y_VERIFY(buffer.size() < (40 * 1024 * 1024),
                    "EvPut invalid: LogoBlobId# %s buffer.Size# %zu",
-                   id.ToString().data(), buffer.size()); 
-            Y_VERIFY(buffer.size() == id.BlobSize(), 
+                   id.ToString().data(), buffer.size());
+            Y_VERIFY(buffer.size() == id.BlobSize(),
                    "EvPut invalid: LogoBlobId# %s buffer.Size# %zu",
-                   id.ToString().data(), buffer.size()); 
+                   id.ToString().data(), buffer.size());
             REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&id, sizeof(id));
             REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(buffer.Data(), buffer.size());
             REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&deadline, sizeof(deadline));
@@ -957,7 +957,7 @@ struct TEvBlobStorage {
             Y_UNUSED(isFull);
             TStringStream str;
             str << "TEvPutResult {Id# " << Id.ToString();
-            str << " Status# " << NKikimrProto::EReplyStatus_Name(Status).data(); 
+            str << " Status# " << NKikimrProto::EReplyStatus_Name(Status).data();
             str << " StatusFlags# " << StatusFlags;
             if (ErrorReason.size()) {
                 str << " ErrorReason# \"" << ErrorReason << "\"";
@@ -1159,7 +1159,7 @@ struct TEvBlobStorage {
 
         TString Print(bool isFull) const {
             TStringStream str;
-            str << "TEvGetResult {Status# " << NKikimrProto::EReplyStatus_Name(Status).data(); 
+            str << "TEvGetResult {Status# " << NKikimrProto::EReplyStatus_Name(Status).data();
             str << " ResponseSz# " << ResponseSz;
             for (ui32 i = 0; i < ResponseSz; ++i) {
                 TResponse &response = Responses[i];
@@ -1194,7 +1194,7 @@ struct TEvBlobStorage {
         ui32 PayloadSizeBytes() const {
             ui32 size = 0;
             for (ui32 i = 0; i < ResponseSz; ++i) {
-                size += Responses[i].Buffer.size(); 
+                size += Responses[i].Buffer.size();
             }
             return size;
         }
@@ -1255,7 +1255,7 @@ struct TEvBlobStorage {
         TString Print(bool isFull) const {
             Y_UNUSED(isFull);
             TStringStream str;
-            str << "TEvBlockResult {Status# " << NKikimrProto::EReplyStatus_Name(Status).data(); 
+            str << "TEvBlockResult {Status# " << NKikimrProto::EReplyStatus_Name(Status).data();
             if (ErrorReason.size()) {
                 str << " ErrorReason# \"" << ErrorReason << "\"";
             }
@@ -1634,7 +1634,7 @@ struct TEvBlobStorage {
 
         TString Print(bool isFull) const {
             TStringStream str;
-            str << "TEvDiscoverResult {Status# " << NKikimrProto::EReplyStatus_Name(Status).data(); 
+            str << "TEvDiscoverResult {Status# " << NKikimrProto::EReplyStatus_Name(Status).data();
             str << " BlockedGeneration# " << BlockedGeneration;
             str << " Id# " << Id.ToString();
             str << " Size# " << Buffer.size();
@@ -1732,7 +1732,7 @@ struct TEvBlobStorage {
 
         TString Print(bool isFull) const {
             TStringStream str;
-            str << "TEvRangeResult {Status# " << NKikimrProto::EReplyStatus_Name(Status).data(); 
+            str << "TEvRangeResult {Status# " << NKikimrProto::EReplyStatus_Name(Status).data();
             str << " From# " << From.ToString();
             str << " To# " << To.ToString();
             str << " Size# " << Responses.size();
@@ -1906,7 +1906,7 @@ struct TEvBlobStorage {
             str << " RecordGeneration# " << RecordGeneration;
             str << " PerGenerationCounter# " << PerGenerationCounter;
             str << " Channel# " << Channel;
-            str << " Status# " << NKikimrProto::EReplyStatus_Name(Status).data(); 
+            str << " Status# " << NKikimrProto::EReplyStatus_Name(Status).data();
             if (ErrorReason.size()) {
                 str << " ErrorReason# \"" << ErrorReason << "\"";
             }
@@ -1960,7 +1960,7 @@ struct TEvBlobStorage {
         TString Print(bool isFull) const {
             Y_UNUSED(isFull);
             TStringStream str;
-            str << "TEvStatusResult {Status# " << NKikimrProto::EReplyStatus_Name(Status).data(); 
+            str << "TEvStatusResult {Status# " << NKikimrProto::EReplyStatus_Name(Status).data();
             str << " StatusFlags# ";
             StatusFlags.Output(str);
             if (ErrorReason.size()) {
@@ -2104,7 +2104,7 @@ inline bool SendPutToGroup(const TActorContext &ctx, ui32 groupId, TTabletStorag
         return id.TabletID() == storage->TabletID && expectedGroupId != Max<ui32>() && groupId == expectedGroupId;
     };
     Y_VERIFY(checkGroupId(), "groupId# %" PRIu32 " does not match actual one LogoBlobId# %s", groupId,
-        event->Id.ToString().data()); 
+        event->Id.ToString().data());
     return SendToBSProxy(ctx, groupId, event.Release(), cookie, std::move(traceId));
     // TODO(alexvru): check if return status is actually needed?
 }

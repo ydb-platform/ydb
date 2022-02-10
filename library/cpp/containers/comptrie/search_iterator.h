@@ -60,7 +60,7 @@ public:
         return NCompactTrie::Advance(DataPos, DataEnd, ValuePos, label, Trie->Packer);
     }
     inline bool Advance(const TKeyBuf& key) {
-        return Advance(key.data(), key.size()); 
+        return Advance(key.data(), key.size());
     }
     bool Advance(const TSymbol* key, size_t keylen);
     bool GetValue(TData* value = nullptr) const;

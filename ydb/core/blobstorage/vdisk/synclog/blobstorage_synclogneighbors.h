@@ -111,7 +111,7 @@ namespace NKikimr {
 
             TString ToString(char sep = '\0') const {
                 return Sprintf("{Global: %" PRIu64 " LocksNum: %" PRIu32 " Neighbors: %s}",
-                               GlobalSyncedLsn(), LocksNum, Neighbors.ToString(sep).data()); 
+                               GlobalSyncedLsn(), LocksNum, Neighbors.ToString(sep).data());
             }
 
             TSyncLogNeighbors(const TVDiskIdShort &selfVDisk,

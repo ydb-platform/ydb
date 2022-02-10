@@ -595,7 +595,7 @@ namespace NBus {
                              (int)(Now() - Message->GetHeader()->SendTime) / 1000,
                              (int)Pending.size(),
                              (int)Finished.size(),
-                             Status != MESSAGE_OK ? ToString(Status).data() : ""); 
+                             Status != MESSAGE_OK ? ToString(Status).data() : "");
 
         TJobStateVec::iterator it;
         for (it = Pending.begin(); it != Pending.end(); ++it) {
@@ -613,7 +613,7 @@ namespace NBus {
                              (int)Message->GetHeader()->Type,
                              Session->GetProto()->GetService(),
                              (int)(Now() - Message->GetHeader()->SendTime) / 1000,
-                             ToString(Status).data()); 
+                             ToString(Status).data());
         return strReturn;
     }
 

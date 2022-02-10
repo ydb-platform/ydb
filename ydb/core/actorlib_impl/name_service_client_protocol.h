@@ -20,7 +20,7 @@ public:
         msg->Port = port;
 
         MemLogPrintF("TResolveClientProtocol send name request: %s, %u",
-                     msg->Address.data(), (int)msg->Port); 
+                     msg->Address.data(), (int)msg->Port);
 
         ctx.Send(GetNameserviceActorId(), msg);
 

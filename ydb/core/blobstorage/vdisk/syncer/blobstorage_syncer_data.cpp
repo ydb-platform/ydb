@@ -219,7 +219,7 @@ namespace NKikimr {
     void TSyncNeighbors::ApplyChanges(const TActorContext &ctx,
                                       const NSyncer::TSyncerJobTask *task,
                                       TDuration syncTimeInterval) {
-        LOG_INFO(ctx, BS_SYNCER, VDISKP(LogPrefix, "JOB_DONE: %s", task->ToString().data())); 
+        LOG_INFO(ctx, BS_SYNCER, VDISKP(LogPrefix, "JOB_DONE: %s", task->ToString().data()));
 
         TDuration timeout = task->IsFullRecoveryTask() ? TDuration::Seconds(0) : syncTimeInterval;
         TInstant schTime = TAppData::TimeProvider->Now() + timeout;

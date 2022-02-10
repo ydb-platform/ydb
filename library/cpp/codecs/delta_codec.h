@@ -80,11 +80,11 @@ namespace NCodecs {
 
         ui8 Encode(TStringBuf s, TBuffer& b) const override {
             b.Clear();
-            if (s.empty()) { 
+            if (s.empty()) {
                 return 0;
             }
 
-            b.Reserve(s.size()); 
+            b.Reserve(s.size());
             TArrayRef<const T> tin{(const T*)s.data(), s.size() / sizeof(T)};
 
             const T* it = tin.begin();
@@ -117,11 +117,11 @@ namespace NCodecs {
 
         void Decode(TStringBuf s, TBuffer& b) const override {
             b.Clear();
-            if (s.empty()) { 
+            if (s.empty()) {
                 return;
             }
 
-            b.Reserve(s.size()); 
+            b.Reserve(s.size());
             TArrayRef<const T> tin{(const T*)s.data(), s.size() / sizeof(T)};
 
             TDecoder dec;

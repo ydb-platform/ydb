@@ -150,7 +150,7 @@ public:
             str << Sprintf("%016" PRIx64, item.first);
         }
         str << "]";
-        LOG_DEBUG(ctx, NActorsServices::TEST, "finished Init %s", str.Str().data()); 
+        LOG_DEBUG(ctx, NActorsServices::TEST, "finished Init %s", str.Str().data());
 
         auto refIt = referenceItems.begin();
         auto it = msg->Items.begin();
@@ -292,11 +292,11 @@ public:
         ctx.Send(KeeperId, new TEvIncrHugeWrite(Owner, lsn, meta, TString(data), std::make_unique<TPayload>(lsn, logoBlobId)));
 
         LOG_DEBUG(ctx, NActorsServices::TEST, "sent Write LogoBlobId# %s Lsn# %" PRIu64 " NumReq# %" PRIu32,
-                logoBlobId.ToString().data(), lsn, GetNumRequestsInFlight()); 
+                logoBlobId.ToString().data(), lsn, GetNumRequestsInFlight());
 
         // register in-flight write
         TBlobInfo blobInfo{{}, lsn, logoBlobId};
-        MD5().Update(data.data(), data.size()).Final(blobInfo.DataDigest); 
+        MD5().Update(data.data(), data.size()).Final(blobInfo.DataDigest);
         State.InFlightWrites.emplace(std::make_pair(lsn, logoBlobId), std::move(blobInfo));
     }
 
@@ -305,9 +305,9 @@ public:
         TPayload *payload = static_cast<TPayload *>(msg->Payload.get());
 
         LOG_DEBUG(ctx, NActorsServices::TEST, "finished Write Id# %016" PRIx64 " LogoBlobId# %s Lsn# %" PRIu64,
-                msg->Id, payload->LogoBlobId.ToString().data(), payload->Lsn); 
+                msg->Id, payload->LogoBlobId.ToString().data(), payload->Lsn);
 
-        Y_VERIFY(msg->Status == NKikimrProto::OK, "Status# %s", NKikimrProto::EReplyStatus_Name(msg->Status).data()); 
+        Y_VERIFY(msg->Status == NKikimrProto::OK, "Status# %s", NKikimrProto::EReplyStatus_Name(msg->Status).data());
 
         // find matching in-flight request
         auto it = State.InFlightWrites.find(std::make_pair(payload->Lsn, payload->LogoBlobId));
@@ -317,7 +317,7 @@ public:
         TDuration delta = Now() - State.StartTime;
         double speed = State.BytesWritten * 1000 * 1000 / delta.GetValue() / 1048576.0;
         LOG_INFO(ctx, NActorsServices::TEST, "BytesWritten# %" PRIu64 " MB ElapsedTime# %s Speed# %.2lf MB/s",
-                (State.BytesWritten + 512 * 1024) / 1048576, delta.ToString().data(), speed); 
+                (State.BytesWritten + 512 * 1024) / 1048576, delta.ToString().data(), speed);
 
         // insert new entry into confirmed state
         Y_VERIFY(!State.ConfirmedState.count(msg->Id));
@@ -354,7 +354,7 @@ public:
         TEvIncrHugeReadResult *msg = ev->Get();
         ui64 lsn = ev->Cookie;
         LOG_DEBUG(ctx, NActorsServices::TEST, "finished Read Status# %s Lsn# %" PRIu64,
-                NKikimrProto::EReplyStatus_Name(msg->Status).data(), lsn); 
+                NKikimrProto::EReplyStatus_Name(msg->Status).data(), lsn);
 
         Y_VERIFY(msg->Status == NKikimrProto::OK);
 
@@ -394,7 +394,7 @@ public:
         TIncrHugeBlobId id = ev->Cookie;
 
         LOG_DEBUG(ctx, NActorsServices::TEST, "finished Delete Status# %s Id# %016" PRIx64,
-                NKikimrProto::EReplyStatus_Name(msg->Status).data(), id); 
+                NKikimrProto::EReplyStatus_Name(msg->Status).data(), id);
 
         Y_VERIFY(msg->Status == NKikimrProto::OK);
 

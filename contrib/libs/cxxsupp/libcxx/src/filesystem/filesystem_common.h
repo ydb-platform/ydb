@@ -1,8 +1,8 @@
 //===----------------------------------------------------------------------===////
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions. 
-// See https://llvm.org/LICENSE.txt for license information. 
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception 
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===////
 
@@ -73,15 +73,15 @@ format_string_impl(const char* msg, va_list ap) {
   if (static_cast<size_t>(ret) < buf.size()) {
     result.assign(buf.data(), static_cast<size_t>(ret));
   } else {
-  // we did not provide a long enough buffer on our first attempt. The 
-  // return value is the number of bytes (excluding the null byte) that are 
-  // needed for formatting. 
+  // we did not provide a long enough buffer on our first attempt. The
+  // return value is the number of bytes (excluding the null byte) that are
+  // needed for formatting.
     size_t size_with_null = static_cast<size_t>(ret) + 1;
-  result.__resize_default_init(size_with_null - 1); 
+  result.__resize_default_init(size_with_null - 1);
     ret = ::vsnprintf(&result[0], size_with_null, msg, ap);
-  _LIBCPP_ASSERT(static_cast<size_t>(ret) == (size_with_null - 1), "TODO"); 
+  _LIBCPP_ASSERT(static_cast<size_t>(ret) == (size_with_null - 1), "TODO");
 }
-  return result; 
+  return result;
 }
 
 static _LIBCPP_FORMAT_PRINTF(1, 2) string

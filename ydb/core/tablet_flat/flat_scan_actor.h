@@ -678,7 +678,7 @@ namespace NOps {
 
             /* Each Flatten should have its trace on the same position */
 
-            Y_VERIFY(!trace || trace->Sieve.size() == Subset.Flatten.size() + 1); 
+            Y_VERIFY(!trace || trace->Sieve.size() == Subset.Flatten.size() + 1);
 
             /* After invocation of Finish(...) scan object is left on its
                 own and it has to handle self deletion if required. */

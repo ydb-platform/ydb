@@ -32,12 +32,12 @@ namespace NFmt {
             , Types(types)
             , Registry(reg)
         {
-            Y_VERIFY(cells.size() == Types.size(), "Cells and types size missmatch"); 
+            Y_VERIFY(cells.size() == Types.size(), "Cells and types size missmatch");
         }
 
         TOut& Do(TOut &out) const noexcept
         {
-            TDbTupleRef tp{ Types.begin(), Cells.begin(), ui32(Cells.size()) }; 
+            TDbTupleRef tp{ Types.begin(), Cells.begin(), ui32(Cells.size()) };
 
             return out << DbgPrintTuple(tp, *Registry);
         }

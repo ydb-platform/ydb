@@ -18,7 +18,7 @@ namespace {
         const double delta = args[1].GetOrDefault<double>(0.01);
         const double K = args[2].GetOrDefault<double>(25.0);
         if (delta == 0 || K / delta < 1) {
-            UdfTerminate((TStringBuilder() << Pos_ << " Invalid combination of delta/K values").data()); 
+            UdfTerminate((TStringBuilder() << Pos_ << " Invalid combination of delta/K values").data());
         }
 
         return TUnboxedValuePod(new TDigestResource(delta, K, args[0].Get<double>()));

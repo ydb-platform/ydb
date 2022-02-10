@@ -10,7 +10,7 @@
 
 namespace NCodecs {
     static inline ui32 Append(TBuffer& pool, TStringBuf data) {
-        pool.Append(data.data(), data.size()); 
+        pool.Append(data.data(), data.size());
         return pool.Size();
     }
 
@@ -74,7 +74,7 @@ namespace NCodecs {
             for (ui32 i = 1, sz = Decoder.size(); i < sz; ++i) {
                 TStringBuf s = DoDecode(i);
                 tmp2.push_back(std::make_pair(s, i - 1));
-                Y_ENSURE(s.size() == (Decoder[i] - Decoder[i - 1]), "learning invariant failed"); 
+                Y_ENSURE(s.size() == (Decoder[i] - Decoder[i - 1]), "learning invariant failed");
             }
 
             Sort(tmp2.begin(), tmp2.end());
@@ -82,7 +82,7 @@ namespace NCodecs {
             {
                 TEncoder::TBuilder builder(CTBF_PREFIX_GROUPED);
                 for (const auto& it : tmp2) {
-                    builder.Add(it.first.data(), it.first.size(), it.second); 
+                    builder.Add(it.first.data(), it.first.size(), it.second);
                 }
 
                 builder.Save(bout);
@@ -112,7 +112,7 @@ namespace NCodecs {
         for (TEncoder::TConstIterator it = Encoder.Begin(); it != Encoder.End(); ++it) {
             const TString& s = it.GetKey();
             tmp.push_back(std::make_pair(it.GetValue(), !s ? TString("\0", 1) : s));
-            poolsz += Max<ui32>(s.size(), 1); 
+            poolsz += Max<ui32>(s.size(), 1);
         }
 
         Sort(tmp.begin(), tmp.end());

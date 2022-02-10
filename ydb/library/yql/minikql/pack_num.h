@@ -30,16 +30,16 @@ Y_FORCE_INLINE size_t GetPack32Length(ui32 value) {
         return 1;
     }
     else if (value < 0x4000) {
-        WriteUnaligned<ui16>(((ui16*)(buffer)), ui16((value << 2) | 0x1)); 
+        WriteUnaligned<ui16>(((ui16*)(buffer)), ui16((value << 2) | 0x1));
         return 2;
     }
     else if (value < 0x200000) {
-        WriteUnaligned<ui32>(((ui32*)(buffer)), ui32((value << 3) | 0x3)); 
+        WriteUnaligned<ui32>(((ui32*)(buffer)), ui32((value << 3) | 0x3));
         return 3;
     }
     else {
         buffer[0] = 0x7;
-        WriteUnaligned<ui32>((ui32*)(buffer + 1), ui32(value)); 
+        WriteUnaligned<ui32>((ui32*)(buffer + 1), ui32(value));
         return 5;
     }
 }
@@ -109,32 +109,32 @@ Y_FORCE_INLINE size_t GetPack64Length(ui64 value) {
         return 1;
     }
     else if (value < 0x4000) {
-        WriteUnaligned<ui16>((ui16*)(buffer), ui16((value << 2) | 0x1)); 
+        WriteUnaligned<ui16>((ui16*)(buffer), ui16((value << 2) | 0x1));
         return 2;
     }
     else if (value < 0x200000) {
-        WriteUnaligned<ui32>((ui32*)(buffer), ui32((value << 3) | 0x3)); 
+        WriteUnaligned<ui32>((ui32*)(buffer), ui32((value << 3) | 0x3));
         return 3;
     }
     else if (value < 0x10000000) {
-        WriteUnaligned<ui32>((ui32*)(buffer), ui32((value << 4) | 0x7)); 
+        WriteUnaligned<ui32>((ui32*)(buffer), ui32((value << 4) | 0x7));
         return 4;
     }
     else if (value < 0x800000000) {
-        WriteUnaligned<ui64>((ui64*)(buffer), ui64((value << 5) | 0xF)); 
+        WriteUnaligned<ui64>((ui64*)(buffer), ui64((value << 5) | 0xF));
         return 5;
     }
     else if (value < 0x40000000000) {
-        WriteUnaligned<ui64>((ui64*)(buffer), ui64((value << 6) | 0x1F)); 
+        WriteUnaligned<ui64>((ui64*)(buffer), ui64((value << 6) | 0x1F));
         return 6;
     }
     else if (value < 0x2000000000000) {
-        WriteUnaligned<ui64>((ui64*)(buffer), ui64((value << 7) | 0x3F)); 
+        WriteUnaligned<ui64>((ui64*)(buffer), ui64((value << 7) | 0x3F));
         return 7;
     }
     else {
         buffer[0] = 0x7F;
-        WriteUnaligned<ui64>((ui64*)(buffer + 1), value); 
+        WriteUnaligned<ui64>((ui64*)(buffer + 1), value);
         return 9;
     }
 }

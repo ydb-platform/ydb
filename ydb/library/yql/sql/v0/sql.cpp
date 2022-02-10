@@ -471,7 +471,7 @@ static TTableRef SimpleTableRefImpl(const TRule_simple_table_ref& node, NSQLTran
             }
         }
 
-        tr.ConstructInPlace(ctx.Context().MakeName("table"), cluster.empty() ? ctx.Context().CurrCluster : cluster, nullptr); 
+        tr.ConstructInPlace(ctx.Context().MakeName("table"), cluster.empty() ? ctx.Context().CurrCluster : cluster, nullptr);
         auto tableOrAt = Id(node.GetBlock1().GetAlt1().GetBlock1().GetRule_id_or_at2(), ctx);
         auto tableAndView = TableKeyImpl(tableOrAt, "", ctx);
         tr->Keys = BuildTableKey(ctx.Context().Pos(), tr->Cluster, TDeferredAtom(ctx.Context().Pos(), tableAndView.first), tableAndView.second);
@@ -490,7 +490,7 @@ static TTableRef SimpleTableRefImpl(const TRule_simple_table_ref& node, NSQLTran
             return TTableRef(ctx.Context().MakeName("table"), ctx.Context().CurrCluster, nullptr);
         }
 
-        tr.ConstructInPlace(ctx.Context().MakeName("table"), cluster.empty() ? ctx.Context().CurrCluster : cluster, nullptr); 
+        tr.ConstructInPlace(ctx.Context().MakeName("table"), cluster.empty() ? ctx.Context().CurrCluster : cluster, nullptr);
         tr->Keys = BuildTableKey(ctx.Context().Pos(), tr->Cluster, table, at ? "@" : "");
         break;
     }
@@ -498,12 +498,12 @@ static TTableRef SimpleTableRefImpl(const TRule_simple_table_ref& node, NSQLTran
         Y_FAIL("You should change implementation according grammar changes");
     }
 
-    if (mode == NSQLTranslation::ESqlMode::LIMITED_VIEW && !cluster.empty()) { 
+    if (mode == NSQLTranslation::ESqlMode::LIMITED_VIEW && !cluster.empty()) {
         ctx.Error() << "Cluster should not be used in limited view";
         return TTableRef(ctx.Context().MakeName("table"), ctx.Context().CurrCluster, nullptr);
     }
 
-    if (cluster.empty()) { 
+    if (cluster.empty()) {
         cluster = ctx.Context().CurrCluster;
     }
 
@@ -1091,7 +1091,7 @@ bool TSqlCallExpr::Init(const TCallExprRule& node) {
 void TSqlCallExpr::IncCounters() {
     if (Node) {
         Ctx.IncrementMonCounter("sql_features", "NamedNodeUseApply");
-    } else if (!Module.empty()) { 
+    } else if (!Module.empty()) {
         if (ValidateForCounters(Module)) {
             Ctx.IncrementMonCounter("udf_modules", Module);
             Ctx.IncrementMonCounter("sql_features", "CallUdf");
@@ -1211,7 +1211,7 @@ const TString TGroupByClause::AutogenerateNamePrefix = "group";
 
 bool ParseNumbers(TContext& ctx, const TString& strOrig, ui64& value, TString& suffix) {
     const auto str = to_lower(strOrig);
-    const auto strLen = str.size(); 
+    const auto strLen = str.size();
     ui64 base = 10;
     if (strLen > 2 && str[0] == '0') {
         const auto formatChar = str[1];
@@ -1234,7 +1234,7 @@ bool ParseNumbers(TContext& ctx, const TString& strOrig, ui64& value, TString& s
         suffix = TString(++iter, str.cend());
     }
     value = 0;
-    const TString digString(str.begin() + (base == 10 ? 0 : 2), str.end() - suffix.size()); 
+    const TString digString(str.begin() + (base == 10 ? 0 : 2), str.end() - suffix.size());
     for (const char& cur: digString) {
         const ui64 curDigit = Char2DigitTable[static_cast<int>(cur)];
         if (curDigit >= base) {
@@ -1297,9 +1297,9 @@ TNodePtr LiteralNumber(TContext& ctx, const TRule_integer& node) {
 TNodePtr LiteralReal(TContext& ctx, const TRule_real& node) {
     const TString value(ctx.Token(node.GetToken1()));
     YQL_ENSURE(!value.empty());
-    const auto lastValue = value[value.size() - 1]; 
+    const auto lastValue = value[value.size() - 1];
     if (lastValue == 'f' || lastValue == 'F') {
-        return new TLiteralNumberNode<float>(ctx.Pos(), "Float", value.substr(0, value.size()-1)); 
+        return new TLiteralNumberNode<float>(ctx.Pos(), "Float", value.substr(0, value.size()-1));
     } else {
         return new TLiteralNumberNode<double>(ctx.Pos(), "Double", value);
     }
@@ -1842,7 +1842,7 @@ TNodePtr TSqlExpression::SubExpr(const TRule_xor_subexpr& node) {
                         escapeNode = escapeExpr;
                         if (escapeLiteral) {
                             Ctx.IncrementMonCounter("sql_features", "LikeEscape");
-                            if (escapeLiteral->size() != 1) { 
+                            if (escapeLiteral->size() != 1) {
                                 Ctx.IncrementMonCounter("sql_errors", "LikeMultiCharEscape");
                                 Error() << "ESCAPE clause requires single character argument";
                                 return nullptr;
@@ -4069,7 +4069,7 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
                 return nullptr;
             }
 
-            cluster = cluster.empty() ? Ctx.CurrCluster : cluster; 
+            cluster = cluster.empty() ? Ctx.CurrCluster : cluster;
             nameOrAt = std::make_pair(at, table);
             break;
         }
@@ -4621,7 +4621,7 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
         }
     }
 
-    if (prefix.empty()) { 
+    if (prefix.empty()) {
         if (!TopLevel && !hasLexicalScope) {
             Error() << "This pragma '" << pragma << "' is not allowed to be used in actions or subqueries";
             Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");

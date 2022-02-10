@@ -160,7 +160,7 @@ TString TTypeAnnotationContext::FindCredentialContent(const TStringBuf& name1, c
 }
 
 TString TTypeAnnotationContext::GetDefaultDataSource() const {
-    if (!PureResultDataSource.empty()) { 
+    if (!PureResultDataSource.empty()) {
         YQL_ENSURE(Find(AvailablePureResultDataSources.begin(),
             AvailablePureResultDataSources.end(), PureResultDataSource)
             != AvailablePureResultDataSources.end());

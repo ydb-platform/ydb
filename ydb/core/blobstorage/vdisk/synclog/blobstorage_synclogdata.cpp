@@ -103,7 +103,7 @@ namespace NKikimr {
 
         TString TSyncLogSnapshot::BoundariesToString() const {
             return Sprintf("{LogStartLsn: %" PRIu64 " %s %s}", LogStartLsn,
-                           MemSnapPtr->BoundariesToString().data(), DiskSnapPtr->BoundariesToString().data()); 
+                           MemSnapPtr->BoundariesToString().data(), DiskSnapPtr->BoundariesToString().data());
         }
 
         TSyncLogSnapshot::TSyncLogSnapshot(TDiskRecLogSnapshotPtr diskSnapPtr,
@@ -126,7 +126,7 @@ namespace NKikimr {
             if (!MemSnapPtr->Empty()) {
                 ui64 memFirstLsn = MemSnapPtr->GetFirstLsn();
                 ui64 memLastLsn = MemSnapPtr->GetLastLsn();
-                Y_VERIFY(memFirstLsn <= memLastLsn, "%s", BoundariesToString().data()); 
+                Y_VERIFY(memFirstLsn <= memLastLsn, "%s", BoundariesToString().data());
                 // For paranoid mode we can check memory snapshot
                 // consistency by calling "MemSnapPtr->CheckSnapshotConsistency()",
                 // but it's heavy, turned off by default
@@ -135,7 +135,7 @@ namespace NKikimr {
             if (!DiskSnapPtr->Empty()) {
                 ui64 diskFirstLsn = DiskSnapPtr->GetFirstLsn();
                 ui64 diskLastLsn = DiskSnapPtr->GetLastLsn();
-                Y_VERIFY(diskFirstLsn <= diskLastLsn, "%s", BoundariesToString().data()); 
+                Y_VERIFY(diskFirstLsn <= diskLastLsn, "%s", BoundariesToString().data());
             }
         }
 
@@ -263,7 +263,7 @@ namespace NKikimr {
         TString TSyncLog::BoundariesToString() const {
             return Sprintf("{LogStartLsn: %" PRIu64 " LastLsnOfIndexRecord: %" PRIu64
                            " %s %s}", LogStartLsn, LastLsnOfIndexRecord,
-                           MemRecLog.BoundariesToString().data(), DiskRecLog.BoundariesToString().data()); 
+                           MemRecLog.BoundariesToString().data(), DiskRecLog.BoundariesToString().data());
         }
 
         TSyncLogSnapshotPtr TSyncLog::GetSnapshot() const {
@@ -335,7 +335,7 @@ namespace NKikimr {
         {
             TVector<ui32> chunks;
             ui64 sLsn = DiskRecLog.DeleteChunks(numChunksToDel, std::move(notifier), chunks);
-            Y_VERIFY(LogStartLsn <= sLsn, "sLsn# %" PRIu64 " %s", sLsn, BoundariesToString().data()); 
+            Y_VERIFY(LogStartLsn <= sLsn, "sLsn# %" PRIu64 " %s", sLsn, BoundariesToString().data());
             LogStartLsn = sLsn;
             return chunks;
         }

@@ -70,7 +70,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
     void VerifySerialization(TNode* pgm, const TTypeEnvironment& env) {
         TString s = PrintNode(pgm);
         TString serialized = SerializeNode(pgm, env);
-        Cout << "Serialized as " << serialized.size() << " bytes" << Endl; 
+        Cout << "Serialized as " << serialized.size() << " bytes" << Endl;
         TNode* pgm2 = DeserializeNode(serialized, env);
         TString s2 = PrintNode(pgm2);
         UNIT_ASSERT_EQUAL(s, s2);

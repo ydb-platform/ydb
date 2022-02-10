@@ -25,11 +25,11 @@ namespace NActors {
         static bool ExtractVal(const TString& str, const TString& name, TVal& res) {
             if (!str.StartsWith(name))
                 return false;
-            size_t pos = name.size(); 
-            while (pos < str.size() && (str[pos] == ' ' || str[pos] == '\t')) { 
+            size_t pos = name.size();
+            while (pos < str.size() && (str[pos] == ' ' || str[pos] == '\t')) {
                 pos++;
             }
-            res = atol(str.data() + pos); 
+            res = atol(str.data() + pos);
             return true;
         }
 
@@ -63,7 +63,7 @@ namespace NActors {
             TFileInput procStat("/proc/" + strPid + "/stat");
             procStat.ReadLine(str);
             if (!str.empty()) {
-                sscanf(str.data(), 
+                sscanf(str.data(),
                        "%d %*s %c %d %d %d %d %d %u %lu %lu "
                        "%lu %lu %lu %lu %ld %ld %ld %ld %ld "
                        "%ld %llu %lu %ld %lu",
@@ -81,7 +81,7 @@ namespace NActors {
             TFileInput statm("/proc/" + strPid + "/statm");
             statm.ReadLine(str);
             TVector<TString> fields;
-            StringSplitter(str).Split(' ').SkipEmpty().Collect(&fields); 
+            StringSplitter(str).Split(' ').SkipEmpty().Collect(&fields);
             if (fields.size() >= 7) {
                 ui64 resident = FromString<ui64>(fields[1]);
                 ui64 shared = FromString<ui64>(fields[2]);

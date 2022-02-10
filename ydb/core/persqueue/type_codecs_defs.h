@@ -214,7 +214,7 @@ public:
     { }
 
     TDataRef(const TStringBuf& data)
-        : TDataRef(data.data(), data.size()) 
+        : TDataRef(data.data(), data.size())
     { }
 
     /// Copy and take ownership of a small piece of data (<= 16b).
@@ -230,7 +230,7 @@ public:
 
     /// Ownership of the TString is taken with zero-copy.
     TDataRef(const TString& data)
-        : TDataRef(data, data.data(), data.size()) 
+        : TDataRef(data, data.data(), data.size())
     { }
 
     /// Ownership of the TString is taken with zero-copy.
@@ -244,7 +244,7 @@ public:
 
     /// Ownership of the TString is taken with zero-copy.
     TDataRef(const TString& data, size_t begin, size_t size)
-        : TDataRef(data, data.data() + begin, size) 
+        : TDataRef(data, data.data() + begin, size)
     { }
 
     bool operator==(const TDataRef& other) const {

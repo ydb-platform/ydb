@@ -142,7 +142,7 @@ namespace NKikimr {
                    "Barriers MUST be equal; CollectGen# %" PRIu32 " CollectStep# %" PRIu32
                    " rec.CollectGen# %" PRIu32 " rec.CollectStep %" PRIu32
                    " key# %s", CollectGen, CollectStep, rec.CollectGen, rec.CollectStep,
-                   key.ToString().data()); 
+                   key.ToString().data());
             TBarrierIngress::Merge(Ingress, rec.Ingress);
         }
 
@@ -203,7 +203,7 @@ namespace NKikimr {
             Y_UNUSED(outbound);
 
             return Sprintf("{CollectGen: %" PRIu32 " CollectStep: %" PRIu32 " Ingress: %s}",
-                           CollectGen, CollectStep, Ingress.ToString(cache).data()); 
+                           CollectGen, CollectStep, Ingress.ToString(cache).data());
         }
 
         void Serialize(NKikimrBlobStorage::TBarrierVal &proto, bool showInternals) const {

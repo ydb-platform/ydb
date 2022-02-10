@@ -1,7 +1,7 @@
 #pragma once
 #include <util/string/vector.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
-#include <util/string/split.h> 
+#include <util/string/split.h>
 
 namespace NKikimr {
 namespace NViewer {

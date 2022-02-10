@@ -535,7 +535,7 @@ private:
             auto* val = mkqlRow.AddStruct();
 
             bool ok = NMiniKQL::CellToValue(rowScheme[i].PType, c, *val, errStr);
-            Y_VERIFY(ok, "Failed to build result position %" PRIu32 " error: %s", i, errStr.data()); 
+            Y_VERIFY(ok, "Failed to build result position %" PRIu32 " error: %s", i, errStr.data());
         }
     }
 

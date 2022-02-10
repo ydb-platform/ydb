@@ -76,7 +76,7 @@ namespace NKikimr {
             LOG_DEBUG(ctx, BS_VDISK_OTHER,
                       VDISKP(VCtx->VDiskLogPrefix, "TDynamicPDiskWeightsManager: "
                              "update pdisk scheduler weights: msg# %s freshWeightStatus# %s",
-                             msg->ToString().data(), status.ToString().data())); 
+                             msg->ToString().data(), status.ToString().data()));
         }
         // calculate new value
         const bool newVal = StopPuts();
@@ -94,7 +94,7 @@ namespace NKikimr {
 
         LOG_LOG(ctx, pri, BS_VDISK_OTHER,
                 VDISKP(VCtx->VDiskLogPrefix, "TDynamicPDiskWeightsManager: "
-                       "response from Yard: msg# %s", res.ToString().data())); 
+                       "response from Yard: msg# %s", res.ToString().data()));
     }
 
     void TDynamicPDiskWeightsManager::RenderHtml(IOutputStream &str) const {

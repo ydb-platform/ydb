@@ -337,8 +337,8 @@ namespace NKikimr {
                 Y_VERIFY(RChunksIndex < UsedChunks.size() + RChunks.size());
             }
 
-            const TChunkIdx chunkIdx = RChunksIndex < UsedChunks.size() ? UsedChunks[RChunksIndex] 
-                : RChunks[RChunksIndex - UsedChunks.size()]; 
+            const TChunkIdx chunkIdx = RChunksIndex < UsedChunks.size() ? UsedChunks[RChunksIndex]
+                : RChunks[RChunksIndex - UsedChunks.size()];
             TDiskPart location(chunkIdx, Offset, size);
             Offset += alignedSize;
             return location;
@@ -846,7 +846,7 @@ namespace NKikimr {
         bool PushIndexOnly(const TKey& key, const TMemRec& memRec, const TDataMerger *dataMerger, ui32 inplacedDataSize,
                 TDiskPart *location) {
             // inplacedDataSize must be nonzero for DiskBlob with data and zero in all other cases
-            ui32 numAddedOuts = dataMerger->GetHugeBlobMerger().SavedData().size(); 
+            ui32 numAddedOuts = dataMerger->GetHugeBlobMerger().SavedData().size();
             if (!CheckSpace(inplacedDataSize, numAddedOuts)) {
                 return false;
             }

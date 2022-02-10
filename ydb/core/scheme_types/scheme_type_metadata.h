@@ -27,7 +27,7 @@ public:
         }
 
         const char* GetName() const override {
-            return Name.data(); 
+            return Name.data();
         }
 
     private:

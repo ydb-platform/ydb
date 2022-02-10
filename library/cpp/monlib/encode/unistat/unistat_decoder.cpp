@@ -9,7 +9,7 @@
 #include <library/cpp/json/json_reader.h>
 
 #include <util/datetime/base.h>
-#include <util/string/split.h> 
+#include <util/string/split.h>
 
 #include <contrib/libs/re2/re2/re2.h>
 
@@ -174,7 +174,7 @@ namespace NMonitoring {
                 TStringBuf name = parts.back();
                 parts.pop_back();
 
-                Y_ENSURE(RE2::FullMatch(re2::StringPiece{name.data(), name.size()}, NAME_RE), 
+                Y_ENSURE(RE2::FullMatch(re2::StringPiece{name.data(), name.size()}, NAME_RE),
                          "Metric name " << name << " doesn't match regex " << NAME_RE.pattern());
 
                 MetricContext_.Name = name;
@@ -246,7 +246,7 @@ namespace NMonitoring {
     }
 
     void DecodeUnistatToStream(TStringBuf data, IMetricConsumer* c, TInstant ts) {
-        TMemoryInput in{data.data(), data.size()}; 
+        TMemoryInput in{data.data(), data.size()};
         TDecoderUnistat decoder(c, &in, ts);
         decoder.Decode();
     }

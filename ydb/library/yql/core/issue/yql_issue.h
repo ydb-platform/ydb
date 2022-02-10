@@ -6,7 +6,7 @@
 
 namespace NYql {
 
-extern const char IssueMapResource[14]; 
+extern const char IssueMapResource[14];
 using EYqlIssueCode = TIssuesIds::EIssueCode;
 
 inline ESeverity GetSeverity(EYqlIssueCode id) {

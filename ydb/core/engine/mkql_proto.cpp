@@ -266,7 +266,7 @@ bool CellsFromTuple(const NKikimrMiniKQL::TType* tupleType,
             } else if (allowCastFromString && v.HasText()) { \
                 const auto slot = NUdf::GetDataSlot(types[i]); \
                 const auto out = NMiniKQL::ValueFromString(slot, v.GetText()); \
-                CHECK_OR_RETURN_ERROR(out, Sprintf("Cannot parse value of type " #name " from text '%s' in tuple at position %" PRIu32, v.GetText().data(), i)); \ 
+                CHECK_OR_RETURN_ERROR(out, Sprintf("Cannot parse value of type " #name " from text '%s' in tuple at position %" PRIu32, v.GetText().data(), i)); \
                 const auto val = out.Get<type>(); \
                 c = TCell((const char*)&val, sizeof(val)); \
             } else { \

@@ -71,7 +71,7 @@ namespace NCodecs {
         {
             const size_t zeroSz = TSizePacker().MeasureLeaf(0);
             Zero.Resize(zeroSz);
-            TSizePacker().PackLeaf(Zero.data(), 0, zeroSz); 
+            TSizePacker().PackLeaf(Zero.data(), 0, zeroSz);
         }
 
         ui32 GetCompressionLevel() const {
@@ -81,32 +81,32 @@ namespace NCodecs {
         ui8 Encode(TStringBuf in, TBuffer& outbuf) const {
             outbuf.Clear();
 
-            if (in.empty()) { 
+            if (in.empty()) {
                 return 0;
             }
 
             TSizePacker packer;
 
-            const char* rawBeg = in.data(); 
-            const size_t rawSz = in.size(); 
+            const char* rawBeg = in.data();
+            const size_t rawSz = in.size();
 
             const size_t szSz = packer.MeasureLeaf(rawSz);
             const size_t maxDatSz = ZSTD_compressBound(rawSz);
 
             outbuf.Resize(szSz + maxDatSz);
-            packer.PackLeaf(outbuf.data(), rawSz, szSz); 
+            packer.PackLeaf(outbuf.data(), rawSz, szSz);
 
             TCCtx ctx{CheckPtr(ZSTD_createCCtx(), __LOCATION__)};
             const size_t resSz = CheckSize(ZSTD_compress_usingCDict(
-                                               ctx.Get(), outbuf.data() + szSz, maxDatSz, rawBeg, rawSz, CDict.Get()), 
+                                               ctx.Get(), outbuf.data() + szSz, maxDatSz, rawBeg, rawSz, CDict.Get()),
                                            __LOCATION__);
 
             if (resSz < rawSz) {
                 outbuf.Resize(resSz + szSz);
             } else {
-                outbuf.Resize(Zero.size() + rawSz); 
-                memcpy(outbuf.data(), Zero.data(), Zero.size()); 
-                memcpy(outbuf.data() + Zero.size(), rawBeg, rawSz); 
+                outbuf.Resize(Zero.size() + rawSz);
+                memcpy(outbuf.data(), Zero.data(), Zero.size());
+                memcpy(outbuf.data() + Zero.size(), rawBeg, rawSz);
             }
             return 0;
         }
@@ -114,14 +114,14 @@ namespace NCodecs {
         void Decode(TStringBuf in, TBuffer& outbuf) const {
             outbuf.Clear();
 
-            if (in.empty()) { 
+            if (in.empty()) {
                 return;
             }
 
             TSizePacker packer;
 
-            const char* rawBeg = in.data(); 
-            size_t rawSz = in.size(); 
+            const char* rawBeg = in.data();
+            size_t rawSz = in.size();
 
             const size_t szSz = packer.SkipLeaf(rawBeg);
             ui64 datSz = 0;
@@ -132,14 +132,14 @@ namespace NCodecs {
 
             if (!datSz) {
                 outbuf.Resize(rawSz);
-                memcpy(outbuf.data(), rawBeg, rawSz); 
+                memcpy(outbuf.data(), rawBeg, rawSz);
             } else {
                 //                size_t zSz = ZSTD_getDecompressedSize(rawBeg, rawSz);
                 //                Y_ENSURE_EX(datSz == zSz, TCodecException() << datSz << " != " << zSz);
                 outbuf.Resize(datSz);
                 TDCtx ctx{CheckPtr(ZSTD_createDCtx(), __LOCATION__)};
                 CheckSize(ZSTD_decompress_usingDDict(
-                              ctx.Get(), outbuf.data(), outbuf.size(), rawBeg, rawSz, DDict.Get()), 
+                              ctx.Get(), outbuf.data(), outbuf.size(), rawBeg, rawSz, DDict.Get()),
                           __LOCATION__);
                 outbuf.Resize(datSz);
             }
@@ -155,8 +155,8 @@ namespace NCodecs {
                 if (!r) {
                     continue;
                 }
-                data.Append(r.data(), r.size()); 
-                lens.push_back(r.size()); 
+                data.Append(r.data(), r.size());
+                lens.push_back(r.size());
             }
 
             ZDICT_legacy_params_t params;
@@ -193,8 +193,8 @@ namespace NCodecs {
         }
 
         void InitContexts() {
-            CDict.Reset(CheckPtr(ZSTD_createCDict(Dict.data(), Dict.size(), CompressionLevel), __LOCATION__)); 
-            DDict.Reset(CheckPtr(ZSTD_createDDict(Dict.data(), Dict.size()), __LOCATION__)); 
+            CDict.Reset(CheckPtr(ZSTD_createCDict(Dict.data(), Dict.size(), CompressionLevel), __LOCATION__));
+            DDict.Reset(CheckPtr(ZSTD_createDDict(Dict.data(), Dict.size()), __LOCATION__));
         }
 
         static size_t CheckSize(size_t sz, TSourceLocation loc) {

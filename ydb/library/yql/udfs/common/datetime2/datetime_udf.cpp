@@ -1228,8 +1228,8 @@ namespace {
                     Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
                         const auto timezoneId = GetTimezoneId(value);
                         const auto tzName = NUdf::GetTimezones()[timezoneId];
-                        std::memcpy(out, tzName.data(), std::min(tzName.size(), MAX_TIMEZONE_NAME_LEN)); 
-                        return tzName.size(); 
+                        std::memcpy(out, tzName.data(), std::min(tzName.size(), MAX_TIMEZONE_NAME_LEN));
+                        return tzName.size();
                     });
                     ReservedSize_ += MAX_TIMEZONE_NAME_LEN;
                     break;

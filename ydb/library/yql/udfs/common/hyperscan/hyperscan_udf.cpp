@@ -181,7 +181,7 @@ namespace {
                 }
                 Scratch_ = MakeScratch(Database_);
             } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data()); 
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
             }
         }
 

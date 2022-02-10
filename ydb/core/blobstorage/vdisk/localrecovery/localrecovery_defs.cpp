@@ -242,7 +242,7 @@ namespace NKikimr {
         if (SuccessfulRecovery) {
             bool emptyLog = (RecoveryLogFirstLsn == Max<ui64>()) && RecoveryLogLastLsn == 0;
             if (!StartingPoints.empty() && emptyLog) {
-                Y_FAIL("Empty log with none empty entry points; State# %s", ToString().data()); 
+                Y_FAIL("Empty log with none empty entry points; State# %s", ToString().data());
             }
         }
     }

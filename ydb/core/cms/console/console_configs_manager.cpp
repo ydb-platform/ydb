@@ -9,7 +9,7 @@
 
 #include <util/generic/bitmap.h>
 #include <util/random/random.h>
-#include <util/string/split.h> 
+#include <util/string/split.h>
 
 namespace NKikimr {
 namespace NConsole {

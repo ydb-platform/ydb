@@ -39,7 +39,7 @@ class TBlobStorageGroupBlockRequest : public TBlobStorageGroupRequestActor<TBlob
         Y_VERIFY(Info->IsValidId(shortId), "Invalid VDiskId VDiskId# %s", shortId.ToString().c_str());
 
         A_LOG_LOG_S(false, PriorityForStatusInbound(status), "DSPB01", "Handle TEvVBlockResult"
-            << " status# " << NKikimrProto::EReplyStatus_Name(status).data() 
+            << " status# " << NKikimrProto::EReplyStatus_Name(status).data()
             << " From# " << vdisk.ToString()
             << " NodeId# " << Info->GetActorId(vdisk).NodeId());
 
@@ -85,7 +85,7 @@ class TBlobStorageGroupBlockRequest : public TBlobStorageGroupRequestActor<TBlob
             }
 
             default:
-                Y_FAIL("unexpected newStatus# %s", NKikimrProto::EReplyStatus_Name(newStatus).data()); 
+                Y_FAIL("unexpected newStatus# %s", NKikimrProto::EReplyStatus_Name(newStatus).data());
         }
         for (const TVDiskID& vdiskId : queryStatus) {
             SendToQueue(std::make_unique<TEvBlobStorage::TEvVStatus>(vdiskId), 0, NWilson::TTraceId());

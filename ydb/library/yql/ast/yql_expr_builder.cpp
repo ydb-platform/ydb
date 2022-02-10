@@ -244,7 +244,7 @@ TExprNodeBuilder TExprNodeBuilder::Lambda() {
 }
 
 TExprNodeBuilder& TExprNodeBuilder::Param(TPositionHandle pos, const TStringBuf& name) {
-    Y_ENSURE(!name.empty(), "Empty parameter name is not allowed"); 
+    Y_ENSURE(!name.empty(), "Empty parameter name is not allowed");
     Y_ENSURE(Container, "Container expected");
     Y_ENSURE(Container->Type() == TExprNode::Lambda, "Container must be a lambda");
     Y_ENSURE(!CurrentNode, "Lambda already has a body");
@@ -268,7 +268,7 @@ TExprNodeBuilder& TExprNodeBuilder::Params(const TStringBuf& name, ui32 width) {
 }
 
 TExprNodeBuilder& TExprNodeBuilder::Arg(ui32 index, const TStringBuf& name) {
-    Y_ENSURE(!name.empty(), "Empty parameter name is not allowed"); 
+    Y_ENSURE(!name.empty(), "Empty parameter name is not allowed");
     Y_ENSURE(Container, "Container expected");
     Y_ENSURE(Container->ChildrenSize() == index + (Container->IsLambda() ? 1U : 0U),
         "Container position mismatch, expected: " << Container->ChildrenSize() <<

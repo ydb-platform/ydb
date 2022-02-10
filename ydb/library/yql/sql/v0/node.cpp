@@ -1827,7 +1827,7 @@ TString IdContent(TContext& ctx, const TString& s) {
         skipSymbols += 1;
     }
 
-    TStringBuf atom(s.data() + skipSymbols, s.size() - 2 * skipSymbols + 1); 
+    TStringBuf atom(s.data() + skipSymbols, s.size() - 2 * skipSymbols + 1);
     TString unescapedStr;
     TStringOutput sout(unescapedStr);
     unescapedStr.reserve(s.size());
@@ -1844,7 +1844,7 @@ TString IdContent(TContext& ctx, const TString& s) {
         return {};
     }
 
-    if (readBytes != atom.size()) { 
+    if (readBytes != atom.size()) {
         ctx.Error() << "The identifier not parsed completely";
         return {};
     }
@@ -2028,7 +2028,7 @@ TString TDeferredAtom::GetRepr() const {
 }
 
 bool TDeferredAtom::Empty() const {
-    return !Node || Repr.empty(); 
+    return !Node || Repr.empty();
 }
 
 TTupleNode::TTupleNode(TPosition pos, const TVector<TNodePtr>& exprs)
@@ -2212,7 +2212,7 @@ public:
         }
 
         auto tableName = Ids[idx].Name;
-        if (tableName.empty()) { 
+        if (tableName.empty()) {
             return Nothing();
         }
 
@@ -2225,7 +2225,7 @@ public:
             return nullptr;
         }
 
-        auto cluster = clusterAndTable->first.empty() ? ctx.CurrCluster : clusterAndTable->first; 
+        auto cluster = clusterAndTable->first.empty() ? ctx.CurrCluster : clusterAndTable->first;
         TNodePtr tableKey = BuildTableKey(GetPos(), cluster, TDeferredAtom(GetPos(), clusterAndTable->second), view);
         TTableRef table(ctx.MakeName("table"), cluster, tableKey);
         table.Options = BuildInputOptions(GetPos(), GetContextHints(ctx));
@@ -2762,7 +2762,7 @@ TNodePtr GroundWithExpr(const TNodePtr& ground, const TNodePtr& expr) {
 
 TSourcePtr TryMakeSourceFromExpression(TContext& ctx, TNodePtr node, const TString& view) {
     if (auto literal = node->GetLiteral("String")) {
-        if (ctx.CurrCluster.empty()) { 
+        if (ctx.CurrCluster.empty()) {
             return nullptr;
         }
 
@@ -2785,7 +2785,7 @@ TSourcePtr TryMakeSourceFromExpression(TContext& ctx, TNodePtr node, const TStri
         return nullptr;
     }
 
-    if (ctx.CurrCluster.empty()) { 
+    if (ctx.CurrCluster.empty()) {
         return nullptr;
     }
 

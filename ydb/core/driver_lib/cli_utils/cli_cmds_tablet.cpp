@@ -23,7 +23,7 @@ public:
             Y_VERIFY(response.GetReadResult(0).HasValue());
             TFile file(OutputFile, CreateNew | WrOnly);
             TString data = response.GetReadResult(0).GetValue();
-            file.Write(data.data(), data.size()); 
+            file.Write(data.data(), data.size());
             file.Close();
         } else if (!InputFile.empty()) {
             Y_VERIFY(response.WriteResultSize() == 1);

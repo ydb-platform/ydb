@@ -1,6 +1,6 @@
 #include "yql_csv.h"
 
-#include <util/string/split.h> 
+#include <util/string/split.h>
 #include <util/string/escape.h>
 
 namespace {
@@ -91,7 +91,7 @@ TVector<TString> TCsvInputStream::ReadLine()
         TCsvLineParser lineParser(line, Delim_);
         TStringBuf token;
         while (lineParser.Next(token)) {
-            parts.push_back(UnescapeC(token.data(), token.size())); 
+            parts.push_back(UnescapeC(token.data(), token.size()));
         }
     }
 
@@ -132,7 +132,7 @@ TVector<TString> TCsvInputBuffer::ReadLine()
         TCsvLineParser lineParser(line, Delim_);
         TStringBuf token;
         while (lineParser.Next(token)) {
-            parts.push_back(UnescapeC(token.data(), token.size())); 
+            parts.push_back(UnescapeC(token.data(), token.size()));
         }
     }
 
@@ -148,7 +148,7 @@ TVector<TString> TCsvInputBuffer::ReadLineWithEscaping()
         TCsvLineParser lineParser(line, Delim_);
         TStringBuf token;
         while (lineParser.Next(token)) {
-            parts.push_back(TString(token.data(), token.size())); 
+            parts.push_back(TString(token.data(), token.size()));
         }
     }
 

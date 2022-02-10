@@ -533,7 +533,7 @@ public:
         auto tenant = Tenants[ev->Get()->TenantName];
         Y_VERIFY(tenant, "status for unknown tenant");
         Y_VERIFY(!tenant->HasStaticSlot || ev->Get()->Status == TEvLocal::TEvTenantStatus::STARTED,
-                 "Cannot start static tenant %s: %s", ev->Get()->TenantName.data(), ev->Get()->Error.data()); 
+                 "Cannot start static tenant %s: %s", ev->Get()->TenantName.data(), ev->Get()->Error.data());
 
         bool modified = false;
         bool processPendingActions = false;
@@ -700,7 +700,7 @@ public:
         if (!ev)
             return "no event";
         return Sprintf("%" PRIx32 " event %s", ev->GetTypeRewrite(),
-                       ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized"); 
+                       ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized");
     }
 
     void Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx)
@@ -780,7 +780,7 @@ public:
 
         default:
             Y_FAIL("unexpected event type: %" PRIx32 " event: %s",
-                   ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"); 
+                   ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
             break;
         }
     }
@@ -910,7 +910,7 @@ public:
         auto domains = AppData(ctx)->DomainsInfo;
         for (auto &pr : domainConfigs) {
             auto *domain = domains->GetDomainByName(pr.first);
-            Y_VERIFY(domain, "unknown domain %s in Tenant Pool config", pr.first.data()); 
+            Y_VERIFY(domain, "unknown domain %s in Tenant Pool config", pr.first.data());
             auto aid = ctx.RegisterWithSameMailbox(new TDomainTenantPool(pr.first, LocalID, pr.second));
             DomainTenantPools[pr.first] = aid;
             auto serviceId = MakeTenantPoolID(SelfId().NodeId(), domain->DomainUid);
@@ -929,7 +929,7 @@ public:
             HFunc(TEvLocal::TEvLocalDrainNode, Handle);
         default:
             Y_FAIL("unexpected event type: %" PRIx32 " event: %s",
-                   ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"); 
+                   ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
             break;
         }
     }
@@ -975,7 +975,7 @@ void TTenantPoolConfig::AddStaticSlot(const NKikimrTenantPool::TSlotConfig &slot
     TString name = CanonizePath(slot.GetTenantName());
     Y_VERIFY(IsEnabled);
     Y_VERIFY(!StaticSlots.contains(name),
-             "two static slots for the same tenant '%s'", name.data()); 
+             "two static slots for the same tenant '%s'", name.data());
     StaticSlots[name] = slot;
     StaticSlots[name].SetTenantName(name);
 }
@@ -994,7 +994,7 @@ void TTenantPoolConfig::AddDynamicSlot(const NKikimrTenantPool::TSlotConfig &slo
 {
     Y_VERIFY(IsEnabled);
     Y_VERIFY(!DynamicSlots.contains(slot.GetId()),
-             "two dynamic slots with the same id '%s'", slot.GetId().data()); 
+             "two dynamic slots with the same id '%s'", slot.GetId().data());
     DynamicSlots[slot.GetId()] = slot;
     DynamicSlots[slot.GetId()].SetTenantName(CanonizePath(slot.GetTenantName()));
 }

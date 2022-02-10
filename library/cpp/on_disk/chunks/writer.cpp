@@ -3,7 +3,7 @@
 #include "writer.h"
 
 static inline void WriteAux(IOutputStream* out, const TVector<ui64>& data) {
-    ::SavePodArray(out, data.data(), data.size()); 
+    ::SavePodArray(out, data.data(), data.size());
 }
 
 /*************************** TBuffersWriter ***************************/

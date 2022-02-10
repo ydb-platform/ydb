@@ -4,7 +4,7 @@
 #include <ydb/core/ymq/base/limits.h>
 #include <library/cpp/scheme/scheme.h>
 
-#include <util/string/split.h> 
+#include <util/string/split.h>
 #include <util/string/join.h>
 
 namespace NKikimr::NSQS {

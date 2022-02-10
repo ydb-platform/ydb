@@ -16,19 +16,19 @@
         }                                                             \
     } while (0)
 
-#define MKQL_ENSURE_WITH_LOC(location, condition, message)      \ 
-    do {                                                        \ 
-        if (Y_UNLIKELY(!(condition))) {                         \ 
-            ThrowException(location + yexception() << message); \ 
-        }                                                       \ 
+#define MKQL_ENSURE_WITH_LOC(location, condition, message)      \
+    do {                                                        \
+        if (Y_UNLIKELY(!(condition))) {                         \
+            ThrowException(location + yexception() << message); \
+        }                                                       \
     } while (0)
 
-#define MKQL_ENSURE_S(condition, ...)                                 \ 
-    do {                                                              \ 
-        if (Y_UNLIKELY(!(condition))) {                               \ 
-            (THROW yexception() << __FUNCTION__ << "(): requirement " \ 
-                << #condition << " failed. " << "" __VA_ARGS__);      \ 
-        }                                                             \ 
+#define MKQL_ENSURE_S(condition, ...)                                 \
+    do {                                                              \
+        if (Y_UNLIKELY(!(condition))) {                               \
+            (THROW yexception() << __FUNCTION__ << "(): requirement " \
+                << #condition << " failed. " << "" __VA_ARGS__);      \
+        }                                                             \
     } while (0)
 
 namespace NKikimr {

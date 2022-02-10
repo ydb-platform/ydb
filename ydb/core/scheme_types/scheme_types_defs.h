@@ -70,10 +70,10 @@ public:
 /// 0x01 - 0x20
 /// DO NOT FORGET TO REGISTER THE TYPES in Library::OpenLibrary() / file tablet_library.h
 namespace NNames {
-    extern const char Int32[6]; 
-    extern const char Uint32[7]; 
-    extern const char Int64[6]; 
-    extern const char Uint64[7]; 
+    extern const char Int32[6];
+    extern const char Uint32[7];
+    extern const char Int64[6];
+    extern const char Uint64[7];
 }
 
 class TInt32 : public IIntegerTypeWithKeyString<i32, NTypeIds::Int32, NNames::Int32> {};
@@ -84,7 +84,7 @@ class TUint64 : public IIntegerTypeWithKeyString<ui64, NTypeIds::Uint64, NNames:
 // upyachka to get around undefined tryfromstring for chars
 
 namespace NNames {
-    extern const char Uint8[6]; 
+    extern const char Uint8[6];
 }
 
 class TUint8 : public TTypedType<ui8, TUint8, NTypeIds::Uint8, NNames::Uint8> {
@@ -92,7 +92,7 @@ public:
 };
 
 namespace NNames {
-    extern const char Bool[5]; 
+    extern const char Bool[5];
 }
 
 class TBool : public TTypedType<bool, TBool, NTypeIds::Bool, NNames::Bool> {
@@ -100,8 +100,8 @@ public:
 };
 
 namespace NNames {
-    extern const char Float[6]; 
-    extern const char Double[7]; 
+    extern const char Float[6];
+    extern const char Double[7];
 }
 
 template<typename T, typename TDerived, ui32 TypeId, const char *Name>
@@ -127,7 +127,7 @@ class IIntegerPair : public TTypedType<
 /// 0x101 - 0x200
 /// DO NOT FORGET TO REGISTER THE TYPES in Library::OpenLibrary() / file tablet_library.h
 namespace NNames {
-    extern const char PairUi64Ui64[13]; 
+    extern const char PairUi64Ui64[13];
 }
 
 class TPairUi64Ui64 : public IIntegerPair<ui64, ui64, NTypeIds::PairUi64Ui64, NNames::PairUi64Ui64> {};
@@ -156,10 +156,10 @@ public:
 };
 
 namespace NNames {
-    extern const char String[7]; 
-    extern const char Utf8[5]; 
-    extern const char Yson[5]; 
-    extern const char Json[5]; 
+    extern const char String[7];
+    extern const char Utf8[5];
+    extern const char Yson[5];
+    extern const char Json[5];
     extern const char JsonDocument[13];
     extern const char DyNumber[9];
 }
@@ -203,15 +203,15 @@ public:
 };
 
 namespace NNames {
-    extern const char SmallBoundedString[19]; 
-    extern const char LargeBoundedString[19]; 
+    extern const char SmallBoundedString[19];
+    extern const char LargeBoundedString[19];
 }
 
 using TSmallBoundedString = TBoundedString<0x1000, NTypeIds::String4k, NNames::SmallBoundedString>; // 4K
 using TLargeBoundedString = TBoundedString<0x200000, NTypeIds::String2m, NNames::LargeBoundedString>; // 2Mb
 
 namespace NNames {
-    extern const char Decimal[8]; 
+    extern const char Decimal[8];
 }
 
 class TDecimal : public IIntegerPair<ui64, i64, NTypeIds::Decimal, NNames::Decimal> {};

@@ -1,9 +1,9 @@
 // -*- C++ -*-
 //===-----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions. 
-// See https://llvm.org/LICENSE.txt for license information. 
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception 
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -94,7 +94,7 @@ public:
         : __locale(nullptr), __locale_str(nullptr), __lc(nullptr) {}
     locale_t(std::nullptr_t)
         : __locale(nullptr), __locale_str(nullptr), __lc(nullptr) {}
-    locale_t(_locale_t __xlocale, const char* __xlocale_str) 
+    locale_t(_locale_t __xlocale, const char* __xlocale_str)
         : __locale(__xlocale), __locale_str(__xlocale_str), __lc(nullptr) {}
     locale_t(const locale_t &__l)
         : __locale(__l.__locale), __locale_str(__l.__locale_str), __lc(nullptr) {}

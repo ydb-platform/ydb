@@ -85,19 +85,19 @@ class TFakeVDisk
             }
 
             void SetChecksums(ui32 index, const TVector<ui32>& checksums) {
-                const ui32 num = checksums.size(); 
-                Y_VERIFY(index + num <= Checksums.size() && index + num <= UsedBlocks.Size()); 
+                const ui32 num = checksums.size();
+                Y_VERIFY(index + num <= Checksums.size() && index + num <= UsedBlocks.Size());
                 UsedBlocks.Set(index, index + num);
                 std::copy(checksums.begin(), checksums.end(), Checksums.begin() + index);
             }
 
             ui32 GetChecksum(ui32 index) const {
-                Y_VERIFY(index < Checksums.size()); 
+                Y_VERIFY(index < Checksums.size());
                 return Checksums[index];
             }
 
             bool VerifyChecksum(ui32 index, ui32 checksum) const {
-                Y_VERIFY(index < Checksums.size()); 
+                Y_VERIFY(index < Checksums.size());
                 return UsedBlocks[index] && Checksums[index] == checksum;
             }
 
@@ -107,7 +107,7 @@ class TFakeVDisk
 
             void SerializeToProto(NPDiskFIT::TFakeVDiskState::TChunk& pb) const {
                 Y_FOR_EACH_BIT(index, UsedBlocks) {
-                    Y_VERIFY(index < Checksums.size(), "index# %zu +Checksums# %zu UsedBlocks# %zu", index, Checksums.size(), 
+                    Y_VERIFY(index < Checksums.size(), "index# %zu +Checksums# %zu UsedBlocks# %zu", index, Checksums.size(),
                             UsedBlocks.Size());
                     auto& block = *pb.AddBlocks();
                     block.SetIndex(index);
@@ -277,7 +277,7 @@ public:
     TFakeVDisk(const TVDiskID& vdiskId, const TActorId& pdiskServiceId, ui64 pdiskGuid, TStateManager *stateManager,
             TFakeVDiskParams params)
         : TActor<TFakeVDisk>(&TFakeVDisk::StateFunc)
-        , TObjectWithState(Sprintf("vdisk[%s]", vdiskId.ToString().data())) 
+        , TObjectWithState(Sprintf("vdisk[%s]", vdiskId.ToString().data()))
         , VDiskId(vdiskId)
         , PDiskServiceId(pdiskServiceId)
         , PDiskGuid(pdiskGuid)
@@ -379,8 +379,8 @@ public:
                 << Endl;
             Cerr << str.Str();
 
-            State.Confirmed.insert(TLogRecord{item.Lsn, item.Signature, (ui32)item.Data.size(), 
-                    Crc32c(item.Data.data(), item.Data.size()), {}, {}}); 
+            State.Confirmed.insert(TLogRecord{item.Lsn, item.Signature, (ui32)item.Data.size(),
+                    Crc32c(item.Data.data(), item.Data.size()), {}, {}});
         }
 
         if (msg->IsEndOfLog) {
@@ -503,9 +503,9 @@ public:
 
         auto *info = new TLogRecord;
         info->Signature = signature;
-        info->DataLen = data.size(); 
+        info->DataLen = data.size();
         info->Lsn = Lsn;
-        info->Checksum = Crc32c(data.data(), data.size()); 
+        info->Checksum = Crc32c(data.data(), data.size());
 
         // find out chunks we can commit or delete now
         for (auto& pair : State.Chunks) {
@@ -596,7 +596,7 @@ public:
         auto *msg = ev->Get();
         Y_VERIFY(msg->Results, "No results in TEvLogResult, Owner# %" PRIu32 " Status# %s",
                 (ui32)PDiskParams->Owner, NKikimrProto::EReplyStatus_Name(msg->Status).c_str());
-        InFlightLog -= msg->Results.size(); 
+        InFlightLog -= msg->Results.size();
         for (const auto& result : msg->Results) {
             std::unique_ptr<TLogRecord> info(static_cast<TLogRecord *>(result.Cookie));
             Y_VERIFY(info);
@@ -723,7 +723,7 @@ public:
         // calculate checksums for written blocks
         TVector<ui32> checksums;
         for (ui32 i = 0; i < numBlocks; ++i) {
-            const char *ptr = data.data() + i * PDiskParams->AppendBlockSize; 
+            const char *ptr = data.data() + i * PDiskParams->AppendBlockSize;
             checksums.push_back(Crc32c(ptr, PDiskParams->AppendBlockSize));
         }
 
@@ -761,7 +761,7 @@ public:
             }
             Y_VERIFY(it != State.WritesInFlight.end());
             Y_VERIFY(it->ChunkIdx == msg->ChunkIdx);
-            Y_VERIFY(it->Checksums.size() == it->SizeInBlocks); 
+            Y_VERIFY(it->Checksums.size() == it->SizeInBlocks);
 
             TStringStream s;
             s << "TEvChunkWriteResult ChunkIdx# " << it->ChunkIdx << " OffsetInBlocks# " << it->OffsetInBlocks
@@ -841,7 +841,7 @@ public:
                     Y_VERIFY(it != Recovered.WritesInFlight.end() || chunk.VerifyChecksum(i, checksum),
                             "inconsistent chunk data ChunkIdx# %" PRIu32 " OffsetInBlocks# %" PRIu32 " Used# %s"
                             " Checksum# %08" PRIx32 " StoredChecksum# %08" PRIx32 " WritesInFlight# %s", msg->ChunkIdx, i,
-                            chunk.IsUsed(i) ? "true" : "false", checksum, chunk.GetChecksum(i), s.Str().data()); 
+                            chunk.IsUsed(i) ? "true" : "false", checksum, chunk.GetChecksum(i), s.Str().data());
                     chunk.SetChecksums(i, {checksum});
                 } else {
                     Y_VERIFY(!chunk.IsUsed(i), "unexpected data ChunkIdx# %" PRIu32 " OffsetInBlocks# %" PRIu32,

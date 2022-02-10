@@ -47,9 +47,9 @@ public:
             "%s"
             "Connection: close\r\n"
             "\r\n",
-            Url.data(), Host.data(), headers.data()); 
+            Url.data(), Host.data(), headers.data());
 
-        MemLogPrintF("HTTPRequest %s", HttpRequestMessage.data()); 
+        MemLogPrintF("HTTPRequest %s", HttpRequestMessage.data());
 
         WriteTask = EWriteTask::COMPLETE;
         NumberOfTriesLeft = 4;
@@ -117,8 +117,8 @@ public:
                      ", actorId #%s"
                      ", address %s",
                      __func__,
-                     ctx.SelfID.ToString().data(), 
-                     PrintHostAndPort(*addr).data()); 
+                     ctx.SelfID.ToString().data(),
+                     PrintHostAndPort(*addr).data());
 
         NumberOfTriesLeft = 4;
         RetryCall = [=](const TActorContext& ctx) {
@@ -140,8 +140,8 @@ public:
                          ", actorId #%s"
                          ", error %s",
                          __func__,
-                         ctx.SelfID.ToString().data(), 
-                         error.data()); 
+                         ctx.SelfID.ToString().data(),
+                         error.data());
 
             ctx.Schedule(TDuration::Seconds(1), new TEvHTTPProtocolRetry);
             return;
@@ -153,8 +153,8 @@ public:
                      ", actorId #%s"
                      ", error %s",
                      __func__,
-                     ctx.SelfID.ToString().data(), 
-                     error.data()); 
+                     ctx.SelfID.ToString().data(),
+                     error.data());
 
         CatchHTTPRequestError(std::move(error));
     }
@@ -181,7 +181,7 @@ public:
     {
         Socket = std::move(socket);
         SendData<TOrigActor>(OriginalActor, ctx, Socket.Get(),
-                             HttpRequestMessage.data(), HttpRequestMessage.size()); 
+                             HttpRequestMessage.data(), HttpRequestMessage.size());
         ReadHTTPReply<TOrigActor>(OriginalActor, ctx, Socket);
     }
 

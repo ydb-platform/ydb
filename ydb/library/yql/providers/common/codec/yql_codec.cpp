@@ -861,7 +861,7 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type,
         case NUdf::TDataType<NUdf::TDecimal>::Id: {
             auto nextString = ReadNextString(cmd, buf);
             if (isTableFormat) {
-                const auto& des = NDecimal::Deserialize(nextString.data()); 
+                const auto& des = NDecimal::Deserialize(nextString.data());
                 YQL_ENSURE(nextString.size() == des.second);
                 YQL_ENSURE(!NDecimal::IsError(des.first));
                 return NUdf::TUnboxedValuePod(des.first);

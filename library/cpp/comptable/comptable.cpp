@@ -96,11 +96,11 @@ namespace NCompTable {
         size_t i = 0;
         iterator.Visit(ui32(data.size()));
         for (; i + 3 < data.size(); i += 4) {
-            iterator.Visit(reinterpret_cast<const ui32*>(data.data() + i)[0]); 
+            iterator.Visit(reinterpret_cast<const ui32*>(data.data() + i)[0]);
         }
         if (i != data.size()) {
             ui32 buffer[1] = {0};
-            memcpy(buffer, data.data() + i, data.size() - i); 
+            memcpy(buffer, data.data() + i, data.size() - i);
             iterator.Visit(buffer[0]);
         }
     }
@@ -317,8 +317,8 @@ namespace NCompTable {
             if (dataBuf.empty()) {
                 return;
             }
-            const ui8* src = reinterpret_cast<const ui8*>(dataBuf.data()); 
-            ui64 border = dataBuf.size(); 
+            const ui8* src = reinterpret_cast<const ui8*>(dataBuf.data());
+            ui64 border = dataBuf.size();
             ui32 len = 0;
             ui32 nullTerm = 1;
             if (HQ) {

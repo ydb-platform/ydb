@@ -100,19 +100,19 @@ Y_NO_INLINE int FFF(int x, int y) {
 }
 
 Y_NO_INLINE size_t FS1(TStringBuf x) {
-    return x.size(); 
+    return x.size();
 }
 
 Y_NO_INLINE size_t FS1_2(TStringBuf x, TStringBuf y) {
-    return x.size() + y.size(); 
+    return x.size() + y.size();
 }
 
 Y_NO_INLINE size_t FS2(const TStringBuf& x) {
-    return x.size(); 
+    return x.size();
 }
 
 Y_NO_INLINE size_t FS2_2(const TStringBuf& x, const TStringBuf& y) {
-    return x.size() + y.size(); 
+    return x.size() + y.size();
 }
 
 Y_CPU_BENCHMARK(FunctionCallCost_StringBufVal1, iface) {

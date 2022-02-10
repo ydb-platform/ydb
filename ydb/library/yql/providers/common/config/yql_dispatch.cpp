@@ -73,7 +73,7 @@ TParser<TInstant> GetDefaultParser<TInstant>() {
     TParser<type> GetDefaultParser<type>() {                            \
         return [] (const TString& str) {                                \
             type res;                                                   \
-            StringSplitter(str).SplitBySet(",;| ").AddTo(&res);         \ 
+            StringSplitter(str).SplitBySet(",;| ").AddTo(&res);         \
             for (auto& s: res) {                                        \
                 if (s.empty()) {                                        \
                     throw yexception() << "Empty value item";           \

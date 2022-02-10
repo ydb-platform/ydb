@@ -7,7 +7,7 @@
 
 namespace NKikimr {
 
-extern const char IssueMapResource[17]; 
+extern const char IssueMapResource[17];
 
 inline NYql::ESeverity GetSeverity(NYql::TIssueCode id) {
     return NYql::GetSeverity<NKikimrIssues::TIssuesIds, IssueMapResource>(id);

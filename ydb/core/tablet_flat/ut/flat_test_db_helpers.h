@@ -33,7 +33,7 @@ public:
     void Set(const TRawTypeValue& v) {
         if (!v.IsEmpty()) {
             Buf = TString((const char*)v.Data(), v.Size());
-            Val = TRawTypeValue(Buf.data(), Buf.size(), v.Type()); 
+            Val = TRawTypeValue(Buf.data(), Buf.size(), v.Type());
         } else {
             Val = TRawTypeValue();
         }
@@ -88,7 +88,7 @@ inline TFakeTableCell FromVal(NScheme::TTypeId, std::nullptr_t) {
 
 inline TFakeTableCell FromVal(NScheme::TTypeId t, TString val) {
     TFakeTableCell c;
-    c.Set(TRawTypeValue(val.data(), val.size(), t)); 
+    c.Set(TRawTypeValue(val.data(), val.size(), t));
     return c;
 }
 
@@ -143,7 +143,7 @@ public:
         const TScheme::TTableInfo* tableInfo = Scheme.GetTableInfo(GetRoot());
         Y_VERIFY(tableInfo, "Unknown table id %u", GetRoot());
         const ui32* tagId = tableInfo->ColumnNames.FindPtr(tagName);
-        Y_VERIFY(tagId, "Unknown column \"%s\" in table %u", tagName.data(), GetRoot()); 
+        Y_VERIFY(tagId, "Unknown column \"%s\" in table %u", tagName.data(), GetRoot());
         const auto *colInfo = Scheme.GetColumnInfo(GetRoot(), *tagId);
         Y_VERIFY(colInfo, "Column info not found for table id %u, column id %u", GetRoot(), *tagId);
         NScheme::TTypeId type = colInfo->PType;
@@ -155,7 +155,7 @@ public:
         const TScheme::TTableInfo* tableInfo = Scheme.GetTableInfo(GetRoot());
         Y_VERIFY(tableInfo, "Unknown table id %u", GetRoot());
         const ui32* tagId = tableInfo->ColumnNames.FindPtr(tagName);
-        Y_VERIFY(tagId, "Unknown column \"%s\" in table %u", tagName.data(), GetRoot()); 
+        Y_VERIFY(tagId, "Unknown column \"%s\" in table %u", tagName.data(), GetRoot());
         const auto * colInfo = Scheme.GetColumnInfo(GetRoot(), *tagId);
         Y_VERIFY(colInfo, "Column info not found for table id %u, column id %u", GetRoot(), *tagId);
         TagOps[*tagId] = MakeNull(ECellOp::Null);

@@ -961,7 +961,7 @@ void TExecutor::ApplyFollowerAuxUpdate(const TString &auxBody) {
         if (auto logl = Logger->Log(ELnLev::Debug)) {
             logl
                 << NFmt::Do(*this) << " refresh pageCollection " << metaId
-                << " " << pages.size() << " pages of " << x.TouchedPagesSize(); 
+                << " " << pages.size() << " pages of " << x.TouchedPagesSize();
         }
 
         if (pages) {
@@ -1289,7 +1289,7 @@ void TExecutor::ApplyExternalPartSwitch(TPendingPartSwitch &partSwitch) {
             auto overlay = NTable::TOverlay::Decode(change.Legacy, change.Opaque);
             Y_VERIFY(overlay.Slices && *overlay.Slices,
                 "Change for bundle %s has unexpected empty slices",
-                change.Label.ToString().data()); 
+                change.Label.ToString().data());
             updatedBundles[change.Label] = std::move(overlay.Slices);
         }
 

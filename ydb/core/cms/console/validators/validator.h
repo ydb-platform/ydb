@@ -88,7 +88,7 @@ protected:
                   ui32 severity = NYql::TSeverityIds::S_ERROR) const
     {
         Ydb::Issue::IssueMessage issue;
-        issue.set_message(Sprintf("%s validator: %s", Name.data(), msg.data())); 
+        issue.set_message(Sprintf("%s validator: %s", Name.data(), msg.data()));
         issue.set_severity(severity);
         issues.push_back(issue);
     }

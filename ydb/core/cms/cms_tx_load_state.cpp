@@ -82,7 +82,7 @@ public:
             google::protobuf::TextFormat::ParseFromString(requestStr, &request.Request);
 
             LOG_DEBUG(ctx, NKikimrServices::CMS, "Loaded request %s owned by %s: %s",
-                      id.data(), owner.data(), requestStr.data()); 
+                      id.data(), owner.data(), requestStr.data());
 
             state->ScheduledRequests.emplace(id, request);
 
@@ -101,7 +101,7 @@ public:
             state->WalleTasks.emplace(taskId, task);
 
             LOG_DEBUG(ctx, NKikimrServices::CMS, "Loaded Wall-E task %s mapped to request %s",
-                      taskId.data(), requestId.data()); 
+                      taskId.data(), requestId.data());
 
             if (!walleTaskRowset.Next())
                 return false;
@@ -122,7 +122,7 @@ public:
             permission.Deadline = TInstant::MicroSeconds(deadline);
 
             LOG_DEBUG(ctx, NKikimrServices::CMS, "Loaded permission %s owned by %s valid until %s: %s",
-                      id.data(), owner.data(), TInstant::MicroSeconds(deadline).ToStringLocalUpToSeconds().data(), actionStr.data()); 
+                      id.data(), owner.data(), TInstant::MicroSeconds(deadline).ToStringLocalUpToSeconds().data(), actionStr.data());
 
             state->Permissions.emplace(id, permission);
 
@@ -131,7 +131,7 @@ public:
                 state->WalleTasks[taskId].Permissions.insert(id);
 
                 LOG_DEBUG(ctx, NKikimrServices::CMS, "Added permission %s to Wall-E task %s",
-                          id.data(), taskId.data()); 
+                          id.data(), taskId.data());
             }
 
             if (!permissionRowset.Next())
@@ -149,7 +149,7 @@ public:
             google::protobuf::TextFormat::ParseFromString(notificationStr, &notification.Notification);
 
             LOG_DEBUG(ctx, NKikimrServices::CMS, "Loaded notification %s owned by %s: %s",
-                      id.data(), owner.data(), notificationStr.data()); 
+                      id.data(), owner.data(), notificationStr.data());
 
             state->Notifications.emplace(id, notification);
 
@@ -163,7 +163,7 @@ public:
 
             LOG_DEBUG(ctx, NKikimrServices::CMS,
                       "Loaded node tenant '%s' for node %" PRIu32,
-                      tenant.data(), nodeId); 
+                      tenant.data(), nodeId);
             state->InitialNodeTenants[nodeId] = tenant;
 
             if (!nodeTenantRowset.Next())

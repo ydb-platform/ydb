@@ -42,7 +42,7 @@ namespace NKikimr {
                             VDISKP(HullCtx->VCtx->VDiskLogPrefix,
                                 "%s: DelSst: action# %s timeSpent# %s sstsToDelete# %" PRIu32,
                                 PDiskSignatureForHullDbKey<TKey>().ToString().data(),
-                                ActionToStr(action), (finishTime - startTime).ToString().data(), 
+                                ActionToStr(action), (finishTime - startTime).ToString().data(),
                                 SstToDelete));
                 }
 

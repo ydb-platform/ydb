@@ -128,11 +128,11 @@ TString FullTableName(const TStringBuf& cluster, const TStringBuf& table) {
 
 IDataProvider::TFillSettings GetFillSettings(const TExprNode& node) {
     IDataProvider::TFillSettings fillSettings;
-    fillSettings.AllResultsBytesLimit = node.Child(1)->Content().empty() 
+    fillSettings.AllResultsBytesLimit = node.Child(1)->Content().empty()
         ? Nothing()
         : TMaybe<ui64>(FromString<ui64>(node.Child(1)->Content()));
 
-    fillSettings.RowsLimitPerWrite = node.Child(2)->Content().empty() 
+    fillSettings.RowsLimitPerWrite = node.Child(2)->Content().empty()
         ? Nothing()
         : TMaybe<ui64>(FromString<ui64>(node.Child(2)->Content()));
 

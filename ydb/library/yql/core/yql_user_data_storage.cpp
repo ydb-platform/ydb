@@ -279,9 +279,9 @@ void FillUserDataTableFromFileSystem(const TString& aliasPrefix, const TString& 
     for (auto it = dir.begin(); it != dir.end(); ++it) {
         if (FTS_F == it->fts_info) {
             TString filePath = it->fts_path;
-            if (!filePath.empty()) { 
+            if (!filePath.empty()) {
                 auto ptr = &*filePath.begin();
-                for (size_t i = 0; i < filePath.size(); ++i) { 
+                for (size_t i = 0; i < filePath.size(); ++i) {
                     if (ptr[i] == '\\') {
                         ptr[i] = Sep;
                     }

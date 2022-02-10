@@ -1,9 +1,9 @@
 // -*- C++ -*-
 //===--------------------------- float.h ----------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions. 
-// See https://llvm.org/LICENSE.txt for license information. 
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception 
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -23,14 +23,14 @@ Macros:
     DBL_MANT_DIG
     LDBL_MANT_DIG
 
-    FLT_HAS_SUBNORM     // C11 
-    DBL_HAS_SUBNORM     // C11 
-    LDBL_HAS_SUBNORM    // C11 
- 
+    FLT_HAS_SUBNORM     // C11
+    DBL_HAS_SUBNORM     // C11
+    LDBL_HAS_SUBNORM    // C11
+
     DECIMAL_DIG         // C99
-    FLT_DECIMAL_DIG     // C11 
-    DBL_DECIMAL_DIG     // C11 
-    LDBL_DECIMAL_DIG    // C11 
+    FLT_DECIMAL_DIG     // C11
+    DBL_DECIMAL_DIG     // C11
+    LDBL_DECIMAL_DIG    // C11
 
     FLT_DIG
     DBL_DIG
@@ -64,10 +64,10 @@ Macros:
     DBL_MIN
     LDBL_MIN
 
-    FLT_TRUE_MIN        // C11 
-    DBL_TRUE_MIN        // C11 
-    LDBL_TRUE_MIN       // C11 
- 
+    FLT_TRUE_MIN        // C11
+    DBL_TRUE_MIN        // C11
+    LDBL_TRUE_MIN       // C11
+
 */
 
 #include <__config>

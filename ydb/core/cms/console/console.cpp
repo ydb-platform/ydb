@@ -60,7 +60,7 @@ void TConsole::Enqueue(TAutoPtr<IEventHandle> &ev, const TActorContext &ctx)
 {
     LOG_DEBUG(ctx, NKikimrServices::CMS,
               "TConsole::Enqueue: %" PRIu64 ", event type: %" PRIu32 " event: %s",
-              TabletID(), ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"); 
+              TabletID(), ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
     InitQueue.push_back(ev);
 }
 
@@ -136,7 +136,7 @@ void TConsole::ProcessEnqueuedEvents(const TActorContext &ctx)
         TAutoPtr<IEventHandle> &ev = InitQueue.front();
         LOG_DEBUG(ctx, NKikimrServices::CMS,
                   "TConsole::Dequeue: %" PRIu64 ", event type: %" PRIu32 " event: %s",
-                  TabletID(), ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"); 
+                  TabletID(), ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
         ctx.ExecutorThread.Send(ev.Release());
         InitQueue.pop_front();
     }

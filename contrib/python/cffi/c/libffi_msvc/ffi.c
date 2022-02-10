@@ -40,10 +40,10 @@ extern void Py_FatalError(const char *msg);
 void ffi_prep_args(char *stack, extended_cif *ecif)
 /*@=exportheader@*/
 {
-  unsigned int i; 
-  void **p_argv; 
-  char *argp; 
-  ffi_type **p_arg; 
+  unsigned int i;
+  void **p_argv;
+  char *argp;
+  ffi_type **p_arg;
 
   argp = stack;
   if (ecif->cif->flags == FFI_TYPE_STRUCT)
@@ -354,10 +354,10 @@ ffi_prep_incoming_args_SYSV(char *stack, void **rvalue,
 			    void **avalue, ffi_cif *cif)
 /*@=exportheader@*/
 {
-  unsigned int i; 
-  void **p_argv; 
-  char *argp; 
-  ffi_type **p_arg; 
+  unsigned int i;
+  void **p_argv;
+  char *argp;
+  ffi_type **p_arg;
 
   argp = stack;
 

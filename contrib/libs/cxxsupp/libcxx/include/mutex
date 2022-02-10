@@ -1,9 +1,9 @@
 // -*- C++ -*-
 //===--------------------------- mutex ------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions. 
-// See https://llvm.org/LICENSE.txt for license information. 
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception 
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -196,7 +196,7 @@ template<class Callable, class ...Args>
 #ifndef _LIBCPP_CXX03_LANG
 # include <tuple>
 #endif
-#include <version> 
+#include <version>
 
 #if !defined(_LIBCPP_HAS_NO_THREADS) && !defined(_LIBCPP_CXX03_LANG)
 #include <atomic>
@@ -494,7 +494,7 @@ public:
 };
 
 template <class _Mutex>
-class _LIBCPP_TEMPLATE_VIS _LIBCPP_THREAD_SAFETY_ANNOTATION(scoped_lockable) scoped_lock<_Mutex> { 
+class _LIBCPP_TEMPLATE_VIS _LIBCPP_THREAD_SAFETY_ANNOTATION(scoped_lockable) scoped_lock<_Mutex> {
 public:
     typedef _Mutex  mutex_type;
 private:

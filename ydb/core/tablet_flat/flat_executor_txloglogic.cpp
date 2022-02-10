@@ -135,7 +135,7 @@ TLogicRedo::TCommitRWTransactionResult TLogicRedo::CommitRWTransaction(
             bytes += one.Data.size();
         }
 
-        Counters->Cumulative()[TMonCo::DB_ANNEX_ITEMS_GROW].Increment(change.Annex.size()); 
+        Counters->Cumulative()[TMonCo::DB_ANNEX_ITEMS_GROW].Increment(change.Annex.size());
         Counters->Cumulative()[TMonCo::DB_ANNEX_WRITTEN_BYTES].Increment(bytes);
         if (AppTxCounters && txType != UnknownTxType)
             AppTxCounters->TxCumulative(txType, COUNTER_TT_ANNEX_WRITTEN_BYTES).Increment(bytes);
@@ -194,13 +194,13 @@ TLogicRedo::TCommitRWTransactionResult TLogicRedo::CommitRWTransaction(
 void TLogicRedo::MakeLogEntry(TLogCommit &commit, TString redo, TArrayRef<const ui32> affects, bool embed)
 {
     if (redo) {
-        NSan::CheckMemIsInitialized(redo.data(), redo.size()); 
+        NSan::CheckMemIsInitialized(redo.data(), redo.size());
 
         Cookies->Switch(commit.Step, true /* require step switch */);
 
         auto coded = NPageCollection::TSlicer::Lz4()->Encode(redo);
 
-        Counters->Cumulative()[TMonCo::LOG_REDO_WRITTEN].Increment(coded.size()); 
+        Counters->Cumulative()[TMonCo::LOG_REDO_WRITTEN].Increment(coded.size());
 
         if (embed && coded.size() <= MaxSizeToEmbedInLog) {
             commit.Embedded = std::move(coded);

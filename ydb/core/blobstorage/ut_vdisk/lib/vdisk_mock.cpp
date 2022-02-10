@@ -92,10 +92,10 @@ public:
         auto& record = ev->Get()->Record;
         Y_VERIFY(VDiskIDFromVDiskID(record.GetVDiskID()) == VDiskId,
                 "record.VDiskId# %s VDiskId# %s",
-                VDiskIDFromVDiskID(record.GetVDiskID()).ToString().data(), VDiskId.ToString().data()); 
+                VDiskIDFromVDiskID(record.GetVDiskID()).ToString().data(), VDiskId.ToString().data());
         TLogoBlobID id{LogoBlobIDFromLogoBlobID(record.GetBlobID())};
 
-        LOG_DEBUG(ctx, NActorsServices::TEST, "TEvVPut# %s", ev->Get()->ToString().data()); 
+        LOG_DEBUG(ctx, NActorsServices::TEST, "TEvVPut# %s", ev->Get()->ToString().data());
 
         auto sendResponse = [&](NKikimrProto::EReplyStatus status, const TString& errorReason) {
             ui64 cookie = record.GetCookie();
@@ -176,7 +176,7 @@ public:
 
         if (ErrorMode) {
             response->MakeError(NKikimrProto::ERROR, "error mode", record);
-            LOG_DEBUG(ctx, NActorsServices::TEST, "TEvVGet# %s -> %s", ev->Get()->ToString().data(), response->ToString().data()); 
+            LOG_DEBUG(ctx, NActorsServices::TEST, "TEvVGet# %s -> %s", ev->Get()->ToString().data(), response->ToString().data());
             FinalizeAndSend(std::move(response), ctx, ev->Sender);
             return;
         }
@@ -316,7 +316,7 @@ public:
         }
 
         // send final response
-        LOG_DEBUG(ctx, NActorsServices::TEST, "TEvVGet# %s -> %s", ev->Get()->ToString().data(), response->ToString().data()); 
+        LOG_DEBUG(ctx, NActorsServices::TEST, "TEvVGet# %s -> %s", ev->Get()->ToString().data(), response->ToString().data());
         FinalizeAndSend(std::move(response), ctx, ev->Sender);
     }
 

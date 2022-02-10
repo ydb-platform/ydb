@@ -42,7 +42,7 @@ TSysLogBackend::TSysLogBackend(const char* ident, EFacility facility, int flags)
         sysflags |= LOG_CONS;
     }
 
-    openlog(Ident.data(), sysflags, f2sf[(size_t)facility]); 
+    openlog(Ident.data(), sysflags, f2sf[(size_t)facility]);
 #endif
 }
 

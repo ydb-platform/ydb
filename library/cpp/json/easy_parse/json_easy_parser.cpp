@@ -66,7 +66,7 @@ namespace NJson {
         bool CheckFilter(const TVector<TPathElem>& path) const {
             if (Stack.size() < path.size())
                 return false;
-            for (size_t n = 0; n < path.size(); ++n) { 
+            for (size_t n = 0; n < path.size(); ++n) {
                 if (!PathElementMatch(path[n], Stack[n]))
                     return false;
             }
@@ -74,7 +74,7 @@ namespace NJson {
         }
 
         void UpdateRule() {
-            for (size_t n = 0; n < Parent.Fields.size(); ++n) { 
+            for (size_t n = 0; n < Parent.Fields.size(); ++n) {
                 if (FieldValues[n].empty() && CheckFilter(Parent.Fields[n].Path)) {
                     CurrentFieldIdx = n;
                     return;
@@ -113,7 +113,7 @@ namespace NJson {
             , CurrentFieldIdx(-1)
             , HasFormatError(false)
         {
-            for (size_t n = 0; n < Parent.Fields.size(); ++n) { 
+            for (size_t n = 0; n < Parent.Fields.size(); ++n) {
                 if (!Parent.Fields[n].Path.empty() && Parent.Fields[n].Path.back().Type == NImpl::ARRAY)
                     ShouldUpdateOnArrayChange = true;
             }
@@ -187,14 +187,14 @@ namespace NJson {
         bool IsOK() const {
             if (HasFormatError)
                 return false;
-            for (size_t n = 0; n < FieldValues.size(); ++n) 
+            for (size_t n = 0; n < FieldValues.size(); ++n)
                 if (Parent.Fields[n].NonEmpty && FieldValues[n].empty())
                     return false;
             return true;
         }
 
         void WriteTo(IOutputStream& out) const {
-            for (size_t n = 0; n < FieldValues.size(); ++n) 
+            for (size_t n = 0; n < FieldValues.size(); ++n)
                 out << "\t" << FieldValues[n];
         }
 

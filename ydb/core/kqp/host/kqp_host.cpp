@@ -58,7 +58,7 @@ public:
 
     void Write(const TStringBuf& resultData) override {
         if (!Discard) {
-            YQL_ENSURE(Result.empty()); 
+            YQL_ENSURE(Result.empty());
             Result = resultData;
         }
     }
@@ -72,7 +72,7 @@ public:
     }
 
     ui64 Size() override {
-        return Result.size(); 
+        return Result.size();
     }
 
 private:
@@ -209,7 +209,7 @@ public:
                 google::protobuf::Arena::CreateMessage<NKikimrMiniKQL::TResult>(queryResult.ProtobufArenaPtr.get()));
             NKikimrMiniKQL::TResult* result = queryResult.Results.back();
 
-            if (!result->ParseFromArray(resultStr.data(), resultStr.size())) { 
+            if (!result->ParseFromArray(resultStr.data(), resultStr.size())) {
                 queryResult = ResultFromError<TResult>("Failed to parse run result.");
                 return;
             }

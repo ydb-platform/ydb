@@ -29,7 +29,7 @@ void SerializeMetadata(const IBuiltinFunctionRegistry& funcRegistry, TString* ou
 void DeserializeMetadata(TStringBuf buffer, IBuiltinFunctionRegistry& funcRegistry)
 {
     NKikimrSchemeTypeOperation::TMetadata metadata;
-    Y_VERIFY(metadata.ParseFromArray(buffer.data(), buffer.size())); 
+    Y_VERIFY(metadata.ParseFromArray(buffer.data(), buffer.size()));
     size_t totalArgsToAllocate = 0;
     for (const auto& protoOp : metadata.GetOperation()) {
         for (const auto& protoDesc : protoOp.GetDescription()) {

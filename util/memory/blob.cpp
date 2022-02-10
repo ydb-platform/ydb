@@ -395,7 +395,7 @@ TBlob ConstructFromString(S&& s) {
     using TBase = TStringBlobBase<TCounter>;
     auto base = MakeHolder<TBase>(std::forward<S>(s));
 
-    TBlob ret(base->String().data(), base->String().size(), base.Get()); 
+    TBlob ret(base->String().data(), base->String().size(), base.Get());
     Y_UNUSED(base.Release());
 
     return ret;

@@ -258,7 +258,7 @@ private:
             return x;
         };
         LOG_DEBUG(ActorSystem, NKikimrServices::GRPC_SERVER, "[%p] issuing response Name# %s data# %s peer# %s", this,
-            Name, makeResponseString().data(), Context.peer().c_str()); 
+            Name, makeResponseString().data(), Context.peer().c_str());
         ResponseSize = resp.ByteSize();
         ResponseStatus = status;
         StateFunc = &TSimpleRequest::FinishDone;
@@ -290,7 +290,7 @@ private:
             return resp;
         };
         LOG_DEBUG(ActorSystem, NKikimrServices::GRPC_SERVER, "[%p] received request Name# %s ok# %s data# %s peer# %s current inflight# %li", this,
-            Name, ok ? "true" : "false", makeRequestString().data(), Context.peer().c_str(), Server->GetCurrentInFlight()); 
+            Name, ok ? "true" : "false", makeRequestString().data(), Context.peer().c_str(), Server->GetCurrentInFlight());
 
         if (Context.c_call() == nullptr) {
             Y_VERIFY(!ok);

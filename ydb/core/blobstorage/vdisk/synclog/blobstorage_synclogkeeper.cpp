@@ -173,7 +173,7 @@ namespace NKikimr {
                 LOG_DEBUG(ctx, BS_SYNCLOG,
                           VDISKP(SlCtx->VCtx->VDiskLogPrefix,
                                 "KEEPER: TEvSyncLogCommitDone: ev# %s",
-                                msg->ToString().data())); 
+                                msg->ToString().data()));
 
                 LOG_DEBUG(ctx, BS_LOGCUTTER,
                           VDISKP(SlCtx->VCtx->VDiskLogPrefix,
@@ -182,7 +182,7 @@ namespace NKikimr {
 
                 // log commit to Sublog
                 Sublog.Log() << ToStringLocalTimeUpToSeconds(ctx.Now())
-                    << " Commit done: message# " << msg->ToString().data() << "\n"; 
+                    << " Commit done: message# " << msg->ToString().data() << "\n";
 
                 // commit finished
                 CommitterId = TActorId();

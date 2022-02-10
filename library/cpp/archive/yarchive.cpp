@@ -23,8 +23,8 @@ static inline void ESSave(IOutputStream* out, const T& t_in) {
 }
 
 static inline void ESSave(IOutputStream* out, const TString& s) {
-    ESSave(out, (ui32) s.size()); 
-    out->Write(s.data(), s.size()); 
+    ESSave(out, (ui32) s.size());
+    out->Write(s.data(), s.size());
 }
 
 template <class T>
@@ -339,7 +339,7 @@ public:
     inline TBlob BlobByKey(const TStringBuf key) const {
         const auto it = Dict_.find(key);
 
-        Y_ENSURE(it != Dict_.end(), "key " << key.data() << " not found"); 
+        Y_ENSURE(it != Dict_.end(), "key " << key.data() << " not found");
 
         const size_t off = it->second->Offset();
         const size_t len = it->second->Length();

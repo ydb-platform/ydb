@@ -12,10 +12,10 @@ private:
 
         TBuffer outEnc, outDec;
         NStaticCodecExample::Encode(outEnc, letov, dv);
-        NStaticCodecExample::Decode(outDec, TStringBuf{outEnc.data(), outEnc.size()}); 
+        NStaticCodecExample::Decode(outDec, TStringBuf{outEnc.data(), outEnc.size()});
 
         UNIT_ASSERT_VALUES_EQUAL(outEnc.Size(), expectedSize);
-        UNIT_ASSERT_EQUAL(TStringBuf(outDec.data(), outDec.size()), letov); 
+        UNIT_ASSERT_EQUAL(TStringBuf(outDec.data(), outDec.size()), letov);
     }
 
     void TestUsage() {

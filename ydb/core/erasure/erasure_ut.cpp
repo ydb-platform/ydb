@@ -20,13 +20,13 @@ void TestMissingPartWithRandomData(TErasureType &groupType, ui32 *missingPartIdx
     VERBOSE_COUT(" dataSize# " << dataSize << Endl);
     TString testString;
     testString.resize(dataSize);
-    char *writePosChar = (char *)testString.data(); 
-    ui32 charParts = testString.size() % sizeof(ui64); 
+    char *writePosChar = (char *)testString.data();
+    ui32 charParts = testString.size() % sizeof(ui64);
     for (ui32 i = 0; i < charParts; ++i) {
         writePosChar[i] = (char)randGen.GenRand();
     }
     ui64 *writePos64 = (ui64 *)writePosChar;
-    ui32 ui64Parts = testString.size() / sizeof(ui64); 
+    ui32 ui64Parts = testString.size() / sizeof(ui64);
     for (ui32 i = 0; i < ui64Parts; ++i) {
         writePos64[i] = randGen.GenRand();
     }
@@ -289,7 +289,7 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
             TVector<TVector<ui8>> &expectedParts = partsPool[variant];
             TString testString;
             testString.resize(data.size());
-            for (ui32 i = 0; i < testString.size(); ++i) { 
+            for (ui32 i = 0; i < testString.size(); ++i) {
                 testString[i] = (char)data[i];
             }
             TDataPartSet partSet;

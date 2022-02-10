@@ -8,7 +8,7 @@ namespace NKikimr {
     inline ui32 DataCenterFromString(const TString &dc)
     {
         ui32 res = 0;
-        strncpy(reinterpret_cast<char *>(&res), dc.data(), sizeof(res)); 
+        strncpy(reinterpret_cast<char *>(&res), dc.data(), sizeof(res));
         return res;
     }
 
@@ -22,6 +22,6 @@ namespace NKikimr {
 
     inline ui32 RackFromString(const TString &rack)
     {
-        return MurmurHash<ui32>(rack.data(), rack.size()); 
+        return MurmurHash<ui32>(rack.data(), rack.size());
     }
 } // namespace NKikimr

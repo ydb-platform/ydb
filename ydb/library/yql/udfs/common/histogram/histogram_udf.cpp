@@ -136,7 +136,7 @@ namespace {
                 histogram->Get()->Add(args[0].Get<double>(), args[1].Get<double>());
                 return TUnboxedValuePod(histogram.Release());
             } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data()); 
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
             }
         }
 
@@ -187,7 +187,7 @@ namespace {
                 resource->Get()->Add(args[1].Get<double>(), args[2].Get<double>());
                 return TUnboxedValuePod(args[0]);
             } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data()); 
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
             }
         }
 
@@ -239,7 +239,7 @@ namespace {
                 Y_PROTOBUF_SUPPRESS_NODISCARD proto.SerializeToString(&result);
                 return valueBuilder->NewString(result);
             } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data()); 
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
             }
         }
 
@@ -292,7 +292,7 @@ namespace {
                 histogram->Get()->FromProto(proto);
                 return TUnboxedValuePod(histogram.Release());
             } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data()); 
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
             }
         }
 
@@ -344,7 +344,7 @@ namespace {
                 static_cast<THistogramResource*>(args[1].AsBoxed().Get())->Get()->Merge(proto, 1.0);
                 return TUnboxedValuePod(args[1]);
             } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data()); 
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
             }
         }
 
@@ -481,7 +481,7 @@ namespace {
             histogram->Get()->Add(args[0].Get<double>(), 1.0);
             return TUnboxedValuePod(histogram.Release());
         } catch (const std::exception& e) {
-            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data()); 
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
         }
     }
 
@@ -517,7 +517,7 @@ namespace {
             histogram->Get()->FromProto(proto);
             return TUnboxedValuePod(histogram.Release());
         } catch (const std::exception& e) {
-            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data()); 
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
         }
     }
 
@@ -551,7 +551,7 @@ namespace {
             histogram->Get()->Add(args[0].Get<double>(), 1.0);
             return TUnboxedValuePod(histogram.Release());
         } catch (const std::exception& e) {
-            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data()); 
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
         }
     }
 
@@ -587,7 +587,7 @@ namespace {
             histogram->Get()->FromProto(proto);
             return TUnboxedValuePod(histogram.Release());
         } catch (const std::exception& e) {
-            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data()); 
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
         }
     }
 
@@ -887,7 +887,7 @@ namespace {
 
                 return GetResult(histogram, args);
             } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data()); 
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
             }
         }
 

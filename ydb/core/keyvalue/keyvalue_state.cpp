@@ -414,7 +414,7 @@ void TKeyValueState::Load(const TString &key, const TString& value) {
                     Cerr << str.Str();
                     IsDamaged = true;
                 } else {
-                    Y_VERIFY(false, "%s", str.Str().data()); 
+                    Y_VERIFY(false, "%s", str.Str().data());
                 }
             }
             for (const TIndexRecord::TChainItem& item : record.Chain) {
@@ -431,8 +431,8 @@ void TKeyValueState::Load(const TString &key, const TString& value) {
         }
         case EIT_TRASH: {
             Y_VERIFY(value.size() == 0);
-            Y_VERIFY(arbitraryPart.size() == sizeof(TTrashKeyArbitrary)); 
-            const TTrashKeyArbitrary *trashKey = (const TTrashKeyArbitrary *) arbitraryPart.data(); 
+            Y_VERIFY(arbitraryPart.size() == sizeof(TTrashKeyArbitrary));
+            const TTrashKeyArbitrary *trashKey = (const TTrashKeyArbitrary *) arbitraryPart.data();
             Trash.insert(trashKey->LogoBlobId);
             CountInitialTrashRecord(trashKey->LogoBlobId.BlobSize());
             break;
@@ -441,7 +441,7 @@ void TKeyValueState::Load(const TString &key, const TString& value) {
             Y_VERIFY(arbitraryPart.size() == 0);
             Y_VERIFY(!CollectOperation.Get());
             Y_VERIFY(value.size() >= sizeof(TCollectOperationHeader));
-            const TCollectOperationHeader *header = (const TCollectOperationHeader*)value.data(); 
+            const TCollectOperationHeader *header = (const TCollectOperationHeader*)value.data();
             Y_VERIFY(header->DataHeader.ItemType == EIT_COLLECT);
             ui64 totalSize = sizeof(TCollectOperationHeader)
                 + sizeof(TLogoBlobID) * (header->KeepCount + header->DoNotKeepCount);
@@ -450,7 +450,7 @@ void TKeyValueState::Load(const TString &key, const TString& value) {
             TVector<TLogoBlobID> doNotKeep;
             keep.resize(header->KeepCount);
             doNotKeep.resize(header->DoNotKeepCount);
-            const char* data = value.data() + sizeof(TCollectOperationHeader); 
+            const char* data = value.data() + sizeof(TCollectOperationHeader);
             if (keep.size()) {
                 memcpy((char *) &keep[0], data, sizeof(TLogoBlobID) * keep.size());
             }
@@ -467,7 +467,7 @@ void TKeyValueState::Load(const TString &key, const TString& value) {
             IsStatePresent = true;
             Y_VERIFY(arbitraryPart.size() == 0);
             Y_VERIFY(value.size() >= sizeof(TKeyValueStoredStateData));
-            const TKeyValueStoredStateData *data = (const TKeyValueStoredStateData *) value.data(); 
+            const TKeyValueStoredStateData *data = (const TKeyValueStoredStateData *) value.data();
             Y_VERIFY(data->CheckChecksum());
             Y_VERIFY(data->DataHeader.ItemType == EIT_STATE);
             StoredState = *data;
@@ -2317,8 +2317,8 @@ bool TKeyValueState::PrepareCmdCopyRange(const TActorContext& ctx, NKikimrClient
         intermediate->Commands.emplace_back(TIntermediate::TCopyRange());
         auto& interm = std::get<TIntermediate::TCopyRange>(intermediate->Commands.back());
 
-        if ((!request.HasPrefixToAdd() || request.GetPrefixToAdd().empty()) && 
-                (!request.HasPrefixToRemove() || request.GetPrefixToRemove().empty())) { 
+        if ((!request.HasPrefixToAdd() || request.GetPrefixToAdd().empty()) &&
+                (!request.HasPrefixToRemove() || request.GetPrefixToRemove().empty())) {
             TStringStream str;
             str << "KeyValue# " << TabletId
                 << " Missing or empty both PrefixToAdd and PrefixToRemove in CmdCopyRange(" << i << ") Marker# KV11";
@@ -3201,15 +3201,15 @@ void TKeyValueState::VerifyEqualIndex(const TKeyValueState& state) const {
     auto i2 = state.Index.cbegin(), e2 = state.Index.cend();
     int i = 0;
     for (auto i1 = Index.cbegin(), e1 = Index.cend(); i1 != e1; ++i, ++i1, ++i2) {
-        Y_VERIFY(i2 != e2, "index length differs. Dump:\n%s\n%s\n", Dump().data(), state.Dump().data()); 
+        Y_VERIFY(i2 != e2, "index length differs. Dump:\n%s\n%s\n", Dump().data(), state.Dump().data());
         const TString& k1 = i1->first;
         const TString& k2 = i2->first;
-        Y_VERIFY(k1 == k2, "index key #%d differs. Dump:\n%s\n%s\n", i, Dump().data(), state.Dump().data()); 
+        Y_VERIFY(k1 == k2, "index key #%d differs. Dump:\n%s\n%s\n", i, Dump().data(), state.Dump().data());
         const TIndexRecord& v1 = i1->second;
         const TIndexRecord& v2 = i2->second;
-        Y_VERIFY(v1 == v2, "index value #%d differs. Dump:\n%s\n%s\n", i, Dump().data(), state.Dump().data()); 
+        Y_VERIFY(v1 == v2, "index value #%d differs. Dump:\n%s\n%s\n", i, Dump().data(), state.Dump().data());
     }
-    Y_VERIFY(i2 == e2, "index length differs. Dump:\n%s\n%s\n", Dump().data(), state.Dump().data()); 
+    Y_VERIFY(i2 == e2, "index length differs. Dump:\n%s\n%s\n", Dump().data(), state.Dump().data());
 }
 
 void TKeyValueState::RenderHTMLPage(IOutputStream &out) const {

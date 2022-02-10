@@ -369,7 +369,7 @@ bool TKikimrKey::Extract(const TExprNode& key) {
                     Ctx.AddError(TIssue(Ctx.GetPosition(viewNode->Child(0)->Pos()), "Dynamic views names are not supported"));
                     return false;
                 }
-                if (viewNode->Child(0)->Content().empty()) { 
+                if (viewNode->Child(0)->Content().empty()) {
                     Ctx.AddError(TIssue(Ctx.GetPosition(viewNode->Child(0)->Pos()), "Secondary index name must not be empty"));
                     return false;
                 }

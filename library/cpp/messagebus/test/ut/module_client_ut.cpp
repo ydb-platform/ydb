@@ -178,7 +178,7 @@ Y_UNIT_TEST_SUITE(BusJobTest) {
         }
 
         void ReplyHandler(TBusJob*, EMessageStatus status, TBusMessage* req, TBusMessage* resp) {
-            Y_VERIFY(status == MESSAGE_CONNECT_FAILED || status == MESSAGE_TIMEOUT, "got wrong status: %s", ToString(status).data()); 
+            Y_VERIFY(status == MESSAGE_CONNECT_FAILED || status == MESSAGE_TIMEOUT, "got wrong status: %s", ToString(status).data());
             Y_VERIFY(req == SentMessage, "checking request");
             Y_VERIFY(resp == nullptr, "checking response");
             GotReplyLatch.CountDown();

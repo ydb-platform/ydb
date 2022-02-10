@@ -310,7 +310,7 @@ namespace NKikimr {
 
             LOG_DEBUG(ctx, BS_SYNCER,
                       VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidFirstRunActor: GenerateGuid; guid# %s",
-                            FirstRunState.GetGuid().ToString().data())); 
+                            FirstRunState.GetGuid().ToString().data()));
             SUBLOGLINE(NotifyId, ctx, {
                 stream << "FirstRun: GenerateGuid; guid# " << FirstRunState.GetGuid();
             });
@@ -346,7 +346,7 @@ namespace NKikimr {
         void HandleInProgressWritten(TEvVDiskGuidWritten::TPtr &ev, const TActorContext &ctx) {
             LOG_DEBUG(ctx, BS_SYNCER,
                       VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidFirstRunActor: HandleInProgressWritten: msg# %s",
-                            ev->Get()->ToString().data())); 
+                            ev->Get()->ToString().data()));
             SUBLOGLINE(NotifyId, ctx, {
                 stream << "FirstRun: InProgressGuidWritten; msg# " << ev->Get()->ToString();
             });
@@ -429,7 +429,7 @@ namespace NKikimr {
         void HandleFinalWritten(TEvVDiskGuidWritten::TPtr &ev, const TActorContext &ctx) {
             LOG_DEBUG(ctx, BS_SYNCER,
                       VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidFirstRunActor: HandleFinalWritten: msg# %s",
-                            ev->Get()->ToString().data())); 
+                            ev->Get()->ToString().data()));
             SUBLOGLINE(NotifyId, ctx, {
                 stream << "FirstRun: FinalGuidWritten; msg# " << ev->Get()->ToString();
             });

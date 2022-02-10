@@ -58,9 +58,9 @@ yasm__strsep(char **stringp, const char *delim)
 #ifdef HAVE_STRSEP
     return strsep(stringp, delim);
 #else
-        char *s; 
-        const char *spanp; 
-        int c, sc; 
+        char *s;
+        const char *spanp;
+        int c, sc;
         char *tok;
 
         if ((s = *stringp) == NULL)

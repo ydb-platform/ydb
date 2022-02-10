@@ -646,8 +646,8 @@ public:
         s = Data._012345();
         UNIT_ASSERT(s.at(1) == *Data._1());
         UNIT_ASSERT(s[1] == *Data._1());
-        UNIT_ASSERT(s.at(s.size()) == 0); 
-        UNIT_ASSERT(s[s.size()] == 0); 
+        UNIT_ASSERT(s.at(s.size()) == 0);
+        UNIT_ASSERT(s[s.size()] == 0);
     }
 
 #ifndef TSTRING_IS_STD_STRING
@@ -690,7 +690,7 @@ public:
 
         UNIT_ASSERT(s.find_first_of(TStringType(Data._389())) == 3);
         UNIT_ASSERT(s.find_first_of(Data._389()) == 3);
-        UNIT_ASSERT(s.find_first_of(Data._389(), s.size()) == TStringType::npos); 
+        UNIT_ASSERT(s.find_first_of(Data._389(), s.size()) == TStringType::npos);
         UNIT_ASSERT(s.find_first_not_of(Data._123()) == 0);
         UNIT_ASSERT(s.find_first_of('6') == 6);
         UNIT_ASSERT(s.find_first_of('1', 2) == 8);
@@ -820,10 +820,10 @@ public:
 
     void TestFuncs() {
         TStringType s(Data._0123456());
-        UNIT_ASSERT(s.c_str() == s.data()); 
+        UNIT_ASSERT(s.c_str() == s.data());
 
         // length()
-        UNIT_ASSERT(s.length() == s.size()); 
+        UNIT_ASSERT(s.length() == s.size());
         UNIT_ASSERT(s.length() == traits_type::length(s.data()));
 
         // is_null()
@@ -868,10 +868,10 @@ public:
         s2 = s3;
 
         // resize family
-        s2.resize(s2.size()); // without length change 
+        s2.resize(s2.size()); // without length change
         UNIT_ASSERT(s2 == Data.Asdf1234qwer());
 
-        s2.resize(s2.size() + 4, *Data.W()); 
+        s2.resize(s2.size() + 4, *Data.W());
         UNIT_ASSERT(s2 == Data.Asdf1234qwerWWWW());
 
         s2.resize(4);

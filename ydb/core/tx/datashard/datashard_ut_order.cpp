@@ -609,7 +609,7 @@ static TString MkRandomTx(ui64 txId, ui32 points, ui32 rw, ui32 keysCount, TVect
         (let updates_ (AsList (UpdateRow 'table1 localKey_ '('('uint rVal_)))))
         %s
         (return (Extend (AsList (SetResult 'Result selects_)) updates_))
-    ))", remoteKey, (ui32)txId+100, body.data()); 
+    ))", remoteKey, (ui32)txId+100, body.data());
 }
 
 static void PrintRandomResults(const TVector<ui32>& result, const TString& prefix) {
@@ -1003,7 +1003,7 @@ public:
             (let points_ (List (ListType (TypeOf (Unwrap (SelectRow 'table1 '('('key (Uint32 '0))) '('key 'uint)))))))
             %s
             (return (Extend (AsList (SetResult 'Result points_)) updates_))
-        ))", body.data()); 
+        ))", body.data());
     }
 
     ui64 GetTxId() const { return TxId; }

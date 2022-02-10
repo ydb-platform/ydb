@@ -475,7 +475,7 @@ namespace NKikimr {
             size_t byteSize = TBase::Record.ByteSize();
             Y_VERIFY(byteSize <= NActors::EventMaxByteSize,
                 "event suspiciously large: %zu\n%s",
-                byteSize, this->ToString().data()); 
+                byteSize, this->ToString().data());
 
             if (SkeletonFrontIDPtr && MsgCtx.IntQueueId != NKikimrBlobStorage::IntUnknown) {
                 ctx.Send(*SkeletonFrontIDPtr, new TEvVDiskRequestCompleted(MsgCtx, std::move(ev)));
@@ -608,10 +608,10 @@ namespace NKikimr {
                 str << " Cost# " << qos.GetCost();
             }
             if (qos.HasExtQueueId()) {
-                str << " ExtQueueId# " << NKikimrBlobStorage::EVDiskQueueId_Name(qos.GetExtQueueId()).data(); 
+                str << " ExtQueueId# " << NKikimrBlobStorage::EVDiskQueueId_Name(qos.GetExtQueueId()).data();
             }
             if (qos.HasIntQueueId()) {
-                str << " IntQueueId# " << NKikimrBlobStorage::EVDiskInternalQueueId_Name(qos.GetIntQueueId()).data(); 
+                str << " IntQueueId# " << NKikimrBlobStorage::EVDiskInternalQueueId_Name(qos.GetIntQueueId()).data();
             }
             if (qos.HasCostSettings()) {
                 str << " CostSettings# {";
@@ -644,7 +644,7 @@ namespace NKikimr {
                 str << " Window# {";
                 const NKikimrBlobStorage::TWindowFeedback &window = qos.GetWindow();
                 if (window.HasStatus()) {
-                    str << " Status# " << NKikimrBlobStorage::TWindowFeedback::EStatus_Name(window.GetStatus()).data(); 
+                    str << " Status# " << NKikimrBlobStorage::TWindowFeedback::EStatus_Name(window.GetStatus()).data();
                 }
                 if (window.HasActualWindowSize()) {
                     str << " ActualWindowSize# " << window.GetActualWindowSize();
@@ -678,8 +678,8 @@ namespace NKikimr {
                 str << " ";
                 TEvBlobStorage::TEvVPut::OutMsgQos(record.GetMsgQoS(), str);
             }
-            str << " DataSize# " << data.size(); 
-            if (data.size() > 16) { 
+            str << " DataSize# " << data.size();
+            if (data.size() > 16) {
                 str << " Data# <too_large>";
             } else {
                 TString encoded;
@@ -719,7 +719,7 @@ namespace NKikimr {
         static TString ToString(const NKikimrBlobStorage::TEvVPutResult &record) {
             TStringStream str;
             TLogoBlobID id = LogoBlobIDFromLogoBlobID(record.GetBlobID());
-            str << "{EvVPutResult Status# " << NKikimrProto::EReplyStatus_Name(record.GetStatus()).data(); 
+            str << "{EvVPutResult Status# " << NKikimrProto::EReplyStatus_Name(record.GetStatus()).data();
             if (record.HasErrorReason()) {
                 str << " ErrorReason# " << '"' << EscapeC(record.GetErrorReason()) << '"';
             }
@@ -1321,8 +1321,8 @@ namespace NKikimr {
                 }
                 if (result.HasBuffer()) {
                     const TString &data = result.GetBuffer();
-                    str << " DataSize# " << data.size(); 
-                    if (data.size() > 16) { 
+                    str << " DataSize# " << data.size();
+                    if (data.size() > 16) {
                         str << " Data# <too_large>";
                     } else {
                         TString encoded;
@@ -1735,7 +1735,7 @@ namespace NKikimr {
 
         TString ToString() const override {
             TStringStream str;
-            str << "{EvVBlockResult Status# " << NKikimrProto::EReplyStatus_Name(Record.GetStatus()).data(); 
+            str << "{EvVBlockResult Status# " << NKikimrProto::EReplyStatus_Name(Record.GetStatus()).data();
             if (Record.HasTabletId()) {
                 str << "TabletId# " << Record.GetTabletId();
             }
@@ -2110,7 +2110,7 @@ namespace NKikimr {
 
         TString ToString() const override {
             TStringStream str;
-            str << "{EvVGetBlockResult Status# " << NKikimrProto::EReplyStatus_Name(Record.GetStatus()).data(); 
+            str << "{EvVGetBlockResult Status# " << NKikimrProto::EReplyStatus_Name(Record.GetStatus()).data();
             if (Record.HasTabletId()) {
                 str << "TabletId# " << Record.GetTabletId();
             }
@@ -2231,7 +2231,7 @@ namespace NKikimr {
 
         TString ToString() const override {
             TStringStream str;
-            str << "{EvVCollectGarbageResult Status# " << NKikimrProto::EReplyStatus_Name(Record.GetStatus()).data(); 
+            str << "{EvVCollectGarbageResult Status# " << NKikimrProto::EReplyStatus_Name(Record.GetStatus()).data();
             if (Record.HasTabletId()) {
                 str << " TabletId# " << Record.GetTabletId();
             }

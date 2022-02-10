@@ -199,7 +199,7 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
     {
         TString rawProcessingParams;
         LOAD_SYS_BYTES(db, Schema::Sys_SubDomainInfo, rawProcessingParams);
-        if (!rawProcessingParams.empty()) { 
+        if (!rawProcessingParams.empty()) {
             Self->ProcessingParams.reset(new NKikimrSubDomains::TProcessingParams());
             Y_VERIFY(Self->ProcessingParams->ParseFromString(rawProcessingParams));
         }
@@ -357,11 +357,11 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
 
     Y_VERIFY(Self->SplitSrcSnapshotSender.AllAcked() || Self->State == TShardState::SplitSrcSendingSnapshot,
              "Unexpected state %s while having unsent split snapshots at datashard %" PRIu64,
-             DatashardStateName(Self->State).data(), Self->TabletID()); 
+             DatashardStateName(Self->State).data(), Self->TabletID());
 
     Y_VERIFY(Self->ReceiveSnapshotsFrom.empty() || Self->State == TShardState::SplitDstReceivingSnapshot,
              "Unexpected state %s while having non-received split snapshots at datashard %" PRIu64,
-             DatashardStateName(Self->State).data(), Self->TabletID()); 
+             DatashardStateName(Self->State).data(), Self->TabletID());
 
     // Load unsent ReadSets
     if (!Self->OutReadSets.LoadReadSets(db))
@@ -538,7 +538,7 @@ public:
             TString rawProcessingParams;
             LOAD_SYS_BYTES(db, Schema::Sys_SubDomainInfo, rawProcessingParams)
 
-            if (rawProcessingParams.empty()) { 
+            if (rawProcessingParams.empty()) {
                 auto appdata = AppData(ctx);
                 const ui32 selfDomain = appdata->DomainsInfo->GetDomainUidByTabletId(Self->TabletID());
                 Y_VERIFY(selfDomain != appdata->DomainsInfo->BadDomainId);

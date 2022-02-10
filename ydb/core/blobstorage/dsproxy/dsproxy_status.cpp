@@ -26,9 +26,9 @@ class TBlobStorageGroupStatusRequest : public TBlobStorageGroupRequestActor<TBlo
         const TVDiskID vdisk = VDiskIDFromVDiskID(record.GetVDiskID());
 
         A_LOG_LOG_S(false, PriorityForStatusInbound(status), "DSPS01", "Handle TEvVStatusResult"
-            << " status# " << NKikimrProto::EReplyStatus_Name(status).data() 
+            << " status# " << NKikimrProto::EReplyStatus_Name(status).data()
             << " From# " << vdisk.ToString()
-            << " StatusFlags# " << (record.HasStatusFlags() ? Sprintf("%" PRIx32, record.GetStatusFlags()).data() : "NA") 
+            << " StatusFlags# " << (record.HasStatusFlags() ? Sprintf("%" PRIx32, record.GetStatusFlags()).data() : "NA")
             << " NodeId# " << Info->GetActorId(vdisk).NodeId());
 
         if (record.HasStatusFlags()) {

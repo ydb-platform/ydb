@@ -7,7 +7,7 @@ TString IndentText(TStringBuf text, TStringBuf indent) {
         return TString();
 
     TStringStream ss;
-    ss.Reserve(text.size() + 20); 
+    ss.Reserve(text.size() + 20);
 
     char pc = 0;
     for (size_t i = 0; i < text.size(); ++i) {

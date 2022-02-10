@@ -60,22 +60,22 @@ namespace {
                     return true;
                 }
 
-                if (strncmp(RequestString.data(), "GET /hosts HTTP/1.", 18) == 0) { 
+                if (strncmp(RequestString.data(), "GET /hosts HTTP/1.", 18) == 0) {
                     TString list = Sprintf("[\"localhost\"]");
                     Output() << "HTTP/1.1 200 Ok\r\n";
                     Output() << "Connection: close\r\n";
-                    Output() << "Content-Length: " << list.size() << "\r\n"; 
+                    Output() << "Content-Length: " << list.size() << "\r\n";
                     Output() << "\r\n";
                     Output() << list;
                     return true;
                 }
 
                 Output() << "HTTP/1.1 200 Ok\r\n";
-                if (Buf.Size()) { 
-                    Output() << "Content-Length: " << Buf.Size() << "\r\n\r\n"; 
-                    Output().Write(Buf.AsCharPtr(), Buf.Size()); 
+                if (Buf.Size()) {
+                    Output() << "Content-Length: " << Buf.Size() << "\r\n\r\n";
+                    Output().Write(Buf.AsCharPtr(), Buf.Size());
                 } else {
-                    Output() << "Content-Length: " << (Parent_->Res_).size() 
+                    Output() << "Content-Length: " << (Parent_->Res_).size()
                              << "\r\n\r\n";
                     Output() << Parent_->Res_;
                 }

@@ -41,7 +41,7 @@
 #endif
 
 #ifdef WITH_VALGRIND
-#define NOTE_IN_VALGRIND(test) VALGRIND_PRINTF("%s::%s", test->unit->name.data(), test->name) 
+#define NOTE_IN_VALGRIND(test) VALGRIND_PRINTF("%s::%s", test->unit->name.data(), test->name)
 #else
 #define NOTE_IN_VALGRIND(test)
 #endif
@@ -87,7 +87,7 @@ private:
         event.InsertValue("class", className);
         event.InsertValue("subtest", subtestName);
         event.InsertValue("status", status);
-        event.InsertValue("comment", comment.data()); 
+        event.InsertValue("comment", comment.data());
         event.InsertValue("time", (now - PrevTime).SecondsFloat());
         if (context) {
             for (const auto& metric : context->Metrics) {
@@ -140,13 +140,13 @@ private:
     }
 
     void OnError(const TError* descr) override {
-        const TString comment = BuildComment(descr->msg, descr->BackTrace.data()); 
+        const TString comment = BuildComment(descr->msg, descr->BackTrace.data());
         ErrorMessages.push_back(comment);
     }
 
     void OnFinish(const TFinish* descr) override {
         if (descr->Success) {
-            TraceSubtestFinished(descr->test->unit->name.data(), descr->test->name, "good", "", descr->Context); 
+            TraceSubtestFinished(descr->test->unit->name.data(), descr->test->name, "good", "", descr->Context);
         } else {
             TStringBuilder msgs;
             for (const TString& m : ErrorMessages) {
@@ -158,7 +158,7 @@ private:
             if (msgs) {
                 msgs << TStringBuf("\n");
             }
-            TraceSubtestFinished(descr->test->unit->name.data(), descr->test->name, "fail", msgs, descr->Context); 
+            TraceSubtestFinished(descr->test->unit->name.data(), descr->test->name, "fail", msgs, descr->Context);
             ErrorMessages.clear();
         }
     }
@@ -302,7 +302,7 @@ private:
             return;
         }
         if (PrintBeforeSuite_ || PrintBeforeTest_) {
-            fprintf(stderr, "%s<-----%s %s\n", LightBlueColor().data(), OldColor().data(), unit->name.data()); 
+            fprintf(stderr, "%s<-----%s %s\n", LightBlueColor().data(), OldColor().data(), unit->name.data());
         }
     }
 
@@ -316,11 +316,11 @@ private:
         }
 
         fprintf(stderr, "%s----->%s %s -> ok: %s%u%s",
-                LightBlueColor().data(), OldColor().data(), unit->name.data(), 
-                LightGreenColor().data(), GoodTestsInCurrentUnit(), OldColor().data()); 
+                LightBlueColor().data(), OldColor().data(), unit->name.data(),
+                LightGreenColor().data(), GoodTestsInCurrentUnit(), OldColor().data());
         if (FailTestsInCurrentUnit()) {
             fprintf(stderr, ", err: %s%u%s",
-                    LightRedColor().data(), FailTestsInCurrentUnit(), OldColor().data()); 
+                    LightRedColor().data(), FailTestsInCurrentUnit(), OldColor().data());
         }
         fprintf(stderr, "\n");
     }
@@ -331,7 +331,7 @@ private:
             return;
         }
         if (PrintBeforeTest_) {
-            fprintf(stderr, "[%sexec%s] %s::%s...\n", LightBlueColor().data(), OldColor().data(), test->unit->name.data(), test->name); 
+            fprintf(stderr, "[%sexec%s] %s::%s...\n", LightBlueColor().data(), OldColor().data(), test->unit->name.data(), test->name);
         }
     }
 
@@ -344,19 +344,19 @@ private:
             return;
         }
 
-        const TString err = Sprintf("[%sFAIL%s] %s::%s -> %s%s%s\n%s%s%s", LightRedColor().data(), OldColor().data(), 
-                                    descr->test->unit->name.data(), 
+        const TString err = Sprintf("[%sFAIL%s] %s::%s -> %s%s%s\n%s%s%s", LightRedColor().data(), OldColor().data(),
+                                    descr->test->unit->name.data(),
                                     descr->test->name,
-                                    LightRedColor().data(), descr->msg, OldColor().data(), LightCyanColor().data(), descr->BackTrace.data(), OldColor().data()); 
+                                    LightRedColor().data(), descr->msg, OldColor().data(), LightCyanColor().data(), descr->BackTrace.data(), OldColor().data());
         const TDuration test_duration = SaveTestDuration();
         if (ShowFails) {
             if (PrintTimes_) {
-                Fails.push_back(Sprintf("%s %s", test_duration.ToString().data(), err.data())); 
+                Fails.push_back(Sprintf("%s %s", test_duration.ToString().data(), err.data()));
             } else {
                 Fails.push_back(err);
             }
         }
-        fprintf(stderr, "%s", err.data()); 
+        fprintf(stderr, "%s", err.data());
         NOTE_IN_VALGRIND(descr->test);
         PrintTimes(test_duration);
         if (IsForked) {
@@ -374,8 +374,8 @@ private:
         }
 
         if (descr->Success) {
-            fprintf(stderr, "[%sgood%s] %s::%s\n", LightGreenColor().data(), OldColor().data(), 
-                    descr->test->unit->name.data(), 
+            fprintf(stderr, "[%sgood%s] %s::%s\n", LightGreenColor().data(), OldColor().data(),
+                    descr->test->unit->name.data(),
                     descr->test->name);
             NOTE_IN_VALGRIND(descr->test);
             PrintTimes(SaveTestDuration());
@@ -411,16 +411,16 @@ private:
         }
 
         fprintf(stderr, "[%sDONE%s] ok: %s%u%s",
-                YellowColor().data(), OldColor().data(), 
-                LightGreenColor().data(), GoodTests(), OldColor().data()); 
+                YellowColor().data(), OldColor().data(),
+                LightGreenColor().data(), GoodTests(), OldColor().data());
         if (FailTests())
             fprintf(stderr, ", err: %s%u%s",
-                    LightRedColor().data(), FailTests(), OldColor().data()); 
+                    LightRedColor().data(), FailTests(), OldColor().data());
         fprintf(stderr, "\n");
 
         if (ShowFails) {
             for (size_t i = 0; i < Fails.size(); ++i) {
-                printf("%s", Fails[i].data()); 
+                printf("%s", Fails[i].data());
             }
         }
     }
@@ -434,7 +434,7 @@ private:
             return false;
         }
 
-        if (DisabledSuites_.find(name.data()) != DisabledSuites_.end()) { 
+        if (DisabledSuites_.find(name.data()) != DisabledSuites_.end()) {
             return false;
         }
 
@@ -442,7 +442,7 @@ private:
             return true;
         }
 
-        return EnabledSuites_.find(name.data()) != EnabledSuites_.end(); 
+        return EnabledSuites_.find(name.data()) != EnabledSuites_.end();
     }
 
     bool CheckAccessTest(TString suite, const char* test) override {
@@ -468,7 +468,7 @@ private:
         }
 
         TList<TString> args(1, "--is-forked-internal");
-        args.push_back(Sprintf("+%s::%s", suite.data(), name)); 
+        args.push_back(Sprintf("+%s::%s", suite.data(), name));
 
         // stdin is ignored - unittest should not need them...
         TShellCommand cmd(AppName, args,

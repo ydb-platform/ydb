@@ -109,11 +109,11 @@ namespace NRedo {
         {
             using namespace  NUtil::NBin;
 
-            Y_VERIFY(blobs.size() <= Max<ui32>(), "Too large blobs catalog"); 
+            Y_VERIFY(blobs.size() <= Max<ui32>(), "Too large blobs catalog");
 
              const ui32 size = sizeof(TEvAnnex) + SizeOf(blobs);
 
-            TEvAnnex ev{ { ERedo::Annex, 0, 0x8000, size }, ui32(blobs.size()) }; 
+            TEvAnnex ev{ { ERedo::Annex, 0, 0x8000, size }, ui32(blobs.size()) };
 
             auto out = Begin(size);
 
@@ -138,7 +138,7 @@ namespace NRedo {
             auto out = Begin(size);
 
             TEvUpdate ev{ { tag, 0, 0x8000, size },
-                                table, rop, 0, ui16(key.size()), ui16(ops.size()) }; 
+                                table, rop, 0, ui16(key.size()), ui16(ops.size()) };
 
             Write(out, &ev, sizeof(ev));
 

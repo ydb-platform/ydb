@@ -1,9 +1,9 @@
 // -*- C++ -*-
 //===--------------------------- cstddef ----------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions. 
-// See https://llvm.org/LICENSE.txt for license information. 
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception 
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -34,7 +34,7 @@ Types:
 */
 
 #include <__config>
-#include <version> 
+#include <version>
 
 #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
 #pragma GCC system_header
@@ -102,10 +102,10 @@ template <class _Tp> using _EnableByteOverload = typename __enable_if_integral_i
 
 constexpr byte  operator| (byte  __lhs, byte __rhs) noexcept
 {
-    return static_cast<byte>( 
-      static_cast<unsigned char>( 
-         static_cast<unsigned int>(__lhs) | static_cast<unsigned int>(__rhs) 
-    )); 
+    return static_cast<byte>(
+      static_cast<unsigned char>(
+         static_cast<unsigned int>(__lhs) | static_cast<unsigned int>(__rhs)
+    ));
 }
 
 constexpr byte& operator|=(byte& __lhs, byte __rhs) noexcept
@@ -113,10 +113,10 @@ constexpr byte& operator|=(byte& __lhs, byte __rhs) noexcept
 
 constexpr byte  operator& (byte  __lhs, byte __rhs) noexcept
 {
-    return static_cast<byte>( 
-      static_cast<unsigned char>( 
-         static_cast<unsigned int>(__lhs) & static_cast<unsigned int>(__rhs) 
-    )); 
+    return static_cast<byte>(
+      static_cast<unsigned char>(
+         static_cast<unsigned int>(__lhs) & static_cast<unsigned int>(__rhs)
+    ));
 }
 
 constexpr byte& operator&=(byte& __lhs, byte __rhs) noexcept
@@ -124,10 +124,10 @@ constexpr byte& operator&=(byte& __lhs, byte __rhs) noexcept
 
 constexpr byte  operator^ (byte  __lhs, byte __rhs) noexcept
 {
-    return static_cast<byte>( 
-      static_cast<unsigned char>( 
-         static_cast<unsigned int>(__lhs) ^ static_cast<unsigned int>(__rhs) 
-    )); 
+    return static_cast<byte>(
+      static_cast<unsigned char>(
+         static_cast<unsigned int>(__lhs) ^ static_cast<unsigned int>(__rhs)
+    ));
 }
 
 constexpr byte& operator^=(byte& __lhs, byte __rhs) noexcept

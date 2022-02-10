@@ -357,7 +357,7 @@ namespace NKikimr {
                     case NKikimrProto::TRYLATER:
                     case NKikimrProto::TRYLATER_TIME:
                     case NKikimrProto::TRYLATER_SIZE:
-                        Y_FAIL("unexpected Status# %s from BS_QUEUE", EReplyStatus_Name(rec.GetStatus()).data()); 
+                        Y_FAIL("unexpected Status# %s from BS_QUEUE", EReplyStatus_Name(rec.GetStatus()).data());
                     default:
                         ++Stat.VDiskRespOther;
                         STLOG(PRI_DEBUG, BS_REPL, BSVR24, VDISKP(ReplCtx->VCtx->VDiskLogPrefix,
@@ -394,7 +394,7 @@ namespace NKikimr {
                                     " VDISK CAN NOT REPLICATE A BLOB BECAUSE HAS FOUND INCONSISTENCY IN BLOB SIZE",
                                     id.ToString().data(), buffer.size());
                                 STLOG(PRI_CRIT, BS_REPL, BSVR26, message, (BlobId, id), (BufferSize, buffer.size()));
-                                Y_VERIFY_DEBUG(false, "%s", message.data()); 
+                                Y_VERIFY_DEBUG(false, "%s", message.data());
 
                                 // count this blob as erroneous one
                                 portion.DataPortion.AddError(id, NKikimrProto::ERROR);

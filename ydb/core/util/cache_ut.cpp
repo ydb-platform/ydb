@@ -253,7 +253,7 @@ Y_UNIT_TEST_SUITE(TCacheTest) {
     Y_UNIT_TEST(TestUpdateItemSize) {
         TUnboundedCacheOnMap<ui32, TString> cache([](const ui32& key, const TString& value) {
             Y_UNUSED(key);
-            return value.size(); 
+            return value.size();
         });
 
         TString* tmp;

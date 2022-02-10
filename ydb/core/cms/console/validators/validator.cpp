@@ -8,7 +8,7 @@ void RegisterValidator(IConfigValidator::TPtr validator)
 {
     auto res = TValidatorsRegistry::Instance()->AddValidator(validator);
     Y_VERIFY(res, "cannot register validator '%s' (locked=%" PRIu32 ")",
-             validator->GetName().data(), (ui32)TValidatorsRegistry::Instance()->IsLocked()); 
+             validator->GetName().data(), (ui32)TValidatorsRegistry::Instance()->IsLocked());
 }
 
 } // namespace NConsole

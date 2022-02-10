@@ -8,7 +8,7 @@ ui64 RequestIdSample(const TStringBuf& requestId) {
     if (Y_UNLIKELY(requestId.size() < sizeof(ui64))) {
         return 0;
     }
-    const ui64 result = *reinterpret_cast<const ui64*>(requestId.data()); // We don't need real hashing, 
+    const ui64 result = *reinterpret_cast<const ui64*>(requestId.data()); // We don't need real hashing,
                                                                           // because logging system will take
                                                                           // murmur hash from returned ui64
     return result;

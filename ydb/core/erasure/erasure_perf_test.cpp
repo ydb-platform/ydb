@@ -40,7 +40,7 @@ TString GenerateData(ui32 dataSize) {
     }
 
     char *writePosChar = (char *)writePos64;
-    ui32 charParts = testString.size() % sizeof(ui64); 
+    ui32 charParts = testString.size() % sizeof(ui64);
     for (ui32 i = 0; i < charParts; ++i) {
         writePosChar[i] = (char)randGen.GenRand();
     }

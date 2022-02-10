@@ -23,7 +23,7 @@ namespace NFake {
 
         void Put(TInstant stamp, ui32 level, EComp comp, TArrayRef<const char> line) noexcept
         {
-            Y_VERIFY(line.size() < 8192 * 16, "Too large log line"); 
+            Y_VERIFY(line.size() < 8192 * 16, "Too large log line");
 
             static const char scaleMajor[] = "^^*CEWNIDT.";
             static const char scaleMinor[] = "0123456789.";
@@ -47,7 +47,7 @@ namespace NFake {
                         major,
                         minor ? scaleMinor[Min(minor, ui32(10))] : major,
                         cname.data(),
-                        int(line.size()), line.data()); 
+                        int(line.size()), line.data());
 
             while (true) {
                 try {

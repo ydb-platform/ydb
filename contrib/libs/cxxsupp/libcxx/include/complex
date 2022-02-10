@@ -1,9 +1,9 @@
 // -*- C++ -*-
 //===--------------------------- complex ----------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions. 
-// See https://llvm.org/LICENSE.txt for license information. 
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception 
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -236,7 +236,7 @@ template<class T> complex<T> tanh (const complex<T>&);
 #include <iosfwd>
 #include <stdexcept>
 #include <type_traits>
-#include <version> 
+#include <version>
 
 #if !defined(_LIBCPP_HAS_NO_LOCALIZATION)
 #   include <sstream> // for std::basic_ostringstream

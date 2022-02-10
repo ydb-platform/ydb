@@ -77,7 +77,7 @@ namespace NBus {
             TValue value = {m.MessagePtr.Release()};
 
             std::pair<TKeyToMessage::iterator, bool> p = KeyToMessage.insert(TKeyToMessage::value_type(m.Header.Id, value));
-            Y_VERIFY(p.second, "non-unique id; %s", value.Message->Describe().data()); 
+            Y_VERIFY(p.second, "non-unique id; %s", value.Message->Describe().data());
 
             TTimedItem item = {m.Header.Id, m.Header.SendTime};
             TimedItems.push_back(item);

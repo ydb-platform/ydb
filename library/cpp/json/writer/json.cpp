@@ -467,7 +467,7 @@ namespace NJsonWriter {
     }
 
     void TBuf::UnsafeWriteRawBytes(const TStringBuf& s) {
-        UnsafeWriteRawBytes(s.data(), s.size()); 
+        UnsafeWriteRawBytes(s.data(), s.size());
     }
 
     const TString& TBuf::Str() const {

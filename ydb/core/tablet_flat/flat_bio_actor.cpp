@@ -143,7 +143,7 @@ void TBlockIO::Handle(ui32 base, TArrayRef<TLoaded> items) noexcept
     if (auto logl = Logger->Log(ELnLev::Debug)) {
         logl
             << "NBlockIO pageCollection " << Origin->PageCollection->Label() << " got base"
-            << " " << items.size() << " bricks, left " << Pending; 
+            << " " << items.size() << " bricks, left " << Pending;
     }
 
     for (auto &piece: items) {

@@ -123,10 +123,10 @@ symtab_init (void)
 static size_t M4_GNUC_PURE
 hash (const char *s)
 {
-  size_t val = 0; 
+  size_t val = 0;
 
-  const char *ptr = s; 
-  char ch; 
+  const char *ptr = s;
+  char ch;
 
   while ((ch = *ptr++) != '\0')
     val = (val << 7) + (val >> (sizeof (val) * CHAR_BIT - 7)) + ch;

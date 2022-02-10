@@ -8,14 +8,14 @@ Y_UNIT_TEST_SUITE(TStrBufTest) {
     Y_UNIT_TEST(TestConstructorsAndOperators) {
         TStringBuf str("qwerty");
 
-        UNIT_ASSERT_EQUAL(*str.data(), 'q'); 
-        UNIT_ASSERT_EQUAL(str.size(), 6); 
+        UNIT_ASSERT_EQUAL(*str.data(), 'q');
+        UNIT_ASSERT_EQUAL(str.size(), 6);
 
         TStringBuf str1("qwe\0rty"sv);
         TStringBuf str2(str1.data());
         UNIT_ASSERT_VALUES_UNEQUAL(str1, str2);
-        UNIT_ASSERT_VALUES_EQUAL(str1.size(), 7); 
-        UNIT_ASSERT_VALUES_EQUAL(str2.size(), 3); 
+        UNIT_ASSERT_VALUES_EQUAL(str1.size(), 7);
+        UNIT_ASSERT_VALUES_EQUAL(str2.size(), 3);
 
         std::string_view helloWorld("Hello, World!");
         TStringBuf fromStringView(helloWorld);
@@ -29,10 +29,10 @@ Y_UNIT_TEST_SUITE(TStrBufTest) {
 
     Y_UNIT_TEST(TestConstExpr) {
         static constexpr TStringBuf str1("qwe\0rty", 7);
-        static constexpr TStringBuf str2(str1.data(), str1.size()); 
+        static constexpr TStringBuf str2(str1.data(), str1.size());
         static constexpr TStringBuf str3 = "qwe\0rty"sv;
 
-        UNIT_ASSERT_VALUES_EQUAL(str1.size(), 7); 
+        UNIT_ASSERT_VALUES_EQUAL(str1.size(), 7);
 
         UNIT_ASSERT_VALUES_EQUAL(str1, str2);
         UNIT_ASSERT_VALUES_EQUAL(str2, str3);
@@ -136,7 +136,7 @@ Y_UNIT_TEST_SUITE(TStrBufTest) {
     }
 
     Y_UNIT_TEST(TestEmpty) {
-        UNIT_ASSERT(TStringBuf().empty()); 
+        UNIT_ASSERT(TStringBuf().empty());
         UNIT_ASSERT(!TStringBuf("q").empty());
     }
 
@@ -146,7 +146,7 @@ Y_UNIT_TEST_SUITE(TStrBufTest) {
 
         str = qw;
         str.Chop(10);
-        UNIT_ASSERT(str.empty()); 
+        UNIT_ASSERT(str.empty());
 
         str = qw;
         UNIT_ASSERT_EQUAL(str.SubStr(2), TStringBuf("erty"));
@@ -172,7 +172,7 @@ Y_UNIT_TEST_SUITE(TStrBufTest) {
         rt = qw;
         lt = rt.NextTok('r');
         TStringBuf ty = rt.NextTok('r'); // no 'r' in "ty"
-        UNIT_ASSERT_EQUAL(rt.size(), 0); 
+        UNIT_ASSERT_EQUAL(rt.size(), 0);
         UNIT_ASSERT_EQUAL(ty, TStringBuf("ty"));
     }
 

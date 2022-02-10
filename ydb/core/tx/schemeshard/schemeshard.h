@@ -129,22 +129,22 @@ struct TEvSchemeShard {
             : TEvModifySchemeTransactionResult(TTxId(txid), TTabletId(schemeshardId))
         {
             Record.SetStatus(status);
-            if (reason.size() > 0) { 
-                Record.SetReason(reason.data(), reason.size()); 
+            if (reason.size() > 0) {
+                Record.SetReason(reason.data(), reason.size());
             }
         }
 
         bool IsAccepted() const {
-            return Record.GetReason().empty() && (Record.GetStatus() == EStatus::StatusAccepted); 
+            return Record.GetReason().empty() && (Record.GetStatus() == EStatus::StatusAccepted);
         }
 
         bool IsConditionalAccepted() const {
             //happens on retries, we answer like StatusAccepted with error message and do nothing in operation
-            return !Record.GetReason().empty() && (Record.GetStatus() == EStatus::StatusAccepted); 
+            return !Record.GetReason().empty() && (Record.GetStatus() == EStatus::StatusAccepted);
         }
 
         bool IsDone() const {
-            return Record.GetReason().empty() && (Record.GetStatus() == EStatus::StatusSuccess); 
+            return Record.GetReason().empty() && (Record.GetStatus() == EStatus::StatusSuccess);
         }
 
         void SetStatus(EStatus status, const TString& reason = {}) {

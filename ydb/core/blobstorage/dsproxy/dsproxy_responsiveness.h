@@ -19,8 +19,8 @@ namespace NKikimr {
                     const TInstant now = TInstant::Now();
                     const TDuration since = now - Since;
                     const TDuration until = now - Until;
-                    return Sprintf("%s/%" PRIu32 "/%s-%s", Responsiveness.ToString().data(), (ui32)NumRequests, since.ToString().data(), 
-                        until.ToString().data()); 
+                    return Sprintf("%s/%" PRIu32 "/%s-%s", Responsiveness.ToString().data(), (ui32)NumRequests, since.ToString().data(),
+                        until.ToString().data());
                 }
             };
             THashMap<TDiskId, TInfo> DiskData;

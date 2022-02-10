@@ -72,7 +72,7 @@ namespace NKikimr {
                 Record.SetTabletId(tabletId);
                 Record.SetType(type);
                 ActorIdToProto(sender, Record.MutableSender());
-                Record.SetBuffer(buffer.data(), buffer.size()); 
+                Record.SetBuffer(buffer.data(), buffer.size());
                 Record.SetCookie(cookie);
                 Record.SetExtendedFormat(extendedFormat);
             }

@@ -125,7 +125,7 @@ namespace {
                 hash = CseeHash(node.Content().data(), node.Content().size(), hash);
             } else {
                 // can hash ptr due to intern
-                const char* ptr = node.Content().data(); 
+                const char* ptr = node.Content().data();
                 hash = CseeHash(&ptr, sizeof(ptr), hash);
             }
 
@@ -137,7 +137,7 @@ namespace {
                 hash = CseeHash(node.Content().data(), node.Content().size(), hash);
             } else {
                 // can hash ptr due to intern
-                const char* ptr = node.Content().data(); 
+                const char* ptr = node.Content().data();
                 hash = CseeHash(&ptr, sizeof(ptr), hash);
             }
             [[fallthrough]];
@@ -266,7 +266,7 @@ namespace {
 
         case TExprNode::Callable:
             // compare pointers due to intern
-            if (left.Content().data() != right.Content().data()) { 
+            if (left.Content().data() != right.Content().data()) {
                 return false;
             }
             [[fallthrough]];
@@ -377,12 +377,12 @@ namespace {
 
         switch (left.Type()) {
         case TExprNode::Atom:
-            if (left.Content().size() != right.Content().size()) { 
-                return (int)left.Content().size() - (int)right.Content().size(); 
+            if (left.Content().size() != right.Content().size()) {
+                return (int)left.Content().size() - (int)right.Content().size();
             }
 
             // compare pointers due to intern
-            if (left.Content().data() != right.Content().data()) { 
+            if (left.Content().data() != right.Content().data()) {
                 if (const auto res = left.Content().compare(right.Content())) {
                     return res;
                 }
@@ -390,12 +390,12 @@ namespace {
 
             return (int)left.GetFlagsToCompare() - (int)right.GetFlagsToCompare();
         case TExprNode::Callable:
-            if (left.Content().size() != right.Content().size()) { 
-                return (int)left.Content().size() - (int)right.Content().size(); 
+            if (left.Content().size() != right.Content().size()) {
+                return (int)left.Content().size() - (int)right.Content().size();
             }
 
             // compare pointers due to intern
-            if (left.Content().data() != right.Content().data()) { 
+            if (left.Content().data() != right.Content().data()) {
                 if (const auto res = left.Content().compare(right.Content())) {
                     return res;
                 }

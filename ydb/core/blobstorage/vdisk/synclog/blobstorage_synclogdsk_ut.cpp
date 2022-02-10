@@ -93,8 +93,8 @@ namespace NKikimr {
                 std::unique_ptr<TDiskRecLog> uDsk = std::make_unique<TDiskRecLog>(ChunkSize,
                                                                     PageSize,
                                                                     IndexBulk,
-                                                                    serialized.data(), 
-                                                                    serialized.data() + serialized.size()); 
+                                                                    serialized.data(),
+                                                                    serialized.data() + serialized.size());
                 return uDsk;
             }
         };

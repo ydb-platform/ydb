@@ -60,7 +60,7 @@ namespace NActors {
             Proxy->Common->Settings.MaxSerializedEventSize, Params);
 
         LOG_INFO(*TlsActivationContext, NActorsServices::INTERCONNECT_STATUS, "[%u] session created", Proxy->PeerNodeId);
-        SetPrefix(Sprintf("Session %s [node %" PRIu32 "]", SelfId().ToString().data(), Proxy->PeerNodeId)); 
+        SetPrefix(Sprintf("Session %s [node %" PRIu32 "]", SelfId().ToString().data(), Proxy->PeerNodeId));
         SendUpdateToWhiteboard();
     }
 
@@ -117,7 +117,7 @@ namespace NActors {
     void TInterconnectSessionTCP::Forward(STATEFN_SIG) {
         Proxy->ValidateEvent(ev, "Forward");
 
-        LOG_DEBUG_IC_SESSION("ICS02", "send event from: %s to: %s", ev->Sender.ToString().data(), ev->Recipient.ToString().data()); 
+        LOG_DEBUG_IC_SESSION("ICS02", "send event from: %s to: %s", ev->Sender.ToString().data(), ev->Recipient.ToString().data());
         ++MessagesGot;
 
         if (ev->Flags & IEventHandle::FlagSubscribeOnSession) {
@@ -185,7 +185,7 @@ namespace NActors {
     }
 
     void TInterconnectSessionTCP::Subscribe(STATEFN_SIG) {
-        LOG_DEBUG_IC_SESSION("ICS04", "subscribe for session state for %s", ev->Sender.ToString().data()); 
+        LOG_DEBUG_IC_SESSION("ICS04", "subscribe for session state for %s", ev->Sender.ToString().data());
         const auto [it, inserted] = Subscribers.emplace(ev->Sender, ev->Cookie);
         if (inserted) {
             Proxy->Metrics->IncSubscribersCount();
@@ -196,7 +196,7 @@ namespace NActors {
     }
 
     void TInterconnectSessionTCP::Unsubscribe(STATEFN_SIG) {
-        LOG_DEBUG_IC_SESSION("ICS05", "unsubscribe for session state for %s", ev->Sender.ToString().data()); 
+        LOG_DEBUG_IC_SESSION("ICS05", "unsubscribe for session state for %s", ev->Sender.ToString().data());
         Proxy->Metrics->SubSubscribersCount( Subscribers.erase(ev->Sender));
     }
 
@@ -291,7 +291,7 @@ namespace NActors {
         }
         const ui64 serial = s.GetOrElse(Max<ui64>());
 
-        Y_VERIFY(serial > LastConfirmed, "%s serial# %" PRIu64 " LastConfirmed# %" PRIu64, LogPrefix.data(), serial, LastConfirmed); 
+        Y_VERIFY(serial > LastConfirmed, "%s serial# %" PRIu64 " LastConfirmed# %" PRIu64, LogPrefix.data(), serial, LastConfirmed);
         LOG_DEBUG_IC_SESSION("ICS06", "rewind SendQueue size# %zu LastConfirmed# %" PRIu64 " SendQueuePos.Serial# %" PRIu64 "\n",
             SendQueue.size(), LastConfirmed, serial);
 
@@ -619,7 +619,7 @@ namespace NActors {
                     const TString message = r == 0 ? "connection closed by peer"
                         : err ? err
                         : Sprintf("socket: %s", strerror(-r));
-                    LOG_NOTICE_NET(Proxy->PeerNodeId, "%s", message.data()); 
+                    LOG_NOTICE_NET(Proxy->PeerNodeId, "%s", message.data());
                     if (written) {
                         Proxy->Metrics->AddTotalBytesWritten(written);
                     }

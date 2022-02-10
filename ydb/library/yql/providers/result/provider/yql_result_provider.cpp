@@ -228,7 +228,7 @@ namespace {
                     if (!ResultWriter->IsDiscard()) {
                         ResultWriter->Commit(overflow);
                         Config->CommittedResults.push_back(TString(ResultWriter->Str()));
-                        committedSize += Config->CommittedResults.back().size(); 
+                        committedSize += Config->CommittedResults.back().size();
                     }
 
                     ResultWriter.Reset();

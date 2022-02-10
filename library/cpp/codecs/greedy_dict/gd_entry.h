@@ -34,7 +34,7 @@ namespace NGreedyDict {
             return NearestPrefix != NoPrefix;
         }
         ui32 Len() const {
-            return Str.size(); 
+            return Str.size();
         }
 
         static bool StrLess(const TEntry& a, const TEntry& b) {
@@ -58,14 +58,14 @@ namespace NGreedyDict {
         void InitWithAlpha();
 
         void Add(TStringBuf a) {
-            push_back(TStringBuf(Pool.Append(a.data(), a.size()), a.size())); 
+            push_back(TStringBuf(Pool.Append(a.data(), a.size()), a.size()));
         }
 
         void Add(TStringBuf a, TStringBuf b) {
-            size_t sz = a.size() + b.size(); 
+            size_t sz = a.size() + b.size();
             char* p = (char*)Pool.Allocate(sz);
-            memcpy(p, a.data(), a.size()); 
-            memcpy(p + a.size(), b.data(), b.size()); 
+            memcpy(p, a.data(), a.size());
+            memcpy(p + a.size(), b.data(), b.size());
             push_back(TStringBuf(p, sz));
         }
 
@@ -92,7 +92,7 @@ namespace NGreedyDict {
 
             const TEntry& p = Get(e.NearestPrefix);
             suff = e.Str;
-            suff.Skip(p.Str.size()); 
+            suff.Skip(p.Str.size());
             return &p;
         }
 

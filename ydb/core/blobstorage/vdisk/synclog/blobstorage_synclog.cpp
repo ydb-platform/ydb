@@ -135,8 +135,8 @@ namespace NKikimr {
                               VDISKP(SlCtx->VCtx->VDiskLogPrefix,
                                     "Handle(TEvSyncLogRead): check vdisk id failed; "
                                     "SelfVDiskId# %s sourceVDisk# %s targetVDisk# %s",
-                                    SelfVDiskId.ToString().data(), sourceVDisk.ToString().data(), 
-                                    targetVDisk.ToString().data())); 
+                                    SelfVDiskId.ToString().data(), sourceVDisk.ToString().data(),
+                                    targetVDisk.ToString().data()));
 
                     auto result = std::make_unique<TEvBlobStorage::TEvVSyncResult>(NKikimrProto::RACE, SelfVDiskId,
                         TSyncState(), true, SlCtx->VCtx->GetOutOfSpaceState().GetLocalStatusFlags(), now,
@@ -156,7 +156,7 @@ namespace NKikimr {
                               VDISKP(SlCtx->VCtx->VDiskLogPrefix,
                                     "Handle(TEvSyncLogRead): locked; "
                                     "sourceVDisk# %s targetVDisk# %s",
-                                    sourceVDisk.ToString().data(), targetVDisk.ToString().data())); 
+                                    sourceVDisk.ToString().data(), targetVDisk.ToString().data()));
 
                     auto result = std::make_unique<TEvBlobStorage::TEvVSyncResult>(NKikimrProto::BLOCKED, SelfVDiskId,
                         TSyncState(), true, SlCtx->VCtx->GetOutOfSpaceState().GetLocalStatusFlags(), now,
@@ -173,8 +173,8 @@ namespace NKikimr {
                                     "Handle(TEvSyncLogRead): FULL_RECOVER(unequal guid); "
                                    "sourceVDisk# %s targetVDisk# %s oldSyncState# %s"
                                    " DbBirthLsn# %" PRIu64,
-                                   sourceVDisk.ToString().data(), targetVDisk.ToString().data(), 
-                                   oldSyncState.ToString().data(), GetDbBirthLsn())); 
+                                   sourceVDisk.ToString().data(), targetVDisk.ToString().data(),
+                                   oldSyncState.ToString().data(), GetDbBirthLsn()));
 
                     auto status = NKikimrProto::RESTART;
                     TSyncState syncState(VDiskIncarnationGuid, GetDbBirthLsn());
@@ -199,7 +199,7 @@ namespace NKikimr {
                 LOG_DEBUG(ctx, BS_SYNCLOG,
                           VDISKP(SlCtx->VCtx->VDiskLogPrefix,
                                 "Handle(TEvSyncLogPut): recs# %s",
-                                ev->Get()->GetRecs().ToString().data())); 
+                                ev->Get()->GetRecs().ToString().data()));
                 ctx.Send(ev->Forward(KeeperId));
             }
 
@@ -232,7 +232,7 @@ namespace NKikimr {
                              "TSyncLogActor::CutLog: currentSyncedLsn# %" PRIu64
                              " syncedLsn# %" PRIu64 " vdisk# %s prevMinLsn# %" PRIu64
                              " curMinLsn# %" PRIu64,
-                             currentSyncedLsn, syncedLsn, vdisk.ToString().data(), 
+                             currentSyncedLsn, syncedLsn, vdisk.ToString().data(),
                              prevMinLsn, curMinLsn);
                     if (prevMinLsn < curMinLsn) {
                         ctx.Send(KeeperId, new TEvSyncLogTrim(curMinLsn));

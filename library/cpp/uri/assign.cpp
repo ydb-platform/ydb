@@ -120,7 +120,7 @@ namespace NUri {
     }
 
     static inline bool AppendField(TMemoryWriteBuffer& out, TField::EField fld, const TStringBuf& val, long flags) {
-        if (val.empty()) 
+        if (val.empty())
             return false;
         if (flags & TFeature::FeaturesAllEncoder)
             TUri::ReEncodeField(out, val, fld, flags);
@@ -140,7 +140,7 @@ namespace NUri {
         const TSchemeInfo& schemeInfo = SetSchemeImpl(parser.Scheme);
 
         // set the scheme always if available
-        if (schemeInfo.Str.empty() && scheme.IsSet()) 
+        if (schemeInfo.Str.empty() && scheme.IsSet())
             FldSet(FieldScheme, scheme.Get());
 
         if (ParsedOK != ret)
@@ -171,7 +171,7 @@ namespace NUri {
             else
                 hostascii = HostToAscii(hostbuf, hostptr, allowIDN, parser.Enc);
 
-            if (hostascii.empty()) 
+            if (hostascii.empty())
                 ret = ParsedBadHost; // exists but cannot be converted
             else if (hostbuf.data() != hostascii.data()) {
                 hostConverted = true;
@@ -209,7 +209,7 @@ namespace NUri {
                 if (0 == (parser.Flags & FeatureHashBangToEscapedFragment))
                     break;
                 const TStringBuf fragbuf = frag.Get();
-                if (fragbuf.empty() || '!' != fragbuf[0]) 
+                if (fragbuf.empty() || '!' != fragbuf[0])
                     break;
                 encHashBangFrag = true;
                 // '!' will make space for '&' or '\0' if needed
@@ -263,10 +263,10 @@ namespace NUri {
                     if (qryEscapedFragment.IsInited()) {
                         const EField dstfld = FieldFrag; // that's where we will store
                         out << '!';
-                        if (!qryEscapedFragment.empty()) 
+                        if (!qryEscapedFragment.empty())
                             ReEncodeToField(out, qryEscapedFragment, fld, FeatureDecodeANY | careFlags, dstfld, FeatureDecodeANY | parser.GetFieldFlags(dstfld));
                         FldSetNoDirty(dstfld, TStringBuf(beg, out.Buf()));
-                        if (qryBeforeEscapedFragment.empty()) 
+                        if (qryBeforeEscapedFragment.empty())
                             continue;
                         out << '\0';
                         beg = out.Buf();
@@ -336,7 +336,7 @@ namespace NUri {
             CheckMissingFields();
 
         const TStringBuf& port = GetField(FieldPort);
-        if (!port.empty()) { 
+        if (!port.empty()) {
             if (!TryFromString<ui16>(port, Port))
                 ret = ParsedBadPort;
         }
@@ -350,9 +350,9 @@ namespace NUri {
         do {
             if (0 == (flags & FeatureCheckHost))
                 break;
-            if (hostascii.empty()) 
+            if (hostascii.empty())
                 hostascii = GetField(FieldHost);
-            if (hostascii.empty()) 
+            if (hostascii.empty())
                 break;
             // IP literal
             if ('[' == hostascii[0] && ']' == hostascii.back())
@@ -368,7 +368,7 @@ namespace NUri {
     TState::EParsed TUri::ParseImpl(const TStringBuf& url, const TParseFlags& flags, ui32 maxlen, TScheme::EKind defscheme, ECharset enc) {
         Clear();
 
-        if (url.empty()) 
+        if (url.empty())
             return ParsedEmpty;
 
         if (maxlen > 0 && url.length() > maxlen)
@@ -381,11 +381,11 @@ namespace NUri {
 
     TState::EParsed TUri::Parse(const TStringBuf& url, const TParseFlags& flags, const TStringBuf& url_base, ui32 maxlen, ECharset enc) {
         const TParseFlags flags1 = flags.Exclude(FeatureNoRelPath);
-        TState::EParsed ret = ParseImpl(url, url_base.empty() ? flags : flags1, maxlen, SchemeEmpty, enc); 
+        TState::EParsed ret = ParseImpl(url, url_base.empty() ? flags : flags1, maxlen, SchemeEmpty, enc);
         if (ParsedOK != ret)
             return ret;
 
-        if (!url_base.empty() && !IsValidAbs()) { 
+        if (!url_base.empty() && !IsValidAbs()) {
             TUri base;
             ret = base.ParseImpl(url_base, flags, maxlen, SchemeEmpty, enc);
             if (ParsedOK != ret)

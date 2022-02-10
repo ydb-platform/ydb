@@ -13,24 +13,24 @@ namespace NBalloc {
 
     static Y_FORCE_INLINE void* Malloc(size_t size) {
         TLS& ltls = tls;
-        size = Align(size, sizeof(TAllocHeader)); 
+        size = Align(size, sizeof(TAllocHeader));
         if (Y_UNLIKELY(ltls.Mode == Empty || ltls.Mode == ToBeEnabled)) {
-            Init(ltls); 
+            Init(ltls);
         }
         if (Y_LIKELY(ltls.Mode != Disabled)) {
-            TAllocHeader* allocHeader = AllocateRaw(size, ALIVE_SIGNATURE); 
-            return allocHeader + 1; 
+            TAllocHeader* allocHeader = AllocateRaw(size, ALIVE_SIGNATURE);
+            return allocHeader + 1;
         } else {
             // ltls.Mode == Disabled
             const size_t extsize = size + sizeof(TAllocHeader);
-            TAllocHeader* allocHeader = (TAllocHeader*)LibcMalloc(extsize); 
+            TAllocHeader* allocHeader = (TAllocHeader*)LibcMalloc(extsize);
             allocHeader->Encode(allocHeader, size, DISABLED_SIGNATURE);
-            return allocHeader + 1; 
+            return allocHeader + 1;
         }
     }
 
     static void Y_FORCE_INLINE Free(void* ptr) {
-        if (ptr == nullptr) { 
+        if (ptr == nullptr) {
             return;
         }
         TAllocHeader* allocHeader = ((TAllocHeader*)ptr) - 1;
@@ -38,9 +38,9 @@ namespace NBalloc {
         const size_t signature = size & SIGNATURE_MASK;
         if (Y_LIKELY(signature == ALIVE_SIGNATURE)) {
             allocHeader->AllocSize = 0; // abort later on double free
-#ifdef DBG_FILL_MEMORY 
-            memset(ptr, 0xde, size - signature); 
-#endif 
+#ifdef DBG_FILL_MEMORY
+            memset(ptr, 0xde, size - signature);
+#endif
             FreeRaw(allocHeader->Block);
             if (NAllocStats::IsEnabled()) {
                 NAllocStats::DecThreadAllocStats(size - signature);
@@ -66,15 +66,15 @@ namespace NBalloc {
     }
 
     static void Y_FORCE_INLINE Disable() {
-#if defined(_musl_) 
+#if defined(_musl_)
     // just skip it
-#else 
+#else
         tls.Mode = Disabled;
-#endif 
+#endif
     }
 
     static void Y_FORCE_INLINE Enable() {
-        tls.Mode = ToBeEnabled; 
+        tls.Mode = ToBeEnabled;
     }
 
     static bool Y_FORCE_INLINE IsDisabled() {
@@ -103,12 +103,12 @@ extern "C" void free(void* data) {
 #endif
 }
 
-#if defined(USE_INTELCC) || defined(_darwin_) || defined(_freebsd_) || defined(_STLPORT_VERSION) 
-#define OP_THROWNOTHING noexcept 
-#else 
-#define OP_THROWNOTHING 
-#endif 
- 
+#if defined(USE_INTELCC) || defined(_darwin_) || defined(_freebsd_) || defined(_STLPORT_VERSION)
+#define OP_THROWNOTHING noexcept
+#else
+#define OP_THROWNOTHING
+#endif
+
 void* operator new(size_t size) {
 #if defined(Y_COVER_PTR)
     return malloc(size);
@@ -132,8 +132,8 @@ int posix_memalign(void** memptr, const size_t alignment, const size_t size) {
     }
     size_t bigSize = size + alignment - NBalloc::MINIMAL_ALIGNMENT;
     void* res = NBalloc::Malloc(bigSize);
-    void* alignedPtr = (void*)NBalloc::Align((size_t)res, alignment); 
-    if (alignedPtr != res) { 
+    void* alignedPtr = (void*)NBalloc::Align((size_t)res, alignment);
+    if (alignedPtr != res) {
         auto oldAllocHeader = (NBalloc::TAllocHeader*)res - 1;
         auto newAllocHeader = (NBalloc::TAllocHeader*)alignedPtr - 1;
         void* block = oldAllocHeader->Block;
@@ -144,7 +144,7 @@ int posix_memalign(void** memptr, const size_t alignment, const size_t size) {
 #endif
 }
 
-void* operator new(size_t size, const std::nothrow_t&) OP_THROWNOTHING { 
+void* operator new(size_t size, const std::nothrow_t&) OP_THROWNOTHING {
 #if defined(Y_COVER_PTR)
     return malloc(size);
 #else
@@ -152,7 +152,7 @@ void* operator new(size_t size, const std::nothrow_t&) OP_THROWNOTHING {
 #endif
 }
 
-void operator delete(void* p)OP_THROWNOTHING { 
+void operator delete(void* p)OP_THROWNOTHING {
 #if defined(Y_COVER_PTR)
     free(p);
 #else
@@ -160,7 +160,7 @@ void operator delete(void* p)OP_THROWNOTHING {
 #endif
 }
 
-void operator delete(void* p, const std::nothrow_t&)OP_THROWNOTHING { 
+void operator delete(void* p, const std::nothrow_t&)OP_THROWNOTHING {
 #if defined(Y_COVER_PTR)
     free(p);
 #else
@@ -176,7 +176,7 @@ void* operator new[](size_t size) {
 #endif
 }
 
-void* operator new[](size_t size, const std::nothrow_t&) OP_THROWNOTHING { 
+void* operator new[](size_t size, const std::nothrow_t&) OP_THROWNOTHING {
 #if defined(Y_COVER_PTR)
     return malloc(size);
 #else
@@ -184,7 +184,7 @@ void* operator new[](size_t size, const std::nothrow_t&) OP_THROWNOTHING {
 #endif
 }
 
-void operator delete[](void* p) OP_THROWNOTHING { 
+void operator delete[](void* p) OP_THROWNOTHING {
 #if defined(Y_COVER_PTR)
     free(p);
 #else
@@ -192,7 +192,7 @@ void operator delete[](void* p) OP_THROWNOTHING {
 #endif
 }
 
-void operator delete[](void* p, const std::nothrow_t&) OP_THROWNOTHING { 
+void operator delete[](void* p, const std::nothrow_t&) OP_THROWNOTHING {
 #if defined(Y_COVER_PTR)
     free(p);
 #else

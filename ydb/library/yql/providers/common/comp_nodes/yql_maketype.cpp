@@ -126,7 +126,7 @@ public:
             auto typeName = TStringBuf(str.AsStringRef());
             auto slot = NUdf::FindDataSlot(typeName);
             if (!slot) {
-                UdfTerminate((TStringBuilder() << Pos_ << ": Unknown data type: " << typeName).data()); 
+                UdfTerminate((TStringBuilder() << Pos_ << ": Unknown data type: " << typeName).data());
             }
 
             if (*slot == NUdf::EDataSlot::Decimal) {
@@ -281,7 +281,7 @@ public:
                     if (flagName == TStringBuf("AutoMap")) {
                         info.Flags |= NUdf::ICallablePayload::TArgumentFlags::AutoMap;
                     } else {
-                        UdfTerminate((TStringBuilder() << Pos_ << ": Unknown flag: " << flagName << ", known flags: AutoMap.").data()); 
+                        UdfTerminate((TStringBuilder() << Pos_ << ": Unknown flag: " << flagName << ", known flags: AutoMap.").data());
                     }
                 }
 

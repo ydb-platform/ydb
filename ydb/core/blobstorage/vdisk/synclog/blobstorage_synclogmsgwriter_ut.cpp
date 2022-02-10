@@ -22,12 +22,12 @@ Y_UNIT_TEST_SUITE(NaiveFragmentWriterTest) {
 
         TNaiveFragmentWriter w;
         TString result;
-        const TRecordHdr *begin = (const TRecordHdr *)(data.data()); 
-        const TRecordHdr *end = (const TRecordHdr *)(data.data() + data.size()); 
+        const TRecordHdr *begin = (const TRecordHdr *)(data.data());
+        const TRecordHdr *end = (const TRecordHdr *)(data.data() + data.size());
         for (const TRecordHdr *it = begin; it < end; it = it->Next()) {
             w.Push(it);
             result.append((const char *)it, it->GetSize());
-            UNIT_ASSERT_VALUES_EQUAL(w.GetSize(), result.size()); 
+            UNIT_ASSERT_VALUES_EQUAL(w.GetSize(), result.size());
         }
         TString temp;
         w.Finish(&temp);
@@ -37,14 +37,14 @@ Y_UNIT_TEST_SUITE(NaiveFragmentWriterTest) {
     Y_UNIT_TEST(Long) {
         TString data;
         AppendBlock(data, 100, 66, 1);
-        const TRecordHdr *rec = (const TRecordHdr *)(data.data()); 
+        const TRecordHdr *rec = (const TRecordHdr *)(data.data());
 
         TNaiveFragmentWriter w;
         TString result;
-        while (result.size() < (5 << 20)) { 
+        while (result.size() < (5 << 20)) {
             w.Push(rec);
             result.append((const char *)rec, rec->GetSize());
-            UNIT_ASSERT_VALUES_EQUAL(w.GetSize(), result.size()); 
+            UNIT_ASSERT_VALUES_EQUAL(w.GetSize(), result.size());
         }
 
         TString temp;

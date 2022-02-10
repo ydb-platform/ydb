@@ -112,7 +112,7 @@ namespace NBus {
         if (Y_UNLIKELY(LocalFlags != 0)) {
             TString describe = Describe();
             TString localFlags = LocalFlagSetToString(LocalFlags);
-            Y_FAIL("message local flags must be zero, got: %s, message: %s", localFlags.data(), describe.data()); 
+            Y_FAIL("message local flags must be zero, got: %s, message: %s", localFlags.data(), describe.data());
         }
     }
 

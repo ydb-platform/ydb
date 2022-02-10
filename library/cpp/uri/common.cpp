@@ -107,7 +107,7 @@ namespace NUri {
 
     const char* SchemeKindToString(const TScheme::EKind& t) {
         const TSchemeInfo& info = TSchemeInfo::Get(t);
-        if (!info.Str.empty()) 
+        if (!info.Str.empty())
             return info.Str.data();
         return TScheme::SchemeEmpty == t ? "empty" : "unknown";
     }

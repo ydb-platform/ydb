@@ -30,7 +30,7 @@ Y_UNIT_TEST_SUITE(TS3ListingTest) {
                     )
                 )";
 
-        annoyingClient.FlatQuery(Sprintf(insertRowQuery.data(), hash, name.data(), path.data(), version, ts, data.data(), table.data())); 
+        annoyingClient.FlatQuery(Sprintf(insertRowQuery.data(), hash, name.data(), path.data(), version, ts, data.data(), table.data()));
     }
 
     void S3DeleteRow(TFlatMsgBusClient& annoyingClient, ui64 hash, TString name, TString path, ui64 version, TString table) {
@@ -49,7 +49,7 @@ Y_UNIT_TEST_SUITE(TS3ListingTest) {
                     )
                 )";
 
-        annoyingClient.FlatQuery(Sprintf(eraseRowQuery.data(), hash, name.data(), path.data(), version, table.data())); 
+        annoyingClient.FlatQuery(Sprintf(eraseRowQuery.data(), hash, name.data(), path.data(), version, table.data()));
     }
 
     void PrepareS3Data(TFlatMsgBusClient& annoyingClient) {
@@ -203,7 +203,7 @@ Y_UNIT_TEST_SUITE(TS3ListingTest) {
 
         TClient::TFlatQueryOptions opts;
         NKikimrMiniKQL::TResult res;
-        annoyingClient.FlatQuery(Sprintf(selectBucketQuery.data(), hash, hash, name.data(), name.data(), table.data()), opts, res); 
+        annoyingClient.FlatQuery(Sprintf(selectBucketQuery.data(), hash, hash, name.data(), name.data(), table.data()), opts, res);
 
         //Cout << res << Endl;
         TValue value = TValue::Create(res.GetValue(), res.GetType());

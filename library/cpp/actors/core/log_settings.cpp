@@ -198,7 +198,7 @@ namespace NActors {
         }
 
         bool TSettings::IsValidComponent(EComponent component) {
-            return (MinVal <= component) && (component <= MaxVal) && !ComponentNames[component].empty(); 
+            return (MinVal <= component) && (component <= MaxVal) && !ComponentNames[component].empty();
         }
 
         void TSettings::SetAllowDrop(bool val) {
@@ -214,7 +214,7 @@ namespace NActors {
         }
 
         EComponent TSettings::FindComponent(const TStringBuf& componentName) const {
-            if (componentName.empty()) 
+            if (componentName.empty())
                 return InvalidComponent;
 
             for (EComponent component = MinVal; component <= MaxVal; ++component) {

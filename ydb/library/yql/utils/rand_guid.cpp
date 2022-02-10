@@ -19,7 +19,7 @@ void TRandGuid::ResetSeed() {
 
 TString TRandGuid::GenGuid() {
     TGUID ret = {};
-    WriteUnaligned<ui64>(ret.dw, Rnd->GenRand()); 
+    WriteUnaligned<ui64>(ret.dw, Rnd->GenRand());
     ret.dw[2] = (ui32)Rnd->GenRand();
     ret.dw[3] = AtomicIncrement(Counter);
 

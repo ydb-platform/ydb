@@ -327,7 +327,7 @@ namespace NKikimr {
                                 IsFirstKey = false;
                             } else {
                                 Y_VERIFY(!key.IsSameAs(PreviousKey), "duplicate keys: %s -> %s",
-                                        PreviousKey.ToString().data(), key.ToString().data()); 
+                                        PreviousKey.ToString().data(), key.ToString().data());
                             }
                             PreviousKey = key;
 
@@ -564,7 +564,7 @@ namespace NKikimr {
             // if there is no active writer, create one and start writing
             if (!WriterPtr) {
                 // ensure we have enough reserved chunks to do operation; or else request for allocation and wait
-                if (ReservedChunks.size() < ChunksToUse) { 
+                if (ReservedChunks.size() < ChunksToUse) {
                     return ETryProcessItemStatus::NeedMoreChunks;
                 }
 
@@ -637,9 +637,9 @@ namespace NKikimr {
                     // either we read something or it is already in memory
                     const TDiskBlobMerger& diskBlobMerger = TransformedItem->DataMerger->GetDiskBlobMerger();
                     Y_VERIFY(!diskBlobMerger.Empty() || numReads > 0, "Key# %s MemRec# %s LocalParts# %s KeepData# %s",
-                            It.GetCurKey().ToString().data(), 
-                            TransformedItem->MemRec->ToString(HullCtx->IngressCache.Get(), nullptr).data(), 
-                            TransformedItem->MemRec->GetLocalParts(GType).ToString().data(), 
+                            It.GetCurKey().ToString().data(),
+                            TransformedItem->MemRec->ToString(HullCtx->IngressCache.Get(), nullptr).data(),
+                            TransformedItem->MemRec->GetLocalParts(GType).ToString().data(),
                             GcmpIt.KeepData() ? "true" : "false");
 
                     // TODO(alexvru): maybe we should get rid of copying DiskBlobMerger?
@@ -711,10 +711,10 @@ namespace NKikimr {
         }
 
         std::unique_ptr<NPDisk::TEvChunkReserve> CheckForReservation() {
-            if (ReservedChunks.size() + ChunkReservePending >= ChunksToUse) { 
+            if (ReservedChunks.size() + ChunkReservePending >= ChunksToUse) {
                 return nullptr;
             }
-            const ui32 num = ChunksToUse - (ReservedChunks.size() + ChunkReservePending); 
+            const ui32 num = ChunksToUse - (ReservedChunks.size() + ChunkReservePending);
             ChunkReservePending += num;
             return std::make_unique<NPDisk::TEvChunkReserve>(PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound, num);
         }

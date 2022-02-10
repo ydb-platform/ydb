@@ -1022,7 +1022,7 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (input->Child(1)->Content().empty()) { 
+        if (input->Child(1)->Content().empty()) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(1)->Pos()), "Empty member name is not allowed"));
             return IGraphTransformer::TStatus::Error;
         }

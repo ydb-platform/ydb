@@ -77,7 +77,7 @@ void TCms::TGroupCounter::CountVDisk(const TVDiskInfo &vdisk,
     if (!vdisk.NodeId || !vdisk.PDiskId) {
         ++Down;
         Errors.push_back(Sprintf("Missing info for %s in affected group %u",
-                                 vdisk.ItemName().data(), GroupId)); 
+                                 vdisk.ItemName().data(), GroupId));
         return;
     }
 
@@ -93,7 +93,7 @@ void TCms::TGroupCounter::CountVDisk(const TVDiskInfo &vdisk,
             Code = error.Code;
         ++Locked;
         Errors.push_back(Sprintf("Issue in affected group %u: %s",
-                                 GroupId, error.Reason.data())); 
+                                 GroupId, error.Reason.data()));
         Deadline = Max(Deadline, error.Deadline);
         return;
     }
@@ -102,7 +102,7 @@ void TCms::TGroupCounter::CountVDisk(const TVDiskInfo &vdisk,
     if (!pdisk.NodeId) {
         ++Down;
         Errors.push_back(Sprintf("Missing info for %s in affected group %u",
-                                 pdisk.ItemName().data(), GroupId)); 
+                                 pdisk.ItemName().data(), GroupId));
         return;
     }
 
@@ -113,7 +113,7 @@ void TCms::TGroupCounter::CountVDisk(const TVDiskInfo &vdisk,
         || vdisk.IsDown(error, defaultDeadline)) {
         ++Down;
         Errors.push_back(Sprintf("Issue in affected group %u: %s",
-                                 GroupId, error.Reason.data())); 
+                                 GroupId, error.Reason.data()));
         Deadline = Max(Deadline, error.Deadline);
         return;
     }
@@ -256,7 +256,7 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
 
         TErrorInfo error;
 
-        LOG_DEBUG(ctx, NKikimrServices::CMS, "Checking action: %s", action.ShortDebugString().data()); 
+        LOG_DEBUG(ctx, NKikimrServices::CMS, "Checking action: %s", action.ShortDebugString().data());
 
         if (CheckAction(action, opts, error)) {
             LOG_DEBUG(ctx, NKikimrServices::CMS, "Result: ALLOW");
@@ -269,7 +269,7 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
             ClusterInfo->AddTempLocks(action, &ctx);
         } else {
             LOG_DEBUG(ctx, NKikimrServices::CMS, "Result: %s (reason: %s)",
-                      ToString(error.Code).data(), error.Reason.data()); 
+                      ToString(error.Code).data(), error.Reason.data());
 
             if (CodesRate[response.GetStatus().GetCode()] > CodesRate[error.Code]) {
                 response.MutableStatus()->SetCode(error.Code);
@@ -321,14 +321,14 @@ bool TCms::IsActionHostValid(const TAction &action, TErrorInfo &error) const
     if (!ClusterInfo->HasNode(action.GetHost())
         && ActionRequiresHost(action)) {
         error.Code = TStatus::NO_SUCH_HOST;
-        error.Reason = Sprintf("Unknown host '%s'", action.GetHost().data()); 
+        error.Reason = Sprintf("Unknown host '%s'", action.GetHost().data());
         return false;
     }
 
     if (ClusterInfo->HasNode(action.GetHost())
         && action.GetType() == TAction::ADD_HOST) {
         error.Code = TStatus::WRONG_REQUEST;
-        error.Reason = Sprintf("Host '%s' already exists", action.GetHost().data()); 
+        error.Reason = Sprintf("Host '%s' already exists", action.GetHost().data());
         return false;
     }
 #if 0
@@ -430,11 +430,11 @@ bool TCms::CheckAction(const TAction &action,
         case TAction::REMOVE_DEVICES:
             error.Code = TStatus::ERROR;
             error.Reason = Sprintf("Unsupported action action '%s'",
-                                   TAction::EType_Name(action.GetType()).data()); 
+                                   TAction::EType_Name(action.GetType()).data());
             return false;
         default:
             error.Code =  TStatus::WRONG_REQUEST;
-            error.Reason = Sprintf("Unknown action '%s'", TAction::EType_Name(action.GetType()).data()); 
+            error.Reason = Sprintf("Unknown action '%s'", TAction::EType_Name(action.GetType()).data());
             return false;
     }
 }
@@ -699,7 +699,7 @@ bool TCms::TryToLockVDisk(const TActionOptions& opts,
         default:
             error.Code = TStatus::WRONG_REQUEST;
             error.Reason = Sprintf("Unknown availability mode: %s (%" PRIu32 ")",
-                                   EAvailabilityMode_Name(opts.AvailabilityMode).data(), 
+                                   EAvailabilityMode_Name(opts.AvailabilityMode).data(),
                                    static_cast<ui32>(opts.AvailabilityMode));
             error.Deadline = defaultDeadline;
             return false;
@@ -746,7 +746,7 @@ bool TCms::CheckActionReplaceDevices(const TAction &action,
         } else {
             error.Code = TStatus::NO_SUCH_DEVICE;
             error.Reason = Sprintf("Unknown device %s (use cluster state command"
-                                   " to get list of known devices)", device.data()); 
+                                   " to get list of known devices)", device.data());
             res = false;
         }
     }
@@ -930,7 +930,7 @@ void TCms::RemoveEmptyWalleTasks(const TActorContext &ctx)
     for (const auto &entry : State->WalleTasks) {
         const auto &task = entry.second;
         if (!State->ScheduledRequests.contains(task.RequestId) && task.Permissions.empty()) {
-            LOG_DEBUG(ctx, NKikimrServices::CMS, "Found empty task %s", task.TaskId.data()); 
+            LOG_DEBUG(ctx, NKikimrServices::CMS, "Found empty task %s", task.TaskId.data());
             tasksToRemove.push_back(task.TaskId);
         }
     }
@@ -1001,7 +1001,7 @@ void TCms::GetPermission(TEvCms::TEvManagePermissionRequest::TPtr &ev, bool all,
     const TString &user = rec.GetUser();
 
     LOG_INFO(ctx, NKikimrServices::CMS, "Get %s permissions for %s",
-              all ? "all" : "selected", user.data()); 
+              all ? "all" : "selected", user.data());
 
     resp->Record.MutableStatus()->SetCode(TStatus::OK);
     if (all) {
@@ -1023,7 +1023,7 @@ void TCms::GetPermission(TEvCms::TEvManagePermissionRequest::TPtr &ev, bool all,
             const auto &permission = it->second;
             if (permission.Owner != user) {
                 resp->Record.MutableStatus()->SetCode(TStatus::WRONG_REQUEST);
-                resp->Record.MutableStatus()->SetReason(Sprintf("Permission %s doesn't belong to %s", id.data(), user.data())); 
+                resp->Record.MutableStatus()->SetReason(Sprintf("Permission %s doesn't belong to %s", id.data(), user.data()));
                 resp->Record.ClearPermissions();
                 break;
             }
@@ -1033,7 +1033,7 @@ void TCms::GetPermission(TEvCms::TEvManagePermissionRequest::TPtr &ev, bool all,
     }
 
     LOG_DEBUG(ctx, NKikimrServices::CMS, "Resulting status: %s %s",
-              TStatus::ECode_Name(resp->Record.GetStatus().GetCode()).data(), resp->Record.GetStatus().GetReason().data()); 
+              TStatus::ECode_Name(resp->Record.GetStatus().GetCode()).data(), resp->Record.GetStatus().GetReason().data());
 
     Reply(ev, std::move(resp), ctx);
 }
@@ -1045,7 +1045,7 @@ void TCms::RemovePermission(TEvCms::TEvManagePermissionRequest::TPtr &ev, bool d
     const TString &user = rec.GetUser();
 
     LOG_INFO(ctx, NKikimrServices::CMS, "User %s %s permissions %s",
-              user.data(), done ? "is done with" : "rejected", ToString(rec.GetPermissions()).data()); 
+              user.data(), done ? "is done with" : "rejected", ToString(rec.GetPermissions()).data());
 
     TVector<TString> ids;
     resp->Record.MutableStatus()->SetCode(TStatus::OK);
@@ -1060,7 +1060,7 @@ void TCms::RemovePermission(TEvCms::TEvManagePermissionRequest::TPtr &ev, bool d
         const auto &permission = it->second;
         if (permission.Owner != user) {
             resp->Record.MutableStatus()->SetCode(TStatus::WRONG_REQUEST);
-            resp->Record.MutableStatus()->SetReason(Sprintf("Permission %s doesn't belong to %s", id.data(), user.data())); 
+            resp->Record.MutableStatus()->SetReason(Sprintf("Permission %s doesn't belong to %s", id.data(), user.data()));
             break;
         }
 
@@ -1069,7 +1069,7 @@ void TCms::RemovePermission(TEvCms::TEvManagePermissionRequest::TPtr &ev, bool d
 
 
     LOG_DEBUG(ctx, NKikimrServices::CMS, "Resulting status: %s %s",
-              TStatus::ECode_Name(resp->Record.GetStatus().GetCode()).data(), resp->Record.GetStatus().GetReason().data()); 
+              TStatus::ECode_Name(resp->Record.GetStatus().GetCode()).data(), resp->Record.GetStatus().GetReason().data());
 
     if (!rec.GetDryRun() && resp->Record.GetStatus().GetCode() == TStatus::OK) {
         auto handle = new IEventHandle(ev->Sender, SelfId(), resp.Release(), 0, ev->Cookie);
@@ -1086,7 +1086,7 @@ void TCms::GetRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, bool all, const
     const TString &user = rec.GetUser();
 
     LOG_INFO(ctx, NKikimrServices::CMS, "Get %s requests for %s",
-              all ? "all" : "selected", user.data()); 
+              all ? "all" : "selected", user.data());
 
     resp->Record.MutableStatus()->SetCode(TStatus::OK);
     if (all) {
@@ -1105,14 +1105,14 @@ void TCms::GetRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, bool all, const
             const auto &request = it->second;
             if (request.Owner != user) {
                 resp->Record.MutableStatus()->SetCode(TStatus::WRONG_REQUEST);
-                resp->Record.MutableStatus()->SetReason(Sprintf("Request %s doesn't belong to %s", id.data(), user.data())); 
+                resp->Record.MutableStatus()->SetReason(Sprintf("Request %s doesn't belong to %s", id.data(), user.data()));
             } else
                 request.CopyTo(*resp->Record.AddRequests());
         }
     }
 
     LOG_DEBUG(ctx, NKikimrServices::CMS, "Resulting status: %s %s",
-              TStatus::ECode_Name(resp->Record.GetStatus().GetCode()).data(), resp->Record.GetStatus().GetReason().data()); 
+              TStatus::ECode_Name(resp->Record.GetStatus().GetCode()).data(), resp->Record.GetStatus().GetReason().data());
 
     Reply(ev, std::move(resp), ctx);
 }
@@ -1135,13 +1135,13 @@ void TCms::RemoveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, const TActor
         const auto &request = it->second;
         if (request.Owner != user) {
             resp->Record.MutableStatus()->SetCode(TStatus::WRONG_REQUEST);
-            resp->Record.MutableStatus()->SetReason(Sprintf("Request %s doesn't belong to %s", id.data(), user.data())); 
+            resp->Record.MutableStatus()->SetReason(Sprintf("Request %s doesn't belong to %s", id.data(), user.data()));
         }
     }
 
 
     LOG_DEBUG(ctx, NKikimrServices::CMS, "Resulting status: %s %s",
-              TStatus::ECode_Name(resp->Record.GetStatus().GetCode()).data(), resp->Record.GetStatus().GetReason().data()); 
+              TStatus::ECode_Name(resp->Record.GetStatus().GetCode()).data(), resp->Record.GetStatus().GetReason().data());
 
     if (!rec.GetDryRun() && resp->Record.GetStatus().GetCode() == TStatus::OK) {
         auto handle = new IEventHandle(ev->Sender, SelfId(), resp.Release(), 0, ev->Cookie);
@@ -1160,7 +1160,7 @@ void TCms::GetNotifications(TEvCms::TEvManageNotificationRequest::TPtr &ev, bool
     const TString &user = rec.GetUser();
 
     LOG_INFO(ctx, NKikimrServices::CMS, "Get %s notifications for %s",
-              all ? "all" : "selected", user.data()); 
+              all ? "all" : "selected", user.data());
 
     resp->Record.MutableStatus()->SetCode(TStatus::OK);
     if (all) {
@@ -1179,14 +1179,14 @@ void TCms::GetNotifications(TEvCms::TEvManageNotificationRequest::TPtr &ev, bool
             const auto &notification = it->second;
             if (notification.Owner != user) {
                 resp->Record.MutableStatus()->SetCode(TStatus::WRONG_REQUEST);
-                resp->Record.MutableStatus()->SetReason(Sprintf("Notification %s doesn't belong to %s", id.data(), user.data())); 
+                resp->Record.MutableStatus()->SetReason(Sprintf("Notification %s doesn't belong to %s", id.data(), user.data()));
             } else
                 notification.CopyTo(*resp->Record.AddNotifications());
         }
     }
 
     LOG_DEBUG(ctx, NKikimrServices::CMS, "Resulting status: %s %s",
-              ToString(resp->Record.GetStatus().GetCode()).data(), resp->Record.GetStatus().GetReason().data()); 
+              ToString(resp->Record.GetStatus().GetCode()).data(), resp->Record.GetStatus().GetReason().data());
 
     Reply(ev, std::move(resp), ctx);
 }
@@ -1203,7 +1203,7 @@ bool TCms::RemoveNotification(const TString &id, const TString &user, bool remov
     const auto &notification = it->second;
     if (notification.Owner != user) {
         error.Code = TStatus::WRONG_REQUEST;
-        error.Reason = Sprintf("Notification %s doesn't belong to %s", id.data(), user.data()); 
+        error.Reason = Sprintf("Notification %s doesn't belong to %s", id.data(), user.data());
         return false;
     }
 
@@ -1246,12 +1246,12 @@ void TCms::CheckAndEnqueueRequest(TEvCms::TEvCheckRequest::TPtr &ev, const TActo
 
     auto it = State->ScheduledRequests.find(rec.GetRequestId());
     if (it == State->ScheduledRequests.end()) {
-        auto reason = Sprintf("Unknown request %s", rec.GetRequestId().data()); 
+        auto reason = Sprintf("Unknown request %s", rec.GetRequestId().data());
         return ReplyWithError<TEvCms::TEvPermissionResponse>(ev, TStatus::WRONG_REQUEST, reason, ctx);
     }
 
     if (it->second.Owner != rec.GetUser()) {
-        auto reason = Sprintf("Request %s doesn't belong to %s", rec.GetRequestId().data(), rec.GetUser().data()); 
+        auto reason = Sprintf("Request %s doesn't belong to %s", rec.GetRequestId().data(), rec.GetUser().data());
         return ReplyWithError<TEvCms::TEvPermissionResponse>(ev, TStatus::WRONG_REQUEST, reason, ctx);
     }
 
@@ -1288,7 +1288,7 @@ void TCms::PersistNodeTenants(TTransactionContext& txc, const TActorContext& ctx
 
         LOG_NOTICE(ctx, NKikimrServices::CMS,
                   "Persist node %" PRIu32 " tenant '%s'",
-                  nodeId, tenant.data()); 
+                  nodeId, tenant.data());
     }
 }
 
@@ -1557,7 +1557,7 @@ void TCms::Handle(TEvCms::TEvCheckRequest::TPtr &ev, const TActorContext &ctx)
     // Have to check request existence again because it could be
     // deleted after previous event check.
     if (it == State->ScheduledRequests.end()) {
-        auto reason = Sprintf("Unknown request %s", rec.GetRequestId().data()); 
+        auto reason = Sprintf("Unknown request %s", rec.GetRequestId().data());
         return ReplyWithError<TEvCms::TEvPermissionResponse>(
             ev, TStatus::WRONG_REQUEST, reason, ctx);
     }
@@ -1656,7 +1656,7 @@ bool TCms::CheckNotificationReplaceDevices(const TAction &action, TInstant time,
                 && !ClusterInfo->HasVDisk(device)) {
             error.Code = TStatus::NO_SUCH_DEVICE;
             error.Reason = Sprintf("Unknown device %s (use cluster state command"
-                                   " to get list of known devices)", device.data()); 
+                                   " to get list of known devices)", device.data());
             return false;
         }
     }
@@ -1688,11 +1688,11 @@ bool TCms::IsValidNotificationAction(const TAction &action, TInstant time,
         case TAction::REMOVE_DEVICES:
             error.Code = TStatus::ERROR;
             error.Reason = Sprintf("Unsupported action action '%s'",
-                                   TAction::EType_Name(action.GetType()).data()); 
+                                   TAction::EType_Name(action.GetType()).data());
             return false;
         default:
             error.Code =  TStatus::WRONG_REQUEST;
-            error.Reason = Sprintf("Unknown action '%s'", TAction::EType_Name(action.GetType()).data()); 
+            error.Reason = Sprintf("Unknown action '%s'", TAction::EType_Name(action.GetType()).data());
             return false;
     }
 }
@@ -1724,7 +1724,7 @@ bool TCms::CheckNotification(const TNotification &notification,
         TErrorInfo error;
 
         LOG_DEBUG(ctx, NKikimrServices::CMS, "Processing notification for action: %s",
-                  action.ShortDebugString().data()); 
+                  action.ShortDebugString().data());
 
         if (!IsValidNotificationAction(action, time, error, ctx)) {
             resp.MutableStatus()->SetCode(error.Code);
@@ -1751,7 +1751,7 @@ void TCms::Handle(TEvCms::TEvManageNotificationRequest::TPtr &ev, const TActorCo
     auto &rec = ev->Get()->Record;
 
     LOG_INFO(ctx, NKikimrServices::CMS, "Notification management request: %s",
-              rec.ShortDebugString().data()); 
+              rec.ShortDebugString().data());
 
     if (!rec.GetUser()) {
         return ReplyWithError<TEvCms::TEvManageNotificationResponse>(

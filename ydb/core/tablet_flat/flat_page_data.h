@@ -217,7 +217,7 @@ namespace NPage {
                 }
 
                 auto *hdr = TDeref<TRecordsHeader>::At(got.Page.data(), 0);
-                auto skip = got.Page.size() - hdr->Records * sizeof(TPgSize); 
+                auto skip = got.Page.size() - hdr->Records * sizeof(TPgSize);
 
                 BaseRow_ = TDeref<const TExtra>::At(hdr + 1, 0)->BaseRow;
                 Page.Base = base;

@@ -55,7 +55,7 @@ namespace NKikimr {
                 const TIngress &ingress)
         {
             Y_VERIFY(GetLastLsnOfIndexRecord() < lsn,
-                     "State# %s lsn# %" PRIu64, ToString().data(), lsn); 
+                     "State# %s lsn# %" PRIu64, ToString().data(), lsn);
             ++LogoBlobs;
 
             char buf[NSyncLog::MaxRecFullSize];
@@ -65,7 +65,7 @@ namespace NKikimr {
 
         void TSyncLogRecovery::PutBlock(ui64 lsn, ui64 tabletId, ui32 gen) {
             Y_VERIFY(GetLastLsnOfIndexRecord() < lsn,
-                     "State# %s lsn# %" PRIu64, ToString().data(), lsn); 
+                     "State# %s lsn# %" PRIu64, ToString().data(), lsn);
             ++Blocks;
 
             char buf[NSyncLog::MaxRecFullSize];
@@ -80,7 +80,7 @@ namespace NKikimr {
                 const TBarrierIngress &ingress)
         {
             Y_VERIFY(GetLastLsnOfIndexRecord() < lsn,
-                     "State# %s lsn# %" PRIu64, ToString().data(), lsn); 
+                     "State# %s lsn# %" PRIu64, ToString().data(), lsn);
             ++Gcs;
 
             const bool collect = record.HasCollectGeneration();
@@ -111,7 +111,7 @@ namespace NKikimr {
                 const TBarrierIngress &ingress)
         {
             Y_VERIFY(GetLastLsnOfIndexRecord() < lsn,
-                     "State# %s lsn# %" PRIu64, ToString().data(), lsn); 
+                     "State# %s lsn# %" PRIu64, ToString().data(), lsn);
             ++Barriers;
 
             char buf[NSyncLog::MaxRecFullSize];
@@ -125,7 +125,7 @@ namespace NKikimr {
         std::unique_ptr<TSyncLogRepaired> TSyncLogRecovery::ReleaseRepaired() {
             // after finishing recovery check that Dsk and Mem do not intersect
             Y_VERIFY(Repaired->SyncLogPtr->CheckMemAndDiskRecLogsDoNotIntersect(),
-                     "%s", Repaired->SyncLogPtr->BoundariesToString().data()); 
+                     "%s", Repaired->SyncLogPtr->BoundariesToString().data());
             return std::exchange(Repaired, nullptr);
         }
 

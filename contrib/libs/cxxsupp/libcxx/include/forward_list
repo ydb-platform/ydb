@@ -1,9 +1,9 @@
 // -*- C++ -*-
 //===----------------------- forward_list ---------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions. 
-// See https://llvm.org/LICENSE.txt for license information. 
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception 
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -168,13 +168,13 @@ template <class T, class Allocator>
     void swap(forward_list<T, Allocator>& x, forward_list<T, Allocator>& y)
          noexcept(noexcept(x.swap(y)));
 
-template <class T, class Allocator, class U> 
+template <class T, class Allocator, class U>
     typename forward_list<T, Allocator>::size_type
     erase(forward_list<T, Allocator>& c, const U& value);       // C++20
-template <class T, class Allocator, class Predicate> 
+template <class T, class Allocator, class Predicate>
     typename forward_list<T, Allocator>::size_type
     erase_if(forward_list<T, Allocator>& c, Predicate pred);    // C++20
- 
+
 }  // std
 
 */
@@ -186,7 +186,7 @@ template <class T, class Allocator, class Predicate>
 #include <iterator>
 #include <limits>
 #include <memory>
-#include <version> 
+#include <version>
 
 #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
 #pragma GCC system_header
@@ -770,11 +770,11 @@ public:
     const_reference front() const {return base::__before_begin()->__next_->__value_;}
 
 #ifndef _LIBCPP_CXX03_LANG
-#if _LIBCPP_STD_VER > 14 
+#if _LIBCPP_STD_VER > 14
     template <class... _Args> reference emplace_front(_Args&&... __args);
-#else 
-    template <class... _Args> void      emplace_front(_Args&&... __args); 
-#endif 
+#else
+    template <class... _Args> void      emplace_front(_Args&&... __args);
+#endif
     void push_front(value_type&& __v);
 #endif // _LIBCPP_CXX03_LANG
     void push_front(const value_type& __v);
@@ -975,7 +975,7 @@ template <class _Tp, class _Alloc>
 forward_list<_Tp, _Alloc>::forward_list(const forward_list& __x)
     : base(
           __node_traits::select_on_container_copy_construction(__x.__alloc())) {
-  insert_after(cbefore_begin(), __x.begin(), __x.end()); 
+  insert_after(cbefore_begin(), __x.begin(), __x.end());
 }
 
 template <class _Tp, class _Alloc>
@@ -1120,11 +1120,11 @@ forward_list<_Tp, _Alloc>::assign(initializer_list<value_type> __il)
 
 template <class _Tp, class _Alloc>
 template <class... _Args>
-#if _LIBCPP_STD_VER > 14 
+#if _LIBCPP_STD_VER > 14
 typename forward_list<_Tp, _Alloc>::reference
-#else 
-void 
-#endif 
+#else
+void
+#endif
 forward_list<_Tp, _Alloc>::emplace_front(_Args&&... __args)
 {
     __node_allocator& __a = base::__alloc();
@@ -1134,9 +1134,9 @@ forward_list<_Tp, _Alloc>::emplace_front(_Args&&... __args)
                                   _VSTD::forward<_Args>(__args)...);
     __h->__next_ = base::__before_begin()->__next_;
     base::__before_begin()->__next_ = __h.release();
-#if _LIBCPP_STD_VER > 14 
+#if _LIBCPP_STD_VER > 14
     return base::__before_begin()->__next_->__value_;
-#endif 
+#endif
 }
 
 template <class _Tp, class _Alloc>
@@ -1765,22 +1765,22 @@ swap(forward_list<_Tp, _Alloc>& __x, forward_list<_Tp, _Alloc>& __y)
     __x.swap(__y);
 }
 
-#if _LIBCPP_STD_VER > 17 
-template <class _Tp, class _Allocator, class _Predicate> 
-inline _LIBCPP_INLINE_VISIBILITY 
+#if _LIBCPP_STD_VER > 17
+template <class _Tp, class _Allocator, class _Predicate>
+inline _LIBCPP_INLINE_VISIBILITY
     typename forward_list<_Tp, _Allocator>::size_type
     erase_if(forward_list<_Tp, _Allocator>& __c, _Predicate __pred) {
   return __c.remove_if(__pred);
 }
- 
-template <class _Tp, class _Allocator, class _Up> 
-inline _LIBCPP_INLINE_VISIBILITY 
+
+template <class _Tp, class _Allocator, class _Up>
+inline _LIBCPP_INLINE_VISIBILITY
     typename forward_list<_Tp, _Allocator>::size_type
     erase(forward_list<_Tp, _Allocator>& __c, const _Up& __v) {
   return _VSTD::erase_if(__c, [&](auto& __elem) { return __elem == __v; });
 }
-#endif 
- 
+#endif
+
 _LIBCPP_END_NAMESPACE_STD
 
 _LIBCPP_POP_MACROS

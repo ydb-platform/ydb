@@ -13,10 +13,10 @@ namespace NKikimr {
         // Codec detector
         ////////////////////////////////////////////////////////////////////////////
         ECodec FragmentCodecDetector(const TString &data) {
-            if (data.size() < 48) 
+            if (data.size() < 48)
                 return ECodec::Naive;
 
-            const ui64 *firstWords = reinterpret_cast<const ui64 *>(data.data()); 
+            const ui64 *firstWords = reinterpret_cast<const ui64 *>(data.data());
             const bool firstWordsAreZero = (firstWords[0] == 0 &&
                                             firstWords[1] == 0 &&
                                             firstWords[2] == 0 &&

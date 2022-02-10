@@ -1915,10 +1915,10 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         ))";
 
         NKikimrMiniKQL::TResult res;
-        UNIT_ASSERT(client.FlatQuery(Sprintf(writeOldTypes, TablePlacement.data(), "Old"), res)); 
-        UNIT_ASSERT(client.FlatQuery(Sprintf(writeOldTypes, TablePlacement.data(), "New"), res)); 
-        UNIT_ASSERT(client.FlatQuery(Sprintf(writeNewTypes, TablePlacement.data(), "Old"), res)); 
-        UNIT_ASSERT(client.FlatQuery(Sprintf(writeNewTypes, TablePlacement.data(), "New"), res)); 
+        UNIT_ASSERT(client.FlatQuery(Sprintf(writeOldTypes, TablePlacement.data(), "Old"), res));
+        UNIT_ASSERT(client.FlatQuery(Sprintf(writeOldTypes, TablePlacement.data(), "New"), res));
+        UNIT_ASSERT(client.FlatQuery(Sprintf(writeNewTypes, TablePlacement.data(), "Old"), res));
+        UNIT_ASSERT(client.FlatQuery(Sprintf(writeNewTypes, TablePlacement.data(), "New"), res));
 
         const char * readOldTypes = R"((
             (let row_ '('('key (Uint32 '42)) '('strKey (ByteString 'old)) '('utf8Key (Utf8String 'old))))
@@ -1934,10 +1934,10 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             (return (AsList (SetResult 'res result_)))
         ))";
 
-        UNIT_ASSERT(client.FlatQuery(Sprintf(readOldTypes, TablePlacement.data(), "Old"), res)); 
-        UNIT_ASSERT(client.FlatQuery(Sprintf(readOldTypes, TablePlacement.data(), "New"), res)); 
-        UNIT_ASSERT(client.FlatQuery(Sprintf(readNewTypes, TablePlacement.data(), "Old"), res)); 
-        UNIT_ASSERT(client.FlatQuery(Sprintf(readNewTypes, TablePlacement.data(), "New"), res)); 
+        UNIT_ASSERT(client.FlatQuery(Sprintf(readOldTypes, TablePlacement.data(), "Old"), res));
+        UNIT_ASSERT(client.FlatQuery(Sprintf(readOldTypes, TablePlacement.data(), "New"), res));
+        UNIT_ASSERT(client.FlatQuery(Sprintf(readNewTypes, TablePlacement.data(), "Old"), res));
+        UNIT_ASSERT(client.FlatQuery(Sprintf(readNewTypes, TablePlacement.data(), "New"), res));
 
         // TODO: check resluts
 
@@ -1961,10 +1961,10 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             (return (AsList (SetResult 'res result_)))
         ))";
 
-        UNIT_ASSERT(client.FlatQuery(Sprintf(rangeOldTypes, TablePlacement.data(), "Old"), res)); 
-        UNIT_ASSERT(client.FlatQuery(Sprintf(rangeOldTypes, TablePlacement.data(), "New"), res)); 
-        UNIT_ASSERT(client.FlatQuery(Sprintf(rangeNewTypes, TablePlacement.data(), "Old"), res)); 
-        UNIT_ASSERT(client.FlatQuery(Sprintf(rangeNewTypes, TablePlacement.data(), "New"), res)); 
+        UNIT_ASSERT(client.FlatQuery(Sprintf(rangeOldTypes, TablePlacement.data(), "Old"), res));
+        UNIT_ASSERT(client.FlatQuery(Sprintf(rangeOldTypes, TablePlacement.data(), "New"), res));
+        UNIT_ASSERT(client.FlatQuery(Sprintf(rangeNewTypes, TablePlacement.data(), "Old"), res));
+        UNIT_ASSERT(client.FlatQuery(Sprintf(rangeNewTypes, TablePlacement.data(), "New"), res));
 
         // TODO: check resluts
     }
@@ -2013,14 +2013,14 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         ))";
 
         NKikimrMiniKQL::TResult res;
-        UNIT_ASSERT(client.FlatQueryParams(Sprintf(writeOldTypes, TablePlacement.data(), "Old"), paramsOld, false, res)); 
-        UNIT_ASSERT(client.FlatQueryParams(Sprintf(writeOldTypes, TablePlacement.data(), "New"), paramsOld, false, res)); 
-        UNIT_ASSERT(client.FlatQueryParams(Sprintf(writeNewTypes, TablePlacement.data(), "Old"), paramsOld, false, res)); 
-        UNIT_ASSERT(client.FlatQueryParams(Sprintf(writeNewTypes, TablePlacement.data(), "New"), paramsOld, false, res)); 
-        UNIT_ASSERT(client.FlatQueryParams(Sprintf(writeOldTypes, TablePlacement.data(), "Old"), paramsNew, false, res)); 
-        UNIT_ASSERT(client.FlatQueryParams(Sprintf(writeOldTypes, TablePlacement.data(), "New"), paramsNew, false, res)); 
-        UNIT_ASSERT(client.FlatQueryParams(Sprintf(writeNewTypes, TablePlacement.data(), "Old"), paramsNew, false, res)); 
-        UNIT_ASSERT(client.FlatQueryParams(Sprintf(writeNewTypes, TablePlacement.data(), "New"), paramsNew, false, res)); 
+        UNIT_ASSERT(client.FlatQueryParams(Sprintf(writeOldTypes, TablePlacement.data(), "Old"), paramsOld, false, res));
+        UNIT_ASSERT(client.FlatQueryParams(Sprintf(writeOldTypes, TablePlacement.data(), "New"), paramsOld, false, res));
+        UNIT_ASSERT(client.FlatQueryParams(Sprintf(writeNewTypes, TablePlacement.data(), "Old"), paramsOld, false, res));
+        UNIT_ASSERT(client.FlatQueryParams(Sprintf(writeNewTypes, TablePlacement.data(), "New"), paramsOld, false, res));
+        UNIT_ASSERT(client.FlatQueryParams(Sprintf(writeOldTypes, TablePlacement.data(), "Old"), paramsNew, false, res));
+        UNIT_ASSERT(client.FlatQueryParams(Sprintf(writeOldTypes, TablePlacement.data(), "New"), paramsNew, false, res));
+        UNIT_ASSERT(client.FlatQueryParams(Sprintf(writeNewTypes, TablePlacement.data(), "Old"), paramsNew, false, res));
+        UNIT_ASSERT(client.FlatQueryParams(Sprintf(writeNewTypes, TablePlacement.data(), "New"), paramsNew, false, res));
 
         const char * readOldTypes = R"((
             (let strKey_ (Parameter 'STR_KEY (DataType 'ByteString)))
@@ -2040,14 +2040,14 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             (return (AsList (SetResult 'res result_)))
         ))";
 
-        UNIT_ASSERT(client.FlatQueryParams(Sprintf(readOldTypes, TablePlacement.data(), "Old"), paramsOld, false, res)); 
-        UNIT_ASSERT(client.FlatQueryParams(Sprintf(readOldTypes, TablePlacement.data(), "New"), paramsOld, false, res)); 
-        UNIT_ASSERT(client.FlatQueryParams(Sprintf(readNewTypes, TablePlacement.data(), "Old"), paramsOld, false, res)); 
-        UNIT_ASSERT(client.FlatQueryParams(Sprintf(readNewTypes, TablePlacement.data(), "New"), paramsOld, false, res)); 
-        UNIT_ASSERT(client.FlatQueryParams(Sprintf(readOldTypes, TablePlacement.data(), "Old"), paramsNew, false, res)); 
-        UNIT_ASSERT(client.FlatQueryParams(Sprintf(readOldTypes, TablePlacement.data(), "New"), paramsNew, false, res)); 
-        UNIT_ASSERT(client.FlatQueryParams(Sprintf(readNewTypes, TablePlacement.data(), "Old"), paramsNew, false, res)); 
-        UNIT_ASSERT(client.FlatQueryParams(Sprintf(readNewTypes, TablePlacement.data(), "New"), paramsNew, false, res)); 
+        UNIT_ASSERT(client.FlatQueryParams(Sprintf(readOldTypes, TablePlacement.data(), "Old"), paramsOld, false, res));
+        UNIT_ASSERT(client.FlatQueryParams(Sprintf(readOldTypes, TablePlacement.data(), "New"), paramsOld, false, res));
+        UNIT_ASSERT(client.FlatQueryParams(Sprintf(readNewTypes, TablePlacement.data(), "Old"), paramsOld, false, res));
+        UNIT_ASSERT(client.FlatQueryParams(Sprintf(readNewTypes, TablePlacement.data(), "New"), paramsOld, false, res));
+        UNIT_ASSERT(client.FlatQueryParams(Sprintf(readOldTypes, TablePlacement.data(), "Old"), paramsNew, false, res));
+        UNIT_ASSERT(client.FlatQueryParams(Sprintf(readOldTypes, TablePlacement.data(), "New"), paramsNew, false, res));
+        UNIT_ASSERT(client.FlatQueryParams(Sprintf(readNewTypes, TablePlacement.data(), "Old"), paramsNew, false, res));
+        UNIT_ASSERT(client.FlatQueryParams(Sprintf(readNewTypes, TablePlacement.data(), "New"), paramsNew, false, res));
 
         // TODO: check resluts
     }

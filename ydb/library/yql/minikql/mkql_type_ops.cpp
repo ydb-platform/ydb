@@ -1141,19 +1141,19 @@ NUdf::TUnboxedValuePod ParseTzDate(NUdf::TStringRef str) {
 
     ui32 year, month, day;
     ui32 pos = 0;
-    if (!ParseNumber(pos, buf, year) || pos == buf.size() || buf.data()[pos] != '-') { 
+    if (!ParseNumber(pos, buf, year) || pos == buf.size() || buf.data()[pos] != '-') {
         return NUdf::TUnboxedValuePod();
     }
 
     // skip '-'
     ++pos;
-    if (!ParseNumber(pos, buf, month) || pos == buf.size() || buf.data()[pos] != '-') { 
+    if (!ParseNumber(pos, buf, month) || pos == buf.size() || buf.data()[pos] != '-') {
         return NUdf::TUnboxedValuePod();
     }
 
     // skip '-'
     ++pos;
-    if (!ParseNumber(pos, buf, day) || pos != buf.size()) { 
+    if (!ParseNumber(pos, buf, day) || pos != buf.size()) {
         return NUdf::TUnboxedValuePod();
     }
 
@@ -1241,38 +1241,38 @@ NUdf::TUnboxedValuePod ParseTzDatetime(NUdf::TStringRef str) {
 
     ui32 year, month, day;
     ui32 pos = 0;
-    if (!ParseNumber(pos, buf, year) || pos == buf.size() || buf.data()[pos] != '-') { 
+    if (!ParseNumber(pos, buf, year) || pos == buf.size() || buf.data()[pos] != '-') {
         return NUdf::TUnboxedValuePod();
     }
 
     // skip '-'
     ++pos;
-    if (!ParseNumber(pos, buf, month) || pos == buf.size() || buf.data()[pos] != '-') { 
+    if (!ParseNumber(pos, buf, month) || pos == buf.size() || buf.data()[pos] != '-') {
         return NUdf::TUnboxedValuePod();
     }
 
     // skip '-'
     ++pos;
-    if (!ParseNumber(pos, buf, day) || pos == buf.size() || buf.data()[pos] != 'T') { 
+    if (!ParseNumber(pos, buf, day) || pos == buf.size() || buf.data()[pos] != 'T') {
         return NUdf::TUnboxedValuePod();
     }
 
     ui32 hour, minute, second;
     // skip 'T'
     ++pos;
-    if (!ParseNumber(pos, buf, hour) || pos == buf.size() || buf.data()[pos] != ':') { 
+    if (!ParseNumber(pos, buf, hour) || pos == buf.size() || buf.data()[pos] != ':') {
         return NUdf::TUnboxedValuePod();
     }
 
     // skip ':'
     ++pos;
-    if (!ParseNumber(pos, buf, minute) || pos == buf.size() || buf.data()[pos] != ':') { 
+    if (!ParseNumber(pos, buf, minute) || pos == buf.size() || buf.data()[pos] != ':') {
         return NUdf::TUnboxedValuePod();
     }
 
     // skip ':'
     ++pos;
-    if (!ParseNumber(pos, buf, second) || pos != buf.size()) { 
+    if (!ParseNumber(pos, buf, second) || pos != buf.size()) {
         return NUdf::TUnboxedValuePod();
     }
 
@@ -1387,32 +1387,32 @@ NUdf::TUnboxedValuePod ParseTzTimestamp(NUdf::TStringRef str) {
 
     ui32 year, month, day;
     ui32 pos = 0;
-    if (!ParseNumber(pos, buf, year) || pos == buf.size() || buf.data()[pos] != '-') { 
+    if (!ParseNumber(pos, buf, year) || pos == buf.size() || buf.data()[pos] != '-') {
         return NUdf::TUnboxedValuePod();
     }
 
     // skip '-'
     ++pos;
-    if (!ParseNumber(pos, buf, month) || pos == buf.size() || buf.data()[pos] != '-') { 
+    if (!ParseNumber(pos, buf, month) || pos == buf.size() || buf.data()[pos] != '-') {
         return NUdf::TUnboxedValuePod();
     }
 
     // skip '-'
     ++pos;
-    if (!ParseNumber(pos, buf, day) || pos == buf.size() || buf.data()[pos] != 'T') { 
+    if (!ParseNumber(pos, buf, day) || pos == buf.size() || buf.data()[pos] != 'T') {
         return NUdf::TUnboxedValuePod();
     }
 
     ui32 hour, minute, second;
     // skip 'T'
     ++pos;
-    if (!ParseNumber(pos, buf, hour) || pos == buf.size() || buf.data()[pos] != ':') { 
+    if (!ParseNumber(pos, buf, hour) || pos == buf.size() || buf.data()[pos] != ':') {
         return NUdf::TUnboxedValuePod();
     }
 
     // skip ':'
     ++pos;
-    if (!ParseNumber(pos, buf, minute) || pos == buf.size() || buf.data()[pos] != ':') { 
+    if (!ParseNumber(pos, buf, minute) || pos == buf.size() || buf.data()[pos] != ':') {
         return NUdf::TUnboxedValuePod();
     }
 
@@ -1423,8 +1423,8 @@ NUdf::TUnboxedValuePod ParseTzTimestamp(NUdf::TStringRef str) {
     }
 
     ui32 microseconds = 0;
-    if (pos != buf.size()) { 
-        if (buf.data()[pos] != '.') { 
+    if (pos != buf.size()) {
+        if (buf.data()[pos] != '.') {
             return NUdf::TUnboxedValuePod();
         }
 
@@ -1444,7 +1444,7 @@ NUdf::TUnboxedValuePod ParseTzTimestamp(NUdf::TStringRef str) {
             ++prevPos;
         }
 
-        if (pos != buf.size()) { 
+        if (pos != buf.size()) {
             return NUdf::TUnboxedValuePod();
         }
     }
@@ -2036,17 +2036,17 @@ void SerializeTzTimestamp(ui64 timestamp, ui16 tzId, IOutputStream& out) {
 }
 
 bool DeserializeTzDate(TStringBuf buf, ui16& date, ui16& tzId) {
-    if (buf.size() != sizeof(ui16) + sizeof(ui16)) { 
+    if (buf.size() != sizeof(ui16) + sizeof(ui16)) {
         return false;
     }
 
-    date = ReadUnaligned<ui16>(buf.data()); 
+    date = ReadUnaligned<ui16>(buf.data());
     date = SwapBytes(date);
     if (date >= NUdf::MAX_DATE) {
         return false;
     }
 
-    tzId = ReadUnaligned<ui16>(buf.data() + sizeof(date)); 
+    tzId = ReadUnaligned<ui16>(buf.data() + sizeof(date));
     tzId = SwapBytes(tzId);
     if (!IsValidTimezoneId(tzId)) {
         return false;
@@ -2056,17 +2056,17 @@ bool DeserializeTzDate(TStringBuf buf, ui16& date, ui16& tzId) {
 }
 
 bool DeserializeTzDatetime(TStringBuf buf, ui32& datetime, ui16& tzId) {
-    if (buf.size() != sizeof(ui32) + sizeof(ui16)) { 
+    if (buf.size() != sizeof(ui32) + sizeof(ui16)) {
         return false;
     }
 
-    datetime = ReadUnaligned<ui32>(buf.data()); 
+    datetime = ReadUnaligned<ui32>(buf.data());
     datetime = SwapBytes(datetime);
     if (datetime >= NUdf::MAX_DATETIME) {
         return false;
     }
 
-    tzId = ReadUnaligned<ui16>(buf.data() + sizeof(datetime)); 
+    tzId = ReadUnaligned<ui16>(buf.data() + sizeof(datetime));
     tzId = SwapBytes(tzId);
     if (!IsValidTimezoneId(tzId)) {
         return false;
@@ -2076,17 +2076,17 @@ bool DeserializeTzDatetime(TStringBuf buf, ui32& datetime, ui16& tzId) {
 }
 
 bool DeserializeTzTimestamp(TStringBuf buf, ui64& timestamp, ui16& tzId) {
-    if (buf.size() != sizeof(ui64) + sizeof(ui16)) { 
+    if (buf.size() != sizeof(ui64) + sizeof(ui16)) {
         return false;
     }
 
-    timestamp = ReadUnaligned<ui64>(buf.data()); 
+    timestamp = ReadUnaligned<ui64>(buf.data());
     timestamp = SwapBytes(timestamp);
     if (timestamp >= NUdf::MAX_TIMESTAMP) {
         return false;
     }
 
-    tzId = ReadUnaligned<ui16>(buf.data() + sizeof(timestamp)); 
+    tzId = ReadUnaligned<ui16>(buf.data() + sizeof(timestamp));
     tzId = SwapBytes(tzId);
     if (!IsValidTimezoneId(tzId)) {
         return false;

@@ -109,7 +109,7 @@ void TLoader::StageParseMeta() noexcept
     {
         Y_Fail("Part " << Packs[0]->PageCollection->Label() << " has"
             << " invalid layout : " << (Rooted ? "rooted" : "legacy")
-            << " " << Packs.size() << "s " << meta.TotalPages() << "pg" 
+            << " " << Packs.size() << "s " << meta.TotalPages() << "pg"
             << ", Scheme " << SchemeId << ", Index " << IndexId
             << ", Blobs " << GlobsId << ", Small " << SmallId
             << ", Large " << LargeId << ", ByKey " << ByKeyId

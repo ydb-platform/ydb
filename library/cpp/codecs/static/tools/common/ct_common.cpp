@@ -36,23 +36,23 @@ namespace NCodecs {
             decodeBuffer.Clear();
 
             stats.Records += 1;
-            stats.RawSize += data.size(); 
+            stats.RawSize += data.size();
 
             THPTimer timer;
             c.Encode(data, encodeBuffer);
-            stats.EncSize += encodeBuffer.size(); 
+            stats.EncSize += encodeBuffer.size();
             stats.EncSeconds += timer.PassedReset();
 
-            c.Decode(TStringBuf{encodeBuffer.data(), encodeBuffer.size()}, decodeBuffer); 
+            c.Decode(TStringBuf{encodeBuffer.data(), encodeBuffer.size()}, decodeBuffer);
             stats.DecSeconds += timer.PassedReset();
-            Y_ENSURE(data == TStringBuf(decodeBuffer.data(), decodeBuffer.size()), "invalid encoding at record " << stats.Records); 
+            Y_ENSURE(data == TStringBuf(decodeBuffer.data(), decodeBuffer.size()), "invalid encoding at record " << stats.Records);
         }
 
         return stats;
     }
 
     void ParseBlob(TVector<TString>& result, EDataStreamFormat fmt, const TBlob& blob) {
-        TStringBuf bin(blob.AsCharPtr(), blob.Size()); 
+        TStringBuf bin(blob.AsCharPtr(), blob.Size());
         TStringBuf line;
         TString buffer;
         while (bin.ReadLine(line)) {
@@ -63,7 +63,7 @@ namespace NCodecs {
             if (!line) {
                 continue;
             }
-            result.emplace_back(line.data(), line.size()); 
+            result.emplace_back(line.data(), line.size());
         }
     }
 

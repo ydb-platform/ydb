@@ -20,7 +20,7 @@ str = endptr + 1;
 
 
     bool TKeyBarrier::Parse(TKeyBarrier &out, const TString &buf, TString &errorExplanation) {
-        const char *str = buf.data(); 
+        const char *str = buf.data();
         char *endptr = nullptr;
 
         str = SkipSpaces(str);

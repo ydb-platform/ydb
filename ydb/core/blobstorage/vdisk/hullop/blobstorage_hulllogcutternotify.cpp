@@ -27,7 +27,7 @@ namespace NKikimr {
             LOG_DEBUG(ctx, NKikimrServices::BS_LOGCUTTER,
                     VDISKP(VCtx->VDiskLogPrefix,
                         "THullLogCutterNotifier: lsn# %" PRIu64 " PreviousCutLsn# %s",
-                        lsn, PreviousCutLsnToString().data())); 
+                        lsn, PreviousCutLsnToString().data()));
 
             if (lsn != ui64(-1)) {
                 Y_VERIFY(!PreviousCutLsn || *PreviousCutLsn <= lsn);

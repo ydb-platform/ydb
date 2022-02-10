@@ -31,7 +31,7 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
     , Cancelled(false)
     , ReceivedAt_(receivedAt)
 {
-    bool success = Tx.ParseFromArray(TxBody.data(), TxBody.size()); 
+    bool success = Tx.ParseFromArray(TxBody.data(), TxBody.size());
     if (!success) {
         ErrCode = NKikimrTxDataShard::TError::BAD_ARGUMENT;
         ErrStr = "Failed to parse TxBody";
@@ -429,7 +429,7 @@ bool TActiveTransaction::BuildSchemeTx()
 {
     Y_VERIFY(TxBody);
     SchemeTx.Reset(new NKikimrTxDataShard::TFlatSchemeTransaction);
-    bool res = SchemeTx->ParseFromArray(TxBody.data(), TxBody.size()); 
+    bool res = SchemeTx->ParseFromArray(TxBody.data(), TxBody.size());
     if (!res)
         return false;
 

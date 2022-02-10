@@ -152,12 +152,12 @@ inline T FromString(const TChar* data) {
 
 template <class T>
 inline T FromString(const TStringBuf& s) {
-    return ::FromString<T>(s.data(), s.size()); 
+    return ::FromString<T>(s.data(), s.size());
 }
 
 template <class T>
 inline T FromString(const TString& s) {
-    return ::FromString<T>(s.data(), s.size()); 
+    return ::FromString<T>(s.data(), s.size());
 }
 
 template <class T>
@@ -172,7 +172,7 @@ inline TString FromString<TString>(const TString& s) {
 
 template <class T>
 inline T FromString(const TWtringBuf& s) {
-    return ::FromString<T, typename TWtringBuf::char_type>(s.data(), s.size()); 
+    return ::FromString<T, typename TWtringBuf::char_type>(s.data(), s.size());
 }
 
 template <class T>
@@ -212,7 +212,7 @@ inline ::NPrivate::TFromString<TChar> FromString(const TChar* data) {
 
 template <typename T>
 inline ::NPrivate::TFromString<typename T::TChar> FromString(const T& s) {
-    return ::NPrivate::TFromString<typename T::TChar>(s.data(), s.size()); 
+    return ::NPrivate::TFromString<typename T::TChar>(s.data(), s.size());
 }
 
 // Conversion exception free versions
@@ -247,12 +247,12 @@ inline bool TryFromString(const TChar* data, const size_t len, T& result, const 
 
 template <class T>
 inline bool TryFromString(const TStringBuf& s, T& result) {
-    return TryFromString<T>(s.data(), s.size(), result); 
+    return TryFromString<T>(s.data(), s.size(), result);
 }
 
 template <class T>
 inline bool TryFromString(const TString& s, T& result) {
-    return TryFromString<T>(s.data(), s.size(), result); 
+    return TryFromString<T>(s.data(), s.size(), result);
 }
 
 template <class T>
@@ -262,17 +262,17 @@ inline bool TryFromString(const std::string& s, T& result) {
 
 template <class T>
 inline bool TryFromString(const TWtringBuf& s, T& result) {
-    return TryFromString<T>(s.data(), s.size(), result); 
+    return TryFromString<T>(s.data(), s.size(), result);
 }
 
 template <class T>
 inline bool TryFromString(const TUtf16String& s, T& result) {
-    return TryFromString<T>(s.data(), s.size(), result); 
+    return TryFromString<T>(s.data(), s.size(), result);
 }
 
 template <class T, class TStringType>
 inline bool TryFromStringWithDefault(const TStringType& s, T& result, const T& def) {
-    return TryFromString<T>(s.data(), s.size(), result, def); 
+    return TryFromString<T>(s.data(), s.size(), result, def);
 }
 
 template <class T>
@@ -295,7 +295,7 @@ inline T FromString(const TChar* data, const size_t len, const T& def) {
 
 template <class T, class TStringType>
 inline T FromStringWithDefault(const TStringType& s, const T& def) {
-    return FromString<T>(s.data(), s.size(), def); 
+    return FromString<T>(s.data(), s.size(), def);
 }
 
 template <class T>
@@ -328,7 +328,7 @@ bool TryIntFromString(const TChar* data, size_t len, TInt& result);
 
 template <int base, class TInt, class TStringType>
 inline bool TryIntFromString(const TStringType& s, TInt& result) {
-    return TryIntFromString<base>(s.data(), s.size(), result); 
+    return TryIntFromString<base>(s.data(), s.size(), result);
 }
 
 template <class TInt, int base, class TChar>
@@ -341,7 +341,7 @@ inline TInt IntFromString(const TChar* str) {
 
 template <class TInt, int base, class TStringType>
 inline TInt IntFromString(const TStringType& str) {
-    return IntFromString<TInt, base>(str.data(), str.size()); 
+    return IntFromString<TInt, base>(str.data(), str.size());
 }
 
 static inline TString ToString(const TStringBuf str) {

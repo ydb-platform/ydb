@@ -692,8 +692,8 @@ class TTestChunkReadRandomOffset : public TBaseTest {
             VERBOSE_COUT(" Sending TEvChunkWrite");
             ChunkWriteParts.Reset(new NPDisk::TEvChunkWrite::TPart[1]);
             ChunkWriteData = PrepareData(ReadSize + StepSize * StepsCount);
-            ChunkWriteParts[0].Data = ChunkWriteData.data(); 
-            ChunkWriteParts[0].Size = (ui32)ChunkWriteData.size(); 
+            ChunkWriteParts[0].Data = ChunkWriteData.data();
+            ChunkWriteParts[0].Size = (ui32)ChunkWriteData.size();
             ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, ChunkIdx, 0,
                 new NPDisk::TEvChunkWrite::TNonOwningParts(ChunkWriteParts.Get(), 1), nullptr, false, 1));
             TestStep = 20;
@@ -784,8 +784,8 @@ class TTestChunkWriteRead : public TBaseTest {
             VERBOSE_COUT(" Sending TEvChunkWrite");
             ChunkWriteParts.Reset(new NPDisk::TEvChunkWrite::TPart[1]);
             ChunkWriteData = PrepareData((Size1 + BlockSize - 1) / BlockSize * BlockSize);
-            ChunkWriteParts[0].Data = ChunkWriteData.data(); 
-            ChunkWriteParts[0].Size = (ui32)ChunkWriteData.size(); 
+            ChunkWriteParts[0].Data = ChunkWriteData.data();
+            ChunkWriteParts[0].Size = (ui32)ChunkWriteData.size();
             ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, ChunkIdx, 0,
                 new NPDisk::TEvChunkWrite::TNonOwningParts(ChunkWriteParts.Get(), 1), (void*)42, false, 1));
             TestStep = 20;
@@ -824,14 +824,14 @@ class TTestChunkWriteRead : public TBaseTest {
             TEST_DATA_EQUALS(LastResponse.Data.ToString(), expectedData);
 
             VERBOSE_COUT(" Sending TEvChunkRead with offset");
-            ctx.Send(Yard, new NPDisk::TEvChunkRead(Owner, OwnerRound, ChunkIdx, 127, ChunkWriteData.size() - 127, 1, nullptr)); 
+            ctx.Send(Yard, new NPDisk::TEvChunkRead(Owner, OwnerRound, ChunkIdx, 127, ChunkWriteData.size() - 127, 1, nullptr));
             TestStep = 46;
             return;
         }
         case 46:
         {
             TEST_RESPONSE(EvChunkReadResult, OK);
-            TString expectedData = TString(ChunkWriteData, 127, ChunkWriteData.size() - 127); 
+            TString expectedData = TString(ChunkWriteData, 127, ChunkWriteData.size() - 127);
             TEST_DATA_EQUALS(LastResponse.Data.ToString(), expectedData);
 
             VERBOSE_COUT(" Sending TEvChunkRead with offset");
@@ -856,11 +856,11 @@ class TTestChunkWriteRead : public TBaseTest {
             VERBOSE_COUT(" Sending TEvChunkWrite");
             ChunkWriteParts.Reset(new NPDisk::TEvChunkWrite::TPart[1]);
             ChunkWriteData = PrepareData(Size2 / BlockSize * BlockSize);
-            ChunkWriteParts[0].Data = ChunkWriteData.data(); 
-            ChunkWriteParts[0].Size = (ui32)ChunkWriteData.size(); 
+            ChunkWriteParts[0].Data = ChunkWriteData.data();
+            ChunkWriteParts[0].Size = (ui32)ChunkWriteData.size();
             ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, ChunkIdx, 0,
                 new NPDisk::TEvChunkWrite::TNonOwningParts(ChunkWriteParts.Get(), 1), (void*)42, false, 1));
-            ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, ChunkIdx, ChunkWriteData.size(), 
+            ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, ChunkIdx, ChunkWriteData.size(),
                 new NPDisk::TEvChunkWrite::TNonOwningParts(ChunkWriteParts.Get(), 1), (void*)42, false, 1));
             break;
         }
@@ -885,9 +885,9 @@ class TTestChunkWriteRead : public TBaseTest {
             TEST_RESPONSE(EvLogResult, OK);
 
             VERBOSE_COUT(" Sending TEvChunkRead");
-            ctx.Send(Yard, new NPDisk::TEvChunkRead(Owner, OwnerRound, ChunkIdx, 0, ChunkWriteData.size(), 1, nullptr)); 
-            ctx.Send(Yard, new NPDisk::TEvChunkRead(Owner, OwnerRound, ChunkIdx, ChunkWriteData.size(), 
-                        ChunkWriteData.size(), 1, nullptr)); 
+            ctx.Send(Yard, new NPDisk::TEvChunkRead(Owner, OwnerRound, ChunkIdx, 0, ChunkWriteData.size(), 1, nullptr));
+            ctx.Send(Yard, new NPDisk::TEvChunkRead(Owner, OwnerRound, ChunkIdx, ChunkWriteData.size(),
+                        ChunkWriteData.size(), 1, nullptr));
             break;
         case 100:
             TEST_RESPONSE(EvChunkReadResult, OK);
@@ -1073,8 +1073,8 @@ class TTestChunk3WriteRead : public TBaseTest {
             VERBOSE_COUT(" Sending TEvChunkWrite");
             ChunkWriteParts.Reset(new NPDisk::TEvChunkWrite::TPart[1]);
             ChunkWriteData = PrepareData(DataSize);
-            ChunkWriteParts[0].Data = ChunkWriteData.data(); 
-            ChunkWriteParts[0].Size = (ui32)ChunkWriteData.size(); 
+            ChunkWriteParts[0].Data = ChunkWriteData.data();
+            ChunkWriteParts[0].Size = (ui32)ChunkWriteData.size();
             ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, ChunkIdx, DataSize * Iteration,
                 new NPDisk::TEvChunkWrite::TNonOwningParts(ChunkWriteParts.Get(), 1), (void*)42, false, 1));
             ++Iteration;
@@ -1187,7 +1187,7 @@ class TTestLogMultipleWriteRead : public TBaseTest {
                     ++Lsn;
                     ASSERT_YTHROW(CurrentSize <= LastSize, "Excessive records");
 
-                    totalSize += LastResponse.LogRecords[idx].Data.size(); 
+                    totalSize += LastResponse.LogRecords[idx].Data.size();
                     ++CurrentSize;
                 }
                 ASSERT_YTHROW(totalSize <= ReadSizeLimit, "totalSize=" << totalSize << ", sizeLimit=" << ReadSizeLimit);

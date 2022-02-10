@@ -88,7 +88,7 @@ class TBlobStorageGroupCollectGarbageRequest : public TBlobStorageGroupRequestAc
                 return ReplyAndDie(NKikimrProto::ERROR);
 
             default:
-                Y_FAIL("unexpected newStatus# %s", NKikimrProto::EReplyStatus_Name(newStatus).data()); 
+                Y_FAIL("unexpected newStatus# %s", NKikimrProto::EReplyStatus_Name(newStatus).data());
         }
         for (const TVDiskID& vdiskId : queryStatus) {
             SendToQueue(std::make_unique<TEvBlobStorage::TEvVStatus>(vdiskId), 0, NWilson::TTraceId());

@@ -343,7 +343,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
         } else if (status == NKikimrProto::ERROR || status == NKikimrProto::VDISK_ERROR_STATE) {
             ++GetBlockErrors;
         } else {
-            Y_FAIL("status: %s" , NKikimrProto::EReplyStatus_Name(status).data()); 
+            Y_FAIL("status: %s" , NKikimrProto::EReplyStatus_Name(status).data());
         }
 
         // Not Minimal Restorable, but minimal needed for write to succseed
@@ -447,7 +447,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
 
         vDiskData.IsMoreRequested = false;
         if (vDiskData.Blobs.size() > 0) {
-            TLogoBlobID &lastBlobId = vDiskData.Blobs.back().Id; 
+            TLogoBlobID &lastBlobId = vDiskData.Blobs.back().Id;
 
             ui64 tablet = lastBlobId.TabletID();
             ui32 channel = lastBlobId.Channel();
@@ -477,7 +477,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
             str << " VERIFY FAILED ";
             str << "Group# " << Info->GroupID << " Discover# " << SelfId().ToString();
 
-            Y_VERIFY(false, "%s", str.Str().data()); 
+            Y_VERIFY(false, "%s", str.Str().data());
         }
         Y_VERIFY(TotalRecieved < TotalSent);
     }
@@ -514,7 +514,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
             TVDiskIdShort vId(vDiskIt->first);
             TVDiskInfo &curVDisk = vDiskIt->second;
             if (!curVDisk.IsError && curVDisk.Blobs.size() > 0) {
-                TLogoBlobID &last = curVDisk.Blobs.back().Id; 
+                TLogoBlobID &last = curVDisk.Blobs.back().Id;
                 if (isFirst || stepToId < last) {
                     stepToId = TLogoBlobID(last, 0);
                     isFirst = false;
@@ -812,7 +812,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
                     str << " verboseNoData# ";
                     str << msg->DebugInfo;
 
-                    Y_VERIFY(false, "%s", str.Str().data()); 
+                    Y_VERIFY(false, "%s", str.Str().data());
                     // TODO: Remove the lines above
 
                     IsGetDataDone = true;

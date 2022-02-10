@@ -41,11 +41,11 @@ namespace {
     const TString TEST_POST_RECV = "POST was ok.";
 
     TString BuildServiceLocation(ui32 port) {
-        return Sprintf("http://*:%" PRIu32 "/%s", port, TEST_SERVICE.data()); 
+        return Sprintf("http://*:%" PRIu32 "/%s", port, TEST_SERVICE.data());
     }
 
     TString BuildPostServiceLocation(ui32 port) {
-        return Sprintf("post://*:%" PRIu32 "/%s", port + 1, TEST_SERVICE.data()); 
+        return Sprintf("post://*:%" PRIu32 "/%s", port + 1, TEST_SERVICE.data());
     }
 
     TString BuildGetTestRequest(ui32 port) {
@@ -74,7 +74,7 @@ namespace {
             const int THR_POOL_SIZE = 2;
             runner->ForkLoop(THR_POOL_SIZE);
         } catch (...) {
-            Y_FAIL("Can't run server: %s", CurrentExceptionMessage().data()); 
+            Y_FAIL("Can't run server: %s", CurrentExceptionMessage().data());
         }
 
         return runner;

@@ -367,7 +367,7 @@ void TSysLogReader::PrepareResult() {
     for (ui32 idx = 1; idx <= BestRecordLastOffset - BestRecordFirstOffset; ++idx) {
         ui32 setIdx = (idx + BestRecordFirstOffset) % SectorSetInfo.size();
         TSectorSetInfo &partInfo = SectorSetInfo[setIdx];
-        void* destination = (ui8*)payload.data() + writePosition; 
+        void* destination = (ui8*)payload.data() + writePosition;
         if (info.FullPayloadSize < writePosition + partInfo.PayloadPartSize) {
             TStringStream str;
             str << "Payload part too large. info.FullPayloadSize# " << info.FullPayloadSize

@@ -48,7 +48,7 @@ namespace NMonitoring {
         auto&& formatStr = req.GetParams()
             .Get(TStringBuf("format"));
 
-        if (!formatStr.empty()) { 
+        if (!formatStr.empty()) {
             if (formatStr == TStringBuf("SPACK")) {
                 return EFormat::SPACK;
             } else if (formatStr == TStringBuf("TEXT")) {

@@ -47,7 +47,7 @@ public:
             for (auto udfPtr : functions) {
                 auto& udf = *udfPtr;
                 TStringBuf moduleName, funcName;
-                if (!SplitUdfName(udf.Name, moduleName, funcName) || moduleName.empty() || funcName.empty()) { 
+                if (!SplitUdfName(udf.Name, moduleName, funcName) || moduleName.empty() || funcName.empty()) {
                     ctx.AddError(TIssue(udf.Pos, TStringBuilder() <<
                         "Incorrect format of function name: " << udf.Name));
                     hasErrors = true;

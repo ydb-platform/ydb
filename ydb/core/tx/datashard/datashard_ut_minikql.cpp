@@ -1387,11 +1387,11 @@ Y_UNIT_TEST(WriteAndReadMany) {
         for (ui32 j=0; j < pageSize; ++j) {
             body += Sprintf(
                 "(UpdateRow 'table2 '('('key1 (Uint32 '%u)) '('key2 (Utf8 '%s))) '('('value (Utf8 '%s))))\n",
-                i*pageSize + j, key.data(), value.data()); 
+                i*pageSize + j, key.data(), value.data());
         }
 
         Cout << "inserting " << i * pageSize << Endl;
-        proxy.CheckedExecute(Sprintf(progUpsert, body.data())); 
+        proxy.CheckedExecute(Sprintf(progUpsert, body.data()));
     }
 
     const char * progSelect = R"___((
@@ -1555,7 +1555,7 @@ Y_UNIT_TEST(MemoryUsageImmediateSmallTx) {
         (return pgmReturn)
     ))___";
 
-    auto text = Sprintf(programText, TString(1024, 'v').data()); 
+    auto text = Sprintf(programText, TString(1024, 'v').data());
     UNIT_ASSERT_EQUAL(proxy.Execute(text), IEngineFlat::EStatus::Complete);
 
     auto counters2 = ReadTxMemoryCounters(t, TTestTxConfig::TxTablet0);

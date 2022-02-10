@@ -40,7 +40,7 @@ long GetRunnigThreadsCount() {
     TString procStat = TFileInput("/proc/self/stat").ReadAll();
     long num_threads = -2;         // Number of threads in this process (since Linux 2.6)
 
-    int n = sscanf(procStat.data(), 
+    int n = sscanf(procStat.data(),
         "%*d %*s %*c %*d %*d %*d %*d %*d %*u %*u %*u %*u %*u %*u %*u %*d %*d %*d %*d %ld",
         &num_threads);
 

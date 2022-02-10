@@ -49,7 +49,7 @@ public:
         if (record.GetStatus() != NKikimrProto::OK) {
             response->Record.SetStatus(MSTATUS_ERROR);
             response->Record.SetErrorReason(Sprintf("Local response is not OK (Status# %s), Marker# LE1",
-                NKikimrProto::EReplyStatus_Name(record.GetStatus()).data())); 
+                NKikimrProto::EReplyStatus_Name(record.GetStatus()).data()));
             TBase::SendReplyAndDie(response.Release(), ctx);
         } else {
             response->Record.SetStatus(MSTATUS_OK);

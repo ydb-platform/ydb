@@ -99,7 +99,7 @@ namespace NKikimr {
 
             void Bootstrap(const TActorContext& ctx) {
                 LOG_INFO(ctx, NKikimrServices::BS_LOAD_TEST, "Load actor starter, erasure# %s",
-                        GType.ToString().data()); 
+                        GType.ToString().data());
                 Become(&TVDiskLoadActor::StateFunc);
                 StartTime = TAppData::TimeProvider->Now();
                 ctx.Schedule(TDuration::Seconds(DurationSeconds), new TEvents::TEvPoisonPill);

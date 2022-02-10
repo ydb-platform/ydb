@@ -9,7 +9,7 @@ using namespace NKikimr;
 TString CreateData(const TString &orig, ui32 minHugeBlobSize, bool huge) {
     if (huge) {
         TString res;
-        res.reserve(minHugeBlobSize + orig.size()); 
+        res.reserve(minHugeBlobSize + orig.size());
         while (res.size() < minHugeBlobSize) {
             res += orig;
         }
@@ -23,7 +23,7 @@ TString CreateData(const TString &orig, ui32 minHugeBlobSize, bool huge) {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 TSmallCommonDataSet::TSmallCommonDataSet() {
     auto put = [&] (ui32 step, TString data) {
-        Items.push_back(TDataItem{NKikimr::TLogoBlobID(0, 1, step, 0, data.size(), 0), std::move(data), 
+        Items.push_back(TDataItem{NKikimr::TLogoBlobID(0, 1, step, 0, data.size(), 0), std::move(data),
             NKikimrBlobStorage::EPutHandleClass::TabletLog});
     };
 
@@ -43,7 +43,7 @@ TCustomDataSet::TCustomDataSet(ui64 tabletId, ui32 gen, ui32 channel, ui32 step,
     Y_UNUSED(blobSize); // FIXME: incorrect data size for small blobs
     TString data(CreateData("abcdefghkj", minHugeBlobSize, huge));
     for (ui32 i = 0; i < num; i++) {
-        NKikimr::TLogoBlobID id(tabletId, gen, step + i, channel, data.size(), 0); 
+        NKikimr::TLogoBlobID id(tabletId, gen, step + i, channel, data.size(), 0);
         Items.push_back(TDataItem{id, data, cls});
     }
 }
@@ -54,15 +54,15 @@ TCustomDataSet::TCustomDataSet(ui64 tabletId, ui32 gen, ui32 channel, ui32 step,
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 T3PutDataSet::T3PutDataSet(NKikimrBlobStorage::EPutHandleClass cls, ui32 minHugeBlobSize, bool huge) {
     TString abcdefghkj(CreateData("abcdefghkj", minHugeBlobSize, huge));
-    TLogoBlobID id1(0, 1, 10, 0, abcdefghkj.size(), 0, 1); 
+    TLogoBlobID id1(0, 1, 10, 0, abcdefghkj.size(), 0, 1);
     Items.push_back(TDataItem(id1, abcdefghkj, cls));
 
     TString pqr(CreateData("pqr", minHugeBlobSize, huge));
-    TLogoBlobID id2(0, 1, 30, 0, pqr.size(), 0, 1); 
+    TLogoBlobID id2(0, 1, 30, 0, pqr.size(), 0, 1);
     Items.push_back(TDataItem(id2, pqr, cls));
 
     TString xyz(CreateData("xyz", minHugeBlobSize, huge));
-    TLogoBlobID id3(0, 1, 34, 0, xyz.size(), 0, 1); 
+    TLogoBlobID id3(0, 1, 34, 0, xyz.size(), 0, 1);
     Items.push_back(TDataItem(id3, xyz, cls));
 }
 
@@ -72,8 +72,8 @@ T3PutDataSet::T3PutDataSet(NKikimrBlobStorage::EPutHandleClass cls, ui32 minHuge
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 T1PutHandoff2DataSet::T1PutHandoff2DataSet(NKikimrBlobStorage::EPutHandleClass cls, ui32 minHugeBlobSize, bool huge) {
     TString abc(CreateData("abc", minHugeBlobSize, huge));
-    TLogoBlobID id1Part1(0, 1, 10, 0, abc.size(), 0, 1); 
-    TLogoBlobID id1Part2(0, 1, 10, 0, abc.size(), 0, 2); 
+    TLogoBlobID id1Part1(0, 1, 10, 0, abc.size(), 0, 1);
+    TLogoBlobID id1Part2(0, 1, 10, 0, abc.size(), 0, 2);
 
     Items.push_back(TDataItem(id1Part1, abc, cls));
     Items.push_back(TDataItem(id1Part2, abc, cls));
@@ -86,12 +86,12 @@ T3PutHandoff2DataSet::T3PutHandoff2DataSet(NKikimrBlobStorage::EPutHandleClass c
     TString abcdefghkj(CreateData("abcdefghkj", minHugeBlobSize, huge));
     TString pqr(CreateData("pqr", minHugeBlobSize, huge));
     TString xyz(CreateData("xyz", minHugeBlobSize, huge));
-    TLogoBlobID id1Part1(0, 1, 10, 0, abcdefghkj.size(), 0, 1); 
-    TLogoBlobID id1Part2(0, 1, 10, 0, abcdefghkj.size(), 0, 2); 
-    TLogoBlobID id2Part1(0, 1, 30, 0, pqr.size(), 0, 1); 
-    TLogoBlobID id2Part2(0, 1, 30, 0, pqr.size(), 0, 2); 
-    TLogoBlobID id3Part1(0, 1, 34, 0, xyz.size(), 0, 1); 
-    TLogoBlobID id3Part2(0, 1, 34, 0, xyz.size(), 0, 2); 
+    TLogoBlobID id1Part1(0, 1, 10, 0, abcdefghkj.size(), 0, 1);
+    TLogoBlobID id1Part2(0, 1, 10, 0, abcdefghkj.size(), 0, 2);
+    TLogoBlobID id2Part1(0, 1, 30, 0, pqr.size(), 0, 1);
+    TLogoBlobID id2Part2(0, 1, 30, 0, pqr.size(), 0, 2);
+    TLogoBlobID id3Part1(0, 1, 34, 0, xyz.size(), 0, 1);
+    TLogoBlobID id3Part2(0, 1, 34, 0, xyz.size(), 0, 2);
 
     Items.push_back(TDataItem(id1Part1, abcdefghkj, cls));
     Items.push_back(TDataItem(id1Part2, abcdefghkj, cls));
@@ -178,7 +178,7 @@ IDataGenerator* CreateBlobGenerator(ui64 maxCumSize, ui32 maxNumBlobs, ui32 minB
 
         TString GenerateData(ui32 size) {
             if (ReuseData) {
-                if (size > ReusedDataBuf.size()) 
+                if (size > ReusedDataBuf.size())
                     ReusedDataBuf.resize(size);
                 return ReusedDataBuf;
             } else {

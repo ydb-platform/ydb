@@ -27,7 +27,7 @@ public:
         auto &rec = RequestEvent->Get()->Record;
 
         LOG_INFO(ctx, NKikimrServices::CMS, "Processing Wall-E request: %s",
-                  rec.ShortDebugString().data()); 
+                  rec.ShortDebugString().data());
 
         if (rec.GetAction() != "reboot"
             && rec.GetAction() != "power-off"
@@ -66,7 +66,7 @@ private:
         default:
             LOG_DEBUG(ctx, NKikimrServices::CMS,
                       "TWalleCreateTaskAdapter::StateWork ignored event type: %" PRIx32 " event: %s",
-                      ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"); 
+                      ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
         }
     }
 

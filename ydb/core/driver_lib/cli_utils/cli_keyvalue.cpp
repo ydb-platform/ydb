@@ -75,7 +75,7 @@ int KeyValueRequest(TCommandConfig &cmdConf, int argc, char **argv) {
         Y_VERIFY(record.GetCmdWrite(0).HasKey());
         Y_VERIFY(!record.GetCmdWrite(0).HasValue());
         TString data = TUnbufferedFileInput(requestConfig.WriteFromPath).ReadAll();
-        if (data.size() <= maxWriteBlockSize) { 
+        if (data.size() <= maxWriteBlockSize) {
             record.MutableCmdWrite(0)->SetValue(data);
         } else {
             const auto& originalCmdWrite = record.GetCmdWrite(0);
@@ -96,12 +96,12 @@ int KeyValueRequest(TCommandConfig &cmdConf, int argc, char **argv) {
 
             records.clear();
 
-            for (ui32 offset = 0, partId = 0; offset < data.size(); ++partId) { 
-                const ui32 size = Min<ui32>(maxWriteBlockSize, data.size() - offset); 
+            for (ui32 offset = 0, partId = 0; offset < data.size(); ++partId) {
+                const ui32 size = Min<ui32>(maxWriteBlockSize, data.size() - offset);
                 NKikimrClient::TKeyValueRequest& last = *records.emplace(records.end());
                 last.SetTabletId(tabletId);
                 auto& cmdWrite = *last.AddCmdWrite();
-                TString partKey = Sprintf("%s@PartId#%09" PRIu32, key.data(), partId); 
+                TString partKey = Sprintf("%s@PartId#%09" PRIu32, key.data(), partId);
                 cmdWrite.SetKey(partKey);
                 cmdWrite.SetValue(data.substr(offset, size));
                 if (storageChannel) {
@@ -142,10 +142,10 @@ int KeyValueRequest(TCommandConfig &cmdConf, int argc, char **argv) {
             TString data = response.GetReadResult(0).GetValue();
             readBuffer += data;
 
-            if (data.size() == maxReadBlockSize) { 
+            if (data.size() == maxReadBlockSize) {
                 auto& last = *records.emplace(records.end());
                 last = records[0];
-                last.MutableCmdRead(0)->SetOffset(readBuffer.size()); 
+                last.MutableCmdRead(0)->SetOffset(readBuffer.size());
             }
         } else if (requestConfig.IsWriteFromFile) {
             Y_VERIFY(status == NMsgBusProxy::MSTATUS_OK);
@@ -169,7 +169,7 @@ int KeyValueRequest(TCommandConfig &cmdConf, int argc, char **argv) {
     };
 
     int status = 0;
-    for (size_t i = 0; i < records.size(); ++i) { 
+    for (size_t i = 0; i < records.size(); ++i) {
         auto request = MakeHolder<NMsgBusProxy::TBusKeyValue>();
         request->Record = records[i];
         status = ClientSyncCall(request.Release(), requestConfig, successOp);
@@ -180,7 +180,7 @@ int KeyValueRequest(TCommandConfig &cmdConf, int argc, char **argv) {
 
     if (requestConfig.IsReadToFile) {
         TFile file(requestConfig.ReadToPath, CreateNew | WrOnly);
-        file.Write(readBuffer.data(), readBuffer.size()); 
+        file.Write(readBuffer.data(), readBuffer.size());
         file.Close();
     }
 

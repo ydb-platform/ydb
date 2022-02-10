@@ -239,11 +239,11 @@ INTERNAL (strtol) (const STRING_TYPE *nptr, STRING_TYPE **endptr,
                    int base, int group LOCALE_PARAM_PROTO)
 {
   int negative;
-  unsigned LONG int cutoff; 
-  unsigned int cutlim; 
-  unsigned LONG int i; 
-  const STRING_TYPE *s; 
-  UCHAR_TYPE c; 
+  unsigned LONG int cutoff;
+  unsigned int cutlim;
+  unsigned LONG int i;
+  const STRING_TYPE *s;
+  UCHAR_TYPE c;
   const STRING_TYPE *save, *end;
   int overflow;
 

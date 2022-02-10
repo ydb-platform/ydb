@@ -65,7 +65,7 @@ aliases_hash (register const char *str, register unsigned int len)
       1004, 1004, 1004, 1004, 1004, 1004, 1004, 1004, 1004, 1004,
       1004, 1004, 1004, 1004, 1004, 1004, 1004, 1004
     };
-  int hval = len; 
+  int hval = len;
 
   switch (hval)
     {
@@ -1735,14 +1735,14 @@ aliases_lookup (register const char *str, register unsigned int len)
 {
   if (len <= MAX_WORD_LENGTH && len >= MIN_WORD_LENGTH)
     {
-      int key = aliases_hash (str, len); 
+      int key = aliases_hash (str, len);
 
       if (key <= MAX_HASH_VALUE && key >= 0)
         {
-          int o = aliases[key].name; 
+          int o = aliases[key].name;
           if (o >= 0)
             {
-              const char *s = o + stringpool; 
+              const char *s = o + stringpool;
 
               if (*str == *s && !strcmp (str + 1, s + 1))
                 return &aliases[key];

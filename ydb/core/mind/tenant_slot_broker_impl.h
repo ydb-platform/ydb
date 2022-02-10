@@ -591,7 +591,7 @@ private:
 
         void DecPending()
         {
-            Y_VERIFY(PendingCount, "Dec zero pending for %s", Description.ToString().data()); 
+            Y_VERIFY(PendingCount, "Dec zero pending for %s", Description.ToString().data());
             SetPending(PendingCount - 1);
         }
 
@@ -620,7 +620,7 @@ private:
 
         void DecMissing()
         {
-            Y_VERIFY(MissingCount, "Dec zero missing for %s", Description.ToString().data()); 
+            Y_VERIFY(MissingCount, "Dec zero missing for %s", Description.ToString().data());
             SetMissing(MissingCount - 1);
         }
 
@@ -644,7 +644,7 @@ private:
 
         void DecMisplaced()
         {
-            Y_VERIFY(MisplacedCount, "Dec zero misplaced for %s", Description.ToString().data()); 
+            Y_VERIFY(MisplacedCount, "Dec zero misplaced for %s", Description.ToString().data());
             SetMisplaced(MisplacedCount - 1);
         }
 
@@ -668,7 +668,7 @@ private:
 
         void DecSplit()
         {
-            Y_VERIFY(SplitCount, "Dec zero split for %s", Description.ToString().data()); 
+            Y_VERIFY(SplitCount, "Dec zero split for %s", Description.ToString().data());
             SetSplit(SplitCount - 1);
         }
 
@@ -686,7 +686,7 @@ private:
 
         void DecPinned()
         {
-            Y_VERIFY(PinnedCount, "Dec zero pinned for %s", Description.ToString().data()); 
+            Y_VERIFY(PinnedCount, "Dec zero pinned for %s", Description.ToString().data());
             SetPinned(PinnedCount - 1);
         }
 
@@ -1125,7 +1125,7 @@ private:
         default:
             if (!HandleDefaultEvents(ev, ctx)) {
                 Y_FAIL("TTenantSlotBroker::StateWork unexpected event type: %" PRIx32 " event: %s",
-                       ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"); 
+                       ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
             }
         }
     }

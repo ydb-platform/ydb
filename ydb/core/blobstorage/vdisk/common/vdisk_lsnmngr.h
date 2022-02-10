@@ -26,7 +26,7 @@ namespace NKikimr {
         void Allocated(TLsnSeg seg) {
             auto m = Guard(WriteLock);
             Y_VERIFY(InFly.Empty() || InFly.Back().Last < seg.First,
-                     "this# %s seg# %s", ToString().data(), seg.ToString().data()); 
+                     "this# %s seg# %s", ToString().data(), seg.ToString().data());
             InFly.Push(seg);
         }
 
@@ -37,7 +37,7 @@ namespace NKikimr {
                      static_cast<ui64>(AtomicGet(ConfirmedLsn)) < seg.Last &&
                      !InFly.Empty() &&
                      InFly.Top() == seg,
-                     "this# %s seg# %s", ToString().data(), seg.ToString().data()); 
+                     "this# %s seg# %s", ToString().data(), seg.ToString().data());
             AtomicSet(ConfirmedLsn, seg.Last);
             InFly.Pop();
         }

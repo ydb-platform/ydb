@@ -28,7 +28,7 @@ void DoTest(const TCompressorTable& table, const TVector<TString>& lines) {
         compSize += compressed.size();
         TStringBuf in(compressed.data(), compressed.size());
         deCompressor.Decompress(in, &decompressed);
-        UNIT_ASSERT(decompressed.size() == line.size() && memcmp(decompressed.data(), line.data(), decompressed.size()) == 0); 
+        UNIT_ASSERT(decompressed.size() == line.size() && memcmp(decompressed.data(), line.data(), decompressed.size()) == 0);
     }
     UNIT_ASSERT_EQUAL(origSize, 45491584);
     if (HQ) {

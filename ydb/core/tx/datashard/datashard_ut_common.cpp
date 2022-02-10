@@ -436,7 +436,7 @@ ui32 TFakeScanTx::SetProgram(TTester& tester) {
             (let points_ (List (ListType (TypeOf (Unwrap (SelectRow 'table1 '('('key (Uint32 '0))) '('key 'uint)))))))
             %s
             (return (AsList (SetResult 'Result points_)))
-        ))", body.data()); 
+        ))", body.data());
     return TFakeProxyTx::SetProgram(tester, pgm);
 }
 
@@ -455,7 +455,7 @@ void TFakeScanTx::AddPlanStepShardResult(ui32 /*shardId*/,
     if (event->Record.GetStatus() == NKikimrTxDataShard::TEvProposeTransactionResult::RESPONSE_DATA) {
         auto &res = event->Record.GetTxResult();
         YdbOld::ResultSet part;
-        UNIT_ASSERT(part.ParseFromArray(res.data(), res.size())); 
+        UNIT_ASSERT(part.ParseFromArray(res.data(), res.size()));
 
         if (Result.column_metaSize())
             part.Clearcolumn_meta();

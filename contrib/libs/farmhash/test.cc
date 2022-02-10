@@ -23,12 +23,12 @@ static const int kDataSize = 1 << 20;
 static const int kTestSize = 300;
 #define kSeed128 Uint128(kSeed0, kSeed1)
 
-static char farm_hash_data[kDataSize]; 
+static char farm_hash_data[kDataSize];
 
 static int completed_self_tests = 0;
 static int errors = 0;
 
-// Initialize farm_hash_data to pseudorandom values. 
+// Initialize farm_hash_data to pseudorandom values.
 void Setup() {
   if (completed_self_tests == 0) {
     uint64_t a = 9;
@@ -39,7 +39,7 @@ void Setup() {
       a = (a ^ (a >> 41)) * k0;
       b = (b ^ (b >> 41)) * k0 + i;
       uint8_t u = b >> 37;
-      memcpy(farm_hash_data + i, &u, 1);  // uint8_t -> char 
+      memcpy(farm_hash_data + i, &u, 1);  // uint8_t -> char
     }
   }
 }
@@ -1561,11 +1561,11 @@ bool Test(int offset, int len = 0) {
 
   // After the following line is where the uses of "Check" and such will go.
   static int index = 0;
-if (offset == -1) { int alive = 0; IsAlive(farmhashcc::Hash32WithSeed(farm_hash_data, len++, SEED)); IsAlive(farmhashcc::Hash32(farm_hash_data, len++)); { uint128_t u = farmhashcc::Fingerprint128(farm_hash_data, len++); uint64_t h = Uint128Low64(u); IsAlive(h >> 32); IsAlive((h << 32) >> 32); h = Uint128High64(u); IsAlive(h >> 32); IsAlive((h << 32) >> 32); } len -= 3; return alive > 0; } 
-Check(farmhashcc::Hash32WithSeed(farm_hash_data + offset, len, SEED)); 
-Check(farmhashcc::Hash32(farm_hash_data + offset, len)); 
-{ uint128_t u = farmhashcc::Fingerprint128(farm_hash_data + offset, len); uint64_t h = Uint128Low64(u); Check(h >> 32); Check((h << 32) >> 32); h = Uint128High64(u); Check(h >> 32); Check((h << 32) >> 32); } 
-{ uint128_t u = farmhashcc::CityHash128WithSeed(farm_hash_data + offset, len, Uint128(SEED0, SEED1)); uint64_t h = Uint128Low64(u); Check(h >> 32); Check((h << 32) >> 32); h = Uint128High64(u); Check(h >> 32); Check((h << 32) >> 32); } 
+if (offset == -1) { int alive = 0; IsAlive(farmhashcc::Hash32WithSeed(farm_hash_data, len++, SEED)); IsAlive(farmhashcc::Hash32(farm_hash_data, len++)); { uint128_t u = farmhashcc::Fingerprint128(farm_hash_data, len++); uint64_t h = Uint128Low64(u); IsAlive(h >> 32); IsAlive((h << 32) >> 32); h = Uint128High64(u); IsAlive(h >> 32); IsAlive((h << 32) >> 32); } len -= 3; return alive > 0; }
+Check(farmhashcc::Hash32WithSeed(farm_hash_data + offset, len, SEED));
+Check(farmhashcc::Hash32(farm_hash_data + offset, len));
+{ uint128_t u = farmhashcc::Fingerprint128(farm_hash_data + offset, len); uint64_t h = Uint128Low64(u); Check(h >> 32); Check((h << 32) >> 32); h = Uint128High64(u); Check(h >> 32); Check((h << 32) >> 32); }
+{ uint128_t u = farmhashcc::CityHash128WithSeed(farm_hash_data + offset, len, Uint128(SEED0, SEED1)); uint64_t h = Uint128Low64(u); Check(h >> 32); Check((h << 32) >> 32); h = Uint128High64(u); Check(h >> 32); Check((h << 32) >> 32); }
 
   return true;
 #undef Check
@@ -1597,10 +1597,10 @@ int RunTest() {
 
 // After the following line is where the code to print hash codes will go.
 void Dump(int offset, int len) {
-cout << farmhashcc::Hash32WithSeed(farm_hash_data + offset, len, SEED) << "u," << endl; 
-cout << farmhashcc::Hash32(farm_hash_data + offset, len) << "u," << endl; 
-{ uint128_t u = farmhashcc::Fingerprint128(farm_hash_data + offset, len); uint64_t h = Uint128Low64(u); cout << (h >> 32) << "u, " << ((h << 32) >> 32) << "u, "; h = Uint128High64(u); cout << (h >> 32) << "u, " << ((h << 32) >> 32) << "u," << endl; } 
-{ uint128_t u = farmhashcc::CityHash128WithSeed(farm_hash_data + offset, len, Uint128(SEED0, SEED1)); uint64_t h = Uint128Low64(u); cout << (h >> 32) << "u, " << ((h << 32) >> 32) << "u, "; h = Uint128High64(u); cout << (h >> 32) << "u, " << ((h << 32) >> 32) << "u," << endl; } 
+cout << farmhashcc::Hash32WithSeed(farm_hash_data + offset, len, SEED) << "u," << endl;
+cout << farmhashcc::Hash32(farm_hash_data + offset, len) << "u," << endl;
+{ uint128_t u = farmhashcc::Fingerprint128(farm_hash_data + offset, len); uint64_t h = Uint128Low64(u); cout << (h >> 32) << "u, " << ((h << 32) >> 32) << "u, "; h = Uint128High64(u); cout << (h >> 32) << "u, " << ((h << 32) >> 32) << "u," << endl; }
+{ uint128_t u = farmhashcc::CityHash128WithSeed(farm_hash_data + offset, len, Uint128(SEED0, SEED1)); uint64_t h = Uint128Low64(u); cout << (h >> 32) << "u, " << ((h << 32) >> 32) << "u, "; h = Uint128High64(u); cout << (h >> 32) << "u, " << ((h << 32) >> 32) << "u," << endl; }
 }
 
 #endif
@@ -1643,12 +1643,12 @@ static const int kDataSize = 1 << 20;
 static const int kTestSize = 300;
 #define kSeed128 Uint128(kSeed0, kSeed1)
 
-static char farm_hash_data[kDataSize]; 
+static char farm_hash_data[kDataSize];
 
 static int completed_self_tests = 0;
 static int errors = 0;
 
-// Initialize farm_hash_data to pseudorandom values. 
+// Initialize farm_hash_data to pseudorandom values.
 void Setup() {
   if (completed_self_tests == 0) {
     uint64_t a = 9;
@@ -1659,7 +1659,7 @@ void Setup() {
       a = (a ^ (a >> 41)) * k0;
       b = (b ^ (b >> 41)) * k0 + i;
       uint8_t u = b >> 37;
-      memcpy(farm_hash_data + i, &u, 1);  // uint8_t -> char 
+      memcpy(farm_hash_data + i, &u, 1);  // uint8_t -> char
     }
   }
 }
@@ -2457,9 +2457,9 @@ bool Test(int offset, int len = 0) {
 
   // After the following line is where the uses of "Check" and such will go.
   static int index = 0;
-if (offset == -1) { int alive = 0; IsAlive(farmhashmk::Hash32WithSeed(farm_hash_data, len++, SEED)); IsAlive(farmhashmk::Hash32(farm_hash_data, len++)); IsAlive(farmhashmk::Hash32(farm_hash_data, len++)); len -= 3; return alive > 0; } 
-Check(farmhashmk::Hash32WithSeed(farm_hash_data + offset, len, SEED)); 
-Check(farmhashmk::Hash32(farm_hash_data + offset, len)); 
+if (offset == -1) { int alive = 0; IsAlive(farmhashmk::Hash32WithSeed(farm_hash_data, len++, SEED)); IsAlive(farmhashmk::Hash32(farm_hash_data, len++)); IsAlive(farmhashmk::Hash32(farm_hash_data, len++)); len -= 3; return alive > 0; }
+Check(farmhashmk::Hash32WithSeed(farm_hash_data + offset, len, SEED));
+Check(farmhashmk::Hash32(farm_hash_data + offset, len));
 
   return true;
 #undef Check
@@ -2491,8 +2491,8 @@ int RunTest() {
 
 // After the following line is where the code to print hash codes will go.
 void Dump(int offset, int len) {
-cout << farmhashmk::Hash32WithSeed(farm_hash_data + offset, len, SEED) << "u," << endl; 
-cout << farmhashmk::Hash32(farm_hash_data + offset, len) << "u," << endl; 
+cout << farmhashmk::Hash32WithSeed(farm_hash_data + offset, len, SEED) << "u," << endl;
+cout << farmhashmk::Hash32(farm_hash_data + offset, len) << "u," << endl;
 }
 
 #endif
@@ -2535,12 +2535,12 @@ static const int kDataSize = 1 << 20;
 static const int kTestSize = 300;
 #define kSeed128 Uint128(kSeed0, kSeed1)
 
-static char farm_hash_data[kDataSize]; 
+static char farm_hash_data[kDataSize];
 
 static int completed_self_tests = 0;
 static int errors = 0;
 
-// Initialize farm_hash_data to pseudorandom values. 
+// Initialize farm_hash_data to pseudorandom values.
 void Setup() {
   if (completed_self_tests == 0) {
     uint64_t a = 9;
@@ -2551,7 +2551,7 @@ void Setup() {
       a = (a ^ (a >> 41)) * k0;
       b = (b ^ (b >> 41)) * k0 + i;
       uint8_t u = b >> 37;
-      memcpy(farm_hash_data + i, &u, 1);  // uint8_t -> char 
+      memcpy(farm_hash_data + i, &u, 1);  // uint8_t -> char
     }
   }
 }
@@ -3711,10 +3711,10 @@ bool Test(int offset, int len = 0) {
 
   // After the following line is where the uses of "Check" and such will go.
   static int index = 0;
-if (offset == -1) { int alive = 0; { uint64_t h = farmhashna::Hash64WithSeeds(farm_hash_data, len++, SEED0, SEED1); IsAlive(h >> 32); IsAlive((h << 32) >> 32); } { uint64_t h = farmhashna::Hash64WithSeed(farm_hash_data, len++, SEED); IsAlive(h >> 32); IsAlive((h << 32) >> 32); } { uint64_t h = farmhashna::Hash64(farm_hash_data, len++); IsAlive(h >> 32); IsAlive((h << 32) >> 32); } len -= 3; return alive > 0; } 
-{ uint64_t h = farmhashna::Hash64WithSeeds(farm_hash_data + offset, len, SEED0, SEED1); Check(h >> 32); Check((h << 32) >> 32); } 
-{ uint64_t h = farmhashna::Hash64WithSeed(farm_hash_data + offset, len, SEED); Check(h >> 32); Check((h << 32) >> 32); } 
-{ uint64_t h = farmhashna::Hash64(farm_hash_data + offset, len); Check(h >> 32); Check((h << 32) >> 32); } 
+if (offset == -1) { int alive = 0; { uint64_t h = farmhashna::Hash64WithSeeds(farm_hash_data, len++, SEED0, SEED1); IsAlive(h >> 32); IsAlive((h << 32) >> 32); } { uint64_t h = farmhashna::Hash64WithSeed(farm_hash_data, len++, SEED); IsAlive(h >> 32); IsAlive((h << 32) >> 32); } { uint64_t h = farmhashna::Hash64(farm_hash_data, len++); IsAlive(h >> 32); IsAlive((h << 32) >> 32); } len -= 3; return alive > 0; }
+{ uint64_t h = farmhashna::Hash64WithSeeds(farm_hash_data + offset, len, SEED0, SEED1); Check(h >> 32); Check((h << 32) >> 32); }
+{ uint64_t h = farmhashna::Hash64WithSeed(farm_hash_data + offset, len, SEED); Check(h >> 32); Check((h << 32) >> 32); }
+{ uint64_t h = farmhashna::Hash64(farm_hash_data + offset, len); Check(h >> 32); Check((h << 32) >> 32); }
 
   return true;
 #undef Check
@@ -3746,9 +3746,9 @@ int RunTest() {
 
 // After the following line is where the code to print hash codes will go.
 void Dump(int offset, int len) {
-{ uint64_t h = farmhashna::Hash64WithSeeds(farm_hash_data + offset, len, SEED0, SEED1); cout << (h >> 32) << "u, " << ((h << 32) >> 32) << "u," << endl; } 
-{ uint64_t h = farmhashna::Hash64WithSeed(farm_hash_data + offset, len, SEED); cout << (h >> 32) << "u, " << ((h << 32) >> 32) << "u," << endl; } 
-{ uint64_t h = farmhashna::Hash64(farm_hash_data + offset, len); cout << (h >> 32) << "u, " << ((h << 32) >> 32) << "u," << endl; } 
+{ uint64_t h = farmhashna::Hash64WithSeeds(farm_hash_data + offset, len, SEED0, SEED1); cout << (h >> 32) << "u, " << ((h << 32) >> 32) << "u," << endl; }
+{ uint64_t h = farmhashna::Hash64WithSeed(farm_hash_data + offset, len, SEED); cout << (h >> 32) << "u, " << ((h << 32) >> 32) << "u," << endl; }
+{ uint64_t h = farmhashna::Hash64(farm_hash_data + offset, len); cout << (h >> 32) << "u, " << ((h << 32) >> 32) << "u," << endl; }
 }
 
 #endif
@@ -3791,12 +3791,12 @@ static const int kDataSize = 1 << 20;
 static const int kTestSize = 300;
 #define kSeed128 Uint128(kSeed0, kSeed1)
 
-static char farm_hash_data[kDataSize]; 
+static char farm_hash_data[kDataSize];
 
 static int completed_self_tests = 0;
 static int errors = 0;
 
-// Initialize farm_hash_data to pseudorandom values. 
+// Initialize farm_hash_data to pseudorandom values.
 void Setup() {
   if (completed_self_tests == 0) {
     uint64_t a = 9;
@@ -3807,7 +3807,7 @@ void Setup() {
       a = (a ^ (a >> 41)) * k0;
       b = (b ^ (b >> 41)) * k0 + i;
       uint8_t u = b >> 37;
-      memcpy(farm_hash_data + i, &u, 1);  // uint8_t -> char 
+      memcpy(farm_hash_data + i, &u, 1);  // uint8_t -> char
     }
   }
 }
@@ -4605,9 +4605,9 @@ bool Test(int offset, int len = 0) {
 
   // After the following line is where the uses of "Check" and such will go.
   static int index = 0;
-if (offset == -1) { int alive = 0; IsAlive(farmhashnt::Hash32WithSeed(farm_hash_data, len++, SEED)); IsAlive(farmhashnt::Hash32(farm_hash_data, len++)); IsAlive(farmhashnt::Hash32(farm_hash_data, len++)); len -= 3; return alive > 0; } 
-Check(farmhashnt::Hash32WithSeed(farm_hash_data + offset, len, SEED)); 
-Check(farmhashnt::Hash32(farm_hash_data + offset, len)); 
+if (offset == -1) { int alive = 0; IsAlive(farmhashnt::Hash32WithSeed(farm_hash_data, len++, SEED)); IsAlive(farmhashnt::Hash32(farm_hash_data, len++)); IsAlive(farmhashnt::Hash32(farm_hash_data, len++)); len -= 3; return alive > 0; }
+Check(farmhashnt::Hash32WithSeed(farm_hash_data + offset, len, SEED));
+Check(farmhashnt::Hash32(farm_hash_data + offset, len));
 
   return true;
 #undef Check
@@ -4639,8 +4639,8 @@ int RunTest() {
 
 // After the following line is where the code to print hash codes will go.
 void Dump(int offset, int len) {
-cout << farmhashnt::Hash32WithSeed(farm_hash_data + offset, len, SEED) << "u," << endl; 
-cout << farmhashnt::Hash32(farm_hash_data + offset, len) << "u," << endl; 
+cout << farmhashnt::Hash32WithSeed(farm_hash_data + offset, len, SEED) << "u," << endl;
+cout << farmhashnt::Hash32(farm_hash_data + offset, len) << "u," << endl;
 }
 
 #endif
@@ -4683,12 +4683,12 @@ static const int kDataSize = 1 << 20;
 static const int kTestSize = 300;
 #define kSeed128 Uint128(kSeed0, kSeed1)
 
-static char farm_hash_data[kDataSize]; 
+static char farm_hash_data[kDataSize];
 
 static int completed_self_tests = 0;
 static int errors = 0;
 
-// Initialize farm_hash_data to pseudorandom values. 
+// Initialize farm_hash_data to pseudorandom values.
 void Setup() {
   if (completed_self_tests == 0) {
     uint64_t a = 9;
@@ -4699,7 +4699,7 @@ void Setup() {
       a = (a ^ (a >> 41)) * k0;
       b = (b ^ (b >> 41)) * k0 + i;
       uint8_t u = b >> 37;
-      memcpy(farm_hash_data + i, &u, 1);  // uint8_t -> char 
+      memcpy(farm_hash_data + i, &u, 1);  // uint8_t -> char
     }
   }
 }
@@ -5497,9 +5497,9 @@ bool Test(int offset, int len = 0) {
 
   // After the following line is where the uses of "Check" and such will go.
   static int index = 0;
-if (offset == -1) { int alive = 0; IsAlive(farmhashsa::Hash32WithSeed(farm_hash_data, len++, SEED)); IsAlive(farmhashsa::Hash32(farm_hash_data, len++)); IsAlive(farmhashsa::Hash32(farm_hash_data, len++)); len -= 3; return alive > 0; } 
-Check(farmhashsa::Hash32WithSeed(farm_hash_data + offset, len, SEED)); 
-Check(farmhashsa::Hash32(farm_hash_data + offset, len)); 
+if (offset == -1) { int alive = 0; IsAlive(farmhashsa::Hash32WithSeed(farm_hash_data, len++, SEED)); IsAlive(farmhashsa::Hash32(farm_hash_data, len++)); IsAlive(farmhashsa::Hash32(farm_hash_data, len++)); len -= 3; return alive > 0; }
+Check(farmhashsa::Hash32WithSeed(farm_hash_data + offset, len, SEED));
+Check(farmhashsa::Hash32(farm_hash_data + offset, len));
 
   return true;
 #undef Check
@@ -5531,8 +5531,8 @@ int RunTest() {
 
 // After the following line is where the code to print hash codes will go.
 void Dump(int offset, int len) {
-cout << farmhashsa::Hash32WithSeed(farm_hash_data + offset, len, SEED) << "u," << endl; 
-cout << farmhashsa::Hash32(farm_hash_data + offset, len) << "u," << endl; 
+cout << farmhashsa::Hash32WithSeed(farm_hash_data + offset, len, SEED) << "u," << endl;
+cout << farmhashsa::Hash32(farm_hash_data + offset, len) << "u," << endl;
 }
 
 #endif
@@ -5575,12 +5575,12 @@ static const int kDataSize = 1 << 20;
 static const int kTestSize = 300;
 #define kSeed128 Uint128(kSeed0, kSeed1)
 
-static char farm_hash_data[kDataSize]; 
+static char farm_hash_data[kDataSize];
 
 static int completed_self_tests = 0;
 static int errors = 0;
 
-// Initialize farm_hash_data to pseudorandom values. 
+// Initialize farm_hash_data to pseudorandom values.
 void Setup() {
   if (completed_self_tests == 0) {
     uint64_t a = 9;
@@ -5591,7 +5591,7 @@ void Setup() {
       a = (a ^ (a >> 41)) * k0;
       b = (b ^ (b >> 41)) * k0 + i;
       uint8_t u = b >> 37;
-      memcpy(farm_hash_data + i, &u, 1);  // uint8_t -> char 
+      memcpy(farm_hash_data + i, &u, 1);  // uint8_t -> char
     }
   }
 }
@@ -6389,9 +6389,9 @@ bool Test(int offset, int len = 0) {
 
   // After the following line is where the uses of "Check" and such will go.
   static int index = 0;
-if (offset == -1) { int alive = 0; IsAlive(farmhashsu::Hash32WithSeed(farm_hash_data, len++, SEED)); IsAlive(farmhashsu::Hash32(farm_hash_data, len++)); IsAlive(farmhashsu::Hash32(farm_hash_data, len++)); len -= 3; return alive > 0; } 
-Check(farmhashsu::Hash32WithSeed(farm_hash_data + offset, len, SEED)); 
-Check(farmhashsu::Hash32(farm_hash_data + offset, len)); 
+if (offset == -1) { int alive = 0; IsAlive(farmhashsu::Hash32WithSeed(farm_hash_data, len++, SEED)); IsAlive(farmhashsu::Hash32(farm_hash_data, len++)); IsAlive(farmhashsu::Hash32(farm_hash_data, len++)); len -= 3; return alive > 0; }
+Check(farmhashsu::Hash32WithSeed(farm_hash_data + offset, len, SEED));
+Check(farmhashsu::Hash32(farm_hash_data + offset, len));
 
   return true;
 #undef Check
@@ -6423,8 +6423,8 @@ int RunTest() {
 
 // After the following line is where the code to print hash codes will go.
 void Dump(int offset, int len) {
-cout << farmhashsu::Hash32WithSeed(farm_hash_data + offset, len, SEED) << "u," << endl; 
-cout << farmhashsu::Hash32(farm_hash_data + offset, len) << "u," << endl; 
+cout << farmhashsu::Hash32WithSeed(farm_hash_data + offset, len, SEED) << "u," << endl;
+cout << farmhashsu::Hash32(farm_hash_data + offset, len) << "u," << endl;
 }
 
 #endif
@@ -6467,12 +6467,12 @@ static const int kDataSize = 1 << 20;
 static const int kTestSize = 300;
 #define kSeed128 Uint128(kSeed0, kSeed1)
 
-static char farm_hash_data[kDataSize]; 
+static char farm_hash_data[kDataSize];
 
 static int completed_self_tests = 0;
 static int errors = 0;
 
-// Initialize farm_hash_data to pseudorandom values. 
+// Initialize farm_hash_data to pseudorandom values.
 void Setup() {
   if (completed_self_tests == 0) {
     uint64_t a = 9;
@@ -6483,7 +6483,7 @@ void Setup() {
       a = (a ^ (a >> 41)) * k0;
       b = (b ^ (b >> 41)) * k0 + i;
       uint8_t u = b >> 37;
-      memcpy(farm_hash_data + i, &u, 1);  // uint8_t -> char 
+      memcpy(farm_hash_data + i, &u, 1);  // uint8_t -> char
     }
   }
 }
@@ -7643,10 +7643,10 @@ bool Test(int offset, int len = 0) {
 
   // After the following line is where the uses of "Check" and such will go.
   static int index = 0;
-if (offset == -1) { int alive = 0; { uint64_t h = farmhashte::Hash64WithSeeds(farm_hash_data, len++, SEED0, SEED1); IsAlive(h >> 32); IsAlive((h << 32) >> 32); } { uint64_t h = farmhashte::Hash64WithSeed(farm_hash_data, len++, SEED); IsAlive(h >> 32); IsAlive((h << 32) >> 32); } { uint64_t h = farmhashte::Hash64(farm_hash_data, len++); IsAlive(h >> 32); IsAlive((h << 32) >> 32); } len -= 3; return alive > 0; } 
-{ uint64_t h = farmhashte::Hash64WithSeeds(farm_hash_data + offset, len, SEED0, SEED1); Check(h >> 32); Check((h << 32) >> 32); } 
-{ uint64_t h = farmhashte::Hash64WithSeed(farm_hash_data + offset, len, SEED); Check(h >> 32); Check((h << 32) >> 32); } 
-{ uint64_t h = farmhashte::Hash64(farm_hash_data + offset, len); Check(h >> 32); Check((h << 32) >> 32); } 
+if (offset == -1) { int alive = 0; { uint64_t h = farmhashte::Hash64WithSeeds(farm_hash_data, len++, SEED0, SEED1); IsAlive(h >> 32); IsAlive((h << 32) >> 32); } { uint64_t h = farmhashte::Hash64WithSeed(farm_hash_data, len++, SEED); IsAlive(h >> 32); IsAlive((h << 32) >> 32); } { uint64_t h = farmhashte::Hash64(farm_hash_data, len++); IsAlive(h >> 32); IsAlive((h << 32) >> 32); } len -= 3; return alive > 0; }
+{ uint64_t h = farmhashte::Hash64WithSeeds(farm_hash_data + offset, len, SEED0, SEED1); Check(h >> 32); Check((h << 32) >> 32); }
+{ uint64_t h = farmhashte::Hash64WithSeed(farm_hash_data + offset, len, SEED); Check(h >> 32); Check((h << 32) >> 32); }
+{ uint64_t h = farmhashte::Hash64(farm_hash_data + offset, len); Check(h >> 32); Check((h << 32) >> 32); }
 
   return true;
 #undef Check
@@ -7678,9 +7678,9 @@ int RunTest() {
 
 // After the following line is where the code to print hash codes will go.
 void Dump(int offset, int len) {
-{ uint64_t h = farmhashte::Hash64WithSeeds(farm_hash_data + offset, len, SEED0, SEED1); cout << (h >> 32) << "u, " << ((h << 32) >> 32) << "u," << endl; } 
-{ uint64_t h = farmhashte::Hash64WithSeed(farm_hash_data + offset, len, SEED); cout << (h >> 32) << "u, " << ((h << 32) >> 32) << "u," << endl; } 
-{ uint64_t h = farmhashte::Hash64(farm_hash_data + offset, len); cout << (h >> 32) << "u, " << ((h << 32) >> 32) << "u," << endl; } 
+{ uint64_t h = farmhashte::Hash64WithSeeds(farm_hash_data + offset, len, SEED0, SEED1); cout << (h >> 32) << "u, " << ((h << 32) >> 32) << "u," << endl; }
+{ uint64_t h = farmhashte::Hash64WithSeed(farm_hash_data + offset, len, SEED); cout << (h >> 32) << "u, " << ((h << 32) >> 32) << "u," << endl; }
+{ uint64_t h = farmhashte::Hash64(farm_hash_data + offset, len); cout << (h >> 32) << "u, " << ((h << 32) >> 32) << "u," << endl; }
 }
 
 #endif
@@ -7723,12 +7723,12 @@ static const int kDataSize = 1 << 20;
 static const int kTestSize = 300;
 #define kSeed128 Uint128(kSeed0, kSeed1)
 
-static char farm_hash_data[kDataSize]; 
+static char farm_hash_data[kDataSize];
 
 static int completed_self_tests = 0;
 static int errors = 0;
 
-// Initialize farm_hash_data to pseudorandom values. 
+// Initialize farm_hash_data to pseudorandom values.
 void Setup() {
   if (completed_self_tests == 0) {
     uint64_t a = 9;
@@ -7739,7 +7739,7 @@ void Setup() {
       a = (a ^ (a >> 41)) * k0;
       b = (b ^ (b >> 41)) * k0 + i;
       uint8_t u = b >> 37;
-      memcpy(farm_hash_data + i, &u, 1);  // uint8_t -> char 
+      memcpy(farm_hash_data + i, &u, 1);  // uint8_t -> char
     }
   }
 }
@@ -8537,9 +8537,9 @@ bool Test(int offset, int len = 0) {
 
   // After the following line is where the uses of "Check" and such will go.
   static int index = 0;
-if (offset == -1) { int alive = 0; { uint64_t h = farmhashuo::Hash64WithSeed(farm_hash_data, len++, SEED); IsAlive(h >> 32); IsAlive((h << 32) >> 32); } { uint64_t h = farmhashuo::Hash64(farm_hash_data, len++); IsAlive(h >> 32); IsAlive((h << 32) >> 32); } { uint64_t h = farmhashuo::Hash64(farm_hash_data, len++); IsAlive(h >> 32); IsAlive((h << 32) >> 32); } len -= 3; return alive > 0; } 
-{ uint64_t h = farmhashuo::Hash64WithSeed(farm_hash_data + offset, len, SEED); Check(h >> 32); Check((h << 32) >> 32); } 
-{ uint64_t h = farmhashuo::Hash64(farm_hash_data + offset, len); Check(h >> 32); Check((h << 32) >> 32); } 
+if (offset == -1) { int alive = 0; { uint64_t h = farmhashuo::Hash64WithSeed(farm_hash_data, len++, SEED); IsAlive(h >> 32); IsAlive((h << 32) >> 32); } { uint64_t h = farmhashuo::Hash64(farm_hash_data, len++); IsAlive(h >> 32); IsAlive((h << 32) >> 32); } { uint64_t h = farmhashuo::Hash64(farm_hash_data, len++); IsAlive(h >> 32); IsAlive((h << 32) >> 32); } len -= 3; return alive > 0; }
+{ uint64_t h = farmhashuo::Hash64WithSeed(farm_hash_data + offset, len, SEED); Check(h >> 32); Check((h << 32) >> 32); }
+{ uint64_t h = farmhashuo::Hash64(farm_hash_data + offset, len); Check(h >> 32); Check((h << 32) >> 32); }
 
   return true;
 #undef Check
@@ -8571,8 +8571,8 @@ int RunTest() {
 
 // After the following line is where the code to print hash codes will go.
 void Dump(int offset, int len) {
-{ uint64_t h = farmhashuo::Hash64WithSeed(farm_hash_data + offset, len, SEED); cout << (h >> 32) << "u, " << ((h << 32) >> 32) << "u," << endl; } 
-{ uint64_t h = farmhashuo::Hash64(farm_hash_data + offset, len); cout << (h >> 32) << "u, " << ((h << 32) >> 32) << "u," << endl; } 
+{ uint64_t h = farmhashuo::Hash64WithSeed(farm_hash_data + offset, len, SEED); cout << (h >> 32) << "u, " << ((h << 32) >> 32) << "u," << endl; }
+{ uint64_t h = farmhashuo::Hash64(farm_hash_data + offset, len); cout << (h >> 32) << "u, " << ((h << 32) >> 32) << "u," << endl; }
 }
 
 #endif
@@ -8615,12 +8615,12 @@ static const int kDataSize = 1 << 20;
 static const int kTestSize = 300;
 #define kSeed128 Uint128(kSeed0, kSeed1)
 
-static char farm_hash_data[kDataSize]; 
+static char farm_hash_data[kDataSize];
 
 static int completed_self_tests = 0;
 static int errors = 0;
 
-// Initialize farm_hash_data to pseudorandom values. 
+// Initialize farm_hash_data to pseudorandom values.
 void Setup() {
   if (completed_self_tests == 0) {
     uint64_t a = 9;
@@ -8631,7 +8631,7 @@ void Setup() {
       a = (a ^ (a >> 41)) * k0;
       b = (b ^ (b >> 41)) * k0 + i;
       uint8_t u = b >> 37;
-      memcpy(farm_hash_data + i, &u, 1);  // uint8_t -> char 
+      memcpy(farm_hash_data + i, &u, 1);  // uint8_t -> char
     }
   }
 }
@@ -9791,10 +9791,10 @@ bool Test(int offset, int len = 0) {
 
   // After the following line is where the uses of "Check" and such will go.
   static int index = 0;
-if (offset == -1) { int alive = 0; { uint64_t h = farmhashxo::Hash64WithSeeds(farm_hash_data, len++, SEED0, SEED1); IsAlive(h >> 32); IsAlive((h << 32) >> 32); } { uint64_t h = farmhashxo::Hash64WithSeed(farm_hash_data, len++, SEED); IsAlive(h >> 32); IsAlive((h << 32) >> 32); } { uint64_t h = farmhashxo::Hash64(farm_hash_data, len++); IsAlive(h >> 32); IsAlive((h << 32) >> 32); } len -= 3; return alive > 0; } 
-{ uint64_t h = farmhashxo::Hash64WithSeeds(farm_hash_data + offset, len, SEED0, SEED1); Check(h >> 32); Check((h << 32) >> 32); } 
-{ uint64_t h = farmhashxo::Hash64WithSeed(farm_hash_data + offset, len, SEED); Check(h >> 32); Check((h << 32) >> 32); } 
-{ uint64_t h = farmhashxo::Hash64(farm_hash_data + offset, len); Check(h >> 32); Check((h << 32) >> 32); } 
+if (offset == -1) { int alive = 0; { uint64_t h = farmhashxo::Hash64WithSeeds(farm_hash_data, len++, SEED0, SEED1); IsAlive(h >> 32); IsAlive((h << 32) >> 32); } { uint64_t h = farmhashxo::Hash64WithSeed(farm_hash_data, len++, SEED); IsAlive(h >> 32); IsAlive((h << 32) >> 32); } { uint64_t h = farmhashxo::Hash64(farm_hash_data, len++); IsAlive(h >> 32); IsAlive((h << 32) >> 32); } len -= 3; return alive > 0; }
+{ uint64_t h = farmhashxo::Hash64WithSeeds(farm_hash_data + offset, len, SEED0, SEED1); Check(h >> 32); Check((h << 32) >> 32); }
+{ uint64_t h = farmhashxo::Hash64WithSeed(farm_hash_data + offset, len, SEED); Check(h >> 32); Check((h << 32) >> 32); }
+{ uint64_t h = farmhashxo::Hash64(farm_hash_data + offset, len); Check(h >> 32); Check((h << 32) >> 32); }
 
   return true;
 #undef Check
@@ -9826,9 +9826,9 @@ int RunTest() {
 
 // After the following line is where the code to print hash codes will go.
 void Dump(int offset, int len) {
-{ uint64_t h = farmhashxo::Hash64WithSeeds(farm_hash_data + offset, len, SEED0, SEED1); cout << (h >> 32) << "u, " << ((h << 32) >> 32) << "u," << endl; } 
-{ uint64_t h = farmhashxo::Hash64WithSeed(farm_hash_data + offset, len, SEED); cout << (h >> 32) << "u, " << ((h << 32) >> 32) << "u," << endl; } 
-{ uint64_t h = farmhashxo::Hash64(farm_hash_data + offset, len); cout << (h >> 32) << "u, " << ((h << 32) >> 32) << "u," << endl; } 
+{ uint64_t h = farmhashxo::Hash64WithSeeds(farm_hash_data + offset, len, SEED0, SEED1); cout << (h >> 32) << "u, " << ((h << 32) >> 32) << "u," << endl; }
+{ uint64_t h = farmhashxo::Hash64WithSeed(farm_hash_data + offset, len, SEED); cout << (h >> 32) << "u, " << ((h << 32) >> 32) << "u," << endl; }
+{ uint64_t h = farmhashxo::Hash64(farm_hash_data + offset, len); cout << (h >> 32) << "u, " << ((h << 32) >> 32) << "u," << endl; }
 }
 
 #endif

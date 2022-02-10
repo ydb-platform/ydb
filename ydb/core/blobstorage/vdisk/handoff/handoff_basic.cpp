@@ -95,7 +95,7 @@ namespace NKikimr {
                                   ui64 fullDataSize,
                                   TRope&& data) {
             Y_VERIFY(Initialized, "Restore(%p): SelfVDiskID# %s TargetVDiskID# %s id# %s",
-                   this, SelfVDiskID.ToString().data(), TargetVDiskID.ToString().data(), id.ToString().data()); 
+                   this, SelfVDiskID.ToString().data(), TargetVDiskID.ToString().data(), id.ToString().data());
             ui32 byteSize = TEvLocalHandoff::ByteSize(data.GetSize());
             Y_VERIFY_DEBUG(byteSize < MaxBytes);
 

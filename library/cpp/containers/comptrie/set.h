@@ -31,7 +31,7 @@ public:
     }
 
     bool Has(const typename TBase::TKeyBuf& key) const {
-        return TBase::Find(key.data(), key.size()); 
+        return TBase::Find(key.data(), key.size());
     }
 
     bool FindTails(const typename TBase::TKeyBuf& key, TCompactTrieSet<T>& res) const {

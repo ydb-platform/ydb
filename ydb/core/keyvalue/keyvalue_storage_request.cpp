@@ -120,7 +120,7 @@ public:
 
             TStringStream str;
             str << "KeyValue# " << TabletInfo->TabletID;
-            str << " Unexpected EvPut result# " << NKikimrProto::EReplyStatus_Name(status).data(); 
+            str << " Unexpected EvPut result# " << NKikimrProto::EReplyStatus_Name(status).data();
             str << " Deadline# " << IntermediateResults->Deadline.MilliSeconds();
             str << " Now# " << now.MilliSeconds();
             str << " duration# " << duration;
@@ -176,7 +176,7 @@ public:
         if (status != NKikimrProto::OK) {
             TStringStream str;
             str << "KeyValue# " << TabletInfo->TabletID;
-            str << " Unexpected EvStatusResult# " << NKikimrProto::EReplyStatus_Name(status).data(); 
+            str << " Unexpected EvStatusResult# " << NKikimrProto::EReplyStatus_Name(status).data();
             str << " Deadline# " << IntermediateResults->Deadline.MilliSeconds();
             str << " Now# " << now.MilliSeconds();
             str << " GetStatusSentAt# " << GetStatusSentAt.MilliSeconds();
@@ -245,7 +245,7 @@ public:
 
             TStringStream str;
             str << "KeyValue# " << TabletInfo->TabletID;
-            str << " Unexpected EvGet result# " << NKikimrProto::EReplyStatus_Name(status).data(); 
+            str << " Unexpected EvGet result# " << NKikimrProto::EReplyStatus_Name(status).data();
             str << " Deadline# " << IntermediateResults->Deadline.MilliSeconds();
             str << " Now# " << now.MilliSeconds();
             str << " SentAt# " << request.SentAt.MilliSeconds();
@@ -283,17 +283,17 @@ public:
             auto& readItem = *it->ReadItem;
 
             if (response.Status == NKikimrProto::OK) {
-                if (read.Value.size() != read.ValueSize) { 
+                if (read.Value.size() != read.ValueSize) {
                     read.Value.resize(read.ValueSize);
                 }
-                Y_VERIFY(response.Buffer.size() == readItem.BlobSize); 
+                Y_VERIFY(response.Buffer.size() == readItem.BlobSize);
                 Y_VERIFY(readItem.ValueOffset + readItem.BlobSize <= read.ValueSize);
-                memcpy(const_cast<char *>(read.Value.data()) + readItem.ValueOffset, response.Buffer.data(), response.Buffer.size()); 
+                memcpy(const_cast<char *>(read.Value.data()) + readItem.ValueOffset, response.Buffer.data(), response.Buffer.size());
                 IntermediateResults->Stat.GroupReadBytes[std::make_pair(response.Id.Channel(), groupId)] += response.Buffer.size();
                 IntermediateResults->Stat.GroupReadIops[std::make_pair(response.Id.Channel(), groupId)] += 1; // FIXME: count distinct blobs?
             } else {
                 TStringStream err;
-                if (read.Message.size()) { 
+                if (read.Message.size()) {
                     err << read.Message << Endl;
                 }
                 err << "BS EvGet query failed"

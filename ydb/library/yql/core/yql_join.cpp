@@ -446,7 +446,7 @@ TMaybe<TIssue> TJoinLabel::Parse(TExprContext& ctx, TExprNode& node, const TStru
             }
 
             auto columnName = name.substr(pos + 1);
-            if (columnName.empty()) { 
+            if (columnName.empty()) {
                 return TIssue(ctx.GetPosition(node.Pos()), "Empty correlation name is not allowed");
             }
         }
@@ -459,7 +459,7 @@ TMaybe<TIssue> TJoinLabel::Parse(TExprContext& ctx, TExprNode& node, const TStru
 }
 
 TMaybe<TIssue> TJoinLabel::ValidateLabel(TExprContext& ctx, const TCoAtom& label) {
-    if (label.Value().empty()) { 
+    if (label.Value().empty()) {
         return TIssue(ctx.GetPosition(label.Pos()), "Empty correlation name is not allowed");
     }
 
@@ -885,7 +885,7 @@ TMap<TStringBuf, TVector<TStringBuf>> LoadJoinRenameMap(const TExprNode& setting
     for (const auto& child : settings.Children()) {
         if (child->Child(0)->Content() == "rename") {
             auto& v = res[child->Child(1)->Content()];
-            if (!child->Child(2)->Content().empty()) { 
+            if (!child->Child(2)->Content().empty()) {
                 v.push_back(child->Child(2)->Content());
             }
         }
@@ -1132,7 +1132,7 @@ TMap<TStringBuf, TVector<TStringBuf>> UpdateUsedFieldsInRenameMap(
     }
 
     for (auto& x : newRenameMap) {
-        if (AnyOf(x.second, [](const TStringBuf& value) { return !value.empty(); })) { 
+        if (AnyOf(x.second, [](const TStringBuf& value) { return !value.empty(); })) {
             continue;
         }
 

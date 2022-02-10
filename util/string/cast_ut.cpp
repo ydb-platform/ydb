@@ -324,7 +324,7 @@ Y_UNIT_TEST_SUITE(TCastTest) {
         TString a = "xyz";
         TStringBuf b = FromString<TStringBuf>(a);
         UNIT_ASSERT_VALUES_EQUAL(a, b);
-        UNIT_ASSERT_VALUES_EQUAL((void*)a.data(), (void*)b.data()); 
+        UNIT_ASSERT_VALUES_EQUAL((void*)a.data(), (void*)b.data());
     }
 
 #if 0
@@ -360,14 +360,14 @@ Y_UNIT_TEST_SUITE(TCastTest) {
         UNIT_ASSERT_VALUES_EQUAL(TryFromString(uw, uv), true);
         UNIT_ASSERT_VALUES_EQUAL(uv, 21474836470ull);
 
-        TWtringBuf bw(uw.data(), uw.size()); 
+        TWtringBuf bw(uw.data(), uw.size());
         uv = 0;
         UNIT_ASSERT_VALUES_EQUAL(TryFromString(uw, uv), true);
         UNIT_ASSERT_VALUES_EQUAL(uv, 21474836470ull);
 
-        const wchar16* beg = uw.data(); 
+        const wchar16* beg = uw.data();
         uv = 0;
-        UNIT_ASSERT_VALUES_EQUAL(TryFromString(beg, uw.size(), uv), true); 
+        UNIT_ASSERT_VALUES_EQUAL(TryFromString(beg, uw.size(), uv), true);
         UNIT_ASSERT_VALUES_EQUAL(uv, 21474836470ull);
     }
 

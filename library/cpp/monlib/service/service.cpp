@@ -21,11 +21,11 @@ namespace NMonitoring {
                     RemoteAddr = remoteAddr;
                     THttpHeaderParser parser;
                     parser.Init(&Header);
-                    if (parser.Execute(in.FirstLine().data(), in.FirstLine().size()) < 0) { 
+                    if (parser.Execute(in.FirstLine().data(), in.FirstLine().size()) < 0) {
                         out << "HTTP/1.1 400 Bad request\r\nConnection: Close\r\n\r\n";
                         return;
                     }
-                    if (Url.Parse(Header.GetUrl().data()) != THttpURL::ParsedOK) { 
+                    if (Url.Parse(Header.GetUrl().data()) != THttpURL::ParsedOK) {
                         out << "HTTP/1.1 400 Invalid url\r\nConnection: Close\r\n\r\n";
                         return;
                     }
@@ -38,7 +38,7 @@ namespace NMonitoring {
                     CgiParams.Scan(Url.Get(THttpURL::FieldQuery));
                 } catch (...) {
                     out << "HTTP/1.1 500 Internal server error\r\nConnection: Close\r\n\r\n";
-                    YSYSLOG(TLOG_ERR, "THttpClient: internal error while serving monitoring request: %s", CurrentExceptionMessage().data()); 
+                    YSYSLOG(TLOG_ERR, "THttpClient: internal error while serving monitoring request: %s", CurrentExceptionMessage().data());
                 }
 
                 if (Header.http_method == HTTP_METHOD_POST)
@@ -75,7 +75,7 @@ namespace NMonitoring {
             return (HTTP_METHOD)Header.http_method;
         }
         void ScanPostParams() {
-            PostParams.Scan(TStringBuf(PostContent.Buffer().data(), PostContent.Buffer().size())); 
+            PostParams.Scan(TStringBuf(PostContent.Buffer().data(), PostContent.Buffer().size()));
         }
 
         const THttpHeaders& GetHeaders() const override {
@@ -123,7 +123,7 @@ namespace NMonitoring {
                 out << s.Str();
                 out.Finish();
             } catch (...) {
-                YSYSLOG(TLOG_WARNING, "TCoHttpServer::TConnection: error: %s\n", CurrentExceptionMessage().data()); 
+                YSYSLOG(TLOG_WARNING, "TCoHttpServer::TConnection: error: %s\n", CurrentExceptionMessage().data());
             }
         }
 
@@ -143,7 +143,7 @@ namespace NMonitoring {
         try {
             Listener.Bind(TIpAddress(bindAddr, port));
         } catch (yexception e) {
-            Y_FAIL("TCoHttpServer::TCoHttpServer: couldn't bind to %s:%d\n", bindAddr.data(), port); 
+            Y_FAIL("TCoHttpServer::TCoHttpServer: couldn't bind to %s:%d\n", bindAddr.data(), port);
         }
     }
 
@@ -177,11 +177,11 @@ namespace NMonitoring {
                 out << "HTTP/1.1 200 Ok\nConnection: Close\n\n";
                 TransferData(&http_in, &out);
             } catch (...) {
-                YSYSLOG(TLOG_DEBUG, "TCoHttpServer: while getting data from backend: %s", CurrentExceptionMessage().data()); 
+                YSYSLOG(TLOG_DEBUG, "TCoHttpServer: while getting data from backend: %s", CurrentExceptionMessage().data());
             }
         } catch (const yexception& /*e*/) {
             out << "HTTP/1.1 500 Internal server error\nConnection: Close\n\n";
-            YSYSLOG(TLOG_DEBUG, "TCoHttpServer: while getting data from backend: %s", CurrentExceptionMessage().data()); 
+            YSYSLOG(TLOG_DEBUG, "TCoHttpServer: while getting data from backend: %s", CurrentExceptionMessage().data());
         }
     }
 

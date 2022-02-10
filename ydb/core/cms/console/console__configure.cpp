@@ -223,7 +223,7 @@ public:
             return false;
         default:
             Error(Ydb::StatusIds::BAD_REQUEST,
-                  Sprintf("unsupported filter in action (%s)", action.ShortDebugString().data()), 
+                  Sprintf("unsupported filter in action (%s)", action.ShortDebugString().data()),
                   ctx);
             return false;
         }
@@ -309,7 +309,7 @@ public:
             return false;
         default:
             Error(Ydb::StatusIds::BAD_REQUEST,
-                  Sprintf("unsupported configure action (%s)", action.ShortDebugString().data()), 
+                  Sprintf("unsupported configure action (%s)", action.ShortDebugString().data()),
                   ctx);
             return false;
         }

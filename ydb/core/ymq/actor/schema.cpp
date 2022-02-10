@@ -298,7 +298,7 @@ void TCreateUserSchemaActor::Process() {
             TStringBuf rootSqs = Root_;
             TStringBuf mainRoot, sqsDirName;
             rootSqs.RSplit('/', mainRoot, sqsDirName);
-            if (mainRoot.empty() || sqsDirName.empty()) { 
+            if (mainRoot.empty() || sqsDirName.empty()) {
                 RLOG_SQS_WARN("Failed to split root directory into components: [" << Root_ << "]");
                 Send(Sender_, MakeHolder<TSqsEvents::TEvUserCreated>(false));
                 PassAway();

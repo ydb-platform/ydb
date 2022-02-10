@@ -119,7 +119,7 @@ RECURSE(
     jdk
     jemalloc
     jemalloc/dynamic
-    jerasure 
+    jerasure
     jinja2cpp
     js-v8
     json-c

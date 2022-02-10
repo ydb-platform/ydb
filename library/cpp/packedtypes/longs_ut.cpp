@@ -38,7 +38,7 @@ Y_UNIT_TEST_SUITE(TLongsTest) {
             s += Sprintf("OK\n");
         }
 
-        UNIT_ASSERT_EQUAL(Crc<ui64>(s.data(), s.size()), 7251624297500315779ULL); // WTF? 
+        UNIT_ASSERT_EQUAL(Crc<ui64>(s.data(), s.size()), 7251624297500315779ULL); // WTF?
     }
 
     template <typename TSignedInt>

@@ -80,12 +80,12 @@ namespace NKikimr {
         const T *DataPtr(ui32 offset, ui32 len = sizeof(T)) const {
             Y_VERIFY(IsReadable(offset, len), "returned data is corrupt (or was never written) at offset# %" PRIu32
                    " len# %" PRIu32 " and therefore could not be used safely", offset, len);
-            return reinterpret_cast<T *>(Data.data() + offset); 
+            return reinterpret_cast<T *>(Data.data() + offset);
         }
 
         ui8 *RawDataPtr(ui32 offset, ui32 len) {
-            Y_VERIFY(offset + len <= Data.size(), "Buffer has size# %zu less then requested offset# %" PRIu32 
-                    " len# %" PRIu32, Data.size(), offset, len); 
+            Y_VERIFY(offset + len <= Data.size(), "Buffer has size# %zu less then requested offset# %" PRIu32
+                    " len# %" PRIu32, Data.size(), offset, len);
             IsCommited = false;
             return reinterpret_cast<ui8 *>(Data.Detach() + offset);
         }
@@ -128,7 +128,7 @@ namespace NKikimr {
         }
 
         ui32 Size() const {
-            return Data.size(); 
+            return Data.size();
         }
 
         void Swap(TBufferWithGaps& other) {
@@ -154,7 +154,7 @@ namespace NKikimr {
         }
 
         void Sanitize() const {
-            if (Data.size()) { 
+            if (Data.size()) {
                 ui64 a = 0;
                 for (const auto &gap : Gaps) {
                     ui64 b = gap.first - Offset;
@@ -165,7 +165,7 @@ namespace NKikimr {
                     }
                     a = b + gap.second;
                 }
-                ui64 b = Data.size(); 
+                ui64 b = Data.size();
                 if (a < b) {
                     ui64 size = b - a;
                     Y_UNUSED(size);

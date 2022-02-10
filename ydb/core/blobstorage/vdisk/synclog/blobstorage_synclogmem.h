@@ -500,7 +500,7 @@ namespace NKikimr {
             }
 
             TString ToString() const {
-                return Sprintf("[PagesIt=%s Hdr=%p]", PagesIt.ToString().data(), Hdr); 
+                return Sprintf("[PagesIt=%s Hdr=%p]", PagesIt.ToString().data(), Hdr);
             }
 
         private:

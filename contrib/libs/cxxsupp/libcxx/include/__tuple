@@ -1,9 +1,9 @@
 // -*- C++ -*-
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions. 
-// See https://llvm.org/LICENSE.txt for license information. 
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception 
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -387,7 +387,7 @@ template<class _Tp, size_t _Np, class _Apply, size_t _Ep>
 struct __make_tuple_types_flat<array<_Tp, _Np>, _Apply, _Ep, 0, enable_if_t<(_Ep > 0)>> {
     using type = typename __make_tuple_types_append_front<
         typename __make_tuple_types_flat<array<_Tp, _Np>, _Apply, _Ep - 1, 0>::type,
-        typename _Apply::template __apply<_Tp>>::type; 
+        typename _Apply::template __apply<_Tp>>::type;
 };
 
 template<class _Tp, size_t _Np, class _Apply, size_t _Ep, size_t _Sp>

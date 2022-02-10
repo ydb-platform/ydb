@@ -126,7 +126,7 @@ namespace NKikimr {
             it->Callback = MakeCallback(std::move(callback));
 
             IHLOG_DEBUG(ctx, "QueryId# %" PRIu64 " HandleWrite Lsn# %" PRIu64 " DataSize# %" PRIu32
-                    " WriteQueueSize# %zu WriteInProgressItemsSize# %zu", it->QueryId, it->Lsn, ui32(it->Data.size()), 
+                    " WriteQueueSize# %zu WriteInProgressItemsSize# %zu", it->QueryId, it->Lsn, ui32(it->Data.size()),
                     WriteQueue.size(), WriteInProgressItems.size());
 
             // kick processor
@@ -209,7 +209,7 @@ namespace NKikimr {
             }
 
             // calculate payload size in bytes and ensure it fits into required boundaries
-            const ui32 payloadSize = item.Data.size(); 
+            const ui32 payloadSize = item.Data.size();
             Y_VERIFY(payloadSize >= Keeper.State.Settings.MinHugeBlobInBytes && payloadSize < 0x1000000);
 
             // calculate full data record size in blocks; round total size of header and payload up to a block size
@@ -261,7 +261,7 @@ namespace NKikimr {
             // fill in header; calculate checksum for header (excluding CRC) + data
             header.ChunkSerNum = chunk.ChunkSerNum;
             header.Checksum = Crc32cExtend(Crc32c(&header.IndexRecord, sizeof(TBlobHeader) - sizeof(ui32)),
-                    item.Data.data(), item.Data.size()); 
+                    item.Data.data(), item.Data.size());
             static_assert(offsetof(TBlobHeader, Checksum) == 0 && sizeof(TBlobHeader::Checksum) == sizeof(ui32),
                     "incorrect displacement of TBlobHeader::Checksum");
 
@@ -276,7 +276,7 @@ namespace NKikimr {
             // then blob data and padding to fill up to block size; if padding is zero, it is not added
             ui32 numParts = 0;
             item.Parts[numParts++] = {&item.Header, sizeof(TBlobHeader)};
-            item.Parts[numParts++] = {item.Data.data(), payloadSize}; 
+            item.Parts[numParts++] = {item.Data.data(), payloadSize};
             if (padding) {
                 item.Parts[numParts++] = {nullptr, padding};
             }
@@ -316,7 +316,7 @@ namespace NKikimr {
                     " End# %" PRIu32 " Id# %016" PRIx64 " ChunkIdx# %" PRIu32 " ChunkSerNum# %s Defrag# %s",
                     item.QueryId, CurrentChunkOffsetInBlocks, chunk.NumItems, sizeInBlocks, sizeInBlocks *
                     Keeper.State.BlockSize, offset, totalSize, offset + totalSize, item.Id, item.ChunkIdx,
-                    chunk.ChunkSerNum.ToString().data(), item.Defrag ? "true" : "false"); 
+                    chunk.ChunkSerNum.ToString().data(), item.Defrag ? "true" : "false");
 
             // if this is defragmentation item, then put it into special hash map indicating that it is 'write in progress'
             // in this case, if delete request comes for such item, it should wait for defragmentation to finish
@@ -341,7 +341,7 @@ namespace NKikimr {
         void TWriter::ApplyBlobWrite(NKikimrProto::EReplyStatus status, TWriteQueueItem& item, IEventBase *result,
                 const TActorContext& ctx) {
             IHLOG_DEBUG(ctx, "QueryId# %" PRIu64 " ApplyBlobWrite Status# %s", item.QueryId,
-                    NKikimrProto::EReplyStatus_Name(status).data()); 
+                    NKikimrProto::EReplyStatus_Name(status).data());
 
             Y_VERIFY(status == NKikimrProto::OK, "don't know how to handle errors yet");
 
@@ -489,10 +489,10 @@ namespace NKikimr {
             TBlobIndexHeader& indexHeader = item.Header;
             memset(&indexHeader, 0, sizeof(indexHeader));
             indexHeader.ChunkSerNum = chunk.ChunkSerNum;
-            indexHeader.NumItems = finIt->second.Index.size(); 
+            indexHeader.NumItems = finIt->second.Index.size();
             indexHeader.Checksum = Crc32cExtend(Crc32c(&indexHeader.ChunkSerNum,
                     sizeof(indexHeader) - sizeof(TBlobIndexHeader::Checksum)),
-                    finIt->second.Index.data(), indexHeader.NumItems * sizeof(TBlobIndexRecord)); 
+                    finIt->second.Index.data(), indexHeader.NumItems * sizeof(TBlobIndexRecord));
             static_assert(offsetof(TBlobIndexHeader, Checksum) == 0 && sizeof(TBlobIndexHeader::Checksum) == sizeof(ui32),
                     "incorrect displacement of TBlobIndexHeader::Checksum");
 
@@ -509,7 +509,7 @@ namespace NKikimr {
                 item.Parts[numParts++] = {nullptr, dataPadding};
             }
             item.Parts[numParts++] = {&indexHeader, sizeof(TBlobIndexHeader)};
-            item.Parts[numParts++] = {finIt->second.Index.data(), indexSize}; 
+            item.Parts[numParts++] = {finIt->second.Index.data(), indexSize};
             if (indexPadding) {
                 item.Parts[numParts++] = {nullptr, indexPadding};
             }
@@ -595,7 +595,7 @@ namespace NKikimr {
                 auto it = Keeper.State.Chunks.find(chunkIdx);
                 Y_VERIFY(it != Keeper.State.Chunks.end());
                 TChunkInfo& chunk = it->second;
-                for (ui32 i = 0; i < index.size(); ++i) { 
+                for (ui32 i = 0; i < index.size(); ++i) {
                     const TBlobIndexRecord& record = index[i];
                     if (!chunk.DeletedItems.Get(i) && record.Owner == owner && record.Lsn >= firstLsn) {
                         res.push_back(TEvIncrHugeInitResult::TItem{

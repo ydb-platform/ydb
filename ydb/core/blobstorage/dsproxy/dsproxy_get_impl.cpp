@@ -133,7 +133,7 @@ void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TLogContext &logC
             } else if (blobState.WholeSituation == TBlobState::ESituation::Error) {
                 outResponse.Status = NKikimrProto::ERROR;
             } else {
-                Y_VERIFY(false, "Id# %s BlobState# %s", query.Id.ToString().c_str(), blobState.ToString().data()); 
+                Y_VERIFY(false, "Id# %s BlobState# %s", query.Id.ToString().c_str(), blobState.ToString().data());
             }
         }
     }
@@ -440,7 +440,7 @@ void TGetImpl::OnVPutResult(TLogContext &logCtx, TEvBlobStorage::TEvVPutResult &
             Blackboard.AddPutOkResponse(blob, orderNumber);
             break;
         default:
-        Y_FAIL("Unexpected status# %s", NKikimrProto::EReplyStatus_Name(status).data()); 
+        Y_FAIL("Unexpected status# %s", NKikimrProto::EReplyStatus_Name(status).data());
     }
     Step(logCtx, outVGets, outVPuts, outGetResult);
 }

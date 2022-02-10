@@ -74,7 +74,7 @@ namespace NCodecs {
         for (TIter iter = begin; iter != end; ++iter) {
             if (sampleProb >= 1 || rng.GenRandReal1() < sampleProb) {
                 TStringBuf reg = getter(iter);
-                result.emplace_back(reg.data(), reg.size()); 
+                result.emplace_back(reg.data(), reg.size());
             }
         }
         Shuffle(result.begin(), result.end(), rng);

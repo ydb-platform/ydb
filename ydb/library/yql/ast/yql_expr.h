@@ -409,8 +409,8 @@ public:
 
     static ui64 MakeHash(const TStringBuf& name, const TTypeAnnotationNode* itemType) {
         ui64 hash = TypeHashMagic | (ui64)ETypeAnnotationKind::Item;
-        hash = StreamHash(name.size(), hash); 
-        hash = StreamHash(name.data(), name.size(), hash); 
+        hash = StreamHash(name.size(), hash);
+        hash = StreamHash(name.data(), name.size(), hash);
         return StreamHash(itemType->GetHash(), hash);
     }
 
@@ -641,8 +641,8 @@ public:
     static ui64 MakeHash(EDataSlot slot) {
         ui64 hash = TypeHashMagic | (ui64)ETypeAnnotationKind::Data;
         auto dataType = NUdf::GetDataTypeInfo(slot).Name;
-        hash = StreamHash(dataType.size(), hash); 
-        return StreamHash(dataType.data(), dataType.size(), hash); 
+        hash = StreamHash(dataType.size(), hash);
+        return StreamHash(dataType.data(), dataType.size(), hash);
     }
 
     EDataSlot GetSlot() const {
@@ -669,10 +669,10 @@ public:
 
     static ui64 MakeHash(EDataSlot slot, const TStringBuf& one, const TStringBuf& two) {
         auto hash = TDataExprType::MakeHash(slot);
-        hash = StreamHash(one.size(), hash); 
-        hash = StreamHash(one.data(), one.size(), hash); 
-        hash = StreamHash(two.size(), hash); 
-        hash = StreamHash(two.data(), two.size(), hash); 
+        hash = StreamHash(one.size(), hash);
+        hash = StreamHash(one.data(), one.size(), hash);
+        hash = StreamHash(two.size(), hash);
+        hash = StreamHash(two.data(), two.size(), hash);
         return hash;
     }
 
@@ -920,7 +920,7 @@ public:
     {
         for (ui32 i = 0; i < Arguments.size(); ++i) {
             const auto& arg = Arguments[i];
-            if (!arg.Name.empty()) { 
+            if (!arg.Name.empty()) {
                 IndexByName.insert({ arg.Name, i });
             }
         }
@@ -932,15 +932,15 @@ public:
         hash = StreamHash(returnType->GetHash(), hash);
         hash = StreamHash(arguments.size(), hash);
         for (const auto& arg : arguments) {
-            hash = StreamHash(arg.Name.size(), hash); 
-            hash = StreamHash(arg.Name.data(), arg.Name.size(), hash); 
+            hash = StreamHash(arg.Name.size(), hash);
+            hash = StreamHash(arg.Name.data(), arg.Name.size(), hash);
             hash = StreamHash(arg.Flags, hash);
             hash = StreamHash(arg.Type->GetHash(), hash);
         }
 
         hash = StreamHash(optionalArgumentsCount, hash);
-        hash = StreamHash(payload.size(), hash); 
-        hash = StreamHash(payload.data(), payload.size(), hash); 
+        hash = StreamHash(payload.size(), hash);
+        hash = StreamHash(payload.data(), payload.size(), hash);
         return hash;
     }
 
@@ -1043,8 +1043,8 @@ public:
 
     static ui64 MakeHash(const TStringBuf& tag) {
         ui64 hash = TypeHashMagic | (ui64)ETypeAnnotationKind::Resource;
-        hash = StreamHash(tag.size(), hash); 
-        return StreamHash(tag.data(), tag.size(), hash); 
+        hash = StreamHash(tag.size(), hash);
+        return StreamHash(tag.data(), tag.size(), hash);
     }
 
     const TStringBuf& GetTag() const {
@@ -1072,8 +1072,8 @@ public:
     static ui64 MakeHash(const TTypeAnnotationNode* baseType, const TStringBuf& tag) {
         ui64 hash = TypeHashMagic | (ui64)ETypeAnnotationKind::Tagged;
         hash = StreamHash(baseType->GetHash(), hash);
-        hash = StreamHash(tag.size(), hash); 
-        return StreamHash(tag.data(), tag.size(), hash); 
+        hash = StreamHash(tag.size(), hash);
+        return StreamHash(tag.data(), tag.size(), hash);
     }
 
     const TStringBuf& GetTag() const {
@@ -2275,7 +2275,7 @@ struct TExprContext : private TNonCopyable {
 
     TStringBuf AppendString(const TStringBuf& buf) {
         ENSURE_NOT_FROZEN_CTX
-        if (buf.size() == 0) { 
+        if (buf.size() == 0) {
             return ZeroString;
         }
 

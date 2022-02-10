@@ -49,7 +49,7 @@ void Test(bool headCompacted, ui32 parts, ui32 partSize, ui32 leftInHead)
     head.Batches.back().Unpack();
     head.Batches.back().Pack();
     TString str = head.Batches.back().Serialize();
-    auto header = ExtractHeader(str.c_str(), str.size()); 
+    auto header = ExtractHeader(str.c_str(), str.size());
     TBatch batch(header, str.c_str() + header.ByteSize() + sizeof(ui16));
     batch.Unpack();
 
@@ -183,7 +183,7 @@ Y_UNIT_TEST(TestBatchPacking) {
     batch.Pack();
     UNIT_ASSERT(batch.PackedData == s);
     TString str = batch.Serialize();
-    auto header = ExtractHeader(str.c_str(), str.size()); 
+    auto header = ExtractHeader(str.c_str(), str.size());
     TBatch batch2(header, str.c_str() + header.ByteSize() + sizeof(ui16));
     batch2.Unpack();
     Y_VERIFY(batch2.Blobs.size() == 100);

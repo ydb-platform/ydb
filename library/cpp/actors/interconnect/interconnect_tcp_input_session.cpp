@@ -36,7 +36,7 @@ namespace NActors {
     }
 
     void TInputSessionTCP::Bootstrap() {
-        SetPrefix(Sprintf("InputSession %s [node %" PRIu32 "]", SelfId().ToString().data(), NodeId)); 
+        SetPrefix(Sprintf("InputSession %s [node %" PRIu32 "]", SelfId().ToString().data(), NodeId));
         Become(&TThis::WorkingState, DeadPeerTimeout, new TEvCheckDeadPeer);
         LOG_DEBUG_IC_SESSION("ICIS01", "InputSession created");
         LastReceiveTimestamp = TActivationContext::Now();
@@ -371,7 +371,7 @@ namespace NActors {
                     : recvres == 0 ? "connection closed by peer"
                     : err ? err
                     : Sprintf("socket: %s", strerror(-recvres));
-                LOG_NOTICE_NET(NodeId, "%s", message.data()); 
+                LOG_NOTICE_NET(NodeId, "%s", message.data());
                 ReestablishConnection(CloseInputSessionRequested ? TDisconnectReason::Debug() :
                     recvres == 0 ? TDisconnectReason::EndOfStream() : TDisconnectReason::FromErrno(-recvres));
             } else if (PollerToken && !std::exchange(Context->ReadPending, true)) {

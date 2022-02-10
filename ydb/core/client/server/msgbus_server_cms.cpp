@@ -40,7 +40,7 @@ public:
         if (Request.HasDomainName()) {
             auto *domain = dinfo->GetDomainByName(Request.GetDomainName());
             if (!domain) {
-                auto error = Sprintf("Unknown domain %s", Request.GetDomainName().data()); 
+                auto error = Sprintf("Unknown domain %s", Request.GetDomainName().data());
                 ReplyWithErrorAndDie(error, ctx);
                 return;
             }
@@ -67,7 +67,7 @@ public:
         CmsPipe = ctx.RegisterWithSameMailbox(pipe);
 
         LOG_DEBUG(ctx, NKikimrServices::CMS, "Forwarding CMS request: %s",
-                  Request.ShortDebugString().data()); 
+                  Request.ShortDebugString().data());
 
         if (Request.HasClusterStateRequest()) {
             TAutoPtr<TEvCms::TEvClusterStateRequest> request
@@ -283,7 +283,7 @@ public:
         default:
             Y_FAIL("TCmsRequestActor::MainState unexpected event type: %" PRIx32 " event: %s",
                    ev->GetTypeRewrite(),
-                   ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"); 
+                   ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
         }
     }
 

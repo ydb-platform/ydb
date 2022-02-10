@@ -91,7 +91,7 @@ namespace NPQ {
             ui32 cropped = 0;
             for (ui32 i = 0; i < Blobs.size(); ++i) {
                 TRequestedBlob& blob = Blobs[i];
-                if (blob.Value.size()) 
+                if (blob.Value.size())
                     Verify(blob);
                 size += blob.Value.size();
                 if (size > MAX_RESPONSE_SIZE) {

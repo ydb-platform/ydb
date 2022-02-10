@@ -72,7 +72,7 @@ private:
 
         default:
             Y_FAIL("TLeaseHolder::StateIdle unexpected event type: %" PRIx32 " event: %s",
-                   ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"); 
+                   ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
         }
     }
 
@@ -87,7 +87,7 @@ private:
 
         default:
             Y_FAIL("TLeaseHolder::StatePing unexpected event type: %" PRIx32 " event: %s",
-                   ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"); 
+                   ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
         }
     }
 
@@ -158,7 +158,7 @@ private:
         Y_VERIFY(rec.GetNodeId() == ctx.SelfID.NodeId());
         if (rec.GetStatus().GetCode() != NKikimrNodeBroker::TStatus::OK) {
             LOG_ERROR(ctx, NKikimrServices::NODE_BROKER, "Cannot extend lease: %s",
-                      rec.GetStatus().GetReason().data()); 
+                      rec.GetStatus().GetReason().data());
             return;
         }
 

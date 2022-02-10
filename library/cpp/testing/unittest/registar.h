@@ -454,7 +454,7 @@ public:                       \
         const TString _a(A);                                                                                                                   \
         const TString _b(B);                                                                                                                   \
         if (_a != _b) {                                                                                                                        \
-            UNIT_FAIL_IMPL("strings (" #A ") and (" #B ") are different", Sprintf("\n%s", ::NUnitTest::ColoredDiff(_a, _b, " \t\n.,:;'\"").data())); \ 
+            UNIT_FAIL_IMPL("strings (" #A ") and (" #B ") are different", Sprintf("\n%s", ::NUnitTest::ColoredDiff(_a, _b, " \t\n.,:;'\"").data())); \
         }                                                                                                                                      \
     } while (false)
 

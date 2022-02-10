@@ -1642,7 +1642,7 @@ void TDataShard::Handle(TEvTxProcessing::TEvReadSet::TPtr &ev, const TActorConte
     LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "Receive RS at %" PRIu64 " source %" PRIu64 " dest %" PRIu64 " producer %" PRIu64 " txId %" PRIu64,
               TabletID(), sender, dest, producer, txId);
     IncCounter(COUNTER_READSET_RECEIVED_COUNT);
-    IncCounter(COUNTER_READSET_RECEIVED_SIZE, ev->Get()->Record.GetReadSet().size()); 
+    IncCounter(COUNTER_READSET_RECEIVED_SIZE, ev->Get()->Record.GetReadSet().size());
     Execute(new TTxReadSet(this, ev), ctx);
 }
 
@@ -2034,7 +2034,7 @@ void TDataShard::SendReadSet(const TActorContext& ctx, ui64 step,
     auto ev = PrepareReadSet(step, txId, source, target, body, seqno);
 
     IncCounter(COUNTER_READSET_SENT_COUNT);
-    IncCounter(COUNTER_READSET_SENT_SIZE, body.size()); 
+    IncCounter(COUNTER_READSET_SENT_SIZE, body.size());
 
     PipeClientCache->Send(ctx, target, ev.Release());
 }
@@ -2055,7 +2055,7 @@ void TDataShard::SendReadSets(const TActorContext& ctx,
                     << " to " << target << " txId " << txId);
 
         IncCounter(COUNTER_READSET_SENT_COUNT);
-        IncCounter(COUNTER_READSET_SENT_SIZE, rs->Record.GetReadSet().size()); 
+        IncCounter(COUNTER_READSET_SENT_SIZE, rs->Record.GetReadSet().size());
 
         pendingPipeTrackerCommands.AttachTablet(seqno, target);
         PipeClientCache->Send(ctx, target, rs.Release());

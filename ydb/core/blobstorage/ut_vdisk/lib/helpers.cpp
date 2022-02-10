@@ -11,7 +11,7 @@
 using namespace NKikimr;
 
 static inline TString LimitData(const TString &data) {
-    return data.size() <= 16 ? data : (data.substr(0, 16) + "..."); 
+    return data.size() <= 16 ? data : (data.substr(0, 16) + "...");
 }
 
 
@@ -111,7 +111,7 @@ class TRangeGet : public TActorBootstrapped<TRangeGet> {
         Become(&TThis::StateFunc);
 
         LOG_NOTICE(ctx, NActorsServices::TEST,
-                   "  RANGE READ: from=%s to=%s\n", ReadFrom.ToString().data(), ReadTo.ToString().data()); 
+                   "  RANGE READ: from=%s to=%s\n", ReadFrom.ToString().data(), ReadTo.ToString().data());
 
         auto req = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(VDiskInfo.VDiskID,
                                                                   TInstant::Max(),
@@ -576,7 +576,7 @@ class TManyGets : public TActorBootstrapped<TManyGets> {
         // get logo blob
         if (Step % 100 == 0)
             LOG_NOTICE(ctx, NActorsServices::TEST, "GET Step=%u", Step);
-        TLogoBlobID logoBlobID(TabletId, Gen, Step, Channel, MsgData.size(), 0, 1); 
+        TLogoBlobID logoBlobID(TabletId, Gen, Step, Channel, MsgData.size(), 0, 1);
         auto req = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(VDiskInfo.VDiskID,
                                                                    TInstant::Max(),
                                                                    NKikimrBlobStorage::EGetHandleClass::AsyncRead,
@@ -592,8 +592,8 @@ class TManyGets : public TActorBootstrapped<TManyGets> {
         Y_VERIFY(size == 1, "size=%d", size);
         const NKikimrBlobStorage::TQueryResult &q = rec.GetResult(0);
         if (q.GetBuffer() != MsgData) {
-            fprintf(stderr, "Original: %s\n", MsgData.data()); 
-            fprintf(stderr, "Received: %s\n", q.GetBuffer().data()); 
+            fprintf(stderr, "Original: %s\n", MsgData.data());
+            fprintf(stderr, "Received: %s\n", q.GetBuffer().data());
             Y_VERIFY(q.GetBuffer() == MsgData);
         }
     }
@@ -1392,7 +1392,7 @@ NActors::IActor *PutGCToCorrespondingVDisks(const NActors::TActorId &notifyID, T
 
 void PutLogoBlobToVDisk(const TActorContext &ctx, const TActorId &actorID, const TVDiskID &vdiskID,
                         const TLogoBlobID &id, const TString &data, NKikimrBlobStorage::EPutHandleClass cls) {
-    LOG_DEBUG(ctx, NActorsServices::TEST, "  Sending TEvPut: id=%s data='%s'", id.ToString().data(), LimitData(data).data()); 
+    LOG_DEBUG(ctx, NActorsServices::TEST, "  Sending TEvPut: id=%s data='%s'", id.ToString().data(), LimitData(data).data());
     ctx.Send(actorID, new TEvBlobStorage::TEvVPut(id, data, vdiskID, false, nullptr, TInstant::Max(), cls));
 }
 
@@ -1423,7 +1423,7 @@ ui32 GetLogoBlobFromCorrespondingVDisks(const NActors::TActorContext &ctx, NKiki
     ui8 n = info->Type.TotalPartCount();
     for (ui8 i = 0; i < n; i++) {
         TLogoBlobID aid(id, i + 1);
-        LOG_NOTICE(ctx, NActorsServices::TEST, "  Sending TEvGet: id=%s", aid.ToString().data()); 
+        LOG_NOTICE(ctx, NActorsServices::TEST, "  Sending TEvGet: id=%s", aid.ToString().data());
         auto req = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(outVDisks[i],
                                                                    TInstant::Max(),
                                                                    NKikimrBlobStorage::EGetHandleClass::AsyncRead,
@@ -1518,8 +1518,8 @@ private:
     friend class TActorBootstrapped<TLoadDataSnapshotActor>;
 
     void Output(const TLogoBlobID &lb) {
-        fprintf(stderr, "%s: %s\n", lb.ToString().data(), 
-                TIngress::PrintVDisksForLogoBlob(Conf->GroupInfo.Get(), TLogoBlobID(lb, 0)).data()); 
+        fprintf(stderr, "%s: %s\n", lb.ToString().data(),
+                TIngress::PrintVDisksForLogoBlob(Conf->GroupInfo.Get(), TLogoBlobID(lb, 0)).data());
     }
 
     void Bootstrap(const TActorContext &ctx) {
@@ -1583,8 +1583,8 @@ class TCheckDataSnapshotActor : public TActorBootstrapped<TCheckDataSnapshotActo
     friend class TActorBootstrapped<TCheckDataSnapshotActor>;
 
     void Output(const TLogoBlobID &lb) {
-        fprintf(stderr, "%s: %s\n", lb.ToString().data(), 
-                TIngress::PrintVDisksForLogoBlob(Conf->GroupInfo.Get(), TLogoBlobID(lb, 0)).data()); 
+        fprintf(stderr, "%s: %s\n", lb.ToString().data(),
+                TIngress::PrintVDisksForLogoBlob(Conf->GroupInfo.Get(), TLogoBlobID(lb, 0)).data());
     }
 
     void Bootstrap(const TActorContext &ctx) {
@@ -1631,23 +1631,23 @@ class TCheckDataSnapshotActor : public TActorBootstrapped<TCheckDataSnapshotActo
                      "vdiskId# %s id# %s ingress# %s Cur->Ingress# %s"
                      " ingress.Raw# %" PRIu64 " Cur->Ingress.Raw# %" PRIu64
                      " buf# '%s' Cur->Data# '%s'",
-                     Cur->VDiskID.ToString().data(), 
-                     id.ToString().data(), 
-                     ingress.ToString(&Conf->GroupInfo->GetTopology(), Cur->VDiskID, id).data(), 
-                     Cur->Ingress.ToString(&Conf->GroupInfo->GetTopology(), Cur->VDiskID, id).data(), 
+                     Cur->VDiskID.ToString().data(),
+                     id.ToString().data(),
+                     ingress.ToString(&Conf->GroupInfo->GetTopology(), Cur->VDiskID, id).data(),
+                     Cur->Ingress.ToString(&Conf->GroupInfo->GetTopology(), Cur->VDiskID, id).data(),
                      ingress.Raw(),
                      Cur->Ingress.Raw(),
-                     q.GetBuffer().data(), 
-                     Cur->Data.data()); 
+                     q.GetBuffer().data(),
+                     Cur->Data.data());
         } else if (q.GetStatus() == NKikimrProto::NODATA) {
             Y_VERIFY(Cur->Data.empty());
             Y_VERIFY(ingress.Raw() == Cur->Ingress.Raw(),
                      "vdiskId# %s id# %s ingress# %s Cur->Ingress# %s"
                      " ingress.Raw# %" PRIu64 " Cur->Ingress.Raw# %" PRIu64,
-                     Cur->VDiskID.ToString().data(), 
-                     id.ToString().data(), 
-                     ingress.ToString(&Conf->GroupInfo->GetTopology(), Cur->VDiskID, id).data(), 
-                     Cur->Ingress.ToString(&Conf->GroupInfo->GetTopology(), Cur->VDiskID, id).data(), 
+                     Cur->VDiskID.ToString().data(),
+                     id.ToString().data(),
+                     ingress.ToString(&Conf->GroupInfo->GetTopology(), Cur->VDiskID, id).data(),
+                     Cur->Ingress.ToString(&Conf->GroupInfo->GetTopology(), Cur->VDiskID, id).data(),
                      ingress.Raw(),
                      Cur->Ingress.Raw());
         }
@@ -1712,7 +1712,7 @@ void CheckQueryResult(NKikimr::TEvBlobStorage::TEvVGetResult::TPtr &ev, const NA
                 const NKikimrBlobStorage::TQueryResult &q = rec.GetResult(i);
                 const TLogoBlobID id = LogoBlobIDFromLogoBlobID(q.GetBlobID());
                 LOG_NOTICE(ctx, NActorsServices::TEST, "    @@@@@@@@@@ Status=%s LogoBlob=%s Data='%s' Cookie=%" PRIu64,
-                           NKikimrProto::EReplyStatus_Name(q.GetStatus()).data(), id.ToString().data(), LimitData(q.GetBuffer()).data(), 
+                           NKikimrProto::EReplyStatus_Name(q.GetStatus()).data(), id.ToString().data(), LimitData(q.GetBuffer()).data(),
                            q.GetCookie());
                 expSet->Check(id, q.GetStatus(), q.GetBuffer());
             }
@@ -1745,8 +1745,8 @@ void PrintDebug(NKikimr::TEvBlobStorage::TEvVGetResult::TPtr &ev, const NActors:
             ingressRaw = ingress.Raw();
         }
         LOG_NOTICE(ctx, NActorsServices::TEST, "  @@@@@@@@@@ Status=%s LogoBlob=%s Data='%s' Ingress='%s' Raw=0x%lx",
-                   NKikimrProto::EReplyStatus_Name(q.GetStatus()).data(), id.ToString().data(), LimitData(q.GetBuffer()).data(), 
-                   ingressStr.data(), ingressRaw); 
+                   NKikimrProto::EReplyStatus_Name(q.GetStatus()).data(), id.ToString().data(), LimitData(q.GetBuffer()).data(),
+                   ingressStr.data(), ingressRaw);
     }
 }
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1774,14 +1774,14 @@ TString TExpectedSet::ToString() const {
 void TExpectedSet::Check(const TLogoBlobID &id, NKikimrProto::EReplyStatus status, const TString &data) {
     //fprintf(stderr, "Check: id=%s status=%s data=%s\n", ~id.ToString(), ~NKikimrProto::EReplyStatus_Name(status), ~data);
     TMapType::iterator it = Map.find(id);
-    Y_VERIFY(it != Map.end(), "TExpectedSet::Check: can't find id=%s; data# '%s' map# %s", id.ToString().data(), data.data(), 
-           ToString().data()); 
+    Y_VERIFY(it != Map.end(), "TExpectedSet::Check: can't find id=%s; data# '%s' map# %s", id.ToString().data(), data.data(),
+           ToString().data());
     Y_VERIFY(it->second.Status == status, "TExpectedSet::Check: incorrect status %s instead of %s for %s",
-           NKikimrProto::EReplyStatus_Name(status).data(), NKikimrProto::EReplyStatus_Name(it->second.Status).data(), 
-           id.ToString().data()); 
+           NKikimrProto::EReplyStatus_Name(status).data(), NKikimrProto::EReplyStatus_Name(it->second.Status).data(),
+           id.ToString().data());
     Y_VERIFY(it->second.Data == data, "TExpectedSet::Check: incorrect data '%s' instead of '%s' for %s; "
            "got string of size %u instead of string of size %u",
-           data.data(), it->second.Data.data(), id.ToString().data(), unsigned(data.size()), unsigned(it->second.Data.size())); 
+           data.data(), it->second.Data.data(), id.ToString().data(), unsigned(data.size()), unsigned(it->second.Data.size()));
     Map.erase(it);
 }
 
@@ -1988,8 +1988,8 @@ class TManyPutsToCorrespondingVDisksActor : public TActorBootstrapped<TManyPutsT
     friend class TActorBootstrapped<TManyPutsToCorrespondingVDisksActor>;
 
     void Output(const TLogoBlobID &lb) {
-        fprintf(stderr, "%s: %s\n", lb.ToString().data(), 
-                TIngress::PrintVDisksForLogoBlob(Conf->GroupInfo.Get(), TLogoBlobID(lb, 0)).data()); 
+        fprintf(stderr, "%s: %s\n", lb.ToString().data(),
+                TIngress::PrintVDisksForLogoBlob(Conf->GroupInfo.Get(), TLogoBlobID(lb, 0)).data());
     }
 
     void Bootstrap(const TActorContext &ctx) {
@@ -2002,7 +2002,7 @@ class TManyPutsToCorrespondingVDisksActor : public TActorBootstrapped<TManyPutsT
     void SendRequest(const TActorContext &ctx) {
         while (Counter < InFlight && Cur->IsValid()) {
             ++BlobsSent;
-            BytesSent += Cur->Get()->Data.size(); 
+            BytesSent += Cur->Get()->Data.size();
             Counter += PutLogoBlobToCorrespondingVDisks(ctx, Conf->GroupInfo.Get(), Cur->Get()->Id,
                                                         Cur->Get()->Data, Cur->Get()->HandleClass);
             Cur->Next();

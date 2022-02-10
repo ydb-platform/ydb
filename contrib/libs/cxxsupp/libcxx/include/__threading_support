@@ -1,9 +1,9 @@
 // -*- C++ -*-
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions. 
-// See https://llvm.org/LICENSE.txt for license information. 
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception 
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -101,7 +101,7 @@ typedef pthread_once_t __libcpp_exec_once_flag;
 #define _LIBCPP_NULL_THREAD ((__libcpp_thread_t()))
 typedef pthread_t __libcpp_thread_t;
 
-// Thread Local Storage 
+// Thread Local Storage
 typedef pthread_key_t __libcpp_tls_key;
 
 #define _LIBCPP_TLS_DESTRUCTOR_CC

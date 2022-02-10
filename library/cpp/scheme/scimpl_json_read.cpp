@@ -186,7 +186,7 @@ namespace NSc {
         if (cfg.RelaxedJson) {
             return NJson::ReadJsonFast(json, &d);
         } else {
-            TMemoryInput min(json.data(), json.size()); 
+            TMemoryInput min(json.data(), json.size());
             return NJson::ReadJson(&min, &cfg, &d);
         }
     }

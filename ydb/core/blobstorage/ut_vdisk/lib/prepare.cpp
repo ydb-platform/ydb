@@ -112,7 +112,7 @@ TAllPDisks::TAllPDisks(const TAllPDisksConfiguration &cfg)
         }
 
         // database dir
-        TString dbDir = Sprintf("%s/yard", entryDir.data()); 
+        TString dbDir = Sprintf("%s/yard", entryDir.data());
         MakeDirIfNotExist(dbDir.c_str());
 
         // create pdisks
@@ -121,7 +121,7 @@ TAllPDisks::TAllPDisks(const TAllPDisksConfiguration &cfg)
             // pdisk specific parameters
             ui32 pDiskId = i + 1;
             ui64 pDiskGuid = i + 1; // some guide != 0
-            TString filename = Sprintf("%s/pdisk%u.dat", dbDir.data(), pDiskId); 
+            TString filename = Sprintf("%s/pdisk%u.dat", dbDir.data(), pDiskId);
 
             // create pdisk
             PDisks.emplace_back(pDiskId, pDiskGuid, filename, cfg.ChunkSize, cfg.DiskSize);

@@ -77,7 +77,7 @@ class TReadUntilSuccessActor : public TActorBootstrapped<TReadUntilSuccessActor>
             ReadSet.insert(std::pair<TLogoBlobID, TVal>(it->Get()->Id, TVal(it->Get()->Data)));
             PendingReads.insert(it->Get()->Id);
             ++numBlobs;
-            blobsSize += it->Get()->Data.size(); 
+            blobsSize += it->Get()->Data.size();
             it->Next();
         }
 
@@ -391,7 +391,7 @@ SYNC_TEST_BEGIN(TTestHandoffMoveDel, TSyncTestBase)
 virtual void Scenario(const TActorContext &ctx) {
     TDataSnapshotPtr data(new TDataSnapshot(Conf->GroupInfo.Get()));
     TString aaaa("aaaa");
-    TLogoBlobID id0(0, 1, 321, 0, aaaa.size(), 0); 
+    TLogoBlobID id0(0, 1, 321, 0, aaaa.size(), 0);
     // [0:0:0:0:0] - main
     // [0:0:0:1:1] - main
     // [0:0:0:2:0] - main

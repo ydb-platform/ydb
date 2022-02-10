@@ -194,7 +194,7 @@ SRCS(
     src/atomic.cpp
     src/barrier.cpp
     src/bind.cpp
-    src/charconv.cpp 
+    src/charconv.cpp
     src/chrono.cpp
     src/condition_variable.cpp
     src/condition_variable_destructor.cpp

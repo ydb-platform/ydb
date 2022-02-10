@@ -6,7 +6,7 @@
 #include <library/cpp/colorizer/output.h>
 
 #include <util/string/ascii.h>
-#include <util/string/split.h> 
+#include <util/string/split.h>
 #include <util/string/strip.h>
 #include <util/string/subst.h>
 #include <util/system/compiler.h>
@@ -231,10 +231,10 @@ TMaybe<TPosition> TryParseTerminationMessage(TStringBuf& message) {
     size_t startPos = message.find(TerminationMessageMarker);
     size_t endPos = 0;
     if (startPos != TString::npos) {
-        endPos = message.find(')', startPos + TerminationMessageMarker.size()); 
+        endPos = message.find(')', startPos + TerminationMessageMarker.size());
         if (endPos != TString::npos) {
-            TStringBuf lenText = message.Tail(startPos + TerminationMessageMarker.size()) 
-                .Trunc(endPos - startPos - TerminationMessageMarker.size()); 
+            TStringBuf lenText = message.Tail(startPos + TerminationMessageMarker.size())
+                .Trunc(endPos - startPos - TerminationMessageMarker.size());
             try {
                 len = FromString<size_t>(lenText);
             } catch (const TFromStringException&) {

@@ -4,14 +4,14 @@
 #include <ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_hulldefs.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_blob.h>
 #include <ydb/core/blobstorage/vdisk/huge/blobstorage_hullhugedefs.h>
-#include <util/generic/noncopyable.h> 
- 
+#include <util/generic/noncopyable.h>
+
 namespace NKikimr {
 
     ////////////////////////////////////////////////////////////////////////////
     // TDataMerger
     ////////////////////////////////////////////////////////////////////////////
-    class TDataMerger : TNonCopyable { 
+    class TDataMerger : TNonCopyable {
     private:
         TDiskBlobMerger DiskBlobMerger;
         NHuge::TBlobMerger HugeBlobMerger;

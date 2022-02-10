@@ -138,7 +138,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         void OnError(TAutoPtr<TBusMessage> message, EMessageStatus status) override {
             Y_UNUSED(message);
 
-            Y_VERIFY(status == MESSAGE_CONNECT_FAILED, "must be MESSAGE_CONNECT_FAILED, got %s", ToString(status).data()); 
+            Y_VERIFY(status == MESSAGE_CONNECT_FAILED, "must be MESSAGE_CONNECT_FAILED, got %s", ToString(status).data());
 
             TestSync.CheckAndIncrement((failures++) * 2);
         }
@@ -159,7 +159,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
                 status = client.Session->SendMessageAutoPtr(message, &noServerAddr);
             }
 
-            Y_VERIFY(status == MESSAGE_OK, "must be MESSAGE_OK, got %s", ToString(status).data()); 
+            Y_VERIFY(status == MESSAGE_OK, "must be MESSAGE_OK, got %s", ToString(status).data());
 
             if (count == 0) {
                 // lame way to wait until it is connected
@@ -266,7 +266,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         TSystemEvent ErrorHappened;
 
         void OnError(TAutoPtr<TBusMessage>, EMessageStatus status) override {
-            Y_VERIFY(status == MESSAGE_CONNECT_FAILED || status == MESSAGE_TIMEOUT, "got status: %s", ToString(status).data()); 
+            Y_VERIFY(status == MESSAGE_CONNECT_FAILED || status == MESSAGE_TIMEOUT, "got status: %s", ToString(status).data());
             ErrorHappened.Signal();
         }
     };
@@ -378,7 +378,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
 
         void OnError(TAutoPtr<TBusMessage> mess, EMessageStatus status) override {
             Y_UNUSED(mess);
-            Y_VERIFY(status == MESSAGE_SHUTDOWN, "only shutdown allowed, got %s", ToString(status).data()); 
+            Y_VERIFY(status == MESSAGE_SHUTDOWN, "only shutdown allowed, got %s", ToString(status).data());
         }
     };
 
@@ -697,7 +697,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
 
         void OnError(TAutoPtr<TBusMessage> mess, EMessageStatus status) override {
             TestSync.WaitForAndIncrement(0);
-            Y_VERIFY(status == MESSAGE_CONNECT_FAILED || status == MESSAGE_TIMEOUT, "must be connection failed, got %s", ToString(status).data()); 
+            Y_VERIFY(status == MESSAGE_CONNECT_FAILED || status == MESSAGE_TIMEOUT, "must be connection failed, got %s", ToString(status).data());
             mess.Destroy();
             TestSync.CheckAndIncrement(1);
         }
@@ -726,7 +726,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         void OnError(TAutoPtr<TBusMessage> message, EMessageStatus status) override {
             TestSync.CheckAndIncrement(0);
 
-            Y_VERIFY(status == MESSAGE_CONNECT_FAILED, "must be MESSAGE_CONNECT_FAILED, got %s", ToString(status).data()); 
+            Y_VERIFY(status == MESSAGE_CONNECT_FAILED, "must be MESSAGE_CONNECT_FAILED, got %s", ToString(status).data());
 
             // check reset is possible here
             message->Reset();
@@ -755,7 +755,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         client.Session->Shutdown();
 
         ok = client.Session->SendMessageOneWay(message);
-        Y_VERIFY(ok == MESSAGE_SHUTDOWN, "must be shutdown when sending during shutdown, got %s", ToString(ok).data()); 
+        Y_VERIFY(ok == MESSAGE_SHUTDOWN, "must be shutdown when sending during shutdown, got %s", ToString(ok).data());
 
         // check reset is possible here
         message->Reset();
@@ -1074,7 +1074,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
             EMessageStatus status = client.Session->SendMessageOneWay(new TExampleRequest(&client.Proto.RequestCount),
                                                                       &noServerAddr);
 
-            Y_VERIFY(status == MESSAGE_OK, "must be MESSAGE_OK, got %s", ToString(status).data()); 
+            Y_VERIFY(status == MESSAGE_OK, "must be MESSAGE_OK, got %s", ToString(status).data());
             client.TestSync.WaitForAndIncrement(count * 2 + 1);
 
             // First connection attempt is for connect call; second one is to get connect result.
@@ -1085,7 +1085,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
             EMessageStatus status = client.Session->SendMessageOneWay(new TExampleRequest(&client.Proto.RequestCount),
                                                                       &noServerAddr);
 
-            Y_VERIFY(status == MESSAGE_OK, "must be MESSAGE_OK, got %s", ToString(status).data()); 
+            Y_VERIFY(status == MESSAGE_OK, "must be MESSAGE_OK, got %s", ToString(status).data());
             client.TestSync.WaitForAndIncrement(count * 2 + 1);
 
             // First connection attempt is for connect call; second one is to get connect result.
@@ -1107,7 +1107,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
             EMessageStatus status = client.Session->SendMessageOneWay(new TExampleRequest(&client.Proto.RequestCount),
                                                                       &noServerAddr);
 
-            Y_VERIFY(status == MESSAGE_OK, "must be MESSAGE_OK, got %s", ToString(status).data()); 
+            Y_VERIFY(status == MESSAGE_OK, "must be MESSAGE_OK, got %s", ToString(status).data());
             client.TestSync.WaitForAndIncrement(count * 2 + 1);
 
             // First connection attempt is for connect call; second one is to get connect result.
@@ -1134,7 +1134,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
             EMessageStatus status = client.Session->SendMessageOneWay(new TExampleRequest(&client.Proto.RequestCount),
                                                                       &noServerAddr);
 
-            Y_VERIFY(status == MESSAGE_OK, "must be MESSAGE_OK, got %s", ToString(status).data()); 
+            Y_VERIFY(status == MESSAGE_OK, "must be MESSAGE_OK, got %s", ToString(status).data());
             client.TestSync.WaitForAndIncrement(count * 2 + 1);
 
             // First connection attempt is for connect call; second one is to get connect result.

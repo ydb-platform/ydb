@@ -48,7 +48,7 @@ public:
 
     // hack for output empty values
     inline TCsvOutputStream& operator<<(const TString& value) {
-        DoWrite(value.data(), value.size()); 
+        DoWrite(value.data(), value.size());
         return *this;
     }
 

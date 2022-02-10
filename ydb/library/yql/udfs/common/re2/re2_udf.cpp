@@ -163,7 +163,7 @@ namespace {
                 }
 
             } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data()); 
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
             }
         }
 
@@ -340,7 +340,7 @@ namespace {
         if (hasEscape) {
             const std::string_view escapeRef(args[1].AsStringRef());
             if (escapeRef.size() != 1U) {
-                UdfTerminate((TStringBuilder() << Pos_ << " Escape should be single character").data()); 
+                UdfTerminate((TStringBuilder() << Pos_ << " Escape should be single character").data());
             }
             escape = escapeRef.front();
         }

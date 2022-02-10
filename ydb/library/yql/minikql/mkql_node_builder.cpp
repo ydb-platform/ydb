@@ -23,7 +23,7 @@ namespace {
             TStructLiteralBuilder itemBuilder(env);
             auto name = argNames[i];
             auto flags = argFlags[i];
-            bool hasName = name.size() > 0; 
+            bool hasName = name.size() > 0;
             if (startedNames) {
                 MKQL_ENSURE(hasName, "Named arguments already started");
             } else {

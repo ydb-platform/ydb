@@ -60,7 +60,7 @@ public:
         Tenant = Self->GetTenant(path);
         if (!Tenant)
             return Error(Ydb::StatusIds::NOT_FOUND,
-                         Sprintf("Database '%s' doesn't exist", path.data()), ctx); 
+                         Sprintf("Database '%s' doesn't exist", path.data()), ctx);
 
         if (Tenant->IsRemoving()) {
             FillTenantResponse();
@@ -69,7 +69,7 @@ public:
             return true;
         } else if (!Tenant->IsConfiguring() && !Tenant->IsRunning()) {
             return Error(Ydb::StatusIds::UNAVAILABLE,
-                         Sprintf("Database '%s' is busy", path.data()), ctx); 
+                         Sprintf("Database '%s' is busy", path.data()), ctx);
         } else if (Tenant->HostedTenants) {
             return Error(Ydb::StatusIds::PRECONDITION_FAILED,
                          Sprintf("Database '%s' has serverless databases. Remove all of them first", path.data()), ctx);

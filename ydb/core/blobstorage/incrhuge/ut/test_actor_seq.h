@@ -59,7 +59,7 @@ public:
 
         for (const auto& item : msg->Items) {
             LOG_DEBUG(ctx, NActorsServices::TEST, "Item# {Id# %016" PRIx64 " Lsn# %" PRIu64 " LogoBlobId# %s}",
-                    item.Id, item.Lsn, TLogoBlobID(item.Meta.RawU64).ToString().data()); 
+                    item.Id, item.Lsn, TLogoBlobID(item.Meta.RawU64).ToString().data());
         }
 
         auto itemIt = msg->Items.begin();
@@ -151,10 +151,10 @@ public:
             ui32 pattern = Rng();
             ui32 i;
             for (i = 0; i + 4 <= len; i += 4) {
-                *(ui32 *)(data.data() + i) = pattern; 
+                *(ui32 *)(data.data() + i) = pattern;
             }
             while (i < len) {
-                *(ui8 *)(data.data() + i) = pattern; 
+                *(ui8 *)(data.data() + i) = pattern;
                 ++i;
             }
 
@@ -171,7 +171,7 @@ public:
                     std::make_unique<TPayload>(blob.Lsn, blob.LogoBlobId)));
             State.WriteRequest = blob;
             LOG_DEBUG(ctx, NActorsServices::TEST, "sent Write Lsn# %" PRIu64 " LogoBlobId# %s", blob.Lsn,
-                    blob.LogoBlobId.ToString().data()); 
+                    blob.LogoBlobId.ToString().data());
             return;
         } else {
             option -= writeScore;
@@ -182,7 +182,7 @@ public:
     void Handle(TEvIncrHugeDeleteResult::TPtr& ev, const TActorContext& ctx) {
         TEvIncrHugeDeleteResult *msg = ev->Get();
         LOG_DEBUG(ctx, NActorsServices::TEST, "finished Delete Status# %s Id# %016" PRIx64,
-                NKikimrProto::EReplyStatus_Name(msg->Status).data(), ev->Cookie); 
+                NKikimrProto::EReplyStatus_Name(msg->Status).data(), ev->Cookie);
         Y_VERIFY(msg->Status == NKikimrProto::OK);
         Y_VERIFY(ev->Cookie == *State.DeleteRequest);
         State.DeleteRequest.Clear();
@@ -194,7 +194,7 @@ public:
         TEvIncrHugeWriteResult *msg = ev->Get();
         TPayload *payload = static_cast<TPayload *>(msg->Payload.get());
         LOG_DEBUG(ctx, NActorsServices::TEST, "finished Write Status# %s Lsn# %" PRIu64 " LogoBlobId# %s Id# %016" PRIx64,
-                NKikimrProto::EReplyStatus_Name(msg->Status).data(), payload->Lsn, payload->LogoBlobId.ToString().data(), msg->Id); 
+                NKikimrProto::EReplyStatus_Name(msg->Status).data(), payload->Lsn, payload->LogoBlobId.ToString().data(), msg->Id);
         Y_VERIFY(msg->Status == NKikimrProto::OK);
         Y_VERIFY(State.WriteRequest);
         State.WriteRequest->Id = msg->Id;

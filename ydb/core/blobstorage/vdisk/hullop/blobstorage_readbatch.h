@@ -62,7 +62,7 @@ namespace NKikimr {
         template<typename TBitMap>
         void ToBitMap(TBitMap& bm) {
             TValue prev;
-            for (size_t i = 0; i < Ranges.size(); ++i) { 
+            for (size_t i = 0; i < Ranges.size(); ++i) {
                 const TRange& r = Ranges[i];
                 Y_VERIFY_DEBUG(i == 0 || prev < r.first);
                 prev = r.second;
@@ -207,7 +207,7 @@ namespace NKikimr {
             ++NextRequestCookie;
 
             // move stored items to their place and advance Iterator
-            Y_VERIFY_DEBUG(it - outIt == static_cast<ssize_t>(otherItems.size())); 
+            Y_VERIFY_DEBUG(it - outIt == static_cast<ssize_t>(otherItems.size()));
             Iterator = outIt;
             std::move(otherItems.begin(), otherItems.end(), Iterator);
 

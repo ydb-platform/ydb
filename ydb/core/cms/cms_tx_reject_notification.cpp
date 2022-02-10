@@ -43,8 +43,8 @@ public:
         }
 
         LOG_INFO(ctx, NKikimrServices::CMS, "Response status: %s %s",
-                  ToString(Response->Record.GetStatus().GetCode()).data(), 
-                  Response->Record.GetStatus().GetReason().data()); 
+                  ToString(Response->Record.GetStatus().GetCode()).data(),
+                  Response->Record.GetStatus().GetReason().data());
 
         return true;
     }

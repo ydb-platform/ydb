@@ -250,7 +250,7 @@ TProgram::TProgram(
     , OutputFormat_(NYson::EYsonFormat::Pretty)
     , EnableRangeComputeFor_(enableRangeComputeFor)
 {
-    if (SessionId_.empty()) { 
+    if (SessionId_.empty()) {
         SessionId_ = CreateGuidAsString();
     }
 
@@ -1218,7 +1218,7 @@ void TProgram::CloseLastSession() {
     YQL_LOG_CTX_ROOT_SCOPE(GetSessionId());
 
     TString sessionId = TakeSessionId();
-    if (sessionId.empty()) { 
+    if (sessionId.empty()) {
         return;
     }
 

@@ -240,7 +240,7 @@ public:
         }
         PDiskParams = msg->PDiskParams;
         DataBuffer.Resize(PDiskParams->ChunkSize);
-        char *data = DataBuffer.data(); 
+        char *data = DataBuffer.data();
         for (ui32 i = 0; i < PDiskParams->ChunkSize; ++i) {
             data[i] = Rng();
         }
@@ -430,7 +430,7 @@ public:
             ui64 requestIdx = NewTRequestInfo(size, chunkIdx, now, now, false, isLogWritten);
             SendRequest(ctx, std::make_unique<NPDisk::TEvChunkWrite>(PDiskParams->Owner, PDiskParams->OwnerRound,
                     chunkIdx, offset,
-                    new TParts{DataBuffer.data() + Rng() % (DataBuffer.size() - size), size}, 
+                    new TParts{DataBuffer.data() + Rng() % (DataBuffer.size() - size), size},
                     reinterpret_cast<void*>(requestIdx), true, NPriWrite::HullHugeAsyncBlob, Sequential));
             ++ChunkWrite_RequestsSent;
 

@@ -15,7 +15,7 @@ public:
             ythrow TSystemError(EINVAL) << "pipe \"r+\" mode is implemented only on FreeBSD";
         }
 #endif
-        Pipe_ = ::popen(command.data(), mode); 
+        Pipe_ = ::popen(command.data(), mode);
         if (Pipe_ == nullptr) {
             ythrow TSystemError() << "failed to open pipe: " << command.Quote();
         }

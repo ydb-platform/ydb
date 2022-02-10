@@ -426,7 +426,7 @@ ffi_closure_inner (struct closure_frame *frame, char *stack)
   int cabi, i, n, flags, dir, narg_reg;
   const struct abi_params *pabi;
   ffi_type **arg_types;
-  char *argp; 
+  char *argp;
   void *rvalue;
   void **avalue;
 

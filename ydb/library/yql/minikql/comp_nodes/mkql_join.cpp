@@ -276,9 +276,9 @@ private:
     void Write(NUdf::TUnboxedValue&& value) {
         Y_VERIFY_DEBUG(FileState->Output);
         TStringBuf serialized = ItemPacker.Pack(value);
-        ui32 length = serialized.size(); 
+        ui32 length = serialized.size();
         FileState->Output->Write(&length, sizeof(length));
-        FileState->Output->Write(serialized.data(), length); 
+        FileState->Output->Write(serialized.data(), length);
         FileState->TotalSize += sizeof(length);
         FileState->TotalSize += length;
     }
@@ -1547,9 +1547,9 @@ private:
     void Write(NUdf::TUnboxedValue&& value) {
         Y_VERIFY_DEBUG(FileState->Output);
         TStringBuf serialized = ItemPacker.Pack(value);
-        ui32 length = serialized.size(); 
+        ui32 length = serialized.size();
         FileState->Output->Write(&length, sizeof(length));
-        FileState->Output->Write(serialized.data(), length); 
+        FileState->Output->Write(serialized.data(), length);
         FileState->TotalSize += sizeof(length);
         FileState->TotalSize += length;
     }

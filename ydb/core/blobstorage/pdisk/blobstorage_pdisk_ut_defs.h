@@ -84,8 +84,8 @@ do { \
             "\n got \n'" << (a).c_str() << "'\n expected \n'" << (b).c_str() << "'\n" ); \
     } \
     for (ui32 i = 0; i < (a).size(); ++i) { \
-        if ((a).data()[i] != (b).data()[i]) { \ 
-            if ((a).size() > 255) { \ 
+        if ((a).data()[i] != (b).data()[i]) { \
+            if ((a).size() > 255) { \
                 ASSERT_YTHROW(false, \
                     "Unexpected data at position " << i << " got " << (ui32)(a)[i] << \
                     " expected " << (ui32)(b)[i]); \

@@ -1,9 +1,9 @@
 // -*- C++ -*-
 //===-----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions. 
-// See https://llvm.org/LICENSE.txt for license information. 
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception 
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -44,17 +44,17 @@ extern "C" {
 #endif
 
 inline _LIBCPP_INLINE_VISIBILITY float strtof_l(const char* __nptr, char** __endptr,
-                                                locale_t) { 
+                                                locale_t) {
   return ::strtof(__nptr, __endptr);
 }
 
 inline _LIBCPP_INLINE_VISIBILITY double strtod_l(const char* __nptr,
-                                                 char** __endptr, locale_t) { 
+                                                 char** __endptr, locale_t) {
   return ::strtod(__nptr, __endptr);
 }
 
 inline _LIBCPP_INLINE_VISIBILITY long strtol_l(const char* __nptr, char** __endptr,
-                                               int __base, locale_t) { 
+                                               int __base, locale_t) {
   return ::strtol(__nptr, __endptr, __base);
 }
 

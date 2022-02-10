@@ -23,11 +23,11 @@ public:
     void Reset(TStringBuf& buf) {
         Reset();
         ui64 bytes = 0ULL;
-        buf.Skip(Unpack64(buf.data(), buf.size(), bytes)); 
+        buf.Skip(Unpack64(buf.data(), buf.size(), bytes));
         if (bytes) {
-            Y_VERIFY_DEBUG(bytes <= buf.size()); 
+            Y_VERIFY_DEBUG(bytes <= buf.size());
             Mask.Reserve(bytes << 3ULL);
-            std::memcpy(const_cast<ui8*>(Mask.GetChunks()), buf.data(), bytes); 
+            std::memcpy(const_cast<ui8*>(Mask.GetChunks()), buf.data(), bytes);
             buf.Skip(bytes);
         }
     }

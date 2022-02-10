@@ -170,7 +170,7 @@ namespace NKikimr {
             {
                 Y_VERIFY(NumFailRealms >= NumFailRealmsInSubgroup &&
                         NumFailDomainsPerFailRealm >= NumFailDomainsPerFailRealmInSubgroup,
-                        "mirror-3-dc group tolopogy is invalid: %s", topology->ToString().data()); 
+                        "mirror-3-dc group tolopogy is invalid: %s", topology->ToString().data());
             }
 
             void PickSubgroup(ui32 hash, TBlobStorageGroupInfo::TOrderNums &orderNums) override final {

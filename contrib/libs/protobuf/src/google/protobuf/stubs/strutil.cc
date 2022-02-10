@@ -961,7 +961,7 @@ static const char two_ASCII_digits[100][2] = {
 };
 
 char* FastUInt32ToBufferLeft(uint32 u, char* buffer) {
-  uint32 digits; 
+  uint32 digits;
   const char *ASCII_digits = nullptr;
   // The idea of this implementation is to trim the number of divides to as few
   // as possible by using multiplication and subtraction rather than mod (%),

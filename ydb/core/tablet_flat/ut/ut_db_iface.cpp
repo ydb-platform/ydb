@@ -126,7 +126,7 @@ Y_UNIT_TEST_SUITE(DBase) {
 
         const auto subset = me->Subset(1, TEpoch::Max(), { }, { });
 
-        UNIT_ASSERT(subset->Flatten.size() == 3 && subset->Frozen.size() == 3); 
+        UNIT_ASSERT(subset->Flatten.size() == 3 && subset->Frozen.size() == 3);
     }
 
     Y_UNIT_TEST(Defaults)
@@ -191,7 +191,7 @@ Y_UNIT_TEST_SUITE(DBase) {
         { /*_ Check memtable snapshots for compactions */
             auto subset = me->Subset(1, TEpoch::Max(), { }, { });
 
-            UNIT_ASSERT(subset->Flatten.size() == 2 && subset->Frozen.size() == 0); 
+            UNIT_ASSERT(subset->Flatten.size() == 2 && subset->Frozen.size() == 0);
             UNIT_ASSERT(subset->Flatten[0]->Stat.Rows == 2);
             UNIT_ASSERT(subset->Flatten[1]->Stat.Rows == 2);
         }
@@ -203,7 +203,7 @@ Y_UNIT_TEST_SUITE(DBase) {
         { /*_ Check Replace(...) with non-trivail subsets */
             auto subset = me->Subset(1, TEpoch::Max(), { }, { });
 
-            UNIT_ASSERT(subset->Flatten.size() == 1 && subset->Frozen.size() == 0); 
+            UNIT_ASSERT(subset->Flatten.size() == 1 && subset->Frozen.size() == 0);
             UNIT_ASSERT(subset->Flatten[0]->Stat.Rows == 4);
             UNIT_ASSERT(subset->Flatten[0]->Stat.Drops == 0);
         }
@@ -213,7 +213,7 @@ Y_UNIT_TEST_SUITE(DBase) {
 
             me.Begin()->DebugDump(dump, *DbgRegistry());
 
-            UNIT_ASSERT(dump.Str().size() > 20 && dump.Str().size() < 10000); 
+            UNIT_ASSERT(dump.Str().size() > 20 && dump.Str().size() < 10000);
         }
     }
 
@@ -315,7 +315,7 @@ Y_UNIT_TEST_SUITE(DBase) {
         {
             const auto subset = me->Subset(2, TEpoch::Max(), { }, { });
 
-            UNIT_ASSERT(subset->Flatten.size() == 1 && subset->Frozen.size() == 0); 
+            UNIT_ASSERT(subset->Flatten.size() == 1 && subset->Frozen.size() == 0);
         }
 
         me.To(40).Replay(EPlay::Boot).Replay(EPlay::Redo);
@@ -462,7 +462,7 @@ Y_UNIT_TEST_SUITE(DBase) {
 
         auto subset = me.To(18)->Subset(1, TEpoch::Max(), { }, { });
 
-        UNIT_ASSERT(subset->Flatten.size() == 2 && subset->Flatten[0]->Small); 
+        UNIT_ASSERT(subset->Flatten.size() == 2 && subset->Flatten[0]->Small);
         UNIT_ASSERT(subset->Flatten[0]->Small->Stats().Items == 1);
         UNIT_ASSERT(me->Counters().Parts.SmallItems == 2);
         UNIT_ASSERT(me->Counters().Parts.SmallBytes == 2 * 8 + 17 + 21);
@@ -472,7 +472,7 @@ Y_UNIT_TEST_SUITE(DBase) {
 
         auto last = me.To(20).Compact(1, true)->Subset(1, TEpoch::FromIndex(666), { }, { });
 
-        UNIT_ASSERT(last->Flatten.size() == 1 && last->Flatten[0]->Small); 
+        UNIT_ASSERT(last->Flatten.size() == 1 && last->Flatten[0]->Small);
         UNIT_ASSERT(last->Flatten[0]->Small->Stats().Items == 2);
         UNIT_ASSERT(last->Flatten[0]->Small->Stats().Size == 54);
         UNIT_ASSERT(me->Counters().Parts.SmallItems == 2);

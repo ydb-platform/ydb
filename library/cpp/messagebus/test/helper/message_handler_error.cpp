@@ -6,7 +6,7 @@ using namespace NBus;
 using namespace NBus::NTest;
 
 void TBusClientHandlerError::OnError(TAutoPtr<TBusMessage>, EMessageStatus status) {
-    Y_FAIL("must not be called, status: %s", ToString(status).data()); 
+    Y_FAIL("must not be called, status: %s", ToString(status).data());
 }
 
 void TBusClientHandlerError::OnReply(TAutoPtr<TBusMessage>, TAutoPtr<TBusMessage>) {
@@ -18,7 +18,7 @@ void TBusClientHandlerError::OnMessageSentOneWay(TAutoPtr<TBusMessage>) {
 }
 
 void TBusServerHandlerError::OnError(TAutoPtr<TBusMessage>, EMessageStatus status) {
-    Y_FAIL("must not be called, status: %s", ToString(status).data()); 
+    Y_FAIL("must not be called, status: %s", ToString(status).data());
 }
 
 void TBusServerHandlerError::OnMessage(TOnMessageContext&) {

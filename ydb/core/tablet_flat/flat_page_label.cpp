@@ -22,7 +22,7 @@ namespace NPage {
     {
         auto label = TDeref<TLabel>::Copy(raw.begin(), 0);
 
-        if (raw.size() < 8) { 
+        if (raw.size() < 8) {
             Y_FAIL("NPage blob is too small to hold label");
         } else if (label.Type != type && type != EPage::Undef) {
             Y_FAIL("NPage blob has an unexpected label type");

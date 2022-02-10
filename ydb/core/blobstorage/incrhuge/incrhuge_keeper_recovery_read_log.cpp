@@ -97,7 +97,7 @@ namespace NKikimr {
                                 }
                                 s << "]";
                                 LOG_DEBUG(ctx, NKikimrServices::BS_INCRHUGE, "IncrHugeDelete# Lsn# %" PRIu64 " %s",
-                                        item.Lsn, s.Str().data()); 
+                                        item.Lsn, s.Str().data());
 
                                 DeleteMerger(record);
                             }

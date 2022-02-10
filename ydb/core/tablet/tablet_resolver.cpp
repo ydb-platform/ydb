@@ -478,7 +478,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
 
         LOG_DEBUG(ctx, NKikimrServices::TABLET_RESOLVER,
                   "Handle TEvForward tabletId: %" PRIu64 " entry.State: %s ev: %s",
-                  tabletId, TEntry::StateToString(entry.State), msg->ToString().data()); 
+                  tabletId, TEntry::StateToString(entry.State), msg->ToString().data());
 
         switch (entry.State) {
         case TEntry::StInit:
@@ -604,7 +604,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
 
         LOG_DEBUG(ctx, NKikimrServices::TABLET_RESOLVER, "Handle TEvInfo tabletId: %" PRIu64
             " entry.State: %s success: %s ev: %s", tabletId, TEntry::StateToString(entry.State),
-            (success ? "true" : "false"), ev->GetBase()->ToString().data()); 
+            (success ? "true" : "false"), ev->GetBase()->ToString().data());
 
         switch (entry.State) {
         case TEntry::StInit:
@@ -862,7 +862,7 @@ public:
             HFunc(TEvents::TEvUndelivered, Handle);
             default:
                 LOG_WARN(ctx, NKikimrServices::TABLET_RESOLVER, "TTabletResolver::StateWork unexpected event type: %" PRIx32
-                    " event: %s", ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"); 
+                    " event: %s", ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
                 break;
         }
     }

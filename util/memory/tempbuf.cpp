@@ -10,9 +10,9 @@
 #include <utility>
 #include <util/thread/singleton.h>
 
-#ifndef TMP_BUF_LEN 
+#ifndef TMP_BUF_LEN
     #define TMP_BUF_LEN (64 * 1024)
-#endif 
+#endif
 
 class TTempBuf::TImpl: public TRefCounted<TImpl, TSimpleCounter, TImpl> {
 public:

@@ -148,12 +148,12 @@ size_t CompactTrieMakeFastLayout(IOutputStream& os, const char* data, size_t dat
 template <class TTrieBuilder>
 size_t CompactTrieMakeFastLayout(IOutputStream& os, const TTrieBuilder& builder, bool verbose = false);
 
-// Composition of minimization and fast layout
-template <class TPacker>
+// Composition of minimization and fast layout 
+template <class TPacker> 
 size_t CompactTrieMinimizeAndMakeFastLayout(IOutputStream& os, const char* data, size_t datalength, bool verbose = false, const TPacker& packer = TPacker());
-
-template <class TTrieBuilder>
+ 
+template <class TTrieBuilder> 
 size_t CompactTrieMinimizeAndMakeFastLayout(IOutputStream& os, const TTrieBuilder& builder, bool verbose = false);
-
+ 
 // Implementation details moved here.
 #include "comptrie_builder.inl"

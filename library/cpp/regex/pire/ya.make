@@ -31,10 +31,10 @@ SRCS(
     minimize.h
 )
 
-PEERDIR(
+PEERDIR( 
     library/cpp/charset
-)
-
+) 
+ 
 END()
 
 RECURSE_FOR_TESTS(ut)

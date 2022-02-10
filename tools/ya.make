@@ -110,7 +110,7 @@ RECURSE(
     protobin2mr
     prwordsfr
     pure_compiler
-    pure_fingerprints
+    pure_fingerprints 
     pycron
     python-netconfig-static
     qlz

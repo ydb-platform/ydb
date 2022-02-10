@@ -76,7 +76,7 @@ enum WC_TYPE {        // TODO move no NUnicode
     CCL_NUM = 57,
     CCL_MASK = 0x3F,
 
-    IS_ASCII_XDIGIT = 1 << 6,
+    IS_ASCII_XDIGIT = 1 << 6, 
     IS_DIGIT = 1 << 7,
     IS_NONBREAK = 1 << 8,
 
@@ -251,7 +251,7 @@ inline bool IsHangulTrailing(wchar32 ch) {
     return NUnicode::CharHasType(ch, SHIFT(Lo_TRAILING));
 }
 inline bool IsHexdigit(wchar32 ch) {
-    return NUnicode::NPrivate::CharInfo(ch) & IS_ASCII_XDIGIT;
+    return NUnicode::NPrivate::CharInfo(ch) & IS_ASCII_XDIGIT; 
 }
 inline bool IsDecdigit(wchar32 ch) {
     return NUnicode::CharHasType(ch, SHIFT(Nd_DIGIT));

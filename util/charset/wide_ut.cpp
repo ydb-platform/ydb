@@ -1,4 +1,4 @@
-#include "utf8.h"
+#include "utf8.h" 
 #include "wide.h"
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -32,7 +32,7 @@ namespace {
 
     const wchar32 LEAD_BITS_MASK_2_BYTES = 0x1F;
     const wchar32 LEAD_BITS_MASK_3_BYTES = 0x0F;
-    const wchar32 LEAD_BITS_MASK_4_BYTES = 0x07;
+    const wchar32 LEAD_BITS_MASK_4_BYTES = 0x07; 
 
     wchar16 ws[] = {
         0x0009,
@@ -126,7 +126,7 @@ namespace {
         wchar32 w = 0;
         const unsigned char* p = first;
 
-        RECODE_RESULT r = ReadUTF8CharAndAdvance(w, p, first + n);
+        RECODE_RESULT r = ReadUTF8CharAndAdvance(w, p, first + n); 
         UNIT_ASSERT(w == expected);
         UNIT_ASSERT(size_t(p - first) == n);
         UNIT_ASSERT(r == RECODE_OK);
@@ -136,7 +136,7 @@ namespace {
         wchar32 w = 0;
         const unsigned char* p = first;
 
-        RECODE_RESULT r = ReadUTF8CharAndAdvance(w, p, last);
+        RECODE_RESULT r = ReadUTF8CharAndAdvance(w, p, last); 
         UNIT_ASSERT(w == BROKEN_RUNE);
         UNIT_ASSERT(p - first == 0);
         UNIT_ASSERT(r == RECODE_BROKENSYMBOL);
@@ -146,7 +146,7 @@ namespace {
         wchar32 w = 0;
         const unsigned char* p = first;
 
-        RECODE_RESULT r = ReadUTF8CharAndAdvance(w, p, first + n);
+        RECODE_RESULT r = ReadUTF8CharAndAdvance(w, p, first + n); 
         (void)w;
         UNIT_ASSERT(p - first == 0);
         UNIT_ASSERT(r == RECODE_EOINPUT);
@@ -154,7 +154,7 @@ namespace {
 
     void CheckCharLen(unsigned char* first, unsigned char* last, size_t len, RECODE_RESULT result) {
         size_t n = 0;
-        RECODE_RESULT r = GetUTF8CharLen(n, first, last);
+        RECODE_RESULT r = GetUTF8CharLen(n, first, last); 
         UNIT_ASSERT(n == len);
         UNIT_ASSERT(r == result);
     }
@@ -243,19 +243,19 @@ void TConversionTest::TestReadUTF8Char() {
         CheckBrokenSymbol(first, last);
     }
 
-    // overlong encoding: leading byte of 2-byte symbol: 1100 0000 - 1100 0001
-    for (c = 0xC0; c <= 0xC1; ++c) {
-        u = c;
-        CheckBrokenSymbol(first, last);
-
-        u |= 0x8000;
-        CheckBrokenSymbol(first, first + 2);
-
-        CheckEndOfInput(first, 1);
-    }
-
+    // overlong encoding: leading byte of 2-byte symbol: 1100 0000 - 1100 0001 
+    for (c = 0xC0; c <= 0xC1; ++c) { 
+        u = c; 
+        CheckBrokenSymbol(first, last); 
+ 
+        u |= 0x8000; 
+        CheckBrokenSymbol(first, first + 2); 
+ 
+        CheckEndOfInput(first, 1); 
+    } 
+ 
     // leading byte of 2-byte symbol: 1100 0000 - 1101 1111
-    for (c = 0xC2; c <= 0xDF; ++c) {
+    for (c = 0xC2; c <= 0xDF; ++c) { 
         u = c;
         CheckBrokenSymbol(first, last);
 
@@ -268,24 +268,24 @@ void TConversionTest::TestReadUTF8Char() {
         CheckEndOfInput(first, 1);
     }
 
-    // possible overlong encoding with leading byte 1110 0000
-    {
-        u = c = 0xE0;
-        CheckBrokenSymbol(first, last);
-
-        u |= 0x808000;
-        CheckBrokenSymbol(first, first + 3);
-
-        u = c | 0x80A000;
-        e = 0x800;
-        CheckRecodeOK(e, first, 3);
-
-        CheckEndOfInput(first, 2);
-        CheckEndOfInput(first, 1);
-    }
-
-    // leading byte of 3-byte symbol: 1110 0001 - 1110 1111
-    for (c = 0xE1; c <= 0xEF; ++c) {
+    // possible overlong encoding with leading byte 1110 0000 
+    { 
+        u = c = 0xE0; 
+        CheckBrokenSymbol(first, last); 
+ 
+        u |= 0x808000; 
+        CheckBrokenSymbol(first, first + 3); 
+ 
+        u = c | 0x80A000; 
+        e = 0x800; 
+        CheckRecodeOK(e, first, 3); 
+ 
+        CheckEndOfInput(first, 2); 
+        CheckEndOfInput(first, 1); 
+    } 
+ 
+    // leading byte of 3-byte symbol: 1110 0001 - 1110 1111 
+    for (c = 0xE1; c <= 0xEF; ++c) { 
         u = c;
         CheckBrokenSymbol(first, last);
 
@@ -299,25 +299,25 @@ void TConversionTest::TestReadUTF8Char() {
         CheckEndOfInput(first, 1);
     }
 
-    // possible overlong encoding with leading byte 1111 0000
-    {
-        u = c = 0xF0;
-        CheckBrokenSymbol(first, last);
-
-        u |= 0x80808000;
-        CheckBrokenSymbol(first, first + 4);
-
-        u = c | 0x80809000;
-        e = 0x10000;
-        CheckRecodeOK(e, first, 4);
-
-        CheckEndOfInput(first, 3);
-        CheckEndOfInput(first, 2);
-        CheckEndOfInput(first, 1);
-    }
-
-    // leading byte of 4-byte symbol: 1111 0001 - 1111 0111
-    for (c = 0xF1; c <= 0xF3; ++c) {
+    // possible overlong encoding with leading byte 1111 0000 
+    { 
+        u = c = 0xF0; 
+        CheckBrokenSymbol(first, last); 
+ 
+        u |= 0x80808000; 
+        CheckBrokenSymbol(first, first + 4); 
+ 
+        u = c | 0x80809000; 
+        e = 0x10000; 
+        CheckRecodeOK(e, first, 4); 
+ 
+        CheckEndOfInput(first, 3); 
+        CheckEndOfInput(first, 2); 
+        CheckEndOfInput(first, 1); 
+    } 
+ 
+    // leading byte of 4-byte symbol: 1111 0001 - 1111 0111 
+    for (c = 0xF1; c <= 0xF3; ++c) { 
         u = c;
         CheckBrokenSymbol(first, last);
 
@@ -332,26 +332,26 @@ void TConversionTest::TestReadUTF8Char() {
         CheckEndOfInput(first, 1);
     }
 
-    // possible invalid code points with leading byte 1111 0100
-    {
-        c = 0xF4;
-
-        u = 0x80808000 | c;
-        e = c & LEAD_BITS_MASK_4_BYTES;
-        e <<= 18;
-        CheckRecodeOK(e, first, 4);
-
-        // the largest possible Unicode code point
-        u = 0xBFBF8F00 | c;
-        e = 0x10FFFF;
-        CheckRecodeOK(e, first, 4);
-
-        u = 0x80809000 | c;
-        CheckBrokenSymbol(first, last);
-    }
-
-    // broken symbols: 1111 0101 - 1111 1111
-    for (c = 0xF5; c <= 0xFF; ++c) {
+    // possible invalid code points with leading byte 1111 0100 
+    { 
+        c = 0xF4; 
+ 
+        u = 0x80808000 | c; 
+        e = c & LEAD_BITS_MASK_4_BYTES; 
+        e <<= 18; 
+        CheckRecodeOK(e, first, 4); 
+ 
+        // the largest possible Unicode code point 
+        u = 0xBFBF8F00 | c; 
+        e = 0x10FFFF; 
+        CheckRecodeOK(e, first, 4); 
+ 
+        u = 0x80809000 | c; 
+        CheckBrokenSymbol(first, last); 
+    } 
+ 
+    // broken symbols: 1111 0101 - 1111 1111 
+    for (c = 0xF5; c <= 0xFF; ++c) { 
         u = c;
         CheckBrokenSymbol(first, last);
     }
@@ -428,33 +428,33 @@ void TConversionTest::TestWriteUTF8Char() {
 
     for (w = 0x00; w < 0x80; ++w) {
         u = 0;
-        WriteUTF8Char(w, n, reinterpret_cast<unsigned char*>(&u));
+        WriteUTF8Char(w, n, reinterpret_cast<unsigned char*>(&u)); 
         UNIT_ASSERT((u & 0xFFFFFF80) == 0x00000000);
         UNIT_ASSERT(n == 1);
     }
 
     for (w = 0x80; w < 0x800; ++w) {
         u = 0;
-        WriteUTF8Char(w, n, reinterpret_cast<unsigned char*>(&u));
+        WriteUTF8Char(w, n, reinterpret_cast<unsigned char*>(&u)); 
         UNIT_ASSERT((u & 0xFFFFC000) == 0x00008000); // see constants in ReadUTF8Char
         UNIT_ASSERT(n == 2);
     }
 
     for (w = 0x800; w < 0x10000; ++w) {
         u = 0;
-        WriteUTF8Char(w, n, reinterpret_cast<unsigned char*>(&u));
+        WriteUTF8Char(w, n, reinterpret_cast<unsigned char*>(&u)); 
         UNIT_ASSERT((u & 0xFFC0C000) == 0x00808000); // see constants in ReadUTF8Char
         UNIT_ASSERT(n == 3);
     }
 
     for (w = 0x10000; w < 0x80; ++w) {
-        WriteUTF8Char(w, n, reinterpret_cast<unsigned char*>(&u));
+        WriteUTF8Char(w, n, reinterpret_cast<unsigned char*>(&u)); 
         UNIT_ASSERT((u & 0xC0C0C000) == 0x80808000); // see constants in ReadUTF8Char
         UNIT_ASSERT(n == 4);
     }
 }
 
-static void TestSurrogates(const char* str, const wchar16* wide, size_t wideSize) {
+static void TestSurrogates(const char* str, const wchar16* wide, size_t wideSize) { 
     TUtf16String w = UTF8ToWide(str);
 
     UNIT_ASSERT(w.size() == wideSize);
@@ -496,18 +496,18 @@ void TConversionTest::TestUTF8ToWide() {
     UNIT_ASSERT(buffer[3] == 0x0000);
     UNIT_ASSERT(written == 0);
 
-    w = UTF8ToWide(asciiLatinAlphabet, strlen(asciiLatinAlphabet));
+    w = UTF8ToWide(asciiLatinAlphabet, strlen(asciiLatinAlphabet)); 
     UNIT_ASSERT(w == wideLatinAlphabet);
-    w = UTF8ToWide(utf8CyrillicAlphabet, strlen(utf8CyrillicAlphabet));
+    w = UTF8ToWide(utf8CyrillicAlphabet, strlen(utf8CyrillicAlphabet)); 
     UNIT_ASSERT(w == wideCyrillicAlphabet);
 
     const char* utf8NonBMP = "\xf4\x80\x89\x84\xf4\x80\x89\x87\xf4\x80\x88\xba";
     wchar16 wNonBMPDummy[] = {0xDBC0, 0xDE44, 0xDBC0, 0xDE47, 0xDBC0, 0xDE3A};
-    TestSurrogates(utf8NonBMP, wNonBMPDummy, Y_ARRAY_SIZE(wNonBMPDummy));
+    TestSurrogates(utf8NonBMP, wNonBMPDummy, Y_ARRAY_SIZE(wNonBMPDummy)); 
 
     const char* utf8NonBMP2 = "ab\xf4\x80\x89\x87n";
     wchar16 wNonBMPDummy2[] = {'a', 'b', 0xDBC0, 0xDE47, 'n'};
-    TestSurrogates(utf8NonBMP2, wNonBMPDummy2, Y_ARRAY_SIZE(wNonBMPDummy2));
+    TestSurrogates(utf8NonBMP2, wNonBMPDummy2, Y_ARRAY_SIZE(wNonBMPDummy2)); 
 
     UNIT_ASSERT_VALUES_EQUAL(WideToUTF8(UTF8ToWide(WideToUTF8(UTF8ToWide<true>(
                                  "m\xFB\xB2\xA5\xAA\xAFyeuse.sexwebcamz.com")))),
@@ -519,7 +519,7 @@ void TConversionTest::TestWideToUTF8() {
     TString s = WideToUTF8(UnicodeText_);
     size_t len = 0;
     for (TUtf16String::const_iterator i = UnicodeText_.begin(), ie = UnicodeText_.end(); i != ie; ++i) {
-        len += UTF8RuneLenByUCS(*i);
+        len += UTF8RuneLenByUCS(*i); 
     }
 
     UNIT_ASSERT(s.size() == Utf8Text_.size());
@@ -589,9 +589,9 @@ class TWideUtilTest: public TTestBase {
     UNIT_TEST(TestToLower);
     UNIT_TEST(TestToUpper);
     UNIT_TEST(TestWideString);
-    UNIT_TEST(TestCountWideChars);
-    UNIT_TEST(TestIsValidUTF16);
-    UNIT_TEST(TestIsStringASCII);
+    UNIT_TEST(TestCountWideChars); 
+    UNIT_TEST(TestIsValidUTF16); 
+    UNIT_TEST(TestIsStringASCII); 
     UNIT_TEST(TestIsLowerWordStr);
     UNIT_TEST(TestIsUpperWordStr);
     UNIT_TEST(TestIsTitleStr);
@@ -607,7 +607,7 @@ public:
         TUtf16String s;
         s.append(ws, Y_ARRAY_SIZE(ws)).append(3, 'a').append(ws, Y_ARRAY_SIZE(ws)).append(3, 'b').append(ws, Y_ARRAY_SIZE(ws));
         Collapse(s);
-        UNIT_ASSERT(s == ASCIIToWide(" aaa bbb "));
+        UNIT_ASSERT(s == ASCIIToWide(" aaa bbb ")); 
         {
             const TUtf16String w(ASCIIToWide(" a b c "));
             s = w;
@@ -617,25 +617,25 @@ public:
             UNIT_ASSERT(s.c_str() == w.c_str()); // Collapse() does not change the string at all
 #endif
         }
-        s = ASCIIToWide("  123    456  ");
+        s = ASCIIToWide("  123    456  "); 
         Collapse(s);
-        UNIT_ASSERT(s == ASCIIToWide(" 123 456 "));
+        UNIT_ASSERT(s == ASCIIToWide(" 123 456 ")); 
 
-        s = ASCIIToWide("  1\n\n\n23\t    4\f\f56  ");
+        s = ASCIIToWide("  1\n\n\n23\t    4\f\f56  "); 
         Collapse(s);
-        UNIT_ASSERT(s == ASCIIToWide(" 1 23 4 56 "));
+        UNIT_ASSERT(s == ASCIIToWide(" 1 23 4 56 ")); 
 
-        s = ASCIIToWide(" 1\n\n\n\f\f56  ");
+        s = ASCIIToWide(" 1\n\n\n\f\f56  "); 
         Collapse(s);
-        UNIT_ASSERT(s == ASCIIToWide(" 1 56 "));
+        UNIT_ASSERT(s == ASCIIToWide(" 1 56 ")); 
 
-        s = ASCIIToWide("  1\r\n,\n(\n23\t    4\f\f56  ");
+        s = ASCIIToWide("  1\r\n,\n(\n23\t    4\f\f56  "); 
         Collapse(s);
-        UNIT_ASSERT(s == ASCIIToWide(" 1 , ( 23 4 56 "));
+        UNIT_ASSERT(s == ASCIIToWide(" 1 , ( 23 4 56 ")); 
 
-        s = ASCIIToWide("1 23  ");
+        s = ASCIIToWide("1 23  "); 
         Collapse(s);
-        UNIT_ASSERT(s == ASCIIToWide("1 23 "));
+        UNIT_ASSERT(s == ASCIIToWide("1 23 ")); 
         {
             const TUtf16String w = ASCIIToWide(" ");
             s = w;
@@ -645,17 +645,17 @@ public:
             UNIT_ASSERT(s.c_str() == w.c_str()); // Collapse() does not change the string at all
 #endif
         }
-        s = ASCIIToWide("   ");
+        s = ASCIIToWide("   "); 
         Collapse(s);
-        UNIT_ASSERT(s == ASCIIToWide(" "));
+        UNIT_ASSERT(s == ASCIIToWide(" ")); 
 
-        s = ASCIIToWide(",\r\n\"");
+        s = ASCIIToWide(",\r\n\""); 
         Collapse(s);
-        UNIT_ASSERT(s == ASCIIToWide(", \""));
+        UNIT_ASSERT(s == ASCIIToWide(", \"")); 
 
-        s = ASCIIToWide("-");
+        s = ASCIIToWide("-"); 
         Collapse(s);
-        UNIT_ASSERT(s == ASCIIToWide("-"));
+        UNIT_ASSERT(s == ASCIIToWide("-")); 
 
         s.clear();
         Collapse(s);
@@ -667,62 +667,62 @@ public:
         s.append(ws, Y_ARRAY_SIZE(ws)).append(3, 'a').append(ws, Y_ARRAY_SIZE(ws)).append(3, 'b').append(ws, Y_ARRAY_SIZE(ws));
         size_t n = Collapse(s.begin(), s.size());
         s.resize(n);
-        UNIT_ASSERT(s == ASCIIToWide(" aaa bbb "));
+        UNIT_ASSERT(s == ASCIIToWide(" aaa bbb ")); 
 
-        s = ASCIIToWide(" a b c ");
+        s = ASCIIToWide(" a b c "); 
         n = Collapse(s.begin(), s.size());
         UNIT_ASSERT(n == s.size()); // length was not changed
-        UNIT_ASSERT(s == ASCIIToWide(" a b c "));
+        UNIT_ASSERT(s == ASCIIToWide(" a b c ")); 
 
-        s = ASCIIToWide("  123    456  ");
+        s = ASCIIToWide("  123    456  "); 
         n = Collapse(s.begin(), s.size());
         s.resize(n);
-        UNIT_ASSERT(s == ASCIIToWide(" 123 456 "));
+        UNIT_ASSERT(s == ASCIIToWide(" 123 456 ")); 
 
-        s = ASCIIToWide("  1\n\n\n23\t    4\f\f56  ");
+        s = ASCIIToWide("  1\n\n\n23\t    4\f\f56  "); 
         n = Collapse(s.begin(), s.size());
         s.resize(n);
-        UNIT_ASSERT(s == ASCIIToWide(" 1 23 4 56 "));
+        UNIT_ASSERT(s == ASCIIToWide(" 1 23 4 56 ")); 
 
-        s = ASCIIToWide(" 1\n\n\n\f\f56  ");
+        s = ASCIIToWide(" 1\n\n\n\f\f56  "); 
         n = Collapse(s.begin(), s.size());
         s.resize(n);
-        UNIT_ASSERT(s == ASCIIToWide(" 1 56 "));
+        UNIT_ASSERT(s == ASCIIToWide(" 1 56 ")); 
 
-        s = ASCIIToWide("  1\r\n,\n(\n23\t    4\f\f56  ");
+        s = ASCIIToWide("  1\r\n,\n(\n23\t    4\f\f56  "); 
         n = Collapse(s.begin(), s.size());
         s.resize(n);
-        UNIT_ASSERT(s == ASCIIToWide(" 1 , ( 23 4 56 "));
+        UNIT_ASSERT(s == ASCIIToWide(" 1 , ( 23 4 56 ")); 
 
-        s = ASCIIToWide("1 23  ");
+        s = ASCIIToWide("1 23  "); 
         n = Collapse(s.begin(), s.size());
         s.resize(n);
-        UNIT_ASSERT(s == ASCIIToWide("1 23 "));
+        UNIT_ASSERT(s == ASCIIToWide("1 23 ")); 
 
-        s = ASCIIToWide(" ");
+        s = ASCIIToWide(" "); 
         n = Collapse(s.begin(), s.size());
         UNIT_ASSERT(n == 1);
-        UNIT_ASSERT(s == ASCIIToWide(" "));
+        UNIT_ASSERT(s == ASCIIToWide(" ")); 
 
-        s = ASCIIToWide("   ");
+        s = ASCIIToWide("   "); 
         n = Collapse(s.begin(), s.size());
         s.resize(n);
-        UNIT_ASSERT(s == ASCIIToWide(" "));
+        UNIT_ASSERT(s == ASCIIToWide(" ")); 
 
-        s = ASCIIToWide(",\r\n\"");
+        s = ASCIIToWide(",\r\n\""); 
         n = Collapse(s.begin(), s.size());
         s.resize(n);
-        UNIT_ASSERT(s == ASCIIToWide(", \""));
+        UNIT_ASSERT(s == ASCIIToWide(", \"")); 
 
-        s = ASCIIToWide("-");
+        s = ASCIIToWide("-"); 
         n = Collapse(s.begin(), s.size());
         UNIT_ASSERT(n == 1);
-        UNIT_ASSERT(s == ASCIIToWide("-"));
+        UNIT_ASSERT(s == ASCIIToWide("-")); 
 
-        s = ASCIIToWide("\t");
+        s = ASCIIToWide("\t"); 
         n = Collapse(s.begin(), s.size());
         UNIT_ASSERT(n == 1);
-        UNIT_ASSERT(s == ASCIIToWide(" "));
+        UNIT_ASSERT(s == ASCIIToWide(" ")); 
 
         s.clear();
         n = Collapse(s.begin(), s.size());
@@ -740,7 +740,7 @@ public:
         StripRight(s);
         UNIT_ASSERT(s == TUtf16String());
 
-        s = ASCIIToWide(" \t\r\n");
+        s = ASCIIToWide(" \t\r\n"); 
         Strip(s);
         UNIT_ASSERT(s == TUtf16String());
         s = ASCIIToWide(" \t\r\n");
@@ -750,9 +750,9 @@ public:
         StripRight(s);
         UNIT_ASSERT(s == TUtf16String());
 
-        s = ASCIIToWide("\t\f\va \r\n");
+        s = ASCIIToWide("\t\f\va \r\n"); 
         Strip(s);
-        UNIT_ASSERT(s == ASCIIToWide("a"));
+        UNIT_ASSERT(s == ASCIIToWide("a")); 
         s = ASCIIToWide("\t\f\va \r\n");
         StripLeft(s);
         UNIT_ASSERT(s == ASCIIToWide("a \r\n"));
@@ -760,9 +760,9 @@ public:
         StripRight(s);
         UNIT_ASSERT(s == ASCIIToWide("\t\f\va"));
 
-        s = ASCIIToWide("\r\na\r\nb\t\tc\r\n");
+        s = ASCIIToWide("\r\na\r\nb\t\tc\r\n"); 
         Strip(s);
-        UNIT_ASSERT(s == ASCIIToWide("a\r\nb\t\tc"));
+        UNIT_ASSERT(s == ASCIIToWide("a\r\nb\t\tc")); 
         s = ASCIIToWide("\r\na\r\nb\t\tc\r\n");
         StripLeft(s);
         UNIT_ASSERT(s == ASCIIToWide("a\r\nb\t\tc\r\n"));
@@ -815,16 +815,16 @@ public:
 
             switch (c) {
                 case '<':
-                    UNIT_ASSERT(w == ASCIIToWide("&lt;"));
+                    UNIT_ASSERT(w == ASCIIToWide("&lt;")); 
                     break;
                 case '>':
-                    UNIT_ASSERT(w == ASCIIToWide("&gt;"));
+                    UNIT_ASSERT(w == ASCIIToWide("&gt;")); 
                     break;
                 case '&':
-                    UNIT_ASSERT(w == ASCIIToWide("&amp;"));
+                    UNIT_ASSERT(w == ASCIIToWide("&amp;")); 
                     break;
                 case '"':
-                    UNIT_ASSERT(w == ASCIIToWide("&quot;"));
+                    UNIT_ASSERT(w == ASCIIToWide("&quot;")); 
                     break;
                 default:
                     UNIT_ASSERT(w == TUtf16String(1, c));
@@ -838,20 +838,20 @@ public:
 
             switch (c) {
                 case '<':
-                    UNIT_ASSERT(w == ASCIIToWide("&lt;"));
+                    UNIT_ASSERT(w == ASCIIToWide("&lt;")); 
                     break;
                 case '>':
-                    UNIT_ASSERT(w == ASCIIToWide("&gt;"));
+                    UNIT_ASSERT(w == ASCIIToWide("&gt;")); 
                     break;
                 case '&':
-                    UNIT_ASSERT(w == ASCIIToWide("&amp;"));
+                    UNIT_ASSERT(w == ASCIIToWide("&amp;")); 
                     break;
                 case '"':
-                    UNIT_ASSERT(w == ASCIIToWide("&quot;"));
+                    UNIT_ASSERT(w == ASCIIToWide("&quot;")); 
                     break;
                 case '\r':
                 case '\n':
-                    UNIT_ASSERT(w == ASCIIToWide("<BR>"));
+                    UNIT_ASSERT(w == ASCIIToWide("<BR>")); 
                     break;
                 default:
                     UNIT_ASSERT(w == TUtf16String(1, c));
@@ -915,74 +915,74 @@ public:
         ReverseInPlace(temp);
         UNIT_ASSERT(temp == reversed);
     }
-
-    void TestCountWideChars() {
-        UNIT_ASSERT_EQUAL(CountWideChars(UTF8ToWide("привет!")), 7);
+ 
+    void TestCountWideChars() { 
+        UNIT_ASSERT_EQUAL(CountWideChars(UTF8ToWide("привет!")), 7); 
         TUtf16String wideStr = UTF8ToWide("\xf0\x9f\x92\xb8привет!");
-        UNIT_ASSERT_EQUAL(wideStr.size(), 9);
-        UNIT_ASSERT_EQUAL(CountWideChars(wideStr), 8);
-    }
-
-    void TestIsValidUTF16() {
-        static wchar16 str1[] = {'h', 'e', 'l', 'l', 'o', '!', 0};
-        static wchar16 str2[] = {'h', 'e', 'l', 'l', 'o', 0xD842, 0xDEAD, '!', 0};
-        static wchar16 str3[] = {'h', 'e', 'l', 'l', 'o', 0xD842, '!', 0};
-        static wchar16 str4[] = {'h', 'e', 'l', 'l', 'o', 0xDEAD, 0xD842, '!', 0};
-        static wchar16 str5[] = {'h', 'e', 'l', 'l', 'o', 0xD842, 0xDEAD, 0xDEAD, '!', 0};
-        UNIT_ASSERT(IsValidUTF16(TWtringBuf(str1)));
-        UNIT_ASSERT(IsValidUTF16(TWtringBuf(str2)));
-        UNIT_ASSERT(!IsValidUTF16(TWtringBuf(str3)));
-        UNIT_ASSERT(!IsValidUTF16(TWtringBuf(str4)));
-        UNIT_ASSERT(!IsValidUTF16(TWtringBuf(str5)));
-    }
-
-    void TestIsStringASCII() {
-        static char charAscii[] = "0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF";
-        static wchar16 char16Ascii[] = {
-            '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', 'A',
-            'B', 'C', 'D', 'E', 'F', '0', '1', '2', '3', '4', '5', '6',
-            '7', '8', '9', '0', 'A', 'B', 'C', 'D', 'E', 'F', 0};
-
-        // Test a variety of the fragment start positions and lengths in order to make
-        // sure that bit masking in IsStringASCII works correctly.
-        // Also, test that a non-ASCII character will be detected regardless of its
-        // position inside the string.
-        {
-            const size_t stringLength = Y_ARRAY_SIZE(charAscii) - 1;
-            for (size_t offset = 0; offset < 8; ++offset) {
-                for (size_t len = 0, maxLen = stringLength - offset; len < maxLen; ++len) {
-                    UNIT_ASSERT(IsStringASCII(charAscii + offset, charAscii + offset + len));
-                    for (size_t charPos = offset; charPos < len; ++charPos) {
-                        charAscii[charPos] |= '\x80';
-                        UNIT_ASSERT(!IsStringASCII(charAscii + offset, charAscii + offset + len));
-                        charAscii[charPos] &= ~'\x80';
-                    }
-                }
-            }
-        }
-
-        {
-            const size_t stringLength = Y_ARRAY_SIZE(char16Ascii) - 1;
-            for (size_t offset = 0; offset < 4; ++offset) {
-                for (size_t len = 0, maxLen = stringLength - offset; len < maxLen; ++len) {
-                    UNIT_ASSERT(IsStringASCII(char16Ascii + offset, char16Ascii + offset + len));
-
-                    for (size_t charPos = offset; charPos < len; ++charPos) {
-                        char16Ascii[charPos] |= 0x80;
-                        UNIT_ASSERT(
-                            !IsStringASCII(char16Ascii + offset, char16Ascii + offset + len));
-
-                        char16Ascii[charPos] &= ~0x80;
-                        // Also test when the upper half is non-zero.
-                        char16Ascii[charPos] |= 0x100;
-                        UNIT_ASSERT(
-                            !IsStringASCII(char16Ascii + offset, char16Ascii + offset + len));
-                        char16Ascii[charPos] &= ~0x100;
-                    }
-                }
-            }
-        }
-    }
+        UNIT_ASSERT_EQUAL(wideStr.size(), 9); 
+        UNIT_ASSERT_EQUAL(CountWideChars(wideStr), 8); 
+    } 
+ 
+    void TestIsValidUTF16() { 
+        static wchar16 str1[] = {'h', 'e', 'l', 'l', 'o', '!', 0}; 
+        static wchar16 str2[] = {'h', 'e', 'l', 'l', 'o', 0xD842, 0xDEAD, '!', 0}; 
+        static wchar16 str3[] = {'h', 'e', 'l', 'l', 'o', 0xD842, '!', 0}; 
+        static wchar16 str4[] = {'h', 'e', 'l', 'l', 'o', 0xDEAD, 0xD842, '!', 0}; 
+        static wchar16 str5[] = {'h', 'e', 'l', 'l', 'o', 0xD842, 0xDEAD, 0xDEAD, '!', 0}; 
+        UNIT_ASSERT(IsValidUTF16(TWtringBuf(str1))); 
+        UNIT_ASSERT(IsValidUTF16(TWtringBuf(str2))); 
+        UNIT_ASSERT(!IsValidUTF16(TWtringBuf(str3))); 
+        UNIT_ASSERT(!IsValidUTF16(TWtringBuf(str4))); 
+        UNIT_ASSERT(!IsValidUTF16(TWtringBuf(str5))); 
+    } 
+ 
+    void TestIsStringASCII() { 
+        static char charAscii[] = "0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF"; 
+        static wchar16 char16Ascii[] = { 
+            '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', 'A', 
+            'B', 'C', 'D', 'E', 'F', '0', '1', '2', '3', '4', '5', '6', 
+            '7', '8', '9', '0', 'A', 'B', 'C', 'D', 'E', 'F', 0}; 
+ 
+        // Test a variety of the fragment start positions and lengths in order to make 
+        // sure that bit masking in IsStringASCII works correctly. 
+        // Also, test that a non-ASCII character will be detected regardless of its 
+        // position inside the string. 
+        { 
+            const size_t stringLength = Y_ARRAY_SIZE(charAscii) - 1; 
+            for (size_t offset = 0; offset < 8; ++offset) { 
+                for (size_t len = 0, maxLen = stringLength - offset; len < maxLen; ++len) { 
+                    UNIT_ASSERT(IsStringASCII(charAscii + offset, charAscii + offset + len)); 
+                    for (size_t charPos = offset; charPos < len; ++charPos) { 
+                        charAscii[charPos] |= '\x80'; 
+                        UNIT_ASSERT(!IsStringASCII(charAscii + offset, charAscii + offset + len)); 
+                        charAscii[charPos] &= ~'\x80'; 
+                    } 
+                } 
+            } 
+        } 
+ 
+        { 
+            const size_t stringLength = Y_ARRAY_SIZE(char16Ascii) - 1; 
+            for (size_t offset = 0; offset < 4; ++offset) { 
+                for (size_t len = 0, maxLen = stringLength - offset; len < maxLen; ++len) { 
+                    UNIT_ASSERT(IsStringASCII(char16Ascii + offset, char16Ascii + offset + len)); 
+ 
+                    for (size_t charPos = offset; charPos < len; ++charPos) { 
+                        char16Ascii[charPos] |= 0x80; 
+                        UNIT_ASSERT( 
+                            !IsStringASCII(char16Ascii + offset, char16Ascii + offset + len)); 
+ 
+                        char16Ascii[charPos] &= ~0x80; 
+                        // Also test when the upper half is non-zero. 
+                        char16Ascii[charPos] |= 0x100; 
+                        UNIT_ASSERT( 
+                            !IsStringASCII(char16Ascii + offset, char16Ascii + offset + len)); 
+                        char16Ascii[charPos] &= ~0x100; 
+                    } 
+                } 
+            } 
+        } 
+    } 
 
     void TestIsLowerWordStr() {
         UNIT_ASSERT(IsLowerWord(TWtringBuf()));

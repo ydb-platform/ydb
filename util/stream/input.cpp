@@ -2,17 +2,17 @@
 #include "output.h"
 #include "str.h"
 
-#include <util/charset/wide.h>
+#include <util/charset/wide.h> 
 #include <util/memory/tempbuf.h>
 #include <util/generic/string.h>
 #include <util/generic/yexception.h>
 #include <util/generic/singleton.h>
-#include <util/string/cast.h>
+#include <util/string/cast.h> 
 #include <util/system/compat.h>
 #include <util/system/spinlock.h>
 
-#include <cstdlib>
-
+#include <cstdlib> 
+ 
 IInputStream::IInputStream() noexcept = default;
 
 IInputStream::~IInputStream() = default;
@@ -291,7 +291,7 @@ void In<TUtf16String>(IInputStream& i, TUtf16String& w) {
     if (s.empty()) {
         w.erase();
     } else {
-        w = UTF8ToWide(s);
+        w = UTF8ToWide(s); 
     }
 }
 

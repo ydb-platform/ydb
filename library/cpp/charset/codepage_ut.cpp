@@ -1,10 +1,10 @@
-#include "codepage.h"
-#include "recyr.hh"
+#include "codepage.h" 
+#include "recyr.hh" 
 #include "wide.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/charset/utf8.h>
+#include <util/charset/utf8.h> 
 #include <util/system/yassert.h>
 
 #if defined(_MSC_VER)
@@ -76,7 +76,7 @@ public:
 UNIT_TEST_SUITE_REGISTRATION(TCodepageTest);
 
 void TCodepageTest::TestUTF() {
-    for (wchar32 i = 0; i <= 0x10FFFF; i++) {
+    for (wchar32 i = 0; i <= 0x10FFFF; i++) { 
         unsigned char buffer[32];
         Zero(buffer);
         size_t rune_len;
@@ -91,32 +91,32 @@ void TCodepageTest::TestUTF() {
         else
             ref_len = 4;
 
-        RECODE_RESULT res = SafeWriteUTF8Char(i, rune_len, buffer, buffer + 32);
+        RECODE_RESULT res = SafeWriteUTF8Char(i, rune_len, buffer, buffer + 32); 
         UNIT_ASSERT(res == RECODE_OK);
         UNIT_ASSERT(rune_len == ref_len);
 
-        res = SafeWriteUTF8Char(i, rune_len, buffer, buffer + ref_len - 1);
+        res = SafeWriteUTF8Char(i, rune_len, buffer, buffer + ref_len - 1); 
         UNIT_ASSERT(res == RECODE_EOOUTPUT);
 
         wchar32 rune;
-        res = SafeReadUTF8Char(rune, rune_len, buffer, buffer + 32);
+        res = SafeReadUTF8Char(rune, rune_len, buffer, buffer + 32); 
         UNIT_ASSERT(res == RECODE_OK);
         UNIT_ASSERT(rune == i);
         UNIT_ASSERT(rune_len == ref_len);
 
-        res = SafeReadUTF8Char(rune, rune_len, buffer, buffer + ref_len - 1);
+        res = SafeReadUTF8Char(rune, rune_len, buffer, buffer + ref_len - 1); 
         UNIT_ASSERT(res == RECODE_EOINPUT);
 
         if (ref_len > 1) {
-            res = SafeReadUTF8Char(rune, rune_len, buffer + 1, buffer + ref_len);
+            res = SafeReadUTF8Char(rune, rune_len, buffer + 1, buffer + ref_len); 
             UNIT_ASSERT(res == RECODE_BROKENSYMBOL);
 
             buffer[1] |= 0xC0;
-            res = SafeReadUTF8Char(rune, rune_len, buffer, buffer + ref_len);
+            res = SafeReadUTF8Char(rune, rune_len, buffer, buffer + ref_len); 
             UNIT_ASSERT(res == RECODE_BROKENSYMBOL);
 
             buffer[1] &= 0x3F;
-            res = SafeReadUTF8Char(rune, rune_len, buffer, buffer + ref_len);
+            res = SafeReadUTF8Char(rune, rune_len, buffer, buffer + ref_len); 
             UNIT_ASSERT(res == RECODE_BROKENSYMBOL);
         }
     }
@@ -124,7 +124,7 @@ void TCodepageTest::TestUTF() {
         "\xfe",
         "\xff",
         "\xcc\xc0",
-        "\xf4\x90\x80\x80",
+        "\xf4\x90\x80\x80", 
         //overlong:
         "\xfe\xfe\xff\xff",
         "\xc0\xaf",
@@ -155,7 +155,7 @@ void TCodepageTest::TestUTF() {
         wchar32 rune;
         const ui8* p = (const ui8*)badStrings[i];
         size_t len;
-        RECODE_RESULT res = SafeReadUTF8Char(rune, len, p, p + strlen(badStrings[i]));
+        RECODE_RESULT res = SafeReadUTF8Char(rune, len, p, p + strlen(badStrings[i])); 
         UNIT_ASSERT(res == RECODE_BROKENSYMBOL);
     }
 }

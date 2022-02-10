@@ -7,7 +7,7 @@
 #include <library/cpp/histogram/adaptive/protos/histo.pb.h>
 
 #include <util/generic/ptr.h>
-#include <util/generic/yexception.h>
+#include <util/generic/yexception.h> 
 
 namespace NKiwiAggr {
     class TAutoHistogram: private TNonCopyable, public IHistogram {

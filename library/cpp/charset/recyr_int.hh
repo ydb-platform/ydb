@@ -1,10 +1,10 @@
 #pragma once
 
-#include <util/charset/recode_result.h>
-#include <util/charset/utf8.h>
+#include <util/charset/recode_result.h> 
+#include <util/charset/utf8.h> 
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
-#include <util/system/defaults.h>
+#include <util/system/defaults.h> 
 
 #include "codepage.h"
 #include "doccodes.h"
@@ -38,7 +38,7 @@ namespace NCodepagePrivate {
         size_t rune_len;
         RECODE_RESULT res = RECODE_OK;
         while ((unsigned char*)in < in_end && res == RECODE_OK) {
-            res = SafeWriteUTF8Char(cp->unicode[(unsigned char)(*in++)], rune_len, (unsigned char*)out, out_end);
+            res = SafeWriteUTF8Char(cp->unicode[(unsigned char)(*in++)], rune_len, (unsigned char*)out, out_end); 
             out += rune_len;
         }
         in_readed = (unsigned char*)in - in_start;
@@ -61,7 +61,7 @@ namespace NCodepagePrivate {
         size_t rune_len;
         RECODE_RESULT res = RECODE_OK;
         while ((const unsigned char*)in < in_end && (res == RECODE_OK || res == RECODE_BROKENSYMBOL)) {
-            res = SafeReadUTF8Char(rune, rune_len, (const unsigned char*)in, in_end);
+            res = SafeReadUTF8Char(rune, rune_len, (const unsigned char*)in, in_end); 
             if (res == RECODE_BROKENSYMBOL)
                 rune_len = 1;
             if (res != RECODE_EOINPUT)
@@ -112,7 +112,7 @@ namespace NCodepagePrivate {
         wchar32 rune;
         RECODE_RESULT res = RECODE_OK;
         while ((res == RECODE_OK || res == RECODE_BROKENSYMBOL) && inp < in_end && outp < out_end) {
-            res = SafeReadUTF8Char(rune, rune_len, inp, in_end);
+            res = SafeReadUTF8Char(rune, rune_len, inp, in_end); 
             if (res == RECODE_BROKENSYMBOL)
                 rune_len = 1;
             if (res == RECODE_OK || res == RECODE_BROKENSYMBOL) {
@@ -159,7 +159,7 @@ namespace NCodepagePrivate {
 
         while ((res == RECODE_OK || res == RECODE_BROKENSYMBOL) && inp != in_end) {
             rune = ReadSymbolAndAdvance(inp, in_end);
-            res = SafeWriteUTF8Char(rune, rune_len, outp, out_end);
+            res = SafeWriteUTF8Char(rune, rune_len, outp, out_end); 
             if (outp >= out_end && (res == RECODE_OK || res == RECODE_BROKENSYMBOL))
                 res = RECODE_EOOUTPUT;
             outp += rune_len;
@@ -170,7 +170,7 @@ namespace NCodepagePrivate {
     }
 
     inline RECODE_RESULT _recodeUnicodeToUTF8(wchar32 rune, char* out, size_t out_size, size_t& nwritten) {
-        return SafeWriteUTF8Char(rune, nwritten, (unsigned char*)out, out_size);
+        return SafeWriteUTF8Char(rune, nwritten, (unsigned char*)out, out_size); 
     }
 
     template <class TCharType, int Size = sizeof(TCharType)>

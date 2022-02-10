@@ -22,7 +22,7 @@
 
 
 #include <stdexcept>
-#include <util/charset/utf8.h>
+#include <util/charset/utf8.h> 
 #include <utility>
 
 #include <contrib/libs/pire/pire/stub/defaults.h>
@@ -83,7 +83,7 @@ namespace {
 		{
 			wchar32 rune;
 			size_t len;
-			if (SafeReadUTF8Char(rune, len, reinterpret_cast<const unsigned char*>(begin), reinterpret_cast<const unsigned char*>(end)) != RECODE_OK)
+			if (SafeReadUTF8Char(rune, len, reinterpret_cast<const unsigned char*>(begin), reinterpret_cast<const unsigned char*>(end)) != RECODE_OK) 
 				throw Error("Error reading UTF8 sequence");
 			begin += len;
 			return rune;
@@ -91,10 +91,10 @@ namespace {
 
 		ystring ToLocal(wchar32 c) const
 		{
-			ystring ret(UTF8RuneLenByUCS(c), ' ');
+			ystring ret(UTF8RuneLenByUCS(c), ' '); 
 			size_t len;
 			unsigned char* p = (unsigned char*) &*ret.begin();
-			if (SafeWriteUTF8Char(c, len, p, p + ret.size()) != RECODE_OK)
+			if (SafeWriteUTF8Char(c, len, p, p + ret.size()) != RECODE_OK) 
 				Y_ASSERT(!"Pire::UTF8::toLocal(): Internal error");
 			return ret;
 		}

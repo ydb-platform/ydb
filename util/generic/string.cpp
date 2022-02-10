@@ -1,6 +1,6 @@
 #include "string.h"
 
-#include <util/string/ascii.h>
+#include <util/string/ascii.h> 
 #include <util/system/sanitizers.h>
 #include <util/system/sys_alloc.h>
 #include <util/charset/wide.h>
@@ -20,21 +20,21 @@ std::istream& operator>>(std::istream& is, TString& s) {
 
 template <>
 bool TBasicString<char, std::char_traits<char>>::to_lower(size_t pos, size_t n) {
-    return Transform([](size_t, char c) { return AsciiToLower(c); }, pos, n);
+    return Transform([](size_t, char c) { return AsciiToLower(c); }, pos, n); 
 }
 
 template <>
 bool TBasicString<char, std::char_traits<char>>::to_upper(size_t pos, size_t n) {
-    return Transform([](size_t, char c) { return AsciiToUpper(c); }, pos, n);
+    return Transform([](size_t, char c) { return AsciiToUpper(c); }, pos, n); 
 }
 
 template <>
 bool TBasicString<char, std::char_traits<char>>::to_title(size_t pos, size_t n) {
-    if (n == 0) {
-        return false;
+    if (n == 0) { 
+        return false; 
     }
-    bool changed = to_upper(pos, 1);
-    return to_lower(pos + 1, n - 1) || changed;
+    bool changed = to_upper(pos, 1); 
+    return to_lower(pos + 1, n - 1) || changed; 
 }
 
 template <>

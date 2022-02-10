@@ -1,4 +1,4 @@
-#include "utf8.h"
+#include "utf8.h" 
 #include "wide.h"
 
 #include <util/stream/file.h>
@@ -9,7 +9,7 @@
 
 Y_UNIT_TEST_SUITE(TUtfUtilTest) {
     Y_UNIT_TEST(TestUTF8Len) {
-        UNIT_ASSERT_EQUAL(GetNumberOfUTF8Chars("привет!"), 7);
+        UNIT_ASSERT_EQUAL(GetNumberOfUTF8Chars("привет!"), 7); 
     }
 
     Y_UNIT_TEST(TestToLowerUtfString) {

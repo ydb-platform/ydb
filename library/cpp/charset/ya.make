@@ -1,6 +1,6 @@
 LIBRARY()
 
-OWNER(alzobnin)
+OWNER(alzobnin) 
 
 SRCS(
     generated/cp_data.cpp
@@ -8,11 +8,11 @@ SRCS(
     codepage.cpp
     cp_encrec.cpp
     doccodes.cpp
-    iconv.cpp
+    iconv.cpp 
     recyr.hh
     recyr_int.hh
     ci_string.cpp
-    wide.cpp
+    wide.cpp 
 )
 
 PEERDIR(

@@ -1,23 +1,23 @@
 #pragma once
 
-#include "codepage.h"
+#include "codepage.h" 
 #include "iconv.h"
 
-#include <util/charset/recode_result.h>
-#include <util/charset/unidata.h>
-#include <util/charset/utf8.h>
-#include <util/charset/wide.h>
+#include <util/charset/recode_result.h> 
+#include <util/charset/unidata.h> 
+#include <util/charset/utf8.h> 
+#include <util/charset/wide.h> 
 #include <util/generic/string.h>
 #include <util/generic/algorithm.h>
 #include <util/generic/yexception.h>
-#include <util/memory/tempbuf.h>
-#include <util/system/yassert.h>
+#include <util/memory/tempbuf.h> 
+#include <util/system/yassert.h> 
 
 //! converts text from unicode to yandex codepage
 //! @attention destination buffer must be long enough to fit all characters of the text
 //! @note @c dest buffer must fit at least @c len number of characters
 template <typename TCharType>
-inline size_t WideToChar(const TCharType* text, size_t len, char* dest, ECharset enc) {
+inline size_t WideToChar(const TCharType* text, size_t len, char* dest, ECharset enc) { 
     Y_ASSERT(SingleByteCodepage(enc));
 
     const char* start = dest;
@@ -39,7 +39,7 @@ inline size_t WideToChar(const TCharType* text, size_t len, char* dest, ECharset
 //!       it does not make sense to create an additional version of this function because
 //!       it will call to @c strlen anyway in order to allocate destination buffer
 template <typename TCharType>
-inline void CharToWide(const char* text, size_t len, TCharType* dest, const CodePage& cp) {
+inline void CharToWide(const char* text, size_t len, TCharType* dest, const CodePage& cp) { 
     const unsigned char* cur = reinterpret_cast<const unsigned char*>(text);
     const unsigned char* const last = cur + len;
     for (; cur != last; ++cur, ++dest) {
@@ -285,20 +285,20 @@ inline TUtf16String UTF8ToWide(const char* text, size_t len, const CodePage& cp)
 }
 
 inline TString WideToChar(const TWtringBuf w, ECharset enc) {
-    return WideToChar(w.data(), w.size(), enc);
+    return WideToChar(w.data(), w.size(), enc); 
 }
 
 inline TUtf16String CharToWide(const TStringBuf s, ECharset enc) {
-    return CharToWide<false>(s.data(), s.size(), enc);
+    return CharToWide<false>(s.data(), s.size(), enc); 
 }
 
-template <bool robust>
+template <bool robust> 
 inline TUtf16String CharToWide(const TStringBuf s, ECharset enc) {
-    return CharToWide<robust>(s.data(), s.size(), enc);
+    return CharToWide<robust>(s.data(), s.size(), enc); 
 }
 
 inline TUtf16String CharToWide(const TStringBuf s, const CodePage& cp) {
-    return CharToWide(s.data(), s.size(), cp);
+    return CharToWide(s.data(), s.size(), cp); 
 }
 
 // true if @text can be fully encoded to specified @encoding,

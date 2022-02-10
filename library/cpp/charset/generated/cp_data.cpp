@@ -124,14 +124,14 @@ static const CodePage CODES_ASCII_CODE_PAGE = {
 
 static const CodePage CODES_BIG5_CODE_PAGE = {
     CODES_BIG5,
-    {"BIG5", "BIGFIVE", "CN-BIG5", "CSBIG5",},
+    {"BIG5", "BIGFIVE", "CN-BIG5", "CSBIG5",}, 
     {},
     nullptr,
 }; // generated from multibyte.txt
 
 static const CodePage CODES_BIG5_HKSCS_CODE_PAGE = {
     CODES_BIG5_HKSCS,
-    {"BIG5-HKSCS", "BIG5-HKSCS:2004",},
+    {"BIG5-HKSCS", "BIG5-HKSCS:2004",}, 
     {},
     nullptr,
 }; // generated from multibyte.txt
@@ -1286,7 +1286,7 @@ static const CodePage CODES_CP936_CODE_PAGE = {
 
 static const CodePage CODES_CP949_CODE_PAGE = {
     CODES_CP949,
-    {"CP949", "UHC",},
+    {"CP949", "UHC",}, 
     {},
     nullptr,
 }; // generated from multibyte.txt
@@ -1300,28 +1300,28 @@ static const CodePage CODES_CP950_CODE_PAGE = {
 
 static const CodePage CODES_EUC_CN_CODE_PAGE = {
     CODES_EUC_CN,
-    {"EUC-CN", "CN-GB", "GB2312", "CSGB2312",},
+    {"EUC-CN", "CN-GB", "GB2312", "CSGB2312",}, 
     {},
     nullptr,
 }; // generated from multibyte.txt
 
 static const CodePage CODES_EUC_JP_CODE_PAGE = {
     CODES_EUC_JP,
-    {"EUC-JP", "EXTENDED_UNIX_CODE_PACKED_FORMAT_FOR_JAPANESE", "CSEUCPKDFMTJAPANESE",},
+    {"EUC-JP", "EXTENDED_UNIX_CODE_PACKED_FORMAT_FOR_JAPANESE", "CSEUCPKDFMTJAPANESE",}, 
     {},
     nullptr,
 }; // generated from multibyte.txt
 
 static const CodePage CODES_EUC_KR_CODE_PAGE = {
     CODES_EUC_KR,
-    {"EUC-KR", "ISO-IR-149", "KOREAN", "KSC_5601", "KS_C_5601-1987", "KS_C_5601-1989", "CSEUCKR", "CSKSC56011987",},
+    {"EUC-KR", "ISO-IR-149", "KOREAN", "KSC_5601", "KS_C_5601-1987", "KS_C_5601-1989", "CSEUCKR", "CSKSC56011987",}, 
     {},
     nullptr,
 }; // generated from multibyte.txt
 
 static const CodePage CODES_EUC_TW_CODE_PAGE = {
     CODES_EUC_TW,
-    {"EUC-TW", "CSEUCTW",},
+    {"EUC-TW", "CSEUCTW",}, 
     {},
     nullptr,
 }; // generated from multibyte.txt
@@ -1335,7 +1335,7 @@ static const CodePage CODES_GB18030_CODE_PAGE = {
 
 static const CodePage CODES_GBK_CODE_PAGE = {
     CODES_GBK,
-    {"GBK",},
+    {"GBK",}, 
     {},
     nullptr,
 }; // generated from multibyte.txt
@@ -1462,7 +1462,7 @@ static const CodePage CODES_HP_ROMAN8_CODE_PAGE = {
 
 static const CodePage CODES_HZ_CODE_PAGE = {
     CODES_HZ,
-    {"HZ", "HZ-GB-2312",},
+    {"HZ", "HZ-GB-2312",}, 
     {},
     nullptr,
 }; // generated from multibyte.txt
@@ -1709,7 +1709,7 @@ static const CodePage CODES_ISO8859_14_CODE_PAGE = {
 
 static const CodePage CODES_ISO_2022_CN_CODE_PAGE = {
     CODES_ISO_2022_CN,
-    {"ISO-2022-CN", "CSISO2022CN",},
+    {"ISO-2022-CN", "CSISO2022CN",}, 
     {},
     nullptr,
 }; // generated from multibyte.txt
@@ -1723,7 +1723,7 @@ static const CodePage CODES_ISO_2022_CN_EXT_CODE_PAGE = {
 
 static const CodePage CODES_ISO_2022_JP_CODE_PAGE = {
     CODES_ISO_2022_JP,
-    {"ISO-2022-JP", "CPISO2022JP",},
+    {"ISO-2022-JP", "CPISO2022JP",}, 
     {},
     nullptr,
 }; // generated from multibyte.txt
@@ -1737,14 +1737,14 @@ static const CodePage CODES_ISO_2022_JP_1_CODE_PAGE = {
 
 static const CodePage CODES_ISO_2022_JP_2_CODE_PAGE = {
     CODES_ISO_2022_JP_2,
-    {"ISO-2022-JP-2", "CPISO2022JP2",},
+    {"ISO-2022-JP-2", "CPISO2022JP2",}, 
     {},
     nullptr,
 }; // generated from multibyte.txt
 
 static const CodePage CODES_ISO_2022_KR_CODE_PAGE = {
     CODES_ISO_2022_KR,
-    {"ISO-2022-KR", "CSISO2022KR",},
+    {"ISO-2022-KR", "CSISO2022KR",}, 
     {},
     nullptr,
 }; // generated from multibyte.txt
@@ -1951,7 +1951,7 @@ static const CodePage CODES_ISO_8859_4_CODE_PAGE = {
 
 static const CodePage CODES_ISO_8859_6_CODE_PAGE = {
     CODES_ISO_8859_6,
-    {"iso-8859-6", "cp708",},
+    {"iso-8859-6", "cp708",}, 
     {
         0x0000, 0x0001, 0x0002, 0x0003, 0x0004, 0x0005, 0x0006, 0x0007,
         0x0008, 0x0009, 0x000A, 0x000B, 0x000C, 0x000D, 0x000E, 0x000F,
@@ -1969,22 +1969,22 @@ static const CodePage CODES_ISO_8859_6_CODE_PAGE = {
         0x0068, 0x0069, 0x006A, 0x006B, 0x006C, 0x006D, 0x006E, 0x006F,
         0x0070, 0x0071, 0x0072, 0x0073, 0x0074, 0x0075, 0x0076, 0x0077,
         0x0078, 0x0079, 0x007A, 0x007B, 0x007C, 0x007D, 0x007E, 0x007F,
-        0x2502, 0x2524, 0x00E9, 0x00E2, 0x2561, 0x00E0, 0x2562, 0x00E7,
-        0x00EA, 0x00EB, 0x00E8, 0x00EF, 0x00EE, 0x2556, 0x2555, 0x2563,
-        0x2551, 0x2557, 0x255D, 0x00F4, 0x255C, 0x255B, 0x00FB, 0x00F9,
-        0x2510, 0x2514, 0x009A, 0x009B, 0x009C, 0x009D, 0x009E, 0x009F,
-        0x00A0, 0x2534, 0x252C, 0x251C, 0x00A4, 0x2500, 0x253C, 0x255E,
-        0x255F, 0x255A, 0x2554, 0x2569, 0x060C, 0x2566, 0x00AB, 0x00BB,
-        0x2591, 0x2592, 0x2593, 0x2560, 0x2550, 0x256C, 0x2567, 0x2568,
-        0x2564, 0x2565, 0x2559, 0x061B, 0x2558, 0x2552, 0x2553, 0x061F,
-        0x256B, 0x0621, 0x0622, 0x0623, 0x0624, 0x0625, 0x0626, 0x0627,
+        0x2502, 0x2524, 0x00E9, 0x00E2, 0x2561, 0x00E0, 0x2562, 0x00E7, 
+        0x00EA, 0x00EB, 0x00E8, 0x00EF, 0x00EE, 0x2556, 0x2555, 0x2563, 
+        0x2551, 0x2557, 0x255D, 0x00F4, 0x255C, 0x255B, 0x00FB, 0x00F9, 
+        0x2510, 0x2514, 0x009A, 0x009B, 0x009C, 0x009D, 0x009E, 0x009F, 
+        0x00A0, 0x2534, 0x252C, 0x251C, 0x00A4, 0x2500, 0x253C, 0x255E, 
+        0x255F, 0x255A, 0x2554, 0x2569, 0x060C, 0x2566, 0x00AB, 0x00BB, 
+        0x2591, 0x2592, 0x2593, 0x2560, 0x2550, 0x256C, 0x2567, 0x2568, 
+        0x2564, 0x2565, 0x2559, 0x061B, 0x2558, 0x2552, 0x2553, 0x061F, 
+        0x256B, 0x0621, 0x0622, 0x0623, 0x0624, 0x0625, 0x0626, 0x0627, 
         0x0628, 0x0629, 0x062A, 0x062B, 0x062C, 0x062D, 0x062E, 0x062F,
         0x0630, 0x0631, 0x0632, 0x0633, 0x0634, 0x0635, 0x0636, 0x0637,
-        0x0638, 0x0639, 0x063A, 0x2588, 0x2584, 0x258C, 0x2590, 0x2580,
+        0x0638, 0x0639, 0x063A, 0x2588, 0x2584, 0x258C, 0x2590, 0x2580, 
         0x0640, 0x0641, 0x0642, 0x0643, 0x0644, 0x0645, 0x0646, 0x0647,
         0x0648, 0x0649, 0x064A, 0x064B, 0x064C, 0x064D, 0x064E, 0x064F,
         0x0650, 0x0651, 0x0652, 0xFFFD, 0xFFFD, 0xFFFD, 0xFFFD, 0xFFFD,
-        0xFFFD, 0x256A, 0x2518, 0x250C, 0x00B5, 0x00A3, 0x25A0, 0x00A0,
+        0xFFFD, 0x256A, 0x2518, 0x250C, 0x00B5, 0x00A3, 0x25A0, 0x00A0, 
     },
     defchars[0],
 }; // generated from listing.txt
@@ -2191,7 +2191,7 @@ static const CodePage CODES_JISX0201_CODE_PAGE = {
 
 static const CodePage CODES_JOHAB_CODE_PAGE = {
     CODES_JOHAB,
-    {"JOHAB", "CP1361",},
+    {"JOHAB", "CP1361",}, 
     {},
     nullptr,
 }; // generated from multibyte.txt
@@ -3078,7 +3078,7 @@ static const CodePage CODES_RK1048_CODE_PAGE = {
 
 static const CodePage CODES_SHIFT_JIS_CODE_PAGE = {
     CODES_SHIFT_JIS,
-    {"SHIFT_JIS", "MS_KANJI", "SJIS", "CSSHIFTJIS",},
+    {"SHIFT_JIS", "MS_KANJI", "SJIS", "CSSHIFTJIS",}, 
     {},
     nullptr,
 }; // generated from multibyte.txt
@@ -3669,7 +3669,7 @@ const char defchars[][DEFCHAR_BUF] = {
     {"\077\xA6\xB6\xA6\055\xB6\x9F\x9F\x9F\x9F\x9F\x9F\x9F\200\200\200\071\130\077\071\040\040\n\n\x1A\x1A\x1A\x1A\x1A\x1A\x1A\077\077\055\055\050\042\051\042\042\042\137\052\042\056\055\055\075\055\044\140\xB0\047\047\047\047\047"}, // generated from yandex_dc.txt
 };
 
-const CodePage* const NCodepagePrivate::TCodePageData::AllCodePages[] = {
+const CodePage* const NCodepagePrivate::TCodePageData::AllCodePages[] = { 
     &CODES_ALT_CODE_PAGE,
     &CODES_ARMSCII_CODE_PAGE,
     &CODES_ASCII_CODE_PAGE,

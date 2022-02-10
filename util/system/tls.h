@@ -76,10 +76,10 @@
         @code
         //in header
         namespace TMorph {
-            Y_THREAD(ELanguage) ThreadLocalMainLanguage;
+            Y_THREAD(ELanguage) ThreadLocalMainLanguage; 
         }
         //in cpp
-        Y_THREAD(ELanguage) TMorph::ThreadLocalMainLanguage(LANG_RUS);
+        Y_THREAD(ELanguage) TMorph::ThreadLocalMainLanguage(LANG_RUS); 
         @endcode
 
     Example:

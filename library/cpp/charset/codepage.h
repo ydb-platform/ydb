@@ -2,12 +2,12 @@
 
 #include "doccodes.h"
 
-#include <util/charset/recode_result.h>
-#include <util/charset/unidata.h> // all wchar32 functions
-#include <util/charset/utf8.h>
+#include <util/charset/recode_result.h> 
+#include <util/charset/unidata.h> // all wchar32 functions 
+#include <util/charset/utf8.h> 
 #include <util/generic/string.h>
-#include <util/generic/ylimits.h>
-#include <util/generic/yexception.h>
+#include <util/generic/ylimits.h> 
+#include <util/generic/yexception.h> 
 #include <util/system/yassert.h>
 #include <util/system/defaults.h>
 
@@ -248,7 +248,7 @@ const Encoder& EncoderByCharset(ECharset enc);
 namespace NCodepagePrivate {
     class TCodePageData {
     private:
-        static const CodePage* const AllCodePages[];
+        static const CodePage* const AllCodePages[]; 
 
         static const Recoder rcdr_to_yandex[];
         static const Recoder rcdr_from_yandex[];
@@ -256,7 +256,7 @@ namespace NCodepagePrivate {
         static const Recoder rcdr_to_upper[];
         static const Recoder rcdr_to_title[];
 
-        static const Encoder* const EncodeTo[];
+        static const Encoder* const EncodeTo[]; 
 
         friend struct ::CodePage;
         friend class TCodepagesMap;
@@ -302,23 +302,23 @@ inline void ToUpper(char* s, size_t n, const CodePage& cp = csYandex) {
     for (; s != e; ++s)
         *s = cp.ToUpper(*s);
 }
-
+ 
 inline TString ToLower(TString s, const CodePage& cp, size_t pos = 0, size_t n = TString::npos) {
-    s.Transform([&cp](size_t, char c) { return cp.ToLower(c); }, pos, n);
-    return s;
-}
-
+    s.Transform([&cp](size_t, char c) { return cp.ToLower(c); }, pos, n); 
+    return s; 
+} 
+ 
 inline TString ToUpper(TString s, const CodePage& cp, size_t pos = 0, size_t n = TString::npos) {
-    s.Transform([&cp](size_t, char c) { return cp.ToUpper(c); }, pos, n);
-    return s;
-}
-
+    s.Transform([&cp](size_t, char c) { return cp.ToUpper(c); }, pos, n); 
+    return s; 
+} 
+ 
 inline TString ToTitle(TString s, const CodePage& cp, size_t pos = 0, size_t n = TString::npos) {
-    s.Transform(
-        [pos, &cp](size_t i, char c) {
-            return i == pos ? cp.ToTitle(c) : cp.ToLower(c);
-        },
-        pos,
+    s.Transform( 
+        [pos, &cp](size_t i, char c) { 
+            return i == pos ? cp.ToTitle(c) : cp.ToLower(c); 
+        }, 
+        pos, 
         n);
-    return s;
-}
+    return s; 
+} 

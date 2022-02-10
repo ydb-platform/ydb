@@ -2,7 +2,7 @@
 #include "cast.h"
 
 #include <util/system/defaults.h>
-#include <util/charset/utf8.h>
+#include <util/charset/utf8.h> 
 #include <util/charset/wide.h>
 
 /// @todo: escape trigraphs (eg "??/" is "\")

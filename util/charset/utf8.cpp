@@ -1,6 +1,6 @@
-#include "unidata.h"
+#include "unidata.h" 
 #include "utf8.h"
-
+ 
 namespace {
     enum class ECaseConversion {
         ToUpper,
@@ -82,72 +82,72 @@ namespace {
     }
 } // namespace
 
-extern const wchar32 BROKEN_RUNE = 0xFFFD;
-
-static const char* SkipUTF8Chars(const char* begin, const char* end, size_t numChars) {
-    const unsigned char* uEnd = reinterpret_cast<const unsigned char*>(end);
-    while (begin != end && numChars > 0) {
-        const unsigned char* uBegin = reinterpret_cast<const unsigned char*>(begin);
-        size_t runeLen;
-        if (GetUTF8CharLen(runeLen, uBegin, uEnd) != RECODE_OK) {
-            ythrow yexception() << "invalid UTF-8 char";
-        }
-        begin += runeLen;
+extern const wchar32 BROKEN_RUNE = 0xFFFD; 
+ 
+static const char* SkipUTF8Chars(const char* begin, const char* end, size_t numChars) { 
+    const unsigned char* uEnd = reinterpret_cast<const unsigned char*>(end); 
+    while (begin != end && numChars > 0) { 
+        const unsigned char* uBegin = reinterpret_cast<const unsigned char*>(begin); 
+        size_t runeLen; 
+        if (GetUTF8CharLen(runeLen, uBegin, uEnd) != RECODE_OK) { 
+            ythrow yexception() << "invalid UTF-8 char"; 
+        } 
+        begin += runeLen; 
         Y_ASSERT(begin <= end);
-        --numChars;
-    }
-    return begin;
-}
-
+        --numChars; 
+    } 
+    return begin; 
+} 
+ 
 TStringBuf SubstrUTF8(const TStringBuf str, size_t pos, size_t len) {
-    const char* start = SkipUTF8Chars(str.begin(), str.end(), pos);
-    const char* end = SkipUTF8Chars(start, str.end(), len);
-    return TStringBuf(start, end - start);
-}
-
-EUTF8Detect UTF8Detect(const char* s, size_t len) {
-    const unsigned char* s0 = (const unsigned char*)s;
-    const unsigned char* send = s0 + len;
-    wchar32 rune;
-    size_t rune_len;
-    EUTF8Detect res = ASCII;
-
-    while (s0 < send) {
-        RECODE_RESULT rr = SafeReadUTF8Char(rune, rune_len, s0, send);
-
-        if (rr != RECODE_OK) {
-            return NotUTF8;
-        }
-
-        if (rune_len > 1) {
-            res = UTF8;
-        }
-
-        s0 += rune_len;
-    }
-
-    return res;
-}
-
+    const char* start = SkipUTF8Chars(str.begin(), str.end(), pos); 
+    const char* end = SkipUTF8Chars(start, str.end(), len); 
+    return TStringBuf(start, end - start); 
+} 
+ 
+EUTF8Detect UTF8Detect(const char* s, size_t len) { 
+    const unsigned char* s0 = (const unsigned char*)s; 
+    const unsigned char* send = s0 + len; 
+    wchar32 rune; 
+    size_t rune_len; 
+    EUTF8Detect res = ASCII; 
+ 
+    while (s0 < send) { 
+        RECODE_RESULT rr = SafeReadUTF8Char(rune, rune_len, s0, send); 
+ 
+        if (rr != RECODE_OK) { 
+            return NotUTF8; 
+        } 
+ 
+        if (rune_len > 1) { 
+            res = UTF8; 
+        } 
+ 
+        s0 += rune_len; 
+    } 
+ 
+    return res; 
+} 
+ 
 bool ToLowerUTF8Impl(const char* beg, size_t n, TString& newString) {
     return ConvertCaseUTF8Impl(ECaseConversion::ToLower, beg, n, newString);
-}
-
+} 
+ 
 TString ToLowerUTF8(const TString& s) {
     TString newString;
     bool changed = ToLowerUTF8Impl(s.data(), s.size(), newString);
-    return changed ? newString : s;
-}
-
+    return changed ? newString : s; 
+} 
+ 
 TString ToLowerUTF8(TStringBuf s) {
     TString newString;
     bool changed = ToLowerUTF8Impl(s.data(), s.size(), newString);
     return changed ? newString : TString(s.data(), s.size());
-}
-
+} 
+ 
 TString ToLowerUTF8(const char* s) {
-    return ToLowerUTF8(TStringBuf(s));
-}
+    return ToLowerUTF8(TStringBuf(s)); 
+} 
 
 bool ToUpperUTF8Impl(const char* beg, size_t n, TString& newString) {
     return ConvertCaseUTF8Impl(ECaseConversion::ToUpper, beg, n, newString);

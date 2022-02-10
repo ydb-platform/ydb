@@ -1,6 +1,6 @@
 UNITTEST_FOR(library/cpp/charset)
 
-OWNER(alzobnin)
+OWNER(alzobnin) 
 
 SRCS(
     ci_string_ut.cpp

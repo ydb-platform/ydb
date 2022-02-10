@@ -70,8 +70,8 @@ namespace {
         } catch (yexception&) {                                  \
             return TUnboxedValue();                              \
         }                                                        \
-    }
-
+    } 
+ 
 #define STROKA_ASCII_CASE_UDF(udfName, function)                 \
     SIMPLE_UDF(T##udfName, char*(TAutoMap<char*>)) {             \
         TString input(args[0].AsStringRef());                    \
@@ -142,11 +142,11 @@ namespace {
     XX(Base64StrictDecode, Base64StrictDecode)         \
     XX(HexDecode, HexDecode)
 
-#define STROKA_CASE_UDF_MAP(XX) \
+#define STROKA_CASE_UDF_MAP(XX) \ 
     XX(ToLower, ToLower)        \
     XX(ToUpper, ToUpper)        \
-    XX(ToTitle, ToTitle)
-
+    XX(ToTitle, ToTitle) 
+ 
 #define STROKA_ASCII_CASE_UDF_MAP(XX) \
     XX(AsciiToLower, to_lower)        \
     XX(AsciiToUpper, to_upper)        \

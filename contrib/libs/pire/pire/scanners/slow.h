@@ -177,7 +177,7 @@ public:
 		SlowScanner s;
 		const size_t* p = reinterpret_cast<const size_t*>(ptr);
 
-		Impl::ValidateHeader(p, size, ScannerIOTypes::SlowScanner, sizeof(s.m));
+		Impl::ValidateHeader(p, size, ScannerIOTypes::SlowScanner, sizeof(s.m)); 
 		Locals* locals;
 		Impl::MapPtr(locals, 1, p, size);
 		memcpy(&s.m, locals, sizeof(s.m));

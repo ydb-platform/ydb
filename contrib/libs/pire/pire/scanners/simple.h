@@ -64,10 +64,10 @@ public:
 
 	bool Dead(const State&) const { return false; }
 
-	ypair<const size_t*, const size_t*> AcceptedRegexps(const State& s) const {
-		return Final(s) ? Accept() : Deny();
-	}
-
+	ypair<const size_t*, const size_t*> AcceptedRegexps(const State& s) const { 
+		return Final(s) ? Accept() : Deny(); 
+	} 
+ 
 	/// returns an initial state for this scanner
 	void Initialize(State& state) const { state = m.initial; }
 
@@ -128,7 +128,7 @@ public:
 		SimpleScanner s;
 
 		const size_t* p = reinterpret_cast<const size_t*>(ptr);
-		Impl::ValidateHeader(p, size, ScannerIOTypes::SimpleScanner, sizeof(m));
+		Impl::ValidateHeader(p, size, ScannerIOTypes::SimpleScanner, sizeof(m)); 
 		if (size < sizeof(s.m))
 			throw Error("EOF reached while mapping NPire::Scanner");
 
@@ -185,18 +185,18 @@ protected:
 		return n;
 	}
 
-	static ypair<const size_t*, const size_t*> Accept()
-	{
-		static size_t v[1] = { 0 };
-		return ymake_pair(v, v + 1);
-	}
-
-	static ypair<const size_t*, const size_t*> Deny()
-	{
-		static size_t v[1] = { 0 };
-		return ymake_pair(v, v);
-	}
-
+	static ypair<const size_t*, const size_t*> Accept() 
+	{ 
+		static size_t v[1] = { 0 }; 
+		return ymake_pair(v, v + 1); 
+	} 
+ 
+	static ypair<const size_t*, const size_t*> Deny() 
+	{ 
+		static size_t v[1] = { 0 }; 
+		return ymake_pair(v, v); 
+	} 
+ 
 	/*
 	 * Initializes pointers depending on buffer start, letters and states count
 	 */

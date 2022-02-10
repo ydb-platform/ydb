@@ -23,7 +23,7 @@
 
 #include <contrib/libs/pire/pire/stub/stl.h>
 #include <contrib/libs/pire/pire/stub/saveload.h>
-#include <contrib/libs/pire/pire/scanners/common.h>
+#include <contrib/libs/pire/pire/scanners/common.h> 
 #include <contrib/libs/pire/pire/scanners/slow.h>
 #include <contrib/libs/pire/pire/scanners/simple.h>
 #include <contrib/libs/pire/pire/scanners/loaded.h>
@@ -34,7 +34,7 @@ namespace Pire {
 	
 void SimpleScanner::Save(yostream* s) const
 {
-	SavePodType(s, Header(ScannerIOTypes::SimpleScanner, sizeof(m)));
+	SavePodType(s, Header(ScannerIOTypes::SimpleScanner, sizeof(m))); 
 	Impl::AlignSave(s, sizeof(Header));
 	Locals mc = m;
 	mc.initial -= reinterpret_cast<size_t>(m_transitions);
@@ -51,7 +51,7 @@ void SimpleScanner::Save(yostream* s) const
 void SimpleScanner::Load(yistream* s)
 {
 	SimpleScanner sc;
-	Impl::ValidateHeader(s, ScannerIOTypes::SimpleScanner, sizeof(sc.m));
+	Impl::ValidateHeader(s, ScannerIOTypes::SimpleScanner, sizeof(sc.m)); 
 	LoadPodType(s, sc.m);
 	Impl::AlignLoad(s, sizeof(sc.m));
 	bool empty;
@@ -70,7 +70,7 @@ void SimpleScanner::Load(yistream* s)
 
 void SlowScanner::Save(yostream* s) const
 {
-	SavePodType(s, Header(ScannerIOTypes::SlowScanner, sizeof(m)));
+	SavePodType(s, Header(ScannerIOTypes::SlowScanner, sizeof(m))); 
 	Impl::AlignSave(s, sizeof(Header));
 	SavePodType(s, m);
 	Impl::AlignSave(s, sizeof(m));
@@ -112,7 +112,7 @@ void SlowScanner::Save(yostream* s) const
 void SlowScanner::Load(yistream* s)
 {
 	SlowScanner sc;
-	Impl::ValidateHeader(s, ScannerIOTypes::SlowScanner, sizeof(sc.m));
+	Impl::ValidateHeader(s, ScannerIOTypes::SlowScanner, sizeof(sc.m)); 
 	LoadPodType(s, sc.m);
 	Impl::AlignLoad(s, sizeof(sc.m));
 	bool empty;
@@ -195,7 +195,7 @@ void LoadedScanner::Load(yistream* s) {
 void LoadedScanner::Load(yistream* s, ui32* type)
 {
 	LoadedScanner sc;
-	Header header = Impl::ValidateHeader(s, ScannerIOTypes::LoadedScanner, sizeof(sc.m));
+	Header header = Impl::ValidateHeader(s, ScannerIOTypes::LoadedScanner, sizeof(sc.m)); 
 	if (type) {
 		*type = header.Type;
 	}

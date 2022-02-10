@@ -31,9 +31,9 @@ class TYqlResultPartIterator;
 namespace NTable {
 
 enum class ECollectQueryStatsMode {
-    None = 0,  // Stats collection is disabled
-    Basic = 1, // Aggregated stats of reads, updates and deletes per table
-    Full = 2   // Add per-stage execution profile and query plan on top of Basic mode
+    None = 0,  // Stats collection is disabled 
+    Basic = 1, // Aggregated stats of reads, updates and deletes per table 
+    Full = 2   // Add per-stage execution profile and query plan on top of Basic mode 
 };
 
 class TQueryStats {
@@ -41,7 +41,7 @@ class TQueryStats {
     friend class NYdb::TProtoAccessor;
     friend class NYdb::NScripting::TScriptingClient;
     friend class NYdb::NScripting::TYqlResultPartIterator;
-    friend class TScanQueryPartIterator;
+    friend class TScanQueryPartIterator; 
 
 public:
     TString ToString(bool withPlan = false) const;

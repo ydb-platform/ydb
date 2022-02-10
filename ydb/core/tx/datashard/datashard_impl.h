@@ -229,7 +229,7 @@ class TDataShard
     friend class TTxS3Listing;
     friend class TExecuteKqpScanTxUnit;
     friend class TTableScan;
-    friend class TKqpScan;
+    friend class TKqpScan; 
 
     friend class TTransQueue;
     friend class TOutReadSets;
@@ -917,7 +917,7 @@ class TDataShard
     void Handle(TEvDataShard::TEvGetTableStats::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvAsyncTableStats::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvS3ListingRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContext& ctx); 
     void Handle(TEvDataShard::TEvUploadRowsRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvEraseRowsRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvConditionalEraseRowsRequest::TPtr& ev, const TActorContext& ctx);
@@ -1157,7 +1157,7 @@ public:
     bool CheckDataTxReject(const TString& opDescr,
                            const TActorContext &ctx,
                            NKikimrTxDataShard::TEvProposeTransactionResult::EStatus& rejectStatus,
-                           TString &reason);
+                           TString &reason); 
     bool CheckDataTxRejectAndReply(TEvDataShard::TEvProposeTransaction* msg, const TActorContext& ctx);
 
     TSysLocks& SysLocksTable() { return SysLocks; }
@@ -2179,7 +2179,7 @@ protected:
             HFunc(TEvDataShard::TEvGetTableStats, Handle);
             HFunc(TEvPrivate::TEvAsyncTableStats, Handle);
             HFunc(TEvDataShard::TEvS3ListingRequest, Handle);
-            HFunc(TEvDataShard::TEvKqpScan, Handle);
+            HFunc(TEvDataShard::TEvKqpScan, Handle); 
             HFunc(TEvDataShard::TEvUploadRowsRequest, Handle);
             HFunc(TEvDataShard::TEvEraseRowsRequest, Handle);
             HFunc(TEvDataShard::TEvConditionalEraseRowsRequest, Handle);

@@ -82,7 +82,7 @@ private:
             auto commitResult = TEvCommitTransactionRequest::AllocateResult<Ydb::Table::CommitTransactionResult>(Request_);
 
             if (kqpResponse.HasQueryStats()) {
-                FillQueryStats(*commitResult->mutable_query_stats(), kqpResponse);
+                FillQueryStats(*commitResult->mutable_query_stats(), kqpResponse); 
             }
 
             ReplyWithResult(Ydb::StatusIds::SUCCESS, issueMessage, *commitResult, ctx);

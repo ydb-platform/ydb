@@ -1,48 +1,48 @@
---!syntax_v1
-PRAGMA Kikimr.UseNewEngine = "true";
-CREATE TABLE ScriptingTest (
-    Key Uint64,
-    Value String,
-    PRIMARY KEY (Key)
-);
-COMMIT;
-
-PRAGMA Kikimr.UseNewEngine = "false";
-REPLACE INTO ScriptingTest (Key, Value) VALUES
-    (1, "One"),
-    (2, "Two");
-COMMIT;
-
-PRAGMA Kikimr.UseNewEngine = "true";
-REPLACE INTO ScriptingTest (Key, Value) VALUES
-    (3, "Three"),
-    (4, "Four");
-COMMIT;
-
-PRAGMA kikimr.ScanQuery = "true";
-PRAGMA Kikimr.UseNewEngine = "true";
-SELECT count(*) FROM ScriptingTest;
-COMMIT;
-
-PRAGMA kikimr.ScanQuery = "false";
-PRAGMA Kikimr.UseNewEngine = "true";
-SELECT count(*) FROM ScriptingTest;
-COMMIT;
-
-PRAGMA kikimr.ScanQuery = "true";
-PRAGMA Kikimr.UseNewEngine = "false";
-SELECT count(*) FROM ScriptingTest;
-COMMIT;
-
-PRAGMA kikimr.ScanQuery = "false";
-PRAGMA Kikimr.UseNewEngine = "false";
-SELECT count(*) FROM ScriptingTest;
-COMMIT;
-
-PRAGMA kikimr.ScanQuery = "true";
-SELECT 1*2*3*4*5;
-COMMIT;
-
-PRAGMA kikimr.ScanQuery = "false";
-SELECT 1*2*3*4*5;
-COMMIT;
+--!syntax_v1 
+PRAGMA Kikimr.UseNewEngine = "true"; 
+CREATE TABLE ScriptingTest ( 
+    Key Uint64, 
+    Value String, 
+    PRIMARY KEY (Key) 
+); 
+COMMIT; 
+ 
+PRAGMA Kikimr.UseNewEngine = "false"; 
+REPLACE INTO ScriptingTest (Key, Value) VALUES 
+    (1, "One"), 
+    (2, "Two"); 
+COMMIT; 
+ 
+PRAGMA Kikimr.UseNewEngine = "true"; 
+REPLACE INTO ScriptingTest (Key, Value) VALUES 
+    (3, "Three"), 
+    (4, "Four"); 
+COMMIT; 
+ 
+PRAGMA kikimr.ScanQuery = "true"; 
+PRAGMA Kikimr.UseNewEngine = "true"; 
+SELECT count(*) FROM ScriptingTest; 
+COMMIT; 
+ 
+PRAGMA kikimr.ScanQuery = "false"; 
+PRAGMA Kikimr.UseNewEngine = "true"; 
+SELECT count(*) FROM ScriptingTest; 
+COMMIT; 
+ 
+PRAGMA kikimr.ScanQuery = "true"; 
+PRAGMA Kikimr.UseNewEngine = "false"; 
+SELECT count(*) FROM ScriptingTest; 
+COMMIT; 
+ 
+PRAGMA kikimr.ScanQuery = "false"; 
+PRAGMA Kikimr.UseNewEngine = "false"; 
+SELECT count(*) FROM ScriptingTest; 
+COMMIT; 
+ 
+PRAGMA kikimr.ScanQuery = "true"; 
+SELECT 1*2*3*4*5; 
+COMMIT; 
+ 
+PRAGMA kikimr.ScanQuery = "false"; 
+SELECT 1*2*3*4*5; 
+COMMIT; 

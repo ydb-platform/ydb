@@ -47,8 +47,8 @@ NNodes::TCoLambda BuildIdentityLambda(TPositionHandle pos, TExprContext& ctx);
 bool EnsureDqUnion(const NNodes::TExprBase& node, TExprContext& ctx);
 
 const TNodeSet& GetConsumers(const NNodes::TExprBase& node, const TParentsMap& parentsMap);
-const TNodeMultiSet& GetConsumers(const NNodes::TExprBase& node, const TParentsMultiMap& parentsMap);
-
+const TNodeMultiSet& GetConsumers(const NNodes::TExprBase& node, const TParentsMultiMap& parentsMap); 
+ 
 ui32 GetConsumersCount(const NNodes::TExprBase& node, const TParentsMap& parentsMap);
 bool IsSingleConsumer(const NNodes::TExprBase& node, const TParentsMap& parentsMap);
 

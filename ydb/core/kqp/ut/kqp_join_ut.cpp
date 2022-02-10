@@ -301,21 +301,21 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         AssertTableReads(result, "/Root/Join1_2", 3);
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(LeftJoinWithNull) {
+    Y_UNIT_TEST_NEW_ENGINE(LeftJoinWithNull) { 
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         CreateSampleTables(session);
 
-        auto result = session.ExecuteDataQuery(Q_(R"(
+        auto result = session.ExecuteDataQuery(Q_(R"( 
             SELECT * FROM `/Root/Join1_1` AS t1
             INNER JOIN `/Root/Join1_2` AS t2
             ON t1.Fk21 == t2.Key1 AND t1.Fk22 == t2.Key2
             LEFT JOIN `/Root/Join1_3` AS t3
             ON t2.Fk3 = t3.Key
             WHERE t1.Value == "Value5" AND t2.Value == "Value31";
-        )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync(); 
         UNIT_ASSERT(result.IsSuccess());
 
         CompareYson(R"([[[108];["One"];[8];["Value5"];#;[108];["One"];["Value31"];#;#]])",
@@ -762,14 +762,14 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
             FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(JoinAggregate) {
+    Y_UNIT_TEST_NEW_ENGINE(JoinAggregate) { 
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         CreateSampleTables(session);
 
         {
-            auto result = session.ExecuteDataQuery(Q_(R"(
+            auto result = session.ExecuteDataQuery(Q_(R"( 
                 SELECT t1.Value, SUM(t3.Value)
                 FROM `/Root/Join1_1` AS t1
                 INNER JOIN `/Root/Join1_2` AS t2
@@ -777,7 +777,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                 LEFT JOIN `/Root/Join1_3` AS t3
                 ON t2.Fk3 = t3.Key
                 GROUP BY t1.Value;
-            )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync(); 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             CompareYson(R"([[["Value1"];[3004]];[["Value2"];[1001]];[["Value3"];[2006]];[["Value5"];#]])",

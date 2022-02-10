@@ -743,14 +743,14 @@ protected:
 
 protected:
     // virtual methods (TODO: replace with static_cast<TDerived*>(this)->Foo()
-
+ 
     virtual THolder<NKikimr::IDestructable> GetSourcesState() {
         return nullptr;
-    }
-
+    } 
+ 
     virtual void PollSources(THolder<NKikimr::IDestructable> /* state */) {
-    }
-
+    } 
+ 
     virtual void TerminateSources(const TString& /* message */, bool /* success */) {
     }
 
@@ -1358,7 +1358,7 @@ private:
 
         if (TaskRunner) {
             TaskRunner->UpdateStats();
-
+ 
             if (auto* taskStats = TaskRunner->GetStats()) {
                 auto* protoTask = dst->AddTasks();
                 FillTaskRunnerStats(Task.GetId(), Task.GetStageId(), *taskStats, protoTask, (bool) ProfileStats);

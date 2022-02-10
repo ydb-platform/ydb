@@ -47,9 +47,9 @@ public:
     TRuntimeNode KqpReadTable(const TTableId& tableId, const TKqpKeyRange& range,
         const TArrayRef<TKqpTableColumn>& columns);
 
-    TRuntimeNode KqpWideReadTable(const TTableId& tableId, const TKqpKeyRange& range,
-        const TArrayRef<TKqpTableColumn>& columns);
-
+    TRuntimeNode KqpWideReadTable(const TTableId& tableId, const TKqpKeyRange& range, 
+        const TArrayRef<TKqpTableColumn>& columns); 
+ 
     TRuntimeNode KqpWideReadTableRanges(const TTableId& tableId, const TKqpKeyRanges& range,
         const TArrayRef<TKqpTableColumn>& columns, TType* returnType);
 

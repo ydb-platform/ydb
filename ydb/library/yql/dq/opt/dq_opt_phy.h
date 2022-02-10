@@ -74,11 +74,11 @@ NNodes::TExprBase DqBuildJoinDict(const NNodes::TDqJoin& join, TExprContext& ctx
 
 TMaybe<std::pair<NNodes::TExprBase, NNodes::TDqConnection>>  ExtractPureExprStage(TExprNode::TPtr input,
     TExprContext& ctx);
-
-NNodes::TExprBase DqBuildPureExprStage(NNodes::TExprBase node, TExprContext& ctx);
-
+ 
+NNodes::TExprBase DqBuildPureExprStage(NNodes::TExprBase node, TExprContext& ctx); 
+ 
 NNodes::TExprBase DqBuildExtendStage(NNodes::TExprBase node, TExprContext& ctx);
-
+ 
 NNodes::TExprBase DqBuildPrecomputeStage(NNodes::TExprBase node, TExprContext& ctx);
 
 NYql::NNodes::TExprBase DqBuildHasItems(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,

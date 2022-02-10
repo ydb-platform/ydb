@@ -12,7 +12,7 @@
 
 #include <ydb/library/yql/core/issue/yql_issue.h>
 
-#include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/json_reader.h> 
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/yson/writer.h>
@@ -54,17 +54,17 @@
     void N(NUnitTest::TTestContext&)
 
 template <bool UseNewEngine, bool ForceVersionV1 = false>
-TString Query(const TString& tmpl) {
+TString Query(const TString& tmpl) { 
     return TStringBuilder()
         << (ForceVersionV1 ? "--!syntax_v1\n" : "")
         << "PRAGMA Kikimr.UseNewEngine = '" << (UseNewEngine ? "true" : "false") << "';" << Endl
         //<< (UseNewEngine ? "PRAGMA Kikimr.UseNewEngine = 'true';" : "")
         << tmpl;
-}
-
+} 
+ 
 #define Q_(expr) Query<UseNewEngine, false>(expr)
 #define Q1_(expr) Query<UseNewEngine, true>(expr)
-
+ 
 namespace NKikimr {
 namespace NKqp {
 
@@ -151,15 +151,15 @@ private:
     THolder<NYdb::TDriver> Driver;
 };
 
-struct TCollectedStreamResult {
-    TString ResultSetYson;
+struct TCollectedStreamResult { 
+    TString ResultSetYson; 
     TMaybe<TString> PlanJson;
     TMaybe<Ydb::TableStats::QueryStats> QueryStats;
-};
-
-TCollectedStreamResult CollectStreamResult(NYdb::NExperimental::TStreamPartIterator& it);
-TCollectedStreamResult CollectStreamResult(NYdb::NTable::TScanQueryPartIterator& it);
-
+}; 
+ 
+TCollectedStreamResult CollectStreamResult(NYdb::NExperimental::TStreamPartIterator& it); 
+TCollectedStreamResult CollectStreamResult(NYdb::NTable::TScanQueryPartIterator& it); 
+ 
 enum class EIndexTypeSql {
     Global,
     GlobalSync,
@@ -223,8 +223,8 @@ TString StreamResultToYson(NYdb::NTable::TScanQueryPartIterator& it);
 TString StreamResultToYson(NYdb::NScripting::TYqlResultPartIterator& it);
 
 ui32 CountPlanNodesByKv(const NJson::TJsonValue& plan, const TString& key, const TString& value);
-NJson::TJsonValue FindPlanNodeByKv(const NJson::TJsonValue& plan, const TString& key, const TString& value);
-
+NJson::TJsonValue FindPlanNodeByKv(const NJson::TJsonValue& plan, const TString& key, const TString& value); 
+ 
 TString ReadTablePartToYson(NYdb::NTable::TSession session, const TString& table);
 
 inline void AssertSuccessResult(const NYdb::TStatus& result) {

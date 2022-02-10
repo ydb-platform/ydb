@@ -19064,11 +19064,11 @@
         "query_99": {
             "uri": "file://test_sql_logic.TestSQLLogic.test_sql_suite_results-select3-9.test_/query_99"
         }
-    },
-    "test_stream_query.TestStreamQuery.test_sql_suite[plan-window.test]": {},
-    "test_stream_query.TestStreamQuery.test_sql_suite[results-window.test]": {
-        "window.test.out": {
+    }, 
+    "test_stream_query.TestStreamQuery.test_sql_suite[plan-window.test]": {}, 
+    "test_stream_query.TestStreamQuery.test_sql_suite[results-window.test]": { 
+        "window.test.out": { 
             "uri": "file://test_stream_query.TestStreamQuery.test_sql_suite_results-window.test_/window.test.out"
-        }
+        } 
     }
 }

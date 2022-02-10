@@ -123,13 +123,13 @@ const TNodeSet& GetConsumers(const TExprBase& node, const TParentsMap& parentsMa
     return consumersIt->second;
 }
 
-const TNodeMultiSet& GetConsumers(const TExprBase& node, const TParentsMultiMap& parentsMap) {
-    auto consumersIt = parentsMap.find(node.Raw());
-    YQL_ENSURE(consumersIt != parentsMap.end());
-
-    return consumersIt->second;
-}
-
+const TNodeMultiSet& GetConsumers(const TExprBase& node, const TParentsMultiMap& parentsMap) { 
+    auto consumersIt = parentsMap.find(node.Raw()); 
+    YQL_ENSURE(consumersIt != parentsMap.end()); 
+ 
+    return consumersIt->second; 
+} 
+ 
 ui32 GetConsumersCount(const TExprBase& node, const TParentsMap& parentsMap) {
     return GetConsumers(node, parentsMap).size();
 }

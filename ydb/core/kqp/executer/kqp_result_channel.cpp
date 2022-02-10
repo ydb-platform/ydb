@@ -74,7 +74,7 @@ private:
         LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId
             << ", send ack to channelId: " << ChannelId
             << ", seqNo: " << seqNo
-            << ", enough: " << ev->Get()->Record.GetEnough()
+            << ", enough: " << ev->Get()->Record.GetEnough() 
             << ", freeSpace: " << freeSpace
             << ", to: " << ComputeActor);
 
@@ -82,7 +82,7 @@ private:
         ackEv->Record.SetSeqNo(seqNo);
         ackEv->Record.SetChannelId(ChannelId);
         ackEv->Record.SetFreeSpace(freeSpace);
-        ackEv->Record.SetFinish(ev->Get()->Record.GetEnough());
+        ackEv->Record.SetFinish(ev->Get()->Record.GetEnough()); 
         Send(ComputeActor, ackEv.Release(), /* TODO: undelivery */ 0, /* cookie */ ChannelId);
     }
 

@@ -35,7 +35,7 @@ protected:
     void Init();
 
     void ReportQueryAction(NKikimrKqp::EQueryAction action);
-    void ReportQueryType(NKikimrKqp::EQueryType type);
+    void ReportQueryType(NKikimrKqp::EQueryType type); 
 
     void ReportSessionShutdownRequest();
     void ReportCreateSession(ui64 requestSize);
@@ -116,9 +116,9 @@ protected:
     NMonitoring::TDynamicCounters::TCounterPtr SqlV1Translations;
     NMonitoring::TDynamicCounters::TCounterPtr SqlUnknownTranslations;
 
-    THashMap<NKikimrKqp::EQueryType, NMonitoring::TDynamicCounters::TCounterPtr> QueryTypes;
-    NMonitoring::TDynamicCounters::TCounterPtr OtherQueryTypes;
-
+    THashMap<NKikimrKqp::EQueryType, NMonitoring::TDynamicCounters::TCounterPtr> QueryTypes; 
+    NMonitoring::TDynamicCounters::TCounterPtr OtherQueryTypes; 
+ 
     NMonitoring::TDynamicCounters::TCounterPtr QueriesWithRangeScan;
     NMonitoring::TDynamicCounters::TCounterPtr QueriesWithFullScan;
     NMonitoring::THistogramPtr QueryAffectedShardsCount;

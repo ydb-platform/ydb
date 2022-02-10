@@ -146,8 +146,8 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     }
 
     TKikimrSettings::TConstPtr Snapshot() const;
-
-    NKikimrConfig::TFeatureFlags FeatureFlags;
+ 
+    NKikimrConfig::TFeatureFlags FeatureFlags; 
 };
 
 }

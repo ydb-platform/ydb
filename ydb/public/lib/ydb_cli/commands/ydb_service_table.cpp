@@ -553,12 +553,12 @@ void TCommandExplain::Config(TConfig& config) {
         .RequiredArgument("PATH").StoreResult(&QueryFile);
     config.Opts->AddLongOption("ast", "Print query AST")
         .StoreTrue(&PrintAst);
-
-    config.Opts->AddLongOption('t', "type", "Query type [data, scan]")
-        .RequiredArgument("[String]").DefaultValue("data").StoreResult(&QueryType);
-    config.Opts->AddLongOption("analyze", "Run query and collect execution statistics")
-        .NoArgument().SetFlag(&Analyze);
-
+ 
+    config.Opts->AddLongOption('t', "type", "Query type [data, scan]") 
+        .RequiredArgument("[String]").DefaultValue("data").StoreResult(&QueryType); 
+    config.Opts->AddLongOption("analyze", "Run query and collect execution statistics") 
+        .NoArgument().SetFlag(&Analyze); 
+ 
     AddFormats(config, {
             EOutputFormat::Pretty,
             EOutputFormat::JsonUnicode,
@@ -577,77 +577,77 @@ void TCommandExplain::Parse(TConfig& config) {
 int TCommandExplain::Run(TConfig& config) {
     CheckQueryFile();
 
-    TString planJson;
-    TString ast;
-    if (QueryType == "scan") {
-        NTable::TTableClient client(CreateDriver(config));
-        NTable::TStreamExecScanQuerySettings settings;
+    TString planJson; 
+    TString ast; 
+    if (QueryType == "scan") { 
+        NTable::TTableClient client(CreateDriver(config)); 
+        NTable::TStreamExecScanQuerySettings settings; 
 
-        if (Analyze) {
-            settings.CollectQueryStats(NTable::ECollectQueryStatsMode::Full);
-        } else {
-            settings.Explain(true);
-        }
-
-        auto result = client.StreamExecuteScanQuery(Query, settings).GetValueSync();
-        ThrowOnError(result);
-
-        SetInterruptHandlers();
+        if (Analyze) { 
+            settings.CollectQueryStats(NTable::ECollectQueryStatsMode::Full); 
+        } else { 
+            settings.Explain(true); 
+        } 
+ 
+        auto result = client.StreamExecuteScanQuery(Query, settings).GetValueSync(); 
+        ThrowOnError(result); 
+ 
+        SetInterruptHandlers(); 
         while (!IsInterrupted()) {
-            auto tablePart = result.ReadNext().GetValueSync();
-            if (!tablePart.IsSuccess()) {
-                if (tablePart.EOS()) {
-                    break;
-                }
-                ThrowOnError(tablePart);
-            }
-            if (tablePart.HasQueryStats() ) {
+            auto tablePart = result.ReadNext().GetValueSync(); 
+            if (!tablePart.IsSuccess()) { 
+                if (tablePart.EOS()) { 
+                    break; 
+                } 
+                ThrowOnError(tablePart); 
+            } 
+            if (tablePart.HasQueryStats() ) { 
                 auto proto = NYdb::TProtoAccessor::GetProto(tablePart.GetQueryStats());
-                planJson = proto.query_plan();
-                ast = proto.query_ast();
-            }
-        }
-
+                planJson = proto.query_plan(); 
+                ast = proto.query_ast(); 
+            } 
+        } 
+ 
         if (IsInterrupted()) {
             Cerr << "<INTERRUPTED>" << Endl;
         }
 
-    } else if (QueryType == "data" && Analyze) {
-        NTable::TExecDataQuerySettings settings;
-        settings.CollectQueryStats(NTable::ECollectQueryStatsMode::Full);
-
-        auto result = GetSession(config).ExecuteDataQuery(
-            Query,
-            NTable::TTxControl::BeginTx(NTable::TTxSettings::SerializableRW()).CommitTx(),
-            settings
-        ).ExtractValueSync();
-        ThrowOnError(result);
-        planJson = result.GetQueryPlan();
+    } else if (QueryType == "data" && Analyze) { 
+        NTable::TExecDataQuerySettings settings; 
+        settings.CollectQueryStats(NTable::ECollectQueryStatsMode::Full); 
+ 
+        auto result = GetSession(config).ExecuteDataQuery( 
+            Query, 
+            NTable::TTxControl::BeginTx(NTable::TTxSettings::SerializableRW()).CommitTx(), 
+            settings 
+        ).ExtractValueSync(); 
+        ThrowOnError(result); 
+        planJson = result.GetQueryPlan(); 
         if (auto stats = result.GetStats()) {
-            auto proto = NYdb::TProtoAccessor::GetProto(*stats);
-            ast = proto.query_ast();
-        }
-    } else if (QueryType == "data" && !Analyze) {
-        NTable::TExplainQueryResult result = GetSession(config).ExplainDataQuery(
-            Query,
-            FillSettings(NTable::TExplainDataQuerySettings())
-        ).GetValueSync();
-        ThrowOnError(result);
-        planJson = result.GetPlan();
-        ast = result.GetAst();
-
-    } else {
-        throw TMissUseException() << "Unknown query type for explain.";
-    }
-
+            auto proto = NYdb::TProtoAccessor::GetProto(*stats); 
+            ast = proto.query_ast(); 
+        } 
+    } else if (QueryType == "data" && !Analyze) { 
+        NTable::TExplainQueryResult result = GetSession(config).ExplainDataQuery( 
+            Query, 
+            FillSettings(NTable::TExplainDataQuerySettings()) 
+        ).GetValueSync(); 
+        ThrowOnError(result); 
+        planJson = result.GetPlan(); 
+        ast = result.GetAst(); 
+ 
+    } else { 
+        throw TMissUseException() << "Unknown query type for explain."; 
+    } 
+ 
     if (PrintAst) {
         Cout << "Query AST:" << Endl << ast << Endl;
-    } else {
+    } else { 
         Cout << "Query Plan:" << Endl;
         TQueryPlanPrinter queryPlanPrinter(OutputFormat, Analyze);
         queryPlanPrinter.Print(planJson);
-    }
-
+    } 
+ 
     return EXIT_SUCCESS;
 }
 

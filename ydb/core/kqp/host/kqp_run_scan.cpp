@@ -65,60 +65,60 @@ protected:
     }
 };
 
-class TKqpCreateSnapshotTransformer : public TGraphTransformerBase {
-public:
-    TKqpCreateSnapshotTransformer(TIntrusivePtr<IKqpGateway> gateway, TIntrusivePtr<TKqlTransformContext> transformCtx,
+class TKqpCreateSnapshotTransformer : public TGraphTransformerBase { 
+public: 
+    TKqpCreateSnapshotTransformer(TIntrusivePtr<IKqpGateway> gateway, TIntrusivePtr<TKqlTransformContext> transformCtx, 
         TIntrusivePtr<TKqpTransactionState> txState)
-        : Gateway(gateway)
-        , TransformCtx(transformCtx)
-        , TxState(txState)
-    {}
-
-    TStatus DoTransform(NYql::TExprNode::TPtr input, NYql::TExprNode::TPtr& output, NYql::TExprContext&) {
-        output = input;
-
-        THashSet<TString> tablesSet;
-        for (const auto& phyTx: TransformCtx->PhysicalQuery->GetTransactions()) {
-            for (const auto& stage: phyTx.GetStages()) {
-                for (const auto& tableOp: stage.GetTableOps()) {
-                    tablesSet.insert(tableOp.GetTable().GetPath());
-                }
-            }
-        }
-        TVector<TString> tables(tablesSet.begin(), tablesSet.end());
-
-        auto timeout = TransformCtx->QueryCtx->Deadlines.TimeoutAt - Gateway->GetCurrentTime();
-        if (!timeout) {
-            // TODO: Just cancel request.
-            timeout = TDuration::MilliSeconds(1);
-        }
-        SnapshotFuture = Gateway->CreatePersistentSnapshot(tables, timeout);
-
-        Promise = NewPromise();
-        auto promise = Promise;
-        SnapshotFuture.Apply([promise](const TFuture<IKqpGateway::TKqpSnapshotHandle> future) mutable {
-            YQL_ENSURE(future.HasValue());
-            promise.SetValue();
-        });
-
-        return TStatus::Async;
-    }
-
-    NThreading::TFuture<void> DoGetAsyncFuture(const NYql::TExprNode& ) {
-        return Promise.GetFuture();
-    }
-
-    TStatus DoApplyAsyncChanges(NYql::TExprNode::TPtr input, NYql::TExprNode::TPtr& output, NYql::TExprContext& ctx) {
-        output = input;
-
-        auto handle = SnapshotFuture.ExtractValue();
-
-        if (!handle.Snapshot.IsValid()) {
+        : Gateway(gateway) 
+        , TransformCtx(transformCtx) 
+        , TxState(txState) 
+    {} 
+ 
+    TStatus DoTransform(NYql::TExprNode::TPtr input, NYql::TExprNode::TPtr& output, NYql::TExprContext&) { 
+        output = input; 
+ 
+        THashSet<TString> tablesSet; 
+        for (const auto& phyTx: TransformCtx->PhysicalQuery->GetTransactions()) { 
+            for (const auto& stage: phyTx.GetStages()) { 
+                for (const auto& tableOp: stage.GetTableOps()) { 
+                    tablesSet.insert(tableOp.GetTable().GetPath()); 
+                } 
+            } 
+        } 
+        TVector<TString> tables(tablesSet.begin(), tablesSet.end()); 
+ 
+        auto timeout = TransformCtx->QueryCtx->Deadlines.TimeoutAt - Gateway->GetCurrentTime(); 
+        if (!timeout) { 
+            // TODO: Just cancel request. 
+            timeout = TDuration::MilliSeconds(1); 
+        } 
+        SnapshotFuture = Gateway->CreatePersistentSnapshot(tables, timeout); 
+ 
+        Promise = NewPromise(); 
+        auto promise = Promise; 
+        SnapshotFuture.Apply([promise](const TFuture<IKqpGateway::TKqpSnapshotHandle> future) mutable { 
+            YQL_ENSURE(future.HasValue()); 
+            promise.SetValue(); 
+        }); 
+ 
+        return TStatus::Async; 
+    } 
+ 
+    NThreading::TFuture<void> DoGetAsyncFuture(const NYql::TExprNode& ) { 
+        return Promise.GetFuture(); 
+    } 
+ 
+    TStatus DoApplyAsyncChanges(NYql::TExprNode::TPtr input, NYql::TExprNode::TPtr& output, NYql::TExprContext& ctx) { 
+        output = input; 
+ 
+        auto handle = SnapshotFuture.ExtractValue(); 
+ 
+        if (!handle.Snapshot.IsValid()) { 
             YQL_CLOG(NOTICE, ProviderKqp) << "Failed to create persistent snapshot. "
                 << "Status: " << NKikimrIssues::TStatusIds_EStatusCode_Name(handle.Status)
                 << ", issues: " << handle.Issues().ToString();
 
-            TIssue issue("Failed to create persistent snapshot");
+            TIssue issue("Failed to create persistent snapshot"); 
             switch (handle.Status) {
                 case NKikimrIssues::TStatusIds::SCHEME_ERROR:
                     issue.SetCode(NYql::TIssuesIds::KIKIMR_SCHEME_ERROR, NYql::TSeverityIds::S_ERROR);
@@ -136,48 +136,48 @@ public:
             }
 
             for (const auto& subIssue: handle.Issues()) {
-                issue.AddSubIssue(MakeIntrusive<TIssue>(subIssue));
-            }
-            ctx.AddError(issue);
-            return TStatus::Error;
-        }
-
-        TxState->Tx().SnapshotHandle = handle;
-        return TStatus::Ok;
-    }
-
-private:
-    TIntrusivePtr<IKqpGateway> Gateway;
-    TIntrusivePtr<TKqlTransformContext> TransformCtx;
-
-    NThreading::TFuture<IKqpGateway::TKqpSnapshotHandle> SnapshotFuture;
-    NThreading::TPromise<void> Promise;
-    TIntrusivePtr<TKqpTransactionState> TxState;
-};
-
-class TKqpReleaseSnapshotTransformer : public TSyncTransformerBase {
-public:
-    TKqpReleaseSnapshotTransformer(TIntrusivePtr<IKqpGateway> gateway, TIntrusivePtr<TKqpTransactionState> txState)
-        : Gateway(gateway)
-        , TxState(txState)
-    {}
-
-    TStatus DoTransform(NYql::TExprNode::TPtr input, NYql::TExprNode::TPtr& output, NYql::TExprContext&) {
-        output = input;
-
+                issue.AddSubIssue(MakeIntrusive<TIssue>(subIssue)); 
+            } 
+            ctx.AddError(issue); 
+            return TStatus::Error; 
+        } 
+ 
+        TxState->Tx().SnapshotHandle = handle; 
+        return TStatus::Ok; 
+    } 
+ 
+private: 
+    TIntrusivePtr<IKqpGateway> Gateway; 
+    TIntrusivePtr<TKqlTransformContext> TransformCtx; 
+ 
+    NThreading::TFuture<IKqpGateway::TKqpSnapshotHandle> SnapshotFuture; 
+    NThreading::TPromise<void> Promise; 
+    TIntrusivePtr<TKqpTransactionState> TxState; 
+}; 
+ 
+class TKqpReleaseSnapshotTransformer : public TSyncTransformerBase { 
+public: 
+    TKqpReleaseSnapshotTransformer(TIntrusivePtr<IKqpGateway> gateway, TIntrusivePtr<TKqpTransactionState> txState) 
+        : Gateway(gateway) 
+        , TxState(txState) 
+    {} 
+ 
+    TStatus DoTransform(NYql::TExprNode::TPtr input, NYql::TExprNode::TPtr& output, NYql::TExprContext&) { 
+        output = input; 
+ 
         if (TxState->Tx().GetSnapshot().IsValid()) {
-            Gateway->DiscardPersistentSnapshot(TxState->Tx().SnapshotHandle);
-        }
-
-        return TStatus::Ok;
-    }
-
-private:
-    TIntrusivePtr<IKqpGateway> Gateway;
-    TIntrusivePtr<TKqpTransactionState> TxState;
-};
-
-
+            Gateway->DiscardPersistentSnapshot(TxState->Tx().SnapshotHandle); 
+        } 
+ 
+        return TStatus::Ok; 
+    } 
+ 
+private: 
+    TIntrusivePtr<IKqpGateway> Gateway; 
+    TIntrusivePtr<TKqpTransactionState> TxState; 
+}; 
+ 
+ 
 TAutoPtr<IGraphTransformer> CreateKqpExecuteScanTransformer(TIntrusivePtr<IKqpGateway> gateway,
     const TString& cluster, TIntrusivePtr<TKqpTransactionState> txState,
     TIntrusivePtr<TKqlTransformContext> transformCtx)
@@ -185,17 +185,17 @@ TAutoPtr<IGraphTransformer> CreateKqpExecuteScanTransformer(TIntrusivePtr<IKqpGa
     return new TKqpExecuteScanTransformer(gateway, cluster, txState, transformCtx);
 }
 
-TAutoPtr<IGraphTransformer> CreateKqpCreateSnapshotTransformer(TIntrusivePtr<IKqpGateway> gateway,
+TAutoPtr<IGraphTransformer> CreateKqpCreateSnapshotTransformer(TIntrusivePtr<IKqpGateway> gateway, 
     TIntrusivePtr<TKqlTransformContext> transformCtx, TIntrusivePtr<TKqpTransactionState> txState)
-{
+{ 
     return new TKqpCreateSnapshotTransformer(gateway, transformCtx, txState);
-}
-
-TAutoPtr<IGraphTransformer> CreateKqpReleaseSnapshotTransformer(TIntrusivePtr<IKqpGateway> gateway,
-    TIntrusivePtr<TKqpTransactionState> txState)
-{
-    return new TKqpReleaseSnapshotTransformer(gateway, txState);
-}
-
+} 
+ 
+TAutoPtr<IGraphTransformer> CreateKqpReleaseSnapshotTransformer(TIntrusivePtr<IKqpGateway> gateway, 
+    TIntrusivePtr<TKqpTransactionState> txState) 
+{ 
+    return new TKqpReleaseSnapshotTransformer(gateway, txState); 
+} 
+ 
 } // namespace NKqp
 } // namespace NKikimr

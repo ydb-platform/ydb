@@ -95,11 +95,11 @@ struct TShardKeyRanges {
     std::pair<const TSerializedCellVec*, bool> GetRightBorder() const;
 };
 
-// TODO: use two different structs for scans and data queries
+// TODO: use two different structs for scans and data queries 
 struct TTaskMeta {
     ui64 ShardId = 0; // only in case of non-scans (data-query & legacy scans)
     ui64 NodeId = 0;  // only in case of scans over persistent snapshots
-
+ 
     TMap<TString, NYql::NDqProto::TData> Params;
     TMap<TString, NKikimr::NMiniKQL::TType*> ParamTypes;
 

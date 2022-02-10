@@ -425,12 +425,12 @@ class BaseCanonicalTest(object):
         rp = script_client.execute_yql(query, params)
         return self.wrap_result_sets(rp.result_sets)
 
-    def script_explain(self, query):
-        script_client = ydb.ScriptingClient(self.driver)
-        settings = ydb.ExplainYqlScriptSettings().with_mode(ydb.ExplainYqlScriptSettings.MODE_EXPLAIN)
-        rp = script_client.explain_yql(query, settings)
-        return rp.plan
-
+    def script_explain(self, query): 
+        script_client = ydb.ScriptingClient(self.driver) 
+        settings = ydb.ExplainYqlScriptSettings().with_mode(ydb.ExplainYqlScriptSettings.MODE_EXPLAIN) 
+        rp = script_client.explain_yql(query, settings) 
+        return rp.plan 
+ 
     def compare_tables_test(self, canons, config, query_name):
         for table_name in config.get('compare_tables', []):
             canons['table_data_%s' % table_name] = self.canonical_results(
@@ -486,7 +486,7 @@ class BaseCanonicalTest(object):
             pt = config.get('parameters_types', {})
             result_sets = self.script_query(query, pv, pt)
             canons['script'] = self.canonical_results(query_name, self.pretty_json(result_sets))
-            canons['script_plan'] = self.canonical_plan(query_name, self.script_explain(query))
+            canons['script_plan'] = self.canonical_plan(query_name, self.script_explain(query)) 
             self.compare_tables_test(canons, config, query_name)
         elif kind == 'plan':
             plan = self.explain(query)

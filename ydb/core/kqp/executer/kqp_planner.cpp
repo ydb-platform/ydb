@@ -1,12 +1,12 @@
 #include "kqp_planner.h"
 #include "kqp_planner_strategy.h"
-#include "kqp_shards_resolver.h"
+#include "kqp_shards_resolver.h" 
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/kqp/rm/kqp_rm.h>
 #include <ydb/core/kqp/rm/kqp_resource_estimation.h>
 
-#include <util/generic/set.h>
+#include <util/generic/set.h> 
 
 namespace NKikimr::NKqp {
 
@@ -28,8 +28,8 @@ TKqpPlanner::TKqpPlanner(ui64 txId, const TActorId& executer, TVector<NDqProto::
     : TxId(txId)
     , ExecuterId(executer)
     , Tasks(std::move(tasks))
-    , ScanTasks(std::move(scanTasks))
-    , Snapshot(snapshot)
+    , ScanTasks(std::move(scanTasks)) 
+    , Snapshot(snapshot) 
     , Database(database)
     , UserToken(userToken)
     , Deadline(deadline)
@@ -161,12 +161,12 @@ void TKqpPlanner::Process(const TVector<NKikimrKqp::TKqpNodeResources>& snapshot
             TlsActivationContext->Send(new IEventHandle(target, ExecuterId, ev.Release(),
                 CalcSendMessageFlagsForNode(target.NodeId())));
         }
-
-        TVector<ui64> nodes;
+ 
+        TVector<ui64> nodes; 
         nodes.reserve(ScanTasks.size());
         for (auto& [nodeId, _]: ScanTasks) {
             nodes.push_back(nodeId);
-        }
+        } 
 
         for (ui64 nodeId: nodes) {
             auto ev = PrepareKqpNodeRequest({});
@@ -175,7 +175,7 @@ void TKqpPlanner::Process(const TVector<NKikimrKqp::TKqpNodeResources>& snapshot
             auto target = MakeKqpNodeServiceID(nodeId);
             TlsActivationContext->Send(new IEventHandle(target, ExecuterId, ev.Release(),
                 CalcSendMessageFlagsForNode(target.NodeId())));
-        }
+        } 
         Y_VERIFY(ScanTasks.empty());
     } else {
         auto ev = MakeHolder<TEvKqp::TEvAbortExecution>(Ydb::StatusIds::PRECONDITION_FAILED,
@@ -198,12 +198,12 @@ void TKqpPlanner::RunLocal(const TVector<NKikimrKqp::TKqpNodeResources>& snapsho
     auto target = MakeKqpNodeServiceID(SelfId().NodeId());
     TlsActivationContext->Send(new IEventHandle(target, ExecuterId, ev.Release(), IEventHandle::FlagTrackDelivery));
 
-
-    TVector<ui64> nodes;
-    for (const auto& pair: ScanTasks) {
-        nodes.push_back(pair.first);
+ 
+    TVector<ui64> nodes; 
+    for (const auto& pair: ScanTasks) { 
+        nodes.push_back(pair.first); 
         YQL_ENSURE(pair.first != SelfId().NodeId());
-    }
+    } 
 
     THashMap<ui64, size_t> nodeIdToIdx;
     for (size_t idx = 0; idx < snapshot.size(); ++idx) {
@@ -211,15 +211,15 @@ void TKqpPlanner::RunLocal(const TVector<NKikimrKqp::TKqpNodeResources>& snapsho
         LOG_D("snapshot #" << idx << ": " << snapshot[idx].ShortDebugString());
     }
 
-    for (auto nodeId: nodes) {
+    for (auto nodeId: nodes) { 
         auto ev = PrepareKqpNodeRequest({});
         AddScansToKqpNodeRequest(ev, nodeId);
         auto target = MakeKqpNodeServiceID(nodeId);
         TlsActivationContext->Send(new IEventHandle(target, ExecuterId, ev.Release(),
             CalcSendMessageFlagsForNode(target.NodeId())));
-    }
-    Y_VERIFY(ScanTasks.size() == 0);
-
+    } 
+    Y_VERIFY(ScanTasks.size() == 0); 
+ 
     PassAway();
 }
 
@@ -321,7 +321,7 @@ IActor* CreateKqpPlanner(ui64 txId, const TActorId& executer, TVector<NDqProto::
     const TString& database, const TMaybe<TString>& token, TInstant deadline, const NYql::NDqProto::EDqStatsMode& statsMode,
     bool disableLlvmForUdfStages, bool enableLlvm, bool withSpilling, const TMaybe<NKikimrKqp::TRlPath>& rlPath)
 {
-    return new TKqpPlanner(txId, executer, std::move(tasks), std::move(scanTasks), snapshot,
+    return new TKqpPlanner(txId, executer, std::move(tasks), std::move(scanTasks), snapshot, 
         database, token, deadline, statsMode, disableLlvmForUdfStages, enableLlvm, withSpilling, rlPath);
 }
 

@@ -45,7 +45,7 @@ inline NYql::NDqProto::EDqStatsMode GetKqpStatsMode(Ydb::Table::QueryStatsCollec
     switch (mode) {
         case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC:
             return NYql::NDqProto::DQ_STATS_MODE_BASIC;
-        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL:
+        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL: 
             return NYql::NDqProto::DQ_STATS_MODE_PROFILE;
         default:
             return NYql::NDqProto::DQ_STATS_MODE_NONE;
@@ -70,7 +70,7 @@ inline bool CheckQuery(const TString& query, NYql::TIssues& issues) {
     return true;
 }
 
-void FillQueryStats(Ydb::TableStats::QueryStats& queryStats, const NKikimrKqp::TQueryResponse& kqpResponse);
+void FillQueryStats(Ydb::TableStats::QueryStats& queryStats, const NKikimrKqp::TQueryResponse& kqpResponse); 
 
 inline void ConvertKqpQueryResultToDbResult(const NKikimrMiniKQL::TResult& from, Ydb::ResultSet* to) {
     const auto& type = from.GetType();

@@ -88,8 +88,8 @@ protected:
                 << ", error: " << message);
 
         auto error = MakeHolder<NKqp::TEvKqpCompute::TEvScanError>();
-        error->Record.SetStatus(status);
-        IssueToMessage(NYql::TIssue(message), error->Record.MutableIssues()->Add());
+        error->Record.SetStatus(status); 
+        IssueToMessage(NYql::TIssue(message), error->Record.MutableIssues()->Add()); 
 
         TBase::Send(OwnerActorId, error.Release());
 

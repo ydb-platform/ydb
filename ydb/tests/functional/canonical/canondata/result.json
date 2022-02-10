@@ -91,14 +91,14 @@
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_dynumber_select_params.sql-result_sets_/dynumber_select_params.sql_scan_query.results"
         }
     },
-    "test_sql.TestCanonicalFolder1.test_case[explain.script-script]": {
-        "script": {
+    "test_sql.TestCanonicalFolder1.test_case[explain.script-script]": { 
+        "script": { 
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_explain.script-script_/explain.script.results"
-        },
-        "script_plan": {
+        }, 
+        "script_plan": { 
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_explain.script-script_/explain.script.plan"
-        }
-    },
+        } 
+    }, 
     "test_sql.TestCanonicalFolder1.test_case[index/select_using_index.sql-plan]": {
         "plan": {
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_index_select_using_index.sql-plan_/index_select_using_index.sql.plan"
@@ -913,9 +913,9 @@
         "script": {
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_simple_ct.script-script_/simple_ct.script.results"
         },
-        "script_plan": {
+        "script_plan": { 
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_simple_ct.script-script_/simple_ct.script.plan"
-        },
+        }, 
         "table_data_Questions": {
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_simple_ct.script-script_/simple_ct.script_Questions.results"
         }
@@ -1163,16 +1163,16 @@
     "test_sql.TestCanonicalFolder1.test_case[simple/script_params.script-script]": {
         "script": {
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_simple_script_params.script-script_/simple_script_params.script.results"
-        },
-        "script_plan": {
+        }, 
+        "script_plan": { 
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_simple_script_params.script-script_/simple_script_params.script.plan"
         }
     },
     "test_sql.TestCanonicalFolder1.test_case[table_types.script-script]": {
         "script": {
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_table_types.script-script_/table_types.script.results"
-        },
-        "script_plan": {
+        }, 
+        "script_plan": { 
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_table_types.script-script_/table_types.script.plan"
         }
     },

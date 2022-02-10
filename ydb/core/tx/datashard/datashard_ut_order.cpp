@@ -3686,18 +3686,18 @@ void TestLateKqpQueryAfterColumnDrop(bool dataQuery, const TString& query, bool 
         // }
         switch (ev->GetTypeRewrite()) {
             case TEvDataShard::EvProposeTransaction: {
-                auto &rec = ev->Get<TEvDataShard::TEvProposeTransaction>()->Record;
-                if (capturePropose && rec.GetTxKind() != NKikimrTxDataShard::TX_KIND_SNAPSHOT) {
-                    Cerr << "---- capture EvProposeTransaction ---- type=" << rec.GetTxKind() << Endl;
-                    eventsPropose.emplace_back(ev.Release());
-                    return TTestActorRuntime::EEventAction::DROP;
-                }
-                break;
-            }
-
-            case TEvDataShard::EvKqpScan: {
+                auto &rec = ev->Get<TEvDataShard::TEvProposeTransaction>()->Record; 
+                if (capturePropose && rec.GetTxKind() != NKikimrTxDataShard::TX_KIND_SNAPSHOT) { 
+                    Cerr << "---- capture EvProposeTransaction ---- type=" << rec.GetTxKind() << Endl; 
+                    eventsPropose.emplace_back(ev.Release()); 
+                    return TTestActorRuntime::EEventAction::DROP; 
+                } 
+                break; 
+            } 
+ 
+            case TEvDataShard::EvKqpScan: { 
                 if (capturePropose) {
-                    Cerr << "---- capture EvKqpScan ----" << Endl;
+                    Cerr << "---- capture EvKqpScan ----" << Endl; 
                     eventsPropose.emplace_back(ev.Release());
                     return TTestActorRuntime::EEventAction::DROP;
                 }

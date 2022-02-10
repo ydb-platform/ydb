@@ -23,7 +23,7 @@ SRCS(
     kqp_arrow_in_channels_ut.cpp
     kqp_document_api_ut.cpp
     kqp_effects_perf_ut.cpp
-    kqp_explain_ut.cpp
+    kqp_explain_ut.cpp 
     kqp_flip_join_ut.cpp
     kqp_index_lookup_join_ut.cpp
     kqp_indexes_ut.cpp
@@ -47,7 +47,7 @@ SRCS(
     kqp_scripting_ut.cpp
     kqp_service_ut.cpp
     kqp_sort_ut.cpp
-    kqp_stats_ut.cpp
+    kqp_stats_ut.cpp 
     kqp_sqlin_ut.cpp
     kqp_sys_view_ut.cpp
     kqp_sys_col_ut.cpp

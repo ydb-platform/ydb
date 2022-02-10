@@ -495,7 +495,7 @@ TExprBase DqBuildPhyJoin(const TDqJoin& join, bool pushLeftStage, TExprContext& 
 
     TMaybeNode<TDqCnBroadcast> rightBroadcast;
     TNodeOnNodeOwnedMap rightPrecomputes;
-
+ 
     if (rightCn) {
         auto collectRightStage = Build<TDqStage>(ctx, join.Pos())
             .Inputs()
@@ -575,7 +575,7 @@ TExprBase DqBuildPhyJoin(const TDqJoin& join, bool pushLeftStage, TExprContext& 
 
     TCoArgument leftInputArg{ctx.NewArgument(join.Pos(), "_dq_join_left")};
     TCoArgument rightInputArg{ctx.NewArgument(join.Pos(), "_dq_join_right")};
-
+ 
     bool buildNewStage = !pushLeftStage;
     if (!rightCn) {
         // right input is DqPure expression, try to push down the join...
@@ -594,7 +594,7 @@ TExprBase DqBuildPhyJoin(const TDqJoin& join, bool pushLeftStage, TExprContext& 
             buildNewStage = GetStageOutputsCount(leftCn.Output().Stage(), true) > 1;
         }
     }
-
+ 
     TExprBase joinRightInput = buildNewStage
         ? (TExprBase) rightInputArg
         : (rightBroadcast

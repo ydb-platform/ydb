@@ -653,7 +653,7 @@ message QueryStatsCollection {
         STATS_COLLECTION_UNSPECIFIED = 0;
         STATS_COLLECTION_NONE = 1;       // Stats collection is disabled
         STATS_COLLECTION_BASIC = 2;      // Aggregated stats of reads, updates and deletes per table
-        STATS_COLLECTION_FULL = 3;       // Add execution stats and plan on top of STATS_COLLECTION_BASIC
+        STATS_COLLECTION_FULL = 3;       // Add execution stats and plan on top of STATS_COLLECTION_BASIC 
     }
 }
 
@@ -968,7 +968,7 @@ message BulkUpsertResult {
 message ExecuteScanQueryRequest {
     enum Mode {
         MODE_UNSPECIFIED = 0;
-        MODE_EXPLAIN = 1;
+        MODE_EXPLAIN = 1; 
         // MODE_PREPARE = 2;
         MODE_EXEC = 3;
     }
@@ -980,7 +980,7 @@ message ExecuteScanQueryRequest {
     reserved 5; // query_cache_policy
     Mode mode = 6;
     reserved 7; // report_progress
-    QueryStatsCollection.Mode collect_stats = 8;
+    QueryStatsCollection.Mode collect_stats = 8; 
 }
 
 message ExecuteScanQueryPartialResponse {
@@ -995,6 +995,6 @@ message ExecuteScanQueryPartialResult {
     reserved 3; // query_meta
     reserved 4; // query_progress
     reserved 5; // query_plan
-    Ydb.TableStats.QueryStats query_stats = 6;
+    Ydb.TableStats.QueryStats query_stats = 6; 
 }
 

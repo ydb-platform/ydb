@@ -546,7 +546,7 @@ TExprNode::TPtr HandleReadTable(const TKiReadTable& read, TExprContext& ctx, con
         YQL_ENSURE(metadata, "unable to find metadata for index: " << indexName);
         YQL_ENSURE(state == TIndexDescription::EIndexState::Ready
             || state == TIndexDescription::EIndexState::WriteOnly);
-
+ 
         if (state != TIndexDescription::EIndexState::Ready) {
             auto err = TStringBuilder()
                 << "Requested index: " << indexName

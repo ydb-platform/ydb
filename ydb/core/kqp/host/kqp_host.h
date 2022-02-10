@@ -98,8 +98,8 @@ public:
         NKikimrMiniKQL::TParams&& parameters, const NActors::TActorId& target,
         const NYql::IKikimrQueryExecutor::TExecuteSettings& settings) = 0;
 
-    virtual IAsyncQueryResultPtr ExplainScanQuery(const TString& query, bool isSql) = 0;
-
+    virtual IAsyncQueryResultPtr ExplainScanQuery(const TString& query, bool isSql) = 0; 
+ 
     /* Scripting */
     virtual IAsyncQueryResultPtr ValidateYqlScript(const TString& script) = 0;
     virtual TQueryResult SyncValidateYqlScript(const TString& script) = 0;

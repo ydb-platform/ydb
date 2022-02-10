@@ -4,7 +4,7 @@ OWNER(g:kikimr)
 
 SRCS(
     kqp_resource_estimation.cpp
-    kqp_snapshot_manager.cpp
+    kqp_snapshot_manager.cpp 
     kqp_rm.cpp
 )
 

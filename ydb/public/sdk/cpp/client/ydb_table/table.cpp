@@ -1274,17 +1274,17 @@ public:
                 // TODO: Add headers for streaming calls.
                 TPlainStatus plainStatus{clientStatus, std::move(issues), self->Endpoint_, {}};
                 TStatus status{std::move(plainStatus)};
-                TMaybe<TQueryStats> queryStats;
-
-                if (self->Response_.result().has_query_stats()) {
-                    queryStats = TQueryStats(self->Response_.result().query_stats());
-                }
-
+                TMaybe<TQueryStats> queryStats; 
+ 
+                if (self->Response_.result().has_query_stats()) { 
+                    queryStats = TQueryStats(self->Response_.result().query_stats()); 
+                } 
+ 
                 if (self->Response_.result().has_result_set()) {
-                    promise.SetValue({std::move(status),
-                        TResultSet(std::move(*self->Response_.mutable_result()->mutable_result_set())), queryStats});
+                    promise.SetValue({std::move(status), 
+                        TResultSet(std::move(*self->Response_.mutable_result()->mutable_result_set())), queryStats}); 
                 } else {
-                    promise.SetValue({std::move(status), queryStats});
+                    promise.SetValue({std::move(status), queryStats}); 
                 }
             }
         };
@@ -2602,14 +2602,14 @@ public:
             *request.mutable_parameters() = *params;
         }
 
-        if (settings.Explain_) {
-            request.set_mode(Ydb::Table::ExecuteScanQueryRequest::MODE_EXPLAIN);
-        } else {
-            request.set_mode(Ydb::Table::ExecuteScanQueryRequest::MODE_EXEC);
-        }
+        if (settings.Explain_) { 
+            request.set_mode(Ydb::Table::ExecuteScanQueryRequest::MODE_EXPLAIN); 
+        } else { 
+            request.set_mode(Ydb::Table::ExecuteScanQueryRequest::MODE_EXEC); 
+        } 
 
-        request.set_collect_stats(GetStatsCollectionMode(settings.CollectQueryStats_));
-
+        request.set_collect_stats(GetStatsCollectionMode(settings.CollectQueryStats_)); 
+ 
         auto promise = NewPromise<std::pair<TPlainStatus, TScanQueryProcessorPtr>>();
 
         Connections_->StartReadStream<
@@ -4192,14 +4192,14 @@ const TMaybe<TQueryStats>& TDataQueryResult::GetStats() const {
     return QueryStats_;
 }
 
-const TString TDataQueryResult::GetQueryPlan() const {
-    if (QueryStats_.Defined()) {
-        return NYdb::TProtoAccessor::GetProto(*QueryStats_.Get()).query_plan();
-    } else {
-        return "";
-    }
-}
-
+const TString TDataQueryResult::GetQueryPlan() const { 
+    if (QueryStats_.Defined()) { 
+        return NYdb::TProtoAccessor::GetProto(*QueryStats_.Get()).query_plan(); 
+    } else { 
+        return ""; 
+    } 
+} 
+ 
 ////////////////////////////////////////////////////////////////////////////////
 
 TBeginTransactionResult::TBeginTransactionResult(TStatus&& status, TTransaction transaction)

@@ -123,22 +123,22 @@ std::pair<TDqStage, TVector<TCoAtom>> ReplicateStageOutput(const TDqStage& stage
 
 struct TMultiUsedOutput {
     TDqOutput Output;
-    const TNodeMultiSet& Consumers;
+    const TNodeMultiSet& Consumers; 
 
-    TMultiUsedOutput(const TDqOutput& output, const TNodeMultiSet& consumers)
+    TMultiUsedOutput(const TDqOutput& output, const TNodeMultiSet& consumers) 
         : Output(output)
         , Consumers(consumers) {}
 };
 
 struct TMultiUsedConnection {
     TDqConnection Connection;
-    const TNodeMultiSet& Consumers;
+    const TNodeMultiSet& Consumers; 
 
     // set if Connection has single consumer, but it's Output has many consumers
     // in that case, Connection - is on of connections, references to this Output
     TMaybe<TMultiUsedOutput> Output;
 
-    TMultiUsedConnection(const TDqConnection& connection, const TNodeMultiSet& consumers)
+    TMultiUsedConnection(const TDqConnection& connection, const TNodeMultiSet& consumers) 
         : Connection(connection)
         , Consumers(consumers) {}
 

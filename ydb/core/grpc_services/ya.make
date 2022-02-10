@@ -38,7 +38,7 @@ SRCS(
     rpc_execute_data_query.cpp
     rpc_execute_scheme_query.cpp
     rpc_execute_yql_script.cpp
-    rpc_explain_yql_script.cpp
+    rpc_explain_yql_script.cpp 
     rpc_explain_data_query.cpp
     rpc_forget_operation.cpp
     rpc_get_operation.cpp

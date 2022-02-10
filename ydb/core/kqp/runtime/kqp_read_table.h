@@ -38,14 +38,14 @@ struct TParseReadTableRangesResult : TParseReadTableResultBase {
 void ParseReadColumns(const TType* readType, const TRuntimeNode& tagsNode,
     TSmallVec<TKqpComputeContextBase::TColumn>& columns, TSmallVec<TKqpComputeContextBase::TColumn>& systemColumns);
 
-TParseReadTableResult ParseWideReadTable(TCallable& callable);
+TParseReadTableResult ParseWideReadTable(TCallable& callable); 
 TParseReadTableRangesResult ParseWideReadTableRanges(TCallable& callable);
 
 IComputationNode* WrapKqpScanWideReadTableRanges(TCallable& callable, const TComputationNodeFactoryContext& ctx,
     TKqpScanComputeContext& computeCtx);
-IComputationNode* WrapKqpScanWideReadTable(TCallable& callable, const TComputationNodeFactoryContext& ctx,
-    TKqpScanComputeContext& computeCtx);
+IComputationNode* WrapKqpScanWideReadTable(TCallable& callable, const TComputationNodeFactoryContext& ctx, 
+    TKqpScanComputeContext& computeCtx); 
 
-} // namespace NMiniKQL
-} // namespace NKikimr
-
+} // namespace NMiniKQL 
+} // namespace NKikimr 
+ 

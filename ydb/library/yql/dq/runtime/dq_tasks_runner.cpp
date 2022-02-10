@@ -333,10 +333,10 @@ public:
         LOG(TStringBuilder() << "task: " << TaskId << ", program size: " << programSize
             << ", llvm: `" << Settings.OptLLVM << "`.");
 
-        if (Y_UNLIKELY(CollectProfileStats)) {
-            ProgramParsed.StatsRegistry = NMiniKQL::CreateDefaultStatsRegistry();
-        }
-
+        if (Y_UNLIKELY(CollectProfileStats)) { 
+            ProgramParsed.StatsRegistry = NMiniKQL::CreateDefaultStatsRegistry(); 
+        } 
+ 
         auto validatePolicy = Settings.TerminateOnError ? NUdf::EValidatePolicy::Fail : NUdf::EValidatePolicy::Exception;
         TComputationPatternOpts opts(Alloc().Ref(), typeEnv, Context.ComputationFactory, Context.FuncRegistry,
             NUdf::EValidateMode::None, validatePolicy, Settings.OptLLVM,

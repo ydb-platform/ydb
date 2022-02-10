@@ -255,7 +255,7 @@ private:
     void HandleExecute(TEvKqpExecuter::TEvStreamDataAck::TPtr& ev) {
         LOG_T("Recv stream data ack, seqNo: " << ev->Get()->Record.GetSeqNo()
             << ", freeSpace: " << ev->Get()->Record.GetFreeSpace()
-            << ", enough: " << ev->Get()->Record.GetEnough()
+            << ", enough: " << ev->Get()->Record.GetEnough() 
             << ", from: " << ev->Sender);
 
         if (ResultChannelProxies.empty()) {
@@ -401,43 +401,43 @@ private:
         }
     };
 
-    void BuildDatashardScanTasks(TStageInfo& stageInfo, const NMiniKQL::THolderFactory& holderFactory,
-        const NMiniKQL::TTypeEnvironment& typeEnv)
-    {
+    void BuildDatashardScanTasks(TStageInfo& stageInfo, const NMiniKQL::THolderFactory& holderFactory, 
+        const NMiniKQL::TTypeEnvironment& typeEnv) 
+    { 
         Y_VERIFY_DEBUG(stageInfo.Meta.IsDatashard());
 
         THashMap<ui64, TVector<ui64>> nodeTasks; // nodeId -> [taskId]
-
-        auto getNodeTask = [&](ui64 nodeId, ui32 taskIdx) -> TTask& {
-            auto& tasks = nodeTasks[nodeId];
-
-            if (taskIdx < tasks.size()) {
-                return TasksGraph.GetTask(tasks[taskIdx]);
-            } else {
-                Y_ASSERT(taskIdx == tasks.size());
-                auto& task = TasksGraph.AddTask(stageInfo);
-                task.Meta.NodeId = nodeId;
-                tasks.emplace_back(task.Id);
-                return task;
-            }
-        };
-
-        auto& stage = GetStage(stageInfo);
-
-        const auto& table = TableKeys.GetTable(stageInfo.Meta.TableId);
+ 
+        auto getNodeTask = [&](ui64 nodeId, ui32 taskIdx) -> TTask& { 
+            auto& tasks = nodeTasks[nodeId]; 
+ 
+            if (taskIdx < tasks.size()) { 
+                return TasksGraph.GetTask(tasks[taskIdx]); 
+            } else { 
+                Y_ASSERT(taskIdx == tasks.size()); 
+                auto& task = TasksGraph.AddTask(stageInfo); 
+                task.Meta.NodeId = nodeId; 
+                tasks.emplace_back(task.Id); 
+                return task; 
+            } 
+        }; 
+ 
+        auto& stage = GetStage(stageInfo); 
+ 
+        const auto& table = TableKeys.GetTable(stageInfo.Meta.TableId); 
         const auto& keyTypes = table.KeyColumnTypes;
-
-        for (auto& op : stage.GetTableOps()) {
-            Y_VERIFY_DEBUG(stageInfo.Meta.TablePath == op.GetTable().GetPath());
-
+ 
+        for (auto& op : stage.GetTableOps()) { 
+            Y_VERIFY_DEBUG(stageInfo.Meta.TablePath == op.GetTable().GetPath()); 
+ 
             auto columns = BuildKqpColumns(op, table);
             THashMap<ui64, TShardInfo> partitions;
-
-            switch (op.GetTypeCase()) {
+ 
+            switch (op.GetTypeCase()) { 
                 case NKqpProto::TKqpPhyTableOperation::kReadRanges:
                     partitions = PrunePartitions(TableKeys, op.GetReadRanges(), stageInfo, holderFactory, typeEnv);
                     break;
-                case NKqpProto::TKqpPhyTableOperation::kReadRange:
+                case NKqpProto::TKqpPhyTableOperation::kReadRange: 
                     partitions = PrunePartitions(TableKeys, op.GetReadRange(), stageInfo, holderFactory, typeEnv);
                     break;
                 case NKqpProto::TKqpPhyTableOperation::kLookup:
@@ -447,7 +447,7 @@ private:
                     YQL_ENSURE(false, "Unexpected table scan operation: " << (ui32) op.GetTypeCase());
                     break;
             }
-
+ 
             bool reverse = false;
             ui64 itemsLimit = 0;
             TString itemsLimitParamName;
@@ -465,20 +465,20 @@ private:
                 stageInfo.Meta.SkipNullKeys.assign(op.GetReadRange().GetSkipNullKeys().begin(),
                                                    op.GetReadRange().GetSkipNullKeys().end());
             }
-
+ 
             // TODO: take into account number of active scans on node
             bool heavyProgram = stage.GetProgram().GetSettings().GetHasSort() ||
                                 stage.GetProgram().GetSettings().GetHasMapJoin();
             const ui32 maxScansPerNode = heavyProgram ? 4 : 16;
             THashMap<ui64, ui32> nTasksOnNodes; // nodeId -> tasks count
-
+ 
             for (auto& [shardId, shardInfo] : partitions) {
                 YQL_ENSURE(!shardInfo.KeyWriteRanges);
-
+ 
                 ui64 nodeId = ShardIdToNodeId.at(shardId);
                 ui32 nTasksOnNode = nTasksOnNodes[nodeId]++;
                 auto& task = getNodeTask(nodeId, nTasksOnNode % maxScansPerNode);
-
+ 
                 for (auto& [name, value] : shardInfo.Params) {
                     auto ret = task.Meta.Params.emplace(name, std::move(value));
                     YQL_ENSURE(ret.second);
@@ -487,65 +487,65 @@ private:
                     auto retType = task.Meta.ParamTypes.emplace(name, typeIterator->second);
                     YQL_ENSURE(retType.second);
                 }
-
+ 
                 TTaskMeta::TShardReadInfo readInfo = {
                     .Ranges = std::move(*shardInfo.KeyReadRanges), // sorted & non-intersecting
                     .Columns = columns,
                     .ShardId = shardId,
                 };
-
+ 
                 if (itemsLimit && !task.Meta.Params.contains(itemsLimitParamName)) {
                     task.Meta.Params.emplace(itemsLimitParamName, itemsLimitBytes);
                     task.Meta.ParamTypes.emplace(itemsLimitParamName, itemsLimitType);
-                }
-
+                } 
+ 
                 FillReadInfo(task.Meta, itemsLimit, reverse, TMaybe<::NKqpProto::TKqpPhyOpReadOlapRanges>());
 
                 if (!task.Meta.Reads) {
                     task.Meta.Reads.ConstructInPlace();
-                }
+                } 
 
                 task.Meta.Reads->emplace_back(std::move(readInfo));
-            }
-        }
-
-        LOG_D("Stage " << stageInfo.Id << " will be executed on " << nodeTasks.size() << " nodes.");
-
-        for (const auto& pair : nodeTasks) {
-            for (const auto& taskIdx : pair.second) {
-                auto& task = TasksGraph.GetTask(taskIdx);
-                YQL_ENSURE(task.Meta.Reads.Defined());
-                auto& taskReads = task.Meta.Reads.GetRef();
-
-                /*
-                 * Sort read ranges so that sequential scan of that ranges produce sorted result.
-                 *
-                 * Partition pruner feed us with set of non-intersecting ranges with filled right boundary.
+            } 
+        } 
+ 
+        LOG_D("Stage " << stageInfo.Id << " will be executed on " << nodeTasks.size() << " nodes."); 
+ 
+        for (const auto& pair : nodeTasks) { 
+            for (const auto& taskIdx : pair.second) { 
+                auto& task = TasksGraph.GetTask(taskIdx); 
+                YQL_ENSURE(task.Meta.Reads.Defined()); 
+                auto& taskReads = task.Meta.Reads.GetRef(); 
+ 
+                /* 
+                 * Sort read ranges so that sequential scan of that ranges produce sorted result. 
+                 * 
+                 * Partition pruner feed us with set of non-intersecting ranges with filled right boundary. 
                  * So we may sort ranges based solely on the their rightmost point.
-                 */
-                std::sort(taskReads.begin(), taskReads.end(), [&](const auto& lhs, const auto& rhs){
+                 */ 
+                std::sort(taskReads.begin(), taskReads.end(), [&](const auto& lhs, const auto& rhs){ 
                     YQL_ENSURE(lhs.ShardId != rhs.ShardId);
-
+ 
                     const std::pair<const TSerializedCellVec*, bool> k1 = lhs.Ranges.GetRightBorder();
                     const std::pair<const TSerializedCellVec*, bool> k2 = lhs.Ranges.GetRightBorder();
 
-                    const int cmp = CompareBorders<false, false>(
+                    const int cmp = CompareBorders<false, false>( 
                         k1.first->GetCells(),
                         k2.first->GetCells(),
                         k1.second,
                         k2.second,
-                        keyTypes);
-
-                    return (cmp < 0);
-                });
-
-                LOG_D("Stage " << stageInfo.Id << " create datashard scan task: " << taskIdx
-                    << ", node: " << pair.first
-                    << ", meta: " << task.Meta.ToString(keyTypes, *AppData()->TypeRegistry));
-            }
-        }
-    }
-
+                        keyTypes); 
+ 
+                    return (cmp < 0); 
+                }); 
+ 
+                LOG_D("Stage " << stageInfo.Id << " create datashard scan task: " << taskIdx 
+                    << ", node: " << pair.first 
+                    << ", meta: " << task.Meta.ToString(keyTypes, *AppData()->TypeRegistry)); 
+            } 
+        } 
+    } 
+ 
     // Returns the list of ColumnShards that can store rows from the specified range
     // NOTE: Unlike OLTP tables that store data in DataShards, data in OLAP tables is not range
     // partitioned and multiple ColumnShards store data from the same key range
@@ -755,10 +755,10 @@ private:
             return;
         }
 
-        // NodeId -> {Tasks}
-        THashMap<ui64, TVector<NYql::NDqProto::TDqTask>> scanTasks;
-        ui32 nShardScans = 0;
-        ui32 nScanTasks = 0;
+        // NodeId -> {Tasks} 
+        THashMap<ui64, TVector<NYql::NDqProto::TDqTask>> scanTasks; 
+        ui32 nShardScans = 0; 
+        ui32 nScanTasks = 0; 
 
         TVector<NYql::NDqProto::TDqTask> computeTasks;
 
@@ -873,10 +873,10 @@ private:
 
                 if (stageInfo.Meta.IsSysView()) {
                     computeTasks.emplace_back(std::move(taskDesc));
-                } else {
+                } else { 
                     scanTasks[task.Meta.NodeId].emplace_back(std::move(taskDesc));
                     nScanTasks++;
-                }
+                } 
             } else {
                 computeTasks.emplace_back(std::move(taskDesc));
             }
@@ -900,25 +900,25 @@ private:
             << ", " << nScanTasks << " scan tasks on " << scanTasks.size() << " nodes"
             << ", totalShardScans: " << nShardScans << ", execType: Scan"
             << ", snapshot: {" << Request.Snapshot.TxId << ", " << Request.Snapshot.Step << "}");
-
+ 
         ExecuteScanTx(std::move(computeTasks), std::move(scanTasks));
-
+ 
         Become(&TKqpScanExecuter::ExecuteState);
-    }
-
-    void ExecuteScanTx(TVector<NYql::NDqProto::TDqTask>&& computeTasks, THashMap<ui64, TVector<NYql::NDqProto::TDqTask>>&& scanTasks) {
+    } 
+ 
+    void ExecuteScanTx(TVector<NYql::NDqProto::TDqTask>&& computeTasks, THashMap<ui64, TVector<NYql::NDqProto::TDqTask>>&& scanTasks) { 
         LOG_D("Execute scan tx, computeTasks: " << computeTasks.size() << ", scanTasks: " << scanTasks.size());
-        for (const auto& [_, tasks]: scanTasks) {
-            for (const auto& task : tasks) {
-                PendingComputeTasks.insert(task.GetId());
+        for (const auto& [_, tasks]: scanTasks) { 
+            for (const auto& task : tasks) { 
+                PendingComputeTasks.insert(task.GetId()); 
             }
         }
 
-        for (auto& taskDesc : computeTasks) {
-            PendingComputeTasks.insert(taskDesc.GetId());
-        }
-
-        auto planner = CreateKqpPlanner(TxId, SelfId(), std::move(computeTasks),
+        for (auto& taskDesc : computeTasks) { 
+            PendingComputeTasks.insert(taskDesc.GetId()); 
+        } 
+ 
+        auto planner = CreateKqpPlanner(TxId, SelfId(), std::move(computeTasks), 
             std::move(scanTasks), Request.Snapshot,
             Database, UserToken, Deadline.GetOrElse(TInstant::Zero()), Request.StatsMode,
             Request.DisableLlvmForUdfStages, Request.LlvmEnabled, AppData()->EnableKqpSpilling, Request.RlPath);
@@ -950,12 +950,12 @@ private:
 
             Stats->FinishTs = TInstant::Now();
             Stats->Finish();
-
+ 
             if (Request.StatsMode == NYql::NDqProto::DQ_STATS_MODE_PROFILE) {
                 const auto& tx = Request.Transactions[0].Body;
                 auto planWithStats = AddExecStatsToTxPlan(tx.GetPlan(), response.GetResult().GetStats());
                 response.MutableResult()->MutableStats()->AddTxPlansWithStats(planWithStats);
-            }
+            } 
         }
 
         LOG_D("Sending response to: " << Target);

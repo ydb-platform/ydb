@@ -123,10 +123,10 @@ public:
     virtual int Run(TConfig& config) override;
 
 private:
-
+ 
     bool PrintAst = false;
-    TString QueryType;
-    bool Analyze = false;
+    TString QueryType; 
+    bool Analyze = false; 
 };
 
 class TCommandReadTable : public TYdbCommand, public TCommandWithPath,

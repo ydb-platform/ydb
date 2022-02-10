@@ -27,10 +27,10 @@ public:
     const TString& GetProfile() const { return *Profile_; }
     TString ExtractProfile() { return std::move(*Profile_); }
 
-    bool HasPlan() const { return Plan_.Defined(); }
-    const TString& GetPlan() const { return *Plan_; }
-    TString ExtractPlan() { return std::move(*Plan_); }
-
+    bool HasPlan() const { return Plan_.Defined(); } 
+    const TString& GetPlan() const { return *Plan_; } 
+    TString ExtractPlan() { return std::move(*Plan_); } 
+ 
     TStreamPart(TStatus&& status)
         : TStreamPartStatus(std::move(status))
     {}
@@ -45,15 +45,15 @@ public:
         , Profile_(std::move(profile))
     {}
 
-    TStreamPart(const TMaybe<TString>& plan, TStatus&& status)
-        : TStreamPartStatus(std::move(status))
-        , Plan_(plan)
-    {}
-
+    TStreamPart(const TMaybe<TString>& plan, TStatus&& status) 
+        : TStreamPartStatus(std::move(status)) 
+        , Plan_(plan) 
+    {} 
+ 
 private:
     TMaybe<TResultSet> ResultSet_;
     TMaybe<TString> Profile_;
-    TMaybe<TString> Plan_;
+    TMaybe<TString> Plan_; 
 };
 
 using TAsyncStreamPart = NThreading::TFuture<TStreamPart>;
@@ -81,7 +81,7 @@ struct TExecuteStreamQuerySettings : public TRequestSettings<TExecuteStreamQuery
     using TSelf = TExecuteStreamQuerySettings;
 
     FLUENT_SETTING_DEFAULT(EStreamQueryProfileMode, ProfileMode, EStreamQueryProfileMode::None);
-    FLUENT_SETTING_DEFAULT(bool, Explain, false);
+    FLUENT_SETTING_DEFAULT(bool, Explain, false); 
 };
 
 class TStreamQueryClient {

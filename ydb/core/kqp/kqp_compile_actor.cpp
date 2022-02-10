@@ -94,8 +94,8 @@ public:
             ctx.SelfID.NodeId(), counters, MakeMiniKQLCompileServiceID());
         Gateway->SetToken(Query.Cluster, UserToken);
 
-        Config->FeatureFlags = AppData(ctx)->FeatureFlags;
-
+        Config->FeatureFlags = AppData(ctx)->FeatureFlags; 
+ 
         KqpHost = CreateKqpHost(Gateway, Query.Cluster, Query.Database, Config, ModuleResolverState->ModuleResolver,
             AppData(ctx)->FunctionRegistry, false);
 

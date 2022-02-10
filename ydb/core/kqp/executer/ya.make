@@ -15,7 +15,7 @@ SRCS(
     kqp_partition_helper.cpp
     kqp_planner.cpp
     kqp_planner_strategy.cpp
-    kqp_shards_resolver.cpp
+    kqp_shards_resolver.cpp 
     kqp_result_channel.cpp
     kqp_table_resolver.cpp
     kqp_tasks_graph.cpp

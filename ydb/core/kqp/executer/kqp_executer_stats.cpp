@@ -168,7 +168,7 @@ void TQueryExecutionStats::AddDatashardStats(NYql::NDqProto::TDqComputeActorStat
             tableAggr->SetWriteRows(tableAggr->GetWriteRows() + table.GetWriteRows());
             tableAggr->SetWriteBytes(tableAggr->GetWriteBytes() + table.GetWriteBytes());
             tableAggr->SetEraseRows(tableAggr->GetEraseRows() + table.GetEraseRows());
-
+ 
             auto& shards = TableShards[table.GetTablePath()];
             for (const auto& perShard : txStats.GetPerShardStats()) {
                 shards.insert(perShard.GetShardId());

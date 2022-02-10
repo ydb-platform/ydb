@@ -198,11 +198,11 @@
             "Match": {"Type": "Callable", "Name": "OrderedLMap"}
         },
         {
-            "Name": "TCoNarrowMap",
-            "Base": "TCoMapBase",
-            "Match": {"Type": "Callable", "Name": "NarrowMap"}
-        },
-        {
+            "Name": "TCoNarrowMap", 
+            "Base": "TCoMapBase", 
+            "Match": {"Type": "Callable", "Name": "NarrowMap"} 
+        }, 
+        { 
             "Name": "TCoNarrowFlatMap",
             "Base": "TCoMapBase",
             "Match": {"Type": "Callable", "Name": "NarrowFlatMap"}
@@ -213,11 +213,11 @@
             "Match": {"Type": "Callable", "Name": "NarrowMultiMap"}
         },
         {
-            "Name": "TCoWideMap",
-            "Base": "TCoMapBase",
-            "Match": {"Type": "Callable", "Name": "WideMap"}
-        },
-        {
+            "Name": "TCoWideMap", 
+            "Base": "TCoMapBase", 
+            "Match": {"Type": "Callable", "Name": "WideMap"} 
+        }, 
+        { 
             "Name": "TCoFilterBase",
             "Base": "TCoInputBase",
             "Match": {"Type": "CallableBase"},
@@ -237,11 +237,11 @@
             "Match": {"Type": "Callable", "Name": "OrderedFilter"}
         },
         {
-            "Name": "TCoWideFilter",
-            "Base": "TCoFilterBase",
-            "Match": {"Type": "Callable", "Name": "WideFilter"}
-        },
-        {
+            "Name": "TCoWideFilter", 
+            "Base": "TCoFilterBase", 
+            "Match": {"Type": "Callable", "Name": "WideFilter"} 
+        }, 
+        { 
             "Name": "TCoFilterNullMembersBase",
             "Base": "TCoInputBase",
             "Match": {"Type": "CallableBase"},
@@ -1365,19 +1365,19 @@
             "Match": {"Type": "Callable", "Name": "EquiJoin"}
         },
         {
-            "Name": "TCoMapJoinCore",
+            "Name": "TCoMapJoinCore", 
             "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "MapJoinCore"},
-            "Children": [
-                {"Index": 0, "Name": "LeftInput", "Type": "TExprBase"},
-                {"Index": 1, "Name": "RightDict", "Type": "TExprBase"},
-                {"Index": 2, "Name": "JoinKind", "Type": "TCoAtom"},
-                {"Index": 3, "Name": "LeftKeysColumns", "Type": "TCoAtomList"},
+            "Match": {"Type": "Callable", "Name": "MapJoinCore"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "LeftInput", "Type": "TExprBase"}, 
+                {"Index": 1, "Name": "RightDict", "Type": "TExprBase"}, 
+                {"Index": 2, "Name": "JoinKind", "Type": "TCoAtom"}, 
+                {"Index": 3, "Name": "LeftKeysColumns", "Type": "TCoAtomList"}, 
                 {"Index": 4, "Name": "LeftRenames", "Type": "TCoAtomList"},
                 {"Index": 5, "Name": "RightRenames", "Type": "TCoAtomList"}
-            ]
-        },
-        {
+            ] 
+        }, 
+        { 
             "Name": "TCoJoinDict",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "JoinDict"},
@@ -1645,18 +1645,18 @@
             ]
         },
         {
-            "Name": "TCoWideCombiner",
-            "Base": "TCoInputBase",
-            "Match": {"Type": "Callable", "Name": "WideCombiner"},
-            "Children": [
-                {"Index": 1, "Name": "MemLimit",      "Type": "TCoAtom"},
-                {"Index": 2, "Name": "KeyExtractor",  "Type": "TCoLambda"},
-                {"Index": 3, "Name": "InitHandler",   "Type": "TCoLambda"},
-                {"Index": 4, "Name": "UpdateHandler", "Type": "TCoLambda"},
-                {"Index": 5, "Name": "FinishHandler", "Type": "TCoLambda"}
-            ]
-        },
-        {
+            "Name": "TCoWideCombiner", 
+            "Base": "TCoInputBase", 
+            "Match": {"Type": "Callable", "Name": "WideCombiner"}, 
+            "Children": [ 
+                {"Index": 1, "Name": "MemLimit",      "Type": "TCoAtom"}, 
+                {"Index": 2, "Name": "KeyExtractor",  "Type": "TCoLambda"}, 
+                {"Index": 3, "Name": "InitHandler",   "Type": "TCoLambda"}, 
+                {"Index": 4, "Name": "UpdateHandler", "Type": "TCoLambda"}, 
+                {"Index": 5, "Name": "FinishHandler", "Type": "TCoLambda"} 
+            ] 
+        }, 
+        { 
             "Name": "TCoGroupingCore",
             "Base": "TCoInputBase",
             "Match": {"Type": "Callable", "Name": "GroupingCore"},

@@ -100,9 +100,9 @@ public:
         ConvertKqpQueryResultsToDbResult(kqpResponse, queryResult);
 
         if (kqpResponse.HasQueryStats()) {
-            FillQueryStats(*queryResult->mutable_query_stats(), kqpResponse);
-        } else if (kqpResponse.HasQueryPlan()) {
-            queryResult->mutable_query_stats()->set_query_plan(kqpResponse.GetQueryPlan());
+            FillQueryStats(*queryResult->mutable_query_stats(), kqpResponse); 
+        } else if (kqpResponse.HasQueryPlan()) { 
+            queryResult->mutable_query_stats()->set_query_plan(kqpResponse.GetQueryPlan()); 
         }
 
         ReplyWithResult(Ydb::StatusIds::SUCCESS, issueMessage, *queryResult, ctx);

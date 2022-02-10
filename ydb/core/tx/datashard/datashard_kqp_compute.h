@@ -102,11 +102,11 @@ IComputationNode* WrapKqpDeleteRows(TCallable& callable, const TComputationNodeF
     TKqpDatashardComputeContext& computeCtx);
 IComputationNode* WrapKqpEffects(TCallable& callable, const TComputationNodeFactoryContext& ctx,
     TKqpDatashardComputeContext& computeCtx);
-IComputationNode* WrapKqpWideReadTable(TCallable& callable, const TComputationNodeFactoryContext& ctx,
-    TKqpDatashardComputeContext& computeCtx);
+IComputationNode* WrapKqpWideReadTable(TCallable& callable, const TComputationNodeFactoryContext& ctx, 
+    TKqpDatashardComputeContext& computeCtx); 
 
 TComputationNodeFactory GetKqpDatashardComputeFactory(TKqpDatashardComputeContext* computeCtx);
 TComputationNodeFactory GetKqpScanComputeFactory(TKqpScanComputeContext* computeCtx);
 
-} // namespace NMiniKQL
+} // namespace NMiniKQL 
 } // namespace NKikimr

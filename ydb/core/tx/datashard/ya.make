@@ -64,7 +64,7 @@ SRCS(
     datashard__s3.cpp
     datashard__s3_download_txs.cpp
     datashard__s3_upload_txs.cpp
-    datashard__kqp_scan.cpp
+    datashard__kqp_scan.cpp 
     datashard__snapshot_txs.cpp
     datashard__stats.cpp
     datashard__store_table_path.cpp

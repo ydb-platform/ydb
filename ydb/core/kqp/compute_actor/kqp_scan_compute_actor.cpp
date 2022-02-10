@@ -740,8 +740,8 @@ private:
     }
 
     void HandleExecute(TEvTxProxySchemeCache::TEvInvalidateTableResult::TPtr&) {
-    }
-
+    } 
+ 
     void HandleExecute(TEvents::TEvUndelivered::TPtr& ev) {
         switch (ev->Get()->SourceType) {
             case TEvDataShard::TEvKqpScan::EventType:
@@ -807,7 +807,7 @@ private:
     void SendStartScanRequest(TShardState& state, ui32 gen) {
         YQL_ENSURE(state.State == EShardState::Starting);
 
-        auto ev = MakeHolder<TEvDataShard::TEvKqpScan>();
+        auto ev = MakeHolder<TEvDataShard::TEvKqpScan>(); 
         ev->Record.SetLocalPathId(ScanData->TableId.PathId.LocalPathId);
         for (auto& column: ScanData->GetColumns()) {
             ev->Record.AddColumnTags(column.Tag);
@@ -1012,7 +1012,7 @@ private:
             CA_LOG(prio, "Table: " << ScanData->TablePath << ", scan has not been started yet");
         }
     }
-
+ 
     void PassAway() override {
         Send(MakePipePeNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
         for (ui32 nodeId : TrackingNodes) {

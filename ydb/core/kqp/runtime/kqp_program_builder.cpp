@@ -141,9 +141,9 @@ TRuntimeNode TKqpProgramBuilder::KqpReadTable(const TTableId& tableId, const TKq
     return TRuntimeNode(builder.Build(), false);
 }
 
-TRuntimeNode TKqpProgramBuilder::KqpWideReadTable(const TTableId& tableId, const TKqpKeyRange& range,
+TRuntimeNode TKqpProgramBuilder::KqpWideReadTable(const TTableId& tableId, const TKqpKeyRange& range, 
     const TArrayRef<TKqpTableColumn>& columns)
-{
+{ 
     auto rowType = GetRowType(*this, columns);
     auto structType = AS_TYPE(TStructType, rowType);
     auto returnType = MakeWideFlowType(*this, structType);
@@ -152,18 +152,18 @@ TRuntimeNode TKqpProgramBuilder::KqpWideReadTable(const TTableId& tableId, const
     MKQL_ENSURE_S(returnType->IsFlow());
     const auto itemType = AS_TYPE(TFlowType, returnType)->GetItemType();
     MKQL_ENSURE_S(itemType->IsTuple());
-
-    TCallableBuilder builder(Env, __func__, returnType);
-    builder.Add(BuildTableIdLiteral(tableId, *this));
+ 
+    TCallableBuilder builder(Env, __func__, returnType); 
+    builder.Add(BuildTableIdLiteral(tableId, *this)); 
     builder.Add(BuildKeyRangeNode(*this, range));
-    builder.Add(BuildColumnTags(*this, columns));
+    builder.Add(BuildColumnTags(*this, columns)); 
     builder.Add(BuildSkipNullKeysNode(*this, range));
     builder.Add(range.ItemsLimit ? range.ItemsLimit : NewNull());
     builder.Add(NewDataLiteral(range.Reverse));
-
-    return TRuntimeNode(builder.Build(), false);
-}
-
+ 
+    return TRuntimeNode(builder.Build(), false); 
+} 
+ 
 TRuntimeNode TKqpProgramBuilder::KqpWideReadTableRanges(const TTableId& tableId, const TKqpKeyRanges& ranges,
     const TArrayRef<TKqpTableColumn>& columns, TType* returnType)
 {

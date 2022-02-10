@@ -32,7 +32,7 @@
 #include <library/cpp/actors/core/hfunc.h>
 
 #include <util/string/split.h>
-#include <util/string/vector.h>
+#include <util/string/vector.h> 
 
 namespace NKikimr {
 namespace NKqp {
@@ -46,8 +46,8 @@ using namespace NKikimrSchemeOp;
 
 using NKikimrTxUserProxy::TMiniKQLTransaction;
 
-constexpr const IKqpGateway::TKqpSnapshot IKqpGateway::TKqpSnapshot::InvalidSnapshot = TKqpSnapshot();
-
+constexpr const IKqpGateway::TKqpSnapshot IKqpGateway::TKqpSnapshot::InvalidSnapshot = TKqpSnapshot(); 
+ 
 #define STATIC_ASSERT_STATE_EQUAL(name) \
     static_assert(static_cast<ui32>(NYql::TIndexDescription::EIndexState::name) \
         == NKikimrSchemeOp::EIndexState::EIndexState##name, \
@@ -208,7 +208,7 @@ public:
         }
 
         auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
-        resp->Record.SetEnough(truncated);
+        resp->Record.SetEnough(truncated); 
         resp->Record.SetSeqNo(ev->Get()->Record.GetSeqNo());
         resp->Record.SetFreeSpace(ResultSetBytesLimit);
         ctx.Send(ev->Sender, resp.Release());
@@ -1742,32 +1742,32 @@ public:
         });
     }
 
-    TFuture<TQueryResult> ExplainScanQueryAst(const TString& cluster, const TString& query) override
-    {
-        using TRequest = NKqp::TEvKqp::TEvQueryRequest;
-        using TResponse = NKqp::TEvKqp::TEvQueryResponse;
-
-        auto ev = MakeHolder<TRequest>();
-        if (UserToken) {
-            ev->Record.SetUserToken(UserToken->Serialized);
-        }
-
-        ev->Record.MutableRequest()->SetDatabase(Database);
-        ev->Record.MutableRequest()->SetCluster(cluster);
-        ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXPLAIN);
-        ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_AST_SCAN);
-        ev->Record.MutableRequest()->SetQuery(query);
-        ev->Record.MutableRequest()->SetKeepSession(false);
-
-        return SendKqpScanQueryRequest(ev.Release(), 100,
-            [] (TPromise<TQueryResult> promise, TResponse&& responseEv) {
-                TQueryResult queryResult;
-                queryResult.ProtobufArenaPtr.reset(new google::protobuf::Arena());
-                KqpResponseToQueryResult(responseEv.Record.GetRef(), queryResult);
+    TFuture<TQueryResult> ExplainScanQueryAst(const TString& cluster, const TString& query) override 
+    { 
+        using TRequest = NKqp::TEvKqp::TEvQueryRequest; 
+        using TResponse = NKqp::TEvKqp::TEvQueryResponse; 
+ 
+        auto ev = MakeHolder<TRequest>(); 
+        if (UserToken) { 
+            ev->Record.SetUserToken(UserToken->Serialized); 
+        } 
+ 
+        ev->Record.MutableRequest()->SetDatabase(Database); 
+        ev->Record.MutableRequest()->SetCluster(cluster); 
+        ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXPLAIN); 
+        ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_AST_SCAN); 
+        ev->Record.MutableRequest()->SetQuery(query); 
+        ev->Record.MutableRequest()->SetKeepSession(false); 
+ 
+        return SendKqpScanQueryRequest(ev.Release(), 100, 
+            [] (TPromise<TQueryResult> promise, TResponse&& responseEv) { 
+                TQueryResult queryResult; 
+                queryResult.ProtobufArenaPtr.reset(new google::protobuf::Arena()); 
+                KqpResponseToQueryResult(responseEv.Record.GetRef(), queryResult); 
                 promise.SetValue(std::move(queryResult));
-            });
-    }
-
+            }); 
+    } 
+ 
     TFuture<TQueryResult> ExecDataQueryAst(const TString& cluster, const TString& query, TKqpParamsMap&& params,
         const TAstQuerySettings& settings, const Ydb::Table::TransactionSettings& txSettings) override
     {
@@ -1850,32 +1850,32 @@ public:
         return ExecutePhysicalQueryInternal(std::move(request), target, true);
     }
 
-    TFuture<TKqpSnapshotHandle> CreatePersistentSnapshot(const TVector<TString>& tablePaths, TDuration queryTimeout) override {
+    TFuture<TKqpSnapshotHandle> CreatePersistentSnapshot(const TVector<TString>& tablePaths, TDuration queryTimeout) override { 
         auto* snapMgr = CreateKqpSnapshotManager(Database, queryTimeout);
-        auto snapMgrActorId = RegisterActor(snapMgr);
-
+        auto snapMgrActorId = RegisterActor(snapMgr); 
+ 
         auto ev = MakeHolder<TEvKqpSnapshot::TEvCreateSnapshotRequest>(tablePaths);
-
-        return SendActorRequest<
+ 
+        return SendActorRequest< 
             TEvKqpSnapshot::TEvCreateSnapshotRequest,
             TEvKqpSnapshot::TEvCreateSnapshotResponse,
-            IKqpGateway::TKqpSnapshotHandle>
-        (
-            snapMgrActorId,
-            ev.Release(),
-            [snapMgrActorId](TPromise<IKqpGateway::TKqpSnapshotHandle> promise,
+            IKqpGateway::TKqpSnapshotHandle> 
+        ( 
+            snapMgrActorId, 
+            ev.Release(), 
+            [snapMgrActorId](TPromise<IKqpGateway::TKqpSnapshotHandle> promise, 
                              TEvKqpSnapshot::TEvCreateSnapshotResponse&& response) mutable
-            {
-                IKqpGateway::TKqpSnapshotHandle handle;
-                handle.Snapshot = response.Snapshot;
-                handle.ManagingActor = snapMgrActorId;
+            { 
+                IKqpGateway::TKqpSnapshotHandle handle; 
+                handle.Snapshot = response.Snapshot; 
+                handle.ManagingActor = snapMgrActorId; 
                 handle.Status = response.Status;
                 handle.AddIssues(response.Issues);
-                promise.SetValue(handle);
-            }
-        );
-    }
-
+                promise.SetValue(handle); 
+            } 
+        ); 
+    } 
+ 
     NThreading::TFuture<TKqpSnapshotHandle> AcquireMvccSnapshot(TDuration queryTimeout) override {
         auto* snapMgr = CreateKqpSnapshotManager(Database, queryTimeout);
         auto snapMgrActorId = RegisterActor(snapMgr);
@@ -1901,11 +1901,11 @@ public:
             );
     }
 
-    void DiscardPersistentSnapshot(const TKqpSnapshotHandle& handle) override {
+    void DiscardPersistentSnapshot(const TKqpSnapshotHandle& handle) override { 
         if (handle.ManagingActor)
             ActorSystem->Send(handle.ManagingActor, new TEvKqpSnapshot::TEvDiscardSnapshot(handle.Snapshot));
-    }
-
+    } 
+ 
     TInstant GetCurrentTime() const override {
         return TAppData::TimeProvider->Now();
     }

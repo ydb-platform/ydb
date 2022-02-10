@@ -1,5 +1,5 @@
 #pragma once
-
+ 
 #include <memory>
 #include <util/generic/fwd.h>
 #include <util/generic/strbuf.h>
@@ -58,7 +58,7 @@ public:
     virtual void ShowGeneratedFunctions(IOutputStream* out) = 0;
     virtual void LoadBitCode(TStringBuf bitcode, TStringBuf uniqId) = 0;
     virtual void AddGlobalMapping(TStringBuf name, const void* address) = 0;
-    virtual void TogglePerfJITEventListener() = 0;
+    virtual void TogglePerfJITEventListener() = 0; 
 
     typedef std::unique_ptr<ICodegen> TPtr;
     static TPtr Make(ETarget target, ESanitize sanitize = ESanitize::Auto);

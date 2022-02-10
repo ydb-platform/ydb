@@ -135,7 +135,7 @@ struct TRpcServices {
         EvLongTxRollback,
         EvLongTxWrite,
         EvLongTxRead,
-        EvExplainYqlScript,
+        EvExplainYqlScript, 
         EvImportData,
         EvAnalyticsReserved,
         EvDataStreamsCreateStream,

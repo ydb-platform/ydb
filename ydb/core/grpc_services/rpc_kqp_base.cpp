@@ -1,13 +1,13 @@
 #include "rpc_kqp_base.h"
 
 #include <ydb/core/kqp/prepare/kqp_query_plan.h>
-
+ 
 namespace NKikimr {
 namespace NGRpcService {
 
-void FillQueryStats(Ydb::TableStats::QueryStats& queryStats, const NKikimrKqp::TQueryResponse& kqpResponse) {
-    const auto& kqpStats = kqpResponse.GetQueryStats();
-
+void FillQueryStats(Ydb::TableStats::QueryStats& queryStats, const NKikimrKqp::TQueryResponse& kqpResponse) { 
+    const auto& kqpStats = kqpResponse.GetQueryStats(); 
+ 
     uint64_t totalCpuTimeUs = 0;
     uint64_t totalDurationUs = 0;
 
@@ -65,8 +65,8 @@ void FillQueryStats(Ydb::TableStats::QueryStats& queryStats, const NKikimrKqp::T
     queryStats.set_process_cpu_time_us(kqpStats.GetWorkerCpuTimeUs());
     queryStats.set_total_cpu_time_us(totalCpuTimeUs);
     queryStats.set_total_duration_us(totalDurationUs);
-
-    queryStats.set_query_plan(kqpResponse.GetQueryPlan());
+ 
+    queryStats.set_query_plan(kqpResponse.GetQueryPlan()); 
 }
 
 } // namespace NGRpcService

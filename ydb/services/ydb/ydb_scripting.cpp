@@ -57,18 +57,18 @@ void TGRpcYdbScriptingService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
             new TGrpcRequestOperationCall<ExecuteYqlRequest, ExecuteYqlResponse>
                 (ctx, &DoExecuteYqlScript, TRequestAuxSettings{TRateLimiterMode::Ru, nullptr}));
     })
-
+ 
     ADD_REQUEST(StreamExecuteYql, ExecuteYqlRequest, ExecuteYqlPartialResponse, {
         ActorSystem_->Send(GRpcRequestProxyId_,
             new TGrpcRequestNoOperationCall<ExecuteYqlRequest, ExecuteYqlPartialResponse>
                 (ctx, &DoStreamExecuteYqlScript, TRequestAuxSettings{TRateLimiterMode::Rps, nullptr}));
     })
 
-    ADD_REQUEST(ExplainYql, ExplainYqlRequest, ExplainYqlResponse, {
+    ADD_REQUEST(ExplainYql, ExplainYqlRequest, ExplainYqlResponse, { 
         ActorSystem_->Send(GRpcRequestProxyId_,
             new TGrpcRequestOperationCall<ExplainYqlRequest, ExplainYqlResponse>
                 (ctx, &DoExplainYqlScript, TRequestAuxSettings{TRateLimiterMode::Rps, nullptr}));
-    })
+    }) 
 #undef ADD_REQUEST
 }
 

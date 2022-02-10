@@ -241,7 +241,7 @@ public:
     using TIterator = TSplitIterator<TSubstringSplit>;
     friend class TSplitIterator<TSubstringSplit>;
 
-    TSubstringSplit(const char* str, size_t length, const TSubstringSplitDelimiter& delimiter); 
+    TSubstringSplit(const char* str, size_t length, const TSubstringSplitDelimiter& delimiter);
     TSubstringSplit(const TString& str, const TSubstringSplitDelimiter& delimiter);
     TIterator Iterator() const;
     TSizeTRegion Next(size_t& pos) const;

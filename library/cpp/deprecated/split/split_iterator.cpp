@@ -282,12 +282,12 @@ TSubstringSplitDelimiter::TSubstringSplitDelimiter(const TString& s)
 
 /****************** TSubstringSplit ******************/
 
-TSubstringSplit::TSubstringSplit(const char* str, size_t length, const TSubstringSplitDelimiter& delimiter) 
-    : TSplitBase(str, length) 
-    , Delimiter(delimiter) 
-{ 
-} 
- 
+TSubstringSplit::TSubstringSplit(const char* str, size_t length, const TSubstringSplitDelimiter& delimiter)
+    : TSplitBase(str, length)
+    , Delimiter(delimiter)
+{
+}
+
 TSubstringSplit::TSubstringSplit(const TString& str, const TSubstringSplitDelimiter& delimiter)
     : TSplitBase(str)
     , Delimiter(delimiter)

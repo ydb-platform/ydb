@@ -566,7 +566,7 @@ public:
         TFsPath fsPath(path);
         CreateTable(fsPath.Dirname(),
            "Name: \"" + fsPath.Basename() + "\""
-           "Columns { Name: \"Hash\"             Type: \"Uint32\"}" 
+           "Columns { Name: \"Hash\"             Type: \"Uint32\"}"
            "Columns { Name: \"SourceId\"         Type: \"Utf8\"}"
            "Columns { Name: \"Topic\"            Type: \"Utf8\"}"
            "Columns { Name: \"Partition\"        Type: \"Uint32\"}"
@@ -577,13 +577,13 @@ public:
     }
 
     void InsertSourceId(ui32 hash, TString sourceId, ui64 accessTime, const TString& path = "/Root/PQ/SourceIdMeta2") {
-        TString query = 
-            "DECLARE $Hash AS Uint32; " 
-            "DECLARE $SourceId AS Utf8; " 
-            "DECLARE $AccessTime AS Uint64; " 
+        TString query =
+            "DECLARE $Hash AS Uint32; "
+            "DECLARE $SourceId AS Utf8; "
+            "DECLARE $AccessTime AS Uint64; "
             "UPSERT INTO [" + path + "] (Hash, SourceId, Topic, Partition, CreateTime, AccessTime) "
             "VALUES($Hash, $SourceId, \"1\", 0, 0, $AccessTime); ";
- 
+
         NYdb::TParamsBuilder builder;
         auto params = builder
             .AddParam("$Hash").Uint32(hash).Build()
@@ -592,25 +592,25 @@ public:
             .Build();
 
         RunYqlDataQueryWithParams(query, params);
-    } 
- 
+    }
+
     THashMap<TString, TInstant> ListSourceIds(const TString& path = "/Root/PQ/SourceIdMeta2") {
         auto result = RunYqlDataQuery("SELECT SourceId, AccessTime FROM [" + path + "];");
         NYdb::TResultSetParser parser(*result);
-        THashMap<TString, TInstant> sourceIds; 
+        THashMap<TString, TInstant> sourceIds;
         while(parser.TryNextRow()) {
             TString sourceId = *parser.ColumnParser("SourceId").GetOptionalUtf8();
             TInstant accessTime = TInstant::MilliSeconds(*parser.ColumnParser("AccessTime").GetOptionalUint64());
-            sourceIds[sourceId] = accessTime; 
-        } 
-        return sourceIds; 
-    } 
- 
+            sourceIds[sourceId] = accessTime;
+        }
+        return sourceIds;
+    }
+
     void InitDCs(THashMap<TString, TPQTestClusterInfo> clusters = DEFAULT_CLUSTERS_LIST, const TString& localCluster = TString()) {
         MkDir("/Root/PQ", "Config");
-        MkDir("/Root/PQ/Config", "V2"); 
+        MkDir("/Root/PQ/Config", "V2");
         RunYqlSchemeQuery(R"___(
-            CREATE TABLE [/Root/PQ/Config/V2/Cluster] ( 
+            CREATE TABLE [/Root/PQ/Config/V2/Cluster] (
                 name Utf8,
                 balancer Utf8,
                 local Bool,
@@ -1263,7 +1263,7 @@ public:
                 UNIT_ASSERT(tt.GetErrorCode() == (ui32)NPersQueue::NErrorCode::OK);
             }
         }
-        return response->Record; 
+        return response->Record;
     }
 
 

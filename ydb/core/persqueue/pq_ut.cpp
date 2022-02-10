@@ -138,53 +138,53 @@ Y_UNIT_TEST(TestGroupsBalancer3) {
 
 
 Y_UNIT_TEST(TestUserInfoCompatibility) {
-    TTestContext tc; 
-    RunTestWithReboots(tc.TabletIds, [&]() { 
-        return tc.InitialEventsFilter.Prepare(); 
-    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) { 
-        TFinalizer finalizer(tc); 
-        tc.Prepare(dispatchName, setup, activeZone); 
-        activeZone = false; 
-        TString client = "test"; 
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+        activeZone = false;
+        TString client = "test";
         tc.Runtime->SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_DEBUG);
- 
+
         PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {{client, false}}, tc, 4, 6*1024*1024, true, 0, 0, 1);
 
-        TVector<std::pair<ui64, TString>> data; 
-        data.push_back({1, "s"}); 
-        data.push_back({2, "q"}); 
-        CmdWrite(0, "sourceid", data, tc); 
-        CmdWrite(1, "sourceid", data, tc); 
-        CmdWrite(2, "sourceid", data, tc); 
+        TVector<std::pair<ui64, TString>> data;
+        data.push_back({1, "s"});
+        data.push_back({2, "q"});
+        CmdWrite(0, "sourceid", data, tc);
+        CmdWrite(1, "sourceid", data, tc);
+        CmdWrite(2, "sourceid", data, tc);
         CmdWrite(3, "sourceid", data, tc);
- 
 
-        THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest); 
-        FillUserInfo(request->Record.AddCmdWrite(), client, 0, 0); 
-        FillDeprecatedUserInfo(request->Record.AddCmdWrite(), client, 0, 0); 
-        FillUserInfo(request->Record.AddCmdWrite(), client, 1, 1); 
-        FillDeprecatedUserInfo(request->Record.AddCmdWrite(), client, 2, 1); 
+
+        THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
+        FillUserInfo(request->Record.AddCmdWrite(), client, 0, 0);
+        FillDeprecatedUserInfo(request->Record.AddCmdWrite(), client, 0, 0);
+        FillUserInfo(request->Record.AddCmdWrite(), client, 1, 1);
+        FillDeprecatedUserInfo(request->Record.AddCmdWrite(), client, 2, 1);
         FillUserInfo(request->Record.AddCmdWrite(), client, 2, 1);
         FillDeprecatedUserInfo(request->Record.AddCmdWrite(), client, 3, 0);
         FillUserInfo(request->Record.AddCmdWrite(), client, 3, 1);
- 
 
-        tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries()); 
-        TAutoPtr<IEventHandle> handle; 
-        TEvKeyValue::TEvResponse* result = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle); 
-        Y_UNUSED(result); 
- 
-        RestartTablet(tc); 
+
+        tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
+        TAutoPtr<IEventHandle> handle;
+        TEvKeyValue::TEvResponse* result = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle);
+        Y_UNUSED(result);
+
+        RestartTablet(tc);
         Cerr  << "AFTER RESTART\n";
 
-        CmdGetOffset(0, client, 0, tc); 
-        CmdGetOffset(1, client, 1, tc); 
-        CmdGetOffset(2, client, 1, tc); 
+        CmdGetOffset(0, client, 0, tc);
+        CmdGetOffset(1, client, 1, tc);
+        CmdGetOffset(2, client, 1, tc);
         CmdGetOffset(3, client, 1, tc);
 
-    }); 
-} 
- 
+    });
+}
+
 Y_UNIT_TEST(TestReadRuleVersions) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
@@ -273,49 +273,49 @@ Y_UNIT_TEST(TestCreateBalancer) {
 }
 
 Y_UNIT_TEST(TestDescribeBalancer) {
-    TTestContext tc; 
-    RunTestWithReboots(tc.TabletIds, [&]() { 
-        return tc.InitialEventsFilter.Prepare(); 
-    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) { 
-        TFinalizer finalizer(tc); 
-        tc.Prepare(dispatchName, setup, activeZone); 
-        activeZone = false; 
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+        activeZone = false;
         TFakeSchemeShardState::TPtr state{new TFakeSchemeShardState()};
         ui64 ssId = 9876;
         BootFakeSchemeShard(*tc.Runtime, ssId, state);
 
-        tc.Runtime->SetScheduledLimit(50); 
-        tc.Runtime->SetDispatchTimeout(TDuration::MilliSeconds(100)); 
+        tc.Runtime->SetScheduledLimit(50);
+        tc.Runtime->SetDispatchTimeout(TDuration::MilliSeconds(100));
         BalancerPrepare("topic", {{1,{1, 2}}}, ssId, tc);
-        TAutoPtr<IEventHandle> handle; 
-        tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, new TEvPersQueue::TEvDescribe(), 0, GetPipeConfigWithRetries()); 
-        TEvPersQueue::TEvDescribeResponse* result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvDescribeResponse>(handle); 
-        UNIT_ASSERT(result); 
-        auto& rec = result->Record; 
+        TAutoPtr<IEventHandle> handle;
+        tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, new TEvPersQueue::TEvDescribe(), 0, GetPipeConfigWithRetries());
+        TEvPersQueue::TEvDescribeResponse* result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvDescribeResponse>(handle);
+        UNIT_ASSERT(result);
+        auto& rec = result->Record;
         UNIT_ASSERT(rec.HasSchemeShardId() && rec.GetSchemeShardId() == ssId);
-        RestartTablet(tc); 
-        tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, new TEvPersQueue::TEvDescribe(), 0, GetPipeConfigWithRetries()); 
-        result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvDescribeResponse>(handle); 
-        UNIT_ASSERT(result); 
-        auto& rec2 = result->Record; 
+        RestartTablet(tc);
+        tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, new TEvPersQueue::TEvDescribe(), 0, GetPipeConfigWithRetries());
+        result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvDescribeResponse>(handle);
+        UNIT_ASSERT(result);
+        auto& rec2 = result->Record;
         UNIT_ASSERT(rec2.HasSchemeShardId() && rec2.GetSchemeShardId() == ssId);
-    }); 
-} 
+    });
+}
 
 Y_UNIT_TEST(TestCheckACL) {
-    TTestContext tc; 
-    RunTestWithReboots(tc.TabletIds, [&]() { 
-        return tc.InitialEventsFilter.Prepare(); 
-    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) { 
-        TFinalizer finalizer(tc); 
-        tc.Prepare(dispatchName, setup, activeZone); 
-        activeZone = false; 
-        TFakeSchemeShardState::TPtr state{new TFakeSchemeShardState()}; 
-        ui64 ssId = 9876; 
-        BootFakeSchemeShard(*tc.Runtime, ssId, state); 
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+        activeZone = false;
+        TFakeSchemeShardState::TPtr state{new TFakeSchemeShardState()};
+        ui64 ssId = 9876;
+        BootFakeSchemeShard(*tc.Runtime, ssId, state);
         IActor* ticketParser = NKikimr::CreateTicketParser(tc.Runtime->GetAppData().AuthConfig);
         TActorId ticketParserId = tc.Runtime->Register(ticketParser);
-        tc.Runtime->RegisterService(NKikimr::MakeTicketParserID(), ticketParserId); 
+        tc.Runtime->RegisterService(NKikimr::MakeTicketParserID(), ticketParserId);
 
         TAutoPtr<IEventHandle> handle;
         THolder<TEvPersQueue::TEvCheckACL> request(new TEvPersQueue::TEvCheckACL());
@@ -326,57 +326,57 @@ Y_UNIT_TEST(TestCheckACL) {
         tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
 
         tc.Runtime->SetScheduledLimit(600);
-        tc.Runtime->SetDispatchTimeout(TDuration::MilliSeconds(100)); 
+        tc.Runtime->SetDispatchTimeout(TDuration::MilliSeconds(100));
         BalancerPrepare("topic", {{1,{1, 2}}}, ssId, tc);
- 
-        { 
-            TDispatchOptions options; 
+
+        {
+            TDispatchOptions options;
             options.FinalEvents.emplace_back(NSchemeShard::TEvSchemeShard::EvDescribeSchemeResult);
-            tc.Runtime->DispatchEvents(options); 
-        } 
- 
-        TEvPersQueue::TEvCheckACLResponse* result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvCheckACLResponse>(handle); 
-        auto& rec = result->Record; 
-        UNIT_ASSERT(rec.GetAccess() == NKikimrPQ::EAccess::DENIED); 
-        UNIT_ASSERT(rec.GetTopic() == "topic"); 
- 
-        state->ACL.AddAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, "client@" BUILTIN_ACL_DOMAIN); 
- 
-        { 
-            TDispatchOptions options; 
+            tc.Runtime->DispatchEvents(options);
+        }
+
+        TEvPersQueue::TEvCheckACLResponse* result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvCheckACLResponse>(handle);
+        auto& rec = result->Record;
+        UNIT_ASSERT(rec.GetAccess() == NKikimrPQ::EAccess::DENIED);
+        UNIT_ASSERT(rec.GetTopic() == "topic");
+
+        state->ACL.AddAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, "client@" BUILTIN_ACL_DOMAIN);
+
+        {
+            TDispatchOptions options;
             options.FinalEvents.emplace_back(NSchemeShard::TEvSchemeShard::EvDescribeSchemeResult);
-            tc.Runtime->DispatchEvents(options); 
-        } 
- 
-        request.Reset(new TEvPersQueue::TEvCheckACL()); 
+            tc.Runtime->DispatchEvents(options);
+        }
+
+        request.Reset(new TEvPersQueue::TEvCheckACL());
         request->Record.SetToken(NACLib::TUserToken("client@" BUILTIN_ACL_DOMAIN, {}).SerializeAsString());
         request->Record.SetUser("client");
-        request->Record.SetOperation(NKikimrPQ::EOperation::READ_OP); 
- 
-        tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries()); 
-        result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvCheckACLResponse>(handle); 
-        auto& rec2 = result->Record; 
+        request->Record.SetOperation(NKikimrPQ::EOperation::READ_OP);
+
+        tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
+        result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvCheckACLResponse>(handle);
+        auto& rec2 = result->Record;
         UNIT_ASSERT_C(rec2.GetAccess() == NKikimrPQ::EAccess::ALLOWED, rec2);
- 
-        state->ACL.AddAccess(NACLib::EAccessType::Allow, NACLib::UpdateRow, "client@" BUILTIN_ACL_DOMAIN); 
- 
-        { 
-            TDispatchOptions options; 
+
+        state->ACL.AddAccess(NACLib::EAccessType::Allow, NACLib::UpdateRow, "client@" BUILTIN_ACL_DOMAIN);
+
+        {
+            TDispatchOptions options;
             options.FinalEvents.emplace_back(NSchemeShard::TEvSchemeShard::EvDescribeSchemeResult);
-            tc.Runtime->DispatchEvents(options); 
-        } 
- 
-        request.Reset(new TEvPersQueue::TEvCheckACL()); 
+            tc.Runtime->DispatchEvents(options);
+        }
+
+        request.Reset(new TEvPersQueue::TEvCheckACL());
         request->Record.SetToken(NACLib::TUserToken("client@" BUILTIN_ACL_DOMAIN, {}).SerializeAsString());
         request->Record.SetUser("client");
-        request->Record.SetOperation(NKikimrPQ::EOperation::WRITE_OP); 
- 
-        tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries()); 
-        result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvCheckACLResponse>(handle); 
-        auto& rec3 = result->Record; 
-        UNIT_ASSERT(rec3.GetAccess() == NKikimrPQ::EAccess::ALLOWED); 
- 
-        request.Reset(new TEvPersQueue::TEvCheckACL()); 
+        request->Record.SetOperation(NKikimrPQ::EOperation::WRITE_OP);
+
+        tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
+        result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvCheckACLResponse>(handle);
+        auto& rec3 = result->Record;
+        UNIT_ASSERT(rec3.GetAccess() == NKikimrPQ::EAccess::ALLOWED);
+
+        request.Reset(new TEvPersQueue::TEvCheckACL());
         request->Record.SetToken(NACLib::TUserToken("client@" BUILTIN_ACL_DOMAIN, {}).SerializeAsString());
         request->Record.SetUser("client2");
         request->Record.SetOperation(NKikimrPQ::EOperation::WRITE_OP);
@@ -387,47 +387,47 @@ Y_UNIT_TEST(TestCheckACL) {
         UNIT_ASSERT(rec9.GetAccess() == NKikimrPQ::EAccess::ALLOWED);
 
         request.Reset(new TEvPersQueue::TEvCheckACL());
-        // No auth provided and auth for topic not required 
-        request->Record.SetOperation(NKikimrPQ::EOperation::WRITE_OP); 
- 
-        tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries()); 
-        result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvCheckACLResponse>(handle); 
-        auto& rec5 = result->Record; 
-        UNIT_ASSERT(rec5.GetAccess() == NKikimrPQ::EAccess::ALLOWED); 
- 
-        request.Reset(new TEvPersQueue::TEvCheckACL()); 
-        // No auth provided and auth for topic not required 
-        request->Record.SetOperation(NKikimrPQ::EOperation::READ_OP); 
- 
-        tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries()); 
-        result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvCheckACLResponse>(handle); 
-        auto& rec6 = result->Record; 
-        UNIT_ASSERT(rec6.GetAccess() == NKikimrPQ::EAccess::ALLOWED); 
- 
-        request.Reset(new TEvPersQueue::TEvCheckACL()); 
-        // No auth provided and auth for topic is required 
-        request->Record.SetOperation(NKikimrPQ::EOperation::READ_OP); 
+        // No auth provided and auth for topic not required
+        request->Record.SetOperation(NKikimrPQ::EOperation::WRITE_OP);
+
+        tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
+        result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvCheckACLResponse>(handle);
+        auto& rec5 = result->Record;
+        UNIT_ASSERT(rec5.GetAccess() == NKikimrPQ::EAccess::ALLOWED);
+
+        request.Reset(new TEvPersQueue::TEvCheckACL());
+        // No auth provided and auth for topic not required
+        request->Record.SetOperation(NKikimrPQ::EOperation::READ_OP);
+
+        tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
+        result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvCheckACLResponse>(handle);
+        auto& rec6 = result->Record;
+        UNIT_ASSERT(rec6.GetAccess() == NKikimrPQ::EAccess::ALLOWED);
+
+        request.Reset(new TEvPersQueue::TEvCheckACL());
+        // No auth provided and auth for topic is required
+        request->Record.SetOperation(NKikimrPQ::EOperation::READ_OP);
         request->Record.SetToken("");
- 
+
         BalancerPrepare("topic", {{1,{1, 2}}}, ssId, tc, true);
-        tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries()); 
-        result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvCheckACLResponse>(handle); 
-        auto& rec7 = result->Record; 
-        UNIT_ASSERT(rec7.GetAccess() == NKikimrPQ::EAccess::DENIED); 
- 
-        request.Reset(new TEvPersQueue::TEvCheckACL()); 
-        // No auth provided and auth for topic is required 
-        request->Record.SetOperation(NKikimrPQ::EOperation::READ_OP); 
+        tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
+        result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvCheckACLResponse>(handle);
+        auto& rec7 = result->Record;
+        UNIT_ASSERT(rec7.GetAccess() == NKikimrPQ::EAccess::DENIED);
+
+        request.Reset(new TEvPersQueue::TEvCheckACL());
+        // No auth provided and auth for topic is required
+        request->Record.SetOperation(NKikimrPQ::EOperation::READ_OP);
         request->Record.SetToken("");
- 
-        tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries()); 
-        result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvCheckACLResponse>(handle); 
-        auto& rec8 = result->Record; 
-        UNIT_ASSERT(rec8.GetAccess() == NKikimrPQ::EAccess::DENIED); 
-    }); 
-} 
- 
- 
+
+        tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
+        result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvCheckACLResponse>(handle);
+        auto& rec8 = result->Record;
+        UNIT_ASSERT(rec8.GetAccess() == NKikimrPQ::EAccess::DENIED);
+    });
+}
+
+
 void CheckLabeledCountersResponse(ui32 count, TTestContext& tc, TVector<TString> mustHave = {})
 {
     IActor* actor = CreateClusterLabeledCountersAggregatorActor(tc.Edge, TTabletTypes::PERSQUEUE);
@@ -980,28 +980,28 @@ Y_UNIT_TEST(TestAlreadyWritten) {
 
 
 Y_UNIT_TEST(TestAlreadyWrittenWithoutDeduplication) {
-    TTestContext tc; 
-    RunTestWithReboots(tc.TabletIds, [&]() { 
-        return tc.InitialEventsFilter.Prepare(); 
-    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) { 
-        TFinalizer finalizer(tc); 
-        tc.Prepare(dispatchName, setup, activeZone); 
-        activeZone = false; 
-        tc.Runtime->SetScheduledLimit(200); 
- 
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+        activeZone = false;
+        tc.Runtime->SetScheduledLimit(200);
+
         PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {}, tc); //no important clients, lifetimeseconds=0 - delete all right now, except last datablob
-        TVector<std::pair<ui64, TString>> data; 
-        activeZone = true; 
- 
-        TString s{32, 'c'}; 
-        ui32 pp = 4 + 8 + 1 + 9; 
-        data.push_back({2, s.substr(pp)}); 
-        CmdWrite(0, "sourceid0", data, tc, false, {}, false, "", -1, 0, false, false, true); 
-        data[0].first = 1; 
-        CmdWrite(0, "sourceid0", data, tc, false, {}, false, "", -1, 1, false, false, true); 
-        CmdRead(0, 0, Max<i32>(), Max<i32>(), 2, false, tc, {0, 1}); 
-    }); 
-} 
+        TVector<std::pair<ui64, TString>> data;
+        activeZone = true;
+
+        TString s{32, 'c'};
+        ui32 pp = 4 + 8 + 1 + 9;
+        data.push_back({2, s.substr(pp)});
+        CmdWrite(0, "sourceid0", data, tc, false, {}, false, "", -1, 0, false, false, true);
+        data[0].first = 1;
+        CmdWrite(0, "sourceid0", data, tc, false, {}, false, "", -1, 1, false, false, true);
+        CmdRead(0, 0, Max<i32>(), Max<i32>(), 2, false, tc, {0, 1});
+    });
+}
 
 
 Y_UNIT_TEST(TestWritePQCompact) {
@@ -1904,14 +1904,14 @@ Y_UNIT_TEST(TestPQCacheSizeManagement) {
 }
 
 Y_UNIT_TEST(TestOffsetEstimation) {
-    std::deque<NPQ::TDataKey> container = { 
+    std::deque<NPQ::TDataKey> container = {
         {NPQ::TKey(NPQ::TKeyPrefix::EType::TypeNone, 0, 1, 0, 0, 0), 0, TInstant::Seconds(1), 10},
         {NPQ::TKey(NPQ::TKeyPrefix::EType::TypeNone, 0, 2, 0, 0, 0), 0, TInstant::Seconds(1), 10},
         {NPQ::TKey(NPQ::TKeyPrefix::EType::TypeNone, 0, 3, 0, 0, 0), 0, TInstant::Seconds(2), 10},
         {NPQ::TKey(NPQ::TKeyPrefix::EType::TypeNone, 0, 4, 0, 0, 0), 0, TInstant::Seconds(2), 10},
         {NPQ::TKey(NPQ::TKeyPrefix::EType::TypeNone, 0, 5, 0, 0, 0), 0, TInstant::Seconds(3), 10},
         {NPQ::TKey(NPQ::TKeyPrefix::EType::TypeNone, 0, 6, 0, 0, 0), 0, TInstant::Seconds(3), 10},
-    }; 
+    };
     UNIT_ASSERT_EQUAL(NPQ::GetOffsetEstimate({}, TInstant::MilliSeconds(0), 9999), 9999);
     UNIT_ASSERT_EQUAL(NPQ::GetOffsetEstimate(container, TInstant::MilliSeconds(0), 9999), 1);
     UNIT_ASSERT_EQUAL(NPQ::GetOffsetEstimate(container, TInstant::MilliSeconds(500), 9999), 1);
@@ -1921,35 +1921,35 @@ Y_UNIT_TEST(TestOffsetEstimation) {
     UNIT_ASSERT_EQUAL(NPQ::GetOffsetEstimate(container, TInstant::MilliSeconds(2500), 9999), 5);
     UNIT_ASSERT_EQUAL(NPQ::GetOffsetEstimate(container, TInstant::MilliSeconds(3000), 9999), 5);
     UNIT_ASSERT_EQUAL(NPQ::GetOffsetEstimate(container, TInstant::MilliSeconds(3500), 9999), 9999);
-} 
- 
+}
+
 Y_UNIT_TEST(TestMaxTimeLagRewind) {
-    TTestContext tc; 
+    TTestContext tc;
 
-    RunTestWithReboots(tc.TabletIds, [&]() { 
-        return tc.InitialEventsFilter.Prepare(); 
-    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) { 
-        TFinalizer finalizer(tc); 
-        tc.Prepare(dispatchName, setup, activeZone); 
- 
-        tc.Runtime->SetScheduledLimit(200); 
- 
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+
+        tc.Runtime->SetScheduledLimit(200);
+
         PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {{"aaa", true}}, tc);
-        activeZone = false; 
- 
+        activeZone = false;
 
-        for (int i = 0; i < 5; i++) { 
-            TVector<std::pair<ui64, TString>> data; 
-            for (int j = 0; j < 7; j++) { 
-                data.push_back({7 * i + j + 1, TString(1 * 1024 * 1024, 'a')}); 
-            } 
-            CmdWrite(0, "sourceid0", data, tc, false, {}, i == 0); 
-            tc.Runtime->UpdateCurrentTime(tc.Runtime->GetCurrentTime() + TDuration::Minutes(1)); 
-        } 
+
+        for (int i = 0; i < 5; i++) {
+            TVector<std::pair<ui64, TString>> data;
+            for (int j = 0; j < 7; j++) {
+                data.push_back({7 * i + j + 1, TString(1 * 1024 * 1024, 'a')});
+            }
+            CmdWrite(0, "sourceid0", data, tc, false, {}, i == 0);
+            tc.Runtime->UpdateCurrentTime(tc.Runtime->GetCurrentTime() + TDuration::Minutes(1));
+        }
         auto ts = tc.Runtime->GetCurrentTime();
-        CmdRead(0, 0, 1, Max<i32>(), 1, false, tc, {0}); 
-        CmdRead(0, 0, 1, Max<i32>(), 1, false, tc, {21}, 3 * 60 * 1000); 
-        CmdRead(0, 22, 1, Max<i32>(), 1, false, tc, {22}, 3 * 60 * 1000); 
+        CmdRead(0, 0, 1, Max<i32>(), 1, false, tc, {0});
+        CmdRead(0, 0, 1, Max<i32>(), 1, false, tc, {21}, 3 * 60 * 1000);
+        CmdRead(0, 22, 1, Max<i32>(), 1, false, tc, {22}, 3 * 60 * 1000);
         CmdRead(0, 4, 1, Max<i32>(), 1, false, tc, {34}, 1000);
 
         CmdRead(0, 0, 1, Max<i32>(), 1, false, tc, {21}, 0, ts.MilliSeconds() - 3 * 60 * 1000);
@@ -1959,9 +1959,9 @@ Y_UNIT_TEST(TestMaxTimeLagRewind) {
         PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {{"aaa", true}}, tc, 2, 6*1024*1024, true, ts.MilliSeconds() - 1000);
         CmdRead(0, 0, 1, Max<i32>(), 1, false, tc, {34});
 
-    }); 
-} 
- 
+    });
+}
+
 
 Y_UNIT_TEST(TestWriteTimeStampEstimate) {
     TTestContext tc;

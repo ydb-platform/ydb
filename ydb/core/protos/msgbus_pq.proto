@@ -15,7 +15,7 @@ message TPersQueuePartitionRequest {
         optional int32 Count = 4; //optional
         optional int32 Bytes = 5; //optional, max value = 25Mb
         optional int32 TimeoutMs = 6; //ms, default = 1000
-        optional int32 MaxTimeLagMs = 8; // optional, default = infinity, why we use int instead of uint? 
+        optional int32 MaxTimeLagMs = 8; // optional, default = infinity, why we use int instead of uint?
         optional uint64 ReadTimestampMs = 9; //optional, default = 0
 
         optional bool MirrorerRequest = 10 [default = false];
@@ -60,7 +60,7 @@ message TPersQueuePartitionRequest {
         optional int32 TotalParts = 6; //fill it for first part of multi-part message
         optional int32 TotalSize = 7; // fill it for first part of multi-part message
         optional int64 CreateTimeMS = 8; //mandatory
-        optional bool DisableDeduplication = 9 [ default = false ]; 
+        optional bool DisableDeduplication = 9 [ default = false ];
         optional int64 WriteTimeMS = 10; //for mirroring only
         optional int32 UncompressedSize = 12; //fill it for all parts
 
@@ -203,7 +203,7 @@ message TPersQueueFetchRequest {
         optional int32 Partition = 2; // must be set
         optional int64 Offset = 3; // must be set
         optional int32 MaxBytes = 4; // must be set
-        optional uint64 ReadTimestampMs = 5; //optional, default = 0 
+        optional uint64 ReadTimestampMs = 5; //optional, default = 0
     }
     repeated TPartitionInfo Partition = 1;
     optional int32 TotalMaxBytes = 2; //must be set
@@ -221,7 +221,7 @@ message TPersQueueRequest {
 
     //only one from data, meta or fetch request must be set.
     optional string SecurityToken = 5;
-    optional string Ticket = 6; //if set, check for acl 
+    optional string Ticket = 6; //if set, check for acl
 
     optional string RequestId = 100; //for logging
 }

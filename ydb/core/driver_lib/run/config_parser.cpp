@@ -65,10 +65,10 @@ void TRunCommandConfigParser::SetupLastGetOptForConfigFiles(NLastGetopt::TOpts& 
     opts.AddLongOption("grpc-public-host", "set public gRPC host for discovery").RequiredArgument("HOST");
     opts.AddLongOption("grpc-public-port", "set public gRPC port for discovery").RequiredArgument("PORT");
     opts.AddLongOption("grpcs-public-port", "set public gRPC SSL port for discovery").RequiredArgument("PORT");
-    opts.AddLongOption("pq-file", "PQ config file").OptionalArgument("PATH"); 
+    opts.AddLongOption("pq-file", "PQ config file").OptionalArgument("PATH");
     opts.AddLongOption("pqcd-file", "PQCD config file").OptionalArgument("PATH");
     opts.AddLongOption("netclassifier-file", "NetClassifier config file").OptionalArgument("PATH");
-    opts.AddLongOption("auth-file", "authorization config file").OptionalArgument("PATH"); 
+    opts.AddLongOption("auth-file", "authorization config file").OptionalArgument("PATH");
     opts.AddLongOption("auth-token-file", "authorization token config file").OptionalArgument("PATH");
     opts.AddLongOption("key-file", "encryption key config file").OptionalArgument("PATH");
     opts.AddLongOption("sqs-file", "SQS config file").OptionalArgument("PATH");
@@ -146,7 +146,7 @@ void TRunCommandConfigParser::ParseConfigFiles(const NLastGetopt::TOptsParseResu
         conf.SetStartGRpcProxy(true);
         conf.SetPort(FromString<ui16>(res.Get("grpc-port")));
     }
- 
+
     if (res.Has("grpcs-port")) {
         auto& conf = *Config.AppConfig.MutableGRpcConfig();
         conf.SetStartGRpcProxy(true);
@@ -168,10 +168,10 @@ void TRunCommandConfigParser::ParseConfigFiles(const NLastGetopt::TOptsParseResu
         conf.SetPublicSslPort(FromString<ui16>(res.Get("grpcs-public-port")));
     }
 
-    if (res.Has("pq-file")) { 
-        Y_VERIFY(ParsePBFromFile(res.Get("pq-file"), Config.AppConfig.MutablePQConfig())); 
-    } 
- 
+    if (res.Has("pq-file")) {
+        Y_VERIFY(ParsePBFromFile(res.Get("pq-file"), Config.AppConfig.MutablePQConfig()));
+    }
+
     if (res.Has("pqcd-file")) {
         Y_VERIFY(ParsePBFromFile(res.Get("pqcd-file"), Config.AppConfig.MutablePQClusterDiscoveryConfig()));
     }
@@ -180,9 +180,9 @@ void TRunCommandConfigParser::ParseConfigFiles(const NLastGetopt::TOptsParseResu
         Y_VERIFY(ParsePBFromFile(res.Get("netclassifier-file"), Config.AppConfig.MutableNetClassifierConfig()));
     }
 
-    if (res.Has("auth-file")) { 
-        Y_VERIFY(ParsePBFromFile(res.Get("auth-file"), Config.AppConfig.MutableAuthConfig())); 
-    } 
+    if (res.Has("auth-file")) {
+        Y_VERIFY(ParsePBFromFile(res.Get("auth-file"), Config.AppConfig.MutableAuthConfig()));
+    }
 
     if (res.Has("auth-token-file")) {
         Y_VERIFY(ParsePBFromFile(res.Get("auth-token-file"), Config.AppConfig.MutableAuthConfig()));

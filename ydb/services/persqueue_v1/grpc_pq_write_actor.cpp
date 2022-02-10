@@ -11,7 +11,7 @@
 #include <ydb/services/lib/sharding/sharding.h>
 #include <library/cpp/actors/core/log.h>
 #include <library/cpp/digest/md5/md5.h>
-#include <util/string/hex.h> 
+#include <util/string/hex.h>
 #include <util/string/vector.h>
 #include <util/string/escape.h>
 #include <util/string/printf.h>
@@ -81,8 +81,8 @@ using namespace Ydb::PersQueue::V1;
 static const ui32 MAX_RESERVE_REQUESTS_INFLIGHT = 5;
 
 static const ui32 MAX_BYTES_INFLIGHT = 1 << 20; //1mb
-static const ui32 MURMUR_ARRAY_SEED = 0x9747b28c; 
-static const TDuration SOURCEID_UPDATE_PERIOD = TDuration::Hours(1); 
+static const ui32 MURMUR_ARRAY_SEED = 0x9747b28c;
+static const TDuration SOURCEID_UPDATE_PERIOD = TDuration::Hours(1);
 
 static const TString SELECT_SOURCEID_QUERY1 =
     "--!syntax_v1\n"
@@ -138,11 +138,11 @@ TWriteSessionActor::TWriteSessionActor(
     , RequestNotChecked(false)
     , LastACLCheckTimestamp(TInstant::Zero())
     , LogSessionDeadline(TInstant::Zero())
-    , BalancerTabletId(0) 
+    , BalancerTabletId(0)
     , ClientDC(clientDC ? *clientDC : "other")
-    , LastSourceIdUpdate(TInstant::Zero()) 
-    , SourceIdCreateTime(0) 
-    , SourceIdUpdateInfly(false) 
+    , LastSourceIdUpdate(TInstant::Zero())
+    , SourceIdCreateTime(0)
+    , SourceIdUpdateInfly(false)
 {
     Y_ASSERT(Request);
     ++(*GetServiceCounters(Counters, "pqproxy|writeSession")->GetCounter("SessionsCreatedTotal", true));
@@ -287,8 +287,8 @@ void TWriteSessionActor::CheckACL(const TActorContext& ctx) {
             Token->GetUserSID().c_str());
         CloseSession(errorReason, PersQueue::ErrorCode::ACCESS_DENIED, ctx);
     }
-} 
- 
+}
+
 void TWriteSessionActor::Handle(TEvPQProxy::TEvWriteInit::TPtr& ev, const TActorContext& ctx) {
     THolder<TEvPQProxy::TEvWriteInit> event(ev->Release());
 
@@ -324,7 +324,7 @@ void TWriteSessionActor::Handle(TEvPQProxy::TEvWriteInit::TPtr& ev, const TActor
         return;
     }
     EscapedSourceId = HexEncode(encodedSourceId);
- 
+
     TString s = TopicConverter->GetClientsideName() + encodedSourceId;
     Hash = MurmurHash<ui32>(s.c_str(), s.size(), MURMUR_ARRAY_SEED);
 
@@ -534,11 +534,11 @@ void TWriteSessionActor::DiscoverPartition(const NActors::TActorContext& ctx) {
     ev->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
     // keep compiled query in cache.
     ev->Record.MutableRequest()->MutableQueryCachePolicy()->set_keep_in_cache(true);
-    NClient::TParameters parameters; 
-    parameters["$Hash"] = Hash; 
+    NClient::TParameters parameters;
+    parameters["$Hash"] = Hash;
     parameters["$Topic"] = TopicConverter->GetClientsideName();
-    parameters["$SourceId"] = EscapedSourceId; 
-    ev->Record.MutableRequest()->MutableParameters()->Swap(&parameters); 
+    parameters["$SourceId"] = EscapedSourceId;
+    ev->Record.MutableRequest()->MutableParameters()->Swap(&parameters);
     ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
     State = ES_WAIT_TABLE_REQUEST_1;
 }
@@ -588,18 +588,18 @@ void TWriteSessionActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr &ev, const 
 
     if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
         TStringBuilder errorReason;
-        errorReason << "internal error in kqp Marker# PQ50 : " <<  record; 
-        if (State == EState::ES_INITED) { 
-            LOG_WARN_S(ctx, NKikimrServices::PQ_WRITE_PROXY, errorReason); 
-            SourceIdUpdateInfly = false; 
-        } else { 
+        errorReason << "internal error in kqp Marker# PQ50 : " <<  record;
+        if (State == EState::ES_INITED) {
+            LOG_WARN_S(ctx, NKikimrServices::PQ_WRITE_PROXY, errorReason);
+            SourceIdUpdateInfly = false;
+        } else {
             CloseSession(errorReason, PersQueue::ErrorCode::ERROR, ctx);
-        } 
+        }
         return;
     }
 
-    if (State == EState::ES_WAIT_TABLE_REQUEST_1) { 
-        SourceIdCreateTime = TInstant::Now().MilliSeconds(); 
+    if (State == EState::ES_WAIT_TABLE_REQUEST_1) {
+        SourceIdCreateTime = TInstant::Now().MilliSeconds();
 
         bool partitionFound = false;
         auto& t = record.GetResponse().GetResults(0).GetValue().GetStruct(0);
@@ -614,19 +614,19 @@ void TWriteSessionActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr &ev, const 
                     return;
                 }
                 partitionFound = true;
-                SourceIdCreateTime = t.GetList(0).GetStruct(1).GetOptional().GetUint64(); 
+                SourceIdCreateTime = t.GetList(0).GetStruct(1).GetOptional().GetUint64();
             }
         }
 
         LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " messageGroupId "
             << SourceId << " escaped " << EscapedSourceId << " hash " << Hash << " partition " << Partition << " partitions "
-            << PartitionToTablet.size() << "(" << Hash % PartitionToTablet.size() << ") create " << SourceIdCreateTime << " result " << t); 
+            << PartitionToTablet.size() << "(" << Hash % PartitionToTablet.size() << ") create " << SourceIdCreateTime << " result " << t);
 
         if (!partitionFound && (PreferedPartition < Max<ui32>() || !AppData(ctx)->PQConfig.GetRoundRobinPartitionMapping())) {
             Partition = PreferedPartition < Max<ui32>() ? PreferedPartition : Hash % PartitionToTablet.size(); //choose partition default value
             partitionFound = true;
         }
- 
+
         if (partitionFound) {
             UpdatePartition(ctx);
         } else {
@@ -634,11 +634,11 @@ void TWriteSessionActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr &ev, const 
         }
         return;
     } else if (State == EState::ES_WAIT_TABLE_REQUEST_2) {
-        LastSourceIdUpdate = ctx.Now(); 
+        LastSourceIdUpdate = ctx.Now();
         ProceedPartition(Partition, ctx);
-    } else if (State == EState::ES_INITED) { 
-        SourceIdUpdateInfly = false; 
-        LastSourceIdUpdate = ctx.Now(); 
+    } else if (State == EState::ES_INITED) {
+        SourceIdUpdateInfly = false;
+        LastSourceIdUpdate = ctx.Now();
     } else {
         Y_FAIL("Wrong state");
     }
@@ -648,7 +648,7 @@ THolder<NKqp::TEvKqp::TEvQueryRequest> TWriteSessionActor::MakeUpdateSourceIdMet
         const NActors::TActorContext& ctx
 ) {
 
-    auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>(); 
+    auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
 
     ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
     ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
@@ -661,19 +661,19 @@ THolder<NKqp::TEvKqp::TEvQueryRequest> TWriteSessionActor::MakeUpdateSourceIdMet
     // keep compiled query in cache.
     ev->Record.MutableRequest()->MutableQueryCachePolicy()->set_keep_in_cache(true);
 
-    NClient::TParameters parameters; 
-    parameters["$Hash"] = Hash; 
+    NClient::TParameters parameters;
+    parameters["$Hash"] = Hash;
     parameters["$Topic"] = TopicConverter->GetClientsideName();
-    parameters["$SourceId"] = EscapedSourceId; 
-    parameters["$CreateTime"] = SourceIdCreateTime; 
-    parameters["$AccessTime"] = TInstant::Now().MilliSeconds(); 
-    parameters["$Partition"] = Partition; 
-    ev->Record.MutableRequest()->MutableParameters()->Swap(&parameters); 
+    parameters["$SourceId"] = EscapedSourceId;
+    parameters["$CreateTime"] = SourceIdCreateTime;
+    parameters["$AccessTime"] = TInstant::Now().MilliSeconds();
+    parameters["$Partition"] = Partition;
+    ev->Record.MutableRequest()->MutableParameters()->Swap(&parameters);
 
-    return ev; 
-} 
- 
- 
+    return ev;
+}
+
+
 void TWriteSessionActor::Handle(NKqp::TEvKqp::TEvProcessResponse::TPtr &ev, const TActorContext &ctx) {
     auto& record = ev->Get()->Record;
 
@@ -1112,8 +1112,8 @@ void TWriteSessionActor::Handle(TEvPQProxy::TEvWrite::TPtr& ev, const TActorCont
         if (!dataCheck(writeRequest, messageIndex)) {
             return;
         }
-    } 
- 
+    }
+
     THolder<TEvPQProxy::TEvWrite> event(ev->Release());
     Writes.push_back(std::move(event));
 
@@ -1141,7 +1141,7 @@ void TWriteSessionActor::Handle(TEvPQProxy::TEvWrite::TPtr& ev, const TActorCont
 }
 
 void TWriteSessionActor::HandlePoison(TEvPQProxy::TEvDieCommand::TPtr& ev, const TActorContext& ctx) {
-    CloseSession(ev->Get()->Reason, ev->Get()->ErrorCode, ctx); 
+    CloseSession(ev->Get()->Reason, ev->Get()->ErrorCode, ctx);
 }
 
 void TWriteSessionActor::LogSession(const TActorContext& ctx) {
@@ -1161,9 +1161,9 @@ void TWriteSessionActor::HandleWakeup(const TActorContext& ctx) {
     // ToDo[migration] - separate flag for having config tables
     if (!AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen() && !SourceIdUpdateInfly && ctx.Now() - LastSourceIdUpdate > SOURCEID_UPDATE_PERIOD) {
         auto ev = MakeUpdateSourceIdMetadataRequest(ctx);
-        SourceIdUpdateInfly = true; 
+        SourceIdUpdateInfly = true;
         ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
-    } 
+    }
     if (ctx.Now() >= LogSessionDeadline) {
         LogSession(ctx);
     }

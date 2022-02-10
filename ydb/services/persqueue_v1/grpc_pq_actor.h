@@ -424,7 +424,7 @@ struct TEvPQProxy {
     struct TEvDieCommand : public NActors::TEventLocal<TEvDieCommand, EvDieCommand> {
         TEvDieCommand(const TString& reason, const PersQueue::ErrorCode::ErrorCode errorCode)
         : Reason(reason)
-        , ErrorCode(errorCode) 
+        , ErrorCode(errorCode)
         { }
 
         TString Reason;
@@ -648,20 +648,20 @@ private:
     TInstant LastACLCheckTimestamp;
     TInstant LogSessionDeadline;
 
-    ui64 BalancerTabletId; 
+    ui64 BalancerTabletId;
     TActorId PipeToBalancer;
- 
+
     // PQ tablet configuration that we get at the time of session initialization
     NKikimrPQ::TPQTabletConfig InitialPQTabletConfig;
 
     NKikimrPQClient::TDataChunk InitMeta;
-    TString LocalDC; 
+    TString LocalDC;
     TString ClientDC;
-    TString SelectSourceIdQuery; 
-    TString UpdateSourceIdQuery; 
-    TInstant LastSourceIdUpdate; 
-    ui64 SourceIdCreateTime; 
-    bool SourceIdUpdateInfly; 
+    TString SelectSourceIdQuery;
+    TString UpdateSourceIdQuery;
+    TInstant LastSourceIdUpdate;
+    ui64 SourceIdCreateTime;
+    bool SourceIdUpdateInfly;
 
     TVector<NPQ::TLabelsInfo> Aggr;
     NKikimr::NPQ::TMultiCounter SLITotal;

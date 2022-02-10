@@ -32,15 +32,15 @@ static const ui32 MAX_BLOB_PART_SIZE = 500 << 10; //500Kb
 typedef TProtobufTabletLabeledCounters<EPartitionLabeledCounters_descriptor> TPartitionLabeledCounters;
 
 
-struct TDataKey { 
-    TKey Key; 
-    ui32 Size; 
+struct TDataKey {
+    TKey Key;
+    ui32 Size;
     TInstant Timestamp;
-    ui64 CumulativeSize; 
-}; 
- 
+    ui64 CumulativeSize;
+};
+
 ui64 GetOffsetEstimate(const std::deque<TDataKey>& container, TInstant timestamp, ui64 headOffset);
- 
+
 struct TMirrorerInfo;
 
 class TPartition : public TActorBootstrapped<TPartition> {

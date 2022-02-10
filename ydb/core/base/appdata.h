@@ -133,7 +133,7 @@ struct TAppData {
     THolder<NKikimrCms::TCmsConfig> DefaultCmsConfig;
 
     NKikimrStream::TStreamingConfig StreamingConfig;
-    NKikimrPQ::TPQConfig PQConfig; 
+    NKikimrPQ::TPQConfig PQConfig;
     NKikimrPQ::TPQClusterDiscoveryConfig PQClusterDiscoveryConfig;
     NKikimrNetClassifier::TNetClassifierConfig NetClassifierConfig;
     NKikimrNetClassifier::TNetClassifierDistributableConfig NetClassifierDistributableConfig;

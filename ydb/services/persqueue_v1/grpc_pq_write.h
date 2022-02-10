@@ -75,10 +75,10 @@ private:
 
     ui32 MaxSessions;
     TMaybe<TString> LocalCluster;
-    bool Enabled; 
-    TString SelectSourceIdQuery; 
-    TString UpdateSourceIdQuery; 
-    TString DeleteSourceIdQuery; 
+    bool Enabled;
+    TString SelectSourceIdQuery;
+    TString UpdateSourceIdQuery;
+    TString DeleteSourceIdQuery;
 
     NAddressClassifier::TLabeledAddressClassifier::TConstPtr DatacenterClassifier; // Detects client's datacenter by IP. May be null
     bool HaveClusters;

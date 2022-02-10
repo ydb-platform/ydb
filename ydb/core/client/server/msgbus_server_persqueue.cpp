@@ -458,7 +458,7 @@ protected:
     ui32 TopicsAnswered;
     THashSet<ui64> TabletsDiscovered;
     THashSet<ui64> TabletsAnswered;
-    ui32 AclRequests; 
+    ui32 AclRequests;
     ui32 DescribeRequests;
     ui32 PartTabletsRequested;
     TString ErrorReason;
@@ -779,8 +779,8 @@ public:
     bool AnswerIfCanForMeta(const TActorContext& ctx) {
         Y_VERIFY(IsMetaRequest);
         Y_VERIFY(RequestProto.HasMetaRequest());
-        if (AclRequests) 
-            return false; 
+        if (AclRequests)
+            return false;
         if (DescribeRequests)
             return false;
         const auto& meta = RequestProto.GetMetaRequest();
@@ -1210,7 +1210,7 @@ public:
         const auto& offset = req.GetOffset();
         const auto& part = req.GetPartition();
         const auto& maxBytes = req.GetMaxBytes();
-        const auto& readTimestampMs = req.GetReadTimestampMs(); 
+        const auto& readTimestampMs = req.GetReadTimestampMs();
         auto it = TopicInfo.find(topic);
         Y_VERIFY(it != TopicInfo.end());
         if (it->second.PartitionToTablet.find(part) == it->second.PartitionToTablet.end()) { //tablet's info is not filled for this topic yet
@@ -1242,7 +1242,7 @@ public:
         read->SetCount(1000000);
         read->SetTimeoutMs(0);
         read->SetBytes(Min<ui32>(maxBytes, FetchRequestBytesLeft));
-        read->SetReadTimestampMs(readTimestampMs); 
+        read->SetReadTimestampMs(readTimestampMs);
         NTabletPipe::SendData(ctx, jt->second.PipeClient, preq.Release());
     }
 

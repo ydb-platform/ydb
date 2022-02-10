@@ -1,5 +1,5 @@
 PROTO_LIBRARY()
- 
+
 GRPC()
 
 OWNER(
@@ -119,7 +119,7 @@ SRCS(
     tx_sequenceshard.proto
     pdiskfit.proto
     pqconfig.proto
-    auth.proto 
+    auth.proto
     key.proto
     grpc.proto
     grpc_pq_old.proto

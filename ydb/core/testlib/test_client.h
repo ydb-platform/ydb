@@ -90,7 +90,7 @@ namespace Tests {
         ui16 Port;
         ui16 GrpcPort = 0;
         NKikimrProto::TAuthConfig AuthConfig;
-        NKikimrPQ::TPQConfig PQConfig; 
+        NKikimrPQ::TPQConfig PQConfig;
         NKikimrPQ::TPQClusterDiscoveryConfig PQClusterDiscoveryConfig;
         NKikimrNetClassifier::TNetClassifierConfig NetClassifierConfig;
         ui32 Domain = TestDomain;
@@ -181,8 +181,8 @@ namespace Tests {
 
         explicit TServerSettings(ui16 port, const NKikimrProto::TAuthConfig authConfig = {}, const NKikimrPQ::TPQConfig pqConfig = {})
             : Port(port)
-            , AuthConfig(authConfig) 
-            , PQConfig(pqConfig) 
+            , AuthConfig(authConfig)
+            , PQConfig(pqConfig)
         {
             AddStoragePool("test", "/" + DomainName + ":test");
         }

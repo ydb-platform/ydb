@@ -56,7 +56,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
             struct Version : Column<36, NScheme::NTypeIds::Uint32> {};
             struct Config : Column<40, NScheme::NTypeIds::Utf8> {};
             struct MaxPartsPerTablet : Column<41, NScheme::NTypeIds::Uint32> {};
-            struct SchemeShardId : Column<42, NScheme::NTypeIds::Uint64> {}; 
+            struct SchemeShardId : Column<42, NScheme::NTypeIds::Uint64> {};
             struct NextPartitionId : Column<43, NScheme::NTypeIds::Uint64> {};
 
             using TKey = TableKey<Key>;
@@ -180,9 +180,9 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
         ctx.Schedule(TDuration::Seconds(30), new TEvents::TEvWakeup()); //TODO: remove it
     }
 
-    void HandleUpdateACL(TEvPersQueue::TEvUpdateACL::TPtr&, const TActorContext &ctx) { 
-        GetACL(ctx); 
-    } 
+    void HandleUpdateACL(TEvPersQueue::TEvUpdateACL::TPtr&, const TActorContext &ctx) {
+        GetACL(ctx);
+    }
 
     void Die(const TActorContext& ctx) override {
         for (auto& pipe : TabletPipes) {
@@ -240,7 +240,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
         RegisterEvents.clear();
 
         ctx.Schedule(TDuration::Seconds(30), new TEvents::TEvWakeup()); //TODO: remove it
-        ctx.Send(ctx.SelfID, new TEvPersQueue::TEvUpdateACL()); 
+        ctx.Send(ctx.SelfID, new TEvPersQueue::TEvUpdateACL());
     }
 
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx) override;
@@ -256,7 +256,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     void Handle(TEvPersQueue::TEvRegisterReadSession::TPtr &ev, const TActorContext& ctx);
 
     void Handle(TEvPersQueue::TEvGetReadSessionsInfo::TPtr &ev, const TActorContext& ctx);
-    void Handle(TEvPersQueue::TEvCheckACL::TPtr&, const TActorContext&); 
+    void Handle(TEvPersQueue::TEvCheckACL::TPtr&, const TActorContext&);
     void Handle(TEvPersQueue::TEvGetPartitionIdForWrite::TPtr&, const TActorContext&);
 
     void Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActorContext&);
@@ -267,17 +267,17 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
 
     TStringBuilder GetPrefix() const;
 
-    void RequestTabletIfNeeded(const ui64 tabletId, const TActorContext&); 
+    void RequestTabletIfNeeded(const ui64 tabletId, const TActorContext&);
     void RestartPipe(const ui64 tabletId, const TActorContext&);
     void CheckStat(const TActorContext&);
-    void RespondWithACL( 
-        const TEvPersQueue::TEvCheckACL::TPtr &request, 
-        const NKikimrPQ::EAccess &access, 
-        const TString &error, 
-        const TActorContext &ctx); 
-    void CheckACL(const TEvPersQueue::TEvCheckACL::TPtr &request, const NACLib::TUserToken& token, const TActorContext &ctx); 
+    void RespondWithACL(
+        const TEvPersQueue::TEvCheckACL::TPtr &request,
+        const NKikimrPQ::EAccess &access,
+        const TString &error,
+        const TActorContext &ctx);
+    void CheckACL(const TEvPersQueue::TEvCheckACL::TPtr &request, const NACLib::TUserToken& token, const TActorContext &ctx);
     void GetStat(const TActorContext&);
-    void GetACL(const TActorContext&); 
+    void GetACL(const TActorContext&);
     void AnswerWaitingRequests(const TActorContext& ctx);
 
     void Handle(TEvPersQueue::TEvPartitionReleased::TPtr& ev, const TActorContext& ctx);
@@ -298,10 +298,10 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     ui32 Generation;
     int Version;
     ui32 MaxPartsPerTablet;
-    ui64 SchemeShardId; 
+    ui64 SchemeShardId;
     NKikimrPQ::TPQTabletConfig TabletConfig;
-    NACLib::TSecurityObject ACL; 
-    TInstant LastACLUpdate; 
+    NACLib::TSecurityObject ACL;
+    TInstant LastACLUpdate;
 
     THashSet<TString> Consumers;
 
@@ -419,7 +419,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     THashMap<ui64, TActorId> TabletPipes;
 
     THashSet<ui64> WaitingForStat;
-    bool WaitingForACL; 
+    bool WaitingForACL;
     ui64 TotalAvgSpeedSec;
     ui64 MaxAvgSpeedSec;
     ui64 TotalAvgSpeedMin;
@@ -444,8 +444,8 @@ public:
         , Generation(0)
         , Version(-1)
         , MaxPartsPerTablet(0)
-        , SchemeShardId(0) 
-        , LastACLUpdate(TInstant::Zero()) 
+        , SchemeShardId(0)
+        , LastACLUpdate(TInstant::Zero())
         , TxId(0)
         , NumActiveParts(0)
         , MaxIdx(0)
@@ -455,7 +455,7 @@ public:
         , TotalGroups(0)
         , NoGroupsInBase(true)
         , ResourceMetrics(nullptr)
-        , WaitingForACL(false) 
+        , WaitingForACL(false)
         , TotalAvgSpeedSec(0)
         , MaxAvgSpeedSec(0)
         , TotalAvgSpeedMin(0)
@@ -492,8 +492,8 @@ public:
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvents::TEvPoisonPill, Handle);
             HFunc(TEvents::TEvWakeup, HandleWakeup);
-            HFunc(TEvPersQueue::TEvUpdateACL, HandleUpdateACL); 
-            HFunc(TEvPersQueue::TEvCheckACL, Handle); 
+            HFunc(TEvPersQueue::TEvUpdateACL, HandleUpdateACL);
+            HFunc(TEvPersQueue::TEvCheckACL, Handle);
             HFunc(TEvPersQueue::TEvGetPartitionIdForWrite, Handle);
             HFunc(TEvPersQueue::TEvUpdateBalancerConfig, Handle);
             HFunc(TEvPersQueue::TEvWakeupClient, Handle);

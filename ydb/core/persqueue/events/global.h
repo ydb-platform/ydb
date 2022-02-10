@@ -36,9 +36,9 @@ struct TEvPersQueue {
         EvGetReadSessionsInfo,
         EvReadSessionsInfoResponse,
         EvWakeupClient,
-        EvUpdateACL, 
-        EvCheckACL, 
-        EvCheckACLResponse, 
+        EvUpdateACL,
+        EvCheckACL,
+        EvCheckACLResponse,
         EvError,
         EvGetPartitionIdForWrite,
         EvGetPartitionIdForWriteResponse,
@@ -182,22 +182,22 @@ struct TEvPersQueue {
         TEvDescribeResponse()
         {}
     };
- 
-    struct TEvUpdateACL : public TEventLocal<TEvUpdateACL, EvUpdateACL> { 
-        TEvUpdateACL() 
-        {} 
-    }; 
- 
-    struct TEvCheckACL : public TEventPB<TEvCheckACL, NKikimrPQ::TCheckACL, EvCheckACL> { 
-        TEvCheckACL() 
-        {} 
-    }; 
- 
-    struct TEvCheckACLResponse : public TEventPB<TEvCheckACLResponse, NKikimrPQ::TCheckACLResponse, EvCheckACLResponse> { 
-        TEvCheckACLResponse() 
-        {}; 
-    }; 
- 
+
+    struct TEvUpdateACL : public TEventLocal<TEvUpdateACL, EvUpdateACL> {
+        TEvUpdateACL()
+        {}
+    };
+
+    struct TEvCheckACL : public TEventPB<TEvCheckACL, NKikimrPQ::TCheckACL, EvCheckACL> {
+        TEvCheckACL()
+        {}
+    };
+
+    struct TEvCheckACLResponse : public TEventPB<TEvCheckACLResponse, NKikimrPQ::TCheckACLResponse, EvCheckACLResponse> {
+        TEvCheckACLResponse()
+        {};
+    };
+
     struct TEvError : public TEventPB<TEvError,
             NPersQueueCommon::TError, EvError> {
             TEvError() {}

@@ -7,7 +7,7 @@
 #ifdef BALLOC
 #include <library/cpp/balloc/optional/operators.h>
 #endif
- 
+
 namespace NActors {
 
     struct TBasicSchedulerThread::TMonCounters {
@@ -57,7 +57,7 @@ namespace NActors {
 
         ui64 currentMonotonic = RelaxedLoad(CurrentMonotonic);
         ui64 throttledMonotonic = currentMonotonic;
- 
+
         ui64 activeTick = AlignUp<ui64>(throttledMonotonic, IntrasecondThreshold);
         TAutoPtr<TMomentMap> activeSec;
 

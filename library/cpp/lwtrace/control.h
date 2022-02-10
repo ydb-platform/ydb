@@ -1,15 +1,15 @@
 #pragma once
 
-#include "custom_action.h" 
-#include "event.h" 
-#include "log.h" 
+#include "custom_action.h"
+#include "event.h"
+#include "log.h"
 #include "log_shuttle.h"
-#include "probe.h" 
- 
+#include "probe.h"
+
 #include <library/cpp/lwtrace/protos/lwtrace.pb.h>
- 
+
 #include <google/protobuf/repeated_field.h>
- 
+
 #include <util/generic/deque.h>
 #include <util/generic/hash.h>
 #include <util/generic/noncopyable.h>

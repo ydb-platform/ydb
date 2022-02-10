@@ -58,7 +58,7 @@ namespace NActors {
         const ui32 EventsPerMailbox;
 
         const int RealtimePriority;
- 
+
         TAtomic ThreadUtilization;
         TAtomic MaxUtilizationCounter;
         TAtomic MaxUtilizationAccumulator;

@@ -84,7 +84,7 @@ struct TKikimrEvents : TEvents {
         ES_GRPC_PROXY_STATUS, //OLD
         ES_SQS,
         ES_BLOCKSTORE, //4162
-        ES_RTMR_ICBUS, 
+        ES_RTMR_ICBUS,
         ES_TENANT_POOL,
         ES_USER_REGISTRY,
         ES_TVM_SETTINGS_UPDATER,

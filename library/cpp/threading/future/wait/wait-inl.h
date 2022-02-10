@@ -28,7 +28,7 @@ namespace NThreading {
     [[nodiscard]] NImpl::EnableGenericWait<TContainer> WaitExceptionOrAll(const TContainer& futures) {
         return WaitExceptionOrAll(NImpl::ToVoidFutures(futures));
     }
- 
+
     template <typename TContainer>
     [[nodiscard]] NImpl::EnableGenericWait<TContainer> WaitAny(const TContainer& futures) {
         return WaitAny(NImpl::ToVoidFutures(futures));

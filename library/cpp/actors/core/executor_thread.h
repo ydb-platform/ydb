@@ -83,7 +83,7 @@ namespace NActors {
         TVector<THolder<IActor>> DyingActors;
         TActorId CurrentRecipient;
         ui64 CurrentActorScheduledEventsCounter = 0;
- 
+
         // Thread-specific
         TWorkerContext Ctx;
         ui64 RevolvingReadCounter = 0;

@@ -448,22 +448,22 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
         Cerr << "MaxTimePerEventInMks option is deprecated" << Endl;
     }
 
-    if (config.HasTotalInflightAmountOfData()) { 
-        result.TotalInflightAmountOfData = config.GetTotalInflightAmountOfData(); 
-    } 
- 
-    if (config.HasPingPeriodDuration()) { 
-        result.PingPeriod = DurationFromProto(config.GetPingPeriodDuration()); 
-    } 
- 
-    if (config.HasForceConfirmPeriodDuration()) { 
-        result.ForceConfirmPeriod = DurationFromProto(config.GetForceConfirmPeriodDuration()); 
-    } 
- 
-    if (config.HasLostConnectionDuration()) { 
-        result.LostConnection = DurationFromProto(config.GetLostConnectionDuration()); 
-    } 
- 
+    if (config.HasTotalInflightAmountOfData()) {
+        result.TotalInflightAmountOfData = config.GetTotalInflightAmountOfData();
+    }
+
+    if (config.HasPingPeriodDuration()) {
+        result.PingPeriod = DurationFromProto(config.GetPingPeriodDuration());
+    }
+
+    if (config.HasForceConfirmPeriodDuration()) {
+        result.ForceConfirmPeriod = DurationFromProto(config.GetForceConfirmPeriodDuration());
+    }
+
+    if (config.HasLostConnectionDuration()) {
+        result.LostConnection = DurationFromProto(config.GetLostConnectionDuration());
+    }
+
     if (config.HasBatchPeriodDuration()) {
         result.BatchPeriod = DurationFromProto(config.GetBatchPeriodDuration());
     } else {

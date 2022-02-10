@@ -1,6 +1,6 @@
 #include "symbol.h"
- 
-#include <util/stream/output.h> 
+
+#include <util/stream/output.h>
 #include <util/string/cast.h>
 
 template <>

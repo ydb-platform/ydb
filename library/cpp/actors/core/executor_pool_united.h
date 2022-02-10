@@ -60,7 +60,7 @@ namespace NActors {
 
         // Returns per worker schedule writers
         NSchedulerQueue::TWriter* GetScheduleWriter(TWorkerId workerId) const;
- 
+
         // Sets executor for specified pool
         void SetupPool(TPoolId pool, IExecutorPool* executorPool, TMailboxTable* mailboxTable);
 

@@ -1,15 +1,15 @@
-#include "start.h" 
+#include "start.h"
 
-#include "all.h" 
- 
+#include "all.h"
+
 #include <google/protobuf/text_format.h>
 
 #include <util/generic/singleton.h>
 #include <util/stream/file.h>
-#include <util/stream/output.h> 
+#include <util/stream/output.h>
 #include <util/system/env.h>
 
-#include <stdlib.h> 
+#include <stdlib.h>
 
 using namespace NLWTrace;
 

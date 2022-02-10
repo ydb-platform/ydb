@@ -51,7 +51,7 @@ message TActorSystemConfig {
         optional uint64 SpinThreshold = 3;
         optional TAffinity Affinity = 4;
         optional uint32 InjectMadSquirrels = 5;
-        optional string Name = 6; 
+        optional string Name = 6;
         optional uint32 TimePerMailboxMicroSecs = 7;
         optional uint32 EventsPerMailbox = 8;
         optional uint32 RealtimePriority = 9;
@@ -408,11 +408,11 @@ message TInterconnectConfig {
     optional NKikimrConfigUnits.TDuration HeartbeatIntervalDuration = 22;
     optional NKikimrConfigUnits.TDuration DeadPeerTimeoutDuration = 23;
     optional NKikimrConfigUnits.TDuration CloseOnIdleTimeoutDuration = 24;
- 
-    optional uint64 TotalInflightAmountOfData = 25; 
-    optional NKikimrConfigUnits.TDuration PingPeriodDuration = 26; 
-    optional NKikimrConfigUnits.TDuration ForceConfirmPeriodDuration = 27; 
-    optional NKikimrConfigUnits.TDuration LostConnectionDuration = 28; 
+
+    optional uint64 TotalInflightAmountOfData = 25;
+    optional NKikimrConfigUnits.TDuration PingPeriodDuration = 26;
+    optional NKikimrConfigUnits.TDuration ForceConfirmPeriodDuration = 27;
+    optional NKikimrConfigUnits.TDuration LostConnectionDuration = 28;
     optional NKikimrConfigUnits.TDuration BatchPeriodDuration = 29;
 }
 

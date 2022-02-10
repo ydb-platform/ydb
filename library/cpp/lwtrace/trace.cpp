@@ -1,16 +1,16 @@
-#include "all.h" 
+#include "all.h"
 #include "kill_action.h"
-#include "log_shuttle.h" 
-#include "preprocessor.h" 
+#include "log_shuttle.h"
+#include "preprocessor.h"
 #include "sleep_action.h"
-#include "stderr_writer.h" 
+#include "stderr_writer.h"
 #include "google/protobuf/repeated_field.h"
- 
+
 #include <util/generic/map.h>
 #include <util/random/random.h>
 
-#include <functional> 
- 
+#include <functional>
+
 namespace NLWTrace {
 #ifndef LWTRACE_DISABLE
 

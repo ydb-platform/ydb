@@ -39,8 +39,8 @@ struct aio_ring {
 	unsigned        header_length;  /* size of aio_ring */
 };
 
- 
-int io_getevents(io_context_t ctx, long min_nr, long nr, struct io_event * events, struct timespec * timeout) 
+
+int io_getevents(io_context_t ctx, long min_nr, long nr, struct io_event * events, struct timespec * timeout)
 {
 	struct aio_ring *ring;
 	ring = (struct aio_ring*)ctx;

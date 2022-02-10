@@ -1,9 +1,9 @@
 #pragma once
 
-#include "preprocessor.h" 
+#include "preprocessor.h"
 #include "signature.h"
 #include "param_traits.h"
- 
+
 #include <library/cpp/lwtrace/protos/lwtrace.pb.h>
 
 namespace NLWTrace {

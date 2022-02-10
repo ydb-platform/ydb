@@ -1,5 +1,5 @@
 #include "stderr_writer.h"
- 
+
 #include <util/stream/str.h>
 
 using namespace NLWTrace;

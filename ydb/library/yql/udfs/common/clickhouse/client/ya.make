@@ -96,7 +96,7 @@ IF (OS_LINUX AND CLANG AND NOT WITH_VALGRIND)
 
         src/AggregateFunctions/AggregateFunctionFactory.cpp
         src/AggregateFunctions/AggregateFunctionCombinatorFactory.cpp
-        src/AggregateFunctions/IAggregateFunction.cpp 
+        src/AggregateFunctions/IAggregateFunction.cpp
 
         src/Columns/Collator.cpp
         src/Columns/ColumnAggregateFunction.cpp

@@ -1,11 +1,11 @@
-#include "kill_action.h" 
+#include "kill_action.h"
 
 #ifndef _win_
 #include <sys/types.h>
 #include <signal.h>
 #endif
 
-#include <stdlib.h> 
+#include <stdlib.h>
 
 using namespace NLWTrace;
 using namespace NLWTrace::NPrivate;

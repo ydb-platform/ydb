@@ -1,6 +1,6 @@
 #include "check.h"
- 
-#include <util/stream/output.h> 
+
+#include <util/stream/output.h>
 #include <util/string/cast.h>
 
 namespace NLWTrace {

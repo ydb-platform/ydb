@@ -281,17 +281,17 @@ namespace {
             TVector<TFuture<void>> promises;
             promises.push_back(promise1);
             promises.push_back(promise2);
- 
+
             TFuture<void> future = WaitExceptionOrAll(promises);
             UNIT_ASSERT(!future.HasValue());
- 
+
             promise1.SetValue();
             UNIT_ASSERT(!future.HasValue());
- 
+
             promise2.SetValue();
             UNIT_ASSERT(future.HasValue());
         }
- 
+
         Y_UNIT_TEST(ShouldWaitExceptionOrAllVectorWithValueType) {
             TPromise<int> promise1 = NewPromise<int>();
             TPromise<int> promise2 = NewPromise<int>();
@@ -313,7 +313,7 @@ namespace {
         Y_UNIT_TEST(ShouldWaitExceptionOrAllList) {
             TPromise<void> promise1 = NewPromise();
             TPromise<void> promise2 = NewPromise();
- 
+
             std::list<TFuture<void>> promises;
             promises.push_back(promise1);
             promises.push_back(promise2);
@@ -334,25 +334,25 @@ namespace {
             TFuture<void> future = WaitExceptionOrAll(promises);
             UNIT_ASSERT(future.HasValue());
         }
- 
+
         Y_UNIT_TEST(ShouldWaitAnyVector) {
             TPromise<void> promise1 = NewPromise();
             TPromise<void> promise2 = NewPromise();
- 
+
             TVector<TFuture<void>> promises;
             promises.push_back(promise1);
             promises.push_back(promise2);
- 
+
             TFuture<void> future = WaitAny(promises);
             UNIT_ASSERT(!future.HasValue());
- 
+
             promise1.SetValue();
             UNIT_ASSERT(future.HasValue());
- 
+
             promise2.SetValue();
             UNIT_ASSERT(future.HasValue());
         }
- 
+
 
         Y_UNIT_TEST(ShouldWaitAnyVectorWithValueType) {
             TPromise<int> promise1 = NewPromise<int>();
@@ -375,7 +375,7 @@ namespace {
         Y_UNIT_TEST(ShouldWaitAnyList) {
             TPromise<void> promise1 = NewPromise();
             TPromise<void> promise2 = NewPromise();
- 
+
             std::list<TFuture<void>> promises;
             promises.push_back(promise1);
             promises.push_back(promise2);
@@ -396,11 +396,11 @@ namespace {
             TFuture<void> future = WaitAny(promises);
             UNIT_ASSERT(future.HasValue());
         }
- 
+
         Y_UNIT_TEST(ShouldWaitAny) {
             TPromise<void> promise1 = NewPromise();
             TPromise<void> promise2 = NewPromise();
- 
+
             TFuture<void> future = WaitAny(promise1, promise2);
             UNIT_ASSERT(!future.HasValue());
 
@@ -506,7 +506,7 @@ namespace {
             UNIT_ASSERT(promise.TrySetValue(42));
             UNIT_ASSERT(!promise.TrySetValue(42));
         }
- 
+
         Y_UNIT_TEST(HandlingRepetitiveSetException) {
             TPromise<int> promise = NewPromise<int>();
             promise.SetException("test");
@@ -519,24 +519,24 @@ namespace {
             UNIT_ASSERT(!promise.TrySetException(std::make_exception_ptr("test")));
         }
 
-        Y_UNIT_TEST(ShouldAllowToMakeFutureWithException) 
-        { 
-            auto future1 = MakeErrorFuture<void>(std::make_exception_ptr(TFutureException())); 
-            UNIT_ASSERT(future1.HasException()); 
-            UNIT_CHECK_GENERATED_EXCEPTION(future1.GetValue(), TFutureException); 
- 
-            auto future2 = MakeErrorFuture<int>(std::make_exception_ptr(TFutureException())); 
-            UNIT_ASSERT(future2.HasException()); 
-            UNIT_CHECK_GENERATED_EXCEPTION(future2.GetValue(), TFutureException); 
- 
-            auto future3 = MakeFuture<std::exception_ptr>(std::make_exception_ptr(TFutureException())); 
-            UNIT_ASSERT(future3.HasValue()); 
-            UNIT_CHECK_GENERATED_NO_EXCEPTION(future3.GetValue(), TFutureException); 
- 
-            auto future4 = MakeFuture<std::unique_ptr<int>>(nullptr); 
-            UNIT_ASSERT(future4.HasValue()); 
-            UNIT_CHECK_GENERATED_NO_EXCEPTION(future4.GetValue(), TFutureException); 
-        } 
+        Y_UNIT_TEST(ShouldAllowToMakeFutureWithException)
+        {
+            auto future1 = MakeErrorFuture<void>(std::make_exception_ptr(TFutureException()));
+            UNIT_ASSERT(future1.HasException());
+            UNIT_CHECK_GENERATED_EXCEPTION(future1.GetValue(), TFutureException);
+
+            auto future2 = MakeErrorFuture<int>(std::make_exception_ptr(TFutureException()));
+            UNIT_ASSERT(future2.HasException());
+            UNIT_CHECK_GENERATED_EXCEPTION(future2.GetValue(), TFutureException);
+
+            auto future3 = MakeFuture<std::exception_ptr>(std::make_exception_ptr(TFutureException()));
+            UNIT_ASSERT(future3.HasValue());
+            UNIT_CHECK_GENERATED_NO_EXCEPTION(future3.GetValue(), TFutureException);
+
+            auto future4 = MakeFuture<std::unique_ptr<int>>(nullptr);
+            UNIT_ASSERT(future4.HasValue());
+            UNIT_CHECK_GENERATED_NO_EXCEPTION(future4.GetValue(), TFutureException);
+        }
 
         Y_UNIT_TEST(WaitAllowsExtract) {
             auto future = MakeFuture<int>(42);

@@ -244,7 +244,7 @@ message TRtmrGatewayConfig {
     repeated TAttr DefaultSettings = 2;
     optional string YqlRtmrDynLib = 3; // path to libyql-dynlib.so
     optional bool UseFakeYfUpload = 4 [default = false]; // use in tests only to speedup upload
-    repeated string Artifacts = 5;  /// default artifacts to put into every function 
+    repeated string Artifacts = 5;  /// default artifacts to put into every function
     repeated TRtmrOperationArtifactsInfo CommonArtifacts = 6; // common artifacts for all clusters
     optional uint32 MaxPqPartitions = 7 [default = 10];
     optional uint32 PreviewCollectTimeoutMs = 8 [default = 2000];

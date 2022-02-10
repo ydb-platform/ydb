@@ -41,8 +41,8 @@ public:
 
         auto* txState = context.SS->FindTx(OperationId);
         Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxAlterFileStore, "invalid tx type %u", txState->TxType); 
-        Y_VERIFY(txState->State == TTxState::ConfigureParts, "invalid tx state %u", txState->State); 
+        Y_VERIFY(txState->TxType == TTxState::TxAlterFileStore, "invalid tx type %u", txState->TxType);
+        Y_VERIFY(txState->State == TTxState::ConfigureParts, "invalid tx state %u", txState->State);
 
         auto tabletId = TTabletId(ev->Get()->Record.GetOrigin());
         auto status = ev->Get()->Record.GetStatus();
@@ -278,25 +278,25 @@ private:
     TTxState& PrepareChanges(
         TOperationId operationId, TPathElement::TPtr item,
         TFileStoreInfo::TPtr fs,
-        const TChannelsBindings& partitionChannels, 
+        const TChannelsBindings& partitionChannels,
         TOperationContext& context);
 
     const NKikimrFileStore::TConfig* ParseParams(
         const NKikimrSchemeOp::TFileStoreDescription& operation,
         TString& errStr);
- 
-    bool ProcessChannelProfiles( 
-        const TPath& path, 
-        const NKikimrFileStore::TConfig& config, 
-        const NKikimrFileStore::TConfig& alterConfig, 
-        TOperationContext& context, 
-        TProposeResponse& result, 
-        TChannelsBindings& storeChannelsBinding); 
- 
-    void ApplyChannelBindings( 
-        TFileStoreInfo::TPtr volume, 
-        const TChannelsBindings& channelBindings, 
-        TOperationContext& context); 
+
+    bool ProcessChannelProfiles(
+        const TPath& path,
+        const NKikimrFileStore::TConfig& config,
+        const NKikimrFileStore::TConfig& alterConfig,
+        TOperationContext& context,
+        TProposeResponse& result,
+        TChannelsBindings& storeChannelsBinding);
+
+    void ApplyChannelBindings(
+        TFileStoreInfo::TPtr volume,
+        const TChannelsBindings& channelBindings,
+        TOperationContext& context);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -380,26 +380,26 @@ THolder<TProposeResponse> TAlterFileStore::Propose(
         return result;
     }
 
-    if (alterConfig->HasVersion() && alterConfig->GetVersion() != fs->Version) { 
+    if (alterConfig->HasVersion() && alterConfig->GetVersion() != fs->Version) {
         result->SetError(
             NKikimrScheme::StatusPreconditionFailed,
             "Wrong version in config");
         return result;
     }
 
-    TChannelsBindings storeChannelsBinding; 
-    const auto channelProfilesProcessed = ProcessChannelProfiles( 
-        path, 
-        fs->Config, 
-        *alterConfig, 
-        context, 
-        *result, 
-        storeChannelsBinding); 
- 
-    if (!channelProfilesProcessed) { 
-        return result; 
-    } 
- 
+    TChannelsBindings storeChannelsBinding;
+    const auto channelProfilesProcessed = ProcessChannelProfiles(
+        path,
+        fs->Config,
+        *alterConfig,
+        context,
+        *result,
+        storeChannelsBinding);
+
+    if (!channelProfilesProcessed) {
+        return result;
+    }
+
     if (!context.SS->CheckApplyIf(Transaction, errStr)) {
         result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
         return result;
@@ -407,7 +407,7 @@ THolder<TProposeResponse> TAlterFileStore::Propose(
 
     fs->PrepareAlter(*alterConfig);
 
-    PrepareChanges(OperationId, path.Base(), fs, storeChannelsBinding, context); 
+    PrepareChanges(OperationId, path.Base(), fs, storeChannelsBinding, context);
 
     context.SS->ClearDescribePathCaches(path.Base());
     context.OnComplete.PublishToSchemeBoard(OperationId, path.Base()->PathId);
@@ -417,35 +417,35 @@ THolder<TProposeResponse> TAlterFileStore::Propose(
     return result;
 }
 
-const NKikimrFileStore::TConfig* TAlterFileStore::ParseParams( 
+const NKikimrFileStore::TConfig* TAlterFileStore::ParseParams(
     const NKikimrSchemeOp::TFileStoreDescription& operation,
-    TString& errStr) 
-{ 
-    if (operation.HasIndexTabletId() || operation.HasVersion()) { 
-        errStr = "Setting schemeshard owned properties is not allowed"; 
-        return nullptr; 
-    } 
- 
-    if (!operation.HasConfig()) { 
-        errStr = "Missing changes to FileStore config"; 
-        return nullptr; 
-    } 
- 
-    const auto& config = operation.GetConfig(); 
- 
-    if (config.HasBlockSize()) { 
-        errStr = "Cannot change block size after creation"; 
-        return nullptr; 
-    } 
- 
-    return &config; 
-} 
- 
+    TString& errStr)
+{
+    if (operation.HasIndexTabletId() || operation.HasVersion()) {
+        errStr = "Setting schemeshard owned properties is not allowed";
+        return nullptr;
+    }
+
+    if (!operation.HasConfig()) {
+        errStr = "Missing changes to FileStore config";
+        return nullptr;
+    }
+
+    const auto& config = operation.GetConfig();
+
+    if (config.HasBlockSize()) {
+        errStr = "Cannot change block size after creation";
+        return nullptr;
+    }
+
+    return &config;
+}
+
 TTxState& TAlterFileStore::PrepareChanges(
     TOperationId operationId,
     TPathElement::TPtr item,
     TFileStoreInfo::TPtr fs,
-    const TChannelsBindings& channelBindings, 
+    const TChannelsBindings& channelBindings,
     TOperationContext& context)
 {
     NIceDb::TNiceDb db(context.Txc.DB);
@@ -456,11 +456,11 @@ TTxState& TAlterFileStore::PrepareChanges(
     TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxAlterFileStore, item->PathId);
     txState.State = TTxState::CreateParts;
 
-    ApplyChannelBindings( 
-        fs, 
-        channelBindings, 
-        context); 
- 
+    ApplyChannelBindings(
+        fs,
+        channelBindings,
+        context);
+
     txState.Shards.reserve(1);
     {
         TShardIdx shardIdx = fs->IndexShardIdx;
@@ -485,85 +485,85 @@ TTxState& TAlterFileStore::PrepareChanges(
     return txState;
 }
 
-bool TAlterFileStore::ProcessChannelProfiles( 
-    const TPath& path, 
-    const NKikimrFileStore::TConfig& config, 
-    const NKikimrFileStore::TConfig& alterConfig, 
-    TOperationContext& context, 
-    TProposeResponse& result, 
-    TChannelsBindings& storeChannelsBinding) 
+bool TAlterFileStore::ProcessChannelProfiles(
+    const TPath& path,
+    const NKikimrFileStore::TConfig& config,
+    const NKikimrFileStore::TConfig& alterConfig,
+    TOperationContext& context,
+    TProposeResponse& result,
+    TChannelsBindings& storeChannelsBinding)
 {
-    const auto& alterEcps = alterConfig.GetExplicitChannelProfiles(); 
- 
-    if (alterEcps.size()) { 
-        if (ui32(alterEcps.size()) > NHive::MAX_TABLET_CHANNELS) { 
-            auto errStr = Sprintf("Wrong number of channels %u , should be [1 .. %lu]", 
-                alterEcps.size(), NHive::MAX_TABLET_CHANNELS); 
- 
+    const auto& alterEcps = alterConfig.GetExplicitChannelProfiles();
+
+    if (alterEcps.size()) {
+        if (ui32(alterEcps.size()) > NHive::MAX_TABLET_CHANNELS) {
+            auto errStr = Sprintf("Wrong number of channels %u , should be [1 .. %lu]",
+                alterEcps.size(), NHive::MAX_TABLET_CHANNELS);
+
             result.SetError(NKikimrScheme::StatusInvalidParameter, errStr);
-            return false; 
-        } 
- 
-        // Cannot delete explicit profiles for existing channels 
-        if (alterConfig.ExplicitChannelProfilesSize() < config.ExplicitChannelProfilesSize()) { 
+            return false;
+        }
+
+        // Cannot delete explicit profiles for existing channels
+        if (alterConfig.ExplicitChannelProfilesSize() < config.ExplicitChannelProfilesSize()) {
             result.SetError(NKikimrScheme::StatusInvalidParameter,
-                "Cannot reduce the number of channel profiles"); 
-            return false; 
-        } 
- 
-        if (!alterConfig.GetPoolKindChangeAllowed()) { 
-            // Cannot change pool kinds for existing channels 
-            // But it's ok to change other params, e.g. DataKind 
-            for (ui32 i = 0; i < config.ExplicitChannelProfilesSize(); ++i) { 
-                const auto& prevProfile = config.GetExplicitChannelProfiles(i); 
-                const auto& newProfile = alterConfig.GetExplicitChannelProfiles(i); 
-                if (prevProfile.GetPoolKind() != newProfile.GetPoolKind()) { 
-                    result.SetError( 
+                "Cannot reduce the number of channel profiles");
+            return false;
+        }
+
+        if (!alterConfig.GetPoolKindChangeAllowed()) {
+            // Cannot change pool kinds for existing channels
+            // But it's ok to change other params, e.g. DataKind
+            for (ui32 i = 0; i < config.ExplicitChannelProfilesSize(); ++i) {
+                const auto& prevProfile = config.GetExplicitChannelProfiles(i);
+                const auto& newProfile = alterConfig.GetExplicitChannelProfiles(i);
+                if (prevProfile.GetPoolKind() != newProfile.GetPoolKind()) {
+                    result.SetError(
                         NKikimrScheme::StatusInvalidParameter,
-                        TStringBuilder() << "Cannot change PoolKind for channel " << i 
-                            << ", " << prevProfile.GetPoolKind() 
-                            << " -> " << newProfile.GetPoolKind()); 
- 
-                    return false; 
-                } 
-            } 
-        } 
+                        TStringBuilder() << "Cannot change PoolKind for channel " << i
+                            << ", " << prevProfile.GetPoolKind()
+                            << " -> " << newProfile.GetPoolKind());
+
+                    return false;
+                }
+            }
+        }
     }
 
-    const auto& ecps = alterEcps.empty() ? config.GetExplicitChannelProfiles() : alterEcps; 
-    TVector<TStringBuf> partitionPoolKinds(Reserve(ecps.size())); 
-    for (const auto& ecp : ecps) { 
-        partitionPoolKinds.push_back(ecp.GetPoolKind()); 
+    const auto& ecps = alterEcps.empty() ? config.GetExplicitChannelProfiles() : alterEcps;
+    TVector<TStringBuf> partitionPoolKinds(Reserve(ecps.size()));
+    for (const auto& ecp : ecps) {
+        partitionPoolKinds.push_back(ecp.GetPoolKind());
     }
 
-    const auto storeChannelsResolved = context.SS->ResolveChannelsByPoolKinds( 
-        partitionPoolKinds, 
-        path.DomainId(), 
-        storeChannelsBinding); 
+    const auto storeChannelsResolved = context.SS->ResolveChannelsByPoolKinds(
+        partitionPoolKinds,
+        path.DomainId(),
+        storeChannelsBinding);
 
-    if (!storeChannelsResolved) { 
+    if (!storeChannelsResolved) {
         result.SetError(NKikimrScheme::StatusInvalidParameter,
-            "Unable to construct channel binding for filestore with the storage pool"); 
-        return false; 
+            "Unable to construct channel binding for filestore with the storage pool");
+        return false;
     }
 
-    context.SS->SetNfsChannelsParams(ecps, storeChannelsBinding); 
-    return true; 
+    context.SS->SetNfsChannelsParams(ecps, storeChannelsBinding);
+    return true;
 }
 
-void TAlterFileStore::ApplyChannelBindings( 
-        TFileStoreInfo::TPtr fs, 
-        const TChannelsBindings& channelBindings, 
-        TOperationContext& context) 
-{ 
-    auto& shardInfo = context.SS->ShardInfos[fs->IndexShardIdx]; 
-    if (!shardInfo.BindedChannels.empty()) { 
-        Y_VERIFY(shardInfo.BindedChannels.size() <= channelBindings.size()); 
-        shardInfo.BindedChannels.resize(channelBindings.size()); 
-        Copy(channelBindings.begin(), channelBindings.end(), shardInfo.BindedChannels.begin()); 
-    } 
-} 
- 
+void TAlterFileStore::ApplyChannelBindings(
+        TFileStoreInfo::TPtr fs,
+        const TChannelsBindings& channelBindings,
+        TOperationContext& context)
+{
+    auto& shardInfo = context.SS->ShardInfos[fs->IndexShardIdx];
+    if (!shardInfo.BindedChannels.empty()) {
+        Y_VERIFY(shardInfo.BindedChannels.size() <= channelBindings.size());
+        shardInfo.BindedChannels.resize(channelBindings.size());
+        Copy(channelBindings.begin(), channelBindings.end(), shardInfo.BindedChannels.begin());
+    }
+}
+
 }   // namespace
 
 namespace NKikimr {

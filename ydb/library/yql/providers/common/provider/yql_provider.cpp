@@ -464,11 +464,11 @@ bool FillUsedFilesImpl(
             YQL_ENSURE(SplitUdfName(node.Head().Content(), moduleName, funcName));
         }
 
-        auto scriptType = NKikimr::NMiniKQL::ScriptTypeFromStr(moduleName); 
+        auto scriptType = NKikimr::NMiniKQL::ScriptTypeFromStr(moduleName);
         if (node.IsCallable("ScriptUdf")) {
             moduleName = NKikimr::NMiniKQL::ScriptTypeAsStr(NKikimr::NMiniKQL::CanonizeScriptType(scriptType));
         }
- 
+
         bool addSysModule = true;
         TString fileAlias;
         if (node.IsCallable("Udf")) {
@@ -478,9 +478,9 @@ bool FillUsedFilesImpl(
             // we have external UdfModule (not in preinstalled udfs)
             if (iterator != types.UdfModules.end()) {
                 fileAlias = iterator->second;
-            } 
+            }
         }
- 
+
         if (!fileAlias.empty()) {
             addSysModule = false;
             const auto block = types.UserDataStorage->FindUserDataBlock(fileAlias);

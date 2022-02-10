@@ -85,11 +85,11 @@ inline void AddAnyJoinSide(EAnyJoinSettings& combined, EAnyJoinSettings value) {
 }
 
 #define MKQL_SCRIPT_TYPES(xx) \
-    xx(Unknown, 0, unknown) \ 
-    xx(Python, 1, python) \ 
-    xx(Lua, 2, lua) \ 
-    xx(ArcPython, 3, arcpython) \ 
-    xx(CustomPython, 4, custompython) \ 
+    xx(Unknown, 0, unknown) \
+    xx(Python, 1, python) \
+    xx(Lua, 2, lua) \
+    xx(ArcPython, 3, arcpython) \
+    xx(CustomPython, 4, custompython) \
     xx(Javascript, 5, javascript) \
     xx(Python2, 6, python2) \
     xx(ArcPython2, 7, arcpython2) \

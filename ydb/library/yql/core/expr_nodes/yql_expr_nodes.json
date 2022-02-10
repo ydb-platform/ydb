@@ -193,11 +193,11 @@
             "Match": {"Type": "Callable", "Name": "LMap"}
         },
         {
-            "Name": "TCoOrderedLMap", 
-            "Base": "TCoMapBase", 
-            "Match": {"Type": "Callable", "Name": "OrderedLMap"} 
-        }, 
-        { 
+            "Name": "TCoOrderedLMap",
+            "Base": "TCoMapBase",
+            "Match": {"Type": "Callable", "Name": "OrderedLMap"}
+        },
+        {
             "Name": "TCoNarrowMap",
             "Base": "TCoMapBase",
             "Match": {"Type": "Callable", "Name": "NarrowMap"}
@@ -1880,14 +1880,14 @@
             "Children": [
                 {"Index": 0, "Name": "Variant", "Type": "TExprBase"}
             ]
-        }, 
-        { 
-            "Name": "TCoEnsurePersistable", 
-            "Base": "TCallable", 
-            "Match": {"Type": "Callable", "Name": "EnsurePersistable"}, 
-            "Children": [ 
-                {"Index": 0, "Name": "Input", "Type": "TExprBase"} 
-            ] 
+        },
+        {
+            "Name": "TCoEnsurePersistable",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "EnsurePersistable"},
+            "Children": [
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"}
+            ]
         },
         {
             "Name": "TCoSecureParam",

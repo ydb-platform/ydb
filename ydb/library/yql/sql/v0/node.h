@@ -995,8 +995,8 @@ namespace NSQLTranslationV0 {
     TSourcePtr BuildUpdateValues(TPosition pos, const TVector<TString>& columnsHint, const TVector<TNodePtr>& values);
 
     EWriteColumnMode ToWriteColumnsMode(ESQLWriteColumnMode sqlWriteColumnMode);
-    TNodePtr BuildEraseColumns(TPosition pos, const TVector<TString>& columns); 
-    TNodePtr BuildWriteColumns(TPosition pos, const TTableRef& table, EWriteColumnMode mode, TSourcePtr values, TNodePtr options = nullptr); 
+    TNodePtr BuildEraseColumns(TPosition pos, const TVector<TString>& columns);
+    TNodePtr BuildWriteColumns(TPosition pos, const TTableRef& table, EWriteColumnMode mode, TSourcePtr values, TNodePtr options = nullptr);
     TNodePtr BuildUpdateColumns(TPosition pos, const TTableRef& table, TSourcePtr values, TSourcePtr source);
     TNodePtr BuildDelete(TPosition pos, const TTableRef& table, TSourcePtr source);
 
@@ -1010,7 +1010,7 @@ namespace NSQLTranslationV0 {
         const TVector<std::pair<TIdentifier, bool>>& orderByColumns);
     TNodePtr BuildAlterTable(TPosition pos, const TTableRef& tr, const TVector<TColumnSchema>& columns, EAlterTableIntentnt mode);
     TNodePtr BuildDropTable(TPosition pos, const TTableRef& table);
-    TNodePtr BuildWriteTable(TPosition pos, const TString& label, const TTableRef& table, EWriteColumnMode mode, TNodePtr options = nullptr); 
+    TNodePtr BuildWriteTable(TPosition pos, const TString& label, const TTableRef& table, EWriteColumnMode mode, TNodePtr options = nullptr);
     TNodePtr BuildWriteResult(TPosition pos, const TString& label, TNodePtr settings, const TSet<TString>& clusters);
     TNodePtr BuildCommitClusters(TPosition pos, const TSet<TString>& clusters = TSet<TString>());
     TNodePtr BuildRollbackClusters(TPosition pos, const TSet<TString>& clusters = TSet<TString>());

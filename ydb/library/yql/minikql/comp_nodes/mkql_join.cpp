@@ -361,12 +361,12 @@ public:
         }
 
     private:
-        // copypaste to resolve -Woverloaded-virtual 
-        bool Next(NUdf::TUnboxedValue&) override { 
+        // copypaste to resolve -Woverloaded-virtual
+        bool Next(NUdf::TUnboxedValue&) override {
             this->ThrowNotSupported(__func__);
-            return false; 
-        } 
- 
+            return false;
+        }
+
         NUdf::TUnboxedValue Next(IComputationNode* flow, TComputationContext& ctx) {
             while (EatInput) {
                 if (!InitialUsage) {

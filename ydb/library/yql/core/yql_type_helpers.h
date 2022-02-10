@@ -1,12 +1,12 @@
-#pragma once 
- 
+#pragma once
+
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
- 
+
 #include <util/generic/set.h>
- 
-namespace NYql { 
- 
+
+namespace NYql {
+
 const TTypeAnnotationNode* GetItemType(const TTypeAnnotationNode& type);
 TSet<TStringBuf> GetColumnsOfStructOrSequenceOfStruct(const TTypeAnnotationNode& type);
 
@@ -16,5 +16,5 @@ const TTypeAnnotationNode* GetSequenceItemType(TPositionHandle pos, const TTypeA
                                                bool allowMultiIO, TExprContext& ctx);
 bool GetSequenceItemType(const TExprNode& list, const TTypeAnnotationNode*& itemType, TExprContext& ctx);
 const TTypeAnnotationNode* SilentGetSequenceItemType(const TExprNode& list, bool allowMultiIO);
- 
-} // namespace NYql 
+
+} // namespace NYql

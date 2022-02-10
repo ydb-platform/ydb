@@ -1093,17 +1093,17 @@ void TSqlCallExpr::IncCounters() {
         Ctx.IncrementMonCounter("sql_features", "NamedNodeUseApply");
     } else if (!Module.empty()) {
         if (ValidateForCounters(Module)) {
-            Ctx.IncrementMonCounter("udf_modules", Module); 
+            Ctx.IncrementMonCounter("udf_modules", Module);
             Ctx.IncrementMonCounter("sql_features", "CallUdf");
             if (ValidateForCounters(Func)) {
-                auto scriptType = NKikimr::NMiniKQL::ScriptTypeFromStr(Module); 
-                if (scriptType == NKikimr::NMiniKQL::EScriptType::Unknown) { 
-                   Ctx.IncrementMonCounter("udf_functions", Module + "." + Func); 
+                auto scriptType = NKikimr::NMiniKQL::ScriptTypeFromStr(Module);
+                if (scriptType == NKikimr::NMiniKQL::EScriptType::Unknown) {
+                   Ctx.IncrementMonCounter("udf_functions", Module + "." + Func);
                 }
             }
         }
     } else if (ValidateForCounters(Func)) {
-        Ctx.IncrementMonCounter("sql_builtins", Func); 
+        Ctx.IncrementMonCounter("sql_builtins", Func);
         Ctx.IncrementMonCounter("sql_features", "CallBuiltin");
     }
 }
@@ -4040,9 +4040,9 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
     SqlIntoModeStr = JoinRange("", modeStrings.begin(), modeStrings.end());
     SqlIntoUserModeStr = JoinRange(" ", userModeStrings.begin(), userModeStrings.end());
 
-    auto intoTableRef = node.GetRule_into_simple_table_ref3(); 
-    auto tableRef = intoTableRef.GetRule_simple_table_ref1(); 
- 
+    auto intoTableRef = node.GetRule_into_simple_table_ref3();
+    auto tableRef = intoTableRef.GetRule_simple_table_ref1();
+
     auto cluster = Ctx.CurrCluster;
     std::pair<bool, TDeferredAtom> nameOrAt;
     if (tableRef.HasBlock1()) {
@@ -4091,24 +4091,24 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
         }
     }
 
-    TVector<TString> eraseColumns; 
-    if (intoTableRef.HasBlock2()) { 
-        auto service = Ctx.GetClusterProvider(cluster); 
-        if (!service) { 
-            Ctx.Error() << "Unknown cluster name: " << cluster; 
-            return nullptr; 
-        } 
- 
-        if (*service != StatProviderName) { 
-            Ctx.Error() << "ERASE BY is unsupported for " << *service; 
-            return nullptr; 
-        } 
- 
-        PureColumnListStr( 
-            intoTableRef.GetBlock2().GetRule_pure_column_list3(), *this, eraseColumns 
-        ); 
-    } 
- 
+    TVector<TString> eraseColumns;
+    if (intoTableRef.HasBlock2()) {
+        auto service = Ctx.GetClusterProvider(cluster);
+        if (!service) {
+            Ctx.Error() << "Unknown cluster name: " << cluster;
+            return nullptr;
+        }
+
+        if (*service != StatProviderName) {
+            Ctx.Error() << "ERASE BY is unsupported for " << *service;
+            return nullptr;
+        }
+
+        PureColumnListStr(
+            intoTableRef.GetBlock2().GetRule_pure_column_list3(), *this, eraseColumns
+        );
+    }
+
     if (withTruncate) {
         if (SqlIntoModeStr != "InsertInto") {
             Error() << "Unable " << SqlIntoUserModeStr << " with truncate mode";
@@ -4135,13 +4135,13 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
         return nullptr;
     }
     Ctx.IncrementMonCounter("sql_features", SqlIntoModeStr);
- 
-    TNodePtr options; 
-    if (eraseColumns) { 
-        options = BuildEraseColumns(pos, std::move(eraseColumns)); 
-    } 
- 
-    return BuildWriteColumns(pos, table, ToWriteColumnsMode(SqlIntoMode), std::move(values), std::move(options)); 
+
+    TNodePtr options;
+    if (eraseColumns) {
+        options = BuildEraseColumns(pos, std::move(eraseColumns));
+    }
+
+    return BuildWriteColumns(pos, table, ToWriteColumnsMode(SqlIntoMode), std::move(values), std::move(options));
 }
 
 bool TSqlIntoTable::ValidateServiceName(const TRule_into_table_stmt& node, const TTableRef& table,
@@ -4154,13 +4154,13 @@ bool TSqlIntoTable::ValidateServiceName(const TRule_into_table_stmt& node, const
     const bool isMapReduce = serviceName == YtProviderName;
     const bool isKikimr = serviceName == KikimrProviderName;
     const bool isRtmr = serviceName == RtmrProviderName;
-    const bool isStat = serviceName == StatProviderName; 
+    const bool isStat = serviceName == StatProviderName;
 
     if (!isKikimr) {
         if (mode == ESQLWriteColumnMode::InsertOrAbortInto ||
             mode == ESQLWriteColumnMode::InsertOrIgnoreInto ||
             mode == ESQLWriteColumnMode::InsertOrRevertInto ||
-            mode == ESQLWriteColumnMode::UpsertInto && !isStat) 
+            mode == ESQLWriteColumnMode::UpsertInto && !isStat)
         {
             Ctx.Error(pos) << SqlIntoUserModeStr << " is not supported for " << serviceName << " tables";
             Ctx.IncrementMonCounter("sql_errors", TStringBuilder() << SqlIntoUserModeStr << "UnsupportedFor" << serviceName);
@@ -4186,12 +4186,12 @@ bool TSqlIntoTable::ValidateServiceName(const TRule_into_table_stmt& node, const
             Ctx.IncrementMonCounter("sql_errors", TStringBuilder() << SqlIntoUserModeStr << "UnsupportedFor" << serviceName);
             return false;
         }
-    } else if (isStat) { 
-        if (mode != ESQLWriteColumnMode::UpsertInto) { 
-            Ctx.Error(pos) << SqlIntoUserModeStr << " is unsupported for " << serviceName; 
-            Ctx.IncrementMonCounter("sql_errors", TStringBuilder() << SqlIntoUserModeStr << "UnsupportedFor" << serviceName); 
-            return false; 
-        } 
+    } else if (isStat) {
+        if (mode != ESQLWriteColumnMode::UpsertInto) {
+            Ctx.Error(pos) << SqlIntoUserModeStr << " is unsupported for " << serviceName;
+            Ctx.IncrementMonCounter("sql_errors", TStringBuilder() << SqlIntoUserModeStr << "UnsupportedFor" << serviceName);
+            return false;
+        }
     }
 
     return true;

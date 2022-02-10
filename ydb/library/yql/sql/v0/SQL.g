@@ -284,7 +284,7 @@ join_constraint:
   | USING pure_column_or_named_list
 ;
 
-into_table_stmt: (INSERT | INSERT OR ABORT | INSERT OR REVERT | INSERT OR IGNORE | UPSERT | REPLACE) INTO into_simple_table_ref into_values_source; 
+into_table_stmt: (INSERT | INSERT OR ABORT | INSERT OR REVERT | INSERT OR IGNORE | UPSERT | REPLACE) INTO into_simple_table_ref into_values_source;
 
 into_values_source:
     pure_column_list? values_source
@@ -327,7 +327,7 @@ table_arg: AT? expr (COLON id_or_string)?;
 table_hints: WITH (id_or_string | pure_column_list);
 
 simple_table_ref: ((opt_id_prefix id_or_at) | AT? bind_parameter) table_hints?;
-into_simple_table_ref: simple_table_ref (ERASE BY pure_column_list)?; 
+into_simple_table_ref: simple_table_ref (ERASE BY pure_column_list)?;
 
 delete_stmt: DELETE FROM simple_table_ref (WHERE expr | ON into_values_source)?;
 update_stmt: UPDATE simple_table_ref (SET set_clause_choice (WHERE expr)? | ON into_values_source);
@@ -448,8 +448,8 @@ keyword_expr_uncompat:
 ;
 
 keyword_table_uncompat:
-    ERASE 
-  | STREAM 
+    ERASE
+  | STREAM
 ;
 
 keyword_select_uncompat:
@@ -751,7 +751,7 @@ EACH: E A C H;
 ELSE: E L S E;
 EMPTY_ACTION: E M P T Y '_' A C T I O N;
 END: E N D;
-ERASE: E R A S E; 
+ERASE: E R A S E;
 ESCAPE: E S C A P E;
 EVALUATE: E V A L U A T E;
 EXCEPT: E X C E P T;

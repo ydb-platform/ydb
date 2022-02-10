@@ -8,7 +8,7 @@
 
 #include <ydb/library/yql/public/udf/udf_terminator.h>
 
-#ifndef MKQL_DISABLE_CODEGEN 
+#ifndef MKQL_DISABLE_CODEGEN
 extern "C" NKikimr::NUdf::TUnboxedValuePod DataFromString(const NKikimr::NUdf::TUnboxedValuePod data, NKikimr::NUdf::EDataSlot slot) {
     return NKikimr::NMiniKQL::ValueFromString(slot, data.AsStringRef());
 }
@@ -16,7 +16,7 @@ extern "C" NKikimr::NUdf::TUnboxedValuePod DataFromString(const NKikimr::NUdf::T
 extern "C" NYql::NDecimal::TInt128 DecimalFromString(const NKikimr::NUdf::TUnboxedValuePod decimal, ui8 precision, ui8 scale) {
     return NYql::NDecimal::FromStringEx(decimal.AsStringRef(), precision, scale);
 }
-#endif 
+#endif
 
 namespace NKikimr {
 namespace NMiniKQL {

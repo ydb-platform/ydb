@@ -712,10 +712,10 @@ static const TMap<EWriteColumnMode, TString> columnModeToStrMapMR {
     {EWriteColumnMode::Renew, "renew"}
 };
 
-static const TMap<EWriteColumnMode, TString> columnModeToStrMapStat { 
-    {EWriteColumnMode::Upsert, "upsert"} 
-}; 
- 
+static const TMap<EWriteColumnMode, TString> columnModeToStrMapStat {
+    {EWriteColumnMode::Upsert, "upsert"}
+};
+
 static const TMap<EWriteColumnMode, TString> columnModeToStrMapKikimr {
     {EWriteColumnMode::Default, ""},
     {EWriteColumnMode::Insert, "insert_abort"},
@@ -733,7 +733,7 @@ static const TMap<EWriteColumnMode, TString> columnModeToStrMapKikimr {
 class TWriteTableNode final: public TAstListNode {
 public:
     TWriteTableNode(TPosition pos, const TString& label, const TTableRef& table, EWriteColumnMode mode,
-        TNodePtr options) 
+        TNodePtr options)
         : TAstListNode(pos)
         , Label(label)
         , Table(table)
@@ -756,22 +756,22 @@ public:
         auto getModesMap = [] (const TString& serviceName) -> const TMap<EWriteColumnMode, TString>& {
             if (serviceName == KikimrProviderName) {
                 return columnModeToStrMapKikimr;
-            } else if (serviceName == StatProviderName) { 
-                return columnModeToStrMapStat; 
+            } else if (serviceName == StatProviderName) {
+                return columnModeToStrMapStat;
             } else {
                 return columnModeToStrMapMR;
             }
         };
 
         auto options = Y();
-        if (Options) { 
-            if (!Options->Init(ctx, src)) { 
-                return false; 
-            } 
- 
-            options = L(Options); 
-        } 
- 
+        if (Options) {
+            if (!Options->Init(ctx, src)) {
+                return false;
+            }
+
+            options = L(Options);
+        }
+
         if (Mode != EWriteColumnMode::Default) {
             auto modeStr = getModesMap(serviceName).FindPtr(Mode);
 
@@ -795,12 +795,12 @@ private:
     TString Label;
     TTableRef Table;
     EWriteColumnMode Mode;
-    TNodePtr Options; 
+    TNodePtr Options;
 };
 
-TNodePtr BuildWriteTable(TPosition pos, const TString& label, const TTableRef& table, EWriteColumnMode mode, TNodePtr options) 
+TNodePtr BuildWriteTable(TPosition pos, const TString& label, const TTableRef& table, EWriteColumnMode mode, TNodePtr options)
 {
-    return new TWriteTableNode(pos, label, table, mode, std::move(options)); 
+    return new TWriteTableNode(pos, label, table, mode, std::move(options));
 }
 
 class TClustersSinkOperationBase: public TAstListNode {

@@ -270,7 +270,7 @@ public:
         , Table(table)
         , Mode(mode)
         , Values(std::move(values))
-        , Options(std::move(options)) 
+        , Options(std::move(options))
     {
         FakeSource = BuildFakeSource(pos);
     }
@@ -286,14 +286,14 @@ public:
     bool DoInit(TContext& ctx, ISource* src) override {
         TTableList tableList;
         TNodePtr values;
-        auto options = Y(); 
-        if (Options) { 
-            if (!Options->Init(ctx, src)) { 
-                return false; 
-            } 
-            options = L(Options); 
-        } 
- 
+        auto options = Y();
+        if (Options) {
+            if (!Options->Init(ctx, src)) {
+                return false;
+            }
+            options = L(Options);
+        }
+
         ISource* underlyingSrc = src;
 
         if (TableSource) {
@@ -327,7 +327,7 @@ public:
             if (!Update->Init(ctx, TableSource.Get()) || !Update->InitFilters(ctx)) {
                 return false;
             }
-            options = L(options, Q(Y(Q("update"), Update->Build(ctx)))); 
+            options = L(options, Q(Y(Q("update"), Update->Build(ctx))));
         }
 
         auto write = BuildWriteTable(Pos, "values", Table, Mode, std::move(options), Scoped);
@@ -361,7 +361,7 @@ protected:
     TSourcePtr Values;
     TSourcePtr Update;
     TSourcePtr FakeSource;
-    TNodePtr Options; 
+    TNodePtr Options;
 };
 
 EWriteColumnMode ToWriteColumnsMode(ESQLWriteColumnMode sqlWriteColumnMode) {
@@ -387,40 +387,40 @@ TNodePtr BuildDelete(TPosition pos, TScopedStatePtr scoped, const TTableRef& tab
     return writeNode;
 }
 
- 
-class TEraseColumnsNode: public TAstListNode { 
-public: 
-    TEraseColumnsNode(TPosition pos, const TVector<TString>& columns) 
-        : TAstListNode(pos) 
-        , Columns(columns) 
-    { 
-    } 
- 
-    bool DoInit(TContext& ctx, ISource* src) override { 
-        Y_UNUSED(ctx); 
-        Y_UNUSED(src); 
- 
-        TNodePtr columnList = Y(); 
-        for (const auto& column: Columns) { 
-            columnList->Add(Q(column)); 
-        } 
- 
-        Add(Q(Y(Q("erase_columns"), Q(columnList)))); 
- 
-        return true; 
-    } 
- 
-    TNodePtr DoClone() const final { 
-        return {}; 
-    } 
- 
-private: 
-    TVector<TString> Columns; 
-}; 
- 
- 
-TNodePtr BuildEraseColumns(TPosition pos, const TVector<TString>& columns) { 
-    return new TEraseColumnsNode(pos, columns); 
-} 
- 
+
+class TEraseColumnsNode: public TAstListNode {
+public:
+    TEraseColumnsNode(TPosition pos, const TVector<TString>& columns)
+        : TAstListNode(pos)
+        , Columns(columns)
+    {
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        Y_UNUSED(ctx);
+        Y_UNUSED(src);
+
+        TNodePtr columnList = Y();
+        for (const auto& column: Columns) {
+            columnList->Add(Q(column));
+        }
+
+        Add(Q(Y(Q("erase_columns"), Q(columnList))));
+
+        return true;
+    }
+
+    TNodePtr DoClone() const final {
+        return {};
+    }
+
+private:
+    TVector<TString> Columns;
+};
+
+
+TNodePtr BuildEraseColumns(TPosition pos, const TVector<TString>& columns) {
+    return new TEraseColumnsNode(pos, columns);
+}
+
 } // namespace NSQLTranslationV1

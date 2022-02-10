@@ -2217,15 +2217,15 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
         moduleResource = ctx.Settings.ModuleMapping.at(ns);
     }
 
-    if (ns == "js") { 
-        ns = "javascript"; 
-    } 
- 
-    auto scriptType = NKikimr::NMiniKQL::ScriptTypeFromStr(ns); 
+    if (ns == "js") {
+        ns = "javascript";
+    }
+
+    auto scriptType = NKikimr::NMiniKQL::ScriptTypeFromStr(ns);
     if (scriptType == NKikimr::NMiniKQL::EScriptType::SystemPython2) {
         scriptType = NKikimr::NMiniKQL::EScriptType::Python2;
     }
- 
+
     if (ns == "yql") {
         return new TCallNodeImpl(pos, name, -1, -1, args);
     } else if (ns == "string" && name == "SplitToList") {
@@ -2337,8 +2337,8 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
     } else if (ns == "datetime2" && (name == "Format" || name == "Parse")) {
         return BuildUdf(ctx, pos, nameSpace, name, args);
 
-    } else if (scriptType != NKikimr::NMiniKQL::EScriptType::Unknown) { 
-        auto scriptName = NKikimr::NMiniKQL::ScriptTypeAsStr(scriptType); 
+    } else if (scriptType != NKikimr::NMiniKQL::EScriptType::Unknown) {
+        auto scriptName = NKikimr::NMiniKQL::ScriptTypeAsStr(scriptType);
         return new TScriptUdf(pos, TString(scriptName), name, args);
     } else if (ns.empty()) {
         auto type = NormalizeTypeString(normalizedName);

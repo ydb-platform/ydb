@@ -372,7 +372,7 @@ struct TStringConvert {
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    static Value* Generate(Value* arg, const TCodegenContext&, BasicBlock*&) 
+    static Value* Generate(Value* arg, const TCodegenContext&, BasicBlock*&)
     {
         return arg;
     }

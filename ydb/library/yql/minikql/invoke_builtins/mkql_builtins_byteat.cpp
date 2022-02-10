@@ -39,16 +39,16 @@ struct TByteAt {
         const auto type = Type::getInt8Ty(context);
         const auto embType = FixedVectorType::get(type, 16);
         const auto cast = CastInst::Create(Instruction::BitCast, left, embType, "cast", block);
-        const auto mark = ExtractElementInst::Create(cast, ConstantInt::get(type, 15), "mark", block); 
+        const auto mark = ExtractElementInst::Create(cast, ConstantInt::get(type, 15), "mark", block);
         const auto index = GetterFor<ui32>(right, context, block);
 
-        const auto bsize = ExtractElementInst::Create(cast, ConstantInt::get(type, 14), "bsize", block); 
+        const auto bsize = ExtractElementInst::Create(cast, ConstantInt::get(type, 14), "bsize", block);
         const auto esize = CastInst::Create(Instruction::ZExt, bsize, index->getType(), "esize", block);
 
         const auto sizeType = Type::getInt32Ty(context);
         const auto strType = FixedVectorType::get(sizeType, 4);
         const auto four = CastInst::Create(Instruction::BitCast, left, strType, "four", block);
-        const auto ssize = ExtractElementInst::Create(four, ConstantInt::get(type, 2), "ssize", block); 
+        const auto ssize = ExtractElementInst::Create(four, ConstantInt::get(type, 2), "ssize", block);
 
         const auto cemb = CastInst::Create(Instruction::Trunc, mark, Type::getInt1Ty(context), "cemb", block);
         const auto size = SelectInst::Create(cemb, esize, ssize, "size", block);
@@ -74,7 +74,7 @@ struct TByteAt {
         {
             block = emb;
 
-            const auto byte = ExtractElementInst::Create(cast, index, "byte", block); 
+            const auto byte = ExtractElementInst::Create(cast, index, "byte", block);
             const auto full = SetterFor<ui8>(byte, context, block);
             result->addIncoming(full, block);
             BranchInst::Create(done, block);
@@ -83,7 +83,7 @@ struct TByteAt {
         {
             block = str;
 
-            const auto foffs = ExtractElementInst::Create(four, ConstantInt::get(type, 3), "foffs", block); 
+            const auto foffs = ExtractElementInst::Create(four, ConstantInt::get(type, 3), "foffs", block);
             const auto offs = BinaryOperator::CreateAnd(foffs, ConstantInt::get(foffs->getType(), 0xFFFFFF), "offs", block);
             const auto skip = BinaryOperator::CreateAdd(offs, ConstantInt::get(offs->getType(), 16), "skip", block);
             const auto pos = BinaryOperator::CreateAdd(index, skip, "pos", block);

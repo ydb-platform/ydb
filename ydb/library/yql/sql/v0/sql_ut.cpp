@@ -633,23 +633,23 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         NYql::TAstParseResult res = SqlToYql("update plato.Input set (key, value, subkey) = (select key, value, subkey from plato.Input where key = 911) where key = 200;", 10, "kikimr");
         UNIT_ASSERT(res.Root);
 
-        int lineIndex = 0; 
-        int writeLineIndex = -1; 
-        bool found = false; 
- 
-        TVerifyLineFunc verifyLine = [&lineIndex, &writeLineIndex, &found](const TString& word, const TString& line) { 
+        int lineIndex = 0;
+        int writeLineIndex = -1;
+        bool found = false;
+
+        TVerifyLineFunc verifyLine = [&lineIndex, &writeLineIndex, &found](const TString& word, const TString& line) {
             if (word == "Write") {
-                writeLineIndex = lineIndex; 
-                found = line.find("('mode 'update)") != TString::npos; 
-            } else if (word == "mode") { 
-                found |= lineIndex == writeLineIndex + 1 && line.find("('mode 'update)") != TString::npos; 
-                UNIT_ASSERT(found); 
+                writeLineIndex = lineIndex;
+                found = line.find("('mode 'update)") != TString::npos;
+            } else if (word == "mode") {
+                found |= lineIndex == writeLineIndex + 1 && line.find("('mode 'update)") != TString::npos;
+                UNIT_ASSERT(found);
             }
- 
-            ++lineIndex; 
+
+            ++lineIndex;
         };
 
-        TWordCountHive elementStat = {{TString("Write"), 0}, {TString("mode"), 0}}; 
+        TWordCountHive elementStat = {{TString("Write"), 0}, {TString("mode"), 0}};
         VerifyProgram(res, elementStat, verifyLine);
 
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);

@@ -59,7 +59,7 @@ struct TDecimalAbs {
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    static Value* Generate(Value* arg, const TCodegenContext&, BasicBlock*& block) 
+    static Value* Generate(Value* arg, const TCodegenContext&, BasicBlock*& block)
     {
         const auto val = GetterForInt128(arg, block);
         const auto zero = ConstantInt::get(val->getType(), 0);

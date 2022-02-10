@@ -13,7 +13,7 @@ struct TPlus : public TSimpleArithmeticUnary<TInput, TOutput, TPlus<TInput, TOut
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    static Value* Gen(Value* arg, const TCodegenContext&, BasicBlock*&) 
+    static Value* Gen(Value* arg, const TCodegenContext&, BasicBlock*&)
     {
         return arg;
     }
@@ -26,7 +26,7 @@ struct TDecimalPlus {
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    static Value* Generate(Value* arg, const TCodegenContext&, BasicBlock*&) 
+    static Value* Generate(Value* arg, const TCodegenContext&, BasicBlock*&)
     {
         return arg;
     }

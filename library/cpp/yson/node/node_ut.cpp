@@ -282,11 +282,11 @@ Y_UNIT_TEST_SUITE(YtNodeTest) {
     Y_UNIT_TEST(TestIntCast) {
         TNode node = 1ull << 31;
         UNIT_ASSERT(node.IsUint64());
-        UNIT_ASSERT_EXCEPTION(node.IntCast<i32>(), TNode::TTypeError);
-        UNIT_ASSERT(node.IntCast<ui32>() == static_cast<ui32>(node.AsUint64()));
-        UNIT_ASSERT(node.IntCast<i64>() == static_cast<i64>(node.AsUint64()));
+        UNIT_ASSERT_EXCEPTION(node.IntCast<i32>(), TNode::TTypeError); 
+        UNIT_ASSERT(node.IntCast<ui32>() == static_cast<ui32>(node.AsUint64())); 
+        UNIT_ASSERT(node.IntCast<i64>() == static_cast<i64>(node.AsUint64())); 
         UNIT_ASSERT(node.IntCast<ui64>() == node.AsUint64());
-
+ 
         node = 1ull << 63;
         UNIT_ASSERT(node.IsUint64());
         UNIT_ASSERT_EXCEPTION(node.IntCast<i64>(), TNode::TTypeError);
@@ -294,24 +294,24 @@ Y_UNIT_TEST_SUITE(YtNodeTest) {
 
         node = 12345;
         UNIT_ASSERT(node.IsInt64());
-        UNIT_ASSERT_EXCEPTION(node.IntCast<i8>(), TNode::TTypeError);
-        UNIT_ASSERT_EXCEPTION(node.IntCast<ui8>(), TNode::TTypeError);
-        UNIT_ASSERT(node.IntCast<i16>() == static_cast<i16>(node.AsInt64()));
-        UNIT_ASSERT(node.IntCast<ui16>() == static_cast<ui16>(node.AsInt64()));
-        UNIT_ASSERT(node.IntCast<i32>() == static_cast<i32>(node.AsInt64()));
-        UNIT_ASSERT(node.IntCast<ui32>() == static_cast<ui32>(node.AsInt64()));
+        UNIT_ASSERT_EXCEPTION(node.IntCast<i8>(), TNode::TTypeError); 
+        UNIT_ASSERT_EXCEPTION(node.IntCast<ui8>(), TNode::TTypeError); 
+        UNIT_ASSERT(node.IntCast<i16>() == static_cast<i16>(node.AsInt64())); 
+        UNIT_ASSERT(node.IntCast<ui16>() == static_cast<ui16>(node.AsInt64())); 
+        UNIT_ASSERT(node.IntCast<i32>() == static_cast<i32>(node.AsInt64())); 
+        UNIT_ASSERT(node.IntCast<ui32>() == static_cast<ui32>(node.AsInt64())); 
         UNIT_ASSERT(node.IntCast<i64>() == node.AsInt64());
         UNIT_ASSERT(node.IntCast<ui64>() == static_cast<ui64>(node.AsInt64()));
-
+ 
         node = -5;
         UNIT_ASSERT(node.IsInt64());
-        UNIT_ASSERT(node.IntCast<i8>() == static_cast<i8>(node.AsInt64()));
-        UNIT_ASSERT(node.IntCast<i16>() == static_cast<i16>(node.AsInt64()));
-        UNIT_ASSERT(node.IntCast<i32>() == static_cast<i32>(node.AsInt64()));
+        UNIT_ASSERT(node.IntCast<i8>() == static_cast<i8>(node.AsInt64())); 
+        UNIT_ASSERT(node.IntCast<i16>() == static_cast<i16>(node.AsInt64())); 
+        UNIT_ASSERT(node.IntCast<i32>() == static_cast<i32>(node.AsInt64())); 
         UNIT_ASSERT(node.IntCast<i64>() == node.AsInt64());
-        UNIT_ASSERT_EXCEPTION(node.IntCast<ui8>(), TNode::TTypeError);
-        UNIT_ASSERT_EXCEPTION(node.IntCast<ui16>(), TNode::TTypeError);
-        UNIT_ASSERT_EXCEPTION(node.IntCast<ui32>(), TNode::TTypeError);
+        UNIT_ASSERT_EXCEPTION(node.IntCast<ui8>(), TNode::TTypeError); 
+        UNIT_ASSERT_EXCEPTION(node.IntCast<ui16>(), TNode::TTypeError); 
+        UNIT_ASSERT_EXCEPTION(node.IntCast<ui32>(), TNode::TTypeError); 
         UNIT_ASSERT_EXCEPTION(node.IntCast<ui64>(), TNode::TTypeError);
     }
 
@@ -335,20 +335,20 @@ Y_UNIT_TEST_SUITE(YtNodeTest) {
     }
 
     Y_UNIT_TEST(TestConvertDoubleInt) {
-        UNIT_ASSERT_VALUES_EQUAL(TNode(5.3).ConvertTo<i8>(), 5);
-        UNIT_ASSERT_VALUES_EQUAL(TNode(5.3).ConvertTo<ui8>(), 5);
-        UNIT_ASSERT_VALUES_EQUAL(TNode(5.3).ConvertTo<i64>(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(TNode(5.3).ConvertTo<i8>(), 5); 
+        UNIT_ASSERT_VALUES_EQUAL(TNode(5.3).ConvertTo<ui8>(), 5); 
+        UNIT_ASSERT_VALUES_EQUAL(TNode(5.3).ConvertTo<i64>(), 5); 
         UNIT_ASSERT_VALUES_EQUAL(TNode(5.3).ConvertTo<ui64>(), 5);
-
-        UNIT_ASSERT_VALUES_EQUAL(TNode(-5.3).ConvertTo<i8>(), -5);
+ 
+        UNIT_ASSERT_VALUES_EQUAL(TNode(-5.3).ConvertTo<i8>(), -5); 
         UNIT_ASSERT_VALUES_EQUAL(TNode(-5.3).ConvertTo<i64>(), -5);
-        UNIT_ASSERT_EXCEPTION(TNode(-5.3).ConvertTo<ui8>(), TNode::TTypeError);
+        UNIT_ASSERT_EXCEPTION(TNode(-5.3).ConvertTo<ui8>(), TNode::TTypeError); 
         UNIT_ASSERT_EXCEPTION(TNode(-5.3).ConvertTo<ui64>(), TNode::TTypeError);
-
+ 
         UNIT_ASSERT_VALUES_EQUAL(TNode(127.0).ConvertTo<i8>(), 127);
         UNIT_ASSERT_EXCEPTION(TNode(128.0).ConvertTo<i8>(), TNode::TTypeError);
         UNIT_ASSERT_VALUES_EQUAL(TNode(255.0).ConvertTo<ui8>(), 255);
-        UNIT_ASSERT_EXCEPTION(TNode(256.0).ConvertTo<ui8>(), TNode::TTypeError);
+        UNIT_ASSERT_EXCEPTION(TNode(256.0).ConvertTo<ui8>(), TNode::TTypeError); 
         UNIT_ASSERT_EXCEPTION(TNode(1e100).ConvertTo<i64>(), TNode::TTypeError);
         UNIT_ASSERT_EXCEPTION(TNode(1e100).ConvertTo<ui64>(), TNode::TTypeError);
         {

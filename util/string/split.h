@@ -441,7 +441,7 @@ void GetNext(TStringBuf& s, D delim, TMaybe<P>& param) {
     }
 }
 
-// example: 
+// example:
 // Split(TStringBuf("Sherlock,2014,36.6"), ',', name, year, temperature);
 template <class D, class P1, class P2>
 void Split(TStringBuf s, D delim, P1& p1, P2& p2) {
@@ -451,9 +451,9 @@ void Split(TStringBuf s, D delim, P1& p1, P2& p2) {
 }
 
 template <class D, class P1, class P2, class... Other>
-void Split(TStringBuf s, D delim, P1& p1, P2& p2, Other&... other) { 
+void Split(TStringBuf s, D delim, P1& p1, P2& p2, Other&... other) {
     GetNext(s, delim, p1);
-    Split(s, delim, p2, other...); 
+    Split(s, delim, p2, other...);
 }
 
 /**

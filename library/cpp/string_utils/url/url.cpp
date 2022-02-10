@@ -241,11 +241,11 @@ TStringBuf GetOnlyHost(const TStringBuf url) noexcept {
 
 TStringBuf GetPathAndQuery(const TStringBuf url, bool trimFragment) noexcept {
     const size_t off = url.find('/', GetHttpPrefixSize(url));
-    TStringBuf hostUnused, path; 
-    if (!url.TrySplitAt(off, hostUnused, path)) 
+    TStringBuf hostUnused, path;
+    if (!url.TrySplitAt(off, hostUnused, path))
         return "/";
- 
-    return trimFragment ? path.Before('#') : path; 
+
+    return trimFragment ? path.Before('#') : path;
 }
 
 // this strange creature returns 2nd level domain, possibly with port
@@ -311,15 +311,15 @@ TStringBuf CutMPrefix(const TStringBuf url) noexcept {
 }
 
 static inline bool IsSchemeChar(char c) noexcept {
-    return IsAsciiAlnum(c); //what about '+' ?.. 
+    return IsAsciiAlnum(c); //what about '+' ?..
 }
 
 static bool HasPrefix(const TStringBuf url) noexcept {
-    TStringBuf scheme, unused; 
+    TStringBuf scheme, unused;
     if (!url.TrySplit(TStringBuf("://"), scheme, unused))
         return false;
 
-    return AllOf(scheme, IsSchemeChar); 
+    return AllOf(scheme, IsSchemeChar);
 }
 
 TString AddSchemePrefix(const TString& url) {

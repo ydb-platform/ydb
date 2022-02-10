@@ -1,7 +1,7 @@
 #pragma once
 
 #include <util/generic/utility.h>
-#include <util/generic/strbuf.h> 
+#include <util/generic/strbuf.h>
 
 #include <utility>
 
@@ -18,9 +18,9 @@ constexpr ui64 Uint128High64(const uint128& x) {
     return x.second;
 }
 
-// Hash functions for a byte array. 
-// http://en.wikipedia.org/wiki/CityHash 
- 
+// Hash functions for a byte array.
+// http://en.wikipedia.org/wiki/CityHash
+
 Y_PURE_FUNCTION ui64 CityHash64(const char* buf, size_t len) noexcept;
 
 Y_PURE_FUNCTION ui64 CityHash64WithSeed(const char* buf, size_t len, ui64 seed) noexcept;
@@ -43,41 +43,41 @@ inline ui64 Hash128to64(const uint128& x) {
     b *= kMul;
     return b;
 }
- 
+
 namespace NPrivateCityHash {
     template <class TStringType>
     inline TStringBuf GetBufFromStr(const TStringType& str) {
         static_assert(std::is_integral<std::remove_reference_t<decltype(*str.data())>>::value, "invalid type passed to hash function");
         return TStringBuf(reinterpret_cast<const char*>(str.data()), (str.size()) * sizeof(*str.data()));
     }
-} 
- 
+}
+
 template <class TStringType>
 inline ui64 CityHash64(const TStringType& str) {
     TStringBuf buf = NPrivateCityHash::GetBufFromStr(str);
     return CityHash64(buf.data(), buf.size());
-} 
- 
+}
+
 template <class TStringType>
 inline ui64 CityHash64WithSeeds(const TStringType& str, ui64 seed0, ui64 seed1) {
     TStringBuf buf = NPrivateCityHash::GetBufFromStr(str);
     return CityHash64WithSeeds(buf.data(), buf.size(), seed0, seed1);
-} 
- 
+}
+
 template <class TStringType>
 inline ui64 CityHash64WithSeed(const TStringType& str, ui64 seed) {
     TStringBuf buf = NPrivateCityHash::GetBufFromStr(str);
     return CityHash64WithSeed(buf.data(), buf.size(), seed);
-} 
- 
+}
+
 template <class TStringType>
 inline uint128 CityHash128(const TStringType& str) {
     TStringBuf buf = NPrivateCityHash::GetBufFromStr(str);
     return CityHash128(buf.data(), buf.size());
-} 
- 
+}
+
 template <class TStringType>
 inline uint128 CityHash128WithSeed(const TStringType& str, uint128 seed) {
     TStringBuf buf = NPrivateCityHash::GetBufFromStr(str);
     return CityHash128WithSeed(buf.data(), buf.size(), seed);
-} 
+}

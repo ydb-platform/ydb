@@ -811,21 +811,21 @@ TUtf32String ToTitleRet(const TUtf32StringBuf text, size_t pos = 0, size_t count
 // insertBr=true - replace '\r' and '\n' with "<BR>"
 template <bool insertBr>
 void EscapeHtmlChars(TUtf16String& str);
- 
-//! returns number of characters in range. Handle surrogate pairs as one character. 
-inline size_t CountWideChars(const wchar16* b, const wchar16* e) { 
-    size_t count = 0; 
+
+//! returns number of characters in range. Handle surrogate pairs as one character.
+inline size_t CountWideChars(const wchar16* b, const wchar16* e) {
+    size_t count = 0;
     Y_ENSURE(b <= e, TStringBuf("invalid iterators"));
-    while (b < e) { 
-        b = SkipSymbol(b, e); 
+    while (b < e) {
+        b = SkipSymbol(b, e);
         ++count;
-    } 
-    return count; 
-} 
- 
+    }
+    return count;
+}
+
 inline size_t CountWideChars(const TWtringBuf str) {
-    return CountWideChars(str.begin(), str.end()); 
-} 
+    return CountWideChars(str.begin(), str.end());
+}
 
 //! checks whether the range is valid UTF-16 sequence
 inline bool IsValidUTF16(const wchar16* b, const wchar16* e) {

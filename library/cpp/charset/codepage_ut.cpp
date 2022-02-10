@@ -121,43 +121,43 @@ void TCodepageTest::TestUTF() {
         }
     }
     const char* badStrings[] = {
-        "\xfe", 
-        "\xff", 
-        "\xcc\xc0", 
+        "\xfe",
+        "\xff",
+        "\xcc\xc0",
         "\xf4\x90\x80\x80",
-        //overlong: 
-        "\xfe\xfe\xff\xff", 
-        "\xc0\xaf", 
-        "\xe0\x80\xaf", 
-        "\xf0\x80\x80\xaf", 
-        "\xf8\x80\x80\x80\xaf", 
-        "\xfc\x80\x80\x80\x80\xaf", 
-        "\xc1\xbf", 
-        "\xe0\x9f\xbf", 
-        "\xf0\x8f\xbf\xbf", 
-        "\xf8\x87\xbf\xbf\xbf", 
-        "\xfc\x83\xbf\xbf\xbf\xbf", 
-        "\xc0\x80", 
-        "\xe0\x80\x80", 
-        "\xf0\x80\x80\x80", 
-        "\xf8\x80\x80\x80\x80", 
-        "\xfc\x80\x80\x80\x80\x80", 
-        //UTF-16 surrogate (not covered): 
-        //"\xed\xa0\x80", 
-        //"\xed\xad\xbf", 
-        //"\xed\xae\x80", 
-        //"\xed\xaf\xbf", 
-        //"\xed\xb0\x80", 
-        //"\xed\xbe\x80", 
-        //"\xed\xbf\xbf", 
-    }; 
+        //overlong:
+        "\xfe\xfe\xff\xff",
+        "\xc0\xaf",
+        "\xe0\x80\xaf",
+        "\xf0\x80\x80\xaf",
+        "\xf8\x80\x80\x80\xaf",
+        "\xfc\x80\x80\x80\x80\xaf",
+        "\xc1\xbf",
+        "\xe0\x9f\xbf",
+        "\xf0\x8f\xbf\xbf",
+        "\xf8\x87\xbf\xbf\xbf",
+        "\xfc\x83\xbf\xbf\xbf\xbf",
+        "\xc0\x80",
+        "\xe0\x80\x80",
+        "\xf0\x80\x80\x80",
+        "\xf8\x80\x80\x80\x80",
+        "\xfc\x80\x80\x80\x80\x80",
+        //UTF-16 surrogate (not covered):
+        //"\xed\xa0\x80",
+        //"\xed\xad\xbf",
+        //"\xed\xae\x80",
+        //"\xed\xaf\xbf",
+        //"\xed\xb0\x80",
+        //"\xed\xbe\x80",
+        //"\xed\xbf\xbf",
+    };
     for (size_t i = 0; i < Y_ARRAY_SIZE(badStrings); ++i) {
-        wchar32 rune; 
+        wchar32 rune;
         const ui8* p = (const ui8*)badStrings[i];
-        size_t len; 
+        size_t len;
         RECODE_RESULT res = SafeReadUTF8Char(rune, len, p, p + strlen(badStrings[i]));
-        UNIT_ASSERT(res == RECODE_BROKENSYMBOL); 
-    } 
+        UNIT_ASSERT(res == RECODE_BROKENSYMBOL);
+    }
 }
 
 void TCodepageTest::TestBrokenMultibyte() {

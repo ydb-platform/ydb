@@ -38,17 +38,17 @@ Y_UNIT_TEST_SUITE(TDelimStrokaIterTestSuite) {
         ++it;
         UNIT_ASSERT_STRINGS_EQUAL(it.Cdr(), "");
     }
- 
+
     Y_UNIT_TEST(ForIter) {
         TVector<TStringBuf> expected = {"1", "", "3@4", ""};
         TVector<TStringBuf> got;
- 
+
         for (TStringBuf x : TDelimStroka("1@@@@3@4@@", "@@")) {
-            got.push_back(x); 
-        } 
- 
-        UNIT_ASSERT_EQUAL(got, expected); 
-    } 
+            got.push_back(x);
+        }
+
+        UNIT_ASSERT_EQUAL(got, expected);
+    }
 }
 
 static void AssertKeyValueStringSplit(

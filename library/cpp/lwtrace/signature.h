@@ -545,9 +545,9 @@ namespace NLWTrace {
     STORE_TYPE_AS(i32, i64);
     STORE_TYPE_AS(bool, ui64);
     STORE_TYPE_AS(float, double);
-#define FOREACH_PARAMTYPE_MACRO(n, t, v) STORE_TYPE_AS(t, t) 
+#define FOREACH_PARAMTYPE_MACRO(n, t, v) STORE_TYPE_AS(t, t)
     FOREACH_PARAMTYPE(FOREACH_PARAMTYPE_MACRO)
-#undef STORE_TYPE_AS 
+#undef STORE_TYPE_AS
 #undef FOREACH_PARAMTYPE_MACRO
 
     // Nil type staits.

@@ -22,30 +22,30 @@ private:
         UNIT_ASSERT_VALUES_EQUAL_C(end - beg, sz, comm);
     }
 
-    template <typename T> 
-    void TestWrite(const char* comm) { 
-        typename TMemoryTraits<T>::TElementType val[4] = {'t', 'e', 's', 't'}; 
-        T t; 
-        NAccessors::Init(t); 
-        NAccessors::Reserve(t, 6); 
- 
-        size_t sz = NAccessors::Size(t); 
-        UNIT_ASSERT_VALUES_EQUAL_C(0u, sz, comm); 
- 
-        NAccessors::Append(t, 'a'); 
-        sz = NAccessors::Size(t); 
-        UNIT_ASSERT_VALUES_EQUAL_C(1u, sz, comm); 
- 
-        NAccessors::Append(t, val, val + 4); 
-        sz = NAccessors::Size(t); 
-        UNIT_ASSERT_VALUES_EQUAL_C(5u, sz, comm); 
- 
-        NAccessors::Clear(t); 
- 
-        sz = NAccessors::Size(t); 
-        UNIT_ASSERT_VALUES_EQUAL_C(0u, sz, comm); 
-    } 
- 
+    template <typename T>
+    void TestWrite(const char* comm) {
+        typename TMemoryTraits<T>::TElementType val[4] = {'t', 'e', 's', 't'};
+        T t;
+        NAccessors::Init(t);
+        NAccessors::Reserve(t, 6);
+
+        size_t sz = NAccessors::Size(t);
+        UNIT_ASSERT_VALUES_EQUAL_C(0u, sz, comm);
+
+        NAccessors::Append(t, 'a');
+        sz = NAccessors::Size(t);
+        UNIT_ASSERT_VALUES_EQUAL_C(1u, sz, comm);
+
+        NAccessors::Append(t, val, val + 4);
+        sz = NAccessors::Size(t);
+        UNIT_ASSERT_VALUES_EQUAL_C(5u, sz, comm);
+
+        NAccessors::Clear(t);
+
+        sz = NAccessors::Size(t);
+        UNIT_ASSERT_VALUES_EQUAL_C(0u, sz, comm);
+    }
+
     void TestAccessors() {
         TestRead('a', "char");
         TestRead(1, "int");
@@ -74,17 +74,17 @@ private:
 
         TestWrite<TString>("TString");
         TestWrite<TVector<char>>("TVector<char>");
-        TestWrite<TBuffer>("TBuffer"); 
+        TestWrite<TBuffer>("TBuffer");
         TestWrite<TVector<ui64>>("TVector<ui64>");
         TestWrite<TUtf16String>("TUtf16String");
- 
+
         std::array<TString, 10> sarr;
-        NAccessors::Init(sarr); 
-        NAccessors::Clear(sarr); 
- 
+        NAccessors::Init(sarr);
+        NAccessors::Clear(sarr);
+
         std::array<char, 10> carr;
-        NAccessors::Init(carr); 
-        NAccessors::Clear(carr); 
+        NAccessors::Init(carr);
+        NAccessors::Clear(carr);
         TestRead(carr, "std::array<char, 10>");
     }
 };

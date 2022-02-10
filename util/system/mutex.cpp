@@ -1,7 +1,7 @@
 #include "mutex.h"
 
 #include <util/generic/yexception.h>
-#include <errno.h> 
+#include <errno.h>
 
 #if defined(_win_)
     #include "winint.h"

@@ -254,10 +254,10 @@ Y_UNIT_TEST_SUITE(SplitStringTest) {
     Y_UNIT_TEST(ConvenientSplitTest) {
         TString data("abc 22 33.5 xyz");
         TString str;
-        int num1 = 0; 
-        double num2 = 0; 
-        TStringBuf strBuf; 
-        Split(data, ' ', str, num1, num2, strBuf); 
+        int num1 = 0;
+        double num2 = 0;
+        TStringBuf strBuf;
+        Split(data, ' ', str, num1, num2, strBuf);
         UNIT_ASSERT_VALUES_EQUAL(str, "abc");
         UNIT_ASSERT_VALUES_EQUAL(num1, 22);
         UNIT_ASSERT_VALUES_EQUAL(num2, 33.5);

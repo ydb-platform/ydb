@@ -445,11 +445,11 @@ void TCompactTrieTest::CheckIterator(const char* data, size_t datalen) {
     }
     TMap<TKey, ui64> received2;
     for (std::pair<TKey, ui64> x : trie) {
-        received2.insert(x); 
-    } 
+        received2.insert(x);
+    }
     UNIT_ASSERT(entry_count == stored.size());
     UNIT_ASSERT(received == stored);
-    UNIT_ASSERT(received2 == stored); 
+    UNIT_ASSERT(received2 == stored);
 
     std::reverse(items.begin(), items.end());
     typename TCompactTrie<T>::TConstIterator revIt = trie.End();

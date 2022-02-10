@@ -19,7 +19,7 @@
 
 #define EPS 10E-7
 
-#define HEX_MACROS_MAP(mac, type, val) mac(type, val, 2) mac(type, val, 8) mac(type, val, 10) mac(type, val, 16) 
+#define HEX_MACROS_MAP(mac, type, val) mac(type, val, 2) mac(type, val, 8) mac(type, val, 10) mac(type, val, 16)
 
 #define OK_HEX_CHECK(type, val, base) UNIT_ASSERT_EQUAL((IntFromStringForCheck<base>(IntToString<base>(val))), val);
 #define EXC_HEX_CHECK(type, val, base) UNIT_ASSERT_EXCEPTION((IntFromString<type, base>(IntToString<base>(val))), yexception);
@@ -326,7 +326,7 @@ Y_UNIT_TEST_SUITE(TCastTest) {
         UNIT_ASSERT_VALUES_EQUAL(a, b);
         UNIT_ASSERT_VALUES_EQUAL((void*)a.data(), (void*)b.data());
     }
- 
+
 #if 0
     Y_UNIT_TEST(TestBufferOverflow) {
         CheckConvertToBuffer<float>(1.f, 5, "1");

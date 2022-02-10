@@ -12,7 +12,7 @@ class TSharedMemory: public TThrRefBase {
     int Size;
 
 public:
-    TSharedMemory(); 
+    TSharedMemory();
     ~TSharedMemory() override;
 
     bool Create(int Size);

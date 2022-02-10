@@ -89,12 +89,12 @@ namespace {
 }
 #endif
 
-TSharedMemory::TSharedMemory() 
+TSharedMemory::TSharedMemory()
     : Handle(INVALID_FHANDLE)
     , Data(nullptr)
-    , Size(0) 
-{ 
-} 
+    , Size(0)
+{
+}
 
 #if defined(_win_)
 static void FormatName(char* buf, const TGUID& id) {

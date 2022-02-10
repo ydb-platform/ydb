@@ -61,7 +61,7 @@ char* ctime_r(const time_t* clock, char* buf) {
 //! @note this code adopted from
 //!       http://osdir.com/ml/web.wget.patches/2005-07/msg00010.html
 //!       Subject: A more robust timegm - msg#00010
-time_t TimeGM(const struct tm* t) { 
+time_t TimeGM(const struct tm* t) {
     static const unsigned short int month_to_days[][13] = {
         {0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334},
         {0, 31, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335}};

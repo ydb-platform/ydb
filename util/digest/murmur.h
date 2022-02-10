@@ -36,7 +36,7 @@ static inline T MurmurHash(const void* buf, size_t len, T init) noexcept {
 
 template <class T>
 static inline T MurmurHash(const void* buf, size_t len) noexcept {
-    return MurmurHash<T>(buf, len, (T)0); 
+    return MurmurHash<T>(buf, len, (T)0);
 }
 
 //non-inline version

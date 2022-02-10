@@ -90,7 +90,7 @@ static inline TString DoUnescape(const TStringBuf s) {
 }
 
 void TCgiParameters::InsertEscaped(const TStringBuf name, const TStringBuf value) {
-    InsertUnescaped(DoUnescape(name), DoUnescape(value)); 
+    InsertUnescaped(DoUnescape(name), DoUnescape(value));
 }
 
 template <bool addAll, class F>
@@ -102,17 +102,17 @@ struct TAddEscaped {
     TCgiParameters* C;
 
     inline void operator()(const TStringBuf key, const TStringBuf val) {
-        C->InsertEscaped(key, val); 
+        C->InsertEscaped(key, val);
     }
 };
 
 void TCgiParameters::Scan(const TStringBuf query, bool form) {
     Flush();
-    form ? ScanAdd(query) : ScanAddAll(query); 
+    form ? ScanAdd(query) : ScanAddAll(query);
 }
 
 void TCgiParameters::ScanAdd(const TStringBuf query) {
-    TAddEscaped f = {this}; 
+    TAddEscaped f = {this};
 
     DoScan<false>(query, f);
 }
@@ -134,7 +134,7 @@ void TCgiParameters::ScanAddAllUnescaped(const TStringBuf query) {
 }
 
 void TCgiParameters::ScanAddAll(const TStringBuf query) {
-    TAddEscaped f = {this}; 
+    TAddEscaped f = {this};
 
     DoScan<true>(query, f);
 }

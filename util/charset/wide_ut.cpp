@@ -545,8 +545,8 @@ void TConversionTest::TestGetNumOfUTF8Chars() {
     result = GetNumberOfUTF8Chars(utext, 1, n);
     UNIT_ASSERT(!result);
     UNIT_ASSERT(n == 0);
- 
-    UNIT_ASSERT_EQUAL(GetNumberOfUTF8Chars("привет!"), 7); 
+
+    UNIT_ASSERT_EQUAL(GetNumberOfUTF8Chars("привет!"), 7);
 }
 
 void TConversionTest::TestSubstrUTF8() {

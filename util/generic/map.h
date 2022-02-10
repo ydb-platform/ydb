@@ -1,7 +1,7 @@
 #pragma once
 
 #include "fwd.h"
-#include "mapfindptr.h" 
+#include "mapfindptr.h"
 
 #include <util/str_stl.h>
 #include <util/memory/alloc.h>

@@ -34,7 +34,7 @@ private:
             return;
 
         ui32 newCapacityPow = CapacityPow;
-        while ((1u << newCapacityPow) < sz + ui32(Size()) + 1u) { 
+        while ((1u << newCapacityPow) < sz + ui32(Size()) + 1u) {
             ++newCapacityPow;
         }
         ui32 newCapacity = 1u << newCapacityPow;

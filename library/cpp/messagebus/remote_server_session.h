@@ -3,10 +3,10 @@
 #include "remote_server_session_semaphore.h"
 #include "session_impl.h"
 
-#ifdef _MSC_VER 
-#pragma warning(push) 
+#ifdef _MSC_VER
+#pragma warning(push)
 #pragma warning(disable : 4250) //  'NBus::NPrivate::TRemoteClientSession' : inherits 'NBus::NPrivate::TBusSessionImpl::NBus::NPrivate::TBusSessionImpl::GetConfig' via dominance
-#endif 
+#endif
 
 namespace NBus {
     namespace NPrivate {
@@ -46,9 +46,9 @@ namespace NBus {
             void ConvertInWork(TBusIdentity& req, TBusMessage* reply);
         };
 
-#ifdef _MSC_VER 
-#pragma warning(pop) 
-#endif 
- 
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
+
     }
 }

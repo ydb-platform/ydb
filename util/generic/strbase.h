@@ -475,18 +475,18 @@ public:
         return AsStringView().rfind(str.data(), pos, str.size());
     }
 
-    //~~~~Contains~~~~ 
+    //~~~~Contains~~~~
     /**
      * @returns                         Whether this string contains the provided substring.
      */
     inline bool Contains(const TStringView s, size_t pos = 0) const noexcept {
         return !s.length() || find(s, pos) != npos;
-    } 
- 
+    }
+
     inline bool Contains(TChar c, size_t pos = 0) const noexcept {
-        return find(c, pos) != npos; 
-    } 
- 
+        return find(c, pos) != npos;
+    }
+
     inline void Contains(std::enable_if<std::is_unsigned<TCharType>::value, char> c, size_t pos = 0) const noexcept {
         return find(ui8(c), pos) != npos;
     }

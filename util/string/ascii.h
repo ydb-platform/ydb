@@ -4,13 +4,13 @@
 #include <util/system/compat.h>
 #include <util/generic/string.h>
 
-// ctype.h-like functions, locale-independent: 
-//      IsAscii{Upper,Lower,Digit,Alpha,Alnum,Space} and 
-//      AsciiTo{Upper,Lower} 
-// 
-// standard functions from <ctype.h> are locale dependent, 
-// and cause undefined behavior when called on chars outside [0..127] range 
- 
+// ctype.h-like functions, locale-independent:
+//      IsAscii{Upper,Lower,Digit,Alpha,Alnum,Space} and
+//      AsciiTo{Upper,Lower}
+//
+// standard functions from <ctype.h> are locale dependent,
+// and cause undefined behavior when called on chars outside [0..127] range
+
 namespace NPrivate {
     enum ECharClass {
         CC_SPACE = 1,
@@ -61,9 +61,9 @@ namespace NPrivate {
 }
 
 constexpr bool IsAscii(const int c) noexcept {
-    return !(c & ~0x7f); 
-} 
- 
+    return !(c & ~0x7f);
+}
+
 inline bool IsAsciiSpace(unsigned char c) {
     return ::NPrivate::ASCII_CLASS[c] & ::NPrivate::CC_SPACE;
 }
@@ -71,27 +71,27 @@ inline bool IsAsciiSpace(unsigned char c) {
 inline bool IsAsciiUpper(unsigned char c) {
     return ::NPrivate::ASCII_CLASS[c] & ::NPrivate::CC_UPPER;
 }
- 
+
 inline bool IsAsciiLower(unsigned char c) {
     return ::NPrivate::ASCII_CLASS[c] & ::NPrivate::CC_LOWER;
-} 
- 
+}
+
 inline bool IsAsciiDigit(unsigned char c) {
     return ::NPrivate::ASCII_CLASS[c] & ::NPrivate::CC_DIGIT;
-} 
- 
+}
+
 inline bool IsAsciiAlpha(unsigned char c) {
     return ::NPrivate::ASCII_CLASS[c] & ::NPrivate::CC_ALPHA;
-} 
- 
+}
+
 inline bool IsAsciiAlnum(unsigned char c) {
     return ::NPrivate::ASCII_CLASS[c] & ::NPrivate::CC_ALNUM;
-} 
- 
+}
+
 inline bool IsAsciiHex(unsigned char c) {
     return ::NPrivate::ASCII_CLASS[c] & ::NPrivate::CC_ISHEX;
-} 
- 
+}
+
 inline bool IsAsciiPunct(unsigned char c) {
     return ::NPrivate::ASCII_CLASS[c] & ::NPrivate::CC_PUNCT;
 }
@@ -101,9 +101,9 @@ inline bool IsAsciiPunct(unsigned char c) {
 template <class T>
 inline bool IsAsciiSpace(T c) {
     return ::NPrivate::RangeOk(c) && IsAsciiSpace(static_cast<unsigned char>(c));
-} 
- 
-template <class T> 
+}
+
+template <class T>
 inline bool IsAsciiUpper(T c) {
     return ::NPrivate::RangeOk(c) && IsAsciiUpper(static_cast<unsigned char>(c));
 }
@@ -150,12 +150,12 @@ inline char AsciiToLower(char c) noexcept {
 template <class T>
 inline ::NPrivate::TDereferenced<T> AsciiToLower(T c) noexcept {
     return (c >= 0 && c <= 127) ? (::NPrivate::TDereferenced<T>)AsciiToLower((ui8)c) : c;
-} 
- 
-template <class T> 
+}
+
+template <class T>
 inline ::NPrivate::TDereferenced<T> AsciiToUpper(T c) noexcept {
-    return IsAsciiLower(c) ? (c + ('A' - 'a')) : c; 
-} 
+    return IsAsciiLower(c) ? (c + ('A' - 'a')) : c;
+}
 
 /**
  * ASCII case-insensitive string comparison (for proper UTF8 strings

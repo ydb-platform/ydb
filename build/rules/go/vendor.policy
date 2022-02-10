@@ -302,9 +302,9 @@ ALLOW .* -> vendor/github.com/mitchellh/mapstructure
 # library for detecting and expanding the user's home directory without cgo
 ALLOW .* -> vendor/github.com/mitchellh/go-homedir
 
-# A well tested and comprehensive Golang statistics library package with no dependencies 
-ALLOW .* -> vendor/github.com/montanaflynn/stats 
- 
+# A well tested and comprehensive Golang statistics library package with no dependencies
+ALLOW .* -> vendor/github.com/montanaflynn/stats
+
 # runtime dependencies of go-swagger
 ALLOW .* -> vendor/github.com/go-openapi
 
@@ -318,8 +318,8 @@ ALLOW .* -> vendor/github.com/go-redis/redis/v8
 ALLOW .* -> vendor/github.com/google/go-github/v35/github
 
 # fast JSON serializer for golang. relies on code generation.
-ALLOW .* -> vendor/github.com/mailru/easyjson 
- 
+ALLOW .* -> vendor/github.com/mailru/easyjson
+
 # lz4 compression codec
 ALLOW .* -> vendor/github.com/pierrec/lz4
 
@@ -427,7 +427,7 @@ ALLOW .* -> vendor/github.com/PaesslerAG/jsonpath
 # Protocol buffers
 ALLOW .* -> vendor/github.com/golang/protobuf
 ALLOW .* -> vendor/google.golang.org/protobuf
- 
+
 # Google RPC
 ALLOW .* -> vendor/google.golang.org/grpc
 

@@ -1,71 +1,71 @@
-button.cfg-item-remove-icon {
-    background: url(res/remove.png) no-repeat center;
-}
-
-button.cfg-item-edit-icon {
-    background: url(res/edit.png) no-repeat center;
-}
-
-.btn-cfg-item:hover {
-    border-style: solid;
-    border-color: #cccccc;
-    border-width: 1px;
-    border-radius: 4px;
-}
-
-.btn-cfg-item {
-    width: 34px;
-    height: 34px;
-    background-color: transparent;
-    border: none;
-    margin: 0;
-    padding: 0;
-}
-
-form.cfg-form {
-    margin: 5px 0 5px 0;
-    border-style: solid;
-    border-color: #cccccc;
-    border-width: 1px;
-    border-radius: 4px;
-    padding: 5px 10px;
-}
-
-label.cfg-form {
-    margin: 0 5px 0 5px;
-}
-
-.pending-update {
-    background: #F08080 url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' version='1.1' height='100px' width='300px'><text x='0' y='50' fill='red' font-size='30'>Pending Update</text></svg>") no-repeat center;
-
-}
-
-pre.cfg-item-hdr {
-    background-color: transparent;
-}
-
-.cfg-item {
-    margin: 5px 0 5px 0;
-    background-color: #f7f7f7;
-    border-style: solid;
-    border-color: #cccccc;
-    border-width: 1px;
-    border-radius: 4px;
-    padding: 5px 10px;
-}
-
-.btn-light {
-    background-color: #f5f5f5;
-    margin: 1px 0px;
-}
-
-th {
-    font-weight: 700;
-    padding-left: 10px;
-    padding-right: 10px;
-}
-
-td {
-    padding-left: 10px;
-    padding-right: 10px;
-}
+button.cfg-item-remove-icon { 
+    background: url(res/remove.png) no-repeat center; 
+} 
+ 
+button.cfg-item-edit-icon { 
+    background: url(res/edit.png) no-repeat center; 
+} 
+ 
+.btn-cfg-item:hover { 
+    border-style: solid; 
+    border-color: #cccccc; 
+    border-width: 1px; 
+    border-radius: 4px; 
+} 
+ 
+.btn-cfg-item { 
+    width: 34px; 
+    height: 34px; 
+    background-color: transparent; 
+    border: none; 
+    margin: 0; 
+    padding: 0; 
+} 
+ 
+form.cfg-form { 
+    margin: 5px 0 5px 0; 
+    border-style: solid; 
+    border-color: #cccccc; 
+    border-width: 1px; 
+    border-radius: 4px; 
+    padding: 5px 10px; 
+} 
+ 
+label.cfg-form { 
+    margin: 0 5px 0 5px; 
+} 
+ 
+.pending-update { 
+    background: #F08080 url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' version='1.1' height='100px' width='300px'><text x='0' y='50' fill='red' font-size='30'>Pending Update</text></svg>") no-repeat center; 
+ 
+} 
+ 
+pre.cfg-item-hdr { 
+    background-color: transparent; 
+} 
+ 
+.cfg-item { 
+    margin: 5px 0 5px 0; 
+    background-color: #f7f7f7; 
+    border-style: solid; 
+    border-color: #cccccc; 
+    border-width: 1px; 
+    border-radius: 4px; 
+    padding: 5px 10px; 
+} 
+ 
+.btn-light { 
+    background-color: #f5f5f5; 
+    margin: 1px 0px; 
+} 
+ 
+th { 
+    font-weight: 700; 
+    padding-left: 10px; 
+    padding-right: 10px; 
+} 
+ 
+td { 
+    padding-left: 10px; 
+    padding-right: 10px; 
+} 

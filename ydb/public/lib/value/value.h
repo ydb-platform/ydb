@@ -214,16 +214,16 @@ struct TFormatJSON {
 
 struct TFormatRowset {};
 struct TFormatCSV {
-    TFormatCSV(TString delim = ",", bool printHeader = false)
-        : Delim(delim)
-        , PrintHeader(printHeader)
-    {}
+    TFormatCSV(TString delim = ",", bool printHeader = false) 
+        : Delim(delim) 
+        , PrintHeader(printHeader) 
+    {} 
 
-    static TString EscapeString(const TString& s);
-
-    TString Delim;
-    bool PrintHeader;
-};
-
+    static TString EscapeString(const TString& s); 
+ 
+    TString Delim; 
+    bool PrintHeader; 
+}; 
+ 
 } // namespace NClient
 } // namespace NKikimr

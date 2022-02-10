@@ -34,8 +34,8 @@ message TTabletTypes {
         PersQueueReadBalancer = 24;
         BlockStoreVolume = 25;
         BlockStorePartition = 26;
-        TenantSlotBroker = 27;
-        Console = 28;
+        TenantSlotBroker = 27; 
+        Console = 28; 
         Kesus = 29;
         BlockStorePartition2 = 30;
         BlockStoreDiskRegistry = 31;

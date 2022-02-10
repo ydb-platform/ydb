@@ -9,8 +9,8 @@
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <utility>
 
-#include <cxxabi.h>
-
+#include <cxxabi.h> 
+ 
 // https://wiki.yandex-team.ru/kikimr/techdoc/db/cxxapi/nicedb/
 
 namespace NKikimr {
@@ -41,10 +41,10 @@ public:
         : TRawTypeValue(&value, sizeof(value), type)
     {}
 
-    TTypeValue(const ui16& value, NScheme::TTypeId type = NScheme::NTypeIds::Date)
-        : TRawTypeValue(&value, sizeof(value), type)
-    {}
-
+    TTypeValue(const ui16& value, NScheme::TTypeId type = NScheme::NTypeIds::Date) 
+        : TRawTypeValue(&value, sizeof(value), type) 
+    {} 
+ 
     TTypeValue(const ui8& value, NScheme::TTypeId type = NScheme::NTypeIds::Byte)
         : TRawTypeValue(&value, sizeof(value), type)
     {}
@@ -70,10 +70,10 @@ public:
         : TRawTypeValue(&value, sizeof(value), type)
     {}
 
-    TTypeValue(const std::pair<ui64, i64>& value, NScheme::TTypeId type = NScheme::NTypeIds::Decimal)
-        : TRawTypeValue(&value, sizeof(value), type)
-    {}
-
+    TTypeValue(const std::pair<ui64, i64>& value, NScheme::TTypeId type = NScheme::NTypeIds::Decimal) 
+        : TRawTypeValue(&value, sizeof(value), type) 
+    {} 
+ 
     TTypeValue(const TString& value, NScheme::TTypeId type = NScheme::NTypeIds::Utf8)
         : TRawTypeValue(value.data(), value.size(), type)
     {}
@@ -103,23 +103,23 @@ public:
     }
 
     operator ui64() const {
-        Y_VERIFY((Type() == NScheme::NTypeIds::Uint64
-                  || Type() == NScheme::NTypeIds::Timestamp)
-                 && Size() == sizeof(ui64), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
+        Y_VERIFY((Type() == NScheme::NTypeIds::Uint64 
+                  || Type() == NScheme::NTypeIds::Timestamp) 
+                 && Size() == sizeof(ui64), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size()); 
         return ReadUnaligned<ui64>(reinterpret_cast<const ui64*>(Data()));
     }
 
     operator i64() const {
-        Y_VERIFY((Type() == NScheme::NTypeIds::Int64
-                  || Type() == NScheme::NTypeIds::Interval)
-                 && Size() == sizeof(i64), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
+        Y_VERIFY((Type() == NScheme::NTypeIds::Int64 
+                  || Type() == NScheme::NTypeIds::Interval) 
+                 && Size() == sizeof(i64), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size()); 
         return ReadUnaligned<i64>(reinterpret_cast<const i64*>(Data()));
     }
 
     operator ui32() const {
-        Y_VERIFY((Type() == NScheme::NTypeIds::Uint32
-                  || Type() == NScheme::NTypeIds::Datetime)
-                 && Size() == sizeof(ui32), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
+        Y_VERIFY((Type() == NScheme::NTypeIds::Uint32 
+                  || Type() == NScheme::NTypeIds::Datetime) 
+                 && Size() == sizeof(ui32), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size()); 
         ui32 value = ReadUnaligned<ui32>(reinterpret_cast<const ui32*>(Data()));
         return value;
     }
@@ -130,12 +130,12 @@ public:
         return value;
     }
 
-    operator ui16() const {
-        Y_VERIFY(Type() == NScheme::NTypeIds::Date && Size() == sizeof(ui16), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
-        ui16 value = ReadUnaligned<ui16>(reinterpret_cast<const ui16*>(Data()));
-        return value;
-    }
-
+    operator ui16() const { 
+        Y_VERIFY(Type() == NScheme::NTypeIds::Date && Size() == sizeof(ui16), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size()); 
+        ui16 value = ReadUnaligned<ui16>(reinterpret_cast<const ui16*>(Data())); 
+        return value; 
+    } 
+ 
     operator ui8() const {
         Y_VERIFY(Type() == NScheme::NTypeIds::Byte && Size() == sizeof(ui8), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
         ui8 value = *reinterpret_cast<const ui8*>(Data());
@@ -182,11 +182,11 @@ public:
         return *reinterpret_cast<const std::pair<ui64, ui64>*>(Data());
     }
 
-    operator std::pair<ui64, i64>() const {
-        Y_VERIFY(Type() == NScheme::NTypeIds::Decimal && Size() == sizeof(std::pair<ui64, ui64>), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
-        return *reinterpret_cast<const std::pair<ui64, i64>*>(Data());
-    }
-
+    operator std::pair<ui64, i64>() const { 
+        Y_VERIFY(Type() == NScheme::NTypeIds::Decimal && Size() == sizeof(std::pair<ui64, ui64>), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size()); 
+        return *reinterpret_cast<const std::pair<ui64, i64>*>(Data()); 
+    } 
+ 
     template <typename ElementType>
     operator TVector<ElementType>() const {
         static_assert(std::is_pod<ElementType>::value, "ElementType should be a POD type");
@@ -226,11 +226,11 @@ template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Utf8> { typedef TString 
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::ActorId> { typedef TActorId Type; };
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::PairUi64Ui64> { typedef std::pair<ui64, ui64> Type; };
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Double> { typedef double Type; };
-template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Decimal> { typedef std::pair<ui64, i64> Type; };
-template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Date> { typedef ui16 Type; };
-template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Datetime> { typedef ui32 Type; };
-template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Timestamp> { typedef ui64 Type; };
-template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Interval> { typedef i64 Type; };
+template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Decimal> { typedef std::pair<ui64, i64> Type; }; 
+template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Date> { typedef ui16 Type; }; 
+template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Datetime> { typedef ui32 Type; }; 
+template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Timestamp> { typedef ui64 Type; }; 
+template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Interval> { typedef i64 Type; }; 
 
 /// only for compatibility with old code
 template <NScheme::TTypeId ValType>

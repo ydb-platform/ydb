@@ -26,15 +26,15 @@ message TEvRegisterNodeResult {
     optional uint32 HiveGeneration = 3;
 }
 
-message TLocalConfig {
+message TLocalConfig { 
     repeated NKikimrSchemeOp.TResourceProfile ResourceProfiles = 1;
-}
-
+} 
+ 
 message TEvPing {
     optional fixed64 HiveId = 1;
     optional uint32 HiveGeneration = 2;
     optional bool Purge = 3;
-    optional TLocalConfig Config = 4;
+    optional TLocalConfig Config = 4; 
 }
 
 message TEvDeadTabletAck {

@@ -22,7 +22,7 @@ namespace NMonitoring {
         virtual const TCgiParameters& GetParams() const = 0;
         virtual const TCgiParameters& GetPostParams() const = 0;
         virtual TStringBuf GetPostContent() const = 0;
-        virtual HTTP_METHOD GetMethod() const = 0;
+        virtual HTTP_METHOD GetMethod() const = 0; 
         virtual const THttpHeaders& GetHeaders() const = 0;
         virtual TString GetRemoteAddr() const = 0;
     };

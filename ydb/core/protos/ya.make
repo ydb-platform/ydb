@@ -29,13 +29,13 @@ SRCS(
     bootstrapper.proto
     change_exchange.proto
     channel_purpose.proto
-    cms.proto
-    config.proto
+    cms.proto 
+    config.proto 
     config_units.proto
-    console.proto
-    console_base.proto
-    console_config.proto
-    console_tenant.proto
+    console.proto 
+    console_base.proto 
+    console_config.proto 
+    console_tenant.proto 
     counters_tx_allocator.proto
     counters_bs_controller.proto
     counters_coordinator.proto
@@ -79,12 +79,12 @@ SRCS(
     msgbus_kv.proto
     msgbus_pq.proto
     netclassifier.proto
-    node_broker.proto
+    node_broker.proto 
     node_limits.proto
     profiler.proto
     query_stats.proto
     replication.proto
-    resource_broker.proto
+    resource_broker.proto 
     scheme_log.proto
     scheme_type_metadata.proto
     scheme_type_operation.proto
@@ -95,7 +95,7 @@ SRCS(
     follower_group.proto
     ssa.proto
     statestorage.proto
-    stream.proto
+    stream.proto 
     subdomains.proto
     table_stats.proto
     tablet.proto
@@ -104,8 +104,8 @@ SRCS(
     tablet_database.proto
     tablet_pipe.proto
     tablet_tx.proto
-    tenant_pool.proto
-    tenant_slot_broker.proto
+    tenant_pool.proto 
+    tenant_slot_broker.proto 
     test_shard.proto
     tracing.proto
     tablet_tracing_signals.proto

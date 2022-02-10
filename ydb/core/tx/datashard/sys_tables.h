@@ -58,8 +58,8 @@ struct TSysTables {
             ui64 LockId = 0;
             ui64 DataShard = 0;
             ui32 Generation = 0;
-            // Padding is used to avoid use-of-uninitialized on writes to DB.
-            ui32 Padding_ = 0;
+            // Padding is used to avoid use-of-uninitialized on writes to DB. 
+            ui32 Padding_ = 0; 
             ui64 Counter = 0;
             ui64 SchemeShard = 0;
             ui64 PathId = 0;

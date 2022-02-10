@@ -2,7 +2,7 @@
 
 #include "datashard_common_upload.h"
 #include "datashard_impl.h"
-#include "execution_unit_kind.h"
+#include "execution_unit_kind.h" 
 
 namespace NKikimr {
 namespace NDataShard {
@@ -72,38 +72,38 @@ public:
     TTxType GetTxType() const override { return TXTYPE_PROGRESS_START; }
 
 private:
-    TOperation::TPtr ActiveOp;
-    TVector<EExecutionUnitKind> CompleteList;
-    TInstant CommitStart;
+    TOperation::TPtr ActiveOp; 
+    TVector<EExecutionUnitKind> CompleteList; 
+    TInstant CommitStart; 
     bool Rescheduled = false;
 };
 
 class TDataShard::TTxProposeTransactionBase : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
-public:
+public: 
     TTxProposeTransactionBase(TDataShard *self,
                               TEvDataShard::TEvProposeTransaction::TPtr &&ev,
                               TInstant receivedAt, ui64 tieBreakerIndex,
                               bool delayed);
 
-    bool Execute(NTabletFlatExecutor::TTransactionContext &txc,
-                 const TActorContext &ctx) override;
+    bool Execute(NTabletFlatExecutor::TTransactionContext &txc, 
+                 const TActorContext &ctx) override; 
     void Complete(const TActorContext &ctx) override;
     TTxType GetTxType() const override { return TXTYPE_PROPOSE; }
 
 private:
     bool SyncSchemeOnFollower(TOutputOpData::TResultPtr &result,
-                           TTransactionContext &txc,
-                           const TActorContext &ctx);
+                           TTransactionContext &txc, 
+                           const TActorContext &ctx); 
 
 protected:
-    TOperation::TPtr Op;
-    TEvDataShard::TEvProposeTransaction::TPtr Ev;
+    TOperation::TPtr Op; 
+    TEvDataShard::TEvProposeTransaction::TPtr Ev; 
     const TInstant ReceivedAt;
     const ui64 TieBreakerIndex;
-    EOperationKind Kind;
+    EOperationKind Kind; 
     ui64 TxId;
-    TVector<EExecutionUnitKind> CompleteList;
-    TInstant CommitStart;
+    TVector<EExecutionUnitKind> CompleteList; 
+    TInstant CommitStart; 
     bool Acked;
     bool Rescheduled = false;
 };
@@ -142,30 +142,30 @@ private:
     const ui64 TxId;
 };
 
-inline bool MaybeRequestMoreTxMemory(ui64 usage, NTabletFlatExecutor::TTransactionContext &txc) {
-    if (usage > txc.GetMemoryLimit()) {
-        ui64 request = Max(usage - txc.GetMemoryLimit(), txc.GetMemoryLimit() * MEMORY_REQUEST_FACTOR);
-        txc.RequestMemory(request);
-        return true;
-    }
-    return false;
-}
-
+inline bool MaybeRequestMoreTxMemory(ui64 usage, NTabletFlatExecutor::TTransactionContext &txc) { 
+    if (usage > txc.GetMemoryLimit()) { 
+        ui64 request = Max(usage - txc.GetMemoryLimit(), txc.GetMemoryLimit() * MEMORY_REQUEST_FACTOR); 
+        txc.RequestMemory(request); 
+        return true; 
+    } 
+    return false; 
+} 
+ 
 class TDataShard::TTxStoreTablePath : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
-public:
+public: 
     TTxStoreTablePath(TDataShard *self,
-                      ui64 pathId,
-                      const TString &path);
-    bool Execute(TTransactionContext &txc,
-                 const TActorContext &ctx) override;
-    void Complete(const TActorContext &ctx) override;
-    TTxType GetTxType() const override { return TXTYPE_STORE_TABLE_PATH; }
-
-private:
-    ui64 PathId;
-    TString Path;
-};
-
+                      ui64 pathId, 
+                      const TString &path); 
+    bool Execute(TTransactionContext &txc, 
+                 const TActorContext &ctx) override; 
+    void Complete(const TActorContext &ctx) override; 
+    TTxType GetTxType() const override { return TXTYPE_STORE_TABLE_PATH; } 
+ 
+private: 
+    ui64 PathId; 
+    TString Path; 
+}; 
+ 
 class TDataShard::TTxStoreScanState : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
     TTxStoreScanState(TDataShard* ds, TEvPrivate::TEvPersistScanState::TPtr ev);

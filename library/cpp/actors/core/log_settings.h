@@ -118,8 +118,8 @@ namespace NActors {
                         return func(static_cast<T>(c));
                     }
                 );
-            }
-
+            } 
+ 
             inline bool Satisfies(EPriority priority, EComponent component, ui64 sampleBy = 0) const {
                 // by using Mask we don't get outside of array boundaries
                 TComponentSettings settings = GetComponentSettings(component);

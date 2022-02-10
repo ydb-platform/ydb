@@ -18,7 +18,7 @@ TPrivatePageCache::TPage::TPage(ui32 size, ui32 pageId, TInfo* info)
 TPrivatePageCache::TInfo::TInfo(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection)
     : Id(pageCollection->Label())
     , PageCollection(std::move(pageCollection))
-    , Users(0)
+    , Users(0) 
 {
     PageMap.resize(PageCollection->Total());
 }
@@ -26,7 +26,7 @@ TPrivatePageCache::TInfo::TInfo(TIntrusiveConstPtr<NPageCollection::IPageCollect
 TPrivatePageCache::TInfo::TInfo(const TInfo &info)
     : Id(info.Id)
     , PageCollection(info.PageCollection)
-    , Users(info.Users)
+    , Users(info.Users) 
 {
     PageMap.resize(info.PageMap.size());
     for (const auto& kv : info.PageMap) {
@@ -70,10 +70,10 @@ void TPrivatePageCache::RegisterPageCollection(TIntrusivePtr<TInfo> info) {
         if (page->Sticky)
             Stats.TotalSticky += page->Size;
     }
-
+ 
     Evict(evicted);
 
-    ++info->Users;
+    ++info->Users; 
 }
 
 TPrivatePageCache::TPage::TWaitQueuePtr TPrivatePageCache::ForgetPageCollection(TLogoBlobID id) {
@@ -115,18 +115,18 @@ TPrivatePageCache::TPage::TWaitQueuePtr TPrivatePageCache::ForgetPageCollection(
 void TPrivatePageCache::LockPageCollection(TLogoBlobID id) {
     auto it = PageCollections.find(id);
     Y_VERIFY(it != PageCollections.end(), "trying to lock unknown page collection. logic flaw?");
-    ++it->second->Users;
-}
-
+    ++it->second->Users; 
+} 
+ 
 bool TPrivatePageCache::UnlockPageCollection(TLogoBlobID id) {
     auto it = PageCollections.find(id);
     Y_VERIFY(it != PageCollections.end(), "trying to unlock unknown page collection. logic flaw?");
-    TIntrusivePtr<TInfo> info = it->second;
-
-    --info->Users;
-
+    TIntrusivePtr<TInfo> info = it->second; 
+ 
+    --info->Users; 
+ 
     // Completely forget page collection if no users remain.
-    if (!info->Users) {
+    if (!info->Users) { 
         for (const auto& kv : info->PageMap) {
             auto* page = kv.second.Get();
             Y_VERIFY_DEBUG(page);
@@ -146,17 +146,17 @@ bool TPrivatePageCache::UnlockPageCollection(TLogoBlobID id) {
                 Stats.TotalSharedPending -= page->Size;
             if (page->Sticky)
                 Stats.TotalSticky -= page->Size;
-        }
-
+        } 
+ 
         info->PageMap.clear();
         PageCollections.erase(it);
-        ToTouchShared.erase(id);
+        ToTouchShared.erase(id); 
         --Stats.TotalCollections;
-    }
-
-    return !info->Users;
-}
-
+    } 
+ 
+    return !info->Users; 
+} 
+ 
 THashMap<TLogoBlobID, THashMap<ui32, TSharedData>> TPrivatePageCache::GetPrepareSharedTouched() {
     return std::move(ToTouchShared);
 }

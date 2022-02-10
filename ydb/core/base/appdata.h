@@ -4,9 +4,9 @@
 #include "channel_profiles.h"
 #include "domain.h"
 #include "feature_flags.h"
-#include "nameservice.h"
+#include "nameservice.h" 
 #include "tablet_types.h"
-#include "resource_profile.h"
+#include "resource_profile.h" 
 #include "event_filter.h"
 
 #include <ydb/core/control/immediate_control_board_impl.h>
@@ -18,7 +18,7 @@
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/protos/stream.pb.h>
 #include <ydb/library/pdisk_io/aio.h>
-
+ 
 #include <library/cpp/actors/interconnect/poller_tcp.h>
 #include <library/cpp/actors/core/executor_thread.h>
 #include <library/cpp/actors/util/should_continue.h>
@@ -113,7 +113,7 @@ struct TAppData {
     static TIntrusivePtr<ITimeProvider> TimeProvider;
     TIntrusivePtr<TDomainsInfo> DomainsInfo;
     TIntrusivePtr<TChannelProfiles> ChannelProfiles;
-    TIntrusivePtr<TDynamicNameserviceConfig> DynamicNameserviceConfig;
+    TIntrusivePtr<TDynamicNameserviceConfig> DynamicNameserviceConfig; 
 
     ui64 ProxySchemeCacheNodes;
     ui64 ProxySchemeCacheDistrNodes;
@@ -130,9 +130,9 @@ struct TAppData {
     TIntrusivePtr<NInterconnect::TPollerThreads> PollerThreads;
 
     THolder<NKikimrBlobStorage::TNodeWardenServiceSet> StaticBlobStorageConfig;
-    THolder<NKikimrCms::TCmsConfig> DefaultCmsConfig;
+    THolder<NKikimrCms::TCmsConfig> DefaultCmsConfig; 
 
-    NKikimrStream::TStreamingConfig StreamingConfig;
+    NKikimrStream::TStreamingConfig StreamingConfig; 
     NKikimrPQ::TPQConfig PQConfig;
     NKikimrPQ::TPQClusterDiscoveryConfig PQClusterDiscoveryConfig;
     NKikimrNetClassifier::TNetClassifierConfig NetClassifierConfig;

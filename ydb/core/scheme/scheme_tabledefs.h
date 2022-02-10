@@ -177,22 +177,22 @@ public:
     bool IsEmptyRange(TConstArrayRef<const NScheme::TTypeId> cellTypeIds) const;
 };
 
-class TSerializedTableRange {
-public:
-    TSerializedCellVec From;
-    TSerializedCellVec To;
+class TSerializedTableRange { 
+public: 
+    TSerializedCellVec From; 
+    TSerializedCellVec To; 
     bool FromInclusive = false;
     bool ToInclusive = false;
     bool Point = false;
 
     TSerializedTableRange() {}
-
+ 
     TSerializedTableRange(const TString& from, const TString& to, bool fromInclusive, bool toInclusive)
-        : From(from)
-        , To(to)
-        , FromInclusive(fromInclusive)
+        : From(from) 
+        , To(to) 
+        , FromInclusive(fromInclusive) 
         , ToInclusive(toInclusive) {}
-
+ 
     TSerializedTableRange(TConstArrayRef<TCell> fromValues, bool inclusiveFrom, TConstArrayRef<TCell> toValues,
         bool inclusiveTo)
         : From(TSerializedCellVec::Serialize(fromValues))
@@ -208,24 +208,24 @@ public:
     }
 
     explicit TSerializedTableRange(const NKikimrTx::TKeyRange& range) {
-        Load(range);
-    }
-
-    TSerializedTableRange(const TSerializedTableRange &other) = default;
-    TSerializedTableRange(TSerializedTableRange &&other) = default;
-    TSerializedTableRange &operator=(const TSerializedTableRange &other) = default;
-    TSerializedTableRange &operator=(TSerializedTableRange &&other) = default;
-
+        Load(range); 
+    } 
+ 
+    TSerializedTableRange(const TSerializedTableRange &other) = default; 
+    TSerializedTableRange(TSerializedTableRange &&other) = default; 
+    TSerializedTableRange &operator=(const TSerializedTableRange &other) = default; 
+    TSerializedTableRange &operator=(TSerializedTableRange &&other) = default; 
+ 
     void Load(const NKikimrTx::TKeyRange& range) {
-        From.Parse(range.GetFrom());
-        To.Parse(range.GetTo());
-        FromInclusive = range.GetFromInclusive();
-        ToInclusive = range.GetToInclusive();
-    }
-
+        From.Parse(range.GetFrom()); 
+        To.Parse(range.GetTo()); 
+        FromInclusive = range.GetFromInclusive(); 
+        ToInclusive = range.GetToInclusive(); 
+    } 
+ 
     void Serialize(NKikimrTx::TKeyRange& range) const {
-        range.SetFrom(From.GetBuffer());
-        range.SetFromInclusive(FromInclusive);
+        range.SetFrom(From.GetBuffer()); 
+        range.SetFromInclusive(FromInclusive); 
         if (Point) {
             Y_VERIFY_DEBUG(FromInclusive);
             range.SetTo(From.GetBuffer());
@@ -234,15 +234,15 @@ public:
             range.SetTo(To.GetBuffer());
             range.SetToInclusive(ToInclusive);
         }
-    }
-
-    bool IsEmpty(TConstArrayRef<NScheme::TTypeId> type) const;
+    } 
+ 
+    bool IsEmpty(TConstArrayRef<NScheme::TTypeId> type) const; 
 
     TTableRange ToTableRange() const {
         return TTableRange(From.GetCells(), FromInclusive, To.GetCells(), ToInclusive, Point);
     }
-};
-
+}; 
+ 
 template <typename T>
 int ComparePointAndRange(const TConstArrayRef<TCell>& point, const TTableRange& range,
                          const T& pointTypes, const T& rangeTypes)
@@ -279,10 +279,10 @@ int ComparePointAndRange(const TConstArrayRef<TCell>& point, const TTableRange& 
     return 0;
 }
 
-// Method used to compare range borders.
-// Template args determine where range lies regarding compared border.
-// E.g. CompareBorders<true, true>(...) compares borders of ranges lying on the left
-// of compared borders (or in other words upper range borders are compared).
+// Method used to compare range borders. 
+// Template args determine where range lies regarding compared border. 
+// E.g. CompareBorders<true, true>(...) compares borders of ranges lying on the left 
+// of compared borders (or in other words upper range borders are compared). 
 template<bool FirstLeft, bool SecondLeft>
 int CompareBorders(TConstArrayRef<TCell> first, TConstArrayRef<TCell> second, bool inclusiveFirst, bool inclusiveSecond,
     TConstArrayRef<NScheme::TTypeId> cellTypes)

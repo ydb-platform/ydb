@@ -53,8 +53,8 @@ public:
         if (CanInline(sz)) {
             IsInline_ = 1;
             IntVal = 0;
-            if (ptr)
-                memcpy(&IntVal, ptr, sz);
+            if (ptr) 
+                memcpy(&IntVal, ptr, sz); 
         }
     }
 
@@ -100,7 +100,7 @@ public:
 #if 1
     // Optimization to store small values (<= 8 bytes) inplace
     static constexpr bool CanInline(ui32 sz) { return sz <= 8; }
-    static constexpr size_t MaxInlineSize() { return 8; }
+    static constexpr size_t MaxInlineSize() { return 8; } 
     const char* InlineData() const                  { Y_VERIFY_DEBUG(IsInline_); return IsNull_ ? nullptr : (char*)&IntVal; }
     const char* Data() const                        { return IsNull_ ? nullptr : (IsInline_ ? (char*)&IntVal : Ptr); }
 #else
@@ -150,10 +150,10 @@ inline int CompareTypedCells(const TCell& a, const TCell& b, NScheme::TTypeIdOrd
     SIMPLE_TYPE_SWITCH(Double, double);
     SIMPLE_TYPE_SWITCH(Float,  float);
     SIMPLE_TYPE_SWITCH(PairUi64Ui64,  TPair);
-    SIMPLE_TYPE_SWITCH(Date,   ui16);
-    SIMPLE_TYPE_SWITCH(Datetime,  ui32);
-    SIMPLE_TYPE_SWITCH(Timestamp, ui64);
-    SIMPLE_TYPE_SWITCH(Interval,  i64);
+    SIMPLE_TYPE_SWITCH(Date,   ui16); 
+    SIMPLE_TYPE_SWITCH(Datetime,  ui32); 
+    SIMPLE_TYPE_SWITCH(Timestamp, ui64); 
+    SIMPLE_TYPE_SWITCH(Interval,  i64); 
 
 #undef SIMPLE_TYPE_SWITCH
 
@@ -177,17 +177,17 @@ inline int CompareTypedCells(const TCell& a, const TCell& b, NScheme::TTypeIdOrd
         return sza == szb ? 0 : ((sza < szb) != type.IsDescending() ? -1 : 1);
     }
 
-    case NKikimr::NScheme::NTypeIds::Decimal:
-    {
-        Y_VERIFY_DEBUG(a.Size() == sizeof(std::pair<ui64, i64>));
-        Y_VERIFY_DEBUG(b.Size() == sizeof(std::pair<ui64, i64>));
-        std::pair<ui64, i64> va = ReadUnaligned<std::pair<ui64, i64>>((const std::pair<ui64, i64>*)a.Data());
-        std::pair<ui64, i64> vb = ReadUnaligned<std::pair<ui64, i64>>((const std::pair<ui64, i64>*)b.Data());
-        if (va.second == vb.second)
+    case NKikimr::NScheme::NTypeIds::Decimal: 
+    { 
+        Y_VERIFY_DEBUG(a.Size() == sizeof(std::pair<ui64, i64>)); 
+        Y_VERIFY_DEBUG(b.Size() == sizeof(std::pair<ui64, i64>)); 
+        std::pair<ui64, i64> va = ReadUnaligned<std::pair<ui64, i64>>((const std::pair<ui64, i64>*)a.Data()); 
+        std::pair<ui64, i64> vb = ReadUnaligned<std::pair<ui64, i64>>((const std::pair<ui64, i64>*)b.Data()); 
+        if (va.second == vb.second) 
             return va.first == vb.first ? 0 : ((va.first < vb.first) != type.IsDescending() ? -1 : 1);
         return (va.second < vb.second) != type.IsDescending() ? -1 : 1;
-    }
-
+    } 
+ 
     default:
         Y_VERIFY_DEBUG(false, "Unknown type");
     };
@@ -400,41 +400,41 @@ public:
     }
 
     TSerializedCellVec() {}
-
-    TSerializedCellVec(const TSerializedCellVec &other)
+ 
+    TSerializedCellVec(const TSerializedCellVec &other) 
         : Buf(other.Buf)
         , Cells(other.Cells)
-    {
+    { 
         Y_VERIFY(Buf.data() == other.Buf.data(), "Buffer must be shared");
-    }
-
-    TSerializedCellVec(TSerializedCellVec &&other)
-    {
-        *this = std::move(other);
-    }
-
-    TSerializedCellVec &operator=(const TSerializedCellVec &other)
-    {
+    } 
+ 
+    TSerializedCellVec(TSerializedCellVec &&other) 
+    { 
+        *this = std::move(other); 
+    } 
+ 
+    TSerializedCellVec &operator=(const TSerializedCellVec &other) 
+    { 
         if (this == &other)
             return *this;
 
         TSerializedCellVec tmp(other);
         *this = std::move(tmp);
-        return *this;
-    }
-
-    TSerializedCellVec &operator=(TSerializedCellVec &&other)
-    {
+        return *this; 
+    } 
+ 
+    TSerializedCellVec &operator=(TSerializedCellVec &&other) 
+    { 
         if (this == &other)
             return *this;
 
         const char* otherPtr = other.Buf.data();
-        Buf = std::move(other.Buf);
+        Buf = std::move(other.Buf); 
         Y_VERIFY(Buf.data() == otherPtr, "Buffer address must not change");
         Cells = std::move(other.Cells);
-        return *this;
-    }
-
+        return *this; 
+    } 
+ 
     static bool TryParse(const TString& data, TSerializedCellVec& vec) {
         bool ok = DoTryParse(data, vec);
         if (!ok) {
@@ -475,8 +475,8 @@ public:
         return res;
     }
 
-    const TString &GetBuffer() const { return Buf; }
-
+    const TString &GetBuffer() const { return Buf; } 
+ 
     TString ReleaseBuffer() {
         Cells.clear();
         return std::move(Buf);

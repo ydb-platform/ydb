@@ -12,7 +12,7 @@ class TTabletStorageInfo;
 class TTabletSetupInfo : public TThrRefBase {
 public:
     typedef std::function<IActor* (const TActorId &, TTabletStorageInfo*)> TTabletCreationFunc;
-    using TPtr = TIntrusivePtr<TTabletSetupInfo>;
+    using TPtr = TIntrusivePtr<TTabletSetupInfo>; 
 
 private:
     const TTabletCreationFunc Op;

@@ -120,9 +120,9 @@ message IndexBuildMetadata {
 message StoragePool {
     string media = 1;
 }
-
-message StoragePolicy {
-    string preset_name = 1;
+ 
+message StoragePolicy { 
+    string preset_name = 1; 
     StoragePool syslog = 2;
     StoragePool log = 3;
     StoragePool data = 4;
@@ -130,7 +130,7 @@ message StoragePolicy {
     Ydb.FeatureFlag.Status keep_in_memory = 6;
     repeated ColumnFamilyPolicy column_families = 7;
 }
-
+ 
 message ColumnFamilyPolicy {
     enum Compression {
         COMPRESSION_UNSPECIFIED = 0;
@@ -154,19 +154,19 @@ message ColumnFamilyPolicy {
     Compression compression = 5;
 }
 
-message CompactionPolicy {
-    string preset_name = 1;
+message CompactionPolicy { 
+    string preset_name = 1; 
 }
-
-message ExplicitPartitions {
-    // Specify key values used to split table into partitions.
-    // Each value becomes the first key of a new partition.
-    // Key values should go in ascending order.
-    // Total number of created partitions is number of specified
-    // keys + 1.
-    repeated TypedValue split_points = 1;
+ 
+message ExplicitPartitions { 
+    // Specify key values used to split table into partitions. 
+    // Each value becomes the first key of a new partition. 
+    // Key values should go in ascending order. 
+    // Total number of created partitions is number of specified 
+    // keys + 1. 
+    repeated TypedValue split_points = 1; 
 }
-
+ 
 message PartitionStats {
     // Approximate number of rows in shard
     uint64 rows_estimate = 1;
@@ -189,58 +189,58 @@ message TableStats {
     google.protobuf.Timestamp modification_time = 6;
 }
 
-message PartitioningPolicy {
-    enum AutoPartitioningPolicy {
+message PartitioningPolicy { 
+    enum AutoPartitioningPolicy { 
         AUTO_PARTITIONING_POLICY_UNSPECIFIED = 0;
         DISABLED = 1;
         AUTO_SPLIT = 2;
         AUTO_SPLIT_MERGE = 3;
-    }
-
-    string preset_name = 1;
-    AutoPartitioningPolicy auto_partitioning = 2;
-    oneof partitions {
-        // Allows to enable uniform sharding using given shards number.
-        // The first components of primary key must have Uint32/Uint64 type.
-        uint64 uniform_partitions = 3;
-        // Explicitly specify key values which are used as borders for
-        // created partitions.
-        ExplicitPartitions explicit_partitions = 4;
-    }
+    } 
+ 
+    string preset_name = 1; 
+    AutoPartitioningPolicy auto_partitioning = 2; 
+    oneof partitions { 
+        // Allows to enable uniform sharding using given shards number. 
+        // The first components of primary key must have Uint32/Uint64 type. 
+        uint64 uniform_partitions = 3; 
+        // Explicitly specify key values which are used as borders for 
+        // created partitions. 
+        ExplicitPartitions explicit_partitions = 4; 
+    } 
 }
-
-message ExecutionPolicy {
-    string preset_name = 1;
+ 
+message ExecutionPolicy { 
+    string preset_name = 1; 
 }
-
-message ReplicationPolicy {
-    string preset_name = 1;
-    // If value is non-zero then it specifies a number of read-only
-    // replicas to create for a table. Zero value means preset
-    // setting usage.
-    uint32 replicas_count = 2;
-    // If this feature in enabled then requested number of replicas
-    // will be created in each availability zone.
+ 
+message ReplicationPolicy { 
+    string preset_name = 1; 
+    // If value is non-zero then it specifies a number of read-only 
+    // replicas to create for a table. Zero value means preset 
+    // setting usage. 
+    uint32 replicas_count = 2; 
+    // If this feature in enabled then requested number of replicas 
+    // will be created in each availability zone. 
     Ydb.FeatureFlag.Status create_per_availability_zone = 3;
-    // If this feature in enabled then read-only replicas can be promoted
+    // If this feature in enabled then read-only replicas can be promoted 
     // to leader.
     Ydb.FeatureFlag.Status allow_promotion = 4;
 }
-
-message CachingPolicy {
-    string preset_name = 1;
+ 
+message CachingPolicy { 
+    string preset_name = 1; 
 }
-
-message TableProfile {
-    string preset_name = 1;
-    StoragePolicy storage_policy = 2;
-    CompactionPolicy compaction_policy = 3;
-    PartitioningPolicy partitioning_policy = 4;
-    ExecutionPolicy execution_policy = 5;
-    ReplicationPolicy replication_policy = 6;
-    CachingPolicy caching_policy = 7;
+ 
+message TableProfile { 
+    string preset_name = 1; 
+    StoragePolicy storage_policy = 2; 
+    CompactionPolicy compaction_policy = 3; 
+    PartitioningPolicy partitioning_policy = 4; 
+    ExecutionPolicy execution_policy = 5; 
+    ReplicationPolicy replication_policy = 6; 
+    CachingPolicy caching_policy = 7; 
 }
-
+ 
 message ColumnMeta {
     // Name of column
     string name = 1;
@@ -403,7 +403,7 @@ message CreateTableRequest {
     // List of columns used as primary key
     repeated string primary_key = 4;
     // Table profile
-    TableProfile profile = 5;
+    TableProfile profile = 5; 
     Ydb.Operations.OperationParams operation_params = 6;
     // List of secondary indexes
     repeated TableIndex indexes = 7;
@@ -820,71 +820,71 @@ message RollbackTransactionResponse {
     Ydb.Operations.Operation operation = 1;
 }
 
-message StoragePolicyDescription {
-    string name = 1;
-    map<string, string> labels = 2;
-}
-
-message CompactionPolicyDescription {
-    string name = 1;
-    map<string, string> labels = 2;
-}
-
-message PartitioningPolicyDescription {
-    string name = 1;
-    map<string, string> labels = 2;
-}
-
-message ExecutionPolicyDescription {
-    string name = 1;
-    map<string, string> labels = 2;
-}
-
-message ReplicationPolicyDescription {
-    string name = 1;
-    map<string, string> labels = 2;
-}
-
-message CachingPolicyDescription {
-    string name = 1;
-    map<string, string> labels = 2;
-}
-
-message TableProfileDescription {
-    string name = 1;
-    map<string, string> labels = 2;
-    string default_storage_policy = 3;
-    repeated string allowed_storage_policies = 4;
-    string default_compaction_policy = 5;
-    repeated string allowed_compaction_policies = 6;
-    string default_partitioning_policy = 7;
-    repeated string allowed_partitioning_policies = 8;
-    string default_execution_policy = 9;
-    repeated string allowed_execution_policies = 10;
-    string default_replication_policy = 11;
-    repeated string allowed_replication_policies = 12;
-    string default_caching_policy = 13;
-    repeated string allowed_caching_policies = 14;
-}
-
-message DescribeTableOptionsRequest {
+message StoragePolicyDescription { 
+    string name = 1; 
+    map<string, string> labels = 2; 
+} 
+ 
+message CompactionPolicyDescription { 
+    string name = 1; 
+    map<string, string> labels = 2; 
+} 
+ 
+message PartitioningPolicyDescription { 
+    string name = 1; 
+    map<string, string> labels = 2; 
+} 
+ 
+message ExecutionPolicyDescription { 
+    string name = 1; 
+    map<string, string> labels = 2; 
+} 
+ 
+message ReplicationPolicyDescription { 
+    string name = 1; 
+    map<string, string> labels = 2; 
+} 
+ 
+message CachingPolicyDescription { 
+    string name = 1; 
+    map<string, string> labels = 2; 
+} 
+ 
+message TableProfileDescription { 
+    string name = 1; 
+    map<string, string> labels = 2; 
+    string default_storage_policy = 3; 
+    repeated string allowed_storage_policies = 4; 
+    string default_compaction_policy = 5; 
+    repeated string allowed_compaction_policies = 6; 
+    string default_partitioning_policy = 7; 
+    repeated string allowed_partitioning_policies = 8; 
+    string default_execution_policy = 9; 
+    repeated string allowed_execution_policies = 10; 
+    string default_replication_policy = 11; 
+    repeated string allowed_replication_policies = 12; 
+    string default_caching_policy = 13; 
+    repeated string allowed_caching_policies = 14; 
+} 
+ 
+message DescribeTableOptionsRequest { 
     Ydb.Operations.OperationParams operation_params = 1;
-}
-
-message DescribeTableOptionsResponse {
-    // operation.result holds ListTableParametersResult
-    Ydb.Operations.Operation operation = 1;
-}
-
-message DescribeTableOptionsResult {
-    repeated TableProfileDescription table_profile_presets = 1;
-    repeated StoragePolicyDescription storage_policy_presets = 2;
-    repeated CompactionPolicyDescription compaction_policy_presets = 3;
-    repeated PartitioningPolicyDescription partitioning_policy_presets = 4;
-    repeated ExecutionPolicyDescription execution_policy_presets = 5;
-    repeated ReplicationPolicyDescription replication_policy_presets = 6;
-    repeated CachingPolicyDescription caching_policy_presets = 7;
-}
+} 
+ 
+message DescribeTableOptionsResponse { 
+    // operation.result holds ListTableParametersResult 
+    Ydb.Operations.Operation operation = 1; 
+} 
+ 
+message DescribeTableOptionsResult { 
+    repeated TableProfileDescription table_profile_presets = 1; 
+    repeated StoragePolicyDescription storage_policy_presets = 2; 
+    repeated CompactionPolicyDescription compaction_policy_presets = 3; 
+    repeated PartitioningPolicyDescription partitioning_policy_presets = 4; 
+    repeated ExecutionPolicyDescription execution_policy_presets = 5; 
+    repeated ReplicationPolicyDescription replication_policy_presets = 6; 
+    repeated CachingPolicyDescription caching_policy_presets = 7; 
+} 
 
 // ReadTable request/response
 

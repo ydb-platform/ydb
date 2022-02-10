@@ -5,9 +5,9 @@
 namespace NKikimr {
 namespace NDataShard {
 
-const TSet<TStepOrder> TTransQueue::EMPTY_PLAN;
-
-void TTransQueue::AddTxInFly(TOperation::TPtr op) {
+const TSet<TStepOrder> TTransQueue::EMPTY_PLAN; 
+ 
+void TTransQueue::AddTxInFly(TOperation::TPtr op) { 
     const ui64 txId = op->GetTxId();
     const ui64 maxStep = op->GetMaxStep();
     Y_VERIFY_S(!TxsInFly.contains(txId), "Adding duplicate txId " << txId);
@@ -60,9 +60,9 @@ bool TTransQueue::Load(NIceDb::TNiceDb& db) {
                 flags = rowset.GetValue<Schema::TxMain::Flags>();
             }
             ui64 maxStep = rowset.GetValue<Schema::TxMain::MaxStep>();
-            EOperationKind kind = rowset.GetValue<Schema::TxMain::Kind>();
-            ui64 received = rowset.GetValueOrDefault<Schema::TxMain::ReceivedAt>(now.GetValue());
-            if (kind == EOperationKind::SchemeTx)
+            EOperationKind kind = rowset.GetValue<Schema::TxMain::Kind>(); 
+            ui64 received = rowset.GetValueOrDefault<Schema::TxMain::ReceivedAt>(now.GetValue()); 
+            if (kind == EOperationKind::SchemeTx) 
                 schemaTxs.insert(txId);
 
             if (flags & TTxFlags::Immediate) {
@@ -97,8 +97,8 @@ bool TTransQueue::Load(NIceDb::TNiceDb& db) {
             ui64 txId = rowset.GetValue<Schema::PlanQueue::TxId>();
             PlannedTxs.emplace(TStepOrder(step, txId));
 
-            auto op = FindTxInFly(txId);
-            if (op) {
+            auto op = FindTxInFly(txId); 
+            if (op) { 
                 if (Y_LIKELY(!op->GetStep())) {
                     op->SetStep(step);
                     --PlanWaitingTxCount;
@@ -108,10 +108,10 @@ bool TTransQueue::Load(NIceDb::TNiceDb& db) {
                         ProposeDelayers.insert(txId);
                     }
                 }
-                PlannedTxsByKind[op->GetKind()].emplace(TStepOrder(step, txId));
+                PlannedTxsByKind[op->GetKind()].emplace(TStepOrder(step, txId)); 
                 DeadlineQueue.erase(std::make_pair(op->GetMaxStep(), op->GetTxId()));
-            }
-
+            } 
+ 
             if (!rowset.Next())
                 return false;
         }
@@ -130,7 +130,7 @@ bool TTransQueue::Load(NIceDb::TNiceDb& db) {
             ui64 minStep = rowset.GetValue<Schema::SchemaOperations::MinStep>();
             ui64 maxStep = rowset.GetValue<Schema::SchemaOperations::MaxStep>();
             ui64 planStep = rowset.GetValueOrDefault<Schema::SchemaOperations::PlanStep>(0);
-            ui64 readOnly = rowset.GetValueOrDefault<Schema::SchemaOperations::ReadOnly>(false);
+            ui64 readOnly = rowset.GetValueOrDefault<Schema::SchemaOperations::ReadOnly>(false); 
             bool success = rowset.GetValueOrDefault<Schema::SchemaOperations::Success>(false);
             TString error = rowset.GetValueOrDefault<Schema::SchemaOperations::Error>(TString());
             ui64 dataSize = rowset.GetValueOrDefault<Schema::SchemaOperations::DataSize>(0);
@@ -205,7 +205,7 @@ void TTransQueue::ProposeSchemaTx(NIceDb::TNiceDb& db, const TSchemaOperation& o
         NIceDb::TUpdate<Schema::SchemaOperations::SourceTablet>(op.TabletId),
         NIceDb::TUpdate<Schema::SchemaOperations::MinStep>(op.MinStep),
         NIceDb::TUpdate<Schema::SchemaOperations::MaxStep>(op.MaxStep),
-        NIceDb::TUpdate<Schema::SchemaOperations::PlanStep>(op.PlanStep),
+        NIceDb::TUpdate<Schema::SchemaOperations::PlanStep>(op.PlanStep), 
         NIceDb::TUpdate<Schema::SchemaOperations::ReadOnly>(op.ReadOnly),
         NIceDb::TUpdate<Schema::SchemaOperations::Success>(op.Success),
         NIceDb::TUpdate<Schema::SchemaOperations::Error>(op.Error),
@@ -261,20 +261,20 @@ void TTransQueue::UpdateTxBody(NIceDb::TNiceDb& db, ui64 txId, const TStringBuf&
         .Update<Schema::TxDetails::Body>(TString(txBody));
 }
 
-void TTransQueue::RemoveTx(NIceDb::TNiceDb &db,
-                           const TOperation &op) {
+void TTransQueue::RemoveTx(NIceDb::TNiceDb &db, 
+                           const TOperation &op) { 
     using Schema = TDataShard::Schema;
 
-    db.Table<Schema::TxMain>().Key(op.GetTxId()).Delete();
-    db.Table<Schema::TxDetails>().Key(op.GetTxId(), Self->TabletID()).Delete();
-    db.Table<Schema::TxArtifacts>().Key(op.GetTxId()).Delete();
+    db.Table<Schema::TxMain>().Key(op.GetTxId()).Delete(); 
+    db.Table<Schema::TxDetails>().Key(op.GetTxId(), Self->TabletID()).Delete(); 
+    db.Table<Schema::TxArtifacts>().Key(op.GetTxId()).Delete(); 
 
-    db.Table<Schema::PlanQueue>().Key(op.GetStep(), op.GetTxId()).Delete();
-    db.Table<Schema::DeadlineQueue>().Key(op.GetMaxStep(), op.GetTxId()).Delete();
-    DeadlineQueue.erase(std::make_pair(op.GetMaxStep(), op.GetTxId()));
-    RemoveTxInFly(op.GetTxId());
-    PlannedTxs.erase(op.GetStepOrder());
-    PlannedTxsByKind[op.GetKind()].erase(op.GetStepOrder());
+    db.Table<Schema::PlanQueue>().Key(op.GetStep(), op.GetTxId()).Delete(); 
+    db.Table<Schema::DeadlineQueue>().Key(op.GetMaxStep(), op.GetTxId()).Delete(); 
+    DeadlineQueue.erase(std::make_pair(op.GetMaxStep(), op.GetTxId())); 
+    RemoveTxInFly(op.GetTxId()); 
+    PlannedTxs.erase(op.GetStepOrder()); 
+    PlannedTxsByKind[op.GetKind()].erase(op.GetStepOrder()); 
     db.NoMoreReadsForTx();
 }
 
@@ -291,12 +291,12 @@ void TTransQueue::RemoveScanProgress(NIceDb::TNiceDb& db, ui64 txId) {
 
 /// @arg inOutStep, inOutTxId - last (complete) tx
 /// @return inOutStep, inOutTxId - next planned Tx
-void TTransQueue::GetPlannedTxId(ui64& step, ui64& txId) const {
+void TTransQueue::GetPlannedTxId(ui64& step, ui64& txId) const { 
     auto it = PlannedTxs.lower_bound(TStepOrder(step, txId));
     if (it != PlannedTxs.end()) {
         step = it->Step;
         txId = it->TxId;
-        return;
+        return; 
     }
 
     step = txId = 0;
@@ -313,31 +313,31 @@ bool TTransQueue::GetNextPlannedTxId(ui64& step, ui64& txId) const {
     return false;
 }
 
-bool TTransQueue::LoadTxDetails(NIceDb::TNiceDb &db,
-                                ui64 txId,
+bool TTransQueue::LoadTxDetails(NIceDb::TNiceDb &db, 
+                                ui64 txId, 
                                 TActorId &target,
-                                TString &txBody,
-                                TVector<TSysTables::TLocksTable::TLock> &locks,
-                                ui64 &artifactFlags) {
+                                TString &txBody, 
+                                TVector<TSysTables::TLocksTable::TLock> &locks, 
+                                ui64 &artifactFlags) { 
     using Schema = TDataShard::Schema;
 
-    auto detailsRow = db.Table<Schema::TxDetails>().Key(txId, Self->TabletID()).Select();
-    auto artifactsRow = db.Table<Schema::TxArtifacts>().Key(txId).Select();
-
-    if (!detailsRow.IsReady() || !artifactsRow.IsReady())
+    auto detailsRow = db.Table<Schema::TxDetails>().Key(txId, Self->TabletID()).Select(); 
+    auto artifactsRow = db.Table<Schema::TxArtifacts>().Key(txId).Select(); 
+ 
+    if (!detailsRow.IsReady() || !artifactsRow.IsReady()) 
         return false;
 
-    Y_VERIFY_S(!detailsRow.EndOfSet(), "cannot find details for tx=" << txId);
-
-    txBody = detailsRow.GetValue<Schema::TxDetails::Body>();
-    target = detailsRow.GetValue<Schema::TxDetails::Source>();
-
-    artifactFlags = 0;
-    if (!artifactsRow.EndOfSet()) {
-        artifactFlags = artifactsRow.GetValue<Schema::TxArtifacts::Flags>();
-        locks = artifactsRow.GetValueOrDefault<Schema::TxArtifacts::Locks>({});
-    }
-
+    Y_VERIFY_S(!detailsRow.EndOfSet(), "cannot find details for tx=" << txId); 
+ 
+    txBody = detailsRow.GetValue<Schema::TxDetails::Body>(); 
+    target = detailsRow.GetValue<Schema::TxDetails::Source>(); 
+ 
+    artifactFlags = 0; 
+    if (!artifactsRow.EndOfSet()) { 
+        artifactFlags = artifactsRow.GetValue<Schema::TxArtifacts::Flags>(); 
+        locks = artifactsRow.GetValueOrDefault<Schema::TxArtifacts::Locks>({}); 
+    } 
+ 
     return true;
 }
 
@@ -356,8 +356,8 @@ bool TTransQueue::ClearTxDetails(NIceDb::TNiceDb& db, ui64 txId) {
             return false;
     }
 
-    db.Table<Schema::TxArtifacts>().Key(txId).Delete();
-
+    db.Table<Schema::TxArtifacts>().Key(txId).Delete(); 
+ 
     return true;
 }
 
@@ -368,7 +368,7 @@ bool TTransQueue::CancelPropose(NIceDb::TNiceDb& db, ui64 txId) {
     if (it == TxsInFly.end())
         return true; // already cleaned up
 
-    ui64 maxStep = it->second->GetMaxStep();
+    ui64 maxStep = it->second->GetMaxStep(); 
 
     if (!ClearTxDetails(db, txId))
         return false;
@@ -429,10 +429,10 @@ ECleanupStatus TTransQueue::CleanupOutdated(NIceDb::TNiceDb& db, ui64 outdatedSt
     return ECleanupStatus::Success;
 }
 
-void TTransQueue::PlanTx(TOperation::TPtr op,
-                         ui64 step,
-                         NIceDb::TNiceDb &db)
-{
+void TTransQueue::PlanTx(TOperation::TPtr op, 
+                         ui64 step, 
+                         NIceDb::TNiceDb &db) 
+{ 
     Y_VERIFY_DEBUG(TxsInFly.contains(op->GetTxId()) && TxsInFly.at(op->GetTxId()) == op);
 
     if (Y_LIKELY(!op->GetStep())) {
@@ -444,14 +444,14 @@ void TTransQueue::PlanTx(TOperation::TPtr op,
     }
 
     using Schema = TDataShard::Schema;
-    db.Table<Schema::PlanQueue>().Key(step, op->GetTxId()).Update();
-    PlannedTxs.emplace(op->GetStepOrder());
-    PlannedTxsByKind[op->GetKind()].emplace(op->GetStepOrder());
+    db.Table<Schema::PlanQueue>().Key(step, op->GetTxId()).Update(); 
+    PlannedTxs.emplace(op->GetStepOrder()); 
+    PlannedTxsByKind[op->GetKind()].emplace(op->GetStepOrder()); 
     DeadlineQueue.erase(std::make_pair(op->GetMaxStep(), op->GetTxId()));
 }
 
 void TTransQueue::ForgetPlannedTx(NIceDb::TNiceDb &db, ui64 step, ui64 txId)
-{
+{ 
     using Schema = TDataShard::Schema;
     db.Table<Schema::PlanQueue>().Key(step, txId).Delete();
     PlannedTxs.erase(TStepOrder(step, txId));
@@ -462,12 +462,12 @@ void TTransQueue::ForgetPlannedTx(NIceDb::TNiceDb &db, ui64 step, ui64 txId)
     Self->IncCounter(COUNTER_TX_PROGRESS_DUPLICATE);
 }
 
-TString TTransQueue::TxInFlyToString() const
-{
-    TStringStream ss;
-    for (auto &pr : TxsInFly)
-        ss << "{" << pr.first << ": " << pr.second->GetKind() << "} ";
-    return ss.Str();
-}
-
+TString TTransQueue::TxInFlyToString() const 
+{ 
+    TStringStream ss; 
+    for (auto &pr : TxsInFly) 
+        ss << "{" << pr.first << ": " << pr.second->GetKind() << "} "; 
+    return ss.Str(); 
+} 
+ 
 }}

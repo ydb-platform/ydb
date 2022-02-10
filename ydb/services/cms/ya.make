@@ -1,12 +1,12 @@
-LIBRARY()
-
-OWNER(g:kikimr)
-
-SRCS(
-    grpc_service.cpp
-)
-
-PEERDIR(
+LIBRARY() 
+ 
+OWNER(g:kikimr) 
+ 
+SRCS( 
+    grpc_service.cpp 
+) 
+ 
+PEERDIR( 
     library/cpp/grpc/server
     ydb/core/grpc_services
     ydb/core/mind
@@ -14,9 +14,9 @@ PEERDIR(
     ydb/public/api/grpc
     ydb/public/lib/operation_id
     ydb/public/sdk/cpp/client/resources
-)
-
-END()
+) 
+ 
+END() 
 
 RECURSE_FOR_TESTS(
     ut

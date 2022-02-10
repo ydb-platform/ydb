@@ -244,24 +244,24 @@ THolder<TKeyDesc> ExtractEraseRow(TCallable& callable, const TTypeEnvironment& e
 #define MAKE_PRIMITIVE_TYPE_CELL(type, layout) \
     case NUdf::TDataType<type>::Id: return MakeCell<layout>(value);
 
-TCell MakeCell(NUdf::TDataTypeId typeId, const NUdf::TUnboxedValuePod& value, const TTypeEnvironment& env, bool copy) {
+TCell MakeCell(NUdf::TDataTypeId typeId, const NUdf::TUnboxedValuePod& value, const TTypeEnvironment& env, bool copy) { 
     if (!value)
         return TCell();
 
     switch(typeId) {
         KNOWN_FIXED_VALUE_TYPES(MAKE_PRIMITIVE_TYPE_CELL)
-    case NUdf::TDataType<NUdf::TDecimal>::Id:
-        {
-            auto intVal = value.GetInt128();
-            const auto& val = env.NewString(sizeof(intVal));
-            std::memcpy(val.Data(), reinterpret_cast<const char*>(&intVal), sizeof(intVal));
-            return TCell(val.Data(), val.Size());
-        }
-        break;
+    case NUdf::TDataType<NUdf::TDecimal>::Id: 
+        { 
+            auto intVal = value.GetInt128(); 
+            const auto& val = env.NewString(sizeof(intVal)); 
+            std::memcpy(val.Data(), reinterpret_cast<const char*>(&intVal), sizeof(intVal)); 
+            return TCell(val.Data(), val.Size()); 
+        } 
+        break; 
     }
 
     const auto& ref = value.AsStringRef();
-    if (!copy || value.IsString() || TCell::CanInline(ref.Size()))
+    if (!copy || value.IsString() || TCell::CanInline(ref.Size())) 
         return TCell(ref.Data(), ref.Size());
 
     const auto& val = env.NewString(ref.Size());

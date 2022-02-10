@@ -52,10 +52,10 @@ public:
     {
         ui16 port = PortManager.GetPort(2134);
         ui16 grpc = PortManager.GetPort(2135);
-        ServerSettings = new TServerSettings(port);
+        ServerSettings = new TServerSettings(port); 
         ServerSettings->SetGrpcPort(grpc);
-        ServerSettings->SetLogBackend(logBackend);
-        ServerSettings->SetDomainName("Root");
+        ServerSettings->SetLogBackend(logBackend); 
+        ServerSettings->SetDomainName("Root"); 
         ServerSettings->SetDynamicNodeCount(2);
         if (TestSettings::PrecreatePools) {
             ServerSettings->AddStoragePool("ssd");
@@ -93,7 +93,7 @@ public:
 
         Server_.Reset(new TServer(*ServerSettings));
         Tenants_.Reset(new Tests::TTenants(Server_));
-
+ 
         //Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_PROXY_SCHEME_CACHE, NActors::NLog::PRI_DEBUG);
         //Server_->GetRuntime()->SetLogPriority(NKikimrServices::SCHEME_BOARD_REPLICA, NActors::NLog::PRI_DEBUG);
         Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_INFO);
@@ -118,7 +118,7 @@ public:
         }
         Server_->EnableGRpc(grpcOption);
 
-        TClient annoyingClient(*ServerSettings);
+        TClient annoyingClient(*ServerSettings); 
         if (ServerSettings->AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement()) {
             annoyingClient.SetSecurityToken("root@builtin");
         }
@@ -148,7 +148,7 @@ public:
         return *Server_;
     }
 
-    TServerSettings::TPtr ServerSettings;
+    TServerSettings::TPtr ServerSettings; 
     Tests::TServer::TPtr Server_;
     THolder<Tests::TTenants> Tenants_;
 private:

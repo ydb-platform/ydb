@@ -116,7 +116,7 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
         case EDM_BS:
         case EDM_BLOBSTORAGE:
         case EDM_SERVER:
-        case EDM_CMS:
+        case EDM_CMS: 
         case EDM_DISCOVERY:
         case EDM_WHOAMI:
             return NDriverClient::NewClient(argc + freeArgsPos, argv - freeArgsPos, factories);

@@ -31,7 +31,7 @@ enum class ECompactionState {
     Unknown,
     Free,
     Pending,
-    PendingBackground,
+    PendingBackground, 
     Compaction,
     SnapshotPending,
     SnapshotCompaction,
@@ -44,19 +44,19 @@ enum class EForcedCompactionState {
 };
 
 struct TCompactionLogicState {
-    struct TCompactionTask {
+    struct TCompactionTask { 
         ui64 TaskId = 0;
         ui32 Priority = 0;
-        TInstant SubmissionTimestamp;
+        TInstant SubmissionTimestamp; 
         ui64 CompactionId = 0;
-    };
-
+    }; 
+ 
     struct TInMem {
         ui64 EstimatedSize = 0;
         ui32 Steps = 0;
         ui32 CompactingSteps = 0;
         ECompactionState State = ECompactionState::Free;
-        TCompactionTask CompactionTask;
+        TCompactionTask CompactionTask; 
         ui64 LogOverheadCount = 0;
         ui64 LogOverheadSize = 0;
         float OverloadFactor = 0.0;
@@ -129,7 +129,7 @@ struct TCompactionLogicState {
     THashMap<ui32, TSnapshotState> Snapshots;
 };
 
-class TFlatTableScan;
+class TFlatTableScan; 
 
 struct TTableCompactionResult {
     NTable::TCompactionChanges Changes;
@@ -159,25 +159,25 @@ class TCompactionLogic {
     NTable::ICompactionBackend * const Backend;
     ITimeProvider * const Time = nullptr;
     TAutoPtr<TCompactionLogicState> State;
-    TString TaskNameSuffix;
+    TString TaskNameSuffix; 
 
-    // Update background compaction task when priority changes
-    // at least by 5% (1/20 of current value).
-    static constexpr ui32 PRIORITY_UPDATE_FACTOR = 20;
-
-    void SubmitCompactionTask(ui32 table, ui32 generation,
-                              const TString &type, ui32 priority,
+    // Update background compaction task when priority changes 
+    // at least by 5% (1/20 of current value). 
+    static constexpr ui32 PRIORITY_UPDATE_FACTOR = 20; 
+ 
+    void SubmitCompactionTask(ui32 table, ui32 generation, 
+                              const TString &type, ui32 priority, 
                               TCompactionLogicState::TCompactionTask &task);
-    void UpdateCompactionTask(const TString &type, ui32 priority,
+    void UpdateCompactionTask(const TString &type, ui32 priority, 
                               TCompactionLogicState::TCompactionTask &task);
-
+ 
     bool BeginMemTableCompaction(ui64 taskId, ui32 tableId);
-
+ 
     THolder<NTable::ICompactionStrategy> CreateStrategy(ui32 tableId, NKikimrSchemeOp::ECompactionStrategy);
 
     void StopTable(TCompactionLogicState::TTableInfo &table);
     void StrategyChanging(TCompactionLogicState::TTableInfo &table);
-
+ 
     TCompactionLogicState::TTableInfo* HandleCompaction(
         ui64 compactionId,
         const NTable::TCompactionParams* params,
@@ -199,9 +199,9 @@ public:
 
     TCompactionLogicState::TSnapshotState SnapToLog(ui32 tableId);
 
-    // Update priorities for background compaction tasks.
+    // Update priorities for background compaction tasks. 
     void UpdateCompactions();
-
+ 
     // Strategy of this table wants to apply some changes
     void RequestChanges(ui32 tableId);
     TVector<TTableCompactionChanges> ApplyChanges();

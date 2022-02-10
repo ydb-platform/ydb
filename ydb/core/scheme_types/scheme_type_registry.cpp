@@ -30,11 +30,11 @@ TTypeRegistry::TTypeRegistry()
     RegisterType<TYson>();
     RegisterType<TJson>();
     RegisterType<TJsonDocument>();
-    RegisterType<TDecimal>();
-    RegisterType<TDate>();
-    RegisterType<TDatetime>();
-    RegisterType<TTimestamp>();
-    RegisterType<TInterval>();
+    RegisterType<TDecimal>(); 
+    RegisterType<TDate>(); 
+    RegisterType<TDatetime>(); 
+    RegisterType<TTimestamp>(); 
+    RegisterType<TInterval>(); 
     RegisterType<TDyNumber>();
 }
 

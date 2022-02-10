@@ -111,7 +111,7 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
 
         if (updateTimecast) {
             if (!TimecastLagCounter)
-                TimecastLagCounter = GetServiceCounters(AppData(ctx)->Counters, "processing")->GetSubgroup("mediator", ToString(Mediator))->GetSubgroup("sensor", "TimecastLag")->GetNamedCounter("Bucket", ToString(HashBucket));
+                TimecastLagCounter = GetServiceCounters(AppData(ctx)->Counters, "processing")->GetSubgroup("mediator", ToString(Mediator))->GetSubgroup("sensor", "TimecastLag")->GetNamedCounter("Bucket", ToString(HashBucket)); 
             *TimecastLagCounter = (AcceptedStep - CommitedStep);
 
             TEvMediatorTimecast::TEvUpdate evx;

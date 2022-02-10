@@ -31,7 +31,7 @@ namespace NKikimr {
                             // output node info
                             TActorId aid = GInfo.GetActorId(it->VDiskIdShort);
                             ui32 nodeId = aid.NodeId();
-                            using TNodeInfo = TEvInterconnect::TNodeInfo;
+                            using TNodeInfo = TEvInterconnect::TNodeInfo; 
                             const TNodeInfo *info = NodesInfo->Get()->GetNodeInfo(nodeId);
                             if (!info) {
                                 str << "Node: NameService Error<br>";

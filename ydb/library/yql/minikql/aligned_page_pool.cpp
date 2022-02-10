@@ -112,12 +112,12 @@ TAlignedPagePoolCounters::TAlignedPagePoolCounters(NMonitoring::TDynamicCounterP
 
 TAlignedPagePool::~TAlignedPagePool() {
     if (CheckLostMem && !UncaughtException()) {
-        Y_VERIFY_DEBUG(TotalAllocated == FreePages.size() * POOL_PAGE_SIZE,
+        Y_VERIFY_DEBUG(TotalAllocated == FreePages.size() * POOL_PAGE_SIZE, 
                        "Expected %ld, actual %ld (%ld page(s), %ld offloaded)", TotalAllocated,
                        FreePages.size() * POOL_PAGE_SIZE, FreePages.size(), OffloadedActiveBytes);
         Y_VERIFY_DEBUG(OffloadedActiveBytes == 0, "offloaded: %ld", OffloadedActiveBytes);
     }
-
+ 
     size_t activeBlocksSize = 0;
     for (auto it = ActiveBlocks.cbegin(); ActiveBlocks.cend() != it; ActiveBlocks.erase(it++)) {
         activeBlocksSize += it->second;
@@ -145,16 +145,16 @@ TAlignedPagePool::~TAlignedPagePool() {
         --(*Counters.PoolsCntr);
     }
     TotalAllocated = 0;
-}
+} 
 
-void TAlignedPagePool::ReleaseFreePages() {
-    TotalAllocated -= FreePages.size() * POOL_PAGE_SIZE;
-    if (Counters.TotalBytesAllocatedCntr) {
-        (*Counters.TotalBytesAllocatedCntr) -= FreePages.size() * POOL_PAGE_SIZE;
-    }
-
+void TAlignedPagePool::ReleaseFreePages() { 
+    TotalAllocated -= FreePages.size() * POOL_PAGE_SIZE; 
+    if (Counters.TotalBytesAllocatedCntr) { 
+        (*Counters.TotalBytesAllocatedCntr) -= FreePages.size() * POOL_PAGE_SIZE; 
+    } 
+ 
     for (; !FreePages.empty(); FreePages.pop()) {
-        AllPages.erase(FreePages.top());
+        AllPages.erase(FreePages.top()); 
         TGlobalPools::Instance().Get(0).PushPage(FreePages.top());
     }
 }
@@ -207,9 +207,9 @@ void* TAlignedPagePool::GetPage() {
     }
 
     if (Limit && TotalAllocated + POOL_PAGE_SIZE > Limit && !TryIncreaseLimit(TotalAllocated + POOL_PAGE_SIZE)) {
-        throw TMemoryLimitExceededException();
-    }
-
+        throw TMemoryLimitExceededException(); 
+    } 
+ 
     if (const auto ptr = TGlobalPools::Instance().Get(0).GetPage()) {
         TotalAllocated += POOL_PAGE_SIZE;
         if (AllocNotifyCallback) {
@@ -260,11 +260,11 @@ void TAlignedPagePool::ReturnBlock(void* ptr, size_t size) noexcept {
 void* TAlignedPagePool::Alloc(size_t size) {
     void* res = nullptr;
     size = AlignUp(size, SYS_PAGE_SIZE);
-
+ 
     if (Limit && TotalAllocated + size > Limit && !TryIncreaseLimit(TotalAllocated + size)) {
-        throw TMemoryLimitExceededException();
-    }
-
+        throw TMemoryLimitExceededException(); 
+    } 
+ 
     if (AllocNotifyCallback) {
         if (AllocNotifyCurrentBytes > AllocNotifyBytes) {
             AllocNotifyCallback();
@@ -372,8 +372,8 @@ void* TAlignedPagePool::Alloc(size_t size) {
 
 void TAlignedPagePool::Free(void* ptr, size_t size) noexcept {
     size = AlignUp(size, SYS_PAGE_SIZE);
-    if (size <= MaxMidSize)
-        size = FastClp2(size);
+    if (size <= MaxMidSize) 
+        size = FastClp2(size); 
     if (size <= MaxMidSize) {
         auto level = LeastSignificantBit(size) - LeastSignificantBit(TAlignedPagePool::POOL_PAGE_SIZE);
         Y_VERIFY_DEBUG(level >= 1 && level <= MidLevels);

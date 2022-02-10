@@ -31,20 +31,20 @@ public:
     TClientCommandNode();
 };
 
-class TClientCommandTenant : public TClientCommandTree {
-public:
-    TClientCommandTenant();
-};
-
-class TClientCommandConsole : public TClientCommandTree {
-public:
-    TClientCommandConsole();
-};
-
-class TClientCommandCms : public TClientCommandTree {
-public:
-    TClientCommandCms();
-};
-
+class TClientCommandTenant : public TClientCommandTree { 
+public: 
+    TClientCommandTenant(); 
+}; 
+ 
+class TClientCommandConsole : public TClientCommandTree { 
+public: 
+    TClientCommandConsole(); 
+}; 
+ 
+class TClientCommandCms : public TClientCommandTree { 
+public: 
+    TClientCommandCms(); 
+}; 
+ 
 }
 }

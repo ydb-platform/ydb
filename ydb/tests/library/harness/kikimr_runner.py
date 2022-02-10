@@ -5,7 +5,7 @@ import shutil
 import tempfile
 import time
 import itertools
-from google.protobuf import text_format
+from google.protobuf import text_format 
 
 import ydb.tests.library.common.yatest_common as yatest_common
 
@@ -67,8 +67,8 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         if configurator.sqs_service_enabled:
             self.sqs_port = port_allocator.sqs_port
 
-        self.__role = role
-        self.__node_broker_port = node_broker_port
+        self.__role = role 
+        self.__node_broker_port = node_broker_port 
         self.__log_file = tempfile.NamedTemporaryFile(dir=self.cwd, prefix="logfile_", suffix=".log", delete=False)
         self.__cms_config_cache_file = tempfile.NamedTemporaryFile(
             dir=self.cwd,
@@ -124,9 +124,9 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
                 "grpcs://" if self.__configurator.grpc_ssl_enable else "",
                 self.host,
                 self.__node_broker_port))
-        else:
+        else: 
             command.append("--node=%d" % self.node_id)
-
+ 
         if self.__configurator.grpc_ssl_enable:
             command.append(
                 "--ca=%s" % self.__configurator.grpc_tls_ca_path
@@ -136,7 +136,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
             command.append(
                 "--tenant=%s" % self._tenant_affiliation
             )
-
+ 
         if self.__configurator.grpc_ssl_enable:
             command.append(
                 "--grpcs-port={}".format(
@@ -291,7 +291,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
 
         self.__wait_for_bs_controller_to_start()
         self.__add_bs_box()
-
+ 
         pools = {}
 
         for p in self.__configurator.dynamic_storage_pools:
@@ -354,46 +354,46 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         )
         self._slots[slot_index] = KiKiMRNode(
             slot_index,
-            self.config_path,
+            self.config_path, 
             port_allocator=self.__port_allocator.get_slot_port_allocator(slot_index),
-            cluster_name=self.__cluster_name,
-            configurator=self.__configurator,
-            udfs_dir=self.__common_udfs_dir,
-            role='slot',
+            cluster_name=self.__cluster_name, 
+            configurator=self.__configurator, 
+            udfs_dir=self.__common_udfs_dir, 
+            role='slot', 
             node_broker_port=node_broker_port,
             tenant_affiliation=tenant_affiliation,
             encryption_key=encryption_key,
-        )
+        ) 
         return self._slots[slot_index]
-
-    def __stop_node(self, node):
-        ret = None
-        try:
-            node.stop()
+ 
+    def __stop_node(self, node): 
+        ret = None 
+        try: 
+            node.stop() 
         except daemon.DaemonError as exceptions:
-            ret = exceptions
-        else:
-            if self.__tmpdir is not None:
-                shutil.rmtree(self.__tmpdir, ignore_errors=True)
-            if self.__common_udfs_dir is not None:
-                shutil.rmtree(self.__common_udfs_dir, ignore_errors=True)
-        return ret
-
+            ret = exceptions 
+        else: 
+            if self.__tmpdir is not None: 
+                shutil.rmtree(self.__tmpdir, ignore_errors=True) 
+            if self.__common_udfs_dir is not None: 
+                shutil.rmtree(self.__common_udfs_dir, ignore_errors=True) 
+        return ret 
+ 
     def stop(self):
         saved_exceptions = []
 
-        for slot in self.slots.values():
-            exception = self.__stop_node(slot)
-            if exception is not None:
-                saved_exceptions.append(exception)
-
+        for slot in self.slots.values(): 
+            exception = self.__stop_node(slot) 
+            if exception is not None: 
+                saved_exceptions.append(exception) 
+ 
         for node in self.nodes.values():
             exception = self.__stop_node(node)
             if exception is not None:
                 saved_exceptions.append(exception)
 
         self.__port_allocator.release_ports()
-
+ 
         if saved_exceptions:
             raise daemon.SeveralDaemonErrors(saved_exceptions)
 
@@ -430,31 +430,31 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
 
             self.nodes[node_id].format_pdisk(**pdisk)
 
-    def __add_bs_box(self):
+    def __add_bs_box(self): 
         request = bs.TConfigRequest()
-
-        for node_id in self.__configurator.all_node_ids():
+ 
+        for node_id in self.__configurator.all_node_ids(): 
             cmd = request.Command.add()
             cmd.DefineHostConfig.HostConfigId = node_id
             for drive in self.__configurator.pdisks_info:
                 if drive['node_id'] != node_id:
                     continue
 
-                drive_proto = cmd.DefineHostConfig.Drive.add()
+                drive_proto = cmd.DefineHostConfig.Drive.add() 
                 drive_proto.Path = drive['pdisk_path']
                 drive_proto.Kind = drive['pdisk_user_kind']
                 drive_proto.Type = drive.get('pdisk_type', 0)
-
-        cmd = request.Command.add()
-        cmd.DefineBox.BoxId = 1
-        for node_id, node in self.nodes.items():
-            host = cmd.DefineBox.Host.add()
-            host.Key.Fqdn = node.host
-            host.Key.IcPort = node.ic_port
-            host.HostConfigId = node_id
-
+ 
+        cmd = request.Command.add() 
+        cmd.DefineBox.BoxId = 1 
+        for node_id, node in self.nodes.items(): 
+            host = cmd.DefineBox.Host.add() 
+            host.Key.Fqdn = node.host 
+            host.Key.IcPort = node.ic_port 
+            host.HostConfigId = node_id 
+ 
         self._bs_config_invoke(request)
-
+ 
     def _bs_config_invoke(self, request):
         timeout = yatest_common.plain_or_under_sanitizer(120, 240)
         sleep = 5
@@ -484,8 +484,8 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         if erasure is None:
             erasure = self.__configurator.static_erasure
         request = bs.TConfigRequest()
-        cmd = request.Command.add()
-        cmd.DefineStoragePool.BoxId = 1
+        cmd = request.Command.add() 
+        cmd.DefineStoragePool.BoxId = 1 
 
         pool_id = cmd.DefineStoragePool.StoragePoolId = next(self.__storage_pool_id_allocator)
         if name is None:
@@ -494,7 +494,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         cmd.DefineStoragePool.Name = name
         cmd.DefineStoragePool.Kind = kind
         cmd.DefineStoragePool.ErasureSpecies = str(erasure)
-        cmd.DefineStoragePool.VDiskKind = "Default"
+        cmd.DefineStoragePool.VDiskKind = "Default" 
         cmd.DefineStoragePool.NumGroups = 2
 
         pdisk_filter = cmd.DefineStoragePool.PDiskFilter.add()
@@ -502,7 +502,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         pdisk_filter.Property.add().Kind = pdisk_user_kind
         self._bs_config_invoke(request)
         return name
-
+ 
     def __wait_for_bs_controller_to_start(self):
         monitors = [node.monitor for node in self.nodes.values()]
 

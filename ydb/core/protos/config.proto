@@ -1,4 +1,4 @@
-import "google/protobuf/descriptor.proto";
+import "google/protobuf/descriptor.proto"; 
 import "library/cpp/actors/protos/interconnect.proto";
 import "ydb/core/protos/blobstorage.proto";
 import "ydb/core/protos/blobstorage_config.proto";
@@ -136,7 +136,7 @@ message TStaticNameserviceConfig {
         optional NActorsInterconnect.TNodeLocation Location = 6;
 
         repeated TEndpoint Endpoint = 7;
-
+ 
         optional NActorsInterconnect.TNodeLocation WalleLocation = 8 [deprecated=true];
     }
 
@@ -148,12 +148,12 @@ message TStaticNameserviceConfig {
     optional ENameserviceType Type = 5;
 }
 
-message TDynamicNameserviceConfig {
-    optional uint32 MaxStaticNodeId = 1 [default = 1000];
+message TDynamicNameserviceConfig { 
+    optional uint32 MaxStaticNodeId = 1 [default = 1000]; 
     optional uint32 MaxDynamicNodeId = 2 [default = 200000];
-    optional uint64 LeaseDuration = 3 [default = 3600000000]; // DEPRECATED
-}
-
+    optional uint64 LeaseDuration = 3 [default = 3600000000]; // DEPRECATED 
+} 
+ 
 message TDomainsConfig {
     message TStateStorage {
         message TRing {
@@ -168,11 +168,11 @@ message TDomainsConfig {
         optional TRing Ring = 2;
     }
 
-    message TStoragePoolType {
+    message TStoragePoolType { 
         optional string Kind = 1;
-        optional NKikimrBlobStorage.TDefineStoragePool PoolConfig = 2;
-    }
-
+        optional NKikimrBlobStorage.TDefineStoragePool PoolConfig = 2; 
+    } 
+ 
     message TDomain {
         message TTxLimits {
             optional uint64 PerRequestDataSizeLimit = 1;
@@ -189,8 +189,8 @@ message TDomainsConfig {
         repeated uint32 HiveUid = 7;
         optional uint64 PlanResolution = 8;
         optional string Name = 9;
-        optional TTxLimits TxLimits = 10; // DEPRECATED
-        repeated TStoragePoolType StoragePoolTypes = 11;
+        optional TTxLimits TxLimits = 10; // DEPRECATED 
+        repeated TStoragePoolType StoragePoolTypes = 11; 
         repeated fixed64 ExplicitMediators = 12;
         repeated fixed64 ExplicitCoordinators = 13;
         repeated fixed64 ExplicitAllocators = 14;
@@ -319,12 +319,12 @@ message TBootstrap {
         JOBRUNNER_POOL_MANAGER = 40;
         FLAT_JOBRUNNER_POOL_MANAGER = 41;
 
-        CMS = 51;
-        NODE_BROKER = 52;
-
-        TENANT_SLOT_BROKER = 53;
-        CONSOLE = 54;
-
+        CMS = 51; 
+        NODE_BROKER = 52; 
+ 
+        TENANT_SLOT_BROKER = 53; 
+        CONSOLE = 54; 
+ 
         FAKE_DATASHARD = 700;
     }
 
@@ -344,7 +344,7 @@ message TBootstrap {
     optional uint64 ProxySchemeCacheDistNodes = 3;
     optional NKikimrTablet.TCompactionBroker CompactionBroker = 4;
     optional NKikimrNodeLimits.TNodeLimitsConfig NodeLimits = 5;
-    optional NKikimrResourceBroker.TResourceBrokerConfig ResourceBroker = 6;
+    optional NKikimrResourceBroker.TResourceBrokerConfig ResourceBroker = 6; 
     optional NKikimrSharedCache.TSharedCacheConfig SharedCacheConfig = 7;
     repeated NKikimrSchemeOp.TResourceProfile ResourceProfiles = 8;
     optional TCompileServiceConfig CompileServiceConfig = 9; //may be need special file with resource limits?
@@ -436,48 +436,48 @@ message TChannelProfileConfig {
 }
 
 message TMonitoringConfig {
-    message TDatabaseLabels {
-        optional bool Enabled = 1 [default = true];
-        // If labels are enabled and services list is empty
-        // then GetTenantSensorServices is used to get it.
-        repeated string Services = 2;
-        // Custom database label is not currently supported.
-        // optional string DatabaseLabel = 3 [default = "database"];
-        optional string NoneDatabasetLabelValue = 4 [default = "<none>"];
-        optional string MultipleDatabaseLabelValue = 5 [default = "<multiple>"];
-        // Custom slot label is not currently supported.
-        // optional string SlotLabel = 6 [default = "slot"];
-        optional string StaticSlotLabelValue = 7 [default = "static"];
-        optional string DynamicSlotLabelValue = 8 [default = "dynamic"];
-        optional string MultipleSlotLabelValue = 9 [default = "<multiple>"];
+    message TDatabaseLabels { 
+        optional bool Enabled = 1 [default = true]; 
+        // If labels are enabled and services list is empty 
+        // then GetTenantSensorServices is used to get it. 
+        repeated string Services = 2; 
+        // Custom database label is not currently supported. 
+        // optional string DatabaseLabel = 3 [default = "database"]; 
+        optional string NoneDatabasetLabelValue = 4 [default = "<none>"]; 
+        optional string MultipleDatabaseLabelValue = 5 [default = "<multiple>"]; 
+        // Custom slot label is not currently supported. 
+        // optional string SlotLabel = 6 [default = "slot"]; 
+        optional string StaticSlotLabelValue = 7 [default = "static"]; 
+        optional string DynamicSlotLabelValue = 8 [default = "dynamic"]; 
+        optional string MultipleSlotLabelValue = 9 [default = "<multiple>"]; 
         optional bool GroupAllMetrics = 10;
-    };
-
-    message TDatabaseAttributeLabels {
-        message TAttributeGroup {
-            // Currently custom list of attributes is not
-            // supported. GetTenantAttributeLabels is used
-            // to get default list.
-            //repeated string Attributes = 1;
-            repeated string Services = 2;
-        }
-
-        optional bool Enabled = 1 [default = true];
-        // If labels are enabled and no attribute group
-        // is specified then default one is built using
-        // GetTenantAttributeSensorServices and
-        // GetTenantAttributeLabels.
-        repeated TAttributeGroup AttributeGroups = 2;
-    };
-
+    }; 
+ 
+    message TDatabaseAttributeLabels { 
+        message TAttributeGroup { 
+            // Currently custom list of attributes is not 
+            // supported. GetTenantAttributeLabels is used 
+            // to get default list. 
+            //repeated string Attributes = 1; 
+            repeated string Services = 2; 
+        } 
+ 
+        optional bool Enabled = 1 [default = true]; 
+        // If labels are enabled and no attribute group 
+        // is specified then default one is built using 
+        // GetTenantAttributeSensorServices and 
+        // GetTenantAttributeLabels. 
+        repeated TAttributeGroup AttributeGroups = 2; 
+    }; 
+ 
     optional uint32 MonitoringPort = 1 [default = 0];
     optional uint32 MonitoringThreads = 2 [default = 10];
     optional string MonitoringCaption = 3 [default = "YDB Monitoring"];
     optional uint32 TabletMonitoringRetries = 4 [default = 1];
-    optional bool ForceDatabaseLabels = 5 [default = false];
+    optional bool ForceDatabaseLabels = 5 [default = false]; 
     optional string MonitoringAddress = 6;
-    optional TDatabaseLabels DatabaseLabels = 7;
-    optional TDatabaseAttributeLabels DatabaseAttributeLabels = 8;
+    optional TDatabaseLabels DatabaseLabels = 7; 
+    optional TDatabaseAttributeLabels DatabaseAttributeLabels = 8; 
     optional string DataCenter = 9;
     optional string HostLabelOverride = 10;
     optional string ProcessLocation = 11;
@@ -565,7 +565,7 @@ message TGRpcConfig {
     optional uint64 GRpcMemoryQuotaBytes = 5 [default = 1073741824]; // 1 GB default; 0 == unlimited
     optional uint64 MaxMessageSize = 6; // default = DEFAULT_GRPC_MESSAGE_SIZE_LIMIT
     optional uint32 MaxInFlight = 7; // 0 == unlimited [default]
-    optional NKikimrStream.TStreamingConfig StreamingConfig = 8;
+    optional NKikimrStream.TStreamingConfig StreamingConfig = 8; 
     // Ssl part
     optional uint32 SslPort = 9;
     optional string CA = 10;
@@ -597,15 +597,15 @@ message TGRpcConfig {
     repeated TGRpcConfig ExtEndpoints = 200; // run specific services on separate endpoints
 }
 
-message TDynamicNodeConfig {
-    optional string NodeBrokerAddress = 1; //DEPRECATED
-    optional string DomainName = 2; //DEPRECATED
-    optional uint32 InterconnectPort = 3; //DEPRECATED
-    optional NKikimrNodeBroker.TNodeInfo NodeInfo = 4;
-    optional string NodeAddress = 5; //DEPRECATED
-    optional string NodeHost = 6; //DEPRECATED
-}
-
+message TDynamicNodeConfig { 
+    optional string NodeBrokerAddress = 1; //DEPRECATED 
+    optional string DomainName = 2; //DEPRECATED 
+    optional uint32 InterconnectPort = 3; //DEPRECATED 
+    optional NKikimrNodeBroker.TNodeInfo NodeInfo = 4; 
+    optional string NodeAddress = 5; //DEPRECATED 
+    optional string NodeHost = 6; //DEPRECATED 
+} 
+ 
 message TFeatureFlags {
     enum Tribool {
         UNSET = 0;
@@ -873,77 +873,77 @@ message TSqsConfig {
     optional TYdbAuthConfig AuthConfig = 67;
 }
 
-message TConfigsDispatcherConfig {
-}
-
-message TCompactionPolicy {
-    optional string Name = 1;
+message TConfigsDispatcherConfig { 
+} 
+ 
+message TCompactionPolicy { 
+    optional string Name = 1; 
     optional NKikimrSchemeOp.TCompactionPolicy CompactionPolicy = 2;
-}
-
-message TExecutionPolicy {
-    optional string Name = 1;
-
+} 
+ 
+message TExecutionPolicy { 
+    optional string Name = 1; 
+ 
     optional NKikimrSchemeOp.TPipelineConfig PipelineConfig = 2;
-    optional string ResourceProfile = 3;
-    optional bool EnableFilterByKey = 4 [default = false];
-    optional bool ExecutorFastLogPolicy = 5 [default  = true];
-    optional uint64 TxReadSizeLimit = 6;
+    optional string ResourceProfile = 3; 
+    optional bool EnableFilterByKey = 4 [default = false]; 
+    optional bool ExecutorFastLogPolicy = 5 [default  = true]; 
+    optional uint64 TxReadSizeLimit = 6; 
 
     optional bool EnableEraseCache = 7;
     optional uint32 EraseCacheMinRows = 8;
     optional uint32 EraseCacheMaxBytes = 9;
-}
-
-message TPartitioningPolicy {
-    optional string Name = 1;
-
-    optional uint32 UniformPartitionsCount = 2;
-    optional bool AutoSplit = 3;
-    optional bool AutoMerge = 4;
-    optional uint64 SizeToSplit = 5;
-    optional uint64 MaxPartitionsCount = 6;
-}
-
-message TStoragePolicy {
-    optional string Name = 1;
+} 
+ 
+message TPartitioningPolicy { 
+    optional string Name = 1; 
+ 
+    optional uint32 UniformPartitionsCount = 2; 
+    optional bool AutoSplit = 3; 
+    optional bool AutoMerge = 4; 
+    optional uint64 SizeToSplit = 5; 
+    optional uint64 MaxPartitionsCount = 6; 
+} 
+ 
+message TStoragePolicy { 
+    optional string Name = 1; 
     repeated NKikimrSchemeOp.TFamilyDescription ColumnFamilies = 2;
-}
-
-message TReplicationPolicy {
-    optional string Name = 1;
-
+} 
+ 
+message TReplicationPolicy { 
+    optional string Name = 1; 
+ 
     optional uint64 FollowerCount = 2;
     optional bool AllowFollowerPromotion = 3 [default = true];
-    optional bool CrossDataCenter = 4;
-}
-
-message TCachingPolicy {
-    optional string Name = 1;
-
-    optional uint64 ExecutorCacheSize = 2;
-}
-
-message TTableProfile {
-    optional string Name = 1;
-    optional string CompactionPolicy = 2;
-    optional string ExecutionPolicy = 3;
-    optional string PartitioningPolicy = 4;
-    optional string StoragePolicy = 5;
-    optional string ReplicationPolicy = 6;
-    optional string CachingPolicy = 7;
-}
-
-message TTableProfilesConfig {
-    repeated TTableProfile TableProfiles = 1;
-    repeated TCompactionPolicy CompactionPolicies = 2;
-    repeated TExecutionPolicy ExecutionPolicies = 3;
-    repeated TPartitioningPolicy PartitioningPolicies = 4;
-    repeated TStoragePolicy StoragePolicies = 5;
-    repeated TReplicationPolicy ReplicationPolicies = 6;
-    repeated TCachingPolicy CachingPolicies = 7;
-}
-
+    optional bool CrossDataCenter = 4; 
+} 
+ 
+message TCachingPolicy { 
+    optional string Name = 1; 
+ 
+    optional uint64 ExecutorCacheSize = 2; 
+} 
+ 
+message TTableProfile { 
+    optional string Name = 1; 
+    optional string CompactionPolicy = 2; 
+    optional string ExecutionPolicy = 3; 
+    optional string PartitioningPolicy = 4; 
+    optional string StoragePolicy = 5; 
+    optional string ReplicationPolicy = 6; 
+    optional string CachingPolicy = 7; 
+} 
+ 
+message TTableProfilesConfig { 
+    repeated TTableProfile TableProfiles = 1; 
+    repeated TCompactionPolicy CompactionPolicies = 2; 
+    repeated TExecutionPolicy ExecutionPolicies = 3; 
+    repeated TPartitioningPolicy PartitioningPolicies = 4; 
+    repeated TStoragePolicy StoragePolicies = 5; 
+    repeated TReplicationPolicy ReplicationPolicies = 6; 
+    repeated TCachingPolicy CachingPolicies = 7; 
+} 
+ 
 message TTableServiceConfig {
     message TResourceManager {
         optional uint32 ComputeActorsCount = 1 [default = 1000];
@@ -1084,69 +1084,69 @@ message TTableServiceConfig {
     optional TQueryReplayConfig QueryReplayConfig = 21;
 };
 
-// Config describes immediate controls and allows
-// to manage their values (not variety and limits)
-// via CMS. All fields should be either [u]int64 or
-// another message.
-//
-// Control names match field names. For embedded
-// messages field names are concatenated via '.'
-// symbol. E.g. "DataShardControls.MaxTxInFly".
-//
-// Min, max and default values are specified in
-// field options.
-message TImmediateControlOptions {
-    optional string Description = 1;
-    optional uint64 MinValue = 2;
-    optional uint64 MaxValue = 3;
-    optional uint64 DefaultValue = 4;
-}
-
-extend google.protobuf.FieldOptions {
-    optional TImmediateControlOptions ControlOptions = 61001;
-}
-
-message TImmediateControlsConfig {
-    message TDataShardControls {
-        message TExecutionProfileOptions {
-            optional uint64 LogThresholdMs = 1 [(ControlOptions) = {
-                Description: "Log execution profile for slow operations",
-                MinValue: 0,
-                MaxValue: 86400000,
-                DefaultValue: 0 }];
-            optional uint64 BufferThresholdMs = 2 [(ControlOptions) = {
-                Description: "Store execution profile for slow operations",
-                MinValue: 0,
-                MaxValue: 86400000,
-                DefaultValue: 0 }];
-            optional uint64 BufferSize = 3 [(ControlOptions) = {
-                Description: "Slow operation profiles buffer size",
-                MinValue: 0,
-                MaxValue: 1000,
-                DefaultValue: 100 }];
-        }
-
-        optional uint64 MaxTxInFly = 1 [(ControlOptions) = {
-            Description: "Maximum tx queue size for single shard",
-            MinValue: 0,
-            MaxValue: 100000,
-            DefaultValue: 15000 }];
-        optional uint64 DisableByKeyFilter = 2 [(ControlOptions) = {
-            Description: "Disable bloom filter usage on row selects",
-            MinValue: 0,
-            MaxValue: 1,
-            DefaultValue: 0 }];
-        optional uint64 MaxTxLagMilliseconds = 3 [(ControlOptions) = {
-            Description: "Max lag in tx plan execution before shard becomes overloaded",
-            MinValue: 0,
-            MaxValue: 2592000000,
-            DefaultValue: 300000 }];
-        optional uint64 CanCancelROWithReadSets = 4 [(ControlOptions) = {
-            Description: "Allow to cancel RO tx with output read sets by timeout",
-            MinValue: 0,
-            MaxValue: 1,
-            DefaultValue: 0 }];
-        optional TExecutionProfileOptions DataTxProfile = 5;
+// Config describes immediate controls and allows 
+// to manage their values (not variety and limits) 
+// via CMS. All fields should be either [u]int64 or 
+// another message. 
+// 
+// Control names match field names. For embedded 
+// messages field names are concatenated via '.' 
+// symbol. E.g. "DataShardControls.MaxTxInFly". 
+// 
+// Min, max and default values are specified in 
+// field options. 
+message TImmediateControlOptions { 
+    optional string Description = 1; 
+    optional uint64 MinValue = 2; 
+    optional uint64 MaxValue = 3; 
+    optional uint64 DefaultValue = 4; 
+} 
+ 
+extend google.protobuf.FieldOptions { 
+    optional TImmediateControlOptions ControlOptions = 61001; 
+} 
+ 
+message TImmediateControlsConfig { 
+    message TDataShardControls { 
+        message TExecutionProfileOptions { 
+            optional uint64 LogThresholdMs = 1 [(ControlOptions) = { 
+                Description: "Log execution profile for slow operations", 
+                MinValue: 0, 
+                MaxValue: 86400000, 
+                DefaultValue: 0 }]; 
+            optional uint64 BufferThresholdMs = 2 [(ControlOptions) = { 
+                Description: "Store execution profile for slow operations", 
+                MinValue: 0, 
+                MaxValue: 86400000, 
+                DefaultValue: 0 }]; 
+            optional uint64 BufferSize = 3 [(ControlOptions) = { 
+                Description: "Slow operation profiles buffer size", 
+                MinValue: 0, 
+                MaxValue: 1000, 
+                DefaultValue: 100 }]; 
+        } 
+ 
+        optional uint64 MaxTxInFly = 1 [(ControlOptions) = { 
+            Description: "Maximum tx queue size for single shard", 
+            MinValue: 0, 
+            MaxValue: 100000, 
+            DefaultValue: 15000 }]; 
+        optional uint64 DisableByKeyFilter = 2 [(ControlOptions) = { 
+            Description: "Disable bloom filter usage on row selects", 
+            MinValue: 0, 
+            MaxValue: 1, 
+            DefaultValue: 0 }]; 
+        optional uint64 MaxTxLagMilliseconds = 3 [(ControlOptions) = { 
+            Description: "Max lag in tx plan execution before shard becomes overloaded", 
+            MinValue: 0, 
+            MaxValue: 2592000000, 
+            DefaultValue: 300000 }]; 
+        optional uint64 CanCancelROWithReadSets = 4 [(ControlOptions) = { 
+            Description: "Allow to cancel RO tx with output read sets by timeout", 
+            MinValue: 0, 
+            MaxValue: 1, 
+            DefaultValue: 0 }]; 
+        optional TExecutionProfileOptions DataTxProfile = 5; 
 
         optional uint64 BackupReadAheadLo = 6 [(ControlOptions) = {
             Description: "Override for backup readahead (low watermark)",
@@ -1158,35 +1158,35 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 134217728,
             DefaultValue: 0 }];
-    }
-
-    message TTxLimitControls {
-        optional uint64 PerRequestDataSizeLimit = 1 [(ControlOptions) = {
-            Description: "Maximum read data size per transaction",
-            MinValue: 0,
+    } 
+ 
+    message TTxLimitControls { 
+        optional uint64 PerRequestDataSizeLimit = 1 [(ControlOptions) = { 
+            Description: "Maximum read data size per transaction", 
+            MinValue: 0, 
             MaxValue: 256000000000000,
-            DefaultValue: 53687091200 }];
-        optional uint64 PerShardReadSizeLimit = 2 [(ControlOptions) = {
-            Description: "Maximum read data size per transaction per shard",
-            MinValue: 0,
-            MaxValue: 107374182400,
-            DefaultValue: 5368709120 }];
-        optional uint64 PerShardIncomingReadSetSizeLimit = 3 [(ControlOptions) = {
-            Description: "Maximum input read sets size per transaction per shard",
-            MinValue: 0,
-            MaxValue: 5368709120,
-            DefaultValue: 209715200 }];
-        optional uint64 DefaultTimeoutMs = 4 [(ControlOptions) = {
-            Description: "Default execution timeout for transactions",
-            MinValue: 0,
-            MaxValue: 3600000,
-            DefaultValue: 60000 }];
-    }
-
-    optional TDataShardControls DataShardControls = 1;
-    optional TTxLimitControls TxLimitControls = 2;
-};
-
+            DefaultValue: 53687091200 }]; 
+        optional uint64 PerShardReadSizeLimit = 2 [(ControlOptions) = { 
+            Description: "Maximum read data size per transaction per shard", 
+            MinValue: 0, 
+            MaxValue: 107374182400, 
+            DefaultValue: 5368709120 }]; 
+        optional uint64 PerShardIncomingReadSetSizeLimit = 3 [(ControlOptions) = { 
+            Description: "Maximum input read sets size per transaction per shard", 
+            MinValue: 0, 
+            MaxValue: 5368709120, 
+            DefaultValue: 209715200 }]; 
+        optional uint64 DefaultTimeoutMs = 4 [(ControlOptions) = { 
+            Description: "Default execution timeout for transactions", 
+            MinValue: 0, 
+            MaxValue: 3600000, 
+            DefaultValue: 60000 }]; 
+    } 
+ 
+    optional TDataShardControls DataShardControls = 1; 
+    optional TTxLimitControls TxLimitControls = 2; 
+}; 
+ 
 message TMeteringConfig {
     optional string MeteringFilePath = 1;
     repeated string SystemBackupSIDs = 2;
@@ -1310,16 +1310,16 @@ message TCompactionConfig {
     optional TBackgroundCompactionConfig BackgroundCompactionConfig = 1;
 }
 
-// This message is used to upload custom service configs
-// to CMS. Config name is used to identify owner and
-// data format.
+// This message is used to upload custom service configs 
+// to CMS. Config name is used to identify owner and 
+// data format. 
 // Custom config validators should b8e used to detect name
-// conflicts and check config consistency.
-message TNamedConfig {
-    optional string Name = 1;
-    optional bytes Config = 2;
-}
-
+// conflicts and check config consistency. 
+message TNamedConfig { 
+    optional string Name = 1; 
+    optional bytes Config = 2; 
+} 
+ 
 message TConfigItemVersion {
     optional uint32 Kind = 1;
     optional uint64 Id = 2;
@@ -1351,24 +1351,24 @@ message TAppConfig {
     optional TKQPConfig KQPConfig = 17;
     optional TMemoryLogConfig MemoryLogConfig = 19;
     optional TGRpcConfig GRpcConfig = 20;
-    optional TDynamicNameserviceConfig DynamicNameserviceConfig = 22;
-    //optional TLocalConfig LocalConfig = 23; DEPRECATED
-    optional TDynamicNodeConfig DynamicNodeConfig = 24;
-    optional NKikimrCms.TCmsConfig CmsConfig = 25;
+    optional TDynamicNameserviceConfig DynamicNameserviceConfig = 22; 
+    //optional TLocalConfig LocalConfig = 23; DEPRECATED 
+    optional TDynamicNodeConfig DynamicNodeConfig = 24; 
+    optional NKikimrCms.TCmsConfig CmsConfig = 25; 
     optional TFeatureFlags FeatureFlags = 26;
     optional TSqsConfig SqsConfig = 27;
     optional NKikimrPQ.TPQConfig PQConfig = 28;
-    optional NKikimrTenantPool.TTenantPoolConfig TenantPoolConfig = 29;
+    optional NKikimrTenantPool.TTenantPoolConfig TenantPoolConfig = 29; 
     optional NKikimrProto.TAuthConfig AuthConfig = 30;
-    optional NKikimrTenantSlotBroker.TConfig TenantSlotBrokerConfig = 32;
-    optional TConfigsDispatcherConfig ConfigsDispatcherConfig = 33;
-    optional TTableProfilesConfig TableProfilesConfig = 34;
+    optional NKikimrTenantSlotBroker.TConfig TenantSlotBrokerConfig = 32; 
+    optional TConfigsDispatcherConfig ConfigsDispatcherConfig = 33; 
+    optional TTableProfilesConfig TableProfilesConfig = 34; 
     optional NKikimrProto.TKeyConfig KeyConfig = 35;
     optional NKikimrProto.TKeyConfig PDiskKeyConfig = 51;
-    optional NKikimrNodeBroker.TConfig NodeBrokerConfig = 36;
+    optional NKikimrNodeBroker.TConfig NodeBrokerConfig = 36; 
     optional TTableServiceConfig TableServiceConfig = 37;
     optional NKikimrSharedCache.TSharedCacheConfig SharedCacheConfig = 38; // dynamic configuration via cms
-    optional TImmediateControlsConfig ImmediateControlsConfig = 39;
+    optional TImmediateControlsConfig ImmediateControlsConfig = 39; 
     optional TAllocatorConfig AllocatorConfig = 40;
     optional NKikimrPQ.TPQClusterDiscoveryConfig PQClusterDiscoveryConfig = 41;
     optional NKikimrNetClassifier.TNetClassifierConfig NetClassifierConfig = 42;
@@ -1380,8 +1380,8 @@ message TAppConfig {
     optional NYq.NConfig.TConfig YandexQueryConfig = 50;
     optional TCompactionConfig CompactionConfig = 52;
 
-    repeated TNamedConfig NamedConfigs = 100;
-    optional string ClusterYamlConfig = 101;
+    repeated TNamedConfig NamedConfigs = 100; 
+    optional string ClusterYamlConfig = 101; 
 
     optional TConfigVersion Version = 102;
 }

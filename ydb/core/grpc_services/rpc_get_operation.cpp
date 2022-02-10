@@ -70,13 +70,13 @@ public:
 
     void Bootstrap(const TActorContext &ctx) {
         const auto req = Request->GetProtoRequest();
-
-        try {
+ 
+        try { 
             OperationId_ = TOperationId(req->id());
 
             switch (OperationId_.GetKind()) {
             case TOperationId::CMS_REQUEST:
-                SendCheckCmsOperation(ctx);
+                SendCheckCmsOperation(ctx); 
                 break;
             case TOperationId::EXPORT:
             case TOperationId::IMPORT:
@@ -87,13 +87,13 @@ public:
                 ResolveDatabase();
                 break;
             default:
-                SendNotifyTxCompletion(ctx);
+                SendNotifyTxCompletion(ctx); 
                 break;
             }
-        } catch (const yexception& ex) {
+        } catch (const yexception& ex) { 
             return ReplyWithStatus(StatusIds::BAD_REQUEST);
-        }
-
+        } 
+ 
         Become(&TGetOperationRPC::AwaitState);
     }
     STFUNC(AwaitState) {
@@ -101,7 +101,7 @@ public:
             HFunc(TEvTxUserProxy::TEvProposeTransactionStatus, HandleResponse);
             HFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
             HFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered, Handle);
-            HFunc(NConsole::TEvConsole::TEvGetOperationResponse, Handle);
+            HFunc(NConsole::TEvConsole::TEvGetOperationResponse, Handle); 
             HFunc(NSchemeShard::TEvExport::TEvGetExportResponse, Handle);
             HFunc(NSchemeShard::TEvImport::TEvGetImportResponse, Handle);
             HFunc(NSchemeShard::TEvIndexBuilder::TEvGetResponse, Handle);
@@ -119,45 +119,45 @@ private:
         ReplyGetOperationResponse(true, ctx);
     }
 
-    void Handle(NConsole::TEvConsole::TEvGetOperationResponse::TPtr &ev, const TActorContext& ctx) {
-        auto &rec = ev->Get()->Record.GetResponse();
+    void Handle(NConsole::TEvConsole::TEvGetOperationResponse::TPtr &ev, const TActorContext& ctx) { 
+        auto &rec = ev->Get()->Record.GetResponse(); 
         if (rec.operation().ready())
-            ReplyWithError(rec.operation().status(), rec.operation().issues(), ctx);
-        else
-            ReplyGetOperationResponse(false, ctx);
-    }
-
+            ReplyWithError(rec.operation().status(), rec.operation().issues(), ctx); 
+        else 
+            ReplyGetOperationResponse(false, ctx); 
+    } 
+ 
     void HandleResponse(typename TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, const TActorContext& ctx) {
         Y_UNUSED(ev);
         Y_UNUSED(ctx);
     }
 
-    void SendCheckCmsOperation(const TActorContext& ctx) {
-        ui64 tid;
-
-        try {
+    void SendCheckCmsOperation(const TActorContext& ctx) { 
+        ui64 tid; 
+ 
+        try { 
             const auto& cmsIds = OperationId_.GetValue("cmstid");
-            if (cmsIds.size() != 1) {
+            if (cmsIds.size() != 1) { 
                 return ReplyWithStatus(StatusIds::BAD_REQUEST);
-            }
-            if (!TryFromString(*cmsIds[0], tid)) {
+            } 
+            if (!TryFromString(*cmsIds[0], tid)) { 
                 return ReplyWithStatus(StatusIds::BAD_REQUEST);
-            }
-        } catch (const yexception& ex) {
+            } 
+        } catch (const yexception& ex) { 
             Request->RaiseIssue(NYql::ExceptionToIssue(ex));
             return ReplyWithStatus(StatusIds::BAD_REQUEST);
-        }
-
-        IActor* pipeActor = NTabletPipe::CreateClient(ctx.SelfID, tid);
-        Y_VERIFY(pipeActor);
-        PipeActorId_ = ctx.ExecutorThread.RegisterActor(pipeActor);
-
-        auto request = MakeHolder<NConsole::TEvConsole::TEvGetOperationRequest>();
+        } 
+ 
+        IActor* pipeActor = NTabletPipe::CreateClient(ctx.SelfID, tid); 
+        Y_VERIFY(pipeActor); 
+        PipeActorId_ = ctx.ExecutorThread.RegisterActor(pipeActor); 
+ 
+        auto request = MakeHolder<NConsole::TEvConsole::TEvGetOperationRequest>(); 
         request->Record.MutableRequest()->set_id(Request->GetProtoRequest()->id());
         request->Record.SetUserToken(Request->GetInternalToken());
-        NTabletPipe::SendData(ctx, PipeActorId_, request.Release());
-    }
-
+        NTabletPipe::SendData(ctx, PipeActorId_, request.Release()); 
+    } 
+ 
     void SendNotifyTxCompletion(const TActorContext& ctx) {
         ui64 txId;
         ui64 schemeShardTabletId;
@@ -177,11 +177,11 @@ private:
 
         IActor* pipeActor = NTabletPipe::CreateClient(ctx.SelfID, schemeShardTabletId);
         Y_VERIFY(pipeActor);
-        PipeActorId_ = ctx.ExecutorThread.RegisterActor(pipeActor);
+        PipeActorId_ = ctx.ExecutorThread.RegisterActor(pipeActor); 
 
         auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
         request->Record.SetTxId(txId);
-        NTabletPipe::SendData(ctx, PipeActorId_, request.Release());
+        NTabletPipe::SendData(ctx, PipeActorId_, request.Release()); 
     }
 
     void Handle(NSchemeShard::TEvExport::TEvGetExportResponse::TPtr& ev, const TActorContext& ctx) {
@@ -223,15 +223,15 @@ private:
     }
 
     void ReplyWithError(const StatusIds::StatusCode status,
-                        const google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage> &issues,
-                        const TActorContext &ctx) {
+                        const google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage> &issues, 
+                        const TActorContext &ctx) { 
         TEvGetOperationRequest::TResponse resp;
         auto deferred = resp.mutable_operation();
         deferred->set_id(Request->GetProtoRequest()->id());
         deferred->set_ready(true);
         deferred->set_status(status);
-        if (issues.size())
-            deferred->mutable_issues()->CopyFrom(issues);
+        if (issues.size()) 
+            deferred->mutable_issues()->CopyFrom(issues); 
         Reply(resp, ctx);
     }
 

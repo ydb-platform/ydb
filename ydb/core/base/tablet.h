@@ -3,19 +3,19 @@
 #include "defs.h"
 #include "events.h"
 #include "logoblob.h"
-#include "shared_quota.h"
-
+#include "shared_quota.h" 
+ 
 #include <ydb/core/base/resource_profile.h>
 #include <ydb/core/protos/base.pb.h>
 #include <ydb/core/protos/tablet.pb.h>
 #include <ydb/core/protos/tablet_tx.pb.h>
 #include <ydb/core/tablet/tablet_metrics.h>
-
+ 
 #include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
 #include <util/generic/deque.h>
 #include <util/generic/vector.h>
 #include <util/datetime/base.h>
-
+ 
 #include <functional>
 
 namespace NKikimr {
@@ -51,7 +51,7 @@ struct TEvTablet {
         EvFollowerGcApplied, // from leader to user tablet when all known followers reported consumed gc barrier
         EvFollowerSyncComplete, // from leader to user tablet when all old followers are touched and synced
         EvCutTabletHistory,
-        EvUpdateConfig,
+        EvUpdateConfig, 
 
         EvCommit = EvBoot + 512,
         EvAux,
@@ -205,8 +205,8 @@ struct TEvTablet {
             , DependencyGraph(dependencyGraph)
             , Launcher(launcher)
             , TabletStorageInfo(info)
-            , ResourceProfiles(profiles)
-            , TxCacheQuota(txCacheQuota)
+            , ResourceProfiles(profiles) 
+            , TxCacheQuota(txCacheQuota) 
             , GroupReadBytes(std::move(read))
             , GroupReadOps(std::move(readOps))
         {}
@@ -632,7 +632,7 @@ struct TEvTablet {
 
         TResourceProfilesPtr ResourceProfiles;
         TSharedQuotaPtr TxCacheQuota;
-
+ 
         TEvFBoot(ui64 tabletID, ui32 followerID, ui32 generation, TActorId launcher, const TEvFollowerUpdate &upd,
                  TIntrusivePtr<TTabletStorageInfo> info, TResourceProfilesPtr profiles = nullptr,
                  TSharedQuotaPtr txCacheQuota = nullptr)
@@ -642,8 +642,8 @@ struct TEvTablet {
             , Launcher(launcher)
             , Update(new TFUpdateBody(upd))
             , TabletStorageInfo(info)
-            , ResourceProfiles(profiles)
-            , TxCacheQuota(txCacheQuota)
+            , ResourceProfiles(profiles) 
+            , TxCacheQuota(txCacheQuota) 
         {}
 
         TEvFBoot(ui64 tabletID, ui32 followerID, ui32 generation, TActorId launcher, TDependencyGraph *dependencyGraph,
@@ -731,14 +731,14 @@ struct TEvTablet {
     struct TEvCutTabletHistory : TEventPB<TEvCutTabletHistory, NKikimrTabletBase::TEvCutTabletHistory, EvCutTabletHistory> {
         TEvCutTabletHistory() = default;
     };
-
-    struct TEvUpdateConfig : TEventLocal<TEvUpdateConfig, EvUpdateConfig> {
+ 
+    struct TEvUpdateConfig : TEventLocal<TEvUpdateConfig, EvUpdateConfig> { 
         TResourceProfilesPtr ResourceProfiles;
-
+ 
         TEvUpdateConfig(TResourceProfilesPtr profiles)
-            : ResourceProfiles(profiles)
-        {}
-    };
+            : ResourceProfiles(profiles) 
+        {} 
+    }; 
 
     struct TEvFeatures : TEventLocal<TEvFeatures, EvFeatures> {
         enum EFeatureFlags : ui32 {

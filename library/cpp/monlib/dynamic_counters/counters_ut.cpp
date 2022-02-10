@@ -96,134 +96,134 @@ Y_UNIT_TEST_SUITE(TDynamicCountersTest) {
                                   "  users:count = 7\n"
                                   "}\n");
     }
-
+ 
     Y_UNIT_TEST(MergeSubgroup) {
-        TDynamicCounterPtr rootGroup(new TDynamicCounters());
-
-        auto sensor1 = rootGroup->GetNamedCounter("sensor", "1");
-        *sensor1 = 1;
-
-        auto group1 = rootGroup->GetSubgroup("group", "1");
-        auto sensor2 = group1->GetNamedCounter("sensor", "2");
-        *sensor2 = 2;
-
-        auto group2 = group1->GetSubgroup("group", "2");
-        auto sensor3 = group2->GetNamedCounter("sensor", "3");
-        *sensor3 = 3;
-
-        rootGroup->MergeWithSubgroup("group", "1");
-
-        TStringStream ss;
-        TCountersPrinter printer(&ss);
-        rootGroup->Accept("root", "counters", printer);
-
-        UNIT_ASSERT_STRINGS_EQUAL(ss.Str(),
-                                  "root:counters {\n"
-                                  "  group:2 {\n"
-                                  "    sensor:3 = 3\n"
-                                  "  }\n"
-                                  "  sensor:1 = 1\n"
-                                  "  sensor:2 = 2\n"
-                                  "}\n");
-    }
-
+        TDynamicCounterPtr rootGroup(new TDynamicCounters()); 
+ 
+        auto sensor1 = rootGroup->GetNamedCounter("sensor", "1"); 
+        *sensor1 = 1; 
+ 
+        auto group1 = rootGroup->GetSubgroup("group", "1"); 
+        auto sensor2 = group1->GetNamedCounter("sensor", "2"); 
+        *sensor2 = 2; 
+ 
+        auto group2 = group1->GetSubgroup("group", "2"); 
+        auto sensor3 = group2->GetNamedCounter("sensor", "3"); 
+        *sensor3 = 3; 
+ 
+        rootGroup->MergeWithSubgroup("group", "1"); 
+ 
+        TStringStream ss; 
+        TCountersPrinter printer(&ss); 
+        rootGroup->Accept("root", "counters", printer); 
+ 
+        UNIT_ASSERT_STRINGS_EQUAL(ss.Str(), 
+                                  "root:counters {\n" 
+                                  "  group:2 {\n" 
+                                  "    sensor:3 = 3\n" 
+                                  "  }\n" 
+                                  "  sensor:1 = 1\n" 
+                                  "  sensor:2 = 2\n" 
+                                  "}\n"); 
+    } 
+ 
     Y_UNIT_TEST(ResetCounters) {
-        TDynamicCounterPtr rootGroup(new TDynamicCounters());
-
-        auto sensor1 = rootGroup->GetNamedCounter("sensor", "1");
-        *sensor1 = 1;
-
-        auto group1 = rootGroup->GetSubgroup("group", "1");
-        auto sensor2 = group1->GetNamedCounter("sensor", "2");
-        *sensor2 = 2;
-
-        auto group2 = group1->GetSubgroup("group", "2");
-        auto sensor3 = group2->GetNamedCounter("sensor", "3", true);
-        *sensor3 = 3;
-
-        rootGroup->ResetCounters(true);
-
-        TStringStream ss1;
-        TCountersPrinter printer1(&ss1);
-        rootGroup->Accept("root", "counters", printer1);
-
-        UNIT_ASSERT_STRINGS_EQUAL(ss1.Str(),
-                                  "root:counters {\n"
-                                  "  group:1 {\n"
-                                  "    group:2 {\n"
-                                  "      sensor:3 = 0\n"
-                                  "    }\n"
-                                  "    sensor:2 = 2\n"
-                                  "  }\n"
-                                  "  sensor:1 = 1\n"
-                                  "}\n");
-
-        rootGroup->ResetCounters();
-
-        TStringStream ss2;
-        TCountersPrinter printer2(&ss2);
-        rootGroup->Accept("root", "counters", printer2);
-
-        UNIT_ASSERT_STRINGS_EQUAL(ss2.Str(),
-                                  "root:counters {\n"
-                                  "  group:1 {\n"
-                                  "    group:2 {\n"
-                                  "      sensor:3 = 0\n"
-                                  "    }\n"
-                                  "    sensor:2 = 0\n"
-                                  "  }\n"
-                                  "  sensor:1 = 0\n"
-                                  "}\n");
-    }
-
+        TDynamicCounterPtr rootGroup(new TDynamicCounters()); 
+ 
+        auto sensor1 = rootGroup->GetNamedCounter("sensor", "1"); 
+        *sensor1 = 1; 
+ 
+        auto group1 = rootGroup->GetSubgroup("group", "1"); 
+        auto sensor2 = group1->GetNamedCounter("sensor", "2"); 
+        *sensor2 = 2; 
+ 
+        auto group2 = group1->GetSubgroup("group", "2"); 
+        auto sensor3 = group2->GetNamedCounter("sensor", "3", true); 
+        *sensor3 = 3; 
+ 
+        rootGroup->ResetCounters(true); 
+ 
+        TStringStream ss1; 
+        TCountersPrinter printer1(&ss1); 
+        rootGroup->Accept("root", "counters", printer1); 
+ 
+        UNIT_ASSERT_STRINGS_EQUAL(ss1.Str(), 
+                                  "root:counters {\n" 
+                                  "  group:1 {\n" 
+                                  "    group:2 {\n" 
+                                  "      sensor:3 = 0\n" 
+                                  "    }\n" 
+                                  "    sensor:2 = 2\n" 
+                                  "  }\n" 
+                                  "  sensor:1 = 1\n" 
+                                  "}\n"); 
+ 
+        rootGroup->ResetCounters(); 
+ 
+        TStringStream ss2; 
+        TCountersPrinter printer2(&ss2); 
+        rootGroup->Accept("root", "counters", printer2); 
+ 
+        UNIT_ASSERT_STRINGS_EQUAL(ss2.Str(), 
+                                  "root:counters {\n" 
+                                  "  group:1 {\n" 
+                                  "    group:2 {\n" 
+                                  "      sensor:3 = 0\n" 
+                                  "    }\n" 
+                                  "    sensor:2 = 0\n" 
+                                  "  }\n" 
+                                  "  sensor:1 = 0\n" 
+                                  "}\n"); 
+    } 
+ 
     Y_UNIT_TEST(RemoveCounter) {
-        TDynamicCounterPtr rootGroup(new TDynamicCounters());
-
-        rootGroup->GetNamedCounter("label", "1");
-        rootGroup->GetCounter("2");
-        rootGroup->GetCounter("3");
-        rootGroup->GetSubgroup("group", "1");
-
-        rootGroup->RemoveNamedCounter("label", "1");
-        rootGroup->RemoveNamedCounter("label", "5");
-        rootGroup->RemoveNamedCounter("group", "1");
-        rootGroup->RemoveCounter("2");
-        rootGroup->RemoveCounter("5");
-
-        TStringStream ss;
-        TCountersPrinter printer(&ss);
-        rootGroup->Accept("root", "counters", printer);
-
-        UNIT_ASSERT_STRINGS_EQUAL(ss.Str(),
-                                  "root:counters {\n"
-                                  "  group:1 {\n"
-                                  "  }\n"
-                                  "  sensor:3 = 0\n"
-                                  "}\n");
-    }
-
+        TDynamicCounterPtr rootGroup(new TDynamicCounters()); 
+ 
+        rootGroup->GetNamedCounter("label", "1"); 
+        rootGroup->GetCounter("2"); 
+        rootGroup->GetCounter("3"); 
+        rootGroup->GetSubgroup("group", "1"); 
+ 
+        rootGroup->RemoveNamedCounter("label", "1"); 
+        rootGroup->RemoveNamedCounter("label", "5"); 
+        rootGroup->RemoveNamedCounter("group", "1"); 
+        rootGroup->RemoveCounter("2"); 
+        rootGroup->RemoveCounter("5"); 
+ 
+        TStringStream ss; 
+        TCountersPrinter printer(&ss); 
+        rootGroup->Accept("root", "counters", printer); 
+ 
+        UNIT_ASSERT_STRINGS_EQUAL(ss.Str(), 
+                                  "root:counters {\n" 
+                                  "  group:1 {\n" 
+                                  "  }\n" 
+                                  "  sensor:3 = 0\n" 
+                                  "}\n"); 
+    } 
+ 
     Y_UNIT_TEST(RemoveSubgroup) {
-        TDynamicCounterPtr rootGroup(new TDynamicCounters());
-
-        rootGroup->GetSubgroup("group", "1");
-        rootGroup->GetSubgroup("group", "2");
-        rootGroup->GetCounter("2");
-
-        rootGroup->RemoveSubgroup("group", "1");
-        rootGroup->RemoveSubgroup("group", "3");
-        rootGroup->RemoveSubgroup("sensor", "2");
-
-        TStringStream ss;
-        TCountersPrinter printer(&ss);
-        rootGroup->Accept("root", "counters", printer);
-
-        UNIT_ASSERT_STRINGS_EQUAL(ss.Str(),
-                                  "root:counters {\n"
-                                  "  group:2 {\n"
-                                  "  }\n"
-                                  "  sensor:2 = 0\n"
-                                  "}\n");
-    }
+        TDynamicCounterPtr rootGroup(new TDynamicCounters()); 
+ 
+        rootGroup->GetSubgroup("group", "1"); 
+        rootGroup->GetSubgroup("group", "2"); 
+        rootGroup->GetCounter("2"); 
+ 
+        rootGroup->RemoveSubgroup("group", "1"); 
+        rootGroup->RemoveSubgroup("group", "3"); 
+        rootGroup->RemoveSubgroup("sensor", "2"); 
+ 
+        TStringStream ss; 
+        TCountersPrinter printer(&ss); 
+        rootGroup->Accept("root", "counters", printer); 
+ 
+        UNIT_ASSERT_STRINGS_EQUAL(ss.Str(), 
+                                  "root:counters {\n" 
+                                  "  group:2 {\n" 
+                                  "  }\n" 
+                                  "  sensor:2 = 0\n" 
+                                  "}\n"); 
+    } 
 
     Y_UNIT_TEST(ExpiringCounters) {
         TDynamicCounterPtr rootGroup{new TDynamicCounters()};

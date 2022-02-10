@@ -29,7 +29,7 @@ struct ITabletStateClassifier : public TAtomicRefCount<ITabletStateClassifier>{
 
 
 struct TTabletListElement {
-    const TEvInterconnect::TNodeInfo* NodeInfo;
+    const TEvInterconnect::TNodeInfo* NodeInfo; 
     ui64 TabletIndex;
     const NKikimrWhiteboard::TTabletStateInfo* TabletStateInfo;
 };

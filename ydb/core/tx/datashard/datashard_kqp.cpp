@@ -612,7 +612,7 @@ void KqpEraseLocks(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLocks) {
     }
 }
 
-void KqpPrepareInReadsets(TInputOpData::TInReadSets& inReadSets,
+void KqpPrepareInReadsets(TInputOpData::TInReadSets& inReadSets, 
     const NKikimrTxDataShard::TKqpTransaction& kqpTx, ui64 tabletId)
 {
     for (auto& task : kqpTx.GetTasks()) {

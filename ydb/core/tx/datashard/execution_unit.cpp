@@ -1,105 +1,105 @@
-#include "execution_unit.h"
-#include "execution_unit_ctors.h"
-#include "datashard_impl.h"
-
-namespace NKikimr {
+#include "execution_unit.h" 
+#include "execution_unit_ctors.h" 
+#include "datashard_impl.h" 
+ 
+namespace NKikimr { 
 namespace NDataShard {
-
-THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
+ 
+THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind, 
                                             TDataShard &dataShard,
-                                            TPipeline &pipeline)
-{
-    switch (kind) {
-    case EExecutionUnitKind::CheckDataTx:
-        return CreateCheckDataTxUnit(dataShard, pipeline);
-    case EExecutionUnitKind::CheckSchemeTx:
-        return CreateCheckSchemeTxUnit(dataShard, pipeline);
+                                            TPipeline &pipeline) 
+{ 
+    switch (kind) { 
+    case EExecutionUnitKind::CheckDataTx: 
+        return CreateCheckDataTxUnit(dataShard, pipeline); 
+    case EExecutionUnitKind::CheckSchemeTx: 
+        return CreateCheckSchemeTxUnit(dataShard, pipeline); 
     case EExecutionUnitKind::CheckSnapshotTx:
         return CreateCheckSnapshotTxUnit(dataShard, pipeline);
     case EExecutionUnitKind::CheckDistributedEraseTx:
         return CreateCheckDistributedEraseTxUnit(dataShard, pipeline);
     case EExecutionUnitKind::CheckCommitWritesTx:
         return CreateCheckCommitWritesTxUnit(dataShard, pipeline);
-    case EExecutionUnitKind::StoreDataTx:
-        return CreateStoreDataTxUnit(dataShard, pipeline);
-    case EExecutionUnitKind::StoreSchemeTx:
-        return CreateStoreSchemeTxUnit(dataShard, pipeline);
+    case EExecutionUnitKind::StoreDataTx: 
+        return CreateStoreDataTxUnit(dataShard, pipeline); 
+    case EExecutionUnitKind::StoreSchemeTx: 
+        return CreateStoreSchemeTxUnit(dataShard, pipeline); 
     case EExecutionUnitKind::StoreSnapshotTx:
         return CreateStoreSnapshotTxUnit(dataShard, pipeline);
     case EExecutionUnitKind::StoreDistributedEraseTx:
         return CreateStoreDistributedEraseTxUnit(dataShard, pipeline);
     case EExecutionUnitKind::StoreCommitWritesTx:
         return CreateStoreCommitWritesTxUnit(dataShard, pipeline);
-    case EExecutionUnitKind::BuildAndWaitDependencies:
-        return CreateBuildAndWaitDependenciesUnit(dataShard, pipeline);
-    case EExecutionUnitKind::FinishPropose:
-        return CreateFinishProposeUnit(dataShard, pipeline);
-    case EExecutionUnitKind::CompletedOperations:
-        return CreateCompletedOperationsUnit(dataShard, pipeline);
-    case EExecutionUnitKind::WaitForPlan:
-        return CreateWaitForPlanUnit(dataShard, pipeline);
-    case EExecutionUnitKind::PlanQueue:
-        return CreatePlanQueueUnit(dataShard, pipeline);
-    case EExecutionUnitKind::LoadTxDetails:
-        return CreateLoadTxDetailsUnit(dataShard, pipeline);
+    case EExecutionUnitKind::BuildAndWaitDependencies: 
+        return CreateBuildAndWaitDependenciesUnit(dataShard, pipeline); 
+    case EExecutionUnitKind::FinishPropose: 
+        return CreateFinishProposeUnit(dataShard, pipeline); 
+    case EExecutionUnitKind::CompletedOperations: 
+        return CreateCompletedOperationsUnit(dataShard, pipeline); 
+    case EExecutionUnitKind::WaitForPlan: 
+        return CreateWaitForPlanUnit(dataShard, pipeline); 
+    case EExecutionUnitKind::PlanQueue: 
+        return CreatePlanQueueUnit(dataShard, pipeline); 
+    case EExecutionUnitKind::LoadTxDetails: 
+        return CreateLoadTxDetailsUnit(dataShard, pipeline); 
     case EExecutionUnitKind::FinalizeDataTxPlan:
         return CreateFinalizeDataTxPlanUnit(dataShard, pipeline);
     case EExecutionUnitKind::ProtectSchemeEchoes:
         return CreateProtectSchemeEchoesUnit(dataShard, pipeline);
-    case EExecutionUnitKind::BuildDataTxOutRS:
-        return CreateBuildDataTxOutRSUnit(dataShard, pipeline);
+    case EExecutionUnitKind::BuildDataTxOutRS: 
+        return CreateBuildDataTxOutRSUnit(dataShard, pipeline); 
     case EExecutionUnitKind::BuildDistributedEraseTxOutRS:
         return CreateBuildDistributedEraseTxOutRSUnit(dataShard, pipeline);
-    case EExecutionUnitKind::BuildKqpDataTxOutRS:
-        return CreateBuildKqpDataTxOutRSUnit(dataShard, pipeline);
-    case EExecutionUnitKind::StoreAndSendOutRS:
-        return CreateStoreAndSendOutRSUnit(dataShard, pipeline);
-    case EExecutionUnitKind::PrepareDataTxInRS:
-        return CreatePrepareDataTxInRSUnit(dataShard, pipeline);
-    case EExecutionUnitKind::PrepareKqpDataTxInRS:
-        return CreatePrepareKqpDataTxInRSUnit(dataShard, pipeline);
+    case EExecutionUnitKind::BuildKqpDataTxOutRS: 
+        return CreateBuildKqpDataTxOutRSUnit(dataShard, pipeline); 
+    case EExecutionUnitKind::StoreAndSendOutRS: 
+        return CreateStoreAndSendOutRSUnit(dataShard, pipeline); 
+    case EExecutionUnitKind::PrepareDataTxInRS: 
+        return CreatePrepareDataTxInRSUnit(dataShard, pipeline); 
+    case EExecutionUnitKind::PrepareKqpDataTxInRS: 
+        return CreatePrepareKqpDataTxInRSUnit(dataShard, pipeline); 
     case EExecutionUnitKind::PrepareDistributedEraseTxInRS:
         return CreatePrepareDistributedEraseTxInRSUnit(dataShard, pipeline);
-    case EExecutionUnitKind::LoadAndWaitInRS:
-        return CreateLoadAndWaitInRSUnit(dataShard, pipeline);
-    case EExecutionUnitKind::ExecuteDataTx:
-        return CreateExecuteDataTxUnit(dataShard, pipeline);
-    case EExecutionUnitKind::ExecuteKqpDataTx:
-        return CreateExecuteKqpDataTxUnit(dataShard, pipeline);
+    case EExecutionUnitKind::LoadAndWaitInRS: 
+        return CreateLoadAndWaitInRSUnit(dataShard, pipeline); 
+    case EExecutionUnitKind::ExecuteDataTx: 
+        return CreateExecuteDataTxUnit(dataShard, pipeline); 
+    case EExecutionUnitKind::ExecuteKqpDataTx: 
+        return CreateExecuteKqpDataTxUnit(dataShard, pipeline); 
     case EExecutionUnitKind::ExecuteDistributedEraseTx:
         return CreateExecuteDistributedEraseTxUnit(dataShard, pipeline);
     case EExecutionUnitKind::ExecuteCommitWritesTx:
         return CreateExecuteCommitWritesTxUnit(dataShard, pipeline);
-    case EExecutionUnitKind::CompleteOperation:
-        return CreateCompleteOperationUnit(dataShard, pipeline);
+    case EExecutionUnitKind::CompleteOperation: 
+        return CreateCompleteOperationUnit(dataShard, pipeline); 
     case EExecutionUnitKind::ExecuteKqpScanTx:
         return CreateExecuteKqpScanTxUnit(dataShard, pipeline);
-    case EExecutionUnitKind::MakeScanSnapshot:
-        return CreateMakeScanSnapshotUnit(dataShard, pipeline);
-    case EExecutionUnitKind::WaitForStreamClearance:
-        return CreateWaitForStreamClearanceUnit(dataShard, pipeline);
-    case EExecutionUnitKind::ReadTableScan:
-        return CreateReadTableScanUnit(dataShard, pipeline);
-    case EExecutionUnitKind::MakeSnapshot:
-        return CreateMakeSnapshotUnit(dataShard, pipeline);
-    case EExecutionUnitKind::BuildSchemeTxOutRS:
-        return CreateBuildSchemeTxOutRSUnit(dataShard, pipeline);
-    case EExecutionUnitKind::PrepareSchemeTxInRS:
-        return CreatePrepareSchemeTxInRSUnit(dataShard, pipeline);
+    case EExecutionUnitKind::MakeScanSnapshot: 
+        return CreateMakeScanSnapshotUnit(dataShard, pipeline); 
+    case EExecutionUnitKind::WaitForStreamClearance: 
+        return CreateWaitForStreamClearanceUnit(dataShard, pipeline); 
+    case EExecutionUnitKind::ReadTableScan: 
+        return CreateReadTableScanUnit(dataShard, pipeline); 
+    case EExecutionUnitKind::MakeSnapshot: 
+        return CreateMakeSnapshotUnit(dataShard, pipeline); 
+    case EExecutionUnitKind::BuildSchemeTxOutRS: 
+        return CreateBuildSchemeTxOutRSUnit(dataShard, pipeline); 
+    case EExecutionUnitKind::PrepareSchemeTxInRS: 
+        return CreatePrepareSchemeTxInRSUnit(dataShard, pipeline); 
     case EExecutionUnitKind::Backup:
         return CreateBackupUnit(dataShard, pipeline);
     case EExecutionUnitKind::Restore:
         return CreateRestoreUnit(dataShard, pipeline);
-    case EExecutionUnitKind::CreateTable:
-        return CreateCreateTableUnit(dataShard, pipeline);
-    case EExecutionUnitKind::ReceiveSnapshot:
-        return CreateReceiveSnapshotUnit(dataShard, pipeline);
+    case EExecutionUnitKind::CreateTable: 
+        return CreateCreateTableUnit(dataShard, pipeline); 
+    case EExecutionUnitKind::ReceiveSnapshot: 
+        return CreateReceiveSnapshotUnit(dataShard, pipeline); 
     case EExecutionUnitKind::AlterMoveShadow:
         return CreateAlterMoveShadowUnit(dataShard, pipeline);
-    case EExecutionUnitKind::AlterTable:
-        return CreateAlterTableUnit(dataShard, pipeline);
-    case EExecutionUnitKind::DropTable:
-        return CreateDropTableUnit(dataShard, pipeline);
+    case EExecutionUnitKind::AlterTable: 
+        return CreateAlterTableUnit(dataShard, pipeline); 
+    case EExecutionUnitKind::DropTable: 
+        return CreateDropTableUnit(dataShard, pipeline); 
     case EExecutionUnitKind::DirectOp:
         return CreateDirectOpUnit(dataShard, pipeline);
     case EExecutionUnitKind::CreatePersistentSnapshot:
@@ -124,13 +124,13 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
         return CreateAlterCdcStreamUnit(dataShard, pipeline);
     case EExecutionUnitKind::DropCdcStream:
         return CreateDropCdcStreamUnit(dataShard, pipeline);
-    default:
-        Y_FAIL_S("Unexpected execution kind " << kind << " (" << (ui32)kind << ")");
-    }
-
-    return nullptr;
-}
-
+    default: 
+        Y_FAIL_S("Unexpected execution kind " << kind << " (" << (ui32)kind << ")"); 
+    } 
+ 
+    return nullptr; 
+} 
+ 
 bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext& ctx) {
     // Reject operations after receiving EvSplit
     // This is to avoid races when split is in progress
@@ -243,19 +243,19 @@ bool TExecutionUnit::WillRejectDataTx(TOperation::TPtr op) const {
     return false;
 }
 
-TOutputOpData::TResultPtr &TExecutionUnit::BuildResult(TOperation::TPtr op,
-                                                       NKikimrTxDataShard::TEvProposeTransactionResult::EStatus status)
-{
-    auto kind = static_cast<NKikimrTxDataShard::ETransactionKind>(op->GetKind());
+TOutputOpData::TResultPtr &TExecutionUnit::BuildResult(TOperation::TPtr op, 
+                                                       NKikimrTxDataShard::TEvProposeTransactionResult::EStatus status) 
+{ 
+    auto kind = static_cast<NKikimrTxDataShard::ETransactionKind>(op->GetKind()); 
     op->Result().Reset(new TEvDataShard::TEvProposeTransactionResult(kind,
-                                                                 DataShard.TabletID(),
-                                                                 op->GetTxId(),
+                                                                 DataShard.TabletID(), 
+                                                                 op->GetTxId(), 
                                                                  status));
-    if (DataShard.GetProcessingParams())
-        op->Result()->SetDomainCoordinators(*DataShard.GetProcessingParams());
-
-    return op->Result();
-}
-
+    if (DataShard.GetProcessingParams()) 
+        op->Result()->SetDomainCoordinators(*DataShard.GetProcessingParams()); 
+ 
+    return op->Result(); 
+} 
+ 
 } // namespace NDataShard
-} // namespace NKikimr
+} // namespace NKikimr 

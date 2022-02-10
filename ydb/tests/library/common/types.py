@@ -161,10 +161,10 @@ class TabletTypes(Enum):
     FLAT_HIVE = _tablet_type(14, 0xA001, is_unique=True, service_name='HIVE')
     FLAT_SCHEMESHARD = _tablet_type(16, 0x8587a0, is_unique=True, service_name='FLAT_TX_SCHEMESHARD')
 
-    CMS = _tablet_type(21, 0x2000, is_unique=True, service_name='CMS')
+    CMS = _tablet_type(21, 0x2000, is_unique=True, service_name='CMS') 
     NODE_BROKER = _tablet_type(22, 0x2001, is_unique=True, service_name='NODE_BROKER')
-    TENANT_SLOT_BROKER = _tablet_type(27, 0x2002, is_unique=True, service_name='TENANT_SLOT_BROKER')
-    CONSOLE = _tablet_type(28, 0x2003, is_unique=True, service_name='CONSOLE')
+    TENANT_SLOT_BROKER = _tablet_type(27, 0x2002, is_unique=True, service_name='TENANT_SLOT_BROKER') 
+    CONSOLE = _tablet_type(28, 0x2003, is_unique=True, service_name='CONSOLE') 
     FLAT_BS_CONTROLLER = _tablet_type(15, 0x1001, is_unique=True, service_name='BS_CONTROLLER')
 
     USER_TYPE_START = _tablet_type(0xFF, 0)

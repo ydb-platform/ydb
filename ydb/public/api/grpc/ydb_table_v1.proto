@@ -67,9 +67,9 @@ service TableService {
 
     // Performs a rollback of the specified active transaction.
     rpc RollbackTransaction(Table.RollbackTransactionRequest) returns (Table.RollbackTransactionResponse);
-
-    // Describe supported table options.
-    rpc DescribeTableOptions(Table.DescribeTableOptionsRequest) returns (Table.DescribeTableOptionsResponse);
+ 
+    // Describe supported table options. 
+    rpc DescribeTableOptions(Table.DescribeTableOptionsRequest) returns (Table.DescribeTableOptionsResponse); 
 
     // Streaming read table
     rpc StreamReadTable(Table.ReadTableRequest) returns (stream Table.ReadTableResponse);

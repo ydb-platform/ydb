@@ -494,8 +494,8 @@ void TTablet::HandleByFollower(TEvTablet::TEvFollowerUpdate::TPtr &ev) {
 
         Send(UserTablet,
                  new TEvTablet::TEvFBoot(TabletID(), FollowerId, record.GetGeneration(),
-                                         Launcher, *ev->Get(), Info,
-                                         ResourceProfiles, TxCacheQuota));
+                                         Launcher, *ev->Get(), Info, 
+                                         ResourceProfiles, TxCacheQuota)); 
 
         BLOG_TRACE("SBoot attempt: " << FollowerInfo.FollowerAttempt
             << ", " << record.GetGeneration() << ":" << record.GetStep());
@@ -961,8 +961,8 @@ void TTablet::HandleRebuildGraphResult(TEvTabletBase::TEvRebuildGraphResult::TPt
     case NKikimrProto::NODATA:
         WriteZeroEntry(graph.Get());
         Send(UserTablet,
-                 new TEvTablet::TEvBoot(TabletID(), StateStorageInfo.KnownGeneration,
-                                        graph.Get(), Launcher, Info, ResourceProfiles,
+                 new TEvTablet::TEvBoot(TabletID(), StateStorageInfo.KnownGeneration, 
+                                        graph.Get(), Launcher, Info, ResourceProfiles, 
                                         TxCacheQuota,
                                         std::move(msg->GroupReadBytes),
                                         std::move(msg->GroupReadOps)));
@@ -1787,11 +1787,11 @@ void TTablet::CancelTablet(TEvTablet::TEvTabletDead::EReason reason, const TStri
 }
 
 void TTablet::Handle(TEvTablet::TEvUpdateConfig::TPtr &ev) {
-    ResourceProfiles = ev->Get()->ResourceProfiles;
-    if (UserTablet)
+    ResourceProfiles = ev->Get()->ResourceProfiles; 
+    if (UserTablet) 
         TActivationContext::Send(ev->Forward(UserTablet));
-}
-
+} 
+ 
 void TTablet::LockedInitializationPath() {
     const ui32 latestChangeGeneration = SuggestedGeneration ? SuggestedGeneration - 1 : Info->ChannelInfo(0)->LatestEntry()->FromGeneration;
 
@@ -1833,8 +1833,8 @@ TTablet::TTablet(const TActorId &launcher, TTabletStorageInfo *info, TTabletSetu
     , GcInFly(0)
     , GcInFlyStep(0)
     , GcNextStep(0)
-    , ResourceProfiles(profiles)
-    , TxCacheQuota(txCacheQuota)
+    , ResourceProfiles(profiles) 
+    , TxCacheQuota(txCacheQuota) 
 {
     Y_VERIFY(!info->Channels.empty() && !info->Channels[0].History.empty());
     Y_VERIFY(TTabletTypes::TYPE_INVALID != info->TabletType);
@@ -1924,19 +1924,19 @@ TActorId TTabletSetupInfo::Apply(TTabletStorageInfo *info, const TActorContext &
 
 TActorId TTabletSetupInfo::Tablet(TTabletStorageInfo *info, const TActorId &launcher, const TActorContext &ctx,
                                   ui32 suggestedGeneration, TResourceProfilesPtr profiles, TSharedQuotaPtr txCacheQuota) {
-    return ctx.ExecutorThread.RegisterActor(CreateTablet(launcher, info, this, suggestedGeneration, profiles, txCacheQuota),
-                                            TabletMailboxType, TabletPoolId);
+    return ctx.ExecutorThread.RegisterActor(CreateTablet(launcher, info, this, suggestedGeneration, profiles, txCacheQuota), 
+                                            TabletMailboxType, TabletPoolId); 
 }
 
 TActorId TTabletSetupInfo::Follower(TTabletStorageInfo *info, const TActorId &launcher, const TActorContext &ctx,
                                  ui32 followerId, TResourceProfilesPtr profiles, TSharedQuotaPtr txCacheQuota) {
     return ctx.ExecutorThread.RegisterActor(CreateTabletFollower(launcher, info, this, followerId, profiles, txCacheQuota),
-                                            TabletMailboxType, TabletPoolId);
+                                            TabletMailboxType, TabletPoolId); 
 }
 
 IActor* CreateTablet(const TActorId &launcher, TTabletStorageInfo *info, TTabletSetupInfo *setupInfo,
                      ui32 suggestedGeneration, TResourceProfilesPtr profiles, TSharedQuotaPtr txCacheQuota) {
-    return new TTablet(launcher, info, setupInfo, true, suggestedGeneration, 0, profiles, txCacheQuota);
+    return new TTablet(launcher, info, setupInfo, true, suggestedGeneration, 0, profiles, txCacheQuota); 
 }
 
 IActor* CreateTabletFollower(const TActorId &launcher, TTabletStorageInfo *info, TTabletSetupInfo *setupInfo,

@@ -97,21 +97,21 @@ message TTableId {
     optional uint64 SchemaVersion = 3;
 }
 
-message TReadTableTransaction {
-    message TColumn {
-        optional uint32 Id = 1;
-        optional string Name = 2;
-        optional uint32 TypeId = 3;
-    }
-
-    optional TTableId TableId = 1;
-    repeated TColumn Columns = 2;
-    optional NKikimrTx.TKeyRange Range = 3;
+message TReadTableTransaction { 
+    message TColumn { 
+        optional uint32 Id = 1; 
+        optional string Name = 2; 
+        optional uint32 TypeId = 3; 
+    } 
+ 
+    optional TTableId TableId = 1; 
+    repeated TColumn Columns = 2; 
+    optional NKikimrTx.TKeyRange Range = 3; 
     optional uint32 ApiVersion = 4;
     optional uint64 SnapshotStep = 5;
     optional uint64 SnapshotTxId = 6;
-}
-
+} 
+ 
 message TKqpLocks {
     repeated TLock Locks = 1;
     repeated uint64 SendingShards = 2;   // empty at Erase
@@ -248,8 +248,8 @@ message TDataTransaction {
     optional fixed64 LockTxId = 5;
     optional bool NeedDiagnostics = 6;
     optional bool ReadOnly = 7;
-    optional TReadTableTransaction ReadTableTransaction = 8;
-    optional bool StreamResponse = 9;
+    optional TReadTableTransaction ReadTableTransaction = 8; 
+    optional bool StreamResponse = 9; 
     optional NActorsProto.TActorId Sink = 10;
     optional bool LlvmRuntime = 11;
     optional uint64 PerShardKeysSizeLimitBytes = 12;
@@ -397,7 +397,7 @@ message TFlatSchemeTransaction {
     optional NKikimrSchemeOp.TBackupTask Backup = 6;
 
     optional TSchemeOpSeqNo SeqNo = 7;
-    optional bool ReadOnly = 8;
+    optional bool ReadOnly = 8; 
     reserved 9;
 
     optional TCreatePersistentSnapshot CreatePersistentSnapshot = 10;
@@ -453,14 +453,14 @@ enum ETransactionKind {
     TX_KIND_NONE = 0;
     TX_KIND_DATA = 1;
     TX_KIND_SCHEME = 2;
-    DEPRECATED_3 = 3; //TX_KIND_BALANCE
-    DEPRECATED_4 = 4; //TX_KIND_SNAPSHOT_POLICY
-    TX_KIND_SCAN = 5;
+    DEPRECATED_3 = 3; //TX_KIND_BALANCE 
+    DEPRECATED_4 = 4; //TX_KIND_SNAPSHOT_POLICY 
+    TX_KIND_SCAN = 5; 
     TX_KIND_SNAPSHOT = 6;
     TX_KIND_DISTRIBUTED_ERASE = 7;
     TX_KIND_COMMIT_WRITES = 8;
-
-    // Values [100, inf) are used for internal datashard operation
+ 
+    // Values [100, inf) are used for internal datashard operation 
     // kinds. See NKikimr::NDataShard::EOperationKind.
 }
 
@@ -540,12 +540,12 @@ message TEvProposeTransactionResult {
         ERROR = 4;
         TRY_LATER = 5;
         OVERLOADED = 6;
-        RESPONSE_DATA = 7;
+        RESPONSE_DATA = 7; 
         EXEC_ERROR = 8;
         RESULT_UNAVAILABLE = 9;
         LOCKS_BROKEN = 10;
         CANCELLED = 11;
-        BAD_REQUEST = 12;
+        BAD_REQUEST = 12; 
     };
 
     message TReadSetInfo {
@@ -572,8 +572,8 @@ message TEvProposeTransactionResult {
     optional uint64 ReplySize = 17;
     repeated TReadSetInfo OutgoingReadSetInfo = 18;
     optional TTabletInfo TabletInfo = 19;
-    // For read table tx result holds offsets in TxResult to cut response
-    repeated uint32 RowOffsets = 20;
+    // For read table tx result holds offsets in TxResult to cut response 
+    repeated uint32 RowOffsets = 20; 
     repeated fixed64 DomainCoordinators = 21;
     optional uint32 ApiVersion = 22; // Version of TxResult response data
     optional NKikimrQueryStats.TTxStats TxStats = 23;
@@ -831,324 +831,324 @@ message TEvReadColumnsResponse {
     optional bool LastKeyInclusive = 6;
     optional bool EndOfShard = 7;
 }
-
-message TStatus {
-    optional Ydb.StatusIds.StatusCode Code = 1;
-    repeated Ydb.Issue.IssueMessage Issues = 2;
-}
-
-message TEvGetInfoRequest {
-}
-
-message TEvGetInfoResponse {
-    message TStats {
-        optional uint64 RowCount = 1;
-        optional uint64 DataSize = 2;
-        optional string LastAccessTime = 3;
-        optional string LastUpdateTime = 4;
-        optional string LastStatsUpdateTime = 5;
-        optional string LastStatsReportTime = 6;
-    }
-
-    message TUserTable {
-        optional string Name = 1;
-        optional string Path = 2;
-        optional uint32 LocalId = 3;
-        optional uint64 PathId = 4;
+ 
+message TStatus { 
+    optional Ydb.StatusIds.StatusCode Code = 1; 
+    repeated Ydb.Issue.IssueMessage Issues = 2; 
+} 
+ 
+message TEvGetInfoRequest { 
+} 
+ 
+message TEvGetInfoResponse { 
+    message TStats { 
+        optional uint64 RowCount = 1; 
+        optional uint64 DataSize = 2; 
+        optional string LastAccessTime = 3; 
+        optional string LastUpdateTime = 4; 
+        optional string LastStatsUpdateTime = 5; 
+        optional string LastStatsReportTime = 6; 
+    } 
+ 
+    message TUserTable { 
+        optional string Name = 1; 
+        optional string Path = 2; 
+        optional uint32 LocalId = 3; 
+        optional uint64 PathId = 4; 
         optional NKikimrSchemeOp.TTableDescription Description = 5;
-        optional TStats Stats = 6;
+        optional TStats Stats = 6; 
         optional NKikimrTabletBase.TMetrics Metrics = 7;
         optional uint64 SchemaVersion = 8;
-    }
-
-    message TTabletInfo {
-        optional uint64 SchemeShard = 1;
-        optional uint64 Mediator = 2;
-        optional uint32 Generation = 3;
+    } 
+ 
+    message TTabletInfo { 
+        optional uint64 SchemeShard = 1; 
+        optional uint64 Mediator = 2; 
+        optional uint32 Generation = 3; 
         optional bool IsFollower = 4;
-        optional string State = 5;
-        optional bool IsActive = 6;
-        optional bool HasSharedBlobs = 7;
-    }
-
-    message TNamedValue {
-        optional string Name = 1;
-        optional string Value = 2;
-    }
-
-    message TActivities {
-        optional uint64 InFlyPlanned = 1;
-        optional uint64 InFlyImmediate = 2;
-        optional uint64 ExecutingOps = 3;
-        optional uint64 WaitingOps = 4;
-        optional uint64 ExecuteBlockers = 5;
-        optional uint64 DataTxCached = 6;
-        optional uint64 OutReadSets = 7;
-        optional uint64 OutReadSetsAcks = 8;
-        optional uint64 DelayedAcks = 9;
-        optional uint64 Locks = 10;
-        optional uint64 BrokenLocks = 11;
-        optional uint64 LastPlannedTx = 12;
-        optional uint64 LastPlannedStep = 13;
-        optional uint64 LastCompletedTx = 14;
-        optional uint64 LastCompletedStep = 15;
-        optional uint64 UtmostCompletedTx = 16;
-        optional uint64 UtmostCompletedStep = 17;
-        optional uint64 DataTxCompleteLag = 18;
-        optional uint64 ScanTxCompleteLag = 19;
-    }
-
-    message TPipelineConfig {
-        optional bool OutOfOrderEnabled = 1;
-        optional uint32 ActiveTxsLimit = 2;
-        optional bool AllowImmediate = 3;
-        optional bool ForceOnlineRW = 4;
-        optional bool DirtyOnline = 5;
-        optional bool DirtyImmediate = 6;
-        optional uint32 DataTxCacheSize = 7;
-    }
-
-    optional TStatus Status = 1;
-    repeated TUserTable UserTables = 2;
-    optional TTabletInfo TabletInfo = 3;
-    repeated TNamedValue Controls = 4;
-    optional TActivities Activities = 5;
-    repeated TNamedValue SysTable = 6;
-    optional TPipelineConfig PipelineConfig = 7;
-}
-
-message TEvListOperationsRequest {
-}
-
-message TEvListOperationsResponse {
-    message TOperationInfo {
-        optional uint64 TxId = 1;
-        optional uint64 Step = 2;
-        optional string Kind = 3;
-        optional bool IsImmediate = 4;
-        optional bool IsReadOnly = 5;
-        optional bool IsWaiting = 6;
-        optional bool IsExecuting = 7;
-        optional bool IsCompleted = 8;
-        optional string ExecutionUnit = 9;
-        optional uint64 ReceivedAt = 10;
-    }
-
-    optional TStatus Status = 1;
-    repeated TOperationInfo Operations = 2;
-}
-
-message TEvGetOperationRequest {
-    optional uint64 TxId = 1;
-}
-
-message TBasicOpInfo {
-    optional uint64 TxId = 1;
-    optional uint64 Step = 2;
-    optional string Kind = 3;
-    optional uint64 ReceivedAt = 4;
-    optional uint64 MinStep = 5;
-    optional uint64 MaxStep = 6;
-    repeated string Flags = 7;
-}
-
-message TExecutionProfile {
-    message TUnitProfile {
-        optional string UnitKind = 1;
-        optional uint64 WaitTime = 2;
-        optional uint64 ExecuteTime = 3;
-        optional uint64 CommitTime = 4;
-        optional uint64 CompleteTime = 5;
-        optional uint32 ExecuteCount = 6;
-    }
-
-    repeated TUnitProfile UnitProfiles = 1;
-}
-
-message TEvGetOperationResponse {
-    message TExecutionPlan {
-        repeated string Units = 1;
-        optional bool IsFinished = 2;
-        optional uint32 CurrentUnit = 3;
-    }
-
-    message TDependency {
-        optional uint64 Target = 1;
-        repeated string Types = 2;
-    }
-
-    message TDependencies {
-        repeated TDependency Dependencies = 1;
-        repeated TDependency Dependents = 2;
-    }
-
-    message TInputRS {
-        optional uint64 From = 1;
-        optional uint32 Received = 2;
-    }
-
-    message TInputData {
-        repeated TInputRS InputRS = 1;
-        optional uint32 RemainedInputRS = 2;
-    }
-
-    message TReadTableState {
-        optional string State = 1;
-        optional uint32 TableId = 2;
-        optional uint64 SnapshotId = 3;
-        optional uint64 ScanTaskId = 4;
-        optional string SinkActor = 5;
-        optional string ScanActor = 6;
-    }
-
-    optional TStatus Status = 1;
-    optional TBasicOpInfo BasicInfo = 2;
-    optional TExecutionPlan ExecutionPlan = 3;
-    optional TDependencies Dependencies = 4;
-    optional TInputData InputData = 5;
-    optional TExecutionProfile ExecutionProfile = 6;
-
-    optional TReadTableState ReadTableState = 10;
-}
-
-message TEvGetReadTableSinkStateRequest {
-    optional uint64 TxId = 1;
-}
-
-message TShard {
-    optional uint64 Id = 1;
-}
-
-message TEvGetReadTableSinkStateResponse {
-    optional TStatus Status = 1;
-    optional uint64 TxId = 2;
-    optional uint64 WallClockAccepted = 3;
-    optional uint64 WallClockResolveStarted = 4;
-    optional uint64 WallClockResolved = 5;
-    optional uint64 WallClockPrepared = 6;
-    optional uint64 WallClockPlanned = 7;
-    optional uint64 ExecTimeoutPeriod = 8;
-    optional uint64 SelectedCoordinator = 9;
-    optional string RequestSource = 10;
-    optional uint32 RequestVersion = 11;
-    optional uint32 ResponseVersion = 12;
-    repeated TShard ClearanceRequests = 13;
-    repeated TShard QuotaRequests = 14;
-    repeated TShard StreamingShards = 15;
-    repeated TShard ShardsQueue = 16;
-    optional bool Ordered = 17;
-    optional bool RowsLimited = 18;
-    optional uint64 RowsRemain = 19;
-}
-
-message TEvGetReadTableScanStateRequest {
-    optional uint64 TxId = 1;
-}
-
-message TEvGetReadTableScanStateResponse {
-    optional TStatus Status = 1;
-    optional uint64 TxId = 2;
-    optional uint64 MessageQuota = 3;
-    optional uint64 MessageSizeLimit = 4;
-    optional uint64 RowsLimit = 5;
-    optional uint64 PendingAcks = 6;
-    optional uint64 ResultSize = 7;
-    optional uint64 ResultRows = 8;
-    optional bool HasUpperBorder = 9;
-    optional bool Finished = 10;
-    optional string Error = 11;
-}
-
-message TEvGetReadTableStreamStateRequest {
-    optional uint64 TxId = 1;
-}
-
-message TEvGetReadTableStreamStateResponse {
-    message TShardQuota {
-        optional uint64 ShardId = 1;
-        optional uint64 Quota = 2;
-    }
-
-    optional TStatus Status = 1;
-    optional bool Ready = 2;
-    optional bool Finished = 3;
-    optional uint64 ResponseQueueSize = 4;
-    repeated TShard QuotaRequests = 5;
-    repeated TShardQuota ShardQuotas = 6;
-    optional uint64 QuotaLimit = 7;
-    optional uint64 QuotaReserved = 8;
-    repeated TShard ReleasedShards = 9;
-    optional uint64 InactiveClientTimeout = 10;
-    optional uint64 InactiveServerTimeout = 11;
-    optional uint64 LastDataStreamTimestamp = 12;
-    optional uint64 LastStatusTimestamp = 13;
-}
-
-message TEvGetSlowOpProfilesRequest {
-}
-
-message TEvGetSlowOpProfilesResponse {
-    message TOpProfile {
-        optional TBasicOpInfo BasicInfo = 1;
-        optional TExecutionProfile ExecutionProfile = 2;
-    }
-
-    optional TStatus Status = 1;
-    repeated TOpProfile Profiles = 2;
-}
-
-message TEvGetRSInfoRequest {
-}
-
-message TEvGetRSInfoResponse {
-    message TOutRSInfo {
-        optional uint64 TxId = 1;
-        optional uint64 Origin = 2;
-        optional uint64 Source = 3;
-        optional uint64 Destination = 4;
-        optional uint64 SeqNo = 5;
-    }
-
-    message TRSAckInfo {
-        optional uint64 TxId = 1;
-        optional uint64 Step = 2;
-        optional uint64 Origin = 3;
-        optional uint64 Source = 4;
-        optional uint64 Destination = 5;
-        optional uint64 SeqNo = 6;
-    }
-
-    optional TStatus Status = 1;
-    repeated TOutRSInfo OutReadSets = 2;
-    repeated TRSAckInfo OutRSAcks = 3;
-    repeated TRSAckInfo DelayedRSAcks = 4;
-}
-
-message TEvGetDataHistogramRequest {
+        optional string State = 5; 
+        optional bool IsActive = 6; 
+        optional bool HasSharedBlobs = 7; 
+    } 
+ 
+    message TNamedValue { 
+        optional string Name = 1; 
+        optional string Value = 2; 
+    } 
+ 
+    message TActivities { 
+        optional uint64 InFlyPlanned = 1; 
+        optional uint64 InFlyImmediate = 2; 
+        optional uint64 ExecutingOps = 3; 
+        optional uint64 WaitingOps = 4; 
+        optional uint64 ExecuteBlockers = 5; 
+        optional uint64 DataTxCached = 6; 
+        optional uint64 OutReadSets = 7; 
+        optional uint64 OutReadSetsAcks = 8; 
+        optional uint64 DelayedAcks = 9; 
+        optional uint64 Locks = 10; 
+        optional uint64 BrokenLocks = 11; 
+        optional uint64 LastPlannedTx = 12; 
+        optional uint64 LastPlannedStep = 13; 
+        optional uint64 LastCompletedTx = 14; 
+        optional uint64 LastCompletedStep = 15; 
+        optional uint64 UtmostCompletedTx = 16; 
+        optional uint64 UtmostCompletedStep = 17; 
+        optional uint64 DataTxCompleteLag = 18; 
+        optional uint64 ScanTxCompleteLag = 19; 
+    } 
+ 
+    message TPipelineConfig { 
+        optional bool OutOfOrderEnabled = 1; 
+        optional uint32 ActiveTxsLimit = 2; 
+        optional bool AllowImmediate = 3; 
+        optional bool ForceOnlineRW = 4; 
+        optional bool DirtyOnline = 5; 
+        optional bool DirtyImmediate = 6; 
+        optional uint32 DataTxCacheSize = 7; 
+    } 
+ 
+    optional TStatus Status = 1; 
+    repeated TUserTable UserTables = 2; 
+    optional TTabletInfo TabletInfo = 3; 
+    repeated TNamedValue Controls = 4; 
+    optional TActivities Activities = 5; 
+    repeated TNamedValue SysTable = 6; 
+    optional TPipelineConfig PipelineConfig = 7; 
+} 
+ 
+message TEvListOperationsRequest { 
+} 
+ 
+message TEvListOperationsResponse { 
+    message TOperationInfo { 
+        optional uint64 TxId = 1; 
+        optional uint64 Step = 2; 
+        optional string Kind = 3; 
+        optional bool IsImmediate = 4; 
+        optional bool IsReadOnly = 5; 
+        optional bool IsWaiting = 6; 
+        optional bool IsExecuting = 7; 
+        optional bool IsCompleted = 8; 
+        optional string ExecutionUnit = 9; 
+        optional uint64 ReceivedAt = 10; 
+    } 
+ 
+    optional TStatus Status = 1; 
+    repeated TOperationInfo Operations = 2; 
+} 
+ 
+message TEvGetOperationRequest { 
+    optional uint64 TxId = 1; 
+} 
+ 
+message TBasicOpInfo { 
+    optional uint64 TxId = 1; 
+    optional uint64 Step = 2; 
+    optional string Kind = 3; 
+    optional uint64 ReceivedAt = 4; 
+    optional uint64 MinStep = 5; 
+    optional uint64 MaxStep = 6; 
+    repeated string Flags = 7; 
+} 
+ 
+message TExecutionProfile { 
+    message TUnitProfile { 
+        optional string UnitKind = 1; 
+        optional uint64 WaitTime = 2; 
+        optional uint64 ExecuteTime = 3; 
+        optional uint64 CommitTime = 4; 
+        optional uint64 CompleteTime = 5; 
+        optional uint32 ExecuteCount = 6; 
+    } 
+ 
+    repeated TUnitProfile UnitProfiles = 1; 
+} 
+ 
+message TEvGetOperationResponse { 
+    message TExecutionPlan { 
+        repeated string Units = 1; 
+        optional bool IsFinished = 2; 
+        optional uint32 CurrentUnit = 3; 
+    } 
+ 
+    message TDependency { 
+        optional uint64 Target = 1; 
+        repeated string Types = 2; 
+    } 
+ 
+    message TDependencies { 
+        repeated TDependency Dependencies = 1; 
+        repeated TDependency Dependents = 2; 
+    } 
+ 
+    message TInputRS { 
+        optional uint64 From = 1; 
+        optional uint32 Received = 2; 
+    } 
+ 
+    message TInputData { 
+        repeated TInputRS InputRS = 1; 
+        optional uint32 RemainedInputRS = 2; 
+    } 
+ 
+    message TReadTableState { 
+        optional string State = 1; 
+        optional uint32 TableId = 2; 
+        optional uint64 SnapshotId = 3; 
+        optional uint64 ScanTaskId = 4; 
+        optional string SinkActor = 5; 
+        optional string ScanActor = 6; 
+    } 
+ 
+    optional TStatus Status = 1; 
+    optional TBasicOpInfo BasicInfo = 2; 
+    optional TExecutionPlan ExecutionPlan = 3; 
+    optional TDependencies Dependencies = 4; 
+    optional TInputData InputData = 5; 
+    optional TExecutionProfile ExecutionProfile = 6; 
+ 
+    optional TReadTableState ReadTableState = 10; 
+} 
+ 
+message TEvGetReadTableSinkStateRequest { 
+    optional uint64 TxId = 1; 
+} 
+ 
+message TShard { 
+    optional uint64 Id = 1; 
+} 
+ 
+message TEvGetReadTableSinkStateResponse { 
+    optional TStatus Status = 1; 
+    optional uint64 TxId = 2; 
+    optional uint64 WallClockAccepted = 3; 
+    optional uint64 WallClockResolveStarted = 4; 
+    optional uint64 WallClockResolved = 5; 
+    optional uint64 WallClockPrepared = 6; 
+    optional uint64 WallClockPlanned = 7; 
+    optional uint64 ExecTimeoutPeriod = 8; 
+    optional uint64 SelectedCoordinator = 9; 
+    optional string RequestSource = 10; 
+    optional uint32 RequestVersion = 11; 
+    optional uint32 ResponseVersion = 12; 
+    repeated TShard ClearanceRequests = 13; 
+    repeated TShard QuotaRequests = 14; 
+    repeated TShard StreamingShards = 15; 
+    repeated TShard ShardsQueue = 16; 
+    optional bool Ordered = 17; 
+    optional bool RowsLimited = 18; 
+    optional uint64 RowsRemain = 19; 
+} 
+ 
+message TEvGetReadTableScanStateRequest { 
+    optional uint64 TxId = 1; 
+} 
+ 
+message TEvGetReadTableScanStateResponse { 
+    optional TStatus Status = 1; 
+    optional uint64 TxId = 2; 
+    optional uint64 MessageQuota = 3; 
+    optional uint64 MessageSizeLimit = 4; 
+    optional uint64 RowsLimit = 5; 
+    optional uint64 PendingAcks = 6; 
+    optional uint64 ResultSize = 7; 
+    optional uint64 ResultRows = 8; 
+    optional bool HasUpperBorder = 9; 
+    optional bool Finished = 10; 
+    optional string Error = 11; 
+} 
+ 
+message TEvGetReadTableStreamStateRequest { 
+    optional uint64 TxId = 1; 
+} 
+ 
+message TEvGetReadTableStreamStateResponse { 
+    message TShardQuota { 
+        optional uint64 ShardId = 1; 
+        optional uint64 Quota = 2; 
+    } 
+ 
+    optional TStatus Status = 1; 
+    optional bool Ready = 2; 
+    optional bool Finished = 3; 
+    optional uint64 ResponseQueueSize = 4; 
+    repeated TShard QuotaRequests = 5; 
+    repeated TShardQuota ShardQuotas = 6; 
+    optional uint64 QuotaLimit = 7; 
+    optional uint64 QuotaReserved = 8; 
+    repeated TShard ReleasedShards = 9; 
+    optional uint64 InactiveClientTimeout = 10; 
+    optional uint64 InactiveServerTimeout = 11; 
+    optional uint64 LastDataStreamTimestamp = 12; 
+    optional uint64 LastStatusTimestamp = 13; 
+} 
+ 
+message TEvGetSlowOpProfilesRequest { 
+} 
+ 
+message TEvGetSlowOpProfilesResponse { 
+    message TOpProfile { 
+        optional TBasicOpInfo BasicInfo = 1; 
+        optional TExecutionProfile ExecutionProfile = 2; 
+    } 
+ 
+    optional TStatus Status = 1; 
+    repeated TOpProfile Profiles = 2; 
+} 
+ 
+message TEvGetRSInfoRequest { 
+} 
+ 
+message TEvGetRSInfoResponse { 
+    message TOutRSInfo { 
+        optional uint64 TxId = 1; 
+        optional uint64 Origin = 2; 
+        optional uint64 Source = 3; 
+        optional uint64 Destination = 4; 
+        optional uint64 SeqNo = 5; 
+    } 
+ 
+    message TRSAckInfo { 
+        optional uint64 TxId = 1; 
+        optional uint64 Step = 2; 
+        optional uint64 Origin = 3; 
+        optional uint64 Source = 4; 
+        optional uint64 Destination = 5; 
+        optional uint64 SeqNo = 6; 
+    } 
+ 
+    optional TStatus Status = 1; 
+    repeated TOutRSInfo OutReadSets = 2; 
+    repeated TRSAckInfo OutRSAcks = 3; 
+    repeated TRSAckInfo DelayedRSAcks = 4; 
+} 
+ 
+message TEvGetDataHistogramRequest { 
     optional uint32 CollectKeySampleMs = 1;
     optional bool ActualData = 2;
-}
-
-message TEvGetDataHistogramResponse {
-    message THistogramItem {
-        optional uint64 Value = 1;
-        repeated string KeyValues = 2;
-    }
-
-    message THistogram {
-        repeated THistogramItem Items = 1;
-    }
-
-    message TTableHistograms {
-        optional string TableName = 1;
-        repeated string KeyNames = 2;
-        optional THistogram SizeHistogram = 3;
-        optional THistogram CountHistogram = 4;
+} 
+ 
+message TEvGetDataHistogramResponse { 
+    message THistogramItem { 
+        optional uint64 Value = 1; 
+        repeated string KeyValues = 2; 
+    } 
+ 
+    message THistogram { 
+        repeated THistogramItem Items = 1; 
+    } 
+ 
+    message TTableHistograms { 
+        optional string TableName = 1; 
+        repeated string KeyNames = 2; 
+        optional THistogram SizeHistogram = 3; 
+        optional THistogram CountHistogram = 4; 
         optional THistogram KeyAccessSample = 5;
-    }
-
-    optional TStatus Status = 1;
-    repeated TTableHistograms TableHistograms = 2;
+    } 
+ 
+    optional TStatus Status = 1; 
+    repeated TTableHistograms TableHistograms = 2; 
 }
 
 message TEvRefreshVolatileSnapshotRequest {

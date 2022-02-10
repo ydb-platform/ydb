@@ -159,7 +159,7 @@ class KikimrConfigGenerator(object):
         self.__udfs_path = udfs_path
         self.__yql_config_path = yql_config_path
         self.__auth_config_path = auth_config_path
-        self.__slot_count = slot_count
+        self.__slot_count = slot_count 
         self._dcs = [1]
         if erasure == Erasure.MIRROR_3_DC:
             self._dcs = [1, 2, 3]

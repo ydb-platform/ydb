@@ -101,7 +101,7 @@ SRCS(
     ares_timeout.c
     ares_version.c
     ares_writev.c
-    atomic.cpp
+    atomic.cpp 
     bitncmp.c
     inet_net_pton.c
     inet_ntop.c

@@ -19,7 +19,7 @@ SRCS(
     rpc_begin_transaction.cpp
     rpc_calls.cpp
     rpc_cancel_operation.cpp
-    rpc_cms.cpp
+    rpc_cms.cpp 
     rpc_commit_transaction.cpp
     rpc_copy_table.cpp
     rpc_copy_tables.cpp
@@ -31,7 +31,7 @@ SRCS(
     rpc_describe_coordination_node.cpp
     rpc_describe_path.cpp
     rpc_describe_table.cpp
-    rpc_describe_table_options.cpp
+    rpc_describe_table_options.cpp 
     rpc_drop_coordination_node.cpp
     rpc_drop_table.cpp
     rpc_discovery.cpp
@@ -70,7 +70,7 @@ SRCS(
     rpc_stream_execute_yql_script.cpp
     rpc_whoami.cpp
     rpc_yq.cpp
-    table_profiles.cpp
+    table_profiles.cpp 
     table_settings.cpp
     rpc_analytics_internal.cpp
 )

@@ -6,7 +6,7 @@
 #include <ydb/core/base/row_version.h>
 #include <ydb/core/protos/counters_datashard.pb.h>
 #include <ydb/core/tablet/tablet_counters.h>
-
+ 
 #include <library/cpp/cache/cache.h>
 #include <util/generic/queue.h>
 #include <util/generic/set.h>
@@ -19,82 +19,82 @@ namespace NDataShard {
 
 struct TUserTable;
 
-class TLocksDataShard {
-public:
+class TLocksDataShard { 
+public: 
     TLocksDataShard(TTabletCountersBase* const &tabletCounters)
-        : TabletCounters(tabletCounters)
-    {
-    }
+        : TabletCounters(tabletCounters) 
+    { 
+    } 
 
-    virtual ~TLocksDataShard() = default;
+    virtual ~TLocksDataShard() = default; 
 
     virtual void IncCounter(ECumulativeCounters counter,
-                            ui64 num = 1) const = 0;
+                            ui64 num = 1) const = 0; 
     virtual void IncCounter(EPercentileCounters counter,
-                            ui64 num) const = 0;
+                            ui64 num) const = 0; 
     virtual void IncCounter(EPercentileCounters counter,
-                            const TDuration& latency) const = 0;
+                            const TDuration& latency) const = 0; 
 
-    virtual ui64 TabletID() const = 0;
-    virtual bool IsUserTable(const TTableId& tableId) const = 0;
-    virtual ui32 Generation() const = 0;
+    virtual ui64 TabletID() const = 0; 
+    virtual bool IsUserTable(const TTableId& tableId) const = 0; 
+    virtual ui32 Generation() const = 0; 
     virtual TRowVersion LastCompleteTxVersion() const = 0;
-
-    TTabletCountersBase* const &TabletCounters;
-};
-
-template <typename T>
-class TLocksDataShardAdapter : public TLocksDataShard
-{
-public:
-    TLocksDataShardAdapter(const T *self)
+ 
+    TTabletCountersBase* const &TabletCounters; 
+}; 
+ 
+template <typename T> 
+class TLocksDataShardAdapter : public TLocksDataShard 
+{ 
+public: 
+    TLocksDataShardAdapter(const T *self) 
         : TLocksDataShard(self->TabletCounters)
-        , Self(self)
-    {
-    }
-
+        , Self(self) 
+    { 
+    } 
+ 
     void IncCounter(ECumulativeCounters counter,
-                    ui64 num = 1) const override
-    {
-        return Self->IncCounter(counter, num);
-    }
-
+                    ui64 num = 1) const override 
+    { 
+        return Self->IncCounter(counter, num); 
+    } 
+ 
     void IncCounter(EPercentileCounters counter,
-                    ui64 num) const override
-    {
-        return Self->IncCounter(counter, num);
-    }
-
+                    ui64 num) const override 
+    { 
+        return Self->IncCounter(counter, num); 
+    } 
+ 
     void IncCounter(EPercentileCounters counter,
-                    const TDuration& latency) const override
-    {
-        return Self->IncCounter(counter, latency);
-    }
-
-    ui64 TabletID() const override
-    {
-        return Self->TabletID();
-    }
-
-    bool IsUserTable(const TTableId& tableId) const override
-    {
-        return Self->IsUserTable(tableId);
-    }
-
-    ui32 Generation() const override
-    {
-        return Self->Generation();
-    }
-
+                    const TDuration& latency) const override 
+    { 
+        return Self->IncCounter(counter, latency); 
+    } 
+ 
+    ui64 TabletID() const override 
+    { 
+        return Self->TabletID(); 
+    } 
+ 
+    bool IsUserTable(const TTableId& tableId) const override 
+    { 
+        return Self->IsUserTable(tableId); 
+    } 
+ 
+    ui32 Generation() const override 
+    { 
+        return Self->Generation(); 
+    } 
+ 
     TRowVersion LastCompleteTxVersion() const override
     {
         return Self->LastCompleteTxVersion();
     }
 
-private:
-    const T *Self;
-};
-
+private: 
+    const T *Self; 
+}; 
+ 
 class TLockInfo;
 class TTableLocks;
 class TLockLocker;
@@ -151,7 +151,7 @@ public:
 
     size_t NumPoints() const { return Points.size(); }
     size_t NumRanges() const { return Ranges.size(); }
-    bool IsShardLock() const { return ShardLock; }
+    bool IsShardLock() const { return ShardLock; } 
     //ui64 MemorySize() const { return 1; } // TODO
 
     bool MayHavePointsAndRanges() const { return !ShardLock && (!BreakVersion || *BreakVersion); }
@@ -267,9 +267,9 @@ public:
         TLRUCache<ui64, TInstant> LocksQueue;
     };
 
-    template <typename T>
-    TLockLocker(const T * self)
-        : Self(new TLocksDataShardAdapter<T>(self))
+    template <typename T> 
+    TLockLocker(const T * self) 
+        : Self(new TLocksDataShardAdapter<T>(self)) 
         , Limiter(this)
         , Counter(0)
     {}
@@ -329,7 +329,7 @@ public:
     ui64 IncCounter() { return Counter++; };
 
 private:
-    THolder<TLocksDataShard> Self;
+    THolder<TLocksDataShard> Self; 
     THashMap<ui64, TLockInfo::TPtr> Locks; // key is LockId
     THashMap<TPathId, TTableLocks::TPtr> Tables;
     THashSet<ui64> ShardLocks;
@@ -420,37 +420,37 @@ struct TLocksUpdate {
     }
 };
 
-struct TLocksCache {
-    THashMap<ui64, TSysTables::TLocksTable::TLock> Locks;
-};
-
+struct TLocksCache { 
+    THashMap<ui64, TSysTables::TLocksTable::TLock> Locks; 
+}; 
+ 
 /// /sys/locks table logic
 class TSysLocks {
 public:
     using TLocksTable = TSysTables::TLocksTable;
     using TLock = TLocksTable::TLock;
 
-    template <typename T>
-    TSysLocks(const T * self)
-        : Self(new TLocksDataShardAdapter<T>(self))
+    template <typename T> 
+    TSysLocks(const T * self) 
+        : Self(new TLocksDataShardAdapter<T>(self)) 
         , Locker(self)
         , Update(nullptr)
-        , AccessLog(nullptr)
-        , Cache(nullptr)
+        , AccessLog(nullptr) 
+        , Cache(nullptr) 
     {}
 
     void SetTxUpdater(TLocksUpdate * up) {
         Update = up;
     }
 
-    void SetAccessLog(TLocksCache *log) {
-        AccessLog = log;
-    }
-
-    void SetCache(TLocksCache *cache) {
-        Cache = cache;
-    }
-
+    void SetAccessLog(TLocksCache *log) { 
+        AccessLog = log; 
+    } 
+ 
+    void SetCache(TLocksCache *cache) { 
+        Cache = cache; 
+    } 
+ 
     ui64 CurrentLockTxId() const {
         Y_VERIFY(Update);
         return Update->LockTxId;
@@ -490,11 +490,11 @@ public:
     }
 
 private:
-    THolder<TLocksDataShard> Self;
+    THolder<TLocksDataShard> Self; 
     TLockLocker Locker;
     TLocksUpdate * Update;
-    TLocksCache *AccessLog;
-    TLocksCache *Cache;
+    TLocksCache *AccessLog; 
+    TLocksCache *Cache; 
 
     TLock MakeLock(ui64 lockTxId, ui64 counter, const TPathId& pathId) const;
     TLock MakeAndLogLock(ui64 lockTxId, ui64 counter, const TPathId& pathId) const;

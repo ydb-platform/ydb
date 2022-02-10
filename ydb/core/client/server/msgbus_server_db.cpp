@@ -280,7 +280,7 @@ protected:
         case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError:
         case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecError:
         case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::DomainLocalityError:
-        case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::WrongRequest:
+        case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::WrongRequest: 
             return ReplyWithResult(MSTATUS_ERROR, msg->Record, ctx);
         case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardNotAvailable:
         case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardTryLater:
@@ -703,7 +703,7 @@ protected:
         case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::EmptyAffectedSet:
         case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError:
         case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecError:
-        case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::WrongRequest:
+        case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::WrongRequest: 
             return ReplyWithResult(MSTATUS_ERROR, msg->Record, ctx);
         case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardNotAvailable:
         case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardTryLater:

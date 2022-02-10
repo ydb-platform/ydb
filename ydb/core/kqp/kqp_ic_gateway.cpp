@@ -2342,9 +2342,9 @@ private:
             case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecCancelled:
                 status = TIssuesIds::KIKIMR_OPERATION_CANCELLED;
                 break;
-            case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::WrongRequest:
-                status = TIssuesIds::KIKIMR_BAD_REQUEST;
-                break;
+            case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::WrongRequest: 
+                status = TIssuesIds::KIKIMR_BAD_REQUEST; 
+                break; 
             case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardUnknown:
             case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::CoordinatorUnknown:
                 status = TIssuesIds::KIKIMR_OPERATION_STATE_UNKNOWN;

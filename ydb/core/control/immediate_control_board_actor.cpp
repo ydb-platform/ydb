@@ -48,7 +48,7 @@ public:
             const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters)
         : Board(board)
     {
-        TIntrusivePtr<NMonitoring::TDynamicCounters> IcbGroup = GetServiceCounters(counters, "utils");
+        TIntrusivePtr<NMonitoring::TDynamicCounters> IcbGroup = GetServiceCounters(counters, "utils"); 
         HasChanged = IcbGroup->GetCounter("Icb/HasChangedContol");
         ChangedCount = IcbGroup->GetCounter("Icb/ChangedControlsCount");
     }

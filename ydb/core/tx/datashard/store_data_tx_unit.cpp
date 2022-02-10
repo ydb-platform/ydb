@@ -1,72 +1,72 @@
-#include "const.h"
-#include "datashard_pipeline.h"
-#include "execution_unit_ctors.h"
-
-namespace NKikimr {
+#include "const.h" 
+#include "datashard_pipeline.h" 
+#include "execution_unit_ctors.h" 
+ 
+namespace NKikimr { 
 namespace NDataShard {
-
-class TStoreDataTxUnit : public TExecutionUnit {
-public:
+ 
+class TStoreDataTxUnit : public TExecutionUnit { 
+public: 
     TStoreDataTxUnit(TDataShard &dataShard,
-                     TPipeline &pipeline);
-    ~TStoreDataTxUnit() override;
-
-    bool IsReadyToExecute(TOperation::TPtr op) const override;
-    EExecutionStatus Execute(TOperation::TPtr op,
-                             TTransactionContext &txc,
-                             const TActorContext &ctx) override;
-    void Complete(TOperation::TPtr op,
-                  const TActorContext &ctx) override;
-
-private:
-};
-
+                     TPipeline &pipeline); 
+    ~TStoreDataTxUnit() override; 
+ 
+    bool IsReadyToExecute(TOperation::TPtr op) const override; 
+    EExecutionStatus Execute(TOperation::TPtr op, 
+                             TTransactionContext &txc, 
+                             const TActorContext &ctx) override; 
+    void Complete(TOperation::TPtr op, 
+                  const TActorContext &ctx) override; 
+ 
+private: 
+}; 
+ 
 TStoreDataTxUnit::TStoreDataTxUnit(TDataShard &dataShard,
-                                   TPipeline &pipeline)
-    : TExecutionUnit(EExecutionUnitKind::StoreDataTx, false, dataShard, pipeline)
-{
-}
-
-TStoreDataTxUnit::~TStoreDataTxUnit()
-{
-}
-
-bool TStoreDataTxUnit::IsReadyToExecute(TOperation::TPtr) const
-{
-    return true;
-}
-
-EExecutionStatus TStoreDataTxUnit::Execute(TOperation::TPtr op,
-                                           TTransactionContext &txc,
+                                   TPipeline &pipeline) 
+    : TExecutionUnit(EExecutionUnitKind::StoreDataTx, false, dataShard, pipeline) 
+{ 
+} 
+ 
+TStoreDataTxUnit::~TStoreDataTxUnit() 
+{ 
+} 
+ 
+bool TStoreDataTxUnit::IsReadyToExecute(TOperation::TPtr) const 
+{ 
+    return true; 
+} 
+ 
+EExecutionStatus TStoreDataTxUnit::Execute(TOperation::TPtr op, 
+                                           TTransactionContext &txc, 
                                            const TActorContext &ctx)
-{
-    Y_VERIFY(op->IsDataTx() || op->IsReadTable());
-    Y_VERIFY(!op->IsAborted() && !op->IsInterrupted());
-
-    TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
-    Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
-    Y_VERIFY(tx->GetDataTx());
-
-    Pipeline.SaveForPropose(tx->GetDataTx());
+{ 
+    Y_VERIFY(op->IsDataTx() || op->IsReadTable()); 
+    Y_VERIFY(!op->IsAborted() && !op->IsInterrupted()); 
+ 
+    TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get()); 
+    Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind()); 
+    Y_VERIFY(tx->GetDataTx()); 
+ 
+    Pipeline.SaveForPropose(tx->GetDataTx()); 
     Pipeline.ProposeTx(op, tx->GetTxBody(), txc, ctx);
-
-    tx->ClearTxBody();
-    tx->ClearDataTx();
-
+ 
+    tx->ClearTxBody(); 
+    tx->ClearDataTx(); 
+ 
     return EExecutionStatus::DelayCompleteNoMoreRestarts;
-}
-
+} 
+ 
 void TStoreDataTxUnit::Complete(TOperation::TPtr op,
                                 const TActorContext &ctx)
-{
+{ 
     Pipeline.ProposeComplete(op, ctx);
-}
-
+} 
+ 
 THolder<TExecutionUnit> CreateStoreDataTxUnit(TDataShard &dataShard,
-                                              TPipeline &pipeline)
-{
+                                              TPipeline &pipeline) 
+{ 
     return MakeHolder<TStoreDataTxUnit>(dataShard, pipeline);
-}
-
+} 
+ 
 } // namespace NDataShard
-} // namespace NKikimr
+} // namespace NKikimr 

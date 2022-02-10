@@ -1,5 +1,5 @@
 #include "local.h"
-
+ 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/hive.h>
@@ -9,11 +9,11 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/scheme_board/scheme_board.h>
 #include <ydb/core/util/tuples.h>
-
+ 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/log.h>
-
+ 
 #include <util/system/info.h>
 
 #include <unordered_map>
@@ -115,8 +115,8 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     NKikimrTabletBase::TMetrics ResourceLimit;
     TResourceProfilesPtr ResourceProfiles;
     TSharedQuotaPtr TxCacheQuota;
-    NMonitoring::TDynamicCounterPtr Counters;
-
+    NMonitoring::TDynamicCounterPtr Counters; 
+ 
     NMonitoring::TDynamicCounters::TCounterPtr CounterStartAttempts;
     NMonitoring::TDynamicCounters::TCounterPtr CounterFollowerAttempts;
     NMonitoring::TDynamicCounters::TCounterPtr CounterRestored;
@@ -265,12 +265,12 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         HandlePipeDestroyed(ctx);
     }
 
-    void SendStatusOk(const TActorContext &ctx) {
+    void SendStatusOk(const TActorContext &ctx) { 
         LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar SendStatusOk");
-        TAutoPtr<TEvLocal::TEvStatus> eventStatus = new TEvLocal::TEvStatus(TEvLocal::TEvStatus::StatusOk);
-        auto& record = eventStatus->Record;
-        record.SetStartTime(StartTime.GetValue());
-        record.MutableResourceMaximum()->CopyFrom(ResourceLimit);
+        TAutoPtr<TEvLocal::TEvStatus> eventStatus = new TEvLocal::TEvStatus(TEvLocal::TEvStatus::StatusOk); 
+        auto& record = eventStatus->Record; 
+        record.SetStartTime(StartTime.GetValue()); 
+        record.MutableResourceMaximum()->CopyFrom(ResourceLimit); 
         if (!record.GetResourceMaximum().HasCPU()) {
             TExecutorPoolStats poolStats;
             TVector<TExecutorThreadStats> statsCopy;
@@ -287,8 +287,8 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             }
         }
         NTabletPipe::SendData(ctx, HivePipeClient, eventStatus.Release());
-    }
-
+    } 
+ 
     void Handle(TEvLocal::TEvReconnect::TPtr& ev, const TActorContext& ctx) {
         LOG_DEBUG(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar::Handle TEvLocal::TEvReconnect");
         const TActorId& sender = ev->Sender;
@@ -349,7 +349,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
                 tablet->SetFollowerId(pr.first.second);
                 tablet->SetGeneration(pr.second.Generation);
                 tablet->SetBootMode(pr.second.BootMode);
-
+ 
                 ctx.Send(pr.second.Tablet, new TEvTablet::TEvUpdateConfig(ResourceProfiles));
             }
             for (const auto& pr : OnlineTablets) {
@@ -366,12 +366,12 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             Connected = true;
             LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar TEvPing - CONNECTED");
         }
-
+ 
         HiveGeneration = hiveGen;
         BootQueue = sender;
 
         // we send status of the 'local' to become online and available for new tablets
-        SendStatusOk(ctx);
+        SendStatusOk(ctx); 
 
         ScheduleSendTabletMetrics(ctx);
     }
@@ -401,7 +401,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         }
 
         LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar: Handle TEvLocal::TEvBootTablet tabletType:"
-                    << tabletType << " tabletId:" << tabletId << " suggestedGen:" << suggestedGen);
+                    << tabletType << " tabletId:" << tabletId << " suggestedGen:" << suggestedGen); 
 
         TMap<TTabletTypes::EType, TLocalConfig::TTabletClassInfo>::const_iterator it = Config->TabletClassInfo.find(tabletType);
         if (it == Config->TabletClassInfo.end()) {
@@ -447,7 +447,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         TTabletSetupInfo *setupInfo = it->second.SetupInfo.Get();
         switch (record.GetBootMode()) {
         case NKikimrLocal::BOOT_MODE_LEADER:
-            entry.Tablet = setupInfo->Tablet(info.Get(), ctx.SelfID, ctx, suggestedGen, ResourceProfiles, TxCacheQuota);
+            entry.Tablet = setupInfo->Tablet(info.Get(), ctx.SelfID, ctx, suggestedGen, ResourceProfiles, TxCacheQuota); 
             CounterStartAttempts->Inc();
             break;
         case NKikimrLocal::BOOT_MODE_FOLLOWER:
@@ -660,18 +660,18 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         }
     }
 
-    void Handle(TEvLocal::TEvAlterTenant::TPtr &ev, const TActorContext &ctx) {
-        auto &info = ev->Get()->TenantInfo;
-        ResourceLimit = info.ResourceLimit;
-
-        LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, "Updated resoure limit: "
-                    << ResourceLimit.ShortDebugString());
-
-        UpdateCacheQuota();
-
-        SendStatusOk(ctx);
-    }
-
+    void Handle(TEvLocal::TEvAlterTenant::TPtr &ev, const TActorContext &ctx) { 
+        auto &info = ev->Get()->TenantInfo; 
+        ResourceLimit = info.ResourceLimit; 
+ 
+        LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, "Updated resoure limit: " 
+                    << ResourceLimit.ShortDebugString()); 
+ 
+        UpdateCacheQuota(); 
+ 
+        SendStatusOk(ctx); 
+    } 
+ 
     void MarkRunningTablet(TTabletId tabletId, ui32 generation, const TActorContext& ctx) {
         auto inbootIt = InbootTablets.find(tabletId);
         if (inbootIt == InbootTablets.end())
@@ -848,22 +848,22 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         }
     }
 
-    void UpdateCacheQuota() {
-        ui64 mem = ResourceLimit.GetMemory();
-        if (mem)
-            TxCacheQuota->ChangeQuota(mem / 4);
-        else
-            TxCacheQuota->ChangeQuota(Max<i64>());
-    }
-
+    void UpdateCacheQuota() { 
+        ui64 mem = ResourceLimit.GetMemory(); 
+        if (mem) 
+            TxCacheQuota->ChangeQuota(mem / 4); 
+        else 
+            TxCacheQuota->ChangeQuota(Max<i64>()); 
+    } 
+ 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::LOCAL_ACTOR;
     }
 
     TLocalNodeRegistrar(const TActorId &owner, ui64 hiveId, TVector<TSubDomainKey> servicedDomains,
-                        const NKikimrTabletBase::TMetrics &resourceLimit, TIntrusivePtr<TLocalConfig> config,
-                        NMonitoring::TDynamicCounterPtr counters)
+                        const NKikimrTabletBase::TMetrics &resourceLimit, TIntrusivePtr<TLocalConfig> config, 
+                        NMonitoring::TDynamicCounterPtr counters) 
         : Owner(owner)
         , HiveId(hiveId)
         , ServicedDomains(std::move(servicedDomains))
@@ -871,12 +871,12 @@ public:
         , Config(config)
         , HiveGeneration(0)
         , SendTabletMetricsInProgress(false)
-        , ResourceLimit(resourceLimit)
-        , Counters(counters)
+        , ResourceLimit(resourceLimit) 
+        , Counters(counters) 
     {
         Y_VERIFY(!ServicedDomains.empty());
-        TxCacheQuota = new TSharedQuota(Counters->GetCounter("UsedTxDataCache"),
-                                        Counters->GetCounter("TxDataCacheSize"));
+        TxCacheQuota = new TSharedQuota(Counters->GetCounter("UsedTxDataCache"), 
+                                        Counters->GetCounter("TxDataCacheSize")); 
 
         CounterStartAttempts = Counters->GetCounter("Local_StartAttempts", true);
         CounterFollowerAttempts = Counters->GetCounter("Local_FollowerAttempts", true);
@@ -895,7 +895,7 @@ public:
         CounterCancelDemotedByBS = Counters->GetCounter("Local_CancelDemotedByBS", true);
         CounterCancelUnknownReason = Counters->GetCounter("Local_CancelUnknownReason", true);
 
-        UpdateCacheQuota();
+        UpdateCacheQuota(); 
     }
 
     void Bootstrap(const TActorContext &ctx) {
@@ -918,7 +918,7 @@ public:
             HFunc(TEvLocal::TEvEnumerateTablets, Handle);
             HFunc(TEvLocal::TEvTabletMetrics, Handle);
             HFunc(TEvLocal::TEvTabletMetricsAck, Handle);
-            HFunc(TEvLocal::TEvAlterTenant, Handle);
+            HFunc(TEvLocal::TEvAlterTenant, Handle); 
             HFunc(TEvLocal::TEvReconnect, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
@@ -938,179 +938,179 @@ public:
 
 };
 
-class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
-    struct TResolveTask {
-        TRegistrationInfo Info;
+class TDomainLocal : public TActorBootstrapped<TDomainLocal> { 
+    struct TResolveTask { 
+        TRegistrationInfo Info; 
         TVector<TActorId> Senders;
-    };
+    }; 
 
-    struct TTenantInfo {
+    struct TTenantInfo { 
         TTenantInfo(const TRegistrationInfo &info, const TSubDomainKey &domainKey)
-            : Info(info)
+            : Info(info) 
             , DomainKey(domainKey)
-        {}
+        {} 
 
-        TTenantInfo(const TTenantInfo &other) = default;
-        TTenantInfo(TTenantInfo &&other) = default;
-
-        TRegistrationInfo Info;
+        TTenantInfo(const TTenantInfo &other) = default; 
+        TTenantInfo(TTenantInfo &&other) = default; 
+ 
+        TRegistrationInfo Info; 
         TVector<TActorId> Locals;
         TActorId Subscriber;
         TVector<TTabletId> HiveIds;
-        THashMap<TString, TString> Attributes;
+        THashMap<TString, TString> Attributes; 
         TSubDomainKey DomainKey;
-    };
+    }; 
 
-    TString Domain;
-    ui64 SchemeRoot;
-    TVector<ui64> HiveIds;
+    TString Domain; 
+    ui64 SchemeRoot; 
+    TVector<ui64> HiveIds; 
     TActorId SchemeShardPipe;
-    NTabletPipe::TClientConfig PipeConfig;
-    THashMap<TString, TResolveTask> ResolveTasks;
-    TIntrusivePtr<TLocalConfig> Config;
-    THashMap<TString, TTenantInfo> RunningTenants;
-    TString LogPrefix;
+    NTabletPipe::TClientConfig PipeConfig; 
+    THashMap<TString, TResolveTask> ResolveTasks; 
+    TIntrusivePtr<TLocalConfig> Config; 
+    THashMap<TString, TTenantInfo> RunningTenants; 
+    TString LogPrefix; 
 
-    void OpenPipe(const TActorContext &ctx)
-    {
-        ClosePipe(ctx);
+    void OpenPipe(const TActorContext &ctx) 
+    { 
+        ClosePipe(ctx); 
         SchemeShardPipe = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, SchemeRoot, PipeConfig));
-    }
+    } 
 
-    void ClosePipe(const TActorContext &ctx)
-    {
-        if (SchemeShardPipe) {
-            NTabletPipe::CloseClient(ctx, SchemeShardPipe);
+    void ClosePipe(const TActorContext &ctx) 
+    { 
+        if (SchemeShardPipe) { 
+            NTabletPipe::CloseClient(ctx, SchemeShardPipe); 
             SchemeShardPipe = TActorId();
-        }
-    }
+        } 
+    } 
 
-    void SendResolveRequest(const TRegistrationInfo &info, const TActorContext &ctx)
-    {
-        LOG_DEBUG_S(ctx, NKikimrServices::LOCAL,
-                    LogPrefix << "Send resolve request for " << info.TenantName
-                    << " to schemeshard " << SchemeRoot);
+    void SendResolveRequest(const TRegistrationInfo &info, const TActorContext &ctx) 
+    { 
+        LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, 
+                    LogPrefix << "Send resolve request for " << info.TenantName 
+                    << " to schemeshard " << SchemeRoot); 
 
         auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvDescribeScheme>(info.TenantName);
-        NTabletPipe::SendData(ctx.SelfID, SchemeShardPipe, request.Release());
-    }
+        NTabletPipe::SendData(ctx.SelfID, SchemeShardPipe, request.Release()); 
+    } 
 
-    void SendStatus(const TString &tenant,
+    void SendStatus(const TString &tenant, 
                     TActorId recipient,
-                    const TActorContext &ctx)
-    {
-        TAutoPtr<TEvLocal::TEvTenantStatus> ev;
+                    const TActorContext &ctx) 
+    { 
+        TAutoPtr<TEvLocal::TEvTenantStatus> ev; 
 
-        auto it = RunningTenants.find(tenant);
-        if (it != RunningTenants.end())
-            ev = new TEvLocal::TEvTenantStatus(tenant,
-                                               TEvLocal::TEvTenantStatus::STARTED,
-                                               it->second.Info.ResourceLimit,
+        auto it = RunningTenants.find(tenant); 
+        if (it != RunningTenants.end()) 
+            ev = new TEvLocal::TEvTenantStatus(tenant, 
+                                               TEvLocal::TEvTenantStatus::STARTED, 
+                                               it->second.Info.ResourceLimit, 
                                                it->second.Attributes,
                                                it->second.DomainKey);
+ 
+        else 
+            ev = new TEvLocal::TEvTenantStatus(tenant, 
+                                               TEvLocal::TEvTenantStatus::STOPPED); 
 
-        else
-            ev = new TEvLocal::TEvTenantStatus(tenant,
-                                               TEvLocal::TEvTenantStatus::STOPPED);
+        ctx.Send(recipient, ev.Release()); 
+    } 
 
-        ctx.Send(recipient, ev.Release());
-    }
-
-    void SendStatus(const TString &tenant,
-                    TEvLocal::TEvTenantStatus::EStatus status,
-                    const TString &msg,
+    void SendStatus(const TString &tenant, 
+                    TEvLocal::TEvTenantStatus::EStatus status, 
+                    const TString &msg, 
                     TActorId recipient,
-                    const TActorContext &ctx)
-    {
-        TAutoPtr<TEvLocal::TEvTenantStatus> ev = new TEvLocal::TEvTenantStatus(tenant, status, msg);
-        ctx.Send(recipient, ev.Release());
+                    const TActorContext &ctx) 
+    { 
+        TAutoPtr<TEvLocal::TEvTenantStatus> ev = new TEvLocal::TEvTenantStatus(tenant, status, msg); 
+        ctx.Send(recipient, ev.Release()); 
     }
 
-    void SendStatus(const TString &tenant,
+    void SendStatus(const TString &tenant, 
                     const TVector<TActorId> &recipients,
-                    const TActorContext &ctx)
-    {
-        for (auto &r : recipients)
-            SendStatus(tenant, r, ctx);
+                    const TActorContext &ctx) 
+    { 
+        for (auto &r : recipients) 
+            SendStatus(tenant, r, ctx); 
     }
 
-    void SendStatus(const TString &tenant,
-                    TEvLocal::TEvTenantStatus::EStatus status,
-                    const TString &msg,
+    void SendStatus(const TString &tenant, 
+                    TEvLocal::TEvTenantStatus::EStatus status, 
+                    const TString &msg, 
                     const TVector<TActorId> &recipients,
-                    const TActorContext &ctx)
-    {
-        for (auto &r : recipients)
-            SendStatus(tenant, status, msg, r, ctx);
+                    const TActorContext &ctx) 
+    { 
+        for (auto &r : recipients) 
+            SendStatus(tenant, status, msg, r, ctx); 
     }
-
-    void RegisterLocalNode(const TString &tenant,
-                           const NKikimrTabletBase::TMetrics &resourceLimit,
+ 
+    void RegisterLocalNode(const TString &tenant, 
+                           const NKikimrTabletBase::TMetrics &resourceLimit, 
                            ui64 hiveId,
-                           const TVector<TSubDomainKey> &servicedDomains,
+                           const TVector<TSubDomainKey> &servicedDomains, 
                            const TActorContext &ctx)
     {
-        auto counters = GetServiceCounters(AppData(ctx)->Counters, "tablets");
-        auto actor = new TLocalNodeRegistrar(SelfId(), hiveId, servicedDomains, resourceLimit, Config, counters);
+        auto counters = GetServiceCounters(AppData(ctx)->Counters, "tablets"); 
+        auto actor = new TLocalNodeRegistrar(SelfId(), hiveId, servicedDomains, resourceLimit, Config, counters); 
         TActorId actorId = ctx.Register(actor);
 
-        RunningTenants.at(tenant).Locals.push_back(actorId);
+        RunningTenants.at(tenant).Locals.push_back(actorId); 
 
         TActorId localRegistrarServiceId = MakeLocalRegistrarID(ctx.SelfID.NodeId(), hiveId);
         ctx.ExecutorThread.ActorSystem->RegisterLocalService(localRegistrarServiceId, actorId);
-    }
-
-    void RegisterAsDomain(const TRegistrationInfo &info,
+    } 
+ 
+    void RegisterAsDomain(const TRegistrationInfo &info, 
                           const TActorContext &ctx)
     {
         Y_VERIFY(!RunningTenants.contains(info.TenantName));
         const auto domainKey = TSubDomainKey(SchemeRoot, 1);
         RunningTenants.emplace(std::make_pair(info.TenantName, TTenantInfo(info, domainKey)));
-        for (auto id : HiveIds) {
+        for (auto id : HiveIds) { 
             RegisterLocalNode(info.TenantName, info.ResourceLimit, id, {domainKey}, ctx);
-
-            LOG_DEBUG_S(ctx, NKikimrServices::LOCAL,
-                        LogPrefix << "Binding to hive " << id <<
-                        " at domain " << info.DomainName <<
-                        " (allocated resources: " << info.ResourceLimit.ShortDebugString() << ")");
-        }
+ 
+            LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, 
+                        LogPrefix << "Binding to hive " << id << 
+                        " at domain " << info.DomainName << 
+                        " (allocated resources: " << info.ResourceLimit.ShortDebugString() << ")"); 
+        } 
     }
 
     void RegisterAsSubDomain(const NKikimrScheme::TEvDescribeSchemeResult &rec,
-                             const TResolveTask &task,
+                             const TResolveTask &task, 
                              const TVector<TTabletId> hiveIds,
-                             const TActorContext &ctx)
-    {
-        const auto &domainDesc = rec.GetPathDescription().GetDomainDescription();
+                             const TActorContext &ctx) 
+    { 
+        const auto &domainDesc = rec.GetPathDescription().GetDomainDescription(); 
         const auto domainKey = TSubDomainKey(domainDesc.GetDomainKey());
 
         Y_VERIFY(!RunningTenants.contains(task.Info.TenantName));
         TTenantInfo info(task.Info, domainKey);
-        for (auto &attr : rec.GetPathDescription().GetUserAttributes())
-            info.Attributes.emplace(std::make_pair(attr.GetKey(), attr.GetValue()));
-        RunningTenants.emplace(std::make_pair(task.Info.TenantName, info));
+        for (auto &attr : rec.GetPathDescription().GetUserAttributes()) 
+            info.Attributes.emplace(std::make_pair(attr.GetKey(), attr.GetValue())); 
+        RunningTenants.emplace(std::make_pair(task.Info.TenantName, info)); 
         const TActorId whiteboardServiceId(NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId()));
         Send(whiteboardServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateAddRole("Tenant"));
         Send(whiteboardServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateSetTenant(task.Info.TenantName));
         for (TTabletId hId : hiveIds) {
-            LOG_DEBUG_S(ctx, NKikimrServices::LOCAL,
-                        LogPrefix << "Binding tenant " << task.Info.TenantName
+            LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, 
+                        LogPrefix << "Binding tenant " << task.Info.TenantName 
                         << " to hive " << hId
-                        << " (allocated resources: " << task.Info.ResourceLimit.ShortDebugString() << ")");
+                        << " (allocated resources: " << task.Info.ResourceLimit.ShortDebugString() << ")"); 
             RegisterLocalNode(task.Info.TenantName, task.Info.ResourceLimit, hId, {domainKey}, ctx);
         }
     }
-
-    void HandlePoison(const TActorContext &ctx)
+ 
+    void HandlePoison(const TActorContext &ctx) 
     {
-        LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, LogPrefix << "HandlePoison");
-
+        LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, LogPrefix << "HandlePoison"); 
+ 
         for (auto &pr : RunningTenants) {
-            for (auto aid : pr.second.Locals) {
-                LOG_DEBUG_S(ctx, NKikimrServices::LOCAL,
-                            LogPrefix << "Send poison pill to local of " << pr.second.Info.TenantName);
-                ctx.Send(aid, new TEvents::TEvPoisonPill);
-            }
+            for (auto aid : pr.second.Locals) { 
+                LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, 
+                            LogPrefix << "Send poison pill to local of " << pr.second.Info.TenantName); 
+                ctx.Send(aid, new TEvents::TEvPoisonPill); 
+            } 
             if (pr.second.Subscriber) {
                 LOG_DEBUG_S(ctx, NKikimrServices::LOCAL,
                             LogPrefix << "Send poison pill to scheme subscriber of " << pr.second.Info.TenantName);
@@ -1120,66 +1120,66 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
             ctx.Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(ctx.SelfID.NodeId()),
                      new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateRemoveTenant(pr.first));
         }
-
+ 
         ClosePipe(ctx);
-        Die(ctx);
+        Die(ctx); 
     }
 
-    void HandlePipe(TEvTabletPipe::TEvClientConnected::TPtr ev, const TActorContext &ctx)
-    {
+    void HandlePipe(TEvTabletPipe::TEvClientConnected::TPtr ev, const TActorContext &ctx) 
+    { 
         TEvTabletPipe::TEvClientConnected *msg = ev->Get();
 
         LOG_DEBUG_S(ctx, NKikimrServices::LOCAL,
-                    LogPrefix << "TDomainLocal::TEvClientConnected for " << Domain
-                    << " shard " << msg->TabletId);
+                    LogPrefix << "TDomainLocal::TEvClientConnected for " << Domain 
+                    << " shard " << msg->TabletId); 
 
-        if (msg->Status != NKikimrProto::EReplyStatus::OK) {
-            OpenPipe(ctx);
+        if (msg->Status != NKikimrProto::EReplyStatus::OK) { 
+            OpenPipe(ctx); 
             return;
         }
 
-        for (auto &pr : ResolveTasks)
-            SendResolveRequest(pr.second.Info, ctx);
+        for (auto &pr : ResolveTasks) 
+            SendResolveRequest(pr.second.Info, ctx); 
     }
 
-    void HandlePipe(TEvTabletPipe::TEvClientDestroyed::TPtr ev, const TActorContext &ctx)
-    {
+    void HandlePipe(TEvTabletPipe::TEvClientDestroyed::TPtr ev, const TActorContext &ctx) 
+    { 
         TEvTabletPipe::TEvClientDestroyed *msg = ev->Get();
 
         LOG_DEBUG_S(ctx, NKikimrServices::LOCAL,
-                    LogPrefix << "TEvTabletPipe::TEvClientDestroyed from tablet " << msg->TabletId);
+                    LogPrefix << "TEvTabletPipe::TEvClientDestroyed from tablet " << msg->TabletId); 
 
-        OpenPipe(ctx);
+        OpenPipe(ctx); 
     }
 
     void HandleResolve(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr ev, const TActorContext &ctx)
-    {
+    { 
         const NKikimrScheme::TEvDescribeSchemeResult &rec = ev->Get()->GetRecord();
 
         LOG_DEBUG_S(ctx, NKikimrServices::LOCAL,
-                    LogPrefix << "HandleResolve from schemeshard " << SchemeRoot
-                    << ": " << rec.ShortDebugString());
+                    LogPrefix << "HandleResolve from schemeshard " << SchemeRoot 
+                    << ": " << rec.ShortDebugString()); 
 
         if (!ResolveTasks.contains(rec.GetPath())) {
-            LOG_DEBUG_S(ctx, NKikimrServices::LOCAL,
-                        LogPrefix << "Missing task for " << rec.GetPath());
+            LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, 
+                        LogPrefix << "Missing task for " << rec.GetPath()); 
             return;
         }
 
-        const TResolveTask &task = ResolveTasks.find(rec.GetPath())->second;
+        const TResolveTask &task = ResolveTasks.find(rec.GetPath())->second; 
 
         using EDescStatus = NKikimrScheme::EStatus;
         if (rec.GetStatus() != EDescStatus::StatusSuccess) {
-            LOG_ERROR_S(ctx, NKikimrServices::LOCAL,
-                        LogPrefix << " Receive TEvDescribeSchemeResult with bad status "
+            LOG_ERROR_S(ctx, NKikimrServices::LOCAL, 
+                        LogPrefix << " Receive TEvDescribeSchemeResult with bad status " 
                         << NKikimrScheme::EStatus_Name(rec.GetStatus()) <<
-                        " reason is <" << rec.GetReason() << ">" <<
-                        " while resolving subdomain " << task.Info.DomainName);
-
-            SendStatus(rec.GetPath(), TEvLocal::TEvTenantStatus::UNKNOWN_TENANT,
-                       rec.GetReason(), task.Senders, ctx);
-            ResolveTasks.erase(rec.GetPath());
-            return;
+                        " reason is <" << rec.GetReason() << ">" << 
+                        " while resolving subdomain " << task.Info.DomainName); 
+ 
+            SendStatus(rec.GetPath(), TEvLocal::TEvTenantStatus::UNKNOWN_TENANT, 
+                       rec.GetReason(), task.Senders, ctx); 
+            ResolveTasks.erase(rec.GetPath()); 
+            return; 
         }
 
         Y_VERIFY(rec.HasPathDescription());
@@ -1187,14 +1187,14 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
         if (rec.GetPathDescription().GetSelf().GetPathType() != NKikimrSchemeOp::EPathTypeSubDomain
             && rec.GetPathDescription().GetSelf().GetPathType() != NKikimrSchemeOp::EPathTypeExtSubDomain) {
             LOG_CRIT_S(ctx, NKikimrServices::LOCAL,
-                       LogPrefix << " Resolve subdomain fail, requested path "
-                       << task.Info.DomainName << " has invalid path type "
+                       LogPrefix << " Resolve subdomain fail, requested path " 
+                       << task.Info.DomainName << " has invalid path type " 
                        << NKikimrSchemeOp::EPathType_Name(rec.GetPathDescription().GetSelf().GetPathType()));
-
-            SendStatus(rec.GetPath(), TEvLocal::TEvTenantStatus::UNKNOWN_TENANT,
-                       rec.GetPath() + " is not a tenant path", task.Senders, ctx);
-            ResolveTasks.erase(rec.GetPath());
-            return;
+ 
+            SendStatus(rec.GetPath(), TEvLocal::TEvTenantStatus::UNKNOWN_TENANT, 
+                       rec.GetPath() + " is not a tenant path", task.Senders, ctx); 
+            ResolveTasks.erase(rec.GetPath()); 
+            return; 
         }
         Y_VERIFY(rec.GetPathDescription().HasDomainDescription());
         Y_VERIFY(rec.GetPathDescription().GetDomainDescription().GetDomainKey().GetSchemeShard() == SchemeRoot);
@@ -1228,8 +1228,8 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
             LOG_WARN_S(ctx, NKikimrServices::LOCAL,
                        LogPrefix << " Local tenant info not found, requested path " << task.Info.DomainName);
         }
-    }
-
+    } 
+ 
     void HandleSchemeBoard(TSchemeBoardEvents::TEvNotifyUpdate::TPtr &ev, const TActorContext &ctx)
     {
         TString path = ev->Get()->DescribeSchemeResult.GetPath();
@@ -1260,61 +1260,61 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
         Y_UNUSED(ctx);
     }
 
-    void HandleTenant(TEvLocal::TEvAddTenant::TPtr &ev, const TActorContext &ctx)
-    {
-        auto &info = ev->Get()->TenantInfo;
-
-        // Already started?
+    void HandleTenant(TEvLocal::TEvAddTenant::TPtr &ev, const TActorContext &ctx) 
+    { 
+        auto &info = ev->Get()->TenantInfo; 
+ 
+        // Already started? 
         if (RunningTenants.contains(info.TenantName)) {
-            SendStatus(info.TenantName, ev->Sender, ctx);
-            return;
+            SendStatus(info.TenantName, ev->Sender, ctx); 
+            return; 
         }
-
-        // In-fly?
-        auto it = ResolveTasks.find(info.TenantName);
-        if (it != ResolveTasks.end()) {
-            it->second.Senders.push_back(ev->Sender);
-            return;
-        }
-
-        if (info.TenantIsDomain()) {
-            RegisterAsDomain(info, ctx);
-            SendStatus(info.TenantName, ev->Sender, ctx);
-        } else {
-            ResolveTasks.emplace(info.TenantName, TResolveTask{info, {ev->Sender}});
-            if (SchemeShardPipe)
-                SendResolveRequest(info, ctx);
-            else
-                OpenPipe(ctx);
-        }
+ 
+        // In-fly? 
+        auto it = ResolveTasks.find(info.TenantName); 
+        if (it != ResolveTasks.end()) { 
+            it->second.Senders.push_back(ev->Sender); 
+            return; 
+        } 
+ 
+        if (info.TenantIsDomain()) { 
+            RegisterAsDomain(info, ctx); 
+            SendStatus(info.TenantName, ev->Sender, ctx); 
+        } else { 
+            ResolveTasks.emplace(info.TenantName, TResolveTask{info, {ev->Sender}}); 
+            if (SchemeShardPipe) 
+                SendResolveRequest(info, ctx); 
+            else 
+                OpenPipe(ctx); 
+        } 
     }
 
-    void HandleTenant(TEvLocal::TEvRemoveTenant::TPtr &ev, const TActorContext &ctx)
-    {
-        auto &tenant = ev->Get()->TenantName;
+    void HandleTenant(TEvLocal::TEvRemoveTenant::TPtr &ev, const TActorContext &ctx) 
+    { 
+        auto &tenant = ev->Get()->TenantName; 
 
-        // In-fly?
-        auto it = ResolveTasks.find(tenant);
-        if (it != ResolveTasks.end()) {
+        // In-fly? 
+        auto it = ResolveTasks.find(tenant); 
+        if (it != ResolveTasks.end()) { 
             Y_VERIFY(!RunningTenants.contains(tenant));
-            SendStatus(tenant, it->second.Senders, ctx);
-            ResolveTasks.erase(it);
-        } else {
-            auto it = RunningTenants.find(tenant);
-            if (it != RunningTenants.end()) {
-                for (auto aid : it->second.Locals)
-                    ctx.Send(aid, new TEvents::TEvPoisonPill());
+            SendStatus(tenant, it->second.Senders, ctx); 
+            ResolveTasks.erase(it); 
+        } else { 
+            auto it = RunningTenants.find(tenant); 
+            if (it != RunningTenants.end()) { 
+                for (auto aid : it->second.Locals) 
+                    ctx.Send(aid, new TEvents::TEvPoisonPill()); 
                 if (it->second.Subscriber) {
                     ctx.Send(it->second.Subscriber, new TEvents::TEvPoisonPill());
                     it->second.Subscriber = TActorId();
                 }
                 ctx.Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(ctx.SelfID.NodeId()),
                          new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateRemoveTenant(it->first));
-                RunningTenants.erase(it);
-            }
-        }
-        SendStatus(ev->Get()->TenantName, ev->Sender, ctx);
-    }
+                RunningTenants.erase(it); 
+            } 
+        } 
+        SendStatus(ev->Get()->TenantName, ev->Sender, ctx); 
+    } 
 
     void HandleDrain(TEvLocal::TEvLocalDrainNode::TPtr &ev, const TActorContext& ctx) {
         for(auto& hiveId: HiveIds) {
@@ -1326,50 +1326,50 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
         ev->Get()->DrainProgress->OnReceive();
     }
 
-    void HandleTenant(TEvLocal::TEvAlterTenant::TPtr &ev, const TActorContext &ctx)
-    {
-        auto &info = ev->Get()->TenantInfo;
+    void HandleTenant(TEvLocal::TEvAlterTenant::TPtr &ev, const TActorContext &ctx) 
+    { 
+        auto &info = ev->Get()->TenantInfo; 
 
-        LOG_DEBUG_S(ctx, NKikimrServices::LOCAL,
-                    LogPrefix << "Alter tenant " << info.TenantName);
-
-        auto it = RunningTenants.find(info.TenantName);
-        if (it != RunningTenants.end()) {
-            it->second.Info = info;
-            for (auto &aid : it->second.Locals)
-                ctx.Send(aid, new TEvLocal::TEvAlterTenant(info));
+        LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, 
+                    LogPrefix << "Alter tenant " << info.TenantName); 
+ 
+        auto it = RunningTenants.find(info.TenantName); 
+        if (it != RunningTenants.end()) { 
+            it->second.Info = info; 
+            for (auto &aid : it->second.Locals) 
+                ctx.Send(aid, new TEvLocal::TEvAlterTenant(info)); 
         }
-
-        SendStatus(info.TenantName, ev->Sender, ctx);
+ 
+        SendStatus(info.TenantName, ev->Sender, ctx); 
     }
 
-public:
+public: 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::LOCAL_ACTOR;
-    }
-
-    TDomainLocal(const TDomainsInfo &domainsInfo, const TDomainsInfo::TDomain &domain,
-                 TIntrusivePtr<TLocalConfig> config)
-        : Domain(domain.Name)
-        , SchemeRoot(domain.SchemeRoot)
-        , Config(config)
-    {
-        for (auto hiveUid : domain.HiveUids)
-            HiveIds.push_back(domainsInfo.GetHive(hiveUid));
+    } 
+ 
+    TDomainLocal(const TDomainsInfo &domainsInfo, const TDomainsInfo::TDomain &domain, 
+                 TIntrusivePtr<TLocalConfig> config) 
+        : Domain(domain.Name) 
+        , SchemeRoot(domain.SchemeRoot) 
+        , Config(config) 
+    { 
+        for (auto hiveUid : domain.HiveUids) 
+            HiveIds.push_back(domainsInfo.GetHive(hiveUid)); 
 
         PipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
-
+ 
         LogPrefix = Sprintf("TDomainLocal(%s): ", Domain.data());
-    }
-
-    void Bootstrap(const TActorContext &ctx)
-    {
-        LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, LogPrefix << "Bootstrap");
-
-        Become(&TThis::StateWork);
-    }
-
-    STFUNC(StateWork) {
+    } 
+ 
+    void Bootstrap(const TActorContext &ctx) 
+    { 
+        LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, LogPrefix << "Bootstrap"); 
+ 
+        Become(&TThis::StateWork); 
+    } 
+ 
+    STFUNC(StateWork) { 
         switch (ev->GetTypeRewrite()) {
             CFunc(TEvents::TSystem::PoisonPill, HandlePoison);
 
@@ -1378,92 +1378,92 @@ public:
 
             HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, HandleResolve);
 
-            HFunc(TEvLocal::TEvAddTenant, HandleTenant);
-            HFunc(TEvLocal::TEvRemoveTenant, HandleTenant);
-            HFunc(TEvLocal::TEvAlterTenant, HandleTenant);
-
+            HFunc(TEvLocal::TEvAddTenant, HandleTenant); 
+            HFunc(TEvLocal::TEvRemoveTenant, HandleTenant); 
+            HFunc(TEvLocal::TEvAlterTenant, HandleTenant); 
+ 
             HFunc(TSchemeBoardEvents::TEvNotifyUpdate, HandleSchemeBoard);
             HFunc(TSchemeBoardEvents::TEvNotifyDelete, HandleSchemeBoard);
 
             HFunc(TEvLocal::TEvLocalDrainNode, HandleDrain);
-        default:
-            Y_FAIL("Unexpected event for TDomainLocal");
-            break;
+        default: 
+            Y_FAIL("Unexpected event for TDomainLocal"); 
+            break; 
         }
     }
 };
 
-class TLocal : public TActorBootstrapped<TLocal> {
-    TIntrusivePtr<TLocalConfig> Config;
+class TLocal : public TActorBootstrapped<TLocal> { 
+    TIntrusivePtr<TLocalConfig> Config; 
     THashMap<TString, TActorId> DomainLocals;
-
-public:
+ 
+public: 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::LOCAL_ACTOR;
-    }
-
-    TLocal(TLocalConfig *cfg)
-        : Config(cfg)
-    {}
-
-    void HandlePoison(const TActorContext &ctx) {
-        LOG_DEBUG(ctx, NKikimrServices::LOCAL, "TLocal: HandlePoison");
-        for (auto &pr : DomainLocals)
-            ctx.Send(pr.second, new TEvents::TEvPoisonPill());
-        Die(ctx);
-    }
-
-    void Bootstrap(const TActorContext &ctx) {
-        LOG_DEBUG(ctx, NKikimrServices::LOCAL, "TLocal::Bootstrap");
-        Become(&TThis::StateWork);
-    }
-
-    bool ForwardToDomainLocal(TAutoPtr<IEventHandle> ev, const TString &domainName, const TActorContext &ctx)
-    {
-        auto &domainsInfo = *AppData(ctx)->DomainsInfo;
-        auto *domain = domainsInfo.GetDomainByName(domainName);
-        if (!domain) {
-            LOG_ERROR_S(ctx, NKikimrServices::LOCAL, "Unknown domain " << domainName);
-            return false;
-        }
-
+    } 
+ 
+    TLocal(TLocalConfig *cfg) 
+        : Config(cfg) 
+    {} 
+ 
+    void HandlePoison(const TActorContext &ctx) { 
+        LOG_DEBUG(ctx, NKikimrServices::LOCAL, "TLocal: HandlePoison"); 
+        for (auto &pr : DomainLocals) 
+            ctx.Send(pr.second, new TEvents::TEvPoisonPill()); 
+        Die(ctx); 
+    } 
+ 
+    void Bootstrap(const TActorContext &ctx) { 
+        LOG_DEBUG(ctx, NKikimrServices::LOCAL, "TLocal::Bootstrap"); 
+        Become(&TThis::StateWork); 
+    } 
+ 
+    bool ForwardToDomainLocal(TAutoPtr<IEventHandle> ev, const TString &domainName, const TActorContext &ctx) 
+    { 
+        auto &domainsInfo = *AppData(ctx)->DomainsInfo; 
+        auto *domain = domainsInfo.GetDomainByName(domainName); 
+        if (!domain) { 
+            LOG_ERROR_S(ctx, NKikimrServices::LOCAL, "Unknown domain " << domainName); 
+            return false; 
+        } 
+ 
         if (!DomainLocals.contains(domainName)) {
-            auto actor = new TDomainLocal(domainsInfo, *domain, Config);
-            DomainLocals[domainName] = ctx.Register(actor);
-        }
-
-        ctx.Send(ev->Forward(DomainLocals[domainName]));
-        return true;
-    }
-
+            auto actor = new TDomainLocal(domainsInfo, *domain, Config); 
+            DomainLocals[domainName] = ctx.Register(actor); 
+        } 
+ 
+        ctx.Send(ev->Forward(DomainLocals[domainName])); 
+        return true; 
+    } 
+ 
     void SendUnknownDomain(const TString &tenant, TActorId sender, const TActorContext &ctx)
-    {
-        TAutoPtr<TEvLocal::TEvTenantStatus> ev
-            = new TEvLocal::TEvTenantStatus(tenant, TEvLocal::TEvTenantStatus::UNKNOWN_TENANT,
-                                            "Tenant is in unknown domain");
-        ctx.Send(sender, ev.Release());
-    }
-
-    void ForwardOrReplyError(TAutoPtr<IEventHandle> ev, const TRegistrationInfo &info, const TActorContext &ctx)
-    {
-        auto sender = ev->Sender;
-
-        if (!ForwardToDomainLocal(std::move(ev), info.DomainName, ctx))
-            SendUnknownDomain(info.TenantName, sender, ctx);
-    }
-
-    void HandleTenant(TEvLocal::TEvAddTenant::TPtr &ev, const TActorContext &ctx)
-    {
-        TRegistrationInfo info = ev->Get()->TenantInfo;
-        ForwardOrReplyError(ev.Release(), info, ctx);
-    }
-
-    void HandleTenant(TEvLocal::TEvRemoveTenant::TPtr &ev, const TActorContext &ctx)
-    {
-        TRegistrationInfo info(ev->Get()->TenantName);
-        ForwardOrReplyError(ev.Release(), info, ctx);
-    }
-
+    { 
+        TAutoPtr<TEvLocal::TEvTenantStatus> ev 
+            = new TEvLocal::TEvTenantStatus(tenant, TEvLocal::TEvTenantStatus::UNKNOWN_TENANT, 
+                                            "Tenant is in unknown domain"); 
+        ctx.Send(sender, ev.Release()); 
+    } 
+ 
+    void ForwardOrReplyError(TAutoPtr<IEventHandle> ev, const TRegistrationInfo &info, const TActorContext &ctx) 
+    { 
+        auto sender = ev->Sender; 
+ 
+        if (!ForwardToDomainLocal(std::move(ev), info.DomainName, ctx)) 
+            SendUnknownDomain(info.TenantName, sender, ctx); 
+    } 
+ 
+    void HandleTenant(TEvLocal::TEvAddTenant::TPtr &ev, const TActorContext &ctx) 
+    { 
+        TRegistrationInfo info = ev->Get()->TenantInfo; 
+        ForwardOrReplyError(ev.Release(), info, ctx); 
+    } 
+ 
+    void HandleTenant(TEvLocal::TEvRemoveTenant::TPtr &ev, const TActorContext &ctx) 
+    { 
+        TRegistrationInfo info(ev->Get()->TenantName); 
+        ForwardOrReplyError(ev.Release(), info, ctx); 
+    } 
+ 
     void HandleDrain(TEvLocal::TEvLocalDrainNode::TPtr &ev, const TActorContext& ctx) {
         for(auto& x: DomainLocals) {
             ev->Get()->DrainProgress->OnSend();
@@ -1472,37 +1472,37 @@ public:
         ev->Get()->DrainProgress->OnReceive();
     }
 
-    void HandleTenant(TEvLocal::TEvAlterTenant::TPtr &ev, const TActorContext &ctx)
-    {
-        TRegistrationInfo info = ev->Get()->TenantInfo;
-        ForwardOrReplyError(ev.Release(), info, ctx);
-    }
-
-    void HandleTenant(TEvLocal::TEvTenantStatus::TPtr &ev, const TActorContext &/*ctx*/)
-    {
-        Y_VERIFY(ev->Get()->Status != TEvLocal::TEvTenantStatus::UNKNOWN_TENANT,
+    void HandleTenant(TEvLocal::TEvAlterTenant::TPtr &ev, const TActorContext &ctx) 
+    { 
+        TRegistrationInfo info = ev->Get()->TenantInfo; 
+        ForwardOrReplyError(ev.Release(), info, ctx); 
+    } 
+ 
+    void HandleTenant(TEvLocal::TEvTenantStatus::TPtr &ev, const TActorContext &/*ctx*/) 
+    { 
+        Y_VERIFY(ev->Get()->Status != TEvLocal::TEvTenantStatus::UNKNOWN_TENANT, 
                  "Unknown tenant %s", ev->Get()->TenantName.data());
-    }
-
-    STFUNC(StateWork) {
-        switch (ev->GetTypeRewrite()) {
-            CFunc(TEvents::TSystem::PoisonPill, HandlePoison);
-
-            HFunc(TEvLocal::TEvAddTenant, HandleTenant);
-            HFunc(TEvLocal::TEvRemoveTenant, HandleTenant);
-            HFunc(TEvLocal::TEvAlterTenant, HandleTenant);
-            HFunc(TEvLocal::TEvTenantStatus, HandleTenant);
+    } 
+ 
+    STFUNC(StateWork) { 
+        switch (ev->GetTypeRewrite()) { 
+            CFunc(TEvents::TSystem::PoisonPill, HandlePoison); 
+ 
+            HFunc(TEvLocal::TEvAddTenant, HandleTenant); 
+            HFunc(TEvLocal::TEvRemoveTenant, HandleTenant); 
+            HFunc(TEvLocal::TEvAlterTenant, HandleTenant); 
+            HFunc(TEvLocal::TEvTenantStatus, HandleTenant); 
             HFunc(TEvLocal::TEvLocalDrainNode, HandleDrain);
-
-        default:
-            LOG_DEBUG_S(ctx, NKikimrServices::LOCAL,
-                        "TLocal: Unhandled in StateResolveSubDomain type: " <<  ev->GetTypeRewrite() <<
+ 
+        default: 
+            LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, 
+                        "TLocal: Unhandled in StateResolveSubDomain type: " <<  ev->GetTypeRewrite() << 
                         " event: " << ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
-            break;
-        }
-    }
-};
-
+            break; 
+        } 
+    } 
+}; 
+ 
 IActor* CreateLocal(TLocalConfig *config) {
     return new TLocal(config);
 }

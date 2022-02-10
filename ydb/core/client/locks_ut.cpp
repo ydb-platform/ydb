@@ -1910,109 +1910,109 @@ Y_UNIT_TEST(LocksLimit) {
     LocksLimit<TLocksV2>();
 }
 
-template <typename TLocksVer>
-static void ShardLocks() {
-    TClientServer cs;
-    NKikimrMiniKQL::TResult res;
-    TClient::TFlatQueryOptions opts;
-
-
+template <typename TLocksVer> 
+static void ShardLocks() { 
+    TClientServer cs; 
+    NKikimrMiniKQL::TResult res; 
+    TClient::TFlatQueryOptions opts; 
+ 
+ 
     ui32 limit = NDataShard::TLockLocker::TLockLimiter::LockLimit();
-    //const ui32 factor = 100;
-
-    const char * setLock = R"___((
-        (let range_ '('IncFrom 'IncTo '('key (Uint32 '%u) (Uint32 '%u))))
-        (let cols_ '('key 'value))
-        (return (AsList
-            (SetResult 'res (SelectRange '/dc-1/Dir/A range_ cols_ '()))
-            (AcquireLocks (Uint64 '%lu))
-        ))
-    ))___";
-
-    // Attach lots of ranges to a single lock.
-    TVector<NMiniKQL::IEngineFlat::TTxLock> locks;
-    ui64 lockId = 0;
-    for (ui32 i = 0; i < limit + 1; ++i) {
-        cs.Client.FlatQuery(Sprintf(setLock, i * 10, i * 10 + 5, lockId), res);
-        ExtractResultLocks<TLocksVer>(res, locks);
-        lockId = locks.back().LockId;
-    }
-
-    // We now have too many rnages attached to locks and new lock
-    // will be forced to be shard lock.
-    cs.Client.FlatQuery(Sprintf(setLock, 0, 5, 0), res);
-    ExtractResultLocks<TLocksVer>(res, locks);
-
-    // Now check shard lock is ok.
-    const char * checkLock = R"___((
-        (let locksTable_ '%s)
-        (let lockKey_ '(%s))
-        (let lockCols_ '(%s))
-        (return (AsList
-            (SetResult 'Result (SelectRow locksTable_ lockKey_ lockCols_))
-        ))
-    ))___";
-    {
-        cs.Client.FlatQuery(Sprintf(checkLock,
-                                    TLocksVer::TableName(),
+    //const ui32 factor = 100; 
+ 
+    const char * setLock = R"___(( 
+        (let range_ '('IncFrom 'IncTo '('key (Uint32 '%u) (Uint32 '%u)))) 
+        (let cols_ '('key 'value)) 
+        (return (AsList 
+            (SetResult 'res (SelectRange '/dc-1/Dir/A range_ cols_ '())) 
+            (AcquireLocks (Uint64 '%lu)) 
+        )) 
+    ))___"; 
+ 
+    // Attach lots of ranges to a single lock. 
+    TVector<NMiniKQL::IEngineFlat::TTxLock> locks; 
+    ui64 lockId = 0; 
+    for (ui32 i = 0; i < limit + 1; ++i) { 
+        cs.Client.FlatQuery(Sprintf(setLock, i * 10, i * 10 + 5, lockId), res); 
+        ExtractResultLocks<TLocksVer>(res, locks); 
+        lockId = locks.back().LockId; 
+    } 
+ 
+    // We now have too many rnages attached to locks and new lock 
+    // will be forced to be shard lock. 
+    cs.Client.FlatQuery(Sprintf(setLock, 0, 5, 0), res); 
+    ExtractResultLocks<TLocksVer>(res, locks); 
+ 
+    // Now check shard lock is ok. 
+    const char * checkLock = R"___(( 
+        (let locksTable_ '%s) 
+        (let lockKey_ '(%s)) 
+        (let lockCols_ '(%s)) 
+        (return (AsList 
+            (SetResult 'Result (SelectRow locksTable_ lockKey_ lockCols_)) 
+        )) 
+    ))___"; 
+    { 
+        cs.Client.FlatQuery(Sprintf(checkLock, 
+                                    TLocksVer::TableName(), 
                                     TLocksVer::Key(locks.back().LockId,
-                                                    locks.back().DataShard,
-                                                    locks.back().SchemeShard,
+                                                    locks.back().DataShard, 
+                                                    locks.back().SchemeShard, 
                                                     locks.back().PathId).data(),
-                                    TLocksVer::Columns()), res);
-        TValue result = TValue::Create(res.GetValue(), res.GetType());
-        TValue xres = result["Result"];
-        UNIT_ASSERT(xres.HaveValue());
-        auto lock = ExtractRowLock<TLocksVer>(xres);
-        UNIT_ASSERT_VALUES_EQUAL(lock.LockId, locks.back().LockId);
-        UNIT_ASSERT_VALUES_EQUAL(lock.Generation, locks.back().Generation);
-        UNIT_ASSERT_VALUES_EQUAL(lock.Counter, locks.back().Counter);
-    }
-
-    // Break locks by single row update.
-    const char * lockUpdate = R"___((
-        (let row0_ '('('key (Uint32 '42))))
-        (let update_ '('('value (Uint32 '0))))
-        (let ret_ (AsList
-            (UpdateRow '/dc-1/Dir/A row0_ update_)
-        ))
-        (return ret_)
-    ))___";
-    cs.Client.FlatQuery(lockUpdate, opts, res);
-
-    // Check locks are broken.
-    {
-        cs.Client.FlatQuery(Sprintf(checkLock,
-                                    TLocksVer::TableName(),
+                                    TLocksVer::Columns()), res); 
+        TValue result = TValue::Create(res.GetValue(), res.GetType()); 
+        TValue xres = result["Result"]; 
+        UNIT_ASSERT(xres.HaveValue()); 
+        auto lock = ExtractRowLock<TLocksVer>(xres); 
+        UNIT_ASSERT_VALUES_EQUAL(lock.LockId, locks.back().LockId); 
+        UNIT_ASSERT_VALUES_EQUAL(lock.Generation, locks.back().Generation); 
+        UNIT_ASSERT_VALUES_EQUAL(lock.Counter, locks.back().Counter); 
+    } 
+ 
+    // Break locks by single row update. 
+    const char * lockUpdate = R"___(( 
+        (let row0_ '('('key (Uint32 '42)))) 
+        (let update_ '('('value (Uint32 '0)))) 
+        (let ret_ (AsList 
+            (UpdateRow '/dc-1/Dir/A row0_ update_) 
+        )) 
+        (return ret_) 
+    ))___"; 
+    cs.Client.FlatQuery(lockUpdate, opts, res); 
+ 
+    // Check locks are broken. 
+    { 
+        cs.Client.FlatQuery(Sprintf(checkLock, 
+                                    TLocksVer::TableName(), 
                                     TLocksVer::Key(locks.back().LockId,
-                                                    locks.back().DataShard,
-                                                    locks.back().SchemeShard,
+                                                    locks.back().DataShard, 
+                                                    locks.back().SchemeShard, 
                                                     locks.back().PathId).data(),
-                                    TLocksVer::Columns()), res);
-        TValue result = TValue::Create(res.GetValue(), res.GetType());
-        TValue xres = result["Result"];
-        UNIT_ASSERT(!xres.HaveValue());
-    }
-
-    {
-        cs.Client.FlatQuery(Sprintf(checkLock,
-                                    TLocksVer::TableName(),
+                                    TLocksVer::Columns()), res); 
+        TValue result = TValue::Create(res.GetValue(), res.GetType()); 
+        TValue xres = result["Result"]; 
+        UNIT_ASSERT(!xres.HaveValue()); 
+    } 
+ 
+    { 
+        cs.Client.FlatQuery(Sprintf(checkLock, 
+                                    TLocksVer::TableName(), 
                                     TLocksVer::Key(locks[0].LockId,
-                                                    locks[0].DataShard,
-                                                    locks[0].SchemeShard,
+                                                    locks[0].DataShard, 
+                                                    locks[0].SchemeShard, 
                                                     locks[0].PathId).data(),
-                                    TLocksVer::Columns()), res);
-        TValue result = TValue::Create(res.GetValue(), res.GetType());
-        TValue xres = result["Result"];
-        UNIT_ASSERT(!xres.HaveValue());
-    }
-}
-
-Y_UNIT_TEST(ShardLocks) {
-    ShardLocks<TLocksV1>();
-    ShardLocks<TLocksV2>();
-}
-
+                                    TLocksVer::Columns()), res); 
+        TValue result = TValue::Create(res.GetValue(), res.GetType()); 
+        TValue xres = result["Result"]; 
+        UNIT_ASSERT(!xres.HaveValue()); 
+    } 
+} 
+ 
+Y_UNIT_TEST(ShardLocks) { 
+    ShardLocks<TLocksV1>(); 
+    ShardLocks<TLocksV2>(); 
+} 
+ 
 } // TLocksFatTest
 
 }}

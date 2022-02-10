@@ -2,7 +2,7 @@
 
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/core/base/counters.h>
-
+ 
 namespace NKikimr {
 
 namespace NPQ {

@@ -23,8 +23,8 @@ SRCS(
     blobstorage.h
     blobstorage.cpp
     channel_profiles.h
-    counters.cpp
-    counters.h
+    counters.cpp 
+    counters.h 
     defs.h
     domain.h
     event_filter.cpp
@@ -38,22 +38,22 @@ SRCS(
     kikimr_issue.h
     localdb.cpp
     localdb.h
-    location.h
+    location.h 
     logoblob.cpp
     logoblob.h
-    nameservice.h
+    nameservice.h 
     path.cpp
     pathid.cpp
     pool_stats_collector.cpp
     pool_stats_collector.h
     quoter.cpp
     quoter.h
-    resource_profile.h
+    resource_profile.h 
     row_version.cpp
     row_version.h
     services_assert.cpp
     shared_data.cpp
-    shared_quota.h
+    shared_quota.h 
     statestorage.cpp
     statestorage.h
     statestorage_event_filter.cpp

@@ -83,8 +83,8 @@ public:
     TString GetOriginalUserToken() const;
     TString SerializeAsString() const;
     void AddGroupSID(const TSID& groupSID);
-
-    using NACLibProto::TUserToken::ShortDebugString;
+ 
+    using NACLibProto::TUserToken::ShortDebugString; 
 
 protected:
     static TSID GetUserFromVector(const TVector<TSID>& userAndGroupSIDs);

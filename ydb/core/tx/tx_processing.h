@@ -9,20 +9,20 @@ struct TEvTxProcessing {
         EvPlanStep = EventSpaceBegin(TKikimrEvents::ES_TX_PROCESSING),
         EvReadSet,
         EvPrePlanTx, // unused
-        EvStreamClearanceRequest,
-        EvStreamQuotaRequest,
-        EvStreamQuotaRelease,
-        EvStreamIsDead,
-        EvInterruptTransaction,
+        EvStreamClearanceRequest, 
+        EvStreamQuotaRequest, 
+        EvStreamQuotaRelease, 
+        EvStreamIsDead, 
+        EvInterruptTransaction, 
 
         EvPlanStepAck = EvPlanStep + 512,
         EvPrePlanTxAck, // unused
         EvReadSetAck,
         EvPlanStepAccepted,
-        EvStreamClearanceResponse,
-        EvStreamQuotaResponse,
-        EvStreamClearancePending,
-        EvStreamDataAck,
+        EvStreamClearanceResponse, 
+        EvStreamQuotaResponse, 
+        EvStreamClearancePending, 
+        EvStreamDataAck, 
 
         EvEnd
     };
@@ -173,77 +173,77 @@ struct TEvTxProcessing {
             str << "}";
             return str.Str();
         }
+    }; 
+
+    struct TEvStreamClearanceRequest: public TEventPB<TEvStreamClearanceRequest, 
+                                                      NKikimrTx::TEvStreamClearanceRequest, 
+                                                      EvStreamClearanceRequest> 
+    { 
     };
-
-    struct TEvStreamClearanceRequest: public TEventPB<TEvStreamClearanceRequest,
-                                                      NKikimrTx::TEvStreamClearanceRequest,
-                                                      EvStreamClearanceRequest>
-    {
-    };
-
-    struct TEvStreamClearanceResponse: public TEventPB<TEvStreamClearanceResponse,
-                                                       NKikimrTx::TEvStreamClearanceResponse,
-                                                       EvStreamClearanceResponse>
-    {
-    };
-
-    struct TEvStreamClearancePending: public TEventPB<TEvStreamClearancePending,
-                                                      NKikimrTx::TEvStreamClearancePending,
-                                                      EvStreamClearancePending>
-    {
-        TEvStreamClearancePending() = default;
-
-        TEvStreamClearancePending(ui64 txId)
-        {
-            Record.SetTxId(txId);
-        }
-    };
-
-    struct TEvStreamQuotaRequest: public TEventPB<TEvStreamQuotaRequest,
-                                                  NKikimrTx::TEvStreamQuotaRequest,
-                                                  EvStreamQuotaRequest>
-    {
-    };
-
-    struct TEvStreamQuotaResponse: public TEventPB<TEvStreamQuotaResponse,
-                                                   NKikimrTx::TEvStreamQuotaResponse,
-                                                   EvStreamQuotaResponse>
-    {
-    };
-
-    struct TEvStreamQuotaRelease: public TEventPB<TEvStreamQuotaRelease,
-                                                  NKikimrTx::TEvStreamQuotaRelease,
-                                                  EvStreamQuotaRelease>
-    {
-    };
-
-    struct TEvStreamIsDead: public TEventPB<TEvStreamIsDead,
-                                            NKikimrTx::TEvStreamIsDead,
-                                            EvStreamIsDead>
-    {
-        TEvStreamIsDead(ui64 txId = 0)
-        {
-            Record.SetTxId(txId);
-        }
-    };
-
-    struct TEvInterruptTransaction: public TEventPB<TEvInterruptTransaction,
-                                                    NKikimrTx::TEvInterruptTransaction,
-                                                    EvInterruptTransaction>
-    {
-        TEvInterruptTransaction() = default;
-
-        TEvInterruptTransaction(ui64 txId)
-        {
-            Record.SetTxId(txId);
-        }
-    };
-
-    struct TEvStreamDataAck: public TEventPB<TEvStreamDataAck,
-                                             NKikimrTx::TEvStreamDataAck,
-                                             EvStreamDataAck>
-    {
-    };
+ 
+    struct TEvStreamClearanceResponse: public TEventPB<TEvStreamClearanceResponse, 
+                                                       NKikimrTx::TEvStreamClearanceResponse, 
+                                                       EvStreamClearanceResponse> 
+    { 
+    }; 
+ 
+    struct TEvStreamClearancePending: public TEventPB<TEvStreamClearancePending, 
+                                                      NKikimrTx::TEvStreamClearancePending, 
+                                                      EvStreamClearancePending> 
+    { 
+        TEvStreamClearancePending() = default; 
+ 
+        TEvStreamClearancePending(ui64 txId) 
+        { 
+            Record.SetTxId(txId); 
+        } 
+    }; 
+ 
+    struct TEvStreamQuotaRequest: public TEventPB<TEvStreamQuotaRequest, 
+                                                  NKikimrTx::TEvStreamQuotaRequest, 
+                                                  EvStreamQuotaRequest> 
+    { 
+    }; 
+ 
+    struct TEvStreamQuotaResponse: public TEventPB<TEvStreamQuotaResponse, 
+                                                   NKikimrTx::TEvStreamQuotaResponse, 
+                                                   EvStreamQuotaResponse> 
+    { 
+    }; 
+ 
+    struct TEvStreamQuotaRelease: public TEventPB<TEvStreamQuotaRelease, 
+                                                  NKikimrTx::TEvStreamQuotaRelease, 
+                                                  EvStreamQuotaRelease> 
+    { 
+    }; 
+ 
+    struct TEvStreamIsDead: public TEventPB<TEvStreamIsDead, 
+                                            NKikimrTx::TEvStreamIsDead, 
+                                            EvStreamIsDead> 
+    { 
+        TEvStreamIsDead(ui64 txId = 0) 
+        { 
+            Record.SetTxId(txId); 
+        } 
+    }; 
+ 
+    struct TEvInterruptTransaction: public TEventPB<TEvInterruptTransaction, 
+                                                    NKikimrTx::TEvInterruptTransaction, 
+                                                    EvInterruptTransaction> 
+    { 
+        TEvInterruptTransaction() = default; 
+ 
+        TEvInterruptTransaction(ui64 txId) 
+        { 
+            Record.SetTxId(txId); 
+        } 
+    }; 
+ 
+    struct TEvStreamDataAck: public TEventPB<TEvStreamDataAck, 
+                                             NKikimrTx::TEvStreamDataAck, 
+                                             EvStreamDataAck> 
+    { 
+    }; 
 };
 
 }

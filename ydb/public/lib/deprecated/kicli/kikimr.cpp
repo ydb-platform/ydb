@@ -281,8 +281,8 @@ public:
             return ExecuteGRpcRequest<NMsgBusProxy::TBusS3ListingRequest, NMsgBusProxy::TBusS3ListingResponse>(&NGRpcProxy::TGRpcClient::S3Listing, promise, request);
         case NMsgBusProxy::MTYPE_CLIENT_INTERCONNECT_DEBUG:
             return ExecuteGRpcRequest<NMsgBusProxy::TBusInterconnectDebug>(&NGRpcProxy::TGRpcClient::InterconnectDebug, promise, request);
-        case NMsgBusProxy::MTYPE_CLIENT_CONSOLE_REQUEST:
-            return ExecuteGRpcRequest<NMsgBusProxy::TBusConsoleRequest, NMsgBusProxy::TBusConsoleResponse>(&NGRpcProxy::TGRpcClient::ConsoleRequest, promise, request);
+        case NMsgBusProxy::MTYPE_CLIENT_CONSOLE_REQUEST: 
+            return ExecuteGRpcRequest<NMsgBusProxy::TBusConsoleRequest, NMsgBusProxy::TBusConsoleResponse>(&NGRpcProxy::TGRpcClient::ConsoleRequest, promise, request); 
         case NMsgBusProxy::MTYPE_CLIENT_WHOAMI:
             return ExecuteGRpcRequest<NMsgBusProxy::TBusWhoAmI, NMsgBusProxy::TBusResponse>(&NGRpcProxy::TGRpcClient::WhoAmI, promise, request);
         case NMsgBusProxy::MTYPE_CLIENT_RESOLVE_NODE:
@@ -564,56 +564,56 @@ TKikimr::TKikimr(TKikimr&& kikimr)
     , Impl(std::move(kikimr.Impl))
 {}
 
-TNodeRegistrant TKikimr::GetNodeRegistrant()
-{
-    return TNodeRegistrant(*this);
+TNodeRegistrant TKikimr::GetNodeRegistrant() 
+{ 
+    return TNodeRegistrant(*this); 
 }
-
-TNodeConfigurator TKikimr::GetNodeConfigurator()
-{
-    return TNodeConfigurator(*this);
-}
-
-NThreading::TFuture<TResult> TKikimr::RegisterNode(const TString& domainPath, const TString& host, ui16 port,
-                                                   const TString& address, const TString& resolveHost,
+ 
+TNodeConfigurator TKikimr::GetNodeConfigurator() 
+{ 
+    return TNodeConfigurator(*this); 
+} 
+ 
+NThreading::TFuture<TResult> TKikimr::RegisterNode(const TString& domainPath, const TString& host, ui16 port, 
+                                                   const TString& address, const TString& resolveHost, 
                                                    const NActors::TNodeLocation& location,
                                                    bool fixedNodeId, TMaybe<TString> path)
-{
-    TAutoPtr<NMsgBusProxy::TBusNodeRegistrationRequest> request = new NMsgBusProxy::TBusNodeRegistrationRequest;
-    request->Record.SetHost(host);
-    request->Record.SetPort(port);
-    request->Record.SetAddress(address);
-    request->Record.SetResolveHost(resolveHost);
+{ 
+    TAutoPtr<NMsgBusProxy::TBusNodeRegistrationRequest> request = new NMsgBusProxy::TBusNodeRegistrationRequest; 
+    request->Record.SetHost(host); 
+    request->Record.SetPort(port); 
+    request->Record.SetAddress(address); 
+    request->Record.SetResolveHost(resolveHost); 
     location.Serialize(request->Record.MutableLocation());
     location.GetLegacyValue().Serialize(request->Record.MutableLocation());
-    request->Record.SetDomainPath(domainPath);
-    request->Record.SetFixedNodeId(fixedNodeId);
+    request->Record.SetDomainPath(domainPath); 
+    request->Record.SetFixedNodeId(fixedNodeId); 
     if (path) {
         request->Record.SetPath(*path);
     }
-    return ExecuteRequest(request.Release());
+    return ExecuteRequest(request.Release()); 
 }
-
-NThreading::TFuture<TResult> TKikimr::GetNodeConfig(ui32 nodeId,
-                                                    const TString &host,
-                                                    const TString &tenant,
-                                                    const TString &nodeType,
+ 
+NThreading::TFuture<TResult> TKikimr::GetNodeConfig(ui32 nodeId, 
+                                                    const TString &host, 
+                                                    const TString &tenant, 
+                                                    const TString &nodeType, 
                                                     const TString& domain,
                                                     const TString& token)
-{
-    TAutoPtr<NMsgBusProxy::TBusConsoleRequest> request = new NMsgBusProxy::TBusConsoleRequest;
-    auto &node = *request->Record.MutableGetNodeConfigRequest()->MutableNode();
-    node.SetNodeId(nodeId);
-    node.SetHost(host);
-    node.SetTenant(tenant);
-    node.SetNodeType(nodeType);
-    if (domain)
-        request->Record.SetDomainName(domain);
+{ 
+    TAutoPtr<NMsgBusProxy::TBusConsoleRequest> request = new NMsgBusProxy::TBusConsoleRequest; 
+    auto &node = *request->Record.MutableGetNodeConfigRequest()->MutableNode(); 
+    node.SetNodeId(nodeId); 
+    node.SetHost(host); 
+    node.SetTenant(tenant); 
+    node.SetNodeType(nodeType); 
+    if (domain) 
+        request->Record.SetDomainName(domain); 
     if (token)
         request->Record.SetSecurityToken(token);
-    return ExecuteRequest(request.Release());
-}
-
-
-}
-}
+    return ExecuteRequest(request.Release()); 
+} 
+ 
+ 
+} 
+} 

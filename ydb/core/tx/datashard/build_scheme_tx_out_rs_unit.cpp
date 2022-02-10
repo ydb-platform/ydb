@@ -1,56 +1,56 @@
-#include "datashard_impl.h"
-#include "datashard_pipeline.h"
-#include "execution_unit_ctors.h"
-
-namespace NKikimr {
+#include "datashard_impl.h" 
+#include "datashard_pipeline.h" 
+#include "execution_unit_ctors.h" 
+ 
+namespace NKikimr { 
 namespace NDataShard {
-
-class TBuildSchemeTxOutRSUnit : public TExecutionUnit {
-public:
+ 
+class TBuildSchemeTxOutRSUnit : public TExecutionUnit { 
+public: 
     TBuildSchemeTxOutRSUnit(TDataShard &dataShard,
-                            TPipeline &pipeline);
-    ~TBuildSchemeTxOutRSUnit() override;
-
-    bool IsReadyToExecute(TOperation::TPtr op) const override;
-    EExecutionStatus Execute(TOperation::TPtr op,
-                             TTransactionContext &txc,
-                             const TActorContext &ctx) override;
-    void Complete(TOperation::TPtr op,
-                  const TActorContext &ctx) override;
-
-private:
-};
-
+                            TPipeline &pipeline); 
+    ~TBuildSchemeTxOutRSUnit() override; 
+ 
+    bool IsReadyToExecute(TOperation::TPtr op) const override; 
+    EExecutionStatus Execute(TOperation::TPtr op, 
+                             TTransactionContext &txc, 
+                             const TActorContext &ctx) override; 
+    void Complete(TOperation::TPtr op, 
+                  const TActorContext &ctx) override; 
+ 
+private: 
+}; 
+ 
 TBuildSchemeTxOutRSUnit::TBuildSchemeTxOutRSUnit(TDataShard &dataShard,
-                                                 TPipeline &pipeline)
-    : TExecutionUnit(EExecutionUnitKind::BuildSchemeTxOutRS, false, dataShard, pipeline)
-{
-}
-
-TBuildSchemeTxOutRSUnit::~TBuildSchemeTxOutRSUnit()
-{
-}
-
-bool TBuildSchemeTxOutRSUnit::IsReadyToExecute(TOperation::TPtr) const
-{
-    return true;
-}
-
-EExecutionStatus TBuildSchemeTxOutRSUnit::Execute(TOperation::TPtr op,
-                                                  TTransactionContext &txc,
-                                                  const TActorContext &)
-{
-    TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
-    Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
-
-    auto &schemeTx = tx->GetSchemeTx();
-    if (!schemeTx.HasSendSnapshot())
-        return EExecutionStatus::Executed;
-
-    Y_VERIFY(!op->InputSnapshots().empty(), "Snapshots expected");
-
-    auto &outReadSets = op->OutReadSets();
-    ui64 srcTablet = DataShard.TabletID();
+                                                 TPipeline &pipeline) 
+    : TExecutionUnit(EExecutionUnitKind::BuildSchemeTxOutRS, false, dataShard, pipeline) 
+{ 
+} 
+ 
+TBuildSchemeTxOutRSUnit::~TBuildSchemeTxOutRSUnit() 
+{ 
+} 
+ 
+bool TBuildSchemeTxOutRSUnit::IsReadyToExecute(TOperation::TPtr) const 
+{ 
+    return true; 
+} 
+ 
+EExecutionStatus TBuildSchemeTxOutRSUnit::Execute(TOperation::TPtr op, 
+                                                  TTransactionContext &txc, 
+                                                  const TActorContext &) 
+{ 
+    TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get()); 
+    Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind()); 
+ 
+    auto &schemeTx = tx->GetSchemeTx(); 
+    if (!schemeTx.HasSendSnapshot()) 
+        return EExecutionStatus::Executed; 
+ 
+    Y_VERIFY(!op->InputSnapshots().empty(), "Snapshots expected"); 
+ 
+    auto &outReadSets = op->OutReadSets(); 
+    ui64 srcTablet = DataShard.TabletID(); 
 
     const auto& snapshot = schemeTx.GetSendSnapshot();
     ui64 targetTablet = snapshot.GetSendTo(0).GetShard();
@@ -59,15 +59,15 @@ EExecutionStatus TBuildSchemeTxOutRSUnit::Execute(TOperation::TPtr op,
         Y_VERIFY(DataShard.GetPathOwnerId() == snapshot.GetTableId().GetOwnerId());
         tableId = snapshot.GetTableId().GetTableId();
     }
-    Y_VERIFY(DataShard.GetUserTables().contains(tableId));
-    ui32 localTableId = DataShard.GetUserTables().at(tableId)->LocalTid;
-
-    for (auto &snapshot : op->InputSnapshots()) {
-        TString snapBody = DataShard.BorrowSnapshot(localTableId, *snapshot, { }, { }, targetTablet);
-        txc.Env.DropSnapshot(snapshot);
-
-        Y_VERIFY(snapBody, "Failed to make full borrow snap. w/o tx restarts");
-
+    Y_VERIFY(DataShard.GetUserTables().contains(tableId)); 
+    ui32 localTableId = DataShard.GetUserTables().at(tableId)->LocalTid; 
+ 
+    for (auto &snapshot : op->InputSnapshots()) { 
+        TString snapBody = DataShard.BorrowSnapshot(localTableId, *snapshot, { }, { }, targetTablet); 
+        txc.Env.DropSnapshot(snapshot); 
+ 
+        Y_VERIFY(snapBody, "Failed to make full borrow snap. w/o tx restarts"); 
+ 
         TString rsBody;
         bool extended = false;
 
@@ -124,23 +124,23 @@ EExecutionStatus TBuildSchemeTxOutRSUnit::Execute(TOperation::TPtr op,
         }
 
         outReadSets[std::make_pair(srcTablet, targetTablet)] = rsBody;
-    }
-
-    op->InputSnapshots().clear();
-
-    return EExecutionStatus::Executed;
-}
-
-void TBuildSchemeTxOutRSUnit::Complete(TOperation::TPtr,
-                                       const TActorContext &)
-{
-}
-
+    } 
+ 
+    op->InputSnapshots().clear(); 
+ 
+    return EExecutionStatus::Executed; 
+} 
+ 
+void TBuildSchemeTxOutRSUnit::Complete(TOperation::TPtr, 
+                                       const TActorContext &) 
+{ 
+} 
+ 
 THolder<TExecutionUnit> CreateBuildSchemeTxOutRSUnit(TDataShard &dataShard,
-                                                     TPipeline &pipeline)
-{
+                                                     TPipeline &pipeline) 
+{ 
     return MakeHolder<TBuildSchemeTxOutRSUnit>(dataShard, pipeline);
-}
-
+} 
+ 
 } // namespace NDataShard
-} // namespace NKikimr
+} // namespace NKikimr 

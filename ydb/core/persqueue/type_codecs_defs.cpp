@@ -123,22 +123,22 @@ TTypeCodecs::TTypeCodecs(TTypeId typeId) {
     case NTypeIds::StepOrderId:
         AddFixedLen<TStepOrderId>(this);
         break;
-    case NTypeIds::Decimal:
-        AddFixedLen<TDecimal>(this);
-        break;
-
-    case NTypeIds::Date:
-        AddFixedLen<TDate>(this);
-        break;
-    case NTypeIds::Datetime:
-        AddFixedLen<TDatetime>(this);
-        break;
-    case NTypeIds::Timestamp:
-        AddFixedLen<TTimestamp>(this);
-        break;
-    case NTypeIds::Interval:
-        AddFixedLen<TInterval>(this);
-        break;
+    case NTypeIds::Decimal: 
+        AddFixedLen<TDecimal>(this); 
+        break; 
+ 
+    case NTypeIds::Date: 
+        AddFixedLen<TDate>(this); 
+        break; 
+    case NTypeIds::Datetime: 
+        AddFixedLen<TDatetime>(this); 
+        break; 
+    case NTypeIds::Timestamp: 
+        AddFixedLen<TTimestamp>(this); 
+        break; 
+    case NTypeIds::Interval: 
+        AddFixedLen<TInterval>(this); 
+        break; 
     }
 }
 

@@ -135,7 +135,7 @@ static void Run(i64 instances = 1) {
         logSettings->SetLevel(NLog::PRI_EMERG, NKikimrServices::BS_PDISK, explanation);
 
         NActors::TLoggerActor *loggerActor = new NActors::TLoggerActor(logSettings, NActors::CreateStderrBackend(),
-            GetServiceCounters(Counters, "utils"));
+            GetServiceCounters(Counters, "utils")); 
         NActors::TActorSetupCmd loggerActorCmd(loggerActor, NActors::TMailboxType::Simple, 2);
         std::pair<NActors::TActorId, NActors::TActorSetupCmd> loggerActorPair(loggerActorId, loggerActorCmd);
         setup->LocalServices.push_back(loggerActorPair);

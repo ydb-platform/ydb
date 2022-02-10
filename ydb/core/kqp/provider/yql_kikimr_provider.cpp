@@ -172,16 +172,16 @@ bool TKikimrTableDescription::Load(TExprContext& ctx, bool withSystemColumns) {
     for (auto pair : Metadata->Columns) {
         auto& column = pair.second;
 
-        // Currently Kikimr doesn't have parametrized types and Decimal type
-        // is passed with no params. It's known to always be Decimal(22,9),
-        // so we transform Decimal type here.
+        // Currently Kikimr doesn't have parametrized types and Decimal type 
+        // is passed with no params. It's known to always be Decimal(22,9), 
+        // so we transform Decimal type here. 
         const TTypeAnnotationNode *type;
-        if (to_lower(column.Type) == "decimal")
-            type = ctx.MakeType<TDataExprParamsType>(
+        if (to_lower(column.Type) == "decimal") 
+            type = ctx.MakeType<TDataExprParamsType>( 
                 NKikimr::NUdf::GetDataSlot(column.Type),
-                ToString(NKikimr::NScheme::DECIMAL_PRECISION),
-                ToString(NKikimr::NScheme::DECIMAL_SCALE));
-        else
+                ToString(NKikimr::NScheme::DECIMAL_PRECISION), 
+                ToString(NKikimr::NScheme::DECIMAL_SCALE)); 
+        else 
             type = ctx.MakeType<TDataExprType>(NKikimr::NUdf::GetDataSlot(column.Type));
 
         if (!column.NotNull) {

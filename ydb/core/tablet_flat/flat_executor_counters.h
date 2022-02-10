@@ -48,16 +48,16 @@ namespace NTabletFlatExecutor {
     XX(CACHE_STAGING_SIZE, "CacheStagingSize") \
     XX(CACHE_WARM_SIZE, "CacheMemTableSize") \
     XX(CACHE_PINNED_SET, "CachePinned") \
-    XX(CACHE_PINNED_LOAD, "CachePinnedLoad") \
+    XX(CACHE_PINNED_LOAD, "CachePinnedLoad") \ 
     XX(CACHE_TOTAL_COLLECTIONS, "CacheTotalCollections") \
     XX(CACHE_TOTAL_SHARED_BODY, "CacheTotalSharedBody") \
     XX(CACHE_TOTAL_PINNED_BODY, "CacheTotalPinnedBody") \
     XX(CACHE_TOTAL_EXCLUSIVE, "CacheTotalExclusive") \
     XX(CACHE_TOTAL_SHARED_PENDING, "CacheTotalSharedPending") \
     XX(CACHE_TOTAL_STICKY, "CacheTotalSticky") \
-    XX(USED_TABLET_MEMORY, "UsedTabletMemory") \
-    XX(USED_TABLET_TX_MEMORY, "UsedTabletTxMemory") \
-    XX(USED_DYNAMIC_TX_MEMORY, "UsedDynamicTxMemory") \
+    XX(USED_TABLET_MEMORY, "UsedTabletMemory") \ 
+    XX(USED_TABLET_TX_MEMORY, "UsedTabletTxMemory") \ 
+    XX(USED_DYNAMIC_TX_MEMORY, "UsedDynamicTxMemory") \ 
     XX(CONSUMED_STORAGE, "ConsumedStorage") \
     XX(CONSUMED_MEMORY, "ConsumedMemory") \
     XX(COMPACTION_READ_IN_FLY, "CompactionReadInFly") \
@@ -91,7 +91,7 @@ namespace NTabletFlatExecutor {
     XX(TX_DATA_RELEASES, "TxDataReleases") \
     XX(TX_RO_COMPLETED, "Tx(ro complete)") \
     XX(TX_RW_COMPLETED, "Tx(rw complete)") \
-    XX(TX_TERMINATED, "Tx(terminated)") \
+    XX(TX_TERMINATED, "Tx(terminated)") \ 
     XX(TX_CHARGE_WEEDED, "TxKeyChargeWeeded") \
     XX(TX_CHARGE_SIEVED, "TxKeyChargeSieved") \
     XX(TX_SELECT_WEEDED, "TxKeySelectWeeded") \

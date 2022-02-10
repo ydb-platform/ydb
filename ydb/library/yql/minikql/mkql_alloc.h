@@ -107,18 +107,18 @@ public:
         }
     }
 
-    size_t GetUsed() const { return MyState_.GetUsed(); }
+    size_t GetUsed() const { return MyState_.GetUsed(); } 
     size_t GetPeakUsed() const { return MyState_.GetPeakUsed(); }
-    size_t GetAllocated() const { return MyState_.GetAllocated(); }
+    size_t GetAllocated() const { return MyState_.GetAllocated(); } 
     size_t GetPeakAllocated() const { return MyState_.GetPeakAllocated(); }
-
-    size_t GetLimit() const { return MyState_.GetLimit(); }
-    void SetLimit(size_t limit) { MyState_.SetLimit(limit); }
+ 
+    size_t GetLimit() const { return MyState_.GetLimit(); } 
+    void SetLimit(size_t limit) { MyState_.SetLimit(limit); } 
     void DisableStrictAllocationCheck() { MyState_.DisableStrictAllocationCheck(); }
-
-    void ReleaseFreePages() { MyState_.ReleaseFreePages(); }
+ 
+    void ReleaseFreePages() { MyState_.ReleaseFreePages(); } 
     void InvalidateMemInfo() { MyState_.InvalidateMemInfo(); }
-
+ 
     bool IsAttached() const { return AttachedCount_ > 0; }
 
 private:

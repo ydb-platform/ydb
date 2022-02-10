@@ -27,7 +27,7 @@ public:
             response->Record.SetProxyErrorCode(proxyStatus);
 
         SendReplyAutoPtr(response);
-
+ 
         this->Die(ctx);
     }
 };

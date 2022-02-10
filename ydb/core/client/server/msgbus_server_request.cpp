@@ -1,6 +1,6 @@
 #include "msgbus_server_request.h"
 #include "msgbus_securereq.h"
-
+ 
 #include <ydb/core/actorlib_impl/async_destroyer.h>
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/client/minikql_compile/mkql_compile_service.h>
@@ -8,7 +8,7 @@
 #include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/tx_processing.h>
-
+ 
 #include <ydb/library/yql/minikql/mkql_node_serialization.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
@@ -27,20 +27,20 @@ class TMessageBusServerRequest : public TMessageBusSecureRequest<TMessageBusServ
     TString TextProgramForCompilation;
     bool CompilationRetried;
 
-    void ReplyWithResult(EResponseStatus status, NKikimrTxUserProxy::TEvProposeTransactionStatus &result,
+    void ReplyWithResult(EResponseStatus status, NKikimrTxUserProxy::TEvProposeTransactionStatus &result, 
                          const TActorContext &ctx);
     bool RetryResolve(const TActorContext &ctx);
-    void FinishReply(const TActorContext &ctx);
-    void TryToAllocateQuota(const TActorContext &ctx);
+    void FinishReply(const TActorContext &ctx); 
+    void TryToAllocateQuota(const TActorContext &ctx); 
 
     void Handle(TMiniKQLCompileServiceEvents::TEvCompileStatus::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvDataShard::TEvGetReadTableStreamStateRequest::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvDataShard::TEvGetReadTableStreamStateRequest::TPtr &ev, const TActorContext &ctx); 
 
     bool AllRequestsCompleted(const TActorContext& ctx);
-    bool AllRequestsCompletedMKQL(const TActorContext& ctx);
-    bool AllRequestsCompletedReadTable(const TActorContext& ctx);
-
+    bool AllRequestsCompletedMKQL(const TActorContext& ctx); 
+    bool AllRequestsCompletedReadTable(const TActorContext& ctx); 
+ 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::FRONT_MKQL_REQUEST;
@@ -61,13 +61,13 @@ public:
         switch (ev->GetTypeRewrite()) {
             HFunc(TMiniKQLCompileServiceEvents::TEvCompileStatus, Handle);
             HFunc(TEvTxUserProxy::TEvProposeTransactionStatus, Handle);
-            HFunc(TEvDataShard::TEvGetReadTableStreamStateRequest, Handle);
+            HFunc(TEvDataShard::TEvGetReadTableStreamStateRequest, Handle); 
         }
     }
 
     void Bootstrap(const TActorContext &ctx) {
         TBase::Become(&TMessageBusServerRequest::StateWork);
-
+ 
         ProposalStatus.Reset(new NKikimrTxUserProxy::TEvProposeTransactionStatus());
         Proposal.Reset(new TEvTxUserProxy::TEvProposeTransaction());
         NKikimrTxUserProxy::TEvProposeTransaction &record = Proposal->Record;
@@ -89,7 +89,7 @@ public:
         }
 
         record.SetStreamResponse(false);
-
+ 
         auto* transaction = record.MutableTransaction();
         if (transaction->HasMiniKQLTransaction()) {
             auto& mkqlTx = *transaction->MutableMiniKQLTransaction();
@@ -133,7 +133,7 @@ public:
                 AllRequestsCompleted(ctx);
             }
             return;
-        } else if (transaction->HasReadTableTransaction()) {
+        } else if (transaction->HasReadTableTransaction()) { 
             NKikimrTxUserProxy::TEvProposeTransactionStatus status;
             return ReplyWithResult(EResponseStatus::MSTATUS_ERROR, status, ctx);
         }
@@ -155,18 +155,18 @@ bool TMessageBusServerRequest::RetryResolve(const TActorContext &ctx) {
     return true;
 }
 
-void TMessageBusServerRequest::ReplyWithResult(EResponseStatus status,
-                                               NKikimrTxUserProxy::TEvProposeTransactionStatus &result,
+void TMessageBusServerRequest::ReplyWithResult(EResponseStatus status, 
+                                               NKikimrTxUserProxy::TEvProposeTransactionStatus &result, 
                                                const TActorContext &ctx)
-{
+{ 
     TAutoPtr<TBusResponse> response(ProposeTransactionStatusToResponse(status, result));
 
     if (result.HasExecutionEngineEvaluatedResponse()) {
         response->Record.MutableExecutionEngineEvaluatedResponse()->Swap(result.MutableExecutionEngineEvaluatedResponse());
     }
-    if (result.HasSerializedReadTableResponse()) {
-        response->Record.SetSerializedReadTableResponse(result.GetSerializedReadTableResponse());
-    }
+    if (result.HasSerializedReadTableResponse()) { 
+        response->Record.SetSerializedReadTableResponse(result.GetSerializedReadTableResponse()); 
+    } 
     if (result.HasStatus()) {
         response->Record.SetProxyErrorCode(result.GetStatus());
     }
@@ -178,10 +178,10 @@ void TMessageBusServerRequest::ReplyWithResult(EResponseStatus status,
     SendReplyAutoPtr(response);
 
     FinishReply(ctx);
-}
-
-void TMessageBusServerRequest::FinishReply(const TActorContext &ctx)
-{
+} 
+ 
+void TMessageBusServerRequest::FinishReply(const TActorContext &ctx) 
+{ 
     if (Proposal)
         AsyncDestroy(Proposal, ctx, AppData(ctx)->UserPoolId);
 
@@ -232,14 +232,14 @@ void TMessageBusServerRequest::Handle(TMiniKQLCompileServiceEvents::TEvCompileSt
 }
 
 bool TMessageBusServerRequest::AllRequestsCompleted(const TActorContext& ctx) {
-    auto &transaction = Proposal->Record.GetTransaction();
-    if (transaction.HasMiniKQLTransaction())
-        return AllRequestsCompletedMKQL(ctx);
-    else
-        Y_FAIL("Unexpected transaction type");
-}
-
-bool TMessageBusServerRequest::AllRequestsCompletedMKQL(const TActorContext& ctx) {
+    auto &transaction = Proposal->Record.GetTransaction(); 
+    if (transaction.HasMiniKQLTransaction()) 
+        return AllRequestsCompletedMKQL(ctx); 
+    else 
+        Y_FAIL("Unexpected transaction type"); 
+} 
+ 
+bool TMessageBusServerRequest::AllRequestsCompletedMKQL(const TActorContext& ctx) { 
     auto* mkqlTx = Proposal->Record.MutableTransaction()->MutableMiniKQLTransaction();
     const bool need2CompileProgram = mkqlTx->HasProgram() && mkqlTx->GetProgram().HasText();
     const bool need2CompileParams = mkqlTx->HasParams() && mkqlTx->GetParams().HasText();
@@ -302,7 +302,7 @@ void TMessageBusServerRequest::Handle(TEvTxUserProxy::TEvProposeTransactionStatu
     case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::DomainLocalityError:
     case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecResultUnavailable:
     case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecCancelled:
-    case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::WrongRequest:
+    case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::WrongRequest: 
         return ReplyWithResult(MSTATUS_ERROR, msg->Record, ctx);
     case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError:
         if (!RetryResolve(ctx))
@@ -325,16 +325,16 @@ void TMessageBusServerRequest::Handle(TEvTxUserProxy::TEvProposeTransactionStatu
     }
 }
 
-void TMessageBusServerRequest::Handle(TEvDataShard::TEvGetReadTableStreamStateRequest::TPtr &ev, const TActorContext &ctx) {
-    auto *response = new TEvDataShard::TEvGetReadTableStreamStateResponse;
-
+void TMessageBusServerRequest::Handle(TEvDataShard::TEvGetReadTableStreamStateRequest::TPtr &ev, const TActorContext &ctx) { 
+    auto *response = new TEvDataShard::TEvGetReadTableStreamStateResponse; 
+ 
     response->Record.MutableStatus()->SetCode(Ydb::StatusIds::GENERIC_ERROR);
     auto *issue = response->Record.MutableStatus()->AddIssues();
     issue->set_severity(NYql::TSeverityIds::S_ERROR);
     issue->set_message("request proxy is not streaming");
-    ctx.Send(ev->Sender, response);
-}
-
+    ctx.Send(ev->Sender, response); 
+} 
+ 
 void TMessageBusServerProxy::Handle(TEvBusProxy::TEvRequest::TPtr& ev, const TActorContext& ctx) {
     ctx.Register(new TMessageBusServerRequest(ev->Get()));
 }

@@ -285,8 +285,8 @@ public:
                 rowCountResolution = ti.second->Stats.RowCountResolution;
             }
 
-            ti.second->StatsUpdateInProgress = true;
-            ti.second->StatsNeedUpdate = false;
+            ti.second->StatsUpdateInProgress = true; 
+            ti.second->StatsNeedUpdate = false; 
 
             ui64 indexSize = txc.DB.GetTableIndexSize(localTableId);
             if (shadowTableId) {

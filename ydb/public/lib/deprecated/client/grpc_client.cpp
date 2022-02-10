@@ -6,29 +6,29 @@
 #include <util/system/mutex.h>
 #include <util/generic/maybe.h>
 #include <util/generic/queue.h>
-#include <util/generic/set.h>
+#include <util/generic/set.h> 
 #include <grpc++/grpc++.h>
 
 namespace NKikimr {
     namespace NGRpcProxy {
 
         class TGRpcClient::TImpl : ISimpleThread {
-            struct IProcessorBase {
-                virtual ~IProcessorBase() = default;
-                virtual void Start() = 0;
-            };
-
-            struct IRequestProcessor : public IProcessorBase
+            struct IProcessorBase { 
+                virtual ~IProcessorBase() = default; 
+                virtual void Start() = 0; 
+            }; 
+ 
+            struct IRequestProcessor : public IProcessorBase 
             {
                 virtual void Finished() = 0;
             };
 
             struct IStreamRequestReadProcessor : public IProcessorBase
-            {
-                virtual void InvokeProcess() = 0;
-                virtual void InvokeFinish() = 0;
-            };
-
+            { 
+                virtual void InvokeProcess() = 0; 
+                virtual void InvokeFinish() = 0; 
+            }; 
+ 
         public:
             using TStub = NKikimrClient::TGRpcServer::Stub;
 
@@ -93,88 +93,88 @@ namespace NKikimr {
                 }
             };
 
-            template<typename TRequest, typename TResponse>
-            class TStreamRequestProcessor
+            template<typename TRequest, typename TResponse> 
+            class TStreamRequestProcessor 
                 : public IStreamRequestReadProcessor
-            {
-            public:
-                using TAsyncReaderPtr = std::unique_ptr<grpc::ClientAsyncReader<TResponse>>;
-                using TAsyncRequest = TAsyncReaderPtr (TStub::*)(grpc::ClientContext*, const TRequest&, grpc::CompletionQueue*, void*);
-                grpc::ClientContext Context;
-                TAsyncReaderPtr Reader;
-                TMutex ReaderLock;
-                TImpl *Impl;
-                TAsyncRequest AsyncRequest;
-                TRequest Params;
-                const TSimpleCallback<TResponse> Process;
-                const TFinishCallback Finish;
-                TResponse Reply;
-                grpc::Status Status;
-                bool Initialized;
-                bool Finished;
-
-            public:
-                TStreamRequestProcessor(TImpl *impl,
-                                        TAsyncRequest asyncRequest,
-                                        const TRequest& params,
-                                        TSimpleCallback<TResponse>&& process,
-                                        TFinishCallback &&finish,
-                                        const TMaybe<TDuration>& timeout)
-                    : Reader(nullptr)
-                    , Impl(impl)
-                    , AsyncRequest(asyncRequest)
-                    , Params(params)
-                    , Process(std::move(process))
-                    , Finish(std::move(finish))
-                    , Initialized(false)
-                    , Finished(false)
-                {
-                    if (timeout) {
-                        Context.set_deadline(std::chrono::system_clock::now() +
-                            std::chrono::microseconds(timeout->MicroSeconds()));
-                    }
-                }
-
-                ~TStreamRequestProcessor() {
-                    if (!Finished) {
+            { 
+            public: 
+                using TAsyncReaderPtr = std::unique_ptr<grpc::ClientAsyncReader<TResponse>>; 
+                using TAsyncRequest = TAsyncReaderPtr (TStub::*)(grpc::ClientContext*, const TRequest&, grpc::CompletionQueue*, void*); 
+                grpc::ClientContext Context; 
+                TAsyncReaderPtr Reader; 
+                TMutex ReaderLock; 
+                TImpl *Impl; 
+                TAsyncRequest AsyncRequest; 
+                TRequest Params; 
+                const TSimpleCallback<TResponse> Process; 
+                const TFinishCallback Finish; 
+                TResponse Reply; 
+                grpc::Status Status; 
+                bool Initialized; 
+                bool Finished; 
+ 
+            public: 
+                TStreamRequestProcessor(TImpl *impl, 
+                                        TAsyncRequest asyncRequest, 
+                                        const TRequest& params, 
+                                        TSimpleCallback<TResponse>&& process, 
+                                        TFinishCallback &&finish, 
+                                        const TMaybe<TDuration>& timeout) 
+                    : Reader(nullptr) 
+                    , Impl(impl) 
+                    , AsyncRequest(asyncRequest) 
+                    , Params(params) 
+                    , Process(std::move(process)) 
+                    , Finish(std::move(finish)) 
+                    , Initialized(false) 
+                    , Finished(false) 
+                { 
+                    if (timeout) { 
+                        Context.set_deadline(std::chrono::system_clock::now() + 
+                            std::chrono::microseconds(timeout->MicroSeconds())); 
+                    } 
+                } 
+ 
+                ~TStreamRequestProcessor() { 
+                    if (!Finished) { 
                         TGrpcError error = {"request left unhandled", -1};
-                        Finish(&error);
-                    }
-                }
-
-                void Start() override {
-                    // Stub call will cause async call to InvokeProcess. Lock reader to avoid race.
-                    auto guard = Guard(ReaderLock);
-                    Reader = (Impl->Stub.*AsyncRequest)(&Context, Params, &Impl->CQ, this);
-                }
-
-            private:
-                void InvokeProcess() override {
-                    auto guard = Guard(ReaderLock);
-
-                    Y_VERIFY(!Finished);
-                    Y_VERIFY_DEBUG(Reader);
-
-                    if (Initialized)
-                        Process(Reply);
-                    Reader->Read(&Reply, this);
-                    Initialized = true;
-                }
-
-                void InvokeFinish() override {
-                    Y_VERIFY(!Finished);
-                    Finished = true;
-
-                    if (Status.ok()) {
-                        Finish(nullptr);
-                    } else {
-                        const auto& msg = Status.error_message();
+                        Finish(&error); 
+                    } 
+                } 
+ 
+                void Start() override { 
+                    // Stub call will cause async call to InvokeProcess. Lock reader to avoid race. 
+                    auto guard = Guard(ReaderLock); 
+                    Reader = (Impl->Stub.*AsyncRequest)(&Context, Params, &Impl->CQ, this); 
+                } 
+ 
+            private: 
+                void InvokeProcess() override { 
+                    auto guard = Guard(ReaderLock); 
+ 
+                    Y_VERIFY(!Finished); 
+                    Y_VERIFY_DEBUG(Reader); 
+ 
+                    if (Initialized) 
+                        Process(Reply); 
+                    Reader->Read(&Reply, this); 
+                    Initialized = true; 
+                } 
+ 
+                void InvokeFinish() override { 
+                    Y_VERIFY(!Finished); 
+                    Finished = true; 
+ 
+                    if (Status.ok()) { 
+                        Finish(nullptr); 
+                    } else { 
+                        const auto& msg = Status.error_message(); 
                         TGrpcError error = {TString(msg.data(), msg.length()), Status.error_code()};
-                        Finish(&error);
-                    }
-                }
-            };
-
+                        Finish(&error); 
+                    } 
+                } 
+            }; 
+ 
         private:
             std::shared_ptr<grpc::ChannelInterface> Channel;
             TStub Stub;
@@ -221,61 +221,61 @@ namespace NKikimr {
                 }
             }
 
-            template<typename TRequest, typename TResponse>
-            void IssueStream(const TRequest& request,
-                             TSimpleCallback<TResponse>&& processCb,
-                             TFinishCallback&& finishCb,
-                             typename TStreamRequestProcessor<TRequest, TResponse>::TAsyncRequest streamRequest) {
-                auto processor = MakeHolder<TStreamRequestProcessor<TRequest, TResponse>>
-                    (this, streamRequest, request, std::move(processCb), std::move(finishCb), Timeout);
-                with_lock (Mutex) {
-                    StreamTags.insert(processor.Get());
-                    if (!MaxInFlight || InFlight < MaxInFlight) {
-                        Start(std::move(processor));
-                    } else {
-                        PendingQ.push(std::move(processor));
-                    }
-                }
-            }
-
-            bool IsStreamTag(void *tag) {
-                with_lock (Mutex) {
+            template<typename TRequest, typename TResponse> 
+            void IssueStream(const TRequest& request, 
+                             TSimpleCallback<TResponse>&& processCb, 
+                             TFinishCallback&& finishCb, 
+                             typename TStreamRequestProcessor<TRequest, TResponse>::TAsyncRequest streamRequest) { 
+                auto processor = MakeHolder<TStreamRequestProcessor<TRequest, TResponse>> 
+                    (this, streamRequest, request, std::move(processCb), std::move(finishCb), Timeout); 
+                with_lock (Mutex) { 
+                    StreamTags.insert(processor.Get()); 
+                    if (!MaxInFlight || InFlight < MaxInFlight) { 
+                        Start(std::move(processor)); 
+                    } else { 
+                        PendingQ.push(std::move(processor)); 
+                    } 
+                } 
+            } 
+ 
+            bool IsStreamTag(void *tag) { 
+                with_lock (Mutex) { 
                     return StreamTags.contains(tag);
-                }
-            }
-
-            void EraseStreamTag(void *tag) {
-                with_lock (Mutex) {
-                    StreamTags.erase(tag);
-                }
-            }
-
+                } 
+            } 
+ 
+            void EraseStreamTag(void *tag) { 
+                with_lock (Mutex) { 
+                    StreamTags.erase(tag); 
+                } 
+            } 
+ 
             void *ThreadProc() override {
                 for (;;) {
                     void *tag;
                     bool ok = false;
-                    bool finished = true;
+                    bool finished = true; 
                     if (!CQ.Next(&tag, &ok)) {
                         break;
                     }
-                    if (IsStreamTag(tag)) {
+                    if (IsStreamTag(tag)) { 
                         THolder<IStreamRequestReadProcessor> processor(static_cast<IStreamRequestReadProcessor*>(tag));
-                        if (ok) {
-                            processor->InvokeProcess();
+                        if (ok) { 
+                            processor->InvokeProcess(); 
                             Y_UNUSED(processor.Release()); // keep processor alive
-                            finished = false;
-                        } else {
-                            processor->InvokeFinish();
-                            EraseStreamTag(tag);
-                        }
-                    } else {
-                        THolder<IRequestProcessor> processor(static_cast<IRequestProcessor*>(tag));
-                        if (ok) {
-                            processor->Finished();
-                        }
-                    }
-
-                    if (finished) {
+                            finished = false; 
+                        } else { 
+                            processor->InvokeFinish(); 
+                            EraseStreamTag(tag); 
+                        } 
+                    } else { 
+                        THolder<IRequestProcessor> processor(static_cast<IRequestProcessor*>(tag)); 
+                        if (ok) { 
+                            processor->Finished(); 
+                        } 
+                    } 
+ 
+                    if (finished) { 
                         with_lock (Mutex) {
                             --InFlight;
                             while (PendingQ && InFlight < MaxInFlight) {
@@ -288,7 +288,7 @@ namespace NKikimr {
                 return nullptr;
             }
 
-            void Start(THolder<IProcessorBase> &&processor) {
+            void Start(THolder<IProcessorBase> &&processor) { 
                 processor->Start();
                 Y_UNUSED(processor.Release());
                 ++InFlight;
@@ -328,8 +328,8 @@ namespace NKikimr {
         IMPL_REQUEST(HiveCreateTablet, THiveCreateTablet, TResponse)
         IMPL_REQUEST(LocalEnumerateTablets, TLocalEnumerateTablets, TResponse)
         IMPL_REQUEST(KeyValue, TKeyValueRequest, TResponse)
-        IMPL_REQUEST(RegisterNode, TNodeRegistrationRequest, TNodeRegistrationResponse)
-        IMPL_REQUEST(CmsRequest, TCmsRequest, TCmsResponse)
+        IMPL_REQUEST(RegisterNode, TNodeRegistrationRequest, TNodeRegistrationResponse) 
+        IMPL_REQUEST(CmsRequest, TCmsRequest, TCmsResponse) 
         IMPL_REQUEST(SqsRequest, TSqsRequest, TSqsResponse)
         IMPL_REQUEST(S3Listing, TS3ListingRequest, TS3ListingResponse)
         IMPL_REQUEST(LocalMKQL, TLocalMKQL, TResponse)
@@ -343,7 +343,7 @@ namespace NKikimr {
         IMPL_REQUEST(DbOperation, TJSON, TJSON)
         IMPL_REQUEST(DbBatch, TJSON, TJSON)
         IMPL_REQUEST(ChooseProxy, TChooseProxyRequest, TResponse)
-        IMPL_REQUEST(ConsoleRequest, TConsoleRequest, TConsoleResponse)
+        IMPL_REQUEST(ConsoleRequest, TConsoleRequest, TConsoleResponse) 
         IMPL_REQUEST(WhoAmI, TWhoAmI, TResponse)
         IMPL_REQUEST(FillNode, TFillNodeRequest, TResponse)
         IMPL_REQUEST(DrainNode, TDrainNodeRequest, TResponse)

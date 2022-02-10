@@ -68,7 +68,7 @@ namespace NTxProxy {
     XX(ExecTimeout, 51) \
     XX(ExecError, 52) \
     XX(ExecInProgress, 53) \
-    XX(ExecResponseData, 54) \
+    XX(ExecResponseData, 54) \ 
     XX(ExecResultUnavailable, 55) \
     XX(ExecCancelled, 56) \
     \

@@ -27,81 +27,81 @@ namespace NDataShard {
 
     struct TTxFlags {
         enum Flags : ui64 {
-            ////////////////////////////
-            // Public operation flags //
-            ////////////////////////////
+            //////////////////////////// 
+            // Public operation flags // 
+            //////////////////////////// 
             Default = 0,
             Dirty = 0x01,
             DenyOnlineIfSnapshotNotReady = 0x02,
             ForceOnline = 0x04,
-            Immediate = 0x08,
-
-            PublicFlagsMask = 0x000000000000FFFF,
-
-            //////////////////////////////
-            // Internal operation flags //
-            //////////////////////////////
-            ForceDirty = 1ULL << 16,
-            // Operation is currently executed within some
-            // tablet transaction
-            InProgress = 1ULL << 17,
-            // Operation execution was completed. No more
-            // local database accesses will be made for it
-            Completed = 1ULL << 18,
-            // Operation execution was interrupted by
-            // external event
-            Interrupted = 1ULL << 19,
-            // Operation execution was aborted due to
-            // internal error
-            Aborted = 1ULL << 20,
-            // Operation doesn't modify user data (operation
-            // execution may still require system data
-            // modification like storing operation in local
-            // database)
-            ReadOnly = 1ULL << 21,
-            // Operation can block proposal of some
-            // other operations
-            ProposeBlocker = 1ULL << 22,
-            // Operation requests additional diagnostics
-            // in its response
-            NeedDiagnostics = 1ULL << 24,
-            // Operation is considered as reading
-            // all shard data
-            GlobalReader = 1ULL << 25,
-            // Operation is considered as affecting
-            // all shard data
-            GlobalWriter = 1ULL << 26,
-            // Operation waits for dependencies to
-            // start execution
-            WaitingDependencies = 1ULL << 27,
-            // Operation is executing. It's considered that
-            // all operations having this flag set at the
-            // same time can be executed in any order. All
-            // operations with this flag set should be added
-            // to ExecutingOps set in pipeline. Only executing
-            // operations can receive input data
-            Executing = 1ULL << 28,
-            // Operation is working on a snapshot and therefore
-            // doesn't conflict with other operations by data
-            UsingSnapshot = 1ULL << 29,
-            // Operation is using new execution engine
-            KqpDataTransaction = 1ULL << 30,
-            // Operation attached RS to KQP task runner
-            // TODO: rework execution to remove this flag
-            KqpAttachedRS = 1ULL << 31,
-            // All input RS for operation were loaded from
-            // local database
-            LoadedInRS = 1ULL << 32,
+            Immediate = 0x08, 
+ 
+            PublicFlagsMask = 0x000000000000FFFF, 
+ 
+            ////////////////////////////// 
+            // Internal operation flags // 
+            ////////////////////////////// 
+            ForceDirty = 1ULL << 16, 
+            // Operation is currently executed within some 
+            // tablet transaction 
+            InProgress = 1ULL << 17, 
+            // Operation execution was completed. No more 
+            // local database accesses will be made for it 
+            Completed = 1ULL << 18, 
+            // Operation execution was interrupted by 
+            // external event 
+            Interrupted = 1ULL << 19, 
+            // Operation execution was aborted due to 
+            // internal error 
+            Aborted = 1ULL << 20, 
+            // Operation doesn't modify user data (operation 
+            // execution may still require system data 
+            // modification like storing operation in local 
+            // database) 
+            ReadOnly = 1ULL << 21, 
+            // Operation can block proposal of some 
+            // other operations 
+            ProposeBlocker = 1ULL << 22, 
+            // Operation requests additional diagnostics 
+            // in its response 
+            NeedDiagnostics = 1ULL << 24, 
+            // Operation is considered as reading 
+            // all shard data 
+            GlobalReader = 1ULL << 25, 
+            // Operation is considered as affecting 
+            // all shard data 
+            GlobalWriter = 1ULL << 26, 
+            // Operation waits for dependencies to 
+            // start execution 
+            WaitingDependencies = 1ULL << 27, 
+            // Operation is executing. It's considered that 
+            // all operations having this flag set at the 
+            // same time can be executed in any order. All 
+            // operations with this flag set should be added 
+            // to ExecutingOps set in pipeline. Only executing 
+            // operations can receive input data 
+            Executing = 1ULL << 28, 
+            // Operation is working on a snapshot and therefore 
+            // doesn't conflict with other operations by data 
+            UsingSnapshot = 1ULL << 29, 
+            // Operation is using new execution engine 
+            KqpDataTransaction = 1ULL << 30, 
+            // Operation attached RS to KQP task runner 
+            // TODO: rework execution to remove this flag 
+            KqpAttachedRS = 1ULL << 31, 
+            // All input RS for operation were loaded from 
+            // local database 
+            LoadedInRS = 1ULL << 32, 
             // Operation is using new execution engine in scan mode
             KqpScanTransaction = 1ULL << 33,
-            // Operation is waiting for stream clearance
-            WaitingForStreamClearance = 1ULL << 34,
-            // Operation is interested in interconnect disconnects
-            ProcessDisconnects = 1ULL << 35,
-            // Operation is waiting for async scan to finish
-            WaitingForScan = 1ULL << 36,
-            // Operation is waiting for snapshot
-            WaitingForSnapshot = 1ULL << 37,
+            // Operation is waiting for stream clearance 
+            WaitingForStreamClearance = 1ULL << 34, 
+            // Operation is interested in interconnect disconnects 
+            ProcessDisconnects = 1ULL << 35, 
+            // Operation is waiting for async scan to finish 
+            WaitingForScan = 1ULL << 36, 
+            // Operation is waiting for snapshot 
+            WaitingForSnapshot = 1ULL << 37, 
             // Operation is blocking conflicting immediate ops until it completes
             BlockingImmediateOps = 1ULL << 38,
             // Operation is blocking conflicting immediate writes until it completes
@@ -116,11 +116,11 @@ namespace NDataShard {
             WaitingForAsyncJob = 1ULL << 43,
             // Operation must complete before results sending
             WaitCompletion = 1ULL << 44,
-
+ 
             LastFlag = WaitCompletion,
-
-            PrivateFlagsMask = 0xFFFFFFFFFFFF0000ULL,
-            PreservedPrivateFlagsMask = ReadOnly | ProposeBlocker | NeedDiagnostics | GlobalReader
+ 
+            PrivateFlagsMask = 0xFFFFFFFFFFFF0000ULL, 
+            PreservedPrivateFlagsMask = ReadOnly | ProposeBlocker | NeedDiagnostics | GlobalReader 
                 | GlobalWriter | KqpDataTransaction | KqpScanTransaction
                 | BlockingImmediateOps | BlockingImmediateWrites,
         };
@@ -128,8 +128,8 @@ namespace NDataShard {
 
     // Old datashard uses Uint32 column type for flags in local database.
     static_assert(TTxFlags::PreservedPrivateFlagsMask <= Max<ui64>());
-    static_assert(TTxFlags::PublicFlagsMask <= Max<ui32>());
-
+    static_assert(TTxFlags::PublicFlagsMask <= Max<ui32>()); 
+ 
     // NOTE: this switch should be modified only in tests !!!
     extern bool gAllowLogBatchingDefaultValue;
     extern TDuration gDbStatsReportInterval;
@@ -234,30 +234,30 @@ struct TEvDataShard {
         EvReadColumnsRequest,
         EvReadColumnsResponse,
 
-        EvGetInfoRequest,
-        EvGetInfoResponse,
-        EvListOperationsRequest,
-        EvListOperationsResponse,
-        EvGetOperationRequest,
-        EvGetOperationResponse,
-        EvGetReadTableSinkStateRequest,
-        EvGetReadTableSinkStateResponse,
-        EvGetReadTableScanStateRequest,
-        EvGetReadTableScanStateResponse,
-        EvGetReadTableStreamStateRequest,
-        EvGetReadTableStreamStateResponse,
-        EvGetSlowOpProfilesRequest,
-        EvGetSlowOpProfilesResponse,
-        EvGetRSInfoRequest,
-        EvGetRSInfoResponse,
-        EvGetDataHistogramRequest,
-        EvGetDataHistogramResponse,
+        EvGetInfoRequest, 
+        EvGetInfoResponse, 
+        EvListOperationsRequest, 
+        EvListOperationsResponse, 
+        EvGetOperationRequest, 
+        EvGetOperationResponse, 
+        EvGetReadTableSinkStateRequest, 
+        EvGetReadTableSinkStateResponse, 
+        EvGetReadTableScanStateRequest, 
+        EvGetReadTableScanStateResponse, 
+        EvGetReadTableStreamStateRequest, 
+        EvGetReadTableStreamStateResponse, 
+        EvGetSlowOpProfilesRequest, 
+        EvGetSlowOpProfilesResponse, 
+        EvGetRSInfoRequest, 
+        EvGetRSInfoResponse, 
+        EvGetDataHistogramRequest, 
+        EvGetDataHistogramResponse, 
         EvCancelFillIndex_DEPRECATED,
         EvRefreshVolatileSnapshotRequest,
         EvRefreshVolatileSnapshotResponse,
         EvDiscardVolatileSnapshotRequest,
         EvDiscardVolatileSnapshotResponse,
-
+ 
         EvGetS3Upload,
         EvStoreS3UploadId,
         EvS3Upload,
@@ -499,7 +499,7 @@ struct TEvDataShard {
         bool IsTryLater() const { return GetStatus() == NKikimrTxDataShard::TEvProposeTransactionResult::TRY_LATER; }
         bool IsExecError() const { return GetStatus() == NKikimrTxDataShard::TEvProposeTransactionResult::EXEC_ERROR; }
         bool IsError() const { return GetStatus() == NKikimrTxDataShard::TEvProposeTransactionResult::ERROR; }
-        bool IsBadRequest() const { return GetStatus() == NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST; }
+        bool IsBadRequest() const { return GetStatus() == NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST; } 
 
         bool IsForceOnline() const { return ForceOnline; }
         bool IsForceDirty() const { return ForceDirty; }
@@ -1011,95 +1011,95 @@ struct TEvDataShard {
         }
     };
 
-    struct TEvGetInfoRequest : public TEventPB<TEvGetInfoRequest,
-                                               NKikimrTxDataShard::TEvGetInfoRequest,
-                                               TEvDataShard::EvGetInfoRequest> {
-    };
-
-    struct TEvGetInfoResponse : public TEventPB<TEvGetInfoResponse,
-                                                NKikimrTxDataShard::TEvGetInfoResponse,
-                                                TEvDataShard::EvGetInfoResponse> {
-    };
-
-    struct TEvListOperationsRequest : public TEventPB<TEvListOperationsRequest,
-                                                      NKikimrTxDataShard::TEvListOperationsRequest,
-                                                      TEvDataShard::EvListOperationsRequest> {
-    };
-
-    struct TEvListOperationsResponse : public TEventPB<TEvListOperationsResponse,
-                                                       NKikimrTxDataShard::TEvListOperationsResponse,
-                                                       TEvDataShard::EvListOperationsResponse> {
-    };
-
-    struct TEvGetOperationRequest : public TEventPB<TEvGetOperationRequest,
-                                                    NKikimrTxDataShard::TEvGetOperationRequest,
-                                                    TEvDataShard::EvGetOperationRequest> {
-    };
-
-    struct TEvGetOperationResponse : public TEventPB<TEvGetOperationResponse,
-                                                     NKikimrTxDataShard::TEvGetOperationResponse,
-                                                     TEvDataShard::EvGetOperationResponse> {
-    };
-
-    struct TEvGetReadTableSinkStateRequest : public TEventPB<TEvGetReadTableSinkStateRequest,
-                                                             NKikimrTxDataShard::TEvGetReadTableSinkStateRequest,
-                                                             TEvDataShard::EvGetReadTableSinkStateRequest> {
-    };
-
-    struct TEvGetReadTableSinkStateResponse : public TEventPB<TEvGetReadTableSinkStateResponse,
-                                                              NKikimrTxDataShard::TEvGetReadTableSinkStateResponse,
-                                                              TEvDataShard::EvGetReadTableSinkStateResponse> {
-    };
-
-    struct TEvGetReadTableScanStateRequest : public TEventPB<TEvGetReadTableScanStateRequest,
-                                                             NKikimrTxDataShard::TEvGetReadTableScanStateRequest,
-                                                             TEvDataShard::EvGetReadTableScanStateRequest> {
-    };
-
-    struct TEvGetReadTableScanStateResponse : public TEventPB<TEvGetReadTableScanStateResponse,
-                                                              NKikimrTxDataShard::TEvGetReadTableScanStateResponse,
-                                                              TEvDataShard::EvGetReadTableScanStateResponse> {
-    };
-
-    struct TEvGetReadTableStreamStateRequest : public TEventPB<TEvGetReadTableStreamStateRequest,
-                                                               NKikimrTxDataShard::TEvGetReadTableStreamStateRequest,
-                                                               TEvDataShard::EvGetReadTableStreamStateRequest> {
-    };
-
-    struct TEvGetReadTableStreamStateResponse : public TEventPB<TEvGetReadTableStreamStateResponse,
-                                                                NKikimrTxDataShard::TEvGetReadTableStreamStateResponse,
-                                                                TEvDataShard::EvGetReadTableStreamStateResponse> {
-    };
-
-    struct TEvGetSlowOpProfilesRequest : public TEventPB<TEvGetSlowOpProfilesRequest,
-                                                         NKikimrTxDataShard::TEvGetSlowOpProfilesRequest,
-                                                         TEvDataShard::EvGetSlowOpProfilesRequest> {
-    };
-
-    struct TEvGetSlowOpProfilesResponse : public TEventPB<TEvGetSlowOpProfilesResponse,
-                                                          NKikimrTxDataShard::TEvGetSlowOpProfilesResponse,
-                                                          TEvDataShard::EvGetSlowOpProfilesResponse> {
-    };
-
-    struct TEvGetRSInfoRequest : public TEventPB<TEvGetRSInfoRequest,
-                                                 NKikimrTxDataShard::TEvGetRSInfoRequest,
-                                                 TEvDataShard::EvGetRSInfoRequest> {
-    };
-
-    struct TEvGetRSInfoResponse : public TEventPB<TEvGetRSInfoResponse,
-                                                  NKikimrTxDataShard::TEvGetRSInfoResponse,
-                                                  TEvDataShard::EvGetRSInfoResponse> {
-    };
-
-    struct TEvGetDataHistogramRequest : public TEventPB<TEvGetDataHistogramRequest,
-                                                        NKikimrTxDataShard::TEvGetDataHistogramRequest,
-                                                        TEvDataShard::EvGetDataHistogramRequest> {
-    };
-
-    struct TEvGetDataHistogramResponse : public TEventPB<TEvGetDataHistogramResponse,
-                                                         NKikimrTxDataShard::TEvGetDataHistogramResponse,
-                                                         TEvDataShard::EvGetDataHistogramResponse> {
-    };
+    struct TEvGetInfoRequest : public TEventPB<TEvGetInfoRequest, 
+                                               NKikimrTxDataShard::TEvGetInfoRequest, 
+                                               TEvDataShard::EvGetInfoRequest> { 
+    }; 
+ 
+    struct TEvGetInfoResponse : public TEventPB<TEvGetInfoResponse, 
+                                                NKikimrTxDataShard::TEvGetInfoResponse, 
+                                                TEvDataShard::EvGetInfoResponse> { 
+    }; 
+ 
+    struct TEvListOperationsRequest : public TEventPB<TEvListOperationsRequest, 
+                                                      NKikimrTxDataShard::TEvListOperationsRequest, 
+                                                      TEvDataShard::EvListOperationsRequest> { 
+    }; 
+ 
+    struct TEvListOperationsResponse : public TEventPB<TEvListOperationsResponse, 
+                                                       NKikimrTxDataShard::TEvListOperationsResponse, 
+                                                       TEvDataShard::EvListOperationsResponse> { 
+    }; 
+ 
+    struct TEvGetOperationRequest : public TEventPB<TEvGetOperationRequest, 
+                                                    NKikimrTxDataShard::TEvGetOperationRequest, 
+                                                    TEvDataShard::EvGetOperationRequest> { 
+    }; 
+ 
+    struct TEvGetOperationResponse : public TEventPB<TEvGetOperationResponse, 
+                                                     NKikimrTxDataShard::TEvGetOperationResponse, 
+                                                     TEvDataShard::EvGetOperationResponse> { 
+    }; 
+ 
+    struct TEvGetReadTableSinkStateRequest : public TEventPB<TEvGetReadTableSinkStateRequest, 
+                                                             NKikimrTxDataShard::TEvGetReadTableSinkStateRequest, 
+                                                             TEvDataShard::EvGetReadTableSinkStateRequest> { 
+    }; 
+ 
+    struct TEvGetReadTableSinkStateResponse : public TEventPB<TEvGetReadTableSinkStateResponse, 
+                                                              NKikimrTxDataShard::TEvGetReadTableSinkStateResponse, 
+                                                              TEvDataShard::EvGetReadTableSinkStateResponse> { 
+    }; 
+ 
+    struct TEvGetReadTableScanStateRequest : public TEventPB<TEvGetReadTableScanStateRequest, 
+                                                             NKikimrTxDataShard::TEvGetReadTableScanStateRequest, 
+                                                             TEvDataShard::EvGetReadTableScanStateRequest> { 
+    }; 
+ 
+    struct TEvGetReadTableScanStateResponse : public TEventPB<TEvGetReadTableScanStateResponse, 
+                                                              NKikimrTxDataShard::TEvGetReadTableScanStateResponse, 
+                                                              TEvDataShard::EvGetReadTableScanStateResponse> { 
+    }; 
+ 
+    struct TEvGetReadTableStreamStateRequest : public TEventPB<TEvGetReadTableStreamStateRequest, 
+                                                               NKikimrTxDataShard::TEvGetReadTableStreamStateRequest, 
+                                                               TEvDataShard::EvGetReadTableStreamStateRequest> { 
+    }; 
+ 
+    struct TEvGetReadTableStreamStateResponse : public TEventPB<TEvGetReadTableStreamStateResponse, 
+                                                                NKikimrTxDataShard::TEvGetReadTableStreamStateResponse, 
+                                                                TEvDataShard::EvGetReadTableStreamStateResponse> { 
+    }; 
+ 
+    struct TEvGetSlowOpProfilesRequest : public TEventPB<TEvGetSlowOpProfilesRequest, 
+                                                         NKikimrTxDataShard::TEvGetSlowOpProfilesRequest, 
+                                                         TEvDataShard::EvGetSlowOpProfilesRequest> { 
+    }; 
+ 
+    struct TEvGetSlowOpProfilesResponse : public TEventPB<TEvGetSlowOpProfilesResponse, 
+                                                          NKikimrTxDataShard::TEvGetSlowOpProfilesResponse, 
+                                                          TEvDataShard::EvGetSlowOpProfilesResponse> { 
+    }; 
+ 
+    struct TEvGetRSInfoRequest : public TEventPB<TEvGetRSInfoRequest, 
+                                                 NKikimrTxDataShard::TEvGetRSInfoRequest, 
+                                                 TEvDataShard::EvGetRSInfoRequest> { 
+    }; 
+ 
+    struct TEvGetRSInfoResponse : public TEventPB<TEvGetRSInfoResponse, 
+                                                  NKikimrTxDataShard::TEvGetRSInfoResponse, 
+                                                  TEvDataShard::EvGetRSInfoResponse> { 
+    }; 
+ 
+    struct TEvGetDataHistogramRequest : public TEventPB<TEvGetDataHistogramRequest, 
+                                                        NKikimrTxDataShard::TEvGetDataHistogramRequest, 
+                                                        TEvDataShard::EvGetDataHistogramRequest> { 
+    }; 
+ 
+    struct TEvGetDataHistogramResponse : public TEventPB<TEvGetDataHistogramResponse, 
+                                                         NKikimrTxDataShard::TEvGetDataHistogramResponse, 
+                                                         TEvDataShard::EvGetDataHistogramResponse> { 
+    }; 
 
     struct TEvRefreshVolatileSnapshotRequest
         : public TEventPB<TEvRefreshVolatileSnapshotRequest,

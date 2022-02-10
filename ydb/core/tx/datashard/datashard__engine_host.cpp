@@ -25,14 +25,14 @@ using namespace NTabletFlatExecutor;
 
 namespace {
 
-NUdf::TUnboxedValue CreateRow(const TVector<TCell>& inRow,
-                              const TVector<NScheme::TTypeId>& inType,
-                              const THolderFactory& holderFactory) {
+NUdf::TUnboxedValue CreateRow(const TVector<TCell>& inRow, 
+                              const TVector<NScheme::TTypeId>& inType, 
+                              const THolderFactory& holderFactory) { 
     NUdf::TUnboxedValue* rowItems = nullptr;
     auto row = holderFactory.CreateDirectArrayHolder(inRow.size(), rowItems);
 
     for (ui32 i = 0; i < inRow.size(); ++i) {
-        rowItems[i] = GetCellValue(inRow[i], inType[i]);
+        rowItems[i] = GetCellValue(inRow[i], inType[i]); 
     }
 
     return std::move(row);
@@ -87,15 +87,15 @@ struct TRowResultInfo {
         Y_VERIFY(inRow.size() >= ItemInfos.size());
 
         // reorder columns
-        TVector<TCell> outRow(Reserve(ItemInfos.size()));
-        TVector<NScheme::TTypeId> outTypes(Reserve(ItemInfos.size()));
+        TVector<TCell> outRow(Reserve(ItemInfos.size())); 
+        TVector<NScheme::TTypeId> outTypes(Reserve(ItemInfos.size())); 
         for (ui32 i = 0; i < ItemInfos.size(); ++i) {
             ui32 colId = ItemInfos[i].ColumnId;
             outRow.emplace_back(std::move(inRow[colId]));
-            outTypes.emplace_back(ItemInfos[i].SchemeType);
+            outTypes.emplace_back(ItemInfos[i].SchemeType); 
         }
 
-        return CreateRow(outRow, outTypes, holderFactory);
+        return CreateRow(outRow, outTypes, holderFactory); 
     }
 };
 
@@ -166,7 +166,7 @@ struct TRangeResultInfo {
         }
 
         Bytes += 8; // per row overhead
-        Rows = Rows.Append(CreateRow(TmpRow, TmpTypes, holderFactory));
+        Rows = Rows.Append(CreateRow(TmpRow, TmpTypes, holderFactory)); 
 
         if (!FirstKey) {
             FirstKey = Serialize(TmpRow, TmpTypes);
@@ -573,7 +573,7 @@ TEngineBay::~TEngineBay() {
 
 void TEngineBay::AddReadRange(const TTableId& tableId, const TVector<ui32>& columns, const TTableRange& range,
                               const TVector<NScheme::TTypeId>& keyTypes, ui64 itemsLimit, bool reverse)
-{
+{ 
     TVector<TKeyDesc::TColumnOp> columnOps;
     columnOps.reserve(columns.size());
     for (ui32 column : columns) {
@@ -590,10 +590,10 @@ void TEngineBay::AddReadRange(const TTableId& tableId, const TVector<ui32>& colu
                                      0 /* bytesLimit */, reverse);
     Info.Keys.emplace_back(TValidatedKey(std::move(desc), /* isWrite */ false));
     // Info.Keys.back().IsResultPart = not a lock key? // TODO: KIKIMR-11134
-    ++Info.ReadsCount;
+    ++Info.ReadsCount; 
     Info.Loaded = true;
-}
-
+} 
+ 
 void TEngineBay::AddWriteRange(const TTableId& tableId, const TTableRange& range,
                                const TVector<NScheme::TTypeId>& keyTypes)
 {

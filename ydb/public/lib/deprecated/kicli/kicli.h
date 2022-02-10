@@ -372,33 +372,33 @@ protected:
     TQueryResult(const TResult& result);
 };
 
-class TReadTableResult : public TResult {
-    friend class TTableStream;
-public:
-    TReadTableResult(TReadTableResult&&) = default;
-    TReadTableResult(const TReadTableResult&) = default;
-    TReadTableResult& operator=(TReadTableResult&&) = default;
-    TReadTableResult& operator=(const TReadTableResult&) = default;
-
+class TReadTableResult : public TResult { 
+    friend class TTableStream; 
+public: 
+    TReadTableResult(TReadTableResult&&) = default; 
+    TReadTableResult(const TReadTableResult&) = default; 
+    TReadTableResult& operator=(TReadTableResult&&) = default; 
+    TReadTableResult& operator=(const TReadTableResult&) = default; 
+ 
     const YdbOld::ResultSet &GetResultSet() const;
-
-    template<typename TFormat>
-    TString GetTypeText(const TFormat &format) const;
-    template<typename TFormat>
-    TString GetValueText(const TFormat &format) const;
-
-protected:
-    TReadTableResult(const TResult& result);
-
-    template<typename TFormat>
+ 
+    template<typename TFormat> 
+    TString GetTypeText(const TFormat &format) const; 
+    template<typename TFormat> 
+    TString GetValueText(const TFormat &format) const; 
+ 
+protected: 
+    TReadTableResult(const TResult& result); 
+ 
+    template<typename TFormat> 
     static TString ValueToString(const YdbOld::Value &value, const YdbOld::DataType &type);
-    template<typename TFormat>
+    template<typename TFormat> 
     static TString ValueToString(const YdbOld::Value &value, const YdbOld::Type &type);
-
+ 
     mutable YdbOld::ResultSet Result;
-    mutable bool Parsed = false;
-};
-
+    mutable bool Parsed = false; 
+}; 
+ 
 class TPrepareResult : public TResult {
     friend class TKikimr;
     friend class TTextQuery;
@@ -616,93 +616,93 @@ protected:
     EPathType PathType;
 };
 
-class TRegistrationResult : public TResult {
-    friend class TNodeRegistrant;
-public:
-    TRegistrationResult(const TRegistrationResult& other) = default;
-    TRegistrationResult(TRegistrationResult&& other) = default;
-    TRegistrationResult& operator=(const TRegistrationResult& other) = default;
-    TRegistrationResult& operator=(TRegistrationResult&& other) = default;
-
-    bool IsSuccess() const;
-    TString GetErrorMessage() const;
-
-    ui32 GetNodeId() const;
+class TRegistrationResult : public TResult { 
+    friend class TNodeRegistrant; 
+public: 
+    TRegistrationResult(const TRegistrationResult& other) = default; 
+    TRegistrationResult(TRegistrationResult&& other) = default; 
+    TRegistrationResult& operator=(const TRegistrationResult& other) = default; 
+    TRegistrationResult& operator=(TRegistrationResult&& other) = default; 
+ 
+    bool IsSuccess() const; 
+    TString GetErrorMessage() const; 
+ 
+    ui32 GetNodeId() const; 
     NActors::TScopeId GetScopeId() const;
-
-    const NKikimrClient::TNodeRegistrationResponse& Record() const;
-
-private:
-    TRegistrationResult(const TResult& result);
-};
-
-class TNodeRegistrant {
-    friend class TKikimr;
-public:
-    TRegistrationResult SyncRegisterNode(const TString& domainPath, const TString& host, ui16 port,
-                                         const TString& address, const TString& resolveHost,
+ 
+    const NKikimrClient::TNodeRegistrationResponse& Record() const; 
+ 
+private: 
+    TRegistrationResult(const TResult& result); 
+}; 
+ 
+class TNodeRegistrant { 
+    friend class TKikimr; 
+public: 
+    TRegistrationResult SyncRegisterNode(const TString& domainPath, const TString& host, ui16 port, 
+                                         const TString& address, const TString& resolveHost, 
                                          const NActors::TNodeLocation& location,
                                          bool fixedNodeId = false, TMaybe<TString> path = {}) const;
-
-private:
-    TNodeRegistrant(TKikimr& kikimr);
-
-private:
-    TKikimr* Kikimr;
-};
-
-class TTableStream {
-    friend class TKikimr;
-public:
-    NThreading::TFuture<TResult> AsyncRead(const TString &path, bool ordered,
-                                           std::function<void(NClient::TReadTableResult)> processPart,
+ 
+private: 
+    TNodeRegistrant(TKikimr& kikimr); 
+ 
+private: 
+    TKikimr* Kikimr; 
+}; 
+ 
+class TTableStream { 
+    friend class TKikimr; 
+public: 
+    NThreading::TFuture<TResult> AsyncRead(const TString &path, bool ordered, 
+                                           std::function<void(NClient::TReadTableResult)> processPart, 
                                            const TVector<TString> &columns = TVector<TString>(),
-                                           const NKikimrTxUserProxy::TKeyRange &range = NKikimrTxUserProxy::TKeyRange(),
-                                           ui64 limit = 0);
-
-private:
-    TTableStream(TKikimr& kikimr);
-
-private:
-    TKikimr* Kikimr;
-};
-
-class TConfigurationResult : public TResult {
-    friend class TNodeConfigurator;
-public:
-    TConfigurationResult(const TConfigurationResult& other) = default;
-    TConfigurationResult(TConfigurationResult&& other) = default;
-    TConfigurationResult& operator=(const TConfigurationResult& other) = default;
-    TConfigurationResult& operator=(TConfigurationResult&& other) = default;
-
-    bool IsSuccess() const;
-    TString GetErrorMessage() const;
-
-    const NKikimrConfig::TAppConfig &GetConfig() const;
-
-    const NKikimrClient::TConsoleResponse &Record() const;
-
-private:
-    TConfigurationResult(const TResult& result);
-};
-
-class TNodeConfigurator {
-    friend class TKikimr;
-public:
-    TConfigurationResult SyncGetNodeConfig(ui32 nodeId,
-                                           const TString &host,
-                                           const TString &tenant,
-                                           const TString &nodeType,
+                                           const NKikimrTxUserProxy::TKeyRange &range = NKikimrTxUserProxy::TKeyRange(), 
+                                           ui64 limit = 0); 
+ 
+private: 
+    TTableStream(TKikimr& kikimr); 
+ 
+private: 
+    TKikimr* Kikimr; 
+}; 
+ 
+class TConfigurationResult : public TResult { 
+    friend class TNodeConfigurator; 
+public: 
+    TConfigurationResult(const TConfigurationResult& other) = default; 
+    TConfigurationResult(TConfigurationResult&& other) = default; 
+    TConfigurationResult& operator=(const TConfigurationResult& other) = default; 
+    TConfigurationResult& operator=(TConfigurationResult&& other) = default; 
+ 
+    bool IsSuccess() const; 
+    TString GetErrorMessage() const; 
+ 
+    const NKikimrConfig::TAppConfig &GetConfig() const; 
+ 
+    const NKikimrClient::TConsoleResponse &Record() const; 
+ 
+private: 
+    TConfigurationResult(const TResult& result); 
+}; 
+ 
+class TNodeConfigurator { 
+    friend class TKikimr; 
+public: 
+    TConfigurationResult SyncGetNodeConfig(ui32 nodeId, 
+                                           const TString &host, 
+                                           const TString &tenant, 
+                                           const TString &nodeType, 
                                            const TString& domain = "",
                                            const TString& token = "") const;
-
-private:
-    TNodeConfigurator(TKikimr& kikimr);
-
-private:
-    TKikimr* Kikimr;
-};
-
+ 
+private: 
+    TNodeConfigurator(TKikimr& kikimr); 
+ 
+private: 
+    TKikimr* Kikimr; 
+}; 
+ 
 struct TRetryPolicy {
     ui32 RetryLimitCount;
     TDuration MinRetryTime;
@@ -739,8 +739,8 @@ class TKikimr {
     friend class TTextQuery;
     friend class TPreparedQuery;
     friend class TSchemaObject;
-    friend class TNodeRegistrant;
-    friend class TNodeConfigurator;
+    friend class TNodeRegistrant; 
+    friend class TNodeConfigurator; 
     class TImpl;
     class TMsgBusImpl;
     class TGRpcImpl;
@@ -764,9 +764,9 @@ public:
     void SetSecurityToken(const TString& securityToken);
     TString GetCurrentLocation() const;
 
-    TNodeRegistrant GetNodeRegistrant();
-    TNodeConfigurator GetNodeConfigurator();
-
+    TNodeRegistrant GetNodeRegistrant(); 
+    TNodeConfigurator GetNodeConfigurator(); 
+ 
     // execute arbitrary message bus request
     template <typename RecordType, int MessageType>
     NThreading::TFuture<TResult> ExecuteRequest(NBus::TBusBufferMessage<RecordType, MessageType>* request) {
@@ -790,14 +790,14 @@ protected:
     NThreading::TFuture<TResult> CreateTable(TSchemaObject& object, const TString& name, const TVector<TColumn>& columns,
                                              const TTablePartitionConfig* partitionConfig);
     NBus::EMessageStatus ExecuteRequestInternal(NThreading::TPromise<TResult> promise, TAutoPtr<NBus::TBusMessage> request);
-    NThreading::TFuture<TResult> RegisterNode(const TString& domainPath, const TString& host, ui16 port,
-                                              const TString& address, const TString& resolveHost,
+    NThreading::TFuture<TResult> RegisterNode(const TString& domainPath, const TString& host, ui16 port, 
+                                              const TString& address, const TString& resolveHost, 
                                               const NActors::TNodeLocation& location,
                                               bool fixedNodeId, TMaybe<TString> path);
-    NThreading::TFuture<TResult> GetNodeConfig(ui32 nodeId,
-                                               const TString &host,
-                                               const TString &tenant,
-                                               const TString &nodeType,
+    NThreading::TFuture<TResult> GetNodeConfig(ui32 nodeId, 
+                                               const TString &host, 
+                                               const TString &tenant, 
+                                               const TString &nodeType, 
                                                const TString& domain,
                                                const TString& token = TString());
 
@@ -826,24 +826,24 @@ protected:
         }
     }
 
-    void PrepareRequest(NKikimrClient::TCmsRequest& request) const {
-        if (!SecurityToken.empty()) {
-            request.SetSecurityToken(SecurityToken);
-        }
-    }
-
-    void PrepareRequest(NKikimrClient::TConsoleRequest& request) const {
-        if (!SecurityToken.empty()) {
-            request.SetSecurityToken(SecurityToken);
-        }
-    }
-
-    void PrepareRequest(NKikimrClient::TSchemeDescribe& request) const {
-        if (!SecurityToken.empty()) {
-            request.SetSecurityToken(SecurityToken);
-        }
-    }
-
+    void PrepareRequest(NKikimrClient::TCmsRequest& request) const { 
+        if (!SecurityToken.empty()) { 
+            request.SetSecurityToken(SecurityToken); 
+        } 
+    } 
+ 
+    void PrepareRequest(NKikimrClient::TConsoleRequest& request) const { 
+        if (!SecurityToken.empty()) { 
+            request.SetSecurityToken(SecurityToken); 
+        } 
+    } 
+ 
+    void PrepareRequest(NKikimrClient::TSchemeDescribe& request) const { 
+        if (!SecurityToken.empty()) { 
+            request.SetSecurityToken(SecurityToken); 
+        } 
+    } 
+ 
     void PrepareRequest(NKikimrClient::TSchemeOperation& request) const {
         if (!SecurityToken.empty()) {
             request.SetSecurityToken(SecurityToken);

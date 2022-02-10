@@ -44,7 +44,7 @@ ui64 TTxAllocator::ApplyPrivateMarker(const ui64 elem) {
 
 void TTxAllocator::InitCounters(const TActorContext &ctx) {
     auto &counters = AppData(ctx)->Counters;
-        MonCounters.AllocatorCounters = GetServiceCounters(counters, "tablets")->GetSubgroup("type", "TxAllocator");
+        MonCounters.AllocatorCounters = GetServiceCounters(counters, "tablets")->GetSubgroup("type", "TxAllocator"); 
 
         MonCounters.Allocated = MonCounters.AllocatorCounters->GetCounter("Allocated", true);
         MonCounters.AllocationsPresence = MonCounters.AllocatorCounters->GetCounter("AllocationPresence", true);

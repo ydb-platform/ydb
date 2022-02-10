@@ -75,8 +75,8 @@ protected:
     void Handle(TEvCommitTransactionRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvRollbackTransactionRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvListEndpointsRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDescribeTenantOptionsRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDescribeTableOptionsRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDescribeTenantOptionsRequest::TPtr& ev, const TActorContext& ctx); 
+    void Handle(TEvDescribeTableOptionsRequest::TPtr& ev, const TActorContext& ctx); 
     void Handle(TEvCreateCoordinationNode::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvAlterCoordinationNode::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDropCoordinationNode::TPtr& ev, const TActorContext& ctx);

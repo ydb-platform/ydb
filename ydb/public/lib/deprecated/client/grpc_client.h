@@ -13,21 +13,21 @@ namespace NKikimr {
         using TGrpcError = std::pair<TString, int>;
 
         template<typename T>
-        using TSimpleCallback = std::function<void (const T&)>;
-
-        template<typename T>
+        using TSimpleCallback = std::function<void (const T&)>; 
+ 
+        template<typename T> 
         using TCallback = std::function<void (const TGrpcError*, const T&)>;
 
         using TResponseCallback = TCallback<NKikimrClient::TResponse>;
         using TJSONCallback = TCallback<NKikimrClient::TJSON>;
-        using TNodeRegistrationResponseCallback = TCallback<NKikimrClient::TNodeRegistrationResponse>;
-        using TCmsResponseCallback = TCallback<NKikimrClient::TCmsResponse>;
+        using TNodeRegistrationResponseCallback = TCallback<NKikimrClient::TNodeRegistrationResponse>; 
+        using TCmsResponseCallback = TCallback<NKikimrClient::TCmsResponse>; 
         using TSqsResponseCallback = TCallback<NKikimrClient::TSqsResponse>;
         using TS3ListingResponseCallback = TCallback<NKikimrClient::TS3ListingResponse>;
-        using TConsoleResponseCallback = TCallback<NKikimrClient::TConsoleResponse>;
+        using TConsoleResponseCallback = TCallback<NKikimrClient::TConsoleResponse>; 
 
         using TFinishCallback = std::function<void (const TGrpcError*)>;
-
+ 
         class TGRpcClient {
             TGRpcClientConfig Config;
             class TImpl;
@@ -44,9 +44,9 @@ namespace NKikimr {
             // ChooseProxy request
             void ChooseProxy(const NKikimrClient::TChooseProxyRequest& request, TResponseCallback callback);
 
-            // Stream request
-            void StreamRequest(const NKikimrClient::TRequest& request, TSimpleCallback<NKikimrClient::TResponse> process, TFinishCallback finish);
-
+            // Stream request 
+            void StreamRequest(const NKikimrClient::TRequest& request, TSimpleCallback<NKikimrClient::TResponse> process, TFinishCallback finish); 
+ 
             // DML transactions
             void SchemeOperation(const NKikimrClient::TSchemeOperation& request, TResponseCallback callback);
             // status polling for scheme transactions
@@ -76,16 +76,16 @@ namespace NKikimr {
             void KeyValue(const NKikimrClient::TKeyValueRequest& request, TResponseCallback callback);
 
             /////////////////////////////////////////////////////////////////////////////////////////////////
-            // DYNAMIC NODES INTERNAL INTERFACE
-            /////////////////////////////////////////////////////////////////////////////////////////////////
-            void RegisterNode(const NKikimrClient::TNodeRegistrationRequest& request, TNodeRegistrationResponseCallback callback);
-
-            /////////////////////////////////////////////////////////////////////////////////////////////////
-            // CMS INTERFACE
-            /////////////////////////////////////////////////////////////////////////////////////////////////
-            void CmsRequest(const NKikimrClient::TCmsRequest& request, TCmsResponseCallback callback);
-
-            /////////////////////////////////////////////////////////////////////////////////////////////////
+            // DYNAMIC NODES INTERNAL INTERFACE 
+            ///////////////////////////////////////////////////////////////////////////////////////////////// 
+            void RegisterNode(const NKikimrClient::TNodeRegistrationRequest& request, TNodeRegistrationResponseCallback callback); 
+ 
+            ///////////////////////////////////////////////////////////////////////////////////////////////// 
+            // CMS INTERFACE 
+            ///////////////////////////////////////////////////////////////////////////////////////////////// 
+            void CmsRequest(const NKikimrClient::TCmsRequest& request, TCmsResponseCallback callback); 
+ 
+            ///////////////////////////////////////////////////////////////////////////////////////////////// 
             // SQS INTERFACE
             /////////////////////////////////////////////////////////////////////////////////////////////////
             void SqsRequest(const NKikimrClient::TSqsRequest& request, TSqsResponseCallback callback);
@@ -96,11 +96,11 @@ namespace NKikimr {
             void S3Listing(const NKikimrClient::TS3ListingRequest& request, TS3ListingResponseCallback callback);
 
             /////////////////////////////////////////////////////////////////////////////////////////////////
-            // CONSOLE INTERFACE
-            /////////////////////////////////////////////////////////////////////////////////////////////////
-            void ConsoleRequest(const NKikimrClient::TConsoleRequest& request, TConsoleResponseCallback callback);
-
-            /////////////////////////////////////////////////////////////////////////////////////////////////
+            // CONSOLE INTERFACE 
+            ///////////////////////////////////////////////////////////////////////////////////////////////// 
+            void ConsoleRequest(const NKikimrClient::TConsoleRequest& request, TConsoleResponseCallback callback); 
+ 
+            ///////////////////////////////////////////////////////////////////////////////////////////////// 
             // INTROSPECTION
             /////////////////////////////////////////////////////////////////////////////////////////////////
             void LocalMKQL(const NKikimrClient::TLocalMKQL& request, TResponseCallback callback);

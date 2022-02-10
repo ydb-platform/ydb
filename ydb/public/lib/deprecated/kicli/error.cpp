@@ -40,7 +40,7 @@ bool TError::Success() const {
         case NTxProxy::TResultStatus::EStatus::ExecComplete:
         case NTxProxy::TResultStatus::EStatus::ExecAlready:
         case NTxProxy::TResultStatus::EStatus::ExecInProgress:
-        case NTxProxy::TResultStatus::EStatus::ExecResponseData:
+        case NTxProxy::TResultStatus::EStatus::ExecResponseData: 
             return true;
         default:
             break;

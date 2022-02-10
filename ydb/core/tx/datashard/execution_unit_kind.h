@@ -1,55 +1,55 @@
-#pragma once
-#include "defs.h"
-
-namespace NKikimr {
+#pragma once 
+#include "defs.h" 
+ 
+namespace NKikimr { 
 namespace NDataShard {
-
-enum class EExecutionUnitKind : ui32 {
-    CheckDataTx,
-    CheckSchemeTx,
+ 
+enum class EExecutionUnitKind : ui32 { 
+    CheckDataTx, 
+    CheckSchemeTx, 
     CheckSnapshotTx,
     CheckDistributedEraseTx,
     CheckCommitWritesTx,
-    StoreDataTx,
-    StoreSchemeTx,
+    StoreDataTx, 
+    StoreSchemeTx, 
     StoreSnapshotTx,
     StoreDistributedEraseTx,
     StoreCommitWritesTx,
-    BuildAndWaitDependencies,
-    FinishPropose,
-    CompletedOperations,
-    WaitForPlan,
-    PlanQueue,
-    LoadTxDetails,
+    BuildAndWaitDependencies, 
+    FinishPropose, 
+    CompletedOperations, 
+    WaitForPlan, 
+    PlanQueue, 
+    LoadTxDetails, 
     FinalizeDataTxPlan,
     ProtectSchemeEchoes,
-    BuildDataTxOutRS,
-    BuildKqpDataTxOutRS,
+    BuildDataTxOutRS, 
+    BuildKqpDataTxOutRS, 
     BuildDistributedEraseTxOutRS,
-    StoreAndSendOutRS,
-    PrepareDataTxInRS,
-    PrepareKqpDataTxInRS,
+    StoreAndSendOutRS, 
+    PrepareDataTxInRS, 
+    PrepareKqpDataTxInRS, 
     PrepareDistributedEraseTxInRS,
-    LoadAndWaitInRS,
-    ExecuteDataTx,
-    ExecuteKqpDataTx,
+    LoadAndWaitInRS, 
+    ExecuteDataTx, 
+    ExecuteKqpDataTx, 
     ExecuteDistributedEraseTx,
     ExecuteCommitWritesTx,
-    CompleteOperation,
+    CompleteOperation, 
     ExecuteKqpScanTx,
-    MakeScanSnapshot,
-    WaitForStreamClearance,
-    ReadTableScan,
-    MakeSnapshot,
-    BuildSchemeTxOutRS,
-    PrepareSchemeTxInRS,
+    MakeScanSnapshot, 
+    WaitForStreamClearance, 
+    ReadTableScan, 
+    MakeSnapshot, 
+    BuildSchemeTxOutRS, 
+    PrepareSchemeTxInRS, 
     Backup,
     Restore,
-    CreateTable,
-    ReceiveSnapshot,
+    CreateTable, 
+    ReceiveSnapshot, 
     AlterMoveShadow,
-    AlterTable,
-    DropTable,
+    AlterTable, 
+    DropTable, 
     DirectOp,
     CreatePersistentSnapshot,
     DropPersistentSnapshot,
@@ -62,9 +62,9 @@ enum class EExecutionUnitKind : ui32 {
     CreateCdcStream,
     AlterCdcStream,
     DropCdcStream,
-    Count,
-    Unspecified
-};
-
+    Count, 
+    Unspecified 
+}; 
+ 
 } // namespace NDataShard
-} // namespace NKikimr
+} // namespace NKikimr 

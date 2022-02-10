@@ -89,7 +89,7 @@ message Value {
         string text_value = 9;
         google.protobuf.NullValue null_flag_value = 10; // Set if current TValue is terminal Null
         Value nested_value = 11; // Represents nested TValue for Optional<Optional<T>>(Null), or Variant<T> types
-        fixed64 low_128 = 15;
+        fixed64 low_128 = 15; 
     }
     repeated Value items = 12; // Used for List, Tuple, Struct types
     repeated ValuePair pairs = 13; // Used for Dict type

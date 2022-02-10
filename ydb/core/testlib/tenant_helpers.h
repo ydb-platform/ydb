@@ -1,70 +1,70 @@
-#pragma once
-#include "defs.h"
-#include "tenant_runtime.h"
-
+#pragma once 
+#include "defs.h" 
+#include "tenant_runtime.h" 
+ 
 #include <ydb/core/cms/console/console.h>
-
+ 
 #include <library/cpp/testing/unittest/registar.h>
-
-namespace NKikimr {
-
-struct TSlotRequest {
-    TString Type;
-    TString Zone;
-    ui64 Count;
-};
-
-struct TSlotState {
-    ui64 Required = 0;
-    ui64 Allocated = 0;
-};
-
-struct TPoolAllocation {
-    TPoolAllocation(const TString &type = "", ui32 size = 0, ui32 allocated = 0)
-        : PoolType(type)
-        , PoolSize(size)
-        , Allocated(allocated)
-    {
-    }
-
-    TString PoolType;
-    ui32 PoolSize;
-    ui32 Allocated;
-};
-
-inline void CollectSlots(TVector<TSlotRequest> &)
-{
-}
-
-template <typename ...Ts>
-void CollectSlots(TVector<TSlotRequest> &requests,
-                  const TString &type,
-                  const TString &zone,
-                  ui64 count,
-                  Ts... args)
-{
-    requests.push_back({type, zone, count});
-    CollectSlots(requests, args...);
-}
-
-inline void CollectSlots(THashMap<std::pair<TString, TString>, TSlotState> &)
-{
-}
-
-template <typename ...Ts>
-void CollectSlots(THashMap<std::pair<TString, TString>, TSlotState> &slots,
-                  const TString &type,
-                  const TString &zone,
-                  ui64 required,
-                  ui64 allocated,
-                  Ts... args)
-{
-    auto &slot = slots[std::make_pair(type, zone)];
-    slot.Required += required;
-    slot.Allocated += allocated;
-    CollectSlots(slots, args...);
-}
-
+ 
+namespace NKikimr { 
+ 
+struct TSlotRequest { 
+    TString Type; 
+    TString Zone; 
+    ui64 Count; 
+}; 
+ 
+struct TSlotState { 
+    ui64 Required = 0; 
+    ui64 Allocated = 0; 
+}; 
+ 
+struct TPoolAllocation { 
+    TPoolAllocation(const TString &type = "", ui32 size = 0, ui32 allocated = 0) 
+        : PoolType(type) 
+        , PoolSize(size) 
+        , Allocated(allocated) 
+    { 
+    } 
+ 
+    TString PoolType; 
+    ui32 PoolSize; 
+    ui32 Allocated; 
+}; 
+ 
+inline void CollectSlots(TVector<TSlotRequest> &) 
+{ 
+} 
+ 
+template <typename ...Ts> 
+void CollectSlots(TVector<TSlotRequest> &requests, 
+                  const TString &type, 
+                  const TString &zone, 
+                  ui64 count, 
+                  Ts... args) 
+{ 
+    requests.push_back({type, zone, count}); 
+    CollectSlots(requests, args...); 
+} 
+ 
+inline void CollectSlots(THashMap<std::pair<TString, TString>, TSlotState> &) 
+{ 
+} 
+ 
+template <typename ...Ts> 
+void CollectSlots(THashMap<std::pair<TString, TString>, TSlotState> &slots, 
+                  const TString &type, 
+                  const TString &zone, 
+                  ui64 required, 
+                  ui64 allocated, 
+                  Ts... args) 
+{ 
+    auto &slot = slots[std::make_pair(type, zone)]; 
+    slot.Required += required; 
+    slot.Allocated += allocated; 
+    CollectSlots(slots, args...); 
+} 
+ 
 struct TCreateTenantRequest {
     using TSelf = TCreateTenantRequest;
     using TAttrsCont = TVector<std::pair<TString, TString>>;
@@ -149,13 +149,13 @@ struct TCreateTenantRequest {
 };
 
 inline void CheckCreateTenant(TTenantTestRuntime &runtime,
-                       const TString &token,
-                       Ydb::StatusIds::StatusCode code,
+                       const TString &token, 
+                       Ydb::StatusIds::StatusCode code, 
                        const TCreateTenantRequest &request)
-{
+{ 
     using EType = TCreateTenantRequest::EType;
-
-    auto *event = new NConsole::TEvConsole::TEvCreateTenantRequest;
+ 
+    auto *event = new NConsole::TEvConsole::TEvCreateTenantRequest; 
     event->Record.MutableRequest()->set_path(request.Path);
 
     auto *resources = request.Type == EType::Shared
@@ -164,24 +164,24 @@ inline void CheckCreateTenant(TTenantTestRuntime &runtime,
 
     for (auto &req : request.Slots) {
         auto &unit = *resources->add_computational_units();
-        unit.set_unit_kind(req.Type);
-        unit.set_availability_zone(req.Zone);
-        unit.set_count(req.Count);
-    }
+        unit.set_unit_kind(req.Type); 
+        unit.set_availability_zone(req.Zone); 
+        unit.set_count(req.Count); 
+    } 
 
     for (auto &pool : request.Pools) {
         auto &unit = *resources->add_storage_units();
-        unit.set_unit_kind(pool.PoolType);
-        unit.set_count(pool.PoolSize);
-    }
+        unit.set_unit_kind(pool.PoolType); 
+        unit.set_count(pool.PoolSize); 
+    } 
 
-    if (token)
-        event->Record.SetUserToken(token);
+    if (token) 
+        event->Record.SetUserToken(token); 
 
     for (const auto& [key, value] : request.Attrs) {
         (*event->Record.MutableRequest()->mutable_attributes())[key] = value;
-    }
-
+    } 
+ 
     if (request.Type == EType::Serverless) {
         event->Record.MutableRequest()->mutable_serverless_resources()->set_shared_database_path(request.SharedDbPath);
     }
@@ -190,33 +190,33 @@ inline void CheckCreateTenant(TTenantTestRuntime &runtime,
         event->Record.MutableRequest()->mutable_options()->set_plan_resolution(request.PlanResolution);
     }
 
-    TAutoPtr<IEventHandle> handle;
-    runtime.SendToConsole(event);
-    auto reply = runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvCreateTenantResponse>(handle);
-    auto &operation = reply->Record.GetResponse().operation();
-
-    if (operation.ready()) {
-        UNIT_ASSERT_VALUES_EQUAL(operation.status(), code);
-    } else {
-        TString id = operation.id();
-        auto *request = new NConsole::TEvConsole::TEvNotifyOperationCompletionRequest;
-        request->Record.MutableRequest()->set_id(id);
-
-        runtime.SendToConsole(request);
-        TAutoPtr<IEventHandle> handle;
-        auto replies = runtime.GrabEdgeEventsRethrow<NConsole::TEvConsole::TEvNotifyOperationCompletionResponse,
-                                                     NConsole::TEvConsole::TEvOperationCompletionNotification>(handle);
-        auto *resp = std::get<1>(replies);
-        if (!resp) {
-            UNIT_ASSERT(!std::get<0>(replies)->Record.GetResponse().operation().ready());
-            resp = runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvOperationCompletionNotification>(handle);
-        }
-
-        UNIT_ASSERT(resp->Record.GetResponse().operation().ready());
-        UNIT_ASSERT_VALUES_EQUAL(resp->Record.GetResponse().operation().status(), code);
-    }
-}
-
+    TAutoPtr<IEventHandle> handle; 
+    runtime.SendToConsole(event); 
+    auto reply = runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvCreateTenantResponse>(handle); 
+    auto &operation = reply->Record.GetResponse().operation(); 
+ 
+    if (operation.ready()) { 
+        UNIT_ASSERT_VALUES_EQUAL(operation.status(), code); 
+    } else { 
+        TString id = operation.id(); 
+        auto *request = new NConsole::TEvConsole::TEvNotifyOperationCompletionRequest; 
+        request->Record.MutableRequest()->set_id(id); 
+ 
+        runtime.SendToConsole(request); 
+        TAutoPtr<IEventHandle> handle; 
+        auto replies = runtime.GrabEdgeEventsRethrow<NConsole::TEvConsole::TEvNotifyOperationCompletionResponse, 
+                                                     NConsole::TEvConsole::TEvOperationCompletionNotification>(handle); 
+        auto *resp = std::get<1>(replies); 
+        if (!resp) { 
+            UNIT_ASSERT(!std::get<0>(replies)->Record.GetResponse().operation().ready()); 
+            resp = runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvOperationCompletionNotification>(handle); 
+        } 
+ 
+        UNIT_ASSERT(resp->Record.GetResponse().operation().ready()); 
+        UNIT_ASSERT_VALUES_EQUAL(resp->Record.GetResponse().operation().status(), code); 
+    } 
+} 
+ 
 inline void CheckCreateTenant(TTenantTestRuntime &runtime,
                        Ydb::StatusIds::StatusCode code,
                        const TCreateTenantRequest &request)
@@ -224,15 +224,15 @@ inline void CheckCreateTenant(TTenantTestRuntime &runtime,
     CheckCreateTenant(runtime, "", code, request);
 }
 
-template <typename ...Ts>
-void CheckCreateTenant(TTenantTestRuntime &runtime,
-                       const TString &path,
+template <typename ...Ts> 
+void CheckCreateTenant(TTenantTestRuntime &runtime, 
+                       const TString &path, 
                        const TString &token,
-                       Ydb::StatusIds::StatusCode code,
-                       TVector<TPoolAllocation> pools,
-                       const TVector<std::pair<TString, TString>> &attrs,
-                       Ts... args)
-{
+                       Ydb::StatusIds::StatusCode code, 
+                       TVector<TPoolAllocation> pools, 
+                       const TVector<std::pair<TString, TString>> &attrs, 
+                       Ts... args) 
+{ 
     TVector<TSlotRequest> slots;
     CollectSlots(slots, args...);
 
@@ -251,73 +251,73 @@ void CheckCreateTenant(TTenantTestRuntime &runtime,
                        const TVector<std::pair<TString, TString>> &attrs,
                        Ts... args)
 {
-    CheckCreateTenant(runtime, path, "", code, pools, attrs, args...);
-}
-
-template <typename ...Ts>
-void CheckCreateTenant(TTenantTestRuntime &runtime,
-                       const TString &path,
-                       const TString &token,
-                       Ydb::StatusIds::StatusCode code,
-                       TVector<TPoolAllocation> pools,
-                       Ts... args)
-{
-    CheckCreateTenant(runtime, path, token, code, pools, {}, args...);
-}
-
-template <typename ...Ts>
-void CheckCreateTenant(TTenantTestRuntime &runtime,
-                       const TString &path,
-                       Ydb::StatusIds::StatusCode code,
-                       TVector<TPoolAllocation> pools,
-                       Ts... args)
-{
-    CheckCreateTenant(runtime, path, "", code, pools, {}, args...);
-}
-
-inline void CheckRemoveTenant(TTenantTestRuntime &runtime,
-                              const TString &path,
-                              const TString &token,
-                              Ydb::StatusIds::StatusCode code)
-{
-    auto *event = new NConsole::TEvConsole::TEvRemoveTenantRequest;
-    event->Record.MutableRequest()->set_path(path);
-    if (token)
-        event->Record.SetUserToken(token);
-
-    TAutoPtr<IEventHandle> handle;
-    runtime.SendToConsole(event);
-    auto reply = runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvRemoveTenantResponse>(handle);
-    auto &operation = reply->Record.GetResponse().operation();
-
-    if (operation.ready()) {
-        UNIT_ASSERT_VALUES_EQUAL(operation.status(), code);
-    } else {
-        TString id = operation.id();
+    CheckCreateTenant(runtime, path, "", code, pools, attrs, args...); 
+} 
+ 
+template <typename ...Ts> 
+void CheckCreateTenant(TTenantTestRuntime &runtime, 
+                       const TString &path, 
+                       const TString &token, 
+                       Ydb::StatusIds::StatusCode code, 
+                       TVector<TPoolAllocation> pools, 
+                       Ts... args) 
+{ 
+    CheckCreateTenant(runtime, path, token, code, pools, {}, args...); 
+} 
+ 
+template <typename ...Ts> 
+void CheckCreateTenant(TTenantTestRuntime &runtime, 
+                       const TString &path, 
+                       Ydb::StatusIds::StatusCode code, 
+                       TVector<TPoolAllocation> pools, 
+                       Ts... args) 
+{ 
+    CheckCreateTenant(runtime, path, "", code, pools, {}, args...); 
+} 
+ 
+inline void CheckRemoveTenant(TTenantTestRuntime &runtime, 
+                              const TString &path, 
+                              const TString &token, 
+                              Ydb::StatusIds::StatusCode code) 
+{ 
+    auto *event = new NConsole::TEvConsole::TEvRemoveTenantRequest; 
+    event->Record.MutableRequest()->set_path(path); 
+    if (token) 
+        event->Record.SetUserToken(token); 
+ 
+    TAutoPtr<IEventHandle> handle; 
+    runtime.SendToConsole(event); 
+    auto reply = runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvRemoveTenantResponse>(handle); 
+    auto &operation = reply->Record.GetResponse().operation(); 
+ 
+    if (operation.ready()) { 
+        UNIT_ASSERT_VALUES_EQUAL(operation.status(), code); 
+    } else { 
+        TString id = operation.id(); 
         for (;;) {
-            auto check = new NConsole::TEvConsole::TEvGetOperationRequest;
-            check->Record.MutableRequest()->set_id(id);
-            runtime.SendToConsole(check);
-            auto checkReply = runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvGetOperationResponse>(handle);
-            auto &checkOperation = checkReply->Record.GetResponse().operation();
-            if (checkOperation.ready()) {
-                UNIT_ASSERT_VALUES_EQUAL(checkOperation.status(), code);
+            auto check = new NConsole::TEvConsole::TEvGetOperationRequest; 
+            check->Record.MutableRequest()->set_id(id); 
+            runtime.SendToConsole(check); 
+            auto checkReply = runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvGetOperationResponse>(handle); 
+            auto &checkOperation = checkReply->Record.GetResponse().operation(); 
+            if (checkOperation.ready()) { 
+                UNIT_ASSERT_VALUES_EQUAL(checkOperation.status(), code); 
                 break;
-            }
+            } 
 
             TDispatchOptions options;
             runtime.DispatchEvents(options, TDuration::MilliSeconds(100));
-        }
-    }
-}
-
-inline void CheckRemoveTenant(TTenantTestRuntime &runtime,
-                              const TString &path,
-                              Ydb::StatusIds::StatusCode code)
-{
-    CheckRemoveTenant(runtime, path, "", code);
-}
-
+        } 
+    } 
+} 
+ 
+inline void CheckRemoveTenant(TTenantTestRuntime &runtime, 
+                              const TString &path, 
+                              Ydb::StatusIds::StatusCode code) 
+{ 
+    CheckRemoveTenant(runtime, path, "", code); 
+} 
+ 
 inline void WaitTenantStatus(TTenantTestRuntime &runtime,
                              const TString &path,
                              TVector<Ydb::Cms::GetDatabaseStatusResult::State> expected)
@@ -348,4 +348,4 @@ inline void WaitTenantRunning(TTenantTestRuntime &runtime, const TString &path) 
     WaitTenantStatus(runtime, path, { Ydb::Cms::GetDatabaseStatusResult::RUNNING });
 }
 
-} // namespace NKikimr
+} // namespace NKikimr 

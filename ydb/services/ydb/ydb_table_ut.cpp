@@ -622,7 +622,7 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
         auto session = CreateSession(connection);
 
         auto result = session.ExecuteDataQuery(R"___(
-            SELECT CAST("184467440737.12345678" as Decimal(22,9));
+            SELECT CAST("184467440737.12345678" as Decimal(22,9)); 
         )___", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
 
         UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
@@ -665,7 +665,7 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
             auto tableBuilder = client.GetTableBuilder();
             tableBuilder
                 .AddNullableColumn("Key", EPrimitiveType::Int32)
-                .AddNullableColumn("Value", TDecimalType(22,9));
+                .AddNullableColumn("Value", TDecimalType(22,9)); 
             tableBuilder.SetPrimaryKeyColumn("Key");
             auto result = session.CreateTable("/Root/FooTable", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
@@ -674,7 +674,7 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
 
         {
             TString query = R"___(
-                DECLARE $Value AS "Decimal(22,9)";
+                DECLARE $Value AS "Decimal(22,9)"; 
                 DECLARE $Key AS Int32;
                 UPSERT INTO [Root/FooTable] (Key, Value) VALUES
                     ($Key, $Value);

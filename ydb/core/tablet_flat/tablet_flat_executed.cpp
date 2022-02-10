@@ -50,7 +50,7 @@ void TTabletExecutedFlat::Handle(TEvTablet::TEvBoot::TPtr &ev, const TActorConte
     const auto& msg = *ev->Get();
     UpdateTabletInfo(msg.TabletStorageInfo, msg.Launcher);
     CreateExecutor(ctx)->Boot(ev, ExecutorCtx(ctx));
-    TxCacheQuota = ev->Get()->TxCacheQuota;
+    TxCacheQuota = ev->Get()->TxCacheQuota; 
 }
 
 void TTabletExecutedFlat::Handle(TEvTablet::TEvRestored::TPtr &ev, const TActorContext &ctx) {
@@ -60,7 +60,7 @@ void TTabletExecutedFlat::Handle(TEvTablet::TEvRestored::TPtr &ev, const TActorC
 void TTabletExecutedFlat::Handle(TEvTablet::TEvFBoot::TPtr &ev, const TActorContext &ctx) {
     UpdateTabletInfo(ev->Get()->TabletStorageInfo);
     CreateExecutor(ctx)->FollowerBoot(ev, ExecutorCtx(ctx));
-    TxCacheQuota = ev->Get()->TxCacheQuota;
+    TxCacheQuota = ev->Get()->TxCacheQuota; 
 }
 
 void TTabletExecutedFlat::Handle(TEvTablet::TEvFUpdate::TPtr &ev) {
@@ -89,10 +89,10 @@ void TTabletExecutedFlat::Handle(TEvTablet::TEvFollowerGcApplied::TPtr &ev) {
 }
 
 void TTabletExecutedFlat::Handle(TEvTablet::TEvUpdateConfig::TPtr &ev) {
-    if (Executor())
+    if (Executor()) 
         Executor()->UpdateConfig(ev);
-}
-
+} 
+ 
 void TTabletExecutedFlat::OnTabletStop(TEvTablet::TEvTabletStop::TPtr &ev, const TActorContext &ctx) {
     Y_UNUSED(ev);
     // Default implementation just confirms it's ok to be stopped

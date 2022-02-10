@@ -1,14 +1,14 @@
 #include "mon.h"
 
 #include <ydb/core/base/counters.h>
-
+ 
 namespace NKikimr {
 namespace NTxProxy {
 
 TTxProxyMon::TTxProxyMon(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters)
     : Counters(counters)
-    , TxGroup(GetServiceCounters(counters, "proxy")->GetSubgroup("subsystem", "tx"))
-    , DataReqGroup(GetServiceCounters(counters, "proxy")->GetSubgroup("subsystem", "datareq"))
+    , TxGroup(GetServiceCounters(counters, "proxy")->GetSubgroup("subsystem", "tx")) 
+    , DataReqGroup(GetServiceCounters(counters, "proxy")->GetSubgroup("subsystem", "datareq")) 
     , AllocPoolCounters(counters, "tx_proxy")
 {
     CacheRequestLatency = TxGroup->GetHistogram("CacheRequest/LatencyMs", NMonitoring::ExponentialHistogram(10, 4, 1));
@@ -32,7 +32,7 @@ TTxProxyMon::TTxProxyMon(const TIntrusivePtr<NMonitoring::TDynamicCounters>& cou
 
     ReportStatusOK = DataReqGroup->GetCounter("ReportStatus/OK", true);
     ReportStatusNotOK = DataReqGroup->GetCounter("ReportStatus/NotOK", true);
-    ReportStatusStreamData = DataReqGroup->GetCounter("ReportStatus/StreamData", true);
+    ReportStatusStreamData = DataReqGroup->GetCounter("ReportStatus/StreamData", true); 
 
     TxPrepareTimeHgram = DataReqGroup->GetHistogram("TxPrepareTimesMs",
         NMonitoring::ExponentialHistogram(20, 2, 1));
@@ -61,9 +61,9 @@ TTxProxyMon::TTxProxyMon(const TIntrusivePtr<NMonitoring::TDynamicCounters>& cou
     MiniKQLResolveSentToShard = DataReqGroup->GetCounter("MiniKQLResolve/SentToShard", true);
     MiniKQLWrongRequest = DataReqGroup->GetCounter("MiniKQLResolve/WrongRequest", true);
 
-    ReadTableResolveSentToShard = DataReqGroup->GetCounter("ReadTableResolve/SentToShard", true);
-    ReadTableWrongRequest = DataReqGroup->GetCounter("ReadTableResolve/WrongRequest", true);
-
+    ReadTableResolveSentToShard = DataReqGroup->GetCounter("ReadTableResolve/SentToShard", true); 
+    ReadTableWrongRequest = DataReqGroup->GetCounter("ReadTableResolve/WrongRequest", true); 
+ 
     MiniKQLProgramSize = DataReqGroup->GetCounter("MiniKQLProgramSize", true);
     MiniKQLParamsSize = DataReqGroup->GetCounter("MiniKQLParamsSize", true);
 
@@ -95,7 +95,7 @@ TTxProxyMon::TTxProxyMon(const TIntrusivePtr<NMonitoring::TDynamicCounters>& cou
 
     ResolveKeySetLegacySuccess = DataReqGroup->GetCounter("ResolveKeySet/LegacySuccess", true);
     ResolveKeySetMiniKQLSuccess = DataReqGroup->GetCounter("ResolveKeySet/MiniKQLSuccess", true);
-    ResolveKeySetReadTableSuccess = DataReqGroup->GetCounter("ResolveKeySet/ReadTableSuccess", true);
+    ResolveKeySetReadTableSuccess = DataReqGroup->GetCounter("ResolveKeySet/ReadTableSuccess", true); 
     ResolveKeySetRedirectUnavaible = DataReqGroup->GetCounter("ResolveKeySet/RedirectUnavaible", true);
     ResolveKeySetFail = DataReqGroup->GetCounter("ResolveKeySet/Fail", true);
     ResolveKeySetWrongRequest = DataReqGroup->GetCounter("ResolveKeySet/WrongRequest", true);

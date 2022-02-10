@@ -65,7 +65,7 @@ message TAlterRecord {
     optional bool ExecutorAllowLogBatching = 102;
     optional uint64 ExecutorLogFlushPeriod = 103;
     optional uint32 ExecutorLimitInFlyTx = 104;
-    optional string ExecutorResourceProfile = 105;
+    optional string ExecutorResourceProfile = 105; 
     optional bool ExecutorLogFastCommitTactic = 106;
 };
 

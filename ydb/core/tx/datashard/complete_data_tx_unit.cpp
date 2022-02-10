@@ -1,129 +1,129 @@
-#include "datashard_failpoints.h"
-#include "datashard_impl.h"
-#include "datashard_pipeline.h"
-#include "execution_unit_ctors.h"
-
+#include "datashard_failpoints.h" 
+#include "datashard_impl.h" 
+#include "datashard_pipeline.h" 
+#include "execution_unit_ctors.h" 
+ 
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
-
-namespace NKikimr {
+ 
+namespace NKikimr { 
 namespace NDataShard {
-
-using namespace NMiniKQL;
-
-class TCompleteOperationUnit : public TExecutionUnit {
-public:
+ 
+using namespace NMiniKQL; 
+ 
+class TCompleteOperationUnit : public TExecutionUnit { 
+public: 
     TCompleteOperationUnit(TDataShard &dataShard,
-                           TPipeline &pipeline);
-    ~TCompleteOperationUnit() override;
-
-    bool IsReadyToExecute(TOperation::TPtr op) const override;
-    EExecutionStatus Execute(TOperation::TPtr op,
-                             TTransactionContext &txc,
-                             const TActorContext &ctx) override;
-    void Complete(TOperation::TPtr op,
-                  const TActorContext &ctx) override;
-
-private:
-    void CompleteOperation(TOperation::TPtr op,
-                           const TActorContext &ctx);
-};
-
+                           TPipeline &pipeline); 
+    ~TCompleteOperationUnit() override; 
+ 
+    bool IsReadyToExecute(TOperation::TPtr op) const override; 
+    EExecutionStatus Execute(TOperation::TPtr op, 
+                             TTransactionContext &txc, 
+                             const TActorContext &ctx) override; 
+    void Complete(TOperation::TPtr op, 
+                  const TActorContext &ctx) override; 
+ 
+private: 
+    void CompleteOperation(TOperation::TPtr op, 
+                           const TActorContext &ctx); 
+}; 
+ 
 TCompleteOperationUnit::TCompleteOperationUnit(TDataShard &dataShard,
-                                               TPipeline &pipeline)
-    : TExecutionUnit(EExecutionUnitKind::CompleteOperation, false, dataShard, pipeline)
-{
-}
-
-TCompleteOperationUnit::~TCompleteOperationUnit()
-{
-}
-
-bool TCompleteOperationUnit::IsReadyToExecute(TOperation::TPtr) const
-{
-    return true;
-}
-
-EExecutionStatus TCompleteOperationUnit::Execute(TOperation::TPtr op,
-                                                 TTransactionContext &txc,
-                                                 const TActorContext &ctx)
-{
-    Pipeline.DeactivateOp(op, txc, ctx);
-
-    TOutputOpData::TResultPtr &result = op->Result();
-    if (result) {
-        auto execLatency = op->GetCompletedAt() - op->GetStartExecutionAt();
-        result->Record.SetExecLatency(execLatency.MilliSeconds());
-    }
-
-    if (op->IsDirty()) {
-        DataShard.IncCounter(COUNTER_TX_PROGRESS_DIRTY);
-        CompleteOperation(op, ctx);
+                                               TPipeline &pipeline) 
+    : TExecutionUnit(EExecutionUnitKind::CompleteOperation, false, dataShard, pipeline) 
+{ 
+} 
+ 
+TCompleteOperationUnit::~TCompleteOperationUnit() 
+{ 
+} 
+ 
+bool TCompleteOperationUnit::IsReadyToExecute(TOperation::TPtr) const 
+{ 
+    return true; 
+} 
+ 
+EExecutionStatus TCompleteOperationUnit::Execute(TOperation::TPtr op, 
+                                                 TTransactionContext &txc, 
+                                                 const TActorContext &ctx) 
+{ 
+    Pipeline.DeactivateOp(op, txc, ctx); 
+ 
+    TOutputOpData::TResultPtr &result = op->Result(); 
+    if (result) { 
+        auto execLatency = op->GetCompletedAt() - op->GetStartExecutionAt(); 
+        result->Record.SetExecLatency(execLatency.MilliSeconds()); 
+    } 
+ 
+    if (op->IsDirty()) { 
+        DataShard.IncCounter(COUNTER_TX_PROGRESS_DIRTY); 
+        CompleteOperation(op, ctx); 
     } else if (result) {
         Pipeline.AddCompletingOp(op);
-    }
-
+    } 
+ 
     // TODO: release snapshot used by a planned tx (not currently used)
     // TODO: prepared txs may be cancelled until planned, in which case we may
     // end up with a dangling snapshot reference. Such references would have
     // to be handled in a restart-safe manner too.
     Y_VERIFY_DEBUG(!op->HasAcquiredSnapshotKey());
 
-    return EExecutionStatus::DelayComplete;
-}
-
-void TCompleteOperationUnit::CompleteOperation(TOperation::TPtr op,
-                                               const TActorContext &ctx)
-{
-    TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
-    Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
-
-    auto duration = TAppData::TimeProvider->Now() - op->GetStartExecutionAt();
-
-    if (DataShard.GetDataTxProfileLogThresholdMs()
-        && duration.MilliSeconds() >= DataShard.GetDataTxProfileLogThresholdMs()) {
-        LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD,
-                   op->ExecutionProfileLogString(DataShard.TabletID()));
-    }
-
-    if (DataShard.GetDataTxProfileBufferThresholdMs()
-        && duration.MilliSeconds() >= DataShard.GetDataTxProfileBufferThresholdMs()) {
-        Pipeline.HoldExecutionProfile(op);
-    }
-
+    return EExecutionStatus::DelayComplete; 
+} 
+ 
+void TCompleteOperationUnit::CompleteOperation(TOperation::TPtr op, 
+                                               const TActorContext &ctx) 
+{ 
+    TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get()); 
+    Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind()); 
+ 
+    auto duration = TAppData::TimeProvider->Now() - op->GetStartExecutionAt(); 
+ 
+    if (DataShard.GetDataTxProfileLogThresholdMs() 
+        && duration.MilliSeconds() >= DataShard.GetDataTxProfileLogThresholdMs()) { 
+        LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD, 
+                   op->ExecutionProfileLogString(DataShard.TabletID())); 
+    } 
+ 
+    if (DataShard.GetDataTxProfileBufferThresholdMs() 
+        && duration.MilliSeconds() >= DataShard.GetDataTxProfileBufferThresholdMs()) { 
+        Pipeline.HoldExecutionProfile(op); 
+    } 
+ 
     TOutputOpData::TResultPtr result = std::move(op->Result());
-    if (result) {
-        result->Record.SetProposeLatency(duration.MilliSeconds());
-
+    if (result) { 
+        result->Record.SetProposeLatency(duration.MilliSeconds()); 
+ 
         DataShard.FillExecutionStats(op->GetExecutionProfile(), *result);
 
-        if (!gSkipRepliesFailPoint.Check(DataShard.TabletID(), op->GetTxId()))
-            DataShard.SendResult(ctx, result, op->GetTarget(), op->GetStep(), op->GetTxId());
-    }
+        if (!gSkipRepliesFailPoint.Check(DataShard.TabletID(), op->GetTxId())) 
+            DataShard.SendResult(ctx, result, op->GetTarget(), op->GetStep(), op->GetTxId()); 
+    } 
 
     Pipeline.RemoveCompletingOp(op);
-}
-
-void TCompleteOperationUnit::Complete(TOperation::TPtr op,
-                                      const TActorContext &ctx)
-{
+} 
+ 
+void TCompleteOperationUnit::Complete(TOperation::TPtr op, 
+                                      const TActorContext &ctx) 
+{ 
     Pipeline.RemoveCommittingOp(op);
-    Pipeline.RemoveTx(op->GetStepOrder());
-    DataShard.IncCounter(COUNTER_PLANNED_TX_COMPLETE);
-    if (!op->IsDirty())
-        CompleteOperation(op, ctx);
-
-    DataShard.SendDelayedAcks(ctx, op->DelayedAcks());
-    if (op->IsSchemeTx())
-        DataShard.NotifySchemeshard(ctx, op->GetTxId());
+    Pipeline.RemoveTx(op->GetStepOrder()); 
+    DataShard.IncCounter(COUNTER_PLANNED_TX_COMPLETE); 
+    if (!op->IsDirty()) 
+        CompleteOperation(op, ctx); 
+ 
+    DataShard.SendDelayedAcks(ctx, op->DelayedAcks()); 
+    if (op->IsSchemeTx()) 
+        DataShard.NotifySchemeshard(ctx, op->GetTxId()); 
 
     DataShard.EnqueueChangeRecords(std::move(op->ChangeRecords()));
-}
-
+} 
+ 
 THolder<TExecutionUnit> CreateCompleteOperationUnit(TDataShard &dataShard,
-                                                    TPipeline &pipeline)
-{
+                                                    TPipeline &pipeline) 
+{ 
     return THolder(new TCompleteOperationUnit(dataShard, pipeline));
-}
-
+} 
+ 
 } // namespace NDataShard
-} // namespace NKikimr
+} // namespace NKikimr 

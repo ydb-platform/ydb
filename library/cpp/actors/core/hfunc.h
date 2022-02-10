@@ -64,9 +64,9 @@
         HandleFunc(ctx);              \
         break;
 
-#define cFunc(TEventType, HandleFunc) \
-    case TEventType:                  \
-        HandleFunc();                 \
+#define cFunc(TEventType, HandleFunc) \ 
+    case TEventType:                  \ 
+        HandleFunc();                 \ 
         break;
 
 #define FFunc(TEventType, HandleFunc) \

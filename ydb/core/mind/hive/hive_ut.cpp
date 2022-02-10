@@ -44,7 +44,7 @@ static constexpr bool ENABLE_DETAILED_HIVE_LOG = true;
 #else
 static constexpr bool ENABLE_DETAILED_HIVE_LOG = false;
 #endif
-const char *DOMAIN_NAME = "dc-1";
+const char *DOMAIN_NAME = "dc-1"; 
 
 namespace NKikimr {
 namespace {
@@ -228,7 +228,7 @@ namespace {
             TTenantPoolConfig::TPtr tenantPoolConfig = new TTenantPoolConfig(localConfig);
             tenantPoolConfig->AddStaticSlot(DOMAIN_NAME);
 
-            runtime.AddLocalService(MakeTenantPoolRootID(), TActorSetupCmd(
+            runtime.AddLocalService(MakeTenantPoolRootID(), TActorSetupCmd( 
                 CreateTenantPool(tenantPoolConfig), TMailboxType::Revolving, 0), nodeIndex);
         }
     }
@@ -641,13 +641,13 @@ Y_UNIT_TEST_SUITE(THiveTest) {
                 TMailboxType::Simple, 0,
                 TMailboxType::Simple, 0);
         }
-        TTenantPoolConfig::TPtr tenantPoolConfig = new TTenantPoolConfig(localConfig);
-        tenantPoolConfig->AddStaticSlot(DOMAIN_NAME);
+        TTenantPoolConfig::TPtr tenantPoolConfig = new TTenantPoolConfig(localConfig); 
+        tenantPoolConfig->AddStaticSlot(DOMAIN_NAME); 
 
         TActorId actorId = runtime.Register(
-            CreateTenantPool(tenantPoolConfig), nodeIndex, 0, TMailboxType::Revolving, 0);
+            CreateTenantPool(tenantPoolConfig), nodeIndex, 0, TMailboxType::Revolving, 0); 
         runtime.EnableScheduleForActor(actorId, true);
-        runtime.RegisterService(MakeTenantPoolRootID(), actorId, nodeIndex);
+        runtime.RegisterService(MakeTenantPoolRootID(), actorId, nodeIndex); 
     }
 
     void CreateLocalForTenant(TTestActorRuntime &runtime, ui32 nodeIndex, const TString& tenant) {
@@ -2051,16 +2051,16 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
         // Start local only when transaction is complete
         {
-            TLocalConfig::TPtr localConfig(new TLocalConfig());
+            TLocalConfig::TPtr localConfig(new TLocalConfig()); 
             localConfig->TabletClassInfo[TTabletTypes::Dummy].SetupInfo = new TTabletSetupInfo(&CreateFlatDummyTablet,
                     TMailboxType::Simple, 0,
                     TMailboxType::Simple, 0);
-            TTenantPoolConfig::TPtr tenantPoolConfig = new TTenantPoolConfig(localConfig);
-            tenantPoolConfig->AddStaticSlot(DOMAIN_NAME);
+            TTenantPoolConfig::TPtr tenantPoolConfig = new TTenantPoolConfig(localConfig); 
+            tenantPoolConfig->AddStaticSlot(DOMAIN_NAME); 
 
             TActorId actorId = runtime.Register(CreateTenantPool(tenantPoolConfig));
             runtime.EnableScheduleForActor(actorId, true);
-            runtime.RegisterService(MakeTenantPoolRootID(), actorId);
+            runtime.RegisterService(MakeTenantPoolRootID(), actorId); 
         }
 
         MakeSureTabletIsUp(runtime, tabletId, 0);
@@ -2983,7 +2983,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             tablets.emplace_back(tabletId);
         }
 
-        // checking distribution, new tablets should go to less loaded nodes (7,6,5)
+        // checking distribution, new tablets should go to less loaded nodes (7,6,5) 
         {
             std::array<int, NUM_NODES> nodeTablets = {};
             {

@@ -145,7 +145,7 @@ TMessageBusHttpServer::TMessageBusHttpServer(TActorSystem* actorSystem, NBus::IB
     , Monitor(actorSystem->AppData<TAppData>()->Mon)
     , Config(config)
 {
-    HttpGroup = GetServiceCounters(Counters, "proxy")->GetSubgroup("subsystem", "http");
+    HttpGroup = GetServiceCounters(Counters, "proxy")->GetSubgroup("subsystem", "http"); 
     RequestsActive = HttpGroup->GetCounter("Requests/Active", false);
     RequestsCount = HttpGroup->GetCounter("Requests/Count", true);
     InboundSize = HttpGroup->GetCounter("Requests/InboundSize", true);

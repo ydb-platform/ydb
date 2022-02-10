@@ -282,11 +282,11 @@ NUdf::TUnboxedValue TEngineHost::SelectRow(const TTableId& tableId, const TArray
     TSmallVec<NTable::TTag> systemColumnTags;
     AnalyzeRowType(columnIds, tags, systemColumnTags);
 
-    TSmallVec<NScheme::TTypeId> cellTypes;
-    cellTypes.reserve(tags.size());
-    for (size_t i = 0; i < tags.size(); ++i)
-        cellTypes.emplace_back(tableInfo->Columns.at(tags[i]).PType);
-
+    TSmallVec<NScheme::TTypeId> cellTypes; 
+    cellTypes.reserve(tags.size()); 
+    for (size_t i = 0; i < tags.size(); ++i) 
+        cellTypes.emplace_back(tableInfo->Columns.at(tags[i]).PType); 
+ 
     NTable::TRowState dbRow;
 
     if (key.size() != Db.GetScheme().GetTableInfo(localTid)->KeyColumns.size())
@@ -317,7 +317,7 @@ NUdf::TUnboxedValue TEngineHost::SelectRow(const TTableId& tableId, const TArray
 
     ui64 rowBytes = 0;
     for (ui32 i = 0; i < tags.size(); ++i) {
-        rowItems[i] = GetCellValue(dbRow.Get(i), cellTypes[i]);
+        rowItems[i] = GetCellValue(dbRow.Get(i), cellTypes[i]); 
         rowBytes += dbRow.Get(i).IsNull() ? 1 : dbRow.Get(i).Size();
     }
     for (ui32 i = 0; i < systemColumnTags.size(); ++i) {
@@ -959,7 +959,7 @@ void AnalyzeRowType(TStructLiteral* columnIds, TSmallVec<NTable::TTag>& tags, TS
     }
 }
 
-NUdf::TUnboxedValue GetCellValue(const TCell& cell, NScheme::TTypeId type) {
+NUdf::TUnboxedValue GetCellValue(const TCell& cell, NScheme::TTypeId type) { 
     if (cell.IsNull()) {
         return NUdf::TUnboxedValue();
     }
@@ -1030,7 +1030,7 @@ NUdf::TUnboxedValue GetCellValue(const TCell& cell, NScheme::TTypeId type) {
         default:
             Y_VERIFY_DEBUG(false, "Unsupported type: %" PRIu16, type);
             return MakeString(NUdf::TStringRef(cell.Data(), cell.Size()));
-    }
+    } 
 }
 
 }}

@@ -106,9 +106,9 @@ void TGRpcYdbTableService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
     ADD_REQUEST(RollbackTransaction, RollbackTransactionRequest, RollbackTransactionResponse, {
         ActorSystem_->Send(GRpcRequestProxyId_, new TEvRollbackTransactionRequest(ctx));
     })
-    ADD_REQUEST(DescribeTableOptions, DescribeTableOptionsRequest, DescribeTableOptionsResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvDescribeTableOptionsRequest(ctx));
-    })
+    ADD_REQUEST(DescribeTableOptions, DescribeTableOptionsRequest, DescribeTableOptionsResponse, { 
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvDescribeTableOptionsRequest(ctx)); 
+    }) 
     ADD_REQUEST(BulkUpsert, BulkUpsertRequest, BulkUpsertResponse, {
         ActorSystem_->Send(GRpcRequestProxyId_, new TEvBulkUpsertRequest(ctx));
     })

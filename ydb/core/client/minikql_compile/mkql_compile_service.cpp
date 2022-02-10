@@ -71,7 +71,7 @@ public:
 
     void Bootstrap(const TActorContext& ctx) {
 
-        Counters = GetServiceCounters(AppData(ctx)->Counters, "compile")->GetSubgroup("subsystem", "cache");
+        Counters = GetServiceCounters(AppData(ctx)->Counters, "compile")->GetSubgroup("subsystem", "cache"); 
         AllocPoolCounters = TAlignedPagePoolCounters(AppData(ctx)->Counters, "compile");
 
         if (!DbSchemeResolver) {

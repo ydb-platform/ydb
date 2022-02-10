@@ -1,7 +1,7 @@
 #pragma once
 
 #include "datashard_active_transaction.h"
-#include "operation.h"
+#include "operation.h" 
 
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/protos/counters_datashard.pb.h>
@@ -25,7 +25,7 @@ enum class ECleanupStatus {
 class TTransQueue {
 public:
     friend class TPipeline;
-    friend class TActiveTransaction;
+    friend class TActiveTransaction; 
 
     TTransQueue(TDataShard * self)
         : Self(self)
@@ -42,29 +42,29 @@ public:
 
     bool Load(NIceDb::TNiceDb& db);
 
-    const THashMap<ui64, TOperation::TPtr> &GetTxsInFly() const { return TxsInFly; }
+    const THashMap<ui64, TOperation::TPtr> &GetTxsInFly() const { return TxsInFly; } 
     ui64 TxInFly() const { return TxsInFly.size(); }
-    void AddTxInFly(TOperation::TPtr op);
+    void AddTxInFly(TOperation::TPtr op); 
     void RemoveTxInFly(ui64 txId);
     TOperation::TPtr FindTxInFly(ui64 txId) const
-    {
-        auto it = TxsInFly.find(txId);
-        if (it != TxsInFly.end())
-            return it->second;
-        return nullptr;
-    }
+    { 
+        auto it = TxsInFly.find(txId); 
+        if (it != TxsInFly.end()) 
+            return it->second; 
+        return nullptr; 
+    } 
     bool Has(ui64 txId) const {return TxsInFly.contains(txId); }
 
-    ui64 TxPlanned() const { return PlannedTxs.size(); }
-    const TSet<TStepOrder> &GetPlan() const { return PlannedTxs; }
-    const TSet<TStepOrder> &GetPlan(EOperationKind kind) const
-    {
-        auto it = PlannedTxsByKind.find(kind);
-        if (it != PlannedTxsByKind.end())
-            return it->second;
-        return EMPTY_PLAN;
-    }
-
+    ui64 TxPlanned() const { return PlannedTxs.size(); } 
+    const TSet<TStepOrder> &GetPlan() const { return PlannedTxs; } 
+    const TSet<TStepOrder> &GetPlan(EOperationKind kind) const 
+    { 
+        auto it = PlannedTxsByKind.find(kind); 
+        if (it != PlannedTxsByKind.end()) 
+            return it->second; 
+        return EMPTY_PLAN; 
+    } 
+ 
     TSchemaOperation * FindSchemaTx(ui64 txId) { return SchemaOps.FindPtr(txId); }
     const TMap<ui64, TSchemaOperation>& GetSchemaOperations() const { return SchemaOps; }
     bool HasNotAckedSchemaTx() const { return ! SchemaOps.empty(); }
@@ -74,9 +74,9 @@ public:
     bool HasProposeDelayers() const { return !ProposeDelayers.empty(); }
     bool RemoveProposeDelayer(ui64 txId) { return ProposeDelayers.erase(txId) > 0; }
 
-    // Debug
-    TString TxInFlyToString() const;
-
+    // Debug 
+    TString TxInFlyToString() const; 
+ 
 private: // for pipeline only
 
     // Propose
@@ -90,27 +90,27 @@ private: // for pipeline only
 
     // Plan
 
-    void PlanTx(TOperation::TPtr op,
-                ui64 step,
-                NIceDb::TNiceDb &db);
+    void PlanTx(TOperation::TPtr op, 
+                ui64 step, 
+                NIceDb::TNiceDb &db); 
     void ForgetPlannedTx(NIceDb::TNiceDb &db, ui64 step, ui64 txId);
 
     // Execute
 
     // get first planned tx starting from {step, txId}
-    void GetPlannedTxId(ui64& step, ui64& txId) const;
+    void GetPlannedTxId(ui64& step, ui64& txId) const; 
     bool GetNextPlannedTxId(ui64& step, ui64& txId) const;
-    bool LoadTxDetails(NIceDb::TNiceDb &db,
-                       ui64 txId,
+    bool LoadTxDetails(NIceDb::TNiceDb &db, 
+                       ui64 txId, 
                        TActorId &targets,
-                       TString &txBody,
-                       TVector<TSysTables::TLocksTable::TLock> &locks,
-                       ui64 &artifactFlags);
+                       TString &txBody, 
+                       TVector<TSysTables::TLocksTable::TLock> &locks, 
+                       ui64 &artifactFlags); 
 
     // Done
 
-    void RemoveTx(NIceDb::TNiceDb &db,
-                  const TOperation &op);
+    void RemoveTx(NIceDb::TNiceDb &db, 
+                  const TOperation &op); 
     void RemoveSchemaOperation(NIceDb::TNiceDb& db, ui64 txId);
     void RemoveScanProgress(NIceDb::TNiceDb& db, ui64 txId);
 
@@ -122,16 +122,16 @@ private: // for pipeline only
 
 private:
     TDataShard * Self;
-    THashMap<ui64, TOperation::TPtr> TxsInFly;
+    THashMap<ui64, TOperation::TPtr> TxsInFly; 
     TSet<TStepOrder> PlannedTxs;
-    THashMap<EOperationKind, TSet<TStepOrder>> PlannedTxsByKind;
+    THashMap<EOperationKind, TSet<TStepOrder>> PlannedTxsByKind; 
     TSet<std::pair<ui64, ui64>> DeadlineQueue; // {maxStep, txId}
     TMap<ui64, TSchemaOperation> SchemaOps; // key - txId
     TSet<ui64> ProposeDelayers;
     ui64 PlanWaitingTxCount = 0;
 
-    static const TSet<TStepOrder> EMPTY_PLAN;
-
+    static const TSet<TStepOrder> EMPTY_PLAN; 
+ 
     bool ClearTxDetails(NIceDb::TNiceDb& db, ui64 txId);
 };
 

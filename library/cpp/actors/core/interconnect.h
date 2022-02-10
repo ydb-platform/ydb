@@ -128,9 +128,9 @@ namespace NActors {
             EvRegisterNodeResult,
             EvListNodes,
             EvNodesInfo,
-            EvDisconnect,
-            EvGetNode,
-            EvNodeInfo,
+            EvDisconnect, 
+            EvGetNode, 
+            EvNodeInfo, 
             EvClosePeerSocket,
             EvCloseInputSession,
             EvPoisonSession,
@@ -146,7 +146,7 @@ namespace NActors {
         static_assert(EvEnd < EventSpaceEnd(TEvents::ES_INTERCONNECT), "expect EvEnd < EventSpaceEnd(TEvents::ES_INTERCONNECT)");
 
         struct TEvResolveNode;
-        struct TEvNodeAddress;
+        struct TEvNodeAddress; 
 
         struct TEvConnectNode: public TEventBase<TEvConnectNode, EvConnectNode> {
             DEFINE_SIMPLE_LOCAL_EVENT(TEvConnectNode, "TEvInterconnect::TEvConnectNode")
@@ -178,38 +178,38 @@ namespace NActors {
         struct TEvListNodes: public TEventLocal<TEvListNodes, EvListNodes> {
         };
 
-        struct TNodeInfo {
-            ui32 NodeId;
-            TString Address;
-            TString Host;
-            TString ResolveHost;
-            ui16 Port;
+        struct TNodeInfo { 
+            ui32 NodeId; 
+            TString Address; 
+            TString Host; 
+            TString ResolveHost; 
+            ui16 Port; 
             TNodeLocation Location;
 
             TNodeInfo() = default;
             TNodeInfo(const TNodeInfo&) = default;
             TNodeInfo& operator =(const TNodeInfo&) = default;
-            TNodeInfo(ui32 nodeId,
-                      const TString& address,
-                      const TString& host,
-                      const TString& resolveHost,
-                      ui16 port,
+            TNodeInfo(ui32 nodeId, 
+                      const TString& address, 
+                      const TString& host, 
+                      const TString& resolveHost, 
+                      ui16 port, 
                       const TNodeLocation& location)
-                : NodeId(nodeId)
-                , Address(address)
-                , Host(host)
-                , ResolveHost(resolveHost)
-                , Port(port)
-                , Location(location)
-            {
-            }
+                : NodeId(nodeId) 
+                , Address(address) 
+                , Host(host) 
+                , ResolveHost(resolveHost) 
+                , Port(port) 
+                , Location(location) 
+            { 
+            } 
 
-            operator ui32() const {
-                return NodeId;
-            }
-        };
+            operator ui32() const { 
+                return NodeId; 
+            } 
+        }; 
 
-        struct TEvNodesInfo: public TEventLocal<TEvNodesInfo, EvNodesInfo> {
+        struct TEvNodesInfo: public TEventLocal<TEvNodesInfo, EvNodesInfo> { 
             TVector<TNodeInfo> Nodes;
 
             const TNodeInfo* GetNodeInfo(ui32 nodeId) const {
@@ -220,29 +220,29 @@ namespace NActors {
                 return nullptr;
             }
         };
-
-        struct TEvDisconnect;
-
-        struct TEvGetNode: public TEventLocal<TEvGetNode, EvGetNode> {
-            ui32 NodeId;
+ 
+        struct TEvDisconnect; 
+ 
+        struct TEvGetNode: public TEventLocal<TEvGetNode, EvGetNode> { 
+            ui32 NodeId; 
             TInstant Deadline;
-
+ 
             TEvGetNode(ui32 nodeId, TInstant deadline = TInstant::Max())
-                : NodeId(nodeId)
+                : NodeId(nodeId) 
                 , Deadline(deadline)
-            {
-            }
-        };
-
-        struct TEvNodeInfo: public TEventLocal<TEvNodeInfo, EvNodeInfo> {
-            TEvNodeInfo(ui32 nodeId)
-                : NodeId(nodeId)
-            {
-            }
-
-            ui32 NodeId;
-            THolder<TNodeInfo> Node;
-        };
+            { 
+            } 
+        }; 
+ 
+        struct TEvNodeInfo: public TEventLocal<TEvNodeInfo, EvNodeInfo> { 
+            TEvNodeInfo(ui32 nodeId) 
+                : NodeId(nodeId) 
+            { 
+            } 
+ 
+            ui32 NodeId; 
+            THolder<TNodeInfo> Node; 
+        }; 
 
         struct TEvClosePeerSocket : TEventLocal<TEvClosePeerSocket, EvClosePeerSocket> {};
 

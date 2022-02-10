@@ -899,7 +899,7 @@ void CrossShard_1_Cycle_Impl(const TString& dispatchName, std::function<void (TT
             (return pgmReturn)
         ))___";
 
-        proxy.Execute(programText, false);
+        proxy.Execute(programText, false); 
     }
 
     {
@@ -973,7 +973,7 @@ void CrossShard_2_SwapAndCopy_Impl(const TString& dispatchName, std::function<vo
             (return pgmReturn)
         ))___";
 
-        proxy.Execute(programText, false);
+        proxy.Execute(programText, false); 
     }
 
     {
@@ -1052,19 +1052,19 @@ void CrossShard_3_AllToOne_Impl(const TString& dispatchName, std::function<void 
             (return pgmReturn)
         ))___";
 
-        proxy.Execute(programText, false);
+        proxy.Execute(programText, false); 
     }
 
     {
         auto programText = R"___((
-            (let row1 '('('key (Uint32 '100))))
+            (let row1 '('('key (Uint32 '100)))) 
             (let row31 '('('key (Uint32 '2201))))
             (let row32 '('('key (Uint32 '2202))))
             (let row33 '('('key (Uint32 '2203))))
             (let select '('value))
             (let pgmReturn (AsList
             (SetResult 'myRes (AsList
-                (SelectRow 'table1 row1 select)
+                (SelectRow 'table1 row1 select) 
                 (SelectRow 'table1 row31 select)
                 (SelectRow 'table1 row32 select)
                 (SelectRow 'table1 row33 select)
@@ -1078,9 +1078,9 @@ void CrossShard_3_AllToOne_Impl(const TString& dispatchName, std::function<void 
 
         TValue value = TValue::Create(res.GetValue(), res.GetType());
         TValue rl = value["myRes"];
-        TValue row31 = rl[1];
-        TValue row32 = rl[2];
-        TValue row33 = rl[3];
+        TValue row31 = rl[1]; 
+        TValue row32 = rl[2]; 
+        TValue row33 = rl[3]; 
         UNIT_ASSERT_EQUAL(TString(row31["value"]), "ImInShard1");
         UNIT_ASSERT_EQUAL(TString(row32["value"]), "ImInShard2");
         UNIT_ASSERT_EQUAL(TString(row33["value"]), "ImInShard3");
@@ -1130,7 +1130,7 @@ void CrossShard_4_OneToAll_Impl(const TString& dispatchName, std::function<void 
             (return pgmReturn)
         ))___";
 
-        proxy.Execute(programText, false);
+        proxy.Execute(programText, false); 
     }
 
     {
@@ -1218,7 +1218,7 @@ void CrossShard_5_AllToAll_Impl(const TString& dispatchName, std::function<void 
             (return pgmReturn)
         ))___";
 
-        proxy.Execute(programText, false);
+        proxy.Execute(programText, false); 
     }
 
     {
@@ -1318,7 +1318,7 @@ void CrossShard_6_Local_Impl(const TString& dispatchName, std::function<void (TT
             (return pgmReturn)
         ))___";
 
-        proxy.Execute(programText, false);
+        proxy.Execute(programText, false); 
     }
 
     {
@@ -1472,48 +1472,48 @@ Y_UNIT_TEST(WriteLargeExternalBlob) {
     UNIT_ASSERT_EQUAL(proxy.Execute(Sprintf(progUpsert, 234u, "bar", value.c_str()), res2), IEngineFlat::EStatus::Complete);
 }
 
-void SetupProfiles(TTestActorRuntime &runtime)
-{
-    TResourceProfiles::TResourceProfile profile;
-    profile.SetTabletType(NKikimrTabletBase::TTabletTypes::Unknown);
-    profile.SetName("default");
-    profile.SetStaticTabletTxMemoryLimit(100 << 20);
-    profile.SetStaticTxMemoryLimit(128);
-    profile.SetTxMemoryLimit(300 << 20);
-    profile.SetInitialTxMemory(128);
-    profile.SetSmallTxMemoryLimit(1 << 20);
-    profile.SetMediumTxMemoryLimit(50 << 20);
-    profile.SetSmallTxTaskType("transaction");
-    profile.SetMediumTxTaskType("transaction");
-    profile.SetLargeTxTaskType("transaction");
-
-    for (ui32 i = 0; i < runtime.GetNodeCount(); ++i) {
-        auto &appData = runtime.GetAppData();
-        appData.ResourceProfiles = new TResourceProfiles;
-        appData.ResourceProfiles->AddProfile(profile);
-    }
-}
-
-std::tuple<ui64, ui64, ui64> ReadTxMemoryCounters(TTester &t, ui64 tabletId)
-{
-    auto sender = t.Runtime.AllocateEdgeActor();
-    t.Runtime.SendToPipe(tabletId, sender, new TEvTablet::TEvGetCounters);
-    TAutoPtr<IEventHandle> handle;
-    auto event = t.Runtime.GrabEdgeEvent<TEvTablet::TEvGetCountersResponse>(handle);
-
-    std::tuple<ui64, ui64, ui64> res;
-    const auto &resp = event->Record;
-    for (auto &counter : resp.GetTabletCounters().GetExecutorCounters().GetCumulativeCounters()) {
-        if (counter.GetName() == "TxMemoryRequests")
-            std::get<0>(res) = counter.GetValue();
-        else if (counter.GetName() == "TxMemoryCaptures")
-            std::get<1>(res) = counter.GetValue();
-        else if (counter.GetName() == "TxMemoryAttaches")
-            std::get<2>(res) = counter.GetValue();
-    }
-    return res;
-}
-
+void SetupProfiles(TTestActorRuntime &runtime) 
+{ 
+    TResourceProfiles::TResourceProfile profile; 
+    profile.SetTabletType(NKikimrTabletBase::TTabletTypes::Unknown); 
+    profile.SetName("default"); 
+    profile.SetStaticTabletTxMemoryLimit(100 << 20); 
+    profile.SetStaticTxMemoryLimit(128); 
+    profile.SetTxMemoryLimit(300 << 20); 
+    profile.SetInitialTxMemory(128); 
+    profile.SetSmallTxMemoryLimit(1 << 20); 
+    profile.SetMediumTxMemoryLimit(50 << 20); 
+    profile.SetSmallTxTaskType("transaction"); 
+    profile.SetMediumTxTaskType("transaction"); 
+    profile.SetLargeTxTaskType("transaction"); 
+ 
+    for (ui32 i = 0; i < runtime.GetNodeCount(); ++i) { 
+        auto &appData = runtime.GetAppData(); 
+        appData.ResourceProfiles = new TResourceProfiles; 
+        appData.ResourceProfiles->AddProfile(profile); 
+    } 
+} 
+ 
+std::tuple<ui64, ui64, ui64> ReadTxMemoryCounters(TTester &t, ui64 tabletId) 
+{ 
+    auto sender = t.Runtime.AllocateEdgeActor(); 
+    t.Runtime.SendToPipe(tabletId, sender, new TEvTablet::TEvGetCounters); 
+    TAutoPtr<IEventHandle> handle; 
+    auto event = t.Runtime.GrabEdgeEvent<TEvTablet::TEvGetCountersResponse>(handle); 
+ 
+    std::tuple<ui64, ui64, ui64> res; 
+    const auto &resp = event->Record; 
+    for (auto &counter : resp.GetTabletCounters().GetExecutorCounters().GetCumulativeCounters()) { 
+        if (counter.GetName() == "TxMemoryRequests") 
+            std::get<0>(res) = counter.GetValue(); 
+        else if (counter.GetName() == "TxMemoryCaptures") 
+            std::get<1>(res) = counter.GetValue(); 
+        else if (counter.GetName() == "TxMemoryAttaches") 
+            std::get<2>(res) = counter.GetValue(); 
+    } 
+    return res; 
+} 
+ 
 struct TCounterRange {
     const ui64 MinValue;
     const ui64 MaxValue;
@@ -1528,187 +1528,187 @@ struct TCounterRange {
 };
 
 template<class TCounter1, class TCounter2, class TCounter3>
-void CheckCounters(const std::tuple<ui64, ui64, ui64> &newCnt, const std::tuple<ui64, ui64, ui64> &oldCnt,
+void CheckCounters(const std::tuple<ui64, ui64, ui64> &newCnt, const std::tuple<ui64, ui64, ui64> &oldCnt, 
                    const TCounter1& d1, const TCounter2& d2, const TCounter3& d3)
-{
-    UNIT_ASSERT_VALUES_EQUAL(std::get<0>(newCnt) - std::get<0>(oldCnt), d1);
-    UNIT_ASSERT_VALUES_EQUAL(std::get<1>(newCnt) - std::get<1>(oldCnt), d2);
-    UNIT_ASSERT_VALUES_EQUAL(std::get<2>(newCnt) - std::get<2>(oldCnt), d3);
-}
-
+{ 
+    UNIT_ASSERT_VALUES_EQUAL(std::get<0>(newCnt) - std::get<0>(oldCnt), d1); 
+    UNIT_ASSERT_VALUES_EQUAL(std::get<1>(newCnt) - std::get<1>(oldCnt), d2); 
+    UNIT_ASSERT_VALUES_EQUAL(std::get<2>(newCnt) - std::get<2>(oldCnt), d3); 
+} 
+ 
 Y_UNIT_TEST(MemoryUsageImmediateSmallTx) {
-    bool activeZone = false;
-    TTester t(TTester::ESchema_KV, "dispatch_name", [&](TTestActorRuntime &runtime) {
-            SetupProfiles(runtime);
-        }, activeZone);
-    TFakeMiniKQLProxy proxy(t);
-
+    bool activeZone = false; 
+    TTester t(TTester::ESchema_KV, "dispatch_name", [&](TTestActorRuntime &runtime) { 
+            SetupProfiles(runtime); 
+        }, activeZone); 
+    TFakeMiniKQLProxy proxy(t); 
+ 
     auto counters1 = ReadTxMemoryCounters(t, TTestTxConfig::TxTablet0);
-
-    auto programText = R"___((
-        (let row '('('key (Uint32 '42))))
-        (let myUpd '(
-            '('value (Utf8 '%s))))
-        (let pgmReturn (AsList
-        (UpdateRow 'table1 row myUpd)
-        ))
-        (return pgmReturn)
-    ))___";
-
+ 
+    auto programText = R"___(( 
+        (let row '('('key (Uint32 '42)))) 
+        (let myUpd '( 
+            '('value (Utf8 '%s)))) 
+        (let pgmReturn (AsList 
+        (UpdateRow 'table1 row myUpd) 
+        )) 
+        (return pgmReturn) 
+    ))___"; 
+ 
     auto text = Sprintf(programText, TString(1024, 'v').data());
-    UNIT_ASSERT_EQUAL(proxy.Execute(text), IEngineFlat::EStatus::Complete);
-
+    UNIT_ASSERT_EQUAL(proxy.Execute(text), IEngineFlat::EStatus::Complete); 
+ 
     auto counters2 = ReadTxMemoryCounters(t, TTestTxConfig::TxTablet0);
-    // Expect one allocation on prepare.
-    CheckCounters(counters2, counters1, 1, 0, 0);
-
-    {
-        auto programText = R"___((
-            (let row1 '('('key (Uint32 '42))))
-            (let select '('value))
-            (let pgmReturn (AsList
-            (SetResult 'myRes (AsList
-                (SelectRow 'table1 row1 select)
-            ))
-            ))
-            (return pgmReturn)
-        ))___";
-
-        NKikimrMiniKQL::TResult res;
-        UNIT_ASSERT_EQUAL(proxy.Execute(programText, res), IEngineFlat::EStatus::Complete);
-    }
-
+    // Expect one allocation on prepare. 
+    CheckCounters(counters2, counters1, 1, 0, 0); 
+ 
+    { 
+        auto programText = R"___(( 
+            (let row1 '('('key (Uint32 '42)))) 
+            (let select '('value)) 
+            (let pgmReturn (AsList 
+            (SetResult 'myRes (AsList 
+                (SelectRow 'table1 row1 select) 
+            )) 
+            )) 
+            (return pgmReturn) 
+        ))___"; 
+ 
+        NKikimrMiniKQL::TResult res; 
+        UNIT_ASSERT_EQUAL(proxy.Execute(programText, res), IEngineFlat::EStatus::Complete); 
+    } 
+ 
     auto counters3 = ReadTxMemoryCounters(t, TTestTxConfig::TxTablet0);
-    // Expect one allocation on prepare.
-    CheckCounters(counters3, counters2, 1, 0, 0);
-}
-
+    // Expect one allocation on prepare. 
+    CheckCounters(counters3, counters2, 1, 0, 0); 
+} 
+ 
 Y_UNIT_TEST(MemoryUsageImmediateMediumTx) {
-    bool activeZone = false;
-    TTester t(TTester::ESchema_KV, "dispatch_name", [&](TTestActorRuntime &runtime) {
-            SetupProfiles(runtime);
-        }, activeZone);
-    TFakeMiniKQLProxy proxy(t);
-
+    bool activeZone = false; 
+    TTester t(TTester::ESchema_KV, "dispatch_name", [&](TTestActorRuntime &runtime) { 
+            SetupProfiles(runtime); 
+        }, activeZone); 
+    TFakeMiniKQLProxy proxy(t); 
+ 
     auto counters1 = ReadTxMemoryCounters(t, TTestTxConfig::TxTablet0);
-
-    {
-        auto programText = R"___((
-            (let row1 '('('key (Uint32 '42))))
-            (let sum (lambda '(x y) (+ x y)))
-            (let x1 (Collect (ListFromRange (Uint32 '0) (Uint32 '100000))))
-            (let x2 (Fold x1 (Uint32 '0) sum))
-            (let myUpd '('('uint x2)))
-            (let pgmReturn (AsList
-                (UpdateRow 'table1 row1 myUpd)
-            ))
-            (return pgmReturn)
-        ))___";
-
-        NKikimrMiniKQL::TResult res;
-        UNIT_ASSERT_EQUAL(proxy.Execute(programText, res), IEngineFlat::EStatus::Complete);
-    }
-
+ 
+    { 
+        auto programText = R"___(( 
+            (let row1 '('('key (Uint32 '42)))) 
+            (let sum (lambda '(x y) (+ x y))) 
+            (let x1 (Collect (ListFromRange (Uint32 '0) (Uint32 '100000)))) 
+            (let x2 (Fold x1 (Uint32 '0) sum)) 
+            (let myUpd '('('uint x2))) 
+            (let pgmReturn (AsList 
+                (UpdateRow 'table1 row1 myUpd) 
+            )) 
+            (return pgmReturn) 
+        ))___"; 
+ 
+        NKikimrMiniKQL::TResult res; 
+        UNIT_ASSERT_EQUAL(proxy.Execute(programText, res), IEngineFlat::EStatus::Complete); 
+    } 
+ 
     auto counters2 = ReadTxMemoryCounters(t, TTestTxConfig::TxTablet0);
     // Expect one allocation on prepare and one or two
-    // allocations during execution.
+    // allocations during execution. 
     CheckCounters(counters2, counters1, TCounterRange{2, 3}, 0, 0);
-}
-
+} 
+ 
 Y_UNIT_TEST(MemoryUsageImmediateHugeTx) {
-    bool activeZone = false;
-    TTester t(TTester::ESchema_KV, "dispatch_name", [&](TTestActorRuntime &runtime) {
-            SetupProfiles(runtime);
-        }, activeZone);
-    TFakeMiniKQLProxy proxy(t);
-
+    bool activeZone = false; 
+    TTester t(TTester::ESchema_KV, "dispatch_name", [&](TTestActorRuntime &runtime) { 
+            SetupProfiles(runtime); 
+        }, activeZone); 
+    TFakeMiniKQLProxy proxy(t); 
+ 
     auto counters1 = ReadTxMemoryCounters(t, TTestTxConfig::TxTablet0);
-
-    {
-        auto programText = R"___((
-            (let row1 '('('key (Uint32 '42))))
-            (let sum (lambda '(x y) (+ x y)))
-            (let x1 (Collect (ListFromRange (Uint32 '0) (Uint32 '1000000))))
-            (let x2 (Fold x1 (Uint32 '0) sum))
-            (let myUpd '('('uint x2)))
-            (let pgmReturn (AsList
-                (UpdateRow 'table1 row1 myUpd)
-            ))
-            (return pgmReturn)
-        ))___";
-
-        NKikimrMiniKQL::TResult res;
-        UNIT_ASSERT_EQUAL(proxy.Execute(programText, res), IEngineFlat::EStatus::Complete);
-    }
-
+ 
+    { 
+        auto programText = R"___(( 
+            (let row1 '('('key (Uint32 '42)))) 
+            (let sum (lambda '(x y) (+ x y))) 
+            (let x1 (Collect (ListFromRange (Uint32 '0) (Uint32 '1000000)))) 
+            (let x2 (Fold x1 (Uint32 '0) sum)) 
+            (let myUpd '('('uint x2))) 
+            (let pgmReturn (AsList 
+                (UpdateRow 'table1 row1 myUpd) 
+            )) 
+            (return pgmReturn) 
+        ))___"; 
+ 
+        NKikimrMiniKQL::TResult res; 
+        UNIT_ASSERT_EQUAL(proxy.Execute(programText, res), IEngineFlat::EStatus::Complete); 
+    } 
+ 
     auto counters2 = ReadTxMemoryCounters(t, TTestTxConfig::TxTablet0);
-    // Expect one allocation on prepare and three
-    // allocations during execution.
-    CheckCounters(counters2, counters1, 4, 0, 0);
-}
-
+    // Expect one allocation on prepare and three 
+    // allocations during execution. 
+    CheckCounters(counters2, counters1, 4, 0, 0); 
+} 
+ 
 Y_UNIT_TEST(MemoryUsageMultiShard) {
-    bool activeZone = false;
-    TTester t(TTester::ESchema_MultiShardKV, "dispatch_name", [&](TTestActorRuntime &runtime) {
-            SetupProfiles(runtime);
-        }, activeZone);
-    TFakeMiniKQLProxy proxy(t);
-
-    t.Runtime.SetLogPriority(NKikimrServices::RESOURCE_BROKER, NActors::NLog::PRI_DEBUG);
-    t.Runtime.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
-    t.Runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
-
-    //InitCrossShard(proxy);
-    auto programText = R"___((
-        (let row1 '('('key (Uint32 '100))))
-        (let row2 '('('key (Uint32 '1100))))
-        (let row3 '('('key (Uint32 '2100))))
-        (let myUpd1 '(
-            '('value (Utf8 'ImInShard1))))
-        (let myUpd2 '(
-            '('value (Utf8 'ImInShard2))))
-        (let myUpd3 '(
-            '('value (Utf8 'ImInShard3))))
-        (let pgmReturn (AsList
-        (UpdateRow 'table1 row1 myUpd1)
-        (UpdateRow 'table1 row2 myUpd2)
-        (UpdateRow 'table1 row3 myUpd3)
-        ))
-        (return pgmReturn)
-    ))___";
-
-    UNIT_ASSERT_EQUAL(proxy.Execute(programText), IEngineFlat::EStatus::Complete);
-
-    {
-        TTester::TActiveZone az(t);
-        auto programText = R"___((
-            (let row1 '('('key (Uint32 '100))))
-            (let row2 '('('key (Uint32 '1100))))
-            (let row3 '('('key (Uint32 '2100))))
-            (let row13 '('('key (Uint32 '203))))
-            (let row23 '('('key (Uint32 '1203))))
-            (let row33 '('('key (Uint32 '2203))))
-            (let select '('value))
-            (let val3 (FlatMap (SelectRow 'table1 row3 select) (lambda '(x) (Member x 'value))))
-            (let sum (lambda '(x y) (+ x y)))
-            (let x1 (Collect (ListFromRange (Uint32 '0) (Uint32 '1000000))))
-            (let x2 (Fold x1 (Uint32 '0) sum))
-            (let upd3 '('('value val3)))
-            (let upd4 '('('uint x2)))
-            (let pgmReturn (AsList
-            (UpdateRow 'table1 row13 upd3)
-            (UpdateRow 'table1 row13 upd4)
-            (UpdateRow 'table1 row23 upd3)
-            (UpdateRow 'table1 row23 upd4)
-            (UpdateRow 'table1 row33 upd3)
-            (UpdateRow 'table1 row33 upd4)
-            ))
-            (return pgmReturn)
-        ))___";
-        proxy.CheckedExecute(programText);
-    }
-}
-
+    bool activeZone = false; 
+    TTester t(TTester::ESchema_MultiShardKV, "dispatch_name", [&](TTestActorRuntime &runtime) { 
+            SetupProfiles(runtime); 
+        }, activeZone); 
+    TFakeMiniKQLProxy proxy(t); 
+ 
+    t.Runtime.SetLogPriority(NKikimrServices::RESOURCE_BROKER, NActors::NLog::PRI_DEBUG); 
+    t.Runtime.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG); 
+    t.Runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE); 
+ 
+    //InitCrossShard(proxy); 
+    auto programText = R"___(( 
+        (let row1 '('('key (Uint32 '100)))) 
+        (let row2 '('('key (Uint32 '1100)))) 
+        (let row3 '('('key (Uint32 '2100)))) 
+        (let myUpd1 '( 
+            '('value (Utf8 'ImInShard1)))) 
+        (let myUpd2 '( 
+            '('value (Utf8 'ImInShard2)))) 
+        (let myUpd3 '( 
+            '('value (Utf8 'ImInShard3)))) 
+        (let pgmReturn (AsList 
+        (UpdateRow 'table1 row1 myUpd1) 
+        (UpdateRow 'table1 row2 myUpd2) 
+        (UpdateRow 'table1 row3 myUpd3) 
+        )) 
+        (return pgmReturn) 
+    ))___"; 
+ 
+    UNIT_ASSERT_EQUAL(proxy.Execute(programText), IEngineFlat::EStatus::Complete); 
+ 
+    { 
+        TTester::TActiveZone az(t); 
+        auto programText = R"___(( 
+            (let row1 '('('key (Uint32 '100)))) 
+            (let row2 '('('key (Uint32 '1100)))) 
+            (let row3 '('('key (Uint32 '2100)))) 
+            (let row13 '('('key (Uint32 '203)))) 
+            (let row23 '('('key (Uint32 '1203)))) 
+            (let row33 '('('key (Uint32 '2203)))) 
+            (let select '('value)) 
+            (let val3 (FlatMap (SelectRow 'table1 row3 select) (lambda '(x) (Member x 'value)))) 
+            (let sum (lambda '(x y) (+ x y))) 
+            (let x1 (Collect (ListFromRange (Uint32 '0) (Uint32 '1000000)))) 
+            (let x2 (Fold x1 (Uint32 '0) sum)) 
+            (let upd3 '('('value val3))) 
+            (let upd4 '('('uint x2))) 
+            (let pgmReturn (AsList 
+            (UpdateRow 'table1 row13 upd3) 
+            (UpdateRow 'table1 row13 upd4) 
+            (UpdateRow 'table1 row23 upd3) 
+            (UpdateRow 'table1 row23 upd4) 
+            (UpdateRow 'table1 row33 upd3) 
+            (UpdateRow 'table1 row33 upd4) 
+            )) 
+            (return pgmReturn) 
+        ))___"; 
+        proxy.CheckedExecute(programText); 
+    } 
+} 
+ 
 } // Y_UNIT_TEST_SUITE(TTxDataShardMiniKQL)
 
 } // namespace NKikimr

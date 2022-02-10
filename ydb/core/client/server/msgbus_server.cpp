@@ -119,16 +119,16 @@ public:
             MTYPE(TBusDbResponse)
             MTYPE(TBusDbBatch)
             MTYPE(TBusBlobStorageConfigRequest)
-            MTYPE(TBusNodeRegistrationRequest)
-            MTYPE(TBusCmsRequest)
+            MTYPE(TBusNodeRegistrationRequest) 
+            MTYPE(TBusCmsRequest) 
             MTYPE(TBusChooseProxy)
             MTYPE(TBusSqsRequest)
             MTYPE(TBusWhoAmI)
-            MTYPE(TBusStreamRequest)
+            MTYPE(TBusStreamRequest) 
             MTYPE(TBusS3ListingRequest)
             MTYPE(TBusS3ListingResponse)
             MTYPE(TBusInterconnectDebug)
-            MTYPE(TBusConsoleRequest)
+            MTYPE(TBusConsoleRequest) 
             MTYPE(TBusResolveNode)
             MTYPE(TBusFillNode)
             MTYPE(TBusDrainNode)
@@ -172,11 +172,11 @@ public:
             REPLY_OPTION(TBusResponse)
             REPLY_OPTION(TBusDbResponse)
             REPLY_OPTION(TBusBsTestLoadResponse)
-            REPLY_OPTION(TBusNodeRegistrationResponse)
-            REPLY_OPTION(TBusCmsResponse)
+            REPLY_OPTION(TBusNodeRegistrationResponse) 
+            REPLY_OPTION(TBusCmsResponse) 
             REPLY_OPTION(TBusSqsResponse)
             REPLY_OPTION(TBusS3ListingResponse)
-            REPLY_OPTION(TBusConsoleResponse)
+            REPLY_OPTION(TBusConsoleResponse) 
 
             default:
                 Y_FAIL("unexpected response type %" PRIu32, type);
@@ -298,8 +298,8 @@ class TMessageBusSessionIdentHolder::TImplGRpc
 public:
     TImplGRpc(TIntrusivePtr<TBusMessageContext::TImplGRpc> context)
         : Context(context)
-    {
-    }
+    { 
+    } 
 
     ~TImplGRpc() {
         if (Context) {
@@ -308,16 +308,16 @@ public:
     }
 
     void SendReply(NBus::TBusMessage *resp) override {
-        Y_VERIFY(Context);
-        Context->SendReply(resp);
-
+        Y_VERIFY(Context); 
+        Context->SendReply(resp); 
+ 
         auto context = std::move(Context);
     }
 
     void SendReplyMove(NBus::TBusMessageAutoPtr resp) override {
-        Y_VERIFY(Context);
-        Context->SendReplyMove(resp);
-
+        Y_VERIFY(Context); 
+        Context->SendReplyMove(resp); 
+ 
         auto context = std::move(Context);
     }
 
@@ -538,8 +538,8 @@ void TMessageBusServer::OnMessage(TBusMessageContext &msg) {
         return ClientActorRequest(CreateMessageBusFillNode, msg);
     case MTYPE_CLIENT_RESOLVE_NODE:
         return ClientActorRequest(CreateMessageBusResolveNode, msg);
-    case MTYPE_CLIENT_CMS_REQUEST:
-        return ClientActorRequest(CreateMessageBusCmsRequest, msg);
+    case MTYPE_CLIENT_CMS_REQUEST: 
+        return ClientActorRequest(CreateMessageBusCmsRequest, msg); 
     case MTYPE_CLIENT_SQS_REQUEST:
         return ClientActorRequest(CreateMessageBusSqsRequest, msg);
     case MTYPE_CLIENT_WHOAMI:
@@ -548,8 +548,8 @@ void TMessageBusServer::OnMessage(TBusMessageContext &msg) {
         return ClientActorRequest(CreateMessageBusS3ListingRequest, msg);
     case MTYPE_CLIENT_INTERCONNECT_DEBUG:
         return ClientActorRequest(CreateMessageBusInterconnectDebug, msg);
-    case MTYPE_CLIENT_CONSOLE_REQUEST:
-        return ClientActorRequest(CreateMessageBusConsoleRequest, msg);
+    case MTYPE_CLIENT_CONSOLE_REQUEST: 
+        return ClientActorRequest(CreateMessageBusConsoleRequest, msg); 
     case MTYPE_CLIENT_TEST_SHARD_CONTROL:
         return ClientActorRequest(CreateMessageBusTestShardControl, msg);
     default:

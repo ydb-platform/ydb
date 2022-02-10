@@ -10,12 +10,12 @@ bool TTableRange::IsEmptyRange(TConstArrayRef<const NScheme::TTypeId> cellTypeId
     return (compares < 0);
 }
 
-bool TSerializedTableRange::IsEmpty(TConstArrayRef<NScheme::TTypeId> type) const
-{
-    auto cmp = CompareBorders<true, false>(To.GetCells(), From.GetCells(), ToInclusive, FromInclusive, type);
-    return (cmp < 0);
-}
-
+bool TSerializedTableRange::IsEmpty(TConstArrayRef<NScheme::TTypeId> type) const 
+{ 
+    auto cmp = CompareBorders<true, false>(To.GetCells(), From.GetCells(), ToInclusive, FromInclusive, type); 
+    return (cmp < 0); 
+} 
+ 
 void TKeyDesc::Out(IOutputStream& o, TKeyDesc::EStatus x) {
 #define KEYDESCRIPTION_STATUS_TO_STRING_IMPL(name, ...) \
     case EStatus::name: \

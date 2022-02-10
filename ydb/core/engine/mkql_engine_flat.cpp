@@ -1188,9 +1188,9 @@ public:
         catch (TNotReadyTabletException&) {
             throw;
         }
-        catch (TMemoryLimitExceededException&) {
-            throw;
-        }
+        catch (TMemoryLimitExceededException&) { 
+            throw; 
+        } 
         catch (yexception& e) {
             Alloc.InvalidateMemInfo();
             HandleException("PrepareOutgoingReadsets", __LINE__, e);
@@ -1219,10 +1219,10 @@ public:
         AreOutgoingReadSetsExtracted = true;
     }
 
-    bool IsAfterOutgoingReadsetsExtracted() noexcept override {
-        return AreOutgoingReadSetsExtracted;
-    }
-
+    bool IsAfterOutgoingReadsetsExtracted() noexcept override { 
+        return AreOutgoingReadSetsExtracted; 
+    } 
+ 
     EResult PrepareIncomingReadsets() override {
         Y_VERIFY(!AreIncomingReadsetsPrepared, "PrepareIncomingReadsets is already called");
         Y_VERIFY(Settings.Host, "Host is not set");
@@ -1403,9 +1403,9 @@ public:
         catch (TNotReadyTabletException&) {
             throw;
         }
-        catch (TMemoryLimitExceededException&) {
-            throw;
-        }
+        catch (TMemoryLimitExceededException&) { 
+            throw; 
+        } 
         catch (TDeadlineExceededException&) {
             Cancel();
             IsExecuted = true;
@@ -1433,26 +1433,26 @@ public:
         return it->second;
     }
 
-    size_t GetMemoryUsed() const noexcept override {
-        return Alloc.GetUsed();
-    }
-
-    size_t GetMemoryAllocated() const noexcept override {
-        return Alloc.GetAllocated();
-    }
-
-    size_t GetMemoryLimit() const noexcept override {
-        return Alloc.GetLimit();
-    }
-
-    void SetMemoryLimit(size_t limit) noexcept override {
-        Alloc.SetLimit(limit);
-    }
-
-    void ReleaseUnusedMemory() noexcept override {
-        Alloc.ReleaseFreePages();
-    }
-
+    size_t GetMemoryUsed() const noexcept override { 
+        return Alloc.GetUsed(); 
+    } 
+ 
+    size_t GetMemoryAllocated() const noexcept override { 
+        return Alloc.GetAllocated(); 
+    } 
+ 
+    size_t GetMemoryLimit() const noexcept override { 
+        return Alloc.GetLimit(); 
+    } 
+ 
+    void SetMemoryLimit(size_t limit) noexcept override { 
+        Alloc.SetLimit(limit); 
+    } 
+ 
+    void ReleaseUnusedMemory() noexcept override { 
+        Alloc.ReleaseFreePages(); 
+    } 
+ 
     void SetDeadline(const TInstant& deadline) noexcept override {
         if (!ReadOnlyOriginPrograms) {
             return;

@@ -47,31 +47,31 @@ message TReadTransaction {
     optional fixed64 OrderId = 3;
 }
 
-message TKeyRange {
-    // Key as a tuple of values. Missing key column values are treated as NULL.
-    optional NKikimrMiniKQL.TParams From = 1;
-    // Missing key column values are treated as INF.
-    optional NKikimrMiniKQL.TParams To = 2;
-    optional bool FromInclusive = 3 [default = true];
-    optional bool ToInclusive = 4 [default = false];
-};
-
-message TReadTableTransaction {
+message TKeyRange { 
+    // Key as a tuple of values. Missing key column values are treated as NULL. 
+    optional NKikimrMiniKQL.TParams From = 1; 
+    // Missing key column values are treated as INF. 
+    optional NKikimrMiniKQL.TParams To = 2; 
+    optional bool FromInclusive = 3 [default = true]; 
+    optional bool ToInclusive = 4 [default = false]; 
+}; 
+ 
+message TReadTableTransaction { 
     enum EVersion {
         UNSPECIFIED = 0;
         YDB_V1 = 1;
     }
-    optional string Path = 1;
-    optional bool Ordered = 2 [default = false];
-    optional bool AllowDuplicates = 3 [default = false];
-    repeated string Columns = 4; // All by default.
-    optional TKeyRange KeyRange = 5;
-    optional uint64 RowLimit = 6 [default = 0]; // All rows by default.
+    optional string Path = 1; 
+    optional bool Ordered = 2 [default = false]; 
+    optional bool AllowDuplicates = 3 [default = false]; 
+    repeated string Columns = 4; // All by default. 
+    optional TKeyRange KeyRange = 5; 
+    optional uint64 RowLimit = 6 [default = 0]; // All rows by default. 
     optional uint32 ApiVersion = 7;
     optional uint64 SnapshotStep = 8;
     optional uint64 SnapshotTxId = 9;
-};
-
+}; 
+ 
 message TCreateVolatileSnapshotTx {
     message TTable {
         optional string TablePath = 1;
@@ -175,8 +175,8 @@ message TTransaction {
 
     optional NKikimrSchemeOp.TModifyScheme ModifyScheme = 10;
     repeated NKikimrSchemeOp.TModifyScheme TransactionalModification = 11;
-
-    optional TReadTableTransaction ReadTableTransaction = 20;
+ 
+    optional TReadTableTransaction ReadTableTransaction = 20; 
 
     optional TCreateVolatileSnapshotTx CreateVolatileSnapshot = 30;
     optional TRefreshVolatileSnapshotTx RefreshVolatileSnapshot = 31;
@@ -190,7 +190,7 @@ message TEvProposeTransaction {
     optional uint64 ProxyFlags = 2;
     optional uint64 ExecTimeoutPeriod = 3;
     optional string UserToken = 4; // already built and serialized user's token
-    optional bool StreamResponse = 5;
+    optional bool StreamResponse = 5; 
     optional uint64 CancelAfterMs = 6;
     optional string DatabaseName = 7;
     optional string RequestType = 8;
@@ -238,10 +238,10 @@ message TEvProposeTransactionStatus {
     optional uint64 PathId = 34;
     optional uint64 PathCreateTxId = 35;
     optional uint64 PathDropTxId = 36;
-
-    optional fixed64 DataShardTabletId = 40;
-
-    optional bytes SerializedReadTableResponse = 50;
+ 
+    optional fixed64 DataShardTabletId = 40; 
+ 
+    optional bytes SerializedReadTableResponse = 50; 
     optional uint32 ReadTableResponseVersion = 51;
 }
 

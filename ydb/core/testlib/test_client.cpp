@@ -168,10 +168,10 @@ namespace Tests {
 
         Runtime = MakeHolder<TTestBasicRuntime>(StaticNodes() + DynamicNodes(), Settings->UseRealThreads);
 
-        if (!Settings->UseRealThreads)
+        if (!Settings->UseRealThreads) 
             Runtime->SetRegistrationObserverFunc([](TTestActorRuntimeBase& runtime, const TActorId&, const TActorId& actorId) {
-                    runtime.EnableScheduleForActor(actorId);
-                });
+                    runtime.EnableScheduleForActor(actorId); 
+                }); 
 
         for (auto& it: Settings->NodeKeys)     {
             ui32 nodeId = it.first;
@@ -309,7 +309,7 @@ namespace Tests {
         GRpcServer->AddService(new NGRpcService::V1::TGRpcPersQueueService(system, counters, NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), grpcRequestProxyId));
         GRpcServer->AddService(new NGRpcService::TGRpcPQClusterDiscoveryService(system, counters, grpcRequestProxyId));
         GRpcServer->AddService(new NKesus::TKesusGRpcService(system, counters, grpcRequestProxyId));
-        GRpcServer->AddService(new NGRpcService::TGRpcCmsService(system, counters, grpcRequestProxyId));
+        GRpcServer->AddService(new NGRpcService::TGRpcCmsService(system, counters, grpcRequestProxyId)); 
         GRpcServer->AddService(new NGRpcService::TGRpcDiscoveryService(system, counters, grpcRequestProxyId));
         GRpcServer->AddService(new NGRpcService::TGRpcYdbExperimentalService(system, counters, grpcRequestProxyId));
         GRpcServer->AddService(new NGRpcService::TGRpcYdbClickhouseInternalService(system, counters, appData.InFlightLimiterRegistry, grpcRequestProxyId));
@@ -370,7 +370,7 @@ namespace Tests {
         CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(ChangeStateStorage(Hive, domainId), TTabletTypes::FLAT_HIVE), &CreateDefaultHive);
         CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(MakeBSControllerID(domainId), TTabletTypes::FLAT_BS_CONTROLLER), &CreateFlatBsController);
         CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(MakeTenantSlotBrokerID(domainId), TTabletTypes::TENANT_SLOT_BROKER), &NTenantSlotBroker::CreateTenantSlotBroker);
-        if (Settings->EnableConsole)
+        if (Settings->EnableConsole) 
             CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(MakeConsoleID(domainId), TTabletTypes::CONSOLE), &NConsole::CreateConsole);
     }
 
@@ -556,18 +556,18 @@ namespace Tests {
         auto &appData = Runtime->GetAppData(nodeIdx);
         SetupLocalConfig(*localConfig, appData);
 
-        TTenantPoolConfig::TPtr tenantPoolConfig = new TTenantPoolConfig(localConfig);
-        tenantPoolConfig->AddStaticSlot(domainName);
+        TTenantPoolConfig::TPtr tenantPoolConfig = new TTenantPoolConfig(localConfig); 
+        tenantPoolConfig->AddStaticSlot(domainName); 
 
-        auto poolId = Runtime->Register(CreateTenantPool(tenantPoolConfig), nodeIdx, appData.SystemPoolId,
-                                        TMailboxType::Revolving, 0);
-        Runtime->RegisterService(MakeTenantPoolRootID(), poolId, nodeIdx);
-        if (Settings->EnableConfigsDispatcher) {
+        auto poolId = Runtime->Register(CreateTenantPool(tenantPoolConfig), nodeIdx, appData.SystemPoolId, 
+                                        TMailboxType::Revolving, 0); 
+        Runtime->RegisterService(MakeTenantPoolRootID(), poolId, nodeIdx); 
+        if (Settings->EnableConfigsDispatcher) { 
             auto *dispatcher = NConsole::CreateConfigsDispatcher(Settings->AppConfig);
-            auto aid = Runtime->Register(dispatcher, nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0);
-            Runtime->RegisterService(NConsole::MakeConfigsDispatcherID(Runtime->GetNodeId(nodeIdx)), aid);
-        }
-        Runtime->Register(CreateLabelsMaintainer({}), nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0);
+            auto aid = Runtime->Register(dispatcher, nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0); 
+            Runtime->RegisterService(NConsole::MakeConfigsDispatcherID(Runtime->GetNodeId(nodeIdx)), aid); 
+        } 
+        Runtime->Register(CreateLabelsMaintainer({}), nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0); 
 
         auto sysViewService = NSysView::CreateSysViewServiceForTests();
         TActorId sysViewServiceId = Runtime->Register(sysViewService.Release(), nodeIdx);
@@ -577,12 +577,12 @@ namespace Tests {
         Runtime->Register(tenantPublisher, nodeIdx);
     }
 
-    void TServer::SetupConfigurators(ui32 nodeIdx) {
-        auto &appData = Runtime->GetAppData(nodeIdx);
-        Runtime->Register(NConsole::CreateImmediateControlsConfigurator(appData.Icb, Settings->Controls),
-                          nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0);
-    }
-
+    void TServer::SetupConfigurators(ui32 nodeIdx) { 
+        auto &appData = Runtime->GetAppData(nodeIdx); 
+        Runtime->Register(NConsole::CreateImmediateControlsConfigurator(appData.Icb, Settings->Controls), 
+                          nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0); 
+    } 
+ 
     void TServer::SetupProxies(ui32 nodeIdx) {
         Runtime->SetTxAllocatorTabletIds({ChangeStateStorage(TxAllocator, Settings->Domain)});
         {

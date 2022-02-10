@@ -104,7 +104,7 @@ Y_UNIT_TEST_SUITE(ConvertMiniKQLTypeToYdbTypeTest) {
         const TString input =
             "Kind: Data\n"
             "Data {\n"
-            "  Scheme: 4865\n"
+            "  Scheme: 4865\n" 
             "  DecimalParams {\n"
             "    Precision: 21\n"
             "    Scale: 8\n"
@@ -430,7 +430,7 @@ Y_UNIT_TEST_SUITE(ConvertMiniKQLValueToYdbValueTest) {
          const TString inputType =
             "Kind: Data\n"
             "Data {\n"
-            "  Scheme: 4865\n"
+            "  Scheme: 4865\n" 
             "  DecimalParams {\n"
             "    Precision: 21\n"
             "    Scale: 8\n"

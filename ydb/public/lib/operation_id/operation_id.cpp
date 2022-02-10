@@ -31,8 +31,8 @@ TString ProtoToString(const Ydb::TOperationId& proto) {
             res << "ydb://preparedqueryid";
             break;
         case Ydb::TOperationId::CMS_REQUEST:
-            res << "ydb://cmsrequest";
-            break;
+            res << "ydb://cmsrequest"; 
+            break; 
         case Ydb::TOperationId::EXPORT:
             res << "ydb://export";
             break;

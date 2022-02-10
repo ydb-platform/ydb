@@ -68,15 +68,15 @@ protected:
     bool HandleDefaultEvents(STFUNC_SIG);
     virtual void RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr&, const TActorContext &ctx);
 
-    bool TryCaptureTxCache(ui64 size) {
-        if (!TxCacheQuota)
-            return false;
-        return TxCacheQuota->TryCaptureQuota(size);
-    }
-    void ReleaseTxCache(ui64 size) {
-        if (size)
-            TxCacheQuota->ReleaseQuota(size);
-    }
+    bool TryCaptureTxCache(ui64 size) { 
+        if (!TxCacheQuota) 
+            return false; 
+        return TxCacheQuota->TryCaptureQuota(size); 
+    } 
+    void ReleaseTxCache(ui64 size) { 
+        if (size) 
+            TxCacheQuota->ReleaseQuota(size); 
+    } 
 
 private:
     IExecutor* CreateExecutor(const TActorContext &ctx);

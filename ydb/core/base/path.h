@@ -8,7 +8,7 @@ namespace NKikimr {
 
 TVector<TString> SplitPath(TString path);
 TString JoinPath(const TVector<TString>& path);
-TString CanonizePath(const TString &path);
+TString CanonizePath(const TString &path); 
 TString CanonizePath(const TVector<TString>& path);
 ui32 CanonizedPathLen(const TVector<TString>& path);
 TStringBuf ExtractDomain(const TString& path) noexcept;
@@ -17,7 +17,7 @@ TStringBuf ExtractBase(const TString& path) noexcept;
 TStringBuf ExtractParent(const TString& path) noexcept;
 bool IsEqualPaths(const TString& l, const TString& r) noexcept;
 bool IsStartWithSlash(const TString& l);
-bool CheckDbPath(const TString &path, const TString &domain, TString &error);
+bool CheckDbPath(const TString &path, const TString &domain, TString &error); 
 TString::const_iterator PathPartBrokenAt(const TString &part, const TStringBuf extraSymbols = {});
 bool TrySplitPathByDb(const TString& path, const TString& database,
     std::pair<TString, TString>& result, TString& error);

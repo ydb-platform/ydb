@@ -164,7 +164,7 @@ private:
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
             HFunc(TEvents::TEvSubscribe, Handle);
             HFunc(TEvents::TEvWakeup, Handle);
-            HFunc(TEvDataShard::TEvGetReadTableStreamStateRequest, Handle);
+            HFunc(TEvDataShard::TEvGetReadTableStreamStateRequest, Handle); 
             default:
                 Y_FAIL("TRequestHandler: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
         }
@@ -403,33 +403,33 @@ private:
             SetTimeoutTimer(timeout, ctx);
     }
 
-    void Handle(TEvDataShard::TEvGetReadTableStreamStateRequest::TPtr &ev, const TActorContext &ctx)
-    {
-        auto *response = new TEvDataShard::TEvGetReadTableStreamStateResponse;
-        response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
+    void Handle(TEvDataShard::TEvGetReadTableStreamStateRequest::TPtr &ev, const TActorContext &ctx) 
+    { 
+        auto *response = new TEvDataShard::TEvGetReadTableStreamStateResponse; 
+        response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS); 
 
-        //response->Record.SetReady(IsStreamReady);
-        //response->Record.SetFinished(IsStreamFinished);
-        response->Record.SetResponseQueueSize(LeftInGRpcAdaptorQueue_);
-        for (auto &ev : QuotaRequestQueue_)
-            response->Record.AddQuotaRequests()->SetId(ev->Get()->Record.GetShardId());
-        for (auto &pr : QuotaByShard_) {
-            auto &quota = *response->Record.AddShardQuotas();
-            quota.SetShardId(pr.first);
-            quota.SetQuota(pr.second);
-        }
-        response->Record.SetQuotaLimit(QuotaLimit_);
-        response->Record.SetQuotaReserved(QuotaReserved_);
-        for (auto shard : ReleasedShards_)
-            response->Record.AddReleasedShards()->SetId(shard);
-        response->Record.SetInactiveClientTimeout(InactiveClientTimeout_.GetValue());
-        response->Record.SetInactiveServerTimeout(InactiveServerTimeout_.GetValue());
-        response->Record.SetLastDataStreamTimestamp(LastDataStreamTimestamp_.GetValue());
-        response->Record.SetLastStatusTimestamp(LastStatusTimestamp_.GetValue());
-
-        ctx.Send(ev->Sender, response);
-    }
-
+        //response->Record.SetReady(IsStreamReady); 
+        //response->Record.SetFinished(IsStreamFinished); 
+        response->Record.SetResponseQueueSize(LeftInGRpcAdaptorQueue_); 
+        for (auto &ev : QuotaRequestQueue_) 
+            response->Record.AddQuotaRequests()->SetId(ev->Get()->Record.GetShardId()); 
+        for (auto &pr : QuotaByShard_) { 
+            auto &quota = *response->Record.AddShardQuotas(); 
+            quota.SetShardId(pr.first); 
+            quota.SetQuota(pr.second); 
+        } 
+        response->Record.SetQuotaLimit(QuotaLimit_); 
+        response->Record.SetQuotaReserved(QuotaReserved_); 
+        for (auto shard : ReleasedShards_) 
+            response->Record.AddReleasedShards()->SetId(shard); 
+        response->Record.SetInactiveClientTimeout(InactiveClientTimeout_.GetValue()); 
+        response->Record.SetInactiveServerTimeout(InactiveServerTimeout_.GetValue()); 
+        response->Record.SetLastDataStreamTimestamp(LastDataStreamTimestamp_.GetValue()); 
+        response->Record.SetLastStatusTimestamp(LastStatusTimestamp_.GetValue()); 
+ 
+        ctx.Send(ev->Sender, response); 
+    } 
+ 
     void SendProposeRequest(const TActorContext &ctx) {
         const auto req = Request_->GetProtoRequest();
         auto actorId = SelfId();
@@ -567,7 +567,7 @@ private:
             LOG_DEBUG_S(ctx, NKikimrServices::READ_TABLE_API,
                         SelfId() << " Send zero quota to Shard " << rec.GetShardId()
                         << ", TxId " << rec.GetTxId());
-            ctx.Send(request->Sender, response.Release(), 0, request->Cookie);
+            ctx.Send(request->Sender, response.Release(), 0, request->Cookie); 
         }
 
         for (const auto& id : StreamSubscribers_) {

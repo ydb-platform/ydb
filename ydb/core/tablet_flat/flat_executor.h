@@ -22,16 +22,16 @@
 #include "flat_sausage_grind.h"
 #include "shared_cache_events.h"
 #include "util_fmt_logger.h"
-
+ 
 #include <ydb/core/control/immediate_control_board_wrapper.h>
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tablet/tablet_metrics.h>
 #include <ydb/core/util/queue_oneone_inplace.h>
-
+ 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
-
+ 
 #include <util/system/hp_timer.h>
 #include <util/thread/singleton.h>
 
@@ -330,7 +330,7 @@ class TExecutor
             EvActivateExecution = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
             EvUpdateCounters,
             EvCheckYellow,
-            EvUpdateCompactions,
+            EvUpdateCompactions, 
             EvActivateCompactionRead,
             EvActivateCompactionChanges,
             EvBrokenTransaction,
@@ -343,7 +343,7 @@ class TExecutor
         struct TEvActivateExecution : public TEventLocal<TEvActivateExecution, EvActivateExecution> {};
         struct TEvUpdateCounters : public TEventLocal<TEvUpdateCounters, EvUpdateCounters> {};
         struct TEvCheckYellow : public TEventLocal<TEvCheckYellow, EvCheckYellow> {};
-        struct TEvUpdateCompactions : public TEventLocal<TEvUpdateCompactions, EvUpdateCompactions> {};
+        struct TEvUpdateCompactions : public TEventLocal<TEvUpdateCompactions, EvUpdateCompactions> {}; 
         struct TEvActivateCompactionRead : public TEventLocal<TEvActivateCompactionRead, EvActivateCompactionRead> {};
         struct TEvActivateCompactionChanges : public TEventLocal<TEvActivateCompactionChanges, EvActivateCompactionChanges> {};
         struct TEvBrokenTransaction : public TEventLocal<TEvBrokenTransaction, EvBrokenTransaction> {};
@@ -435,7 +435,7 @@ class TExecutor
     size_t ReadyPartSwitches = 0;
 
     ui64 UsedTabletMemory = 0;
-
+ 
     TActorContext OwnerCtx() const;
 
     TControlWrapper LogFlushDelayOverrideUsec;
@@ -469,9 +469,9 @@ class TExecutor
     void TranscriptFollowerBootOpResult(ui32 res, const TActorContext &ctx);
     void ExecuteTransaction(TAutoPtr<TSeat> seat, const TActorContext &ctx);
     void CommitTransactionLog(TAutoPtr<TSeat>, TPageCollectionTxEnv&, TAutoPtr<NTable::TChange>,
-                              THPTimer &bookkeepingTimer, const TActorContext &ctx);
+                              THPTimer &bookkeepingTimer, const TActorContext &ctx); 
     void UnpinTransactionPages(TSeat &seat);
-    void ReleaseTxData(TSeat &seat, ui64 requested, const TActorContext &ctx);
+    void ReleaseTxData(TSeat &seat, ui64 requested, const TActorContext &ctx); 
     void PostponeTransaction(TAutoPtr<TSeat>, TPageCollectionTxEnv&, TAutoPtr<NTable::TChange>, THPTimer &bookkeepingTimer, const TActorContext &ctx);
     void PlanTransactionActivation();
     void MakeLogSnapshot();
@@ -492,7 +492,7 @@ class TExecutor
     void StartScan(ui64 serial, ui32 table) noexcept;
     void StartScan(ui64 task, TResource*) noexcept;
     void StartSeat(ui64 task, TResource*) noexcept;
-    void PostponedScanCleared(NResourceBroker::TEvResourceBroker::TEvResourceAllocated *msg, const TActorContext &ctx);
+    void PostponedScanCleared(NResourceBroker::TEvResourceBroker::TEvResourceAllocated *msg, const TActorContext &ctx); 
 
     void ApplyFollowerUpdate(THolder<TEvTablet::TFUpdateBody> update);
     void ApplyFollowerAuxUpdate(const TString &auxBody);
@@ -517,15 +517,15 @@ class TExecutor
     void Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled);
     void Handle(TEvBlobStorage::TEvGetResult::TPtr&, const TActorContext&);
 
-    void UpdateUsedTabletMemory();
+    void UpdateUsedTabletMemory(); 
     void UpdateCounters(const TActorContext &ctx);
     void UpdateYellow();
     void UpdateCompactions();
     void Handle(TEvTablet::TEvCheckBlobstorageStatusResult::TPtr &ev);
-
-    void ReadResourceProfile();
+ 
+    void ReadResourceProfile(); 
     TString CheckBorrowConsistency();
-
+ 
     // ICompactionBackend API
 
     ui64 OwnerTabletId() const override;
@@ -601,7 +601,7 @@ public:
     void GetTabletCounters(TEvTablet::TEvGetCounters::TPtr &ev) override;
 
     void UpdateConfig(TEvTablet::TEvUpdateConfig::TPtr &ev) override;
-
+ 
     void SendUserAuxUpdateToFollowers(TString upd, const TActorContext &ctx) override;
 
     THashMap<TLogoBlobID, TVector<ui64>> GetBorrowedParts() const override;

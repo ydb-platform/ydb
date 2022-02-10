@@ -61,7 +61,7 @@ static bool IsVerbose = true;
 
 static yexception LastException;
 
-constexpr ui32 DOMAIN_ID = 31;
+constexpr ui32 DOMAIN_ID = 31; 
 
 using namespace NActors;
 

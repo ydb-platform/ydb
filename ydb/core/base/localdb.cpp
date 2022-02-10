@@ -2,64 +2,64 @@
 #include "compile_time_flags.h"
 
 #include <ydb/core/protos/resource_broker.pb.h>
-
+ 
 namespace NKikimr {
 namespace NLocalDb {
 
-TCompactionPolicy::TBackgroundPolicy::TBackgroundPolicy()
-    : Threshold(101)
-    , PriorityBase(100)
-    , TimeFactor(1.0)
-    , ResourceBrokerTask(BackgroundCompactionTaskName)
-{}
-
-TCompactionPolicy::TBackgroundPolicy::TBackgroundPolicy(ui32 threshold,
-                                                        ui32 priorityBase,
-                                                        double timeFactor,
-                                                        const TString &resourceBrokerTask)
-    : Threshold(threshold)
-    , PriorityBase(priorityBase)
-    , TimeFactor(timeFactor)
-    , ResourceBrokerTask(resourceBrokerTask)
-{}
-
+TCompactionPolicy::TBackgroundPolicy::TBackgroundPolicy() 
+    : Threshold(101) 
+    , PriorityBase(100) 
+    , TimeFactor(1.0) 
+    , ResourceBrokerTask(BackgroundCompactionTaskName) 
+{} 
+ 
+TCompactionPolicy::TBackgroundPolicy::TBackgroundPolicy(ui32 threshold, 
+                                                        ui32 priorityBase, 
+                                                        double timeFactor, 
+                                                        const TString &resourceBrokerTask) 
+    : Threshold(threshold) 
+    , PriorityBase(priorityBase) 
+    , TimeFactor(timeFactor) 
+    , ResourceBrokerTask(resourceBrokerTask) 
+{} 
+ 
 TCompactionPolicy::TBackgroundPolicy::TBackgroundPolicy(const NKikimrSchemeOp::TCompactionPolicy::TBackgroundPolicy &policyPb)
     : Threshold(policyPb.HasThreshold() ? policyPb.GetThreshold() : 101)
     , PriorityBase(policyPb.HasPriorityBase() ? policyPb.GetPriorityBase() : 100)
     , TimeFactor(policyPb.HasTimeFactor() ? policyPb.GetTimeFactor() : 1.0)
-    , ResourceBrokerTask(policyPb.HasResourceBrokerTask() ? policyPb.GetResourceBrokerTask() : BackgroundCompactionTaskName)
-{}
-
+    , ResourceBrokerTask(policyPb.HasResourceBrokerTask() ? policyPb.GetResourceBrokerTask() : BackgroundCompactionTaskName) 
+{} 
+ 
 void TCompactionPolicy::TBackgroundPolicy::Serialize(NKikimrSchemeOp::TCompactionPolicy::TBackgroundPolicy& policyPb) const
-{
-    policyPb.SetThreshold(Threshold);
-    policyPb.SetPriorityBase(PriorityBase);
-    policyPb.SetTimeFactor(TimeFactor);
-    policyPb.SetResourceBrokerTask(ResourceBrokerTask);
-}
-
-TCompactionPolicy::TGenerationPolicy::TGenerationPolicy(ui64 sizeToCompact,
-                                                        ui32 countToCompact,
-                                                        ui32 forceCountToCompact,
-                                                        ui64 forceSizeToCompact,
-                                                        const TString &resourceBrokerTask,
-                                                        bool keepInCache,
-                                                        const TBackgroundPolicy &backgroundCompactionPolicy)
-    : SizeToCompact(sizeToCompact)
-    , CountToCompact(countToCompact)
-    , ForceCountToCompact(forceCountToCompact)
-    , ForceSizeToCompact(forceSizeToCompact)
-    , CompactionBrokerQueue(Max<ui32>())
-    , ResourceBrokerTask(resourceBrokerTask)
-    , KeepInCache(keepInCache)
-    , BackgroundCompactionPolicy(backgroundCompactionPolicy)
+{ 
+    policyPb.SetThreshold(Threshold); 
+    policyPb.SetPriorityBase(PriorityBase); 
+    policyPb.SetTimeFactor(TimeFactor); 
+    policyPb.SetResourceBrokerTask(ResourceBrokerTask); 
+} 
+ 
+TCompactionPolicy::TGenerationPolicy::TGenerationPolicy(ui64 sizeToCompact, 
+                                                        ui32 countToCompact, 
+                                                        ui32 forceCountToCompact, 
+                                                        ui64 forceSizeToCompact, 
+                                                        const TString &resourceBrokerTask, 
+                                                        bool keepInCache, 
+                                                        const TBackgroundPolicy &backgroundCompactionPolicy) 
+    : SizeToCompact(sizeToCompact) 
+    , CountToCompact(countToCompact) 
+    , ForceCountToCompact(forceCountToCompact) 
+    , ForceSizeToCompact(forceSizeToCompact) 
+    , CompactionBrokerQueue(Max<ui32>()) 
+    , ResourceBrokerTask(resourceBrokerTask) 
+    , KeepInCache(keepInCache) 
+    , BackgroundCompactionPolicy(backgroundCompactionPolicy) 
     , ExtraCompactionPercent(10)
     , ExtraCompactionExpPercent(110)
     , ExtraCompactionMinSize(16384)
     , ExtraCompactionExpMaxSize(sizeToCompact / countToCompact)
     , UpliftPartSize(sizeToCompact / countToCompact)
-{}
-
+{} 
+ 
 TCompactionPolicy::TGenerationPolicy::TGenerationPolicy(const NKikimrSchemeOp::TCompactionPolicy::TGenerationPolicy &policyPb)
     : SizeToCompact(policyPb.HasSizeToCompact() ? policyPb.GetSizeToCompact() : 0)
     , CountToCompact(policyPb.HasCountToCompact() ? policyPb.GetCountToCompact() : 5)
@@ -74,44 +74,44 @@ TCompactionPolicy::TGenerationPolicy::TGenerationPolicy(const NKikimrSchemeOp::T
     , ExtraCompactionMinSize(policyPb.HasExtraCompactionMinSize() ? policyPb.GetExtraCompactionMinSize() : 16384)
     , ExtraCompactionExpMaxSize(policyPb.HasExtraCompactionExpMaxSize() ? policyPb.GetExtraCompactionExpMaxSize() : SizeToCompact / CountToCompact)
     , UpliftPartSize(policyPb.HasUpliftPartSize() ? policyPb.GetUpliftPartSize() : SizeToCompact / CountToCompact)
-{
-    if (!ResourceBrokerTask)
-        ResourceBrokerTask = LegacyQueueIdToTaskName(CompactionBrokerQueue);
-}
-
+{ 
+    if (!ResourceBrokerTask) 
+        ResourceBrokerTask = LegacyQueueIdToTaskName(CompactionBrokerQueue); 
+} 
+ 
 void TCompactionPolicy::TGenerationPolicy::Serialize(NKikimrSchemeOp::TCompactionPolicy::TGenerationPolicy& policyPb) const
-{
-    policyPb.SetSizeToCompact(SizeToCompact);
-    policyPb.SetCountToCompact(CountToCompact);
-    policyPb.SetForceCountToCompact(ForceCountToCompact);
-    policyPb.SetForceSizeToCompact(ForceSizeToCompact);
-    policyPb.SetCompactionBrokerQueue(CompactionBrokerQueue);
-    policyPb.SetResourceBrokerTask(ResourceBrokerTask);
-    policyPb.SetKeepInCache(KeepInCache);
-    BackgroundCompactionPolicy.Serialize(*policyPb.MutableBackgroundCompactionPolicy());
+{ 
+    policyPb.SetSizeToCompact(SizeToCompact); 
+    policyPb.SetCountToCompact(CountToCompact); 
+    policyPb.SetForceCountToCompact(ForceCountToCompact); 
+    policyPb.SetForceSizeToCompact(ForceSizeToCompact); 
+    policyPb.SetCompactionBrokerQueue(CompactionBrokerQueue); 
+    policyPb.SetResourceBrokerTask(ResourceBrokerTask); 
+    policyPb.SetKeepInCache(KeepInCache); 
+    BackgroundCompactionPolicy.Serialize(*policyPb.MutableBackgroundCompactionPolicy()); 
     policyPb.SetExtraCompactionPercent(ExtraCompactionPercent);
     policyPb.SetExtraCompactionMinSize(ExtraCompactionMinSize);
     policyPb.SetExtraCompactionExpPercent(ExtraCompactionExpPercent);
     policyPb.SetExtraCompactionExpMaxSize(ExtraCompactionExpMaxSize);
     policyPb.SetUpliftPartSize(UpliftPartSize);
-}
-
+} 
+ 
 TCompactionPolicy::TCompactionPolicy()
     : InMemSizeToSnapshot(4 * 1024 * 1024)
     , InMemStepsToSnapshot(300)
     , InMemForceStepsToSnapshot(500)
     , InMemForceSizeToSnapshot(16 * 1024 * 1024)
-    , InMemCompactionBrokerQueue(0)
-    , InMemResourceBrokerTask(LegacyQueueIdToTaskName(0))
+    , InMemCompactionBrokerQueue(0) 
+    , InMemResourceBrokerTask(LegacyQueueIdToTaskName(0)) 
     , ReadAheadHiThreshold(64 * 1024 * 1024)
     , ReadAheadLoThreshold(16 * 1024 * 1024)
     , MinDataPageSize(7*1024)
-    , SnapshotCompactionBrokerQueue(0)
-    , SnapshotResourceBrokerTask(LegacyQueueIdToTaskName(0))
-    , BackupCompactionBrokerQueue(1)
-    , BackupResourceBrokerTask(ScanTaskName)
-    , DefaultTaskPriority(5)
-    , BackgroundSnapshotPolicy()
+    , SnapshotCompactionBrokerQueue(0) 
+    , SnapshotResourceBrokerTask(LegacyQueueIdToTaskName(0)) 
+    , BackupCompactionBrokerQueue(1) 
+    , BackupResourceBrokerTask(ScanTaskName) 
+    , DefaultTaskPriority(5) 
+    , BackgroundSnapshotPolicy() 
     , LogOverheadSizeToSnapshot(16 * 1024 * 1024)
     , LogOverheadCountToSnapshot(500)
     , DroppedRowsPercentToCompact(50)
@@ -132,7 +132,7 @@ TCompactionPolicy::TCompactionPolicy(const NKikimrSchemeOp::TCompactionPolicy& p
     , SnapshotCompactionBrokerQueue(policyPb.HasSnapBrokerQueue() ? policyPb.GetSnapBrokerQueue() : 0)
     , SnapshotResourceBrokerTask(policyPb.HasSnapshotResourceBrokerTask() ? policyPb.GetSnapshotResourceBrokerTask() : LegacyQueueIdToTaskName(0))
     , BackupCompactionBrokerQueue(policyPb.HasBackupBrokerQueue() ? policyPb.GetBackupBrokerQueue() : 1)
-    , BackupResourceBrokerTask(policyPb.HasBackupResourceBrokerTask() ? policyPb.GetBackupResourceBrokerTask() : ScanTaskName)
+    , BackupResourceBrokerTask(policyPb.HasBackupResourceBrokerTask() ? policyPb.GetBackupResourceBrokerTask() : ScanTaskName) 
     , DefaultTaskPriority(policyPb.HasDefaultTaskPriority() ? policyPb.GetDefaultTaskPriority() : 5)
     , BackgroundSnapshotPolicy(policyPb.HasBackgroundSnapshotPolicy() ? policyPb.GetBackgroundSnapshotPolicy() : TBackgroundPolicy())
     , LogOverheadSizeToSnapshot(policyPb.HasLogOverheadSizeToSnapshot() ? policyPb.GetLogOverheadSizeToSnapshot() : 16 * 1024 * 1024)
@@ -141,17 +141,17 @@ TCompactionPolicy::TCompactionPolicy(const NKikimrSchemeOp::TCompactionPolicy& p
     , CompactionStrategy(policyPb.GetCompactionStrategy())
     , KeepEraseMarkers(policyPb.HasKeepEraseMarkers() ? policyPb.GetKeepEraseMarkers() : false)
 {
-    if (!InMemResourceBrokerTask)
-        InMemResourceBrokerTask = LegacyQueueIdToTaskName(InMemCompactionBrokerQueue);
-    if (!SnapshotResourceBrokerTask)
-        SnapshotResourceBrokerTask = LegacyQueueIdToTaskName(SnapshotCompactionBrokerQueue);
+    if (!InMemResourceBrokerTask) 
+        InMemResourceBrokerTask = LegacyQueueIdToTaskName(InMemCompactionBrokerQueue); 
+    if (!SnapshotResourceBrokerTask) 
+        SnapshotResourceBrokerTask = LegacyQueueIdToTaskName(SnapshotCompactionBrokerQueue); 
     if (!BackupResourceBrokerTask || IsLegacyQueueIdTaskName(BackupResourceBrokerTask))
         BackupResourceBrokerTask = ScanTaskName;
     Generations.reserve(policyPb.GenerationSize());
     for (ui32 i = 0; i < policyPb.GenerationSize(); ++i) {
         const auto& g = policyPb.GetGeneration(i);
         Y_VERIFY_DEBUG(g.GetGenerationId() == i);
-        Generations.emplace_back(g);
+        Generations.emplace_back(g); 
     }
     if (policyPb.HasShardPolicy()) {
         ShardPolicy.CopyFrom(policyPb.GetShardPolicy());
@@ -163,17 +163,17 @@ void TCompactionPolicy::Serialize(NKikimrSchemeOp::TCompactionPolicy& policyPb) 
     policyPb.SetInMemStepsToSnapshot(InMemStepsToSnapshot);
     policyPb.SetInMemForceStepsToSnapshot(InMemForceStepsToSnapshot);
     policyPb.SetInMemForceSizeToSnapshot(InMemForceSizeToSnapshot);
-    policyPb.SetInMemCompactionBrokerQueue(InMemCompactionBrokerQueue);
-    policyPb.SetInMemResourceBrokerTask(InMemResourceBrokerTask);
+    policyPb.SetInMemCompactionBrokerQueue(InMemCompactionBrokerQueue); 
+    policyPb.SetInMemResourceBrokerTask(InMemResourceBrokerTask); 
     policyPb.SetReadAheadHiThreshold(ReadAheadHiThreshold);
     policyPb.SetReadAheadLoThreshold(ReadAheadLoThreshold);
     policyPb.SetMinDataPageSize(MinDataPageSize);
-    policyPb.SetSnapBrokerQueue(SnapshotCompactionBrokerQueue);
-    policyPb.SetSnapshotResourceBrokerTask(SnapshotResourceBrokerTask);
-    policyPb.SetBackupBrokerQueue(BackupCompactionBrokerQueue);
-    policyPb.SetBackupResourceBrokerTask(BackupResourceBrokerTask);
-    policyPb.SetDefaultTaskPriority(DefaultTaskPriority);
-    BackgroundSnapshotPolicy.Serialize(*policyPb.MutableBackgroundSnapshotPolicy());
+    policyPb.SetSnapBrokerQueue(SnapshotCompactionBrokerQueue); 
+    policyPb.SetSnapshotResourceBrokerTask(SnapshotResourceBrokerTask); 
+    policyPb.SetBackupBrokerQueue(BackupCompactionBrokerQueue); 
+    policyPb.SetBackupResourceBrokerTask(BackupResourceBrokerTask); 
+    policyPb.SetDefaultTaskPriority(DefaultTaskPriority); 
+    BackgroundSnapshotPolicy.Serialize(*policyPb.MutableBackgroundSnapshotPolicy()); 
     policyPb.SetLogOverheadSizeToSnapshot(LogOverheadSizeToSnapshot);
     policyPb.SetLogOverheadCountToSnapshot(LogOverheadCountToSnapshot);
     policyPb.SetDroppedRowsPercentToCompact(DroppedRowsPercentToCompact);
@@ -188,9 +188,9 @@ void TCompactionPolicy::Serialize(NKikimrSchemeOp::TCompactionPolicy& policyPb) 
     }
 
     for (ui32 i = 0; i < Generations.size(); ++i) {
-        auto &g = *policyPb.AddGeneration();
+        auto &g = *policyPb.AddGeneration(); 
         g.SetGenerationId(i);
-        Generations[i].Serialize(g);
+        Generations[i].Serialize(g); 
     }
 }
 
@@ -206,12 +206,12 @@ TCompactionPolicyPtr CreateDefaultTablePolicy() {
 TCompactionPolicyPtr CreateDefaultUserTablePolicy() {
     TCompactionPolicyPtr userPolicy = new TCompactionPolicy();
     userPolicy->Generations.reserve(3);
-    userPolicy->Generations.push_back({0, 8, 8, 128 * 1024 * 1024,
-                LegacyQueueIdToTaskName(1), true});
+    userPolicy->Generations.push_back({0, 8, 8, 128 * 1024 * 1024, 
+                LegacyQueueIdToTaskName(1), true}); 
     userPolicy->Generations.push_back({40 * 1024 * 1024, 5, 16, 512 * 1024 * 1024,
-                LegacyQueueIdToTaskName(2), false});
+                LegacyQueueIdToTaskName(2), false}); 
     userPolicy->Generations.push_back({400 * 1024 * 1024, 5, 16, 16ull * 1024 * 1024 * 1024,
-                LegacyQueueIdToTaskName(3), false});
+                LegacyQueueIdToTaskName(3), false}); 
 #if KIKIMR_DEFAULT_SHARDED_COMPACTION
     userPolicy->CompactionStrategy = NKikimrSchemeOp::CompactionStrategySharded;
 #endif
@@ -227,22 +227,22 @@ bool ValidateCompactionPolicyChange(const TCompactionPolicy& oldPolicy, const TC
     return true;
 }
 
-TString LegacyQueueIdToTaskName(ui32 id)
-{
-    switch (id) {
-    case 0:
-        return "compaction_gen0";
-    case 1:
-        return "compaction_gen1";
-    case 2:
-        return "compaction_gen2";
-    case 3:
-        return "compaction_gen3";
-    default:
-        return UnknownTaskName;
-    };
-}
-
+TString LegacyQueueIdToTaskName(ui32 id) 
+{ 
+    switch (id) { 
+    case 0: 
+        return "compaction_gen0"; 
+    case 1: 
+        return "compaction_gen1"; 
+    case 2: 
+        return "compaction_gen2"; 
+    case 3: 
+        return "compaction_gen3"; 
+    default: 
+        return UnknownTaskName; 
+    }; 
+} 
+ 
 bool IsLegacyQueueIdTaskName(const TString& taskName)
 {
     if (taskName.size() == LegacyQueueIdTaskNamePrefix.size() + 1 &&
@@ -255,13 +255,13 @@ bool IsLegacyQueueIdTaskName(const TString& taskName)
     return false;
 }
 
-const TString DefaultQueueName = "queue_default";
-const TString UnknownTaskName = "unknown";
-const TString TransactionTaskName = "transaction";
-const TString ScanTaskName = "scan";
-const TString BackgroundCompactionTaskName = "background_compaction";
+const TString DefaultQueueName = "queue_default"; 
+const TString UnknownTaskName = "unknown"; 
+const TString TransactionTaskName = "transaction"; 
+const TString ScanTaskName = "scan"; 
+const TString BackgroundCompactionTaskName = "background_compaction"; 
 const TString KqpResourceManagerTaskName = "kqp_query";
 const TString KqpResourceManagerQueue = "queue_kqp_resource_manager";
 const TString LegacyQueueIdTaskNamePrefix = "compaction_gen";
-
+ 
 }}

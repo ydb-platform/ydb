@@ -18,8 +18,8 @@ SRCS(
     tablet_flat_dummy.cpp
     tablet_helpers.cpp
     tablet_helpers.h
-    tenant_runtime.cpp
-    tenant_runtime.h
+    tenant_runtime.cpp 
+    tenant_runtime.h 
     test_client.cpp
     test_client.h
     service_mocks/access_service_mock.h

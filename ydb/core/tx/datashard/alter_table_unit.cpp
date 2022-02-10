@@ -1,10 +1,10 @@
-#include "datashard_impl.h"
-#include "datashard_pipeline.h"
-#include "execution_unit_ctors.h"
-
-namespace NKikimr {
+#include "datashard_impl.h" 
+#include "datashard_pipeline.h" 
+#include "execution_unit_ctors.h" 
+ 
+namespace NKikimr { 
 namespace NDataShard {
-
+ 
 ////////////////////////////////////////////////////////////////////////////////
 
 class TAlterMoveShadowUnit : public TExecutionUnit {
@@ -92,54 +92,54 @@ THolder<TExecutionUnit> CreateAlterMoveShadowUnit(TDataShard& dataShard, TPipeli
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TAlterTableUnit : public TExecutionUnit {
-public:
+class TAlterTableUnit : public TExecutionUnit { 
+public: 
     TAlterTableUnit(TDataShard &dataShard,
-                    TPipeline &pipeline);
-    ~TAlterTableUnit() override;
-
-    bool IsReadyToExecute(TOperation::TPtr op) const override;
-    EExecutionStatus Execute(TOperation::TPtr op,
-                             TTransactionContext &txc,
-                             const TActorContext &ctx) override;
-    void Complete(TOperation::TPtr op,
-                  const TActorContext &ctx) override;
-
-private:
-};
-
+                    TPipeline &pipeline); 
+    ~TAlterTableUnit() override; 
+ 
+    bool IsReadyToExecute(TOperation::TPtr op) const override; 
+    EExecutionStatus Execute(TOperation::TPtr op, 
+                             TTransactionContext &txc, 
+                             const TActorContext &ctx) override; 
+    void Complete(TOperation::TPtr op, 
+                  const TActorContext &ctx) override; 
+ 
+private: 
+}; 
+ 
 TAlterTableUnit::TAlterTableUnit(TDataShard &dataShard,
-                                 TPipeline &pipeline)
-    : TExecutionUnit(EExecutionUnitKind::AlterTable, false, dataShard, pipeline)
-{
-}
-
-TAlterTableUnit::~TAlterTableUnit()
-{
-}
-
-bool TAlterTableUnit::IsReadyToExecute(TOperation::TPtr) const
-{
-    return true;
-}
-
-EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
-                                          TTransactionContext &txc,
-                                          const TActorContext &ctx)
-{
-    TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
-    Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
-
-    auto &schemeTx = tx->GetSchemeTx();
-    if (!schemeTx.HasAlterTable())
-        return EExecutionStatus::Executed;
-
+                                 TPipeline &pipeline) 
+    : TExecutionUnit(EExecutionUnitKind::AlterTable, false, dataShard, pipeline) 
+{ 
+} 
+ 
+TAlterTableUnit::~TAlterTableUnit() 
+{ 
+} 
+ 
+bool TAlterTableUnit::IsReadyToExecute(TOperation::TPtr) const 
+{ 
+    return true; 
+} 
+ 
+EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op, 
+                                          TTransactionContext &txc, 
+                                          const TActorContext &ctx) 
+{ 
+    TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get()); 
+    Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind()); 
+ 
+    auto &schemeTx = tx->GetSchemeTx(); 
+    if (!schemeTx.HasAlterTable()) 
+        return EExecutionStatus::Executed; 
+ 
     const auto& alterTableTx = schemeTx.GetAlterTable();
 
-    LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
+    LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, 
                "Trying to ALTER TABLE at " << DataShard.TabletID()
                << " version " << alterTableTx.GetTableSchemaVersion());
-
+ 
     TPathId tableId(DataShard.GetPathOwnerId(), alterTableTx.GetId_Deprecated());
     if (alterTableTx.HasPathId()) {
         auto& pathId = alterTableTx.GetPathId();
@@ -148,25 +148,25 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
     }
 
     TUserTable::TPtr info = DataShard.AlterUserTable(ctx, txc, alterTableTx);
-
-    DataShard.AddUserTable(tableId, info);
-
-    BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
-    op->Result()->SetStepOrderId(op->GetStepOrder().ToPair());
-
-    return EExecutionStatus::ExecutedNoMoreRestarts;
-}
-
-void TAlterTableUnit::Complete(TOperation::TPtr,
-                               const TActorContext &)
-{
-}
-
+ 
+    DataShard.AddUserTable(tableId, info); 
+ 
+    BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE); 
+    op->Result()->SetStepOrderId(op->GetStepOrder().ToPair()); 
+ 
+    return EExecutionStatus::ExecutedNoMoreRestarts; 
+} 
+ 
+void TAlterTableUnit::Complete(TOperation::TPtr, 
+                               const TActorContext &) 
+{ 
+} 
+ 
 THolder<TExecutionUnit> CreateAlterTableUnit(TDataShard &dataShard,
-                                             TPipeline &pipeline)
-{
+                                             TPipeline &pipeline) 
+{ 
     return THolder(new TAlterTableUnit(dataShard, pipeline));
-}
-
+} 
+ 
 } // namespace NDataShard
-} // namespace NKikimr
+} // namespace NKikimr 

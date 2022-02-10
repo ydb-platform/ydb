@@ -326,19 +326,19 @@ namespace NMonitoring {
         THistogramPtr FindHistogram(const TString& value) const;
         THistogramPtr FindNamedHistogram(const TString& name,const TString& value) const;
 
-        void RemoveCounter(const TString &value);
-        void RemoveNamedCounter(const TString& name, const TString &value);
+        void RemoveCounter(const TString &value); 
+        void RemoveNamedCounter(const TString& name, const TString &value); 
 
         TIntrusivePtr<TDynamicCounters> GetSubgroup(const TString& name, const TString& value);
         TIntrusivePtr<TDynamicCounters> FindSubgroup(const TString& name, const TString& value) const;
-        void RemoveSubgroup(const TString& name, const TString& value);
-        void ReplaceSubgroup(const TString& name, const TString& value, TIntrusivePtr<TDynamicCounters> subgroup);
+        void RemoveSubgroup(const TString& name, const TString& value); 
+        void ReplaceSubgroup(const TString& name, const TString& value, TIntrusivePtr<TDynamicCounters> subgroup); 
 
-        // Move all counters from specified subgroup and remove the subgroup.
-        void MergeWithSubgroup(const TString& name, const TString& value);
-        // Recursively reset all/deriv counters to 0.
-        void ResetCounters(bool derivOnly = false);
-
+        // Move all counters from specified subgroup and remove the subgroup. 
+        void MergeWithSubgroup(const TString& name, const TString& value); 
+        // Recursively reset all/deriv counters to 0. 
+        void ResetCounters(bool derivOnly = false); 
+ 
         void RegisterSubgroup(const TString& name,
             const TString& value,
             TIntrusivePtr<TDynamicCounters> subgroup);
@@ -363,7 +363,7 @@ namespace NMonitoring {
 
         void RegisterCountable(const TString& name, const TString& value, TCountablePtr countable);
         void RemoveExpired() const;
-
+ 
         template <bool expiring, class TCounterType, class... TArgs>
         TCountablePtr GetNamedCounterImpl(const TString& name, const TString& value, TArgs&&... args);
 

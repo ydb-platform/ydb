@@ -36,10 +36,10 @@ public:
             && rec.GetAction() != "profile"
             && rec.GetAction() != "redeploy"
             && rec.GetAction() != "prepare"
-            && rec.GetAction() != "repair-link"
-            && rec.GetAction() != "repair-bmc"
-            && rec.GetAction() != "repair-overheat"
-            && rec.GetAction() != "repair-capping"
+            && rec.GetAction() != "repair-link" 
+            && rec.GetAction() != "repair-bmc" 
+            && rec.GetAction() != "repair-overheat" 
+            && rec.GetAction() != "repair-capping" 
             && rec.GetAction() != "deactivate") {
             ReplyWithErrorAndDie(TStatus::WRONG_REQUEST, "Unsupported action", ctx);
             return;
@@ -169,17 +169,17 @@ private:
             } else if (task.GetAction() == "redeploy") {
                 action.SetType(TAction::SHUTDOWN_HOST);
                 action.SetDuration(TDuration::Max().GetValue());
-            } else if (task.GetAction() == "repair-link") {
-                action.SetType(TAction::SHUTDOWN_HOST);
+            } else if (task.GetAction() == "repair-link") { 
+                action.SetType(TAction::SHUTDOWN_HOST); 
                 action.SetDuration(TDuration::Max().GetValue());
-            } else if (task.GetAction() == "repair-bmc") {
-                action.SetType(TAction::SHUTDOWN_HOST);
+            } else if (task.GetAction() == "repair-bmc") { 
+                action.SetType(TAction::SHUTDOWN_HOST); 
                 action.SetDuration(TDuration::Max().GetValue());
-            } else if (task.GetAction() == "repair-overheat") {
-                action.SetType(TAction::SHUTDOWN_HOST);
+            } else if (task.GetAction() == "repair-overheat") { 
+                action.SetType(TAction::SHUTDOWN_HOST); 
                 action.SetDuration(TDuration::Max().GetValue());
-            } else if (task.GetAction() == "repair-capping") {
-                action.SetType(TAction::SHUTDOWN_HOST);
+            } else if (task.GetAction() == "repair-capping") { 
+                action.SetType(TAction::SHUTDOWN_HOST); 
                 action.SetDuration(TDuration::Max().GetValue());
             } else
                 Y_FAIL("Unknown action");

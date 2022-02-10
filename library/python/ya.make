@@ -57,8 +57,8 @@ RECURSE(
     django/example
     django-idm-api
     django-multic
-    django-sform 
-    django-sform/tests 
+    django-sform
+    django-sform/tests
     django_alive
     django_celery_monitoring
     django_russian

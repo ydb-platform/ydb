@@ -37,7 +37,7 @@ TClientCommandRootCommon::TClientCommandRootCommon(const TClientSettings& settin
     AddCommand(std::make_unique<TCommandConfig>());
     AddCommand(std::make_unique<TCommandInit>());
     AddCommand(std::make_unique<TCommandYql>());
-    AddCommand(std::make_unique<TCommandStream>()); 
+    AddCommand(std::make_unique<TCommandStream>());
     AddCommand(std::make_unique<TCommandWorkload>());
 }
 

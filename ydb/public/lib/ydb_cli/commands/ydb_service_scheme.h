@@ -48,11 +48,11 @@ private:
     int PrintResponseProtoJsonBase64(const NTable::TTableDescription& tableDescription);
     void WarnAboutTableOptions();
 
-    int DescribeStream(TDriver& driver); 
-    int PrintStreamResponse(const NYdb::NPersQueue::TDescribeTopicResult& result); 
-    int PrintStreamResponsePretty(const NYdb::NPersQueue::TDescribeTopicResult::TTopicSettings& settings); 
-    int PrintStreamResponseProtoJsonBase64(const NYdb::NPersQueue::TDescribeTopicResult& result); 
- 
+    int DescribeStream(TDriver& driver);
+    int PrintStreamResponse(const NYdb::NPersQueue::TDescribeTopicResult& result);
+    int PrintStreamResponsePretty(const NYdb::NPersQueue::TDescribeTopicResult::TTopicSettings& settings);
+    int PrintStreamResponseProtoJsonBase64(const NYdb::NPersQueue::TDescribeTopicResult& result);
+
     // Common options
     bool ShowPermissions = false;
     // Table options

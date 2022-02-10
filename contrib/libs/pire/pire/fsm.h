@@ -201,7 +201,7 @@ namespace Pire {
 
 
 		/// Builds letters equivalence classes
-		void Sparse(bool needEpsilons = false);
+		void Sparse(bool needEpsilons = false); 
 
 		/// Unpacks all letters equivalence classs back into transitions table
 		void Unsparse();

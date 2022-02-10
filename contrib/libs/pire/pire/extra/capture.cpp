@@ -34,25 +34,25 @@ namespace {
 			: State(0)
 			, Pos(pos)
 			, Level(0)
-			, StateRepetition(NoRepetition)
+			, StateRepetition(NoRepetition) 
 		{}
 		
-		bool Accepts(wchar32 c) const { return c == '(' || c == '+' || c == '*' || c == '?' || c == '{'; }
+		bool Accepts(wchar32 c) const { return c == '(' || c == '+' || c == '*' || c == '?' || c == '{'; } 
 		Term Lex()
 		{
-			wchar32 c = GetChar();
-			if (!Accepts(c))
+			wchar32 c = GetChar(); 
+			if (!Accepts(c)) 
 				Error("How did we get here?!..");
-			if (c != '(') {
-				wchar32 next = PeekChar();
-				if (next == '?') {
-					StateRepetition = NonGreedyRepetition;
-					GetChar();
-				}
-				else
-					StateRepetition = GreedyRepetition;
-			}
-			else if (State == 0 && Pos > 1)
+			if (c != '(') { 
+				wchar32 next = PeekChar(); 
+				if (next == '?') { 
+					StateRepetition = NonGreedyRepetition; 
+					GetChar(); 
+				} 
+				else 
+					StateRepetition = GreedyRepetition; 
+			} 
+			else if (State == 0 && Pos > 1) 
 				--Pos;
 			else if (State == 0 && Pos == 1) {
 				State = 1;
@@ -60,27 +60,27 @@ namespace {
 			} else if (State == 1) {
 				++Level;
 			}
-			if (c == '(')
-				return Term(TokenTypes::Open);
-			else if (c == '+')
-				return Term::Repetition(1, Inf);
-			else if (c == '*')
-				return Term::Repetition(0, Inf);
-			else if (c == '?')
-				return Term::Repetition(0, 1);
-			else {
-				UngetChar(c);
-				return Term(0);
-			}
+			if (c == '(') 
+				return Term(TokenTypes::Open); 
+			else if (c == '+') 
+				return Term::Repetition(1, Inf); 
+			else if (c == '*') 
+				return Term::Repetition(0, Inf); 
+			else if (c == '?') 
+				return Term::Repetition(0, 1); 
+			else { 
+				UngetChar(c); 
+				return Term(0); 
+			} 
 		}
 		
 		void Parenthesized(Fsm& fsm)
 		{
-			if (StateRepetition != NoRepetition) {
-				bool greedy = (StateRepetition == GreedyRepetition);
-				SetRepetitionMark(fsm, greedy);
-				StateRepetition = NoRepetition;
-			} else if (State == 1 && Level == 0) {
+			if (StateRepetition != NoRepetition) { 
+				bool greedy = (StateRepetition == GreedyRepetition); 
+				SetRepetitionMark(fsm, greedy); 
+				StateRepetition = NoRepetition; 
+			} else if (State == 1 && Level == 0) { 
 				SetCaptureMark(fsm);
 				State = 2;
 			} else if (State == 1 && Level > 0)
@@ -90,23 +90,23 @@ namespace {
 		unsigned State;
 		size_t Pos;
 		size_t Level;
-		RepetitionTypes StateRepetition;
-
-		void SetRepetitionMark(Fsm& fsm, bool greedy)
-		{
+		RepetitionTypes StateRepetition; 
+ 
+		void SetRepetitionMark(Fsm& fsm, bool greedy) 
+		{ 
 			fsm.Resize(fsm.Size() + 1);
-			fsm.ConnectFinal(fsm.Size() - 1);
-
-			for (size_t state = 0; state < fsm.Size() - 1; ++state)
-				if (fsm.IsFinal(state))
-					if (greedy)
-						fsm.SetOutput(state, fsm.Size() - 1, SlowCapturingScanner::EndRepetition);
-					else
-						fsm.SetOutput(state, fsm.Size() - 1, SlowCapturingScanner::EndNonGreedyRepetition);
-			fsm.ClearFinal();
-			fsm.SetFinal(fsm.Size() - 1, true);
-			fsm.SetIsDetermined(false);
-		}
+			fsm.ConnectFinal(fsm.Size() - 1); 
+ 
+			for (size_t state = 0; state < fsm.Size() - 1; ++state) 
+				if (fsm.IsFinal(state)) 
+					if (greedy) 
+						fsm.SetOutput(state, fsm.Size() - 1, SlowCapturingScanner::EndRepetition); 
+					else 
+						fsm.SetOutput(state, fsm.Size() - 1, SlowCapturingScanner::EndNonGreedyRepetition); 
+			fsm.ClearFinal(); 
+			fsm.SetFinal(fsm.Size() - 1, true); 
+			fsm.SetIsDetermined(false); 
+		} 
 
 		void SetCaptureMark(Fsm& fsm)
 		{

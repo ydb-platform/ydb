@@ -290,15 +290,15 @@ std::string_view LongestPrefix(const Scanner& sc, std::string_view str, bool thr
 {
 	typename Scanner::State st;
 	sc.Initialize(st);
-	if (throughBeginMark)
-		Pire::Step(sc, st, BeginMark);
+	if (throughBeginMark) 
+		Pire::Step(sc, st, BeginMark); 
 	const char* pos = (sc.Final(st) ? str.data() : nullptr);
 	Impl::DoRun(sc, st, str, Impl::LongestPrefixPred<Scanner>(pos));
-	if (throughEndMark) {
-		Pire::Step(sc, st, EndMark);
-		if (sc.Final(st))
+	if (throughEndMark) { 
+		Pire::Step(sc, st, EndMark); 
+		if (sc.Final(st)) 
 			pos = str.data() + str.size();
-	}
+	} 
 	return pos ? str.substr(0, pos - str.data()) : std::string_view{};
 }
 
@@ -316,17 +316,17 @@ std::string_view ShortestPrefix(const Scanner& sc, std::string_view str, bool th
 {
 	typename Scanner::State st;
 	sc.Initialize(st);
-	if (throughBeginMark)
-		Pire::Step(sc, st, BeginMark);
+	if (throughBeginMark) 
+		Pire::Step(sc, st, BeginMark); 
 	if (sc.Final(st))
 		return str.substr(0, 0);
 	const char* pos = nullptr;
 	Impl::DoRun(sc, st, str, Impl::ShortestPrefixPred<Scanner>(pos));
-	if (throughEndMark) {
-		Pire::Step(sc, st, EndMark);
+	if (throughEndMark) { 
+		Pire::Step(sc, st, EndMark); 
 		if (sc.Final(st) && !pos)
 			pos = str.data() + str.size();
-	}
+	} 
 	return pos ? str.substr(0, pos - str.data()) : std::string_view{};
 }
 
@@ -347,8 +347,8 @@ inline std::string_view LongestSuffix(const Scanner& scanner, std::string_view s
 {
 	typename Scanner::State state;
 	scanner.Initialize(state);
-	if (throughEndMark)
-		Step(scanner, state, EndMark);
+	if (throughEndMark) 
+		Step(scanner, state, EndMark); 
 	PIRE_IFDEBUG(Cdbg << "Running LongestSuffix on string " << ystring(str) << Endl);
 	PIRE_IFDEBUG(Cdbg << "Initial state " << StDump(scanner, state) << Endl);
 
@@ -363,11 +363,11 @@ inline std::string_view LongestSuffix(const Scanner& scanner, std::string_view s
 	}
 	if (scanner.Final(state))
 		suffix = str.substr(begin - str.data());
-	if (throughBeginMark) {
-		Step(scanner, state, BeginMark);
-		if (scanner.Final(state))
+	if (throughBeginMark) { 
+		Step(scanner, state, BeginMark); 
+		if (scanner.Final(state)) 
 			suffix = str.substr(begin - str.data());
-	}
+	} 
 	return suffix;
 }
 
@@ -386,8 +386,8 @@ inline std::string_view ShortestSuffix(const Scanner& scanner, std::string_view 
 	auto begin = str.data() + str.size();
 	typename Scanner::State state;
 	scanner.Initialize(state);
-	if (throughEndMark)
-		Step(scanner, state, EndMark);
+	if (throughEndMark) 
+		Step(scanner, state, EndMark); 
 	PIRE_IFDEBUG(Cdbg << "Running ShortestSuffix on string " << ystring(str) << Endl);
 	PIRE_IFDEBUG(Cdbg << "Initial state " << StDump(scanner, state) << Endl);
 
@@ -396,8 +396,8 @@ inline std::string_view ShortestSuffix(const Scanner& scanner, std::string_view 
 		scanner.Next(state, (unsigned char)*begin);
 		PIRE_IFDEBUG(Cdbg << *rbegin << " => state " << StDump(scanner, state) << Endl);
 	}
-	if (throughBeginMark)
-		Step(scanner, state, BeginMark);
+	if (throughBeginMark) 
+		Step(scanner, state, BeginMark); 
 	return scanner.Final(state) ? str.substr(begin - str.data()) : std::string_view{};
 }
 

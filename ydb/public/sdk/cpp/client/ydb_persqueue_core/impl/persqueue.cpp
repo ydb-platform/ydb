@@ -72,7 +72,7 @@ TString TCredentials::GetIamServiceAccountKey() const {
 TDescribeTopicResult::TDescribeTopicResult(TStatus status, const Ydb::PersQueue::V1::DescribeTopicResult& result)
     : TStatus(std::move(status))
     , TopicSettings_(result.settings())
-    , Proto_(result)
+    , Proto_(result) 
 {
 }
 

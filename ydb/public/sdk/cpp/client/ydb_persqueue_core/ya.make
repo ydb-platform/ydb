@@ -9,7 +9,7 @@ GENERATE_ENUM_SERIALIZATION(ydb/public/sdk/cpp/client/ydb_persqueue_core/persque
 
 SRCS(
     persqueue.h
-    proto_accessor.cpp
+    proto_accessor.cpp 
 )
 
 PEERDIR(

@@ -15,10 +15,10 @@
 #include <exception>
 #include <variant>
 
-namespace NYdb {
-    class TProtoAccessor;
-}
-
+namespace NYdb { 
+    class TProtoAccessor; 
+} 
+ 
 namespace NYdb::NPersQueue {
 
 enum class EFormat {
@@ -57,7 +57,7 @@ private:
 
 // Result for describe resource request.
 struct TDescribeTopicResult : public TStatus {
-    friend class NYdb::TProtoAccessor;
+    friend class NYdb::TProtoAccessor; 
 
     struct TTopicSettings {
         TTopicSettings(const Ydb::PersQueue::V1::TopicSettings&);
@@ -158,10 +158,10 @@ struct TDescribeTopicResult : public TStatus {
 
 private:
     TTopicSettings TopicSettings_;
-    [[nodiscard]] const Ydb::PersQueue::V1::DescribeTopicResult& GetProto() const {
-        return Proto_;
-    }
-    const Ydb::PersQueue::V1::DescribeTopicResult Proto_;
+    [[nodiscard]] const Ydb::PersQueue::V1::DescribeTopicResult& GetProto() const { 
+        return Proto_; 
+    } 
+    const Ydb::PersQueue::V1::DescribeTopicResult Proto_; 
 };
 
 using TAsyncDescribeTopicResult = NThreading::TFuture<TDescribeTopicResult>;

@@ -355,12 +355,12 @@ protected:
     TString Path;
 };
 
-class TCommandWithStreamName {
-protected:
-    void ParseStreamName(const TClientCommand::TConfig& config, const size_t argPos);
-
-    TString StreamName;
-};
-
+class TCommandWithStreamName { 
+protected: 
+    void ParseStreamName(const TClientCommand::TConfig& config, const size_t argPos); 
+ 
+    TString StreamName; 
+}; 
+ 
 }
 }

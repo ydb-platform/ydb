@@ -178,8 +178,8 @@ int TCommandDescribe::PrintPathResponse(TDriver& driver, const NScheme::TDescrib
     switch (entry.Type) {
     case NScheme::ESchemeEntryType::Table:
         return DescribeTable(driver);
-    case NScheme::ESchemeEntryType::PqGroup:
-        return DescribeStream(driver);
+    case NScheme::ESchemeEntryType::PqGroup: 
+        return DescribeStream(driver); 
     default:
         WarnAboutTableOptions();
         PrintEntryVerbose(entry, ShowPermissions);
@@ -187,101 +187,101 @@ int TCommandDescribe::PrintPathResponse(TDriver& driver, const NScheme::TDescrib
     return EXIT_SUCCESS;
 }
 
-namespace {
-    TString FormatCodecs(const TVector<NYdb::NPersQueue::ECodec> codecs) {
-        if (codecs.empty()) {
-            return "";
-        }
-
-        TStringBuilder builder = TStringBuilder();
-        for (unsigned int i = 0; i < codecs.size() - 1; ++i) {
-            builder << codecs[i] << ", ";
-        }
-        builder << codecs[codecs.size() - 1];
-        return ToString(builder);
-    }
-
-    void PrintStreamReadRules(
-            const TVector<NYdb::NPersQueue::TDescribeTopicResult::
-                                  TTopicSettings::TReadRule>& readRules) {
-        if (readRules.empty()) {
-            return;
-        }
-        TPrettyTable table(
-                {"ConsumerName", "SupportedCodecs",
-                 "StartingMessageTimestamp", "Important",
-                 "ServiceType", "SupportedFormat", "Version"});
-        for (const auto& rule: readRules) {
-            table.AddRow()
-                .Column(0, rule.ConsumerName())
-                .Column(1, FormatCodecs(rule.SupportedCodecs()))
-                .Column(2, rule.StartingMessageTimestamp().ToRfc822StringLocal())
-                .Column(3, rule.Important())
-                .Column(4, rule.ServiceType())
-                .Column(5, rule.SupportedFormat())
-                .Column(6, rule.Version());
-        }
-        Cout << Endl << "ReadRules: " << Endl;
-        Cout << table;
-    }
-}
-
-int TCommandDescribe::PrintStreamResponsePretty(const NYdb::NPersQueue::TDescribeTopicResult::TTopicSettings &settings) {
-    Cout << Endl << "RetentionPeriod: " << settings.RetentionPeriod().Hours() << " hours";
-    Cout << Endl << "PartitionsCount: " << settings.PartitionsCount();
-    Cout << Endl << "SupportedFormat: " << settings.SupportedFormat();
-    if (!settings.SupportedCodecs().empty()) {
-        Cout << Endl << "SupportedCodecs: " << FormatCodecs(settings.SupportedCodecs()) << Endl;
-    }
-    PrintStreamReadRules(settings.ReadRules());
-    return EXIT_SUCCESS;
-}
-
-int TCommandDescribe::PrintStreamResponseProtoJsonBase64(
-        const NYdb::NPersQueue::
-                TDescribeTopicResult& result) {
-    TString json;
-    google::protobuf::util::JsonPrintOptions jsonOpts;
-    jsonOpts.preserve_proto_field_names = true;
-    auto convertStatus = google::protobuf::util::MessageToJsonString(
-            TProtoAccessor::GetProto(result),
-            &json,
-            jsonOpts
-    );
-    if (convertStatus.ok()) {
-        Cout << json << Endl;
-    } else {
-        Cerr << "Error occurred while converting result proto to json" << Endl;
-        return EXIT_FAILURE;
-    }
-    return EXIT_SUCCESS;
-}
-
-int TCommandDescribe::PrintStreamResponse(const NYdb::NPersQueue::TDescribeTopicResult& result) {
-    switch (OutputFormat) {
-        case EOutputFormat::Default:
-        case EOutputFormat::Pretty:
-            PrintStreamResponsePretty(result.TopicSettings());
-            break;
-        case EOutputFormat::Json:
-            Cerr << "Warning! Option --json is deprecated and will be removed soon. "
-                 << "Use \"--format proto-json-base64\" option instead." << Endl;
+namespace { 
+    TString FormatCodecs(const TVector<NYdb::NPersQueue::ECodec> codecs) { 
+        if (codecs.empty()) { 
+            return ""; 
+        } 
+ 
+        TStringBuilder builder = TStringBuilder(); 
+        for (unsigned int i = 0; i < codecs.size() - 1; ++i) { 
+            builder << codecs[i] << ", "; 
+        } 
+        builder << codecs[codecs.size() - 1]; 
+        return ToString(builder); 
+    } 
+ 
+    void PrintStreamReadRules( 
+            const TVector<NYdb::NPersQueue::TDescribeTopicResult:: 
+                                  TTopicSettings::TReadRule>& readRules) { 
+        if (readRules.empty()) { 
+            return; 
+        } 
+        TPrettyTable table( 
+                {"ConsumerName", "SupportedCodecs", 
+                 "StartingMessageTimestamp", "Important", 
+                 "ServiceType", "SupportedFormat", "Version"}); 
+        for (const auto& rule: readRules) { 
+            table.AddRow() 
+                .Column(0, rule.ConsumerName()) 
+                .Column(1, FormatCodecs(rule.SupportedCodecs())) 
+                .Column(2, rule.StartingMessageTimestamp().ToRfc822StringLocal()) 
+                .Column(3, rule.Important()) 
+                .Column(4, rule.ServiceType()) 
+                .Column(5, rule.SupportedFormat()) 
+                .Column(6, rule.Version()); 
+        } 
+        Cout << Endl << "ReadRules: " << Endl; 
+        Cout << table; 
+    } 
+} 
+ 
+int TCommandDescribe::PrintStreamResponsePretty(const NYdb::NPersQueue::TDescribeTopicResult::TTopicSettings &settings) { 
+    Cout << Endl << "RetentionPeriod: " << settings.RetentionPeriod().Hours() << " hours"; 
+    Cout << Endl << "PartitionsCount: " << settings.PartitionsCount(); 
+    Cout << Endl << "SupportedFormat: " << settings.SupportedFormat(); 
+    if (!settings.SupportedCodecs().empty()) { 
+        Cout << Endl << "SupportedCodecs: " << FormatCodecs(settings.SupportedCodecs()) << Endl; 
+    } 
+    PrintStreamReadRules(settings.ReadRules()); 
+    return EXIT_SUCCESS; 
+} 
+ 
+int TCommandDescribe::PrintStreamResponseProtoJsonBase64( 
+        const NYdb::NPersQueue:: 
+                TDescribeTopicResult& result) { 
+    TString json; 
+    google::protobuf::util::JsonPrintOptions jsonOpts; 
+    jsonOpts.preserve_proto_field_names = true; 
+    auto convertStatus = google::protobuf::util::MessageToJsonString( 
+            TProtoAccessor::GetProto(result), 
+            &json, 
+            jsonOpts 
+    ); 
+    if (convertStatus.ok()) { 
+        Cout << json << Endl; 
+    } else { 
+        Cerr << "Error occurred while converting result proto to json" << Endl; 
+        return EXIT_FAILURE; 
+    } 
+    return EXIT_SUCCESS; 
+} 
+ 
+int TCommandDescribe::PrintStreamResponse(const NYdb::NPersQueue::TDescribeTopicResult& result) { 
+    switch (OutputFormat) { 
+        case EOutputFormat::Default: 
+        case EOutputFormat::Pretty: 
+            PrintStreamResponsePretty(result.TopicSettings()); 
+            break; 
+        case EOutputFormat::Json: 
+            Cerr << "Warning! Option --json is deprecated and will be removed soon. " 
+                 << "Use \"--format proto-json-base64\" option instead." << Endl; 
             [[fallthrough]];
-        case EOutputFormat::ProtoJsonBase64:
-            return PrintStreamResponseProtoJsonBase64(result);
-        default:
-            throw TMissUseException() << "This command doesn't support " << OutputFormat << " output format";
-    }
-    return EXIT_SUCCESS;
-}
-
-int TCommandDescribe::DescribeStream(TDriver& driver) {
-    NYdb::NPersQueue::TPersQueueClient persQueueClient(driver);
-    auto describeResult = persQueueClient.DescribeTopic(Path).GetValueSync();
-    ThrowOnError(describeResult);
-    return PrintStreamResponse(describeResult);
-}
-
+        case EOutputFormat::ProtoJsonBase64: 
+            return PrintStreamResponseProtoJsonBase64(result); 
+        default: 
+            throw TMissUseException() << "This command doesn't support " << OutputFormat << " output format"; 
+    } 
+    return EXIT_SUCCESS; 
+} 
+ 
+int TCommandDescribe::DescribeStream(TDriver& driver) { 
+    NYdb::NPersQueue::TPersQueueClient persQueueClient(driver); 
+    auto describeResult = persQueueClient.DescribeTopic(Path).GetValueSync(); 
+    ThrowOnError(describeResult); 
+    return PrintStreamResponse(describeResult); 
+} 
+ 
 int TCommandDescribe::DescribeTable(TDriver& driver) {
     NTable::TTableClient client(driver);
     NTable::TCreateSessionResult sessionResult = client.GetSession(NTable::TCreateSessionSettings()).GetValueSync();

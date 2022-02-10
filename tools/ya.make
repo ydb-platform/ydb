@@ -162,7 +162,7 @@ RECURSE(
     trie_ops
     trie_ops/lib
     trie_ops/tests
-    trigram_index_print 
+    trigram_index_print
     uc
     unpackrichtree
     unpackrrr

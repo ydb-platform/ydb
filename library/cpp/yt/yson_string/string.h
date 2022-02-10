@@ -128,7 +128,7 @@ bool operator != (const TYsonString& lhs, const TYsonStringBuf& rhs);
 bool operator != (const TYsonStringBuf& lhs, const TYsonString& rhs);
 bool operator != (const TYsonStringBuf& lhs, const TYsonStringBuf& rhs);
 
-TString ToString(const TYsonString& yson);
+TString ToString(const TYsonString& yson); 
 TString ToString(const TYsonStringBuf& yson);
 
 ////////////////////////////////////////////////////////////////////////////////

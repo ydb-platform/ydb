@@ -1,29 +1,29 @@
-#pragma once
-
+#pragma once 
+ 
 #include "new.h"
 #include "range.h"
 #include "shared_range.h"
 
 #include <type_traits>
 
-namespace NYT {
-
-////////////////////////////////////////////////////////////////////////////////
-
+namespace NYT { 
+ 
+//////////////////////////////////////////////////////////////////////////////// 
+ 
 // Forward declaration.
 class TBlob;
 
 //! A non-owning reference to a range of memory.
-class TRef
+class TRef 
     : public TRange<char>
-{
-public:
+{ 
+public: 
     //! Creates a null TRef.
     TRef() = default;
-
+ 
     //! Creates a TRef for a given block of memory.
     TRef(const void* data, size_t size);
-
+ 
     //! Creates a TRef for a given range of memory.
     TRef(const void* begin, const void* end);
 
@@ -32,7 +32,7 @@ public:
 
     //! Creates a non-owning TRef for a given blob.
     static TRef FromBlob(const TBlob& blob);
-
+ 
     //! Creates a non-owning TRef for a given string.
     static TRef FromString(const TString& str);
 
@@ -45,11 +45,11 @@ public:
 
     //! Creates a TRef for a part of existing range.
     TRef Slice(size_t startOffset, size_t endOffset) const;
-
+ 
     //! Compares the content for bitwise equality.
     static bool AreBitwiseEqual(TRef lhs, TRef rhs);
 };
-
+ 
 ////////////////////////////////////////////////////////////////////////////////
 
 //! A non-owning reference to a mutable range of memory.
@@ -77,7 +77,7 @@ public:
 
     //! Creates a non-owning TMutableRef for a given blob.
     static TMutableRef FromBlob(TBlob& blob);
-
+ 
     //! Creates a non-owning TMutableRef for a given pod structure.
     template <class T>
     static TMutableRef FromPod(T& data);
@@ -88,10 +88,10 @@ public:
 
     //! Creates a TMutableRef for a part of existing range.
     TMutableRef Slice(size_t startOffset, size_t endOffset) const;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
+}; 
+ 
+//////////////////////////////////////////////////////////////////////////////// 
+ 
 //! Default tag type for memory blocks allocated via TSharedRef.
 /*!
  *  Each newly allocated TSharedRef blob is associated with a tag type
@@ -100,10 +100,10 @@ public:
 struct TDefaultSharedBlobTag { };
 
 //! A reference to a range of memory with shared ownership.
-class TSharedRef
+class TSharedRef 
     : public TSharedRange<char>
-{
-public:
+{ 
+public: 
     //! Creates a null TSharedRef.
     TSharedRef() = default;
 
@@ -141,7 +141,7 @@ public:
 
     //! Creates a TSharedRef for a given blob taking ownership of its content.
     static TSharedRef FromBlob(TBlob&& blob);
-
+ 
     //! Creates a copy of a given TRef.
     //! The memory is marked with a given tag.
     static TSharedRef MakeCopy(TRef ref, TRefCountedTypeCookie tagCookie);
@@ -150,13 +150,13 @@ public:
     //! The memory is marked with a given tag.
     template <class TTag>
     static TSharedRef MakeCopy(TRef ref);
-
+ 
     //! Creates a TSharedRef for a part of existing range.
     TSharedRef Slice(size_t startOffset, size_t endOffset) const;
-
+ 
     //! Creates a TSharedRef for a part of existing range.
     TSharedRef Slice(const void* begin, const void* end) const;
-
+ 
     //! Creates a vector of slices with specified size.
     std::vector<TSharedRef> Split(size_t partSize) const;
 
@@ -189,13 +189,13 @@ public:
 
     //! Converts a TSharedMutableRef to TMutableRef.
     operator TMutableRef() const;
-
+ 
     //! Converts a TSharedMutableRef to TSharedRef.
     operator TSharedRef() const;
-
+ 
     //! Converts a TSharedMutableRef to TRef.
     operator TRef() const;
-
+ 
 
     //! Allocates a new shared block of memory.
     //! The memory is marked with a given tag.
@@ -301,8 +301,8 @@ private:
         size_t poolCapacity,
         TRefCountedTypeCookie cookie,
         As&&... args);
-};
-
+}; 
+ 
 // STL interop.
 const TSharedRef* begin(const TSharedRefArray& array);
 const TSharedRef* end(const TSharedRefArray& array);
@@ -361,11 +361,11 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 TString ToString(TRef ref);
-TString ToString(const TMutableRef& ref);
-TString ToString(const TSharedRef& ref);
-TString ToString(const TSharedMutableRef& ref);
+TString ToString(const TMutableRef& ref); 
+TString ToString(const TSharedRef& ref); 
+TString ToString(const TSharedMutableRef& ref); 
 
-size_t GetPageSize();
+size_t GetPageSize(); 
 size_t RoundUpToPage(size_t bytes);
 
 size_t GetByteSize(TRef ref);
@@ -377,7 +377,7 @@ size_t GetByteSize(const std::vector<T>& parts);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT
+} // namespace NYT 
 
 #define REF_INL_H_
 #include "ref-inl.h"

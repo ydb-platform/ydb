@@ -161,7 +161,7 @@ void TBlob::Allocate(size_t newCapacity)
     TRefCountedTrackerFacade::AllocateSpace(TagCookie_, newCapacity);
 #endif
 }
-
+ 
 void TBlob::Reallocate(size_t newCapacity)
 {
     if (!Begin_) {

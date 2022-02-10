@@ -9,9 +9,9 @@ namespace {
     }
 
     const char* GetEmptyParam(const char*) {
-        return nullptr;
-    }
-
+        return nullptr; 
+    } 
+ 
     bool CheckEmptyParam(const char*, bool defaultValue) {
         return defaultValue;
     }
@@ -23,7 +23,7 @@ namespace NMalloc {
     TMallocInfo::TMallocInfo()
         : Name()
         , SetParam(SetEmptyParam)
-        , GetParam(GetEmptyParam)
+        , GetParam(GetEmptyParam) 
         , CheckParam(CheckEmptyParam)
     {
     }

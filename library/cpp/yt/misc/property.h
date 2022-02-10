@@ -115,7 +115,7 @@ public: \
     Y_FORCE_INLINE void Set##name(type value) \
     { \
         name##_ = value; \
-    } \
+    } \ 
 
 //! Defines a trivial public read-write property that is passed by value.
 //! All arguments after name are used as default value (via braced-init-list).

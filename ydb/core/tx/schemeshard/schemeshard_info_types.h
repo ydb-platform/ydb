@@ -1951,12 +1951,12 @@ struct TBlockStoreVolumeInfo : public TSimpleRefCount<TBlockStoreVolumeInfo> {
         space.Raw += blockCount * blockSize;
         switch (VolumeConfig.GetStorageMediaKind()) {
             case 1: // STORAGE_MEDIA_SSD
-                if (VolumeConfig.GetIsSystem()) { 
-                    space.SSDSystem += blockCount * blockSize; // merged blobs 
-                } else { 
-                    space.SSD += blockCount * blockSize; // merged blobs 
-                    space.SSD += (blockCount / 8) * blockSize; // mixed blobs 
-                } 
+                if (VolumeConfig.GetIsSystem()) {
+                    space.SSDSystem += blockCount * blockSize; // merged blobs
+                } else {
+                    space.SSD += blockCount * blockSize; // merged blobs
+                    space.SSD += (blockCount / 8) * blockSize; // mixed blobs
+                }
                 break;
             case 2: // STORAGE_MEDIA_HYBRID
                 space.HDD += blockCount * blockSize; // merged blobs
@@ -1977,7 +1977,7 @@ struct TBlockStoreVolumeInfo : public TSimpleRefCount<TBlockStoreVolumeInfo> {
             space.SSD = Max(space.SSD, altSpace.SSD);
             space.HDD = Max(space.HDD, altSpace.HDD);
             space.SSDNonrepl = Max(space.SSDNonrepl, altSpace.SSDNonrepl);
-            space.SSDSystem = Max(space.SSDSystem, altSpace.SSDSystem); 
+            space.SSDSystem = Max(space.SSDSystem, altSpace.SSDSystem);
         }
 
         return space;

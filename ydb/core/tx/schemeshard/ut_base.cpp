@@ -7825,7 +7825,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
                            {NLs::CheckMountToken("BSVolume", "Owner124")});
- 
+
         // AssignVolume using TokenVersion
         TestAssignBlockStoreVolume(runtime, ++txId, "/MyRoot", "BSVolume", "Owner125", 2);
 
@@ -8299,125 +8299,125 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, txId);
     }
 
-    Y_UNIT_TEST(BlockStoreSystemVolumeLimits) { //+ 
-        TTestBasicRuntime runtime; 
-        TTestEnv env(runtime); 
-        ui64 txId = 100; 
- 
-        TestUserAttrs( 
-            runtime, 
-            ++txId, 
-            "", 
-            "MyRoot", 
-            AlterUserAttrs({{ 
-                "__volume_space_limit_ssd_system", 
-                ToString(32 * 4_KB) 
-            }}) 
-        ); 
-        env.TestWaitNotification(runtime, txId); 
- 
-        // Other pool kinds should not be affected 
+    Y_UNIT_TEST(BlockStoreSystemVolumeLimits) { //+
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestUserAttrs(
+            runtime,
+            ++txId,
+            "",
+            "MyRoot",
+            AlterUserAttrs({{
+                "__volume_space_limit_ssd_system",
+                ToString(32 * 4_KB)
+            }})
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        // Other pool kinds should not be affected
         NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
-        auto& vc = *vdescr.MutableVolumeConfig(); 
-        vc.SetStorageMediaKind(1); 
-        vc.SetBlockSize(4_KB); 
-        vc.AddPartitions()->SetBlockCount(100500); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
- 
-        vdescr.SetName("BSVolumeOther"); 
-        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString()); 
-        env.TestWaitNotification(runtime, txId); 
- 
-        // Creating a SSD system volume 
-        vdescr.SetName("BSVolume1"); 
-        vc.SetIsSystem(true); 
-        vc.MutablePartitions(0)->SetBlockCount(16); 
-        TestCreateBlockStoreVolume( 
-            runtime, 
-            ++txId, 
-            "/MyRoot", 
-            vdescr.DebugString() 
-        ); 
-        env.TestWaitNotification(runtime, txId); 
- 
-        // Cannot have more than quota 
-        vdescr.SetName("BSVolume2"); 
-        vc.MutablePartitions(0)->SetBlockCount(17); 
-        TestCreateBlockStoreVolume( 
-            runtime, 
-            ++txId, 
-            "/MyRoot", 
-            vdescr.DebugString(), 
+        auto& vc = *vdescr.MutableVolumeConfig();
+        vc.SetStorageMediaKind(1);
+        vc.SetBlockSize(4_KB);
+        vc.AddPartitions()->SetBlockCount(100500);
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+
+        vdescr.SetName("BSVolumeOther");
+        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
+        env.TestWaitNotification(runtime, txId);
+
+        // Creating a SSD system volume
+        vdescr.SetName("BSVolume1");
+        vc.SetIsSystem(true);
+        vc.MutablePartitions(0)->SetBlockCount(16);
+        TestCreateBlockStoreVolume(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            vdescr.DebugString()
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        // Cannot have more than quota
+        vdescr.SetName("BSVolume2");
+        vc.MutablePartitions(0)->SetBlockCount(17);
+        TestCreateBlockStoreVolume(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            vdescr.DebugString(),
             {NKikimrScheme::StatusPreconditionFailed}
-        ); 
-        env.TestWaitNotification(runtime, txId); 
- 
-        // It's ok to use quota completely, but only the first create should succeed 
-        vdescr.SetName("BSVolume2"); 
-        vc.MutablePartitions(0)->SetBlockCount(16); 
-        TestCreateBlockStoreVolume( 
-            runtime, 
-            ++txId, 
-            "/MyRoot", 
-            vdescr.DebugString() 
-        ); 
-        env.TestWaitNotification(runtime, txId); 
- 
-        // We may drop a volume and then use freed quota in an alter 
-        TestDropBlockStoreVolume(runtime, ++txId, "/MyRoot", "BSVolume1"); 
-        env.TestWaitNotification(runtime, txId); 
- 
-        vc.Clear(); 
-        vdescr.SetName("BSVolume2"); 
-        vc.AddPartitions()->SetBlockCount(32); 
-        vc.SetVersion(1); 
-        TestAlterBlockStoreVolume( 
-            runtime, 
-            ++txId, 
-            "/MyRoot", 
-            vdescr.DebugString() 
-        ); 
-        env.TestWaitNotification(runtime, txId); 
- 
-        // Cannot have more than quota 
-        vdescr.SetName("BSVolume3"); 
-        vc.SetIsSystem(true); 
-        vc.SetStorageMediaKind(1); 
-        vc.SetBlockSize(4_KB); 
-        vc.MutablePartitions(0)->SetBlockCount(1); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
-        vc.ClearVersion(); 
-        TestCreateBlockStoreVolume( 
-            runtime, 
-            ++txId, 
-            "/MyRoot", 
-            vdescr.DebugString(), 
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        // It's ok to use quota completely, but only the first create should succeed
+        vdescr.SetName("BSVolume2");
+        vc.MutablePartitions(0)->SetBlockCount(16);
+        TestCreateBlockStoreVolume(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            vdescr.DebugString()
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        // We may drop a volume and then use freed quota in an alter
+        TestDropBlockStoreVolume(runtime, ++txId, "/MyRoot", "BSVolume1");
+        env.TestWaitNotification(runtime, txId);
+
+        vc.Clear();
+        vdescr.SetName("BSVolume2");
+        vc.AddPartitions()->SetBlockCount(32);
+        vc.SetVersion(1);
+        TestAlterBlockStoreVolume(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            vdescr.DebugString()
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        // Cannot have more than quota
+        vdescr.SetName("BSVolume3");
+        vc.SetIsSystem(true);
+        vc.SetStorageMediaKind(1);
+        vc.SetBlockSize(4_KB);
+        vc.MutablePartitions(0)->SetBlockCount(1);
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.ClearVersion();
+        TestCreateBlockStoreVolume(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            vdescr.DebugString(),
             {NKikimrScheme::StatusPreconditionFailed}
-        ); 
- 
-        // It's possible to modify quota size 
-        TestUserAttrs( 
-            runtime, 
-            ++txId, 
-            "", 
-            "MyRoot", 
-            AlterUserAttrs({{ 
-                "__volume_space_limit_ssd_system", 
-                ToString(33 * 4_KB) 
-            }}) 
-        ); 
-        env.TestWaitNotification(runtime, txId); 
- 
-        // Ok 
-        TestCreateBlockStoreVolume( 
-            runtime, 
-            ++txId, 
-            "/MyRoot", 
-            vdescr.DebugString() 
-        ); 
-        env.TestWaitNotification(runtime, txId); 
-    } 
- 
+        );
+
+        // It's possible to modify quota size
+        TestUserAttrs(
+            runtime,
+            ++txId,
+            "",
+            "MyRoot",
+            AlterUserAttrs({{
+                "__volume_space_limit_ssd_system",
+                ToString(33 * 4_KB)
+            }})
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        // Ok
+        TestCreateBlockStoreVolume(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            vdescr.DebugString()
+        );
+        env.TestWaitNotification(runtime, txId);
+    }
+
     Y_UNIT_TEST(CreateAlterBlockStoreVolumeWithInvalidPoolKinds) { //+
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, /* nchannels */ 6);

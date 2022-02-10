@@ -191,7 +191,7 @@ public:
         // create new shards
         for (ui64 i = 0; i < shardsToCreate; ++i) {
             TShardIdx shardIdx;
-            if (volume->VolumeConfig.GetTabletVersion() == 2) { 
+            if (volume->VolumeConfig.GetTabletVersion() == 2) {
                 shardIdx = context.SS->RegisterShardInfo(TShardInfo::BlockStorePartition2Info(txId, pathId));
                 context.SS->TabletCounters->Simple()[COUNTER_BLOCKSTORE_PARTITION2_SHARD_COUNT].Add(1);
             } else {

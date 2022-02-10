@@ -66,7 +66,7 @@ void Opt2::EatArgv(const char* optspec, const char* long_alias) {
         char* comma = strchr(s, ',');
         if (comma)
             *comma = 0;
-        if (!eq || (comma && comma < eq))
+        if (!eq || (comma && comma < eq)) 
             ythrow yexception() << "Opt2, long_alias: '=' is expected after " << s;
         *eq++ = 0;
         if (!*eq || eq[1])

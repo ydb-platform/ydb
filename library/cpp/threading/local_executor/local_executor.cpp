@@ -1,5 +1,5 @@
-#include "local_executor.h" 
- 
+#include "local_executor.h"
+
 #include <library/cpp/threading/future/future.h>
 
 #include <util/generic/utility.h>
@@ -358,7 +358,7 @@ int NPar::TLocalExecutor::GetLPQueueSize() const noexcept {
     return AtomicGet(Impl_->LPQueueSize);
 }
 
-int NPar::TLocalExecutor::GetWorkerThreadId() const noexcept { 
+int NPar::TLocalExecutor::GetWorkerThreadId() const noexcept {
     return Impl_->WorkerThreadId;
 }
 

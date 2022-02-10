@@ -1,20 +1,20 @@
-OWNER( 
+OWNER(
     g:matrixnet
-    gulin 
+    gulin
     kirillovs
     espetrov
-) 
- 
+)
+
 LIBRARY()
 
-SRCS( 
-    local_executor.cpp 
+SRCS(
+    local_executor.cpp
     tbb_local_executor.cpp
-) 
- 
+)
+
 PEERDIR(
     contrib/libs/tbb
     library/cpp/threading/future
 )
 
-END() 
+END()

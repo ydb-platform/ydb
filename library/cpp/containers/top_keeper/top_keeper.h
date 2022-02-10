@@ -108,15 +108,15 @@ private:
             return Internal;
         }
 
-        auto Extract() { 
-            using std::swap; 
- 
-            decltype(Internal) values; 
-            swap(Internal, values); 
-            Reset(); 
-            return values; 
-        } 
- 
+        auto Extract() {
+            using std::swap;
+
+            decltype(Internal) values;
+            swap(Internal, values);
+            Reset();
+            return values;
+        }
+
         const T& Back() const {
             return Internal.back();
         }
@@ -204,11 +204,11 @@ public:
         return value;
     }
 
-    auto Extract() { 
-        Finalize(); 
-        return Internal.Extract(); 
-    } 
- 
+    auto Extract() {
+        Finalize();
+        return Internal.Extract();
+    }
+
     bool Insert(const T& value) {
         CheckNotFinalized();
         return Internal.Push(value);

@@ -202,21 +202,21 @@ Y_UNIT_TEST_SUITE(TTopKeeperTest) {
         }
         k.Finalize();
     }
- 
-    Y_UNIT_TEST(ExtractTest) { 
-        TTopKeeper<size_t> keeper(100); 
-        for (size_t i = 0; i < 100; ++i) { 
-            keeper.Insert(i); 
-        } 
- 
-        auto values = keeper.Extract(); 
-        UNIT_ASSERT_EQUAL(values.size(), 100); 
-        Sort(values); 
- 
-        for (size_t i = 0; i < 100; ++i) { 
-            UNIT_ASSERT_EQUAL(values[i], i); 
-        } 
- 
-        UNIT_ASSERT(keeper.IsEmpty()); 
-    } 
+
+    Y_UNIT_TEST(ExtractTest) {
+        TTopKeeper<size_t> keeper(100);
+        for (size_t i = 0; i < 100; ++i) {
+            keeper.Insert(i);
+        }
+
+        auto values = keeper.Extract();
+        UNIT_ASSERT_EQUAL(values.size(), 100);
+        Sort(values);
+
+        for (size_t i = 0; i < 100; ++i) {
+            UNIT_ASSERT_EQUAL(values[i], i);
+        }
+
+        UNIT_ASSERT(keeper.IsEmpty());
+    }
 }

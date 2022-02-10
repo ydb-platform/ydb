@@ -16,12 +16,12 @@
 // NOTE: Check StringSplitter below to get more convenient split string interface.
 
 namespace NPrivate {
- 
+
     void SplitStringImpl(TVector<TString>* res, const char* ptr,
                          const char* delimiter, size_t maxFields, int options);
     void SplitStringImpl(TVector<TString>* res, const char* ptr, size_t len,
                          const char* delimiter, size_t maxFields, int options);
- 
+
     void SplitStringImpl(TVector<TUtf16String>* res, const wchar16* ptr,
                          const wchar16* delimiter, size_t maxFields, int options);
     void SplitStringImpl(TVector<TUtf16String>* res, const wchar16* ptr, size_t len,
@@ -56,9 +56,9 @@ SplitString(const C* ptr, size_t len, const C* delimiter,
             size_t maxFields = 0, int options = 0) {
     TVector<typename ::NPrivate::TStringDeducer<C>::type> res;
     ::NPrivate::SplitStringImpl(&res, ptr, len, delimiter, maxFields, options);
-    return res; 
-} 
- 
+    return res;
+}
+
 template <typename C>
 TVector<typename ::NPrivate::TStringDeducer<C>::type>
 SplitString(const typename ::NPrivate::TStringDeducer<C>::type& str, const C* delimiter,

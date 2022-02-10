@@ -22,16 +22,16 @@ private:
 
         template <class UT>
         bool Insert(UT&& value) noexcept {
-            if (Y_UNLIKELY(0 == HalfMaxSize)) { 
+            if (Y_UNLIKELY(0 == HalfMaxSize)) {
                 return false;
             }
 
-            if (Internal.size() < HalfMaxSize) { 
+            if (Internal.size() < HalfMaxSize) {
                 if (Internal.empty() || Comparer(Internal[MinElementIndex], value)) {
                     MinElementIndex = Internal.size();
-                    Internal.push_back(std::forward<UT>(value)); 
-                    return true; 
-                } 
+                    Internal.push_back(std::forward<UT>(value));
+                    return true;
+                }
             } else if (!Comparer(value, Internal[MinElementIndex])) {
                 return false;
             }
@@ -69,11 +69,11 @@ private:
         }
 
         void Partition() {
-            if (Y_UNLIKELY(HalfMaxSize == 0)) { 
-                return; 
-            } 
-            if (Y_LIKELY(Internal.size() >= HalfMaxSize)) { 
-                NthElement(Internal.begin(), Internal.begin() + HalfMaxSize - 1, Internal.end(), Comparer); 
+            if (Y_UNLIKELY(HalfMaxSize == 0)) {
+                return;
+            }
+            if (Y_LIKELY(Internal.size() >= HalfMaxSize)) {
+                NthElement(Internal.begin(), Internal.begin() + HalfMaxSize - 1, Internal.end(), Comparer);
                 Internal.erase(Internal.begin() + HalfMaxSize, Internal.end());
 
                 //we should update MinElementIndex cause we just altered Internal
@@ -96,7 +96,7 @@ private:
 
         void SetMaxSize(size_t newHalfMaxSize) {
             HalfMaxSize = newHalfMaxSize;
-            Reserve(); 
+            Reserve();
             Partition();
         }
 
@@ -142,14 +142,14 @@ private:
     bool Finalized;
 
 public:
-    TTopKeeper() 
-        : MaxSize(0) 
-        , Comparer() 
-        , Internal(0, Comparer) 
-        , Finalized(false) 
-    { 
-    } 
- 
+    TTopKeeper()
+        : MaxSize(0)
+        , Comparer()
+        , Internal(0, Comparer)
+        , Finalized(false)
+    {
+    }
+
     TTopKeeper(size_t maxSize, const TComparator& comp = TComparator())
         : MaxSize(maxSize)
         , Comparer(comp)

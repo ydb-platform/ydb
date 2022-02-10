@@ -787,14 +787,14 @@ Y_UNIT_TEST_SUITE(TMaybeTest) {
             UNIT_ASSERT(m2 == Nothing());
         }
     }
- 
+
     Y_UNIT_TEST(TestOutputStreamEmptyMaybe) {
         TString s;
-        TStringOutput output(s); 
-        output << TMaybe<int>(); 
-        UNIT_ASSERT_EQUAL("(empty maybe)", s); 
-    } 
- 
+        TStringOutput output(s);
+        output << TMaybe<int>();
+        UNIT_ASSERT_EQUAL("(empty maybe)", s);
+    }
+
     Y_UNIT_TEST(TestOutputStreamNothing) {
         TString s;
         TStringOutput output(s);
@@ -804,10 +804,10 @@ Y_UNIT_TEST_SUITE(TMaybeTest) {
 
     Y_UNIT_TEST(TestOutputStreamDefinedMaybe) {
         TString s;
-        TStringOutput output(s); 
-        output << TMaybe<int>(42); 
-        UNIT_ASSERT_EQUAL("42", s); 
-    } 
+        TStringOutput output(s);
+        output << TMaybe<int>(42);
+        UNIT_ASSERT_EQUAL("42", s);
+    }
 
     Y_UNIT_TEST(TestMaybeCovarianceImplicit) {
         struct TestStruct {

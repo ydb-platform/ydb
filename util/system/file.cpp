@@ -937,7 +937,7 @@ public:
     // Syscalls can cause contention if they operate on very large data blocks.
     static constexpr size_t MaxReadPortion = 1_GB;
 
-    i32 RawRead(void* bufferIn, size_t numBytes) { 
+    i32 RawRead(void* bufferIn, size_t numBytes) {
         const size_t toRead = Min(MaxReadPortion, numBytes);
         return Handle_.Read(bufferIn, toRead);
     }
@@ -1002,7 +1002,7 @@ public:
 
         while (numBytes) {
             const i32 toRead = (i32)Min(MaxReadPortion, numBytes);
-            const i32 reallyRead = RawPread(buf, toRead, offset); 
+            const i32 reallyRead = RawPread(buf, toRead, offset);
 
             if (reallyRead < 0) {
                 ythrow TFileError() << "can not read data from " << FileName_.Quote();
@@ -1021,10 +1021,10 @@ public:
         return buf - (ui8*)bufferIn;
     }
 
-    i32 RawPread(void* buf, ui32 len, i64 offset) const { 
-        return Handle_.Pread(buf, len, offset); 
-    } 
- 
+    i32 RawPread(void* buf, ui32 len, i64 offset) const {
+        return Handle_.Pread(buf, len, offset);
+    }
+
     void Pload(void* buf, size_t len, i64 offset) const {
         if (Pread(buf, len, offset) != len) {
             ythrow TFileError() << "can't read " << len << " bytes at offset " << offset << " from " << FileName_.Quote();
@@ -1171,8 +1171,8 @@ size_t TFile::Read(void* buf, size_t len) {
     return Impl_->Read(buf, len);
 }
 
-i32 TFile::RawRead(void* buf, size_t len) { 
-    return Impl_->RawRead(buf, len); 
+i32 TFile::RawRead(void* buf, size_t len) {
+    return Impl_->RawRead(buf, len);
 }
 
 size_t TFile::ReadOrFail(void* buf, size_t len) {

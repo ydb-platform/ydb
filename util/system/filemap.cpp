@@ -337,7 +337,7 @@ private:
     TFile File_;
     TString DbgName_; // This string is never used to actually open a file, only in exceptions
     i64 Length_;
-    EOpenMode Mode_; 
+    EOpenMode Mode_;
 
 #if defined(_win_)
     void* Mapping_;
@@ -347,10 +347,10 @@ private:
 };
 
 TMemoryMap::TMemoryMap(const TString& name)
-    : Impl_(new TImpl(name, EOpenModeFlag::oRdOnly)) 
-{ 
-} 
- 
+    : Impl_(new TImpl(name, EOpenModeFlag::oRdOnly))
+{
+}
+
 TMemoryMap::TMemoryMap(const TString& name, EOpenMode om)
     : Impl_(new TImpl(name, om))
 {
@@ -363,9 +363,9 @@ TMemoryMap::TMemoryMap(const TString& name, i64 length, EOpenMode om)
 
 TMemoryMap::TMemoryMap(FILE* f, TString dbgName)
     : Impl_(new TImpl(f, EOpenModeFlag::oRdOnly, std::move(dbgName)))
-{ 
-} 
- 
+{
+}
+
 TMemoryMap::TMemoryMap(FILE* f, EOpenMode om, TString dbgName)
     : Impl_(new TImpl(f, om, std::move(dbgName)))
 {
@@ -373,9 +373,9 @@ TMemoryMap::TMemoryMap(FILE* f, EOpenMode om, TString dbgName)
 
 TMemoryMap::TMemoryMap(const TFile& file, TString dbgName)
     : Impl_(new TImpl(file, EOpenModeFlag::oRdOnly, std::move(dbgName)))
-{ 
-} 
- 
+{
+}
+
 TMemoryMap::TMemoryMap(const TFile& file, EOpenMode om, TString dbgName)
     : Impl_(new TImpl(file, om, std::move(dbgName)))
 {
@@ -445,10 +445,10 @@ TFileMap::TFileMap(const TMemoryMap& map) noexcept
 }
 
 TFileMap::TFileMap(const TString& name)
-    : Map_(name) 
-{ 
-} 
- 
+    : Map_(name)
+{
+}
+
 TFileMap::TFileMap(const TString& name, EOpenMode om)
     : Map_(name, om)
 {

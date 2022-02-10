@@ -8,7 +8,7 @@
 #include <util/generic/ptr.h>
 #include <util/generic/utility.h>
 #include <util/generic/yexception.h>
-#include <util/generic/flags.h> 
+#include <util/generic/flags.h>
 #include <util/generic/string.h>
 
 #include <new>
@@ -48,7 +48,7 @@ struct TMemoryMapCommon {
         }
     };
 
-    enum EOpenModeFlag { 
+    enum EOpenModeFlag {
         oRdOnly = 1,
         oRdWr = 2,
         oCopyOnWr = 4,
@@ -58,7 +58,7 @@ struct TMemoryMapCommon {
         oPrecharge = 16,
         oPopulate = 32, // Populate page table entries (see mmap's MAP_POPULATE)
     };
-    Y_DECLARE_FLAGS(EOpenMode, EOpenModeFlag) 
+    Y_DECLARE_FLAGS(EOpenMode, EOpenModeFlag)
 
     /**
      * Name that will be printed in exceptions if not specified.
@@ -66,7 +66,7 @@ struct TMemoryMapCommon {
      */
     static TString UnknownFileName();
 };
-Y_DECLARE_OPERATORS_FOR_FLAGS(TMemoryMapCommon::EOpenMode) 
+Y_DECLARE_OPERATORS_FOR_FLAGS(TMemoryMapCommon::EOpenMode)
 
 class TMemoryMap: public TMemoryMapCommon {
 public:

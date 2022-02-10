@@ -19,10 +19,10 @@ class TFileTest: public TTestBase {
     UNIT_TEST(TestLocale);
     UNIT_TEST(TestFlush);
     UNIT_TEST(TestFlushSpecialFile);
-    UNIT_TEST(TestRawRead); 
-    UNIT_TEST(TestRead); 
+    UNIT_TEST(TestRawRead);
+    UNIT_TEST(TestRead);
     UNIT_TEST(TestRawPread);
-    UNIT_TEST(TestPread); 
+    UNIT_TEST(TestPread);
     UNIT_TEST(TestCache);
     UNIT_TEST_SUITE_END();
 
@@ -33,10 +33,10 @@ public:
     void TestLocale();
     void TestFlush();
     void TestFlushSpecialFile();
-    void TestRawRead(); 
-    void TestRead(); 
+    void TestRawRead();
+    void TestRead();
     void TestRawPread();
-    void TestPread(); 
+    void TestPread();
     void TestCache();
 
     inline void TestLinkTo() {
@@ -239,48 +239,48 @@ void TFileTest::TestFlushSpecialFile() {
 #endif
 }
 
-void TFileTest::TestRawRead() { 
-    TTempFile tmp("tmp"); 
- 
-    { 
-        TFile file(tmp.Name(), OpenAlways | WrOnly); 
-        file.Write("1234567", 7); 
-        file.Flush(); 
-        file.Close(); 
-    } 
- 
-    { 
-        TFile file(tmp.Name(), OpenExisting | RdOnly); 
-        char buf[7]; 
-        i32 reallyRead = file.RawRead(buf, 7); 
-        Y_ENSURE(0 <= reallyRead && reallyRead <= 7); 
-        Y_ENSURE(TStringBuf(buf, reallyRead) == TStringBuf("1234567").Head(reallyRead)); 
-    } 
-} 
- 
-void TFileTest::TestRead() { 
-    TTempFile tmp("tmp"); 
- 
-    { 
-        TFile file(tmp.Name(), OpenAlways | WrOnly); 
-        file.Write("1234567", 7); 
-        file.Flush(); 
-        file.Close(); 
-    } 
- 
-    { 
-        TFile file(tmp.Name(), OpenExisting | RdOnly); 
-        char buf[7]; 
-        Y_ENSURE(file.Read(buf, 7) == 7); 
-        Y_ENSURE(TStringBuf(buf, 7) == "1234567"); 
- 
-        memset(buf, 0, sizeof(buf)); 
-        file.Seek(0, sSet); 
-        Y_ENSURE(file.Read(buf, 123) == 7); 
-        Y_ENSURE(TStringBuf(buf, 7) == "1234567"); 
-    } 
-} 
- 
+void TFileTest::TestRawRead() {
+    TTempFile tmp("tmp");
+
+    {
+        TFile file(tmp.Name(), OpenAlways | WrOnly);
+        file.Write("1234567", 7);
+        file.Flush();
+        file.Close();
+    }
+
+    {
+        TFile file(tmp.Name(), OpenExisting | RdOnly);
+        char buf[7];
+        i32 reallyRead = file.RawRead(buf, 7);
+        Y_ENSURE(0 <= reallyRead && reallyRead <= 7);
+        Y_ENSURE(TStringBuf(buf, reallyRead) == TStringBuf("1234567").Head(reallyRead));
+    }
+}
+
+void TFileTest::TestRead() {
+    TTempFile tmp("tmp");
+
+    {
+        TFile file(tmp.Name(), OpenAlways | WrOnly);
+        file.Write("1234567", 7);
+        file.Flush();
+        file.Close();
+    }
+
+    {
+        TFile file(tmp.Name(), OpenExisting | RdOnly);
+        char buf[7];
+        Y_ENSURE(file.Read(buf, 7) == 7);
+        Y_ENSURE(TStringBuf(buf, 7) == "1234567");
+
+        memset(buf, 0, sizeof(buf));
+        file.Seek(0, sSet);
+        Y_ENSURE(file.Read(buf, 123) == 7);
+        Y_ENSURE(TStringBuf(buf, 7) == "1234567");
+    }
+}
+
 void TFileTest::TestRawPread() {
     TTempFile tmp("tmp");
 
@@ -305,28 +305,28 @@ void TFileTest::TestRawPread() {
     }
 }
 
-void TFileTest::TestPread() { 
-    TTempFile tmp("tmp"); 
- 
-    { 
-        TFile file(tmp.Name(), OpenAlways | WrOnly); 
-        file.Write("1234567", 7); 
-        file.Flush(); 
-        file.Close(); 
-    } 
- 
-    { 
-        TFile file(tmp.Name(), OpenExisting | RdOnly); 
-        char buf[7]; 
-        Y_ENSURE(file.Pread(buf, 3, 1) == 3); 
-        Y_ENSURE(TStringBuf(buf, 3) == "234"); 
- 
-        memset(buf, 0, sizeof(buf)); 
-        Y_ENSURE(file.Pread(buf, 2, 5) == 2); 
-        Y_ENSURE(TStringBuf(buf, 2) == "67"); 
-    } 
-} 
- 
+void TFileTest::TestPread() {
+    TTempFile tmp("tmp");
+
+    {
+        TFile file(tmp.Name(), OpenAlways | WrOnly);
+        file.Write("1234567", 7);
+        file.Flush();
+        file.Close();
+    }
+
+    {
+        TFile file(tmp.Name(), OpenExisting | RdOnly);
+        char buf[7];
+        Y_ENSURE(file.Pread(buf, 3, 1) == 3);
+        Y_ENSURE(TStringBuf(buf, 3) == "234");
+
+        memset(buf, 0, sizeof(buf));
+        Y_ENSURE(file.Pread(buf, 2, 5) == 2);
+        Y_ENSURE(TStringBuf(buf, 2) == "67");
+    }
+}
+
 #ifdef _linux_
     #include <sys/statfs.h>
 #endif

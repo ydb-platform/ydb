@@ -16,7 +16,7 @@ RECURSE(
     aioftp
     aiogram
     aiographite
-    aiohttp 
+    aiohttp
     aiohttp-apispec
     aiohttp-cors
     aiohttp-jinja2
@@ -642,7 +642,7 @@ RECURSE(
     msal
     msgpack
     mujson
-    multidict 
+    multidict
     multitasking
     munch
     murmurhash

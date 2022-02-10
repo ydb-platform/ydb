@@ -559,7 +559,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
         UNIT_ASSERT_STRINGS_EQUAL(serverImpl.ExceptionMessage, "(yexception) some error");
     };
 
-    THttpInput SendRequest(TSocket& socket, ui16 port) { 
+    THttpInput SendRequest(TSocket& socket, ui16 port) {
         TSocketInput si(socket);
         TSocketOutput so(socket);
         THttpOutput out(&so);
@@ -571,7 +571,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
 
         THttpInput input(&si);
         input.ReadAll();
-        return input; 
+        return input;
     }
 
     THttpInput SendRequestWithBody(TSocket& socket, ui16 port, TString body) {
@@ -642,24 +642,24 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
     }
 
 
-    Y_UNIT_TEST(TTestCloseConnectionOnRequestLimit) { 
-        TPortManager pm; 
-        const ui16 port = pm.GetPort(); 
- 
-        TEchoServer serverImpl("test_data"); 
-        THttpServer server(&serverImpl, THttpServer::TOptions(port).EnableKeepAlive(true).SetMaxRequestsPerConnection(2)); 
-        UNIT_ASSERT(server.Start()); 
- 
-        TSocket socket(TNetworkAddress("localhost", port), TDuration::Seconds(10)); 
- 
-        UNIT_ASSERT(SendRequest(socket, port).IsKeepAlive()); 
-        UNIT_ASSERT(!SendRequest(socket, port).IsKeepAlive()); 
- 
-        UNIT_ASSERT_EXCEPTION(SendRequest(socket, port), THttpReadException); 
- 
-        server.Stop(); 
-    } 
- 
+    Y_UNIT_TEST(TTestCloseConnectionOnRequestLimit) {
+        TPortManager pm;
+        const ui16 port = pm.GetPort();
+
+        TEchoServer serverImpl("test_data");
+        THttpServer server(&serverImpl, THttpServer::TOptions(port).EnableKeepAlive(true).SetMaxRequestsPerConnection(2));
+        UNIT_ASSERT(server.Start());
+
+        TSocket socket(TNetworkAddress("localhost", port), TDuration::Seconds(10));
+
+        UNIT_ASSERT(SendRequest(socket, port).IsKeepAlive());
+        UNIT_ASSERT(!SendRequest(socket, port).IsKeepAlive());
+
+        UNIT_ASSERT_EXCEPTION(SendRequest(socket, port), THttpReadException);
+
+        server.Stop();
+    }
+
     Y_UNIT_TEST(TTestListenerSockAddrConnection) {
         TPortManager pm;
         const ui16 port1 = pm.GetPort();

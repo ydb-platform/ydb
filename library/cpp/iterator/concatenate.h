@@ -77,9 +77,9 @@ namespace NPrivate {
                 TValue operator*() const {
                     return GetCurrentValue(Position_, Iterators_);
                 }
-                TIterator& operator++() { 
+                TIterator& operator++() {
                     MaybeIncrementIteratorAndSkipExhaustedContainers<true>();
-                    return *this; 
+                    return *this;
                 }
                 bool operator!=(const TSentinel& other) const {
                     // give compiler an opportunity to optimize sentinel case (-70% of time)

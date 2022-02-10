@@ -1,5 +1,5 @@
-RECURSE( 
-    dynamic_prototype 
+RECURSE(
+    dynamic_prototype
     from_xml
     from_xml/ut
     interop
@@ -16,4 +16,4 @@ RECURSE(
     yql/ut
     yandex_patches_ut
     yt
-) 
+)

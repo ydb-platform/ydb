@@ -882,7 +882,7 @@ RECURSE(
     pytest-server-fixtures
     pytest-shutil
     pytest-timeout
-    pytest-tornado
+    pytest-tornado 
     pytest-twisted
     pytest-vcr
     pytest-xdist
@@ -989,7 +989,7 @@ RECURSE(
     sentinels
     sentry-sdk
     service-identity
-    setproctitle
+    setproctitle 
     setuptools
     sgmllib3k
     sh

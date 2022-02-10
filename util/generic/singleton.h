@@ -113,8 +113,8 @@ namespace NPrivate {
 template <class T, class... TArgs>
 T* Singleton(TArgs&&... args) {
     return ::NPrivate::SingletonInt<T, TSingletonTraits<T>::Priority>(std::forward<TArgs>(args)...);
-} 
- 
+}
+
 template <class T, class... TArgs>
 T* HugeSingleton(TArgs&&... args) {
     return Singleton<::NPrivate::THeapStore<T>>(std::forward<TArgs>(args)...)->D;

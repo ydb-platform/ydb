@@ -962,7 +962,7 @@ template <typename T, typename... Args>
     return MakeShared<T, TSimpleCounter>(std::forward<Args>(args)...);
 }
 
-class TCopyClone { 
+class TCopyClone {
 public:
     template <class T>
     static inline T* Copy(T* t) {
@@ -970,9 +970,9 @@ public:
             return t->Clone();
         return nullptr;
     }
-}; 
- 
-class TCopyNew { 
+};
+
+class TCopyNew {
 public:
     template <class T>
     static inline T* Copy(T* t) {
@@ -980,21 +980,21 @@ public:
             return new T(*t);
         return nullptr;
     }
-}; 
- 
+};
+
 template <class T, class C, class D>
-class TCopyPtr: public TPointerBase<TCopyPtr<T, C, D>, T> { 
+class TCopyPtr: public TPointerBase<TCopyPtr<T, C, D>, T> {
 public:
     inline TCopyPtr(T* t = nullptr) noexcept
         : T_(t)
     {
     }
- 
+
     inline TCopyPtr(const TCopyPtr& t)
         : T_(C::Copy(t.Get()))
     {
     }
- 
+
     inline TCopyPtr(TCopyPtr&& t) noexcept
         : T_(nullptr)
     {
@@ -1004,24 +1004,24 @@ public:
     inline ~TCopyPtr() {
         DoDestroy();
     }
- 
+
     inline TCopyPtr& operator=(TCopyPtr t) noexcept {
         t.Swap(*this);
- 
+
         return *this;
     }
- 
+
     inline T* Release() noexcept Y_WARN_UNUSED_RESULT {
         return DoRelease(T_);
     }
- 
+
     inline void Reset(T* t) noexcept {
         if (T_ != t) {
             DoDestroy();
             T_ = t;
-        } 
+        }
     }
- 
+
     inline void Reset() noexcept {
         Destroy();
     }
@@ -1029,15 +1029,15 @@ public:
     inline void Destroy() noexcept {
         Reset(nullptr);
     }
- 
+
     inline void Swap(TCopyPtr& r) noexcept {
         DoSwap(T_, r.T_);
     }
- 
+
     inline T* Get() const noexcept {
         return T_;
     }
- 
+
 #ifdef __cpp_impl_three_way_comparison
     template <class Other>
     inline bool operator==(const Other& p) const noexcept {
@@ -1049,11 +1049,11 @@ private:
         if (T_)
             D::Destroy(T_);
     }
- 
+
 private:
     T* T_;
-}; 
- 
+};
+
 // Copy-on-write pointer
 template <class TPtr, class TCopy>
 class TCowPtr: public TPointerBase<TCowPtr<TPtr, TCopy>, const typename TPtr::TValueType> {

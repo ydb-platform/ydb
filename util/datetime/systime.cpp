@@ -81,7 +81,7 @@ time_t TimeGM(const struct tm* t) {
     days += month_to_days[LEAPYEAR(1900 + t->tm_year)][t->tm_mon];
     days += t->tm_mday - 1;
 
-    unsigned long secs = days * 86400ul + t->tm_hour * 3600 + t->tm_min * 60 + t->tm_sec; 
+    unsigned long secs = days * 86400ul + t->tm_hour * 3600 + t->tm_min * 60 + t->tm_sec;
     return (time_t)secs;
 }
 

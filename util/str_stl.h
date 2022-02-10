@@ -100,10 +100,10 @@ template <>
 struct THash<TUtf32StringBuf>: ::NHashPrivate::TStringHash<wchar32> {
 };
 
-template <class C, class T, class A> 
+template <class C, class T, class A>
 struct hash<std::basic_string<C, T, A>>: ::NHashPrivate::TStringHash<C> {
-}; 
- 
+};
+
 template <>
 struct THash<std::type_index> {
     inline size_t operator()(const std::type_index& index) const {

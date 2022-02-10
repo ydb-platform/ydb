@@ -74,19 +74,19 @@ typedef i32 ssize_t;
 
 inline int snprintf(char *str, size_t size, const char *format, ...)
 {
-    va_list argptr; 
-    va_start(argptr, format); 
-    int i = _vsnprintf(str, size-1, format, argptr); 
-    va_end(argptr); 
+    va_list argptr;
+    va_start(argptr, format);
+    int i = _vsnprintf(str, size-1, format, argptr);
+    va_end(argptr);
 
-    // A workaround for some bug 
-    if (i < 0) { 
-        str[size - 1] = '\x00'; 
-        i = (int)size; 
-    } else if (i < (int)size) { 
-        str[i] = '\x00'; 
-    } 
-    return i; 
+    // A workaround for some bug
+    if (i < 0) {
+        str[size - 1] = '\x00';
+        i = (int)size;
+    } else if (i < (int)size) {
+        str[i] = '\x00';
+    }
+    return i;
 }
 
 }
@@ -95,40 +95,40 @@ inline int snprintf(char *str, size_t size, const char *format, ...)
 namespace Pire {
 namespace Impl {
 
-// A portable way to define a constant like `(size_t)0101010101010101ull' without any warnings. 
-template<unsigned Pos, unsigned char Byte> 
-struct DoGenerateConst { 
-    static const size_t Value = DoGenerateConst<Pos-1, Byte>::Value << 8 | (size_t) Byte; 
-}; 
- 
-template<unsigned char Byte> 
-struct DoGenerateConst<0, Byte> { 
-    static const size_t Value = 0; 
-}; 
- 
-template<unsigned char Byte> 
-struct GenerateConst { 
-    static const size_t Value = DoGenerateConst<sizeof(size_t), Byte>::Value; 
-}; 
- 
- 
+// A portable way to define a constant like `(size_t)0101010101010101ull' without any warnings.
+template<unsigned Pos, unsigned char Byte>
+struct DoGenerateConst {
+    static const size_t Value = DoGenerateConst<Pos-1, Byte>::Value << 8 | (size_t) Byte;
+};
+
+template<unsigned char Byte>
+struct DoGenerateConst<0, Byte> {
+    static const size_t Value = 0;
+};
+
+template<unsigned char Byte>
+struct GenerateConst {
+    static const size_t Value = DoGenerateConst<sizeof(size_t), Byte>::Value;
+};
+
+
 // Common implementation of mask comparison logic suitable for
 // any instruction set
 struct BasicInstructionSet {
-    typedef size_t Vector; 
+    typedef size_t Vector;
 
-    // Check bytes in the chunk against bytes in the mask 
-    static inline Vector CheckBytes(Vector mask, Vector chunk) 
-    { 
-        const size_t mask0x01 = GenerateConst<0x01>::Value; 
-        const size_t mask0x80 = GenerateConst<0x80>::Value; 
-        size_t mc = chunk ^ mask; 
-        return ((mc - mask0x01) & ~mc & mask0x80); 
-    } 
+    // Check bytes in the chunk against bytes in the mask
+    static inline Vector CheckBytes(Vector mask, Vector chunk)
+    {
+        const size_t mask0x01 = GenerateConst<0x01>::Value;
+        const size_t mask0x80 = GenerateConst<0x80>::Value;
+        size_t mc = chunk ^ mask;
+        return ((mc - mask0x01) & ~mc & mask0x80);
+    }
 
-    static inline Vector Or(Vector mask1, Vector mask2) { return (mask1 | mask2); } 
+    static inline Vector Or(Vector mask1, Vector mask2) { return (mask1 | mask2); }
 
-    static inline bool IsAnySet(Vector mask) { return (mask != 0); } 
+    static inline bool IsAnySet(Vector mask) { return (mask != 0); }
 };
 
 }}
@@ -141,22 +141,22 @@ namespace Impl {
 
 // SSE2-optimized mask comparison logic
 struct AvailSSE2 {
-    typedef __m128i Vector; 
+    typedef __m128i Vector;
 
-    static inline Vector CheckBytes(Vector mask, Vector chunk) 
-    { 
-        return _mm_cmpeq_epi8(mask, chunk); 
-    } 
+    static inline Vector CheckBytes(Vector mask, Vector chunk)
+    {
+        return _mm_cmpeq_epi8(mask, chunk);
+    }
 
-    static inline Vector Or(Vector mask1, Vector mask2) 
-    { 
-        return _mm_or_si128(mask1, mask2); 
-    } 
+    static inline Vector Or(Vector mask1, Vector mask2)
+    {
+        return _mm_or_si128(mask1, mask2);
+    }
 
-    static inline bool IsAnySet(Vector mask) 
-    { 
-        return _mm_movemask_epi8(mask); 
-    } 
+    static inline bool IsAnySet(Vector mask)
+    {
+        return _mm_movemask_epi8(mask);
+    }
 };
 
 typedef AvailSSE2 AvailInstructionSet;
@@ -173,27 +173,27 @@ namespace Impl {
 
 // MMX-optimized mask comparison logic
 struct AvailMMX {
-    typedef __m64 Vector; 
+    typedef __m64 Vector;
 
-    static inline Vector CheckBytes(Vector mask, Vector chunk) 
-    { 
-        return _mm_cmpeq_pi8(mask, chunk); 
-    } 
+    static inline Vector CheckBytes(Vector mask, Vector chunk)
+    {
+        return _mm_cmpeq_pi8(mask, chunk);
+    }
 
-    static inline Vector Or(Vector mask1, Vector mask2) 
-    { 
-        return _mm_or_si64(mask1, mask2); 
-    } 
+    static inline Vector Or(Vector mask1, Vector mask2)
+    {
+        return _mm_or_si64(mask1, mask2);
+    }
 
-    static inline bool IsAnySet(Vector mask) 
-    { 
-        union { 
-            Vector mmxMask; 
-            ui64 ui64Mask; 
-        }; 
-        mmxMask = mask; 
-        return ui64Mask; 
-    } 
+    static inline bool IsAnySet(Vector mask)
+    {
+        union {
+            Vector mmxMask;
+            ui64 ui64Mask;
+        };
+        mmxMask = mask;
+        return ui64Mask;
+    }
 };
 
 typedef AvailMMX AvailInstructionSet;
@@ -234,25 +234,25 @@ template <size_t Size> struct MaxWordSizeHelper;
 // Maximum size of SSE register is 128 bit on x86 and x86_64
 template <>
 struct MaxWordSizeHelper<16> {
-    struct MaxSizeWord { 
-        char val[16]; 
-    }; 
+    struct MaxSizeWord {
+        char val[16];
+    };
 };
 
 typedef MaxWordSizeHelper<16>::MaxSizeWord MaxSizeWord;
 
 // MaxSizeWord size should be a multiple of size_t size and a multipe of Word size
 PIRE_STATIC_ASSERT(
-    (sizeof(MaxSizeWord) % sizeof(size_t) == 0) && 
-    (sizeof(MaxSizeWord) % sizeof(Word) == 0)); 
+    (sizeof(MaxSizeWord) % sizeof(size_t) == 0) &&
+    (sizeof(MaxSizeWord) % sizeof(Word) == 0));
 
 inline size_t FillSizeT(char c)
 {
-    size_t w = c; 
-    w &= 0x0ff; 
-    for (size_t i = 8; i != sizeof(size_t)*8; i <<= 1) 
-        w = (w << i) | w; 
-    return w; 
+    size_t w = c;
+    w &= 0x0ff;
+    for (size_t i = 8; i != sizeof(size_t)*8; i <<= 1)
+        w = (w << i) | w;
+    return w;
 }
 
 }}

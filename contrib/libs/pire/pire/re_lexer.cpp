@@ -29,15 +29,15 @@
 #include <contrib/libs/pire/pire/stub/singleton.h>
 
 #include "fsm.h"
-#include "re_lexer.h" 
-#include "re_parser.h" 
+#include "re_lexer.h"
+#include "re_parser.h"
 #include "read_unicode.h"
 
 
 namespace Pire {
 
 namespace Impl {
-    int yre_parse(Pire::Lexer& lexer); 
+    int yre_parse(Pire::Lexer& lexer);
 }
 
 Term Term::Character(wchar32 c) { Term::CharacterRange cr; cr.first.insert(Term::String(1, c)); cr.second = false; return Term(TokenTypes::Letters, cr); }
@@ -50,51 +50,51 @@ Lexer::~Lexer() = default;
 
 wchar32 Lexer::GetChar()
 {
-    if (m_input.empty()) 
-        return End; 
-    else if (m_input.front() == '\\') { 
-        m_input.pop_front(); 
-        if (m_input.empty()) 
-            Error("Regexp must not end with a backslash"); 
-        wchar32 ch = m_input.front(); 
-        m_input.pop_front(); 
-        return Control | ch; 
-    } else { 
-        wchar32 ch = m_input.front(); 
-        m_input.pop_front(); 
-        return ch; 
-    } 
+    if (m_input.empty())
+        return End;
+    else if (m_input.front() == '\\') {
+        m_input.pop_front();
+        if (m_input.empty())
+            Error("Regexp must not end with a backslash");
+        wchar32 ch = m_input.front();
+        m_input.pop_front();
+        return Control | ch;
+    } else {
+        wchar32 ch = m_input.front();
+        m_input.pop_front();
+        return ch;
+    }
 }
 
 wchar32 Lexer::PeekChar()
 {
-    if (m_input.empty()) 
-        return End; 
-    else 
-        return m_input.front(); 
+    if (m_input.empty())
+        return End;
+    else
+        return m_input.front();
 }
 
 void Lexer::UngetChar(wchar32 c)
 {
-    if (c != End) 
-        m_input.push_front(c); 
+    if (c != End)
+        m_input.push_front(c);
 }
 
 namespace {
     class CompareFeaturesByPriority: public ybinary_function<const Feature::Ptr&, const Feature::Ptr&, bool> {
-    public: 
+    public:
         bool operator()(const Feature::Ptr& a, const Feature::Ptr& b) const
-        { 
-            return a->Priority() < b->Priority(); 
-        } 
-    }; 
+        {
+            return a->Priority() < b->Priority();
+        }
+    };
 }
 
 Lexer& Lexer::AddFeature(Feature::Ptr& feature)
 {
-    feature->m_lexer = this; 
+    feature->m_lexer = this;
     m_features.insert(LowerBound(m_features.begin(), m_features.end(), feature, CompareFeaturesByPriority()), std::move(feature));
-    return *this; 
+    return *this;
 }
 
 Lexer& Lexer::AddFeature(Feature::Ptr&& feature)
@@ -106,107 +106,107 @@ Lexer& Lexer::AddFeature(Feature::Ptr&& feature)
 
 Term Lexer::DoLex()
 {
-    static const char* controls = "|().*+?^$\\"; 
-    for (;;) { 
-        UngetChar(GetChar()); 
-        wchar32 ch = PeekChar(); 
-        if (ch == End) 
-            return Term(TokenTypes::End); 
+    static const char* controls = "|().*+?^$\\";
+    for (;;) {
+        UngetChar(GetChar());
+        wchar32 ch = PeekChar();
+        if (ch == End)
+            return Term(TokenTypes::End);
         for (auto&& i : m_features) {
             if (i->Accepts(ch)) {
                 Term ret = i->Lex();
-                if (ret.Type()) 
-                    return ret; 
-            } 
-        } 
-        ch = GetChar(); 
+                if (ret.Type())
+                    return ret;
+            }
+        }
+        ch = GetChar();
 
-        if (ch == '|') 
-            return Term(TokenTypes::Or); 
-        else if (ch == '(') { 
-            return Term(TokenTypes::Open); 
-        } else if (ch == ')') 
-            return Term(TokenTypes::Close); 
-        else if (ch == '.') 
-            return Term::Dot(); 
-        else if (ch == '*') 
-            return Term::Repetition(0, Inf); 
-        else if (ch == '+') 
-            return Term::Repetition(1, Inf); 
-        else if (ch == '?') 
-            return Term::Repetition(0, 1); 
-        else if (ch == '^') 
-            return Term::BeginMark(); 
-        else if (ch == '$') 
-            return Term::EndMark(); 
-        else if ((ch & ControlMask) == Control && strchr(controls, ch & ~ControlMask)) 
-            return Term::Character(ch & ~ControlMask); 
-        else 
-            return Term::Character(ch); 
-    } 
+        if (ch == '|')
+            return Term(TokenTypes::Or);
+        else if (ch == '(') {
+            return Term(TokenTypes::Open);
+        } else if (ch == ')')
+            return Term(TokenTypes::Close);
+        else if (ch == '.')
+            return Term::Dot();
+        else if (ch == '*')
+            return Term::Repetition(0, Inf);
+        else if (ch == '+')
+            return Term::Repetition(1, Inf);
+        else if (ch == '?')
+            return Term::Repetition(0, 1);
+        else if (ch == '^')
+            return Term::BeginMark();
+        else if (ch == '$')
+            return Term::EndMark();
+        else if ((ch & ControlMask) == Control && strchr(controls, ch & ~ControlMask))
+            return Term::Character(ch & ~ControlMask);
+        else
+            return Term::Character(ch);
+    }
 }
 
 Term Lexer::Lex()
 {
-    Term t = DoLex(); 
+    Term t = DoLex();
 
     for (auto i = m_features.rbegin(), ie = m_features.rend(); i != ie; ++i)
-        (*i)->Alter(t); 
+        (*i)->Alter(t);
 
-    if (t.Value().IsA<Term::CharacterRange>()) { 
+    if (t.Value().IsA<Term::CharacterRange>()) {
         const auto& chars = t.Value().As<Term::CharacterRange>();
-        //std::cerr << "lex: type " << t.type() << "; chars = { " << join(chars.first.begin(), chars.first.end(), ", ") << " }" << std::endl; 
+        //std::cerr << "lex: type " << t.type() << "; chars = { " << join(chars.first.begin(), chars.first.end(), ", ") << " }" << std::endl;
         for (auto&& i : chars.first)
             for (auto&& j : i)
                 if ((j & ControlMask) == Control)
-                    Error("Control character in tokens sequence"); 
-    } 
+                    Error("Control character in tokens sequence");
+    }
 
-    int type = t.Type(); 
-    if (type == TokenTypes::Letters) 
-        type = YRE_LETTERS; 
-    else if (type == TokenTypes::Count) 
-        type = YRE_COUNT; 
-    else if (type == TokenTypes::Dot) 
-        type = YRE_DOT; 
-    else if (type == TokenTypes::Open) 
-        type = '('; 
-    else if (type == TokenTypes::Close) 
-        type = ')'; 
-    else if (type == TokenTypes::Or) 
-        type = '|'; 
-    else if (type == TokenTypes::And) 
-        type = YRE_AND; 
-    else if (type == TokenTypes::Not) 
-        type = YRE_NOT; 
-    else if (type == TokenTypes::BeginMark) 
-        type = '^'; 
-    else if (type == TokenTypes::EndMark) 
-        type = '$'; 
-    else if (type == TokenTypes::End) 
-        type = 0; 
-    return Term(type, t.Value()); 
+    int type = t.Type();
+    if (type == TokenTypes::Letters)
+        type = YRE_LETTERS;
+    else if (type == TokenTypes::Count)
+        type = YRE_COUNT;
+    else if (type == TokenTypes::Dot)
+        type = YRE_DOT;
+    else if (type == TokenTypes::Open)
+        type = '(';
+    else if (type == TokenTypes::Close)
+        type = ')';
+    else if (type == TokenTypes::Or)
+        type = '|';
+    else if (type == TokenTypes::And)
+        type = YRE_AND;
+    else if (type == TokenTypes::Not)
+        type = YRE_NOT;
+    else if (type == TokenTypes::BeginMark)
+        type = '^';
+    else if (type == TokenTypes::EndMark)
+        type = '$';
+    else if (type == TokenTypes::End)
+        type = 0;
+    return Term(type, t.Value());
 }
 
 void Lexer::Parenthesized(Fsm& fsm)
 {
     for (auto i = m_features.rbegin(), ie = m_features.rend(); i != ie; ++i)
-        (*i)->Parenthesized(fsm); 
+        (*i)->Parenthesized(fsm);
 }
 
 wchar32 Feature::CorrectChar(wchar32 c, const char* controls)
 {
-    bool ctrl = (strchr(controls, c & 0xFF) != 0); 
-    if ((c & ControlMask) == Control && ctrl) 
-        return c & ~ControlMask; 
-    if (c <= 0xFF && ctrl) 
-        return c | Control; 
-    return c; 
+    bool ctrl = (strchr(controls, c & 0xFF) != 0);
+    if ((c & ControlMask) == Control && ctrl)
+        return c & ~ControlMask;
+    if (c <= 0xFF && ctrl)
+        return c | Control;
+    return c;
 }
 
 namespace {
     class EnableUnicodeSequencesImpl : public UnicodeReader {
-    public: 
+    public:
         bool Accepts(wchar32 c) const {
             return c == (Control | 'x');
         }
@@ -218,27 +218,27 @@ namespace {
 
     class CharacterRangeReader: public UnicodeReader {
     public:
-        bool Accepts(wchar32 c) const { return c == '[' || c == (Control | '[') || c == (Control | ']'); } 
+        bool Accepts(wchar32 c) const { return c == '[' || c == (Control | '[') || c == (Control | ']'); }
 
-        Term Lex() 
-        { 
-            static const char* controls = "^[]-\\"; 
-            static const char* controls2 = "*+{}()$?.&~"; 
-            wchar32 ch = CorrectChar(GetChar(), controls); 
-            if (ch == '[' || ch == ']') 
-                return Term::Character(ch); 
+        Term Lex()
+        {
+            static const char* controls = "^[]-\\";
+            static const char* controls2 = "*+{}()$?.&~";
+            wchar32 ch = CorrectChar(GetChar(), controls);
+            if (ch == '[' || ch == ']')
+                return Term::Character(ch);
 
-            Term::CharacterRange cs; 
-            ch = CorrectChar(GetChar(), controls); 
-            if (ch == (Control | '^')) { 
-                cs.second = true; 
-                ch = CorrectChar(GetChar(), controls); 
-            } 
+            Term::CharacterRange cs;
+            ch = CorrectChar(GetChar(), controls);
+            if (ch == (Control | '^')) {
+                cs.second = true;
+                ch = CorrectChar(GetChar(), controls);
+            }
 
             bool firstUnicode;
             wchar32 unicodeSymbol = 0;
 
-            for (; ch != End && ch != (Control | ']'); ch = CorrectChar(GetChar(), controls)) { 
+            for (; ch != End && ch != (Control | ']'); ch = CorrectChar(GetChar(), controls)) {
                 if (ch == (Control | 'x')) {
                     UngetChar(ch);
 					firstUnicode = true;
@@ -248,7 +248,7 @@ namespace {
                 }
 
                 if (((ch & ControlMask) != Control || firstUnicode) && CorrectChar(PeekChar(), controls) == (Control | '-')) {
-                    GetChar(); 
+                    GetChar();
                     wchar32 current = GetChar();
 
                     bool secondUnicode = (current == (Control | 'x'));
@@ -265,104 +265,104 @@ namespace {
                     }
 
                     for (ch = begin; ch <= end; ++ch) {
-                        cs.first.insert(Term::String(1, ch)); 
+                        cs.first.insert(Term::String(1, ch));
                     }
                 } else if (ch == (Control | '-')) {
-                    cs.first.insert(Term::String(1, '-')); 
+                    cs.first.insert(Term::String(1, '-'));
                 }
                 else if ((ch & ControlMask) == Control && (strchr(controls2, ch & ~ControlMask) || strchr(controls, ch & ~ControlMask))) {
-                    cs.first.insert(Term::String(1, ch & ~ControlMask)); 
+                    cs.first.insert(Term::String(1, ch & ~ControlMask));
                 }
                 else if ((ch & ControlMask) != Control || !strchr(controls, ch & ~ControlMask)) {
                     cs.first.insert(Term::String(1, (firstUnicode) ? unicodeSymbol : ch));
                 } else {
-                    Error("Wrong character in range"); 
+                    Error("Wrong character in range");
                 }
-            } 
-            if (ch == End) 
-                Error("Unexpected end of pattern"); 
+            }
+            if (ch == End)
+                Error("Unexpected end of pattern");
 
-            return Term(TokenTypes::Letters, cs); 
-        } 
-    }; 
+            return Term(TokenTypes::Letters, cs);
+        }
+    };
 
-    class RepetitionCountReader: public Feature { 
-    public: 
-        bool Accepts(wchar32 c) const { return c == '{' || c == (Control | '{') || c == (Control | '}'); } 
+    class RepetitionCountReader: public Feature {
+    public:
+        bool Accepts(wchar32 c) const { return c == '{' || c == (Control | '{') || c == (Control | '}'); }
 
-        Term Lex() 
-        { 
-            wchar32 ch = GetChar(); 
-            if (ch == (Control | '{') || ch == (Control | '}')) 
-                return Term::Character(ch & ~ControlMask); 
-            ch = GetChar(); 
-            int lower = 0, upper = 0; 
+        Term Lex()
+        {
+            wchar32 ch = GetChar();
+            if (ch == (Control | '{') || ch == (Control | '}'))
+                return Term::Character(ch & ~ControlMask);
+            ch = GetChar();
+            int lower = 0, upper = 0;
 
-            if (!is_digit(ch)) 
-                Error("Wrong repetition count"); 
+            if (!is_digit(ch))
+                Error("Wrong repetition count");
 
-            for (; is_digit(ch); ch = GetChar()) 
-                lower = lower * 10 + (ch - '0'); 
-            if (ch == '}') 
-                return Term::Repetition(lower, lower); 
-            else if (ch != ',') 
-                Error("Wrong repetition count"); 
+            for (; is_digit(ch); ch = GetChar())
+                lower = lower * 10 + (ch - '0');
+            if (ch == '}')
+                return Term::Repetition(lower, lower);
+            else if (ch != ',')
+                Error("Wrong repetition count");
 
-            ch = GetChar(); 
-            if (ch == '}') 
-                return Term::Repetition(lower, Inf); 
-            else if (!is_digit(ch)) 
-                Error("Wrong repetition count"); 
-            for (; is_digit(ch); ch = GetChar()) 
-                upper = upper * 10 + (ch - '0'); 
+            ch = GetChar();
+            if (ch == '}')
+                return Term::Repetition(lower, Inf);
+            else if (!is_digit(ch))
+                Error("Wrong repetition count");
+            for (; is_digit(ch); ch = GetChar())
+                upper = upper * 10 + (ch - '0');
 
-            if (ch != '}') 
-                Error("Wrong repetition count"); 
-            return Term::Repetition(lower, upper); 
-        } 
-    }; 
+            if (ch != '}')
+                Error("Wrong repetition count");
+            return Term::Repetition(lower, upper);
+        }
+    };
 
-    class CaseInsensitiveImpl: public Feature { 
-    public: 
-        void Alter(Term& t) 
-        { 
-            if (t.Value().IsA<Term::CharacterRange>()) { 
-                typedef Term::CharacterRange::first_type CharSet; 
-                const CharSet& old = t.Value().As<Term::CharacterRange>().first; 
-                CharSet altered; 
+    class CaseInsensitiveImpl: public Feature {
+    public:
+        void Alter(Term& t)
+        {
+            if (t.Value().IsA<Term::CharacterRange>()) {
+                typedef Term::CharacterRange::first_type CharSet;
+                const CharSet& old = t.Value().As<Term::CharacterRange>().first;
+                CharSet altered;
                 for (auto&& i : old) {
                     if (i.size() == 1) {
                         altered.insert(Term::String(1, to_upper(i[0])));
                         altered.insert(Term::String(1, to_lower(i[0])));
-                    } else 
+                    } else
                         altered.insert(i);
-                } 
-                t = Term(t.Type(), Term::CharacterRange(altered, t.Value().As<Term::CharacterRange>().second)); 
-            } 
-        } 
-    }; 
-    class AndNotSupportImpl: public Feature { 
-    public: 
-        bool Accepts(wchar32 c) const 
-        { 
-            return c == '&' || c == '~' || c == (Control | '&') || c == (Control | '~'); 
-        } 
+                }
+                t = Term(t.Type(), Term::CharacterRange(altered, t.Value().As<Term::CharacterRange>().second));
+            }
+        }
+    };
+    class AndNotSupportImpl: public Feature {
+    public:
+        bool Accepts(wchar32 c) const
+        {
+            return c == '&' || c == '~' || c == (Control | '&') || c == (Control | '~');
+        }
 
-        Term Lex() 
-        { 
-            wchar32 ch = GetChar(); 
-            if (ch == (Control | '&') || ch == (Control | '~')) 
-                return Term::Character(ch & ~ControlMask); 
-            else if (ch == '&') 
-                return Term(TokenTypes::And); 
-            else if (ch == '~') 
-                return Term(TokenTypes::Not); 
-            else { 
-                Error("Pire::AndNotSupport::Lex(): strange input character"); 
-                return Term(0); // Make compiler happy 
-            } 
-        } 
-    }; 
+        Term Lex()
+        {
+            wchar32 ch = GetChar();
+            if (ch == (Control | '&') || ch == (Control | '~'))
+                return Term::Character(ch & ~ControlMask);
+            else if (ch == '&')
+                return Term(TokenTypes::And);
+            else if (ch == '~')
+                return Term(TokenTypes::Not);
+            else {
+                Error("Pire::AndNotSupport::Lex(): strange input character");
+                return Term(0); // Make compiler happy
+            }
+        }
+    };
 }
 
 namespace Features {
@@ -375,18 +375,18 @@ void Lexer::InstallDefaultFeatures()
 {
     AddFeature(Feature::Ptr(new CharacterRangeReader));
     AddFeature(Feature::Ptr(new RepetitionCountReader));
-    AddFeature(Features::CharClasses()); 
+    AddFeature(Features::CharClasses());
     AddFeature(Feature::Ptr(new EnableUnicodeSequencesImpl));
 }
 
 Fsm Lexer::Parse()
 {
-    if (!Impl::yre_parse(*this)) 
-        return m_retval.As<Fsm>(); 
-    else { 
-        Error("Syntax error in regexp"); 
-        return Fsm(); // Make compiler happy 
-    } 
+    if (!Impl::yre_parse(*this))
+        return m_retval.As<Fsm>();
+    else {
+        Error("Syntax error in regexp");
+        return Fsm(); // Make compiler happy
+    }
 }
 
 }

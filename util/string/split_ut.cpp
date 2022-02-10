@@ -46,15 +46,15 @@ inline void Cmp(const T1& t1, const T2& t2) {
             throw;
         }
     }
-} 
- 
+}
+
 template <class T>
 inline void Print(const T& t) {
     for (typename T::const_iterator i = t.begin(); i != t.end(); ++i) {
         Cerr << *i << Endl;
     }
-} 
- 
+}
+
 template <template <typename> class TConsumer, typename TResult, typename I, typename TDelimiter>
 void TestDelimiterOnString(TResult& good, I* str, const TDelimiter& delim) {
     TResult test;
@@ -62,8 +62,8 @@ void TestDelimiterOnString(TResult& good, I* str, const TDelimiter& delim) {
     SplitString(str, delim, consumer);
     Cmp(good, test);
     UNIT_ASSERT_EQUAL(good, test);
-} 
- 
+}
+
 template <template <typename> class TConsumer, typename TResult, typename I, typename TDelimiter>
 void TestDelimiterOnRange(TResult& good, I* b, I* e, const TDelimiter& delim) {
     TResult test;

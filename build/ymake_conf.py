@@ -605,7 +605,7 @@ class Build(object):
             type_ = detector.type
         else:
             detector = None
- 
+
         if type_ == 'msvc':
             return MSVCToolchainOptions(self, detector)
         else:
@@ -613,7 +613,7 @@ class Build(object):
 
     def _print_other_settings(self, compiler):
         host = self.host
- 
+
         emit('USE_LOCAL_TOOLS', 'no' if self.ignore_local_files else 'yes')
 
         ragel = Ragel()
@@ -623,7 +623,7 @@ class Build(object):
         perl = Perl()
         perl.configure_local()
         perl.print_variables('LOCAL_')
- 
+
         swiftc = SwiftCompiler(self)
         swiftc.configure()
         swiftc.print_compiler()

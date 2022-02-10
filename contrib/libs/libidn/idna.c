@@ -33,43 +33,43 @@
 #define DOTP(c) ((c) == 0x002E || (c) == 0x3002 ||	\
 		 (c) == 0xFF0E || (c) == 0xFF61)
 
-#ifdef WITH_VALGRIND 
+#ifdef WITH_VALGRIND
+
+static size_t STRLEN(const char *s) {
+    size_t ret = 0;
+    while (*s++)
+        ++ret;
+    return ret;
+}
+
+static char* STRCPY(char* destination, const char* source) {
+    char *p = destination;
+    while (*source)
+        *p++ = *source++;
+    *p = 0;
+    return destination;
+}
+
+static char* STRCAT(char* destination, const char* source) {
+    char *p = destination;
+    while (*p)
+        ++p;
+
+    while (*source)
+        *p++ = *source++;
+    *p = 0;
+
+    return destination;
+}
+
+#else //WITH_VALGRIND
+
+#   define STRLEN(s) strlen(s)
+#   define STRCAT(d, s) strcat(d, s)
+#   define STRCPY(d, s) strcpy(d, s)
+
+#endif
  
-static size_t STRLEN(const char *s) { 
-    size_t ret = 0; 
-    while (*s++) 
-        ++ret; 
-    return ret; 
-} 
- 
-static char* STRCPY(char* destination, const char* source) { 
-    char *p = destination; 
-    while (*source) 
-        *p++ = *source++; 
-    *p = 0; 
-    return destination; 
-} 
- 
-static char* STRCAT(char* destination, const char* source) { 
-    char *p = destination; 
-    while (*p) 
-        ++p; 
- 
-    while (*source) 
-        *p++ = *source++; 
-    *p = 0; 
- 
-    return destination; 
-} 
- 
-#else //WITH_VALGRIND 
- 
-#   define STRLEN(s) strlen(s) 
-#   define STRCAT(d, s) strcat(d, s) 
-#   define STRCPY(d, s) strcpy(d, s) 
- 
-#endif 
-  
 /* Core functions */
 
 /**
@@ -150,7 +150,7 @@ idna_to_ascii_4i (const uint32_t * in, size_t inlen, char *out, int flags)
     if (p == NULL)
       return IDNA_MALLOC_ERROR;
 
-    len = STRLEN (p); 
+    len = STRLEN (p);
     do
       {
 	char *newp;
@@ -251,7 +251,7 @@ step3:
     int match;
 
     match = 1;
-    for (i = 0; match && i < STRLEN (IDNA_ACE_PREFIX); i++) 
+    for (i = 0; match && i < STRLEN (IDNA_ACE_PREFIX); i++)
       if (((uint32_t) IDNA_ACE_PREFIX[i] & 0xFF) != src[i])
 	match = 0;
     if (match)
@@ -270,19 +270,19 @@ step3:
   src[len] = '\0';
   outlen = IDNA_LABEL_MAX_LENGTH - STRLEN (IDNA_ACE_PREFIX);
   rc = punycode_encode (len, src, NULL,
-			&outlen, &out[STRLEN (IDNA_ACE_PREFIX)]); 
+			&outlen, &out[STRLEN (IDNA_ACE_PREFIX)]);
   if (rc != PUNYCODE_SUCCESS)
     {
       free (src);
       return IDNA_PUNYCODE_ERROR;
     }
-  out[STRLEN (IDNA_ACE_PREFIX) + outlen] = '\0'; 
+  out[STRLEN (IDNA_ACE_PREFIX) + outlen] = '\0';
 
   /*
    * 7. Prepend the ACE prefix.
    */
 
-  memcpy (out, IDNA_ACE_PREFIX, STRLEN (IDNA_ACE_PREFIX)); 
+  memcpy (out, IDNA_ACE_PREFIX, STRLEN (IDNA_ACE_PREFIX));
 
   /*
    * 8. Verify that the number of code points is in the range 1 to IDNA_LABEL_MAX_LENGTH
@@ -304,7 +304,7 @@ idna_to_unicode_internal (char *utf8in,
 {
   int rc;
   char tmpout[IDNA_LABEL_MAX_LENGTH + 1];
-  size_t utf8len = STRLEN (utf8in) + 1; 
+  size_t utf8len = STRLEN (utf8in) + 1;
   size_t addlen = 0;
 
   /*
@@ -369,8 +369,8 @@ step3:
   /* 4. Remove the ACE prefix.
    */
 
-  memmove (utf8in, &utf8in[STRLEN (IDNA_ACE_PREFIX)], 
-	   STRLEN (utf8in) - STRLEN (IDNA_ACE_PREFIX) + 1); 
+  memmove (utf8in, &utf8in[STRLEN (IDNA_ACE_PREFIX)],
+	   STRLEN (utf8in) - STRLEN (IDNA_ACE_PREFIX) + 1);
 
   /* 5. Decode the sequence using the decoding algorithm in [PUNYCODE]
    * and fail if there is an error. Save a copy of the result of
@@ -379,7 +379,7 @@ step3:
 
   (*outlen)--;			/* reserve one for the zero */
 
-  rc = punycode_decode (STRLEN (utf8in), utf8in, outlen, out, NULL); 
+  rc = punycode_decode (STRLEN (utf8in), utf8in, outlen, out, NULL);
   if (rc != PUNYCODE_SUCCESS)
     {
       free (utf8in);
@@ -402,7 +402,7 @@ step3:
    * step 3, using a case-insensitive ASCII comparison.
    */
 
-  if (strcasecmp (utf8in, tmpout + STRLEN (IDNA_ACE_PREFIX)) != 0) 
+  if (strcasecmp (utf8in, tmpout + STRLEN (IDNA_ACE_PREFIX)) != 0)
     {
       free (utf8in);
       return IDNA_ROUNDTRIP_VERIFY_ERROR;
@@ -510,7 +510,7 @@ idna_to_ascii_4z (const uint32_t * input, char **output, int flags)
       *output = malloc (1);
       if (!*output)
 	return IDNA_MALLOC_ERROR;
-      STRCPY (*output, ""); 
+      STRCPY (*output, "");
       return IDNA_SUCCESS;
     }
 
@@ -520,7 +520,7 @@ idna_to_ascii_4z (const uint32_t * input, char **output, int flags)
       *output = malloc (2);
       if (!*output)
 	return IDNA_MALLOC_ERROR;
-      STRCPY (*output, "."); 
+      STRCPY (*output, ".");
       return IDNA_SUCCESS;
     }
 
@@ -549,22 +549,22 @@ idna_to_ascii_4z (const uint32_t * input, char **output, int flags)
 
       if (out)
 	{
-	  char *newp = realloc (out, STRLEN (out) + 1 + STRLEN (buf) + 1); 
+	  char *newp = realloc (out, STRLEN (out) + 1 + STRLEN (buf) + 1);
 	  if (!newp)
 	    {
 	      free (out);
 	      return IDNA_MALLOC_ERROR;
 	    }
 	  out = newp;
-	  STRCAT (out, "."); 
-	  STRCAT (out, buf); 
+	  STRCAT (out, ".");
+	  STRCAT (out, buf);
 	}
       else
 	{
-	  out = (char *) malloc (STRLEN (buf) + 1); 
+	  out = (char *) malloc (STRLEN (buf) + 1);
 	  if (!out)
 	    return IDNA_MALLOC_ERROR;
-	  STRCPY (out, buf); 
+	  STRCPY (out, buf);
 	}
 
       start = end + 1;

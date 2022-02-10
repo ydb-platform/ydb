@@ -368,7 +368,7 @@ RECURSE(
     faulthandler
     fbprophet
     feedparser
-    ffmpeg-python 
+    ffmpeg-python
     fido2
     filelock
     fingerprints

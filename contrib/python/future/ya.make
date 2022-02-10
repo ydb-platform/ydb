@@ -126,15 +126,15 @@ PY_SRCS(
     future/types/newstr.py
     future/utils/__init__.py
     future/utils/surrogateescape.py
-    past/builtins/__init__.py 
-    past/builtins/misc.py 
-    past/builtins/noniterators.py 
-    past/tests/__init__.py 
-    past/types/__init__.py 
-    past/types/basestring.py 
-    past/types/olddict.py 
-    past/types/oldstr.py 
-    past/utils/__init__.py 
+    past/builtins/__init__.py
+    past/builtins/misc.py
+    past/builtins/noniterators.py
+    past/tests/__init__.py
+    past/types/__init__.py
+    past/types/basestring.py
+    past/types/olddict.py
+    past/types/oldstr.py
+    past/utils/__init__.py
 )
 
 IF (MODULE_TAG == "PY2")
@@ -154,7 +154,7 @@ IF (MODULE_TAG == "PY2")
         http/cookiejar.py
         http/cookies.py
         http/server.py
-        past/__init__.py 
+        past/__init__.py
         queue/__init__.py
         reprlib/__init__.py
         socketserver/__init__.py

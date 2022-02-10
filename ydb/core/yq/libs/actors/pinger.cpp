@@ -1,6 +1,6 @@
 #include <ydb/core/yq/libs/config/protos/pinger.pb.h>
 #include "proxy.h"
-#include <util/datetime/base.h> 
+#include <util/datetime/base.h>
 
 #include <ydb/core/yq/libs/control_plane_storage/control_plane_storage.h>
 #include <ydb/core/yq/libs/control_plane_storage/events/events.h>
@@ -10,7 +10,7 @@
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/events.h>
 #include <library/cpp/actors/core/log.h>
-#include <library/cpp/protobuf/interop/cast.h> 
+#include <library/cpp/protobuf/interop/cast.h>
 
 #include <util/generic/utility.h>
 
@@ -148,8 +148,8 @@ public:
         const TString& ownerId,
         const TPrivateClient& client,
         const TActorId parent,
-        const NConfig::TPingerConfig& config, 
-        const TInstant& deadline) 
+        const NConfig::TPingerConfig& config,
+        const TInstant& deadline)
         : Config(config)
         , Scope(scope)
         , UserId(userId)
@@ -157,7 +157,7 @@ public:
         , OwnerId(ownerId)
         , Client(client)
         , Parent(parent)
-        , Deadline(deadline) 
+        , Deadline(deadline)
     {
     }
 
@@ -382,7 +382,7 @@ private:
         request.set_scope(Scope.ToString());
         request.set_owner_id(OwnerId);
         request.mutable_query_id()->set_value(Id);
-        *request.mutable_deadline() = NProtoInterop::CastToProto(Deadline); 
+        *request.mutable_deadline() = NProtoInterop::CastToProto(Deadline);
 
         const auto* actorSystem = NActors::TActivationContext::ActorSystem();
         const auto selfId = SelfId();
@@ -424,7 +424,7 @@ private:
     TInstant StartLeaseTime;
     TRetryState RetryState;
     const TActorId Parent;
-    const TInstant Deadline; 
+    const TInstant Deadline;
 
     std::deque<TForwardPingReqInfo> ForwardRequests;
     bool Finishing = false;
@@ -440,8 +440,8 @@ IActor* CreatePingerActor(
     const TString& ownerId,
     const TPrivateClient& client,
     const TActorId parent,
-    const NConfig::TPingerConfig& config, 
-    const TInstant& deadline) 
+    const NConfig::TPingerConfig& config,
+    const TInstant& deadline)
 {
     return new TPingerActor(
         scope,
@@ -450,8 +450,8 @@ IActor* CreatePingerActor(
         ownerId,
         client,
         parent,
-        config, 
-        deadline); 
+        config,
+        deadline);
 }
 
 } /* NYq */

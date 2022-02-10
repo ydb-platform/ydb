@@ -20,7 +20,7 @@ struct TTaskInternal {
     TString Owner;
     TString HostName;
     TMaybe<YandexQuery::Job> Job;
-    TInstant Deadline; 
+    TInstant Deadline;
 };
 
 std::pair<TString, NYdb::TParams> MakeSql(const TTaskInternal& taskInternal) {
@@ -66,7 +66,7 @@ std::tuple<TString, NYdb::TParams, std::function<std::pair<TString, NYdb::TParam
     const TTaskInternal& taskInternal,
     const std::shared_ptr<TResponseTasks>& responseTasks,
     const TInstant& taskLeaseTimestamp,
-    bool disableCurrentIam, 
+    bool disableCurrentIam,
     const TDuration& automaticQueriesTtl,
     const TDuration& resultSetsTtl)
 {
@@ -104,7 +104,7 @@ std::tuple<TString, NYdb::TParams, std::function<std::pair<TString, NYdb::TParam
                     throw TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query. Please contact internal support";
                 }
                 const TInstant deadline = TInstant::Now() + (task.Query.content().automatic() ? std::min(automaticQueriesTtl, resultSetsTtl) : resultSetsTtl);
-                task.Deadline = deadline; 
+                task.Deadline = deadline;
                 if (!task.Internal.ParseFromString(*parser.ColumnParser(INTERNAL_COLUMN_NAME).GetOptionalString())) {
                     throw TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query internal. Please contact internal support";
                 }

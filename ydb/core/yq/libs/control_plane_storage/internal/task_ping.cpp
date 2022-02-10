@@ -19,7 +19,7 @@ bool IsFinishedStatus(YandexQuery::QueryMeta::ComputeStatus status) {
 
 std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParams>(const TVector<NYdb::TResultSet>&)>> ConstructHardPingTask(
     const TEvControlPlaneStorage::TEvPingTaskRequest* request, std::shared_ptr<YandexQuery::QueryAction> response,
-    const TString& tablePathPrefix, const TDuration& automaticQueriesTtl) { 
+    const TString& tablePathPrefix, const TDuration& automaticQueriesTtl) {
 
     TSqlQueryBuilder readQueryBuilder(tablePathPrefix, "HardPingTask(read)");
     readQueryBuilder.AddString("scope", request->Scope);
@@ -127,30 +127,30 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
         }
 
         if (request->StartedAt) {
-            *query.mutable_meta()->mutable_started_at() = NProtoInterop::CastToProto(*request->StartedAt); 
-            *job.mutable_query_meta()->mutable_started_at() = NProtoInterop::CastToProto(*request->StartedAt); 
+            *query.mutable_meta()->mutable_started_at() = NProtoInterop::CastToProto(*request->StartedAt);
+            *job.mutable_query_meta()->mutable_started_at() = NProtoInterop::CastToProto(*request->StartedAt);
         }
 
         if (request->FinishedAt) {
-            *query.mutable_meta()->mutable_finished_at() = NProtoInterop::CastToProto(*request->FinishedAt); 
-            *job.mutable_query_meta()->mutable_finished_at() = NProtoInterop::CastToProto(*request->FinishedAt); 
+            *query.mutable_meta()->mutable_finished_at() = NProtoInterop::CastToProto(*request->FinishedAt);
+            *job.mutable_query_meta()->mutable_finished_at() = NProtoInterop::CastToProto(*request->FinishedAt);
             if (!query.meta().has_started_at()) {
-                *query.mutable_meta()->mutable_started_at() = NProtoInterop::CastToProto(*request->FinishedAt); 
-                *job.mutable_query_meta()->mutable_started_at() = NProtoInterop::CastToProto(*request->FinishedAt); 
+                *query.mutable_meta()->mutable_started_at() = NProtoInterop::CastToProto(*request->FinishedAt);
+                *job.mutable_query_meta()->mutable_started_at() = NProtoInterop::CastToProto(*request->FinishedAt);
             }
         }
 
-        TInstant expireAt = TInstant::Now() + automaticQueriesTtl; 
-        if (IsTerminalStatus(query.meta().status()) && query.content().automatic()) { 
-            *query.mutable_meta()->mutable_expire_at() = NProtoInterop::CastToProto(expireAt); 
-            *job.mutable_query_meta()->mutable_expire_at() = NProtoInterop::CastToProto(expireAt); 
-            *job.mutable_expire_at() = NProtoInterop::CastToProto(expireAt); 
-        } 
- 
-        if (query.meta().status() == YandexQuery::QueryMeta::COMPLETED) { 
-            *query.mutable_meta()->mutable_result_expire_at() = NProtoInterop::CastToProto(request->Deadline); 
-        } 
- 
+        TInstant expireAt = TInstant::Now() + automaticQueriesTtl;
+        if (IsTerminalStatus(query.meta().status()) && query.content().automatic()) {
+            *query.mutable_meta()->mutable_expire_at() = NProtoInterop::CastToProto(expireAt);
+            *job.mutable_query_meta()->mutable_expire_at() = NProtoInterop::CastToProto(expireAt);
+            *job.mutable_expire_at() = NProtoInterop::CastToProto(expireAt);
+        }
+
+        if (query.meta().status() == YandexQuery::QueryMeta::COMPLETED) {
+            *query.mutable_meta()->mutable_result_expire_at() = NProtoInterop::CastToProto(request->Deadline);
+        }
+
         if (request->StateLoadMode) {
             internal.set_state_load_mode(request->StateLoadMode);
             if (request->StateLoadMode == YandexQuery::FROM_LAST_CHECKPOINT) { // Saved checkpoint
@@ -258,10 +258,10 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
         } else {
             updateQueryTtl = "`" EXPIRE_AT_COLUMN_NAME "` = NULL";
         }
- 
+
         writeQueryBuilder.AddText(
             "UPSERT INTO `" JOBS_TABLE_NAME "` (`" SCOPE_COLUMN_NAME "`, `" QUERY_ID_COLUMN_NAME "`, `" JOB_ID_COLUMN_NAME "`, `" JOB_COLUMN_NAME "`) VALUES($scope, $query_id, $job_id, $job);\n"
-            "UPDATE `" QUERIES_TABLE_NAME "` SET `" QUERY_COLUMN_NAME "` = $query, `" STATUS_COLUMN_NAME "` = $status, `" INTERNAL_COLUMN_NAME "` = $internal, `" RESULT_ID_COLUMN_NAME "` = $result_id, " + updateResultSetsExpire + ", " + updateQueryTtl + ", `" META_REVISION_COLUMN_NAME  "` = `" META_REVISION_COLUMN_NAME "` + 1\n" 
+            "UPDATE `" QUERIES_TABLE_NAME "` SET `" QUERY_COLUMN_NAME "` = $query, `" STATUS_COLUMN_NAME "` = $status, `" INTERNAL_COLUMN_NAME "` = $internal, `" RESULT_ID_COLUMN_NAME "` = $result_id, " + updateResultSetsExpire + ", " + updateQueryTtl + ", `" META_REVISION_COLUMN_NAME  "` = `" META_REVISION_COLUMN_NAME "` + 1\n"
             "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
         );
 
@@ -344,15 +344,15 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvPingTaskReq
     const TString scope = request->Scope;
     const TString queryId = request->QueryId;
     const TString owner = request->Owner;
-    const TInstant deadline = request->Deadline; 
+    const TInstant deadline = request->Deadline;
 
     CPS_LOG_T("PingTaskRequest: " << scope << " " << queryId
         << " " << owner << " " << deadline << " "
         << (request->Status ? YandexQuery::QueryMeta_ComputeStatus_Name(*request->Status) : "no status"));
 
-    NYql::TIssues issues = ValidatePingTask(scope, queryId, owner, deadline, Config.ResultSetsTtl); 
+    NYql::TIssues issues = ValidatePingTask(scope, queryId, owner, deadline, Config.ResultSetsTtl);
     if (issues) {
-        CPS_LOG_D("PingTaskRequest, validation failed: " << scope << " " << queryId  << " " << owner << " " << deadline << issues.ToString()); 
+        CPS_LOG_D("PingTaskRequest, validation failed: " << scope << " " << queryId  << " " << owner << " " << deadline << issues.ToString());
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvPingTaskResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
         LWPROBE(PingTaskRequest, queryId, delta, false);

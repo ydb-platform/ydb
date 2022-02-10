@@ -18,11 +18,11 @@ struct TTopicConsumerLess {
     }
 };
 
-NYql::TIssues ValidateWriteResultData(const TString& resultId, const Ydb::ResultSet& resultSet, const TInstant& deadline, const TDuration& ttl); 
+NYql::TIssues ValidateWriteResultData(const TString& resultId, const Ydb::ResultSet& resultSet, const TInstant& deadline, const TDuration& ttl);
 
 NYql::TIssues ValidateGetTask(const TString& owner, const TString& hostName);
 
-NYql::TIssues ValidatePingTask(const TString& scope, const TString& queryId, const TString& owner, const TInstant& deadline, const TDuration& ttl); 
+NYql::TIssues ValidatePingTask(const TString& scope, const TString& queryId, const TString& owner, const TInstant& deadline, const TDuration& ttl);
 
 NYql::TIssues ValidateNodesHealthCheck(
     const TString& tenant,

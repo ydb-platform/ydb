@@ -15,7 +15,7 @@
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 #include <library/cpp/monlib/service/pages/templates.h>
-#include <library/cpp/protobuf/interop/cast.h> 
+#include <library/cpp/protobuf/interop/cast.h>
 
 #include <ydb/public/api/protos/yq.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
@@ -93,13 +93,13 @@ class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbCont
         RT_CREATE_QUERY,
         RT_LIST_QUERIES,
         RT_DESCRIBE_QUERY,
-        RT_GET_QUERY_STATUS, 
+        RT_GET_QUERY_STATUS,
         RT_MODIFY_QUERY,
         RT_DELETE_QUERY,
         RT_CONTROL_QUERY,
         RT_GET_RESULT_DATA,
         RT_LIST_JOBS_DATA,
-        RT_DESCRIBE_JOB, 
+        RT_DESCRIBE_JOB,
         RT_CREATE_CONNECTION,
         RT_LIST_CONNECTIONS,
         RT_DESCRIBE_CONNECTION,
@@ -122,13 +122,13 @@ class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbCont
             { MakeIntrusive<TRequestCounters>("CreateQuery") },
             { MakeIntrusive<TRequestCounters>("ListQueries") },
             { MakeIntrusive<TRequestCounters>("DescribeQuery") },
-            { MakeIntrusive<TRequestCounters>("GetQueryStatus") }, 
+            { MakeIntrusive<TRequestCounters>("GetQueryStatus") },
             { MakeIntrusive<TRequestCounters>("ModifyQuery") },
             { MakeIntrusive<TRequestCounters>("DeleteQuery") },
             { MakeIntrusive<TRequestCounters>("ControlQuery") },
             { MakeIntrusive<TRequestCounters>("GetResultData") },
             { MakeIntrusive<TRequestCounters>("ListJobs") },
-            { MakeIntrusive<TRequestCounters>("DescribeJob") }, 
+            { MakeIntrusive<TRequestCounters>("DescribeJob") },
             { MakeIntrusive<TRequestCounters>("CreateConnection") },
             { MakeIntrusive<TRequestCounters>("ListConnections") },
             { MakeIntrusive<TRequestCounters>("DescribeConnection") },
@@ -161,7 +161,7 @@ class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbCont
         TString IdsPrefix;
         TDuration IdempotencyKeyTtl;
         TDuration AutomaticQueriesTtl;
-        TDuration ResultSetsTtl; 
+        TDuration ResultSetsTtl;
         TDuration AnalyticsRetryCounterUpdateTime;
         TDuration StreamingRetryCounterUpdateTime;
         TDuration TaskLeaseTtl;
@@ -208,13 +208,13 @@ public:
         hFunc(TEvControlPlaneStorage::TEvCreateQueryRequest, Handle);
         hFunc(TEvControlPlaneStorage::TEvListQueriesRequest, Handle);
         hFunc(TEvControlPlaneStorage::TEvDescribeQueryRequest, Handle);
-        hFunc(TEvControlPlaneStorage::TEvGetQueryStatusRequest, Handle); 
+        hFunc(TEvControlPlaneStorage::TEvGetQueryStatusRequest, Handle);
         hFunc(TEvControlPlaneStorage::TEvModifyQueryRequest, Handle);
         hFunc(TEvControlPlaneStorage::TEvDeleteQueryRequest, Handle);
         hFunc(TEvControlPlaneStorage::TEvControlQueryRequest, Handle);
         hFunc(TEvControlPlaneStorage::TEvGetResultDataRequest, Handle);
         hFunc(TEvControlPlaneStorage::TEvListJobsRequest, Handle);
-        hFunc(TEvControlPlaneStorage::TEvDescribeJobRequest, Handle); 
+        hFunc(TEvControlPlaneStorage::TEvDescribeJobRequest, Handle);
         hFunc(TEvControlPlaneStorage::TEvCreateConnectionRequest, Handle);
         hFunc(TEvControlPlaneStorage::TEvListConnectionsRequest, Handle);
         hFunc(TEvControlPlaneStorage::TEvDescribeConnectionRequest, Handle);
@@ -235,13 +235,13 @@ public:
     void Handle(TEvControlPlaneStorage::TEvCreateQueryRequest::TPtr& ev);
     void Handle(TEvControlPlaneStorage::TEvListQueriesRequest::TPtr& ev);
     void Handle(TEvControlPlaneStorage::TEvDescribeQueryRequest::TPtr& ev);
-    void Handle(TEvControlPlaneStorage::TEvGetQueryStatusRequest::TPtr& ev); 
+    void Handle(TEvControlPlaneStorage::TEvGetQueryStatusRequest::TPtr& ev);
     void Handle(TEvControlPlaneStorage::TEvModifyQueryRequest::TPtr& ev);
     void Handle(TEvControlPlaneStorage::TEvDeleteQueryRequest::TPtr& ev);
     void Handle(TEvControlPlaneStorage::TEvControlQueryRequest::TPtr& ev);
     void Handle(TEvControlPlaneStorage::TEvGetResultDataRequest::TPtr& ev);
     void Handle(TEvControlPlaneStorage::TEvListJobsRequest::TPtr& ev);
-    void Handle(TEvControlPlaneStorage::TEvDescribeJobRequest::TPtr& ev); 
+    void Handle(TEvControlPlaneStorage::TEvDescribeJobRequest::TPtr& ev);
 
     void Handle(TEvControlPlaneStorage::TEvCreateConnectionRequest::TPtr& ev);
     void Handle(TEvControlPlaneStorage::TEvListConnectionsRequest::TPtr& ev);
@@ -276,10 +276,10 @@ public:
             issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.acl.visibility field is not specified"));
         }
 
-        if (content.name() != to_lower(content.name())) { 
-            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "Incorrect connection name: " + content.name() + ". Please use only lower case")); 
-        } 
- 
+        if (content.name() != to_lower(content.name())) {
+            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "Incorrect connection name: " + content.name() + ". Please use only lower case"));
+        }
+
         if (!content.has_setting()) {
             issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.setting field is not specified"));
         }
@@ -398,10 +398,10 @@ public:
                 issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "binding.acl.visibility field is not specified"));
             }
 
-            if (content.name() != to_lower(content.name())) { 
-                issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "Incorrect binding name: " + content.name() + ". Please use only lower case")); 
-            } 
- 
+            if (content.name() != to_lower(content.name())) {
+                issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "Incorrect binding name: " + content.name() + ". Please use only lower case"));
+            }
+
             if (!content.has_setting()) {
                 issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "binding.setting field is not specified"));
             }
@@ -811,7 +811,7 @@ private:
         common.set_id(id);
         common.set_created_by(user);
         common.set_modified_by(user);
-        auto now = NProtoInterop::CastToProto(startTime); 
+        auto now = NProtoInterop::CastToProto(startTime);
         *common.mutable_created_at() = now;
         *common.mutable_modified_at() = now;
         common.set_revision(revision);

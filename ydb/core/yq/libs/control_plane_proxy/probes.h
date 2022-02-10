@@ -15,10 +15,10 @@
         GROUPS(), \
         TYPES(TString, TString, TString, TDuration, i64, bool, bool), \
         NAMES("scope", "user", "queryId", "latencyMs", "size", "success", "timeout")) \
-    PROBE(GetQueryStatusRequest, \ 
-        GROUPS(), \ 
-        TYPES(TString, TString, TString, TDuration, i64, bool, bool), \ 
-        NAMES("scope", "user", "queryId", "latencyMs", "size", "success", "timeout")) \ 
+    PROBE(GetQueryStatusRequest, \
+        GROUPS(), \
+        TYPES(TString, TString, TString, TDuration, i64, bool, bool), \
+        NAMES("scope", "user", "queryId", "latencyMs", "size", "success", "timeout")) \
     PROBE(ModifyQueryRequest, \
         GROUPS(), \
         TYPES(TString, TString, TString, TDuration, i64, bool, bool), \
@@ -39,10 +39,10 @@
         GROUPS(), \
         TYPES(TString, TString, TString, TDuration, i64, bool, bool), \
         NAMES("scope", "user", "queryId", "latencyMs", "size", "success", "timeout")) \
-    PROBE(DescribeJobRequest, \ 
-        GROUPS(), \ 
-        TYPES(TString, TString, TString, TDuration, i64, bool, bool), \ 
-        NAMES("scope", "user", "jobId", "latencyMs", "size", "success", "timeout")) \ 
+    PROBE(DescribeJobRequest, \
+        GROUPS(), \
+        TYPES(TString, TString, TString, TDuration, i64, bool, bool), \
+        NAMES("scope", "user", "jobId", "latencyMs", "size", "success", "timeout")) \
     PROBE(CreateConnectionRequest, \
         GROUPS(), \
         TYPES(TString, TString, TDuration, i64, bool, bool), \

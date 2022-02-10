@@ -116,34 +116,34 @@ public:
         return future;
     }
 
-    TAsyncGetQueryStatusResult GetQueryStatus( 
-        const YandexQuery::GetQueryStatusRequest& protoRequest, 
-        const TGetQueryStatusSettings& settings) { 
-        auto request = MakeOperationRequest<YandexQuery::GetQueryStatusRequest>(settings); 
-        request = protoRequest; 
- 
-        auto promise = NThreading::NewPromise<TGetQueryStatusResult>(); 
-        auto future = promise.GetFuture(); 
- 
-        auto extractor = MakeResultExtractor< 
-            YandexQuery::GetQueryStatusResult, 
-            TGetQueryStatusResult>(std::move(promise)); 
- 
-        Connections_->RunDeferred< 
-            YandexQuery::V1::YandexQueryService, 
-            YandexQuery::GetQueryStatusRequest, 
-            YandexQuery::GetQueryStatusResponse>( 
-                std::move(request), 
-                std::move(extractor), 
-                &YandexQuery::V1::YandexQueryService::Stub::AsyncGetQueryStatus, 
-                DbDriverState_, 
-                INITIAL_DEFERRED_CALL_DELAY, 
-                TRpcRequestSettings::Make(settings), 
-                settings.ClientTimeout_); 
- 
-        return future; 
-    } 
- 
+    TAsyncGetQueryStatusResult GetQueryStatus(
+        const YandexQuery::GetQueryStatusRequest& protoRequest,
+        const TGetQueryStatusSettings& settings) {
+        auto request = MakeOperationRequest<YandexQuery::GetQueryStatusRequest>(settings);
+        request = protoRequest;
+
+        auto promise = NThreading::NewPromise<TGetQueryStatusResult>();
+        auto future = promise.GetFuture();
+
+        auto extractor = MakeResultExtractor<
+            YandexQuery::GetQueryStatusResult,
+            TGetQueryStatusResult>(std::move(promise));
+
+        Connections_->RunDeferred<
+            YandexQuery::V1::YandexQueryService,
+            YandexQuery::GetQueryStatusRequest,
+            YandexQuery::GetQueryStatusResponse>(
+                std::move(request),
+                std::move(extractor),
+                &YandexQuery::V1::YandexQueryService::Stub::AsyncGetQueryStatus,
+                DbDriverState_,
+                INITIAL_DEFERRED_CALL_DELAY,
+                TRpcRequestSettings::Make(settings),
+                settings.ClientTimeout_);
+
+        return future;
+    }
+
     TAsyncModifyQueryResult ModifyQuery(
         const YandexQuery::ModifyQueryRequest& protoRequest,
         const TModifyQuerySettings& settings) {
@@ -284,34 +284,34 @@ public:
         return future;
     }
 
-    TAsyncDescribeJobResult DescribeJob( 
-        const YandexQuery::DescribeJobRequest& protoRequest, 
-        const TDescribeJobSettings& settings) { 
-        auto request = MakeOperationRequest<YandexQuery::DescribeJobRequest>(settings); 
-        request = protoRequest; 
- 
-        auto promise = NThreading::NewPromise<TDescribeJobResult>(); 
-        auto future = promise.GetFuture(); 
- 
-        auto extractor = MakeResultExtractor< 
-            YandexQuery::DescribeJobResult, 
-            TDescribeJobResult>(std::move(promise)); 
- 
-        Connections_->RunDeferred< 
-            YandexQuery::V1::YandexQueryService, 
-            YandexQuery::DescribeJobRequest, 
-            YandexQuery::DescribeJobResponse>( 
-                std::move(request), 
-                std::move(extractor), 
-                &YandexQuery::V1::YandexQueryService::Stub::AsyncDescribeJob, 
-                DbDriverState_, 
-                INITIAL_DEFERRED_CALL_DELAY, 
-                TRpcRequestSettings::Make(settings), 
-                settings.ClientTimeout_); 
- 
-        return future; 
-    } 
- 
+    TAsyncDescribeJobResult DescribeJob(
+        const YandexQuery::DescribeJobRequest& protoRequest,
+        const TDescribeJobSettings& settings) {
+        auto request = MakeOperationRequest<YandexQuery::DescribeJobRequest>(settings);
+        request = protoRequest;
+
+        auto promise = NThreading::NewPromise<TDescribeJobResult>();
+        auto future = promise.GetFuture();
+
+        auto extractor = MakeResultExtractor<
+            YandexQuery::DescribeJobResult,
+            TDescribeJobResult>(std::move(promise));
+
+        Connections_->RunDeferred<
+            YandexQuery::V1::YandexQueryService,
+            YandexQuery::DescribeJobRequest,
+            YandexQuery::DescribeJobResponse>(
+                std::move(request),
+                std::move(extractor),
+                &YandexQuery::V1::YandexQueryService::Stub::AsyncDescribeJob,
+                DbDriverState_,
+                INITIAL_DEFERRED_CALL_DELAY,
+                TRpcRequestSettings::Make(settings),
+                settings.ClientTimeout_);
+
+        return future;
+    }
+
     TAsyncCreateConnectionResult CreateConnection(
         const YandexQuery::CreateConnectionRequest& protoRequest,
         const TCreateConnectionSettings& settings) {
@@ -643,12 +643,12 @@ TAsyncDescribeQueryResult TClient::DescribeQuery(
     return Impl_->DescribeQuery(request, settings);
 }
 
-TAsyncGetQueryStatusResult TClient::GetQueryStatus( 
-    const YandexQuery::GetQueryStatusRequest& request, 
-    const TGetQueryStatusSettings& settings) { 
-    return Impl_->GetQueryStatus(request, settings); 
-} 
- 
+TAsyncGetQueryStatusResult TClient::GetQueryStatus(
+    const YandexQuery::GetQueryStatusRequest& request,
+    const TGetQueryStatusSettings& settings) {
+    return Impl_->GetQueryStatus(request, settings);
+}
+
 TAsyncModifyQueryResult TClient::ModifyQuery(
     const YandexQuery::ModifyQueryRequest& request,
     const TModifyQuerySettings& settings) {
@@ -679,12 +679,12 @@ TAsyncListJobsResult TClient::ListJobs(
     return Impl_->ListJobs(request, settings);
 }
 
-TAsyncDescribeJobResult TClient::DescribeJob( 
-    const YandexQuery::DescribeJobRequest& request, 
-    const TDescribeJobSettings& settings) { 
-    return Impl_->DescribeJob(request, settings); 
-} 
- 
+TAsyncDescribeJobResult TClient::DescribeJob(
+    const YandexQuery::DescribeJobRequest& request,
+    const TDescribeJobSettings& settings) {
+    return Impl_->DescribeJob(request, settings);
+}
+
 TAsyncCreateConnectionResult TClient::CreateConnection(
     const YandexQuery::CreateConnectionRequest& request,
     const TCreateConnectionSettings& settings) {

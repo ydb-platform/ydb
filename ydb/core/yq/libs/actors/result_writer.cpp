@@ -14,7 +14,7 @@
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/log.h>
-#include <library/cpp/protobuf/interop/cast.h> 
+#include <library/cpp/protobuf/interop/cast.h>
 
 #include <ydb/core/yq/libs/control_plane_storage/control_plane_storage.h>
 #include <ydb/core/yq/libs/control_plane_storage/events/events.h>
@@ -42,14 +42,14 @@ public:
         const NConfig::TPrivateApiConfig& privateApiConfig,
         const TResultId& resultId,
         const TVector<TString>& columns,
-        const TString& traceId, 
+        const TString& traceId,
         const TInstant& deadline,
         const NMonitoring::TDynamicCounterPtr& clientCounters)
         : ExecuterId(executerId)
         , ResultBuilder(MakeHolder<TProtoBuilder>(resultType, columns))
         , ResultId({resultId})
         , TraceId(traceId)
-        , Deadline(deadline) 
+        , Deadline(deadline)
         , Client(
             driver,
             NYdb::TCommonClientSettings()
@@ -60,7 +60,7 @@ public:
 
     static constexpr char ActorName[] = "YQ_RESULT_WRITER";
 
-    void Bootstrap(const TActorContext&) { 
+    void Bootstrap(const TActorContext&) {
         LOG_I("Bootstrap");
         Become(&TResultWriter::StateFunc);
     }
@@ -184,7 +184,7 @@ private:
         protoReq.set_offset(startRowIndex);
         protoReq.set_result_set_id(ResultId.SetId);
         protoReq.set_request_id(Cookie);
-        *protoReq.mutable_deadline() = NProtoInterop::CastToProto(Deadline); 
+        *protoReq.mutable_deadline() = NProtoInterop::CastToProto(Deadline);
         return protoReq;
     }
 
@@ -334,7 +334,7 @@ private:
     THolder<TProtoBuilder> ResultBuilder;
     const TResultId ResultId;
     const TString TraceId;
-    TInstant Deadline; 
+    TInstant Deadline;
     TPrivateClient Client;
     const TInstant StartTime = TInstant::Now();
 
@@ -361,7 +361,7 @@ NActors::IActor* CreateResultWriter(
     const NConfig::TPrivateApiConfig& privateApiConfig,
     const TResultId& resultId,
     const TVector<TString>& columns,
-    const TString& traceId, 
+    const TString& traceId,
     const TInstant& deadline,
     const NMonitoring::TDynamicCounterPtr& clientCounters)
 {

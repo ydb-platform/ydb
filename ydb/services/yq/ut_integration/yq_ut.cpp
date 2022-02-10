@@ -57,16 +57,16 @@ namespace {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             queryId = result.GetResult().query_id();
         }
-        // GetQueryStatus 
-        const auto request = ::NYq::TGetQueryStatusBuilder{} 
+        // GetQueryStatus
+        const auto request = ::NYq::TGetQueryStatusBuilder{}
             .SetQueryId(queryId)
             .Build();
         const auto result = DoWithRetryOnRetCode([&]() {
-            auto result = client.GetQueryStatus( 
-                request, CreateYqSettings<TGetQueryStatusSettings>(folderId)) 
+            auto result = client.GetQueryStatus(
+                request, CreateYqSettings<TGetQueryStatusSettings>(folderId))
                 .ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            return result.GetResult().status() == expectedStatusResult; 
+            return result.GetResult().status() == expectedStatusResult;
         }, TRetryOptions(Retries));
         UNIT_ASSERT_C(result, "the execution of the query did not end within the time limit");
 
@@ -581,8 +581,8 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         NYdb::NYq::TClient client(driver);
 
         const auto folderId = TString(__func__) + "folder_id";
-        auto name = TString(__func__) + "_name"; 
-        name.to_lower(); 
+        auto name = TString(__func__) + "_name";
+        name.to_lower();
 
         {
             const auto request = ::NYq::TCreateConnectionBuilder()
@@ -788,71 +788,71 @@ Y_UNIT_TEST_SUITE(Yq_1) {
             UNIT_ASSERT_VALUES_EQUAL(query.content().description(), "OK");
         }
     }
- 
-    Y_UNIT_TEST(DescribeJob) { 
-        TKikimrWithGrpcAndRootSchema server({}, {}, {}, true); 
-        ui16 grpc        = server.GetPort(); 
-        TString location = TStringBuilder() << "localhost:" << grpc; 
-        auto driver      = TDriver(TDriverConfig().SetEndpoint(location).SetAuthToken("root@builtin")); 
-        NYdb::NYq::TClient client(driver); 
-        const auto folderId = "some_folder_id"; 
-        const auto queryId = CreateNewHistoryAndWaitFinish(folderId, client, "select 1", YandexQuery::QueryMeta::COMPLETED); 
-        CheckGetResultData(client, queryId, folderId, 1, 1, 1); 
-        TString jobId; 
- 
-        { 
-            auto request = ::NYq::TListJobsBuilder{}.SetQueryId(queryId).Build(); 
-            auto result = DoWithRetryOnRetCode([&]() { 
-                auto result = client.ListJobs( 
-                    request, CreateYqSettings<TListJobsSettings>(folderId)) 
-                    .ExtractValueSync(); 
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
-                UNIT_ASSERT_VALUES_EQUAL(result.GetResult().job_size(), 1); 
-                jobId = result.GetResult().job(0).meta().id(); 
-                return result.GetStatus() == EStatus::SUCCESS; 
-            }, TRetryOptions(Retries)); 
-            UNIT_ASSERT_C(result, "the execution of the query did not end within the time limit"); 
-        } 
- 
-        { 
-            const auto request = ::NYq::TDescribeJobBuilder() 
-                .SetJobId(jobId) 
-                .Build(); 
-            auto result = client.DescribeJob( 
-                request, CreateYqSettings<TDescribeJobSettings>(folderId)) 
-                .ExtractValueSync(); 
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+
+    Y_UNIT_TEST(DescribeJob) {
+        TKikimrWithGrpcAndRootSchema server({}, {}, {}, true);
+        ui16 grpc        = server.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
+        auto driver      = TDriver(TDriverConfig().SetEndpoint(location).SetAuthToken("root@builtin"));
+        NYdb::NYq::TClient client(driver);
+        const auto folderId = "some_folder_id";
+        const auto queryId = CreateNewHistoryAndWaitFinish(folderId, client, "select 1", YandexQuery::QueryMeta::COMPLETED);
+        CheckGetResultData(client, queryId, folderId, 1, 1, 1);
+        TString jobId;
+
+        {
+            auto request = ::NYq::TListJobsBuilder{}.SetQueryId(queryId).Build();
+            auto result = DoWithRetryOnRetCode([&]() {
+                auto result = client.ListJobs(
+                    request, CreateYqSettings<TListJobsSettings>(folderId))
+                    .ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL(result.GetResult().job_size(), 1);
+                jobId = result.GetResult().job(0).meta().id();
+                return result.GetStatus() == EStatus::SUCCESS;
+            }, TRetryOptions(Retries));
+            UNIT_ASSERT_C(result, "the execution of the query did not end within the time limit");
+        }
+
+        {
+            const auto request = ::NYq::TDescribeJobBuilder()
+                .SetJobId(jobId)
+                .Build();
+            auto result = client.DescribeJob(
+                request, CreateYqSettings<TDescribeJobSettings>(folderId))
+                .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().job().query_meta().common().id(), queryId);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().job().meta().id(), jobId); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().job().query_name(), "test_query_name_1"); 
-        } 
-    } 
- 
-    Y_UNIT_TEST(DescribeQuery) { 
-        TKikimrWithGrpcAndRootSchema server({}, {}, {}, true); 
-        ui16 grpc        = server.GetPort(); 
-        TString location = TStringBuilder() << "localhost:" << grpc; 
-        auto driver      = TDriver(TDriverConfig().SetEndpoint(location).SetAuthToken("root@builtin")); 
-        NYdb::NYq::TClient client(driver); 
-        const auto folderId = "some_folder_id"; 
-        const auto queryId = CreateNewHistoryAndWaitFinish(folderId, client, "select 1", YandexQuery::QueryMeta::COMPLETED); 
-        CheckGetResultData(client, queryId, folderId, 1, 1, 1); 
-        TString jobId; 
- 
-        { 
-            const auto request = ::NYq::TDescribeQueryBuilder() 
-                .SetQueryId(queryId) 
-                .Build(); 
-            auto result = client.DescribeQuery( 
-                request, CreateYqSettings<TDescribeQuerySettings>(folderId)) 
-                .ExtractValueSync(); 
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
-            const auto query = result.GetResult().query(); 
-            UNIT_ASSERT_VALUES_EQUAL(YandexQuery::QueryMeta::ComputeStatus_Name(query.meta().status()), YandexQuery::QueryMeta::ComputeStatus_Name(YandexQuery::QueryMeta::COMPLETED)); 
-            UNIT_ASSERT_VALUES_EQUAL(query.content().text(), "select 1"); 
-            UNIT_ASSERT_VALUES_EQUAL(query.content().name(), "test_query_name_1"); 
-        } 
-    } 
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().job().meta().id(), jobId);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().job().query_name(), "test_query_name_1");
+        }
+    }
+
+    Y_UNIT_TEST(DescribeQuery) {
+        TKikimrWithGrpcAndRootSchema server({}, {}, {}, true);
+        ui16 grpc        = server.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
+        auto driver      = TDriver(TDriverConfig().SetEndpoint(location).SetAuthToken("root@builtin"));
+        NYdb::NYq::TClient client(driver);
+        const auto folderId = "some_folder_id";
+        const auto queryId = CreateNewHistoryAndWaitFinish(folderId, client, "select 1", YandexQuery::QueryMeta::COMPLETED);
+        CheckGetResultData(client, queryId, folderId, 1, 1, 1);
+        TString jobId;
+
+        {
+            const auto request = ::NYq::TDescribeQueryBuilder()
+                .SetQueryId(queryId)
+                .Build();
+            auto result = client.DescribeQuery(
+                request, CreateYqSettings<TDescribeQuerySettings>(folderId))
+                .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            const auto query = result.GetResult().query();
+            UNIT_ASSERT_VALUES_EQUAL(YandexQuery::QueryMeta::ComputeStatus_Name(query.meta().status()), YandexQuery::QueryMeta::ComputeStatus_Name(YandexQuery::QueryMeta::COMPLETED));
+            UNIT_ASSERT_VALUES_EQUAL(query.content().text(), "select 1");
+            UNIT_ASSERT_VALUES_EQUAL(query.content().name(), "test_query_name_1");
+        }
+    }
 }
 
 Y_UNIT_TEST_SUITE(Yq_2) {

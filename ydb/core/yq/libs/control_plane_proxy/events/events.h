@@ -21,8 +21,8 @@ struct TEvControlPlaneProxy {
         EvListQueriesResponse,
         EvDescribeQueryRequest,
         EvDescribeQueryResponse,
-        EvGetQueryStatusRequest, 
-        EvGetQueryStatusResponse, 
+        EvGetQueryStatusRequest,
+        EvGetQueryStatusResponse,
         EvModifyQueryRequest,
         EvModifyQueryResponse,
         EvDeleteQueryRequest,
@@ -33,8 +33,8 @@ struct TEvControlPlaneProxy {
         EvGetResultDataResponse,
         EvListJobsRequest,
         EvListJobsResponse,
-        EvDescribeJobRequest, 
-        EvDescribeJobResponse, 
+        EvDescribeJobRequest,
+        EvDescribeJobResponse,
         EvCreateConnectionRequest,
         EvCreateConnectionResponse,
         EvListConnectionsRequest,
@@ -173,42 +173,42 @@ struct TEvControlPlaneProxy {
         NYql::TIssues Issues;
     };
 
-    struct TEvGetQueryStatusRequest : NActors::TEventLocal<TEvGetQueryStatusRequest, EvGetQueryStatusRequest> { 
-        explicit TEvGetQueryStatusRequest(const TString& folderId, 
-                                         const YandexQuery::GetQueryStatusRequest& request, 
-                                         const TString& user, 
-                                         const TString& token, 
-                                         const TVector<TString>& permissions) 
-            : FolderId(folderId) 
-            , Request(request) 
-            , User(user) 
-            , Token(token) 
-            , Permissions(permissions) 
-        { 
-        } 
- 
-        TString FolderId; 
-        YandexQuery::GetQueryStatusRequest Request; 
-        TString User; 
-        TString Token; 
-        TVector<TString> Permissions; 
-    }; 
- 
-    struct TEvGetQueryStatusResponse : NActors::TEventLocal<TEvGetQueryStatusResponse, EvGetQueryStatusResponse> { 
-        explicit TEvGetQueryStatusResponse(const YandexQuery::GetQueryStatusResult& result) 
-            : Result(result) 
-        { 
-        } 
- 
-        explicit TEvGetQueryStatusResponse(const NYql::TIssues& issues) 
-            : Issues(issues) 
-        { 
-        } 
- 
-        YandexQuery::GetQueryStatusResult Result; 
-        NYql::TIssues Issues; 
-    }; 
- 
+    struct TEvGetQueryStatusRequest : NActors::TEventLocal<TEvGetQueryStatusRequest, EvGetQueryStatusRequest> {
+        explicit TEvGetQueryStatusRequest(const TString& folderId,
+                                         const YandexQuery::GetQueryStatusRequest& request,
+                                         const TString& user,
+                                         const TString& token,
+                                         const TVector<TString>& permissions)
+            : FolderId(folderId)
+            , Request(request)
+            , User(user)
+            , Token(token)
+            , Permissions(permissions)
+        {
+        }
+
+        TString FolderId;
+        YandexQuery::GetQueryStatusRequest Request;
+        TString User;
+        TString Token;
+        TVector<TString> Permissions;
+    };
+
+    struct TEvGetQueryStatusResponse : NActors::TEventLocal<TEvGetQueryStatusResponse, EvGetQueryStatusResponse> {
+        explicit TEvGetQueryStatusResponse(const YandexQuery::GetQueryStatusResult& result)
+            : Result(result)
+        {
+        }
+
+        explicit TEvGetQueryStatusResponse(const NYql::TIssues& issues)
+            : Issues(issues)
+        {
+        }
+
+        YandexQuery::GetQueryStatusResult Result;
+        NYql::TIssues Issues;
+    };
+
     struct TEvModifyQueryRequest : NActors::TEventLocal<TEvModifyQueryRequest, EvModifyQueryRequest> {
         explicit TEvModifyQueryRequest(const TString& folderId,
                                        const YandexQuery::ModifyQueryRequest& request,
@@ -398,42 +398,42 @@ struct TEvControlPlaneProxy {
         NYql::TIssues Issues;
     };
 
-    struct TEvDescribeJobRequest : NActors::TEventLocal<TEvDescribeJobRequest, EvDescribeJobRequest> { 
-        explicit TEvDescribeJobRequest(const TString& folderId, 
-                                           const YandexQuery::DescribeJobRequest& request, 
-                                           const TString& user, 
-                                           const TString& token, 
-                                           const TVector<TString>& permissions) 
-            : FolderId(folderId) 
-            , Request(request) 
-            , User(user) 
-            , Token(token) 
-            , Permissions(permissions) 
-        { 
-        } 
- 
-        TString FolderId; 
-        YandexQuery::DescribeJobRequest Request; 
-        TString User; 
-        TString Token; 
-        TVector<TString> Permissions; 
-    }; 
- 
-    struct TEvDescribeJobResponse : NActors::TEventLocal<TEvDescribeJobResponse, EvDescribeJobResponse> { 
-        explicit TEvDescribeJobResponse(const YandexQuery::DescribeJobResult& result) 
-            : Result(result) 
-        { 
-        } 
- 
-        explicit TEvDescribeJobResponse(const NYql::TIssues& issues) 
-            : Issues(issues) 
-        { 
-        } 
- 
-        YandexQuery::DescribeJobResult Result; 
-        NYql::TIssues Issues; 
-    }; 
- 
+    struct TEvDescribeJobRequest : NActors::TEventLocal<TEvDescribeJobRequest, EvDescribeJobRequest> {
+        explicit TEvDescribeJobRequest(const TString& folderId,
+                                           const YandexQuery::DescribeJobRequest& request,
+                                           const TString& user,
+                                           const TString& token,
+                                           const TVector<TString>& permissions)
+            : FolderId(folderId)
+            , Request(request)
+            , User(user)
+            , Token(token)
+            , Permissions(permissions)
+        {
+        }
+
+        TString FolderId;
+        YandexQuery::DescribeJobRequest Request;
+        TString User;
+        TString Token;
+        TVector<TString> Permissions;
+    };
+
+    struct TEvDescribeJobResponse : NActors::TEventLocal<TEvDescribeJobResponse, EvDescribeJobResponse> {
+        explicit TEvDescribeJobResponse(const YandexQuery::DescribeJobResult& result)
+            : Result(result)
+        {
+        }
+
+        explicit TEvDescribeJobResponse(const NYql::TIssues& issues)
+            : Issues(issues)
+        {
+        }
+
+        YandexQuery::DescribeJobResult Result;
+        NYql::TIssues Issues;
+    };
+
     struct TEvCreateConnectionRequest : NActors::TEventLocal<TEvCreateConnectionRequest, EvCreateConnectionRequest> {
         explicit TEvCreateConnectionRequest(const TString& folderId,
                                             const YandexQuery::CreateConnectionRequest& request,

@@ -101,15 +101,15 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
     if (request.execute_mode() != YandexQuery::SAVE) {
         meta.set_last_job_query_revision(InitialRevision);
         meta.set_last_job_id(jobId);
-        meta.set_started_by(user); 
+        meta.set_started_by(user);
 
         *job.mutable_meta() = common;
         job.mutable_meta()->set_id(jobId);
         job.set_text(content.text());
         *job.mutable_query_meta() = meta;
-        job.set_query_name(query.mutable_content()->name()); 
-        *job.mutable_acl() = content.acl(); 
-        job.set_automatic(content.automatic()); 
+        job.set_query_name(query.mutable_content()->name());
+        *job.mutable_acl() = content.acl();
+        job.set_automatic(content.automatic());
     }
 
     std::shared_ptr<std::pair<YandexQuery::CreateQueryResult, TAuditDetails<YandexQuery::Query>>> response = std::make_shared<std::pair<YandexQuery::CreateQueryResult, TAuditDetails<YandexQuery::Query>>>();
@@ -245,10 +245,10 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
         writeQueryBuilder.AddText(
             "INSERT INTO `" QUERIES_TABLE_NAME "` (`" SCOPE_COLUMN_NAME "`, `" QUERY_ID_COLUMN_NAME "`, `" NAME_COLUMN_NAME "`, `" STATUS_COLUMN_NAME "`, `" QUERY_TYPE_COLUMN_NAME "`, "
             "`" EXECUTE_MODE_COLUMN_NAME "`, `" USER_COLUMN_NAME "`, `" VISIBILITY_COLUMN_NAME "`, `" AUTOMATIC_COLUMN_NAME "`, "
-            "`" REVISION_COLUMN_NAME "`, `" QUERY_COLUMN_NAME "`, `" INTERNAL_COLUMN_NAME "`, `" LAST_JOB_ID_COLUMN_NAME "`, `" GENERATION_COLUMN_NAME "`, `" META_REVISION_COLUMN_NAME "`)\n" 
+            "`" REVISION_COLUMN_NAME "`, `" QUERY_COLUMN_NAME "`, `" INTERNAL_COLUMN_NAME "`, `" LAST_JOB_ID_COLUMN_NAME "`, `" GENERATION_COLUMN_NAME "`, `" META_REVISION_COLUMN_NAME "`)\n"
             "VALUES ($scope, $query_id, $name, $status, $query_type, "
             "$execute_mode, $user,  $visibility, $automatic, "
-            "$revision, $query, $internal, $job_id, 0, 0);" 
+            "$revision, $query, $internal, $job_id, 0, 0);"
         );
 
         const auto write = writeQueryBuilder.Build();
@@ -366,23 +366,23 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListQueries
             filters.push_back("`" USER_COLUMN_NAME "` = $user");
         }
 
-        if (request.filter().visibility() != YandexQuery::Acl::VISIBILITY_UNSPECIFIED) { 
+        if (request.filter().visibility() != YandexQuery::Acl::VISIBILITY_UNSPECIFIED) {
             queryBuilder.AddInt64("filter_visibility", request.filter().visibility());
             filters.push_back("`" VISIBILITY_COLUMN_NAME "` = $filter_visibility");
-        } 
- 
-        switch (request.filter().automatic()) { 
-        case YandexQuery::AUTOMATIC: 
-            filters.push_back("`" AUTOMATIC_COLUMN_NAME "` = true"); 
-            break; 
-        case YandexQuery::NOT_AUTOMATIC: 
-            filters.push_back("`" AUTOMATIC_COLUMN_NAME "` = false"); 
-            break; 
-        default: 
-            break; 
-        } 
- 
-        filter = JoinSeq(" AND ", filters); 
+        }
+
+        switch (request.filter().automatic()) {
+        case YandexQuery::AUTOMATIC:
+            filters.push_back("`" AUTOMATIC_COLUMN_NAME "` = true");
+            break;
+        case YandexQuery::NOT_AUTOMATIC:
+            filters.push_back("`" AUTOMATIC_COLUMN_NAME "` = false");
+            break;
+        default:
+            break;
+        }
+
+        filter = JoinSeq(" AND ", filters);
     }
 
     PrepareViewAccessCondition(queryBuilder, permissions, user);
@@ -541,95 +541,95 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeQue
         });
 }
 
-void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetQueryStatusRequest::TPtr& ev) 
-{ 
-    TInstant startTime = TInstant::Now(); 
-    TRequestCountersPtr requestCounters = Counters.Requests[RT_GET_QUERY_STATUS]; 
-    requestCounters->InFly->Inc(); 
- 
-    const YandexQuery::GetQueryStatusRequest& request = ev->Get()->Request; 
-    const TString scope = ev->Get()->Scope; 
-    const TString user = ev->Get()->User; 
-    const TString token = ev->Get()->Token; 
+void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetQueryStatusRequest::TPtr& ev)
+{
+    TInstant startTime = TInstant::Now();
+    TRequestCountersPtr requestCounters = Counters.Requests[RT_GET_QUERY_STATUS];
+    requestCounters->InFly->Inc();
+
+    const YandexQuery::GetQueryStatusRequest& request = ev->Get()->Request;
+    const TString scope = ev->Get()->Scope;
+    const TString user = ev->Get()->User;
+    const TString token = ev->Get()->Token;
     TPermissions permissions = Config.Proto.GetEnablePermissions()
-        ? ev->Get()->Permissions 
-        : TPermissions{TPermissions::VIEW_PUBLIC | TPermissions::VIEW_AST}; 
-    if (IsSuperUser(user)) { 
-        permissions.SetAll(); 
-    } 
-    const TString queryId = request.query_id(); 
-    const int byteSize = request.ByteSize(); 
-    CPS_LOG_T(MakeLogPrefix(scope, user, queryId) 
-        << "GetQueryStatusRequest: " 
-        << NKikimr::MaskTicket(token) << " " 
-        << request.DebugString()); 
- 
-    NYql::TIssues issues = ValidateEvent(ev); 
-    if (issues) { 
-        CPS_LOG_D(MakeLogPrefix(scope, user, queryId) 
-            << "GetQueryStatusRequest, validation failed: " 
-            << NKikimr::MaskTicket(token) << " " << request.DebugString() 
-            << " error: " << issues.ToString()); 
-        const TDuration delta = TInstant::Now() - startTime; 
-        SendResponseIssues<TEvControlPlaneStorage::TEvGetQueryStatusResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters); 
-        LWPROBE(GetQueryStatusRequest, scope, user, queryId, delta, byteSize, false); 
-        return; 
-    } 
- 
+        ? ev->Get()->Permissions
+        : TPermissions{TPermissions::VIEW_PUBLIC | TPermissions::VIEW_AST};
+    if (IsSuperUser(user)) {
+        permissions.SetAll();
+    }
+    const TString queryId = request.query_id();
+    const int byteSize = request.ByteSize();
+    CPS_LOG_T(MakeLogPrefix(scope, user, queryId)
+        << "GetQueryStatusRequest: "
+        << NKikimr::MaskTicket(token) << " "
+        << request.DebugString());
+
+    NYql::TIssues issues = ValidateEvent(ev);
+    if (issues) {
+        CPS_LOG_D(MakeLogPrefix(scope, user, queryId)
+            << "GetQueryStatusRequest, validation failed: "
+            << NKikimr::MaskTicket(token) << " " << request.DebugString()
+            << " error: " << issues.ToString());
+        const TDuration delta = TInstant::Now() - startTime;
+        SendResponseIssues<TEvControlPlaneStorage::TEvGetQueryStatusResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
+        LWPROBE(GetQueryStatusRequest, scope, user, queryId, delta, byteSize, false);
+        return;
+    }
+
     TSqlQueryBuilder queryBuilder(YdbConnection->TablePathPrefix, "GetQueryStatus");
     queryBuilder.AddString("scope", scope);
     queryBuilder.AddString("query_id", queryId);
     queryBuilder.AddTimestamp("now", TInstant::Now());
- 
+
     queryBuilder.AddText(
-        "SELECT `" STATUS_COLUMN_NAME "`, `" VISIBILITY_COLUMN_NAME "`, `" USER_COLUMN_NAME "`, `" META_REVISION_COLUMN_NAME  "` FROM `" QUERIES_TABLE_NAME "`\n" 
+        "SELECT `" STATUS_COLUMN_NAME "`, `" VISIBILITY_COLUMN_NAME "`, `" USER_COLUMN_NAME "`, `" META_REVISION_COLUMN_NAME  "` FROM `" QUERIES_TABLE_NAME "`\n"
         "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id AND (`" EXPIRE_AT_COLUMN_NAME "` is NULL OR `" EXPIRE_AT_COLUMN_NAME "` > $now);"
     );
- 
+
     const auto read = queryBuilder.Build();
     auto debugInfo = Config.Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     auto [result, resultSets] = Read(read.Sql, read.Params, requestCounters, debugInfo);
-    auto prepare = [resultSets=resultSets, user,permissions] { 
-        if (resultSets->size() != 1) { 
-            ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support"; 
-        } 
- 
-        TResultSetParser parser(resultSets->front()); 
-        if (!parser.TryNextRow()) { 
-            ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id query or your access rights"; 
-        } 
- 
-        YandexQuery::GetQueryStatusResult result; 
-        result.set_status(static_cast<YandexQuery::QueryMeta_ComputeStatus>(*parser.ColumnParser(STATUS_COLUMN_NAME).GetOptionalInt64())); 
-        result.set_meta_revision(parser.ColumnParser(META_REVISION_COLUMN_NAME).GetOptionalInt64().GetOrElse(0)); 
- 
-        const auto queryVisibility = static_cast<YandexQuery::Acl::Visibility>(*parser.ColumnParser(VISIBILITY_COLUMN_NAME).GetOptionalInt64()); 
-        const auto queryUser = *parser.ColumnParser(USER_COLUMN_NAME).GetOptionalString(); 
-        const bool hasViewAccess = HasViewAccess(permissions, queryVisibility, queryUser, user); 
-        if (!hasViewAccess) { 
-            ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id query or your access rights"; 
-        } 
- 
-        return result; 
-    }; 
- 
-    auto success = SendResponse<TEvControlPlaneStorage::TEvGetQueryStatusResponse, YandexQuery::GetQueryStatusResult>( 
-        MakeLogPrefix(scope, user, queryId) + "GetQueryStatusRequest", 
-        NActors::TActivationContext::ActorSystem(), 
-        result, 
-        SelfId(), 
-        ev, 
-        startTime, 
-        requestCounters, 
-        prepare, 
-        debugInfo); 
- 
-    success.Apply([=](const auto& future) { 
-            TDuration delta = TInstant::Now() - startTime; 
-            LWPROBE(DescribeQueryRequest, scope, user, queryId, delta, byteSize, future.GetValue()); 
-        }); 
-} 
- 
+    auto prepare = [resultSets=resultSets, user,permissions] {
+        if (resultSets->size() != 1) {
+            ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
+        }
+
+        TResultSetParser parser(resultSets->front());
+        if (!parser.TryNextRow()) {
+            ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id query or your access rights";
+        }
+
+        YandexQuery::GetQueryStatusResult result;
+        result.set_status(static_cast<YandexQuery::QueryMeta_ComputeStatus>(*parser.ColumnParser(STATUS_COLUMN_NAME).GetOptionalInt64()));
+        result.set_meta_revision(parser.ColumnParser(META_REVISION_COLUMN_NAME).GetOptionalInt64().GetOrElse(0));
+
+        const auto queryVisibility = static_cast<YandexQuery::Acl::Visibility>(*parser.ColumnParser(VISIBILITY_COLUMN_NAME).GetOptionalInt64());
+        const auto queryUser = *parser.ColumnParser(USER_COLUMN_NAME).GetOptionalString();
+        const bool hasViewAccess = HasViewAccess(permissions, queryVisibility, queryUser, user);
+        if (!hasViewAccess) {
+            ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id query or your access rights";
+        }
+
+        return result;
+    };
+
+    auto success = SendResponse<TEvControlPlaneStorage::TEvGetQueryStatusResponse, YandexQuery::GetQueryStatusResult>(
+        MakeLogPrefix(scope, user, queryId) + "GetQueryStatusRequest",
+        NActors::TActivationContext::ActorSystem(),
+        result,
+        SelfId(),
+        ev,
+        startTime,
+        requestCounters,
+        prepare,
+        debugInfo);
+
+    success.Apply([=](const auto& future) {
+            TDuration delta = TInstant::Now() - startTime;
+            LWPROBE(DescribeQueryRequest, scope, user, queryId, delta, byteSize, future.GetValue());
+        });
+}
+
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQueryRequest::TPtr& ev)
 {
     TInstant startTime = TInstant::Now();
@@ -759,7 +759,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
         auto& common = *query.mutable_meta()->mutable_common();
         common.set_revision(common.revision() + 1);
         common.set_modified_by(user);
-        *common.mutable_modified_at() = NProtoInterop::CastToProto(now); 
+        *common.mutable_modified_at() = NProtoInterop::CastToProto(now);
 
         *query.mutable_content() = request.content();
         query.mutable_meta()->set_execute_mode(request.execute_mode());
@@ -830,7 +830,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
             internal.clear_action();
             query.clear_result_set_meta();
             query.clear_plan();
-            query.clear_ast(); 
+            query.clear_ast();
             query.clear_issue();
             query.clear_transient_issue();
             query.clear_statistics();
@@ -839,24 +839,24 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
             query.mutable_meta()->set_last_job_query_revision(common.revision());
             query.mutable_meta()->set_last_job_id(jobId);
             query.mutable_meta()->set_status(YandexQuery::QueryMeta::STARTING);
-            query.mutable_meta()->clear_expire_at(); 
-            query.mutable_meta()->clear_result_expire_at(); 
-            query.mutable_meta()->set_started_by(user); 
-            query.mutable_meta()->clear_action(); 
+            query.mutable_meta()->clear_expire_at();
+            query.mutable_meta()->clear_result_expire_at();
+            query.mutable_meta()->set_started_by(user);
+            query.mutable_meta()->clear_action();
 
             auto& jobMeta = *job.mutable_meta();
             jobMeta.set_id(jobId);
             jobMeta.set_created_by(user);
             jobMeta.set_modified_by(user);
-            *jobMeta.mutable_modified_at() = NProtoInterop::CastToProto(now); 
-            *jobMeta.mutable_created_at() = NProtoInterop::CastToProto(now); 
+            *jobMeta.mutable_modified_at() = NProtoInterop::CastToProto(now);
+            *jobMeta.mutable_created_at() = NProtoInterop::CastToProto(now);
             jobMeta.set_revision(InitialRevision);
 
             job.set_text(request.content().text());
             *job.mutable_query_meta() = query.meta();
-            job.set_query_name(query.mutable_content()->name()); 
-            *job.mutable_acl() = request.content().acl(); 
-            job.set_automatic(request.content().automatic()); 
+            job.set_query_name(query.mutable_content()->name());
+            *job.mutable_acl() = request.content().acl();
+            job.set_automatic(request.content().automatic());
         }
 
         response->second.After.ConstructInPlace().CopyFrom(query);
@@ -956,15 +956,15 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
         YdbConnection->TablePathPrefix);
     validators.push_back(accessValidator);
 
-    auto ttlValidator = CreateTtlValidator( 
-        QUERIES_TABLE_NAME, 
-        QUERY_ID_COLUMN_NAME, 
-        scope, 
-        queryId, 
-        "Query does not exist or permission denied. Please check the id query or your access rights", 
-        YdbConnection->TablePathPrefix); 
-    validators.push_back(ttlValidator); 
- 
+    auto ttlValidator = CreateTtlValidator(
+        QUERIES_TABLE_NAME,
+        QUERY_ID_COLUMN_NAME,
+        scope,
+        queryId,
+        "Query does not exist or permission denied. Please check the id query or your access rights",
+        YdbConnection->TablePathPrefix);
+    validators.push_back(ttlValidator);
+
     if (previousRevision > 0) {
         auto revisionValidator = CreateRevisionValidator(
             QUERIES_TABLE_NAME,
@@ -1212,7 +1212,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvControlQuer
         auto& commonQuery = *metaQuery.mutable_common();
         commonQuery.set_revision(commonQuery.revision() + 1);
         commonQuery.set_modified_by(user);
-        *commonQuery.mutable_modified_at() = NProtoInterop::CastToProto(now); 
+        *commonQuery.mutable_modified_at() = NProtoInterop::CastToProto(now);
 
         if (action == YandexQuery::ABORT || action == YandexQuery::ABORT_GRACEFULLY) {
             const bool isValidStatusForAbort = IsIn({
@@ -1224,7 +1224,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvControlQuer
 
             if (isValidStatusForAbort) {
                 metaQuery.set_status(YandexQuery::QueryMeta::ABORTING_BY_USER);
-                metaQuery.set_aborted_by(user); 
+                metaQuery.set_aborted_by(user);
             } else {
                 ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Conversion from status " << YandexQuery::QueryMeta::ComputeStatus_Name(metaQuery.status()) << " to " << YandexQuery::QueryMeta::ComputeStatus_Name(YandexQuery::QueryMeta::ABORTING_BY_USER) << " is not possible. Please wait for the previous operation to be completed";
             }
@@ -1238,7 +1238,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvControlQuer
 
             if (isValidStatusForPause) {
                 metaQuery.set_status(YandexQuery::QueryMeta::PAUSING);
-                metaQuery.set_paused_by(user); 
+                metaQuery.set_paused_by(user);
             } else {
                 ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "Conversion from status " << YandexQuery::QueryMeta::ComputeStatus_Name(metaQuery.status()) << " to " << YandexQuery::QueryMeta::ComputeStatus_Name(YandexQuery::QueryMeta::PAUSING) << " is not possible. Please wait for the previous operation to be completed";
             }
@@ -1256,7 +1256,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvControlQuer
         job.mutable_query_meta()->CopyFrom(metaQuery);
         job.mutable_meta()->set_revision(job.meta().revision() + 1);
         job.mutable_meta()->set_modified_by(user);
-        *job.mutable_meta()->mutable_modified_at() = NProtoInterop::CastToProto(now); 
+        *job.mutable_meta()->mutable_modified_at() = NProtoInterop::CastToProto(now);
 
         response->second.After.ConstructInPlace().CopyFrom(query);
         response->second.CloudId = queryInternal.cloud_id();
@@ -1275,7 +1275,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvControlQuer
         writeQueryBuilder.AddText(
             "UPDATE `" JOBS_TABLE_NAME "` SET `" JOB_COLUMN_NAME "` = $job\n"
             "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id AND `" JOB_ID_COLUMN_NAME "` = $job_id;\n"
-            "UPDATE `" QUERIES_TABLE_NAME "` SET `" QUERY_COLUMN_NAME "` = $query, `" REVISION_COLUMN_NAME "` = $revision, `" STATUS_COLUMN_NAME "` = $status, `" INTERNAL_COLUMN_NAME "` = $internal, `" META_REVISION_COLUMN_NAME "` = `" META_REVISION_COLUMN_NAME "` + 1\n" 
+            "UPDATE `" QUERIES_TABLE_NAME "` SET `" QUERY_COLUMN_NAME "` = $query, `" REVISION_COLUMN_NAME "` = $revision, `" STATUS_COLUMN_NAME "` = $status, `" INTERNAL_COLUMN_NAME "` = $internal, `" META_REVISION_COLUMN_NAME "` = `" META_REVISION_COLUMN_NAME "` + 1\n"
             "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
             "UPDATE `" PENDING_SMALL_TABLE_NAME "` SET `" HOST_NAME_COLUMN_NAME "` = \"\"\n"
             "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;"
@@ -1382,15 +1382,15 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetResultDa
     queryBuilder.AddUint64("limit", limit);
 
     queryBuilder.AddText(
-        "$query_info = SELECT `" RESULT_ID_COLUMN_NAME "`, `" RESULT_SETS_EXPIRE_AT_COLUMN_NAME "`, `" QUERY_COLUMN_NAME "`, `" USER_COLUMN_NAME "`, `" VISIBILITY_COLUMN_NAME "`, `" STATUS_COLUMN_NAME "` FROM `" QUERIES_TABLE_NAME "`\n" 
-        "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id AND (`" EXPIRE_AT_COLUMN_NAME "` is NULL OR `" EXPIRE_AT_COLUMN_NAME "` > $now);\n" 
-        "SELECT `" QUERY_COLUMN_NAME "`, `" USER_COLUMN_NAME "`, `" VISIBILITY_COLUMN_NAME "`, `" STATUS_COLUMN_NAME "`, `" RESULT_SETS_EXPIRE_AT_COLUMN_NAME "` FROM $query_info;\n" 
-        "$result_id = SELECT `" RESULT_ID_COLUMN_NAME "` FROM $query_info\n" 
-        "WHERE `" RESULT_SETS_EXPIRE_AT_COLUMN_NAME "` >= $now;\n" 
+        "$query_info = SELECT `" RESULT_ID_COLUMN_NAME "`, `" RESULT_SETS_EXPIRE_AT_COLUMN_NAME "`, `" QUERY_COLUMN_NAME "`, `" USER_COLUMN_NAME "`, `" VISIBILITY_COLUMN_NAME "`, `" STATUS_COLUMN_NAME "` FROM `" QUERIES_TABLE_NAME "`\n"
+        "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id AND (`" EXPIRE_AT_COLUMN_NAME "` is NULL OR `" EXPIRE_AT_COLUMN_NAME "` > $now);\n"
+        "SELECT `" QUERY_COLUMN_NAME "`, `" USER_COLUMN_NAME "`, `" VISIBILITY_COLUMN_NAME "`, `" STATUS_COLUMN_NAME "`, `" RESULT_SETS_EXPIRE_AT_COLUMN_NAME "` FROM $query_info;\n"
+        "$result_id = SELECT `" RESULT_ID_COLUMN_NAME "` FROM $query_info\n"
+        "WHERE `" RESULT_SETS_EXPIRE_AT_COLUMN_NAME "` >= $now;\n"
         "SELECT `" RESULT_SET_ID_COLUMN_NAME "`, `" RESULT_SET_COLUMN_NAME "`, `" ROW_ID_COLUMN_NAME "` FROM `" RESULT_SETS_TABLE_NAME "`\n"
         "WHERE `" RESULT_ID_COLUMN_NAME "` = $result_id AND `" RESULT_SET_ID_COLUMN_NAME "` = $result_set_index AND `" ROW_ID_COLUMN_NAME "` >= $offset\n"
         "ORDER BY `" ROW_ID_COLUMN_NAME "`\n"
-        "LIMIT $limit;\n" 
+        "LIMIT $limit;\n"
     );
 
     const auto query = queryBuilder.Build();
@@ -1427,19 +1427,19 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetResultDa
                 ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "Result set index out of bound: " << resultSetIndex << " >= " << query.result_set_meta_size();
             }
 
-            if (YandexQuery::QueryMeta::ComputeStatus(*parser.ColumnParser(STATUS_COLUMN_NAME).GetOptionalInt64()) != YandexQuery::QueryMeta::COMPLETED) { 
-                ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "Result doesn't exist"; 
-            } 
- 
-            auto resultSetsExpireAtParser = parser.ColumnParser(RESULT_SETS_EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp(); 
-            if (!resultSetsExpireAtParser) { 
-                ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "Result doesn't exist"; 
-            } 
+            if (YandexQuery::QueryMeta::ComputeStatus(*parser.ColumnParser(STATUS_COLUMN_NAME).GetOptionalInt64()) != YandexQuery::QueryMeta::COMPLETED) {
+                ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "Result doesn't exist";
+            }
 
-            if (*resultSetsExpireAtParser < TInstant::Now()) { 
-                ythrow TControlPlaneStorageException(TIssuesIds::EXPIRED) << "Result removed by TTL"; 
-            } 
- 
+            auto resultSetsExpireAtParser = parser.ColumnParser(RESULT_SETS_EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp();
+            if (!resultSetsExpireAtParser) {
+                ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "Result doesn't exist";
+            }
+
+            if (*resultSetsExpireAtParser < TInstant::Now()) {
+                ythrow TControlPlaneStorageException(TIssuesIds::EXPIRED) << "Result removed by TTL";
+            }
+
             resultSetProto.mutable_columns()->CopyFrom(query.result_set_meta(resultSetIndex).column());
         }
 
@@ -1542,7 +1542,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListJobsReq
             filters.push_back("`" USER_COLUMN_NAME "` = $user");
         }
 
-        filter = JoinSeq(" AND ", filters); 
+        filter = JoinSeq(" AND ", filters);
     }
 
     PrepareViewAccessCondition(queryBuilder, permissions, user);
@@ -1580,7 +1580,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListJobsReq
             briefJob.set_query_name(job.query_name());
             briefJob.set_visibility(job.acl().visibility());
             briefJob.set_automatic(job.automatic());
-            *briefJob.mutable_expire_at() = job.expire_at(); 
+            *briefJob.mutable_expire_at() = job.expire_at();
             *result.add_job() = briefJob;
         }
 
@@ -1609,22 +1609,22 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListJobsReq
         });
 }
 
-void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeJobRequest::TPtr& ev) 
-{ 
-    TInstant startTime = TInstant::Now(); 
-    TRequestCountersPtr requestCounters = Counters.Requests[RT_DESCRIBE_JOB]; 
-    requestCounters->InFly->Inc(); 
- 
-    const YandexQuery::DescribeJobRequest& request = ev->Get()->Request; 
-    const TString scope = ev->Get()->Scope; 
-    const TString user = ev->Get()->User; 
+void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeJobRequest::TPtr& ev)
+{
+    TInstant startTime = TInstant::Now();
+    TRequestCountersPtr requestCounters = Counters.Requests[RT_DESCRIBE_JOB];
+    requestCounters->InFly->Inc();
+
+    const YandexQuery::DescribeJobRequest& request = ev->Get()->Request;
+    const TString scope = ev->Get()->Scope;
+    const TString user = ev->Get()->User;
 
     auto splittedId = SplitId(request.job_id());
     const auto jobId = std::move(splittedId.first);
     const auto queryId = std::move(splittedId.second);
 
-    const int byteSize = ev->Get()->Request.ByteSize(); 
-    const TString token = ev->Get()->Token; 
+    const int byteSize = ev->Get()->Request.ByteSize();
+    const TString token = ev->Get()->Token;
     TPermissions permissions = Config.Proto.GetEnablePermissions()
         ? ev->Get()->Permissions
         : TPermissions{TPermissions::VIEW_PUBLIC};
@@ -1635,73 +1635,73 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeJob
         << "DescribeJobRequest: "
         << NKikimr::MaskTicket(token) << " "
         << request.DebugString());
- 
-    NYql::TIssues issues = ValidateEvent(ev); 
-    if (issues) { 
+
+    NYql::TIssues issues = ValidateEvent(ev);
+    if (issues) {
         CPS_LOG_D(MakeLogPrefix(scope, user, jobId)
             << "DescribeJobRequest, validation failed: "
             << NKikimr::MaskTicket(token) << " " << request.DebugString()
             << " error: " << issues.ToString());
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvDescribeJobResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
-        LWPROBE(DescribeJobRequest, scope, user, jobId, delta, byteSize, false); 
-        return; 
-    } 
- 
+        LWPROBE(DescribeJobRequest, scope, user, jobId, delta, byteSize, false);
+        return;
+    }
+
     TSqlQueryBuilder queryBuilder(YdbConnection->TablePathPrefix, "DescribeJob");
     queryBuilder.AddString("scope", scope);
     queryBuilder.AddString("job_id", jobId);
     queryBuilder.AddString("query_id", queryId);
     queryBuilder.AddTimestamp("now", TInstant::Now());
- 
+
     queryBuilder.AddText(
         "SELECT `" JOB_COLUMN_NAME "`, `" VISIBILITY_COLUMN_NAME "` FROM `" JOBS_TABLE_NAME "`\n"
         "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id\n"
         " AND `" JOB_ID_COLUMN_NAME "` = $job_id AND (`" EXPIRE_AT_COLUMN_NAME "` is NULL OR `" EXPIRE_AT_COLUMN_NAME "` > $now);\n"
     );
- 
+
     const auto query = queryBuilder.Build();
     auto debugInfo = Config.Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     auto [result, resultSets] = Read(query.Sql, query.Params, requestCounters, debugInfo);
- 
+
     auto prepare = [=, id=request.job_id(), resultSets=resultSets] {
         if (resultSets->size() != 1) {
             ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
-        } 
+        }
 
         YandexQuery::DescribeJobResult result;
         TResultSetParser parser(resultSets->front());
         if (!parser.TryNextRow()) {
             ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Job does not exist or permission denied. Please check the job id or your access rights";
-        } 
+        }
         if (!result.mutable_job()->ParseFromString(*parser.ColumnParser(JOB_COLUMN_NAME).GetOptionalString())) {
             ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for job. Please contact internal support";
-        } 
+        }
         auto visibility = static_cast<YandexQuery::Acl::Visibility>(*parser.ColumnParser(VISIBILITY_COLUMN_NAME).GetOptionalInt64());
         result.mutable_job()->mutable_meta()->set_id(id);
- 
+
         bool hasViewAccces = HasViewAccess(permissions, visibility, result.job().meta().created_by(), user);
         if (!hasViewAccces) {
             ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Job does not exist or permission denied. Please check the job id or your access rights";
-        } 
-        return result; 
-    }; 
- 
-    auto success = SendResponse<TEvControlPlaneStorage::TEvDescribeJobResponse, YandexQuery::DescribeJobResult>( 
-        MakeLogPrefix(scope, user, jobId) + "DescribeJobRequest", 
-        NActors::TActivationContext::ActorSystem(), 
-        result, 
-        SelfId(), 
-        ev, 
-        startTime, 
-        requestCounters, 
+        }
+        return result;
+    };
+
+    auto success = SendResponse<TEvControlPlaneStorage::TEvDescribeJobResponse, YandexQuery::DescribeJobResult>(
+        MakeLogPrefix(scope, user, jobId) + "DescribeJobRequest",
+        NActors::TActivationContext::ActorSystem(),
+        result,
+        SelfId(),
+        ev,
+        startTime,
+        requestCounters,
         prepare,
         debugInfo);
- 
-    success.Apply([=](const auto& future) { 
-            TDuration delta = TInstant::Now() - startTime; 
-            LWPROBE(DescribeJobRequest, scope, user, jobId, delta, byteSize, future.GetValue()); 
-        }); 
-} 
- 
+
+    success.Apply([=](const auto& future) {
+            TDuration delta = TInstant::Now() - startTime;
+            LWPROBE(DescribeJobRequest, scope, user, jobId, delta, byteSize, future.GetValue());
+        });
+}
+
 } // NYq

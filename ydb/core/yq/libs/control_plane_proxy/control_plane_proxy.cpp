@@ -262,13 +262,13 @@ class TControlPlaneProxyActor : public NActors::TActorBootstrapped<TControlPlane
         RT_CREATE_QUERY,
         RT_LIST_QUERIES,
         RT_DESCRIBE_QUERY,
-        RT_GET_QUERY_STATUS, 
+        RT_GET_QUERY_STATUS,
         RT_MODIFY_QUERY,
         RT_DELETE_QUERY,
         RT_CONTROL_QUERY,
         RT_GET_RESULT_DATA,
         RT_LIST_JOBS,
-        RT_DESCRIBE_JOB, 
+        RT_DESCRIBE_JOB,
         RT_CREATE_CONNECTION,
         RT_LIST_CONNECTIONS,
         RT_DESCRIBE_CONNECTION,
@@ -289,13 +289,13 @@ class TControlPlaneProxyActor : public NActors::TActorBootstrapped<TControlPlane
             { MakeIntrusive<TRequestCounters>("CreateQuery") },
             { MakeIntrusive<TRequestCounters>("ListQueries") },
             { MakeIntrusive<TRequestCounters>("DescribeQuery") },
-            { MakeIntrusive<TRequestCounters>("GetQueryStatus") }, 
+            { MakeIntrusive<TRequestCounters>("GetQueryStatus") },
             { MakeIntrusive<TRequestCounters>("ModifyQuery") },
             { MakeIntrusive<TRequestCounters>("DeleteQuery") },
             { MakeIntrusive<TRequestCounters>("ControlQuery") },
             { MakeIntrusive<TRequestCounters>("GetResultData") },
             { MakeIntrusive<TRequestCounters>("ListJobs") },
-            { MakeIntrusive<TRequestCounters>("DescribeJob") }, 
+            { MakeIntrusive<TRequestCounters>("DescribeJob") },
             { MakeIntrusive<TRequestCounters>("CreateConnection") },
             { MakeIntrusive<TRequestCounters>("ListConnections") },
             { MakeIntrusive<TRequestCounters>("DescribeConnection") },
@@ -353,13 +353,13 @@ private:
         hFunc(TEvControlPlaneProxy::TEvCreateQueryRequest, Handle);
         hFunc(TEvControlPlaneProxy::TEvListQueriesRequest, Handle);
         hFunc(TEvControlPlaneProxy::TEvDescribeQueryRequest, Handle);
-        hFunc(TEvControlPlaneProxy::TEvGetQueryStatusRequest, Handle); 
+        hFunc(TEvControlPlaneProxy::TEvGetQueryStatusRequest, Handle);
         hFunc(TEvControlPlaneProxy::TEvModifyQueryRequest, Handle);
         hFunc(TEvControlPlaneProxy::TEvDeleteQueryRequest, Handle);
         hFunc(TEvControlPlaneProxy::TEvControlQueryRequest, Handle);
         hFunc(TEvControlPlaneProxy::TEvGetResultDataRequest, Handle);
         hFunc(TEvControlPlaneProxy::TEvListJobsRequest, Handle);
-        hFunc(TEvControlPlaneProxy::TEvDescribeJobRequest, Handle); 
+        hFunc(TEvControlPlaneProxy::TEvDescribeJobRequest, Handle);
         hFunc(TEvControlPlaneProxy::TEvCreateConnectionRequest, Handle);
         hFunc(TEvControlPlaneProxy::TEvListConnectionsRequest, Handle);
         hFunc(TEvControlPlaneProxy::TEvDescribeConnectionRequest, Handle);
@@ -413,7 +413,7 @@ private:
     }
 
     void Handle(TEvControlPlaneProxy::TEvCreateQueryRequest::TPtr& ev) {
-        TInstant startTime = TInstant::Now(); 
+        TInstant startTime = TInstant::Now();
         YandexQuery::CreateQueryRequest request = std::move(ev->Get()->Request);
         CPP_LOG_T("CreateQueryRequest: " << request.DebugString());
         TRequestCountersPtr requestCounters = Counters.Requests[RT_CREATE_QUERY];
@@ -433,7 +433,7 @@ private:
             CPS_LOG_E("CreateQueryRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
             Send(ev->Sender, new TEvControlPlaneProxy::TEvCreateQueryResponse(issues), 0, ev->Cookie);
             requestCounters->Error->Inc();
-            TDuration delta = TInstant::Now() - startTime; 
+            TDuration delta = TInstant::Now() - startTime;
             requestCounters->LatencyMs->Collect(delta.MilliSeconds());
             probe(delta, false, false);
             return;
@@ -451,7 +451,7 @@ private:
     }
 
     void Handle(TEvControlPlaneProxy::TEvListQueriesRequest::TPtr& ev) {
-        TInstant startTime = TInstant::Now(); 
+        TInstant startTime = TInstant::Now();
         YandexQuery::ListQueriesRequest request = std::move(ev->Get()->Request);
         CPP_LOG_T("ListQueriesRequest: " << request.DebugString());
         TRequestCountersPtr requestCounters = Counters.Requests[RT_LIST_QUERIES];
@@ -471,7 +471,7 @@ private:
             CPS_LOG_E("ListQueriesRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
             Send(ev->Sender, new TEvControlPlaneProxy::TEvListQueriesResponse(issues), 0, ev->Cookie);
             requestCounters->Error->Inc();
-            TDuration delta = TInstant::Now() - startTime; 
+            TDuration delta = TInstant::Now() - startTime;
             requestCounters->LatencyMs->Collect(delta.MilliSeconds());
             probe(delta, false, false);
             return;
@@ -489,7 +489,7 @@ private:
     }
 
     void Handle(TEvControlPlaneProxy::TEvDescribeQueryRequest::TPtr& ev) {
-        TInstant startTime = TInstant::Now(); 
+        TInstant startTime = TInstant::Now();
         YandexQuery::DescribeQueryRequest request = std::move(ev->Get()->Request);
         CPP_LOG_T("DescribeQueryRequest: " << request.DebugString());
         TRequestCountersPtr requestCounters = Counters.Requests[RT_DESCRIBE_QUERY];
@@ -510,7 +510,7 @@ private:
             CPS_LOG_E("DescribeQueryRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
             Send(ev->Sender, new TEvControlPlaneProxy::TEvDescribeQueryResponse(issues), 0, ev->Cookie);
             requestCounters->Error->Inc();
-            TDuration delta = TInstant::Now() - startTime; 
+            TDuration delta = TInstant::Now() - startTime;
             requestCounters->LatencyMs->Collect(delta.MilliSeconds());
             probe(delta, false, false);
             return;
@@ -527,47 +527,47 @@ private:
                                                                                    ExtractPermissions(ev)));
     }
 
-    void Handle(TEvControlPlaneProxy::TEvGetQueryStatusRequest::TPtr& ev) { 
-        TInstant startTime = TInstant::Now(); 
-        YandexQuery::GetQueryStatusRequest request = std::move(ev->Get()->Request); 
-        CPP_LOG_T("GetStatusRequest: " << request.DebugString()); 
-        TRequestCountersPtr requestCounters = Counters.Requests[RT_GET_QUERY_STATUS]; 
- 
-        const TString folderId = ev->Get()->FolderId; 
-        const TString scope = "yandexcloud://" + folderId; 
-        TString user = std::move(ev->Get()->User); 
-        TString token = std::move(ev->Get()->Token); 
-        const TString queryId = request.query_id(); 
-        const int byteSize = request.ByteSize(); 
- 
-        auto probe = [=](const TDuration& delta, bool isSuccess, bool isTimeout) { 
-            LWPROBE(GetQueryStatusRequest, scope, user, queryId, delta, byteSize, isSuccess, isTimeout); 
-        }; 
- 
-        NYql::TIssues issues = ValidatePermissions(ev, {"yq.queries.getStatus@as"}); 
-        if (issues) { 
-            CPS_LOG_E("GetQueryStatusRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString()); 
-            Send(ev->Sender, new TEvControlPlaneProxy::TEvGetQueryStatusResponse(issues), 0, ev->Cookie); 
-            requestCounters->Error->Inc(); 
-            TDuration delta = TInstant::Now() - startTime; 
-            requestCounters->LatencyMs->Collect(delta.MilliSeconds()); 
-            probe(delta, false, false); 
-            return; 
-        } 
- 
-        Register(new TRequestActor<YandexQuery::GetQueryStatusRequest, 
-                                   TEvControlPlaneStorage::TEvGetQueryStatusRequest, 
-                                   TEvControlPlaneStorage::TEvGetQueryStatusResponse, 
-                                   TEvControlPlaneProxy::TEvGetQueryStatusResponse>(Config, ev->Sender, ev->Cookie, scope, folderId, 
-                                                                                   std::move(request), std::move(user), std::move(token), 
-                                                                                   ControlPlaneStorageServiceActorId(), 
-                                                                                   requestCounters, 
-                                                                                   probe, 
-                                                                                   ExtractPermissions(ev))); 
-    } 
- 
+    void Handle(TEvControlPlaneProxy::TEvGetQueryStatusRequest::TPtr& ev) {
+        TInstant startTime = TInstant::Now();
+        YandexQuery::GetQueryStatusRequest request = std::move(ev->Get()->Request);
+        CPP_LOG_T("GetStatusRequest: " << request.DebugString());
+        TRequestCountersPtr requestCounters = Counters.Requests[RT_GET_QUERY_STATUS];
+
+        const TString folderId = ev->Get()->FolderId;
+        const TString scope = "yandexcloud://" + folderId;
+        TString user = std::move(ev->Get()->User);
+        TString token = std::move(ev->Get()->Token);
+        const TString queryId = request.query_id();
+        const int byteSize = request.ByteSize();
+
+        auto probe = [=](const TDuration& delta, bool isSuccess, bool isTimeout) {
+            LWPROBE(GetQueryStatusRequest, scope, user, queryId, delta, byteSize, isSuccess, isTimeout);
+        };
+
+        NYql::TIssues issues = ValidatePermissions(ev, {"yq.queries.getStatus@as"});
+        if (issues) {
+            CPS_LOG_E("GetQueryStatusRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
+            Send(ev->Sender, new TEvControlPlaneProxy::TEvGetQueryStatusResponse(issues), 0, ev->Cookie);
+            requestCounters->Error->Inc();
+            TDuration delta = TInstant::Now() - startTime;
+            requestCounters->LatencyMs->Collect(delta.MilliSeconds());
+            probe(delta, false, false);
+            return;
+        }
+
+        Register(new TRequestActor<YandexQuery::GetQueryStatusRequest,
+                                   TEvControlPlaneStorage::TEvGetQueryStatusRequest,
+                                   TEvControlPlaneStorage::TEvGetQueryStatusResponse,
+                                   TEvControlPlaneProxy::TEvGetQueryStatusResponse>(Config, ev->Sender, ev->Cookie, scope, folderId,
+                                                                                   std::move(request), std::move(user), std::move(token),
+                                                                                   ControlPlaneStorageServiceActorId(),
+                                                                                   requestCounters,
+                                                                                   probe,
+                                                                                   ExtractPermissions(ev)));
+    }
+
     void Handle(TEvControlPlaneProxy::TEvModifyQueryRequest::TPtr& ev) {
-        TInstant startTime = TInstant::Now(); 
+        TInstant startTime = TInstant::Now();
         YandexQuery::ModifyQueryRequest request = std::move(ev->Get()->Request);
         CPP_LOG_T("ModifyQueryRequest: " << request.DebugString());
         TRequestCountersPtr requestCounters = Counters.Requests[RT_MODIFY_QUERY];
@@ -588,7 +588,7 @@ private:
             CPS_LOG_E("ModifyQueryRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
             Send(ev->Sender, new TEvControlPlaneProxy::TEvModifyQueryResponse(issues), 0, ev->Cookie);
             requestCounters->Error->Inc();
-            TDuration delta = TInstant::Now() - startTime; 
+            TDuration delta = TInstant::Now() - startTime;
             requestCounters->LatencyMs->Collect(delta.MilliSeconds());
             probe(delta, false, false);
             return;
@@ -606,7 +606,7 @@ private:
     }
 
     void Handle(TEvControlPlaneProxy::TEvDeleteQueryRequest::TPtr& ev) {
-        TInstant startTime = TInstant::Now(); 
+        TInstant startTime = TInstant::Now();
         YandexQuery::DeleteQueryRequest request = std::move(ev->Get()->Request);
         CPP_LOG_T("DeleteQueryRequest: " << request.DebugString());
         TRequestCountersPtr requestCounters = Counters.Requests[RT_DELETE_QUERY];
@@ -627,7 +627,7 @@ private:
             CPS_LOG_E("DeleteQueryRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
             Send(ev->Sender, new TEvControlPlaneProxy::TEvDeleteQueryResponse(issues), 0, ev->Cookie);
             requestCounters->Error->Inc();
-            TDuration delta = TInstant::Now() - startTime; 
+            TDuration delta = TInstant::Now() - startTime;
             requestCounters->LatencyMs->Collect(delta.MilliSeconds());
             probe(delta, false, false);
             return;
@@ -645,7 +645,7 @@ private:
     }
 
     void Handle(TEvControlPlaneProxy::TEvControlQueryRequest::TPtr& ev) {
-        TInstant startTime = TInstant::Now(); 
+        TInstant startTime = TInstant::Now();
         YandexQuery::ControlQueryRequest request = std::move(ev->Get()->Request);
         CPP_LOG_T("ControlQueryRequest: " << request.DebugString());
         TRequestCountersPtr requestCounters = Counters.Requests[RT_CONTROL_QUERY];
@@ -666,7 +666,7 @@ private:
             CPS_LOG_E("ControlQueryRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
             Send(ev->Sender, new TEvControlPlaneProxy::TEvControlQueryResponse(issues), 0, ev->Cookie);
             requestCounters->Error->Inc();
-            TDuration delta = TInstant::Now() - startTime; 
+            TDuration delta = TInstant::Now() - startTime;
             requestCounters->LatencyMs->Collect(delta.MilliSeconds());
             probe(delta, false, false);
             return;
@@ -684,7 +684,7 @@ private:
     }
 
     void Handle(TEvControlPlaneProxy::TEvGetResultDataRequest::TPtr& ev) {
-        TInstant startTime = TInstant::Now(); 
+        TInstant startTime = TInstant::Now();
         YandexQuery::GetResultDataRequest request = std::move(ev->Get()->Request);
         CPP_LOG_T("GetResultDataRequest: " << request.DebugString());
         TRequestCountersPtr requestCounters = Counters.Requests[RT_GET_RESULT_DATA];
@@ -708,7 +708,7 @@ private:
             CPS_LOG_E("GetResultDataRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
             Send(ev->Sender, new TEvControlPlaneProxy::TEvGetResultDataResponse(issues), 0, ev->Cookie);
             requestCounters->Error->Inc();
-            TDuration delta = TInstant::Now() - startTime; 
+            TDuration delta = TInstant::Now() - startTime;
             requestCounters->LatencyMs->Collect(delta.MilliSeconds());
             probe(delta, false, false);
             return;
@@ -726,7 +726,7 @@ private:
     }
 
     void Handle(TEvControlPlaneProxy::TEvListJobsRequest::TPtr& ev) {
-        TInstant startTime = TInstant::Now(); 
+        TInstant startTime = TInstant::Now();
         YandexQuery::ListJobsRequest request = std::move(ev->Get()->Request);
         CPP_LOG_T("ListJobsRequest: " << request.DebugString());
         TRequestCountersPtr requestCounters = Counters.Requests[RT_LIST_JOBS];
@@ -747,7 +747,7 @@ private:
             CPS_LOG_E("ListJobsRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
             Send(ev->Sender, new TEvControlPlaneProxy::TEvListJobsResponse(issues), 0, ev->Cookie);
             requestCounters->Error->Inc();
-            TDuration delta = TInstant::Now() - startTime; 
+            TDuration delta = TInstant::Now() - startTime;
             requestCounters->LatencyMs->Collect(delta.MilliSeconds());
             probe(delta, false, false);
             return;
@@ -764,47 +764,47 @@ private:
                                                                               ExtractPermissions(ev)));
     }
 
-    void Handle(TEvControlPlaneProxy::TEvDescribeJobRequest::TPtr& ev) { 
-        TInstant startTime = TInstant::Now(); 
-        YandexQuery::DescribeJobRequest request = std::move(ev->Get()->Request); 
+    void Handle(TEvControlPlaneProxy::TEvDescribeJobRequest::TPtr& ev) {
+        TInstant startTime = TInstant::Now();
+        YandexQuery::DescribeJobRequest request = std::move(ev->Get()->Request);
         CPP_LOG_T("DescribeJobRequest: " << request.DebugString());
-        TRequestCountersPtr requestCounters = Counters.Requests[RT_DESCRIBE_JOB]; 
- 
-        const TString folderId = ev->Get()->FolderId; 
-        const TString scope = "yandexcloud://" + folderId; 
-        TString user = std::move(ev->Get()->User); 
-        TString token = std::move(ev->Get()->Token); 
-        const TString jobId = request.job_id(); 
-        const int byteSize = request.ByteSize(); 
- 
-        auto probe = [=](const TDuration& delta, bool isSuccess, bool isTimeout) { 
-            LWPROBE(DescribeJobRequest, scope, user, jobId, delta, byteSize, isSuccess, isTimeout); 
-        }; 
- 
+        TRequestCountersPtr requestCounters = Counters.Requests[RT_DESCRIBE_JOB];
+
+        const TString folderId = ev->Get()->FolderId;
+        const TString scope = "yandexcloud://" + folderId;
+        TString user = std::move(ev->Get()->User);
+        TString token = std::move(ev->Get()->Token);
+        const TString jobId = request.job_id();
+        const int byteSize = request.ByteSize();
+
+        auto probe = [=](const TDuration& delta, bool isSuccess, bool isTimeout) {
+            LWPROBE(DescribeJobRequest, scope, user, jobId, delta, byteSize, isSuccess, isTimeout);
+        };
+
         NYql::TIssues issues = ValidatePermissions(ev, {"yq.jobs.get@as"});
-        if (issues) { 
-            CPS_LOG_E("DescribeJobRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString()); 
-            Send(ev->Sender, new TEvControlPlaneProxy::TEvDescribeJobResponse(issues), 0, ev->Cookie); 
-            requestCounters->Error->Inc(); 
-            TDuration delta = TInstant::Now() - startTime; 
-            requestCounters->LatencyMs->Collect(delta.MilliSeconds()); 
-            probe(delta, false, false); 
-            return; 
-        } 
- 
-        Register(new TRequestActor<YandexQuery::DescribeJobRequest, 
-                                   TEvControlPlaneStorage::TEvDescribeJobRequest, 
-                                   TEvControlPlaneStorage::TEvDescribeJobResponse, 
-                                   TEvControlPlaneProxy::TEvDescribeJobResponse>(Config, ev->Sender, ev->Cookie, scope, folderId, 
-                                                                                     std::move(request), std::move(user), std::move(token), 
-                                                                                     ControlPlaneStorageServiceActorId(), 
-                                                                                     requestCounters, 
+        if (issues) {
+            CPS_LOG_E("DescribeJobRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
+            Send(ev->Sender, new TEvControlPlaneProxy::TEvDescribeJobResponse(issues), 0, ev->Cookie);
+            requestCounters->Error->Inc();
+            TDuration delta = TInstant::Now() - startTime;
+            requestCounters->LatencyMs->Collect(delta.MilliSeconds());
+            probe(delta, false, false);
+            return;
+        }
+
+        Register(new TRequestActor<YandexQuery::DescribeJobRequest,
+                                   TEvControlPlaneStorage::TEvDescribeJobRequest,
+                                   TEvControlPlaneStorage::TEvDescribeJobResponse,
+                                   TEvControlPlaneProxy::TEvDescribeJobResponse>(Config, ev->Sender, ev->Cookie, scope, folderId,
+                                                                                     std::move(request), std::move(user), std::move(token),
+                                                                                     ControlPlaneStorageServiceActorId(),
+                                                                                     requestCounters,
                                                                                      probe,
                                                                                      ExtractPermissions(ev)));
-    } 
- 
+    }
+
     void Handle(TEvControlPlaneProxy::TEvCreateConnectionRequest::TPtr& ev) {
-        TInstant startTime = TInstant::Now(); 
+        TInstant startTime = TInstant::Now();
         YandexQuery::CreateConnectionRequest request = std::move(ev->Get()->Request);
         CPP_LOG_T("CreateConnectionRequest: " << request.DebugString());
         TRequestCountersPtr requestCounters = Counters.Requests[RT_CREATE_CONNECTION];
@@ -829,7 +829,7 @@ private:
             CPS_LOG_E("CreateConnectionRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
             Send(ev->Sender, new TEvControlPlaneProxy::TEvCreateConnectionResponse(issues), 0, ev->Cookie);
             requestCounters->Error->Inc();
-            TDuration delta = TInstant::Now() - startTime; 
+            TDuration delta = TInstant::Now() - startTime;
             requestCounters->LatencyMs->Collect(delta.MilliSeconds());
             probe(delta, false, false);
             return;
@@ -847,7 +847,7 @@ private:
     }
 
     void Handle(TEvControlPlaneProxy::TEvListConnectionsRequest::TPtr& ev) {
-        TInstant startTime = TInstant::Now(); 
+        TInstant startTime = TInstant::Now();
         YandexQuery::ListConnectionsRequest request = std::move(ev->Get()->Request);
         CPP_LOG_T("ListConnectionsRequest: " << request.DebugString());
         TRequestCountersPtr requestCounters = Counters.Requests[RT_LIST_CONNECTIONS];
@@ -867,7 +867,7 @@ private:
             CPS_LOG_E("ListConnectionsRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
             Send(ev->Sender, new TEvControlPlaneProxy::TEvListConnectionsResponse(issues), 0, ev->Cookie);
             requestCounters->Error->Inc();
-            TDuration delta = TInstant::Now() - startTime; 
+            TDuration delta = TInstant::Now() - startTime;
             requestCounters->LatencyMs->Collect(delta.MilliSeconds());
             probe(delta, false, false);
             return;
@@ -885,7 +885,7 @@ private:
     }
 
     void Handle(TEvControlPlaneProxy::TEvDescribeConnectionRequest::TPtr& ev) {
-        TInstant startTime = TInstant::Now(); 
+        TInstant startTime = TInstant::Now();
         YandexQuery::DescribeConnectionRequest request = std::move(ev->Get()->Request);
         CPP_LOG_T("DescribeConnectionRequest: " << request.DebugString());
         TRequestCountersPtr requestCounters = Counters.Requests[RT_DESCRIBE_CONNECTION];
@@ -906,7 +906,7 @@ private:
             CPS_LOG_E("DescribeConnectionRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
             Send(ev->Sender, new TEvControlPlaneProxy::TEvDescribeConnectionResponse(issues), 0, ev->Cookie);
             requestCounters->Error->Inc();
-            TDuration delta = TInstant::Now() - startTime; 
+            TDuration delta = TInstant::Now() - startTime;
             requestCounters->LatencyMs->Collect(delta.MilliSeconds());
             probe(delta, false, false);
             return;
@@ -924,7 +924,7 @@ private:
     }
 
     void Handle(TEvControlPlaneProxy::TEvModifyConnectionRequest::TPtr& ev) {
-        TInstant startTime = TInstant::Now(); 
+        TInstant startTime = TInstant::Now();
         YandexQuery::ModifyConnectionRequest request = std::move(ev->Get()->Request);
         CPP_LOG_T("ModifyConnectionRequest: " << request.DebugString());
         TRequestCountersPtr requestCounters = Counters.Requests[RT_MODIFY_CONNECTION];
@@ -950,7 +950,7 @@ private:
             CPS_LOG_E("ModifyConnectionRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
             Send(ev->Sender, new TEvControlPlaneProxy::TEvModifyConnectionResponse(issues), 0, ev->Cookie);
             requestCounters->Error->Inc();
-            TDuration delta = TInstant::Now() - startTime; 
+            TDuration delta = TInstant::Now() - startTime;
             requestCounters->LatencyMs->Collect(delta.MilliSeconds());
             probe(delta, false, false);
             return;
@@ -968,7 +968,7 @@ private:
     }
 
     void Handle(TEvControlPlaneProxy::TEvDeleteConnectionRequest::TPtr& ev) {
-        TInstant startTime = TInstant::Now(); 
+        TInstant startTime = TInstant::Now();
         YandexQuery::DeleteConnectionRequest request = std::move(ev->Get()->Request);
         CPP_LOG_T("DeleteConnectionRequest: " << request.DebugString());
         TRequestCountersPtr requestCounters = Counters.Requests[RT_DELETE_CONNECTION];
@@ -989,7 +989,7 @@ private:
             CPS_LOG_E("DeleteConnectionRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
             Send(ev->Sender, new TEvControlPlaneProxy::TEvDeleteConnectionResponse(issues), 0, ev->Cookie);
             requestCounters->Error->Inc();
-            TDuration delta = TInstant::Now() - startTime; 
+            TDuration delta = TInstant::Now() - startTime;
             requestCounters->LatencyMs->Collect(delta.MilliSeconds());
             probe(delta, false, false);
             return;
@@ -1050,7 +1050,7 @@ private:
     }
 
     void Handle(TEvControlPlaneProxy::TEvCreateBindingRequest::TPtr& ev) {
-        TInstant startTime = TInstant::Now(); 
+        TInstant startTime = TInstant::Now();
         YandexQuery::CreateBindingRequest request = std::move(ev->Get()->Request);
         CPP_LOG_T("CreateBindingRequest: " << request.DebugString());
         TRequestCountersPtr requestCounters = Counters.Requests[RT_CREATE_BINDING];
@@ -1070,7 +1070,7 @@ private:
             CPS_LOG_E("CreateBindingRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
             Send(ev->Sender, new TEvControlPlaneProxy::TEvCreateBindingResponse(issues), 0, ev->Cookie);
             requestCounters->Error->Inc();
-            TDuration delta = TInstant::Now() - startTime; 
+            TDuration delta = TInstant::Now() - startTime;
             requestCounters->LatencyMs->Collect(delta.MilliSeconds());
             probe(delta, false, false);
             return;
@@ -1088,7 +1088,7 @@ private:
     }
 
     void Handle(TEvControlPlaneProxy::TEvListBindingsRequest::TPtr& ev) {
-        TInstant startTime = TInstant::Now(); 
+        TInstant startTime = TInstant::Now();
         YandexQuery::ListBindingsRequest request = std::move(ev->Get()->Request);
         CPP_LOG_T("ListBindingsRequest: " << request.DebugString());
         TRequestCountersPtr requestCounters = Counters.Requests[RT_LIST_BINDINGS];
@@ -1108,7 +1108,7 @@ private:
             CPS_LOG_E("ListBindingsRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
             Send(ev->Sender, new TEvControlPlaneProxy::TEvListBindingsResponse(issues), 0, ev->Cookie);
             requestCounters->Error->Inc();
-            TDuration delta = TInstant::Now() - startTime; 
+            TDuration delta = TInstant::Now() - startTime;
             requestCounters->LatencyMs->Collect(delta.MilliSeconds());
             probe(delta, false, false);
             return;
@@ -1126,7 +1126,7 @@ private:
     }
 
     void Handle(TEvControlPlaneProxy::TEvDescribeBindingRequest::TPtr& ev) {
-        TInstant startTime = TInstant::Now(); 
+        TInstant startTime = TInstant::Now();
         YandexQuery::DescribeBindingRequest request = std::move(ev->Get()->Request);
         CPP_LOG_T("DescribeBindingRequest: " << request.DebugString());
         TRequestCountersPtr requestCounters = Counters.Requests[RT_DESCRIBE_BINDING];
@@ -1147,7 +1147,7 @@ private:
             CPS_LOG_E("DescribeBindingRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
             Send(ev->Sender, new TEvControlPlaneProxy::TEvDescribeBindingResponse(issues), 0, ev->Cookie);
             requestCounters->Error->Inc();
-            TDuration delta = TInstant::Now() - startTime; 
+            TDuration delta = TInstant::Now() - startTime;
             requestCounters->LatencyMs->Collect(delta.MilliSeconds());
             probe(delta, false, false);
             return;
@@ -1165,7 +1165,7 @@ private:
     }
 
     void Handle(TEvControlPlaneProxy::TEvModifyBindingRequest::TPtr& ev) {
-        TInstant startTime = TInstant::Now(); 
+        TInstant startTime = TInstant::Now();
         YandexQuery::ModifyBindingRequest request = std::move(ev->Get()->Request);
         CPP_LOG_T("ModifyBindingRequest: " << request.DebugString());
         TRequestCountersPtr requestCounters = Counters.Requests[RT_MODIFY_BINDING];
@@ -1186,7 +1186,7 @@ private:
             CPS_LOG_E("ModifyBindingRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
             Send(ev->Sender, new TEvControlPlaneProxy::TEvModifyBindingResponse(issues), 0, ev->Cookie);
             requestCounters->Error->Inc();
-            TDuration delta = TInstant::Now() - startTime; 
+            TDuration delta = TInstant::Now() - startTime;
             requestCounters->LatencyMs->Collect(delta.MilliSeconds());
             probe(delta, false, false);
             return;
@@ -1204,7 +1204,7 @@ private:
     }
 
     void Handle(TEvControlPlaneProxy::TEvDeleteBindingRequest::TPtr& ev) {
-        TInstant startTime = TInstant::Now(); 
+        TInstant startTime = TInstant::Now();
         YandexQuery::DeleteBindingRequest request = std::move(ev->Get()->Request);
         CPP_LOG_T("DeleteBindingRequest: " << request.DebugString());
         TRequestCountersPtr requestCounters = Counters.Requests[RT_DELETE_BINDING];
@@ -1225,7 +1225,7 @@ private:
             CPS_LOG_E("DeleteBindingRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
             Send(ev->Sender, new TEvControlPlaneProxy::TEvDeleteBindingResponse(issues), 0, ev->Cookie);
             requestCounters->Error->Inc();
-            TDuration delta = TInstant::Now() - startTime; 
+            TDuration delta = TInstant::Now() - startTime;
             requestCounters->LatencyMs->Collect(delta.MilliSeconds());
             probe(delta, false, false);
             return;

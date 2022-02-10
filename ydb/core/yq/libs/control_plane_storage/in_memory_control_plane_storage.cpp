@@ -4,8 +4,8 @@
 #include <util/generic/guid.h>
 #include <util/generic/set.h>
 
-#include <library/cpp/protobuf/interop/cast.h> 
- 
+#include <library/cpp/protobuf/interop/cast.h>
+
 #include <ydb/core/yq/libs/config/yq_issue.h>
 #include <ydb/core/yq/libs/control_plane_storage/events/events.h>
 
@@ -26,7 +26,7 @@ class TInMemoryControlPlaneStorageActor : public NActors::TActor<TInMemoryContro
         NConfig::TControlPlaneStorageConfig Proto;
         TDuration IdempotencyKeyTtl;
         TDuration AutomaticQueriesTtl;
-        TDuration ResultSetsTtl; 
+        TDuration ResultSetsTtl;
         TDuration AnalyticsRetryCounterUpdateTime;
         TDuration StreamingRetryCounterUpdateTime;
         TDuration TaskLeaseTtl;
@@ -35,7 +35,7 @@ class TInMemoryControlPlaneStorageActor : public NActors::TActor<TInMemoryContro
             : Proto(FillDefaultParameters(config))
             , IdempotencyKeyTtl(GetDuration(Proto.GetIdempotencyKeysTtl(), TDuration::Minutes(10)))
             , AutomaticQueriesTtl(GetDuration(Proto.GetAutomaticQueriesTtl(), TDuration::Days(1)))
-            , ResultSetsTtl(GetDuration(Proto.GetResultSetsTtl(), TDuration::Days(1))) 
+            , ResultSetsTtl(GetDuration(Proto.GetResultSetsTtl(), TDuration::Days(1)))
             , AnalyticsRetryCounterUpdateTime(GetDuration(Proto.GetAnalyticsRetryCounterUpdateTime(), TDuration::Days(1)))
             , StreamingRetryCounterUpdateTime(GetDuration(Proto.GetAnalyticsRetryCounterUpdateTime(), TDuration::Days(1)))
             , TaskLeaseTtl(GetDuration(Proto.GetTaskLeaseTtl(), TDuration::Seconds(30)))
@@ -120,7 +120,7 @@ private:
         YandexQuery::CommonMeta& common = *meta.mutable_common();
         common.set_id(queryId);
         common.set_created_by(user);
-        auto timestamp = NProtoInterop::CastToProto(now); 
+        auto timestamp = NProtoInterop::CastToProto(now);
         *common.mutable_created_at() = timestamp;
         common.set_revision(InitialRevision);
 

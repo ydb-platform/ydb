@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/datetime/base.h> 
+#include <util/datetime/base.h>
 
 #include <ydb/public/api/protos/yq.pb.h>
 
@@ -126,22 +126,22 @@ public:
     }
 };
 
-class TGetQueryStatusBuilder { 
-    YandexQuery::GetQueryStatusRequest Request; 
- 
-public: 
-    TGetQueryStatusBuilder& SetQueryId(const TString& queryId) 
-    { 
-        Request.set_query_id(queryId); 
-        return *this; 
-    } 
- 
-    const YandexQuery::GetQueryStatusRequest& Build() 
-    { 
-        return Request; 
-    } 
-}; 
- 
+class TGetQueryStatusBuilder {
+    YandexQuery::GetQueryStatusRequest Request;
+
+public:
+    TGetQueryStatusBuilder& SetQueryId(const TString& queryId)
+    {
+        Request.set_query_id(queryId);
+        return *this;
+    }
+
+    const YandexQuery::GetQueryStatusRequest& Build()
+    {
+        return Request;
+    }
+};
+
 class TDeleteQueryBuilder {
     YandexQuery::DeleteQueryRequest Request;
 
@@ -207,12 +207,12 @@ public:
         return *this;
     }
 
-    TModifyQueryBuilder& SetAutomatic(bool automatic) 
-    { 
-        Request.mutable_content()->set_automatic(automatic); 
-        return *this; 
-    } 
- 
+    TModifyQueryBuilder& SetAutomatic(bool automatic)
+    {
+        Request.mutable_content()->set_automatic(automatic);
+        return *this;
+    }
+
     TModifyQueryBuilder& SetText(const TString& content)
     {
         Request.mutable_content()->set_text(content);
@@ -376,22 +376,22 @@ public:
     }
 };
 
-class TDescribeJobBuilder { 
-    YandexQuery::DescribeJobRequest Request; 
- 
-public: 
-    TDescribeJobBuilder& SetJobId(const TString& jobId) 
-    { 
-        Request.set_job_id(jobId); 
-        return *this; 
-    } 
- 
-    const YandexQuery::DescribeJobRequest& Build() 
-    { 
-        return Request; 
-    } 
-}; 
- 
+class TDescribeJobBuilder {
+    YandexQuery::DescribeJobRequest Request;
+
+public:
+    TDescribeJobBuilder& SetJobId(const TString& jobId)
+    {
+        Request.set_job_id(jobId);
+        return *this;
+    }
+
+    const YandexQuery::DescribeJobRequest& Build()
+    {
+        return Request;
+    }
+};
+
 // Connections
 
 class TCreateConnectionBuilder {
@@ -993,7 +993,7 @@ class TPingTaskBuilder {
     TString QueryId;
     TString ResultId;
     TString Owner;
-    TInstant Deadline; 
+    TInstant Deadline;
     TMaybe<YandexQuery::QueryMeta::ComputeStatus> Status;
     TMaybe<NYql::TIssues> Issues;
     TMaybe<NYql::TIssues> TransientIssues;
@@ -1010,9 +1010,9 @@ class TPingTaskBuilder {
 
 public:
     TPingTaskBuilder()
-    { 
-        SetDeadline(TInstant::Now() + TDuration::Minutes(5)); 
-    } 
+    {
+        SetDeadline(TInstant::Now() + TDuration::Minutes(5));
+    }
 
     TPingTaskBuilder& SetScope(const TString& scope)
     {
@@ -1038,12 +1038,12 @@ public:
         return *this;
     }
 
-    TPingTaskBuilder& SetDeadline(const TInstant& deadline) 
-    { 
-        Deadline = deadline; 
-        return *this; 
-    } 
- 
+    TPingTaskBuilder& SetDeadline(const TInstant& deadline)
+    {
+        Deadline = deadline;
+        return *this;
+    }
+
     TPingTaskBuilder& SetStatus(const YandexQuery::QueryMeta::ComputeStatus& status)
     {
         Status = status;
@@ -1124,7 +1124,7 @@ public:
 
     std::unique_ptr<TEvControlPlaneStorage::TEvPingTaskRequest> Build()
     {
-        auto request = std::make_unique<TEvControlPlaneStorage::TEvPingTaskRequest>(Scope, QueryId, Owner, Deadline, ResultId); 
+        auto request = std::make_unique<TEvControlPlaneStorage::TEvPingTaskRequest>(Scope, QueryId, Owner, Deadline, ResultId);
         request->Status = Status;
         request->Issues = Issues;
         request->TransientIssues = TransientIssues;

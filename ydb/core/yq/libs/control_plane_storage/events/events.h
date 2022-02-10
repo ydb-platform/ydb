@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/datetime/base.h> 
+#include <util/datetime/base.h>
 #include <util/generic/map.h>
 #include <util/generic/maybe.h>
 
@@ -101,8 +101,8 @@ struct TEvControlPlaneStorage {
         EvListQueriesResponse,
         EvDescribeQueryRequest,
         EvDescribeQueryResponse,
-        EvGetQueryStatusRequest, 
-        EvGetQueryStatusResponse, 
+        EvGetQueryStatusRequest,
+        EvGetQueryStatusResponse,
         EvModifyQueryRequest,
         EvModifyQueryResponse,
         EvDeleteQueryRequest,
@@ -113,8 +113,8 @@ struct TEvControlPlaneStorage {
         EvGetResultDataResponse,
         EvListJobsRequest,
         EvListJobsResponse,
-        EvDescribeJobRequest, 
-        EvDescribeJobResponse, 
+        EvDescribeJobRequest,
+        EvDescribeJobResponse,
         EvCreateConnectionRequest,
         EvCreateConnectionResponse,
         EvListConnectionsRequest,
@@ -267,43 +267,43 @@ struct TEvControlPlaneStorage {
         TDebugInfoPtr DebugInfo;
     };
 
-    struct TEvGetQueryStatusRequest : NActors::TEventLocal<TEvGetQueryStatusRequest, EvGetQueryStatusRequest> { 
-        explicit TEvGetQueryStatusRequest(const TString& scope, 
-                                         const YandexQuery::GetQueryStatusRequest& request, 
-                                         const TString& user, 
-                                         const TString& token, 
-                                         TPermissions permissions) 
-            : Scope(scope) 
-            , Request(request) 
-            , User(user) 
-            , Token(token) 
-            , Permissions(permissions) 
-        { 
-        } 
- 
-        TString Scope; 
-        YandexQuery::GetQueryStatusRequest Request; 
-        TString User; 
-        TString Token; 
-        TPermissions Permissions; 
-    }; 
- 
-    struct TEvGetQueryStatusResponse : NActors::TEventLocal<TEvGetQueryStatusResponse, EvGetQueryStatusResponse> { 
-        explicit TEvGetQueryStatusResponse(const YandexQuery::GetQueryStatusResult& result) 
-            : Result(result) 
-        { 
-        } 
- 
-        explicit TEvGetQueryStatusResponse(const NYql::TIssues& issues) 
-            : Issues(issues) 
-        { 
-        } 
- 
-        YandexQuery::GetQueryStatusResult Result; 
-        NYql::TIssues Issues; 
-        TDebugInfoPtr DebugInfo; 
-    }; 
- 
+    struct TEvGetQueryStatusRequest : NActors::TEventLocal<TEvGetQueryStatusRequest, EvGetQueryStatusRequest> {
+        explicit TEvGetQueryStatusRequest(const TString& scope,
+                                         const YandexQuery::GetQueryStatusRequest& request,
+                                         const TString& user,
+                                         const TString& token,
+                                         TPermissions permissions)
+            : Scope(scope)
+            , Request(request)
+            , User(user)
+            , Token(token)
+            , Permissions(permissions)
+        {
+        }
+
+        TString Scope;
+        YandexQuery::GetQueryStatusRequest Request;
+        TString User;
+        TString Token;
+        TPermissions Permissions;
+    };
+
+    struct TEvGetQueryStatusResponse : NActors::TEventLocal<TEvGetQueryStatusResponse, EvGetQueryStatusResponse> {
+        explicit TEvGetQueryStatusResponse(const YandexQuery::GetQueryStatusResult& result)
+            : Result(result)
+        {
+        }
+
+        explicit TEvGetQueryStatusResponse(const NYql::TIssues& issues)
+            : Issues(issues)
+        {
+        }
+
+        YandexQuery::GetQueryStatusResult Result;
+        NYql::TIssues Issues;
+        TDebugInfoPtr DebugInfo;
+    };
+
     struct TEvModifyQueryRequest : NActors::TEventLocal<TEvModifyQueryRequest, EvModifyQueryRequest> {
         explicit TEvModifyQueryRequest(const TString& scope,
                                        const YandexQuery::ModifyQueryRequest& request,
@@ -498,43 +498,43 @@ struct TEvControlPlaneStorage {
         TDebugInfoPtr DebugInfo;
     };
 
-    struct TEvDescribeJobRequest : NActors::TEventLocal<TEvDescribeJobRequest, EvDescribeJobRequest> { 
-        explicit TEvDescribeJobRequest(const TString& scope, 
-                                           const YandexQuery::DescribeJobRequest& request, 
-                                           const TString& user, 
+    struct TEvDescribeJobRequest : NActors::TEventLocal<TEvDescribeJobRequest, EvDescribeJobRequest> {
+        explicit TEvDescribeJobRequest(const TString& scope,
+                                           const YandexQuery::DescribeJobRequest& request,
+                                           const TString& user,
                                            const TString& token,
                                            TPermissions permissions)
-            : Scope(scope) 
-            , Request(request) 
-            , User(user) 
-            , Token(token) 
+            : Scope(scope)
+            , Request(request)
+            , User(user)
+            , Token(token)
             , Permissions(permissions)
-        { 
-        } 
- 
-        TString Scope; 
-        YandexQuery::DescribeJobRequest Request; 
-        TString User; 
-        TString Token; 
+        {
+        }
+
+        TString Scope;
+        YandexQuery::DescribeJobRequest Request;
+        TString User;
+        TString Token;
         TPermissions Permissions;
-    }; 
- 
-    struct TEvDescribeJobResponse : NActors::TEventLocal<TEvDescribeJobResponse, EvDescribeJobResponse> { 
-        explicit TEvDescribeJobResponse(const YandexQuery::DescribeJobResult& result) 
-            : Result(result) 
-        { 
-        } 
- 
-        explicit TEvDescribeJobResponse(const NYql::TIssues& issues) 
-            : Issues(issues) 
-        { 
-        } 
- 
-        YandexQuery::DescribeJobResult Result; 
-        NYql::TIssues Issues; 
+    };
+
+    struct TEvDescribeJobResponse : NActors::TEventLocal<TEvDescribeJobResponse, EvDescribeJobResponse> {
+        explicit TEvDescribeJobResponse(const YandexQuery::DescribeJobResult& result)
+            : Result(result)
+        {
+        }
+
+        explicit TEvDescribeJobResponse(const NYql::TIssues& issues)
+            : Issues(issues)
+        {
+        }
+
+        YandexQuery::DescribeJobResult Result;
+        NYql::TIssues Issues;
         TDebugInfoPtr DebugInfo;
-    }; 
- 
+    };
+
     struct TEvCreateConnectionRequest : NActors::TEventLocal<TEvCreateConnectionRequest, EvCreateConnectionRequest> {
         explicit TEvCreateConnectionRequest(const TString& scope,
                                             const YandexQuery::CreateConnectionRequest& request,
@@ -989,7 +989,7 @@ struct TEvControlPlaneStorage {
         YandexQuery::Query Query;
         YandexQuery::Internal::QueryInternal Internal;
         ui64 Generation = 0;
-        TInstant Deadline; 
+        TInstant Deadline;
     };
 
     struct TEvGetTaskResponse : NActors::TEventLocal<TEvGetTaskResponse, EvGetTaskResponse> {
@@ -1023,11 +1023,11 @@ struct TEvControlPlaneStorage {
     };
 
     struct TEvPingTaskRequest : NActors::TEventLocal<TEvPingTaskRequest, EvPingTaskRequest> {
-        explicit TEvPingTaskRequest(const TString& scope, const TString& queryId, const TString& owner, const TInstant& deadline, const TString& resultId = "") 
+        explicit TEvPingTaskRequest(const TString& scope, const TString& queryId, const TString& owner, const TInstant& deadline, const TString& resultId = "")
             : Scope(scope)
             , QueryId(queryId)
             , Owner(owner)
-            , Deadline(deadline) 
+            , Deadline(deadline)
             , ResultId(resultId)
         {
         }
@@ -1035,7 +1035,7 @@ struct TEvControlPlaneStorage {
         const TString Scope;
         const TString QueryId;
         const TString Owner;
-        const TInstant Deadline; 
+        const TInstant Deadline;
         TString ResultId;
         TMaybe<YandexQuery::QueryMeta::ComputeStatus> Status;
         TMaybe<NYql::TIssues> Issues;

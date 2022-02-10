@@ -9,7 +9,7 @@
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/log.h>
-#include <library/cpp/protobuf/interop/cast.h> 
+#include <library/cpp/protobuf/interop/cast.h>
 
 #include <ydb/core/yq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/yq/libs/control_plane_storage/control_plane_storage.h>
@@ -71,11 +71,11 @@ public:
         PassAway();
     }
 
-    void Bootstrap(const TActorContext&) { 
+    void Bootstrap(const TActorContext&) {
         Become(&TWriteTaskRequestActor::StateFunc);
         const auto& req = Ev->Record;
 
-        Deadline = NProtoInterop::CastFromProto(req.deadline()); 
+        Deadline = NProtoInterop::CastFromProto(req.deadline());
 
         const auto& resultSet = req.result_set();
         ResultId = req.result_id().value();

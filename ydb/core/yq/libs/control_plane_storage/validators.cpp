@@ -328,36 +328,36 @@ TValidationQuery CreateConnectionExistsValidator(const TString& scope,
     return {query.Sql, query.Params, validator};
 }
 
-TValidationQuery CreateTtlValidator(const TString& tableName, 
-                                    const TString& columnName, 
-                                    const TString& scope, 
-                                    const TString& id, 
-                                    const TString& error, 
-                                    const TString& tablePathPrefix) { 
+TValidationQuery CreateTtlValidator(const TString& tableName,
+                                    const TString& columnName,
+                                    const TString& scope,
+                                    const TString& id,
+                                    const TString& error,
+                                    const TString& tablePathPrefix) {
     TSqlQueryBuilder queryBuilder(tablePathPrefix);
     queryBuilder.AddString("scope", scope);
     queryBuilder.AddString("id", id);
     queryBuilder.AddTimestamp("now", TInstant::Now());
     queryBuilder.AddText(
-        "SELECT `" EXPIRE_AT_COLUMN_NAME "`\n" 
+        "SELECT `" EXPIRE_AT_COLUMN_NAME "`\n"
         "FROM `" + tableName + "` WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" + columnName + "` = $id AND (`" EXPIRE_AT_COLUMN_NAME "` is NULL OR `" EXPIRE_AT_COLUMN_NAME "` > $now);\n"
     );
- 
-    auto validator = [error](NYdb::NTable::TDataQueryResult result) { 
-        const auto& resultSets = result.GetResultSets(); 
-        if (resultSets.size() != 1) { 
-            ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets.size() << ". Please contact internal support"; 
-        } 
- 
-        TResultSetParser parser(resultSets.front()); 
-        if (!parser.TryNextRow()) { 
-            ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << error; 
-        } 
- 
-        return false; 
-    }; 
+
+    auto validator = [error](NYdb::NTable::TDataQueryResult result) {
+        const auto& resultSets = result.GetResultSets();
+        if (resultSets.size() != 1) {
+            ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets.size() << ". Please contact internal support";
+        }
+
+        TResultSetParser parser(resultSets.front());
+        if (!parser.TryNextRow()) {
+            ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << error;
+        }
+
+        return false;
+    };
     const auto query = queryBuilder.Build();
     return {query.Sql, query.Params, validator};
-} 
- 
+}
+
 } // namespace NYq

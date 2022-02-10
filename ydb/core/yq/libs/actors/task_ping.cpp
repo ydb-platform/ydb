@@ -1,5 +1,5 @@
 #include "proxy_private.h"
-#include <util/datetime/base.h> 
+#include <util/datetime/base.h>
 
 #include <ydb/core/protos/services.pb.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
@@ -9,7 +9,7 @@
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/log.h>
-#include <library/cpp/protobuf/interop/cast.h> 
+#include <library/cpp/protobuf/interop/cast.h>
 
 #include <ydb/core/yq/libs/control_plane_storage/control_plane_storage.h>
 #include <ydb/core/yq/libs/control_plane_storage/events/events.h>
@@ -79,7 +79,7 @@ public:
         OperationId = req.query_id().value();
         OwnerId = req.owner_id();
         Scope = req.scope();
-        Deadline = NProtoInterop::CastFromProto(req.deadline()); 
+        Deadline = NProtoInterop::CastFromProto(req.deadline());
         LOG_D("Request CP::PingTask with size: " << req.ByteSize() << " bytes");
         RequestedMBytes->Collect(req.ByteSize() / 1024 / 1024);
         try {
@@ -100,7 +100,7 @@ private:
     )
 
     std::unique_ptr<NYq::TEvControlPlaneStorage::TEvPingTaskRequest> CreateControlPlaneEvent() {
-        auto event = std::make_unique<NYq::TEvControlPlaneStorage::TEvPingTaskRequest>(Scope, OperationId, OwnerId, Deadline); 
+        auto event = std::make_unique<NYq::TEvControlPlaneStorage::TEvPingTaskRequest>(Scope, OperationId, OwnerId, Deadline);
         const auto& req = Ev->Record;
         ui64 issuesByteSize = 0;
         ui64 transientIssuesByteSize = 0;
@@ -225,7 +225,7 @@ private:
     TString OperationId;
     TString OwnerId;
     TString Scope;
-    TInstant Deadline; 
+    TInstant Deadline;
     NYql::TIssues Issues;
 };
 

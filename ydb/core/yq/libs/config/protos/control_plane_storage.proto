@@ -32,5 +32,5 @@ message TControlPlaneStorageConfig {
     string TaskLeaseTtl = 21;
     repeated string AvailableConnection = 22;
     repeated string AvailableBinding = 23;
-    string ResultSetsTtl = 24; 
+    string ResultSetsTtl = 24;
 }

@@ -87,13 +87,13 @@ TValidationQuery CreateConnectionExistsValidator(const TString& scope,
                                                  const TString& user,
                                                  const TString& tablePathPrefix);
 
-TValidationQuery CreateTtlValidator(const TString& tableName, 
-                                    const TString& columnName, 
-                                    const TString& scope, 
-                                    const TString& id, 
-                                    const TString& error, 
-                                    const TString& tablePathPrefix); 
- 
+TValidationQuery CreateTtlValidator(const TString& tableName,
+                                    const TString& columnName,
+                                    const TString& scope,
+                                    const TString& id,
+                                    const TString& error,
+                                    const TString& tablePathPrefix);
+
 template<typename T>
 TValidationQuery CreateIdempotencyKeyValidator(const TString& scope,
                                                const TString& idempotencyKey,

@@ -46,10 +46,10 @@ using TDescribeQueryResult = TProtoResultWrapper<YandexQuery::DescribeQueryResul
 using TAsyncDescribeQueryResult = NThreading::TFuture<TDescribeQueryResult>;
 struct TDescribeQuerySettings : public NYdb::TOperationRequestSettings<TDescribeQuerySettings> {};
 
-using TGetQueryStatusResult = TProtoResultWrapper<YandexQuery::GetQueryStatusResult>; 
-using TAsyncGetQueryStatusResult = NThreading::TFuture<TGetQueryStatusResult>; 
-struct TGetQueryStatusSettings : public NYdb::TOperationRequestSettings<TGetQueryStatusSettings> {}; 
- 
+using TGetQueryStatusResult = TProtoResultWrapper<YandexQuery::GetQueryStatusResult>;
+using TAsyncGetQueryStatusResult = NThreading::TFuture<TGetQueryStatusResult>;
+struct TGetQueryStatusSettings : public NYdb::TOperationRequestSettings<TGetQueryStatusSettings> {};
+
 using TModifyQueryResult = TProtoResultWrapper<YandexQuery::ModifyQueryResult>;
 using TAsyncModifyQueryResult = NThreading::TFuture<TModifyQueryResult>;
 struct TModifyQuerySettings : public NYdb::TOperationRequestSettings<TModifyQuerySettings> {};
@@ -70,10 +70,10 @@ using TListJobsResult = TProtoResultWrapper<YandexQuery::ListJobsResult>;
 using TAsyncListJobsResult = NThreading::TFuture<TListJobsResult>;
 struct TListJobsSettings : public NYdb::TOperationRequestSettings<TListJobsSettings> {};
 
-using TDescribeJobResult = TProtoResultWrapper<YandexQuery::DescribeJobResult>; 
-using TAsyncDescribeJobResult = NThreading::TFuture<TDescribeJobResult>; 
-struct TDescribeJobSettings : public NYdb::TOperationRequestSettings<TDescribeJobSettings> {}; 
- 
+using TDescribeJobResult = TProtoResultWrapper<YandexQuery::DescribeJobResult>;
+using TAsyncDescribeJobResult = NThreading::TFuture<TDescribeJobResult>;
+struct TDescribeJobSettings : public NYdb::TOperationRequestSettings<TDescribeJobSettings> {};
+
 using TCreateConnectionResult = TProtoResultWrapper<YandexQuery::CreateConnectionResult>;
 using TAsyncCreateConnectionResult = NThreading::TFuture<TCreateConnectionResult>;
 struct TCreateConnectionSettings : public NYdb::TOperationRequestSettings<TCreateConnectionSettings> {};
@@ -136,10 +136,10 @@ public:
         const YandexQuery::DescribeQueryRequest& request,
         const TDescribeQuerySettings& settings = TDescribeQuerySettings());
 
-    TAsyncGetQueryStatusResult GetQueryStatus( 
-        const YandexQuery::GetQueryStatusRequest& request, 
-        const TGetQueryStatusSettings& settings = TGetQueryStatusSettings()); 
- 
+    TAsyncGetQueryStatusResult GetQueryStatus(
+        const YandexQuery::GetQueryStatusRequest& request,
+        const TGetQueryStatusSettings& settings = TGetQueryStatusSettings());
+
     TAsyncModifyQueryResult ModifyQuery(
         const YandexQuery::ModifyQueryRequest& request,
         const TModifyQuerySettings& settings = TModifyQuerySettings());
@@ -160,10 +160,10 @@ public:
         const YandexQuery::ListJobsRequest& request,
         const TListJobsSettings& settings = TListJobsSettings());
 
-    TAsyncDescribeJobResult DescribeJob( 
-        const YandexQuery::DescribeJobRequest& request, 
-        const TDescribeJobSettings& settings = TDescribeJobSettings()); 
- 
+    TAsyncDescribeJobResult DescribeJob(
+        const YandexQuery::DescribeJobRequest& request,
+        const TDescribeJobSettings& settings = TDescribeJobSettings());
+
     TAsyncCreateConnectionResult CreateConnection(
         const YandexQuery::CreateConnectionRequest& request,
         const TCreateConnectionSettings& settings = TCreateConnectionSettings());

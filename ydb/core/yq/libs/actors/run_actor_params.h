@@ -56,7 +56,7 @@ struct TRunActorParams { // TODO2 : Change name
         int32_t dqGraphIndex,
         TVector<Yq::Private::TopicConsumer> createdTopicConsumers,
         bool automatic,
-        const TString& queryName, 
+        const TString& queryName,
         const TInstant& deadline,
         const NMonitoring::TDynamicCounterPtr& clientCounters
     );
@@ -104,7 +104,7 @@ struct TRunActorParams { // TODO2 : Change name
 
     bool Automatic = false;
     TString QueryName;
-    TInstant Deadline; 
+    TInstant Deadline;
 
     const NMonitoring::TDynamicCounterPtr ClientCounters;
 };

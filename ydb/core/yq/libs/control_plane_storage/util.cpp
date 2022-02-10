@@ -5,12 +5,12 @@
 
 namespace NYq {
 
-bool IsTerminalStatus(YandexQuery::QueryMeta::ComputeStatus status) 
-{ 
-    return IsIn({ YandexQuery::QueryMeta::ABORTED_BY_USER, YandexQuery::QueryMeta::ABORTED_BY_SYSTEM, 
-        YandexQuery::QueryMeta::COMPLETED, YandexQuery::QueryMeta::FAILED }, status); 
-} 
- 
+bool IsTerminalStatus(YandexQuery::QueryMeta::ComputeStatus status)
+{
+    return IsIn({ YandexQuery::QueryMeta::ABORTED_BY_USER, YandexQuery::QueryMeta::ABORTED_BY_SYSTEM,
+        YandexQuery::QueryMeta::COMPLETED, YandexQuery::QueryMeta::FAILED }, status);
+}
+
 TDuration GetDuration(const TString& value, const TDuration& defaultValue)
 {
     TDuration result = defaultValue;
@@ -72,9 +72,9 @@ NConfig::TControlPlaneStorageConfig FillDefaultParameters(NConfig::TControlPlane
         config.SetStreamingRetryCounterUpdateTime("1d");
     }
 
-    if (!config.GetAutomaticQueriesTtl()) { 
-        config.SetAutomaticQueriesTtl("1d"); 
-    } 
+    if (!config.GetAutomaticQueriesTtl()) {
+        config.SetAutomaticQueriesTtl("1d");
+    }
 
     if (!config.GetTaskLeaseTtl()) {
         config.SetTaskLeaseTtl("30s");
@@ -84,9 +84,9 @@ NConfig::TControlPlaneStorageConfig FillDefaultParameters(NConfig::TControlPlane
         config.MutableStorage()->SetToken(StripString(TFileInput(config.GetStorage().GetOAuthFile()).ReadAll()));
     }
 
-    if (!config.GetResultSetsTtl()) { 
-        config.SetResultSetsTtl("1d"); 
-    } 
+    if (!config.GetResultSetsTtl()) {
+        config.SetResultSetsTtl("1d");
+    }
 
     return config;
 }

@@ -14,7 +14,7 @@
 """Objects for use in testing gRPC Python-using application code."""
 
 import abc
-import six
+import six 
 
 from google.protobuf import descriptor
 

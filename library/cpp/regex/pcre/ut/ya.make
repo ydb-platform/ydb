@@ -1,10 +1,10 @@
 UNITTEST_FOR(library/cpp/regex/pcre)
-
+ 
 OWNER(g:util)
-
-SRCS(
+ 
+SRCS( 
     pcre_ut.cpp
-    regexp_ut.cpp
-)
-
-END()
+    regexp_ut.cpp 
+) 
+ 
+END() 

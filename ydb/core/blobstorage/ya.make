@@ -1,13 +1,13 @@
 LIBRARY()
 
-OWNER(
+OWNER( 
     alexvru
     cthulhu
-    ddoarn
-    fomichev
+    ddoarn 
+    fomichev 
     g:kikimr
-)
-
+) 
+ 
 SRCS(
     defs.h
 )

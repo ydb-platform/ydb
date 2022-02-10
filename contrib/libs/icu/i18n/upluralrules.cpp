@@ -1,30 +1,30 @@
 // © 2016 and later: Unicode, Inc. and others.
-// License & terms of use: http://www.unicode.org/copyright.html
-/*
-*****************************************************************************************
-* Copyright (C) 2010-2012, International Business Machines
-* Corporation and others. All Rights Reserved.
-*****************************************************************************************
-*/
-
-#include "unicode/utypes.h"
-
-#if !UCONFIG_NO_FORMATTING
-
-#include "unicode/upluralrules.h"
-#include "unicode/plurrule.h"
-#include "unicode/locid.h"
-#include "unicode/unistr.h"
+// License & terms of use: http://www.unicode.org/copyright.html 
+/* 
+***************************************************************************************** 
+* Copyright (C) 2010-2012, International Business Machines 
+* Corporation and others. All Rights Reserved. 
+***************************************************************************************** 
+*/ 
+ 
+#include "unicode/utypes.h" 
+ 
+#if !UCONFIG_NO_FORMATTING 
+ 
+#include "unicode/upluralrules.h" 
+#include "unicode/plurrule.h" 
+#include "unicode/locid.h" 
+#include "unicode/unistr.h" 
 #include "unicode/unum.h"
 #include "unicode/numfmt.h"
 #include "unicode/unumberformatter.h"
 #include "number_decimalquantity.h"
 #include "number_utypes.h"
-
-U_NAMESPACE_USE
-
+ 
+U_NAMESPACE_USE 
+ 
 namespace {
-
+ 
 /**
  * Given a number and a format, returns the keyword of the first applicable
  * rule for the PluralRules object.
@@ -58,41 +58,41 @@ UnicodeString select(const PluralRules &rules, const Formattable& obj, const Num
 
 }  // namespace
 
-U_CAPI UPluralRules* U_EXPORT2
-uplrules_open(const char *locale, UErrorCode *status)
-{
-    return uplrules_openForType(locale, UPLURAL_TYPE_CARDINAL, status);
-}
-
-U_CAPI UPluralRules* U_EXPORT2
-uplrules_openForType(const char *locale, UPluralType type, UErrorCode *status)
-{
-    return (UPluralRules*)PluralRules::forLocale(Locale(locale), type, *status);
-}
-
-U_CAPI void U_EXPORT2
-uplrules_close(UPluralRules *uplrules)
-{
-    delete (PluralRules*)uplrules;
-}
-
-U_CAPI int32_t U_EXPORT2
-uplrules_select(const UPluralRules *uplrules,
-                double number,
-                UChar *keyword, int32_t capacity,
-                UErrorCode *status)
-{
-    if (U_FAILURE(*status)) {
-        return 0;
-    }
-    if (keyword == NULL ? capacity != 0 : capacity < 0) {
-        *status = U_ILLEGAL_ARGUMENT_ERROR;
-        return 0;
-    }
-    UnicodeString result = ((PluralRules*)uplrules)->select(number);
-    return result.extract(keyword, capacity, *status);
-}
-
+U_CAPI UPluralRules* U_EXPORT2 
+uplrules_open(const char *locale, UErrorCode *status) 
+{ 
+    return uplrules_openForType(locale, UPLURAL_TYPE_CARDINAL, status); 
+} 
+ 
+U_CAPI UPluralRules* U_EXPORT2 
+uplrules_openForType(const char *locale, UPluralType type, UErrorCode *status) 
+{ 
+    return (UPluralRules*)PluralRules::forLocale(Locale(locale), type, *status); 
+} 
+ 
+U_CAPI void U_EXPORT2 
+uplrules_close(UPluralRules *uplrules) 
+{ 
+    delete (PluralRules*)uplrules; 
+} 
+ 
+U_CAPI int32_t U_EXPORT2 
+uplrules_select(const UPluralRules *uplrules, 
+                double number, 
+                UChar *keyword, int32_t capacity, 
+                UErrorCode *status) 
+{ 
+    if (U_FAILURE(*status)) { 
+        return 0; 
+    } 
+    if (keyword == NULL ? capacity != 0 : capacity < 0) { 
+        *status = U_ILLEGAL_ARGUMENT_ERROR; 
+        return 0; 
+    } 
+    UnicodeString result = ((PluralRules*)uplrules)->select(number); 
+    return result.extract(keyword, capacity, *status); 
+} 
+ 
 U_CAPI int32_t U_EXPORT2
 uplrules_selectFormatted(const UPluralRules *uplrules,
                 const UFormattedNumber* number,
@@ -114,7 +114,7 @@ uplrules_selectFormatted(const UPluralRules *uplrules,
     UnicodeString result = ((PluralRules*)uplrules)->select(*dq);
     return result.extract(keyword, capacity, *status);
 }
-
+ 
 U_CAPI int32_t U_EXPORT2
 uplrules_selectWithFormat(const UPluralRules *uplrules,
                           double number,
@@ -159,4 +159,4 @@ uplrules_getKeywords(const UPluralRules *uplrules,
     return uenum_openFromStringEnumeration(senum, status);
 }
 
-#endif /* #if !UCONFIG_NO_FORMATTING */
+#endif /* #if !UCONFIG_NO_FORMATTING */ 

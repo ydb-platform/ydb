@@ -1,8 +1,8 @@
 OWNER(g:messagebus)
 
 RECURSE(
-    core
-    http
-    messagebus
-    test
+    core 
+    http 
+    messagebus 
+    test 
 )

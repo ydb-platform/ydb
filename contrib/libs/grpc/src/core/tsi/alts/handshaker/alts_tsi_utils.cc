@@ -22,8 +22,8 @@
 
 #include <grpc/byte_buffer_reader.h>
 
-#include "src/core/lib/slice/slice_internal.h"
-
+#include "src/core/lib/slice/slice_internal.h" 
+ 
 tsi_result alts_tsi_utils_convert_to_tsi_result(grpc_status_code code) {
   switch (code) {
     case GRPC_STATUS_OK:
@@ -54,7 +54,7 @@ grpc_gcp_HandshakerResp* alts_tsi_utils_deserialize_response(
          buf_size);
   grpc_gcp_HandshakerResp* resp = grpc_gcp_HandshakerResp_parse(
       reinterpret_cast<char*>(buf), buf_size, arena);
-  grpc_slice_unref_internal(slice);
+  grpc_slice_unref_internal(slice); 
   grpc_byte_buffer_reader_destroy(&bbr);
   if (resp == nullptr) {
     gpr_log(GPR_ERROR, "grpc_gcp_handshaker_resp_decode() failed");

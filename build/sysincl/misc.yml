@@ -111,9 +111,9 @@
   includes:
     - regex.h:       contrib/tools/tre/lib/regex.h
 
-- source_filter: "^contrib/libs/cppkafka"
+- source_filter: "^contrib/libs/cppkafka" 
   includes:
-    - error.h:       contrib/libs/cppkafka/include/cppkafka/error.h
+    - error.h:       contrib/libs/cppkafka/include/cppkafka/error.h 
 
 - source_filter: "^contrib/libs/clang11-rt"
   includes:

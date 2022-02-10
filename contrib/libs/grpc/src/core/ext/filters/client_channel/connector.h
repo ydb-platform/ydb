@@ -63,7 +63,7 @@ class SubchannelConnector : public InternallyRefCounted<SubchannelConnector> {
   // Only one connection attempt may be in progress at any one time.
   virtual void Connect(const Args& args, Result* result,
                        grpc_closure* notify) = 0;
-
+ 
   // Cancels any in-flight connection attempt and shuts down the
   // connector.
   virtual void Shutdown(grpc_error* error) = 0;

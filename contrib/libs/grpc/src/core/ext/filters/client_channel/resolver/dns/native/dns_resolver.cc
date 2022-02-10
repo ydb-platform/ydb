@@ -30,7 +30,7 @@
 
 #include "src/core/ext/filters/client_channel/resolver/dns/dns_resolver_selection.h"
 #include "src/core/ext/filters/client_channel/resolver_registry.h"
-#include "src/core/ext/filters/client_channel/server_address.h"
+#include "src/core/ext/filters/client_channel/server_address.h" 
 #include "src/core/lib/backoff/backoff.h"
 #include "src/core/lib/channel/channel_args.h"
 #include "src/core/lib/gpr/string.h"
@@ -58,8 +58,8 @@ class NativeDnsResolver : public Resolver {
 
   void RequestReresolutionLocked() override;
 
-  void ResetBackoffLocked() override;
-
+  void ResetBackoffLocked() override; 
+ 
   void ShutdownLocked() override;
 
  private:
@@ -135,13 +135,13 @@ void NativeDnsResolver::RequestReresolutionLocked() {
   }
 }
 
-void NativeDnsResolver::ResetBackoffLocked() {
-  if (have_next_resolution_timer_) {
-    grpc_timer_cancel(&next_resolution_timer_);
-  }
-  backoff_.Reset();
-}
-
+void NativeDnsResolver::ResetBackoffLocked() { 
+  if (have_next_resolution_timer_) { 
+    grpc_timer_cancel(&next_resolution_timer_); 
+  } 
+  backoff_.Reset(); 
+} 
+ 
 void NativeDnsResolver::ShutdownLocked() {
   shutdown_ = true;
   if (have_next_resolution_timer_) {
@@ -216,7 +216,7 @@ void NativeDnsResolver::OnResolvedLocked(grpc_error* error) {
     // callback as part of the type system.
     Ref(DEBUG_LOCATION, "next_resolution_timer").release();
     if (timeout > 0) {
-      gpr_log(GPR_DEBUG, "retrying in %" PRId64 " milliseconds", timeout);
+      gpr_log(GPR_DEBUG, "retrying in %" PRId64 " milliseconds", timeout); 
     } else {
       gpr_log(GPR_DEBUG, "retrying immediately");
     }
@@ -231,7 +231,7 @@ void NativeDnsResolver::OnResolvedLocked(grpc_error* error) {
 void NativeDnsResolver::MaybeStartResolvingLocked() {
   // If there is an existing timer, the time it fires is the earliest time we
   // can start the next resolution.
-  if (have_next_resolution_timer_) return;
+  if (have_next_resolution_timer_) return; 
   if (last_resolution_timestamp_ >= 0) {
     const grpc_millis earliest_next_resolution =
         last_resolution_timestamp_ + min_time_between_resolutions_;
@@ -241,8 +241,8 @@ void NativeDnsResolver::MaybeStartResolvingLocked() {
       const grpc_millis last_resolution_ago =
           grpc_core::ExecCtx::Get()->Now() - last_resolution_timestamp_;
       gpr_log(GPR_DEBUG,
-              "In cooldown from last resolution (from %" PRId64
-              " ms ago). Will resolve again in %" PRId64 " ms",
+              "In cooldown from last resolution (from %" PRId64 
+              " ms ago). Will resolve again in %" PRId64 " ms", 
               last_resolution_ago, ms_until_next_resolution);
       have_next_resolution_timer_ = true;
       // TODO(roth): We currently deal with this ref manually.  Once the

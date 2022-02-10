@@ -1,9 +1,9 @@
 LIBRARY()
 
-OWNER(
+OWNER( 
     g:zora
-)
-
+) 
+ 
 PEERDIR(
     contrib/libs/zlib
     library/cpp/charset

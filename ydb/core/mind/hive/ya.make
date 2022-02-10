@@ -1,10 +1,10 @@
 LIBRARY()
 
-OWNER(
+OWNER( 
     xenoxeno
     g:kikimr
-)
-
+) 
+ 
 SRCS(
     balancer.cpp
     balancer.h

@@ -1,18 +1,18 @@
-import sys
-import subprocess
+import sys 
+import subprocess 
 import os
 import collections
 import re
 import tempfile
-
-
-def is_clang(command):
-    for word in command:
-        if '--compiler-bindir' in word and 'clang' in word:
-            return True
-
-    return False
-
+ 
+ 
+def is_clang(command): 
+    for word in command: 
+        if '--compiler-bindir' in word and 'clang' in word: 
+            return True 
+ 
+    return False 
+ 
 
 def main():
     try:
@@ -25,7 +25,7 @@ def main():
     mtime0 = sys.argv[1]
     command = sys.argv[2: spl]
     cflags = sys.argv[spl + 1:]
-
+ 
     dump_args = False
     if '--y_dump_args' in command:
         command.remove('--y_dump_args')
@@ -35,7 +35,7 @@ def main():
     if not os.path.exists(executable):
         print >> sys.stderr, '{} not found'.format(executable)
         sys.exit(1)
-
+ 
     if is_clang(command):
         # nvcc concatenates the sources for clang, and clang reports unused
         # things from .h files as if they they were defined in a .cpp file.

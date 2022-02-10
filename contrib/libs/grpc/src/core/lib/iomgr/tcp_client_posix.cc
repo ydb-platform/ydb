@@ -20,7 +20,7 @@
 
 #include "src/core/lib/iomgr/port.h"
 
-#ifdef GRPC_POSIX_SOCKET_TCP_CLIENT
+#ifdef GRPC_POSIX_SOCKET_TCP_CLIENT 
 
 #include "src/core/lib/iomgr/tcp_client_posix.h"
 
@@ -46,7 +46,7 @@
 #include "src/core/lib/iomgr/tcp_posix.h"
 #include "src/core/lib/iomgr/timer.h"
 #include "src/core/lib/iomgr/unix_sockets_posix.h"
-#include "src/core/lib/slice/slice_internal.h"
+#include "src/core/lib/slice/slice_internal.h" 
 
 extern grpc_core::TraceFlag grpc_tcp_trace;
 
@@ -77,11 +77,11 @@ static grpc_error* prepare_socket(const grpc_resolved_address* addr, int fd,
   if (!grpc_is_unix_socket(addr)) {
     err = grpc_set_socket_low_latency(fd, 1);
     if (err != GRPC_ERROR_NONE) goto error;
-    err = grpc_set_socket_reuse_addr(fd, 1);
-    if (err != GRPC_ERROR_NONE) goto error;
-    err = grpc_set_socket_tcp_user_timeout(fd, channel_args,
-                                           true /* is_client */);
-    if (err != GRPC_ERROR_NONE) goto error;
+    err = grpc_set_socket_reuse_addr(fd, 1); 
+    if (err != GRPC_ERROR_NONE) goto error; 
+    err = grpc_set_socket_tcp_user_timeout(fd, channel_args, 
+                                           true /* is_client */); 
+    if (err != GRPC_ERROR_NONE) goto error; 
   }
   err = grpc_set_socket_no_sigpipe_if_possible(fd);
   if (err != GRPC_ERROR_NONE) goto error;
@@ -210,7 +210,7 @@ static void on_writable(void* acp, grpc_error* error) {
 finish:
   if (fd != nullptr) {
     grpc_pollset_set_del_fd(ac->interested_parties, fd);
-    grpc_fd_orphan(fd, nullptr, nullptr, "tcp_client_orphan");
+    grpc_fd_orphan(fd, nullptr, nullptr, "tcp_client_orphan"); 
     fd = nullptr;
   }
   done = (--ac->refs == 0);
@@ -230,7 +230,7 @@ finish:
     error = grpc_error_set_str(error, GRPC_ERROR_STR_TARGET_ADDRESS,
                                addr_str_slice /* takes ownership */);
   } else {
-    grpc_slice_unref_internal(addr_str_slice);
+    grpc_slice_unref_internal(addr_str_slice); 
   }
   if (done) {
     // This is safe even outside the lock, because "done", the sentinel, is
@@ -297,7 +297,7 @@ void grpc_tcp_client_create_from_prepared_fd(
     error = grpc_error_set_str(
         error, GRPC_ERROR_STR_TARGET_ADDRESS,
         grpc_slice_from_cpp_string(grpc_sockaddr_to_uri(addr)));
-    grpc_fd_orphan(fdobj, nullptr, nullptr, "tcp_client_connect_error");
+    grpc_fd_orphan(fdobj, nullptr, nullptr, "tcp_client_connect_error"); 
     grpc_core::ExecCtx::Run(DEBUG_LOCATION, closure, error);
     return;
   }

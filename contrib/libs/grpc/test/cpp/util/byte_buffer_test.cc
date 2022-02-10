@@ -45,13 +45,13 @@ class ByteBufferTest : public ::testing::Test {
   static void TearDownTestCase() { grpc_shutdown(); }
 };
 
-TEST_F(ByteBufferTest, CopyCtor) {
-  ByteBuffer buffer1;
-  EXPECT_FALSE(buffer1.Valid());
-  const ByteBuffer& buffer2 = buffer1;
-  EXPECT_FALSE(buffer2.Valid());
-}
-
+TEST_F(ByteBufferTest, CopyCtor) { 
+  ByteBuffer buffer1; 
+  EXPECT_FALSE(buffer1.Valid()); 
+  const ByteBuffer& buffer2 = buffer1; 
+  EXPECT_FALSE(buffer2.Valid()); 
+} 
+ 
 TEST_F(ByteBufferTest, CreateFromSingleSlice) {
   Slice s(kContent1);
   ByteBuffer buffer(&s, 1);

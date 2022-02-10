@@ -40,18 +40,18 @@ std::unique_ptr<ByteBuffer> SerializeToByteBuffer(
   return std::unique_ptr<ByteBuffer>(new ByteBuffer(&slice, 1));
 }
 
-bool SerializeToByteBufferInPlace(grpc::protobuf::Message* message,
-                                  ByteBuffer* buffer) {
+bool SerializeToByteBufferInPlace(grpc::protobuf::Message* message, 
+                                  ByteBuffer* buffer) { 
   TString buf;
-  if (!message->SerializeToString(&buf)) {
-    return false;
-  }
-  buffer->Clear();
-  Slice slice(buf);
-  ByteBuffer tmp(&slice, 1);
-  buffer->Swap(&tmp);
-  return true;
-}
-
+  if (!message->SerializeToString(&buf)) { 
+    return false; 
+  } 
+  buffer->Clear(); 
+  Slice slice(buf); 
+  ByteBuffer tmp(&slice, 1); 
+  buffer->Swap(&tmp); 
+  return true; 
+} 
+ 
 }  // namespace testing
 }  // namespace grpc

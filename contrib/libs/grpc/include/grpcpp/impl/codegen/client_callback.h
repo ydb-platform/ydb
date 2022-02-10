@@ -1,25 +1,25 @@
-/*
- *
+/* 
+ * 
  * Copyright 2019 gRPC authors.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
-#ifndef GRPCPP_IMPL_CODEGEN_CLIENT_CALLBACK_H
-#define GRPCPP_IMPL_CODEGEN_CLIENT_CALLBACK_H
+ * 
+ * Licensed under the Apache License, Version 2.0 (the "License"); 
+ * you may not use this file except in compliance with the License. 
+ * You may obtain a copy of the License at 
+ * 
+ *     http://www.apache.org/licenses/LICENSE-2.0 
+ * 
+ * Unless required by applicable law or agreed to in writing, software 
+ * distributed under the License is distributed on an "AS IS" BASIS, 
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+ * See the License for the specific language governing permissions and 
+ * limitations under the License. 
+ */ 
+ 
+#ifndef GRPCPP_IMPL_CODEGEN_CLIENT_CALLBACK_H 
+#define GRPCPP_IMPL_CODEGEN_CLIENT_CALLBACK_H 
 #include <atomic>
 #include <functional>
-
+ 
 #include <grpcpp/impl/codegen/call.h>
 #include <grpcpp/impl/codegen/call_op_set.h>
 #include <grpcpp/impl/codegen/callback_common.h>
@@ -27,8 +27,8 @@
 #include <grpcpp/impl/codegen/config.h>
 #include <grpcpp/impl/codegen/core_codegen_interface.h>
 #include <grpcpp/impl/codegen/status.h>
-
-namespace grpc {
+ 
+namespace grpc { 
 class Channel;
 class ClientContext;
 
@@ -1190,30 +1190,30 @@ class ClientCallbackUnaryFactory {
 }  // namespace internal
 
 // TODO(vjpai): Remove namespace experimental when de-experimentalized fully.
-namespace experimental {
-
-template <class Response>
+namespace experimental { 
+ 
+template <class Response> 
 using ClientCallbackReader = ::grpc::ClientCallbackReader<Response>;
 
-template <class Request>
+template <class Request> 
 using ClientCallbackWriter = ::grpc::ClientCallbackWriter<Request>;
-
-template <class Request, class Response>
+ 
+template <class Request, class Response> 
 using ClientCallbackReaderWriter =
     ::grpc::ClientCallbackReaderWriter<Request, Response>;
-
-template <class Response>
+ 
+template <class Response> 
 using ClientReadReactor = ::grpc::ClientReadReactor<Response>;
-
-template <class Request>
+ 
+template <class Request> 
 using ClientWriteReactor = ::grpc::ClientWriteReactor<Request>;
-
-template <class Request, class Response>
+ 
+template <class Request, class Response> 
 using ClientBidiReactor = ::grpc::ClientBidiReactor<Request, Response>;
-
+ 
 typedef ::grpc::ClientUnaryReactor ClientUnaryReactor;
 
-}  // namespace experimental
+}  // namespace experimental 
 
-}  // namespace grpc
-#endif  // GRPCPP_IMPL_CODEGEN_CLIENT_CALLBACK_H
+}  // namespace grpc 
+#endif  // GRPCPP_IMPL_CODEGEN_CLIENT_CALLBACK_H 

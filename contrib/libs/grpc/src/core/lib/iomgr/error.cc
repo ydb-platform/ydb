@@ -124,7 +124,7 @@ static const char* error_time_name(grpc_error_times key) {
 }
 
 #ifndef NDEBUG
-grpc_error* grpc_error_do_ref(grpc_error* err, const char* file, int line) {
+grpc_error* grpc_error_do_ref(grpc_error* err, const char* file, int line) { 
   if (grpc_trace_error_refcount.enabled()) {
     gpr_log(GPR_DEBUG, "%p: %" PRIdPTR " -> %" PRIdPTR " [%s:%d]", err,
             gpr_atm_no_barrier_load(&err->atomics.refs.count),
@@ -134,7 +134,7 @@ grpc_error* grpc_error_do_ref(grpc_error* err, const char* file, int line) {
   return err;
 }
 #else
-grpc_error* grpc_error_do_ref(grpc_error* err) {
+grpc_error* grpc_error_do_ref(grpc_error* err) { 
   gpr_ref(&err->atomics.refs);
   return err;
 }
@@ -171,7 +171,7 @@ static void error_destroy(grpc_error* err) {
 }
 
 #ifndef NDEBUG
-void grpc_error_do_unref(grpc_error* err, const char* file, int line) {
+void grpc_error_do_unref(grpc_error* err, const char* file, int line) { 
   if (grpc_trace_error_refcount.enabled()) {
     gpr_log(GPR_DEBUG, "%p: %" PRIdPTR " -> %" PRIdPTR " [%s:%d]", err,
             gpr_atm_no_barrier_load(&err->atomics.refs.count),
@@ -182,7 +182,7 @@ void grpc_error_do_unref(grpc_error* err, const char* file, int line) {
   }
 }
 #else
-void grpc_error_do_unref(grpc_error* err) {
+void grpc_error_do_unref(grpc_error* err) { 
   if (gpr_unref(&err->atomics.refs)) {
     error_destroy(err);
   }
@@ -305,16 +305,16 @@ static void internal_add_error(grpc_error** err, grpc_error* new_err) {
 // It is very common to include and extra int and string in an error
 #define SURPLUS_CAPACITY (2 * SLOTS_PER_INT + SLOTS_PER_TIME)
 
-static gpr_atm g_error_creation_allowed = true;
-
-void grpc_disable_error_creation() {
-  gpr_atm_no_barrier_store(&g_error_creation_allowed, false);
-}
-
-void grpc_enable_error_creation() {
-  gpr_atm_no_barrier_store(&g_error_creation_allowed, true);
-}
-
+static gpr_atm g_error_creation_allowed = true; 
+ 
+void grpc_disable_error_creation() { 
+  gpr_atm_no_barrier_store(&g_error_creation_allowed, false); 
+} 
+ 
+void grpc_enable_error_creation() { 
+  gpr_atm_no_barrier_store(&g_error_creation_allowed, true); 
+} 
+ 
 grpc_error* grpc_error_create(const char* file, int line,
                               const grpc_slice& desc, grpc_error** referencing,
                               size_t num_referencing) {
@@ -329,12 +329,12 @@ grpc_error* grpc_error_create(const char* file, int line,
     return GRPC_ERROR_OOM;
   }
 #ifndef NDEBUG
-  if (!gpr_atm_no_barrier_load(&g_error_creation_allowed)) {
-    gpr_log(GPR_ERROR,
-            "Error creation occurred when error creation was disabled [%s:%d]",
-            file, line);
-    abort();
-  }
+  if (!gpr_atm_no_barrier_load(&g_error_creation_allowed)) { 
+    gpr_log(GPR_ERROR, 
+            "Error creation occurred when error creation was disabled [%s:%d]", 
+            file, line); 
+    abort(); 
+  } 
   if (grpc_trace_error_refcount.enabled()) {
     gpr_log(GPR_DEBUG, "%p create [%s:%d]", err, file, line);
   }
@@ -464,9 +464,9 @@ const special_error_status_map error_status_map[] = {
 bool grpc_error_get_int(grpc_error* err, grpc_error_ints which, intptr_t* p) {
   GPR_TIMER_SCOPE("grpc_error_get_int", 0);
   if (grpc_error_is_special(err)) {
-    if (which != GRPC_ERROR_INT_GRPC_STATUS) return false;
-    *p = error_status_map[reinterpret_cast<size_t>(err)].code;
-    return true;
+    if (which != GRPC_ERROR_INT_GRPC_STATUS) return false; 
+    *p = error_status_map[reinterpret_cast<size_t>(err)].code; 
+    return true; 
   }
   uint8_t slot = err->ints[which];
   if (slot != UINT8_MAX) {
@@ -487,14 +487,14 @@ grpc_error* grpc_error_set_str(grpc_error* src, grpc_error_strs which,
 bool grpc_error_get_str(grpc_error* err, grpc_error_strs which,
                         grpc_slice* str) {
   if (grpc_error_is_special(err)) {
-    if (which != GRPC_ERROR_STR_GRPC_MESSAGE) return false;
+    if (which != GRPC_ERROR_STR_GRPC_MESSAGE) return false; 
     const special_error_status_map& msg =
         error_status_map[reinterpret_cast<size_t>(err)];
     str->refcount = &grpc_core::kNoopRefcount;
     str->data.refcounted.bytes =
         reinterpret_cast<uint8_t*>(const_cast<char*>(msg.msg));
     str->data.refcounted.length = msg.len;
-    return true;
+    return true; 
   }
   uint8_t slot = err->strs[which];
   if (slot != UINT8_MAX) {
@@ -507,24 +507,24 @@ bool grpc_error_get_str(grpc_error* err, grpc_error_strs which,
 
 grpc_error* grpc_error_add_child(grpc_error* src, grpc_error* child) {
   GPR_TIMER_SCOPE("grpc_error_add_child", 0);
-  if (src != GRPC_ERROR_NONE) {
-    if (child == GRPC_ERROR_NONE) {
-      /* \a child is empty. Simply return the ref to \a src */
-      return src;
-    } else if (child != src) {
-      grpc_error* new_err = copy_error_and_unref(src);
-      internal_add_error(&new_err, child);
-      return new_err;
-    } else {
-      /* \a src and \a child are the same. Drop one of the references and return
-       * the other */
-      GRPC_ERROR_UNREF(child);
-      return src;
-    }
-  } else {
-    /* \a src is empty. Simply return the ref to \a child */
-    return child;
-  }
+  if (src != GRPC_ERROR_NONE) { 
+    if (child == GRPC_ERROR_NONE) { 
+      /* \a child is empty. Simply return the ref to \a src */ 
+      return src; 
+    } else if (child != src) { 
+      grpc_error* new_err = copy_error_and_unref(src); 
+      internal_add_error(&new_err, child); 
+      return new_err; 
+    } else { 
+      /* \a src and \a child are the same. Drop one of the references and return 
+       * the other */ 
+      GRPC_ERROR_UNREF(child); 
+      return src; 
+    } 
+  } else { 
+    /* \a src is empty. Simply return the ref to \a child */ 
+    return child; 
+  } 
 }
 
 static const char* no_error_string = "\"No Error\"";
@@ -779,7 +779,7 @@ grpc_error* grpc_os_error(const char* file, int line, int err,
       grpc_error_set_str(
           grpc_error_set_int(
               grpc_error_create(file, line,
-                                grpc_slice_from_static_string(strerror(err)),
+                                grpc_slice_from_static_string(strerror(err)), 
                                 nullptr, 0),
               GRPC_ERROR_INT_ERRNO, err),
           GRPC_ERROR_STR_OS_ERROR,

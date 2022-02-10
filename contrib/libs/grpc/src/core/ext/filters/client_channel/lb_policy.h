@@ -80,7 +80,7 @@ extern DebugOnlyTraceFlag grpc_trace_lb_policy_refcount;
 /// returned by \a interested_parties().
 // TODO(roth): Once we move to EventManager-based polling, remove the
 // interested_parties() hooks from the API.
-class LoadBalancingPolicy : public InternallyRefCounted<LoadBalancingPolicy> {
+class LoadBalancingPolicy : public InternallyRefCounted<LoadBalancingPolicy> { 
  public:
   // Represents backend metrics reported by the backend to the client.
   struct BackendMetricData {
@@ -347,14 +347,14 @@ class LoadBalancingPolicy : public InternallyRefCounted<LoadBalancingPolicy> {
   LoadBalancingPolicy(const LoadBalancingPolicy&) = delete;
   LoadBalancingPolicy& operator=(const LoadBalancingPolicy&) = delete;
 
-  /// Returns the name of the LB policy.
+  /// Returns the name of the LB policy. 
   virtual const char* name() const = 0;
 
   /// Updates the policy with new data from the resolver.  Will be invoked
   /// immediately after LB policy is constructed, and then again whenever
   /// the resolver returns a new result.
   virtual void UpdateLocked(UpdateArgs) = 0;  // NOLINT
-
+ 
   /// Tries to enter a READY connectivity state.
   /// This is a no-op by default, since most LB policies never go into
   /// IDLE state.
@@ -384,7 +384,7 @@ class LoadBalancingPolicy : public InternallyRefCounted<LoadBalancingPolicy> {
     RefCountedPtr<LoadBalancingPolicy> parent_;
     bool exit_idle_called_ = false;
   };
-
+ 
   // A picker that returns PICK_TRANSIENT_FAILURE for all picks.
   class TransientFailurePicker : public SubchannelPicker {
    public:
@@ -392,7 +392,7 @@ class LoadBalancingPolicy : public InternallyRefCounted<LoadBalancingPolicy> {
     ~TransientFailurePicker() override { GRPC_ERROR_UNREF(error_); }
 
     PickResult Pick(PickArgs args) override;
-
+ 
    private:
     grpc_error* error_;
   };

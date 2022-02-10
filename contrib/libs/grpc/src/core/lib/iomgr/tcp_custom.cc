@@ -337,7 +337,7 @@ static grpc_resource_user* endpoint_get_resource_user(grpc_endpoint* ep) {
 static int endpoint_get_fd(grpc_endpoint* /*ep*/) { return -1; }
 
 static bool endpoint_can_track_err(grpc_endpoint* /*ep*/) { return false; }
-
+ 
 static grpc_endpoint_vtable vtable = {endpoint_read,
                                       endpoint_write,
                                       endpoint_add_to_pollset,
@@ -348,8 +348,8 @@ static grpc_endpoint_vtable vtable = {endpoint_read,
                                       endpoint_get_resource_user,
                                       endpoint_get_peer,
                                       endpoint_get_local_address,
-                                      endpoint_get_fd,
-                                      endpoint_can_track_err};
+                                      endpoint_get_fd, 
+                                      endpoint_can_track_err}; 
 
 grpc_endpoint* custom_tcp_endpoint_create(grpc_custom_socket* socket,
                                           grpc_resource_quota* resource_quota,

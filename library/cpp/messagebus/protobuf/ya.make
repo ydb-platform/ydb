@@ -7,7 +7,7 @@ SRCS(
 )
 
 PEERDIR(
-    contrib/libs/protobuf
+    contrib/libs/protobuf 
     library/cpp/messagebus
     library/cpp/messagebus/actor
 )

@@ -50,7 +50,7 @@ Status CliCall::Call(const std::shared_ptr<grpc::Channel>& channel,
   return call.Finish(server_trailing_metadata);
 }
 
-CliCall::CliCall(const std::shared_ptr<grpc::Channel>& channel,
+CliCall::CliCall(const std::shared_ptr<grpc::Channel>& channel, 
                  const TString& method,
                  const OutgoingMetadataContainer& metadata, CliArgs args)
     : stub_(new grpc::GenericStub(channel)) {

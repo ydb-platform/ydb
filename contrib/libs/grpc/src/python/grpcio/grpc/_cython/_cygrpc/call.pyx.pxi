@@ -17,7 +17,7 @@ cdef class Call:
 
   def __cinit__(self):
     # Create an *empty* call
-    fork_handlers_and_grpc_init()
+    fork_handlers_and_grpc_init() 
     self.c_call = NULL
     self.references = []
 
@@ -93,5 +93,5 @@ cdef class Call:
   def is_valid(self):
     return self.c_call != NULL
 
-  def _custom_op_on_c_call(self, int op):
-    return _custom_op_on_c_call(op, self.c_call)
+  def _custom_op_on_c_call(self, int op): 
+    return _custom_op_on_c_call(op, self.c_call) 

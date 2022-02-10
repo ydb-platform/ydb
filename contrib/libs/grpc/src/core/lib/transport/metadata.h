@@ -119,8 +119,8 @@ struct grpc_mdelem {
  * the input slices; we unref them. This method is always safe to call; however,
  * if we know data about the slices in question (e.g. if we knew our key was
  * static) we can call specializations that save on cycle count. */
-grpc_mdelem grpc_mdelem_from_slices(const grpc_slice& key,
-                                    const grpc_slice& value);
+grpc_mdelem grpc_mdelem_from_slices(const grpc_slice& key, 
+                                    const grpc_slice& value); 
 
 /* Like grpc_mdelem_from_slices, but we know that key is a static slice. This
    saves us a few branches and a no-op call to md_unref() for the key. */
@@ -149,7 +149,7 @@ grpc_mdelem grpc_mdelem_from_grpc_metadata(grpc_metadata* metadata);
    compatible_external_backing_store if it is non-NULL (in which case it's the
    users responsibility to ensure that it outlives usage) */
 grpc_mdelem grpc_mdelem_create(
-    const grpc_slice& key, const grpc_slice& value,
+    const grpc_slice& key, const grpc_slice& value, 
     grpc_mdelem_data* compatible_external_backing_store);
 
 /* Like grpc_mdelem_create, but we know that key is static. */

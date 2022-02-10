@@ -37,7 +37,7 @@
 #include "src/core/lib/surface/api_trace.h"
 #include "src/core/lib/surface/channel.h"
 #include "src/core/lib/transport/authority_override.h"
-#include "src/core/lib/uri/uri_parser.h"
+#include "src/core/lib/uri/uri_parser.h" 
 
 namespace grpc_core {
 
@@ -187,7 +187,7 @@ grpc_channel* grpc_secure_channel_create(grpc_channel_credentials* creds,
     const char* arg_to_remove = channel_factory_arg.key;
     grpc_channel_args* new_args = grpc_channel_args_copy_and_add_and_remove(
         args, &arg_to_remove, 1, args_to_add, GPR_ARRAY_SIZE(args_to_add));
-    new_args = creds->update_arguments(new_args);
+    new_args = creds->update_arguments(new_args); 
     // Create channel.
     channel = grpc_core::CreateChannel(target, new_args);
     // Clean up.

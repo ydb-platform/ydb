@@ -3,10 +3,10 @@
 #include <util/generic/typetraits.h>
 #include <util/string/ascii.h>
 
-#include <iterator>
+#include <iterator> 
 
 template <class T>
-struct TLowerCaseIterator: public std::iterator<std::input_iterator_tag, T> {
+struct TLowerCaseIterator: public std::iterator<std::input_iterator_tag, T> { 
     using TNonConst = std::remove_const_t<T>;
 
     inline TLowerCaseIterator(T* c)

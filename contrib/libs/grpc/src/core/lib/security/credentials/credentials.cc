@@ -42,21 +42,21 @@
 void grpc_channel_credentials_release(grpc_channel_credentials* creds) {
   GRPC_API_TRACE("grpc_channel_credentials_release(creds=%p)", 1, (creds));
   grpc_core::ExecCtx exec_ctx;
-  if (creds) creds->Unref();
+  if (creds) creds->Unref(); 
 }
 
 void grpc_call_credentials_release(grpc_call_credentials* creds) {
   GRPC_API_TRACE("grpc_call_credentials_release(creds=%p)", 1, (creds));
   grpc_core::ExecCtx exec_ctx;
-  if (creds) creds->Unref();
+  if (creds) creds->Unref(); 
 }
 
 static void credentials_pointer_arg_destroy(void* p) {
-  static_cast<grpc_channel_credentials*>(p)->Unref();
+  static_cast<grpc_channel_credentials*>(p)->Unref(); 
 }
 
 static void* credentials_pointer_arg_copy(void* p) {
-  return static_cast<grpc_channel_credentials*>(p)->Ref().release();
+  return static_cast<grpc_channel_credentials*>(p)->Ref().release(); 
 }
 
 static int credentials_pointer_cmp(void* a, void* b) { return GPR_ICMP(a, b); }
@@ -98,32 +98,32 @@ grpc_channel_credentials* grpc_channel_credentials_find_in_args(
 void grpc_server_credentials_release(grpc_server_credentials* creds) {
   GRPC_API_TRACE("grpc_server_credentials_release(creds=%p)", 1, (creds));
   grpc_core::ExecCtx exec_ctx;
-  if (creds) creds->Unref();
+  if (creds) creds->Unref(); 
 }
 
-void grpc_server_credentials::set_auth_metadata_processor(
-    const grpc_auth_metadata_processor& processor) {
+void grpc_server_credentials::set_auth_metadata_processor( 
+    const grpc_auth_metadata_processor& processor) { 
   GRPC_API_TRACE(
       "grpc_server_credentials_set_auth_metadata_processor("
       "creds=%p, "
       "processor=grpc_auth_metadata_processor { process: %p, state: %p })",
-      3, (this, (void*)(intptr_t)processor.process, processor.state));
-  DestroyProcessor();
-  processor_ = processor;
+      3, (this, (void*)(intptr_t)processor.process, processor.state)); 
+  DestroyProcessor(); 
+  processor_ = processor; 
 }
 
-void grpc_server_credentials_set_auth_metadata_processor(
-    grpc_server_credentials* creds, grpc_auth_metadata_processor processor) {
-  GPR_DEBUG_ASSERT(creds != nullptr);
-  creds->set_auth_metadata_processor(processor);
-}
-
+void grpc_server_credentials_set_auth_metadata_processor( 
+    grpc_server_credentials* creds, grpc_auth_metadata_processor processor) { 
+  GPR_DEBUG_ASSERT(creds != nullptr); 
+  creds->set_auth_metadata_processor(processor); 
+} 
+ 
 static void server_credentials_pointer_arg_destroy(void* p) {
-  static_cast<grpc_server_credentials*>(p)->Unref();
+  static_cast<grpc_server_credentials*>(p)->Unref(); 
 }
 
 static void* server_credentials_pointer_arg_copy(void* p) {
-  return static_cast<grpc_server_credentials*>(p)->Ref().release();
+  return static_cast<grpc_server_credentials*>(p)->Ref().release(); 
 }
 
 static int server_credentials_pointer_cmp(void* a, void* b) {

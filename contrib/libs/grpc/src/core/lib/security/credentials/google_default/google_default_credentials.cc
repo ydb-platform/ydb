@@ -26,17 +26,17 @@
 #include <grpc/support/log.h>
 #include <grpc/support/sync.h>
 
-#include "src/core/ext/filters/client_channel/lb_policy/grpclb/grpclb.h"
-#include "src/core/lib/channel/channel_args.h"
+#include "src/core/ext/filters/client_channel/lb_policy/grpclb/grpclb.h" 
+#include "src/core/lib/channel/channel_args.h" 
 #include "src/core/lib/gpr/env.h"
 #include "src/core/lib/gpr/string.h"
-#include "src/core/lib/gprpp/ref_counted_ptr.h"
+#include "src/core/lib/gprpp/ref_counted_ptr.h" 
 #include "src/core/lib/http/httpcli.h"
 #include "src/core/lib/http/parser.h"
 #include "src/core/lib/iomgr/load_file.h"
 #include "src/core/lib/iomgr/polling_entity.h"
-#include "src/core/lib/security/credentials/alts/alts_credentials.h"
-#include "src/core/lib/security/credentials/alts/check_gcp_environment.h"
+#include "src/core/lib/security/credentials/alts/alts_credentials.h" 
+#include "src/core/lib/security/credentials/alts/check_gcp_environment.h" 
 #include "src/core/lib/security/credentials/google_default/google_default_credentials.h"
 #include "src/core/lib/security/credentials/jwt/jwt_credentials.h"
 #include "src/core/lib/security/credentials/oauth2/oauth2_credentials.h"
@@ -48,24 +48,24 @@ using grpc_core::Json;
 
 /* -- Constants. -- */
 
-#define GRPC_COMPUTE_ENGINE_DETECTION_HOST "metadata.google.internal."
+#define GRPC_COMPUTE_ENGINE_DETECTION_HOST "metadata.google.internal." 
 #define GRPC_GOOGLE_CREDENTIAL_CREATION_ERROR \
   "Failed to create Google credentials"
 
 /* -- Default credentials. -- */
 
-/* A sticky bit that will be set only if the result of metadata server detection
- * is positive. We do not set the bit if the result is negative. Because it
- * means the detection is done via network test that is unreliable and the
- * unreliable result should not be referred by successive calls. */
-static int g_metadata_server_available = 0;
+/* A sticky bit that will be set only if the result of metadata server detection 
+ * is positive. We do not set the bit if the result is negative. Because it 
+ * means the detection is done via network test that is unreliable and the 
+ * unreliable result should not be referred by successive calls. */ 
+static int g_metadata_server_available = 0; 
 static gpr_mu g_state_mu;
-/* Protect a metadata_server_detector instance that can be modified by more than
- * one gRPC threads */
+/* Protect a metadata_server_detector instance that can be modified by more than 
+ * one gRPC threads */ 
 static gpr_mu* g_polling_mu;
 static gpr_once g_once = GPR_ONCE_INIT;
-static grpc_core::internal::grpc_gce_tenancy_checker g_gce_tenancy_checker =
-    grpc_alts_is_running_on_gcp;
+static grpc_core::internal::grpc_gce_tenancy_checker g_gce_tenancy_checker = 
+    grpc_alts_is_running_on_gcp; 
 
 static void init_default_credentials(void) { gpr_mu_init(&g_state_mu); }
 
@@ -75,64 +75,64 @@ struct metadata_server_detector {
   int success;
   grpc_http_response response;
 };
-grpc_core::RefCountedPtr<grpc_channel_security_connector>
-grpc_google_default_channel_credentials::create_security_connector(
-    grpc_core::RefCountedPtr<grpc_call_credentials> call_creds,
-    const char* target, const grpc_channel_args* args,
-    grpc_channel_args** new_args) {
-  bool is_grpclb_load_balancer = grpc_channel_arg_get_bool(
-      grpc_channel_args_find(args, GRPC_ARG_ADDRESS_IS_GRPCLB_LOAD_BALANCER),
-      false);
-  bool is_backend_from_grpclb_load_balancer = grpc_channel_arg_get_bool(
-      grpc_channel_args_find(
-          args, GRPC_ARG_ADDRESS_IS_BACKEND_FROM_GRPCLB_LOAD_BALANCER),
-      false);
-  bool use_alts =
-      is_grpclb_load_balancer || is_backend_from_grpclb_load_balancer;
-  /* Return failure if ALTS is selected but not running on GCE. */
+grpc_core::RefCountedPtr<grpc_channel_security_connector> 
+grpc_google_default_channel_credentials::create_security_connector( 
+    grpc_core::RefCountedPtr<grpc_call_credentials> call_creds, 
+    const char* target, const grpc_channel_args* args, 
+    grpc_channel_args** new_args) { 
+  bool is_grpclb_load_balancer = grpc_channel_arg_get_bool( 
+      grpc_channel_args_find(args, GRPC_ARG_ADDRESS_IS_GRPCLB_LOAD_BALANCER), 
+      false); 
+  bool is_backend_from_grpclb_load_balancer = grpc_channel_arg_get_bool( 
+      grpc_channel_args_find( 
+          args, GRPC_ARG_ADDRESS_IS_BACKEND_FROM_GRPCLB_LOAD_BALANCER), 
+      false); 
+  bool use_alts = 
+      is_grpclb_load_balancer || is_backend_from_grpclb_load_balancer; 
+  /* Return failure if ALTS is selected but not running on GCE. */ 
   if (use_alts && alts_creds_ == nullptr) {
-    gpr_log(GPR_ERROR, "ALTS is selected, but not running on GCE.");
-    return nullptr;
-  }
-
-  grpc_core::RefCountedPtr<grpc_channel_security_connector> sc =
-      use_alts ? alts_creds_->create_security_connector(call_creds, target,
-                                                        args, new_args)
-               : ssl_creds_->create_security_connector(call_creds, target, args,
-                                                       new_args);
-  /* grpclb-specific channel args are removed from the channel args set
-   * to ensure backends and fallback adresses will have the same set of channel
-   * args. By doing that, it guarantees the connections to backends will not be
-   * torn down and re-connected when switching in and out of fallback mode.
-   */
-  if (use_alts) {
-    static const char* args_to_remove[] = {
-        GRPC_ARG_ADDRESS_IS_GRPCLB_LOAD_BALANCER,
-        GRPC_ARG_ADDRESS_IS_BACKEND_FROM_GRPCLB_LOAD_BALANCER,
-    };
-    *new_args = grpc_channel_args_copy_and_add_and_remove(
-        args, args_to_remove, GPR_ARRAY_SIZE(args_to_remove), nullptr, 0);
-  }
-  return sc;
-}
-
-grpc_channel_args* grpc_google_default_channel_credentials::update_arguments(
-    grpc_channel_args* args) {
-  grpc_channel_args* updated = args;
-  if (grpc_channel_args_find(args, GRPC_ARG_DNS_ENABLE_SRV_QUERIES) ==
-      nullptr) {
-    grpc_arg new_srv_arg = grpc_channel_arg_integer_create(
-        const_cast<char*>(GRPC_ARG_DNS_ENABLE_SRV_QUERIES), true);
-    updated = grpc_channel_args_copy_and_add(args, &new_srv_arg, 1);
-    grpc_channel_args_destroy(args);
-  }
-  return updated;
-}
-
-static void on_metadata_server_detection_http_response(void* user_data,
-                                                       grpc_error* error) {
-  metadata_server_detector* detector =
-      static_cast<metadata_server_detector*>(user_data);
+    gpr_log(GPR_ERROR, "ALTS is selected, but not running on GCE."); 
+    return nullptr; 
+  } 
+ 
+  grpc_core::RefCountedPtr<grpc_channel_security_connector> sc = 
+      use_alts ? alts_creds_->create_security_connector(call_creds, target, 
+                                                        args, new_args) 
+               : ssl_creds_->create_security_connector(call_creds, target, args, 
+                                                       new_args); 
+  /* grpclb-specific channel args are removed from the channel args set 
+   * to ensure backends and fallback adresses will have the same set of channel 
+   * args. By doing that, it guarantees the connections to backends will not be 
+   * torn down and re-connected when switching in and out of fallback mode. 
+   */ 
+  if (use_alts) { 
+    static const char* args_to_remove[] = { 
+        GRPC_ARG_ADDRESS_IS_GRPCLB_LOAD_BALANCER, 
+        GRPC_ARG_ADDRESS_IS_BACKEND_FROM_GRPCLB_LOAD_BALANCER, 
+    }; 
+    *new_args = grpc_channel_args_copy_and_add_and_remove( 
+        args, args_to_remove, GPR_ARRAY_SIZE(args_to_remove), nullptr, 0); 
+  } 
+  return sc; 
+} 
+ 
+grpc_channel_args* grpc_google_default_channel_credentials::update_arguments( 
+    grpc_channel_args* args) { 
+  grpc_channel_args* updated = args; 
+  if (grpc_channel_args_find(args, GRPC_ARG_DNS_ENABLE_SRV_QUERIES) == 
+      nullptr) { 
+    grpc_arg new_srv_arg = grpc_channel_arg_integer_create( 
+        const_cast<char*>(GRPC_ARG_DNS_ENABLE_SRV_QUERIES), true); 
+    updated = grpc_channel_args_copy_and_add(args, &new_srv_arg, 1); 
+    grpc_channel_args_destroy(args); 
+  } 
+  return updated; 
+} 
+ 
+static void on_metadata_server_detection_http_response(void* user_data, 
+                                                       grpc_error* error) { 
+  metadata_server_detector* detector = 
+      static_cast<metadata_server_detector*>(user_data); 
   if (error == GRPC_ERROR_NONE && detector->response.status == 200 &&
       detector->response.hdr_count > 0) {
     /* Internet providers can return a generic response to all requests, so
@@ -160,8 +160,8 @@ static void destroy_pollset(void* p, grpc_error* /*e*/) {
   grpc_pollset_destroy(static_cast<grpc_pollset*>(p));
 }
 
-static int is_metadata_server_reachable() {
-  metadata_server_detector detector;
+static int is_metadata_server_reachable() { 
+  metadata_server_detector detector; 
   grpc_httpcli_request request;
   grpc_httpcli_context context;
   grpc_closure destroy_closure;
@@ -183,13 +183,13 @@ static int is_metadata_server_reachable() {
   grpc_httpcli_get(
       &context, &detector.pollent, resource_quota, &request,
       grpc_core::ExecCtx::Get()->Now() + max_detection_delay,
-      GRPC_CLOSURE_CREATE(on_metadata_server_detection_http_response, &detector,
+      GRPC_CLOSURE_CREATE(on_metadata_server_detection_http_response, &detector, 
                           grpc_schedule_on_exec_ctx),
       &detector.response);
   grpc_resource_quota_unref_internal(resource_quota);
   grpc_core::ExecCtx::Get()->Flush();
   /* Block until we get the response. This is not ideal but this should only be
-    called once for the lifetime of the process by the default credentials. */
+    called once for the lifetime of the process by the default credentials. */ 
   gpr_mu_lock(g_polling_mu);
   while (!detector.is_done) {
     grpc_pollset_worker* worker = nullptr;
@@ -221,7 +221,7 @@ static grpc_error* create_default_creds_from_path(
     grpc_core::RefCountedPtr<grpc_call_credentials>* creds) {
   grpc_auth_json_key key;
   grpc_auth_refresh_token token;
-  grpc_core::RefCountedPtr<grpc_call_credentials> result;
+  grpc_core::RefCountedPtr<grpc_call_credentials> result; 
   grpc_slice creds_data = grpc_empty_slice();
   grpc_error* error = GRPC_ERROR_NONE;
   Json json;
@@ -278,18 +278,18 @@ static void update_tenancy() {
   gpr_once_init(&g_once, init_default_credentials);
   grpc_core::MutexLock lock(&g_state_mu);
 
-  /* Try a platform-provided hint for GCE. */
-  if (!g_metadata_server_available) {
+  /* Try a platform-provided hint for GCE. */ 
+  if (!g_metadata_server_available) { 
     g_metadata_server_available = g_gce_tenancy_checker();
-  }
-  /* TODO: Add a platform-provided hint for GAE. */
-
-  /* Do a network test for metadata server. */
-  if (!g_metadata_server_available) {
-    g_metadata_server_available = is_metadata_server_reachable();
-  }
+  } 
+  /* TODO: Add a platform-provided hint for GAE. */ 
+ 
+  /* Do a network test for metadata server. */ 
+  if (!g_metadata_server_available) { 
+    g_metadata_server_available = is_metadata_server_reachable(); 
+  } 
 }
-
+ 
 static bool metadata_server_available() {
   grpc_core::MutexLock lock(&g_state_mu);
   return static_cast<bool>(g_metadata_server_available);
@@ -318,9 +318,9 @@ static grpc_core::RefCountedPtr<grpc_call_credentials> make_default_call_creds(
   update_tenancy();
 
   if (metadata_server_available()) {
-    call_creds = grpc_core::RefCountedPtr<grpc_call_credentials>(
-        grpc_google_compute_engine_credentials_create(nullptr));
-    if (call_creds == nullptr) {
+    call_creds = grpc_core::RefCountedPtr<grpc_call_credentials>( 
+        grpc_google_compute_engine_credentials_create(nullptr)); 
+    if (call_creds == nullptr) { 
       *error = GRPC_ERROR_CREATE_FROM_STATIC_STRING(
           GRPC_GOOGLE_CREDENTIAL_CREATION_ERROR);
       *error = grpc_error_add_child(
@@ -346,49 +346,49 @@ grpc_channel_credentials* grpc_google_default_credentials_create(
     call_creds = make_default_call_creds(&error);
   }
 
-  if (call_creds != nullptr) {
-    /* Create google default credentials. */
-    grpc_channel_credentials* ssl_creds =
-        grpc_ssl_credentials_create(nullptr, nullptr, nullptr, nullptr);
-    GPR_ASSERT(ssl_creds != nullptr);
-    grpc_alts_credentials_options* options =
-        grpc_alts_credentials_client_options_create();
-    grpc_channel_credentials* alts_creds =
-        grpc_alts_credentials_create(options);
-    grpc_alts_credentials_options_destroy(options);
-    auto creds =
-        grpc_core::MakeRefCounted<grpc_google_default_channel_credentials>(
+  if (call_creds != nullptr) { 
+    /* Create google default credentials. */ 
+    grpc_channel_credentials* ssl_creds = 
+        grpc_ssl_credentials_create(nullptr, nullptr, nullptr, nullptr); 
+    GPR_ASSERT(ssl_creds != nullptr); 
+    grpc_alts_credentials_options* options = 
+        grpc_alts_credentials_client_options_create(); 
+    grpc_channel_credentials* alts_creds = 
+        grpc_alts_credentials_create(options); 
+    grpc_alts_credentials_options_destroy(options); 
+    auto creds = 
+        grpc_core::MakeRefCounted<grpc_google_default_channel_credentials>( 
             grpc_core::RefCountedPtr<grpc_channel_credentials>(alts_creds),
             grpc_core::RefCountedPtr<grpc_channel_credentials>(ssl_creds));
-    result = grpc_composite_channel_credentials_create(
-        creds.get(), call_creds.get(), nullptr);
-    GPR_ASSERT(result != nullptr);
+    result = grpc_composite_channel_credentials_create( 
+        creds.get(), call_creds.get(), nullptr); 
+    GPR_ASSERT(result != nullptr); 
   } else {
-    gpr_log(GPR_ERROR, "Could not create google default credentials: %s",
-            grpc_error_string(error));
+    gpr_log(GPR_ERROR, "Could not create google default credentials: %s", 
+            grpc_error_string(error)); 
   }
-  GRPC_ERROR_UNREF(error);
+  GRPC_ERROR_UNREF(error); 
   return result;
 }
 
-namespace grpc_core {
-namespace internal {
-
-void set_gce_tenancy_checker_for_testing(grpc_gce_tenancy_checker checker) {
-  g_gce_tenancy_checker = checker;
-}
-
+namespace grpc_core { 
+namespace internal { 
+ 
+void set_gce_tenancy_checker_for_testing(grpc_gce_tenancy_checker checker) { 
+  g_gce_tenancy_checker = checker; 
+} 
+ 
 void grpc_flush_cached_google_default_credentials(void) {
   grpc_core::ExecCtx exec_ctx;
   gpr_once_init(&g_once, init_default_credentials);
   gpr_mu_lock(&g_state_mu);
-  g_metadata_server_available = 0;
+  g_metadata_server_available = 0; 
   gpr_mu_unlock(&g_state_mu);
 }
 
-}  // namespace internal
-}  // namespace grpc_core
-
+}  // namespace internal 
+}  // namespace grpc_core 
+ 
 /* -- Well known credentials path. -- */
 
 static grpc_well_known_credentials_path_getter creds_path_getter = nullptr;

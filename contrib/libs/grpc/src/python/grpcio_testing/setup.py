@@ -27,45 +27,45 @@ os.chdir(os.path.dirname(os.path.abspath(__file__)))
 # Break import style to ensure that we can find same-directory modules.
 import grpc_version
 
-
-class _NoOpCommand(setuptools.Command):
-    """No-op command."""
-
-    description = ''
-    user_options = []
-
-    def initialize_options(self):
-        pass
-
-    def finalize_options(self):
-        pass
-
-    def run(self):
-        pass
-
-
+ 
+class _NoOpCommand(setuptools.Command): 
+    """No-op command.""" 
+ 
+    description = '' 
+    user_options = [] 
+ 
+    def initialize_options(self): 
+        pass 
+ 
+    def finalize_options(self): 
+        pass 
+ 
+    def run(self): 
+        pass 
+ 
+ 
 PACKAGE_DIRECTORIES = {
     '': '.',
 }
 
 INSTALL_REQUIRES = (
-    'protobuf>=3.6.0',
+    'protobuf>=3.6.0', 
     'grpcio>={version}'.format(version=grpc_version.VERSION),
 )
 
-try:
-    import testing_commands as _testing_commands
-    # we are in the build environment, otherwise the above import fails
-    COMMAND_CLASS = {
-        # Run preprocess from the repository *before* doing any packaging!
-        'preprocess': _testing_commands.Preprocess,
-    }
-except ImportError:
-    COMMAND_CLASS = {
-        # wire up commands to no-op not to break the external dependencies
-        'preprocess': _NoOpCommand,
-    }
-
+try: 
+    import testing_commands as _testing_commands 
+    # we are in the build environment, otherwise the above import fails 
+    COMMAND_CLASS = { 
+        # Run preprocess from the repository *before* doing any packaging! 
+        'preprocess': _testing_commands.Preprocess, 
+    } 
+except ImportError: 
+    COMMAND_CLASS = { 
+        # wire up commands to no-op not to break the external dependencies 
+        'preprocess': _NoOpCommand, 
+    } 
+ 
 setuptools.setup(name='grpcio-testing',
                  version=grpc_version.VERSION,
                  license='Apache License 2.0',

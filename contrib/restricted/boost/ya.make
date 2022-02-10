@@ -1,5 +1,5 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 LICENSE(
     BSD-3-Clause AND
     BSL-1.0 AND
@@ -19,18 +19,18 @@ OWNER(
     g:cpp-committee
     g:cpp-contrib
 )
-
+ 
 NO_UTIL()
-
+ 
 # This is the header-only version of boost
 # To use a boost library with separate compilation units, 
 # one should use `contrib/restricted/boost/libs/$lib`
 
-ADDINCL(
+ADDINCL( 
     GLOBAL contrib/restricted/boost
-)
-
-END()
+) 
+ 
+END() 
 
 RECURSE(
     libs

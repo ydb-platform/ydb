@@ -26,8 +26,8 @@
 
 #include "src/core/ext/filters/client_channel/backup_poller.h"
 #include "src/core/ext/filters/client_channel/client_channel.h"
-#include "src/core/ext/filters/client_channel/client_channel_channelz.h"
-#include "src/core/ext/filters/client_channel/global_subchannel_pool.h"
+#include "src/core/ext/filters/client_channel/client_channel_channelz.h" 
+#include "src/core/ext/filters/client_channel/global_subchannel_pool.h" 
 #include "src/core/ext/filters/client_channel/http_connect_handshaker.h"
 #include "src/core/ext/filters/client_channel/http_proxy.h"
 #include "src/core/ext/filters/client_channel/lb_policy_registry.h"
@@ -51,7 +51,7 @@ void grpc_client_channel_init(void) {
   grpc_core::internal::ServerRetryThrottleMap::Init();
   grpc_core::ProxyMapperRegistry::Init();
   grpc_core::RegisterHttpProxyMapper();
-  grpc_core::GlobalSubchannelPool::Init();
+  grpc_core::GlobalSubchannelPool::Init(); 
   grpc_channel_init_register_stage(
       GRPC_CLIENT_CHANNEL, GRPC_CHANNEL_INIT_BUILTIN_PRIORITY, append_filter,
       (void*)&grpc_client_channel_filter);
@@ -60,7 +60,7 @@ void grpc_client_channel_init(void) {
 }
 
 void grpc_client_channel_shutdown(void) {
-  grpc_core::GlobalSubchannelPool::Shutdown();
+  grpc_core::GlobalSubchannelPool::Shutdown(); 
   grpc_channel_init_shutdown();
   grpc_core::ProxyMapperRegistry::Shutdown();
   grpc_core::internal::ServerRetryThrottleMap::Shutdown();

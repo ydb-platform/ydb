@@ -3004,7 +3004,7 @@ TExprNode::TPtr OptimizeExpandMap(const TExprNode::TPtr& node, TExprContext& ctx
                     .Add(0, input.HeadPtr())
                     .Lambda(1)
                         .Param("item")
-                        .Do([&inItemType](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                        .Do([&inItemType](TExprNodeBuilder& parent) -> TExprNodeBuilder& { 
                             ui32 i = 0U;
                             for (const auto& item : inItemType->Cast<TStructExprType>()->GetItems()) {
                                 parent.Callable(i++, "Member")
@@ -3054,7 +3054,7 @@ TExprNode::TPtr OptimizeExpandMap(const TExprNode::TPtr& node, TExprContext& ctx
                     .Add(0, input.HeadPtr())
                     .Lambda(1)
                         .Param("item")
-                        .Do([&inItemType](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                        .Do([&inItemType](TExprNodeBuilder& parent) -> TExprNodeBuilder& { 
                             ui32 i = 0U;
                             for (const auto& item : inItemType->Cast<TStructExprType>()->GetItems()) {
                                 parent.Callable(i++, "Member")

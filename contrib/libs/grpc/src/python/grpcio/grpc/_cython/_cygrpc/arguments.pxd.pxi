@@ -1,4 +1,4 @@
-# Copyright 2018 The gRPC Authors
+# Copyright 2018 The gRPC Authors 
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,24 +13,24 @@
 # limitations under the License.
 
 
-cdef tuple _wrap_grpc_arg(grpc_arg arg)
+cdef tuple _wrap_grpc_arg(grpc_arg arg) 
 
-
-cdef grpc_arg _unwrap_grpc_arg(tuple wrapped_arg)
-
-
-cdef class _ChannelArg:
-
+ 
+cdef grpc_arg _unwrap_grpc_arg(tuple wrapped_arg) 
+ 
+ 
+cdef class _ChannelArg: 
+ 
   cdef grpc_arg c_argument
 
   cdef void c(self, argument, references) except *
 
 
-cdef class _ChannelArgs:
+cdef class _ChannelArgs: 
 
   cdef readonly tuple _arguments
-  cdef list _channel_args
+  cdef list _channel_args 
   cdef readonly list _references
   cdef grpc_channel_args _c_arguments
 
-  cdef grpc_channel_args *c_args(self) except *
+  cdef grpc_channel_args *c_args(self) except * 

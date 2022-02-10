@@ -1,11 +1,11 @@
 LIBRARY()
 
-OWNER(
-    ddoarn
+OWNER( 
+    ddoarn 
     xenoxeno
     g:kikimr
-)
-
+) 
+ 
 SRCS(
     mon.cpp
     mon.h

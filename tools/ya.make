@@ -15,12 +15,12 @@ RECURSE(
     check_json
     check_yaml
     checktrigrams
-    clustermaster
+    clustermaster 
     coldiff
     compress
     convert2html
     cproxy
-    crc32
+    crc32 
     crx_creator
     curl_to_ab
     diaprintkeys
@@ -31,7 +31,7 @@ RECURSE(
     dolbilo
     domschemec
     domschemec/ut
-    drawrichtree
+    drawrichtree 
     dsindexer
     easyparser
     enforce_fsync
@@ -39,27 +39,27 @@ RECURSE(
     event2cpp
     fast_diff
     fastcksum
-    filter_nonucs2
+    filter_nonucs2 
     fix_elf
     fml_sweeper_api
     frq_index_print
-    geo
+    geo 
     geodb_ops
     geodb_ops/tests
     geograph_compiler
     go_test_miner
     go_fake_xcrun
-    groupgen
-    hilite
+    groupgen 
+    hilite 
     host_canonizer
     hostdump
-    hostpire
+    hostpire 
     html2cpp
     html2text
     idl
-    idx_relemmatizer
+    idx_relemmatizer 
     inflector
-    is_holiday
+    is_holiday 
     jsv8
     json_to_jsonlines
     langdiscr-test
@@ -86,7 +86,7 @@ RECURSE(
     nots
     oauth_token
     pgmigrate
-    pire
+    pire 
     print_ranking_features
     printcorpus
     printdocstat
@@ -98,7 +98,7 @@ RECURSE(
     printreqs/tests
     printrichnode
     printrichnode/tests
-    printtrie
+    printtrie 
     printurls
     printwzrd
     printwzrd/scripts
@@ -106,19 +106,19 @@ RECURSE(
     printxmap
     printxref
     prngrp_index_print
-    prog_rule
+    prog_rule 
     protobin2mr
     prwordsfr
     pure_compiler
     pure_fingerprints
     pycron
     python-netconfig-static
-    qlz
+    qlz 
     query_marker_builder
     queryrectest
     queryrectest/tests
     queryrectest/tests/data
-    rcgtest
+    rcgtest 
     re_check
     recode
     refaww_index_print
@@ -127,19 +127,19 @@ RECURSE(
     releaser
     relev_fml_codegen
     relev_fml_unused
-    remorphc
-    remorphparser
+    remorphc 
+    remorphparser 
     rescompiler
     rescompressor
     rorescompiler
     sandboxctl
     sanitizer
-    segutils
-    seinfo
+    segutils 
+    seinfo 
     sent_index_print
     showmime
     shutter_jing_plugin
-    snipmake
+    snipmake 
     spamfilt
     stdin
     struct2fieldcalc
@@ -154,7 +154,7 @@ RECURSE(
     titleseq_index_print
     tokenize
     tokenize/tests
-    tomaparsertest
+    tomaparsertest 
     trans_str
     triecompiler
     triecompiler/build_tool
@@ -167,11 +167,11 @@ RECURSE(
     unpackrichtree
     unpackrrr
     unpack_staff_cert
-    untranslit_test
+    untranslit_test 
     untranslit_test/tests
     url
-    urlmenuindexer
-    urlseq_print
+    urlmenuindexer 
+    urlseq_print 
     voice
     webxmltest
     wizard_yt

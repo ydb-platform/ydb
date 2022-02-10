@@ -1,11 +1,11 @@
 PROGRAM(last_getopt_demo)
 
 OWNER(amatanhead)
-
-PEERDIR(
+ 
+PEERDIR( 
     library/cpp/getopt
-)
-
+) 
+ 
 SRCS(
     demo.cpp
 )

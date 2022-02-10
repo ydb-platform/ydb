@@ -43,18 +43,18 @@ namespace grpc_core {
 class Chttp2IncomingByteStream;
 }  // namespace grpc_core
 
-struct grpc_chttp2_data_parser {
-  grpc_chttp2_data_parser() = default;
-  ~grpc_chttp2_data_parser();
+struct grpc_chttp2_data_parser { 
+  grpc_chttp2_data_parser() = default; 
+  ~grpc_chttp2_data_parser(); 
 
-  grpc_chttp2_stream_state state = GRPC_CHTTP2_DATA_FH_0;
-  uint8_t frame_type = 0;
-  uint32_t frame_size = 0;
-  grpc_error* error = GRPC_ERROR_NONE;
+  grpc_chttp2_stream_state state = GRPC_CHTTP2_DATA_FH_0; 
+  uint8_t frame_type = 0; 
+  uint32_t frame_size = 0; 
+  grpc_error* error = GRPC_ERROR_NONE; 
 
-  bool is_frame_compressed = false;
-  grpc_core::Chttp2IncomingByteStream* parsing_frame = nullptr;
-};
+  bool is_frame_compressed = false; 
+  grpc_core::Chttp2IncomingByteStream* parsing_frame = nullptr; 
+}; 
 
 /* start processing a new data frame */
 grpc_error* grpc_chttp2_data_parser_begin_frame(grpc_chttp2_data_parser* parser,

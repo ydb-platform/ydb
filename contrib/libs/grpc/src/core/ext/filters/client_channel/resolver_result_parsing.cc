@@ -1,68 +1,68 @@
-/*
- *
- * Copyright 2018 gRPC authors.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
- */
-
-#include <grpc/support/port_platform.h>
-
-#include "src/core/ext/filters/client_channel/resolver_result_parsing.h"
-
-#include <ctype.h>
-#include <stdio.h>
-#include <string.h>
-
+/* 
+ * 
+ * Copyright 2018 gRPC authors. 
+ * 
+ * Licensed under the Apache License, Version 2.0 (the "License"); 
+ * you may not use this file except in compliance with the License. 
+ * You may obtain a copy of the License at 
+ * 
+ *     http://www.apache.org/licenses/LICENSE-2.0 
+ * 
+ * Unless required by applicable law or agreed to in writing, software 
+ * distributed under the License is distributed on an "AS IS" BASIS, 
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+ * See the License for the specific language governing permissions and 
+ * limitations under the License. 
+ * 
+ */ 
+ 
+#include <grpc/support/port_platform.h> 
+ 
+#include "src/core/ext/filters/client_channel/resolver_result_parsing.h" 
+ 
+#include <ctype.h> 
+#include <stdio.h> 
+#include <string.h> 
+ 
 #include "y_absl/strings/str_cat.h"
 #include "y_absl/types/optional.h"
 
-#include <grpc/support/alloc.h>
-#include <grpc/support/log.h>
-#include <grpc/support/string_util.h>
-
-#include "src/core/ext/filters/client_channel/client_channel.h"
-#include "src/core/ext/filters/client_channel/lb_policy_registry.h"
-#include "src/core/ext/filters/client_channel/server_address.h"
+#include <grpc/support/alloc.h> 
+#include <grpc/support/log.h> 
+#include <grpc/support/string_util.h> 
+ 
+#include "src/core/ext/filters/client_channel/client_channel.h" 
+#include "src/core/ext/filters/client_channel/lb_policy_registry.h" 
+#include "src/core/ext/filters/client_channel/server_address.h" 
 #include "src/core/lib/channel/channel_args.h"
-#include "src/core/lib/channel/status_util.h"
-#include "src/core/lib/gpr/string.h"
-#include "src/core/lib/gprpp/memory.h"
+#include "src/core/lib/channel/status_util.h" 
+#include "src/core/lib/gpr/string.h" 
+#include "src/core/lib/gprpp/memory.h" 
 #include "src/core/lib/json/json_util.h"
-#include "src/core/lib/uri/uri_parser.h"
-
-// As per the retry design, we do not allow more than 5 retry attempts.
-#define MAX_MAX_RETRY_ATTEMPTS 5
-
-namespace grpc_core {
-namespace internal {
-
+#include "src/core/lib/uri/uri_parser.h" 
+ 
+// As per the retry design, we do not allow more than 5 retry attempts. 
+#define MAX_MAX_RETRY_ATTEMPTS 5 
+ 
+namespace grpc_core { 
+namespace internal { 
+ 
 namespace {
 size_t g_client_channel_service_config_parser_index;
-}
-
+} 
+ 
 size_t ClientChannelServiceConfigParser::ParserIndex() {
   return g_client_channel_service_config_parser_index;
-}
-
+} 
+ 
 void ClientChannelServiceConfigParser::Register() {
   g_client_channel_service_config_parser_index =
       ServiceConfigParser::RegisterParser(
           y_absl::make_unique<ClientChannelServiceConfigParser>());
-}
-
-namespace {
-
+} 
+ 
+namespace { 
+ 
 std::unique_ptr<ClientChannelMethodParsedConfig::RetryPolicy> ParseRetryPolicy(
     const Json& json, grpc_error** error) {
   GPR_DEBUG_ASSERT(error != nullptr && *error == GRPC_ERROR_NONE);
@@ -87,11 +87,11 @@ std::unique_ptr<ClientChannelMethodParsedConfig::RetryPolicy> ParseRetryPolicy(
         error_list.push_back(GRPC_ERROR_CREATE_FROM_STATIC_STRING(
             "field:maxAttempts error:should be at least 2"));
       } else if (retry_policy->max_attempts > MAX_MAX_RETRY_ATTEMPTS) {
-        gpr_log(GPR_ERROR,
-                "service config: clamped retryPolicy.maxAttempts at %d",
-                MAX_MAX_RETRY_ATTEMPTS);
-        retry_policy->max_attempts = MAX_MAX_RETRY_ATTEMPTS;
-      }
+        gpr_log(GPR_ERROR, 
+                "service config: clamped retryPolicy.maxAttempts at %d", 
+                MAX_MAX_RETRY_ATTEMPTS); 
+        retry_policy->max_attempts = MAX_MAX_RETRY_ATTEMPTS; 
+      } 
     }
   }
   // Parse initialBackoff.
@@ -147,22 +147,22 @@ std::unique_ptr<ClientChannelMethodParsedConfig::RetryPolicy> ParseRetryPolicy(
               "string"));
           continue;
         }
-        grpc_status_code status;
+        grpc_status_code status; 
         if (!grpc_status_code_from_string(element.string_value().c_str(),
                                           &status)) {
           error_list.push_back(GRPC_ERROR_CREATE_FROM_STATIC_STRING(
               "field:retryableStatusCodes error:failed to parse status code"));
           continue;
-        }
-        retry_policy->retryable_status_codes.Add(status);
-      }
+        } 
+        retry_policy->retryable_status_codes.Add(status); 
+      } 
       if (retry_policy->retryable_status_codes.Empty()) {
         error_list.push_back(GRPC_ERROR_CREATE_FROM_STATIC_STRING(
             "field:retryableStatusCodes error:should be non-empty"));
       };
-    }
-  }
-  // Make sure required fields are set.
+    } 
+  } 
+  // Make sure required fields are set. 
   if (error_list.empty()) {
     if (retry_policy->max_attempts == 0 || retry_policy->initial_backoff == 0 ||
         retry_policy->max_backoff == 0 ||
@@ -261,8 +261,8 @@ const char* ParseHealthCheckConfig(const Json& field, grpc_error** error) {
   if (field.type() != Json::Type::OBJECT) {
     *error = GRPC_ERROR_CREATE_FROM_STATIC_STRING(
         "field:healthCheckConfig error:should be of type object");
-    return nullptr;
-  }
+    return nullptr; 
+  } 
   std::vector<grpc_error*> error_list;
   auto it = field.object_value().find("serviceName");
   if (it != field.object_value().end()) {
@@ -279,10 +279,10 @@ const char* ParseHealthCheckConfig(const Json& field, grpc_error** error) {
   *error =
       GRPC_ERROR_CREATE_FROM_VECTOR("field:healthCheckConfig", &error_list);
   return service_name;
-}
-
-}  // namespace
-
+} 
+ 
+}  // namespace 
+ 
 std::unique_ptr<ServiceConfigParser::ParsedConfig>
 ClientChannelServiceConfigParser::ParseGlobalParams(
     const grpc_channel_args* /*args*/, const Json& json, grpc_error** error) {
@@ -380,8 +380,8 @@ ClientChannelServiceConfigParser::ParsePerMethodParams(
     } else {
       error_list.push_back(GRPC_ERROR_CREATE_FROM_STATIC_STRING(
           "field:waitForReady error:Type should be true/false"));
-    }
-  }
+    } 
+  } 
   // Parse timeout.
   it = json.object_value().find("timeout");
   if (it != json.object_value().end()) {
@@ -405,7 +405,7 @@ ClientChannelServiceConfigParser::ParsePerMethodParams(
         timeout, wait_for_ready, std::move(retry_policy));
   }
   return nullptr;
-}
-
-}  // namespace internal
-}  // namespace grpc_core
+} 
+ 
+}  // namespace internal 
+}  // namespace grpc_core 

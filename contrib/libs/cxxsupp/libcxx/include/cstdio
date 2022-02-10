@@ -137,7 +137,7 @@ using ::fgetpos _LIBCPP_USING_IF_EXISTS;
 using ::fseek _LIBCPP_USING_IF_EXISTS;
 #ifndef _LIBCPP_HAS_NO_FGETPOS_FSETPOS
 using ::fsetpos _LIBCPP_USING_IF_EXISTS;
-#endif
+#endif 
 using ::ftell _LIBCPP_USING_IF_EXISTS;
 using ::rewind _LIBCPP_USING_IF_EXISTS;
 using ::clearerr _LIBCPP_USING_IF_EXISTS;

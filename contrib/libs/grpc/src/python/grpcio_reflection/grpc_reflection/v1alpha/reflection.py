@@ -21,8 +21,8 @@ from src.proto.grpc.reflection.v1alpha import reflection_pb2_grpc as _reflection
 
 from grpc_reflection.v1alpha._base import BaseReflectionServicer
 
-SERVICE_NAME = _reflection_pb2.DESCRIPTOR.services_by_name[
-    'ServerReflection'].full_name
+SERVICE_NAME = _reflection_pb2.DESCRIPTOR.services_by_name[ 
+    'ServerReflection'].full_name 
 
 
 class ReflectionServicer(BaseReflectionServicer):
@@ -46,8 +46,8 @@ class ReflectionServicer(BaseReflectionServicer):
             elif request.HasField('list_services'):
                 yield self._list_services()
             else:
-                yield _reflection_pb2.ServerReflectionResponse(
-                    error_response=_reflection_pb2.ErrorResponse(
+                yield _reflection_pb2.ServerReflectionResponse( 
+                    error_response=_reflection_pb2.ErrorResponse( 
                         error_code=grpc.StatusCode.INVALID_ARGUMENT.value[0],
                         error_message=grpc.StatusCode.INVALID_ARGUMENT.value[1].
                         encode(),

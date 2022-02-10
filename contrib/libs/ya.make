@@ -10,37 +10,37 @@ RECURSE(
     apr
     apr-util
     asio
-    asmlib
+    asmlib 
     authparser
     avs-device-sdk
     aws-sdk-cpp
     backtrace
     base64
-    bdb
-    bdb/ut
+    bdb 
+    bdb/ut 
     benchmark
     bento4
     bluez-clean-headers
     breakpad
     brotli
     c-ares
-    cairo
+    cairo 
     cbc
     cctools
     cctz
     cereal
     ceres-solver
-    chromaprint
+    chromaprint 
     clang12
     clang12-rt
     clapack
     cld2
     cnpy
-    cookiemy
+    cookiemy 
     coreml
     coturn
     courgette_bsdiff
-    cppkafka
+    cppkafka 
     crcutil
     crfsuite
     croaring
@@ -52,7 +52,7 @@ RECURSE(
     dlib
     dpdk
     dr_wav
-    dwarflib
+    dwarflib 
     earcut
     eccodes
     eccodes/python
@@ -63,9 +63,9 @@ RECURSE(
     farmhash
     farmhash/ut
     faster-rnnlm
-    fastlz
+    fastlz 
     fastops
-    fcgi
+    fcgi 
     ffmpeg-3
     ffmpeg-3.4.1
     fft
@@ -77,14 +77,14 @@ RECURSE(
     fmt
     fontconfig
     fp16
-    freetype
+    freetype 
     fuse
     fxdiv
     gamma_function_apache_math_port
     gdal
     gdal/apps
     gdk-pixbuf
-    geos
+    geos 
     geos/capi/ctypes
     gflags
     giflib
@@ -108,45 +108,45 @@ RECURSE(
     hyperscan
     i18n
     i18n/ut
-    icu
+    icu 
     ImageMagick
     inja
     inja/ut
     intel
     isa-l
     isa-l/ut
-    jansson
+    jansson 
     jdk
-    jemalloc
+    jemalloc 
     jemalloc/dynamic
     jerasure
     jinja2cpp
-    js-v8
+    js-v8 
     json-c
     jwt-cpp
-    kaldi
+    kaldi 
     kenlm
     kissfft
-    kyotocabinet
-    lang_detect
+    kyotocabinet 
+    lang_detect 
     lbfgs
     lcms2
     lepton
-    leveldb
+    leveldb 
     libarchive
     libbpf
-    libbz2
+    libbz2 
     libc_compat
     libc_userver_workarounds
     libcpuid
     libcroco
     libde265
     libdivide
-    libdivsufsort2
+    libdivsufsort2 
     libeatmydata/dynamic
     libev
     libevent
-    libexslt
+    libexslt 
     libfdk-aac
     libfuzzer12
     libgeotiff
@@ -154,23 +154,23 @@ RECURSE(
     libgraphqlparser
     libheif
     libical
-    libiconv
-    libidn
+    libiconv 
+    libidn 
     libidn2
     libjpeg-turbo
     libjwt
     liblinear
     libm
-    libmagic
-    libmemcached
+    libmagic 
+    libmemcached 
     libmp3lame
-    libmysql_r
+    libmysql_r 
     libogg
-    libopendkim
-    libopendmarc
+    libopendkim 
+    libopendmarc 
     libosmium
-    libphonenumber
-    libpng
+    libphonenumber 
+    libpng 
     libpq
     libpqxx
     libpsl
@@ -181,9 +181,9 @@ RECURSE(
     libsamplerate
     libsavi
     libsodium
-    libspf2
+    libspf2 
     libsrtp
-    libssh2
+    libssh2 
     libtapi
     libtess2
     libtiff
@@ -199,12 +199,12 @@ RECURSE(
     libx265
     libxml
     libxml/dynamic
-    libxslt
+    libxslt 
     libyang
     libyuv
     linenoise
     linux-headers
-    linuxvdso
+    linuxvdso 
     liquidfun
     llvm11
     llvm12
@@ -212,25 +212,25 @@ RECURSE(
     lmdbxx
     lmdbxx/check
     lmdbxx/example
-    lua
+    lua 
     lua-cjson
     luajit_21
-    lz4
+    lz4 
     lz4/generated
-    lzmasdk
+    lzmasdk 
     lzo2
-    matrixssl
+    matrixssl 
     mecab
     metrohash
     mimalloc
-    minilzo
+    minilzo 
     minizip
     mlir11
     mms
     mongo-c-driver
     mongo-cxx-driver
     msgpack
-    muparser
+    muparser 
     muparser/tests
     musl
     nanosvg
@@ -240,7 +240,7 @@ RECURSE(
     node-addon-api
     nodejs_12
     node_nan
-    nsync
+    nsync 
     numa
     nvidia
     odpi
@@ -249,13 +249,13 @@ RECURSE(
     opencv
     opencv/modules
     opencv/modules/python/src2
-    openfst
+    openfst 
     opengv
     openjpeg
     openldap
     openldap/libraries
     openmp
-    openssl
+    openssl 
     opentracing-cpp
     opus
     ortools
@@ -270,12 +270,12 @@ RECURSE(
     pfr
     picohttpparser
     #pire/ut
-    pixman
+    pixman 
     poco
     portaudio
     porto_api
     proj
-    protobuf
+    protobuf 
     protobuf/python
     protobuf-mutator
     protobuf_std
@@ -288,9 +288,9 @@ RECURSE(
     python
     python/ut
     qhull
-    quicklz
+    quicklz 
     r-lang
-    re2
+    re2 
     regional-units/library
     regional-units/library/ut
     rocksdb
@@ -300,16 +300,16 @@ RECURSE(
     sctp
     sentencepiece
     serf
-    snappy
+    snappy 
     sophos
     sparrowhawk
-    sparsehash
+    sparsehash 
     spdk
     speex
     spirv_cross
     spirv_headers
     spirv_tools
-    sqlite3
+    sqlite3 
     srt
     stan
     stan-math
@@ -317,12 +317,12 @@ RECURSE(
     stxxl
     subversion
     sundials
-    svm
+    svm 
     svt-hevc
     svt-vp9
     szip
     t1ha
-    taocrypt
+    taocrypt 
     tbb
     tcmalloc
     tcmalloc/dynamic
@@ -347,7 +347,7 @@ RECURSE(
     utf8proc
     util-linux
     valgrind
-    vlfeat
+    vlfeat 
     vmaf
     wapiti
     webrtc
@@ -358,23 +358,23 @@ RECURSE(
     xpdf-3.04
     xxhash
     xz
-    yajl
+    yajl 
     yaml
     yaml-cpp
     zeromq
-    zlib
+    zlib 
     zlib-ng-develop
-    zookeeper
+    zookeeper 
     zstd
     zstd06
-    zzip
+    zzip 
 )
 
 IF (OS_FREEBSD OR OS_LINUX)
     RECURSE(
-        asmglibc
-        httpd
-        mod_perl2
+        asmglibc 
+        httpd 
+        mod_perl2 
         libeatmydata
     )
 ENDIF()
@@ -390,9 +390,9 @@ ENDIF()
 
 IF (OS_LINUX)
     RECURSE(
-        ibdrv
+        ibdrv 
         ibdrv/ut
-        proc
+        proc 
         luajit
         luajit_21
         libaio
@@ -417,14 +417,14 @@ IF (OS_WINDOWS)
     )
 ELSE()
     RECURSE(
-        lftp
-        unixodbc
+        lftp 
+        unixodbc 
     )
 ENDIF()
 
 IF (OS_LINUX OR OS_WINDOWS)
     RECURSE(
-        lockless
+        lockless 
     )
 ENDIF()
 

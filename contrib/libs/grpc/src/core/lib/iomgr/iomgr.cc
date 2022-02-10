@@ -33,10 +33,10 @@
 #include "src/core/lib/gpr/useful.h"
 #include "src/core/lib/gprpp/global_config.h"
 #include "src/core/lib/gprpp/thd.h"
-#include "src/core/lib/iomgr/buffer_list.h"
+#include "src/core/lib/iomgr/buffer_list.h" 
 #include "src/core/lib/iomgr/exec_ctx.h"
 #include "src/core/lib/iomgr/executor.h"
-#include "src/core/lib/iomgr/internal_errqueue.h"
+#include "src/core/lib/iomgr/internal_errqueue.h" 
 #include "src/core/lib/iomgr/iomgr_internal.h"
 #include "src/core/lib/iomgr/timer.h"
 #include "src/core/lib/iomgr/timer_manager.h"
@@ -57,12 +57,12 @@ void grpc_iomgr_init() {
   g_shutdown = 0;
   gpr_mu_init(&g_mu);
   gpr_cv_init(&g_rcv);
-  grpc_core::Executor::InitAll();
+  grpc_core::Executor::InitAll(); 
   g_root_object.next = g_root_object.prev = &g_root_object;
   g_root_object.name = (char*)"root";
   grpc_iomgr_platform_init();
   grpc_timer_list_init();
-  grpc_core::grpc_errqueue_init();
+  grpc_core::grpc_errqueue_init(); 
   g_grpc_abort_on_leaks = GPR_GLOBAL_CONFIG_GET(grpc_abort_on_leaks);
 }
 
@@ -77,8 +77,8 @@ static size_t count_objects(void) {
   return n;
 }
 
-size_t grpc_iomgr_count_objects_for_testing(void) { return count_objects(); }
-
+size_t grpc_iomgr_count_objects_for_testing(void) { return count_objects(); } 
+ 
 static void dump_objects(const char* kind) {
   grpc_iomgr_object* obj;
   for (obj = g_root_object.next; obj != &g_root_object; obj = obj->next) {
@@ -94,7 +94,7 @@ void grpc_iomgr_shutdown() {
   {
     grpc_timer_manager_shutdown();
     grpc_iomgr_platform_flush();
-    grpc_core::Executor::ShutdownAll();
+    grpc_core::Executor::ShutdownAll(); 
 
     gpr_mu_lock(&g_mu);
     g_shutdown = 1;
@@ -160,14 +160,14 @@ void grpc_iomgr_shutdown() {
   gpr_cv_destroy(&g_rcv);
 }
 
-void grpc_iomgr_shutdown_background_closure() {
-  grpc_iomgr_platform_shutdown_background_closure();
-}
-
-bool grpc_iomgr_is_any_background_poller_thread() {
-  return grpc_iomgr_platform_is_any_background_poller_thread();
-}
-
+void grpc_iomgr_shutdown_background_closure() { 
+  grpc_iomgr_platform_shutdown_background_closure(); 
+} 
+ 
+bool grpc_iomgr_is_any_background_poller_thread() { 
+  return grpc_iomgr_platform_is_any_background_poller_thread(); 
+} 
+ 
 bool grpc_iomgr_add_closure_to_background_poller(grpc_closure* closure,
                                                  grpc_error* error) {
   return grpc_iomgr_platform_add_closure_to_background_poller(closure, error);

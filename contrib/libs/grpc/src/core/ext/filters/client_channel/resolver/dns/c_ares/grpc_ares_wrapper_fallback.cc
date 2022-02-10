@@ -26,7 +26,7 @@ struct grpc_ares_request {
   char val;
 };
 
-static grpc_ares_request* grpc_dns_lookup_ares_locked_impl(
+static grpc_ares_request* grpc_dns_lookup_ares_locked_impl( 
     const char* dns_server, const char* name, const char* default_port,
     grpc_pollset_set* interested_parties, grpc_closure* on_done,
     std::unique_ptr<grpc_core::ServerAddressList>* addrs,
@@ -36,7 +36,7 @@ static grpc_ares_request* grpc_dns_lookup_ares_locked_impl(
   return NULL;
 }
 
-grpc_ares_request* (*grpc_dns_lookup_ares_locked)(
+grpc_ares_request* (*grpc_dns_lookup_ares_locked)( 
     const char* dns_server, const char* name, const char* default_port,
     grpc_pollset_set* interested_parties, grpc_closure* on_done,
     std::unique_ptr<grpc_core::ServerAddressList>* addrs,
@@ -45,11 +45,11 @@ grpc_ares_request* (*grpc_dns_lookup_ares_locked)(
     std::shared_ptr<grpc_core::WorkSerializer> work_serializer) =
     grpc_dns_lookup_ares_locked_impl;
 
-static void grpc_cancel_ares_request_locked_impl(grpc_ares_request* r) {}
+static void grpc_cancel_ares_request_locked_impl(grpc_ares_request* r) {} 
 
-void (*grpc_cancel_ares_request_locked)(grpc_ares_request* r) =
-    grpc_cancel_ares_request_locked_impl;
-
+void (*grpc_cancel_ares_request_locked)(grpc_ares_request* r) = 
+    grpc_cancel_ares_request_locked_impl; 
+ 
 grpc_error* grpc_ares_init(void) { return GRPC_ERROR_NONE; }
 
 void grpc_ares_cleanup(void) {}

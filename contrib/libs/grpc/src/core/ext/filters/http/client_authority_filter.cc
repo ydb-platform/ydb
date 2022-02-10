@@ -45,7 +45,7 @@ struct call_data {
 
 struct channel_data {
   grpc_core::ManagedMemorySlice default_authority;
-  grpc_mdelem default_authority_mdelem;
+  grpc_mdelem default_authority_mdelem; 
 };
 
 void client_authority_start_transport_stream_op_batch(
@@ -93,7 +93,7 @@ grpc_error* client_authority_init_channel_elem(
   if (default_authority_arg == nullptr) {
     return GRPC_ERROR_CREATE_FROM_STATIC_STRING(
         "GRPC_ARG_DEFAULT_AUTHORITY channel arg. not found. Note that direct "
-        "channels must explicitly specify a value for this argument.");
+        "channels must explicitly specify a value for this argument."); 
   }
   const char* default_authority_str =
       grpc_channel_arg_get_string(default_authority_arg);
@@ -103,8 +103,8 @@ grpc_error* client_authority_init_channel_elem(
   }
   chand->default_authority =
       grpc_core::ManagedMemorySlice(default_authority_str);
-  chand->default_authority_mdelem = grpc_mdelem_create(
-      GRPC_MDSTR_AUTHORITY, chand->default_authority, nullptr);
+  chand->default_authority_mdelem = grpc_mdelem_create( 
+      GRPC_MDSTR_AUTHORITY, chand->default_authority, nullptr); 
   GPR_ASSERT(!args->is_last);
   return GRPC_ERROR_NONE;
 }
@@ -112,8 +112,8 @@ grpc_error* client_authority_init_channel_elem(
 /* Destructor for channel data */
 void client_authority_destroy_channel_elem(grpc_channel_element* elem) {
   channel_data* chand = static_cast<channel_data*>(elem->channel_data);
-  grpc_slice_unref_internal(chand->default_authority);
-  GRPC_MDELEM_UNREF(chand->default_authority_mdelem);
+  grpc_slice_unref_internal(chand->default_authority); 
+  GRPC_MDELEM_UNREF(chand->default_authority_mdelem); 
 }
 }  // namespace
 

@@ -1,30 +1,30 @@
 // © 2016 and later: Unicode, Inc. and others.
-// License & terms of use: http://www.unicode.org/copyright.html
-/*
-**********************************************************************
-* Copyright (c) 2004-2014, International Business Machines
-* Corporation and others.  All Rights Reserved.
-**********************************************************************
-* Author: Alan Liu
-* Created: April 26, 2004
-* Since: ICU 3.0
-**********************************************************************
-*/
-#include "unicode/utypes.h"
-
-#if !UCONFIG_NO_FORMATTING
-
-#include "unicode/currunit.h"
-#include "unicode/ustring.h"
+// License & terms of use: http://www.unicode.org/copyright.html 
+/* 
+********************************************************************** 
+* Copyright (c) 2004-2014, International Business Machines 
+* Corporation and others.  All Rights Reserved. 
+********************************************************************** 
+* Author: Alan Liu 
+* Created: April 26, 2004 
+* Since: ICU 3.0 
+********************************************************************** 
+*/ 
+#include "unicode/utypes.h" 
+ 
+#if !UCONFIG_NO_FORMATTING 
+ 
+#include "unicode/currunit.h" 
+#include "unicode/ustring.h" 
 #include "unicode/uchar.h"
 #include "cstring.h"
 #include "uinvchar.h"
 #include "charstr.h"
 #include "ustr_imp.h"
 #include "measunit_impl.h"
-
-U_NAMESPACE_BEGIN
-
+ 
+U_NAMESPACE_BEGIN 
+ 
 CurrencyUnit::CurrencyUnit(ConstChar16Ptr _isoCode, UErrorCode& ec) {
     // The constructor always leaves the CurrencyUnit in a valid state (with a 3-character currency code).
     // Note: in ICU4J Currency.getInstance(), we check string length for 3, but in ICU4C we allow a
@@ -44,17 +44,17 @@ CurrencyUnit::CurrencyUnit(ConstChar16Ptr _isoCode, UErrorCode& ec) {
     } else {
         for (int32_t i=0; i<3; i++) {
             isoCode[i] = u_asciiToUpper(_isoCode[i]);
-        }
+        } 
         isoCode[3] = 0;
-    }
+    } 
     if (useDefault) {
         uprv_memcpy(isoCode, kDefaultCurrency, sizeof(UChar) * 4);
     }
     char simpleIsoCode[4];
     u_UCharsToChars(isoCode, simpleIsoCode, 4);
     initCurrency(simpleIsoCode);
-}
-
+} 
+ 
 CurrencyUnit::CurrencyUnit(StringPiece _isoCode, UErrorCode& ec) {
     // Note: unlike the old constructor, reject empty arguments with an error.
     char isoCodeBuffer[4];
@@ -80,9 +80,9 @@ CurrencyUnit::CurrencyUnit(StringPiece _isoCode, UErrorCode& ec) {
 }
 
 CurrencyUnit::CurrencyUnit(const CurrencyUnit& other) : MeasureUnit(other) {
-    u_strcpy(isoCode, other.isoCode);
-}
-
+    u_strcpy(isoCode, other.isoCode); 
+} 
+ 
 CurrencyUnit::CurrencyUnit(const MeasureUnit& other, UErrorCode& ec) : MeasureUnit(other) {
     // Make sure this is a currency.
     // OK to hard-code the string because we are comparing against another hard-coded string.
@@ -103,24 +103,24 @@ CurrencyUnit::CurrencyUnit() : MeasureUnit() {
     initCurrency(simpleIsoCode);
 }
 
-CurrencyUnit& CurrencyUnit::operator=(const CurrencyUnit& other) {
-    if (this == &other) {
-        return *this;
-    }
-    MeasureUnit::operator=(other);
-    u_strcpy(isoCode, other.isoCode);
-    return *this;
-}
-
+CurrencyUnit& CurrencyUnit::operator=(const CurrencyUnit& other) { 
+    if (this == &other) { 
+        return *this; 
+    } 
+    MeasureUnit::operator=(other); 
+    u_strcpy(isoCode, other.isoCode); 
+    return *this; 
+} 
+ 
 CurrencyUnit* CurrencyUnit::clone() const {
-    return new CurrencyUnit(*this);
-}
-
-CurrencyUnit::~CurrencyUnit() {
-}
-    
-UOBJECT_DEFINE_RTTI_IMPLEMENTATION(CurrencyUnit)
-
-U_NAMESPACE_END
-
-#endif // !UCONFIG_NO_FORMATTING
+    return new CurrencyUnit(*this); 
+} 
+ 
+CurrencyUnit::~CurrencyUnit() { 
+} 
+     
+UOBJECT_DEFINE_RTTI_IMPLEMENTATION(CurrencyUnit) 
+ 
+U_NAMESPACE_END 
+ 
+#endif // !UCONFIG_NO_FORMATTING 

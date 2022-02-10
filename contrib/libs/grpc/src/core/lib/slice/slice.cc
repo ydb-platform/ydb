@@ -93,14 +93,14 @@ class NewSliceRefcount {
 
 }  // namespace grpc_core
 
-size_t grpc_slice_memory_usage(grpc_slice s) {
+size_t grpc_slice_memory_usage(grpc_slice s) { 
   if (s.refcount == nullptr || s.refcount == &grpc_core::kNoopRefcount) {
-    return 0;
-  } else {
-    return s.data.refcounted.length;
-  }
-}
-
+    return 0; 
+  } else { 
+    return s.data.refcounted.length; 
+  } 
+} 
+ 
 grpc_slice grpc_slice_from_static_buffer(const void* s, size_t len) {
   return grpc_core::ExternallyManagedSlice(s, len);
 }

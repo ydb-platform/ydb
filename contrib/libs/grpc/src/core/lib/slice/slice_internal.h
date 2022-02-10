@@ -340,11 +340,11 @@ grpc_slice grpc_slice_from_moved_buffer(grpc_core::UniquePtr<char> p,
 grpc_slice grpc_slice_from_moved_string(grpc_core::UniquePtr<char> p);
 grpc_slice grpc_slice_from_cpp_string(TString str);
 
-// Returns the memory used by this slice, not counting the slice structure
-// itself. This means that inlined and slices from static strings will return
-// 0. All other slices will return the size of the allocated chars.
-size_t grpc_slice_memory_usage(grpc_slice s);
-
+// Returns the memory used by this slice, not counting the slice structure 
+// itself. This means that inlined and slices from static strings will return 
+// 0. All other slices will return the size of the allocated chars. 
+size_t grpc_slice_memory_usage(grpc_slice s); 
+ 
 grpc_core::UnmanagedMemorySlice grpc_slice_sub_no_ref(
     const grpc_core::UnmanagedMemorySlice& source, size_t begin, size_t end);
 

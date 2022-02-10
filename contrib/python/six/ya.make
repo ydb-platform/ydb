@@ -6,11 +6,11 @@ LICENSE(MIT)
 
 VERSION(1.16.0)
 
-PY_SRCS(
-    TOP_LEVEL
-    six.py
-)
-
+PY_SRCS( 
+    TOP_LEVEL 
+    six.py 
+) 
+ 
 RESOURCE_FILES(
     PREFIX contrib/python/six/
     .dist-info/METADATA

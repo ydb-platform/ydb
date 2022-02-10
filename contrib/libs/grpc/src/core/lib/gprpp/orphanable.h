@@ -30,7 +30,7 @@
 #include "src/core/lib/debug/trace.h"
 #include "src/core/lib/gprpp/debug_location.h"
 #include "src/core/lib/gprpp/memory.h"
-#include "src/core/lib/gprpp/ref_counted.h"
+#include "src/core/lib/gprpp/ref_counted.h" 
 #include "src/core/lib/gprpp/ref_counted_ptr.h"
 
 namespace grpc_core {
@@ -83,16 +83,16 @@ class InternallyRefCounted : public Orphanable {
  protected:
   // Allow RefCountedPtr<> to access Unref() and IncrementRefCount().
   template <typename T>
-  friend class RefCountedPtr;
+  friend class RefCountedPtr; 
 
-  // TraceFlagT is defined to accept both DebugOnlyTraceFlag and TraceFlag.
-  // Note: RefCount tracing is only enabled on debug builds, even when a
-  //       TraceFlag is used.
-  template <typename TraceFlagT = TraceFlag>
+  // TraceFlagT is defined to accept both DebugOnlyTraceFlag and TraceFlag. 
+  // Note: RefCount tracing is only enabled on debug builds, even when a 
+  //       TraceFlag is used. 
+  template <typename TraceFlagT = TraceFlag> 
   explicit InternallyRefCounted(TraceFlagT* trace_flag = nullptr,
                                 intptr_t initial_refcount = 1)
       : refs_(initial_refcount, trace_flag) {}
-  virtual ~InternallyRefCounted() = default;
+  virtual ~InternallyRefCounted() = default; 
 
   RefCountedPtr<Child> Ref() GRPC_MUST_USE_RESULT {
     IncrementRefCount();
@@ -100,8 +100,8 @@ class InternallyRefCounted : public Orphanable {
   }
   RefCountedPtr<Child> Ref(const DebugLocation& location,
                            const char* reason) GRPC_MUST_USE_RESULT {
-    IncrementRefCount(location, reason);
-    return RefCountedPtr<Child>(static_cast<Child*>(this));
+    IncrementRefCount(location, reason); 
+    return RefCountedPtr<Child>(static_cast<Child*>(this)); 
   }
 
   void Unref() {
@@ -116,12 +116,12 @@ class InternallyRefCounted : public Orphanable {
   }
 
  private:
-  void IncrementRefCount() { refs_.Ref(); }
-  void IncrementRefCount(const DebugLocation& location, const char* reason) {
-    refs_.Ref(location, reason);
-  }
+  void IncrementRefCount() { refs_.Ref(); } 
+  void IncrementRefCount(const DebugLocation& location, const char* reason) { 
+    refs_.Ref(location, reason); 
+  } 
 
-  grpc_core::RefCount refs_;
+  grpc_core::RefCount refs_; 
 };
 
 }  // namespace grpc_core

@@ -56,14 +56,14 @@ namespace {
    existing entry rather than try to use a backup. Hence, "maybe-cuckoo."
    TODO(arjunroy): Add unit tests for hashtable implementation. */
 #define GRPC_HPACK_ENCODER_USE_CUCKOO_HASH 1
-#define HASH_FRAGMENT_MASK (GRPC_CHTTP2_HPACKC_NUM_VALUES - 1)
-#define HASH_FRAGMENT_1(x) ((x)&HASH_FRAGMENT_MASK)
-#define HASH_FRAGMENT_2(x) \
-  (((x) >> GRPC_CHTTP2_HPACKC_NUM_VALUES_BITS) & HASH_FRAGMENT_MASK)
-#define HASH_FRAGMENT_3(x) \
-  (((x) >> (GRPC_CHTTP2_HPACKC_NUM_VALUES_BITS * 2)) & HASH_FRAGMENT_MASK)
-#define HASH_FRAGMENT_4(x) \
-  (((x) >> (GRPC_CHTTP2_HPACKC_NUM_VALUES_BITS * 3)) & HASH_FRAGMENT_MASK)
+#define HASH_FRAGMENT_MASK (GRPC_CHTTP2_HPACKC_NUM_VALUES - 1) 
+#define HASH_FRAGMENT_1(x) ((x)&HASH_FRAGMENT_MASK) 
+#define HASH_FRAGMENT_2(x) \ 
+  (((x) >> GRPC_CHTTP2_HPACKC_NUM_VALUES_BITS) & HASH_FRAGMENT_MASK) 
+#define HASH_FRAGMENT_3(x) \ 
+  (((x) >> (GRPC_CHTTP2_HPACKC_NUM_VALUES_BITS * 2)) & HASH_FRAGMENT_MASK) 
+#define HASH_FRAGMENT_4(x) \ 
+  (((x) >> (GRPC_CHTTP2_HPACKC_NUM_VALUES_BITS * 3)) & HASH_FRAGMENT_MASK) 
 
 /* don't consider adding anything bigger than this to the hpack table */
 constexpr size_t kMaxDecoderSpaceUsage = 512;
@@ -72,7 +72,7 @@ constexpr uint8_t kMaxFilterValue = 255;
 
 /* if the probability of this item being seen again is < 1/x then don't add
    it to the table */
-#define ONE_ON_ADD_PROBABILITY (GRPC_CHTTP2_HPACKC_NUM_VALUES >> 1)
+#define ONE_ON_ADD_PROBABILITY (GRPC_CHTTP2_HPACKC_NUM_VALUES >> 1) 
 /* The hpack index we encode over the wire. Meaningful to the hpack encoder and
    parser on the remote end as well as HTTP2. *Not* the same as
    HpackEncoderSlotHash, which is only meaningful to the hpack encoder
@@ -710,8 +710,8 @@ static void hpack_enc(grpc_chttp2_hpack_compressor* c, grpc_mdelem elem,
     return;
   }
   /* should this elem be in the table? */
-  const size_t decoder_space_usage =
-      grpc_chttp2_get_size_in_hpack_table(elem, st->use_true_binary_metadata);
+  const size_t decoder_space_usage = 
+      grpc_chttp2_get_size_in_hpack_table(elem, st->use_true_binary_metadata); 
   const bool decoder_space_available =
       decoder_space_usage < kMaxDecoderSpaceUsage;
   const bool should_add_elem =
@@ -729,16 +729,16 @@ static void hpack_enc(grpc_chttp2_hpack_compressor* c, grpc_mdelem elem,
   }
   /* no elem, key in the table... fall back to literal emission */
   const bool should_add_key = !elem_interned && decoder_space_available;
-  if (should_add_elem || should_add_key) {
+  if (should_add_elem || should_add_key) { 
     emit_lithdr_v<EmitLitHdrVType::INC_IDX_V>(c, elem, st);
-  } else {
+  } else { 
     emit_lithdr_v<EmitLitHdrVType::NO_IDX_V>(c, elem, st);
-  }
-  if (should_add_elem) {
+  } 
+  if (should_add_elem) { 
     add_elem(c, elem, decoder_space_usage, elem_hash, key_hash);
-  } else if (should_add_key) {
+  } else if (should_add_key) { 
     add_key(c, elem, decoder_space_usage, key_hash);
-  }
+  } 
 }
 
 #define STRLEN_LIT(x) (sizeof(x) - 1)
@@ -864,7 +864,7 @@ void grpc_chttp2_encode_header(grpc_chttp2_hpack_compressor* c,
     emit_advertise_table_size_change(c, &st);
   }
   for (size_t i = 0; i < extra_headers_size; ++i) {
-    grpc_mdelem md = *extra_headers[i];
+    grpc_mdelem md = *extra_headers[i]; 
     const bool is_static =
         GRPC_MDELEM_STORAGE(md) == GRPC_MDELEM_STORAGE_STATIC;
     uintptr_t static_index;
@@ -873,9 +873,9 @@ void grpc_chttp2_encode_header(grpc_chttp2_hpack_compressor* c,
              reinterpret_cast<grpc_core::StaticMetadata*>(GRPC_MDELEM_DATA(md))
                  ->StaticIndex()) < GRPC_CHTTP2_LAST_STATIC_ENTRY) {
       emit_indexed(c, static_cast<uint32_t>(static_index + 1), &st);
-    } else {
-      hpack_enc(c, md, &st);
-    }
+    } else { 
+      hpack_enc(c, md, &st); 
+    } 
   }
   grpc_metadata_batch_assert_ok(metadata);
   for (grpc_linked_mdelem* l = metadata->list.head; l; l = l->next) {
@@ -887,9 +887,9 @@ void grpc_chttp2_encode_header(grpc_chttp2_hpack_compressor* c,
                             GRPC_MDELEM_DATA(l->md))
                             ->StaticIndex()) < GRPC_CHTTP2_LAST_STATIC_ENTRY) {
       emit_indexed(c, static_cast<uint32_t>(static_index + 1), &st);
-    } else {
-      hpack_enc(c, l->md, &st);
-    }
+    } else { 
+      hpack_enc(c, l->md, &st); 
+    } 
   }
   grpc_millis deadline = metadata->deadline;
   if (deadline != GRPC_MILLIS_INF_FUTURE) {

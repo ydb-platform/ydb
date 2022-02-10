@@ -47,5 +47,5 @@ cdef str _decode(bytes bytestring):
         try:
             return bytestring.decode('utf8')
         except UnicodeDecodeError:
-            _LOGGER.exception('Invalid encoding on %s', bytestring)
+            _LOGGER.exception('Invalid encoding on %s', bytestring) 
             return bytestring.decode('latin1')

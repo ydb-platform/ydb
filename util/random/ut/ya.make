@@ -1,9 +1,9 @@
 UNITTEST_FOR(util)
-
+ 
 OWNER(g:util)
 SUBSCRIBER(g:util-subscribers)
-
-SRCS(
+ 
+SRCS( 
     random/common_ops_ut.cpp
     random/easy_ut.cpp
     random/entropy_ut.cpp
@@ -12,8 +12,8 @@ SRCS(
     random/mersenne_ut.cpp
     random/random_ut.cpp
     random/shuffle_ut.cpp
-)
-
+) 
+ 
 INCLUDE(${ARCADIA_ROOT}/util/tests/ya_util_tests.inc)
 
-END()
+END() 

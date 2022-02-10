@@ -1,11 +1,11 @@
 LIBRARY()
 
-OWNER(
-    ddoarn
-    vvvv
+OWNER( 
+    ddoarn 
+    vvvv 
     g:kikimr
-)
-
+) 
+ 
 IF (KIKIMR_DEFAULT_SHARDED_COMPACTION)
     # Makes it easier to test sharded compaction
     CFLAGS(

@@ -1,10 +1,10 @@
 LIBRARY()
-
-OWNER(somov)
-
+ 
+OWNER(somov) 
+ 
 NO_PLATFORM()
 
-IF (USE_PERL_SYSTEM)
+IF (USE_PERL_SYSTEM) 
     IF (PERL_SDK == "ubuntu-12")
         PEERDIR(build/platform/perl/5.14)
     ELSEIF (PERL_SDK == "ubuntu-14")
@@ -19,10 +19,10 @@ IF (USE_PERL_SYSTEM)
         MESSAGE(FATAL_ERROR "Building against system perl is not supported on ${PERL_SDK}")
     ENDIF()
 
-ELSE()
+ELSE() 
 
     MESSAGE(FATAL_ERROR "There is no perl ready for static linkage. Try using the system one.")
 
-ENDIF()
-
-END()
+ENDIF() 
+ 
+END() 

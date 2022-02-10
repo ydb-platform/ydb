@@ -27,7 +27,7 @@
 #include <grpc/support/string_util.h>
 
 #include "src/core/ext/filters/client_channel/resolver_registry.h"
-#include "src/core/ext/filters/client_channel/server_address.h"
+#include "src/core/ext/filters/client_channel/server_address.h" 
 #include "src/core/lib/channel/channel_args.h"
 #include "src/core/lib/gpr/string.h"
 #include "src/core/lib/iomgr/parse_address.h"
@@ -58,7 +58,7 @@ class SockaddrResolver : public Resolver {
 SockaddrResolver::SockaddrResolver(ServerAddressList addresses,
                                    ResolverArgs args)
     : Resolver(std::move(args.work_serializer), std::move(args.result_handler)),
-      addresses_(std::move(addresses)),
+      addresses_(std::move(addresses)), 
       channel_args_(grpc_channel_args_copy(args.args)) {}
 
 SockaddrResolver::~SockaddrResolver() {
@@ -95,15 +95,15 @@ bool ParseUri(const grpc_uri* uri,
   grpc_slice_buffer_init(&path_parts);
   grpc_slice_split(path_slice, ",", &path_parts);
   bool errors_found = false;
-  for (size_t i = 0; i < path_parts.count; i++) {
+  for (size_t i = 0; i < path_parts.count; i++) { 
     grpc_uri ith_uri = *uri;
     grpc_core::UniquePtr<char> part_str(
         grpc_slice_to_c_string(path_parts.slices[i]));
-    ith_uri.path = part_str.get();
-    grpc_resolved_address addr;
-    if (!parse(&ith_uri, &addr)) {
+    ith_uri.path = part_str.get(); 
+    grpc_resolved_address addr; 
+    if (!parse(&ith_uri, &addr)) { 
       errors_found = true;
-      break;
+      break; 
     }
     if (addresses != nullptr) {
       addresses->emplace_back(addr, nullptr /* args */);

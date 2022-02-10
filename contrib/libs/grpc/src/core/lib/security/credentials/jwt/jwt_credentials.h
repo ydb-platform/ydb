@@ -30,50 +30,50 @@
 #include "src/core/lib/security/credentials/credentials.h"
 #include "src/core/lib/security/credentials/jwt/json_token.h"
 
-class grpc_service_account_jwt_access_credentials
-    : public grpc_call_credentials {
- public:
-  grpc_service_account_jwt_access_credentials(grpc_auth_json_key key,
-                                              gpr_timespec token_lifetime);
-  ~grpc_service_account_jwt_access_credentials() override;
+class grpc_service_account_jwt_access_credentials 
+    : public grpc_call_credentials { 
+ public: 
+  grpc_service_account_jwt_access_credentials(grpc_auth_json_key key, 
+                                              gpr_timespec token_lifetime); 
+  ~grpc_service_account_jwt_access_credentials() override; 
 
-  bool get_request_metadata(grpc_polling_entity* pollent,
-                            grpc_auth_metadata_context context,
-                            grpc_credentials_mdelem_array* md_array,
-                            grpc_closure* on_request_metadata,
-                            grpc_error** error) override;
-
-  void cancel_get_request_metadata(grpc_credentials_mdelem_array* md_array,
-                                   grpc_error* error) override;
-
-  const gpr_timespec& jwt_lifetime() const { return jwt_lifetime_; }
-  const grpc_auth_json_key& key() const { return key_; }
-
+  bool get_request_metadata(grpc_polling_entity* pollent, 
+                            grpc_auth_metadata_context context, 
+                            grpc_credentials_mdelem_array* md_array, 
+                            grpc_closure* on_request_metadata, 
+                            grpc_error** error) override; 
+ 
+  void cancel_get_request_metadata(grpc_credentials_mdelem_array* md_array, 
+                                   grpc_error* error) override; 
+ 
+  const gpr_timespec& jwt_lifetime() const { return jwt_lifetime_; } 
+  const grpc_auth_json_key& key() const { return key_; } 
+ 
   TString debug_string() override {
     return y_absl::StrFormat("JWTAccessCredentials{ExpirationTime:%s}",
                            y_absl::FormatTime(y_absl::FromUnixMicros(
                                gpr_timespec_to_micros(jwt_lifetime_))));
   };
 
- private:
-  void reset_cache();
-
+ private: 
+  void reset_cache(); 
+ 
   // Have a simple cache for now with just 1 entry. We could have a map based on
   // the service_url for a more sophisticated one.
-  gpr_mu cache_mu_;
+  gpr_mu cache_mu_; 
   struct {
-    grpc_mdelem jwt_md = GRPC_MDNULL;
-    char* service_url = nullptr;
+    grpc_mdelem jwt_md = GRPC_MDNULL; 
+    char* service_url = nullptr; 
     gpr_timespec jwt_expiration;
-  } cached_;
+  } cached_; 
 
-  grpc_auth_json_key key_;
-  gpr_timespec jwt_lifetime_;
-};
+  grpc_auth_json_key key_; 
+  gpr_timespec jwt_lifetime_; 
+}; 
 
 // Private constructor for jwt credentials from an already parsed json key.
 // Takes ownership of the key.
-grpc_core::RefCountedPtr<grpc_call_credentials>
+grpc_core::RefCountedPtr<grpc_call_credentials> 
 grpc_service_account_jwt_access_credentials_create_from_auth_json_key(
     grpc_auth_json_key key, gpr_timespec token_lifetime);
 

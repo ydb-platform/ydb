@@ -62,7 +62,7 @@ TEST_F(StringRefTest, FromString) {
 TEST_F(StringRefTest, CopyConstructor) {
   string_ref s1(kTestString);
   ;
-  const string_ref& s2(s1);
+  const string_ref& s2(s1); 
   EXPECT_EQ(s1.length(), s2.length());
   EXPECT_EQ(s1.data(), s2.data());
 }

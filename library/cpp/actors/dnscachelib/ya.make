@@ -1,13 +1,13 @@
 LIBRARY()
 
-OWNER(
-    davenger
-    fomichev
-    serxa
-    dimanne
-    single
-)
-
+OWNER( 
+    davenger 
+    fomichev 
+    serxa 
+    dimanne 
+    single 
+) 
+ 
 SRCS(
     dnscache.cpp
     dnscache.h

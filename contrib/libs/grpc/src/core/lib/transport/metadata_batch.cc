@@ -137,7 +137,7 @@ static void maybe_unlink_callout(grpc_metadata_batch* batch,
   if (idx == GRPC_BATCH_CALLOUTS_COUNT) {
     return;
   }
-  --batch->list.default_count;
+  --batch->list.default_count; 
   GPR_DEBUG_ASSERT(batch->idx.array[idx] != nullptr);
   batch->idx.array[idx] = nullptr;
 }
@@ -155,7 +155,7 @@ static void link_head(grpc_mdelem_list* list, grpc_linked_mdelem* storage) {
   GPR_DEBUG_ASSERT(!GRPC_MDISNULL(storage->md));
   storage->prev = nullptr;
   storage->next = list->head;
-  storage->reserved = nullptr;
+  storage->reserved = nullptr; 
   if (list->head != nullptr) {
     list->head->prev = storage;
   } else {

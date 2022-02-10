@@ -46,7 +46,7 @@ cdef grpc_event _next(grpc_completion_queue *c_completion_queue, deadline) excep
 cdef _interpret_event(grpc_event c_event):
   cdef _Tag tag
   if c_event.type == GRPC_QUEUE_TIMEOUT:
-    # TODO(ericgribkoff) Do not coopt ConnectivityEvent here.
+    # TODO(ericgribkoff) Do not coopt ConnectivityEvent here. 
     return None, ConnectivityEvent(GRPC_QUEUE_TIMEOUT, False, None)
   elif c_event.type == GRPC_QUEUE_SHUTDOWN:
     # NOTE(nathaniel): For now we coopt ConnectivityEvent here.
@@ -68,7 +68,7 @@ cdef class CompletionQueue:
 
   def __cinit__(self, shutdown_cq=False):
     cdef grpc_completion_queue_attributes c_attrs
-    fork_handlers_and_grpc_init()
+    fork_handlers_and_grpc_init() 
     if shutdown_cq:
       c_attrs.version = 1
       c_attrs.cq_completion_type = GRPC_CQ_NEXT

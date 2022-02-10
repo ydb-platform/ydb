@@ -16,7 +16,7 @@
 cdef class Server:
 
   def __cinit__(self, object arguments):
-    fork_handlers_and_grpc_init()
+    fork_handlers_and_grpc_init() 
     self.references = []
     self.registered_completion_queues = []
     self.is_started = False
@@ -125,10 +125,10 @@ cdef class Server:
       with nogil:
         grpc_server_cancel_all_calls(self.c_server)
 
-  # TODO(https://github.com/grpc/grpc/issues/17515) Determine what, if any,
-  # portion of this is safe to call from __dealloc__, and potentially remove
-  # backup_shutdown_queue.
-  def destroy(self):
+  # TODO(https://github.com/grpc/grpc/issues/17515) Determine what, if any, 
+  # portion of this is safe to call from __dealloc__, and potentially remove 
+  # backup_shutdown_queue. 
+  def destroy(self): 
     if self.c_server != NULL:
       if not self.is_started:
         pass
@@ -151,7 +151,7 @@ cdef class Server:
       with nogil:
         grpc_server_destroy(self.c_server)
         self.c_server = NULL
-
-  def __dealloc__(self):
-    if self.c_server == NULL:
+ 
+  def __dealloc__(self): 
+    if self.c_server == NULL: 
       grpc_shutdown_blocking()

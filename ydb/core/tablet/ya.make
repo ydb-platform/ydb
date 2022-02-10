@@ -1,11 +1,11 @@
 LIBRARY()
 
-OWNER(
-    ddoarn
-    vvvv
+OWNER( 
+    ddoarn 
+    vvvv 
     g:kikimr
-)
-
+) 
+ 
 SRCS(
     defs.h
     node_tablet_monitor.cpp

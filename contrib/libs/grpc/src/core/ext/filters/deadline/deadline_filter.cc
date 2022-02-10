@@ -27,7 +27,7 @@
 #include <grpc/support/time.h>
 
 #include "src/core/lib/channel/channel_stack_builder.h"
-#include "src/core/lib/gprpp/memory.h"
+#include "src/core/lib/gprpp/memory.h" 
 #include "src/core/lib/iomgr/timer.h"
 #include "src/core/lib/slice/slice_internal.h"
 #include "src/core/lib/surface/channel_init.h"
@@ -128,36 +128,36 @@ static void cancel_timer_if_needed(grpc_deadline_state* deadline_state) {
   }
 }
 
-// Callback run when we receive trailing metadata.
-static void recv_trailing_metadata_ready(void* arg, grpc_error* error) {
+// Callback run when we receive trailing metadata. 
+static void recv_trailing_metadata_ready(void* arg, grpc_error* error) { 
   grpc_deadline_state* deadline_state = static_cast<grpc_deadline_state*>(arg);
   cancel_timer_if_needed(deadline_state);
-  // Invoke the original callback.
+  // Invoke the original callback. 
   grpc_core::Closure::Run(DEBUG_LOCATION,
                           deadline_state->original_recv_trailing_metadata_ready,
                           GRPC_ERROR_REF(error));
 }
 
-// Inject our own recv_trailing_metadata_ready callback into op.
-static void inject_recv_trailing_metadata_ready(
-    grpc_deadline_state* deadline_state, grpc_transport_stream_op_batch* op) {
-  deadline_state->original_recv_trailing_metadata_ready =
-      op->payload->recv_trailing_metadata.recv_trailing_metadata_ready;
-  GRPC_CLOSURE_INIT(&deadline_state->recv_trailing_metadata_ready,
-                    recv_trailing_metadata_ready, deadline_state,
+// Inject our own recv_trailing_metadata_ready callback into op. 
+static void inject_recv_trailing_metadata_ready( 
+    grpc_deadline_state* deadline_state, grpc_transport_stream_op_batch* op) { 
+  deadline_state->original_recv_trailing_metadata_ready = 
+      op->payload->recv_trailing_metadata.recv_trailing_metadata_ready; 
+  GRPC_CLOSURE_INIT(&deadline_state->recv_trailing_metadata_ready, 
+                    recv_trailing_metadata_ready, deadline_state, 
                     grpc_schedule_on_exec_ctx);
-  op->payload->recv_trailing_metadata.recv_trailing_metadata_ready =
-      &deadline_state->recv_trailing_metadata_ready;
+  op->payload->recv_trailing_metadata.recv_trailing_metadata_ready = 
+      &deadline_state->recv_trailing_metadata_ready; 
 }
 
 // Callback and associated state for starting the timer after call stack
 // initialization has been completed.
 struct start_timer_after_init_state {
-  start_timer_after_init_state(grpc_call_element* elem, grpc_millis deadline)
-      : elem(elem), deadline(deadline) {}
-  ~start_timer_after_init_state() { start_timer_if_needed(elem, deadline); }
-
-  bool in_call_combiner = false;
+  start_timer_after_init_state(grpc_call_element* elem, grpc_millis deadline) 
+      : elem(elem), deadline(deadline) {} 
+  ~start_timer_after_init_state() { start_timer_if_needed(elem, deadline); } 
+ 
+  bool in_call_combiner = false; 
   grpc_call_element* elem;
   grpc_millis deadline;
   grpc_closure closure;
@@ -181,11 +181,11 @@ static void start_timer_after_init(void* arg, grpc_error* error) {
                           "done scheduling deadline timer");
 }
 
-grpc_deadline_state::grpc_deadline_state(grpc_call_element* elem,
-                                         grpc_call_stack* call_stack,
+grpc_deadline_state::grpc_deadline_state(grpc_call_element* elem, 
+                                         grpc_call_stack* call_stack, 
                                          grpc_core::CallCombiner* call_combiner,
-                                         grpc_millis deadline)
-    : call_stack(call_stack), call_combiner(call_combiner) {
+                                         grpc_millis deadline) 
+    : call_stack(call_stack), call_combiner(call_combiner) { 
   // Deadline will always be infinite on servers, so the timer will only be
   // set on clients with a finite deadline.
   if (deadline != GRPC_MILLIS_INF_FUTURE) {
@@ -204,7 +204,7 @@ grpc_deadline_state::grpc_deadline_state(grpc_call_element* elem,
   }
 }
 
-grpc_deadline_state::~grpc_deadline_state() { cancel_timer_if_needed(this); }
+grpc_deadline_state::~grpc_deadline_state() { cancel_timer_if_needed(this); } 
 
 void grpc_deadline_state_reset(grpc_call_element* elem,
                                grpc_millis new_deadline) {
@@ -224,7 +224,7 @@ void grpc_deadline_state_client_start_transport_stream_op_batch(
     // Make sure we know when the call is complete, so that we can cancel
     // the timer.
     if (op->recv_trailing_metadata) {
-      inject_recv_trailing_metadata_ready(deadline_state, op);
+      inject_recv_trailing_metadata_ready(deadline_state, op); 
     }
   }
 }
@@ -263,8 +263,8 @@ typedef struct server_call_data {
 // Constructor for call_data.  Used for both client and server filters.
 static grpc_error* deadline_init_call_elem(grpc_call_element* elem,
                                            const grpc_call_element_args* args) {
-  new (elem->call_data) grpc_deadline_state(
-      elem, args->call_stack, args->call_combiner, args->deadline);
+  new (elem->call_data) grpc_deadline_state( 
+      elem, args->call_stack, args->call_combiner, args->deadline); 
   return GRPC_ERROR_NONE;
 }
 
@@ -272,9 +272,9 @@ static grpc_error* deadline_init_call_elem(grpc_call_element* elem,
 static void deadline_destroy_call_elem(
     grpc_call_element* elem, const grpc_call_final_info* /*final_info*/,
     grpc_closure* /*ignored*/) {
-  grpc_deadline_state* deadline_state =
-      static_cast<grpc_deadline_state*>(elem->call_data);
-  deadline_state->~grpc_deadline_state();
+  grpc_deadline_state* deadline_state = 
+      static_cast<grpc_deadline_state*>(elem->call_data); 
+  deadline_state->~grpc_deadline_state(); 
 }
 
 // Method for starting a call op for client filter.
@@ -323,7 +323,7 @@ static void deadline_server_start_transport_stream_op_batch(
     // the client never sends trailing metadata, because this is the
     // hook that tells us when the call is complete on the server side.
     if (op->recv_trailing_metadata) {
-      inject_recv_trailing_metadata_ready(&calld->base.deadline_state, op);
+      inject_recv_trailing_metadata_ready(&calld->base.deadline_state, op); 
     }
   }
   // Chain to next filter.

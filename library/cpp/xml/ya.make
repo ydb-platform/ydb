@@ -1,13 +1,13 @@
 RECURSE(
-    doc
-    document/ut
+    doc 
+    document/ut 
     encode
     encode/ut
-    init
+    init 
     parslib
-    parslib/ut
+    parslib/ut 
     sax
-    sax/ut
+    sax/ut 
     validator
     validator/ut
 )

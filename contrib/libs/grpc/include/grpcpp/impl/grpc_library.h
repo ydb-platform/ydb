@@ -40,12 +40,12 @@ class GrpcLibraryInitializer final {
  public:
   GrpcLibraryInitializer() {
     if (grpc::g_glip == nullptr) {
-      static auto* const g_gli = new GrpcLibrary();
-      grpc::g_glip = g_gli;
+      static auto* const g_gli = new GrpcLibrary(); 
+      grpc::g_glip = g_gli; 
     }
     if (grpc::g_core_codegen_interface == nullptr) {
-      static auto* const g_core_codegen = new CoreCodegen();
-      grpc::g_core_codegen_interface = g_core_codegen;
+      static auto* const g_core_codegen = new CoreCodegen(); 
+      grpc::g_core_codegen_interface = g_core_codegen; 
     }
   }
 

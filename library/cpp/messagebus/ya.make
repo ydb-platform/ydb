@@ -7,52 +7,52 @@ IF (SANITIZER_TYPE == "undefined")
 ENDIF()
 
 SRCS(
-    acceptor.cpp
-    acceptor_status.cpp
+    acceptor.cpp 
+    acceptor_status.cpp 
     connection.cpp
-    coreconn.cpp
+    coreconn.cpp 
     duration_histogram.cpp
-    event_loop.cpp
-    futex_like.cpp
-    handler.cpp
-    key_value_printer.cpp
-    local_flags.cpp
-    locator.cpp
+    event_loop.cpp 
+    futex_like.cpp 
+    handler.cpp 
+    key_value_printer.cpp 
+    local_flags.cpp 
+    locator.cpp 
     mb_lwtrace.cpp
-    message.cpp
-    message_counter.cpp
-    message_status.cpp
-    message_status_counter.cpp
-    messqueue.cpp
+    message.cpp 
+    message_counter.cpp 
+    message_status.cpp 
+    message_status_counter.cpp 
+    messqueue.cpp 
     misc/atomic_box.h
     misc/granup.h
     misc/test_sync.h
     misc/tokenquota.h
     misc/weak_ptr.h
-    network.cpp
-    queue_config.cpp
-    remote_client_connection.cpp
-    remote_client_session.cpp
-    remote_client_session_semaphore.cpp
-    remote_connection.cpp
-    remote_connection_status.cpp
-    remote_server_connection.cpp
-    remote_server_session.cpp
-    remote_server_session_semaphore.cpp
-    session.cpp
-    session_impl.cpp
-    session_job_count.cpp
-    shutdown_state.cpp
+    network.cpp 
+    queue_config.cpp 
+    remote_client_connection.cpp 
+    remote_client_session.cpp 
+    remote_client_session_semaphore.cpp 
+    remote_connection.cpp 
+    remote_connection_status.cpp 
+    remote_server_connection.cpp 
+    remote_server_session.cpp 
+    remote_server_session_semaphore.cpp 
+    session.cpp 
+    session_impl.cpp 
+    session_job_count.cpp 
+    shutdown_state.cpp 
     socket_addr.cpp
-    storage.cpp
-    synchandler.cpp
-    use_after_free_checker.cpp
-    use_count_checker.cpp
-    ybus.h
+    storage.cpp 
+    synchandler.cpp 
+    use_after_free_checker.cpp 
+    use_count_checker.cpp 
+    ybus.h 
 )
 
 PEERDIR(
-    contrib/libs/sparsehash
+    contrib/libs/sparsehash 
     library/cpp/codecs
     library/cpp/deprecated/enum_codegen
     library/cpp/getopt/small

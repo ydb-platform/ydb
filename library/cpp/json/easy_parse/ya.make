@@ -2,7 +2,7 @@ OWNER(finder)
 
 LIBRARY()
 
-SRCS(
+SRCS( 
     json_easy_parser.cpp
 )
 

@@ -2,10 +2,10 @@ LIBRARY()
 
 OWNER(g:messagebus)
 
-PEERDIR(
+PEERDIR( 
     library/cpp/threading/future
-)
-
+) 
+ 
 SRCS(
     scheduler.cpp
 )

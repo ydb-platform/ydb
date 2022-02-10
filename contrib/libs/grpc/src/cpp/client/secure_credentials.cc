@@ -49,25 +49,25 @@ SecureChannelCredentials::SecureChannelCredentials(
 
 std::shared_ptr<Channel> SecureChannelCredentials::CreateChannelImpl(
     const TString& target, const ChannelArguments& args) {
-  return CreateChannelWithInterceptors(
-      target, args,
+  return CreateChannelWithInterceptors( 
+      target, args, 
       std::vector<std::unique_ptr<
           grpc::experimental::ClientInterceptorFactoryInterface>>());
-}
-
+} 
+ 
 std::shared_ptr<Channel>
-SecureChannelCredentials::CreateChannelWithInterceptors(
+SecureChannelCredentials::CreateChannelWithInterceptors( 
     const TString& target, const ChannelArguments& args,
-    std::vector<
+    std::vector< 
         std::unique_ptr<grpc::experimental::ClientInterceptorFactoryInterface>>
-        interceptor_creators) {
+        interceptor_creators) { 
   grpc_channel_args channel_args;
   args.SetChannelArgs(&channel_args);
   return ::grpc::CreateChannelInternal(
       args.GetSslTargetNameOverride(),
       grpc_secure_channel_create(c_creds_, target.c_str(), &channel_args,
-                                 nullptr),
-      std::move(interceptor_creators));
+                                 nullptr), 
+      std::move(interceptor_creators)); 
 }
 
 SecureCallCredentials::SecureCallCredentials(grpc_call_credentials* c_creds)
@@ -110,8 +110,8 @@ std::shared_ptr<ChannelCredentials> SslCredentials(
 
   grpc_channel_credentials* c_creds = grpc_ssl_credentials_create(
       options.pem_root_certs.empty() ? nullptr : options.pem_root_certs.c_str(),
-      options.pem_private_key.empty() ? nullptr : &pem_key_cert_pair, nullptr,
-      nullptr);
+      options.pem_private_key.empty() ? nullptr : &pem_key_cert_pair, nullptr, 
+      nullptr); 
   return WrapChannelCredentials(c_creds);
 }
 
@@ -280,13 +280,13 @@ std::shared_ptr<ChannelCredentials> AltsCredentials(
   return WrapChannelCredentials(c_creds);
 }
 
-// Builds Local Credentials
-std::shared_ptr<ChannelCredentials> LocalCredentials(
-    grpc_local_connect_type type) {
+// Builds Local Credentials 
+std::shared_ptr<ChannelCredentials> LocalCredentials( 
+    grpc_local_connect_type type) { 
   grpc::GrpcLibraryCodegen init;  // To call grpc_init().
-  return WrapChannelCredentials(grpc_local_credentials_create(type));
-}
-
+  return WrapChannelCredentials(grpc_local_credentials_create(type)); 
+} 
+ 
 // Builds TLS Credentials given TLS options.
 std::shared_ptr<ChannelCredentials> TlsCredentials(
     const TlsCredentialsOptions& options) {
@@ -433,10 +433,10 @@ int MetadataCredentialsPluginWrapper::GetMetadata(
     grpc_auth_metadata_context_copy(&context, &context_copy);
     // Asynchronous return.
     w->thread_pool_->Add([w, context_copy, cb, user_data]() mutable {
-      w->MetadataCredentialsPluginWrapper::InvokePlugin(
+      w->MetadataCredentialsPluginWrapper::InvokePlugin( 
           context_copy, cb, user_data, nullptr, nullptr, nullptr, nullptr);
       grpc_auth_metadata_context_reset(&context_copy);
-    });
+    }); 
     return 0;
   } else {
     // Synchronous return.
@@ -463,10 +463,10 @@ void MetadataCredentialsPluginWrapper::InvokePlugin(
     grpc_status_code* status_code, const char** error_details) {
   std::multimap<TString, TString> metadata;
 
-  // const_cast is safe since the SecureAuthContext only inc/dec the refcount
-  // and the object is passed as a const ref to plugin_->GetMetadata.
+  // const_cast is safe since the SecureAuthContext only inc/dec the refcount 
+  // and the object is passed as a const ref to plugin_->GetMetadata. 
   SecureAuthContext cpp_channel_auth_context(
-      const_cast<grpc_auth_context*>(context.channel_auth_context));
+      const_cast<grpc_auth_context*>(context.channel_auth_context)); 
 
   Status status = plugin_->GetMetadata(context.service_url, context.method_name,
                                        cpp_channel_auth_context, &metadata);

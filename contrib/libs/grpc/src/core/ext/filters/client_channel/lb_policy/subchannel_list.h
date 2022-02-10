@@ -29,7 +29,7 @@
 #include "y_absl/container/inlined_vector.h"
 
 #include "src/core/ext/filters/client_channel/lb_policy_registry.h"
-#include "src/core/ext/filters/client_channel/server_address.h"
+#include "src/core/ext/filters/client_channel/server_address.h" 
 // TODO(roth): Should not need the include of subchannel.h here, since
 // that implementation should be hidden from the LB policy API.
 #include "src/core/ext/filters/client_channel/subchannel.h"
@@ -68,10 +68,10 @@ class MySubchannelList
 
 namespace grpc_core {
 
-// Forward declaration.
-template <typename SubchannelListType, typename SubchannelDataType>
-class SubchannelList;
-
+// Forward declaration. 
+template <typename SubchannelListType, typename SubchannelDataType> 
+class SubchannelList; 
+ 
 // Stores data for a particular subchannel in a subchannel list.
 // Callers must create a subclass that implements the
 // ProcessConnectivityChangeLocked() method.
@@ -79,9 +79,9 @@ template <typename SubchannelListType, typename SubchannelDataType>
 class SubchannelData {
  public:
   // Returns a pointer to the subchannel list containing this object.
-  SubchannelListType* subchannel_list() const {
-    return static_cast<SubchannelListType*>(subchannel_list_);
-  }
+  SubchannelListType* subchannel_list() const { 
+    return static_cast<SubchannelListType*>(subchannel_list_); 
+  } 
 
   // Returns the index into the subchannel list of this object.
   size_t Index() const {
@@ -102,10 +102,10 @@ class SubchannelData {
     return connectivity_state_;
   }
 
-  // Resets the connection backoff.
-  // TODO(roth): This method should go away when we move the backoff
-  // code out of the subchannel and into the LB policies.
-  void ResetBackoffLocked();
+  // Resets the connection backoff. 
+  // TODO(roth): This method should go away when we move the backoff 
+  // code out of the subchannel and into the LB policies. 
+  void ResetBackoffLocked(); 
 
   // Starts watching the connectivity state of the subchannel.
   // ProcessConnectivityChangeLocked() will be called whenever the
@@ -119,8 +119,8 @@ class SubchannelData {
   void ShutdownLocked();
 
  protected:
-  SubchannelData(
-      SubchannelList<SubchannelListType, SubchannelDataType>* subchannel_list,
+  SubchannelData( 
+      SubchannelList<SubchannelListType, SubchannelDataType>* subchannel_list, 
       const ServerAddress& address,
       RefCountedPtr<SubchannelInterface> subchannel);
 
@@ -156,11 +156,11 @@ class SubchannelData {
     RefCountedPtr<SubchannelListType> subchannel_list_;
   };
 
-  // Unrefs the subchannel.
-  void UnrefSubchannelLocked(const char* reason);
-
+  // Unrefs the subchannel. 
+  void UnrefSubchannelLocked(const char* reason); 
+ 
   // Backpointer to owning subchannel list.  Not owned.
-  SubchannelList<SubchannelListType, SubchannelDataType>* subchannel_list_;
+  SubchannelList<SubchannelListType, SubchannelDataType>* subchannel_list_; 
   // The subchannel.
   RefCountedPtr<SubchannelInterface> subchannel_;
   // Will be non-null when the subchannel's state is being watched.
@@ -172,7 +172,7 @@ class SubchannelData {
 
 // A list of subchannels.
 template <typename SubchannelListType, typename SubchannelDataType>
-class SubchannelList : public InternallyRefCounted<SubchannelListType> {
+class SubchannelList : public InternallyRefCounted<SubchannelListType> { 
  public:
   typedef y_absl::InlinedVector<SubchannelDataType, 10> SubchannelVector;
 
@@ -189,14 +189,14 @@ class SubchannelList : public InternallyRefCounted<SubchannelListType> {
   LoadBalancingPolicy* policy() const { return policy_; }
   TraceFlag* tracer() const { return tracer_; }
 
-  // Resets connection backoff of all subchannels.
-  // TODO(roth): We will probably need to rethink this as part of moving
-  // the backoff code out of subchannels and into LB policies.
-  void ResetBackoffLocked();
-
+  // Resets connection backoff of all subchannels. 
+  // TODO(roth): We will probably need to rethink this as part of moving 
+  // the backoff code out of subchannels and into LB policies. 
+  void ResetBackoffLocked(); 
+ 
   void Orphan() override {
     ShutdownLocked();
-    InternallyRefCounted<SubchannelListType>::Unref(DEBUG_LOCATION, "shutdown");
+    InternallyRefCounted<SubchannelListType>::Unref(DEBUG_LOCATION, "shutdown"); 
   }
 
  protected:
@@ -264,7 +264,7 @@ void SubchannelData<SubchannelListType, SubchannelDataType>::Watcher::
 
 template <typename SubchannelListType, typename SubchannelDataType>
 SubchannelData<SubchannelListType, SubchannelDataType>::SubchannelData(
-    SubchannelList<SubchannelListType, SubchannelDataType>* subchannel_list,
+    SubchannelList<SubchannelListType, SubchannelDataType>* subchannel_list, 
     const ServerAddress& /*address*/,
     RefCountedPtr<SubchannelInterface> subchannel)
     : subchannel_list_(subchannel_list),
@@ -296,14 +296,14 @@ void SubchannelData<SubchannelListType, SubchannelDataType>::
 
 template <typename SubchannelListType, typename SubchannelDataType>
 void SubchannelData<SubchannelListType,
-                    SubchannelDataType>::ResetBackoffLocked() {
-  if (subchannel_ != nullptr) {
-    subchannel_->ResetBackoff();
-  }
-}
-
-template <typename SubchannelListType, typename SubchannelDataType>
-void SubchannelData<SubchannelListType,
+                    SubchannelDataType>::ResetBackoffLocked() { 
+  if (subchannel_ != nullptr) { 
+    subchannel_->ResetBackoff(); 
+  } 
+} 
+ 
+template <typename SubchannelListType, typename SubchannelDataType> 
+void SubchannelData<SubchannelListType, 
                     SubchannelDataType>::StartConnectivityWatchLocked() {
   if (GRPC_TRACE_FLAG_ENABLED(*subchannel_list_->tracer())) {
     gpr_log(GPR_INFO,
@@ -354,15 +354,15 @@ SubchannelList<SubchannelListType, SubchannelDataType>::SubchannelList(
     LoadBalancingPolicy* policy, TraceFlag* tracer, ServerAddressList addresses,
     LoadBalancingPolicy::ChannelControlHelper* helper,
     const grpc_channel_args& args) Y_NO_SANITIZE("undefined")
-    : InternallyRefCounted<SubchannelListType>(tracer),
+    : InternallyRefCounted<SubchannelListType>(tracer), 
       policy_(policy),
       tracer_(tracer) {
   if (GRPC_TRACE_FLAG_ENABLED(*tracer_)) {
     gpr_log(GPR_INFO,
             "[%s %p] Creating subchannel list %p for %" PRIuPTR " subchannels",
-            tracer_->name(), policy, this, addresses.size());
+            tracer_->name(), policy, this, addresses.size()); 
   }
-  subchannels_.reserve(addresses.size());
+  subchannels_.reserve(addresses.size()); 
   // Create a subchannel for each address.
   for (const ServerAddress& address : addresses) {
     RefCountedPtr<SubchannelInterface> subchannel =
@@ -410,15 +410,15 @@ void SubchannelList<SubchannelListType, SubchannelDataType>::ShutdownLocked() {
   }
 }
 
-template <typename SubchannelListType, typename SubchannelDataType>
-void SubchannelList<SubchannelListType,
-                    SubchannelDataType>::ResetBackoffLocked() {
-  for (size_t i = 0; i < subchannels_.size(); i++) {
-    SubchannelDataType* sd = &subchannels_[i];
-    sd->ResetBackoffLocked();
-  }
-}
-
+template <typename SubchannelListType, typename SubchannelDataType> 
+void SubchannelList<SubchannelListType, 
+                    SubchannelDataType>::ResetBackoffLocked() { 
+  for (size_t i = 0; i < subchannels_.size(); i++) { 
+    SubchannelDataType* sd = &subchannels_[i]; 
+    sd->ResetBackoffLocked(); 
+  } 
+} 
+ 
 }  // namespace grpc_core
 
 #endif /* GRPC_CORE_EXT_FILTERS_CLIENT_CHANNEL_LB_POLICY_SUBCHANNEL_LIST_H */

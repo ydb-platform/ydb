@@ -1,25 +1,25 @@
-/*
- *
- * Copyright 2018 gRPC authors.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
- */
-
-#include <grpc/support/port_platform.h>
-
-#include "src/core/ext/filters/client_channel/server_address.h"
-
+/* 
+ * 
+ * Copyright 2018 gRPC authors. 
+ * 
+ * Licensed under the Apache License, Version 2.0 (the "License"); 
+ * you may not use this file except in compliance with the License. 
+ * You may obtain a copy of the License at 
+ * 
+ *     http://www.apache.org/licenses/LICENSE-2.0 
+ * 
+ * Unless required by applicable law or agreed to in writing, software 
+ * distributed under the License is distributed on an "AS IS" BASIS, 
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+ * See the License for the specific language governing permissions and 
+ * limitations under the License. 
+ * 
+ */ 
+ 
+#include <grpc/support/port_platform.h> 
+ 
+#include "src/core/ext/filters/client_channel/server_address.h" 
+ 
 #include <memory>
 #include <util/generic/string.h>
 #include <vector>
@@ -29,25 +29,25 @@
 
 #include "src/core/lib/iomgr/sockaddr_utils.h"
 
-namespace grpc_core {
-
-//
-// ServerAddress
-//
-
+namespace grpc_core { 
+ 
+// 
+// ServerAddress 
+// 
+ 
 ServerAddress::ServerAddress(
     const grpc_resolved_address& address, grpc_channel_args* args,
     std::map<const char*, std::unique_ptr<AttributeInterface>> attributes)
     : address_(address), args_(args), attributes_(std::move(attributes)) {}
-
+ 
 ServerAddress::ServerAddress(
     const void* address, size_t address_len, grpc_channel_args* args,
     std::map<const char*, std::unique_ptr<AttributeInterface>> attributes)
     : args_(args), attributes_(std::move(attributes)) {
-  memcpy(address_.addr, address, address_len);
-  address_.len = static_cast<socklen_t>(address_len);
-}
-
+  memcpy(address_.addr, address, address_len); 
+  address_.len = static_cast<socklen_t>(address_len); 
+} 
+ 
 ServerAddress::ServerAddress(const ServerAddress& other)
     : address_(other.address_), args_(grpc_channel_args_copy(other.args_)) {
   for (const auto& p : other.attributes_) {
@@ -117,8 +117,8 @@ int ServerAddress::Cmp(const ServerAddress& other) const {
   retval = grpc_channel_args_compare(args_, other.args_);
   if (retval != 0) return retval;
   return CompareAttributes(attributes_, other.attributes_);
-}
-
+} 
+ 
 const ServerAddress::AttributeInterface* ServerAddress::GetAttribute(
     const char* key) const {
   auto it = attributes_.find(key);
@@ -158,4 +158,4 @@ TString ServerAddress::ToString() const {
   return y_absl::StrJoin(parts, " ");
 }
 
-}  // namespace grpc_core
+}  // namespace grpc_core 

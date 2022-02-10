@@ -115,15 +115,15 @@ class CallData {
     }
     GRPC_CLOSURE_INIT(&start_send_message_batch_in_call_combiner_,
                       StartSendMessageBatch, elem, grpc_schedule_on_exec_ctx);
-  }
-
+  } 
+ 
   ~CallData() {
     if (state_initialized_) {
       grpc_slice_buffer_destroy_internal(&slices_);
     }
     GRPC_ERROR_UNREF(cancel_error_);
-  }
-
+  } 
+ 
   void CompressStartTransportStreamOpBatch(
       grpc_call_element* elem, grpc_transport_stream_op_batch* batch);
 
@@ -148,7 +148,7 @@ class CallData {
 
   grpc_core::CallCombiner* call_combiner_;
   grpc_message_compression_algorithm message_compression_algorithm_ =
-      GRPC_MESSAGE_COMPRESS_NONE;
+      GRPC_MESSAGE_COMPRESS_NONE; 
   grpc_error* cancel_error_ = GRPC_ERROR_NONE;
   grpc_transport_stream_op_batch* send_message_batch_ = nullptr;
   bool seen_initial_metadata_ = false;

@@ -53,7 +53,7 @@ std::shared_ptr<Channel> CreateCustomChannel(
     const std::shared_ptr<ChannelCredentials>& creds,
     const ChannelArguments& args);
 
-namespace experimental {
+namespace experimental { 
 /// Create a new \em custom \a Channel pointing to \a target with \a
 /// interceptors being invoked per call.
 ///
@@ -66,13 +66,13 @@ namespace experimental {
 /// fail) is returned.
 /// \param args Options for channel creation.
 std::shared_ptr<Channel> CreateCustomChannelWithInterceptors(
-    const grpc::string& target,
-    const std::shared_ptr<ChannelCredentials>& creds,
-    const ChannelArguments& args,
-    std::vector<
-        std::unique_ptr<experimental::ClientInterceptorFactoryInterface>>
+    const grpc::string& target, 
+    const std::shared_ptr<ChannelCredentials>& creds, 
+    const ChannelArguments& args, 
+    std::vector< 
+        std::unique_ptr<experimental::ClientInterceptorFactoryInterface>> 
         interceptor_creators);
-}  // namespace experimental
+}  // namespace experimental 
 }  // namespace grpc
 
 #endif  // GRPCPP_CREATE_CHANNEL_H

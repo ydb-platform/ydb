@@ -11,7 +11,7 @@ framework module grpc {
   header "impl/codegen/gpr_slice.h"
   header "impl/codegen/gpr_types.h"
   header "impl/codegen/grpc_types.h"
-  header "impl/codegen/log.h"
+  header "impl/codegen/log.h" 
   header "impl/codegen/port_platform.h"
   header "impl/codegen/propagation_bits.h"
   header "impl/codegen/slice.h"

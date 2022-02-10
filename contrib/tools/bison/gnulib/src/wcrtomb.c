@@ -24,8 +24,8 @@
 #include <stdlib.h>
 
 
-// wcrtomb is defined for msvs 2017 15.7
-#if _MSC_VER < 1914
+// wcrtomb is defined for msvs 2017 15.7 
+#if _MSC_VER < 1914 
 size_t
 wcrtomb (char *s, wchar_t wc, mbstate_t *ps)
 {
@@ -53,4 +53,4 @@ wcrtomb (char *s, wchar_t wc, mbstate_t *ps)
         }
     }
 }
-#endif
+#endif 

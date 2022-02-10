@@ -1,19 +1,19 @@
 UNITTEST_FOR(library/cpp/uri)
-
-OWNER(leo)
-
+ 
+OWNER(leo) 
+ 
 NO_OPTIMIZE()
 
 NO_WSHADOW()
 
-PEERDIR(
+PEERDIR( 
     library/cpp/html/entity
-)
-
-SRCS(
+) 
+ 
+SRCS( 
     location_ut.cpp
-    uri-ru_ut.cpp
-    uri_ut.cpp
-)
-
-END()
+    uri-ru_ut.cpp 
+    uri_ut.cpp 
+) 
+ 
+END() 

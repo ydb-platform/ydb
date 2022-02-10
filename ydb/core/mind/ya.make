@@ -1,11 +1,11 @@
 LIBRARY()
 
-OWNER(
-    ddoarn
+OWNER( 
+    ddoarn 
     xenoxeno
     g:kikimr
-)
-
+) 
+ 
 SRCS(
     configured_tablet_bootstrapper.cpp
     configured_tablet_bootstrapper.h

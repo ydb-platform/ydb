@@ -14,7 +14,7 @@ IF (PYTHON2)
 ENDIF()
 
 PEERDIR(
-    contrib/libs/openssl
+    contrib/libs/openssl 
     contrib/python/cffi
     # contrib/python/idna
     # contrib/python/asn1crypto

@@ -634,9 +634,9 @@ class Build(object):
                 python.configure_posix()
                 python.print_variables()
 
-        cuda = Cuda(self)
-        cuda.print_()
-        CuDNN(cuda).print_()
+        cuda = Cuda(self) 
+        cuda.print_() 
+        CuDNN(cuda).print_() 
 
         print_swig_config()
 
@@ -970,8 +970,8 @@ class ToolchainOptions(object):
         logger.debug('c_compiler=%s', self.c_compiler)
         logger.debug('cxx_compiler=%s', self.cxx_compiler)
 
-        self.compiler_platform_projects = self.target.find_in_dict(self.params.get('platform'), [])
-
+        self.compiler_platform_projects = self.target.find_in_dict(self.params.get('platform'), []) 
+ 
     def version_at_least(self, *args):
         return args <= tuple(self.compiler_version_list)
 
@@ -1743,10 +1743,10 @@ class SwiftCompiler(object):
 
 
 class Linker(object):
-    BFD = 'bfd'
-    LLD = 'lld'
-    GOLD = 'gold'
-
+    BFD = 'bfd' 
+    LLD = 'lld' 
+    GOLD = 'gold' 
+ 
     def __init__(self, tc, build):
         """
         :type tc: ToolchainOptions
@@ -2239,14 +2239,14 @@ class MSVCToolchainOptions(ToolchainOptions):
             # TODO(somov): Определять автоматически self.version в этом случае
 
         else:
-            if self.version_at_least(2019):
-                self.sdk_version = '10.0.18362.0'
-                sdk_dir = '$(WINDOWS_KITS-sbr:1939557911)'
-                if is_positive('MSVC20'):  # XXX: temporary flag, remove after DTCC-123 is completed
-                    self.cxx_std = 'c++latest'
-            else:
-                self.sdk_version = '10.0.16299.0'
-                sdk_dir = '$(WINDOWS_KITS-sbr:1379398385)'
+            if self.version_at_least(2019): 
+                self.sdk_version = '10.0.18362.0' 
+                sdk_dir = '$(WINDOWS_KITS-sbr:1939557911)' 
+                if is_positive('MSVC20'):  # XXX: temporary flag, remove after DTCC-123 is completed 
+                    self.cxx_std = 'c++latest' 
+            else: 
+                self.sdk_version = '10.0.16299.0' 
+                sdk_dir = '$(WINDOWS_KITS-sbr:1379398385)' 
 
             self.vc_root = self.name_marker if not self.use_clang else '$MSVC_FOR_CLANG_RESOURCE_GLOBAL'
             self.kit_includes = os.path.join(sdk_dir, 'Include', self.sdk_version)
@@ -2356,7 +2356,7 @@ class MSVCCompiler(MSVC, Compiler):
             4201,  # nonstandard extension used : nameless struct/union
             4351,  # elements of array will be default initialized
             4355,  # 'this' : used in base member initializer list
-            4503,  # decorated name length exceeded, name was truncated
+            4503,  # decorated name length exceeded, name was truncated 
             4510,  # default constructor could not be generated
             4511,  # copy constructor could not be generated
             4512,  # assignment operator could not be generated
@@ -3148,8 +3148,8 @@ class Cuda(object):
             'Y_SDK_Root': '$WINDOWS_KITS_RESOURCE_GLOBAL',
         }
 
-        if not self.build.tc.ide_msvs:
-            self.peerdirs.append('build/platform/msvc')
+        if not self.build.tc.ide_msvs: 
+            self.peerdirs.append('build/platform/msvc') 
         self.cuda_host_compiler_env.value = format_env(env)
         self.cuda_host_msvc_version.value = vc_version
         return '%(Y_VC_Root)s/bin/HostX64/x64/cl.exe' % env
@@ -3176,26 +3176,26 @@ class Cuda(object):
             self.cuda_host_compiler_env.value = format_env({'Y_VC_Root': vc_root})
 
 
-class CuDNN(object):
-    def __init__(self, cuda):
-        """
-        :type cuda: Cuda
-        """
-        self.cuda = cuda
-
-        self.cudnn_version = Setting('CUDNN_VERSION', auto=self.auto_cudnn_version)
-
-    def have_cudnn(self):
-        return self.cudnn_version.value in ('7.6.5', '8.0.5')
-
-    def auto_cudnn_version(self):
-        return '7.6.5'
-
-    def print_(self):
-        if self.cuda.have_cuda.value and self.have_cudnn():
-            self.cudnn_version.emit()
-
-
+class CuDNN(object): 
+    def __init__(self, cuda): 
+        """ 
+        :type cuda: Cuda 
+        """ 
+        self.cuda = cuda 
+ 
+        self.cudnn_version = Setting('CUDNN_VERSION', auto=self.auto_cudnn_version) 
+ 
+    def have_cudnn(self): 
+        return self.cudnn_version.value in ('7.6.5', '8.0.5') 
+ 
+    def auto_cudnn_version(self): 
+        return '7.6.5' 
+ 
+    def print_(self): 
+        if self.cuda.have_cuda.value and self.have_cudnn(): 
+            self.cudnn_version.emit() 
+ 
+ 
 def print_swig_config():
     def get_swig_tool():
         tool = preset('USER_SWIG_TOOL')

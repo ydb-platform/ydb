@@ -1,11 +1,11 @@
 LIBRARY()
 
-OWNER(
+OWNER( 
     a-romanov
-    ddoarn
+    ddoarn 
     g:kikimr
-)
-
+) 
+ 
 SRCS(
     actor_tracker.cpp
     actor_tracker.h

@@ -1,11 +1,11 @@
 LIBRARY()
 
-OWNER(
-    ddoarn
-    fomichev
+OWNER( 
+    ddoarn 
+    fomichev 
     vvvv
     g:kikimr
-)
+) 
 
 SRCS(
     actor_helpers.cpp

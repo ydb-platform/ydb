@@ -24,8 +24,8 @@
 #include <grpcpp/resource_quota.h>
 #include <grpcpp/server.h>
 
-#include <utility>
-
+#include <utility> 
+ 
 #include "src/core/lib/channel/channel_args.h"
 #include "src/core/lib/gpr/string.h"
 #include "src/core/lib/gpr/useful.h"
@@ -44,8 +44,8 @@ static void do_plugin_list_init(void) {
 }
 
 ServerBuilder::ServerBuilder()
-    : max_receive_message_size_(INT_MIN),
-      max_send_message_size_(INT_MIN),
+    : max_receive_message_size_(INT_MIN), 
+      max_send_message_size_(INT_MIN), 
       sync_server_settings_(SyncServerSettings()),
       resource_quota_(nullptr) {
   gpr_once_init(&once_init_plugin_list, do_plugin_list_init);
@@ -71,9 +71,9 @@ ServerBuilder::~ServerBuilder() {
 std::unique_ptr<grpc::ServerCompletionQueue> ServerBuilder::AddCompletionQueue(
     bool is_frequently_polled) {
   grpc::ServerCompletionQueue* cq = new grpc::ServerCompletionQueue(
-      GRPC_CQ_NEXT,
-      is_frequently_polled ? GRPC_CQ_DEFAULT_POLLING : GRPC_CQ_NON_LISTENING,
-      nullptr);
+      GRPC_CQ_NEXT, 
+      is_frequently_polled ? GRPC_CQ_DEFAULT_POLLING : GRPC_CQ_NON_LISTENING, 
+      nullptr); 
   cqs_.push_back(cq);
   return std::unique_ptr<grpc::ServerCompletionQueue>(cq);
 }
@@ -180,7 +180,7 @@ ServerBuilder& ServerBuilder::SetCompressionAlgorithmSupportStatus(
 
 ServerBuilder& ServerBuilder::SetDefaultCompressionLevel(
     grpc_compression_level level) {
-  maybe_default_compression_level_.is_set = true;
+  maybe_default_compression_level_.is_set = true; 
   maybe_default_compression_level_.level = level;
   return *this;
 }
@@ -212,14 +212,14 @@ ServerBuilder& ServerBuilder::AddListeningPort(
     while (addr_uri[pos] == '/') ++pos;  // Skip slashes.
     addr = addr_uri.substr(pos);
   }
-  Port port = {addr, std::move(creds), selected_port};
+  Port port = {addr, std::move(creds), selected_port}; 
   ports_.push_back(port);
   return *this;
 }
 
 std::unique_ptr<grpc::Server> ServerBuilder::BuildAndStart() {
   grpc::ChannelArguments args;
-  if (max_receive_message_size_ >= -1) {
+  if (max_receive_message_size_ >= -1) { 
     args.SetInt(GRPC_ARG_MAX_RECEIVE_MESSAGE_LENGTH, max_receive_message_size_);
   }
   if (max_send_message_size_ >= -1) {
@@ -306,14 +306,14 @@ std::unique_ptr<grpc::Server> ServerBuilder::BuildAndStart() {
 
     // Create completion queues to listen to incoming rpc requests
     for (int i = 0; i < sync_server_settings_.num_cqs; i++) {
-      sync_server_cqs->emplace_back(
+      sync_server_cqs->emplace_back( 
           new grpc::ServerCompletionQueue(GRPC_CQ_NEXT, polling_type, nullptr));
     }
   }
 
-  // TODO(vjpai): Add a section here for plugins once they can support callback
-  // methods
-
+  // TODO(vjpai): Add a section here for plugins once they can support callback 
+  // methods 
+ 
   if (has_sync_methods) {
     // This is a Sync server
     gpr_log(GPR_INFO,
@@ -324,16 +324,16 @@ std::unique_ptr<grpc::Server> ServerBuilder::BuildAndStart() {
             sync_server_settings_.cq_timeout_msec);
   }
 
-  if (has_callback_methods) {
-    gpr_log(GPR_INFO, "Callback server.");
-  }
-
+  if (has_callback_methods) { 
+    gpr_log(GPR_INFO, "Callback server."); 
+  } 
+ 
   std::unique_ptr<grpc::Server> server(new grpc::Server(
       &args, sync_server_cqs, sync_server_settings_.min_pollers,
       sync_server_settings_.max_pollers, sync_server_settings_.cq_timeout_msec,
       std::move(acceptors_), resource_quota_,
       std::move(interceptor_creators_)));
-
+ 
   ServerInitializer* initializer = server->initializer();
 
   // Register all the completion queues with the server. i.e
@@ -347,10 +347,10 @@ std::unique_ptr<grpc::Server> ServerBuilder::BuildAndStart() {
   }
 
   if (has_callback_methods || callback_generic_service_ != nullptr) {
-    auto* cq = server->CallbackCQ();
-    grpc_server_register_completion_queue(server->server_, cq->cq(), nullptr);
-  }
-
+    auto* cq = server->CallbackCQ(); 
+    grpc_server_register_completion_queue(server->server_, cq->cq(), nullptr); 
+  } 
+ 
   // cqs_ contains the completion queue added by calling the ServerBuilder's
   // AddCompletionQueue() API. Some of them may not be frequently polled (i.e by
   // calling Next() or AsyncNext()) and hence are not safe to be used for

@@ -72,12 +72,12 @@ static void iomgr_platform_shutdown(void) {
   winsock_shutdown();
 }
 
-static void iomgr_platform_shutdown_background_closure(void) {}
-
-static bool iomgr_platform_is_any_background_poller_thread(void) {
-  return false;
-}
-
+static void iomgr_platform_shutdown_background_closure(void) {} 
+ 
+static bool iomgr_platform_is_any_background_poller_thread(void) { 
+  return false; 
+} 
+ 
 static bool iomgr_platform_add_closure_to_background_poller(
     grpc_closure* closure, grpc_error* error) {
   return false;
@@ -87,7 +87,7 @@ static grpc_iomgr_platform_vtable vtable = {
     iomgr_platform_init,
     iomgr_platform_flush,
     iomgr_platform_shutdown,
-    iomgr_platform_shutdown_background_closure,
+    iomgr_platform_shutdown_background_closure, 
     iomgr_platform_is_any_background_poller_thread,
     iomgr_platform_add_closure_to_background_poller};
 
@@ -101,6 +101,6 @@ void grpc_set_default_iomgr_platform() {
   grpc_set_iomgr_platform_vtable(&vtable);
 }
 
-bool grpc_iomgr_run_in_background() { return false; }
-
+bool grpc_iomgr_run_in_background() { return false; } 
+ 
 #endif /* GRPC_WINSOCK_SOCKET */

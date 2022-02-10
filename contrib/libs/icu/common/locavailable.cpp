@@ -1,109 +1,109 @@
 // © 2016 and later: Unicode, Inc. and others.
-// License & terms of use: http://www.unicode.org/copyright.html
-/*
-*******************************************************************************
-*
-*   Copyright (C) 1997-2013, International Business Machines
-*   Corporation and others.  All Rights Reserved.
-*
-*******************************************************************************
-*   file name:  locavailable.cpp
+// License & terms of use: http://www.unicode.org/copyright.html 
+/* 
+******************************************************************************* 
+* 
+*   Copyright (C) 1997-2013, International Business Machines 
+*   Corporation and others.  All Rights Reserved. 
+* 
+******************************************************************************* 
+*   file name:  locavailable.cpp 
 *   encoding:   UTF-8
-*   tab size:   8 (not used)
-*   indentation:4
-*
-*   created on: 2010feb25
-*   created by: Markus W. Scherer
-*
-*   Code for available locales, separated out from other .cpp files
-*   that then do not depend on resource bundle code and res_index bundles.
-*/
-
+*   tab size:   8 (not used) 
+*   indentation:4 
+* 
+*   created on: 2010feb25 
+*   created by: Markus W. Scherer 
+* 
+*   Code for available locales, separated out from other .cpp files 
+*   that then do not depend on resource bundle code and res_index bundles. 
+*/ 
+ 
 #include "unicode/errorcode.h"
-#include "unicode/utypes.h"
-#include "unicode/locid.h"
-#include "unicode/uloc.h"
-#include "unicode/ures.h"
-#include "cmemory.h"
+#include "unicode/utypes.h" 
+#include "unicode/locid.h" 
+#include "unicode/uloc.h" 
+#include "unicode/ures.h" 
+#include "cmemory.h" 
 #include "cstring.h"
-#include "ucln_cmn.h"
-#include "uassert.h"
-#include "umutex.h"
-#include "uresimp.h"
-
-// C++ API ----------------------------------------------------------------- ***
-
-U_NAMESPACE_BEGIN
-
-static icu::Locale*  availableLocaleList = NULL;
-static int32_t  availableLocaleListCount;
+#include "ucln_cmn.h" 
+#include "uassert.h" 
+#include "umutex.h" 
+#include "uresimp.h" 
+ 
+// C++ API ----------------------------------------------------------------- *** 
+ 
+U_NAMESPACE_BEGIN 
+ 
+static icu::Locale*  availableLocaleList = NULL; 
+static int32_t  availableLocaleListCount; 
 static icu::UInitOnce gInitOnceLocale = U_INITONCE_INITIALIZER;
-
-U_NAMESPACE_END
-
-U_CDECL_BEGIN
-
-static UBool U_CALLCONV locale_available_cleanup(void)
-{
-    U_NAMESPACE_USE
-
-    if (availableLocaleList) {
-        delete []availableLocaleList;
-        availableLocaleList = NULL;
-    }
-    availableLocaleListCount = 0;
+ 
+U_NAMESPACE_END 
+ 
+U_CDECL_BEGIN 
+ 
+static UBool U_CALLCONV locale_available_cleanup(void) 
+{ 
+    U_NAMESPACE_USE 
+ 
+    if (availableLocaleList) { 
+        delete []availableLocaleList; 
+        availableLocaleList = NULL; 
+    } 
+    availableLocaleListCount = 0; 
     gInitOnceLocale.reset();
-
-    return TRUE;
-}
-
-U_CDECL_END
-
-U_NAMESPACE_BEGIN
-
-void U_CALLCONV locale_available_init() {
-    // This function is a friend of class Locale.
-    // This function is only invoked via umtx_initOnce().
-    
-    // for now, there is a hardcoded list, so just walk through that list and set it up.
-    //  Note: this function is a friend of class Locale.
-    availableLocaleListCount = uloc_countAvailable();
-    if(availableLocaleListCount) {
-       availableLocaleList = new Locale[availableLocaleListCount];
-    }
-    if (availableLocaleList == NULL) {
-        availableLocaleListCount= 0;
-    }
-    for (int32_t locCount=availableLocaleListCount-1; locCount>=0; --locCount) {
-        availableLocaleList[locCount].setFromPOSIXID(uloc_getAvailable(locCount));
-    }
-    ucln_common_registerCleanup(UCLN_COMMON_LOCALE_AVAILABLE, locale_available_cleanup);
-}
-
-const Locale* U_EXPORT2
-Locale::getAvailableLocales(int32_t& count)
-{
+ 
+    return TRUE; 
+} 
+ 
+U_CDECL_END 
+ 
+U_NAMESPACE_BEGIN 
+ 
+void U_CALLCONV locale_available_init() { 
+    // This function is a friend of class Locale. 
+    // This function is only invoked via umtx_initOnce(). 
+     
+    // for now, there is a hardcoded list, so just walk through that list and set it up. 
+    //  Note: this function is a friend of class Locale. 
+    availableLocaleListCount = uloc_countAvailable(); 
+    if(availableLocaleListCount) { 
+       availableLocaleList = new Locale[availableLocaleListCount]; 
+    } 
+    if (availableLocaleList == NULL) { 
+        availableLocaleListCount= 0; 
+    } 
+    for (int32_t locCount=availableLocaleListCount-1; locCount>=0; --locCount) { 
+        availableLocaleList[locCount].setFromPOSIXID(uloc_getAvailable(locCount)); 
+    } 
+    ucln_common_registerCleanup(UCLN_COMMON_LOCALE_AVAILABLE, locale_available_cleanup); 
+} 
+ 
+const Locale* U_EXPORT2 
+Locale::getAvailableLocales(int32_t& count) 
+{ 
     umtx_initOnce(gInitOnceLocale, &locale_available_init);
-    count = availableLocaleListCount;
-    return availableLocaleList;
-}
-
-
-U_NAMESPACE_END
-
-// C API ------------------------------------------------------------------- ***
-
-U_NAMESPACE_USE
-
-/* ### Constants **************************************************/
-
+    count = availableLocaleListCount; 
+    return availableLocaleList; 
+} 
+ 
+ 
+U_NAMESPACE_END 
+ 
+// C API ------------------------------------------------------------------- *** 
+ 
+U_NAMESPACE_USE 
+ 
+/* ### Constants **************************************************/ 
+ 
 namespace {
-
+ 
 // Enough capacity for the two lists in the res_index.res file
 const char** gAvailableLocaleNames[2] = {};
 int32_t gAvailableLocaleCounts[2] = {};
 icu::UInitOnce ginstalledLocalesInitOnce = U_INITONCE_INITIALIZER;
-
+ 
 class AvailableLocalesSink : public ResourceSink {
   public:
     void put(const char *key, ResourceValue &value, UBool /*noFallback*/, UErrorCode &status) U_OVERRIDE {
@@ -138,16 +138,16 @@ class AvailableLocalesSink : public ResourceSink {
         }
     }
 };
-
+ 
 class AvailableLocalesStringEnumeration : public StringEnumeration {
   public:
     AvailableLocalesStringEnumeration(ULocAvailableType type) : fType(type) {
     }
-
+ 
     const char* next(int32_t *resultLength, UErrorCode&) override {
         ULocAvailableType actualType = fType;
         int32_t actualIndex = fIndex++;
-
+ 
         // If the "combined" list was requested, resolve that now
         if (fType == ULOC_AVAILABLE_WITH_LEGACY_ALIASES) {
             int32_t defaultLocalesCount = gAvailableLocaleCounts[ULOC_AVAILABLE_DEFAULT];
@@ -158,7 +158,7 @@ class AvailableLocalesStringEnumeration : public StringEnumeration {
                 actualType = ULOC_AVAILABLE_ONLY_LEGACY_ALIASES;
             }
         }
-
+ 
         // Return the requested string
         int32_t count = gAvailableLocaleCounts[actualType];
         const char* result;
@@ -174,7 +174,7 @@ class AvailableLocalesStringEnumeration : public StringEnumeration {
             }
         }
         return result;
-    }
+    } 
 
     void reset(UErrorCode&) override {
         fIndex = 0;
@@ -203,27 +203,27 @@ static UBool U_CALLCONV uloc_cleanup(void) {
         gAvailableLocaleCounts[i] = 0;
     }
     ginstalledLocalesInitOnce.reset();
-    return TRUE;
-}
-
-// Load Installed Locales. This function will be called exactly once
-//   via the initOnce mechanism.
-
+    return TRUE; 
+} 
+ 
+// Load Installed Locales. This function will be called exactly once 
+//   via the initOnce mechanism. 
+ 
 static void U_CALLCONV loadInstalledLocales(UErrorCode& status) {
     ucln_common_registerCleanup(UCLN_COMMON_ULOC, uloc_cleanup);
-
+ 
     icu::LocalUResourceBundlePointer rb(ures_openDirect(NULL, "res_index", &status));
     AvailableLocalesSink sink;
     ures_getAllItemsWithFallback(rb.getAlias(), "", sink, status);
-}
-
+} 
+ 
 void _load_installedLocales(UErrorCode& status) {
     umtx_initOnce(ginstalledLocalesInitOnce, &loadInstalledLocales, status);
-}
-
+} 
+ 
 } // namespace
 
-U_CAPI const char* U_EXPORT2
+U_CAPI const char* U_EXPORT2 
 uloc_getAvailable(int32_t offset) {
     icu::ErrorCode status;
     _load_installedLocales(status);
@@ -235,9 +235,9 @@ uloc_getAvailable(int32_t offset) {
         return nullptr;
     }
     return gAvailableLocaleNames[0][offset];
-}
-
-U_CAPI int32_t  U_EXPORT2
+} 
+ 
+U_CAPI int32_t  U_EXPORT2 
 uloc_countAvailable() {
     icu::ErrorCode status;
     _load_installedLocales(status);
@@ -245,8 +245,8 @@ uloc_countAvailable() {
         return 0;
     }
     return gAvailableLocaleCounts[0];
-}
-
+} 
+ 
 U_CAPI UEnumeration* U_EXPORT2
 uloc_openAvailableByType(ULocAvailableType type, UErrorCode* status) {
     if (U_FAILURE(*status)) {

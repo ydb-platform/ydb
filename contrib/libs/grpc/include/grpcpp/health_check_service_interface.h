@@ -37,7 +37,7 @@ class HealthCheckServiceInterface {
                                 bool serving) = 0;
   /// Apply to all registered service names.
   virtual void SetServingStatus(bool serving) = 0;
-
+ 
   /// Set all registered service names to not serving and prevent future
   /// state changes.
   virtual void Shutdown() {}

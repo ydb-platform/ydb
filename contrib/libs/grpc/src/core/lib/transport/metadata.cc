@@ -361,7 +361,7 @@ static grpc_mdelem md_create_must_intern(const grpc_slice& key,
 
 template <bool key_definitely_static, bool value_definitely_static = false>
 static grpc_mdelem md_create(
-    const grpc_slice& key, const grpc_slice& value,
+    const grpc_slice& key, const grpc_slice& value, 
     grpc_mdelem_data* compatible_external_backing_store) {
   // Ensure slices are, in fact, static if we claimed they were.
   GPR_DEBUG_ASSERT(!key_definitely_static ||
@@ -510,8 +510,8 @@ static grpc_mdelem md_from_slices(const grpc_slice& key,
   return out;
 }
 
-grpc_mdelem grpc_mdelem_from_slices(const grpc_slice& key,
-                                    const grpc_slice& value) {
+grpc_mdelem grpc_mdelem_from_slices(const grpc_slice& key, 
+                                    const grpc_slice& value) { 
   return md_from_slices</*key_definitely_static=*/false>(key, value);
 }
 

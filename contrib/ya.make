@@ -3,7 +3,7 @@ RECURSE(
     deprecated
     go
     java
-    libs
+    libs 
     nginx
     node_modules
     phantom/pd/ssl

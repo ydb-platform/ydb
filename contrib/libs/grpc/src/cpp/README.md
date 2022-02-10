@@ -2,44 +2,44 @@
 
 This directory contains the C++ implementation of gRPC.
 
-# To start using gRPC C++
+# To start using gRPC C++ 
 
 This section describes how to add gRPC as a dependency to your C++ project.
 
-In the C++ world, there's no universally accepted standard for managing project dependencies.
-Therefore, gRPC supports several major build systems, which should satisfy most users.
+In the C++ world, there's no universally accepted standard for managing project dependencies. 
+Therefore, gRPC supports several major build systems, which should satisfy most users. 
 
 ## Bazel
-
+ 
 Bazel is the primary build system used by the core gRPC development team. Bazel
 provides fast builds and it easily handles dependencies that support bazel.
-
-To add gRPC as a dependency in bazel:
-1. determine commit SHA for the grpc release you want to use
+ 
+To add gRPC as a dependency in bazel: 
+1. determine commit SHA for the grpc release you want to use 
 2. Use the [http_archive](https://docs.bazel.build/versions/master/repo/http.html#http_archive) bazel rule to include gRPC source
-  ```
-  http_archive(
-      name = "com_github_grpc_grpc",
-      urls = [
-          "https://github.com/grpc/grpc/archive/YOUR_GRPC_COMMIT_SHA.tar.gz",
-      ],
-      strip_prefix = "grpc-YOUR_GRPC_COMMIT_SHA",
-  )
-
-  load("@com_github_grpc_grpc//bazel:grpc_deps.bzl", "grpc_deps")
-
-  grpc_deps()
-  ```
-
+  ``` 
+  http_archive( 
+      name = "com_github_grpc_grpc", 
+      urls = [ 
+          "https://github.com/grpc/grpc/archive/YOUR_GRPC_COMMIT_SHA.tar.gz", 
+      ], 
+      strip_prefix = "grpc-YOUR_GRPC_COMMIT_SHA", 
+  ) 
+ 
+  load("@com_github_grpc_grpc//bazel:grpc_deps.bzl", "grpc_deps") 
+ 
+  grpc_deps() 
+  ``` 
+ 
 ## CMake
-
+ 
 `cmake` is your best option if you cannot use bazel. It supports building on Linux,
 MacOS and Windows (official support) but also has a good chance of working on
 other platforms (no promises!). `cmake` has good support for crosscompiling and
 can be used for targeting the Android platform.
-
+ 
 To build gRPC C++ from source, follow the [BUILDING guide](../../BUILDING.md).
-
+ 
 ### find_package
 
 The canonical way to discover dependencies in CMake is the
@@ -127,22 +127,22 @@ first install gRPC C++ using CMake, and have your non-CMake project rely on the
 The default choice for building on UNIX based systems used to be `make`, but we are no longer recommending it.
 You should use `bazel` or `cmake` instead.
 
-To install gRPC for C++ on your system using `make`, follow the [Building gRPC C++](../../BUILDING.md)
-instructions to build from source and then install locally using `make install`.
-This also installs the protocol buffer compiler `protoc` (if you don't have it already),
-and the C++ gRPC plugin for `protoc`.
-
-WARNING: After installing with `make install` there is no easy way to uninstall, which can cause issues
-if you later want to remove the grpc and/or protobuf installation or upgrade to a newer version.
-
-## Packaging systems
-
+To install gRPC for C++ on your system using `make`, follow the [Building gRPC C++](../../BUILDING.md) 
+instructions to build from source and then install locally using `make install`. 
+This also installs the protocol buffer compiler `protoc` (if you don't have it already), 
+and the C++ gRPC plugin for `protoc`. 
+ 
+WARNING: After installing with `make install` there is no easy way to uninstall, which can cause issues 
+if you later want to remove the grpc and/or protobuf installation or upgrade to a newer version. 
+ 
+## Packaging systems 
+ 
 We do not officially support any packaging system for C++, but there are some community-maintained packages that are kept up-to-date
 and are known to work well. More contributions and support for popular packaging systems are welcome!
-
+ 
 ### Install using vcpkg package
 gRPC is available using the [vcpkg](https://github.com/Microsoft/vcpkg) dependency manager:
-
+ 
 ```
 # install vcpkg package manager on your system using the official instructions
 git clone https://github.com/Microsoft/vcpkg.git
@@ -157,8 +157,8 @@ vcpkg install grpc
 The gRPC port in vcpkg is kept up to date by Microsoft team members and community contributors. If the version is out of date, please [create an issue or pull request](https://github.com/Microsoft/vcpkg) on the vcpkg repository.
 
 
-## Examples & Additional Documentation
-
+## Examples & Additional Documentation 
+ 
 You can find out how to build and run our simplest gRPC C++ example in our
 [C++ quick start](../../examples/cpp).
 
@@ -175,6 +175,6 @@ documentation site at [grpc.io](https://grpc.io), specifically:
   APIs.
 
 
-# To start developing gRPC C++
+# To start developing gRPC C++ 
 
-For instructions on how to build gRPC C++ from source, follow the [Building gRPC C++](../../BUILDING.md) instructions.
+For instructions on how to build gRPC C++ from source, follow the [Building gRPC C++](../../BUILDING.md) instructions. 

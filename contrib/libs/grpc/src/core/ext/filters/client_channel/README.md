@@ -46,4 +46,4 @@ concrete subchannel instances.
 Naming for GRPC
 ===============
 
-See [/doc/naming.md](gRPC name resolution).
+See [/doc/naming.md](gRPC name resolution). 

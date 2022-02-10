@@ -1,6 +1,6 @@
 #include "welford.h"
 
-#include <util/generic/ymath.h>
+#include <util/generic/ymath.h> 
 
 void TMeanCalculator::Multiply(const double value) {
     SumWeights *= value;

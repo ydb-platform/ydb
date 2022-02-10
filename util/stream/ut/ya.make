@@ -1,9 +1,9 @@
 UNITTEST_FOR(util)
-
+ 
 OWNER(g:util)
 SUBSCRIBER(g:util-subscribers)
-
-SRCS(
+ 
+SRCS( 
     stream/aligned_ut.cpp
     stream/buffer_ut.cpp
     stream/buffered_ut.cpp
@@ -23,8 +23,8 @@ SRCS(
     stream/walk_ut.cpp
     stream/zerocopy_output_ut.cpp
     stream/zlib_ut.cpp
-)
-
+) 
+ 
 INCLUDE(${ARCADIA_ROOT}/util/tests/ya_util_tests.inc)
 
-END()
+END() 

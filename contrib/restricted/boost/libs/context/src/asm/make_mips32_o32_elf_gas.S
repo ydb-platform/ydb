@@ -33,7 +33,7 @@
  *  -------------------------------------------------  *
  *  |  96 | 100 | 104 | 108 | 112 | 116 | 120 | 124 |  *
  *  -------------------------------------------------  *
- *  |       ABI ARGS        |  GP | FCTX| DATA|     |  *
+ *  |       ABI ARGS        |  GP | FCTX| DATA|     |  * 
  *  -------------------------------------------------  *
  *                                                     *
  * *****************************************************/
@@ -50,25 +50,25 @@ make_fcontext:
 .set    reorder
 #endif
     # shift address in A0 to lower 16 byte boundary
-    li $v1, -16 # 0xfffffffffffffff0
-    and $v0, $v1, $a0
+    li $v1, -16 # 0xfffffffffffffff0 
+    and $v0, $v1, $a0 
 
     # reserve space for context-data on context-stack
-    #  includes an extra 32 bytes for:
-    #  - 16-byte incoming argument area required by mips ABI used when
-    #    jump_context calls the initial function
-    #  - 4 bytes to save our GP register used in finish
-    #  - 8 bytes to as space for transfer_t returned to finish
-    #  - 4 bytes for alignment
-    addiu $v0, $v0, -128
+    #  includes an extra 32 bytes for: 
+    #  - 16-byte incoming argument area required by mips ABI used when 
+    #    jump_context calls the initial function 
+    #  - 4 bytes to save our GP register used in finish 
+    #  - 8 bytes to as space for transfer_t returned to finish 
+    #  - 4 bytes for alignment 
+    addiu $v0, $v0, -128 
 
     # third arg of make_fcontext() == address of context-function
     sw  $a2, 92($v0)
     # save global pointer in context-data
-    sw  $gp, 112($v0)
+    sw  $gp, 112($v0) 
 
     # compute address of returned transfer_t
-    addiu $t0, $v0, 116
+    addiu $t0, $v0, 116 
     sw  $t0, 84($v0)
 
     # compute abs address of label finish
@@ -80,15 +80,15 @@ make_fcontext:
     jr  $ra # return pointer to context-data
 
 finish:
-    # reload our gp register (needed for la)
-    lw $gp, 16($sp)
+    # reload our gp register (needed for la) 
+    lw $gp, 16($sp) 
 
-    # call _exit(0)
-    #  the previous function should have left the 16 bytes incoming argument
-    #  area on the stack which we reuse for calling _exit
-    la $t9, _exit
-    move $a0, $zero
-    jr $t9
+    # call _exit(0) 
+    #  the previous function should have left the 16 bytes incoming argument 
+    #  area on the stack which we reuse for calling _exit 
+    la $t9, _exit 
+    move $a0, $zero 
+    jr $t9 
 .end make_fcontext
 .size make_fcontext, .-make_fcontext
 

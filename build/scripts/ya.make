@@ -1,8 +1,8 @@
 OWNER(g:ymake)
 
 PY2TEST()
-
-TEST_SRCS(
+ 
+TEST_SRCS( 
     build_dll_and_java.py
     build_info_gen.py
     build_java_codenav_index.py
@@ -53,7 +53,7 @@ TEST_SRCS(
     ios_wrapper.py
     java_pack_to_file.py
     link_asrc.py
-    link_dyn_lib.py
+    link_dyn_lib.py 
     link_exe.py
     link_fat_obj.py
     link_lib.py
@@ -93,8 +93,8 @@ TEST_SRCS(
     xargs.py
     yield_line.py
     yndexer.py
-)
-
+) 
+ 
 PEERDIR(
     ydb/library/yql/public/udf
 )

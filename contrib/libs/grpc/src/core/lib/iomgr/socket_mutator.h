@@ -33,7 +33,7 @@ struct grpc_socket_mutator_vtable {
   /** Compare socket mutator \a a and \a b */
   int (*compare)(grpc_socket_mutator* a, grpc_socket_mutator* b);
   /** Destroys the socket mutator instance */
-  void (*destroy)(grpc_socket_mutator* mutator);
+  void (*destroy)(grpc_socket_mutator* mutator); 
 };
 /** The Socket Mutator interface allows changes on socket options */
 struct grpc_socket_mutator {

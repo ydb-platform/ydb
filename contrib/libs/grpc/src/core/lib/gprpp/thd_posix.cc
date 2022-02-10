@@ -35,7 +35,7 @@
 #include <unistd.h>
 
 #include "src/core/lib/gpr/useful.h"
-#include "src/core/lib/gprpp/fork.h"
+#include "src/core/lib/gprpp/fork.h" 
 #include "src/core/lib/gprpp/memory.h"
 
 namespace grpc_core {
@@ -136,7 +136,7 @@ class ThreadInternalsPosix : public internal::ThreadInternalsInterface {
 
     GPR_ASSERT(pthread_attr_destroy(&attr) == 0);
 
-    if (!(*success)) {
+    if (!(*success)) { 
       /* don't use gpr_free, as this was allocated using malloc (see above) */
       free(info);
       if (options.tracked()) {

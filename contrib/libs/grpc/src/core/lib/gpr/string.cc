@@ -23,10 +23,10 @@
 #include <ctype.h>
 #include <limits.h>
 #include <stddef.h>
-#include <stdio.h>
+#include <stdio.h> 
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
+#include <time.h> 
 
 #include "y_absl/strings/str_cat.h"
 
@@ -53,29 +53,29 @@ char* gpr_strdup(const char* src) {
 }
 
 TString gpr_format_timespec(gpr_timespec tm) {
-  char time_buffer[35];
-  char ns_buffer[11];  // '.' + 9 digits of precision
-  struct tm* tm_info = localtime((const time_t*)&tm.tv_sec);
-  strftime(time_buffer, sizeof(time_buffer), "%Y-%m-%dT%H:%M:%S", tm_info);
-  snprintf(ns_buffer, 11, ".%09d", tm.tv_nsec);
-  // This loop trims off trailing zeros by inserting a null character that the
-  // right point. We iterate in chunks of three because we want 0, 3, 6, or 9
-  // fractional digits.
-  for (int i = 7; i >= 1; i -= 3) {
-    if (ns_buffer[i] == '0' && ns_buffer[i + 1] == '0' &&
-        ns_buffer[i + 2] == '0') {
-      ns_buffer[i] = '\0';
-      // Edge case in which all fractional digits were 0.
-      if (i == 1) {
-        ns_buffer[0] = '\0';
-      }
-    } else {
-      break;
-    }
-  }
+  char time_buffer[35]; 
+  char ns_buffer[11];  // '.' + 9 digits of precision 
+  struct tm* tm_info = localtime((const time_t*)&tm.tv_sec); 
+  strftime(time_buffer, sizeof(time_buffer), "%Y-%m-%dT%H:%M:%S", tm_info); 
+  snprintf(ns_buffer, 11, ".%09d", tm.tv_nsec); 
+  // This loop trims off trailing zeros by inserting a null character that the 
+  // right point. We iterate in chunks of three because we want 0, 3, 6, or 9 
+  // fractional digits. 
+  for (int i = 7; i >= 1; i -= 3) { 
+    if (ns_buffer[i] == '0' && ns_buffer[i + 1] == '0' && 
+        ns_buffer[i + 2] == '0') { 
+      ns_buffer[i] = '\0'; 
+      // Edge case in which all fractional digits were 0. 
+      if (i == 1) { 
+        ns_buffer[0] = '\0'; 
+      } 
+    } else { 
+      break; 
+    } 
+  } 
   return y_absl::StrCat(time_buffer, ns_buffer, "Z");
-}
-
+} 
+ 
 struct dump_out {
   size_t capacity;
   size_t length;

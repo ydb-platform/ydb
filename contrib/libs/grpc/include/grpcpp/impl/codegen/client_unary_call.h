@@ -47,18 +47,18 @@ class BlockingUnaryCallImpl {
                         grpc::ClientContext* context,
                         const InputMessage& request, OutputMessage* result) {
     ::grpc::CompletionQueue cq(grpc_completion_queue_attributes{
-        GRPC_CQ_CURRENT_VERSION, GRPC_CQ_PLUCK, GRPC_CQ_DEFAULT_POLLING,
-        nullptr});  // Pluckable completion queue
+        GRPC_CQ_CURRENT_VERSION, GRPC_CQ_PLUCK, GRPC_CQ_DEFAULT_POLLING, 
+        nullptr});  // Pluckable completion queue 
     ::grpc::internal::Call call(channel->CreateCall(method, context, &cq));
     CallOpSet<CallOpSendInitialMetadata, CallOpSendMessage,
               CallOpRecvInitialMetadata, CallOpRecvMessage<OutputMessage>,
               CallOpClientSendClose, CallOpClientRecvStatus>
         ops;
-    status_ = ops.SendMessagePtr(&request);
+    status_ = ops.SendMessagePtr(&request); 
     if (!status_.ok()) {
       return;
     }
-    ops.SendInitialMetadata(&context->send_initial_metadata_,
+    ops.SendInitialMetadata(&context->send_initial_metadata_, 
                             context->initial_metadata_flags());
     ops.RecvInitialMetadata(context);
     ops.RecvMessage(result);
@@ -66,17 +66,17 @@ class BlockingUnaryCallImpl {
     ops.ClientSendClose();
     ops.ClientRecvStatus(context, &status_);
     call.PerformOps(&ops);
-    cq.Pluck(&ops);
-    // Some of the ops might fail. If the ops fail in the core layer, status
-    // would reflect the error. But, if the ops fail in the C++ layer, the
-    // status would still be the same as the one returned by gRPC Core. This can
-    // happen if deserialization of the message fails.
-    // TODO(yashykt): If deserialization fails, but the status received is OK,
-    // then it might be a good idea to change the status to something better
-    // than StatusCode::UNIMPLEMENTED to reflect this.
-    if (!ops.got_message && status_.ok()) {
-      status_ = Status(StatusCode::UNIMPLEMENTED,
-                       "No message returned for unary request");
+    cq.Pluck(&ops); 
+    // Some of the ops might fail. If the ops fail in the core layer, status 
+    // would reflect the error. But, if the ops fail in the C++ layer, the 
+    // status would still be the same as the one returned by gRPC Core. This can 
+    // happen if deserialization of the message fails. 
+    // TODO(yashykt): If deserialization fails, but the status received is OK, 
+    // then it might be a good idea to change the status to something better 
+    // than StatusCode::UNIMPLEMENTED to reflect this. 
+    if (!ops.got_message && status_.ok()) { 
+      status_ = Status(StatusCode::UNIMPLEMENTED, 
+                       "No message returned for unary request"); 
     }
   }
   Status status() { return status_; }

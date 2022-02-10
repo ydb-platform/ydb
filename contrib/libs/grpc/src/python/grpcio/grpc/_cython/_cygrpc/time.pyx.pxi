@@ -23,7 +23,7 @@ cdef gpr_timespec _timespec_from_time(object time) except *:
     )
 
 
-cdef double _time_from_timespec(gpr_timespec timespec) except *:
+cdef double _time_from_timespec(gpr_timespec timespec) except *: 
   cdef gpr_timespec real_timespec = gpr_convert_clock_type(
       timespec, GPR_CLOCK_REALTIME)
   return gpr_timespec_to_micros(real_timespec) / GPR_US_PER_SEC

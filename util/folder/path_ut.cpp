@@ -248,21 +248,21 @@ Y_UNIT_TEST_SUITE(TFsPathTests) {
         UNIT_ASSERT_VALUES_EQUAL(expected, children);
     }
 
-#ifdef _unix_ 
+#ifdef _unix_
     Y_UNIT_TEST(MkDirMode) {
-        TTestDirectory td("MkDirMode"); 
-        TFsPath subDir = td.Child("subdir"); 
-        const int mode = MODE0775; 
-        subDir.MkDir(mode); 
-        TFileStat stat; 
-        UNIT_ASSERT(subDir.Stat(stat)); 
-        // mkdir(2) places umask(2) on mode argument. 
-        const int mask = Umask(0); 
-        Umask(mask); 
+        TTestDirectory td("MkDirMode");
+        TFsPath subDir = td.Child("subdir");
+        const int mode = MODE0775;
+        subDir.MkDir(mode);
+        TFileStat stat;
+        UNIT_ASSERT(subDir.Stat(stat));
+        // mkdir(2) places umask(2) on mode argument.
+        const int mask = Umask(0);
+        Umask(mask);
         UNIT_ASSERT_VALUES_EQUAL(stat.Mode& MODE0777, mode & ~mask);
-    } 
-#endif 
- 
+    }
+#endif
+
     Y_UNIT_TEST(Cwd) {
         UNIT_ASSERT_VALUES_EQUAL(TFsPath::Cwd().RealPath(), TFsPath(".").RealPath());
     }

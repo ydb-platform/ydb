@@ -210,10 +210,10 @@ struct TSockAddrInet: public sockaddr_in, public ISockAddr {
         Set(ip, port);
     }
 
-    TSockAddrInet(const char* ip, TIpPort port) { 
-        Set(IpFromString(ip), port); 
-    } 
- 
+    TSockAddrInet(const char* ip, TIpPort port) {
+        Set(IpFromString(ip), port);
+    }
+
     socklen_t Size() const override {
         return sizeof(sockaddr_in);
     }
@@ -272,73 +272,73 @@ struct TSockAddrInet: public sockaddr_in, public ISockAddr {
 };
 
 struct TSockAddrInet6: public sockaddr_in6, public ISockAddr {
-    TSockAddrInet6() { 
-        Clear(); 
-    } 
- 
-    TSockAddrInet6(const char* ip6, const TIpPort port) { 
-        Set(ip6, port); 
-    } 
- 
+    TSockAddrInet6() {
+        Clear();
+    }
+
+    TSockAddrInet6(const char* ip6, const TIpPort port) {
+        Set(ip6, port);
+    }
+
     socklen_t Size() const override {
-        return sizeof(sockaddr_in6); 
-    } 
- 
+        return sizeof(sockaddr_in6);
+    }
+
     socklen_t Len() const override {
-        return Size(); 
-    } 
- 
+        return Size();
+    }
+
     inline void Clear() noexcept {
-        Zero(*(sockaddr_in6*)this); 
-    } 
- 
+        Zero(*(sockaddr_in6*)this);
+    }
+
     inline void Set(const char* ip6, const TIpPort port) noexcept {
-        Clear(); 
-        sin6_family = AF_INET6; 
-        inet_pton(AF_INET6, ip6, &sin6_addr); 
-        sin6_port = HostToInet(port); 
-    } 
- 
+        Clear();
+        sin6_family = AF_INET6;
+        inet_pton(AF_INET6, ip6, &sin6_addr);
+        sin6_port = HostToInet(port);
+    }
+
     sockaddr* SockAddr() override {
         return (struct sockaddr*)(struct sockaddr_in6*)this;
-    } 
- 
+    }
+
     const sockaddr* SockAddr() const override {
         return (const struct sockaddr*)(const struct sockaddr_in6*)this;
-    } 
- 
+    }
+
     TString ToString() const override {
-        return "[" + GetIp() + "]:" + ::ToString(InetToHost(sin6_port)); 
-    } 
- 
+        return "[" + GetIp() + "]:" + ::ToString(InetToHost(sin6_port));
+    }
+
     int Bind(SOCKET s, ui16 mode) const override {
         Y_UNUSED(mode);
-        int ret = bind(s, SockAddr(), Len()); 
-        if (ret < 0) { 
-            return -errno; 
-        } 
-        socklen_t len = Len(); 
-        if (getsockname(s, (struct sockaddr*)(SockAddr()), &len) < 0) { 
-            return -WSAGetLastError(); 
-        } 
-        return 0; 
-    } 
- 
+        int ret = bind(s, SockAddr(), Len());
+        if (ret < 0) {
+            return -errno;
+        }
+        socklen_t len = Len();
+        if (getsockname(s, (struct sockaddr*)(SockAddr()), &len) < 0) {
+            return -WSAGetLastError();
+        }
+        return 0;
+    }
+
     TString GetIp() const noexcept {
-        char ip6[INET6_ADDRSTRLEN]; 
+        char ip6[INET6_ADDRSTRLEN];
         inet_ntop(AF_INET6, (void*)&sin6_addr, ip6, INET6_ADDRSTRLEN);
         return TString(ip6);
-    } 
- 
+    }
+
     TIpPort GetPort() const noexcept {
-        return InetToHost(sin6_port); 
-    } 
+        return InetToHost(sin6_port);
+    }
 
     void SetPort(TIpPort port) noexcept {
         sin6_port = HostToInet(port);
     }
-}; 
- 
+};
+
 using TSockAddrLocalStream = TSockAddrLocal;
 using TSockAddrLocalDgram = TSockAddrLocal;
 using TSockAddrInetStream = TSockAddrInet;
@@ -496,19 +496,19 @@ public:
     }
 };
 
-class TInet6DgramSocket: public TDgramSocket { 
-public: 
-    TInet6DgramSocket(SOCKET fd) 
-        : TDgramSocket(fd) 
-    { 
-    } 
- 
-    TInet6DgramSocket() 
-        : TDgramSocket(socket(AF_INET6, SOCK_DGRAM, 0)) 
-    { 
-    } 
-}; 
- 
+class TInet6DgramSocket: public TDgramSocket {
+public:
+    TInet6DgramSocket(SOCKET fd)
+        : TDgramSocket(fd)
+    {
+    }
+
+    TInet6DgramSocket()
+        : TDgramSocket(socket(AF_INET6, SOCK_DGRAM, 0))
+    {
+    }
+};
+
 class TLocalStreamSocket: public TStreamSocket {
 public:
     TLocalStreamSocket(SOCKET fd)
@@ -535,19 +535,19 @@ public:
     }
 };
 
-class TInet6StreamSocket: public TStreamSocket { 
-public: 
-    TInet6StreamSocket(SOCKET fd) 
-        : TStreamSocket(fd) 
-    { 
-    } 
- 
-    TInet6StreamSocket() 
-        : TStreamSocket(socket(AF_INET6, SOCK_STREAM, 0)) 
-    { 
-    } 
-}; 
- 
+class TInet6StreamSocket: public TStreamSocket {
+public:
+    TInet6StreamSocket(SOCKET fd)
+        : TStreamSocket(fd)
+    {
+    }
+
+    TInet6StreamSocket()
+        : TStreamSocket(socket(AF_INET6, SOCK_STREAM, 0))
+    {
+    }
+};
+
 class TStreamSocketInput: public IInputStream {
 public:
     TStreamSocketInput(TStreamSocket* socket)

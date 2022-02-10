@@ -1,13 +1,13 @@
 #define JEMALLOC_STATS_C_
 #include "jemalloc/internal/jemalloc_preamble.h"
 #include "jemalloc/internal/jemalloc_internal_includes.h"
- 
+
 #include "jemalloc/internal/assert.h"
 #include "jemalloc/internal/ctl.h"
 #include "jemalloc/internal/emitter.h"
 #include "jemalloc/internal/mutex.h"
 #include "jemalloc/internal/mutex_prof.h"
- 
+
 const char *global_mutex_names[mutex_prof_num_global_mutexes] = {
 #define OP(mtx) #mtx,
 	MUTEX_PROF_GLOBAL_MUTEXES
@@ -21,37 +21,37 @@ const char *arena_mutex_names[mutex_prof_num_arena_mutexes] = {
 };
 
 #define CTL_GET(n, v, t) do {						\
-	size_t sz = sizeof(t);						\ 
+	size_t sz = sizeof(t);						\
 	xmallctl(n, (void *)v, &sz, NULL, 0);				\
-} while (0) 
- 
+} while (0)
+
 #define CTL_M2_GET(n, i, v, t) do {					\
 	size_t mib[CTL_MAX_DEPTH];					\
-	size_t miblen = sizeof(mib) / sizeof(size_t);			\ 
-	size_t sz = sizeof(t);						\ 
-	xmallctlnametomib(n, mib, &miblen);				\ 
+	size_t miblen = sizeof(mib) / sizeof(size_t);			\
+	size_t sz = sizeof(t);						\
+	xmallctlnametomib(n, mib, &miblen);				\
 	mib[2] = (i);							\
 	xmallctlbymib(mib, miblen, (void *)v, &sz, NULL, 0);		\
-} while (0) 
- 
+} while (0)
+
 #define CTL_M2_M4_GET(n, i, j, v, t) do {				\
 	size_t mib[CTL_MAX_DEPTH];					\
-	size_t miblen = sizeof(mib) / sizeof(size_t);			\ 
-	size_t sz = sizeof(t);						\ 
-	xmallctlnametomib(n, mib, &miblen);				\ 
+	size_t miblen = sizeof(mib) / sizeof(size_t);			\
+	size_t sz = sizeof(t);						\
+	xmallctlnametomib(n, mib, &miblen);				\
 	mib[2] = (i);							\
 	mib[4] = (j);							\
 	xmallctlbymib(mib, miblen, (void *)v, &sz, NULL, 0);		\
-} while (0) 
- 
-/******************************************************************************/ 
-/* Data. */ 
- 
+} while (0)
+
+/******************************************************************************/
+/* Data. */
+
 bool opt_stats_print = false;
 char opt_stats_print_opts[stats_print_tot_num_options+1] = "";
- 
-/******************************************************************************/ 
- 
+
+/******************************************************************************/
+
 static uint64_t
 rate_per_second(uint64_t value, uint64_t uptime_ns) {
 	uint64_t billion = 1000000000;
@@ -65,7 +65,7 @@ rate_per_second(uint64_t value, uint64_t uptime_ns) {
 		return value / uptime_s;
 	}
 }
- 
+
 /* Calculate x.yyy and output a string (takes a fixed sized char array). */
 static bool
 get_rate_str(uint64_t dividend, uint64_t divisor, char str[6]) {
@@ -76,7 +76,7 @@ get_rate_str(uint64_t dividend, uint64_t divisor, char str[6]) {
 	if (dividend > 0) {
 		assert(UINT64_MAX / dividend >= 1000);
 	}
- 
+
 	unsigned n = (unsigned)((dividend * 1000) / divisor);
 	if (n < 10) {
 		malloc_snprintf(str, 6, "0.00%u", n);
@@ -92,7 +92,7 @@ get_rate_str(uint64_t dividend, uint64_t divisor, char str[6]) {
 }
 
 #define MUTEX_CTL_STR_MAX_LENGTH 128
-static void 
+static void
 gen_mutex_ctl_str(char *str, size_t buf_len, const char *prefix,
     const char *mutex, const char *counter) {
 	malloc_snprintf(str, buf_len, "stats.%s.%s.%s", prefix, mutex, counter);
@@ -268,17 +268,17 @@ mutex_stats_emit(emitter_t *emitter, emitter_row_t *row,
 
 static void
 stats_arena_bins_print(emitter_t *emitter, bool mutex, unsigned i, uint64_t uptime) {
-	size_t page; 
+	size_t page;
 	bool in_gap, in_gap_prev;
 	unsigned nbins, j;
- 
-	CTL_GET("arenas.page", &page, size_t); 
- 
-	CTL_GET("arenas.nbins", &nbins, unsigned); 
- 
+
+	CTL_GET("arenas.page", &page, size_t);
+
+	CTL_GET("arenas.nbins", &nbins, unsigned);
+
 	emitter_row_t header_row;
 	emitter_row_init(&header_row);
- 
+
 	emitter_row_t row;
 	emitter_row_init(&row);
 
@@ -423,10 +423,10 @@ stats_arena_bins_print(emitter_t *emitter, bool mutex, unsigned i, uint64_t upti
 				 * no meaningful utilization can be computed.
 				 */
 				malloc_snprintf(util, sizeof(util), " race");
-			} else { 
+			} else {
 				not_reached();
-			} 
-		} 
+			}
+		}
 
 		col_size.size_val = reg_size;
 		col_ind.unsigned_val = j;
@@ -458,22 +458,22 @@ stats_arena_bins_print(emitter_t *emitter, bool mutex, unsigned i, uint64_t upti
 		 */
 
 		emitter_table_row(emitter, &row);
-	} 
+	}
 	emitter_json_array_end(emitter); /* Close "bins". */
 
 	if (in_gap) {
 		emitter_table_printf(emitter, "                     ---\n");
-	} 
-} 
- 
-static void 
+	}
+}
+
+static void
 stats_arena_lextents_print(emitter_t *emitter, unsigned i, uint64_t uptime) {
 	unsigned nbins, nlextents, j;
 	bool in_gap, in_gap_prev;
- 
+
 	CTL_GET("arenas.nbins", &nbins, unsigned);
 	CTL_GET("arenas.nlextents", &nlextents, unsigned);
- 
+
 	emitter_row_t header_row;
 	emitter_row_init(&header_row);
 	emitter_row_t row;
@@ -497,9 +497,9 @@ stats_arena_lextents_print(emitter_t *emitter, unsigned i, uint64_t uptime) {
 	emitter_json_array_kv_begin(emitter, "lextents");
 
 	for (j = 0, in_gap = false; j < nlextents; j++) {
-		uint64_t nmalloc, ndalloc, nrequests; 
+		uint64_t nmalloc, ndalloc, nrequests;
 		size_t lextent_size, curlextents;
- 
+
 		CTL_M2_M4_GET("stats.arenas.0.lextents.0.nmalloc", i, j,
 		    &nmalloc, uint64_t);
 		CTL_M2_M4_GET("stats.arenas.0.lextents.0.ndalloc", i, j,
@@ -512,7 +512,7 @@ stats_arena_lextents_print(emitter_t *emitter, unsigned i, uint64_t uptime) {
 		if (in_gap_prev && !in_gap) {
 			emitter_table_printf(emitter,
 			    "                     ---\n");
-		} 
+		}
 
 		CTL_M2_GET("arenas.lextent.0.size", j, &lextent_size, size_t);
 		CTL_M2_M4_GET("stats.arenas.0.lextents.0.curlextents", i, j,
@@ -537,14 +537,14 @@ stats_arena_lextents_print(emitter_t *emitter, unsigned i, uint64_t uptime) {
 		if (!in_gap) {
 			emitter_table_row(emitter, &row);
 		}
-	} 
+	}
 	emitter_json_array_end(emitter); /* Close "lextents". */
 	if (in_gap) {
 		emitter_table_printf(emitter, "                     ---\n");
 	}
-} 
- 
-static void 
+}
+
+static void
 stats_arena_extents_print(emitter_t *emitter, unsigned i) {
 	unsigned j;
 	bool in_gap, in_gap_prev;
@@ -660,36 +660,36 @@ stats_arena_mutexes_print(emitter_t *emitter, unsigned arena_ind, uint64_t uptim
 static void
 stats_arena_print(emitter_t *emitter, unsigned i, bool bins, bool large,
     bool mutex, bool extents) {
-	unsigned nthreads; 
-	const char *dss; 
+	unsigned nthreads;
+	const char *dss;
 	ssize_t dirty_decay_ms, muzzy_decay_ms;
 	size_t page, pactive, pdirty, pmuzzy, mapped, retained;
 	size_t base, internal, resident, metadata_thp, extent_avail;
 	uint64_t dirty_npurge, dirty_nmadvise, dirty_purged;
 	uint64_t muzzy_npurge, muzzy_nmadvise, muzzy_purged;
-	size_t small_allocated; 
+	size_t small_allocated;
 	uint64_t small_nmalloc, small_ndalloc, small_nrequests, small_nfills,
 	    small_nflushes;
-	size_t large_allocated; 
+	size_t large_allocated;
 	uint64_t large_nmalloc, large_ndalloc, large_nrequests, large_nfills,
 	    large_nflushes;
 	size_t tcache_bytes, abandoned_vm;
 	uint64_t uptime;
- 
-	CTL_GET("arenas.page", &page, size_t); 
- 
+
+	CTL_GET("arenas.page", &page, size_t);
+
 	CTL_M2_GET("stats.arenas.0.nthreads", i, &nthreads, unsigned);
 	emitter_kv(emitter, "nthreads", "assigned threads",
 	    emitter_type_unsigned, &nthreads);
- 
+
 	CTL_M2_GET("stats.arenas.0.uptime", i, &uptime, uint64_t);
 	emitter_kv(emitter, "uptime_ns", "uptime", emitter_type_uint64,
 	    &uptime);
- 
+
 	CTL_M2_GET("stats.arenas.0.dss", i, &dss, const char *);
 	emitter_kv(emitter, "dss", "dss allocation precedence",
 	    emitter_type_string, &dss);
- 
+
 	CTL_M2_GET("stats.arenas.0.dirty_decay_ms", i, &dirty_decay_ms,
 	    ssize_t);
 	CTL_M2_GET("stats.arenas.0.muzzy_decay_ms", i, &muzzy_decay_ms,
@@ -705,7 +705,7 @@ stats_arena_print(emitter_t *emitter, unsigned i, bool bins, bool large,
 	CTL_M2_GET("stats.arenas.0.muzzy_nmadvise", i, &muzzy_nmadvise,
 	    uint64_t);
 	CTL_M2_GET("stats.arenas.0.muzzy_purged", i, &muzzy_purged, uint64_t);
- 
+
 	emitter_row_t decay_row;
 	emitter_row_init(&decay_row);
 
@@ -764,11 +764,11 @@ stats_arena_print(emitter_t *emitter, unsigned i, bool bins, bool large,
 	} else {
 		col_decay_time.type = emitter_type_title;
 		col_decay_time.str_val = "N/A";
-	} 
- 
+	}
+
 	col_decay_npages.type = emitter_type_size;
 	col_decay_npages.size_val = pdirty;
- 
+
 	col_decay_sweeps.type = emitter_type_uint64;
 	col_decay_sweeps.uint64_val = dirty_npurge;
 
@@ -789,22 +789,22 @@ stats_arena_print(emitter_t *emitter, unsigned i, bool bins, bool large,
 	} else {
 		col_decay_time.type = emitter_type_title;
 		col_decay_time.str_val = "N/A";
-	} 
- 
+	}
+
 	col_decay_npages.type = emitter_type_size;
 	col_decay_npages.size_val = pmuzzy;
- 
+
 	col_decay_sweeps.type = emitter_type_uint64;
 	col_decay_sweeps.uint64_val = muzzy_npurge;
- 
+
 	col_decay_madvises.type = emitter_type_uint64;
 	col_decay_madvises.uint64_val = muzzy_nmadvise;
- 
+
 	col_decay_purged.type = emitter_type_uint64;
 	col_decay_purged.uint64_val = muzzy_purged;
- 
+
 	emitter_table_row(emitter, &decay_row);
- 
+
 	/* Small / large / total allocation counts. */
 	emitter_row_t alloc_count_row;
 	emitter_row_init(&alloc_count_row);
@@ -1102,33 +1102,33 @@ stats_general_print(emitter_t *emitter) {
 
 #undef OPT_WRITE
 #undef OPT_WRITE_MUTABLE
-#undef OPT_WRITE_BOOL 
+#undef OPT_WRITE_BOOL
 #undef OPT_WRITE_BOOL_MUTABLE
 #undef OPT_WRITE_UNSIGNED
-#undef OPT_WRITE_SSIZE_T 
+#undef OPT_WRITE_SSIZE_T
 #undef OPT_WRITE_SSIZE_T_MUTABLE
-#undef OPT_WRITE_CHAR_P 
- 
+#undef OPT_WRITE_CHAR_P
+
 	/* prof. */
 	if (config_prof) {
 		emitter_dict_begin(emitter, "prof", "Profiling settings");
- 
+
 		CTL_GET("prof.thread_active_init", &bv, bool);
 		emitter_kv(emitter, "thread_active_init",
 		    "prof.thread_active_init", emitter_type_bool, &bv);
- 
+
 		CTL_GET("prof.active", &bv, bool);
 		emitter_kv(emitter, "active", "prof.active", emitter_type_bool,
 		    &bv);
- 
+
 		CTL_GET("prof.gdump", &bv, bool);
 		emitter_kv(emitter, "gdump", "prof.gdump", emitter_type_bool,
 		    &bv);
- 
+
 		CTL_GET("prof.interval", &u64v, uint64_t);
 		emitter_kv(emitter, "interval", "prof.interval",
 		    emitter_type_uint64, &u64v);
- 
+
 		CTL_GET("prof.lg_sample", &ssv, ssize_t);
 		emitter_kv(emitter, "lg_sample", "prof.lg_sample",
 		    emitter_type_ssize, &ssv);
@@ -1203,10 +1203,10 @@ stats_general_print(emitter_t *emitter) {
 			    &u32v);
 
 			emitter_json_object_end(emitter);
-		} 
+		}
 		emitter_json_array_end(emitter); /* Close "bin". */
 	}
- 
+
 	unsigned nlextents;
 	CTL_GET("arenas.nlextents", &nlextents, unsigned);
 	emitter_kv(emitter, "nlextents", "Number of large size classes",
@@ -1222,13 +1222,13 @@ stats_general_print(emitter_t *emitter) {
 			    &sv);
 
 			emitter_json_object_end(emitter);
-		} 
+		}
 		emitter_json_array_end(emitter); /* Close "lextent". */
-	} 
- 
+	}
+
 	emitter_json_object_end(emitter); /* Close "arenas" */
 }
- 
+
 static void
 stats_print_helper(emitter_t *emitter, bool merged, bool destroyed,
     bool unmerged, bool bins, bool large, bool mutex, bool extents) {
@@ -1240,7 +1240,7 @@ stats_print_helper(emitter_t *emitter, bool merged, bool destroyed,
 	    retained;
 	size_t num_background_threads;
 	uint64_t background_thread_num_runs, background_thread_run_interval;
- 
+
 	CTL_GET("stats.allocated", &allocated, size_t);
 	CTL_GET("stats.active", &active, size_t);
 	CTL_GET("stats.metadata", &metadata, size_t);
@@ -1248,7 +1248,7 @@ stats_print_helper(emitter_t *emitter, bool merged, bool destroyed,
 	CTL_GET("stats.resident", &resident, size_t);
 	CTL_GET("stats.mapped", &mapped, size_t);
 	CTL_GET("stats.retained", &retained, size_t);
- 
+
 	if (have_background_thread) {
 		CTL_GET("stats.background_thread.num_threads",
 		    &num_background_threads, size_t);
@@ -1261,7 +1261,7 @@ stats_print_helper(emitter_t *emitter, bool merged, bool destroyed,
 		background_thread_num_runs = 0;
 		background_thread_run_interval = 0;
 	}
- 
+
 	/* Generic global stats. */
 	emitter_json_object_kv_begin(emitter, "stats");
 	emitter_json_kv(emitter, "allocated", emitter_type_size, &allocated);
@@ -1272,12 +1272,12 @@ stats_print_helper(emitter_t *emitter, bool merged, bool destroyed,
 	emitter_json_kv(emitter, "resident", emitter_type_size, &resident);
 	emitter_json_kv(emitter, "mapped", emitter_type_size, &mapped);
 	emitter_json_kv(emitter, "retained", emitter_type_size, &retained);
- 
+
 	emitter_table_printf(emitter, "Allocated: %zu, active: %zu, "
 	    "metadata: %zu (n_thp %zu), resident: %zu, mapped: %zu, "
 	    "retained: %zu\n", allocated, active, metadata, metadata_thp,
 	    resident, mapped, retained);
- 
+
 	/* Background thread stats. */
 	emitter_json_object_kv_begin(emitter, "background_thread");
 	emitter_json_kv(emitter, "num_threads", emitter_type_size,
@@ -1287,7 +1287,7 @@ stats_print_helper(emitter_t *emitter, bool merged, bool destroyed,
 	emitter_json_kv(emitter, "run_interval", emitter_type_uint64,
 	    &background_thread_run_interval);
 	emitter_json_object_end(emitter); /* Close "background_thread". */
- 
+
 	emitter_table_printf(emitter, "Background threads: %zu, "
 	    "num_runs: %"FMTu64", run_interval: %"FMTu64" ns\n",
 	    num_background_threads, background_thread_num_runs,
@@ -1314,18 +1314,18 @@ stats_print_helper(emitter_t *emitter, bool merged, bool destroyed,
 			emitter_json_object_kv_begin(emitter, global_mutex_names[i]);
 			mutex_stats_emit(emitter, &row, col64, col32);
 			emitter_json_object_end(emitter);
-		} 
- 
+		}
+
 		emitter_json_object_end(emitter); /* Close "mutexes". */
 	}
- 
+
 	emitter_json_object_end(emitter); /* Close "stats". */
- 
+
 	if (merged || destroyed || unmerged) {
 		unsigned narenas;
- 
+
 		emitter_json_object_kv_begin(emitter, "stats.arenas");
- 
+
 		CTL_GET("arenas.narenas", &narenas, unsigned);
 		size_t mib[3];
 		size_t miblen = sizeof(mib) / sizeof(size_t);
@@ -1385,12 +1385,12 @@ stats_print_helper(emitter_t *emitter, bool merged, bool destroyed,
 					    large, mutex, extents);
 					/* Close "<arena-ind>". */
 					emitter_json_object_end(emitter);
-				} 
-			} 
-		} 
+				}
+			}
+		}
 		emitter_json_object_end(emitter); /* Close "stats.arenas". */
-	} 
-} 
+	}
+}
 
 void
 stats_print(void (*write_cb)(void *, const char *), void *cbopaque,

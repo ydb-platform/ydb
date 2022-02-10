@@ -10,7 +10,7 @@
 #include <util/string/cast.h>
 #include <util/system/fstat.h>
 #include <util/system/platform.h>
-#include <util/system/sysstat.h> 
+#include <util/system/sysstat.h>
 #include <util/system/yassert.h>
 
 #include <utility>
@@ -135,22 +135,22 @@ public:
 
     TFsPath Child(const TString& name) const;
 
-    /** 
-     * @brief create this directory 
-     * 
-     * @param mode specifies permissions to use as described in mkdir(2), makes sense only on Unix-like systems. 
+    /**
+     * @brief create this directory
+     *
+     * @param mode specifies permissions to use as described in mkdir(2), makes sense only on Unix-like systems.
      *
      * Nothing to do if dir exists.
-     */ 
-    void MkDir(const int mode = MODE0777) const; 
+     */
+    void MkDir(const int mode = MODE0777) const;
 
-    /** 
-     * @brief create this directory and all parent directories as needed 
-     * 
-     * @param mode specifies permissions to use as described in mkdir(2), makes sense only on Unix-like systems. 
-     */ 
-    void MkDirs(const int mode = MODE0777) const; 
- 
+    /**
+     * @brief create this directory and all parent directories as needed
+     *
+     * @param mode specifies permissions to use as described in mkdir(2), makes sense only on Unix-like systems.
+     */
+    void MkDirs(const int mode = MODE0777) const;
+
     // XXX: rewrite to return iterator
     void List(TVector<TFsPath>& children) const;
     void ListNames(TVector<TString>& children) const;

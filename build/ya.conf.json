@@ -3507,7 +3507,7 @@
                     "default": true
                 }
             ]
-        }, 
+        },
         "ag": {
             "tools": {
                 "ag": {
@@ -7024,20 +7024,20 @@
             },
             "executable": "ninja"
         },
-        "kwfeed": { 
-            "formula": { 
+        "kwfeed": {
+            "formula": {
                 "sandbox_id": 36077631,
-                "match": "KWFeed" 
-            }, 
-            "executable": { 
+                "match": "KWFeed"
+            },
+            "executable": {
                 "kwfeed": [
                     "kwfeed"
                 ],
                 "metaquery.sh": [
                     "metaquery.sh"
                 ]
-            } 
-        }, 
+            }
+        },
         "protobin_diff": {
             "formula": {
                 "sandbox_id": 28621470,
@@ -7082,16 +7082,16 @@
                 ]
             }
         },
-        "kwmqbuild": { 
-            "formula": { 
+        "kwmqbuild": {
+            "formula": {
                 "sandbox_id": 41067877,
-                "match": "KWMQBuild" 
-            }, 
-            "executable": { 
+                "match": "KWMQBuild"
+            },
+            "executable": {
                 "kwmqbuild": [
                     "kwmqbuild"
                 ]
-            } 
+            }
         },
         "gpt": {
             "formula": {

@@ -497,9 +497,9 @@ void TBusSessionImpl::Listen(const TVector<TBindResult>& bindTo, TBusMessageQueu
         } else {
             Y_VERIFY(actualPort == br.Addr.GetPort(), "state check");
         }
-        if (Config.SocketToS >= 0) { 
+        if (Config.SocketToS >= 0) {
             SetSocketToS(*br.Socket, &(br.Addr), Config.SocketToS);
-        } 
+        }
 
         TAcceptorPtr acceptor(new TAcceptor(this, ++LastAcceptorId, br.Socket->Release(), br.Addr));
 

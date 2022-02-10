@@ -1,6 +1,6 @@
 #ifndef JEMALLOC_INTERNAL_TSD_H
 #define JEMALLOC_INTERNAL_TSD_H
- 
+
 #include "jemalloc/internal/arena_types.h"
 #include "jemalloc/internal/assert.h"
 #include "jemalloc/internal/bin_types.h"
@@ -12,7 +12,7 @@
 #include "jemalloc/internal/tcache_structs.h"
 #include "jemalloc/internal/util.h"
 #include "jemalloc/internal/witness.h"
- 
+
 /*
  * Thread-Specific-Data layout
  * --- data accessed on tcache fast path: state, rtree_ctx, stats, prof ---
@@ -58,8 +58,8 @@ typedef void (*test_callback_t)(int *);
 #else
 #  define MALLOC_TEST_TSD
 #  define MALLOC_TEST_TSD_INITIALIZER
-#endif 
- 
+#endif
+
 /*  O(name,			type,			nullable type */
 #define MALLOC_TSD							\
     O(tcache_enabled,		bool,			bool)		\
@@ -114,14 +114,14 @@ void tsd_prefork(tsd_t *tsd);
 void tsd_postfork_parent(tsd_t *tsd);
 void tsd_postfork_child(tsd_t *tsd);
 
-/* 
+/*
  * Call ..._inc when your module wants to take all threads down the slow paths,
  * and ..._dec when it no longer needs to.
- */ 
+ */
 void tsd_global_slow_inc(tsdn_t *tsdn);
 void tsd_global_slow_dec(tsdn_t *tsdn);
 bool tsd_global_slow();
- 
+
 enum {
 	/* Common case --> jnz. */
 	tsd_state_nominal = 0,
@@ -143,7 +143,7 @@ enum {
 	 * process of being born / dying.
 	 */
 	tsd_state_nominal_max = 2,
- 
+
 	/*
 	 * A thread might free() during its death as its only allocator action;
 	 * in such scenarios, we need tsd, but set up in such a way that no
@@ -174,13 +174,13 @@ enum {
 #  define tsd_atomic_load atomic_load_u8
 #  define tsd_atomic_store atomic_store_u8
 #  define tsd_atomic_exchange atomic_exchange_u8
-#else 
+#else
 #  define tsd_state_t atomic_u32_t
 #  define tsd_atomic_load atomic_load_u32
 #  define tsd_atomic_store atomic_store_u32
 #  define tsd_atomic_exchange atomic_exchange_u32
-#endif 
- 
+#endif
+
 /* The actual tsd. */
 struct tsd_s {
 	/*
@@ -242,16 +242,16 @@ tsdn_tsd(tsdn_t *tsdn) {
  * header files to avoid cluttering this file.  They define tsd_boot0,
  * tsd_boot1, tsd_boot, tsd_booted_get, tsd_get_allocates, tsd_get, and tsd_set.
  */
-#ifdef JEMALLOC_MALLOC_THREAD_CLEANUP 
+#ifdef JEMALLOC_MALLOC_THREAD_CLEANUP
 #error #include "jemalloc/internal/tsd_malloc_thread_cleanup.h"
-#elif (defined(JEMALLOC_TLS)) 
+#elif (defined(JEMALLOC_TLS))
 #include "jemalloc/internal/tsd_tls.h"
-#elif (defined(_WIN32)) 
+#elif (defined(_WIN32))
 #include "jemalloc/internal/tsd_win.h"
-#else 
+#else
 #include "jemalloc/internal/tsd_generic.h"
-#endif 
- 
+#endif
+
 /*
  * tsd_foop_get_unsafe(tsd) returns a pointer to the thread-local instance of
  * foo.  This omits some safety checks, and so can be used during tsd
@@ -261,7 +261,7 @@ tsdn_tsd(tsdn_t *tsdn) {
 JEMALLOC_ALWAYS_INLINE t *						\
 tsd_##n##p_get_unsafe(tsd_t *tsd) {					\
 	return &tsd->TSD_MANGLE(n);					\
-} 
+}
 MALLOC_TSD
 #undef O
 
@@ -280,7 +280,7 @@ tsd_##n##p_get(tsd_t *tsd) {						\
 	    state == tsd_state_reincarnated ||				\
 	    state == tsd_state_minimal_initialized);			\
 	return tsd_##n##p_get_unsafe(tsd);				\
-} 
+}
 MALLOC_TSD
 #undef O
 
@@ -293,10 +293,10 @@ JEMALLOC_ALWAYS_INLINE nt *						\
 tsdn_##n##p_get(tsdn_t *tsdn) {						\
 	if (tsdn_null(tsdn)) {						\
 		return NULL;						\
-	}								\ 
+	}								\
 	tsd_t *tsd = tsdn_tsd(tsdn);					\
 	return (nt *)tsd_##n##p_get(tsd);				\
-} 
+}
 MALLOC_TSD
 #undef O
 
@@ -305,10 +305,10 @@ MALLOC_TSD
 JEMALLOC_ALWAYS_INLINE t						\
 tsd_##n##_get(tsd_t *tsd) {						\
 	return *tsd_##n##p_get(tsd);					\
-} 
+}
 MALLOC_TSD
 #undef O
- 
+
 /* tsd_foo_set(tsd, val) updates the thread-local instance of foo to be val. */
 #define O(n, t, nt)							\
 JEMALLOC_ALWAYS_INLINE void						\
@@ -319,7 +319,7 @@ tsd_##n##_set(tsd_t *tsd, t val) {					\
 }
 MALLOC_TSD
 #undef O
- 
+
 JEMALLOC_ALWAYS_INLINE void
 tsd_assert_fast(tsd_t *tsd) {
 	/*
@@ -330,21 +330,21 @@ tsd_assert_fast(tsd_t *tsd) {
 	assert(!malloc_slow && tsd_tcache_enabled_get(tsd) &&
 	    tsd_reentrancy_level_get(tsd) == 0);
 }
- 
+
 JEMALLOC_ALWAYS_INLINE bool
 tsd_fast(tsd_t *tsd) {
 	bool fast = (tsd_state_get(tsd) == tsd_state_nominal);
 	if (fast) {
 		tsd_assert_fast(tsd);
 	}
- 
+
 	return fast;
 }
- 
+
 JEMALLOC_ALWAYS_INLINE tsd_t *
 tsd_fetch_impl(bool init, bool minimal) {
 	tsd_t *tsd = tsd_get(init);
- 
+
 	if (!init && tsd_get_allocates() && tsd == NULL) {
 		return NULL;
 	}

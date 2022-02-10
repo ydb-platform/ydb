@@ -116,10 +116,10 @@ public:
         return Backend_->FiltrationLevel();
     }
 
-    inline size_t BackEndQueueSize() const { 
+    inline size_t BackEndQueueSize() const {
         return Backend_->QueueSize();
-    } 
- 
+    }
+
 private:
     THolder<TLogBackend> Backend_;
     ELogPriority DefaultPriority_ = LOG_DEF_PRIORITY;
@@ -246,7 +246,7 @@ void TLog::Write(const char* data, size_t len) const {
 void TLog::SetFormatter(TLogFormatter formatter) noexcept {
     Formatter_ = std::move(formatter);
 }
- 
-size_t TLog::BackEndQueueSize() const { 
-    return Impl_->BackEndQueueSize(); 
-} 
+
+size_t TLog::BackEndQueueSize() const {
+    return Impl_->BackEndQueueSize();
+}

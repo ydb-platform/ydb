@@ -75,7 +75,7 @@ public:
     // Call `ReopenLogNoFlush()` of the underlying backend.
     void ReopenLogNoFlush();
     // Call `QueueSize()` of the underlying backend.
-    size_t BackEndQueueSize() const; 
+    size_t BackEndQueueSize() const;
 
     // Set log default priority.
     // NOTE: not thread safe.

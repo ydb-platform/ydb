@@ -1,30 +1,30 @@
-#ifndef WITH_THREAD 
-# error "xxx no-thread configuration not tested, please report if you need that" 
-#endif 
+#ifndef WITH_THREAD
+# error "xxx no-thread configuration not tested, please report if you need that"
+#endif
 #include "pythread.h"
- 
- 
-struct cffi_tls_s { 
+
+
+struct cffi_tls_s {
     /* The current thread's ThreadCanaryObj.  This is only non-null in
        case cffi builds the thread state here.  It remains null if this
        thread had already a thread state provided by CPython. */
     struct thread_canary_s *local_thread_canary;
- 
-#ifndef USE__THREAD 
-    /* The saved errno.  If the C compiler supports '__thread', then 
-       we use that instead. */ 
-    int saved_errno; 
-#endif 
- 
-#ifdef MS_WIN32 
-    /* The saved lasterror, on Windows. */ 
-    int saved_lasterror; 
-#endif 
-}; 
- 
-static struct cffi_tls_s *get_cffi_tls(void);   /* in misc_thread_posix.h  
-                                                   or misc_win32.h */ 
- 
+
+#ifndef USE__THREAD
+    /* The saved errno.  If the C compiler supports '__thread', then
+       we use that instead. */
+    int saved_errno;
+#endif
+
+#ifdef MS_WIN32
+    /* The saved lasterror, on Windows. */
+    int saved_lasterror;
+#endif
+};
+
+static struct cffi_tls_s *get_cffi_tls(void);   /* in misc_thread_posix.h 
+                                                   or misc_win32.h */
+
 
 /* We try to keep the PyThreadState around in a thread not started by
  * Python but where cffi callbacks occur.  If we didn't do that, then
@@ -251,52 +251,52 @@ static void init_cffi_tls_zombie(void)
         PyErr_SetString(PyExc_SystemError, "can't allocate cffi_zombie_lock");
 }
 
-static void cffi_thread_shutdown(void *p) 
-{ 
+static void cffi_thread_shutdown(void *p)
+{
     /* this function is called from misc_thread_posix or misc_win32
        when a thread is about to end. */
-    struct cffi_tls_s *tls = (struct cffi_tls_s *)p; 
- 
+    struct cffi_tls_s *tls = (struct cffi_tls_s *)p;
+
     /* thread-safety: this field 'local_thread_canary' can be reset
        to NULL in parallel, protected by TLS_ZOM_LOCK. */
     TLS_ZOM_LOCK();
     if (tls->local_thread_canary != NULL) {
         tls->local_thread_canary->tls = NULL;
         thread_canary_make_zombie(tls->local_thread_canary);
-    } 
+    }
     TLS_ZOM_UNLOCK();
     //fprintf(stderr, "thread_shutdown(%p)\n", tls);
-    free(tls); 
-} 
- 
-/* USE__THREAD is defined by setup.py if it finds that it is 
-   syntactically valid to use "__thread" with this C compiler. */ 
-#ifdef USE__THREAD 
- 
-static __thread int cffi_saved_errno = 0; 
-static void save_errno_only(void) { cffi_saved_errno = errno; } 
-static void restore_errno_only(void) { errno = cffi_saved_errno; } 
- 
-#else 
- 
-static void save_errno_only(void) 
-{ 
-    int saved = errno; 
-    struct cffi_tls_s *tls = get_cffi_tls(); 
-    if (tls != NULL) 
-        tls->saved_errno = saved; 
-} 
- 
-static void restore_errno_only(void) 
-{ 
-    struct cffi_tls_s *tls = get_cffi_tls(); 
-    if (tls != NULL) 
-        errno = tls->saved_errno; 
-} 
- 
-#endif 
- 
- 
+    free(tls);
+}
+
+/* USE__THREAD is defined by setup.py if it finds that it is
+   syntactically valid to use "__thread" with this C compiler. */
+#ifdef USE__THREAD
+
+static __thread int cffi_saved_errno = 0;
+static void save_errno_only(void) { cffi_saved_errno = errno; }
+static void restore_errno_only(void) { errno = cffi_saved_errno; }
+
+#else
+
+static void save_errno_only(void)
+{
+    int saved = errno;
+    struct cffi_tls_s *tls = get_cffi_tls();
+    if (tls != NULL)
+        tls->saved_errno = saved;
+}
+
+static void restore_errno_only(void)
+{
+    struct cffi_tls_s *tls = get_cffi_tls();
+    if (tls != NULL)
+        errno = tls->saved_errno;
+}
+
+#endif
+
+
 /* MESS.  We can't use PyThreadState_GET(), because that calls
    PyThreadState_Get() which fails an assert if the result is NULL.
    
@@ -314,58 +314,58 @@ static void restore_errno_only(void)
 */
 #if PY_VERSION_HEX >= 0x03050100 && PY_VERSION_HEX < 0x03060000
 PyAPI_DATA(void *volatile) _PyThreadState_Current;
-#endif 
- 
-static PyThreadState *get_current_ts(void) 
-{ 
+#endif
+
+static PyThreadState *get_current_ts(void)
+{
 #if PY_VERSION_HEX >= 0x03060000
     return _PyThreadState_UncheckedGet();
 #elif defined(_Py_atomic_load_relaxed)
-    return (PyThreadState*)_Py_atomic_load_relaxed(&_PyThreadState_Current); 
-#else 
+    return (PyThreadState*)_Py_atomic_load_relaxed(&_PyThreadState_Current);
+#else
     return (PyThreadState*)_PyThreadState_Current;  /* assume atomic read */
-#endif 
-} 
- 
-static PyGILState_STATE gil_ensure(void) 
-{ 
-    /* Called at the start of a callback.  Replacement for 
-       PyGILState_Ensure(). 
-    */ 
-    PyGILState_STATE result; 
-    PyThreadState *ts = PyGILState_GetThisThreadState(); 
- 
-    if (ts != NULL) { 
-        ts->gilstate_counter++; 
-        if (ts != get_current_ts()) { 
-            /* common case: 'ts' is our non-current thread state and 
-               we have to make it current and acquire the GIL */ 
-            PyEval_RestoreThread(ts); 
-            return PyGILState_UNLOCKED; 
-        } 
-        else { 
-            return PyGILState_LOCKED; 
-        } 
-    } 
-    else { 
-        /* no thread state here so far. */ 
-        result = PyGILState_Ensure(); 
-        assert(result == PyGILState_UNLOCKED); 
- 
-        ts = PyGILState_GetThisThreadState(); 
-        assert(ts != NULL); 
-        assert(ts == get_current_ts()); 
-        assert(ts->gilstate_counter >= 1); 
- 
+#endif
+}
+
+static PyGILState_STATE gil_ensure(void)
+{
+    /* Called at the start of a callback.  Replacement for
+       PyGILState_Ensure().
+    */
+    PyGILState_STATE result;
+    PyThreadState *ts = PyGILState_GetThisThreadState();
+
+    if (ts != NULL) {
+        ts->gilstate_counter++;
+        if (ts != get_current_ts()) {
+            /* common case: 'ts' is our non-current thread state and
+               we have to make it current and acquire the GIL */
+            PyEval_RestoreThread(ts);
+            return PyGILState_UNLOCKED;
+        }
+        else {
+            return PyGILState_LOCKED;
+        }
+    }
+    else {
+        /* no thread state here so far. */
+        result = PyGILState_Ensure();
+        assert(result == PyGILState_UNLOCKED);
+
+        ts = PyGILState_GetThisThreadState();
+        assert(ts != NULL);
+        assert(ts == get_current_ts());
+        assert(ts->gilstate_counter >= 1);
+
         /* Use the ThreadCanary mechanism to keep 'ts' alive until the
            thread really shuts down */
         thread_canary_register(ts);
- 
-        return result; 
-    } 
-} 
- 
-static void gil_release(PyGILState_STATE oldstate) 
-{ 
-    PyGILState_Release(oldstate); 
-} 
+
+        return result;
+    }
+}
+
+static void gil_release(PyGILState_STATE oldstate)
+{
+    PyGILState_Release(oldstate);
+}

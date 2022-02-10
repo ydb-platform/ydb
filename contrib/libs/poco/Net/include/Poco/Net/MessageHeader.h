@@ -155,7 +155,7 @@ private:
 		/// Limits for basic sanity checks when reading a header
 	{
 		MAX_NAME_LENGTH  = 256,
-		MAX_VALUE_LENGTH = 16384,
+		MAX_VALUE_LENGTH = 16384, 
 		DFL_FIELD_LIMIT  = 100
 	};
 	

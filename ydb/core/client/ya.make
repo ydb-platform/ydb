@@ -14,15 +14,15 @@ PEERDIR(
     ydb/public/lib/deprecated/kicli
 )
 
-END()
+END() 
 
-RECURSE(
+RECURSE( 
     metadata
     minikql_compile
     minikql_result_lib
     scheme_cache_lib
     server
-)
+) 
 
 RECURSE_FOR_TESTS(
     ut

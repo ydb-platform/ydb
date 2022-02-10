@@ -145,8 +145,8 @@ class TCmdCreateTablet(
 TCmdWrite = namedtuple('TCmdWrite', ['key', 'value'])
 
 
-class TCmdRead(namedtuple('TCmdRead', ['key', 'offset', 'size'])):
-    pass
+class TCmdRead(namedtuple('TCmdRead', ['key', 'offset', 'size'])): 
+    pass 
 
     @staticmethod
     def full_key(key):

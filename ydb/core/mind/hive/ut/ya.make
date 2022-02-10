@@ -6,7 +6,7 @@ OWNER(
     g:kikimr
 )
 
-FORK_SUBTESTS()
+FORK_SUBTESTS() 
 
 TIMEOUT(600)
 

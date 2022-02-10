@@ -20,7 +20,7 @@ namespace NYq {
         , Connections(connections)
     {}
 
-    NThreading::TFuture<THashMap<std::pair<TString, DatabaseType>, TEndpoint>> TDatabaseAsyncResolverWithMeta::ResolveIds(const TResolveParams& params) const {
+    NThreading::TFuture<TEvents::TDbResolverResponse> TDatabaseAsyncResolverWithMeta::ResolveIds(const TResolveParams& params) const {
         return DbResolver.ResolveIds(params);
     }
 

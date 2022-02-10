@@ -2,8 +2,6 @@
 
 namespace NYq {
 
-using TEndpoint = TEvents::TEvEndpointResponse::TEndpoint;
-
 TDatabaseAsyncResolver::TDatabaseAsyncResolver(
     NActors::TActorSystem* actorSystem,
     const NActors::TActorId& recipient,
@@ -17,11 +15,11 @@ TDatabaseAsyncResolver::TDatabaseAsyncResolver(
     , MdbTransformHost(mdbTransformHost)
 {}
 
-NThreading::TFuture<THashMap<std::pair<TString, DatabaseType>, TEndpoint>> TDatabaseAsyncResolver::ResolveIds(const TResolveParams& params) const {
-    auto promise = NThreading::NewPromise<THashMap<std::pair<TString, DatabaseType>, TEndpoint>>();
+NThreading::TFuture<TEvents::TDbResolverResponse> TDatabaseAsyncResolver::ResolveIds(const TResolveParams& params) const {
+    auto promise = NThreading::NewPromise<TEvents::TDbResolverResponse>();
     auto callback = MakeHolder<NYql::TRichActorFutureCallback<TEvents::TEvEndpointResponse>>(
         [promise] (TAutoPtr<NActors::TEventHandle<TEvents::TEvEndpointResponse>>& event) mutable {
-            promise.SetValue(event->Get()->DatabaseId2Endpoint);
+            promise.SetValue(std::move(event->Get()->DbResolverResponse));
         },
         [promise] () mutable {
             //TODO add logs

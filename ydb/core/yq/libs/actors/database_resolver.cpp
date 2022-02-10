@@ -20,7 +20,7 @@ namespace NYq {
 using namespace NActors;
 using namespace NYql;
 
-using TEndpoint = TEvents::TEvEndpointResponse::TEndpoint;
+using TEndpoint = TEvents::TDbResolverResponse::TEndpoint;
 
 using TParsers = THashMap<DatabaseType, std::function<TEndpoint(NJson::TJsonValue& body, bool)>>;
 using TCache = TTtlCache<std::tuple<TString, DatabaseType, TEvents::TDatabaseAuth>, std::variant<TEndpoint, TString>>;
@@ -79,25 +79,29 @@ private:
     void DieOnTtl() {
         Success = false;
 
-        TString logMsg = "Could not resolve database ids: ";
+        TString errorMsg = "Could not resolve database ids: ";
         bool firstUnresolvedDbId = true;
         for (const auto& [_, info]: Requests) {
             const auto& dbId = std::get<0>(info);
             const auto& dbType = std::get<1>(info);
             if (const auto it = DatabaseId2Endpoint.find(std::make_pair(dbId, dbType)); it == DatabaseId2Endpoint.end()) {
-                logMsg += (firstUnresolvedDbId ? TString{""} : TString{", "}) + dbId;
+                errorMsg += (firstUnresolvedDbId ? TString{""} : TString{", "}) + dbId;
                 if (firstUnresolvedDbId)
                     firstUnresolvedDbId = false;
             }
         }
-        logMsg += TStringBuilder() << " in " << ResolvingTtl << " seconds.";
-        LOG_E(logMsg);
+        errorMsg += TStringBuilder() << " in " << ResolvingTtl << " seconds.";
+        LOG_E(errorMsg);
 
-        SendResolvedEndpointsAndDie();
+        SendResolvedEndpointsAndDie(errorMsg);
     }
 
-    void SendResolvedEndpointsAndDie() {
-        Send(Sender, new TEvents::TEvEndpointResponse(std::move(DatabaseId2Endpoint), Success));
+    void SendResolvedEndpointsAndDie(const TString& errorMsg) {
+        NYql::TIssues issues;
+        if (errorMsg) {
+            issues.AddIssue(errorMsg);
+        }
+        Send(Sender, new TEvents::TEvEndpointResponse(TEvents::TDbResolverResponse(std::move(DatabaseId2Endpoint), Success, issues)));
         PassAway();
     }
 
@@ -143,7 +147,9 @@ private:
             }
         } else {
             errorMessage = ev->Get()->Error;
-            const TString error = "Cannot resolve databaseId (status = " + ToString(status) + ")";
+            const TString error = TStringBuilder()
+                << "Cannot resolve databaseId (status = " + ToString(status) + "). "
+                << "Response body from " << ev->Get()->Request->URL << ": " << (ev->Get()->Response ? ev->Get()->Response->Body : "empty");
             if (!errorMessage.empty()) {
                 errorMessage += '\n';
             }
@@ -165,7 +171,7 @@ private:
         }
 
         if (HandledIds == Requests.size()) {
-            SendResolvedEndpointsAndDie();
+            SendResolvedEndpointsAndDie(errorMessage);
         }
 
         LOG_D(DatabaseId2Endpoint.size() << " of " << Requests.size() << " done");
@@ -177,7 +183,7 @@ private:
     const THashMap<NHttp::THttpOutgoingRequestPtr, std::tuple<TString, DatabaseType, TEvents::TDatabaseAuth>> Requests;
     const TString TraceId;
     const bool MdbTransformHost;
-    THashMap<std::pair<TString, DatabaseType>, TEvents::TEvEndpointResponse::TEndpoint> DatabaseId2Endpoint;
+    THashMap<std::pair<TString, DatabaseType>, TEndpoint> DatabaseId2Endpoint;
     size_t HandledIds = 0;
     bool Success = true;
     const TParsers& Parsers;
@@ -216,7 +222,7 @@ public:
             }
 
             Y_ENSURE(endpoint);
-            return TEvents::TEvEndpointResponse::TEndpoint{endpoint, database, secure};
+            return TEndpoint{endpoint, database, secure};
         };
         Parsers[DatabaseType::Ydb] = ydbParser;
         Parsers[DatabaseType::DataStreams] = [ydbParser](NJson::TJsonValue& databaseInfo, bool mdbTransformHost)
@@ -244,7 +250,7 @@ public:
                 ythrow yexception() << "No ALIVE ClickHouse hosts exist";
             }
             endpoint = mdbTransformHost ? TransformMdbHostToCorrectFormat(endpoint) : endpoint;
-            return TEvents::TEvEndpointResponse::TEndpoint{endpoint, "", true};
+            return TEndpoint{endpoint, "", true};
         };
     }
 
@@ -305,7 +311,7 @@ private:
                 ctx.Send(new IEventHandle(HttpProxy, helper, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(request)));
             }
         } else {
-            Send(ev->Sender, new TEvents::TEvEndpointResponse(std::move(ready), /*success=*/true));
+            Send(ev->Sender, new TEvents::TEvEndpointResponse(TEvents::TDbResolverResponse{std::move(ready), /*success=*/true}));
         }
     }
 

@@ -4,8 +4,6 @@
 
 namespace NYq {
 
-using TEndpoint = TEvents::TEvEndpointResponse::TEndpoint;
-
 class TDatabaseAsyncResolver : public IDatabaseAsyncResolver {
 public:
     TDatabaseAsyncResolver(
@@ -16,7 +14,7 @@ public:
         const bool mdbTransformHost
     );
 
-    NThreading::TFuture<THashMap<std::pair<TString, DatabaseType>, TEndpoint>> ResolveIds(const TResolveParams& params) const override;
+    NThreading::TFuture<TEvents::TDbResolverResponse> ResolveIds(const TResolveParams& params) const override;
 private:
     NActors::TActorSystem* ActorSystem;
     const NActors::TActorId Recipient;

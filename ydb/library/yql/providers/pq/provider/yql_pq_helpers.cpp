@@ -79,7 +79,7 @@ void FindYdsDbIdsForResolving(
 
 void FillSettingsWithResolvedYdsIds(
     const TPqState::TPtr& state,
-    const THashMap<std::pair<TString, NYq::DatabaseType>, NYq::TEvents::TEvEndpointResponse::TEndpoint>& fullResolvedIds)
+    const THashMap<std::pair<TString, NYq::DatabaseType>, NYq::TEvents::TDbResolverResponse::TEndpoint>& fullResolvedIds)
 {
     YQL_CLOG(INFO, ProviderPq) << "FullResolvedIds size: " << fullResolvedIds.size();
     auto& clusters = state->Configuration->ClustersConfigurationSettings;

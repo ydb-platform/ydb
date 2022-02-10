@@ -12,9 +12,7 @@ namespace {
 using namespace NNodes;
 
 class TPqDataSinkIODiscoveryTransformer : public TGraphTransformerBase {
-
-using TDbId2Endpoint = THashMap<std::pair<TString, NYq::DatabaseType>, NYq::TEvents::TEvEndpointResponse::TEndpoint>;
-
+using TDbId2Endpoint = THashMap<std::pair<TString, NYq::DatabaseType>, NYq::TEvents::TDbResolverResponse::TEndpoint>;
 public:
     explicit TPqDataSinkIODiscoveryTransformer(TPqState::TPtr state)
         : State_(state)
@@ -36,8 +34,11 @@ public:
         if (ids.empty())
             return TStatus::Ok;
 
-        AsyncFuture_ = State_->DbResolver->ResolveIds({ids, State_->DbResolver->GetTraceId()}).Apply([resolvedIds_ = ResolvedIds_](const auto& future) {
-            *resolvedIds_ = future.GetValue();
+        const std::weak_ptr<NYq::TEvents::TDbResolverResponse> response = DbResolverResponse_;
+        AsyncFuture_ = State_->DbResolver->ResolveIds({ids, State_->DbResolver->GetTraceId()}).Apply([response](auto future)
+        {
+            if (const auto res = response.lock())
+                *res = std::move(future.ExtractValue());
         });
         return TStatus::Async;
     }
@@ -46,11 +47,15 @@ public:
         return AsyncFuture_;
     }
 
-    TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext&) final {
+    TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
         output = input;
         AsyncFuture_.GetValue();
-        FullResolvedIds_.insert(ResolvedIds_->begin(), ResolvedIds_->end());
-        ResolvedIds_->clear();
+        if (!DbResolverResponse_->Success) {
+            ctx.IssueManager.AddIssues(DbResolverResponse_->Issues);
+            return TStatus::Error;
+        }
+        FullResolvedIds_.insert(DbResolverResponse_->DatabaseId2Endpoint.begin(), DbResolverResponse_->DatabaseId2Endpoint.end());
+        DbResolverResponse_ = std::make_shared<NYq::TEvents::TDbResolverResponse>();
         FillSettingsWithResolvedYdsIds(State_, FullResolvedIds_);
         return TStatus::Ok;
     }
@@ -59,7 +64,7 @@ private:
     const TPqState::TPtr State_;
     NThreading::TFuture<void> AsyncFuture_;
     TDbId2Endpoint FullResolvedIds_;
-    std::shared_ptr<TDbId2Endpoint> ResolvedIds_ = std::make_shared<TDbId2Endpoint>();
+    std::shared_ptr<NYq::TEvents::TDbResolverResponse> DbResolverResponse_ = std::make_shared<NYq::TEvents::TDbResolverResponse>();
 };
 }
 

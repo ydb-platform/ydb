@@ -5,16 +5,14 @@
 
 namespace NYq {
 
-struct TResolveParams { //TODO: remove
+struct TResolveParams {
     THashMap<std::pair<TString, DatabaseType>, TEvents::TDatabaseAuth> Ids;
     TString TraceId;
 };
 
 class IDatabaseAsyncResolver {
 public:
-    using TEndpoint = TEvents::TEvEndpointResponse::TEndpoint;
-
-    virtual NThreading::TFuture<THashMap<std::pair<TString, DatabaseType>, TEndpoint>> ResolveIds(const TResolveParams& params) const = 0;
+    virtual NThreading::TFuture<TEvents::TDbResolverResponse> ResolveIds(const TResolveParams& params) const = 0;
 
     virtual ~IDatabaseAsyncResolver() = default;
 };

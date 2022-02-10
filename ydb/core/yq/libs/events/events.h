@@ -126,19 +126,31 @@ struct TEvents {
         {}
     };
 
-    struct TEvEndpointResponse : NActors::TEventLocal<TEvEndpointResponse, TEventIds::EvEndpointResponse> {
+    struct TDbResolverResponse {
         struct TEndpoint {
             TString Endpoint;
             TString Database;
             bool Secure = false;
         };
-        THashMap<std::pair<TString, DatabaseType>, TEndpoint> DatabaseId2Endpoint;
-        bool Success;
 
-        TEvEndpointResponse(THashMap<std::pair<TString, DatabaseType>, TEndpoint>&& res, bool success)
-            : DatabaseId2Endpoint(std::move(res))
+        TDbResolverResponse() = default;
+
+        TDbResolverResponse(
+            THashMap<std::pair<TString, DatabaseType>, TEndpoint>&& databaseId2Endpoint,
+            bool success = false,
+            const NYql::TIssues& issues = {})
+            : DatabaseId2Endpoint(databaseId2Endpoint)
             , Success(success)
-        { }
+            , Issues(issues) {}
+
+        THashMap<std::pair<TString, DatabaseType>, TEndpoint> DatabaseId2Endpoint;
+        bool Success = false;
+        NYql::TIssues Issues;
+    };
+
+    struct TEvEndpointResponse : NActors::TEventLocal<TEvEndpointResponse, TEventIds::EvEndpointResponse> {
+        TDbResolverResponse DbResolverResponse;
+        explicit TEvEndpointResponse(TDbResolverResponse&& response) noexcept : DbResolverResponse(std::move(response)) {}
     };
 
     struct TDatabaseAuth {

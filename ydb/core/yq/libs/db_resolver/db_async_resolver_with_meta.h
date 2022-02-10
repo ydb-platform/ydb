@@ -3,8 +3,6 @@
 
 namespace NYq {
 
-using TEndpoint = TEvents::TEvEndpointResponse::TEndpoint;
-
 class TDatabaseAsyncResolverWithMeta : public IDatabaseAsyncResolver {
 public:
     TDatabaseAsyncResolverWithMeta(
@@ -19,7 +17,7 @@ public:
         const THashMap<TString, YandexQuery::Connection>& connections
     );
 
-    NThreading::TFuture<THashMap<std::pair<TString, DatabaseType>, TEndpoint>> ResolveIds(const TResolveParams& params) const override;
+    NThreading::TFuture<TEvents::TDbResolverResponse> ResolveIds(const TResolveParams& params) const override;
 
     TString GetTraceId() const;
 

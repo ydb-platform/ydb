@@ -19,6 +19,6 @@ void FindYdsDbIdsForResolving(
 
 void FillSettingsWithResolvedYdsIds(
     const TPqState::TPtr& state,
-    const THashMap<std::pair<TString, NYq::DatabaseType>, NYq::TEvents::TEvEndpointResponse::TEndpoint>& fullResolvedIds);
+    const THashMap<std::pair<TString, NYq::DatabaseType>, NYq::TEvents::TDbResolverResponse::TEndpoint>& fullResolvedIds);
 
 } // namespace NYql

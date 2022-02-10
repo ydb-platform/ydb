@@ -53,14 +53,14 @@ Opt::Opt(int argc, const char* argv[], const char* optString, const Ion* longOpt
 
 int Opt::Get() {
     return Get(nullptr);
-} 
- 
+}
+
 int Opt::Get(int* longOptionIndex) {
     if (GotError_)
         return EOF;
 
     Arg = nullptr;
- 
+
     try {
         bool r = OptsParser_->Next();
         Ind = (int)OptsParser_->Pos_;

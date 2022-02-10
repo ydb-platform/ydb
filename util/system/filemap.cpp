@@ -507,13 +507,13 @@ TFileMap::TMapResult TFileMap::ResizeAndRemap(i64 offset, size_t size) {
 void TFileMap::Unmap() {
     if (!Region_.IsMapped()) {
         return;
-    } 
+    }
 
     if (Map_.Unmap(Region_)) {
         Region_.Reset();
     } else {
         ythrow yexception() << "can't unmap file";
-    } 
+    }
 }
 
 TFileMap::~TFileMap() {
@@ -522,7 +522,7 @@ TFileMap::~TFileMap() {
         Unmap();
     } catch (...) {
         // ¯\_(ツ)_/¯
-    } 
+    }
 }
 
 void TFileMap::Precharge(size_t pos, size_t size) const {

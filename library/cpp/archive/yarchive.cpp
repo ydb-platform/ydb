@@ -1,6 +1,6 @@
 #include "yarchive.h"
 
-#include <util/generic/algorithm.h>
+#include <util/generic/algorithm.h> 
 #include <util/generic/hash.h>
 #include <util/generic/utility.h>
 #include <util/generic/vector.h>
@@ -289,7 +289,7 @@ public:
         }
         Sort(Recs_.begin(), Recs_.end(), [](const auto& lhs, const auto& rhs) -> bool {
             return lhs->Offset() < rhs->Offset();
-        });
+        }); 
 
         try {
             UseDecompression = static_cast<bool>(ESLoad<ui8>(&d));

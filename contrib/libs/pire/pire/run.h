@@ -193,7 +193,7 @@ namespace Impl {
 		const size_t* head = reinterpret_cast<const size_t*>((reinterpret_cast<uintptr_t>(str.begin())) & ~(sizeof(size_t)-1));
 		const size_t* tail = reinterpret_cast<const size_t*>((reinterpret_cast<uintptr_t>(str.end())) & ~(sizeof(size_t)-1));
 
-		size_t headSize = (sizeof(size_t) - (str.begin() - (const char*)head)); // The distance from @p begin to the end of the word containing @p begin
+		size_t headSize = (sizeof(size_t) - (str.begin() - (const char*)head)); // The distance from @p begin to the end of the word containing @p begin 
 		size_t tailSize = str.end() - (const char*) tail; // The distance from the beginning of the word containing @p end to the @p end
 
 		Y_ASSERT(headSize >= 1 && headSize <= sizeof(size_t));

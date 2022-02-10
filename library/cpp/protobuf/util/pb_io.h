@@ -37,9 +37,9 @@ namespace NProtoBuf {
     bool TrySerializeToBase64String(const Message& m, TString& dataBase64);
 
     const TString ShortUtf8DebugString(const Message& message);
-
-    bool MergePartialFromString(NProtoBuf::Message& m, const TStringBuf serializedProtoMessage);
-    bool MergeFromString(NProtoBuf::Message& m, const TStringBuf serializedProtoMessage);
+ 
+    bool MergePartialFromString(NProtoBuf::Message& m, const TStringBuf serializedProtoMessage); 
+    bool MergeFromString(NProtoBuf::Message& m, const TStringBuf serializedProtoMessage); 
 }
 
 int operator&(NProtoBuf::Message& m, IBinSaver& f);

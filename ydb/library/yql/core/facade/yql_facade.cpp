@@ -1358,7 +1358,7 @@ TFuture<void> TProgram::OpenSession(const TString& username)
         }
     }
 
-    return WaitExceptionOrAll(openFutures);
+    return WaitExceptionOrAll(openFutures); 
 }
 
 void TProgram::Print(IOutputStream* exprOut, IOutputStream* planOut, bool cleanPlan) {

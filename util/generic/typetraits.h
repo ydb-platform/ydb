@@ -281,12 +281,12 @@ struct TIsSpecializationOf<T, T<Ts...>>: std::true_type {};
  * }
  */
 template <typename... T>
-constexpr bool TDependentFalse = false;
+constexpr bool TDependentFalse = false; 
 
 // FIXME: neither nvcc10 nor nvcc11 support using auto in this context
 #if defined(__NVCC__)
 template <size_t Value>
-constexpr bool TValueDependentFalse = false;
+constexpr bool TValueDependentFalse = false; 
 #else
 template <auto... Values>
 constexpr bool TValueDependentFalse = false;

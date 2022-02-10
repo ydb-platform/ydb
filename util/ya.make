@@ -65,7 +65,7 @@ JOIN_SRCS(
     folder/dirut.cpp
     folder/filelist.cpp
     folder/fts.cpp
-    folder/fwd.cpp
+    folder/fwd.cpp 
     folder/iterator.cpp
     folder/path.cpp
     folder/pathsplit.cpp
@@ -119,7 +119,7 @@ JOIN_SRCS(
     generic/ptr.cpp
     generic/queue.cpp
     generic/refcount.cpp
-    generic/serialized_enum.cpp
+    generic/serialized_enum.cpp 
     generic/set.cpp
     generic/singleton.cpp
     generic/size_literals.cpp
@@ -381,7 +381,7 @@ JOIN_SRCS(
 )
 
 END()
-
-RECURSE_FOR_TESTS(
-    tests/ut
-)
+ 
+RECURSE_FOR_TESTS( 
+    tests/ut 
+) 

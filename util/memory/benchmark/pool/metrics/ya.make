@@ -1,5 +1,5 @@
 OWNER(g:util)
-SUBSCRIBER(g:util-subscribers)
+SUBSCRIBER(g:util-subscribers) 
 
 PY2TEST()
 

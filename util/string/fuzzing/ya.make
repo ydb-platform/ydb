@@ -2,7 +2,7 @@ OWNER(
     g:util
     pg
 )
-SUBSCRIBER(g:util-subscribers)
+SUBSCRIBER(g:util-subscribers) 
 
 RECURSE(
     collapse

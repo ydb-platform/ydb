@@ -31,7 +31,7 @@ PEERDIR(
 
 ADDINCL(
     GLOBAL contrib/libs/xz/liblzma/api
-    contrib/libs/xz
+    contrib/libs/xz 
     contrib/libs/xz/liblzma/check
     contrib/libs/xz/liblzma/common
     contrib/libs/xz/liblzma/delta

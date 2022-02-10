@@ -1,7 +1,7 @@
 #pragma once
 
 #include <util/generic/fwd.h>
-#include <util/generic/strbuf.h>
+#include <util/generic/strbuf.h> 
 #include <util/generic/string.h>
 #include <util/generic/yexception.h>
 #include <util/generic/typetraits.h>
@@ -54,16 +54,16 @@ static inline void SavePodType(IOutputStream* rh, const T& t) {
     rh->Write(&t, sizeof(T));
 }
 
-namespace NPrivate {
-    [[noreturn]] void ThrowLoadEOFException(size_t typeSize, size_t realSize, TStringBuf structName);
-    [[noreturn]] void ThrowUnexpectedVariantTagException(ui8 tagIndex);
-}
-
+namespace NPrivate { 
+    [[noreturn]] void ThrowLoadEOFException(size_t typeSize, size_t realSize, TStringBuf structName); 
+    [[noreturn]] void ThrowUnexpectedVariantTagException(ui8 tagIndex); 
+} 
+ 
 template <class T>
 static inline void LoadPodType(IInputStream* rh, T& t) {
     const size_t res = rh->Load(&t, sizeof(T));
 
-    if (Y_UNLIKELY(res != sizeof(T))) {
+    if (Y_UNLIKELY(res != sizeof(T))) { 
         ::NPrivate::ThrowLoadEOFException(sizeof(T), res, TStringBuf("pod type"));
     }
 }
@@ -78,7 +78,7 @@ static inline void LoadPodArray(IInputStream* rh, T* arr, size_t count) {
     const size_t len = sizeof(T) * count;
     const size_t res = rh->Load(arr, len);
 
-    if (Y_UNLIKELY(res != len)) {
+    if (Y_UNLIKELY(res != len)) { 
         ::NPrivate::ThrowLoadEOFException(len, res, TStringBuf("pod array"));
     }
 }
@@ -666,8 +666,8 @@ struct TSerializer<std::variant<Args...>> {
     static void Load(IInputStream* is, TVar& v) {
         ui8 index;
         ::Load(is, index);
-        if (Y_UNLIKELY(index >= sizeof...(Args))) {
-            ::NPrivate::ThrowUnexpectedVariantTagException(index);
+        if (Y_UNLIKELY(index >= sizeof...(Args))) { 
+            ::NPrivate::ThrowUnexpectedVariantTagException(index); 
         }
         LoadImpl(is, v, index, std::index_sequence_for<Args...>{});
     }
@@ -720,17 +720,17 @@ static inline void LoadMany(S* s, Ts&... t) {
     void Load(IInputStream* s) override {        \
         ::LoadMany(s, __VA_ARGS__);              \
     }
-
-template <class T>
-struct TNonVirtualSaver {
-    const T* Data;
-    void Save(IOutputStream* out) const {
-        Data->T::Save(out);
-    }
-};
-
-template <typename S, typename T, typename... R>
-inline void LoadMany(S* s, TNonVirtualSaver<T> t, R&... r) {
-    const_cast<T*>(t.Data)->T::Load(s);
-    ::LoadMany(s, r...);
-}
+ 
+template <class T> 
+struct TNonVirtualSaver { 
+    const T* Data; 
+    void Save(IOutputStream* out) const { 
+        Data->T::Save(out); 
+    } 
+}; 
+ 
+template <typename S, typename T, typename... R> 
+inline void LoadMany(S* s, TNonVirtualSaver<T> t, R&... r) { 
+    const_cast<T*>(t.Data)->T::Load(s); 
+    ::LoadMany(s, r...); 
+} 

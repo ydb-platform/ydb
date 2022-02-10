@@ -6,9 +6,9 @@
 
 template <typename TWord>
 struct TBitSeqTraits {
-    static constexpr ui8 NumBits = CHAR_BIT * sizeof(TWord);
-    static constexpr TWord ModMask = static_cast<TWord>(NumBits - 1);
-    static constexpr TWord DivShift = MostSignificantBitCT(NumBits);
+    static constexpr ui8 NumBits = CHAR_BIT * sizeof(TWord); 
+    static constexpr TWord ModMask = static_cast<TWord>(NumBits - 1); 
+    static constexpr TWord DivShift = MostSignificantBitCT(NumBits); 
 
     static inline TWord ElemMask(ui8 count) {
         // NOTE: Shifting by the type's length is UB, so we need this workaround.

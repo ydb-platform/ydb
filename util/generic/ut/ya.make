@@ -1,7 +1,7 @@
 UNITTEST_FOR(util)
 
 OWNER(g:util)
-SUBSCRIBER(g:util-subscribers)
+SUBSCRIBER(g:util-subscribers) 
 
 FORK_TESTS()
 
@@ -35,7 +35,7 @@ SRCS(
     generic/overloaded_ut.cpp
     generic/ptr_ut.cpp
     generic/queue_ut.cpp
-    generic/serialized_enum_ut.cpp
+    generic/serialized_enum_ut.cpp 
     generic/set_ut.cpp
     generic/singleton_ut.cpp
     generic/size_literals_ut.cpp

@@ -23,11 +23,11 @@ namespace NThreading {
         TFuture<void> WaitGeneric(TArrayRef<const TFuture<void>> futures) {
             if (futures.empty()) {
                 return MakeFuture();
-            }
+            } 
             if (futures.size() == 1) {
                 return futures.front();
-            }
-
+            } 
+ 
             TWaitGroup<WaitPolicy> wg;
             for (const auto& fut : futures) {
                 wg.Add(fut);
@@ -41,19 +41,19 @@ namespace NThreading {
 
     TFuture<void> WaitAll(const TFuture<void>& f1) {
         return WaitGeneric<TWaitPolicy::TAll>(f1);
-    }
-
+    } 
+ 
     TFuture<void> WaitAll(const TFuture<void>& f1, const TFuture<void>& f2) {
         return WaitGeneric<TWaitPolicy::TAll>(f1, f2);
-    }
-
+    } 
+ 
     TFuture<void> WaitAll(TArrayRef<const TFuture<void>> futures) {
         return WaitGeneric<TWaitPolicy::TAll>(futures);
-    }
-
-
-    ////////////////////////////////////////////////////////////////////////////////
-
+    } 
+ 
+ 
+    //////////////////////////////////////////////////////////////////////////////// 
+ 
     TFuture<void> WaitExceptionOrAll(const TFuture<void>& f1) {
         return WaitGeneric<TWaitPolicy::TExceptionOrAll>(f1);
     }

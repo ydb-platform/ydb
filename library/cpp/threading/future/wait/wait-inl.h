@@ -13,17 +13,17 @@ namespace NThreading {
 
             for (const auto& future: futures) {
                 voidFutures.push_back(future.IgnoreResult());
-            }
-
+            } 
+ 
             return voidFutures;
         }
     }
 
-    template <typename TContainer>
+    template <typename TContainer> 
     [[nodiscard]] NImpl::EnableGenericWait<TContainer> WaitAll(const TContainer& futures) {
         return WaitAll(NImpl::ToVoidFutures(futures));
-    }
-
+    } 
+ 
     template <typename TContainer>
     [[nodiscard]] NImpl::EnableGenericWait<TContainer> WaitExceptionOrAll(const TContainer& futures) {
         return WaitExceptionOrAll(NImpl::ToVoidFutures(futures));

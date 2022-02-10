@@ -3,7 +3,7 @@ UNITTEST_FOR(util)
 REQUIREMENTS(network:full)
 
 OWNER(g:util)
-SUBSCRIBER(g:util-subscribers)
+SUBSCRIBER(g:util-subscribers) 
 
 PEERDIR(
     library/cpp/threading/future

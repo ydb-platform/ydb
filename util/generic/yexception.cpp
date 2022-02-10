@@ -1,4 +1,4 @@
-#include "bt_exception.h"
+#include "bt_exception.h" 
 #include "yexception.h"
 
 #include <util/system/backtrace.h>
@@ -112,11 +112,11 @@ void fputs(const std::exception& e, FILE* f) {
     message[len] = 0;
     fputs(message, f);
 }
-
-void ::NPrivate::ThrowYException(const ::NPrivate::TSimpleExceptionMessage& sm) {
-    throw sm.Location + yexception() << sm.Message;
-}
-
-void ::NPrivate::ThrowYExceptionWithBacktrace(const ::NPrivate::TSimpleExceptionMessage& sm) {
-    throw sm.Location + TWithBackTrace<yexception>() << sm.Message;
-}
+ 
+void ::NPrivate::ThrowYException(const ::NPrivate::TSimpleExceptionMessage& sm) { 
+    throw sm.Location + yexception() << sm.Message; 
+} 
+ 
+void ::NPrivate::ThrowYExceptionWithBacktrace(const ::NPrivate::TSimpleExceptionMessage& sm) { 
+    throw sm.Location + TWithBackTrace<yexception>() << sm.Message; 
+} 

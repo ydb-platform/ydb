@@ -69,16 +69,16 @@ namespace NProtoBuf {
         return result;
     }
 
-    bool MergePartialFromString(NProtoBuf::Message& m, const TStringBuf serializedProtoMessage) {
-        google::protobuf::io::CodedInputStream input(reinterpret_cast<const ui8*>(serializedProtoMessage.data()), serializedProtoMessage.size());
-        bool ok = m.MergePartialFromCodedStream(&input);
-        ok = ok && input.ConsumedEntireMessage();
-        return ok;
-    }
-
-    bool MergeFromString(NProtoBuf::Message& m, const TStringBuf serializedProtoMessage) {
-        return MergePartialFromString(m, serializedProtoMessage) && m.IsInitialized();
-    }
+    bool MergePartialFromString(NProtoBuf::Message& m, const TStringBuf serializedProtoMessage) { 
+        google::protobuf::io::CodedInputStream input(reinterpret_cast<const ui8*>(serializedProtoMessage.data()), serializedProtoMessage.size()); 
+        bool ok = m.MergePartialFromCodedStream(&input); 
+        ok = ok && input.ConsumedEntireMessage(); 
+        return ok; 
+    } 
+ 
+    bool MergeFromString(NProtoBuf::Message& m, const TStringBuf serializedProtoMessage) { 
+        return MergePartialFromString(m, serializedProtoMessage) && m.IsInitialized(); 
+    } 
 }
 
 int operator&(NProtoBuf::Message& m, IBinSaver& f) {

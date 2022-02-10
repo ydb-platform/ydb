@@ -2769,7 +2769,7 @@ public:
             futures.push_back(CallableTransformer->GetAsyncFuture(*callable));
         }
 
-        return WaitExceptionOrAll(futures);
+        return WaitExceptionOrAll(futures); 
     }
 
     TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {

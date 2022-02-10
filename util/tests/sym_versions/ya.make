@@ -4,7 +4,7 @@ OWNER(
     pg
     g:util
 )
-SUBSCRIBER(g:util-subscribers)
+SUBSCRIBER(g:util-subscribers) 
 
 TEST_SRCS(test_glibc.py)
 

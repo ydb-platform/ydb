@@ -1,7 +1,7 @@
 LIBRARY()
 
 OWNER(g:util)
-SUBSCRIBER(g:util-subscribers)
+SUBSCRIBER(g:util-subscribers) 
 
 NO_UTIL()
 
@@ -29,7 +29,7 @@ ELSE()
 ENDIF()
 
 END()
-
-RECURSE_FOR_TESTS(
-    ut
-)
+ 
+RECURSE_FOR_TESTS( 
+    ut 
+) 

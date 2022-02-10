@@ -100,7 +100,7 @@ struct TJsonTraits {
         return &(*v)[key];
     }
 
-    static inline size_t DictSize(TConstValueRef v) {
+    static inline size_t DictSize(TConstValueRef v) { 
         return v->GetMap().size();
     }
 

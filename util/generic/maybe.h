@@ -300,7 +300,7 @@ public:
     }
 
     void CheckDefined() const {
-        if (Y_UNLIKELY(!Defined())) {
+        if (Y_UNLIKELY(!Defined())) { 
             Policy::OnEmpty(typeid(TValueType));
         }
     }
@@ -313,46 +313,46 @@ public:
         return Defined() ? Data() : nullptr;
     }
 
-    constexpr const T& GetRef() const& {
+    constexpr const T& GetRef() const& { 
         CheckDefined();
 
         return *Data();
     }
 
-    constexpr T& GetRef() & {
+    constexpr T& GetRef() & { 
         CheckDefined();
 
         return *Data();
     }
 
-    constexpr const T&& GetRef() const&& {
-        CheckDefined();
-
-        return std::move(*Data());
-    }
-
-    constexpr T&& GetRef() && {
-        CheckDefined();
-
-        return std::move(*Data());
-    }
-
-    constexpr const T& operator*() const& {
+    constexpr const T&& GetRef() const&& { 
+        CheckDefined(); 
+ 
+        return std::move(*Data()); 
+    } 
+ 
+    constexpr T&& GetRef() && { 
+        CheckDefined(); 
+ 
+        return std::move(*Data()); 
+    } 
+ 
+    constexpr const T& operator*() const& { 
         return GetRef();
     }
 
-    constexpr T& operator*() & {
+    constexpr T& operator*() & { 
         return GetRef();
     }
 
-    constexpr const T&& operator*() const&& {
-        return std::move(GetRef());
-    }
-
-    constexpr T&& operator*() && {
-        return std::move(GetRef());
-    }
-
+    constexpr const T&& operator*() const&& { 
+        return std::move(GetRef()); 
+    } 
+ 
+    constexpr T&& operator*() && { 
+        return std::move(GetRef()); 
+    } 
+ 
     constexpr const T* operator->() const {
         return &GetRef();
     }

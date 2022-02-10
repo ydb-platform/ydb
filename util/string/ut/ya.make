@@ -1,7 +1,7 @@
 UNITTEST_FOR(util)
 
 OWNER(g:util)
-SUBSCRIBER(g:util-subscribers)
+SUBSCRIBER(g:util-subscribers) 
 
 SRCS(
     string/builder_ut.cpp

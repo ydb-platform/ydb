@@ -1,7 +1,7 @@
 Y_BENCHMARK()
 
 OWNER(g:util)
-SUBSCRIBER(g:util-subscribers)
+SUBSCRIBER(g:util-subscribers) 
 
 SRCS(
     f.cpp

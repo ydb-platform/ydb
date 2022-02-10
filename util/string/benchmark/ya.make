@@ -2,7 +2,7 @@ OWNER(
     g:util
     yazevnul
 )
-SUBSCRIBER(g:util-subscribers)
+SUBSCRIBER(g:util-subscribers) 
 
 RECURSE(
     ascii

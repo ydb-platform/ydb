@@ -39,27 +39,27 @@ struct TCustomOuterSerializerTmplDerived: public TCustomOuterSerializerTmpl {
     TString StrData;
 };
 
-struct TMoveOnlyType {
-    ui32 Data = 0;
-
-    TMoveOnlyType() = default;
-    TMoveOnlyType(TMoveOnlyType&&) = default;
-
+struct TMoveOnlyType { 
+    ui32 Data = 0; 
+ 
+    TMoveOnlyType() = default; 
+    TMoveOnlyType(TMoveOnlyType&&) = default; 
+ 
     bool operator==(const TMoveOnlyType& obj) const {
-        return Data == obj.Data;
-    }
-};
-
-struct TTypeWithArray {
-    ui32 Data = 1;
+        return Data == obj.Data; 
+    } 
+}; 
+ 
+struct TTypeWithArray { 
+    ui32 Data = 1; 
     TString Array[2][2]{{"test", "data"}, {"and", "more"}};
-
-    SAVELOAD(Data, Array);
+ 
+    SAVELOAD(Data, Array); 
     bool operator==(const TTypeWithArray& obj) const {
         return Data == obj.Data && std::equal(std::begin(Array[0]), std::end(Array[0]), obj.Array[0]) && std::equal(std::begin(Array[1]), std::end(Array[1]), obj.Array[1]);
-    }
-};
-
+    } 
+}; 
+ 
 template <typename T, typename = std::enable_if_t<std::is_base_of<TCustomOuterSerializerTmpl, T>::value>>
 int operator&(T& s, IBinSaver& f);
 
@@ -86,7 +86,7 @@ Y_UNIT_TEST(TestStroka) {
 Y_UNIT_TEST(TestMoveOnlyType) {
     TestBinSaverSerializationToBuffer(TMoveOnlyType());
 }
-
+ 
 Y_UNIT_TEST(TestVectorStrok) {
     TestBinSaverSerialization(TVector<TString>{"A", "B", "C"});
 }

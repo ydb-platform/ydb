@@ -70,7 +70,7 @@ Y_UNIT_TEST_SUITE(TIsIn) {
         UNIT_ASSERT(IsIn(b, 'f'));
         UNIT_ASSERT(!IsIn(b, 'z'));
     }
-
+ 
     Y_UNIT_TEST(IsInInitListTest) {
         const char* abc = "abc";
         const char* def = "def";
@@ -88,22 +88,22 @@ Y_UNIT_TEST_SUITE(TIsIn) {
         UNIT_ASSERT(!IsIn({TStringBuf("abc"), TStringBuf("def")}, TStringBuf("ghi")));
         UNIT_ASSERT(!IsIn({"abc", "def"}, TStringBuf("ghi")));
         UNIT_ASSERT(!IsIn({"abc", "def"}, TString("ghi")));
-
-        const TStringBuf str = "abc////";
-
+ 
+        const TStringBuf str = "abc////"; 
+ 
         UNIT_ASSERT(IsIn({"abc", "def"}, TStringBuf{str.data(), 3}));
     }
 
     Y_UNIT_TEST(ConfOfTest) {
         UNIT_ASSERT(IsIn({1, 2, 3}, 1));
         UNIT_ASSERT(!IsIn({1, 2, 3}, 4));
-
+ 
         const TString b = "b";
-
+ 
         UNIT_ASSERT(!IsIn({"a", "b", "c"}, b.data())); // compares pointers by value. Whether it's good or not.
         UNIT_ASSERT(IsIn(TVector<TStringBuf>({"a", "b", "c"}), b.data()));
         UNIT_ASSERT(IsIn(TVector<TStringBuf>({"a", "b", "c"}), "b"));
-    }
+    } 
 
     Y_UNIT_TEST(IsInArrayTest) {
         const TString array[] = {"a", "b", "d"};

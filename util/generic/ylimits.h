@@ -19,14 +19,14 @@ static constexpr T Min() noexcept {
 namespace NPrivate {
     struct TMax {
         template <class T>
-        constexpr operator T() const {
+        constexpr operator T() const { 
             return Max<T>();
         }
     };
 
     struct TMin {
         template <class T>
-        constexpr operator T() const {
+        constexpr operator T() const { 
             return Min<T>();
         }
     };

@@ -5,7 +5,7 @@
 #include <util/stream/output.h>
 #include <util/charset/wide.h>
 #include <util/datetime/cputimer.h>
-#include <util/generic/maybe.h>
+#include <util/generic/maybe.h> 
 
 #include <string>
 #include <string_view>
@@ -258,25 +258,25 @@ Y_UNIT_TEST_SUITE(SplitStringTest) {
         double num2 = 0;
         TStringBuf strBuf;
         Split(data, ' ', str, num1, num2, strBuf);
-        UNIT_ASSERT_VALUES_EQUAL(str, "abc");
-        UNIT_ASSERT_VALUES_EQUAL(num1, 22);
-        UNIT_ASSERT_VALUES_EQUAL(num2, 33.5);
-        UNIT_ASSERT_VALUES_EQUAL(strBuf, "xyz");
+        UNIT_ASSERT_VALUES_EQUAL(str, "abc"); 
+        UNIT_ASSERT_VALUES_EQUAL(num1, 22); 
+        UNIT_ASSERT_VALUES_EQUAL(num2, 33.5); 
+        UNIT_ASSERT_VALUES_EQUAL(strBuf, "xyz"); 
     }
 
     Y_UNIT_TEST(ConvenientSplitTestWithMaybe) {
         TString data("abc 42");
         TString str;
-        TMaybe<double> num2 = 1;
-        TMaybe<double> maybe = 1;
-
-        Split(data, ' ', str, num2, maybe);
-
-        UNIT_ASSERT_VALUES_EQUAL(str, "abc");
-        UNIT_ASSERT_VALUES_EQUAL(*num2, 42);
-        UNIT_ASSERT(!maybe);
-    }
-
+        TMaybe<double> num2 = 1; 
+        TMaybe<double> maybe = 1; 
+ 
+        Split(data, ' ', str, num2, maybe); 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(str, "abc"); 
+        UNIT_ASSERT_VALUES_EQUAL(*num2, 42); 
+        UNIT_ASSERT(!maybe); 
+    } 
+ 
     Y_UNIT_TEST(ConvenientSplitTestExceptions) {
         TString data("abc 22 33");
         TString s1, s2, s3, s4;
@@ -285,22 +285,22 @@ Y_UNIT_TEST_SUITE(SplitStringTest) {
         UNIT_ASSERT_NO_EXCEPTION(Split(data, ' ', s1, s2, s3));
         UNIT_ASSERT_EXCEPTION(Split(data, ' ', s1, s2, s3, s4), yexception);
     }
-
+ 
     Y_UNIT_TEST(ConvenientSplitTestMaybeExceptions) {
         TString data("abc 22 33");
         TString s1, s2;
         TMaybe<TString> m1, m2;
-
-        UNIT_ASSERT_EXCEPTION(Split(data, ' ', s1, m1), yexception);
-        UNIT_ASSERT_EXCEPTION(Split(data, ' ', m1, m2), yexception);
-        UNIT_ASSERT_NO_EXCEPTION(Split(data, ' ', s1, s2, m1));
-
-        UNIT_ASSERT_NO_EXCEPTION(Split(data, ' ', s1, s2, m1, m2));
-        UNIT_ASSERT_EXCEPTION(Split(data, ' ', m1, m2, s1, s2), yexception);
-
-        UNIT_ASSERT_NO_EXCEPTION(Split(data, ' ', s1, s2, m1, m2, m1, m1, m1, m1));
-        UNIT_ASSERT_EXCEPTION(Split(data, ' ', s1, s2, m1, m2, m1, m1, m1, m1, s1), yexception);
-    }
+ 
+        UNIT_ASSERT_EXCEPTION(Split(data, ' ', s1, m1), yexception); 
+        UNIT_ASSERT_EXCEPTION(Split(data, ' ', m1, m2), yexception); 
+        UNIT_ASSERT_NO_EXCEPTION(Split(data, ' ', s1, s2, m1)); 
+ 
+        UNIT_ASSERT_NO_EXCEPTION(Split(data, ' ', s1, s2, m1, m2)); 
+        UNIT_ASSERT_EXCEPTION(Split(data, ' ', m1, m2, s1, s2), yexception); 
+ 
+        UNIT_ASSERT_NO_EXCEPTION(Split(data, ' ', s1, s2, m1, m2, m1, m1, m1, m1)); 
+        UNIT_ASSERT_EXCEPTION(Split(data, ' ', s1, s2, m1, m2, m1, m1, m1, m1, s1), yexception); 
+    } 
 }
 
 template <typename I, typename C>

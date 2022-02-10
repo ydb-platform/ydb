@@ -47,7 +47,7 @@ static inline bool IsIn(const C& c, const T& e) {
     return TIsInTraits<C, T, TIsAssocCont<C>::value>::IsIn(c, e);
 }
 
-template <class T, class U>
-static inline bool IsIn(std::initializer_list<T> l, const U& e) {
+template <class T, class U> 
+static inline bool IsIn(std::initializer_list<T> l, const U& e) { 
     return ::IsIn(l.begin(), l.end(), e);
 }

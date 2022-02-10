@@ -45,7 +45,7 @@ class TDateTimeParseException: public yexception {
 
 const int DATE_BUF_LEN = 4 + 2 + 2 + 1; // [YYYYMMDD*]
 
-constexpr long seconds(const struct tm& theTm) {
+constexpr long seconds(const struct tm& theTm) { 
     return 60 * (60 * theTm.tm_hour + theTm.tm_min) + theTm.tm_sec;
 }
 
@@ -78,7 +78,7 @@ bool ParseHTTPDateTime(const char* date, size_t dateLen, time_t& utcTime);
 bool ParseX509ValidityDateTime(const char* date, time_t& utcTime);
 bool ParseX509ValidityDateTime(const char* date, size_t dateLen, time_t& utcTime);
 
-constexpr long TVdiff(timeval r1, timeval r2) {
+constexpr long TVdiff(timeval r1, timeval r2) { 
     return (1000000 * (r2.tv_sec - r1.tv_sec) + (r2.tv_usec - r1.tv_usec));
 }
 
@@ -264,9 +264,9 @@ public:
         return TDuration(us);
     }
 
-    /* noexcept(false) as conversion from T might throw, for example FromString("abc") */
+    /* noexcept(false) as conversion from T might throw, for example FromString("abc") */ 
     template <typename T>
-    static constexpr TDuration MilliSeconds(T ms) noexcept(false) {
+    static constexpr TDuration MilliSeconds(T ms) noexcept(false) { 
         return MicroSeconds((ui64)(typename NDateTimeHelpers::TPrecisionHelper<T>::THighPrecision(ms) * 1000));
     }
 
@@ -279,7 +279,7 @@ public:
 
     /// DeadLineFromTimeOut
     inline TInstant ToDeadLine() const;
-    constexpr TInstant ToDeadLine(TInstant now) const;
+    constexpr TInstant ToDeadLine(TInstant now) const; 
 
     static constexpr TDuration Max() noexcept {
         return TDuration(::Max<TValue>());
@@ -289,9 +289,9 @@ public:
         return TDuration();
     }
 
-    /* noexcept(false) as conversion from T might throw, for example FromString("abc") */
+    /* noexcept(false) as conversion from T might throw, for example FromString("abc") */ 
     template <typename T>
-    static constexpr TDuration Seconds(T s) noexcept(false) {
+    static constexpr TDuration Seconds(T s) noexcept(false) { 
         return MilliSeconds(typename NDateTimeHelpers::TPrecisionHelper<T>::THighPrecision(s) * 1000);
     }
 
@@ -571,7 +571,7 @@ namespace NPrivate {
     struct TPrintableLocalTime {
         TInstant MomentToPrint;
 
-        constexpr explicit TPrintableLocalTime(TInstant momentToPrint)
+        constexpr explicit TPrintableLocalTime(TInstant momentToPrint) 
             : MomentToPrint(momentToPrint)
         {
         }
@@ -633,17 +633,17 @@ static constexpr bool operator>=(const TTimeBase<S>& l, const TTimeBase<S>& r) n
 
 namespace NDateTimeHelpers {
     template <typename T>
-    static constexpr T SumWithSaturation(T a, T b) {
+    static constexpr T SumWithSaturation(T a, T b) { 
         static_assert(!std::numeric_limits<T>::is_signed, "expect !std::numeric_limits<T>::is_signed");
 
-        return Max<T>() - a < b ? Max<T>() : a + b;
+        return Max<T>() - a < b ? Max<T>() : a + b; 
     }
 
     template <typename T>
-    static constexpr T DiffWithSaturation(T a, T b) {
+    static constexpr T DiffWithSaturation(T a, T b) { 
         static_assert(!std::numeric_limits<T>::is_signed, "expect !std::numeric_limits<T>::is_signed");
 
-        return a < b ? 0 : a - b;
+        return a < b ? 0 : a - b; 
     }
 }
 
@@ -803,11 +803,11 @@ constexpr double operator/(const TDuration& x, const TDuration& y) noexcept {
     return static_cast<double>(x.GetValue()) / static_cast<double>(y.GetValue());
 }
 
-inline TInstant TDuration::ToDeadLine() const {
+inline TInstant TDuration::ToDeadLine() const { 
     return ToDeadLine(TInstant::Now());
 }
 
-constexpr TInstant TDuration::ToDeadLine(TInstant now) const {
+constexpr TInstant TDuration::ToDeadLine(TInstant now) const { 
     return now + *this;
 }
 

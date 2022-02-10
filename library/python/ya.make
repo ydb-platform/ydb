@@ -129,7 +129,7 @@ RECURSE(
     nirvana_test
     nstools
     nyt
-    oauth
+    oauth 
     oauth/example
     ok_client
     openssl

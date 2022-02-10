@@ -507,98 +507,98 @@ Y_UNIT_TEST_SUITE(TJsonValueTest) {
     }
 
     Y_UNIT_TEST(NonexistentFieldAccessTest) {
-        {
-            TJsonValue json;
-            json.InsertValue("some", "key");
-
-            UNIT_ASSERT(!json["some"]["weird"]["access"]["sequence"].Has("value"));
-            UNIT_ASSERT(!json["some"]["weird"]["access"]["sequence"].IsDefined());
-
-            UNIT_ASSERT(json["some"].GetType() == JSON_MAP);
-        }
-    }
-
+        { 
+            TJsonValue json; 
+            json.InsertValue("some", "key"); 
+ 
+            UNIT_ASSERT(!json["some"]["weird"]["access"]["sequence"].Has("value")); 
+            UNIT_ASSERT(!json["some"]["weird"]["access"]["sequence"].IsDefined()); 
+ 
+            UNIT_ASSERT(json["some"].GetType() == JSON_MAP); 
+        } 
+    } 
+ 
     Y_UNIT_TEST(DefaultValuesTest) {
-        {
-            TJsonValue json;
-            json.InsertValue("some", "key");
-            json.InsertValue("existing", 1.2);
-
-            UNIT_ASSERT_VALUES_EQUAL(json["existing"].GetDoubleSafe(), 1.2);
-            UNIT_ASSERT_VALUES_EQUAL(json["existing"].GetDoubleSafe(15), 1.2);
-
-            UNIT_ASSERT_EXCEPTION(json["some"].GetUIntegerSafe(), yexception);
-            UNIT_ASSERT_EXCEPTION(json["some"].GetUIntegerSafe(12), yexception);
-
-            UNIT_ASSERT_EXCEPTION(json["nonexistent"].GetUIntegerSafe(), yexception);
-            UNIT_ASSERT_VALUES_EQUAL(json["nonexistent"].GetUIntegerSafe(12), 12);
-            UNIT_ASSERT_VALUES_EQUAL(json["nonexistent"]["more_nonexistent"].GetUIntegerSafe(12), 12);
-
-            json.InsertValue("map", TJsonValue(JSON_MAP));
-
-            UNIT_ASSERT_VALUES_EQUAL(json["map"]["nonexistent"].GetUIntegerSafe(12), 12);
-        }
-    }
-
+        { 
+            TJsonValue json; 
+            json.InsertValue("some", "key"); 
+            json.InsertValue("existing", 1.2); 
+ 
+            UNIT_ASSERT_VALUES_EQUAL(json["existing"].GetDoubleSafe(), 1.2); 
+            UNIT_ASSERT_VALUES_EQUAL(json["existing"].GetDoubleSafe(15), 1.2); 
+ 
+            UNIT_ASSERT_EXCEPTION(json["some"].GetUIntegerSafe(), yexception); 
+            UNIT_ASSERT_EXCEPTION(json["some"].GetUIntegerSafe(12), yexception); 
+ 
+            UNIT_ASSERT_EXCEPTION(json["nonexistent"].GetUIntegerSafe(), yexception); 
+            UNIT_ASSERT_VALUES_EQUAL(json["nonexistent"].GetUIntegerSafe(12), 12); 
+            UNIT_ASSERT_VALUES_EQUAL(json["nonexistent"]["more_nonexistent"].GetUIntegerSafe(12), 12); 
+ 
+            json.InsertValue("map", TJsonValue(JSON_MAP)); 
+ 
+            UNIT_ASSERT_VALUES_EQUAL(json["map"]["nonexistent"].GetUIntegerSafe(12), 12); 
+        } 
+    } 
+ 
     Y_UNIT_TEST(GetArrayPointerInArrayTest) {
-        TJsonValue outer;
-        {
-            TJsonValue json;
-            json.AppendValue(1);
-            json.AppendValue(2);
-            json.AppendValue(3);
-
-            outer.AppendValue(json);
-        }
+        TJsonValue outer; 
+        { 
+            TJsonValue json; 
+            json.AppendValue(1); 
+            json.AppendValue(2); 
+            json.AppendValue(3); 
+ 
+            outer.AppendValue(json); 
+        } 
         const TJsonValue::TArray* array = nullptr;
-        GetArrayPointer(outer, 0, &array);
-        UNIT_ASSERT_VALUES_EQUAL((*array)[1], 2);
-    }
-
+        GetArrayPointer(outer, 0, &array); 
+        UNIT_ASSERT_VALUES_EQUAL((*array)[1], 2); 
+    } 
+ 
     Y_UNIT_TEST(GetArrayPointerInMapTest) {
-        TJsonValue outer;
-        {
-            TJsonValue json;
-            json.AppendValue(1);
-            json.AppendValue(2);
-            json.AppendValue(3);
-
-            outer.InsertValue("x", json);
-        }
+        TJsonValue outer; 
+        { 
+            TJsonValue json; 
+            json.AppendValue(1); 
+            json.AppendValue(2); 
+            json.AppendValue(3); 
+ 
+            outer.InsertValue("x", json); 
+        } 
         const TJsonValue::TArray* array = nullptr;
-        GetArrayPointer(outer, "x", &array);
-        UNIT_ASSERT_VALUES_EQUAL((*array)[1], 2);
-    }
-
+        GetArrayPointer(outer, "x", &array); 
+        UNIT_ASSERT_VALUES_EQUAL((*array)[1], 2); 
+    } 
+ 
     Y_UNIT_TEST(GetMapPointerInArrayTest) {
-        TJsonValue outer;
-        {
-            TJsonValue json;
-            json.InsertValue("a", 1);
-            json.InsertValue("b", 2);
-            json.InsertValue("c", 3);
-
-            outer.AppendValue(json);
-        }
+        TJsonValue outer; 
+        { 
+            TJsonValue json; 
+            json.InsertValue("a", 1); 
+            json.InsertValue("b", 2); 
+            json.InsertValue("c", 3); 
+ 
+            outer.AppendValue(json); 
+        } 
         const TJsonValue::TMapType* map = nullptr;
-        GetMapPointer(outer, 0, &map);
-        UNIT_ASSERT_VALUES_EQUAL((*map).at("b"), 2);
-    }
-
+        GetMapPointer(outer, 0, &map); 
+        UNIT_ASSERT_VALUES_EQUAL((*map).at("b"), 2); 
+    } 
+ 
     Y_UNIT_TEST(GetMapPointerInMapTest) {
-        TJsonValue outer;
-        {
-            TJsonValue json;
-            json.InsertValue("a", 1);
-            json.InsertValue("b", 2);
-            json.InsertValue("c", 3);
-
-            outer.InsertValue("x", json);
-        }
+        TJsonValue outer; 
+        { 
+            TJsonValue json; 
+            json.InsertValue("a", 1); 
+            json.InsertValue("b", 2); 
+            json.InsertValue("c", 3); 
+ 
+            outer.InsertValue("x", json); 
+        } 
         const TJsonValue::TMapType* map = nullptr;
-        GetMapPointer(outer, "x", &map);
-        UNIT_ASSERT_VALUES_EQUAL((*map).at("b"), 2);
-    }
+        GetMapPointer(outer, "x", &map); 
+        UNIT_ASSERT_VALUES_EQUAL((*map).at("b"), 2); 
+    } 
 
     Y_UNIT_TEST(GetIntegerRobustBignumStringTest) {
         TString value = "1626862681464633683";

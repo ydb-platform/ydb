@@ -25,5 +25,5 @@ __all__ = [
     'TestStroka',
     'TestVector',
     'TestFromString',
-    'TestToString',
+    'TestToString', 
 ]

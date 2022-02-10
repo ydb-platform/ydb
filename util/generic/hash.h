@@ -1390,12 +1390,12 @@ void THashTable<V, K, HF, Ex, Eq, A>::copy_from_dynamic(const THashTable& ht) {
 #endif /* __STL_USE_EXCEPTIONS */
 }
 
-namespace NPrivate {
+namespace NPrivate { 
     template <class Key>
     inline TString MapKeyToString(const Key&) {
         return TypeName<Key>();
-    }
-
+    } 
+ 
     TString MapKeyToString(TStringBuf key);
     TString MapKeyToString(unsigned short key);
     TString MapKeyToString(short key);
@@ -1405,22 +1405,22 @@ namespace NPrivate {
     TString MapKeyToString(long key);
     TString MapKeyToString(unsigned long long key);
     TString MapKeyToString(long long key);
-
+ 
     inline TString MapKeyToString(const TString& key) {
-        return MapKeyToString(TStringBuf(key));
-    }
-
+        return MapKeyToString(TStringBuf(key)); 
+    } 
+ 
     inline TString MapKeyToString(const char* key) {
-        return MapKeyToString(TStringBuf(key));
-    }
-
+        return MapKeyToString(TStringBuf(key)); 
+    } 
+ 
     inline TString MapKeyToString(char* key) {
-        return MapKeyToString(TStringBuf(key));
-    }
+        return MapKeyToString(TStringBuf(key)); 
+    } 
 
     [[noreturn]] void ThrowKeyNotFoundInHashTableException(const TStringBuf keyRepresentation);
 }
-
+ 
 template <class Key, class T, class HashFcn, class EqualKey, class Alloc>
 class THashMap: public TMapOps<THashMap<Key, T, HashFcn, EqualKey, Alloc>> {
 private:

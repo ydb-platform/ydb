@@ -5,22 +5,22 @@
 #include <cstring>
 
 template <class T>
-static constexpr const T& Min(const T& l, const T& r) {
+static constexpr const T& Min(const T& l, const T& r) { 
     return r < l ? r : l;
 }
 
 template <typename T, typename... Args>
-static constexpr const T& Min(const T& a, const T& b, const Args&... args) {
+static constexpr const T& Min(const T& a, const T& b, const Args&... args) { 
     return Min(a, Min(b, args...));
 }
 
 template <class T>
-static constexpr const T& Max(const T& l, const T& r) {
+static constexpr const T& Max(const T& l, const T& r) { 
     return l < r ? r : l;
 }
 
 template <typename T, typename... Args>
-static constexpr const T& Max(const T& a, const T& b, const Args&... args) {
+static constexpr const T& Max(const T& a, const T& b, const Args&... args) { 
     return Max(a, Max(b, args...));
 }
 

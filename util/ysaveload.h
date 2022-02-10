@@ -685,12 +685,12 @@ private:
 
 template <class T>
 static inline void SaveLoad(IOutputStream* out, const T& t) {
-    Save(out, t);
+    Save(out, t); 
 }
 
 template <class T>
 static inline void SaveLoad(IInputStream* in, T& t) {
-    Load(in, t);
+    Load(in, t); 
 }
 
 template <class S, class... Ts>

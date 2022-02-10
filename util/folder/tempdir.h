@@ -1,7 +1,7 @@
 #pragma once
 
 #include "fwd.h"
-#include "path.h"
+#include "path.h" 
 #include <util/generic/string.h>
 
 class TTempDir {
@@ -22,10 +22,10 @@ public:
     }
 
     const TString& Name() const {
-        return TempDir.GetPath();
-    }
-
-    const TFsPath& Path() const {
+        return TempDir.GetPath(); 
+    } 
+ 
+    const TFsPath& Path() const { 
         return TempDir;
     }
 
@@ -38,6 +38,6 @@ private:
     // by requiring additional fake argument.
     TTempDir(const char* prefix, TCreationToken);
 
-    TFsPath TempDir;
+    TFsPath TempDir; 
     bool Remove;
 };

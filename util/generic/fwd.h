@@ -132,7 +132,7 @@ class TSharedPtr;
 
 template <class T, class C = TCopyNew, class D = TDelete>
 class TCopyPtr;
-
+ 
 template <class TPtr, class TCopy = TCopyNew>
 class TCowPtr;
 
@@ -151,13 +151,13 @@ using TArrayPtr = TAutoPtr<T, TDeleteArray>;
 template <typename T>
 using TMallocPtr = TAutoPtr<T, TFree>;
 
-//maybe
-namespace NMaybe {
-    struct TPolicyUndefinedExcept;
-}
+//maybe 
+namespace NMaybe { 
+    struct TPolicyUndefinedExcept; 
+} 
 
-template <class T, class Policy = ::NMaybe::TPolicyUndefinedExcept>
-class TMaybe;
+template <class T, class Policy = ::NMaybe::TPolicyUndefinedExcept> 
+class TMaybe; 
 
 struct TGUID;
 

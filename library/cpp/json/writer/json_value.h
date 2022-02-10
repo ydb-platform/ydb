@@ -135,7 +135,7 @@ namespace NJson {
         unsigned long long GetUIntegerRobust() const noexcept;
         double GetDoubleRobust() const noexcept;
         TString GetStringRobust() const;
-
+ 
         // Exception-free accessors
         bool GetBoolean(bool* value) const noexcept;
         bool GetInteger(long long* value) const noexcept;

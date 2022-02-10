@@ -20,7 +20,7 @@ class TPointerTest: public TTestBase {
     UNIT_TEST(TestHolderPtrMoveAssignmentInheritance);
     UNIT_TEST(TestMakeHolder);
     UNIT_TEST(TestTrulePtr);
-    UNIT_TEST(TestAutoToHolder);
+    UNIT_TEST(TestAutoToHolder); 
     UNIT_TEST(TestCopyPtr);
     UNIT_TEST(TestIntrPtr);
     UNIT_TEST(TestIntrusiveConvertion);
@@ -72,7 +72,7 @@ private:
     void TestHolderPtrMoveAssignmentInheritance();
     void TestMakeHolder();
     void TestTrulePtr();
-    void TestAutoToHolder();
+    void TestAutoToHolder(); 
     void TestCopyPtr();
     void TestIntrPtr();
     void TestIntrusiveConvertion();
@@ -136,7 +136,7 @@ void TPointerTest::TestSimpleIntrPtr() {
         a2 = a3;
     }
 
-    UNIT_ASSERT_VALUES_EQUAL(cnt, 0);
+    UNIT_ASSERT_VALUES_EQUAL(cnt, 0); 
 }
 
 void TPointerTest::TestHolderPtr() {
@@ -145,7 +145,7 @@ void TPointerTest::TestHolderPtr() {
         THolder<A> a2(a1.Release());
     }
 
-    UNIT_ASSERT_VALUES_EQUAL(cnt, 0);
+    UNIT_ASSERT_VALUES_EQUAL(cnt, 0); 
 }
 
 THolder<int> CreateInt(int value) {
@@ -246,19 +246,19 @@ void TPointerTest::TestTrulePtr() {
         a1 = a2;
     }
 
-    UNIT_ASSERT_VALUES_EQUAL(cnt, 0);
+    UNIT_ASSERT_VALUES_EQUAL(cnt, 0); 
 }
 
 void TPointerTest::TestAutoToHolder() {
-    {
+    { 
         TAutoPtr<A> a1(MakeA());
-        THolder<A> a2(a1);
-
-        UNIT_ASSERT_EQUAL(a1.Get(), nullptr);
-        UNIT_ASSERT_VALUES_EQUAL(cnt, 1);
-    }
-
-    UNIT_ASSERT_VALUES_EQUAL(cnt, 0);
+        THolder<A> a2(a1); 
+ 
+        UNIT_ASSERT_EQUAL(a1.Get(), nullptr); 
+        UNIT_ASSERT_VALUES_EQUAL(cnt, 1); 
+    } 
+ 
+    UNIT_ASSERT_VALUES_EQUAL(cnt, 0); 
 
     {
         TAutoPtr<A> x(new A());
@@ -276,22 +276,22 @@ void TPointerTest::TestAutoToHolder() {
     }
 
     UNIT_ASSERT_VALUES_EQUAL(cnt, 0);
-}
-
+} 
+ 
 void TPointerTest::TestCopyPtr() {
     TCopyPtr<A> a1(MakeA());
     {
         TCopyPtr<A> a2(MakeA());
         TCopyPtr<A> a3 = a2;
-        UNIT_ASSERT_VALUES_EQUAL(cnt, 3);
+        UNIT_ASSERT_VALUES_EQUAL(cnt, 3); 
 
         a1 = a2;
         a2 = a3;
     }
-    UNIT_ASSERT_VALUES_EQUAL(cnt, 1);
+    UNIT_ASSERT_VALUES_EQUAL(cnt, 1); 
     a1.Destroy();
 
-    UNIT_ASSERT_VALUES_EQUAL(cnt, 0);
+    UNIT_ASSERT_VALUES_EQUAL(cnt, 0); 
 }
 
 class TOp: public TSimpleRefCount<TOp>, public TNonCopyable {
@@ -348,20 +348,20 @@ void TPointerTest::TestIntrPtr() {
                 f2.push_back(p);
                 Attach(&op3, &f2[1]);
                 f1 = f2;
-                UNIT_ASSERT_VALUES_EQUAL(f1[0]->RefCount(), 2);
-                UNIT_ASSERT_VALUES_EQUAL(f1[1]->RefCount(), 3);
+                UNIT_ASSERT_VALUES_EQUAL(f1[0]->RefCount(), 2); 
+                UNIT_ASSERT_VALUES_EQUAL(f1[1]->RefCount(), 3); 
                 UNIT_ASSERT_EQUAL(f1[1].Get(), op3.Op2.Get());
-                UNIT_ASSERT_VALUES_EQUAL(op3.Op2->RefCount(), 3);
-                UNIT_ASSERT_VALUES_EQUAL(op3.Op2->Op->RefCount(), 2);
-                UNIT_ASSERT_VALUES_EQUAL(TOp::Cnt, 4);
+                UNIT_ASSERT_VALUES_EQUAL(op3.Op2->RefCount(), 3); 
+                UNIT_ASSERT_VALUES_EQUAL(op3.Op2->Op->RefCount(), 2); 
+                UNIT_ASSERT_VALUES_EQUAL(TOp::Cnt, 4); 
             }
             p2 = p;
         }
-        UNIT_ASSERT_VALUES_EQUAL(op3.Op2->RefCount(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(op3.Op2->Op->RefCount(), 3);
-        UNIT_ASSERT_VALUES_EQUAL(TOp::Cnt, 3);
+        UNIT_ASSERT_VALUES_EQUAL(op3.Op2->RefCount(), 1); 
+        UNIT_ASSERT_VALUES_EQUAL(op3.Op2->Op->RefCount(), 3); 
+        UNIT_ASSERT_VALUES_EQUAL(TOp::Cnt, 3); 
     }
-    UNIT_ASSERT_VALUES_EQUAL(TOp::Cnt, 0);
+    UNIT_ASSERT_VALUES_EQUAL(TOp::Cnt, 0); 
 }
 
 namespace NTestIntrusiveConvertion {
@@ -424,7 +424,7 @@ void TPointerTest::TestMakeIntrusive() {
         UNIT_ASSERT_VALUES_EQUAL(1, p->RefCount());
         UNIT_ASSERT_VALUES_EQUAL(1, TOp::Cnt);
     }
-    UNIT_ASSERT_VALUES_EQUAL(TOp::Cnt, 0);
+    UNIT_ASSERT_VALUES_EQUAL(TOp::Cnt, 0); 
 }
 
 void TPointerTest::TestCopyOnWritePtr1() {

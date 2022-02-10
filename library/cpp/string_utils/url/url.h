@@ -44,8 +44,8 @@ TStringBuf GetSchemePrefix(const TStringBuf url) noexcept;
 
 //! removes protocol prefixes 'http://' and 'https://' from given URL
 //! @note if URL has no prefix or some other prefix the function does nothing
-//! @param url    URL from which the prefix should be removed
-//! @param ignorehttps if true, leaves https://
+//! @param url    URL from which the prefix should be removed 
+//! @param ignorehttps if true, leaves https:// 
 //! @return a new URL without protocol prefix
 Y_PURE_FUNCTION
 TStringBuf CutHttpPrefix(const TStringBuf url, bool ignorehttps = false) noexcept;

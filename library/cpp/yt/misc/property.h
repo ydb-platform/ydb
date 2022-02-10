@@ -1,7 +1,7 @@
-#pragma once
-
-////////////////////////////////////////////////////////////////////////////////
-
+#pragma once 
+ 
+//////////////////////////////////////////////////////////////////////////////// 
+ 
 //! Declares a trivial public read-write property that is passed by reference.
 #define DECLARE_BYREF_RW_PROPERTY(type, name) \
 public: \
@@ -13,18 +13,18 @@ public: \
 #define DEFINE_BYREF_RW_PROPERTY(type, name, ...) \
 protected: \
     type name##_ { __VA_ARGS__ }; \
-    \
-public: \
+    \ 
+public: \ 
     Y_FORCE_INLINE type& name() \
-    { \
-        return name##_; \
-    } \
-    \
+    { \ 
+        return name##_; \ 
+    } \ 
+    \ 
     Y_FORCE_INLINE const type& name() const \
-    { \
-        return name##_; \
-    }
-
+    { \ 
+        return name##_; \ 
+    } 
+ 
 //! Defines a trivial public read-write property that is passed by reference
 //! and is not inline-initialized.
 #define DEFINE_BYREF_RW_PROPERTY_NO_INIT(type, name) \
@@ -105,18 +105,18 @@ public: \
 #define DEFINE_BYVAL_RW_PROPERTY(type, name, ...) \
 protected: \
     type name##_ { __VA_ARGS__ }; \
-    \
-public: \
+    \ 
+public: \ 
     Y_FORCE_INLINE type Get##name() const \
-    { \
-        return name##_; \
-    } \
-    \
+    { \ 
+        return name##_; \ 
+    } \ 
+    \ 
     Y_FORCE_INLINE void Set##name(type value) \
-    { \
-        name##_ = value; \
+    { \ 
+        name##_ = value; \ 
     } \
-
+ 
 //! Defines a trivial public read-write property that is passed by value.
 //! All arguments after name are used as default value (via braced-init-list).
 #define DEFINE_BYVAL_RW_PROPERTY_WITH_FLUENT_SETTER(declaringType, type, name, ...) \
@@ -208,7 +208,7 @@ public: \
         return (delegateTo).Get##name(); \
     }
 
-////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////// 
 
 //! Below are macro helpers for extra properties.
 //! Extra properties should be used for lazy memory allocation for properties that

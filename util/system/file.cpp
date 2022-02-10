@@ -339,25 +339,25 @@ bool TFileHandle::Resize(i64 length) noexcept {
     if (!IsOpen()) {
         return false;
     }
-    i64 currentLength = GetLength();
+    i64 currentLength = GetLength(); 
     if (length == currentLength) {
-        return true;
+        return true; 
     }
 #if defined(_win_)
-    i64 currentPosition = GetPosition();
+    i64 currentPosition = GetPosition(); 
     if (currentPosition == -1L) {
         return false;
     }
-    Seek(length, sSet);
+    Seek(length, sSet); 
     if (!::SetEndOfFile(Fd_)) {
         return false;
     }
     if (currentPosition < length) {
-        Seek(currentPosition, sSet);
+        Seek(currentPosition, sSet); 
     }
     return true;
 #elif defined(_unix_)
-    return (0 == ftruncate(Fd_, (off_t)length));
+    return (0 == ftruncate(Fd_, (off_t)length)); 
 #else
     #error unsupported platform
 #endif
@@ -366,28 +366,28 @@ bool TFileHandle::Resize(i64 length) noexcept {
 bool TFileHandle::Reserve(i64 length) noexcept {
     // FIXME this should reserve disk space with fallocate
     if (!IsOpen()) {
-        return false;
+        return false; 
     }
-    i64 currentLength = GetLength();
+    i64 currentLength = GetLength(); 
     if (length <= currentLength) {
-        return true;
+        return true; 
     }
     if (!Resize(length)) {
-        return false;
+        return false; 
     }
 #if defined(_win_)
-    if (!::SetFileValidData(Fd_, length)) {
-        Resize(currentLength);
-        return false;
-    }
+    if (!::SetFileValidData(Fd_, length)) { 
+        Resize(currentLength); 
+        return false; 
+    } 
 #elif defined(_unix_)
 // No way to implement this under FreeBSD. Just do nothing
-#else
+#else 
     #error unsupported platform
-#endif
-    return true;
-}
-
+#endif 
+    return true; 
+} 
+ 
 bool TFileHandle::FallocateNoResize(i64 length) noexcept {
     if (!IsOpen()) {
         return false;
@@ -897,7 +897,7 @@ public:
             ythrow TFileError() << "can't reserve " << length << " for file " << FileName_.Quote();
         }
     }
-
+ 
     void FallocateNoResize(i64 length) {
         if (!Handle_.FallocateNoResize(length)) {
             ythrow TFileError() << "can't allocate " << length << "bytes of space for file " << FileName_.Quote();
@@ -1137,14 +1137,14 @@ i64 TFile::Seek(i64 offset, SeekDir origin) {
     return Impl_->Seek(offset, origin);
 }
 
-void TFile::Resize(i64 length) {
-    Impl_->Resize(length);
+void TFile::Resize(i64 length) { 
+    Impl_->Resize(length); 
 }
 
-void TFile::Reserve(i64 length) {
-    Impl_->Reserve(length);
-}
-
+void TFile::Reserve(i64 length) { 
+    Impl_->Reserve(length); 
+} 
+ 
 void TFile::FallocateNoResize(i64 length) {
     Impl_->FallocateNoResize(length);
 }

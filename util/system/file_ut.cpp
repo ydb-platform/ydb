@@ -92,24 +92,24 @@ public:
 
         UNIT_ASSERT_EQUAL(TUnbufferedFileInput(tmp.Name()).ReadAll(), "67895678");
     }
-
+ 
     inline void TestResize() {
         TTempFile tmp("tmp");
-
+ 
         {
             TFile file(tmp.Name(), OpenAlways | WrOnly);
-
+ 
             file.Write("1234567", 7);
             file.Seek(3, sSet);
-
+ 
             file.Resize(5);
             UNIT_ASSERT_EQUAL(file.GetLength(), 5);
             UNIT_ASSERT_EQUAL(file.GetPosition(), 3);
-
+ 
             file.Resize(12);
             UNIT_ASSERT_EQUAL(file.GetLength(), 12);
             UNIT_ASSERT_EQUAL(file.GetPosition(), 3);
-        }
+        } 
 
         const TString data = TUnbufferedFileInput(tmp.Name()).ReadAll();
         UNIT_ASSERT_EQUAL(data.length(), 12);

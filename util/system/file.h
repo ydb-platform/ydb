@@ -162,8 +162,8 @@ public:
     FHANDLE GetHandle() const noexcept;
 
     i64 Seek(i64 offset, SeekDir origin);
-    void Resize(i64 length);
-    void Reserve(i64 length);
+    void Resize(i64 length); 
+    void Reserve(i64 length); 
     void FallocateNoResize(i64 length);
     void ShrinkToFit();
     void Flush();

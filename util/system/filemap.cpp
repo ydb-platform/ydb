@@ -474,20 +474,20 @@ TFileMap::TFileMap(const TFileMap& fm) noexcept
 {
 }
 
-void TFileMap::Flush(void* ptr, size_t size, bool sync) {
+void TFileMap::Flush(void* ptr, size_t size, bool sync) { 
     Y_ASSERT(ptr >= Ptr());
     Y_ASSERT(static_cast<char*>(ptr) + size <= static_cast<char*>(Ptr()) + MappedSize());
-
+ 
     if (!Region_.IsMapped()) {
         return;
     }
 
 #if defined(_win_)
-    if (sync) {
-        FlushViewOfFile(ptr, size);
-    }
+    if (sync) { 
+        FlushViewOfFile(ptr, size); 
+    } 
 #else
-    msync(ptr, size, sync ? MS_SYNC : MS_ASYNC);
+    msync(ptr, size, sync ? MS_SYNC : MS_ASYNC); 
 #endif
 }
 

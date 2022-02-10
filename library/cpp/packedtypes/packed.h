@@ -10,28 +10,28 @@
 struct Stream_traits {
     template <typename T>
     static T get(IInputStream& in) {
-        T x;
-        ::Load(&in, x);
-        return x;
-    }
+        T x; 
+        ::Load(&in, x); 
+        return x; 
+    } 
     static ui8 get_8(IInputStream& in) {
-        return get<ui8>(in);
-    }
+        return get<ui8>(in); 
+    } 
     static ui16 get_16(IInputStream& in) {
-        return get<ui16>(in);
-    }
+        return get<ui16>(in); 
+    } 
     static ui32 get_32(IInputStream& in) {
-        return get<ui32>(in);
-    }
+        return get<ui32>(in); 
+    } 
     static void put_8(ui8 x, IOutputStream& out) {
-        ::Save(&out, x);
-    }
+        ::Save(&out, x); 
+    } 
     static void put_16(ui16 x, IOutputStream& out) {
-        ::Save(&out, x);
-    }
+        ::Save(&out, x); 
+    } 
     static void put_32(ui32 x, IOutputStream& out) {
-        ::Save(&out, x);
-    }
+        ::Save(&out, x); 
+    } 
     static int is_good(IInputStream& /*in*/) {
         return 1;
     }
@@ -42,24 +42,24 @@ struct Stream_traits {
 
 struct TZCMemoryInput_traits {
     template <typename T>
-    static T get(TZCMemoryInput& in) {
-        T x;
+    static T get(TZCMemoryInput& in) { 
+        T x; 
         in.ReadPOD(x);
-        return x;
+        return x; 
     }
 
     static ui8 Y_FORCE_INLINE get_8(TZCMemoryInput& in) {
-        return get<ui8>(in);
+        return get<ui8>(in); 
     }
 
     static ui16 Y_FORCE_INLINE get_16(TZCMemoryInput& in) {
-        return get<ui16>(in);
+        return get<ui16>(in); 
     }
 
     static ui32 Y_FORCE_INLINE get_32(TZCMemoryInput& in) {
-        return get<ui32>(in);
-    }
-
+        return get<ui32>(in); 
+    } 
+ 
     static int Y_FORCE_INLINE is_good(TZCMemoryInput&) {
         return 1;
     }

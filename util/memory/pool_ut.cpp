@@ -135,9 +135,9 @@ private:
         }
 
         alloc.CheckAtEnd();
-
-        struct TConstructorTest {
-            int ConstructorType;
+ 
+        struct TConstructorTest { 
+            int ConstructorType; 
             TConstructorTest()
                 : ConstructorType(1)
             {
@@ -154,19 +154,19 @@ private:
                 : ConstructorType(4)
             {
             }
-        };
-
-        {
-            TMemoryPool pool(123, TMemoryPool::TExpGrow::Instance(), &alloc);
+        }; 
+ 
+        { 
+            TMemoryPool pool(123, TMemoryPool::TExpGrow::Instance(), &alloc); 
             THolder<TConstructorTest, TDestructor> data1{pool.New<TConstructorTest>()};
             THolder<TConstructorTest, TDestructor> data2{pool.New<TConstructorTest>(42)};
             THolder<TConstructorTest, TDestructor> data3{pool.New<TConstructorTest>("hello", "world")};
-            UNIT_ASSERT_VALUES_EQUAL(data1->ConstructorType, 1);
-            UNIT_ASSERT_VALUES_EQUAL(data2->ConstructorType, 2);
-            UNIT_ASSERT_VALUES_EQUAL(data3->ConstructorType, 4);
-        }
-
-        alloc.CheckAtEnd();
+            UNIT_ASSERT_VALUES_EQUAL(data1->ConstructorType, 1); 
+            UNIT_ASSERT_VALUES_EQUAL(data2->ConstructorType, 2); 
+            UNIT_ASSERT_VALUES_EQUAL(data3->ConstructorType, 4); 
+        } 
+ 
+        alloc.CheckAtEnd(); 
     }
 
     inline void TestAlign() {

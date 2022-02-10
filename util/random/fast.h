@@ -73,10 +73,10 @@ public:
     }
 
     inline void Advance(ui64 delta) noexcept {
-        R1_.Advance(delta);
-        R2_.Advance(delta);
-    }
-
+        R1_.Advance(delta); 
+        R2_.Advance(delta); 
+    } 
+ 
 private:
     TFastRng32Base R1_;
     TFastRng32Base R2_;

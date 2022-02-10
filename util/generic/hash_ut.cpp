@@ -45,7 +45,7 @@ class THashTest: public TTestBase {
     UNIT_TEST(TestHMMapEmplace);
     UNIT_TEST(TestHMMapEmplaceNoresize);
     UNIT_TEST(TestHMMapEmplaceDirect);
-    UNIT_TEST(TestHSetEmplace);
+    UNIT_TEST(TestHSetEmplace); 
     UNIT_TEST(TestHSetEmplaceNoresize);
     UNIT_TEST(TestHSetEmplaceDirect);
     UNIT_TEST(TestNonCopyable);
@@ -93,7 +93,7 @@ protected:
     void TestEmplaceDirect();
     void TestTryEmplace();
     void TestTryEmplaceCopyKey();
-    void TestHSetEmplace();
+    void TestHSetEmplace(); 
     void TestHSetEmplaceNoresize();
     void TestHSetEmplaceDirect();
     void TestHMMapEmplace();
@@ -1007,11 +1007,11 @@ void THashTest::TestHMMapEmplaceDirect() {
     UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(it->second), 0);
 }
 
-void THashTest::TestHSetEmplace() {
+void THashTest::TestHSetEmplace() { 
     using hash_t = THashSet<TNonCopyableInt<0>, THash<int>, TEqualTo<int>>;
     hash_t hash;
     UNIT_ASSERT(!hash.contains(0));
-    hash.emplace(0);
+    hash.emplace(0); 
     UNIT_ASSERT(hash.contains(0));
     UNIT_ASSERT(!hash.contains(1));
 }
@@ -1021,11 +1021,11 @@ void THashTest::TestHSetEmplaceNoresize() {
     hash_t hash;
     hash.reserve(1);
     UNIT_ASSERT(!hash.contains(0));
-    hash.emplace_noresize(0);
+    hash.emplace_noresize(0); 
     UNIT_ASSERT(hash.contains(0));
     UNIT_ASSERT(!hash.contains(1));
-}
-
+} 
+ 
 void THashTest::TestHSetEmplaceDirect() {
     using hash_t = THashSet<TNonCopyableInt<0>, THash<int>, TEqualTo<int>>;
     hash_t hash;

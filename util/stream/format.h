@@ -38,11 +38,11 @@ namespace NFormatPrivate {
 
     template <typename T>
     struct TLeftPad {
-        T Value;
+        T Value; 
         size_t Width;
         char Padc;
 
-        inline TLeftPad(const T& value, size_t width, char padc)
+        inline TLeftPad(const T& value, size_t width, char padc) 
             : Value(value)
             , Width(width)
             , Padc(padc)
@@ -54,7 +54,7 @@ namespace NFormatPrivate {
     IOutputStream& operator<<(IOutputStream& o, const TLeftPad<T>& lp) {
         TTempBuf buf;
         TMemoryOutput ss(buf.Data(), buf.Size());
-        ss << lp.Value;
+        ss << lp.Value; 
         size_t written = buf.Size() - ss.Avail();
         if (lp.Width > written) {
             WriteChars(o, lp.Padc, lp.Width - written);
@@ -65,11 +65,11 @@ namespace NFormatPrivate {
 
     template <typename T>
     struct TRightPad {
-        T Value;
+        T Value; 
         size_t Width;
         char Padc;
 
-        inline TRightPad(const T& value, size_t width, char padc)
+        inline TRightPad(const T& value, size_t width, char padc) 
             : Value(value)
             , Width(width)
             , Padc(padc)
@@ -81,7 +81,7 @@ namespace NFormatPrivate {
     IOutputStream& operator<<(IOutputStream& o, const TRightPad<T>& lp) {
         TTempBuf buf;
         TMemoryOutput ss(buf.Data(), buf.Size());
-        ss << lp.Value;
+        ss << lp.Value; 
         size_t written = buf.Size() - ss.Avail();
         o.Write(buf.Data(), written);
         if (lp.Width > written) {
@@ -152,24 +152,24 @@ namespace NFormatPrivate {
         }
         return os;
     }
-
+ 
     template <typename T>
-    struct TFloatPrecision {
+    struct TFloatPrecision { 
         using TdVal = std::remove_cv_t<T>;
         static_assert(std::is_floating_point<TdVal>::value, "expect std::is_floating_point<TdVal>::value");
-
-        TdVal Value;
-        EFloatToStringMode Mode;
-        int NDigits;
-    };
-
+ 
+        TdVal Value; 
+        EFloatToStringMode Mode; 
+        int NDigits; 
+    }; 
+ 
     template <typename T>
     IOutputStream& operator<<(IOutputStream& o, const TFloatPrecision<T>& prec) {
-        char buf[512];
-        size_t count = FloatToString(prec.Value, buf, sizeof(buf), prec.Mode, prec.NDigits);
-        o << TStringBuf(buf, count);
-        return o;
-    }
+        char buf[512]; 
+        size_t count = FloatToString(prec.Value, buf, sizeof(buf), prec.Mode, prec.NDigits); 
+        o << TStringBuf(buf, count); 
+        return o; 
+    } 
 
     struct THumanReadableDuration {
         TDuration Value;
@@ -205,14 +205,14 @@ namespace NFormatPrivate {
  */
 template <typename T>
 static constexpr ::NFormatPrivate::TLeftPad<T> LeftPad(const T& value, const size_t width, const char padc = ' ') noexcept {
-    return ::NFormatPrivate::TLeftPad<T>(value, width, padc);
+    return ::NFormatPrivate::TLeftPad<T>(value, width, padc); 
 }
 
 template <typename T, int N>
 static constexpr ::NFormatPrivate::TLeftPad<const T*> LeftPad(const T (&value)[N], const size_t width, const char padc = ' ') noexcept {
-    return ::NFormatPrivate::TLeftPad<const T*>(value, width, padc);
-}
-
+    return ::NFormatPrivate::TLeftPad<const T*>(value, width, padc); 
+} 
+ 
 /**
  * Output manipulator similar to `std::setw` and `std::setfill`.
  *
@@ -231,14 +231,14 @@ static constexpr ::NFormatPrivate::TLeftPad<const T*> LeftPad(const T (&value)[N
  */
 template <typename T>
 static constexpr ::NFormatPrivate::TRightPad<T> RightPad(const T& value, const size_t width, const char padc = ' ') noexcept {
-    return ::NFormatPrivate::TRightPad<T>(value, width, padc);
+    return ::NFormatPrivate::TRightPad<T>(value, width, padc); 
 }
 
 template <typename T, int N>
 static constexpr ::NFormatPrivate::TRightPad<const T*> RightPad(const T (&value)[N], const size_t width, const char padc = ' ') noexcept {
-    return ::NFormatPrivate::TRightPad<const T*>(value, width, padc);
-}
-
+    return ::NFormatPrivate::TRightPad<const T*>(value, width, padc); 
+} 
+ 
 /**
  * Output manipulator similar to `std::setbase(16)`.
  *
@@ -402,7 +402,7 @@ static constexpr ::NFormatPrivate::THumanReadableSize HumanReadableSize(const do
 
 void Time(IOutputStream& l);
 void TimeHumanReadable(IOutputStream& l);
-
+ 
 /**
  * Output manipulator for adjusting precision of floating point values.
  *
@@ -419,11 +419,11 @@ void TimeHumanReadable(IOutputStream& l);
  * @param ndigits                       Number of significant digits (in `PREC_NDIGITS` and `PREC_POINT_DIGITS` mode).
  * @see EFloatToStringMode
  */
-template <typename T>
+template <typename T> 
 static constexpr ::NFormatPrivate::TFloatPrecision<T> Prec(const T& value, const EFloatToStringMode mode, const int ndigits = 0) noexcept {
-    return {value, mode, ndigits};
-}
-
+    return {value, mode, ndigits}; 
+} 
+ 
 /**
  * Output manipulator for adjusting precision of floating point values.
  *
@@ -440,5 +440,5 @@ static constexpr ::NFormatPrivate::TFloatPrecision<T> Prec(const T& value, const
  */
 template <typename T>
 static constexpr ::NFormatPrivate::TFloatPrecision<T> Prec(const T& value, const int ndigits) noexcept {
-    return {value, PREC_NDIGITS, ndigits};
-}
+    return {value, PREC_NDIGITS, ndigits}; 
+} 

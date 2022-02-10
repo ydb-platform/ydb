@@ -6,11 +6,11 @@
 // common engine for lcg-based RNG's
 // http://en.wikipedia.org/wiki/Linear_congruential_generator
 
-namespace NPrivate {
-    template <typename T>
+namespace NPrivate { 
+    template <typename T> 
     T LcgAdvance(T seed, T lcgBase, T lcgAddend, T delta) noexcept;
-};
-
+}; 
+ 
 template <typename T, T A, T C>
 struct TFastLcgIterator {
     static_assert(C % 2 == 1, "C must be odd");
@@ -18,10 +18,10 @@ struct TFastLcgIterator {
     static constexpr T Iterate(T x) noexcept {
         return x * A + C;
     }
-
+ 
     static inline T IterateMultiple(T x, T delta) noexcept {
-        return ::NPrivate::LcgAdvance(x, A, C, delta);
-    }
+        return ::NPrivate::LcgAdvance(x, A, C, delta); 
+    } 
 };
 
 template <typename T, T A>
@@ -36,9 +36,9 @@ struct TLcgIterator {
     }
 
     inline T IterateMultiple(T x, T delta) noexcept {
-        return ::NPrivate::LcgAdvance(x, A, C, delta);
-    }
-
+        return ::NPrivate::LcgAdvance(x, A, C, delta); 
+    } 
+ 
     const T C;
 };
 
@@ -59,8 +59,8 @@ struct TLcgRngBase: public TIterator, public TMixer {
     }
 
     inline void Advance(TStateType delta) noexcept {
-        X = this->IterateMultiple(X, delta);
-    }
-
+        X = this->IterateMultiple(X, delta); 
+    } 
+ 
     TStateType X;
 };

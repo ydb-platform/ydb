@@ -172,7 +172,7 @@ void TLog::AddLog(ELogPriority priority, const char* format, ...) const {
     Impl_->AddLog(priority, format, args);
 }
 
-void TLog::AddLogVAList(const char* format, va_list lst) {
+void TLog::AddLogVAList(const char* format, va_list lst) { 
     Impl_->AddLog(Impl_->DefaultPriority(), format, lst);
 }
 

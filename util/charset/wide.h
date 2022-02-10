@@ -82,7 +82,7 @@ inline wchar32 ReadSymbol(const wchar16* begin, const wchar16* end) noexcept {
     Y_ASSERT(begin < end);
     if (IsW16SurrogateLead(*begin)) {
         if (begin + 1 < end && IsW16SurrogateTail(*(begin + 1)))
-            return ::NDetail::ReadSurrogatePair(begin);
+            return ::NDetail::ReadSurrogatePair(begin); 
 
         return BROKEN_RUNE;
     } else if (IsW16SurrogateTail(*begin)) {
@@ -103,7 +103,7 @@ inline wchar32 ReadSymbolAndAdvance(const wchar16*& begin) noexcept {
     if (IsW16SurrogateLead(begin[0])) {
         if (IsW16SurrogateTail(begin[1])) {
             Y_ASSERT(begin[1] != 0);
-            const wchar32 c = ::NDetail::ReadSurrogatePair(begin);
+            const wchar32 c = ::NDetail::ReadSurrogatePair(begin); 
             begin += 2;
             return c;
         }
@@ -126,7 +126,7 @@ inline wchar32 ReadSymbolAndAdvance(const wchar16*& begin, const wchar16* end) n
     Y_ASSERT(begin < end);
     if (IsW16SurrogateLead(begin[0])) {
         if (begin + 1 != end && IsW16SurrogateTail(begin[1])) {
-            const wchar32 c = ::NDetail::ReadSurrogatePair(begin);
+            const wchar32 c = ::NDetail::ReadSurrogatePair(begin); 
             begin += 2;
             return c;
         }
@@ -157,7 +157,7 @@ inline size_t WriteSymbol(wchar32 s, T& dest) noexcept {
             return WriteSymbol(static_cast<wchar16>(BROKEN_RUNE), dest);
         }
 
-        ::NDetail::WriteSurrogatePair(s, dest);
+        ::NDetail::WriteSurrogatePair(s, dest); 
         return 2;
     }
 
@@ -176,7 +176,7 @@ inline bool WriteSymbol(wchar32 s, wchar16*& dest, const wchar16* destEnd) noexc
         if (dest + 2 > destEnd)
             return false;
 
-        ::NDetail::WriteSurrogatePair(s, dest);
+        ::NDetail::WriteSurrogatePair(s, dest); 
     } else {
         *(dest++) = static_cast<wchar16>(s);
     }

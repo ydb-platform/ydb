@@ -161,10 +161,10 @@ public:
         return std::pair<iterator, bool>(p.first, p.second);
     }
     template <typename... Args>
-    std::pair<iterator, bool> emplace(Args&&... args) {
-        std::pair<mutable_iterator, bool> p = rep.emplace_unique(std::forward<Args>(args)...);
-        return std::pair<iterator, bool>(p.first, p.second);
-    }
+    std::pair<iterator, bool> emplace(Args&&... args) { 
+        std::pair<mutable_iterator, bool> p = rep.emplace_unique(std::forward<Args>(args)...); 
+        return std::pair<iterator, bool>(p.first, p.second); 
+    } 
 
     iterator insert(const_iterator, const value_type& obj) { // insert_hint
         std::pair<mutable_iterator, bool> p = rep.insert_unique(obj);
@@ -176,10 +176,10 @@ public:
         return std::pair<iterator, bool>(p.first, p.second);
     }
     template <typename... Args>
-    std::pair<iterator, bool> emplace_noresize(Args&&... args) {
-        std::pair<mutable_iterator, bool> p = rep.emplace_unique_noresize(std::forward<Args>(args)...);
-        return std::pair<iterator, bool>(p.first, p.second);
-    }
+    std::pair<iterator, bool> emplace_noresize(Args&&... args) { 
+        std::pair<mutable_iterator, bool> p = rep.emplace_unique_noresize(std::forward<Args>(args)...); 
+        return std::pair<iterator, bool>(p.first, p.second); 
+    } 
 
     template <class TheObj>
     iterator insert_direct(const TheObj& obj, const insert_ctx& ins) {

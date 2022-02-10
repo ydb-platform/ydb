@@ -189,8 +189,8 @@ public:
         return ptr;
     }
 
-    template <typename T, typename... Args>
-    inline T* New(Args&&... args) {
+    template <typename T, typename... Args> 
+    inline T* New(Args&&... args) { 
         return new (Allocate<T>()) T(std::forward<Args>(args)...);
     }
 

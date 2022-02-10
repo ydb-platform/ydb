@@ -21,79 +21,79 @@
     #elif defined(__MACH__) && defined(__APPLE__)
         #include <mach/mach.h>
     #endif
-#elif defined(_win_)
+#elif defined(_win_) 
     #include <Windows.h>
     #include <util/generic/ptr.h>
-
+ 
 using NTSTATUS = LONG;
     #define STATUS_INFO_LENGTH_MISMATCH 0xC0000004
     #define STATUS_BUFFER_TOO_SMALL 0xC0000023
-
-typedef struct _UNICODE_STRING {
-    USHORT Length;
-    USHORT MaximumLength;
-    PWSTR Buffer;
-} UNICODE_STRING, *PUNICODE_STRING;
+ 
+typedef struct _UNICODE_STRING { 
+    USHORT Length; 
+    USHORT MaximumLength; 
+    PWSTR Buffer; 
+} UNICODE_STRING, *PUNICODE_STRING; 
 typedef struct _CLIENT_ID {
-    HANDLE UniqueProcess;
-    HANDLE UniqueThread;
-} CLIENT_ID, *PCLIENT_ID;
+    HANDLE UniqueProcess; 
+    HANDLE UniqueThread; 
+} CLIENT_ID, *PCLIENT_ID; 
 using KWAIT_REASON = ULONG;
 typedef struct _SYSTEM_THREAD_INFORMATION {
-    LARGE_INTEGER KernelTime;
-    LARGE_INTEGER UserTime;
-    LARGE_INTEGER CreateTime;
-    ULONG WaitTime;
-    PVOID StartAddress;
-    CLIENT_ID ClientId;
-    LONG Priority;
-    LONG BasePriority;
-    ULONG ContextSwitches;
-    ULONG ThreadState;
-    KWAIT_REASON WaitReason;
-} SYSTEM_THREAD_INFORMATION, *PSYSTEM_THREAD_INFORMATION;
+    LARGE_INTEGER KernelTime; 
+    LARGE_INTEGER UserTime; 
+    LARGE_INTEGER CreateTime; 
+    ULONG WaitTime; 
+    PVOID StartAddress; 
+    CLIENT_ID ClientId; 
+    LONG Priority; 
+    LONG BasePriority; 
+    ULONG ContextSwitches; 
+    ULONG ThreadState; 
+    KWAIT_REASON WaitReason; 
+} SYSTEM_THREAD_INFORMATION, *PSYSTEM_THREAD_INFORMATION; 
 typedef struct _SYSTEM_PROCESS_INFORMATION {
-    ULONG NextEntryOffset;
-    ULONG NumberOfThreads;
-    LARGE_INTEGER SpareLi1;
-    LARGE_INTEGER SpareLi2;
-    LARGE_INTEGER SpareLi3;
-    LARGE_INTEGER CreateTime;
-    LARGE_INTEGER UserTime;
-    LARGE_INTEGER KernelTime;
-    UNICODE_STRING ImageName;
-    LONG BasePriority;
-    HANDLE UniqueProcessId;
-    HANDLE InheritedFromUniqueProcessId;
-    ULONG HandleCount;
-    ULONG SessionId;
-    ULONG_PTR PageDirectoryBase;
-    SIZE_T PeakVirtualSize;
-    SIZE_T VirtualSize;
-    DWORD PageFaultCount;
-    SIZE_T PeakWorkingSetSize;
-    SIZE_T WorkingSetSize;
-    SIZE_T QuotaPeakPagedPoolUsage;
-    SIZE_T QuotaPagedPoolUsage;
-    SIZE_T QuotaPeakNonPagedPoolUsage;
-    SIZE_T QuotaNonPagedPoolUsage;
-    SIZE_T PagefileUsage;
-    SIZE_T PeakPagefileUsage;
-    SIZE_T PrivatePageCount;
-    LARGE_INTEGER ReadOperationCount;
-    LARGE_INTEGER WriteOperationCount;
-    LARGE_INTEGER OtherOperationCount;
-    LARGE_INTEGER ReadTransferCount;
-    LARGE_INTEGER WriteTransferCount;
-    LARGE_INTEGER OtherTransferCount;
-    SYSTEM_THREAD_INFORMATION Threads[1];
-} SYSTEM_PROCESS_INFORMATION, *PSYSTEM_PROCESS_INFORMATION;
-
-typedef enum _SYSTEM_INFORMATION_CLASS {
-    SystemBasicInformation = 0,
-    SystemProcessInformation = 5,
-} SYSTEM_INFORMATION_CLASS;
-
+    ULONG NextEntryOffset; 
+    ULONG NumberOfThreads; 
+    LARGE_INTEGER SpareLi1; 
+    LARGE_INTEGER SpareLi2; 
+    LARGE_INTEGER SpareLi3; 
+    LARGE_INTEGER CreateTime; 
+    LARGE_INTEGER UserTime; 
+    LARGE_INTEGER KernelTime; 
+    UNICODE_STRING ImageName; 
+    LONG BasePriority; 
+    HANDLE UniqueProcessId; 
+    HANDLE InheritedFromUniqueProcessId; 
+    ULONG HandleCount; 
+    ULONG SessionId; 
+    ULONG_PTR PageDirectoryBase; 
+    SIZE_T PeakVirtualSize; 
+    SIZE_T VirtualSize; 
+    DWORD PageFaultCount; 
+    SIZE_T PeakWorkingSetSize; 
+    SIZE_T WorkingSetSize; 
+    SIZE_T QuotaPeakPagedPoolUsage; 
+    SIZE_T QuotaPagedPoolUsage; 
+    SIZE_T QuotaPeakNonPagedPoolUsage; 
+    SIZE_T QuotaNonPagedPoolUsage; 
+    SIZE_T PagefileUsage; 
+    SIZE_T PeakPagefileUsage; 
+    SIZE_T PrivatePageCount; 
+    LARGE_INTEGER ReadOperationCount; 
+    LARGE_INTEGER WriteOperationCount; 
+    LARGE_INTEGER OtherOperationCount; 
+    LARGE_INTEGER ReadTransferCount; 
+    LARGE_INTEGER WriteTransferCount; 
+    LARGE_INTEGER OtherTransferCount; 
+    SYSTEM_THREAD_INFORMATION Threads[1]; 
+} SYSTEM_PROCESS_INFORMATION, *PSYSTEM_PROCESS_INFORMATION; 
+ 
+typedef enum _SYSTEM_INFORMATION_CLASS { 
+    SystemBasicInformation = 0, 
+    SystemProcessInformation = 5, 
+} SYSTEM_INFORMATION_CLASS; 
+ 
 #else
 
 #endif
@@ -173,15 +173,15 @@ namespace NMemInfo {
         Y_UNUSED(pid);
         ythrow yexception() << "arm is not supported";
     #endif
-#elif defined(_win_)
+#elif defined(_win_) 
         if (!pid) {
             pid = GetCurrentProcessId();
         }
-
+ 
         NTSTATUS status;
         TArrayHolder<char> buffer;
         ULONG bufferSize;
-
+ 
         // Query data for all processes and threads in the system.
         // This is probably an overkill if the target process is normal not-privileged one,
         // but allows to obtain information even about system processes that are not open-able directly.
@@ -201,7 +201,7 @@ namespace NMemInfo {
                 ythrow yexception() << "NtQuerySystemInformation failed with status code " << status;
             }
         }
-
+ 
         SYSTEM_PROCESS_INFORMATION* process = (SYSTEM_PROCESS_INFORMATION*)buffer.Get();
         while (process->UniqueProcessId != (HANDLE)(size_t)(pid)) {
             if (!process->NextEntryOffset) {
@@ -210,7 +210,7 @@ namespace NMemInfo {
 
             process = (SYSTEM_PROCESS_INFORMATION*)((char*)process + process->NextEntryOffset);
         }
-
+ 
         result.VMS = process->VirtualSize;
         result.RSS = process->WorkingSetSize;
 #endif

@@ -7,7 +7,7 @@
 #include <util/generic/noncopyable.h>
 #include <util/generic/ptr.h>
 #include <util/generic/singleton.h>
-#include <util/generic/ymath.h> 
+#include <util/generic/ymath.h>
 
 #include <functional>
 

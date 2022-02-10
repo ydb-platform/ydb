@@ -77,10 +77,10 @@ struct segpool_alloc {
         if (!pool) {
             Y_IF_DEBUG(malloc_free_count++);
             free(__p);
-        } else { 
+        } else {
             Y_IF_DEBUG(pool_free_count++);
-            ; 
-        } 
+            ;
+        }
     }
     ~segpool_alloc() {
         //assert(pool_count == pool_free_count && malloc_count == malloc_free_count); <- uncomment when swap() problem is solved

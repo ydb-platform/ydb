@@ -4,11 +4,11 @@
 
 #include <util/stream/input.h>
 #include <util/stream/output.h>
-#include <util/stream/file.h> 
+#include <util/stream/file.h>
 
 class TYaStreamInput: public IBinaryStream {
     IInputStream& Stream;
- 
+
     int WriteImpl(const void*, int) override {
         Y_ASSERT(0);
         return 0;
@@ -41,13 +41,13 @@ inline void SerializeFromStream(IInputStream& stream, T& c) {
 
 template <class T>
 inline void SerializeFromFile(const TString& fileName, T& c) {
-    TIFStream in(fileName); 
-    SerializeFromStream(in, c); 
-} 
- 
+    TIFStream in(fileName);
+    SerializeFromStream(in, c);
+}
+
 class TYaStreamOutput: public IBinaryStream {
     IOutputStream& Stream;
- 
+
     int WriteImpl(const void* what, int size) override {
         Stream.Write(what, (size_t)size);
         return size;
@@ -78,9 +78,9 @@ inline void SerializeToArcadiaStream(IOutputStream& stream, T& c) {
         bs.Add(1, &c);
     }
 }
- 
+
 template <class T>
 inline void SerializeToFile(const TString& fileName, T& c) {
-    TOFStream out(fileName); 
+    TOFStream out(fileName);
     SerializeToArcadiaStream(out, c);
-} 
+}

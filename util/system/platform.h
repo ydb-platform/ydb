@@ -138,10 +138,10 @@
     #define _sse2_
 #endif
 
-#if defined(__SSE3__) || defined(SSE3_ENABLED) 
+#if defined(__SSE3__) || defined(SSE3_ENABLED)
     #define _sse3_
-#endif 
- 
+#endif
+
 #if defined(__SSSE3__) || defined(SSSE3_ENABLED)
     #define _ssse3_
 #endif

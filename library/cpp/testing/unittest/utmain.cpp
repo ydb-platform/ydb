@@ -651,7 +651,7 @@ int NUnitTest::RunMain(int argc, char** argv) {
     InitNetworkSubSystem();
 
     try {
-        GetExecPath(); 
+        GetExecPath();
     } catch (...) {
     }
 

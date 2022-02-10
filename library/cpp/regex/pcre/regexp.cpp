@@ -137,7 +137,7 @@ protected:
     int CompileOptions;
     TString RegExpr;
     regex_t Preg;
- 
+
 public:
     TRegExBaseImpl()
         : CompileOptions(0)
@@ -156,8 +156,8 @@ public:
             regerror(rc, &Preg, errbuf, ERRBUF_SIZE);
             Error = "Error: regular expression " + re + " is wrong: " + errbuf;
             ythrow yexception() << "RegExp " << re << ": " << Error.data();
-        } 
-    } 
+        }
+    }
 
     int Exec(const char* str, regmatch_t pmatch[], int eflags, int nmatches) const {
         if (!RegExpr) {
@@ -205,7 +205,7 @@ TRegExBase::TRegExBase(const TString& re, int cflags) {
     Compile(re, cflags);
 }
 
-TRegExBase::~TRegExBase() { 
+TRegExBase::~TRegExBase() {
 }
 
 void TRegExBase::Compile(const TString& re, int cflags) {
@@ -234,7 +234,7 @@ TRegExMatch::TRegExMatch(const char* re, int cflags)
     : TRegExBase(re, cflags)
 {
 }
- 
+
 TRegExMatch::TRegExMatch(const TString& re, int cflags)
     : TRegExBase(re, cflags)
 {
@@ -242,47 +242,47 @@ TRegExMatch::TRegExMatch(const TString& re, int cflags)
 
 bool TRegExMatch::Match(const char* str) const {
     return Exec(str, nullptr, 0, 0) == 0;
-} 
- 
+}
+
 TRegExSubst::TRegExSubst(const char* re, int cflags)
     : TRegExBase(re, cflags)
     , Replacement(nullptr)
-{ 
-    memset(Brfs, 0, sizeof(TBackReferences) * NMATCHES); 
-} 
- 
+{
+    memset(Brfs, 0, sizeof(TBackReferences) * NMATCHES);
+}
+
 TString TRegExSubst::Replace(const char* str, int eflags) {
     TString s;
-    if (BrfsCount) { 
-        if (Exec(str, PMatch, eflags) == 0) { 
+    if (BrfsCount) {
+        if (Exec(str, PMatch, eflags) == 0) {
             int i;
             for (i = 0; i < BrfsCount; i++) {
                 s += TString(Replacement, Brfs[i].Beg, Brfs[i].End - Brfs[i].Beg);
-                if (Brfs[i].Refer >= 0 && Brfs[i].Refer < NMATCHES) 
+                if (Brfs[i].Refer >= 0 && Brfs[i].Refer < NMATCHES)
                     s += TString(str, PMatch[Brfs[i].Refer].rm_so, int(PMatch[Brfs[i].Refer].rm_eo - PMatch[Brfs[i].Refer].rm_so));
             }
             s += TString(Replacement, Brfs[i].Beg, Brfs[i].End - Brfs[i].Beg);
         }
     } else {
-        s = Replacement; 
+        s = Replacement;
     }
     return s;
 }
 
 //***
 // ��� ������������ ������ aaa.$1.$$$$.$2.bbb.$$$ccc Brfs ����� �����:
-// {beg = 0,  end = 4,  Refer =  1} => "aaa." + $1_match 
-// {beg = 6,  end = 8,  Refer = -1} => ".$" 
-// {beg = 9,  end = 10, Refer = -1} => "$" 
-// {beg = 11, end = 12, Refer =  2} => "." + $2_match 
-// {beg = 14, end = 20, Refer = -1} => ".bbb.$" 
-// {beg = 21, end = 22, Refer = -1} => "$" 
-// {beg = 22, end = 25, Refer = -1} => "ccc" 
-// {beg = 0,  end = 0,  Refer =  0} 
+// {beg = 0,  end = 4,  Refer =  1} => "aaa." + $1_match
+// {beg = 6,  end = 8,  Refer = -1} => ".$"
+// {beg = 9,  end = 10, Refer = -1} => "$"
+// {beg = 11, end = 12, Refer =  2} => "." + $2_match
+// {beg = 14, end = 20, Refer = -1} => ".bbb.$"
+// {beg = 21, end = 22, Refer = -1} => "$"
+// {beg = 22, end = 25, Refer = -1} => "ccc"
+// {beg = 0,  end = 0,  Refer =  0}
 //***
 int TRegExSubst::ParseReplacement(const char* repl) {
-    Replacement = repl; 
-    if (!Replacement || *Replacement == 0) 
+    Replacement = repl;
+    if (!Replacement || *Replacement == 0)
         return 0;
     char* pos = (char*)Replacement;
     char* pos1 = nullptr;
@@ -290,7 +290,7 @@ int TRegExSubst::ParseReplacement(const char* repl) {
     int i = 0;
     while (pos && *pos && i < NMATCHES) {
         pos1 = strchr(pos, '$');
-        Brfs[i].Refer = -1; 
+        Brfs[i].Refer = -1;
         pos2 = pos1;
         if (pos1) {
             pos2 = pos1 + 1;
@@ -302,16 +302,16 @@ int TRegExSubst::ParseReplacement(const char* repl) {
                 pos1++;
                 if (*pos2 == '$')
                     pos2++;
-                Brfs[i].Refer = -1; 
+                Brfs[i].Refer = -1;
             }
         }
-        Brfs[i].Beg = int(pos - (char*)Replacement); 
+        Brfs[i].Beg = int(pos - (char*)Replacement);
         Brfs[i].End = (pos1 == nullptr ? (int)strlen(Replacement) : int(pos1 - Replacement));
         pos = pos2;
         i++;
     }
-    Brfs[i].Beg = Brfs[i].End = 0; 
-    Brfs[i].Refer = -1; 
-    BrfsCount = i; 
-    return BrfsCount; 
+    Brfs[i].Beg = Brfs[i].End = 0;
+    Brfs[i].Refer = -1;
+    BrfsCount = i;
+    return BrfsCount;
 }

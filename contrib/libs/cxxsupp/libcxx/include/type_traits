@@ -1392,8 +1392,8 @@ template <class _Tp, class _Up>
 struct __is_same_uncvref : _IsSame<typename __uncvref<_Tp>::type,
                                    typename __uncvref<_Up>::type> {};
 
-// C++20, enabled for C++17 in Arcadia 
-#if _LIBCPP_STD_VER > 14 
+// C++20, enabled for C++17 in Arcadia
+#if _LIBCPP_STD_VER > 14
 // remove_cvref - same as __uncvref
 template <class _Tp>
 struct remove_cvref : public __uncvref<_Tp> {};

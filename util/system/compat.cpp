@@ -17,11 +17,11 @@
 #endif
 
 #ifndef HAVE_NATIVE_GETPROGNAME
-const char* getprogname() { 
+const char* getprogname() {
     return GetProgramName().data();
-} 
+}
 #endif
- 
+
 #ifdef _win_
 
 void sleep(i64 len) {

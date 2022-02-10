@@ -157,27 +157,27 @@ using uf8 = NPackedFloat::float8<0>;
 using f8d = NPackedFloat::float8<1, 1>;
 using uf8d = NPackedFloat::float8<0, 1>;
 
-// [0,1) value in 1/255s. 
+// [0,1) value in 1/255s.
 using frac8 = ui8;
- 
+
 using frac16 = ui16;
 
 template <class T>
 inline constexpr T Float2Frac(float fac) {
     return T(fac * float(Max<T>()));
-} 
- 
+}
+
 template <class T>
 inline constexpr T Float2FracR(float fac) {
     float v = fac * float(Max<T>());
-    return T(v + 0.5f); 
-} 
- 
+    return T(v + 0.5f);
+}
+
 template <class T>
 inline constexpr float Frac2Float(T pf) {
     constexpr float multiplier = float(1.0 / Max<T>());
     return pf * multiplier;
-} 
+}
 
 class TUi82FloatMapping {
 private:

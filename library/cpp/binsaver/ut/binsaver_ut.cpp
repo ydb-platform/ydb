@@ -80,51 +80,51 @@ UNIT_ASSERT(IBinSaver::HasNonTrivialSerializer<TVector<TCustomSerializer>>(0u));
 
 
 Y_UNIT_TEST(TestStroka) {
-    TestBinSaverSerialization(TString("QWERTY")); 
+    TestBinSaverSerialization(TString("QWERTY"));
 }
 
 Y_UNIT_TEST(TestMoveOnlyType) {
-    TestBinSaverSerializationToBuffer(TMoveOnlyType()); 
+    TestBinSaverSerializationToBuffer(TMoveOnlyType());
 }
 
 Y_UNIT_TEST(TestVectorStrok) {
-    TestBinSaverSerialization(TVector<TString>{"A", "B", "C"}); 
+    TestBinSaverSerialization(TVector<TString>{"A", "B", "C"});
 }
 
 Y_UNIT_TEST(TestCArray) {
-    TestBinSaverSerialization(TTypeWithArray()); 
+    TestBinSaverSerialization(TTypeWithArray());
 }
 
 Y_UNIT_TEST(TestSets) {
-    TestBinSaverSerialization(THashSet<TString>{"A", "B", "C"}); 
-    TestBinSaverSerialization(TSet<TString>{"A", "B", "C"}); 
+    TestBinSaverSerialization(THashSet<TString>{"A", "B", "C"});
+    TestBinSaverSerialization(TSet<TString>{"A", "B", "C"});
 }
 
 Y_UNIT_TEST(TestMaps) {
-    TestBinSaverSerialization(THashMap<TString, ui32>{{"A", 1}, {"B", 2}, {"C", 3}}); 
-    TestBinSaverSerialization(TMap<TString, ui32>{{"A", 1}, {"B", 2}, {"C", 3}}); 
+    TestBinSaverSerialization(THashMap<TString, ui32>{{"A", 1}, {"B", 2}, {"C", 3}});
+    TestBinSaverSerialization(TMap<TString, ui32>{{"A", 1}, {"B", 2}, {"C", 3}});
 }
 
 Y_UNIT_TEST(TestBlob) {
-    TestBinSaverSerialization(TBlob::FromStringSingleThreaded("qwerty")); 
+    TestBinSaverSerialization(TBlob::FromStringSingleThreaded("qwerty"));
 }
 
-Y_UNIT_TEST(TestVariant) { 
-    { 
+Y_UNIT_TEST(TestVariant) {
+    {
         using T = std::variant<TString, int>;
- 
-        TestBinSaverSerialization(T(TString(""))); 
-        TestBinSaverSerialization(T(0)); 
-    } 
-    { 
+
+        TestBinSaverSerialization(T(TString("")));
+        TestBinSaverSerialization(T(0));
+    }
+    {
         using T = std::variant<TString, int, float>;
- 
-        TestBinSaverSerialization(T(TString("ask"))); 
-        TestBinSaverSerialization(T(12)); 
-        TestBinSaverSerialization(T(0.64f)); 
-    } 
-} 
- 
+
+        TestBinSaverSerialization(T(TString("ask")));
+        TestBinSaverSerialization(T(12));
+        TestBinSaverSerialization(T(0.64f));
+    }
+}
+
 Y_UNIT_TEST(TestPod) {
     struct TPod {
         ui32 A = 5;
@@ -133,12 +133,12 @@ Y_UNIT_TEST(TestPod) {
             return A == other.A && B == other.B;
         }
     };
-    TestBinSaverSerialization(TPod()); 
+    TestBinSaverSerialization(TPod());
     TPod custom;
     custom.A = 25;
     custom.B = 37;
-    TestBinSaverSerialization(custom); 
-    TestBinSaverSerialization(TVector<TPod>{custom}); 
+    TestBinSaverSerialization(custom);
+    TestBinSaverSerialization(TVector<TPod>{custom});
 }
 
 Y_UNIT_TEST(TestSubPod) {
@@ -158,12 +158,12 @@ Y_UNIT_TEST(TestSubPod) {
             return B == other.B;
         }
     };
-    TestBinSaverSerialization(TPod()); 
+    TestBinSaverSerialization(TPod());
     TPod::TSub sub;
     sub.X = 1;
     TPod custom;
     custom.B = {sub};
-    TestBinSaverSerialization(TVector<TPod>{custom}); 
+    TestBinSaverSerialization(TVector<TPod>{custom});
 }
 
 Y_UNIT_TEST(TestMemberAndOpIsMain) {
@@ -192,7 +192,7 @@ Y_UNIT_TEST(TestMemberAndOpIsMain) {
     obj.S = "TString";
     obj.A = 42;
 
-    TestBinSaverSerialization(obj); 
+    TestBinSaverSerialization(obj);
 }
 }
 ;

@@ -8,8 +8,8 @@
 
 #include <cstdlib>
 
-#include <time.h> 
- 
+#include <time.h>
+
 namespace NDatetime {
     extern const ui32 MonthDays[2][12];        // !leapYear; !!leapYear
     extern const ui32 MonthDaysNewYear[2][13]; // !leapYear; !!leapYear
@@ -132,53 +132,53 @@ namespace NDatetime {
         }
     };
 }
- 
+
 inline TString date2str(const time_t date) {
     struct tm dateTm;
     memset(&dateTm, 0, sizeof(dateTm));
     localtime_r(&date, &dateTm);
-    char buf[9]; 
+    char buf[9];
     strftime(buf, sizeof(buf), "%Y%m%d", &dateTm);
     return TString(buf);
-} 
- 
+}
+
 inline time_t str2date(const TString& dateStr) {
     struct tm dateTm;
-    memset(&dateTm, 0, sizeof(tm)); 
+    memset(&dateTm, 0, sizeof(tm));
     strptime(dateStr.data(), "%Y%m%d", &dateTm);
-    return mktime(&dateTm); 
-} 
- 
-// checks whether time2 > time1 and close enough to it 
+    return mktime(&dateTm);
+}
+
+// checks whether time2 > time1 and close enough to it
 inline bool AreTimesSeqAndClose(time_t time1, time_t time2, time_t closeInterval = 10) {
-    return (time2 - time1) <= closeInterval; 
-} 
- 
-// checks whether time2 and time1 are close enough 
+    return (time2 - time1) <= closeInterval;
+}
+
+// checks whether time2 and time1 are close enough
 inline bool AreTimesClose(time_t time1, time_t time2, time_t closeInterval = 10) {
     return std::abs(time2 - time1) <= closeInterval;
-} 
- 
-//////////////////////////////// 
- 
+}
+
+////////////////////////////////
+
 struct TMonth {
-    ui16 Year; 
+    ui16 Year;
     ui8 Month;
- 
-    TMonth(ui16 year = 0, ui8 month = 0) 
-        : Year(year) 
-        , Month(month) 
+
+    TMonth(ui16 year = 0, ui8 month = 0)
+        : Year(year)
+        , Month(month)
     {
     }
- 
+
     TMonth operator-(ui16 n) {
-        if (n <= Month) { 
+        if (n <= Month) {
             return TMonth(Year, Month - (ui8)n);
-        } else { 
-            n -= Month; 
-            return (n % 12) ? TMonth(Year - 1 - (n / 12), 12 - (n % 12)) : TMonth(Year - (n / 12), 0); 
-        } 
-    } 
-}; 
+        } else {
+            n -= Month;
+            return (n % 12) ? TMonth(Year - 1 - (n / 12), 12 - (n % 12)) : TMonth(Year - (n / 12), 0);
+        }
+    }
+};
 
 Y_DECLARE_PODTYPE(NDatetime::TSimpleTM);

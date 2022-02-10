@@ -124,7 +124,7 @@ struct TFromStringException: public TBadCastException {
 
 /*
  * specialized for:
- *  bool 
+ *  bool
  *  short
  *  unsigned short
  *  int

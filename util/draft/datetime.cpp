@@ -1,15 +1,15 @@
 #include "datetime.h"
 
-#include <util/ysaveload.h> 
- 
+#include <util/ysaveload.h>
+
 #include <util/system/atomic.h>
 #include <util/system/fasttime.h>
 #include <util/datetime/base.h>
 #include <util/datetime/systime.h>
 #include <util/stream/output.h>
-#include <util/stream/mem.h> 
-#include <util/string/cast.h> 
-#include <util/string/printf.h> 
+#include <util/stream/mem.h>
+#include <util/string/cast.h>
+#include <util/string/printf.h>
 
 namespace NDatetime {
     const ui32 MonthDays[2][12] = {
@@ -213,25 +213,25 @@ namespace NDatetime {
         return t;
     }
 }
- 
+
 template <>
 void In<TMonth>(IInputStream& in, TMonth& t) {
-    char buf[4]; 
-    LoadPodArray(&in, buf, 4); 
+    char buf[4];
+    LoadPodArray(&in, buf, 4);
     t.Year = FromString<ui16>(buf, 4);
-    LoadPodArray(&in, buf, 2); 
+    LoadPodArray(&in, buf, 2);
     t.Month = ui8(FromString<ui16>(buf, 2)) - 1;
-} 
- 
+}
+
 template <>
 void Out<TMonth>(IOutputStream& o, const TMonth& t) {
-    o << t.Year << Sprintf("%.2hu", (ui16)(t.Month + 1)); 
-} 
- 
+    o << t.Year << Sprintf("%.2hu", (ui16)(t.Month + 1));
+}
+
 template <>
 TMonth FromStringImpl<TMonth, char>(const char* s, size_t len) {
-    TMonth res; 
+    TMonth res;
     TMemoryInput in(s, len);
-    in >> res; 
-    return res; 
-} 
+    in >> res;
+    return res;
+}

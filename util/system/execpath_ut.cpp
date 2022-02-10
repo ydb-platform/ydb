@@ -14,7 +14,7 @@ Y_UNIT_TEST_SUITE(TExecPathTest) {
             UNIT_ASSERT(NFs::Exists(execPath));
             UNIT_ASSERT(NFs::Exists(persistentExecPath));
         } catch (...) {
-            Cerr << execPath << Endl; 
+            Cerr << execPath << Endl;
 
             throw;
         }

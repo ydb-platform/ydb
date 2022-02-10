@@ -1,46 +1,46 @@
 #pragma once
- 
+
 #include <util/generic/ptr.h>
 #include <util/generic/vector.h>
 #include <util/generic/noncopyable.h>
- 
+
 template <class T, class D = TDelete>
 class THolderVector: public TVector<T*>, public TNonCopyable {
     using TBase = TVector<T*>;
 
-public: 
+public:
     explicit THolderVector(size_t n = 0)
         : TBase(n)
     {
     }
 
-    ~THolderVector() { 
+    ~THolderVector() {
         Clear();
     }
 
     void Clear() {
-        for (typename TBase::iterator it = TBase::begin(); it != TBase::end(); ++it) { 
+        for (typename TBase::iterator it = TBase::begin(); it != TBase::end(); ++it) {
             if (*it)
                 D::Destroy(*it);
-        } 
+        }
         TBase::clear();
-    } 
- 
-    size_t Size() const { 
-        return TBase::size(); 
-    } 
- 
+    }
+
+    size_t Size() const {
+        return TBase::size();
+    }
+
     // TVector takes ownership of T
-    void PushBack(T* t) { 
-        try { 
+    void PushBack(T* t) {
+        try {
             TBase::push_back(t);
         } catch (...) {
             if (t)
                 D::Destroy(t);
             throw;
-        } 
-    } 
- 
+        }
+    }
+
     void PushBack(std::unique_ptr<T> t) {
         PushBack(t.release());
     }
@@ -82,9 +82,9 @@ public:
         TBase::swap(other);
     }
 
-    using TBase::operator[]; 
+    using TBase::operator[];
     using TBase::operator bool;
-    using TBase::at; 
+    using TBase::at;
     using TBase::back;
     using TBase::begin;
     using TBase::capacity;
@@ -99,4 +99,4 @@ public:
     using typename TBase::iterator;
     using typename TBase::reverse_iterator;
     using typename TBase::value_type;
-}; 
+};

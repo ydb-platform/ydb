@@ -1,7 +1,7 @@
 #include "info.h"
 
-#include "error.h" 
- 
+#include "error.h"
+
 #include <cstdlib>
 
 #if defined(_linux_) || defined(_cygwin_)
@@ -26,7 +26,7 @@ static int getloadavg(double* loadavg, int nelem) {
 
     return nelem;
 }
-#elif defined(_unix_) || defined(_darwin_) 
+#elif defined(_unix_) || defined(_darwin_)
     #include <sys/types.h>
 #endif
 
@@ -38,7 +38,7 @@ static int getloadavg(double* loadavg, int nelem) {
 #include <util/string/cast.h>
 #include <util/string/strip.h>
 #include <util/stream/file.h>
-#include <util/generic/yexception.h> 
+#include <util/generic/yexception.h>
 
 #if defined(_linux_)
 static inline size_t CgroupCpus() {
@@ -204,25 +204,25 @@ size_t NSystemInfo::TotalMemorySize() {
     sysinfo(&info);
     return info.totalram;
 #elif defined(_darwin_)
-    int mib[2]; 
-    int64_t memSize; 
-    size_t length; 
- 
-    // Get the Physical memory size 
-    mib[0] = CTL_HW; 
-    mib[1] = HW_MEMSIZE; 
-    length = sizeof(int64_t); 
-    if (sysctl(mib, 2, &memSize, &length, NULL, 0) != 0) { 
-        ythrow yexception() << "sysctl failed: " << LastSystemErrorText(); 
-    } 
-    return (size_t)memSize; 
+    int mib[2];
+    int64_t memSize;
+    size_t length;
+
+    // Get the Physical memory size
+    mib[0] = CTL_HW;
+    mib[1] = HW_MEMSIZE;
+    length = sizeof(int64_t);
+    if (sysctl(mib, 2, &memSize, &length, NULL, 0) != 0) {
+        ythrow yexception() << "sysctl failed: " << LastSystemErrorText();
+    }
+    return (size_t)memSize;
 #elif defined(_win_)
-    MEMORYSTATUSEX memoryStatusEx; 
-    memoryStatusEx.dwLength = sizeof(memoryStatusEx); 
-    if (!GlobalMemoryStatusEx(&memoryStatusEx)) { 
-        ythrow yexception() << "GlobalMemoryStatusEx failed: " << LastSystemErrorText(); 
-    } 
-    return (size_t)memoryStatusEx.ullTotalPhys; 
+    MEMORYSTATUSEX memoryStatusEx;
+    memoryStatusEx.dwLength = sizeof(memoryStatusEx);
+    if (!GlobalMemoryStatusEx(&memoryStatusEx)) {
+        ythrow yexception() << "GlobalMemoryStatusEx failed: " << LastSystemErrorText();
+    }
+    return (size_t)memoryStatusEx.ullTotalPhys;
 #else
     return 0;
 #endif

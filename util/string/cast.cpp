@@ -54,7 +54,7 @@ namespace {
     template <class T>
     std::enable_if_t<std::is_signed<T>::value, std::make_unsigned_t<T>> NegateNegativeSigned(T value) noexcept {
         return std::make_unsigned_t<T>(-(value + 1)) + std::make_unsigned_t<T>(1);
-    } 
+    }
 
     template <class T>
     std::enable_if_t<std::is_unsigned<T>::value, std::make_unsigned_t<T>> NegateNegativeSigned(T) noexcept {
@@ -482,29 +482,29 @@ size_t ToStringImpl<bool>(bool t, char* buf, size_t len) {
 /*
  * ------------------------------ parsers ------------------------------
  */
- 
-template <> 
+
+template <>
 bool TryFromStringImpl<bool>(const char* data, size_t len, bool& result) {
-    if (len == 1) { 
-        if (data[0] == '0') { 
+    if (len == 1) {
+        if (data[0] == '0') {
             result = false;
             return true;
-        } else if (data[0] == '1') { 
+        } else if (data[0] == '1') {
             result = true;
-            return true; 
-        } 
-    } 
-    TStringBuf buf(data, len); 
+            return true;
+        }
+    }
+    TStringBuf buf(data, len);
     if (IsTrue(buf)) {
         result = true;
-        return true; 
+        return true;
     } else if (IsFalse(buf)) {
         result = false;
         return true;
-    } 
+    }
     return false;
-} 
- 
+}
+
 template <>
 bool FromStringImpl<bool>(const char* data, size_t len) {
     bool result;

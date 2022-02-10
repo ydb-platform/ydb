@@ -4,9 +4,9 @@ RECURSE(
     encode
     encode/ut
     init
-    parslib 
+    parslib
     parslib/ut
-    sax 
+    sax
     sax/ut
     validator
     validator/ut

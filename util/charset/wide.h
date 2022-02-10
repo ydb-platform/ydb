@@ -26,8 +26,8 @@ using TCharTemp = TTempArray<wchar16>;
 namespace NDetail {
     inline TString InStringMsg(const char* s, size_t len) {
         return (len <= 50) ? " in string " + TString(s, len).Quote() : TString();
-    } 
- 
+    }
+
     template <bool isPointer>
     struct TSelector;
 

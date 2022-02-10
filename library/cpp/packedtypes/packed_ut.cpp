@@ -1,13 +1,13 @@
 #include "packed.h"
 
 #include <library/cpp/testing/unittest/registar.h>
- 
+
 #include <util/system/defaults.h>
 #include <util/generic/ylimits.h>
 #include <util/generic/buffer.h>
-#include <util/stream/mem.h> 
+#include <util/stream/mem.h>
 #include <util/stream/buffer.h>
- 
+
 namespace NPrivate {
 #if 0
 static ui64 gSeed = 42;
@@ -26,67 +26,67 @@ static T PseudoRandom(T max = Max<T>()) {
 
 Y_UNIT_TEST_SUITE(TPackedTest) {
     void TestPackUi32Sub(ui32 v, const TVector<char>& p) {
-        TBufferOutput out; 
-        PackUI32(out, v); 
-        const TBuffer& buf = out.Buffer(); 
+        TBufferOutput out;
+        PackUI32(out, v);
+        const TBuffer& buf = out.Buffer();
         UNIT_ASSERT_VALUES_EQUAL(buf.Size(), p.size());
-        UNIT_ASSERT(!memcmp(buf.Data(), &p[0], buf.Size())); 
+        UNIT_ASSERT(!memcmp(buf.Data(), &p[0], buf.Size()));
 
-        { 
-            TBufferInput in(buf); 
-            ui32 v2; 
-            UnPackUI32(in, v2); 
-            UNIT_ASSERT_VALUES_EQUAL(v, v2);
-        } 
- 
         {
-            TZCMemoryInput in(buf.Data(), buf.Size()); 
-            ui32 v2; 
-            UnPackUI32(in, v2); 
+            TBufferInput in(buf);
+            ui32 v2;
+            UnPackUI32(in, v2);
             UNIT_ASSERT_VALUES_EQUAL(v, v2);
-        } 
-    } 
+        }
+
+        {
+            TZCMemoryInput in(buf.Data(), buf.Size());
+            ui32 v2;
+            UnPackUI32(in, v2);
+            UNIT_ASSERT_VALUES_EQUAL(v, v2);
+        }
+    }
 
     Y_UNIT_TEST(TestPackUi32) {
-        ui32 v; 
+        ui32 v;
         TVector<char> pv;
- 
-        v = 0; 
-        pv.resize(1); 
-        pv[0] = 0x0; 
+
+        v = 0;
+        pv.resize(1);
+        pv[0] = 0x0;
         TestPackUi32Sub(v, pv);
- 
-        v = 0x1600; 
-        pv.resize(2); 
-        pv[0] = 0x96; 
-        pv[1] = 0x00; 
+
+        v = 0x1600;
+        pv.resize(2);
+        pv[0] = 0x96;
+        pv[1] = 0x00;
         TestPackUi32Sub(v, pv);
- 
-        v = 0xEF98; 
-        pv.resize(3); 
-        pv[0] = 0xC0; 
+
+        v = 0xEF98;
+        pv.resize(3);
+        pv[0] = 0xC0;
 #if defined(_big_endian_)
-        pv[1] = 0xEF; 
-        pv[2] = 0x98; 
-#elif defined(_little_endian_) 
-        pv[1] = 0x98; 
-        pv[2] = 0xEF; 
-#endif 
+        pv[1] = 0xEF;
+        pv[2] = 0x98;
+#elif defined(_little_endian_)
+        pv[1] = 0x98;
+        pv[2] = 0xEF;
+#endif
         TestPackUi32Sub(v, pv);
- 
-        v = 0xF567FE4; 
-        pv.resize(4); 
-        pv[0] = 0xEF; 
-        pv[1] = 0x56; 
+
+        v = 0xF567FE4;
+        pv.resize(4);
+        pv[0] = 0xEF;
+        pv[1] = 0x56;
 #if defined(_big_endian_)
-        pv[2] = 0x7F; 
-        pv[3] = 0xE4; 
-#elif defined(_little_endian_) 
-        pv[2] = 0xE4; 
-        pv[3] = 0x7F; 
-#endif 
+        pv[2] = 0x7F;
+        pv[3] = 0xE4;
+#elif defined(_little_endian_)
+        pv[2] = 0xE4;
+        pv[3] = 0x7F;
+#endif
         TestPackUi32Sub(v, pv);
-    } 
+    }
 
 #if 0
     Y_UNIT_TEST(ReadWrite32) {
@@ -127,4 +127,4 @@ Y_UNIT_TEST_SUITE(TPackedTest) {
         }
     }
 #endif
-}; 
+};

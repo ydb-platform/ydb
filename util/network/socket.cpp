@@ -49,7 +49,7 @@
 using namespace NAddr;
 
 #if defined(_win_)
- 
+
 int inet_aton(const char* cp, struct in_addr* inp) {
     sockaddr_in addr;
     addr.sin_family = AF_INET;

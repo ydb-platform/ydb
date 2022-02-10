@@ -17,15 +17,15 @@
 class TRegExBaseImpl;
 
 class TRegExBase {
-protected: 
+protected:
     TSimpleIntrusivePtr<TRegExBaseImpl> Impl;
 
-public: 
+public:
     TRegExBase(const char* regExpr = nullptr, int cflags = REG_EXTENDED);
     TRegExBase(const TString& regExpr, int cflags = REG_EXTENDED);
 
     virtual ~TRegExBase();
- 
+
     int Exec(const char* str, regmatch_t pmatch[], int eflags, int nmatches = NMATCHES) const;
     void Compile(const TString& regExpr, int cflags = REG_EXTENDED);
     bool IsCompiled() const;
@@ -34,30 +34,30 @@ public:
 };
 
 class TRegExMatch: public TRegExBase {
-public: 
+public:
     TRegExMatch(const char* regExpr = nullptr, int cflags = REG_NOSUB | REG_EXTENDED);
     TRegExMatch(const TString& regExpr, int cflags = REG_NOSUB | REG_EXTENDED);
 
     bool Match(const char* str) const;
-}; 
+};
 
 struct TBackReferences {
-    int Beg; 
-    int End; 
-    int Refer; 
-}; 
+    int Beg;
+    int End;
+    int Refer;
+};
 
 class TRegExSubst: public TRegExBase {
-private: 
-    const char* Replacement; 
+private:
+    const char* Replacement;
     regmatch_t PMatch[NMATCHES];
- 
-    TBackReferences Brfs[NMATCHES]; 
-    int BrfsCount; 
- 
-public: 
+
+    TBackReferences Brfs[NMATCHES];
+    int BrfsCount;
+
+public:
     TRegExSubst(const char* regExpr = nullptr, int cflags = REG_EXTENDED);
- 
+
     TString Replace(const char* str, int eflags = 0);
     int ParseReplacement(const char* replacement);
 };

@@ -71,8 +71,8 @@ TString GetGuidAsString(const TGUID& g) {
 
 TString CreateGuidAsString() {
     return TGUID::Create().AsGuidString();
-} 
- 
+}
+
 static bool GetDigit(const char c, ui32& digit) {
     digit = 0;
     if ('0' <= c && c <= '9') {

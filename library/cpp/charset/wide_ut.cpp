@@ -208,8 +208,8 @@ void TConversionTest::TestYandexEncoding() {
     UNIT_ASSERT(w == wideCyrillicAlphabet);
     w = UTF8ToWide(yandexCyrillicAlphabet, strlen(yandexCyrillicAlphabet), csYandex);
     UNIT_ASSERT(w == wideCyrillicAlphabet);
- 
-    const char* utf8NonBMP2 = "ab\xf4\x80\x89\x87n"; 
+
+    const char* utf8NonBMP2 = "ab\xf4\x80\x89\x87n";
     wchar16 wNonBMPDummy2[] = {'a', 'b', 0xDBC0, 0xDE47, 'n'};
     TestSurrogates(utf8NonBMP2, wNonBMPDummy2, Y_ARRAY_SIZE(wNonBMPDummy2), CODES_UTF8);
 

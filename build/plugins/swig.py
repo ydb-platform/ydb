@@ -67,7 +67,7 @@ class Swig(iw.CustomCommand):
 
         if self._swig_lang in ['jni_cpp', 'java']:
             self._out_header = os.path.splitext(self._main_out)[0] + '.h'
-            if (not unit.get('USE_SYSTEM_JDK')) and (unit.get('OS_ANDROID') != "yes"): 
+            if (not unit.get('USE_SYSTEM_JDK')) and (unit.get('OS_ANDROID') != "yes"):
                 unit.onpeerdir(['contrib/libs/jdk'])
 
         self._package = 'ru.yandex.' + os.path.dirname(self._path).replace('$S/', '').replace('$B/', '').replace('/', '.').replace('-', '_')

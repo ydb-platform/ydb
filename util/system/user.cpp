@@ -1,18 +1,18 @@
-#include "user.h" 
-#include "platform.h" 
-#include "defaults.h" 
+#include "user.h"
+#include "platform.h"
+#include "defaults.h"
 #include "env.h"
- 
-#include <util/generic/yexception.h> 
- 
-#ifdef _win_ 
+
+#include <util/generic/yexception.h>
+
+#ifdef _win_
     #include "winint.h"
-#else 
+#else
     #include <errno.h>
     #include <pwd.h>
     #include <unistd.h>
-#endif 
- 
+#endif
+
 TString GetUsername() {
     for (const auto& var : {"LOGNAME", "USER", "LNAME", "USERNAME"}) {
         TString val = GetEnv(var);
@@ -21,19 +21,19 @@ TString GetUsername() {
         }
     }
 
-    TTempBuf nameBuf; 
-    for (;;) { 
-#if defined(_win_) 
-        DWORD len = (DWORD)Min(nameBuf.Size(), size_t(32767)); 
+    TTempBuf nameBuf;
+    for (;;) {
+#if defined(_win_)
+        DWORD len = (DWORD)Min(nameBuf.Size(), size_t(32767));
         if (!GetUserNameA(nameBuf.Data(), &len)) {
-            DWORD err = GetLastError(); 
-            if ((err == ERROR_INSUFFICIENT_BUFFER) && (nameBuf.Size() <= 32767)) 
-                nameBuf = TTempBuf((size_t)len); 
-            else 
-                ythrow TSystemError(err) << " GetUserName failed"; 
-        } else { 
+            DWORD err = GetLastError();
+            if ((err == ERROR_INSUFFICIENT_BUFFER) && (nameBuf.Size() <= 32767))
+                nameBuf = TTempBuf((size_t)len);
+            else
+                ythrow TSystemError(err) << " GetUserName failed";
+        } else {
             return TString(nameBuf.Data(), (size_t)(len - 1));
-        } 
+        }
 #elif defined(_bionic_)
         const passwd* pwd = getpwuid(geteuid());
 
@@ -43,16 +43,16 @@ TString GetUsername() {
 
         ythrow TSystemError() << TStringBuf(" getpwuid failed");
 #else
-        passwd pwd; 
-        passwd* tmpPwd; 
-        int err = getpwuid_r(geteuid(), &pwd, nameBuf.Data(), nameBuf.Size(), &tmpPwd); 
+        passwd pwd;
+        passwd* tmpPwd;
+        int err = getpwuid_r(geteuid(), &pwd, nameBuf.Data(), nameBuf.Size(), &tmpPwd);
         if (err == 0 && tmpPwd) {
             return TString(pwd.pw_name);
         } else if (err == ERANGE) {
             nameBuf = TTempBuf(nameBuf.Size() * 2);
-        } else { 
+        } else {
             ythrow TSystemError(err) << " getpwuid_r failed";
-        } 
-#endif 
-    } 
-} 
+        }
+#endif
+    }
+}

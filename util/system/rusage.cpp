@@ -109,7 +109,7 @@ void TRusage::Fill() {
     }
 
     #if defined(_darwin_)
-    // see https://lists.apple.com/archives/darwin-kernel/2009/Mar/msg00005.html 
+    // see https://lists.apple.com/archives/darwin-kernel/2009/Mar/msg00005.html
     MaxRss = ru.ru_maxrss;
     #else
     MaxRss = ru.ru_maxrss * 1024LL;

@@ -41,13 +41,13 @@
 #include <string.h>
 #include <ctype.h>
 
-#ifdef _win32_ 
+#ifdef _win32_
     #include "winint.h"
     #include <util/folder/dirut.h>
 #else
-    #include <unistd.h> 
-#endif 
- 
+    #include <unistd.h>
+#endif
+
 #include <util/random/random.h>
 #include "sysstat.h"
 
@@ -59,10 +59,10 @@ GetTemp(char* path, int* doopen, int domkdir, int slen)
 {
     char *start, *trv, *suffp;
     char* pad;
-#ifndef _win32_ 
+#ifndef _win32_
     struct stat sbuf;
     int rval;
-#endif 
+#endif
     ui32 rand;
 
     if (doopen != nullptr && domkdir) {
@@ -95,7 +95,7 @@ GetTemp(char* path, int* doopen, int domkdir, int slen)
         for (; trv > path; --trv) {
             if (*trv == '/') {
                 *trv = '\0';
-#ifdef _win32_ 
+#ifdef _win32_
                 ui32 attr = ::GetFileAttributesA(path);
                 *trv = '/';
                 if (attr == 0xFFFFFFFF)
@@ -104,7 +104,7 @@ GetTemp(char* path, int* doopen, int domkdir, int slen)
                     errno = ENOTDIR;
                     return (0);
                 }
-#else 
+#else
                 rval = stat(path, &sbuf);
                 *trv = '/';
                 if (rval != 0) {
@@ -114,7 +114,7 @@ GetTemp(char* path, int* doopen, int domkdir, int slen)
                     errno = ENOTDIR;
                     return (0);
                 }
-#endif 
+#endif
                 break;
             }
         }
@@ -137,14 +137,14 @@ GetTemp(char* path, int* doopen, int domkdir, int slen)
                 return (0);
             }
         } else
-#ifdef _win32_ 
+#ifdef _win32_
             if (::GetFileAttributesA(path) == INVALID_FILE_ATTRIBUTES)
             return (errno == ENOENT);
-#else 
+#else
             if (lstat(path, &sbuf)) {
             return (errno == ENOENT);
         }
-#endif 
+#endif
         /* If we have a collision, cycle through the space of filenames */
         for (trv = start;;) {
             if (*trv == '\0' || trv == suffp) {

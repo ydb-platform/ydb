@@ -1,4 +1,4 @@
-#include "execpath.h" 
+#include "execpath.h"
 #include "progname.h"
 
 #include <util/folder/dirut.h>

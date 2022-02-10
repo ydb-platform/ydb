@@ -29,10 +29,10 @@ public:
 
     TDate(const char* yyyymmdd);
     TDate(const TString& yyyymmdd);
-    TDate(unsigned year, unsigned month, unsigned monthDay); // month from 01, monthDay from 01 
+    TDate(unsigned year, unsigned month, unsigned monthDay); // month from 01, monthDay from 01
     TDate(const TString& date, const TString& format);
- 
-    explicit TDate(time_t t); 
+
+    explicit TDate(time_t t);
 
     time_t GetStart() const {
         return Timestamp;
@@ -54,28 +54,28 @@ public:
 
     TDate& operator+=(unsigned days) {
         Timestamp = GetDateStart(Timestamp + days * SECONDS_IN_DAY + SECONDS_IN_DAY / 2);
-        return *this; 
-    } 
- 
+        return *this;
+    }
+
     TDate& operator-=(unsigned days) {
         Timestamp = GetDateStart(Timestamp - days * SECONDS_IN_DAY + SECONDS_IN_DAY / 2);
-        return *this; 
-    } 
- 
+        return *this;
+    }
+
     TDate operator+(unsigned days) const {
         return TDate(Timestamp + days * SECONDS_IN_DAY + SECONDS_IN_DAY / 2);
-    } 
- 
+    }
+
     TDate operator-(unsigned days) const {
         return TDate(Timestamp - days * SECONDS_IN_DAY + SECONDS_IN_DAY / 2);
-    } 
- 
-    unsigned GetWeekDay() const; // days since Sunday 
- 
-    unsigned GetYear() const; 
+    }
+
+    unsigned GetWeekDay() const; // days since Sunday
+
+    unsigned GetYear() const;
     unsigned GetMonth() const;    // from 01
-    unsigned GetMonthDay() const; // from 01 
- 
+    unsigned GetMonthDay() const; // from 01
+
     friend bool operator<(const TDate& left, const TDate& right);
     friend bool operator>(const TDate& left, const TDate& right);
     friend bool operator<=(const TDate& left, const TDate& right);

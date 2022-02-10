@@ -82,7 +82,7 @@ public:
     const char* Buf() const noexcept {
         return Buf_;
     }
- 
+
     /**
      * Initializes this stream with a next chunk extracted from the given zero
      * copy stream.

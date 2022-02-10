@@ -34,4 +34,4 @@ SRCS(
     lz4hc.c
 )
 
-END() 
+END()

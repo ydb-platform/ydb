@@ -11,21 +11,21 @@ class TArchiveTest: public TTestBase {
     UNIT_TEST_SUITE(TArchiveTest)
     UNIT_TEST(TestCreate);
     UNIT_TEST(TestRead);
-    UNIT_TEST(TestOffsetOrder); 
+    UNIT_TEST(TestOffsetOrder);
     UNIT_TEST_SUITE_END();
 
 private:
-    void CreateArchive(); 
+    void CreateArchive();
     void TestCreate();
     void TestRead();
-    void TestOffsetOrder(); 
+    void TestOffsetOrder();
 };
 
 UNIT_TEST_SUITE_REGISTRATION(TArchiveTest);
 
 #define ARCHIVE "./test.ar"
 
-void TArchiveTest::CreateArchive() { 
+void TArchiveTest::CreateArchive() {
     TFixedBufferFileOutput out(ARCHIVE);
     TArchiveWriter w(&out);
 
@@ -41,13 +41,13 @@ void TArchiveTest::CreateArchive() {
     out.Finish();
 }
 
-void TArchiveTest::TestCreate() { 
-    CreateArchive(); 
-    TTempFile tmpFile(ARCHIVE); 
-} 
- 
+void TArchiveTest::TestCreate() {
+    CreateArchive();
+    TTempFile tmpFile(ARCHIVE);
+}
+
 void TArchiveTest::TestRead() {
-    CreateArchive(); 
+    CreateArchive();
     TTempFile tmpFile(ARCHIVE);
     TBlob blob = TBlob::FromFileSingleThreaded(ARCHIVE);
     TArchiveReader r(blob);
@@ -62,23 +62,23 @@ void TArchiveTest::TestRead() {
         UNIT_ASSERT_EQUAL(data, "data" + ToString(i * 1000) + "dataend");
     }
 }
- 
-void TArchiveTest::TestOffsetOrder() { 
-    CreateArchive(); 
-    TTempFile tmpFile(ARCHIVE); 
+
+void TArchiveTest::TestOffsetOrder() {
+    CreateArchive();
+    TTempFile tmpFile(ARCHIVE);
     TBlob blob1 = TBlob::FromFileSingleThreaded(ARCHIVE);
     TArchiveReader r(blob1);
- 
+
     const void* prevOffset = nullptr;
- 
-    for (size_t i = 0; i < r.Count(); ++i) { 
+
+    for (size_t i = 0; i < r.Count(); ++i) {
         const TString key = r.KeyByIndex(i);
         TBlob blob2 = r.BlobByKey(key);
         const void* offset = blob2.Data();
- 
-        if (i) { 
-            UNIT_ASSERT(prevOffset < offset); 
-        } 
-        prevOffset = offset; 
-    } 
-} 
+
+        if (i) {
+            UNIT_ASSERT(prevOffset < offset);
+        }
+        prevOffset = offset;
+    }
+}

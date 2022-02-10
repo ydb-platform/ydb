@@ -438,7 +438,7 @@ def is_recursion_error(etype, value, records):
     # by stack frames in IPython itself. >500 frames probably indicates
     # a recursion error.
     return (etype is recursion_error_type) \
-           and str("recursion") in str(value).lower() \
+           and str("recursion") in str(value).lower() \ 
            and len(records) > 500
 
 def find_recursion(etype, value, records):
@@ -1130,12 +1130,12 @@ class VerboseTB(TBTools):
             # problems, but it generates empty tracebacks for console errors
             # (5 blanks lines) where none should be returned.
             return _fixed_getinnerframes(etb, number_of_lines_of_context, tb_offset)
-        except UnicodeDecodeError:
-            # This can occur if a file's encoding magic comment is wrong.
-            # I can't see a way to recover without duplicating a bunch of code
-            # from the stdlib traceback module. --TK
-            error('\nUnicodeDecodeError while processing traceback.\n')
-            return None
+        except UnicodeDecodeError: 
+            # This can occur if a file's encoding magic comment is wrong. 
+            # I can't see a way to recover without duplicating a bunch of code 
+            # from the stdlib traceback module. --TK 
+            error('\nUnicodeDecodeError while processing traceback.\n') 
+            return None 
         except:
             # FIXME: I've been getting many crash reports from python 2.3
             # users, traceable to inspect.py.  If I can find a small test-case
@@ -1227,7 +1227,7 @@ class VerboseTB(TBTools):
 
         if force or self.call_pdb:
             if self.pdb is None:
-                self.pdb = self.debugger_cls()
+                self.pdb = self.debugger_cls() 
             # the system displayhook may have changed, restore the original
             # for pdb
             display_trap = DisplayTrap(hook=sys.__displayhook__)

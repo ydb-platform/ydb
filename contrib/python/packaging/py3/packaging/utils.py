@@ -6,11 +6,11 @@ import re
 from typing import FrozenSet, NewType, Tuple, Union, cast
 
 from .tags import Tag, parse_tag
-from .version import InvalidVersion, Version
+from .version import InvalidVersion, Version 
 
 BuildTag = Union[Tuple[()], Tuple[int, str]]
 NormalizedName = NewType("NormalizedName", str)
-
+ 
 
 class InvalidWheelFilename(ValueError):
     """
@@ -33,13 +33,13 @@ def canonicalize_name(name: str) -> NormalizedName:
     # This is taken from PEP 503.
     value = _canonicalize_regex.sub("-", name).lower()
     return cast(NormalizedName, value)
-
-
+ 
+ 
 def canonicalize_version(version: Union[Version, str]) -> str:
-    """
+    """ 
     This is very similar to Version.__str__, but has one subtle difference
-    with the way it handles the release segment.
-    """
+    with the way it handles the release segment. 
+    """ 
     if isinstance(version, str):
         try:
             parsed = Version(version)
@@ -48,34 +48,34 @@ def canonicalize_version(version: Union[Version, str]) -> str:
             return version
     else:
         parsed = version
-
-    parts = []
-
-    # Epoch
+ 
+    parts = [] 
+ 
+    # Epoch 
     if parsed.epoch != 0:
         parts.append(f"{parsed.epoch}!")
-
-    # Release segment
-    # NB: This strips trailing '.0's to normalize
+ 
+    # Release segment 
+    # NB: This strips trailing '.0's to normalize 
     parts.append(re.sub(r"(\.0)+$", "", ".".join(str(x) for x in parsed.release)))
-
-    # Pre-release
+ 
+    # Pre-release 
     if parsed.pre is not None:
         parts.append("".join(str(x) for x in parsed.pre))
-
-    # Post-release
+ 
+    # Post-release 
     if parsed.post is not None:
         parts.append(f".post{parsed.post}")
-
-    # Development release
+ 
+    # Development release 
     if parsed.dev is not None:
         parts.append(f".dev{parsed.dev}")
-
-    # Local version segment
+ 
+    # Local version segment 
     if parsed.local is not None:
         parts.append(f"+{parsed.local}")
-
-    return "".join(parts)
+ 
+    return "".join(parts) 
 
 
 def parse_wheel_filename(

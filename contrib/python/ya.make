@@ -220,7 +220,7 @@ RECURSE(
     django-ajax-selects
     django-alive
     django-autoconfig
-    django-appconf
+    django-appconf 
     django-bootstrap3
     django-braces
     django-bulk-update
@@ -264,7 +264,7 @@ RECURSE(
     django-json-widget
     django-markwhat
     django-model-choices
-    django-model-utils
+    django-model-utils 
     django-modeladmin-reorder
     django-modeltranslation
     django-moderation
@@ -352,15 +352,15 @@ RECURSE(
     face
     facebook-business
     factory-boy
-    Faker
+    Faker 
     fakeredis
     falcon
     falcon-cors
     falcon-multipart
     fallocate
     fancycompleter
-    fastapi
-    fastapi-utils
+    fastapi 
+    fastapi-utils 
     fastdtw
     fasteners
     fastjsonschema
@@ -437,9 +437,9 @@ RECURSE(
     geobuf
     geoindex
     gevent
-    gino
+    gino 
     gitdb2
-    github3.py
+    github3.py 
     GitPython
     glob2
     glom
@@ -639,7 +639,7 @@ RECURSE(
     mpegdash
     mpi4py
     mpmath
-    msal
+    msal 
     msgpack
     mujson
     multidict
@@ -659,7 +659,7 @@ RECURSE(
     nbconvert
     nbformat
     ncclient
-    ndg-httpsclient
+    ndg-httpsclient 
     nest-asyncio
     nested-diff
     netaddr
@@ -992,7 +992,7 @@ RECURSE(
     setproctitle
     setuptools
     sgmllib3k
-    sh
+    sh 
     Shapely
     shortuuid
     simplediff
@@ -1032,7 +1032,7 @@ RECURSE(
     sshpubkeys
     sshtunnel
     stack-data
-    starlette
+    starlette 
     statsd
     statsmodels
     stevedore
@@ -1058,7 +1058,7 @@ RECURSE(
     terminado
     terminaltables
     testpath
-    text-unidecode
+    text-unidecode 
     textdata
     texttable
     textwrap3
@@ -1088,7 +1088,7 @@ RECURSE(
     trollius
     trollsift
     Twiggy
-    twiggy-goodies
+    twiggy-goodies 
     Twisted
     txaio
     txredisapi
@@ -1151,7 +1151,7 @@ RECURSE(
     weighted-levenshtein
     Werkzeug
     wheel
-    whitenoise
+    whitenoise 
     whodap
     wmctrl
     wrapt

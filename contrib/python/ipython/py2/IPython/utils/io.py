@@ -39,12 +39,12 @@ class IOStream:
         def clone(meth):
             return not hasattr(self, meth) and not meth.startswith('_')
         for meth in filter(clone, dir(stream)):
-            try:
-                val = getattr(stream, meth)
-            except AttributeError:
-                pass
-            else:
-                setattr(self, meth, val)
+            try: 
+                val = getattr(stream, meth) 
+            except AttributeError: 
+                pass 
+            else: 
+                setattr(self, meth, val) 
 
     def __repr__(self):
         cls = self.__class__

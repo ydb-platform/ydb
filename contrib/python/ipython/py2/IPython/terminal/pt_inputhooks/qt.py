@@ -39,11 +39,11 @@ def inputhook(context):
     else:
         # On POSIX platforms, we can use a file descriptor to quit the event
         # loop when there is input ready to read.
-        notifier = QtCore.QSocketNotifier(context.fileno(),
-                                          QtCore.QSocketNotifier.Read)
-        # connect the callback we care about before we turn it on
-        notifier.activated.connect(event_loop.exit)
+        notifier = QtCore.QSocketNotifier(context.fileno(), 
+                                          QtCore.QSocketNotifier.Read) 
+        # connect the callback we care about before we turn it on 
+        notifier.activated.connect(event_loop.exit) 
         notifier.setEnabled(True)
-        # only start the event loop we are not already flipped
-        if not context.input_is_ready():
-            event_loop.exec_()
+        # only start the event loop we are not already flipped 
+        if not context.input_is_ready(): 
+            event_loop.exec_() 

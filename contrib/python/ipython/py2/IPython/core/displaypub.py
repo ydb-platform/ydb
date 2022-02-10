@@ -53,8 +53,8 @@ class DisplayPublisher(Configurable):
             if not isinstance(metadata, dict):
                 raise TypeError('metadata must be a dict, got: %r' % data)
 
-    # use * to indicate transient, update are keyword-only
-    def publish(self, data, metadata=None, source=None, **kwargs):
+    # use * to indicate transient, update are keyword-only 
+    def publish(self, data, metadata=None, source=None, **kwargs): 
         """Publish data and metadata to all frontends.
 
         See the ``display_data`` message in the messaging documentation for
@@ -90,21 +90,21 @@ class DisplayPublisher(Configurable):
             the data itself.
         source : str, deprecated
             Unused.
-        transient: dict, keyword-only
-            A dictionary for transient data.
-            Data in this dictionary should not be persisted as part of saving this output.
-            Examples include 'display_id'.
-        update: bool, keyword-only, default: False
-            If True, only update existing outputs with the same display_id,
-            rather than creating a new output.
+        transient: dict, keyword-only 
+            A dictionary for transient data. 
+            Data in this dictionary should not be persisted as part of saving this output. 
+            Examples include 'display_id'. 
+        update: bool, keyword-only, default: False 
+            If True, only update existing outputs with the same display_id, 
+            rather than creating a new output. 
         """
 
-        # These are kwargs only on Python 3, not used there.
-        # For consistency and avoid code divergence we leave them here to
-        # simplify potential backport
-        transient = kwargs.pop('transient', None)
-        update = kwargs.pop('update', False)
-
+        # These are kwargs only on Python 3, not used there. 
+        # For consistency and avoid code divergence we leave them here to 
+        # simplify potential backport 
+        transient = kwargs.pop('transient', None) 
+        update = kwargs.pop('update', False) 
+ 
         # The default is to simply write the plain text data using sys.stdout.
         if 'text/plain' in data:
             print(data['text/plain'])
@@ -121,19 +121,19 @@ class CapturingDisplayPublisher(DisplayPublisher):
     """A DisplayPublisher that stores"""
     outputs = List()
 
-    def publish(self, data, metadata=None, source=None, **kwargs):
-
-        # These are kwargs only on Python 3, not used there.
-        # For consistency and avoid code divergence we leave them here to
-        # simplify potential backport
-        transient = kwargs.pop('transient', None)
-        update = kwargs.pop('update', False)
-
-        self.outputs.append({'data':data, 'metadata':metadata,
-                             'transient':transient, 'update':update})
-
+    def publish(self, data, metadata=None, source=None, **kwargs): 
+ 
+        # These are kwargs only on Python 3, not used there. 
+        # For consistency and avoid code divergence we leave them here to 
+        # simplify potential backport 
+        transient = kwargs.pop('transient', None) 
+        update = kwargs.pop('update', False) 
+ 
+        self.outputs.append({'data':data, 'metadata':metadata, 
+                             'transient':transient, 'update':update}) 
+ 
     def clear_output(self, wait=False):
         super(CapturingDisplayPublisher, self).clear_output(wait)
-
+ 
         # empty the list, *do not* reassign a new list
-        self.outputs.clear()
+        self.outputs.clear() 

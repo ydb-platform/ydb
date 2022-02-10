@@ -58,7 +58,7 @@ from IPython.core.prefilter import PrefilterManager
 from IPython.core.profiledir import ProfileDir
 from IPython.core.usage import default_banner
 from IPython.testing.skipdoctest import skip_doctest_py2, skip_doctest
-from IPython.display import display
+from IPython.display import display 
 from IPython.utils import PyColorize
 from IPython.utils import io
 from IPython.utils import py3compat
@@ -637,7 +637,7 @@ class InteractiveShell(SingletonConfigurable):
         # removing on exit or representing the existence of more than one
         # IPython at a time.
         builtin_mod.__dict__['__IPYTHON__'] = True
-        builtin_mod.__dict__['display'] = display
+        builtin_mod.__dict__['display'] = display 
 
         self.builtin_trap = BuiltinTrap(shell=self)
 
@@ -2064,7 +2064,7 @@ class InteractiveShell(SingletonConfigurable):
             etpl = "Line magic function `%%%s` not found%s."
             extra = '' if cm is None else (' (But cell magic `%%%%%s` exists, '
                                     'did you mean that instead?)' % magic_name )
-            raise UsageError(etpl % (magic_name, extra))
+            raise UsageError(etpl % (magic_name, extra)) 
         else:
             # Note: this is the distance in the stack to the user's frame.
             # This will need to be updated if the internal calling logic gets
@@ -2101,7 +2101,7 @@ class InteractiveShell(SingletonConfigurable):
             etpl = "Cell magic `%%{0}` not found{1}."
             extra = '' if lm is None else (' (But line magic `%{0}` exists, '
                             'did you mean that instead?)'.format(magic_name))
-            raise UsageError(etpl.format(magic_name, extra))
+            raise UsageError(etpl.format(magic_name, extra)) 
         elif cell == '':
             message = '%%{0} is a cell magic, but the cell body is empty.'.format(magic_name)
             if self.find_line_magic(magic_name) is not None:
@@ -2537,12 +2537,12 @@ class InteractiveShell(SingletonConfigurable):
             """generator for sequence of code blocks to run"""
             if fname.endswith('.ipynb'):
                 from nbformat import read
-                nb = read(fname, as_version=4)
-                if not nb.cells:
-                    return
-                for cell in nb.cells:
-                    if cell.cell_type == 'code':
-                        yield cell.source
+                nb = read(fname, as_version=4) 
+                if not nb.cells: 
+                    return 
+                for cell in nb.cells: 
+                    if cell.cell_type == 'code': 
+                        yield cell.source 
             else:
                 with open(fname) as f:
                     yield f.read()
@@ -2626,8 +2626,8 @@ class InteractiveShell(SingletonConfigurable):
             result.execution_count = self.execution_count
 
         def error_before_exec(value):
-            if store_history:
-                self.execution_count += 1
+            if store_history: 
+                self.execution_count += 1 
             result.error_before_exec = value
             self.last_execution_succeeded = False
             return result
@@ -2900,32 +2900,32 @@ class InteractiveShell(SingletonConfigurable):
     # For backwards compatibility
     runcode = run_code
 
-    def check_complete(self, code):
-        """Return whether a block of code is ready to execute, or should be continued
-
-        Parameters
-        ----------
-        source : string
-          Python input code, which can be multiline.
-
-        Returns
-        -------
-        status : str
-          One of 'complete', 'incomplete', or 'invalid' if source is not a
-          prefix of valid code.
-        indent : str
-          When status is 'incomplete', this is some whitespace to insert on
-          the next line of the prompt.
-        """
-        status, nspaces = self.input_splitter.check_complete(code)
-        return status, ' ' * (nspaces or 0)
-
+    def check_complete(self, code): 
+        """Return whether a block of code is ready to execute, or should be continued 
+ 
+        Parameters 
+        ---------- 
+        source : string 
+          Python input code, which can be multiline. 
+ 
+        Returns 
+        ------- 
+        status : str 
+          One of 'complete', 'incomplete', or 'invalid' if source is not a 
+          prefix of valid code. 
+        indent : str 
+          When status is 'incomplete', this is some whitespace to insert on 
+          the next line of the prompt. 
+        """ 
+        status, nspaces = self.input_splitter.check_complete(code) 
+        return status, ' ' * (nspaces or 0) 
+ 
     #-------------------------------------------------------------------------
     # Things related to GUI support and pylab
     #-------------------------------------------------------------------------
 
-    active_eventloop = None
-
+    active_eventloop = None 
+ 
     def enable_gui(self, gui=None):
         raise NotImplementedError('Implement enable_gui in a subclass')
     

@@ -3,7 +3,7 @@
 Color schemes for exception handling code in IPython.
 """
 
-import os
+import os 
 import warnings
 
 #*****************************************************************************
@@ -156,12 +156,12 @@ def exception_colors():
         Normal = C.Normal,
         ))
 
-    # Hack: the 'neutral' colours are not very visible on a dark background on
-    # Windows. Since Windows command prompts have a dark background by default, and
-    # relatively few users are likely to alter that, we will use the 'Linux' colours,
-    # designed for a dark background, as the default on Windows.
-    if os.name == "nt":
-        ex_colors.add_scheme(ex_colors['Linux'].copy('Neutral'))
+    # Hack: the 'neutral' colours are not very visible on a dark background on 
+    # Windows. Since Windows command prompts have a dark background by default, and 
+    # relatively few users are likely to alter that, we will use the 'Linux' colours, 
+    # designed for a dark background, as the default on Windows. 
+    if os.name == "nt": 
+        ex_colors.add_scheme(ex_colors['Linux'].copy('Neutral')) 
 
     return ex_colors
 
@@ -172,8 +172,8 @@ class Deprec(object):
 
     def __getattr__(self, name):
         val = getattr(self.wrapped, name)
-        warnings.warn("Using ExceptionColors global is deprecated and will be removed in IPython 6.0",
-                DeprecationWarning, stacklevel=2)
+        warnings.warn("Using ExceptionColors global is deprecated and will be removed in IPython 6.0", 
+                DeprecationWarning, stacklevel=2) 
         # using getattr after warnings break ipydoctest in weird way for 3.5
         return val
 

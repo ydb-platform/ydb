@@ -96,9 +96,9 @@ __all__ = ['pretty', 'pprint', 'PrettyPrinter', 'RepresentationPrinter',
 
 
 MAX_SEQ_LENGTH = 1000
-# The language spec says that dicts preserve order from 3.7, but CPython
-# does so from 3.6, so it seems likely that people will expect that.
-DICT_IS_ORDERED = sys.version_info >= (3, 6)
+# The language spec says that dicts preserve order from 3.7, but CPython 
+# does so from 3.6, so it seems likely that people will expect that. 
+DICT_IS_ORDERED = sys.version_info >= (3, 6) 
 _re_pattern_type = type(re.compile(''))
 
 def _safe_getattr(obj, attr, default=None):
@@ -122,21 +122,21 @@ else:
                 cast_unicode(text, encoding=get_stream_enc(sys.stdout)))
 
 
-def _sorted_for_pprint(items):
-    """
-    Sort the given items for pretty printing. Since some predictable
-    sorting is better than no sorting at all, we sort on the string
-    representation if normal sorting fails.
-    """
-    items = list(items)
-    try:
-        return sorted(items)
-    except Exception:
-        try:
-            return sorted(items, key=str)
-        except Exception:
-            return items
-
+def _sorted_for_pprint(items): 
+    """ 
+    Sort the given items for pretty printing. Since some predictable 
+    sorting is better than no sorting at all, we sort on the string 
+    representation if normal sorting fails. 
+    """ 
+    items = list(items) 
+    try: 
+        return sorted(items) 
+    except Exception: 
+        try: 
+            return sorted(items, key=str) 
+        except Exception: 
+            return items 
+ 
 def pretty(obj, verbose=False, max_width=79, newline='\n', max_seq_length=MAX_SEQ_LENGTH):
     """
     Pretty print the object's representation.
@@ -398,10 +398,10 @@ class RepresentationPrinter(PrettyPrinter):
                             meth = cls._repr_pretty_
                             if callable(meth):
                                 return meth(obj, self, cycle)
-                        if cls is not object \
-                                and callable(cls.__dict__.get('__repr__')):
-                            return _repr_pprint(obj, self, cycle)
-
+                        if cls is not object \ 
+                                and callable(cls.__dict__.get('__repr__')): 
+                            return _repr_pprint(obj, self, cycle) 
+ 
             return _default_pprint(obj, self, cycle)
         finally:
             self.end_group()
@@ -552,7 +552,7 @@ def _default_pprint(obj, p, cycle):
     p.end_group(1, '>')
 
 
-def _seq_pprinter_factory(start, end):
+def _seq_pprinter_factory(start, end): 
     """
     Factory that returns a pprint function useful for sequences.  Used by
     the default pprint for tuples, dicts, and lists.
@@ -574,7 +574,7 @@ def _seq_pprinter_factory(start, end):
     return inner
 
 
-def _set_pprinter_factory(start, end):
+def _set_pprinter_factory(start, end): 
     """
     Factory that returns a pprint function useful for sets and frozensets.
     """
@@ -583,15 +583,15 @@ def _set_pprinter_factory(start, end):
             return p.text(start + '...' + end)
         if len(obj) == 0:
             # Special case.
-            p.text(type(obj).__name__ + '()')
+            p.text(type(obj).__name__ + '()') 
         else:
             step = len(start)
             p.begin_group(step, start)
             # Like dictionary keys, we will try to sort the items if there aren't too many
             if not (p.max_seq_length and len(obj) >= p.max_seq_length):
-                items = _sorted_for_pprint(obj)
-            else:
-                items = obj
+                items = _sorted_for_pprint(obj) 
+            else: 
+                items = obj 
             for idx, x in p._enumerate(items):
                 if idx:
                     p.text(',')
@@ -601,7 +601,7 @@ def _set_pprinter_factory(start, end):
     return inner
 
 
-def _dict_pprinter_factory(start, end):
+def _dict_pprinter_factory(start, end): 
     """
     Factory that returns a pprint function used by the default pprint of
     dicts and dict proxies.
@@ -613,10 +613,10 @@ def _dict_pprinter_factory(start, end):
         p.begin_group(step, start)
         keys = obj.keys()
         # if dict isn't large enough to be truncated, sort keys before displaying
-        # From Python 3.7, dicts preserve order by definition, so we don't sort.
-        if not DICT_IS_ORDERED \
-                and not (p.max_seq_length and len(obj) >= p.max_seq_length):
-            keys = _sorted_for_pprint(keys)
+        # From Python 3.7, dicts preserve order by definition, so we don't sort. 
+        if not DICT_IS_ORDERED \ 
+                and not (p.max_seq_length and len(obj) >= p.max_seq_length): 
+            keys = _sorted_for_pprint(keys) 
         for idx, key in p._enumerate(keys):
             if idx:
                 p.text(',')
@@ -743,12 +743,12 @@ _type_pprinters = {
     int:                        _repr_pprint,
     float:                      _repr_pprint,
     str:                        _repr_pprint,
-    tuple:                      _seq_pprinter_factory('(', ')'),
-    list:                       _seq_pprinter_factory('[', ']'),
-    dict:                       _dict_pprinter_factory('{', '}'),
+    tuple:                      _seq_pprinter_factory('(', ')'), 
+    list:                       _seq_pprinter_factory('[', ']'), 
+    dict:                       _dict_pprinter_factory('{', '}'), 
     
-    set:                        _set_pprinter_factory('{', '}'),
-    frozenset:                  _set_pprinter_factory('frozenset({', '})'),
+    set:                        _set_pprinter_factory('{', '}'), 
+    frozenset:                  _set_pprinter_factory('frozenset({', '})'), 
     super:                      _super_pprint,
     _re_pattern_type:           _re_pattern_pprint,
     type:                       _type_pprint,

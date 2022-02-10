@@ -437,7 +437,7 @@ python-profiler package from non-free.""")
 
     def _debug_exec(self, code, breakpoint):
         if breakpoint:
-            (filename, bp_line) = breakpoint.rsplit(':', 1)
+            (filename, bp_line) = breakpoint.rsplit(':', 1) 
             bp_line = int(bp_line)
         else:
             (filename, bp_line) = (None, None)
@@ -806,17 +806,17 @@ python-profiler package from non-free.""")
             self.shell.InteractiveTB.pdb = self.shell.InteractiveTB.debugger_cls()
             deb = self.shell.InteractiveTB.pdb
 
-        # deb.checkline() fails if deb.curframe exists but is None; it can
-        # handle it not existing. https://github.com/ipython/ipython/issues/10028
-        if hasattr(deb, 'curframe'):
-            del deb.curframe
-
+        # deb.checkline() fails if deb.curframe exists but is None; it can 
+        # handle it not existing. https://github.com/ipython/ipython/issues/10028 
+        if hasattr(deb, 'curframe'): 
+            del deb.curframe 
+ 
         # reset Breakpoint state, which is moronically kept
         # in a class
         bdb.Breakpoint.next = 1
         bdb.Breakpoint.bplist = {}
         bdb.Breakpoint.bpbynumber = [None]
-        deb.clear_all_breaks()
+        deb.clear_all_breaks() 
         if bp_line is not None:
             # Set an initial breakpoint to stop execution
             maxtries = 10
@@ -1013,13 +1013,13 @@ python-profiler package from non-free.""")
         ast_setup = self.shell.transform_ast(ast_setup)
         ast_stmt = self.shell.transform_ast(ast_stmt)
 
-        # Check that these compile to valid Python code *outside* the timer func
-        # Invalid code may become valid when put inside the function & loop,
-        # which messes up error messages.
-        # https://github.com/ipython/ipython/issues/10636
-        self.shell.compile(ast_setup, "<magic-timeit-setup>", "exec")
-        self.shell.compile(ast_stmt, "<magic-timeit-stmt>", "exec")
-
+        # Check that these compile to valid Python code *outside* the timer func 
+        # Invalid code may become valid when put inside the function & loop, 
+        # which messes up error messages. 
+        # https://github.com/ipython/ipython/issues/10636 
+        self.shell.compile(ast_setup, "<magic-timeit-setup>", "exec") 
+        self.shell.compile(ast_stmt, "<magic-timeit-stmt>", "exec") 
+ 
         # This codestring is taken from timeit.template - we fill it in as an
         # AST, so that we can apply our AST transformations to the user code
         # without affecting the timing code.

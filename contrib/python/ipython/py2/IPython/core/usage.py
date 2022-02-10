@@ -67,9 +67,9 @@ interactive_usage = """
 IPython -- An enhanced Interactive Python
 =========================================
 
-IPython offers a fully compatible replacement for the standard Python
-interpreter, with convenient shell features, special commands, command
-history mechanism and output results caching.
+IPython offers a fully compatible replacement for the standard Python 
+interpreter, with convenient shell features, special commands, command 
+history mechanism and output results caching. 
 
 At your system command line, type 'ipython -h' to see the command line
 options available. This document only describes interactive features.
@@ -77,8 +77,8 @@ options available. This document only describes interactive features.
 MAIN FEATURES
 -------------
 
-* Access to the standard Python help with object docstrings and the Python
-  manuals. Simply type 'help' (no quotes) to invoke it.
+* Access to the standard Python help with object docstrings and the Python 
+  manuals. Simply type 'help' (no quotes) to invoke it. 
 
 * Magic commands: type %magic for information on the magic subsystem.
 
@@ -86,12 +86,12 @@ MAIN FEATURES
 
 * Dynamic object information:
 
-  Typing ?word or word? prints detailed information about an object. Certain
-  long strings (code, etc.) get snipped in the center for brevity.
+  Typing ?word or word? prints detailed information about an object. Certain 
+  long strings (code, etc.) get snipped in the center for brevity. 
 
   Typing ??word or word?? gives access to the full information without
-  snipping long strings. Strings that are longer than the screen are printed
-  through the less pager.
+  snipping long strings. Strings that are longer than the screen are printed 
+  through the less pager. 
 
   The ?/?? system gives access to the full source code for any object (if
   available), shows function prototypes and other useful information.
@@ -99,16 +99,16 @@ MAIN FEATURES
   If you just want to see an object's docstring, type '%pdoc object' (without
   quotes, and without % if you have automagic on).
 
-* Tab completion in the local namespace:
+* Tab completion in the local namespace: 
 
   At any time, hitting tab will complete any available python commands or
   variable names, and show you a list of the possible completions if there's
   no unambiguous one. It will also complete filenames in the current directory.
 
-* Search previous command history in multiple ways:
+* Search previous command history in multiple ways: 
 
-  - Start typing, and then use arrow keys up/down or (Ctrl-p/Ctrl-n) to search
-    through the history items that match what you've typed so far.
+  - Start typing, and then use arrow keys up/down or (Ctrl-p/Ctrl-n) to search 
+    through the history items that match what you've typed so far. 
 
   - Hit Ctrl-r: opens a search prompt. Begin typing and the system searches
     your history for lines that match what you've typed so far, completing as
@@ -120,7 +120,7 @@ MAIN FEATURES
 
 * Logging of input with the ability to save and restore a working session.
 
-* System shell with !. Typing !ls will run 'ls' in the current directory.
+* System shell with !. Typing !ls will run 'ls' in the current directory. 
 
 * The reload command does a 'deep' reload of a module: changes made to the
   module since you imported will actually be available without having to exit.

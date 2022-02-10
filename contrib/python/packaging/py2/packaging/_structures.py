@@ -41,7 +41,7 @@ class InfinityType(object):
         # type: (object) -> NegativeInfinityType
         return NegativeInfinity
 
-
+ 
 Infinity = InfinityType()
 
 
@@ -82,5 +82,5 @@ class NegativeInfinityType(object):
         # type: (object) -> InfinityType
         return Infinity
 
-
+ 
 NegativeInfinity = NegativeInfinityType()

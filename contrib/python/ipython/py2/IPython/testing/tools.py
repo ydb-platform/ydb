@@ -7,8 +7,8 @@ Authors
 
 from __future__ import absolute_import
 
-# Copyright (c) IPython Development Team.
-# Distributed under the terms of the Modified BSD License.
+# Copyright (c) IPython Development Team. 
+# Distributed under the terms of the Modified BSD License. 
 
 import os
 import re
@@ -18,11 +18,11 @@ import tempfile
 from contextlib import contextmanager
 from io import StringIO
 from subprocess import Popen, PIPE
-try:
-    from unittest.mock import patch
-except ImportError:
-    # Python 2 compatibility
-    from mock import patch
+try: 
+    from unittest.mock import patch 
+except ImportError: 
+    # Python 2 compatibility 
+    from mock import patch 
 
 try:
     # These tools are used by parts of the runtime, so we make the nose
@@ -438,28 +438,28 @@ def make_tempfile(name):
     finally:
         os.unlink(name)
 
-def fake_input(inputs):
-    """Temporarily replace the input() function to return the given values
+def fake_input(inputs): 
+    """Temporarily replace the input() function to return the given values 
 
-    Use as a context manager:
-
-    with fake_input(['result1', 'result2']):
-        ...
-
-    Values are returned in order. If input() is called again after the last value
-    was used, EOFError is raised.
-    """
-    it = iter(inputs)
-    def mock_input(prompt=''):
-        try:
-            return next(it)
-        except StopIteration:
-            raise EOFError('No more inputs given')
-
-    input_name = '%s.%s' % (py3compat.builtin_mod_name,
-                            'input' if py3compat.PY3 else 'raw_input')
-    return patch(input_name, mock_input)
-
+    Use as a context manager: 
+ 
+    with fake_input(['result1', 'result2']): 
+        ... 
+ 
+    Values are returned in order. If input() is called again after the last value 
+    was used, EOFError is raised. 
+    """ 
+    it = iter(inputs) 
+    def mock_input(prompt=''): 
+        try: 
+            return next(it) 
+        except StopIteration: 
+            raise EOFError('No more inputs given') 
+ 
+    input_name = '%s.%s' % (py3compat.builtin_mod_name, 
+                            'input' if py3compat.PY3 else 'raw_input') 
+    return patch(input_name, mock_input) 
+ 
 def help_output_test(subcommand=''):
     """test that `ipython [subcommand] -h` works"""
     cmd = get_ipython_cmd() + [subcommand, '-h']
@@ -478,6 +478,6 @@ def help_all_output_test(subcommand=''):
     nt.assert_equal(rc, 0, err)
     nt.assert_not_in("Traceback", err)
     nt.assert_in("Options", out)
-    nt.assert_in("Class", out)
+    nt.assert_in("Class", out) 
     return out, err
 

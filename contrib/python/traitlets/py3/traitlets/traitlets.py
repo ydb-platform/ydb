@@ -432,8 +432,8 @@ class TraitType(BaseDescriptor):
     info_text = 'any value'
     default_value = Undefined
 
-    def __init__(self, default_value=Undefined, allow_none=False, read_only=None, help=None,
-        config=None, **kwargs):
+    def __init__(self, default_value=Undefined, allow_none=False, read_only=None, help=None, 
+        config=None, **kwargs): 
         """Declare a traitlet.
 
         If *allow_none* is True, None is a valid value in addition to any
@@ -475,8 +475,8 @@ class TraitType(BaseDescriptor):
                 self.metadata = kwargs
         else:
             self.metadata = self.metadata.copy()
-        if config is not None:
-            self.metadata['config'] = config
+        if config is not None: 
+            self.metadata['config'] = config 
 
         # We add help to the metadata during a deprecation period so that
         # code that looks for the help string there can find it.

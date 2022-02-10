@@ -13,8 +13,8 @@ The code in this file is mainly lifted out of cmd.py in Python 2.2, with minor
 changes. Licensing should therefore be under the standard Python terms.  For
 details on the PSF (Python Software Foundation) standard license, see:
 
-https://docs.python.org/2/license.html
-"""
+https://docs.python.org/2/license.html 
+""" 
 
 #*****************************************************************************
 #
@@ -65,7 +65,7 @@ def BdbQuit_excepthook(et, ev, tb, excepthook=None):
     parameter.
     """
     warnings.warn("`BdbQuit_excepthook` is deprecated since version 5.1",
-                  DeprecationWarning, stacklevel=2)
+                  DeprecationWarning, stacklevel=2) 
     if et==bdb.BdbQuit:
         print('Exiting Debugger.')
     elif excepthook is not None:
@@ -78,7 +78,7 @@ def BdbQuit_excepthook(et, ev, tb, excepthook=None):
 def BdbQuit_IPython_excepthook(self,et,ev,tb,tb_offset=None):
     warnings.warn(
         "`BdbQuit_IPython_excepthook` is deprecated since version 5.1",
-        DeprecationWarning, stacklevel=2)
+        DeprecationWarning, stacklevel=2) 
     print('Exiting Debugger.')
 
 
@@ -130,7 +130,7 @@ class Tracer(object):
         """
         warnings.warn("`Tracer` is deprecated since version 5.1, directly use "
                       "`IPython.core.debugger.Pdb.set_trace()`",
-                      DeprecationWarning, stacklevel=2)
+                      DeprecationWarning, stacklevel=2) 
 
         ip = get_ipython()
         if ip is None:
@@ -203,7 +203,7 @@ def _file_lines(fname):
         return out
 
 
-class Pdb(OldPdb):
+class Pdb(OldPdb): 
     """Modified Pdb class, does not load readline.
 
     for a standalone version that uses prompt_toolkit, see
@@ -228,14 +228,14 @@ class Pdb(OldPdb):
         self.shell = get_ipython()
 
         if self.shell is None:
-            save_main = sys.modules['__main__']
+            save_main = sys.modules['__main__'] 
             # No IPython instance running, we must create one
             from IPython.terminal.interactiveshell import \
                 TerminalInteractiveShell
             self.shell = TerminalInteractiveShell.instance()
-            # needed by any code which calls __import__("__main__") after
-            # the debugger was entered. See also #9941.
-            sys.modules['__main__'] = save_main 
+            # needed by any code which calls __import__("__main__") after 
+            # the debugger was entered. See also #9941. 
+            sys.modules['__main__'] = save_main  
 
         if color_scheme is not None:
             warnings.warn(
@@ -485,8 +485,8 @@ class Pdb(OldPdb):
             pass
 
     def do_list(self, arg):
-        """Print lines of code from the current stack frame
-        """
+        """Print lines of code from the current stack frame 
+        """ 
         self.lastcmd = 'list'
         last = None
         if arg:
@@ -530,10 +530,10 @@ class Pdb(OldPdb):
         return inspect.getblock(lines[lineno:]), lineno+1
 
     def do_longlist(self, arg):
-        """Print lines of code from the current stack frame.
-
-        Shows more lines than 'list' does.
-        """
+        """Print lines of code from the current stack frame. 
+ 
+        Shows more lines than 'list' does. 
+        """ 
         self.lastcmd = 'longlist'
         try:
             lines, lineno = self.getsourcelines(self.curframe)
@@ -607,12 +607,12 @@ class Pdb(OldPdb):
                 self.print_stack_trace()
 
         do_w = do_where
-
-
-def set_trace(frame=None):
-    """
-    Start debugging from `frame`.
-
-    If frame is not specified, debugging starts from caller's frame.
-    """
-    Pdb().set_trace(frame or sys._getframe().f_back)
+ 
+ 
+def set_trace(frame=None): 
+    """ 
+    Start debugging from `frame`. 
+ 
+    If frame is not specified, debugging starts from caller's frame. 
+    """ 
+    Pdb().set_trace(frame or sys._getframe().f_back) 

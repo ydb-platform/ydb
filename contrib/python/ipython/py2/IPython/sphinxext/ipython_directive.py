@@ -104,8 +104,8 @@ or :okwarning: options:
         In [1]: 1/0
         In [2]: # raise warning.
 
-To Do
------
+To Do 
+----- 
 
 - Turn the ad-hoc test() function into a real test suite.
 - Break up ipython-specific functionality from matplotlib stuff into better
@@ -127,7 +127,7 @@ from __future__ import print_function
 
 # Stdlib
 import atexit
-import errno
+import errno 
 import os
 import re
 import sys
@@ -139,7 +139,7 @@ import shutil
 
 # Third-party
 from docutils.parsers.rst import directives
-from docutils.parsers.rst import Directive
+from docutils.parsers.rst import Directive 
 
 # Our own
 from traitlets.config import Config
@@ -358,9 +358,9 @@ class EmbeddedSphinxShell(object):
         source_dir = self.source_dir
         saveargs = decorator.split(' ')
         filename = saveargs[1]
-        # insert relative path to image file in source (as absolute path for Sphinx)
-        outfile = '/' + os.path.relpath(os.path.join(savefig_dir,filename),
-                                        source_dir)
+        # insert relative path to image file in source (as absolute path for Sphinx) 
+        outfile = '/' + os.path.relpath(os.path.join(savefig_dir,filename), 
+                                        source_dir) 
 
         imagerows = ['.. image:: %s'%outfile]
 
@@ -843,8 +843,8 @@ class IPythonDirective(Directive):
 
         # get config variables to set figure output directory
         savefig_dir = config.ipython_savefig_dir
-        source_dir = self.state.document.settings.env.srcdir
-        savefig_dir = os.path.join(source_dir, savefig_dir)
+        source_dir = self.state.document.settings.env.srcdir 
+        savefig_dir = os.path.join(source_dir, savefig_dir) 
 
         # get regex and prompt stuff
         rgxin      = config.ipython_rgxin
@@ -863,12 +863,12 @@ class IPythonDirective(Directive):
         (savefig_dir, source_dir, rgxin, rgxout, promptin, promptout,
          mplbackend, exec_lines, hold_count) = self.get_config_options()
 
-        try:
-            os.makedirs(savefig_dir)
-        except OSError as e:
-            if e.errno != errno.EEXIST:
-                raise
-
+        try: 
+            os.makedirs(savefig_dir) 
+        except OSError as e: 
+            if e.errno != errno.EEXIST: 
+                raise 
+ 
         if self.shell is None:
             # We will be here many times.  However, when the
             # EmbeddedSphinxShell is created, its interactive shell member
@@ -977,7 +977,7 @@ def setup(app):
     setup.app = app
 
     app.add_directive('ipython', IPythonDirective)
-    app.add_config_value('ipython_savefig_dir', 'savefig', 'env')
+    app.add_config_value('ipython_savefig_dir', 'savefig', 'env') 
     app.add_config_value('ipython_rgxin',
                          re.compile('In \[(\d+)\]:\s?(.*)\s*'), 'env')
     app.add_config_value('ipython_rgxout',

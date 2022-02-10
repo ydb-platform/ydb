@@ -26,7 +26,7 @@ This module is certainly not ZODB, but can be used for low-load
 (non-mission-critical) situations where tiny code size trumps the
 advanced features of a "real" object database.
 
-Installation guide: pip install pickleshare
+Installation guide: pip install pickleshare 
 
 Author: Ville Vainio <vivainio@gmail.com>
 License: MIT open source license.
@@ -36,52 +36,52 @@ License: MIT open source license.
 from __future__ import print_function
 
 
-__version__ = "0.7.5"
+__version__ = "0.7.5" 
 
-try:
-    from pathlib import Path
-except ImportError:
-    # Python 2 backport
-    from pathlib2 import Path
-
+try: 
+    from pathlib import Path 
+except ImportError: 
+    # Python 2 backport 
+    from pathlib2 import Path 
+ 
 import os,stat,time
 try:
-    import collections.abc as collections_abc
-except ImportError:
-    import collections as collections_abc
-try:
+    import collections.abc as collections_abc 
+except ImportError: 
+    import collections as collections_abc 
+try: 
     import cPickle as pickle
 except ImportError:
     import pickle
 import errno
-import sys
+import sys 
 
-if sys.version_info[0] >= 3:
-    string_types = (str,)
-else:
-    string_types = (str, unicode)
-
+if sys.version_info[0] >= 3: 
+    string_types = (str,) 
+else: 
+    string_types = (str, unicode) 
+ 
 def gethashfile(key):
     return ("%02x" % abs(hash(key) % 256))[-2:]
 
 _sentinel = object()
 
-class PickleShareDB(collections_abc.MutableMapping):
+class PickleShareDB(collections_abc.MutableMapping): 
     """ The main 'connection' object for PickleShare database """
     def __init__(self,root):
         """ Return a db object that will manage the specied directory"""
-        if not isinstance(root, string_types):
-            root = str(root)
-        root = os.path.abspath(os.path.expanduser(root))
-        self.root = Path(root)
-        if not self.root.is_dir():
-            # catching the exception is necessary if multiple processes are concurrently trying to create a folder
-            # exists_ok keyword argument of mkdir does the same but only from Python 3.5
-            try:
-                self.root.mkdir(parents=True)
-            except OSError as e:
-                if e.errno != errno.EEXIST:
-                    raise
+        if not isinstance(root, string_types): 
+            root = str(root) 
+        root = os.path.abspath(os.path.expanduser(root)) 
+        self.root = Path(root) 
+        if not self.root.is_dir(): 
+            # catching the exception is necessary if multiple processes are concurrently trying to create a folder 
+            # exists_ok keyword argument of mkdir does the same but only from Python 3.5 
+            try: 
+                self.root.mkdir(parents=True) 
+            except OSError as e: 
+                if e.errno != errno.EEXIST: 
+                    raise 
         # cache has { 'key' : (obj, orig_mod_time) }
         self.cache = {}
 
@@ -110,14 +110,14 @@ class PickleShareDB(collections_abc.MutableMapping):
         """ db['key'] = 5 """
         fil = self.root / key
         parent = fil.parent
-        if parent and not parent.is_dir():
-            parent.mkdir(parents=True)
+        if parent and not parent.is_dir(): 
+            parent.mkdir(parents=True) 
         # We specify protocol 2, so that we can mostly go between Python 2
         # and Python 3. We can upgrade to protocol 3 when Python 2 is obsolete.
         with fil.open('wb') as f:
             pickle.dump(value, f, protocol=2)
         try:
-            self.cache[fil] = (value, fil.stat().st_mtime)
+            self.cache[fil] = (value, fil.stat().st_mtime) 
         except OSError as e:
             if e.errno != errno.ENOENT:
                 raise
@@ -125,8 +125,8 @@ class PickleShareDB(collections_abc.MutableMapping):
     def hset(self, hashroot, key, value):
         """ hashed set """
         hroot = self.root / hashroot
-        if not hroot.is_dir():
-            hroot.mkdir()
+        if not hroot.is_dir(): 
+            hroot.mkdir() 
         hfile = hroot / gethashfile(key)
         d = self.get(hfile, {})
         d.update( {key : value})
@@ -193,9 +193,9 @@ class PickleShareDB(collections_abc.MutableMapping):
         self[hashroot + '/xx'] = all
         for f in hfiles:
             p = self.root / f
-            if p.name == 'xx':
+            if p.name == 'xx': 
                 continue
-            p.unlink()
+            p.unlink() 
 
 
 
@@ -204,7 +204,7 @@ class PickleShareDB(collections_abc.MutableMapping):
         fil = self.root / key
         self.cache.pop(fil,None)
         try:
-            fil.unlink()
+            fil.unlink() 
         except OSError:
             # notfound and permission denied are ok - we
             # lost, the other process wins the conflict
@@ -212,16 +212,16 @@ class PickleShareDB(collections_abc.MutableMapping):
 
     def _normalized(self, p):
         """ Make a key suitable for user's eyes """
-        return str(p.relative_to(self.root)).replace('\\','/')
+        return str(p.relative_to(self.root)).replace('\\','/') 
 
     def keys(self, globpat = None):
         """ All keys in DB, or all keys matching a glob"""
 
         if globpat is None:
-            files = self.root.rglob('*')
+            files = self.root.rglob('*') 
         else:
-            files = self.root.glob(globpat)
-        return [self._normalized(p) for p in files if p.is_file()]
+            files = self.root.glob(globpat) 
+        return [self._normalized(p) for p in files if p.is_file()] 
 
     def __iter__(self):
         return iter(self.keys())

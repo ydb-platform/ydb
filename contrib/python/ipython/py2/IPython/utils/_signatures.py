@@ -21,7 +21,7 @@ import itertools
 import functools
 import re
 import types
-import inspect
+import inspect 
 
 
 # patch for single-file
@@ -72,7 +72,7 @@ def signature(obj):
     if not callable(obj):
         raise TypeError('{0!r} is not a callable object'.format(obj))
 
-    if inspect.ismethod(obj):
+    if inspect.ismethod(obj): 
         if obj.__self__ is None:
             # Unbound method - treat it as a function (no distinction in Py 3)
             obj = obj.__func__
@@ -97,7 +97,7 @@ def signature(obj):
     else:
         return signature(wrapped)
 
-    if inspect.isfunction(obj):
+    if inspect.isfunction(obj): 
         return Signature.from_function(obj)
 
     if isinstance(obj, functools.partial):
@@ -512,7 +512,7 @@ class Signature(object):
     def from_function(cls, func):
         '''Constructs Signature for the given python function'''
 
-        if not inspect.isfunction(func):
+        if not inspect.isfunction(func): 
             raise TypeError('{0!r} is not a Python function'.format(func))
 
         Parameter = cls._parameter_cls

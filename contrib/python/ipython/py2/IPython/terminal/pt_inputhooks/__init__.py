@@ -30,20 +30,20 @@ class UnknownBackend(KeyError):
                 "Supported event loops are: {}").format(self.name,
                                     ', '.join(backends + sorted(registered)))
 
-def get_inputhook_name_and_func(gui):
+def get_inputhook_name_and_func(gui): 
     if gui in registered:
-        return gui, registered[gui]
+        return gui, registered[gui] 
 
     if gui not in backends:
         raise UnknownBackend(gui)
 
     if gui in aliases:
-        return get_inputhook_name_and_func(aliases[gui])
+        return get_inputhook_name_and_func(aliases[gui]) 
 
-    gui_mod = gui
+    gui_mod = gui 
     if gui == 'qt5':
         os.environ['QT_API'] = 'pyqt5'
-        gui_mod = 'qt'
+        gui_mod = 'qt' 
 
-    mod = importlib.import_module('IPython.terminal.pt_inputhooks.'+gui_mod)
-    return gui, mod.inputhook
+    mod = importlib.import_module('IPython.terminal.pt_inputhooks.'+gui_mod) 
+    return gui, mod.inputhook 

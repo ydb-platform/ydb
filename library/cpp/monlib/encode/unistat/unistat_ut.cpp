@@ -30,7 +30,7 @@ Y_UNIT_TEST_SUITE(TUnistatDecoderTest) {
     }
 
     Y_UNIT_TEST(OverriddenTags) {
-        constexpr auto input = TStringBuf(R"([["ctype=foo;prj=bar;custom_tag=qwe;something_axxx", 42]])"); 
+        constexpr auto input = TStringBuf(R"([["ctype=foo;prj=bar;custom_tag=qwe;something_axxx", 42]])");
 
         NProto::TMultiSamplesList samples;
         auto encoder = EncoderProtobuf(&samples);
@@ -40,7 +40,7 @@ Y_UNIT_TEST_SUITE(TUnistatDecoderTest) {
         UNIT_ASSERT_VALUES_EQUAL(samples.SamplesSize(), 1);
         auto sample = samples.GetSamples(0);
         UNIT_ASSERT_VALUES_EQUAL(sample.PointsSize(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(sample.LabelsSize(), 4); 
+        UNIT_ASSERT_VALUES_EQUAL(sample.LabelsSize(), 4);
 
         const auto& labels = sample.GetLabels();
         TLabels actual;
@@ -48,7 +48,7 @@ Y_UNIT_TEST_SUITE(TUnistatDecoderTest) {
             actual.Add(l.GetName(), l.GetValue());
         }
 
-        TLabels expected{{"ctype", "foo"}, {"prj", "bar"}, {"custom_tag", "qwe"}, {"sensor", "something_axxx"}}; 
+        TLabels expected{{"ctype", "foo"}, {"prj", "bar"}, {"custom_tag", "qwe"}, {"sensor", "something_axxx"}};
 
         UNIT_ASSERT_VALUES_EQUAL(actual.size(), expected.size());
         for (auto&& l : actual) {
@@ -119,16 +119,16 @@ Y_UNIT_TEST_SUITE(TUnistatDecoderTest) {
         UNIT_ASSERT_VALUES_EQUAL(sample.LabelsSize(), 1);
     }
 
-    Y_UNIT_TEST(AllowedMetricNames) { 
-        NProto::TMultiSamplesList samples; 
-        auto encoder = EncoderProtobuf(&samples); 
- 
-        { 
-            constexpr auto input = TStringBuf(R"([["a/A-b/c_D/__G_dmmm", [[0, 1], [200, 2], [500, 3]] ]])"); 
-            UNIT_ASSERT_NO_EXCEPTION(DecodeUnistat(input, encoder.Get())); 
-        } 
-    } 
- 
+    Y_UNIT_TEST(AllowedMetricNames) {
+        NProto::TMultiSamplesList samples;
+        auto encoder = EncoderProtobuf(&samples);
+
+        {
+            constexpr auto input = TStringBuf(R"([["a/A-b/c_D/__G_dmmm", [[0, 1], [200, 2], [500, 3]] ]])");
+            UNIT_ASSERT_NO_EXCEPTION(DecodeUnistat(input, encoder.Get()));
+        }
+    }
+
     Y_UNIT_TEST(DisallowedMetricNames) {
         NProto::TMultiSamplesList samples;
         auto encoder = EncoderProtobuf(&samples);

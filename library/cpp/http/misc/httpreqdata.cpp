@@ -79,7 +79,7 @@ TString TBaseServerRequestData::HeaderByIndex(size_t n) const noexcept {
         return nullptr;
     }
 
-    THttpHeadersContainer::const_iterator i = HeadersIn_.begin(); 
+    THttpHeadersContainer::const_iterator i = HeadersIn_.begin();
 
     while (n) {
         ++i;

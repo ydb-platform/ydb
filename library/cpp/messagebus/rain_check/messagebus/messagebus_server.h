@@ -5,7 +5,7 @@
 
 #include <library/cpp/messagebus/ybus.h>
 
-#include <util/system/yassert.h> 
+#include <util/system/yassert.h>
 
 namespace NRainCheck {
     class TBusTaskStarter: public NBus::IBusServerHandler {

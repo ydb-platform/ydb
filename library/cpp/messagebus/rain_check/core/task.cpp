@@ -211,6 +211,6 @@ TString TTaskRunnerBase::GetStatusSingleLine() {
     return TypeName(*Impl);
 }
 
-bool NRainCheck::AreWeInsideTask() { 
+bool NRainCheck::AreWeInsideTask() {
     return ThreadCurrentTask != nullptr;
-} 
+}

@@ -216,7 +216,7 @@ namespace Tests {
         TServer(TServer&& server) = default;
         TServer& operator =(TServer&& server) = default;
         virtual ~TServer();
- 
+
         void EnableGRpc(const NGrpc::TServerOptions& options);
         void EnableGRpc(ui16 port);
 

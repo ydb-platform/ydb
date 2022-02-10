@@ -1,63 +1,63 @@
-#include "grpc_server.h" 
+#include "grpc_server.h"
 #include "grpc_proxy_status.h"
- 
+
 #include <ydb/core/client/server/msgbus_server_persqueue.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <library/cpp/grpc/server/grpc_request.h>
 #include <library/cpp/grpc/server/grpc_counters.h>
 #include <library/cpp/grpc/server/grpc_async_ctx_base.h>
- 
+
 #include <library/cpp/json/json_writer.h>
 
-#include <util/string/join.h> 
- 
+#include <util/string/join.h>
+
 #include <google/protobuf/text_format.h>
 
-#include <grpc++/resource_quota.h> 
-#include <grpc++/security/server_credentials.h> 
-#include <grpc++/server_builder.h> 
-#include <grpc++/server_context.h> 
-#include <grpc++/server.h> 
- 
-using grpc::Server; 
-using grpc::ServerContext; 
-using grpc::ServerAsyncResponseWriter; 
+#include <grpc++/resource_quota.h>
+#include <grpc++/security/server_credentials.h>
+#include <grpc++/server_builder.h>
+#include <grpc++/server_context.h>
+#include <grpc++/server.h>
+
+using grpc::Server;
+using grpc::ServerContext;
+using grpc::ServerAsyncResponseWriter;
 using grpc::ServerAsyncWriter;
-using grpc::Status; 
-using grpc::StatusCode; 
-using grpc::ServerCompletionQueue; 
+using grpc::Status;
+using grpc::StatusCode;
+using grpc::ServerCompletionQueue;
 using grpc::CompletionQueue;
- 
+
 using NKikimrClient::TResponse;
 using NKikimrClient::TPersQueueRequest;
- 
+
 using NGrpc::IQueueEvent;
 
-using namespace NActors; 
+using namespace NActors;
 using namespace NThreading;
- 
-namespace NKikimr { 
-namespace NGRpcProxy { 
-namespace { 
- 
+
+namespace NKikimr {
+namespace NGRpcProxy {
+namespace {
+
 using TGrpcBaseAsyncContext = NGrpc::TBaseAsyncContext<NGRpcProxy::TGRpcService>;
 
 template <typename TIn, typename TOut = TResponse>
-class TSimpleRequest 
-    : public IQueueEvent 
+class TSimpleRequest
+    : public IQueueEvent
     , public TGrpcBaseAsyncContext
-    , public IRequestContext 
-{ 
+    , public IRequestContext
+{
     using TOnRequest = std::function<void (IRequestContext* ctx)>;
- 
+
     using TRequestCallback = void (NKikimrClient::TGRpcServer::AsyncService::*)(ServerContext*, TIn*,
         ServerAsyncResponseWriter<TOut>*, CompletionQueue*, ServerCompletionQueue*, void*);
 
-public: 
+public:
 
     TSimpleRequest(TGRpcService* server,
                    NKikimrClient::TGRpcServer::AsyncService* service,
-                   ServerCompletionQueue* cq, 
+                   ServerCompletionQueue* cq,
                    TOnRequest cb,
                    TRequestCallback requestCallback,
                    TActorSystem& as,
@@ -76,10 +76,10 @@ public:
         , ResponseSize(0)
         , ResponseStatus(0)
         , InProgress_(false)
-    { 
+    {
         LOG_DEBUG(ActorSystem, NKikimrServices::GRPC_SERVER, "[%p] created request Name# %s", this, Name);
-    } 
- 
+    }
+
     ~TSimpleRequest() {
         if (InProgress_) {
             //If we are ShuttingDown probably ActorSystem unable to recieve new events
@@ -101,7 +101,7 @@ public:
         }
     }
 
-public: 
+public:
     //! Start another instance of request to grab next incoming query (only when the server is not shutting down)
     void Clone() {
         if (!Server->IsShuttingDown()) {
@@ -110,25 +110,25 @@ public:
         }
     }
 
-    bool Execute(bool ok) override { 
+    bool Execute(bool ok) override {
         return (this->*StateFunc)(ok);
-    } 
- 
-    void DestroyRequest() override { 
+    }
+
+    void DestroyRequest() override {
         if (RequestRegistered_) {
             Server->DeregisterRequestCtx(this);
             RequestRegistered_ = false;
         }
-        delete this; 
-    } 
- 
+        delete this;
+    }
+
 public:
-    //! Get pointer to the request's message. 
-    const NProtoBuf::Message* GetRequest() const override { 
+    //! Get pointer to the request's message.
+    const NProtoBuf::Message* GetRequest() const override {
         return &Request;
-    } 
- 
-    //! Send reply. 
+    }
+
+    //! Send reply.
     void Reply(const NKikimrClient::TResponse& resp) override {
         if (const TOut *x = dynamic_cast<const TOut *>(&resp)) {
             Finish(*x, 0);
@@ -169,14 +169,14 @@ public:
         }
     }
 
-    void Reply(const NKikimrClient::TSqsResponse& resp) override { 
-        try { 
+    void Reply(const NKikimrClient::TSqsResponse& resp) override {
+        try {
             Finish(dynamic_cast<const TOut&>(resp), 0);
-        } catch (const std::bad_cast&) { 
-            Y_FAIL("unexpected response type generated"); 
-        } 
-    } 
- 
+        } catch (const std::bad_cast&) {
+            Y_FAIL("unexpected response type generated");
+        }
+    }
+
     void Reply(const NKikimrClient::TS3ListingResponse& resp) override {
         try {
             Finish(dynamic_cast<const TOut&>(resp), 0);
@@ -198,8 +198,8 @@ public:
         TOut resp;
         GenerateErrorResponse(resp, reason);
         Finish(resp, 0);
-    } 
- 
+    }
+
     static void GenerateErrorResponse(NKikimrClient::TResponse& resp, const TString& reason) {
         resp.SetStatus(NMsgBusProxy::MSTATUS_ERROR);
         if (reason) {
@@ -223,14 +223,14 @@ public:
         resp.SetJSON(NJson::WriteJson(json, false));
     }
 
-    static void GenerateErrorResponse(NKikimrClient::TSqsResponse&, const TString&) 
-    { } 
- 
+    static void GenerateErrorResponse(NKikimrClient::TSqsResponse&, const TString&)
+    { }
+
     static void GenerateErrorResponse(NKikimrClient::TS3ListingResponse& resp, const TString& reason) {
         resp.SetStatus(NMsgBusProxy::MSTATUS_ERROR);
         resp.SetDescription(reason);
     }
- 
+
     static void GenerateErrorResponse(NKikimrClient::TConsoleResponse& resp, const TString& reason) {
         resp.MutableStatus()->SetCode(Ydb::StatusIds::GENERIC_ERROR);
         resp.MutableStatus()->SetReason(reason);
@@ -244,7 +244,7 @@ public:
         return GetPeerName();
     }
 
-private: 
+private:
     void* GetGRpcTag() {
         return static_cast<IQueueEvent*>(this);
     }
@@ -263,8 +263,8 @@ private:
         ResponseStatus = status;
         StateFunc = &TSimpleRequest::FinishDone;
         Writer->Finish(resp, Status::OK, GetGRpcTag());
-    } 
- 
+    }
+
     void FinishNoResource() {
         TOut resp;
         TString msg = "no resource";
@@ -277,7 +277,7 @@ private:
                        GetGRpcTag());
     }
 
-    bool RequestDone(bool ok) { 
+    bool RequestDone(bool ok) {
         auto makeRequestString = [&] {
             TString resp;
             if (ok) {
@@ -323,8 +323,8 @@ private:
         }
 
         return true;
-    } 
- 
+    }
+
     bool FinishDone(bool ok) {
         LOG_DEBUG(ActorSystem, NKikimrServices::GRPC_SERVER, "[%p] finished request Name# %s ok# %s peer# %s", this,
             Name, ok ? "true" : "false", Context.peer().c_str());
@@ -340,21 +340,21 @@ private:
         LOG_DEBUG(ActorSystem, NKikimrServices::GRPC_SERVER, "[%p] finished request without processing Name# %s ok# %s peer# %s", this,
             Name, ok ? "true" : "false", Context.peer().c_str());
 
-        return false; 
-    } 
- 
-private: 
-    using TStateFunc = bool (TSimpleRequest::*)(bool); 
- 
+        return false;
+    }
+
+private:
+    using TStateFunc = bool (TSimpleRequest::*)(bool);
+
     TGRpcService* const Server;
     TOnRequest Cb;
     TRequestCallback RequestCallback;
     TActorSystem& ActorSystem;
     const char* const Name;
     NGrpc::ICounterBlockPtr Counters;
- 
+
     THolder<ServerAsyncResponseWriter<TOut>> Writer;
- 
+
     TStateFunc StateFunc;
     TIn Request;
     ui32 RequestSize;
@@ -365,20 +365,20 @@ private:
     TMaybe<NMsgBusProxy::TBusMessageContext> BusContext;
     bool InProgress_;
     bool RequestRegistered_ = false;
-}; 
- 
-} // namespace 
- 
+};
+
+} // namespace
+
 TGRpcService::TGRpcService()
     : ActorSystem(nullptr)
 {}
- 
+
 void TGRpcService::InitService(grpc::ServerCompletionQueue *cq, NGrpc::TLoggerPtr) {
     CQ = cq;
     Y_ASSERT(InitCb_);
     InitCb_();
-} 
- 
+}
+
 TFuture<void> TGRpcService::Prepare(TActorSystem* system, const TActorId& pqMeta, const TActorId& msgBusProxy,
         TIntrusivePtr<NMonitoring::TDynamicCounters> counters) {
     auto promise = NewPromise<void>();
@@ -388,7 +388,7 @@ TFuture<void> TGRpcService::Prepare(TActorSystem* system, const TActorId& pqMeta
             PQMeta = pqMeta;
             MsgBusProxy = msgBusProxy;
             Counters = counters;
- 
+
             promise.SetValue();
         } catch (...) {
             promise.SetException(std::current_exception());
@@ -420,14 +420,14 @@ void TGRpcService::Start() {
     ActorSystem->Send(MakeGRpcProxyStatusID(nodeId), new TEvGRpcProxyStatus::TEvSetup(true, PersQueueWriteSessionsMaxCount,
                                         PersQueueReadSessionsMaxCount));
     SetupIncomingRequests();
-} 
- 
+}
+
 void TGRpcService::RegisterRequestActor(NActors::IActor* req) {
     ActorSystem->Register(req, TMailboxType::HTSwap, ActorSystem->AppData<TAppData>()->UserPoolId);
 }
 
 void TGRpcService::SetupIncomingRequests() {
- 
+
     auto getCounterBlock = NGRpcService::CreateCounterCb(Counters, ActorSystem);
 
 #define ADD_REQUEST(NAME, IN, OUT, ACTION) \
@@ -437,7 +437,7 @@ void TGRpcService::SetupIncomingRequests() {
             ACTION; \
         }, &NKikimrClient::TGRpcServer::AsyncService::Request ## NAME, \
         *ActorSystem, #NAME, getCounterBlock("legacy", #NAME)))->Start();
- 
+
 #define ADD_ACTOR_REQUEST(NAME, TYPE, MTYPE) \
     ADD_REQUEST(NAME, TYPE, TResponse, { \
         NMsgBusProxy::TBusMessageContext msg(ctx->BindBusContext(NMsgBusProxy::MTYPE)); \
@@ -479,18 +479,18 @@ void TGRpcService::SetupIncomingRequests() {
         RegisterRequestActor(CreateMessageBusCmsRequest(msg));
     })
 
-    // SQS request 
-    ADD_REQUEST(SqsRequest, TSqsRequest, TSqsResponse, { 
-        NMsgBusProxy::TBusMessageContext msg(ctx->BindBusContext(NMsgBusProxy::MTYPE_CLIENT_SQS_REQUEST)); 
+    // SQS request
+    ADD_REQUEST(SqsRequest, TSqsRequest, TSqsResponse, {
+        NMsgBusProxy::TBusMessageContext msg(ctx->BindBusContext(NMsgBusProxy::MTYPE_CLIENT_SQS_REQUEST));
         RegisterRequestActor(CreateMessageBusSqsRequest(msg));
-    }) 
- 
+    })
+
     // S3 listing request
     ADD_REQUEST(S3Listing, TS3ListingRequest, TS3ListingResponse, {
         NMsgBusProxy::TBusMessageContext msg(ctx->BindBusContext(NMsgBusProxy::MTYPE_CLIENT_S3_LISTING_REQUEST));
         RegisterRequestActor(CreateMessageBusS3ListingRequest(msg));
     })
- 
+
     // Console request
     ADD_REQUEST(ConsoleRequest, TConsoleRequest, TConsoleResponse, {
         NMsgBusProxy::TBusMessageContext msg(ctx->BindBusContext(NMsgBusProxy::MTYPE_CLIENT_CONSOLE_REQUEST));
@@ -525,7 +525,7 @@ void TGRpcService::SetupIncomingRequests() {
     ADD_PROXY_REQUEST_JJ(DbSchema,    TEvBusProxy::TEvDbSchema,    MTYPE_CLIENT_DB_SCHEMA)
     ADD_PROXY_REQUEST_JJ(DbOperation, TEvBusProxy::TEvDbOperation, MTYPE_CLIENT_DB_OPERATION)
     ADD_PROXY_REQUEST_JJ(DbBatch,     TEvBusProxy::TEvDbBatch,     MTYPE_CLIENT_DB_BATCH)
-} 
- 
-} 
-} 
+}
+
+}
+}

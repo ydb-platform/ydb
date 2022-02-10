@@ -330,7 +330,7 @@ namespace NKikimr {
         IMPL_REQUEST(KeyValue, TKeyValueRequest, TResponse)
         IMPL_REQUEST(RegisterNode, TNodeRegistrationRequest, TNodeRegistrationResponse)
         IMPL_REQUEST(CmsRequest, TCmsRequest, TCmsResponse)
-        IMPL_REQUEST(SqsRequest, TSqsRequest, TSqsResponse) 
+        IMPL_REQUEST(SqsRequest, TSqsRequest, TSqsResponse)
         IMPL_REQUEST(S3Listing, TS3ListingRequest, TS3ListingResponse)
         IMPL_REQUEST(LocalMKQL, TLocalMKQL, TResponse)
         IMPL_REQUEST(LocalSchemeTx, TLocalSchemeTx, TResponse)

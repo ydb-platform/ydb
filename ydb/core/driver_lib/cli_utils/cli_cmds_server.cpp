@@ -67,7 +67,7 @@ protected:
     TString NodeResolveHost;
     TString NodeDomain;
     ui32 InterconnectPort;
-    ui32 SqsHttpPort; 
+    ui32 SqsHttpPort;
     TString NodeType;
     TString DataCenter;
     TString Rack;
@@ -114,7 +114,7 @@ protected:
         NodeBrokerUseTls = false;
         FixedNodeID = false;
         InterconnectPort = 0;
-        SqsHttpPort = 0; 
+        SqsHttpPort = 0;
         IgnoreCmsConfigs = false;
         DataCenter = "";
         Rack = "";
@@ -162,8 +162,8 @@ protected:
                 .RequiredArgument("NAME").StoreResult(&NodeDomain);
         config.Opts->AddLongOption("ic-port", "interconnect port")
                 .RequiredArgument("NUM").StoreResult(&InterconnectPort);
-        config.Opts->AddLongOption("sqs-port", "sqs port") 
-                .RequiredArgument("NUM").StoreResult(&SqsHttpPort); 
+        config.Opts->AddLongOption("sqs-port", "sqs port")
+                .RequiredArgument("NUM").StoreResult(&SqsHttpPort);
         config.Opts->AddLongOption("proxy", "Bind to proxy(-ies)").RequiredArgument("ADDR").AppendTo(&ProxyBindToProxy);
         config.Opts->AddLongOption("host-label-override", "overrides host label for slot").RequiredArgument("NAME").StoreResult(&HostLabelOverride);
         config.Opts->AddLongOption("tenant", "add binding for Local service to specified tenant, might be one of {'no', 'dynamic', '/<root>', '/<root>/<path_to_user>'}")
@@ -215,7 +215,7 @@ protected:
         config.Opts->AddLongOption("auth-token-file", "authorization token configuration").OptionalArgument("PATH");
         config.Opts->AddLongOption("key-file", "tanant encryption key configuration").OptionalArgument("PATH");
         config.Opts->AddLongOption("pdisk-key-file", "pdisk encryption key configuration").OptionalArgument("PATH");
-        config.Opts->AddLongOption("sqs-file", "SQS config file").OptionalArgument("PATH"); 
+        config.Opts->AddLongOption("sqs-file", "SQS config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("bootstrap-file", "Bootstrap config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("dyn-nodes-file", "Dynamic nodes config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("cms-file", "CMS config file").OptionalArgument("PATH");
@@ -524,7 +524,7 @@ protected:
             AppConfig.MutableMonitoringConfig()->SetMonitoringPort(MonitoringPort);
         if (MonitoringAddress)
             AppConfig.MutableMonitoringConfig()->SetMonitoringAddress(MonitoringAddress);
-        if (SqsHttpPort) 
+        if (SqsHttpPort)
             RunConfig.AppConfig.MutableSqsConfig()->MutableHttpServerConfig()->SetPort(SqsHttpPort);
         if (GRpcPort) {
             auto& conf = *AppConfig.MutableGRpcConfig();

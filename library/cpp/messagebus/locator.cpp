@@ -7,8 +7,8 @@
 #include "ybus.h"
 
 #include <util/generic/hash_set.h>
-#include <util/system/hostname.h> 
- 
+#include <util/system/hostname.h>
+
 namespace NBus {
     using namespace NAddr;
 
@@ -17,7 +17,7 @@ namespace NBus {
             case AF_INET: {
                 return ntohs(((const sockaddr_in*)addr.Addr())->sin_port);
             }
- 
+
             case AF_INET6: {
                 return ntohs(((const sockaddr_in6*)addr.Addr())->sin6_port);
             }
@@ -26,9 +26,9 @@ namespace NBus {
                 ythrow yexception() << "not implemented";
                 break;
             }
-        } 
+        }
     }
- 
+
     static inline bool GetIp6AddressFromVector(const TVector<TNetAddr>& addrs, TNetAddr* addr) {
         for (size_t i = 1; i < addrs.size(); ++i) {
             if (addrs[i - 1].Addr()->sa_family == addrs[i].Addr()->sa_family) {
@@ -38,18 +38,18 @@ namespace NBus {
             if (GetAddrPort(addrs[i - 1]) != GetAddrPort(addrs[i])) {
                 return false;
             }
-        } 
- 
+        }
+
         for (size_t i = 0; i < addrs.size(); ++i) {
             if (addrs[i].Addr()->sa_family == AF_INET6) {
                 *addr = addrs[i];
                 return true;
             }
-        } 
+        }
 
         return false;
-    } 
- 
+    }
+
     EMessageStatus TBusProtocol::GetDestination(const TBusClientSession*, TBusMessage* mess, TBusLocator* locator, TNetAddr* addr) {
         TBusService service = GetService();
         TBusKey key = GetKey(mess);
@@ -61,8 +61,8 @@ namespace NBus {
         } else {
             /// lookup address/port in the locator table
             locator->LocateAll(service, key, addrs);
-        } 
- 
+        }
+
         if (addrs.size() == 0) {
             return MESSAGE_SERVICE_UNKNOWN;
         } else if (addrs.size() == 1) {
@@ -73,15 +73,15 @@ namespace NBus {
                 /// to implement custom routing strategy for your service.
                 return MESSAGE_SERVICE_TOOMANY;
             }
-        } 
+        }
 
         return MESSAGE_OK;
-    } 
- 
+    }
+
     static const sockaddr_in* SockAddrIpV4(const IRemoteAddr& a) {
         return (const sockaddr_in*)a.Addr();
-    } 
- 
+    }
+
     static const sockaddr_in6* SockAddrIpV6(const IRemoteAddr& a) {
         return (const sockaddr_in6*)a.Addr();
     }
@@ -96,7 +96,7 @@ namespace NBus {
         }
         return false;
     }
- 
+
     TBusLocator::TBusLocator()
         : MyInterfaces(GetNetworkInterfaces())
     {
@@ -137,7 +137,7 @@ namespace NBus {
         const char* c = ServiceIdSet.insert(name).first->c_str();
         return (ui64)c;
     }
- 
+
     int TBusLocator::RegisterBreak(TBusService service, const TVector<TBusKey>& starts, const TNetAddr& addr) {
         TGuard<TMutex> G(Lock);
 
@@ -399,7 +399,7 @@ namespace NBus {
 
         TServiceId serviceId = GetServiceId(service);
         TItems::const_iterator it;
- 
+
         TItem itemToReg(serviceId, start, end, addr);
         for (it = Items.lower_bound(TItem(serviceId, 0, start, TNetAddr()));
              it != Items.end() && it->ServiceId == serviceId;

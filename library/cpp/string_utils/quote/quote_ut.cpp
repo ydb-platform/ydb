@@ -178,25 +178,25 @@ Y_UNIT_TEST_SUITE(TCGIUnescapeTest) {
     }
 }
 
-Y_UNIT_TEST_SUITE(TUrlEscapeTest) { 
-    Y_UNIT_TEST(EscapeEscaped) { 
-        TString s; 
- 
-        s = "hello%3dworld"; 
+Y_UNIT_TEST_SUITE(TUrlEscapeTest) {
+    Y_UNIT_TEST(EscapeEscaped) {
+        TString s;
+
+        s = "hello%3dworld";
         UNIT_ASSERT_VALUES_EQUAL(UrlEscapeRet(s), "hello%3dworld");
-        UrlEscape(s); 
-        UNIT_ASSERT_VALUES_EQUAL(s, "hello%3dworld"); 
-    } 
- 
-    Y_UNIT_TEST(EscapeUnescape) { 
-        TString s; 
- 
-        s = "hello%3dworld"; 
-        UrlEscape(s); 
-        UrlUnescape(s); 
-        UNIT_ASSERT_VALUES_EQUAL(s, "hello=world"); 
-    } 
- 
+        UrlEscape(s);
+        UNIT_ASSERT_VALUES_EQUAL(s, "hello%3dworld");
+    }
+
+    Y_UNIT_TEST(EscapeUnescape) {
+        TString s;
+
+        s = "hello%3dworld";
+        UrlEscape(s);
+        UrlUnescape(s);
+        UNIT_ASSERT_VALUES_EQUAL(s, "hello=world");
+    }
+
     Y_UNIT_TEST(EscapeUnescapeRet) {
         TString s;
 
@@ -204,23 +204,23 @@ Y_UNIT_TEST_SUITE(TUrlEscapeTest) {
         UNIT_ASSERT_VALUES_EQUAL(UrlUnescapeRet(UrlEscapeRet(s)), "hello=world");
     }
 
-    Y_UNIT_TEST(EscapeEscapedForce) { 
-        TString s; 
- 
-        s = "hello%3dworld"; 
+    Y_UNIT_TEST(EscapeEscapedForce) {
+        TString s;
+
+        s = "hello%3dworld";
         UNIT_ASSERT_VALUES_EQUAL(UrlEscapeRet(s, true), "hello%253dworld");
-        UrlEscape(s, true); 
-        UNIT_ASSERT_VALUES_EQUAL(s, "hello%253dworld"); 
-    } 
- 
-    Y_UNIT_TEST(EscapeUnescapeForce) { 
-        TString s; 
- 
-        s = "hello%3dworld"; 
-        UrlEscape(s, true); 
-        UrlUnescape(s); 
-        UNIT_ASSERT_VALUES_EQUAL(s, "hello%3dworld"); 
-    } 
+        UrlEscape(s, true);
+        UNIT_ASSERT_VALUES_EQUAL(s, "hello%253dworld");
+    }
+
+    Y_UNIT_TEST(EscapeUnescapeForce) {
+        TString s;
+
+        s = "hello%3dworld";
+        UrlEscape(s, true);
+        UrlUnescape(s);
+        UNIT_ASSERT_VALUES_EQUAL(s, "hello%3dworld");
+    }
 
     Y_UNIT_TEST(EscapeUnescapeForceRet) {
         TString s;
@@ -228,8 +228,8 @@ Y_UNIT_TEST_SUITE(TUrlEscapeTest) {
         s = "hello%3dworld";
         UNIT_ASSERT_VALUES_EQUAL(UrlUnescapeRet(UrlEscapeRet(s, true)), "hello%3dworld");
     }
-} 
- 
+}
+
 Y_UNIT_TEST_SUITE(TUrlUnescapeTest) {
     Y_UNIT_TEST(StrokaOutParameterInplace) {
         TString s;

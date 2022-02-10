@@ -17,7 +17,7 @@ static inline T RandomizeSleepTime(T t) noexcept {
 
 //arbitrary values
 #define MIN_SLEEP_TIME 500
-#define MAX_SPIN_COUNT 0x7FF 
+#define MAX_SPIN_COUNT 0x7FF
 
 TSpinWait::TSpinWait() noexcept
     : T(MIN_SLEEP_TIME)

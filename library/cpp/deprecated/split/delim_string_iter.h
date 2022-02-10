@@ -1,8 +1,8 @@
 #pragma once
 
-#include <util/generic/algorithm.h> 
-#include <util/generic/strbuf.h> 
-#include <util/generic/yexception.h> 
+#include <util/generic/algorithm.h>
+#include <util/generic/strbuf.h>
+#include <util/generic/yexception.h>
 #include <util/string/cast.h>
 #include <util/system/yassert.h>
 
@@ -35,9 +35,9 @@ public:
     }
 
     inline explicit operator bool() const {
-        return IsValid; 
-    } 
- 
+        return IsValid;
+    }
+
     // NOTE: this is a potentially unsafe operation (no overrun check)
     inline TDelimStringIter& operator++() {
         if (Current.end() != Str.end()) {
@@ -51,7 +51,7 @@ public:
         return *this;
     }
 
-    inline void operator+=(size_t n) { 
+    inline void operator+=(size_t n) {
         for (; n > 0; --n) {
             ++(*this);
         }
@@ -65,17 +65,17 @@ public:
         return !(*this == rhs);
     }
 
-    inline TStringBuf operator*() const { 
+    inline TStringBuf operator*() const {
         return Current;
     }
 
-    inline const TStringBuf* operator->() const { 
+    inline const TStringBuf* operator->() const {
         return &Current;
     }
 
-    // Get & advance 
+    // Get & advance
     template <class T>
-    inline bool TryNext(T& t) { 
+    inline bool TryNext(T& t) {
         if (IsValid) {
             t = FromString<T>(Current);
             operator++();
@@ -94,46 +94,46 @@ public:
     }
 
     template <class T>
-    inline T GetNext() { 
+    inline T GetNext() {
         T res;
         Next(res);
         return res;
     }
 
-    inline const char* GetBegin() const { 
+    inline const char* GetBegin() const {
         return Current.begin();
     }
 
-    inline const char* GetEnd() const { 
+    inline const char* GetEnd() const {
         return Current.end();
     }
 
-    inline bool Valid() const { 
+    inline bool Valid() const {
         return IsValid;
     }
 
     // contents from next token to the end of string
-    inline TStringBuf Cdr() const { 
+    inline TStringBuf Cdr() const {
         return Str.SubStr(Current.length() + Delim.length());
     }
 
     inline TDelimStringIter IterEnd() const {
         return TDelimStringIter();
     }
- 
-private: 
-    inline void UpdateCurrent() { 
-        // it is much faster than TStringBuf::find 
+
+private:
+    inline void UpdateCurrent() {
+        // it is much faster than TStringBuf::find
         size_t pos = std::search(Str.begin(), Str.end(), Delim.begin(), Delim.end()) - Str.begin();
-        Current = Str.Head(pos); 
-    } 
- 
-private: 
-    bool IsValid; 
- 
-    TStringBuf Str; 
-    TStringBuf Current; 
-    TStringBuf Delim; 
+        Current = Str.Head(pos);
+    }
+
+private:
+    bool IsValid;
+
+    TStringBuf Str;
+    TStringBuf Current;
+    TStringBuf Delim;
 };
 
 //example: for (TStringBuf field: TDelimStroka(line, "@@")) { ... }
@@ -141,7 +141,7 @@ struct TDelimStroka {
     TStringBuf S;
     TStringBuf Delim;
 
-    inline TDelimStroka(TStringBuf s, TStringBuf delim) 
+    inline TDelimStroka(TStringBuf s, TStringBuf delim)
         : S(s)
         , Delim(delim)
     {

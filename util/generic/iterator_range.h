@@ -49,9 +49,9 @@ public:
     using difference_type = typename std::iterator_traits<iterator>::difference_type;
     using size_type = std::size_t;
 
-    TIteratorRange() 
-        : Begin_() 
-        , End_() 
+    TIteratorRange()
+        : Begin_()
+        , End_()
     {
     }
 
@@ -70,13 +70,13 @@ public:
     }
 
     Y_PURE_FUNCTION bool empty() const {
-        return Begin_ == End_; 
-    } 
- 
-    size_type size() const { 
+        return Begin_ == End_;
+    }
+
+    size_type size() const {
         return End_ - Begin_;
-    } 
- 
+    }
+
     reference operator[](size_t at) const {
         Y_ASSERT(at < size());
 

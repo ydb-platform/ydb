@@ -27,7 +27,7 @@ namespace NDiff {
     };
 
     template <typename T>
-    size_t InlineDiff(TVector<TChunk<T>>& chunks, const TConstArrayRef<T>& left, const TConstArrayRef<T>& right) { 
+    size_t InlineDiff(TVector<TChunk<T>>& chunks, const TConstArrayRef<T>& left, const TConstArrayRef<T>& right) {
         TConstArrayRef<T> s1(left);
         TConstArrayRef<T> s2(right);
 
@@ -53,8 +53,8 @@ namespace NDiff {
         const T* e1 = s1.begin();
         const T* e2 = s2.begin();
 
-        size_t dist = s1.size() - lcs.size(); 
- 
+        size_t dist = s1.size() - lcs.size();
+
         const size_t n = ctx.ResultBuffer.size();
         for (size_t i = 0; i <= n && (e1 != s1.end() || e2 != s2.end());) {
             if (i < n) {
@@ -86,8 +86,8 @@ namespace NDiff {
             d1 = e1;
             d2 = e2;
         }
- 
-        return dist; 
+
+        return dist;
     }
 
     template <typename TFormatter, typename T>
@@ -106,7 +106,7 @@ namespace NDiff {
 
     // Without delimiters calculates character-wise diff
     // With delimiters calculates token-wise diff
-    size_t InlineDiff(TVector<TChunk<char>>& chunks, const TStringBuf& left, const TStringBuf& right, const TString& delims = TString()); 
+    size_t InlineDiff(TVector<TChunk<char>>& chunks, const TStringBuf& left, const TStringBuf& right, const TString& delims = TString());
     size_t InlineDiff(TVector<TChunk<wchar16>>& chunks, const TWtringBuf& left, const TWtringBuf& right, const TUtf16String& delims = TUtf16String());
 
 }

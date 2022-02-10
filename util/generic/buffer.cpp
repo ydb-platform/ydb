@@ -22,14 +22,14 @@ TBuffer::TBuffer(TBuffer&& b) noexcept
     Swap(b);
 }
 
-TBuffer::TBuffer(const char* buf, size_t len) 
+TBuffer::TBuffer(const char* buf, size_t len)
     : Data_(nullptr)
-    , Len_(0) 
-    , Pos_(0) 
-{ 
-    Append(buf, len); 
-} 
- 
+    , Len_(0)
+    , Pos_(0)
+{
+    Append(buf, len);
+}
+
 TBuffer& TBuffer::operator=(TBuffer&& b) noexcept {
     y_deallocate(Data_);
 

@@ -1,7 +1,7 @@
-#include "grpc_pq_actor.h" 
+#include "grpc_pq_actor.h"
 #include "grpc_pq_write.h"
 #include "grpc_pq_codecs.h"
- 
+
 #include <ydb/core/persqueue/pq_database.h>
 #include <ydb/core/persqueue/write_meta.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
@@ -15,13 +15,13 @@
 #include <util/string/vector.h>
 #include <util/string/escape.h>
 #include <util/string/printf.h>
- 
-using namespace NActors; 
-using namespace NKikimrClient; 
- 
+
+using namespace NActors;
+using namespace NKikimrClient;
 
 
-namespace NKikimr { 
+
+namespace NKikimr {
 using namespace NSchemeCache;
 
 Ydb::PersQueue::V1::Codec CodecByName(const TString& codec) {
@@ -73,11 +73,11 @@ void FillChunkDataFromReq(
     proto.SetData(writeRequest.blocks_data(messageIndex));
 }
 
-namespace NGRpcProxy { 
+namespace NGRpcProxy {
 namespace V1 {
- 
+
 using namespace Ydb::PersQueue::V1;
- 
+
 static const ui32 MAX_RESERVE_REQUESTS_INFLIGHT = 5;
 
 static const ui32 MAX_BYTES_INFLIGHT = 1 << 20; //1mb
@@ -143,14 +143,14 @@ TWriteSessionActor::TWriteSessionActor(
     , LastSourceIdUpdate(TInstant::Zero())
     , SourceIdCreateTime(0)
     , SourceIdUpdateInfly(false)
-{ 
+{
     Y_ASSERT(Request);
     ++(*GetServiceCounters(Counters, "pqproxy|writeSession")->GetCounter("SessionsCreatedTotal", true));
-} 
- 
+}
 
-TWriteSessionActor::~TWriteSessionActor() = default; 
- 
+
+TWriteSessionActor::~TWriteSessionActor() = default;
+
 void TWriteSessionActor::Bootstrap(const TActorContext& ctx) {
 
     Y_VERIFY(Request);
@@ -165,8 +165,8 @@ void TWriteSessionActor::Bootstrap(const TActorContext& ctx) {
     }
     Become(&TThis::StateFunc);
     StartTime = ctx.Now();
-} 
- 
+}
+
 
 void TWriteSessionActor::HandleDone(const TActorContext& ctx) {
 
@@ -224,7 +224,7 @@ void TWriteSessionActor::Handle(IContext::TEvWriteFinished::TPtr& ev, const TAct
 }
 
 
-void TWriteSessionActor::Die(const TActorContext& ctx) { 
+void TWriteSessionActor::Die(const TActorContext& ctx) {
     if (Writer)
         ctx.Send(Writer, new TEvents::TEvPoisonPill());
 
@@ -238,9 +238,9 @@ void TWriteSessionActor::Die(const TActorContext& ctx) {
 
     ctx.Send(GetPQWriteServiceActorID(), new TEvPQProxy::TEvSessionDead(Cookie));
 
-    TActorBootstrapped<TWriteSessionActor>::Die(ctx); 
-} 
- 
+    TActorBootstrapped<TWriteSessionActor>::Die(ctx);
+}
+
 void TWriteSessionActor::CheckFinish(const TActorContext& ctx) {
     if (!WritesDone)
         return;
@@ -291,14 +291,14 @@ void TWriteSessionActor::CheckACL(const TActorContext& ctx) {
 
 void TWriteSessionActor::Handle(TEvPQProxy::TEvWriteInit::TPtr& ev, const TActorContext& ctx) {
     THolder<TEvPQProxy::TEvWriteInit> event(ev->Release());
- 
+
     if (State != ES_CREATED) {
         //answer error
         CloseSession("got second init request",  PersQueue::ErrorCode::BAD_REQUEST, ctx);
         return;
     }
     const auto& init = event->Request.init_request();
- 
+
     if (init.topic().empty() || init.message_group_id().empty()) {
         CloseSession("no topic or message_group_id in init request",  PersQueue::ErrorCode::BAD_REQUEST, ctx);
         return;
@@ -415,7 +415,7 @@ void TWriteSessionActor::Handle(TEvDescribeTopicsResponse::TPtr& ev, const TActo
     if (processResult.IsFatal) {
         CloseSession(processResult.Reason, processResult.ErrorCode, ctx);
         return;
-    } 
+    }
     auto& description = entry.PQGroupInfo->Description;
     Y_VERIFY(description.PartitionsSize() > 0);
     Y_VERIFY(description.HasPQTabletConfig());
@@ -743,14 +743,14 @@ void TWriteSessionActor::CloseSession(const TString& errorReason, const PersQueu
         }
         LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 closed cookie: " << Cookie << " sessionId: " << OwnerCookie);
     }
-    Die(ctx); 
-} 
- 
+    Die(ctx);
+}
+
 void TWriteSessionActor::Handle(NPQ::TEvPartitionWriter::TEvInitResult::TPtr& ev, const TActorContext& ctx) {
     if (State != ES_WAIT_WRITER_INIT) {
         return CloseSession("got init result but not wait for it", PersQueue::ErrorCode::ERROR, ctx);
     }
- 
+
     const auto& result = *ev->Get();
     if (!result.IsSuccess()) {
         const auto& error = result.GetError();
@@ -760,10 +760,10 @@ void TWriteSessionActor::Handle(NPQ::TEvPartitionWriter::TEvInitResult::TPtr& ev
             return CloseSession("error at writer init: " + error.Reason, PersQueue::ErrorCode::ERROR, ctx);
         }
     }
- 
+
     OwnerCookie = result.GetResult().OwnerCookie;
     const auto& maxSeqNo = result.GetResult().SourceIdInfo.GetSeqNo();
- 
+
     StreamingWriteServerMessage response;
     response.set_status(Ydb::StatusIds::SUCCESS);
     auto init = response.mutable_init_response();
@@ -797,10 +797,10 @@ void TWriteSessionActor::Handle(NPQ::TEvPartitionWriter::TEvInitResult::TPtr& ev
     if (!Request->GetStreamCtx()->Read()) {
         LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " grpc read failed");
         Die(ctx);
-        return; 
-    } 
+        return;
+    }
 }
- 
+
 void TWriteSessionActor::Handle(NPQ::TEvPartitionWriter::TEvWriteAccepted::TPtr& ev, const TActorContext& ctx) {
     if (State != ES_INITED) {
         return CloseSession("got write permission but not wait for it", PersQueue::ErrorCode::ERROR, ctx);
@@ -922,8 +922,8 @@ void TWriteSessionActor::Handle(NPQ::TEvPartitionWriter::TEvWriteResponse::TPtr&
 
 void TWriteSessionActor::Handle(NPQ::TEvPartitionWriter::TEvDisconnected::TPtr&, const TActorContext& ctx) {
     CloseSession("pipe to partition's tablet is dead", PersQueue::ErrorCode::ERROR, ctx);
-} 
- 
+}
+
 void TWriteSessionActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
     TEvTabletPipe::TEvClientConnected *msg = ev->Get();
     //TODO: add here retries for connecting to PQRB
@@ -931,12 +931,12 @@ void TWriteSessionActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, con
         CloseSession(TStringBuilder() << "pipe to tablet is dead " << msg->TabletId, PersQueue::ErrorCode::ERROR, ctx);
         return;
     }
-} 
+}
 
 void TWriteSessionActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx) {
     //TODO: add here retries for connecting to PQRB
     CloseSession(TStringBuilder() << "pipe to tablet is dead " << ev->Get()->TabletId, PersQueue::ErrorCode::ERROR, ctx);
-} 
+}
 
 void TWriteSessionActor::GenerateNextWriteRequest(const TActorContext& ctx) {
     TWriteRequestBatchInfo::TPtr writeRequest = new TWriteRequestBatchInfo();

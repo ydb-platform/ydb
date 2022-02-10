@@ -1,11 +1,11 @@
 #include "action.h"
- 
+
 #include <util/generic/is_in.h>
-#include <util/generic/hash.h> 
+#include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
- 
+
 namespace NKikimr::NSQS {
- 
+
 namespace {
 
 constexpr ui32 FOR_QUEUE = 1;
@@ -76,14 +76,14 @@ const THashMap<TString, EAction> StringToAction = GetStringToAction();
 
 } // namespace
 
-EAction ActionFromString(const TString& name) { 
+EAction ActionFromString(const TString& name) {
     auto ai = StringToAction.find(name);
     if (ai == StringToAction.end()) {
-        return EAction::Unknown; 
-    } 
-    return ai->second; 
-} 
- 
+        return EAction::Unknown;
+    }
+    return ai->second;
+}
+
 const TString& ActionToString(EAction action) {
     return GetProps(action).StringName;
 }

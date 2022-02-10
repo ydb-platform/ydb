@@ -1,16 +1,16 @@
-#include "xml.h" 
+#include "xml.h"
 #include "xml_builder.h"
- 
+
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/string_utils/base64/base64.h>
 
-#include <util/string/builder.h> 
+#include <util/string/builder.h>
 #include <util/string/cast.h>
- 
+
 namespace NKikimr::NSQS {
- 
-using NKikimrClient::TSqsResponse; 
- 
+
+using NKikimrClient::TSqsResponse;
+
 // https://docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html
 // https://docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html#ErrorCodeList - list of error codes
 TString BuildErrorXmlString(const TString& message, const TString& errorCode, const TString& requestId) {
@@ -26,8 +26,8 @@ TString BuildErrorXmlString(const TString& message, const TString& errorCode, co
         }
     }
     return XML_RESULT();
-} 
- 
+}
+
 TString BuildErrorXmlString(const TError& error, const TString& requestId) {
     return BuildErrorXmlString(error.GetMessage(), error.GetErrorCode(), requestId);
 }
@@ -60,15 +60,15 @@ TSqsHttpResponse MakeErrorXmlResponseFromCurrentException(TUserCounters* userCou
     }
 }
 
-template <typename T> 
-static bool MaybeErrorResponse(const T& resp, TStringBuilder& builder) { 
-    if (resp.HasError()) { 
+template <typename T>
+static bool MaybeErrorResponse(const T& resp, TStringBuilder& builder) {
+    if (resp.HasError()) {
         builder << BuildErrorXmlString(resp.GetError(), resp.GetRequestId());
-        return true; 
-    } 
-    return false; 
-} 
- 
+        return true;
+    }
+    return false;
+}
+
 static TString BoolToString(const bool b) {
     return TString(b ? "true" : "false");
 }
@@ -155,16 +155,16 @@ void WriteQueueAttributesToXml(const TGetQueueAttributesResponse& rec, TXmlStrin
 }
 
 TSqsHttpResponse ResponseToAmazonXmlFormat(const TSqsResponse& resp) {
-    TStringBuilder result; 
- 
+    TStringBuilder result;
+
 #define HANDLE_ERROR(METHOD)                                                               \
     if (MaybeErrorResponse(resp.Y_CAT(Get, METHOD)(), result)) {                           \
         return TSqsHttpResponse(result, resp.Y_CAT(Get, METHOD)().GetError().GetStatus()); \
     }                                                                                      \
     /**/
 
-    switch (resp.GetResponseCase()) { 
-        case TSqsResponse::kChangeMessageVisibility: { 
+    switch (resp.GetResponseCase()) {
+        case TSqsResponse::kChangeMessageVisibility: {
             HANDLE_ERROR(ChangeMessageVisibility);
             XML_BUILDER() {
                 XML_DOC() {
@@ -176,10 +176,10 @@ TSqsHttpResponse ResponseToAmazonXmlFormat(const TSqsResponse& resp) {
                 }
             }
             result << XML_RESULT();
-            break; 
-        } 
- 
-        case TSqsResponse::kChangeMessageVisibilityBatch: { 
+            break;
+        }
+
+        case TSqsResponse::kChangeMessageVisibilityBatch: {
             HANDLE_ERROR(ChangeMessageVisibilityBatch);
             XML_BUILDER() {
                 XML_DOC() {
@@ -204,13 +204,13 @@ TSqsHttpResponse ResponseToAmazonXmlFormat(const TSqsResponse& resp) {
                             XML_ELEM_CONT("RequestId", resp.GetChangeMessageVisibilityBatch().GetRequestId());
                         }
                     }
-                } 
-            } 
+                }
+            }
             result << XML_RESULT();
-            break; 
-        } 
- 
-        case TSqsResponse::kCreateQueue: { 
+            break;
+        }
+
+        case TSqsResponse::kCreateQueue: {
             HANDLE_ERROR(CreateQueue);
             XML_BUILDER() {
                 XML_DOC() {
@@ -225,10 +225,10 @@ TSqsHttpResponse ResponseToAmazonXmlFormat(const TSqsResponse& resp) {
                 }
             }
             result << XML_RESULT();
-            break; 
-        } 
- 
-        case TSqsResponse::kDeleteMessage: { 
+            break;
+        }
+
+        case TSqsResponse::kDeleteMessage: {
             HANDLE_ERROR(DeleteMessage);
             XML_BUILDER() {
                 XML_DOC() {
@@ -240,10 +240,10 @@ TSqsHttpResponse ResponseToAmazonXmlFormat(const TSqsResponse& resp) {
                 }
             }
             result << XML_RESULT();
-            break; 
-        } 
- 
-        case TSqsResponse::kDeleteMessageBatch: { 
+            break;
+        }
+
+        case TSqsResponse::kDeleteMessageBatch: {
             HANDLE_ERROR(DeleteMessageBatch);
             XML_BUILDER() {
                 XML_DOC() {
@@ -268,13 +268,13 @@ TSqsHttpResponse ResponseToAmazonXmlFormat(const TSqsResponse& resp) {
                             XML_ELEM_CONT("RequestId", resp.GetDeleteMessageBatch().GetRequestId());
                         }
                     }
-                } 
-            } 
+                }
+            }
             result << XML_RESULT();
-            break; 
-        } 
- 
-        case TSqsResponse::kDeleteQueue: { 
+            break;
+        }
+
+        case TSqsResponse::kDeleteQueue: {
             HANDLE_ERROR(DeleteQueue);
             XML_BUILDER() {
                 XML_DOC() {
@@ -286,8 +286,8 @@ TSqsHttpResponse ResponseToAmazonXmlFormat(const TSqsResponse& resp) {
                 }
             }
             result << XML_RESULT();
-            break; 
-        } 
+            break;
+        }
 
         case TSqsResponse::kDeleteQueueBatch: {
             HANDLE_ERROR(DeleteQueueBatch);
@@ -320,7 +320,7 @@ TSqsHttpResponse ResponseToAmazonXmlFormat(const TSqsResponse& resp) {
             break;
         }
 
-        case TSqsResponse::kGetQueueAttributes: { 
+        case TSqsResponse::kGetQueueAttributes: {
             HANDLE_ERROR(GetQueueAttributes);
             XML_BUILDER() {
                 XML_DOC() {
@@ -365,13 +365,13 @@ TSqsHttpResponse ResponseToAmazonXmlFormat(const TSqsResponse& resp) {
                             XML_ELEM_CONT("RequestId", resp.GetGetQueueAttributesBatch().GetRequestId());
                         }
                     }
-                } 
-            } 
+                }
+            }
             result << XML_RESULT();
-            break; 
-        } 
- 
-        case TSqsResponse::kGetQueueUrl: { 
+            break;
+        }
+
+        case TSqsResponse::kGetQueueUrl: {
             HANDLE_ERROR(GetQueueUrl);
             XML_BUILDER() {
                 XML_DOC() {
@@ -386,10 +386,10 @@ TSqsHttpResponse ResponseToAmazonXmlFormat(const TSqsResponse& resp) {
                 }
             }
             result << XML_RESULT();
-            break; 
-        } 
- 
-        case TSqsResponse::kListQueues: { 
+            break;
+        }
+
+        case TSqsResponse::kListQueues: {
             HANDLE_ERROR(ListQueues);
             XML_BUILDER() {
                 XML_DOC() {
@@ -404,11 +404,11 @@ TSqsHttpResponse ResponseToAmazonXmlFormat(const TSqsResponse& resp) {
                         }
                     }
                 }
-            } 
+            }
             result << XML_RESULT();
-            break; 
-        } 
- 
+            break;
+        }
+
         case TSqsResponse::kCountQueues: {
             HANDLE_ERROR(CountQueues);
             XML_BUILDER() {
@@ -427,7 +427,7 @@ TSqsHttpResponse ResponseToAmazonXmlFormat(const TSqsResponse& resp) {
             break;
         }
 
-        case TSqsResponse::kListUsers: { 
+        case TSqsResponse::kListUsers: {
             HANDLE_ERROR(ListUsers);
             XML_BUILDER() {
                 XML_DOC() {
@@ -442,12 +442,12 @@ TSqsHttpResponse ResponseToAmazonXmlFormat(const TSqsResponse& resp) {
                         }
                     }
                 }
-            } 
+            }
             result << XML_RESULT();
-            break; 
-        } 
- 
-        case TSqsResponse::kPurgeQueue: { 
+            break;
+        }
+
+        case TSqsResponse::kPurgeQueue: {
             HANDLE_ERROR(PurgeQueue);
             XML_BUILDER() {
                 XML_DOC() {
@@ -459,9 +459,9 @@ TSqsHttpResponse ResponseToAmazonXmlFormat(const TSqsResponse& resp) {
                 }
             }
             result << XML_RESULT();
-            break; 
-        } 
- 
+            break;
+        }
+
         case TSqsResponse::kPurgeQueueBatch: {
             HANDLE_ERROR(PurgeQueueBatch);
             XML_BUILDER() {
@@ -493,7 +493,7 @@ TSqsHttpResponse ResponseToAmazonXmlFormat(const TSqsResponse& resp) {
             break;
         }
 
-        case TSqsResponse::kReceiveMessage: { 
+        case TSqsResponse::kReceiveMessage: {
             HANDLE_ERROR(ReceiveMessage);
             XML_BUILDER() {
                 XML_DOC() {
@@ -538,7 +538,7 @@ TSqsHttpResponse ResponseToAmazonXmlFormat(const TSqsResponse& resp) {
                                     if (message.HasSenderId()) {
                                         ATTRIBUTE("SenderId", message.GetSenderId());
                                     }
- 
+
                                     // message attributes
                                     for (const auto& attr : message.messageattributes()) {
                                         XML_ELEM("MessageAttribute") {
@@ -563,14 +563,14 @@ TSqsHttpResponse ResponseToAmazonXmlFormat(const TSqsResponse& resp) {
                         XML_ELEM("ResponseMetadata") {
                             XML_ELEM_CONT("RequestId", resp.GetReceiveMessage().GetRequestId());
                         }
-                    } 
-                } 
-            } 
+                    }
+                }
+            }
             result << XML_RESULT();
-            break; 
-        } 
- 
-        case TSqsResponse::kSendMessage: { 
+            break;
+        }
+
+        case TSqsResponse::kSendMessage: {
             HANDLE_ERROR(SendMessage);
             XML_BUILDER() {
                 XML_DOC() {
@@ -592,10 +592,10 @@ TSqsHttpResponse ResponseToAmazonXmlFormat(const TSqsResponse& resp) {
                 }
             }
             result << XML_RESULT();
-            break; 
-        } 
- 
-        case TSqsResponse::kSendMessageBatch: { 
+            break;
+        }
+
+        case TSqsResponse::kSendMessageBatch: {
             HANDLE_ERROR(SendMessageBatch);
             XML_BUILDER() {
                 XML_DOC() {
@@ -628,13 +628,13 @@ TSqsHttpResponse ResponseToAmazonXmlFormat(const TSqsResponse& resp) {
                             XML_ELEM_CONT("RequestId", resp.GetSendMessageBatch().GetRequestId());
                         }
                     }
-                } 
-            } 
+                }
+            }
             result << XML_RESULT();
-            break; 
-        } 
- 
-        case TSqsResponse::kSetQueueAttributes: { 
+            break;
+        }
+
+        case TSqsResponse::kSetQueueAttributes: {
             HANDLE_ERROR(SetQueueAttributes);
             XML_BUILDER() {
                 XML_DOC() {
@@ -646,10 +646,10 @@ TSqsHttpResponse ResponseToAmazonXmlFormat(const TSqsResponse& resp) {
                 }
             }
             result << XML_RESULT();
-            break; 
-        } 
- 
-        case TSqsResponse::kCreateUser: { 
+            break;
+        }
+
+        case TSqsResponse::kCreateUser: {
             HANDLE_ERROR(CreateUser);
             XML_BUILDER() {
                 XML_DOC() {
@@ -661,10 +661,10 @@ TSqsHttpResponse ResponseToAmazonXmlFormat(const TSqsResponse& resp) {
                 }
             }
             result << XML_RESULT();
-            break; 
-        } 
- 
-        case TSqsResponse::kDeleteUser: { 
+            break;
+        }
+
+        case TSqsResponse::kDeleteUser: {
             HANDLE_ERROR(DeleteUser);
             XML_BUILDER() {
                 XML_DOC() {
@@ -676,9 +676,9 @@ TSqsHttpResponse ResponseToAmazonXmlFormat(const TSqsResponse& resp) {
                 }
             }
             result << XML_RESULT();
-            break; 
-        } 
- 
+            break;
+        }
+
         case TSqsResponse::kModifyPermissions: {
             HANDLE_ERROR(ModifyPermissions);
             XML_BUILDER() {
@@ -756,14 +756,14 @@ TSqsHttpResponse ResponseToAmazonXmlFormat(const TSqsResponse& resp) {
             break;
         }
 
-        case TSqsResponse::RESPONSE_NOT_SET: { 
+        case TSqsResponse::RESPONSE_NOT_SET: {
             return MakeErrorXmlResponse(NErrors::INTERNAL_FAILURE, nullptr, "Not implemented.");
-        } 
-    } 
- 
+        }
+    }
+
     return TSqsHttpResponse(result, 200);
 
 #undef HANDLE_ERROR
-} 
- 
+}
+
 } // namespace NKikimr::NSQS

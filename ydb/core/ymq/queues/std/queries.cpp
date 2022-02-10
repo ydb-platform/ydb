@@ -1,20 +1,20 @@
-#include "queries.h" 
+#include "queries.h"
 #include <ydb/core/ymq/base/constants.h>
- 
+
 namespace NKikimr::NSQS {
-namespace { 
- 
+namespace {
+
 static const char* const AddMessagesToInflyQuery = R"__(
-    ( 
+    (
         (let inflyLimit (Parameter 'INFLY_LIMIT (DataType 'Uint64)))
         (let shard      (Parameter 'SHARD       (DataType 'Uint64)))
         (let from       (Parameter 'FROM        (DataType 'Uint64)))
         (let expectedMaxCount (Parameter 'EXPECTED_MAX_COUNT (DataType 'Uint64)))
- 
-        (let inflyTable '%1$s/%2$i/Infly) 
-        (let msgTable   '%1$s/%2$i/Messages) 
-        (let stateTable '%1$s/State) 
- 
+
+        (let inflyTable '%1$s/%2$i/Infly)
+        (let msgTable   '%1$s/%2$i/Messages)
+        (let stateTable '%1$s/State)
+
         (let stateRow '(
             '('State shard)))
         (let stateFields '(
@@ -23,7 +23,7 @@ static const char* const AddMessagesToInflyQuery = R"__(
             'ReadOffset
             'InflyVersion))
         (let state (SelectRow stateTable stateRow stateFields))
- 
+
         (let inflyMaxCountToAdd
             (Convert
                 (Coalesce
@@ -45,7 +45,7 @@ static const char* const AddMessagesToInflyQuery = R"__(
             'SentTimestamp
             'DelayDeadline))
         (let messages (Take (Member (SelectRange msgTable msgRange msgFields '('('"ItemsLimit" expectedMaxCount))) 'List) inflyMaxCountToAdd))
- 
+
         (let inflyCount (Add (Member state 'InflyCount) (Length messages)))
         (let lastElement (ToOptional (Skip messages (Sub (Length messages) (Uint64 '1)))))
         (let nextReadOffset
@@ -61,56 +61,56 @@ static const char* const AddMessagesToInflyQuery = R"__(
             )
         )
         (let newInflyVersion (If (HasItems messages) (Add currentInflyVersion (Uint64 '1)) currentInflyVersion))
- 
-        (return (Extend 
+
+        (return (Extend
             (AsList (SetResult 'messages messages))
             (AsList (SetResult 'inflyCount inflyCount))
             (AsList (SetResult 'messagesCount (Member state 'MessageCount)))
             (AsList (SetResult 'readOffset nextReadOffset))
             (AsList (SetResult 'currentInflyVersion currentInflyVersion))
             (AsList (SetResult 'newInflyVersion newInflyVersion))
- 
+
             (ListIf (HasItems messages) (block '(
-                (let row '( 
-                    '('State shard))) 
-                (let update '( 
+                (let row '(
+                    '('State shard)))
+                (let update '(
                     '('ReadOffset nextReadOffset)
                     '('InflyCount inflyCount)
                     '('InflyVersion newInflyVersion)))
-                (return (UpdateRow stateTable row update))))) 
- 
+                (return (UpdateRow stateTable row update)))))
+
             (Map messages (lambda '(item) (block '(
-                (let row '( 
-                    '('Offset (Member item 'Offset)))) 
-                (let update '( 
-                    '('RandomId (Member item 'RandomId)) 
+                (let row '(
+                    '('Offset (Member item 'Offset))))
+                (let update '(
+                    '('RandomId (Member item 'RandomId))
                     '('LoadId (Uint64 '0))
-                    '('FirstReceiveTimestamp (Uint64 '0)) 
-                    '('LockTimestamp (Uint64 '0)) 
-                    '('ReceiveCount (Uint32 '0)) 
-                    '('SentTimestamp (Member item 'SentTimestamp)) 
+                    '('FirstReceiveTimestamp (Uint64 '0))
+                    '('LockTimestamp (Uint64 '0))
+                    '('ReceiveCount (Uint32 '0))
+                    '('SentTimestamp (Member item 'SentTimestamp))
                     '('DelayDeadline (Member item 'DelayDeadline))
-                    '('VisibilityDeadline (Uint64 '0)))) 
-                (return (UpdateRow inflyTable row update)))))) 
- 
+                    '('VisibilityDeadline (Uint64 '0))))
+                (return (UpdateRow inflyTable row update))))))
+
             (Map messages (lambda '(item) (block '(
-                (let row '( 
-                    '('Offset (Member item 'Offset)))) 
-                (return (EraseRow msgTable row)))))))) 
-    ) 
-)__"; 
- 
-const char* const ChangeMessageVisibilityQuery = R"__( 
-    ( 
+                (let row '(
+                    '('Offset (Member item 'Offset))))
+                (return (EraseRow msgTable row))))))))
+    )
+)__";
+
+const char* const ChangeMessageVisibilityQuery = R"__(
+    (
         (let now  (Parameter 'NOW      (DataType 'Uint64)))
         (let keys (Parameter 'KEYS
             (ListType (StructType
                 '('Offset (DataType 'Uint64))
                 '('LockTimestamp (DataType 'Uint64))
                 '('NewVisibilityDeadline (DataType 'Uint64))))))
- 
-        (let inflyTable '%1$s/%2$i/Infly) 
- 
+
+        (let inflyTable '%1$s/%2$i/Infly)
+
         (let records
             (MapParameter keys (lambda '(item) (block '(
                 (let messageRow '(
@@ -119,9 +119,9 @@ const char* const ChangeMessageVisibilityQuery = R"__(
                     'VisibilityDeadline
                     'LockTimestamp))
                 (let inflyRead (SelectRow inflyTable messageRow inflySelect))
- 
+
                 (let exists (Exists inflyRead))
- 
+
                 (let changeCond
                     (Coalesce
                         (And
@@ -129,14 +129,14 @@ const char* const ChangeMessageVisibilityQuery = R"__(
                             (Equal (Member item 'LockTimestamp) (Member inflyRead 'LockTimestamp))
                         )
                     (Bool 'false)))
- 
+
                 (return (AsStruct
                     '('Offset (Member item 'Offset))
                     '('Exists exists)
                     '('ChangeCond changeCond)
                     '('CurrentVisibilityDeadline (Member inflyRead 'VisibilityDeadline))
                     '('NewVisibilityDeadline (Member item 'NewVisibilityDeadline)))))))))
- 
+
         (let recordsToChange
             (Filter records (lambda '(item) (block '(
                 (return (And (Member item 'Exists) (Member item 'ChangeCond)))
@@ -152,30 +152,30 @@ const char* const ChangeMessageVisibilityQuery = R"__(
                     '('VisibilityDeadline (Member item 'NewVisibilityDeadline))))
                 (return (UpdateRow inflyTable messageRow visibilityUpdate))
             ))))
-        )) 
-    ) 
-)__"; 
- 
-const char* const PurgeQueueQuery = R"__( 
-    ( 
+        ))
+    )
+)__";
+
+const char* const PurgeQueueQuery = R"__(
+    (
         (let offsetFrom     (Parameter 'OFFSET_FROM (DataType 'Uint64)))
         (let offsetTo       (Parameter 'OFFSET_TO   (DataType 'Uint64)))
         (let now            (Parameter 'NOW         (DataType 'Uint64)))
         (let shard          (Parameter 'SHARD       (DataType 'Uint64)))
         (let batchSize      (Parameter 'BATCH_SIZE  (DataType 'Uint64)))
- 
+
         (let msgTable   '%1$s/%2$i/Messages)
         (let inflyTable '%1$s/%2$i/Infly)
         (let stateTable '%1$s/State)
- 
-        (let stateRow '( 
-            '('State shard))) 
-        (let stateSelect '( 
+
+        (let stateRow '(
+            '('State shard)))
+        (let stateSelect '(
             'CleanupVersion
             'LastModifiedTimestamp))
-        (let stateRead 
-            (SelectRow stateTable stateRow stateSelect)) 
- 
+        (let stateRead
+            (SelectRow stateTable stateRow stateSelect))
+
         (let modifiedTimestamp (Max now (Member stateRead 'LastModifiedTimestamp)))
 
         (let messageRange '(
@@ -183,9 +183,9 @@ const char* const PurgeQueueQuery = R"__(
         (let inflyRange '(
             '('Offset offsetFrom offsetTo)))
         (let messageSelect '(
-            'SentTimestamp 
-            'Offset 
-            'RandomId)) 
+            'SentTimestamp
+            'Offset
+            'RandomId))
 
         (let selectResult (SelectRange msgTable messageRange messageSelect '('('"ItemsLimit" batchSize))))
         (let selectInflyResult (SelectRange inflyTable inflyRange messageSelect '('('"ItemsLimit" batchSize))))
@@ -194,22 +194,22 @@ const char* const PurgeQueueQuery = R"__(
         (let inflyMessages (Member selectInflyResult 'List))
         (let truncated (Coalesce (Member selectResult 'Truncated) (Member selectInflyResult 'Truncated) (Bool 'false)))
         (let newCleanupVersion (Add (Member stateRead 'CleanupVersion) (Uint64 '1)))
- 
-        (let stateUpdate '( 
+
+        (let stateUpdate '(
             '('LastModifiedTimestamp modifiedTimestamp)
             '('CleanupVersion newCleanupVersion)
         ))
- 
-        (return (Extend 
+
+        (return (Extend
             (AsList (SetResult 'messages messages))
             (AsList (SetResult 'inflyMessages inflyMessages))
             (AsList (SetResult 'truncated truncated))
             (AsList (SetResult 'cleanupVersion newCleanupVersion))
-            (AsList (UpdateRow stateTable stateRow stateUpdate)) 
+            (AsList (UpdateRow stateTable stateRow stateUpdate))
         ))
     )
 )__";
- 
+
 const char* const PurgeQueueStage2Query = R"__(
     (
         (let shard (Parameter 'SHARD    (DataType 'Uint64)))
@@ -221,13 +221,13 @@ const char* const PurgeQueueStage2Query = R"__(
                 '('RandomId (DataType 'Uint64))
                 '('SentTimestamp (DataType 'Uint64))
         ))))
- 
+
         (let dataTable  '%1$s/%2$i/MessageData)
         (let inflyTable '%1$s/%2$i/Infly)
         (let msgTable   '%1$s/%2$i/Messages)
         (let sentTsIdx  '%1$s/%2$i/SentTimestampIdx)
         (let stateTable '%1$s/State)
- 
+
         (let stateRow '(
             '('State shard)))
         (let stateSelect '(
@@ -237,7 +237,7 @@ const char* const PurgeQueueStage2Query = R"__(
             'LastModifiedTimestamp))
         (let stateRead
             (SelectRow stateTable stateRow stateSelect))
- 
+
         (let modifiedTimestamp (Max now (Member stateRead 'LastModifiedTimestamp)))
 
         (let inflyRecords
@@ -278,7 +278,7 @@ const char* const PurgeQueueStage2Query = R"__(
             '('LastModifiedTimestamp modifiedTimestamp)
             '('MessageCount newMessagesCount)
             '('InflyCount (Sub (Member stateRead 'InflyCount) (Length inflyRecordsExisted)))
-        )) 
+        ))
 
         (let versionIsSame
             (Coalesce
@@ -327,94 +327,94 @@ const char* const PurgeQueueStage2Query = R"__(
                         '('Offset        (Member item 'Offset)))))))))
                 (AsList (Void)))
         ))
-    ) 
-)__"; 
- 
-const char* const DeleteMessageQuery = R"__( 
-    ( 
-        (let keys (Parameter 'KEYS 
-            (ListType (StructType 
-                '('Offset (DataType 'Uint64)) 
-                '('LockTimestamp (DataType 'Uint64)))))) 
-        (let now (Parameter 'NOW (DataType 'Uint64))) 
-        (let shard  (Parameter 'SHARD  (DataType 'Uint64))) 
- 
-        (let dataTable  '%1$s/%2$i/MessageData) 
-        (let inflyTable '%1$s/%2$i/Infly) 
-        (let sentTsIdx  '%1$s/%2$i/SentTimestampIdx) 
-        (let stateTable '%1$s/State) 
- 
-        (let records 
-            (MapParameter keys (lambda '(item) (block '( 
-                (let row '( 
-                    '('Offset (Member item 'Offset)))) 
-                (let fields '( 
-                    'Offset 
-                    'RandomId 
-                    'SentTimestamp)) 
-                (return (SelectRow inflyTable row fields))))))) 
- 
-        (let existed 
-            (Filter records (lambda '(item) (block '( 
-                (return (Exists item)) 
-            ))))) 
- 
-        (let result 
-            (Map existed (lambda '(item) (block '( 
-                (return (AsStruct 
-                    '('Offset (Member item 'Offset))))))))) 
- 
-        (let stateRow '( 
-            '('State shard))) 
-        (let stateSelect '( 
-            'InflyCount 
+    )
+)__";
+
+const char* const DeleteMessageQuery = R"__(
+    (
+        (let keys (Parameter 'KEYS
+            (ListType (StructType
+                '('Offset (DataType 'Uint64))
+                '('LockTimestamp (DataType 'Uint64))))))
+        (let now (Parameter 'NOW (DataType 'Uint64)))
+        (let shard  (Parameter 'SHARD  (DataType 'Uint64)))
+
+        (let dataTable  '%1$s/%2$i/MessageData)
+        (let inflyTable '%1$s/%2$i/Infly)
+        (let sentTsIdx  '%1$s/%2$i/SentTimestampIdx)
+        (let stateTable '%1$s/State)
+
+        (let records
+            (MapParameter keys (lambda '(item) (block '(
+                (let row '(
+                    '('Offset (Member item 'Offset))))
+                (let fields '(
+                    'Offset
+                    'RandomId
+                    'SentTimestamp))
+                (return (SelectRow inflyTable row fields)))))))
+
+        (let existed
+            (Filter records (lambda '(item) (block '(
+                (return (Exists item))
+            )))))
+
+        (let result
+            (Map existed (lambda '(item) (block '(
+                (return (AsStruct
+                    '('Offset (Member item 'Offset)))))))))
+
+        (let stateRow '(
+            '('State shard)))
+        (let stateSelect '(
+            'InflyCount
             'MessageCount
             'LastModifiedTimestamp))
-        (let stateRead (SelectRow stateTable stateRow stateSelect)) 
- 
+        (let stateRead (SelectRow stateTable stateRow stateSelect))
+
         (let modifiedTimestamp (Max now (Member stateRead 'LastModifiedTimestamp)))
 
         (let newMessagesCount (Sub (Member stateRead 'MessageCount) (Length existed)))
-        (let stateUpdate '( 
+        (let stateUpdate '(
             '('LastModifiedTimestamp modifiedTimestamp)
-            '('InflyCount   (Sub (Member stateRead 'InflyCount)   (Length existed))) 
+            '('InflyCount   (Sub (Member stateRead 'InflyCount)   (Length existed)))
             '('MessageCount newMessagesCount)))
- 
-        (let deleteCond (HasItems existed)) 
- 
-        (return (Extend 
-            (AsList (SetResult 'deleted result)) 
+
+        (let deleteCond (HasItems existed))
+
+        (return (Extend
+            (AsList (SetResult 'deleted result))
             (AsList (SetResult 'newMessagesCount newMessagesCount))
-            (ListIf deleteCond (UpdateRow stateTable stateRow stateUpdate)) 
- 
-            (If deleteCond 
-                (Map existed (lambda '(item) (block '( 
-                    (let row '( 
-                        '('Offset (Member item 'Offset)))) 
-                    (return (EraseRow inflyTable row)))))) 
-                (AsList (Void))) 
- 
-            (If deleteCond 
-                (Map existed (lambda '(item) (block '( 
-                    (let row '( 
-                        '('RandomId (Member item 'RandomId)) 
-                        '('Offset   (Member item 'Offset)))) 
-                    (return (EraseRow dataTable row)))))) 
-                (AsList (Void))) 
- 
-            (If deleteCond 
-                (Map existed (lambda '(item) (block '( 
-                    (let row '( 
-                        '('SentTimestamp (Member item 'SentTimestamp)) 
-                        '('Offset        (Member item 'Offset)))) 
-                    (return (EraseRow sentTsIdx row)))))) 
-                (AsList (Void))) 
-        )) 
-    ) 
-)__"; 
- 
-const char* const SetQueueAttributesQuery = R"__( 
-    ( 
+            (ListIf deleteCond (UpdateRow stateTable stateRow stateUpdate))
+
+            (If deleteCond
+                (Map existed (lambda '(item) (block '(
+                    (let row '(
+                        '('Offset (Member item 'Offset))))
+                    (return (EraseRow inflyTable row))))))
+                (AsList (Void)))
+
+            (If deleteCond
+                (Map existed (lambda '(item) (block '(
+                    (let row '(
+                        '('RandomId (Member item 'RandomId))
+                        '('Offset   (Member item 'Offset))))
+                    (return (EraseRow dataTable row))))))
+                (AsList (Void)))
+
+            (If deleteCond
+                (Map existed (lambda '(item) (block '(
+                    (let row '(
+                        '('SentTimestamp (Member item 'SentTimestamp))
+                        '('Offset        (Member item 'Offset))))
+                    (return (EraseRow sentTsIdx row))))))
+                (AsList (Void)))
+        ))
+    )
+)__";
+
+const char* const SetQueueAttributesQuery = R"__(
+    (
         (let delay           (Parameter 'DELAY             (OptionalType (DataType 'Uint64))))
         (let retention       (Parameter 'RETENTION         (OptionalType (DataType 'Uint64))))
         (let visibility      (Parameter 'VISIBILITY        (OptionalType (DataType 'Uint64))))
@@ -424,32 +424,32 @@ const char* const SetQueueAttributesQuery = R"__(
         (let dlqArn          (Parameter 'DLQ_TARGET_ARN    (OptionalType (DataType 'Utf8String))))
         (let dlqName         (Parameter 'DLQ_TARGET_NAME   (OptionalType (DataType 'Utf8String))))
         (let userName        (Parameter 'USER_NAME         (DataType 'Utf8String)))
- 
-        (let attrsTable '%1$s/Attributes) 
- 
-        (let attrsRow '( 
-            '('State (Uint64 '0)))) 
-        (let attrsSelect '( 
-            'DelaySeconds 
-            'MessageRetentionPeriod 
-            'ReceiveMessageWaitTime 
+
+        (let attrsTable '%1$s/Attributes)
+
+        (let attrsRow '(
+            '('State (Uint64 '0))))
+        (let attrsSelect '(
+            'DelaySeconds
+            'MessageRetentionPeriod
+            'ReceiveMessageWaitTime
             'VisibilityTimeout
             'MaximumMessageSize
             'DlqName
             'DlqArn
             'MaxReceiveCount))
-        (let attrsRead (SelectRow attrsTable attrsRow attrsSelect)) 
- 
-        (let attrsUpdate '( 
-            '('DelaySeconds (Coalesce delay (Member attrsRead 'DelaySeconds))) 
-            '('MessageRetentionPeriod (Coalesce retention (Member attrsRead 'MessageRetentionPeriod))) 
-            '('ReceiveMessageWaitTime (Coalesce wait (Member attrsRead 'ReceiveMessageWaitTime))) 
+        (let attrsRead (SelectRow attrsTable attrsRow attrsSelect))
+
+        (let attrsUpdate '(
+            '('DelaySeconds (Coalesce delay (Member attrsRead 'DelaySeconds)))
+            '('MessageRetentionPeriod (Coalesce retention (Member attrsRead 'MessageRetentionPeriod)))
+            '('ReceiveMessageWaitTime (Coalesce wait (Member attrsRead 'ReceiveMessageWaitTime)))
             '('VisibilityTimeout (Coalesce visibility (Member attrsRead 'VisibilityTimeout)))
             '('MaxReceiveCount (Coalesce maxReceiveCount (Member attrsRead 'MaxReceiveCount)))
             '('DlqName (Coalesce dlqName (Member attrsRead 'DlqName)))
             '('DlqArn (Coalesce dlqArn (Member attrsRead 'DlqArn)))
             '('MaximumMessageSize (Coalesce maxMessageSize (Member attrsRead 'MaximumMessageSize)))))
- 
+
         (let queuesTable '%5$s/.Queues)
         (let queuesRow '(
             '('Account   userName)
@@ -463,12 +463,12 @@ const char* const SetQueueAttributesQuery = R"__(
         (let queuesRowUpdate '(
             '('DlqName (Coalesce dlqName (Member queuesRowRead 'DlqName)))))
 
-        (return (AsList 
+        (return (AsList
             (UpdateRow attrsTable attrsRow attrsUpdate)
             (UpdateRow queuesTable queuesRow queuesRowUpdate)))
-    ) 
-)__"; 
- 
+    )
+)__";
+
 const char* const InternalGetQueueAttributesQuery = R"__(
     (
         (let attrsTable '%1$s/Attributes)
@@ -493,22 +493,22 @@ const char* const InternalGetQueueAttributesQuery = R"__(
     )
 )__";
 
-const char* const ListQueuesQuery = R"__( 
-    ( 
+const char* const ListQueuesQuery = R"__(
+    (
         (let folderId (Parameter 'FOLDERID  (DataType 'Utf8String)))
         (let userName (Parameter 'USER_NAME (DataType 'Utf8String)))
- 
+
         (let queuesTable '%5$s/.Queues)
 
         (let skipFolderIdFilter (Equal folderId (Utf8String '"")))
 
         (let queuesRange '(
             '('Account userName userName)
-            '('QueueName (Utf8String '"") (Void)))) 
+            '('QueueName (Utf8String '"") (Void))))
         (let queueSelect '('QueueName 'QueueId 'QueueState 'FifoQueue 'CreatedTimestamp 'CustomQueueName 'FolderId 'MasterTabletId 'Version 'Shards))
         (let queues (Member (SelectRange queuesTable queuesRange queueSelect '()) 'List))
- 
-        (let filtered (Filter queues (lambda '(item) (block '( 
+
+        (let filtered (Filter queues (lambda '(item) (block '(
             (return (Coalesce
                 (And
                     (Or
@@ -518,58 +518,58 @@ const char* const ListQueuesQuery = R"__(
                         (Equal (Member item 'FolderId) folderId)
                         skipFolderIdFilter))
                 (Bool 'false)))
-        ))))) 
- 
-        (return (AsList 
-            (SetResult 'queues filtered))) 
-    ) 
-)__"; 
- 
-const char* const LoadMessageQuery = R"__( 
-    ( 
-        (let keys (Parameter 'KEYS 
-            (ListType (StructType 
-                '('RandomId (DataType 'Uint64)) 
-                '('Offset   (DataType 'Uint64)) 
+        )))))
+
+        (return (AsList
+            (SetResult 'queues filtered)))
+    )
+)__";
+
+const char* const LoadMessageQuery = R"__(
+    (
+        (let keys (Parameter 'KEYS
+            (ListType (StructType
+                '('RandomId (DataType 'Uint64))
+                '('Offset   (DataType 'Uint64))
                 '('CurrentVisibilityDeadline (DataType 'Uint64))
                 '('DlqIndex (DataType 'Uint64))
                 '('IsDeadLetter (DataType 'Bool))
                 '('VisibilityDeadline (DataType 'Uint64))))))
-        (let now     (Parameter 'NOW     (DataType 'Uint64))) 
-        (let readId  (Parameter 'READ_ID (DataType 'Uint64))) 
-        (let shard   (Parameter 'SHARD   (DataType 'Uint64))) 
- 
-        (let dataTable  '%1$s/%2$i/MessageData) 
-        (let inflyTable '%1$s/%2$i/Infly) 
- 
-        (let records 
-            (MapParameter keys (lambda '(item) (block '( 
-                (let read (block '( 
+        (let now     (Parameter 'NOW     (DataType 'Uint64)))
+        (let readId  (Parameter 'READ_ID (DataType 'Uint64)))
+        (let shard   (Parameter 'SHARD   (DataType 'Uint64)))
+
+        (let dataTable  '%1$s/%2$i/MessageData)
+        (let inflyTable '%1$s/%2$i/Infly)
+
+        (let records
+            (MapParameter keys (lambda '(item) (block '(
+                (let read (block '(
                     (let row '(
-                        '('Offset (Member item 'Offset)))) 
-                    (let fields '( 
-                        'LoadId 
-                        'FirstReceiveTimestamp 
-                        'ReceiveCount 
-                        'SentTimestamp 
+                        '('Offset (Member item 'Offset))))
+                    (let fields '(
+                        'LoadId
+                        'FirstReceiveTimestamp
+                        'ReceiveCount
+                        'SentTimestamp
                         'VisibilityDeadline
                         'DelayDeadline))
-                    (return (SelectRow inflyTable row fields))))) 
- 
-                (let data (block '( 
-                    (let row '( 
-                        '('RandomId (Member item 'RandomId)) 
-                        '('Offset   (Member item 'Offset)))) 
-                    (let fields '( 
-                        'Attributes 
-                        'Data 
+                    (return (SelectRow inflyTable row fields)))))
+
+                (let data (block '(
+                    (let row '(
+                        '('RandomId (Member item 'RandomId))
+                        '('Offset   (Member item 'Offset))))
+                    (let fields '(
+                        'Attributes
+                        'Data
                         'SenderId
-                        'MessageId)) 
-                    (return (SelectRow dataTable row fields))))) 
- 
-                (let receiveTimestamp 
-                    (If (Coalesce (Equal (Member read 'FirstReceiveTimestamp) (Uint64 '0)) (Bool 'false)) now (Member read 'FirstReceiveTimestamp))) 
- 
+                        'MessageId))
+                    (return (SelectRow dataTable row fields)))))
+
+                (let receiveTimestamp
+                    (If (Coalesce (Equal (Member read 'FirstReceiveTimestamp) (Uint64 '0)) (Bool 'false)) now (Member read 'FirstReceiveTimestamp)))
+
                 (let visibilityDeadlineInDb
                     (Max
                         (Member read 'VisibilityDeadline)
@@ -580,56 +580,56 @@ const char* const LoadMessageQuery = R"__(
                     )
                 )
 
-                (let valid 
-                    (Coalesce 
+                (let valid
+                    (Coalesce
                         (Or
                             (Equal visibilityDeadlineInDb (Member item 'CurrentVisibilityDeadline))
                             (And
                                 (Equal (Member read 'LoadId) readId)
                                 (Equal (Member read 'VisibilityDeadline) (Member item 'VisibilityDeadline))))
-                        (Bool 'false))) 
- 
-                (return 
-                    (AsStruct 
-                        '('Offset (Member item 'Offset)) 
-                        '('RandomId (Member item 'RandomId)) 
-                        '('LoadId readId) 
-                        '('Attributes (Member data 'Attributes)) 
-                        '('Data (Member data 'Data)) 
+                        (Bool 'false)))
+
+                (return
+                    (AsStruct
+                        '('Offset (Member item 'Offset))
+                        '('RandomId (Member item 'RandomId))
+                        '('LoadId readId)
+                        '('Attributes (Member data 'Attributes))
+                        '('Data (Member data 'Data))
                         '('SenderId (Member data 'SenderId))
-                        '('MessageId (Member data 'MessageId)) 
-                        '('FirstReceiveTimestamp receiveTimestamp) 
-                        '('LockTimestamp now) 
+                        '('MessageId (Member data 'MessageId))
+                        '('FirstReceiveTimestamp receiveTimestamp)
+                        '('LockTimestamp now)
                         '('IsDeadLetter (Member item 'IsDeadLetter))
                         '('DlqIndex (Member item 'DlqIndex))
-                        '('ReceiveCount (Add (Member read 'ReceiveCount) (Uint32 '1))) 
-                        '('SentTimestamp (Member read 'SentTimestamp)) 
+                        '('ReceiveCount (Add (Member read 'ReceiveCount) (Uint32 '1)))
+                        '('SentTimestamp (Member read 'SentTimestamp))
                         '('VisibilityDeadline (If valid (Member item 'VisibilityDeadline) (Member read 'VisibilityDeadline)))
                         '('Valid valid)
                         '('Exists (Exists read))))
-                    ))))) 
- 
-        (let result 
-            (Filter records (lambda '(item) (block '( 
-                (return (Coalesce (Member item 'Valid) (Bool 'false)))))))) 
- 
-        (return (Extend 
+                    )))))
+
+        (let result
+            (Filter records (lambda '(item) (block '(
+                (return (Coalesce (Member item 'Valid) (Bool 'false))))))))
+
+        (return (Extend
             (AsList (SetResult 'result records))
             (AsList (SetResult 'movedMessagesCount (Uint64 '0)))
- 
-            (Map result (lambda '(item) (block '( 
-                (let row '( 
-                    '('Offset (Member item 'Offset)))) 
-                (let update '( 
+
+            (Map result (lambda '(item) (block '(
+                (let row '(
+                    '('Offset (Member item 'Offset))))
+                (let update '(
                     '('LoadId                readId)
-                    '('FirstReceiveTimestamp (Member item 'FirstReceiveTimestamp)) 
-                    '('LockTimestamp         (Member item 'LockTimestamp)) 
-                    '('ReceiveCount          (Member item 'ReceiveCount)) 
+                    '('FirstReceiveTimestamp (Member item 'FirstReceiveTimestamp))
+                    '('LockTimestamp         (Member item 'LockTimestamp))
+                    '('ReceiveCount          (Member item 'ReceiveCount))
                     '('VisibilityDeadline    (Member item 'VisibilityDeadline))))
-                (return (UpdateRow inflyTable row update)))))))) 
-    ) 
-)__"; 
- 
+                (return (UpdateRow inflyTable row update))))))))
+    )
+)__";
+
 const char* const LoadOrRedriveMessageQuery = R"__(
     (
         (let keys (Parameter 'KEYS
@@ -828,8 +828,8 @@ const char* const LoadOrRedriveMessageQuery = R"__(
     )
 )__";
 
-const char* const WriteMessageQuery = R"__( 
-    ( 
+const char* const WriteMessageQuery = R"__(
+    (
         (let randomId  (Parameter 'RANDOM_ID  (DataType 'Uint64)))
         (let timestamp (Parameter 'TIMESTAMP  (DataType 'Uint64)))
         (let shard     (Parameter 'SHARD      (DataType 'Uint64)))
@@ -843,31 +843,31 @@ const char* const WriteMessageQuery = R"__(
                 '('Index      (DataType 'Uint64))
             ))
         ))
- 
-        (let dataTable  '%1$s/%2$i/MessageData) 
-        (let msgTable   '%1$s/%2$i/Messages) 
-        (let sentTsIdx  '%1$s/%2$i/SentTimestampIdx) 
-        (let stateTable '%1$s/State) 
- 
-        (let stateRow '( 
-            '('State shard))) 
-        (let stateSelect '( 
-            'MessageCount 
+
+        (let dataTable  '%1$s/%2$i/MessageData)
+        (let msgTable   '%1$s/%2$i/Messages)
+        (let sentTsIdx  '%1$s/%2$i/SentTimestampIdx)
+        (let stateTable '%1$s/State)
+
+        (let stateRow '(
+            '('State shard)))
+        (let stateSelect '(
+            'MessageCount
             'WriteOffset
             'LastModifiedTimestamp))
-        (let stateRead (SelectRow stateTable stateRow stateSelect)) 
- 
+        (let stateRead (SelectRow stateTable stateRow stateSelect))
+
         (let sentTimestamp (Max timestamp (Member stateRead 'LastModifiedTimestamp)))
 
         (let newMessagesCount (Add (Member stateRead 'MessageCount) (Length messages)))
         (let newWriteOffset (Add (Member stateRead 'WriteOffset) (Length messages)))
         (let startOffset (Add (Member stateRead 'WriteOffset) (Uint64 '1)))
- 
+
         (let stateUpdate '(
             '('LastModifiedTimestamp sentTimestamp)
             '('MessageCount newMessagesCount)
             '('WriteOffset newWriteOffset)))
- 
+
         (let result
             (MapParameter messages (lambda '(item) (block '(
                 (return
@@ -875,13 +875,13 @@ const char* const WriteMessageQuery = R"__(
                         '('dedupCond (Bool 'true))
                     ))
         )))))
- 
+
         (return (Extend
             (AsList (SetResult 'newMessagesCount newMessagesCount))
             (AsList (SetResult 'result result))
- 
+
             (AsList (UpdateRow stateTable stateRow stateUpdate))
- 
+
             (MapParameter messages (lambda '(item) (block '(
                 (let msgRow '(
                     '('Offset (Add startOffset (Member item 'Index)))))
@@ -892,7 +892,7 @@ const char* const WriteMessageQuery = R"__(
                     '('SentTimestamp sentTimestamp)
                     '('DelayDeadline delayDeadline)))
                 (return (UpdateRow msgTable msgRow messageUpdate))))))
- 
+
             (MapParameter messages (lambda '(item) (block '(
                 (let sentTsRow '(
                     '('SentTimestamp sentTimestamp)
@@ -903,76 +903,76 @@ const char* const WriteMessageQuery = R"__(
                     '('RandomId randomId)
                     '('DelayDeadline delayDeadline)))
                 (return (UpdateRow sentTsIdx sentTsRow sentTsUpdate))))))
- 
+
             (MapParameter messages (lambda '(item) (block '(
                 (let dataRow '(
                     '('RandomId randomId)
                     '('Offset (Add startOffset (Member item 'Index)))))
- 
+
                 (let dataUpdate '(
                     '('Data (Member item 'Data))
                     '('Attributes (Member item 'Attributes))
                     '('SenderId (Member item 'SenderId))
                     '('MessageId (Member item 'MessageId))))
                 (return (UpdateRow dataTable dataRow dataUpdate))))))
-        )) 
-    ) 
-)__"; 
- 
-const char* const SetRetentionQuery = R"__( 
-    ( 
-        (let now   (Parameter 'NOW   (DataType 'Uint64))) 
-        (let purge (Parameter 'PURGE (DataType 'Bool))) 
- 
-        (let attrsTable '%1$s/Attributes) 
-        (let stateTable '%1$s/State) 
- 
-        (let attrs (block '( 
-            (let row '( 
-                '('State (Uint64 '0)))) 
-            (let fields '( 
-                'MessageRetentionPeriod)) 
-            (return (SelectRow attrsTable row fields))))) 
- 
-        (let boundary 
-            (If purge now (Coalesce (Sub now (Member attrs 'MessageRetentionPeriod)) (Uint64 '0)))) 
- 
+        ))
+    )
+)__";
+
+const char* const SetRetentionQuery = R"__(
+    (
+        (let now   (Parameter 'NOW   (DataType 'Uint64)))
+        (let purge (Parameter 'PURGE (DataType 'Bool)))
+
+        (let attrsTable '%1$s/Attributes)
+        (let stateTable '%1$s/State)
+
+        (let attrs (block '(
+            (let row '(
+                '('State (Uint64 '0))))
+            (let fields '(
+                'MessageRetentionPeriod))
+            (return (SelectRow attrsTable row fields)))))
+
+        (let boundary
+            (If purge now (Coalesce (Sub now (Member attrs 'MessageRetentionPeriod)) (Uint64 '0))))
+
         (let range '(
             '('State (Uint64 '0) (Uint64 '18446744073709551615))))
         (let fields '(
             'State
             'RetentionBoundary))
         (let records (Member (SelectRange stateTable range fields '()) 'List))
- 
+
         (let result
             (Map records (lambda '(item) (block '(
                 (let updated
                     (Coalesce
                         (Less (Member item 'RetentionBoundary) boundary)
                         (Bool 'false)))
- 
+
                 (return (AsStruct
                     '('Shard (Member item 'State))
                     '('RetentionBoundary (Max boundary (Member item 'RetentionBoundary)))
                     '('Updated updated))))))))
- 
+
         (let updated (Filter result (lambda '(item) (block '(
             (return (Coalesce (Equal (Member item 'Updated) (Bool 'true)) (Bool 'false))))))))
- 
-        (return (Extend 
-            (AsList (SetResult 'result result)) 
-            (AsList (SetResult 'retention (Member attrs 'MessageRetentionPeriod))) 
- 
+
+        (return (Extend
+            (AsList (SetResult 'result result))
+            (AsList (SetResult 'retention (Member attrs 'MessageRetentionPeriod)))
+
             (Map updated (lambda '(item) (block '(
-                (let row '( 
-                    '('State (Member item 'Shard)))) 
-                (let update '( 
-                    '('RetentionBoundary (Member item 'RetentionBoundary)))) 
-                (return (UpdateRow stateTable row update)))))) 
-        )) 
-    ) 
-)__"; 
- 
+                (let row '(
+                    '('State (Member item 'Shard))))
+                (let update '(
+                    '('RetentionBoundary (Member item 'RetentionBoundary))))
+                (return (UpdateRow stateTable row update))))))
+        ))
+    )
+)__";
+
 const char* const GetOldestMessageTimestampMetricsQuery = R"__(
     (
         (let timeFrom (Parameter 'TIME_FROM (DataType 'Uint64)))
@@ -1198,10 +1198,10 @@ const char* const GetQueuesListQuery = R"__(
     )
 )__";
 
-} // namespace 
- 
-const char* GetStdQueryById(size_t id) { 
-    switch (id) { 
+} // namespace
+
+const char* GetStdQueryById(size_t id) {
+    switch (id) {
     case DELETE_MESSAGE_ID: // 0
         return DeleteMessageQuery;
     case WRITE_MESSAGE_ID: // 3
@@ -1242,8 +1242,8 @@ const char* GetStdQueryById(size_t id) {
         return GetQueuesListQuery;
     case GET_MESSAGE_COUNT_METRIC_ID: // 14
         return GetMessageCountMetricsQuery;
-    } 
-    return nullptr; 
-} 
- 
+    }
+    return nullptr;
+}
+
 } // namespace NKikimr::NSQS

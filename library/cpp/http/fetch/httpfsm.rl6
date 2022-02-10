@@ -86,10 +86,10 @@ response_status_line = http_version ws+ status_code reason_phrase? eol %set_stat
 ############ request status line #################
 action set_request_uri {
     if (request_hd && buflen < FETCHER_URL_MAX) {
-        if (!request_hd->request_uri.empty()) { 
+        if (!request_hd->request_uri.empty()) {
             return -2;
         }
-        request_hd->request_uri =TStringBuf(buf, buflen); 
+        request_hd->request_uri =TStringBuf(buf, buflen);
     }
 }
 action set_http_method {
@@ -225,8 +225,8 @@ mime_type       = "text/plain"i                     %{c(MIME_TEXT)}
                   | "application/x-bzip2"i | "application/x-rar"i ) %{c(MIME_ARCHIVE)}
                 | "application/x-dosexec"i          %{c(MIME_EXE)}
                 | "application/x-gzip"i             %{c(MIME_GZIP)}
-                | "application/json"i               %{c(MIME_JSON)} 
-                | ("application/javascript"i | "text/javascript"i) %{c(MIME_JAVASCRIPT)} 
+                | "application/json"i               %{c(MIME_JSON)}
+                | ("application/javascript"i | "text/javascript"i) %{c(MIME_JAVASCRIPT)}
                 | "application/vnd.android.package-archive"i %{c(MIME_APK)}
                 | ("image/x-icon"i | "image/vnd.microsoft.icon"i) %{c(MIME_IMAGE_ICON)}
                 ;
@@ -253,7 +253,7 @@ action set_location {
         buflen --;
     }
     if (hd && buflen < FETCHER_URL_MAX) {
-        hd->location = TStringBuf(buf, buflen); 
+        hd->location = TStringBuf(buf, buflen);
     }
 }
 
@@ -304,7 +304,7 @@ x_robots_tag = "x-robots-tag"i def >{ AcceptingXRobots = true; } x_robots_value 
 ################# rel_canonical ###############
 action set_canonical {
     if (hd && buflen < FETCHER_URL_MAX) {
-        hd->rel_canonical = TStringBuf(buf, buflen); 
+        hd->rel_canonical = TStringBuf(buf, buflen);
     }
 }
 

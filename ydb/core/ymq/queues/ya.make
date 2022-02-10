@@ -3,8 +3,8 @@ OWNER(
     g:sqs
 )
 
-RECURSE( 
+RECURSE(
     common
-    fifo 
-    std 
-) 
+    fifo
+    std
+)

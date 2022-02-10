@@ -91,7 +91,7 @@ SRCS(
     serverless_proxy_config.proto
     services.proto
     shared_cache.proto
-    sqs.proto 
+    sqs.proto
     follower_group.proto
     ssa.proto
     statestorage.proto

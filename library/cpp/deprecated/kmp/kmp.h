@@ -86,7 +86,7 @@ public:
         ComputePrefixFunction(patternBegin, patternEnd, &pf);
         PrefixFunction.Reset(pf);
     }
- 
+
     void Push(const T& symbol) {
         while ((State >= 0) && (Pattern[State] != symbol)) {
             Y_ASSERT(State <= (ssize_t) Pattern.size());

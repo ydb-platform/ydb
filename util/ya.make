@@ -106,7 +106,7 @@ JOIN_SRCS(
     generic/intrlist.cpp
     generic/is_in.cpp
     generic/iterator.cpp
-    generic/iterator_range.cpp 
+    generic/iterator_range.cpp
     generic/lazy_value.cpp
     generic/list.cpp
     generic/map.cpp

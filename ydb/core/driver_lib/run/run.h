@@ -42,7 +42,7 @@ protected:
     bool EnabledGrpcService = false;
     bool GracefulShutdownSupported = false;
     THolder<NSQS::TAsyncHttpServer> SqsHttp;
- 
+
     THolder<NYdb::TDriver> YdbDriver;
 
     THolder<NKqp::TKqpShutdownController> KqpShutdownController;
@@ -58,7 +58,7 @@ protected:
     TIntrusivePtr<NMonitoring::TBusNgMonPage> BusMonPage;
 
     TVector<std::pair<TString, TAutoPtr<NGrpc::TGRpcServer>>> GRpcServers;
- 
+
     TIntrusivePtr<NActors::NLog::TSettings> LogSettings;
     std::shared_ptr<TLogBackend> LogBackend;
     TAutoPtr<TActorSystem> ActorSystem;
@@ -86,8 +86,8 @@ protected:
         std::shared_ptr<TModuleFactories> factories = nullptr
     );
 
-    void InitializeGRpc(const TKikimrRunConfig& runConfig); 
- 
+    void InitializeGRpc(const TKikimrRunConfig& runConfig);
+
     void InitializeKqpController(const TKikimrRunConfig& runConfig);
 
     void InitializeGracefulShutdown(const TKikimrRunConfig& runConfig);

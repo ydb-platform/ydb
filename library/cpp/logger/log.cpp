@@ -12,17 +12,17 @@
 #include <util/generic/scope.h>
 #include <util/generic/yexception.h>
 
-THolder<TLogBackend> CreateLogBackend(const TString& fname, ELogPriority priority, bool threaded) { 
+THolder<TLogBackend> CreateLogBackend(const TString& fname, ELogPriority priority, bool threaded) {
     TLogBackendCreatorUninitialized creator;
     creator.InitCustom(fname, priority, threaded);
     return creator.CreateLogBackend();
 }
 
-THolder<TLogBackend> CreateFilteredOwningThreadedLogBackend(const TString& fname, ELogPriority priority, size_t queueLen) { 
+THolder<TLogBackend> CreateFilteredOwningThreadedLogBackend(const TString& fname, ELogPriority priority, size_t queueLen) {
     return MakeHolder<TFilteredLogBackend>(CreateOwningThreadedLogBackend(fname, queueLen), priority);
 }
 
-THolder<TOwningThreadedLogBackend> CreateOwningThreadedLogBackend(const TString& fname, size_t queueLen) { 
+THolder<TOwningThreadedLogBackend> CreateOwningThreadedLogBackend(const TString& fname, size_t queueLen) {
     return MakeHolder<TOwningThreadedLogBackend>(CreateLogBackend(fname, LOG_MAX_PRIORITY, false).Release(), queueLen);
 }
 
@@ -45,7 +45,7 @@ class TLog::TImpl: public TAtomicRefCount<TImpl> {
     };
 
 public:
-    inline TImpl(THolder<TLogBackend> backend) 
+    inline TImpl(THolder<TLogBackend> backend)
         : Backend_(std::move(backend))
     {
     }
@@ -76,11 +76,11 @@ public:
         Printf(ls, format, args);
     }
 
-    inline void ResetBackend(THolder<TLogBackend> backend) noexcept { 
+    inline void ResetBackend(THolder<TLogBackend> backend) noexcept {
         Backend_ = std::move(backend);
     }
 
-    inline THolder<TLogBackend> ReleaseBackend() noexcept { 
+    inline THolder<TLogBackend> ReleaseBackend() noexcept {
         return std::move(Backend_);
     }
 
@@ -135,7 +135,7 @@ TLog::TLog(const TString& fname, ELogPriority priority)
 {
 }
 
-TLog::TLog(THolder<TLogBackend> backend) 
+TLog::TLog(THolder<TLogBackend> backend)
     : Impl_(MakeIntrusive<TImpl>(std::move(backend)))
 {
 }
@@ -214,15 +214,15 @@ bool TLog::OpenLog(const char* path, ELogPriority lp) {
     return true;
 }
 
-void TLog::ResetBackend(THolder<TLogBackend> backend) noexcept { 
-    Impl_->ResetBackend(std::move(backend)); 
+void TLog::ResetBackend(THolder<TLogBackend> backend) noexcept {
+    Impl_->ResetBackend(std::move(backend));
 }
 
 bool TLog::IsNullLog() const noexcept {
     return Impl_->IsNullLog();
 }
 
-THolder<TLogBackend> TLog::ReleaseBackend() noexcept { 
+THolder<TLogBackend> TLog::ReleaseBackend() noexcept {
     return Impl_->ReleaseBackend();
 }
 
@@ -235,10 +235,10 @@ void TLog::Write(ELogPriority priority, const char* data, size_t len) const {
     }
 }
 
-void TLog::Write(ELogPriority priority, const TStringBuf data) const { 
-    Write(priority, data.data(), data.size()); 
-} 
- 
+void TLog::Write(ELogPriority priority, const TStringBuf data) const {
+    Write(priority, data.data(), data.size());
+}
+
 void TLog::Write(const char* data, size_t len) const {
     Write(Impl_->DefaultPriority(), data, len);
 }

@@ -3,9 +3,9 @@ OWNER(
     g:sqs
 )
 
-LIBRARY() 
+LIBRARY()
 
-SRCS( 
+SRCS(
     acl.cpp
     action.cpp
     counters.cpp
@@ -17,13 +17,13 @@ SRCS(
     queue_id.cpp
     secure_protobuf_printer.cpp
     events_writer_iface.h
-) 
- 
+)
+
 GENERATE_ENUM_SERIALIZATION(query_id.h)
 
 GENERATE_ENUM_SERIALIZATION(cloud_enums.h)
 
-PEERDIR( 
+PEERDIR(
     contrib/libs/openssl
     library/cpp/cgiparam
     library/cpp/ipmath
@@ -39,6 +39,6 @@ PEERDIR(
     ydb/library/http_proxy/error
     ydb/library/protobuf_printer
     ydb/public/lib/scheme_types
-) 
- 
-END() 
+)
+
+END()

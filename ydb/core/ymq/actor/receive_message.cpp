@@ -1,53 +1,53 @@
-#include "action.h" 
+#include "action.h"
 #include "attributes_md5.h"
 #include "cfg.h"
 #include "error.h"
 #include "executor.h"
 #include "log.h"
-#include "params.h" 
- 
+#include "params.h"
+
 #include <ydb/core/ymq/base/limits.h>
 #include <ydb/core/ymq/base/helpers.h>
 #include <ydb/core/ymq/proto/records.pb.h>
 #include <ydb/public/lib/value/value.h>
- 
+
 #include <library/cpp/digest/md5/md5.h>
 #include <library/cpp/monlib/metrics/histogram_collector.h>
- 
-using NKikimr::NClient::TValue; 
- 
+
+using NKikimr::NClient::TValue;
+
 namespace NKikimr::NSQS {
- 
-class TReceiveMessageActor 
-    : public TActionActor<TReceiveMessageActor> 
-{ 
-public: 
+
+class TReceiveMessageActor
+    : public TActionActor<TReceiveMessageActor>
+{
+public:
     static constexpr bool NeedQueueAttributes() {
         return true;
     }
 
     TReceiveMessageActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
         : TActionActor(sourceSqsRequest, EAction::ReceiveMessage, std::move(cb))
-    { 
+    {
         CopyAccountName(Request());
-        Response_.MutableReceiveMessage()->SetRequestId(RequestId_); 
+        Response_.MutableReceiveMessage()->SetRequestId(RequestId_);
 
         CopySecurityToken(Request());
-    } 
- 
-private: 
+    }
+
+private:
     TDuration GetVisibilityTimeout() const {
         if (Request().HasVisibilityTimeout()) {
             return TDuration::Seconds(Request().GetVisibilityTimeout());
         } else {
             return QueueAttributes_->VisibilityTimeout;
         }
-    } 
- 
+    }
+
     TInstant WaitDeadline() const {
         return StartTs_ + WaitTime_;
-    } 
- 
+    }
+
     bool MaybeScheduleWait() {
         const TInstant waitDeadline = WaitDeadline();
         const TInstant now = TActivationContext::Now();
@@ -59,17 +59,17 @@ private:
             RLOG_SQS_DEBUG("Schedule wait for " << waitStep.MilliSeconds() << "ms");
             Retried_ = true;
             return true;
-        } else { 
+        } else {
             return false;
-        } 
-    } 
- 
-    bool DoValidate() override { 
-        if (!GetQueueName()) { 
+        }
+    }
+
+    bool DoValidate() override {
+        if (!GetQueueName()) {
             MakeError(Response_.MutableReceiveMessage(), NErrors::MISSING_PARAMETER, "No QueueName parameter.");
-            return false; 
-        } 
- 
+            return false;
+        }
+
         const auto& cfg = Cfg();
 
         if (Request().GetWaitTimeSeconds()
@@ -93,9 +93,9 @@ private:
             return false;
         }
 
-        return true; 
-    } 
- 
+        return true;
+    }
+
     TError* MutableErrorDesc() override {
         return Response_.MutableReceiveMessage()->MutableError();
     }
@@ -105,28 +105,28 @@ private:
             return;
         }
         ParamsAreInited_ = true;
- 
+
         if (Request().HasWaitTimeSeconds()) {
             WaitTime_ = TDuration::Seconds(Request().GetWaitTimeSeconds());
         } else {
             WaitTime_ = QueueAttributes_->ReceiveMessageWaitTime;
         }
 
-        if (IsFifoQueue()) { 
+        if (IsFifoQueue()) {
             if (Request().GetReceiveRequestAttemptId()) {
                 ReceiveAttemptId_ = Request().GetReceiveRequestAttemptId();
-            } else { 
+            } else {
                 ReceiveAttemptId_ = CreateGuidAsString();
-            } 
+            }
         }
- 
+
         MaxMessagesCount_ = ClampVal(static_cast<size_t>(Request().GetMaxNumberOfMessages()), TLimits::MinBatchSize, TLimits::MaxBatchSize);
     }
- 
+
     void DoAction() override {
         Become(&TThis::StateFunc);
         Y_VERIFY(QueueAttributes_.Defined());
- 
+
         InitParams();
 
         auto receiveRequest = MakeHolder<TSqsEvents::TEvReceiveMessageBatch>();
@@ -136,35 +136,35 @@ private:
         receiveRequest->VisibilityTimeout = GetVisibilityTimeout();
         if (WaitTime_) {
             receiveRequest->WaitDeadline = WaitDeadline();
-        } 
+        }
 
         Send(QueueLeader_, std::move(receiveRequest));
-    } 
- 
-    TString DoGetQueueName() const override { 
+    }
+
+    TString DoGetQueueName() const override {
         return Request().GetQueueName();
-    } 
- 
-    void DoFinish() override { 
+    }
+
+    void DoFinish() override {
         if (auto* detailedCounters = QueueCounters_ ? QueueCounters_->GetDetailedCounters() : nullptr; !Retried_ && detailedCounters) {
             const TDuration duration = GetRequestDuration();
             COLLECT_HISTOGRAM_COUNTER(detailedCounters, ReceiveMessageImmediate_Duration, duration.MilliSeconds());
         }
-    } 
- 
+    }
+
 private:
     STATEFN(StateFunc) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvWakeup, HandleWakeup);
             hFunc(TSqsEvents::TEvReceiveMessageBatchResponse, HandleReceiveMessageBatchResponse);
-        } 
-    } 
- 
+        }
+    }
+
     void HandleReceiveMessageBatchResponse(TSqsEvents::TEvReceiveMessageBatchResponse::TPtr& ev) {
         if (ev->Get()->Retried) {
             Retried_ = true;
-        } 
- 
+        }
+
         if (ev->Get()->Failed) {
             MakeError(Response_.MutableReceiveMessage(), NErrors::INTERNAL_FAILURE);
         } else if (ev->Get()->OverLimit) {
@@ -192,8 +192,8 @@ private:
                     if (attrs.ParseFromString(message.MessageAttributes)) {
                         for (auto& a : *attrs.MutableAttributes()) {
                             item->AddMessageAttributes()->Swap(&a);
-                        } 
-                    } 
+                        }
+                    }
                     if (item->MessageAttributesSize() > 0) {
                         const TString md5 = CalcMD5OfMessageAttributes(item->GetMessageAttributes());
                         item->SetMD5OfMessageAttributes(md5);
@@ -217,18 +217,18 @@ private:
             }
             if (ev->Get()->Messages.empty()) {
                 INC_COUNTER_COUPLE(QueueCounters_, ReceiveMessage_EmptyCount, empty_receive_attempts_count_per_second);
-            } 
-        } 
+            }
+        }
         SendReplyAndDie();
-    } 
- 
+    }
+
     bool HandleWakeup(TEvWakeup::TPtr& ev) override {
         if (!TActionActor::HandleWakeup(ev)) {
             DoAction();
         }
         return true;
-    } 
- 
+    }
+
     TDuration GetRequestWaitDuration() const override {
         return TotalWaitDuration_;
     }
@@ -249,17 +249,17 @@ private:
         return SourceSqsRequest_.GetReceiveMessage();
     }
 
-private: 
+private:
     TString ReceiveAttemptId_;
     bool Retried_ = false;
     TDuration WaitTime_ = TDuration::Zero();
     bool ParamsAreInited_ = false;
     size_t MaxMessagesCount_ = 0;
     TDuration TotalWaitDuration_;
-}; 
- 
+};
+
 IActor* CreateReceiveMessageActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
     return new TReceiveMessageActor(sourceSqsRequest, std::move(cb));
-} 
- 
+}
+
 } // namespace NKikimr::NSQS

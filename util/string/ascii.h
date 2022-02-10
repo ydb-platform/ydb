@@ -212,8 +212,8 @@ static inline int AsciiCompareIgnoreCase(const char* s1, const char* s2) noexcep
  * similar to stricmp.
  */
 Y_PURE_FUNCTION int AsciiCompareIgnoreCase(const TStringBuf s1, const TStringBuf s2) noexcept;
- 
-/** 
+
+/**
  * ASCII case-sensitive string comparison (for proper UTF8 strings
  * case-sensitive comparison consider using @c library/cpp/charset).
  *
@@ -224,24 +224,24 @@ Y_PURE_FUNCTION int AsciiCompareIgnoreCase(const TStringBuf s1, const TStringBuf
  */
 static inline bool AsciiHasPrefix(const TStringBuf s1, const TStringBuf s2) noexcept {
     return (s1.size() >= s2.size()) && memcmp(s1.data(), s2.data(), s2.size()) == 0;
-} 
- 
-/** 
-  * ASCII case-insensitive string comparison (for proper UTF8 strings 
+}
+
+/**
+  * ASCII case-insensitive string comparison (for proper UTF8 strings
   * case-insensitive comparison consider using @c library/cpp/charset).
-  * 
-  * @return                              true iff @c s2 are case-insensitively prefix of @c s1. 
-  */ 
+  *
+  * @return                              true iff @c s2 are case-insensitively prefix of @c s1.
+  */
 static inline bool AsciiHasPrefixIgnoreCase(const TStringBuf s1, const TStringBuf s2) noexcept {
     return (s1.size() >= s2.size()) && strnicmp(s1.data(), s2.data(), s2.size()) == 0;
-} 
- 
-/** 
-  * ASCII case-insensitive string comparison (for proper UTF8 strings 
+}
+
+/**
+  * ASCII case-insensitive string comparison (for proper UTF8 strings
   * case-insensitive comparison consider using @c library/cpp/charset).
-  * 
-  * @return                              true iff @c s2 are case-insensitively suffix of @c s1. 
-  */ 
+  *
+  * @return                              true iff @c s2 are case-insensitively suffix of @c s1.
+  */
 static inline bool AsciiHasSuffixIgnoreCase(const TStringBuf s1, const TStringBuf s2) noexcept {
     return (s1.size() >= s2.size()) && strnicmp((s1.data() + (s1.size() - s2.size())), s2.data(), s2.size()) == 0;
-} 
+}

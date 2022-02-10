@@ -8,7 +8,7 @@
 
 #include <util/generic/fwd.h>
 #include <util/generic/ptr.h>
- 
+
 #include <functional>
 #include <cstdarg>
 
@@ -37,7 +37,7 @@ public:
     // Construct file logger.
     TLog(const TString& fname, ELogPriority priority = LOG_MAX_PRIORITY);
     // Construct any type of logger
-    TLog(THolder<TLogBackend> backend); 
+    TLog(THolder<TLogBackend> backend);
 
     TLog(const TLog&);
     TLog(TLog&&);
@@ -47,10 +47,10 @@ public:
 
     // Change underlying backend.
     // NOTE: not thread safe.
-    void ResetBackend(THolder<TLogBackend> backend) noexcept; 
+    void ResetBackend(THolder<TLogBackend> backend) noexcept;
     // Reset underlying backend, `IsNullLog()` will return `true` after this call.
     // NOTE: not thread safe.
-    THolder<TLogBackend> ReleaseBackend() noexcept; 
+    THolder<TLogBackend> ReleaseBackend() noexcept;
     // Check if underlying backend is defined and is not null.
     // NOTE: not thread safe with respect to `ResetBackend` and `ReleaseBackend`.
     bool IsNullLog() const noexcept;
@@ -110,6 +110,6 @@ private:
     TLogFormatter Formatter_;
 };
 
-THolder<TLogBackend> CreateLogBackend(const TString& fname, ELogPriority priority = LOG_MAX_PRIORITY, bool threaded = false); 
-THolder<TLogBackend> CreateFilteredOwningThreadedLogBackend(const TString& fname, ELogPriority priority = LOG_MAX_PRIORITY, size_t queueLen = 0); 
-THolder<TOwningThreadedLogBackend> CreateOwningThreadedLogBackend(const TString& fname, size_t queueLen = 0); 
+THolder<TLogBackend> CreateLogBackend(const TString& fname, ELogPriority priority = LOG_MAX_PRIORITY, bool threaded = false);
+THolder<TLogBackend> CreateFilteredOwningThreadedLogBackend(const TString& fname, ELogPriority priority = LOG_MAX_PRIORITY, size_t queueLen = 0);
+THolder<TOwningThreadedLogBackend> CreateOwningThreadedLogBackend(const TString& fname, size_t queueLen = 0);

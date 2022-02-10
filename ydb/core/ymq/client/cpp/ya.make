@@ -3,15 +3,15 @@ OWNER(
     g:sqs
 )
 
-LIBRARY() 
- 
-SRCS( 
-    client.cpp 
-) 
- 
-PEERDIR( 
+LIBRARY()
+
+SRCS(
+    client.cpp
+)
+
+PEERDIR(
     ydb/core/protos
     ydb/public/lib/deprecated/client
-) 
- 
-END() 
+)
+
+END()

@@ -122,7 +122,7 @@ public:
             MTYPE(TBusNodeRegistrationRequest)
             MTYPE(TBusCmsRequest)
             MTYPE(TBusChooseProxy)
-            MTYPE(TBusSqsRequest) 
+            MTYPE(TBusSqsRequest)
             MTYPE(TBusWhoAmI)
             MTYPE(TBusStreamRequest)
             MTYPE(TBusS3ListingRequest)
@@ -174,7 +174,7 @@ public:
             REPLY_OPTION(TBusBsTestLoadResponse)
             REPLY_OPTION(TBusNodeRegistrationResponse)
             REPLY_OPTION(TBusCmsResponse)
-            REPLY_OPTION(TBusSqsResponse) 
+            REPLY_OPTION(TBusSqsResponse)
             REPLY_OPTION(TBusS3ListingResponse)
             REPLY_OPTION(TBusConsoleResponse)
 

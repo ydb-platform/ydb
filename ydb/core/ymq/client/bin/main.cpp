@@ -1,21 +1,21 @@
 #include <util/random/shuffle.h>
 #include <ydb/core/ymq/client/cpp/client.h>
- 
+
 #include <library/cpp/getopt/opt.h>
 #include <library/cpp/getopt/modchooser.h>
- 
-#include <util/stream/file.h> 
-#include <util/stream/output.h> 
+
+#include <util/stream/file.h>
+#include <util/stream/output.h>
 #include <util/system/env.h>
-#include <util/system/user.h> 
- 
+#include <util/system/user.h>
+
 #include <google/protobuf/text_format.h>
- 
-#include <random> 
- 
-using namespace NLastGetopt; 
-using namespace NKikimr::NSQS; 
- 
+
+#include <random>
+
+using namespace NLastGetopt;
+using namespace NKikimr::NSQS;
+
 class TSqsOptions : public TOpts {
 public:
     TSqsOptions(bool addUserOption = true) {
@@ -73,11 +73,11 @@ public:
     TString TVMTicket;
 };
 
-static int HandleChange(int argc, const char* argv[]) { 
-    TString name; 
-    TString receipt; 
-    ui64 timeout; 
- 
+static int HandleChange(int argc, const char* argv[]) {
+    TString name;
+    TString receipt;
+    ui64 timeout;
+
     TSqsOptions opts;
     opts.AddLongOption('q', "queue-name", "name of creating queue")
         .Required()
@@ -88,30 +88,30 @@ static int HandleChange(int argc, const char* argv[]) {
     opts.AddLongOption('t', "timeout", "visibility timeout")
         .Required()
         .StoreResult(&timeout);
- 
+
     TOptsParseResult res(&opts, argc, argv);
- 
-    TChangeMessageVisibilityRequest req; 
+
+    TChangeMessageVisibilityRequest req;
     req.MutableAuth()->SetUserName(opts.User);
-    req.SetQueueName(name); 
-    req.SetReceiptHandle(receipt); 
-    req.SetVisibilityTimeout(timeout); 
+    req.SetQueueName(name);
+    req.SetReceiptHandle(receipt);
+    req.SetVisibilityTimeout(timeout);
     opts.SetCredentials(req);
     auto resp = TQueueClient(TClientOptions().SetHost(opts.Host).SetPort(opts.Port)).ChangeMessageVisibility(req);
- 
-    if (resp.HasError()) { 
-        Cerr << "Got error for queue : " 
-             << name << " : " 
-             << resp.GetError().GetMessage() << Endl; 
-        return 1; 
-    } else { 
-        Cerr << "Visibility timeout has been changed" << Endl; 
-    } 
-    return 0; 
-} 
- 
-static int HandleCreate(int argc, const char* argv[]) { 
-    TString queue; 
+
+    if (resp.HasError()) {
+        Cerr << "Got error for queue : "
+             << name << " : "
+             << resp.GetError().GetMessage() << Endl;
+        return 1;
+    } else {
+        Cerr << "Visibility timeout has been changed" << Endl;
+    }
+    return 0;
+}
+
+static int HandleCreate(int argc, const char* argv[]) {
+    TString queue;
     ui64    shards = 0;
     ui64    partitions = 0;
     ui64    retentionSeconds = 0;
@@ -121,7 +121,7 @@ static int HandleCreate(int argc, const char* argv[]) {
     bool    enableAutosplit = false;
     bool    disableAutosplit = false;
     ui64    sizeToSplit = 0;
- 
+
     TCreateQueueRequest req;
 
     TSqsOptions opts;
@@ -163,11 +163,11 @@ static int HandleCreate(int argc, const char* argv[]) {
         .Optional()
         .StoreResult(&sizeToSplit)
         .DefaultValue(ToString(req.GetSizeToSplit()));
- 
+
     TOptsParseResult res(&opts, argc, argv);
- 
+
     req.MutableAuth()->SetUserName(opts.User);
-    req.SetQueueName(queue); 
+    req.SetQueueName(queue);
     if (queue.EndsWith(".fifo")) {
         auto fifoAttr = req.AddAttributes();
         fifoAttr->SetName("FifoQueue");
@@ -178,8 +178,8 @@ static int HandleCreate(int argc, const char* argv[]) {
         dedupAttr->SetName("ContentBasedDeduplication");
         dedupAttr->SetValue("true");
     }
-    req.SetShards(shards); 
-    req.SetPartitions(partitions); 
+    req.SetShards(shards);
+    req.SetPartitions(partitions);
     if (enableOutOfOrderExecution) {
         req.SetEnableOutOfOrderTransactionsExecution(true);
     } else if (disableOutOfOrderExecution) {
@@ -207,78 +207,78 @@ static int HandleCreate(int argc, const char* argv[]) {
     }
 
     auto resp = TQueueClient(TClientOptions().SetHost(opts.Host).SetPort(opts.Port)).CreateQueue(req);
- 
-    if (resp.HasError()) { 
-        Cerr << "Got error for queue : " 
-             << queue << " : " 
-             << resp.GetError().GetMessage() << Endl; 
-        return 1; 
-    } else { 
-        Cerr << "New queue has been created : " 
-             << resp.GetQueueName() << Endl; 
+
+    if (resp.HasError()) {
+        Cerr << "Got error for queue : "
+             << queue << " : "
+             << resp.GetError().GetMessage() << Endl;
+        return 1;
+    } else {
+        Cerr << "New queue has been created : "
+             << resp.GetQueueName() << Endl;
         Cout << resp.GetQueueUrl() << Endl;
-    } 
-    return 0; 
-} 
- 
-static int HandleDelete(int argc, const char* argv[]) { 
-    TString queue; 
- 
+    }
+    return 0;
+}
+
+static int HandleDelete(int argc, const char* argv[]) {
+    TString queue;
+
     TSqsOptions opts;
     opts.AddLongOption('q', "queue-name", "name of deleting queue")
         .Required()
         .StoreResult(&queue);
- 
+
     TOptsParseResult res(&opts, argc, argv);
- 
-    TDeleteQueueRequest req; 
+
+    TDeleteQueueRequest req;
     req.MutableAuth()->SetUserName(opts.User);
-    req.SetQueueName(queue); 
+    req.SetQueueName(queue);
     opts.SetCredentials(req);
 
     auto resp = TQueueClient(TClientOptions().SetHost(opts.Host).SetPort(opts.Port)).DeleteQueue(req);
- 
-    if (resp.HasError()) { 
-        Cerr << "Got error for queue : " 
-             << queue << " : " 
-             << resp.GetError().GetMessage() << Endl; 
-        return 1; 
-    } else { 
-        Cerr << "The queue has been deleted" 
-             << Endl; 
-    } 
-    return 0; 
-} 
- 
-static int HandleList(int argc, const char* argv[]) { 
+
+    if (resp.HasError()) {
+        Cerr << "Got error for queue : "
+             << queue << " : "
+             << resp.GetError().GetMessage() << Endl;
+        return 1;
+    } else {
+        Cerr << "The queue has been deleted"
+             << Endl;
+    }
+    return 0;
+}
+
+static int HandleList(int argc, const char* argv[]) {
     TSqsOptions opts;
- 
+
     TOptsParseResult res(&opts, argc, argv);
- 
-    TListQueuesRequest req; 
+
+    TListQueuesRequest req;
     req.MutableAuth()->SetUserName(opts.User);
     opts.SetCredentials(req);
- 
+
     auto resp = TQueueClient(TClientOptions().SetHost(opts.Host).SetPort(opts.Port)).ListQueues(req);
- 
-    if (resp.HasError()) { 
-        Cerr << "Got error: " 
-             << resp.GetError().GetMessage() << Endl; 
-        return 1; 
-    } else { 
-        for (auto item : resp.queues()) { 
-            Cout << "Queue : " << item.GetQueueName() << Endl; 
-        } 
-    } 
-    return 0; 
-} 
- 
-static int HandleSend(int argc, const char* argv[]) { 
-    TString queueName; 
-    TString data; 
-    TString groupId; 
-    TString dedup; 
- 
+
+    if (resp.HasError()) {
+        Cerr << "Got error: "
+             << resp.GetError().GetMessage() << Endl;
+        return 1;
+    } else {
+        for (auto item : resp.queues()) {
+            Cout << "Queue : " << item.GetQueueName() << Endl;
+        }
+    }
+    return 0;
+}
+
+static int HandleSend(int argc, const char* argv[]) {
+    TString queueName;
+    TString data;
+    TString groupId;
+    TString dedup;
+
     TSqsOptions opts;
     opts.AddLongOption('q', "queue-name", "name of queue")
         .Required()
@@ -292,40 +292,40 @@ static int HandleSend(int argc, const char* argv[]) {
     opts.AddLongOption("dedup", "deduplication token")
         .Optional()
         .StoreResult(&dedup);
- 
+
     TOptsParseResult res(&opts, argc, argv);
- 
-    TSendMessageRequest req; 
+
+    TSendMessageRequest req;
     req.MutableAuth()->SetUserName(opts.User);
-    req.SetQueueName(queueName); 
-    req.SetMessageBody(data); 
-    req.SetMessageGroupId(groupId); 
-    req.SetMessageDeduplicationId(dedup); 
+    req.SetQueueName(queueName);
+    req.SetMessageBody(data);
+    req.SetMessageGroupId(groupId);
+    req.SetMessageDeduplicationId(dedup);
     opts.SetCredentials(req);
- 
+
     auto resp = TQueueClient(TClientOptions().SetHost(opts.Host).SetPort(opts.Port)).SendMessage(req);
- 
-    if (resp.HasError()) { 
-        Cerr << "Got error for queue : " 
-             << queueName << " : " 
-             << resp.GetError().GetMessage() << Endl; 
-        return 1; 
-    } else { 
-        Cerr << "The message has been sent:" 
-             << " id = " << resp.GetMessageId() 
-             << " seqno = " << resp.GetSequenceNumber() 
-             << Endl; 
-    } 
-    return 0; 
-} 
- 
-static int HandleRead(int argc, const char* argv[]) { 
-    TString queueName; 
-    TString attemptId; 
-    int count = 1; 
-    ui64 waitTime = 0; 
-    bool keep = false; 
- 
+
+    if (resp.HasError()) {
+        Cerr << "Got error for queue : "
+             << queueName << " : "
+             << resp.GetError().GetMessage() << Endl;
+        return 1;
+    } else {
+        Cerr << "The message has been sent:"
+             << " id = " << resp.GetMessageId()
+             << " seqno = " << resp.GetSequenceNumber()
+             << Endl;
+    }
+    return 0;
+}
+
+static int HandleRead(int argc, const char* argv[]) {
+    TString queueName;
+    TString attemptId;
+    int count = 1;
+    ui64 waitTime = 0;
+    bool keep = false;
+
     TSqsOptions opts;
     opts.AddLongOption('q', "queue-name", "name of deleting queue")
         .Required()
@@ -345,103 +345,103 @@ static int HandleRead(int argc, const char* argv[]) {
         .Optional()
         .StoreResult(&waitTime)
         .DefaultValue("0");
- 
+
     TOptsParseResult res(&opts, argc, argv);
- 
+
     TQueueClient client(TClientOptions().SetHost(opts.Host).SetPort(opts.Port));
- 
-    TReceiveMessageRequest req; 
+
+    TReceiveMessageRequest req;
     req.MutableAuth()->SetUserName(opts.User);
-    req.SetQueueName(queueName); 
-    req.SetMaxNumberOfMessages(count); 
-    req.SetVisibilityTimeout(60); 
-    req.SetReceiveRequestAttemptId(attemptId); 
-    req.SetWaitTimeSeconds(waitTime); 
+    req.SetQueueName(queueName);
+    req.SetMaxNumberOfMessages(count);
+    req.SetVisibilityTimeout(60);
+    req.SetReceiveRequestAttemptId(attemptId);
+    req.SetWaitTimeSeconds(waitTime);
     opts.SetCredentials(req);
-    auto resp = client.ReceiveMessage(req); 
- 
-    if (resp.HasError()) { 
-        Cerr << "Got error for queue : " 
-             << queueName << " : " 
-             << resp.GetError().GetMessage() << Endl; 
-        return 1; 
-    } else if (resp.MessagesSize()) { 
+    auto resp = client.ReceiveMessage(req);
+
+    if (resp.HasError()) {
+        Cerr << "Got error for queue : "
+             << queueName << " : "
+             << resp.GetError().GetMessage() << Endl;
+        return 1;
+    } else if (resp.MessagesSize()) {
         TVector<TString> receipts;
- 
-        for (size_t i = 0; i < resp.MessagesSize(); ++i) { 
-            const auto& msg = resp.GetMessages(i); 
- 
-            Cout << "The message has been received: data = " << msg.GetData() << "  " 
-                 << "groupId = " << msg.GetMessageGroupId() << " " 
-                 << "attemptId = " << resp.GetReceiveRequestAttemptId() 
-                 << Endl; 
- 
-            receipts.push_back(msg.GetReceiptHandle()); 
-        } 
- 
-        if (!keep) { 
+
+        for (size_t i = 0; i < resp.MessagesSize(); ++i) {
+            const auto& msg = resp.GetMessages(i);
+
+            Cout << "The message has been received: data = " << msg.GetData() << "  "
+                 << "groupId = " << msg.GetMessageGroupId() << " "
+                 << "attemptId = " << resp.GetReceiveRequestAttemptId()
+                 << Endl;
+
+            receipts.push_back(msg.GetReceiptHandle());
+        }
+
+        if (!keep) {
             Shuffle(receipts.begin(), receipts.end());
- 
-            for (auto ri = receipts.begin(); ri != receipts.end(); ++ri) { 
-                TDeleteMessageRequest d; 
+
+            for (auto ri = receipts.begin(); ri != receipts.end(); ++ri) {
+                TDeleteMessageRequest d;
                 d.MutableAuth()->SetUserName(opts.User);
-                d.SetQueueName(queueName); 
-                d.SetReceiptHandle(*ri); 
-                auto del = client.DeleteMessage(d); 
- 
-                if (del.HasError()) { 
-                    Cerr << "Got error for queue on deletion : " 
-                         << queueName << " : " 
-                         << del.GetError().GetMessage() << Endl; 
-                } 
-            } 
-        } else { 
-            for (auto ri = receipts.begin(); ri != receipts.end(); ++ri) { 
-                Cout << "Receipt: " << *ri << Endl; 
-            } 
-        } 
-    } else { 
-        Cout << "No messages" << Endl; 
-    } 
-    return 0; 
-} 
- 
-static int HandlePurge(int argc, const char* argv[]) { 
-    TString queueName; 
- 
+                d.SetQueueName(queueName);
+                d.SetReceiptHandle(*ri);
+                auto del = client.DeleteMessage(d);
+
+                if (del.HasError()) {
+                    Cerr << "Got error for queue on deletion : "
+                         << queueName << " : "
+                         << del.GetError().GetMessage() << Endl;
+                }
+            }
+        } else {
+            for (auto ri = receipts.begin(); ri != receipts.end(); ++ri) {
+                Cout << "Receipt: " << *ri << Endl;
+            }
+        }
+    } else {
+        Cout << "No messages" << Endl;
+    }
+    return 0;
+}
+
+static int HandlePurge(int argc, const char* argv[]) {
+    TString queueName;
+
     TSqsOptions opts;
     opts.AddLongOption('q', "queue-name", "name of deleting queue")
         .Required()
         .StoreResult(&queueName);
- 
+
     TOptsParseResult res(&opts, argc, argv);
- 
+
     TQueueClient client(TClientOptions().SetHost(opts.Host).SetPort(opts.Port));
- 
-    TPurgeQueueRequest req; 
+
+    TPurgeQueueRequest req;
     req.MutableAuth()->SetUserName(opts.User);
-    req.SetQueueName(queueName); 
+    req.SetQueueName(queueName);
     opts.SetCredentials(req);
- 
-    auto resp = client.PurgeQueue(req); 
-    if (resp.HasError()) { 
-        Cerr << "Got error for queue : " 
-             << queueName << " : " 
-             << resp.GetError().GetMessage() << Endl; 
-        return 1; 
-    } else { 
-        Cerr << "The queue has been purged" 
-             << Endl; 
-    } 
- 
-    return 0; 
-} 
- 
-static int HandleUser(int argc, const char* argv[]) { 
-    bool list = false; 
-    bool del = false; 
+
+    auto resp = client.PurgeQueue(req);
+    if (resp.HasError()) {
+        Cerr << "Got error for queue : "
+             << queueName << " : "
+             << resp.GetError().GetMessage() << Endl;
+        return 1;
+    } else {
+        Cerr << "The queue has been purged"
+             << Endl;
+    }
+
+    return 0;
+}
+
+static int HandleUser(int argc, const char* argv[]) {
+    bool list = false;
+    bool del = false;
     TString name;
- 
+
     TSqsOptions opts;
     opts.AddLongOption("list", "list configured users")
         .Optional()
@@ -455,62 +455,62 @@ static int HandleUser(int argc, const char* argv[]) {
         .Optional()
         .RequiredArgument("NAME")
         .StoreResult(&name);
- 
+
     TOptsParseResult res(&opts, argc, argv);
- 
+
     TQueueClient client(TClientOptions().SetHost(opts.Host).SetPort(opts.Port));
- 
+
     if (!list && !name) {
         Cerr << "Name parameter is required for creation/deletion." << Endl;
         return 1;
     }
 
-    if (list) { 
-        TListUsersRequest req; 
-        req.MutableAuth()->SetUserName(GetUsername()); 
+    if (list) {
+        TListUsersRequest req;
+        req.MutableAuth()->SetUserName(GetUsername());
         opts.SetCredentials(req);
- 
-        auto resp = client.ListUsers(req); 
-        for (size_t i = 0; i < resp.UserNamesSize(); ++i) { 
-            Cout << resp.GetUserNames(i) << Endl; 
-        } 
-    } else if (del) { 
-        TDeleteUserRequest req; 
+
+        auto resp = client.ListUsers(req);
+        for (size_t i = 0; i < resp.UserNamesSize(); ++i) {
+            Cout << resp.GetUserNames(i) << Endl;
+        }
+    } else if (del) {
+        TDeleteUserRequest req;
         req.MutableAuth()->SetUserName(opts.User);
         req.SetUserName(name);
         opts.SetCredentials(req);
- 
-        auto resp = client.DeleteUser(req); 
-        if (resp.HasError()) { 
-            Cerr << "Got error for user : " 
+
+        auto resp = client.DeleteUser(req);
+        if (resp.HasError()) {
+            Cerr << "Got error for user : "
                  << opts.User << " : "
-                 << resp.GetError().GetMessage() << Endl; 
-            return 1; 
-        } else { 
-            Cerr << "The user has been deleted" 
-                 << Endl; 
-        } 
-    } else { 
-        TCreateUserRequest req; 
+                 << resp.GetError().GetMessage() << Endl;
+            return 1;
+        } else {
+            Cerr << "The user has been deleted"
+                 << Endl;
+        }
+    } else {
+        TCreateUserRequest req;
         req.MutableAuth()->SetUserName(opts.User);
         req.SetUserName(name);
         opts.SetCredentials(req);
- 
-        auto resp = client.CreateUser(req); 
-        if (resp.HasError()) { 
-            Cerr << "Got error for user : " 
+
+        auto resp = client.CreateUser(req);
+        if (resp.HasError()) {
+            Cerr << "Got error for user : "
                  << opts.User << " : "
-                 << resp.GetError().GetMessage() << Endl; 
-            return 1; 
-        } else { 
-            Cerr << "The user has been initialized" 
-                 << Endl; 
-        } 
-    } 
- 
-    return 0; 
-} 
- 
+                 << resp.GetError().GetMessage() << Endl;
+            return 1;
+        } else {
+            Cerr << "The user has been initialized"
+                 << Endl;
+        }
+    }
+
+    return 0;
+}
+
 static int HandlePermissions(int argc, const char* argv[]) {
     TString resource;
     TString grantRequest;
@@ -693,8 +693,8 @@ static int HandleSetQueueAttributes(int argc, const char* argv[]) {
     return 0;
 }
 
-int main(int argc, const char* argv[]) { 
-    try { 
+int main(int argc, const char* argv[]) {
+    try {
         TModChooser mods;
         mods.SetDescription("SQS client tool");
         mods.AddMode("change",           HandleChange,             "change visibility timeout");
@@ -710,14 +710,14 @@ int main(int argc, const char* argv[]) {
         mods.AddMode("set-attributes",   HandleSetQueueAttributes, "set queue attributes");
         mods.AddMode("list-permissions", HandleListPermissions,    "list permissions");
         return mods.Run(argc, argv);
-    } catch (const TQueueException& e) { 
-        Cerr << "Queue Error: " 
+    } catch (const TQueueException& e) {
+        Cerr << "Queue Error: "
              << e.Error().GetErrorCode() << " (" << e.Status() << "): " << e.Message() << Endl;
         Cerr << "Request id: " << e.GetRequestId() << Endl;
-        return 1; 
-    } catch (...) { 
-        Cerr << CurrentExceptionMessage() << Endl; 
-        return 1; 
-    } 
-    return 0; 
-} 
+        return 1;
+    } catch (...) {
+        Cerr << CurrentExceptionMessage() << Endl;
+        return 1;
+    }
+    return 0;
+}

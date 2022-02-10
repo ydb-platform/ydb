@@ -3,7 +3,7 @@
 /// Asynchronous Messaging Library implements framework for sending and
 /// receiving messages between loosely connected processes.
 
-#include "coreconn.h" 
+#include "coreconn.h"
 #include "defs.h"
 #include "handler.h"
 #include "handler_impl.h"
@@ -17,7 +17,7 @@
 #include "session.h"
 #include "session_config.h"
 #include "socket_addr.h"
- 
+
 #include <library/cpp/messagebus/actor/executor.h>
 #include <library/cpp/messagebus/scheduler/scheduler.h>
 

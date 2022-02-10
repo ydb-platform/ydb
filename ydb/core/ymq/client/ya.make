@@ -3,7 +3,7 @@ OWNER(
     g:sqs
 )
 
-RECURSE( 
-    bin 
-    cpp 
-) 
+RECURSE(
+    bin
+    cpp
+)

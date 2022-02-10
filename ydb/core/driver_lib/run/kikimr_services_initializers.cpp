@@ -132,7 +132,7 @@
 #include <ydb/public/lib/deprecated/client/msgbus_client.h>
 
 #include <ydb/core/ymq/actor/serviceid.h>
- 
+
 #include <ydb/core/yq/libs/init/init.h>
 #include <ydb/core/yq/libs/logs/log.h>
 
@@ -184,8 +184,8 @@
 #include <util/generic/algorithm.h>
 #include <util/generic/size_literals.h>
 
-#include <util/system/hostname.h> 
- 
+#include <util/system/hostname.h>
+
 namespace NKikimr {
 
 namespace NKikimrServicesInitializers {
@@ -2085,12 +2085,12 @@ void TLeaseHolderInitializer::InitializeServices(NActors::TActorSystemSetup* set
 }
 
 TSqsServiceInitializer::TSqsServiceInitializer(const TKikimrRunConfig& runConfig, const std::shared_ptr<TModuleFactories>& factories)
-    : IKikimrServicesInitializer(runConfig) 
+    : IKikimrServicesInitializer(runConfig)
     , Factories(factories)
-{ 
-} 
+{
+}
 
-void TSqsServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) { 
+void TSqsServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
     if (Config.GetSqsConfig().GetEnableSqs()) {
         ui32 grpcPort = 0;
         if (Config.HasGRpcConfig())
@@ -2112,8 +2112,8 @@ void TSqsServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
         Factories->SqsAuthFactory->Initialize(
             setup->LocalServices, *appData, Config.GetSqsConfig());
     }
-} 
- 
+}
+
 TConfigsDispatcherInitializer::TConfigsDispatcherInitializer(const TKikimrRunConfig& runConfig)
    : IKikimrServicesInitializer(runConfig)
 {

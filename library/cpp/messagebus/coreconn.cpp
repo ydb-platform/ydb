@@ -1,7 +1,7 @@
-#include "coreconn.h" 
+#include "coreconn.h"
 
 #include "remote_connection.h"
- 
+
 #include <util/datetime/base.h>
 #include <util/generic/yexception.h>
 #include <util/network/socket.h>

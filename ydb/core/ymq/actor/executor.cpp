@@ -1,7 +1,7 @@
-#include "executor.h" 
+#include "executor.h"
 #include "log.h"
 #include "cfg.h"
- 
+
 #include <ydb/core/protos/tx_proxy.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 
@@ -13,12 +13,12 @@
 
 #include <ydb/library/yql/minikql/mkql_node_serialization.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
- 
+
 #include <util/generic/ptr.h>
 #include <util/generic/utility.h>
 
 namespace NKikimr::NSQS {
- 
+
 constexpr ui64 EXECUTE_RETRY_WAKEUP_TAG = 1;
 constexpr ui64 COMPILE_RETRY_WAKEUP_TAG = 2;
 
@@ -115,32 +115,32 @@ const char* TExecutorBuilder::GetQueryById(size_t idx) {
     return query;
 }
 
-TMiniKqlExecutionActor::TMiniKqlExecutionActor( 
+TMiniKqlExecutionActor::TMiniKqlExecutionActor(
         const TActorId sender,
         TString requestId,
-        THolder<TRequest> req, 
+        THolder<TRequest> req,
         bool retryOnTimeout,
         const TQueuePath& path, // queue or user
         const TIntrusivePtr<TTransactionCounters>& counters,
         TSqsEvents::TExecutedCallback cb)
-    : Sender_(sender) 
+    : Sender_(sender)
     , RequestId_(std::move(requestId))
-    , Cb_(cb) 
-    , Request_(std::move(req)) 
+    , Cb_(cb)
+    , Request_(std::move(req))
     , Counters_(counters)
     , QueuePath_(path)
     , RetryOnTimeout_(retryOnTimeout)
-{ 
+{
     DebugInfo->ExecutorActors.emplace(RequestId_, this);
-} 
- 
+}
+
 TMiniKqlExecutionActor::~TMiniKqlExecutionActor() {
     DebugInfo->ExecutorActors.EraseKeyValue(RequestId_, this);
 }
 
 void TMiniKqlExecutionActor::Bootstrap() {
     StartTs_ = TActivationContext::Now();
- 
+
     auto& transaction = *Request_->Record.MutableTransaction();
     if (RequestId_) {
         transaction.SetUserRequestId(RequestId_);
@@ -171,57 +171,57 @@ void TMiniKqlExecutionActor::Bootstrap() {
             LogRequestDuration();
             PassAway();
             return;
-        } 
-    } 
- 
-    if (mkqlTx.HasProgram() && mkqlTx.GetProgram().HasText()) { 
-        MkqlProgramText_ = mkqlTx.GetProgram().GetText(); 
+        }
+    }
+
+    if (mkqlTx.HasProgram() && mkqlTx.GetProgram().HasText()) {
+        MkqlProgramText_ = mkqlTx.GetProgram().GetText();
         const bool compileMode = mkqlTx.GetMode() == NKikimrTxUserProxy::TMiniKQLTransaction::COMPILE;
         Mode_ = compileMode ? EMode::Compile : EMode::CompileAndExec;
         CompileProgram(compileMode);
-    } else { 
+    } else {
         Mode_ = EMode::Exec;
         ProceedWithExecution();
-    } 
- 
-    Become(&TMiniKqlExecutionActor::AwaitState); 
-} 
- 
+    }
+
+    Become(&TMiniKqlExecutionActor::AwaitState);
+}
+
 void TMiniKqlExecutionActor::CompileProgram(bool forceRefresh) {
-    auto compileEv = MakeHolder<TMiniKQLCompileServiceEvents::TEvCompile>(MkqlProgramText_); 
-    compileEv->ForceRefresh = forceRefresh; 
-    if (!CompileResolveCookies_.empty()) { 
-        compileEv->CompileResolveCookies = std::move(CompileResolveCookies_); 
-    } 
+    auto compileEv = MakeHolder<TMiniKQLCompileServiceEvents::TEvCompile>(MkqlProgramText_);
+    compileEv->ForceRefresh = forceRefresh;
+    if (!CompileResolveCookies_.empty()) {
+        compileEv->CompileResolveCookies = std::move(CompileResolveCookies_);
+    }
     RLOG_SQS_TRACE(GetRequestType() << " Queue " << TLogQueueName(QueuePath_) << " Compile program: " << MkqlProgramText_);
     Send(MakeMiniKQLCompileServiceID(), compileEv.Release());
-    CompilationPending_ = true; 
+    CompilationPending_ = true;
     INC_COUNTER(Counters_, CompileQueryCount);
-} 
- 
+}
+
 void TMiniKqlExecutionActor::ProceedWithExecution() {
-    if (!CompilationPending_) { 
-        THolder<TRequest> ev = MakeHolder<TRequest>(); 
-        ev->Record.CopyFrom(Request_->Record); 
- 
+    if (!CompilationPending_) {
+        THolder<TRequest> ev = MakeHolder<TRequest>();
+        ev->Record.CopyFrom(Request_->Record);
+
         RLOG_SQS_TRACE(GetRequestType() << " Queue " << TLogQueueName(QueuePath_) << " Execute program: " << ev->Record << ". Params: " << MiniKQLParamsToString(ProtoParamsForDebug));
         StartExecutionTs_ = TActivationContext::Now();
         Send(MakeTxProxyID(), std::move(ev));
         ++AttemptNumber_;
 
         INC_COUNTER(Counters_, TransactionsInfly);
-    } 
-} 
- 
+    }
+}
+
 void TMiniKqlExecutionActor::HandleCompile(TMiniKQLCompileServiceEvents::TEvCompileStatus::TPtr& ev) {
     if (Mode_ == EMode::CompileAndExec) {
         const TDuration duration = TActivationContext::Now() - StartTs_;
         RLOG_SQS_DEBUG(GetRequestType() << " Queue " << TLogQueueName(QueuePath_) << " Compilation duration: " << duration.MilliSeconds() << "ms");
     }
-    const auto& result = ev->Get()->Result; 
-    auto& mkqlTx = *Request_->Record.MutableTransaction()->MutableMiniKQLTransaction(); 
- 
-    if (!result.Errors.Empty()) { 
+    const auto& result = ev->Get()->Result;
+    auto& mkqlTx = *Request_->Record.MutableTransaction()->MutableMiniKQLTransaction();
+
+    if (!result.Errors.Empty()) {
         const TString errors = result.Errors.ToString();
         RLOG_SQS_ERROR(GetRequestType() << " Queue " << TLogQueueName(QueuePath_) << " Errors while compiling program: " << errors << ", program text: " << MkqlProgramText_);
 
@@ -248,32 +248,32 @@ void TMiniKqlExecutionActor::HandleCompile(TMiniKQLCompileServiceEvents::TEvComp
             LogRequestDuration();
             PassAway();
         }
-        return; 
+        return;
     } else {
         PrevAttemptWaitTime_ = TDuration::Zero();
-    } 
- 
-    if (mkqlTx.GetMode() == NKikimrTxUserProxy::TMiniKQLTransaction::COMPILE) { 
-        NKikimrTxUserProxy::TEvProposeTransactionStatus resp; 
-        resp.SetStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete); 
-        resp.MutableMiniKQLCompileResults()->SetCompiledProgram(result.CompiledProgram); 
+    }
+
+    if (mkqlTx.GetMode() == NKikimrTxUserProxy::TMiniKQLTransaction::COMPILE) {
+        NKikimrTxUserProxy::TEvProposeTransactionStatus resp;
+        resp.SetStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete);
+        resp.MutableMiniKQLCompileResults()->SetCompiledProgram(result.CompiledProgram);
         RLOG_SQS_TRACE(GetRequestType() << " Queue " << TLogQueueName(QueuePath_) << " Compile program response: " << resp);
         Send(Sender_, MakeHolder<TSqsEvents::TEvExecuted>(resp, Cb_, ui64(0)));
         LogRequestDuration();
         PassAway();
-        return; 
-    } 
- 
-    auto& pgm = *mkqlTx.MutableProgram(); 
-    pgm.ClearText(); 
-    pgm.SetBin(result.CompiledProgram); 
- 
-    CompileResolveCookies_ = std::move(ev->Get()->CompileResolveCookies); 
- 
-    CompilationPending_ = false; 
+        return;
+    }
+
+    auto& pgm = *mkqlTx.MutableProgram();
+    pgm.ClearText();
+    pgm.SetBin(result.CompiledProgram);
+
+    CompileResolveCookies_ = std::move(ev->Get()->CompileResolveCookies);
+
+    CompilationPending_ = false;
     ProceedWithExecution();
-} 
- 
+}
+
 template<typename TKikimrResultRecord>
 bool TMiniKqlExecutionActor::ShouldRetryOnFail(const TKikimrResultRecord& record) const {
     const auto status = NKikimr::NTxProxy::TResultStatus::EStatus(record.GetStatus());
@@ -284,7 +284,7 @@ bool TMiniKqlExecutionActor::ShouldRetryOnFail(const TKikimrResultRecord& record
 
 void TMiniKqlExecutionActor::HandleResponse(TResponse::TPtr& ev) {
     const TDuration executionDuration = TActivationContext::Now() - StartExecutionTs_;
-    auto& response = *ev->Get(); 
+    auto& response = *ev->Get();
     auto& record = response.Record;
     const auto status = NKikimr::NTxProxy::TResultStatus::EStatus(record.GetStatus());
     RLOG_SQS_TRACE(GetRequestType() << " Queue " << TLogQueueName(QueuePath_) << " HandleResponse " << record);
@@ -296,18 +296,18 @@ void TMiniKqlExecutionActor::HandleResponse(TResponse::TPtr& ev) {
             Counters_->QueryTypeCounters[*QueryId_].TransactionsCount->Inc();
         }
     }
- 
-    const bool resolveError = 
-        status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError || 
-        status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardNotAvailable; 
- 
+
+    const bool resolveError =
+        status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError ||
+        status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardNotAvailable;
+
     if (resolveError && CompilationRetries_ > 0 && !MkqlProgramText_.empty()) {
         RLOG_SQS_INFO(GetRequestType() << " Queue " << TLogQueueName(QueuePath_) << " Resolve error. Retrying mkql request");
         --CompilationRetries_;
         ScheduleRetry(true);
-        return; 
-    } 
- 
+        return;
+    }
+
     bool retryableError = false;
     bool failed = false;
     if (status != TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete
@@ -356,8 +356,8 @@ void TMiniKqlExecutionActor::HandleResponse(TResponse::TPtr& ev) {
             PassAway();
         }
     }
-} 
- 
+}
+
 void TMiniKqlExecutionActor::HandleWakeup(TEvWakeup::TPtr& ev) {
     Y_VERIFY(ev->Get()->Tag != 0);
     switch (ev->Get()->Tag) {

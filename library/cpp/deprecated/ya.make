@@ -4,7 +4,7 @@ RECURSE(
     accessors
     accessors/ut
     autoarray
-    base64 
+    base64
     datafile
     dater_old
     dater_old/ut

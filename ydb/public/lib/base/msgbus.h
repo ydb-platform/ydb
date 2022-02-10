@@ -77,8 +77,8 @@ enum {
     MTYPE_CLIENT_CMS_RESPONSE = 10466,
     MTYPE_CLIENT_RESOURCE_BROKER_SET_CONFIG = 10467,
     MTYPE_CLIENT_CHOOSE_PROXY = 10468,
-    MTYPE_CLIENT_SQS_REQUEST = 10469, 
-    MTYPE_CLIENT_SQS_RESPONSE = 10470, 
+    MTYPE_CLIENT_SQS_REQUEST = 10469,
+    MTYPE_CLIENT_SQS_RESPONSE = 10470,
     MTYPE_CLIENT_WHOAMI = 10471,
     MTYPE_CLIENT_STREAM_REQUEST = 10472,
     MTYPE_CLIENT_S3_LISTING_REQUEST = 10474,
@@ -141,8 +141,8 @@ struct TBusNodeRegistrationResponse : TBusMessage<TBusNodeRegistrationResponse, 
 struct TBusCmsRequest : TBusMessage<TBusCmsRequest, NKikimrClient::TCmsRequest, MTYPE_CLIENT_CMS_REQUEST> {};
 struct TBusCmsResponse : TBusMessage<TBusCmsResponse, NKikimrClient::TCmsResponse, MTYPE_CLIENT_CMS_RESPONSE> {};
 struct TBusChooseProxy : TBusMessage<TBusChooseProxy, NKikimrClient::TChooseProxyRequest, MTYPE_CLIENT_CHOOSE_PROXY> {};
-struct TBusSqsRequest : TBusMessage<TBusSqsRequest, NKikimrClient::TSqsRequest, MTYPE_CLIENT_SQS_REQUEST> {}; 
-struct TBusSqsResponse : TBusMessage<TBusSqsResponse, NKikimrClient::TSqsResponse, MTYPE_CLIENT_SQS_RESPONSE> {}; 
+struct TBusSqsRequest : TBusMessage<TBusSqsRequest, NKikimrClient::TSqsRequest, MTYPE_CLIENT_SQS_REQUEST> {};
+struct TBusSqsResponse : TBusMessage<TBusSqsResponse, NKikimrClient::TSqsResponse, MTYPE_CLIENT_SQS_RESPONSE> {};
 struct TBusWhoAmI : TBusMessage<TBusWhoAmI, NKikimrClient::TWhoAmI, MTYPE_CLIENT_WHOAMI> {};
 struct TBusStreamRequest : TBusMessage<TBusStreamRequest, NKikimrClient::TRequest, MTYPE_CLIENT_STREAM_REQUEST> {};
 struct TBusS3ListingRequest : TBusMessage<TBusS3ListingRequest, NKikimrClient::TS3ListingRequest, MTYPE_CLIENT_S3_LISTING_REQUEST> {};

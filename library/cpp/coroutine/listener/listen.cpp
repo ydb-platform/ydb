@@ -139,9 +139,9 @@ private:
                             if (err == ECANCELED) {
                                 break;
                             }
-                            if (errno == EMFILE) { 
-                                C_->SleepT(TDuration::MilliSeconds(1)); 
-                            } 
+                            if (errno == EMFILE) {
+                                C_->SleepT(TDuration::MilliSeconds(1));
+                            }
 
                             ythrow TSystemError(err) << "can not accept";
                         }

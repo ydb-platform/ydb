@@ -10,7 +10,7 @@ SRCS(
     common.cpp
     encode.cpp
     http_url.h
-    location.cpp 
+    location.cpp
     other.cpp
     parse.cpp
     qargs.cpp

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/system/align.h> 
+#include <util/system/align.h>
 #include <util/system/yassert.h>
 #include <util/system/defaults.h>
 #include <util/generic/noncopyable.h>
@@ -95,9 +95,9 @@ public:
         curseg->freepos += last_ins_size, last_free -= 1;
         return (T*)rv;
     }
-    size_t get_segment_size() const { 
-        return segment_size; 
-    } 
+    size_t get_segment_size() const {
+        return segment_size;
+    }
     bool contains(const T* ptr) const {
         for (seg_const_iterator i = segs.begin(), ie = segs.end(); i != ie; ++i)
             if ((char*)ptr >= (char*)i->data && (char*)ptr < (char*)i->data + i->freepos)
@@ -186,9 +186,9 @@ public:
 
 template <typename T, typename C>
 inline T* pool_push(segmented_pool<C>& pool, const T* v) {
-    static_assert(sizeof(C) == 1, "only char type supported"); 
+    static_assert(sizeof(C) == 1, "only char type supported");
     size_t len = SizeOf(v);
-    C* buf = pool.append(nullptr, AlignUp(len)); 
+    C* buf = pool.append(nullptr, AlignUp(len));
     memcpy(buf, v, len);
     return (T*)buf;
 }

@@ -1,23 +1,23 @@
-#pragma once 
+#pragma once
 
 #include "persqueue_utils.h"
 
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/core/grpc_services/rpc_deferrable.h>
 #include <ydb/core/grpc_services/rpc_calls.h>
- 
+
 
 #include <ydb/core/client/server/msgbus_server_pq_metacache.h>
 #include <ydb/core/client/server/msgbus_server_persqueue.h>
 
 #include <ydb/core/base/events.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
- 
+
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 
 #include <library/cpp/containers/disjoint_interval_tree/disjoint_interval_tree.h>
- 
+
 
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/writer/writer.h>
@@ -37,7 +37,7 @@
 #include <util/system/compiler.h>
 
 namespace NKikimr::NGRpcProxy::V1 {
- 
+
 using namespace Ydb;
 
 using namespace NKikimr::NGRpcService;
@@ -49,7 +49,7 @@ void FillIssue(Ydb::Issue::IssueMessage* issue, const PersQueue::ErrorCode::Erro
 Ydb::StatusIds::StatusCode ConvertPersQueueInternalCodeToStatus(const PersQueue::ErrorCode::ErrorCode code);
 
 const TString& TopicPrefix(const TActorContext& ctx);
- 
+
 static const TDuration CHECK_ACL_DELAY = TDuration::Minutes(5);
 
 // Codec ID size in bytes
@@ -97,9 +97,9 @@ struct TCommitCookie {
 
 
 struct TEvPQProxy {
-    enum EEv { 
+    enum EEv {
         EvWriteInit = EventSpaceBegin(TKikimrEvents::ES_PQ_PROXY_NEW), // TODO: Replace 'NEW' with version or something
-        EvWrite, 
+        EvWrite,
         EvDone,
         EvReadInit,
         EvRead,
@@ -130,8 +130,8 @@ struct TEvPQProxy {
         EvUpdateToken,
         EvCommitRange,
         EvEnd
-    }; 
- 
+    };
+
 
     struct TEvReadSessionStatus : public TEventPB<TEvReadSessionStatus, NKikimrPQ::TReadSessionStatus, EvReadSessionStatus> {
     };
@@ -199,20 +199,20 @@ struct TEvPQProxy {
         TEvWriteInit(PersQueue::V1::StreamingWriteClientMessage&& req, const TString& peerName)
             : Request(std::move(req))
             , PeerName(peerName)
-        { } 
- 
+        { }
+
         PersQueue::V1::StreamingWriteClientMessage Request;
         TString PeerName;
-    }; 
- 
-    struct TEvWrite : public NActors::TEventLocal<TEvWrite, EvWrite> { 
+    };
+
+    struct TEvWrite : public NActors::TEventLocal<TEvWrite, EvWrite> {
         explicit TEvWrite(PersQueue::V1::StreamingWriteClientMessage&& req)
             : Request(std::move(req))
-        { } 
- 
+        { }
+
         PersQueue::V1::StreamingWriteClientMessage Request;
-    }; 
- 
+    };
+
     struct TEvDone : public NActors::TEventLocal<TEvDone, EvDone> {
         TEvDone()
         { }
@@ -447,33 +447,33 @@ struct TEvPQProxy {
         bool Init;
     };
 
-}; 
- 
+};
+
 
 
 /// WRITE ACTOR
-class TWriteSessionActor : public NActors::TActorBootstrapped<TWriteSessionActor> { 
+class TWriteSessionActor : public NActors::TActorBootstrapped<TWriteSessionActor> {
 using IContext = NGRpcServer::IGRpcStreamingContext<PersQueue::V1::StreamingWriteClientMessage, PersQueue::V1::StreamingWriteServerMessage>;
 using TEvDescribeTopicsResponse = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsResponse;
 using TEvDescribeTopicsRequest = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsRequest;
 
-public: 
+public:
     TWriteSessionActor(NKikimr::NGRpcService::TEvStreamPQWriteRequest* request, const ui64 cookie,
                        const NActors::TActorId& schemeCache, const NActors::TActorId& newSchemeCache,
                        TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const TMaybe<TString> clientDC,
                        const NPersQueue::TTopicsListController& topicsController);
-    ~TWriteSessionActor(); 
- 
-    void Bootstrap(const NActors::TActorContext& ctx); 
- 
-    void Die(const NActors::TActorContext& ctx) override; 
- 
+    ~TWriteSessionActor();
+
+    void Bootstrap(const NActors::TActorContext& ctx);
+
+    void Die(const NActors::TActorContext& ctx) override;
+
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::FRONT_PQ_WRITE; }
-private: 
+private:
     STFUNC(StateFunc) {
-        switch (ev->GetTypeRewrite()) { 
+        switch (ev->GetTypeRewrite()) {
             CFunc(NActors::TEvents::TSystem::Wakeup, HandleWakeup);
- 
+
             HFunc(IContext::TEvReadFinished, Handle);
             HFunc(IContext::TEvWriteFinished, Handle);
             CFunc(IContext::TEvNotifiedWhenDone::EventType, HandleDone);
@@ -498,11 +498,11 @@ private:
             HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
             HFunc(NKqp::TEvKqp::TEvProcessResponse, Handle);
 
-        default: 
-            break; 
-        }; 
-    } 
- 
+        default:
+            break;
+        };
+    }
+
 
     void Handle(IContext::TEvReadFinished::TPtr& ev, const TActorContext &ctx);
     void Handle(IContext::TEvWriteFinished::TPtr& ev, const TActorContext &ctx);
@@ -542,8 +542,8 @@ private:
     void Handle(TEvPersQueue::TEvGetPartitionIdForWriteResponse::TPtr& ev, const NActors::TActorContext& ctx);
 
     void HandlePoison(TEvPQProxy::TEvDieCommand::TPtr& ev, const NActors::TActorContext& ctx);
-    void HandleWakeup(const NActors::TActorContext& ctx); 
- 
+    void HandleWakeup(const NActors::TActorContext& ctx);
+
     void CloseSession(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode errorCode, const NActors::TActorContext& ctx);
 
     void CheckFinish(const NActors::TActorContext& ctx);
@@ -553,7 +553,7 @@ private:
     void SetupCounters();
     void SetupCounters(const TString& cloudId, const TString& dbId, const TString& folderId);
 
-private: 
+private:
     std::unique_ptr<NKikimr::NGRpcService::TEvStreamPQWriteRequest> Request;
 
     enum EState {
@@ -669,8 +669,8 @@ private:
     TInstant StartTime;
     NKikimr::NPQ::TPercentileCounter InitLatency;
     NKikimr::NPQ::TMultiCounter SLIBigLatency;
-}; 
- 
+};
+
 
 class TReadInitAndAuthActor : public NActors::TActorBootstrapped<TReadInitAndAuthActor> {
 using TEvDescribeTopicsResponse = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsResponse;
@@ -1219,4 +1219,4 @@ public:
 
 
 
-} 
+}

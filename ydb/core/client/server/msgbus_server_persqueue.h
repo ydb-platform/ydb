@@ -1,6 +1,6 @@
 #pragma once
- 
-#include "grpc_server.h" 
+
+#include "grpc_server.h"
 #include "msgbus_tabletreq.h"
 
 #include <ydb/core/base/tablet_pipe.h>

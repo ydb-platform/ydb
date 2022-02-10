@@ -233,7 +233,7 @@ void TExecutor::EnqueueWork(TArrayRef<IWorkItem* const> wis) {
     }
 }
 
-size_t TExecutor::GetWorkQueueSize() const { 
+size_t TExecutor::GetWorkQueueSize() const {
     return WorkItems.Size();
 }
 
@@ -259,7 +259,7 @@ TString TExecutor::GetStatusSingleLine() const {
     return ss.Str();
 }
 
-TExecutorStatus TExecutor::GetStatusRecordInternal() const { 
+TExecutorStatus TExecutor::GetStatusRecordInternal() const {
     TExecutorStatus r;
 
     r.WorkQueueSize = GetWorkQueueSize();
@@ -279,7 +279,7 @@ TExecutorStatus TExecutor::GetStatusRecordInternal() const {
     return r;
 }
 
-bool TExecutor::IsInExecutorThread() const { 
+bool TExecutor::IsInExecutorThread() const {
     return ThreadCurrentExecutor == this;
 }
 

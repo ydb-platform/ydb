@@ -11,7 +11,7 @@ struct TIntrusiveListDefaultTag {};
  * two-way linked list
  */
 template <class T, class Tag = TIntrusiveListDefaultTag>
-class TIntrusiveListItem { 
+class TIntrusiveListItem {
 private:
     using TListItem = TIntrusiveListItem<T, Tag>;
 
@@ -110,16 +110,16 @@ public:
     }
 
 private:
-    inline TIntrusiveListItem(const TIntrusiveListItem&) = delete; 
-    inline TIntrusiveListItem& operator=(const TIntrusiveListItem&) = delete; 
- 
-private: 
+    inline TIntrusiveListItem(const TIntrusiveListItem&) = delete;
+    inline TIntrusiveListItem& operator=(const TIntrusiveListItem&) = delete;
+
+private:
     TListItem* Next_;
     TListItem* Prev_;
 };
 
 template <class T, class Tag>
-class TIntrusiveList { 
+class TIntrusiveList {
 private:
     using TListItem = TIntrusiveListItem<T, Tag>;
 
@@ -342,8 +342,8 @@ public:
 public:
     inline TIntrusiveList() noexcept = default;
 
-    inline ~TIntrusiveList() = default; 
- 
+    inline ~TIntrusiveList() = default;
+
     inline TIntrusiveList(TIntrusiveList&& right) noexcept {
         this->Swap(right);
     }
@@ -362,7 +362,7 @@ public:
     }
 
     inline size_t Size() const noexcept {
-        return std::distance(Begin(), End()); 
+        return std::distance(Begin(), End());
     }
 
     inline void Remove(TListItem* item) noexcept {
@@ -577,10 +577,10 @@ public:
     }
 
 private:
-    inline TIntrusiveList(const TIntrusiveList&) = delete; 
-    inline TIntrusiveList& operator=(const TIntrusiveList&) = delete; 
- 
-private: 
+    inline TIntrusiveList(const TIntrusiveList&) = delete;
+    inline TIntrusiveList& operator=(const TIntrusiveList&) = delete;
+
+private:
     TListItem End_;
 };
 
@@ -687,16 +687,16 @@ public:
     template <class TListItem, class TNode>
     class TIteratorBase {
     public:
-        using TItem = TListItem; 
-        using TReference = TNode&; 
-        using TPointer = TNode*; 
- 
-        using difference_type = std::ptrdiff_t; 
-        using value_type = TNode; 
-        using pointer = TPointer; 
-        using reference = TReference; 
-        using iterator_category = std::forward_iterator_tag; 
- 
+        using TItem = TListItem;
+        using TReference = TNode&;
+        using TPointer = TNode*;
+
+        using difference_type = std::ptrdiff_t;
+        using value_type = TNode;
+        using pointer = TPointer;
+        using reference = TReference;
+        using iterator_category = std::forward_iterator_tag;
+
         inline TIteratorBase(TListItem* item) noexcept
             : Item_(item)
         {
@@ -766,7 +766,7 @@ public:
     }
 
     inline size_t Size() const noexcept {
-        return std::distance(Begin(), End()); 
+        return std::distance(Begin(), End());
     }
 
     inline void Clear() noexcept {

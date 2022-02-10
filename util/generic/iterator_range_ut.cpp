@@ -1,4 +1,4 @@
-#include "iterator_range.h" 
+#include "iterator_range.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/algorithm.h>
@@ -6,9 +6,9 @@
 
 Y_UNIT_TEST_SUITE(IteratorRange) {
     Y_UNIT_TEST(DefaultConstructor) {
-        TIteratorRange<int*> range; 
-        UNIT_ASSERT(range.empty()); 
-    } 
+        TIteratorRange<int*> range;
+        UNIT_ASSERT(range.empty());
+    }
 
     Y_UNIT_TEST(DefaultConstructorSentinel) {
         TIteratorRange<int*, void*> range;
@@ -16,11 +16,11 @@ Y_UNIT_TEST_SUITE(IteratorRange) {
     }
 
     Y_UNIT_TEST(RangeBasedForLoop) {
-        // compileability test 
-        for (int i : TIteratorRange<int*>()) { 
-            Y_UNUSED(i); 
-        } 
-    } 
+        // compileability test
+        for (int i : TIteratorRange<int*>()) {
+            Y_UNUSED(i);
+        }
+    }
 
     Y_UNIT_TEST(RangeBasedForLoopSentinel) {
         // compileability test
@@ -30,11 +30,11 @@ Y_UNIT_TEST_SUITE(IteratorRange) {
     }
 
     Y_UNIT_TEST(Works) {
-        const int values[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10}; 
-        auto range = MakeIteratorRange(values, values + Y_ARRAY_SIZE(values)); 
-        UNIT_ASSERT_VALUES_EQUAL(range.size(), Y_ARRAY_SIZE(values)); 
-        UNIT_ASSERT(Equal(range.begin(), range.end(), values)); 
-        UNIT_ASSERT(!range.empty()); 
+        const int values[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+        auto range = MakeIteratorRange(values, values + Y_ARRAY_SIZE(values));
+        UNIT_ASSERT_VALUES_EQUAL(range.size(), Y_ARRAY_SIZE(values));
+        UNIT_ASSERT(Equal(range.begin(), range.end(), values));
+        UNIT_ASSERT(!range.empty());
     }
 
     Y_UNIT_TEST(WorksSentinel) {
@@ -89,10 +89,10 @@ Y_UNIT_TEST_SUITE(IteratorRange) {
     }
 
     Y_UNIT_TEST(CanUseInAlgorithms) {
-        const int values[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10}; 
-        auto range = MakeIteratorRange(values, values + Y_ARRAY_SIZE(values)); 
-        // more like compileability test 
-        // we should be able to use TIteratorRange as a container parameter for standard algorithms 
-        UNIT_ASSERT(AllOf(range, [](int x) { return x > 0; })); 
-    } 
+        const int values[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+        auto range = MakeIteratorRange(values, values + Y_ARRAY_SIZE(values));
+        // more like compileability test
+        // we should be able to use TIteratorRange as a container parameter for standard algorithms
+        UNIT_ASSERT(AllOf(range, [](int x) { return x > 0; }));
+    }
 }

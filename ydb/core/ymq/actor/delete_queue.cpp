@@ -1,69 +1,69 @@
-#include "action.h" 
+#include "action.h"
 #include "common_batch_actor.h"
 #include "error.h"
 #include "queue_schema.h"
- 
-#include <util/string/join.h> 
- 
+
+#include <util/string/join.h>
+
 namespace NKikimr::NSQS {
- 
-class TDeleteQueueActor 
-    : public TActionActor<TDeleteQueueActor> 
-{ 
-public: 
+
+class TDeleteQueueActor
+    : public TActionActor<TDeleteQueueActor>
+{
+public:
     TDeleteQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
         : TActionActor(sourceSqsRequest, EAction::DeleteQueue, std::move(cb))
-    { 
+    {
         UserName_ = Request().GetAuth().GetUserName();
-        Response_.MutableDeleteQueue()->SetRequestId(RequestId_); 
- 
+        Response_.MutableDeleteQueue()->SetRequestId(RequestId_);
+
         CopySecurityToken(Request());
    }
 
-private: 
-    bool DoValidate() override { 
-        if (!GetQueueName()) { 
+private:
+    bool DoValidate() override {
+        if (!GetQueueName()) {
             MakeError(Response_.MutableDeleteQueue(), NErrors::MISSING_PARAMETER, "No QueueName parameter.");
-            return false; 
-        } 
- 
-        return true; 
-    } 
- 
+            return false;
+        }
+
+        return true;
+    }
+
     TError* MutableErrorDesc() override {
         return Response_.MutableDeleteQueue()->MutableError();
     }
 
     void DoAction() override {
-        Become(&TThis::StateFunc); 
- 
+        Become(&TThis::StateFunc);
+
         SchemaActor_ = Register(
             new TDeleteQueueSchemaActorV2(
                 TQueuePath(Cfg().GetRoot(), UserName_, GetQueueName()), SelfId(), RequestId_, UserCounters_)
         );
-    } 
- 
-    TString DoGetQueueName() const override { 
+    }
+
+    TString DoGetQueueName() const override {
         return Request().GetQueueName();
-    } 
- 
-private: 
+    }
+
+private:
     STATEFN(StateFunc) {
-        switch (ev->GetTypeRewrite()) { 
+        switch (ev->GetTypeRewrite()) {
             hFunc(TEvWakeup,          HandleWakeup);
             hFunc(TSqsEvents::TEvQueueDeleted, HandleQueueDeleted);
-        } 
-    } 
- 
+        }
+    }
+
     void HandleQueueDeleted(TSqsEvents::TEvQueueDeleted::TPtr& ev) {
         SchemaActor_ = TActorId();
         if (!ev->Get()->Success) {
             MakeError(Response_.MutableDeleteQueue(), NErrors::INTERNAL_FAILURE, ev->Get()->Message);
-        } 
- 
+        }
+
         SendReplyAndDie();
-    } 
- 
+    }
+
     void PassAway() override {
         if (SchemaActor_) {
             Send(SchemaActor_, new TEvPoisonPill());
@@ -76,10 +76,10 @@ private:
         return SourceSqsRequest_.GetDeleteQueue();
     }
 
-private: 
+private:
     TActorId SchemaActor_;
-}; 
- 
+};
+
 class TDeleteQueueBatchActor
     : public TCommonBatchActor<TDeleteQueueBatchActor>
 {
@@ -149,8 +149,8 @@ private:
 
 IActor* CreateDeleteQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
     return new TDeleteQueueActor(sourceSqsRequest, std::move(cb));
-} 
- 
+}
+
 IActor* CreateDeleteQueueBatchActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
     return new TDeleteQueueBatchActor(sourceSqsRequest, std::move(cb));
 }

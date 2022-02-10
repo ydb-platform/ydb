@@ -6,7 +6,7 @@
 #include <util/memory/alloc.h>
 
 #include <vector>
-#include <initializer_list> 
+#include <initializer_list>
 
 template <class T, class A>
 class TVector: public std::vector<T, TReboundAllocator<A, T>> {
@@ -58,15 +58,15 @@ public:
     }
 
     inline TVector(std::initializer_list<T> il)
-        : TBase(il) 
-    { 
-    } 
- 
+        : TBase(il)
+    {
+    }
+
     inline TVector(std::initializer_list<T> il, const typename TBase::allocator_type& a)
-        : TBase(il, a) 
-    { 
-    } 
- 
+        : TBase(il, a)
+    {
+    }
+
     inline TVector(const TSelf& src)
         : TBase(src)
     {
@@ -93,11 +93,11 @@ public:
         return *this;
     }
 
-    inline TSelf& operator=(std::initializer_list<T> il) { 
-        this->assign(il.begin(), il.end()); 
-        return *this; 
-    } 
- 
+    inline TSelf& operator=(std::initializer_list<T> il) {
+        this->assign(il.begin(), il.end());
+        return *this;
+    }
+
     inline explicit operator bool() const noexcept {
         return !this->empty();
     }

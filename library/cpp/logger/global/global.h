@@ -24,8 +24,8 @@ public:
     {
     }
 
-    TGlobalLog(THolder<TLogBackend> backend) 
-        : TLog(std::move(backend)) 
+    TGlobalLog(THolder<TLogBackend> backend)
+        : TLog(std::move(backend))
     {
     }
 };
@@ -40,8 +40,8 @@ public:
     {
     }
 
-    TNullLog(THolder<TLogBackend> backend) 
-        : TLog(std::move(backend)) 
+    TNullLog(THolder<TLogBackend> backend)
+        : TLog(std::move(backend))
     {
     }
 };

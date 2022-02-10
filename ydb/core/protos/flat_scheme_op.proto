@@ -1412,17 +1412,17 @@ message TShardError {
     optional string Explain = 2;
 };
 
-message TBackupProgress { 
-    optional uint32 NotCompleteYet = 1; 
-    optional uint32 Total = 2; 
+message TBackupProgress {
+    optional uint32 NotCompleteYet = 1;
+    optional uint32 Total = 2;
     optional uint32 ErrorCount = 3;
     optional uint64 StartTime = 4;
     repeated TShardError Errors = 5;
     optional TYTSettings YTSettings = 6;
     optional uint64 DataTotalSize = 7;
     optional uint64 TxId = 8;
-} 
- 
+}
+
 message TLastBackupResult {
     optional uint32 ErrorCount = 1;
     optional uint64 CompleteTimeStamp = 2;
@@ -1440,7 +1440,7 @@ message TPathDescription {
     optional TTableDescription Table = 3;           // for table
     repeated TTablePartition TablePartitions = 4;   // for table
     optional TPersQueueGroupDescription PersQueueGroup = 5; // for pq group
-    optional TBackupProgress BackupProgress = 6; 
+    optional TBackupProgress BackupProgress = 6;
     repeated TLastBackupResult LastBackupResult = 7;
     optional NKikimrTableStats.TTableStats TableStats = 8;
     optional NKikimrTabletBase.TMetrics TabletMetrics = 9;

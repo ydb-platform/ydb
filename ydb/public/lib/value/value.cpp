@@ -1,13 +1,13 @@
-#include "value.h" 
- 
+#include "value.h"
+
 #include <ydb/library/yql/public/decimal/yql_decimal.h>
 
 #include <library/cpp/string_utils/base64/base64.h>
 
-#include <util/charset/utf8.h> 
-#include <util/string/cast.h> 
+#include <util/charset/utf8.h>
+#include <util/string/cast.h>
 #include <util/string/escape.h>
-#include <util/string/printf.h> 
+#include <util/string/printf.h>
 
 namespace NKikimr {
 namespace NClient {
@@ -23,10 +23,10 @@ TValue TValue::Create(const NKikimrMiniKQL::TValue& value, const NKikimrMiniKQL:
     return TValue(const_cast<NKikimrMiniKQL::TValue&>(value), const_cast<NKikimrMiniKQL::TType&>(type));
 }
 
-TValue TValue::Create(const NKikimrMiniKQL::TResult& result) { 
-    return TValue::Create(result.GetValue(), result.GetType()); 
-} 
- 
+TValue TValue::Create(const NKikimrMiniKQL::TResult& result) {
+    return TValue::Create(result.GetValue(), result.GetType());
+}
+
 bool TValue::HaveValue() const {
     return !IsNull();
 }
@@ -38,24 +38,24 @@ bool TValue::IsNull() const {
 }
 
 TValue TValue::operator [](const char* name) const {
-    return this->operator [](TStringBuf(name)); 
-} 
- 
-int TValue::GetMemberIndex(TStringBuf name) const { 
-    // TODO: add support for Dict 
-    Y_ASSERT(Type.HasStruct()); 
-    const auto& structField = Type.GetStruct(); 
-    size_t size = structField.MemberSize(); 
-    for (size_t n = 0; n < size; ++n) { 
-        const auto& memberField = structField.GetMember(n); 
-        if (memberField.GetName() == name) { 
-            return n; 
-        } 
-    } 
-    ythrow yexception() << "Unknown Struct member name: " << name; 
-} 
- 
-TValue TValue::operator [](const TStringBuf name) const { 
+    return this->operator [](TStringBuf(name));
+}
+
+int TValue::GetMemberIndex(TStringBuf name) const {
+    // TODO: add support for Dict
+    Y_ASSERT(Type.HasStruct());
+    const auto& structField = Type.GetStruct();
+    size_t size = structField.MemberSize();
+    for (size_t n = 0; n < size; ++n) {
+        const auto& memberField = structField.GetMember(n);
+        if (memberField.GetName() == name) {
+            return n;
+        }
+    }
+    ythrow yexception() << "Unknown Struct member name: " << name;
+}
+
+TValue TValue::operator [](const TStringBuf name) const {
     // TODO: add support for Dict
     Y_ASSERT(Type.HasStruct());
     const auto& structField = Type.GetStruct();
@@ -116,10 +116,10 @@ TWriteValue::TWriteValue(NKikimrMiniKQL::TValue& value, NKikimrMiniKQL::TType& t
 {}
 
 TWriteValue TWriteValue::operator [](const char* name) {
-    return this->operator [](TStringBuf(name)); 
-} 
- 
-TWriteValue TWriteValue::operator [](const TStringBuf name) { 
+    return this->operator [](TStringBuf(name));
+}
+
+TWriteValue TWriteValue::operator [](const TStringBuf name) {
     Y_ASSERT(!Type.HasList() && !Type.HasTuple() && !Type.HasDict());
     Type.SetKind(NKikimrMiniKQL::ETypeKind::Struct);
     auto& structField = *Type.MutableStruct();
@@ -138,7 +138,7 @@ TWriteValue TWriteValue::operator [](const TStringBuf name) {
         }
     }
     auto& memberField = *structField.AddMember();
-    memberField.SetName(TString(name)); 
+    memberField.SetName(TString(name));
     return TWriteValue::Create(*Value.AddStruct(), *memberField.MutableType());
 }
 

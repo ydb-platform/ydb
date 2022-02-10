@@ -1,9 +1,9 @@
-#pragma once 
- 
-#include <util/system/defaults.h> 
- 
+#pragma once
+
+#include <util/system/defaults.h>
+
 namespace NKikimr::NSQS {
- 
+
 enum EQueryId {
     DELETE_MESSAGE_ID = 0,
     LOCK_GROUP_ID = 1,
@@ -30,7 +30,7 @@ enum EQueryId {
     READ_OR_REDRIVE_MESSAGE_ID = 22,
     GET_USER_SETTINGS_ID = 23,
     GET_QUEUES_LIST_ID = 24,
- 
+
     QUERY_VECTOR_SIZE,
 };
 

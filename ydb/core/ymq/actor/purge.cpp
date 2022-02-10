@@ -1,20 +1,20 @@
 #include "log.h"
 #include "cfg.h"
 #include "executor.h"
-#include "params.h" 
-#include "purge.h" 
-#include "serviceid.h" 
- 
+#include "params.h"
+#include "purge.h"
+#include "serviceid.h"
+
 #include <ydb/core/ymq/base/counters.h>
 #include <ydb/core/ymq/base/debug_info.h>
 #include <ydb/core/ymq/base/query_id.h>
- 
-using NKikimr::NClient::TValue; 
- 
+
+using NKikimr::NClient::TValue;
+
 namespace NKikimr::NSQS {
- 
+
 TPurgeActor::TPurgeActor(const TQueuePath& queuePath, TIntrusivePtr<TQueueCounters> counters, const TActorId& queueLeader, bool isFifo)
-    : QueuePath_(queuePath) 
+    : QueuePath_(queuePath)
     , RequestId_(CreateGuidAsString())
     , Counters_(std::move(counters))
     , QueueLeader_(queueLeader)
@@ -22,16 +22,16 @@ TPurgeActor::TPurgeActor(const TQueuePath& queuePath, TIntrusivePtr<TQueueCounte
 {
     DebugInfo->QueuePurgeActors.emplace(TStringBuilder() << TLogQueueName(QueuePath_), this);
 }
- 
+
 TPurgeActor::~TPurgeActor() {
     DebugInfo->QueuePurgeActors.EraseKeyValue(TStringBuilder() << TLogQueueName(QueuePath_), this);
 }
- 
+
 void TPurgeActor::Bootstrap() {
     RLOG_SQS_INFO("Create purge actor for queue " << TString(QueuePath_));
-    Become(&TThis::StateFunc); 
-} 
- 
+    Become(&TThis::StateFunc);
+}
+
 void TPurgeActor::MakeGetRetentionOffsetRequest(const ui64 shardId, TShard* shard) {
     shard->KeysTruncated = false;
     const TInstant boundary = shard->TargetBoundary;
@@ -160,7 +160,7 @@ void TPurgeActor::MakeStage2Request(ui64 cleanupVersion, const TValue& messages,
                 notification->NewMessagesCount = static_cast<ui64>(newMessagesCount);
                 Send(QueueLeader_, std::move(notification));
             }
- 
+
             shard->BoundaryPurged = shard->CurrentLastMessage.SentTimestamp;
             if (shard->KeysTruncated) {
                 MakeGetRetentionOffsetRequest(shardId, shard);
@@ -173,7 +173,7 @@ void TPurgeActor::MakeStage2Request(ui64 cleanupVersion, const TValue& messages,
             shard->TargetBoundary = shard->BoundaryPurged;
         }
     };
- 
+
     TExecutorBuilder builder(SelfId(), RequestId_);
     builder
         .User(QueuePath_.UserName)
@@ -202,34 +202,34 @@ void TPurgeActor::MakeStage2Request(ui64 cleanupVersion, const TValue& messages,
     }
 
     builder.Start();
-} 
- 
+}
+
 void TPurgeActor::HandlePurgeQueue(TSqsEvents::TEvPurgeQueue::TPtr& ev) {
-    auto& shard = Shards_[ev->Get()->Shard]; 
- 
+    auto& shard = Shards_[ev->Get()->Shard];
+
     const char* skipReason = "";
     if (ev->Get()->Boundary > shard.TargetBoundary) {
         shard.TargetBoundary = ev->Get()->Boundary;
- 
+
         if (!shard.Purging) {
-            shard.Purging = true; 
+            shard.Purging = true;
             MakeGetRetentionOffsetRequest(ev->Get()->Shard, &shard);
         } else {
             skipReason = ". Skipping (already purging)";
-        } 
+        }
     } else {
         skipReason = ". Skipping (old boundary)";
-    } 
+    }
 
     RLOG_SQS_INFO("Purge queue request [" << QueuePath_ << "/" << ev->Get()->Shard << "] to " << ev->Get()->Boundary.MilliSeconds() << " (" << ev->Get()->Boundary << ")" << skipReason);
-} 
- 
+}
+
 void TPurgeActor::HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev) {
     ev->Get()->Call();
-} 
- 
+}
+
 void TPurgeActor::HandlePoisonPill(TEvPoisonPill::TPtr&) {
     PassAway();
-} 
- 
+}
+
 } // namespace NKikimr::NSQS

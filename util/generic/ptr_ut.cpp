@@ -708,7 +708,7 @@ void TPointerTest::TestMakeShared() {
         UNIT_ASSERT(state == OS_NOT_CREATED || state == OS_DESTROYED);
     }
 }
- 
+
 template <class TPtr>
 void TestPtrComparison(const TPtr& ptr) {
     UNIT_ASSERT(ptr == ptr);
@@ -719,15 +719,15 @@ void TestPtrComparison(const TPtr& ptr) {
 
 void TPointerTest::TestComparison() {
     THolder<A> ptr1(new A);
-    TAutoPtr<A> ptr2; 
-    TSimpleSharedPtr<int> ptr3(new int(6)); 
-    TIntrusivePtr<A> ptr4; 
+    TAutoPtr<A> ptr2;
+    TSimpleSharedPtr<int> ptr3(new int(6));
+    TIntrusivePtr<A> ptr4;
     TIntrusiveConstPtr<A> ptr5 = ptr4;
- 
-    UNIT_ASSERT(ptr1 != nullptr); 
-    UNIT_ASSERT(ptr2 == nullptr); 
-    UNIT_ASSERT(ptr3 != nullptr); 
-    UNIT_ASSERT(ptr4 == nullptr); 
+
+    UNIT_ASSERT(ptr1 != nullptr);
+    UNIT_ASSERT(ptr2 == nullptr);
+    UNIT_ASSERT(ptr3 != nullptr);
+    UNIT_ASSERT(ptr4 == nullptr);
     UNIT_ASSERT(ptr5 == nullptr);
 
     TestPtrComparison(ptr1);
@@ -735,7 +735,7 @@ void TPointerTest::TestComparison() {
     TestPtrComparison(ptr3);
     TestPtrComparison(ptr4);
     TestPtrComparison(ptr5);
-} 
+}
 
 template <class T, class TRefCountedPtr>
 void TPointerTest::TestRefCountedPtrsInHashSetImpl() {

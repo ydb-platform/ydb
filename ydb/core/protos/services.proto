@@ -177,13 +177,13 @@ enum EServiceKikimr {
 
     GRPC_CLIENT = 461;
 
-    // SQS section 
-    SQS = 470; 
- 
+    // SQS section
+    SQS = 470;
+
     BOARD_REPLICA = 480;
     BOARD_LOOKUP = 481;
     BOARD_PUBLISH = 482;
- 
+
     QUOTER_SERVICE = 490;
     QUOTER_PROXY = 491;
 

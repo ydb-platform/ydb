@@ -24,7 +24,7 @@ SRCS(
     generic/intrlist_ut.cpp
     generic/is_in_ut.cpp
     generic/iterator_ut.cpp
-    generic/iterator_range_ut.cpp 
+    generic/iterator_range_ut.cpp
     generic/lazy_value_ut.cpp
     generic/list_ut.cpp
     generic/map_ut.cpp

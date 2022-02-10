@@ -411,16 +411,16 @@ public:
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
-class TSqsServiceInitializer : public IKikimrServicesInitializer { 
-public: 
+class TSqsServiceInitializer : public IKikimrServicesInitializer {
+public:
     TSqsServiceInitializer(const TKikimrRunConfig& runConfig, const std::shared_ptr<TModuleFactories>& factories);
- 
-    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override; 
+
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 
 private:
     std::shared_ptr<TModuleFactories> Factories;
-}; 
- 
+};
+
 class TConfigsDispatcherInitializer : public IKikimrServicesInitializer {
 public:
     TConfigsDispatcherInitializer(const TKikimrRunConfig& runConfig);

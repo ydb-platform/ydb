@@ -303,7 +303,7 @@ IActor* CreateMessageBusFillNode(TBusMessageContext &msg);
 IActor* CreateMessageBusResolveNode(TBusMessageContext &msg);
 IActor* CreateMessageBusRegisterNode(TBusMessageContext &msg);
 IActor* CreateMessageBusCmsRequest(TBusMessageContext &msg);
-IActor* CreateMessageBusSqsRequest(TBusMessageContext &msg); 
+IActor* CreateMessageBusSqsRequest(TBusMessageContext &msg);
 IActor* CreateMessageBusWhoAmI(TBusMessageContext &msg);
 IActor* CreateMessageBusS3ListingRequest(TBusMessageContext& msg);
 IActor* CreateMessageBusInterconnectDebug(TBusMessageContext& msg);

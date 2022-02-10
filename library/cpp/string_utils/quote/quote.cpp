@@ -276,14 +276,14 @@ TString UrlUnescapeRet(const TStringBuf from) {
     return to;
 }
 
-char* UrlEscape(char* to, const char* from, bool forceEscape) { 
+char* UrlEscape(char* to, const char* from, bool forceEscape) {
     from = FixZero(from);
 
     while (*from) {
-        const bool escapePercent = (*from == '%') && 
-                                   (forceEscape || !((*(from + 1) && IsAsciiHex(*(from + 1)) && *(from + 2) && IsAsciiHex(*(from + 2))))); 
- 
-        if (escapePercent || (unsigned char)*from <= ' ' || (unsigned char)*from > '~') { 
+        const bool escapePercent = (*from == '%') &&
+                                   (forceEscape || !((*(from + 1) && IsAsciiHex(*(from + 1)) && *(from + 2) && IsAsciiHex(*(from + 2)))));
+
+        if (escapePercent || (unsigned char)*from <= ' ' || (unsigned char)*from > '~') {
             *to++ = '%';
             *to++ = d2x((unsigned char)*from >> 4);
             *to++ = d2x((unsigned char)*from & 0xF);
@@ -297,7 +297,7 @@ char* UrlEscape(char* to, const char* from, bool forceEscape) {
     return to;
 }
 
-void UrlEscape(TString& url, bool forceEscape) { 
+void UrlEscape(TString& url, bool forceEscape) {
     TTempBuf tempBuf(CgiEscapeBufLen(url.size()));
     char* to = tempBuf.Data();
     url.AssignNoAlias(to, UrlEscape(to, url.data(), forceEscape));

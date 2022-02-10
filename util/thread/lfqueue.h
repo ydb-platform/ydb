@@ -2,7 +2,7 @@
 
 #include "fwd.h"
 
-#include <util/generic/ptr.h> 
+#include <util/generic/ptr.h>
 #include <util/system/atomic.h>
 #include <util/system/yassert.h>
 #include "lfstack.h"
@@ -358,41 +358,41 @@ public:
         return res;
     }
 };
- 
+
 template <class T, class TCounter>
-class TAutoLockFreeQueue { 
-public: 
+class TAutoLockFreeQueue {
+public:
     using TRef = THolder<T>;
- 
+
     inline ~TAutoLockFreeQueue() {
-        TRef tmp; 
- 
+        TRef tmp;
+
         while (Dequeue(&tmp)) {
         }
-    } 
- 
-    inline bool Dequeue(TRef* t) { 
+    }
+
+    inline bool Dequeue(TRef* t) {
         T* res = nullptr;
- 
-        if (Queue.Dequeue(&res)) { 
-            t->Reset(res); 
- 
-            return true; 
-        } 
- 
-        return false; 
-    } 
- 
-    inline void Enqueue(TRef& t) { 
-        Queue.Enqueue(t.Get()); 
+
+        if (Queue.Dequeue(&res)) {
+            t->Reset(res);
+
+            return true;
+        }
+
+        return false;
+    }
+
+    inline void Enqueue(TRef& t) {
+        Queue.Enqueue(t.Get());
         Y_UNUSED(t.Release());
-    } 
- 
-    inline void Enqueue(TRef&& t) { 
-        Queue.Enqueue(t.Get()); 
+    }
+
+    inline void Enqueue(TRef&& t) {
+        Queue.Enqueue(t.Get());
         Y_UNUSED(t.Release());
-    } 
- 
+    }
+
     inline bool IsEmpty() {
         return Queue.IsEmpty();
     }
@@ -401,6 +401,6 @@ public:
         return Queue.GetCounter();
     }
 
-private: 
-    TLockFreeQueue<T*, TCounter> Queue; 
-}; 
+private:
+    TLockFreeQueue<T*, TCounter> Queue;
+};

@@ -28,7 +28,7 @@ SRCS(
     extraencodings.cpp
     approx_matching.cpp
     half_final_fsm.cpp
-    minimize.h 
+    minimize.h
 )
 
 PEERDIR(

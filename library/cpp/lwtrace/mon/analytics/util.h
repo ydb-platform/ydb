@@ -8,7 +8,7 @@
 namespace NAnalytics {
 
 // Get rid of NaNs and INFs
-inline double Finitize(double x, double notFiniteValue = 0.0)
+inline double Finitize(double x, double notFiniteValue = 0.0) 
 {
     return isfinite(x)? x: notFiniteValue;
 }

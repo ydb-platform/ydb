@@ -35,7 +35,7 @@ public:
     uint8_t table_enc;
   };
 
-  static bool decodeEHHdr(A &addressSpace, pint_t ehHdrStart, pint_t ehHdrEnd,
+  static bool decodeEHHdr(A &addressSpace, pint_t ehHdrStart, pint_t ehHdrEnd, 
                           EHHeaderInfo &ehHdrInfo);
   static bool findFDE(A &addressSpace, pint_t pc, pint_t ehHdrStart,
                       uint32_t sectionLength,
@@ -52,14 +52,14 @@ private:
 };
 
 template <typename A>
-bool EHHeaderParser<A>::decodeEHHdr(A &addressSpace, pint_t ehHdrStart,
+bool EHHeaderParser<A>::decodeEHHdr(A &addressSpace, pint_t ehHdrStart, 
                                     pint_t ehHdrEnd, EHHeaderInfo &ehHdrInfo) {
   pint_t p = ehHdrStart;
   uint8_t version = addressSpace.get8(p++);
-  if (version != 1) {
+  if (version != 1) { 
     _LIBUNWIND_LOG0("Unsupported .eh_frame_hdr version");
-    return false;
-  }
+    return false; 
+  } 
 
   uint8_t eh_frame_ptr_enc = addressSpace.get8(p++);
   uint8_t fde_count_enc = addressSpace.get8(p++);
@@ -72,8 +72,8 @@ bool EHHeaderParser<A>::decodeEHHdr(A &addressSpace, pint_t ehHdrStart,
           ? 0
           : addressSpace.getEncodedP(p, ehHdrEnd, fde_count_enc, ehHdrStart);
   ehHdrInfo.table = p;
-
-  return true;
+ 
+  return true; 
 }
 
 template <typename A>
@@ -107,7 +107,7 @@ bool EHHeaderParser<A>::findFDE(A &addressSpace, pint_t pc, pint_t ehHdrStart,
   EHHeaderParser<A>::EHHeaderInfo hdrInfo;
   if (!EHHeaderParser<A>::decodeEHHdr(addressSpace, ehHdrStart, ehHdrEnd,
                                       hdrInfo))
-    return false;
+    return false; 
 
   if (hdrInfo.fde_count == 0) return false;
 

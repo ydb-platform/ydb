@@ -11,14 +11,14 @@ SRCS(
     normalization.cpp
 )
 
-IF(NOT CATBOOST_OPENSOURCE)
-    SRCS(
-        custom_encoder.cpp
-    )
-    PEERDIR(
+IF(NOT CATBOOST_OPENSOURCE) 
+    SRCS( 
+        custom_encoder.cpp 
+    ) 
+    PEERDIR( 
         library/cpp/charset
-    )
+    ) 
     GENERATE_ENUM_SERIALIZATION(normalization.h)
-ENDIF()
+ENDIF() 
 
 END()

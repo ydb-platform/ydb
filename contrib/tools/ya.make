@@ -6,7 +6,7 @@ RECURSE(
     chromaprinter
     file2c
     flame-graph
-    flatc
+    flatc 
     flatc64
     flex
     flex-old

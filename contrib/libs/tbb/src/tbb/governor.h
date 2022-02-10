@@ -1,5 +1,5 @@
 /*
-    Copyright (c) 2005-2021 Intel Corporation
+    Copyright (c) 2005-2021 Intel Corporation 
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -17,26 +17,26 @@
 #ifndef _TBB_governor_H
 #define _TBB_governor_H
 
-#include "rml_tbb.h"
+#include "rml_tbb.h" 
 
-#include "misc.h" // for AvailableHwConcurrency
+#include "misc.h" // for AvailableHwConcurrency 
 #include "tls.h"
 
 namespace tbb {
-namespace detail {
-namespace r1 {
+namespace detail { 
+namespace r1 { 
 
 class market;
-class thread_data;
+class thread_data; 
 class __TBB_InitOnce;
 
-#if __TBB_USE_ITT_NOTIFY
-//! Defined in profiling.cpp
-extern bool ITT_Present;
-#endif
+#if __TBB_USE_ITT_NOTIFY 
+//! Defined in profiling.cpp 
+extern bool ITT_Present; 
+#endif 
 
-typedef std::size_t stack_size_type;
-
+typedef std::size_t stack_size_type; 
+ 
 //------------------------------------------------------------------------
 // Class governor
 //------------------------------------------------------------------------
@@ -49,23 +49,23 @@ private:
     friend class __TBB_InitOnce;
     friend class market;
 
-    // TODO: consider using thread_local (measure performance and side effects)
+    // TODO: consider using thread_local (measure performance and side effects) 
     //! TLS for scheduler instances associated with individual threads
-    static basic_tls<thread_data*> theTLS;
+    static basic_tls<thread_data*> theTLS; 
 
     //! Caches the maximal level of parallelism supported by the hardware
     static unsigned DefaultNumberOfThreads;
 
-    //! Caches the size of OS regular memory page
-    static std::size_t DefaultPageSize;
-
-    // TODO (TBB_REVAMP_TODO): reconsider constant names
+    //! Caches the size of OS regular memory page 
+    static std::size_t DefaultPageSize; 
+ 
+    // TODO (TBB_REVAMP_TODO): reconsider constant names 
     static rml::tbb_factory theRMLServerFactory;
 
     static bool UsePrivateRML;
 
     // Flags for runtime-specific conditions
-    static cpu_features_type cpu_features;
+    static cpu_features_type cpu_features; 
     static bool is_rethrow_broken;
 
     //! Create key for thread-local storage and initialize RML.
@@ -82,77 +82,77 @@ public:
         return DefaultNumberOfThreads ? DefaultNumberOfThreads :
                                         DefaultNumberOfThreads = AvailableHwConcurrency();
     }
-    static std::size_t default_page_size () {
-        return DefaultPageSize ? DefaultPageSize :
-                                 DefaultPageSize = DefaultSystemPageSize();
-    }
+    static std::size_t default_page_size () { 
+        return DefaultPageSize ? DefaultPageSize : 
+                                 DefaultPageSize = DefaultSystemPageSize(); 
+    } 
     static void one_time_init();
-    //! Processes scheduler initialization request (possibly nested) in an external thread
+    //! Processes scheduler initialization request (possibly nested) in an external thread 
     /** If necessary creates new instance of arena and/or local scheduler.
         The auto_init argument specifies if the call is due to automatic initialization. **/
-    static void init_external_thread();
+    static void init_external_thread(); 
 
-    //! The routine to undo automatic initialization.
-    /** The signature is written with void* so that the routine
-        can be the destructor argument to pthread_key_create. */
-    static void auto_terminate(void* tls);
+    //! The routine to undo automatic initialization. 
+    /** The signature is written with void* so that the routine 
+        can be the destructor argument to pthread_key_create. */ 
+    static void auto_terminate(void* tls); 
 
-    //! Obtain the thread-local instance of the thread data.
-    /** If the scheduler has not been initialized yet, initialization is done automatically.
-        Note that auto-initialized scheduler instance is destroyed only when its thread terminates. **/
-    static thread_data* get_thread_data() {
-        thread_data* td = theTLS.get();
-        if (td) {
-            return td;
-        }
-        init_external_thread();
-        td = theTLS.get();
-        __TBB_ASSERT(td, NULL);
-        return td;
+    //! Obtain the thread-local instance of the thread data. 
+    /** If the scheduler has not been initialized yet, initialization is done automatically. 
+        Note that auto-initialized scheduler instance is destroyed only when its thread terminates. **/ 
+    static thread_data* get_thread_data() { 
+        thread_data* td = theTLS.get(); 
+        if (td) { 
+            return td; 
+        } 
+        init_external_thread(); 
+        td = theTLS.get(); 
+        __TBB_ASSERT(td, NULL); 
+        return td; 
+    } 
+
+    static void set_thread_data(thread_data& td) { 
+        theTLS.set(&td); 
     }
 
-    static void set_thread_data(thread_data& td) {
-        theTLS.set(&td);
+    static void clear_thread_data() { 
+        theTLS.set(nullptr); 
     }
 
-    static void clear_thread_data() {
-        theTLS.set(nullptr);
+    static thread_data* get_thread_data_if_initialized () { 
+        return theTLS.get(); 
     }
 
-    static thread_data* get_thread_data_if_initialized () {
-        return theTLS.get();
-    }
-
-    static bool is_thread_data_set(thread_data* td) {
-        return theTLS.get() == td;
+    static bool is_thread_data_set(thread_data* td) { 
+        return theTLS.get() == td; 
     }
 
     //! Undo automatic initialization if necessary; call when a thread exits.
-    static void terminate_external_thread() {
-        auto_terminate(get_thread_data_if_initialized());
+    static void terminate_external_thread() { 
+        auto_terminate(get_thread_data_if_initialized()); 
     }
 
     static void initialize_rml_factory ();
 
-    static bool does_client_join_workers (const rml::tbb_client &client);
+    static bool does_client_join_workers (const rml::tbb_client &client); 
 
-    static bool speculation_enabled() { return cpu_features.rtm_enabled; }
+    static bool speculation_enabled() { return cpu_features.rtm_enabled; } 
 
-    static bool wait_package_enabled() { return cpu_features.waitpkg_enabled; }
-
+    static bool wait_package_enabled() { return cpu_features.waitpkg_enabled; } 
+ 
     static bool rethrow_exception_broken() { return is_rethrow_broken; }
 
-    static bool is_itt_present() {
-#if __TBB_USE_ITT_NOTIFY
-        return ITT_Present;
-#else
-        return false;
-#endif
-    }
+    static bool is_itt_present() { 
+#if __TBB_USE_ITT_NOTIFY 
+        return ITT_Present; 
+#else 
+        return false; 
+#endif 
+    } 
 }; // class governor
 
-} // namespace r1
-} // namespace detail
+} // namespace r1 
+} // namespace detail 
 } // namespace tbb
 
 #endif /* _TBB_governor_H */

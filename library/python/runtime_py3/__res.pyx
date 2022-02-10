@@ -2,7 +2,7 @@ from _codecs import utf_8_decode, utf_8_encode
 
 from libcpp cimport bool
 
-from util.generic.string cimport TString, TStringBuf
+from util.generic.string cimport TString, TStringBuf 
 
 
 cdef extern from "library/cpp/resource/resource.h" namespace "NResource":

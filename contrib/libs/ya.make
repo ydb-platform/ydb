@@ -69,7 +69,7 @@ RECURSE(
     ffmpeg-3
     ffmpeg-3.4.1
     fft
-    flatbuffers
+    flatbuffers 
     flatbuffers64
     flatbuffers64/flatc
     flatbuffers64/samples

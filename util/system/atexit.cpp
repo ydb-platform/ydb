@@ -104,10 +104,10 @@ namespace {
     }
 }
 
-void ManualRunAtExitFinalizers() {
-    OnExit();
-}
-
+void ManualRunAtExitFinalizers() { 
+    OnExit(); 
+} 
+ 
 bool ExitStarted() {
     if (TAtExit* const atExit = AtomicGet(atExitPtr)) {
         return atExit->FinishStarted();

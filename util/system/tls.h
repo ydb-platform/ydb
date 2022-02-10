@@ -7,7 +7,7 @@
 
 #include <new>
 
-#if defined(_darwin_)
+#if defined(_darwin_) 
     #define Y_DISABLE_THRKEY_OPTIMIZATION
 #endif
 

@@ -34,7 +34,7 @@ cdef extern from "util/generic/hash.h" nogil:
         bint operator<=(THashMap&)
         bint operator>=(THashMap&)
 
-        U& at(T&) except +
+        U& at(T&) except + 
         iterator begin()
         const_iterator const_begin "begin"()
         void clear()
@@ -43,8 +43,8 @@ cdef extern from "util/generic/hash.h" nogil:
         iterator end()
         const_iterator const_end "end"()
         pair[iterator, iterator] equal_range(T&)
-        void erase(iterator) except +
-        void erase(iterator, iterator) except +
+        void erase(iterator) except + 
+        void erase(iterator, iterator) except + 
         size_t erase(T&)
         iterator find(T&)
         bint contains(T&)

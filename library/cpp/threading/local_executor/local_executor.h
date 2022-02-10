@@ -11,15 +11,15 @@
 
 #include <functional>
 
-namespace NPar {
-    struct ILocallyExecutable : virtual public TThrRefBase {
+namespace NPar { 
+    struct ILocallyExecutable : virtual public TThrRefBase { 
         // Must be implemented by the end user to define job that will be processed by one of
         // executor threads.
         //
         // @param id        Job parameter, typically an index pointing somewhere in array, or just
         //                  some dummy value, e.g. `0`.
-        virtual void LocalExec(int id) = 0;
-    };
+        virtual void LocalExec(int id) = 0; 
+    }; 
 
     // Alternative and simpler way of describing a job for executor. Function argument has the
     // same meaning as `id` in `ILocallyExecutable::LocalExec`.
@@ -27,17 +27,17 @@ namespace NPar {
     using TLocallyExecutableFunction = std::function<void(int)>;
 
     class ILocalExecutor: public TNonCopyable {
-    public:
+    public: 
         ILocalExecutor() = default;
         virtual ~ILocalExecutor() = default;
 
         enum EFlags : int {
-            HIGH_PRIORITY = 0,
-            MED_PRIORITY = 1,
-            LOW_PRIORITY = 2,
-            PRIORITY_MASK = 3,
-            WAIT_COMPLETE = 4
-        };
+            HIGH_PRIORITY = 0, 
+            MED_PRIORITY = 1, 
+            LOW_PRIORITY = 2, 
+            PRIORITY_MASK = 3, 
+            WAIT_COMPLETE = 4 
+        }; 
 
         // Add task for further execution.
         //
@@ -156,7 +156,7 @@ namespace NPar {
             }
             ExecRange(BlockedLoopBody(params, body), 0, params.GetBlockCount(), flags);
         }
-
+ 
         template <typename TBody>
         inline void ExecRangeBlockedWithThrow(TBody&& body, int firstId, int lastId, int batchSizeOrZeroForAutoBatchSize, int flags) {
             if (firstId >= lastId) {
@@ -270,8 +270,8 @@ namespace NPar {
     };
 
     static inline TLocalExecutor& LocalExecutor() {
-        return *Singleton<TLocalExecutor>();
-    }
+        return *Singleton<TLocalExecutor>(); 
+    } 
 
     template <typename TBody>
     inline void ParallelFor(ILocalExecutor& executor, ui32 from, ui32 to, TBody&& body) {

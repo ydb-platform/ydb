@@ -1,5 +1,5 @@
 /*
-    Copyright (c) 2005-2021 Intel Corporation
+    Copyright (c) 2005-2021 Intel Corporation 
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -17,17 +17,17 @@
 #include "semaphore.h"
 #if __TBB_USE_SRWLOCK
 #include "dynamic_link.h" // Refers to src/tbb, not include/tbb
-#error #include "tbb_misc.h"
+#error #include "tbb_misc.h" 
 #endif
 
 namespace tbb {
-namespace detail {
-namespace r1 {
+namespace detail { 
+namespace r1 { 
 
 // TODO: For new win UI port, we can use SRWLock API without dynamic_link etc.
 #if __TBB_USE_SRWLOCK
 
-static std::atomic<do_once_state> concmon_module_inited;
+static std::atomic<do_once_state> concmon_module_inited; 
 
 void WINAPI init_binsem_using_event( SRWLOCK* h_ )
 {
@@ -87,6 +87,6 @@ void binary_semaphore::V() { __TBB_release_binsem( &my_sem.lock ); }
 
 #endif /* __TBB_USE_SRWLOCK */
 
-} // namespace r1
-} // namespace detail
+} // namespace r1 
+} // namespace detail 
 } // namespace tbb

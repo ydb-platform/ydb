@@ -62,17 +62,17 @@ namespace {
     }
 }
 
-namespace NUrl {
-
-    TSplitUrlToHostAndPathResult SplitUrlToHostAndPath(const TStringBuf url) {
-        TStringBuf host = GetSchemeHostAndPort(url, /*trimHttp=*/false, /*trimDefaultPort=*/false);
-        TStringBuf path = url;
-        path.SkipPrefix(host);
-        return {host, path};
-    }
-
-} // namespace NUrl
-
+namespace NUrl { 
+ 
+    TSplitUrlToHostAndPathResult SplitUrlToHostAndPath(const TStringBuf url) { 
+        TStringBuf host = GetSchemeHostAndPort(url, /*trimHttp=*/false, /*trimDefaultPort=*/false); 
+        TStringBuf path = url; 
+        path.SkipPrefix(host); 
+        return {host, path}; 
+    } 
+ 
+} // namespace NUrl 
+ 
 size_t GetHttpPrefixSize(const char* url, bool ignorehttps) noexcept {
     return GetHttpPrefixSizeImpl<char>(url, TUncheckedSize(), ignorehttps);
 }
@@ -183,13 +183,13 @@ TStringBuf GetSchemeHostAndPort(const TStringBuf url, bool trimHttp, bool trimDe
 }
 
 void SplitUrlToHostAndPath(const TStringBuf url, TStringBuf& host, TStringBuf& path) {
-    auto [hostBuf, pathBuf] = NUrl::SplitUrlToHostAndPath(url);
-    host = hostBuf;
-    path = pathBuf;
+    auto [hostBuf, pathBuf] = NUrl::SplitUrlToHostAndPath(url); 
+    host = hostBuf; 
+    path = pathBuf; 
 }
 
 void SplitUrlToHostAndPath(const TStringBuf url, TString& host, TString& path) {
-    auto [hostBuf, pathBuf] = NUrl::SplitUrlToHostAndPath(url);
+    auto [hostBuf, pathBuf] = NUrl::SplitUrlToHostAndPath(url); 
     host = hostBuf;
     path = pathBuf;
 }

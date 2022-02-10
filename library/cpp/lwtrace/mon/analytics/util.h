@@ -18,7 +18,7 @@ inline void ParseNameAndOpts(const TString& nameAndOpts, TString& name, THashSet
     name.clear();
     opts.clear();
     bool first = true;
-    auto vs = SplitString(nameAndOpts, "-");
+    auto vs = SplitString(nameAndOpts, "-"); 
     for (const auto& s : vs) {
         if (first) {
             name = s;
@@ -31,7 +31,7 @@ inline void ParseNameAndOpts(const TString& nameAndOpts, TString& name, THashSet
 
 inline TString ParseName(const TString& nameAndOpts)
 {
-    auto vs = SplitString(nameAndOpts, "-");
+    auto vs = SplitString(nameAndOpts, "-"); 
     if (vs.empty()) {
         return TString();
     } else {

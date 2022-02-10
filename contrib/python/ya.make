@@ -966,7 +966,7 @@ RECURSE(
     saneyaml
     sanic
     sanic-routing
-    sanic-testing
+    sanic-testing 
     scales
     scancode-toolkit
     scandir

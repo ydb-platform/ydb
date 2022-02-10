@@ -68,19 +68,19 @@ SplitString(const typename ::NPrivate::TStringDeducer<C>::type& str, const C* de
 
 template <class TIter>
 inline TString JoinStrings(TIter begin, TIter end, const TStringBuf delim) {
-    if (begin == end) 
+    if (begin == end)
         return TString();
 
     TString result = ToString(*begin);
 
-    for (++begin; begin != end; ++begin) { 
-        result.append(delim); 
+    for (++begin; begin != end; ++begin) {
+        result.append(delim);
         result.append(ToString(*begin));
-    } 
+    }
 
-    return result; 
-} 
- 
+    return result;
+}
+
 template <class TIter>
 inline TUtf16String JoinStrings(TIter begin, TIter end, const TWtringBuf delim) {
     if (begin == end)
@@ -99,13 +99,13 @@ inline TUtf16String JoinStrings(TIter begin, TIter end, const TWtringBuf delim) 
 /// Concatenates elements of given TVector<TString>.
 inline TString JoinStrings(const TVector<TString>& v, const TStringBuf delim) {
     return JoinStrings(v.begin(), v.end(), delim);
-} 
- 
+}
+
 inline TString JoinStrings(const TVector<TString>& v, size_t index, size_t count, const TStringBuf delim) {
     Y_ASSERT(index + count <= v.size() && "JoinStrings(): index or count out of range");
     return JoinStrings(v.begin() + index, v.begin() + index + count, delim);
-} 
- 
+}
+
 template <typename T>
 inline TString JoinVectorIntoString(const TVector<T>& v, const TStringBuf delim) {
     return JoinStrings(v.begin(), v.end(), delim);

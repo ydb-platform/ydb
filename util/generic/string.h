@@ -311,9 +311,9 @@ public:
         return &*MutRef().begin();
     }
 
-    iterator vend() { 
+    iterator vend() {
         return &*MutRef().end();
-    } 
+    }
 
     reverse_iterator rbegin() {
         return reverse_iterator(vend());

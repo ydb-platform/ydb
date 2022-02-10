@@ -1,5 +1,5 @@
 #pragma once
- 
+
 #include <utility>
 
 #include "maybe_traits.h"
@@ -36,7 +36,7 @@ constexpr bool operator==(TNothing, TNothing) noexcept {
 
 template <class T, class Policy /*= ::NMaybe::TPolicyUndefinedExcept*/>
 class TMaybe: private TMaybeBase<T> {
-public: 
+public:
     using TInPlace = NMaybe::TInPlace;
 
 private:
@@ -446,7 +446,7 @@ private:
         new (Data()) T(std::forward<Args>(args)...);
         this->Defined_ = true;
     }
-}; 
+};
 
 template <class T>
 using TMaybeFail = TMaybe<T, NMaybe::TPolicyUndefinedFail>;

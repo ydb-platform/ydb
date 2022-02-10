@@ -14,7 +14,7 @@ RECURSE(
     awssdk_async_extensions
     base64
     base64/test
-    bclclient 
+    bclclient
     blackbox
     blackbox/tests
     blackbox/tvm2
@@ -64,10 +64,10 @@ RECURSE(
     django_russian
     django_template_common
     django_tools_log_context
-    dssclient 
+    dssclient
     dump_dict
     edit_distance
-    errorboosterclient 
+    errorboosterclient
     filelock
     filelock/ut
     filesys
@@ -152,7 +152,7 @@ RECURSE(
     reactor
     redis_utils
     reservoir_sampling
-    refsclient 
+    refsclient
     resource
     retry
     retry/tests

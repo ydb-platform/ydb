@@ -235,7 +235,7 @@ RECURSE(
     django-cors-middleware
     django-crispy-forms
     django-cron
-    django-csp 
+    django-csp
     django-cte
     django-datetime-widget
     django-db-geventpool
@@ -246,7 +246,7 @@ RECURSE(
     django-dynamic-raw-id
     django-enumfields
     django-environ
-    django-etc 
+    django-etc
     django-export-action-py3
     django-extensions
     django-fernet-fields
@@ -292,9 +292,9 @@ RECURSE(
     django-select2-forms
     django-sentinel
     django-simple-history
-    django-siteforms 
-    django-sitemessage 
-    django-sitetree 
+    django-siteforms
+    django-sitemessage
+    django-sitetree
     django-sortedm2m
     django-storages
     django-tastypie
@@ -552,7 +552,7 @@ RECURSE(
     json-rpc
     json2html
     jsondiff
-    jsonfield 
+    jsonfield
     jsonobject
     jsonpath-rw
     jsonpickle
@@ -654,7 +654,7 @@ RECURSE(
     MySQL-python
     mysqlclient-python
     namedlist
-    natsort 
+    natsort
     nbclient
     nbconvert
     nbformat
@@ -725,7 +725,7 @@ RECURSE(
     pathtools
     pathy
     patsy
-    paypalrestsdk 
+    paypalrestsdk
     pdbpp
     pdfminer.six
     pecan
@@ -878,7 +878,7 @@ RECURSE(
     pytest-mock
     pytest-randomly
     pytest-responsemock
-    pytest-responses 
+    pytest-responses
     pytest-server-fixtures
     pytest-shutil
     pytest-timeout
@@ -1027,7 +1027,7 @@ RECURSE(
     SQLAlchemy-Utils
     sqlparse
     sqltap
-    srptools 
+    srptools
     srsly
     sshpubkeys
     sshtunnel
@@ -1122,7 +1122,7 @@ RECURSE(
     uwsgi
     uwsgi/bin
     uwsgi/examples
-    uwsgiconf 
+    uwsgiconf
     validators
     validr
     vcrpy

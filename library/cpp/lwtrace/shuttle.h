@@ -1,15 +1,15 @@
 #pragma once
 
-#include "event.h"
-
+#include "event.h" 
+ 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
-
+ 
 #include <util/generic/ptr.h>
 #include <util/system/spinlock.h>
 
-#include <algorithm>
+#include <algorithm> 
 #include <type_traits>
-
+ 
 namespace NLWTrace {
     struct TProbe;
 

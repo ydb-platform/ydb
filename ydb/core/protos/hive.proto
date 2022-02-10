@@ -60,7 +60,7 @@ message TEvBootTablet {
 
 message TEvBootTabletReply {
     optional NKikimrProto.EReplyStatus Status = 1;
-    optional string StatusMsg = 2;
+    optional string StatusMsg = 2; 
 }
 
 message TTabletCategory {

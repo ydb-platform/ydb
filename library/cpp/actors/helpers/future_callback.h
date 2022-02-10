@@ -1,7 +1,7 @@
 #pragma once
 
 #include <library/cpp/actors/core/actor.h>
-#include <library/cpp/actors/core/hfunc.h>
+#include <library/cpp/actors/core/hfunc.h> 
 
 namespace NActors {
 

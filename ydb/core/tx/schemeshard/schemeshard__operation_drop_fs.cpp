@@ -313,8 +313,8 @@ THolder<TProposeResponse> TDropFileStore::Propose(
 
     {
         auto shardIdx = fs->IndexShardIdx;
-        Y_VERIFY_S(context.SS->ShardInfos.count(shardIdx), "invalid schemeshard idx " << shardIdx << " at " << path.Base()->PathId);
-
+        Y_VERIFY_S(context.SS->ShardInfos.count(shardIdx), "invalid schemeshard idx " << shardIdx << " at " << path.Base()->PathId); 
+ 
         txState.Shards.emplace_back(shardIdx, context.SS->ShardInfos.at(shardIdx).TabletType, txState.State);
 
         context.SS->ShardInfos.at(shardIdx).CurrentTxId = OperationId.GetTxId();

@@ -103,8 +103,8 @@ namespace NKikimr {
             }
 
             TString ToString() const {
-                return TStringBuilder()
-                    << "{message:\"" << Message << "\",retryable:" << Retryable << "}";
+                return TStringBuilder() 
+                    << "{message:\"" << Message << "\",retryable:" << Retryable << "}"; 
             }
         };
 

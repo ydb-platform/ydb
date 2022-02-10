@@ -38,15 +38,15 @@ public:
     {}
 
     void Bootstrap(const TActorContext& ctx) {
-        NTabletPipe::TClientConfig config;
+        NTabletPipe::TClientConfig config; 
         config.AllowFollower = ForceFollower;
         config.ForceFollower = ForceFollower;
         config.PreferLocal = Config.PreferLocal;
         config.RetryPolicy = Config.RetryPolicy;
-
-        PipeClient = ctx.ExecutorThread.RegisterActor(NTabletPipe::CreateClient(ctx.SelfID, TargetTablet, config));
+ 
+        PipeClient = ctx.ExecutorThread.RegisterActor(NTabletPipe::CreateClient(ctx.SelfID, TargetTablet, config)); 
         NTabletPipe::SendData(ctx, PipeClient, new NMon::TEvRemoteHttpInfo(Query, Method));
-
+ 
         ctx.Schedule(TDuration::Seconds(60), new TEvents::TEvWakeup());
         Become(&TThis::StateWork);
     }

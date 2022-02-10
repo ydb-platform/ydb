@@ -764,7 +764,7 @@ private:
     TFlatDataBlock* AsFlatDataBlock() override;
     TSingleBlock* AsSingleBlock() override;
     EFetchStatus FetchBlock(TUnboxedValue& result, ui32 rowsLimitHint) override;
-    bool VisitBlocks(TBlockCallback callback, void* context) override;
+    bool VisitBlocks(TBlockCallback callback, void* context) override; 
 #endif
 };
 

@@ -65,7 +65,7 @@ namespace NThreading {
     TFuture<void> WaitExceptionOrAll(TArrayRef<const TFuture<void>> futures) {
         return WaitGeneric<TWaitPolicy::TExceptionOrAll>(futures);
     }
-
+ 
     ////////////////////////////////////////////////////////////////////////////////
 
     TFuture<void> WaitAny(const TFuture<void>& f1) {

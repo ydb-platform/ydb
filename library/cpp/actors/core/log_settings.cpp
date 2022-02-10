@@ -49,34 +49,34 @@ namespace NActors {
         }
 
         void TSettings::Append(EComponent minVal, EComponent maxVal, EComponentToStringFunc func) {
-            Y_VERIFY(minVal >= 0, "NLog::TSettings: minVal must be non-negative");
+            Y_VERIFY(minVal >= 0, "NLog::TSettings: minVal must be non-negative"); 
             Y_VERIFY(maxVal > minVal, "NLog::TSettings: maxVal must be greater than minVal");
 
             // update bounds
-            if (!MaxVal || minVal < MinVal) {
-                MinVal = minVal;
-            }
+            if (!MaxVal || minVal < MinVal) { 
+                MinVal = minVal; 
+            } 
 
             if (!MaxVal || maxVal > MaxVal) {
-                MaxVal = maxVal;
-
+                MaxVal = maxVal; 
+ 
                 // expand ComponentNames to the new bounds
-                auto oldMask = Mask;
-                Mask = PowerOf2Mask(MaxVal);
-
-                TArrayHolder<TAtomic> oldComponentInfo(new TAtomic[Mask + 1]);
-                ComponentInfo.Swap(oldComponentInfo);
-                int startVal = oldMask ? oldMask + 1 : 0;
-                for (int i = 0; i < startVal; i++) {
-                    AtomicSet(ComponentInfo[i], AtomicGet(oldComponentInfo[i]));
-                }
-
-                TComponentSettings defSetting(DefPriority, DefSamplingPriority, DefSamplingRate);
-                for (int i = startVal; i < Mask + 1; i++) {
-                    AtomicSet(ComponentInfo[i], defSetting.Raw.Data);
-                }
-
-                ComponentNames.resize(Mask + 1);
+                auto oldMask = Mask; 
+                Mask = PowerOf2Mask(MaxVal); 
+ 
+                TArrayHolder<TAtomic> oldComponentInfo(new TAtomic[Mask + 1]); 
+                ComponentInfo.Swap(oldComponentInfo); 
+                int startVal = oldMask ? oldMask + 1 : 0; 
+                for (int i = 0; i < startVal; i++) { 
+                    AtomicSet(ComponentInfo[i], AtomicGet(oldComponentInfo[i])); 
+                } 
+ 
+                TComponentSettings defSetting(DefPriority, DefSamplingPriority, DefSamplingRate); 
+                for (int i = startVal; i < Mask + 1; i++) { 
+                    AtomicSet(ComponentInfo[i], defSetting.Raw.Data); 
+                } 
+ 
+                ComponentNames.resize(Mask + 1); 
             }
 
             // assign new names but validate if newly added members were not used before

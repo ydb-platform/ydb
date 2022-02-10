@@ -824,24 +824,24 @@ void TSchemeShard::SetNbsChannelsParams(
 }
 
 void TSchemeShard::SetNfsChannelsParams(
-    const google::protobuf::RepeatedPtrField<NKikimrFileStore::TChannelProfile>& ecps,
-    TChannelsBindings& channelsBinding)
-{
-    Y_VERIFY(channelsBinding.ysize() == ecps.size());
-
-    for (int i = 0; i < ecps.size(); ++i) {
-        channelsBinding[i].SetSize(ecps[i].GetSize());
-        // XXX IOPS and Throughput should be split into read/write IOPS
-        // and read/write Throughput in Hive
-        channelsBinding[i].SetThroughput(
-            ecps[i].GetReadBandwidth() + ecps[i].GetWriteBandwidth()
-        );
-        channelsBinding[i].SetIOPS(
-            ecps[i].GetReadIops() + ecps[i].GetWriteIops()
-        );
-    }
-}
-
+    const google::protobuf::RepeatedPtrField<NKikimrFileStore::TChannelProfile>& ecps, 
+    TChannelsBindings& channelsBinding) 
+{ 
+    Y_VERIFY(channelsBinding.ysize() == ecps.size()); 
+ 
+    for (int i = 0; i < ecps.size(); ++i) { 
+        channelsBinding[i].SetSize(ecps[i].GetSize()); 
+        // XXX IOPS and Throughput should be split into read/write IOPS 
+        // and read/write Throughput in Hive 
+        channelsBinding[i].SetThroughput( 
+            ecps[i].GetReadBandwidth() + ecps[i].GetWriteBandwidth() 
+        ); 
+        channelsBinding[i].SetIOPS( 
+            ecps[i].GetReadIops() + ecps[i].GetWriteIops() 
+        ); 
+    } 
+} 
+ 
 void TSchemeShard::SetPqChannelsParams(
     const google::protobuf::RepeatedPtrField<NKikimrPQ::TChannelProfile>& ecps,
     TChannelsBindings& channelsBinding)

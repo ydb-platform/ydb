@@ -9,7 +9,7 @@ namespace NActors {
     template <typename TEv, ui32 TEventType>
     class TEventLocal: public TEventBase<TEv, TEventType> {
     public:
-        TString ToStringHeader() const override {
+        TString ToStringHeader() const override { 
             return TypeName<TEv>();
         }
 
@@ -17,7 +17,7 @@ namespace NActors {
             Y_FAIL("Serialization of local event %s type %" PRIu32, TypeName<TEv>().data(), TEventType);
         }
 
-        bool IsSerializable() const override {
+        bool IsSerializable() const override { 
             return false;
         }
 

@@ -340,9 +340,9 @@ public:
     static void SetNbsChannelsParams(
         const google::protobuf::RepeatedPtrField<NKikimrBlockStore::TChannelProfile>& ecps,
         TChannelsBindings& channelsBinding);
-    static void SetNfsChannelsParams(
-        const google::protobuf::RepeatedPtrField<NKikimrFileStore::TChannelProfile>& ecps,
-        TChannelsBindings& channelsBinding);
+    static void SetNfsChannelsParams( 
+        const google::protobuf::RepeatedPtrField<NKikimrFileStore::TChannelProfile>& ecps, 
+        TChannelsBindings& channelsBinding); 
     static void SetPqChannelsParams(
         const google::protobuf::RepeatedPtrField<NKikimrPQ::TChannelProfile>& ecps,
         TChannelsBindings& channelsBinding);

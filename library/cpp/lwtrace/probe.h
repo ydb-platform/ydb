@@ -5,11 +5,11 @@
 #include "rwspinlock.h"
 #include "shuttle.h"
 
-#include <util/datetime/cputimer.h>
-#include <util/generic/hide_ptr.h>
+#include <util/datetime/cputimer.h> 
+#include <util/generic/hide_ptr.h> 
 #include <util/generic/scope.h>
-#include <util/system/atomic.h>
-
+#include <util/system/atomic.h> 
+ 
 namespace NLWTrace {
     // Represents a chain (linked list) of steps for execution of a trace query block
     // NOTE: different executor objects are used on different probes (even for the same query block)

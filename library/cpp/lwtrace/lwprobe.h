@@ -1,8 +1,8 @@
 #pragma once
 
-#include "control.h"
-#include "probe.h"
-
+#include "control.h" 
+#include "probe.h" 
+ 
 #include <ctype.h>
 
 namespace NLWTrace {

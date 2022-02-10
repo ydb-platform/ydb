@@ -388,35 +388,35 @@ THolder<TProposeResponse> TCreateFileStore::Propose(
         }
     }
 
-    const auto& ecps = operation.GetConfig().GetExplicitChannelProfiles();
-    if (ecps.empty() || ui32(ecps.size()) > NHive::MAX_TABLET_CHANNELS) {
-        auto errStr = Sprintf("Wrong number of channels %u , should be [1 .. %lu]",
-            ecps.size(), NHive::MAX_TABLET_CHANNELS);
-
+    const auto& ecps = operation.GetConfig().GetExplicitChannelProfiles(); 
+    if (ecps.empty() || ui32(ecps.size()) > NHive::MAX_TABLET_CHANNELS) { 
+        auto errStr = Sprintf("Wrong number of channels %u , should be [1 .. %lu]", 
+            ecps.size(), NHive::MAX_TABLET_CHANNELS); 
+ 
         result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
-        return result;
-    }
-
-    TVector<TStringBuf> storePoolKinds(Reserve(ecps.size()));
-    for (const auto& ecp : ecps) {
-        storePoolKinds.push_back(ecp.GetPoolKind());
-    }
-
-    TChannelsBindings storeChannelBindings;
-    const auto storeChannelsResolved = context.SS->ResolveChannelsByPoolKinds(
-        storePoolKinds,
-        dstPath.DomainId(),
-        storeChannelBindings
-    );
-
-    if (!storeChannelsResolved) {
+        return result; 
+    } 
+ 
+    TVector<TStringBuf> storePoolKinds(Reserve(ecps.size())); 
+    for (const auto& ecp : ecps) { 
+        storePoolKinds.push_back(ecp.GetPoolKind()); 
+    } 
+ 
+    TChannelsBindings storeChannelBindings; 
+    const auto storeChannelsResolved = context.SS->ResolveChannelsByPoolKinds( 
+        storePoolKinds, 
+        dstPath.DomainId(), 
+        storeChannelBindings 
+    ); 
+ 
+    if (!storeChannelsResolved) { 
         result->SetError(NKikimrScheme::StatusInvalidParameter,
-                         "Unable to construct channel binding for filestore with the storage pool");
+                         "Unable to construct channel binding for filestore with the storage pool"); 
         return result;
     }
 
-    context.SS->SetNfsChannelsParams(ecps, storeChannelBindings);
-
+    context.SS->SetNfsChannelsParams(ecps, storeChannelBindings); 
+ 
     TString errStr;
     if (!context.SS->CheckApplyIf(Transaction, errStr)) {
         result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
@@ -440,7 +440,7 @@ THolder<TProposeResponse> TCreateFileStore::Propose(
         dstPath.Base(),
         fs,
         acl,
-        storeChannelBindings,
+        storeChannelBindings, 
         context);
 
     NIceDb::TNiceDb db(context.Txc.DB);

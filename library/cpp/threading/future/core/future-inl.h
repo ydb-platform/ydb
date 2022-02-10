@@ -16,10 +16,10 @@ namespace NThreading {
 
         ////////////////////////////////////////////////////////////////////////////////
 
-        enum class TError {
-            Error
-        };
-
+        enum class TError { 
+            Error 
+        }; 
+ 
         template <typename T>
         class TFutureState: public TAtomicRefCount<TFutureState<T>> {
             enum {
@@ -89,13 +89,13 @@ namespace NThreading {
             {
             }
 
-            TFutureState(std::exception_ptr exception, TError)
-                : State(ExceptionSet)
-                , Exception(std::move(exception))
-                , NullValue(0)
-            {
-            }
-
+            TFutureState(std::exception_ptr exception, TError) 
+                : State(ExceptionSet) 
+                , Exception(std::move(exception)) 
+                , NullValue(0) 
+            { 
+            } 
+ 
             ~TFutureState() {
                 if (State >= ValueMoved) { // ValueMoved, ValueSet, ValueRead
                     Value.~T();
@@ -277,12 +277,12 @@ namespace NThreading {
             {
             }
 
-            TFutureState(std::exception_ptr exception, TError)
-                : State(ExceptionSet)
-                , Exception(std::move(exception))
-            {
-            }
-
+            TFutureState(std::exception_ptr exception, TError) 
+                : State(ExceptionSet) 
+                , Exception(std::move(exception)) 
+            { 
+            } 
+ 
             bool HasValue() const {
                 return AtomicGet(State) == ValueSet;
             }
@@ -971,12 +971,12 @@ namespace NThreading {
         return Singleton<TCache>()->Instance;
     }
 
-    template <typename T>
-    inline TFuture<T> MakeErrorFuture(std::exception_ptr exception)
-    {
-        return {new NImpl::TFutureState<T>(std::move(exception), NImpl::TError::Error)};
-    }
-
+    template <typename T> 
+    inline TFuture<T> MakeErrorFuture(std::exception_ptr exception) 
+    { 
+        return {new NImpl::TFutureState<T>(std::move(exception), NImpl::TError::Error)}; 
+    } 
+ 
     inline TFuture<void> MakeFuture() {
         struct TCache {
             TFuture<void> Instance{new NImpl::TFutureState<void>(true)};

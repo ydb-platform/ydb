@@ -29,8 +29,8 @@ namespace NThreading {
     [[nodiscard]] NImpl::EnableGenericWait<TContainer> WaitExceptionOrAll(const TContainer& futures);
 
     // waits for any future
-    [[nodiscard]] TFuture<void> WaitAny(const TFuture<void>& f1);
-    [[nodiscard]] TFuture<void> WaitAny(const TFuture<void>& f1, const TFuture<void>& f2);
+    [[nodiscard]] TFuture<void> WaitAny(const TFuture<void>& f1); 
+    [[nodiscard]] TFuture<void> WaitAny(const TFuture<void>& f1, const TFuture<void>& f2); 
     [[nodiscard]] TFuture<void> WaitAny(TArrayRef<const TFuture<void>> futures);
     template <typename TContainer>
     [[nodiscard]] NImpl::EnableGenericWait<TContainer> WaitAny(const TContainer& futures);

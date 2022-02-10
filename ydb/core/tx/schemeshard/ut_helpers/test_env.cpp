@@ -95,76 +95,76 @@ private:
     TDeque<TAutoPtr<IEventHandle>> InitialEventsQueue;
 };
 
-class TFakeFileStore : public TActor<TFakeFileStore>, public NTabletFlatExecutor::TTabletExecutedFlat {
-public:
-    TFakeFileStore(const TActorId& tablet, TTabletStorageInfo* info)
-        : TActor(&TThis::StateInit)
-        , TTabletExecutedFlat(info, tablet,  new NMiniKQL::TMiniKQLFactory)
-    {}
-
-    void OnActivateExecutor(const TActorContext& ctx) override {
-        Become(&TThis::StateWork);
-
-        while (!InitialEventsQueue.empty()) {
-            TAutoPtr<IEventHandle>& ev = InitialEventsQueue.front();
-            ctx.ExecutorThread.Send(ev.Release());
-            InitialEventsQueue.pop_front();
-        }
-    }
-
-    void OnDetach(const TActorContext& ctx) override {
-        Die(ctx);
-    }
-
-    void OnTabletDead(TEvTablet::TEvTabletDead::TPtr& ev, const TActorContext& ctx) override {
-        Y_UNUSED(ev);
-        Die(ctx);
-    }
-
-    void Enqueue(STFUNC_SIG) override {
-        Y_UNUSED(ctx);
-        InitialEventsQueue.push_back(ev);
-    }
-
-    STFUNC(StateInit) {
-        StateInitImpl(ev, ctx);
-    }
-
-    STFUNC(StateWork) {
-        switch (ev->GetTypeRewrite()) {
-            HFunc(TEvTablet::TEvTabletDead, HandleTabletDead);
-            HFunc(TEvFileStore::TEvUpdateConfig, Handle);
-            HFunc(TEvents::TEvPoisonPill, Handle);
-        }
-    }
-
-    STFUNC(StateBroken) {
-        switch (ev->GetTypeRewrite()) {
-            HFunc(TEvTablet::TEvTabletDead, HandleTabletDead);
-        }
-    }
-
-private:
-    void Handle(TEvFileStore::TEvUpdateConfig::TPtr& ev, const TActorContext& ctx) {
-        const auto& request = ev->Get()->Record;
-        TAutoPtr<TEvFileStore::TEvUpdateConfigResponse> response =
-            new TEvFileStore::TEvUpdateConfigResponse();
-        response->Record.SetTxId(request.GetTxId());
-        response->Record.SetOrigin(TabletID());
-        response->Record.SetStatus(NKikimrFileStore::OK);
-        ctx.Send(ev->Sender, response.Release());
-    }
-
-    void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx) {
-        Y_UNUSED(ev);
-        Become(&TThis::StateBroken);
-        ctx.Send(Tablet(), new TEvents::TEvPoisonPill());
-    }
-
-private:
-    TDeque<TAutoPtr<IEventHandle>> InitialEventsQueue;
-};
-
+class TFakeFileStore : public TActor<TFakeFileStore>, public NTabletFlatExecutor::TTabletExecutedFlat { 
+public: 
+    TFakeFileStore(const TActorId& tablet, TTabletStorageInfo* info) 
+        : TActor(&TThis::StateInit) 
+        , TTabletExecutedFlat(info, tablet,  new NMiniKQL::TMiniKQLFactory) 
+    {} 
+ 
+    void OnActivateExecutor(const TActorContext& ctx) override { 
+        Become(&TThis::StateWork); 
+ 
+        while (!InitialEventsQueue.empty()) { 
+            TAutoPtr<IEventHandle>& ev = InitialEventsQueue.front(); 
+            ctx.ExecutorThread.Send(ev.Release()); 
+            InitialEventsQueue.pop_front(); 
+        } 
+    } 
+ 
+    void OnDetach(const TActorContext& ctx) override { 
+        Die(ctx); 
+    } 
+ 
+    void OnTabletDead(TEvTablet::TEvTabletDead::TPtr& ev, const TActorContext& ctx) override { 
+        Y_UNUSED(ev); 
+        Die(ctx); 
+    } 
+ 
+    void Enqueue(STFUNC_SIG) override { 
+        Y_UNUSED(ctx); 
+        InitialEventsQueue.push_back(ev); 
+    } 
+ 
+    STFUNC(StateInit) { 
+        StateInitImpl(ev, ctx); 
+    } 
+ 
+    STFUNC(StateWork) { 
+        switch (ev->GetTypeRewrite()) { 
+            HFunc(TEvTablet::TEvTabletDead, HandleTabletDead); 
+            HFunc(TEvFileStore::TEvUpdateConfig, Handle); 
+            HFunc(TEvents::TEvPoisonPill, Handle); 
+        } 
+    } 
+ 
+    STFUNC(StateBroken) { 
+        switch (ev->GetTypeRewrite()) { 
+            HFunc(TEvTablet::TEvTabletDead, HandleTabletDead); 
+        } 
+    } 
+ 
+private: 
+    void Handle(TEvFileStore::TEvUpdateConfig::TPtr& ev, const TActorContext& ctx) { 
+        const auto& request = ev->Get()->Record; 
+        TAutoPtr<TEvFileStore::TEvUpdateConfigResponse> response = 
+            new TEvFileStore::TEvUpdateConfigResponse(); 
+        response->Record.SetTxId(request.GetTxId()); 
+        response->Record.SetOrigin(TabletID()); 
+        response->Record.SetStatus(NKikimrFileStore::OK); 
+        ctx.Send(ev->Sender, response.Release()); 
+    } 
+ 
+    void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx) { 
+        Y_UNUSED(ev); 
+        Become(&TThis::StateBroken); 
+        ctx.Send(Tablet(), new TEvents::TEvPoisonPill()); 
+    } 
+ 
+private: 
+    TDeque<TAutoPtr<IEventHandle>> InitialEventsQueue; 
+}; 
+ 
 // Automatically resend notification requests to Schemeshard if it gets restarted
 class TTxNotificationSubscriber : public TActor<TTxNotificationSubscriber> {
 public:
@@ -768,10 +768,10 @@ std::function<NActors::IActor *(const NActors::TActorId &, NKikimr::TTabletStora
         return [](const TActorId& tablet, TTabletStorageInfo* info) {
             return new TFakeBlockStoreVolume(tablet, info);
         };
-    case TTabletTypes::FileStore:
-        return [](const TActorId& tablet, TTabletStorageInfo* info) {
-            return new TFakeFileStore(tablet, info);
-        };
+    case TTabletTypes::FileStore: 
+        return [](const TActorId& tablet, TTabletStorageInfo* info) { 
+            return new TFakeFileStore(tablet, info); 
+        }; 
     default:
         return nullptr;
     }

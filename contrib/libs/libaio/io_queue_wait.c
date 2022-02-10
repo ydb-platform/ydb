@@ -24,7 +24,7 @@
 
 struct timespec;
 
-int io_queue_wait(io_context_t ctx, struct timespec *timeout)
+int io_queue_wait(io_context_t ctx, struct timespec *timeout) 
 {
 	return io_getevents(ctx, 0, 0, NULL, timeout);
 }

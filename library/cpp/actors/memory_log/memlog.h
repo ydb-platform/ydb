@@ -45,7 +45,7 @@ public:
         return AtomicGet(MemLogBuffer);
     }
 
-    void* GetWriteBuffer(size_t amount) noexcept;
+    void* GetWriteBuffer(size_t amount) noexcept; 
 
     inline static void* GetWriteBufferStatic(size_t amount) noexcept {
         auto logger = GetMemoryLogger();
@@ -62,7 +62,7 @@ public:
     inline static void CreateMemoryLogBuffer(
         size_t totalSize = DEFAULT_TOTAL_SIZE,
         size_t grainSize = DEFAULT_GRAIN_SIZE)
-        Y_COLD {
+        Y_COLD { 
         if (AtomicGet(MemLogBuffer) != nullptr) {
             return;
         }
@@ -73,7 +73,7 @@ public:
     static std::atomic<bool> PrintLastMark;
 
     // buffer must be at least 16 bytes
-    static void ChangeLastMark(char* buffer) noexcept;
+    static void ChangeLastMark(char* buffer) noexcept; 
 
     inline static TThread::TId GetTheadId() noexcept {
         if (LogThreadId == 0) {
@@ -83,7 +83,7 @@ public:
     }
 
 private:
-    TMemoryLog(size_t totalSize, size_t grainSize) Y_COLD;
+    TMemoryLog(size_t totalSize, size_t grainSize) Y_COLD; 
 
     struct TGrain {
         TAtomic WritePointer = 0;
@@ -170,12 +170,12 @@ private:
 
 // it's no use of sanitizing this function
 NO_SANITIZE_THREAD
-char* BareMemLogWrite(
+char* BareMemLogWrite( 
     const char* begin, size_t msgSize, bool isLast = true) noexcept;
 
 // it's no use of sanitizing this function
 NO_SANITIZE_THREAD
-bool MemLogWrite(
+bool MemLogWrite( 
     const char* begin, size_t msgSize, bool addLF = false) noexcept;
 
 Y_WRAPPER inline bool MemLogWrite(const char* begin, const char* end) noexcept {

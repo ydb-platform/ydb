@@ -1,4 +1,4 @@
-RECURSE_FOR_TESTS(
+RECURSE_FOR_TESTS( 
     ut_async_index
     ut_base
     ut_base_reboots
@@ -9,38 +9,38 @@ RECURSE_FOR_TESTS(
     ut_compaction
     ut_export
     ut_export_reboots_s3
-    ut_extsubdomain
-    ut_extsubdomain_reboots
-    ut_filestore_reboots
-    ut_index_build
-    ut_index_build_reboots
+    ut_extsubdomain 
+    ut_extsubdomain_reboots 
+    ut_filestore_reboots 
+    ut_index_build 
+    ut_index_build_reboots 
     ut_login
     ut_move
     ut_move_reboots
-    ut_olap
+    ut_olap 
     ut_olap_reboots
-    ut_pq
-    ut_pq_reboots
-    ut_reboots
+    ut_pq 
+    ut_pq_reboots 
+    ut_reboots 
     ut_replication
     ut_replication_reboots
     ut_restore
-    ut_rtmr
-    ut_rtmr_reboots
+    ut_rtmr 
+    ut_rtmr_reboots 
     ut_ru_calculator
     ut_sequence
     ut_sequence_reboots
-    ut_serverless
-    ut_split_merge
-    ut_split_merge_reboots
-    ut_subdomain
-    ut_subdomain_reboots
-    ut_ttl
-    ut_upgradesubdomain
-    ut_upgradesubdomain_reboots
-    ut_user_attributes
-    ut_user_attributes_reboots
-)
+    ut_serverless 
+    ut_split_merge 
+    ut_split_merge_reboots 
+    ut_subdomain 
+    ut_subdomain_reboots 
+    ut_ttl 
+    ut_upgradesubdomain 
+    ut_upgradesubdomain_reboots 
+    ut_user_attributes 
+    ut_user_attributes_reboots 
+) 
 
 LIBRARY()
 

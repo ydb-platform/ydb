@@ -1,15 +1,15 @@
 package NKikimrFileStore;
 option java_package = "ru.yandex.kikimr.proto";
 
-message TChannelProfile {
-    // storage settings
-    optional string PoolKind = 1;
-    optional uint64 Size = 2; // size in bytes
-    optional double ReadIops = 3; // required iops for read requests
-    optional double ReadBandwidth = 4; // required bandwidth (in bytes/sec) for read requests
-    optional double WriteIops = 5; // required iops for write requests
-    optional double WriteBandwidth = 6; // required bandwidth (in bytes/sec) for write requests
-    optional uint32 DataKind = 7; // the kind of data to be stored, e.g. mixed/merged/etc.
+message TChannelProfile { 
+    // storage settings 
+    optional string PoolKind = 1; 
+    optional uint64 Size = 2; // size in bytes 
+    optional double ReadIops = 3; // required iops for read requests 
+    optional double ReadBandwidth = 4; // required bandwidth (in bytes/sec) for read requests 
+    optional double WriteIops = 5; // required iops for write requests 
+    optional double WriteBandwidth = 6; // required bandwidth (in bytes/sec) for write requests 
+    optional uint32 DataKind = 7; // the kind of data to be stored, e.g. mixed/merged/etc. 
 }
 
 message TConfig {
@@ -30,17 +30,17 @@ message TConfig {
 
     optional uint32 RangeIdHasherType = 18;
 
-    repeated TChannelProfile ExplicitChannelProfiles = 30;
-    optional bool PoolKindChangeAllowed = 31;
-
-    optional uint32 StorageMediaKind = 32;
-
-    optional uint32 PerformanceProfileMaxReadBandwidth = 33;
-    optional uint32 PerformanceProfileMaxReadIops = 34;
-    optional uint32 PerformanceProfileMaxWriteBandwidth = 35;
-    optional uint32 PerformanceProfileMaxWriteIops = 36;
-
-    optional uint32 NodesCount = 40;
+    repeated TChannelProfile ExplicitChannelProfiles = 30; 
+    optional bool PoolKindChangeAllowed = 31; 
+ 
+    optional uint32 StorageMediaKind = 32; 
+ 
+    optional uint32 PerformanceProfileMaxReadBandwidth = 33; 
+    optional uint32 PerformanceProfileMaxReadIops = 34; 
+    optional uint32 PerformanceProfileMaxWriteBandwidth = 35; 
+    optional uint32 PerformanceProfileMaxWriteIops = 36; 
+ 
+    optional uint32 NodesCount = 40; 
 }
 
 message TUpdateConfig {

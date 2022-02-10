@@ -1,5 +1,5 @@
 #include "stackcollect.h"
-
+ 
 #include "profiler.h"
 
 #include <util/generic/algorithm.h>

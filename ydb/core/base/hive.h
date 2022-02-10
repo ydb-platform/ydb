@@ -102,16 +102,16 @@ namespace NKikimr {
             TEvBootTabletReply()
             {}
 
-            TEvBootTabletReply(NKikimrProto::EReplyStatus status, const TString& msg = {})
+            TEvBootTabletReply(NKikimrProto::EReplyStatus status, const TString& msg = {}) 
             {
                 Record.SetStatus(status);
-                Record.SetStatusMsg(msg);
+                Record.SetStatusMsg(msg); 
             }
 
             TString ToString() const {
                 TStringStream str;
                 str << "{EvBootTabletReply Status: " << NKikimrProto::EReplyStatus_Name(Record.GetStatus()).data();
-                str << " Msg: " << Record.GetStatusMsg();
+                str << " Msg: " << Record.GetStatusMsg(); 
                 str << "}";
                 return str.Str();
             }

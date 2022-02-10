@@ -5,7 +5,7 @@
 #include <util/network/ip.h>
 
 #include <util/str_stl.h>
-#include <util/generic/maybe.h>
+#include <util/generic/maybe.h> 
 #include <util/generic/variant.h>
 
 #ifdef _unix_
@@ -62,16 +62,16 @@ static inline TIp6 Ip6FromString(const char* ipStr) {
     return res;
 }
 
-static inline TMaybe<TIp6> TryParseIp6FromString(const char* ipStr) {
-    TIp6 res;
-
-    if (inet_pton(AF_INET6, ipStr, &res.Data) == 0) {
-        return Nothing();
-    }
-
-    return res;
-}
-
+static inline TMaybe<TIp6> TryParseIp6FromString(const char* ipStr) { 
+    TIp6 res; 
+ 
+    if (inet_pton(AF_INET6, ipStr, &res.Data) == 0) { 
+        return Nothing(); 
+    } 
+ 
+    return res; 
+} 
+ 
 static inline char* Ip6ToString(const TIp6& ip, char* buf, size_t len) {
     if (!inet_ntop(AF_INET6, (void*)&ip.Data, buf, (socklen_t)len)) {
         ythrow TSystemError() << "Failed to get ipv6 address string";

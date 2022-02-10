@@ -54,7 +54,7 @@ RECURSE(
     anytree
     apipkg
     apispec
-    apispec-flask-restful
+    apispec-flask-restful 
     appdirs
     APScheduler
     apsw
@@ -179,7 +179,7 @@ RECURSE(
     coverage
     coverage/bin
     cpu-cores
-    crcmod
+    crcmod 
     croniter
     crontab
     cryptography
@@ -967,7 +967,7 @@ RECURSE(
     sanic
     sanic-routing
     sanic-testing
-    scales
+    scales 
     scancode-toolkit
     scandir
     schedule

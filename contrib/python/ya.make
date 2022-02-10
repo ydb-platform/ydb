@@ -318,7 +318,7 @@ RECURSE(
     docopt
     docstring-parser
     docutils
-    dohq-teamcity 
+    dohq-teamcity
     dominate
     dotmap
     dparse

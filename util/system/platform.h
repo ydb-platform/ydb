@@ -75,12 +75,12 @@
     #else
         #define _arm32_
     #endif
-#endif
-
+#endif 
+ 
 #if defined(_arm64_) || defined(_arm32_)
     #define _arm_
-#endif
-
+#endif 
+ 
 /* __ia64__ and __x86_64__      - defined by GNU C.
  * _M_IA64, _M_X64, _M_AMD64    - defined by Visual Studio.
  *

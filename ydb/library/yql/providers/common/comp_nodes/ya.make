@@ -46,7 +46,7 @@ PEERDIR(
 )
 
 IF (NOT MKQL_DISABLE_CODEGEN)
-    PEERDIR(
+    PEERDIR( 
         ydb/library/yql/minikql/codegen
         contrib/libs/llvm12/lib/IR
         contrib/libs/llvm12/lib/ExecutionEngine/MCJIT
@@ -54,8 +54,8 @@ IF (NOT MKQL_DISABLE_CODEGEN)
         contrib/libs/llvm12/lib/Target/X86
         contrib/libs/llvm12/lib/Target/X86/AsmParser
         contrib/libs/llvm12/lib/Transforms/IPO
-    )
-ELSE()
+    ) 
+ELSE() 
     CFLAGS(
         -DMKQL_DISABLE_CODEGEN
     )

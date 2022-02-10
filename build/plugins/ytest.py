@@ -728,20 +728,20 @@ def onadd_pytest_bin(unit, *args):
     if unit.get("TIDY") == "yes":
         # graph changed for clang_tidy tests
         return
-    flat, kws = _common.sort_by_keywords({'RUNNER_BIN': 1}, args)
-    if flat:
-        ymake.report_configure_error(
-            'Unknown arguments found while processing add_pytest_bin macro: {!r}'
-            .format(flat)
-        )
+    flat, kws = _common.sort_by_keywords({'RUNNER_BIN': 1}, args) 
+    if flat: 
+        ymake.report_configure_error( 
+            'Unknown arguments found while processing add_pytest_bin macro: {!r}' 
+            .format(flat) 
+        ) 
 
-    runner_bin = kws.get('RUNNER_BIN', [None])[0]
+    runner_bin = kws.get('RUNNER_BIN', [None])[0] 
     test_type = 'py3test.bin' if (unit.get("PYTHON3") == 'yes') else "pytest.bin"
 
     add_test_to_dart(unit, test_type, runner_bin=runner_bin)
+ 
 
-
-def add_test_to_dart(unit, test_type, binary_path=None, runner_bin=None):
+def add_test_to_dart(unit, test_type, binary_path=None, runner_bin=None): 
     if unit.get("TIDY") == "yes":
         # graph changed for clang_tidy tests
         return
@@ -1016,7 +1016,7 @@ def onsetup_pytest_bin(unit, *args):
     use_arcadia_python = unit.get('USE_ARCADIA_PYTHON') == "yes"
     if use_arcadia_python:
         unit.onresource(['-', 'PY_MAIN={}'.format("library.python.pytest.main:main")])  # XXX
-        unit.onadd_pytest_bin(list(args))
+        unit.onadd_pytest_bin(list(args)) 
     else:
         unit.onno_platform()
         unit.onadd_pytest_script(["PY_TEST"])

@@ -280,25 +280,25 @@ message TPqGatewayConfig {
     repeated TAttr DefaultSettings = 100;
 }
 
-///////////////////////////// Stat /////////////////////////////
-
-message TStatClusterConfig {
-    optional string Name = 1; // Short cluster name
-    optional string Cluster = 2; // Real cluster server name with port
-    optional bool Default = 3 [default = false]; // Default cluster
-    optional string StatToken = 4; // token to use in communication with Statface
-    optional string StatName = 5; // Stat cluster name
-
-    repeated TAttr Settings = 100;
-}
-
-message TStatGatewayConfig {
-    optional uint32 GatewayThreads = 1 [default = 0]; // Number of gateway MtpQueue threads. The adaptive MtpQueue will be used for 0 value
-
-    repeated TStatClusterConfig ClusterMapping = 101; // Accepted cluster shortcuts. All names not from this list will be rejected
-    repeated TAttr DefaultSettings = 102;
-}
-
+///////////////////////////// Stat ///////////////////////////// 
+ 
+message TStatClusterConfig { 
+    optional string Name = 1; // Short cluster name 
+    optional string Cluster = 2; // Real cluster server name with port 
+    optional bool Default = 3 [default = false]; // Default cluster 
+    optional string StatToken = 4; // token to use in communication with Statface 
+    optional string StatName = 5; // Stat cluster name 
+ 
+    repeated TAttr Settings = 100; 
+} 
+ 
+message TStatGatewayConfig { 
+    optional uint32 GatewayThreads = 1 [default = 0]; // Number of gateway MtpQueue threads. The adaptive MtpQueue will be used for 0 value 
+ 
+    repeated TStatClusterConfig ClusterMapping = 101; // Accepted cluster shortcuts. All names not from this list will be rejected 
+    repeated TAttr DefaultSettings = 102; 
+} 
+ 
 ///////////////////////////// CHYT /////////////////////////////
 
 message TChytClusterConfig {
@@ -441,7 +441,7 @@ message TGatewaysConfig {
     optional TClickHouseGatewayConfig ClickHouse = 3;
     optional TRtmrGatewayConfig Rtmr = 4;
     optional TKikimrMvpGatewayConfig KikimrMvp = 5;
-    optional TStatGatewayConfig Stat = 6;
+    optional TStatGatewayConfig Stat = 6; 
     optional TChytGatewayConfig Chyt = 7;
     optional TSolomonGatewayConfig Solomon = 8;
     optional TFileStorageAdditionalConfig Fs = 9;

@@ -554,8 +554,8 @@ TExprNode::TPtr NodeToExprLiteral(TPositionHandle pos, const TTypeAnnotationNode
 void CopyYsonWithAttrs(char cmd, TInputBuf& buf, TVector<char>& yson) {
     if (cmd == BeginAttributesSymbol) {
         yson.push_back(cmd);
-        cmd = buf.Read();
-
+        cmd = buf.Read(); 
+ 
         for (;;) {
             if (cmd == EndAttributesSymbol) {
                 yson.push_back(cmd);
@@ -574,7 +574,7 @@ void CopyYsonWithAttrs(char cmd, TInputBuf& buf, TVector<char>& yson) {
             cmd = buf.Read();
             if (cmd == KeyedItemSeparatorSymbol) {
                 yson.push_back(cmd);
-                cmd = buf.Read();
+                cmd = buf.Read(); 
             }
         }
     }
@@ -610,8 +610,8 @@ void CopyYson(char cmd, TInputBuf& buf, TVector<char>& yson) {
     }
     case BeginListSymbol: {
         yson.push_back(cmd);
-        cmd = buf.Read();
-
+        cmd = buf.Read(); 
+ 
         for (;;) {
             if (cmd == EndListSymbol) {
                 yson.push_back(cmd);
@@ -622,15 +622,15 @@ void CopyYson(char cmd, TInputBuf& buf, TVector<char>& yson) {
             cmd = buf.Read();
             if (cmd == ListItemSeparatorSymbol) {
                 yson.push_back(cmd);
-                cmd = buf.Read();
+                cmd = buf.Read(); 
             }
         }
         break;
     }
     case BeginMapSymbol: {
         yson.push_back(cmd);
-        cmd = buf.Read();
-
+        cmd = buf.Read(); 
+ 
         for (;;) {
             if (cmd == EndMapSymbol) {
                 yson.push_back(cmd);
@@ -648,7 +648,7 @@ void CopyYson(char cmd, TInputBuf& buf, TVector<char>& yson) {
             cmd = buf.Read();
             if (cmd == KeyedItemSeparatorSymbol) {
                 yson.push_back(cmd);
-                cmd = buf.Read();
+                cmd = buf.Read(); 
             }
         }
         break;
@@ -985,11 +985,11 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type,
         NUdf::TUnboxedValue* items;
         NUdf::TUnboxedValue ret = holderFactory.CreateDirectArrayHolder(structType->GetMembersCount(), items);
         if (cmd == BeginListSymbol) {
-            cmd = buf.Read();
-
+            cmd = buf.Read(); 
+ 
             for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
                 items[i] = ReadYsonValue(structType->GetMemberType(i), holderFactory, cmd, buf, isTableFormat);
-
+ 
                 cmd = buf.Read();
                 if (cmd == ListItemSeparatorSymbol) {
                     cmd = buf.Read();
@@ -1000,8 +1000,8 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type,
             return ret;
         }
         else {
-            cmd = buf.Read();
-
+            cmd = buf.Read(); 
+ 
             for (;;) {
                 if (cmd == EndMapSymbol) {
                     break;
@@ -1022,11 +1022,11 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type,
                 } else {
                     SkipYson(cmd, buf);
                 }
-
-                cmd = buf.Read();
-                if (cmd == KeyedItemSeparatorSymbol) {
-                    cmd = buf.Read();
-                }
+ 
+                cmd = buf.Read(); 
+                if (cmd == KeyedItemSeparatorSymbol) { 
+                    cmd = buf.Read(); 
+                } 
             }
 
             for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
@@ -1045,18 +1045,18 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type,
         auto itemType = static_cast<TListType*>(type)->GetItemType();
         TDefaultListRepresentation items;
         CHECK_EXPECTED(cmd, BeginListSymbol);
-        cmd = buf.Read();
-
+        cmd = buf.Read(); 
+ 
         for (;;) {
             if (cmd == EndListSymbol) {
                 break;
             }
 
             items = items.Append(ReadYsonValue(itemType, holderFactory, cmd, buf, isTableFormat));
-
-            cmd = buf.Read();
+ 
+            cmd = buf.Read(); 
             if (cmd == ListItemSeparatorSymbol) {
-                cmd = buf.Read();
+                cmd = buf.Read(); 
             }
         }
 
@@ -1112,8 +1112,8 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type,
                 "Expected String type as dictionary key type");
 
             auto filler = [&](TValuesDictHashMap& map) {
-                cmd = buf.Read();
-
+                cmd = buf.Read(); 
+ 
                 for (;;) {
                     if (cmd == EndMapSymbol) {
                         break;
@@ -1125,11 +1125,11 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type,
                     cmd = buf.Read();
                     auto payload = ReadYsonValue(payloadType, holderFactory, cmd, buf, isTableFormat);
                     map.emplace(std::move(keyStr), std::move(payload));
-
-                    cmd = buf.Read();
-                    if (cmd == KeyedItemSeparatorSymbol) {
-                        cmd = buf.Read();
-                    }
+ 
+                    cmd = buf.Read(); 
+                    if (cmd == KeyedItemSeparatorSymbol) { 
+                        cmd = buf.Read(); 
+                    } 
                 }
             };
 
@@ -1137,8 +1137,8 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type,
         }
         else {
             auto filler = [&](TValuesDictHashMap& map) {
-                cmd = buf.Read();
-
+                cmd = buf.Read(); 
+ 
                 for (;;) {
                     if (cmd == EndListSymbol) {
                         break;
@@ -1161,11 +1161,11 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type,
                     }
 
                     map.emplace(std::move(key), std::move(payload));
-
-                    cmd = buf.Read();
-                    if (cmd == ListItemSeparatorSymbol) {
-                        cmd = buf.Read();
-                    }
+ 
+                    cmd = buf.Read(); 
+                    if (cmd == ListItemSeparatorSymbol) { 
+                        cmd = buf.Read(); 
+                    } 
                 }
             };
 
@@ -1178,11 +1178,11 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type,
         NUdf::TUnboxedValue* items;
         NUdf::TUnboxedValue ret = holderFactory.CreateDirectArrayHolder(tupleType->GetElementsCount(), items);
         CHECK_EXPECTED(cmd, BeginListSymbol);
-        cmd = buf.Read();
-
+        cmd = buf.Read(); 
+ 
         for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
             items[i] = ReadYsonValue(tupleType->GetElementType(i), holderFactory, cmd, buf, isTableFormat);
-
+ 
             cmd = buf.Read();
             if (cmd == ListItemSeparatorSymbol) {
                 cmd = buf.Read();

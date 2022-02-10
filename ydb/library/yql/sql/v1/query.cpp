@@ -1388,10 +1388,10 @@ static const TMap<EWriteColumnMode, TString> columnModeToStrMapMR {
     {EWriteColumnMode::Renew, "renew"}
 };
 
-static const TMap<EWriteColumnMode, TString> columnModeToStrMapStat {
-    {EWriteColumnMode::Upsert, "upsert"}
-};
-
+static const TMap<EWriteColumnMode, TString> columnModeToStrMapStat { 
+    {EWriteColumnMode::Upsert, "upsert"} 
+}; 
+ 
 static const TMap<EWriteColumnMode, TString> columnModeToStrMapKikimr {
     {EWriteColumnMode::Default, ""},
     {EWriteColumnMode::Insert, "insert_abort"},
@@ -1429,22 +1429,22 @@ public:
         auto getModesMap = [] (const TString& serviceName) -> const TMap<EWriteColumnMode, TString>& {
             if (serviceName == KikimrProviderName || serviceName == YdbProviderName) {
                 return columnModeToStrMapKikimr;
-            } else if (serviceName == StatProviderName) {
-                return columnModeToStrMapStat;
+            } else if (serviceName == StatProviderName) { 
+                return columnModeToStrMapStat; 
             } else {
                 return columnModeToStrMapMR;
             }
         };
 
         auto options = Y();
-        if (Options) {
-            if (!Options->Init(ctx, src)) {
-                return false;
-            }
-
-            options = L(Options);
-        }
-
+        if (Options) { 
+            if (!Options->Init(ctx, src)) { 
+                return false; 
+            } 
+ 
+            options = L(Options); 
+        } 
+ 
         if (Mode != EWriteColumnMode::Default) {
             auto modeStr = getModesMap(Table.Service).FindPtr(Mode);
 
@@ -1467,7 +1467,7 @@ private:
     TString Label;
     TTableRef Table;
     EWriteColumnMode Mode;
-    TNodePtr Options;
+    TNodePtr Options; 
     TScopedStatePtr Scoped;
 };
 

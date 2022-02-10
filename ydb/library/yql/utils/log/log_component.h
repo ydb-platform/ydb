@@ -22,7 +22,7 @@ enum class EComponent {
     ProviderRtmr,
     Performance, Perf = Performance,
     Net,
-    ProviderStat,
+    ProviderStat, 
     ProviderSolomon,
     CoreEval,
     CorePeepHole,

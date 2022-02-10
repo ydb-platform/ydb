@@ -77,14 +77,14 @@ void EnsureScriptSpecificTypes(
         case EScriptType::ArcPython:
         case EScriptType::ArcPython2:
         case EScriptType::ArcPython3:
-        case EScriptType::CustomPython:
+        case EScriptType::CustomPython: 
         case EScriptType::CustomPython2:
         case EScriptType::CustomPython3:
             return TPythonTypeChecker().Walk(funcType, env);
         case EScriptType::Javascript:
             return TJavascriptTypeChecker().Walk(funcType, env);
     default:
-        MKQL_ENSURE(false, "Unknown script type " << static_cast<ui32>(scriptType));
+        MKQL_ENSURE(false, "Unknown script type " << static_cast<ui32>(scriptType)); 
     }
 }
 
@@ -229,7 +229,7 @@ bool ReduceOptionalElements(const TType* type, const TArrayRef<const ui32>& test
 
 std::string_view ScriptTypeAsStr(EScriptType type) {
     switch (type) {
-#define MKQL_SCRIPT_TYPE_CASE(name, value, ...) \
+#define MKQL_SCRIPT_TYPE_CASE(name, value, ...) \ 
     case EScriptType::name: return std::string_view(#name);
 
         MKQL_SCRIPT_TYPES(MKQL_SCRIPT_TYPE_CASE)
@@ -242,9 +242,9 @@ std::string_view ScriptTypeAsStr(EScriptType type) {
 
 EScriptType ScriptTypeFromStr(std::string_view str) {
     TString lowerStr = TString(str);
-    lowerStr.to_lower();
-#define MKQL_SCRIPT_TYPE_FROM_STR(name, value, lowerName) \
-    if (lowerStr == #lowerName) return EScriptType::name;
+    lowerStr.to_lower(); 
+#define MKQL_SCRIPT_TYPE_FROM_STR(name, value, lowerName) \ 
+    if (lowerStr == #lowerName) return EScriptType::name; 
 
     MKQL_SCRIPT_TYPES(MKQL_SCRIPT_TYPE_FROM_STR)
 #undef MKQL_SCRIPT_TYPE_FROM_STR

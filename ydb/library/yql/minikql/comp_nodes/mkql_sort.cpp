@@ -14,7 +14,7 @@ namespace NMiniKQL {
 namespace {
 
 std::vector<NUdf::EDataSlot> PrepareKeyTypesByScheme(const std::vector<std::tuple<NUdf::EDataSlot, bool, TType*>>& keySchemeTypes) {
-    MKQL_ENSURE(!keySchemeTypes.empty(), "No key types provided");
+    MKQL_ENSURE(!keySchemeTypes.empty(), "No key types provided"); 
     std::vector<NUdf::EDataSlot> keyTypes;
     keyTypes.reserve(keySchemeTypes.size());
     for (const auto& schemeType: keySchemeTypes) {
@@ -205,34 +205,34 @@ struct TCompareDescr {
 
     template<class Container>
     std::function<bool(const typename Container::value_type&, const typename Container::value_type&)>
-    MakeComparator(const NUdf::TUnboxedValue& ascending) const {
-        if (KeyTypes.size() > 1U) {
-            // sort tuples
-            return [this, &ascending](const typename Container::value_type& x, const typename Container::value_type& y) {
-                const auto& left = Get(x);
-                const auto& right = Get(y);
+    MakeComparator(const NUdf::TUnboxedValue& ascending) const { 
+        if (KeyTypes.size() > 1U) { 
+            // sort tuples 
+            return [this, &ascending](const typename Container::value_type& x, const typename Container::value_type& y) { 
+                const auto& left = Get(x); 
+                const auto& right = Get(y); 
 
-                for (ui32 i = 0; i < KeyTypes.size(); ++i) {
-                    const auto& keyType = KeyTypes[i];
-                    const auto& leftElem = left.GetElement(i);
-                    const auto& rightElem = right.GetElement(i);
-                    const bool asc = ascending.GetElement(i).Get<bool>();
+                for (ui32 i = 0; i < KeyTypes.size(); ++i) { 
+                    const auto& keyType = KeyTypes[i]; 
+                    const auto& leftElem = left.GetElement(i); 
+                    const auto& rightElem = right.GetElement(i); 
+                    const bool asc = ascending.GetElement(i).Get<bool>(); 
 
-                    if (const auto cmp = CompareValues(keyType, asc, std::get<1>(KeySchemeTypes[i]), leftElem, rightElem)) {
-                        return cmp < 0;
+                    if (const auto cmp = CompareValues(keyType, asc, std::get<1>(KeySchemeTypes[i]), leftElem, rightElem)) { 
+                        return cmp < 0; 
                     }
-                }
+                } 
 
-                return false;
-            };
-        } else {
-            // sort one column
-            const bool isOptional = std::get<1>(KeySchemeTypes.front());
-            const bool asc = ascending.Get<bool>();
+                return false; 
+            }; 
+        } else { 
+            // sort one column 
+            const bool isOptional = std::get<1>(KeySchemeTypes.front()); 
+            const bool asc = ascending.Get<bool>(); 
 
-            return [this, asc, isOptional](const typename Container::value_type& x, const typename Container::value_type& y) {
-                    return CompareValues(KeyTypes.front(), asc, isOptional, Get(x), Get(y)) < 0;
-            };
+            return [this, asc, isOptional](const typename Container::value_type& x, const typename Container::value_type& y) { 
+                    return CompareValues(KeyTypes.front(), asc, isOptional, Get(x), Get(y)) < 0; 
+            }; 
         }
     }
 
@@ -519,7 +519,7 @@ public:
                 });
 
                 const auto& ascending = Ascending->GetValue(ctx);
-                const auto max = std::max_element(keys.begin(), keys.end(), Description.MakeComparator<TUnboxedValueVector>(ascending));
+                const auto max = std::max_element(keys.begin(), keys.end(), Description.MakeComparator<TUnboxedValueVector>(ascending)); 
                 hotkey = *max;
                 HotKey->SetValue(ctx, std::move(*max));
             }
@@ -530,7 +530,7 @@ public:
         const auto& key = Key->GetValue(ctx);
 
         const auto& ascending = Ascending->GetValue(ctx);
-        if (Description.MakeComparator<TUnboxedValueVector>(ascending)(key, hotkey)) {
+        if (Description.MakeComparator<TUnboxedValueVector>(ascending)(key, hotkey)) { 
             const auto reserve = std::max<ui64>(count << 1ULL, 1ULL << 8ULL);
             if (size < reserve) {
                 return ctx.HolderFactory.Append(list.Release(), Arg->GetValue(ctx).Release());
@@ -546,7 +546,7 @@ public:
             });
 
             Description.Prepare(ctx, items);
-            std::nth_element(items.begin(), items.begin() + count - 1U, items.end(), Description.MakeComparator<TKeyPayloadPairVector>(ascending));
+            std::nth_element(items.begin(), items.begin() + count - 1U, items.end(), Description.MakeComparator<TKeyPayloadPairVector>(ascending)); 
             items.resize(count);
 
             NUdf::TUnboxedValue *inplace = nullptr;

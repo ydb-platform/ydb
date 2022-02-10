@@ -376,7 +376,7 @@ ids {
   code: YT_ENTRY_NOT_TABLE_OR_VIEW
   severity: S_ERROR
 }
-ids {
+ids { 
   code: YT_CONCURRENT_TABLE_MODIF
   severity: S_ERROR
 }
@@ -409,13 +409,13 @@ ids {
   severity: S_WARNING
 }
 ids {
-  code: STAT_DEPRECATED_STRING_TREE
-  severity: S_WARNING
-}
-ids {
-  code: STAT_ACCESS_DENIED
-  severity: S_ERROR
-}
+  code: STAT_DEPRECATED_STRING_TREE 
+  severity: S_WARNING 
+} 
+ids { 
+  code: STAT_ACCESS_DENIED 
+  severity: S_ERROR 
+} 
 ids {
   code: YQL_DEPRECATED_FUNCTION_OR_SIGNATURE
   severity: S_WARNING

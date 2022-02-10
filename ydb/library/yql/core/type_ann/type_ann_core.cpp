@@ -6936,8 +6936,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         auto moduleName = input->Head().Content();
-        auto scriptType = NKikimr::NMiniKQL::ScriptTypeFromStr(moduleName);
-        if (scriptType == NKikimr::NMiniKQL::EScriptType::Unknown) {
+        auto scriptType = NKikimr::NMiniKQL::ScriptTypeFromStr(moduleName); 
+        if (scriptType == NKikimr::NMiniKQL::EScriptType::Unknown) { 
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "Unknown script type: " << moduleName));
             return IGraphTransformer::TStatus::Error;
         }
@@ -6946,7 +6946,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         auto canonizedModuleName = NKikimr::NMiniKQL::ScriptTypeAsStr(scriptType);
         bool isCustomPython = NKikimr::NMiniKQL::IsCustomPython(scriptType);
         bool foundModule = false;
-
+ 
         // resolve script udf from external resources (files / urls)
         // (main usage of CustomPython)
         {
@@ -6958,12 +6958,12 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
             foundModule = ctx.Types.UdfModules.find(canonizedModuleName) != ctx.Types.UdfModules.end();
         }
-
-        // fallback for preinstalled CustomPython case
+ 
+        // fallback for preinstalled CustomPython case 
         if (!foundModule) {
             foundModule = static_cast<bool>(ctx.Types.UdfResolver->GetSystemModulePath(canonizedModuleName));
-        }
-
+        } 
+ 
         if (!foundModule) {
             if (isCustomPython) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder()
@@ -6973,9 +6973,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder()
                     << "Module not loaded for script type: " << canonizedModuleName));
             }
-            return IGraphTransformer::TStatus::Error;
-        }
-
+            return IGraphTransformer::TStatus::Error; 
+        } 
+ 
         if (input->ChildrenSize() == 5) {
             if (!EnsureTuple(*input->Child(4), ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
@@ -12817,7 +12817,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["Fold1Map"] = &Fold1MapWrapper;
         Functions["Chain1Map"] = &Chain1MapWrapper;
         Functions["LMap"] = &LMapWrapper;
-        Functions["OrderedLMap"] = &LMapWrapper;
+        Functions["OrderedLMap"] = &LMapWrapper; 
         Functions["Struct"] = &StructWrapper;
         Functions["AddMember"] = &AddMemberWrapper;
         Functions["RemoveMember"] = &RemoveMemberWrapper<false>;

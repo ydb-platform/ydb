@@ -4505,15 +4505,15 @@
                     "default": true
                 }
             ]
-        },
-        "run_python_udf": {
-            "tools": {
+        }, 
+        "run_python_udf": { 
+            "tools": { 
                 "run_python_udf": {
                     "bottle": "run_python_udf",
                     "executable": "run_python_udf"
                 }
-            },
-            "platforms": [
+            }, 
+            "platforms": [ 
                 {
                     "host": {
                         "os": "LINUX"
@@ -4532,7 +4532,7 @@
                     },
                     "default": true
                 }
-            ]
+            ] 
         },
         "graphs_difference": {
             "tools": {
@@ -7248,17 +7248,17 @@
                     "python3"
                 ]
             }
-        },
-        "run_python_udf": {
-            "formula": {
-                "sandbox_id": 273337583,
-                "match": "RUN_PYTHON_UDF"
-            },
-            "executable": {
+        }, 
+        "run_python_udf": { 
+            "formula": { 
+                "sandbox_id": 273337583, 
+                "match": "RUN_PYTHON_UDF" 
+            }, 
+            "executable": { 
                 "run_python_udf": [
                     "run_python_udf"
                 ]
-            }
+            } 
         },
         "graphs_difference": {
             "formula": {

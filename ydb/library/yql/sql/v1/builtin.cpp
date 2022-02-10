@@ -2913,11 +2913,11 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
         moduleResource = ctx.Settings.ModuleMapping.at(ns);
     }
 
-    if (ns == "js") {
-        ns = "javascript";
+    if (ns == "js") { 
+        ns = "javascript"; 
         nameSpace = "JavaScript";
-    }
-
+    } 
+ 
     if (ns == "datetime2") {
         ctx.Warning(pos, TIssuesIds::YQL_DEPRECATED_DATETIME2) << "DateTime2:: is a temporary alias for DateTime:: which will be removed in the future, use DateTime:: instead";
     }
@@ -2927,7 +2927,7 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
         nameSpace = "DateTime2";
     }
 
-    auto scriptType = NKikimr::NMiniKQL::ScriptTypeFromStr(ns);
+    auto scriptType = NKikimr::NMiniKQL::ScriptTypeFromStr(ns); 
     switch (scriptType) {
         case NKikimr::NMiniKQL::EScriptType::Python:
         case NKikimr::NMiniKQL::EScriptType::Python3:
@@ -2943,7 +2943,7 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
         default:
             break;
     }
-
+ 
     if (ns == "yql" || ns == "@yql") {
         if (warnOnYqlNameSpace && GetEnv("YQL_DETERMINISTIC_MODE").empty()) {
             ctx.Warning(pos, TIssuesIds::YQL_S_EXPRESSIONS_CALL)
@@ -3070,8 +3070,8 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
         }
 
         return BuildUdf(ctx, pos, nameSpace, name, makeUdfArgs());
-    } else if (scriptType != NKikimr::NMiniKQL::EScriptType::Unknown) {
-        auto scriptName = NKikimr::NMiniKQL::ScriptTypeAsStr(scriptType);
+    } else if (scriptType != NKikimr::NMiniKQL::EScriptType::Unknown) { 
+        auto scriptName = NKikimr::NMiniKQL::ScriptTypeAsStr(scriptType); 
         return new TScriptUdf(pos, TString(scriptName), name, args);
     } else if (ns.empty()) {
         if (auto simpleType = LookupSimpleTypeBySqlAlias(normalizedName, ctx.FlexibleTypes)) {

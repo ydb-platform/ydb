@@ -507,25 +507,25 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
         TString ExceptionMessage;
     };
 
-    class TListenerSockAddrReplyServer: public THttpServer::ICallBack {
-        class TRequest: public TClientRequest {
-        public:
-            bool Reply(void* /*tsr*/) override {
-                Output() << "HTTP/1.1 200 Ok\r\n\r\n";
-                Output() << PrintHostAndPort(*GetListenerSockAddrRef());
-
-                Output().Finish();
-
-                return true;
-            }
-        };
-
-        public:
-        TClientRequest* CreateClient() override {
-            return new TRequest();
-        }
-    };
-
+    class TListenerSockAddrReplyServer: public THttpServer::ICallBack { 
+        class TRequest: public TClientRequest { 
+        public: 
+            bool Reply(void* /*tsr*/) override { 
+                Output() << "HTTP/1.1 200 Ok\r\n\r\n"; 
+                Output() << PrintHostAndPort(*GetListenerSockAddrRef()); 
+ 
+                Output().Finish(); 
+ 
+                return true; 
+            } 
+        }; 
+ 
+        public: 
+        TClientRequest* CreateClient() override { 
+            return new TRequest(); 
+        } 
+    }; 
+ 
     Y_UNIT_TEST(TTestResetConnection) {
         TPortManager pm;
         const ui16 port = pm.GetPort();
@@ -660,30 +660,30 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
         server.Stop();
     }
 
-    Y_UNIT_TEST(TTestListenerSockAddrConnection) {
-        TPortManager pm;
-        const ui16 port1 = pm.GetPort();
-        const ui16 port2 = pm.GetPort();
-
-        TListenerSockAddrReplyServer serverImpl;
-        THttpServer server(&serverImpl, THttpServer::TOptions().EnableKeepAlive(true).AddBindAddress("127.0.0.1", port1).AddBindAddress("127.0.0.1", port2));
-        UNIT_ASSERT(server.Start());
-
-        TTestRequest r1(port1);
-        r1.KeepAliveConnection = true;
-
-        TString resp = r1.Execute();
-        UNIT_ASSERT(resp == TString::Join("127.0.0.1", ":", ToString(port1)));
-
-        TTestRequest r2(port2);
-        r2.KeepAliveConnection = true;
-
-        resp = r2.Execute();
-        UNIT_ASSERT(resp == TString::Join("127.0.0.1", ":", ToString(port2)));
-
-        server.Stop();
-    };
-
+    Y_UNIT_TEST(TTestListenerSockAddrConnection) { 
+        TPortManager pm; 
+        const ui16 port1 = pm.GetPort(); 
+        const ui16 port2 = pm.GetPort(); 
+ 
+        TListenerSockAddrReplyServer serverImpl; 
+        THttpServer server(&serverImpl, THttpServer::TOptions().EnableKeepAlive(true).AddBindAddress("127.0.0.1", port1).AddBindAddress("127.0.0.1", port2)); 
+        UNIT_ASSERT(server.Start()); 
+ 
+        TTestRequest r1(port1); 
+        r1.KeepAliveConnection = true; 
+ 
+        TString resp = r1.Execute(); 
+        UNIT_ASSERT(resp == TString::Join("127.0.0.1", ":", ToString(port1))); 
+ 
+        TTestRequest r2(port2); 
+        r2.KeepAliveConnection = true; 
+ 
+        resp = r2.Execute(); 
+        UNIT_ASSERT(resp == TString::Join("127.0.0.1", ":", ToString(port2))); 
+ 
+        server.Stop(); 
+    }; 
+ 
 #if 0
     Y_UNIT_TEST(TestSocketsLeak) {
         const bool trueFalse[] = {true, false};

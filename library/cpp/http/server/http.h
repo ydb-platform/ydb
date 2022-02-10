@@ -119,7 +119,7 @@ public:
 
     THttpServer* HttpServ() const noexcept;
     const TSocket& Socket() const noexcept;
-    NAddr::IRemoteAddrRef GetListenerSockAddrRef() const noexcept;
+    NAddr::IRemoteAddrRef GetListenerSockAddrRef() const noexcept; 
     TInstant AcceptMoment() const noexcept;
 
     bool IsLocal() const;

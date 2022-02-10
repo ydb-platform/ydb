@@ -1,5 +1,5 @@
 LIBRARY()
-
+ 
 OWNER(
     mvel
     snowball
@@ -15,10 +15,10 @@ PEERDIR(
     library/cpp/string_utils/base64
 )
 
-SRCS(
+SRCS( 
     sandbox.cpp.in
     build_info.cpp.in
     build_info_static.cpp
-)
-
-END()
+) 
+ 
+END() 

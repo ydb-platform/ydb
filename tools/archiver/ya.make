@@ -1,5 +1,5 @@
 PROGRAM()
-
+ 
 OWNER(
     pg
     mvel
@@ -13,8 +13,8 @@ PEERDIR(
 
 SRCS(
     main.cpp
-)
+) 
 
 SET(IDE_FOLDER "_Builders")
-
+ 
 END()

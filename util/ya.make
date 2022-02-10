@@ -6,7 +6,7 @@ SUBSCRIBER(g:util-subscribers)
 NEED_CHECK()
 
 NO_UTIL()
-
+ 
 # stream
 # string
 PEERDIR(
@@ -57,8 +57,8 @@ JOIN_SRCS(
     ysafeptr.cpp
     ysaveload.cpp
     str_stl.cpp
-)
-
+) 
+ 
 # folder
 JOIN_SRCS(
     all_folder.cpp

@@ -1,12 +1,12 @@
 OWNER(g:cpp-contrib)
 
 LIBRARY()
-
-SRCS(
-    svnversion.cpp
+ 
+SRCS( 
+    svnversion.cpp 
     svn_interface.c
-)
-END()
+) 
+END() 
 RECURSE(
     test
 )

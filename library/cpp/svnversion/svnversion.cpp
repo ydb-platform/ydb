@@ -4,7 +4,7 @@
 
 #define FROM_IMPL
 #include "svnversion.h"
-
+ 
 #include <util/generic/strbuf.h>
 
 extern "C" void PrintProgramSvnVersion() {

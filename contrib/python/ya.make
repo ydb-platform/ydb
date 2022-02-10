@@ -661,7 +661,7 @@ RECURSE(
     ncclient
     ndg-httpsclient
     nest-asyncio
-    nested-diff 
+    nested-diff
     netaddr
     netifaces
     networkx

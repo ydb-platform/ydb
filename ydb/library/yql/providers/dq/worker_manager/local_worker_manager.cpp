@@ -174,21 +174,21 @@ private:
     }
 
     void OnConfigureFailureInjector(TEvConfigureFailureInjectorRequest::TPtr& ev) {
-        YQL_LOG(DEBUG) << "TEvConfigureFailureInjectorRequest "; 
- 
-        auto& request = ev->Get()->Record.GetRequest(); 
-        YQL_ENSURE(request.GetNodeId() == SelfId().NodeId(), "Wrong node id!"); 
- 
+        YQL_LOG(DEBUG) << "TEvConfigureFailureInjectorRequest ";
+
+        auto& request = ev->Get()->Record.GetRequest();
+        YQL_ENSURE(request.GetNodeId() == SelfId().NodeId(), "Wrong node id!");
+
         TFailureInjector::Set(request.GetName(), request.GetSkip(), request.GetCountOfFails());
         YQL_LOG(DEBUG) << "Failure injector is configured " << request.GetName();
- 
-        auto response = MakeHolder<TEvConfigureFailureInjectorResponse>(); 
-        auto* r = response->Record.MutableResponse(); 
-        r->Setsuccess(true); 
- 
-        Send(ev->Sender, response.Release()); 
-    } 
- 
+
+        auto response = MakeHolder<TEvConfigureFailureInjectorResponse>();
+        auto* r = response->Record.MutableResponse();
+        r->Setsuccess(true);
+
+        Send(ev->Sender, response.Release());
+    }
+
     void OnAllocateWorkersRequest(TEvAllocateWorkersRequest::TPtr& ev) {
         ui64 resourceId;
         if (ev->Get()->Record.GetResourceId()) {

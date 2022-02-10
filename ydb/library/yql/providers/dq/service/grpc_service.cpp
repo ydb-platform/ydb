@@ -684,42 +684,42 @@ namespace NYql::NDqs {
 
             ActorSystem.Send(new IEventHandle(MakeWorkerManagerActorID(ActorSystem.NodeId), callbackId, ev.Release(), IEventHandle::FlagTrackDelivery));
         });
- 
-        ADD_REQUEST(GetMaster, GetMasterRequest, GetMasterResponse, { 
-            auto* request = dynamic_cast<const Yql::DqsProto::GetMasterRequest*>(ctx->GetRequest()); 
-            Y_VERIFY(!!request); 
- 
-            auto requestEvent = MakeHolder<TEvGetMasterRequest>(); 
- 
-            auto callback = MakeHolder<TActorFutureCallback<TEvGetMasterResponse>>( 
-                    [ctx] (TAutoPtr<TEventHandle<TEvGetMasterResponse>>& event) mutable { 
-                        auto* result = google::protobuf::Arena::CreateMessage<Yql::DqsProto::GetMasterResponse>(ctx->GetArena()); 
-                        result->MergeFrom(event->Get()->Record.GetResponse()); 
-                        ctx->Reply(result, Ydb::StatusIds::SUCCESS); 
-                    }); 
- 
+
+        ADD_REQUEST(GetMaster, GetMasterRequest, GetMasterResponse, {
+            auto* request = dynamic_cast<const Yql::DqsProto::GetMasterRequest*>(ctx->GetRequest());
+            Y_VERIFY(!!request);
+
+            auto requestEvent = MakeHolder<TEvGetMasterRequest>();
+
+            auto callback = MakeHolder<TActorFutureCallback<TEvGetMasterResponse>>(
+                    [ctx] (TAutoPtr<TEventHandle<TEvGetMasterResponse>>& event) mutable {
+                        auto* result = google::protobuf::Arena::CreateMessage<Yql::DqsProto::GetMasterResponse>(ctx->GetArena());
+                        result->MergeFrom(event->Get()->Record.GetResponse());
+                        ctx->Reply(result, Ydb::StatusIds::SUCCESS);
+                    });
+
             TActorId callbackId = ActorSystem.Register(callback.Release());
- 
+
             ActorSystem.Send(new IEventHandle(MakeWorkerManagerActorID(ActorSystem.NodeId), callbackId, requestEvent.Release()));
-        }); 
- 
-        ADD_REQUEST(ConfigureFailureInjector, ConfigureFailureInjectorRequest, ConfigureFailureInjectorResponse,{ 
-            auto* request = dynamic_cast<const Yql::DqsProto::ConfigureFailureInjectorRequest*>(ctx->GetRequest()); 
-            Y_VERIFY(!!request); 
- 
-            auto requestEvent = MakeHolder<TEvConfigureFailureInjectorRequest>(*request); 
- 
-            auto callback = MakeHolder<TActorFutureCallback<TEvConfigureFailureInjectorResponse>>( 
-                    [ctx] (TAutoPtr<TEventHandle<TEvConfigureFailureInjectorResponse>>& event) mutable { 
-                        auto* result = google::protobuf::Arena::CreateMessage<Yql::DqsProto::ConfigureFailureInjectorResponse>(ctx->GetArena()); 
-                        result->MergeFrom(event->Get()->Record.GetResponse()); 
-                        ctx->Reply(result, Ydb::StatusIds::SUCCESS); 
-                    }); 
- 
+        });
+
+        ADD_REQUEST(ConfigureFailureInjector, ConfigureFailureInjectorRequest, ConfigureFailureInjectorResponse,{
+            auto* request = dynamic_cast<const Yql::DqsProto::ConfigureFailureInjectorRequest*>(ctx->GetRequest());
+            Y_VERIFY(!!request);
+
+            auto requestEvent = MakeHolder<TEvConfigureFailureInjectorRequest>(*request);
+
+            auto callback = MakeHolder<TActorFutureCallback<TEvConfigureFailureInjectorResponse>>(
+                    [ctx] (TAutoPtr<TEventHandle<TEvConfigureFailureInjectorResponse>>& event) mutable {
+                        auto* result = google::protobuf::Arena::CreateMessage<Yql::DqsProto::ConfigureFailureInjectorResponse>(ctx->GetArena());
+                        result->MergeFrom(event->Get()->Record.GetResponse());
+                        ctx->Reply(result, Ydb::StatusIds::SUCCESS);
+                    });
+
             TActorId callbackId = ActorSystem.Register(callback.Release());
- 
+
             ActorSystem.Send(new IEventHandle(MakeWorkerManagerActorID(ActorSystem.NodeId), callbackId, requestEvent.Release()));
-        }); 
+        });
 
         ADD_REQUEST(IsReady, IsReadyRequest, IsReadyResponse, {
             auto* request = dynamic_cast<const Yql::DqsProto::IsReadyRequest*>(ctx->GetRequest());

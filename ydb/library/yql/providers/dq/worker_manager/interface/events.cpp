@@ -105,10 +105,10 @@ namespace NYql::NDqs {
         Record.SetIsForwarded(false);
     }
 
-    TEvConfigureFailureInjectorRequest::TEvConfigureFailureInjectorRequest(const Yql::DqsProto::ConfigureFailureInjectorRequest& request) { 
-        *Record.MutableRequest() = request; 
-    } 
- 
+    TEvConfigureFailureInjectorRequest::TEvConfigureFailureInjectorRequest(const Yql::DqsProto::ConfigureFailureInjectorRequest& request) {
+        *Record.MutableRequest() = request;
+    }
+
     TEvQueryStatus::TEvQueryStatus(const Yql::DqsProto::QueryStatusRequest& request) {
         *Record.MutableRequest() = request;
     }

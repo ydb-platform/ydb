@@ -1,31 +1,31 @@
 #include "failure_injector.h"
- 
+
 #include <ydb/library/yql/utils/log/log.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/datetime/base.h>
 
-#include <chrono> 
- 
-using namespace NYql; 
-using namespace NYql::NLog; 
-using namespace std::chrono; 
- 
-// do nothing 
-void OnReach(std::atomic<bool>& called) { 
-    called.store(true); 
-} 
- 
-void SetUpLogger() { 
-    TString logType = "cout"; 
-    NLog::InitLogger(logType, false); 
-    NLog::EComponentHelpers::ForEach([](NLog::EComponent component) { 
-        NLog::YqlLogger().SetComponentLevel(component, ELevel::DEBUG); 
-    }); 
-} 
- 
-Y_UNIT_TEST_SUITE(TFailureInjectorTests) { 
+#include <chrono>
+
+using namespace NYql;
+using namespace NYql::NLog;
+using namespace std::chrono;
+
+// do nothing
+void OnReach(std::atomic<bool>& called) {
+    called.store(true);
+}
+
+void SetUpLogger() {
+    TString logType = "cout";
+    NLog::InitLogger(logType, false);
+    NLog::EComponentHelpers::ForEach([](NLog::EComponent component) {
+        NLog::YqlLogger().SetComponentLevel(component, ELevel::DEBUG);
+    });
+}
+
+Y_UNIT_TEST_SUITE(TFailureInjectorTests) {
     Y_UNIT_TEST(BasicFailureTest) {
         SetUpLogger();
         std::atomic<bool> called;
@@ -38,7 +38,7 @@ Y_UNIT_TEST_SUITE(TFailureInjectorTests) {
         TFailureInjector::Reach("misc_failure", behavior);
         UNIT_ASSERT_EQUAL(true, called.load());
     }
- 
+
     Y_UNIT_TEST(CheckSkipTest) {
         SetUpLogger();
         std::atomic<bool> called;
@@ -46,13 +46,13 @@ Y_UNIT_TEST_SUITE(TFailureInjectorTests) {
         auto behavior = [&called] { OnReach(called); };
         TFailureInjector::Activate();
         TFailureInjector::Set("misc_failure", 1, 1);
- 
+
         TFailureInjector::Reach("misc_failure", behavior);
         UNIT_ASSERT_EQUAL(false, called.load());
         TFailureInjector::Reach("misc_failure", behavior);
         UNIT_ASSERT_EQUAL(true, called.load());
     }
- 
+
     Y_UNIT_TEST(CheckFailCountTest) {
         SetUpLogger();
         int called = 0;
@@ -76,7 +76,7 @@ Y_UNIT_TEST_SUITE(TFailureInjectorTests) {
         SetUpLogger();
         TFailureInjector::Activate();
         TFailureInjector::Set("misc_failure", 0, 1);
- 
+
         auto start = system_clock::now();
         TFailureInjector::Reach("misc_failure", [] { ::Sleep(TDuration::Seconds(5)); });
         auto finish = system_clock::now();

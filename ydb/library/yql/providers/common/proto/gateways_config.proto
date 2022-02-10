@@ -2,7 +2,7 @@ package NYql;
 option java_package = "ru.yandex.yql.proto";
 
 import "ydb/library/yql/protos/clickhouse.proto";
- 
+
 /////////////////////////////// common ///////////////////////////////
 
 message TActivationByHour {
@@ -43,13 +43,13 @@ enum EHostScheme {
     HS_HTTPS       = 1;
 };
 
-enum ETokenType { 
-    IAM = 0; 
-    OAUTH = 1; 
-    BLACKBOX = 2; 
-    CREDENTIALS = 3; 
-}; 
- 
+enum ETokenType {
+    IAM = 0;
+    OAUTH = 1;
+    BLACKBOX = 2;
+    CREDENTIALS = 3;
+};
+
 /////////////////////////////// HTTP GATEWAY //////////////////////
 
 message THttpGatewayConfig {
@@ -117,7 +117,7 @@ message TKikimrClusterConfig {
     optional string ProxyUrl = 8;
     optional string Location = 9;
     optional bool IsFromMvp = 10;
-    optional ETokenType TokenType = 11; 
+    optional ETokenType TokenType = 11;
     repeated TAttr Settings = 101;
 }
 
@@ -176,7 +176,7 @@ message TClickHouseClusterConfig {
     optional string CHTokenYavSecretId = 7;
     optional string CHTokenYavVersionId = 8;
     optional string CHTokenYavKey = 9;
-    optional NYql.NProto.TClickHouseRunnerConfig Runner = 10; 
+    optional NYql.NProto.TClickHouseRunnerConfig Runner = 10;
     optional uint32 NativeHostPort = 11 [default = 9000];
     optional bool NativeSecure = 12 [default = false];
     optional string Id = 13;
@@ -366,31 +366,31 @@ message TFileStorageAdditionalConfig {
     repeated string AllowedUrlPatterns = 1;
 }
 
-/////////////////////////////// Postgresql ///////////////////////////// 
- 
-message TPostgresqlClusterConfig { 
-    optional string Name = 1; 
-    optional string Cluster = 2; 
-    optional string PGtoken = 3; 
-} 
- 
-message TPostgresqlGatewayConfig { 
-    repeated TPostgresqlClusterConfig ClusterMapping = 1; 
-} 
- 
-/////////////////////////////// Mysql ///////////////////////////// 
- 
-message TMysqlClusterConfig { 
-    optional string Name = 1; 
-    optional string Cluster = 2; 
-    optional string MysqlToken = 3; 
-} 
- 
-message TMysqlGatewayConfig { 
-    repeated TMysqlClusterConfig ClusterMapping = 1; 
-} 
- 
- 
+/////////////////////////////// Postgresql /////////////////////////////
+
+message TPostgresqlClusterConfig {
+    optional string Name = 1;
+    optional string Cluster = 2;
+    optional string PGtoken = 3;
+}
+
+message TPostgresqlGatewayConfig {
+    repeated TPostgresqlClusterConfig ClusterMapping = 1;
+}
+
+/////////////////////////////// Mysql /////////////////////////////
+
+message TMysqlClusterConfig {
+    optional string Name = 1;
+    optional string Cluster = 2;
+    optional string MysqlToken = 3;
+}
+
+message TMysqlGatewayConfig {
+    repeated TMysqlClusterConfig ClusterMapping = 1;
+}
+
+
 /////////////////////////////// Dq /////////////////////////////////////
 message TDqGatewayConfig {
     message TDefaultAutoByHourPercentage {
@@ -446,10 +446,10 @@ message TGatewaysConfig {
     optional TSolomonGatewayConfig Solomon = 8;
     optional TFileStorageAdditionalConfig Fs = 9;
     optional TYqlCoreConfig YqlCore = 10;
-    optional TPostgresqlGatewayConfig Postgresql = 11; 
+    optional TPostgresqlGatewayConfig Postgresql = 11;
     optional TSqlCoreConfig SqlCore = 12;
     optional TDqGatewayConfig Dq = 13;
-    optional TMysqlGatewayConfig Mysql = 14; 
+    optional TMysqlGatewayConfig Mysql = 14;
     optional TYdbGatewayConfig Ydb = 15;
     optional TPqGatewayConfig Pq = 16;
     optional TS3GatewayConfig S3 = 17;

@@ -1,8 +1,8 @@
-#include "failure_injector.h" 
+#include "failure_injector.h"
 
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/utils/yql_panic.h>
- 
+
 #include <util/generic/singleton.h>
 
 namespace NYql {
@@ -14,16 +14,16 @@ void TFailureInjector::Activate() {
 void TFailureInjector::Set(std::string_view name, ui64 skip, ui64 countOfFails) {
     Singleton<TFailureInjector>()->SetImpl(name, skip, countOfFails);
 }
- 
+
 void TFailureInjector::Reach(std::string_view name, std::function<void()> action) {
     Singleton<TFailureInjector>()->ReachImpl(name, action);
 }
- 
+
 void TFailureInjector::ActivateImpl() {
     Enabled_.store(true);
     YQL_LOG(DEBUG) << "TFailureInjector::Activate";
 }
- 
+
 void TFailureInjector::ReachImpl(std::string_view name, std::function<void()> action) {
     if (!Enabled_.load()) {
         return;
@@ -37,16 +37,16 @@ void TFailureInjector::ReachImpl(std::string_view name, std::function<void()> ac
                 YQL_LOG(DEBUG) << "TFailureInjector::OnReach: " << name;
                 --failureSpec->CountOfFails;
                 action();
-            } 
-        } 
-    } 
+            }
+        }
+    }
 }
- 
+
 void TFailureInjector::SetImpl(std::string_view name, ui64 skip, ui64 countOfFails) {
     with_lock(Lock) {
         YQL_ENSURE(countOfFails > 0, "failure " << name << ", 'countOfFails' must be positive");
         FailureSpecs[TString{name}] = TFailureSpec{skip, countOfFails};
-    } 
+    }
 }
- 
+
 } // NYql

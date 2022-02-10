@@ -140,7 +140,7 @@ namespace NYql {
                            .SetMaxGlobalRequestInFlight(50000)
                            .SetUseAuth(false)
                            .SetKeepAliveEnable(true)
-                           .SetKeepAliveIdleTimeoutTriggerSec(360) 
+                           .SetKeepAliveIdleTimeoutTriggerSec(360)
                            .SetKeepAliveMaxProbeCount(3)
                            .SetKeepAliveProbeIntervalSec(1)
                            .SetServerBuilderMutator([](grpc::ServerBuilder& builder) {

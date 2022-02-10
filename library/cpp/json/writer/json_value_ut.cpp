@@ -379,103 +379,103 @@ Y_UNIT_TEST_SUITE(TJsonValueTest) {
     }
 
     Y_UNIT_TEST(NonConstMethodsTest) {
-        {
-            TJsonValue src;
-            TJsonValue value1;
-            value1.AppendValue(1);
-            value1.AppendValue(2);
-            src.InsertValue("key", value1);
+        { 
+            TJsonValue src; 
+            TJsonValue value1; 
+            value1.AppendValue(1); 
+            value1.AppendValue(2); 
+            src.InsertValue("key", value1); 
             src.InsertValue("key1", "HI!");
-
-            TJsonValue dst;
-            TJsonValue value2;
-            value2.AppendValue(1);
-            value2.AppendValue(2);
-            value2.AppendValue(3);
-            dst.InsertValue("key", value2);
-
-            src.GetValueByPath("key", '.')->AppendValue(3);
-            src.EraseValue("key1");
-            UNIT_ASSERT(src == dst);
-
-            dst.GetValueByPath("key", '.')->EraseValue(0);
-            UNIT_ASSERT(src != dst);
-            src.GetValueByPath("key", '.')->EraseValue(0);
-            UNIT_ASSERT(src == dst);
-        }
-
-        {
-            TJsonValue src;
-            TJsonValue value1;
-            TJsonValue arr1;
-            value1.InsertValue("key", "value");
-            arr1.AppendValue(value1);
-            arr1.AppendValue(value1);
-            arr1.AppendValue(value1);
-            src.InsertValue("arr", arr1);
-
-            TJsonValue dst;
-            TJsonValue value2;
-            TJsonValue arr2;
-            value2.InsertValue("key", "value");
-            value2.InsertValue("yek", "eulav");
-            arr2.AppendValue(value2);
-            arr2.AppendValue(value2);
-            arr2.AppendValue(value2);
-            arr2.AppendValue(value2);
-            dst.InsertValue("arr", arr2);
-
-            src["arr"].AppendValue(value1);
+ 
+            TJsonValue dst; 
+            TJsonValue value2; 
+            value2.AppendValue(1); 
+            value2.AppendValue(2); 
+            value2.AppendValue(3); 
+            dst.InsertValue("key", value2); 
+ 
+            src.GetValueByPath("key", '.')->AppendValue(3); 
+            src.EraseValue("key1"); 
+            UNIT_ASSERT(src == dst); 
+ 
+            dst.GetValueByPath("key", '.')->EraseValue(0); 
+            UNIT_ASSERT(src != dst); 
+            src.GetValueByPath("key", '.')->EraseValue(0); 
+            UNIT_ASSERT(src == dst); 
+        } 
+ 
+        { 
+            TJsonValue src; 
+            TJsonValue value1; 
+            TJsonValue arr1; 
+            value1.InsertValue("key", "value"); 
+            arr1.AppendValue(value1); 
+            arr1.AppendValue(value1); 
+            arr1.AppendValue(value1); 
+            src.InsertValue("arr", arr1); 
+ 
+            TJsonValue dst; 
+            TJsonValue value2; 
+            TJsonValue arr2; 
+            value2.InsertValue("key", "value"); 
+            value2.InsertValue("yek", "eulav"); 
+            arr2.AppendValue(value2); 
+            arr2.AppendValue(value2); 
+            arr2.AppendValue(value2); 
+            arr2.AppendValue(value2); 
+            dst.InsertValue("arr", arr2); 
+ 
+            src["arr"].AppendValue(value1); 
             for (auto& node : src["arr"].GetArraySafe()) {
-                node.InsertValue("yek", "eulav");
-            }
-            UNIT_ASSERT(src == dst);
-        }
-
-        {
-            TJsonValue src;
-            TJsonValue value1;
-            TJsonValue arr1;
-            value1.InsertValue("key", "value");
-            arr1.AppendValue(value1);
-            arr1.AppendValue(value1);
-            arr1.AppendValue(value1);
-            src.InsertValue("arr", arr1);
-
-            TJsonValue dst;
-            TJsonValue value2;
-            TJsonValue arr2;
-            value2.InsertValue("key", "value");
-            value2.InsertValue("yek", "eulav");
-            arr2.AppendValue(value2);
-            arr2.AppendValue(value2);
-            arr2.AppendValue(value2);
-            arr2.AppendValue(value2);
-            dst.InsertValue("arr", arr2);
-
-            src["arr"].AppendValue(value1);
-            for (auto& node : src.GetValueByPath("arr", '.')->GetArraySafe()) {
-                node.InsertValue("yek", "eulav");
-            }
-            UNIT_ASSERT(src == dst);
-        }
-
-        {
-            TJsonValue json;
-            json.InsertValue("key", "value");
-            try {
-                json.GetArraySafe();
-                UNIT_ASSERT(false);
-            } catch (const TJsonException&) {
-            }
-
-            const TJsonValue constJson(json);
-            try {
-                constJson.GetArray();
-            } catch (...) {
-                UNIT_ASSERT(false);
-            }
-        }
+                node.InsertValue("yek", "eulav"); 
+            } 
+            UNIT_ASSERT(src == dst); 
+        } 
+ 
+        { 
+            TJsonValue src; 
+            TJsonValue value1; 
+            TJsonValue arr1; 
+            value1.InsertValue("key", "value"); 
+            arr1.AppendValue(value1); 
+            arr1.AppendValue(value1); 
+            arr1.AppendValue(value1); 
+            src.InsertValue("arr", arr1); 
+ 
+            TJsonValue dst; 
+            TJsonValue value2; 
+            TJsonValue arr2; 
+            value2.InsertValue("key", "value"); 
+            value2.InsertValue("yek", "eulav"); 
+            arr2.AppendValue(value2); 
+            arr2.AppendValue(value2); 
+            arr2.AppendValue(value2); 
+            arr2.AppendValue(value2); 
+            dst.InsertValue("arr", arr2); 
+ 
+            src["arr"].AppendValue(value1); 
+            for (auto& node : src.GetValueByPath("arr", '.')->GetArraySafe()) { 
+                node.InsertValue("yek", "eulav"); 
+            } 
+            UNIT_ASSERT(src == dst); 
+        } 
+ 
+        { 
+            TJsonValue json; 
+            json.InsertValue("key", "value"); 
+            try { 
+                json.GetArraySafe(); 
+                UNIT_ASSERT(false); 
+            } catch (const TJsonException&) { 
+            } 
+ 
+            const TJsonValue constJson(json); 
+            try { 
+                constJson.GetArray(); 
+            } catch (...) { 
+                UNIT_ASSERT(false); 
+            } 
+        } 
 
         {
             // Check non-const GetArraySafe()
@@ -504,8 +504,8 @@ Y_UNIT_TEST_SUITE(TJsonValueTest) {
             TJsonValue::TMapType expectedMap = {{"foo", TJsonValue{"bar"}}};
             UNIT_ASSERT(jsonMap == expectedMap);
         }
-    }
-
+    } 
+ 
     Y_UNIT_TEST(NonexistentFieldAccessTest) {
         {
             TJsonValue json;

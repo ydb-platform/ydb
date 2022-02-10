@@ -515,7 +515,7 @@ namespace NJson {
     TJsonValue::TArray& TJsonValue::GetArraySafe() {
         return const_cast<TJsonValue::TArray&>(const_cast<const TJsonValue*>(this)->GetArraySafe());
     }
-
+ 
     bool TJsonValue::GetBooleanRobust() const noexcept {
         switch (Type) {
             case JSON_ARRAY:
@@ -753,7 +753,7 @@ namespace NJson {
         }
         return false;
     }
-
+ 
     bool TJsonValue::GetValuePointer(const TStringBuf key, TJsonValue** value) noexcept {
         return static_cast<const TJsonValue*>(this)->GetValuePointer(key, const_cast<const TJsonValue**>(value));
     }

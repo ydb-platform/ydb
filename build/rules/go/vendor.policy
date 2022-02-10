@@ -272,9 +272,9 @@ ALLOW .* -> vendor/github.com/jonboulle/clockwork
 # LRU Cache with TTL
 ALLOW .* -> vendor/github.com/karlseguin/ccache/v2
 
-# Garbage collector-sensitive patricia tree for IP/CIDR tagging
-ALLOW .* -> vendor/github.com/kentik/patricia
-
+# Garbage collector-sensitive patricia tree for IP/CIDR tagging 
+ALLOW .* -> vendor/github.com/kentik/patricia 
+ 
 # driver for ClickHouse column-oriented database management system
 ALLOW .* -> vendor/github.com/ClickHouse/clickhouse-go
 
@@ -334,9 +334,9 @@ ALLOW .* -> vendor/github.com/prometheus/common
 # ZooKeeper client
 ALLOW .* -> vendor/github.com/go-zookeeper/zk
 
-# Consistent hashring implementation (using the same algorithm as libketama)
-ALLOW .* -> vendor/github.com/serialx/hashring
-
+# Consistent hashring implementation (using the same algorithm as libketama) 
+ALLOW .* -> vendor/github.com/serialx/hashring 
+ 
 # Slack API in Go
 ALLOW .* -> vendor/github.com/slack-go/slack
 
@@ -363,8 +363,8 @@ ALLOW .* -> vendor/github.com/stretchr/testify
 
 # very fast json parser and encoder.
 # uses dynamic message structure, suitable for cases where json structure is not known in advance.
-ALLOW .* -> vendor/github.com/valyala/fastjson
-
+ALLOW .* -> vendor/github.com/valyala/fastjson 
+ 
 # xxhash32 and xxhash64 hash functions
 ALLOW .* -> vendor/github.com/OneOfOne/xxhash
 
@@ -581,9 +581,9 @@ ALLOW .* -> vendor/github.com/olekukonko/tablewriter
 # CONTRIB-1596 embedded key/value database
 ALLOW .* -> vendor/go.etcd.io/bbolt
 
-# CONTRIB-1616 Gountries provides structured countries data
-ALLOW .* -> vendor/github.com/pariz/gountries
-
+# CONTRIB-1616 Gountries provides structured countries data 
+ALLOW .* -> vendor/github.com/pariz/gountries 
+ 
 # CONTRIB-1630- Go binding for qemu/qmp runtime
 ALLOW .* -> vendor/github.com/intel/govmm/qemu
 

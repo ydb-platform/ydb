@@ -360,12 +360,12 @@ public:
     using size_type = size_t;
     using difference_type = ptrdiff_t;
     using value_type = T;
-
+ 
     inline TPoolAllocBase(TPool* pool)
         : Pool_(pool)
     {
     }
-
+ 
     template <typename TOther>
     inline TPoolAllocBase(const TPoolAllocBase<TOther, TPool>& o)
         : Pool_(o.GetPool())
@@ -375,29 +375,29 @@ public:
     inline T* allocate(size_t n) {
         return (T*)Pool_->Allocate(n * sizeof(T), alignof(T));
     }
-
+ 
     inline void deallocate(pointer /*p*/, size_t /*n*/) {
     }
-
+ 
     template <class T1>
     struct rebind {
         using other = TPoolAllocBase<T1, TPool>;
     };
-
+ 
     inline size_type max_size() const noexcept {
         return size_type(-1) / sizeof(T);
     }
-
+ 
     template <typename... Args>
     inline void construct(pointer p, Args&&... args) {
         new (p) T(std::forward<Args>(args)...);
     }
-
+ 
     inline void destroy(pointer p) noexcept {
         (void)p; /* Make MSVC happy. */
         p->~T();
     }
-
+ 
     inline TPool* GetPool() const {
         return Pool_;
     }
@@ -412,20 +412,20 @@ public:
 
 private:
     TPool* Pool_;
-};
-
+}; 
+ 
 template <class T>
 using TPoolAlloc = TPoolAllocBase<T, TMemoryPool>;
 
 // Any type since it is supposed to be rebound anyway.
 using TPoolAllocator = TPoolAlloc<int>;
-
-template <class T>
+ 
+template <class T> 
 inline bool operator==(const TPoolAlloc<T>&, const TPoolAlloc<T>&) noexcept {
-    return true;
-}
-
-template <class T>
+    return true; 
+} 
+ 
+template <class T> 
 inline bool operator!=(const TPoolAlloc<T>&, const TPoolAlloc<T>&) noexcept {
-    return false;
-}
+    return false; 
+} 

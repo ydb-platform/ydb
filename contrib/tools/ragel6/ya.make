@@ -9,7 +9,7 @@ ENDIF()
 IF (NOT PREBUILT)
     INCLUDE(${ARCADIA_ROOT}/contrib/tools/ragel6/bin/ya.make)
 ENDIF()
-
+ 
 RECURSE(
     bin
 )

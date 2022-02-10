@@ -204,7 +204,7 @@ public:
     inline TImpl(const TParams& p)
         : Stream_(p.Out)
     {
-        if (deflateInit2(Z(), Min<size_t>(9, p.CompressionLevel), Z_DEFLATED, opts[Type(p.Type)], 8, Z_DEFAULT_STRATEGY)) {
+        if (deflateInit2(Z(), Min<size_t>(9, p.CompressionLevel), Z_DEFLATED, opts[Type(p.Type)], 8, Z_DEFAULT_STRATEGY)) { 
             ythrow TZLibCompressorError() << "can not init inflate engine";
         }
 

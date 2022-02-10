@@ -23,7 +23,7 @@ template <class T>
 class TTempArray;
 using TCharTemp = TTempArray<wchar16>;
 
-namespace NDetail {
+namespace NDetail { 
     inline TString InStringMsg(const char* s, size_t len) {
         return (len <= 50) ? " in string " + TString(s, len).Quote() : TString();
     }
@@ -301,7 +301,7 @@ namespace NDetail {
 //! @return len if robust and position where encoding stopped if not
 template <bool robust, typename TCharType>
 inline size_t UTF8ToWideImpl(const char* text, size_t len, TCharType* dest, size_t& written) noexcept {
-    const unsigned char* cur = reinterpret_cast<const unsigned char*>(text);
+    const unsigned char* cur = reinterpret_cast<const unsigned char*>(text); 
     const unsigned char* last = cur + len;
     TCharType* p = dest;
 #ifdef _sse_ //can't check for sse4, as we build most of arcadia without sse4 support even on platforms that support it
@@ -311,10 +311,10 @@ inline size_t UTF8ToWideImpl(const char* text, size_t len, TCharType* dest, size
 #endif
 
     ::NDetail::UTF8ToWideImplScalar<robust>(cur, last, p);
-    written = p - dest;
+    written = p - dest; 
     return cur - reinterpret_cast<const unsigned char*>(text);
-}
-
+} 
+ 
 template <typename TCharType>
 inline size_t UTF8ToWideImpl(const char* text, size_t len, TCharType* dest, size_t& written) {
     return UTF8ToWideImpl<false>(text, len, dest, written);
@@ -421,13 +421,13 @@ inline TStringBuf WideToUTF8(const TWtringBuf src, TString& dst) {
 
 inline TString WideToUTF8(const wchar16* text, size_t len) {
     TString s = TString::Uninitialized(WideToUTF8BufferSize(len));
-    size_t written = 0;
-    WideToUTF8(text, len, s.begin(), written);
+    size_t written = 0; 
+    WideToUTF8(text, len, s.begin(), written); 
     Y_ASSERT(s.size() >= written);
-    s.remove(written);
-    return s;
-}
-
+    s.remove(written); 
+    return s; 
+} 
+ 
 inline TString WideToUTF8(const wchar32* text, size_t len) {
     TString s = TString::Uninitialized(WideToUTF8BufferSize(len));
     size_t written = 0;
@@ -439,8 +439,8 @@ inline TString WideToUTF8(const wchar32* text, size_t len) {
 
 inline TString WideToUTF8(const TWtringBuf w) {
     return WideToUTF8(w.data(), w.size());
-}
-
+} 
+ 
 inline TString WideToUTF8(const TUtf32StringBuf w) {
     return WideToUTF8(w.data(), w.size());
 }
@@ -594,11 +594,11 @@ namespace NDetail {
 
 }
 
-//! returns @c true if character sequence has no symbols with value greater than 0x7F
-template <typename TChar>
-inline bool IsStringASCII(const TChar* first, const TChar* last) {
+//! returns @c true if character sequence has no symbols with value greater than 0x7F 
+template <typename TChar> 
+inline bool IsStringASCII(const TChar* first, const TChar* last) { 
     return ::NDetail::DoIsStringASCII(first, last);
-}
+} 
 
 #ifdef _sse2_
 template <>
@@ -618,76 +618,76 @@ inline void Copy(const TChar* first, size_t len, TChar* result) {
     memcpy(result, first, len * sizeof(TChar));
 }
 
-template <typename TChar1, typename TChar2>
-inline void Copy(const TChar1* first, size_t len, TChar2* result) {
-    Copy(first, first + len, result);
-}
+template <typename TChar1, typename TChar2> 
+inline void Copy(const TChar1* first, size_t len, TChar2* result) { 
+    Copy(first, first + len, result); 
+} 
 
-//! copies symbols from one character sequence to another without any conversion
-//! @note this function can be used instead of the template constructor of @c std::basic_string:
-//!       template <typename InputIterator>
-//!       basic_string(InputIterator begin, InputIterator end, const Allocator& a = Allocator());
-//!       and the family of template member functions: append, assign, insert, replace.
+//! copies symbols from one character sequence to another without any conversion 
+//! @note this function can be used instead of the template constructor of @c std::basic_string: 
+//!       template <typename InputIterator> 
+//!       basic_string(InputIterator begin, InputIterator end, const Allocator& a = Allocator()); 
+//!       and the family of template member functions: append, assign, insert, replace. 
 template <typename TStringType, typename TChar>
 inline TStringType CopyTo(const TChar* first, const TChar* last) {
     Y_ASSERT(first <= last);
     TStringType str = TStringType::Uninitialized(last - first);
-    Copy(first, last, str.begin());
-    return str;
-}
+    Copy(first, last, str.begin()); 
+    return str; 
+} 
 
 template <typename TStringType, typename TChar>
 inline TStringType CopyTo(const TChar* s, size_t n) {
     TStringType str = TStringType::Uninitialized(n);
-    Copy(s, n, str.begin());
-    return str;
-}
-
+    Copy(s, n, str.begin()); 
+    return str; 
+} 
+ 
 inline TString WideToASCII(const TWtringBuf w) {
     Y_ASSERT(IsStringASCII(w.begin(), w.end()));
     return CopyTo<TString>(w.begin(), w.end());
-}
-
+} 
+ 
 inline TUtf16String ASCIIToWide(const TStringBuf s) {
     Y_ASSERT(IsStringASCII(s.begin(), s.end()));
     return CopyTo<TUtf16String>(s.begin(), s.end());
-}
-
+} 
+ 
 inline TUtf32String ASCIIToUTF32(const TStringBuf s) {
     Y_ASSERT(IsStringASCII(s.begin(), s.end()));
     return CopyTo<TUtf32String>(s.begin(), s.end());
 }
 
-//! returns @c true if string contains whitespace characters only
+//! returns @c true if string contains whitespace characters only 
 inline bool IsSpace(const wchar16* s, size_t n) {
     if (n == 0)
         return false;
 
     Y_ASSERT(s);
 
-    const wchar16* const e = s + n;
-    for (const wchar16* p = s; p != e; ++p) {
+    const wchar16* const e = s + n; 
+    for (const wchar16* p = s; p != e; ++p) { 
         if (!IsWhitespace(*p))
-            return false;
-    }
-    return true;
-}
-
+            return false; 
+    } 
+    return true; 
+} 
+ 
 //! returns @c true if string contains whitespace characters only
 inline bool IsSpace(const TWtringBuf s) {
     return IsSpace(s.data(), s.length());
 }
 
-//! replaces multiple sequential whitespace characters with a single space character
+//! replaces multiple sequential whitespace characters with a single space character 
 void Collapse(TUtf16String& w);
-
-//! @return new length
-size_t Collapse(wchar16* s, size_t n);
-
+ 
+//! @return new length 
+size_t Collapse(wchar16* s, size_t n); 
+ 
 //! Removes leading whitespace characters
 TWtringBuf StripLeft(const TWtringBuf text) noexcept Y_WARN_UNUSED_RESULT;
 void StripLeft(TUtf16String& text);
-
+ 
 //! Removes trailing whitespace characters
 TWtringBuf StripRight(const TWtringBuf text) noexcept Y_WARN_UNUSED_RESULT;
 void StripRight(TUtf16String& text);
@@ -807,7 +807,7 @@ TUtf32String ToLowerRet(const TUtf32StringBuf text, size_t pos = 0, size_t count
 TUtf32String ToUpperRet(const TUtf32StringBuf text, size_t pos = 0, size_t count = TWtringBuf::npos) Y_WARN_UNUSED_RESULT;
 TUtf32String ToTitleRet(const TUtf32StringBuf text, size_t pos = 0, size_t count = TWtringBuf::npos) Y_WARN_UNUSED_RESULT;
 
-//! replaces the '<', '>' and '&' characters in string with '&lt;', '&gt;' and '&amp;' respectively
+//! replaces the '<', '>' and '&' characters in string with '&lt;', '&gt;' and '&amp;' respectively 
 // insertBr=true - replace '\r' and '\n' with "<BR>"
 template <bool insertBr>
 void EscapeHtmlChars(TUtf16String& str);

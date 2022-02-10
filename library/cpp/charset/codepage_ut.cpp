@@ -11,7 +11,7 @@
 #pragma warning(disable : 4309) /*truncation of constant value*/
 #endif
 
-namespace {
+namespace { 
     const char yandexUpperCase[] =
         "\x81\x82\x83\x84\x85\x86\x87"
         "\x8E"
@@ -19,7 +19,7 @@ namespace {
         "\xA8\xA9\xAA\xAB\xAC\xAD\xAE\xAF"
         "\xC0\xC1\xC2\xC3\xC4\xC5\xC6\xC7\xC8\xC9\xCA\xCB\xCC\xCD\xCE\xCF"
         "\xD0\xD1\xD2\xD3\xD4\xD5\xD6\xD7\xD8\xD9\xDA\xDB\xDC\xDD\xDE\xDF";
-
+ 
     const char yandexLowerCase[] =
         "\x91\x92\x93\x94\x95\x96\x97"
         "\x9E"
@@ -27,8 +27,8 @@ namespace {
         "\xB8\xB9\xBA\xBB\xBC\xBD\xBE\xBF"
         "\xE0\xE1\xE2\xE3\xE4\xE5\xE6\xE7\xE8\xE9\xEA\xEB\xEC\xED\xEE\xEF"
         "\xF0\xF1\xF2\xF3\xF4\xF5\xF6\xF7\xF8\xF9\xFA\xFB\xFC\xFD\xFE\xFF";
-}
-
+} 
+ 
 class TCodepageTest: public TTestBase {
 private:
     UNIT_TEST_SUITE(TCodepageTest);
@@ -50,8 +50,8 @@ public:
     void TestBrokenMultibyte();
     void TestSurrogatePairs();
     void TestEncodingHints();
-    void TestToLower();
-    void TestToUpper();
+    void TestToLower(); 
+    void TestToUpper(); 
 
     void TestCanEncode();
 
@@ -325,24 +325,24 @@ void TCodepageTest::TestEncodingHints() {
     UNIT_ASSERT(CODES_UNSUPPORTED != EncodingHintByName("ISO-2022-KR"));
     UNIT_ASSERT(CODES_UNSUPPORTED != EncodingHintByName("ISO-2022-jp"));
 }
-
-void TCodepageTest::TestToLower() {
-    TTempBuf buf;
-    char* data = buf.Data();
+ 
+void TCodepageTest::TestToLower() { 
+    TTempBuf buf; 
+    char* data = buf.Data(); 
     const size_t n = Y_ARRAY_SIZE(yandexUpperCase); // including NTS
-    memcpy(data, yandexUpperCase, n);
-    ToLower(data, n - 1);
+    memcpy(data, yandexUpperCase, n); 
+    ToLower(data, n - 1); 
     UNIT_ASSERT(strcmp(data, yandexLowerCase) == 0);
-}
-
-void TCodepageTest::TestToUpper() {
-    TTempBuf buf;
-    char* data = buf.Data();
+} 
+ 
+void TCodepageTest::TestToUpper() { 
+    TTempBuf buf; 
+    char* data = buf.Data(); 
     const size_t n = Y_ARRAY_SIZE(yandexLowerCase); // including NTS
-    memcpy(data, yandexLowerCase, n);
-    ToUpper(data, n - 1);
+    memcpy(data, yandexLowerCase, n); 
+    ToUpper(data, n - 1); 
     UNIT_ASSERT(strcmp(data, yandexUpperCase) == 0);
-}
+} 
 
 static void TestCanEncodeEmpty() {
     TWtringBuf empty;

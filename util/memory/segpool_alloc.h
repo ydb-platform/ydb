@@ -31,7 +31,7 @@
 template <class _Tp>
 struct segpool_alloc {
     using pool_type = segmented_pool<char>;
-    pool_type* pool;
+    pool_type* pool; 
     using pointer = _Tp*;
     using const_pointer = const _Tp*;
     using reference = _Tp&;
@@ -47,11 +47,11 @@ struct segpool_alloc {
     {
         Y_IF_DEBUG(pool_count = malloc_count = pool_free_count = malloc_free_count = 0);
     }
-    segpool_alloc(pool_type* p)
+    segpool_alloc(pool_type* p) 
         : pool(p)
     {
         Y_IF_DEBUG(pool_count = malloc_count = pool_free_count = malloc_free_count = 0);
-    }
+    } 
     segpool_alloc(const segpool_alloc& a)
         : pool(a.pool)
     {

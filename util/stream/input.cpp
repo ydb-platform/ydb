@@ -97,8 +97,8 @@ size_t IInputStream::ReadLine(TUtf16String& w) {
     }
 
     return result;
-}
-
+} 
+ 
 TString IInputStream::ReadLine() {
     TString ret;
 

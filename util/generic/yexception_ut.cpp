@@ -16,17 +16,17 @@ static inline void Throw2DontMove() {
 #include <util/stream/output.h>
 #include <util/string/subst.h>
 
-#include "yexception_ut.h"
+#include "yexception_ut.h" 
 #include "bt_exception.h"
-
+ 
 #if defined(_MSC_VER)
     #pragma warning(disable : 4702) /*unreachable code*/
 #endif
 
-static void CallbackFun(int i) {
-    throw i;
-}
-
+static void CallbackFun(int i) { 
+    throw i; 
+} 
+ 
 static IOutputStream* OUTS = nullptr;
 
 namespace NOuter::NInner {
@@ -247,7 +247,7 @@ private:
             throw;
         }
     }
-
+ 
     //! tests propagation of an exception through C code
     //! @note on some platforms, for example GCC on 32-bit Linux without -fexceptions option,
     //!       throwing an exception from a C++ callback through C code aborts program
@@ -258,7 +258,7 @@ private:
             UNIT_ASSERT(false);
         } catch (int i) {
             UNIT_ASSERT_VALUES_EQUAL(i, N);
-        }
+        } 
     }
 
     void TestMacroOverload() {

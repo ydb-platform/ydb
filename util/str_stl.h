@@ -82,8 +82,8 @@ struct THash<TStringBuf>: ::NHashPrivate::TStringHash<char> {
 
 template <>
 struct hash<TString>: ::NHashPrivate::TStringHash<char> {
-};
-
+}; 
+ 
 template <>
 struct hash<TUtf16String>: ::NHashPrivate::TStringHash<wchar16> {
 };

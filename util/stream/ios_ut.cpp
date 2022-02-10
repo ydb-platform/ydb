@@ -7,7 +7,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/string/cast.h>
-#include <util/memory/tempbuf.h>
+#include <util/memory/tempbuf.h> 
 #include <util/charset/wide.h>
 
 #include <string>
@@ -278,7 +278,7 @@ void TStreamsTest::TestBufferStream() {
     UNIT_ASSERT_EQUAL(0, bytesRead);
 }
 
-namespace {
+namespace { 
     class TStringListInput: public IWalkInput {
     public:
         TStringListInput(const TVector<TString>& data)
@@ -305,27 +305,27 @@ namespace {
     };
 
     const char Text[] =
-        // UTF8 encoded "one \ntwo\r\nthree\n\tfour\nfive\n" in russian and ...
+        // UTF8 encoded "one \ntwo\r\nthree\n\tfour\nfive\n" in russian and ... 
         "один \n"
         "два\r\n"
         "три\n"
         "\tчетыре\n"
         "пять\n"
-        // ... additional test cases
+        // ... additional test cases 
         "\r\n"
         "\n\r" // this char goes to the front of the next string
         "one two\n"
         "123\r\n"
         "\t\r ";
-
+ 
     const char* Expected[] = {
-        // UTF8 encoded "one ", "two", "three", "\tfour", "five" in russian and ...
+        // UTF8 encoded "one ", "two", "three", "\tfour", "five" in russian and ... 
         "один ",
         "два",
         "три",
         "\tчетыре",
         "пять",
-        // ... additional test cases
+        // ... additional test cases 
         "",
         "",
         "\rone two",
@@ -394,8 +394,8 @@ namespace {
         TStringListInput sli(lst);
         test(sli, "IWalkInput");
     }
-}
-
+} 
+ 
 void TStreamsTest::TestReadTo() {
     TestStreamReadTo("111a222b333c444d555e666f", TestStreamReadTo1);
     TestStreamReadTo(Text, TestStreamReadTo2);
@@ -415,41 +415,41 @@ void TStreamsTest::TestStrokaInput() {
     TestStreamReadTo(s, ::TestStrokaInput);
 }
 
-void TStreamsTest::TestWtrokaInput() {
+void TStreamsTest::TestWtrokaInput() { 
     const TString s(Text);
-    TStringInput is(s);
+    TStringInput is(s); 
     TUtf16String w;
     size_t i = 0;
-
-    while (is.ReadLine(w)) {
+ 
+    while (is.ReadLine(w)) { 
         UNIT_ASSERT(i < Y_ARRAY_SIZE(Expected));
         UNIT_ASSERT_VALUES_EQUAL(w, UTF8ToWide(Expected[i]));
-
-        ++i;
-    }
-}
-
-void TStreamsTest::TestWtrokaOutput() {
+ 
+        ++i; 
+    } 
+} 
+ 
+void TStreamsTest::TestWtrokaOutput() { 
     TString s;
-    TStringOutput os(s);
-    const size_t n = sizeof(Expected) / sizeof(Expected[0]);
-
-    for (size_t i = 0; i < n; ++i) {
+    TStringOutput os(s); 
+    const size_t n = sizeof(Expected) / sizeof(Expected[0]); 
+ 
+    for (size_t i = 0; i < n; ++i) { 
         TUtf16String w = UTF8ToWide(Expected[i]);
-
-        os << w;
+ 
+        os << w; 
 
         if (i == 1 || i == 5 || i == 8) {
-            os << '\r';
+            os << '\r'; 
         }
 
         if (i < n - 1) {
-            os << '\n';
+            os << '\n'; 
         }
-    }
-
-    UNIT_ASSERT(s == Text);
-}
+    } 
+ 
+    UNIT_ASSERT(s == Text); 
+} 
 
 void TStreamsTest::TestWchar16Output() {
     TString s;

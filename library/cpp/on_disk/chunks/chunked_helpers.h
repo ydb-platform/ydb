@@ -520,7 +520,7 @@ public:
         blob = TBlob::NoCopy(GetBlock(it->second), GetBlockLen(it->second));
         return true;
     }
-
+ 
 private:
     TVector<TString> Names;
     THashMap<TString, size_t> NameToIndex;

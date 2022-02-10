@@ -21,13 +21,13 @@ static_assert(sizeof(TString) == sizeof(const char*), "expect sizeof(TString) ==
 #endif
 
 class TStringTestZero: public TTestBase {
-    UNIT_TEST_SUITE(TStringTestZero);
+    UNIT_TEST_SUITE(TStringTestZero); 
     UNIT_TEST(TestZero);
     UNIT_TEST_SUITE_END();
 
 public:
     void TestZero() {
-        const char data[] = "abc\0def\0";
+        const char data[] = "abc\0def\0"; 
         TString s(data, sizeof(data));
         UNIT_ASSERT(s.size() == sizeof(data));
         UNIT_ASSERT(s.StartsWith(s));
@@ -49,60 +49,60 @@ public:
 
         TString copy = s;
         copy.replace(copy.size() - 1, 1, "z");
-        UNIT_ASSERT(s != copy);
+        UNIT_ASSERT(s != copy); 
         copy.replace(copy.size() - 1, 1, "\0", 0, 1);
-        UNIT_ASSERT(s == copy);
+        UNIT_ASSERT(s == copy); 
 
         TString prefix(data, 5);
         UNIT_ASSERT(s.StartsWith(prefix));
-        UNIT_ASSERT(s != prefix);
-        UNIT_ASSERT(s > prefix);
+        UNIT_ASSERT(s != prefix); 
+        UNIT_ASSERT(s > prefix); 
         UNIT_ASSERT(s > s.data());
         UNIT_ASSERT(s == TString(s.data(), s.size()));
-        UNIT_ASSERT(data < s);
+        UNIT_ASSERT(data < s); 
 
-        s.remove(5);
-        UNIT_ASSERT(s == prefix);
-    }
-};
-
-UNIT_TEST_SUITE_REGISTRATION(TStringTestZero);
-
+        s.remove(5); 
+        UNIT_ASSERT(s == prefix); 
+    } 
+}; 
+ 
+UNIT_TEST_SUITE_REGISTRATION(TStringTestZero); 
+ 
 template <typename TStringType, typename TTestData>
-class TStringStdTestImpl {
+class TStringStdTestImpl { 
     using TChar = typename TStringType::char_type;
     using TTraits = typename TStringType::traits_type;
     using TView = std::basic_string_view<TChar, TTraits>;
-
+ 
     TTestData Data_;
-
-protected:
+ 
+protected: 
     void Constructor() {
-        // @todo use UNIT_TEST_EXCEPTION
-        try {
+        // @todo use UNIT_TEST_EXCEPTION 
+        try { 
             TStringType s((size_t)-1, *Data_.a());
-            UNIT_ASSERT(false);
-        } catch (const std::length_error&) {
-            UNIT_ASSERT(true);
-        } catch (...) {
-            //Expected exception is length_error:
-            UNIT_ASSERT(false);
-        }
+            UNIT_ASSERT(false); 
+        } catch (const std::length_error&) { 
+            UNIT_ASSERT(true); 
+        } catch (...) { 
+            //Expected exception is length_error: 
+            UNIT_ASSERT(false); 
+        } 
     }
 
-    void reserve() {
+    void reserve() { 
 #if 0
         TStringType s;
-        // @todo use UNIT_TEST_EXCEPTION
-        try {
-            s.reserve(s.max_size() + 1);
-            UNIT_ASSERT(false);
-        } catch (const std::length_error&) {
-            UNIT_ASSERT(true);
-        } catch (...) {
-            //Expected exception is length_error:
-            UNIT_ASSERT(false);
-        }
+        // @todo use UNIT_TEST_EXCEPTION 
+        try { 
+            s.reserve(s.max_size() + 1); 
+            UNIT_ASSERT(false); 
+        } catch (const std::length_error&) { 
+            UNIT_ASSERT(true); 
+        } catch (...) { 
+            //Expected exception is length_error: 
+            UNIT_ASSERT(false); 
+        } 
 
         // Non-shared behaviour - never shrink
 
@@ -150,149 +150,149 @@ protected:
 #endif
     }
 
-    void short_string() {
+    void short_string() { 
         TStringType const ref_short_str1(Data_.str1()), ref_short_str2(Data_.str2());
         TStringType short_str1(ref_short_str1), short_str2(ref_short_str2);
         TStringType const ref_long_str1(Data_.str__________________________________________________1());
         TStringType const ref_long_str2(Data_.str__________________________________________________2());
         TStringType long_str1(ref_long_str1), long_str2(ref_long_str2);
 
-        UNIT_ASSERT(short_str1 == ref_short_str1);
-        UNIT_ASSERT(long_str1 == ref_long_str1);
+        UNIT_ASSERT(short_str1 == ref_short_str1); 
+        UNIT_ASSERT(long_str1 == ref_long_str1); 
 
-        {
+        { 
             TStringType str1(short_str1);
-            str1 = long_str1;
-            UNIT_ASSERT(str1 == ref_long_str1);
-        }
+            str1 = long_str1; 
+            UNIT_ASSERT(str1 == ref_long_str1); 
+        } 
 
-        {
+        { 
             TStringType str1(long_str1);
-            str1 = short_str1;
-            UNIT_ASSERT(str1 == ref_short_str1);
-        }
+            str1 = short_str1; 
+            UNIT_ASSERT(str1 == ref_short_str1); 
+        } 
 
-        {
-            short_str1.swap(short_str2);
-            UNIT_ASSERT((short_str1 == ref_short_str2) && (short_str2 == ref_short_str1));
-            short_str1.swap(short_str2);
-        }
+        { 
+            short_str1.swap(short_str2); 
+            UNIT_ASSERT((short_str1 == ref_short_str2) && (short_str2 == ref_short_str1)); 
+            short_str1.swap(short_str2); 
+        } 
 
-        {
-            long_str1.swap(long_str2);
-            UNIT_ASSERT((long_str1 == ref_long_str2) && (long_str2 == ref_long_str1));
-            long_str1.swap(long_str2);
-        }
+        { 
+            long_str1.swap(long_str2); 
+            UNIT_ASSERT((long_str1 == ref_long_str2) && (long_str2 == ref_long_str1)); 
+            long_str1.swap(long_str2); 
+        } 
 
-        {
-            short_str1.swap(long_str1);
-            UNIT_ASSERT((short_str1 == ref_long_str1) && (long_str1 == ref_short_str1));
-            short_str1.swap(long_str1);
-        }
+        { 
+            short_str1.swap(long_str1); 
+            UNIT_ASSERT((short_str1 == ref_long_str1) && (long_str1 == ref_short_str1)); 
+            short_str1.swap(long_str1); 
+        } 
 
-        {
-            long_str1.swap(short_str1);
-            UNIT_ASSERT((short_str1 == ref_long_str1) && (long_str1 == ref_short_str1));
-            long_str1.swap(short_str1);
-        }
+        { 
+            long_str1.swap(short_str1); 
+            UNIT_ASSERT((short_str1 == ref_long_str1) && (long_str1 == ref_short_str1)); 
+            long_str1.swap(short_str1); 
+        } 
 
-        {
-            //This is to test move constructor
+        { 
+            //This is to test move constructor 
             TVector<TStringType> str_vect;
 
-            str_vect.push_back(short_str1);
-            str_vect.push_back(long_str1);
-            str_vect.push_back(short_str2);
-            str_vect.push_back(long_str2);
+            str_vect.push_back(short_str1); 
+            str_vect.push_back(long_str1); 
+            str_vect.push_back(short_str2); 
+            str_vect.push_back(long_str2); 
 
             UNIT_ASSERT(str_vect[0] == ref_short_str1);
             UNIT_ASSERT(str_vect[1] == ref_long_str1);
             UNIT_ASSERT(str_vect[2] == ref_short_str2);
             UNIT_ASSERT(str_vect[3] == ref_long_str2);
-        }
+        } 
     }
 
-    void erase() {
+    void erase() { 
         TChar const* c_str = Data_.Hello_World();
         TStringType str(c_str);
-        UNIT_ASSERT(str == c_str);
+        UNIT_ASSERT(str == c_str); 
 
-        str.erase(str.begin() + 1, str.end() - 1); // Erase all but first and last.
+        str.erase(str.begin() + 1, str.end() - 1); // Erase all but first and last. 
 
-        size_t i;
-        for (i = 0; i < str.size(); ++i) {
-            switch (i) {
-                case 0:
+        size_t i; 
+        for (i = 0; i < str.size(); ++i) { 
+            switch (i) { 
+                case 0: 
                     UNIT_ASSERT(str[i] == *Data_.H());
-                    break;
+                    break; 
 
-                case 1:
+                case 1: 
                     UNIT_ASSERT(str[i] == *Data_.d());
-                    break;
+                    break; 
 
-                default:
-                    UNIT_ASSERT(false);
-            }
+                default: 
+                    UNIT_ASSERT(false); 
+            } 
         }
 
-        str.insert(1, c_str);
+        str.insert(1, c_str); 
         str.erase(str.begin());   // Erase first element.
-        str.erase(str.end() - 1); // Erase last element.
-        UNIT_ASSERT(str == c_str);
-        str.clear(); // Erase all.
-        UNIT_ASSERT(str.empty());
+        str.erase(str.end() - 1); // Erase last element. 
+        UNIT_ASSERT(str == c_str); 
+        str.clear(); // Erase all. 
+        UNIT_ASSERT(str.empty()); 
 
-        str = c_str;
-        UNIT_ASSERT(str == c_str);
+        str = c_str; 
+        UNIT_ASSERT(str == c_str); 
 
-        str.erase(1, str.size() - 1); // Erase all but first and last.
-        for (i = 0; i < str.size(); i++) {
-            switch (i) {
-                case 0:
+        str.erase(1, str.size() - 1); // Erase all but first and last. 
+        for (i = 0; i < str.size(); i++) { 
+            switch (i) { 
+                case 0: 
                     UNIT_ASSERT(str[i] == *Data_.H());
-                    break;
+                    break; 
 
-                case 1:
+                case 1: 
                     UNIT_ASSERT(str[i] == *Data_.d());
-                    break;
+                    break; 
 
-                default:
-                    UNIT_ASSERT(false);
-            }
+                default: 
+                    UNIT_ASSERT(false); 
+            } 
         }
-
-        str.erase(1);
+ 
+        str.erase(1); 
         UNIT_ASSERT(str == Data_.H());
     }
 
-    void data() {
+    void data() { 
         TStringType xx;
 
-        // ISO-IEC-14882:1998(E), 21.3.6, paragraph 3
+        // ISO-IEC-14882:1998(E), 21.3.6, paragraph 3 
         UNIT_ASSERT(xx.data() != nullptr);
-    }
+    } 
 
-    void c_str() {
+    void c_str() { 
         TStringType low(Data_._2004_01_01());
         TStringType xx;
         TStringType yy;
 
-        // ISO-IEC-14882:1998(E), 21.3.6, paragraph 1
-        UNIT_ASSERT(*(yy.c_str()) == 0);
+        // ISO-IEC-14882:1998(E), 21.3.6, paragraph 1 
+        UNIT_ASSERT(*(yy.c_str()) == 0); 
 
-        // Blocks A and B should follow each other.
-        // Block A:
+        // Blocks A and B should follow each other. 
+        // Block A: 
         xx = Data_._123456();
-        xx += low;
+        xx += low; 
         UNIT_ASSERT(xx.c_str() == TView(Data_._1234562004_01_01()));
-        // End of block A
+        // End of block A 
 
-        // Block B:
+        // Block B: 
         xx = Data_._1234();
         xx += Data_._5();
         UNIT_ASSERT(xx.c_str() == TView(Data_._12345()));
-        // End of block B
-    }
+        // End of block B 
+    } 
 
     void null_char_of_empty() {
         const TStringType s;
@@ -300,8 +300,8 @@ protected:
         UNIT_ASSERT(s[s.size()] == 0);
     }
 
-    void null_char() {
-        // ISO/IEC 14882:1998(E), ISO/IEC 14882:2003(E), 21.3.4 ('... the const version')
+    void null_char() { 
+        // ISO/IEC 14882:1998(E), ISO/IEC 14882:2003(E), 21.3.4 ('... the const version') 
         const TStringType s(Data_._123456());
 
         UNIT_ASSERT(s[s.size()] == 0);
@@ -315,11 +315,11 @@ protected:
         using reference = volatile typename TStringType::value_type&;
 #else
         using reference = typename TStringType::reference;
-#endif
+#endif 
         reference trailing_zero = s[s.size()];
         trailing_zero = 0;
         UNIT_ASSERT(trailing_zero == 0);
-    }
+    } 
 
     // Allowed since C++17, see http://www.open-std.org/jtc1/sc22/wg21/docs/lwg-defects.html#2475
     void null_char_assignment_to_subscript_of_nonempty() {
@@ -355,45 +355,45 @@ protected:
     }
 #endif
 
-    void insert() {
+    void insert() { 
         TStringType strorg = Data_.This_is_test_string_for_string_calls();
         TStringType str;
 
-        // In case of reallocation there is no auto reference problem
+        // In case of reallocation there is no auto reference problem 
         // so we reserve a big enough TStringType to be sure to test this
-        // particular point.
+        // particular point. 
 
-        str.reserve(100);
-        str = strorg;
+        str.reserve(100); 
+        str = strorg; 
 
-        //test self insertion:
-        str.insert(10, str.c_str() + 5, 15);
+        //test self insertion: 
+        str.insert(10, str.c_str() + 5, 15); 
         UNIT_ASSERT(str == Data_.This_is_teis_test_string_st_string_for_string_calls());
 
-        str = strorg;
-        str.insert(15, str.c_str() + 5, 25);
+        str = strorg; 
+        str.insert(15, str.c_str() + 5, 25); 
         UNIT_ASSERT(str == Data_.This_is_test_stis_test_string_for_stringring_for_string_calls());
 
-        str = strorg;
-        str.insert(0, str.c_str() + str.size() - 4, 4);
+        str = strorg; 
+        str.insert(0, str.c_str() + str.size() - 4, 4); 
         UNIT_ASSERT(str == Data_.allsThis_is_test_string_for_string_calls());
 
-        str = strorg;
-        str.insert(0, str.c_str() + str.size() / 2 - 1, str.size() / 2 + 1);
+        str = strorg; 
+        str.insert(0, str.c_str() + str.size() / 2 - 1, str.size() / 2 + 1); 
         UNIT_ASSERT(str == Data_.ng_for_string_callsThis_is_test_string_for_string_calls());
 
-        str = strorg;
+        str = strorg; 
         typename TStringType::iterator b = str.begin();
         typename TStringType::const_iterator s = str.begin() + str.size() / 2 - 1;
         typename TStringType::const_iterator e = str.end();
-        str.insert(b, s, e);
+        str.insert(b, s, e); 
         UNIT_ASSERT(str == Data_.ng_for_string_callsThis_is_test_string_for_string_calls());
 
 #if 0
-        // AV
-        str = strorg;
-        str.insert(str.begin(), str.begin() + str.size() / 2 - 1, str.end());
-        UNIT_ASSERT(str == Data.ng_for_string_callsThis_is_test_string_for_string_calls());
+        // AV 
+        str = strorg; 
+        str.insert(str.begin(), str.begin() + str.size() / 2 - 1, str.end()); 
+        UNIT_ASSERT(str == Data.ng_for_string_callsThis_is_test_string_for_string_calls()); 
 #endif
 
         TStringType str0;
@@ -401,17 +401,17 @@ protected:
         UNIT_ASSERT(str0 == Data_._00000());
 
         TStringType str1;
-        {
+        { 
             typename TStringType::size_type pos = 0, nb = 2;
             str1.insert(pos, nb, *Data_._1());
-        }
+        } 
         UNIT_ASSERT(str1 == Data_._11());
 
-        str0.insert(0, str1);
+        str0.insert(0, str1); 
         UNIT_ASSERT(str0 == Data_._1100000());
 
         TStringType str2(Data_._2345());
-        str0.insert(str0.size(), str2, 1, 2);
+        str0.insert(str0.size(), str2, 1, 2); 
         UNIT_ASSERT(str0 == Data_._110000034());
 
         str1.insert(str1.begin() + 1, 2, *Data_._2());
@@ -425,40 +425,40 @@ protected:
 
         str1.insert(str1.begin() + 6, *Data_._5());
         UNIT_ASSERT(str1 == Data_._123344544321());
-    }
+    } 
 
-    void resize() {
+    void resize() { 
         TStringType s;
 
-        s.resize(0);
+        s.resize(0); 
 
-        UNIT_ASSERT(*s.c_str() == 0);
-
-        s = Data_._1234567();
-
-        s.resize(0);
-        UNIT_ASSERT(*s.c_str() == 0);
+        UNIT_ASSERT(*s.c_str() == 0); 
 
         s = Data_._1234567();
-        s.resize(1);
-        UNIT_ASSERT(s.size() == 1);
+
+        s.resize(0); 
+        UNIT_ASSERT(*s.c_str() == 0); 
+
+        s = Data_._1234567();
+        s.resize(1); 
+        UNIT_ASSERT(s.size() == 1); 
         UNIT_ASSERT(*s.c_str() == *Data_._1());
-        UNIT_ASSERT(*(s.c_str() + 1) == 0);
+        UNIT_ASSERT(*(s.c_str() + 1) == 0); 
 
         s = Data_._1234567();
 #if 0
-        s.resize(10);
+        s.resize(10); 
 #else
-        s.resize(10, 0);
+        s.resize(10, 0); 
 #endif
-        UNIT_ASSERT(s.size() == 10);
+        UNIT_ASSERT(s.size() == 10); 
         UNIT_ASSERT(s[6] == *Data_._7());
-        UNIT_ASSERT(s[7] == 0);
-        UNIT_ASSERT(s[8] == 0);
-        UNIT_ASSERT(s[9] == 0);
-    }
+        UNIT_ASSERT(s[7] == 0); 
+        UNIT_ASSERT(s[8] == 0); 
+        UNIT_ASSERT(s[9] == 0); 
+    } 
 
-    void find() {
+    void find() { 
         TStringType s(Data_.one_two_three_one_two_three());
 
         UNIT_ASSERT(s.find(Data_.one()) == 0);
@@ -469,33 +469,33 @@ protected:
         UNIT_ASSERT(s.find(Data_.one(), TStringType::npos) == TStringType::npos);
         UNIT_ASSERT(s.find_first_of(Data_.abcde()) == 2);
         UNIT_ASSERT(s.find_first_not_of(Data_.enotw_()) == 9);
-    }
+    } 
 
-    void capacity() {
+    void capacity() { 
         TStringType s;
 
         UNIT_ASSERT(s.capacity() < s.max_size());
         UNIT_ASSERT(s.capacity() >= s.size());
-
-        for (int i = 0; i < 18; ++i) {
-            s += ' ';
-
+ 
+        for (int i = 0; i < 18; ++i) { 
+            s += ' '; 
+ 
             UNIT_ASSERT(s.capacity() > 0);
             UNIT_ASSERT(s.capacity() < s.max_size());
             UNIT_ASSERT(s.capacity() >= s.size());
-        }
+        } 
     }
 
-    void assign() {
+    void assign() { 
         TStringType s;
         TChar const* cstr = Data_.test_string_for_assign();
 
-        s.assign(cstr, cstr + 22);
+        s.assign(cstr, cstr + 22); 
         UNIT_ASSERT(s == Data_.test_string_for_assign());
 
         TStringType s2(Data_.other_test_string());
-        s.assign(s2);
-        UNIT_ASSERT(s == s2);
+        s.assign(s2); 
+        UNIT_ASSERT(s == s2); 
 
         static TStringType str1;
         static TStringType str2;
@@ -507,34 +507,34 @@ protected:
 
         UNIT_ASSERT(str1[5] == *Data_._6());
         UNIT_ASSERT(str2[29] == *Data_._0());
-    }
+    } 
 
-    void copy() {
+    void copy() { 
         TStringType s(Data_.foo());
         TChar dest[4];
-        dest[0] = dest[1] = dest[2] = dest[3] = 1;
-        s.copy(dest, 4);
-        int pos = 0;
+        dest[0] = dest[1] = dest[2] = dest[3] = 1; 
+        s.copy(dest, 4); 
+        int pos = 0; 
         UNIT_ASSERT(dest[pos++] == *Data_.f());
         UNIT_ASSERT(dest[pos++] == *Data_.o());
         UNIT_ASSERT(dest[pos++] == *Data_.o());
-        UNIT_ASSERT(dest[pos++] == 1);
+        UNIT_ASSERT(dest[pos++] == 1); 
 
-        dest[0] = dest[1] = dest[2] = dest[3] = 1;
-        s.copy(dest, 4, 2);
-        pos = 0;
+        dest[0] = dest[1] = dest[2] = dest[3] = 1; 
+        s.copy(dest, 4, 2); 
+        pos = 0; 
         UNIT_ASSERT(dest[pos++] == *Data_.o());
-        UNIT_ASSERT(dest[pos++] == 1);
+        UNIT_ASSERT(dest[pos++] == 1); 
 
-        // @todo use UNIT_TEST_EXCEPTION
-        try {
-            s.copy(dest, 4, 5);
-            UNIT_ASSERT(!"expected std::out_of_range");
-        } catch (const std::out_of_range&) {
-            UNIT_ASSERT(true);
+        // @todo use UNIT_TEST_EXCEPTION 
+        try { 
+            s.copy(dest, 4, 5); 
+            UNIT_ASSERT(!"expected std::out_of_range"); 
+        } catch (const std::out_of_range&) { 
+            UNIT_ASSERT(true); 
         } catch (...) {
-            UNIT_ASSERT(!"expected std::out_of_range");
-        }
+            UNIT_ASSERT(!"expected std::out_of_range"); 
+        } 
     }
 
     void cbegin_cend() {
@@ -546,18 +546,18 @@ protected:
         }
     }
 
-    void compare() {
+    void compare() { 
         TStringType str1(Data_.abcdef());
         TStringType str2;
 
         str2 = Data_.abcdef();
-        UNIT_ASSERT(str1.compare(str2) == 0);
+        UNIT_ASSERT(str1.compare(str2) == 0); 
         UNIT_ASSERT(str1.compare(str2.data(), str2.size()) == 0);
         str2 = Data_.abcde();
-        UNIT_ASSERT(str1.compare(str2) > 0);
+        UNIT_ASSERT(str1.compare(str2) > 0); 
         UNIT_ASSERT(str1.compare(str2.data(), str2.size()) > 0);
         str2 = Data_.abcdefg();
-        UNIT_ASSERT(str1.compare(str2) < 0);
+        UNIT_ASSERT(str1.compare(str2) < 0); 
         UNIT_ASSERT(str1.compare(str2.data(), str2.size()) < 0);
 
         UNIT_ASSERT(str1.compare(Data_.abcdef()) == 0);
@@ -565,24 +565,24 @@ protected:
         UNIT_ASSERT(str1.compare(Data_.abcdefg()) < 0);
 
         str2 = Data_.cde();
-        UNIT_ASSERT(str1.compare(2, 3, str2) == 0);
+        UNIT_ASSERT(str1.compare(2, 3, str2) == 0); 
         str2 = Data_.cd();
-        UNIT_ASSERT(str1.compare(2, 3, str2) > 0);
+        UNIT_ASSERT(str1.compare(2, 3, str2) > 0); 
         str2 = Data_.cdef();
-        UNIT_ASSERT(str1.compare(2, 3, str2) < 0);
+        UNIT_ASSERT(str1.compare(2, 3, str2) < 0); 
 
         str2 = Data_.abcdef();
-        UNIT_ASSERT(str1.compare(2, 3, str2, 2, 3) == 0);
-        UNIT_ASSERT(str1.compare(2, 3, str2, 2, 2) > 0);
-        UNIT_ASSERT(str1.compare(2, 3, str2, 2, 4) < 0);
+        UNIT_ASSERT(str1.compare(2, 3, str2, 2, 3) == 0); 
+        UNIT_ASSERT(str1.compare(2, 3, str2, 2, 2) > 0); 
+        UNIT_ASSERT(str1.compare(2, 3, str2, 2, 4) < 0); 
 
         UNIT_ASSERT(str1.compare(2, 3, Data_.cdefgh(), 3) == 0);
         UNIT_ASSERT(str1.compare(2, 3, Data_.cdefgh(), 2) > 0);
         UNIT_ASSERT(str1.compare(2, 3, Data_.cdefgh(), 4) < 0);
-    }
+    } 
 
-    void find_last_of() {
-        // 21.3.6.4
+    void find_last_of() { 
+        // 21.3.6.4 
         TStringType s(Data_.one_two_three_one_two_three());
 
         UNIT_ASSERT(s.find_last_of(Data_.abcde()) == 26);
@@ -597,16 +597,16 @@ protected:
         UNIT_ASSERT(test.find_last_of(*Data_.a(), 2) == 2);
         UNIT_ASSERT(test.find_last_of(*Data_.a(), 1) == 0);
         UNIT_ASSERT(test.find_last_of(*Data_.a(), 0) == 0);
-    }
+    } 
 #if 0
-    void rfind() {
-        // 21.3.6.2
+    void rfind() { 
+        // 21.3.6.2 
         TStringType s(Data.one_two_three_one_two_three());
 
-        UNIT_ASSERT(s.rfind(Data.two()) == 18);
+        UNIT_ASSERT(s.rfind(Data.two()) == 18); 
         UNIT_ASSERT(s.rfind(Data.two(), 0) == TStringType::npos);
-        UNIT_ASSERT(s.rfind(Data.two(), 11) == 4);
-        UNIT_ASSERT(s.rfind(*Data.w()) == 19);
+        UNIT_ASSERT(s.rfind(Data.two(), 11) == 4); 
+        UNIT_ASSERT(s.rfind(*Data.w()) == 19); 
 
         TStringType test(Data.aba());
 
@@ -617,10 +617,10 @@ protected:
         UNIT_ASSERT(test.rfind(*Data.a(), 2) == 2);
         UNIT_ASSERT(test.rfind(*Data.a(), 1) == 0);
         UNIT_ASSERT(test.rfind(*Data.a(), 0) == 0);
-    }
+    } 
 #endif
-    void find_last_not_of() {
-        // 21.3.6.6
+    void find_last_not_of() { 
+        // 21.3.6.6 
         TStringType s(Data_.one_two_three_one_two_three());
 
         UNIT_ASSERT(s.find_last_not_of(Data_.ehortw_()) == 15);
@@ -640,90 +640,90 @@ protected:
         UNIT_ASSERT(test.find_last_not_of(*Data_.b(), 1) == 0);
         UNIT_ASSERT(test.find_last_not_of(*Data_.a(), 0) == TStringType::npos);
         UNIT_ASSERT(test.find_last_not_of(*Data_.b(), 0) == 0);
-    }
+    } 
 #if 0
-    void replace() {
+    void replace() { 
         // This test case is for the non template basic_TString::replace method,
-        // this is why we play with the const iterators and reference to guaranty
-        // that the right method is called.
+        // this is why we play with the const iterators and reference to guaranty 
+        // that the right method is called. 
 
         const TStringType v(Data._78());
         TStringType s(Data._123456());
         TStringType const& cs = s;
 
         typename TStringType::iterator i = s.begin() + 1;
-        s.replace(i, i + 3, v.begin(), v.end());
+        s.replace(i, i + 3, v.begin(), v.end()); 
         UNIT_ASSERT(s == Data._17856());
 
-        s = Data._123456();
-        i = s.begin() + 1;
-        s.replace(i, i + 1, v.begin(), v.end());
+        s = Data._123456(); 
+        i = s.begin() + 1; 
+        s.replace(i, i + 1, v.begin(), v.end()); 
         UNIT_ASSERT(s == Data._1783456());
 
-        s = Data._123456();
-        i = s.begin() + 1;
+        s = Data._123456(); 
+        i = s.begin() + 1; 
         typename TStringType::const_iterator ci = s.begin() + 1;
-        s.replace(i, i + 3, ci + 3, cs.end());
+        s.replace(i, i + 3, ci + 3, cs.end()); 
         UNIT_ASSERT(s == Data._15656());
 
-        s = Data._123456();
-        i = s.begin() + 1;
-        ci = s.begin() + 1;
-        s.replace(i, i + 3, ci, ci + 2);
+        s = Data._123456(); 
+        i = s.begin() + 1; 
+        ci = s.begin() + 1; 
+        s.replace(i, i + 3, ci, ci + 2); 
         UNIT_ASSERT(s == Data._12356());
 
-        s = Data._123456();
-        i = s.begin() + 1;
-        ci = s.begin() + 1;
-        s.replace(i, i + 3, ci + 1, cs.end());
+        s = Data._123456(); 
+        i = s.begin() + 1; 
+        ci = s.begin() + 1; 
+        s.replace(i, i + 3, ci + 1, cs.end()); 
         UNIT_ASSERT(s == Data._1345656());
 
-        s = Data._123456();
-        i = s.begin();
-        ci = s.begin() + 1;
-        s.replace(i, i, ci, ci + 1);
+        s = Data._123456(); 
+        i = s.begin(); 
+        ci = s.begin() + 1; 
+        s.replace(i, i, ci, ci + 1); 
         UNIT_ASSERT(s == Data._2123456());
 
-        s = Data._123456();
-        s.replace(s.begin() + 4, s.end(), cs.begin(), cs.end());
+        s = Data._123456(); 
+        s.replace(s.begin() + 4, s.end(), cs.begin(), cs.end()); 
         UNIT_ASSERT(s == Data._1234123456());
 
-        // This is the test for the template replace method.
+        // This is the test for the template replace method. 
 
-        s = Data._123456();
+        s = Data._123456(); 
         typename TStringType::iterator b = s.begin() + 4;
         typename TStringType::iterator e = s.end();
         typename TStringType::const_iterator rb = s.begin();
         typename TStringType::const_iterator re = s.end();
-        s.replace(b, e, rb, re);
+        s.replace(b, e, rb, re); 
         UNIT_ASSERT(s == Data._1234123456());
 
-        s = Data._123456();
-        s.replace(s.begin() + 4, s.end(), s.begin(), s.end());
+        s = Data._123456(); 
+        s.replace(s.begin() + 4, s.end(), s.begin(), s.end()); 
         UNIT_ASSERT(s == Data._1234123456());
 
         TStringType strorg(Data.This_is_test_StringT_for_StringT_calls());
         TStringType str = strorg;
-        str.replace(5, 15, str.c_str(), 10);
+        str.replace(5, 15, str.c_str(), 10); 
         UNIT_ASSERT(str == Data.This_This_is_tefor_StringT_calls());
 
-        str = strorg;
-        str.replace(5, 5, str.c_str(), 10);
+        str = strorg; 
+        str.replace(5, 5, str.c_str(), 10); 
         UNIT_ASSERT(str == Data.This_This_is_test_StringT_for_StringT_calls());
 
     #if !defined(STLPORT) || defined(_STLP_MEMBER_TEMPLATES)
         deque<TChar> cdeque;
-        cdeque.push_back(*Data.I());
-        str.replace(str.begin(), str.begin() + 11, cdeque.begin(), cdeque.end());
+        cdeque.push_back(*Data.I()); 
+        str.replace(str.begin(), str.begin() + 11, cdeque.begin(), cdeque.end()); 
         UNIT_ASSERT(str == Data.Is_test_StringT_for_StringT_calls());
     #endif
-    }
+    } 
 #endif
-}; // TStringStdTestImpl
-
+}; // TStringStdTestImpl 
+ 
 class TStringTest: public TTestBase, private TStringTestImpl<TString, TTestData<char>> {
-public:
-    UNIT_TEST_SUITE(TStringTest);
+public: 
+    UNIT_TEST_SUITE(TStringTest); 
     UNIT_TEST(TestMaxSize);
     UNIT_TEST(TestConstructors);
     UNIT_TEST(TestReplace);
@@ -752,7 +752,7 @@ public:
     UNIT_TEST(TestFillingAssign)
     UNIT_TEST(TestStdStreamApi)
     //UNIT_TEST(TestOperatorsCI); must fail
-    UNIT_TEST_SUITE_END();
+    UNIT_TEST_SUITE_END(); 
 
     void TestAppendUtf16() {
         TString appended = TString("А роза упала").AppendUtf16(u" на лапу Азора");
@@ -779,13 +779,13 @@ public:
         ss >> read;
         UNIT_ASSERT_VALUES_EQUAL(read, data);
     }
-};
-
-UNIT_TEST_SUITE_REGISTRATION(TStringTest);
-
+}; 
+ 
+UNIT_TEST_SUITE_REGISTRATION(TStringTest); 
+ 
 class TWideStringTest: public TTestBase, private TStringTestImpl<TUtf16String, TTestData<wchar16>> {
-public:
-    UNIT_TEST_SUITE(TWideStringTest);
+public: 
+    UNIT_TEST_SUITE(TWideStringTest); 
     UNIT_TEST(TestConstructors);
     UNIT_TEST(TestReplace);
 #ifndef TSTRING_IS_STD_STRING
@@ -812,7 +812,7 @@ public:
     UNIT_TEST(TestIterators);
     UNIT_TEST(TestReverseIterators);
     UNIT_TEST(TestStringLiterals);
-    UNIT_TEST_SUITE_END();
+    UNIT_TEST_SUITE_END(); 
 
 private:
     void TestDecodingMethods() {
@@ -903,10 +903,10 @@ private:
         TUtf16String s2 = u"привет";
         UNIT_ASSERT_VALUES_EQUAL(s2, TUtf16String::FromUtf8("привет"));
     }
-};
-
-UNIT_TEST_SUITE_REGISTRATION(TWideStringTest);
-
+}; 
+ 
+UNIT_TEST_SUITE_REGISTRATION(TWideStringTest); 
+ 
 class TUtf32StringTest: public TTestBase, private TStringTestImpl<TUtf32String, TTestData<wchar32>> {
 public:
     UNIT_TEST_SUITE(TUtf32StringTest);
@@ -1106,8 +1106,8 @@ private:
 UNIT_TEST_SUITE_REGISTRATION(TUtf32StringTest);
 
 class TStringStdTest: public TTestBase, private TStringStdTestImpl<TString, TTestData<char>> {
-public:
-    UNIT_TEST_SUITE(TStringStdTest);
+public: 
+    UNIT_TEST_SUITE(TStringStdTest); 
     UNIT_TEST(Constructor);
     UNIT_TEST(reserve);
     UNIT_TEST(short_string);
@@ -1131,19 +1131,19 @@ public:
     UNIT_TEST(cbegin_cend);
     UNIT_TEST(compare);
     UNIT_TEST(find_last_of);
-#if 0
-        UNIT_TEST(rfind);
-        UNIT_TEST(replace);
-#endif
+#if 0 
+        UNIT_TEST(rfind); 
+        UNIT_TEST(replace); 
+#endif 
     UNIT_TEST(find_last_not_of);
-    UNIT_TEST_SUITE_END();
-};
-
-UNIT_TEST_SUITE_REGISTRATION(TStringStdTest);
-
+    UNIT_TEST_SUITE_END(); 
+}; 
+ 
+UNIT_TEST_SUITE_REGISTRATION(TStringStdTest); 
+ 
 class TWideStringStdTest: public TTestBase, private TStringStdTestImpl<TUtf16String, TTestData<wchar16>> {
-public:
-    UNIT_TEST_SUITE(TWideStringStdTest);
+public: 
+    UNIT_TEST_SUITE(TWideStringStdTest); 
     UNIT_TEST(Constructor);
     UNIT_TEST(reserve);
     UNIT_TEST(short_string);
@@ -1167,15 +1167,15 @@ public:
     UNIT_TEST(cbegin_cend);
     UNIT_TEST(compare);
     UNIT_TEST(find_last_of);
-#if 0
-        UNIT_TEST(rfind);
-        UNIT_TEST(replace);
-#endif
+#if 0 
+        UNIT_TEST(rfind); 
+        UNIT_TEST(replace); 
+#endif 
     UNIT_TEST(find_last_not_of);
-    UNIT_TEST_SUITE_END();
-};
-
-UNIT_TEST_SUITE_REGISTRATION(TWideStringStdTest);
+    UNIT_TEST_SUITE_END(); 
+}; 
+ 
+UNIT_TEST_SUITE_REGISTRATION(TWideStringStdTest); 
 
 Y_UNIT_TEST_SUITE(TStringConversionTest) {
     Y_UNIT_TEST(ConversionToStdStringTest) {

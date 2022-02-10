@@ -2981,4 +2981,4 @@ BoolInt LzmaEnc_IsFinished(CLzmaEncHandle pp)
   CLzmaEnc *p = (CLzmaEnc *)pp;
   return p->finished;
 }
-
+

@@ -18,15 +18,13 @@
 /* Define this if you want extra debugging. */
 /* #undef FFI_DEBUG */
 
-/* Cannot use PROT_EXEC on this target, so, we revert to
- alternative means */
+/* Cannot use PROT_EXEC on this target, so, we revert to alternative means */
 /* #undef FFI_EXEC_TRAMPOLINE_TABLE */
 
 /* Define this if you want to enable pax emulated trampolines */
 /* #undef FFI_MMAP_EXEC_EMUTRAMP_PAX */
 
-/* Cannot use malloc on this target, so, we revert to
- alternative means */
+/* Cannot use malloc on this target, so, we revert to alternative means */
 /* #undef FFI_MMAP_EXEC_WRIT */
 
 /* Define this if you do not want support for the raw API. */

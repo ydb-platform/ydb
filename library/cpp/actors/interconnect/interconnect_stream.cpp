@@ -287,23 +287,23 @@ namespace NInterconnect {
             if (certificate) {
                 std::unique_ptr<BIO, TDeleter> bio(BIO_new_mem_buf(certificate.data(), certificate.size()));
                 Y_VERIFY(bio);
-
-                // first certificate in the chain is expected to be a leaf
+ 
+                // first certificate in the chain is expected to be a leaf 
                 std::unique_ptr<X509, TDeleter> cert(PEM_read_bio_X509(bio.get(), nullptr, nullptr, nullptr));
                 Y_VERIFY(cert, "failed to parse certificate");
                 ret = SSL_CTX_use_certificate(Ctx.get(), cert.get());
                 Y_VERIFY(ret == 1);
-
-                // loading additional certificates in the chain, if any
-                while(true) {
-                    X509 *ca = PEM_read_bio_X509(bio.get(), nullptr, nullptr, nullptr);
-                    if (ca == nullptr) {
-                        break;
-                    }
-                    ret = SSL_CTX_add0_chain_cert(Ctx.get(), ca);
-                    Y_VERIFY(ret == 1);
-                    // we must not free memory if certificate was added successfully by SSL_CTX_add0_chain_cert
-                }
+ 
+                // loading additional certificates in the chain, if any 
+                while(true) { 
+                    X509 *ca = PEM_read_bio_X509(bio.get(), nullptr, nullptr, nullptr); 
+                    if (ca == nullptr) { 
+                        break; 
+                    } 
+                    ret = SSL_CTX_add0_chain_cert(Ctx.get(), ca); 
+                    Y_VERIFY(ret == 1); 
+                    // we must not free memory if certificate was added successfully by SSL_CTX_add0_chain_cert 
+                } 
             }
             if (privateKey) {
                 std::unique_ptr<BIO, TDeleter> bio(BIO_new_mem_buf(privateKey.data(), privateKey.size()));

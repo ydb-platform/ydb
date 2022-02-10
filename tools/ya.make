@@ -41,7 +41,7 @@ RECURSE(
     fastcksum
     filter_nonucs2
     fix_elf
-    fml_sweeper_api
+    fml_sweeper_api 
     frq_index_print
     geo
     geodb_ops

@@ -427,7 +427,7 @@ private:
         v.shrink_to_fit();
         UNIT_ASSERT_EQUAL(v.capacity(), 11);
     }
- 
+
     /* This test check a potential issue with empty base class
          * optimization. Some compilers (VC6) do not implement it
          * correctly resulting ina wrong behavior. */

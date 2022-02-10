@@ -149,19 +149,19 @@ void TMathTest::TestErf() {
         UNIT_ASSERT_DOUBLES_EQUAL(f, values[i], 1e-7);
     }
 }
- 
-void TMathTest::TestLogGamma() { 
-    double curVal = 0.0; 
-    for (int i = 1; i <= 20; i++) { 
-        curVal += log((double)i); 
+
+void TMathTest::TestLogGamma() {
+    double curVal = 0.0;
+    for (int i = 1; i <= 20; i++) {
+        curVal += log((double)i);
         UNIT_ASSERT_DOUBLES_EQUAL(curVal, LogGamma((double)(i + 1)), 1e-6);
-    } 
-    curVal = log(M_PI) / 2.0; 
-    for (int i = 1; i <= 20; i++) { 
-        UNIT_ASSERT_DOUBLES_EQUAL(curVal, LogGamma(i - 0.5), 1e-6); 
-        curVal += log(i - 0.5); 
-    } 
-} 
+    }
+    curVal = log(M_PI) / 2.0;
+    for (int i = 1; i <= 20; i++) {
+        UNIT_ASSERT_DOUBLES_EQUAL(curVal, LogGamma(i - 0.5), 1e-6);
+        curVal += log(i - 0.5);
+    }
+}
 
 void TMathTest::TestAbs() {
     UNIT_ASSERT_VALUES_EQUAL(Abs(1), 1);

@@ -554,7 +554,7 @@ public:
     }
 
     size_t GetSize() const {
-        return (size_t)(SizeofOffsets - 1); 
+        return (size_t)(SizeofOffsets - 1);
     }
 
     size_t GetLength(ui64 index) const {

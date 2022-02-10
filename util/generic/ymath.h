@@ -99,7 +99,7 @@ inline double Erf(double x) {
     return erf(x);
 }
 #endif
- 
+
 /**
  * @returns                             Natural logarithm of the absolute value
  *                                      of the gamma function of provided argument.
@@ -114,8 +114,8 @@ inline double LogGamma(double x) noexcept {
 #elif defined(__GNUC__)
     return __builtin_lgamma(x);
 #elif defined(_unix_)
-    return lgamma(x); 
-#else 
+    return lgamma(x);
+#else
     extern double LogGammaImpl(double);
     return LogGammaImpl(x);
 #endif

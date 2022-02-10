@@ -149,7 +149,7 @@ RECURSE(
     python-django-tanker
     python-django-yauth/tests
     python-django-yauth
-    reactor 
+    reactor
     redis_utils
     reservoir_sampling
     refsclient

@@ -13,22 +13,22 @@ namespace NYT {
 ////////////////////////////////////////////////////////////////////////////////
 
 //! A technical base class for ref-counted objects and promise states.
-class TRefCountedBase 
-{ 
-public: 
-    TRefCountedBase() = default; 
+class TRefCountedBase
+{
+public:
+    TRefCountedBase() = default;
 
     // Make destructor protected
     virtual ~TRefCountedBase() noexcept = default;
 
     virtual void DestroyRefCounted() = 0;
 
-private: 
+private:
     TRefCountedBase(const TRefCountedBase&) = delete;
     TRefCountedBase(TRefCountedBase&&) = delete;
 
-    TRefCountedBase& operator=(const TRefCountedBase&) = delete; 
-    TRefCountedBase& operator=(TRefCountedBase&&) = delete; 
+    TRefCountedBase& operator=(const TRefCountedBase&) = delete;
+    TRefCountedBase& operator=(TRefCountedBase&&) = delete;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -62,7 +62,7 @@ public:
      * Note that you should never ever use this method in production code.
      * This method is mainly for debugging purposes.
      */
-    int GetRefCount() const noexcept; 
+    int GetRefCount() const noexcept;
 
     //! Increments the strong reference counter.
     void Ref() const noexcept;

@@ -180,8 +180,8 @@ public:
     TIntrusivePtr<T> Lock() const noexcept
     {
         return T_ && RefCounter()->TryRef()
-            ? TIntrusivePtr<T>(T_, false) 
-            : TIntrusivePtr<T>(); 
+            ? TIntrusivePtr<T>(T_, false)
+            : TIntrusivePtr<T>();
     }
 
     bool IsExpired() const noexcept

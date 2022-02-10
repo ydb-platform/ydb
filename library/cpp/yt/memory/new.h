@@ -79,9 +79,9 @@ struct THasAllocator<T, std::void_t<typename T::TAllocator>>
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! Allocates a new instance of |T|. 
+//! Allocates a new instance of |T|.
 template <class T, class... As, class = typename THasAllocator<T>::TFalse>
-TIntrusivePtr<T> New(As&&... args); 
+TIntrusivePtr<T> New(As&&... args);
 
 template <class T, class... As, class = typename THasAllocator<T>::TTrue>
 TIntrusivePtr<T> New(typename T::TAllocator* allocator, As&&... args);
@@ -97,31 +97,31 @@ TIntrusivePtr<T> NewWithExtraSpace(typename T::TAllocator* allocator, size_t ext
 template <class T, class TDeleter, class... As>
 TIntrusivePtr<T> NewWithDelete(const TDeleter& deleter, As&&... args);
 
-//! Allocates a new instance of |T|. 
-//! The allocation is additionally marked with #location. 
-template <class T, class TTag, int Counter, class... As> 
+//! Allocates a new instance of |T|.
+//! The allocation is additionally marked with #location.
+template <class T, class TTag, int Counter, class... As>
 TIntrusivePtr<T> NewWithLocation(const TSourceLocation& location, As&&... args);
 
-//! Enables calling #New and co for types with private ctors. 
-#define DECLARE_NEW_FRIEND() \ 
+//! Enables calling #New and co for types with private ctors.
+#define DECLARE_NEW_FRIEND() \
     template <class DECLARE_NEW_FRIEND_T> \
     friend struct NYT::TRefCountedWrapper;
 
-//////////////////////////////////////////////////////////////////////////////// 
+////////////////////////////////////////////////////////////////////////////////
 
-//! CRTP mixin enabling access to instance's extra space. 
-template <class T> 
-class TWithExtraSpace 
+//! CRTP mixin enabling access to instance's extra space.
+template <class T>
+class TWithExtraSpace
 {
-protected: 
-    const void* GetExtraSpacePtr() const; 
-    void* GetExtraSpacePtr(); 
-}; 
+protected:
+    const void* GetExtraSpacePtr() const;
+    void* GetExtraSpacePtr();
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT
- 
-#define NEW_INL_H_ 
-#include "new-inl.h" 
-#undef NEW_INL_H_ 
+
+#define NEW_INL_H_
+#include "new-inl.h"
+#undef NEW_INL_H_

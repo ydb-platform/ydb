@@ -251,7 +251,7 @@ public:
 
             bool Reply(void*) override {
                 if (!ProcessHeaders()) {
-                    return true; 
+                    return true;
                 }
 
                 ProcessFailRequest(0);

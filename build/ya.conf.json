@@ -4393,14 +4393,14 @@
                 }
             ]
         },
-        "horadric": { 
-            "tools": { 
+        "horadric": {
+            "tools": {
                 "horadric": {
                     "bottle": "horadric",
                     "executable": "horadric"
                 }
-            }, 
-            "platforms": [ 
+            },
+            "platforms": [
                 {
                     "host": {
                         "os": "LINUX"
@@ -4419,8 +4419,8 @@
                     },
                     "default": true
                 }
-            ] 
-        }, 
+            ]
+        },
         "logbroker": {
             "tools": {
                 "logbroker": {
@@ -7184,16 +7184,16 @@
             }
         },
         "horadric": {
-            "formula": { 
+            "formula": {
                 "sandbox_id": 1210601101,
-                "match": "horadric" 
-            }, 
-            "executable": { 
+                "match": "horadric"
+            },
+            "executable": {
                 "horadric": [
                     "horadric"
                 ]
-            } 
-        }, 
+            }
+        },
         "logbroker": {
             "formula": {
                 "sandbox_id": 1061549819,

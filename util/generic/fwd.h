@@ -2,8 +2,8 @@
 
 #include <util/system/defaults.h>
 
-#include <stlfwd> 
- 
+#include <stlfwd>
+
 template <typename TCharType, typename TTraits = std::char_traits<TCharType>>
 class TBasicString;
 

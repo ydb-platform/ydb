@@ -19,11 +19,11 @@ class TTestHttpServer::TImpl : public THttpServer::ICallBack {
 
         bool Reply(void* /*tsr*/) override {
             if (!ProcessHeaders()) {
-                return true; 
+                return true;
             }
 
             if (!RequestString.StartsWith("GET ")) {
-                return true; 
+                return true;
             }
 
             TRequest r;
@@ -60,7 +60,7 @@ class TTestHttpServer::TImpl : public THttpServer::ICallBack {
                 break;
 
             default:
-                return true; 
+                return true;
             }
 
             if (reply.ETag) {

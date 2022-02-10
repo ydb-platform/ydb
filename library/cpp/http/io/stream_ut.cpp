@@ -25,7 +25,7 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
 
             bool Reply(void* /*tsr*/) override {
                 if (!ProcessHeaders()) {
-                    return true; 
+                    return true;
                 }
 
                 // Check that function will not hang on

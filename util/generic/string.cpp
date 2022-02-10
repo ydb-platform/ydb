@@ -10,7 +10,7 @@
 
 alignas(32) const char NULL_STRING_REPR[128] = {0};
 
-std::ostream& operator<<(std::ostream& os, const TString& s) { 
+std::ostream& operator<<(std::ostream& os, const TString& s) {
     return os.write(s.data(), s.size());
 }
 

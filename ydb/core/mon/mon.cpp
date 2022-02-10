@@ -456,8 +456,8 @@ namespace NActors {
     }
 
     IMonPage *TMon::RegisterCountersPage(const TString &path, const TString &title, TIntrusivePtr<TDynamicCounters> counters) {
-        TDynamicCountersPage* page = new TDynamicCountersPage(path, title, counters);
-        page->SetUnknownGroupPolicy(EUnknownGroupPolicy::Ignore);
+        TDynamicCountersPage* page = new TDynamicCountersPage(path, title, counters); 
+        page->SetUnknownGroupPolicy(EUnknownGroupPolicy::Ignore); 
         Register(page);
         return page;
     }

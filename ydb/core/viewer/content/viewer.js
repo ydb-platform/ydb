@@ -1486,7 +1486,7 @@ function tabletTypeToSymbol(type) {
         return "NB";
     case "TxAllocator":
         return "TA";
-    case "Cms":
+    case "Cms": 
         return "CM";
     case "BlockStorePartition":
         return "BP";
@@ -1536,7 +1536,7 @@ function tabletTypeToColor(type) {
     case "NodeBroker":
         return "maroon";
     case "KeyValue":
-    case "Cms":
+    case "Cms": 
         return "pink";
     case "PersQueue":
         return "darksalmon";

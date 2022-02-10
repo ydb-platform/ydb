@@ -27,7 +27,7 @@ public:
     static constexpr EType FLAT_BS_CONTROLLER = BSController;
     static constexpr EType TX_ALLOCATOR = TxAllocator;
     static constexpr EType NODE_BROKER = NodeBroker;
-    static constexpr EType CMS = Cms;
+    static constexpr EType CMS = Cms; 
     static constexpr EType RTMR_PARTITION = RTMRPartition;
     static constexpr EType BLOCKSTORE_VOLUME = BlockStoreVolume;
     static constexpr EType BLOCKSTORE_PARTITION = BlockStorePartition;

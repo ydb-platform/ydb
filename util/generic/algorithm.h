@@ -559,7 +559,7 @@ template <class TI, class TOp>
 inline void ForEach(TI f, TI l, TOp op) {
     std::for_each(f, l, op);
 }
-
+ 
 namespace NPrivate {
     template <class T, class TOp, size_t... Is>
     constexpr bool AllOfImpl(T&& t, TOp&& op, std::index_sequence<Is...>) {
@@ -624,9 +624,9 @@ constexpr ::TEnableIfTuple<T> ForEach(T&& t, TOp&& op) {
 }
 
 template <class T1, class T2, class O>
-static inline void Transform(T1 b, T1 e, T2 o, O f) {
+static inline void Transform(T1 b, T1 e, T2 o, O f) { 
     std::transform(b, e, o, f);
-}
+} 
 
 template <class T1, class T2, class T3, class O>
 static inline void Transform(T1 b1, T1 e1, T2 b2, T3 o, O f) {
